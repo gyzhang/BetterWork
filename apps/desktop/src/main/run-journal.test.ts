@@ -18,7 +18,7 @@ describe('RunJournal', () => {
     journal = new RunJournal(':memory:');
     const id = journal.saveModel({
       name: '测试模型', provider: 'openai-compatible', baseUrl: 'http://localhost:8000/v1', model: 'demo', role: 'language',
-      apiKey: 'secret-value', maxContextTokens: 8192, maxOutputTokens: 1024, temperature: 0.2,
+      apiKey: 'secret-value', maxContextTokens: 8192, maxOutputTokens: 1024, temperature: 0.2, enabled: true,
     });
     expect(journal.listModels()[0]).toMatchObject({ id, name: '测试模型', apiKeyConfigured: true });
     expect(journal.listModels()[0]).not.toHaveProperty('apiKey');

@@ -75,6 +75,8 @@ export const modelProfileInputSchema = z.object({
   maxContextTokens: z.number().int().positive().max(10_000_000).default(8192),
   maxOutputTokens: z.number().int().positive().max(1_000_000).default(8192),
   temperature: z.number().min(0).max(2).default(0.7),
+  enabled: z.boolean().default(true),
+  priority: z.number().int().nonnegative().optional(),
 });
 export type ModelProfileInput = z.infer<typeof modelProfileInputSchema>;
 export const saveModelProfileRequestSchema = modelProfileInputSchema.extend({ id: z.string().min(1).optional() });
