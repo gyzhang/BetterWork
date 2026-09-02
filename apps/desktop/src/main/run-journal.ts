@@ -124,11 +124,12 @@ export class RunJournal {
     const existing = this.db.prepare('SELECT id, created_at FROM model_profiles WHERE id = ?').get(id) as { id: string; created_at: number } | undefined;
     const priority = existing ? undefined : this.db.prepare('SELECT COALESCE(MAX(priority), -1) + 1 AS next FROM model_profiles').get() as { next: number };
     if (existing) {
-      this.db.prepare(`UPDATE model_profiles SET name=?, provider=?, base_url=?, model=?, role=?, api_key=?, max_context_tokens=?, max_output_tokens=?, temperature=?, updated_at=? WHERE id=?`)
-        .run(input.name, input.provider, input.baseUrl, input.model, input.role, input.apiKey ?? '', input.maxContextTokens, input.maxOutputTokens, input.temperature, now, id);
+      const apiKey = input.apiKey ? input.apiKey : String((this.db.prepare('SELECT api_key FROM model_profiles WHERE id = ?').get(id) as { api_key: string }).api_key);
+      this.db.prepare(`UPDATE model_profiles SET name=?, provider=?, base_url=?, model=?, role=?, api_key=?, enabled=?, priority=COALESCE(?, priority), max_context_tokens=?, max_output_tokens=?, temperature=?, updated_at=? WHERE id=?`)
+        .run(input.name, input.provider, input.baseUrl, input.model, input.role, apiKey, input.enabled ? 1 : 0, input.priority ?? null, input.maxContextTokens, input.maxOutputTokens, input.temperature, now, id);
     } else {
-      this.db.prepare(`INSERT INTO model_profiles (id,name,provider,base_url,model,role,api_key,enabled,priority,max_context_tokens,max_output_tokens,temperature,created_at,updated_at) VALUES (?,?,?,?,?,?,?,1,?,?,?,?,?,?)`)
-        .run(id, input.name, input.provider, input.baseUrl, input.model, input.role, input.apiKey ?? '', priority!.next, input.maxContextTokens, input.maxOutputTokens, input.temperature, now, now);
+      this.db.prepare(`INSERT INTO model_profiles (id,name,provider,base_url,model,role,api_key,enabled,priority,max_context_tokens,max_output_tokens,temperature,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(id, input.name, input.provider, input.baseUrl, input.model, input.role, input.apiKey ?? '', input.enabled ? 1 : 0, input.priority ?? priority!.next, input.maxContextTokens, input.maxOutputTokens, input.temperature, now, now);
     }
     return id;
   }
