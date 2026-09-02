@@ -64,6 +64,8 @@ export type ListRunEventsRequest = z.infer<typeof listRunEventsRequestSchema>;
 
 export const modelRoleSchema = z.enum(['language', 'vision', 'embedding']);
 export type ModelRole = z.infer<typeof modelRoleSchema>;
+export const modelConnectionStatusSchema = z.enum(['untested', 'connected', 'failed']);
+export type ModelConnectionStatus = z.infer<typeof modelConnectionStatusSchema>;
 
 export const modelProfileInputSchema = z.object({
   name: z.string().trim().min(1).max(80),
@@ -91,6 +93,8 @@ export interface ModelProfileSummary {
   apiKeyConfigured: boolean;
   enabled: boolean;
   priority: number;
+  connectionStatus: ModelConnectionStatus;
+  lastTestedAt?: number;
   maxContextTokens: number;
   maxOutputTokens: number;
   temperature: number;
@@ -100,7 +104,7 @@ export interface ModelProfileSummary {
 
 export const modelProfileIdSchema = z.object({ id: z.string().min(1) });
 export const setDefaultModelRequestSchema = z.object({ id: z.string().min(1) });
-export const testModelRequestSchema = modelProfileInputSchema.pick({ baseUrl: true, model: true, role: true, apiKey: true });
+export const testModelRequestSchema = modelProfileInputSchema.pick({ baseUrl: true, model: true, role: true, apiKey: true }).extend({ id: z.string().min(1).optional() });
 export const updateWindowThemeRequestSchema = z.object({
   backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   symbolColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),

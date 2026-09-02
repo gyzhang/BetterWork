@@ -86,11 +86,18 @@ app.whenReady().then(() => {
     const base = input.baseUrl.replace(/\/$/, '');
     const url = base.endsWith('/embeddings') || base.endsWith('/chat/completions') ? base : `${base}/${input.role === 'embedding' ? 'embeddings' : 'chat/completions'}`;
     const body = input.role === 'embedding' ? { model: input.model, input: '算台连接测试' } : { model: input.model, messages: [{ role: 'user', content: '请只回复：连接成功' }], max_tokens: 8 };
+    const stored = input.id ? journal!.getModel(input.id) : undefined;
+    const apiKey = input.apiKey || stored?.apiKey || '';
     try {
-      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(input.apiKey ? { Authorization: `Bearer ${input.apiKey}` } : {}) }, body: JSON.stringify(body) });
-      if (!response.ok) return { ok: false, message: `连接失败（HTTP ${response.status}）` };
+      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) }, body: JSON.stringify(body) });
+      if (!response.ok) {
+        if (input.id) journal!.recordModelConnection(input.id, 'failed');
+        return { ok: false, message: `连接失败（HTTP ${response.status}）` };
+      }
+      if (input.id) journal!.recordModelConnection(input.id, 'connected');
       return { ok: true, message: input.role === 'embedding' ? 'Embedding 模型连接成功' : '模型连接成功' };
     } catch (error) {
+      if (input.id) journal!.recordModelConnection(input.id, 'failed');
       return { ok: false, message: error instanceof Error ? error.message : '连接失败' };
     }
   });
