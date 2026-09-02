@@ -10,6 +10,8 @@
 
 核心价值是利用用户的资料、记忆与工作方法，完成研究、分析、文档与演示。聊天是协作入口，Artifact 是主要交付物。
 
+参考项目及本机路径见 [docs/09-reference-projects.md](docs/09-reference-projects.md)。LobsterAI 用于参考产品 UI 和交互完成度，ClawBible Desktop 用于参考 Agent、工具、知识和 Office 工程实践；两者都不是 BetterWork 的直接代码依赖。
+
 ## 2. 当前阶段
 
 当前处于 `Phase 0：项目骨架与教学链路`。范围以 `docs/07-mvp-and-roadmap.md` 为准。
