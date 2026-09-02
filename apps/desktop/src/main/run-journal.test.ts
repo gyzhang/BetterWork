@@ -41,5 +41,7 @@ describe('RunJournal', () => {
     journal.recordModelConnection(id, 'connected');
     expect(journal.listModels()[0]).toMatchObject({ connectionStatus: 'connected' });
     expect(journal.listModels()[0]?.lastTestedAt).toEqual(expect.any(Number));
+    expect(journal.setModelEnabled(id, false)).toBe(true);
+    expect(journal.listModels()[0]).toMatchObject({ enabled: false, connectionStatus: 'connected' });
   });
 });

@@ -99,7 +99,7 @@ export function App(): React.JSX.Element {
   };
   const saveModel = async (event: FormEvent): Promise<void> => { event.preventDefault(); try { await window.betterwork.models.save({ ...modelForm, ...(editingModelId ? { id: editingModelId } : {}) }); await refreshModels(); setModelEditorOpen(false); setModelMessage(editingModelId ? '模型配置已更新。' : '模型已添加，现在可以用于任务。'); } catch (error) { setModelMessage(error instanceof Error ? error.message : '保存失败，请检查配置。'); } };
   const testModel = async (): Promise<void> => { try { const result = await window.betterwork.models.test({ ...modelForm, ...(editingModelId ? { id: editingModelId } : {}) }); setModelMessage(result.message); await refreshModels(); } catch (error) { setModelMessage(error instanceof Error ? error.message : '连接测试失败。'); } };
-  const toggleModel = (model: ModelProfileSummary): void => { void window.betterwork.models.save({ name: model.name, provider: model.provider, baseUrl: model.baseUrl, model: model.model, role: model.role, apiKey: '', maxContextTokens: model.maxContextTokens, maxOutputTokens: model.maxOutputTokens, temperature: model.temperature, enabled: !model.enabled, priority: model.priority }).then(refreshModels); };
+  const toggleModel = (model: ModelProfileSummary): void => { void window.betterwork.models.setEnabled({ id: model.id, enabled: !model.enabled }).then(refreshModels); };
   const setDefaultModel = (model: ModelProfileSummary): void => { void window.betterwork.models.setDefault({ id: model.id }).then(async (result) => { setModelMessage(result.updated ? `${model.name} 已设为${roleName[model.role]}默认模型。` : '仅已启用模型可以设为默认。'); await refreshModels(); }); };
 
   return <main className="app-shell">
