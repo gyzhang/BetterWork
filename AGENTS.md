@@ -95,6 +95,9 @@ Renderer -> Preload API -> Application -> Agent Core / Infrastructure
 - Artifact 是一等界面对象；右侧上下文面板按场景出现且必须允许完全收起。
 - 模型配置使用独立设置空间，不嵌入 Composer 或任务消息流。
 - 正文和常规控件不得通过 9–10px 小字号换取空间；优先折叠、覆盖和响应式重排。
+- 外观由 `system / light / dark` 模式与可扩展色系两个维度组成；每套正式色系必须同时提供浅色和深色 Variant。
+- Renderer 组件只能使用语义化主题 Token，不得散落硬编码颜色或用局部 `.dark` 补丁绕过 Token 契约。
+- 应用主题不得改变 Artifact 自身的文档、演示、表格或图表配色。
 
 ## 7. 代码质量
 
