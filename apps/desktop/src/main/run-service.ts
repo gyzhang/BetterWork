@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { BrowserWindow } from 'electron';
-import { ReActAgentEngine, FakeModelProvider } from '@betterwork/agent-core';
+import { ReActAgentEngine, FakeModelProvider, OpenAICompatibleProvider } from '@betterwork/agent-core';
 import type { AgentRuntimeEvent, StartRunRequest } from '@betterwork/agent-protocol';
 import { IpcChannel } from '@betterwork/agent-protocol';
 import { calculatorTool, readTextFileTool } from '@betterwork/tool-runtime';
@@ -42,13 +42,14 @@ export class RunService {
 
   private async consume(runId: string, input: StartRunRequest, controller: AbortController): Promise<void> {
     try {
+      const configured = this.journal.getModelForRun('language');
       for await (const event of this.engine.run({
         runId,
         taskId: input.taskId,
         sessionId: input.sessionId,
         prompt: input.prompt,
         workspacePath: input.workspacePath,
-        model: this.model,
+        model: configured ? new OpenAICompatibleProvider(configured) : this.model,
         tools: [calculatorTool, readTextFileTool],
         signal: controller.signal,
       })) this.publish(event);

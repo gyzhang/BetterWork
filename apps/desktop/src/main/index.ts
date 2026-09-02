@@ -4,6 +4,9 @@ import {
   cancelRunRequestSchema,
   IpcChannel,
   listRunEventsRequestSchema,
+  modelProfileIdSchema,
+  saveModelProfileRequestSchema,
+  testModelRequestSchema,
   startRunRequestSchema,
 } from '@betterwork/agent-protocol';
 import { RunJournal } from './run-journal';
@@ -59,6 +62,28 @@ app.whenReady().then(() => {
       properties: ['openDirectory', 'createDirectory'],
     });
     return result.canceled ? null : result.filePaths[0] ?? null;
+  });
+  ipcMain.handle(IpcChannel.ListModels, () => journal!.listModels());
+  ipcMain.handle(IpcChannel.SaveModel, (_event, raw) => {
+    const input = saveModelProfileRequestSchema.parse(raw);
+    return { id: journal!.saveModel(input) };
+  });
+  ipcMain.handle(IpcChannel.DeleteModel, (_event, raw) => {
+    const input = modelProfileIdSchema.parse(raw);
+    return { deleted: journal!.deleteModel(input.id) };
+  });
+  ipcMain.handle(IpcChannel.TestModel, async (_event, raw) => {
+    const input = testModelRequestSchema.parse(raw);
+    const base = input.baseUrl.replace(/\/$/, '');
+    const url = base.endsWith('/embeddings') || base.endsWith('/chat/completions') ? base : `${base}/${input.role === 'embedding' ? 'embeddings' : 'chat/completions'}`;
+    const body = input.role === 'embedding' ? { model: input.model, input: '算台连接测试' } : { model: input.model, messages: [{ role: 'user', content: '请只回复：连接成功' }], max_tokens: 8 };
+    try {
+      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(input.apiKey ? { Authorization: `Bearer ${input.apiKey}` } : {}) }, body: JSON.stringify(body) });
+      if (!response.ok) return { ok: false, message: `连接失败（HTTP ${response.status}）` };
+      return { ok: true, message: input.role === 'embedding' ? 'Embedding 模型连接成功' : '模型连接成功' };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : '连接失败' };
+    }
   });
 
   app.on('activate', () => {

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import type { AgentRuntimeEvent, RunSummary } from '@betterwork/agent-protocol';
+import type { AgentRuntimeEvent, ModelProfileInput, ModelProfileSummary, RunSummary } from '@betterwork/agent-protocol';
 
 const taskId = 'phase-0-playground';
 const sessionId = 'phase-0-session';
@@ -32,8 +32,13 @@ export function App(): React.JSX.Element {
   const [activeRunId, setActiveRunId] = useState<string>();
   const activeRunIdRef = useRef<string | undefined>(undefined);
   const [events, setEvents] = useState<AgentRuntimeEvent[]>([]);
+  const [showModelSettings, setShowModelSettings] = useState(false);
+  const [models, setModels] = useState<ModelProfileSummary[]>([]);
+  const [modelMessage, setModelMessage] = useState('');
+  const [modelForm, setModelForm] = useState<ModelProfileInput>({ name: '', provider: 'openai-compatible', baseUrl: '', model: '', role: 'language', apiKey: '', maxContextTokens: 8192, maxOutputTokens: 8192, temperature: 0.7 });
 
   const refreshRuns = async (): Promise<void> => setRuns(await window.betterwork.runs.list());
+  const refreshModels = async (): Promise<void> => setModels(await window.betterwork.models.list());
 
   useEffect(() => {
     void refreshRuns();
@@ -84,7 +89,7 @@ export function App(): React.JSX.Element {
       </aside>
 
       <section className="conversation">
-        <header><div><h1>Agent 运行实验台</h1><p>观察一次请求如何经过模型、工具、持久化与界面。</p></div><span className="phase-badge">PHASE 0</span></header>
+        <header><div><h1>Agent 运行实验台</h1><p>观察一次请求如何经过模型、工具、持久化与界面。</p></div><div className="header-actions"><button className="settings-button" onClick={() => { setShowModelSettings(true); void refreshModels(); }}>模型设置</button><span className="phase-badge">PHASE 0</span></div></header>
         <div className="messages">
           {events.length === 0 ? (
             <div className="welcome"><div className="abacus">● ━ ● ━ ●</div><h2>以我所知，成我所作。</h2><p>输入计算表达式，或读取当前工作区里的文本文件。</p><div className="examples"><button onClick={() => setPrompt('计算: (128 + 72) / 4')}>计算: (128 + 72) / 4</button><button onClick={() => setPrompt('读取: README.md')}>读取: README.md</button></div></div>
@@ -112,6 +117,15 @@ export function App(): React.JSX.Element {
           {events.length === 0 && <div className="empty-timeline">运行任务后，这里会展示事件顺序。</div>}
         </div>
       </aside>
+      {showModelSettings && <div className="modal-backdrop" onClick={() => setShowModelSettings(false)}><section className="model-settings" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-title"><div><h2>模型设置</h2><p>配置语言、视觉或 Embedding 模型。API Key 只在主进程保存。</p></div><button onClick={() => setShowModelSettings(false)}>×</button></div>
+        <div className="configured-models">{models.length === 0 ? <p className="muted">尚未配置模型，当前使用 Fake Provider。</p> : models.map((model) => <div className="model-row" key={model.id}><div><strong>{model.name}</strong><small>{model.provider} · {model.model} · {model.role}{model.apiKeyConfigured ? ' · 已配置凭据' : ' · 无凭据'}</small></div><button onClick={() => void window.betterwork.models.delete({ id: model.id }).then(() => refreshModels())}>删除</button></div>)}</div>
+        <form className="model-form" onSubmit={(event) => { event.preventDefault(); void window.betterwork.models.save(modelForm).then(() => { setModelMessage('模型已保存'); setModelForm({ ...modelForm, name: '', model: '', apiKey: '' }); return refreshModels(); }).catch((error: unknown) => setModelMessage(error instanceof Error ? error.message : '保存失败')); }}>
+          <div className="form-grid"><label>显示名称<input required value={modelForm.name} onChange={(event) => setModelForm({ ...modelForm, name: event.target.value })} placeholder="例如：公司主力模型" /></label><label>模型类型<select value={modelForm.role} onChange={(event) => setModelForm({ ...modelForm, role: event.target.value as ModelProfileInput['role'] })}><option value="language">语言模型</option><option value="vision">视觉模型</option><option value="embedding">Embedding 模型</option></select></label><label>Provider<input required value={modelForm.provider} onChange={(event) => setModelForm({ ...modelForm, provider: event.target.value })} placeholder="openai-compatible" /></label><label>模型名称<input required value={modelForm.model} onChange={(event) => setModelForm({ ...modelForm, model: event.target.value })} placeholder="模型服务中的 model id" /></label></div>
+          <label>API 地址<input required type="url" value={modelForm.baseUrl} onChange={(event) => setModelForm({ ...modelForm, baseUrl: event.target.value })} placeholder="https://example.com/v1" /></label><label>API Key<input type="password" value={modelForm.apiKey} onChange={(event) => setModelForm({ ...modelForm, apiKey: event.target.value })} placeholder="可留空" /></label>
+          <div className="model-form-actions"><button type="button" onClick={() => void window.betterwork.models.test(modelForm).then((result) => setModelMessage(result.message))}>测试连接</button><button type="submit">保存模型</button></div>
+        </form><p className="model-message">{modelMessage}</p>
+      </section></div>}
     </main>
   );
 }

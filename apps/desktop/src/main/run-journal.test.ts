@@ -13,4 +13,15 @@ describe('RunJournal', () => {
     expect(journal.listEvents('run-1').map((event) => event.type)).toEqual(['run.started', 'run.completed']);
     expect(journal.listRuns()[0]?.status).toBe('completed');
   });
+
+  it('stores model credentials without returning them in summaries', () => {
+    journal = new RunJournal(':memory:');
+    const id = journal.saveModel({
+      name: '测试模型', provider: 'openai-compatible', baseUrl: 'http://localhost:8000/v1', model: 'demo', role: 'language',
+      apiKey: 'secret-value', maxContextTokens: 8192, maxOutputTokens: 1024, temperature: 0.2,
+    });
+    expect(journal.listModels()[0]).toMatchObject({ id, name: '测试模型', apiKeyConfigured: true });
+    expect(journal.listModels()[0]).not.toHaveProperty('apiKey');
+    expect(journal.getModel(id)?.apiKey).toBe('secret-value');
+  });
 });

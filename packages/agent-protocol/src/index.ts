@@ -61,6 +61,43 @@ export type CancelRunRequest = z.infer<typeof cancelRunRequestSchema>;
 export const listRunEventsRequestSchema = z.object({ runId: z.string().min(1) });
 export type ListRunEventsRequest = z.infer<typeof listRunEventsRequestSchema>;
 
+export const modelRoleSchema = z.enum(['language', 'vision', 'embedding']);
+export type ModelRole = z.infer<typeof modelRoleSchema>;
+
+export const modelProfileInputSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  provider: z.string().trim().min(1).max(80),
+  baseUrl: z.string().trim().url(),
+  model: z.string().trim().min(1).max(200),
+  role: modelRoleSchema,
+  apiKey: z.string().max(2000).optional().default(''),
+  maxContextTokens: z.number().int().positive().max(10_000_000).default(8192),
+  maxOutputTokens: z.number().int().positive().max(1_000_000).default(8192),
+  temperature: z.number().min(0).max(2).default(0.7),
+});
+export type ModelProfileInput = z.infer<typeof modelProfileInputSchema>;
+export const saveModelProfileRequestSchema = modelProfileInputSchema.extend({ id: z.string().min(1).optional() });
+
+export interface ModelProfileSummary {
+  id: string;
+  name: string;
+  provider: string;
+  baseUrl: string;
+  model: string;
+  role: ModelRole;
+  apiKeyConfigured: boolean;
+  enabled: boolean;
+  priority: number;
+  maxContextTokens: number;
+  maxOutputTokens: number;
+  temperature: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export const modelProfileIdSchema = z.object({ id: z.string().min(1) });
+export const testModelRequestSchema = modelProfileInputSchema.pick({ baseUrl: true, model: true, role: true, apiKey: true });
+
 export interface RunSummary {
   id: string;
   taskId: string;
@@ -79,6 +116,10 @@ export const IpcChannel = {
   RunEvent: 'run:event',
   GetDefaultWorkspace: 'workspace:get-default',
   SelectWorkspace: 'workspace:select',
+  ListModels: 'model:list',
+  SaveModel: 'model:save',
+  DeleteModel: 'model:delete',
+  TestModel: 'model:test',
 } as const;
 
 export interface BetterWorkDesktopApi {
@@ -92,5 +133,11 @@ export interface BetterWorkDesktopApi {
   workspace: {
     getDefaultPath(): Promise<string>;
     selectDirectory(): Promise<string | null>;
+  };
+  models: {
+    list(): Promise<ModelProfileSummary[]>;
+    save(input: z.infer<typeof saveModelProfileRequestSchema>): Promise<{ id: string }>;
+    delete(input: { id: string }): Promise<{ deleted: boolean }>;
+    test(input: z.infer<typeof testModelRequestSchema>): Promise<{ ok: boolean; message: string }>;
   };
 }

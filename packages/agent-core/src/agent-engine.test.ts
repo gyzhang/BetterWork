@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { calculatorTool } from '@betterwork/tool-runtime';
 import { ReActAgentEngine } from './agent-engine';
 import { FakeModelProvider } from './fake-provider';
+import { OpenAICompatibleProvider } from './openai-compatible-provider';
 
 describe('ReActAgentEngine', () => {
   it('emits an ordered tool run and final answer', async () => {
@@ -46,5 +47,21 @@ describe('ReActAgentEngine', () => {
 
     expect(events.at(-1)?.type).toBe('run.cancelled');
     expect(events.some((event) => event.type === 'run.failed')).toBe(false);
+  });
+
+  it('parses an OpenAI-compatible text stream', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      'data: {"choices":[{"delta":{"content":"连接"}}]}\n\ndata: {"choices":[{"delta":{"content":"成功"}}]}\n\ndata: [DONE]\n\n',
+      { headers: { 'content-type': 'text/event-stream' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const provider = new OpenAICompatibleProvider({ id: 'model-1', baseUrl: 'http://localhost:8000/v1', apiKey: 'secret', model: 'demo' });
+    const chunks = [];
+    for await (const chunk of provider.stream({ messages: [{ id: 'm-1', role: 'user', content: 'hello' }], tools: [], signal: new AbortController().signal })) chunks.push(chunk);
+
+    expect(chunks).toEqual([{ type: 'text-delta', delta: '连接' }, { type: 'text-delta', delta: '成功' }, { type: 'done' }]);
+    expect(fetchMock).toHaveBeenCalledWith('http://localhost:8000/v1/chat/completions', expect.objectContaining({ method: 'POST' }));
+    vi.unstubAllGlobals();
   });
 });
