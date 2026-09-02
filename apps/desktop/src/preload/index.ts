@@ -20,6 +20,12 @@ const api: BetterWorkDesktopApi = {
     getDefaultPath: () => ipcRenderer.invoke(IpcChannel.GetDefaultWorkspace),
     selectDirectory: () => ipcRenderer.invoke(IpcChannel.SelectWorkspace),
   },
+  models: {
+    list: () => ipcRenderer.invoke(IpcChannel.ListModels),
+    save: (input) => ipcRenderer.invoke(IpcChannel.SaveModel, input),
+    delete: (input) => ipcRenderer.invoke(IpcChannel.DeleteModel, input),
+    test: (input) => ipcRenderer.invoke(IpcChannel.TestModel, input),
+  },
 };
 
 contextBridge.exposeInMainWorld('betterwork', api);
