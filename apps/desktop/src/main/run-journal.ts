@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import type { AgentRuntimeEvent, ModelProfileInput, ModelProfileSummary, RunSummary } from '@betterwork/agent-protocol';
+import type { AgentRuntimeEvent, ModelConnectionStatus, ModelProfileInput, ModelProfileSummary, RunSummary } from '@betterwork/agent-protocol';
 import { agentRuntimeEventSchema } from '@betterwork/agent-protocol';
 
 interface RunRow {
@@ -54,6 +54,9 @@ export class RunJournal {
         updated_at INTEGER NOT NULL
       );
     `);
+    const columns = this.db.prepare('PRAGMA table_info(model_profiles)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'connection_status')) this.db.exec("ALTER TABLE model_profiles ADD COLUMN connection_status TEXT NOT NULL DEFAULT 'untested'");
+    if (!columns.some((column) => column.name === 'last_tested_at')) this.db.exec('ALTER TABLE model_profiles ADD COLUMN last_tested_at INTEGER');
   }
 
   createRun(run: RunSummary): void {
@@ -125,11 +128,11 @@ export class RunJournal {
     const priority = existing ? undefined : this.db.prepare('SELECT COALESCE(MAX(priority), -1) + 1 AS next FROM model_profiles').get() as { next: number };
     if (existing) {
       const apiKey = input.apiKey ? input.apiKey : String((this.db.prepare('SELECT api_key FROM model_profiles WHERE id = ?').get(id) as { api_key: string }).api_key);
-      this.db.prepare(`UPDATE model_profiles SET name=?, provider=?, base_url=?, model=?, role=?, api_key=?, enabled=?, priority=COALESCE(?, priority), max_context_tokens=?, max_output_tokens=?, temperature=?, updated_at=? WHERE id=?`)
+      this.db.prepare(`UPDATE model_profiles SET name=?, provider=?, base_url=?, model=?, role=?, api_key=?, enabled=?, priority=COALESCE(?, priority), max_context_tokens=?, max_output_tokens=?, temperature=?, connection_status='untested', last_tested_at=NULL, updated_at=? WHERE id=?`)
         .run(input.name, input.provider, input.baseUrl, input.model, input.role, apiKey, input.enabled ? 1 : 0, input.priority ?? null, input.maxContextTokens, input.maxOutputTokens, input.temperature, now, id);
     } else {
-      this.db.prepare(`INSERT INTO model_profiles (id,name,provider,base_url,model,role,api_key,enabled,priority,max_context_tokens,max_output_tokens,temperature,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(id, input.name, input.provider, input.baseUrl, input.model, input.role, input.apiKey ?? '', input.enabled ? 1 : 0, input.priority ?? priority!.next, input.maxContextTokens, input.maxOutputTokens, input.temperature, now, now);
+      this.db.prepare(`INSERT INTO model_profiles (id,name,provider,base_url,model,role,api_key,enabled,priority,max_context_tokens,max_output_tokens,temperature,connection_status,last_tested_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(id, input.name, input.provider, input.baseUrl, input.model, input.role, input.apiKey ?? '', input.enabled ? 1 : 0, input.priority ?? priority!.next, input.maxContextTokens, input.maxOutputTokens, input.temperature, 'untested', null, now, now);
     }
     return id;
   }
@@ -148,10 +151,18 @@ export class RunJournal {
     return update();
   }
 
+  recordModelConnection(id: string, status: Exclude<ModelConnectionStatus, 'untested'>): void {
+    const now = Date.now();
+    this.db.prepare('UPDATE model_profiles SET connection_status = ?, last_tested_at = ?, updated_at = ? WHERE id = ?')
+      .run(status, now, now, id);
+  }
+
   private toModelSummary(row: Record<string, unknown>): ModelProfileSummary {
     return {
       id: String(row.id), name: String(row.name), provider: String(row.provider), baseUrl: String(row.base_url), model: String(row.model),
       role: row.role as ModelProfileSummary['role'], apiKeyConfigured: Boolean(row.api_key), enabled: Boolean(row.enabled), priority: Number(row.priority),
+      connectionStatus: row.connection_status as ModelConnectionStatus ?? 'untested',
+      ...(row.last_tested_at === null || row.last_tested_at === undefined ? {} : { lastTestedAt: Number(row.last_tested_at) }),
       maxContextTokens: Number(row.max_context_tokens), maxOutputTokens: Number(row.max_output_tokens), temperature: Number(row.temperature),
       createdAt: Number(row.created_at), updatedAt: Number(row.updated_at),
     };

@@ -33,4 +33,13 @@ describe('RunJournal', () => {
     expect(journal.setDefaultModel(second)).toBe(true);
     expect(journal.getModelForRun('language')?.id).toBe(second);
   });
+
+  it('keeps a persisted model connection result in renderer-facing summaries', () => {
+    journal = new RunJournal(':memory:');
+    const id = journal.saveModel({ name: '待测试模型', provider: 'openai-compatible', baseUrl: 'http://localhost:8000/v1', model: 'test', role: 'language', apiKey: '', maxContextTokens: 8192, maxOutputTokens: 1024, temperature: 0.2, enabled: true });
+    expect(journal.listModels()[0]?.connectionStatus).toBe('untested');
+    journal.recordModelConnection(id, 'connected');
+    expect(journal.listModels()[0]).toMatchObject({ connectionStatus: 'connected' });
+    expect(journal.listModels()[0]?.lastTestedAt).toEqual(expect.any(Number));
+  });
 });
