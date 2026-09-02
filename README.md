@@ -41,6 +41,7 @@
 - [研究与 Office 工作流](docs/06-knowledge-workflows.md)
 - [MVP 与路线图](docs/07-mvp-and-roadmap.md)
 - [品牌与视觉方向](docs/08-brand.md)
+- [参考项目与借鉴边界](docs/09-reference-projects.md)
 - [架构决策记录](docs/adr/README.md)
 
 ## 当前阶段

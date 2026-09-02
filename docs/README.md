@@ -14,6 +14,7 @@
 | [知识工作流](06-knowledge-workflows.md) | 定义研究、Excel、Word、PPT 的目标管线 |
 | [MVP 与路线图](07-mvp-and-roadmap.md) | 定义第一阶段范围、验收标准和演进顺序 |
 | [品牌](08-brand.md) | 定义“算台 BetterWork”的名称、文案与图标方向 |
+| [参考项目与借鉴边界](09-reference-projects.md) | 记录 LobsterAI、ClawBible Desktop 的本机路径与借鉴边界 |
 
 ## 架构决策记录
 
@@ -24,4 +25,3 @@ ADR 用于记录会影响多个模块、后续修改成本较高的决策。详�
 - 版本：v0.1
 - 状态：已达成初步共识，可用于启动开发
 - 目标读者：产品设计者、开发者、贡献者和学习者
-
