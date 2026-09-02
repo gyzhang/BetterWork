@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, type BrowserWindowConstructorOptions } from 'electron';
 import {
   cancelRunRequestSchema,
   IpcChannel,
@@ -8,6 +8,7 @@ import {
   saveModelProfileRequestSchema,
   testModelRequestSchema,
   startRunRequestSchema,
+  updateWindowThemeRequestSchema,
 } from '@betterwork/agent-protocol';
 import { RunJournal } from './run-journal';
 import { RunService } from './run-service';
@@ -16,20 +17,23 @@ let mainWindow: BrowserWindow | null = null;
 let journal: RunJournal | null = null;
 
 const createWindow = (): void => {
-  mainWindow = new BrowserWindow({
+  const options: BrowserWindowConstructorOptions = {
     width: 1380,
     height: 860,
     minWidth: 980,
     minHeight: 640,
     title: '算台 BetterWork',
-    backgroundColor: '#f4f1e9',
+    backgroundColor: '#F6F7F5',
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
+    ...(process.platform === 'win32' ? { titleBarOverlay: { color: '#F6F7F5', symbolColor: '#1D2420' } } : {}),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
     },
-  });
+  };
+  mainWindow = new BrowserWindow(options);
 
   if (process.env.ELECTRON_RENDERER_URL) void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
   else void mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
@@ -84,6 +88,11 @@ app.whenReady().then(() => {
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : '连接失败' };
     }
+  });
+  ipcMain.handle(IpcChannel.UpdateWindowTheme, (_event, raw) => {
+    const theme = updateWindowThemeRequestSchema.parse(raw);
+    mainWindow?.setBackgroundColor(theme.backgroundColor);
+    if (process.platform === 'win32') mainWindow?.setTitleBarOverlay({ color: theme.backgroundColor, symbolColor: theme.symbolColor });
   });
 
   app.on('activate', () => {

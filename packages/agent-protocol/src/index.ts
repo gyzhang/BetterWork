@@ -100,6 +100,11 @@ export interface ModelProfileSummary {
 
 export const modelProfileIdSchema = z.object({ id: z.string().min(1) });
 export const testModelRequestSchema = modelProfileInputSchema.pick({ baseUrl: true, model: true, role: true, apiKey: true });
+export const updateWindowThemeRequestSchema = z.object({
+  backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  symbolColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+});
+export type UpdateWindowThemeRequest = z.infer<typeof updateWindowThemeRequestSchema>;
 
 export interface RunSummary {
   id: string;
@@ -123,6 +128,7 @@ export const IpcChannel = {
   SaveModel: 'model:save',
   DeleteModel: 'model:delete',
   TestModel: 'model:test',
+  UpdateWindowTheme: 'window:update-theme',
 } as const;
 
 export interface BetterWorkDesktopApi {
@@ -142,5 +148,8 @@ export interface BetterWorkDesktopApi {
     save(input: z.infer<typeof saveModelProfileRequestSchema>): Promise<{ id: string }>;
     delete(input: { id: string }): Promise<{ deleted: boolean }>;
     test(input: z.infer<typeof testModelRequestSchema>): Promise<{ ok: boolean; message: string }>;
+  };
+  chrome: {
+    updateTheme(input: UpdateWindowThemeRequest): Promise<void>;
   };
 }

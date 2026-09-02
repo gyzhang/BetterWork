@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentRuntimeEvent, ModelProfileInput, ModelProfileSummary, RunSummary } from '@betterwork/agent-protocol';
-import { applyAppearance, bootstrapAppearance, colorSchemes, persistAppearance, type AppearanceMode, type AppearancePreference, type ColorScheme, type ResolvedAppearance } from './appearance';
+import { applyAppearance, bootstrapAppearance, colorSchemes, getWindowTheme, persistAppearance, type AppearanceMode, type AppearancePreference, type ColorScheme, type ResolvedAppearance } from './appearance';
 import { deriveActivityGroups, type ActivityGroup } from './activity';
 
 const taskId = 'phase-0-playground';
@@ -61,6 +61,10 @@ export function App(): React.JSX.Element {
     query.addEventListener('change', onChange);
     return () => query.removeEventListener('change', onChange);
   }, [appearance]);
+
+  useEffect(() => {
+    void window.betterwork.chrome.updateTheme(getWindowTheme());
+  }, [appearance, resolvedAppearance]);
 
   const setAppearanceValue = (next: AppearancePreference): void => { setAppearance(next); persistAppearance(next); setResolvedAppearance(applyAppearance(next)); };
   const assistantText = useMemo(() => events.filter((event): event is Extract<AgentRuntimeEvent, { type: 'message.delta' }> => event.type === 'message.delta').map((event) => event.delta).join(''), [events]);

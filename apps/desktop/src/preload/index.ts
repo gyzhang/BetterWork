@@ -26,6 +26,9 @@ const api: BetterWorkDesktopApi = {
     delete: (input) => ipcRenderer.invoke(IpcChannel.DeleteModel, input),
     test: (input) => ipcRenderer.invoke(IpcChannel.TestModel, input),
   },
+  chrome: {
+    updateTheme: (input) => ipcRenderer.invoke(IpcChannel.UpdateWindowTheme, input),
+  },
 };
 
 contextBridge.exposeInMainWorld('betterwork', api);

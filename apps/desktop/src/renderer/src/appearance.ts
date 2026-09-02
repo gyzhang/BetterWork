@@ -56,6 +56,17 @@ export function applyAppearance(preference: AppearancePreference): ResolvedAppea
   return resolved;
 }
 
+export function getWindowTheme(): { backgroundColor: string; symbolColor: string } {
+  if (typeof document === 'undefined') return { backgroundColor: '#F6F7F5', symbolColor: '#1D2420' };
+  const styles = window.getComputedStyle(document.documentElement);
+  const backgroundColor = styles.getPropertyValue('--canvas').trim();
+  const symbolColor = styles.getPropertyValue('--text-primary').trim();
+  return {
+    backgroundColor: /^#[0-9a-fA-F]{6}$/.test(backgroundColor) ? backgroundColor : '#F6F7F5',
+    symbolColor: /^#[0-9a-fA-F]{6}$/.test(symbolColor) ? symbolColor : '#1D2420',
+  };
+}
+
 export function persistAppearance(preference: AppearancePreference): void {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(appearanceStorageKey, JSON.stringify(preference));
