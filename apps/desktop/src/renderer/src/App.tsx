@@ -34,6 +34,7 @@ export function App(): React.JSX.Element {
   const [events, setEvents] = useState<AgentRuntimeEvent[]>([]);
   const [models, setModels] = useState<ModelProfileSummary[]>([]);
   const [view, setView] = useState<AppView>('work');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.localStorage.getItem('betterwork-sidebar-collapsed') === 'true');
   const [contextTab, setContextTab] = useState<ContextTab>('process');
   const [contextOpen, setContextOpen] = useState(true);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('models');
@@ -62,6 +63,10 @@ export function App(): React.JSX.Element {
     query.addEventListener('change', onChange);
     return () => query.removeEventListener('change', onChange);
   }, [appearance]);
+
+  useEffect(() => {
+    window.localStorage.setItem('betterwork-sidebar-collapsed', String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
 
   useEffect(() => {
     void window.betterwork.chrome.updateTheme(getWindowTheme());
@@ -102,9 +107,9 @@ export function App(): React.JSX.Element {
   const toggleModel = (model: ModelProfileSummary): void => { void window.betterwork.models.setEnabled({ id: model.id, enabled: !model.enabled }).then(refreshModels); };
   const setDefaultModel = (model: ModelProfileSummary): void => { void window.betterwork.models.setDefault({ id: model.id }).then(async (result) => { setModelMessage(result.updated ? `${model.name} 已设为${roleName[model.role]}默认模型。` : '仅已启用模型可以设为默认。'); await refreshModels(); }); };
 
-  return <main className="app-shell">
+  return <main className={sidebarCollapsed ? 'app-shell sidebar-collapsed' : 'app-shell'}>
     <aside className="sidebar">
-      <div className="brand"><span className="brand-mark" aria-hidden="true">算</span><div><strong>算台</strong><small>BetterWork</small></div></div>
+      <div className="brand"><span className="brand-mark" aria-hidden="true">算</span><div><strong>算台</strong><small>BetterWork</small></div><button className="sidebar-collapse-button" aria-label={sidebarCollapsed ? '展开导航' : '收起导航'} onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}>{sidebarCollapsed ? '›' : '‹'}</button></div>
       <button className="new-task" onClick={startNewTask}><span aria-hidden="true">＋</span> 新建任务</button>
       <nav className="primary-nav" aria-label="主要导航">
         <button className={view === 'work' ? 'active' : ''} onClick={() => setView('work')}><span aria-hidden="true">▣</span> 工作</button>
