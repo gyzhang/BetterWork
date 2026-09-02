@@ -45,6 +45,7 @@ export function App(): React.JSX.Element {
 
   useEffect(() => {
     void refreshRuns();
+    void refreshModels();
     void window.betterwork.workspace.getDefaultPath().then(setWorkspacePath);
     return window.betterwork.runs.onEvent((event) => {
       setEvents((current) => event.runId === activeRunIdRef.current ? [...current, event] : current);
@@ -56,6 +57,7 @@ export function App(): React.JSX.Element {
     .filter((event): event is Extract<AgentRuntimeEvent, { type: 'message.delta' }> => event.type === 'message.delta')
     .map((event) => event.delta).join(''), [events]);
   const activeRun = runs.find((run) => run.id === activeRunId);
+  const activeLanguageModel = models.find((model) => model.role === 'language' && model.enabled);
   const isRunning = activeRun?.status === 'running' || events.at(-1)?.type === 'run.started' ||
     (!!activeRunId && !events.some((event) => ['run.completed', 'run.failed', 'run.cancelled'].includes(event.type)));
 
@@ -109,7 +111,7 @@ export function App(): React.JSX.Element {
         <form className="composer" onSubmit={(event) => void submit(event)}>
           <label>工作区<input value={workspacePath} onChange={(event) => setWorkspacePath(event.target.value)} /><button type="button" className="choose-workspace" onClick={() => void window.betterwork.workspace.selectDirectory().then((selected) => { if (selected) setWorkspacePath(selected); })}>选择</button></label>
           <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={3} />
-          <div><span>Fake Provider · 工具调用演示</span>{isRunning && activeRunId ? <button type="button" className="stop" onClick={() => void window.betterwork.runs.cancel({ runId: activeRunId })}>停止</button> : <button type="submit" disabled={!prompt.trim() || !workspacePath}>运行</button>}</div>
+          <div><span>{activeLanguageModel ? `${activeLanguageModel.provider} · ${activeLanguageModel.model}` : 'Fake Provider · 工具调用演示'}</span>{isRunning && activeRunId ? <button type="button" className="stop" onClick={() => void window.betterwork.runs.cancel({ runId: activeRunId })}>停止</button> : <button type="submit" disabled={!prompt.trim() || !workspacePath}>运行</button>}</div>
         </form>
       </section>
 
