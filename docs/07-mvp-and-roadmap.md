@@ -35,6 +35,12 @@
 4. 关闭并重新打开应用后可以查看 Run 历史。
 5. Agent Core 测试不启动 Electron。
 
+### Phase 0 UI Foundation Gate
+
+现有 Renderer 只视为验证 Agent 教学链路的工程原型。进入 Phase 1 前，先按 [UI/UX 体系与落地计划](10-ui-ux-system.md) 完成 UI Foundation：统一视觉 Token、应用外壳、任务工作区、上下文面板和模型设置体验。
+
+该 Gate 允许重构 Renderer 的组件和样式结构，但不借机扩张 Agent Core、知识库或 Office 能力。完成后必须保证 Fake Provider 与真实 Provider 的已有链路不回退。
+
 ## 3. Phase 1：研究报告 MVP
 
 目标：完成第一条真实知识工作闭环。
@@ -156,8 +162,7 @@
 2. 定义 `agent-protocol` 事件与 Schema。
 3. 实现 Fake Provider 和最小 Agent Loop。
 4. 实现 Run Repository 和 Event Journal。
-5. 完成任务列表、对话区和 Execution Timeline。
+5. 按 UI Foundation 规范完成任务列表、协作区和可折叠过程面板。
 6. 接入 Calculator 与 Read File Tool。
 7. 完成第一轮端到端测试。
 8. 再进入 Knowledge Vault 与研究报告切片。
-
