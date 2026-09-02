@@ -151,6 +151,11 @@ export class RunJournal {
     return update();
   }
 
+  setModelEnabled(id: string, enabled: boolean): boolean {
+    return this.db.prepare('UPDATE model_profiles SET enabled = ?, updated_at = ? WHERE id = ?')
+      .run(enabled ? 1 : 0, Date.now(), id).changes > 0;
+  }
+
   recordModelConnection(id: string, status: Exclude<ModelConnectionStatus, 'untested'>): void {
     const now = Date.now();
     this.db.prepare('UPDATE model_profiles SET connection_status = ?, last_tested_at = ?, updated_at = ? WHERE id = ?')

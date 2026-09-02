@@ -6,6 +6,7 @@ import {
   listRunEventsRequestSchema,
   modelProfileIdSchema,
   setDefaultModelRequestSchema,
+  setModelEnabledRequestSchema,
   saveModelProfileRequestSchema,
   testModelRequestSchema,
   startRunRequestSchema,
@@ -80,6 +81,10 @@ app.whenReady().then(() => {
   ipcMain.handle(IpcChannel.SetDefaultModel, (_event, raw) => {
     const input = setDefaultModelRequestSchema.parse(raw);
     return { updated: journal!.setDefaultModel(input.id) };
+  });
+  ipcMain.handle(IpcChannel.SetModelEnabled, (_event, raw) => {
+    const input = setModelEnabledRequestSchema.parse(raw);
+    return { updated: journal!.setModelEnabled(input.id, input.enabled) };
   });
   ipcMain.handle(IpcChannel.TestModel, async (_event, raw) => {
     const input = testModelRequestSchema.parse(raw);
