@@ -1,0 +1,33 @@
+{
+  "name": "betterwork",
+  "version": "0.0.1",
+  "private": true,
+  "description": "面向知识工作者的个人 AI 工作台，基于本地知识库与长期记忆完成深度研究、数据分析、Word 文档和 PPT。",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @betterwork/desktop",
+    "build": "npm run build --workspace @betterwork/desktop",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "npm run typecheck && npm test && npm run build",
+    "setup:runtime": "node node_modules/electron/install.js && electron-rebuild -f -w better-sqlite3",
+    "rebuild:native": "electron-rebuild -f -w better-sqlite3"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.3",
+    "@types/node": "^24.10.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true
+  }
+}

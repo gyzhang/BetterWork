@@ -45,4 +45,24 @@
 
 ## 当前阶段
 
-当前为产品与架构基线 `v0.1`。下一步是搭建桌面应用骨架，并完成第一条最小端到端执行链路。
+当前正在开发 Phase 0：项目骨架与教学链路。仓库已经具备 Electron 三层结构、类型化 IPC、最小 Agent Loop、工具调用、SQLite Run Journal 与执行时间线。
+
+Phase 0 当前使用 Fake Model Provider，让事件顺序和工具行为可以稳定复现。输入 `计算: (12 + 8) * 3` 或 `读取: README.md` 可以观察一条完整执行链路。
+
+## 本地开发
+
+要求 Node.js 22.12 或更高版本。
+
+```bash
+npm install
+npm run setup:runtime
+npm run dev
+```
+
+提交前执行完整验证：
+
+```bash
+npm run verify
+```
+
+仓库内的 [AGENTS.md](AGENTS.md) 是持续开发约束。开始新功能前，应同时阅读它和对应的产品、架构文档。

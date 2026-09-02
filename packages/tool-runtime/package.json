@@ -1,0 +1,11 @@
+{
+  "name": "@betterwork/tool-runtime",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@betterwork/agent-core": "*",
+    "zod": "^4.5.4"
+  }
+}
