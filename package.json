@@ -9,6 +9,8 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace @betterwork/desktop",
+    "dev:start": "bash scripts/dev-start.sh",
+    "dev:stop": "bash scripts/dev-stop.sh",
     "build": "npm run build --workspace @betterwork/desktop",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

@@ -59,6 +59,15 @@ npm run setup:runtime
 npm run dev
 ```
 
+也可以使用带有 PID 和日志管理的开发脚本：
+
+```bash
+npm run dev:start
+npm run dev:stop
+```
+
+默认日志和 PID 文件分别位于 `/tmp/betterwork-dev.log` 与 `/tmp/betterwork-dev.pid`，也可以通过 `BETTERWORK_DEV_LOG`、`BETTERWORK_DEV_PID` 覆盖。
+
 提交前执行完整验证：
 
 ```bash
