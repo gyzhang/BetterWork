@@ -1,0 +1,20 @@
+.DS_Store
+**/.DS_Store
+
+# Dependencies and build outputs
+node_modules/
+dist/
+out/
+release/
+coverage/
+
+# Local configuration and logs
+.env
+.env.*
+!.env.example
+*.log
+
+# Editor metadata
+.idea/
+.vscode/
+
