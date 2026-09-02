@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentRuntimeEvent, ModelProfileInput, ModelProfileSummary, RunSummary } from '@betterwork/agent-protocol';
 import { applyAppearance, bootstrapAppearance, colorSchemes, getWindowTheme, persistAppearance, type AppearanceMode, type AppearancePreference, type ColorScheme, type ResolvedAppearance } from './appearance';
 import { deriveActivityGroups, type ActivityGroup } from './activity';
@@ -77,10 +77,16 @@ export function App(): React.JSX.Element {
   const completedRuns = runs.filter((run) => run.status === 'completed');
 
   const startNewTask = (): void => { activeRunIdRef.current = undefined; setActiveRunId(undefined); setEvents([]); setPrompt(''); setView('work'); };
-  const submit = async (event: FormEvent): Promise<void> => {
-    event.preventDefault(); if (!prompt.trim() || !workspacePath) return;
+  const startRun = async (): Promise<void> => {
+    if (isRunning || !prompt.trim() || !workspacePath) return;
     const result = await window.betterwork.runs.start({ taskId, sessionId, prompt, workspacePath });
     activeRunIdRef.current = result.runId; setActiveRunId(result.runId); setEvents([]); setContextTab('process'); setContextOpen(true); await refreshRuns();
+  };
+  const submit = (event: FormEvent): void => { event.preventDefault(); void startRun(); };
+  const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (event.key !== 'Enter' || (!event.metaKey && !event.ctrlKey) || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    void startRun();
   };
   const selectRun = async (run: RunSummary): Promise<void> => { activeRunIdRef.current = run.id; setActiveRunId(run.id); setPrompt(run.prompt); setEvents(await window.betterwork.runs.listEvents({ runId: run.id })); setView('work'); };
   const openModelEditor = (model?: ModelProfileSummary): void => {
@@ -109,7 +115,7 @@ export function App(): React.JSX.Element {
       {view === 'work' && <>
         <header className="task-header"><div><p className="eyebrow">工作</p><h1>{activeRun ? '继续完成任务' : '开始一件工作'}</h1></div><div className="task-actions"><button className="model-chip" onClick={() => { setView('settings'); setSettingsTab('models'); void refreshModels(); }}>{activeLanguageModel ? activeLanguageModel.name : '选择工作模型'} <span>⌄</span></button><button className="context-toggle" onClick={() => setContextOpen((open) => !open)}>{contextOpen ? '收起上下文' : '查看上下文'}</button></div></header>
         <div className="workspace"><div className="messages">{events.length === 0 ? <Welcome setPrompt={setPrompt} /> : <>{<div className="message user"><span>你</span><p>{prompt}</p></div>}{assistantText && <div className="message assistant"><span>算台</span><p>{assistantText}</p></div>}{completedTools.map((event) => <div className={event.type === 'tool.failed' ? 'tool-card failed' : 'tool-card'} key={event.id}><div><span className="tool-icon" aria-hidden="true">{event.type === 'tool.failed' ? '!' : '✓'}</span><strong>{event.type === 'tool.completed' ? '已完成一个工作步骤' : '工作步骤未完成'}</strong></div><code>{eventDetail(event)}</code></div>)}</>}</div>
-          <form className="composer" onSubmit={(event) => void submit(event)}><div className="workspace-row"><span>工作目录</span><input aria-label="工作目录" value={workspacePath} onChange={(event) => setWorkspacePath(event.target.value)} /><button type="button" className="text-button" onClick={() => void window.betterwork.workspace.selectDirectory().then((selected) => { if (selected) setWorkspacePath(selected); })}>选择</button></div><textarea aria-label="任务输入" value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={3} placeholder="告诉算台你想完成什么工作…" /><div className="composer-footer"><span>{activeLanguageModel ? `${activeLanguageModel.provider} · ${activeLanguageModel.model}` : '未配置模型时使用教学 Provider'}</span>{isRunning && activeRunId ? <button type="button" className="stop" onClick={() => void window.betterwork.runs.cancel({ runId: activeRunId })}>停止</button> : <button type="submit" disabled={!prompt.trim() || !workspacePath}>开始工作 <span aria-hidden="true">↑</span></button>}</div></form>
+          <form className="composer" onSubmit={submit}><div className="workspace-row"><span>工作目录</span><input aria-label="工作目录" value={workspacePath} onChange={(event) => setWorkspacePath(event.target.value)} /><button type="button" className="text-button" onClick={() => void window.betterwork.workspace.selectDirectory().then((selected) => { if (selected) setWorkspacePath(selected); })}>选择</button></div><textarea aria-label="任务输入，按 Command 或 Control 加 Enter 开始工作" value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={handleComposerKeyDown} rows={3} placeholder="告诉算台你想完成什么工作…" /><div className="composer-footer"><span>{activeLanguageModel ? `${activeLanguageModel.provider} · ${activeLanguageModel.model}` : '未配置模型时使用教学 Provider'} <kbd>⌘/Ctrl ↵</kbd></span>{isRunning && activeRunId ? <button type="button" className="stop" onClick={() => void window.betterwork.runs.cancel({ runId: activeRunId })}>停止</button> : <button type="submit" disabled={!prompt.trim() || !workspacePath}>开始工作 <span aria-hidden="true">↑</span></button>}</div></form>
         </div>
       </>}
       {view === 'artifacts' && <CompletedWorkPage runs={completedRuns} onOpen={(run) => void selectRun(run)} />}
