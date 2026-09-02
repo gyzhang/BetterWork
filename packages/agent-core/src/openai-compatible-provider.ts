@@ -26,7 +26,13 @@ export class OpenAICompatibleProvider implements ModelProvider {
       headers: { 'Content-Type': 'application/json', ...(this.config.apiKey ? { Authorization: `Bearer ${this.config.apiKey}` } : {}) },
       body: JSON.stringify({
         model: this.config.model,
-        messages: request.messages,
+        messages: request.messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+          ...(message.toolCallId ? { tool_call_id: message.toolCallId } : {}),
+          ...(message.toolName ? { name: message.toolName } : {}),
+          ...(message.toolCalls ? { tool_calls: message.toolCalls.map((call) => ({ id: call.id, type: 'function', function: { name: call.name, arguments: JSON.stringify(call.input) } })) } : {}),
+        })),
         tools: request.tools.length > 0 ? request.tools.map((tool) => ({ type: 'function', function: { name: tool.name, description: tool.description, parameters: tool.inputSchema } })) : undefined,
         temperature: this.config.temperature ?? 0.7,
         max_tokens: this.config.maxOutputTokens ?? 8192,

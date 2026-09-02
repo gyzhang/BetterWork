@@ -3,21 +3,22 @@ import { z } from 'zod';
 export const messageRoleSchema = z.enum(['system', 'user', 'assistant', 'tool']);
 export type MessageRole = z.infer<typeof messageRoleSchema>;
 
-export const agentMessageSchema = z.object({
-  id: z.string(),
-  role: messageRoleSchema,
-  content: z.string(),
-  toolCallId: z.string().optional(),
-  toolName: z.string().optional(),
-});
-export type AgentMessage = z.infer<typeof agentMessageSchema>;
-
 export const toolCallSchema = z.object({
   id: z.string(),
   name: z.string(),
   input: z.record(z.string(), z.unknown()),
 });
 export type ToolCall = z.infer<typeof toolCallSchema>;
+
+export const agentMessageSchema = z.object({
+  id: z.string(),
+  role: messageRoleSchema,
+  content: z.string(),
+  toolCallId: z.string().optional(),
+  toolName: z.string().optional(),
+  toolCalls: z.array(toolCallSchema).optional(),
+});
+export type AgentMessage = z.infer<typeof agentMessageSchema>;
 
 const eventBaseSchema = z.object({
   id: z.string(),
