@@ -65,7 +65,7 @@ export class ReActAgentEngine implements AgentEngine {
 
         if (messageStarted) {
           yield events.create({ type: 'message.completed', messageId, content });
-          messages.push({ id: messageId, role: 'assistant', content });
+          messages.push({ id: messageId, role: 'assistant', content, ...(pendingToolCall ? { toolCalls: [pendingToolCall] } : {}) });
         }
 
         if (!pendingToolCall) {
@@ -78,6 +78,7 @@ export class ReActAgentEngine implements AgentEngine {
         const tool = tools.get(pendingToolCall.name);
         if (!tool) throw new Error(`Unknown tool: ${pendingToolCall.name}`);
 
+        if (!messageStarted) messages.push({ id: messageId, role: 'assistant', content: '', toolCalls: [pendingToolCall] });
         yield events.create({ type: 'tool.started', toolCall: pendingToolCall });
         const progress: AgentRuntimeEvent[] = [];
         try {
