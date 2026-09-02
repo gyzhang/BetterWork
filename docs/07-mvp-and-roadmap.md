@@ -37,7 +37,7 @@
 
 ### Phase 0 UI Foundation Gate
 
-现有 Renderer 只视为验证 Agent 教学链路的工程原型。进入 Phase 1 前，先按 [UI/UX 体系与落地计划](10-ui-ux-system.md) 完成 UI Foundation：统一视觉 Token、应用外壳、任务工作区、上下文面板和模型设置体验。
+现有 Renderer 只视为验证 Agent 教学链路的工程原型。进入 Phase 1 前，先按 [UI/UX 体系与落地计划](10-ui-ux-system.md) 完成 UI Foundation：统一视觉 Token、多模式多色系外观、应用外壳、任务工作区、上下文面板和模型设置体验。
 
 该 Gate 允许重构 Renderer 的组件和样式结构，但不借机扩张 Agent Core、知识库或 Office 能力。完成后必须保证 Fake Provider 与真实 Provider 的已有链路不回退。
 
