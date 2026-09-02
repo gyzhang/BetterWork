@@ -99,6 +99,7 @@ export interface ModelProfileSummary {
 }
 
 export const modelProfileIdSchema = z.object({ id: z.string().min(1) });
+export const setDefaultModelRequestSchema = z.object({ id: z.string().min(1) });
 export const testModelRequestSchema = modelProfileInputSchema.pick({ baseUrl: true, model: true, role: true, apiKey: true });
 export const updateWindowThemeRequestSchema = z.object({
   backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
@@ -127,6 +128,7 @@ export const IpcChannel = {
   ListModels: 'model:list',
   SaveModel: 'model:save',
   DeleteModel: 'model:delete',
+  SetDefaultModel: 'model:set-default',
   TestModel: 'model:test',
   UpdateWindowTheme: 'window:update-theme',
 } as const;
@@ -147,6 +149,7 @@ export interface BetterWorkDesktopApi {
     list(): Promise<ModelProfileSummary[]>;
     save(input: z.infer<typeof saveModelProfileRequestSchema>): Promise<{ id: string }>;
     delete(input: { id: string }): Promise<{ deleted: boolean }>;
+    setDefault(input: { id: string }): Promise<{ updated: boolean }>;
     test(input: z.infer<typeof testModelRequestSchema>): Promise<{ ok: boolean; message: string }>;
   };
   chrome: {
