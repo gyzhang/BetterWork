@@ -42,11 +42,14 @@
 - [MVP 与路线图](docs/07-mvp-and-roadmap.md)
 - [品牌与视觉方向](docs/08-brand.md)
 - [参考项目与借鉴边界](docs/09-reference-projects.md)
+- [UI/UX 体系与落地计划](docs/10-ui-ux-system.md)
 - [架构决策记录](docs/adr/README.md)
 
 ## 当前阶段
 
 当前正在开发 Phase 0：项目骨架与教学链路。仓库已经具备 Electron 三层结构、类型化 IPC、最小 Agent Loop、工具调用、SQLite Run Journal 与执行时间线。
+
+在进入知识库与研究报告开发之前，项目先完成 [UI Foundation](docs/10-ui-ux-system.md)：统一应用外壳、任务工作区、过程/资料/成果上下文面板和模型设置体验。现有界面只作为工程链路原型，不作为长期产品视觉基线。
 
 Phase 0 当前使用 Fake Model Provider，让事件顺序和工具行为可以稳定复现。输入 `计算: (12 + 8) * 3` 或 `读取: README.md` 可以观察一条完整执行链路。
 
