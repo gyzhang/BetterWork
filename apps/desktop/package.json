@@ -1,0 +1,31 @@
+{
+  "name": "@betterwork/desktop",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview"
+  },
+  "dependencies": {
+    "@betterwork/agent-core": "*",
+    "@betterwork/agent-protocol": "*",
+    "@betterwork/tool-runtime": "*",
+    "better-sqlite3": "^13.0.3",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zod": "^4.5.4",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "5.2.0",
+    "electron": "44.1.1",
+    "electron-vite": "^5.0.0",
+    "vite": "^7.3.1"
+  }
+}
