@@ -24,6 +24,7 @@ const api: BetterWorkDesktopApi = {
     list: () => ipcRenderer.invoke(IpcChannel.ListModels),
     save: (input) => ipcRenderer.invoke(IpcChannel.SaveModel, input),
     delete: (input) => ipcRenderer.invoke(IpcChannel.DeleteModel, input),
+    setDefault: (input) => ipcRenderer.invoke(IpcChannel.SetDefaultModel, input),
     test: (input) => ipcRenderer.invoke(IpcChannel.TestModel, input),
   },
   chrome: {

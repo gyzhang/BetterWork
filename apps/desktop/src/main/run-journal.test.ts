@@ -24,4 +24,13 @@ describe('RunJournal', () => {
     expect(journal.listModels()[0]).not.toHaveProperty('apiKey');
     expect(journal.getModel(id)?.apiKey).toBe('secret-value');
   });
+
+  it('uses an explicitly selected enabled model as the default for its role', () => {
+    journal = new RunJournal(':memory:');
+    const first = journal.saveModel({ name: '第一语言模型', provider: 'openai-compatible', baseUrl: 'http://localhost:8000/v1', model: 'first', role: 'language', apiKey: '', maxContextTokens: 8192, maxOutputTokens: 1024, temperature: 0.2, enabled: true });
+    const second = journal.saveModel({ name: '第二语言模型', provider: 'openai-compatible', baseUrl: 'http://localhost:8000/v1', model: 'second', role: 'language', apiKey: '', maxContextTokens: 8192, maxOutputTokens: 1024, temperature: 0.2, enabled: true });
+    expect(journal.getModelForRun('language')?.id).toBe(first);
+    expect(journal.setDefaultModel(second)).toBe(true);
+    expect(journal.getModelForRun('language')?.id).toBe(second);
+  });
 });

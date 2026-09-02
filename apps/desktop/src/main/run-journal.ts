@@ -138,6 +138,16 @@ export class RunJournal {
     return this.db.prepare('DELETE FROM model_profiles WHERE id = ?').run(id).changes > 0;
   }
 
+  setDefaultModel(id: string): boolean {
+    const target = this.db.prepare('SELECT role, enabled FROM model_profiles WHERE id = ?').get(id) as { role: string; enabled: number } | undefined;
+    if (!target || !target.enabled) return false;
+    const update = this.db.transaction(() => {
+      this.db.prepare('UPDATE model_profiles SET priority = priority + 1 WHERE role = ? AND id != ?').run(target.role, id);
+      return this.db.prepare('UPDATE model_profiles SET priority = 0 WHERE id = ?').run(id).changes > 0;
+    });
+    return update();
+  }
+
   private toModelSummary(row: Record<string, unknown>): ModelProfileSummary {
     return {
       id: String(row.id), name: String(row.name), provider: String(row.provider), baseUrl: String(row.base_url), model: String(row.model),
