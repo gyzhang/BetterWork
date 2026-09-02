@@ -24,7 +24,7 @@ echo "   日志文件：$LOG_FILE"
 : > "$LOG_FILE"
 (
   cd "$PROJECT_ROOT"
-  exec npm run dev
+  exec nohup npm run dev </dev/null
 ) >> "$LOG_FILE" 2>&1 &
 DEV_PID=$!
 printf '%s\n' "$DEV_PID" > "$PID_FILE"
