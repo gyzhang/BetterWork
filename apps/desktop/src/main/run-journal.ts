@@ -226,8 +226,10 @@ export class RunJournal {
     transaction();
   }
 
-  listRuns(): RunSummary[] {
-    const rows = this.db.prepare('SELECT * FROM runs ORDER BY created_at DESC LIMIT 100').all() as RunRow[];
+  listRuns(taskId?: string): RunSummary[] {
+    const rows = (taskId
+      ? this.db.prepare('SELECT * FROM runs WHERE task_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 100').all(taskId)
+      : this.db.prepare('SELECT * FROM runs ORDER BY created_at DESC, rowid DESC LIMIT 100').all()) as RunRow[];
     return rows.map((row) => ({
       id: row.id,
       taskId: row.task_id,

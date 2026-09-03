@@ -6,7 +6,7 @@ const api: BetterWorkDesktopApi = {
   runs: {
     start: (input) => ipcRenderer.invoke(IpcChannel.StartRun, input),
     cancel: (input) => ipcRenderer.invoke(IpcChannel.CancelRun, input),
-    list: () => ipcRenderer.invoke(IpcChannel.ListRuns),
+    list: (input) => ipcRenderer.invoke(IpcChannel.ListRuns, input),
     listEvents: (input) => ipcRenderer.invoke(IpcChannel.ListRunEvents, input),
     onEvent(listener) {
       const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
