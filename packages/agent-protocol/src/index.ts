@@ -209,6 +209,7 @@ export interface ArtifactSummary {
 export interface ArtifactDetail extends ArtifactSummary {
   content: string;
   contentHash: string;
+  evidence: EvidenceSummary[];
 }
 
 export interface ArtifactVersionSummary {
@@ -223,6 +224,7 @@ export interface ArtifactVersionSummary {
 export interface ArtifactVersionDetail extends ArtifactVersionSummary {
   content: string;
   contentHash: string;
+  evidence: EvidenceSummary[];
 }
 
 export const saveMarkdownArtifactRequestSchema = z.object({

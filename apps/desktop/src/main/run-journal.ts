@@ -64,6 +64,10 @@ export class RunJournal {
         origin TEXT NOT NULL DEFAULT 'assistant-run',
         created_at INTEGER NOT NULL, UNIQUE(artifact_id, version_number)
       );
+      CREATE TABLE IF NOT EXISTS artifact_version_evidence (
+        version_id TEXT NOT NULL, evidence_id TEXT NOT NULL,
+        PRIMARY KEY(version_id, evidence_id)
+      );
       CREATE TABLE IF NOT EXISTS runs (
         id TEXT PRIMARY KEY,
         task_id TEXT NOT NULL,
@@ -156,7 +160,7 @@ export class RunJournal {
       const run = this.db.prepare('SELECT task_id FROM runs WHERE id = ?').get(input.runId) as { task_id: string } | undefined;
       if (!run || run.task_id !== input.taskId) throw new Error('Run does not belong to task');
     }
-    const existing = input.artifactId ? this.db.prepare('SELECT id, workspace_id, task_id FROM artifacts WHERE id = ?').get(input.artifactId) as { id: string; workspace_id: string; task_id: string } | undefined : undefined;
+    const existing = input.artifactId ? this.db.prepare('SELECT id, workspace_id, task_id, current_version_id FROM artifacts WHERE id = ?').get(input.artifactId) as { id: string; workspace_id: string; task_id: string; current_version_id: string } | undefined : undefined;
     if (input.artifactId && (!existing || existing.task_id !== input.taskId || existing.workspace_id !== task.workspace_id)) throw new Error('Artifact does not belong to task');
     const artifactId = existing?.id ?? randomUUID();
     const versionId = randomUUID();
@@ -170,6 +174,8 @@ export class RunJournal {
         this.db.prepare('INSERT INTO artifacts (id, workspace_id, task_id, type, title, current_version_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(artifactId, task.workspace_id, input.taskId, 'markdown', input.title, versionId, now, now);
       }
       this.db.prepare('INSERT INTO artifact_versions (id, artifact_id, version_number, content, content_hash, source_run_id, origin, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(versionId, artifactId, versionNumber, input.content, hash, input.runId ?? '', input.origin, now);
+      if (input.origin === 'assistant-run') this.db.prepare('INSERT OR IGNORE INTO artifact_version_evidence (version_id, evidence_id) SELECT ?, id FROM evidence WHERE task_id = ? AND run_id = ?').run(versionId, input.taskId, input.runId);
+      else if (existing) this.db.prepare('INSERT OR IGNORE INTO artifact_version_evidence (version_id, evidence_id) SELECT ?, evidence_id FROM artifact_version_evidence WHERE version_id = ?').run(versionId, existing.current_version_id);
     })();
     return this.getArtifact(artifactId)!;
   }
@@ -183,7 +189,7 @@ export class RunJournal {
 
   getArtifactDetail(id: string): ArtifactDetail | undefined {
     const row = this.db.prepare(`SELECT a.id, a.workspace_id, a.task_id, a.type, a.title, a.current_version_id, v.version_number, v.source_run_id, v.origin, v.content, v.content_hash, a.created_at, a.updated_at FROM artifacts a JOIN artifact_versions v ON v.id = a.current_version_id WHERE a.id = ?`).get(id) as (ArtifactRow & { content: string; content_hash: string }) | undefined;
-    return row ? { ...this.toArtifactSummary(row), content: row.content, contentHash: row.content_hash } : undefined;
+    return row ? { ...this.toArtifactSummary(row), content: row.content, contentHash: row.content_hash, evidence: this.listArtifactVersionEvidence(row.current_version_id) } : undefined;
   }
 
   listArtifactVersions(artifactId: string): ArtifactVersionSummary[] {
@@ -193,7 +199,7 @@ export class RunJournal {
 
   getArtifactVersionDetail(id: string): ArtifactVersionDetail | undefined {
     const row = this.db.prepare('SELECT id, artifact_id, version_number, source_run_id, origin, content, content_hash, created_at FROM artifact_versions WHERE id = ?').get(id) as ArtifactVersionRow | undefined;
-    return row && row.content !== undefined && row.content_hash !== undefined ? { ...this.toArtifactVersionSummary(row), content: row.content, contentHash: row.content_hash } : undefined;
+    return row && row.content !== undefined && row.content_hash !== undefined ? { ...this.toArtifactVersionSummary(row), content: row.content, contentHash: row.content_hash, evidence: this.listArtifactVersionEvidence(row.id) } : undefined;
   }
 
   createRun(run: RunSummary): void {
@@ -335,6 +341,11 @@ export class RunJournal {
 
   private toArtifactVersionSummary(row: ArtifactVersionRow): ArtifactVersionSummary {
     return { id: row.id, artifactId: row.artifact_id, versionNumber: row.version_number, origin: row.origin, ...(row.source_run_id ? { sourceRunId: row.source_run_id } : {}), createdAt: row.created_at };
+  }
+
+  private listArtifactVersionEvidence(versionId: string): EvidenceSummary[] {
+    const rows = this.db.prepare('SELECT e.* FROM artifact_version_evidence ave JOIN evidence e ON e.id = ave.evidence_id WHERE ave.version_id = ? ORDER BY e.captured_at DESC, e.rowid DESC').all(versionId) as EvidenceRow[];
+    return rows.map((row) => ({ id: row.id, taskId: row.task_id, runId: row.run_id, sourceType: 'local-file', sourceUri: row.source_uri, title: row.title, locator: row.locator, excerpt: row.excerpt, contentHash: row.content_hash, capturedAt: row.captured_at }));
   }
 
   close(): void {

@@ -41,6 +41,7 @@ describe('RunJournal', () => {
     const task = journal.createTask(workspace.id, '季度复盘', '根据资料完成季度复盘');
     journal.createRun({ id: 'run-1', taskId: task.task.id, sessionId: task.sessionId, prompt: '生成复盘', status: 'completed', createdAt: 1, completedAt: 2 });
     journal.createRun({ id: 'run-2', taskId: task.task.id, sessionId: task.sessionId, prompt: '修改复盘', status: 'completed', createdAt: 3, completedAt: 4 });
+    journal.saveLocalEvidence({ taskId: task.task.id, runId: 'run-2', sourceUri: '/notes/customer.md', title: '客户访谈', locator: '段落 2', excerpt: '续约风险需要跟进。', contentHash: 'evidence-hash' });
     const first = journal.saveMarkdownArtifact({ taskId: task.task.id, origin: 'assistant-run', runId: 'run-1', title: '季度复盘', content: '# 第一版' });
     const revised = journal.saveMarkdownArtifact({ artifactId: first.id, taskId: task.task.id, origin: 'assistant-run', runId: 'run-2', title: '季度复盘（修订）', content: '# 第二版' });
     const manuallyEdited = journal.saveMarkdownArtifact({ artifactId: first.id, taskId: task.task.id, origin: 'user-edit', title: '季度复盘（人工修订）', content: '# 第三版' });
@@ -49,7 +50,7 @@ describe('RunJournal', () => {
     expect(manuallyEdited).toMatchObject({ id: first.id, title: '季度复盘（人工修订）', versionNumber: 3, origin: 'user-edit' });
     expect(manuallyEdited.sourceRunId).toBeUndefined();
     expect(journal.listArtifacts(task.task.id)).toEqual([expect.objectContaining({ id: first.id, versionNumber: 3, origin: 'user-edit' })]);
-    expect(journal.getArtifactDetail(first.id)).toMatchObject({ id: first.id, content: '# 第三版', versionNumber: 3, origin: 'user-edit' });
+    expect(journal.getArtifactDetail(first.id)).toMatchObject({ id: first.id, content: '# 第三版', versionNumber: 3, origin: 'user-edit', evidence: [expect.objectContaining({ title: '客户访谈', locator: '段落 2' })] });
     expect(journal.listArtifactVersions(first.id)).toEqual([
       expect.objectContaining({ versionNumber: 3, origin: 'user-edit' }),
       expect.objectContaining({ versionNumber: 2, origin: 'assistant-run', sourceRunId: 'run-2' }),
@@ -58,7 +59,7 @@ describe('RunJournal', () => {
     const version = journal.listArtifactVersions(first.id).find((item) => item.versionNumber === 2);
     expect(version).toBeDefined();
     if (!version) throw new Error('Expected the second artifact version');
-    expect(journal.getArtifactVersionDetail(version.id)).toMatchObject({ id: version.id, content: '# 第二版', versionNumber: 2, sourceRunId: 'run-2' });
+    expect(journal.getArtifactVersionDetail(version.id)).toMatchObject({ id: version.id, content: '# 第二版', versionNumber: 2, sourceRunId: 'run-2', evidence: [expect.objectContaining({ title: '客户访谈' })] });
   });
 
   it('persists runs and ordered events', () => {
