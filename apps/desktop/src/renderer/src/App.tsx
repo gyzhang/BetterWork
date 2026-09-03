@@ -1,5 +1,5 @@
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
-import type { AgentRuntimeEvent, ModelProfileInput, ModelProfileSummary, RunSummary } from '@betterwork/agent-protocol';
+import type { AgentRuntimeEvent, KnowledgeDocumentSummary, KnowledgeSearchResult, ModelProfileInput, ModelProfileSummary, RunSummary } from '@betterwork/agent-protocol';
 import { applyAppearance, bootstrapAppearance, colorSchemes, getWindowTheme, persistAppearance, type AppearanceMode, type AppearancePreference, type ColorScheme, type ResolvedAppearance } from './appearance';
 import { deriveActivityGroups, type ActivityGroup } from './activity';
 
@@ -33,6 +33,11 @@ export function App(): React.JSX.Element {
   const activeRunIdRef = useRef<string | undefined>(undefined);
   const [events, setEvents] = useState<AgentRuntimeEvent[]>([]);
   const [models, setModels] = useState<ModelProfileSummary[]>([]);
+  const [knowledgeDocuments, setKnowledgeDocuments] = useState<KnowledgeDocumentSummary[]>([]);
+  const [knowledgeResults, setKnowledgeResults] = useState<KnowledgeSearchResult[]>([]);
+  const [knowledgeQuery, setKnowledgeQuery] = useState('');
+  const [knowledgeMessage, setKnowledgeMessage] = useState('');
+  const [isImportingKnowledge, setIsImportingKnowledge] = useState(false);
   const [view, setView] = useState<AppView>('work');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.localStorage.getItem('betterwork-sidebar-collapsed') === 'true');
   const [contextTab, setContextTab] = useState<ContextTab>('process');
@@ -48,9 +53,10 @@ export function App(): React.JSX.Element {
 
   const refreshRuns = async (): Promise<void> => setRuns(await window.betterwork.runs.list());
   const refreshModels = async (): Promise<void> => setModels(await window.betterwork.models.list());
+  const refreshKnowledge = async (): Promise<void> => setKnowledgeDocuments(await window.betterwork.knowledge.list());
 
   useEffect(() => {
-    void refreshRuns(); void refreshModels(); void window.betterwork.workspace.getDefaultPath().then(setWorkspacePath);
+    void refreshRuns(); void refreshModels(); void refreshKnowledge(); void window.betterwork.workspace.getDefaultPath().then(setWorkspacePath);
     return window.betterwork.runs.onEvent((event) => {
       setEvents((current) => event.runId === activeRunIdRef.current ? [...current, event] : current);
       if (event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.cancelled') void refreshRuns();
@@ -106,6 +112,23 @@ export function App(): React.JSX.Element {
   const testModel = async (): Promise<void> => { try { const result = await window.betterwork.models.test({ ...modelForm, ...(editingModelId ? { id: editingModelId } : {}) }); setModelMessage(result.message); await refreshModels(); } catch (error) { setModelMessage(error instanceof Error ? error.message : '连接测试失败。'); } };
   const toggleModel = (model: ModelProfileSummary): void => { void window.betterwork.models.setEnabled({ id: model.id, enabled: !model.enabled }).then(refreshModels); };
   const setDefaultModel = (model: ModelProfileSummary): void => { void window.betterwork.models.setDefault({ id: model.id }).then(async (result) => { setModelMessage(result.updated ? `${model.name} 已设为${roleName[model.role]}默认模型。` : '仅已启用模型可以设为默认。'); await refreshModels(); }); };
+  const openKnowledge = (): void => { setView('knowledge'); void refreshKnowledge(); };
+  const importKnowledge = async (): Promise<void> => {
+    setIsImportingKnowledge(true); setKnowledgeMessage('');
+    try {
+      const result = await window.betterwork.knowledge.importFromDialog();
+      if (result.imported.length || result.skipped.length) setKnowledgeMessage(`已整理 ${result.imported.length} 份资料${result.skipped.length ? `；${result.skipped.length} 份未导入` : ''}。`);
+      await refreshKnowledge();
+    } catch (error) { setKnowledgeMessage(error instanceof Error ? error.message : '导入资料失败。'); }
+    finally { setIsImportingKnowledge(false); }
+  };
+  const searchKnowledge = async (event: FormEvent): Promise<void> => {
+    event.preventDefault();
+    const query = knowledgeQuery.trim();
+    if (!query) { setKnowledgeResults([]); return; }
+    try { setKnowledgeResults(await window.betterwork.knowledge.search({ query })); }
+    catch (error) { setKnowledgeMessage(error instanceof Error ? error.message : '检索资料失败。'); }
+  };
 
   return <main className={sidebarCollapsed ? 'app-shell sidebar-collapsed' : 'app-shell'}>
     <aside className="sidebar">
@@ -114,7 +137,7 @@ export function App(): React.JSX.Element {
       <nav className="primary-nav" aria-label="主要导航">
         <button className={view === 'work' ? 'active' : ''} onClick={() => setView('work')}><span aria-hidden="true">▣</span> 工作</button>
         <button className={view === 'artifacts' ? 'active' : ''} onClick={() => setView('artifacts')}><span aria-hidden="true">◇</span> 成果</button>
-        <button className={view === 'knowledge' ? 'active' : ''} onClick={() => setView('knowledge')}><span aria-hidden="true">▤</span> 知识 <em>即将推出</em></button>
+        <button className={view === 'knowledge' ? 'active' : ''} onClick={openKnowledge}><span aria-hidden="true">▤</span> 知识</button>
       </nav>
       <div className="sidebar-divider" /><p className="section-label">最近任务</p><div className="run-list">{runs.length === 0 && <p className="empty-runs">你的任务会保存在这里。</p>}{runs.map((run) => <button key={run.id} className={run.id === activeRunId ? 'run-item active' : 'run-item'} onClick={() => void selectRun(run)}><span>{run.prompt}</span><small>{runStatusName[run.status]} · {formatTime(run.createdAt)}</small></button>)}</div>
       <button className={view === 'settings' ? 'settings-nav active' : 'settings-nav'} onClick={() => { setView('settings'); setSettingsTab('models'); void refreshModels(); }}><span aria-hidden="true">⚙</span> 设置</button><div className="sidebar-footer">算台 BetterWork · Phase 0</div>
@@ -127,7 +150,7 @@ export function App(): React.JSX.Element {
         </div>
       </>}
       {view === 'artifacts' && <CompletedWorkPage runs={completedRuns} onOpen={(run) => void selectRun(run)} />}
-      {view === 'knowledge' && <EmptyPage eyebrow="知识" title="你的资料，正在等待被组织" detail="本地知识库将在下一阶段接入；资料仍将由你在本机管理。" />}
+      {view === 'knowledge' && <KnowledgePage documents={knowledgeDocuments} results={knowledgeResults} query={knowledgeQuery} setQuery={setKnowledgeQuery} message={knowledgeMessage} importing={isImportingKnowledge} onImport={() => void importKnowledge()} onSearch={(event) => void searchKnowledge(event)} />}
       {view === 'settings' && <SettingsPage tab={settingsTab} setTab={setSettingsTab} models={filteredModels} modelFilter={modelFilter} setModelFilter={setModelFilter} activeLanguageModel={activeLanguageModel} defaultModelIds={defaultModelIds} onAdd={() => openModelEditor()} onEdit={openModelEditor} onToggle={toggleModel} onSetDefault={setDefaultModel} onDelete={(model) => void window.betterwork.models.delete({ id: model.id }).then(refreshModels)} appearance={appearance} resolvedAppearance={resolvedAppearance} onMode={(mode) => setAppearanceValue({ ...appearance, mode })} onScheme={(scheme) => setAppearanceValue({ ...appearance, scheme })} modelMessage={modelMessage} />}
     </section>
     {view === 'work' && <ContextPanel open={contextOpen} setOpen={setContextOpen} tab={contextTab} setTab={setContextTab} events={events} activeRun={activeRun} activityGroups={activityGroups} />}
@@ -138,6 +161,11 @@ export function App(): React.JSX.Element {
 function Welcome({ setPrompt }: { setPrompt: (value: string) => void }): React.JSX.Element { return <div className="welcome"><div className="abacus" aria-hidden="true"><i /><i /><i /><i /></div><p className="eyebrow">算台 · 知识工作台</p><h2>以我所知，成我所作。</h2><p>从一个清楚的问题开始。算台会协助你把过程沉淀为可以继续使用的成果。</p><div className="examples"><button onClick={() => setPrompt('计算: (128 + 72) / 4')}>计算一组数据</button><button onClick={() => setPrompt('读取: README.md')}>读取一份资料</button></div></div>; }
 function EmptyContext({ title, detail }: { title: string; detail: string }): React.JSX.Element { return <div className="empty-context"><span aria-hidden="true">◇</span><strong>{title}</strong><p>{detail}</p></div>; }
 function EmptyPage({ eyebrow, title, detail }: { eyebrow: string; title: string; detail: string }): React.JSX.Element { return <section className="empty-page"><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{detail}</p></section>; }
+function KnowledgePage({ documents, results, query, setQuery, message, importing, onImport, onSearch }: { documents: KnowledgeDocumentSummary[]; results: KnowledgeSearchResult[]; query: string; setQuery: (query: string) => void; message: string; importing: boolean; onImport: () => void; onSearch: (event: FormEvent) => void }): React.JSX.Element {
+  const showingResults = Boolean(query.trim());
+  const items: Array<{ document: KnowledgeDocumentSummary; excerpt?: string }> = showingResults ? results.map((result) => ({ document: result.document, excerpt: result.excerpt })) : documents.map((document) => ({ document }));
+  return <section className="knowledge-page"><header><div><p className="eyebrow">知识 · 个人资料库</p><h1>让资料成为下一次工作的起点</h1><p>资料保留在你的本机路径；算台只建立可重建的本地文本索引。当前支持 Markdown 与文本文件。</p></div><button className="primary-button" disabled={importing} onClick={onImport}>{importing ? '正在导入…' : '＋ 导入资料'}</button></header><form className="knowledge-search" onSubmit={onSearch}><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索资料库中的内容…" aria-label="搜索个人资料库" /><button type="submit">搜索</button>{showingResults && <button type="button" className="clear-search" onClick={() => setQuery('')}>清除</button>}</form>{message && <p className="inline-message">{message}</p>}<div className="knowledge-summary"><span>{showingResults ? `找到 ${items.length} 条相关资料` : `已整理 ${documents.length} 份资料`}</span><small>{showingResults ? '检索仅在本地资料库中进行' : '下一步将支持 PDF、Office 与语义检索'}</small></div>{items.length === 0 ? <EmptyPage eyebrow={showingResults ? '没有匹配结果' : '从一份资料开始'} title={showingResults ? '换个关键词试试' : '把常用资料放进你的资料库'} detail={showingResults ? '当前先按文本内容进行本地检索。' : '导入 Markdown 或文本文件后，它们会在后续研究和写作中成为可引用的个人资料。'} /> : <div className="knowledge-list">{items.map(({ document, excerpt }) => <article className="knowledge-card" key={document.id}><span className={`knowledge-format ${document.format}`}>{document.format === 'markdown' ? 'MD' : 'TXT'}</span><div><strong>{document.title}</strong>{excerpt && <p>{excerpt}</p>}<small>{document.sourcePath} · 更新于 {formatTime(document.updatedAt)}</small></div></article>)}</div>}</section>;
+}
 function CompletedWorkPage({ runs, onOpen }: { runs: RunSummary[]; onOpen: (run: RunSummary) => void }): React.JSX.Element { return <section className="completed-work-page"><header><div><p className="eyebrow">成果</p><h1>已完成的工作</h1><p>Phase 0 先展示可以回看的任务交付。研究报告、Word、Excel 与 PPT 将在后续以独立 Artifact 形式管理。</p></div><span className="work-count">{runs.length} 项</span></header>{runs.length === 0 ? <EmptyPage eyebrow="尚无交付" title="完成一项工作，它会出现在这里" detail="当前可使用计算和读取资料的教学链路；后续这里会承载可继续编辑的报告、表格和演示。" /> : <div className="completed-work-list">{runs.map((run) => <button className="completed-work-card" key={run.id} onClick={() => onOpen(run)}><span className="completed-work-icon" aria-hidden="true">✓</span><div><strong>{run.prompt}</strong><p>已完成 · {formatTime(run.completedAt ?? run.createdAt)}</p></div><span aria-hidden="true">›</span></button>)}</div>}</section>; }
 
 function ContextPanel({ open, setOpen, tab, setTab, events, activeRun, activityGroups }: { open: boolean; setOpen: (open: boolean) => void; tab: ContextTab; setTab: (tab: ContextTab) => void; events: AgentRuntimeEvent[]; activeRun?: RunSummary | undefined; activityGroups: ActivityGroup[] }): React.JSX.Element {

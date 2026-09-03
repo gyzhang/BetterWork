@@ -31,6 +31,11 @@ const api: BetterWorkDesktopApi = {
   chrome: {
     updateTheme: (input) => ipcRenderer.invoke(IpcChannel.UpdateWindowTheme, input),
   },
+  knowledge: {
+    list: () => ipcRenderer.invoke(IpcChannel.ListKnowledge),
+    importFromDialog: () => ipcRenderer.invoke(IpcChannel.ImportKnowledge),
+    search: (input) => ipcRenderer.invoke(IpcChannel.SearchKnowledge, input),
+  },
 };
 
 contextBridge.exposeInMainWorld('betterwork', api);
