@@ -1,5 +1,5 @@
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
-import type { AgentRuntimeEvent, KnowledgeDocumentSummary, KnowledgeSearchResult, ModelProfileInput, ModelProfileSummary, RunSummary, WorkspaceSummary } from '@betterwork/agent-protocol';
+import type { AgentRuntimeEvent, EvidenceSummary, KnowledgeDocumentSummary, KnowledgeSearchResult, ModelProfileInput, ModelProfileSummary, RunSummary, WorkspaceSummary } from '@betterwork/agent-protocol';
 import { applyAppearance, bootstrapAppearance, colorSchemes, getWindowTheme, persistAppearance, type AppearanceMode, type AppearancePreference, type ColorScheme, type ResolvedAppearance } from './appearance';
 import { deriveActivityGroups, type ActivityGroup } from './activity';
 
@@ -27,10 +27,12 @@ export function App(): React.JSX.Element {
   const [prompt, setPrompt] = useState('计算: (12 + 8) * 3');
   const [workspace, setWorkspace] = useState<WorkspaceSummary>();
   const [activeTask, setActiveTask] = useState<{ id: string; sessionId: string; title: string }>();
+  const activeTaskIdRef = useRef<string | undefined>(undefined);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [activeRunId, setActiveRunId] = useState<string>();
   const activeRunIdRef = useRef<string | undefined>(undefined);
   const [events, setEvents] = useState<AgentRuntimeEvent[]>([]);
+  const [evidence, setEvidence] = useState<EvidenceSummary[]>([]);
   const [models, setModels] = useState<ModelProfileSummary[]>([]);
   const [knowledgeDocuments, setKnowledgeDocuments] = useState<KnowledgeDocumentSummary[]>([]);
   const [knowledgeResults, setKnowledgeResults] = useState<KnowledgeSearchResult[]>([]);
@@ -53,12 +55,16 @@ export function App(): React.JSX.Element {
   const refreshRuns = async (): Promise<void> => setRuns(await window.betterwork.runs.list());
   const refreshModels = async (): Promise<void> => setModels(await window.betterwork.models.list());
   const refreshKnowledge = async (): Promise<void> => setKnowledgeDocuments(await window.betterwork.knowledge.list());
+  const refreshEvidence = async (taskId = activeTaskIdRef.current): Promise<void> => {
+    if (!taskId) { setEvidence([]); return; }
+    setEvidence(await window.betterwork.evidence.list({ taskId }));
+  };
 
   useEffect(() => {
     void refreshRuns(); void refreshModels(); void refreshKnowledge(); void window.betterwork.workspace.getDefault().then(setWorkspace);
     return window.betterwork.runs.onEvent((event) => {
       setEvents((current) => event.runId === activeRunIdRef.current ? [...current, event] : current);
-      if (event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.cancelled') void refreshRuns();
+      if (event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.cancelled') { void refreshRuns(); void refreshEvidence(); }
     });
   }, []);
 
@@ -88,14 +94,14 @@ export function App(): React.JSX.Element {
   const filteredModels = models.filter((model) => modelFilter === 'all' || model.role === modelFilter);
   const completedRuns = runs.filter((run) => run.status === 'completed');
 
-  const startNewTask = (): void => { activeRunIdRef.current = undefined; setActiveRunId(undefined); setActiveTask(undefined); setEvents([]); setPrompt(''); setView('work'); };
+  const startNewTask = (): void => { activeRunIdRef.current = undefined; activeTaskIdRef.current = undefined; setActiveRunId(undefined); setActiveTask(undefined); setEvidence([]); setEvents([]); setPrompt(''); setView('work'); };
   const startRun = async (): Promise<void> => {
     if (isRunning || !prompt.trim() || !workspace) return;
     let task = activeTask;
     if (!task) {
       const created = await window.betterwork.tasks.create({ workspaceId: workspace.id, title: prompt.trim().slice(0, 80), goal: prompt.trim() });
       task = { id: created.task.id, sessionId: created.sessionId, title: created.task.title };
-      setActiveTask(task);
+      activeTaskIdRef.current = task.id; setActiveTask(task);
     }
     const result = await window.betterwork.runs.start({ taskId: task.id, sessionId: task.sessionId, prompt, workspacePath: workspace.rootPath });
     activeRunIdRef.current = result.runId; setActiveRunId(result.runId); setEvents([]); setContextTab('process'); setContextOpen(true); await refreshRuns();
@@ -106,7 +112,7 @@ export function App(): React.JSX.Element {
     event.preventDefault();
     void startRun();
   };
-  const selectRun = async (run: RunSummary): Promise<void> => { activeRunIdRef.current = run.id; setActiveRunId(run.id); setActiveTask({ id: run.taskId, sessionId: run.sessionId, title: run.prompt.slice(0, 80) }); setPrompt(run.prompt); setEvents(await window.betterwork.runs.listEvents({ runId: run.id })); setView('work'); };
+  const selectRun = async (run: RunSummary): Promise<void> => { activeRunIdRef.current = run.id; activeTaskIdRef.current = run.taskId; setActiveRunId(run.id); setActiveTask({ id: run.taskId, sessionId: run.sessionId, title: run.prompt.slice(0, 80) }); setPrompt(run.prompt); setEvents(await window.betterwork.runs.listEvents({ runId: run.id })); await refreshEvidence(run.taskId); setView('work'); };
   const openModelEditor = (model?: ModelProfileSummary): void => {
     setModelMessage('');
     if (model) { setEditingModelId(model.id); setModelForm({ name: model.name, provider: model.provider, baseUrl: model.baseUrl, model: model.model, role: model.role, apiKey: '', maxContextTokens: model.maxContextTokens, maxOutputTokens: model.maxOutputTokens, temperature: model.temperature, enabled: model.enabled, priority: model.priority }); }
@@ -158,7 +164,7 @@ export function App(): React.JSX.Element {
       {view === 'knowledge' && <KnowledgePage documents={knowledgeDocuments} results={knowledgeResults} query={knowledgeQuery} setQuery={setKnowledgeQuery} message={knowledgeMessage} importing={isImportingKnowledge} onImport={() => void importKnowledge()} onSearch={(event) => void searchKnowledge(event)} />}
       {view === 'settings' && <SettingsPage tab={settingsTab} setTab={setSettingsTab} models={filteredModels} modelFilter={modelFilter} setModelFilter={setModelFilter} activeLanguageModel={activeLanguageModel} defaultModelIds={defaultModelIds} onAdd={() => openModelEditor()} onEdit={openModelEditor} onToggle={toggleModel} onSetDefault={setDefaultModel} onDelete={(model) => void window.betterwork.models.delete({ id: model.id }).then(refreshModels)} appearance={appearance} resolvedAppearance={resolvedAppearance} onMode={(mode) => setAppearanceValue({ ...appearance, mode })} onScheme={(scheme) => setAppearanceValue({ ...appearance, scheme })} modelMessage={modelMessage} />}
     </section>
-    {view === 'work' && <ContextPanel open={contextOpen} setOpen={setContextOpen} tab={contextTab} setTab={setContextTab} events={events} activeRun={activeRun} activityGroups={activityGroups} />}
+    {view === 'work' && <ContextPanel open={contextOpen} setOpen={setContextOpen} tab={contextTab} setTab={setContextTab} events={events} evidence={evidence} activeRun={activeRun} activityGroups={activityGroups} />}
     {modelEditorOpen && <ModelEditor form={modelForm} setForm={setModelForm} editing={Boolean(editingModelId)} message={modelMessage} onClose={() => setModelEditorOpen(false)} onSave={saveModel} onTest={() => void testModel()} />}
   </main>;
 }
@@ -173,9 +179,9 @@ function KnowledgePage({ documents, results, query, setQuery, message, importing
 }
 function CompletedWorkPage({ runs, onOpen }: { runs: RunSummary[]; onOpen: (run: RunSummary) => void }): React.JSX.Element { return <section className="completed-work-page"><header><div><p className="eyebrow">成果</p><h1>已完成的工作</h1><p>Phase 0 先展示可以回看的任务交付。研究报告、Word、Excel 与 PPT 将在后续以独立 Artifact 形式管理。</p></div><span className="work-count">{runs.length} 项</span></header>{runs.length === 0 ? <EmptyPage eyebrow="尚无交付" title="完成一项工作，它会出现在这里" detail="当前可使用计算和读取资料的教学链路；后续这里会承载可继续编辑的报告、表格和演示。" /> : <div className="completed-work-list">{runs.map((run) => <button className="completed-work-card" key={run.id} onClick={() => onOpen(run)}><span className="completed-work-icon" aria-hidden="true">✓</span><div><strong>{run.prompt}</strong><p>已完成 · {formatTime(run.completedAt ?? run.createdAt)}</p></div><span aria-hidden="true">›</span></button>)}</div>}</section>; }
 
-function ContextPanel({ open, setOpen, tab, setTab, events, activeRun, activityGroups }: { open: boolean; setOpen: (open: boolean) => void; tab: ContextTab; setTab: (tab: ContextTab) => void; events: AgentRuntimeEvent[]; activeRun?: RunSummary | undefined; activityGroups: ActivityGroup[] }): React.JSX.Element {
+function ContextPanel({ open, setOpen, tab, setTab, events, evidence, activeRun, activityGroups }: { open: boolean; setOpen: (open: boolean) => void; tab: ContextTab; setTab: (tab: ContextTab) => void; events: AgentRuntimeEvent[]; evidence: EvidenceSummary[]; activeRun?: RunSummary | undefined; activityGroups: ActivityGroup[] }): React.JSX.Element {
   if (!open) return <aside className="context-collapsed"><button aria-label="展开上下文面板" onClick={() => setOpen(true)}>◀</button></aside>;
-  return <aside className="context-panel"><div className="context-topline"><span>当前任务</span><button aria-label="收起上下文面板" onClick={() => setOpen(false)}>›</button></div><div className="context-tabs" role="tablist" aria-label="任务上下文">{([['process', '过程'], ['sources', '资料'], ['artifacts', '成果']] as const).map(([key, label]) => <button key={key} role="tab" aria-selected={tab === key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>{label}</button>)}</div><div className="context-content">{tab === 'process' && (events.length === 0 ? <EmptyContext title="等待任务开始" detail="开始后，这里会按工作阶段呈现过程，而不是堆叠底层日志。" /> : <div className="activity-list"><div className="activity-summary"><span className={`status-dot ${activeRun?.status === 'running' ? 'running' : ''}`} /><div><strong>{activeRun ? runStatusName[activeRun.status] : '正在处理任务'}</strong><p>{activityGroups.length} 个工作阶段</p></div></div>{activityGroups.map((group) => <ActivityGroupRow group={group} key={group.id} />)}</div>)}{tab === 'sources' && <EmptyContext title="尚无引用资料" detail="知识库与网络资料会在研究工作流进入后显示在这里。" />}{tab === 'artifacts' && <EmptyContext title="尚无工作成果" detail="报告、分析、文档和演示会作为可继续编辑的成果出现在这里。" />}</div></aside>;
+  return <aside className="context-panel"><div className="context-topline"><span>当前任务</span><button aria-label="收起上下文面板" onClick={() => setOpen(false)}>›</button></div><div className="context-tabs" role="tablist" aria-label="任务上下文">{([['process', '过程'], ['sources', '资料'], ['artifacts', '成果']] as const).map(([key, label]) => <button key={key} role="tab" aria-selected={tab === key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>{label}</button>)}</div><div className="context-content">{tab === 'process' && (events.length === 0 ? <EmptyContext title="等待任务开始" detail="开始后，这里会按工作阶段呈现过程，而不是堆叠底层日志。" /> : <div className="activity-list"><div className="activity-summary"><span className={`status-dot ${activeRun?.status === 'running' ? 'running' : ''}`} /><div><strong>{activeRun ? runStatusName[activeRun.status] : '正在处理任务'}</strong><p>{activityGroups.length} 个工作阶段</p></div></div>{activityGroups.map((group) => <ActivityGroupRow group={group} key={group.id} />)}</div>)}{tab === 'sources' && (evidence.length === 0 ? <EmptyContext title="尚无引用资料" detail="检索个人资料库后，相关来源会显示在这里。" /> : <div className="evidence-list">{evidence.map((item) => <article className="evidence-row" key={item.id}><span aria-hidden="true">▤</span><div><strong>{item.title}</strong><small>{item.locator} · 本地资料</small><p>{item.excerpt}</p></div></article>)}</div>)}{tab === 'artifacts' && <EmptyContext title="尚无工作成果" detail="报告、分析、文档和演示会作为可继续编辑的成果出现在这里。" />}</div></aside>;
 }
 
 function ActivityGroupRow({ group }: { group: ActivityGroup }): React.JSX.Element { return <div className={`activity-row ${group.status}`}><span className="activity-marker" /><div><strong>{group.title}</strong><p>{group.description}</p><small>{group.status === 'running' ? '进行中' : formatTime(group.updatedAt)}</small></div></div>; }

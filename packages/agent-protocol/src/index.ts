@@ -159,6 +159,22 @@ export interface KnowledgeSearchResult {
   excerpt: string;
 }
 
+export interface EvidenceSummary {
+  id: string;
+  taskId: string;
+  runId: string;
+  sourceType: 'local-file';
+  sourceUri: string;
+  title: string;
+  locator: string;
+  excerpt: string;
+  contentHash: string;
+  capturedAt: number;
+}
+
+export const listEvidenceRequestSchema = z.object({ taskId: z.string().min(1) });
+export type ListEvidenceRequest = z.infer<typeof listEvidenceRequestSchema>;
+
 export const modelProfileIdSchema = z.object({ id: z.string().min(1) });
 export const setDefaultModelRequestSchema = z.object({ id: z.string().min(1) });
 export const setModelEnabledRequestSchema = z.object({ id: z.string().min(1), enabled: z.boolean() });
@@ -188,6 +204,7 @@ export const IpcChannel = {
   GetDefaultWorkspace: 'workspace:get-default',
   SelectWorkspace: 'workspace:select',
   CreateTask: 'task:create',
+  ListEvidence: 'evidence:list',
   ListModels: 'model:list',
   SaveModel: 'model:save',
   DeleteModel: 'model:delete',
@@ -214,6 +231,9 @@ export interface BetterWorkDesktopApi {
   };
   tasks: {
     create(input: CreateTaskRequest): Promise<CreatedTask>;
+  };
+  evidence: {
+    list(input: ListEvidenceRequest): Promise<EvidenceSummary[]>;
   };
   models: {
     list(): Promise<ModelProfileSummary[]>;
