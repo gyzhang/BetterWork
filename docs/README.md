@@ -16,6 +16,7 @@
 | [品牌](08-brand.md) | 定义“算台 BetterWork”的名称、文案与图标方向 |
 | [参考项目与借鉴边界](09-reference-projects.md) | 记录 LobsterAI、ClawBible Desktop 的本机路径与借鉴边界 |
 | [UI/UX 体系与落地计划](10-ui-ux-system.md) | 定义界面信息架构、视觉语言、组件规范和 Terra 实施顺序 |
+| [Qoder 开发交接](11-qoder-handoff.md) | 记录当前实现基线、运行方式、架构入口、续作边界与验证要求 |
 
 ## 架构决策记录
 
