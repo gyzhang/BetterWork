@@ -102,7 +102,7 @@ app.whenReady().then(() => {
     const result = await dialog.showOpenDialog(mainWindow!, {
       title: '导入本地资料',
       properties: ['openFile', 'multiSelections'],
-      filters: [{ name: 'Markdown 和文本', extensions: ['md', 'markdown', 'txt', 'text'] }, { name: '所有文件', extensions: ['*'] }],
+      filters: [{ name: '资料文件', extensions: ['md', 'markdown', 'txt', 'text', 'pdf'] }, { name: '所有文件', extensions: ['*'] }],
     });
     return result.canceled ? { imported: [], skipped: [] } : knowledgeVault!.importPaths(result.filePaths);
   });

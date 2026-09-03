@@ -131,7 +131,7 @@ export interface ModelProfileSummary {
   updatedAt: number;
 }
 
-export type KnowledgeFormat = 'markdown' | 'text';
+export type KnowledgeFormat = 'markdown' | 'text' | 'pdf';
 
 export interface KnowledgeDocumentSummary {
   id: string;
@@ -140,6 +140,7 @@ export interface KnowledgeDocumentSummary {
   format: KnowledgeFormat;
   byteSize: number;
   contentHash: string;
+  pageCount?: number;
   importedAt: number;
   updatedAt: number;
 }
@@ -154,6 +155,7 @@ export type SearchKnowledgeRequest = z.infer<typeof searchKnowledgeRequestSchema
 
 export interface KnowledgeSearchResult {
   document: KnowledgeDocumentSummary;
+  locator: string;
   excerpt: string;
 }
 
