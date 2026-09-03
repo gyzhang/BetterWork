@@ -121,4 +121,30 @@ describe('KnowledgeVault', () => {
     expect(await vault.refreshDocument('missing-document')).toEqual({ error: '资料已不在当前资料库中。' });
     vault.close();
   });
+
+  it('falls back to substring search when full-text match finds nothing', async () => {
+    const directory = temporaryDirectory();
+    const markdown = path.join(directory, '增长笔记.md');
+    writeFileSync(markdown, '# 渠道复盘\nBetterWork 的转化率在三月显著提升。');
+    const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
+    await vault.importPaths([markdown]);
+    expect(vault.search('etterWork')[0]).toMatchObject({ document: { title: '增长笔记' }, excerpt: expect.stringContaining('BetterWork') });
+    expect(vault.search('完全不存在的词组xyz')).toEqual([]);
+    vault.close();
+  });
+
+  it('keeps the index unchanged when the original file is missing during refresh', async () => {
+    const directory = temporaryDirectory();
+    const text = path.join(directory, '会消失的资料.txt');
+    writeFileSync(text, '待刷新的原始内容。');
+    const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
+    const original = (await vault.importPaths([text])).imported[0]!;
+    rmSync(text);
+    const refreshed = await vault.refreshDocument(original.id);
+    expect(refreshed.refreshed).toBeUndefined();
+    expect(refreshed.error).toMatch(/原始文件/u);
+    expect(vault.listDocuments()).toHaveLength(1);
+    expect(vault.search('待刷新的原始内容')[0]?.document.id).toBe(original.id);
+    vault.close();
+  });
 });

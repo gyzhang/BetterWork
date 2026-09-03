@@ -91,6 +91,11 @@ export class KnowledgeVault {
   async refreshDocument(id: string): Promise<KnowledgeRefreshResult> {
     const row = this.db.prepare('SELECT source_path FROM knowledge_documents WHERE id = ?').get(id) as { source_path: string } | undefined;
     if (!row) return { error: '资料已不在当前资料库中。' };
+    try {
+      await stat(row.source_path);
+    } catch {
+      return { error: '原始文件无法访问（可能已被移动或删除）；本地索引保持不变，可移出资料库后重新导入。' };
+    }
     const result = await this.importPaths([row.source_path]);
     return result.imported[0] ? { refreshed: result.imported[0] } : { error: result.skipped[0]?.reason ?? '刷新索引失败。' };
   }

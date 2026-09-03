@@ -23,6 +23,7 @@ const eventDetail = (event: AgentRuntimeEvent): string => {
 };
 
 const formatTime = (value: number): string => new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const fileNameOf = (value: string): string => value.slice(Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\')) + 1);
 
 export function App(): React.JSX.Element {
   const [prompt, setPrompt] = useState('计算: (12 + 8) * 3');
@@ -45,6 +46,7 @@ export function App(): React.JSX.Element {
   const [knowledgeResults, setKnowledgeResults] = useState<KnowledgeSearchResult[]>([]);
   const [knowledgeQuery, setKnowledgeQuery] = useState('');
   const [knowledgeMessage, setKnowledgeMessage] = useState('');
+  const [knowledgeIssues, setKnowledgeIssues] = useState<string[]>([]);
   const [isImportingKnowledge, setIsImportingKnowledge] = useState(false);
   const [view, setView] = useState<AppView>('work');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.localStorage.getItem('betterwork-sidebar-collapsed') === 'true');
@@ -164,20 +166,27 @@ export function App(): React.JSX.Element {
     if (!result.opened) throw new Error(result.error ?? '无法打开原始资料。');
   };
   const importKnowledge = async (): Promise<void> => {
-    setIsImportingKnowledge(true); setKnowledgeMessage('');
+    setIsImportingKnowledge(true); setKnowledgeMessage(''); setKnowledgeIssues([]);
     try {
       const result = await window.betterwork.knowledge.importFromDialog();
-      if (result.imported.length || result.skipped.length) setKnowledgeMessage(`已整理 ${result.imported.length} 份资料${result.skipped.length ? `；${result.skipped.length} 份未导入` : ''}。`);
+      if (result.imported.length || result.skipped.length) {
+        setKnowledgeMessage(`已整理 ${result.imported.length} 份资料${result.skipped.length ? `；${result.skipped.length} 份未导入` : ''}。`);
+        setKnowledgeIssues(result.skipped.map((item) => `${fileNameOf(item.sourcePath)}：${item.reason}`));
+      } else {
+        setKnowledgeMessage('已取消导入，未选择文件。');
+      }
       await refreshKnowledge();
     } catch (error) { setKnowledgeMessage(error instanceof Error ? error.message : '导入资料失败。'); }
     finally { setIsImportingKnowledge(false); }
   };
   const removeKnowledgeDocument = async (document: KnowledgeDocumentSummary): Promise<void> => {
     if (!window.confirm(`从算台资料库移除「${document.title}」？\n\n这不会删除原始文件，只会删除本地检索索引。`)) return;
-    const result = await window.betterwork.knowledge.remove({ id: document.id });
-    setKnowledgeMessage(result.removed ? `已从资料库移除「${document.title}」，原始文件未受影响。` : '资料已不在当前资料库中。');
-    setKnowledgeQuery('');
-    await refreshKnowledge();
+    try {
+      const result = await window.betterwork.knowledge.remove({ id: document.id });
+      setKnowledgeMessage(result.removed ? `已从资料库移除「${document.title}」，原始文件未受影响。` : '资料已不在当前资料库中。');
+      setKnowledgeQuery('');
+      await refreshKnowledge();
+    } catch (error) { setKnowledgeMessage(error instanceof Error ? error.message : '移出资料库失败，请重试。'); }
   };
   const refreshKnowledgeDocument = async (document: KnowledgeDocumentSummary): Promise<void> => {
     setIsImportingKnowledge(true);
@@ -186,7 +195,8 @@ export function App(): React.JSX.Element {
       setKnowledgeMessage(result.refreshed ? `已刷新「${document.title}」的本地索引。` : result.error ?? '刷新索引失败。');
       setKnowledgeQuery('');
       await refreshKnowledge();
-    } finally { setIsImportingKnowledge(false); }
+    } catch (error) { setKnowledgeMessage(error instanceof Error && error.message ? `刷新索引失败：${error.message}` : '刷新索引失败，请重试。'); }
+    finally { setIsImportingKnowledge(false); }
   };
   const searchKnowledge = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
@@ -216,7 +226,7 @@ export function App(): React.JSX.Element {
         </div>
       </>}
       {view === 'artifacts' && <ArtifactPage artifacts={artifacts} selected={selectedArtifact} onSelect={(artifact) => void openArtifact(artifact)} onSave={reviseArtifact} onExport={exportArtifact} onBack={() => setSelectedArtifact(undefined)} />}
-      {view === 'knowledge' && <KnowledgePage documents={knowledgeDocuments} results={knowledgeResults} query={knowledgeQuery} setQuery={setKnowledgeQuery} message={knowledgeMessage} importing={isImportingKnowledge} onImport={() => void importKnowledge()} onSearch={(event) => void searchKnowledge(event)} onOpenSource={openKnowledgeSource} onRefresh={refreshKnowledgeDocument} onRemove={removeKnowledgeDocument} />}
+      {view === 'knowledge' && <KnowledgePage documents={knowledgeDocuments} results={knowledgeResults} query={knowledgeQuery} setQuery={setKnowledgeQuery} message={knowledgeMessage} issues={knowledgeIssues} importing={isImportingKnowledge} onImport={() => void importKnowledge()} onSearch={(event) => void searchKnowledge(event)} onOpenSource={openKnowledgeSource} onRefresh={refreshKnowledgeDocument} onRemove={removeKnowledgeDocument} />}
       {view === 'settings' && <SettingsPage tab={settingsTab} setTab={setSettingsTab} models={filteredModels} modelFilter={modelFilter} setModelFilter={setModelFilter} activeLanguageModel={activeLanguageModel} defaultModelIds={defaultModelIds} onAdd={() => openModelEditor()} onEdit={openModelEditor} onToggle={toggleModel} onSetDefault={setDefaultModel} onDelete={(model) => void window.betterwork.models.delete({ id: model.id }).then(refreshModels)} appearance={appearance} resolvedAppearance={resolvedAppearance} onMode={(mode) => setAppearanceValue({ ...appearance, mode })} onScheme={(scheme) => setAppearanceValue({ ...appearance, scheme })} modelMessage={modelMessage} />}
     </section>
     {view === 'work' && <ContextPanel open={contextOpen} setOpen={setContextOpen} tab={contextTab} setTab={setContextTab} events={events} evidence={evidence} artifacts={currentTaskArtifacts} activeRun={activeRun} taskRuns={taskRuns} activityGroups={activityGroups} onSelectRun={(run) => void selectRun(run)} onOpenSource={openKnowledgeSource} />}
@@ -227,11 +237,11 @@ export function App(): React.JSX.Element {
 function Welcome({ setPrompt }: { setPrompt: (value: string) => void }): React.JSX.Element { return <div className="welcome"><div className="abacus" aria-hidden="true"><i /><i /><i /><i /></div><p className="eyebrow">算台 · 知识工作台</p><h2>以我所知，成我所作。</h2><p>从一个清楚的问题开始。算台会协助你把过程沉淀为可以继续使用的成果。</p><div className="examples"><button onClick={() => setPrompt('计算: (128 + 72) / 4')}>计算一组数据</button><button onClick={() => setPrompt('读取: README.md')}>读取一份资料</button></div></div>; }
 function EmptyContext({ title, detail }: { title: string; detail: string }): React.JSX.Element { return <div className="empty-context"><span aria-hidden="true">◇</span><strong>{title}</strong><p>{detail}</p></div>; }
 function EmptyPage({ eyebrow, title, detail }: { eyebrow: string; title: string; detail: string }): React.JSX.Element { return <section className="empty-page"><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{detail}</p></section>; }
-function KnowledgePage({ documents, results, query, setQuery, message, importing, onImport, onSearch, onOpenSource, onRefresh, onRemove }: { documents: KnowledgeDocumentSummary[]; results: KnowledgeSearchResult[]; query: string; setQuery: (query: string) => void; message: string; importing: boolean; onImport: () => void; onSearch: (event: FormEvent) => void; onOpenSource: (sourcePath: string) => Promise<void>; onRefresh: (document: KnowledgeDocumentSummary) => Promise<void>; onRemove: (document: KnowledgeDocumentSummary) => Promise<void> }): React.JSX.Element {
+function KnowledgePage({ documents, results, query, setQuery, message, issues, importing, onImport, onSearch, onOpenSource, onRefresh, onRemove }: { documents: KnowledgeDocumentSummary[]; results: KnowledgeSearchResult[]; query: string; setQuery: (query: string) => void; message: string; issues: string[]; importing: boolean; onImport: () => void; onSearch: (event: FormEvent) => void; onOpenSource: (sourcePath: string) => Promise<void>; onRefresh: (document: KnowledgeDocumentSummary) => Promise<void>; onRemove: (document: KnowledgeDocumentSummary) => Promise<void> }): React.JSX.Element {
   const showingResults = Boolean(query.trim());
   const items: Array<{ document: KnowledgeDocumentSummary; excerpt?: string; locator?: string }> = showingResults ? results.map((result) => ({ document: result.document, locator: result.locator, excerpt: result.excerpt })) : documents.map((document) => ({ document }));
   const [openMessage, setOpenMessage] = useState('');
-  return <section className="knowledge-page"><header><div><p className="eyebrow">知识 · 个人资料库</p><h1>让资料成为下一次工作的起点</h1><p>资料保留在你的本机路径；算台只建立可重建的本地文本索引。当前支持 Markdown、文本、PDF 与 Word。</p></div><button className="primary-button" disabled={importing} onClick={onImport}>{importing ? '正在处理…' : '＋ 导入资料'}</button></header><form className="knowledge-search" onSubmit={onSearch}><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索资料库中的内容…" aria-label="搜索个人资料库" /><button type="submit">搜索</button>{showingResults && <button type="button" className="clear-search" onClick={() => setQuery('')}>清除</button>}</form>{message && <p className="inline-message">{message}</p>}{openMessage && <p className="knowledge-open-message">{openMessage}</p>}<div className="knowledge-summary"><span>{showingResults ? `找到 ${items.length} 条相关资料` : `已整理 ${documents.length} 份资料`}</span><small>{showingResults ? '检索仅在本地资料库中进行' : '下一步将支持表格与语义检索'}</small></div>{items.length === 0 ? <EmptyPage eyebrow={showingResults ? '没有匹配结果' : '从一份资料开始'} title={showingResults ? '换个关键词试试' : '把常用资料放进你的资料库'} detail={showingResults ? '当前先按文本内容进行本地检索。' : '导入 Markdown、文本、PDF 或 Word 后，它们会在后续研究和写作中成为可引用的个人资料。'} /> : <div className="knowledge-list">{items.map(({ document, excerpt, locator }) => <article className="knowledge-card" key={`${document.id}-${locator ?? 'document'}`}><span className={`knowledge-format ${document.format}`}>{document.format === 'markdown' ? 'MD' : document.format === 'pdf' ? 'PDF' : document.format === 'docx' ? 'DOC' : 'TXT'}</span><div><strong>{document.title}</strong>{excerpt && <p>{excerpt}</p>}<small>{document.sourcePath}{locator ? ` · ${locator}` : ''} · 更新于 {formatTime(document.updatedAt)}</small></div><div className="knowledge-card-actions"><button className="open-source-button" onClick={() => void onOpenSource(document.sourcePath).then(() => setOpenMessage(`已打开「${document.title}」的原始资料。`)).catch((reason: unknown) => setOpenMessage(reason instanceof Error ? reason.message : '无法打开原始资料。'))}>打开原文</button><button className="refresh-knowledge-button" disabled={importing} onClick={() => void onRefresh(document)}>刷新索引</button><button className="remove-knowledge-button" disabled={importing} onClick={() => void onRemove(document)}>移出资料库</button></div></article>)}</div>}</section>;
+  return <section className="knowledge-page"><header><div><p className="eyebrow">知识 · 个人资料库</p><h1>让资料成为下一次工作的起点</h1><p>资料保留在你的本机路径；算台只建立可重建的本地文本索引。当前支持 Markdown、文本、PDF 与 Word。</p></div><button className="primary-button" disabled={importing} onClick={onImport}>{importing ? '正在处理…' : '＋ 导入资料'}</button></header><form className="knowledge-search" onSubmit={onSearch}><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索资料库中的内容…" aria-label="搜索个人资料库" /><button type="submit">搜索</button>{showingResults && <button type="button" className="clear-search" onClick={() => setQuery('')}>清除</button>}</form>{message && <p className="inline-message">{message}</p>}{issues.length > 0 && <div className="knowledge-issues"><strong>以下资料未导入</strong><ul>{issues.map((issue, index) => <li key={`${index}-${issue}`}>{issue}</li>)}</ul></div>}{openMessage && <p className="knowledge-open-message">{openMessage}</p>}<div className="knowledge-summary"><span>{showingResults ? `找到 ${items.length} 条相关资料` : `已整理 ${documents.length} 份资料`}</span><small>{showingResults ? '检索仅在本地资料库中进行' : '下一步将支持表格与语义检索'}</small></div>{items.length === 0 ? <EmptyPage eyebrow={showingResults ? '没有匹配结果' : '从一份资料开始'} title={showingResults ? '换个关键词试试' : '把常用资料放进你的资料库'} detail={showingResults ? '当前先按文本内容进行本地检索。' : '导入 Markdown、文本、PDF 或 Word 后，它们会在后续研究和写作中成为可引用的个人资料。'} /> : <div className="knowledge-list">{items.map(({ document, excerpt, locator }) => <article className="knowledge-card" key={`${document.id}-${locator ?? 'document'}`}><span className={`knowledge-format ${document.format}`}>{document.format === 'markdown' ? 'MD' : document.format === 'pdf' ? 'PDF' : document.format === 'docx' ? 'DOC' : 'TXT'}</span><div><strong>{document.title}</strong>{excerpt && <p>{excerpt}</p>}<small>{document.sourcePath}{locator ? ` · ${locator}` : ''} · 更新于 {formatTime(document.updatedAt)}</small></div><div className="knowledge-card-actions"><button className="open-source-button" onClick={() => void onOpenSource(document.sourcePath).then(() => setOpenMessage(`已打开「${document.title}」的原始资料。`)).catch((reason: unknown) => setOpenMessage(reason instanceof Error ? reason.message : '无法打开原始资料。'))}>打开原文</button><button className="refresh-knowledge-button" disabled={importing} onClick={() => void onRefresh(document)}>刷新索引</button><button className="remove-knowledge-button" disabled={importing} onClick={() => void onRemove(document)}>移出资料库</button></div></article>)}</div>}</section>;
 }
 function CompletedWorkPage({ runs, onOpen }: { runs: RunSummary[]; onOpen: (run: RunSummary) => void }): React.JSX.Element { return <section className="completed-work-page"><header><div><p className="eyebrow">成果</p><h1>已完成的工作</h1><p>Phase 0 先展示可以回看的任务交付。研究报告、Word、Excel 与 PPT 将在后续以独立 Artifact 形式管理。</p></div><span className="work-count">{runs.length} 项</span></header>{runs.length === 0 ? <EmptyPage eyebrow="尚无交付" title="完成一项工作，它会出现在这里" detail="当前可使用计算和读取资料的教学链路；后续这里会承载可继续编辑的报告、表格和演示。" /> : <div className="completed-work-list">{runs.map((run) => <button className="completed-work-card" key={run.id} onClick={() => onOpen(run)}><span className="completed-work-icon" aria-hidden="true">✓</span><div><strong>{run.prompt}</strong><p>已完成 · {formatTime(run.completedAt ?? run.createdAt)}</p></div><span aria-hidden="true">›</span></button>)}</div>}</section>; }
 function ArtifactPage({ artifacts, selected, onSelect, onSave, onExport, onBack }: { artifacts: ArtifactSummary[]; selected: ArtifactDetail | undefined; onSelect: (artifact: ArtifactSummary) => void; onSave: (artifact: ArtifactDetail, title: string, content: string) => Promise<void>; onExport: (artifact: ArtifactDetail, versionId?: string) => Promise<{ cancelled: boolean; filePath?: string }>; onBack: () => void }): React.JSX.Element {
