@@ -17,8 +17,11 @@ const api: BetterWorkDesktopApi = {
     },
   },
   workspace: {
-    getDefaultPath: () => ipcRenderer.invoke(IpcChannel.GetDefaultWorkspace),
+    getDefault: () => ipcRenderer.invoke(IpcChannel.GetDefaultWorkspace),
     selectDirectory: () => ipcRenderer.invoke(IpcChannel.SelectWorkspace),
+  },
+  tasks: {
+    create: (input) => ipcRenderer.invoke(IpcChannel.CreateTask, input),
   },
   models: {
     list: () => ipcRenderer.invoke(IpcChannel.ListModels),

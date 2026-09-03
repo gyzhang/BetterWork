@@ -56,6 +56,35 @@ export const startRunRequestSchema = z.object({
 });
 export type StartRunRequest = z.infer<typeof startRunRequestSchema>;
 
+export interface WorkspaceSummary {
+  id: string;
+  name: string;
+  rootPath: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface TaskSummary {
+  id: string;
+  workspaceId: string;
+  title: string;
+  goal: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export const createTaskRequestSchema = z.object({
+  workspaceId: z.string().min(1),
+  title: z.string().trim().min(1).max(160),
+  goal: z.string().trim().min(1).max(20_000),
+});
+export type CreateTaskRequest = z.infer<typeof createTaskRequestSchema>;
+
+export interface CreatedTask {
+  task: TaskSummary;
+  sessionId: string;
+}
+
 export const cancelRunRequestSchema = z.object({ runId: z.string().min(1) });
 export type CancelRunRequest = z.infer<typeof cancelRunRequestSchema>;
 
@@ -156,6 +185,7 @@ export const IpcChannel = {
   RunEvent: 'run:event',
   GetDefaultWorkspace: 'workspace:get-default',
   SelectWorkspace: 'workspace:select',
+  CreateTask: 'task:create',
   ListModels: 'model:list',
   SaveModel: 'model:save',
   DeleteModel: 'model:delete',
@@ -177,8 +207,11 @@ export interface BetterWorkDesktopApi {
     onEvent(listener: (event: AgentRuntimeEvent) => void): () => void;
   };
   workspace: {
-    getDefaultPath(): Promise<string>;
-    selectDirectory(): Promise<string | null>;
+    getDefault(): Promise<WorkspaceSummary>;
+    selectDirectory(): Promise<WorkspaceSummary | null>;
+  };
+  tasks: {
+    create(input: CreateTaskRequest): Promise<CreatedTask>;
   };
   models: {
     list(): Promise<ModelProfileSummary[]>;

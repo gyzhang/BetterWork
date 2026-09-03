@@ -5,6 +5,17 @@ let journal: RunJournal | undefined;
 afterEach(() => journal?.close());
 
 describe('RunJournal', () => {
+  it('creates a stable workspace, task, and separate session identifiers', () => {
+    journal = new RunJournal(':memory:');
+    const workspace = journal.getOrCreateWorkspace('/work/customer-a', '客户 A');
+    const sameWorkspace = journal.getOrCreateWorkspace('/work/customer-a', '不同名称不会复制工作区');
+    const created = journal.createTask(workspace.id, '季度复盘', '根据资料完成季度复盘');
+    expect(sameWorkspace.id).toBe(workspace.id);
+    expect(created.task).toMatchObject({ workspaceId: workspace.id, title: '季度复盘', goal: '根据资料完成季度复盘' });
+    expect(created.sessionId).not.toBe(created.task.id);
+    expect(() => journal!.createTask('missing-workspace', '无效任务', '不应创建')).toThrow('Workspace does not exist');
+  });
+
   it('persists runs and ordered events', () => {
     journal = new RunJournal(':memory:');
     journal.createRun({ id: 'run-1', taskId: 'task-1', sessionId: 'session-1', prompt: 'hello', status: 'running', createdAt: 1 });
