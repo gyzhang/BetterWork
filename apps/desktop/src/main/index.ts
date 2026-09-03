@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { writeFile } from 'node:fs/promises';
 import { app, BrowserWindow, dialog, ipcMain, type BrowserWindowConstructorOptions } from 'electron';
 import {
   cancelRunRequestSchema,
@@ -11,6 +12,7 @@ import {
   listTasksRequestSchema,
   getArtifactRequestSchema,
   getArtifactVersionRequestSchema,
+  exportMarkdownArtifactRequestSchema,
   modelProfileIdSchema,
   setDefaultModelRequestSchema,
   setModelEnabledRequestSchema,
@@ -94,6 +96,18 @@ app.whenReady().then(() => {
   ipcMain.handle(IpcChannel.ListArtifactVersions, (_event, raw) => journal!.listArtifactVersions(listArtifactVersionsRequestSchema.parse(raw).artifactId));
   ipcMain.handle(IpcChannel.GetArtifactVersion, (_event, raw) => journal!.getArtifactVersionDetail(getArtifactVersionRequestSchema.parse(raw).id) ?? null);
   ipcMain.handle(IpcChannel.SaveMarkdownArtifact, (_event, raw) => journal!.saveMarkdownArtifact(saveMarkdownArtifactRequestSchema.parse(raw)));
+  ipcMain.handle(IpcChannel.ExportMarkdownArtifact, async (_event, raw) => {
+    const input = exportMarkdownArtifactRequestSchema.parse(raw);
+    const artifact = journal!.getArtifactDetail(input.artifactId);
+    if (!artifact) throw new Error('Artifact does not exist');
+    const version = input.versionId ? journal!.getArtifactVersionDetail(input.versionId) : undefined;
+    if (input.versionId && (!version || version.artifactId !== artifact.id)) throw new Error('Artifact version does not belong to artifact');
+    const safeTitle = artifact.title.replace(/[\\/:*?"<>|]/g, '-').trim() || '算台成果';
+    const result = await dialog.showSaveDialog(mainWindow!, { title: '导出 Markdown 成果', defaultPath: `${safeTitle}.md`, filters: [{ name: 'Markdown', extensions: ['md'] }] });
+    if (result.canceled || !result.filePath) return { cancelled: true };
+    await writeFile(result.filePath, version?.content ?? artifact.content, 'utf8');
+    return { cancelled: false, filePath: result.filePath };
+  });
   ipcMain.handle(IpcChannel.ListModels, () => journal!.listModels());
   ipcMain.handle(IpcChannel.SaveModel, (_event, raw) => {
     const input = saveModelProfileRequestSchema.parse(raw);
