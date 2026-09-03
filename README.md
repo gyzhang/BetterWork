@@ -1,5 +1,7 @@
 # 算台 BetterWork
 
+<p align="center"><img src="docs/assets/betterwork-logo.svg" width="96" alt="算台 BetterWork 标志" /></p>
+
 算台（BetterWork）是一款面向知识工作者的个人 AI 工作台。
 
 它帮助用户利用个人知识库、长期记忆和新获得的信息，持续完成深度研究、Excel 分析、Word 文档编写以及 PPT 创建与修改。
