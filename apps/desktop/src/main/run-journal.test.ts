@@ -37,6 +37,7 @@ describe('RunJournal', () => {
     expect(first).toMatchObject({ type: 'markdown', versionNumber: 1, sourceRunId: 'run-1' });
     expect(revised).toMatchObject({ id: first.id, title: '季度复盘（修订）', versionNumber: 2, sourceRunId: 'run-2' });
     expect(journal.listArtifacts(task.task.id)).toEqual([expect.objectContaining({ id: first.id, versionNumber: 2 })]);
+    expect(journal.getArtifactDetail(first.id)).toMatchObject({ id: first.id, content: '# 第二版', versionNumber: 2 });
   });
 
   it('persists runs and ordered events', () => {

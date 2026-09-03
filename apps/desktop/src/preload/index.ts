@@ -28,6 +28,7 @@ const api: BetterWorkDesktopApi = {
   },
   artifacts: {
     list: (input) => ipcRenderer.invoke(IpcChannel.ListArtifacts, input),
+    get: (input) => ipcRenderer.invoke(IpcChannel.GetArtifact, input),
     saveMarkdown: (input) => ipcRenderer.invoke(IpcChannel.SaveMarkdownArtifact, input),
   },
   models: {

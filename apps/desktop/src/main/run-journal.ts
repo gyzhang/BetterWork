@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { createHash, randomUUID } from 'node:crypto';
-import type { AgentRuntimeEvent, ArtifactSummary, CreatedTask, EvidenceSummary, ModelConnectionStatus, ModelProfileInput, ModelProfileSummary, RunSummary, SaveMarkdownArtifactRequest, TaskSummary, WorkspaceSummary } from '@betterwork/agent-protocol';
+import type { AgentRuntimeEvent, ArtifactDetail, ArtifactSummary, CreatedTask, EvidenceSummary, ModelConnectionStatus, ModelProfileInput, ModelProfileSummary, RunSummary, SaveMarkdownArtifactRequest, TaskSummary, WorkspaceSummary } from '@betterwork/agent-protocol';
 import { agentRuntimeEventSchema } from '@betterwork/agent-protocol';
 
 interface RunRow {
@@ -163,6 +163,11 @@ export class RunJournal {
       ? this.db.prepare(`SELECT a.id, a.workspace_id, a.task_id, a.type, a.title, a.current_version_id, v.version_number, v.source_run_id, a.created_at, a.updated_at FROM artifacts a JOIN artifact_versions v ON v.id = a.current_version_id WHERE a.task_id = ? ORDER BY a.updated_at DESC, a.rowid DESC`).all(taskId)
       : this.db.prepare(`SELECT a.id, a.workspace_id, a.task_id, a.type, a.title, a.current_version_id, v.version_number, v.source_run_id, a.created_at, a.updated_at FROM artifacts a JOIN artifact_versions v ON v.id = a.current_version_id ORDER BY a.updated_at DESC, a.rowid DESC`).all();
     return (rows as ArtifactRow[]).map((row) => this.toArtifactSummary(row));
+  }
+
+  getArtifactDetail(id: string): ArtifactDetail | undefined {
+    const row = this.db.prepare(`SELECT a.id, a.workspace_id, a.task_id, a.type, a.title, a.current_version_id, v.version_number, v.source_run_id, v.content, v.content_hash, a.created_at, a.updated_at FROM artifacts a JOIN artifact_versions v ON v.id = a.current_version_id WHERE a.id = ?`).get(id) as (ArtifactRow & { content: string; content_hash: string }) | undefined;
+    return row ? { ...this.toArtifactSummary(row), content: row.content, contentHash: row.content_hash } : undefined;
   }
 
   createRun(run: RunSummary): void {
