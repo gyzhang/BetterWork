@@ -26,6 +26,19 @@ describe('RunJournal', () => {
     expect(journal.listEvidence(task.task.id)).toEqual([expect.objectContaining({ ...evidence, sourceType: 'local-file' })]);
   });
 
+  it('creates a Markdown artifact and appends revisions without overwriting history', () => {
+    journal = new RunJournal(':memory:');
+    const workspace = journal.getOrCreateWorkspace('/work/customer-a', '客户 A');
+    const task = journal.createTask(workspace.id, '季度复盘', '根据资料完成季度复盘');
+    journal.createRun({ id: 'run-1', taskId: task.task.id, sessionId: task.sessionId, prompt: '生成复盘', status: 'completed', createdAt: 1, completedAt: 2 });
+    journal.createRun({ id: 'run-2', taskId: task.task.id, sessionId: task.sessionId, prompt: '修改复盘', status: 'completed', createdAt: 3, completedAt: 4 });
+    const first = journal.saveMarkdownArtifact({ taskId: task.task.id, runId: 'run-1', title: '季度复盘', content: '# 第一版' });
+    const revised = journal.saveMarkdownArtifact({ artifactId: first.id, taskId: task.task.id, runId: 'run-2', title: '季度复盘（修订）', content: '# 第二版' });
+    expect(first).toMatchObject({ type: 'markdown', versionNumber: 1, sourceRunId: 'run-1' });
+    expect(revised).toMatchObject({ id: first.id, title: '季度复盘（修订）', versionNumber: 2, sourceRunId: 'run-2' });
+    expect(journal.listArtifacts(task.task.id)).toEqual([expect.objectContaining({ id: first.id, versionNumber: 2 })]);
+  });
+
   it('persists runs and ordered events', () => {
     journal = new RunJournal(':memory:');
     journal.createRun({ id: 'run-1', taskId: 'task-1', sessionId: 'session-1', prompt: 'hello', status: 'running', createdAt: 1 });
