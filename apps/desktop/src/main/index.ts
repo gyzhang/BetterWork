@@ -48,7 +48,7 @@ app.whenReady().then(() => {
   journal = new RunJournal(path.join(app.getPath('userData'), 'betterwork.db'));
   knowledgeVault = new KnowledgeVault(path.join(app.getPath('userData'), 'vaults', 'default', 'vault.sqlite'));
   createWindow();
-  const runs = new RunService(journal, () => mainWindow);
+  const runs = new RunService(journal, knowledgeVault, () => mainWindow);
 
   ipcMain.handle(IpcChannel.StartRun, (_event, raw) => {
     const input = startRunRequestSchema.parse(raw);

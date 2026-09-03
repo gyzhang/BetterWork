@@ -3,8 +3,9 @@ import type { BrowserWindow } from 'electron';
 import { ReActAgentEngine, FakeModelProvider, OpenAICompatibleProvider } from '@betterwork/agent-core';
 import type { AgentRuntimeEvent, StartRunRequest } from '@betterwork/agent-protocol';
 import { IpcChannel } from '@betterwork/agent-protocol';
-import { calculatorTool, readTextFileTool } from '@betterwork/tool-runtime';
+import { calculatorTool, createKnowledgeSearchTool, readTextFileTool } from '@betterwork/tool-runtime';
 import { RunJournal } from './run-journal';
+import { KnowledgeVault } from './knowledge-vault';
 
 export class RunService {
   private readonly activeRuns = new Map<string, AbortController>();
@@ -13,6 +14,7 @@ export class RunService {
 
   constructor(
     private readonly journal: RunJournal,
+    private readonly knowledgeVault: KnowledgeVault,
     private readonly getWindow: () => BrowserWindow | null,
   ) {}
 
@@ -50,7 +52,7 @@ export class RunService {
         prompt: input.prompt,
         workspacePath: input.workspacePath,
         model: configured ? new OpenAICompatibleProvider(configured) : this.model,
-        tools: [calculatorTool, readTextFileTool],
+        tools: [calculatorTool, readTextFileTool, createKnowledgeSearchTool((query) => this.knowledgeVault.search(query).map(({ document, excerpt }) => ({ ...document, excerpt })))],
         signal: controller.signal,
       })) this.publish(event);
     } finally {

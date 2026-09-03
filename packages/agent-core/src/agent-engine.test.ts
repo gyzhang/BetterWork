@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { calculatorTool } from '@betterwork/tool-runtime';
+import { calculatorTool, createKnowledgeSearchTool } from '@betterwork/tool-runtime';
 import { ReActAgentEngine } from './agent-engine';
 import { FakeModelProvider } from './fake-provider';
 import { OpenAICompatibleProvider } from './openai-compatible-provider';
@@ -31,6 +31,21 @@ describe('ReActAgentEngine', () => {
       model: new FakeModelProvider(), tools: [], signal: controller.signal,
     })) events.push(event);
     expect(events.map((event) => event.type)).toEqual(['run.started', 'run.cancelled']);
+  });
+
+  it('lets the teaching provider search local knowledge through a read-only tool', async () => {
+    const events = [];
+    const engine = new ReActAgentEngine();
+    for await (const event of engine.run({
+      runId: 'run-knowledge', taskId: 'task-1', sessionId: 'session-1', prompt: '搜索知识: 续约风险', workspacePath: '.',
+      model: new FakeModelProvider(0),
+      tools: [createKnowledgeSearchTool(() => [{ id: 'doc-1', title: '客户访谈', sourcePath: '/notes/customer.md', format: 'markdown', excerpt: '续约风险需要季度复盘。' }])],
+      signal: new AbortController().signal,
+    })) events.push(event);
+
+    expect(events.some((event) => event.type === 'tool.requested' && event.toolCall.name === 'knowledge_search')).toBe(true);
+    expect(events.some((event) => event.type === 'tool.completed')).toBe(true);
+    expect(events.at(-1)?.type).toBe('run.completed');
   });
 
   it('cancels an active stream without reporting a failure', async () => {
