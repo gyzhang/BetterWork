@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { writeFile } from 'node:fs/promises';
-import { app, BrowserWindow, dialog, ipcMain, shell, type BrowserWindowConstructorOptions } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell, systemPreferences, type BrowserWindowConstructorOptions } from 'electron';
 import {
   cancelRunRequestSchema,
   createTaskRequestSchema,
@@ -26,6 +26,7 @@ import {
   removeKnowledgeDocumentRequestSchema,
   refreshKnowledgeDocumentRequestSchema,
   updateWindowThemeRequestSchema,
+  windowToggleMaximizeRequestSchema,
 } from '@betterwork/agent-protocol';
 import { RunJournal } from './run-journal';
 import { RunService } from './run-service';
@@ -43,7 +44,7 @@ const createWindow = (): void => {
     minHeight: 640,
     title: '算台 BetterWork',
     backgroundColor: '#F6F7F5',
-    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 16, y: 18 } } : {}),
     ...(process.platform === 'win32' ? { titleBarOverlay: { color: '#F6F7F5', symbolColor: '#1D2420' } } : {}),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
@@ -171,6 +172,17 @@ app.whenReady().then(() => {
     const theme = updateWindowThemeRequestSchema.parse(raw);
     mainWindow?.setBackgroundColor(theme.backgroundColor);
     if (process.platform === 'win32') mainWindow?.setTitleBarOverlay({ color: theme.backgroundColor, symbolColor: theme.symbolColor });
+  });
+  ipcMain.handle(IpcChannel.WindowToggleMaximize, () => {
+    if (!mainWindow) return { maximized: false };
+    if (process.platform === 'darwin') {
+      const preference = systemPreferences.getUserDefault('AppleActionOnDoubleClick', 'string');
+      if (preference === 'Minimize') { mainWindow.minimize(); return { maximized: false }; }
+      if (preference === 'None') return { maximized: mainWindow.isMaximized() };
+    }
+    if (mainWindow.isMaximized()) { mainWindow.unmaximize(); return { maximized: false }; }
+    mainWindow.maximize();
+    return { maximized: true };
   });
 
   app.on('activate', () => {

@@ -45,6 +45,7 @@ const api: BetterWorkDesktopApi = {
   },
   chrome: {
     updateTheme: (input) => ipcRenderer.invoke(IpcChannel.UpdateWindowTheme, input),
+    toggleMaximize: () => ipcRenderer.invoke(IpcChannel.WindowToggleMaximize, {}),
   },
   knowledge: {
     list: () => ipcRenderer.invoke(IpcChannel.ListKnowledge),
