@@ -36,7 +36,7 @@ Phase 0 教学链路与 UI Foundation 已完成。当前允许进入 `Phase 1：
 - 完整记忆、Office 和 Kit 实现
 - 在没有真实产品需求前引入大型框架
 
-当前 Phase 1 仅允许：本地 Markdown/Text 导入、源路径与哈希记录、SQLite FTS5 检索及对应类型化 IPC/UI。PDF/Office 解析、Embedding、研究 Agent、Evidence 与 Artifact 仍须在后续切片单独实现。
+当前 Phase 1 仅允许：本地 Markdown/Text 导入、源路径与哈希记录、SQLite FTS5 检索、只读 Knowledge Search Tool 及对应类型化 IPC/UI。PDF/Office 解析、Embedding、研究 Agent、Evidence 与 Artifact 仍须在后续切片单独实现。
 
 ## 3. 架构硬约束
 
