@@ -47,7 +47,8 @@ export function App(): React.JSX.Element {
   const [evidence, setEvidence] = useState<EvidenceSummary[]>([]);
   const [artifacts, setArtifacts] = useState<ArtifactSummary[]>([]);
   const [selectedArtifact, setSelectedArtifact] = useState<ArtifactDetail>();
-  const [artifactMessage, setArtifactMessage] = useState('');
+  const [sentPrompt, setSentPrompt] = useState('');
+  const [artifactNote, setArtifactNote] = useState<{ tone: 'ok' | 'error'; text: string }>();
   const [models, setModels] = useState<ModelProfileSummary[]>([]);
   const [knowledgeDocuments, setKnowledgeDocuments] = useState<KnowledgeDocumentSummary[]>([]);
   const [knowledgeResults, setKnowledgeResults] = useState<KnowledgeSearchResult[]>([]);
@@ -104,6 +105,7 @@ export function App(): React.JSX.Element {
 
   const setAppearanceValue = (next: AppearancePreference): void => { setAppearance(next); persistAppearance(next); setResolvedAppearance(applyAppearance(next)); };
   const assistantText = useMemo(() => events.filter((event): event is Extract<AgentRuntimeEvent, { type: 'message.delta' }> => event.type === 'message.delta').map((event) => event.delta).join(''), [events]);
+  const assistantDisplayText = assistantText.trim();
   const activeRun = runs.find((run) => run.id === activeRunId);
   const activeLanguageModel = models.find((model) => model.role === 'language' && model.enabled);
   const defaultModelIds = useMemo(() => new Map((['language', 'vision', 'embedding'] as const).map((role) => [role, models.find((model) => model.role === role && model.enabled)?.id])), [models]);
@@ -114,17 +116,18 @@ export function App(): React.JSX.Element {
   const currentTaskArtifacts = artifacts.filter((artifact) => artifact.taskId === activeTask?.id);
   const isCompletedRun = events.some((event) => event.type === 'run.completed');
 
-  const startNewTask = (): void => { activeRunIdRef.current = undefined; activeTaskIdRef.current = undefined; setActiveRunId(undefined); setActiveTask(undefined); setTaskRuns([]); setEvidence([]); setEvents([]); setPrompt(''); setView('work'); };
+  const startNewTask = (): void => { activeRunIdRef.current = undefined; activeTaskIdRef.current = undefined; setActiveRunId(undefined); setActiveTask(undefined); setTaskRuns([]); setEvidence([]); setEvents([]); setSentPrompt(''); setPrompt(''); setArtifactNote(undefined); setView('work'); };
   const startRun = async (): Promise<void> => {
     if (isRunning || !prompt.trim() || !workspace) return;
+    const goal = prompt.trim();
     let task = activeTask;
     if (!task) {
-      const created = await window.betterwork.tasks.create({ workspaceId: workspace.id, title: prompt.trim().slice(0, 80), goal: prompt.trim() });
+      const created = await window.betterwork.tasks.create({ workspaceId: workspace.id, title: goal.slice(0, 80), goal });
       task = { id: created.task.id, sessionId: created.sessionId, title: created.task.title };
       activeTaskIdRef.current = task.id; setActiveTask(task);
     }
     const result = await window.betterwork.runs.start({ taskId: task.id, sessionId: task.sessionId, prompt, workspacePath: workspace.rootPath });
-    activeRunIdRef.current = result.runId; setActiveRunId(result.runId); setEvents([]); setContextTab('process'); setContextOpen(true); await refreshRuns(); await refreshTaskRuns(task.id); await refreshTasks();
+    activeRunIdRef.current = result.runId; setActiveRunId(result.runId); setEvents([]); setSentPrompt(goal); setPrompt(''); setArtifactNote(undefined); setContextTab('process'); setContextOpen(true); await refreshRuns(); await refreshTaskRuns(task.id); await refreshTasks();
   };
   const submit = (event: FormEvent): void => { event.preventDefault(); void startRun(); };
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -132,11 +135,11 @@ export function App(): React.JSX.Element {
     event.preventDefault();
     void startRun();
   };
-  const selectRun = async (run: RunSummary): Promise<void> => { activeRunIdRef.current = run.id; activeTaskIdRef.current = run.taskId; setActiveRunId(run.id); setActiveTask({ id: run.taskId, sessionId: run.sessionId, title: run.prompt.slice(0, 80) }); setPrompt(run.prompt); setEvents(await window.betterwork.runs.listEvents({ runId: run.id })); await refreshTaskRuns(run.taskId); await refreshEvidence(run.taskId); setView('work'); };
+  const selectRun = async (run: RunSummary): Promise<void> => { activeRunIdRef.current = run.id; activeTaskIdRef.current = run.taskId; setActiveRunId(run.id); setActiveTask({ id: run.taskId, sessionId: run.sessionId, title: run.prompt.slice(0, 80) }); setSentPrompt(run.prompt.trim()); setPrompt(''); setArtifactNote(undefined); setEvents(await window.betterwork.runs.listEvents({ runId: run.id })); await refreshTaskRuns(run.taskId); await refreshEvidence(run.taskId); setView('work'); };
   const selectTask = async (task: RecentTaskSummary): Promise<void> => {
     if (task.latestRun) { await selectRun(task.latestRun); return; }
     activeRunIdRef.current = undefined; activeTaskIdRef.current = task.id;
-    setActiveRunId(undefined); setActiveTask({ id: task.id, sessionId: task.sessionId, title: task.title }); setPrompt(task.goal); setEvents([]); await refreshTaskRuns(task.id); await refreshEvidence(task.id); setView('work');
+    setActiveRunId(undefined); setActiveTask({ id: task.id, sessionId: task.sessionId, title: task.title }); setSentPrompt(task.goal); setPrompt(''); setArtifactNote(undefined); setEvents([]); await refreshTaskRuns(task.id); await refreshEvidence(task.id); setView('work');
   };
   const openModelEditor = (model?: ModelProfileSummary): void => {
     setModelMessage('');
@@ -149,12 +152,12 @@ export function App(): React.JSX.Element {
   const toggleModel = (model: ModelProfileSummary): void => { void window.betterwork.models.setEnabled({ id: model.id, enabled: !model.enabled }).then(refreshModels); };
   const setDefaultModel = (model: ModelProfileSummary): void => { void window.betterwork.models.setDefault({ id: model.id }).then(async (result) => { setModelMessage(result.updated ? `${model.name} 已设为${roleName[model.role]}默认模型。` : '仅已启用模型可以设为默认。'); await refreshModels(); }); };
   const saveCurrentArtifact = async (): Promise<void> => {
-    if (!activeTask || !activeRunId || !assistantText.trim()) return;
+    if (!activeTask || !activeRunId || !assistantDisplayText) return;
     try {
-      const artifact = await window.betterwork.artifacts.saveMarkdown({ ...(currentTaskArtifacts[0] ? { artifactId: currentTaskArtifacts[0].id } : {}), taskId: activeTask.id, origin: 'assistant-run', runId: activeRunId, title: activeTask.title, content: assistantText });
-      setArtifactMessage(`已保存为 Markdown 成果（v${artifact.versionNumber}）。`);
+      const artifact = await window.betterwork.artifacts.saveMarkdown({ ...(currentTaskArtifacts[0] ? { artifactId: currentTaskArtifacts[0].id } : {}), taskId: activeTask.id, origin: 'assistant-run', runId: activeRunId, title: activeTask.title, content: assistantDisplayText });
+      setArtifactNote({ tone: 'ok', text: `已保存为 Markdown 成果（v${artifact.versionNumber}）。` });
       await refreshArtifacts(); setContextTab('artifacts'); setContextOpen(true);
-    } catch (error) { setArtifactMessage(error instanceof Error ? error.message : '保存成果失败。'); }
+    } catch (error) { setArtifactNote({ tone: 'error', text: error instanceof Error ? error.message : '保存成果失败。' }); }
   };
   const openArtifact = async (artifact: ArtifactSummary): Promise<void> => {
     const detail = await window.betterwork.artifacts.get({ id: artifact.id });
@@ -230,7 +233,7 @@ export function App(): React.JSX.Element {
       {view !== 'work' && <div className="window-drag-strip" onDoubleClick={handleTitlebarDoubleClick} />}
       {view === 'work' && <>
         <header className="task-header" onDoubleClick={handleTitlebarDoubleClick}><div><p className="eyebrow">工作</p><h1>{activeRun ? '继续完成任务' : '开始一件工作'}</h1></div><div className="task-actions"><button className="model-chip" onClick={() => { setView('settings'); setSettingsTab('models'); void refreshModels(); }}>{activeLanguageModel ? activeLanguageModel.name : '选择工作模型'} <span><ChevronDownIcon size={12} /></span></button><button className="context-toggle" onClick={() => setContextOpen((open) => !open)}>{contextOpen ? '收起上下文' : '查看上下文'}</button></div></header>
-        <div className="workspace"><div className="messages">{events.length === 0 ? <Welcome setPrompt={setPrompt} /> : <>{<div className="message user"><span>你</span><p>{prompt}</p></div>}{assistantText && <div className="message assistant"><span>算台</span><p>{assistantText}</p></div>}{isCompletedRun && assistantText && <div className="artifact-save"><div><strong>将这次回复沉淀为成果</strong><p>保存后可作为版本化 Markdown Artifact 管理。</p></div><button onClick={() => void saveCurrentArtifact()}>保存为 Markdown</button></div>}{artifactMessage && <p className="inline-message">{artifactMessage}</p>}{completedTools.map((event) => <div className={event.type === 'tool.failed' ? 'tool-card failed' : 'tool-card'} key={event.id}><div><span className="tool-icon" aria-hidden="true">{event.type === 'tool.failed' ? <AlertIcon size={11} /> : <CheckIcon size={11} />}</span><strong>{event.type === 'tool.completed' ? '已完成一个工作步骤' : '工作步骤未完成'}</strong></div><code>{eventDetail(event)}</code></div>)}</>}</div>
+        <div className="workspace"><div className="messages">{events.length === 0 && !activeRunId ? <Welcome setPrompt={setPrompt} /> : <>{<div className="message user"><span>你</span><p>{sentPrompt}</p></div>}{assistantDisplayText && <div className="message assistant"><span>算台</span><p>{assistantDisplayText}</p></div>}{isCompletedRun && assistantDisplayText && <div className="message-actions"><button className="message-action" onClick={() => void saveCurrentArtifact()}><ArtifactIcon size={13} />保存为成果</button>{artifactNote && <span className={artifactNote.tone === 'ok' ? 'action-note ok' : 'action-note error'}>{artifactNote.text}</span>}</div>}{completedTools.map((event) => <div className={event.type === 'tool.failed' ? 'tool-card failed' : 'tool-card'} key={event.id}><div><span className="tool-icon" aria-hidden="true">{event.type === 'tool.failed' ? <AlertIcon size={11} /> : <CheckIcon size={11} />}</span><strong>{event.type === 'tool.completed' ? '已完成一个工作步骤' : '工作步骤未完成'}</strong></div><code>{eventDetail(event)}</code></div>)}</>}</div>
           <form className="composer" onSubmit={submit}><div className="workspace-row"><span>工作区</span><input aria-label="工作区" value={workspace?.rootPath ?? ''} readOnly /><button type="button" className="text-button" onClick={() => void window.betterwork.workspace.selectDirectory().then((selected) => { if (selected) { startNewTask(); workspaceIdRef.current = selected.id; setWorkspace(selected); void refreshTasks(selected.id); } })}>选择</button></div><textarea aria-label="任务输入，按 Command 或 Control 加 Enter 开始工作" value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={handleComposerKeyDown} rows={3} placeholder="告诉算台你想完成什么工作…" /><div className="composer-footer"><span>{activeLanguageModel ? `${activeLanguageModel.provider} · ${activeLanguageModel.model}` : '未配置模型时使用教学 Provider'} <kbd>⌘/Ctrl ↵</kbd></span>{isRunning && activeRunId ? <button type="button" className="stop" onClick={() => void window.betterwork.runs.cancel({ runId: activeRunId })}>停止</button> : <button type="submit" disabled={!prompt.trim() || !workspace}>开始工作 <ArrowUpIcon size={13} /></button>}</div></form>
         </div>
       </>}
