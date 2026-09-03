@@ -2,6 +2,22 @@
 
 本文件是仓库内所有开发工作的持续约束。开始任何任务前先阅读本文件和与任务相关的 `docs/` 文档；实现与文档冲突时，先修正文档或新增 ADR，不得静默偏离。
 
+`.qoder/rules/` 下的分层规则由 Qoder 自动加载（常驻铁律 + 按场景触发）；其他编码智能体按下方任务路由读取同一套约束，保持单一规则源。
+
+## 任务路由（动手前按类型检查）
+
+| 我要做什么 | 动手前必读 |
+| --- | --- |
+| 新增/修改 IPC、协议、Zod Schema | `packages/agent-protocol/src/index.ts`、[系统架构](docs/03-system-architecture.md)、[ADR-0003](docs/adr/0003-agent-core-boundary.md) |
+| 修改 Agent Core / Provider / Tool | [系统架构](docs/03-system-architecture.md)、[领域模型](docs/02-domain-model.md) |
+| Knowledge 导入/索引/检索/Evidence/打开源文件 | [知识库与记忆](docs/04-knowledge-and-memory.md) |
+| Artifact / 版本 / 来源 / 导出 | [ADR-0005](docs/adr/0005-artifact-version-evidence.md)、[UI/UX 体系](docs/10-ui-ux-system.md) |
+| UI / 样式 / 主题 / 组件 | [UI/UX 体系](docs/10-ui-ux-system.md) |
+| 启动/停止/构建/验证/提交 | [交接说明](docs/11-qoder-handoff.md) 第 3 节 |
+| 排查缺陷 | GATE-0：先查 SQLite 数据，再看 `/tmp/betterwork-dev.log`，最后才看代码（`.qoder/rules/betterwork-diagnosis.md`） |
+| 范围变化 | 同步更新 [MVP 与路线图](docs/07-mvp-and-roadmap.md)；跨模块关系或关键技术选择新增 ADR |
+| 结束一次任务 | 写 `docs/logs/YYYY-MM-DD.md`（模板见 [docs/logs/README.md](docs/logs/README.md)） |
+
 ## 1. 产品北极星
 
 算台是面向知识工作者的个人 AI 工作台。
@@ -10,7 +26,7 @@
 
 核心价值是利用用户的资料、记忆与工作方法，完成研究、分析、文档与演示。聊天是协作入口，Artifact 是主要交付物。
 
-参考项目及本机路径见 [docs/09-reference-projects.md](docs/09-reference-projects.md)。LobsterAI 用于参考产品 UI 和交互完成度，ClawBible Desktop 用于参考 Agent、工具、知识和 Office 工程实践；两者都不是 BetterWork 的直接代码依赖。
+参考项目及本机路径见 [docs/09-reference-projects.md](docs/09-reference-projects.md)。LobsterAI 用于参考产品 UI 和交互完成度，ClawBible Desktop 用于参考 Agent、工具、知识和 Office 工程实践，ClawBible Cloud 用于参考面向 AI Agent 的协作资产组织方式；三者都不是 BetterWork 的直接代码依赖。
 
 ## 2. 当前阶段
 
@@ -128,3 +144,4 @@ Renderer -> Preload API -> Application -> Agent Core / Infrastructure
 4. 类型检查与相关测试通过。
 5. 必要文档已更新。
 6. 没有遗留未说明的临时实现、密钥或生成文件。
+7. 工作日志已写入 `docs/logs/`。
