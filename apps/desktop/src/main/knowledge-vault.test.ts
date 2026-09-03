@@ -72,6 +72,8 @@ describe('KnowledgeVault', () => {
     expect((await vault.importPaths([markdown, text])).skipped).toEqual([]);
     expect(vault.listDocuments().map((document) => document.title)).toEqual(['客户访谈', '市场笔记']);
     expect(vault.search('渠道转化')[0]).toMatchObject({ document: { title: '市场笔记', format: 'markdown' }, excerpt: expect.stringContaining('渠道转化') });
+    expect(vault.getRegisteredSourcePath(markdown)).toBe(markdown);
+    expect(vault.getRegisteredSourcePath(path.join(directory, '未导入.txt'))).toBeUndefined();
     vault.close();
   });
 

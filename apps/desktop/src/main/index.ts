@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { writeFile } from 'node:fs/promises';
-import { app, BrowserWindow, dialog, ipcMain, type BrowserWindowConstructorOptions } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell, type BrowserWindowConstructorOptions } from 'electron';
 import {
   cancelRunRequestSchema,
   createTaskRequestSchema,
@@ -21,6 +21,7 @@ import {
   testModelRequestSchema,
   startRunRequestSchema,
   searchKnowledgeRequestSchema,
+  openKnowledgeSourceRequestSchema,
   updateWindowThemeRequestSchema,
 } from '@betterwork/agent-protocol';
 import { RunJournal } from './run-journal';
@@ -135,6 +136,12 @@ app.whenReady().then(() => {
     return result.canceled ? { imported: [], skipped: [] } : knowledgeVault!.importPaths(result.filePaths);
   });
   ipcMain.handle(IpcChannel.SearchKnowledge, (_event, raw) => knowledgeVault!.search(searchKnowledgeRequestSchema.parse(raw).query));
+  ipcMain.handle(IpcChannel.OpenKnowledgeSource, async (_event, raw) => {
+    const sourcePath = knowledgeVault!.getRegisteredSourcePath(openKnowledgeSourceRequestSchema.parse(raw).sourcePath);
+    if (!sourcePath) return { opened: false, error: '该文件不在当前知识库中，无法打开。' };
+    const error = await shell.openPath(sourcePath);
+    return error ? { opened: false, error } : { opened: true };
+  });
   ipcMain.handle(IpcChannel.TestModel, async (_event, raw) => {
     const input = testModelRequestSchema.parse(raw);
     const base = input.baseUrl.replace(/\/$/, '');
