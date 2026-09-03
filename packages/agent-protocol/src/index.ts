@@ -236,6 +236,15 @@ export type ListArtifactsRequest = z.infer<typeof listArtifactsRequestSchema>;
 export const getArtifactRequestSchema = z.object({ id: z.string().min(1) });
 export const listArtifactVersionsRequestSchema = z.object({ artifactId: z.string().min(1) });
 export const getArtifactVersionRequestSchema = z.object({ id: z.string().min(1) });
+export const exportMarkdownArtifactRequestSchema = z.object({
+  artifactId: z.string().min(1),
+  versionId: z.string().min(1).optional(),
+});
+export type ExportMarkdownArtifactRequest = z.infer<typeof exportMarkdownArtifactRequestSchema>;
+export interface ExportMarkdownArtifactResult {
+  cancelled: boolean;
+  filePath?: string;
+}
 
 export const listEvidenceRequestSchema = z.object({ taskId: z.string().min(1) });
 export type ListEvidenceRequest = z.infer<typeof listEvidenceRequestSchema>;
@@ -276,6 +285,7 @@ export const IpcChannel = {
   ListArtifactVersions: 'artifact:list-versions',
   GetArtifactVersion: 'artifact:get-version',
   SaveMarkdownArtifact: 'artifact:save-markdown',
+  ExportMarkdownArtifact: 'artifact:export-markdown',
   ListModels: 'model:list',
   SaveModel: 'model:save',
   DeleteModel: 'model:delete',
@@ -313,6 +323,7 @@ export interface BetterWorkDesktopApi {
     listVersions(input: { artifactId: string }): Promise<ArtifactVersionSummary[]>;
     getVersion(input: { id: string }): Promise<ArtifactVersionDetail | null>;
     saveMarkdown(input: SaveMarkdownArtifactRequest): Promise<ArtifactSummary>;
+    exportMarkdown(input: ExportMarkdownArtifactRequest): Promise<ExportMarkdownArtifactResult>;
   };
   models: {
     list(): Promise<ModelProfileSummary[]>;
