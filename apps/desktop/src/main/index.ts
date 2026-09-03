@@ -7,8 +7,10 @@ import {
   listRunEventsRequestSchema,
   listEvidenceRequestSchema,
   listArtifactsRequestSchema,
+  listArtifactVersionsRequestSchema,
   listTasksRequestSchema,
   getArtifactRequestSchema,
+  getArtifactVersionRequestSchema,
   modelProfileIdSchema,
   setDefaultModelRequestSchema,
   setModelEnabledRequestSchema,
@@ -89,6 +91,8 @@ app.whenReady().then(() => {
   ipcMain.handle(IpcChannel.ListEvidence, (_event, raw) => journal!.listEvidence(listEvidenceRequestSchema.parse(raw).taskId));
   ipcMain.handle(IpcChannel.ListArtifacts, (_event, raw) => journal!.listArtifacts(listArtifactsRequestSchema.parse(raw ?? {}).taskId));
   ipcMain.handle(IpcChannel.GetArtifact, (_event, raw) => journal!.getArtifactDetail(getArtifactRequestSchema.parse(raw).id) ?? null);
+  ipcMain.handle(IpcChannel.ListArtifactVersions, (_event, raw) => journal!.listArtifactVersions(listArtifactVersionsRequestSchema.parse(raw).artifactId));
+  ipcMain.handle(IpcChannel.GetArtifactVersion, (_event, raw) => journal!.getArtifactVersionDetail(getArtifactVersionRequestSchema.parse(raw).id) ?? null);
   ipcMain.handle(IpcChannel.SaveMarkdownArtifact, (_event, raw) => journal!.saveMarkdownArtifact(saveMarkdownArtifactRequestSchema.parse(raw)));
   ipcMain.handle(IpcChannel.ListModels, () => journal!.listModels());
   ipcMain.handle(IpcChannel.SaveModel, (_event, raw) => {

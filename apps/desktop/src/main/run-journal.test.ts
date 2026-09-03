@@ -50,6 +50,15 @@ describe('RunJournal', () => {
     expect(manuallyEdited.sourceRunId).toBeUndefined();
     expect(journal.listArtifacts(task.task.id)).toEqual([expect.objectContaining({ id: first.id, versionNumber: 3, origin: 'user-edit' })]);
     expect(journal.getArtifactDetail(first.id)).toMatchObject({ id: first.id, content: '# 第三版', versionNumber: 3, origin: 'user-edit' });
+    expect(journal.listArtifactVersions(first.id)).toEqual([
+      expect.objectContaining({ versionNumber: 3, origin: 'user-edit' }),
+      expect.objectContaining({ versionNumber: 2, origin: 'assistant-run', sourceRunId: 'run-2' }),
+      expect.objectContaining({ versionNumber: 1, origin: 'assistant-run', sourceRunId: 'run-1' }),
+    ]);
+    const version = journal.listArtifactVersions(first.id).find((item) => item.versionNumber === 2);
+    expect(version).toBeDefined();
+    if (!version) throw new Error('Expected the second artifact version');
+    expect(journal.getArtifactVersionDetail(version.id)).toMatchObject({ id: version.id, content: '# 第二版', versionNumber: 2, sourceRunId: 'run-2' });
   });
 
   it('persists runs and ordered events', () => {

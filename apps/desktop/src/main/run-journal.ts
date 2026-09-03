@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { createHash, randomUUID } from 'node:crypto';
-import type { AgentRuntimeEvent, ArtifactDetail, ArtifactSummary, CreatedTask, EvidenceSummary, ModelConnectionStatus, ModelProfileInput, ModelProfileSummary, RecentTaskSummary, RunSummary, SaveMarkdownArtifactRequest, TaskSummary, WorkspaceSummary } from '@betterwork/agent-protocol';
+import type { AgentRuntimeEvent, ArtifactDetail, ArtifactSummary, ArtifactVersionDetail, ArtifactVersionSummary, CreatedTask, EvidenceSummary, ModelConnectionStatus, ModelProfileInput, ModelProfileSummary, RecentTaskSummary, RunSummary, SaveMarkdownArtifactRequest, TaskSummary, WorkspaceSummary } from '@betterwork/agent-protocol';
 import { agentRuntimeEventSchema } from '@betterwork/agent-protocol';
 
 interface RunRow {
@@ -18,6 +18,7 @@ interface TaskRow { id: string; workspace_id: string; title: string; goal: strin
 interface RecentTaskRow extends TaskRow { session_id: string; run_id: string | null; run_session_id: string | null; prompt: string | null; status: RunSummary['status'] | null; run_created_at: number | null; completed_at: number | null; }
 interface EvidenceRow { id: string; task_id: string; run_id: string; source_type: 'local-file'; source_uri: string; title: string; locator: string; excerpt: string; content_hash: string; captured_at: number; }
 interface ArtifactRow { id: string; workspace_id: string; task_id: string; type: 'markdown'; title: string; current_version_id: string; version_number: number; source_run_id: string; origin: 'assistant-run' | 'user-edit'; created_at: number; updated_at: number; }
+interface ArtifactVersionRow { id: string; artifact_id: string; version_number: number; source_run_id: string; origin: 'assistant-run' | 'user-edit'; content?: string; content_hash?: string; created_at: number; }
 
 export class RunJournal {
   private readonly db: Database.Database;
@@ -185,6 +186,16 @@ export class RunJournal {
     return row ? { ...this.toArtifactSummary(row), content: row.content, contentHash: row.content_hash } : undefined;
   }
 
+  listArtifactVersions(artifactId: string): ArtifactVersionSummary[] {
+    const rows = this.db.prepare('SELECT id, artifact_id, version_number, source_run_id, origin, created_at FROM artifact_versions WHERE artifact_id = ? ORDER BY version_number DESC').all(artifactId) as ArtifactVersionRow[];
+    return rows.map((row) => this.toArtifactVersionSummary(row));
+  }
+
+  getArtifactVersionDetail(id: string): ArtifactVersionDetail | undefined {
+    const row = this.db.prepare('SELECT id, artifact_id, version_number, source_run_id, origin, content, content_hash, created_at FROM artifact_versions WHERE id = ?').get(id) as ArtifactVersionRow | undefined;
+    return row && row.content !== undefined && row.content_hash !== undefined ? { ...this.toArtifactVersionSummary(row), content: row.content, contentHash: row.content_hash } : undefined;
+  }
+
   createRun(run: RunSummary): void {
     const transaction = this.db.transaction(() => {
       this.db.prepare(`
@@ -318,6 +329,10 @@ export class RunJournal {
 
   private toArtifactSummary(row: ArtifactRow): ArtifactSummary {
     return { id: row.id, workspaceId: row.workspace_id, taskId: row.task_id, type: 'markdown', title: row.title, currentVersionId: row.current_version_id, versionNumber: row.version_number, origin: row.origin, ...(row.source_run_id ? { sourceRunId: row.source_run_id } : {}), createdAt: row.created_at, updatedAt: row.updated_at };
+  }
+
+  private toArtifactVersionSummary(row: ArtifactVersionRow): ArtifactVersionSummary {
+    return { id: row.id, artifactId: row.artifact_id, versionNumber: row.version_number, origin: row.origin, ...(row.source_run_id ? { sourceRunId: row.source_run_id } : {}), createdAt: row.created_at };
   }
 
   close(): void {
