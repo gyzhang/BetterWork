@@ -79,6 +79,15 @@ export class KnowledgeVault {
     return row?.source_path;
   }
 
+  removeDocument(id: string): boolean {
+    const remove = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM knowledge_fts WHERE document_id = ?').run(id);
+      this.db.prepare('DELETE FROM knowledge_chunks WHERE document_id = ?').run(id);
+      return this.db.prepare('DELETE FROM knowledge_documents WHERE id = ?').run(id).changes > 0;
+    });
+    return remove();
+  }
+
   close(): void { this.db.close(); }
 
   private storeDocument(sourcePath: string, byteSize: number, bytes: Buffer, extracted: ExtractedDocument): KnowledgeDocumentSummary {

@@ -51,6 +51,7 @@ const api: BetterWorkDesktopApi = {
     importFromDialog: () => ipcRenderer.invoke(IpcChannel.ImportKnowledge),
     search: (input) => ipcRenderer.invoke(IpcChannel.SearchKnowledge, input),
     openSource: (input) => ipcRenderer.invoke(IpcChannel.OpenKnowledgeSource, input),
+    remove: (input) => ipcRenderer.invoke(IpcChannel.RemoveKnowledgeDocument, input),
   },
 };
 
