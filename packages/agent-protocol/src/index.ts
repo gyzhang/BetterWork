@@ -271,6 +271,9 @@ export const updateWindowThemeRequestSchema = z.object({
 });
 export type UpdateWindowThemeRequest = z.infer<typeof updateWindowThemeRequestSchema>;
 
+export const windowToggleMaximizeRequestSchema = z.object({}).strict();
+export type WindowToggleMaximizeRequest = z.infer<typeof windowToggleMaximizeRequestSchema>;
+
 export interface RunSummary {
   id: string;
   taskId: string;
@@ -311,6 +314,7 @@ export const IpcChannel = {
   RefreshKnowledgeDocument: 'knowledge:refresh',
   TestModel: 'model:test',
   UpdateWindowTheme: 'window:update-theme',
+  WindowToggleMaximize: 'window:toggle-maximize',
 } as const;
 
 export interface BetterWorkDesktopApi {
@@ -350,6 +354,7 @@ export interface BetterWorkDesktopApi {
   };
   chrome: {
     updateTheme(input: UpdateWindowThemeRequest): Promise<void>;
+    toggleMaximize(): Promise<{ maximized: boolean }>;
   };
   knowledge: {
     list(): Promise<KnowledgeDocumentSummary[]>;
