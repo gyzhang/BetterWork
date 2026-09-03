@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import type { KnowledgeDocumentSummary, KnowledgeFormat, KnowledgeImportResult, KnowledgeSearchResult } from '@betterwork/agent-protocol';
+import type { KnowledgeDocumentSummary, KnowledgeFormat, KnowledgeImportResult, KnowledgeRefreshResult, KnowledgeSearchResult } from '@betterwork/agent-protocol';
 
 interface KnowledgeRow { id: string; title: string; source_path: string; format: KnowledgeFormat; byte_size: number; content_hash: string; page_count: number | null; imported_at: number; updated_at: number; }
 interface KnowledgeChunk { id: string; locator: string; content: string; ordinal: number; }
@@ -86,6 +86,13 @@ export class KnowledgeVault {
       return this.db.prepare('DELETE FROM knowledge_documents WHERE id = ?').run(id).changes > 0;
     });
     return remove();
+  }
+
+  async refreshDocument(id: string): Promise<KnowledgeRefreshResult> {
+    const row = this.db.prepare('SELECT source_path FROM knowledge_documents WHERE id = ?').get(id) as { source_path: string } | undefined;
+    if (!row) return { error: '资料已不在当前资料库中。' };
+    const result = await this.importPaths([row.source_path]);
+    return result.imported[0] ? { refreshed: result.imported[0] } : { error: result.skipped[0]?.reason ?? '刷新索引失败。' };
   }
 
   close(): void { this.db.close(); }
