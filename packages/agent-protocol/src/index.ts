@@ -201,6 +201,20 @@ export interface ArtifactDetail extends ArtifactSummary {
   contentHash: string;
 }
 
+export interface ArtifactVersionSummary {
+  id: string;
+  artifactId: string;
+  versionNumber: number;
+  origin: ArtifactVersionOrigin;
+  sourceRunId?: string;
+  createdAt: number;
+}
+
+export interface ArtifactVersionDetail extends ArtifactVersionSummary {
+  content: string;
+  contentHash: string;
+}
+
 export const saveMarkdownArtifactRequestSchema = z.object({
   artifactId: z.string().min(1).optional(),
   taskId: z.string().min(1),
@@ -220,6 +234,8 @@ export type SaveMarkdownArtifactRequest = z.infer<typeof saveMarkdownArtifactReq
 export const listArtifactsRequestSchema = z.object({ taskId: z.string().min(1).optional() });
 export type ListArtifactsRequest = z.infer<typeof listArtifactsRequestSchema>;
 export const getArtifactRequestSchema = z.object({ id: z.string().min(1) });
+export const listArtifactVersionsRequestSchema = z.object({ artifactId: z.string().min(1) });
+export const getArtifactVersionRequestSchema = z.object({ id: z.string().min(1) });
 
 export const listEvidenceRequestSchema = z.object({ taskId: z.string().min(1) });
 export type ListEvidenceRequest = z.infer<typeof listEvidenceRequestSchema>;
@@ -257,6 +273,8 @@ export const IpcChannel = {
   ListEvidence: 'evidence:list',
   ListArtifacts: 'artifact:list',
   GetArtifact: 'artifact:get',
+  ListArtifactVersions: 'artifact:list-versions',
+  GetArtifactVersion: 'artifact:get-version',
   SaveMarkdownArtifact: 'artifact:save-markdown',
   ListModels: 'model:list',
   SaveModel: 'model:save',
@@ -292,6 +310,8 @@ export interface BetterWorkDesktopApi {
   artifacts: {
     list(input?: ListArtifactsRequest): Promise<ArtifactSummary[]>;
     get(input: { id: string }): Promise<ArtifactDetail | null>;
+    listVersions(input: { artifactId: string }): Promise<ArtifactVersionSummary[]>;
+    getVersion(input: { id: string }): Promise<ArtifactVersionDetail | null>;
     saveMarkdown(input: SaveMarkdownArtifactRequest): Promise<ArtifactSummary>;
   };
   models: {
