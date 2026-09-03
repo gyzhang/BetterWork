@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
-import type { AgentRuntimeEvent, ModelConnectionStatus, ModelProfileInput, ModelProfileSummary, RunSummary } from '@betterwork/agent-protocol';
+import { randomUUID } from 'node:crypto';
+import type { AgentRuntimeEvent, CreatedTask, ModelConnectionStatus, ModelProfileInput, ModelProfileSummary, RunSummary, TaskSummary, WorkspaceSummary } from '@betterwork/agent-protocol';
 import { agentRuntimeEventSchema } from '@betterwork/agent-protocol';
 
 interface RunRow {
@@ -12,6 +13,9 @@ interface RunRow {
   completed_at: number | null;
 }
 
+interface WorkspaceRow { id: string; name: string; root_path: string; created_at: number; updated_at: number; }
+interface TaskRow { id: string; workspace_id: string; title: string; goal: string; created_at: number; updated_at: number; }
+
 export class RunJournal {
   private readonly db: Database.Database;
 
@@ -19,6 +23,26 @@ export class RunJournal {
     this.db = new Database(filePath);
     this.db.pragma('journal_mode = WAL');
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS workspaces (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        root_path TEXT NOT NULL UNIQUE,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS tasks (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        goal TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS runs (
         id TEXT PRIMARY KEY,
         task_id TEXT NOT NULL,
@@ -57,6 +81,30 @@ export class RunJournal {
     const columns = this.db.prepare('PRAGMA table_info(model_profiles)').all() as Array<{ name: string }>;
     if (!columns.some((column) => column.name === 'connection_status')) this.db.exec("ALTER TABLE model_profiles ADD COLUMN connection_status TEXT NOT NULL DEFAULT 'untested'");
     if (!columns.some((column) => column.name === 'last_tested_at')) this.db.exec('ALTER TABLE model_profiles ADD COLUMN last_tested_at INTEGER');
+  }
+
+  getOrCreateWorkspace(rootPath: string, name: string): WorkspaceSummary {
+    const existing = this.db.prepare('SELECT * FROM workspaces WHERE root_path = ?').get(rootPath) as WorkspaceRow | undefined;
+    if (existing) return this.toWorkspaceSummary(existing);
+    const now = Date.now();
+    const workspace: WorkspaceRow = { id: randomUUID(), name, root_path: rootPath, created_at: now, updated_at: now };
+    this.db.prepare('INSERT INTO workspaces (id, name, root_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+      .run(workspace.id, workspace.name, workspace.root_path, workspace.created_at, workspace.updated_at);
+    return this.toWorkspaceSummary(workspace);
+  }
+
+  createTask(workspaceId: string, title: string, goal: string): CreatedTask {
+    const workspace = this.db.prepare('SELECT id FROM workspaces WHERE id = ?').get(workspaceId) as { id: string } | undefined;
+    if (!workspace) throw new Error('Workspace does not exist');
+    const now = Date.now();
+    const task: TaskRow = { id: randomUUID(), workspace_id: workspaceId, title, goal, created_at: now, updated_at: now };
+    const sessionId = randomUUID();
+    this.db.transaction(() => {
+      this.db.prepare('INSERT INTO tasks (id, workspace_id, title, goal, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(task.id, task.workspace_id, task.title, task.goal, task.created_at, task.updated_at);
+      this.db.prepare('INSERT INTO sessions (id, task_id, created_at) VALUES (?, ?, ?)').run(sessionId, task.id, now);
+    })();
+    return { task: this.toTaskSummary(task), sessionId };
   }
 
   createRun(run: RunSummary): void {
@@ -171,6 +219,14 @@ export class RunJournal {
       maxContextTokens: Number(row.max_context_tokens), maxOutputTokens: Number(row.max_output_tokens), temperature: Number(row.temperature),
       createdAt: Number(row.created_at), updatedAt: Number(row.updated_at),
     };
+  }
+
+  private toWorkspaceSummary(row: WorkspaceRow): WorkspaceSummary {
+    return { id: row.id, name: row.name, rootPath: row.root_path, createdAt: row.created_at, updatedAt: row.updated_at };
+  }
+
+  private toTaskSummary(row: TaskRow): TaskSummary {
+    return { id: row.id, workspaceId: row.workspace_id, title: row.title, goal: row.goal, createdAt: row.created_at, updatedAt: row.updated_at };
   }
 
   close(): void {

@@ -2,6 +2,7 @@ import path from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, type BrowserWindowConstructorOptions } from 'electron';
 import {
   cancelRunRequestSchema,
+  createTaskRequestSchema,
   IpcChannel,
   listRunEventsRequestSchema,
   modelProfileIdSchema,
@@ -63,15 +64,21 @@ app.whenReady().then(() => {
     const input = listRunEventsRequestSchema.parse(raw);
     return journal!.listEvents(input.runId);
   });
-  ipcMain.handle(IpcChannel.GetDefaultWorkspace, () => (
-    app.isPackaged ? app.getPath('documents') : path.resolve(app.getAppPath(), '../..')
-  ));
+  ipcMain.handle(IpcChannel.GetDefaultWorkspace, () => {
+    const rootPath = app.isPackaged ? app.getPath('documents') : path.resolve(app.getAppPath(), '../..');
+    return journal!.getOrCreateWorkspace(rootPath, '我的工作区');
+  });
   ipcMain.handle(IpcChannel.SelectWorkspace, async () => {
     const result = await dialog.showOpenDialog(mainWindow!, {
       title: '选择工作区',
       properties: ['openDirectory', 'createDirectory'],
     });
-    return result.canceled ? null : result.filePaths[0] ?? null;
+    const rootPath = result.filePaths[0];
+    return result.canceled || !rootPath ? null : journal!.getOrCreateWorkspace(rootPath, path.basename(rootPath));
+  });
+  ipcMain.handle(IpcChannel.CreateTask, (_event, raw) => {
+    const input = createTaskRequestSchema.parse(raw);
+    return journal!.createTask(input.workspaceId, input.title, input.goal);
   });
   ipcMain.handle(IpcChannel.ListModels, () => journal!.listModels());
   ipcMain.handle(IpcChannel.SaveModel, (_event, raw) => {
