@@ -107,4 +107,18 @@ describe('KnowledgeVault', () => {
     expect(existsSync(text)).toBe(true);
     vault.close();
   });
+
+  it('refreshes a registered document from its original source path', async () => {
+    const directory = temporaryDirectory();
+    const text = path.join(directory, '动态资料.txt');
+    writeFileSync(text, '第一版内容。');
+    const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
+    const original = (await vault.importPaths([text])).imported[0]!;
+    writeFileSync(text, '第二版内容，包含新的市场信号。');
+    const refreshed = await vault.refreshDocument(original.id);
+    expect(refreshed.refreshed).toMatchObject({ id: original.id, contentHash: expect.not.stringMatching(original.contentHash) });
+    expect(vault.search('市场信号')[0]?.document.id).toBe(original.id);
+    expect(await vault.refreshDocument('missing-document')).toEqual({ error: '资料已不在当前资料库中。' });
+    vault.close();
+  });
 });
