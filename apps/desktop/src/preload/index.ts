@@ -22,6 +22,7 @@ const api: BetterWorkDesktopApi = {
   },
   tasks: {
     create: (input) => ipcRenderer.invoke(IpcChannel.CreateTask, input),
+    list: (input) => ipcRenderer.invoke(IpcChannel.ListTasks, input),
   },
   evidence: {
     list: (input) => ipcRenderer.invoke(IpcChannel.ListEvidence, input),

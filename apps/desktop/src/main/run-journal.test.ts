@@ -16,6 +16,15 @@ describe('RunJournal', () => {
     expect(() => journal!.createTask('missing-workspace', '无效任务', '不应创建')).toThrow('Workspace does not exist');
   });
 
+  it('lists one recent task with its latest run instead of duplicate run rows', () => {
+    journal = new RunJournal(':memory:');
+    const workspace = journal.getOrCreateWorkspace('/work/customer-a', '客户 A');
+    const task = journal.createTask(workspace.id, '季度复盘', '根据资料完成季度复盘');
+    journal.createRun({ id: 'run-1', taskId: task.task.id, sessionId: task.sessionId, prompt: '第一轮', status: 'completed', createdAt: 1, completedAt: 2 });
+    journal.createRun({ id: 'run-2', taskId: task.task.id, sessionId: task.sessionId, prompt: '第二轮', status: 'running', createdAt: 3 });
+    expect(journal.listTasks(workspace.id)).toEqual([expect.objectContaining({ id: task.task.id, sessionId: task.sessionId, latestRun: expect.objectContaining({ id: 'run-2', prompt: '第二轮' }) })]);
+  });
+
   it('persists deduplicated local evidence for a task', () => {
     journal = new RunJournal(':memory:');
     const workspace = journal.getOrCreateWorkspace('/work/customer-a', '客户 A');

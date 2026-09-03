@@ -85,6 +85,14 @@ export interface CreatedTask {
   sessionId: string;
 }
 
+export interface RecentTaskSummary extends TaskSummary {
+  sessionId: string;
+  latestRun?: RunSummary;
+}
+
+export const listTasksRequestSchema = z.object({ workspaceId: z.string().min(1).optional() });
+export type ListTasksRequest = z.infer<typeof listTasksRequestSchema>;
+
 export const cancelRunRequestSchema = z.object({ runId: z.string().min(1) });
 export type CancelRunRequest = z.infer<typeof cancelRunRequestSchema>;
 
@@ -234,6 +242,7 @@ export const IpcChannel = {
   GetDefaultWorkspace: 'workspace:get-default',
   SelectWorkspace: 'workspace:select',
   CreateTask: 'task:create',
+  ListTasks: 'task:list',
   ListEvidence: 'evidence:list',
   ListArtifacts: 'artifact:list',
   GetArtifact: 'artifact:get',
@@ -264,6 +273,7 @@ export interface BetterWorkDesktopApi {
   };
   tasks: {
     create(input: CreateTaskRequest): Promise<CreatedTask>;
+    list(input?: ListTasksRequest): Promise<RecentTaskSummary[]>;
   };
   evidence: {
     list(input: ListEvidenceRequest): Promise<EvidenceSummary[]>;

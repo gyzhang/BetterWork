@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { createHash, randomUUID } from 'node:crypto';
-import type { AgentRuntimeEvent, ArtifactDetail, ArtifactSummary, CreatedTask, EvidenceSummary, ModelConnectionStatus, ModelProfileInput, ModelProfileSummary, RunSummary, SaveMarkdownArtifactRequest, TaskSummary, WorkspaceSummary } from '@betterwork/agent-protocol';
+import type { AgentRuntimeEvent, ArtifactDetail, ArtifactSummary, CreatedTask, EvidenceSummary, ModelConnectionStatus, ModelProfileInput, ModelProfileSummary, RecentTaskSummary, RunSummary, SaveMarkdownArtifactRequest, TaskSummary, WorkspaceSummary } from '@betterwork/agent-protocol';
 import { agentRuntimeEventSchema } from '@betterwork/agent-protocol';
 
 interface RunRow {
@@ -15,6 +15,7 @@ interface RunRow {
 
 interface WorkspaceRow { id: string; name: string; root_path: string; created_at: number; updated_at: number; }
 interface TaskRow { id: string; workspace_id: string; title: string; goal: string; created_at: number; updated_at: number; }
+interface RecentTaskRow extends TaskRow { session_id: string; run_id: string | null; run_session_id: string | null; prompt: string | null; status: RunSummary['status'] | null; run_created_at: number | null; completed_at: number | null; }
 interface EvidenceRow { id: string; task_id: string; run_id: string; source_type: 'local-file'; source_uri: string; title: string; locator: string; excerpt: string; content_hash: string; captured_at: number; }
 interface ArtifactRow { id: string; workspace_id: string; task_id: string; type: 'markdown'; title: string; current_version_id: string; version_number: number; source_run_id: string; created_at: number; updated_at: number; }
 
@@ -125,6 +126,15 @@ export class RunJournal {
     return { task: this.toTaskSummary(task), sessionId };
   }
 
+  listTasks(workspaceId?: string): RecentTaskSummary[] {
+    const query = `SELECT t.id, t.workspace_id, t.title, t.goal, t.created_at, t.updated_at, s.id AS session_id, r.id AS run_id, r.session_id AS run_session_id, r.prompt, r.status, r.created_at AS run_created_at, r.completed_at FROM tasks t JOIN sessions s ON s.id = (SELECT id FROM sessions WHERE task_id = t.id ORDER BY created_at ASC, rowid ASC LIMIT 1) LEFT JOIN runs r ON r.id = (SELECT id FROM runs WHERE task_id = t.id ORDER BY created_at DESC, rowid DESC LIMIT 1) ${workspaceId ? 'WHERE t.workspace_id = ?' : ''} ORDER BY t.updated_at DESC, t.rowid DESC LIMIT 100`;
+    const rows = (workspaceId ? this.db.prepare(query).all(workspaceId) : this.db.prepare(query).all()) as RecentTaskRow[];
+    return rows.map((row) => ({
+      ...this.toTaskSummary(row), sessionId: row.session_id,
+      ...(row.run_id && row.run_session_id && row.prompt && row.status && row.run_created_at !== null ? { latestRun: { id: row.run_id, taskId: row.id, sessionId: row.run_session_id, prompt: row.prompt, status: row.status, createdAt: row.run_created_at, ...(row.completed_at === null ? {} : { completedAt: row.completed_at }) } } : {}),
+    }));
+  }
+
   saveLocalEvidence(input: Omit<EvidenceSummary, 'id' | 'sourceType' | 'capturedAt'>): void {
     this.db.prepare(`INSERT OR IGNORE INTO evidence (id, task_id, run_id, source_type, source_uri, title, locator, excerpt, content_hash, captured_at) VALUES (?, ?, ?, 'local-file', ?, ?, ?, ?, ?, ?)`)
       .run(randomUUID(), input.taskId, input.runId, input.sourceUri, input.title, input.locator, input.excerpt, input.contentHash, Date.now());
@@ -171,10 +181,14 @@ export class RunJournal {
   }
 
   createRun(run: RunSummary): void {
-    this.db.prepare(`
+    const transaction = this.db.transaction(() => {
+      this.db.prepare(`
       INSERT INTO runs (id, task_id, session_id, prompt, status, created_at, completed_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(run.id, run.taskId, run.sessionId, run.prompt, run.status, run.createdAt, run.completedAt ?? null);
+      `).run(run.id, run.taskId, run.sessionId, run.prompt, run.status, run.createdAt, run.completedAt ?? null);
+      this.db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(run.createdAt, run.taskId);
+    });
+    transaction();
   }
 
   appendEvent(event: AgentRuntimeEvent): void {
