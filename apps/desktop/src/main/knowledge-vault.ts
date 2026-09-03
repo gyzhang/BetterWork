@@ -74,6 +74,11 @@ export class KnowledgeVault {
     return fallback.map((row) => ({ document: this.toSummary(row), locator: row.locator, excerpt: makeExcerpt(row.content, query) }));
   }
 
+  getRegisteredSourcePath(sourcePath: string): string | undefined {
+    const row = this.db.prepare('SELECT source_path FROM knowledge_documents WHERE source_path = ?').get(sourcePath) as { source_path: string } | undefined;
+    return row?.source_path;
+  }
+
   close(): void { this.db.close(); }
 
   private storeDocument(sourcePath: string, byteSize: number, bytes: Buffer, extracted: ExtractedDocument): KnowledgeDocumentSummary {
