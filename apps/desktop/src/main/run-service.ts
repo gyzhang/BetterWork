@@ -52,7 +52,7 @@ export class RunService {
         prompt: input.prompt,
         workspacePath: input.workspacePath,
         model: configured ? new OpenAICompatibleProvider(configured) : this.model,
-        tools: [calculatorTool, readTextFileTool, createKnowledgeSearchTool((query) => this.knowledgeVault.search(query).map(({ document, excerpt }) => ({ ...document, excerpt })))],
+        tools: [calculatorTool, readTextFileTool, createKnowledgeSearchTool((query) => this.knowledgeVault.search(query).map(({ document, locator, excerpt }) => ({ ...document, locator, excerpt })))],
         signal: controller.signal,
       })) this.publish(event);
     } finally {

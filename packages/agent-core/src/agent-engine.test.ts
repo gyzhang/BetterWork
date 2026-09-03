@@ -39,7 +39,7 @@ describe('ReActAgentEngine', () => {
     for await (const event of engine.run({
       runId: 'run-knowledge', taskId: 'task-1', sessionId: 'session-1', prompt: '搜索知识: 续约风险', workspacePath: '.',
       model: new FakeModelProvider(0),
-      tools: [createKnowledgeSearchTool(() => [{ id: 'doc-1', title: '客户访谈', sourcePath: '/notes/customer.md', format: 'markdown', excerpt: '续约风险需要季度复盘。' }])],
+      tools: [createKnowledgeSearchTool(() => [{ id: 'doc-1', title: '客户访谈', sourcePath: '/notes/customer.md', format: 'markdown', locator: '全文', excerpt: '续约风险需要季度复盘。' }])],
       signal: new AbortController().signal,
     })) events.push(event);
 

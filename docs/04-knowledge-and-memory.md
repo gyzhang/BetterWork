@@ -26,6 +26,8 @@ vaults/<vault-id>/
 
 如果用户选择引用原位置而不是复制文件，Vault 记录文件路径、Hash 和最近索引状态。
 
+当前实现状态：Markdown/Text 以“全文”为 Locator；PDF 使用跨平台解析器按页提取，检索结果保留“第 N 页”Locator。原件仍引用原路径，SQLite 中保存的是可重建的提取文本和索引。
+
 ## 3. 支持格式
 
 目标格式：
@@ -179,4 +181,3 @@ type ModelRole = "language" | "vision" | "embedding" | "reranker" | "ocr";
 ```
 
 模型配置记录角色、Provider、Endpoint、上下文、工具能力、图片能力和 Embedding 维度。更换 Embedding 模型后应重建对应索引。
-
