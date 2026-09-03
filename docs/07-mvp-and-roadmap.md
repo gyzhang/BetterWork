@@ -41,6 +41,8 @@
 
 该 Gate 允许重构 Renderer 的组件和样式结构，但不借机扩张 Agent Core、知识库或 Office 能力。完成后必须保证 Fake Provider 与真实 Provider 的已有链路不回退。
 
+状态：已完成。随后以最小的本地知识库切片进入 Phase 1：仅导入 Markdown/Text，记录源路径和内容哈希，并以 SQLite FTS5 提供可定位的本地检索；PDF/Office 解析、Embedding 与研究工作流保持后置。
+
 ## 3. Phase 1：研究报告 MVP
 
 目标：完成第一条真实知识工作闭环。

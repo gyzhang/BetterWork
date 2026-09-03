@@ -10,13 +10,16 @@ import {
   saveModelProfileRequestSchema,
   testModelRequestSchema,
   startRunRequestSchema,
+  searchKnowledgeRequestSchema,
   updateWindowThemeRequestSchema,
 } from '@betterwork/agent-protocol';
 import { RunJournal } from './run-journal';
 import { RunService } from './run-service';
+import { KnowledgeVault } from './knowledge-vault';
 
 let mainWindow: BrowserWindow | null = null;
 let journal: RunJournal | null = null;
+let knowledgeVault: KnowledgeVault | null = null;
 
 const createWindow = (): void => {
   const options: BrowserWindowConstructorOptions = {
@@ -43,6 +46,7 @@ const createWindow = (): void => {
 
 app.whenReady().then(() => {
   journal = new RunJournal(path.join(app.getPath('userData'), 'betterwork.db'));
+  knowledgeVault = new KnowledgeVault(path.join(app.getPath('userData'), 'vaults', 'default', 'vault.sqlite'));
   createWindow();
   const runs = new RunService(journal, () => mainWindow);
 
@@ -86,6 +90,16 @@ app.whenReady().then(() => {
     const input = setModelEnabledRequestSchema.parse(raw);
     return { updated: journal!.setModelEnabled(input.id, input.enabled) };
   });
+  ipcMain.handle(IpcChannel.ListKnowledge, () => knowledgeVault!.listDocuments());
+  ipcMain.handle(IpcChannel.ImportKnowledge, async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: '导入本地资料',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Markdown 和文本', extensions: ['md', 'markdown', 'txt', 'text'] }, { name: '所有文件', extensions: ['*'] }],
+    });
+    return result.canceled ? { imported: [], skipped: [] } : knowledgeVault!.importPaths(result.filePaths);
+  });
+  ipcMain.handle(IpcChannel.SearchKnowledge, (_event, raw) => knowledgeVault!.search(searchKnowledgeRequestSchema.parse(raw).query));
   ipcMain.handle(IpcChannel.TestModel, async (_event, raw) => {
     const input = testModelRequestSchema.parse(raw);
     const base = input.baseUrl.replace(/\/$/, '');
@@ -121,4 +135,4 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => journal?.close());
+app.on('before-quit', () => { journal?.close(); knowledgeVault?.close(); });

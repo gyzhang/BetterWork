@@ -102,6 +102,32 @@ export interface ModelProfileSummary {
   updatedAt: number;
 }
 
+export type KnowledgeFormat = 'markdown' | 'text';
+
+export interface KnowledgeDocumentSummary {
+  id: string;
+  title: string;
+  sourcePath: string;
+  format: KnowledgeFormat;
+  byteSize: number;
+  contentHash: string;
+  importedAt: number;
+  updatedAt: number;
+}
+
+export interface KnowledgeImportResult {
+  imported: KnowledgeDocumentSummary[];
+  skipped: Array<{ sourcePath: string; reason: string }>;
+}
+
+export const searchKnowledgeRequestSchema = z.object({ query: z.string().trim().min(1).max(500) });
+export type SearchKnowledgeRequest = z.infer<typeof searchKnowledgeRequestSchema>;
+
+export interface KnowledgeSearchResult {
+  document: KnowledgeDocumentSummary;
+  excerpt: string;
+}
+
 export const modelProfileIdSchema = z.object({ id: z.string().min(1) });
 export const setDefaultModelRequestSchema = z.object({ id: z.string().min(1) });
 export const setModelEnabledRequestSchema = z.object({ id: z.string().min(1), enabled: z.boolean() });
@@ -135,6 +161,9 @@ export const IpcChannel = {
   DeleteModel: 'model:delete',
   SetDefaultModel: 'model:set-default',
   SetModelEnabled: 'model:set-enabled',
+  ListKnowledge: 'knowledge:list',
+  ImportKnowledge: 'knowledge:import',
+  SearchKnowledge: 'knowledge:search',
   TestModel: 'model:test',
   UpdateWindowTheme: 'window:update-theme',
 } as const;
@@ -161,5 +190,10 @@ export interface BetterWorkDesktopApi {
   };
   chrome: {
     updateTheme(input: UpdateWindowThemeRequest): Promise<void>;
+  };
+  knowledge: {
+    list(): Promise<KnowledgeDocumentSummary[]>;
+    importFromDialog(): Promise<KnowledgeImportResult>;
+    search(input: SearchKnowledgeRequest): Promise<KnowledgeSearchResult[]>;
   };
 }

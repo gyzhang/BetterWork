@@ -14,7 +14,7 @@
 
 ## 2. 当前阶段
 
-当前处于 `Phase 0：项目骨架与教学链路`。范围以 `docs/07-mvp-and-roadmap.md` 为准。
+Phase 0 教学链路与 UI Foundation 已完成。当前允许进入 `Phase 1：研究报告 MVP` 的第一条知识库垂直切片；范围以 `docs/07-mvp-and-roadmap.md` 为准。
 
 本阶段允许实现：
 
@@ -33,8 +33,10 @@
 - OpenClaw 兼容
 - 编程 Agent 和代码仓库自动修改
 - 多 Agent、通用 DAG、IM、定时任务、云同步
-- 完整知识库、记忆、Office 和 Kit 实现
+- 完整记忆、Office 和 Kit 实现
 - 在没有真实产品需求前引入大型框架
+
+当前 Phase 1 仅允许：本地 Markdown/Text 导入、源路径与哈希记录、SQLite FTS5 检索及对应类型化 IPC/UI。PDF/Office 解析、Embedding、研究 Agent、Evidence 与 Artifact 仍须在后续切片单独实现。
 
 ## 3. 架构硬约束
 
