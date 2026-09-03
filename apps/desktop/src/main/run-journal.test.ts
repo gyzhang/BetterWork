@@ -41,12 +41,15 @@ describe('RunJournal', () => {
     const task = journal.createTask(workspace.id, '季度复盘', '根据资料完成季度复盘');
     journal.createRun({ id: 'run-1', taskId: task.task.id, sessionId: task.sessionId, prompt: '生成复盘', status: 'completed', createdAt: 1, completedAt: 2 });
     journal.createRun({ id: 'run-2', taskId: task.task.id, sessionId: task.sessionId, prompt: '修改复盘', status: 'completed', createdAt: 3, completedAt: 4 });
-    const first = journal.saveMarkdownArtifact({ taskId: task.task.id, runId: 'run-1', title: '季度复盘', content: '# 第一版' });
-    const revised = journal.saveMarkdownArtifact({ artifactId: first.id, taskId: task.task.id, runId: 'run-2', title: '季度复盘（修订）', content: '# 第二版' });
-    expect(first).toMatchObject({ type: 'markdown', versionNumber: 1, sourceRunId: 'run-1' });
-    expect(revised).toMatchObject({ id: first.id, title: '季度复盘（修订）', versionNumber: 2, sourceRunId: 'run-2' });
-    expect(journal.listArtifacts(task.task.id)).toEqual([expect.objectContaining({ id: first.id, versionNumber: 2 })]);
-    expect(journal.getArtifactDetail(first.id)).toMatchObject({ id: first.id, content: '# 第二版', versionNumber: 2 });
+    const first = journal.saveMarkdownArtifact({ taskId: task.task.id, origin: 'assistant-run', runId: 'run-1', title: '季度复盘', content: '# 第一版' });
+    const revised = journal.saveMarkdownArtifact({ artifactId: first.id, taskId: task.task.id, origin: 'assistant-run', runId: 'run-2', title: '季度复盘（修订）', content: '# 第二版' });
+    const manuallyEdited = journal.saveMarkdownArtifact({ artifactId: first.id, taskId: task.task.id, origin: 'user-edit', title: '季度复盘（人工修订）', content: '# 第三版' });
+    expect(first).toMatchObject({ type: 'markdown', versionNumber: 1, origin: 'assistant-run', sourceRunId: 'run-1' });
+    expect(revised).toMatchObject({ id: first.id, title: '季度复盘（修订）', versionNumber: 2, origin: 'assistant-run', sourceRunId: 'run-2' });
+    expect(manuallyEdited).toMatchObject({ id: first.id, title: '季度复盘（人工修订）', versionNumber: 3, origin: 'user-edit' });
+    expect(manuallyEdited.sourceRunId).toBeUndefined();
+    expect(journal.listArtifacts(task.task.id)).toEqual([expect.objectContaining({ id: first.id, versionNumber: 3, origin: 'user-edit' })]);
+    expect(journal.getArtifactDetail(first.id)).toMatchObject({ id: first.id, content: '# 第三版', versionNumber: 3, origin: 'user-edit' });
   });
 
   it('persists runs and ordered events', () => {
