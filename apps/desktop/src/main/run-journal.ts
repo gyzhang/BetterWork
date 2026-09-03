@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
-import { randomUUID } from 'node:crypto';
-import type { AgentRuntimeEvent, CreatedTask, EvidenceSummary, ModelConnectionStatus, ModelProfileInput, ModelProfileSummary, RunSummary, TaskSummary, WorkspaceSummary } from '@betterwork/agent-protocol';
+import { createHash, randomUUID } from 'node:crypto';
+import type { AgentRuntimeEvent, ArtifactSummary, CreatedTask, EvidenceSummary, ModelConnectionStatus, ModelProfileInput, ModelProfileSummary, RunSummary, SaveMarkdownArtifactRequest, TaskSummary, WorkspaceSummary } from '@betterwork/agent-protocol';
 import { agentRuntimeEventSchema } from '@betterwork/agent-protocol';
 
 interface RunRow {
@@ -16,6 +16,7 @@ interface RunRow {
 interface WorkspaceRow { id: string; name: string; root_path: string; created_at: number; updated_at: number; }
 interface TaskRow { id: string; workspace_id: string; title: string; goal: string; created_at: number; updated_at: number; }
 interface EvidenceRow { id: string; task_id: string; run_id: string; source_type: 'local-file'; source_uri: string; title: string; locator: string; excerpt: string; content_hash: string; captured_at: number; }
+interface ArtifactRow { id: string; workspace_id: string; task_id: string; type: 'markdown'; title: string; current_version_id: string; version_number: number; source_run_id: string; created_at: number; updated_at: number; }
 
 export class RunJournal {
   private readonly db: Database.Database;
@@ -49,6 +50,16 @@ export class RunJournal {
         source_type TEXT NOT NULL, source_uri TEXT NOT NULL, title TEXT NOT NULL,
         locator TEXT NOT NULL, excerpt TEXT NOT NULL, content_hash TEXT NOT NULL,
         captured_at INTEGER NOT NULL, UNIQUE(run_id, source_uri, locator)
+      );
+      CREATE TABLE IF NOT EXISTS artifacts (
+        id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, task_id TEXT NOT NULL,
+        type TEXT NOT NULL, title TEXT NOT NULL, current_version_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS artifact_versions (
+        id TEXT PRIMARY KEY, artifact_id TEXT NOT NULL, version_number INTEGER NOT NULL,
+        content TEXT NOT NULL, content_hash TEXT NOT NULL, source_run_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL, UNIQUE(artifact_id, version_number)
       );
       CREATE TABLE IF NOT EXISTS runs (
         id TEXT PRIMARY KEY,
@@ -122,6 +133,36 @@ export class RunJournal {
   listEvidence(taskId: string): EvidenceSummary[] {
     const rows = this.db.prepare('SELECT * FROM evidence WHERE task_id = ? ORDER BY captured_at DESC, rowid DESC').all(taskId) as EvidenceRow[];
     return rows.map((row) => ({ id: row.id, taskId: row.task_id, runId: row.run_id, sourceType: 'local-file', sourceUri: row.source_uri, title: row.title, locator: row.locator, excerpt: row.excerpt, contentHash: row.content_hash, capturedAt: row.captured_at }));
+  }
+
+  saveMarkdownArtifact(input: SaveMarkdownArtifactRequest): ArtifactSummary {
+    const task = this.db.prepare('SELECT workspace_id FROM tasks WHERE id = ?').get(input.taskId) as { workspace_id: string } | undefined;
+    if (!task) throw new Error('Task does not exist');
+    const run = this.db.prepare('SELECT task_id FROM runs WHERE id = ?').get(input.runId) as { task_id: string } | undefined;
+    if (!run || run.task_id !== input.taskId) throw new Error('Run does not belong to task');
+    const existing = input.artifactId ? this.db.prepare('SELECT id, workspace_id, task_id FROM artifacts WHERE id = ?').get(input.artifactId) as { id: string; workspace_id: string; task_id: string } | undefined : undefined;
+    if (input.artifactId && (!existing || existing.task_id !== input.taskId || existing.workspace_id !== task.workspace_id)) throw new Error('Artifact does not belong to task');
+    const artifactId = existing?.id ?? randomUUID();
+    const versionId = randomUUID();
+    const now = Date.now();
+    const versionNumber = (this.db.prepare('SELECT COALESCE(MAX(version_number), 0) + 1 AS next FROM artifact_versions WHERE artifact_id = ?').get(artifactId) as { next: number }).next;
+    const hash = createHash('sha256').update(input.content).digest('hex');
+    this.db.transaction(() => {
+      if (existing) {
+        this.db.prepare('UPDATE artifacts SET title = ?, current_version_id = ?, updated_at = ? WHERE id = ?').run(input.title, versionId, now, artifactId);
+      } else {
+        this.db.prepare('INSERT INTO artifacts (id, workspace_id, task_id, type, title, current_version_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(artifactId, task.workspace_id, input.taskId, 'markdown', input.title, versionId, now, now);
+      }
+      this.db.prepare('INSERT INTO artifact_versions (id, artifact_id, version_number, content, content_hash, source_run_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(versionId, artifactId, versionNumber, input.content, hash, input.runId, now);
+    })();
+    return this.getArtifact(artifactId)!;
+  }
+
+  listArtifacts(taskId?: string): ArtifactSummary[] {
+    const rows = taskId
+      ? this.db.prepare(`SELECT a.id, a.workspace_id, a.task_id, a.type, a.title, a.current_version_id, v.version_number, v.source_run_id, a.created_at, a.updated_at FROM artifacts a JOIN artifact_versions v ON v.id = a.current_version_id WHERE a.task_id = ? ORDER BY a.updated_at DESC, a.rowid DESC`).all(taskId)
+      : this.db.prepare(`SELECT a.id, a.workspace_id, a.task_id, a.type, a.title, a.current_version_id, v.version_number, v.source_run_id, a.created_at, a.updated_at FROM artifacts a JOIN artifact_versions v ON v.id = a.current_version_id ORDER BY a.updated_at DESC, a.rowid DESC`).all();
+    return (rows as ArtifactRow[]).map((row) => this.toArtifactSummary(row));
   }
 
   createRun(run: RunSummary): void {
@@ -244,6 +285,15 @@ export class RunJournal {
 
   private toTaskSummary(row: TaskRow): TaskSummary {
     return { id: row.id, workspaceId: row.workspace_id, title: row.title, goal: row.goal, createdAt: row.created_at, updatedAt: row.updated_at };
+  }
+
+  private getArtifact(id: string): ArtifactSummary | undefined {
+    const row = this.db.prepare(`SELECT a.id, a.workspace_id, a.task_id, a.type, a.title, a.current_version_id, v.version_number, v.source_run_id, a.created_at, a.updated_at FROM artifacts a JOIN artifact_versions v ON v.id = a.current_version_id WHERE a.id = ?`).get(id) as ArtifactRow | undefined;
+    return row ? this.toArtifactSummary(row) : undefined;
+  }
+
+  private toArtifactSummary(row: ArtifactRow): ArtifactSummary {
+    return { id: row.id, workspaceId: row.workspace_id, taskId: row.task_id, type: 'markdown', title: row.title, currentVersionId: row.current_version_id, versionNumber: row.version_number, sourceRunId: row.source_run_id, createdAt: row.created_at, updatedAt: row.updated_at };
   }
 
   close(): void {

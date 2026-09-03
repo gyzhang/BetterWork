@@ -172,6 +172,30 @@ export interface EvidenceSummary {
   capturedAt: number;
 }
 
+export interface ArtifactSummary {
+  id: string;
+  workspaceId: string;
+  taskId: string;
+  type: 'markdown';
+  title: string;
+  currentVersionId: string;
+  versionNumber: number;
+  sourceRunId: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export const saveMarkdownArtifactRequestSchema = z.object({
+  artifactId: z.string().min(1).optional(),
+  taskId: z.string().min(1),
+  runId: z.string().min(1),
+  title: z.string().trim().min(1).max(160),
+  content: z.string().trim().min(1).max(2_000_000),
+});
+export type SaveMarkdownArtifactRequest = z.infer<typeof saveMarkdownArtifactRequestSchema>;
+export const listArtifactsRequestSchema = z.object({ taskId: z.string().min(1).optional() });
+export type ListArtifactsRequest = z.infer<typeof listArtifactsRequestSchema>;
+
 export const listEvidenceRequestSchema = z.object({ taskId: z.string().min(1) });
 export type ListEvidenceRequest = z.infer<typeof listEvidenceRequestSchema>;
 
@@ -205,6 +229,8 @@ export const IpcChannel = {
   SelectWorkspace: 'workspace:select',
   CreateTask: 'task:create',
   ListEvidence: 'evidence:list',
+  ListArtifacts: 'artifact:list',
+  SaveMarkdownArtifact: 'artifact:save-markdown',
   ListModels: 'model:list',
   SaveModel: 'model:save',
   DeleteModel: 'model:delete',
@@ -234,6 +260,10 @@ export interface BetterWorkDesktopApi {
   };
   evidence: {
     list(input: ListEvidenceRequest): Promise<EvidenceSummary[]>;
+  };
+  artifacts: {
+    list(input?: ListArtifactsRequest): Promise<ArtifactSummary[]>;
+    saveMarkdown(input: SaveMarkdownArtifactRequest): Promise<ArtifactSummary>;
   };
   models: {
     list(): Promise<ModelProfileSummary[]>;

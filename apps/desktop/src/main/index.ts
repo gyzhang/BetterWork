@@ -6,10 +6,12 @@ import {
   IpcChannel,
   listRunEventsRequestSchema,
   listEvidenceRequestSchema,
+  listArtifactsRequestSchema,
   modelProfileIdSchema,
   setDefaultModelRequestSchema,
   setModelEnabledRequestSchema,
   saveModelProfileRequestSchema,
+  saveMarkdownArtifactRequestSchema,
   testModelRequestSchema,
   startRunRequestSchema,
   searchKnowledgeRequestSchema,
@@ -82,6 +84,8 @@ app.whenReady().then(() => {
     return journal!.createTask(input.workspaceId, input.title, input.goal);
   });
   ipcMain.handle(IpcChannel.ListEvidence, (_event, raw) => journal!.listEvidence(listEvidenceRequestSchema.parse(raw).taskId));
+  ipcMain.handle(IpcChannel.ListArtifacts, (_event, raw) => journal!.listArtifacts(listArtifactsRequestSchema.parse(raw ?? {}).taskId));
+  ipcMain.handle(IpcChannel.SaveMarkdownArtifact, (_event, raw) => journal!.saveMarkdownArtifact(saveMarkdownArtifactRequestSchema.parse(raw)));
   ipcMain.handle(IpcChannel.ListModels, () => journal!.listModels());
   ipcMain.handle(IpcChannel.SaveModel, (_event, raw) => {
     const input = saveModelProfileRequestSchema.parse(raw);
