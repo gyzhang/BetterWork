@@ -70,6 +70,17 @@ describe('RunJournal', () => {
     expect(journal.listRuns()[0]?.status).toBe('completed');
   });
 
+  it('lists only a task’s own runs when requested', () => {
+    journal = new RunJournal(':memory:');
+    const workspace = journal.getOrCreateWorkspace('/workspace-runs', '工作区');
+    const firstTask = journal.createTask(workspace.id, '市场研究', '研究市场');
+    const secondTask = journal.createTask(workspace.id, '客户复盘', '复盘客户');
+    journal.createRun({ id: 'market-run-1', taskId: firstTask.task.id, sessionId: firstTask.sessionId, prompt: '收集资料', status: 'completed', createdAt: 1, completedAt: 2 });
+    journal.createRun({ id: 'market-run-2', taskId: firstTask.task.id, sessionId: firstTask.sessionId, prompt: '形成结论', status: 'completed', createdAt: 3, completedAt: 4 });
+    journal.createRun({ id: 'customer-run-1', taskId: secondTask.task.id, sessionId: secondTask.sessionId, prompt: '识别风险', status: 'completed', createdAt: 5, completedAt: 6 });
+    expect(journal.listRuns(firstTask.task.id).map((run) => run.id)).toEqual(['market-run-2', 'market-run-1']);
+  });
+
   it('stores model credentials without returning them in summaries', () => {
     journal = new RunJournal(':memory:');
     const id = journal.saveModel({

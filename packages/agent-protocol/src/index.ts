@@ -98,6 +98,8 @@ export type CancelRunRequest = z.infer<typeof cancelRunRequestSchema>;
 
 export const listRunEventsRequestSchema = z.object({ runId: z.string().min(1) });
 export type ListRunEventsRequest = z.infer<typeof listRunEventsRequestSchema>;
+export const listRunsRequestSchema = z.object({ taskId: z.string().min(1).optional() });
+export type ListRunsRequest = z.infer<typeof listRunsRequestSchema>;
 
 export const modelRoleSchema = z.enum(['language', 'vision', 'embedding']);
 export type ModelRole = z.infer<typeof modelRoleSchema>;
@@ -313,7 +315,7 @@ export interface BetterWorkDesktopApi {
   runs: {
     start(input: StartRunRequest): Promise<{ runId: string }>;
     cancel(input: CancelRunRequest): Promise<{ cancelled: boolean }>;
-    list(): Promise<RunSummary[]>;
+    list(input?: ListRunsRequest): Promise<RunSummary[]>;
     listEvents(input: ListRunEventsRequest): Promise<AgentRuntimeEvent[]>;
     onEvent(listener: (event: AgentRuntimeEvent) => void): () => void;
   };

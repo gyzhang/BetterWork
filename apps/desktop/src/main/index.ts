@@ -6,6 +6,7 @@ import {
   createTaskRequestSchema,
   IpcChannel,
   listRunEventsRequestSchema,
+  listRunsRequestSchema,
   listEvidenceRequestSchema,
   listArtifactsRequestSchema,
   listArtifactVersionsRequestSchema,
@@ -71,7 +72,7 @@ app.whenReady().then(() => {
     const input = cancelRunRequestSchema.parse(raw);
     return { cancelled: runs.cancel(input.runId) };
   });
-  ipcMain.handle(IpcChannel.ListRuns, () => journal!.listRuns());
+  ipcMain.handle(IpcChannel.ListRuns, (_event, raw) => journal!.listRuns(listRunsRequestSchema.parse(raw ?? {}).taskId));
   ipcMain.handle(IpcChannel.ListRunEvents, (_event, raw) => {
     const input = listRunEventsRequestSchema.parse(raw);
     return journal!.listEvents(input.runId);
