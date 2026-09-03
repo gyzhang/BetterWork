@@ -1,12 +1,14 @@
-export function BrandLogo({ size = 30 }: { size?: number }): React.JSX.Element {
+export function BrandLogo({ size = 26 }: { size?: number }): React.JSX.Element {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
-      <rect x="3" y="3" width="18" height="18" rx="5.5" stroke="currentColor" strokeWidth={2} />
-      <line x1="5.7" y1="12" x2="18.3" y2="12" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" />
-      <circle cx="7.2" cy="12" r="1.55" fill="currentColor" />
-      <circle cx="10.4" cy="12" r="1.55" fill="currentColor" />
-      <circle cx="13.6" cy="12" r="1.55" fill="currentColor" />
-      <circle cx="16.8" cy="12" r="1.55" stroke="currentColor" strokeWidth={1.6} />
+      <mask id="bw-logo-beads">
+        <rect x="2" y="2" width="20" height="20" rx="7" fill="#fff" />
+        <rect x="4.6" y="11.2" width="14.8" height="1.9" rx="0.95" fill="#000" />
+        <circle cx="12" cy="8.3" r="2.4" fill="#000" />
+        <circle cx="8" cy="15.75" r="2.4" fill="#000" />
+        <circle cx="16" cy="15.75" r="2.4" fill="#000" />
+      </mask>
+      <rect x="2" y="2" width="20" height="20" rx="7" fill="currentColor" mask="url(#bw-logo-beads)" />
     </svg>
   );
 }
