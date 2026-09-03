@@ -180,6 +180,8 @@ export interface EvidenceSummary {
   capturedAt: number;
 }
 
+export type ArtifactVersionOrigin = 'assistant-run' | 'user-edit';
+
 export interface ArtifactSummary {
   id: string;
   workspaceId: string;
@@ -188,7 +190,8 @@ export interface ArtifactSummary {
   title: string;
   currentVersionId: string;
   versionNumber: number;
-  sourceRunId: string;
+  origin: ArtifactVersionOrigin;
+  sourceRunId?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -201,9 +204,17 @@ export interface ArtifactDetail extends ArtifactSummary {
 export const saveMarkdownArtifactRequestSchema = z.object({
   artifactId: z.string().min(1).optional(),
   taskId: z.string().min(1),
-  runId: z.string().min(1),
+  origin: z.enum(['assistant-run', 'user-edit']).default('assistant-run'),
+  runId: z.string().min(1).optional(),
   title: z.string().trim().min(1).max(160),
   content: z.string().trim().min(1).max(2_000_000),
+}).superRefine((input, context) => {
+  if (input.origin === 'assistant-run' && !input.runId) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'AI 运行生成的成果必须关联 Run', path: ['runId'] });
+  }
+  if (input.origin === 'user-edit' && input.runId) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: '人工修订不能伪装为 AI 运行产物', path: ['runId'] });
+  }
 });
 export type SaveMarkdownArtifactRequest = z.infer<typeof saveMarkdownArtifactRequestSchema>;
 export const listArtifactsRequestSchema = z.object({ taskId: z.string().min(1).optional() });
