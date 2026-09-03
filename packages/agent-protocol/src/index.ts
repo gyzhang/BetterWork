@@ -131,7 +131,7 @@ export interface ModelProfileSummary {
   updatedAt: number;
 }
 
-export type KnowledgeFormat = 'markdown' | 'text' | 'pdf';
+export type KnowledgeFormat = 'markdown' | 'text' | 'pdf' | 'docx';
 
 export interface KnowledgeDocumentSummary {
   id: string;

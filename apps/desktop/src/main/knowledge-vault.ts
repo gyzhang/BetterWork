@@ -9,7 +9,7 @@ interface KnowledgeRow { id: string; title: string; source_path: string; format:
 interface KnowledgeChunk { id: string; locator: string; content: string; ordinal: number; }
 interface ExtractedDocument { format: KnowledgeFormat; content: string; pageCount?: number; chunks: Array<Omit<KnowledgeChunk, 'id'>>; }
 
-const supportedFormats: Record<string, KnowledgeFormat> = { '.md': 'markdown', '.markdown': 'markdown', '.txt': 'text', '.text': 'text', '.pdf': 'pdf' };
+const supportedFormats: Record<string, KnowledgeFormat> = { '.md': 'markdown', '.markdown': 'markdown', '.txt': 'text', '.text': 'text', '.pdf': 'pdf', '.docx': 'docx' };
 const maxBytes = 20 * 1024 * 1024;
 
 export class KnowledgeVault {
@@ -40,7 +40,7 @@ export class KnowledgeVault {
   }
 
   listDocuments(): KnowledgeDocumentSummary[] {
-    const rows = this.db.prepare('SELECT id, title, source_path, format, byte_size, content_hash, page_count, imported_at, updated_at FROM knowledge_documents ORDER BY updated_at DESC').all() as KnowledgeRow[];
+    const rows = this.db.prepare('SELECT id, title, source_path, format, byte_size, content_hash, page_count, imported_at, updated_at FROM knowledge_documents ORDER BY updated_at DESC, rowid DESC').all() as KnowledgeRow[];
     return rows.map((row) => this.toSummary(row));
   }
 
@@ -50,7 +50,7 @@ export class KnowledgeVault {
     for (const sourcePath of sourcePaths) {
       const extension = path.extname(sourcePath).toLowerCase();
       const format = supportedFormats[extension];
-      if (!format) { skipped.push({ sourcePath, reason: '暂仅支持 Markdown、文本和 PDF 文件。' }); continue; }
+      if (!format) { skipped.push({ sourcePath, reason: '暂仅支持 Markdown、文本、PDF 和 Word 文件。' }); continue; }
       try {
         const file = await stat(sourcePath);
         if (file.size > maxBytes) { skipped.push({ sourcePath, reason: '文件超过 20 MB，暂不导入。' }); continue; }
@@ -118,9 +118,16 @@ export class KnowledgeVault {
 }
 
 async function extractDocument(format: KnowledgeFormat, bytes: Buffer): Promise<ExtractedDocument> {
-  if (format !== 'pdf') {
+  if (format === 'markdown' || format === 'text') {
     const content = bytes.toString('utf8').replace(/^\uFEFF/, '');
     return { format, content, chunks: [{ locator: '全文', ordinal: 0, content }] };
+  }
+  if (format === 'docx') {
+    const mammoth = await import('mammoth');
+    const result = await mammoth.extractRawText({ buffer: bytes });
+    const paragraphs = result.value.split(/\n{2,}/u).map((paragraph) => paragraph.trim()).filter(Boolean);
+    const chunks = paragraphs.map((content, index) => ({ locator: `段落 ${index + 1}`, ordinal: index, content }));
+    return { format, content: chunks.map((chunk) => chunk.content).join('\n\n'), chunks };
   }
   const { PDFParse } = await import('pdf-parse');
   const parser = new PDFParse({ data: bytes });

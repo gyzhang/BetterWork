@@ -41,7 +41,7 @@
 
 该 Gate 允许重构 Renderer 的组件和样式结构，但不借机扩张 Agent Core、知识库或 Office 能力。完成后必须保证 Fake Provider 与真实 Provider 的已有链路不回退。
 
-状态：已完成。随后以最小的 Phase 1 切片进入：Workspace、Task 与 Session 已以独立持久化标识建立关联，运行不再依赖教学期的硬编码 ID；本地资料库可导入 Markdown/Text/PDF，记录源路径、内容哈希，且 PDF 按页建立 SQLite FTS5 索引并返回页码 Locator。检索同时通过只读 `knowledge_search` Tool 提供给任务执行；Office 解析、Embedding 与完整研究工作流保持后置。
+状态：已完成。随后以最小的 Phase 1 切片进入：Workspace、Task 与 Session 已以独立持久化标识建立关联，运行不再依赖教学期的硬编码 ID；本地资料库可导入 Markdown/Text/PDF/DOCX，记录源路径、内容哈希，并以 SQLite FTS5 提供可定位的检索（PDF 按页、DOCX 按提取段落）。检索同时通过只读 `knowledge_search` Tool 提供给任务执行；XLSX/PPTX 解析、Embedding 与完整研究工作流保持后置。
 
 ## 3. Phase 1：研究报告 MVP
 

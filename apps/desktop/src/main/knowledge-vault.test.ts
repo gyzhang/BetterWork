@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import JSZip from 'jszip';
 import { afterEach, describe, expect, it } from 'vitest';
 import { KnowledgeVault } from './knowledge-vault';
 
@@ -29,7 +30,27 @@ const makePdf = (text: string): Buffer => {
   return Buffer.from(output, 'binary');
 };
 
+const makeDocx = async (paragraphs: string[]): Promise<Buffer> => {
+  const zip = new JSZip();
+  zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+  zip.folder('_rels')!.file('.rels', '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+  const body = paragraphs.map((paragraph) => `<w:p><w:r><w:t>${paragraph}</w:t></w:r></w:p>`).join('');
+  zip.folder('word')!.file('document.xml', `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr/></w:body></w:document>`);
+  return zip.generateAsync({ type: 'nodebuffer' });
+};
+
 describe('KnowledgeVault', () => {
+  it('imports Word paragraphs with stable locators', async () => {
+    const directory = temporaryDirectory();
+    const document = path.join(directory, '客户方案.docx');
+    writeFileSync(document, await makeDocx(['客户续约风险需要在复盘中跟进', '第二段作为独立来源定位']));
+    const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
+    const result = await vault.importPaths([document]);
+    expect(result).toMatchObject({ imported: [{ title: '客户方案', format: 'docx' }], skipped: [] });
+    expect(vault.search('续约风险')[0]).toMatchObject({ document: { title: '客户方案', format: 'docx' }, locator: '段落 1', excerpt: expect.stringContaining('续约风险') });
+    vault.close();
+  });
+
   it('imports PDF pages as independently locatable search results', async () => {
     const directory = temporaryDirectory();
     const pdf = path.join(directory, '市场报告.pdf');

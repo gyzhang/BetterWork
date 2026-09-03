@@ -7,7 +7,7 @@ export interface KnowledgeSearchItem {
   id: string;
   title: string;
   sourcePath: string;
-  format: 'markdown' | 'text' | 'pdf';
+  format: 'markdown' | 'text' | 'pdf' | 'docx';
   locator: string;
   excerpt: string;
 }

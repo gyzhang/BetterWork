@@ -26,7 +26,7 @@ vaults/<vault-id>/
 
 如果用户选择引用原位置而不是复制文件，Vault 记录文件路径、Hash 和最近索引状态。
 
-当前实现状态：Markdown/Text 以“全文”为 Locator；PDF 使用跨平台解析器按页提取，检索结果保留“第 N 页”Locator。原件仍引用原路径，SQLite 中保存的是可重建的提取文本和索引。
+当前实现状态：Markdown/Text 以“全文”为 Locator；PDF 使用跨平台解析器按页提取，检索结果保留“第 N 页”Locator；DOCX 使用 Mammoth 提取文本并以“段落 N”定位。原件仍引用原路径，SQLite 中保存的是可重建的提取文本和索引。
 
 ## 3. 支持格式
 
