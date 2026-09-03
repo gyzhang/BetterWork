@@ -163,6 +163,8 @@ export type SearchKnowledgeRequest = z.infer<typeof searchKnowledgeRequestSchema
 export const openKnowledgeSourceRequestSchema = z.object({ sourcePath: z.string().trim().min(1).max(4_000) });
 export type OpenKnowledgeSourceRequest = z.infer<typeof openKnowledgeSourceRequestSchema>;
 export interface OpenKnowledgeSourceResult { opened: boolean; error?: string; }
+export const removeKnowledgeDocumentRequestSchema = z.object({ id: z.string().min(1) });
+export type RemoveKnowledgeDocumentRequest = z.infer<typeof removeKnowledgeDocumentRequestSchema>;
 
 export interface KnowledgeSearchResult {
   document: KnowledgeDocumentSummary;
@@ -298,6 +300,7 @@ export const IpcChannel = {
   ImportKnowledge: 'knowledge:import',
   SearchKnowledge: 'knowledge:search',
   OpenKnowledgeSource: 'knowledge:open-source',
+  RemoveKnowledgeDocument: 'knowledge:remove',
   TestModel: 'model:test',
   UpdateWindowTheme: 'window:update-theme',
 } as const;
@@ -345,5 +348,6 @@ export interface BetterWorkDesktopApi {
     importFromDialog(): Promise<KnowledgeImportResult>;
     search(input: SearchKnowledgeRequest): Promise<KnowledgeSearchResult[]>;
     openSource(input: OpenKnowledgeSourceRequest): Promise<OpenKnowledgeSourceResult>;
+    remove(input: RemoveKnowledgeDocumentRequest): Promise<{ removed: boolean }>;
   };
 }

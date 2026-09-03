@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import JSZip from 'jszip';
@@ -91,6 +91,20 @@ describe('KnowledgeVault', () => {
     expect(result.skipped[0]?.sourcePath).toBe(pdf);
     expect(result.skipped[0]?.reason).toMatch(/^导入失败：/u);
     expect(vault.search('新的方向')[0]?.document.id).toBe(first.id);
+    vault.close();
+  });
+
+  it('removes only the local index record and its search chunks', async () => {
+    const directory = temporaryDirectory();
+    const text = path.join(directory, '可移除资料.txt');
+    writeFileSync(text, '需要从本地索引中移除的内容。');
+    const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
+    const document = (await vault.importPaths([text])).imported[0]!;
+    expect(vault.removeDocument(document.id)).toBe(true);
+    expect(vault.listDocuments()).toEqual([]);
+    expect(vault.search('移除')).toEqual([]);
+    expect(vault.removeDocument(document.id)).toBe(false);
+    expect(existsSync(text)).toBe(true);
     vault.close();
   });
 });

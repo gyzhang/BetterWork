@@ -41,7 +41,7 @@
 
 该 Gate 允许重构 Renderer 的组件和样式结构，但不借机扩张 Agent Core、知识库或 Office 能力。完成后必须保证 Fake Provider 与真实 Provider 的已有链路不回退。
 
-状态：已完成。随后以最小的 Phase 1 切片进入：Workspace、Task 与 Session 已以独立持久化标识建立关联，运行不再依赖教学期的硬编码 ID，侧栏也以真实 Task 而不是重复 Run 展示近期工作；本地资料库可导入 Markdown/Text/PDF/DOCX，记录源路径、内容哈希，并以 SQLite FTS5 提供可定位的检索（PDF 按页、DOCX 按提取段落），用户可从已登记的资料卡片或任务中的 Evidence 安全地打开原始文件。检索同时通过只读 `knowledge_search` Tool 提供给任务执行，并将结果去重登记为可在任务侧栏回看的本地 Evidence。任务完成后，用户可把最终回复保存为关联 Workspace、Task、Run 的 Markdown Artifact；再次保存或在成果页编辑都会新增 ArtifactVersion 而不覆盖旧版本。人工修订明确标为 `user-edit`，不伪装为 AI Run 产物；成果页可将当前或历史版本以安全的文档化 Markdown 预览呈现、从历史版本继续创建修订，或使用系统保存对话框导出当前/历史 Markdown 文件。XLSX/PPTX 解析、Embedding 与完整研究工作流保持后置。
+状态：已完成。随后以最小的 Phase 1 切片进入：Workspace、Task 与 Session 已以独立持久化标识建立关联，运行不再依赖教学期的硬编码 ID，侧栏也以真实 Task 而不是重复 Run 展示近期工作；本地资料库可导入 Markdown/Text/PDF/DOCX，记录源路径、内容哈希，并以 SQLite FTS5 提供可定位的检索（PDF 按页、DOCX 按提取段落）。用户可从已登记的资料卡片或任务中的 Evidence 安全地打开原始文件，也可将某份资料仅从算台的本地索引移除而不删除原始文件。检索同时通过只读 `knowledge_search` Tool 提供给任务执行，并将结果去重登记为可在任务侧栏回看的本地 Evidence。任务完成后，用户可把最终回复保存为关联 Workspace、Task、Run 的 Markdown Artifact；再次保存或在成果页编辑都会新增 ArtifactVersion 而不覆盖旧版本。人工修订明确标为 `user-edit`，不伪装为 AI Run 产物；成果页可将当前或历史版本以安全的文档化 Markdown 预览呈现、从历史版本继续创建修订，或使用系统保存对话框导出当前/历史 Markdown 文件。XLSX/PPTX 解析、Embedding 与完整研究工作流保持后置。
 
 ## 3. Phase 1：研究报告 MVP
 

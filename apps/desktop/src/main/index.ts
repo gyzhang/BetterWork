@@ -22,6 +22,7 @@ import {
   startRunRequestSchema,
   searchKnowledgeRequestSchema,
   openKnowledgeSourceRequestSchema,
+  removeKnowledgeDocumentRequestSchema,
   updateWindowThemeRequestSchema,
 } from '@betterwork/agent-protocol';
 import { RunJournal } from './run-journal';
@@ -142,6 +143,7 @@ app.whenReady().then(() => {
     const error = await shell.openPath(sourcePath);
     return error ? { opened: false, error } : { opened: true };
   });
+  ipcMain.handle(IpcChannel.RemoveKnowledgeDocument, (_event, raw) => ({ removed: knowledgeVault!.removeDocument(removeKnowledgeDocumentRequestSchema.parse(raw).id) }));
   ipcMain.handle(IpcChannel.TestModel, async (_event, raw) => {
     const input = testModelRequestSchema.parse(raw);
     const base = input.baseUrl.replace(/\/$/, '');

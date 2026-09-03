@@ -36,7 +36,7 @@ Phase 0 教学链路与 UI Foundation 已完成。当前允许进入 `Phase 1：
 - 完整记忆、Office 和 Kit 实现
 - 在没有真实产品需求前引入大型框架
 
-当前 Phase 1 仅允许：Workspace / Task / Session 的最小持久化关系、本地 Markdown/Text/PDF/DOCX 导入、源路径与哈希及 Locator 记录、SQLite FTS5 检索、只读 Knowledge Search Tool、由检索结果生成的本地 Evidence，以及仅对已登记 Knowledge 来源开放的系统原文打开、任务回复保存为版本化 Markdown Artifact，以及用户在成果页查看版本历史、导出 Markdown、创建独立 `user-edit` 版本的对应类型化 IPC/UI。XLSX/PPTX 解析、Embedding、Web Research、DOCX/PPTX Artifact 与完整研究 Agent 仍须在后续切片单独实现。
+当前 Phase 1 仅允许：Workspace / Task / Session 的最小持久化关系、本地 Markdown/Text/PDF/DOCX 导入、移除本地 Knowledge 索引（不删除源文件）、源路径与哈希及 Locator 记录、SQLite FTS5 检索、只读 Knowledge Search Tool、由检索结果生成的本地 Evidence，以及仅对已登记 Knowledge 来源开放的系统原文打开、任务回复保存为版本化 Markdown Artifact，以及用户在成果页查看版本历史、导出 Markdown、创建独立 `user-edit` 版本的对应类型化 IPC/UI。XLSX/PPTX 解析、Embedding、Web Research、DOCX/PPTX Artifact 与完整研究 Agent 仍须在后续切片单独实现。
 
 ## 3. 架构硬约束
 
