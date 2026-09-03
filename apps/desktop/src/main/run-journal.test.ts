@@ -112,4 +112,29 @@ describe('RunJournal', () => {
     expect(journal.setModelEnabled(id, false)).toBe(true);
     expect(journal.listModels()[0]).toMatchObject({ enabled: false, connectionStatus: 'connected' });
   });
+
+  it('rejects artifact writes that cross task or run boundaries', () => {
+    journal = new RunJournal(':memory:');
+    const workspace = journal.getOrCreateWorkspace('/work/boundary', '边界工作区');
+    const first = journal.createTask(workspace.id, '任务一', '目标一');
+    const second = journal.createTask(workspace.id, '任务二', '目标二');
+    journal.createRun({ id: 'run-first', taskId: first.task.id, sessionId: first.sessionId, prompt: '任务一运行', status: 'completed', createdAt: 1, completedAt: 2 });
+    journal.createRun({ id: 'run-second', taskId: second.task.id, sessionId: second.sessionId, prompt: '任务二运行', status: 'completed', createdAt: 3, completedAt: 4 });
+    expect(() => journal!.saveMarkdownArtifact({ taskId: first.task.id, origin: 'assistant-run', runId: 'run-second', title: '跨任务运行', content: '# 内容' })).toThrow('Run does not belong to task');
+    expect(() => journal!.saveMarkdownArtifact({ taskId: 'missing-task', origin: 'assistant-run', runId: 'run-first', title: '缺失任务', content: '# 内容' })).toThrow('Task does not exist');
+    const artifact = journal!.saveMarkdownArtifact({ taskId: first.task.id, origin: 'assistant-run', runId: 'run-first', title: '归属正确', content: '# 第一版' });
+    expect(() => journal!.saveMarkdownArtifact({ artifactId: artifact.id, taskId: second.task.id, origin: 'user-edit', title: '跨任务修订', content: '# 内容' })).toThrow('Artifact does not belong to task');
+  });
+
+  it('keeps evidence scoped to its own run when the same source appears in several runs', () => {
+    journal = new RunJournal(':memory:');
+    const workspace = journal.getOrCreateWorkspace('/work/evidence-scope', '证据工作区');
+    const task = journal.createTask(workspace.id, '季度复盘', '复盘目标');
+    const base = { taskId: task.task.id, sourceUri: '/notes/customer.md', title: '客户访谈', locator: '全文', excerpt: '续约风险需要跟进。', contentHash: 'hash-1' };
+    journal.saveLocalEvidence({ ...base, runId: 'run-1' });
+    journal.saveLocalEvidence({ ...base, runId: 'run-2' });
+    journal.saveLocalEvidence({ ...base, runId: 'run-2' });
+    expect(journal.listEvidence(task.task.id)).toHaveLength(2);
+    expect(journal.listEvidence(task.task.id).map((item) => item.runId).sort()).toEqual(['run-1', 'run-2']);
+  });
 });
