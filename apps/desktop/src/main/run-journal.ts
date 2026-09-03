@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import type { AgentRuntimeEvent, CreatedTask, ModelConnectionStatus, ModelProfileInput, ModelProfileSummary, RunSummary, TaskSummary, WorkspaceSummary } from '@betterwork/agent-protocol';
+import type { AgentRuntimeEvent, CreatedTask, EvidenceSummary, ModelConnectionStatus, ModelProfileInput, ModelProfileSummary, RunSummary, TaskSummary, WorkspaceSummary } from '@betterwork/agent-protocol';
 import { agentRuntimeEventSchema } from '@betterwork/agent-protocol';
 
 interface RunRow {
@@ -15,6 +15,7 @@ interface RunRow {
 
 interface WorkspaceRow { id: string; name: string; root_path: string; created_at: number; updated_at: number; }
 interface TaskRow { id: string; workspace_id: string; title: string; goal: string; created_at: number; updated_at: number; }
+interface EvidenceRow { id: string; task_id: string; run_id: string; source_type: 'local-file'; source_uri: string; title: string; locator: string; excerpt: string; content_hash: string; captured_at: number; }
 
 export class RunJournal {
   private readonly db: Database.Database;
@@ -42,6 +43,12 @@ export class RunJournal {
         id TEXT PRIMARY KEY,
         task_id TEXT NOT NULL,
         created_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS evidence (
+        id TEXT PRIMARY KEY, task_id TEXT NOT NULL, run_id TEXT NOT NULL,
+        source_type TEXT NOT NULL, source_uri TEXT NOT NULL, title TEXT NOT NULL,
+        locator TEXT NOT NULL, excerpt TEXT NOT NULL, content_hash TEXT NOT NULL,
+        captured_at INTEGER NOT NULL, UNIQUE(run_id, source_uri, locator)
       );
       CREATE TABLE IF NOT EXISTS runs (
         id TEXT PRIMARY KEY,
@@ -105,6 +112,16 @@ export class RunJournal {
       this.db.prepare('INSERT INTO sessions (id, task_id, created_at) VALUES (?, ?, ?)').run(sessionId, task.id, now);
     })();
     return { task: this.toTaskSummary(task), sessionId };
+  }
+
+  saveLocalEvidence(input: Omit<EvidenceSummary, 'id' | 'sourceType' | 'capturedAt'>): void {
+    this.db.prepare(`INSERT OR IGNORE INTO evidence (id, task_id, run_id, source_type, source_uri, title, locator, excerpt, content_hash, captured_at) VALUES (?, ?, ?, 'local-file', ?, ?, ?, ?, ?, ?)`)
+      .run(randomUUID(), input.taskId, input.runId, input.sourceUri, input.title, input.locator, input.excerpt, input.contentHash, Date.now());
+  }
+
+  listEvidence(taskId: string): EvidenceSummary[] {
+    const rows = this.db.prepare('SELECT * FROM evidence WHERE task_id = ? ORDER BY captured_at DESC, rowid DESC').all(taskId) as EvidenceRow[];
+    return rows.map((row) => ({ id: row.id, taskId: row.task_id, runId: row.run_id, sourceType: 'local-file', sourceUri: row.source_uri, title: row.title, locator: row.locator, excerpt: row.excerpt, contentHash: row.content_hash, capturedAt: row.captured_at }));
   }
 
   createRun(run: RunSummary): void {

@@ -23,6 +23,9 @@ const api: BetterWorkDesktopApi = {
   tasks: {
     create: (input) => ipcRenderer.invoke(IpcChannel.CreateTask, input),
   },
+  evidence: {
+    list: (input) => ipcRenderer.invoke(IpcChannel.ListEvidence, input),
+  },
   models: {
     list: () => ipcRenderer.invoke(IpcChannel.ListModels),
     save: (input) => ipcRenderer.invoke(IpcChannel.SaveModel, input),

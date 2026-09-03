@@ -16,6 +16,16 @@ describe('RunJournal', () => {
     expect(() => journal!.createTask('missing-workspace', '无效任务', '不应创建')).toThrow('Workspace does not exist');
   });
 
+  it('persists deduplicated local evidence for a task', () => {
+    journal = new RunJournal(':memory:');
+    const workspace = journal.getOrCreateWorkspace('/work/customer-a', '客户 A');
+    const task = journal.createTask(workspace.id, '季度复盘', '根据资料完成季度复盘');
+    const evidence = { taskId: task.task.id, runId: 'run-1', sourceUri: '/notes/interview.md', title: '客户访谈', locator: '全文', excerpt: '续约风险需要跟进。', contentHash: 'hash-1' };
+    journal.saveLocalEvidence(evidence);
+    journal.saveLocalEvidence(evidence);
+    expect(journal.listEvidence(task.task.id)).toEqual([expect.objectContaining({ ...evidence, sourceType: 'local-file' })]);
+  });
+
   it('persists runs and ordered events', () => {
     journal = new RunJournal(':memory:');
     journal.createRun({ id: 'run-1', taskId: 'task-1', sessionId: 'session-1', prompt: 'hello', status: 'running', createdAt: 1 });
