@@ -27,17 +27,20 @@ import {
   refreshKnowledgeDocumentRequestSchema,
   saveSearchEngineRequestSchema,
   testSearchEngineRequestSchema,
+  markNotificationReadRequestSchema,
   updateWindowThemeRequestSchema,
   windowToggleMaximizeRequestSchema,
 } from '@betterwork/agent-protocol';
 import { RunJournal } from './run-journal';
 import { RunService } from './run-service';
 import { KnowledgeVault } from './knowledge-vault';
+import { NotificationService } from './notification-service';
 import { createQianfanSearchClient } from './search-engine-service';
 
 let mainWindow: BrowserWindow | null = null;
 let journal: RunJournal | null = null;
 let knowledgeVault: KnowledgeVault | null = null;
+let notificationService: NotificationService | null = null;
 
 const createWindow = (): void => {
   const options: BrowserWindowConstructorOptions = {
@@ -65,8 +68,9 @@ const createWindow = (): void => {
 app.whenReady().then(() => {
   journal = new RunJournal(path.join(app.getPath('userData'), 'betterwork.db'));
   knowledgeVault = new KnowledgeVault(path.join(app.getPath('userData'), 'vaults', 'default', 'vault.sqlite'));
+  notificationService = new NotificationService(journal, () => mainWindow);
   createWindow();
-  const runs = new RunService(journal, knowledgeVault, () => mainWindow);
+  const runs = new RunService(journal, knowledgeVault, notificationService, () => mainWindow);
 
   ipcMain.handle(IpcChannel.StartRun, (_event, raw) => {
     const input = startRunRequestSchema.parse(raw);
@@ -113,8 +117,14 @@ app.whenReady().then(() => {
     const safeTitle = artifact.title.replace(/[\\/:*?"<>|]/g, '-').trim() || '算台成果';
     const result = await dialog.showSaveDialog(mainWindow!, { title: '导出 Markdown 成果', defaultPath: `${safeTitle}.md`, filters: [{ name: 'Markdown', extensions: ['md'] }] });
     if (result.canceled || !result.filePath) return { cancelled: true };
-    await writeFile(result.filePath, version?.content ?? artifact.content, 'utf8');
-    return { cancelled: false, filePath: result.filePath };
+    try {
+      await writeFile(result.filePath, version?.content ?? artifact.content, 'utf8');
+      notificationService!.create({ level: 'success', kind: 'artifact', title: `已导出「${artifact.title}」`, detail: result.filePath, target: { kind: 'artifact', artifactId: artifact.id } });
+      return { cancelled: false, filePath: result.filePath };
+    } catch (error) {
+      notificationService!.create({ level: 'error', kind: 'artifact', title: `导出「${artifact.title}」失败`, detail: error instanceof Error ? error.message : String(error), target: { kind: 'artifact', artifactId: artifact.id } });
+      throw error;
+    }
   });
   ipcMain.handle(IpcChannel.ListModels, () => journal!.listModels());
   ipcMain.handle(IpcChannel.SaveModel, (_event, raw) => {
@@ -140,7 +150,30 @@ app.whenReady().then(() => {
       properties: ['openFile', 'multiSelections'],
       filters: [{ name: '资料文件', extensions: ['md', 'markdown', 'txt', 'text', 'pdf', 'docx'] }, { name: '所有文件', extensions: ['*'] }],
     });
-    return result.canceled ? { imported: [], skipped: [] } : knowledgeVault!.importPaths(result.filePaths);
+    if (result.canceled) return { imported: [], skipped: [] };
+    try {
+      const outcome = await knowledgeVault!.importPaths(result.filePaths);
+      if (outcome.imported.length > 0) {
+        notificationService!.create({
+          level: outcome.skipped.length > 0 ? 'warning' : 'success',
+          kind: 'knowledge-import',
+          title: outcome.skipped.length > 0 ? `已整理 ${outcome.imported.length} 份资料，${outcome.skipped.length} 份未导入` : `已整理 ${outcome.imported.length} 份资料`,
+          target: { kind: 'knowledge' },
+        });
+      } else if (outcome.skipped.length > 0) {
+        notificationService!.create({
+          level: 'warning',
+          kind: 'knowledge-import',
+          title: `资料未导入（${outcome.skipped.length} 份）`,
+          detail: outcome.skipped.slice(0, 5).map((item) => `${path.basename(item.sourcePath)}：${item.reason}`).join('；'),
+          target: { kind: 'knowledge' },
+        });
+      }
+      return outcome;
+    } catch (error) {
+      notificationService!.create({ level: 'error', kind: 'knowledge-import', title: '导入资料失败', detail: error instanceof Error ? error.message : String(error), target: { kind: 'knowledge' } });
+      throw error;
+    }
   });
   ipcMain.handle(IpcChannel.SearchKnowledge, (_event, raw) => knowledgeVault!.search(searchKnowledgeRequestSchema.parse(raw).query));
   ipcMain.handle(IpcChannel.OpenKnowledgeSource, async (_event, raw) => {
@@ -152,6 +185,16 @@ app.whenReady().then(() => {
   ipcMain.handle(IpcChannel.RemoveKnowledgeDocument, (_event, raw) => ({ removed: knowledgeVault!.removeDocument(removeKnowledgeDocumentRequestSchema.parse(raw).id) }));
   ipcMain.handle(IpcChannel.RefreshKnowledgeDocument, (_event, raw) => knowledgeVault!.refreshDocument(refreshKnowledgeDocumentRequestSchema.parse(raw).id));
   ipcMain.handle(IpcChannel.ListSearchEngines, () => journal!.listSearchEngines());
+  ipcMain.handle(IpcChannel.ListNotifications, () => notificationService!.list());
+  ipcMain.handle(IpcChannel.MarkNotificationRead, (_event, raw) => {
+    const input = markNotificationReadRequestSchema.parse(raw);
+    return { unreadCount: notificationService!.markRead(input.id) };
+  });
+  ipcMain.handle(IpcChannel.MarkAllNotificationsRead, () => ({ unreadCount: notificationService!.markAllRead() }));
+  ipcMain.handle(IpcChannel.ClearNotifications, () => {
+    notificationService!.clear();
+    return { cleared: true };
+  });
   ipcMain.handle(IpcChannel.SaveSearchEngine, (_event, raw) => {
     const input = saveSearchEngineRequestSchema.parse(raw);
     return { provider: journal!.saveSearchEngine(input) };

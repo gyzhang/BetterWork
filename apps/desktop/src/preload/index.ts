@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AgentRuntimeEvent, BetterWorkDesktopApi } from '@betterwork/agent-protocol';
-import { agentRuntimeEventSchema, IpcChannel } from '@betterwork/agent-protocol';
+import type { AgentRuntimeEvent, BetterWorkDesktopApi, NotificationActivated, NotificationChangeEvent } from '@betterwork/agent-protocol';
+import { agentRuntimeEventSchema, notificationActivatedSchema, notificationChangeEventSchema, IpcChannel } from '@betterwork/agent-protocol';
 
 const api: BetterWorkDesktopApi = {
   runs: {
@@ -47,6 +47,26 @@ const api: BetterWorkDesktopApi = {
     list: () => ipcRenderer.invoke(IpcChannel.ListSearchEngines),
     save: (input) => ipcRenderer.invoke(IpcChannel.SaveSearchEngine, input),
     test: (input) => ipcRenderer.invoke(IpcChannel.TestSearchEngine, input),
+  },
+  notifications: {
+    list: () => ipcRenderer.invoke(IpcChannel.ListNotifications),
+    markRead: (input) => ipcRenderer.invoke(IpcChannel.MarkNotificationRead, input),
+    markAllRead: () => ipcRenderer.invoke(IpcChannel.MarkAllNotificationsRead, {}),
+    clear: () => ipcRenderer.invoke(IpcChannel.ClearNotifications, {}),
+    onChange(listener) {
+      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
+        listener(notificationChangeEventSchema.parse(raw) as NotificationChangeEvent);
+      };
+      ipcRenderer.on(IpcChannel.NotificationChangeEvent, handler);
+      return () => ipcRenderer.off(IpcChannel.NotificationChangeEvent, handler);
+    },
+    onActivate(listener) {
+      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
+        listener(notificationActivatedSchema.parse(raw) as NotificationActivated);
+      };
+      ipcRenderer.on(IpcChannel.NotificationActivated, handler);
+      return () => ipcRenderer.off(IpcChannel.NotificationActivated, handler);
+    },
   },
   chrome: {
     updateTheme: (input) => ipcRenderer.invoke(IpcChannel.UpdateWindowTheme, input),

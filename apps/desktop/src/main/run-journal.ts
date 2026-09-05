@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { createHash, randomUUID } from 'node:crypto';
-import type { AgentRuntimeEvent, ArtifactDetail, ArtifactSummary, ArtifactVersionDetail, ArtifactVersionSummary, CreatedTask, EvidenceSummary, ModelConnectionStatus, ModelProfileInput, ModelProfileSummary, RecentTaskSummary, RunSummary, SaveMarkdownArtifactRequest, SearchEngineConfigInput, SearchEngineSummary, SearchProviderId, TaskSummary, WorkspaceSummary } from '@betterwork/agent-protocol';
+import type { AgentRuntimeEvent, ArtifactDetail, ArtifactSummary, ArtifactVersionDetail, ArtifactVersionSummary, CreatedTask, CreateNotificationInput, EvidenceSummary, ModelConnectionStatus, ModelProfileInput, ModelProfileSummary, NotificationSummary, NotificationTarget, RecentTaskSummary, RunSummary, SaveMarkdownArtifactRequest, SearchEngineConfigInput, SearchEngineSummary, SearchProviderId, TaskSummary, WorkspaceSummary } from '@betterwork/agent-protocol';
 import { agentRuntimeEventSchema } from '@betterwork/agent-protocol';
 
 interface RunRow {
@@ -19,6 +19,7 @@ interface RecentTaskRow extends TaskRow { session_id: string; run_id: string | n
 interface EvidenceRow { id: string; task_id: string; run_id: string; source_type: 'local-file' | 'web-page'; source_uri: string; title: string; locator: string; excerpt: string; content_hash: string; captured_at: number; }
 interface ArtifactRow { id: string; workspace_id: string; task_id: string; type: 'markdown'; title: string; current_version_id: string; version_number: number; source_run_id: string; origin: 'assistant-run' | 'user-edit'; created_at: number; updated_at: number; }
 interface ArtifactVersionRow { id: string; artifact_id: string; version_number: number; source_run_id: string; origin: 'assistant-run' | 'user-edit'; content?: string; content_hash?: string; created_at: number; }
+interface NotificationRow { id: string; level: NotificationSummary['level']; kind: NotificationSummary['kind']; title: string; detail: string | null; target_kind: string | null; target_id: string | null; read: 0 | 1; created_at: number; }
 
 const parseSearchOptions = (raw: unknown): { webTopK: number } => {
   try {
@@ -121,6 +122,19 @@ export class RunJournal {
         last_tested_at INTEGER,
         updated_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS notifications (
+        id TEXT PRIMARY KEY,
+        level TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        title TEXT NOT NULL,
+        detail TEXT,
+        target_kind TEXT,
+        target_id TEXT,
+        read INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
+      CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);
     `);
     const columns = this.db.prepare('PRAGMA table_info(model_profiles)').all() as Array<{ name: string }>;
     if (!columns.some((column) => column.name === 'connection_status')) this.db.exec("ALTER TABLE model_profiles ADD COLUMN connection_status TEXT NOT NULL DEFAULT 'untested'");
@@ -375,6 +389,59 @@ export class RunJournal {
     const now = Date.now();
     this.db.prepare('UPDATE search_engine_configs SET connection_status = ?, last_tested_at = ?, updated_at = ? WHERE provider = ?')
       .run(status, now, now, provider);
+  }
+
+  saveNotification(input: CreateNotificationInput): NotificationSummary {
+    const row: NotificationRow = {
+      id: randomUUID(), level: input.level, kind: input.kind, title: input.title,
+      detail: input.detail ?? null,
+      target_kind: input.target?.kind ?? null,
+      target_id: input.target && 'taskId' in input.target ? input.target.taskId : input.target && 'artifactId' in input.target ? input.target.artifactId : null,
+      read: 0, created_at: Date.now(),
+    };
+    const transaction = this.db.transaction(() => {
+      this.db.prepare('INSERT INTO notifications (id, level, kind, title, detail, target_kind, target_id, read, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(row.id, row.level, row.kind, row.title, row.detail, row.target_kind, row.target_id, row.read, row.created_at);
+      this.db.prepare('DELETE FROM notifications WHERE rowid NOT IN (SELECT rowid FROM notifications ORDER BY created_at DESC, rowid DESC LIMIT 200)').run();
+    });
+    transaction();
+    return this.toNotificationSummary(row);
+  }
+
+  listNotifications(): NotificationSummary[] {
+    const rows = this.db.prepare('SELECT * FROM notifications ORDER BY created_at DESC, rowid DESC LIMIT 200').all() as NotificationRow[];
+    return rows.map((row) => this.toNotificationSummary(row));
+  }
+
+  markNotificationRead(id: string): number {
+    this.db.prepare('UPDATE notifications SET read = 1 WHERE id = ?').run(id);
+    return this.unreadNotificationCount();
+  }
+
+  markAllNotificationsRead(): number {
+    this.db.prepare('UPDATE notifications SET read = 1 WHERE read = 0').run();
+    return this.unreadNotificationCount();
+  }
+
+  clearNotifications(): void {
+    this.db.prepare('DELETE FROM notifications').run();
+  }
+
+  unreadNotificationCount(): number {
+    return (this.db.prepare('SELECT COUNT(*) AS count FROM notifications WHERE read = 0').get() as { count: number }).count;
+  }
+
+  private toNotificationSummary(row: NotificationRow): NotificationSummary {
+    let target: NotificationTarget | undefined;
+    if (row.target_kind === 'task' && row.target_id) target = { kind: 'task', taskId: row.target_id };
+    else if (row.target_kind === 'artifact' && row.target_id) target = { kind: 'artifact', artifactId: row.target_id };
+    else if (row.target_kind === 'knowledge') target = { kind: 'knowledge' };
+    return {
+      id: row.id, level: row.level, kind: row.kind, title: row.title,
+      ...(row.detail === null ? {} : { detail: row.detail }),
+      ...(target ? { target } : {}),
+      read: row.read === 1, createdAt: row.created_at,
+    };
   }
 
   private toModelSummary(row: Record<string, unknown>): ModelProfileSummary {
