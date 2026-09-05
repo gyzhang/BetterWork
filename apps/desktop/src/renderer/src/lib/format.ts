@@ -1,6 +1,7 @@
 import type { AgentRuntimeEvent } from '@betterwork/agent-protocol';
 
-export const eventDetail = (event: AgentRuntimeEvent): string => {
+/** 原始事件载荷，只在过程详情里展开，不得进入主界面（docs/10 §11.1）。 */
+export const rawEventPayload = (event: AgentRuntimeEvent): string => {
   if (event.type === 'message.delta' || event.type === 'reasoning.delta') return event.delta;
   if (event.type === 'tool.requested' || event.type === 'tool.started') return event.toolCall.name;
   if (event.type === 'tool.progress') return event.message;

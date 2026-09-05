@@ -39,8 +39,9 @@ import {
   WorkIcon,
 } from './icons';
 import type { AppView, ContextTab, SettingsTab } from './lib/view-types';
-import { eventDetail, fileNameOf, formatTime } from './lib/format';
-import { emptyModel, roleName, runStatusName } from './lib/labels';
+import { fileNameOf, formatTime } from './lib/format';
+import { emptyModel, roleName, runStatusName, toolStageLabel } from './lib/labels';
+import { summarizeToolOutput } from './lib/tool-summary';
 import { handleTitlebarDoubleClick } from './lib/titlebar';
 import { reportAction, trackAction } from './lib/async-action';
 import { Welcome } from './components/Welcome';
@@ -220,6 +221,17 @@ export function App(): React.JSX.Element {
   const completedTools = events.filter(
     (event) => event.type === 'tool.completed' || event.type === 'tool.failed',
   );
+  // 终态事件只带 toolCallId，工具名要从 requested/started 事件里取回，
+  // 才能给出「查阅个人资料」这种用户能读懂的阶段名与摘要。
+  const toolNameById = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const event of events) {
+      if (event.type === 'tool.requested' || event.type === 'tool.started') {
+        names.set(event.toolCall.id, event.toolCall.name);
+      }
+    }
+    return names;
+  }, [events]);
   const activityGroups = useMemo(() => deriveActivityGroups(events), [events]);
   const filteredModels = models.filter(
     (model) => modelFilter === 'all' || model.role === modelFilter,
@@ -667,7 +679,7 @@ export function App(): React.JSX.Element {
             onClear={clearAllNotifications}
           />
         </div>
-        <div className="sidebar-footer">算台 BetterWork · Phase 0</div>
+        <div className="sidebar-footer">算台 BetterWork</div>
       </aside>
       <section className="main-stage">
         {actionError && (
@@ -736,30 +748,25 @@ export function App(): React.JSX.Element {
                           )}
                         </div>
                       )}
-                      {completedTools.map((event) => (
-                        <div
-                          className={
-                            event.type === 'tool.failed' ? 'tool-card failed' : 'tool-card'
-                          }
-                          key={event.id}
-                        >
-                          <div>
-                            <span className="tool-icon" aria-hidden="true">
-                              {event.type === 'tool.failed' ? (
-                                <AlertIcon size={11} />
-                              ) : (
-                                <CheckIcon size={11} />
-                              )}
-                            </span>
-                            <strong>
-                              {event.type === 'tool.completed'
-                                ? '已完成一个工作步骤'
-                                : '工作步骤未完成'}
-                            </strong>
+                      {completedTools.map((event) => {
+                        const toolName = toolNameById.get(event.toolCallId);
+                        const failed = event.type === 'tool.failed';
+                        return (
+                          <div className={failed ? 'tool-card failed' : 'tool-card'} key={event.id}>
+                            <div>
+                              <span className="tool-icon" aria-hidden="true">
+                                {failed ? <AlertIcon size={11} /> : <CheckIcon size={11} />}
+                              </span>
+                              <strong>
+                                {failed ? '工作步骤未完成' : toolStageLabel(toolName)}
+                              </strong>
+                            </div>
+                            <p className="tool-summary">
+                              {failed ? event.error : summarizeToolOutput(toolName, event.output)}
+                            </p>
                           </div>
-                          <code>{eventDetail(event)}</code>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </>
                   )}
                 </div>

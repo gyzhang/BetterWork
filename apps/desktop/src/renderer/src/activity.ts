@@ -1,4 +1,5 @@
 import type { AgentRuntimeEvent } from '@betterwork/agent-protocol';
+import { toolStageLabel } from './lib/labels';
 
 export type ActivityStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
@@ -13,24 +14,6 @@ export interface ActivityGroup {
 type ToolStartedEvent = Extract<AgentRuntimeEvent, { type: 'tool.requested' | 'tool.started' }>;
 type ToolCompletedEvent = Extract<AgentRuntimeEvent, { type: 'tool.completed' }>;
 type ToolFailedEvent = Extract<AgentRuntimeEvent, { type: 'tool.failed' }>;
-
-/**
- * 工具名到用户可读阶段名的映射。
- *
- * 新增工具时必须同步这里，否则过程面板会退化成通用的「处理工作材料」，
- * 用户看不出算台到底在做什么（docs/10 §11.1）。
- */
-const TOOL_LABELS: Readonly<Record<string, string>> = {
-  calculator: '计算数据',
-  read_text_file: '阅读资料',
-  knowledge_search: '查阅个人资料',
-  web_search: '搜索网络资料',
-};
-
-const FALLBACK_TOOL_LABEL = '处理工作材料';
-
-const toolLabel = (name: string | undefined): string =>
-  (name ? TOOL_LABELS[name] : undefined) ?? FALLBACK_TOOL_LABEL;
 
 const mostRecent = <T>(items: readonly T[]): T | undefined => items.at(-1);
 
@@ -96,7 +79,7 @@ export function deriveActivityGroups(events: AgentRuntimeEvent[]): ActivityGroup
 
     groups.push({
       id: 'tools',
-      title: toolLabel(mostRecent(started)?.toolCall.name),
+      title: toolStageLabel(mostRecent(started)?.toolCall.name),
       description: failed
         ? failed.error
         : completed.length === 0
