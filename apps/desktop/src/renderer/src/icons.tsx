@@ -32,4 +32,10 @@ export const AlertIcon = (props: IconProps): React.JSX.Element => <Icon {...prop
 
 export const CloseIcon = (props: IconProps): React.JSX.Element => <Icon {...props}><path d="m6 6 12 12M18 6 6 18" /></Icon>;
 
+export const BellIcon = (props: IconProps): React.JSX.Element => <Icon {...props}><path d="M18 16H6c1.2-1.1 1.8-2.6 1.8-4.8v-1.4c0-2.9 1.9-5 4.2-5s4.2 2.1 4.2 5v1.4c0 2.2.6 3.7 1.8 4.8Z" /><path d="M10.2 19a1.9 1.9 0 0 0 3.6 0" /></Icon>;
+
+export const InfoIcon = (props: IconProps): React.JSX.Element => <Icon {...props}><circle cx="12" cy="12" r="8.5" /><path d="M12 11v5.5" /><path d="M12 7.8v.1" /></Icon>;
+
+export const WarningIcon = (props: IconProps): React.JSX.Element => <Icon {...props}><path d="M12 4.2 21 19.5H3Z" /><path d="M12 10v4.2" /><path d="M12 16.8v.1" /></Icon>;
+
 export const PanelLeftIcon = (props: IconProps): React.JSX.Element => <Icon {...props}><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" /><path d="M9.5 4.5v15" /></Icon>;

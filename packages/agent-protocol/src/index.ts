@@ -307,6 +307,55 @@ export interface RunSummary {
   completedAt?: number;
 }
 
+export const notificationLevelSchema = z.enum(['info', 'success', 'warning', 'error']);
+export type NotificationLevel = z.infer<typeof notificationLevelSchema>;
+export const notificationKindSchema = z.enum(['run', 'knowledge-import', 'artifact', 'system']);
+export type NotificationKind = z.infer<typeof notificationKindSchema>;
+
+export const notificationTargetSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('task'), taskId: z.string().min(1) }),
+  z.object({ kind: z.literal('artifact'), artifactId: z.string().min(1) }),
+  z.object({ kind: z.literal('knowledge') }),
+]);
+export type NotificationTarget = z.infer<typeof notificationTargetSchema>;
+
+export const notificationSummarySchema = z.object({
+  id: z.string().min(1),
+  level: notificationLevelSchema,
+  kind: notificationKindSchema,
+  title: z.string(),
+  detail: z.string().optional(),
+  target: notificationTargetSchema.optional(),
+  read: z.boolean(),
+  createdAt: z.number().int().nonnegative(),
+});
+export type NotificationSummary = z.infer<typeof notificationSummarySchema>;
+
+export const createNotificationInputSchema = z.object({
+  level: notificationLevelSchema,
+  kind: notificationKindSchema,
+  title: z.string().trim().min(1).max(200),
+  detail: z.string().trim().max(2_000).optional(),
+  target: notificationTargetSchema.optional(),
+});
+export type CreateNotificationInput = z.infer<typeof createNotificationInputSchema>;
+
+export const markNotificationReadRequestSchema = z.object({ id: z.string().min(1) });
+export type MarkNotificationReadRequest = z.infer<typeof markNotificationReadRequestSchema>;
+export const markAllNotificationsReadRequestSchema = z.object({}).strict();
+export const clearNotificationsRequestSchema = z.object({}).strict();
+
+export const notificationChangeEventSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('created'), notification: notificationSummarySchema, unreadCount: z.number().int().nonnegative() }),
+  z.object({ type: z.literal('read'), notificationId: z.string().min(1), unreadCount: z.number().int().nonnegative() }),
+  z.object({ type: z.literal('read-all'), unreadCount: z.number().int().nonnegative() }),
+  z.object({ type: z.literal('cleared'), unreadCount: z.number().int().nonnegative() }),
+]);
+export type NotificationChangeEvent = z.infer<typeof notificationChangeEventSchema>;
+
+export const notificationActivatedSchema = z.object({ id: z.string().min(1) });
+export type NotificationActivated = z.infer<typeof notificationActivatedSchema>;
+
 export const IpcChannel = {
   StartRun: 'run:start',
   CancelRun: 'run:cancel',
@@ -341,6 +390,12 @@ export const IpcChannel = {
   TestModel: 'model:test',
   UpdateWindowTheme: 'window:update-theme',
   WindowToggleMaximize: 'window:toggle-maximize',
+  ListNotifications: 'notification:list',
+  MarkNotificationRead: 'notification:mark-read',
+  MarkAllNotificationsRead: 'notification:mark-all-read',
+  ClearNotifications: 'notification:clear',
+  NotificationChangeEvent: 'notification:event',
+  NotificationActivated: 'notification:activated',
 } as const;
 
 export interface BetterWorkDesktopApi {
@@ -382,6 +437,14 @@ export interface BetterWorkDesktopApi {
     list(): Promise<SearchEngineSummary[]>;
     save(input: z.input<typeof saveSearchEngineRequestSchema>): Promise<{ provider: string }>;
     test(input: z.input<typeof testSearchEngineRequestSchema>): Promise<{ ok: boolean; message: string }>;
+  };
+  notifications: {
+    list(): Promise<NotificationSummary[]>;
+    markRead(input: MarkNotificationReadRequest): Promise<{ unreadCount: number }>;
+    markAllRead(): Promise<{ unreadCount: number }>;
+    clear(): Promise<{ cleared: boolean }>;
+    onChange(listener: (event: NotificationChangeEvent) => void): () => void;
+    onActivate(listener: (input: NotificationActivated) => void): () => void;
   };
   chrome: {
     updateTheme(input: UpdateWindowThemeRequest): Promise<void>;

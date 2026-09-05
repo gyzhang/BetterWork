@@ -164,4 +164,40 @@ describe('RunJournal', () => {
     journal.saveWebEvidence(evidence);
     expect(journal.listEvidence(task.task.id)).toEqual([expect.objectContaining({ ...evidence, sourceType: 'web-page' })]);
   });
+
+  it('stores notifications with targets, enforces the rolling cap, and tracks unread counts', () => {
+    journal = new RunJournal(':memory:');
+    const first = journal.saveNotification({ level: 'success', kind: 'run', title: '任务完成：计算', target: { kind: 'task', taskId: 'task-1' } });
+    const second = journal.saveNotification({ level: 'warning', kind: 'knowledge-import', title: '资料未导入（1 份）', detail: 'a.md：格式不支持', target: { kind: 'knowledge' } });
+    const third = journal.saveNotification({ level: 'info', kind: 'artifact', title: '已导出「报告」', target: { kind: 'artifact', artifactId: 'artifact-1' } });
+    const fourth = journal.saveNotification({ level: 'error', kind: 'run', title: '任务失败' });
+
+    expect(journal.unreadNotificationCount()).toBe(4);
+    const listed = journal.listNotifications();
+    expect(listed.map((item) => item.id)).toEqual([fourth.id, third.id, second.id, first.id]);
+    expect(listed[0]?.level).toBe('error');
+    expect(listed[0]?.kind).toBe('run');
+    expect(listed[0]?.read).toBe(false);
+    expect(listed[0]?.target).toBeUndefined();
+    expect(listed[1]).toMatchObject({ target: { kind: 'artifact', artifactId: 'artifact-1' } });
+    expect(listed[2]).toMatchObject({ level: 'warning', detail: 'a.md：格式不支持', target: { kind: 'knowledge' } });
+    expect(listed[3]).toMatchObject({ target: { kind: 'task', taskId: 'task-1' } });
+
+    expect(journal.markNotificationRead(second.id)).toBe(3);
+    expect(journal.markAllNotificationsRead()).toBe(0);
+    expect(journal.listNotifications().every((item) => item.read)).toBe(true);
+
+    journal.clearNotifications();
+    expect(journal.listNotifications()).toEqual([]);
+    expect(journal.unreadNotificationCount()).toBe(0);
+  });
+
+  it('evicts the oldest notifications beyond the 200-entry cap', () => {
+    journal = new RunJournal(':memory:');
+    for (let index = 0; index < 205; index += 1) journal.saveNotification({ level: 'info', kind: 'system', title: `通知 ${index}` });
+    const listed = journal.listNotifications();
+    expect(listed).toHaveLength(200);
+    expect(listed[0]?.title).toBe('通知 204');
+    expect(listed.at(-1)?.title).toBe('通知 5');
+  });
 });

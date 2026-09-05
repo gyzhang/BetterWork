@@ -7,6 +7,7 @@ import { IpcChannel } from '@betterwork/agent-protocol';
 import { calculatorTool, createKnowledgeSearchTool, createWebSearchTool, readTextFileTool, type KnowledgeSearchItem, type WebSearch } from '@betterwork/tool-runtime';
 import { RunJournal } from './run-journal';
 import { KnowledgeVault } from './knowledge-vault';
+import { NotificationService } from './notification-service';
 import { createQianfanSearchClient } from './search-engine-service';
 
 export const createRunTools = (dependencies: { knowledgeSearch: (query: string) => KnowledgeSearchItem[]; webSearch?: WebSearch }): AgentTool[] => {
@@ -14,9 +15,12 @@ export const createRunTools = (dependencies: { knowledgeSearch: (query: string) 
   return dependencies.webSearch ? [...tools, createWebSearchTool(dependencies.webSearch)] : tools;
 };
 
+const truncate = (value: string, max: number): string => (value.length <= max ? value : `${value.slice(0, max - 1)}…`);
+
 export class RunService {
   private readonly activeRuns = new Map<string, AbortController>();
   private readonly activeRunTasks = new Map<string, string>();
+  private readonly activeRunPrompts = new Map<string, string>();
   private readonly activeToolCalls = new Map<string, Map<string, string>>();
   private readonly engine = new ReActAgentEngine();
   private readonly model = new FakeModelProvider();
@@ -24,6 +28,7 @@ export class RunService {
   constructor(
     private readonly journal: RunJournal,
     private readonly knowledgeVault: KnowledgeVault,
+    private readonly notifications: NotificationService,
     private readonly getWindow: () => BrowserWindow | null,
   ) {}
 
@@ -32,6 +37,7 @@ export class RunService {
     const controller = new AbortController();
     this.activeRuns.set(runId, controller);
     this.activeRunTasks.set(runId, input.taskId);
+    this.activeRunPrompts.set(runId, input.prompt);
     this.activeToolCalls.set(runId, new Map());
     this.journal.createRun({
       id: runId,
@@ -74,6 +80,7 @@ export class RunService {
     } finally {
       this.activeRuns.delete(runId);
       this.activeRunTasks.delete(runId);
+      this.activeRunPrompts.delete(runId);
       this.activeToolCalls.delete(runId);
     }
   }
@@ -91,6 +98,19 @@ export class RunService {
     }
     const window = this.getWindow();
     if (window && !window.isDestroyed()) window.webContents.send(IpcChannel.RunEvent, event);
+    if (event.type === 'run.completed' || event.type === 'run.failed') {
+      const taskId = this.activeRunTasks.get(event.runId);
+      const prompt = this.activeRunPrompts.get(event.runId);
+      if (taskId && prompt !== undefined) {
+        this.notifications.create({
+          level: event.type === 'run.completed' ? 'success' : 'error',
+          kind: 'run',
+          title: `${event.type === 'run.completed' ? '任务完成' : '任务失败'}：${truncate(prompt, 80)}`,
+          ...(event.type === 'run.failed' ? { detail: truncate(event.error, 500) } : {}),
+          target: { kind: 'task', taskId },
+        }, { systemNotify: true });
+      }
+    }
   }
 
   private persistKnowledgeEvidence(taskId: string, runId: string, output: unknown): void {
