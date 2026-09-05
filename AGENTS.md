@@ -87,6 +87,7 @@ Renderer -> Preload API -> Application -> Agent Core / Infrastructure
 - Artifact：可继续使用和版本化的工作成果
 - Knowledge：用户拥有的资料
 - Memory：协作形成的长期上下文和经验
+- Notification：可回溯的操作结果通知（见 ADR-0006）
 
 不要用 Conversation、Session、Task、Run 互相代称。
 
