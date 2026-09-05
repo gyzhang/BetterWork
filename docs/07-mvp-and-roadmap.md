@@ -57,7 +57,7 @@
 - 本地 Knowledge Vault
 - Markdown/Text/PDF 基础解析
 - FTS5 + Embedding 检索
-- Web Search / Fetch
+- Web Search / Fetch（第一步已落地：搜索引擎配置 + `web_search` Tool，见 ADR-0007；网页正文 Fetch 仍后置）
 - Evidence
 - 精简 Research Workflow
 - 大纲确认

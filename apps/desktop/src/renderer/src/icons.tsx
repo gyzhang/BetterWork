@@ -12,6 +12,8 @@ export const ArtifactIcon = (props: IconProps): React.JSX.Element => <Icon {...p
 
 export const KnowledgeIcon = (props: IconProps): React.JSX.Element => <Icon {...props}><path d="m12 3.5 9 4.5-9 4.5L3 8Z" /><path d="m4.5 12.2 7.5 3.8 7.5-3.8" /><path d="m4.5 16.2 7.5 3.8 7.5-3.8" /></Icon>;
 
+export const GlobeIcon = (props: IconProps): React.JSX.Element => <Icon {...props}><circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17" /><path d="M12 3.5c2.4 2.3 3.6 5.1 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.1-3.6-8.5s1.2-6.2 3.6-8.5Z" /></Icon>;
+
 export const SettingsIcon = (props: IconProps): React.JSX.Element => <Icon {...props}><path d="M4 7h3.5M11.5 7H20" /><circle cx="9.5" cy="7" r="2" /><path d="M4 12h8.5M16.5 12H20" /><circle cx="14.5" cy="12" r="2" /><path d="M4 17h1.5M9.5 17H20" /><circle cx="7.5" cy="17" r="2" /></Icon>;
 
 export const PlusIcon = (props: IconProps): React.JSX.Element => <Icon {...props}><path d="M12 5.5v13M5.5 12h13" /></Icon>;

@@ -137,4 +137,31 @@ describe('RunJournal', () => {
     expect(journal.listEvidence(task.task.id)).toHaveLength(2);
     expect(journal.listEvidence(task.task.id).map((item) => item.runId).sort()).toEqual(['run-1', 'run-2']);
   });
+
+  it('stores the enabled search engine with masked credentials and preserves its connection status until the key changes', () => {
+    journal = new RunJournal(':memory:');
+    expect(journal.getEnabledSearchEngine()).toBeUndefined();
+    journal.saveSearchEngine({ provider: 'baidu_qianfan', apiKey: 'secret-key', webTopK: 8, enabled: true });
+    expect(journal.listSearchEngines()[0]).toMatchObject({ provider: 'baidu_qianfan', apiKeyConfigured: true, enabled: true, webTopK: 8, connectionStatus: 'untested' });
+    expect(journal.listSearchEngines()[0]).not.toHaveProperty('apiKey');
+    expect(journal.getEnabledSearchEngine()).toMatchObject({ apiKey: 'secret-key', webTopK: 8 });
+    journal.recordSearchConnection('baidu_qianfan', 'connected');
+    expect(journal.listSearchEngines()[0]).toMatchObject({ connectionStatus: 'connected' });
+    journal.saveSearchEngine({ provider: 'baidu_qianfan', apiKey: '', webTopK: 12, enabled: true });
+    expect(journal.getEnabledSearchEngine()).toMatchObject({ apiKey: 'secret-key', webTopK: 12 });
+    expect(journal.listSearchEngines()[0]).toMatchObject({ connectionStatus: 'connected' });
+    journal.saveSearchEngine({ provider: 'baidu_qianfan', apiKey: 'next-key', webTopK: 10, enabled: true });
+    expect(journal.listSearchEngines()[0]).toMatchObject({ connectionStatus: 'untested' });
+    expect(journal.getSearchEngine('baidu_qianfan')?.apiKey).toBe('next-key');
+  });
+
+  it('persists deduplicated web evidence with a web-page source type', () => {
+    journal = new RunJournal(':memory:');
+    const workspace = journal.getOrCreateWorkspace('/work/web-evidence', '网页证据工作区');
+    const task = journal.createTask(workspace.id, '联网调研', '调研市场动态');
+    const evidence = { taskId: task.task.id, runId: 'run-1', sourceUri: 'https://example.com/a', title: '网页标题', locator: 'example.com', excerpt: '网页摘要。', contentHash: 'hash-web' };
+    journal.saveWebEvidence(evidence);
+    journal.saveWebEvidence(evidence);
+    expect(journal.listEvidence(task.task.id)).toEqual([expect.objectContaining({ ...evidence, sourceType: 'web-page' })]);
+  });
 });

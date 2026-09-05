@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { createHash, randomUUID } from 'node:crypto';
-import type { AgentRuntimeEvent, ArtifactDetail, ArtifactSummary, ArtifactVersionDetail, ArtifactVersionSummary, CreatedTask, EvidenceSummary, ModelConnectionStatus, ModelProfileInput, ModelProfileSummary, RecentTaskSummary, RunSummary, SaveMarkdownArtifactRequest, TaskSummary, WorkspaceSummary } from '@betterwork/agent-protocol';
+import type { AgentRuntimeEvent, ArtifactDetail, ArtifactSummary, ArtifactVersionDetail, ArtifactVersionSummary, CreatedTask, EvidenceSummary, ModelConnectionStatus, ModelProfileInput, ModelProfileSummary, RecentTaskSummary, RunSummary, SaveMarkdownArtifactRequest, SearchEngineConfigInput, SearchEngineSummary, SearchProviderId, TaskSummary, WorkspaceSummary } from '@betterwork/agent-protocol';
 import { agentRuntimeEventSchema } from '@betterwork/agent-protocol';
 
 interface RunRow {
@@ -16,9 +16,19 @@ interface RunRow {
 interface WorkspaceRow { id: string; name: string; root_path: string; created_at: number; updated_at: number; }
 interface TaskRow { id: string; workspace_id: string; title: string; goal: string; created_at: number; updated_at: number; }
 interface RecentTaskRow extends TaskRow { session_id: string; run_id: string | null; run_session_id: string | null; prompt: string | null; status: RunSummary['status'] | null; run_created_at: number | null; completed_at: number | null; }
-interface EvidenceRow { id: string; task_id: string; run_id: string; source_type: 'local-file'; source_uri: string; title: string; locator: string; excerpt: string; content_hash: string; captured_at: number; }
+interface EvidenceRow { id: string; task_id: string; run_id: string; source_type: 'local-file' | 'web-page'; source_uri: string; title: string; locator: string; excerpt: string; content_hash: string; captured_at: number; }
 interface ArtifactRow { id: string; workspace_id: string; task_id: string; type: 'markdown'; title: string; current_version_id: string; version_number: number; source_run_id: string; origin: 'assistant-run' | 'user-edit'; created_at: number; updated_at: number; }
 interface ArtifactVersionRow { id: string; artifact_id: string; version_number: number; source_run_id: string; origin: 'assistant-run' | 'user-edit'; content?: string; content_hash?: string; created_at: number; }
+
+const parseSearchOptions = (raw: unknown): { webTopK: number } => {
+  try {
+    const parsed = JSON.parse(String(raw ?? '{}')) as { webTopK?: unknown };
+    const webTopK = Number(parsed.webTopK);
+    return Number.isInteger(webTopK) && webTopK >= 1 && webTopK <= 20 ? { webTopK } : { webTopK: 10 };
+  } catch {
+    return { webTopK: 10 };
+  }
+};
 
 export class RunJournal {
   private readonly db: Database.Database;
@@ -102,6 +112,15 @@ export class RunJournal {
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS search_engine_configs (
+        provider TEXT PRIMARY KEY,
+        api_key TEXT NOT NULL DEFAULT '',
+        options TEXT NOT NULL DEFAULT '{}',
+        enabled INTEGER NOT NULL DEFAULT 0,
+        connection_status TEXT NOT NULL DEFAULT 'untested',
+        last_tested_at INTEGER,
+        updated_at INTEGER NOT NULL
+      );
     `);
     const columns = this.db.prepare('PRAGMA table_info(model_profiles)').all() as Array<{ name: string }>;
     if (!columns.some((column) => column.name === 'connection_status')) this.db.exec("ALTER TABLE model_profiles ADD COLUMN connection_status TEXT NOT NULL DEFAULT 'untested'");
@@ -148,9 +167,14 @@ export class RunJournal {
       .run(randomUUID(), input.taskId, input.runId, input.sourceUri, input.title, input.locator, input.excerpt, input.contentHash, Date.now());
   }
 
+  saveWebEvidence(input: Omit<EvidenceSummary, 'id' | 'sourceType' | 'capturedAt'>): void {
+    this.db.prepare(`INSERT OR IGNORE INTO evidence (id, task_id, run_id, source_type, source_uri, title, locator, excerpt, content_hash, captured_at) VALUES (?, ?, ?, 'web-page', ?, ?, ?, ?, ?, ?)`)
+      .run(randomUUID(), input.taskId, input.runId, input.sourceUri, input.title, input.locator, input.excerpt, input.contentHash, Date.now());
+  }
+
   listEvidence(taskId: string): EvidenceSummary[] {
     const rows = this.db.prepare('SELECT * FROM evidence WHERE task_id = ? ORDER BY captured_at DESC, rowid DESC').all(taskId) as EvidenceRow[];
-    return rows.map((row) => ({ id: row.id, taskId: row.task_id, runId: row.run_id, sourceType: 'local-file', sourceUri: row.source_uri, title: row.title, locator: row.locator, excerpt: row.excerpt, contentHash: row.content_hash, capturedAt: row.captured_at }));
+    return rows.map((row) => ({ id: row.id, taskId: row.task_id, runId: row.run_id, sourceType: row.source_type, sourceUri: row.source_uri, title: row.title, locator: row.locator, excerpt: row.excerpt, contentHash: row.content_hash, capturedAt: row.captured_at }));
   }
 
   saveMarkdownArtifact(input: SaveMarkdownArtifactRequest): ArtifactSummary {
@@ -311,6 +335,48 @@ export class RunJournal {
       .run(status, now, now, id);
   }
 
+  listSearchEngines(): SearchEngineSummary[] {
+    const rows = this.db.prepare('SELECT * FROM search_engine_configs ORDER BY updated_at DESC').all() as Array<Record<string, unknown>>;
+    return rows.map((row) => this.toSearchEngineSummary(row));
+  }
+
+  saveSearchEngine(input: SearchEngineConfigInput): string {
+    const now = Date.now();
+    const existing = this.db.prepare('SELECT api_key, connection_status, last_tested_at FROM search_engine_configs WHERE provider = ?').get(input.provider) as { api_key: string; connection_status: string; last_tested_at: number | null } | undefined;
+    const transaction = this.db.transaction(() => {
+      if (input.enabled) this.db.prepare('UPDATE search_engine_configs SET enabled = 0').run();
+      const apiKey = input.apiKey ? input.apiKey : String(existing?.api_key ?? '');
+      const keyChanged = input.apiKey !== '' && input.apiKey !== existing?.api_key;
+      if (existing) {
+        this.db.prepare('UPDATE search_engine_configs SET api_key = ?, options = ?, enabled = ?, connection_status = ?, last_tested_at = ?, updated_at = ? WHERE provider = ?')
+          .run(apiKey, JSON.stringify({ webTopK: input.webTopK }), input.enabled ? 1 : 0, keyChanged ? 'untested' : existing.connection_status, keyChanged ? null : existing.last_tested_at, now, input.provider);
+      } else {
+        this.db.prepare('INSERT INTO search_engine_configs (provider, api_key, options, enabled, connection_status, last_tested_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+          .run(input.provider, apiKey, JSON.stringify({ webTopK: input.webTopK }), input.enabled ? 1 : 0, 'untested', null, now);
+      }
+    });
+    transaction();
+    return input.provider;
+  }
+
+  getEnabledSearchEngine(): { provider: SearchProviderId; apiKey: string; webTopK: number } | undefined {
+    const row = this.db.prepare('SELECT provider, api_key, options FROM search_engine_configs WHERE enabled = 1 LIMIT 1').get() as Record<string, unknown> | undefined;
+    if (!row) return undefined;
+    return { provider: String(row.provider) as SearchProviderId, apiKey: String(row.api_key ?? ''), webTopK: parseSearchOptions(row.options).webTopK };
+  }
+
+  getSearchEngine(provider: SearchProviderId): { provider: SearchProviderId; apiKey: string; webTopK: number } | undefined {
+    const row = this.db.prepare('SELECT provider, api_key, options FROM search_engine_configs WHERE provider = ?').get(provider) as Record<string, unknown> | undefined;
+    if (!row) return undefined;
+    return { provider: String(row.provider) as SearchProviderId, apiKey: String(row.api_key ?? ''), webTopK: parseSearchOptions(row.options).webTopK };
+  }
+
+  recordSearchConnection(provider: SearchProviderId, status: Exclude<ModelConnectionStatus, 'untested'>): void {
+    const now = Date.now();
+    this.db.prepare('UPDATE search_engine_configs SET connection_status = ?, last_tested_at = ?, updated_at = ? WHERE provider = ?')
+      .run(status, now, now, provider);
+  }
+
   private toModelSummary(row: Record<string, unknown>): ModelProfileSummary {
     return {
       id: String(row.id), name: String(row.name), provider: String(row.provider), baseUrl: String(row.base_url), model: String(row.model),
@@ -319,6 +385,18 @@ export class RunJournal {
       ...(row.last_tested_at === null || row.last_tested_at === undefined ? {} : { lastTestedAt: Number(row.last_tested_at) }),
       maxContextTokens: Number(row.max_context_tokens), maxOutputTokens: Number(row.max_output_tokens), temperature: Number(row.temperature),
       createdAt: Number(row.created_at), updatedAt: Number(row.updated_at),
+    };
+  }
+
+  private toSearchEngineSummary(row: Record<string, unknown>): SearchEngineSummary {
+    return {
+      provider: String(row.provider) as SearchEngineSummary['provider'],
+      apiKeyConfigured: Boolean(row.api_key),
+      enabled: Boolean(row.enabled),
+      webTopK: parseSearchOptions(row.options).webTopK,
+      connectionStatus: row.connection_status as ModelConnectionStatus ?? 'untested',
+      ...(row.last_tested_at === null || row.last_tested_at === undefined ? {} : { lastTestedAt: Number(row.last_tested_at) }),
+      updatedAt: Number(row.updated_at),
     };
   }
 
@@ -345,7 +423,7 @@ export class RunJournal {
 
   private listArtifactVersionEvidence(versionId: string): EvidenceSummary[] {
     const rows = this.db.prepare('SELECT e.* FROM artifact_version_evidence ave JOIN evidence e ON e.id = ave.evidence_id WHERE ave.version_id = ? ORDER BY e.captured_at DESC, e.rowid DESC').all(versionId) as EvidenceRow[];
-    return rows.map((row) => ({ id: row.id, taskId: row.task_id, runId: row.run_id, sourceType: 'local-file', sourceUri: row.source_uri, title: row.title, locator: row.locator, excerpt: row.excerpt, contentHash: row.content_hash, capturedAt: row.captured_at }));
+    return rows.map((row) => ({ id: row.id, taskId: row.task_id, runId: row.run_id, sourceType: row.source_type, sourceUri: row.source_uri, title: row.title, locator: row.locator, excerpt: row.excerpt, contentHash: row.content_hash, capturedAt: row.captured_at }));
   }
 
   close(): void {
