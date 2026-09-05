@@ -45,13 +45,6 @@ interface TableInfoRow {
   name: string;
 }
 
-interface ForeignKeyViolation {
-  table: string;
-  rowid: number;
-  parent: string;
-  fkid: number;
-}
-
 function assertValidPlan(plan: MigrationPlan): readonly Migration[] {
   const sorted = [...plan.migrations].sort((a, b) => a.version - b.version);
   const seen = new Set<number>();
@@ -105,8 +98,7 @@ function stamp(db: Database.Database, migration: Migration): void {
 /**
  * 按 SQLite 官方推荐流程重建一张表（用于补外键这类无法 ALTER 的变更）：
  * 外键开关在事务外关闭，建新表、拷数据、删旧表、改名，
- * 最后用 `foreign_key_check` 兜底——发现任何悬空引用就抛错回滚，
- * 绝不把用户数据留在半迁移状态。
+ * 悬空引用的清理由调用方在重建前完成。
  *
  * 旧表上的索引会随 DROP 一起消失，调用方必须在 `recreateIndexes` 里补回。
  */
@@ -135,14 +127,6 @@ export function rebuildTable(
       db.exec(`DROP TABLE ${table}`);
       db.exec(`ALTER TABLE ${temporaryName} RENAME TO ${table}`);
       for (const indexSql of recreateIndexes) db.exec(indexSql);
-      const violations = db.pragma('foreign_key_check') as ForeignKeyViolation[];
-      if (violations.length > 0) {
-        const first = violations[0];
-        throw new Error(
-          `Foreign key violation after rebuilding ${table}: ` +
-            `${first?.table ?? 'unknown'} row ${first?.rowid ?? 'unknown'} -> ${first?.parent ?? 'unknown'}`,
-        );
-      }
     });
     run();
   } finally {

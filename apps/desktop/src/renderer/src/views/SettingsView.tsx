@@ -1,5 +1,4 @@
-import type { ModelProfileSummary, SearchEngineSummary } from '@betterwork/agent-protocol';
-import { useEffect, useState } from 'react';
+import type { ModelProfileSummary } from '@betterwork/agent-protocol';
 
 import type {
   AppearanceMode,
@@ -8,6 +7,7 @@ import type {
   ResolvedAppearance,
 } from '../appearance';
 import { colorSchemes } from '../appearance';
+import { useSearchEngineSettings } from '../hooks/use-search-engine-settings';
 import { CheckIcon, PlusIcon } from '../icons';
 import { trackAction } from '../lib/async-action';
 import { connectionStatusName, roleName } from '../lib/labels';
@@ -239,46 +239,8 @@ export function AppearanceSettings({
   );
 }
 export function SearchSettings(): React.JSX.Element {
-  const [engines, setEngines] = useState<SearchEngineSummary[]>([]);
-  const [apiKey, setApiKey] = useState('');
-  const [webTopK, setWebTopK] = useState(10);
-  const [message, setMessage] = useState('');
-  const configured = engines.find((engine) => engine.provider === 'baidu_qianfan');
-  const refresh = (): void => {
-    trackAction(window.betterwork.searchEngines.list().then(setEngines), '刷新搜索引擎配置');
-  };
-  useEffect(() => {
-    refresh();
-  }, []);
-  const save = async (): Promise<void> => {
-    try {
-      await window.betterwork.searchEngines.save({
-        provider: 'baidu_qianfan',
-        apiKey,
-        webTopK,
-        enabled: true,
-      });
-      setApiKey('');
-      setMessage('搜索配置已保存，智能体可以在任务中联网搜索并标注来源。');
-      refresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '保存失败，请检查配置。');
-    }
-  };
-  const test = async (): Promise<void> => {
-    setMessage('正在连接搜索服务…');
-    try {
-      const result = await window.betterwork.searchEngines.test({
-        provider: 'baidu_qianfan',
-        apiKey,
-        webTopK,
-      });
-      setMessage(result.message);
-      refresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '连接测试失败。');
-    }
-  };
+  const { configured, apiKey, setApiKey, webTopK, setWebTopK, message, save, test } =
+    useSearchEngineSettings();
   return (
     <section className="settings-section search-settings">
       <div className="settings-heading">
@@ -320,9 +282,7 @@ export function SearchSettings(): React.JSX.Element {
               min={1}
               max={20}
               value={webTopK}
-              onChange={(event) =>
-                setWebTopK(Math.min(20, Math.max(1, Number(event.target.value) || 10)))
-              }
+              onChange={(event) => setWebTopK(Number(event.target.value))}
             />
           </label>
         </details>
