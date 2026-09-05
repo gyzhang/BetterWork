@@ -1,5 +1,6 @@
-import type { FormEvent } from 'react';
 import type { ModelProfileInput } from '@betterwork/agent-protocol';
+import type { FormEvent } from 'react';
+
 import { CloseIcon } from '../icons';
 import { trackAction } from '../lib/async-action';
 

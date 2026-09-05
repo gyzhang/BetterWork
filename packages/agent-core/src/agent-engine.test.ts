@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
 import { calculatorTool, createKnowledgeSearchTool } from '@betterwork/tool-runtime';
+import { describe, expect, it, vi } from 'vitest';
+
 import { ReActAgentEngine } from './agent-engine';
 import { FakeModelProvider } from './fake-provider';
 import { OpenAICompatibleProvider } from './openai-compatible-provider';

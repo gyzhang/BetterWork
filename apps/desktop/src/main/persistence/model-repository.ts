@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import type Database from 'better-sqlite3';
+
 import type {
   ModelConnectionStatus,
   ModelProfileInput,
   ModelProfileSummary,
   ModelRole,
 } from '@betterwork/agent-protocol';
+import type Database from 'better-sqlite3';
 
 interface ModelRow {
   id: string;

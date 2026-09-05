@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import { createQianfanSearchClient } from './search-engine-service';
 
 afterEach(() => vi.unstubAllGlobals());

@@ -1,8 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import type Database from 'better-sqlite3';
-import { openKnowledgeDatabase } from '../db';
+
 import type {
   KnowledgeDocumentSummary,
   KnowledgeFormat,
@@ -10,6 +9,9 @@ import type {
   KnowledgeRefreshResult,
   KnowledgeSearchResult,
 } from '@betterwork/agent-protocol';
+import type Database from 'better-sqlite3';
+
+import { openKnowledgeDatabase } from '../db';
 
 interface KnowledgeRow {
   id: string;

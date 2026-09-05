@@ -1,16 +1,17 @@
-import { useEffect, useState } from 'react';
 import type {
   ArtifactDetail,
   ArtifactSummary,
   ArtifactVersionDetail,
   ArtifactVersionSummary,
 } from '@betterwork/agent-protocol';
-import { MarkdownPreview } from '../markdown-preview';
+import { useEffect, useState } from 'react';
+
+import { EmptyPage } from '../components/EmptyState';
 import { ChevronLeftIcon, ChevronRightIcon, GlobeIcon, KnowledgeIcon } from '../icons';
+import { reportAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
 import { handleTitlebarDoubleClick } from '../lib/titlebar';
-import { EmptyPage } from '../components/EmptyState';
-import { reportAction } from '../lib/async-action';
+import { MarkdownPreview } from '../markdown-preview';
 
 export function ArtifactPage({
   artifacts,

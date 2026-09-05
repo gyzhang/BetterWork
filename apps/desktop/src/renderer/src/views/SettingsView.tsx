@@ -1,16 +1,17 @@
-import { useEffect, useState } from 'react';
 import type { ModelProfileSummary, SearchEngineSummary } from '@betterwork/agent-protocol';
-import { colorSchemes } from '../appearance';
+import { useEffect, useState } from 'react';
+
 import type {
   AppearanceMode,
   AppearancePreference,
   ColorScheme,
   ResolvedAppearance,
 } from '../appearance';
+import { colorSchemes } from '../appearance';
 import { CheckIcon, PlusIcon } from '../icons';
-import type { SettingsTab } from '../lib/view-types';
-import { connectionStatusName, roleName } from '../lib/labels';
 import { trackAction } from '../lib/async-action';
+import { connectionStatusName, roleName } from '../lib/labels';
+import type { SettingsTab } from '../lib/view-types';
 
 export interface SettingsPageProps {
   tab: SettingsTab;

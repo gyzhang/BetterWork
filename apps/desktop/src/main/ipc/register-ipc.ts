@@ -1,7 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { dialog, ipcMain, shell, systemPreferences, type BrowserWindow } from 'electron';
-import { z, type ZodTypeAny } from 'zod';
+
 import {
   cancelRunRequestSchema,
   clearNotificationsRequestSchema,
@@ -10,8 +9,9 @@ import {
   getArtifactRequestSchema,
   getArtifactVersionRequestSchema,
   IpcChannel,
-  listArtifactVersionsRequestSchema,
+  type KnowledgeImportResult,
   listArtifactsRequestSchema,
+  listArtifactVersionsRequestSchema,
   listEvidenceRequestSchema,
   listRunEventsRequestSchema,
   listRunsRequestSchema,
@@ -33,8 +33,10 @@ import {
   testSearchEngineRequestSchema,
   updateWindowThemeRequestSchema,
   windowToggleMaximizeRequestSchema,
-  type KnowledgeImportResult,
 } from '@betterwork/agent-protocol';
+import { type BrowserWindow, dialog, ipcMain, shell, systemPreferences } from 'electron';
+import { z, type ZodTypeAny } from 'zod';
+
 import type { AppStore } from '../persistence';
 import type { KnowledgeVault } from '../services/knowledge-vault';
 import { probeModelConnection } from '../services/model-connectivity';

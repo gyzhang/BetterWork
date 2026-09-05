@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { createKnowledgeSearchTool } from './knowledge-search';
 
 const context = {

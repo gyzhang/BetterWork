@@ -1,30 +1,25 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { FormEvent, KeyboardEvent } from 'react';
 import type {
   AgentRuntimeEvent,
   ArtifactDetail,
   ArtifactSummary,
   EvidenceSummary,
-  KnowledgeDocumentSummary,
-  KnowledgeSearchResult,
-  ModelProfileInput,
-  ModelProfileSummary,
   NotificationSummary,
   NotificationTarget,
   RecentTaskSummary,
   RunSummary,
   WorkspaceSummary,
 } from '@betterwork/agent-protocol';
-import type { AppearancePreference, ResolvedAppearance } from './appearance';
-import {
-  applyAppearance,
-  bootstrapAppearance,
-  getWindowTheme,
-  persistAppearance,
-} from './appearance';
+import type { FormEvent, KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
 import { deriveActivityGroups } from './activity';
 import { BrandLogo } from './brand-logo';
-import { NotificationCenter, ToastHost, useNotifications } from './notifications';
+import { ContextPanel } from './components/ContextPanel';
+import { ModelEditor } from './components/ModelEditorSheet';
+import { Welcome } from './components/Welcome';
+import { useAppearance } from './hooks/use-appearance';
+import { useKnowledgeLibrary } from './hooks/use-knowledge-library';
+import { useModelSettings } from './hooks/use-model-settings';
 import {
   AlertIcon,
   ArrowUpIcon,
@@ -38,20 +33,31 @@ import {
   SettingsIcon,
   WorkIcon,
 } from './icons';
-import type { AppView, ContextTab, SettingsTab } from './lib/view-types';
-import { fileNameOf, formatTime } from './lib/format';
-import { emptyModel, roleName, runStatusName, toolStageLabel } from './lib/labels';
-import { summarizeToolOutput } from './lib/tool-summary';
-import { handleTitlebarDoubleClick } from './lib/titlebar';
 import { reportAction, trackAction } from './lib/async-action';
-import { Welcome } from './components/Welcome';
-import { ContextPanel } from './components/ContextPanel';
-import { ModelEditor } from './components/ModelEditorSheet';
-import { KnowledgePage } from './views/KnowledgeView';
+import { formatTime } from './lib/format';
+import { runStatusName, toolStageLabel } from './lib/labels';
+import { handleTitlebarDoubleClick } from './lib/titlebar';
+import { summarizeToolOutput } from './lib/tool-summary';
+import type { AppView, ContextTab, SettingsTab } from './lib/view-types';
+import { NotificationCenter, ToastHost, useNotifications } from './notifications';
 import { ArtifactPage } from './views/ArtifactView';
+import { KnowledgePage } from './views/KnowledgeView';
 import { SettingsPage } from './views/SettingsView';
 
 export function App(): React.JSX.Element {
+  // 三个自包含的状态簇各自成 hook；App 只保留跨簇的编排与布局。
+  const appearanceState = useAppearance();
+  const appearance = appearanceState.preference;
+  const resolvedAppearance = appearanceState.resolved;
+  const setAppearanceValue = appearanceState.update;
+
+  const knowledge = useKnowledgeLibrary();
+  const refreshKnowledge = knowledge.refresh;
+
+  const modelSettings = useModelSettings();
+  const activeLanguageModel = modelSettings.activeLanguageModel;
+  const refreshModels = modelSettings.refresh;
+
   const [prompt, setPrompt] = useState('计算: (12 + 8) * 3');
   const [workspace, setWorkspace] = useState<WorkspaceSummary>();
   const workspaceIdRef = useRef<string | undefined>(undefined);
@@ -71,13 +77,6 @@ export function App(): React.JSX.Element {
   // 跨视图的动作错误出口：开始任务、切换任务、停止执行、选择工作区等失败都在这里呈现，
   // 而不是像此前那样被 `void` 静默吞掉。
   const [actionError, setActionError] = useState('');
-  const [models, setModels] = useState<ModelProfileSummary[]>([]);
-  const [knowledgeDocuments, setKnowledgeDocuments] = useState<KnowledgeDocumentSummary[]>([]);
-  const [knowledgeResults, setKnowledgeResults] = useState<KnowledgeSearchResult[]>([]);
-  const [knowledgeQuery, setKnowledgeQuery] = useState('');
-  const [knowledgeMessage, setKnowledgeMessage] = useState('');
-  const [knowledgeIssues, setKnowledgeIssues] = useState<string[]>([]);
-  const [isImportingKnowledge, setIsImportingKnowledge] = useState(false);
   const [view, setView] = useState<AppView>('work');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => window.localStorage.getItem('betterwork-sidebar-collapsed') === 'true',
@@ -86,53 +85,37 @@ export function App(): React.JSX.Element {
   const [contextOpen, setContextOpen] = useState(true);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('models');
   const [notificationCenterOpen, setNotificationCenterOpen] = useState(false);
-  const [modelEditorOpen, setModelEditorOpen] = useState(false);
-  const [modelForm, setModelForm] = useState<ModelProfileInput>(emptyModel);
-  const [editingModelId, setEditingModelId] = useState<string>();
-  const [modelFilter, setModelFilter] = useState<ModelProfileSummary['role'] | 'all'>('all');
-  const [modelMessage, setModelMessage] = useState('');
-  const [appearance, setAppearance] = useState<AppearancePreference>(() => bootstrapAppearance());
-  const [resolvedAppearance, setResolvedAppearance] = useState<ResolvedAppearance>(() =>
-    applyAppearance(bootstrapAppearance()),
-  );
-
   /**
    * 列表刷新属于后台同步：失败时用户无法据以行动，但也不能完全无痕。
    * 统一走 trackAction 记录到控制台，并对调用方保证「永不 reject」，
    * 因此这些函数返回 void，调用点不需要也不应该 await。
    */
-  const refreshRuns = (): void => {
+  const refreshRuns = useCallback((): void => {
     trackAction(window.betterwork.runs.list().then(setRuns), '刷新运行列表');
-  };
-  const refreshTaskRuns = (taskId = activeTaskIdRef.current): void => {
+  }, []);
+  const refreshTaskRuns = useCallback((taskId = activeTaskIdRef.current): void => {
     if (!taskId) {
       setTaskRuns([]);
       return;
     }
     trackAction(window.betterwork.runs.list({ taskId }).then(setTaskRuns), '刷新任务运行记录');
-  };
-  const refreshTasks = (workspaceId = workspaceIdRef.current): void => {
+  }, []);
+  const refreshTasks = useCallback((workspaceId = workspaceIdRef.current): void => {
     trackAction(
       window.betterwork.tasks.list(workspaceId ? { workspaceId } : undefined).then(setRecentTasks),
       '刷新最近任务',
     );
-  };
-  const refreshModels = (): void => {
-    trackAction(window.betterwork.models.list().then(setModels), '刷新模型配置');
-  };
-  const refreshKnowledge = (): void => {
-    trackAction(window.betterwork.knowledge.list().then(setKnowledgeDocuments), '刷新资料库');
-  };
-  const refreshEvidence = (taskId = activeTaskIdRef.current): void => {
+  }, []);
+  const refreshEvidence = useCallback((taskId = activeTaskIdRef.current): void => {
     if (!taskId) {
       setEvidence([]);
       return;
     }
     trackAction(window.betterwork.evidence.list({ taskId }).then(setEvidence), '刷新引用资料');
-  };
-  const refreshArtifacts = (): void => {
+  }, []);
+  const refreshArtifacts = useCallback((): void => {
     trackAction(window.betterwork.artifacts.list().then(setArtifacts), '刷新成果列表');
-  };
+  }, []);
 
   useEffect(() => {
     refreshRuns();
@@ -163,30 +146,20 @@ export function App(): React.JSX.Element {
         refreshArtifacts();
       }
     });
-  }, []);
-
-  useEffect(() => {
-    const query = window.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = (): void => {
-      if (appearance.mode === 'system') setResolvedAppearance(applyAppearance(appearance));
-    };
-    query.addEventListener('change', onChange);
-    return () => query.removeEventListener('change', onChange);
-  }, [appearance]);
+  }, [
+    refreshRuns,
+    refreshModels,
+    refreshKnowledge,
+    refreshArtifacts,
+    refreshTasks,
+    refreshTaskRuns,
+    refreshEvidence,
+  ]);
 
   useEffect(() => {
     window.localStorage.setItem('betterwork-sidebar-collapsed', String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
-  useEffect(() => {
-    trackAction(window.betterwork.chrome.updateTheme(getWindowTheme()), '同步窗口主题');
-  }, [appearance, resolvedAppearance]);
-
-  const setAppearanceValue = (next: AppearancePreference): void => {
-    setAppearance(next);
-    persistAppearance(next);
-    setResolvedAppearance(applyAppearance(next));
-  };
   const assistantText = useMemo(
     () =>
       events
@@ -200,17 +173,6 @@ export function App(): React.JSX.Element {
   );
   const assistantDisplayText = assistantText.trim();
   const activeRun = runs.find((run) => run.id === activeRunId);
-  const activeLanguageModel = models.find((model) => model.role === 'language' && model.enabled);
-  const defaultModelIds = useMemo(
-    () =>
-      new Map(
-        (['language', 'vision', 'embedding'] as const).map((role) => [
-          role,
-          models.find((model) => model.role === role && model.enabled)?.id,
-        ]),
-      ),
-    [models],
-  );
   const isRunning =
     activeRun?.status === 'running' ||
     events.at(-1)?.type === 'run.started' ||
@@ -233,9 +195,6 @@ export function App(): React.JSX.Element {
     return names;
   }, [events]);
   const activityGroups = useMemo(() => deriveActivityGroups(events), [events]);
-  const filteredModels = models.filter(
-    (model) => modelFilter === 'all' || model.role === modelFilter,
-  );
   const currentTaskArtifacts = artifacts.filter((artifact) => artifact.taskId === activeTask?.id);
   const isCompletedRun = events.some((event) => event.type === 'run.completed');
 
@@ -327,78 +286,6 @@ export function App(): React.JSX.Element {
     refreshTaskRuns(task.id);
     refreshEvidence(task.id);
     setView('work');
-  };
-  const openModelEditor = (model?: ModelProfileSummary): void => {
-    setModelMessage('');
-    if (model) {
-      setEditingModelId(model.id);
-      setModelForm({
-        name: model.name,
-        provider: model.provider,
-        baseUrl: model.baseUrl,
-        model: model.model,
-        role: model.role,
-        apiKey: '',
-        maxContextTokens: model.maxContextTokens,
-        maxOutputTokens: model.maxOutputTokens,
-        temperature: model.temperature,
-        enabled: model.enabled,
-        priority: model.priority,
-      });
-    } else {
-      setEditingModelId(undefined);
-      setModelForm(emptyModel);
-    }
-    setModelEditorOpen(true);
-  };
-  const saveModel = async (event: FormEvent): Promise<void> => {
-    event.preventDefault();
-    try {
-      await window.betterwork.models.save({
-        ...modelForm,
-        ...(editingModelId ? { id: editingModelId } : {}),
-      });
-      refreshModels();
-      setModelEditorOpen(false);
-      setModelMessage(editingModelId ? '模型配置已更新。' : '模型已添加，现在可以用于任务。');
-    } catch (error) {
-      setModelMessage(error instanceof Error ? error.message : '保存失败，请检查配置。');
-    }
-  };
-  const testModel = async (): Promise<void> => {
-    try {
-      const result = await window.betterwork.models.test({
-        ...modelForm,
-        ...(editingModelId ? { id: editingModelId } : {}),
-      });
-      setModelMessage(result.message);
-      refreshModels();
-    } catch (error) {
-      setModelMessage(error instanceof Error ? error.message : '连接测试失败。');
-    }
-  };
-  const toggleModel = (model: ModelProfileSummary): void => {
-    reportAction(
-      window.betterwork.models
-        .setEnabled({ id: model.id, enabled: !model.enabled })
-        .then(() => refreshModels()),
-      setModelMessage,
-      '切换启用状态失败，请重试。',
-    );
-  };
-  const setDefaultModel = (model: ModelProfileSummary): void => {
-    reportAction(
-      window.betterwork.models.setDefault({ id: model.id }).then((result) => {
-        setModelMessage(
-          result.updated
-            ? `${model.name} 已设为${roleName[model.role]}默认模型。`
-            : '仅已启用模型可以设为默认。',
-        );
-        refreshModels();
-      }),
-      setModelMessage,
-      '设置默认模型失败，请重试。',
-    );
   };
   const saveCurrentArtifact = async (): Promise<void> => {
     if (!activeTask || !activeRunId || !assistantDisplayText) return;
@@ -504,88 +391,6 @@ export function App(): React.JSX.Element {
     setNotificationCenterOpen(false);
     activateNotificationFromCenter(notification);
   };
-  const openKnowledgeSource = async (sourcePath: string): Promise<void> => {
-    const result = await window.betterwork.knowledge.openSource({ sourcePath });
-    if (!result.opened) throw new Error(result.error ?? '无法打开原始资料。');
-  };
-  const importKnowledge = async (): Promise<void> => {
-    setIsImportingKnowledge(true);
-    setKnowledgeMessage('');
-    setKnowledgeIssues([]);
-    try {
-      const result = await window.betterwork.knowledge.importFromDialog();
-      if (result.imported.length || result.skipped.length) {
-        setKnowledgeMessage(
-          `已整理 ${result.imported.length} 份资料${result.skipped.length ? `；${result.skipped.length} 份未导入` : ''}。`,
-        );
-        setKnowledgeIssues(
-          result.skipped.map((item) => `${fileNameOf(item.sourcePath)}：${item.reason}`),
-        );
-      } else {
-        setKnowledgeMessage('已取消导入，未选择文件。');
-      }
-      refreshKnowledge();
-    } catch (error) {
-      setKnowledgeMessage(error instanceof Error ? error.message : '导入资料失败。');
-    } finally {
-      setIsImportingKnowledge(false);
-    }
-  };
-  const removeKnowledgeDocument = async (document: KnowledgeDocumentSummary): Promise<void> => {
-    if (
-      !window.confirm(
-        `从算台资料库移除「${document.title}」？\n\n这不会删除原始文件，只会删除本地检索索引。`,
-      )
-    )
-      return;
-    try {
-      const result = await window.betterwork.knowledge.remove({ id: document.id });
-      setKnowledgeMessage(
-        result.removed
-          ? `已从资料库移除「${document.title}」，原始文件未受影响。`
-          : '资料已不在当前资料库中。',
-      );
-      setKnowledgeQuery('');
-      refreshKnowledge();
-    } catch (error) {
-      setKnowledgeMessage(error instanceof Error ? error.message : '移出资料库失败，请重试。');
-    }
-  };
-  const refreshKnowledgeDocument = async (document: KnowledgeDocumentSummary): Promise<void> => {
-    setIsImportingKnowledge(true);
-    try {
-      const result = await window.betterwork.knowledge.refresh({ id: document.id });
-      setKnowledgeMessage(
-        result.refreshed
-          ? `已刷新「${document.title}」的本地索引。`
-          : (result.error ?? '刷新索引失败。'),
-      );
-      setKnowledgeQuery('');
-      refreshKnowledge();
-    } catch (error) {
-      setKnowledgeMessage(
-        error instanceof Error && error.message
-          ? `刷新索引失败：${error.message}`
-          : '刷新索引失败，请重试。',
-      );
-    } finally {
-      setIsImportingKnowledge(false);
-    }
-  };
-  const searchKnowledge = async (event: FormEvent): Promise<void> => {
-    event.preventDefault();
-    const query = knowledgeQuery.trim();
-    if (!query) {
-      setKnowledgeResults([]);
-      return;
-    }
-    try {
-      setKnowledgeResults(await window.betterwork.knowledge.search({ query }));
-    } catch (error) {
-      setKnowledgeMessage(error instanceof Error ? error.message : '检索资料失败。');
-    }
-  };
-
   return (
     <main className={sidebarCollapsed ? 'app-shell sidebar-collapsed' : 'app-shell'}>
       <aside className="sidebar">
@@ -847,47 +652,26 @@ export function App(): React.JSX.Element {
             onBack={() => setSelectedArtifact(undefined)}
           />
         )}
-        {view === 'knowledge' && (
-          <KnowledgePage
-            documents={knowledgeDocuments}
-            results={knowledgeResults}
-            query={knowledgeQuery}
-            setQuery={setKnowledgeQuery}
-            message={knowledgeMessage}
-            issues={knowledgeIssues}
-            importing={isImportingKnowledge}
-            onImport={() => trackAction(importKnowledge(), '导入资料')}
-            onSearch={(event) => trackAction(searchKnowledge(event), '检索资料')}
-            onOpenSource={openKnowledgeSource}
-            onRefresh={refreshKnowledgeDocument}
-            onRemove={removeKnowledgeDocument}
-          />
-        )}
+        {view === 'knowledge' && <KnowledgePage library={knowledge} />}
         {view === 'settings' && (
           <SettingsPage
             tab={settingsTab}
             setTab={setSettingsTab}
-            models={filteredModels}
-            modelFilter={modelFilter}
-            setModelFilter={setModelFilter}
+            models={modelSettings.filteredModels}
+            modelFilter={modelSettings.filter}
+            setModelFilter={modelSettings.setFilter}
             activeLanguageModel={activeLanguageModel}
-            defaultModelIds={defaultModelIds}
-            onAdd={() => openModelEditor()}
-            onEdit={openModelEditor}
-            onToggle={toggleModel}
-            onSetDefault={setDefaultModel}
-            onDelete={(model) =>
-              reportAction(
-                window.betterwork.models.delete({ id: model.id }).then(() => refreshModels()),
-                setModelMessage,
-                '删除模型失败，请重试。',
-              )
-            }
+            defaultModelIds={modelSettings.defaultModelIds}
+            onAdd={() => modelSettings.openEditor()}
+            onEdit={modelSettings.openEditor}
+            onToggle={modelSettings.onToggle}
+            onSetDefault={modelSettings.onSetDefault}
+            onDelete={modelSettings.onDelete}
             appearance={appearance}
             resolvedAppearance={resolvedAppearance}
             onMode={(mode) => setAppearanceValue({ ...appearance, mode })}
             onScheme={(scheme) => setAppearanceValue({ ...appearance, scheme })}
-            modelMessage={modelMessage}
+            modelMessage={modelSettings.message}
           />
         )}
       </section>
@@ -906,18 +690,18 @@ export function App(): React.JSX.Element {
           onSelectRun={(run) =>
             reportAction(selectRun(run), setActionError, '无法打开这次执行记录。')
           }
-          onOpenSource={openKnowledgeSource}
+          onOpenSource={knowledge.onOpenSource}
         />
       )}
-      {modelEditorOpen && (
+      {modelSettings.editorOpen && (
         <ModelEditor
-          form={modelForm}
-          setForm={setModelForm}
-          editing={Boolean(editingModelId)}
-          message={modelMessage}
-          onClose={() => setModelEditorOpen(false)}
-          onSave={saveModel}
-          onTest={() => trackAction(testModel(), '测试模型连接')}
+          form={modelSettings.editorForm}
+          setForm={modelSettings.setEditorForm}
+          editing={modelSettings.editorIsEditing}
+          message={modelSettings.message}
+          onClose={modelSettings.closeEditor}
+          onSave={modelSettings.onSave}
+          onTest={() => trackAction(modelSettings.onTest(), '测试模型连接')}
         />
       )}
       <ToastHost

@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentMessage } from '@betterwork/agent-protocol';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import { OpenAICompatibleProvider } from './openai-compatible-provider';
 import type { ModelRequest, ModelStreamChunk } from './types';
 

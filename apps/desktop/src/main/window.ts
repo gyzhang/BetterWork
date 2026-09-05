@@ -1,4 +1,5 @@
 import path from 'node:path';
+
 import { BrowserWindow, type BrowserWindowConstructorOptions } from 'electron';
 
 /**

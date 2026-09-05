@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import type Database from 'better-sqlite3';
+
 import type { WorkspaceSummary } from '@betterwork/agent-protocol';
+import type Database from 'better-sqlite3';
 
 interface WorkspaceRow {
   id: string;

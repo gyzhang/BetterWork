@@ -1,8 +1,10 @@
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
 import JSZip from 'jszip';
 import { afterEach, describe, expect, it } from 'vitest';
+
 import { KnowledgeVault } from './knowledge-vault';
 
 const temporaryDirectories: string[] = [];

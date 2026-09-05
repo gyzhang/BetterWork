@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { exportMarkdownArtifactRequestSchema, updateWindowThemeRequestSchema } from './index';
 
 describe('window theme protocol', () => {
