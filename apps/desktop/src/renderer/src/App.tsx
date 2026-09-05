@@ -252,8 +252,11 @@ export function App(): React.JSX.Element {
         <button className={view === 'knowledge' ? 'active' : ''} onClick={openKnowledge}><span aria-hidden="true"><KnowledgeIcon size={15} /></span> 知识</button>
       </nav>
       <div className="sidebar-divider" /><p className="section-label">最近任务</p><div className="run-list">{recentTasks.length === 0 && <p className="empty-runs">你的任务会保存在这里。</p>}{recentTasks.map((task) => <button key={task.id} className={task.id === activeTask?.id ? 'run-item active' : 'run-item'} onClick={() => void selectTask(task)}><span>{task.title}</span><small>{task.latestRun ? `${runStatusName[task.latestRun.status]} · ${formatTime(task.latestRun.createdAt)}` : '等待开始'}</small></button>)}</div>
-      <NotificationCenter notifications={notifications} unreadCount={unreadCount} open={notificationCenterOpen} onOpenChange={setNotificationCenterOpen} onActivate={activateNotification} onMarkAllRead={markAllRead} onClear={clearAllNotifications} />
-      <button className={view === 'settings' ? 'settings-nav active' : 'settings-nav'} onClick={() => { setView('settings'); setSettingsTab('models'); void refreshModels(); }}><span aria-hidden="true"><SettingsIcon size={15} /></span> 设置</button><div className="sidebar-footer">算台 BetterWork · Phase 0</div>
+      <div className="sidebar-bottom">
+        <button className={view === 'settings' ? 'settings-nav active' : 'settings-nav'} onClick={() => { setView('settings'); setSettingsTab('models'); void refreshModels(); }}><span aria-hidden="true"><SettingsIcon size={15} /></span> 设置</button>
+        <NotificationCenter notifications={notifications} unreadCount={unreadCount} open={notificationCenterOpen} onOpenChange={setNotificationCenterOpen} onActivate={activateNotification} onMarkAllRead={markAllRead} onClear={clearAllNotifications} />
+      </div>
+      <div className="sidebar-footer">算台 BetterWork · Phase 0</div>
     </aside>
     <section className="main-stage">
       {view === 'settings' && <div className="window-drag-strip" onDoubleClick={handleTitlebarDoubleClick} />}

@@ -116,9 +116,8 @@ interface NotificationCenterProps { notifications: NotificationSummary[]; unread
 
 export const NotificationCenter = ({ notifications, unreadCount, open, onOpenChange, onActivate, onMarkAllRead, onClear }: NotificationCenterProps): React.JSX.Element => (
   <div className="notification-anchor">
-    <button className={open ? 'notification-bell active' : 'notification-bell'} aria-label={unreadCount > 0 ? `通知，${unreadCount} 条未读` : '通知'} onClick={() => onOpenChange(!open)}>
-      <span aria-hidden="true"><BellIcon size={15} /></span>
-      <span className="bell-label">通知</span>
+    <button className={open ? 'notification-bell active' : 'notification-bell'} title="通知" aria-label={unreadCount > 0 ? `通知，${unreadCount} 条未读` : '通知'} onClick={() => onOpenChange(!open)}>
+      <BellIcon size={16} />
       {unreadCount > 0 && <span className="notification-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}
     </button>
     {open && <div className="notification-overlay" onMouseDown={() => onOpenChange(false)} />}
