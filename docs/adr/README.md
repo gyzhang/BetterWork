@@ -7,5 +7,7 @@
 | [0003](0003-agent-core-boundary.md) | Agent Core 与 Electron/存储解耦 | Accepted |
 | [0004](0004-hybrid-memory.md) | 记忆采用文档、结构化记录和派生索引混合架构 | Accepted |
 | [0005](0005-artifact-version-evidence.md) | ArtifactVersion 持久化来源 Evidence | Accepted |
+| [0006](0006-notification-feedback.md) | 消息中心与三层反馈机制 | Accepted |
+| [0007](0007-search-engine-config-and-web-search-tool.md) | 搜索引擎配置与 `web_search` 工具 | Accepted |
 
 ADR 一经 Accepted 不直接重写历史；需要改变时新增 ADR 并标记替代关系。
