@@ -2,7 +2,7 @@
 
 > 交接日期：2026-09-05
 >
-> 交接基线：`6ca395d fix: separate settings nav items with 4px spacing`
+> 交接基线：分支 `refactor/unified-code-quality`，代码基线 `8905e60 refactor(renderer): move cohesive state clusters into hooks and sort imports`
 >
 > 仓库：[gyzhang/BetterWork](https://github.com/gyzhang/BetterWork.git)
 
@@ -40,14 +40,16 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 
 ## 3. 先读什么、如何运行
 
+
 推荐阅读顺序：
 
 1. [AGENTS.md](../AGENTS.md)：硬约束、当前允许范围和完成定义。
-2. [MVP 与路线图](07-mvp-and-roadmap.md)：产品阶段、切片进度与远期演进。
-3. [UI/UX 体系](10-ui-ux-system.md)：信息架构、主题 Token 与交互规范（设计真相源）。
-4. [系统架构](03-system-architecture.md)、[领域模型](02-domain-model.md)、[知识库与记忆](04-knowledge-and-memory.md)、[能力体系](05-capability-system.md)。
-5. 本文，以及涉及变更的 ADR；如需借鉴参考项目，再读 [参考项目与借鉴边界](09-reference-projects.md)。
-6. `.qoder/rules/` 的分层规则（由 Qoder 自动加载，其他智能体按 AGENTS.md 的任务路由读取）；写工作日志前先读 [日志模板](logs/README.md)。
+2. [工程规范](12-engineering-standards.md)：全仓唯一的代码规范。写任何代码前先读它，`eslint.config.mjs` 与 `.prettierrc.json` 是它的可执行形式。
+3. [MVP 与路线图](07-mvp-and-roadmap.md)：产品阶段、切片进度与远期演进。
+4. [UI/UX 体系](10-ui-ux-system.md)：信息架构、主题 Token 与交互规范（界面设计真相源）。
+5. [系统架构](03-system-architecture.md)、[领域模型](02-domain-model.md)、[知识库与记忆](04-knowledge-and-memory.md)、[能力体系](05-capability-system.md)。
+6. 本文，以及涉及变更的 ADR；如需借鉴参考项目，再读 [参考项目与借鉴边界](09-reference-projects.md)。
+7. `.qoder/rules/` 的分层规则（由 Qoder 自动加载，其他智能体按 AGENTS.md 的任务路由读取）；写工作日志前先读 [日志模板](logs/README.md)。
 
 在仓库根目录执行：
 
@@ -60,43 +62,49 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 
 开发应用只能通过 `bash scripts/dev-start.sh` 启动；它会准确停止旧的 BetterWork 开发实例并写入 PID。停止使用 `bash scripts/dev-stop.sh`，日志在 `/tmp/betterwork-dev.log`。不要绕开脚本直接启动 Electron，也不要用宽泛的进程匹配方式杀掉用户的其他 Electron 应用。
 
-提交前最低验证命令：
+提交前唯一门禁：
 
-    npm run typecheck
-    npm test
-    npm run build
-    git diff --check
+    npm run verify     # lint + format:check + typecheck + test + build
 
-目前测试覆盖 **13 个测试文件、55 个测试**。生产构建存在两条来自 Zod 的 Rollup `@PURE` 注释警告；在不影响构建成功的前提下，它们是已知警告，不应因此作无关依赖升级。
+**不要把 verify 的输出接管道后只看末尾**（`npm run verify | tail` 的退出码是 `tail` 的，永远为 0，会把失败读成成功）。需要截取输出时用 `npm run verify > /tmp/verify.log 2>&1; echo $?`。
 
-**冷缓存注意**：`knowledge-vault.test.ts` 的 PDF 与 DOCX 两个用例首次运行需要现场转换 `pdf-parse` 与 `mammoth`，在冷 Vite 缓存下可能超过 Vitest 默认的 5000ms 超时而失败；缓存预热后同一文件仅需约 200–450ms。遇到这两条超时先重跑一次确认，不要误判为解析逻辑回归（该问题已记录在 §6 的收敛项中）。
+目前测试覆盖 **18 个测试文件、111 个测试**，ESLint 全仓零错误。生产构建存在两条来自 Zod 的 Rollup `@PURE` 注释警告；在不影响构建成功的前提下，它们是已知警告，不应因此作无关依赖升级。
 
-用 `npm run verify` 时注意它由 `&&` 串联，测试失败会直接跳过构建；把输出接管道时还要留意管道会掩盖真实退出码。
+`knowledge-vault.test.ts` 的 PDF 与 DOCX 两个用例已显式提高超时——它们首次运行需要现场转换 `pdf-parse` 与 `mammoth`，冷 Vite 缓存下会超过默认的 5 秒。
 
+数据文件位于 Electron `userData` 下：应用状态库 `betterwork.db` 与知识库 `vaults/default/vault.sqlite`，都是本地运行数据，绝不能提交到 Git。两个库的 schema 由 `db/` 下的版本化迁移管理；迁移制度之前建立的历史库会在首次启动时被识别并对账，不会丢数据。模型与搜索的 API Key 明文存于本地 SQLite，列表接口只回 `apiKeyConfigured`；日志和错误消息绝不能输出密钥。如未来引入系统钥匙串（`safeStorage`），须先新增 ADR 并设计迁移。
 ## 4. 代码地图
+
 
 | 位置 | 职责与注意事项 |
 | --- | --- |
 | `packages/agent-protocol/src/index.ts` | 跨进程协议、领域类型、Zod Schema 与 IPC channel 的唯一入口。新增 IPC 必须先在此处定义输入/输出并在边界校验。 |
 | `packages/agent-core/src/agent-engine.ts` | `ReActAgentEngine`：单循环 ReAct，工具轮次上限默认 8，取消与失败语义在此收口。核心输出必须保持 `AsyncIterable<AgentRuntimeEvent>`。 |
-| `packages/agent-core/src/fake-provider.ts`、`openai-compatible-provider.ts` | 教学 Provider 与 OpenAI 兼容 Provider。前者按前缀正则触发 calculator / read_text_file / knowledge_search，**不触发 web_search**。 |
-| `packages/tool-runtime/src/` | 可测试的确定性工具实现。需要 Application 层资源的工具用「工厂 + 闭包注入」（`createKnowledgeSearchTool`、`createWebSearchTool`），保持本包不依赖 Electron、SQLite 或服务商 SDK。 |
-| `apps/desktop/src/main/index.ts` | Electron 生命周期、全部 IPC handler 注册、系统对话框、模型与搜索的连通性测试、安全的系统文件打开入口。 |
-| `apps/desktop/src/main/run-service.ts` | 运行编排：按配置选择 Provider、按是否有可用搜索引擎决定工具集、先持久化事件/Evidence 再向 Renderer 广播、run 终态触发通知。 |
-| `apps/desktop/src/main/run-journal.ts` | 产品 SQLite 状态：Workspace、Task、Session、Run、Run Event、Evidence、Artifact 与版本、Model Profile、搜索引擎配置、Notification。 |
-| `apps/desktop/src/main/knowledge-vault.ts` | 本地资料导入、格式解析与分块、FTS5 与子串兜底检索、来源路径验证、刷新与仅索引移除。 |
-| `apps/desktop/src/main/notification-service.ts` | 通知的持久化—广播收口，以及窗口失焦时的系统通知与点击激活。 |
-| `apps/desktop/src/main/search-engine-service.ts` | 千帆 `web_summary` HTTP 客户端与连接测试；错误信息不得含 Key。 |
+| `packages/agent-core/src/errors.ts` | 取消与错误描述的**唯一**定义（`abortError` / `isAbortError` / `describeError`）。任何地方都不要再手写 `Object.assign(new Error(...), { name: 'AbortError' })`。 |
+| `packages/agent-core/src/fake-provider.ts` | 教学 Provider，不联网、输出可预测。刻意不支持 `web_search` 触发词——联网搜索会发起真实请求，与离线可复现的定位冲突。 |
+| `packages/agent-core/src/openai-compatible-provider.ts` | OpenAI 兼容 SSE 解析与 `tool_calls` 增量拼接。改动前先看它的 19 个测试。 |
+| `packages/tool-runtime/src/` | 确定性工具实现。需要 Application 层资源的工具用「工厂 + 闭包注入」（`createKnowledgeSearchTool`、`createWebSearchTool`），保持本包不依赖 Electron、SQLite 或服务商 SDK。 |
+| `apps/desktop/src/main/index.ts` | 只做装配：建窗口、组装依赖、注册 IPC、管理生命周期；启动时收口上次被中断的 Run。**不放业务逻辑**。 |
+| `apps/desktop/src/main/window.ts` | 窗口构造、首帧主题常量（必须与青玉浅色 Token 一致，避免冷启动闪白）。 |
+| `apps/desktop/src/main/db/` | 连接与 PRAGMA、版本化迁移执行器（`migrate.ts`）、两个库的 schema 与历史库对账。新增 schema 变更只能加迁移，不能改已发布的迁移。 |
+| `apps/desktop/src/main/persistence/` | 按聚合拆分的 Repository（workspace / task / run / evidence / artifact / model / search-engine / notification）与组装它们的 `AppStore`。Repository 只写自己的表，可读其他表做归属校验；跨聚合写入由调用方用 `store.transaction()` 显式包起来。 |
+| `apps/desktop/src/main/services/run-service.ts` | 运行编排：选 Provider、按是否有可用搜索引擎决定工具集、先持久化再广播、终态触发通知，并在编排自身出错时用 `forceFailure` 兜底。 |
+| `apps/desktop/src/main/services/knowledge-vault.ts` | 资料导入、格式解析与分块、FTS5 与子串兜底检索、来源路径验证、刷新与仅索引移除。不碰 DDL。 |
+| `apps/desktop/src/main/services/notification-service.ts` | 通知的持久化—广播收口，以及窗口失焦时的系统通知与点击激活。 |
+| `apps/desktop/src/main/services/search-engine-service.ts` | 千帆 `web_summary` 客户端与连接测试；外部字段一律经 `readString` 收窄，错误信息不得含 Key。 |
+| `apps/desktop/src/main/services/model-connectivity.ts` | 模型连通性探测的纯函数实现（可注入 fetch），含超时与 http/https 协议校验收窄。 |
+| `apps/desktop/src/main/ipc/register-ipc.ts` | 全部 channel 注册。三个 helper（`handleInput` / `handleOptionalInput` / `handleNoInput`）是入参校验的唯一通道，handler 不得自行解析 `raw`。 |
 | `apps/desktop/src/preload/index.ts` | 最小化、类型化的 Renderer API；所有推送事件过 Zod 后再交给 Renderer。必须维持 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。 |
-| `apps/desktop/src/renderer/src/App.tsx` | 当前主要 Renderer 组合入口，含工作/成果/知识/设置四视图与模型编辑 Sheet。后续可按明确功能逐步拆组件，但不要以大规模重构替代垂直切片交付。 |
-| `apps/desktop/src/renderer/src/notifications.tsx` | `useNotifications` hook（初始加载、增量广播、同页抑制、Toast 生命周期）、消息中心面板与 Toast 宿主。 |
-| `apps/desktop/src/renderer/src/activity.ts` | 从事件流派生用户可理解的工作阶段分组。**新增工具时必须同步更新此处的标签映射**，否则阶段标题退化为通用文案。 |
-| `apps/desktop/src/renderer/src/appearance.ts`、`styles.css` | 主题系统与 UI Token。Renderer 不得新增硬编码色值或局部 `.dark` 补丁，必须使用语义化 Token。 |
-| `apps/desktop/src/renderer/src/icons.tsx`、`brand-logo.tsx` | 内联 SVG 描边图标集（`currentColor`、统一 24 网格）与品牌标志。新增图标先进图标集再使用；禁止用 Unicode 字符或 emoji 充当界面图标。 |
+| `apps/desktop/src/renderer/src/App.tsx` | 跨簇编排与布局组装（约 720 行）：工作会话状态、视图切换、通知接线、Sidebar 与错误条。 |
+| `apps/desktop/src/renderer/src/views/` | 工作以外的页面级视图：`ArtifactView`、`KnowledgeView`、`SettingsView`。视图内不出现 IPC 调用。 |
+| `apps/desktop/src/renderer/src/components/` | 跨视图复用组件：`ContextPanel`、`Welcome`、`EmptyState`、`ModelEditorSheet`。 |
+| `apps/desktop/src/renderer/src/hooks/` | 三个内聚状态簇：`useAppearance`、`useKnowledgeLibrary`、`useModelSettings`。刷新类回调用 `useCallback` 保持引用稳定，挂载 effect 才能如实声明依赖。 |
+| `apps/desktop/src/renderer/src/lib/` | 无状态纯函数与常量：`async-action`（异步收口的唯一入口）、`tool-summary`、`labels`（含 `TOOL_LABELS`，新增工具必须同步）、`format`、`titlebar`、`view-types`。 |
+| `apps/desktop/src/renderer/src/notifications.tsx` | `useNotifications`（初始加载、增量广播、同页抑制、Toast 生命周期）、消息中心面板与 Toast 宿主。 |
+| `apps/desktop/src/renderer/src/activity.ts` | 从事件流派生用户可理解的工作阶段分组。 |
+| `apps/desktop/src/renderer/src/appearance.ts`、`styles.css` | 主题系统、Token 与全部界面样式。不得新增硬编码色值或局部 `.dark` 补丁；动效时长只能用 Token。 |
+| `apps/desktop/src/renderer/src/icons.tsx`、`brand-logo.tsx` | 内联 SVG 描边图标集（`currentColor`、统一 24 网格）与品牌标志。新增图标先进图标集再使用。 |
 | `apps/desktop/src/renderer/src/markdown-preview.tsx` | 成果的文档化 Markdown 预览，不渲染原始 HTML。 |
-
-数据文件位于 Electron `userData` 下：应用状态库 `betterwork.db` 与知识库 `vaults/default/vault.sqlite` 都是可重建/本地运行数据，绝不能提交到 Git。当前 `model_profiles.api_key` 与 `search_engine_configs.api_key` 明文存于本地 SQLite，列表接口只回 `apiKeyConfigured`；日志和错误消息绝不能输出密钥。如未来引入系统钥匙串（`safeStorage`），须先新增 ADR 并设计迁移。
-
 ## 5. 不可破坏的实现约束
 
 - 依赖方向固定为 `Renderer -> Preload API -> Application -> Agent Core / Infrastructure -> Tool Runtime`。
@@ -111,57 +119,61 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 
 ## 6. 已知缺陷与收敛项
 
-以下是本次全量 review（2026-09-05）确认的问题，按优先级排列。它们不是「补全即正确」的产品缺口，而是需要修复的实现问题；动手前先确认优先级。
 
-**正确性与健壮性**
+2026-09-05 的全量 review 记录了 26 项问题，随后在 `refactor/unified-code-quality` 分支上做了一轮系统收敛。下面先列**仍未解决**的，再列已收敛的，避免后续会话重复劳动。
 
-1. `RunService.consume` 只有 `try/finally` 没有 `catch`。引擎内部会自行收口失败与取消，但 `consume` 内在进入事件循环之前（读取模型配置、构造搜索客户端）或 `publish` 内部（事件入库、Evidence 落库）抛错时，Run 会永久停留在 `running` 状态，且异常以未处理的 Promise rejection 形式逃逸（调用点是 `void this.consume(...)`）。应补 `catch` 并合成 `run.failed` 终态事件。
-2. 未开启 `PRAGMA foreign_keys`，`run_events.run_id` 上的 `ON DELETE CASCADE` 实际不生效。当前没有删除 Run 的入口所以尚未暴露，但任何清理功能都必须先处理这一点。
-3. 表结构演进靠启动时 `PRAGMA table_info` 探测加 `ALTER TABLE`，没有版本化迁移，也没有迁移测试（[MVP 与路线图](07-mvp-and-roadmap.md) §9 的未达成项）。
-4. 冷 Vite 缓存下 `npm test` 会因 PDF/DOCX 用例超时而失败（见 §3）。应给这两条用例显式提高超时，或在 `vitest.config.ts` 中调整 `testTimeout`。
+### 仍未解决
 
-**协议与测试覆盖**
+**测试覆盖**
 
-5. `OpenAICompatibleProvider` 的 SSE 解析与 `tool_calls` 增量拼接是风险最高的解析代码，却**完全没有测试**；断流、跨包分片、`[DONE]`、非法 JSON 行等路径均未覆盖。
-6. `main/index.ts` 的 IPC handler 承载了大量业务判断（导出对话框与写盘、模型连通性测试的 URL 拼装、工作区选择、通知触发），全部没有测试。
-7. `notification-service.ts` 的系统通知分支只在 `run-service.test.ts` 里被间接绕过（窗口桩返回 `isFocused: true`），没有独立测试。
-8. Renderer 无任何组件测试（仓库没有 React 测试库），只覆盖了 `activity.ts`、`appearance.ts`、`markdown-preview.ts` 三个纯函数模块。
-9. 无端到端 UI 自动化，`docs/07` §9 的「至少一个端到端用户旅程」未达成。
+1. `ipc/register-ipc.ts` 仍无测试。它承载导出对话框与写盘、工作区选择、导入结果通知分级、版本归属校验等业务判断；其中的模型连通性探测已抽为 `services/model-connectivity.ts` 并单独覆盖，但 IPC 编排本身需要 electron 模块替身才能测。
+2. Renderer 仍无组件测试（仓库没有 React 测试库）。已覆盖的是纯函数：`activity`、`appearance`、`markdown-preview`、`lib/tool-summary`。视图与 hook 的行为只靠人工桌面验收。
+3. 无端到端 UI 自动化，[MVP 与路线图](07-mvp-and-roadmap.md) §9 的「至少一个端到端用户旅程」与「macOS 和 Windows 基础打包验证」两项门槛仍未达成。
 
-**规范违规（UI 铁律）**
+**界面**
 
-10. 消息流的工具卡片用 `code` 直接渲染 `JSON.stringify` 后的工具输出，违反「原始 Run 事件不得成为默认主界面的视觉中心」（[UI/UX 体系](10-ui-ux-system.md) §11.1）。
-11. `styles.css` 有 16 处 `10px`、2 处 `9px`、29 处 `11px`，其中承载产品信息的次要文本部分违反「禁止用 9–10px 小字号换取空间」铁律（§9.7 已区分可豁免的格式徽标与属违规的正文）。
-12. 通知未读徽标 `.notification-badge` 硬编码 `color: #fff`，违反 Token 契约（§9.3）。
-13. `styles.css` 零 `transition` / `animation`，也无 `prefers-reduced-motion`，§9.9 动效契约尚未开始实施。
-14. 窄屏（`max-width: 960px`）自动折叠仍是 60px，与已拍板的 88px 手动折叠宽度不一致；60px 装不下 macOS 红绿灯正是当初改宽的原因。
-
-**工程卫生**
-
-15. 死代码：`App.tsx` 中从未被引用的 `CompletedWorkPage` 组件；`icons.tsx` 中未被使用的 `PanelLeftIcon`、`ChevronDownIcon`；`styles.css` 中成果来源图标容器残留的 `font-size: 9px`（该处早已改为 SVG 图标）。
-16. 死 Token：`--text-on-dark` 在 8 个 Variant 中都定义但零消费；契约中的 `border-subtle` 与图表数据色尚未定义。
-17. 依赖问题：`zustand` 写进 `apps/desktop/package.json` 但代码零引用，应移除；`knowledge-vault.test.ts` 直接 `import JSZip`，而 `jszip` 只是 `mammoth` 的传递依赖、并未显式声明。
-18. 无 Lint 配置（ESLint / Prettier / Biome 均无）。`App.tsx` 与 `styles.css` 都存在极长单行（单行 JSX 与单行 CSS 规则），既难 review，也直接触发仓库的中文长行编辑损坏风险。
-19. `activity.ts` 的工具标签映射未覆盖 `knowledge_search` 与 `web_search`，两者都退化为「调用工作工具」。
+4. `App.tsx` 仍有约 720 行，AppShell 与 Sidebar 未拆出。工作会话状态刻意留在 App（它同时牵动任务列表、上下文面板、成果列表与通知跳转），但 Sidebar 是纯 JSX，可以继续外提。
+5. 破坏性确认仍用原生 `window.confirm`（移出资料库、清空通知两处），应替换为符合 docs/10 §10.1 的 Dialog 组件。
+6. 间距仍有少量偏离 4/8/12/16/24/32 标尺的 `3px`（上下文页签、证据列表、执行记录等非导航场景）。
+7. 部分低频次级按钮的点击区域小于 32px（Composer 工作区行的文字按钮、上下文页签、模型行内动作、通知面板动作、证据「原文」按钮）。达标方式是扩大命中区，不是放大视觉尺寸。
+8. Tooltip、Popover、Progress、Skeleton、Switch 未落地；除 `⌘/Ctrl ↵` 外没有其他快捷键。
+9. docs/10 §13 UI-5 要求的三尺寸 × 3 模式 × 4 色系验收矩阵仍未建立；本轮字号与动效收敛后需要重新做一轮人工验收。
+10. 窄屏（`max-width: 960px`）是**强制**图标栏，不读取用户的折叠偏好；覆盖式右栏没有点击外部关闭的背板。
+11. 上下文面板展开状态未按 Task 记忆（侧栏折叠状态已持久化）。
+12. 外观持久化值损坏时静默回落到默认外观，未按 docs/10 §9.5 向用户说明原因。
+13. 阴影与遮罩背板仍是 `rgba(0, 0, 0, …)` 字面量，未 Token 化，因此深色 Variant 无法单独调低阴影强度。
 
 **产品缺口（属规划，不是缺陷）**
 
-20. 视觉与嵌入模型可配置但未进入执行链路。
-21. Evidence 已按版本关联，但没有正文 Claim/Citation 系统；这是 Phase 1 验收项 3，需先立 ADR。
-22. 大纲确认（Phase 1 验收项 4）阻塞在协议层：`approval.requested` / `approval.resolved` / `run.waiting` 事件尚未定义。
-23. Run 历史与 Session 标识已持久化，但尚未把历史作为模型上下文传入，不构成记忆系统。
-24. 上下文面板展开状态未按 Task 记忆；侧栏折叠状态已持久化。
-25. Renderer 多处 `void invoke()` 无 `catch`，失败静默（成果页版本列表加载失败即属此类）。
-26. Dock/打包图标（`.icns`）待打包阶段：logo 已定稿（`docs/assets/betterwork-logo.svg`，透明背景），缺 PNG/ICNS 导出管线，`docs/07` §9 的打包验证门槛未达成。
+14. 视觉与嵌入模型可配置但未进入执行链路；一个 ModelProfile 只能担任一个角色。
+15. Evidence 已按版本关联，但没有正文 Claim/Citation 系统——Phase 1 验收项 3，需先立 ADR。
+16. 大纲确认（Phase 1 验收项 4）阻塞在协议层：`approval.requested` / `approval.resolved` / `run.waiting` 事件尚未定义，事件 Schema 也没有版本号字段。
+17. Run 历史与 Session 标识已持久化，但执行链路尚未把历史作为模型上下文传入，不构成记忆系统。
+18. Dock/打包图标（`.icns`）待打包阶段：logo 已定稿（`docs/assets/betterwork-logo.svg`，透明背景），缺 PNG/ICNS 导出管线。
 
+### 本轮已收敛
+
+- **Run 终态保证**：`RunService.consume` 补了 `catch`，`RunRepository.forceFailure` 只在 Run 仍为 `running` 时合成 `run.failed`（重复调用安全、不与引擎终态冲突），启动时 `failInterruptedRuns` 收口上次被强杀留下的运行。此前编排层抛错会让 Run 永远停在 `running` 并以未处理 rejection 逃逸。
+- **数据完整性**：`PRAGMA foreign_keys` 常开，任务/运行/证据/成果/版本之间的级联删除真实生效；schema 改为版本化迁移（`schema_migrations` + 历史库对账 + 原子事务 + `foreign_key_check` 兜底），并有迁移测试。
+- **上帝对象拆分**：502 行的 `RunJournal` 按聚合拆为 8 个 Repository + `AppStore`；`main/index.ts` 的 45 处非空断言随 IPC 下沉到 `ipc/register-ipc.ts` 后全部消失。
+- **静默失败**：46 处 `void someIpcCall()` 全部改为 `reportAction`（失败呈现给用户，新增了跨视图错误条）或 `trackAction`（后台同步记录到控制台）；成果页版本列表加载失败不再静默。
+- **测试补齐**：SSE Provider 19 个用例（端点归一化、跨包拼接、`tool_calls` 增量合并、并行调用按 index 分离、keep-alive 与畸形行、各类失败）、连通性探测 10 个、通知服务 7 个（含此前被完全跳过的系统通知分支）。
+- **UI 契约**：动效 Token + transitions + keyframes + `prefers-reduced-motion`；41 处小字号提升到 12px 下限（5 处图形徽标按规范豁免，3 处死声明删除）；`--on-danger` 与 `--border-subtle` 补齐 8 个 Variant，硬编码 `#fff` 清零；死 Token `--text-on-dark` 删除；窄屏折叠 60px 统一为 88px；工具卡片不再裸渲染 JSON，原始载荷移入过程面板折叠区。
+- **工程卫生**：引入 Prettier + ESLint（类型感知规则、导入排序）并纳入 `verify` 门禁，全仓零 lint 错误；3930 行源码格式化后为可读的多行结构，不再有 2000 字符的单行 JSX/CSS；删除死代码（`CompletedWorkPage`、`PanelLeftIcon`、`ChevronDownIcon`、两处 `.primary-nav em`）；移除未使用的 `zustand`，显式声明测试用到的 `jszip`；取消语义统一到 `agent-core/errors.ts`；`FakeModelProvider` 的可取消延时不再每次泄漏一个 abort 监听器。
 ## 7. 建议的续作方式
 
-优先从 §6 的「正确性与健壮性」与「协议与测试覆盖」两组里选一条小而完整的路径收口——它们影响后续所有切片的可靠性，且都不需要新的产品决策。
 
-UI 收敛项（§6 第 10–14 条）应作为**一次专项**处理，不要夹带进功能切片：字号、动效与折叠宽度都涉及观感验收，需要单独走人工验收流程。
+先读 [工程规范](12-engineering-standards.md)，再动手。规范是机器强制的：`npm run verify` 不过就不能提交。
+
+从 §6「仍未解决」里选一条小而完整的路径收口。优先级建议：
+
+1. **第 1、2 条（IPC 与 Renderer 测试）**：这两处是唯一还没有自动化保护的核心路径，后续任何切片都要踩在上面。
+2. **第 16 条（确认点事件协议）**：它是 Phase 1「大纲确认」验收项的前置，且属跨模块协议变更，需要先立 ADR 再实现。
+3. **第 9 条（视觉验收矩阵）**：本轮改了字号与动效，观感需要一次系统性人工验收，不要等到下一个功能切片时才发现。
+
+界面类的第 4–13 条涉及观感，应作为**一次专项**处理并单独走人工验收，不要夹带进功能切片。
 
 以下能力符合长期方向，但**不是自动授权的下一步**：Embedding 与混合检索、带 Citation 的研究流与大纲确认、网页正文 Fetch、DOCX 报告、Excel 分析、PPT、长期 Memory、Expert/Skill/Kit。开始其中任一项前，应先与项目负责人确认优先级；再更新 [MVP 与路线图](07-mvp-and-roadmap.md)，并在涉及跨模块关系或关键技术选择时新增 ADR。
-
 ## 8. 变更与提交纪律
 
 每次开始先执行 `git status --short`。工作树并不一定总是干净；既有改动属于用户，不能删除、覆盖或夹带进无关提交。多个会话并行改本仓库时，提交前要重新核对 `git status` 与 `git diff`，追加共享文档（如 `docs/logs/` 当天日志）前先重读文件末尾。每个提交保持聚焦，提交前完成第 3 节的验证，并将必要的测试、文档和 ADR 与实现放在同一变更中。

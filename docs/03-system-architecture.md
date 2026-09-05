@@ -77,7 +77,7 @@ BetterWork/
 
 当前实现状态：仓库只有 `apps/desktop`（`src/main`、`src/preload`、`src/renderer`）与三个 package——`agent-protocol`、`agent-core`、`tool-runtime`。三个 package 通过 tsconfig `paths` 与 electron-vite alias 直接指向源码，不做预构建。
 
-上图中的 Application Layer 目前没有独立 package，落在 `apps/desktop/src/main/`：`run-service.ts`（运行编排）、`run-journal.ts`（产品状态持久化）、`knowledge-vault.ts`（资料导入与检索）、`notification-service.ts`（通知）、`search-engine-service.ts`（搜索服务商客户端），`index.ts` 承担 Electron 生命周期与 IPC 注册。当出现第二个应用形态（CLI、Worker 宿主）或 main 进程文件数继续增长时，应把这一层拆为独立 `packages/application`，而不是继续在 `index.ts` 内联业务处理。
+上图中的 Application Layer 目前没有独立 package，落在 `apps/desktop/src/main/`，并已按职责分层：`db/`（连接、PRAGMA、版本化迁移与各库 schema）、`persistence/`（按聚合拆分的 Repository 与组装它们的 `AppStore`）、`services/`（运行编排、通知、资料库、搜索服务商客户端、模型连通性探测）、`ipc/`（全部 channel 注册与边界校验）、`window.ts`（窗口构造与首帧主题常量），`index.ts` 只做装配与生命周期，不含业务逻辑。当出现第二个应用形态（CLI、Worker 宿主）需要复用这一层时，应把它整体提升为 `packages/application`；在那之前保持现状，不要为了对齐上图而提前建包。
 
 `workers/`、`resources/`、`examples/` 与其余 package 均属后续阶段，当前不存在。
 
@@ -227,8 +227,8 @@ SQLite 是产品状态真相源；向量索引、缩略图和解析缓存均可�
 
 - `messages`、`run_steps`、`tool_calls` 未建表。消息与工具调用目前以 `run_events` 的事件载荷形式持久化，可按 `sequence` 完整重放；Step 语义尚未落地（见 [领域模型](02-domain-model.md) §5）。
 - `app_settings` 未建表。外观偏好（模式与色系）与侧栏折叠状态存放在 Renderer 的 `localStorage`，属于可重建的界面偏好而非产品状态；需要跨设备一致或被主进程读取的设置项应迁入该表。
-- 表结构演进目前用启动时的 `PRAGMA table_info` 探测加 `ALTER TABLE` 完成，没有版本化迁移与迁移测试。
-- 未开启 `PRAGMA foreign_keys`，因此 `run_events.run_id` 上声明的 `ON DELETE CASCADE` 实际不生效；删除 Run 需要显式清理子表。
+- 表结构演进走 `db/` 下的版本化迁移：`schema_migrations` 记录已应用版本，迁移制度之前建立的历史库会被识别、对账到 v1 形状、打版本戳后继续走增量迁移，因此不会漏掉后续变更；补外键这类无法 `ALTER` 的变更按 SQLite 官方流程重建表，并用 `foreign_key_check` 兜底，发现悬空引用整条迁移回滚。
+- 已开启 `PRAGMA foreign_keys`，任务、运行、证据、成果与版本之间的级联删除真实生效；删除工作区会带走它的整棵子树。
 
 ## 9. 模型提供层
 
