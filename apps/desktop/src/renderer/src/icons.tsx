@@ -83,12 +83,6 @@ export const ChevronRightIcon = (props: IconProps): React.JSX.Element => (
   </Icon>
 );
 
-export const ChevronDownIcon = (props: IconProps): React.JSX.Element => (
-  <Icon {...props}>
-    <path d="m6 9.5 6 6 6-6" />
-  </Icon>
-);
-
 export const ArrowUpIcon = (props: IconProps): React.JSX.Element => (
   <Icon {...props}>
     <path d="M12 19V5" />
@@ -136,12 +130,5 @@ export const WarningIcon = (props: IconProps): React.JSX.Element => (
     <path d="M12 4.2 21 19.5H3Z" />
     <path d="M12 10v4.2" />
     <path d="M12 16.8v.1" />
-  </Icon>
-);
-
-export const PanelLeftIcon = (props: IconProps): React.JSX.Element => (
-  <Icon {...props}>
-    <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
-    <path d="M9.5 4.5v15" />
   </Icon>
 );

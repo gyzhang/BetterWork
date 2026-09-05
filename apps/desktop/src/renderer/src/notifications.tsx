@@ -5,6 +5,7 @@ import type {
   NotificationTarget,
 } from '@betterwork/agent-protocol';
 import { AlertIcon, BellIcon, CheckIcon, CloseIcon, InfoIcon, WarningIcon } from './icons';
+import { trackAction } from './lib/async-action';
 
 const TOAST_MAX = 4;
 const TOAST_DURATION = 4_000;
@@ -42,15 +43,17 @@ export const useNotifications = ({
   const notificationsRef = useRef<NotificationSummary[]>([]);
   const pausedToastsRef = useRef(new Set<string>());
   const callbacksRef = useRef({ navigate, isTargetVisible });
-  callbacksRef.current = { navigate, isTargetVisible };
 
   useEffect(() => {
     let disposed = false;
-    void window.betterwork.notifications.list().then((list) => {
-      if (disposed) return;
-      setNotifications(list);
-      setUnreadCount(list.filter((item) => !item.read).length);
-    });
+    trackAction(
+      window.betterwork.notifications.list().then((list) => {
+        if (disposed) return;
+        setNotifications(list);
+        setUnreadCount(list.filter((item) => !item.read).length);
+      }),
+      '加载消息中心',
+    );
     const offChange = window.betterwork.notifications.onChange((event) => {
       if (event.type === 'created') {
         setNotifications((current) => [event.notification, ...current]);
@@ -90,7 +93,9 @@ export const useNotifications = ({
     const offActivate = window.betterwork.notifications.onActivate(({ id }) => {
       const notification = notificationsRef.current.find((item) => item.id === id);
       if (!notification) return;
-      if (!notification.read) void window.betterwork.notifications.markRead({ id });
+      if (!notification.read) {
+        trackAction(window.betterwork.notifications.markRead({ id }), '标记通知已读');
+      }
       if (notification.target) callbacksRef.current.navigate(notification.target);
     });
     return () => {
@@ -104,6 +109,12 @@ export const useNotifications = ({
     notificationsRef.current = notifications;
   }, [notifications]);
 
+  // 渲染期间写 ref 违反 React 的纯度约束；改为在 effect 里同步最新值，
+  // 事件回调依然能读到当前的 navigate / isTargetVisible。
+  useEffect(() => {
+    callbacksRef.current = { navigate, isTargetVisible };
+  });
+
   useEffect(() => {
     const timer = window.setInterval(() => {
       const now = Date.now();
@@ -115,15 +126,20 @@ export const useNotifications = ({
   }, []);
 
   const activate = useCallback((notification: NotificationSummary): void => {
-    if (!notification.read) void window.betterwork.notifications.markRead({ id: notification.id });
+    if (!notification.read) {
+      trackAction(
+        window.betterwork.notifications.markRead({ id: notification.id }),
+        '标记通知已读',
+      );
+    }
     setToasts((current) => current.filter((toast) => toast.id !== notification.id));
     if (notification.target) callbacksRef.current.navigate(notification.target);
   }, []);
   const markAllRead = useCallback((): void => {
-    void window.betterwork.notifications.markAllRead();
+    trackAction(window.betterwork.notifications.markAllRead(), '全部标记已读');
   }, []);
   const clear = useCallback((): void => {
-    void window.betterwork.notifications.clear();
+    trackAction(window.betterwork.notifications.clear(), '清空通知');
   }, []);
   const dismissToast = useCallback((id: string): void => {
     setToasts((current) => current.filter((toast) => toast.id !== id));

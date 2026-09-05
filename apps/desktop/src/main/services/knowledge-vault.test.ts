@@ -84,7 +84,8 @@ describe('KnowledgeVault', () => {
       excerpt: expect.stringContaining('续约风险'),
     });
     vault.close();
-  });
+    // mammoth 首次动态导入需要现场转换，冷缓存下会超过默认的 5 秒
+  }, 30_000);
 
   it('imports PDF pages as independently locatable search results', async () => {
     const directory = temporaryDirectory();
@@ -102,7 +103,8 @@ describe('KnowledgeVault', () => {
       excerpt: expect.stringContaining('retention risk'),
     });
     vault.close();
-  });
+    // pdf-parse 首次动态导入需要现场转换，冷缓存下会超过默认的 5 秒
+  }, 30_000);
 
   it('imports local markdown and text, then searches their contents', async () => {
     const directory = temporaryDirectory();
