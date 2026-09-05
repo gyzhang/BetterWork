@@ -134,22 +134,20 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 
 4. `App.tsx` 仍有约 720 行，AppShell 与 Sidebar 未拆出。工作会话状态刻意留在 App（它同时牵动任务列表、上下文面板、成果列表与通知跳转），但 Sidebar 是纯 JSX，可以继续外提。
 5. 破坏性确认仍用原生 `window.confirm`（移出资料库、清空通知两处），应替换为符合 docs/10 §10.1 的 Dialog 组件。
-6. 间距仍有少量偏离 4/8/12/16/24/32 标尺的 `3px`（上下文页签、证据列表、执行记录等非导航场景）。
-7. 部分低频次级按钮的点击区域小于 32px（Composer 工作区行的文字按钮、上下文页签、模型行内动作、通知面板动作、证据「原文」按钮）。达标方式是扩大命中区，不是放大视觉尺寸。
-8. Tooltip、Popover、Progress、Skeleton、Switch 未落地；除 `⌘/Ctrl ↵` 外没有其他快捷键。
-9. docs/10 §13 UI-5 要求的三尺寸 × 3 模式 × 4 色系验收矩阵仍未建立；本轮字号与动效收敛后需要重新做一轮人工验收。
-10. 窄屏（`max-width: 960px`）是**强制**图标栏，不读取用户的折叠偏好；覆盖式右栏没有点击外部关闭的背板。
-11. 上下文面板展开状态未按 Task 记忆（侧栏折叠状态已持久化）。
-12. 外观持久化值损坏时静默回落到默认外观，未按 docs/10 §9.5 向用户说明原因。
-13. 阴影与遮罩背板仍是 `rgba(0, 0, 0, …)` 字面量，未 Token 化，因此深色 Variant 无法单独调低阴影强度。
+6. 部分低频次级按钮的点击区域小于 32px（Composer 工作区行的文字按钮、上下文页签、模型行内动作、通知面板动作、证据「原文」按钮）。达标方式是扩大命中区，不是放大视觉尺寸。
+7. Tooltip、Popover、Progress、Skeleton、Switch 未落地；除 `⌘/Ctrl ↵` 外没有其他快捷键。
+8. docs/10 §13 UI-5 要求的三尺寸 × 3 模式 × 4 色系验收矩阵仍未建立；本轮字号与动效收敛后需要重新做一轮人工验收。
+9. 窄屏（`max-width: 960px`）是**强制**图标栏，不读取用户的折叠偏好；覆盖式右栏没有点击外部关闭的背板。
+10. 上下文面板展开状态未按 Task 记忆（侧栏折叠状态已持久化）。
+11. 外观持久化值损坏时静默回落到默认外观，未按 docs/10 §9.5 向用户说明原因。
 
 **产品缺口（属规划，不是缺陷）**
 
-14. 视觉与嵌入模型可配置但未进入执行链路；一个 ModelProfile 只能担任一个角色。
-15. Evidence 已按版本关联，但没有正文 Claim/Citation 系统——Phase 1 验收项 3，需先立 ADR。
-16. 大纲确认（Phase 1 验收项 4）阻塞在协议层：`approval.requested` / `approval.resolved` / `run.waiting` 事件尚未定义，事件 Schema 也没有版本号字段。
-17. Run 历史与 Session 标识已持久化，但执行链路尚未把历史作为模型上下文传入，不构成记忆系统。
-18. Dock/打包图标（`.icns`）待打包阶段：logo 已定稿（`docs/assets/betterwork-logo.svg`，透明背景），缺 PNG/ICNS 导出管线。
+12. 视觉与嵌入模型可配置但未进入执行链路；一个 ModelProfile 只能担任一个角色。
+13. Evidence 已按版本关联，但没有正文 Claim/Citation 系统——Phase 1 验收项 3，需先立 ADR。
+14. 大纲确认（Phase 1 验收项 4）阻塞在协议层：`approval.requested` / `approval.resolved` / `run.waiting` 事件尚未定义，事件 Schema 也没有版本号字段。
+15. Run 历史与 Session 标识已持久化，但执行链路尚未把历史作为模型上下文传入，不构成记忆系统。
+16. Dock/打包图标（`.icns`）待打包阶段：logo 已定稿（`docs/assets/betterwork-logo.svg`，透明背景），缺 PNG/ICNS 导出管线。
 
 ### 本轮已收敛
 
@@ -158,6 +156,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 - **上帝对象拆分**：502 行的 `RunJournal` 按聚合拆为 8 个 Repository + `AppStore`；`main/index.ts` 的 45 处非空断言随 IPC 下沉到 `ipc/register-ipc.ts` 后全部消失。
 - **静默失败**：46 处 `void someIpcCall()` 全部改为 `reportAction`（失败呈现给用户，新增了跨视图错误条）或 `trackAction`（后台同步记录到控制台）；成果页版本列表加载失败不再静默。
 - **测试补齐**：SSE Provider 19 个用例（端点归一化、跨包拼接、`tool_calls` 增量合并、并行调用按 index 分离、keep-alive 与畸形行、各类失败）、连通性探测 10 个、通知服务 7 个（含此前被完全跳过的系统通知分支）。
+- **间距与阴影 Token**：5 处偏离标尺的 `3px` 间距对齐到 4px；阴影与遮罩颜色提为 `--scrim` 与五档 `--shadow-color-*`，按明暗分别取值（深色画布上同等强度的黑色阴影不可见，抬升感会消失），组件不再写 `rgba(0, 0, 0, …)` 字面量。
 - **UI 契约**：动效 Token + transitions + keyframes + `prefers-reduced-motion`；41 处小字号提升到 12px 下限（5 处图形徽标按规范豁免，3 处死声明删除）；`--on-danger` 与 `--border-subtle` 补齐 8 个 Variant，硬编码 `#fff` 清零；死 Token `--text-on-dark` 删除；窄屏折叠 60px 统一为 88px；工具卡片不再裸渲染 JSON，原始载荷移入过程面板折叠区。
 - **工程卫生**：引入 Prettier + ESLint（类型感知规则、导入排序）并纳入 `verify` 门禁，全仓零 lint 错误；3930 行源码格式化后为可读的多行结构，不再有 2000 字符的单行 JSX/CSS；删除死代码（`CompletedWorkPage`、`PanelLeftIcon`、`ChevronDownIcon`、两处 `.primary-nav em`）；移除未使用的 `zustand`，显式声明测试用到的 `jszip`；取消语义统一到 `agent-core/errors.ts`；`FakeModelProvider` 的可取消延时不再每次泄漏一个 abort 监听器。
 ## 7. 建议的续作方式
@@ -168,10 +167,10 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 从 §6「仍未解决」里选一条小而完整的路径收口。优先级建议：
 
 1. **第 1、2 条（IPC 与 Renderer 测试）**：这两处是唯一还没有自动化保护的核心路径，后续任何切片都要踩在上面。
-2. **第 16 条（确认点事件协议）**：它是 Phase 1「大纲确认」验收项的前置，且属跨模块协议变更，需要先立 ADR 再实现。
-3. **第 9 条（视觉验收矩阵）**：本轮改了字号与动效，观感需要一次系统性人工验收，不要等到下一个功能切片时才发现。
+2. **第 14 条（确认点事件协议）**：它是 Phase 1「大纲确认」验收项的前置，且属跨模块协议变更，需要先立 ADR 再实现。
+3. **第 8 条（视觉验收矩阵）**：本轮改了字号与动效，观感需要一次系统性人工验收，不要等到下一个功能切片时才发现。
 
-界面类的第 4–13 条涉及观感，应作为**一次专项**处理并单独走人工验收，不要夹带进功能切片。
+界面类的第 4–11 条涉及观感，应作为**一次专项**处理并单独走人工验收，不要夹带进功能切片。
 
 以下能力符合长期方向，但**不是自动授权的下一步**：Embedding 与混合检索、带 Citation 的研究流与大纲确认、网页正文 Fetch、DOCX 报告、Excel 分析、PPT、长期 Memory、Expert/Skill/Kit。开始其中任一项前，应先与项目负责人确认优先级；再更新 [MVP 与路线图](07-mvp-and-roadmap.md)，并在涉及跨模块关系或关键技术选择时新增 ADR。
 ## 8. 变更与提交纪律
