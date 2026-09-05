@@ -116,7 +116,7 @@ npm run dev:stop
 npm run verify
 ```
 
-当前覆盖 18 个测试文件、111 个测试，ESLint 全仓零错误。构建会产生两条来自 Zod 的 Rollup `@PURE` 注释警告，属已知警告，不影响构建成功。
+当前覆盖 19 个测试文件、114 个测试，ESLint 全仓零错误。构建会产生两条来自 Zod 的 Rollup `@PURE` 注释警告，属已知警告，不影响构建成功。
 
 > 不要把 `npm run verify` 的输出接管道后只看末尾：管道的退出码取最后一个命令，`npm run verify | tail` 永远是 0，会把失败读成成功。需要截取输出时用 `npm run verify > /tmp/verify.log 2>&1; echo $?`。
 
