@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
-import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
+
 import react from '@vitejs/plugin-react';
+import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const aliases = {

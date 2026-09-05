@@ -1,5 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentMessage, AgentRuntimeEvent, AgentRuntimeEventInput, ToolCall } from '@betterwork/agent-protocol';
+
+import type {
+  AgentMessage,
+  AgentRuntimeEvent,
+  AgentRuntimeEventInput,
+  ToolCall,
+} from '@betterwork/agent-protocol';
+
+import { abortError, describeError, isAbortError } from './errors';
 import type { AgentEngine, AgentRunInput } from './types';
 
 class RunEventFactory {
@@ -14,11 +22,9 @@ class RunEventFactory {
       runId: this.runId,
       sequence: this.sequence++,
       createdAt: Date.now(),
-    } as AgentRuntimeEvent;
+    };
   }
 }
-
-const abortError = (): Error => Object.assign(new Error('Run cancelled'), { name: 'AbortError' });
 
 export class ReActAgentEngine implements AgentEngine {
   async *run(input: AgentRunInput): AsyncIterable<AgentRuntimeEvent> {
@@ -43,7 +49,11 @@ export class ReActAgentEngine implements AgentEngine {
 
         for await (const chunk of input.model.stream({
           messages,
-          tools: input.tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
+          tools: input.tools.map(({ name, description, inputSchema }) => ({
+            name,
+            description,
+            inputSchema,
+          })),
           signal: input.signal,
         })) {
           if (input.signal.aborted) throw abortError();
@@ -65,7 +75,12 @@ export class ReActAgentEngine implements AgentEngine {
 
         if (messageStarted) {
           yield events.create({ type: 'message.completed', messageId, content });
-          messages.push({ id: messageId, role: 'assistant', content, ...(pendingToolCall ? { toolCalls: [pendingToolCall] } : {}) });
+          messages.push({
+            id: messageId,
+            role: 'assistant',
+            content,
+            ...(pendingToolCall ? { toolCalls: [pendingToolCall] } : {}),
+          });
         }
 
         if (!pendingToolCall) {
@@ -77,47 +92,62 @@ export class ReActAgentEngine implements AgentEngine {
 
         const tool = tools.get(pendingToolCall.name);
         if (!tool) throw new Error(`Unknown tool: ${pendingToolCall.name}`);
+        // 绑定为不可变引用：下面的进度回调与结果处理都属于同一次调用，
+        // 也因此在闭包里不再需要非空断言。
+        const toolCall: ToolCall = pendingToolCall;
 
-        if (!messageStarted) messages.push({ id: messageId, role: 'assistant', content: '', toolCalls: [pendingToolCall] });
-        yield events.create({ type: 'tool.started', toolCall: pendingToolCall });
+        if (!messageStarted)
+          messages.push({
+            id: messageId,
+            role: 'assistant',
+            content: '',
+            toolCalls: [toolCall],
+          });
+        yield events.create({ type: 'tool.started', toolCall });
         const progress: AgentRuntimeEvent[] = [];
         try {
-          const output = await tool.execute(pendingToolCall.input, {
+          const output = await tool.execute(toolCall.input, {
             runId: input.runId,
             workspacePath: input.workspacePath,
             signal: input.signal,
             reportProgress(message) {
-              progress.push(events.create({ type: 'tool.progress', toolCallId: pendingToolCall!.id, message }));
+              progress.push(
+                events.create({ type: 'tool.progress', toolCallId: toolCall.id, message }),
+              );
             },
           });
           for (const event of progress) yield event;
-          yield events.create({ type: 'tool.completed', toolCallId: pendingToolCall.id, output });
+          yield events.create({ type: 'tool.completed', toolCallId: toolCall.id, output });
           messages.push({
             id: randomUUID(),
             role: 'tool',
-            toolCallId: pendingToolCall.id,
-            toolName: pendingToolCall.name,
+            toolCallId: toolCall.id,
+            toolName: toolCall.name,
             content: JSON.stringify(output),
           });
         } catch (error) {
           if (input.signal.aborted) throw abortError();
-          const message = error instanceof Error ? error.message : String(error);
-          yield events.create({ type: 'tool.failed', toolCallId: pendingToolCall.id, error: message });
+          const message = describeError(error);
+          yield events.create({
+            type: 'tool.failed',
+            toolCallId: toolCall.id,
+            error: message,
+          });
           messages.push({
             id: randomUUID(),
             role: 'tool',
-            toolCallId: pendingToolCall.id,
-            toolName: pendingToolCall.name,
+            toolCallId: toolCall.id,
+            toolName: toolCall.name,
             content: JSON.stringify({ error: message }),
           });
         }
       }
     } catch (error) {
-      if (input.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
+      if (input.signal.aborted || isAbortError(error)) {
         yield events.create({ type: 'run.cancelled' });
         return;
       }
-      yield events.create({ type: 'run.failed', error: error instanceof Error ? error.message : String(error) });
+      yield events.create({ type: 'run.failed', error: describeError(error) });
     }
   }
 }

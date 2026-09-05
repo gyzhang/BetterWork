@@ -1,4 +1,4 @@
-import type { AgentTool } from '@betterwork/agent-core';
+import { abortError, type AgentTool } from '@betterwork/agent-core';
 import { z } from 'zod';
 
 const inputSchema = z.object({ expression: z.string().min(1).max(500) });
@@ -11,7 +11,8 @@ class Parser {
   parse(): number {
     const result = this.parseExpression();
     this.skipWhitespace();
-    if (this.cursor !== this.expression.length) throw new Error(`Unexpected token at position ${this.cursor + 1}`);
+    if (this.cursor !== this.expression.length)
+      throw new Error(`Unexpected token at position ${this.cursor + 1}`);
     if (!Number.isFinite(result)) throw new Error('Result is not finite');
     return result;
   }
@@ -46,7 +47,8 @@ class Parser {
     if (this.take('(')) {
       const value = this.parseExpression();
       this.skipWhitespace();
-      if (!this.take(')')) throw new Error(`Expected closing parenthesis at position ${this.cursor + 1}`);
+      if (!this.take(')'))
+        throw new Error(`Expected closing parenthesis at position ${this.cursor + 1}`);
       return value;
     }
     const match = this.expression.slice(this.cursor).match(/^(?:\d+(?:\.\d*)?|\.\d+)/);
@@ -76,7 +78,7 @@ export const calculatorTool: AgentTool = {
     additionalProperties: false,
   },
   async execute(rawInput, context) {
-    if (context.signal.aborted) throw Object.assign(new Error('Run cancelled'), { name: 'AbortError' });
+    if (context.signal.aborted) throw abortError();
     const { expression } = inputSchema.parse(rawInput);
     context.reportProgress(`正在计算 ${expression}`);
     return { expression, result: new Parser(expression).parse() };
