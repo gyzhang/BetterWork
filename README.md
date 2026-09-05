@@ -116,11 +116,11 @@ npm run dev:stop
 npm run verify
 ```
 
-当前覆盖 19 个测试文件、114 个测试，ESLint 全仓零错误。构建会产生两条来自 Zod 的 Rollup `@PURE` 注释警告，属已知警告，不影响构建成功。
+当前覆盖 20 个测试文件、131 个测试，ESLint 全仓零错误。构建会产生两条来自 Zod 的 Rollup `@PURE` 注释警告，属已知警告，不影响构建成功。
 
 > 不要把 `npm run verify` 的输出接管道后只看末尾：管道的退出码取最后一个命令，`npm run verify | tail` 永远是 0，会把失败读成成功。需要截取输出时用 `npm run verify > /tmp/verify.log 2>&1; echo $?`。
 
-代码风格由 Prettier 与 ESLint 统一强制，全仓只有一套规范——不允许按目录或按文件另立风格。规则的理由、目录约定、命名与错误处理纪律写在 [工程规范](docs/12-engineering-standards.md)，`eslint.config.mjs` 与 `.prettierrc.json` 是它的可执行形式。日常可用的命令：
+代码风格由 Prettier 与 ESLint 统一强制，全仓只有一套规范——不允许按目录、按文件或按智能体另立风格。规则的理由、目录约定、命名与错误处理纪律写在 [工程规范](docs/12-engineering-standards.md)，`eslint.config.mjs` 与 `.prettierrc.json` 是它的可执行形式；ESLint 管不到的跨文件约定（配置唯一性、分层边界、主题 Token 纪律）由 `standards/coding-standard.test.ts` 守卫，同样跑在 `npm test` 里。日常可用的命令：
 
 ```bash
 npm run lint        # 或 npm run lint:fix

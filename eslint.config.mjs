@@ -102,6 +102,7 @@ export default tseslint.config(
       'apps/desktop/src/preload/**/*.ts',
       'packages/**/*.ts',
       'scripts/**/*.ts',
+      'standards/**/*.ts',
       '*.config.ts',
     ],
     languageOptions: { globals: { ...globals.node } },

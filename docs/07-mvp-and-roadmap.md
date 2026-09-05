@@ -161,9 +161,9 @@
 
 | 门槛 | 当前状态 |
 | --- | --- |
-| 单元测试 | 已达成：Vitest 19 个文件、114 个测试，覆盖协议、Agent 引擎、SSE Provider、工具、迁移与持久化、知识库、连通性探测、通知与 Renderer 纯函数 |
+| 单元测试 | 已达成：Vitest 20 个文件、131 个测试，覆盖协议、Agent 引擎、SSE Provider、工具、迁移与持久化、知识库、连通性探测、通知、Renderer 纯函数与全仓编码规范护栏 |
 | 关键事件时序测试 | 已达成：`agent-engine.test.ts` 覆盖流式、工具轮次、失败与取消时序；`run-service.test.ts` 覆盖广播顺序与终态 |
-| 数据迁移测试 | 已达成：`apps/desktop/src/main/db/` 下的版本化迁移，`migrate.test.ts` 覆盖新库建立、历史库对账、缺列补齐、幂等重开、孤儿行拒绝与迁移表校验 |
+| 数据迁移测试 | 已达成：`apps/desktop/src/main/db/` 下的版本化迁移，`migrate.test.ts` 覆盖新库建立、历史库对账、缺列补齐、幂等重开、孤儿行清理与迁移表校验 |
 | 至少一个端到端用户旅程 | **未达成**：无 Playwright 或等价的 UI 自动化；当前以单元测试加人工桌面验收兜底 |
 | 示例数据和 Fake Provider | 已达成：`FakeModelProvider` 可稳定复现事件顺序与工具行为 |
 | 对应教学文档 | 部分达成：架构与领域文档齐备，尚缺面向学习者的链路讲解材料 |
