@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { KnowledgeVault } from './knowledge-vault';
 import { RunJournal } from './run-journal';
-import { RunService } from './run-service';
+import { RunService, createRunTools } from './run-service';
 import type { BrowserWindow } from 'electron';
 
 const temporaryDirectories: string[] = [];
@@ -56,5 +56,11 @@ describe('RunService', () => {
     expect(service.cancel(runId)).toBe(false);
     vault.close();
     journal.close();
+  });
+
+  it('registers the web search tool only when a search engine is configured', () => {
+    const knowledgeSearch = () => [];
+    expect(createRunTools({ knowledgeSearch }).map((tool) => tool.name)).toEqual(['calculator', 'read_text_file', 'knowledge_search']);
+    expect(createRunTools({ knowledgeSearch, webSearch: async () => ({ results: [] }) }).map((tool) => tool.name)).toEqual(['calculator', 'read_text_file', 'knowledge_search', 'web_search']);
   });
 });

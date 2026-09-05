@@ -43,6 +43,11 @@ const api: BetterWorkDesktopApi = {
     setEnabled: (input) => ipcRenderer.invoke(IpcChannel.SetModelEnabled, input),
     test: (input) => ipcRenderer.invoke(IpcChannel.TestModel, input),
   },
+  searchEngines: {
+    list: () => ipcRenderer.invoke(IpcChannel.ListSearchEngines),
+    save: (input) => ipcRenderer.invoke(IpcChannel.SaveSearchEngine, input),
+    test: (input) => ipcRenderer.invoke(IpcChannel.TestSearchEngine, input),
+  },
   chrome: {
     updateTheme: (input) => ipcRenderer.invoke(IpcChannel.UpdateWindowTheme, input),
     toggleMaximize: () => ipcRenderer.invoke(IpcChannel.WindowToggleMaximize, {}),

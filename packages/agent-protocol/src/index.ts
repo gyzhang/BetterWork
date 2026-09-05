@@ -181,7 +181,7 @@ export interface EvidenceSummary {
   id: string;
   taskId: string;
   runId: string;
-  sourceType: 'local-file';
+  sourceType: 'local-file' | 'web-page';
   sourceUri: string;
   title: string;
   locator: string;
@@ -274,6 +274,29 @@ export type UpdateWindowThemeRequest = z.infer<typeof updateWindowThemeRequestSc
 export const windowToggleMaximizeRequestSchema = z.object({}).strict();
 export type WindowToggleMaximizeRequest = z.infer<typeof windowToggleMaximizeRequestSchema>;
 
+export const searchProviderIdSchema = z.enum(['baidu_qianfan']);
+export type SearchProviderId = z.infer<typeof searchProviderIdSchema>;
+
+export const searchEngineConfigInputSchema = z.object({
+  provider: searchProviderIdSchema,
+  apiKey: z.string().max(2000).optional().default(''),
+  webTopK: z.number().int().min(1).max(20).default(10),
+  enabled: z.boolean().default(true),
+});
+export type SearchEngineConfigInput = z.infer<typeof searchEngineConfigInputSchema>;
+export const saveSearchEngineRequestSchema = searchEngineConfigInputSchema;
+export const testSearchEngineRequestSchema = searchEngineConfigInputSchema;
+
+export interface SearchEngineSummary {
+  provider: SearchProviderId;
+  apiKeyConfigured: boolean;
+  enabled: boolean;
+  webTopK: number;
+  connectionStatus: ModelConnectionStatus;
+  lastTestedAt?: number;
+  updatedAt: number;
+}
+
 export interface RunSummary {
   id: string;
   taskId: string;
@@ -312,6 +335,9 @@ export const IpcChannel = {
   OpenKnowledgeSource: 'knowledge:open-source',
   RemoveKnowledgeDocument: 'knowledge:remove',
   RefreshKnowledgeDocument: 'knowledge:refresh',
+  ListSearchEngines: 'search:list',
+  SaveSearchEngine: 'search:save',
+  TestSearchEngine: 'search:test',
   TestModel: 'model:test',
   UpdateWindowTheme: 'window:update-theme',
   WindowToggleMaximize: 'window:toggle-maximize',
@@ -351,6 +377,11 @@ export interface BetterWorkDesktopApi {
     setDefault(input: { id: string }): Promise<{ updated: boolean }>;
     setEnabled(input: { id: string; enabled: boolean }): Promise<{ updated: boolean }>;
     test(input: z.infer<typeof testModelRequestSchema>): Promise<{ ok: boolean; message: string }>;
+  };
+  searchEngines: {
+    list(): Promise<SearchEngineSummary[]>;
+    save(input: z.input<typeof saveSearchEngineRequestSchema>): Promise<{ provider: string }>;
+    test(input: z.input<typeof testSearchEngineRequestSchema>): Promise<{ ok: boolean; message: string }>;
   };
   chrome: {
     updateTheme(input: UpdateWindowThemeRequest): Promise<void>;

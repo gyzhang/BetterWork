@@ -25,12 +25,15 @@ import {
   openKnowledgeSourceRequestSchema,
   removeKnowledgeDocumentRequestSchema,
   refreshKnowledgeDocumentRequestSchema,
+  saveSearchEngineRequestSchema,
+  testSearchEngineRequestSchema,
   updateWindowThemeRequestSchema,
   windowToggleMaximizeRequestSchema,
 } from '@betterwork/agent-protocol';
 import { RunJournal } from './run-journal';
 import { RunService } from './run-service';
 import { KnowledgeVault } from './knowledge-vault';
+import { createQianfanSearchClient } from './search-engine-service';
 
 let mainWindow: BrowserWindow | null = null;
 let journal: RunJournal | null = null;
@@ -148,6 +151,20 @@ app.whenReady().then(() => {
   });
   ipcMain.handle(IpcChannel.RemoveKnowledgeDocument, (_event, raw) => ({ removed: knowledgeVault!.removeDocument(removeKnowledgeDocumentRequestSchema.parse(raw).id) }));
   ipcMain.handle(IpcChannel.RefreshKnowledgeDocument, (_event, raw) => knowledgeVault!.refreshDocument(refreshKnowledgeDocumentRequestSchema.parse(raw).id));
+  ipcMain.handle(IpcChannel.ListSearchEngines, () => journal!.listSearchEngines());
+  ipcMain.handle(IpcChannel.SaveSearchEngine, (_event, raw) => {
+    const input = saveSearchEngineRequestSchema.parse(raw);
+    return { provider: journal!.saveSearchEngine(input) };
+  });
+  ipcMain.handle(IpcChannel.TestSearchEngine, async (_event, raw) => {
+    const input = testSearchEngineRequestSchema.parse(raw);
+    const stored = journal!.getSearchEngine(input.provider);
+    const apiKey = input.apiKey || stored?.apiKey || '';
+    if (!apiKey) return { ok: false, message: '请先填写 API Key。' };
+    const result = await createQianfanSearchClient({ apiKey, webTopK: input.webTopK }).test();
+    journal!.recordSearchConnection(input.provider, result.ok ? 'connected' : 'failed');
+    return result;
+  });
   ipcMain.handle(IpcChannel.TestModel, async (_event, raw) => {
     const input = testModelRequestSchema.parse(raw);
     const base = input.baseUrl.replace(/\/$/, '');
