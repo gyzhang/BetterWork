@@ -67,18 +67,27 @@ Renderer -> Preload API -> Application -> Agent Core / Infrastructure
 BetterWork/
 ├── apps/desktop/
 │   └── src/
-│       ├── main/          # Electron 生命周期、IPC、Application 层服务与 SQLite 持久化
-│       ├── preload/       # 最小化、类型化的 Renderer API
-│       └── renderer/      # React 界面、主题 Token 与 SVG 图标集
+│       ├── main/
+│       │   ├── index.ts       # 只做装配与生命周期，不含业务逻辑
+│       │   ├── db/            # 连接、PRAGMA 与版本化迁移
+│       │   ├── persistence/   # 按聚合拆分的 Repository 与 AppStore
+│       │   ├── services/      # 运行编排、通知、资料库、搜索、连通性探测
+│       │   └── ipc/           # 全部 channel 注册与边界校验
+│       ├── preload/           # 最小化、类型化的 Renderer API
+│       └── renderer/
+│           ├── views/         # 页面级视图（不含 IPC 调用）
+│           ├── components/    # 跨视图复用组件
+│           ├── hooks/         # 内聚状态簇
+│           └── lib/           # 无状态纯函数与常量
 ├── packages/
 │   ├── agent-protocol/    # 跨进程协议、领域类型、Zod Schema 与 IPC channel 的唯一入口
-│   ├── agent-core/        # Agent Loop 与 Model Provider 接口
+│   ├── agent-core/        # Agent Loop、Model Provider 接口与统一错误词汇
 │   └── tool-runtime/      # 可测试的确定性工具实现
 ├── scripts/               # 带 PID 与日志管理的开发启停脚本
-└── docs/                  # 产品、架构、UI 规范、ADR 与按天工作日志
+└── docs/                  # 产品、架构、UI 规范、工程规范、ADR 与按天工作日志
 ```
 
-技术栈：Electron + electron-vite、React 19、TypeScript strict（含 `noUncheckedIndexedAccess` 与 `exactOptionalPropertyTypes`）、better-sqlite3（FTS5）、Zod、react-markdown、pdf-parse、mammoth、Vitest。界面使用手写 CSS 加语义化主题 Token 与自建内联 SVG 图标集，不引入样式框架、通用图标库或全局状态库——取舍理由见 [系统架构](docs/03-system-architecture.md) §10。
+技术栈：Electron + electron-vite、React 19、TypeScript strict（含 `noUncheckedIndexedAccess` 与 `exactOptionalPropertyTypes`）、better-sqlite3（FTS5）、Zod、react-markdown、pdf-parse、mammoth、Vitest，风格与质量由 ESLint（含类型感知规则）与 Prettier 强制。界面使用手写 CSS 加语义化主题 Token 与自建内联 SVG 图标集，不引入样式框架、通用图标库或全局状态库——取舍理由见 [系统架构](docs/03-system-architecture.md) §10，目录与命名约定见 [工程规范](docs/12-engineering-standards.md) §2。
 
 ## 本地开发
 
@@ -101,15 +110,24 @@ npm run dev:stop
 
 默认日志和 PID 文件分别位于 `/tmp/betterwork-dev.log` 与 `/tmp/betterwork-dev.pid`，也可以通过 `BETTERWORK_DEV_LOG`、`BETTERWORK_DEV_PID` 覆盖。请只用这两个脚本启停应用，不要绕开脚本直接启动 Electron，也不要用宽泛的进程匹配杀进程——那会误伤机器上的其他 Electron 应用。
 
-提交前执行完整验证（类型检查 + 单元测试 + 构建）：
+提交前执行完整验证（lint + 格式校验 + 类型检查 + 单元测试 + 构建）：
 
 ```bash
 npm run verify
 ```
 
-当前覆盖 13 个测试文件、55 个测试。构建会产生两条来自 Zod 的 Rollup `@PURE` 注释警告，属已知警告，不影响构建成功。
+当前覆盖 18 个测试文件、111 个测试，ESLint 全仓零错误。构建会产生两条来自 Zod 的 Rollup `@PURE` 注释警告，属已知警告，不影响构建成功。
 
-> 冷 Vite 缓存下首次运行 `npm test`，知识库的 PDF 与 DOCX 两个用例可能因现场转换依赖而超时；缓存预热后同一文件仅需数百毫秒。遇到这两条超时先重跑确认。
+> 不要把 `npm run verify` 的输出接管道后只看末尾：管道的退出码取最后一个命令，`npm run verify | tail` 永远是 0，会把失败读成成功。需要截取输出时用 `npm run verify > /tmp/verify.log 2>&1; echo $?`。
+
+代码风格由 Prettier 与 ESLint 统一强制，全仓只有一套规范——不允许按目录或按文件另立风格。规则的理由、目录约定、命名与错误处理纪律写在 [工程规范](docs/12-engineering-standards.md)，`eslint.config.mjs` 与 `.prettierrc.json` 是它的可执行形式。日常可用的命令：
+
+```bash
+npm run lint        # 或 npm run lint:fix
+npm run format      # 或 npm run format:check
+```
+
+> 冷 Vite 缓存下首次运行 `npm test`，知识库的 PDF 与 DOCX 两个用例需要现场转换依赖，因此已显式提高超时；若仍失败请先重跑一次确认。
 
 未配置模型时使用 Fake Model Provider，事件顺序与工具行为可稳定复现。输入 `计算: (12 + 8) * 3`、`读取: README.md` 或 `搜索知识: 市场` 可以观察一条完整执行链路；在设置中配置一个 OpenAI-compatible 语言模型后即切换到真实模型。
 
@@ -129,6 +147,7 @@ npm run verify
 - [参考项目与借鉴边界](docs/09-reference-projects.md)
 - [UI/UX 体系与落地计划](docs/10-ui-ux-system.md)（界面设计真相源）
 - [Qoder 开发交接](docs/11-qoder-handoff.md)（**当前实现基线、代码地图与已知缺陷**）
+- [工程规范](docs/12-engineering-standards.md)（**全仓唯一的代码规范**，配置即执行形式）
 - [架构决策记录](docs/adr/README.md)
 - [工作日志](docs/logs/README.md)
 
