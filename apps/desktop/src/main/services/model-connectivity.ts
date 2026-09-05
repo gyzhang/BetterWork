@@ -25,14 +25,16 @@ const PROBE_MAX_TOKENS = 8;
  * 而这里要拿它去发起网络请求，必须在边界上收窄。
  */
 export function resolveEndpoint(baseUrl: string, role: ModelRole): string {
-  const trimmed = baseUrl.replace(/\/+$/, '');
-  const url = new URL(trimmed);
+  const normalized = baseUrl.replace(/\/+$/, '');
+  const url = new URL(normalized);
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new Error('模型 API 地址必须是 http 或 https');
   }
-  const suffix = role === 'embedding' ? 'embeddings' : 'chat/completions';
-  if (trimmed.endsWith('/embeddings') || trimmed.endsWith('/chat/completions')) return trimmed;
-  return `${trimmed}/${suffix}`;
+  // 用户可能已经写全了端点，两种后缀都要认，否则会被再拼一次路径
+  if (normalized.endsWith('/chat/completions') || normalized.endsWith('/embeddings')) {
+    return normalized;
+  }
+  return `${normalized}/${role === 'embedding' ? 'embeddings' : 'chat/completions'}`;
 }
 
 const buildProbeBody = (target: ModelConnectionTarget): unknown =>

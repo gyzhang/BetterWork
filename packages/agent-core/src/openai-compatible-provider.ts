@@ -9,10 +9,15 @@ export interface OpenAICompatibleProviderConfig {
   maxOutputTokens?: number;
 }
 
-const endpoint = (baseUrl: string): string =>
-  baseUrl.replace(/\/$/, '').endsWith('/chat/completions')
-    ? baseUrl
-    : `${baseUrl.replace(/\/$/, '')}/chat/completions`;
+/**
+ * 归一化用户填写的 base URL。
+ * 三种填法都要落到同一个端点：`https://host/v1`、带若干尾斜杠的同一地址、
+ * 以及已经写全的 `https://host/v1/chat/completions`。
+ */
+const endpoint = (baseUrl: string): string => {
+  const normalized = baseUrl.replace(/\/+$/, '');
+  return normalized.endsWith('/chat/completions') ? normalized : `${normalized}/chat/completions`;
+};
 
 export class OpenAICompatibleProvider implements ModelProvider {
   readonly id: string;
