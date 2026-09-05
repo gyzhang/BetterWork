@@ -245,7 +245,7 @@ export function App(): React.JSX.Element {
     <aside className="sidebar">
       <div className="sidebar-top-drag" onDoubleClick={handleTitlebarDoubleClick} />
       <div className="brand" onDoubleClick={handleTitlebarDoubleClick}><span className="brand-mark" aria-hidden="true"><BrandLogo size={28} /></span><div><strong>算台</strong><small>BetterWork</small></div><button className="sidebar-collapse-button" aria-label={sidebarCollapsed ? '展开导航' : '收起导航'} onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}>{sidebarCollapsed ? <ChevronRightIcon size={15} /> : <ChevronLeftIcon size={15} />}</button></div>
-      <button className="new-task" onClick={startNewTask}><PlusIcon size={14} /> 新建任务</button>
+      <button className="new-task" onClick={startNewTask}><PlusIcon size={15} /> 新建任务</button>
       <nav className="primary-nav" aria-label="主要导航">
         <button className={view === 'work' ? 'active' : ''} onClick={() => setView('work')}><span aria-hidden="true"><WorkIcon size={15} /></span> 工作</button>
         <button className={view === 'artifacts' ? 'active' : ''} onClick={() => { setView('artifacts'); setSelectedArtifact(undefined); void refreshArtifacts(); }}><span aria-hidden="true"><ArtifactIcon size={15} /></span> 成果</button>
