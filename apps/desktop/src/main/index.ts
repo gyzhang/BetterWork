@@ -205,7 +205,7 @@ app.whenReady().then(() => {
     const apiKey = input.apiKey || stored?.apiKey || '';
     if (!apiKey) return { ok: false, message: '请先填写 API Key。' };
     const result = await createQianfanSearchClient({ apiKey, webTopK: input.webTopK }).test();
-    journal!.recordSearchConnection(input.provider, result.ok ? 'connected' : 'failed');
+    journal!.recordSearchConnection(input.provider, result.ok ? 'connected' : 'failed', apiKey);
     return result;
   });
   ipcMain.handle(IpcChannel.TestModel, async (_event, raw) => {

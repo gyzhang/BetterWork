@@ -145,7 +145,7 @@ describe('RunJournal', () => {
     expect(journal.listSearchEngines()[0]).toMatchObject({ provider: 'baidu_qianfan', apiKeyConfigured: true, enabled: true, webTopK: 8, connectionStatus: 'untested' });
     expect(journal.listSearchEngines()[0]).not.toHaveProperty('apiKey');
     expect(journal.getEnabledSearchEngine()).toMatchObject({ apiKey: 'secret-key', webTopK: 8 });
-    journal.recordSearchConnection('baidu_qianfan', 'connected');
+    journal.recordSearchConnection('baidu_qianfan', 'connected', 'secret-key');
     expect(journal.listSearchEngines()[0]).toMatchObject({ connectionStatus: 'connected' });
     journal.saveSearchEngine({ provider: 'baidu_qianfan', apiKey: '', webTopK: 12, enabled: true });
     expect(journal.getEnabledSearchEngine()).toMatchObject({ apiKey: 'secret-key', webTopK: 12 });
@@ -163,6 +163,14 @@ describe('RunJournal', () => {
     journal.saveWebEvidence(evidence);
     journal.saveWebEvidence(evidence);
     expect(journal.listEvidence(task.task.id)).toEqual([expect.objectContaining({ ...evidence, sourceType: 'web-page' })]);
+  });
+
+  it('keeps the connection result of a test that ran before the first save', () => {
+    journal = new RunJournal(':memory:');
+    journal.recordSearchConnection('baidu_qianfan', 'connected', 'tested-key');
+    expect(journal.listSearchEngines()[0]).toMatchObject({ apiKeyConfigured: true, enabled: false, connectionStatus: 'connected' });
+    journal.saveSearchEngine({ provider: 'baidu_qianfan', apiKey: 'tested-key', webTopK: 10, enabled: true });
+    expect(journal.listSearchEngines()[0]).toMatchObject({ enabled: true, connectionStatus: 'connected' });
   });
 
   it('stores notifications with targets, enforces the rolling cap, and tracks unread counts', () => {

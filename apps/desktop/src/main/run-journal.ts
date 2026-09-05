@@ -385,10 +385,13 @@ export class RunJournal {
     return { provider: String(row.provider) as SearchProviderId, apiKey: String(row.api_key ?? ''), webTopK: parseSearchOptions(row.options).webTopK };
   }
 
-  recordSearchConnection(provider: SearchProviderId, status: Exclude<ModelConnectionStatus, 'untested'>): void {
+  recordSearchConnection(provider: SearchProviderId, status: Exclude<ModelConnectionStatus, 'untested'>, apiKey: string): void {
     const now = Date.now();
-    this.db.prepare('UPDATE search_engine_configs SET connection_status = ?, last_tested_at = ?, updated_at = ? WHERE provider = ?')
-      .run(status, now, now, provider);
+    this.db.prepare(`
+      INSERT INTO search_engine_configs (provider, api_key, options, enabled, connection_status, last_tested_at, updated_at)
+      VALUES (?, ?, '{}', 0, ?, ?, ?)
+      ON CONFLICT(provider) DO UPDATE SET api_key = excluded.api_key, connection_status = excluded.connection_status, last_tested_at = excluded.last_tested_at, updated_at = excluded.updated_at
+    `).run(provider, apiKey, status, now, now);
   }
 
   saveNotification(input: CreateNotificationInput): NotificationSummary {
