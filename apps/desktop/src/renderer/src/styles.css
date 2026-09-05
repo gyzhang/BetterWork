@@ -253,6 +253,22 @@
   --info: #9fc0d4;
   --info-soft: #303f4b;
 }
+:root[data-theme='light'] {
+  --scrim: rgba(0, 0, 0, 0.35);
+  --shadow-color-strong: rgba(0, 0, 0, 0.18);
+  --shadow-color-overlay: rgba(0, 0, 0, 0.16);
+  --shadow-color-drawer: rgba(0, 0, 0, 0.12);
+  --shadow-color-raised: rgba(0, 0, 0, 0.08);
+  --shadow-color-soft: rgba(0, 0, 0, 0.05);
+}
+:root[data-theme='dark'] {
+  --scrim: rgba(0, 0, 0, 0.55);
+  --shadow-color-strong: rgba(0, 0, 0, 0.5);
+  --shadow-color-overlay: rgba(0, 0, 0, 0.45);
+  --shadow-color-drawer: rgba(0, 0, 0, 0.4);
+  --shadow-color-raised: rgba(0, 0, 0, 0.32);
+  --shadow-color-soft: rgba(0, 0, 0, 0.28);
+}
 * {
   box-sizing: border-box;
 }
@@ -437,7 +453,7 @@ p {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   min-height: 0;
   overflow: auto;
 }
@@ -742,7 +758,7 @@ p {
   background: var(--composer);
   border: 1px solid var(--input-border);
   border-radius: 12px;
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 26px var(--shadow-color-raised);
 }
 .workspace-row {
   display: flex;
@@ -857,7 +873,7 @@ p {
 }
 .context-tabs {
   display: flex;
-  gap: 3px;
+  gap: 4px;
   padding: 0 12px 4px;
   border-bottom: 1px solid var(--border);
 }
@@ -873,7 +889,7 @@ p {
 .context-tabs button[aria-selected='true'] {
   color: var(--text-primary);
   background: var(--surface);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 2px var(--shadow-color-raised);
 }
 .context-content {
   min-height: 0;
@@ -1419,7 +1435,7 @@ p {
   position: fixed;
   inset: 0;
   z-index: 10;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--scrim);
 }
 .model-sheet {
   position: absolute;
@@ -1432,7 +1448,7 @@ p {
   flex-direction: column;
   background: var(--surface);
   border-left: 1px solid var(--border);
-  box-shadow: -16px 0 42px rgba(0, 0, 0, 0.18);
+  box-shadow: -16px 0 42px var(--shadow-color-strong);
 }
 .model-sheet header {
   display: flex;
@@ -1529,7 +1545,7 @@ p {
     bottom: 0;
     z-index: 4;
     width: 360px;
-    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.12);
+    box-shadow: -10px 0 30px var(--shadow-color-drawer);
   }
   .context-toggle {
     display: inline-flex;
@@ -1709,7 +1725,7 @@ p {
 .evidence-list {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 .context-source-message {
   margin: 8px 0 4px;
@@ -1827,7 +1843,7 @@ p {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 12px 28px var(--shadow-color-soft);
   font-size: 15px;
   line-height: 1.8;
 }
@@ -2136,7 +2152,7 @@ p {
 .artifact-version-list button {
   display: flex;
   width: 100%;
-  gap: 3px;
+  gap: 4px;
   padding: 8px 7px;
   flex-direction: column;
   color: var(--text-secondary);
@@ -2243,7 +2259,7 @@ p {
 .back-button {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
 }
 .brand svg,
 .primary-nav span svg,
@@ -2361,7 +2377,7 @@ p {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 16px 40px var(--shadow-color-overlay);
 }
 .notification-overlay {
   position: fixed;
@@ -2538,7 +2554,7 @@ p {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 14px 34px var(--shadow-color-overlay);
   text-align: left;
 }
 .toast > span {
@@ -2659,7 +2675,7 @@ p {
   background: var(--surface);
   border: 1px solid var(--danger);
   border-radius: 10px;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 14px 34px var(--shadow-color-overlay);
   transform: translateX(-50%);
 }
 .action-error-banner > span {
