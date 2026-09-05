@@ -19,8 +19,8 @@ const toolLabel = (name: string): string => {
 const mostRecent = (events: AgentRuntimeEvent[]): AgentRuntimeEvent | undefined => events.at(-1);
 
 export function deriveActivityGroups(events: AgentRuntimeEvent[]): ActivityGroup[] {
-  if (events.length === 0) return [];
-  const latest = mostRecent(events)!;
+  const latest = mostRecent(events);
+  if (!latest) return [];
   const toolEvents = events.filter((event) => event.type.startsWith('tool.'));
   const messageEvents = events.filter((event) => event.type.startsWith('message.'));
   const reasoningEvents = events.filter((event) => event.type === 'reasoning.delta');
