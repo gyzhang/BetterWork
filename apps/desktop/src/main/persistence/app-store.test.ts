@@ -1,18 +1,47 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { RunJournal } from './run-journal';
+import type { CreatedTask } from '@betterwork/agent-protocol';
+import { AppStore } from './index';
 
-let journal: RunJournal | undefined;
-afterEach(() => journal?.close());
+const openStores: AppStore[] = [];
+/** 每个用例自己开一个内存库并登记清理，用例内部因此不需要任何非空断言。 */
+const openStore = (): AppStore => {
+  const store = AppStore.open(':memory:');
+  openStores.push(store);
+  return store;
+};
 
-describe('RunJournal', () => {
+/**
+ * 外键约束开启后，Evidence 与 Run Event 必须挂在真实存在的 Task / Session / Run 上。
+ * 这两个夹具按生产链路建库，测试因此不再需要伪造父级 id。
+ */
+const seedTask = (store: AppStore, rootPath: string, title: string): CreatedTask => {
+  const workspace = store.workspaces.getOrCreate(rootPath, title);
+  return store.tasks.create(workspace.id, title, `${title}的目标`);
+};
+
+const seedRun = (store: AppStore, task: CreatedTask, runId: string): void => {
+  store.runs.create({
+    id: runId,
+    taskId: task.task.id,
+    sessionId: task.sessionId,
+    prompt: runId,
+    status: 'running',
+    createdAt: 1,
+  });
+};
+afterEach(() => {
+  for (const store of openStores.splice(0)) store.close();
+});
+
+describe('AppStore', () => {
   it('creates a stable workspace, task, and separate session identifiers', () => {
-    journal = new RunJournal(':memory:');
-    const workspace = journal.getOrCreateWorkspace('/work/customer-a', '客户 A');
-    const sameWorkspace = journal.getOrCreateWorkspace(
+    const store = openStore();
+    const workspace = store.workspaces.getOrCreate('/work/customer-a', '客户 A');
+    const sameWorkspace = store.workspaces.getOrCreate(
       '/work/customer-a',
       '不同名称不会复制工作区',
     );
-    const created = journal.createTask(workspace.id, '季度复盘', '根据资料完成季度复盘');
+    const created = store.tasks.create(workspace.id, '季度复盘', '根据资料完成季度复盘');
     expect(sameWorkspace.id).toBe(workspace.id);
     expect(created.task).toMatchObject({
       workspaceId: workspace.id,
@@ -20,16 +49,16 @@ describe('RunJournal', () => {
       goal: '根据资料完成季度复盘',
     });
     expect(created.sessionId).not.toBe(created.task.id);
-    expect(() => journal!.createTask('missing-workspace', '无效任务', '不应创建')).toThrow(
+    expect(() => store.tasks.create('missing-workspace', '无效任务', '不应创建')).toThrow(
       'Workspace does not exist',
     );
   });
 
   it('lists one recent task with its latest run instead of duplicate run rows', () => {
-    journal = new RunJournal(':memory:');
-    const workspace = journal.getOrCreateWorkspace('/work/customer-a', '客户 A');
-    const task = journal.createTask(workspace.id, '季度复盘', '根据资料完成季度复盘');
-    journal.createRun({
+    const store = openStore();
+    const workspace = store.workspaces.getOrCreate('/work/customer-a', '客户 A');
+    const task = store.tasks.create(workspace.id, '季度复盘', '根据资料完成季度复盘');
+    store.runs.create({
       id: 'run-1',
       taskId: task.task.id,
       sessionId: task.sessionId,
@@ -38,7 +67,7 @@ describe('RunJournal', () => {
       createdAt: 1,
       completedAt: 2,
     });
-    journal.createRun({
+    store.runs.create({
       id: 'run-2',
       taskId: task.task.id,
       sessionId: task.sessionId,
@@ -46,7 +75,7 @@ describe('RunJournal', () => {
       status: 'running',
       createdAt: 3,
     });
-    expect(journal.listTasks(workspace.id)).toEqual([
+    expect(store.tasks.listRecent(workspace.id)).toEqual([
       expect.objectContaining({
         id: task.task.id,
         sessionId: task.sessionId,
@@ -56,9 +85,9 @@ describe('RunJournal', () => {
   });
 
   it('persists deduplicated local evidence for a task', () => {
-    journal = new RunJournal(':memory:');
-    const workspace = journal.getOrCreateWorkspace('/work/customer-a', '客户 A');
-    const task = journal.createTask(workspace.id, '季度复盘', '根据资料完成季度复盘');
+    const store = openStore();
+    const task = seedTask(store, '/work/customer-a', '客户 A');
+    seedRun(store, task, 'run-1');
     const evidence = {
       taskId: task.task.id,
       runId: 'run-1',
@@ -68,18 +97,18 @@ describe('RunJournal', () => {
       excerpt: '续约风险需要跟进。',
       contentHash: 'hash-1',
     };
-    journal.saveLocalEvidence(evidence);
-    journal.saveLocalEvidence(evidence);
-    expect(journal.listEvidence(task.task.id)).toEqual([
+    store.evidence.saveLocal(evidence);
+    store.evidence.saveLocal(evidence);
+    expect(store.evidence.listByTask(task.task.id)).toEqual([
       expect.objectContaining({ ...evidence, sourceType: 'local-file' }),
     ]);
   });
 
   it('creates a Markdown artifact and appends revisions without overwriting history', () => {
-    journal = new RunJournal(':memory:');
-    const workspace = journal.getOrCreateWorkspace('/work/customer-a', '客户 A');
-    const task = journal.createTask(workspace.id, '季度复盘', '根据资料完成季度复盘');
-    journal.createRun({
+    const store = openStore();
+    const workspace = store.workspaces.getOrCreate('/work/customer-a', '客户 A');
+    const task = store.tasks.create(workspace.id, '季度复盘', '根据资料完成季度复盘');
+    store.runs.create({
       id: 'run-1',
       taskId: task.task.id,
       sessionId: task.sessionId,
@@ -88,7 +117,7 @@ describe('RunJournal', () => {
       createdAt: 1,
       completedAt: 2,
     });
-    journal.createRun({
+    store.runs.create({
       id: 'run-2',
       taskId: task.task.id,
       sessionId: task.sessionId,
@@ -97,7 +126,7 @@ describe('RunJournal', () => {
       createdAt: 3,
       completedAt: 4,
     });
-    journal.saveLocalEvidence({
+    store.evidence.saveLocal({
       taskId: task.task.id,
       runId: 'run-2',
       sourceUri: '/notes/customer.md',
@@ -106,14 +135,14 @@ describe('RunJournal', () => {
       excerpt: '续约风险需要跟进。',
       contentHash: 'evidence-hash',
     });
-    const first = journal.saveMarkdownArtifact({
+    const first = store.artifacts.saveMarkdown({
       taskId: task.task.id,
       origin: 'assistant-run',
       runId: 'run-1',
       title: '季度复盘',
       content: '# 第一版',
     });
-    const revised = journal.saveMarkdownArtifact({
+    const revised = store.artifacts.saveMarkdown({
       artifactId: first.id,
       taskId: task.task.id,
       origin: 'assistant-run',
@@ -121,7 +150,7 @@ describe('RunJournal', () => {
       title: '季度复盘（修订）',
       content: '# 第二版',
     });
-    const manuallyEdited = journal.saveMarkdownArtifact({
+    const manuallyEdited = store.artifacts.saveMarkdown({
       artifactId: first.id,
       taskId: task.task.id,
       origin: 'user-edit',
@@ -148,25 +177,25 @@ describe('RunJournal', () => {
       origin: 'user-edit',
     });
     expect(manuallyEdited.sourceRunId).toBeUndefined();
-    expect(journal.listArtifacts(task.task.id)).toEqual([
+    expect(store.artifacts.list(task.task.id)).toEqual([
       expect.objectContaining({ id: first.id, versionNumber: 3, origin: 'user-edit' }),
     ]);
-    expect(journal.getArtifactDetail(first.id)).toMatchObject({
+    expect(store.artifacts.getDetail(first.id)).toMatchObject({
       id: first.id,
       content: '# 第三版',
       versionNumber: 3,
       origin: 'user-edit',
       evidence: [expect.objectContaining({ title: '客户访谈', locator: '段落 2' })],
     });
-    expect(journal.listArtifactVersions(first.id)).toEqual([
+    expect(store.artifacts.listVersions(first.id)).toEqual([
       expect.objectContaining({ versionNumber: 3, origin: 'user-edit' }),
       expect.objectContaining({ versionNumber: 2, origin: 'assistant-run', sourceRunId: 'run-2' }),
       expect.objectContaining({ versionNumber: 1, origin: 'assistant-run', sourceRunId: 'run-1' }),
     ]);
-    const version = journal.listArtifactVersions(first.id).find((item) => item.versionNumber === 2);
+    const version = store.artifacts.listVersions(first.id).find((item) => item.versionNumber === 2);
     expect(version).toBeDefined();
     if (!version) throw new Error('Expected the second artifact version');
-    expect(journal.getArtifactVersionDetail(version.id)).toMatchObject({
+    expect(store.artifacts.getVersionDetail(version.id)).toMatchObject({
       id: version.id,
       content: '# 第二版',
       versionNumber: 2,
@@ -176,25 +205,19 @@ describe('RunJournal', () => {
   });
 
   it('persists runs and ordered events', () => {
-    journal = new RunJournal(':memory:');
-    journal.createRun({
-      id: 'run-1',
-      taskId: 'task-1',
-      sessionId: 'session-1',
-      prompt: 'hello',
-      status: 'running',
-      createdAt: 1,
-    });
-    journal.appendEvent({
+    const store = openStore();
+    const task = seedTask(store, '/work/run-events', '事件工作区');
+    seedRun(store, task, 'run-1');
+    store.runs.appendEvent({
       id: 'event-1',
       runId: 'run-1',
       sequence: 0,
       createdAt: 2,
       type: 'run.started',
-      taskId: 'task-1',
-      sessionId: 'session-1',
+      taskId: task.task.id,
+      sessionId: task.sessionId,
     });
-    journal.appendEvent({
+    store.runs.appendEvent({
       id: 'event-2',
       runId: 'run-1',
       sequence: 1,
@@ -202,19 +225,19 @@ describe('RunJournal', () => {
       type: 'run.completed',
       finalContent: 'done',
     });
-    expect(journal.listEvents('run-1').map((event) => event.type)).toEqual([
+    expect(store.runs.listEvents('run-1').map((event) => event.type)).toEqual([
       'run.started',
       'run.completed',
     ]);
-    expect(journal.listRuns()[0]?.status).toBe('completed');
+    expect(store.runs.list()[0]?.status).toBe('completed');
   });
 
   it('lists only a task’s own runs when requested', () => {
-    journal = new RunJournal(':memory:');
-    const workspace = journal.getOrCreateWorkspace('/workspace-runs', '工作区');
-    const firstTask = journal.createTask(workspace.id, '市场研究', '研究市场');
-    const secondTask = journal.createTask(workspace.id, '客户复盘', '复盘客户');
-    journal.createRun({
+    const store = openStore();
+    const workspace = store.workspaces.getOrCreate('/workspace-runs', '工作区');
+    const firstTask = store.tasks.create(workspace.id, '市场研究', '研究市场');
+    const secondTask = store.tasks.create(workspace.id, '客户复盘', '复盘客户');
+    store.runs.create({
       id: 'market-run-1',
       taskId: firstTask.task.id,
       sessionId: firstTask.sessionId,
@@ -223,7 +246,7 @@ describe('RunJournal', () => {
       createdAt: 1,
       completedAt: 2,
     });
-    journal.createRun({
+    store.runs.create({
       id: 'market-run-2',
       taskId: firstTask.task.id,
       sessionId: firstTask.sessionId,
@@ -232,7 +255,7 @@ describe('RunJournal', () => {
       createdAt: 3,
       completedAt: 4,
     });
-    journal.createRun({
+    store.runs.create({
       id: 'customer-run-1',
       taskId: secondTask.task.id,
       sessionId: secondTask.sessionId,
@@ -241,15 +264,15 @@ describe('RunJournal', () => {
       createdAt: 5,
       completedAt: 6,
     });
-    expect(journal.listRuns(firstTask.task.id).map((run) => run.id)).toEqual([
+    expect(store.runs.list(firstTask.task.id).map((run) => run.id)).toEqual([
       'market-run-2',
       'market-run-1',
     ]);
   });
 
   it('stores model credentials without returning them in summaries', () => {
-    journal = new RunJournal(':memory:');
-    const id = journal.saveModel({
+    const store = openStore();
+    const id = store.models.save({
       name: '测试模型',
       provider: 'openai-compatible',
       baseUrl: 'http://localhost:8000/v1',
@@ -261,14 +284,14 @@ describe('RunJournal', () => {
       temperature: 0.2,
       enabled: true,
     });
-    expect(journal.listModels()[0]).toMatchObject({ id, name: '测试模型', apiKeyConfigured: true });
-    expect(journal.listModels()[0]).not.toHaveProperty('apiKey');
-    expect(journal.getModel(id)?.apiKey).toBe('secret-value');
+    expect(store.models.list()[0]).toMatchObject({ id, name: '测试模型', apiKeyConfigured: true });
+    expect(store.models.list()[0]).not.toHaveProperty('apiKey');
+    expect(store.models.getWithSecret(id)?.apiKey).toBe('secret-value');
   });
 
   it('uses an explicitly selected enabled model as the default for its role', () => {
-    journal = new RunJournal(':memory:');
-    const first = journal.saveModel({
+    const store = openStore();
+    const first = store.models.save({
       name: '第一语言模型',
       provider: 'openai-compatible',
       baseUrl: 'http://localhost:8000/v1',
@@ -280,7 +303,7 @@ describe('RunJournal', () => {
       temperature: 0.2,
       enabled: true,
     });
-    const second = journal.saveModel({
+    const second = store.models.save({
       name: '第二语言模型',
       provider: 'openai-compatible',
       baseUrl: 'http://localhost:8000/v1',
@@ -292,14 +315,14 @@ describe('RunJournal', () => {
       temperature: 0.2,
       enabled: true,
     });
-    expect(journal.getModelForRun('language')?.id).toBe(first);
-    expect(journal.setDefaultModel(second)).toBe(true);
-    expect(journal.getModelForRun('language')?.id).toBe(second);
+    expect(store.models.getForRun('language')?.id).toBe(first);
+    expect(store.models.setDefault(second)).toBe(true);
+    expect(store.models.getForRun('language')?.id).toBe(second);
   });
 
   it('keeps a persisted model connection result in renderer-facing summaries', () => {
-    journal = new RunJournal(':memory:');
-    const id = journal.saveModel({
+    const store = openStore();
+    const id = store.models.save({
       name: '待测试模型',
       provider: 'openai-compatible',
       baseUrl: 'http://localhost:8000/v1',
@@ -311,23 +334,23 @@ describe('RunJournal', () => {
       temperature: 0.2,
       enabled: true,
     });
-    expect(journal.listModels()[0]?.connectionStatus).toBe('untested');
-    journal.recordModelConnection(id, 'connected');
-    expect(journal.listModels()[0]).toMatchObject({ connectionStatus: 'connected' });
-    expect(journal.listModels()[0]?.lastTestedAt).toEqual(expect.any(Number));
-    expect(journal.setModelEnabled(id, false)).toBe(true);
-    expect(journal.listModels()[0]).toMatchObject({
+    expect(store.models.list()[0]?.connectionStatus).toBe('untested');
+    store.models.recordConnection(id, 'connected');
+    expect(store.models.list()[0]).toMatchObject({ connectionStatus: 'connected' });
+    expect(store.models.list()[0]?.lastTestedAt).toEqual(expect.any(Number));
+    expect(store.models.setEnabled(id, false)).toBe(true);
+    expect(store.models.list()[0]).toMatchObject({
       enabled: false,
       connectionStatus: 'connected',
     });
   });
 
   it('rejects artifact writes that cross task or run boundaries', () => {
-    journal = new RunJournal(':memory:');
-    const workspace = journal.getOrCreateWorkspace('/work/boundary', '边界工作区');
-    const first = journal.createTask(workspace.id, '任务一', '目标一');
-    const second = journal.createTask(workspace.id, '任务二', '目标二');
-    journal.createRun({
+    const store = openStore();
+    const workspace = store.workspaces.getOrCreate('/work/boundary', '边界工作区');
+    const first = store.tasks.create(workspace.id, '任务一', '目标一');
+    const second = store.tasks.create(workspace.id, '任务二', '目标二');
+    store.runs.create({
       id: 'run-first',
       taskId: first.task.id,
       sessionId: first.sessionId,
@@ -336,7 +359,7 @@ describe('RunJournal', () => {
       createdAt: 1,
       completedAt: 2,
     });
-    journal.createRun({
+    store.runs.create({
       id: 'run-second',
       taskId: second.task.id,
       sessionId: second.sessionId,
@@ -346,7 +369,7 @@ describe('RunJournal', () => {
       completedAt: 4,
     });
     expect(() =>
-      journal!.saveMarkdownArtifact({
+      store.artifacts.saveMarkdown({
         taskId: first.task.id,
         origin: 'assistant-run',
         runId: 'run-second',
@@ -355,7 +378,7 @@ describe('RunJournal', () => {
       }),
     ).toThrow('Run does not belong to task');
     expect(() =>
-      journal!.saveMarkdownArtifact({
+      store.artifacts.saveMarkdown({
         taskId: 'missing-task',
         origin: 'assistant-run',
         runId: 'run-first',
@@ -363,7 +386,7 @@ describe('RunJournal', () => {
         content: '# 内容',
       }),
     ).toThrow('Task does not exist');
-    const artifact = journal!.saveMarkdownArtifact({
+    const artifact = store.artifacts.saveMarkdown({
       taskId: first.task.id,
       origin: 'assistant-run',
       runId: 'run-first',
@@ -371,7 +394,7 @@ describe('RunJournal', () => {
       content: '# 第一版',
     });
     expect(() =>
-      journal!.saveMarkdownArtifact({
+      store.artifacts.saveMarkdown({
         artifactId: artifact.id,
         taskId: second.task.id,
         origin: 'user-edit',
@@ -382,9 +405,10 @@ describe('RunJournal', () => {
   });
 
   it('keeps evidence scoped to its own run when the same source appears in several runs', () => {
-    journal = new RunJournal(':memory:');
-    const workspace = journal.getOrCreateWorkspace('/work/evidence-scope', '证据工作区');
-    const task = journal.createTask(workspace.id, '季度复盘', '复盘目标');
+    const store = openStore();
+    const task = seedTask(store, '/work/evidence-scope', '证据工作区');
+    seedRun(store, task, 'run-1');
+    seedRun(store, task, 'run-2');
     const base = {
       taskId: task.task.id,
       sourceUri: '/notes/customer.md',
@@ -393,55 +417,55 @@ describe('RunJournal', () => {
       excerpt: '续约风险需要跟进。',
       contentHash: 'hash-1',
     };
-    journal.saveLocalEvidence({ ...base, runId: 'run-1' });
-    journal.saveLocalEvidence({ ...base, runId: 'run-2' });
-    journal.saveLocalEvidence({ ...base, runId: 'run-2' });
-    expect(journal.listEvidence(task.task.id)).toHaveLength(2);
+    store.evidence.saveLocal({ ...base, runId: 'run-1' });
+    store.evidence.saveLocal({ ...base, runId: 'run-2' });
+    store.evidence.saveLocal({ ...base, runId: 'run-2' });
+    expect(store.evidence.listByTask(task.task.id)).toHaveLength(2);
     expect(
-      journal
-        .listEvidence(task.task.id)
+      store.evidence
+        .listByTask(task.task.id)
         .map((item) => item.runId)
         .sort(),
     ).toEqual(['run-1', 'run-2']);
   });
 
   it('stores the enabled search engine with masked credentials and preserves its connection status until the key changes', () => {
-    journal = new RunJournal(':memory:');
-    expect(journal.getEnabledSearchEngine()).toBeUndefined();
-    journal.saveSearchEngine({
+    const store = openStore();
+    expect(store.searchEngines.getEnabled()).toBeUndefined();
+    store.searchEngines.save({
       provider: 'baidu_qianfan',
       apiKey: 'secret-key',
       webTopK: 8,
       enabled: true,
     });
-    expect(journal.listSearchEngines()[0]).toMatchObject({
+    expect(store.searchEngines.list()[0]).toMatchObject({
       provider: 'baidu_qianfan',
       apiKeyConfigured: true,
       enabled: true,
       webTopK: 8,
       connectionStatus: 'untested',
     });
-    expect(journal.listSearchEngines()[0]).not.toHaveProperty('apiKey');
-    expect(journal.getEnabledSearchEngine()).toMatchObject({ apiKey: 'secret-key', webTopK: 8 });
-    journal.recordSearchConnection('baidu_qianfan', 'connected', 'secret-key');
-    expect(journal.listSearchEngines()[0]).toMatchObject({ connectionStatus: 'connected' });
-    journal.saveSearchEngine({ provider: 'baidu_qianfan', apiKey: '', webTopK: 12, enabled: true });
-    expect(journal.getEnabledSearchEngine()).toMatchObject({ apiKey: 'secret-key', webTopK: 12 });
-    expect(journal.listSearchEngines()[0]).toMatchObject({ connectionStatus: 'connected' });
-    journal.saveSearchEngine({
+    expect(store.searchEngines.list()[0]).not.toHaveProperty('apiKey');
+    expect(store.searchEngines.getEnabled()).toMatchObject({ apiKey: 'secret-key', webTopK: 8 });
+    store.searchEngines.recordConnection('baidu_qianfan', 'connected', 'secret-key');
+    expect(store.searchEngines.list()[0]).toMatchObject({ connectionStatus: 'connected' });
+    store.searchEngines.save({ provider: 'baidu_qianfan', apiKey: '', webTopK: 12, enabled: true });
+    expect(store.searchEngines.getEnabled()).toMatchObject({ apiKey: 'secret-key', webTopK: 12 });
+    expect(store.searchEngines.list()[0]).toMatchObject({ connectionStatus: 'connected' });
+    store.searchEngines.save({
       provider: 'baidu_qianfan',
       apiKey: 'next-key',
       webTopK: 10,
       enabled: true,
     });
-    expect(journal.listSearchEngines()[0]).toMatchObject({ connectionStatus: 'untested' });
-    expect(journal.getSearchEngine('baidu_qianfan')?.apiKey).toBe('next-key');
+    expect(store.searchEngines.list()[0]).toMatchObject({ connectionStatus: 'untested' });
+    expect(store.searchEngines.get('baidu_qianfan')?.apiKey).toBe('next-key');
   });
 
   it('persists deduplicated web evidence with a web-page source type', () => {
-    journal = new RunJournal(':memory:');
-    const workspace = journal.getOrCreateWorkspace('/work/web-evidence', '网页证据工作区');
-    const task = journal.createTask(workspace.id, '联网调研', '调研市场动态');
+    const store = openStore();
+    const task = seedTask(store, '/work/web-evidence', '网页证据工作区');
+    seedRun(store, task, 'run-1');
     const evidence = {
       taskId: task.task.id,
       runId: 'run-1',
@@ -451,58 +475,58 @@ describe('RunJournal', () => {
       excerpt: '网页摘要。',
       contentHash: 'hash-web',
     };
-    journal.saveWebEvidence(evidence);
-    journal.saveWebEvidence(evidence);
-    expect(journal.listEvidence(task.task.id)).toEqual([
+    store.evidence.saveWeb(evidence);
+    store.evidence.saveWeb(evidence);
+    expect(store.evidence.listByTask(task.task.id)).toEqual([
       expect.objectContaining({ ...evidence, sourceType: 'web-page' }),
     ]);
   });
 
   it('keeps the connection result of a test that ran before the first save', () => {
-    journal = new RunJournal(':memory:');
-    journal.recordSearchConnection('baidu_qianfan', 'connected', 'tested-key');
-    expect(journal.listSearchEngines()[0]).toMatchObject({
+    const store = openStore();
+    store.searchEngines.recordConnection('baidu_qianfan', 'connected', 'tested-key');
+    expect(store.searchEngines.list()[0]).toMatchObject({
       apiKeyConfigured: true,
       enabled: false,
       connectionStatus: 'connected',
     });
-    journal.saveSearchEngine({
+    store.searchEngines.save({
       provider: 'baidu_qianfan',
       apiKey: 'tested-key',
       webTopK: 10,
       enabled: true,
     });
-    expect(journal.listSearchEngines()[0]).toMatchObject({
+    expect(store.searchEngines.list()[0]).toMatchObject({
       enabled: true,
       connectionStatus: 'connected',
     });
   });
 
   it('stores notifications with targets, enforces the rolling cap, and tracks unread counts', () => {
-    journal = new RunJournal(':memory:');
-    const first = journal.saveNotification({
+    const store = openStore();
+    const first = store.notifications.save({
       level: 'success',
       kind: 'run',
       title: '任务完成：计算',
       target: { kind: 'task', taskId: 'task-1' },
     });
-    const second = journal.saveNotification({
+    const second = store.notifications.save({
       level: 'warning',
       kind: 'knowledge-import',
       title: '资料未导入（1 份）',
       detail: 'a.md：格式不支持',
       target: { kind: 'knowledge' },
     });
-    const third = journal.saveNotification({
+    const third = store.notifications.save({
       level: 'info',
       kind: 'artifact',
       title: '已导出「报告」',
       target: { kind: 'artifact', artifactId: 'artifact-1' },
     });
-    const fourth = journal.saveNotification({ level: 'error', kind: 'run', title: '任务失败' });
+    const fourth = store.notifications.save({ level: 'error', kind: 'run', title: '任务失败' });
 
-    expect(journal.unreadNotificationCount()).toBe(4);
-    const listed = journal.listNotifications();
+    expect(store.notifications.unreadCount()).toBe(4);
+    const listed = store.notifications.list();
     expect(listed.map((item) => item.id)).toEqual([fourth.id, third.id, second.id, first.id]);
     expect(listed[0]?.level).toBe('error');
     expect(listed[0]?.kind).toBe('run');
@@ -516,20 +540,20 @@ describe('RunJournal', () => {
     });
     expect(listed[3]).toMatchObject({ target: { kind: 'task', taskId: 'task-1' } });
 
-    expect(journal.markNotificationRead(second.id)).toBe(3);
-    expect(journal.markAllNotificationsRead()).toBe(0);
-    expect(journal.listNotifications().every((item) => item.read)).toBe(true);
+    expect(store.notifications.markRead(second.id)).toBe(3);
+    expect(store.notifications.markAllRead()).toBe(0);
+    expect(store.notifications.list().every((item) => item.read)).toBe(true);
 
-    journal.clearNotifications();
-    expect(journal.listNotifications()).toEqual([]);
-    expect(journal.unreadNotificationCount()).toBe(0);
+    store.notifications.clear();
+    expect(store.notifications.list()).toEqual([]);
+    expect(store.notifications.unreadCount()).toBe(0);
   });
 
   it('evicts the oldest notifications beyond the 200-entry cap', () => {
-    journal = new RunJournal(':memory:');
+    const store = openStore();
     for (let index = 0; index < 205; index += 1)
-      journal.saveNotification({ level: 'info', kind: 'system', title: `通知 ${index}` });
-    const listed = journal.listNotifications();
+      store.notifications.save({ level: 'info', kind: 'system', title: `通知 ${index}` });
+    const listed = store.notifications.list();
     expect(listed).toHaveLength(200);
     expect(listed[0]?.title).toBe('通知 204');
     expect(listed.at(-1)?.title).toBe('通知 5');

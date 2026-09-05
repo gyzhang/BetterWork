@@ -1,371 +1,82 @@
 import path from 'node:path';
-import { writeFile } from 'node:fs/promises';
-import {
-  app,
-  BrowserWindow,
-  dialog,
-  ipcMain,
-  shell,
-  systemPreferences,
-  type BrowserWindowConstructorOptions,
-} from 'electron';
-import {
-  cancelRunRequestSchema,
-  createTaskRequestSchema,
-  IpcChannel,
-  listRunEventsRequestSchema,
-  listRunsRequestSchema,
-  listEvidenceRequestSchema,
-  listArtifactsRequestSchema,
-  listArtifactVersionsRequestSchema,
-  listTasksRequestSchema,
-  getArtifactRequestSchema,
-  getArtifactVersionRequestSchema,
-  exportMarkdownArtifactRequestSchema,
-  modelProfileIdSchema,
-  setDefaultModelRequestSchema,
-  setModelEnabledRequestSchema,
-  saveModelProfileRequestSchema,
-  saveMarkdownArtifactRequestSchema,
-  testModelRequestSchema,
-  startRunRequestSchema,
-  searchKnowledgeRequestSchema,
-  openKnowledgeSourceRequestSchema,
-  removeKnowledgeDocumentRequestSchema,
-  refreshKnowledgeDocumentRequestSchema,
-  saveSearchEngineRequestSchema,
-  testSearchEngineRequestSchema,
-  markNotificationReadRequestSchema,
-  updateWindowThemeRequestSchema,
-  windowToggleMaximizeRequestSchema,
-} from '@betterwork/agent-protocol';
-import { RunJournal } from './run-journal';
-import { RunService } from './run-service';
-import { KnowledgeVault } from './knowledge-vault';
-import { NotificationService } from './notification-service';
-import { createQianfanSearchClient } from './search-engine-service';
+import { app, BrowserWindow } from 'electron';
+import { registerIpc } from './ipc/register-ipc';
+import { AppStore } from './persistence';
+import { KnowledgeVault } from './services/knowledge-vault';
+import { NotificationService } from './services/notification-service';
+import { RunService } from './services/run-service';
+import { createMainWindow } from './window';
 
-let mainWindow: BrowserWindow | null = null;
-let journal: RunJournal | null = null;
-let knowledgeVault: KnowledgeVault | null = null;
-let notificationService: NotificationService | null = null;
+/**
+ * 主进程入口只负责装配：建窗口、组装依赖、注册 IPC、管理生命周期。
+ * 业务逻辑不在这里——持久化在 `persistence/`，编排在 `services/`，通道在 `ipc/`。
+ *
+ * 装配完成后各依赖通过闭包传递，不再有可空模块级单例，
+ * 因此不需要任何非空断言。
+ */
+interface ApplicationContext {
+  store: AppStore;
+  knowledgeVault: KnowledgeVault;
+  window: BrowserWindow | null;
+}
 
-const createWindow = (): void => {
-  const options: BrowserWindowConstructorOptions = {
-    width: 1380,
-    height: 860,
-    minWidth: 980,
-    minHeight: 640,
-    title: '算台 BetterWork',
-    backgroundColor: '#F6F7F5',
-    ...(process.platform === 'darwin'
-      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 16, y: 18 } }
-      : {}),
-    ...(process.platform === 'win32'
-      ? { titleBarOverlay: { color: '#F6F7F5', symbolColor: '#1D2420' } }
-      : {}),
-    webPreferences: {
-      preload: path.join(__dirname, '../preload/index.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
+let context: ApplicationContext | null = null;
+
+/** 开发态把仓库根当工作区；打包后不能把安装目录暴露给用户，改用文档目录。 */
+function getDefaultWorkspaceRoot(): string {
+  return app.isPackaged ? app.getPath('documents') : path.resolve(app.getAppPath(), '../..');
+}
+
+function bootstrap(): ApplicationContext {
+  const userData = app.getPath('userData');
+  const store = AppStore.open(path.join(userData, 'betterwork.db'));
+  const knowledgeVault = new KnowledgeVault(
+    path.join(userData, 'vaults', 'default', 'vault.sqlite'),
+  );
+
+  // 上次进程被强杀时正在执行的 Run 会停在 running。启动时统一收口为 failed，
+  // 维持「每个 Run 都有明确结果」这条不变量，历史列表不会出现永远转圈的任务。
+  const interrupted = store.runs.failInterruptedRuns('算台上次退出时这次执行被中断', Date.now());
+  if (interrupted > 0) {
+    console.warn(`Marked ${interrupted} interrupted run(s) as failed on startup`);
+  }
+
+  const started: ApplicationContext = { store, knowledgeVault, window: null };
+  const getWindow = (): BrowserWindow | null => {
+    const window = started.window;
+    return window && !window.isDestroyed() ? window : null;
   };
-  mainWindow = new BrowserWindow(options);
 
-  if (process.env.ELECTRON_RENDERER_URL) void mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
-  else void mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
-};
+  started.window = createMainWindow();
+  const notifications = new NotificationService(store.notifications, getWindow);
+  const runs = new RunService(store, knowledgeVault, notifications, getWindow);
 
-app.whenReady().then(() => {
-  journal = new RunJournal(path.join(app.getPath('userData'), 'betterwork.db'));
-  knowledgeVault = new KnowledgeVault(
-    path.join(app.getPath('userData'), 'vaults', 'default', 'vault.sqlite'),
-  );
-  notificationService = new NotificationService(journal, () => mainWindow);
-  createWindow();
-  const runs = new RunService(journal, knowledgeVault, notificationService, () => mainWindow);
+  registerIpc({ store, knowledgeVault, notifications, runs, getWindow, getDefaultWorkspaceRoot });
+  return started;
+}
 
-  ipcMain.handle(IpcChannel.StartRun, (_event, raw) => {
-    const input = startRunRequestSchema.parse(raw);
-    return { runId: runs.start(input) };
-  });
-  ipcMain.handle(IpcChannel.CancelRun, (_event, raw) => {
-    const input = cancelRunRequestSchema.parse(raw);
-    return { cancelled: runs.cancel(input.runId) };
-  });
-  ipcMain.handle(IpcChannel.ListRuns, (_event, raw) =>
-    journal!.listRuns(listRunsRequestSchema.parse(raw ?? {}).taskId),
-  );
-  ipcMain.handle(IpcChannel.ListRunEvents, (_event, raw) => {
-    const input = listRunEventsRequestSchema.parse(raw);
-    return journal!.listEvents(input.runId);
-  });
-  ipcMain.handle(IpcChannel.GetDefaultWorkspace, () => {
-    const rootPath = app.isPackaged
-      ? app.getPath('documents')
-      : path.resolve(app.getAppPath(), '../..');
-    return journal!.getOrCreateWorkspace(rootPath, '我的工作区');
-  });
-  ipcMain.handle(IpcChannel.SelectWorkspace, async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
-      title: '选择工作区',
-      properties: ['openDirectory', 'createDirectory'],
-    });
-    const rootPath = result.filePaths[0];
-    return result.canceled || !rootPath
-      ? null
-      : journal!.getOrCreateWorkspace(rootPath, path.basename(rootPath));
-  });
-  ipcMain.handle(IpcChannel.CreateTask, (_event, raw) => {
-    const input = createTaskRequestSchema.parse(raw);
-    return journal!.createTask(input.workspaceId, input.title, input.goal);
-  });
-  ipcMain.handle(IpcChannel.ListTasks, (_event, raw) =>
-    journal!.listTasks(listTasksRequestSchema.parse(raw ?? {}).workspaceId),
-  );
-  ipcMain.handle(IpcChannel.ListEvidence, (_event, raw) =>
-    journal!.listEvidence(listEvidenceRequestSchema.parse(raw).taskId),
-  );
-  ipcMain.handle(IpcChannel.ListArtifacts, (_event, raw) =>
-    journal!.listArtifacts(listArtifactsRequestSchema.parse(raw ?? {}).taskId),
-  );
-  ipcMain.handle(
-    IpcChannel.GetArtifact,
-    (_event, raw) => journal!.getArtifactDetail(getArtifactRequestSchema.parse(raw).id) ?? null,
-  );
-  ipcMain.handle(IpcChannel.ListArtifactVersions, (_event, raw) =>
-    journal!.listArtifactVersions(listArtifactVersionsRequestSchema.parse(raw).artifactId),
-  );
-  ipcMain.handle(
-    IpcChannel.GetArtifactVersion,
-    (_event, raw) =>
-      journal!.getArtifactVersionDetail(getArtifactVersionRequestSchema.parse(raw).id) ?? null,
-  );
-  ipcMain.handle(IpcChannel.SaveMarkdownArtifact, (_event, raw) =>
-    journal!.saveMarkdownArtifact(saveMarkdownArtifactRequestSchema.parse(raw)),
-  );
-  ipcMain.handle(IpcChannel.ExportMarkdownArtifact, async (_event, raw) => {
-    const input = exportMarkdownArtifactRequestSchema.parse(raw);
-    const artifact = journal!.getArtifactDetail(input.artifactId);
-    if (!artifact) throw new Error('Artifact does not exist');
-    const version = input.versionId
-      ? journal!.getArtifactVersionDetail(input.versionId)
-      : undefined;
-    if (input.versionId && (!version || version.artifactId !== artifact.id))
-      throw new Error('Artifact version does not belong to artifact');
-    const safeTitle = artifact.title.replace(/[\\/:*?"<>|]/g, '-').trim() || '算台成果';
-    const result = await dialog.showSaveDialog(mainWindow!, {
-      title: '导出 Markdown 成果',
-      defaultPath: `${safeTitle}.md`,
-      filters: [{ name: 'Markdown', extensions: ['md'] }],
-    });
-    if (result.canceled || !result.filePath) return { cancelled: true };
-    try {
-      await writeFile(result.filePath, version?.content ?? artifact.content, 'utf8');
-      notificationService!.create({
-        level: 'success',
-        kind: 'artifact',
-        title: `已导出「${artifact.title}」`,
-        detail: result.filePath,
-        target: { kind: 'artifact', artifactId: artifact.id },
-      });
-      return { cancelled: false, filePath: result.filePath };
-    } catch (error) {
-      notificationService!.create({
-        level: 'error',
-        kind: 'artifact',
-        title: `导出「${artifact.title}」失败`,
-        detail: error instanceof Error ? error.message : String(error),
-        target: { kind: 'artifact', artifactId: artifact.id },
-      });
-      throw error;
-    }
-  });
-  ipcMain.handle(IpcChannel.ListModels, () => journal!.listModels());
-  ipcMain.handle(IpcChannel.SaveModel, (_event, raw) => {
-    const input = saveModelProfileRequestSchema.parse(raw);
-    return { id: journal!.saveModel(input) };
-  });
-  ipcMain.handle(IpcChannel.DeleteModel, (_event, raw) => {
-    const input = modelProfileIdSchema.parse(raw);
-    return { deleted: journal!.deleteModel(input.id) };
-  });
-  ipcMain.handle(IpcChannel.SetDefaultModel, (_event, raw) => {
-    const input = setDefaultModelRequestSchema.parse(raw);
-    return { updated: journal!.setDefaultModel(input.id) };
-  });
-  ipcMain.handle(IpcChannel.SetModelEnabled, (_event, raw) => {
-    const input = setModelEnabledRequestSchema.parse(raw);
-    return { updated: journal!.setModelEnabled(input.id, input.enabled) };
-  });
-  ipcMain.handle(IpcChannel.ListKnowledge, () => knowledgeVault!.listDocuments());
-  ipcMain.handle(IpcChannel.ImportKnowledge, async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, {
-      title: '导入本地资料',
-      properties: ['openFile', 'multiSelections'],
-      filters: [
-        { name: '资料文件', extensions: ['md', 'markdown', 'txt', 'text', 'pdf', 'docx'] },
-        { name: '所有文件', extensions: ['*'] },
-      ],
-    });
-    if (result.canceled) return { imported: [], skipped: [] };
-    try {
-      const outcome = await knowledgeVault!.importPaths(result.filePaths);
-      if (outcome.imported.length > 0) {
-        notificationService!.create({
-          level: outcome.skipped.length > 0 ? 'warning' : 'success',
-          kind: 'knowledge-import',
-          title:
-            outcome.skipped.length > 0
-              ? `已整理 ${outcome.imported.length} 份资料，${outcome.skipped.length} 份未导入`
-              : `已整理 ${outcome.imported.length} 份资料`,
-          target: { kind: 'knowledge' },
-        });
-      } else if (outcome.skipped.length > 0) {
-        notificationService!.create({
-          level: 'warning',
-          kind: 'knowledge-import',
-          title: `资料未导入（${outcome.skipped.length} 份）`,
-          detail: outcome.skipped
-            .slice(0, 5)
-            .map((item) => `${path.basename(item.sourcePath)}：${item.reason}`)
-            .join('；'),
-          target: { kind: 'knowledge' },
-        });
+app
+  .whenReady()
+  .then(() => {
+    context = bootstrap();
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0 && context) {
+        context.window = createMainWindow();
       }
-      return outcome;
-    } catch (error) {
-      notificationService!.create({
-        level: 'error',
-        kind: 'knowledge-import',
-        title: '导入资料失败',
-        detail: error instanceof Error ? error.message : String(error),
-        target: { kind: 'knowledge' },
-      });
-      throw error;
-    }
+    });
+  })
+  .catch((error: unknown) => {
+    console.error('BetterWork failed to start', error);
+    app.quit();
   });
-  ipcMain.handle(IpcChannel.SearchKnowledge, (_event, raw) =>
-    knowledgeVault!.search(searchKnowledgeRequestSchema.parse(raw).query),
-  );
-  ipcMain.handle(IpcChannel.OpenKnowledgeSource, async (_event, raw) => {
-    const sourcePath = knowledgeVault!.getRegisteredSourcePath(
-      openKnowledgeSourceRequestSchema.parse(raw).sourcePath,
-    );
-    if (!sourcePath) return { opened: false, error: '该文件不在当前知识库中，无法打开。' };
-    const error = await shell.openPath(sourcePath);
-    return error ? { opened: false, error } : { opened: true };
-  });
-  ipcMain.handle(IpcChannel.RemoveKnowledgeDocument, (_event, raw) => ({
-    removed: knowledgeVault!.removeDocument(removeKnowledgeDocumentRequestSchema.parse(raw).id),
-  }));
-  ipcMain.handle(IpcChannel.RefreshKnowledgeDocument, (_event, raw) =>
-    knowledgeVault!.refreshDocument(refreshKnowledgeDocumentRequestSchema.parse(raw).id),
-  );
-  ipcMain.handle(IpcChannel.ListSearchEngines, () => journal!.listSearchEngines());
-  ipcMain.handle(IpcChannel.ListNotifications, () => notificationService!.list());
-  ipcMain.handle(IpcChannel.MarkNotificationRead, (_event, raw) => {
-    const input = markNotificationReadRequestSchema.parse(raw);
-    return { unreadCount: notificationService!.markRead(input.id) };
-  });
-  ipcMain.handle(IpcChannel.MarkAllNotificationsRead, () => ({
-    unreadCount: notificationService!.markAllRead(),
-  }));
-  ipcMain.handle(IpcChannel.ClearNotifications, () => {
-    notificationService!.clear();
-    return { cleared: true };
-  });
-  ipcMain.handle(IpcChannel.SaveSearchEngine, (_event, raw) => {
-    const input = saveSearchEngineRequestSchema.parse(raw);
-    return { provider: journal!.saveSearchEngine(input) };
-  });
-  ipcMain.handle(IpcChannel.TestSearchEngine, async (_event, raw) => {
-    const input = testSearchEngineRequestSchema.parse(raw);
-    const stored = journal!.getSearchEngine(input.provider);
-    const apiKey = input.apiKey || stored?.apiKey || '';
-    if (!apiKey) return { ok: false, message: '请先填写 API Key。' };
-    const result = await createQianfanSearchClient({ apiKey, webTopK: input.webTopK }).test();
-    journal!.recordSearchConnection(input.provider, result.ok ? 'connected' : 'failed', apiKey);
-    return result;
-  });
-  ipcMain.handle(IpcChannel.TestModel, async (_event, raw) => {
-    const input = testModelRequestSchema.parse(raw);
-    const base = input.baseUrl.replace(/\/$/, '');
-    const url =
-      base.endsWith('/embeddings') || base.endsWith('/chat/completions')
-        ? base
-        : `${base}/${input.role === 'embedding' ? 'embeddings' : 'chat/completions'}`;
-    const body =
-      input.role === 'embedding'
-        ? { model: input.model, input: '算台连接测试' }
-        : {
-            model: input.model,
-            messages: [{ role: 'user', content: '请只回复：连接成功' }],
-            max_tokens: 8,
-          };
-    const stored = input.id ? journal!.getModel(input.id) : undefined;
-    const apiKey = input.apiKey || stored?.apiKey || '';
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-        },
-        body: JSON.stringify(body),
-      });
-      if (!response.ok) {
-        if (input.id) journal!.recordModelConnection(input.id, 'failed');
-        return { ok: false, message: `连接失败（HTTP ${response.status}）` };
-      }
-      if (input.id) journal!.recordModelConnection(input.id, 'connected');
-      return {
-        ok: true,
-        message: input.role === 'embedding' ? 'Embedding 模型连接成功' : '模型连接成功',
-      };
-    } catch (error) {
-      if (input.id) journal!.recordModelConnection(input.id, 'failed');
-      return { ok: false, message: error instanceof Error ? error.message : '连接失败' };
-    }
-  });
-  ipcMain.handle(IpcChannel.UpdateWindowTheme, (_event, raw) => {
-    const theme = updateWindowThemeRequestSchema.parse(raw);
-    mainWindow?.setBackgroundColor(theme.backgroundColor);
-    if (process.platform === 'win32')
-      mainWindow?.setTitleBarOverlay({
-        color: theme.backgroundColor,
-        symbolColor: theme.symbolColor,
-      });
-  });
-  ipcMain.handle(IpcChannel.WindowToggleMaximize, () => {
-    if (!mainWindow) return { maximized: false };
-    if (process.platform === 'darwin') {
-      const preference = systemPreferences.getUserDefault('AppleActionOnDoubleClick', 'string');
-      if (preference === 'Minimize') {
-        mainWindow.minimize();
-        return { maximized: false };
-      }
-      if (preference === 'None') return { maximized: mainWindow.isMaximized() };
-    }
-    if (mainWindow.isMaximized()) {
-      mainWindow.unmaximize();
-      return { maximized: false };
-    }
-    mainWindow.maximize();
-    return { maximized: true };
-  });
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
 app.on('before-quit', () => {
-  journal?.close();
-  knowledgeVault?.close();
+  // 知识库先关：它可能还持有从应用状态库读到的路径引用
+  context?.knowledgeVault.close();
+  context?.store.close();
+  context = null;
 });

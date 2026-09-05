@@ -1,4 +1,4 @@
-import type { AgentTool } from '@betterwork/agent-core';
+import { abortError, type AgentTool } from '@betterwork/agent-core';
 import { z } from 'zod';
 
 const inputSchema = z.object({ expression: z.string().min(1).max(500) });
@@ -78,8 +78,7 @@ export const calculatorTool: AgentTool = {
     additionalProperties: false,
   },
   async execute(rawInput, context) {
-    if (context.signal.aborted)
-      throw Object.assign(new Error('Run cancelled'), { name: 'AbortError' });
+    if (context.signal.aborted) throw abortError();
     const { expression } = inputSchema.parse(rawInput);
     context.reportProgress(`正在计算 ${expression}`);
     return { expression, result: new Parser(expression).parse() };

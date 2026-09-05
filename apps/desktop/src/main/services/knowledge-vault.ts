@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
+import { openKnowledgeDatabase } from '../db';
 import type {
   KnowledgeDocumentSummary,
   KnowledgeFormat,
@@ -48,35 +48,9 @@ const maxBytes = 20 * 1024 * 1024;
 export class KnowledgeVault {
   private readonly db: Database.Database;
 
+  /** schema 与历史库对账由 db/knowledge-schema.ts 的版本化迁移负责，服务层不碰 DDL。 */
   constructor(filePath: string) {
-    mkdirSync(path.dirname(filePath), { recursive: true });
-    this.db = new Database(filePath);
-    this.db.pragma('journal_mode = WAL');
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS knowledge_documents (
-        id TEXT PRIMARY KEY, title TEXT NOT NULL, source_path TEXT NOT NULL UNIQUE,
-        format TEXT NOT NULL, byte_size INTEGER NOT NULL, content_hash TEXT NOT NULL,
-        content TEXT NOT NULL, imported_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS knowledge_chunks (
-        id TEXT PRIMARY KEY, document_id TEXT NOT NULL, locator TEXT NOT NULL,
-        ordinal INTEGER NOT NULL, content TEXT NOT NULL, UNIQUE(document_id, ordinal)
-      );
-    `);
-    const documentColumns = this.db
-      .prepare('PRAGMA table_info(knowledge_documents)')
-      .all() as Array<{ name: string }>;
-    if (!documentColumns.some((column) => column.name === 'page_count'))
-      this.db.exec('ALTER TABLE knowledge_documents ADD COLUMN page_count INTEGER');
-    const ftsColumns = this.db.prepare('PRAGMA table_info(knowledge_fts)').all() as Array<{
-      name: string;
-    }>;
-    if (!ftsColumns.some((column) => column.name === 'chunk_id')) {
-      this.db.exec(
-        'DROP TABLE IF EXISTS knowledge_fts; CREATE VIRTUAL TABLE knowledge_fts USING fts5(document_id UNINDEXED, chunk_id UNINDEXED, title, content);',
-      );
-      this.rebuildFtsIndex();
-    }
+    this.db = openKnowledgeDatabase(filePath);
   }
 
   listDocuments(): KnowledgeDocumentSummary[] {
@@ -258,29 +232,6 @@ export class KnowledgeVault {
       )
       .get(id) as KnowledgeRow;
     return this.toSummary(row);
-  }
-
-  private rebuildFtsIndex(): void {
-    const withoutChunks = this.db
-      .prepare(
-        'SELECT d.id, d.content FROM knowledge_documents d LEFT JOIN knowledge_chunks c ON c.document_id = d.id WHERE c.id IS NULL',
-      )
-      .all() as Array<{ id: string; content: string }>;
-    const insertChunk = this.db.prepare(
-      'INSERT INTO knowledge_chunks (id, document_id, locator, ordinal, content) VALUES (?, ?, ?, ?, ?)',
-    );
-    for (const document of withoutChunks)
-      insertChunk.run(randomUUID(), document.id, '全文', 0, document.content);
-    const chunks = this.db
-      .prepare(
-        'SELECT c.id, c.document_id, d.title, c.content FROM knowledge_chunks c JOIN knowledge_documents d ON d.id = c.document_id',
-      )
-      .all() as Array<{ id: string; document_id: string; title: string; content: string }>;
-    const insertFts = this.db.prepare(
-      'INSERT INTO knowledge_fts (document_id, chunk_id, title, content) VALUES (?, ?, ?, ?)',
-    );
-    for (const chunk of chunks)
-      insertFts.run(chunk.document_id, chunk.id, chunk.title, chunk.content);
   }
 
   private toSummary(row: KnowledgeRow): KnowledgeDocumentSummary {

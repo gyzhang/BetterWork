@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { AgentTool } from '@betterwork/agent-core';
+import { abortError, type AgentTool } from '@betterwork/agent-core';
 import { z } from 'zod';
 
 const inputSchema = z.object({ path: z.string().min(1) });
@@ -22,8 +22,7 @@ export const readTextFileTool: AgentTool = {
     const relative = path.relative(workspace, target);
     if (relative.startsWith('..') || path.isAbsolute(relative))
       throw new Error('File is outside the active workspace');
-    if (context.signal.aborted)
-      throw Object.assign(new Error('Run cancelled'), { name: 'AbortError' });
+    if (context.signal.aborted) throw abortError();
     context.reportProgress(`正在读取 ${relative || path.basename(target)}`);
     const content = await readFile(target, 'utf8');
     return {
