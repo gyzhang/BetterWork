@@ -1,11 +1,11 @@
-import { contextBridge, ipcRenderer } from 'electron';
 import type { BetterWorkDesktopApi } from '@betterwork/agent-protocol';
 import {
   agentRuntimeEventSchema,
+  IpcChannel,
   notificationActivatedSchema,
   notificationChangeEventSchema,
-  IpcChannel,
 } from '@betterwork/agent-protocol';
+import { contextBridge, ipcRenderer } from 'electron';
 
 const api: BetterWorkDesktopApi = {
   runs: {

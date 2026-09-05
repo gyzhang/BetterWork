@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
 import type { AgentRuntimeEvent } from '@betterwork/agent-protocol';
+import { describe, expect, it } from 'vitest';
+
 import { deriveActivityGroups } from './activity';
 
 const event = <T extends AgentRuntimeEvent['type']>(

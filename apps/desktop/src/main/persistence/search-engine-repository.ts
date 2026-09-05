@@ -1,10 +1,10 @@
-import type Database from 'better-sqlite3';
 import type {
   ModelConnectionStatus,
   SearchEngineConfigInput,
   SearchEngineSummary,
   SearchProviderId,
 } from '@betterwork/agent-protocol';
+import type Database from 'better-sqlite3';
 
 interface SearchEngineRow {
   provider: SearchProviderId;

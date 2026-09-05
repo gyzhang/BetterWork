@@ -1,10 +1,11 @@
-import { Notification, type BrowserWindow } from 'electron';
 import type {
   CreateNotificationInput,
   NotificationChangeEvent,
   NotificationSummary,
 } from '@betterwork/agent-protocol';
 import { IpcChannel } from '@betterwork/agent-protocol';
+import { type BrowserWindow, Notification } from 'electron';
+
 import type { NotificationRepository } from '../persistence';
 
 /**

@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest';
 import type { CreatedTask } from '@betterwork/agent-protocol';
+import { afterEach, describe, expect, it } from 'vitest';
+
 import { AppStore } from './index';
 
 const openStores: AppStore[] = [];

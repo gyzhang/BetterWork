@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+
 import { openAppDatabase } from '../db';
 import { ArtifactRepository } from './artifact-repository';
 import { EvidenceRepository } from './evidence-repository';
@@ -62,6 +63,6 @@ export { EvidenceRepository, type NewEvidence } from './evidence-repository';
 export { ModelRepository, type RunnableModel } from './model-repository';
 export { NotificationRepository } from './notification-repository';
 export { RunRepository } from './run-repository';
-export { SearchEngineRepository, type EnabledSearchEngine } from './search-engine-repository';
+export { type EnabledSearchEngine, SearchEngineRepository } from './search-engine-repository';
 export { TaskRepository } from './task-repository';
 export { WorkspaceRepository } from './workspace-repository';

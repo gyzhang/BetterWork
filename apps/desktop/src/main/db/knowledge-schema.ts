@@ -1,6 +1,8 @@
-import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import { hasColumn, hasTable, rebuildTable, type Migration } from './migrate';
+
+import type Database from 'better-sqlite3';
+
+import { hasColumn, hasTable, type Migration, rebuildTable } from './migrate';
 
 /**
  * 本地知识库（`vaults/<id>/vault.sqlite`）的 schema 演进。

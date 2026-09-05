@@ -1,17 +1,18 @@
-import { useState } from 'react';
 import type {
   AgentRuntimeEvent,
   ArtifactSummary,
   EvidenceSummary,
   RunSummary,
 } from '@betterwork/agent-protocol';
+import { useState } from 'react';
+
 import type { ActivityGroup } from '../activity';
 import { ArtifactIcon, ChevronRightIcon, GlobeIcon, KnowledgeIcon } from '../icons';
-import type { ContextTab } from '../lib/view-types';
 import { formatTime } from '../lib/format';
 import { runStatusName, toolStageLabel } from '../lib/labels';
-import { rawToolOutput } from '../lib/tool-summary';
 import { handleTitlebarDoubleClick } from '../lib/titlebar';
+import { rawToolOutput } from '../lib/tool-summary';
+import type { ContextTab } from '../lib/view-types';
 import { EmptyContext } from './EmptyState';
 
 export function ContextPanel({

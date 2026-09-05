@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   NotificationLevel,
   NotificationSummary,
   NotificationTarget,
 } from '@betterwork/agent-protocol';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
 import { AlertIcon, BellIcon, CheckIcon, CloseIcon, InfoIcon, WarningIcon } from './icons';
 import { trackAction } from './lib/async-action';
 

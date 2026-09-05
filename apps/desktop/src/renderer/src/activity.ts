@@ -1,4 +1,5 @@
 import type { AgentRuntimeEvent } from '@betterwork/agent-protocol';
+
 import { toolStageLabel } from './lib/labels';
 
 export type ActivityStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';

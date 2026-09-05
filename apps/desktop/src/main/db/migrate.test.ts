@@ -1,11 +1,13 @@
-import Database from 'better-sqlite3';
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
+
 import { appMigrations, openAppDatabase, openKnowledgeDatabase } from './index';
 import { knowledgeMigrations } from './knowledge-schema';
-import { migrate, readSchemaVersion, type Migration } from './migrate';
+import { migrate, type Migration, readSchemaVersion } from './migrate';
 
 const temporaryDirectories: string[] = [];
 const temporaryDirectory = (): string => {

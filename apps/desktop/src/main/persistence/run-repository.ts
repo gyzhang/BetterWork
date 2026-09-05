@@ -1,6 +1,6 @@
-import type Database from 'better-sqlite3';
 import type { AgentRuntimeEvent, RunSummary } from '@betterwork/agent-protocol';
 import { agentRuntimeEventSchema } from '@betterwork/agent-protocol';
+import type Database from 'better-sqlite3';
 
 interface RunRow {
   id: string;

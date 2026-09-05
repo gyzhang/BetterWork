@@ -1,9 +1,11 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+
+import { IpcChannel } from '@betterwork/agent-protocol';
 import type { BrowserWindow } from 'electron';
 import { afterEach, describe, expect, it } from 'vitest';
-import { IpcChannel } from '@betterwork/agent-protocol';
+
 import { AppStore } from '../persistence';
 import { KnowledgeVault } from './knowledge-vault';
 import { NotificationService } from './notification-service';

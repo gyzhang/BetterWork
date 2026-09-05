@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { BrowserWindow } from 'electron';
+
 import type { AgentTool, ModelProvider } from '@betterwork/agent-core';
 import {
   describeError,
@@ -13,10 +13,12 @@ import {
   calculatorTool,
   createKnowledgeSearchTool,
   createWebSearchTool,
-  readTextFileTool,
   type KnowledgeSearchItem,
+  readTextFileTool,
   type WebSearch,
 } from '@betterwork/tool-runtime';
+import type { BrowserWindow } from 'electron';
+
 import type { AppStore } from '../persistence';
 import type { KnowledgeVault } from './knowledge-vault';
 import type { NotificationService } from './notification-service';

@@ -1,11 +1,12 @@
 import type Database from 'better-sqlite3';
-import { openDatabase } from './migrate';
+
 import { appMigrations, detectLegacyAppDatabase, reconcileLegacyAppDatabase } from './app-schema';
 import {
   detectLegacyKnowledgeDatabase,
   knowledgeMigrations,
   reconcileLegacyKnowledgeDatabase,
 } from './knowledge-schema';
+import { openDatabase } from './migrate';
 
 /** 历史库对账后达到的 schema 版本；两个库的 v1 都是「迁移制度之前」的形状。 */
 const LEGACY_BASELINE = 1;

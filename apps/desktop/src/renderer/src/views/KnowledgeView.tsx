@@ -1,39 +1,32 @@
+import type { KnowledgeDocumentSummary } from '@betterwork/agent-protocol';
 import { useState } from 'react';
-import type { FormEvent } from 'react';
-import type { KnowledgeDocumentSummary, KnowledgeSearchResult } from '@betterwork/agent-protocol';
+
+import { EmptyPage } from '../components/EmptyState';
+import type { KnowledgeLibrary } from '../hooks/use-knowledge-library';
 import { PlusIcon } from '../icons';
+import { trackAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
 import { handleTitlebarDoubleClick } from '../lib/titlebar';
-import { EmptyPage } from '../components/EmptyState';
-import { trackAction } from '../lib/async-action';
 
-export function KnowledgePage({
-  documents,
-  results,
-  query,
-  setQuery,
-  message,
-  issues,
-  importing,
-  onImport,
-  onSearch,
-  onOpenSource,
-  onRefresh,
-  onRemove,
-}: {
-  documents: KnowledgeDocumentSummary[];
-  results: KnowledgeSearchResult[];
-  query: string;
-  setQuery: (query: string) => void;
-  message: string;
-  issues: string[];
-  importing: boolean;
-  onImport: () => void;
-  onSearch: (event: FormEvent) => void;
-  onOpenSource: (sourcePath: string) => Promise<void>;
-  onRefresh: (document: KnowledgeDocumentSummary) => Promise<void>;
-  onRemove: (document: KnowledgeDocumentSummary) => Promise<void>;
-}): React.JSX.Element {
+/**
+ * 资料库视图。状态与动作全部来自 useKnowledgeLibrary，
+ * 视图只负责呈现，因此这里没有任何 IPC 调用。
+ */
+export function KnowledgePage({ library }: { library: KnowledgeLibrary }): React.JSX.Element {
+  const {
+    documents,
+    results,
+    query,
+    setQuery,
+    message,
+    issues,
+    importing,
+    onImport,
+    onSearch,
+    onOpenSource,
+    onRefresh,
+    onRemove,
+  } = library;
   const showingResults = Boolean(query.trim());
   const items: Array<{ document: KnowledgeDocumentSummary; excerpt?: string; locator?: string }> =
     showingResults
@@ -51,7 +44,11 @@ export function KnowledgePage({
           <p className="eyebrow">知识 · 个人资料库</p>
           <h1>让资料成为下一次工作的起点</h1>
         </div>
-        <button className="primary-button" disabled={importing} onClick={onImport}>
+        <button
+          className="primary-button"
+          disabled={importing}
+          onClick={() => trackAction(onImport(), '导入资料')}
+        >
           {importing ? (
             '正在处理…'
           ) : (
@@ -67,7 +64,10 @@ export function KnowledgePage({
             资料保留在你的本机路径；算台只建立可重建的本地文本索引。当前支持 Markdown、文本、PDF 与
             Word。
           </p>
-          <form className="knowledge-search" onSubmit={onSearch}>
+          <form
+            className="knowledge-search"
+            onSubmit={(event) => trackAction(onSearch(event), '检索资料')}
+          >
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}

@@ -1,6 +1,7 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
+import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import prettier from 'eslint-config-prettier';
 import globals from 'globals';
 
@@ -27,6 +28,7 @@ export default tseslint.config(
   {
     name: 'betterwork/base',
     files: ['**/*.{ts,tsx,mts,cts}'],
+    plugins: { 'simple-import-sort': simpleImportSort },
     languageOptions: {
       parserOptions: {
         projectService: true,
@@ -85,6 +87,11 @@ export default tseslint.config(
       'prefer-const': 'error',
       'object-shorthand': 'error',
       'no-else-return': ['error', { allowElseIf: false }],
+
+      // ---- 导入顺序：交给插件统一，不在每个文件里各写一套习惯 ----
+      // 分组为 副作用导入 → Node 内置 → 外部包 → 绝对路径 → 相对路径
+      'simple-import-sort/imports': 'error',
+      'simple-import-sort/exports': 'error',
     },
   },
 

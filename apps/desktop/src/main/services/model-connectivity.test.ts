@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+
 import { probeModelConnection, resolveEndpoint } from './model-connectivity';
 
 type FetchMock = ReturnType<typeof vi.fn>;

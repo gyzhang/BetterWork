@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
-import { hasColumn, hasTable, rebuildTable, type Migration } from './migrate';
+
+import { hasColumn, hasTable, type Migration, rebuildTable } from './migrate';
 
 /**
  * 应用状态库（`betterwork.db`）的 schema 演进。

@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import type Database from 'better-sqlite3';
+
 import type {
   CreateNotificationInput,
-  NotificationLevel,
   NotificationKind,
+  NotificationLevel,
   NotificationSummary,
   NotificationTarget,
 } from '@betterwork/agent-protocol';
+import type Database from 'better-sqlite3';
 
 interface NotificationRow {
   id: string;

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type Database from 'better-sqlite3';
+
 import type {
   ArtifactDetail,
   ArtifactSummary,
@@ -8,6 +8,7 @@ import type {
   EvidenceSummary,
   SaveMarkdownArtifactRequest,
 } from '@betterwork/agent-protocol';
+import type Database from 'better-sqlite3';
 
 /** artifacts 与当前版本的 JOIN 结果；version_number 等字段来自 artifact_versions。 */
 interface ArtifactRow {

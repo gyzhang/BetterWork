@@ -1,5 +1,7 @@
 import path from 'node:path';
+
 import { app, BrowserWindow } from 'electron';
+
 import { registerIpc } from './ipc/register-ipc';
 import { AppStore } from './persistence';
 import { KnowledgeVault } from './services/knowledge-vault';
