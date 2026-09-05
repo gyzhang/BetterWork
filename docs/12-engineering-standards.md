@@ -20,6 +20,16 @@
 
 提交前必须跑 `npm run verify`。**不要**把它的输出接管道后只看末尾——`cmd | tail` 的退出码是 `tail` 的，会把失败读成成功。需要截取输出时用 `npm run verify > log 2>&1; echo $?`。
 
+规范的执行分三层，缺一层就会漂移：
+
+| 层 | 载体 | 管住什么 |
+| --- | --- | --- |
+| 单文件写法 | `eslint.config.mjs`、`.prettierrc.json` | 一个文件内部的类型、异步、命名与排版 |
+| 跨文件结构 | `standards/coding-standard.test.ts` | 配置唯一性、零豁免、分层边界、Token 与动效纪律 |
+| 门禁 | `npm run verify` | 上面两层，加类型检查、全部测试与构建 |
+
+结构护栏随 `npm test` 执行，因此也在 `verify` 里。它断言的都是 ESLint 表达不了的约定：ESLint / Prettier / tsconfig 各只有一份且严格开关全开、源码里没有任何豁免注释、`packages/*` 不依赖 `apps/*`、Agent Core 不依赖宿主运行时、Renderer 不导入 `node:*`、`views/` 与 `components/` 不直接调 IPC、`ipcMain.handle` 只在一处、取消词汇只在一处、硬编码色值与写死的动效时长只出现在白名单里、首帧窗口主题与青玉浅色 Token 一致、`.qoder/rules/` 下每个规则文件都登记在索引里。
+
 格式化范围：所有 `.ts` / `.tsx` / `.css` / `.html` / `.json`。Markdown 与 `docs/assets/` 下的品牌 SVG **不格式化**——中文长行经重排后无法逐字回读校验，标志文件是人工定稿资产。
 
 ## 2. 目录结构
@@ -47,6 +57,9 @@ packages/
 ├── agent-protocol/       # 跨进程协议、领域类型、Zod Schema、IPC channel 的唯一入口
 ├── agent-core/           # Agent Loop、Provider 接口与统一错误词汇
 └── tool-runtime/         # 确定性工具实现
+
+standards/
+└── coding-standard.test.ts  # 跨文件的结构护栏，随 npm test 执行
 ```
 
 放置规则：
@@ -113,7 +126,8 @@ packages/
   - `version` 从 1 开始连续递增且唯一，`migrate()` 启动时校验，写错会直接抛错而不是静默跳版本。
   - v1 固定为「迁移制度引入之前」的形状；历史库由 `detectLegacy` 识别、`reconcileLegacy` 对账到 v1、打版本戳，然后正常走 v2 及以后。这样历史库不会漏掉任何后续迁移。
   - 每条迁移是一个原子事务，失败整体回滚且不打版本戳，下次启动从失败那条重来。
-  - SQLite 无法用 `ALTER` 增删外键，补外键一律走 `rebuildTable`：事务外关外键、建新表、拷数据、删旧表、改名，最后用 `PRAGMA foreign_key_check` 兜底——发现悬空引用就回滚，绝不把用户数据留在半迁移状态。
+  - SQLite 无法用 `ALTER` 增删外键，补外键一律走 `rebuildTable`：事务外关外键、建新表、拷数据、删旧表、改名、补回索引。
+  - **悬空引用由调用方在重建前清理**，不要用 `PRAGMA foreign_key_check` 在事务内兜底：它读的是已落盘的数据，看不到同一事务里早先的 `DELETE`，放在事务内只会误报。清理顺序必须**先父后子**——删父表孤儿会产生新的子表孤儿（见 `app-schema.ts` 的 `addForeignKeys`）。整条迁移仍是一个原子事务，失败即回滚且不打版本戳。
   - 新增迁移必须同时补 `db/migrate.test.ts` 里的对应用例（新库、历史库、幂等、失败回滚）。
 - `PRAGMA foreign_keys` 常开。写测试时要建真实的父级行，不能塞伪造 id。
 - Repository 只写自己的聚合表，但可以读其他表做存在性与归属校验；跨聚合写入由调用方用 `store.transaction()` 显式包起来。Repository 之间不互相持有引用。
@@ -156,8 +170,9 @@ packages/
 
 规范可以有例外，但例外必须**写在配置里并说明理由**，不允许散落在源码中。
 
-- 需要单点豁免时用 `// eslint-disable-next-line <rule> -- <理由>`，理由必填。
+- 源码里**不接受单点豁免**：`eslint-disable`、`@ts-ignore`、`@ts-expect-error`、`prettier-ignore` 一律为零，由结构护栏强制。真要放宽某条规则，改 `eslint.config.mjs` 并在配置注释里写清理由——这会迫使例外可见、可评审，而不是藏进一行注释。
 - 需要整类豁免时在 `eslint.config.mjs` 里按文件角色（如 `betterwork/tests`）配置，并写清为什么这类文件适用不同口径。
+- 结构性约定的例外写在 `standards/coding-standard.test.ts` 的白名单数组里并注明理由（外观预览色板可以用字面色值、格式与徽标类标识可以小于 12px、首帧窗口主题只能写字面值）。白名单里的每一项都必须能在本文或 [UI/UX 体系](10-ui-ux-system.md) 里找到对应条款；找不到就先补条款再加白名单。
 - 已经生效的三处策略性关闭及其理由都记录在配置注释中：`require-await`（接口签名要求 async，同步实现必然无 await）、`prefer-nullish-coalescing` 对字符串放行 `||`（空串回退是有意的）、React Compiler 的优化类规则（本项目未启用编译器）。
 
 发现规则产生大量误报时，先判断是「规则不适用于本项目的架构」还是「代码写法有问题」。前者改配置并记录理由，后者改代码。不要因为嫌麻烦而放宽规则。
@@ -165,3 +180,4 @@ packages/
 ## 11. 变更记录
 
 - 2026-09-05：建立本文。同时引入 Prettier + ESLint（含类型感知规则、导入排序）、把 `lint` 与 `format:check` 纳入 `verify` 门禁、按聚合拆分持久化层、引入版本化迁移与外键、统一异步收口与错误词汇、按 views / components / hooks / lib 拆分 Renderer。
+- 2026-09-06：新增 `standards/coding-standard.test.ts`，把 ESLint 表达不了的跨文件约定（配置唯一、源码零豁免、分层边界、Token 与动效纪律、规则索引完整、首帧主题一致）纳入 `npm test` 门禁；修正 §6 中已失效的 `foreign_key_check` 兜底描述——它在事务内看不到同事务早先的 `DELETE`，改为由调用方在重建表前按「先父后子」清理孤儿行。

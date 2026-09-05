@@ -44,7 +44,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 推荐阅读顺序：
 
 1. [AGENTS.md](../AGENTS.md)：硬约束、当前允许范围和完成定义。
-2. [工程规范](12-engineering-standards.md)：全仓唯一的代码规范。写任何代码前先读它，`eslint.config.mjs` 与 `.prettierrc.json` 是它的可执行形式。
+2. [工程规范](12-engineering-standards.md)：全仓唯一的代码规范。写任何代码前先读它，`eslint.config.mjs` 与 `.prettierrc.json` 是它的可执行形式，`standards/coding-standard.test.ts` 是它的跨文件结构护栏。
 3. [MVP 与路线图](07-mvp-and-roadmap.md)：产品阶段、切片进度与远期演进。
 4. [UI/UX 体系](10-ui-ux-system.md)：信息架构、主题 Token 与交互规范（界面设计真相源）。
 5. [系统架构](03-system-architecture.md)、[领域模型](02-domain-model.md)、[知识库与记忆](04-knowledge-and-memory.md)、[能力体系](05-capability-system.md)。
@@ -68,7 +68,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 
 **不要把 verify 的输出接管道后只看末尾**（`npm run verify | tail` 的退出码是 `tail` 的，永远为 0，会把失败读成成功）。需要截取输出时用 `npm run verify > /tmp/verify.log 2>&1; echo $?`。
 
-目前测试覆盖 **19 个测试文件、114 个测试**，ESLint 全仓零错误。生产构建存在两条来自 Zod 的 Rollup `@PURE` 注释警告；在不影响构建成功的前提下，它们是已知警告，不应因此作无关依赖升级。
+目前测试覆盖 **20 个测试文件、131 个测试**（含 `standards/coding-standard.test.ts` 的 17 条规范护栏），ESLint 全仓零错误。生产构建存在两条来自 Zod 的 Rollup `@PURE` 注释警告；在不影响构建成功的前提下，它们是已知警告，不应因此作无关依赖升级。
 
 `knowledge-vault.test.ts` 的 PDF 与 DOCX 两个用例已显式提高超时——它们首次运行需要现场转换 `pdf-parse` 与 `mammoth`，冷 Vite 缓存下会超过默认的 5 秒。
 
@@ -98,13 +98,14 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 | `apps/desktop/src/renderer/src/App.tsx` | 跨簇编排与布局组装（约 720 行）：工作会话状态、视图切换、通知接线、Sidebar 与错误条。 |
 | `apps/desktop/src/renderer/src/views/` | 工作以外的页面级视图：`ArtifactView`、`KnowledgeView`、`SettingsView`。视图内不出现 IPC 调用。 |
 | `apps/desktop/src/renderer/src/components/` | 跨视图复用组件：`ContextPanel`、`Welcome`、`EmptyState`、`ModelEditorSheet`。 |
-| `apps/desktop/src/renderer/src/hooks/` | 三个内聚状态簇：`useAppearance`、`useKnowledgeLibrary`、`useModelSettings`。刷新类回调用 `useCallback` 保持引用稳定，挂载 effect 才能如实声明依赖。 |
+| `apps/desktop/src/renderer/src/hooks/` | 五个内聚状态簇：`useAppearance`、`useKnowledgeLibrary`、`useModelSettings`、`useArtifactViewer`、`useSearchEngineSettings`。IPC 调用只出现在这一层与 `App.tsx`；刷新类回调用 `useCallback` 保持引用稳定，挂载 effect 才能如实声明依赖。 |
 | `apps/desktop/src/renderer/src/lib/` | 无状态纯函数与常量：`async-action`（异步收口的唯一入口）、`tool-summary`、`labels`（含 `TOOL_LABELS`，新增工具必须同步）、`format`、`titlebar`、`view-types`。 |
 | `apps/desktop/src/renderer/src/notifications.tsx` | `useNotifications`（初始加载、增量广播、同页抑制、Toast 生命周期）、消息中心面板与 Toast 宿主。 |
 | `apps/desktop/src/renderer/src/activity.ts` | 从事件流派生用户可理解的工作阶段分组。 |
 | `apps/desktop/src/renderer/src/appearance.ts`、`styles.css` | 主题系统、Token 与全部界面样式。不得新增硬编码色值或局部 `.dark` 补丁；动效时长只能用 Token。 |
 | `apps/desktop/src/renderer/src/icons.tsx`、`brand-logo.tsx` | 内联 SVG 描边图标集（`currentColor`、统一 24 网格）与品牌标志。新增图标先进图标集再使用。 |
 | `apps/desktop/src/renderer/src/markdown-preview.tsx` | 成果的文档化 Markdown 预览，不渲染原始 HTML。 |
+| `standards/coding-standard.test.ts` | 跨文件的规范护栏：配置唯一性、源码零豁免、分层边界、Token 与动效纪律、规则索引完整、首帧主题一致。例外写成文件内的白名单数组并注明理由，不要在源码里加豁免注释。 |
 ## 5. 不可破坏的实现约束
 
 - 依赖方向固定为 `Renderer -> Preload API -> Application -> Agent Core / Infrastructure -> Tool Runtime`。
@@ -152,7 +153,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 ### 本轮已收敛
 
 - **Run 终态保证**：`RunService.consume` 补了 `catch`，`RunRepository.forceFailure` 只在 Run 仍为 `running` 时合成 `run.failed`（重复调用安全、不与引擎终态冲突），启动时 `failInterruptedRuns` 收口上次被强杀留下的运行。此前编排层抛错会让 Run 永远停在 `running` 并以未处理 rejection 逃逸。
-- **数据完整性**：`PRAGMA foreign_keys` 常开，任务/运行/证据/成果/版本之间的级联删除真实生效；schema 改为版本化迁移（`schema_migrations` + 历史库对账 + 原子事务 + `foreign_key_check` 兜底），并有迁移测试。
+- **数据完整性**：`PRAGMA foreign_keys` 常开，任务/运行/证据/成果/版本之间的级联删除真实生效；schema 改为版本化迁移（`schema_migrations` + 历史库对账 + 重建表前清理孤儿行 + 原子事务），并有迁移测试。
 - **上帝对象拆分**：502 行的 `RunJournal` 按聚合拆为 8 个 Repository + `AppStore`；`main/index.ts` 的 45 处非空断言随 IPC 下沉到 `ipc/register-ipc.ts` 后全部消失。
 - **静默失败**：46 处 `void someIpcCall()` 全部改为 `reportAction`（失败呈现给用户，新增了跨视图错误条）或 `trackAction`（后台同步记录到控制台）；成果页版本列表加载失败不再静默。
 - **测试补齐**：SSE Provider 19 个用例（端点归一化、跨包拼接、`tool_calls` 增量合并、并行调用按 index 分离、keep-alive 与畸形行、各类失败）、连通性探测 10 个、通知服务 7 个（含此前被完全跳过的系统通知分支）。

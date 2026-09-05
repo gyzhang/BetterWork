@@ -4,6 +4,8 @@
 
 `.qoder/rules/` 下的分层规则由 Qoder 自动加载（常驻铁律 + 按场景触发）；其他编码智能体按下方任务路由读取同一套约束，保持单一规则源。
 
+**编码规范与风格已经固定，不接受按任务、按目录、按人或按智能体另行约定。** 唯一标准是 [工程规范](docs/12-engineering-standards.md)；`eslint.config.mjs` 与 `.prettierrc.json` 是它的可执行形式，`standards/coding-standard.test.ts` 是它的跨文件结构护栏。三者都在 `npm run verify` 门禁里。无论在 Qoder、Codex 还是其他智能体中工作，遵循的都是同一份：写代码前先读 docs/12 的相关小节，要改规范必须同时改文档、配置与护栏并说明理由，不得只在某一次对话里口头放宽。
+
 ## 任务路由（动手前按类型检查）
 
 | 我要做什么 | 动手前必读 |
@@ -16,7 +18,7 @@
 | 启动/停止/构建/验证/提交 | [交接说明](docs/11-qoder-handoff.md) 第 3 节 |
 | 排查缺陷 | GATE-0：先查 SQLite 数据，再看 `/tmp/betterwork-dev.log`，最后才看代码（`.qoder/rules/betterwork-diagnosis.md`） |
 | 范围变化 | 同步更新 [MVP 与路线图](docs/07-mvp-and-roadmap.md)；跨模块关系或关键技术选择新增 ADR |
-| 目录结构、命名、类型、异步与错误处理、测试约定、lint/format 规则 | [工程规范](docs/12-engineering-standards.md)（全仓唯一规范，配置文件是它的可执行形式） |
+| **写任何代码**：目录结构、命名、类型、异步与错误处理、测试约定、lint/format 规则 | [工程规范](docs/12-engineering-standards.md)——全仓唯一规范；`eslint.config.mjs` + `.prettierrc.json` 是它的可执行形式，`standards/coding-standard.test.ts` 是它的结构护栏 |
 | 结束一次任务 | 写 `docs/logs/YYYY-MM-DD.md`（模板见 [docs/logs/README.md](docs/logs/README.md)） |
 
 ## 1. 产品北极星
@@ -121,7 +123,8 @@ Renderer -> Preload API -> Application -> Agent Core / Infrastructure
 
 ## 7. 代码质量
 
-- 全仓只有**一份**代码规范，见 [工程规范](docs/12-engineering-standards.md)；`eslint.config.mjs` 与 `.prettierrc.json` 是它的可执行形式。不允许按目录、按文件或按人另立风格，例外必须写进配置并注明理由。
+- 全仓只有**一份**代码规范，见 [工程规范](docs/12-engineering-standards.md)；`eslint.config.mjs` 与 `.prettierrc.json` 是它的可执行形式，`standards/coding-standard.test.ts` 是它的跨文件结构护栏。不允许按目录、按文件、按人或按智能体另立风格，例外必须写进配置或护栏白名单并注明理由。
+- 不新建第二份 ESLint / Prettier / tsconfig，不在任何 `package.json` 内嵌 `eslintConfig` 或 `prettier` 键；源码里禁止 `eslint-disable`、`@ts-ignore`、`@ts-expect-error`、`prettier-ignore`。
 - TypeScript 开启 strict，并额外开启 `noUncheckedIndexedAccess`、`exactOptionalPropertyTypes`、`useUnknownInCatchVariables`。
 - 生产代码禁止 `any` 与 `!` 非空断言；下标访问后判空，可选属性用条件展开构造。
 - Renderer 到主进程的每一次调用都必须收口：`reportAction`（失败要让用户看见）或 `trackAction`（后台同步，失败记录到控制台）。禁止 `void someIpcCall()`。
