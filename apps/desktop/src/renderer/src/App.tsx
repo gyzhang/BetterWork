@@ -1,10 +1,9 @@
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { FormEvent, KeyboardEvent } from 'react';
 import type {
   AgentRuntimeEvent,
   ArtifactDetail,
   ArtifactSummary,
-  ArtifactVersionDetail,
-  ArtifactVersionSummary,
   EvidenceSummary,
   KnowledgeDocumentSummary,
   KnowledgeSearchResult,
@@ -14,22 +13,16 @@ import type {
   NotificationTarget,
   RecentTaskSummary,
   RunSummary,
-  SearchEngineSummary,
   WorkspaceSummary,
 } from '@betterwork/agent-protocol';
+import type { AppearancePreference, ResolvedAppearance } from './appearance';
 import {
   applyAppearance,
   bootstrapAppearance,
-  colorSchemes,
   getWindowTheme,
   persistAppearance,
-  type AppearanceMode,
-  type AppearancePreference,
-  type ColorScheme,
-  type ResolvedAppearance,
 } from './appearance';
-import { deriveActivityGroups, type ActivityGroup } from './activity';
-import { MarkdownPreview } from './markdown-preview';
+import { deriveActivityGroups } from './activity';
 import { BrandLogo } from './brand-logo';
 import { NotificationCenter, ToastHost, useNotifications } from './notifications';
 import {
@@ -40,64 +33,22 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CloseIcon,
-  GlobeIcon,
   KnowledgeIcon,
   PlusIcon,
   SettingsIcon,
   WorkIcon,
 } from './icons';
-
-type AppView = 'work' | 'artifacts' | 'knowledge' | 'settings';
-type ContextTab = 'process' | 'sources' | 'artifacts';
-type SettingsTab = 'models' | 'search' | 'appearance' | 'general';
-
-const emptyModel: ModelProfileInput = {
-  name: '',
-  provider: 'openai-compatible',
-  baseUrl: '',
-  model: '',
-  role: 'language',
-  apiKey: '',
-  maxContextTokens: 8192,
-  maxOutputTokens: 8192,
-  temperature: 0.7,
-  enabled: true,
-};
-const roleName: Record<ModelProfileSummary['role'], string> = {
-  language: '语言',
-  vision: '视觉',
-  embedding: '嵌入',
-};
-const runStatusName: Record<RunSummary['status'], string> = {
-  running: '进行中',
-  completed: '已完成',
-  failed: '失败',
-  cancelled: '已停止',
-};
-const connectionStatusName: Record<ModelProfileSummary['connectionStatus'], string> = {
-  untested: '尚未验证',
-  connected: '连接成功',
-  failed: '连接失败',
-};
-
-const eventDetail = (event: AgentRuntimeEvent): string => {
-  if (event.type === 'message.delta' || event.type === 'reasoning.delta') return event.delta;
-  if (event.type === 'tool.requested' || event.type === 'tool.started') return event.toolCall.name;
-  if (event.type === 'tool.progress') return event.message;
-  if (event.type === 'tool.completed') return JSON.stringify(event.output);
-  if (event.type === 'tool.failed' || event.type === 'run.failed') return event.error;
-  return '';
-};
-
-const formatTime = (value: number): string =>
-  new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-const fileNameOf = (value: string): string =>
-  value.slice(Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\')) + 1);
-
-const handleTitlebarDoubleClick = (event: React.MouseEvent): void => {
-  if ((event.target as HTMLElement).closest('button, input, textarea, select, a')) return;
-  void window.betterwork.chrome.toggleMaximize();
-};
+import type { AppView, ContextTab, SettingsTab } from './lib/view-types';
+import { eventDetail, fileNameOf, formatTime } from './lib/format';
+import { emptyModel, roleName, runStatusName } from './lib/labels';
+import { handleTitlebarDoubleClick } from './lib/titlebar';
+import { reportAction, trackAction } from './lib/async-action';
+import { Welcome } from './components/Welcome';
+import { ContextPanel } from './components/ContextPanel';
+import { ModelEditor } from './components/ModelEditorSheet';
+import { KnowledgePage } from './views/KnowledgeView';
+import { ArtifactPage } from './views/ArtifactView';
+import { SettingsPage } from './views/SettingsView';
 
 export function App(): React.JSX.Element {
   const [prompt, setPrompt] = useState('计算: (12 + 8) * 3');
@@ -116,6 +67,9 @@ export function App(): React.JSX.Element {
   const [selectedArtifact, setSelectedArtifact] = useState<ArtifactDetail>();
   const [sentPrompt, setSentPrompt] = useState('');
   const [artifactNote, setArtifactNote] = useState<{ tone: 'ok' | 'error'; text: string }>();
+  // 跨视图的动作错误出口：开始任务、切换任务、停止执行、选择工作区等失败都在这里呈现，
+  // 而不是像此前那样被 `void` 静默吞掉。
+  const [actionError, setActionError] = useState('');
   const [models, setModels] = useState<ModelProfileSummary[]>([]);
   const [knowledgeDocuments, setKnowledgeDocuments] = useState<KnowledgeDocumentSummary[]>([]);
   const [knowledgeResults, setKnowledgeResults] = useState<KnowledgeSearchResult[]>([]);
@@ -141,34 +95,57 @@ export function App(): React.JSX.Element {
     applyAppearance(bootstrapAppearance()),
   );
 
-  const refreshRuns = async (): Promise<void> => setRuns(await window.betterwork.runs.list());
-  const refreshTaskRuns = async (taskId = activeTaskIdRef.current): Promise<void> =>
-    setTaskRuns(taskId ? await window.betterwork.runs.list({ taskId }) : []);
-  const refreshTasks = async (workspaceId = workspaceIdRef.current): Promise<void> =>
-    setRecentTasks(await window.betterwork.tasks.list(workspaceId ? { workspaceId } : undefined));
-  const refreshModels = async (): Promise<void> => setModels(await window.betterwork.models.list());
-  const refreshKnowledge = async (): Promise<void> =>
-    setKnowledgeDocuments(await window.betterwork.knowledge.list());
-  const refreshEvidence = async (taskId = activeTaskIdRef.current): Promise<void> => {
+  /**
+   * 列表刷新属于后台同步：失败时用户无法据以行动，但也不能完全无痕。
+   * 统一走 trackAction 记录到控制台，并对调用方保证「永不 reject」，
+   * 因此这些函数返回 void，调用点不需要也不应该 await。
+   */
+  const refreshRuns = (): void => {
+    trackAction(window.betterwork.runs.list().then(setRuns), '刷新运行列表');
+  };
+  const refreshTaskRuns = (taskId = activeTaskIdRef.current): void => {
+    if (!taskId) {
+      setTaskRuns([]);
+      return;
+    }
+    trackAction(window.betterwork.runs.list({ taskId }).then(setTaskRuns), '刷新任务运行记录');
+  };
+  const refreshTasks = (workspaceId = workspaceIdRef.current): void => {
+    trackAction(
+      window.betterwork.tasks.list(workspaceId ? { workspaceId } : undefined).then(setRecentTasks),
+      '刷新最近任务',
+    );
+  };
+  const refreshModels = (): void => {
+    trackAction(window.betterwork.models.list().then(setModels), '刷新模型配置');
+  };
+  const refreshKnowledge = (): void => {
+    trackAction(window.betterwork.knowledge.list().then(setKnowledgeDocuments), '刷新资料库');
+  };
+  const refreshEvidence = (taskId = activeTaskIdRef.current): void => {
     if (!taskId) {
       setEvidence([]);
       return;
     }
-    setEvidence(await window.betterwork.evidence.list({ taskId }));
+    trackAction(window.betterwork.evidence.list({ taskId }).then(setEvidence), '刷新引用资料');
   };
-  const refreshArtifacts = async (): Promise<void> =>
-    setArtifacts(await window.betterwork.artifacts.list());
+  const refreshArtifacts = (): void => {
+    trackAction(window.betterwork.artifacts.list().then(setArtifacts), '刷新成果列表');
+  };
 
   useEffect(() => {
-    void refreshRuns();
-    void refreshModels();
-    void refreshKnowledge();
-    void refreshArtifacts();
-    void window.betterwork.workspace.getDefault().then((currentWorkspace) => {
-      workspaceIdRef.current = currentWorkspace.id;
-      setWorkspace(currentWorkspace);
-      void refreshTasks(currentWorkspace.id);
-    });
+    refreshRuns();
+    refreshModels();
+    refreshKnowledge();
+    refreshArtifacts();
+    trackAction(
+      window.betterwork.workspace.getDefault().then((currentWorkspace) => {
+        workspaceIdRef.current = currentWorkspace.id;
+        setWorkspace(currentWorkspace);
+        refreshTasks(currentWorkspace.id);
+      }),
+      '加载默认工作区',
+    );
     return window.betterwork.runs.onEvent((event) => {
       setEvents((current) =>
         event.runId === activeRunIdRef.current ? [...current, event] : current,
@@ -178,11 +155,11 @@ export function App(): React.JSX.Element {
         event.type === 'run.failed' ||
         event.type === 'run.cancelled'
       ) {
-        void refreshRuns();
-        void refreshTaskRuns();
-        void refreshTasks();
-        void refreshEvidence();
-        void refreshArtifacts();
+        refreshRuns();
+        refreshTaskRuns();
+        refreshTasks();
+        refreshEvidence();
+        refreshArtifacts();
       }
     });
   }, []);
@@ -201,7 +178,7 @@ export function App(): React.JSX.Element {
   }, [sidebarCollapsed]);
 
   useEffect(() => {
-    void window.betterwork.chrome.updateTheme(getWindowTheme());
+    trackAction(window.betterwork.chrome.updateTheme(getWindowTheme()), '同步窗口主题');
   }, [appearance, resolvedAppearance]);
 
   const setAppearanceValue = (next: AppearancePreference): void => {
@@ -291,13 +268,13 @@ export function App(): React.JSX.Element {
     setArtifactNote(undefined);
     setContextTab('process');
     setContextOpen(true);
-    await refreshRuns();
-    await refreshTaskRuns(task.id);
-    await refreshTasks();
+    refreshRuns();
+    refreshTaskRuns(task.id);
+    refreshTasks();
   };
   const submit = (event: FormEvent): void => {
     event.preventDefault();
-    void startRun();
+    reportAction(startRun(), setActionError, '无法开始这项工作，请重试。');
   };
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (
@@ -307,7 +284,7 @@ export function App(): React.JSX.Element {
     )
       return;
     event.preventDefault();
-    void startRun();
+    reportAction(startRun(), setActionError, '无法开始这项工作，请重试。');
   };
   const selectRun = async (run: RunSummary): Promise<void> => {
     activeRunIdRef.current = run.id;
@@ -318,8 +295,8 @@ export function App(): React.JSX.Element {
     setPrompt('');
     setArtifactNote(undefined);
     setEvents(await window.betterwork.runs.listEvents({ runId: run.id }));
-    await refreshTaskRuns(run.taskId);
-    await refreshEvidence(run.taskId);
+    refreshTaskRuns(run.taskId);
+    refreshEvidence(run.taskId);
     setView('work');
   };
   const selectTask = async (task: RecentTaskSummary): Promise<void> => {
@@ -335,8 +312,8 @@ export function App(): React.JSX.Element {
     setPrompt('');
     setArtifactNote(undefined);
     setEvents([]);
-    await refreshTaskRuns(task.id);
-    await refreshEvidence(task.id);
+    refreshTaskRuns(task.id);
+    refreshEvidence(task.id);
     setView('work');
   };
   const openModelEditor = (model?: ModelProfileSummary): void => {
@@ -369,7 +346,7 @@ export function App(): React.JSX.Element {
         ...modelForm,
         ...(editingModelId ? { id: editingModelId } : {}),
       });
-      await refreshModels();
+      refreshModels();
       setModelEditorOpen(false);
       setModelMessage(editingModelId ? '模型配置已更新。' : '模型已添加，现在可以用于任务。');
     } catch (error) {
@@ -383,25 +360,33 @@ export function App(): React.JSX.Element {
         ...(editingModelId ? { id: editingModelId } : {}),
       });
       setModelMessage(result.message);
-      await refreshModels();
+      refreshModels();
     } catch (error) {
       setModelMessage(error instanceof Error ? error.message : '连接测试失败。');
     }
   };
   const toggleModel = (model: ModelProfileSummary): void => {
-    void window.betterwork.models
-      .setEnabled({ id: model.id, enabled: !model.enabled })
-      .then(refreshModels);
+    reportAction(
+      window.betterwork.models
+        .setEnabled({ id: model.id, enabled: !model.enabled })
+        .then(() => refreshModels()),
+      setModelMessage,
+      '切换启用状态失败，请重试。',
+    );
   };
   const setDefaultModel = (model: ModelProfileSummary): void => {
-    void window.betterwork.models.setDefault({ id: model.id }).then(async (result) => {
-      setModelMessage(
-        result.updated
-          ? `${model.name} 已设为${roleName[model.role]}默认模型。`
-          : '仅已启用模型可以设为默认。',
-      );
-      await refreshModels();
-    });
+    reportAction(
+      window.betterwork.models.setDefault({ id: model.id }).then((result) => {
+        setModelMessage(
+          result.updated
+            ? `${model.name} 已设为${roleName[model.role]}默认模型。`
+            : '仅已启用模型可以设为默认。',
+        );
+        refreshModels();
+      }),
+      setModelMessage,
+      '设置默认模型失败，请重试。',
+    );
   };
   const saveCurrentArtifact = async (): Promise<void> => {
     if (!activeTask || !activeRunId || !assistantDisplayText) return;
@@ -418,7 +403,7 @@ export function App(): React.JSX.Element {
         tone: 'ok',
         text: `已保存为 Markdown 成果（v${artifact.versionNumber}）。`,
       });
-      await refreshArtifacts();
+      refreshArtifacts();
       setContextTab('artifacts');
       setContextOpen(true);
     } catch (error) {
@@ -430,7 +415,8 @@ export function App(): React.JSX.Element {
   };
   const openArtifact = async (artifact: ArtifactSummary): Promise<void> => {
     const detail = await window.betterwork.artifacts.get({ id: artifact.id });
-    if (detail) setSelectedArtifact(detail);
+    if (!detail) throw new Error('成果已不存在，可能已被移除。');
+    setSelectedArtifact(detail);
   };
   const reviseArtifact = async (
     artifact: ArtifactDetail,
@@ -444,7 +430,7 @@ export function App(): React.JSX.Element {
       title,
       content,
     });
-    await refreshArtifacts();
+    refreshArtifacts();
     const detail = await window.betterwork.artifacts.get({ id: saved.id });
     if (detail) setSelectedArtifact(detail);
   };
@@ -458,20 +444,24 @@ export function App(): React.JSX.Element {
     });
   const openKnowledge = (): void => {
     setView('knowledge');
-    void refreshKnowledge();
+    refreshKnowledge();
   };
   const navigateToTarget = (target: NotificationTarget): void => {
     if (target.kind === 'task') {
       const task = recentTasks.find((item) => item.id === target.taskId);
-      if (task) void selectTask(task);
+      if (task) reportAction(selectTask(task), setActionError, '无法打开这项任务。');
       else setView('work');
       return;
     }
     if (target.kind === 'artifact') {
       setView('artifacts');
-      void window.betterwork.artifacts.get({ id: target.artifactId }).then((detail) => {
-        setSelectedArtifact(detail ?? undefined);
-      });
+      reportAction(
+        window.betterwork.artifacts.get({ id: target.artifactId }).then((detail) => {
+          setSelectedArtifact(detail ?? undefined);
+        }),
+        setActionError,
+        '无法打开这项成果。',
+      );
       return;
     }
     openKnowledge();
@@ -522,7 +512,7 @@ export function App(): React.JSX.Element {
       } else {
         setKnowledgeMessage('已取消导入，未选择文件。');
       }
-      await refreshKnowledge();
+      refreshKnowledge();
     } catch (error) {
       setKnowledgeMessage(error instanceof Error ? error.message : '导入资料失败。');
     } finally {
@@ -544,7 +534,7 @@ export function App(): React.JSX.Element {
           : '资料已不在当前资料库中。',
       );
       setKnowledgeQuery('');
-      await refreshKnowledge();
+      refreshKnowledge();
     } catch (error) {
       setKnowledgeMessage(error instanceof Error ? error.message : '移出资料库失败，请重试。');
     }
@@ -559,7 +549,7 @@ export function App(): React.JSX.Element {
           : (result.error ?? '刷新索引失败。'),
       );
       setKnowledgeQuery('');
-      await refreshKnowledge();
+      refreshKnowledge();
     } catch (error) {
       setKnowledgeMessage(
         error instanceof Error && error.message
@@ -619,7 +609,7 @@ export function App(): React.JSX.Element {
             onClick={() => {
               setView('artifacts');
               setSelectedArtifact(undefined);
-              void refreshArtifacts();
+              refreshArtifacts();
             }}
           >
             <span aria-hidden="true">
@@ -642,7 +632,7 @@ export function App(): React.JSX.Element {
             <button
               key={task.id}
               className={task.id === activeTask?.id ? 'run-item active' : 'run-item'}
-              onClick={() => void selectTask(task)}
+              onClick={() => reportAction(selectTask(task), setActionError, '无法打开这项任务。')}
             >
               <span>{task.title}</span>
               <small>
@@ -659,7 +649,7 @@ export function App(): React.JSX.Element {
             onClick={() => {
               setView('settings');
               setSettingsTab('models');
-              void refreshModels();
+              refreshModels();
             }}
           >
             <span aria-hidden="true">
@@ -680,6 +670,17 @@ export function App(): React.JSX.Element {
         <div className="sidebar-footer">算台 BetterWork · Phase 0</div>
       </aside>
       <section className="main-stage">
+        {actionError && (
+          <div className="action-error-banner" role="alert">
+            <span aria-hidden="true">
+              <AlertIcon size={13} />
+            </span>
+            <p>{actionError}</p>
+            <button type="button" aria-label="关闭提示" onClick={() => setActionError('')}>
+              <CloseIcon size={12} />
+            </button>
+          </div>
+        )}
         {view === 'settings' && (
           <div className="window-drag-strip" onDoubleClick={handleTitlebarDoubleClick} />
         )}
@@ -719,7 +720,7 @@ export function App(): React.JSX.Element {
                         <div className="message-actions">
                           <button
                             className="message-action"
-                            onClick={() => void saveCurrentArtifact()}
+                            onClick={() => trackAction(saveCurrentArtifact(), '保存成果')}
                           >
                             <ArtifactIcon size={13} />
                             保存为成果
@@ -771,14 +772,18 @@ export function App(): React.JSX.Element {
                     type="button"
                     className="text-button"
                     onClick={() =>
-                      void window.betterwork.workspace.selectDirectory().then((selected) => {
-                        if (selected) {
-                          startNewTask();
-                          workspaceIdRef.current = selected.id;
-                          setWorkspace(selected);
-                          void refreshTasks(selected.id);
-                        }
-                      })
+                      reportAction(
+                        window.betterwork.workspace.selectDirectory().then((selected) => {
+                          if (selected) {
+                            startNewTask();
+                            workspaceIdRef.current = selected.id;
+                            setWorkspace(selected);
+                            refreshTasks(selected.id);
+                          }
+                        }),
+                        setActionError,
+                        '选择工作区失败，请重试。',
+                      )
                     }
                   >
                     选择
@@ -803,7 +808,13 @@ export function App(): React.JSX.Element {
                     <button
                       type="button"
                       className="stop"
-                      onClick={() => void window.betterwork.runs.cancel({ runId: activeRunId })}
+                      onClick={() =>
+                        reportAction(
+                          window.betterwork.runs.cancel({ runId: activeRunId }),
+                          setActionError,
+                          '无法停止这次执行，请重试。',
+                        )
+                      }
                     >
                       停止
                     </button>
@@ -821,7 +832,9 @@ export function App(): React.JSX.Element {
           <ArtifactPage
             artifacts={artifacts}
             selected={selectedArtifact}
-            onSelect={(artifact) => void openArtifact(artifact)}
+            onSelect={(artifact) =>
+              reportAction(openArtifact(artifact), setActionError, '无法打开这项成果。')
+            }
             onSave={reviseArtifact}
             onExport={exportArtifact}
             onBack={() => setSelectedArtifact(undefined)}
@@ -836,8 +849,8 @@ export function App(): React.JSX.Element {
             message={knowledgeMessage}
             issues={knowledgeIssues}
             importing={isImportingKnowledge}
-            onImport={() => void importKnowledge()}
-            onSearch={(event) => void searchKnowledge(event)}
+            onImport={() => trackAction(importKnowledge(), '导入资料')}
+            onSearch={(event) => trackAction(searchKnowledge(event), '检索资料')}
             onOpenSource={openKnowledgeSource}
             onRefresh={refreshKnowledgeDocument}
             onRemove={removeKnowledgeDocument}
@@ -857,7 +870,11 @@ export function App(): React.JSX.Element {
             onToggle={toggleModel}
             onSetDefault={setDefaultModel}
             onDelete={(model) =>
-              void window.betterwork.models.delete({ id: model.id }).then(refreshModels)
+              reportAction(
+                window.betterwork.models.delete({ id: model.id }).then(() => refreshModels()),
+                setModelMessage,
+                '删除模型失败，请重试。',
+              )
             }
             appearance={appearance}
             resolvedAppearance={resolvedAppearance}
@@ -879,7 +896,9 @@ export function App(): React.JSX.Element {
           activeRun={activeRun}
           taskRuns={taskRuns}
           activityGroups={activityGroups}
-          onSelectRun={(run) => void selectRun(run)}
+          onSelectRun={(run) =>
+            reportAction(selectRun(run), setActionError, '无法打开这次执行记录。')
+          }
           onOpenSource={openKnowledgeSource}
         />
       )}
@@ -891,7 +910,7 @@ export function App(): React.JSX.Element {
           message={modelMessage}
           onClose={() => setModelEditorOpen(false)}
           onSave={saveModel}
-          onTest={() => void testModel()}
+          onTest={() => trackAction(testModel(), '测试模型连接')}
         />
       )}
       <ToastHost
@@ -902,1197 +921,5 @@ export function App(): React.JSX.Element {
         onResume={resumeToast}
       />
     </main>
-  );
-}
-
-function Welcome({ setPrompt }: { setPrompt: (value: string) => void }): React.JSX.Element {
-  return (
-    <div className="welcome">
-      <div className="abacus" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-        <i />
-      </div>
-      <p className="eyebrow">算台 · 知识工作台</p>
-      <h2>以我所知，成我所作</h2>
-      <p>从一个清楚的问题开始，算台会协助你把过程沉淀为可以继续使用的成果。</p>
-      <div className="examples">
-        <button onClick={() => setPrompt('计算: (128 + 72) / 4')}>计算一组数据</button>
-        <button onClick={() => setPrompt('读取: README.md')}>读取一份资料</button>
-      </div>
-    </div>
-  );
-}
-function EmptyContext({ title, detail }: { title: string; detail: string }): React.JSX.Element {
-  return (
-    <div className="empty-context">
-      <span aria-hidden="true">
-        <ArtifactIcon size={16} />
-      </span>
-      <strong>{title}</strong>
-      <p>{detail}</p>
-    </div>
-  );
-}
-function EmptyPage({
-  eyebrow,
-  title,
-  detail,
-}: {
-  eyebrow: string;
-  title: string;
-  detail: string;
-}): React.JSX.Element {
-  return (
-    <section className="empty-page">
-      <p className="eyebrow">{eyebrow}</p>
-      <h1>{title}</h1>
-      <p>{detail}</p>
-    </section>
-  );
-}
-function KnowledgePage({
-  documents,
-  results,
-  query,
-  setQuery,
-  message,
-  issues,
-  importing,
-  onImport,
-  onSearch,
-  onOpenSource,
-  onRefresh,
-  onRemove,
-}: {
-  documents: KnowledgeDocumentSummary[];
-  results: KnowledgeSearchResult[];
-  query: string;
-  setQuery: (query: string) => void;
-  message: string;
-  issues: string[];
-  importing: boolean;
-  onImport: () => void;
-  onSearch: (event: FormEvent) => void;
-  onOpenSource: (sourcePath: string) => Promise<void>;
-  onRefresh: (document: KnowledgeDocumentSummary) => Promise<void>;
-  onRemove: (document: KnowledgeDocumentSummary) => Promise<void>;
-}): React.JSX.Element {
-  const showingResults = Boolean(query.trim());
-  const items: Array<{ document: KnowledgeDocumentSummary; excerpt?: string; locator?: string }> =
-    showingResults
-      ? results.map((result) => ({
-          document: result.document,
-          locator: result.locator,
-          excerpt: result.excerpt,
-        }))
-      : documents.map((document) => ({ document }));
-  const [openMessage, setOpenMessage] = useState('');
-  return (
-    <>
-      <header className="page-header" onDoubleClick={handleTitlebarDoubleClick}>
-        <div>
-          <p className="eyebrow">知识 · 个人资料库</p>
-          <h1>让资料成为下一次工作的起点</h1>
-        </div>
-        <button className="primary-button" disabled={importing} onClick={onImport}>
-          {importing ? (
-            '正在处理…'
-          ) : (
-            <>
-              <PlusIcon size={13} /> 导入资料
-            </>
-          )}
-        </button>
-      </header>
-      <div className="page-scroll">
-        <section className="page-body knowledge-page">
-          <p className="page-intro">
-            资料保留在你的本机路径；算台只建立可重建的本地文本索引。当前支持 Markdown、文本、PDF 与
-            Word。
-          </p>
-          <form className="knowledge-search" onSubmit={onSearch}>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索资料库中的内容…"
-              aria-label="搜索个人资料库"
-            />
-            <button type="submit">搜索</button>
-            {showingResults && (
-              <button type="button" className="clear-search" onClick={() => setQuery('')}>
-                清除
-              </button>
-            )}
-          </form>
-          {message && <p className="inline-message">{message}</p>}
-          {issues.length > 0 && (
-            <div className="knowledge-issues">
-              <strong>以下资料未导入</strong>
-              <ul>
-                {issues.map((issue, index) => (
-                  <li key={`${index}-${issue}`}>{issue}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {openMessage && <p className="knowledge-open-message">{openMessage}</p>}
-          <div className="knowledge-summary">
-            <span>
-              {showingResults
-                ? `找到 ${items.length} 条相关资料`
-                : `已整理 ${documents.length} 份资料`}
-            </span>
-            <small>
-              {showingResults ? '检索仅在本地资料库中进行' : '下一步将支持表格与语义检索'}
-            </small>
-          </div>
-          {items.length === 0 ? (
-            <EmptyPage
-              eyebrow={showingResults ? '没有匹配结果' : '从一份资料开始'}
-              title={showingResults ? '换个关键词试试' : '把常用资料放进你的资料库'}
-              detail={
-                showingResults
-                  ? '当前先按文本内容进行本地检索。'
-                  : '导入 Markdown、文本、PDF 或 Word 后，它们会在后续研究和写作中成为可引用的个人资料。'
-              }
-            />
-          ) : (
-            <div className="knowledge-list">
-              {items.map(({ document, excerpt, locator }) => (
-                <article className="knowledge-card" key={`${document.id}-${locator ?? 'document'}`}>
-                  <span className={`knowledge-format ${document.format}`}>
-                    {document.format === 'markdown'
-                      ? 'MD'
-                      : document.format === 'pdf'
-                        ? 'PDF'
-                        : document.format === 'docx'
-                          ? 'DOC'
-                          : 'TXT'}
-                  </span>
-                  <div>
-                    <strong>{document.title}</strong>
-                    {excerpt && <p>{excerpt}</p>}
-                    <small>
-                      {document.sourcePath}
-                      {locator ? ` · ${locator}` : ''} · 更新于 {formatTime(document.updatedAt)}
-                    </small>
-                  </div>
-                  <div className="knowledge-card-actions">
-                    <button
-                      className="open-source-button"
-                      onClick={() =>
-                        void onOpenSource(document.sourcePath)
-                          .then(() => setOpenMessage(`已打开「${document.title}」的原始资料。`))
-                          .catch((reason: unknown) =>
-                            setOpenMessage(
-                              reason instanceof Error ? reason.message : '无法打开原始资料。',
-                            ),
-                          )
-                      }
-                    >
-                      打开原文
-                    </button>
-                    <button
-                      className="refresh-knowledge-button"
-                      disabled={importing}
-                      onClick={() => void onRefresh(document)}
-                    >
-                      刷新索引
-                    </button>
-                    <button
-                      className="remove-knowledge-button"
-                      disabled={importing}
-                      onClick={() => void onRemove(document)}
-                    >
-                      移出资料库
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-    </>
-  );
-}
-function CompletedWorkPage({
-  runs,
-  onOpen,
-}: {
-  runs: RunSummary[];
-  onOpen: (run: RunSummary) => void;
-}): React.JSX.Element {
-  return (
-    <section className="completed-work-page">
-      <header>
-        <div>
-          <p className="eyebrow">成果</p>
-          <h1>已完成的工作</h1>
-          <p>
-            Phase 0 先展示可以回看的任务交付。研究报告、Word、Excel 与 PPT 将在后续以独立 Artifact
-            形式管理。
-          </p>
-        </div>
-        <span className="work-count">{runs.length} 项</span>
-      </header>
-      {runs.length === 0 ? (
-        <EmptyPage
-          eyebrow="尚无交付"
-          title="完成一项工作，它会出现在这里"
-          detail="当前可使用计算和读取资料的教学链路；后续这里会承载可继续编辑的报告、表格和演示。"
-        />
-      ) : (
-        <div className="completed-work-list">
-          {runs.map((run) => (
-            <button className="completed-work-card" key={run.id} onClick={() => onOpen(run)}>
-              <span className="completed-work-icon" aria-hidden="true">
-                <CheckIcon size={14} />
-              </span>
-              <div>
-                <strong>{run.prompt}</strong>
-                <p>已完成 · {formatTime(run.completedAt ?? run.createdAt)}</p>
-              </div>
-              <span aria-hidden="true">
-                <ChevronRightIcon size={16} />
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-function ArtifactPage({
-  artifacts,
-  selected,
-  onSelect,
-  onSave,
-  onExport,
-  onBack,
-}: {
-  artifacts: ArtifactSummary[];
-  selected: ArtifactDetail | undefined;
-  onSelect: (artifact: ArtifactSummary) => void;
-  onSave: (artifact: ArtifactDetail, title: string, content: string) => Promise<void>;
-  onExport: (
-    artifact: ArtifactDetail,
-    versionId?: string,
-  ) => Promise<{ cancelled: boolean; filePath?: string }>;
-  onBack: () => void;
-}): React.JSX.Element {
-  const [editing, setEditing] = useState(false);
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [error, setError] = useState('');
-  const [versions, setVersions] = useState<ArtifactVersionSummary[]>([]);
-  const [viewingVersion, setViewingVersion] = useState<ArtifactVersionDetail>();
-  const [exportMessage, setExportMessage] = useState('');
-  useEffect(() => {
-    setEditing(false);
-    setError('');
-    setExportMessage('');
-    setTitle(selected?.title ?? '');
-    setContent(selected?.content ?? '');
-    setViewingVersion(undefined);
-    if (!selected) {
-      setVersions([]);
-      return;
-    }
-    void window.betterwork.artifacts.listVersions({ artifactId: selected.id }).then(setVersions);
-  }, [selected?.id, selected?.currentVersionId]);
-  const visibleVersion =
-    viewingVersion ??
-    (selected
-      ? {
-          id: selected.currentVersionId,
-          artifactId: selected.id,
-          versionNumber: selected.versionNumber,
-          origin: selected.origin,
-          sourceRunId: selected.sourceRunId,
-          createdAt: selected.updatedAt,
-          content: selected.content,
-          contentHash: selected.contentHash,
-          evidence: selected.evidence,
-        }
-      : undefined);
-  const selectVersion = async (version: ArtifactVersionSummary): Promise<void> => {
-    const detail = await window.betterwork.artifacts.getVersion({ id: version.id });
-    if (detail) {
-      setViewingVersion(detail);
-      setEditing(false);
-      setError('');
-    }
-  };
-  if (selected && visibleVersion)
-    return (
-      <>
-        <header className="page-header" onDoubleClick={handleTitlebarDoubleClick}>
-          <div className="page-header-leading">
-            <button className="back-button" onClick={onBack}>
-              <ChevronLeftIcon size={13} /> 成果
-            </button>
-            <div>
-              <p className="eyebrow">
-                Markdown · v{visibleVersion.versionNumber}
-                {visibleVersion.origin === 'user-edit' ? ' · 人工修订' : ''}
-                {visibleVersion.id !== selected.currentVersionId ? ' · 历史版本' : ''}
-              </p>
-              <h1>{selected.title}</h1>
-            </div>
-          </div>
-          {!editing && (
-            <div className="page-header-actions">
-              <button
-                className="secondary-button"
-                onClick={() =>
-                  void onExport(selected, visibleVersion.id)
-                    .then((result) =>
-                      setExportMessage(
-                        result.cancelled ? '' : `已导出到 ${result.filePath ?? '所选位置'}。`,
-                      ),
-                    )
-                    .catch((reason: unknown) =>
-                      setExportMessage(reason instanceof Error ? reason.message : '导出失败。'),
-                    )
-                }
-              >
-                导出 Markdown
-              </button>
-              <button
-                className="primary-button"
-                onClick={() => {
-                  setTitle(selected.title);
-                  setContent(visibleVersion.content);
-                  setEditing(true);
-                }}
-              >
-                编辑此版本
-              </button>
-            </div>
-          )}
-        </header>
-        <div className="page-scroll">
-          <section className="page-body artifact-detail-page">
-            <p className="page-intro">
-              {visibleVersion.id !== selected.currentVersionId
-                ? '正在查看历史版本；编辑后会从这里创建新的人工修订版本。'
-                : visibleVersion.origin === 'user-edit'
-                  ? '这是人工修订版本；此前版本仍可回溯。'
-                  : '来自一次任务运行，可在后续继续修订并形成新版本。'}
-            </p>
-            {exportMessage && <p className="artifact-export-message">{exportMessage}</p>}
-            <div className="artifact-detail-layout">
-              <aside className="artifact-version-list">
-                <div>
-                  <strong>版本历史</strong>
-                  <span>{versions.length} 个版本</span>
-                </div>
-                {versions.map((version) => (
-                  <button
-                    key={version.id}
-                    className={version.id === visibleVersion.id ? 'active' : ''}
-                    onClick={() => void selectVersion(version)}
-                  >
-                    <span>v{version.versionNumber}</span>
-                    <small>
-                      {version.origin === 'user-edit' ? '人工修订' : 'AI 生成'} ·{' '}
-                      {formatTime(version.createdAt)}
-                    </small>
-                  </button>
-                ))}
-                {visibleVersion.evidence.length > 0 && (
-                  <div className="artifact-evidence-list">
-                    <strong>本版来源</strong>
-                    {visibleVersion.evidence.map((item) => (
-                      <article key={item.id}>
-                        <b>
-                          {item.sourceType === 'web-page' ? (
-                            <GlobeIcon size={10} />
-                          ) : (
-                            <KnowledgeIcon size={10} />
-                          )}
-                        </b>
-                        <div>
-                          <span>{item.title}</span>
-                          <small>{item.locator}</small>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </aside>
-              {editing ? (
-                <form
-                  className="artifact-editor"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    setError('');
-                    void onSave(selected, title, content)
-                      .then(() => setEditing(false))
-                      .catch((reason: unknown) =>
-                        setError(reason instanceof Error ? reason.message : '保存修订失败。'),
-                      );
-                  }}
-                >
-                  <label>
-                    标题
-                    <input
-                      value={title}
-                      onChange={(event) => setTitle(event.target.value)}
-                      maxLength={160}
-                      required
-                    />
-                  </label>
-                  <label>
-                    Markdown 内容
-                    <textarea
-                      value={content}
-                      onChange={(event) => setContent(event.target.value)}
-                      rows={20}
-                      required
-                    />
-                  </label>
-                  {error && <p className="artifact-editor-error">{error}</p>}
-                  <footer>
-                    <span>保存后会创建 v{selected.versionNumber + 1} 人工修订版本。</span>
-                    <div>
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={() => {
-                          setEditing(false);
-                          setError('');
-                          setTitle(selected.title);
-                          setContent(visibleVersion.content);
-                        }}
-                      >
-                        取消
-                      </button>
-                      <button type="submit" className="primary-button">
-                        保存新版本
-                      </button>
-                    </div>
-                  </footer>
-                </form>
-              ) : (
-                <MarkdownPreview content={visibleVersion.content} />
-              )}
-            </div>
-          </section>
-        </div>
-      </>
-    );
-  return (
-    <>
-      <header className="page-header" onDoubleClick={handleTitlebarDoubleClick}>
-        <div>
-          <p className="eyebrow">成果</p>
-          <h1>可继续工作的交付物</h1>
-        </div>
-        <span className="work-count">{artifacts.length} 项</span>
-      </header>
-      <div className="page-scroll">
-        <section className="page-body completed-work-page">
-          <p className="page-intro">
-            Markdown 是第一种可版本化的成果。后续研究报告、Word、Excel 和 PPT 会接入同一条 Artifact
-            链路。
-          </p>
-          {artifacts.length === 0 ? (
-            <EmptyPage
-              eyebrow="尚无成果"
-              title="将一次完成的回复保存为成果"
-              detail="成果不同于运行记录：它会关联任务、来源运行与版本，方便后续继续修改和导出。"
-            />
-          ) : (
-            <div className="completed-work-list">
-              {artifacts.map((artifact) => (
-                <button
-                  className="completed-work-card"
-                  key={artifact.id}
-                  onClick={() => onSelect(artifact)}
-                >
-                  <span className="completed-work-icon markdown" aria-hidden="true">
-                    MD
-                  </span>
-                  <div>
-                    <strong>{artifact.title}</strong>
-                    <p>
-                      Markdown · v{artifact.versionNumber}
-                      {artifact.origin === 'user-edit' ? ' · 人工修订' : ''} · 更新于{' '}
-                      {formatTime(artifact.updatedAt)}
-                    </p>
-                  </div>
-                  <span aria-hidden="true">
-                    <ChevronRightIcon size={16} />
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-    </>
-  );
-}
-
-function ContextPanel({
-  open,
-  setOpen,
-  tab,
-  setTab,
-  events,
-  evidence,
-  artifacts,
-  activeRun,
-  taskRuns,
-  activityGroups,
-  onSelectRun,
-  onOpenSource,
-}: {
-  open: boolean;
-  setOpen: (open: boolean) => void;
-  tab: ContextTab;
-  setTab: (tab: ContextTab) => void;
-  events: AgentRuntimeEvent[];
-  evidence: EvidenceSummary[];
-  artifacts: ArtifactSummary[];
-  activeRun?: RunSummary | undefined;
-  taskRuns: RunSummary[];
-  activityGroups: ActivityGroup[];
-  onSelectRun: (run: RunSummary) => void;
-  onOpenSource: (sourcePath: string) => Promise<void>;
-}): React.JSX.Element | null {
-  const [sourceMessage, setSourceMessage] = useState('');
-  if (!open) return null;
-  return (
-    <aside className="context-panel">
-      <div className="context-topline" onDoubleClick={handleTitlebarDoubleClick}>
-        <span>当前任务</span>
-        <button aria-label="收起上下文面板" onClick={() => setOpen(false)}>
-          <ChevronRightIcon size={14} />
-        </button>
-      </div>
-      <div className="context-tabs" role="tablist" aria-label="任务上下文">
-        {(
-          [
-            ['process', '过程'],
-            ['sources', '资料'],
-            ['artifacts', '成果'],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            role="tab"
-            aria-selected={tab === key}
-            className={tab === key ? 'active' : ''}
-            onClick={() => setTab(key)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <div className="context-content">
-        {tab === 'process' &&
-          (events.length === 0 ? (
-            <EmptyContext
-              title="等待任务开始"
-              detail="开始后，这里会按工作阶段呈现过程，而不是堆叠底层日志。"
-            />
-          ) : (
-            <div className="activity-list">
-              <div className="activity-summary">
-                <span
-                  className={`status-dot ${activeRun?.status === 'running' ? 'running' : ''}`}
-                />
-                <div>
-                  <strong>{activeRun ? runStatusName[activeRun.status] : '正在处理任务'}</strong>
-                  <p>{activityGroups.length} 个工作阶段</p>
-                </div>
-              </div>
-              {activityGroups.map((group) => (
-                <ActivityGroupRow group={group} key={group.id} />
-              ))}
-              {taskRuns.length > 1 && (
-                <details className="task-run-history">
-                  <summary>执行记录 · {taskRuns.length} 次</summary>
-                  {taskRuns.map((run) => (
-                    <button
-                      key={run.id}
-                      className={run.id === activeRun?.id ? 'active' : ''}
-                      onClick={() => onSelectRun(run)}
-                    >
-                      <span>{runStatusName[run.status]}</span>
-                      <strong>{run.prompt}</strong>
-                      <small>{formatTime(run.createdAt)}</small>
-                    </button>
-                  ))}
-                </details>
-              )}
-            </div>
-          ))}
-        {tab === 'sources' &&
-          (evidence.length === 0 ? (
-            <EmptyContext title="尚无引用资料" detail="检索到的本地资料与网页来源会显示在这里。" />
-          ) : (
-            <div className="evidence-list">
-              {sourceMessage && <p className="context-source-message">{sourceMessage}</p>}
-              {evidence.map((item) =>
-                item.sourceType === 'web-page' ? (
-                  <article className="evidence-row" key={item.id}>
-                    <span aria-hidden="true">
-                      <GlobeIcon size={12} />
-                    </span>
-                    <div>
-                      <strong>{item.title}</strong>
-                      <small>{item.locator} · 网页来源</small>
-                      <p>{item.excerpt}</p>
-                    </div>
-                  </article>
-                ) : (
-                  <article className="evidence-row" key={item.id}>
-                    <span aria-hidden="true">
-                      <KnowledgeIcon size={12} />
-                    </span>
-                    <div>
-                      <strong>{item.title}</strong>
-                      <small>{item.locator} · 本地资料</small>
-                      <p>{item.excerpt}</p>
-                    </div>
-                    <button
-                      className="evidence-open-button"
-                      onClick={() =>
-                        void onOpenSource(item.sourceUri)
-                          .then(() => setSourceMessage(`已打开「${item.title}」原文。`))
-                          .catch((reason: unknown) =>
-                            setSourceMessage(
-                              reason instanceof Error ? reason.message : '无法打开原始资料。',
-                            ),
-                          )
-                      }
-                    >
-                      原文
-                    </button>
-                  </article>
-                ),
-              )}
-            </div>
-          ))}
-        {tab === 'artifacts' &&
-          (artifacts.length === 0 ? (
-            <EmptyContext
-              title="尚无工作成果"
-              detail="将完成的回复保存为 Markdown 后，它会出现在这里。"
-            />
-          ) : (
-            <div className="evidence-list">
-              {artifacts.map((artifact) => (
-                <article className="evidence-row" key={artifact.id}>
-                  <span aria-hidden="true">
-                    <ArtifactIcon size={12} />
-                  </span>
-                  <div>
-                    <strong>{artifact.title}</strong>
-                    <small>Markdown · v{artifact.versionNumber}</small>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ))}
-      </div>
-    </aside>
-  );
-}
-
-function ActivityGroupRow({ group }: { group: ActivityGroup }): React.JSX.Element {
-  return (
-    <div className={`activity-row ${group.status}`}>
-      <span className="activity-marker" />
-      <div>
-        <strong>{group.title}</strong>
-        <p>{group.description}</p>
-        <small>{group.status === 'running' ? '进行中' : formatTime(group.updatedAt)}</small>
-      </div>
-    </div>
-  );
-}
-
-interface SettingsPageProps {
-  tab: SettingsTab;
-  setTab: (tab: SettingsTab) => void;
-  models: ModelProfileSummary[];
-  modelFilter: ModelProfileSummary['role'] | 'all';
-  setModelFilter: (filter: ModelProfileSummary['role'] | 'all') => void;
-  activeLanguageModel?: ModelProfileSummary | undefined;
-  defaultModelIds: Map<ModelProfileSummary['role'], string | undefined>;
-  onAdd: () => void;
-  onEdit: (model: ModelProfileSummary) => void;
-  onToggle: (model: ModelProfileSummary) => void;
-  onSetDefault: (model: ModelProfileSummary) => void;
-  onDelete: (model: ModelProfileSummary) => void;
-  appearance: AppearancePreference;
-  resolvedAppearance: ResolvedAppearance;
-  onMode: (mode: AppearanceMode) => void;
-  onScheme: (scheme: ColorScheme) => void;
-  modelMessage: string;
-}
-function SettingsPage(props: SettingsPageProps): React.JSX.Element {
-  const { tab, setTab } = props;
-  return (
-    <div className="settings-layout">
-      <aside className="settings-nav-list">
-        <p className="eyebrow">设置</p>
-        <h1>偏好与能力</h1>
-        <button className={tab === 'models' ? 'active' : ''} onClick={() => setTab('models')}>
-          模型与能力
-        </button>
-        <button className={tab === 'search' ? 'active' : ''} onClick={() => setTab('search')}>
-          搜索
-        </button>
-        <button
-          className={tab === 'appearance' ? 'active' : ''}
-          onClick={() => setTab('appearance')}
-        >
-          外观
-        </button>
-        <button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>
-          通用
-        </button>
-      </aside>
-      <section className="settings-content">
-        {tab === 'models' && <ModelSettings {...props} />}
-        {tab === 'search' && <SearchSettings />}
-        {tab === 'appearance' && <AppearanceSettings {...props} />}
-        {tab === 'general' && (
-          <section className="settings-section">
-            <p className="eyebrow">通用</p>
-            <h2>工作偏好</h2>
-            <div className="setting-placeholder">
-              <strong>通用设置将在后续阶段开放</strong>
-              <p>工作目录、语言、数据与更新设置会在这里统一管理。</p>
-            </div>
-          </section>
-        )}
-      </section>
-    </div>
-  );
-}
-function ModelSettings({
-  models,
-  modelFilter,
-  setModelFilter,
-  defaultModelIds,
-  onAdd,
-  onEdit,
-  onToggle,
-  onSetDefault,
-  onDelete,
-  modelMessage,
-}: SettingsPageProps): React.JSX.Element {
-  return (
-    <section className="settings-section">
-      <div className="settings-heading">
-        <div>
-          <p className="eyebrow">模型与能力</p>
-          <h2>让每一种工作使用合适的模型</h2>
-          <p>
-            API Key 仅保存于本机主进程。语言模型会用于当前任务，视觉与嵌入能力将在对应工作流启用。
-          </p>
-        </div>
-        <button className="primary-button" onClick={onAdd}>
-          <PlusIcon size={13} /> 添加模型
-        </button>
-      </div>
-      {modelMessage && <p className="inline-message">{modelMessage}</p>}
-      <div className="filter-bar">
-        {(['all', 'language', 'vision', 'embedding'] as const).map((role) => (
-          <button
-            className={modelFilter === role ? 'active' : ''}
-            key={role}
-            onClick={() => setModelFilter(role)}
-          >
-            {role === 'all' ? '全部' : roleName[role]}
-          </button>
-        ))}
-      </div>
-      <div className="model-list">
-        {models.length === 0 ? (
-          <div className="empty-models">
-            <strong>尚未配置模型</strong>
-            <p>添加一个 OpenAI-compatible 服务后，即可从教学链路切换到真实模型。</p>
-          </div>
-        ) : (
-          models.map((model) => {
-            const isDefault = defaultModelIds.get(model.role) === model.id;
-            return (
-              <article
-                className={model.enabled ? 'model-row' : 'model-row disabled'}
-                key={model.id}
-              >
-                <div className="model-role-icon" aria-hidden="true">
-                  {model.role === 'language' ? '文' : model.role === 'vision' ? '图' : '嵌'}
-                </div>
-                <div className="model-main">
-                  <div>
-                    <strong>{model.name}</strong>
-                    {isDefault && (
-                      <span className="current-badge">
-                        {model.role === 'language' ? '当前工作模型' : '默认模型'}
-                      </span>
-                    )}
-                  </div>
-                  <p>
-                    {roleName[model.role]} · {model.provider} · {model.model}
-                  </p>
-                  <small>
-                    {model.apiKeyConfigured ? '已配置凭据' : '未配置凭据'} ·{' '}
-                    <span className={`connection-status ${model.connectionStatus}`}>
-                      {connectionStatusName[model.connectionStatus]}
-                    </span>{' '}
-                    · {model.enabled ? '已启用' : '已停用'}
-                  </small>
-                </div>
-                <div className="model-actions">
-                  <button onClick={() => onEdit(model)}>编辑</button>
-                  {!isDefault && (
-                    <button disabled={!model.enabled} onClick={() => onSetDefault(model)}>
-                      设为默认
-                    </button>
-                  )}
-                  <button onClick={() => onToggle(model)}>{model.enabled ? '停用' : '启用'}</button>
-                  <button className="danger-text" onClick={() => onDelete(model)}>
-                    删除
-                  </button>
-                </div>
-              </article>
-            );
-          })
-        )}
-      </div>
-    </section>
-  );
-}
-function AppearanceSettings({
-  appearance,
-  resolvedAppearance,
-  onMode,
-  onScheme,
-}: SettingsPageProps): React.JSX.Element {
-  return (
-    <section className="settings-section appearance-settings">
-      <div className="settings-heading">
-        <div>
-          <p className="eyebrow">外观</p>
-          <h2>选择适合长期工作的界面</h2>
-          <p>外观模式与色系独立保存；跟随系统时仍会保留你选择的色系。</p>
-        </div>
-      </div>
-      <h3>外观模式</h3>
-      <div className="appearance-modes">
-        {(
-          [
-            ['light', '浅色'],
-            ['dark', '深色'],
-            ['system', '跟随系统'],
-          ] as const
-        ).map(([mode, label]) => (
-          <button
-            className={appearance.mode === mode ? 'selected' : ''}
-            key={mode}
-            onClick={() => onMode(mode)}
-          >
-            <span className={`mode-preview ${mode}`}>
-              <i />
-              <b />
-              <em />
-            </span>
-            <strong>{label}</strong>
-            {mode === 'system' && (
-              <small>当前为{resolvedAppearance === 'dark' ? '深色' : '浅色'}</small>
-            )}
-          </button>
-        ))}
-      </div>
-      <h3>色系</h3>
-      <div className="scheme-grid">
-        {colorSchemes.map((scheme) => (
-          <button
-            className={appearance.scheme === scheme.id ? 'selected' : ''}
-            key={scheme.id}
-            onClick={() => onScheme(scheme.id)}
-          >
-            <span className={`scheme-preview ${scheme.id}`}>
-              <i />
-              <i />
-              <i />
-            </span>
-            <strong>{scheme.name}</strong>
-            <small>{scheme.description}</small>
-          </button>
-        ))}
-      </div>
-      <div className="appearance-note">
-        <span>
-          <CheckIcon size={13} />
-        </span>
-        <p>
-          所有色系都提供浅色与深色 Variant。应用换肤不会改变 Word、PPT、Excel 和其他成果自身的配色。
-        </p>
-      </div>
-    </section>
-  );
-}
-function SearchSettings(): React.JSX.Element {
-  const [engines, setEngines] = useState<SearchEngineSummary[]>([]);
-  const [apiKey, setApiKey] = useState('');
-  const [webTopK, setWebTopK] = useState(10);
-  const [message, setMessage] = useState('');
-  const configured = engines.find((engine) => engine.provider === 'baidu_qianfan');
-  const refresh = async (): Promise<void> =>
-    setEngines(await window.betterwork.searchEngines.list());
-  useEffect(() => {
-    void refresh();
-  }, []);
-  const save = async (): Promise<void> => {
-    try {
-      await window.betterwork.searchEngines.save({
-        provider: 'baidu_qianfan',
-        apiKey,
-        webTopK,
-        enabled: true,
-      });
-      setApiKey('');
-      setMessage('搜索配置已保存，智能体可以在任务中联网搜索并标注来源。');
-      await refresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '保存失败，请检查配置。');
-    }
-  };
-  const test = async (): Promise<void> => {
-    setMessage('正在连接搜索服务…');
-    try {
-      const result = await window.betterwork.searchEngines.test({
-        provider: 'baidu_qianfan',
-        apiKey,
-        webTopK,
-      });
-      setMessage(result.message);
-      await refresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '连接测试失败。');
-    }
-  };
-  return (
-    <section className="settings-section search-settings">
-      <div className="settings-heading">
-        <div>
-          <p className="eyebrow">搜索</p>
-          <h2>为智能体接入联网搜索</h2>
-          <p>
-            API Key
-            仅保存于本机主进程。启用后，智能体在任务需要时会搜索互联网，并给过程与成果标注网页来源。
-          </p>
-        </div>
-      </div>
-      {message && <p className="inline-message">{message}</p>}
-      <div className="search-form">
-        <label>
-          搜索引擎
-          <select defaultValue="baidu_qianfan">
-            <option value="baidu_qianfan">百度千帆 AI 搜索</option>
-            <option disabled>更多搜索引擎即将支持</option>
-          </select>
-        </label>
-        <label>
-          API Key
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
-            placeholder={
-              configured?.apiKeyConfigured ? '留空则保持原有凭据' : '粘贴服务商控制台生成的 API Key'
-            }
-          />
-        </label>
-        <details>
-          <summary>高级参数</summary>
-          <label>
-            网页结果数量 top_k
-            <input
-              type="number"
-              min={1}
-              max={20}
-              value={webTopK}
-              onChange={(event) =>
-                setWebTopK(Math.min(20, Math.max(1, Number(event.target.value) || 10)))
-              }
-            />
-          </label>
-        </details>
-        <div className="search-actions">
-          <button type="button" className="secondary-button" onClick={() => void test()}>
-            测试连接
-          </button>
-          <button type="button" className="primary-button" onClick={() => void save()}>
-            保存并启用
-          </button>
-        </div>
-      </div>
-      <p className="search-status">
-        {configured ? (
-          <>
-            当前状态：{configured.enabled ? '已启用' : '已停用'} ·{' '}
-            {configured.apiKeyConfigured ? '已配置凭据' : '未配置凭据'} ·{' '}
-            <span className={`connection-status ${configured.connectionStatus}`}>
-              {connectionStatusName[configured.connectionStatus]}
-            </span>
-          </>
-        ) : (
-          '当前状态：未配置。保存并启用后，智能体即可联网搜索。'
-        )}
-      </p>
-    </section>
-  );
-}
-
-interface ModelEditorProps {
-  form: ModelProfileInput;
-  setForm: (input: ModelProfileInput) => void;
-  editing: boolean;
-  message: string;
-  onClose: () => void;
-  onSave: (event: FormEvent) => Promise<void>;
-  onTest: () => void;
-}
-function ModelEditor({
-  form,
-  setForm,
-  editing,
-  message,
-  onClose,
-  onSave,
-  onTest,
-}: ModelEditorProps): React.JSX.Element {
-  return (
-    <div className="sheet-backdrop" onMouseDown={onClose}>
-      <aside
-        className="model-sheet"
-        role="dialog"
-        aria-modal="true"
-        aria-label={editing ? '编辑模型' : '添加模型'}
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header>
-          <div>
-            <p className="eyebrow">模型配置</p>
-            <h2>{editing ? '编辑模型' : '添加模型'}</h2>
-          </div>
-          <button aria-label="关闭" onClick={onClose}>
-            <CloseIcon size={14} />
-          </button>
-        </header>
-        <form onSubmit={(event) => void onSave(event)}>
-          <label>
-            显示名称
-            <input
-              required
-              value={form.name}
-              onChange={(event) => setForm({ ...form, name: event.target.value })}
-              placeholder="例如：公司主力模型"
-            />
-          </label>
-          <div className="form-grid">
-            <label>
-              模型角色
-              <select
-                value={form.role}
-                onChange={(event) =>
-                  setForm({ ...form, role: event.target.value as ModelProfileInput['role'] })
-                }
-              >
-                <option value="language">语言模型</option>
-                <option value="vision">视觉模型</option>
-                <option value="embedding">嵌入模型</option>
-              </select>
-            </label>
-            <label>
-              Provider
-              <input
-                required
-                value={form.provider}
-                onChange={(event) => setForm({ ...form, provider: event.target.value })}
-                placeholder="openai-compatible"
-              />
-            </label>
-          </div>
-          <label>
-            模型名称
-            <input
-              required
-              value={form.model}
-              onChange={(event) => setForm({ ...form, model: event.target.value })}
-              placeholder="模型服务中的 model id"
-            />
-          </label>
-          <label>
-            API 地址
-            <input
-              required
-              type="url"
-              value={form.baseUrl}
-              onChange={(event) => setForm({ ...form, baseUrl: event.target.value })}
-              placeholder="https://example.com/v1"
-            />
-          </label>
-          <label>
-            API Key
-            <input
-              type="password"
-              value={form.apiKey}
-              onChange={(event) => setForm({ ...form, apiKey: event.target.value })}
-              placeholder={editing ? '留空则保持原有凭据' : '可留空'}
-            />
-          </label>
-          <details>
-            <summary>高级参数</summary>
-            <div className="form-grid">
-              <label>
-                上下文 Token
-                <input
-                  type="number"
-                  min="1"
-                  value={form.maxContextTokens}
-                  onChange={(event) =>
-                    setForm({ ...form, maxContextTokens: Number(event.target.value) })
-                  }
-                />
-              </label>
-              <label>
-                最大输出 Token
-                <input
-                  type="number"
-                  min="1"
-                  value={form.maxOutputTokens}
-                  onChange={(event) =>
-                    setForm({ ...form, maxOutputTokens: Number(event.target.value) })
-                  }
-                />
-              </label>
-            </div>
-          </details>
-          {message && <p className="inline-message">{message}</p>}
-          <footer>
-            <button type="button" className="secondary-button" onClick={onTest}>
-              测试连接
-            </button>
-            <button type="submit" className="primary-button">
-              {editing ? '保存修改' : '添加模型'}
-            </button>
-          </footer>
-        </form>
-      </aside>
-    </div>
   );
 }
