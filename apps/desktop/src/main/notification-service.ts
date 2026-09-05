@@ -1,5 +1,9 @@
 import { Notification, type BrowserWindow } from 'electron';
-import type { CreateNotificationInput, NotificationChangeEvent, NotificationSummary } from '@betterwork/agent-protocol';
+import type {
+  CreateNotificationInput,
+  NotificationChangeEvent,
+  NotificationSummary,
+} from '@betterwork/agent-protocol';
 import { IpcChannel } from '@betterwork/agent-protocol';
 import { RunJournal } from './run-journal';
 
@@ -9,9 +13,16 @@ export class NotificationService {
     private readonly getWindow: () => BrowserWindow | null,
   ) {}
 
-  create(input: CreateNotificationInput, options?: { systemNotify?: boolean }): NotificationSummary {
+  create(
+    input: CreateNotificationInput,
+    options?: { systemNotify?: boolean },
+  ): NotificationSummary {
     const notification = this.journal.saveNotification(input);
-    this.broadcast({ type: 'created', notification, unreadCount: this.journal.unreadNotificationCount() });
+    this.broadcast({
+      type: 'created',
+      notification,
+      unreadCount: this.journal.unreadNotificationCount(),
+    });
     if (options?.systemNotify) this.showSystemNotification(notification);
     return notification;
   }
@@ -41,7 +52,10 @@ export class NotificationService {
     const window = this.getWindow();
     if (!window || window.isDestroyed() || window.isFocused()) return;
     if (!Notification.isSupported()) return;
-    const systemNotification = new Notification({ title: notification.title, body: notification.detail ?? '算台 BetterWork' });
+    const systemNotification = new Notification({
+      title: notification.title,
+      body: notification.detail ?? '算台 BetterWork',
+    });
     systemNotification.on('click', () => {
       const target = this.getWindow();
       if (!target || target.isDestroyed()) return;
@@ -55,6 +69,7 @@ export class NotificationService {
 
   private broadcast(event: NotificationChangeEvent): void {
     const window = this.getWindow();
-    if (window && !window.isDestroyed()) window.webContents.send(IpcChannel.NotificationChangeEvent, event);
+    if (window && !window.isDestroyed())
+      window.webContents.send(IpcChannel.NotificationChangeEvent, event);
   }
 }

@@ -1,21 +1,40 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { BrowserWindow } from 'electron';
 import type { AgentTool } from '@betterwork/agent-core';
-import { ReActAgentEngine, FakeModelProvider, OpenAICompatibleProvider } from '@betterwork/agent-core';
+import {
+  ReActAgentEngine,
+  FakeModelProvider,
+  OpenAICompatibleProvider,
+} from '@betterwork/agent-core';
 import type { AgentRuntimeEvent, StartRunRequest } from '@betterwork/agent-protocol';
 import { IpcChannel } from '@betterwork/agent-protocol';
-import { calculatorTool, createKnowledgeSearchTool, createWebSearchTool, readTextFileTool, type KnowledgeSearchItem, type WebSearch } from '@betterwork/tool-runtime';
+import {
+  calculatorTool,
+  createKnowledgeSearchTool,
+  createWebSearchTool,
+  readTextFileTool,
+  type KnowledgeSearchItem,
+  type WebSearch,
+} from '@betterwork/tool-runtime';
 import { RunJournal } from './run-journal';
 import { KnowledgeVault } from './knowledge-vault';
 import { NotificationService } from './notification-service';
 import { createQianfanSearchClient } from './search-engine-service';
 
-export const createRunTools = (dependencies: { knowledgeSearch: (query: string) => KnowledgeSearchItem[]; webSearch?: WebSearch }): AgentTool[] => {
-  const tools: AgentTool[] = [calculatorTool, readTextFileTool, createKnowledgeSearchTool(dependencies.knowledgeSearch)];
+export const createRunTools = (dependencies: {
+  knowledgeSearch: (query: string) => KnowledgeSearchItem[];
+  webSearch?: WebSearch;
+}): AgentTool[] => {
+  const tools: AgentTool[] = [
+    calculatorTool,
+    readTextFileTool,
+    createKnowledgeSearchTool(dependencies.knowledgeSearch),
+  ];
   return dependencies.webSearch ? [...tools, createWebSearchTool(dependencies.webSearch)] : tools;
 };
 
-const truncate = (value: string, max: number): string => (value.length <= max ? value : `${value.slice(0, max - 1)}…`);
+const truncate = (value: string, max: number): string =>
+  value.length <= max ? value : `${value.slice(0, max - 1)}…`;
 
 export class RunService {
   private readonly activeRuns = new Map<string, AbortController>();
@@ -59,11 +78,17 @@ export class RunService {
     return true;
   }
 
-  private async consume(runId: string, input: StartRunRequest, controller: AbortController): Promise<void> {
+  private async consume(
+    runId: string,
+    input: StartRunRequest,
+    controller: AbortController,
+  ): Promise<void> {
     try {
       const configured = this.journal.getModelForRun('language');
       const searchEngine = this.journal.getEnabledSearchEngine();
-      const webSearch = searchEngine?.apiKey ? createQianfanSearchClient(searchEngine).search : undefined;
+      const webSearch = searchEngine?.apiKey
+        ? createQianfanSearchClient(searchEngine).search
+        : undefined;
       for await (const event of this.engine.run({
         runId,
         taskId: input.taskId,
@@ -72,11 +97,15 @@ export class RunService {
         workspacePath: input.workspacePath,
         model: configured ? new OpenAICompatibleProvider(configured) : this.model,
         tools: createRunTools({
-          knowledgeSearch: (query) => this.knowledgeVault.search(query).map(({ document, locator, excerpt }) => ({ ...document, locator, excerpt })),
+          knowledgeSearch: (query) =>
+            this.knowledgeVault
+              .search(query)
+              .map(({ document, locator, excerpt }) => ({ ...document, locator, excerpt })),
           ...(webSearch ? { webSearch } : {}),
         }),
         signal: controller.signal,
-      })) this.publish(event);
+      }))
+        this.publish(event);
     } finally {
       this.activeRuns.delete(runId);
       this.activeRunTasks.delete(runId);
@@ -87,12 +116,19 @@ export class RunService {
 
   private publish(event: AgentRuntimeEvent): void {
     this.journal.appendEvent(event);
-    if (event.type === 'tool.started') this.activeToolCalls.get(event.runId)?.set(event.toolCall.id, event.toolCall.name);
-    if (event.type === 'tool.completed' && this.activeToolCalls.get(event.runId)?.get(event.toolCallId) === 'knowledge_search') {
+    if (event.type === 'tool.started')
+      this.activeToolCalls.get(event.runId)?.set(event.toolCall.id, event.toolCall.name);
+    if (
+      event.type === 'tool.completed' &&
+      this.activeToolCalls.get(event.runId)?.get(event.toolCallId) === 'knowledge_search'
+    ) {
       const taskId = this.activeRunTasks.get(event.runId);
       if (taskId) this.persistKnowledgeEvidence(taskId, event.runId, event.output);
     }
-    if (event.type === 'tool.completed' && this.activeToolCalls.get(event.runId)?.get(event.toolCallId) === 'web_search') {
+    if (
+      event.type === 'tool.completed' &&
+      this.activeToolCalls.get(event.runId)?.get(event.toolCallId) === 'web_search'
+    ) {
       const taskId = this.activeRunTasks.get(event.runId);
       if (taskId) this.persistWebEvidence(taskId, event.runId, event.output);
     }
@@ -102,23 +138,32 @@ export class RunService {
       const taskId = this.activeRunTasks.get(event.runId);
       const prompt = this.activeRunPrompts.get(event.runId);
       if (taskId && prompt !== undefined) {
-        this.notifications.create({
-          level: event.type === 'run.completed' ? 'success' : 'error',
-          kind: 'run',
-          title: `${event.type === 'run.completed' ? '任务完成' : '任务失败'}：${truncate(prompt, 80)}`,
-          ...(event.type === 'run.failed' ? { detail: truncate(event.error, 500) } : {}),
-          target: { kind: 'task', taskId },
-        }, { systemNotify: true });
+        this.notifications.create(
+          {
+            level: event.type === 'run.completed' ? 'success' : 'error',
+            kind: 'run',
+            title: `${event.type === 'run.completed' ? '任务完成' : '任务失败'}：${truncate(prompt, 80)}`,
+            ...(event.type === 'run.failed' ? { detail: truncate(event.error, 500) } : {}),
+            target: { kind: 'task', taskId },
+          },
+          { systemNotify: true },
+        );
       }
     }
   }
 
   private persistKnowledgeEvidence(taskId: string, runId: string, output: unknown): void {
     if (!isKnowledgeSearchOutput(output)) return;
-    for (const result of output.results) this.journal.saveLocalEvidence({
-      taskId, runId, sourceUri: result.sourcePath, title: result.title, locator: result.locator,
-      excerpt: result.excerpt, contentHash: result.contentHash,
-    });
+    for (const result of output.results)
+      this.journal.saveLocalEvidence({
+        taskId,
+        runId,
+        sourceUri: result.sourcePath,
+        title: result.title,
+        locator: result.locator,
+        excerpt: result.excerpt,
+        contentHash: result.contentHash,
+      });
   }
 
   private persistWebEvidence(taskId: string, runId: string, output: unknown): void {
@@ -138,22 +183,53 @@ export class RunService {
   }
 }
 
-interface KnowledgeSearchOutputItem { title: string; sourcePath: string; locator: string; excerpt: string; contentHash: string; }
-const isKnowledgeSearchOutput = (value: unknown): value is { results: KnowledgeSearchOutputItem[] } => {
-  if (!value || typeof value !== 'object' || !('results' in value) || !Array.isArray(value.results)) return false;
-  return value.results.every((result) => result && typeof result === 'object'
-    && 'title' in result && typeof result.title === 'string'
-    && 'sourcePath' in result && typeof result.sourcePath === 'string'
-    && 'locator' in result && typeof result.locator === 'string'
-    && 'excerpt' in result && typeof result.excerpt === 'string'
-    && 'contentHash' in result && typeof result.contentHash === 'string');
+interface KnowledgeSearchOutputItem {
+  title: string;
+  sourcePath: string;
+  locator: string;
+  excerpt: string;
+  contentHash: string;
+}
+const isKnowledgeSearchOutput = (
+  value: unknown,
+): value is { results: KnowledgeSearchOutputItem[] } => {
+  if (!value || typeof value !== 'object' || !('results' in value) || !Array.isArray(value.results))
+    return false;
+  return value.results.every(
+    (result) =>
+      result &&
+      typeof result === 'object' &&
+      'title' in result &&
+      typeof result.title === 'string' &&
+      'sourcePath' in result &&
+      typeof result.sourcePath === 'string' &&
+      'locator' in result &&
+      typeof result.locator === 'string' &&
+      'excerpt' in result &&
+      typeof result.excerpt === 'string' &&
+      'contentHash' in result &&
+      typeof result.contentHash === 'string',
+  );
 };
 
-interface WebSearchOutputItem { title: string; url: string; snippet: string; site?: string; }
+interface WebSearchOutputItem {
+  title: string;
+  url: string;
+  snippet: string;
+  site?: string;
+}
 const isWebSearchOutput = (value: unknown): value is { results: WebSearchOutputItem[] } => {
-  if (!value || typeof value !== 'object' || !('results' in value) || !Array.isArray(value.results)) return false;
-  return value.results.every((result) => result && typeof result === 'object'
-    && 'title' in result && typeof result.title === 'string'
-    && 'url' in result && typeof result.url === 'string'
-    && 'snippet' in result && typeof result.snippet === 'string');
+  if (!value || typeof value !== 'object' || !('results' in value) || !Array.isArray(value.results))
+    return false;
+  return value.results.every(
+    (result) =>
+      result &&
+      typeof result === 'object' &&
+      'title' in result &&
+      typeof result.title === 'string' &&
+      'url' in result &&
+      typeof result.url === 'string' &&
+      'snippet' in result &&
+      typeof result.snippet === 'string',
+  );
 };

@@ -10,9 +10,16 @@ describe('readTextFileTool', () => {
     const workspace = path.join(root, 'workspace');
     await writeFile(path.join(root, 'secret.txt'), 'private');
 
-    await expect(readTextFileTool.execute(
-      { path: '../secret.txt' },
-      { runId: 'run-1', workspacePath: workspace, signal: new AbortController().signal, reportProgress: () => undefined },
-    )).rejects.toThrow('outside the active workspace');
+    await expect(
+      readTextFileTool.execute(
+        { path: '../secret.txt' },
+        {
+          runId: 'run-1',
+          workspacePath: workspace,
+          signal: new AbortController().signal,
+          reportProgress: () => undefined,
+        },
+      ),
+    ).rejects.toThrow('outside the active workspace');
   });
 });

@@ -12,7 +12,10 @@ interface QianfanWebSummaryResponse {
 }
 
 /** Builds the Baidu Qianfan AI Search (web_summary) client; API key never appears in error messages. */
-export const createQianfanSearchClient = (config: QianfanSearchConfig, fetchImpl: typeof fetch = fetch) => {
+export const createQianfanSearchClient = (
+  config: QianfanSearchConfig,
+  fetchImpl: typeof fetch = fetch,
+) => {
   const search = async (query: string): Promise<WebSearchResponse> => {
     let response: Response;
     try {
@@ -31,15 +34,20 @@ export const createQianfanSearchClient = (config: QianfanSearchConfig, fetchImpl
     } catch (error) {
       throw new Error(`无法连接搜索服务：${error instanceof Error ? error.message : '网络错误'}`);
     }
-    const payload = await response.json().catch(() => undefined) as QianfanWebSummaryResponse | undefined;
+    const payload = (await response.json().catch(() => undefined)) as
+      QianfanWebSummaryResponse | undefined;
     if (!response.ok) {
-      const detail = typeof payload?.message === 'string' && payload.message ? `：${payload.message}` : '';
+      const detail =
+        typeof payload?.message === 'string' && payload.message ? `：${payload.message}` : '';
       throw new Error(`搜索服务返回错误（HTTP ${response.status}${detail}）`);
     }
     if (!payload || typeof payload !== 'object') throw new Error('搜索服务返回了无法解析的结果');
     const references = Array.isArray(payload.references) ? payload.references : [];
     const results = references
-      .filter((reference): reference is Record<string, unknown> => Boolean(reference) && typeof reference === 'object')
+      .filter(
+        (reference): reference is Record<string, unknown> =>
+          Boolean(reference) && typeof reference === 'object',
+      )
       .map((reference) => ({
         title: String(reference.title ?? '') || '无标题',
         url: String(reference.url ?? ''),
@@ -49,7 +57,9 @@ export const createQianfanSearchClient = (config: QianfanSearchConfig, fetchImpl
       }))
       .filter((item) => item.url !== '');
     return {
-      ...(typeof payload.summary === 'string' && payload.summary ? { summary: payload.summary } : {}),
+      ...(typeof payload.summary === 'string' && payload.summary
+        ? { summary: payload.summary }
+        : {}),
       results,
     };
   };
