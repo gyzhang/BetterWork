@@ -1,6 +1,11 @@
+import type { BetterWorkDesktopApi } from '@betterwork/agent-protocol';
+import {
+  agentRuntimeEventSchema,
+  IpcChannel,
+  notificationActivatedSchema,
+  notificationChangeEventSchema,
+} from '@betterwork/agent-protocol';
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AgentRuntimeEvent, BetterWorkDesktopApi, NotificationActivated, NotificationChangeEvent } from '@betterwork/agent-protocol';
-import { agentRuntimeEventSchema, notificationActivatedSchema, notificationChangeEventSchema, IpcChannel } from '@betterwork/agent-protocol';
 
 const api: BetterWorkDesktopApi = {
   runs: {
@@ -10,7 +15,7 @@ const api: BetterWorkDesktopApi = {
     listEvents: (input) => ipcRenderer.invoke(IpcChannel.ListRunEvents, input),
     onEvent(listener) {
       const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
-        listener(agentRuntimeEventSchema.parse(raw) as AgentRuntimeEvent);
+        listener(agentRuntimeEventSchema.parse(raw));
       };
       ipcRenderer.on(IpcChannel.RunEvent, handler);
       return () => ipcRenderer.off(IpcChannel.RunEvent, handler);
@@ -55,14 +60,14 @@ const api: BetterWorkDesktopApi = {
     clear: () => ipcRenderer.invoke(IpcChannel.ClearNotifications, {}),
     onChange(listener) {
       const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
-        listener(notificationChangeEventSchema.parse(raw) as NotificationChangeEvent);
+        listener(notificationChangeEventSchema.parse(raw));
       };
       ipcRenderer.on(IpcChannel.NotificationChangeEvent, handler);
       return () => ipcRenderer.off(IpcChannel.NotificationChangeEvent, handler);
     },
     onActivate(listener) {
       const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
-        listener(notificationActivatedSchema.parse(raw) as NotificationActivated);
+        listener(notificationActivatedSchema.parse(raw));
       };
       ipcRenderer.on(IpcChannel.NotificationActivated, handler);
       return () => ipcRenderer.off(IpcChannel.NotificationActivated, handler);

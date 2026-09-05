@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { defaultAppearance, parseAppearance, resolveAppearance } from './appearance';
 
 describe('appearance preference', () => {
@@ -9,7 +10,10 @@ describe('appearance preference', () => {
   });
 
   it('keeps appearance mode and color scheme as independent choices', () => {
-    expect(parseAppearance('{"mode":"system","scheme":"ocean"}')).toEqual({ mode: 'system', scheme: 'ocean' });
+    expect(parseAppearance('{"mode":"system","scheme":"ocean"}')).toEqual({
+      mode: 'system',
+      scheme: 'ocean',
+    });
     expect(resolveAppearance('system', true)).toBe('dark');
     expect(resolveAppearance('system', false)).toBe('light');
     expect(resolveAppearance('light', true)).toBe('light');

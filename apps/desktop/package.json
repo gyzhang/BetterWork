@@ -19,8 +19,7 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0",
-    "zod": "^4.5.4",
-    "zustand": "^5.0.15"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
@@ -29,6 +28,7 @@
     "@vitejs/plugin-react": "5.2.0",
     "electron": "44.1.1",
     "electron-vite": "^5.0.0",
+    "jszip": "^3.10.1",
     "vite": "^7.3.1"
   }
 }

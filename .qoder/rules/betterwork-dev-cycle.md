@@ -16,10 +16,19 @@ description: 启动应用、停止应用、调试、运行开发环境、构建�
 
 ## 提交前最低验证
 
+    npm run verify        # lint + format:check + typecheck + test + build，任一失败即中止
+
+需要单独定位时：
+
+    npm run lint          # 或 npm run lint:fix 自动修复导入顺序等
+    npm run format:check  # 或 npm run format 写入
     npm run typecheck
     npm test
     npm run build
     git diff --check
+
+- **禁止把 `npm run verify` 的输出接管道后只看末尾**（如 `npm run verify | tail`）：管道退出码取最后一个命令，`tail` 永远返回 0，会把失败读成成功。需要截取输出时用 `npm run verify > /tmp/verify.log 2>&1; echo $?`。
+- 规范本身见 [工程规范](../../docs/12-engineering-standards.md)；配置（`eslint.config.mjs`、`.prettierrc.json`）是规范的可执行形式，跨文件的结构约定由 `standards/coding-standard.test.ts` 守卫，同样跑在 `npm test` 里。改规则前先读该文档的例外机制一节。
 
 ## 提交纪律
 
