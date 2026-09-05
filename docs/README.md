@@ -14,7 +14,7 @@
 | [知识工作流](06-knowledge-workflows.md) | 定义研究、Excel、Word、PPT 的目标管线 |
 | [MVP 与路线图](07-mvp-and-roadmap.md) | 定义第一阶段范围、验收标准和演进顺序 |
 | [品牌](08-brand.md) | 定义“算台 BetterWork”的名称、文案与图标方向 |
-| [参考项目与借鉴边界](09-reference-projects.md) | 记录 LobsterAI、ClawBible Desktop 的本机路径与借鉴边界 |
+| [参考项目与借鉴边界](09-reference-projects.md) | 记录 LobsterAI、ClawBible Desktop、ClawBible Cloud 的本机路径与借鉴边界 |
 | [UI/UX 体系与落地计划](10-ui-ux-system.md) | 定义界面信息架构、视觉语言、组件规范和 Terra 实施顺序 |
 | [Qoder 开发交接](11-qoder-handoff.md) | 记录当前实现基线、运行方式、架构入口、续作边界与验证要求 |
 
@@ -24,6 +24,12 @@ ADR 用于记录会影响多个模块、后续修改成本较高的决策。详�
 
 ## 文档状态
 
-- 版本：v0.1
-- 状态：产品与架构已达成初步共识，UI Foundation 规范待按阶段落地
+- 版本：v0.2
+- 状态：产品与架构已达成初步共识；UI Foundation 已落地，当前处于 Phase 1 研究报告 MVP 的知识库垂直切片
 - 目标读者：产品设计者、开发者、贡献者和学习者
+
+## 阅读约定
+
+本目录同时承载**产品愿景**与**实现现状**两类内容：`01`–`06`、`08`、`10` 以长期目标和规范为主，`07` 定义阶段范围，`11` 记录当前真实实现基线。
+
+判断「现在到底做到了什么」时，以 [Qoder 开发交接](11-qoder-handoff.md) 第 2 节的能力表为准，不要把其他文档中的目标管线、接口示例或能力清单直接当成现状。范围归属以 [AGENTS.md](../AGENTS.md) 与 [MVP 与路线图](07-mvp-and-roadmap.md) 为准；两者冲突时 AGENTS.md 让位不了，应先修路线图。

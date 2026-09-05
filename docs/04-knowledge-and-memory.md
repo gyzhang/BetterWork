@@ -26,6 +26,8 @@ vaults/<vault-id>/
 
 如果用户选择引用原位置而不是复制文件，Vault 记录文件路径、Hash 和最近索引状态。
 
+当前落盘结构只有 `vaults/default/vault.sqlite` 一个文件——上面的 `originals/`、`extracted/`、`thumbnails/`、`index/` 子目录均未创建，因为现行策略是引用原位置、不复制原件，提取文本与索引直接存放在 SQLite 内。引入缩略图或需要落盘的中间产物时再按需创建对应子目录。
+
 当前实现状态：Markdown/Text 以“全文”为 Locator；PDF 使用跨平台解析器按页提取，检索结果保留“第 N 页”Locator；DOCX 使用 Mammoth 提取文本并以“段落 N”定位。原件仍引用原路径，SQLite 中保存的是可重建的提取文本和索引。
 
 ## 3. 支持格式
@@ -48,6 +50,10 @@ vaults/<vault-id>/
 - PPT Slide、对象和备注
 - 图片 OCR 区域和视觉描述
 
+当前实现状态：已支持 **Markdown、Text、PDF、DOCX** 四种格式，导入对话框也只提供这四类扩展名过滤。单文件上限 20 MB；格式不支持、超限、读取失败或提取不到可检索文本时，该文件被跳过并回报具体原因，不中断整批导入。
+
+定位信息的保留程度低于上表目标：PDF 只到页码（未保留页内区块），DOCX 只到按空行切分的段落序号（未保留标题层级与表格结构）。XLSX/CSV 属 Phase 2，PPTX 属 Phase 3，HTML 与图片 OCR 未排入 MVP。
+
 ## 4. 索引流程
 
 ```text
@@ -65,6 +71,13 @@ vaults/<vault-id>/
 
 分块策略、Parser 版本和 Embedding 模型必须记录，以支持重建索引。
 
+当前实现状态：已落地的步骤是「发现文件（用户在系统对话框中选择）→ 内容 Hash（对原始字节做 SHA-256）→ 格式解析 → 提取 → 分块 → 元数据保存 → FTS5 → 可检索」；Embedding、摘要和关键词三步未做。
+
+分块策略按格式固定：Markdown/Text 整篇作为单块（Locator「全文」），PDF 按页，DOCX 按空行切分的段落。与本节要求相比有两处差距：
+
+- **去重口径**：唯一约束建在 `source_path` 上，因此实际语义是「同一路径重复导入即更新既有记录」，不是按内容 Hash 去重——同一份内容放在两个不同路径会被当作两份资料分别入库。Hash 已保存但当前只用于展示与刷新比对，未参与去重判定。
+- **可重建性元数据**：分块策略与 Parser 版本都没有记录在库中。索引确实可以重建（FTS5 虚表在探测到结构变化时会丢弃并从 `knowledge_documents.content` 重灌），但重建时无法判断历史数据是用哪一版解析器产生的。引入 Embedding 时必须一并补上这两项，否则更换模型后无法定向重建。
+
 ## 5. 检索
 
 第一阶段采用混合检索：
@@ -80,7 +93,13 @@ vaults/<vault-id>/
 
 VectorIndex 必须可替换。第一版优先考虑 SQLite + sqlite-vec；规模和多模态需求增加后可切换或增加 LanceDB 实现。
 
+当前实现状态：只有关键词一路。查询按空白与标点切词，每个词加引号后以 `AND` 连接交给 FTS5 `MATCH`，按 `rank` 排序；若命中为空，回退到对标题与分块内容的 `LIKE` 子串匹配（用于覆盖 FTS5 分词器切不出的中文子串，例如检索 `etterWork` 命中 `BetterWork`）。两路结果都带 Locator 与围绕命中位置截取的摘要。
+
+结果上限 50 条；`knowledge_search` Tool 侧再截到 8 条，避免把长清单塞进模型上下文。向量检索、元数据过滤、融合与 Rerank 均未落地，Embedding 按 AGENTS.md 的范围约束留待后续切片。
+
 ## 6. 三层记忆体系
+
+> **现状：本节至 §8 全部为设计目标，Memory 零实现。** 属 Phase 4 范围（见 [MVP 与路线图](07-mvp-and-roadmap.md) §6），架构决策见 [ADR-0004](adr/0004-hybrid-memory.md)。当前没有 `memory/` 目录、没有 `MemoryRecord` 表、没有记忆中心与后台反思。Run 历史与 Session 标识已持久化，但执行链路尚未把历史作为模型上下文传入，因此也不存在任何形式的隐式记忆。
 
 ### Core Memory Files
 
@@ -181,3 +200,5 @@ type ModelRole = "language" | "vision" | "embedding" | "reranker" | "ocr";
 ```
 
 模型配置记录角色、Provider、Endpoint、上下文、工具能力、图片能力和 Embedding 维度。更换 Embedding 模型后应重建对应索引。
+
+当前实现状态：只落地 `language | vision | embedding` 三种角色，`reranker` 与 `ocr` 未落地；配置项记录了 Provider、Endpoint、模型标识、上下文与输出 Token 上限、温度、启用状态与优先级，但未记录工具能力、图片能力与 Embedding 维度。只有 `language` 角色进入 Agent 执行链路，另两种仅完成配置与连通性测试。因为还没有 Embedding 索引，「更换 Embedding 模型后重建索引」目前尚无从触发，该约束应在 Embedding 切片中一并落地。
