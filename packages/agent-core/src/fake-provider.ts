@@ -4,10 +4,14 @@ import type { ModelProvider, ModelRequest, ModelStreamChunk } from './types';
 const pause = async (signal: AbortSignal, delayMs: number): Promise<void> => {
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(resolve, delayMs);
-    signal.addEventListener('abort', () => {
-      clearTimeout(timer);
-      reject(Object.assign(new Error('Run cancelled'), { name: 'AbortError' }));
-    }, { once: true });
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        reject(Object.assign(new Error('Run cancelled'), { name: 'AbortError' }));
+      },
+      { once: true },
+    );
   });
 };
 
@@ -22,11 +26,29 @@ export class FakeModelProvider implements ModelProvider {
 
     if (last.role === 'tool') {
       const parsed = JSON.parse(last.content) as unknown;
-      const text = last.toolName === 'calculator'
-        ? `计算结果是 ${typeof parsed === 'object' && parsed !== null && 'result' in parsed ? String(parsed.result) : last.content}。`
-        : last.toolName === 'knowledge_search'
-          ? `已检索个人资料库。${typeof parsed === 'object' && parsed !== null && 'message' in parsed ? String(parsed.message) : ''}\n\n${typeof parsed === 'object' && parsed !== null && 'results' in parsed && Array.isArray(parsed.results) ? parsed.results.map((result) => typeof result === 'object' && result !== null && 'title' in result && 'excerpt' in result ? `- ${String(result.title)}：${String(result.excerpt)}` : '').filter(Boolean).join('\n') : ''}`
-        : `文件内容如下：\n\n${typeof parsed === 'object' && parsed !== null && 'content' in parsed ? String(parsed.content) : last.content}`;
+      const text =
+        last.toolName === 'calculator'
+          ? `计算结果是 ${typeof parsed === 'object' && parsed !== null && 'result' in parsed ? String(parsed.result) : last.content}。`
+          : last.toolName === 'knowledge_search'
+            ? `已检索个人资料库。${typeof parsed === 'object' && parsed !== null && 'message' in parsed ? String(parsed.message) : ''}\n\n${
+                typeof parsed === 'object' &&
+                parsed !== null &&
+                'results' in parsed &&
+                Array.isArray(parsed.results)
+                  ? parsed.results
+                      .map((result) =>
+                        typeof result === 'object' &&
+                        result !== null &&
+                        'title' in result &&
+                        'excerpt' in result
+                          ? `- ${String(result.title)}：${String(result.excerpt)}`
+                          : '',
+                      )
+                      .filter(Boolean)
+                      .join('\n')
+                  : ''
+              }`
+            : `文件内容如下：\n\n${typeof parsed === 'object' && parsed !== null && 'content' in parsed ? String(parsed.content) : last.content}`;
       for (const piece of text.match(/.{1,5}/gu) ?? []) {
         await pause(request.signal, this.delayMs);
         yield { type: 'text-delta', delta: piece };
@@ -58,12 +80,18 @@ export class FakeModelProvider implements ModelProvider {
       return;
     }
 
-    const knowledgeSearch = prompt.match(/^(?:搜索知识|检索知识|search knowledge)\s*[:：]?\s*(.+)$/i);
+    const knowledgeSearch = prompt.match(
+      /^(?:搜索知识|检索知识|search knowledge)\s*[:：]?\s*(.+)$/i,
+    );
     if (knowledgeSearch?.[1]) {
       yield { type: 'reasoning-delta', delta: '检索个人资料库中的相关内容。' };
       yield {
         type: 'tool-call',
-        toolCall: { id: randomUUID(), name: 'knowledge_search', input: { query: knowledgeSearch[1].trim() } },
+        toolCall: {
+          id: randomUUID(),
+          name: 'knowledge_search',
+          input: { query: knowledgeSearch[1].trim() },
+        },
       };
       yield { type: 'done' };
       return;

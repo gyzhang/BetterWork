@@ -9,7 +9,13 @@ import { RunService, createRunTools } from './run-service';
 import type { BrowserWindow } from 'electron';
 
 const temporaryDirectories: string[] = [];
-afterEach(async () => Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))));
+afterEach(async () =>
+  Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
+  ),
+);
 
 const waitForCompletion = async (journal: RunJournal, runId: string): Promise<void> => {
   for (let attempt = 0; attempt < 80; attempt += 1) {
@@ -28,10 +34,22 @@ describe('RunService', () => {
     const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
     await vault.importPaths([note]);
     const journal = new RunJournal(':memory:');
-    const service = new RunService(journal, vault, new NotificationService(journal, () => null), () => null);
-    const runId = service.start({ taskId: 'task-1', sessionId: 'session-1', prompt: '搜索知识: 续约风险', workspacePath: directory });
+    const service = new RunService(
+      journal,
+      vault,
+      new NotificationService(journal, () => null),
+      () => null,
+    );
+    const runId = service.start({
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      prompt: '搜索知识: 续约风险',
+      workspacePath: directory,
+    });
     await waitForCompletion(journal, runId);
-    expect(journal.listEvidence('task-1')).toEqual([expect.objectContaining({ runId, title: '客户资料', locator: '全文', sourceUri: note })]);
+    expect(journal.listEvidence('task-1')).toEqual([
+      expect.objectContaining({ runId, title: '客户资料', locator: '全文', sourceUri: note }),
+    ]);
     vault.close();
     journal.close();
   });
@@ -42,9 +60,26 @@ describe('RunService', () => {
     const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
     const journal = new RunJournal(':memory:');
     const sent: Array<{ type: string }> = [];
-    const windowStub = { isDestroyed: () => false, webContents: { send: (_channel: string, event: { type: string }) => { sent.push(event); } } };
-    const service = new RunService(journal, vault, new NotificationService(journal, () => null), () => windowStub as unknown as BrowserWindow);
-    const runId = service.start({ taskId: 'task-cancel', sessionId: 'session-cancel', prompt: '随便聊聊', workspacePath: directory });
+    const windowStub = {
+      isDestroyed: () => false,
+      webContents: {
+        send: (_channel: string, event: { type: string }) => {
+          sent.push(event);
+        },
+      },
+    };
+    const service = new RunService(
+      journal,
+      vault,
+      new NotificationService(journal, () => null),
+      () => windowStub as unknown as BrowserWindow,
+    );
+    const runId = service.start({
+      taskId: 'task-cancel',
+      sessionId: 'session-cancel',
+      prompt: '随便聊聊',
+      workspacePath: directory,
+    });
     expect(service.cancel(runId)).toBe(true);
     await waitForCompletion(journal, runId);
 
@@ -54,7 +89,8 @@ describe('RunService', () => {
     expect(sent.map((event) => event.type)).toEqual(events);
     expect(journal.listNotifications()).toEqual([]);
 
-    for (let attempt = 0; attempt < 40 && service.cancel(runId); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+    for (let attempt = 0; attempt < 40 && service.cancel(runId); attempt += 1)
+      await new Promise((resolve) => setTimeout(resolve, 5));
     expect(service.cancel(runId)).toBe(false);
     vault.close();
     journal.close();
@@ -62,8 +98,16 @@ describe('RunService', () => {
 
   it('registers the web search tool only when a search engine is configured', () => {
     const knowledgeSearch = () => [];
-    expect(createRunTools({ knowledgeSearch }).map((tool) => tool.name)).toEqual(['calculator', 'read_text_file', 'knowledge_search']);
-    expect(createRunTools({ knowledgeSearch, webSearch: async () => ({ results: [] }) }).map((tool) => tool.name)).toEqual(['calculator', 'read_text_file', 'knowledge_search', 'web_search']);
+    expect(createRunTools({ knowledgeSearch }).map((tool) => tool.name)).toEqual([
+      'calculator',
+      'read_text_file',
+      'knowledge_search',
+    ]);
+    expect(
+      createRunTools({ knowledgeSearch, webSearch: async () => ({ results: [] }) }).map(
+        (tool) => tool.name,
+      ),
+    ).toEqual(['calculator', 'read_text_file', 'knowledge_search', 'web_search']);
   });
 
   it('creates a notification with a task target when a run completes', async () => {
@@ -72,14 +116,39 @@ describe('RunService', () => {
     const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
     const journal = new RunJournal(':memory:');
     const sent: Array<{ type: string }> = [];
-    const windowStub = { isDestroyed: () => false, isFocused: () => true, webContents: { send: (_channel: string, event: { type: string }) => { sent.push(event); } } };
-    const service = new RunService(journal, vault, new NotificationService(journal, () => windowStub as unknown as BrowserWindow), () => windowStub as unknown as BrowserWindow);
-    const runId = service.start({ taskId: 'task-notify', sessionId: 'session-notify', prompt: '计算: 1 + 1', workspacePath: directory });
+    const windowStub = {
+      isDestroyed: () => false,
+      isFocused: () => true,
+      webContents: {
+        send: (_channel: string, event: { type: string }) => {
+          sent.push(event);
+        },
+      },
+    };
+    const service = new RunService(
+      journal,
+      vault,
+      new NotificationService(journal, () => windowStub as unknown as BrowserWindow),
+      () => windowStub as unknown as BrowserWindow,
+    );
+    const runId = service.start({
+      taskId: 'task-notify',
+      sessionId: 'session-notify',
+      prompt: '计算: 1 + 1',
+      workspacePath: directory,
+    });
     await waitForCompletion(journal, runId);
 
     const notifications = journal.listNotifications();
     expect(notifications).toHaveLength(1);
-    expect(notifications[0]).toEqual(expect.objectContaining({ level: 'success', kind: 'run', read: false, target: { kind: 'task', taskId: 'task-notify' } }));
+    expect(notifications[0]).toEqual(
+      expect.objectContaining({
+        level: 'success',
+        kind: 'run',
+        read: false,
+        target: { kind: 'task', taskId: 'task-notify' },
+      }),
+    );
     expect(notifications[0]?.title).toContain('任务完成');
     expect(sent.filter((event) => event.type === 'created')).toHaveLength(1);
     vault.close();

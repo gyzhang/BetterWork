@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentMessage, AgentRuntimeEvent, AgentRuntimeEventInput, ToolCall } from '@betterwork/agent-protocol';
+import type {
+  AgentMessage,
+  AgentRuntimeEvent,
+  AgentRuntimeEventInput,
+  ToolCall,
+} from '@betterwork/agent-protocol';
 import type { AgentEngine, AgentRunInput } from './types';
 
 class RunEventFactory {
@@ -43,7 +48,11 @@ export class ReActAgentEngine implements AgentEngine {
 
         for await (const chunk of input.model.stream({
           messages,
-          tools: input.tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
+          tools: input.tools.map(({ name, description, inputSchema }) => ({
+            name,
+            description,
+            inputSchema,
+          })),
           signal: input.signal,
         })) {
           if (input.signal.aborted) throw abortError();
@@ -65,7 +74,12 @@ export class ReActAgentEngine implements AgentEngine {
 
         if (messageStarted) {
           yield events.create({ type: 'message.completed', messageId, content });
-          messages.push({ id: messageId, role: 'assistant', content, ...(pendingToolCall ? { toolCalls: [pendingToolCall] } : {}) });
+          messages.push({
+            id: messageId,
+            role: 'assistant',
+            content,
+            ...(pendingToolCall ? { toolCalls: [pendingToolCall] } : {}),
+          });
         }
 
         if (!pendingToolCall) {
@@ -78,7 +92,13 @@ export class ReActAgentEngine implements AgentEngine {
         const tool = tools.get(pendingToolCall.name);
         if (!tool) throw new Error(`Unknown tool: ${pendingToolCall.name}`);
 
-        if (!messageStarted) messages.push({ id: messageId, role: 'assistant', content: '', toolCalls: [pendingToolCall] });
+        if (!messageStarted)
+          messages.push({
+            id: messageId,
+            role: 'assistant',
+            content: '',
+            toolCalls: [pendingToolCall],
+          });
         yield events.create({ type: 'tool.started', toolCall: pendingToolCall });
         const progress: AgentRuntimeEvent[] = [];
         try {
@@ -87,7 +107,9 @@ export class ReActAgentEngine implements AgentEngine {
             workspacePath: input.workspacePath,
             signal: input.signal,
             reportProgress(message) {
-              progress.push(events.create({ type: 'tool.progress', toolCallId: pendingToolCall!.id, message }));
+              progress.push(
+                events.create({ type: 'tool.progress', toolCallId: pendingToolCall!.id, message }),
+              );
             },
           });
           for (const event of progress) yield event;
@@ -102,7 +124,11 @@ export class ReActAgentEngine implements AgentEngine {
         } catch (error) {
           if (input.signal.aborted) throw abortError();
           const message = error instanceof Error ? error.message : String(error);
-          yield events.create({ type: 'tool.failed', toolCallId: pendingToolCall.id, error: message });
+          yield events.create({
+            type: 'tool.failed',
+            toolCallId: pendingToolCall.id,
+            error: message,
+          });
           messages.push({
             id: randomUUID(),
             role: 'tool',
@@ -117,7 +143,10 @@ export class ReActAgentEngine implements AgentEngine {
         yield events.create({ type: 'run.cancelled' });
         return;
       }
-      yield events.create({ type: 'run.failed', error: error instanceof Error ? error.message : String(error) });
+      yield events.create({
+        type: 'run.failed',
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 }

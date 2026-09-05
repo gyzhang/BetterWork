@@ -28,16 +28,40 @@ const eventBaseSchema = z.object({
 });
 
 export const agentRuntimeEventSchema = z.discriminatedUnion('type', [
-  eventBaseSchema.extend({ type: z.literal('run.started'), taskId: z.string(), sessionId: z.string() }),
+  eventBaseSchema.extend({
+    type: z.literal('run.started'),
+    taskId: z.string(),
+    sessionId: z.string(),
+  }),
   eventBaseSchema.extend({ type: z.literal('message.started'), messageId: z.string() }),
-  eventBaseSchema.extend({ type: z.literal('message.delta'), messageId: z.string(), delta: z.string() }),
-  eventBaseSchema.extend({ type: z.literal('message.completed'), messageId: z.string(), content: z.string() }),
+  eventBaseSchema.extend({
+    type: z.literal('message.delta'),
+    messageId: z.string(),
+    delta: z.string(),
+  }),
+  eventBaseSchema.extend({
+    type: z.literal('message.completed'),
+    messageId: z.string(),
+    content: z.string(),
+  }),
   eventBaseSchema.extend({ type: z.literal('reasoning.delta'), delta: z.string() }),
   eventBaseSchema.extend({ type: z.literal('tool.requested'), toolCall: toolCallSchema }),
   eventBaseSchema.extend({ type: z.literal('tool.started'), toolCall: toolCallSchema }),
-  eventBaseSchema.extend({ type: z.literal('tool.progress'), toolCallId: z.string(), message: z.string() }),
-  eventBaseSchema.extend({ type: z.literal('tool.completed'), toolCallId: z.string(), output: z.unknown() }),
-  eventBaseSchema.extend({ type: z.literal('tool.failed'), toolCallId: z.string(), error: z.string() }),
+  eventBaseSchema.extend({
+    type: z.literal('tool.progress'),
+    toolCallId: z.string(),
+    message: z.string(),
+  }),
+  eventBaseSchema.extend({
+    type: z.literal('tool.completed'),
+    toolCallId: z.string(),
+    output: z.unknown(),
+  }),
+  eventBaseSchema.extend({
+    type: z.literal('tool.failed'),
+    toolCallId: z.string(),
+    error: z.string(),
+  }),
   eventBaseSchema.extend({ type: z.literal('run.completed'), finalContent: z.string() }),
   eventBaseSchema.extend({ type: z.literal('run.failed'), error: z.string() }),
   eventBaseSchema.extend({ type: z.literal('run.cancelled') }),
@@ -120,7 +144,9 @@ export const modelProfileInputSchema = z.object({
   priority: z.number().int().nonnegative().optional(),
 });
 export type ModelProfileInput = z.infer<typeof modelProfileInputSchema>;
-export const saveModelProfileRequestSchema = modelProfileInputSchema.extend({ id: z.string().min(1).optional() });
+export const saveModelProfileRequestSchema = modelProfileInputSchema.extend({
+  id: z.string().min(1).optional(),
+});
 
 export interface ModelProfileSummary {
   id: string;
@@ -162,14 +188,22 @@ export interface KnowledgeImportResult {
 
 export const searchKnowledgeRequestSchema = z.object({ query: z.string().trim().min(1).max(500) });
 export type SearchKnowledgeRequest = z.infer<typeof searchKnowledgeRequestSchema>;
-export const openKnowledgeSourceRequestSchema = z.object({ sourcePath: z.string().trim().min(1).max(4_000) });
+export const openKnowledgeSourceRequestSchema = z.object({
+  sourcePath: z.string().trim().min(1).max(4_000),
+});
 export type OpenKnowledgeSourceRequest = z.infer<typeof openKnowledgeSourceRequestSchema>;
-export interface OpenKnowledgeSourceResult { opened: boolean; error?: string; }
+export interface OpenKnowledgeSourceResult {
+  opened: boolean;
+  error?: string;
+}
 export const removeKnowledgeDocumentRequestSchema = z.object({ id: z.string().min(1) });
 export type RemoveKnowledgeDocumentRequest = z.infer<typeof removeKnowledgeDocumentRequestSchema>;
 export const refreshKnowledgeDocumentRequestSchema = z.object({ id: z.string().min(1) });
 export type RefreshKnowledgeDocumentRequest = z.infer<typeof refreshKnowledgeDocumentRequestSchema>;
-export interface KnowledgeRefreshResult { refreshed?: KnowledgeDocumentSummary; error?: string; }
+export interface KnowledgeRefreshResult {
+  refreshed?: KnowledgeDocumentSummary;
+  error?: string;
+}
 
 export interface KnowledgeSearchResult {
   document: KnowledgeDocumentSummary;
@@ -227,21 +261,31 @@ export interface ArtifactVersionDetail extends ArtifactVersionSummary {
   evidence: EvidenceSummary[];
 }
 
-export const saveMarkdownArtifactRequestSchema = z.object({
-  artifactId: z.string().min(1).optional(),
-  taskId: z.string().min(1),
-  origin: z.enum(['assistant-run', 'user-edit']).default('assistant-run'),
-  runId: z.string().min(1).optional(),
-  title: z.string().trim().min(1).max(160),
-  content: z.string().trim().min(1).max(2_000_000),
-}).superRefine((input, context) => {
-  if (input.origin === 'assistant-run' && !input.runId) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: 'AI 运行生成的成果必须关联 Run', path: ['runId'] });
-  }
-  if (input.origin === 'user-edit' && input.runId) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: '人工修订不能伪装为 AI 运行产物', path: ['runId'] });
-  }
-});
+export const saveMarkdownArtifactRequestSchema = z
+  .object({
+    artifactId: z.string().min(1).optional(),
+    taskId: z.string().min(1),
+    origin: z.enum(['assistant-run', 'user-edit']).default('assistant-run'),
+    runId: z.string().min(1).optional(),
+    title: z.string().trim().min(1).max(160),
+    content: z.string().trim().min(1).max(2_000_000),
+  })
+  .superRefine((input, context) => {
+    if (input.origin === 'assistant-run' && !input.runId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'AI 运行生成的成果必须关联 Run',
+        path: ['runId'],
+      });
+    }
+    if (input.origin === 'user-edit' && input.runId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: '人工修订不能伪装为 AI 运行产物',
+        path: ['runId'],
+      });
+    }
+  });
 export type SaveMarkdownArtifactRequest = z.infer<typeof saveMarkdownArtifactRequestSchema>;
 export const listArtifactsRequestSchema = z.object({ taskId: z.string().min(1).optional() });
 export type ListArtifactsRequest = z.infer<typeof listArtifactsRequestSchema>;
@@ -263,8 +307,13 @@ export type ListEvidenceRequest = z.infer<typeof listEvidenceRequestSchema>;
 
 export const modelProfileIdSchema = z.object({ id: z.string().min(1) });
 export const setDefaultModelRequestSchema = z.object({ id: z.string().min(1) });
-export const setModelEnabledRequestSchema = z.object({ id: z.string().min(1), enabled: z.boolean() });
-export const testModelRequestSchema = modelProfileInputSchema.pick({ baseUrl: true, model: true, role: true, apiKey: true }).extend({ id: z.string().min(1).optional() });
+export const setModelEnabledRequestSchema = z.object({
+  id: z.string().min(1),
+  enabled: z.boolean(),
+});
+export const testModelRequestSchema = modelProfileInputSchema
+  .pick({ baseUrl: true, model: true, role: true, apiKey: true })
+  .extend({ id: z.string().min(1).optional() });
 export const updateWindowThemeRequestSchema = z.object({
   backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   symbolColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
@@ -346,8 +395,16 @@ export const markAllNotificationsReadRequestSchema = z.object({}).strict();
 export const clearNotificationsRequestSchema = z.object({}).strict();
 
 export const notificationChangeEventSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('created'), notification: notificationSummarySchema, unreadCount: z.number().int().nonnegative() }),
-  z.object({ type: z.literal('read'), notificationId: z.string().min(1), unreadCount: z.number().int().nonnegative() }),
+  z.object({
+    type: z.literal('created'),
+    notification: notificationSummarySchema,
+    unreadCount: z.number().int().nonnegative(),
+  }),
+  z.object({
+    type: z.literal('read'),
+    notificationId: z.string().min(1),
+    unreadCount: z.number().int().nonnegative(),
+  }),
   z.object({ type: z.literal('read-all'), unreadCount: z.number().int().nonnegative() }),
   z.object({ type: z.literal('cleared'), unreadCount: z.number().int().nonnegative() }),
 ]);
@@ -436,7 +493,9 @@ export interface BetterWorkDesktopApi {
   searchEngines: {
     list(): Promise<SearchEngineSummary[]>;
     save(input: z.input<typeof saveSearchEngineRequestSchema>): Promise<{ provider: string }>;
-    test(input: z.input<typeof testSearchEngineRequestSchema>): Promise<{ ok: boolean; message: string }>;
+    test(
+      input: z.input<typeof testSearchEngineRequestSchema>,
+    ): Promise<{ ok: boolean; message: string }>;
   };
   notifications: {
     list(): Promise<NotificationSummary[]>;

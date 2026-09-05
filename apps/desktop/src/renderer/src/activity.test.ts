@@ -2,7 +2,22 @@ import { describe, expect, it } from 'vitest';
 import type { AgentRuntimeEvent } from '@betterwork/agent-protocol';
 import { deriveActivityGroups } from './activity';
 
-const event = <T extends AgentRuntimeEvent['type']>(type: T, payload: Omit<Extract<AgentRuntimeEvent, { type: T }>, 'id' | 'runId' | 'sequence' | 'createdAt' | 'type'>, sequence: number): AgentRuntimeEvent => ({ id: `event-${sequence}`, runId: 'run-1', sequence, createdAt: sequence * 1000, type, ...payload } as AgentRuntimeEvent);
+const event = <T extends AgentRuntimeEvent['type']>(
+  type: T,
+  payload: Omit<
+    Extract<AgentRuntimeEvent, { type: T }>,
+    'id' | 'runId' | 'sequence' | 'createdAt' | 'type'
+  >,
+  sequence: number,
+): AgentRuntimeEvent =>
+  ({
+    id: `event-${sequence}`,
+    runId: 'run-1',
+    sequence,
+    createdAt: sequence * 1000,
+    type,
+    ...payload,
+  }) as AgentRuntimeEvent;
 
 describe('deriveActivityGroups', () => {
   it('groups raw calculator events into user-facing work stages', () => {
@@ -29,7 +44,9 @@ describe('deriveActivityGroups', () => {
       event('tool.started', { toolCall: { id: 'tool-1', name: 'read_text_file', input: {} } }, 1),
     ]);
 
-    expect(groups).toContainEqual(expect.objectContaining({ id: 'tools', title: '阅读资料', status: 'running' }));
+    expect(groups).toContainEqual(
+      expect.objectContaining({ id: 'tools', title: '阅读资料', status: 'running' }),
+    );
     expect(groups).not.toContainEqual(expect.objectContaining({ id: 'finish' }));
   });
 });

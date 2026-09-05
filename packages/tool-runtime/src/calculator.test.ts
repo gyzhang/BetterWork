@@ -10,12 +10,15 @@ const context = {
 
 describe('calculatorTool', () => {
   it('respects arithmetic precedence', async () => {
-    await expect(calculatorTool.execute({ expression: '(12 + 8) * 3' }, context))
-      .resolves.toEqual({ expression: '(12 + 8) * 3', result: 60 });
+    await expect(calculatorTool.execute({ expression: '(12 + 8) * 3' }, context)).resolves.toEqual({
+      expression: '(12 + 8) * 3',
+      result: 60,
+    });
   });
 
   it('rejects executable input', async () => {
-    await expect(calculatorTool.execute({ expression: 'process.exit()' }, context))
-      .rejects.toThrow('Expected number');
+    await expect(calculatorTool.execute({ expression: 'process.exit()' }, context)).rejects.toThrow(
+      'Expected number',
+    );
   });
 });

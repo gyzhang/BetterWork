@@ -20,8 +20,10 @@ export const readTextFileTool: AgentTool = {
     const workspace = path.resolve(context.workspacePath);
     const target = path.resolve(workspace, input.path);
     const relative = path.relative(workspace, target);
-    if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('File is outside the active workspace');
-    if (context.signal.aborted) throw Object.assign(new Error('Run cancelled'), { name: 'AbortError' });
+    if (relative.startsWith('..') || path.isAbsolute(relative))
+      throw new Error('File is outside the active workspace');
+    if (context.signal.aborted)
+      throw Object.assign(new Error('Run cancelled'), { name: 'AbortError' });
     context.reportProgress(`正在读取 ${relative || path.basename(target)}`);
     const content = await readFile(target, 'utf8');
     return {

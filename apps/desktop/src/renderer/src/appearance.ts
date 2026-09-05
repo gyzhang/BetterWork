@@ -27,7 +27,8 @@ export function parseAppearance(value: string | null): AppearancePreference {
     const parsed: unknown = JSON.parse(value);
     if (typeof parsed !== 'object' || parsed === null) return defaultAppearance;
     const candidate = parsed as { mode?: unknown; scheme?: unknown };
-    if (typeof candidate.mode !== 'string' || typeof candidate.scheme !== 'string') return defaultAppearance;
+    if (typeof candidate.mode !== 'string' || typeof candidate.scheme !== 'string')
+      return defaultAppearance;
     if (!modes.has(candidate.mode) || !schemes.has(candidate.scheme)) return defaultAppearance;
     return { mode: candidate.mode as AppearanceMode, scheme: candidate.scheme as ColorScheme };
   } catch {
@@ -46,7 +47,8 @@ export function readAppearance(): AppearancePreference {
 }
 
 export function applyAppearance(preference: AppearancePreference): ResolvedAppearance {
-  const prefersDark = typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const prefersDark =
+    typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches;
   const resolved = resolveAppearance(preference.mode, prefersDark);
   if (typeof document !== 'undefined') {
     document.documentElement.dataset.theme = resolved;
@@ -57,7 +59,8 @@ export function applyAppearance(preference: AppearancePreference): ResolvedAppea
 }
 
 export function getWindowTheme(): { backgroundColor: string; symbolColor: string } {
-  if (typeof document === 'undefined') return { backgroundColor: '#F6F7F5', symbolColor: '#1D2420' };
+  if (typeof document === 'undefined')
+    return { backgroundColor: '#F6F7F5', symbolColor: '#1D2420' };
   const styles = window.getComputedStyle(document.documentElement);
   const backgroundColor = styles.getPropertyValue('--canvas').trim();
   const symbolColor = styles.getPropertyValue('--text-primary').trim();
