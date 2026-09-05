@@ -238,7 +238,7 @@ describe('application database migrations', () => {
     third.close();
   });
 
-  it('refuses to migrate a legacy database with orphan rows and leaves it at the baseline', () => {
+  it('cleans orphan rows during migration and completes successfully', () => {
     const file = path.join(temporaryDirectory(), 'orphan.sqlite');
     const legacy = createLegacyAppDatabase(file);
     // 旧库没有外键约束，历史数据可能留下指向不存在任务的运行
@@ -249,12 +249,10 @@ describe('application database migrations', () => {
       .run('run-orphan', 'task-missing', 'session-missing', '孤儿运行', 'completed', 1);
     legacy.close();
 
-    expect(() => openAppDatabase(file)).toThrow(/FOREIGN KEY/iu);
-
-    const inspect = new Database(file);
-    expect(readSchemaVersion(inspect)).toBe(1);
-    expect(countRows(inspect, 'runs')).toBe(1);
-    inspect.close();
+    const db = openAppDatabase(file);
+    expect(readSchemaVersion(db)).toBe(appMigrations.length);
+    expect(countRows(db, 'runs')).toBe(0);
+    db.close();
   });
 
   it('rejects a migration list with duplicate or non-contiguous versions', () => {

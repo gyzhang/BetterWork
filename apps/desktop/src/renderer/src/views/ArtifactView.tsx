@@ -1,12 +1,7 @@
-import type {
-  ArtifactDetail,
-  ArtifactSummary,
-  ArtifactVersionDetail,
-  ArtifactVersionSummary,
-} from '@betterwork/agent-protocol';
-import { useEffect, useState } from 'react';
+import type { ArtifactDetail, ArtifactSummary } from '@betterwork/agent-protocol';
 
 import { EmptyPage } from '../components/EmptyState';
+import { useArtifactViewer } from '../hooks/use-artifact-viewer';
 import { ChevronLeftIcon, ChevronRightIcon, GlobeIcon, KnowledgeIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
@@ -31,53 +26,23 @@ export function ArtifactPage({
   ) => Promise<{ cancelled: boolean; filePath?: string }>;
   onBack: () => void;
 }): React.JSX.Element {
-  const [editing, setEditing] = useState(false);
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [error, setError] = useState('');
-  const [versions, setVersions] = useState<ArtifactVersionSummary[]>([]);
-  const [viewingVersion, setViewingVersion] = useState<ArtifactVersionDetail>();
-  const [exportMessage, setExportMessage] = useState('');
-  useEffect(() => {
-    setEditing(false);
-    setError('');
-    setExportMessage('');
-    setTitle(selected?.title ?? '');
-    setContent(selected?.content ?? '');
-    setViewingVersion(undefined);
-    if (!selected) {
-      setVersions([]);
-      return;
-    }
-    // 版本列表加载失败此前是静默的：用户只会看到一个空的「0 个版本」。
-    reportAction(
-      window.betterwork.artifacts.listVersions({ artifactId: selected.id }).then(setVersions),
-      setError,
-      '版本历史加载失败，请重试。',
-    );
-  }, [selected]);
-  const visibleVersion =
-    viewingVersion ??
-    (selected
-      ? {
-          id: selected.currentVersionId,
-          artifactId: selected.id,
-          versionNumber: selected.versionNumber,
-          origin: selected.origin,
-          sourceRunId: selected.sourceRunId,
-          createdAt: selected.updatedAt,
-          content: selected.content,
-          contentHash: selected.contentHash,
-          evidence: selected.evidence,
-        }
-      : undefined);
-  const selectVersion = async (version: ArtifactVersionSummary): Promise<void> => {
-    const detail = await window.betterwork.artifacts.getVersion({ id: version.id });
-    if (!detail) throw new Error('该版本已不存在，请返回成果列表重新选择。');
-    setViewingVersion(detail);
-    setEditing(false);
-    setError('');
-  };
+  const {
+    editing,
+    title,
+    content,
+    error,
+    exportMessage,
+    versions,
+    visibleVersion,
+    setTitle,
+    setContent,
+    setExportMessage,
+    setError,
+    beginEditing,
+    cancelEditing,
+    finishEditing,
+    selectVersion,
+  } = useArtifactViewer(selected);
   if (selected && visibleVersion)
     return (
       <>
@@ -113,14 +78,7 @@ export function ArtifactPage({
               >
                 导出 Markdown
               </button>
-              <button
-                className="primary-button"
-                onClick={() => {
-                  setTitle(selected.title);
-                  setContent(visibleVersion.content);
-                  setEditing(true);
-                }}
-              >
+              <button className="primary-button" onClick={beginEditing}>
                 编辑此版本
               </button>
             </div>
@@ -184,8 +142,8 @@ export function ArtifactPage({
                   onSubmit={(event) => {
                     event.preventDefault();
                     setError('');
-                    void onSave(selected, title, content)
-                      .then(() => setEditing(false))
+                    onSave(selected, title, content)
+                      .then(finishEditing)
                       .catch((reason: unknown) =>
                         setError(reason instanceof Error ? reason.message : '保存修订失败。'),
                       );
@@ -213,16 +171,7 @@ export function ArtifactPage({
                   <footer>
                     <span>保存后会创建 v{selected.versionNumber + 1} 人工修订版本。</span>
                     <div>
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={() => {
-                          setEditing(false);
-                          setError('');
-                          setTitle(selected.title);
-                          setContent(visibleVersion.content);
-                        }}
-                      >
+                      <button type="button" className="secondary-button" onClick={cancelEditing}>
                         取消
                       </button>
                       <button type="submit" className="primary-button">

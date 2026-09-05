@@ -145,6 +145,23 @@ const INITIAL_SCHEMA = `
  * - `artifact_versions.source_run_id`：`user-edit` 版本没有来源 Run，存空串。
  */
 function addForeignKeys(db: Database.Database): void {
+  db.exec('DELETE FROM runs WHERE task_id NOT IN (SELECT id FROM tasks)');
+  db.exec('DELETE FROM sessions WHERE task_id NOT IN (SELECT id FROM tasks)');
+  db.exec('DELETE FROM tasks WHERE workspace_id NOT IN (SELECT id FROM workspaces)');
+  db.exec('DELETE FROM run_events WHERE run_id NOT IN (SELECT id FROM runs)');
+  db.exec('DELETE FROM evidence WHERE run_id NOT IN (SELECT id FROM runs)');
+  db.exec('DELETE FROM evidence WHERE task_id NOT IN (SELECT id FROM tasks)');
+  db.exec(
+    'DELETE FROM artifact_version_evidence WHERE version_id NOT IN (SELECT id FROM artifact_versions)',
+  );
+  db.exec(
+    'DELETE FROM artifact_version_evidence WHERE evidence_id NOT IN (SELECT id FROM evidence)',
+  );
+  db.exec('DELETE FROM artifact_versions WHERE artifact_id NOT IN (SELECT id FROM artifacts)');
+  db.exec('DELETE FROM runs WHERE session_id NOT IN (SELECT id FROM sessions)');
+  db.exec('DELETE FROM artifacts WHERE workspace_id NOT IN (SELECT id FROM workspaces)');
+  db.exec('DELETE FROM artifacts WHERE task_id NOT IN (SELECT id FROM tasks)');
+
   rebuildTable(
     db,
     'tasks',

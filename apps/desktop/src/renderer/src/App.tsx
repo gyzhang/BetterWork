@@ -484,7 +484,6 @@ export function App(): React.JSX.Element {
             onClear={clearAllNotifications}
           />
         </div>
-        <div className="sidebar-footer">算台 BetterWork</div>
       </aside>
       <section className="main-stage">
         {actionError && (
