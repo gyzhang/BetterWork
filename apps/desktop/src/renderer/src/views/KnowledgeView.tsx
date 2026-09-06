@@ -1,6 +1,7 @@
 import type { KnowledgeDocumentSummary } from '@betterwork/agent-protocol';
 import { useCallback, useState } from 'react';
 
+import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, ErrorPage, LoadingPage } from '../components/EmptyState';
 import { KnowledgeDocumentCard } from '../components/KnowledgeDocumentCard';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -49,6 +50,7 @@ export function KnowledgePage({ library }: { library: KnowledgeLibrary }): React
         }))
       : documents.map((document) => ({ document }));
   const [toast, setToast] = useState<KnowledgeToast>();
+  const [removalTarget, setRemovalTarget] = useState<KnowledgeDocumentSummary>();
   const dismissToast = useCallback(() => setToast(undefined), []);
 
   return (
@@ -169,7 +171,7 @@ export function KnowledgePage({ library }: { library: KnowledgeLibrary }): React
                           }),
                       )
                     }
-                    onRemove={() => trackAction(onRemove(document), '移出资料库')}
+                    onRemove={() => setRemovalTarget(document)}
                   />
                 ))}
               </ViewContainer>
@@ -178,6 +180,19 @@ export function KnowledgePage({ library }: { library: KnowledgeLibrary }): React
         </section>
       </div>
       {toast && <TransientToast {...toast} onDismiss={dismissToast} />}
+      {removalTarget && (
+        <ConfirmationDialog
+          title={`移出「${removalTarget.title}」？`}
+          detail="这不会删除原始文件，只会删除本地检索索引。"
+          confirmLabel="移出资料库"
+          onCancel={() => setRemovalTarget(undefined)}
+          onConfirm={() => {
+            const target = removalTarget;
+            setRemovalTarget(undefined);
+            trackAction(onRemove(target), '移出资料库');
+          }}
+        />
+      )}
     </>
   );
 }

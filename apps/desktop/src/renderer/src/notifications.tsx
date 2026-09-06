@@ -5,6 +5,7 @@ import type {
 } from '@betterwork/agent-protocol';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { AlertIcon, BellIcon, CheckIcon, CloseIcon, InfoIcon, WarningIcon } from './icons';
 import { trackAction } from './lib/async-action';
 
@@ -204,74 +205,87 @@ export const NotificationCenter = ({
   onActivate,
   onMarkAllRead,
   onClear,
-}: NotificationCenterProps): React.JSX.Element => (
-  <div className="notification-anchor">
-    <button
-      className={open ? 'notification-bell active' : 'notification-bell'}
-      title="通知"
-      aria-label={unreadCount > 0 ? `通知，${unreadCount} 条未读` : '通知'}
-      onClick={() => onOpenChange(!open)}
-    >
-      <BellIcon size={16} />
-      {unreadCount > 0 && (
-        <span className="notification-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
-      )}
-    </button>
-    {open && <div className="notification-overlay" onMouseDown={() => onOpenChange(false)} />}
-    {open && (
-      <div className="notification-panel" role="dialog" aria-label="消息中心">
-        <div className="notification-panel-header">
-          <div>
-            <strong>消息中心</strong>
-            <small>{unreadCount > 0 ? `未读 ${unreadCount} 条` : '已全部阅读'}</small>
-          </div>
-          <div className="notification-panel-actions">
-            {unreadCount > 0 && <button onClick={onMarkAllRead}>全部已读</button>}
-            {notifications.length > 0 && (
-              <button
-                className="danger-text"
-                onClick={() => {
-                  if (window.confirm('清空全部通知？此操作不可恢复。')) onClear();
-                }}
-              >
-                清空
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="notification-list">
-          {notifications.length === 0 ? (
-            <div className="notification-empty">
-              <span aria-hidden="true">
-                <BellIcon size={16} />
-              </span>
-              <strong>暂无通知</strong>
-              <p>任务与导入的结果会保存在这里。</p>
-            </div>
-          ) : (
-            notifications.map((item) => (
-              <button
-                key={item.id}
-                className={item.read ? 'notification-item' : 'notification-item unread'}
-                onClick={() => onActivate(item)}
-              >
-                <span className={`level-${item.level}`} aria-hidden="true">
-                  <LevelIcon level={item.level} />
-                </span>
-                <div>
-                  <strong>{item.title}</strong>
-                  {item.detail && <p>{item.detail}</p>}
-                  <small>{relativeTime(item.createdAt)}</small>
-                </div>
-                {!item.read && <span className="notification-dot" aria-hidden="true" />}
-              </button>
-            ))
+}: NotificationCenterProps): React.JSX.Element => {
+  const [clearRequested, setClearRequested] = useState(false);
+
+  return (
+    <>
+      <div className="notification-anchor">
+        <button
+          className={open ? 'notification-bell active' : 'notification-bell'}
+          title="通知"
+          aria-label={unreadCount > 0 ? `通知，${unreadCount} 条未读` : '通知'}
+          onClick={() => onOpenChange(!open)}
+        >
+          <BellIcon size={16} />
+          {unreadCount > 0 && (
+            <span className="notification-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
           )}
-        </div>
+        </button>
+        {open && <div className="notification-overlay" onMouseDown={() => onOpenChange(false)} />}
+        {open && (
+          <div className="notification-panel" role="dialog" aria-label="消息中心">
+            <div className="notification-panel-header">
+              <div>
+                <strong>消息中心</strong>
+                <small>{unreadCount > 0 ? `未读 ${unreadCount} 条` : '已全部阅读'}</small>
+              </div>
+              <div className="notification-panel-actions">
+                {unreadCount > 0 && <button onClick={onMarkAllRead}>全部已读</button>}
+                {notifications.length > 0 && (
+                  <button className="danger-text" onClick={() => setClearRequested(true)}>
+                    清空
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="notification-list">
+              {notifications.length === 0 ? (
+                <div className="notification-empty">
+                  <span aria-hidden="true">
+                    <BellIcon size={16} />
+                  </span>
+                  <strong>暂无通知</strong>
+                  <p>任务与导入的结果会保存在这里。</p>
+                </div>
+              ) : (
+                notifications.map((item) => (
+                  <button
+                    key={item.id}
+                    className={item.read ? 'notification-item' : 'notification-item unread'}
+                    onClick={() => onActivate(item)}
+                  >
+                    <span className={`level-${item.level}`} aria-hidden="true">
+                      <LevelIcon level={item.level} />
+                    </span>
+                    <div>
+                      <strong>{item.title}</strong>
+                      {item.detail && <p>{item.detail}</p>}
+                      <small>{relativeTime(item.createdAt)}</small>
+                    </div>
+                    {!item.read && <span className="notification-dot" aria-hidden="true" />}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        )}
       </div>
-    )}
-  </div>
-);
+      {clearRequested && (
+        <ConfirmationDialog
+          title="清空全部通知？"
+          detail="清空后无法恢复历史通知记录。"
+          confirmLabel="清空通知"
+          onCancel={() => setClearRequested(false)}
+          onConfirm={() => {
+            setClearRequested(false);
+            onClear();
+          }}
+        />
+      )}
+    </>
+  );
+};
 
 interface ToastHostProps {
   toasts: ToastItem[];
