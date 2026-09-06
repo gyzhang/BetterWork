@@ -1514,6 +1514,51 @@ p {
   z-index: 10;
   background: var(--scrim);
 }
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 12;
+  display: grid;
+  padding: 24px;
+  place-items: center;
+  background: var(--scrim);
+}
+.confirmation-dialog {
+  width: min(420px, 100%);
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px var(--shadow-color-overlay);
+}
+.confirmation-dialog h2 {
+  margin: 8px 0 10px;
+  font-size: 20px;
+}
+.confirmation-dialog-detail {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.confirmation-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 24px;
+}
+.danger-confirm-button {
+  min-height: 32px;
+  padding: 7px 11px;
+  color: var(--on-danger);
+  background: var(--danger);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.danger-confirm-button:hover {
+  background: var(--danger-hover);
+}
 .model-sheet {
   position: absolute;
   top: 0;
@@ -2917,6 +2962,12 @@ select,
 }
 .sheet-backdrop {
   animation: betterwork-fade-in var(--motion-overlay) var(--motion-easing);
+}
+.dialog-backdrop {
+  animation: betterwork-fade-in var(--motion-overlay) var(--motion-easing);
+}
+.confirmation-dialog {
+  animation: betterwork-rise-in var(--motion-expand) var(--motion-easing);
 }
 .model-sheet {
   animation: betterwork-slide-in-right var(--motion-overlay) var(--motion-easing);
