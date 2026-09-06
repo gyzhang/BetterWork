@@ -1,12 +1,17 @@
 import type { KnowledgeDocumentSummary } from '@betterwork/agent-protocol';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { EmptyPage } from '../components/EmptyState';
 import type { KnowledgeLibrary } from '../hooks/use-knowledge-library';
-import { PlusIcon } from '../icons';
-import { trackAction } from '../lib/async-action';
+import { AlertIcon, CheckIcon, PlusIcon } from '../icons';
+import { reportAction, trackAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
 import { handleTitlebarDoubleClick } from '../lib/titlebar';
+
+interface KnowledgeToast {
+  tone: 'success' | 'error';
+  text: string;
+}
 
 /**
  * 资料库视图。状态与动作全部来自 useKnowledgeLibrary，
@@ -36,7 +41,17 @@ export function KnowledgePage({ library }: { library: KnowledgeLibrary }): React
           excerpt: result.excerpt,
         }))
       : documents.map((document) => ({ document }));
-  const [openMessage, setOpenMessage] = useState('');
+  const [toast, setToast] = useState<KnowledgeToast>();
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(
+      () => setToast(undefined),
+      toast.tone === 'error' ? 6_000 : 4_000,
+    );
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
   return (
     <>
       <header className="page-header" onDoubleClick={handleTitlebarDoubleClick}>
@@ -58,7 +73,7 @@ export function KnowledgePage({ library }: { library: KnowledgeLibrary }): React
           )}
         </button>
       </header>
-      <div className="page-scroll">
+      <div className="page-scroll knowledge-scroll">
         <section className="page-body knowledge-page">
           <p className="page-intro">
             资料保留在你的本机路径；算台只建立可重建的本地文本索引。当前支持 Markdown、文本、PDF 与
@@ -92,7 +107,6 @@ export function KnowledgePage({ library }: { library: KnowledgeLibrary }): React
               </ul>
             </div>
           )}
-          {openMessage && <p className="knowledge-open-message">{openMessage}</p>}
           <div className="knowledge-summary">
             <span>
               {showingResults
@@ -103,73 +117,105 @@ export function KnowledgePage({ library }: { library: KnowledgeLibrary }): React
               {showingResults ? '检索仅在本地资料库中进行' : '下一步将支持表格与语义检索'}
             </small>
           </div>
-          {items.length === 0 ? (
-            <EmptyPage
-              eyebrow={showingResults ? '没有匹配结果' : '从一份资料开始'}
-              title={showingResults ? '换个关键词试试' : '把常用资料放进你的资料库'}
-              detail={
-                showingResults
-                  ? '当前先按文本内容进行本地检索。'
-                  : '导入 Markdown、文本、PDF 或 Word 后，它们会在后续研究和写作中成为可引用的个人资料。'
-              }
-            />
-          ) : (
-            <div className="knowledge-list">
-              {items.map(({ document, excerpt, locator }) => (
-                <article className="knowledge-card" key={`${document.id}-${locator ?? 'document'}`}>
-                  <span className={`knowledge-format ${document.format}`}>
-                    {document.format === 'markdown'
-                      ? 'MD'
-                      : document.format === 'pdf'
-                        ? 'PDF'
-                        : document.format === 'docx'
-                          ? 'DOC'
-                          : 'TXT'}
-                  </span>
-                  <div>
-                    <strong>{document.title}</strong>
-                    {excerpt && <p>{excerpt}</p>}
-                    <small>
-                      {document.sourcePath}
-                      {locator ? ` · ${locator}` : ''} · 更新于 {formatTime(document.updatedAt)}
-                    </small>
-                  </div>
-                  <div className="knowledge-card-actions">
-                    <button
-                      className="open-source-button"
-                      onClick={() =>
-                        void onOpenSource(document.sourcePath)
-                          .then(() => setOpenMessage(`已打开「${document.title}」的原始资料。`))
-                          .catch((reason: unknown) =>
-                            setOpenMessage(
-                              reason instanceof Error ? reason.message : '无法打开原始资料。',
+          <div className="knowledge-list-scroll">
+            {items.length === 0 ? (
+              <EmptyPage
+                eyebrow={showingResults ? '没有匹配结果' : '从一份资料开始'}
+                title={showingResults ? '换个关键词试试' : '把常用资料放进你的资料库'}
+                detail={
+                  showingResults
+                    ? '当前先按文本内容进行本地检索。'
+                    : '导入 Markdown、文本、PDF 或 Word 后，它们会在后续研究和写作中成为可引用的个人资料。'
+                }
+              />
+            ) : (
+              <div className="knowledge-list">
+                {items.map(({ document, excerpt, locator }) => (
+                  <article
+                    className="knowledge-card"
+                    key={`${document.id}-${locator ?? 'document'}`}
+                  >
+                    <span className={`knowledge-format ${document.format}`}>
+                      {document.format === 'markdown'
+                        ? 'MD'
+                        : document.format === 'pdf'
+                          ? 'PDF'
+                          : document.format === 'docx'
+                            ? 'DOC'
+                            : 'TXT'}
+                    </span>
+                    <div>
+                      <strong>{document.title}</strong>
+                      {excerpt && <p>{excerpt}</p>}
+                      <small>
+                        {document.sourcePath}
+                        {locator ? ` · ${locator}` : ''} · 更新于 {formatTime(document.updatedAt)}
+                      </small>
+                    </div>
+                    <div className="knowledge-card-actions">
+                      <button
+                        className="open-source-button"
+                        onClick={() =>
+                          reportAction(
+                            onOpenSource(document.sourcePath).then(() =>
+                              setToast({
+                                tone: 'success',
+                                text: `已打开「${document.title}」的原始资料。`,
+                              }),
                             ),
+                            (error) =>
+                              setToast({
+                                tone: 'error',
+                                text: error || '无法打开原始资料。',
+                              }),
                           )
-                      }
-                    >
-                      打开原文
-                    </button>
-                    <button
-                      className="refresh-knowledge-button"
-                      disabled={importing}
-                      onClick={() => trackAction(onRefresh(document), '刷新资料索引')}
-                    >
-                      刷新索引
-                    </button>
-                    <button
-                      className="remove-knowledge-button"
-                      disabled={importing}
-                      onClick={() => trackAction(onRemove(document), '移出资料库')}
-                    >
-                      移出资料库
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
+                        }
+                      >
+                        打开原文
+                      </button>
+                      <button
+                        className="refresh-knowledge-button"
+                        disabled={importing}
+                        onClick={() =>
+                          reportAction(
+                            onRefresh(document).then(() =>
+                              setToast({
+                                tone: 'success',
+                                text: `已刷新「${document.title}」的本地索引。`,
+                              }),
+                            ),
+                            (error) =>
+                              setToast({ tone: 'error', text: error || '刷新索引失败，请重试。' }),
+                          )
+                        }
+                      >
+                        刷新索引
+                      </button>
+                      <button
+                        className="remove-knowledge-button"
+                        disabled={importing}
+                        onClick={() => trackAction(onRemove(document), '移出资料库')}
+                      >
+                        移出资料库
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
         </section>
       </div>
+      {toast && (
+        <div className="knowledge-toast-host" aria-live="polite">
+          <div className="toast" role="status">
+            <span className={`level-${toast.tone}`} aria-hidden="true">
+              {toast.tone === 'success' ? <CheckIcon size={12} /> : <AlertIcon size={12} />}
+            </span>
+            <p>{toast.text}</p>
+          </div>
+        </div>
+      )}
     </>
   );
 }

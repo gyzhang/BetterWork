@@ -94,11 +94,12 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     setImporting(true);
     try {
       const result = await window.betterwork.knowledge.refresh({ id: document.id });
-      setMessage(
-        result.refreshed
-          ? `已刷新「${document.title}」的本地索引。`
-          : (result.error ?? '刷新索引失败。'),
-      );
+      if (!result.refreshed) {
+        const errorMessage = result.error ?? '刷新索引失败。';
+        setMessage(errorMessage);
+        throw new Error(errorMessage);
+      }
+      setMessage('');
       setQuery('');
       refresh();
     } catch (error) {
