@@ -1,16 +1,20 @@
 import type { KnowledgeDocumentSummary } from '@betterwork/agent-protocol';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
-import { EmptyPage } from '../components/EmptyState';
+import { EmptyPage, ErrorPage, LoadingPage } from '../components/EmptyState';
+import { KnowledgeDocumentCard } from '../components/KnowledgeDocumentCard';
+import { PageHeader } from '../components/layout/PageHeader';
+import { PageToolbar } from '../components/layout/PageToolbar';
+import { ScrollRegion } from '../components/layout/ScrollRegion';
+import { ViewContainer } from '../components/layout/ViewContainer';
+import { TransientToast } from '../components/TransientToast';
 import type { KnowledgeLibrary } from '../hooks/use-knowledge-library';
-import { AlertIcon, CheckIcon, PlusIcon } from '../icons';
+import { PlusIcon } from '../icons';
 import { reportAction, trackAction } from '../lib/async-action';
-import { formatTime } from '../lib/format';
-import { handleTitlebarDoubleClick } from '../lib/titlebar';
 
 interface KnowledgeToast {
   tone: 'success' | 'error';
-  text: string;
+  message: string;
 }
 
 /**
@@ -26,6 +30,9 @@ export function KnowledgePage({ library }: { library: KnowledgeLibrary }): React
     message,
     issues,
     importing,
+    loading,
+    loadError,
+    refresh,
     onImport,
     onSearch,
     onOpenSource,
@@ -42,60 +49,54 @@ export function KnowledgePage({ library }: { library: KnowledgeLibrary }): React
         }))
       : documents.map((document) => ({ document }));
   const [toast, setToast] = useState<KnowledgeToast>();
-
-  useEffect(() => {
-    if (!toast) return;
-    const timer = window.setTimeout(
-      () => setToast(undefined),
-      toast.tone === 'error' ? 6_000 : 4_000,
-    );
-    return () => window.clearTimeout(timer);
-  }, [toast]);
+  const dismissToast = useCallback(() => setToast(undefined), []);
 
   return (
     <>
-      <header className="page-header" onDoubleClick={handleTitlebarDoubleClick}>
-        <div>
-          <p className="eyebrow">知识 · 个人资料库</p>
-          <h1>让资料成为下一次工作的起点</h1>
-        </div>
-        <button
-          className="primary-button"
-          disabled={importing}
-          onClick={() => trackAction(onImport(), '导入资料')}
-        >
-          {importing ? (
-            '正在处理…'
-          ) : (
-            <>
-              <PlusIcon size={13} /> 导入资料
-            </>
-          )}
-        </button>
-      </header>
+      <PageHeader
+        eyebrow="知识 · 个人资料库"
+        title="让资料成为下一次工作的起点"
+        actions={
+          <button
+            className="primary-button"
+            disabled={importing}
+            onClick={() => trackAction(onImport(), '导入资料')}
+          >
+            {importing ? (
+              '正在处理…'
+            ) : (
+              <>
+                <PlusIcon size={13} /> 导入资料
+              </>
+            )}
+          </button>
+        }
+      />
       <div className="page-scroll knowledge-scroll">
         <section className="page-body knowledge-page">
           <p className="page-intro">
             资料保留在你的本机路径；算台只建立可重建的本地文本索引。当前支持 Markdown、文本、PDF 与
             Word。
           </p>
-          <form
-            className="knowledge-search"
-            onSubmit={(event) => trackAction(onSearch(event), '检索资料')}
-          >
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索资料库中的内容…"
-              aria-label="搜索个人资料库"
-            />
-            <button type="submit">搜索</button>
-            {showingResults && (
-              <button type="button" className="clear-search" onClick={() => setQuery('')}>
-                清除
-              </button>
-            )}
-          </form>
+          <PageToolbar ariaLabel="资料库操作">
+            <form
+              className="knowledge-search"
+              onSubmit={(event) => trackAction(onSearch(event), '检索资料')}
+            >
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="搜索资料库中的内容…"
+                aria-label="搜索个人资料库"
+              />
+              <button type="submit">搜索</button>
+              {showingResults && (
+                <button type="button" className="clear-search" onClick={() => setQuery('')}>
+                  清除
+                </button>
+              )}
+            </form>
+          </PageToolbar>
           {message && <p className="inline-message">{message}</p>}
           {issues.length > 0 && (
             <div className="knowledge-issues">
@@ -117,8 +118,12 @@ export function KnowledgePage({ library }: { library: KnowledgeLibrary }): React
               {showingResults ? '检索仅在本地资料库中进行' : '下一步将支持表格与语义检索'}
             </small>
           </div>
-          <div className="knowledge-list-scroll">
-            {items.length === 0 ? (
+          <ScrollRegion ariaLabel="知识资料列表" busy={importing} className="knowledge-list-scroll">
+            {loading ? (
+              <LoadingPage />
+            ) : loadError ? (
+              <ErrorPage detail={loadError} onRetry={refresh} />
+            ) : items.length === 0 ? (
               <EmptyPage
                 eyebrow={showingResults ? '没有匹配结果' : '从一份资料开始'}
                 title={showingResults ? '换个关键词试试' : '把常用资料放进你的资料库'}
@@ -129,93 +134,50 @@ export function KnowledgePage({ library }: { library: KnowledgeLibrary }): React
                 }
               />
             ) : (
-              <div className="knowledge-list">
+              <ViewContainer mode="list">
                 {items.map(({ document, excerpt, locator }) => (
-                  <article
-                    className="knowledge-card"
+                  <KnowledgeDocumentCard
                     key={`${document.id}-${locator ?? 'document'}`}
-                  >
-                    <span className={`knowledge-format ${document.format}`}>
-                      {document.format === 'markdown'
-                        ? 'MD'
-                        : document.format === 'pdf'
-                          ? 'PDF'
-                          : document.format === 'docx'
-                            ? 'DOC'
-                            : 'TXT'}
-                    </span>
-                    <div>
-                      <strong>{document.title}</strong>
-                      {excerpt && <p>{excerpt}</p>}
-                      <small>
-                        {document.sourcePath}
-                        {locator ? ` · ${locator}` : ''} · 更新于 {formatTime(document.updatedAt)}
-                      </small>
-                    </div>
-                    <div className="knowledge-card-actions">
-                      <button
-                        className="open-source-button"
-                        onClick={() =>
-                          reportAction(
-                            onOpenSource(document.sourcePath).then(() =>
-                              setToast({
-                                tone: 'success',
-                                text: `已打开「${document.title}」的原始资料。`,
-                              }),
-                            ),
-                            (error) =>
-                              setToast({
-                                tone: 'error',
-                                text: error || '无法打开原始资料。',
-                              }),
-                          )
-                        }
-                      >
-                        打开原文
-                      </button>
-                      <button
-                        className="refresh-knowledge-button"
-                        disabled={importing}
-                        onClick={() =>
-                          reportAction(
-                            onRefresh(document).then(() =>
-                              setToast({
-                                tone: 'success',
-                                text: `已刷新「${document.title}」的本地索引。`,
-                              }),
-                            ),
-                            (error) =>
-                              setToast({ tone: 'error', text: error || '刷新索引失败，请重试。' }),
-                          )
-                        }
-                      >
-                        刷新索引
-                      </button>
-                      <button
-                        className="remove-knowledge-button"
-                        disabled={importing}
-                        onClick={() => trackAction(onRemove(document), '移出资料库')}
-                      >
-                        移出资料库
-                      </button>
-                    </div>
-                  </article>
+                    document={document}
+                    {...(excerpt ? { excerpt } : {})}
+                    {...(locator ? { locator } : {})}
+                    busy={importing}
+                    onOpen={() =>
+                      reportAction(
+                        onOpenSource(document.sourcePath).then(() =>
+                          setToast({
+                            tone: 'success',
+                            message: `已打开「${document.title}」的原始资料。`,
+                          }),
+                        ),
+                        (error) =>
+                          setToast({ tone: 'error', message: error || '无法打开原始资料。' }),
+                      )
+                    }
+                    onRefresh={() =>
+                      reportAction(
+                        onRefresh(document).then(() =>
+                          setToast({
+                            tone: 'success',
+                            message: `已刷新「${document.title}」的本地索引。`,
+                          }),
+                        ),
+                        (error) =>
+                          setToast({
+                            tone: 'error',
+                            message: error || '刷新索引失败，请重试。',
+                          }),
+                      )
+                    }
+                    onRemove={() => trackAction(onRemove(document), '移出资料库')}
+                  />
                 ))}
-              </div>
+              </ViewContainer>
             )}
-          </div>
+          </ScrollRegion>
         </section>
       </div>
-      {toast && (
-        <div className="knowledge-toast-host" aria-live="polite">
-          <div className="toast" role="status">
-            <span className={`level-${toast.tone}`} aria-hidden="true">
-              {toast.tone === 'success' ? <CheckIcon size={12} /> : <AlertIcon size={12} />}
-            </span>
-            <p>{toast.text}</p>
-          </div>
-        </div>
-      )}
+      {toast && <TransientToast {...toast} onDismiss={dismissToast} />}
     </>
   );
 }

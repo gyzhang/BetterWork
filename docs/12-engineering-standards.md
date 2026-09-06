@@ -48,7 +48,7 @@ apps/desktop/src/
     ├── main.tsx          # 挂载入口
     ├── App.tsx           # 跨簇编排与布局组装
     ├── views/            # 页面级视图（一个导航入口一个文件）
-    ├── components/       # 跨视图复用的界面组件
+    ├── components/       # 布局、反馈与稳定领域呈现组件
     ├── hooks/            # 有状态逻辑，一个内聚状态簇一个 hook
     ├── lib/              # 无状态纯函数与常量（可单测，不含 JSX）
     └── *.ts / *.tsx      # 领域派生逻辑（activity、appearance、icons 等）
@@ -65,7 +65,7 @@ standards/
 放置规则：
 
 - **有状态**逻辑进 `hooks/`，**无状态**逻辑进 `lib/`。判据是「是否持有 React 状态」，不是「文件长短」。
-- 一个视图只在 `views/`，被两个以上视图使用才提升到 `components/`。不要为「以后可能复用」提前提升。
+- 页面专属视图留在 `views/`；跨视图布局/反馈组件，以及有明确数据-动作边界的稳定领域呈现组件进入 `components/`。不要为「以后可能复用」提前抽象数据加载或 CRUD 控制器。
 - `services/` 可以依赖 `persistence/`，反向不行；两者都可以依赖 `packages/*`，`packages/*` 不得依赖 `apps/*`。
 - 需要 Application 层资源的 Tool 用「工厂 + 闭包注入」（`createKnowledgeSearchTool`），使 `tool-runtime` 不依赖 Electron、SQLite 或服务商 SDK。
 
@@ -145,7 +145,7 @@ standards/
 
 ## 8. Renderer
 
-分层：`views/` 只呈现、`components/` 只呈现、`hooks/` 持有状态与动作、`lib/` 是纯函数。**视图组件里不应出现 IPC 调用**，它们从 hook 拿到已经包装好的动作。
+分层：`views/` 负责页面组合，`components/` 负责布局、反馈和领域呈现，`hooks/` 持有状态与动作，`lib/` 是纯函数。**视图组件里不应出现 IPC 调用**，它们从 hook 拿到已经包装好的动作。列表页优先复用 `components/layout/` 的页头、工具栏、滚动区和视图容器，不在每个页面重新发明滚动边界。
 
 界面规范以 [UI/UX 体系](10-ui-ux-system.md) 为真相源，其中与本节相关的硬约束：
 

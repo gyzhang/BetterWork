@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { deriveActivityGroups } from './activity';
 import { BrandLogo } from './brand-logo';
 import { ContextPanel } from './components/ContextPanel';
+import { PageHeader } from './components/layout/PageHeader';
 import { ModelEditor } from './components/ModelEditorSheet';
 import { Welcome } from './components/Welcome';
 import { useAppearance } from './hooks/use-appearance';
@@ -502,17 +503,15 @@ export function App(): React.JSX.Element {
         )}
         {view === 'work' && (
           <>
-            <header className="page-header" onDoubleClick={handleTitlebarDoubleClick}>
-              <div>
-                <p className="eyebrow">工作</p>
-                <h1>{activeRun ? '继续完成任务' : '开始一件工作'}</h1>
-              </div>
-              <div className="page-header-actions">
+            <PageHeader
+              eyebrow="工作"
+              title={activeRun ? '继续完成任务' : '开始一件工作'}
+              actions={
                 <button className="context-toggle" onClick={() => setContextOpen((open) => !open)}>
                   {contextOpen ? '收起上下文' : '查看上下文'}
                 </button>
-              </div>
-            </header>
+              }
+            />
             <div className="workspace">
               <div className="messages">
                 <div className="page-body">

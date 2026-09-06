@@ -1,11 +1,15 @@
 import type { ArtifactDetail, ArtifactSummary } from '@betterwork/agent-protocol';
+import { useCallback, useState } from 'react';
 
 import { EmptyPage } from '../components/EmptyState';
+import { PageHeader } from '../components/layout/PageHeader';
+import { ScrollRegion } from '../components/layout/ScrollRegion';
+import { ViewContainer } from '../components/layout/ViewContainer';
+import { type ToastTone, TransientToast } from '../components/TransientToast';
 import { useArtifactViewer } from '../hooks/use-artifact-viewer';
 import { ChevronLeftIcon, ChevronRightIcon, GlobeIcon, KnowledgeIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
-import { handleTitlebarDoubleClick } from '../lib/titlebar';
 import { MarkdownPreview } from '../markdown-preview';
 
 export function ArtifactPage({
@@ -31,60 +35,59 @@ export function ArtifactPage({
     title,
     content,
     error,
-    exportMessage,
     versions,
     visibleVersion,
     setTitle,
     setContent,
-    setExportMessage,
     setError,
     beginEditing,
     cancelEditing,
     finishEditing,
     selectVersion,
   } = useArtifactViewer(selected);
+  const [toast, setToast] = useState<{ tone: ToastTone; message: string }>();
+  const dismissToast = useCallback(() => setToast(undefined), []);
   if (selected && visibleVersion)
     return (
       <>
-        <header className="page-header" onDoubleClick={handleTitlebarDoubleClick}>
-          <div className="page-header-leading">
+        <PageHeader
+          eyebrow={`Markdown · v${visibleVersion.versionNumber}${visibleVersion.origin === 'user-edit' ? ' · 人工修订' : ''}${visibleVersion.id !== selected.currentVersionId ? ' · 历史版本' : ''}`}
+          title={selected.title}
+          leading={
             <button className="back-button" onClick={onBack}>
               <ChevronLeftIcon size={13} /> 成果
             </button>
-            <div>
-              <p className="eyebrow">
-                Markdown · v{visibleVersion.versionNumber}
-                {visibleVersion.origin === 'user-edit' ? ' · 人工修订' : ''}
-                {visibleVersion.id !== selected.currentVersionId ? ' · 历史版本' : ''}
-              </p>
-              <h1>{selected.title}</h1>
-            </div>
-          </div>
-          {!editing && (
-            <div className="page-header-actions">
-              <button
-                className="secondary-button"
-                onClick={() =>
-                  void onExport(selected, visibleVersion.id)
-                    .then((result) =>
-                      setExportMessage(
-                        result.cancelled ? '' : `已导出到 ${result.filePath ?? '所选位置'}。`,
-                      ),
+          }
+          actions={
+            !editing && (
+              <>
+                <button
+                  className="secondary-button"
+                  onClick={() =>
+                    reportAction(
+                      onExport(selected, visibleVersion.id).then((result) => {
+                        if (!result.cancelled) {
+                          setToast({
+                            tone: 'success',
+                            message: `已导出到 ${result.filePath ?? '所选位置'}。`,
+                          });
+                        }
+                      }),
+                      (errorMessage) =>
+                        setToast({ tone: 'error', message: errorMessage || '导出失败。' }),
                     )
-                    .catch((reason: unknown) =>
-                      setExportMessage(reason instanceof Error ? reason.message : '导出失败。'),
-                    )
-                }
-              >
-                导出 Markdown
-              </button>
-              <button className="primary-button" onClick={beginEditing}>
-                编辑此版本
-              </button>
-            </div>
-          )}
-        </header>
-        <div className="page-scroll">
+                  }
+                >
+                  导出 Markdown
+                </button>
+                <button className="primary-button" onClick={beginEditing}>
+                  编辑此版本
+                </button>
+              </>
+            )
+          }
+        />
+        <ScrollRegion ariaLabel="成果版本详情">
           <section className="page-body artifact-detail-page">
             <p className="page-intro">
               {visibleVersion.id !== selected.currentVersionId
@@ -93,7 +96,6 @@ export function ArtifactPage({
                   ? '这是人工修订版本；此前版本仍可回溯。'
                   : '来自一次任务运行，可在后续继续修订并形成新版本。'}
             </p>
-            {exportMessage && <p className="artifact-export-message">{exportMessage}</p>}
             <div className="artifact-detail-layout">
               <aside className="artifact-version-list">
                 <div>
@@ -185,19 +187,18 @@ export function ArtifactPage({
               )}
             </div>
           </section>
-        </div>
+        </ScrollRegion>
+        {toast && <TransientToast {...toast} onDismiss={dismissToast} />}
       </>
     );
   return (
     <>
-      <header className="page-header" onDoubleClick={handleTitlebarDoubleClick}>
-        <div>
-          <p className="eyebrow">成果</p>
-          <h1>可继续工作的交付物</h1>
-        </div>
-        <span className="work-count">{artifacts.length} 项</span>
-      </header>
-      <div className="page-scroll">
+      <PageHeader
+        eyebrow="成果"
+        title="可继续工作的交付物"
+        actions={<span className="work-count">{artifacts.length} 项</span>}
+      />
+      <ScrollRegion ariaLabel="成果列表">
         <section className="page-body completed-work-page">
           <p className="page-intro">
             Markdown 是第一种可版本化的成果。后续研究报告、Word、Excel 和 PPT 会接入同一条 Artifact
@@ -210,7 +211,7 @@ export function ArtifactPage({
               detail="成果不同于运行记录：它会关联任务、来源运行与版本，方便后续继续修改和导出。"
             />
           ) : (
-            <div className="completed-work-list">
+            <ViewContainer mode="list" className="completed-work-list">
               {artifacts.map((artifact) => (
                 <button
                   className="completed-work-card"
@@ -233,10 +234,10 @@ export function ArtifactPage({
                   </span>
                 </button>
               ))}
-            </div>
+            </ViewContainer>
           )}
         </section>
-      </div>
+      </ScrollRegion>
     </>
   );
 }

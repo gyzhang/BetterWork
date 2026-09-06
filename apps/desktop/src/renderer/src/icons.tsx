@@ -110,6 +110,14 @@ export const CloseIcon = (props: IconProps): React.JSX.Element => (
   </Icon>
 );
 
+export const MoreHorizontalIcon = (props: IconProps): React.JSX.Element => (
+  <Icon {...props}>
+    <circle cx="5.5" cy="12" r="1" />
+    <circle cx="12" cy="12" r="1" />
+    <circle cx="18.5" cy="12" r="1" />
+  </Icon>
+);
+
 export const BellIcon = (props: IconProps): React.JSX.Element => (
   <Icon {...props}>
     <path d="M18 16H6c1.2-1.1 1.8-2.6 1.8-4.8v-1.4c0-2.9 1.9-5 4.2-5s4.2 2.1 4.2 5v1.4c0 2.2.6 3.7 1.8 4.8Z" />
