@@ -217,7 +217,7 @@ ClawBible Desktop 继续作为模型接入、Agent、工具、知识和 Office �
 - 版心（page body）：统一 860px、水平居中；窄窗口时两侧各留 24px 最小间距。页内说明文字、内容列表、对话消息与输入框全部落在版心内；工作视图的对话列与输入框同宽。
 - 上下文面板按场景出现：右栏只在承载任务上下文的工作视图渲染（过程/资料/成果）；成果、知识、设置等无任务上下文的视图不渲染面板，主工作区占满剩余宽度，布局网格不得预留空栏。面板收起后整体移除、不留残条，重开入口固定为页头带右侧操作区的「查看上下文」开关。
 
-实现上以共享的 layout 样式类（`.page-header` / `.page-scroll` / `.page-body`）为唯一来源，页面不得自定版心宽度、页头结构或标题坐标。设置页因保留二级导航布局作为声明特例，其余新增页面一律套用本骨架。
+实现上以 `components/layout/` 下的 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 与共享 Token/样式为唯一来源；页面不得自定版心宽度、页头结构或滚动边界。设置页因保留二级导航布局作为声明特例，其余新增页面一律套用本骨架。数据加载、搜索和删除等业务编排留在页面对应的 hook，不在布局组件中复制 Cloud 的通用 CRUD 控制器。
 
 ## 9. 视觉系统
 
@@ -392,7 +392,7 @@ UI Foundation 首批提供四套成对色系：
 
 所有交互组件都必须定义：默认、悬停、聚焦、按下、禁用、加载、成功和错误状态。键盘焦点必须可见，不能只依赖颜色变化。
 
-落地现状：上述组件目前**以样式类形式存在于 `styles.css`，而不是独立 React 组件**——按钮、输入、页签、Sheet、Toast、内联提示、空状态都有对应类名与状态样式，聚焦环用 `:focus-visible` 统一实现。尚未落地的有 Tooltip、Popover、Progress、Skeleton、Switch；确认对话框当前使用原生 `window.confirm`（移出资料库、清空通知两处），需要替换为符合本节的 Dialog 组件。
+落地现状：按钮、输入、页签、Sheet、Toast、内联提示、空状态都有对应样式；页面骨架已由 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 负责结构，`KnowledgeDocumentCard` 负责知识条目的领域呈现，聚焦环用 `:focus-visible` 统一实现。尚未落地的有 Tooltip、Popover、Progress、Skeleton、Switch；确认对话框当前使用原生 `window.confirm`（移出资料库、清空通知两处），需要替换为符合本节的 Dialog 组件。
 
 业务组件的落地边界：`views/` 承载工作、成果、知识、设置四个页面级视图，`components/` 承载跨视图复用的上下文面板、欢迎视图、空状态与模型编辑 Sheet，`hooks/` 承载外观、资料库、模型设置三个内聚状态簇，`lib/` 承载纯函数与常量。AppShell 与 Sidebar 仍在 `App.tsx` 内；`ConfirmationBlock`、`PlanStep`、`EvidenceChip`、`RunSummary` 未落地。
 

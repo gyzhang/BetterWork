@@ -12,13 +12,11 @@ export interface ArtifactViewer {
   title: string;
   content: string;
   error: string;
-  exportMessage: string;
   versions: ArtifactVersionSummary[];
   /** 正在查看的版本；未选历史版本时回落到成果的当前版本。 */
   visibleVersion: ArtifactVersionDetail | undefined;
   setTitle: (title: string) => void;
   setContent: (content: string) => void;
-  setExportMessage: (message: string) => void;
   setError: (message: string) => void;
   beginEditing: () => void;
   cancelEditing: () => void;
@@ -49,14 +47,12 @@ export function useArtifactViewer(selected: ArtifactDetail | undefined): Artifac
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [error, setError] = useState('');
-  const [exportMessage, setExportMessage] = useState('');
   const [versions, setVersions] = useState<ArtifactVersionSummary[]>([]);
   const [viewingVersion, setViewingVersion] = useState<ArtifactVersionDetail>();
 
   useEffect(() => {
     setEditing(false);
     setError('');
-    setExportMessage('');
     setTitle(selected?.title ?? '');
     setContent(selected?.content ?? '');
     setViewingVersion(undefined);
@@ -103,12 +99,10 @@ export function useArtifactViewer(selected: ArtifactDetail | undefined): Artifac
     title,
     content,
     error,
-    exportMessage,
     versions,
     visibleVersion,
     setTitle,
     setContent,
-    setExportMessage,
     setError,
     beginEditing,
     cancelEditing,

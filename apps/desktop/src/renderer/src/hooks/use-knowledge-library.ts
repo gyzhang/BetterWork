@@ -1,7 +1,7 @@
 import type { KnowledgeDocumentSummary, KnowledgeSearchResult } from '@betterwork/agent-protocol';
 import { type FormEvent, useCallback, useState } from 'react';
 
-import { trackAction } from '../lib/async-action';
+import { describeActionError, trackAction } from '../lib/async-action';
 import { fileNameOf } from '../lib/format';
 
 export interface KnowledgeLibrary {
@@ -12,6 +12,8 @@ export interface KnowledgeLibrary {
   message: string;
   issues: string[];
   importing: boolean;
+  loading: boolean;
+  loadError: string;
   /** 后台重新拉取资料清单；永不 reject。 */
   refresh: () => void;
   onImport: () => Promise<void>;
@@ -36,9 +38,22 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   const [message, setMessage] = useState('');
   const [issues, setIssues] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const refresh = useCallback((): void => {
-    trackAction(window.betterwork.knowledge.list().then(setDocuments), '刷新资料库');
+    setLoading(true);
+    setLoadError('');
+    trackAction(
+      window.betterwork.knowledge
+        .list()
+        .then(setDocuments)
+        .catch((error: unknown) => {
+          setLoadError(describeActionError(error, '资料库加载失败，请重试。'));
+        })
+        .finally(() => setLoading(false)),
+      '刷新资料库',
+    );
   }, []);
 
   const onImport = async (): Promise<void> => {
@@ -64,6 +79,7 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   };
 
   const onOpenSource = async (sourcePath: string): Promise<void> => {
+    setMessage('');
     const result = await window.betterwork.knowledge.openSource({ sourcePath });
     if (!result.opened) throw new Error(result.error ?? '无法打开原始资料。');
   };
@@ -92,6 +108,7 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
 
   const onRefresh = async (document: KnowledgeDocumentSummary): Promise<void> => {
     setImporting(true);
+    setMessage('');
     try {
       const result = await window.betterwork.knowledge.refresh({ id: document.id });
       if (!result.refreshed) {
@@ -103,11 +120,9 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
       setQuery('');
       refresh();
     } catch (error) {
-      setMessage(
-        error instanceof Error && error.message
-          ? `刷新索引失败：${error.message}`
-          : '刷新索引失败，请重试。',
-      );
+      const message = describeActionError(error, '刷新索引失败，请重试。');
+      setMessage(`刷新索引失败：${message}`);
+      throw error instanceof Error ? error : new Error(message);
     } finally {
       setImporting(false);
     }
@@ -135,6 +150,8 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     message,
     issues,
     importing,
+    loading,
+    loadError,
     refresh,
     onImport,
     onSearch,
