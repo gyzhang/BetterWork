@@ -307,6 +307,7 @@ p {
 .app-shell {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) auto;
+  grid-template-rows: 1fr;
   height: 100vh;
   overflow: hidden;
   color: var(--text-primary);
@@ -540,6 +541,7 @@ p {
 .main-stage {
   display: flex;
   min-width: 0;
+  min-height: 0;
   flex-direction: column;
   background: var(--canvas);
 }
