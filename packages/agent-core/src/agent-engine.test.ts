@@ -220,6 +220,52 @@ describe('ReActAgentEngine', () => {
     expect(events.some((event) => event.type === 'run.failed')).toBe(false);
   });
 
+  it('executes every tool call requested in the same model round', async () => {
+    const events = [];
+    const executed: number[] = [];
+    const engine = new ReActAgentEngine();
+    const multiTool: AgentTool = {
+      name: 'record',
+      description: '记录调用顺序',
+      inputSchema: { type: 'object' },
+      async execute(input) {
+        const value = input.value;
+        if (typeof value !== 'number') throw new Error('value must be a number');
+        executed.push(value);
+        return { value };
+      },
+    };
+    for await (const event of engine.run({
+      runId: 'run-multiple-tools',
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      prompt: '连续调用两个工具',
+      workspacePath: '.',
+      model: scriptedModel([
+        [
+          { type: 'tool-call', toolCall: { id: 'call-1', name: 'record', input: { value: 1 } } },
+          { type: 'tool-call', toolCall: { id: 'call-2', name: 'record', input: { value: 2 } } },
+          { type: 'done' },
+        ],
+        [{ type: 'text-delta', delta: '两个工具都已完成。' }, { type: 'done' }],
+      ]),
+      tools: [multiTool],
+      signal: new AbortController().signal,
+    }))
+      events.push(event);
+
+    expect(executed).toEqual([1, 2]);
+    expect(events.filter((event) => event.type === 'tool.started')).toMatchObject([
+      { toolCall: { id: 'call-1' } },
+      { toolCall: { id: 'call-2' } },
+    ]);
+    expect(events.filter((event) => event.type === 'tool.completed')).toMatchObject([
+      { toolCallId: 'call-1' },
+      { toolCallId: 'call-2' },
+    ]);
+    expect(events.at(-1)?.type).toBe('run.completed');
+  });
+
   it('fails the run when the model requests an unknown tool', async () => {
     const events = [];
     const engine = new ReActAgentEngine();

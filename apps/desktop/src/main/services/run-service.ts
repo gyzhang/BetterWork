@@ -77,6 +77,9 @@ export class RunService {
   ) {}
 
   start(input: StartRunRequest): string {
+    const context = this.store.tasks.getRunContext(input.taskId, input.sessionId);
+    if (!context) throw new Error('Session does not belong to task');
+
     const runId = randomUUID();
     const controller = new AbortController();
     this.activeRuns.set(runId, {
@@ -99,7 +102,7 @@ export class RunService {
     });
 
     // 事件流是异步消费的；错误全部在 consume 内部收口，这里不会有未处理 rejection。
-    this.consume(runId, input, controller).catch((error: unknown) => {
+    this.consume(runId, input, context.workspacePath, controller).catch((error: unknown) => {
       console.error(`Run ${runId} could not be finalized`, error);
     });
     return runId;
@@ -119,6 +122,7 @@ export class RunService {
   private async consume(
     runId: string,
     input: StartRunRequest,
+    workspacePath: string,
     controller: AbortController,
   ): Promise<void> {
     let terminated = false;
@@ -130,7 +134,7 @@ export class RunService {
         taskId: input.taskId,
         sessionId: input.sessionId,
         prompt: input.prompt,
-        workspacePath: input.workspacePath,
+        workspacePath,
         model,
         tools: createRunTools({
           knowledgeSearch: (query) =>

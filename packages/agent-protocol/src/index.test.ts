@@ -1,6 +1,30 @@
 import { describe, expect, it } from 'vitest';
 
-import { exportMarkdownArtifactRequestSchema, updateWindowThemeRequestSchema } from './index';
+import {
+  exportMarkdownArtifactRequestSchema,
+  startRunRequestSchema,
+  updateWindowThemeRequestSchema,
+} from './index';
+
+describe('run protocol', () => {
+  it('accepts only identifiers and prompt, leaving the workspace boundary to Main', () => {
+    expect(
+      startRunRequestSchema.parse({
+        taskId: 'task-1',
+        sessionId: 'session-1',
+        prompt: '研究客户风险',
+      }),
+    ).toEqual({ taskId: 'task-1', sessionId: 'session-1', prompt: '研究客户风险' });
+    expect(() =>
+      startRunRequestSchema.parse({
+        taskId: 'task-1',
+        sessionId: 'session-1',
+        prompt: '研究客户风险',
+        workspacePath: '/',
+      }),
+    ).toThrow();
+  });
+});
 
 describe('window theme protocol', () => {
   it('allows only explicit six-digit color values across the IPC boundary', () => {

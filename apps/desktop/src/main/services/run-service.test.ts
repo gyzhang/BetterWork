@@ -115,7 +115,6 @@ describe('RunService', () => {
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
       prompt: '搜索知识: 续约风险',
-      workspacePath: fixture.directory,
     });
     await waitForCompletion(fixture, runId);
 
@@ -134,7 +133,6 @@ describe('RunService', () => {
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
       prompt: '随便聊聊',
-      workspacePath: fixture.directory,
     });
     expect(service.cancel(runId)).toBe(true);
     await waitForCompletion(fixture, runId);
@@ -149,6 +147,25 @@ describe('RunService', () => {
 
     expect(service.isActive(runId)).toBe(false);
     expect(service.cancel(runId)).toBe(false);
+  });
+
+  it('rejects a Session that belongs to a different Task before creating a Run', async () => {
+    const fixture = await createFixture();
+    const otherTask = fixture.store.tasks.create(
+      fixture.store.tasks.getWorkspaceId(fixture.taskId) ?? '',
+      '另一项任务',
+      '不应共享会话',
+    );
+    const service = createService(fixture);
+
+    expect(() =>
+      service.start({
+        taskId: fixture.taskId,
+        sessionId: otherTask.sessionId,
+        prompt: '错误组合的任务与会话',
+      }),
+    ).toThrow('Session does not belong to task');
+    expect(fixture.store.runs.list()).toEqual([]);
   });
 
   it('registers the web search tool only when a search engine is configured', () => {
@@ -174,7 +191,6 @@ describe('RunService', () => {
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
       prompt: '计算: 1 + 1',
-      workspacePath: fixture.directory,
     });
     await waitForCompletion(fixture, runId);
 
@@ -206,7 +222,6 @@ describe('RunService', () => {
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
       prompt: '计算: 1 + 1',
-      workspacePath: fixture.directory,
     });
     await waitForCompletion(fixture, runId);
 
