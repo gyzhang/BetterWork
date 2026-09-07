@@ -177,9 +177,9 @@ Schema 校验
 - MCP Tool
 - Desktop Integration Tool
 
-当前实现状态：只有 TypeScript Tool 一种后端，落地四个工具——`calculator`、`read_text_file`、`knowledge_search`、`web_search`。管线中已实装的是 Schema 校验（Zod）、执行、进度上报（`reportProgress`）与结构化结果；Policy 检查、用户审批与审计记录尚未建设。
+当前实现状态：只有 TypeScript Tool 一种后端，落地四个工具——`calculator`、`read_text_file`、`knowledge_search`、`web_search`。管线中已实装的是 Schema 校验（Zod）、执行、进度上报（`reportProgress`）与结构化结果；进度事件在 Tool 仍在执行时立即进入 `AsyncIterable`，取消信号同时传入 Tool 与联网搜索请求。Policy 检查、用户审批与审计记录尚未建设。
 
-唯一强制的安全约束是 `read_text_file` 内建的 Workspace 路径边界（解析后校验相对路径不越界）。Evidence 与 Artifact 的登记不在 Tool Runtime 内完成，而是由 Application 层（`RunService`）在观察到 `tool.completed` 事件后落库。
+唯一强制的安全约束是 `read_text_file` 内建的 Workspace 路径边界（对真实路径校验，符号链接也不得越界）。Evidence 与 Artifact 的登记不在 Tool Runtime 内完成，而是由 Application 层（`RunService`）在观察到 `tool.completed` 事件后落库。
 
 ## 7. Python Worker
 
@@ -246,7 +246,7 @@ SQLite 是产品状态真相源；向量索引、缩略图和解析缓存均可�
 
 一个 ModelProfile 只承担一个角色；[UI/UX 体系](10-ui-ux-system.md) §11.4 提出的「同一模型可以承担多个角色」需要改动表结构，属后续切片。`reranker` 与 `ocr` 角色未落地。
 
-Provider 侧现有 `FakeModelProvider`（教学，按前缀正则触发工具）与 `OpenAICompatibleProvider`（SSE 流式，支持 `reasoning_content` 与 `tool_calls` 增量拼接）；尚未抽象出独立的 Provider Adapter 层，新增非 OpenAI 兼容协议时需要先在 `agent-core` 增加实现。API Key 明文存于本地 SQLite，列表接口只回 `apiKeyConfigured`；迁移到系统钥匙串须先新增 ADR。
+Provider 侧现有 `FakeModelProvider`（教学，按前缀正则触发工具）与 `OpenAICompatibleProvider`（SSE 流式，支持 `reasoning_content` 与 `tool_calls` 增量拼接）。后者以 120 秒整体超时包住请求与流读取，要求 `[DONE]` 或服务端 `finish_reason` 作为完成信号；用户取消优先映射为 Run 取消，提前 EOF 作为失败处理。尚未抽象出独立的 Provider Adapter 层，新增非 OpenAI 兼容协议时需要先在 `agent-core` 增加实现。API Key 明文存于本地 SQLite，列表接口只回 `apiKeyConfigured`；迁移到系统钥匙串须先新增 ADR。
 
 ## 10. 前端
 
@@ -284,4 +284,3 @@ Provider 侧现有 `FakeModelProvider`（教学，按前缀正则触发工具）
 - Token、耗时和错误
 
 默认日志不得记录 API Key；完整文档内容不应无必要写入普通日志。
-

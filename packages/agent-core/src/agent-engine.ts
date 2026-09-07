@@ -102,8 +102,11 @@ export class ReActAgentEngine implements AgentEngine {
           if (!tool) throw new Error(`Unknown tool: ${toolCall.name}`);
           yield events.create({ type: 'tool.started', toolCall });
           const progress: AgentRuntimeEvent[] = [];
-          try {
-            const output = await tool.execute(toolCall.input, {
+          let wakeForProgress: (() => void) | undefined;
+          const onAbort = (): void => wakeForProgress?.();
+          input.signal.addEventListener('abort', onAbort, { once: true });
+          const execution = tool
+            .execute(toolCall.input, {
               runId: input.runId,
               workspacePath: input.workspacePath,
               signal: input.signal,
@@ -111,32 +114,58 @@ export class ReActAgentEngine implements AgentEngine {
                 progress.push(
                   events.create({ type: 'tool.progress', toolCallId: toolCall.id, message }),
                 );
+                wakeForProgress?.();
               },
-            });
-            for (const event of progress) yield event;
-            yield events.create({ type: 'tool.completed', toolCallId: toolCall.id, output });
-            messages.push({
-              id: randomUUID(),
-              role: 'tool',
-              toolCallId: toolCall.id,
-              toolName: toolCall.name,
-              content: JSON.stringify(output),
-            });
-          } catch (error) {
-            if (input.signal.aborted) throw abortError();
-            const message = describeError(error);
-            yield events.create({
-              type: 'tool.failed',
-              toolCallId: toolCall.id,
-              error: message,
-            });
-            messages.push({
-              id: randomUUID(),
-              role: 'tool',
-              toolCallId: toolCall.id,
-              toolName: toolCall.name,
-              content: JSON.stringify({ error: message }),
-            });
+            })
+            .then(
+              (output) => ({ type: 'completed' as const, output }),
+              (error: unknown) => ({ type: 'failed' as const, error }),
+            );
+          try {
+            let outcome: Awaited<typeof execution> | undefined;
+            while (!outcome || progress.length > 0) {
+              const nextProgress = progress.shift();
+              if (nextProgress) {
+                yield nextProgress;
+                continue;
+              }
+              if (outcome) break;
+              const progressSignal = new Promise<void>((resolve) => {
+                wakeForProgress = resolve;
+              });
+              const result = await Promise.race([execution, progressSignal]);
+              wakeForProgress = undefined;
+              if (input.signal.aborted) throw abortError();
+              if (result) outcome = result;
+            }
+            if (!outcome) throw new Error('Tool execution ended without a result');
+            if (outcome.type === 'completed') {
+              yield events.create({
+                type: 'tool.completed',
+                toolCallId: toolCall.id,
+                output: outcome.output,
+              });
+              messages.push({
+                id: randomUUID(),
+                role: 'tool',
+                toolCallId: toolCall.id,
+                toolName: toolCall.name,
+                content: JSON.stringify(outcome.output),
+              });
+            } else {
+              const message = describeError(outcome.error);
+              yield events.create({ type: 'tool.failed', toolCallId: toolCall.id, error: message });
+              messages.push({
+                id: randomUUID(),
+                role: 'tool',
+                toolCallId: toolCall.id,
+                toolName: toolCall.name,
+                content: JSON.stringify({ error: message }),
+              });
+            }
+          } finally {
+            input.signal.removeEventListener('abort', onAbort);
+            wakeForProgress = undefined;
           }
         }
       }

@@ -1,3 +1,4 @@
+import { abortError } from '@betterwork/agent-core';
 import type { WebSearchResponse } from '@betterwork/tool-runtime';
 
 export interface QianfanSearchConfig {
@@ -6,7 +7,7 @@ export interface QianfanSearchConfig {
 }
 
 export interface SearchClient {
-  search(query: string): Promise<WebSearchResponse>;
+  search(query: string, signal?: AbortSignal): Promise<WebSearchResponse>;
   test(): Promise<{ ok: boolean; message: string }>;
 }
 
@@ -42,7 +43,8 @@ export const createQianfanSearchClient = (
   config: QianfanSearchConfig,
   fetchImpl: typeof fetch = fetch,
 ): SearchClient => {
-  const search = async (query: string): Promise<WebSearchResponse> => {
+  const search = async (query: string, signal?: AbortSignal): Promise<WebSearchResponse> => {
+    const timeout = AbortSignal.timeout(SEARCH_TIMEOUT_MS);
     let response: Response;
     try {
       response = await fetchImpl(QIANFAN_WEB_SUMMARY_URL, {
@@ -59,10 +61,11 @@ export const createQianfanSearchClient = (
             { type: 'image', top_k: 0 },
           ],
         }),
-        signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
+        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       });
     } catch (error) {
-      if (error instanceof Error && error.name === 'TimeoutError') {
+      if (signal?.aborted) throw abortError();
+      if (timeout.aborted) {
         throw new Error(`搜索服务响应超时（超过 ${SEARCH_TIMEOUT_MS / 1000} 秒）`, {
           cause: error,
         });

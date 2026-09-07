@@ -16,7 +16,7 @@ export interface WebSearchResponse {
   results: WebSearchItem[];
 }
 
-export type WebSearch = (query: string) => Promise<WebSearchResponse>;
+export type WebSearch = (query: string, signal: AbortSignal) => Promise<WebSearchResponse>;
 
 /** Creates a web search tool around an application-injected search function. */
 export const createWebSearchTool = (search: WebSearch): AgentTool => ({
@@ -38,7 +38,8 @@ export const createWebSearchTool = (search: WebSearch): AgentTool => ({
     const { query } = inputSchema.parse(rawInput);
     if (context.signal.aborted) throw abortError();
     context.reportProgress(`正在搜索网页：${query}`);
-    const response = await search(query);
+    const response = await search(query, context.signal);
+    if (context.signal.aborted) throw abortError();
     const results = response.results.slice(0, 8);
     return {
       query,
