@@ -112,6 +112,8 @@ standards/
 
 列表刷新函数（`refreshX`）统一为「返回 `void`、永不 reject」，因此调用点不需要也不应该 `await` 它们。
 
+会因选择对象变化而重新发起的 Renderer 请求（例如切换 Run、Artifact 或版本）必须有请求代号或等价的过期响应保护。旧请求返回后不得覆盖当前选择；事件快照还要与加载期间收到的增量按稳定事件标识合并。
+
 **错误词汇**
 
 取消语义只有一处定义：`packages/agent-core/src/errors.ts` 的 `abortError()` / `isAbortError()` / `describeError()`。任何地方都不允许再写 `Object.assign(new Error('Run cancelled'), { name: 'AbortError' })`——写错名字会让取消被当成失败上报。

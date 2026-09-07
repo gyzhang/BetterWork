@@ -3,7 +3,7 @@ import type {
   ArtifactVersionDetail,
   ArtifactVersionSummary,
 } from '@betterwork/agent-protocol';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { reportAction } from '../lib/async-action';
 
@@ -49,8 +49,13 @@ export function useArtifactViewer(selected: ArtifactDetail | undefined): Artifac
   const [error, setError] = useState('');
   const [versions, setVersions] = useState<ArtifactVersionSummary[]>([]);
   const [viewingVersion, setViewingVersion] = useState<ArtifactVersionDetail>();
+  const listRequestRef = useRef(0);
+  const versionRequestRef = useRef(0);
 
   useEffect(() => {
+    const requestId = listRequestRef.current + 1;
+    listRequestRef.current = requestId;
+    versionRequestRef.current += 1;
     setEditing(false);
     setError('');
     setTitle(selected?.title ?? '');
@@ -61,8 +66,12 @@ export function useArtifactViewer(selected: ArtifactDetail | undefined): Artifac
       return;
     }
     reportAction(
-      window.betterwork.artifacts.listVersions({ artifactId: selected.id }).then(setVersions),
-      setError,
+      window.betterwork.artifacts.listVersions({ artifactId: selected.id }).then((loaded) => {
+        if (listRequestRef.current === requestId) setVersions(loaded);
+      }),
+      (message) => {
+        if (listRequestRef.current === requestId) setError(message);
+      },
       '版本历史加载失败，请重试。',
     );
   }, [selected]);
@@ -70,7 +79,10 @@ export function useArtifactViewer(selected: ArtifactDetail | undefined): Artifac
   const visibleVersion = viewingVersion ?? (selected ? toVersionDetail(selected) : undefined);
 
   const selectVersion = async (version: ArtifactVersionSummary): Promise<void> => {
+    const requestId = versionRequestRef.current + 1;
+    versionRequestRef.current = requestId;
     const detail = await window.betterwork.artifacts.getVersion({ id: version.id });
+    if (versionRequestRef.current !== requestId) return;
     if (!detail) throw new Error('该版本已不存在，请返回成果列表重新选择。');
     setViewingVersion(detail);
     setEditing(false);

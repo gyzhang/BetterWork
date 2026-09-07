@@ -128,13 +128,13 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 **测试覆盖**
 
 1. `ipc/register-ipc.ts` 仍无测试。它承载导出对话框与写盘、工作区选择、导入结果通知分级、版本归属校验等业务判断；其中的模型连通性探测已抽为 `services/model-connectivity.ts` 并单独覆盖，但 IPC 编排本身需要 electron 模块替身才能测。
-2. Renderer 仍无组件测试（仓库没有 React 测试库）。已覆盖的是纯函数：`activity`、`appearance`、`markdown-preview`、`lib/tool-summary`。视图与 hook 的行为只靠人工桌面验收。
+2. Renderer 已引入 `@testing-library/react` + jsdom，并覆盖 Confirmation Dialog 的焦点与 Escape 行为、成果版本加载错误，以及 `useArtifactViewer` 在受控异步乱序下忽略过期版本列表响应。仍无覆盖完整 AppShell 的组件测试与端到端 UI 自动化；其他视图和 hook 仍主要依靠人工桌面验收。
 3. 无端到端 UI 自动化，[MVP 与路线图](07-mvp-and-roadmap.md) §9 的「至少一个端到端用户旅程」与「macOS 和 Windows 基础打包验证」两项门槛仍未达成。
 
 **界面**
 
 4. `App.tsx` 仍有约 720 行，AppShell 与 Sidebar 未拆出。工作会话状态刻意留在 App（它同时牵动任务列表、上下文面板、成果列表与通知跳转），但 Sidebar 是纯 JSX，可以继续外提。
-5. 破坏性确认仍用原生 `window.confirm`（移出资料库、清空通知两处），应替换为符合 docs/10 §10.1 的 Dialog 组件。
+5. Confirmation Dialog 已落地，但尚未覆盖所有未来的破坏性操作；新增此类操作必须复用组件并补键盘行为测试。
 6. 部分低频次级按钮的点击区域小于 32px（Composer 工作区行的文字按钮、上下文页签、模型行内动作、通知面板动作、证据「原文」按钮）。达标方式是扩大命中区，不是放大视觉尺寸。
 7. Tooltip、Popover、Progress、Skeleton、Switch 未落地；除 `⌘/Ctrl ↵` 外没有其他快捷键。
 8. docs/10 §13 UI-5 要求的三尺寸 × 3 模式 × 4 色系验收矩阵仍未建立；本轮字号与动效收敛后需要重新做一轮人工验收。

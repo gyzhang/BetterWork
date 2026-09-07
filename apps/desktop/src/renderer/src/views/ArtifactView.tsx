@@ -98,6 +98,11 @@ export function ArtifactPage({
                   ? '这是人工修订版本；此前版本仍可回溯。'
                   : '来自一次任务运行，可在后续继续修订并形成新版本。'}
             </p>
+            {error && (
+              <p className="artifact-action-error" role="alert">
+                {error}
+              </p>
+            )}
             <div className="artifact-detail-layout">
               <aside className="artifact-version-list">
                 <div>
@@ -194,7 +199,6 @@ export function ArtifactPage({
                       required
                     />
                   </label>
-                  {error && <p className="artifact-editor-error">{error}</p>}
                   <footer>
                     <span>保存后会创建 v{selected.versionNumber + 1} 人工修订版本。</span>
                     <div>

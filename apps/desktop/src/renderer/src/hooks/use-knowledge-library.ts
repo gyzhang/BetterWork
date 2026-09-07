@@ -85,13 +85,6 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   };
 
   const onRemove = async (document: KnowledgeDocumentSummary): Promise<void> => {
-    if (
-      !window.confirm(
-        `从算台资料库移除「${document.title}」？\n\n这不会删除原始文件，只会删除本地检索索引。`,
-      )
-    ) {
-      return;
-    }
     try {
       const result = await window.betterwork.knowledge.remove({ id: document.id });
       setMessage(

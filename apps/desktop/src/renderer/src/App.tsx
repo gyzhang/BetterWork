@@ -38,6 +38,7 @@ import { reportAction, trackAction } from './lib/async-action';
 import { formatTime } from './lib/format';
 import { runStatusName, toolStageLabel } from './lib/labels';
 import { buildResearchPrompt } from './lib/research-prompt';
+import { finalRunContent, mergeRunEvents } from './lib/run-events';
 import { handleTitlebarDoubleClick } from './lib/titlebar';
 import { summarizeToolOutput } from './lib/tool-summary';
 import type { AppView, ContextTab, SettingsTab } from './lib/view-types';
@@ -70,6 +71,9 @@ export function App(): React.JSX.Element {
   const [recentTasks, setRecentTasks] = useState<RecentTaskSummary[]>([]);
   const [activeRunId, setActiveRunId] = useState<string>();
   const activeRunIdRef = useRef<string | undefined>(undefined);
+  const runSelectionRequestRef = useRef(0);
+  const taskRunsRequestRef = useRef(0);
+  const evidenceRequestRef = useRef(0);
   const [events, setEvents] = useState<AgentRuntimeEvent[]>([]);
   const [evidence, setEvidence] = useState<EvidenceSummary[]>([]);
   const [artifacts, setArtifacts] = useState<ArtifactSummary[]>([]);
@@ -96,11 +100,20 @@ export function App(): React.JSX.Element {
     trackAction(window.betterwork.runs.list().then(setRuns), '刷新运行列表');
   }, []);
   const refreshTaskRuns = useCallback((taskId = activeTaskIdRef.current): void => {
+    const requestId = taskRunsRequestRef.current + 1;
+    taskRunsRequestRef.current = requestId;
     if (!taskId) {
       setTaskRuns([]);
       return;
     }
-    trackAction(window.betterwork.runs.list({ taskId }).then(setTaskRuns), '刷新任务运行记录');
+    trackAction(
+      window.betterwork.runs.list({ taskId }).then((loaded) => {
+        if (taskRunsRequestRef.current === requestId && activeTaskIdRef.current === taskId) {
+          setTaskRuns(loaded);
+        }
+      }),
+      '刷新任务运行记录',
+    );
   }, []);
   const refreshTasks = useCallback((workspaceId = workspaceIdRef.current): void => {
     trackAction(
@@ -109,11 +122,20 @@ export function App(): React.JSX.Element {
     );
   }, []);
   const refreshEvidence = useCallback((taskId = activeTaskIdRef.current): void => {
+    const requestId = evidenceRequestRef.current + 1;
+    evidenceRequestRef.current = requestId;
     if (!taskId) {
       setEvidence([]);
       return;
     }
-    trackAction(window.betterwork.evidence.list({ taskId }).then(setEvidence), '刷新引用资料');
+    trackAction(
+      window.betterwork.evidence.list({ taskId }).then((loaded) => {
+        if (evidenceRequestRef.current === requestId && activeTaskIdRef.current === taskId) {
+          setEvidence(loaded);
+        }
+      }),
+      '刷新引用资料',
+    );
   }, []);
   const refreshArtifacts = useCallback((): void => {
     trackAction(window.betterwork.artifacts.list().then(setArtifacts), '刷新成果列表');
@@ -174,6 +196,7 @@ export function App(): React.JSX.Element {
     [events],
   );
   const assistantDisplayText = assistantText.trim();
+  const completedRunContent = useMemo(() => finalRunContent(events), [events]);
   const activeRun = runs.find((run) => run.id === activeRunId);
   const isRunning =
     activeRun?.status === 'running' ||
@@ -201,6 +224,7 @@ export function App(): React.JSX.Element {
   const isCompletedRun = events.some((event) => event.type === 'run.completed');
 
   const startNewTask = (): void => {
+    runSelectionRequestRef.current += 1;
     activeRunIdRef.current = undefined;
     activeTaskIdRef.current = undefined;
     setActiveRunId(undefined);
@@ -232,6 +256,7 @@ export function App(): React.JSX.Element {
       sessionId: task.sessionId,
       prompt,
     });
+    runSelectionRequestRef.current += 1;
     activeRunIdRef.current = result.runId;
     setActiveRunId(result.runId);
     setEvents([]);
@@ -259,6 +284,8 @@ export function App(): React.JSX.Element {
     reportAction(startRun(), setActionError, '无法开始这项工作，请重试。');
   };
   const selectRun = async (run: RunSummary): Promise<void> => {
+    const requestId = runSelectionRequestRef.current + 1;
+    runSelectionRequestRef.current = requestId;
     activeRunIdRef.current = run.id;
     activeTaskIdRef.current = run.taskId;
     setActiveRunId(run.id);
@@ -266,7 +293,10 @@ export function App(): React.JSX.Element {
     setSentPrompt(run.prompt.trim());
     setPrompt('');
     setArtifactNote(undefined);
-    setEvents(await window.betterwork.runs.listEvents({ runId: run.id }));
+    setEvents([]);
+    const snapshot = await window.betterwork.runs.listEvents({ runId: run.id });
+    if (runSelectionRequestRef.current !== requestId) return;
+    setEvents((current) => mergeRunEvents(snapshot, current));
     refreshTaskRuns(run.taskId);
     refreshEvidence(run.taskId);
     setView('work');
@@ -276,6 +306,7 @@ export function App(): React.JSX.Element {
       await selectRun(task.latestRun);
       return;
     }
+    runSelectionRequestRef.current += 1;
     activeRunIdRef.current = undefined;
     activeTaskIdRef.current = task.id;
     setActiveRunId(undefined);
@@ -289,7 +320,7 @@ export function App(): React.JSX.Element {
     setView('work');
   };
   const saveCurrentArtifact = async (): Promise<void> => {
-    if (!activeTask || !activeRunId || !assistantDisplayText) return;
+    if (!activeTask || !activeRunId || !completedRunContent) return;
     try {
       const artifact = await window.betterwork.artifacts.saveMarkdown({
         ...(currentTaskArtifacts[0] ? { artifactId: currentTaskArtifacts[0].id } : {}),
@@ -297,7 +328,7 @@ export function App(): React.JSX.Element {
         origin: 'assistant-run',
         runId: activeRunId,
         title: activeTask.title,
-        content: assistantDisplayText,
+        content: completedRunContent,
       });
       setArtifactNote({
         tone: 'ok',
