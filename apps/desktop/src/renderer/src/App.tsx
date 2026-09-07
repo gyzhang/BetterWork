@@ -42,6 +42,7 @@ import { finalRunContent, mergeRunEvents } from './lib/run-events';
 import { handleTitlebarDoubleClick } from './lib/titlebar';
 import { summarizeToolOutput } from './lib/tool-summary';
 import type { AppView, ContextTab, SettingsTab } from './lib/view-types';
+import { MarkdownPreview } from './markdown-preview';
 import { NotificationCenter, ToastHost, useNotifications } from './notifications';
 import { ArtifactPage } from './views/ArtifactView';
 import { KnowledgePage } from './views/KnowledgeView';
@@ -567,7 +568,7 @@ export function App(): React.JSX.Element {
                       {assistantDisplayText && (
                         <div className="message assistant">
                           <span>算台</span>
-                          <p>{assistantDisplayText}</p>
+                          <MarkdownPreview content={assistantDisplayText} />
                         </div>
                       )}
                       {isCompletedRun && assistantDisplayText && (

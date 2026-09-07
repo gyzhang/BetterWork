@@ -17,6 +17,7 @@
   --canvas: #f6f7f5;
   --surface: #fff;
   --surface-raised: #f0f2ef;
+  --surface-hover: #e6e9e5;
   --overlay: rgba(250, 252, 250, 0.88);
   --sidebar: #edf0ed;
   --composer: #fff;
@@ -47,6 +48,7 @@
   --canvas: #121813;
   --surface: #18211b;
   --surface-raised: #202c24;
+  --surface-hover: #2a3a2f;
   --overlay: rgba(24, 33, 27, 0.9);
   --sidebar: #151d18;
   --composer: #1a251e;
@@ -67,7 +69,7 @@
   --success-soft: #1d3b2b;
   --danger: #e38c84;
   --danger-soft: #482725;
-  --scrollbar: #405348;
+  --scrollbar: #5a7562;
   --warning: #e0b36a;
   --warning-soft: #45351a;
   --info: #8fb8d6;
@@ -77,6 +79,7 @@
   --canvas: #f8f8f5;
   --surface: #fff;
   --surface-raised: #f1f1ee;
+  --surface-hover: #e7e7e4;
   --overlay: rgba(255, 255, 255, 0.88);
   --sidebar: #efefec;
   --composer: #fff;
@@ -107,6 +110,7 @@
   --canvas: #151715;
   --surface: #1d201e;
   --surface-raised: #272a28;
+  --surface-hover: #323633;
   --overlay: rgba(29, 32, 30, 0.92);
   --sidebar: #191b19;
   --composer: #202421;
@@ -127,7 +131,7 @@
   --success-soft: #203b2b;
   --danger: #e69790;
   --danger-soft: #4b2927;
-  --scrollbar: #4a514c;
+  --scrollbar: #636b64;
   --warning: #d9b46a;
   --warning-soft: #413517;
   --info: #a9c2d3;
@@ -137,6 +141,7 @@
   --canvas: #f5f8fa;
   --surface: #fff;
   --surface-raised: #edf2f5;
+  --surface-hover: #e3eaef;
   --overlay: rgba(250, 253, 255, 0.88);
   --sidebar: #eaf0f4;
   --composer: #fff;
@@ -167,6 +172,7 @@
   --canvas: #10191f;
   --surface: #17252d;
   --surface-raised: #20343e;
+  --surface-hover: #2a424e;
   --overlay: rgba(23, 37, 45, 0.92);
   --sidebar: #142027;
   --composer: #192a33;
@@ -187,7 +193,7 @@
   --success-soft: #1b3c2d;
   --danger: #e58e86;
   --danger-soft: #492725;
-  --scrollbar: #41616f;
+  --scrollbar: #5a8090;
   --warning: #ddb06c;
   --warning-soft: #45341a;
   --info: #7fbedd;
@@ -197,6 +203,7 @@
   --canvas: #faf7f1;
   --surface: #fffdfa;
   --surface-raised: #f4eee5;
+  --surface-hover: #ebe4d9;
   --overlay: rgba(255, 253, 250, 0.9);
   --sidebar: #f2ece2;
   --composer: #fffdfa;
@@ -227,6 +234,7 @@
   --canvas: #1d1814;
   --surface: #282018;
   --surface-raised: #342a20;
+  --surface-hover: #413528;
   --overlay: rgba(40, 32, 24, 0.92);
   --sidebar: #211a15;
   --composer: #2a2119;
@@ -247,7 +255,7 @@
   --success-soft: #233a29;
   --danger: #e29189;
   --danger-soft: #4a2725;
-  --scrollbar: #624a37;
+  --scrollbar: #7a5f48;
   --warning: #e2b876;
   --warning-soft: #4a391d;
   --info: #9fc0d4;
@@ -307,7 +315,7 @@ p {
 .app-shell {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) auto;
-  grid-template-rows: 1fr;
+  grid-template-rows: minmax(0, 1fr);
   height: 100vh;
   overflow: hidden;
   color: var(--text-primary);
@@ -317,6 +325,7 @@ p {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   padding: 18px 12px 14px;
   color: var(--text-primary);
   background: var(--sidebar);
@@ -877,6 +886,7 @@ p {
   width: 380px;
   flex: none;
   min-width: 0;
+  min-height: 0;
   flex-direction: column;
   background: var(--surface-raised);
   border-left: 1px solid var(--border);
@@ -1859,7 +1869,7 @@ p {
 }
 .knowledge-more-button:hover,
 .knowledge-actions-menu[open] .knowledge-more-button {
-  color: var(--brand);
+  color: var(--brand-hover);
   border-color: var(--brand);
 }
 .knowledge-actions-menu-panel {

@@ -1,3 +1,4 @@
+import type { AgentMessage } from '@betterwork/agent-protocol';
 import { calculatorTool, createKnowledgeSearchTool } from '@betterwork/tool-runtime';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -11,6 +12,22 @@ const scriptedModel = (rounds: ModelStreamChunk[][]): ModelProvider => {
   return {
     id: 'scripted',
     async *stream(): AsyncIterable<ModelStreamChunk> {
+      yield* rounds[Math.min(call, rounds.length - 1)] ?? [];
+      call += 1;
+    },
+  };
+};
+
+const recordingModel = (
+  rounds: ModelStreamChunk[][],
+): ModelProvider & { readonly capturedMessages: AgentMessage[] } => {
+  const capturedMessages: AgentMessage[] = [];
+  let call = 0;
+  return {
+    id: 'recording',
+    capturedMessages,
+    async *stream(request): AsyncIterable<ModelStreamChunk> {
+      capturedMessages.push(...request.messages);
       yield* rounds[Math.min(call, rounds.length - 1)] ?? [];
       call += 1;
     },
@@ -392,5 +409,27 @@ describe('ReActAgentEngine', () => {
       'run.failed',
     ]);
     expect(events.at(-1)).toMatchObject({ error: '模型连接中断' });
+  });
+
+  it('prepends a system message with the current date', async () => {
+    const model = recordingModel([[{ type: 'text-delta', delta: 'ok' }, { type: 'done' }]]);
+    const engine = new ReActAgentEngine();
+    for await (const _event of engine.run({
+      runId: 'run-system',
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      prompt: '今天几号',
+      workspacePath: '.',
+      model,
+      tools: [],
+      signal: new AbortController().signal,
+    }))
+      void _event;
+
+    const systemMessage = model.capturedMessages.find((message) => message.role === 'system');
+    expect(systemMessage).toBeDefined();
+    const year = new Date().getFullYear();
+    expect(systemMessage?.content).toContain(`${year} 年`);
+    expect(systemMessage?.content).toContain('搜索新闻');
   });
 });
