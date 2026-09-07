@@ -88,4 +88,22 @@ describe('createQianfanSearchClient', () => {
     expect(error?.message).toContain('ECONNREFUSED');
     expect(error?.message).not.toContain('secret-key');
   });
+
+  it('cancels the HTTP request when the Run signal aborts', async () => {
+    let requestSignal: AbortSignal | undefined;
+    const fetchImpl: typeof fetch = async (_url, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        requestSignal = init?.signal as AbortSignal;
+        requestSignal.addEventListener('abort', () => {
+          reject(new Error('request interrupted'));
+        });
+      });
+    const client = createQianfanSearchClient({ apiKey: 'secret-key', webTopK: 10 }, fetchImpl);
+    const controller = new AbortController();
+    const search = client.search('取消测试', controller.signal);
+    controller.abort();
+
+    await expect(search).rejects.toThrow('Run cancelled');
+    expect(requestSignal?.aborted).toBe(true);
+  });
 });

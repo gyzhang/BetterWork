@@ -265,11 +265,14 @@ describe('OpenAICompatibleProvider request shape', () => {
     expect('tools' in bodyOf(fetchMock)).toBe(false);
   });
 
-  it('passes the abort signal through to fetch', async () => {
+  it('combines the caller cancellation signal with the stream timeout', async () => {
     const fetchMock = stubFetch(() => sse(delta({ content: '好' })));
     const controller = new AbortController();
     await collect(provider().stream(request({ signal: controller.signal })));
-    expect(callAt(fetchMock)[1].signal).toBe(controller.signal);
+    const signal = callAt(fetchMock)[1].signal as AbortSignal;
+    expect(signal).not.toBe(controller.signal);
+    controller.abort();
+    expect(signal.aborted).toBe(true);
   });
 });
 
@@ -294,5 +297,67 @@ describe('OpenAICompatibleProvider failures', () => {
   it('rejects a malformed data line instead of silently dropping it', async () => {
     stubFetch(() => streamOf(['data: {not json}\n\n']));
     await expect(collect(provider().stream(request()))).rejects.toThrow();
+  });
+
+  it('rejects a stream that ends before an explicit completion signal', async () => {
+    stubFetch(() => streamOf([`data: ${delta({ content: '部分内容' })}\n\n`]));
+    await expect(collect(provider().stream(request()))).rejects.toThrow(
+      '模型流在收到完成信号前结束',
+    );
+  });
+
+  it('accepts a provider finish reason when it does not send [DONE]', async () => {
+    stubFetch(() =>
+      streamOf([
+        `${`data: ${delta({ content: '完整内容' })}\n\n`}data: {"choices":[{"finish_reason":"stop"}]}\n\n`,
+      ]),
+    );
+    await expect(collect(provider().stream(request()))).resolves.toEqual([
+      { type: 'text-delta', delta: '完整内容' },
+      { type: 'done' },
+    ]);
+  });
+
+  it('turns a user cancellation during the model request into the shared abort error', async () => {
+    let startRequest: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      startRequest = resolve;
+    });
+    const fetchImpl: typeof fetch = async (_url, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        (init?.signal as AbortSignal).addEventListener('abort', () => {
+          reject(new Error('request interrupted'));
+        });
+        startRequest?.();
+      });
+    const controller = new AbortController();
+    const requestPromise = collect(
+      new OpenAICompatibleProvider(
+        { id: 'model-1', baseUrl: 'https://host/v1', apiKey: '', model: 'test-model' },
+        { fetchImpl },
+      ).stream(request({ signal: controller.signal })),
+    );
+    await started;
+    controller.abort();
+
+    await expect(requestPromise).rejects.toThrow('Run cancelled');
+  });
+
+  it('reports a bounded timeout for a model request', async () => {
+    const fetchImpl: typeof fetch = async (_url, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        (init?.signal as AbortSignal).addEventListener('abort', () => {
+          reject(new Error('request timed out'));
+        });
+      });
+
+    await expect(
+      collect(
+        new OpenAICompatibleProvider(
+          { id: 'model-1', baseUrl: 'https://host/v1', apiKey: '', model: 'test-model' },
+          { fetchImpl, streamTimeoutMs: 1 },
+        ).stream(request()),
+      ),
+    ).rejects.toThrow('模型流响应超时（超过 0.001 秒）');
   });
 });

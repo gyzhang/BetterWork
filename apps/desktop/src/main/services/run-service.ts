@@ -258,7 +258,7 @@ export class RunService {
     if (!engine || !engine.apiKey) return undefined;
     // 显式包一层：直接摘出 client.search 会脱离 this 绑定，类型系统无法证明它安全
     const client = createQianfanSearchClient(engine);
-    return (query) => client.search(query);
+    return (query, signal) => client.search(query, signal);
   }
 }
 

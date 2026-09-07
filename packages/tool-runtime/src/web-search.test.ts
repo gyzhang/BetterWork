@@ -55,4 +55,19 @@ describe('createWebSearchTool', () => {
     ).rejects.toThrow('Run cancelled');
     await expect(tool.execute({ query: '' }, context)).rejects.toThrow();
   });
+
+  it('passes the Run signal to the injected search and stops after cancellation', async () => {
+    const controller = new AbortController();
+    let receivedSignal: AbortSignal | undefined;
+    const tool = createWebSearchTool(async (_query, signal) => {
+      receivedSignal = signal;
+      controller.abort();
+      return { results: [] };
+    });
+
+    await expect(
+      tool.execute({ query: '取消搜索' }, { ...context, signal: controller.signal }),
+    ).rejects.toThrow('Run cancelled');
+    expect(receivedSignal).toBe(controller.signal);
+  });
 });

@@ -220,6 +220,45 @@ describe('ReActAgentEngine', () => {
     expect(events.some((event) => event.type === 'run.failed')).toBe(false);
   });
 
+  it('emits tool progress before a long-running tool completes', async () => {
+    let release: (() => void) | undefined;
+    const longRunningTool: AgentTool = {
+      name: 'wait',
+      description: '先报告进度再完成',
+      inputSchema: { type: 'object' },
+      async execute(_input, context) {
+        context.reportProgress('正在等待外部结果');
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return { ok: true };
+      },
+    };
+    const iterator = new ReActAgentEngine()
+      .run({
+        runId: 'run-progress',
+        taskId: 'task-1',
+        sessionId: 'session-1',
+        prompt: '等待工具',
+        workspacePath: '.',
+        model: scriptedModel([
+          [{ type: 'tool-call', toolCall: { id: 'wait-1', name: 'wait', input: {} } }],
+          [{ type: 'text-delta', delta: '完成' }, { type: 'done' }],
+        ]),
+        tools: [longRunningTool],
+        signal: new AbortController().signal,
+      })
+      [Symbol.asyncIterator]();
+
+    expect((await iterator.next()).value?.type).toBe('run.started');
+    expect((await iterator.next()).value?.type).toBe('tool.requested');
+    expect((await iterator.next()).value?.type).toBe('tool.started');
+    expect(await iterator.next()).toMatchObject({ value: { type: 'tool.progress' } });
+    release?.();
+
+    expect((await iterator.next()).value?.type).toBe('tool.completed');
+  });
+
   it('executes every tool call requested in the same model round', async () => {
     const events = [];
     const executed: number[] = [];
