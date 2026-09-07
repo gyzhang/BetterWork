@@ -22,7 +22,13 @@ interface KnowledgeToast {
  * 资料库视图。状态与动作全部来自 useKnowledgeLibrary，
  * 视图只负责呈现，因此这里没有任何 IPC 调用。
  */
-export function KnowledgePage({ library }: { library: KnowledgeLibrary }): React.JSX.Element {
+export function KnowledgePage({
+  library,
+  onStartResearch,
+}: {
+  library: KnowledgeLibrary;
+  onStartResearch: (query: string, sourceCount: number) => void;
+}): React.JSX.Element {
   const {
     documents,
     results,
@@ -49,6 +55,7 @@ export function KnowledgePage({ library }: { library: KnowledgeLibrary }): React
           excerpt: result.excerpt,
         }))
       : documents.map((document) => ({ document }));
+  const researchSourceCount = new Set(items.map(({ document }) => document.id)).size;
   const [toast, setToast] = useState<KnowledgeToast>();
   const [removalTarget, setRemovalTarget] = useState<KnowledgeDocumentSummary>();
   const dismissToast = useCallback(() => setToast(undefined), []);
@@ -116,9 +123,20 @@ export function KnowledgePage({ library }: { library: KnowledgeLibrary }): React
                 ? `找到 ${items.length} 条相关资料`
                 : `已整理 ${documents.length} 份资料`}
             </span>
-            <small>
-              {showingResults ? '检索仅在本地资料库中进行' : '下一步将支持表格与语义检索'}
-            </small>
+            <div className="knowledge-summary-actions">
+              <small>
+                {showingResults ? '检索仅在本地资料库中进行' : '下一步将支持表格与语义检索'}
+              </small>
+              {showingResults && items.length > 0 && (
+                <button
+                  className="knowledge-research-button"
+                  type="button"
+                  onClick={() => onStartResearch(query.trim(), researchSourceCount)}
+                >
+                  用这 {researchSourceCount} 份资料开始研究
+                </button>
+              )}
+            </div>
           </div>
           <ScrollRegion ariaLabel="知识资料列表" busy={importing} className="knowledge-list-scroll">
             {loading ? (

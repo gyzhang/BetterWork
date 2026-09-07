@@ -81,7 +81,7 @@
 
 ### 3.1 切片进度
 
-- 知识库垂直切片（2026-09-03）：Workspace / Task / Session 独立持久化标识、本地资料导入（Markdown/Text/PDF/DOCX）与 FTS5 可定位检索、只读 `knowledge_search` Tool、Evidence 去重登记与「打开原文」白名单、Markdown Artifact 的版本化保存 / 预览 / `user-edit` 修订 / 导出，以及版本—Evidence 关联（[ADR-0005](adr/0005-artifact-version-evidence.md)）。
+- 知识库垂直切片（2026-09-03）：Workspace / Task / Session 独立持久化标识、本地资料导入（Markdown/Text/PDF/DOCX）与 FTS5 可定位检索、只读 `knowledge_search` Tool、Evidence 去重登记与「打开原文」白名单、知识检索结果一键带查询意图进入工作任务、Markdown Artifact 的版本化保存 / 预览 / `user-edit` 修订 / 导出，以及版本—Evidence 关联（[ADR-0005](adr/0005-artifact-version-evidence.md)）。
 - 搜索引擎配置与联网搜索（2026-09-05）：百度千帆 AI 搜索先行，`search_engine_configs` 每服务商一行且 `enabled` 全局唯一；`web_search` Tool 仅在存在已启用且配置了 Key 的引擎时注册；网页引用落为 `sourceType: 'web-page'` 的 Evidence，与本地来源共用同一张表和成果版本来源清单。见 [ADR-0007](adr/0007-search-engine-config-and-web-search-tool.md)。
 - 消息中心与通知机制（2026-09-05 拍板）：作为横向基础能力先行落地。三层反馈模型（页面内联反馈 / Toast / 消息中心统一落档）、Notification 领域对象与 SQLite 持久化（200 条滚动上限）、run 终态与知识导入/成果导出触发、窗口失焦时的系统通知。设计与规范见 [ADR-0006](adr/0006-notification-feedback.md) 与 [UI/UX 体系](10-ui-ux-system.md) §11.5。
 

@@ -1763,6 +1763,24 @@ p {
   color: var(--text-muted);
   font-size: 12px;
 }
+.knowledge-summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.knowledge-research-button {
+  min-height: 30px;
+  padding: 6px 9px;
+  color: var(--brand);
+  background: var(--brand-soft);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.knowledge-research-button:hover {
+  border-color: var(--brand);
+}
 .knowledge-card {
   display: flex;
   align-items: flex-start;
@@ -1893,15 +1911,6 @@ p {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-.context-source-message {
-  margin: 8px 0 4px;
-  padding: 8px;
-  color: var(--success);
-  background: var(--success-soft);
-  border-radius: 6px;
-  font-size: 12px;
-  line-height: 1.45;
 }
 .evidence-row {
   display: flex;
@@ -2275,6 +2284,11 @@ p {
 }
 .artifact-evidence-list article div {
   min-width: 0;
+  flex: 1;
+}
+.artifact-evidence-main {
+  min-width: 0;
+  flex: 1;
 }
 .artifact-evidence-list span,
 .artifact-evidence-list small {

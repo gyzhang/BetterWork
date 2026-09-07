@@ -18,6 +18,7 @@ export function ArtifactPage({
   onSelect,
   onSave,
   onExport,
+  onOpenSource,
   onBack,
 }: {
   artifacts: ArtifactSummary[];
@@ -28,6 +29,7 @@ export function ArtifactPage({
     artifact: ArtifactDetail,
     versionId?: string,
   ) => Promise<{ cancelled: boolean; filePath?: string }>;
+  onOpenSource: (sourcePath: string) => Promise<void>;
   onBack: () => void;
 }): React.JSX.Element {
   const {
@@ -129,10 +131,33 @@ export function ArtifactPage({
                             <KnowledgeIcon size={10} />
                           )}
                         </b>
-                        <div>
+                        <div className="artifact-evidence-main">
                           <span>{item.title}</span>
                           <small>{item.locator}</small>
                         </div>
+                        {item.sourceType === 'local-file' && (
+                          <button
+                            className="evidence-open-button"
+                            type="button"
+                            onClick={() =>
+                              reportAction(
+                                onOpenSource(item.sourceUri).then(() =>
+                                  setToast({
+                                    tone: 'success',
+                                    message: `已打开「${item.title}」的原始资料。`,
+                                  }),
+                                ),
+                                (errorMessage) =>
+                                  setToast({
+                                    tone: 'error',
+                                    message: errorMessage || '无法打开原始资料。',
+                                  }),
+                              )
+                            }
+                          >
+                            原文
+                          </button>
+                        )}
                       </article>
                     ))}
                   </div>
