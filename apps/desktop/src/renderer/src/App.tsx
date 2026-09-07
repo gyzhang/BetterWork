@@ -37,6 +37,7 @@ import {
 import { reportAction, trackAction } from './lib/async-action';
 import { formatTime } from './lib/format';
 import { runStatusName, toolStageLabel } from './lib/labels';
+import { buildResearchPrompt } from './lib/research-prompt';
 import { handleTitlebarDoubleClick } from './lib/titlebar';
 import { summarizeToolOutput } from './lib/tool-summary';
 import type { AppView, ContextTab, SettingsTab } from './lib/view-types';
@@ -346,6 +347,14 @@ export function App(): React.JSX.Element {
     setView('knowledge');
     refreshKnowledge();
   };
+  const startResearchFromKnowledge = (query: string, sourceCount: number): void => {
+    if (isRunning) {
+      setActionError('当前任务仍在执行，请等待完成后再开始新的研究。');
+      return;
+    }
+    startNewTask();
+    setPrompt(buildResearchPrompt(query, sourceCount));
+  };
   const navigateToTarget = (target: NotificationTarget): void => {
     if (target.kind === 'task') {
       const task = recentTasks.find((item) => item.id === target.taskId);
@@ -647,10 +656,13 @@ export function App(): React.JSX.Element {
             }
             onSave={reviseArtifact}
             onExport={exportArtifact}
+            onOpenSource={knowledge.onOpenSource}
             onBack={() => setSelectedArtifact(undefined)}
           />
         )}
-        {view === 'knowledge' && <KnowledgePage library={knowledge} />}
+        {view === 'knowledge' && (
+          <KnowledgePage library={knowledge} onStartResearch={startResearchFromKnowledge} />
+        )}
         {view === 'settings' && (
           <SettingsPage
             tab={settingsTab}
