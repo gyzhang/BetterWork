@@ -72,12 +72,13 @@ type WithoutEventEnvelope<T> = T extends unknown
   : never;
 export type AgentRuntimeEventInput = WithoutEventEnvelope<AgentRuntimeEvent>;
 
-export const startRunRequestSchema = z.object({
-  taskId: z.string().min(1),
-  sessionId: z.string().min(1),
-  prompt: z.string().trim().min(1),
-  workspacePath: z.string().min(1),
-});
+export const startRunRequestSchema = z
+  .object({
+    taskId: z.string().min(1),
+    sessionId: z.string().min(1),
+    prompt: z.string().trim().min(1),
+  })
+  .strict();
 export type StartRunRequest = z.infer<typeof startRunRequestSchema>;
 
 export interface WorkspaceSummary {

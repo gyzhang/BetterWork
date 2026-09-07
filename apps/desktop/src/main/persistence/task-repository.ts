@@ -32,6 +32,14 @@ interface TaskIdRow {
   id: string;
 }
 
+interface RunContextRow {
+  workspace_path: string;
+}
+
+export interface TaskRunContext {
+  workspacePath: string;
+}
+
 const RECENT_TASKS_LIMIT = 100;
 
 const toSummary = (row: TaskRow): TaskSummary => ({
@@ -139,5 +147,22 @@ export class TaskRepository {
     const row = this.db.prepare('SELECT workspace_id FROM tasks WHERE id = ?').get(taskId) as
       { workspace_id: string } | undefined;
     return row?.workspace_id;
+  }
+
+  /**
+   * Run 的权限上下文只能从已持久化的 Task、Session 与 Workspace 关系取得。
+   * Renderer 传来的标识只用于定位，不能自行指定文件访问根目录。
+   */
+  getRunContext(taskId: string, sessionId: string): TaskRunContext | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT w.root_path AS workspace_path
+           FROM tasks t
+           JOIN sessions s ON s.task_id = t.id
+           JOIN workspaces w ON w.id = t.workspace_id
+          WHERE t.id = ? AND s.id = ?`,
+      )
+      .get(taskId, sessionId) as RunContextRow | undefined;
+    return row ? { workspacePath: row.workspace_path } : undefined;
   }
 }

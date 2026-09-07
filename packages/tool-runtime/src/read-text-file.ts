@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 
 import { abortError, type AgentTool } from '@betterwork/agent-core';
@@ -18,8 +18,9 @@ export const readTextFileTool: AgentTool = {
   },
   async execute(rawInput, context) {
     const input = inputSchema.parse(rawInput);
-    const workspace = path.resolve(context.workspacePath);
-    const target = path.resolve(workspace, input.path);
+    const workspace = await realpath(context.workspacePath);
+    const requestedTarget = path.resolve(workspace, input.path);
+    const target = await realpath(requestedTarget);
     const relative = path.relative(workspace, target);
     if (relative.startsWith('..') || path.isAbsolute(relative))
       throw new Error('File is outside the active workspace');

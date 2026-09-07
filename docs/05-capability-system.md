@@ -184,7 +184,7 @@ MVP 期间不建设通用 DAG 引擎，只支持顺序步骤、条件步骤、�
 
 当前实现状态：上述权限声明、Policy 检查、审批与审计层**均未建设**，`AgentTool` 上也没有 `permissions` 字段。
 
-现已存在的强制边界只有两条：`read_text_file` 在执行前校验目标路径解析后不越出 `workspacePath`；主进程在处理「打开原文」请求前，先用知识库登记记录做白名单校验，未登记路径一律拒绝交给 `shell.openPath`。
+现已存在的强制边界只有两条：`read_text_file` 由 Application 层从已登记的 Task / Session / Workspace 关系注入 `workspacePath`，执行前对工作区与目标文件解析真实路径，拒绝路径和符号链接越出工作区；主进程在处理「打开原文」请求前，先用知识库登记记录做白名单校验，未登记路径一律拒绝交给 `shell.openPath`。
 
 当前不存在能覆盖原文件、写入 Workspace 外部、执行 Shell 或批量移动文件的工具——危险操作是靠「不授予该能力」规避的，而不是靠权限系统拦截。引入写操作类 Tool（例如 Phase 3 修改已有 Office 文件）之前，必须先落地本节的权限与审批设计，否则 AGENTS.md 的「默认非破坏性」原则没有执行机制。
 
@@ -207,4 +207,3 @@ MVP 期间不建设通用 DAG 引擎，只支持顺序步骤、条件步骤、�
 | Artifact Version | 已落地 | 版本历史、按版本查看与导出、版本—Evidence 关联（[ADR-0005](adr/0005-artifact-version-evidence.md)） |
 | File Preview | 部分落地 | 已落地：成果 Markdown 的文档化预览、按登记白名单用系统应用打开原文。未落地：应用内 PDF/DOCX/图片预览 |
 | DOCX Render | 未落地 | 按 AGENTS.md 范围约束留待后续切片，不在当前 Phase 1 切片内；渲染管线设计见 [知识工作流](06-knowledge-workflows.md) §4 |
-

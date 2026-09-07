@@ -231,7 +231,6 @@ export function App(): React.JSX.Element {
       taskId: task.id,
       sessionId: task.sessionId,
       prompt,
-      workspacePath: workspace.rootPath,
     });
     activeRunIdRef.current = result.runId;
     setActiveRunId(result.runId);
