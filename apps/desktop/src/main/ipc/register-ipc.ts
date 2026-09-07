@@ -2,14 +2,30 @@ import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
+  agentRuntimeEventSchema,
+  artifactDetailSchema,
+  artifactSummarySchema,
+  artifactVersionDetailSchema,
+  artifactVersionSummarySchema,
+  cancelledResultSchema,
   cancelRunRequestSchema,
+  clearedResultSchema,
   clearNotificationsRequestSchema,
+  connectionTestResultSchema,
+  createdTaskSchema,
   createTaskRequestSchema,
+  deletedResultSchema,
+  evidenceSummarySchema,
   exportMarkdownArtifactRequestSchema,
+  exportMarkdownArtifactResultSchema,
   getArtifactRequestSchema,
   getArtifactVersionRequestSchema,
   IpcChannel,
+  knowledgeDocumentSummarySchema,
   type KnowledgeImportResult,
+  knowledgeImportResultSchema,
+  knowledgeRefreshResultSchema,
+  knowledgeSearchResultSchema,
   listArtifactsRequestSchema,
   listArtifactVersionsRequestSchema,
   listEvidenceRequestSchema,
@@ -18,21 +34,36 @@ import {
   listTasksRequestSchema,
   markAllNotificationsReadRequestSchema,
   markNotificationReadRequestSchema,
+  maximizedResultSchema,
   modelProfileIdSchema,
+  modelProfileSummarySchema,
+  modelSaveResultSchema,
+  notificationSummarySchema,
   openKnowledgeSourceRequestSchema,
+  openKnowledgeSourceResultSchema,
+  recentTaskSummarySchema,
   refreshKnowledgeDocumentRequestSchema,
+  removedResultSchema,
   removeKnowledgeDocumentRequestSchema,
+  runSummarySchema,
   saveMarkdownArtifactRequestSchema,
   saveModelProfileRequestSchema,
   saveSearchEngineRequestSchema,
+  searchEngineSaveResultSchema,
+  searchEngineSummarySchema,
   searchKnowledgeRequestSchema,
   setDefaultModelRequestSchema,
   setModelEnabledRequestSchema,
   startRunRequestSchema,
+  startRunResultSchema,
   testModelRequestSchema,
   testSearchEngineRequestSchema,
+  unreadCountResultSchema,
+  updatedResultSchema,
   updateWindowThemeRequestSchema,
+  voidResultSchema,
   windowToggleMaximizeRequestSchema,
+  workspaceSummarySchema,
 } from '@betterwork/agent-protocol';
 import { type BrowserWindow, dialog, ipcMain, shell, systemPreferences } from 'electron';
 import { z, type ZodTypeAny } from 'zod';
@@ -72,25 +103,36 @@ const emptyRequestSchema = z.object({}).strict();
 function handleInput<Schema extends ZodTypeAny, Result>(
   channel: string,
   schema: Schema,
-  handler: (input: z.output<Schema>) => Result,
+  responseSchema: ZodTypeAny,
+  handler: (input: z.output<Schema>) => Result | Promise<Result>,
 ): void {
-  ipcMain.handle(channel, (_event, raw: unknown) => handler(schema.parse(raw)));
+  ipcMain.handle(channel, async (_event, raw: unknown) =>
+    responseSchema.parse(await handler(schema.parse(raw))),
+  );
 }
 
 /** 入参可整体省略的 channel（例如「列出全部或按某个 id 过滤」）。 */
 function handleOptionalInput<Schema extends ZodTypeAny, Result>(
   channel: string,
   schema: Schema,
-  handler: (input: z.output<Schema>) => Result,
+  responseSchema: ZodTypeAny,
+  handler: (input: z.output<Schema>) => Result | Promise<Result>,
 ): void {
-  ipcMain.handle(channel, (_event, raw: unknown) => handler(schema.parse(raw ?? {})));
+  ipcMain.handle(channel, async (_event, raw: unknown) =>
+    responseSchema.parse(await handler(schema.parse(raw ?? {}))),
+  );
 }
 
 /** 入参必须为空的 channel，防止 Renderer 悄悄夹带字段。 */
-function handleNoInput<Result>(channel: string, schema: ZodTypeAny, handler: () => Result): void {
-  ipcMain.handle(channel, (_event, raw: unknown) => {
+function handleNoInput<Result>(
+  channel: string,
+  schema: ZodTypeAny,
+  responseSchema: ZodTypeAny,
+  handler: () => Result | Promise<Result>,
+): void {
+  ipcMain.handle(channel, async (_event, raw: unknown) => {
     schema.parse(raw ?? {});
-    return handler();
+    return responseSchema.parse(await handler());
   });
 }
 
@@ -129,73 +171,102 @@ export function registerIpc(deps: IpcDependencies): void {
 }
 
 function registerRunChannels({ store, runs }: IpcDependencies): void {
-  handleInput(IpcChannel.StartRun, startRunRequestSchema, (input) => ({
+  handleInput(IpcChannel.StartRun, startRunRequestSchema, startRunResultSchema, (input) => ({
     runId: runs.start(input),
   }));
-  handleInput(IpcChannel.CancelRun, cancelRunRequestSchema, (input) => ({
+  handleInput(IpcChannel.CancelRun, cancelRunRequestSchema, cancelledResultSchema, (input) => ({
     cancelled: runs.cancel(input.runId),
   }));
-  handleInput(IpcChannel.ListRunEvents, listRunEventsRequestSchema, (input) =>
-    store.runs.listEvents(input.runId),
+  handleInput(
+    IpcChannel.ListRunEvents,
+    listRunEventsRequestSchema,
+    z.array(agentRuntimeEventSchema),
+    (input) => store.runs.listEvents(input.runId),
   );
-  handleOptionalInput(IpcChannel.ListRuns, listRunsRequestSchema, (input) =>
-    store.runs.list(input.taskId),
+  handleOptionalInput(
+    IpcChannel.ListRuns,
+    listRunsRequestSchema,
+    z.array(runSummarySchema),
+    (input) => store.runs.list(input.taskId),
   );
 }
 
 function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
   const { store, getDefaultWorkspaceRoot } = deps;
 
-  handleNoInput(IpcChannel.GetDefaultWorkspace, emptyRequestSchema, () =>
+  handleNoInput(IpcChannel.GetDefaultWorkspace, emptyRequestSchema, workspaceSummarySchema, () =>
     store.workspaces.getOrCreate(getDefaultWorkspaceRoot(), '我的工作区'),
   );
 
-  ipcMain.handle(IpcChannel.SelectWorkspace, async () => {
-    const result = await showOpenDialog(deps, {
-      title: '选择工作区',
-      properties: ['openDirectory', 'createDirectory'],
-    });
-    const rootPath = result.filePaths[0];
-    if (result.canceled || !rootPath) return null;
-    return store.workspaces.getOrCreate(rootPath, path.basename(rootPath));
-  });
+  handleNoInput(
+    IpcChannel.SelectWorkspace,
+    emptyRequestSchema,
+    workspaceSummarySchema.nullable(),
+    async () => {
+      const result = await showOpenDialog(deps, {
+        title: '选择工作区',
+        properties: ['openDirectory', 'createDirectory'],
+      });
+      const rootPath = result.filePaths[0];
+      if (result.canceled || !rootPath) return null;
+      return store.workspaces.getOrCreate(rootPath, path.basename(rootPath));
+    },
+  );
 
-  handleInput(IpcChannel.CreateTask, createTaskRequestSchema, (input) =>
+  handleInput(IpcChannel.CreateTask, createTaskRequestSchema, createdTaskSchema, (input) =>
     store.tasks.create(input.workspaceId, input.title, input.goal),
   );
-  handleOptionalInput(IpcChannel.ListTasks, listTasksRequestSchema, (input) =>
-    store.tasks.listRecent(input.workspaceId),
+  handleOptionalInput(
+    IpcChannel.ListTasks,
+    listTasksRequestSchema,
+    z.array(recentTaskSummarySchema),
+    (input) => store.tasks.listRecent(input.workspaceId),
   );
-  handleInput(IpcChannel.ListEvidence, listEvidenceRequestSchema, (input) =>
-    store.evidence.listByTask(input.taskId),
+  handleInput(
+    IpcChannel.ListEvidence,
+    listEvidenceRequestSchema,
+    z.array(evidenceSummarySchema),
+    (input) => store.evidence.listByTask(input.taskId),
   );
 }
 
 function registerArtifactChannels(deps: IpcDependencies): void {
   const { store } = deps;
 
-  handleOptionalInput(IpcChannel.ListArtifacts, listArtifactsRequestSchema, (input) =>
-    store.artifacts.list(input.taskId),
+  handleOptionalInput(
+    IpcChannel.ListArtifacts,
+    listArtifactsRequestSchema,
+    z.array(artifactSummarySchema),
+    (input) => store.artifacts.list(input.taskId),
   );
   handleInput(
     IpcChannel.GetArtifact,
     getArtifactRequestSchema,
+    artifactDetailSchema.nullable(),
     (input) => store.artifacts.getDetail(input.id) ?? null,
   );
-  handleInput(IpcChannel.ListArtifactVersions, listArtifactVersionsRequestSchema, (input) =>
-    store.artifacts.listVersions(input.artifactId),
+  handleInput(
+    IpcChannel.ListArtifactVersions,
+    listArtifactVersionsRequestSchema,
+    z.array(artifactVersionSummarySchema),
+    (input) => store.artifacts.listVersions(input.artifactId),
   );
   handleInput(
     IpcChannel.GetArtifactVersion,
     getArtifactVersionRequestSchema,
+    artifactVersionDetailSchema.nullable(),
     (input) => store.artifacts.getVersionDetail(input.id) ?? null,
   );
-  handleInput(IpcChannel.SaveMarkdownArtifact, saveMarkdownArtifactRequestSchema, (input) =>
-    store.artifacts.saveMarkdown(input),
+  handleInput(
+    IpcChannel.SaveMarkdownArtifact,
+    saveMarkdownArtifactRequestSchema,
+    artifactSummarySchema,
+    (input) => store.artifacts.saveMarkdown(input),
   );
   handleInput(
     IpcChannel.ExportMarkdownArtifact,
     exportMarkdownArtifactRequestSchema,
+    exportMarkdownArtifactResultSchema,
     async (input) => exportMarkdown(deps, input.artifactId, input.versionId),
   );
 }
@@ -251,156 +322,245 @@ async function exportMarkdown(
 }
 
 function registerModelChannels({ store }: IpcDependencies): void {
-  handleNoInput(IpcChannel.ListModels, emptyRequestSchema, () => store.models.list());
-  handleInput(IpcChannel.SaveModel, saveModelProfileRequestSchema, (input) => ({
-    id: store.models.save(input),
-  }));
-  handleInput(IpcChannel.DeleteModel, modelProfileIdSchema, (input) => ({
+  handleNoInput(IpcChannel.ListModels, emptyRequestSchema, z.array(modelProfileSummarySchema), () =>
+    store.models.list(),
+  );
+  handleInput(
+    IpcChannel.SaveModel,
+    saveModelProfileRequestSchema,
+    modelSaveResultSchema,
+    (input) => ({
+      id: store.models.save(input),
+    }),
+  );
+  handleInput(IpcChannel.DeleteModel, modelProfileIdSchema, deletedResultSchema, (input) => ({
     deleted: store.models.delete(input.id),
   }));
-  handleInput(IpcChannel.SetDefaultModel, setDefaultModelRequestSchema, (input) => ({
-    updated: store.models.setDefault(input.id),
-  }));
-  handleInput(IpcChannel.SetModelEnabled, setModelEnabledRequestSchema, (input) => ({
-    updated: store.models.setEnabled(input.id, input.enabled),
-  }));
+  handleInput(
+    IpcChannel.SetDefaultModel,
+    setDefaultModelRequestSchema,
+    updatedResultSchema,
+    (input) => ({
+      updated: store.models.setDefault(input.id),
+    }),
+  );
+  handleInput(
+    IpcChannel.SetModelEnabled,
+    setModelEnabledRequestSchema,
+    updatedResultSchema,
+    (input) => ({
+      updated: store.models.setEnabled(input.id, input.enabled),
+    }),
+  );
 
-  handleInput(IpcChannel.TestModel, testModelRequestSchema, async (input) => {
-    // 编辑既有配置时允许留空 Key，表示沿用已保存的凭据
-    const stored = input.id ? store.models.getWithSecret(input.id) : undefined;
-    const result = await probeModelConnection({
-      baseUrl: input.baseUrl,
-      model: input.model,
-      role: input.role,
-      apiKey: input.apiKey || (stored?.apiKey ?? ''),
-    });
-    if (input.id) store.models.recordConnection(input.id, result.ok ? 'connected' : 'failed');
-    return result;
-  });
+  handleInput(
+    IpcChannel.TestModel,
+    testModelRequestSchema,
+    connectionTestResultSchema,
+    async (input) => {
+      // 编辑既有配置时允许留空 Key，表示沿用已保存的凭据
+      const stored = input.id ? store.models.getWithSecret(input.id) : undefined;
+      const result = await probeModelConnection({
+        baseUrl: input.baseUrl,
+        model: input.model,
+        role: input.role,
+        apiKey: input.apiKey || (stored?.apiKey ?? ''),
+      });
+      if (input.id) store.models.recordConnection(input.id, result.ok ? 'connected' : 'failed');
+      return result;
+    },
+  );
 }
 
 function registerKnowledgeChannels(deps: IpcDependencies): void {
   const { knowledgeVault, notifications } = deps;
 
-  handleNoInput(IpcChannel.ListKnowledge, emptyRequestSchema, () => knowledgeVault.listDocuments());
-
-  ipcMain.handle(IpcChannel.ImportKnowledge, async () => {
-    const result = await showOpenDialog(deps, {
-      title: '导入本地资料',
-      properties: ['openFile', 'multiSelections'],
-      filters: [
-        { name: '资料文件', extensions: ['md', 'markdown', 'txt', 'text', 'pdf', 'docx'] },
-        { name: '所有文件', extensions: ['*'] },
-      ],
-    });
-    if (result.canceled) return { imported: [], skipped: [] };
-
-    try {
-      const outcome = await knowledgeVault.importPaths(result.filePaths);
-      notifyImportOutcome(notifications, outcome);
-      return outcome;
-    } catch (error) {
-      notifications.create({
-        level: 'error',
-        kind: 'knowledge-import',
-        title: '导入资料失败',
-        detail: describeError(error),
-        target: { kind: 'knowledge' },
-      });
-      throw error;
-    }
-  });
-
-  handleInput(IpcChannel.SearchKnowledge, searchKnowledgeRequestSchema, (input) =>
-    knowledgeVault.search(input.query),
+  handleNoInput(
+    IpcChannel.ListKnowledge,
+    emptyRequestSchema,
+    z.array(knowledgeDocumentSummarySchema),
+    () => knowledgeVault.listDocuments(),
   );
 
-  handleInput(IpcChannel.OpenKnowledgeSource, openKnowledgeSourceRequestSchema, async (input) => {
-    // 只打开已登记的来源：白名单校验在主进程，Renderer 无法让它打开任意路径
-    const sourcePath = knowledgeVault.getRegisteredSourcePath(input.sourcePath);
-    if (!sourcePath) return { opened: false, error: '该文件不在当前知识库中，无法打开。' };
-    const error = await shell.openPath(sourcePath);
-    return error ? { opened: false, error } : { opened: true };
-  });
+  handleNoInput(
+    IpcChannel.ImportKnowledge,
+    emptyRequestSchema,
+    knowledgeImportResultSchema,
+    async () => {
+      const result = await showOpenDialog(deps, {
+        title: '导入本地资料',
+        properties: ['openFile', 'multiSelections'],
+        filters: [
+          { name: '资料文件', extensions: ['md', 'markdown', 'txt', 'text', 'pdf', 'docx'] },
+          { name: '所有文件', extensions: ['*'] },
+        ],
+      });
+      if (result.canceled) return { imported: [], skipped: [] };
+
+      try {
+        const outcome = await knowledgeVault.importPaths(result.filePaths);
+        notifyImportOutcome(notifications, outcome);
+        return outcome;
+      } catch (error) {
+        notifications.create({
+          level: 'error',
+          kind: 'knowledge-import',
+          title: '导入资料失败',
+          detail: describeError(error),
+          target: { kind: 'knowledge' },
+        });
+        throw error;
+      }
+    },
+  );
+
+  handleInput(
+    IpcChannel.SearchKnowledge,
+    searchKnowledgeRequestSchema,
+    z.array(knowledgeSearchResultSchema),
+    (input) => knowledgeVault.search(input.query),
+  );
+
+  handleInput(
+    IpcChannel.OpenKnowledgeSource,
+    openKnowledgeSourceRequestSchema,
+    openKnowledgeSourceResultSchema,
+    async (input) => {
+      // 只打开已登记的来源：白名单校验在主进程，Renderer 无法让它打开任意路径
+      const sourcePath = knowledgeVault.getRegisteredSourcePath(input.sourcePath);
+      if (!sourcePath) return { opened: false, error: '该文件不在当前知识库中，无法打开。' };
+      const error = await shell.openPath(sourcePath);
+      return error ? { opened: false, error } : { opened: true };
+    },
+  );
 
   handleInput(
     IpcChannel.RemoveKnowledgeDocument,
     removeKnowledgeDocumentRequestSchema,
+    removedResultSchema,
     (input) => ({
       removed: knowledgeVault.removeDocument(input.id),
     }),
   );
-  handleInput(IpcChannel.RefreshKnowledgeDocument, refreshKnowledgeDocumentRequestSchema, (input) =>
-    knowledgeVault.refreshDocument(input.id),
+  handleInput(
+    IpcChannel.RefreshKnowledgeDocument,
+    refreshKnowledgeDocumentRequestSchema,
+    knowledgeRefreshResultSchema,
+    (input) => knowledgeVault.refreshDocument(input.id),
   );
 }
 
 function registerSearchEngineChannels({ store }: IpcDependencies): void {
-  handleNoInput(IpcChannel.ListSearchEngines, emptyRequestSchema, () => store.searchEngines.list());
-  handleInput(IpcChannel.SaveSearchEngine, saveSearchEngineRequestSchema, (input) => ({
-    provider: store.searchEngines.save(input),
-  }));
+  handleNoInput(
+    IpcChannel.ListSearchEngines,
+    emptyRequestSchema,
+    z.array(searchEngineSummarySchema),
+    () => store.searchEngines.list(),
+  );
+  handleInput(
+    IpcChannel.SaveSearchEngine,
+    saveSearchEngineRequestSchema,
+    searchEngineSaveResultSchema,
+    (input) => ({
+      provider: store.searchEngines.save(input),
+    }),
+  );
 
-  handleInput(IpcChannel.TestSearchEngine, testSearchEngineRequestSchema, async (input) => {
-    const stored = store.searchEngines.get(input.provider);
-    const apiKey = input.apiKey || (stored?.apiKey ?? '');
-    if (!apiKey) return { ok: false, message: '请先填写 API Key。' };
-    const result = await createQianfanSearchClient({ apiKey, webTopK: input.webTopK }).test();
-    store.searchEngines.recordConnection(
-      input.provider,
-      result.ok ? 'connected' : 'failed',
-      apiKey,
-    );
-    return result;
-  });
+  handleInput(
+    IpcChannel.TestSearchEngine,
+    testSearchEngineRequestSchema,
+    connectionTestResultSchema,
+    async (input) => {
+      const stored = store.searchEngines.get(input.provider);
+      const apiKey = input.apiKey || (stored?.apiKey ?? '');
+      if (!apiKey) return { ok: false, message: '请先填写 API Key。' };
+      const result = await createQianfanSearchClient({ apiKey, webTopK: input.webTopK }).test();
+      store.searchEngines.recordConnection(
+        input.provider,
+        result.ok ? 'connected' : 'failed',
+        apiKey,
+      );
+      return result;
+    },
+  );
 }
 
 function registerNotificationChannels({ notifications }: IpcDependencies): void {
-  handleNoInput(IpcChannel.ListNotifications, emptyRequestSchema, () => notifications.list());
-  handleInput(IpcChannel.MarkNotificationRead, markNotificationReadRequestSchema, (input) => ({
-    unreadCount: notifications.markRead(input.id),
-  }));
-  handleNoInput(IpcChannel.MarkAllNotificationsRead, markAllNotificationsReadRequestSchema, () => ({
-    unreadCount: notifications.markAllRead(),
-  }));
-  handleNoInput(IpcChannel.ClearNotifications, clearNotificationsRequestSchema, () => {
-    notifications.clear();
-    return { cleared: true };
-  });
+  handleNoInput(
+    IpcChannel.ListNotifications,
+    emptyRequestSchema,
+    z.array(notificationSummarySchema),
+    () => notifications.list(),
+  );
+  handleInput(
+    IpcChannel.MarkNotificationRead,
+    markNotificationReadRequestSchema,
+    unreadCountResultSchema,
+    (input) => ({
+      unreadCount: notifications.markRead(input.id),
+    }),
+  );
+  handleNoInput(
+    IpcChannel.MarkAllNotificationsRead,
+    markAllNotificationsReadRequestSchema,
+    unreadCountResultSchema,
+    () => ({
+      unreadCount: notifications.markAllRead(),
+    }),
+  );
+  handleNoInput(
+    IpcChannel.ClearNotifications,
+    clearNotificationsRequestSchema,
+    clearedResultSchema,
+    () => {
+      notifications.clear();
+      return { cleared: true };
+    },
+  );
 }
 
 function registerWindowChannels({ getWindow }: IpcDependencies): void {
-  handleInput(IpcChannel.UpdateWindowTheme, updateWindowThemeRequestSchema, (theme) => {
-    const window = getWindow();
-    if (!window || window.isDestroyed()) return;
-    window.setBackgroundColor(theme.backgroundColor);
-    if (process.platform === 'win32') {
-      window.setTitleBarOverlay({
-        color: theme.backgroundColor,
-        symbolColor: theme.symbolColor,
-      });
-    }
-  });
+  handleInput(
+    IpcChannel.UpdateWindowTheme,
+    updateWindowThemeRequestSchema,
+    voidResultSchema,
+    (theme) => {
+      const window = getWindow();
+      if (!window || window.isDestroyed()) return;
+      window.setBackgroundColor(theme.backgroundColor);
+      if (process.platform === 'win32') {
+        window.setTitleBarOverlay({
+          color: theme.backgroundColor,
+          symbolColor: theme.symbolColor,
+        });
+      }
+    },
+  );
 
-  handleNoInput(IpcChannel.WindowToggleMaximize, windowToggleMaximizeRequestSchema, () => {
-    const window = getWindow();
-    if (!window || window.isDestroyed()) return { maximized: false };
-    if (process.platform === 'darwin') {
-      // 双击标题栏的行为跟随系统偏好，不自创交互
-      const preference = systemPreferences.getUserDefault('AppleActionOnDoubleClick', 'string');
-      if (preference === 'Minimize') {
-        window.minimize();
+  handleNoInput(
+    IpcChannel.WindowToggleMaximize,
+    windowToggleMaximizeRequestSchema,
+    maximizedResultSchema,
+    () => {
+      const window = getWindow();
+      if (!window || window.isDestroyed()) return { maximized: false };
+      if (process.platform === 'darwin') {
+        // 双击标题栏的行为跟随系统偏好，不自创交互
+        const preference = systemPreferences.getUserDefault('AppleActionOnDoubleClick', 'string');
+        if (preference === 'Minimize') {
+          window.minimize();
+          return { maximized: false };
+        }
+        if (preference === 'None') return { maximized: window.isMaximized() };
+      }
+      if (window.isMaximized()) {
+        window.unmaximize();
         return { maximized: false };
       }
-      if (preference === 'None') return { maximized: window.isMaximized() };
-    }
-    if (window.isMaximized()) {
-      window.unmaximize();
-      return { maximized: false };
-    }
-    window.maximize();
-    return { maximized: true };
-  });
+      window.maximize();
+      return { maximized: true };
+    },
+  );
 }
 
 /** 导入结果按「全部成功 / 部分跳过 / 全部失败」给出不同级别的通知。 */

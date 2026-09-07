@@ -275,6 +275,35 @@ describe('application database migrations', () => {
     ).toThrow(/Duplicate/iu);
     db.close();
   });
+
+  it('rolls back an invalid migration instead of stamping a schema with foreign key violations', () => {
+    const db = new Database(':memory:');
+    expect(() =>
+      migrate(db, {
+        migrations: [
+          {
+            version: 1,
+            name: 'creates an orphan child row',
+            up(database): void {
+              database.exec(`
+                CREATE TABLE parents (id TEXT PRIMARY KEY);
+                CREATE TABLE children (
+                  id TEXT PRIMARY KEY,
+                  parent_id TEXT NOT NULL REFERENCES parents(id)
+                );
+                INSERT INTO children (id, parent_id) VALUES ('child-1', 'missing-parent');
+              `);
+            },
+          },
+        ],
+      }),
+    ).toThrow(/foreign key violation/iu);
+    expect(readSchemaVersion(db)).toBe(0);
+    expect(
+      db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'children'").get(),
+    ).toBeUndefined();
+    db.close();
+  });
 });
 
 describe('knowledge database migrations', () => {
