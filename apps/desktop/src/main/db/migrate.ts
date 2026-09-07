@@ -96,6 +96,25 @@ function stamp(db: Database.Database, migration: Migration): void {
 }
 
 /**
+ * 外键在迁移期间会暂时关闭，以便按 SQLite 的表重建流程复制数据；重新打开
+ * foreign_keys 不会追溯检查已经写入的孤儿行。因此必须在提交前显式检查。
+ */
+function assertForeignKeyIntegrity(db: Database.Database): void {
+  const violations = db.pragma('foreign_key_check') as Array<{
+    table: string;
+    rowid: number;
+    parent: string;
+    fkid: number;
+  }>;
+  if (violations.length === 0) return;
+  const first = violations[0];
+  if (!first) return;
+  throw new Error(
+    `Migration left foreign key violation in ${first.table} row ${first.rowid} referencing ${first.parent} (constraint ${first.fkid})`,
+  );
+}
+
+/**
  * 按 SQLite 官方推荐流程重建一张表（用于补外键这类无法 ALTER 的变更）：
  * 外键开关在事务外关闭，建新表、拷数据、删旧表、改名，
  * 悬空引用的清理由调用方在重建前完成。
@@ -167,6 +186,7 @@ export function migrate(db: Database.Database, plan: MigrationPlan): void {
         if (migration.version > baseline) break;
         stamp(db, migration);
       }
+      assertForeignKeyIntegrity(db);
     });
     version = baseline;
   }
@@ -176,6 +196,7 @@ export function migrate(db: Database.Database, plan: MigrationPlan): void {
     runWithoutForeignKeys(db, () => {
       migration.up(db);
       stamp(db, migration);
+      assertForeignKeyIntegrity(db);
     });
   }
 }

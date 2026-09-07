@@ -127,9 +127,9 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 
 **测试覆盖**
 
-1. `ipc/register-ipc.ts` 仍无测试。它承载导出对话框与写盘、工作区选择、导入结果通知分级、版本归属校验等业务判断；其中的模型连通性探测已抽为 `services/model-connectivity.ts` 并单独覆盖，但 IPC 编排本身需要 electron 模块替身才能测。
-2. Renderer 已引入 `@testing-library/react` + jsdom，并覆盖 Confirmation Dialog 的焦点与 Escape 行为、成果版本加载错误，以及 `useArtifactViewer` 在受控异步乱序下忽略过期版本列表响应。仍无覆盖完整 AppShell 的组件测试与端到端 UI 自动化；其他视图和 hook 仍主要依靠人工桌面验收。
-3. 无端到端 UI 自动化，[MVP 与路线图](07-mvp-and-roadmap.md) §9 的「至少一个端到端用户旅程」与「macOS 和 Windows 基础打包验证」两项门槛仍未达成。
+1. IPC 注册器已有 Electron 替身行为测试：非法输入、无入参通道、输出 Schema、来源打开白名单，以及「Workspace → Task → Run → Artifact → 修订 → 导出」主进程旅程。后续新增 channel 必须在同一测试中补边界行为；真实桌面窗口自动化尚未建立。
+2. Renderer 已引入 `@testing-library/react` + jsdom，并覆盖 Confirmation Dialog 的焦点与 Escape 行为、成果版本加载错误，以及 `useArtifactViewer` 在受控异步乱序下忽略过期版本列表响应。仍无覆盖完整 AppShell 的组件测试与真实桌面 UI 自动化；其他视图和 hook 仍主要依靠人工桌面验收。
+3. GitHub Actions 已对 Pull Request 和 `main` 推送执行 `npm run verify`。macOS 和 Windows 基础打包验证仍未达成；真实桌面 UI 自动化应在该专项中接入。
 
 **界面**
 

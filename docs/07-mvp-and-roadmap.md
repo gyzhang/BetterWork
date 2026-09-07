@@ -161,10 +161,10 @@
 
 | 门槛 | 当前状态 |
 | --- | --- |
-| 单元测试 | 已达成：Vitest 20 个文件、131 个测试，覆盖协议、Agent 引擎、SSE Provider、工具、迁移与持久化、知识库、连通性探测、通知、Renderer 纯函数与全仓编码规范护栏 |
+| 单元测试 | 已达成：Vitest 覆盖协议、Agent 引擎、SSE Provider、工具、迁移与持久化、知识库、连通性探测、通知、Renderer 组件与全仓编码规范护栏；以实际 `npm run verify` 输出为准 |
 | 关键事件时序测试 | 已达成：`agent-engine.test.ts` 覆盖流式、工具轮次、失败与取消时序；`run-service.test.ts` 覆盖广播顺序与终态 |
-| 数据迁移测试 | 已达成：`apps/desktop/src/main/db/` 下的版本化迁移，`migrate.test.ts` 覆盖新库建立、历史库对账、缺列补齐、幂等重开、孤儿行清理与迁移表校验 |
-| 至少一个端到端用户旅程 | **未达成**：无 Playwright 或等价的 UI 自动化；当前以单元测试加人工桌面验收兜底 |
+| 数据迁移测试 | 已达成：`apps/desktop/src/main/db/` 下的版本化迁移，`migrate.test.ts` 覆盖新库建立、历史库对账、缺列补齐、幂等重开、孤儿行清理、迁移表校验及迁移提交前的外键完整性回滚 |
+| 至少一个端到端用户旅程 | 已达成（主进程边界）：`register-ipc.test.ts` 经已注册 IPC 完成「Workspace → Task → Fake Run → Markdown Artifact → user-edit 版本 → 导出」；真实桌面 UI 自动化仍需在后续专项接入 |
 | 示例数据和 Fake Provider | 已达成：`FakeModelProvider` 可稳定复现事件顺序与工具行为 |
 | 对应教学文档 | 部分达成：架构与领域文档齐备，尚缺面向学习者的链路讲解材料 |
 | Artifact 生成后的自动验证 | **未达成**：无验证状态字段与自动校验 |

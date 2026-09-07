@@ -414,6 +414,154 @@ export type NotificationChangeEvent = z.infer<typeof notificationChangeEventSche
 export const notificationActivatedSchema = z.object({ id: z.string().min(1) });
 export type NotificationActivated = z.infer<typeof notificationActivatedSchema>;
 
+/** IPC 返回值同样跨信任边界；这些 Schema 由 Main 注册器在交给 Preload 前校验。 */
+export const workspaceSummarySchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  rootPath: z.string().min(1),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+});
+export const runSummarySchema = z.object({
+  id: z.string().min(1),
+  taskId: z.string().min(1),
+  sessionId: z.string().min(1),
+  prompt: z.string(),
+  status: z.enum(['running', 'completed', 'failed', 'cancelled']),
+  createdAt: z.number().int().nonnegative(),
+  completedAt: z.number().int().nonnegative().optional(),
+});
+export const taskSummarySchema = z.object({
+  id: z.string().min(1),
+  workspaceId: z.string().min(1),
+  title: z.string(),
+  goal: z.string(),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+});
+export const createdTaskSchema = z.object({
+  task: taskSummarySchema,
+  sessionId: z.string().min(1),
+});
+export const recentTaskSummarySchema = taskSummarySchema.extend({
+  sessionId: z.string().min(1),
+  latestRun: runSummarySchema.optional(),
+});
+export const evidenceSummarySchema = z.object({
+  id: z.string().min(1),
+  taskId: z.string().min(1),
+  runId: z.string().min(1),
+  sourceType: z.enum(['local-file', 'web-page']),
+  sourceUri: z.string().min(1),
+  title: z.string(),
+  locator: z.string(),
+  excerpt: z.string(),
+  contentHash: z.string().min(1),
+  capturedAt: z.number().int().nonnegative(),
+});
+export const artifactSummarySchema = z.object({
+  id: z.string().min(1),
+  workspaceId: z.string().min(1),
+  taskId: z.string().min(1),
+  type: z.literal('markdown'),
+  title: z.string(),
+  currentVersionId: z.string().min(1),
+  versionNumber: z.number().int().positive(),
+  origin: z.enum(['assistant-run', 'user-edit']),
+  sourceRunId: z.string().min(1).optional(),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+});
+export const artifactDetailSchema = artifactSummarySchema.extend({
+  content: z.string(),
+  contentHash: z.string().min(1),
+  evidence: z.array(evidenceSummarySchema),
+});
+export const artifactVersionSummarySchema = z.object({
+  id: z.string().min(1),
+  artifactId: z.string().min(1),
+  versionNumber: z.number().int().positive(),
+  origin: z.enum(['assistant-run', 'user-edit']),
+  sourceRunId: z.string().min(1).optional(),
+  createdAt: z.number().int().nonnegative(),
+});
+export const artifactVersionDetailSchema = artifactVersionSummarySchema.extend({
+  content: z.string(),
+  contentHash: z.string().min(1),
+  evidence: z.array(evidenceSummarySchema),
+});
+export const modelProfileSummarySchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  provider: z.string(),
+  baseUrl: z.string().url(),
+  model: z.string(),
+  role: modelRoleSchema,
+  apiKeyConfigured: z.boolean(),
+  enabled: z.boolean(),
+  priority: z.number().int().nonnegative(),
+  connectionStatus: modelConnectionStatusSchema,
+  lastTestedAt: z.number().int().nonnegative().optional(),
+  maxContextTokens: z.number().int().positive(),
+  maxOutputTokens: z.number().int().positive(),
+  temperature: z.number(),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+});
+export const knowledgeDocumentSummarySchema = z.object({
+  id: z.string().min(1),
+  title: z.string(),
+  sourcePath: z.string().min(1),
+  format: z.enum(['markdown', 'text', 'pdf', 'docx']),
+  byteSize: z.number().int().nonnegative(),
+  contentHash: z.string().min(1),
+  pageCount: z.number().int().positive().optional(),
+  importedAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+});
+export const knowledgeImportResultSchema = z.object({
+  imported: z.array(knowledgeDocumentSummarySchema),
+  skipped: z.array(z.object({ sourcePath: z.string().min(1), reason: z.string().min(1) })),
+});
+export const knowledgeSearchResultSchema = z.object({
+  document: knowledgeDocumentSummarySchema,
+  locator: z.string(),
+  excerpt: z.string(),
+});
+export const knowledgeRefreshResultSchema = z.object({
+  refreshed: knowledgeDocumentSummarySchema.optional(),
+  error: z.string().optional(),
+});
+export const openKnowledgeSourceResultSchema = z.object({
+  opened: z.boolean(),
+  error: z.string().optional(),
+});
+export const searchEngineSummarySchema = z.object({
+  provider: searchProviderIdSchema,
+  apiKeyConfigured: z.boolean(),
+  enabled: z.boolean(),
+  webTopK: z.number().int().positive(),
+  connectionStatus: modelConnectionStatusSchema,
+  lastTestedAt: z.number().int().nonnegative().optional(),
+  updatedAt: z.number().int().nonnegative(),
+});
+export const connectionTestResultSchema = z.object({ ok: z.boolean(), message: z.string() });
+export const exportMarkdownArtifactResultSchema = z.object({
+  cancelled: z.boolean(),
+  filePath: z.string().min(1).optional(),
+});
+export const startRunResultSchema = z.object({ runId: z.string().min(1) });
+export const cancelledResultSchema = z.object({ cancelled: z.boolean() });
+export const deletedResultSchema = z.object({ deleted: z.boolean() });
+export const updatedResultSchema = z.object({ updated: z.boolean() });
+export const removedResultSchema = z.object({ removed: z.boolean() });
+export const modelSaveResultSchema = z.object({ id: z.string().min(1) });
+export const searchEngineSaveResultSchema = z.object({ provider: searchProviderIdSchema });
+export const unreadCountResultSchema = z.object({ unreadCount: z.number().int().nonnegative() });
+export const clearedResultSchema = z.object({ cleared: z.literal(true) });
+export const maximizedResultSchema = z.object({ maximized: z.boolean() });
+export const voidResultSchema = z.undefined();
+
 export const IpcChannel = {
   StartRun: 'run:start',
   CancelRun: 'run:cancel',

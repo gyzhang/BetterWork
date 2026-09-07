@@ -127,10 +127,10 @@ standards/
 - 迁移约定：
   - `version` 从 1 开始连续递增且唯一，`migrate()` 启动时校验，写错会直接抛错而不是静默跳版本。
   - v1 固定为「迁移制度引入之前」的形状；历史库由 `detectLegacy` 识别、`reconcileLegacy` 对账到 v1、打版本戳，然后正常走 v2 及以后。这样历史库不会漏掉任何后续迁移。
-  - 每条迁移是一个原子事务，失败整体回滚且不打版本戳，下次启动从失败那条重来。
+  - 每条迁移是一个原子事务，失败整体回滚且不打版本戳，下次启动从失败那条重来。迁移打戳后、提交前必须执行 `PRAGMA foreign_key_check`；它能读取同一事务内的变更，发现违反项就回滚，避免外键重新开启后遗留孤儿行。
   - SQLite 无法用 `ALTER` 增删外键，补外键一律走 `rebuildTable`：事务外关外键、建新表、拷数据、删旧表、改名、补回索引。
-  - **悬空引用由调用方在重建前清理**，不要用 `PRAGMA foreign_key_check` 在事务内兜底：它读的是已落盘的数据，看不到同一事务里早先的 `DELETE`，放在事务内只会误报。清理顺序必须**先父后子**——删父表孤儿会产生新的子表孤儿（见 `app-schema.ts` 的 `addForeignKeys`）。整条迁移仍是一个原子事务，失败即回滚且不打版本戳。
-  - 新增迁移必须同时补 `db/migrate.test.ts` 里的对应用例（新库、历史库、幂等、失败回滚）。
+  - **悬空引用仍由调用方在重建前清理**。清理顺序必须按实际引用关系安排——删父表孤儿可能产生新的子表孤儿（见 `app-schema.ts` 的 `addForeignKeys`）；最终以事务内完整性检查作为提交门槛。
+  - 新增迁移必须同时补 `db/migrate.test.ts` 里的对应用例（新库、历史库、幂等、失败回滚、完整性检查）。
 - `PRAGMA foreign_keys` 常开。写测试时要建真实的父级行，不能塞伪造 id。
 - Repository 只写自己的聚合表，但可以读其他表做存在性与归属校验；跨聚合写入由调用方用 `store.transaction()` 显式包起来。Repository 之间不互相持有引用。
 - 密钥（模型与搜索的 API Key）明文存于本地 SQLite，**只**在主进程内部流转；对外接口一律只回 `apiKeyConfigured`。日志、错误信息、测试输出绝不出现 Key。
@@ -138,7 +138,7 @@ standards/
 ## 7. IPC
 
 - channel、输入、输出全部在 `packages/agent-protocol` 定义；`IpcChannel` 是 channel 名的唯一来源。
-- 所有 handler 必须经 `ipc/register-ipc.ts` 的三个注册 helper 之一：`handleInput`（必填入参）、`handleOptionalInput`（入参可整体省略）、`handleNoInput`（入参必须为空）。三者都在边界上做 Zod 校验，不允许 handler 自行解析 `raw`。
+- 所有 handler 必须经 `ipc/register-ipc.ts` 的三个注册 helper 之一：`handleInput`（必填入参）、`handleOptionalInput`（入参可整体省略）、`handleNoInput`（入参必须为空）。三者都在边界上用共享协议的 Zod Schema 校验输入与输出，不允许 handler 自行解析 `raw` 或绕过响应校验。
 - 推送给 Renderer 的事件在 preload 侧过 Zod 后再交给监听者。
 - `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true` 不可放松。
 - 需要用户文件访问的能力，白名单校验必须在主进程完成（例如「打开原文」先查知识库登记记录，再交给 `shell.openPath`）。
@@ -182,4 +182,5 @@ standards/
 ## 11. 变更记录
 
 - 2026-09-05：建立本文。同时引入 Prettier + ESLint（含类型感知规则、导入排序）、把 `lint` 与 `format:check` 纳入 `verify` 门禁、按聚合拆分持久化层、引入版本化迁移与外键、统一异步收口与错误词汇、按 views / components / hooks / lib 拆分 Renderer。
-- 2026-09-06：新增 `standards/coding-standard.test.ts`，把 ESLint 表达不了的跨文件约定（配置唯一、源码零豁免、分层边界、Token 与动效纪律、规则索引完整、首帧主题一致）纳入 `npm test` 门禁；修正 §6 中已失效的 `foreign_key_check` 兜底描述——它在事务内看不到同事务早先的 `DELETE`，改为由调用方在重建表前按「先父后子」清理孤儿行。
+- 2026-09-06：新增 `standards/coding-standard.test.ts`，把 ESLint 表达不了的跨文件约定（配置唯一、源码零豁免、分层边界、Token 与动效纪律、规则索引完整、首帧主题一致）纳入 `npm test` 门禁。
+- 2026-09-07：修正 `foreign_key_check` 的事务语义：它可以读取同一事务的变更；迁移现在以迁移后、提交前的完整性检查为门槛。IPC 注册器同时校验共享协议定义的请求和响应。
