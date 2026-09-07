@@ -10,6 +10,14 @@ import type {
 import { abortError, describeError, isAbortError } from './errors';
 import type { AgentEngine, AgentRunInput } from './types';
 
+const SYSTEM_PROMPT = (): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const day = now.getDate();
+  return `今天是 ${year} 年 ${month} 月 ${day} 日。搜索新闻或时效性内容时，请在关键词中包含当前年份。`;
+};
+
 class RunEventFactory {
   private sequence = 0;
 
@@ -30,6 +38,7 @@ export class ReActAgentEngine implements AgentEngine {
   async *run(input: AgentRunInput): AsyncIterable<AgentRuntimeEvent> {
     const events = new RunEventFactory(input.runId);
     const messages: AgentMessage[] = [
+      { id: randomUUID(), role: 'system', content: SYSTEM_PROMPT() },
       ...(input.messages ?? []),
       { id: randomUUID(), role: 'user', content: input.prompt },
     ];
