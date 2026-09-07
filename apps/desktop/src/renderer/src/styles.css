@@ -2158,7 +2158,8 @@ p {
   padding: 8px 11px;
   border-radius: 7px;
 }
-.artifact-editor-error {
+.artifact-action-error {
+  margin-bottom: 12px;
   padding: 9px 11px;
   color: var(--danger);
   background: var(--danger-soft);
