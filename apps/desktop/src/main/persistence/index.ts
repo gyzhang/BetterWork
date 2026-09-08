@@ -2,10 +2,12 @@ import type Database from 'better-sqlite3';
 
 import { openAppDatabase } from '../db';
 import { ArtifactRepository } from './artifact-repository';
+import { DependencyOperationRepository } from './dependency-operation-repository';
 import { EvidenceRepository } from './evidence-repository';
 import { ModelRepository } from './model-repository';
 import { NotificationRepository } from './notification-repository';
 import { RunRepository } from './run-repository';
+import { RuntimeEnvironmentRepository } from './runtime-environment-repository';
 import { SearchEngineRepository } from './search-engine-repository';
 import { SkillExecutionRepository } from './skill-execution-repository';
 import { SkillRepository } from './skill-repository';
@@ -32,6 +34,8 @@ export class AppStore {
   readonly notifications: NotificationRepository;
   readonly skills: SkillRepository;
   readonly executions: SkillExecutionRepository;
+  readonly environments: RuntimeEnvironmentRepository;
+  readonly dependencyOperations: DependencyOperationRepository;
 
   private constructor(private readonly db: Database.Database) {
     this.workspaces = new WorkspaceRepository(db);
@@ -44,6 +48,8 @@ export class AppStore {
     this.notifications = new NotificationRepository(db);
     this.skills = new SkillRepository(db);
     this.executions = new SkillExecutionRepository(db);
+    this.environments = new RuntimeEnvironmentRepository(db);
+    this.dependencyOperations = new DependencyOperationRepository(db);
   }
 
   static open(filePath: string): AppStore {
@@ -65,10 +71,22 @@ export class AppStore {
 }
 
 export { ArtifactRepository } from './artifact-repository';
+export {
+  type CreateOperationInput,
+  DependencyOperationRepository,
+  isTerminalOperationStatus,
+  type OperationProgressPatch,
+  type OperationTerminalPatch,
+} from './dependency-operation-repository';
 export { EvidenceRepository, type NewEvidence } from './evidence-repository';
 export { ModelRepository, type RunnableModel } from './model-repository';
 export { NotificationRepository } from './notification-repository';
 export { RunRepository } from './run-repository';
+export {
+  type CreateEnvironmentInput,
+  type EnvironmentStatusPatch,
+  RuntimeEnvironmentRepository,
+} from './runtime-environment-repository';
 export { type EnabledSearchEngine, SearchEngineRepository } from './search-engine-repository';
 export {
   type CreateBindingInput,

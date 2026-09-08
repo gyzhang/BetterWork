@@ -412,6 +412,89 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 5,
+    name: 'add runtime environments and dependency operations',
+    up(db: Database.Database): void {
+      db.exec(`
+        CREATE TABLE runtime_environments (
+          id TEXT PRIMARY KEY,
+          environment_key TEXT NOT NULL UNIQUE,
+          base_json TEXT NOT NULL,
+          platform_json TEXT NOT NULL,
+          lock_hash TEXT NOT NULL,
+          lock_json TEXT NOT NULL,
+          path_key TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN (
+            'unprepared', 'preparing', 'ready', 'failed', 'cancelled', 'invalid'
+          )),
+          failure_code TEXT,
+          failure_summary TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          ready_at INTEGER
+        );
+        CREATE TABLE dependency_operations (
+          id TEXT PRIMARY KEY,
+          environment_id TEXT NOT NULL REFERENCES runtime_environments(id) ON DELETE CASCADE,
+          environment_key TEXT NOT NULL,
+          kind TEXT NOT NULL CHECK (kind IN ('prepare', 'repair')),
+          status TEXT NOT NULL CHECK (status IN (
+            'queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted'
+          )),
+          step TEXT CHECK (step IN (
+            'resolve-interpreter', 'create-environment', 'install-packages',
+            'probe-imports', 'finalize'
+          )),
+          message TEXT,
+          failure_code TEXT,
+          failure_summary TEXT,
+          created_at INTEGER NOT NULL,
+          started_at INTEGER,
+          finished_at INTEGER
+        );
+        CREATE INDEX idx_dependency_operations_environment
+          ON dependency_operations(environment_id, created_at DESC);
+        CREATE INDEX idx_dependency_operations_open ON dependency_operations(status);
+        CREATE INDEX idx_runtime_environments_status ON runtime_environments(status);
+      `);
+
+      // A07 刻意留空的 environment_id 现在有了归属表：先清悬空引用，
+      // 再按本文件约定用 rebuildTable 补外键，不在启动代码里探测后 ALTER。
+      // RESTRICT 是有意的：历史绑定引用的环境不允许被清理（设计 §4.4）。
+      db.exec(
+        `UPDATE run_skill_bindings SET environment_id = NULL
+         WHERE environment_id IS NOT NULL
+           AND environment_id NOT IN (SELECT id FROM runtime_environments)`,
+      );
+      rebuildTable(
+        db,
+        'run_skill_bindings',
+        `CREATE TABLE run_skill_bindings (
+          id TEXT PRIMARY KEY,
+          run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+          skill_revision_id TEXT NOT NULL REFERENCES skill_revisions(id) ON DELETE CASCADE,
+          profile_revision_id TEXT NOT NULL
+            REFERENCES skill_runtime_profiles(id) ON DELETE CASCADE,
+          environment_id TEXT REFERENCES runtime_environments(id) ON DELETE RESTRICT,
+          dependency_snapshot_ids_json TEXT NOT NULL DEFAULT '[]',
+          grant_id TEXT NOT NULL REFERENCES skill_trust_grants(id) ON DELETE CASCADE,
+          created_at INTEGER NOT NULL
+        )`,
+        [
+          'id',
+          'run_id',
+          'skill_revision_id',
+          'profile_revision_id',
+          'environment_id',
+          'dependency_snapshot_ids_json',
+          'grant_id',
+          'created_at',
+        ],
+        ['CREATE INDEX idx_run_skill_bindings_run ON run_skill_bindings(run_id)'],
+      );
+    },
+  },
 ];
 
 /**

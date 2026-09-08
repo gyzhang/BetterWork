@@ -36,6 +36,7 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | [A13–A17：样本接线](tasks-a3.md) | 模型指令、文件工具、Run 收口、PPT 样本适配、真实试运行 |
 | [A18–A21：成果分发](tasks-a4.md) | 文件成果、成果 UI、安装资源、跨平台验收 |
 | [后续 B/C](phase-b-c-roadmap.md) | 专家配置与研究汇报路径，阶段 A 完成后按模板细化 |
+| [依赖验证记录](dependency-verification.md) | 基础 Python 候选、逐字抄录的上游校验值、本机探测结果与待验证清单 |
 
 产品真相源仍是 [产品定义](../01-product-definition.md)、[能力体系](../05-capability-system.md)、[路线图](../07-mvp-and-roadmap.md)、[UI 规范](../10-ui-ux-system.md)、[工程规范](../12-engineering-standards.md)；本文不创建第二套编码规范。
 
@@ -57,7 +58,7 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | A07 | 执行协议、执行记录及生命周期接口 | A06 | done | [执行服务测试](../../apps/desktop/src/main/services/skill-execution-service.test.ts)、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)、[协议测试](../../packages/agent-protocol/src/index.test.ts)，2026-09-09 00:26 |
 | A08 | macOS 进程组 supervisor | A07 | done | [supervisor 测试](../../apps/desktop/src/main/infrastructure/mac-process-supervisor.test.ts)（17 项真机进程用例）、[guardian](../../apps/desktop/src/main/infrastructure/skill-guardian.ts) 构建产物在 Electron `ELECTRON_RUN_AS_NODE` 下实测取消/组核验，2026-09-09 01:33 |
 | A09 | Windows Job supervisor | A08 | blocked | 本机无 Windows 构建与运行环境。2026-09-09 用户明确授权跳过本卡先行推进 A10–A12；A2/A21 的跨平台门槛保留，不得据此把 Windows 标为已验收 |
-| A10 | Python 环境准备作业 | A09 | todo | — |
+| A10 | Python 环境准备作业 | A09 | done | [依赖服务测试](../../apps/desktop/src/main/services/skill-dependency-service.test.ts)（20 项离线注入 + 真实 venv/import 探测验收）、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)、[依赖验证记录](dependency-verification.md)，2026-09-09 02:04；按用户授权在 A09 blocked 时先行 |
 | A11 | 外部工具链快照与依赖锁 | A10 | todo | — |
 | A12 | 运行配置/环境 UI 与 A2 验收 | A11 | todo | — |
 | A13 | Skill 指令及运行绑定进入 Agent | A12 | todo | — |

@@ -88,6 +88,39 @@ const countRows = (db: Database.Database, table: string): number => {
   return row.count;
 };
 
+/** 外键常开，因此绑定类用例必须建真实的父级链，不能塞伪造 id。 */
+const seedSkillChain = (db: Database.Database, now: number): void => {
+  db.prepare(
+    'INSERT INTO workspaces (id, name, root_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+  ).run('ws-1', '工作区', '/tmp/ws', now, now);
+  db.prepare(
+    'INSERT INTO tasks (id, workspace_id, title, goal, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+  ).run('task-1', 'ws-1', '制作演示', '生成 deck', now, now);
+  db.prepare('INSERT INTO sessions (id, task_id, created_at) VALUES (?, ?, ?)').run(
+    'session-1',
+    'task-1',
+    now,
+  );
+  db.prepare(
+    'INSERT INTO runs (id, task_id, session_id, prompt, status, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+  ).run('run-1', 'task-1', 'session-1', '生成 deck', 'running', now);
+  db.prepare(
+    `INSERT INTO skills (id, name, description, source_kind, enabled, current_revision_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run('skill-1', '样本能力', '描述', 'user', 1, 'rev-1', now, now);
+  db.prepare(
+    `INSERT INTO skill_revisions (id, skill_id, content_hash, resource_key, frontmatter_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run('rev-1', 'skill-1', 'hash-1', 'user/skill-1/revisions/hash-1', '{}', now);
+  db.prepare(
+    'INSERT INTO skill_runtime_profiles (id, skill_id, profile_hash, profile_json, created_at) VALUES (?, ?, ?, ?, ?)',
+  ).run('prof-1', 'skill-1', 'profile-hash', '{"commands":[]}', now);
+  db.prepare(
+    `INSERT INTO skill_trust_grants (id, skill_id, revision_id, profile_hash, dependency_fingerprint, scope_hash, source, granted_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run('grant-1', 'skill-1', 'rev-1', 'profile-hash', 'dep', 'scope', 'user', now);
+};
+
 describe('application database migrations', () => {
   it('builds the current schema from scratch and enforces foreign keys', () => {
     const file = path.join(temporaryDirectory(), 'fresh.sqlite');
@@ -338,6 +371,113 @@ describe('application database migrations', () => {
     expect(() =>
       insertBinding.run('binding-2', 'run-missing', 'rev-1', 'prof-1', '[]', 'grant-1', now),
     ).toThrow();
+    db.close();
+  });
+
+  it('adds environment tables and gives run bindings a real environment foreign key', () => {
+    const file = path.join(temporaryDirectory(), 'environments.sqlite');
+    const db = openAppDatabase(file);
+    expect(readSchemaVersion(db)).toBe(appMigrations.length);
+
+    const now = 1_700_000_000_000;
+    seedSkillChain(db, now);
+    db.prepare(
+      `INSERT INTO runtime_environments (
+         id, environment_key, base_json, platform_json, lock_hash, lock_json, path_key,
+         status, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      'env-1',
+      'key-1',
+      '{"kind":"local","path":"/usr/bin/python3","version":"3.12.14"}',
+      '{"os":"darwin","arch":"arm64","abi":"cp312"}',
+      'lock-hash',
+      '{"lockVersion":1}',
+      'environments/key-1/instance-1',
+      'ready',
+      now,
+      now,
+    );
+
+    // 状态词汇受 CHECK 约束：写错的状态不会静默落库。
+    expect(() =>
+      db.prepare('UPDATE runtime_environments SET status = ? WHERE id = ?').run('broken', 'env-1'),
+    ).toThrow();
+
+    db.prepare(
+      `INSERT INTO dependency_operations (
+         id, environment_id, environment_key, kind, status, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run('op-1', 'env-1', 'key-1', 'prepare', 'succeeded', now);
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO dependency_operations (id, environment_id, environment_key, kind, status, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .run('op-2', 'env-missing', 'key-1', 'prepare', 'queued', now),
+    ).toThrow(/FOREIGN KEY/iu);
+
+    const insertBinding = db.prepare(
+      `INSERT INTO run_skill_bindings (
+         id, run_id, skill_revision_id, profile_revision_id, environment_id,
+         dependency_snapshot_ids_json, grant_id, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    insertBinding.run('binding-1', 'run-1', 'rev-1', 'prof-1', 'env-1', '[]', 'grant-1', now);
+
+    // A07 留下的 environment_id 现在有了归属：不存在的 id 直接被外键拒绝。
+    expect(() =>
+      insertBinding.run('binding-2', 'run-1', 'rev-1', 'prof-1', 'env-ghost', '[]', 'grant-1', now),
+    ).toThrow(/FOREIGN KEY/iu);
+
+    // 历史绑定引用的环境不允许删除：旧运行的可复现性优先于清理。
+    expect(() =>
+      db.prepare('DELETE FROM runtime_environments WHERE id = ?').run('env-1'),
+    ).toThrow();
+
+    db.prepare('UPDATE run_skill_bindings SET environment_id = NULL WHERE id = ?').run('binding-1');
+    db.prepare('DELETE FROM dependency_operations WHERE id = ?').run('op-1');
+    db.prepare('DELETE FROM runtime_environments WHERE id = ?').run('env-1');
+    expect(countRows(db, 'runtime_environments')).toBe(0);
+    db.close();
+  });
+
+  it('nulls a dangling environment reference while upgrading from v4', () => {
+    const file = path.join(temporaryDirectory(), 'upgrade-v5.sqlite');
+    const db = new Database(file);
+    db.pragma('journal_mode = WAL');
+    db.pragma('foreign_keys = ON');
+    const now = 1_700_000_000_000;
+    migrate(db, { migrations: appMigrations.slice(0, 4) });
+    expect(readSchemaVersion(db)).toBe(4);
+
+    seedSkillChain(db, now);
+    db.prepare(
+      `INSERT INTO run_skill_bindings (
+         id, run_id, skill_revision_id, profile_revision_id, environment_id,
+         dependency_snapshot_ids_json, grant_id, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run('binding-1', 'run-1', 'rev-1', 'prof-1', 'env-ghost', '[]', 'grant-1', now);
+
+    migrate(db, { migrations: appMigrations });
+
+    expect(readSchemaVersion(db)).toBe(appMigrations.length);
+    const row = db
+      .prepare('SELECT environment_id FROM run_skill_bindings WHERE id = ?')
+      .get('binding-1') as { environment_id: string | null };
+    expect(row.environment_id).toBeNull();
+    // 升级后外键真的生效，不只是把脏数据抹平。
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO run_skill_bindings (
+             id, run_id, skill_revision_id, profile_revision_id, environment_id,
+             dependency_snapshot_ids_json, grant_id, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run('binding-2', 'run-1', 'rev-1', 'prof-1', 'env-ghost', '[]', 'grant-1', now),
+    ).toThrow(/FOREIGN KEY/iu);
     db.close();
   });
 
