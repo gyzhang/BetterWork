@@ -48,7 +48,7 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | 编号 | 工作 | 前置 | 状态 | 证据/完成时间 |
 | --- | --- | --- | --- | --- |
 | A00 | 基线与设计决策固定 | 无 | done | [implementation-decisions.md](implementation-decisions.md)，2026-09-08 |
-| A01 | Skill 共享协议及输入输出 Schema | A00 | todo | — |
+| A01 | Skill 共享协议及输入输出 Schema | A00 | done | [协议测试](../../packages/agent-protocol/src/index.test.ts)，2026-09-08 |
 | A02 | Skill 修订/profile/信任持久化 | A01 | todo | — |
 | A03 | 本地目录导入与资源定位 | A02 | todo | — |
 | A04 | 内置来源、信任与用户副本 | A03 | todo | — |

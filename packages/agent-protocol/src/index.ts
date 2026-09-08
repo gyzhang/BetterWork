@@ -81,6 +81,170 @@ export const startRunRequestSchema = z
   .strict();
 export type StartRunRequest = z.infer<typeof startRunRequestSchema>;
 
+export const skillSourceKindSchema = z.enum(['builtin', 'user']);
+export type SkillSourceKind = z.infer<typeof skillSourceKindSchema>;
+
+export const skillTrustStatusSchema = z.enum(['untrusted', 'trusted', 'needs-review', 'revoked']);
+export type SkillTrustStatus = z.infer<typeof skillTrustStatusSchema>;
+
+export const skillEnvironmentStatusSchema = z.enum([
+  'unprepared',
+  'preparing',
+  'ready',
+  'failed',
+  'cancelled',
+  'invalid',
+]);
+export type SkillEnvironmentStatus = z.infer<typeof skillEnvironmentStatusSchema>;
+
+export const skillBlockedReasonSchema = z.enum([
+  'disabled',
+  'untrusted',
+  'trust-needs-review',
+  'trust-revoked',
+  'environment-unprepared',
+  'environment-preparing',
+  'environment-failed',
+  'environment-cancelled',
+  'environment-invalid',
+  'missing-runtime-profile',
+]);
+export type SkillBlockedReason = z.infer<typeof skillBlockedReasonSchema>;
+
+const skillIdSchema = z.string().min(1);
+const skillRevisionIdSchema = z.string().min(1);
+
+export const skillRevisionSummarySchema = z
+  .object({
+    id: skillRevisionIdSchema,
+    skillId: skillIdSchema,
+    contentHash: z.string().min(1),
+    originalVersion: z.string().min(1).optional(),
+    resourceKey: z.string().min(1),
+    frontmatter: z.record(z.string(), z.unknown()),
+    createdAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type SkillRevisionSummary = z.infer<typeof skillRevisionSummarySchema>;
+
+export const runtimeProfileCommandSchema = z
+  .object({
+    commandId: z.string().trim().min(1).max(100),
+    label: z.string().trim().min(1).max(160),
+    executableKey: z.string().trim().min(1).max(160),
+    argumentSchema: z.record(z.string(), z.unknown()),
+    timeoutMs: z.number().int().positive().max(1_800_000),
+    expectedOutputs: z.array(z.string().trim().min(1)).max(100),
+    validatorId: z.string().trim().min(1).max(160).optional(),
+  })
+  .strict();
+export type RuntimeProfileCommand = z.infer<typeof runtimeProfileCommandSchema>;
+
+export const runtimeProfileDraftSchema = z
+  .object({
+    commands: z.array(runtimeProfileCommandSchema).max(100),
+    environmentRequirements: z.array(z.string().trim().min(1).max(200)).max(100),
+    outputContract: z
+      .object({
+        reportPath: z.string().trim().min(1).optional(),
+        outputPaths: z.array(z.string().trim().min(1)).max(100),
+      })
+      .strict(),
+  })
+  .strict();
+export type RuntimeProfileDraft = z.infer<typeof runtimeProfileDraftSchema>;
+
+export const runtimeProfileRevisionSchema = z
+  .object({
+    id: z.string().min(1),
+    skillId: skillIdSchema,
+    profileHash: z.string().min(1),
+    profile: runtimeProfileDraftSchema,
+    createdAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type RuntimeProfileRevision = z.infer<typeof runtimeProfileRevisionSchema>;
+
+export const skillSummarySchema = z
+  .object({
+    id: skillIdSchema,
+    name: z.string().min(1),
+    description: z.string(),
+    sourceKind: skillSourceKindSchema,
+    enabled: z.boolean(),
+    currentRevisionId: skillRevisionIdSchema,
+    trustStatus: skillTrustStatusSchema,
+    environmentStatus: skillEnvironmentStatusSchema,
+    blockedReasons: z.array(skillBlockedReasonSchema),
+  })
+  .strict();
+export type SkillSummary = z.infer<typeof skillSummarySchema>;
+
+export const skillDetailSchema = skillSummarySchema
+  .extend({
+    revision: skillRevisionSummarySchema,
+    runtimeProfile: runtimeProfileRevisionSchema.optional(),
+  })
+  .strict();
+export type SkillDetail = z.infer<typeof skillDetailSchema>;
+
+export const listSkillsRequestSchema = z.object({}).strict();
+export type ListSkillsRequest = z.infer<typeof listSkillsRequestSchema>;
+
+export const getSkillRequestSchema = z.object({ id: skillIdSchema }).strict();
+export type GetSkillRequest = z.infer<typeof getSkillRequestSchema>;
+
+export const saveSkillRuntimeProfileRequestSchema = z
+  .object({ skillId: skillIdSchema, profile: runtimeProfileDraftSchema })
+  .strict();
+export type SaveSkillRuntimeProfileRequest = z.infer<typeof saveSkillRuntimeProfileRequestSchema>;
+
+export const setSkillEnabledRequestSchema = z
+  .object({ skillId: skillIdSchema, enabled: z.boolean() })
+  .strict();
+export type SetSkillEnabledRequest = z.infer<typeof setSkillEnabledRequestSchema>;
+
+export const setSkillTrustRequestSchema = z
+  .object({ skillId: skillIdSchema, trusted: z.boolean() })
+  .strict();
+export type SetSkillTrustRequest = z.infer<typeof setSkillTrustRequestSchema>;
+
+export const copySkillRequestSchema = z
+  .object({ skillId: skillIdSchema, name: z.string().trim().min(1).max(160).optional() })
+  .strict();
+export type CopySkillRequest = z.infer<typeof copySkillRequestSchema>;
+
+export const exportSkillRequestSchema = z
+  .object({ skillId: skillIdSchema, revisionId: skillRevisionIdSchema.optional() })
+  .strict();
+export type ExportSkillRequest = z.infer<typeof exportSkillRequestSchema>;
+
+export const importSkillRequestSchema = z.object({}).strict();
+export type ImportSkillRequest = z.infer<typeof importSkillRequestSchema>;
+
+export const skillMutationResultSchema = z
+  .object({
+    skill: skillSummarySchema,
+  })
+  .strict();
+export type SkillMutationResult = z.infer<typeof skillMutationResultSchema>;
+
+export const skillExportResultSchema = z
+  .object({
+    cancelled: z.boolean(),
+    filePath: z.string().min(1).optional(),
+  })
+  .strict();
+export type SkillExportResult = z.infer<typeof skillExportResultSchema>;
+
+export const skillImportResultSchema = z
+  .object({
+    cancelled: z.boolean(),
+    skill: skillSummarySchema.optional(),
+  })
+  .strict();
+export type SkillImportResult = z.infer<typeof skillImportResultSchema>;
+
 export interface WorkspaceSummary {
   id: string;
   name: string;
