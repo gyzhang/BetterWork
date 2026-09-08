@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>算台 · 能力页改版低保真原型（待拍板）</title>
+    <style>
+      :root {
+        --canvas: #f6f7f5;
+        --surface: #ffffff;
+        --surface-raised: #f0f2ef;
+        --sidebar: #edf0ed;
+        --text-primary: #1d2420;
+        --text-secondary: #68736c;
+        --text-muted: #8a948e;
+        --border: #dbe2dc;
+        --brand: #2f6b5d;
+        --brand-soft: #e1eee9;
+        --selection: #d8ebe3;
+        --warning: #a86e1b;
+        --danger: #ad5149;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--canvas);
+        color: var(--text-primary);
+        font:
+          14px/1.6 -apple-system,
+          BlinkMacSystemFont,
+          'PingFang SC',
+          'Microsoft YaHei',
+          sans-serif;
+      }
+      .proto-note {
+        margin: 0;
+        padding: 12px 24px;
+        background: var(--brand-soft);
+        border-bottom: 1px solid var(--border);
+        color: var(--text-secondary);
+        font-size: 12px;
+      }
+      .proto-note strong {
+        color: var(--brand);
+      }
+      main {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      h1 {
+        margin: 8px 0 4px;
+        font-size: 20px;
+      }
+      h2 {
+        margin: 32px 0 8px;
+        font-size: 16px;
+        border-left: 3px solid var(--brand);
+        padding-left: 8px;
+      }
+      p,
+      li {
+        color: var(--text-secondary);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      th,
+      td {
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        text-align: left;
+        vertical-align: top;
+        color: var(--text-secondary);
+      }
+      th {
+        background: var(--surface-raised);
+        color: var(--text-primary);
+      }
+      .rec {
+        color: var(--brand);
+        font-weight: 600;
+      }
+
+      /* ---- 以下为模拟界面 ---- */
+      .app {
+        margin-top: 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .page-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 70px;
+        padding: 0 28px;
+        border-bottom: 1px solid var(--border);
+      }
+      .page-header .titles .eyebrow {
+        margin: 0;
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+      .page-header .titles h3 {
+        margin: 0;
+        font-size: 20px;
+        color: var(--text-primary);
+      }
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .segmented {
+        display: flex;
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        overflow: hidden;
+      }
+      .segmented button {
+        padding: 6px 12px;
+        background: var(--surface);
+        border: 0;
+        color: var(--text-secondary);
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .segmented button[aria-pressed='true'] {
+        background: var(--selection);
+        color: var(--brand);
+        font-weight: 600;
+      }
+      .primary-button {
+        padding: 7px 14px;
+        background: var(--brand);
+        border: 0;
+        border-radius: 7px;
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .back-button {
+        padding: 6px 10px;
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        color: var(--text-secondary);
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .page-body {
+        width: min(860px, 100% - 48px);
+        margin: 0 auto;
+        padding: 24px 0 40px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .card {
+        padding: 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        cursor: pointer;
+      }
+      .card:hover {
+        border-color: var(--brand);
+      }
+      .card .head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .mark {
+        display: grid;
+        place-items: center;
+        width: 36px;
+        height: 36px;
+        background: var(--brand-soft);
+        border-radius: 8px;
+        color: var(--brand);
+        font-weight: 700;
+      }
+      .card strong {
+        color: var(--text-primary);
+      }
+      .card small {
+        display: block;
+        margin-top: 2px;
+        color: var(--text-muted);
+        font-size: 12px;
+      }
+      .card p.desc {
+        margin: 10px 0;
+        color: var(--text-secondary);
+        font-size: 13px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .chip {
+        padding: 2px 8px;
+        background: var(--surface-raised);
+        border-radius: 999px;
+        color: var(--text-secondary);
+        font-size: 12px;
+      }
+      .chip.warn {
+        background: #f5ead3;
+        color: var(--warning);
+      }
+      .chip.on {
+        background: var(--brand-soft);
+        color: var(--brand);
+      }
+      .rows {
+        display: none;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        cursor: pointer;
+      }
+      .row:hover {
+        border-color: var(--brand);
+      }
+      .row .main {
+        flex: 1;
+        min-width: 0;
+      }
+      .row strong {
+        color: var(--text-primary);
+      }
+      .row small {
+        display: block;
+        color: var(--text-muted);
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .app[data-mode='list'] .grid {
+        display: none;
+      }
+      .app[data-mode='list'] .rows {
+        display: flex;
+      }
+      .detail-box {
+        padding: 20px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+      }
+      .state-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+        margin: 16px 0;
+      }
+      .state-grid div {
+        padding: 10px 12px;
+        background: var(--surface-raised);
+        border-radius: 8px;
+      }
+      .state-grid span {
+        display: block;
+        color: var(--text-muted);
+        font-size: 12px;
+      }
+      .state-grid strong {
+        color: var(--text-primary);
+        font-size: 13px;
+      }
+      .trust-box {
+        padding: 14px 16px;
+        background: var(--surface-raised);
+        border-radius: 8px;
+      }
+      .trust-box p {
+        margin: 6px 0 0;
+        color: var(--text-muted);
+        font-size: 12px;
+      }
+      .danger-text {
+        margin-top: 12px;
+        background: transparent;
+        border: 0;
+        color: var(--danger);
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .hidden {
+        display: none;
+      }
+      .decision {
+        padding: 14px 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin-top: 12px;
+      }
+      .decision h4 {
+        margin: 0 0 6px;
+        font-size: 14px;
+        color: var(--text-primary);
+      }
+    </style>
+  </head>
+  <body>
+    <p class="proto-note">
+      <strong>低保真原型 · 待拍板</strong>
+      ｜ 对象：算台「能力」页（Skill 管理）。目的：把当前双栏 master-detail 改为与成果/知识页同一套
+      860px 页面骨架 + 卡片/列表双模式，使其回到 AI 工作台的整体气质。本文件只用于评审结构与密度，
+      不含真实数据与交互逻辑；拍板后才落实现代码。评审方式：浏览器直接打开本文件。
+    </p>
+    <main>
+      <h1>能力页改版：回到统一骨架 + 卡片/列表双模式</h1>
+      <p>
+        现状问题：① 自定义两列网格，未走 docs/10 §8.3 的 860px
+        版心，是继设置页之后事实上的第二个特例；② 左列表右详情的 master-detail
+        形态与成果、知识页的「浏览 → 进入详情」不一致；③ 四个状态 chip
+        挤在列表行尾，窄屏只能整体隐藏，信息反而丢失。参考：腾讯 WorkBuddy 的专家卡片墙、ClawBible
+        桌面/云端的卡片列表可切换模式。
+      </p>
+
+      <h2>一、可交互结构原型</h2>
+      <div class="app" data-mode="card" id="app">
+        <div class="page-header">
+          <div class="titles" id="titles">
+            <p class="eyebrow">能力 · Skill</p>
+            <h3>管理可复用的工作方法</h3>
+          </div>
+          <div class="actions" id="actions">
+            <button class="back-button hidden" id="back" type="button">← 返回</button>
+            <div class="segmented" id="segmented" role="group" aria-label="视图模式">
+              <button type="button" aria-pressed="true" data-mode="card">卡片</button>
+              <button type="button" aria-pressed="false" data-mode="list">列表</button>
+            </div>
+            <button class="primary-button" type="button">＋ 导入 Skill</button>
+          </div>
+        </div>
+
+        <div class="page-body">
+          <section id="browse">
+            <div class="grid">
+              <div class="card" data-open="1">
+                <div class="head">
+                  <span class="mark">P</span>
+                  <div>
+                    <strong>ppt-generation-expert</strong>
+                    <small>用户 · 修订 v20260907</small>
+                  </div>
+                </div>
+                <p class="desc">
+                  只做公司模板 PPT：AI 编写规范化 SVG，编译为 PowerPoint
+                  原生可编辑形状，合入已注册公司模板版式交付。
+                </p>
+                <div class="chips">
+                  <span class="chip">用户</span>
+                  <span class="chip warn">需复核</span>
+                  <span class="chip on">已启用</span>
+                  <span class="chip">未准备</span>
+                </div>
+              </div>
+              <div class="card" data-open="1">
+                <div class="head">
+                  <span class="mark">研</span>
+                  <div>
+                    <strong>研究方法</strong>
+                    <small>内置 · 随包审查</small>
+                  </div>
+                </div>
+                <p class="desc">把资料检索、证据整理与结论归纳固定为可复用步骤的纯指令 Skill。</p>
+                <div class="chips">
+                  <span class="chip">内置</span>
+                  <span class="chip on">已信任</span>
+                  <span class="chip on">已启用</span>
+                  <span class="chip">未准备</span>
+                </div>
+              </div>
+            </div>
+            <div class="rows">
+              <div class="row" data-open="1">
+                <span class="mark">P</span>
+                <div class="main">
+                  <strong>ppt-generation-expert</strong>
+                  <small>只做公司模板 PPT：AI 编写规范化 SVG，编译为原生可编辑形状…</small>
+                </div>
+                <div class="chips">
+                  <span class="chip">用户</span>
+                  <span class="chip warn">需复核</span>
+                  <span class="chip on">已启用</span>
+                  <span class="chip">未准备</span>
+                </div>
+              </div>
+              <div class="row" data-open="1">
+                <span class="mark">研</span>
+                <div class="main">
+                  <strong>研究方法</strong>
+                  <small>把资料检索、证据整理与结论归纳固定为可复用步骤…</small>
+                </div>
+                <div class="chips">
+                  <span class="chip">内置</span>
+                  <span class="chip on">已信任</span>
+                  <span class="chip on">已启用</span>
+                  <span class="chip">未准备</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="detail" class="hidden">
+            <div class="detail-box">
+              <p class="eyebrow" style="margin: 0; font-size: 12px; color: var(--text-muted)">
+                用户 Skill
+              </p>
+              <h3 style="margin: 2px 0 6px; font-size: 20px">ppt-generation-expert</h3>
+              <p style="margin: 0">
+                只做公司模板 PPT：AI 编写规范化 SVG，编译为 PowerPoint
+                原生可编辑形状（零图片），合入已注册公司模板版式交付。
+              </p>
+              <div class="state-grid">
+                <div><span>来源</span><strong>用户</strong></div>
+                <div><span>信任</span><strong>需复核</strong></div>
+                <div><span>启用</span><strong>已启用</strong></div>
+                <div><span>环境</span><strong>未准备</strong></div>
+              </div>
+              <div class="trust-box">
+                <label><input type="checkbox" checked /> 受信任：允许在已授权范围内执行脚本</label>
+                <p>脚本以本机用户权限运行，信任不提供沙箱隔离。</p>
+              </div>
+              <button class="danger-text" type="button">删除 Skill</button>
+            </div>
+          </section>
+        </div>
+      </div>
+      <p>
+        说明：上方「卡片 / 列表」可真实切换，点任意卡片或行进入详情态，「←
+        返回」回到浏览态。切换与进入详情时
+        页头带标题坐标不变（§8.3），浏览区左上角锚点不变（切换不跳动）。运行配置草稿、可运行性清单与导出动作在详情态内
+        向下延续，原型从略。
+      </p>
+
+      <h2>二、与 docs/10 的映射</h2>
+      <table>
+        <tr>
+          <th>规范条款</th>
+          <th>现状</th>
+          <th>改版后</th>
+        </tr>
+        <tr>
+          <td>§8.3 统一页面骨架</td>
+          <td>自定义两列网格，事实上的第二个特例</td>
+          <td>
+            PageHeader + 860px 版心 ViewContainer，与成果/知识同构，<strong>不再需要特例</strong>
+          </td>
+        </tr>
+        <tr>
+          <td>§6.1.1 四项状态独立</td>
+          <td>列表行尾四个 chip，窄屏整体隐藏</td>
+          <td>卡片/列表均显四 chip；窄屏卡片降列、列表行只隐藏「环境」chip，详情始终完整</td>
+        </tr>
+        <tr>
+          <td>§8.2 响应规则</td>
+          <td>≤960px 两列挤压</td>
+          <td>≤960px 卡片单列、列表行折行，不缩字号</td>
+        </tr>
+        <tr>
+          <td>§11.5 反馈路由</td>
+          <td>已改走 TransientToast（2026-09-08）</td>
+          <td>不变</td>
+        </tr>
+        <tr>
+          <td>§12 无障碍</td>
+          <td>双栏各自滚动区</td>
+          <td>卡片/列表项均为可聚焦按钮，焦点环沿用 :focus-visible</td>
+        </tr>
+      </table>
+
+      <h2>三、拍板点（均附推荐）</h2>
+      <div class="decision">
+        <h4>D1 详情承载方式</h4>
+        <p>
+          <span class="rec">推荐：同页详情态 + PageHeader 返回键</span>（与成果页「列表 →
+          预览」一致，信任/配置/删除都在主区，窄屏不丢信息）。备选：右侧
+          Sheet（与模型编辑一致，但信任与删除属高风险动作，放浮层弱化其地位）；保留双栏（维持现状问题）。
+        </p>
+      </div>
+      <div class="decision">
+        <h4>D2 卡片状态密度</h4>
+        <p>
+          <span class="rec">推荐：四 chip 全显</span>（来源/信任/启用/环境，呼应
+          ADR-0011「不得用单一开关混同」）。备选：只显信任+启用（更安静，但环境未准备这一关键阻塞被藏进详情）。
+        </p>
+      </div>
+      <div class="decision">
+        <h4>D3 页头操作区组成</h4>
+        <p>
+          <span class="rec">推荐：分段切换 + 导入主按钮一排，首版不做搜索</span>（Skill
+          数量级为个位到几十，搜索是过早设计）。备选：加搜索框（与 WorkBuddy
+          顶部搜索同构，等数量上来再加）。
+        </p>
+      </div>
+      <div class="decision">
+        <h4>D4 模式偏好持久化</h4>
+        <p>
+          <span class="rec">推荐：写入 localStorage，与侧栏折叠同机制</span
+          >，下次启动保持上次模式。备选：每次默认卡片（更简单，但重复操作成本回到用户身上）。
+        </p>
+      </div>
+    </main>
+    <script>
+      const app = document.getElementById('app');
+      const browse = document.getElementById('browse');
+      const detail = document.getElementById('detail');
+      const back = document.getElementById('back');
+      const segmented = document.getElementById('segmented');
+      segmented.addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-mode]');
+        if (!button) return;
+        app.dataset.mode = button.dataset.mode;
+        for (const item of segmented.querySelectorAll('button')) {
+          item.setAttribute('aria-pressed', String(item === button));
+        }
+      });
+      const showDetail = () => {
+        browse.classList.add('hidden');
+        detail.classList.remove('hidden');
+        back.classList.remove('hidden');
+        segmented.classList.add('hidden');
+      };
+      const showBrowse = () => {
+        detail.classList.add('hidden');
+        browse.classList.remove('hidden');
+        back.classList.add('hidden');
+        segmented.classList.remove('hidden');
+      };
+      for (const item of document.querySelectorAll('[data-open]')) {
+        item.addEventListener('click', showDetail);
+      }
+      back.addEventListener('click', showBrowse);
+    </script>
+  </body>
+</html>

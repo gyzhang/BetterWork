@@ -109,6 +109,10 @@ const parseFrontmatter = (content: string): SkillFrontmatter => {
   return value as SkillFrontmatter;
 };
 
+/** macOS / Windows 资源管理器的元数据不是 Skill 内容：不计入 hash、不复制。 */
+const isOperatingSystemMetadata = (name: string): boolean =>
+  name === '.DS_Store' || name === 'Thumbs.db' || name === 'desktop.ini' || name.startsWith('._');
+
 const readPackage = async (
   sourceRoot: string,
 ): Promise<{ files: SkillFile[]; frontmatter: SkillFrontmatter }> => {
@@ -120,6 +124,7 @@ const readPackage = async (
   const visit = async (directory: string): Promise<void> => {
     const entries = await readdir(directory, { withFileTypes: true });
     for (const entry of entries) {
+      if (!entry.isDirectory() && isOperatingSystemMetadata(entry.name)) continue;
       if (entry.isSymbolicLink())
         throw new Error(`Skill package cannot contain symbolic links: ${entry.name}`);
       if (!entry.isDirectory() && !entry.isFile()) {
