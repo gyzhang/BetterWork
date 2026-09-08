@@ -317,6 +317,10 @@ export class SkillRepository {
     );
   }
 
+  delete(id: string): boolean {
+    return this.db.prepare('DELETE FROM skills WHERE id = ?').run(id).changes > 0;
+  }
+
   setTrustPreference(id: string, preference: SkillTrustPreference): boolean {
     if (!this.getRow(id)) return false;
     this.db

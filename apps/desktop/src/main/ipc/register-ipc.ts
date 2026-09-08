@@ -16,6 +16,7 @@ import {
   createdTaskSchema,
   createTaskRequestSchema,
   deletedResultSchema,
+  deleteSkillRequestSchema,
   evidenceSummarySchema,
   exportMarkdownArtifactRequestSchema,
   exportMarkdownArtifactResultSchema,
@@ -605,6 +606,12 @@ function registerSkillChannels(deps: IpcDependencies): void {
       const filePath = await skillService.exportDirectory(input.skillId, result.filePath);
       return { cancelled: false, filePath };
     },
+  );
+  handleInput(
+    IpcChannel.DeleteSkill,
+    deleteSkillRequestSchema,
+    deletedResultSchema,
+    async (input) => ({ deleted: await skillService.deleteUserSkill(input.skillId) }),
   );
 }
 

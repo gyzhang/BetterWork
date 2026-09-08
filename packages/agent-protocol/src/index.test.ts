@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  deleteSkillRequestSchema,
   exportMarkdownArtifactRequestSchema,
   importSkillRequestSchema,
   runtimeProfileDraftSchema,
@@ -129,6 +130,13 @@ describe('skill management protocol', () => {
         outputContract: {},
         extra: 1,
       }),
+    ).toThrow();
+  });
+
+  it('limits Skill deletion to an application-owned identifier', () => {
+    expect(deleteSkillRequestSchema.parse({ skillId: 'skill-1' })).toEqual({ skillId: 'skill-1' });
+    expect(() =>
+      deleteSkillRequestSchema.parse({ skillId: 'skill-1', sourcePath: '/tmp' }),
     ).toThrow();
   });
 });

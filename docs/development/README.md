@@ -53,7 +53,7 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | A03 | 本地目录导入与资源定位 | A02 | done | [SkillService 测试](../../apps/desktop/src/main/services/skill-service.test.ts)，2026-09-08 |
 | A04 | 内置来源、信任与用户副本 | A03 | done | [SkillService 测试](../../apps/desktop/src/main/services/skill-service.test.ts)，2026-09-08 |
 | A05 | 管理 IPC/Preload 接线 | A04 | done | [IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)，2026-09-08 21:56 |
-| A06 | Skill 管理界面及 A1 验收 | A05 | blocked | [组件测试](../../apps/desktop/src/renderer/src/views/SkillsView.test.tsx)，2026-09-08；删除能力缺少 A05 协议/IPC |
+| A06 | Skill 管理界面及 A1 验收 | A05 | done | [界面测试](../../apps/desktop/src/renderer/src/views/SkillsView.test.tsx)、[Skill 服务测试](../../apps/desktop/src/main/services/skill-service.test.ts)、[协议测试](../../packages/agent-protocol/src/index.test.ts)，2026-09-08 |
 | A07 | 执行协议、执行记录及生命周期接口 | A06 | todo | — |
 | A08 | macOS 进程组 supervisor | A07 | todo | — |
 | A09 | Windows Job supervisor | A08 | todo | — |

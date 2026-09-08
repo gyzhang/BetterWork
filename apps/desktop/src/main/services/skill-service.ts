@@ -433,4 +433,18 @@ export class SkillService {
     );
     return target;
   }
+
+  async deleteUserSkill(skillId: string): Promise<boolean> {
+    const skill = this.store.skills.get(skillId);
+    if (!skill) throw new Error('Skill does not exist');
+    if (skill.sourceKind !== 'user')
+      throw new Error('Builtin Skill cannot be deleted; copy it first');
+    const resourceRoot = await this.resolveResourceRoot(skill);
+    if (!(await stat(resourceRoot)).isDirectory())
+      throw new Error('Skill resource is not a directory');
+    const deleted = this.store.skills.delete(skillId);
+    if (deleted)
+      await rm(path.join(this.roots.userRoot, skillId), { recursive: true, force: true });
+    return deleted;
+  }
 }

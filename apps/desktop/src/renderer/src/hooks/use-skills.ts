@@ -20,6 +20,7 @@ export interface SkillsState {
   setEnabled: (skill: SkillSummary, enabled: boolean) => void;
   copy: (skill: SkillSummary) => void;
   exportSkill: (skill: SkillSummary) => void;
+  deleteSkill: (skill: SkillSummary) => Promise<void>;
   saveProfile: (skillId: string, profile: RuntimeProfileDraft) => Promise<void>;
   clearError: () => void;
 }
@@ -137,6 +138,13 @@ export function useSkills(): SkillsState {
       '导出 Skill 失败，请重试。',
     );
   }, []);
+  const deleteSkill = useCallback(async (skill: SkillSummary): Promise<void> => {
+    await window.betterwork.skills.delete({ skillId: skill.id });
+    setSkills((current) => current.filter((item) => item.id !== skill.id));
+    setSelected(undefined);
+    setSelectedId(undefined);
+    setMessage('Skill 已删除。');
+  }, []);
   const saveProfile = useCallback(
     async (skillId: string, profile: RuntimeProfileDraft): Promise<void> => {
       const result = await window.betterwork.skills.saveRuntimeProfile({ skillId, profile });
@@ -165,6 +173,7 @@ export function useSkills(): SkillsState {
     setEnabled,
     copy,
     exportSkill,
+    deleteSkill,
     saveProfile,
     clearError: () => setError(''),
   };
