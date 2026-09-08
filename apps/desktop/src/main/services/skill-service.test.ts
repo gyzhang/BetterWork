@@ -185,5 +185,56 @@ describe('SkillService', () => {
     expect(store.skills.get(imported.skill.id)?.trustStatus).toBe('revoked');
     store.close();
   });
+
+  it('deletes a user Skill resource and cascades its database records', async () => {
+    const directory = temporaryDirectory();
+    const source = path.join(directory, 'user-source');
+    mkdirSync(source, { recursive: true });
+    writeFileSync(path.join(source, 'SKILL.md'), '# user skill');
+    const roots = rootsFor(directory);
+    const store = AppStore.open(path.join(directory, 'app.sqlite'));
+    const service = new SkillService(store, roots);
+    const imported = await service.importDirectory(source);
+
+    await expect(service.deleteUserSkill(imported.skill.id)).resolves.toBe(true);
+    expect(store.skills.get(imported.skill.id)).toBeUndefined();
+    expect(existsSync(path.join(roots.userRoot, imported.skill.id))).toBe(false);
+    store.close();
+  });
+
+  it('does not delete built-in Skills', async () => {
+    const directory = temporaryDirectory();
+    const roots = rootsFor(directory);
+    const builtin = path.join(roots.developmentBuiltinRoot, 'example');
+    mkdirSync(builtin, { recursive: true });
+    const content = '---\nname: Example\n---\nbody';
+    writeFileSync(path.join(builtin, 'SKILL.md'), content);
+    const store = AppStore.open(path.join(directory, 'app.sqlite'));
+    const service = new SkillService(store, roots);
+    await service.registerBuiltinRelease({
+      formatVersion: 1,
+      skills: [
+        {
+          skillId: 'builtin-example',
+          resourceName: 'example',
+          name: 'Example',
+          description: 'Example',
+          contentHash: contentHash(content),
+          profileHash: 'profile',
+          dependencyFingerprint: 'dependencies',
+          scopeHash: 'scope',
+          profile: {
+            commands: [],
+            environmentRequirements: [],
+            outputContract: { outputPaths: [] },
+          },
+        },
+      ],
+    });
+
+    await expect(service.deleteUserSkill('builtin-example')).rejects.toThrow(/cannot be deleted/iu);
+    expect(existsSync(path.join(builtin, 'SKILL.md'))).toBe(true);
+    store.close();
+  });
 });
 import { createHash } from 'node:crypto';

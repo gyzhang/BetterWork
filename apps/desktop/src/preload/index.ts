@@ -2,6 +2,8 @@ import type { BetterWorkDesktopApi } from '@betterwork/agent-protocol';
 import {
   agentRuntimeEventSchema,
   copySkillRequestSchema,
+  deletedResultSchema,
+  deleteSkillRequestSchema,
   exportSkillRequestSchema,
   getSkillRequestSchema,
   importSkillRequestSchema,
@@ -156,6 +158,12 @@ const api: BetterWorkDesktopApi = {
         IpcChannel.ExportSkill,
         exportSkillRequestSchema.parse(input),
         skillExportResultSchema,
+      ),
+    delete: (input) =>
+      invokeValidated(
+        IpcChannel.DeleteSkill,
+        deleteSkillRequestSchema.parse(input),
+        deletedResultSchema,
       ),
   },
 };

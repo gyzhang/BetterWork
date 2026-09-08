@@ -137,6 +137,7 @@ function SkillDetail({ state }: { state: SkillsState }): React.JSX.Element {
   const [profileText, setProfileText] = useState(initialProfile);
   const [profileError, setProfileError] = useState('');
   const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   useEffect(() => {
     setProfileText(initialProfile);
     setProfileError('');
@@ -258,6 +259,18 @@ function SkillDetail({ state }: { state: SkillsState }): React.JSX.Element {
           试运行（A07 后开放）
         </button>
       </div>
+      <div className="skill-detail-section">
+        <h3>本地 Skill</h3>
+        <p>删除会移除受管用户副本及其本地配置，不能恢复。</p>
+        <button
+          type="button"
+          className="danger-text"
+          disabled={skill.sourceKind === 'builtin'}
+          onClick={() => setConfirmDelete(true)}
+        >
+          删除 Skill
+        </button>
+      </div>
       {confirmRevoke && (
         <ConfirmationDialog
           title="撤销 Skill 信任？"
@@ -267,6 +280,18 @@ function SkillDetail({ state }: { state: SkillsState }): React.JSX.Element {
           onConfirm={() => {
             setConfirmRevoke(false);
             state.revokeTrust(skill);
+          }}
+        />
+      )}
+      {confirmDelete && (
+        <ConfirmationDialog
+          title="删除这个 Skill？"
+          detail="将删除用户 Skill 的受管副本和配置。内置 Skill 不能删除，请使用复制并编辑。"
+          confirmLabel="删除 Skill"
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={() => {
+            setConfirmDelete(false);
+            reportAction(state.deleteSkill(skill), state.clearError, '删除 Skill 失败，请重试。');
           }}
         />
       )}

@@ -222,6 +222,9 @@ export const exportSkillRequestSchema = z
   .strict();
 export type ExportSkillRequest = z.infer<typeof exportSkillRequestSchema>;
 
+export const deleteSkillRequestSchema = z.object({ skillId: skillIdSchema }).strict();
+export type DeleteSkillRequest = z.infer<typeof deleteSkillRequestSchema>;
+
 export const importSkillRequestSchema = z.object({}).strict();
 export type ImportSkillRequest = z.infer<typeof importSkillRequestSchema>;
 
@@ -770,6 +773,7 @@ export const IpcChannel = {
   SetSkillEnabled: 'skill:set-enabled',
   CopySkill: 'skill:copy',
   ExportSkill: 'skill:export',
+  DeleteSkill: 'skill:delete',
   UpdateWindowTheme: 'window:update-theme',
   WindowToggleMaximize: 'window:toggle-maximize',
   ListNotifications: 'notification:list',
@@ -852,5 +856,6 @@ export interface BetterWorkDesktopApi {
     setEnabled(input: SetSkillEnabledRequest): Promise<SkillMutationResult>;
     copy(input: CopySkillRequest): Promise<SkillMutationResult>;
     export(input: ExportSkillRequest): Promise<SkillExportResult>;
+    delete(input: DeleteSkillRequest): Promise<{ deleted: boolean }>;
   };
 }
