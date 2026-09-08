@@ -24,3 +24,23 @@ export const mergeRunEvents = (
   for (const event of incremental) byId.set(event.id, event);
   return [...byId.values()].sort((left, right) => left.sequence - right.sequence);
 };
+
+/** 从事件列表中提取助手回复文本（拼接所有 message.delta）。 */
+export const extractAssistantText = (events: AgentRuntimeEvent[]): string =>
+  events
+    .filter(
+      (event): event is Extract<AgentRuntimeEvent, { type: 'message.delta' }> =>
+        event.type === 'message.delta',
+    )
+    .map((event) => event.delta)
+    .join('')
+    .trim();
+
+/** 从事件列表中提取已完成的工具调用卡片。 */
+export const extractCompletedTools = (
+  events: AgentRuntimeEvent[],
+): Array<Extract<AgentRuntimeEvent, { type: 'tool.completed' | 'tool.failed' }>> =>
+  events.filter(
+    (event): event is Extract<AgentRuntimeEvent, { type: 'tool.completed' | 'tool.failed' }> =>
+      event.type === 'tool.completed' || event.type === 'tool.failed',
+  );
