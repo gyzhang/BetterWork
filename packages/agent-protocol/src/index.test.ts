@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
   deleteSkillRequestSchema,
+  dependencyLockSchema,
+  dependencyOperationSchema,
   exportMarkdownArtifactRequestSchema,
   importSkillRequestSchema,
   jobResultSchema,
   jobSpecSchema,
+  runtimeEnvironmentSchema,
   runtimeProfileDraftSchema,
   scriptExecutionSchema,
   setSkillTrustRequestSchema,
@@ -224,5 +227,107 @@ describe('script execution protocol', () => {
     expect(
       scriptExecutionSchema.parse({ ...execution, status: 'failed', reason: 'cleanup-failed' }),
     ).toMatchObject({ reason: 'cleanup-failed' });
+  });
+});
+
+describe('dependency and environment protocol', () => {
+  const wheelHash = 'a'.repeat(64);
+  const lock = {
+    lockVersion: 1,
+    platform: { os: 'darwin', arch: 'arm64', abi: 'cp312' },
+    pythonRequirement: '3.12',
+    packages: [
+      {
+        name: 'python-pptx',
+        version: '1.0.2',
+        wheel: 'python_pptx-1.0.2-py3-none-any.whl',
+        sha256: wheelHash,
+        source: 'wheelhouse',
+      },
+    ],
+    importProbes: ['pptx'],
+  };
+
+  it('accepts a fully pinned lock and rejects loose or unhashed entries', () => {
+    expect(dependencyLockSchema.parse(lock)).toEqual(lock);
+    expect(() => dependencyLockSchema.parse({ ...lock, lockVersion: 2 })).toThrow();
+    expect(() =>
+      dependencyLockSchema.parse({
+        ...lock,
+        packages: [{ ...lock.packages[0], sha256: 'not-a-hash' }],
+      }),
+    ).toThrow();
+    expect(() =>
+      dependencyLockSchema.parse({
+        ...lock,
+        packages: [{ ...lock.packages[0], source: 'any-index' }],
+      }),
+    ).toThrow();
+  });
+
+  it('only approves https origins without embedded credentials', () => {
+    const approved = {
+      ...lock,
+      packages: [
+        { ...lock.packages[0], source: 'approved-index', origin: 'https://pypi.org/simple' },
+      ],
+    };
+    expect(dependencyLockSchema.parse(approved).packages[0]).toMatchObject({
+      source: 'approved-index',
+    });
+    for (const origin of [
+      'http://pypi.org/simple',
+      'file:///wheels',
+      'https://user:pass@pypi.org/simple',
+    ]) {
+      expect(() =>
+        dependencyLockSchema.parse({
+          ...lock,
+          packages: [{ ...lock.packages[0], source: 'approved-index', origin }],
+        }),
+      ).toThrow();
+    }
+  });
+
+  it('keeps environment and operation status vocabularies closed', () => {
+    const environment = {
+      id: 'env-1',
+      environmentKey: 'key-1',
+      base: { kind: 'local', path: '/usr/bin/python3', version: '3.12.14' },
+      platform: { os: 'darwin', arch: 'arm64', abi: 'cp312' },
+      lockHash: 'hash-1',
+      lock,
+      pathKey: 'environments/key-1/instance-1',
+      status: 'preparing',
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    expect(runtimeEnvironmentSchema.parse(environment)).toEqual(environment);
+    expect(() => runtimeEnvironmentSchema.parse({ ...environment, status: 'broken' })).toThrow();
+    expect(() =>
+      runtimeEnvironmentSchema.parse({
+        ...environment,
+        base: { kind: 'managed', distributionId: 'd', version: '3.12.14', sha256: 'short' },
+      }),
+    ).toThrow();
+    expect(
+      runtimeEnvironmentSchema.parse({
+        ...environment,
+        base: { kind: 'managed', distributionId: 'd', version: '3.12.14', sha256: wheelHash },
+      }).base,
+    ).toMatchObject({ kind: 'managed' });
+
+    const operation = {
+      id: 'op-1',
+      environmentId: 'env-1',
+      environmentKey: 'key-1',
+      kind: 'prepare',
+      status: 'running',
+      step: 'install-packages',
+      createdAt: 1,
+    };
+    expect(dependencyOperationSchema.parse(operation)).toEqual(operation);
+    expect(() => dependencyOperationSchema.parse({ ...operation, status: 'done' })).toThrow();
+    expect(() => dependencyOperationSchema.parse({ ...operation, step: 'pip-install' })).toThrow();
   });
 });

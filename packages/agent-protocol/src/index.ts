@@ -251,6 +251,138 @@ export const skillImportResultSchema = z
   .strict();
 export type SkillImportResult = z.infer<typeof skillImportResultSchema>;
 
+/** 环境键的平台维度：OS/架构/ABI 任一不同都不能复用同一个环境。 */
+export const targetPlatformSchema = z
+  .object({
+    os: z.enum(['darwin', 'win32', 'linux']),
+    arch: z.enum(['arm64', 'x64']),
+    /** CPython ABI 标签，例如 `cp312`；包锁与解释器必须一致。 */
+    abi: z.string().trim().min(1).max(40),
+  })
+  .strict();
+export type TargetPlatform = z.infer<typeof targetPlatformSchema>;
+
+/**
+ * 基础解释器：默认是算台管理的固定发行制品（带真实校验值），
+ * 高级选项是用户选择的本机解释器；两者都只作为 venv 的基础，绝不修改其全局 site-packages。
+ */
+export const baseInterpreterSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('managed'),
+      distributionId: z.string().min(1),
+      version: z.string().min(1),
+      sha256: z.string().regex(/^[0-9a-f]{64}$/u),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('local'),
+      path: z.string().min(1),
+      version: z.string().min(1),
+    })
+    .strict(),
+]);
+export type BaseInterpreter = z.infer<typeof baseInterpreterSchema>;
+
+export const dependencyLockPackageSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200),
+    version: z.string().trim().min(1).max(80),
+    wheel: z.string().trim().min(1).max(300),
+    sha256: z.string().regex(/^[0-9a-f]{64}$/u),
+    /** 只允许两个已批准来源：随包 wheelhouse（离线）与显式批准的 https 索引。 */
+    source: z.enum(['wheelhouse', 'approved-index']),
+    origin: z
+      .string()
+      .trim()
+      .refine((value) => value.startsWith('https://'), {
+        message: 'Approved index origin must be an https URL without credentials',
+      })
+      .refine((value) => !value.includes('@'), {
+        message: 'Approved index origin must not embed credentials',
+      })
+      .optional(),
+  })
+  .strict();
+export type DependencyLockPackage = z.infer<typeof dependencyLockPackageSchema>;
+
+export const dependencyLockSchema = z
+  .object({
+    lockVersion: z.literal(1),
+    platform: targetPlatformSchema,
+    /** 基础解释器必须满足的版本前缀，例如 `3.12`。 */
+    pythonRequirement: z.string().trim().min(1).max(40),
+    packages: z.array(dependencyLockPackageSchema).max(500),
+    /** ready 之前必须成功 import 的模块；缺一项都不能标 ready。 */
+    importProbes: z.array(z.string().trim().min(1).max(200)).max(200),
+  })
+  .strict();
+export type DependencyLock = z.infer<typeof dependencyLockSchema>;
+
+export const runtimeEnvironmentSchema = z
+  .object({
+    id: z.string().min(1),
+    /** 基础解释器指纹 + 平台 + 完整包锁 hash 派生；只有完全相同才共享环境。 */
+    environmentKey: z.string().min(1),
+    base: baseInterpreterSchema,
+    platform: targetPlatformSchema,
+    lockHash: z.string().min(1),
+    /** 本环境实际安装的依赖锁；健康检查的 import 探测与缺项展示都读它。 */
+    lock: dependencyLockSchema,
+    /** 相对受管资产根的最终目录键；Renderer 永远不构造绝对路径。 */
+    pathKey: z.string().min(1),
+    status: skillEnvironmentStatusSchema,
+    failureCode: z.string().min(1).optional(),
+    failureSummary: z.string().optional(),
+    createdAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+    readyAt: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+export type RuntimeEnvironment = z.infer<typeof runtimeEnvironmentSchema>;
+
+export const dependencyOperationKindSchema = z.enum(['prepare', 'repair']);
+export type DependencyOperationKind = z.infer<typeof dependencyOperationKindSchema>;
+
+export const dependencyOperationStatusSchema = z.enum([
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+  'cancelled',
+  'interrupted',
+]);
+export type DependencyOperationStatus = z.infer<typeof dependencyOperationStatusSchema>;
+
+export const dependencyOperationStepSchema = z.enum([
+  'resolve-interpreter',
+  'create-environment',
+  'install-packages',
+  'probe-imports',
+  'finalize',
+]);
+export type DependencyOperationStep = z.infer<typeof dependencyOperationStepSchema>;
+
+export const dependencyOperationSchema = z
+  .object({
+    id: z.string().min(1),
+    environmentId: z.string().min(1),
+    environmentKey: z.string().min(1),
+    kind: dependencyOperationKindSchema,
+    status: dependencyOperationStatusSchema,
+    step: dependencyOperationStepSchema.optional(),
+    /** 可展示进度文本；不写代理凭据、不写完整安装日志。 */
+    message: z.string().optional(),
+    failureCode: z.string().min(1).optional(),
+    failureSummary: z.string().optional(),
+    createdAt: z.number().int().nonnegative(),
+    startedAt: z.number().int().nonnegative().optional(),
+    finishedAt: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+export type DependencyOperation = z.infer<typeof dependencyOperationSchema>;
+
 export const scriptExecutionStatusSchema = z.enum([
   'queued',
   'running',
