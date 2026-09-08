@@ -21,6 +21,7 @@ import { Welcome } from './components/Welcome';
 import { useAppearance } from './hooks/use-appearance';
 import { useKnowledgeLibrary } from './hooks/use-knowledge-library';
 import { useModelSettings } from './hooks/use-model-settings';
+import { useSkills } from './hooks/use-skills';
 import {
   AlertIcon,
   ArrowUpIcon,
@@ -64,6 +65,7 @@ export function App(): React.JSX.Element {
   const refreshKnowledge = knowledge.refresh;
 
   const modelSettings = useModelSettings();
+  const skills = useSkills();
   const activeLanguageModel = modelSettings.activeLanguageModel;
   const refreshModels = modelSettings.refresh;
 
@@ -789,6 +791,7 @@ export function App(): React.JSX.Element {
             onMode={(mode) => setAppearanceValue({ ...appearance, mode })}
             onScheme={(scheme) => setAppearanceValue({ ...appearance, scheme })}
             modelMessage={modelSettings.message}
+            skills={skills}
           />
         )}
       </section>
