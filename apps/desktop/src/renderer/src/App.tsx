@@ -38,7 +38,12 @@ import { reportAction, trackAction } from './lib/async-action';
 import { formatTime } from './lib/format';
 import { runStatusName, toolStageLabel } from './lib/labels';
 import { buildResearchPrompt } from './lib/research-prompt';
-import { finalRunContent, mergeRunEvents } from './lib/run-events';
+import {
+  extractAssistantText,
+  extractCompletedTools,
+  finalRunContent,
+  mergeRunEvents,
+} from './lib/run-events';
 import { handleTitlebarDoubleClick } from './lib/titlebar';
 import { summarizeToolOutput } from './lib/tool-summary';
 import type { AppView, ContextTab, SettingsTab } from './lib/view-types';
@@ -76,10 +81,12 @@ export function App(): React.JSX.Element {
   const taskRunsRequestRef = useRef(0);
   const evidenceRequestRef = useRef(0);
   const [events, setEvents] = useState<AgentRuntimeEvent[]>([]);
+  const [taskAllRuns, setTaskAllRuns] = useState<RunSummary[]>([]);
+  const [taskAllEvents, setTaskAllEvents] = useState<Map<string, AgentRuntimeEvent[]>>(new Map());
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const [evidence, setEvidence] = useState<EvidenceSummary[]>([]);
   const [artifacts, setArtifacts] = useState<ArtifactSummary[]>([]);
   const [selectedArtifact, setSelectedArtifact] = useState<ArtifactDetail>();
-  const [sentPrompt, setSentPrompt] = useState('');
   const [artifactNote, setArtifactNote] = useState<{ tone: 'ok' | 'error'; text: string }>();
   // 跨视图的动作错误出口：开始任务、切换任务、停止执行、选择工作区等失败都在这里呈现，
   // 而不是像此前那样被 `void` 静默吞掉。
@@ -141,6 +148,24 @@ export function App(): React.JSX.Element {
   const refreshArtifacts = useCallback((): void => {
     trackAction(window.betterwork.artifacts.list().then(setArtifacts), '刷新成果列表');
   }, []);
+  const loadAllTaskRuns = useCallback((taskId: string): void => {
+    trackAction(
+      (async () => {
+        const allRuns = await window.betterwork.runs.list({ taskId });
+        const ordered = [...allRuns].sort((a, b) => a.createdAt - b.createdAt);
+        const eventsMap = new Map<string, AgentRuntimeEvent[]>();
+        await Promise.all(
+          ordered.map(async (run) => {
+            const runEvents = await window.betterwork.runs.listEvents({ runId: run.id });
+            eventsMap.set(run.id, runEvents);
+          }),
+        );
+        setTaskAllRuns(ordered);
+        setTaskAllEvents(eventsMap);
+      })(),
+      '加载任务全部执行记录',
+    );
+  }, []);
 
   useEffect(() => {
     refreshRuns();
@@ -159,6 +184,13 @@ export function App(): React.JSX.Element {
       setEvents((current) =>
         event.runId === activeRunIdRef.current ? [...current, event] : current,
       );
+      setTaskAllEvents((prev) => {
+        const existing = prev.get(event.runId);
+        if (!existing) return prev;
+        const next = new Map(prev);
+        next.set(event.runId, [...existing, event]);
+        return next;
+      });
       if (
         event.type === 'run.completed' ||
         event.type === 'run.failed' ||
@@ -169,6 +201,7 @@ export function App(): React.JSX.Element {
         refreshTasks();
         refreshEvidence();
         refreshArtifacts();
+        if (activeTaskIdRef.current) loadAllTaskRuns(activeTaskIdRef.current);
       }
     });
   }, [
@@ -179,26 +212,32 @@ export function App(): React.JSX.Element {
     refreshTasks,
     refreshTaskRuns,
     refreshEvidence,
+    loadAllTaskRuns,
   ]);
 
   useEffect(() => {
     window.localStorage.setItem('betterwork-sidebar-collapsed', String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
-  const assistantText = useMemo(
-    () =>
-      events
-        .filter(
-          (event): event is Extract<AgentRuntimeEvent, { type: 'message.delta' }> =>
-            event.type === 'message.delta',
-        )
-        .map((event) => event.delta)
-        .join(''),
-    [events],
-  );
-  const assistantDisplayText = assistantText.trim();
-  const completedRunContent = useMemo(() => finalRunContent(events), [events]);
+  useEffect(() => {
+    if (taskAllRuns.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [taskAllEvents, taskAllRuns.length]);
+
   const activeRun = runs.find((run) => run.id === activeRunId);
+  const latestCompletedRun = useMemo(() => {
+    for (let i = taskAllRuns.length - 1; i >= 0; i--) {
+      const run = taskAllRuns[i];
+      if (!run) continue;
+      const runEvents = taskAllEvents.get(run.id) ?? [];
+      if (runEvents.some((event) => event.type === 'run.completed')) {
+        const content = finalRunContent(runEvents);
+        if (content) return { id: run.id, content };
+      }
+    }
+    return undefined;
+  }, [taskAllRuns, taskAllEvents]);
   const isRunning =
     activeRun?.status === 'running' ||
     events.at(-1)?.type === 'run.started' ||
@@ -206,23 +245,8 @@ export function App(): React.JSX.Element {
       !events.some((event) =>
         ['run.completed', 'run.failed', 'run.cancelled'].includes(event.type),
       ));
-  const completedTools = events.filter(
-    (event) => event.type === 'tool.completed' || event.type === 'tool.failed',
-  );
-  // 终态事件只带 toolCallId，工具名要从 requested/started 事件里取回，
-  // 才能给出「查阅个人资料」这种用户能读懂的阶段名与摘要。
-  const toolNameById = useMemo(() => {
-    const names = new Map<string, string>();
-    for (const event of events) {
-      if (event.type === 'tool.requested' || event.type === 'tool.started') {
-        names.set(event.toolCall.id, event.toolCall.name);
-      }
-    }
-    return names;
-  }, [events]);
   const activityGroups = useMemo(() => deriveActivityGroups(events), [events]);
   const currentTaskArtifacts = artifacts.filter((artifact) => artifact.taskId === activeTask?.id);
-  const isCompletedRun = events.some((event) => event.type === 'run.completed');
 
   const startNewTask = (): void => {
     runSelectionRequestRef.current += 1;
@@ -233,7 +257,6 @@ export function App(): React.JSX.Element {
     setTaskRuns([]);
     setEvidence([]);
     setEvents([]);
-    setSentPrompt('');
     setPrompt('');
     setArtifactNote(undefined);
     setView('work');
@@ -261,11 +284,24 @@ export function App(): React.JSX.Element {
     activeRunIdRef.current = result.runId;
     setActiveRunId(result.runId);
     setEvents([]);
-    setSentPrompt(goal);
     setPrompt('');
     setArtifactNote(undefined);
     setContextTab('process');
     setContextOpen(true);
+    const newRun: RunSummary = {
+      id: result.runId,
+      taskId: task.id,
+      sessionId: task.sessionId,
+      prompt,
+      status: 'running',
+      createdAt: Date.now(),
+    };
+    setTaskAllRuns((prev) => [...prev, newRun]);
+    setTaskAllEvents((prev) => {
+      const next = new Map(prev);
+      next.set(result.runId, []);
+      return next;
+    });
     refreshRuns();
     refreshTaskRuns(task.id);
     refreshTasks();
@@ -291,7 +327,6 @@ export function App(): React.JSX.Element {
     activeTaskIdRef.current = run.taskId;
     setActiveRunId(run.id);
     setActiveTask({ id: run.taskId, sessionId: run.sessionId, title: run.prompt.slice(0, 80) });
-    setSentPrompt(run.prompt.trim());
     setPrompt('');
     setArtifactNote(undefined);
     setEvents([]);
@@ -300,36 +335,32 @@ export function App(): React.JSX.Element {
     setEvents((current) => mergeRunEvents(snapshot, current));
     refreshTaskRuns(run.taskId);
     refreshEvidence(run.taskId);
+    loadAllTaskRuns(run.taskId);
     setView('work');
   };
   const selectTask = async (task: RecentTaskSummary): Promise<void> => {
-    if (task.latestRun) {
-      await selectRun(task.latestRun);
-      return;
-    }
     runSelectionRequestRef.current += 1;
     activeRunIdRef.current = undefined;
     activeTaskIdRef.current = task.id;
     setActiveRunId(undefined);
     setActiveTask({ id: task.id, sessionId: task.sessionId, title: task.title });
-    setSentPrompt(task.goal);
     setPrompt('');
     setArtifactNote(undefined);
     setEvents([]);
-    refreshTaskRuns(task.id);
+    loadAllTaskRuns(task.id);
     refreshEvidence(task.id);
     setView('work');
   };
   const saveCurrentArtifact = async (): Promise<void> => {
-    if (!activeTask || !activeRunId || !completedRunContent) return;
+    if (!activeTask || !latestCompletedRun) return;
     try {
       const artifact = await window.betterwork.artifacts.saveMarkdown({
         ...(currentTaskArtifacts[0] ? { artifactId: currentTaskArtifacts[0].id } : {}),
         taskId: activeTask.id,
         origin: 'assistant-run',
-        runId: activeRunId,
+        runId: latestCompletedRun.id,
         title: activeTask.title,
-        content: completedRunContent,
+        content: latestCompletedRun.content,
       });
       setArtifactNote({
         tone: 'ok',
@@ -545,7 +576,7 @@ export function App(): React.JSX.Element {
           <>
             <PageHeader
               eyebrow="工作"
-              title={activeRun ? '继续完成任务' : '开始一件工作'}
+              title={taskAllRuns.length > 0 || activeRun ? '继续完成任务' : '开始一件工作'}
               actions={
                 <button className="context-toggle" onClick={() => setContextOpen((open) => !open)}>
                   {contextOpen ? '收起上下文' : '查看上下文'}
@@ -555,61 +586,106 @@ export function App(): React.JSX.Element {
             <div className="workspace">
               <div className="messages">
                 <div className="page-body">
-                  {events.length === 0 && !activeRunId ? (
+                  {taskAllRuns.length === 0 && !activeRunId ? (
                     <Welcome setPrompt={setPrompt} />
                   ) : (
                     <>
-                      {
-                        <div className="message user">
-                          <span>你</span>
-                          <p>{sentPrompt}</p>
-                        </div>
-                      }
-                      {assistantDisplayText && (
-                        <div className="message assistant">
-                          <span>算台</span>
-                          <MarkdownPreview content={assistantDisplayText} />
-                        </div>
-                      )}
-                      {isCompletedRun && assistantDisplayText && (
-                        <div className="message-actions">
-                          <button
-                            className="message-action"
-                            onClick={() => trackAction(saveCurrentArtifact(), '保存成果')}
-                          >
-                            <ArtifactIcon size={13} />
-                            保存为成果
-                          </button>
-                          {artifactNote && (
-                            <span
-                              className={
-                                artifactNote.tone === 'ok' ? 'action-note ok' : 'action-note error'
-                              }
-                            >
-                              {artifactNote.text}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      {completedTools.map((event) => {
-                        const toolName = toolNameById.get(event.toolCallId);
-                        const failed = event.type === 'tool.failed';
+                      {taskAllRuns.map((run, idx) => {
+                        const runEvents = taskAllEvents.get(run.id) ?? [];
+                        const runAssistantText = extractAssistantText(runEvents);
+                        const runTools = extractCompletedTools(runEvents);
+                        const isRunActive = run.id === activeRunId;
+                        const runToolNameById = new Map<string, string>();
+                        for (const event of runEvents) {
+                          if (event.type === 'tool.requested' || event.type === 'tool.started') {
+                            runToolNameById.set(event.toolCall.id, event.toolCall.name);
+                          }
+                        }
+                        const runIsCompleted = runEvents.some(
+                          (event) => event.type === 'run.completed',
+                        );
+                        const isLatestCompleted =
+                          runIsCompleted &&
+                          run.id ===
+                            [...taskAllRuns].reverse().find((r) => {
+                              const evts = taskAllEvents.get(r.id) ?? [];
+                              return evts.some((event) => event.type === 'run.completed');
+                            })?.id;
+
                         return (
-                          <div className={failed ? 'tool-card failed' : 'tool-card'} key={event.id}>
-                            <div>
-                              <span className="tool-icon" aria-hidden="true">
-                                {failed ? <AlertIcon size={11} /> : <CheckIcon size={11} />}
-                              </span>
-                              <strong>
-                                {failed ? '工作步骤未完成' : toolStageLabel(toolName)}
-                              </strong>
+                          <div key={run.id} className="run-group">
+                            {idx > 0 && (
+                              <div className="run-divider">
+                                <span>{formatTime(run.createdAt)}</span>
+                              </div>
+                            )}
+                            <div className="message user">
+                              <span>你</span>
+                              <p>{run.prompt}</p>
                             </div>
-                            <p className="tool-summary">
-                              {failed ? event.error : summarizeToolOutput(toolName, event.output)}
-                            </p>
+                            {runAssistantText && (
+                              <div className="message assistant">
+                                <span>算台</span>
+                                <MarkdownPreview content={runAssistantText} />
+                              </div>
+                            )}
+                            {isLatestCompleted && runAssistantText && (
+                              <div className="message-actions">
+                                <button
+                                  className="message-action"
+                                  onClick={() => trackAction(saveCurrentArtifact(), '保存成果')}
+                                >
+                                  <ArtifactIcon size={13} />
+                                  保存为成果
+                                </button>
+                                {artifactNote && (
+                                  <span
+                                    className={
+                                      artifactNote.tone === 'ok'
+                                        ? 'action-note ok'
+                                        : 'action-note error'
+                                    }
+                                  >
+                                    {artifactNote.text}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {runTools.map((event) => {
+                              const toolName = runToolNameById.get(event.toolCallId);
+                              const failed = event.type === 'tool.failed';
+                              return (
+                                <div
+                                  className={failed ? 'tool-card failed' : 'tool-card'}
+                                  key={event.id}
+                                >
+                                  <div>
+                                    <span className="tool-icon" aria-hidden="true">
+                                      {failed ? <AlertIcon size={11} /> : <CheckIcon size={11} />}
+                                    </span>
+                                    <strong>
+                                      {failed ? '工作步骤未完成' : toolStageLabel(toolName)}
+                                    </strong>
+                                  </div>
+                                  <p className="tool-summary">
+                                    {failed
+                                      ? event.error
+                                      : summarizeToolOutput(toolName, event.output)}
+                                  </p>
+                                </div>
+                              );
+                            })}
+                            {isRunActive &&
+                              runEvents.length > 0 &&
+                              !runEvents.some((event) =>
+                                ['run.completed', 'run.failed', 'run.cancelled'].includes(
+                                  event.type,
+                                ),
+                              ) && <div className="run-running-indicator">正在执行…</div>}
                           </div>
                         );
                       })}
+                      <div ref={messagesEndRef} />
                     </>
                   )}
                 </div>

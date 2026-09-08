@@ -7,7 +7,7 @@ import {
   OpenAICompatibleProvider,
   ReActAgentEngine,
 } from '@betterwork/agent-core';
-import type { AgentRuntimeEvent, StartRunRequest } from '@betterwork/agent-protocol';
+import type { AgentMessage, AgentRuntimeEvent, StartRunRequest } from '@betterwork/agent-protocol';
 import { IpcChannel } from '@betterwork/agent-protocol';
 import {
   calculatorTool,
@@ -135,6 +135,7 @@ export class RunService {
         sessionId: input.sessionId,
         prompt: input.prompt,
         workspacePath,
+        messages: this.buildPreviousMessages(input.taskId, runId),
         model,
         tools: createRunTools({
           knowledgeSearch: (query) =>
@@ -165,6 +166,31 @@ export class RunService {
     const event = this.store.runs.forceFailure(runId, message, Date.now());
     if (!event) return;
     this.dispatch(event);
+  }
+
+  /**
+   * 把同一 Task 下早于当前 Run 的已完成对话轮次重建为消息历史，
+   * 只取用户提问与助手最终回复，跳过工具调用细节以避免跨 Run 的工具 ID 配对问题。
+   */
+  private buildPreviousMessages(taskId: string, currentRunId: string): AgentMessage[] {
+    const previousRuns = this.store.runs
+      .listByTask(taskId)
+      .filter((run) => run.status === 'completed' && run.id !== currentRunId);
+
+    const messages: AgentMessage[] = [];
+    for (const run of previousRuns) {
+      messages.push({ id: randomUUID(), role: 'user', content: run.prompt });
+
+      const events = this.store.runs.listEvents(run.id);
+      const completed = events.find(
+        (event): event is Extract<AgentRuntimeEvent, { type: 'message.completed' }> =>
+          event.type === 'message.completed',
+      );
+      if (completed?.content) {
+        messages.push({ id: randomUUID(), role: 'assistant', content: completed.content });
+      }
+    }
+    return messages;
   }
 
   /** 落库后再分发；顺序不可颠倒，否则 UI 可能看到库里还不存在的事件。 */

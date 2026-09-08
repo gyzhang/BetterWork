@@ -102,6 +102,14 @@ export class RunRepository {
     return rows.map(toSummary);
   }
 
+  /** 按时间正序返回 Task 下所有 Run，用于构建跨 Run 对话历史。 */
+  listByTask(taskId: string): RunSummary[] {
+    const rows = this.db
+      .prepare('SELECT * FROM runs WHERE task_id = ? ORDER BY created_at ASC')
+      .all(taskId) as RunRow[];
+    return rows.map(toSummary);
+  }
+
   listEvents(runId: string): AgentRuntimeEvent[] {
     const rows = this.db
       .prepare('SELECT payload FROM run_events WHERE run_id = ? ORDER BY sequence ASC')

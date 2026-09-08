@@ -195,7 +195,6 @@ export function ArtifactPage({
                     <textarea
                       value={content}
                       onChange={(event) => setContent(event.target.value)}
-                      rows={20}
                       required
                     />
                   </label>
