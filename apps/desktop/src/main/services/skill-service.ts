@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import type { SkillDetail } from '@betterwork/agent-protocol';
+import type { RuntimeProfileDraft, SkillDetail } from '@betterwork/agent-protocol';
 import { parse } from 'yaml';
 
 import { type AppStore } from '../persistence';
@@ -41,6 +41,28 @@ export interface SkillExportManifest {
   name: string;
   description: string;
   runtimeProfile?: SkillDetail['runtimeProfile'];
+}
+
+export interface BuiltinReleaseEntry {
+  skillId: string;
+  resourceName: string;
+  name: string;
+  description: string;
+  contentHash: string;
+  originalVersion?: string;
+  profileHash: string;
+  dependencyFingerprint: string;
+  scopeHash: string;
+  profile?: RuntimeProfileDraft;
+}
+
+export interface BuiltinReleaseManifest {
+  formatVersion: 1;
+  skills: BuiltinReleaseEntry[];
+}
+
+export interface SkillExecutionCanceller {
+  cancelForSkill(skillId: string): Promise<number>;
 }
 
 const isWithin = (root: string, target: string): boolean => {
@@ -214,14 +236,150 @@ export class SkillService {
     }
   }
 
-  resolveResourceRoot(skill: SkillDetail): string {
+  async resolveResourceRoot(skill: SkillDetail): Promise<string> {
     if (skill.sourceKind === 'user') return this.userRevisionRoot(skill);
-    const roots = [this.roots.developmentBuiltinRoot, this.roots.installedBuiltinRoot];
-    for (const root of roots) {
-      const candidate = path.resolve(root, skill.name);
-      if (isWithin(path.resolve(root), candidate)) return candidate;
+    return this.resolveBuiltinResource(skill.revision.resourceKey.replace(/^builtin\//u, ''));
+  }
+
+  private async resolveBuiltinResource(resourceName: string): Promise<string> {
+    for (const root of [this.roots.developmentBuiltinRoot, this.roots.installedBuiltinRoot]) {
+      const resolvedRoot = path.resolve(root);
+      const candidate = path.resolve(resolvedRoot, resourceName);
+      if (!isWithin(resolvedRoot, candidate))
+        throw new Error('Builtin resource path escapes its root');
+      try {
+        const info = await stat(candidate);
+        if (info.isDirectory()) return candidate;
+      } catch {
+        // Try the installed root after an absent development resource.
+      }
     }
-    throw new Error(`Built-in Skill resource is not available: ${skill.id}`);
+    throw new Error(`Builtin Skill resource is not available: ${resourceName}`);
+  }
+
+  async registerBuiltinRelease(manifest: BuiltinReleaseManifest): Promise<SkillDetail[]> {
+    if (manifest.formatVersion !== 1) throw new Error('Unsupported Skill release manifest version');
+    const registered: SkillDetail[] = [];
+    for (const entry of manifest.skills) {
+      const source = await this.resolveBuiltinResource(entry.resourceName);
+      const packageData = await readPackage(source);
+      const actualHash = hashFiles(packageData.files);
+      if (actualHash !== entry.contentHash) {
+        throw new Error(
+          `Builtin Skill content does not match its release manifest: ${entry.skillId}`,
+        );
+      }
+      const existing = this.store.skills.get(entry.skillId);
+      if (existing && existing.sourceKind !== 'builtin') {
+        throw new Error(`Builtin Skill ID conflicts with a user Skill: ${entry.skillId}`);
+      }
+      const preference = this.store.skills.getTrustPreference(entry.skillId);
+      this.store.transaction(() => {
+        this.store.skills.save({
+          id: entry.skillId,
+          name: entry.name,
+          description: entry.description,
+          sourceKind: 'builtin',
+          currentRevisionId: 'pending-revision',
+        });
+        const revisionId = this.store.skills.saveRevision({
+          skillId: entry.skillId,
+          contentHash: entry.contentHash,
+          ...(entry.originalVersion ? { originalVersion: entry.originalVersion } : {}),
+          resourceKey: `builtin/${entry.resourceName}`,
+          frontmatter: packageData.frontmatter,
+        });
+        let profileId: string | undefined;
+        if (entry.profile) {
+          profileId = this.store.skills.saveProfile({
+            skillId: entry.skillId,
+            profileHash: entry.profileHash,
+            profile: entry.profile,
+          });
+        }
+        this.store.skills.save({
+          id: entry.skillId,
+          name: entry.name,
+          description: entry.description,
+          sourceKind: 'builtin',
+          currentRevisionId: revisionId,
+          ...(profileId ? { currentProfileRevisionId: profileId } : {}),
+        });
+        if (preference !== 'revoked') {
+          this.store.skills.saveTrustGrant({
+            skillId: entry.skillId,
+            revisionId,
+            profileHash: entry.profileHash,
+            dependencyFingerprint: entry.dependencyFingerprint,
+            scopeHash: entry.scopeHash,
+            source: 'builtin-release',
+          });
+        }
+      });
+      const skill = this.store.skills.get(entry.skillId);
+      if (!skill) throw new Error(`Builtin Skill was not registered: ${entry.skillId}`);
+      registered.push(skill);
+    }
+    return registered;
+  }
+
+  async copyAsUser(skillId: string): Promise<ImportedSkill> {
+    const sourceSkill = this.store.skills.get(skillId);
+    if (!sourceSkill) throw new Error('Skill does not exist');
+    const source = await this.resolveResourceRoot(sourceSkill);
+    const packageData = await readPackage(source);
+    const contentHash = hashFiles(packageData.files);
+    const userSkillId = randomUUID();
+    const resourceRoot = await this.copyToStaging(packageData.files, userSkillId, contentHash);
+    const resourceKey = `user/${userSkillId}/revisions/${contentHash}`;
+    try {
+      this.store.transaction(() => {
+        this.store.skills.save({
+          id: userSkillId,
+          name: sourceSkill.name,
+          description: sourceSkill.description,
+          sourceKind: 'user',
+          currentRevisionId: 'pending-revision',
+        });
+        const revisionId = this.store.skills.saveRevision({
+          skillId: userSkillId,
+          contentHash,
+          ...(sourceSkill.revision.originalVersion
+            ? { originalVersion: sourceSkill.revision.originalVersion }
+            : {}),
+          resourceKey,
+          frontmatter: sourceSkill.revision.frontmatter,
+        });
+        const profileId = sourceSkill.runtimeProfile
+          ? this.store.skills.saveProfile({
+              skillId: userSkillId,
+              profileHash: sourceSkill.runtimeProfile.profileHash,
+              profile: sourceSkill.runtimeProfile.profile,
+            })
+          : undefined;
+        this.store.skills.save({
+          id: userSkillId,
+          name: sourceSkill.name,
+          description: sourceSkill.description,
+          sourceKind: 'user',
+          currentRevisionId: revisionId,
+          ...(profileId ? { currentProfileRevisionId: profileId } : {}),
+        });
+      });
+      const skill = this.store.skills.get(userSkillId);
+      if (!skill) throw new Error('User Skill copy was not registered');
+      return { skill, contentHash, resourceRoot };
+    } catch (error) {
+      await rm(resourceRoot, { recursive: true, force: true });
+      throw error;
+    }
+  }
+
+  async revokeTrust(skillId: string, canceller?: SkillExecutionCanceller): Promise<number> {
+    if (!this.store.skills.setTrustPreference(skillId, 'revoked')) {
+      throw new Error('Skill does not exist');
+    }
+    return canceller ? canceller.cancelForSkill(skillId) : 0;
   }
 
   async exportDirectory(skillId: string, destination: string): Promise<string> {
@@ -230,7 +388,7 @@ export class SkillService {
     const target = path.resolve(destination);
     const targetInfo = await stat(target).catch(() => undefined);
     if (targetInfo) throw new Error('Skill export destination already exists');
-    const source = this.resolveResourceRoot(skill);
+    const source = await this.resolveResourceRoot(skill);
     await copyDirectory(source, target);
     const manifest: SkillExportManifest = {
       formatVersion: 1,

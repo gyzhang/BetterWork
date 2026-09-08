@@ -14,7 +14,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { AppStore } from '../persistence';
-import { SkillService } from './skill-service';
+import { type BuiltinReleaseManifest, SkillService } from './skill-service';
 
 const temporaryDirectories: string[] = [];
 const temporaryDirectory = (): string => {
@@ -34,6 +34,9 @@ const rootsFor = (directory: string) => ({
   installedBuiltinRoot: path.join(directory, 'installed'),
   userRoot: path.join(directory, 'user-skills'),
 });
+
+const contentHash = (content: string): string =>
+  createHash('sha256').update('SKILL.md').update('\0').update(content).digest('hex');
 
 describe('SkillService', () => {
   it('imports a complete directory as an immutable user revision without executing it', async () => {
@@ -101,4 +104,86 @@ describe('SkillService', () => {
     expect(manifest.apiKey).toBeUndefined();
     store.close();
   });
+
+  it('verifies built-in release content, defaults trust, preserves overrides, and copies without grants', async () => {
+    const directory = temporaryDirectory();
+    const roots = rootsFor(directory);
+    const builtin = path.join(roots.developmentBuiltinRoot, 'example');
+    mkdirSync(builtin, { recursive: true });
+    const firstContent = '---\nname: Example\n---\nfirst';
+    writeFileSync(path.join(builtin, 'SKILL.md'), firstContent);
+    const manifest = (hash: string): BuiltinReleaseManifest => ({
+      formatVersion: 1,
+      skills: [
+        {
+          skillId: 'builtin-example',
+          resourceName: 'example',
+          name: 'Example',
+          description: 'A generic built-in example',
+          contentHash: hash,
+          profileHash: 'profile-1',
+          dependencyFingerprint: 'deps-1',
+          scopeHash: 'scope-1',
+          profile: {
+            commands: [],
+            environmentRequirements: [],
+            outputContract: { outputPaths: [] },
+          },
+        },
+      ],
+    });
+    const store = AppStore.open(path.join(directory, 'app.sqlite'));
+    const service = new SkillService(store, roots);
+    await expect(service.registerBuiltinRelease(manifest('wrong-hash'))).rejects.toThrow(
+      /does not match/iu,
+    );
+    expect(store.skills.get('builtin-example')).toBeUndefined();
+
+    await service.registerBuiltinRelease(manifest(contentHash(firstContent)));
+    expect(store.skills.get('builtin-example')).toMatchObject({
+      sourceKind: 'builtin',
+      trustStatus: 'trusted',
+    });
+    store.skills.setEnabled('builtin-example', false);
+    await service.revokeTrust('builtin-example');
+    const copied = await service.copyAsUser('builtin-example');
+    expect(copied.skill).toMatchObject({
+      sourceKind: 'user',
+      trustStatus: 'untrusted',
+      runtimeProfile: { profileHash: 'profile-1' },
+    });
+    expect(copied.skill.id).not.toBe('builtin-example');
+
+    const secondContent = '---\nname: Example\n---\nsecond';
+    writeFileSync(path.join(builtin, 'SKILL.md'), secondContent);
+    await service.registerBuiltinRelease(manifest(contentHash(secondContent)));
+    expect(store.skills.get('builtin-example')).toMatchObject({
+      enabled: false,
+      trustStatus: 'revoked',
+    });
+    store.close();
+  });
+
+  it('routes trust revocation to an injected canceller without inventing executions', async () => {
+    const directory = temporaryDirectory();
+    const source = path.join(directory, 'user-source');
+    mkdirSync(source, { recursive: true });
+    writeFileSync(path.join(source, 'SKILL.md'), '# user skill');
+    const roots = rootsFor(directory);
+    const store = AppStore.open(path.join(directory, 'app.sqlite'));
+    const service = new SkillService(store, roots);
+    const imported = await service.importDirectory(source);
+    const cancelled: string[] = [];
+    const count = await service.revokeTrust(imported.skill.id, {
+      cancelForSkill: async (skillId) => {
+        cancelled.push(skillId);
+        return 0;
+      },
+    });
+    expect(count).toBe(0);
+    expect(cancelled).toEqual([imported.skill.id]);
+    expect(store.skills.get(imported.skill.id)?.trustStatus).toBe('revoked');
+    store.close();
+  });
 });
+import { createHash } from 'node:crypto';
