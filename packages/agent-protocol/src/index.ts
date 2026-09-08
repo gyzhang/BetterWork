@@ -209,6 +209,9 @@ export const setSkillTrustRequestSchema = z
   .strict();
 export type SetSkillTrustRequest = z.infer<typeof setSkillTrustRequestSchema>;
 
+export const revokeSkillTrustRequestSchema = z.object({ skillId: skillIdSchema }).strict();
+export type RevokeSkillTrustRequest = z.infer<typeof revokeSkillTrustRequestSchema>;
+
 export const copySkillRequestSchema = z
   .object({ skillId: skillIdSchema, name: z.string().trim().min(1).max(160).optional() })
   .strict();
@@ -758,6 +761,15 @@ export const IpcChannel = {
   SaveSearchEngine: 'search:save',
   TestSearchEngine: 'search:test',
   TestModel: 'model:test',
+  ListSkills: 'skill:list',
+  GetSkill: 'skill:get',
+  ImportSkill: 'skill:import',
+  SaveSkillRuntimeProfile: 'skill:save-runtime-profile',
+  SetSkillTrust: 'skill:set-trust',
+  RevokeSkillTrust: 'skill:revoke-trust',
+  SetSkillEnabled: 'skill:set-enabled',
+  CopySkill: 'skill:copy',
+  ExportSkill: 'skill:export',
   UpdateWindowTheme: 'window:update-theme',
   WindowToggleMaximize: 'window:toggle-maximize',
   ListNotifications: 'notification:list',
@@ -829,5 +841,16 @@ export interface BetterWorkDesktopApi {
     openSource(input: OpenKnowledgeSourceRequest): Promise<OpenKnowledgeSourceResult>;
     remove(input: RemoveKnowledgeDocumentRequest): Promise<{ removed: boolean }>;
     refresh(input: RefreshKnowledgeDocumentRequest): Promise<KnowledgeRefreshResult>;
+  };
+  skills: {
+    list(): Promise<SkillSummary[]>;
+    get(input: GetSkillRequest): Promise<SkillDetail | null>;
+    importFromDialog(): Promise<SkillImportResult>;
+    saveRuntimeProfile(input: SaveSkillRuntimeProfileRequest): Promise<SkillMutationResult>;
+    setTrust(input: SetSkillTrustRequest): Promise<SkillMutationResult>;
+    revokeTrust(input: RevokeSkillTrustRequest): Promise<SkillMutationResult>;
+    setEnabled(input: SetSkillEnabledRequest): Promise<SkillMutationResult>;
+    copy(input: CopySkillRequest): Promise<SkillMutationResult>;
+    export(input: ExportSkillRequest): Promise<SkillExportResult>;
   };
 }

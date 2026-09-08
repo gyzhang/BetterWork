@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -62,18 +62,25 @@ describe('registerIpc', () => {
     const { KnowledgeVault } = await import('../services/knowledge-vault');
     const { NotificationService } = await import('../services/notification-service');
     const { RunService } = await import('../services/run-service');
+    const { SkillService } = await import('../services/skill-service');
     const { registerIpc } = await import('./register-ipc');
 
     store = AppStore.open(':memory:');
     const knowledgeVault = new KnowledgeVault(':memory:');
     const notifications = new NotificationService(store.notifications, () => null);
     const runs = new RunService(store, knowledgeVault, notifications, () => null);
+    const skillService = new SkillService(store, {
+      developmentBuiltinRoot: path.join(temporaryDirectory, 'builtin-dev'),
+      installedBuiltinRoot: path.join(temporaryDirectory, 'builtin-installed'),
+      userRoot: path.join(temporaryDirectory, 'user-skills'),
+    });
 
     registerIpc({
       store,
       knowledgeVault,
       notifications,
       runs,
+      skillService,
       getWindow: () => null,
       getDefaultWorkspaceRoot: () => temporaryDirectory,
     });
@@ -131,6 +138,82 @@ describe('registerIpc', () => {
     });
     await expect(invoke(IpcChannel.ListModels, {})).rejects.toThrow();
     Object.defineProperty(store.models, 'list', { value: original });
+  });
+
+  it('completes the Skill management journey through the directory dialogs', async () => {
+    const source = path.join(temporaryDirectory, 'import skill');
+    mkdirSync(source, { recursive: true });
+    writeFileSync(
+      path.join(source, 'SKILL.md'),
+      '---\nname: Imported Skill\ndescription: A test skill\n---\n\n# Instructions\n',
+    );
+    mocks.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [source] });
+    const imported = (await invoke(IpcChannel.ImportSkill, {})) as {
+      cancelled: boolean;
+      skill: { id: string; trustStatus: string };
+    };
+    expect(imported.cancelled).toBe(false);
+    expect(imported.skill.trustStatus).toBe('untrusted');
+
+    const trusted = (await invoke(IpcChannel.SetSkillTrust, {
+      skillId: imported.skill.id,
+      trusted: true,
+    })) as { skill: { trustStatus: string } };
+    expect(trusted.skill.trustStatus).toBe('needs-review');
+    await expect(
+      invoke(IpcChannel.SetSkillTrust, {
+        skillId: imported.skill.id,
+        trusted: true,
+        source: 'builtin',
+      }),
+    ).rejects.toThrow();
+
+    const profiled = (await invoke(IpcChannel.SaveSkillRuntimeProfile, {
+      skillId: imported.skill.id,
+      profile: { commands: [], environmentRequirements: [], outputContract: { outputPaths: [] } },
+    })) as { skill: { id: string; runtimeProfile?: unknown } };
+    expect(profiled.skill.id).toBe(imported.skill.id);
+
+    const copied = (await invoke(IpcChannel.CopySkill, { skillId: imported.skill.id })) as {
+      skill: { id: string; sourceKind: string; trustStatus: string };
+    };
+    expect(copied.skill).toMatchObject({ sourceKind: 'user', trustStatus: 'untrusted' });
+    expect(copied.skill.id).not.toBe(imported.skill.id);
+
+    const revoked = (await invoke(IpcChannel.RevokeSkillTrust, { skillId: imported.skill.id })) as {
+      skill: { trustStatus: string };
+    };
+    expect(revoked.skill.trustStatus).toBe('revoked');
+
+    const disabled = (await invoke(IpcChannel.SetSkillEnabled, {
+      skillId: imported.skill.id,
+      enabled: false,
+    })) as { skill: { enabled: boolean; blockedReasons: string[] } };
+    expect(disabled.skill.enabled).toBe(false);
+    expect(disabled.skill.blockedReasons).toContain('disabled');
+
+    const reopened = (await invoke(IpcChannel.GetSkill, { id: imported.skill.id })) as {
+      id: string;
+      revision: { resourceKey: string };
+    };
+    expect(reopened.id).toBe(imported.skill.id);
+    expect(reopened.revision.resourceKey).toContain('user/');
+
+    const exportTarget = path.join(temporaryDirectory, 'exported skill');
+    mocks.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: exportTarget });
+    const exported = (await invoke(IpcChannel.ExportSkill, { skillId: imported.skill.id })) as {
+      cancelled: boolean;
+      filePath: string;
+    };
+    expect(exported).toEqual({ cancelled: false, filePath: exportTarget });
+    await expect(readFile(path.join(exportTarget, 'SKILL.md'), 'utf8')).resolves.toContain(
+      '# Instructions',
+    );
+  });
+
+  it('does not import when the directory picker is cancelled', async () => {
+    mocks.showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] });
+    await expect(invoke(IpcChannel.ImportSkill, {})).resolves.toEqual({ cancelled: true });
   });
 
   it('completes the local task-to-versioned-artifact journey through registered IPC handlers', async () => {

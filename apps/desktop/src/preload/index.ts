@@ -1,11 +1,33 @@
 import type { BetterWorkDesktopApi } from '@betterwork/agent-protocol';
 import {
   agentRuntimeEventSchema,
+  copySkillRequestSchema,
+  exportSkillRequestSchema,
+  getSkillRequestSchema,
+  importSkillRequestSchema,
   IpcChannel,
   notificationActivatedSchema,
   notificationChangeEventSchema,
+  revokeSkillTrustRequestSchema,
+  saveSkillRuntimeProfileRequestSchema,
+  setSkillEnabledRequestSchema,
+  setSkillTrustRequestSchema,
+  skillDetailSchema,
+  skillExportResultSchema,
+  skillImportResultSchema,
+  skillMutationResultSchema,
+  skillSummarySchema,
 } from '@betterwork/agent-protocol';
 import { contextBridge, ipcRenderer } from 'electron';
+import { z, type ZodTypeAny } from 'zod';
+
+function invokeValidated<Schema extends ZodTypeAny>(
+  channel: string,
+  input: unknown,
+  schema: Schema,
+): Promise<z.output<Schema>> {
+  return ipcRenderer.invoke(channel, input).then((raw: unknown) => schema.parse(raw));
+}
 
 const api: BetterWorkDesktopApi = {
   runs: {
@@ -84,6 +106,57 @@ const api: BetterWorkDesktopApi = {
     openSource: (input) => ipcRenderer.invoke(IpcChannel.OpenKnowledgeSource, input),
     remove: (input) => ipcRenderer.invoke(IpcChannel.RemoveKnowledgeDocument, input),
     refresh: (input) => ipcRenderer.invoke(IpcChannel.RefreshKnowledgeDocument, input),
+  },
+  skills: {
+    list: () => invokeValidated(IpcChannel.ListSkills, {}, z.array(skillSummarySchema)),
+    get: (input) =>
+      invokeValidated(
+        IpcChannel.GetSkill,
+        getSkillRequestSchema.parse(input),
+        skillDetailSchema.nullable(),
+      ),
+    importFromDialog: () =>
+      invokeValidated(
+        IpcChannel.ImportSkill,
+        importSkillRequestSchema.parse({}),
+        skillImportResultSchema,
+      ),
+    saveRuntimeProfile: (input) =>
+      invokeValidated(
+        IpcChannel.SaveSkillRuntimeProfile,
+        saveSkillRuntimeProfileRequestSchema.parse(input),
+        skillMutationResultSchema,
+      ),
+    setTrust: (input) =>
+      invokeValidated(
+        IpcChannel.SetSkillTrust,
+        setSkillTrustRequestSchema.parse(input),
+        skillMutationResultSchema,
+      ),
+    revokeTrust: (input) =>
+      invokeValidated(
+        IpcChannel.RevokeSkillTrust,
+        revokeSkillTrustRequestSchema.parse(input),
+        skillMutationResultSchema,
+      ),
+    setEnabled: (input) =>
+      invokeValidated(
+        IpcChannel.SetSkillEnabled,
+        setSkillEnabledRequestSchema.parse(input),
+        skillMutationResultSchema,
+      ),
+    copy: (input) =>
+      invokeValidated(
+        IpcChannel.CopySkill,
+        copySkillRequestSchema.parse(input),
+        skillMutationResultSchema,
+      ),
+    export: (input) =>
+      invokeValidated(
+        IpcChannel.ExportSkill,
+        exportSkillRequestSchema.parse(input),
+        skillExportResultSchema,
+      ),
   },
 };
 

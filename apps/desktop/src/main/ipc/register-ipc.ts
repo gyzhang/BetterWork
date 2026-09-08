@@ -12,14 +12,18 @@ import {
   clearedResultSchema,
   clearNotificationsRequestSchema,
   connectionTestResultSchema,
+  copySkillRequestSchema,
   createdTaskSchema,
   createTaskRequestSchema,
   deletedResultSchema,
   evidenceSummarySchema,
   exportMarkdownArtifactRequestSchema,
   exportMarkdownArtifactResultSchema,
+  exportSkillRequestSchema,
   getArtifactRequestSchema,
   getArtifactVersionRequestSchema,
+  getSkillRequestSchema,
+  importSkillRequestSchema,
   IpcChannel,
   knowledgeDocumentSummarySchema,
   type KnowledgeImportResult,
@@ -31,6 +35,7 @@ import {
   listEvidenceRequestSchema,
   listRunEventsRequestSchema,
   listRunsRequestSchema,
+  listSkillsRequestSchema,
   listTasksRequestSchema,
   markAllNotificationsReadRequestSchema,
   markNotificationReadRequestSchema,
@@ -45,15 +50,24 @@ import {
   refreshKnowledgeDocumentRequestSchema,
   removedResultSchema,
   removeKnowledgeDocumentRequestSchema,
+  revokeSkillTrustRequestSchema,
   runSummarySchema,
   saveMarkdownArtifactRequestSchema,
   saveModelProfileRequestSchema,
   saveSearchEngineRequestSchema,
+  saveSkillRuntimeProfileRequestSchema,
   searchEngineSaveResultSchema,
   searchEngineSummarySchema,
   searchKnowledgeRequestSchema,
   setDefaultModelRequestSchema,
   setModelEnabledRequestSchema,
+  setSkillEnabledRequestSchema,
+  setSkillTrustRequestSchema,
+  skillDetailSchema,
+  skillExportResultSchema,
+  skillImportResultSchema,
+  skillMutationResultSchema,
+  skillSummarySchema,
   startRunRequestSchema,
   startRunResultSchema,
   testModelRequestSchema,
@@ -74,12 +88,14 @@ import { probeModelConnection } from '../services/model-connectivity';
 import type { NotificationService } from '../services/notification-service';
 import type { RunService } from '../services/run-service';
 import { createQianfanSearchClient } from '../services/search-engine-service';
+import type { SkillService } from '../services/skill-service';
 
 export interface IpcDependencies {
   readonly store: AppStore;
   readonly knowledgeVault: KnowledgeVault;
   readonly notifications: NotificationService;
   readonly runs: RunService;
+  readonly skillService: SkillService;
   readonly getWindow: () => BrowserWindow | null;
   /** 默认工作区根目录；开发态指向仓库根，打包后指向用户文档目录。 */
   readonly getDefaultWorkspaceRoot: () => string;
@@ -166,6 +182,7 @@ export function registerIpc(deps: IpcDependencies): void {
   registerModelChannels(deps);
   registerKnowledgeChannels(deps);
   registerSearchEngineChannels(deps);
+  registerSkillChannels(deps);
   registerNotificationChannels(deps);
   registerWindowChannels(deps);
 }
@@ -481,6 +498,112 @@ function registerSearchEngineChannels({ store }: IpcDependencies): void {
         apiKey,
       );
       return result;
+    },
+  );
+}
+
+function skillSummary(skill: ReturnType<SkillService['setTrustPreference']>) {
+  return {
+    id: skill.id,
+    name: skill.name,
+    description: skill.description,
+    sourceKind: skill.sourceKind,
+    enabled: skill.enabled,
+    currentRevisionId: skill.currentRevisionId,
+    trustStatus: skill.trustStatus,
+    environmentStatus: skill.environmentStatus,
+    blockedReasons: skill.blockedReasons,
+  };
+}
+
+function registerSkillChannels(deps: IpcDependencies): void {
+  const { skillService, store } = deps;
+  handleNoInput(IpcChannel.ListSkills, listSkillsRequestSchema, z.array(skillSummarySchema), () =>
+    store.skills.list(),
+  );
+  handleInput(
+    IpcChannel.GetSkill,
+    getSkillRequestSchema,
+    skillDetailSchema.nullable(),
+    (input) => store.skills.get(input.id) ?? null,
+  );
+  handleNoInput(
+    IpcChannel.ImportSkill,
+    importSkillRequestSchema,
+    skillImportResultSchema,
+    async () => {
+      const result = await showOpenDialog(deps, {
+        title: '导入 Skill',
+        properties: ['openDirectory'],
+      });
+      const sourceRoot = result.filePaths[0];
+      if (result.canceled || !sourceRoot) return { cancelled: true };
+      const imported = await skillService.importDirectory(sourceRoot);
+      return { cancelled: false, skill: skillSummary(imported.skill) };
+    },
+  );
+  handleInput(
+    IpcChannel.SaveSkillRuntimeProfile,
+    saveSkillRuntimeProfileRequestSchema,
+    skillMutationResultSchema,
+    (input) => ({
+      skill: skillSummary(skillService.saveRuntimeProfile(input.skillId, input.profile)),
+    }),
+  );
+  handleInput(
+    IpcChannel.SetSkillTrust,
+    setSkillTrustRequestSchema,
+    skillMutationResultSchema,
+    (input) => ({
+      skill: skillSummary(skillService.setTrustPreference(input.skillId, input.trusted)),
+    }),
+  );
+  handleInput(
+    IpcChannel.RevokeSkillTrust,
+    revokeSkillTrustRequestSchema,
+    skillMutationResultSchema,
+    async (input) => {
+      await skillService.revokeTrust(input.skillId);
+      const skill = store.skills.get(input.skillId);
+      if (!skill) throw new Error('Skill does not exist');
+      return { skill: skillSummary(skill) };
+    },
+  );
+  handleInput(
+    IpcChannel.SetSkillEnabled,
+    setSkillEnabledRequestSchema,
+    skillMutationResultSchema,
+    (input) => {
+      if (!store.skills.setEnabled(input.skillId, input.enabled))
+        throw new Error('Skill does not exist');
+      const skill = store.skills.get(input.skillId);
+      if (!skill) throw new Error('Skill does not exist');
+      return { skill: skillSummary(skill) };
+    },
+  );
+  handleInput(
+    IpcChannel.CopySkill,
+    copySkillRequestSchema,
+    skillMutationResultSchema,
+    async (input) => {
+      const copied = await skillService.copyAsUser(input.skillId);
+      return { skill: skillSummary(copied.skill) };
+    },
+  );
+  handleInput(
+    IpcChannel.ExportSkill,
+    exportSkillRequestSchema,
+    skillExportResultSchema,
+    async (input) => {
+      const skill = store.skills.get(input.skillId);
+      if (!skill) throw new Error('Skill does not exist');
+      const result = await showSaveDialog(deps, {
+        title: '导出 Skill',
+        defaultPath: skill.name,
+      });
+      if (result.canceled || !result.filePath) return { cancelled: true };
+      const filePath = await skillService.exportDirectory(input.skillId, result.filePath);
+      return { cancelled: false, filePath };
     },
   );
 }
