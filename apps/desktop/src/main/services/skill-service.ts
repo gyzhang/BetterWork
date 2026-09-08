@@ -382,6 +382,33 @@ export class SkillService {
     return canceller ? canceller.cancelForSkill(skillId) : 0;
   }
 
+  setTrustPreference(skillId: string, trusted: boolean): SkillDetail {
+    if (!this.store.skills.setTrustPreference(skillId, trusted ? 'trusted' : 'untrusted')) {
+      throw new Error('Skill does not exist');
+    }
+    const skill = this.store.skills.get(skillId);
+    if (!skill) throw new Error('Skill was not available after trust preference update');
+    return skill;
+  }
+
+  saveRuntimeProfile(skillId: string, profile: RuntimeProfileDraft): SkillDetail {
+    const skill = this.store.skills.get(skillId);
+    if (!skill) throw new Error('Skill does not exist');
+    const profileHash = createHash('sha256').update(JSON.stringify(profile)).digest('hex');
+    const profileId = this.store.skills.saveProfile({ skillId, profileHash, profile });
+    this.store.skills.save({
+      id: skill.id,
+      name: skill.name,
+      description: skill.description,
+      sourceKind: skill.sourceKind,
+      currentRevisionId: skill.currentRevisionId,
+      currentProfileRevisionId: profileId,
+    });
+    const updated = this.store.skills.get(skillId);
+    if (!updated) throw new Error('Skill was not available after runtime profile update');
+    return updated;
+  }
+
   async exportDirectory(skillId: string, destination: string): Promise<string> {
     const skill = this.store.skills.get(skillId);
     if (!skill) throw new Error('Skill does not exist');

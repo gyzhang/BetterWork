@@ -52,7 +52,7 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | A02 | Skill 修订/profile/信任持久化 | A01 | done | [迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)、[仓储测试](../../apps/desktop/src/main/persistence/app-store.test.ts)，2026-09-08 |
 | A03 | 本地目录导入与资源定位 | A02 | done | [SkillService 测试](../../apps/desktop/src/main/services/skill-service.test.ts)，2026-09-08 |
 | A04 | 内置来源、信任与用户副本 | A03 | done | [SkillService 测试](../../apps/desktop/src/main/services/skill-service.test.ts)，2026-09-08 |
-| A05 | 管理 IPC/Preload 接线 | A04 | todo | — |
+| A05 | 管理 IPC/Preload 接线 | A04 | done | [IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)，2026-09-08 21:56 |
 | A06 | Skill 管理界面及 A1 验收 | A05 | todo | — |
 | A07 | 执行协议、执行记录及生命周期接口 | A06 | todo | — |
 | A08 | macOS 进程组 supervisor | A07 | todo | — |

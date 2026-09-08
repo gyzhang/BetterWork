@@ -7,6 +7,7 @@ import { AppStore } from './persistence';
 import { KnowledgeVault } from './services/knowledge-vault';
 import { NotificationService } from './services/notification-service';
 import { RunService } from './services/run-service';
+import { SkillService } from './services/skill-service';
 import { createMainWindow } from './window';
 
 /**
@@ -35,6 +36,11 @@ function bootstrap(): ApplicationContext {
   const knowledgeVault = new KnowledgeVault(
     path.join(userData, 'vaults', 'default', 'vault.sqlite'),
   );
+  const skillService = new SkillService(store, {
+    developmentBuiltinRoot: path.resolve(app.getAppPath(), '../../resources/skills'),
+    installedBuiltinRoot: path.join(process.resourcesPath, 'skills'),
+    userRoot: path.join(userData, 'skills'),
+  });
 
   // 上次进程被强杀时正在执行的 Run 会停在 running。启动时统一收口为 failed，
   // 维持「每个 Run 都有明确结果」这条不变量，历史列表不会出现永远转圈的任务。
@@ -53,7 +59,15 @@ function bootstrap(): ApplicationContext {
   const notifications = new NotificationService(store.notifications, getWindow);
   const runs = new RunService(store, knowledgeVault, notifications, getWindow);
 
-  registerIpc({ store, knowledgeVault, notifications, runs, getWindow, getDefaultWorkspaceRoot });
+  registerIpc({
+    store,
+    knowledgeVault,
+    notifications,
+    runs,
+    skillService,
+    getWindow,
+    getDefaultWorkspaceRoot,
+  });
   return started;
 }
 
