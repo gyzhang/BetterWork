@@ -62,9 +62,15 @@ function grantStub(): (input: unknown) => Promise<Record<string, unknown>> {
   }));
 }
 
+const originalLocalStorage = window.localStorage;
+
 afterEach(() => {
   cleanup();
   Reflect.deleteProperty(window, 'betterwork');
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    value: originalLocalStorage,
+  });
 });
 
 describe('SkillsPage', () => {
@@ -215,5 +221,94 @@ describe('SkillsPage', () => {
     const confirmedDialog = await screen.findByRole('alertdialog');
     within(confirmedDialog).getByRole('button', { name: '删除 Skill' }).click();
     await waitFor(() => expect(deleteSkill).toHaveBeenCalledWith({ skillId: summary.id }));
+  });
+
+  it('switches between card and list view via the segmented control', async () => {
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        dependencies: dependencyStub(),
+        skills: {
+          refreshDependencyGrant: grantStub(),
+          list: vi.fn(async () => [summary]),
+          get: vi.fn(async () => detail),
+        },
+      },
+    });
+
+    render(<Harness />);
+    await waitFor(() => expect(screen.getByText('研究方法')).toBeTruthy());
+
+    const group = screen.getByRole('group', { name: '视图模式' });
+    const cardButton = within(group).getByRole('button', { name: '卡片' });
+    const listButton = within(group).getByRole('button', { name: '列表' });
+    expect(cardButton.getAttribute('aria-pressed')).toBe('true');
+    expect(listButton.getAttribute('aria-pressed')).toBe('false');
+
+    expect(document.querySelector('.skill-card')).toBeTruthy();
+    expect(document.querySelector('.skill-list-item')).toBeNull();
+
+    listButton.click();
+    await waitFor(() => {
+      const updatedGroup = screen.getByRole('group', { name: '视图模式' });
+      expect(
+        within(updatedGroup).getByRole('button', { name: '列表' }).getAttribute('aria-pressed'),
+      ).toBe('true');
+      expect(
+        within(updatedGroup).getByRole('button', { name: '卡片' }).getAttribute('aria-pressed'),
+      ).toBe('false');
+    });
+    expect(document.querySelector('.skill-list-item')).toBeTruthy();
+    expect(document.querySelector('.skill-card')).toBeNull();
+  });
+
+  it('returns to browse when the back button is pressed in detail view', async () => {
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        dependencies: dependencyStub(),
+        skills: {
+          refreshDependencyGrant: grantStub(),
+          list: vi.fn(async () => [summary]),
+          get: vi.fn(async () => detail),
+        },
+      },
+    });
+
+    render(<Harness />);
+    await waitFor(() => expect(screen.getByText('研究方法')).toBeTruthy());
+    screen.getByRole('button', { name: /研究方法/ }).click();
+    await waitFor(() => expect(screen.getByRole('heading', { name: '研究方法' })).toBeTruthy());
+
+    screen.getByRole('button', { name: /返回/ }).click();
+    await waitFor(() => expect(screen.getByRole('group', { name: '视图模式' })).toBeTruthy());
+    expect(screen.queryByRole('heading', { name: '研究方法' })).toBeNull();
+  });
+
+  it('persists the chosen view mode to localStorage', async () => {
+    const setItem = vi.fn();
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: { getItem: () => null, setItem },
+    });
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        dependencies: dependencyStub(),
+        skills: {
+          refreshDependencyGrant: grantStub(),
+          list: vi.fn(async () => [summary]),
+          get: vi.fn(async () => detail),
+        },
+      },
+    });
+
+    render(<Harness />);
+    await waitFor(() => expect(screen.getByText('研究方法')).toBeTruthy());
+
+    within(screen.getByRole('group', { name: '视图模式' }))
+      .getByRole('button', { name: '列表' })
+      .click();
+    expect(setItem).toHaveBeenCalledWith('skills-view-mode', 'list');
   });
 });

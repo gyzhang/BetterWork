@@ -13,6 +13,7 @@ export interface SkillsState {
   toast: string;
   error: string;
   select: (skill: SkillSummary) => void;
+  deselect: () => void;
   refresh: () => void;
   importSkill: () => Promise<void>;
   setTrust: (skill: SkillSummary, trusted: boolean) => void;
@@ -65,6 +66,11 @@ export function useSkills(): SkillsState {
       }),
       '加载 Skill 详情',
     );
+  }, []);
+
+  const deselect = useCallback((): void => {
+    setSelected(undefined);
+    setSelectedId(undefined);
   }, []);
 
   const applyMutation = useCallback(
@@ -170,6 +176,7 @@ export function useSkills(): SkillsState {
     toast,
     error,
     select,
+    deselect,
     refresh,
     importSkill,
     setTrust,
