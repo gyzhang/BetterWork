@@ -26,6 +26,7 @@ import {
   AlertIcon,
   ArrowUpIcon,
   ArtifactIcon,
+  CapabilityIcon,
   CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -53,6 +54,7 @@ import { NotificationCenter, ToastHost, useNotifications } from './notifications
 import { ArtifactPage } from './views/ArtifactView';
 import { KnowledgePage } from './views/KnowledgeView';
 import { SettingsPage } from './views/SettingsView';
+import { SkillsPage } from './views/SkillsView';
 
 export function App(): React.JSX.Element {
   // 三个自包含的状态簇各自成 hook；App 只保留跨簇的编排与布局。
@@ -514,6 +516,18 @@ export function App(): React.JSX.Element {
             </span>{' '}
             知识
           </button>
+          <button
+            className={view === 'skills' ? 'active' : ''}
+            onClick={() => {
+              setView('skills');
+              skills.refresh();
+            }}
+          >
+            <span aria-hidden="true">
+              <CapabilityIcon size={15} />
+            </span>{' '}
+            能力
+          </button>
         </nav>
         <div className="sidebar-divider" />
         <p className="section-label">最近任务</p>
@@ -772,6 +786,7 @@ export function App(): React.JSX.Element {
         {view === 'knowledge' && (
           <KnowledgePage library={knowledge} onStartResearch={startResearchFromKnowledge} />
         )}
+        {view === 'skills' && <SkillsPage state={skills} />}
         {view === 'settings' && (
           <SettingsPage
             tab={settingsTab}
