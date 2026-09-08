@@ -1,5 +1,7 @@
 # Qoder 开发交接：算台 BetterWork
 
+> 后续范围更新：阶段 A 必须支持脚本型 `ppt-generation-expert`，详见 [ADR-0009](adr/0009-script-skill-baseline.md)。当前执行器与 PPTX 能力尚未落地；仅指令配置不能满足新的兼容基线。
+
 > 交接日期：2026-09-05
 >
 > 交接基线：分支 `refactor/unified-code-quality`，代码基线 `8905e60 refactor(renderer): move cohesive state clusters into hooks and sort imports`
@@ -10,17 +12,19 @@
 
 本文是「当前到底实现了什么」的唯一入口。其他产品文档（`01`–`06`、`08`、`10`）以长期目标为主，已按章节补注实现状态，但判断现状仍以本文为准。
 
+> 最新产品确认：Skill 信任选项与本地目录分发见 [ADR-0011](adr/0011-skill-trust-and-local-distribution.md)，尚未实现；ADR-0010 其余执行技术仍为 Proposed。
+
 ## 1. 产品与当前边界
 
 算台 BetterWork 是面向知识工作者的个人 AI 工作台：利用用户的资料、记忆与工作方法，完成研究、分析、文档与演示；聊天是协作入口，Artifact 是主要交付物。
 
-BetterWork 是一个新设计的教学项目，同时保留发展为个人或小范围知识工作台的清晰路径。它借鉴但不复制三个本机项目（详见 [参考项目与借鉴边界](09-reference-projects.md)）：
+BetterWork 优先成为个人实际使用的工作台，再供周边同事用于个人工作；教学总结不约束产品可用性。它借鉴但不复制三个本机项目（详见 [参考项目与借鉴边界](09-reference-projects.md)）：
 
 - `/Users/kevin/Dev4AI/LobsterAI/`：参考产品 UI、交互和完成度；不引入其 OpenClaw 引擎。
 - `/Users/kevin/Dev4AI/ClawBible.AI/clawbible-desktop/`：参考 Agent、工具、知识和 Office 工程实践；不作为直接代码依赖。
 - `/Users/kevin/Dev4AI/ClawBible.AI/clawbible-cloud/`：参考面向 AI Agent 的协作资产组织方式（分层规则、任务路由、工作日志）；已落地为 `.qoder/rules/` 与 `docs/logs/` 制度。
 
-当前是 Phase 1 的受控最小切片。AGENTS.md 的范围约束优先于路线图中较远期的产品愿景：未经明确的产品决策、路线图更新和必要 ADR，不要提前实现 Embedding、完整研究 Agent、XLSX/PPTX 解析、DOCX/PPTX Artifact、完整 Memory、Expert/Skill/Kit、OpenClaw 兼容、多 Agent、云同步或代码 Agent。
+2026-09-08 已确认后续顺序：Skill 管理与配置 → 专家管理与配置 → 研究到汇报完整路径。见 [ADR-0008](adr/0008-personal-workbench-and-capability-first.md)。当前仍只有下表所列运行能力；本轮只调整文档。具体配置范围和工程边界见 [修订稿](reviews/2026-09-08-product-scope.md)，建议项不能视为已实现或已接受技术选型；开工仍需相关实现 ADR。
 
 ## 2. 已实现且应保持可用的能力
 

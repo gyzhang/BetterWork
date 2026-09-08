@@ -6,7 +6,11 @@
 
 算台（BetterWork）是一款面向知识工作者的个人 AI 工作台：它理解并调用你的资料、记忆与工作方法，帮你完成研究、分析、文档与演示。
 
-算台首先是一个结构清晰、便于学习的桌面智能体教学项目——一条消息如何穿过 Renderer、类型化 IPC、Application 层、Agent Core 与 Tool Runtime，可以在代码里完整读通；同时它在领域模型和技术边界上为成长为个人知识工作台做好了准备。
+算台优先服务个人实际工作，先用于自用，再供周边同事使用；当前不以企业管理、组织提效或市场化为目标。教学经验从实际建设中总结，不再作为产品可用性的前置约束。
+
+算台是面向个人知识工作的 AI 工作台。用户通过配置化专家调用多项 Skill，结合长期工作目录、个人知识与协作积累，在持续讨论中完成研究、分析、文档和演示，并让成果成为后续工作的基础。
+
+已确认开发顺序：**Skill 管理与配置 → 专家管理与配置 → 研究到汇报完整路径**。基础配置范围与验收建议见 [产品修订稿](docs/reviews/2026-09-08-product-scope.md)。阶段 A 必须支持首个脚本型 PPT Skill，包含 Python/CLI、外部工具链及真实生成校验，见 [运行边界](docs/reviews/2026-09-08-skill-runtime-boundary.md)；这些是待实现能力。
 
 ## 产品定位
 
@@ -19,6 +23,8 @@
 - 可预览、可修改、可回退的 Artifact
 
 聊天是协作入口，Artifact 是主要交付物。
+
+Skill 配置将提供受信任选项：内置 Skill 默认信任，导入项由用户授权，已授权范围内脚本无需反复确认。产品通过本地目录携带完整 Skill，个人修改保存在用户副本，升级不覆盖。详见 [信任与分发规则](docs/adr/0011-skill-trust-and-local-distribution.md)（已确认、待实现）。
 
 ## 核心原则
 
@@ -33,7 +39,7 @@
 
 ## 当前能力
 
-项目已完成 Phase 0（教学链路与 UI Foundation），当前处于 **Phase 1：研究报告 MVP** 的知识库垂直切片。已经可用：
+项目已完成 Phase 0 与原 Phase 1 的部分知识库、搜索和 Markdown 成果能力。2026-09-08 已调整后续开发顺序，Skill 与专家配置尚未实现。已经可用：
 
 | 领域 | 能力 |
 | --- | --- |
@@ -46,7 +52,7 @@
 | 消息中心 | 三层反馈——页面内联提示 / Toast（同页抑制）/ 消息中心持久留档（200 条滚动上限），通知可点击跳转到对应任务、成果或知识页；窗口失焦时任务终态发系统通知 |
 | 外观 | `system / light / dark` 三种模式 × 青玉、纸墨、远洋、暖砂四套成对色系，启动前恢复、跟随系统变化、同步 Electron 标题栏 |
 
-尚未实现（按 [路线图](docs/07-mvp-and-roadmap.md) 分阶段建设）：Embedding 与混合检索、正文 Claim/Citation、大纲确认、网页正文抓取、DOCX/XLSX/PPTX 解析与 Artifact、长期记忆、专家 / Skill / 套件、Python Worker。
+尚未实现（按 [路线图](docs/07-mvp-and-roadmap.md) 分阶段建设）：Embedding 与混合检索、正文 Claim/Citation、大纲确认、网页正文抓取、XLSX/PPTX 解析及 DOCX/XLSX/PPTX Artifact、长期记忆、专家 / Skill / 套件、Python Worker。
 
 ## 架构
 

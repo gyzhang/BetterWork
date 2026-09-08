@@ -19,6 +19,11 @@
 | [Qoder 开发交接](11-qoder-handoff.md) | 记录当前实现基线、运行方式、架构入口、续作边界与验证要求 |
 | [工程规范](12-engineering-standards.md) | 全仓唯一的代码规范：工具链、目录、命名、类型、异步与错误处理、持久化、IPC、测试与例外机制 |
 
+## 技术设计提案
+
+- [Skill 信任与本地分发](adr/0011-skill-trust-and-local-distribution.md)：已确认的产品规则，具体实现未落地。
+- [Skill 执行器与依赖管理](designs/skill-executor-and-dependencies.md)：首个 PPT Skill 的执行、环境、文件成果与阶段 A 验收，配套 ADR-0010 为 Proposed。
+
 ## 架构决策记录
 
 ADR 用于记录会影响多个模块、后续修改成本较高的决策。详见 [ADR 索引](adr/README.md)。
@@ -26,7 +31,7 @@ ADR 用于记录会影响多个模块、后续修改成本较高的决策。详�
 ## 文档状态
 
 - 版本：v0.2
-- 状态：产品与架构已达成初步共识；UI Foundation 已落地，当前处于 Phase 1 研究报告 MVP 的知识库垂直切片
+- 状态：现有知识库/搜索/Markdown 能力作为实现基线；2026-09-08 已确认 Skill 配置 → 专家配置 → 研究到汇报的新顺序，细节见 [产品修订稿](reviews/2026-09-08-product-scope.md)
 - 目标读者：产品设计者、开发者、贡献者和学习者
 
 ## 阅读约定

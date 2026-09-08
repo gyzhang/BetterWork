@@ -9,5 +9,9 @@
 | [0005](0005-artifact-version-evidence.md) | ArtifactVersion 持久化来源 Evidence | Accepted |
 | [0006](0006-notification-feedback.md) | 消息中心与三层反馈机制 | Accepted |
 | [0007](0007-search-engine-config-and-web-search-tool.md) | 搜索引擎配置与 `web_search` 工具 | Accepted |
+| [0008](0008-personal-workbench-and-capability-first.md) | 个人工作台定位、单专家多 Skill 与配置前置顺序 | Accepted |
+| [0009](0009-script-skill-baseline.md) | 脚本型 PPT Skill 作为阶段 A 兼容基线 | Accepted |
+| [0010](0010-skill-executor-and-dependencies.md) | Skill 执行器、依赖快照与文件成果 | Proposed |
+| [0011](0011-skill-trust-and-local-distribution.md) | Skill 信任授权与本地目录分发 | Accepted |
 
 ADR 一经 Accepted 不直接重写历史；需要改变时新增 ADR 并标记替代关系。

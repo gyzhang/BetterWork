@@ -33,29 +33,21 @@
 
 ## 2. 当前阶段
 
-Phase 0 教学链路与 UI Foundation 已完成。当前允许进入 `Phase 1：研究报告 MVP` 的第一条知识库垂直切片；范围以 `docs/07-mvp-and-roadmap.md` 为准。
+Phase 0 与原 Phase 1 的知识库、搜索和 Markdown 成果部分能力已实现。2026-09-08 用户已确认后续顺序：
 
-本阶段允许实现：
+1. Skill 管理与配置。
+2. 智能体专家管理与配置。
+3. 同一专家调用多项 Skill，走通研究、方案、报告和公司模板 PPT 的完整路径。
 
-- Electron Main / Preload / Renderer
-- 类型化 IPC
-- `AsyncIterable<AgentRuntimeEvent>` Agent Core
-- Fake Model Provider 与一个 OpenAI-compatible Provider 接口
-- Calculator Tool 与受 Workspace 限制的 Read Text File Tool
-- 流式消息、工具调用卡片、取消执行
-- SQLite Run Journal
-- Execution Timeline
-- 单元测试与最小端到端验证
+实际可用性优先于教学目标；长期工作目录承接持续项目。已确认决策见 [ADR-0008](docs/adr/0008-personal-workbench-and-capability-first.md)。阶段顺序以 [路线图](docs/07-mvp-and-roadmap.md) §0 为准，具体配置范围及验收建议见 [产品修订稿](docs/reviews/2026-09-08-product-scope.md)。本轮为文档修订，不代表上述功能已实现；修订稿中建议项仍需产品审阅，相应协议、存储、运行时和权限变更在实现前新增 ADR。
 
-本阶段不得扩张到：
+现有能力必须保持：类型化 IPC、Agent Core、Provider、Calculator / 受 Workspace 限制的 Read Text File / Knowledge Search / 已配置服务的 Web Search、流式消息、取消与终态、SQLite Run Journal、Workspace / Task / Session、本地 Markdown/Text/PDF/DOCX 导入与只读索引管理、来源登记、版本化 Markdown Artifact 的查看/修订/导出。
 
-- OpenClaw 兼容
-- 编程 Agent 和代码仓库自动修改
-- 多 Agent、通用 DAG、IM、定时任务、云同步
-- 完整记忆、Office 和 Kit 实现
-- 在没有真实产品需求前引入大型框架
+首个必需兼容样本为用户提供的 `ppt-generation-expert`。阶段 A 必须支持文件夹 Skill、Python 脚本/CLI、外部本地工具链与依赖准备、任务文件读写、子进程取消/超时、质量报告及最小 PPTX 产物登记，见 [ADR-0009](docs/adr/0009-script-skill-baseline.md) 与 [运行边界](docs/reviews/2026-09-08-skill-runtime-boundary.md)。先设计执行约束和协议，再实现；不能以脚本后置或仅提示词试运行代替支持该样本。
 
-当前 Phase 1 仅允许：Workspace / Task / Session 的最小持久化关系、本地 Markdown/Text/PDF/DOCX 导入、刷新或移除本地 Knowledge 索引（不修改或删除源文件）、源路径与哈希及 Locator 记录、SQLite FTS5 检索、只读 Knowledge Search Tool、由检索结果生成的本地 Evidence 及 ArtifactVersion-Evidence 关系，以及仅对已登记 Knowledge 来源开放的系统原文打开、任务回复保存为版本化 Markdown Artifact，以及用户在成果页查看版本历史、导出 Markdown、创建独立 `user-edit` 版本的对应类型化 IPC/UI。XLSX/PPTX 解析、Embedding、Web Research、DOCX/PPTX Artifact 与完整研究 Agent 仍须在后续切片单独实现。
+信任与分发规则已确认（[ADR-0011](docs/adr/0011-skill-trust-and-local-distribution.md)）：内置 Skill 默认信任，导入 Skill 由用户选择信任；有效授权范围内脚本自动执行，信任/启用/依赖状态独立，更新不得静默继承变化后的授权或覆盖用户撤销。源码 `resources/skills/`、安装资源 `skills/`、用户数据 `skills/` 各司其职；内置只读、用户副本可改。尚未实现，不得把信任选项称为原生进程沙箱。
+
+基础配置前移不自动引入：OpenClaw 兼容、代码 Agent、多 Agent、通用 DAG、IM、定时任务、云同步、企业权限、公开 Skill 市场和完整 Kit 生态。完整 Office 工作流、网页正文、引用、讨论节点和最小记忆按第三阶段切片设计；阶段 A 先支持样本所需的真实 PPT 生成与校验。Embedding 和完整记忆不作为配置前置，MCP 范围独立确认。
 
 ## 3. 架构硬约束
 
