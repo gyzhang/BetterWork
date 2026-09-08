@@ -68,6 +68,28 @@ describe('SkillService', () => {
     store.close();
   });
 
+  it('accepts flat frontmatter descriptions containing an unquoted colon', async () => {
+    const directory = temporaryDirectory();
+    const source = path.join(directory, 'ppt-generation-expert');
+    mkdirSync(source, { recursive: true });
+    writeFileSync(
+      path.join(source, 'SKILL.md'),
+      '---\nname: ppt-generation-expert\ndescription_en: Company-template PPT engine — Boundary: does not edit existing files.\nversion: v20260907\nagent_created: true\ndisable: false\n---\n# Instructions\n',
+    );
+    const roots = rootsFor(directory);
+    const store = AppStore.open(path.join(directory, 'app.sqlite'));
+    const service = new SkillService(store, roots);
+
+    const imported = await service.importDirectory(source);
+    expect(imported.skill.name).toBe('ppt-generation-expert');
+    expect(imported.skill.revision.frontmatter).toMatchObject({
+      description_en: 'Company-template PPT engine — Boundary: does not edit existing files.',
+      agent_created: true,
+      disable: false,
+    });
+    store.close();
+  });
+
   it('rejects symbolic links and preserves no visible staging directory', async () => {
     const directory = temporaryDirectory();
     const source = path.join(directory, 'unsafe');

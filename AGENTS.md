@@ -100,6 +100,7 @@ Renderer -> Preload API -> Application -> Agent Core / Infrastructure
 ## 6. UI 原则
 
 - UI 实现以 `docs/10-ui-ux-system.md` 为设计真相源；变更核心信息架构或视觉语言时先更新文档。
+- UI 反馈必须先按 `docs/10-ui-ux-system.md` §11.5 路由：短时操作结果复用现有 `TransientToast`，当前对象/表单可处理的错误用内联反馈，跨页面可回看的长操作结果才进入消息中心；禁止页面或 Hook 自造 Toast、顶部成功横幅或自动消失计时器。具体工程约束见 `docs/12-engineering-standards.md` §8。
 - 借鉴 LobsterAI 的信息架构和产品完成度，不复制其 OpenClaw 结构。
 - 界面服务于任务、过程与成果，不堆叠 AI 装饰。
 - 展示计划、状态、工具、来源和产物，不展示模型私有思维链。

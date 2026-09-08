@@ -13,6 +13,7 @@ trigger: glob: apps/desktop/src/renderer/**/*.tsx,ts,css
 - 中文体验优先；正文和常规控件禁止用 9–10px 小字号换取空间，优先折叠、覆盖和响应式重排。
 - **界面功能图标一律使用内联 SVG 描边图标**（图标集在 `apps/desktop/src/renderer/src/icons.tsx`，`currentColor`、统一 24 网格与笔画粗细）：禁止用 Unicode 字符或 emoji 充当系统操作、导航、按钮等界面图标；新增图标先进图标集再使用，品牌字标与格式徽标（MD/PDF）除外。
 - 长操作三要素缺一不可：可见状态、取消入口、明确结果。
+- 反馈先按 `docs/10-ui-ux-system.md` §11.5 路由：短时本地操作复用 `TransientToast`，当前对象/表单可采取行动的错误用内联反馈，跨页面可回看的长操作结果才进入消息中心。禁止在页面或 Hook 中自造 Toast、顶部成功横幅或自动消失计时器；具体工程约束见 `docs/12-engineering-standards.md` §8。
 - 过程信息按用户目标分组并渐进披露；原始 Run 事件不得成为默认主界面的视觉中心；不展示模型私有思维链。
 - Artifact 是一等界面对象；右侧上下文面板按场景出现且必须允许完全收起。
 - 模型配置使用独立设置空间，不嵌入 Composer 或任务消息流。
