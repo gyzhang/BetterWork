@@ -1,0 +1,280 @@
+import { randomUUID } from 'node:crypto';
+
+import type {
+  RunSkillBinding,
+  ScriptExecution,
+  ScriptExecutionReason,
+  ScriptExecutionStatus,
+} from '@betterwork/agent-protocol';
+import type Database from 'better-sqlite3';
+
+export interface CreateBindingInput {
+  id?: string;
+  runId: string;
+  skillRevisionId: string;
+  profileRevisionId: string;
+  environmentId?: string;
+  dependencySnapshotIds: string[];
+  grantId: string;
+}
+
+export interface CreateExecutionInput {
+  id?: string;
+  runId: string;
+  bindingId: string;
+  toolCallId: string;
+  commandId: string;
+  argumentDigest: string;
+  inputHashes: string[];
+  workDirKey: string;
+  attemptKey: string;
+}
+
+export interface ExecutionTerminalPatch {
+  reason?: ScriptExecutionReason;
+  reportHash?: string;
+  outputIds?: string[];
+  finishedAt: number;
+}
+
+interface BindingRow {
+  id: string;
+  run_id: string;
+  skill_revision_id: string;
+  profile_revision_id: string;
+  environment_id: string | null;
+  dependency_snapshot_ids_json: string;
+  grant_id: string;
+  created_at: number;
+}
+
+interface ExecutionRow {
+  id: string;
+  run_id: string;
+  binding_id: string;
+  tool_call_id: string;
+  command_id: string;
+  argument_digest: string;
+  input_hashes_json: string;
+  work_dir_key: string;
+  attempt_key: string;
+  status: ScriptExecutionStatus;
+  reason: ScriptExecutionReason | null;
+  report_hash: string | null;
+  output_ids_json: string;
+  created_at: number;
+  started_at: number | null;
+  finished_at: number | null;
+}
+
+const TERMINAL_STATUSES: readonly ScriptExecutionStatus[] = [
+  'succeeded',
+  'failed',
+  'cancelled',
+  'timed-out',
+];
+
+export const isTerminalExecutionStatus = (status: ScriptExecutionStatus): boolean =>
+  TERMINAL_STATUSES.includes(status);
+
+const parseStringArray = (value: string): string[] => {
+  const parsed: unknown = JSON.parse(value);
+  if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== 'string')) {
+    throw new Error('Stored execution identifier list must be an array of strings');
+  }
+  return parsed as string[];
+};
+
+const toBinding = (row: BindingRow): RunSkillBinding => ({
+  id: row.id,
+  runId: row.run_id,
+  skillRevisionId: row.skill_revision_id,
+  profileRevisionId: row.profile_revision_id,
+  ...(row.environment_id === null ? {} : { environmentId: row.environment_id }),
+  dependencySnapshotIds: parseStringArray(row.dependency_snapshot_ids_json),
+  grantId: row.grant_id,
+  createdAt: row.created_at,
+});
+
+const toExecution = (row: ExecutionRow): ScriptExecution => ({
+  id: row.id,
+  runId: row.run_id,
+  toolCallId: row.tool_call_id,
+  bindingId: row.binding_id,
+  commandId: row.command_id,
+  argumentDigest: row.argument_digest,
+  inputHashes: parseStringArray(row.input_hashes_json),
+  workDirKey: row.work_dir_key,
+  attemptKey: row.attempt_key,
+  status: row.status,
+  ...(row.reason === null ? {} : { reason: row.reason }),
+  ...(row.report_hash === null ? {} : { reportHash: row.report_hash }),
+  outputIds: parseStringArray(row.output_ids_json),
+  createdAt: row.created_at,
+  ...(row.started_at === null ? {} : { startedAt: row.started_at }),
+  ...(row.finished_at === null ? {} : { finishedAt: row.finished_at }),
+});
+
+/**
+ * 执行聚合仓储：只写 `run_skill_bindings` 与 `script_executions`。
+ *
+ * 状态迁移一律走条件更新（`WHERE status IN (...)`），因此重复结束、迟到的
+ * supervisor 结果和并发的取消都不会把已终态的执行改写第二次。
+ */
+export class SkillExecutionRepository {
+  constructor(private readonly db: Database.Database) {}
+
+  createBinding(input: CreateBindingInput): RunSkillBinding {
+    const id = input.id ?? randomUUID();
+    const createdAt = Date.now();
+    this.db
+      .prepare(
+        `INSERT INTO run_skill_bindings (
+           id, run_id, skill_revision_id, profile_revision_id,
+           environment_id, dependency_snapshot_ids_json, grant_id, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        id,
+        input.runId,
+        input.skillRevisionId,
+        input.profileRevisionId,
+        input.environmentId ?? null,
+        JSON.stringify(input.dependencySnapshotIds),
+        input.grantId,
+        createdAt,
+      );
+    const binding = this.getBinding(id);
+    if (!binding) throw new Error(`Binding ${id} was not readable after insert`);
+    return binding;
+  }
+
+  getBinding(id: string): RunSkillBinding | undefined {
+    const row = this.db.prepare('SELECT * FROM run_skill_bindings WHERE id = ?').get(id) as
+      BindingRow | undefined;
+    return row ? toBinding(row) : undefined;
+  }
+
+  listBindingsByRun(runId: string): RunSkillBinding[] {
+    const rows = this.db
+      .prepare('SELECT * FROM run_skill_bindings WHERE run_id = ? ORDER BY created_at')
+      .all(runId) as BindingRow[];
+    return rows.map(toBinding);
+  }
+
+  /** 执行实例在 supervisor 启动之前登记，先有 queued 行再可能有进程。 */
+  createExecution(input: CreateExecutionInput): ScriptExecution {
+    const id = input.id ?? randomUUID();
+    const createdAt = Date.now();
+    this.db
+      .prepare(
+        `INSERT INTO script_executions (
+           id, run_id, binding_id, tool_call_id, command_id, argument_digest,
+           input_hashes_json, work_dir_key, attempt_key, status,
+           report_hash, output_ids_json, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', NULL, '[]', ?)`,
+      )
+      .run(
+        id,
+        input.runId,
+        input.bindingId,
+        input.toolCallId,
+        input.commandId,
+        input.argumentDigest,
+        JSON.stringify(input.inputHashes),
+        input.workDirKey,
+        input.attemptKey,
+        createdAt,
+      );
+    const execution = this.getExecution(id);
+    if (!execution) throw new Error(`Execution ${id} was not readable after insert`);
+    return execution;
+  }
+
+  getExecution(id: string): ScriptExecution | undefined {
+    const row = this.db.prepare('SELECT * FROM script_executions WHERE id = ?').get(id) as
+      ExecutionRow | undefined;
+    return row ? toExecution(row) : undefined;
+  }
+
+  listExecutionsByRun(runId: string): ScriptExecution[] {
+    const rows = this.db
+      .prepare('SELECT * FROM script_executions WHERE run_id = ? ORDER BY created_at')
+      .all(runId) as ExecutionRow[];
+    return rows.map(toExecution);
+  }
+
+  listOpenExecutions(): ScriptExecution[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM script_executions
+         WHERE status IN ('queued', 'running') ORDER BY created_at`,
+      )
+      .all() as ExecutionRow[];
+    return rows.map(toExecution);
+  }
+
+  /** 跨表只读：创建 binding 前确认存在未被撤销的授权，授权内容不在此复制。 */
+  findActiveGrant(
+    skillId: string,
+    revisionId: string,
+    profileHash: string,
+  ): { id: string } | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT id FROM skill_trust_grants
+         WHERE skill_id = ? AND revision_id = ? AND profile_hash = ? AND revoked_at IS NULL
+         ORDER BY granted_at DESC LIMIT 1`,
+      )
+      .get(skillId, revisionId, profileHash) as { id: string } | undefined;
+    return row;
+  }
+
+  markRunning(id: string, startedAt: number): boolean {
+    const result = this.db
+      .prepare(
+        `UPDATE script_executions SET status = 'running', started_at = ?
+                WHERE id = ? AND status = 'queued'`,
+      )
+      .run(startedAt, id);
+    return result.changes === 1;
+  }
+
+  /** 终态写入是条件更新：已终态的执行返回 false，调用方据此丢弃迟到结果。 */
+  finishExecution(
+    id: string,
+    status: ScriptExecutionStatus,
+    patch: ExecutionTerminalPatch,
+  ): boolean {
+    if (!isTerminalExecutionStatus(status)) {
+      throw new Error(`finishExecution requires a terminal status, got ${status}`);
+    }
+    const result = this.db
+      .prepare(
+        `UPDATE script_executions
+         SET status = ?, reason = ?, report_hash = ?, output_ids_json = ?, finished_at = ?
+         WHERE id = ? AND status IN ('queued', 'running')`,
+      )
+      .run(
+        status,
+        patch.reason ?? null,
+        patch.reportHash ?? null,
+        JSON.stringify(patch.outputIds ?? []),
+        patch.finishedAt,
+        id,
+      );
+    return result.changes === 1;
+  }
+
+  /** 启动恢复：上次进程被强杀留下的非终态执行收口为 interrupted 失败，不自动重放。 */
+  failInterruptedExecutions(finishedAt: number): number {
+    const result = this.db
+      .prepare(
+        `UPDATE script_executions
+         SET status = 'failed', reason = 'interrupted', finished_at = ?
+         WHERE status IN ('queued', 'running')`,
+      )
+      .run(finishedAt);
+    return result.changes;
+  }
+}

@@ -269,6 +269,78 @@ describe('application database migrations', () => {
     db.close();
   });
 
+  it('adds execution tables whose ownership cascades from the run', () => {
+    const file = path.join(temporaryDirectory(), 'executions.sqlite');
+    const db = openAppDatabase(file);
+    expect(readSchemaVersion(db)).toBe(appMigrations.length);
+
+    const now = 1_700_000_000_000;
+    db.prepare(
+      'INSERT INTO workspaces (id, name, root_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+    ).run('ws-1', '工作区', '/tmp/ws', now, now);
+    db.prepare(
+      'INSERT INTO tasks (id, workspace_id, title, goal, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run('task-1', 'ws-1', '制作演示', '生成 deck', now, now);
+    db.prepare('INSERT INTO sessions (id, task_id, created_at) VALUES (?, ?, ?)').run(
+      'session-1',
+      'task-1',
+      now,
+    );
+    db.prepare(
+      'INSERT INTO runs (id, task_id, session_id, prompt, status, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run('run-1', 'task-1', 'session-1', '生成 deck', 'running', now);
+    db.prepare(
+      `INSERT INTO skills (id, name, description, source_kind, enabled, current_revision_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run('skill-1', '样本能力', '描述', 'user', 1, 'rev-1', now, now);
+    db.prepare(
+      `INSERT INTO skill_revisions (id, skill_id, content_hash, resource_key, frontmatter_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run('rev-1', 'skill-1', 'hash-1', 'user/skill-1/revisions/hash-1', '{}', now);
+    db.prepare(
+      'INSERT INTO skill_runtime_profiles (id, skill_id, profile_hash, profile_json, created_at) VALUES (?, ?, ?, ?, ?)',
+    ).run('prof-1', 'skill-1', 'profile-hash', '{"commands":[]}', now);
+    db.prepare(
+      `INSERT INTO skill_trust_grants (id, skill_id, revision_id, profile_hash, dependency_fingerprint, scope_hash, source, granted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run('grant-1', 'skill-1', 'rev-1', 'profile-hash', 'dep', 'scope', 'user', now);
+
+    const insertBinding = db.prepare(
+      `INSERT INTO run_skill_bindings (id, run_id, skill_revision_id, profile_revision_id, dependency_snapshot_ids_json, grant_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    );
+    insertBinding.run('binding-1', 'run-1', 'rev-1', 'prof-1', '[]', 'grant-1', now);
+    db.prepare(
+      `INSERT INTO script_executions (id, run_id, binding_id, tool_call_id, command_id, argument_digest, work_dir_key, attempt_key, status, output_ids_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      'exec-1',
+      'run-1',
+      'binding-1',
+      'tool-1',
+      'svg-export',
+      'digest',
+      'work',
+      'a-1',
+      'queued',
+      '[]',
+      now,
+    );
+
+    expect(() =>
+      db.prepare('UPDATE script_executions SET status = ? WHERE id = ?').run('stopping', 'exec-1'),
+    ).toThrow();
+
+    db.prepare('DELETE FROM runs WHERE id = ?').run('run-1');
+    expect(countRows(db, 'run_skill_bindings')).toBe(0);
+    expect(countRows(db, 'script_executions')).toBe(0);
+
+    expect(() =>
+      insertBinding.run('binding-2', 'run-missing', 'rev-1', 'prof-1', '[]', 'grant-1', now),
+    ).toThrow();
+    db.close();
+  });
+
   it('rejects a migration list with duplicate or non-contiguous versions', () => {
     const db = new Database(':memory:');
     expect(() =>

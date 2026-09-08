@@ -4,7 +4,10 @@ import {
   deleteSkillRequestSchema,
   exportMarkdownArtifactRequestSchema,
   importSkillRequestSchema,
+  jobResultSchema,
+  jobSpecSchema,
   runtimeProfileDraftSchema,
+  scriptExecutionSchema,
   setSkillTrustRequestSchema,
   skillRevisionSummarySchema,
   skillSummarySchema,
@@ -138,5 +141,88 @@ describe('skill management protocol', () => {
     expect(() =>
       deleteSkillRequestSchema.parse({ skillId: 'skill-1', sourcePath: '/tmp' }),
     ).toThrow();
+  });
+});
+
+describe('script execution protocol', () => {
+  const jobSpec = {
+    protocolVersion: 1,
+    executionId: 'exec-1',
+    runId: 'run-1',
+    toolCallId: 'tool-1',
+    bindingId: 'binding-1',
+    commandId: 'svg-export',
+    executable: '/managed/python/bin/python3',
+    argv: ['export.py', '--out', 'deck.svg'],
+    cwd: '/workspace/tasks/t1/runs/run-1/work',
+    env: { PPTM_HOME: '/managed/snapshot' },
+    timeoutMs: 300_000,
+    maxOutputBytes: 32_768,
+    maxLogBytes: 10_485_760,
+    expectedOutputs: ['deck.svg'],
+  };
+
+  it('pins the host-owned job spec and rejects shell strings or extra fields', () => {
+    expect(jobSpecSchema.parse(jobSpec)).toEqual(jobSpec);
+    expect(() => jobSpecSchema.parse({ ...jobSpec, protocolVersion: 2 })).toThrow();
+    expect(() => jobSpecSchema.parse({ ...jobSpec, shell: 'python3 export.py' })).toThrow();
+    expect(() => jobSpecSchema.parse({ ...jobSpec, env: { DEBUG: true } })).toThrow();
+    expect(() => jobSpecSchema.parse({ ...jobSpec, argv: 'export.py' })).toThrow();
+  });
+
+  it('discriminates job results by kind and keeps the failure phase vocabulary closed', () => {
+    expect(
+      jobResultSchema.parse({
+        kind: 'succeeded',
+        exitCode: 0,
+        outputIds: ['out-1'],
+        durationMs: 42,
+      }),
+    ).toEqual({ kind: 'succeeded', exitCode: 0, outputIds: ['out-1'], durationMs: 42 });
+    expect(
+      jobResultSchema.parse({
+        kind: 'failed',
+        phase: 'validate',
+        code: 'quality-gate',
+        summary: '结构校验未通过',
+        retryable: true,
+      }),
+    ).toMatchObject({ phase: 'validate' });
+    expect(() =>
+      jobResultSchema.parse({
+        kind: 'failed',
+        phase: 'download',
+        code: 'x',
+        summary: 's',
+        retryable: false,
+      }),
+    ).toThrow();
+    expect(() => jobResultSchema.parse({ kind: 'cancelled', diagnosticOutputIds: [] })).toThrow();
+    expect(
+      jobResultSchema.parse({ kind: 'timed-out', cleanupCompleted: true, diagnosticOutputIds: [] }),
+    ).toMatchObject({ kind: 'timed-out' });
+  });
+
+  it('keeps execution status vocabulary closed and reason optional', () => {
+    const execution = {
+      id: 'exec-1',
+      runId: 'run-1',
+      toolCallId: 'tool-1',
+      bindingId: 'binding-1',
+      commandId: 'svg-export',
+      argumentDigest: 'sha256:args',
+      inputHashes: [],
+      workDirKey: 'tasks/t1/runs/run-1/work',
+      attemptKey: 'attempt-1',
+      status: 'queued',
+      outputIds: [],
+      createdAt: 1,
+    };
+    expect(scriptExecutionSchema.parse(execution)).toEqual(execution);
+    expect(() => scriptExecutionSchema.parse({ ...execution, status: 'stopping' })).toThrow();
+    expect(() => scriptExecutionSchema.parse({ ...execution, status: 'ready' })).toThrow();
+    expect(
+      scriptExecutionSchema.parse({ ...execution, status: 'failed', reason: 'cleanup-failed' }),
+    ).toMatchObject({ reason: 'cleanup-failed' });
   });
 });

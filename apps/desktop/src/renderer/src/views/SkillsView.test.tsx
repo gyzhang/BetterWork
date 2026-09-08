@@ -112,6 +112,32 @@ describe('SkillsPage', () => {
     await waitFor(() => expect(screen.getByRole('checkbox')).toHaveProperty('checked', true));
   });
 
+  it('routes short-lived success feedback through the shared toast', async () => {
+    const disabledSummary: SkillSummary = { ...summary, enabled: false };
+    const setEnabled = vi.fn(async () => ({ skill: disabledSummary }));
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        skills: {
+          list: vi.fn(async () => [summary]),
+          get: vi.fn(async () => detail),
+          setEnabled,
+        },
+      },
+    });
+
+    render(<Harness />);
+    await waitFor(() => expect(screen.getByText('研究方法')).toBeTruthy());
+    screen.getByRole('button', { name: /研究方法/ }).click();
+    await waitFor(() => expect(screen.getByRole('heading', { name: '研究方法' })).toBeTruthy());
+
+    screen.getByRole('button', { name: '停用 Skill' }).click();
+    const toast = await screen.findByRole('status');
+    expect(within(toast).getByText('Skill 已停用。')).toBeTruthy();
+    expect(setEnabled).toHaveBeenCalledWith({ skillId: summary.id, enabled: false });
+    expect(document.querySelector('.inline-message:not(.error)')).toBeNull();
+  });
+
   it('requires explicit confirmation before deleting a user Skill', async () => {
     const deleteSkill = vi.fn(async () => ({ deleted: true }));
     Object.defineProperty(window, 'betterwork', {

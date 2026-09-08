@@ -276,6 +276,39 @@ describe('ReActAgentEngine', () => {
     expect((await iterator.next()).value?.type).toBe('tool.completed');
   });
 
+  it('injects the engine-owned toolCallId into the tool execution context', async () => {
+    let seenToolCallId = '';
+    const probeTool: AgentTool = {
+      name: 'probe',
+      description: '记录上下文身份',
+      inputSchema: { type: 'object' },
+      async execute(_input, context) {
+        seenToolCallId = context.toolCallId;
+        return { ok: true };
+      },
+    };
+    const events = [];
+    for await (const event of new ReActAgentEngine().run({
+      runId: 'run-identity',
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      prompt: '记录身份',
+      workspacePath: '.',
+      model: scriptedModel([
+        [{ type: 'tool-call', toolCall: { id: 'call-42', name: 'probe', input: {} } }],
+        [{ type: 'text-delta', delta: '完成' }, { type: 'done' }],
+      ]),
+      tools: [probeTool],
+      signal: new AbortController().signal,
+    }))
+      events.push(event);
+
+    expect(seenToolCallId).toBe('call-42');
+    expect(events.find((event) => event.type === 'tool.started')).toMatchObject({
+      toolCall: { id: 'call-42' },
+    });
+  });
+
   it('executes every tool call requested in the same model round', async () => {
     const events = [];
     const executed: number[] = [];

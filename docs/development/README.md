@@ -53,8 +53,8 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | A03 | 本地目录导入与资源定位 | A02 | done | [SkillService 测试](../../apps/desktop/src/main/services/skill-service.test.ts)，2026-09-08 |
 | A04 | 内置来源、信任与用户副本 | A03 | done | [SkillService 测试](../../apps/desktop/src/main/services/skill-service.test.ts)，2026-09-08 |
 | A05 | 管理 IPC/Preload 接线 | A04 | done | [IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)，2026-09-08 21:56 |
-| A06 | Skill 管理界面及 A1 验收 | A05 | done | [界面测试](../../apps/desktop/src/renderer/src/views/SkillsView.test.tsx)、[Skill 服务测试](../../apps/desktop/src/main/services/skill-service.test.ts)、[协议测试](../../packages/agent-protocol/src/index.test.ts)，2026-09-08 |
-| A07 | 执行协议、执行记录及生命周期接口 | A06 | todo | — |
+| A06 | Skill 管理界面及 A1 验收 | A05 | done | [界面测试](../../apps/desktop/src/renderer/src/views/SkillsView.test.tsx)、[Skill 服务测试](../../apps/desktop/src/main/services/skill-service.test.ts)、[协议测试](../../packages/agent-protocol/src/index.test.ts)；A1 手工验收 2026-09-08 23:54 于 macOS 通过（导入/信任/删除/两次重启/三档主题/窄屏/键盘，SQLite 与日志逐字段核对，见 [日志](../logs/2026-09-08.md)） |
+| A07 | 执行协议、执行记录及生命周期接口 | A06 | done | [执行服务测试](../../apps/desktop/src/main/services/skill-execution-service.test.ts)、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)、[协议测试](../../packages/agent-protocol/src/index.test.ts)，2026-09-09 00:26 |
 | A08 | macOS 进程组 supervisor | A07 | todo | — |
 | A09 | Windows Job supervisor | A08 | todo | — |
 | A10 | Python 环境准备作业 | A09 | todo | — |

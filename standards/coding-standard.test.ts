@@ -290,6 +290,30 @@ describe('界面 Token 纪律', () => {
     expect(offenders, '新增颜色先进 Token 契约并当场补齐 8 个 Variant（docs/12 §8）').toEqual([]);
   });
 
+  it('样式表引用的每个 Token 都有定义', () => {
+    // var(--x) 取不到定义时，属性在计算值阶段失效并回退初值：实心按钮的 hover
+    // 背景会变透明、浮层阴影会消失，而 lint 与 typecheck 都发现不了这类问题。
+    const withoutComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const defined = new Set<string>();
+    for (const relative of cssPaths()) {
+      for (const match of withoutComments(read(relative)).matchAll(/--[a-zA-Z0-9-]+(?=\s*:)/g)) {
+        defined.add(match[0]);
+      }
+    }
+    const offenders: string[] = [];
+    for (const relative of cssPaths()) {
+      const references = withoutComments(read(relative)).matchAll(
+        /var\((--[a-zA-Z0-9-]+)\s*([,)])/g,
+      );
+      for (const match of references) {
+        const token = match[1] ?? '';
+        const hasFallback = match[2] === ',';
+        if (!hasFallback && !defined.has(token)) offenders.push(`${relative}: var(${token})`);
+      }
+    }
+    expect(offenders, '用了未定义的 Token 会让属性静默回退初值（docs/12 §8）').toEqual([]);
+  });
+
   it('动效时长一律取自 Token', () => {
     const rawDuration = /\d+(?:\.\d+)?m?s\b/;
     const offenders: string[] = [];

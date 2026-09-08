@@ -25,6 +25,7 @@ export interface ModelProvider {
 
 export interface ToolExecutionContext {
   runId: string;
+  toolCallId: string;
   workspacePath: string;
   signal: AbortSignal;
   reportProgress(message: string): void;
