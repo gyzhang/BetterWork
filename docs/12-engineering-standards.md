@@ -42,6 +42,7 @@ apps/desktop/src/
 │   ├── db/               # 连接、PRAGMA、版本化迁移与各库的 schema
 │   ├── persistence/      # Repository（按聚合拆分）与 AppStore
 │   ├── services/         # 编排与外部系统适配（运行、通知、资料库、搜索、连通性探测）
+│   ├── infrastructure/   # 宿主之外的运行时适配：进程 supervisor、guardian 脚本与其合成 fixture
 │   └── ipc/              # 全部 channel 注册与边界校验
 ├── preload/index.ts      # 最小类型化 API，推送事件一律过 Zod
 └── renderer/src/
@@ -68,6 +69,8 @@ standards/
 - 页面专属视图留在 `views/`；跨视图布局/反馈组件，以及有明确数据-动作边界的稳定领域呈现组件进入 `components/`。不要为「以后可能复用」提前抽象数据加载或 CRUD 控制器。
 - `services/` 可以依赖 `persistence/`，反向不行；两者都可以依赖 `packages/*`，`packages/*` 不得依赖 `apps/*`。
 - 需要 Application 层资源的 Tool 用「工厂 + 闭包注入」（`createKnowledgeSearchTool`），使 `tool-runtime` 不依赖 Electron、SQLite 或服务商 SDK。
+- `infrastructure/` 放「主进程之外还要再跑一个进程」的适配。`skill-guardian.ts` 是**独立构建入口**（见 `apps/desktop/electron.vite.config.ts` 的 `main.build.rollupOptions.input`），必须自包含：只用 `node:` 内置模块与 `import type`，不导入仓库内其他运行时模块。开发/打包态由 Electron 以 `ELECTRON_RUN_AS_NODE=1` 执行构建产物，测试态由 Node 直接执行同一份 TS 源文件（Node ≥ 22.18 原生剥离类型），两条路径共用一份源码，不出现第二套实现。
+- `infrastructure/fixtures/` 是合成进程替身，只在测试里被 `spawn`，不被任何构建入口 import；它们同样是受本规范约束的 TypeScript，不引入第三方脚本或本机运行制品。
 
 ## 3. 命名与导出
 

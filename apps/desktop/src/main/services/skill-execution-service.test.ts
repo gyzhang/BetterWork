@@ -45,6 +45,13 @@ class FakeSupervisor implements ProcessSupervisor {
     return {
       executionId: spec.executionId,
       result,
+      capture: () => ({
+        stdout: '',
+        stderr: '',
+        truncated: false,
+        receivedBytes: 0,
+        droppedBytes: 0,
+      }),
       cancel: async () => {
         job.cancelled = true;
         job.resolveResult({
