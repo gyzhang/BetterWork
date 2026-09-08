@@ -3,6 +3,7 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -256,6 +257,47 @@ describe('SkillService', () => {
 
     await expect(service.deleteUserSkill('builtin-example')).rejects.toThrow(/cannot be deleted/iu);
     expect(existsSync(path.join(builtin, 'SKILL.md'))).toBe(true);
+    store.close();
+  });
+
+  it('excludes operating system metadata from copies and content hashes', async () => {
+    const directory = temporaryDirectory();
+    const clean = path.join(directory, 'clean');
+    const junky = path.join(directory, 'junky');
+    for (const source of [clean, junky]) {
+      mkdirSync(path.join(source, 'scripts'), { recursive: true });
+      writeFileSync(
+        path.join(source, 'SKILL.md'),
+        '---\nname: 样本能力\ndescription: 描述\n---\n# Instructions\n',
+      );
+      writeFileSync(path.join(source, 'scripts', 'run.py'), 'print(1)\n');
+    }
+    writeFileSync(path.join(junky, '.DS_Store'), 'finder metadata');
+    writeFileSync(path.join(junky, '._SKILL.md'), 'apple double');
+    writeFileSync(path.join(junky, 'scripts', 'Thumbs.db'), 'explorer metadata');
+
+    const roots = rootsFor(directory);
+    const store = AppStore.open(path.join(directory, 'app.sqlite'));
+    const service = new SkillService(store, roots);
+
+    const junkyImport = await service.importDirectory(junky);
+    const cleanImport = await service.importDirectory(clean);
+    const junkyDetail = store.skills.get(junkyImport.skill.id);
+    const cleanDetail = store.skills.get(cleanImport.skill.id);
+    expect(junkyDetail?.revision.contentHash).toBe(cleanDetail?.revision.contentHash);
+
+    const copiedNames: string[] = [];
+    const collect = (current: string): void => {
+      for (const entry of readdirSync(current, { withFileTypes: true })) {
+        if (entry.isDirectory()) collect(path.join(current, entry.name));
+        else copiedNames.push(entry.name);
+      }
+    };
+    collect(path.join(roots.userRoot, junkyImport.skill.id));
+    expect(copiedNames).not.toContain('.DS_Store');
+    expect(copiedNames).not.toContain('._SKILL.md');
+    expect(copiedNames).not.toContain('Thumbs.db');
+    expect(copiedNames).toContain('run.py');
     store.close();
   });
 });
