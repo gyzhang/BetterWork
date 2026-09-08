@@ -49,7 +49,7 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | --- | --- | --- | --- | --- |
 | A00 | 基线与设计决策固定 | 无 | done | [implementation-decisions.md](implementation-decisions.md)，2026-09-08 |
 | A01 | Skill 共享协议及输入输出 Schema | A00 | done | [协议测试](../../packages/agent-protocol/src/index.test.ts)，2026-09-08 |
-| A02 | Skill 修订/profile/信任持久化 | A01 | todo | — |
+| A02 | Skill 修订/profile/信任持久化 | A01 | done | [迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)、[仓储测试](../../apps/desktop/src/main/persistence/app-store.test.ts)，2026-09-08 |
 | A03 | 本地目录导入与资源定位 | A02 | todo | — |
 | A04 | 内置来源、信任与用户副本 | A03 | todo | — |
 | A05 | 管理 IPC/Preload 接线 | A04 | todo | — |

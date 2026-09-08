@@ -7,6 +7,7 @@ import { ModelRepository } from './model-repository';
 import { NotificationRepository } from './notification-repository';
 import { RunRepository } from './run-repository';
 import { SearchEngineRepository } from './search-engine-repository';
+import { SkillRepository } from './skill-repository';
 import { TaskRepository } from './task-repository';
 import { WorkspaceRepository } from './workspace-repository';
 
@@ -28,6 +29,7 @@ export class AppStore {
   readonly models: ModelRepository;
   readonly searchEngines: SearchEngineRepository;
   readonly notifications: NotificationRepository;
+  readonly skills: SkillRepository;
 
   private constructor(private readonly db: Database.Database) {
     this.workspaces = new WorkspaceRepository(db);
@@ -38,6 +40,7 @@ export class AppStore {
     this.models = new ModelRepository(db);
     this.searchEngines = new SearchEngineRepository(db);
     this.notifications = new NotificationRepository(db);
+    this.skills = new SkillRepository(db);
   }
 
   static open(filePath: string): AppStore {
@@ -64,5 +67,14 @@ export { ModelRepository, type RunnableModel } from './model-repository';
 export { NotificationRepository } from './notification-repository';
 export { RunRepository } from './run-repository';
 export { type EnabledSearchEngine, SearchEngineRepository } from './search-engine-repository';
+export {
+  type SaveSkillInput,
+  type SaveSkillProfileInput,
+  type SaveSkillRevisionInput,
+  type SaveSkillTrustGrantInput,
+  SkillRepository,
+  type SkillTrustGrantSource,
+  type SkillTrustPreference,
+} from './skill-repository';
 export { TaskRepository } from './task-repository';
 export { WorkspaceRepository } from './workspace-repository';

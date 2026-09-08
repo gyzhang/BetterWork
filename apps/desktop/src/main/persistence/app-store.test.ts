@@ -1,9 +1,14 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import type { CreatedTask } from '@betterwork/agent-protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { AppStore } from './index';
 
 const openStores: AppStore[] = [];
+const temporaryDirectories: string[] = [];
 /** 每个用例自己开一个内存库并登记清理，用例内部因此不需要任何非空断言。 */
 const openStore = (): AppStore => {
   const store = AppStore.open(':memory:');
@@ -32,9 +37,134 @@ const seedRun = (store: AppStore, task: CreatedTask, runId: string): void => {
 };
 afterEach(() => {
   for (const store of openStores.splice(0)) store.close();
+  for (const directory of temporaryDirectories.splice(0)) {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 describe('AppStore', () => {
+  it('keeps disable and revoked preferences after reopening the database', () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), 'betterwork-skills-'));
+    temporaryDirectories.push(directory);
+    const file = path.join(directory, 'app.sqlite');
+    const first = AppStore.open(file);
+    first.skills.save({
+      id: 'skill-restart',
+      name: 'Restart',
+      description: '',
+      sourceKind: 'user',
+      currentRevisionId: 'revision-restart',
+    });
+    first.skills.saveRevision({
+      id: 'revision-restart',
+      skillId: 'skill-restart',
+      contentHash: 'restart-hash',
+      resourceKey: 'user/restart/restart-hash',
+      frontmatter: {},
+    });
+    first.skills.setEnabled('skill-restart', false);
+    first.skills.setTrustPreference('skill-restart', 'revoked');
+    first.close();
+
+    const second = AppStore.open(file);
+    expect(second.skills.get('skill-restart')).toMatchObject({
+      enabled: false,
+      trustStatus: 'revoked',
+    });
+    second.close();
+  });
+
+  it('persists immutable Skill revisions, profiles, and revocable trust grants', () => {
+    const store = openStore();
+    store.skills.save({
+      id: 'skill-1',
+      name: 'PPT Skill',
+      description: 'A local skill',
+      sourceKind: 'user',
+      currentRevisionId: 'revision-1',
+    });
+    const revisionId = store.skills.saveRevision({
+      id: 'revision-1',
+      skillId: 'skill-1',
+      contentHash: 'content-hash-1',
+      originalVersion: 'v20260907',
+      resourceKey: 'user/skill-1/content-hash-1',
+      frontmatter: { version: 'v20260907', custom: 'kept' },
+    });
+    const profileId = store.skills.saveProfile({
+      id: 'profile-1',
+      skillId: 'skill-1',
+      profileHash: 'profile-hash-1',
+      profile: { commands: [], environmentRequirements: [], outputContract: { outputPaths: [] } },
+    });
+    store.skills.save({
+      id: 'skill-1',
+      name: 'PPT Skill',
+      description: 'A local skill',
+      sourceKind: 'user',
+      currentRevisionId: revisionId,
+      currentProfileRevisionId: profileId,
+    });
+    expect(store.skills.get('skill-1')).toMatchObject({
+      trustStatus: 'untrusted',
+      environmentStatus: 'unprepared',
+      revision: { originalVersion: 'v20260907', frontmatter: { custom: 'kept' } },
+    });
+    store.skills.saveTrustGrant({
+      skillId: 'skill-1',
+      revisionId,
+      profileHash: 'profile-hash-1',
+      dependencyFingerprint: 'dependencies-1',
+      scopeHash: 'scope-1',
+      source: 'user',
+    });
+    expect(store.skills.get('skill-1')?.trustStatus).toBe('trusted');
+    store.skills.setTrustPreference('skill-1', 'revoked');
+    expect(store.skills.get('skill-1')?.trustStatus).toBe('revoked');
+    store.close();
+  });
+
+  it('keeps old Skill revisions when a new revision becomes current', () => {
+    const store = openStore();
+    store.skills.save({
+      id: 'skill-versions',
+      name: 'Versions',
+      description: '',
+      sourceKind: 'user',
+      currentRevisionId: 'revision-placeholder',
+    });
+    const firstRevision = store.skills.saveRevision({
+      skillId: 'skill-versions',
+      contentHash: 'hash-1',
+      resourceKey: 'user/skill-versions/hash-1',
+      frontmatter: {},
+    });
+    const secondRevision = store.skills.saveRevision({
+      skillId: 'skill-versions',
+      contentHash: 'hash-2',
+      resourceKey: 'user/skill-versions/hash-2',
+      frontmatter: {},
+    });
+    store.skills.save({
+      id: 'skill-versions',
+      name: 'Versions',
+      description: '',
+      sourceKind: 'user',
+      currentRevisionId: firstRevision,
+    });
+    store.skills.save({
+      id: 'skill-versions',
+      name: 'Versions',
+      description: '',
+      sourceKind: 'user',
+      currentRevisionId: secondRevision,
+    });
+    expect(store.skills.get('skill-versions')?.currentRevisionId).toBe(secondRevision);
+    expect(
+      store.skills.listRevisions('skill-versions').map((revision) => revision.contentHash),
+    ).toEqual(['hash-1', 'hash-2']);
+  });
+
   it('creates a stable workspace, task, and separate session identifiers', () => {
     const store = openStore();
     const workspace = store.workspaces.getOrCreate('/work/customer-a', '客户 A');
