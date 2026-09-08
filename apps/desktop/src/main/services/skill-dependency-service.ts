@@ -7,6 +7,7 @@ import type {
   DependencyOperation,
   DependencyOperationKind,
   DependencyOperationStep,
+  ManagedDistributionSummary,
   RuntimeEnvironment,
   TargetPlatform,
 } from '@betterwork/agent-protocol';
@@ -21,6 +22,7 @@ import {
   abiTagOf,
   findDistribution,
   type PythonDistribution,
+  pythonDistributions,
 } from '../infrastructure/python-distribution';
 import type { AppStore } from '../persistence';
 
@@ -291,6 +293,99 @@ export class SkillDependencyService {
 
   listEnvironments(): RuntimeEnvironment[] {
     return this.store.environments.listEnvironments();
+  }
+
+  /** 受管 Python 候选清单：制品是否已落地决定准备作业要不要显式联网。 */
+  async listManagedDistributions(): Promise<ManagedDistributionSummary[]> {
+    const summaries: ManagedDistributionSummary[] = [];
+    for (const distribution of pythonDistributions) {
+      summaries.push({
+        id: distribution.id,
+        version: distribution.version,
+        platform: distribution.platform,
+        license: distribution.license,
+        installed: await this.distributionPresent(distribution),
+      });
+    }
+    return summaries;
+  }
+
+  /**
+   * 依赖确定后确认授权（契约 §2：有效授权在依赖准备完成、scope 指纹确定后建立或确认）。
+   *
+   * 授权针对「这个内容修订 + 这个 profile + 这组依赖」：指纹由包锁 hash 与快照清单 hash
+   * 派生，因此依赖变化后旧授权自动失配，必须由用户再次确认才会生效。
+   * 未信任或已撤销的 Skill 一律拒绝，不用空指纹或旧指纹代替。
+   */
+  confirmDependencyGrant(
+    skillId: string,
+    input: { lockHash: string; snapshotManifestHashes: readonly string[]; confirm?: boolean },
+  ): {
+    fingerprint?: string;
+    grantActive: boolean;
+    grantCreated: boolean;
+    blockedReason?: string;
+  } {
+    const skill = this.store.skills.get(skillId);
+    if (!skill) throw new Error(`Skill ${skillId} does not exist`);
+    const profile = skill.runtimeProfile;
+    if (!profile) {
+      return {
+        grantActive: false,
+        grantCreated: false,
+        blockedReason: '还没有运行配置，无法确定授权范围',
+      };
+    }
+    if (skill.trustStatus === 'revoked') {
+      return {
+        grantActive: false,
+        grantCreated: false,
+        blockedReason: '信任已撤销，需要用户重新勾选受信任后才能授权',
+      };
+    }
+    if (skill.trustStatus === 'untrusted') {
+      return {
+        grantActive: false,
+        grantCreated: false,
+        blockedReason: '尚未记录信任意愿，先勾选「受信任」再确认依赖授权',
+      };
+    }
+    const fingerprint = computeDependencyFingerprint(input);
+    // 范围指纹暂以 profile 的命令集合代表；A14 落地真实资源作用域后在此扩展，
+    // 而不是先放行一个空范围。
+    const scopeHash = createHash('sha256')
+      .update(
+        JSON.stringify({
+          profileHash: profile.profileHash,
+          commands: profile.profile.commands.map((command) => command.commandId).sort(),
+        }),
+      )
+      .digest('hex');
+    const existing = this.store.executions.findActiveGrant(
+      skillId,
+      skill.revision.id,
+      profile.profileHash,
+      fingerprint,
+    );
+    if (existing) return { fingerprint, grantActive: true, grantCreated: false };
+    // 只复核不建立：打开面板或切换选择不能悄悄产生一条授权。
+    if (input.confirm !== true) {
+      return {
+        fingerprint,
+        grantActive: false,
+        grantCreated: false,
+        blockedReason: '依赖已确定但没有覆盖它的授权，需要用户确认后建立',
+      };
+    }
+    this.store.skills.saveTrustGrant({
+      skillId,
+      revisionId: skill.revision.id,
+      profileHash: profile.profileHash,
+      dependencyFingerprint: fingerprint,
+      scopeHash,
+      source: 'user',
+    });
+    return { fingerprint, grantActive: true, grantCreated: true };
   }
 
   getEnvironment(environmentId: string): RuntimeEnvironment | undefined {

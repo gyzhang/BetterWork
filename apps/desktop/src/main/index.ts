@@ -2,12 +2,19 @@ import path from 'node:path';
 
 import { app, BrowserWindow } from 'electron';
 
+import {
+  createFetchDownloader,
+  createNodeFileSystem,
+  createNodeProcessRunner,
+} from './infrastructure/dependency-adapters';
 import { registerIpc } from './ipc/register-ipc';
 import { AppStore } from './persistence';
 import { KnowledgeVault } from './services/knowledge-vault';
 import { NotificationService } from './services/notification-service';
 import { RunService } from './services/run-service';
+import { SkillDependencyService } from './services/skill-dependency-service';
 import { SkillService } from './services/skill-service';
+import { ToolchainSnapshotService } from './services/toolchain-snapshot-service';
 import { createMainWindow } from './window';
 
 /**
@@ -42,12 +49,54 @@ function bootstrap(): ApplicationContext {
     userRoot: path.join(userData, 'skills'),
   });
 
+  // 受管资产目录（设计 §5）：基础 Python、专属环境与工具链快照都落在用户数据目录，
+  // 不进仓库也不随安装包复制整套 venv。
+  const dependencyFilesystem = createNodeFileSystem();
+  const dependencyProcess = createNodeProcessRunner();
+  const dependencyLocksRoot = app.isPackaged
+    ? path.join(process.resourcesPath, 'dependency-locks')
+    : path.resolve(app.getAppPath(), '../../resources/dependency-locks');
+  const dependencies = new SkillDependencyService({
+    store,
+    paths: {
+      userDataRoot: userData,
+      pythonRoot: path.join(userData, 'python'),
+      environmentsRoot: path.join(userData, 'environments'),
+      wheelhouseRoot: app.isPackaged
+        ? path.join(process.resourcesPath, 'wheelhouse')
+        : path.resolve(app.getAppPath(), '../../resources/wheelhouse'),
+    },
+    filesystem: dependencyFilesystem,
+    process: dependencyProcess,
+    download: createFetchDownloader(),
+  });
+  const snapshots = new ToolchainSnapshotService({
+    store,
+    userDataRoot: userData,
+    assetsRoot: path.join(userData, 'dependency-assets'),
+    filesystem: dependencyFilesystem,
+    process: dependencyProcess,
+  });
+
   // 上次进程被强杀时正在执行的 Run 会停在 running。启动时统一收口为 failed，
   // 维持「每个 Run 都有明确结果」这条不变量，历史列表不会出现永远转圈的任务。
   const interrupted = store.runs.failInterruptedRuns('算台上次退出时这次执行被中断', Date.now());
   if (interrupted > 0) {
     console.warn(`Marked ${interrupted} interrupted run(s) as failed on startup`);
   }
+  // 环境准备作业同样不能停在 preparing：半成品目录会被清掉，不把部分包集当作可用。
+  dependencies
+    .recoverInterruptedPreparations()
+    .then((recovered) => {
+      if (recovered.operations > 0 || recovered.environments > 0) {
+        console.warn(
+          `Recovered ${recovered.operations} interrupted preparation(s) and ${recovered.environments} environment(s)`,
+        );
+      }
+    })
+    .catch((error: unknown) => {
+      console.error('Dependency preparation recovery failed', error);
+    });
 
   const started: ApplicationContext = { store, knowledgeVault, window: null };
   const getWindow = (): BrowserWindow | null => {
@@ -65,6 +114,9 @@ function bootstrap(): ApplicationContext {
     notifications,
     runs,
     skillService,
+    dependencies,
+    snapshots,
+    dependencyLocksRoot,
     getWindow,
     getDefaultWorkspaceRoot,
   });

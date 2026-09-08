@@ -1370,6 +1370,96 @@ p {
 .skill-detail-section {
   margin-top: 22px;
 }
+.dependency-panel {
+  padding: 13px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.dependency-status-chip {
+  padding: 3px 9px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+}
+.dependency-field {
+  margin-top: 13px;
+}
+.dependency-field label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.dependency-field select {
+  width: 100%;
+  padding: 7px 9px;
+  color: var(--text-primary);
+  font-size: 13px;
+  background: var(--surface);
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+}
+.dependency-field > p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.dependency-inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.dependency-inline select {
+  flex: 1;
+}
+.dependency-warning {
+  margin: 6px 0 0;
+  color: var(--warning);
+  font-size: 12px;
+}
+.dependency-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 15px;
+}
+.dependency-progress {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.dependency-operation {
+  margin-top: 12px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.dependency-operation strong {
+  font-size: 13px;
+}
+.dependency-operation span {
+  margin-left: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.dependency-operation p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.dependency-grant {
+  margin-top: 13px;
+  padding-top: 11px;
+  border-top: 1px solid var(--border-subtle);
+}
+.dependency-grant p {
+  margin: 0 0 7px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
 .skill-detail-section h3 {
   margin: 0;
   font-size: 14px;

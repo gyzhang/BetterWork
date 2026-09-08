@@ -1,15 +1,30 @@
 import type { BetterWorkDesktopApi } from '@betterwork/agent-protocol';
 import {
   agentRuntimeEventSchema,
+  cancelDependencyRequestSchema,
+  cancelDependencyResultSchema,
+  chooseInterpreterResultSchema,
   copySkillRequestSchema,
   deletedResultSchema,
   deleteSkillRequestSchema,
+  dependencyOperationSchema,
+  dependencyOptionsSchema,
+  dependencyPlanRequestSchema,
+  dependencyPlanSchema,
   exportSkillRequestSchema,
+  getDependencyOperationRequestSchema,
   getSkillRequestSchema,
   importSkillRequestSchema,
   IpcChannel,
+  listDependencyOptionsRequestSchema,
   notificationActivatedSchema,
   notificationChangeEventSchema,
+  prepareDependencyRequestSchema,
+  prepareDependencyResultSchema,
+  refreshSkillDependencyGrantRequestSchema,
+  refreshSkillDependencyGrantResultSchema,
+  registerToolchainRequestSchema,
+  registerToolchainResultSchema,
   revokeSkillTrustRequestSchema,
   saveSkillRuntimeProfileRequestSchema,
   setSkillEnabledRequestSchema,
@@ -164,6 +179,52 @@ const api: BetterWorkDesktopApi = {
         IpcChannel.DeleteSkill,
         deleteSkillRequestSchema.parse(input),
         deletedResultSchema,
+      ),
+    refreshDependencyGrant: (input) =>
+      invokeValidated(
+        IpcChannel.RefreshSkillDependencyGrant,
+        refreshSkillDependencyGrantRequestSchema.parse(input),
+        refreshSkillDependencyGrantResultSchema,
+      ),
+  },
+  dependencies: {
+    listOptions: () =>
+      invokeValidated(
+        IpcChannel.ListDependencyOptions,
+        listDependencyOptionsRequestSchema.parse({}),
+        dependencyOptionsSchema,
+      ),
+    inspectPlan: (input) =>
+      invokeValidated(
+        IpcChannel.InspectDependencyPlan,
+        dependencyPlanRequestSchema.parse(input),
+        dependencyPlanSchema,
+      ),
+    prepare: (input) =>
+      invokeValidated(
+        IpcChannel.PrepareDependencyEnvironment,
+        prepareDependencyRequestSchema.parse(input),
+        prepareDependencyResultSchema,
+      ),
+    cancel: (input) =>
+      invokeValidated(
+        IpcChannel.CancelDependencyPreparation,
+        cancelDependencyRequestSchema.parse(input),
+        cancelDependencyResultSchema,
+      ),
+    getOperation: (input) =>
+      invokeValidated(
+        IpcChannel.GetDependencyOperation,
+        getDependencyOperationRequestSchema.parse(input),
+        dependencyOperationSchema.nullable(),
+      ),
+    chooseInterpreter: () =>
+      invokeValidated(IpcChannel.ChoosePythonInterpreter, {}, chooseInterpreterResultSchema),
+    registerToolchain: (input) =>
+      invokeValidated(
+        IpcChannel.RegisterToolchainSnapshot,
+        registerToolchainRequestSchema.parse(input),
+        registerToolchainResultSchema,
       ),
   },
 };
