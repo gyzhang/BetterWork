@@ -285,6 +285,19 @@ export const baseInterpreterSchema = z.discriminatedUnion('kind', [
 ]);
 export type BaseInterpreter = z.infer<typeof baseInterpreterSchema>;
 
+/** 已批准来源地址：只允许 https，且不得内嵌凭据（凭据只能来自宿主明确设置）。 */
+const approvedHttpsUrl = z
+  .string()
+  .trim()
+  .min(1)
+  .max(2000)
+  .refine((value) => value.startsWith('https://'), {
+    message: 'Approved source must be an https URL',
+  })
+  .refine((value) => !value.includes('@'), {
+    message: 'Approved source must not embed credentials',
+  });
+
 export const dependencyLockPackageSchema = z
   .object({
     name: z.string().trim().min(1).max(200),
@@ -293,16 +306,11 @@ export const dependencyLockPackageSchema = z
     sha256: z.string().regex(/^[0-9a-f]{64}$/u),
     /** 只允许两个已批准来源：随包 wheelhouse（离线）与显式批准的 https 索引。 */
     source: z.enum(['wheelhouse', 'approved-index']),
-    origin: z
-      .string()
-      .trim()
-      .refine((value) => value.startsWith('https://'), {
-        message: 'Approved index origin must be an https URL without credentials',
-      })
-      .refine((value) => !value.includes('@'), {
-        message: 'Approved index origin must not embed credentials',
-      })
-      .optional(),
+    origin: approvedHttpsUrl.optional(),
+    /** 精确制品地址；存在时优先于 origin 拼接，避免各索引布局差异导致取错文件。 */
+    url: approvedHttpsUrl.optional(),
+    /** SPDX 标识或上游分类，随包分发前整理许可清单用（A20）。 */
+    license: z.string().trim().min(1).max(200).optional(),
   })
   .strict();
 export type DependencyLockPackage = z.infer<typeof dependencyLockPackageSchema>;
@@ -319,6 +327,36 @@ export const dependencyLockSchema = z
   })
   .strict();
 export type DependencyLock = z.infer<typeof dependencyLockSchema>;
+
+/** 快照排除项必须逐条列明理由：用户要能看清哪些内容没有进入受管副本。 */
+export const dependencySnapshotExclusionSchema = z
+  .object({
+    path: z.string().min(1),
+    reason: z.string().min(1),
+  })
+  .strict();
+export type DependencySnapshotExclusion = z.infer<typeof dependencySnapshotExclusionSchema>;
+
+export const dependencySnapshotSchema = z
+  .object({
+    id: z.string().min(1),
+    /** 用户选择的外部目录；只作为来源标识，运行时一律使用受管副本。 */
+    origin: z.string().min(1),
+    originCommit: z.string().min(1).optional(),
+    /** 源目录的版本状态；读不到 git 身份时如实记 unknown，不默认当作干净。 */
+    originState: z.enum(['clean', 'dirty', 'unknown']),
+    /** 所选内容（含本地修改）的清单 hash；内容寻址，因此相同内容只有一个快照。 */
+    manifestHash: z.string().min(1),
+    /** 相对受管资产根的目录键；PPTM_HOME 指向它解析出的绝对路径，不指向开发仓库。 */
+    pathKey: z.string().min(1),
+    fileCount: z.number().int().nonnegative(),
+    totalBytes: z.number().int().nonnegative(),
+    exclusions: z.array(dependencySnapshotExclusionSchema).max(2000),
+    createdAt: z.number().int().nonnegative(),
+    verifiedAt: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+export type DependencySnapshot = z.infer<typeof dependencySnapshotSchema>;
 
 export const runtimeEnvironmentSchema = z
   .object({

@@ -3,6 +3,7 @@ import type Database from 'better-sqlite3';
 import { openAppDatabase } from '../db';
 import { ArtifactRepository } from './artifact-repository';
 import { DependencyOperationRepository } from './dependency-operation-repository';
+import { DependencySnapshotRepository } from './dependency-snapshot-repository';
 import { EvidenceRepository } from './evidence-repository';
 import { ModelRepository } from './model-repository';
 import { NotificationRepository } from './notification-repository';
@@ -36,6 +37,7 @@ export class AppStore {
   readonly executions: SkillExecutionRepository;
   readonly environments: RuntimeEnvironmentRepository;
   readonly dependencyOperations: DependencyOperationRepository;
+  readonly snapshots: DependencySnapshotRepository;
 
   private constructor(private readonly db: Database.Database) {
     this.workspaces = new WorkspaceRepository(db);
@@ -50,6 +52,7 @@ export class AppStore {
     this.executions = new SkillExecutionRepository(db);
     this.environments = new RuntimeEnvironmentRepository(db);
     this.dependencyOperations = new DependencyOperationRepository(db);
+    this.snapshots = new DependencySnapshotRepository(db);
   }
 
   static open(filePath: string): AppStore {
@@ -78,6 +81,10 @@ export {
   type OperationProgressPatch,
   type OperationTerminalPatch,
 } from './dependency-operation-repository';
+export {
+  type CreateSnapshotInput,
+  DependencySnapshotRepository,
+} from './dependency-snapshot-repository';
 export { EvidenceRepository, type NewEvidence } from './evidence-repository';
 export { ModelRepository, type RunnableModel } from './model-repository';
 export { NotificationRepository } from './notification-repository';

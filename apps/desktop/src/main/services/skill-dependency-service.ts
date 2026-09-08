@@ -204,6 +204,26 @@ export const computeEnvironmentKey = (
     .update(JSON.stringify({ base: baseFingerprint(base), platform, lockHash }))
     .digest('hex');
 
+/**
+ * 信任授权的依赖指纹（设计 §7.1、契约 §1 的 `dependencyFingerprint`）。
+ *
+ * 授权不是「信任这个 Skill」，而是「信任这个内容修订在这组依赖下执行」：
+ * 包锁或工具链快照任一变化，指纹就变，旧授权随之失配，必须重新征得用户同意。
+ * 快照可选——纯 Python 依赖的 Skill 没有外部工具链。
+ */
+export const computeDependencyFingerprint = (input: {
+  lockHash: string;
+  snapshotManifestHashes?: readonly string[];
+}): string =>
+  createHash('sha256')
+    .update(
+      JSON.stringify({
+        lockHash: input.lockHash,
+        snapshots: [...(input.snapshotManifestHashes ?? [])].sort(),
+      }),
+    )
+    .digest('hex');
+
 /** 代理或索引凭据绝不能进入操作记录：落库与展示前统一脱敏。 */
 export const redactCredentials = (text: string): string =>
   text.replace(/\/\/[^/\s:@]+:[^/\s@]+@/gu, '//***:***@');
@@ -757,18 +777,18 @@ export class SkillDependencyService {
         }
         continue;
       }
-      if (entry.source !== 'approved-index' || !entry.origin) {
+      if (entry.source !== 'approved-index' || (!entry.url && !entry.origin)) {
         throw new DependencyPreparationError(
           'wheel-missing',
           `随包 wheelhouse 缺少 ${entry.name}==${entry.version}（${entry.wheel}），且未批准联网来源`,
         );
       }
       this.reportProgress(job, 'install-packages', `下载 ${entry.name}==${entry.version}`);
+      // 优先用锁里登记的精确制品地址：各索引的目录布局不同，拼接容易取错文件。
+      const source = entry.url ?? `${(entry.origin ?? '').replace(/\/$/u, '')}/${entry.wheel}`;
       let bytes: Uint8Array;
       try {
-        bytes = await this.roots.download.download(
-          `${entry.origin.replace(/\/$/u, '')}/${entry.wheel}`,
-        );
+        bytes = await this.roots.download.download(source);
       } catch (error) {
         throw new DependencyPreparationError(
           'wheel-missing',
