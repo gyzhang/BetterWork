@@ -147,6 +147,10 @@ export class SkillRepository {
     );
   }
 
+  getTrustPreference(skillId: string): SkillTrustPreference {
+    return this.getPreference(skillId).trust_preference;
+  }
+
   private getGrant(
     skillId: string,
     revisionId: string,
@@ -225,6 +229,10 @@ export class SkillRepository {
   }
 
   saveRevision(input: SaveSkillRevisionInput): string {
+    const existing = this.db
+      .prepare('SELECT id FROM skill_revisions WHERE skill_id = ? AND content_hash = ?')
+      .get(input.skillId, input.contentHash) as { id: string } | undefined;
+    if (existing) return existing.id;
     const id = input.id ?? randomUUID();
     this.db
       .prepare(
@@ -245,6 +253,10 @@ export class SkillRepository {
   }
 
   saveProfile(input: SaveSkillProfileInput): string {
+    const existing = this.db
+      .prepare('SELECT id FROM skill_runtime_profiles WHERE skill_id = ? AND profile_hash = ?')
+      .get(input.skillId, input.profileHash) as { id: string } | undefined;
+    if (existing) return existing.id;
     const id = input.id ?? randomUUID();
     this.db
       .prepare(
