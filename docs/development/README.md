@@ -55,8 +55,8 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | A05 | 管理 IPC/Preload 接线 | A04 | done | [IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)，2026-09-08 21:56 |
 | A06 | Skill 管理界面及 A1 验收 | A05 | done | [界面测试](../../apps/desktop/src/renderer/src/views/SkillsView.test.tsx)、[Skill 服务测试](../../apps/desktop/src/main/services/skill-service.test.ts)、[协议测试](../../packages/agent-protocol/src/index.test.ts)；A1 手工验收 2026-09-08 23:54 于 macOS 通过（导入/信任/删除/两次重启/三档主题/窄屏/键盘，SQLite 与日志逐字段核对，见 [日志](../logs/2026-09-08.md)） |
 | A07 | 执行协议、执行记录及生命周期接口 | A06 | done | [执行服务测试](../../apps/desktop/src/main/services/skill-execution-service.test.ts)、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)、[协议测试](../../packages/agent-protocol/src/index.test.ts)，2026-09-09 00:26 |
-| A08 | macOS 进程组 supervisor | A07 | todo | — |
-| A09 | Windows Job supervisor | A08 | todo | — |
+| A08 | macOS 进程组 supervisor | A07 | done | [supervisor 测试](../../apps/desktop/src/main/infrastructure/mac-process-supervisor.test.ts)（17 项真机进程用例）、[guardian](../../apps/desktop/src/main/infrastructure/skill-guardian.ts) 构建产物在 Electron `ELECTRON_RUN_AS_NODE` 下实测取消/组核验，2026-09-09 01:33 |
+| A09 | Windows Job supervisor | A08 | blocked | 本机无 Windows 构建与运行环境。2026-09-09 用户明确授权跳过本卡先行推进 A10–A12；A2/A21 的跨平台门槛保留，不得据此把 Windows 标为已验收 |
 | A10 | Python 环境准备作业 | A09 | todo | — |
 | A11 | 外部工具链快照与依赖锁 | A10 | todo | — |
 | A12 | 运行配置/环境 UI 与 A2 验收 | A11 | todo | — |
