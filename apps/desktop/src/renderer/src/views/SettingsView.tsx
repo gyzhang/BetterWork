@@ -8,10 +8,12 @@ import type {
 } from '../appearance';
 import { colorSchemes } from '../appearance';
 import { useSearchEngineSettings } from '../hooks/use-search-engine-settings';
+import type { SkillsState } from '../hooks/use-skills';
 import { CheckIcon, PlusIcon } from '../icons';
 import { trackAction } from '../lib/async-action';
 import { connectionStatusName, roleName } from '../lib/labels';
 import type { SettingsTab } from '../lib/view-types';
+import { SkillsPage } from './SkillsView';
 
 export interface SettingsPageProps {
   tab: SettingsTab;
@@ -31,6 +33,7 @@ export interface SettingsPageProps {
   onMode: (mode: AppearanceMode) => void;
   onScheme: (scheme: ColorScheme) => void;
   modelMessage: string;
+  skills: SkillsState;
 }
 export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
   const { tab, setTab } = props;
@@ -41,6 +44,9 @@ export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
         <h1>偏好与能力</h1>
         <button className={tab === 'models' ? 'active' : ''} onClick={() => setTab('models')}>
           模型与能力
+        </button>
+        <button className={tab === 'skills' ? 'active' : ''} onClick={() => setTab('skills')}>
+          能力 Skill
         </button>
         <button className={tab === 'search' ? 'active' : ''} onClick={() => setTab('search')}>
           搜索
@@ -56,6 +62,7 @@ export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
         </button>
       </aside>
       <section className="settings-content">
+        {tab === 'skills' && <SkillsPage state={props.skills} />}
         {tab === 'models' && <ModelSettings {...props} />}
         {tab === 'search' && <SearchSettings />}
         {tab === 'appearance' && <AppearanceSettings {...props} />}
