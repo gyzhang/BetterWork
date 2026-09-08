@@ -365,6 +365,53 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 4,
+    name: 'add run skill bindings and script executions',
+    up(db: Database.Database): void {
+      // environment_id 故意不加外键：runtime_environments 由 A10 引入，
+      // 届时按本文件约定走 rebuildTable 补外键，不在启动代码里探测后 ALTER。
+      db.exec(`
+        CREATE TABLE run_skill_bindings (
+          id TEXT PRIMARY KEY,
+          run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+          skill_revision_id TEXT NOT NULL REFERENCES skill_revisions(id) ON DELETE CASCADE,
+          profile_revision_id TEXT NOT NULL
+            REFERENCES skill_runtime_profiles(id) ON DELETE CASCADE,
+          environment_id TEXT,
+          dependency_snapshot_ids_json TEXT NOT NULL DEFAULT '[]',
+          grant_id TEXT NOT NULL REFERENCES skill_trust_grants(id) ON DELETE CASCADE,
+          created_at INTEGER NOT NULL
+        );
+        CREATE TABLE script_executions (
+          id TEXT PRIMARY KEY,
+          run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+          binding_id TEXT NOT NULL REFERENCES run_skill_bindings(id) ON DELETE CASCADE,
+          tool_call_id TEXT NOT NULL,
+          command_id TEXT NOT NULL,
+          argument_digest TEXT NOT NULL,
+          input_hashes_json TEXT NOT NULL DEFAULT '[]',
+          work_dir_key TEXT NOT NULL,
+          attempt_key TEXT NOT NULL,
+          status TEXT NOT NULL
+            CHECK (status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled', 'timed-out')),
+          reason TEXT CHECK (reason IN (
+            'spawn-failed', 'execute-failed', 'validate-failed', 'publish-failed',
+            'cleanup-failed', 'interrupted', 'timed-out', 'cancelled-by-user',
+            'cancelled-by-run', 'cancelled-by-trust-revoke', 'cancelled-by-disable'
+          )),
+          report_hash TEXT,
+          output_ids_json TEXT NOT NULL DEFAULT '[]',
+          created_at INTEGER NOT NULL,
+          started_at INTEGER,
+          finished_at INTEGER
+        );
+        CREATE INDEX idx_run_skill_bindings_run ON run_skill_bindings(run_id);
+        CREATE INDEX idx_script_executions_run ON script_executions(run_id, created_at DESC);
+        CREATE INDEX idx_script_executions_open ON script_executions(status);
+      `);
+    },
+  },
 ];
 
 /**

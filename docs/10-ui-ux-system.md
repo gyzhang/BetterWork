@@ -270,7 +270,7 @@ UI Foundation 首批提供四套成对色系：
 - 画布与表面：`canvas`、`surface`、`surface-raised`、`overlay`
 - 文本：`text-primary`、`text-secondary`、`text-muted`、`text-on-dark`
 - 边界与输入：`border`、`border-subtle`、`input-border`、`focus-ring`
-- 状态：`success`、`warning`、`danger`、`info` 及其柔和背景
+- 状态：`success`、`warning`、`danger`、`info` 及其柔和背景；实心危险按钮另带 `danger-hover` 作为 hover 背景，浅色 Variant 向暗取、深色 Variant 向亮取，与 `brand-hover` 同向
 - 专用区域：`sidebar`、`composer`、`selection`、`scrollbar`
 - 图表：一组经过对比度校准的有序数据色，但不替代状态色
 

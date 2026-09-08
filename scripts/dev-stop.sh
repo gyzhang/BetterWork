@@ -26,7 +26,19 @@ if [[ "$CWD" != "$PROJECT_ROOT" ]]; then
 fi
 
 echo "🎯 将关闭 BetterWork 开发进程：$ROOT_PID"
-CHILDREN="$(pgrep -P "$ROOT_PID" 2>/dev/null || true)"
+
+# 进程树是 npm → npm --workspace → electron-vite → vite/electron。只杀直接子进程会把
+# 持有渲染端口的孙进程孤儿化，下次启动被迫换端口并导致渲染进程加载失败。
+collect_descendants() {
+  local parent="$1"
+  local child
+  for child in $(pgrep -P "$parent" 2>/dev/null || true); do
+    printf '%s\n' "$child"
+    collect_descendants "$child"
+  done
+}
+
+CHILDREN="$(collect_descendants "$ROOT_PID")"
 for child in $CHILDREN; do kill "$child" 2>/dev/null || true; done
 kill "$ROOT_PID" 2>/dev/null || true
 

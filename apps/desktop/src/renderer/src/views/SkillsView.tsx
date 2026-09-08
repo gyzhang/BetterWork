@@ -5,6 +5,7 @@ import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
+import { TransientToast } from '../components/TransientToast';
 import type { SkillsState } from '../hooks/use-skills';
 import { InfoIcon, PlusIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
@@ -83,7 +84,6 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
           </button>
         </p>
       )}
-      {state.message && <p className="inline-message">{state.message}</p>}
       <div className="skills-layout">
         <ScrollRegion className="skill-list" ariaLabel="Skill 列表">
           {state.loading ? (
@@ -119,6 +119,9 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
           )}
         </ScrollRegion>
       </div>
+      {state.toast && (
+        <TransientToast tone="success" message={state.toast} onDismiss={state.dismissToast} />
+      )}
     </section>
   );
 }

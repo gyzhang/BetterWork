@@ -4,6 +4,7 @@ import { createWebSearchTool } from './web-search';
 
 const context = {
   runId: 'run-1',
+  toolCallId: 'tool-1',
   workspacePath: '.',
   signal: new AbortController().signal,
   reportProgress() {},

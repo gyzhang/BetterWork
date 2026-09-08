@@ -28,7 +28,7 @@
 | 跨文件结构 | `standards/coding-standard.test.ts` | 配置唯一性、零豁免、分层边界、Token 与动效纪律 |
 | 门禁 | `npm run verify` | 上面两层，加类型检查、全部测试与构建 |
 
-结构护栏随 `npm test` 执行，因此也在 `verify` 里。它断言的都是 ESLint 表达不了的约定：ESLint / Prettier / tsconfig 各只有一份且严格开关全开、源码里没有任何豁免注释、`packages/*` 不依赖 `apps/*`、Agent Core 不依赖宿主运行时、Renderer 不导入 `node:*`、`views/` 与 `components/` 不直接调 IPC、`ipcMain.handle` 只在一处、取消词汇只在一处、硬编码色值与写死的动效时长只出现在白名单里、首帧窗口主题与青玉浅色 Token 一致、`.qoder/rules/` 下每个规则文件都登记在索引里。
+结构护栏随 `npm test` 执行，因此也在 `verify` 里。它断言的都是 ESLint 表达不了的约定：ESLint / Prettier / tsconfig 各只有一份且严格开关全开、源码里没有任何豁免注释、`packages/*` 不依赖 `apps/*`、Agent Core 不依赖宿主运行时、Renderer 不导入 `node:*`、`views/` 与 `components/` 不直接调 IPC、`ipcMain.handle` 只在一处、取消词汇只在一处、硬编码色值与写死的动效时长只出现在白名单里、样式表引用的每个 Token 都有定义、首帧窗口主题与青玉浅色 Token 一致、`.qoder/rules/` 下每个规则文件都登记在索引里。
 
 格式化范围：所有 `.ts` / `.tsx` / `.css` / `.html` / `.json`。Markdown 与 `docs/assets/` 下的品牌 SVG **不格式化**——中文长行经重排后无法逐字回读校验，标志文件是人工定稿资产。
 

@@ -117,6 +117,7 @@ export class ReActAgentEngine implements AgentEngine {
           const execution = tool
             .execute(toolCall.input, {
               runId: input.runId,
+              toolCallId: toolCall.id,
               workspacePath: input.workspacePath,
               signal: input.signal,
               reportProgress(message) {

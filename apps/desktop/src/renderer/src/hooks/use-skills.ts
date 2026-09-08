@@ -10,7 +10,7 @@ export interface SkillsState {
   loading: boolean;
   detailLoading: boolean;
   importing: boolean;
-  message: string;
+  toast: string;
   error: string;
   select: (skill: SkillSummary) => void;
   refresh: () => void;
@@ -22,6 +22,7 @@ export interface SkillsState {
   exportSkill: (skill: SkillSummary) => void;
   deleteSkill: (skill: SkillSummary) => Promise<void>;
   saveProfile: (skillId: string, profile: RuntimeProfileDraft) => Promise<void>;
+  dismissToast: () => void;
   clearError: () => void;
 }
 
@@ -32,15 +33,10 @@ export function useSkills(): SkillsState {
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [message, setMessage] = useState('');
+  const [toast, setToast] = useState('');
   const [error, setError] = useState('');
   const requestId = useRef(0);
-
-  useEffect(() => {
-    if (!message) return;
-    const timeoutId = window.setTimeout(() => setMessage(''), 4000);
-    return () => window.clearTimeout(timeoutId);
-  }, [message]);
+  const dismissToast = useCallback((): void => setToast(''), []);
 
   const refresh = useCallback((): void => {
     setLoading(true);
@@ -76,7 +72,7 @@ export function useSkills(): SkillsState {
       reportAction(
         action.then(({ skill }) => {
           setSkills((current) => current.map((item) => (item.id === skill.id ? skill : item)));
-          setMessage(successMessage);
+          setToast(successMessage);
           select(skill);
         }),
         setError,
@@ -94,7 +90,7 @@ export function useSkills(): SkillsState {
       if (result.cancelled) return;
       refresh();
       if (result.skill) select(result.skill);
-      setMessage('Skill 已导入，默认未信任。');
+      setToast('Skill 已导入，默认未信任。');
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : '导入 Skill 失败。');
     } finally {
@@ -140,7 +136,7 @@ export function useSkills(): SkillsState {
   const exportSkill = useCallback((skill: SkillSummary): void => {
     reportAction(
       window.betterwork.skills.export({ skillId: skill.id }).then((result) => {
-        if (!result.cancelled) setMessage(`Skill 已导出到 ${result.filePath ?? '所选位置'}。`);
+        if (!result.cancelled) setToast(`Skill 已导出到 ${result.filePath ?? '所选位置'}。`);
       }),
       setError,
       '导出 Skill 失败，请重试。',
@@ -151,7 +147,7 @@ export function useSkills(): SkillsState {
     setSkills((current) => current.filter((item) => item.id !== skill.id));
     setSelected(undefined);
     setSelectedId(undefined);
-    setMessage('Skill 已删除。');
+    setToast('Skill 已删除。');
   }, []);
   const saveProfile = useCallback(
     async (skillId: string, profile: RuntimeProfileDraft): Promise<void> => {
@@ -159,7 +155,7 @@ export function useSkills(): SkillsState {
       setSkills((current) => current.map((item) => (item.id === skillId ? result.skill : item)));
       setSelected((current) => (current?.id === skillId ? undefined : current));
       select(result.skill);
-      setMessage('运行配置草稿已保存。尚未准备环境。');
+      setToast('运行配置草稿已保存。尚未准备环境。');
     },
     [select],
   );
@@ -171,7 +167,7 @@ export function useSkills(): SkillsState {
     loading,
     detailLoading,
     importing,
-    message,
+    toast,
     error,
     select,
     refresh,
@@ -183,6 +179,7 @@ export function useSkills(): SkillsState {
     exportSkill,
     deleteSkill,
     saveProfile,
+    dismissToast,
     clearError: () => setError(''),
   };
 }

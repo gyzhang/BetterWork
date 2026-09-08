@@ -18,6 +18,7 @@ describe('readTextFileTool', () => {
         { path: '../secret.txt' },
         {
           runId: 'run-1',
+          toolCallId: 'tool-1',
           workspacePath: workspace,
           signal: new AbortController().signal,
           reportProgress: () => undefined,
@@ -39,6 +40,7 @@ describe('readTextFileTool', () => {
         { path: 'linked-secret.txt' },
         {
           runId: 'run-2',
+          toolCallId: 'tool-2',
           workspacePath: workspace,
           signal: new AbortController().signal,
           reportProgress: () => undefined,

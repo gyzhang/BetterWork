@@ -251,6 +251,129 @@ export const skillImportResultSchema = z
   .strict();
 export type SkillImportResult = z.infer<typeof skillImportResultSchema>;
 
+export const scriptExecutionStatusSchema = z.enum([
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+  'cancelled',
+  'timed-out',
+]);
+export type ScriptExecutionStatus = z.infer<typeof scriptExecutionStatusSchema>;
+
+export const scriptExecutionReasonSchema = z.enum([
+  'spawn-failed',
+  'execute-failed',
+  'validate-failed',
+  'publish-failed',
+  'cleanup-failed',
+  'interrupted',
+  'timed-out',
+  'cancelled-by-user',
+  'cancelled-by-run',
+  'cancelled-by-trust-revoke',
+  'cancelled-by-disable',
+]);
+export type ScriptExecutionReason = z.infer<typeof scriptExecutionReasonSchema>;
+
+export const jobFailurePhaseSchema = z.enum(['spawn', 'execute', 'validate', 'publish', 'cleanup']);
+export type JobFailurePhase = z.infer<typeof jobFailurePhaseSchema>;
+
+/** 宿主内部执行规格：只由 Main 依据 runtime profile 构造，Renderer 与模型都提交不了它。 */
+export const jobSpecSchema = z
+  .object({
+    protocolVersion: z.literal(1),
+    executionId: z.string().min(1),
+    runId: z.string().min(1),
+    toolCallId: z.string().min(1),
+    bindingId: z.string().min(1),
+    commandId: z.string().min(1),
+    executable: z.string().min(1),
+    argv: z.array(z.string()),
+    cwd: z.string().min(1),
+    env: z.record(z.string(), z.string()),
+    timeoutMs: z.number().int().positive().max(1_800_000),
+    maxOutputBytes: z.number().int().positive(),
+    maxLogBytes: z.number().int().positive(),
+    expectedOutputs: z.array(z.string().min(1)).max(100),
+    validatorId: z.string().min(1).optional(),
+  })
+  .strict();
+export type JobSpec = z.infer<typeof jobSpecSchema>;
+
+export const jobResultSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('succeeded'),
+      exitCode: z.number().int(),
+      outputIds: z.array(z.string().min(1)),
+      reportHash: z.string().min(1).optional(),
+      durationMs: z.number().int().nonnegative(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('failed'),
+      phase: jobFailurePhaseSchema,
+      code: z.string().min(1),
+      summary: z.string(),
+      logKey: z.string().min(1).optional(),
+      retryable: z.boolean(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('cancelled'),
+      cleanupCompleted: z.boolean(),
+      diagnosticOutputIds: z.array(z.string().min(1)),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('timed-out'),
+      cleanupCompleted: z.boolean(),
+      diagnosticOutputIds: z.array(z.string().min(1)),
+    })
+    .strict(),
+]);
+export type JobResult = z.infer<typeof jobResultSchema>;
+
+export const runSkillBindingSchema = z
+  .object({
+    id: z.string().min(1),
+    runId: z.string().min(1),
+    skillRevisionId: skillRevisionIdSchema,
+    profileRevisionId: z.string().min(1),
+    environmentId: z.string().min(1).optional(),
+    dependencySnapshotIds: z.array(z.string().min(1)),
+    grantId: z.string().min(1),
+    createdAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type RunSkillBinding = z.infer<typeof runSkillBindingSchema>;
+
+export const scriptExecutionSchema = z
+  .object({
+    id: z.string().min(1),
+    runId: z.string().min(1),
+    toolCallId: z.string().min(1),
+    bindingId: z.string().min(1),
+    commandId: z.string().min(1),
+    argumentDigest: z.string(),
+    inputHashes: z.array(z.string().min(1)),
+    workDirKey: z.string().min(1),
+    attemptKey: z.string().min(1),
+    status: scriptExecutionStatusSchema,
+    reason: scriptExecutionReasonSchema.optional(),
+    reportHash: z.string().min(1).optional(),
+    outputIds: z.array(z.string().min(1)),
+    createdAt: z.number().int().nonnegative(),
+    startedAt: z.number().int().nonnegative().optional(),
+    finishedAt: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+export type ScriptExecution = z.infer<typeof scriptExecutionSchema>;
+
 export interface WorkspaceSummary {
   id: string;
   name: string;
