@@ -1,8 +1,12 @@
 # 系统架构
 
+> 对应运行设计现见 [Skill 执行器与依赖管理](designs/skill-executor-and-dependencies.md)（[ADR-0010](adr/0010-skill-executor-and-dependencies.md)，Proposed），明确进程生命周期、信任限制及文件成果接点；不改变本文记录的当前实现状态。
+
+> 2026-09-08 运行能力增量：阶段 A 需支持脚本型 Skill 的 Python/CLI、外部本地依赖、子进程管理及任务输出，见 [ADR-0009](adr/0009-script-skill-baseline.md)。下文是既有架构与实现状态；执行器留在宿主 Application/Tool Runtime 边界，隔离与协议方案尚待实现 ADR。
+
 ## 1. 目标
 
-系统既要适合教学，也要支持未来扩展为成熟知识工作台：
+系统优先支撑可实际交付的个人知识工作台，保持清晰可维护的工程结构：
 
 - 内核与 UI 解耦
 - 事件和数据关系清晰
@@ -73,7 +77,7 @@ BetterWork/
 └── docs/
 ```
 
-教学阶段不要求一次创建所有 Package；可以先保持物理目录较少，但依赖方向必须遵守。
+按实际切片不要求一次创建所有 Package；可以先保持物理目录较少，但依赖方向必须遵守。
 
 当前实现状态：仓库只有 `apps/desktop`（`src/main`、`src/preload`、`src/renderer`）与三个 package——`agent-protocol`、`agent-core`、`tool-runtime`。三个 package 通过 tsconfig `paths` 与 electron-vite alias 直接指向源码，不做预构建。
 

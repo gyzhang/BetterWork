@@ -1,5 +1,11 @@
 # Tool、Skill、专家与套件
 
+> 配置与执行契约提案见 [Skill 执行器设计](designs/skill-executor-and-dependencies.md)：原包与宿主配置分层、受管 Python/工具链快照、脚本执行、产物校验；尚未落地。
+
+> 首个兼容基线已更新：从阶段 A 支持用户的脚本型 `ppt-generation-expert`，见 [ADR-0009](adr/0009-script-skill-baseline.md)。本文 Python/文件写入/权限归属旧 Phase 的描述由此调整；执行器与文件约束必须在 A 配套建设，不能沿用「当前没有写工具所以无需权限设计」作为新增能力的依据。
+
+> 2026-09-08 顺序更新：Skill 管理与配置 → 专家管理与配置 → 研究到汇报。见 [ADR-0008](adr/0008-personal-workbench-and-capability-first.md) 和 [配置范围修订稿](reviews/2026-09-08-product-scope.md)。下文 Phase 4/5 的旧排期不再适用于 Skill 与专家基础配置；Manifest 示例仍为建议，完整 Kit/市场/MCP 扩展没有因配置前移而自动进入首版。
+
 ## 1. 概念关系
 
 ```text
@@ -69,6 +75,16 @@ interface ToolExecutionContext {
 | `artifact_save` | 未落地为 Tool | 成果保存当前是用户在界面上的显式动作，经类型化 IPC 直达 Application 层，不由模型调用 |
 
 需要 Application 层资源的 Tool 一律采用「工厂 + 闭包注入」形式（`createKnowledgeSearchTool`、`createWebSearchTool`），使 `tool-runtime` 不依赖 Electron、SQLite 或具体服务商 SDK。
+
+## 2.1 已确认的信任与分发规则
+
+见 [ADR-0011](adr/0011-skill-trust-and-local-distribution.md)。Skill 的「启用」「信任」「依赖就绪」分别记录；脚本只有在启用、信任有效、依赖就绪且执行范围匹配时才自动运行。信任不扩大工具、文件或外部操作的既有授权。
+
+内置 Skill 由产品审查后默认信任；导入项默认未信任，用户可以勾选信任，授权绑定实际修订与依赖。包中自称 builtin/trusted 不生效，导出的 Skill 不携带接收端执行授权。撤销信任立即禁止新启动并停止该 Skill 的活跃脚本。
+
+本地目录分为源码 `resources/skills/`、安装资源 `skills/` 与用户数据 `skills/`。内置只读、复制后修改、升级不覆盖用户版本和用户撤销选择；相同名称不能覆盖来源或继承信任。脚本执行仍是本地用户权限，不能把声明式访问范围称为原生进程沙箱。
+
+下文 Manifest/Expert 示例仍为设计参考；具体存储字段与执行技术提案见 [执行器设计](designs/skill-executor-and-dependencies.md)。
 
 ## 3. Skill
 
