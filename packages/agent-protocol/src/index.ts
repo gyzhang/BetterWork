@@ -1025,6 +1025,166 @@ export const clearedResultSchema = z.object({ cleared: z.literal(true) });
 export const maximizedResultSchema = z.object({ maximized: z.boolean() });
 export const voidResultSchema = z.undefined();
 
+/**
+ * 依赖与环境管理（A12）。
+ *
+ * Renderer 只提交**登记标识**（受管候选 id、随包锁 id、快照 id）或由主进程对话框
+ * 选出的路径；它永远不能直接提交可执行路径、环境变量或任意目录作为执行输入。
+ */
+export const dependencyBaseChoiceSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('managed'),
+      distributionId: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('local'),
+      /** 由主进程文件对话框选出并回传的路径。 */
+      path: z.string().min(1),
+    })
+    .strict(),
+]);
+export type DependencyBaseChoice = z.infer<typeof dependencyBaseChoiceSchema>;
+
+export const managedDistributionSummarySchema = z
+  .object({
+    id: z.string().min(1),
+    version: z.string().min(1),
+    platform: targetPlatformSchema,
+    license: z.string().min(1),
+    /** 制品是否已在受管目录落地；未落地时准备作业需要显式联网下载。 */
+    installed: z.boolean(),
+  })
+  .strict();
+export type ManagedDistributionSummary = z.infer<typeof managedDistributionSummarySchema>;
+
+export const dependencyOptionsSchema = z
+  .object({
+    distributions: z.array(managedDistributionSummarySchema),
+    lockIds: z.array(z.string().min(1)),
+    snapshots: z.array(dependencySnapshotSchema),
+    environments: z.array(runtimeEnvironmentSchema),
+  })
+  .strict();
+export type DependencyOptions = z.infer<typeof dependencyOptionsSchema>;
+
+export const listDependencyOptionsRequestSchema = z.object({}).strict();
+export type ListDependencyOptionsRequest = z.infer<typeof listDependencyOptionsRequestSchema>;
+
+export const dependencyPlanRequestSchema = z
+  .object({
+    base: dependencyBaseChoiceSchema,
+    lockId: z.string().trim().min(1).max(160),
+  })
+  .strict();
+export type DependencyPlanRequest = z.infer<typeof dependencyPlanRequestSchema>;
+
+export const dependencyPlanSchema = z
+  .object({
+    environmentKey: z.string().min(1),
+    base: baseInterpreterSchema,
+    platform: targetPlatformSchema,
+    lockHash: z.string().min(1),
+    lock: dependencyLockSchema,
+    missingWheels: z.array(z.string().min(1)),
+    requiresDownload: z.boolean(),
+    environment: runtimeEnvironmentSchema.nullable(),
+    openOperationId: z.string().min(1).optional(),
+  })
+  .strict();
+export type DependencyPlan = z.infer<typeof dependencyPlanSchema>;
+
+export const prepareDependencyRequestSchema = dependencyPlanRequestSchema
+  .extend({
+    kind: dependencyOperationKindSchema.optional(),
+  })
+  .strict();
+export type PrepareDependencyRequest = z.infer<typeof prepareDependencyRequestSchema>;
+
+export const prepareDependencyResultSchema = z
+  .object({
+    operationId: z.string().min(1),
+    environmentId: z.string().min(1),
+    environmentKey: z.string().min(1),
+    reused: z.boolean(),
+  })
+  .strict();
+export type PrepareDependencyResult = z.infer<typeof prepareDependencyResultSchema>;
+
+export const cancelDependencyRequestSchema = z.object({ operationId: z.string().min(1) }).strict();
+export type CancelDependencyRequest = z.infer<typeof cancelDependencyRequestSchema>;
+
+export const cancelDependencyResultSchema = z
+  .object({
+    applied: z.boolean(),
+    status: dependencyOperationStatusSchema,
+  })
+  .strict();
+export type CancelDependencyResult = z.infer<typeof cancelDependencyResultSchema>;
+
+export const getDependencyOperationRequestSchema = z
+  .object({ operationId: z.string().min(1) })
+  .strict();
+export type GetDependencyOperationRequest = z.infer<typeof getDependencyOperationRequestSchema>;
+
+export const chooseInterpreterResultSchema = z
+  .object({
+    cancelled: z.boolean(),
+    path: z.string().min(1).optional(),
+  })
+  .strict();
+export type ChooseInterpreterResult = z.infer<typeof chooseInterpreterResultSchema>;
+
+export const registerToolchainRequestSchema = z
+  .object({
+    /** 相对所选目录的包含根；留空表示整个目录（仍按快照排除规则过滤）。 */
+    include: z.array(z.string().trim().min(1).max(300)).max(50).optional(),
+  })
+  .strict();
+export type RegisterToolchainRequest = z.infer<typeof registerToolchainRequestSchema>;
+
+export const registerToolchainResultSchema = z
+  .object({
+    cancelled: z.boolean(),
+    snapshot: dependencySnapshotSchema.nullable(),
+    reused: z.boolean(),
+  })
+  .strict();
+export type RegisterToolchainResult = z.infer<typeof registerToolchainResultSchema>;
+
+export const refreshSkillDependencyGrantRequestSchema = z
+  .object({
+    skillId: z.string().min(1),
+    lockId: z.string().trim().min(1).max(160),
+    snapshotIds: z.array(z.string().min(1)).max(20),
+    /**
+     * 省略或 false 时只复核授权是否覆盖当前依赖，供界面如实展示；
+     * true 才在用户明确点击后建立授权。查看与确认必须是两个意图。
+     */
+    confirm: z.boolean().optional(),
+  })
+  .strict();
+export type RefreshSkillDependencyGrantRequest = z.infer<
+  typeof refreshSkillDependencyGrantRequestSchema
+>;
+
+export const refreshSkillDependencyGrantResultSchema = z
+  .object({
+    skill: skillSummarySchema,
+    /** 授权被拒绝（未信任/已撤销/缺运行配置）时没有指纹可言，因此可选。 */
+    fingerprint: z.string().min(1).optional(),
+    grantActive: z.boolean(),
+    grantCreated: z.boolean(),
+    /** 授权没有生效时必须说明原因，不能只回一个 false。 */
+    blockedReason: z.string().optional(),
+  })
+  .strict();
+export type RefreshSkillDependencyGrantResult = z.infer<
+  typeof refreshSkillDependencyGrantResultSchema
+>;
+
 export const IpcChannel = {
   StartRun: 'run:start',
   CancelRun: 'run:cancel',
@@ -1067,6 +1227,14 @@ export const IpcChannel = {
   CopySkill: 'skill:copy',
   ExportSkill: 'skill:export',
   DeleteSkill: 'skill:delete',
+  RefreshSkillDependencyGrant: 'skill:refresh-dependency-grant',
+  ListDependencyOptions: 'dependency:list-options',
+  InspectDependencyPlan: 'dependency:inspect-plan',
+  PrepareDependencyEnvironment: 'dependency:prepare',
+  CancelDependencyPreparation: 'dependency:cancel',
+  GetDependencyOperation: 'dependency:get-operation',
+  ChoosePythonInterpreter: 'dependency:choose-interpreter',
+  RegisterToolchainSnapshot: 'dependency:register-toolchain',
   UpdateWindowTheme: 'window:update-theme',
   WindowToggleMaximize: 'window:toggle-maximize',
   ListNotifications: 'notification:list',
@@ -1150,5 +1318,17 @@ export interface BetterWorkDesktopApi {
     copy(input: CopySkillRequest): Promise<SkillMutationResult>;
     export(input: ExportSkillRequest): Promise<SkillExportResult>;
     delete(input: DeleteSkillRequest): Promise<{ deleted: boolean }>;
+    refreshDependencyGrant(
+      input: RefreshSkillDependencyGrantRequest,
+    ): Promise<RefreshSkillDependencyGrantResult>;
+  };
+  dependencies: {
+    listOptions(): Promise<DependencyOptions>;
+    inspectPlan(input: DependencyPlanRequest): Promise<DependencyPlan>;
+    prepare(input: PrepareDependencyRequest): Promise<PrepareDependencyResult>;
+    cancel(input: CancelDependencyRequest): Promise<CancelDependencyResult>;
+    getOperation(input: GetDependencyOperationRequest): Promise<DependencyOperation | null>;
+    chooseInterpreter(): Promise<ChooseInterpreterResult>;
+    registerToolchain(input: RegisterToolchainRequest): Promise<RegisterToolchainResult>;
   };
 }

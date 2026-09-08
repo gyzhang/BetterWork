@@ -5,7 +5,10 @@ import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
+import { DependencyPanel } from '../components/skills/DependencyPanel';
 import { TransientToast } from '../components/TransientToast';
+import type { SkillDependenciesState } from '../hooks/use-skill-dependencies';
+import { useSkillDependencies } from '../hooks/use-skill-dependencies';
 import type { SkillsState } from '../hooks/use-skills';
 import { InfoIcon, PlusIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
@@ -60,6 +63,12 @@ function SkillRow({
 
 export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element {
   const { selected, selectedId } = state;
+  const dependencies = useSkillDependencies(selected);
+  const toast = state.toast || dependencies.toast;
+  const dismissToast = (): void => {
+    state.dismissToast();
+    dependencies.dismissToast();
+  };
   return (
     <section className="skills-page">
       <PageHeader
@@ -109,7 +118,7 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
           {state.detailLoading ? (
             <LoadingPage label="正在加载详情…" />
           ) : selected ? (
-            <SkillDetail state={state} />
+            <SkillDetail state={state} dependencies={dependencies} />
           ) : (
             <EmptyPage
               eyebrow="Skill 详情"
@@ -119,14 +128,18 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
           )}
         </ScrollRegion>
       </div>
-      {state.toast && (
-        <TransientToast tone="success" message={state.toast} onDismiss={state.dismissToast} />
-      )}
+      {toast && <TransientToast tone="success" message={toast} onDismiss={dismissToast} />}
     </section>
   );
 }
 
-function SkillDetail({ state }: { state: SkillsState }): React.JSX.Element {
+function SkillDetail({
+  state,
+  dependencies,
+}: {
+  state: SkillsState;
+  dependencies: SkillDependenciesState;
+}): React.JSX.Element {
   const skill = state.selected;
   const initialProfile = JSON.stringify(
     skill?.runtimeProfile?.profile ?? {
@@ -236,6 +249,7 @@ function SkillDetail({ state }: { state: SkillsState }): React.JSX.Element {
           </p>
         )}
       </div>
+      <DependencyPanel skill={skill} state={dependencies} />
       <div className="skill-detail-section">
         <h3>可运行性</h3>
         {skill.blockedReasons.length ? (

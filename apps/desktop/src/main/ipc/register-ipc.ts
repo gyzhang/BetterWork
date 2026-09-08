@@ -7,8 +7,11 @@ import {
   artifactSummarySchema,
   artifactVersionDetailSchema,
   artifactVersionSummarySchema,
+  cancelDependencyRequestSchema,
+  cancelDependencyResultSchema,
   cancelledResultSchema,
   cancelRunRequestSchema,
+  chooseInterpreterResultSchema,
   clearedResultSchema,
   clearNotificationsRequestSchema,
   connectionTestResultSchema,
@@ -17,12 +20,17 @@ import {
   createTaskRequestSchema,
   deletedResultSchema,
   deleteSkillRequestSchema,
+  dependencyOperationSchema,
+  dependencyOptionsSchema,
+  dependencyPlanRequestSchema,
+  dependencyPlanSchema,
   evidenceSummarySchema,
   exportMarkdownArtifactRequestSchema,
   exportMarkdownArtifactResultSchema,
   exportSkillRequestSchema,
   getArtifactRequestSchema,
   getArtifactVersionRequestSchema,
+  getDependencyOperationRequestSchema,
   getSkillRequestSchema,
   importSkillRequestSchema,
   IpcChannel,
@@ -33,6 +41,7 @@ import {
   knowledgeSearchResultSchema,
   listArtifactsRequestSchema,
   listArtifactVersionsRequestSchema,
+  listDependencyOptionsRequestSchema,
   listEvidenceRequestSchema,
   listRunEventsRequestSchema,
   listRunsRequestSchema,
@@ -47,8 +56,14 @@ import {
   notificationSummarySchema,
   openKnowledgeSourceRequestSchema,
   openKnowledgeSourceResultSchema,
+  prepareDependencyRequestSchema,
+  prepareDependencyResultSchema,
   recentTaskSummarySchema,
   refreshKnowledgeDocumentRequestSchema,
+  refreshSkillDependencyGrantRequestSchema,
+  refreshSkillDependencyGrantResultSchema,
+  registerToolchainRequestSchema,
+  registerToolchainResultSchema,
   removedResultSchema,
   removeKnowledgeDocumentRequestSchema,
   revokeSkillTrustRequestSchema,
@@ -83,13 +98,20 @@ import {
 import { type BrowserWindow, dialog, ipcMain, shell, systemPreferences } from 'electron';
 import { z, type ZodTypeAny } from 'zod';
 
+import { createNodeFileSystem } from '../infrastructure/dependency-adapters';
+import { listDependencyLocks, loadDependencyLock } from '../infrastructure/dependency-lock-catalog';
 import type { AppStore } from '../persistence';
 import type { KnowledgeVault } from '../services/knowledge-vault';
 import { probeModelConnection } from '../services/model-connectivity';
 import type { NotificationService } from '../services/notification-service';
 import type { RunService } from '../services/run-service';
 import { createQianfanSearchClient } from '../services/search-engine-service';
+import {
+  computeDependencyLockHash,
+  type SkillDependencyService,
+} from '../services/skill-dependency-service';
 import type { SkillService } from '../services/skill-service';
+import type { ToolchainSnapshotService } from '../services/toolchain-snapshot-service';
 
 export interface IpcDependencies {
   readonly store: AppStore;
@@ -97,6 +119,10 @@ export interface IpcDependencies {
   readonly notifications: NotificationService;
   readonly runs: RunService;
   readonly skillService: SkillService;
+  readonly dependencies: SkillDependencyService;
+  readonly snapshots: ToolchainSnapshotService;
+  /** 随包依赖锁目录：开发态在仓库 resources 下，打包后在安装资源里。 */
+  readonly dependencyLocksRoot: string;
   readonly getWindow: () => BrowserWindow | null;
   /** 默认工作区根目录；开发态指向仓库根，打包后指向用户文档目录。 */
   readonly getDefaultWorkspaceRoot: () => string;
@@ -184,6 +210,7 @@ export function registerIpc(deps: IpcDependencies): void {
   registerKnowledgeChannels(deps);
   registerSearchEngineChannels(deps);
   registerSkillChannels(deps);
+  registerDependencyChannels(deps);
   registerNotificationChannels(deps);
   registerWindowChannels(deps);
 }
@@ -612,6 +639,133 @@ function registerSkillChannels(deps: IpcDependencies): void {
     deleteSkillRequestSchema,
     deletedResultSchema,
     async (input) => ({ deleted: await skillService.deleteUserSkill(input.skillId) }),
+  );
+}
+
+function registerDependencyChannels(deps: IpcDependencies): void {
+  const { dependencies, snapshots, dependencyLocksRoot, store } = deps;
+  const filesystem = createNodeFileSystem();
+
+  handleNoInput(
+    IpcChannel.ListDependencyOptions,
+    listDependencyOptionsRequestSchema,
+    dependencyOptionsSchema,
+    async () => ({
+      distributions: await dependencies.listManagedDistributions(),
+      lockIds: await listDependencyLocks(dependencyLocksRoot, filesystem),
+      snapshots: snapshots.listSnapshots(),
+      environments: dependencies.listEnvironments(),
+    }),
+  );
+
+  handleInput(
+    IpcChannel.InspectDependencyPlan,
+    dependencyPlanRequestSchema,
+    dependencyPlanSchema,
+    async (input) => {
+      const lock = await loadDependencyLock(dependencyLocksRoot, input.lockId, filesystem);
+      const plan = await dependencies.inspectPlan(input.base, lock);
+      return {
+        environmentKey: plan.environmentKey,
+        base: plan.base,
+        platform: plan.platform,
+        lockHash: plan.lockHash,
+        lock,
+        missingWheels: plan.missingWheels,
+        requiresDownload: plan.requiresDownload,
+        environment: plan.environment ?? null,
+        ...(plan.openOperationId ? { openOperationId: plan.openOperationId } : {}),
+      };
+    },
+  );
+
+  handleInput(
+    IpcChannel.PrepareDependencyEnvironment,
+    prepareDependencyRequestSchema,
+    prepareDependencyResultSchema,
+    async (input) => {
+      const lock = await loadDependencyLock(dependencyLocksRoot, input.lockId, filesystem);
+      return dependencies.prepareEnvironment(input.base, lock, input.kind);
+    },
+  );
+
+  handleInput(
+    IpcChannel.CancelDependencyPreparation,
+    cancelDependencyRequestSchema,
+    cancelDependencyResultSchema,
+    (input) => dependencies.cancelPreparation(input.operationId),
+  );
+
+  handleInput(
+    IpcChannel.GetDependencyOperation,
+    getDependencyOperationRequestSchema,
+    dependencyOperationSchema.nullable(),
+    (input) => dependencies.getOperation(input.operationId) ?? null,
+  );
+
+  handleNoInput(
+    IpcChannel.ChoosePythonInterpreter,
+    emptyRequestSchema,
+    chooseInterpreterResultSchema,
+    async () => {
+      const result = await showOpenDialog(deps, {
+        title: '选择本机 Python 解释器',
+        buttonLabel: '选择解释器',
+        properties: ['openFile'],
+      });
+      const chosen = result.filePaths[0];
+      if (result.canceled || !chosen) return { cancelled: true };
+      return { cancelled: false, path: chosen };
+    },
+  );
+
+  handleOptionalInput(
+    IpcChannel.RegisterToolchainSnapshot,
+    registerToolchainRequestSchema,
+    registerToolchainResultSchema,
+    async (input) => {
+      const result = await showOpenDialog(deps, {
+        title: '选择外部工具链目录',
+        buttonLabel: '登记为受管快照',
+        properties: ['openDirectory'],
+      });
+      const origin = result.filePaths[0];
+      if (result.canceled || !origin) return { cancelled: true, snapshot: null, reused: false };
+      const receipt = await snapshots.createSnapshot({
+        origin,
+        ...(input.include ? { include: input.include } : {}),
+      });
+      return { cancelled: false, snapshot: receipt.snapshot, reused: receipt.reused };
+    },
+  );
+
+  handleInput(
+    IpcChannel.RefreshSkillDependencyGrant,
+    refreshSkillDependencyGrantRequestSchema,
+    refreshSkillDependencyGrantResultSchema,
+    async (input) => {
+      const lock = await loadDependencyLock(dependencyLocksRoot, input.lockId, filesystem);
+      const manifestHashes: string[] = [];
+      for (const snapshotId of input.snapshotIds) {
+        const snapshot = snapshots.getSnapshot(snapshotId);
+        if (!snapshot) throw new Error(`工具链快照 ${snapshotId} 不存在`);
+        manifestHashes.push(snapshot.manifestHash);
+      }
+      const outcome = dependencies.confirmDependencyGrant(input.skillId, {
+        lockHash: computeDependencyLockHash(lock),
+        snapshotManifestHashes: manifestHashes,
+        ...(input.confirm === true ? { confirm: true } : {}),
+      });
+      const skill = store.skills.get(input.skillId);
+      if (!skill) throw new Error('Skill does not exist');
+      return {
+        skill: skillSummary(skill),
+        ...(outcome.fingerprint ? { fingerprint: outcome.fingerprint } : {}),
+        grantActive: outcome.grantActive,
+        grantCreated: outcome.grantCreated,
+        ...(outcome.blockedReason ? { blockedReason: outcome.blockedReason } : {}),
+      };
+    },
   );
 }
 

@@ -35,6 +35,33 @@ function Harness(): React.JSX.Element {
   return <SkillsPage state={state} />;
 }
 
+/** A12 之后能力页会同时加载依赖面板：视图测试只需一个安静的替身，不触发任何真实准备。 */
+function dependencyStub(): Record<string, unknown> {
+  return {
+    listOptions: vi.fn(async () => ({
+      distributions: [],
+      lockIds: [],
+      snapshots: [],
+      environments: [],
+    })),
+    inspectPlan: vi.fn(async () => undefined),
+    prepare: vi.fn(async () => undefined),
+    cancel: vi.fn(async () => undefined),
+    getOperation: vi.fn(async () => null),
+    chooseInterpreter: vi.fn(async () => ({ cancelled: true })),
+    registerToolchain: vi.fn(async () => ({ cancelled: true, snapshot: null, reused: false })),
+  };
+}
+
+function grantStub(): (input: unknown) => Promise<Record<string, unknown>> {
+  return vi.fn(async () => ({
+    skill: summary,
+    grantActive: false,
+    grantCreated: false,
+    blockedReason: '尚未记录信任意愿',
+  }));
+}
+
 afterEach(() => {
   cleanup();
   Reflect.deleteProperty(window, 'betterwork');
@@ -44,7 +71,14 @@ describe('SkillsPage', () => {
   it('shows source, trust, enabled and environment independently', async () => {
     Object.defineProperty(window, 'betterwork', {
       configurable: true,
-      value: { skills: { list: vi.fn(async () => [summary]), get: vi.fn(async () => detail) } },
+      value: {
+        dependencies: dependencyStub(),
+        skills: {
+          refreshDependencyGrant: grantStub(),
+          list: vi.fn(async () => [summary]),
+          get: vi.fn(async () => detail),
+        },
+      },
     });
 
     render(<Harness />);
@@ -74,7 +108,14 @@ describe('SkillsPage', () => {
     );
     Object.defineProperty(window, 'betterwork', {
       configurable: true,
-      value: { skills: { list: vi.fn(async () => [summary, second]), get } },
+      value: {
+        dependencies: dependencyStub(),
+        skills: {
+          refreshDependencyGrant: grantStub(),
+          list: vi.fn(async () => [summary, second]),
+          get,
+        },
+      },
     });
 
     render(<Harness />);
@@ -98,7 +139,9 @@ describe('SkillsPage', () => {
     Object.defineProperty(window, 'betterwork', {
       configurable: true,
       value: {
+        dependencies: dependencyStub(),
         skills: {
+          refreshDependencyGrant: grantStub(),
           list: vi.fn(async () => [summary]),
           get: vi.fn(async () => trustedDetail),
           setTrust,
@@ -118,7 +161,9 @@ describe('SkillsPage', () => {
     Object.defineProperty(window, 'betterwork', {
       configurable: true,
       value: {
+        dependencies: dependencyStub(),
         skills: {
+          refreshDependencyGrant: grantStub(),
           list: vi.fn(async () => [summary]),
           get: vi.fn(async () => detail),
           setEnabled,
@@ -143,7 +188,9 @@ describe('SkillsPage', () => {
     Object.defineProperty(window, 'betterwork', {
       configurable: true,
       value: {
+        dependencies: dependencyStub(),
         skills: {
+          refreshDependencyGrant: grantStub(),
           list: vi.fn(async () => [summary]),
           get: vi.fn(async () => detail),
           delete: deleteSkill,

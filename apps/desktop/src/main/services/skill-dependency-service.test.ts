@@ -9,16 +9,17 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   createNodeFileSystem,
   createNodeProcessRunner,
-  type DependencyDirectoryEntry,
   type DependencyDownloader,
-  type DependencyFileSystem,
-  type DependencyProcessHandle,
-  type DependencyProcessRequest,
-  type DependencyProcessResult,
-  type DependencyProcessRunner,
 } from '../infrastructure/dependency-adapters';
 import { pythonDistributions } from '../infrastructure/python-distribution';
 import { AppStore } from '../persistence';
+import {
+  FakeDownloader,
+  FakeFileSystem,
+  FakePythonRunner,
+  type PythonScenario,
+  scenarioOf,
+} from './fixtures/fake-python-runtime';
 import {
   computeDependencyLockHash,
   computeEnvironmentKey,
@@ -45,237 +46,11 @@ afterEach(() => {
 const sha256Of = (bytes: Uint8Array | string): string =>
   createHash('sha256').update(bytes).digest('hex');
 
-/** 替身文件系统：准备作业只应触碰受管目录，测试据此断言写了什么、清了什么。 */
-class FakeFileSystem implements DependencyFileSystem {
-  readonly files = new Map<string, Uint8Array>();
-  readonly directories = new Set<string>();
-
-  async exists(target: string): Promise<boolean> {
-    return this.files.has(target) || this.directories.has(target);
-  }
-
-  async mkdir(target: string): Promise<void> {
-    let current = target;
-    while (!this.directories.has(current)) {
-      this.directories.add(current);
-      const parent = path.dirname(current);
-      if (parent === current) break;
-      current = parent;
-    }
-  }
-
-  async remove(target: string): Promise<void> {
-    const inside = (key: string): boolean => key === target || key.startsWith(`${target}/`);
-    for (const key of [...this.files.keys()]) {
-      if (inside(key)) this.files.delete(key);
-    }
-    for (const key of [...this.directories]) {
-      if (inside(key)) this.directories.delete(key);
-    }
-  }
-
-  async writeFile(target: string, content: string | Uint8Array): Promise<void> {
-    this.files.set(target, typeof content === 'string' ? encoder.encode(content) : content);
-    await this.mkdir(path.dirname(target));
-  }
-
-  async readFile(target: string): Promise<Uint8Array> {
-    const bytes = this.files.get(target);
-    if (!bytes) throw new Error(`ENOENT: ${target}`);
-    return bytes;
-  }
-
-  async readdir(target: string): Promise<string[]> {
-    const prefix = `${target}/`;
-    const names = new Set<string>();
-    for (const key of [...this.files.keys(), ...this.directories]) {
-      if (!key.startsWith(prefix)) continue;
-      const rest = key.slice(prefix.length);
-      const first = rest.split('/')[0];
-      if (first) names.add(first);
-    }
-    return [...names];
-  }
-
-  async readdirEntries(target: string): Promise<DependencyDirectoryEntry[]> {
-    const names = await this.readdir(target);
-    return names.map((name) => {
-      const absolute = path.join(target, name);
-      return {
-        name,
-        isDirectory: this.directories.has(absolute),
-        isFile: this.files.has(absolute),
-        isSymbolicLink: false,
-      };
-    });
-  }
-
-  async size(target: string): Promise<number> {
-    const bytes = this.files.get(target);
-    if (!bytes) throw new Error(`ENOENT: ${target}`);
-    return bytes.byteLength;
-  }
-
-  async realpath(target: string): Promise<string> {
-    return target;
-  }
-}
-
-interface PythonScenario {
-  version: string;
-  machine: string;
-  system: string;
-  venv: boolean;
-  ensurepip: boolean;
-  venvExitCode: number;
-  venvStderr: string;
-  installExitCode: number;
-  installStderr: string;
-  installDelayMs: number;
-  missingModules: string[];
-}
-
-const scenarioOf = (overrides: Partial<PythonScenario> = {}): PythonScenario => ({
-  version: '3.12.14',
-  machine: 'arm64',
-  system: 'Darwin',
-  venv: true,
-  ensurepip: true,
-  venvExitCode: 0,
-  venvStderr: '',
-  installExitCode: 0,
-  installStderr: '',
-  installDelayMs: 0,
-  missingModules: [],
-  ...overrides,
-});
-
-/** 替身解释器：按 argv 判断服务想干什么，并给出可配置结果。测试全程离线。 */
-class FakeProcessRunner implements DependencyProcessRunner {
-  readonly calls: DependencyProcessRequest[] = [];
-  readonly killed: DependencyProcessRequest[] = [];
-
-  constructor(
-    private readonly scenario: PythonScenario,
-    private readonly filesystem: FakeFileSystem,
-  ) {}
-
-  run(request: DependencyProcessRequest): DependencyProcessHandle {
-    this.calls.push(request);
-    let settle: ((result: DependencyProcessResult) => void) | undefined;
-    const result = new Promise<DependencyProcessResult>((resolve) => {
-      settle = resolve;
-    });
-    const deliver = (outcome: DependencyProcessResult): void => {
-      settle?.(outcome);
-    };
-    const hangMs = request.argv.includes('pip') ? this.scenario.installDelayMs : 0;
-    if (hangMs > 0) {
-      setTimeout(() => deliver(this.outcomeFor(request)), hangMs);
-    } else {
-      deliver(this.outcomeFor(request));
-    }
-    return {
-      result,
-      kill: () => {
-        this.killed.push(request);
-        deliver({ exitCode: null, signal: 'SIGKILL', stdout: '', stderr: '', timedOut: false });
-      },
-    };
-  }
-
-  private outcomeFor(request: DependencyProcessRequest): DependencyProcessResult {
-    const scenario = this.scenario;
-    const argv = request.argv;
-    const script = argv[0] === '-c' && typeof argv[1] === 'string' ? argv[1] : '';
-    const ok = (stdout: string): DependencyProcessResult => ({
-      exitCode: 0,
-      signal: null,
-      stdout,
-      stderr: '',
-      timedOut: false,
-    });
-    const failed = (exitCode: number, stderr: string): DependencyProcessResult => ({
-      exitCode,
-      signal: null,
-      stdout: '',
-      stderr,
-      timedOut: false,
-    });
-
-    if (script.includes('importlib.util')) {
-      return ok(
-        JSON.stringify({
-          version: scenario.version,
-          machine: scenario.machine,
-          system: scenario.system,
-          executable: request.executable,
-          venv: scenario.venv,
-          ensurepip: scenario.ensurepip,
-        }),
-      );
-    }
-    if (script.includes('importlib.import_module')) {
-      return ok(
-        JSON.stringify({
-          missing: scenario.missingModules.map((name) => `${name}: No module named '${name}'`),
-        }),
-      );
-    }
-    if (argv.includes('venv')) {
-      if (scenario.venvExitCode !== 0) return failed(scenario.venvExitCode, scenario.venvStderr);
-      const target = argv.at(-1);
-      if (target) {
-        this.filesystem.files.set(
-          path.join(target, 'bin', 'python3'),
-          encoder.encode('# venv interpreter\n'),
-        );
-      }
-      return ok('');
-    }
-    if (argv.includes('pip')) {
-      return scenario.installExitCode === 0
-        ? ok('Successfully installed\n')
-        : failed(scenario.installExitCode, scenario.installStderr);
-    }
-    if (argv.includes('-xzf')) {
-      // 替身解压：把受管制品登记的入口路径写进替身文件系统。
-      const archive = argv[2] ?? '';
-      const target = argv[4];
-      const distribution = pythonDistributions.find((entry) => archive.endsWith(entry.fileName));
-      if (distribution && target) {
-        this.filesystem.files.set(
-          path.join(target, distribution.entryRelativePath),
-          encoder.encode('# managed interpreter\n'),
-        );
-      }
-      return ok('');
-    }
-    return ok('');
-  }
-
-  callsMatching(...fragments: string[]): DependencyProcessRequest[] {
-    return this.calls.filter((call) => fragments.every((fragment) => call.argv.includes(fragment)));
-  }
-}
-
-class FakeDownloader implements DependencyDownloader {
-  readonly urls: string[] = [];
-  payload: Uint8Array = encoder.encode('artifact');
-  error: Error | null = null;
-
-  async download(url: string): Promise<Uint8Array> {
-    this.urls.push(url);
-    if (this.error) throw this.error;
-    return this.payload;
-  }
-}
-
 interface Harness {
   service: SkillDependencyService;
   store: AppStore;
   filesystem: FakeFileSystem;
-  process: FakeProcessRunner;
+  process: FakePythonRunner;
   download: FakeDownloader;
   paths: {
     userDataRoot: string;
@@ -293,7 +68,7 @@ const openService = (scenario: Partial<PythonScenario> = {}): Harness => {
   const filesystem = new FakeFileSystem();
   // 用户选择的本机解释器必须真实存在，服务才会继续探测。
   filesystem.files.set(localBase.path, encoder.encode('#!/bin/sh\n# fake interpreter\n'));
-  const runner = new FakeProcessRunner(scenarioOf(scenario), filesystem);
+  const runner = new FakePythonRunner(scenarioOf(scenario), filesystem);
   const download = new FakeDownloader();
   const paths = {
     userDataRoot,
