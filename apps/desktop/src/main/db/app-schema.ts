@@ -495,6 +495,30 @@ export const appMigrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 6,
+    name: 'add dependency snapshots for external toolchains',
+    up(db: Database.Database): void {
+      // 内容寻址：manifest_hash 唯一，因此相同内容只有一个受管副本。
+      // 不与 skills 建外键——快照是可被多个 Skill/绑定共享的工具链资产。
+      db.exec(`
+        CREATE TABLE dependency_snapshots (
+          id TEXT PRIMARY KEY,
+          origin TEXT NOT NULL,
+          origin_commit TEXT,
+          origin_state TEXT NOT NULL CHECK (origin_state IN ('clean', 'dirty', 'unknown')),
+          manifest_hash TEXT NOT NULL UNIQUE,
+          path_key TEXT NOT NULL,
+          file_count INTEGER NOT NULL,
+          total_bytes INTEGER NOT NULL,
+          exclusions_json TEXT NOT NULL DEFAULT '[]',
+          created_at INTEGER NOT NULL,
+          verified_at INTEGER
+        );
+        CREATE INDEX idx_dependency_snapshots_created ON dependency_snapshots(created_at DESC);
+      `);
+    },
+  },
 ];
 
 /**

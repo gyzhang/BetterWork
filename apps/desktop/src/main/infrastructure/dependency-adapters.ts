@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { mkdir, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 /**
  * 依赖准备的可注入根（设计 §4、docs/12 §9）。
@@ -35,6 +36,13 @@ export interface DependencyProcessRunner {
   run(request: DependencyProcessRequest): DependencyProcessHandle;
 }
 
+export interface DependencyDirectoryEntry {
+  readonly name: string;
+  readonly isDirectory: boolean;
+  readonly isFile: boolean;
+  readonly isSymbolicLink: boolean;
+}
+
 export interface DependencyFileSystem {
   exists(target: string): Promise<boolean>;
   mkdir(target: string): Promise<void>;
@@ -42,6 +50,9 @@ export interface DependencyFileSystem {
   writeFile(target: string, content: string | Uint8Array): Promise<void>;
   readFile(target: string): Promise<Uint8Array>;
   readdir(target: string): Promise<string[]>;
+  /** 带类型的目录项：工具链快照必须能区分普通文件、目录与符号链接。 */
+  readdirEntries(target: string): Promise<DependencyDirectoryEntry[]>;
+  size(target: string): Promise<number>;
   realpath(target: string): Promise<string>;
 }
 
@@ -146,6 +157,8 @@ export const createNodeFileSystem = (): DependencyFileSystem => ({
     await rm(target, { recursive: true, force: true });
   },
   async writeFile(target: string, content: string | Uint8Array): Promise<void> {
+    // 受管副本的目录结构是逐文件写出来的，父目录必须先存在。
+    await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, content);
   },
   async readFile(target: string): Promise<Uint8Array> {
@@ -153,6 +166,19 @@ export const createNodeFileSystem = (): DependencyFileSystem => ({
   },
   async readdir(target: string): Promise<string[]> {
     return readdir(target);
+  },
+  async readdirEntries(target: string): Promise<DependencyDirectoryEntry[]> {
+    const entries = await readdir(target, { withFileTypes: true });
+    return entries.map((entry) => ({
+      name: entry.name,
+      isDirectory: entry.isDirectory(),
+      isFile: entry.isFile(),
+      isSymbolicLink: entry.isSymbolicLink(),
+    }));
+  },
+  async size(target: string): Promise<number> {
+    const info = await stat(target);
+    return info.size;
   },
   async realpath(target: string): Promise<string> {
     return realpath(target);

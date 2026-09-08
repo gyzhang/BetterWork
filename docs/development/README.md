@@ -59,7 +59,7 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | A08 | macOS 进程组 supervisor | A07 | done | [supervisor 测试](../../apps/desktop/src/main/infrastructure/mac-process-supervisor.test.ts)（17 项真机进程用例）、[guardian](../../apps/desktop/src/main/infrastructure/skill-guardian.ts) 构建产物在 Electron `ELECTRON_RUN_AS_NODE` 下实测取消/组核验，2026-09-09 01:33 |
 | A09 | Windows Job supervisor | A08 | blocked | 本机无 Windows 构建与运行环境。2026-09-09 用户明确授权跳过本卡先行推进 A10–A12；A2/A21 的跨平台门槛保留，不得据此把 Windows 标为已验收 |
 | A10 | Python 环境准备作业 | A09 | done | [依赖服务测试](../../apps/desktop/src/main/services/skill-dependency-service.test.ts)（20 项离线注入 + 真实 venv/import 探测验收）、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)、[依赖验证记录](dependency-verification.md)，2026-09-09 02:04；按用户授权在 A09 blocked 时先行 |
-| A11 | 外部工具链快照与依赖锁 | A10 | todo | — |
+| A11 | 外部工具链快照与依赖锁 | A10 | done | [快照服务测试](../../apps/desktop/src/main/services/toolchain-snapshot-service.test.ts)、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)、[样本包锁](../../resources/dependency-locks/ppt-generation-expert-darwin-arm64-cp312.json)；真实快照 12,981 文件 + 真实环境准备 + CLI 探测于 macOS arm64 通过，见[依赖验证记录](dependency-verification.md) §4/§5，2026-09-09 02:33 |
 | A12 | 运行配置/环境 UI 与 A2 验收 | A11 | todo | — |
 | A13 | Skill 指令及运行绑定进入 Agent | A12 | todo | — |
 | A14 | 资源读取/任务写文件/执行工具 | A13 | todo | — |

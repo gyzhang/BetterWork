@@ -481,6 +481,65 @@ describe('application database migrations', () => {
     db.close();
   });
 
+  it('adds a content addressed snapshot table for external toolchains', () => {
+    const file = path.join(temporaryDirectory(), 'snapshots.sqlite');
+    const db = openAppDatabase(file);
+    expect(readSchemaVersion(db)).toBe(appMigrations.length);
+
+    const now = 1_700_000_000_000;
+    const insert = db.prepare(
+      `INSERT INTO dependency_snapshots (
+         id, origin, origin_commit, origin_state, manifest_hash, path_key,
+         file_count, total_bytes, exclusions_json, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    insert.run(
+      'snap-1',
+      '/Users/fixture/ppt-master',
+      '82dd5ccc',
+      'dirty',
+      'manifest-1',
+      'dependency-assets/manifest-1',
+      5,
+      1024,
+      '[{"path":".git","reason":"版本库对象不是运行所需内容"}]',
+      now,
+    );
+
+    // 内容寻址：同一份清单不允许登记两份快照
+    expect(() =>
+      insert.run(
+        'snap-2',
+        '/Users/fixture/other',
+        null,
+        'unknown',
+        'manifest-1',
+        'dependency-assets/manifest-1',
+        5,
+        1024,
+        '[]',
+        now,
+      ),
+    ).toThrow(/UNIQUE/iu);
+    // 版本状态只有三个合法值：读不到 git 身份时不能伪装成 clean
+    expect(() =>
+      insert.run(
+        'snap-3',
+        '/Users/fixture/other',
+        null,
+        'maybe-clean',
+        'manifest-3',
+        'dependency-assets/manifest-3',
+        1,
+        10,
+        '[]',
+        now,
+      ),
+    ).toThrow();
+    expect(countRows(db, 'dependency_snapshots')).toBe(1);
+    db.close();
+  });
+
   it('rejects a migration list with duplicate or non-contiguous versions', () => {
     const db = new Database(':memory:');
     expect(() =>

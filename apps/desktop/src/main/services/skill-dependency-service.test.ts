@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   createNodeFileSystem,
   createNodeProcessRunner,
+  type DependencyDirectoryEntry,
   type DependencyDownloader,
   type DependencyFileSystem,
   type DependencyProcessHandle,
@@ -94,6 +95,25 @@ class FakeFileSystem implements DependencyFileSystem {
       if (first) names.add(first);
     }
     return [...names];
+  }
+
+  async readdirEntries(target: string): Promise<DependencyDirectoryEntry[]> {
+    const names = await this.readdir(target);
+    return names.map((name) => {
+      const absolute = path.join(target, name);
+      return {
+        name,
+        isDirectory: this.directories.has(absolute),
+        isFile: this.files.has(absolute),
+        isSymbolicLink: false,
+      };
+    });
+  }
+
+  async size(target: string): Promise<number> {
+    const bytes = this.files.get(target);
+    if (!bytes) throw new Error(`ENOENT: ${target}`);
+    return bytes.byteLength;
   }
 
   async realpath(target: string): Promise<string> {

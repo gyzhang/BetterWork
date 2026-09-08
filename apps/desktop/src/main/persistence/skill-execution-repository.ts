@@ -214,19 +214,32 @@ export class SkillExecutionRepository {
     return rows.map(toExecution);
   }
 
-  /** 跨表只读：创建 binding 前确认存在未被撤销的授权，授权内容不在此复制。 */
+  /**
+   * 跨表只读：创建 binding 前确认存在未被撤销的授权，授权内容不在此复制。
+   *
+   * `dependencyFingerprint` 传入时还要求授权覆盖同一组依赖：包锁或工具链快照变化后，
+   * 旧授权不再放行（设计 §7.1「更新内容、脚本、依赖或范围 → 授权不自动继承」）。
+   */
   findActiveGrant(
     skillId: string,
     revisionId: string,
     profileHash: string,
+    dependencyFingerprint?: string,
   ): { id: string } | undefined {
     const row = this.db
       .prepare(
         `SELECT id FROM skill_trust_grants
          WHERE skill_id = ? AND revision_id = ? AND profile_hash = ? AND revoked_at IS NULL
+           AND (? IS NULL OR dependency_fingerprint = ?)
          ORDER BY granted_at DESC LIMIT 1`,
       )
-      .get(skillId, revisionId, profileHash) as { id: string } | undefined;
+      .get(
+        skillId,
+        revisionId,
+        profileHash,
+        dependencyFingerprint ?? null,
+        dependencyFingerprint ?? null,
+      ) as { id: string } | undefined;
     return row;
   }
 
