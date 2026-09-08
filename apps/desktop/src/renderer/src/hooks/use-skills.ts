@@ -36,6 +36,12 @@ export function useSkills(): SkillsState {
   const [error, setError] = useState('');
   const requestId = useRef(0);
 
+  useEffect(() => {
+    if (!message) return;
+    const timeoutId = window.setTimeout(() => setMessage(''), 4000);
+    return () => window.clearTimeout(timeoutId);
+  }, [message]);
+
   const refresh = useCallback((): void => {
     setLoading(true);
     trackAction(
@@ -100,7 +106,9 @@ export function useSkills(): SkillsState {
     (skill: SkillSummary, trusted: boolean): void => {
       applyMutation(
         window.betterwork.skills.setTrust({ skillId: skill.id, trusted }),
-        trusted ? '已授予 Skill 信任。' : '已取消 Skill 信任。',
+        trusted
+          ? '已记录 Skill 信任意愿；运行配置和环境准备完成后才可执行。'
+          : '已取消 Skill 信任。',
       );
     },
     [applyMutation],

@@ -152,6 +152,7 @@ function SkillDetail({ state }: { state: SkillsState }): React.JSX.Element {
       setProfileError('运行配置必须是有效的 JSON。');
     }
   };
+  const trustRequested = skill.trustStatus === 'trusted' || skill.trustStatus === 'needs-review';
   return (
     <>
       <div className="skill-detail-heading">
@@ -195,7 +196,7 @@ function SkillDetail({ state }: { state: SkillsState }): React.JSX.Element {
         <label>
           <input
             type="checkbox"
-            checked={skill.trustStatus === 'trusted'}
+            checked={trustRequested}
             onChange={(event) => state.setTrust(skill, event.target.checked)}
           />{' '}
           受信任：允许在已授权范围内执行脚本

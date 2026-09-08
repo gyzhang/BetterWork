@@ -78,7 +78,31 @@ const parseFrontmatter = (content: string): SkillFrontmatter => {
   if (lines[0] !== '---') return {};
   const end = lines.findIndex((line, index) => index > 0 && line === '---');
   if (end < 0) throw new Error('SKILL.md frontmatter is not closed');
-  const value: unknown = parse(lines.slice(1, end).join('\n'));
+  const source = lines.slice(1, end).join('\n');
+  let value: unknown;
+  try {
+    value = parse(source);
+  } catch (error) {
+    const fallback: Record<string, unknown> = {};
+    const entries = source.split(/\r?\n/u).filter((line) => line.trim().length > 0);
+    const flatMapping = entries.every((line) => /^\s*[A-Za-z0-9_-]+\s*:/u.test(line));
+    if (!flatMapping) throw error;
+    for (const line of entries) {
+      const match = /^\s*([A-Za-z0-9_-]+)\s*:\s*(.*)\s*$/u.exec(line);
+      if (!match) throw error;
+      const key = match[1];
+      const rawValue = match[2];
+      if (!key || rawValue === undefined) throw error;
+      try {
+        const parsedValue: unknown = parse(rawValue);
+        fallback[key] =
+          parsedValue !== null && typeof parsedValue === 'object' ? rawValue : parsedValue;
+      } catch {
+        fallback[key] = rawValue;
+      }
+    }
+    value = fallback;
+  }
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('SKILL.md frontmatter must be a YAML mapping');
   }
