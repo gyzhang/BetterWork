@@ -24,6 +24,11 @@
 - [Skill 信任与本地分发](adr/0011-skill-trust-and-local-distribution.md)：已确认的产品规则，具体实现未落地。
 - [Skill 执行器与依赖管理](designs/skill-executor-and-dependencies.md)：首个 PPT Skill 的执行、环境、文件成果与阶段 A 验收，配套 ADR-0010 为 Proposed。
 
+## 开发执行规划
+
+- [阶段 A 执行手册（供 5.6 Luna 使用）](development/README.md)：22 项顺序任务、共享实施契约、逐项验收与可复制派发提示词；仅规划，未开始实现。
+- [阶段 B/C 后续规划](development/phase-b-c-roadmap.md)：专家配置、研究到汇报与积累复用。
+
 ## 架构决策记录
 
 ADR 用于记录会影响多个模块、后续修改成本较高的决策。详见 [ADR 索引](adr/README.md)。
