@@ -4,14 +4,17 @@ import { useEffect, useState } from 'react';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
 import { PageHeader } from '../components/layout/PageHeader';
-import { ScrollRegion } from '../components/layout/ScrollRegion';
+import type { ViewMode } from '../components/layout/ViewContainer';
+import { ViewContainer } from '../components/layout/ViewContainer';
 import { DependencyPanel } from '../components/skills/DependencyPanel';
 import { TransientToast } from '../components/TransientToast';
 import type { SkillDependenciesState } from '../hooks/use-skill-dependencies';
 import { useSkillDependencies } from '../hooks/use-skill-dependencies';
 import type { SkillsState } from '../hooks/use-skills';
-import { InfoIcon, PlusIcon } from '../icons';
+import { ChevronLeftIcon, InfoIcon, PlusIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
+
+const VIEW_MODE_STORAGE_KEY = 'skills-view-mode';
 
 const sourceName = { builtin: '内置', user: '用户' } as const;
 const trustName = {
@@ -29,60 +32,145 @@ const environmentName = {
   invalid: '无效',
 } as const;
 
-function SkillRow({
+type ChipKind = 'source' | 'trust' | 'enabled' | 'environment';
+
+function chipModifier(label: string, kind: ChipKind): string {
+  if (kind === 'trust' && label === '已信任') return ' skill-chip-active';
+  if (kind === 'trust' && label === '需复核') return ' skill-chip-warn';
+  if (kind === 'enabled' && label === '已启用') return ' skill-chip-active';
+  if (kind === 'environment' && label === '已就绪') return ' skill-chip-active';
+  return '';
+}
+
+function SkillChips({ skill }: { skill: SkillSummary }): React.JSX.Element {
+  const source = sourceName[skill.sourceKind];
+  const trust = trustName[skill.trustStatus];
+  const enabled = skill.enabled ? '已启用' : '已停用';
+  const environment = environmentName[skill.environmentStatus];
+  return (
+    <div className="skill-chips">
+      <span className="skill-chip">{source}</span>
+      <span className={`skill-chip${chipModifier(trust, 'trust')}`}>{trust}</span>
+      <span className={`skill-chip${chipModifier(enabled, 'enabled')}`}>{enabled}</span>
+      <span className={`skill-chip${chipModifier(environment, 'environment')}`}>{environment}</span>
+    </div>
+  );
+}
+
+function SkillCard({
   skill,
-  selected,
-  onSelect,
+  onClick,
 }: {
   skill: SkillSummary;
-  selected: boolean;
-  onSelect: () => void;
+  onClick: () => void;
 }): React.JSX.Element {
   return (
-    <button
-      className={selected ? 'skill-row selected' : 'skill-row'}
-      type="button"
-      onClick={onSelect}
-    >
-      <span className="skill-row-mark" aria-hidden="true">
-        {skill.name.slice(0, 1).toUpperCase()}
-      </span>
-      <span className="skill-row-main">
-        <strong>{skill.name}</strong>
-        <small>{skill.description || '暂无描述'}</small>
-      </span>
-      <span className="skill-statuses">
-        <em>{sourceName[skill.sourceKind]}</em>
-        <em>{trustName[skill.trustStatus]}</em>
-        <em>{skill.enabled ? '已启用' : '已停用'}</em>
-        <em>{environmentName[skill.environmentStatus]}</em>
-      </span>
+    <button className="skill-card" type="button" onClick={onClick}>
+      <div className="skill-card-head">
+        <span className="skill-card-mark" aria-hidden="true">
+          {skill.name.slice(0, 1).toUpperCase()}
+        </span>
+        <div>
+          <strong>{skill.name}</strong>
+          <small>{sourceName[skill.sourceKind]} Skill</small>
+        </div>
+      </div>
+      <p className="skill-card-desc">{skill.description || '暂无描述'}</p>
+      <SkillChips skill={skill} />
     </button>
   );
 }
 
+function SkillListItem({
+  skill,
+  onClick,
+}: {
+  skill: SkillSummary;
+  onClick: () => void;
+}): React.JSX.Element {
+  return (
+    <button className="skill-list-item" type="button" onClick={onClick}>
+      <span className="skill-card-mark" aria-hidden="true">
+        {skill.name.slice(0, 1).toUpperCase()}
+      </span>
+      <span className="skill-list-item-main">
+        <strong>{skill.name}</strong>
+        <small>{skill.description || '暂无描述'}</small>
+      </span>
+      <SkillChips skill={skill} />
+    </button>
+  );
+}
+
+function readStoredViewMode(): ViewMode {
+  try {
+    return localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'list' ? 'list' : 'grid';
+  } catch {
+    return 'grid';
+  }
+}
+
 export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element {
-  const { selected, selectedId } = state;
+  const { selected } = state;
   const dependencies = useSkillDependencies(selected);
   const toast = state.toast || dependencies.toast;
   const dismissToast = (): void => {
     state.dismissToast();
     dependencies.dismissToast();
   };
+  const [viewMode, setViewMode] = useState<ViewMode>(readStoredViewMode);
+  const changeViewMode = (mode: ViewMode): void => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
+    } catch {
+      // storage unavailable — mode still applies for this session
+    }
+  };
+
   return (
     <section className="skills-page">
       <PageHeader
         eyebrow="能力 · Skill"
         title="管理可复用的工作方法"
+        leading={
+          selected ? (
+            <button className="text-button" type="button" onClick={state.deselect}>
+              <ChevronLeftIcon size={14} /> 返回
+            </button>
+          ) : undefined
+        }
         actions={
-          <button
-            className="primary-button"
-            type="button"
-            disabled={state.importing}
-            onClick={() => reportAction(state.importSkill(), state.clearError, '导入 Skill 失败。')}
-          >
-            <PlusIcon size={13} /> {state.importing ? '正在导入…' : '导入 Skill'}
-          </button>
+          selected ? undefined : (
+            <>
+              <div className="skill-segmented" role="group" aria-label="视图模式">
+                <button
+                  type="button"
+                  aria-pressed={viewMode === 'grid'}
+                  onClick={() => changeViewMode('grid')}
+                >
+                  卡片
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={viewMode === 'list'}
+                  onClick={() => changeViewMode('list')}
+                >
+                  列表
+                </button>
+              </div>
+              <button
+                className="primary-button"
+                type="button"
+                disabled={state.importing}
+                onClick={() =>
+                  reportAction(state.importSkill(), state.clearError, '导入 Skill 失败。')
+                }
+              >
+                <PlusIcon size={13} /> {state.importing ? '正在导入…' : '导入 Skill'}
+              </button>
+            </>
+          )
         }
       />
       {state.error && (
@@ -93,9 +181,15 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
           </button>
         </p>
       )}
-      <div className="skills-layout">
-        <ScrollRegion className="skill-list" ariaLabel="Skill 列表">
-          {state.loading ? (
+      <div className="page-scroll skills-scroll">
+        <section className="page-body skills-body">
+          {selected ? (
+            state.detailLoading ? (
+              <LoadingPage label="正在加载详情…" />
+            ) : (
+              <SkillDetail state={state} dependencies={dependencies} />
+            )
+          ) : state.loading ? (
             <LoadingPage label="正在加载 Skill…" />
           ) : state.skills.length === 0 ? (
             <EmptyPage
@@ -103,30 +197,20 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
               title="还没有 Skill"
               detail="导入一个目录型 Skill，或等待内置能力加入这里。"
             />
+          ) : viewMode === 'grid' ? (
+            <ViewContainer mode="grid" className="skill-cards">
+              {state.skills.map((skill) => (
+                <SkillCard key={skill.id} skill={skill} onClick={() => state.select(skill)} />
+              ))}
+            </ViewContainer>
           ) : (
-            state.skills.map((skill) => (
-              <SkillRow
-                key={skill.id}
-                skill={skill}
-                selected={skill.id === selectedId}
-                onSelect={() => state.select(skill)}
-              />
-            ))
+            <ViewContainer mode="list" className="skill-rows">
+              {state.skills.map((skill) => (
+                <SkillListItem key={skill.id} skill={skill} onClick={() => state.select(skill)} />
+              ))}
+            </ViewContainer>
           )}
-        </ScrollRegion>
-        <ScrollRegion className="skill-detail" ariaLabel="Skill 详情">
-          {state.detailLoading ? (
-            <LoadingPage label="正在加载详情…" />
-          ) : selected ? (
-            <SkillDetail state={state} dependencies={dependencies} />
-          ) : (
-            <EmptyPage
-              eyebrow="Skill 详情"
-              title="选择一个 Skill"
-              detail="查看来源、授权状态和运行配置草稿。"
-            />
-          )}
-        </ScrollRegion>
+        </section>
       </div>
       {toast && <TransientToast tone="success" message={toast} onDismiss={dismissToast} />}
     </section>
