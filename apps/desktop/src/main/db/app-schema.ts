@@ -308,6 +308,63 @@ export const appMigrations: readonly Migration[] = [
     name: 'enforce foreign keys across task, run, evidence and artifact tables',
     up: addForeignKeys,
   },
+  {
+    version: 3,
+    name: 'add skill revisions profiles preferences and trust grants',
+    up(db: Database.Database): void {
+      db.exec(`
+        CREATE TABLE skills (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT NOT NULL,
+          source_kind TEXT NOT NULL CHECK (source_kind IN ('builtin', 'user')),
+          enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+          current_revision_id TEXT NOT NULL,
+          current_profile_revision_id TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE skill_revisions (
+          id TEXT PRIMARY KEY,
+          skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+          content_hash TEXT NOT NULL,
+          original_version TEXT,
+          resource_key TEXT NOT NULL,
+          frontmatter_json TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          UNIQUE(skill_id, content_hash)
+        );
+        CREATE TABLE skill_runtime_profiles (
+          id TEXT PRIMARY KEY,
+          skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+          profile_hash TEXT NOT NULL,
+          profile_json TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          UNIQUE(skill_id, profile_hash)
+        );
+        CREATE TABLE skill_preferences (
+          skill_id TEXT PRIMARY KEY REFERENCES skills(id) ON DELETE CASCADE,
+          trust_preference TEXT NOT NULL DEFAULT 'untrusted'
+            CHECK (trust_preference IN ('untrusted', 'trusted', 'revoked')),
+          updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE skill_trust_grants (
+          id TEXT PRIMARY KEY,
+          skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+          revision_id TEXT NOT NULL REFERENCES skill_revisions(id) ON DELETE CASCADE,
+          profile_hash TEXT NOT NULL,
+          dependency_fingerprint TEXT NOT NULL,
+          scope_hash TEXT NOT NULL,
+          source TEXT NOT NULL CHECK (source IN ('builtin-release', 'user')),
+          granted_at INTEGER NOT NULL,
+          revoked_at INTEGER
+        );
+        CREATE INDEX idx_skill_revisions_skill ON skill_revisions(skill_id, created_at DESC);
+        CREATE INDEX idx_skill_profiles_skill ON skill_runtime_profiles(skill_id, created_at DESC);
+        CREATE INDEX idx_skill_grants_active ON skill_trust_grants(skill_id, revoked_at);
+      `);
+    },
+  },
 ];
 
 /**

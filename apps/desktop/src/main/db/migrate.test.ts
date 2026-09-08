@@ -94,6 +94,17 @@ describe('application database migrations', () => {
     const db = openAppDatabase(file);
     expect(readSchemaVersion(db)).toBe(appMigrations.length);
     expect(db.pragma('foreign_keys', { simple: true })).toBe(1);
+    expect(
+      db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?, ?, ?, ?)")
+        .all(
+          'skills',
+          'skill_revisions',
+          'skill_runtime_profiles',
+          'skill_preferences',
+          'skill_trust_grants',
+        ),
+    ).toHaveLength(5);
 
     expect(() =>
       db
@@ -124,6 +135,9 @@ describe('application database migrations', () => {
 
     const db = openAppDatabase(file);
     expect(readSchemaVersion(db)).toBe(appMigrations.length);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM skill_preferences').get()).toEqual({
+      count: 0,
+    });
     expect({
       workspaces: countRows(db, 'workspaces'),
       tasks: countRows(db, 'tasks'),
