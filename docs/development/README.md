@@ -61,11 +61,11 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | A10 | Python 环境准备作业 | A09 | done | [依赖服务测试](../../apps/desktop/src/main/services/skill-dependency-service.test.ts)（20 项离线注入 + 真实 venv/import 探测验收）、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)、[依赖验证记录](dependency-verification.md)，2026-09-09 02:04；按用户授权在 A09 blocked 时先行 |
 | A11 | 外部工具链快照与依赖锁 | A10 | done | [快照服务测试](../../apps/desktop/src/main/services/toolchain-snapshot-service.test.ts)、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)、[样本包锁](../../resources/dependency-locks/ppt-generation-expert-darwin-arm64-cp312.json)；真实快照 12,981 文件 + 真实环境准备 + CLI 探测于 macOS arm64 通过，见[依赖验证记录](dependency-verification.md) §4/§5，2026-09-09 02:33 |
 | A12 | 运行配置/环境 UI 与 A2 验收 | A11 | doing | 代码与自动测试完成：[IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)、[面板测试](../../apps/desktop/src/renderer/src/components/skills/DependencyPanel.test.tsx)、`npm run verify` 退出 0（32 文件 / 263 测试），真实启动核对 v6 迁移与无错误日志，2026-09-09 03:13。**A2 里程碑的本机手工旅程待人执行**，通过后才可标 done；Windows 未验收，A2 不标跨平台完成 |
-| A13 | Skill 指令及运行绑定进入 Agent | A12 | doing | 代码与自动测试完成：[agent-engine 测试](../../packages/agent-core/src/agent-engine.test.ts)（19 项，含 5 项 Skill 指令注入）、[协议测试](../../packages/agent-protocol/src/index.test.ts)（14 项，含 skillBinding）、[RunService 测试](../../apps/desktop/src/main/services/run-service.test.ts)（9 项，含 2 项绑定校验）、[SkillService 测试](../../apps/desktop/src/main/services/skill-service.test.ts)（10 项，含 readSkillInstruction）；`npm run verify` 退出 0（32 文件 / 276 测试），2026-09-09 19:10 |
-| A14 | 资源读取/任务写文件/执行工具 | A13 | todo | — |
-| A15 | 取消、撤销、终态与恢复收口 | A14 | todo | — |
-| A16 | PPT Skill 适配预设与报告契约 | A15 | todo | — |
-| A17 | 真实 Skill 试运行与 A3 验收 | A16 | todo | — |
+| A13 | Skill 指令及运行绑定进入 Agent | A12 | done | [agent-engine 测试](../../packages/agent-core/src/agent-engine.test.ts)、[协议测试](../../packages/agent-protocol/src/index.test.ts)、[RunService 测试](../../apps/desktop/src/main/services/run-service.test.ts)、[SkillService 测试](../../apps/desktop/src/main/services/skill-service.test.ts)；`npm run verify` 退出 0（276 测试），2026-09-09 20:39 |
+| A14 | 资源读取/任务写文件/执行工具 | A13 | done | [skill-read-resource 测试](../../packages/tool-runtime/src/skill-read-resource.test.ts)、[task-write-file 测试](../../packages/tool-runtime/src/task-write-file.test.ts)、[skill-execute 测试](../../packages/tool-runtime/src/skill-execute.test.ts)；`npm run verify` 退出 0，2026-09-09 22:12 |
+| A15 | 取消、撤销、终态与恢复收口 | A14 | done | [RunService 测试](../../apps/desktop/src/main/services/run-service.test.ts)（取消/撤销/终态/恢复场景）；`npm run verify` 退出 0，2026-09-09 22:31 |
+| A16 | PPT Skill 适配预设与报告契约 | A15 | done | [skill-adapter 测试](../../apps/desktop/src/main/services/skill-adapter.test.ts)、[ppt-generation-preset 测试](../../apps/desktop/src/main/services/ppt-generation-preset.test.ts)；`npm run verify` 退出 0，2026-09-09 22:53 |
+| A17 | 真实 Skill 试运行与 A3 验收 | A16 | done | [IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)、[协议测试](../../packages/agent-protocol/src/index.test.ts)；`npm run verify` 退出 0（327 测试），2026-09-09 23:09 |
 | A18 | PPTX 文件成果与验证状态 | A17 | todo | — |
 | A19 | 文件成果 UI、打开与导出 | A18 | todo | — |
 | A20 | 内置目录与依赖制品打包 | A19 | todo | — |
