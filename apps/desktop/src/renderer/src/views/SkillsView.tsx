@@ -1,5 +1,5 @@
 import type { RuntimeProfileDraft, SkillSummary } from '@betterwork/agent-protocol';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
@@ -111,13 +111,21 @@ function readStoredViewMode(): ViewMode {
 }
 
 export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element {
-  const { selected } = state;
-  const dependencies = useSkillDependencies(selected, state.refresh);
+  const { selected, dismissToast: dismissStateToast } = state;
+  const refreshSkillDetail = useCallback(
+    (skillId: string): void => {
+      const current = state.skills.find((s) => s.id === skillId);
+      if (current) state.select(current);
+    },
+    [state],
+  );
+  const dependencies = useSkillDependencies(selected, state.refresh, refreshSkillDetail);
+  const { dismissToast: dismissDepsToast } = dependencies;
   const toast = state.toast || dependencies.toast;
-  const dismissToast = (): void => {
-    state.dismissToast();
-    dependencies.dismissToast();
-  };
+  const dismissToast = useCallback((): void => {
+    dismissStateToast();
+    dismissDepsToast();
+  }, [dismissStateToast, dismissDepsToast]);
   const [viewMode, setViewMode] = useState<ViewMode>(readStoredViewMode);
   const changeViewMode = (mode: ViewMode): void => {
     setViewMode(mode);
