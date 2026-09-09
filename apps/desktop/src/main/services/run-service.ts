@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import type { AgentTool, ModelProvider } from '@betterwork/agent-core';
+import type { AgentTool, ModelProvider, SkillInstruction } from '@betterwork/agent-core';
 import {
   describeError,
   FakeModelProvider,
@@ -23,6 +23,7 @@ import type { AppStore } from '../persistence';
 import type { KnowledgeVault } from './knowledge-vault';
 import type { NotificationService } from './notification-service';
 import { createQianfanSearchClient } from './search-engine-service';
+import type { SkillService } from './skill-service';
 
 /** 一次执行期间的内存态；Run 结束后整条丢弃。 */
 interface ActiveRun {
@@ -73,6 +74,7 @@ export class RunService {
     private readonly store: AppStore,
     private readonly knowledgeVault: KnowledgeVault,
     private readonly notifications: NotificationService,
+    private readonly skillService: SkillService,
     private readonly getWindow: () => BrowserWindow | null,
   ) {}
 
@@ -129,6 +131,7 @@ export class RunService {
     try {
       const model = this.resolveModel();
       const webSearch = this.resolveWebSearch();
+      const skillInstructions = await this.resolveSkillInstructions(input);
       const events = this.engine.run({
         runId,
         taskId: input.taskId,
@@ -145,6 +148,7 @@ export class RunService {
           ...(webSearch ? { webSearch } : {}),
         }),
         signal: controller.signal,
+        ...(skillInstructions ? { skillInstructions } : {}),
       });
 
       for await (const event of events) {
@@ -285,6 +289,23 @@ export class RunService {
     // 显式包一层：直接摘出 client.search 会脱离 this 绑定，类型系统无法证明它安全
     const client = createQianfanSearchClient(engine);
     return (query, signal) => client.search(query, signal);
+  }
+
+  /**
+   * 绑定快照：Run 启动时一次性解析 Skill 指令，运行期间不受后续编辑影响。
+   * 未启用或未信任的 Skill 直接抛错，由 consume 兜底为 run.failed。
+   */
+  private async resolveSkillInstructions(
+    input: StartRunRequest,
+  ): Promise<SkillInstruction[] | undefined> {
+    if (!input.skillBinding) return undefined;
+    const skill = this.store.skills.get(input.skillBinding.skillId);
+    if (!skill) throw new Error('Skill does not exist');
+    if (!skill.enabled) throw new Error(`Skill「${skill.name}」已停用`);
+    if (skill.trustStatus !== 'trusted')
+      throw new Error(`Skill「${skill.name}」尚未信任，无法运行`);
+    const instruction = await this.skillService.readSkillInstruction(skill);
+    return [instruction];
   }
 }
 

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import type { SkillInstruction } from '@betterwork/agent-core';
 import type { RuntimeProfileDraft, SkillDetail } from '@betterwork/agent-protocol';
 import { parse } from 'yaml';
 
@@ -107,6 +108,17 @@ const parseFrontmatter = (content: string): SkillFrontmatter => {
     throw new Error('SKILL.md frontmatter must be a YAML mapping');
   }
   return value as SkillFrontmatter;
+};
+
+const stripFrontmatter = (content: string): string => {
+  const lines = content.split(/\r?\n/u);
+  if (lines[0] !== '---') return content;
+  const end = lines.findIndex((line, index) => index > 0 && line === '---');
+  if (end < 0) return content;
+  return lines
+    .slice(end + 1)
+    .join('\n')
+    .trimStart();
 };
 
 /** macOS / Windows 资源管理器的元数据不是 Skill 内容：不计入 hash、不复制。 */
@@ -268,6 +280,17 @@ export class SkillService {
   async resolveResourceRoot(skill: SkillDetail): Promise<string> {
     if (skill.sourceKind === 'user') return this.userRevisionRoot(skill);
     return this.resolveBuiltinResource(skill.revision.resourceKey.replace(/^builtin\//u, ''));
+  }
+
+  async readSkillInstruction(skill: SkillDetail): Promise<SkillInstruction> {
+    const resourceRoot = await this.resolveResourceRoot(skill);
+    const skillFilePath = path.join(resourceRoot, skillFileName);
+    const content = await readFile(skillFilePath, 'utf8');
+    return {
+      skillId: skill.id,
+      name: skill.name,
+      instruction: stripFrontmatter(content),
+    };
   }
 
   private async resolveBuiltinResource(resourceName: string): Promise<string> {

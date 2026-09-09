@@ -106,7 +106,7 @@ function bootstrap(): ApplicationContext {
 
   started.window = createMainWindow();
   const notifications = new NotificationService(store.notifications, getWindow);
-  const runs = new RunService(store, knowledgeVault, notifications, getWindow);
+  const runs = new RunService(store, knowledgeVault, notifications, skillService, getWindow);
 
   registerIpc({
     store,

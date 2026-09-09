@@ -300,5 +300,27 @@ describe('SkillService', () => {
     expect(copiedNames).toContain('run.py');
     store.close();
   });
+
+  it('reads skill instruction content with frontmatter stripped', async () => {
+    const directory = temporaryDirectory();
+    const source = path.join(directory, 'instruction-skill');
+    mkdirSync(source, { recursive: true });
+    const skillContent =
+      '---\nname: 指令测试\ndescription: 测试指令读取\n---\n\n# 指令内容\n\n请遵循这些说明。';
+    writeFileSync(path.join(source, 'SKILL.md'), skillContent);
+    const roots = rootsFor(directory);
+    const store = AppStore.open(path.join(directory, 'app.sqlite'));
+    const service = new SkillService(store, roots);
+    const imported = await service.importDirectory(source);
+
+    const instruction = await service.readSkillInstruction(imported.skill);
+    expect(instruction.skillId).toBe(imported.skill.id);
+    expect(instruction.name).toBe('指令测试');
+    expect(instruction.instruction).toContain('# 指令内容');
+    expect(instruction.instruction).toContain('请遵循这些说明');
+    expect(instruction.instruction).not.toContain('---');
+    expect(instruction.instruction).not.toContain('name:');
+    store.close();
+  });
 });
 import { createHash } from 'node:crypto';

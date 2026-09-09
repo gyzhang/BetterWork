@@ -12,6 +12,7 @@ import {
   runtimeProfileDraftSchema,
   scriptExecutionSchema,
   setSkillTrustRequestSchema,
+  skillBindingSchema,
   skillRevisionSummarySchema,
   skillSummarySchema,
   startRunRequestSchema,
@@ -35,6 +36,53 @@ describe('run protocol', () => {
         workspacePath: '/',
       }),
     ).toThrow();
+  });
+
+  it('accepts an optional skill binding with skillId and optional revisionId', () => {
+    expect(
+      startRunRequestSchema.parse({
+        taskId: 'task-1',
+        sessionId: 'session-1',
+        prompt: '生成 PPT',
+        skillBinding: { skillId: 'skill-1' },
+      }),
+    ).toEqual({
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      prompt: '生成 PPT',
+      skillBinding: { skillId: 'skill-1' },
+    });
+    expect(
+      startRunRequestSchema.parse({
+        taskId: 'task-1',
+        sessionId: 'session-1',
+        prompt: '生成 PPT',
+        skillBinding: { skillId: 'skill-1', revisionId: 'rev-1' },
+      }),
+    ).toEqual({
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      prompt: '生成 PPT',
+      skillBinding: { skillId: 'skill-1', revisionId: 'rev-1' },
+    });
+    expect(() =>
+      startRunRequestSchema.parse({
+        taskId: 'task-1',
+        sessionId: 'session-1',
+        prompt: '生成 PPT',
+        skillBinding: { skillId: '' },
+      }),
+    ).toThrow();
+    expect(() =>
+      startRunRequestSchema.parse({
+        taskId: 'task-1',
+        sessionId: 'session-1',
+        prompt: '生成 PPT',
+        skillBinding: { skillId: 'skill-1', extra: true },
+      }),
+    ).toThrow();
+    expect(() => skillBindingSchema.parse({ skillId: '' })).toThrow();
+    expect(() => skillBindingSchema.parse({ skillId: 'skill-1', revisionId: '' })).toThrow();
   });
 });
 

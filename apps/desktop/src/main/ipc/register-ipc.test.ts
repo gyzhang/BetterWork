@@ -80,12 +80,12 @@ describe('registerIpc', () => {
     store = AppStore.open(':memory:');
     const knowledgeVault = new KnowledgeVault(':memory:');
     const notifications = new NotificationService(store.notifications, () => null);
-    const runs = new RunService(store, knowledgeVault, notifications, () => null);
     const skillService = new SkillService(store, {
       developmentBuiltinRoot: path.join(temporaryDirectory, 'builtin-dev'),
       installedBuiltinRoot: path.join(temporaryDirectory, 'builtin-installed'),
       userRoot: path.join(temporaryDirectory, 'user-skills'),
     });
+    const runs = new RunService(store, knowledgeVault, notifications, skillService, () => null);
 
     // 依赖通道用离线替身根：不触网、不碰系统 Python，也不写受管目录之外的位置。
     const fakeFilesystem = new FakeFileSystem();
