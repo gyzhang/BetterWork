@@ -7,7 +7,10 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "preview": "electron-vite preview"
+    "preview": "electron-vite preview",
+    "dist": "electron-vite build && electron-builder",
+    "dist:mac": "electron-vite build && electron-builder --mac",
+    "dist:win": "electron-vite build && electron-builder --win"
   },
   "dependencies": {
     "@betterwork/agent-core": "*",
@@ -28,6 +31,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "5.2.0",
     "electron": "44.1.1",
+    "electron-builder": "^25.1.8",
     "electron-vite": "^5.0.0",
     "jszip": "^3.10.1",
     "vite": "^7.3.1"

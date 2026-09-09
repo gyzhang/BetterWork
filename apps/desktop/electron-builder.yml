@@ -1,0 +1,50 @@
+appId: dev.betterwork.desktop
+productName: BetterWork
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - out/**/*
+  - node_modules/**/*
+  - package.json
+
+extraResources:
+  - from: resources/skills
+    to: skills
+    filter:
+      - '**/*'
+      - '!.DS_Store'
+      - '!._*'
+  - from: resources/dependency-locks
+    to: dependency-locks
+    filter:
+      - '*.json'
+  - from: resources/wheelhouse
+    to: wheelhouse
+    filter:
+      - '*.whl'
+    errorOnMissing: false
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  category: public.app-category.productivity
+  hardenedRuntime: true
+  gatekeeperAssess: false
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
+publish: []

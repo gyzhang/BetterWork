@@ -68,7 +68,7 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | A17 | 真实 Skill 试运行与 A3 验收 | A16 | done | [IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)、[协议测试](../../packages/agent-protocol/src/index.test.ts)；`npm run verify` 退出 0（327 测试），2026-09-09 23:09 |
 | A18 | PPTX 文件成果与验证状态 | A17 | done | [file-artifact-service 测试](../../apps/desktop/src/main/services/file-artifact-service.test.ts)、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)、[IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)；`npm run verify` 退出 0（34 文件 / 342 测试），2026-09-09 00:56 |
 | A19 | 文件成果 UI、打开与导出 | A18 | done | [ArtifactView 测试](../../apps/desktop/src/renderer/src/views/ArtifactView.test.tsx)、[use-artifact-viewer 测试](../../apps/desktop/src/renderer/src/hooks/use-artifact-viewer.test.tsx)、[IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)；`npm run verify` 退出 0（34 文件 / 342 测试），2026-09-09 00:56。**待手工验收**：打开/导出/版本切换/Markdown 回归 |
-| A20 | 内置目录与依赖制品打包 | A19 | todo | — |
+| A20 | 内置目录与依赖制品打包 | A19 | done | [electron-builder 配置](../../apps/desktop/electron-builder.yml)、[启动注册](../../apps/desktop/src/main/index.ts)、[SkillService 测试](../../apps/desktop/src/main/services/skill-service.test.ts)（6 项新增：开发/安装寻址、缺资源拒绝、用户副本独立、同名并存、无敏感材料）；`npm run verify` 退出 0（39 文件 / 348 测试），2026-09-10 01:06 |
 | A21 | 安装包验收与阶段 A 收尾 | A20 | todo | — |
 
 串行是有意选择：共享协议、迁移、App.tsx、RunService 等容易冲突。没有用户要求不并行派发。A09 的真实 Windows 验收若缺设备，标 blocked；用户可明确允许后续非 Windows 任务先行，但 A2/A21 跨平台门槛不因此取消。
