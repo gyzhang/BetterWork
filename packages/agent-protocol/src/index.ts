@@ -72,11 +72,20 @@ type WithoutEventEnvelope<T> = T extends unknown
   : never;
 export type AgentRuntimeEventInput = WithoutEventEnvelope<AgentRuntimeEvent>;
 
+export const skillBindingSchema = z
+  .object({
+    skillId: z.string().min(1),
+    revisionId: z.string().min(1).optional(),
+  })
+  .strict();
+export type SkillBinding = z.infer<typeof skillBindingSchema>;
+
 export const startRunRequestSchema = z
   .object({
     taskId: z.string().min(1),
     sessionId: z.string().min(1),
     prompt: z.string().trim().min(1),
+    skillBinding: skillBindingSchema.optional(),
   })
   .strict();
 export type StartRunRequest = z.infer<typeof startRunRequestSchema>;

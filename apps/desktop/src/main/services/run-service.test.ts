@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -10,6 +10,7 @@ import { AppStore } from '../persistence';
 import { KnowledgeVault } from './knowledge-vault';
 import { NotificationService } from './notification-service';
 import { createRunTools, RunService } from './run-service';
+import { SkillService } from './skill-service';
 
 const temporaryDirectories: string[] = [];
 const openStores: AppStore[] = [];
@@ -57,6 +58,7 @@ interface Fixture {
   directory: string;
   store: AppStore;
   vault: KnowledgeVault;
+  skillService: SkillService;
   taskId: string;
   sessionId: string;
 }
@@ -72,6 +74,11 @@ const createFixture = async (): Promise<Fixture> => {
   openStores.push(store);
   const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
   openVaults.push(vault);
+  const skillService = new SkillService(store, {
+    developmentBuiltinRoot: path.join(directory, 'builtin-dev'),
+    installedBuiltinRoot: path.join(directory, 'builtin-installed'),
+    userRoot: path.join(directory, 'skills'),
+  });
 
   const workspace = store.workspaces.getOrCreate(directory, path.basename(directory));
   const created = store.tasks.create(workspace.id, '测试任务', '用于运行编排测试');
@@ -79,6 +86,7 @@ const createFixture = async (): Promise<Fixture> => {
     directory,
     store,
     vault,
+    skillService,
     taskId: created.task.id,
     sessionId: created.sessionId,
   };
@@ -89,6 +97,7 @@ const createService = (fixture: Fixture, window?: WindowStub): RunService =>
     fixture.store,
     fixture.vault,
     new NotificationService(fixture.store.notifications, () => window?.asBrowserWindow ?? null),
+    fixture.skillService,
     () => window?.asBrowserWindow ?? null,
   );
 
@@ -264,5 +273,108 @@ describe('RunService', () => {
     });
     // 已经收口的 Run 不会被二次改写
     expect(fixture.store.runs.failInterruptedRuns('再来一次', Date.now())).toBe(0);
+  });
+
+  it('refuses to start a run with an untrusted skill', async () => {
+    const fixture = await createFixture();
+    const window = createWindowStub();
+    const service = createService(fixture, window);
+
+    const skillId = 'skill-untrusted';
+    const contentHash = 'a'.repeat(64);
+    const resourceKey = `user/${skillId}/revisions/${contentHash}`;
+    const skillDir = path.join(fixture.directory, 'skills', skillId, 'revisions', contentHash);
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(path.join(skillDir, 'SKILL.md'), '---\nname: 测试 Skill\n---\n指令内容');
+    fixture.store.skills.save({
+      id: skillId,
+      name: '测试 Skill',
+      description: '用于测试',
+      sourceKind: 'user',
+      currentRevisionId: 'pending',
+    });
+    const revisionId = fixture.store.skills.saveRevision({
+      skillId,
+      contentHash,
+      resourceKey,
+      frontmatter: { name: '测试 Skill' },
+    });
+    fixture.store.skills.save({
+      id: skillId,
+      name: '测试 Skill',
+      description: '用于测试',
+      sourceKind: 'user',
+      currentRevisionId: revisionId,
+    });
+
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '使用 Skill',
+      skillBinding: { skillId },
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('failed');
+    const events = fixture.store.runs.listEvents(runId);
+    expect(events.at(-1)).toMatchObject({ type: 'run.failed' });
+    const error = (events.at(-1) as { type: 'run.failed'; error: string }).error;
+    expect(error).toContain('尚未信任');
+  });
+
+  it('refuses to start a run with a disabled skill', async () => {
+    const fixture = await createFixture();
+    const window = createWindowStub();
+    const service = createService(fixture, window);
+
+    const skillId = 'skill-disabled';
+    const contentHash = 'b'.repeat(64);
+    const resourceKey = `user/${skillId}/revisions/${contentHash}`;
+    const skillDir = path.join(fixture.directory, 'skills', skillId, 'revisions', contentHash);
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(path.join(skillDir, 'SKILL.md'), '---\nname: 停用 Skill\n---\n指令内容');
+    fixture.store.skills.save({
+      id: skillId,
+      name: '停用 Skill',
+      description: '用于测试',
+      sourceKind: 'user',
+      currentRevisionId: 'pending',
+    });
+    const revisionId = fixture.store.skills.saveRevision({
+      skillId,
+      contentHash,
+      resourceKey,
+      frontmatter: { name: '停用 Skill' },
+    });
+    fixture.store.skills.save({
+      id: skillId,
+      name: '停用 Skill',
+      description: '用于测试',
+      sourceKind: 'user',
+      currentRevisionId: revisionId,
+    });
+    fixture.store.skills.setEnabled(skillId, false);
+    fixture.store.skills.setTrustPreference(skillId, 'trusted');
+    fixture.store.skills.saveTrustGrant({
+      skillId,
+      revisionId,
+      profileHash: 'hash',
+      dependencyFingerprint: 'fp',
+      scopeHash: 'scope',
+      source: 'user',
+    });
+
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '使用 Skill',
+      skillBinding: { skillId },
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('failed');
+    const events = fixture.store.runs.listEvents(runId);
+    const error = (events.at(-1) as { type: 'run.failed'; error: string }).error;
+    expect(error).toContain('已停用');
   });
 });

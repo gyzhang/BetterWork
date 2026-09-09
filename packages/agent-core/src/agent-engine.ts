@@ -8,7 +8,7 @@ import type {
 } from '@betterwork/agent-protocol';
 
 import { abortError, describeError, isAbortError } from './errors';
-import type { AgentEngine, AgentRunInput } from './types';
+import type { AgentEngine, AgentRunInput, SkillInstruction } from './types';
 
 const SYSTEM_PROMPT = (): string => {
   const now = new Date();
@@ -16,6 +16,59 @@ const SYSTEM_PROMPT = (): string => {
   const month = now.getMonth() + 1;
   const day = now.getDate();
   return `今天是 ${year} 年 ${month} 月 ${day} 日。搜索新闻或时效性内容时，请在关键词中包含当前年份。`;
+};
+
+export const SKILL_INSTRUCTION_BUDGET = 16_000;
+
+const OVERFLOW_HINT =
+  '（部分 Skill 指令因长度被截断，可通过 skill_read_resource 工具按需读取完整内容。）';
+
+const formatSkillHeader = (name: string): string =>
+  `以下是 Skill「${name}」的指令，请在后续回答中遵循这些说明：`;
+
+export const buildSkillMessages = (
+  instructions: readonly SkillInstruction[] | undefined,
+): AgentMessage[] => {
+  if (!instructions || instructions.length === 0) return [];
+
+  const seen = new Set<string>();
+  const deduped: SkillInstruction[] = [];
+  for (const item of instructions) {
+    if (seen.has(item.skillId)) continue;
+    seen.add(item.skillId);
+    deduped.push(item);
+  }
+
+  const messages: AgentMessage[] = [];
+  let totalLength = 0;
+
+  for (const item of deduped) {
+    const header = formatSkillHeader(item.name);
+    const entryLength = header.length + item.instruction.length;
+
+    if (totalLength + entryLength <= SKILL_INSTRUCTION_BUDGET) {
+      messages.push({
+        id: randomUUID(),
+        role: 'system',
+        content: `${header}\n\n${item.instruction}`,
+      });
+      totalLength += entryLength;
+      continue;
+    }
+
+    const remaining = SKILL_INSTRUCTION_BUDGET - totalLength;
+    if (remaining > OVERFLOW_HINT.length + 4) {
+      const truncated = item.instruction.slice(0, remaining - OVERFLOW_HINT.length);
+      messages.push({
+        id: randomUUID(),
+        role: 'system',
+        content: `${header}\n\n${truncated}${OVERFLOW_HINT}`,
+      });
+    }
+    break;
+  }
+
+  return messages;
 };
 
 class RunEventFactory {
@@ -37,8 +90,10 @@ class RunEventFactory {
 export class ReActAgentEngine implements AgentEngine {
   async *run(input: AgentRunInput): AsyncIterable<AgentRuntimeEvent> {
     const events = new RunEventFactory(input.runId);
+    const skillMessages = buildSkillMessages(input.skillInstructions);
     const messages: AgentMessage[] = [
       { id: randomUUID(), role: 'system', content: SYSTEM_PROMPT() },
+      ...skillMessages,
       ...(input.messages ?? []),
       { id: randomUUID(), role: 'user', content: input.prompt },
     ];

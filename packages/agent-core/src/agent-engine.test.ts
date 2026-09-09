@@ -2,7 +2,7 @@ import type { AgentMessage } from '@betterwork/agent-protocol';
 import { calculatorTool, createKnowledgeSearchTool } from '@betterwork/tool-runtime';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ReActAgentEngine } from './agent-engine';
+import { buildSkillMessages, ReActAgentEngine, SKILL_INSTRUCTION_BUDGET } from './agent-engine';
 import { FakeModelProvider } from './fake-provider';
 import { OpenAICompatibleProvider } from './openai-compatible-provider';
 import { type AgentTool, type ModelProvider, type ModelStreamChunk } from './types';
@@ -464,5 +464,96 @@ describe('ReActAgentEngine', () => {
     const year = new Date().getFullYear();
     expect(systemMessage?.content).toContain(`${year} 年`);
     expect(systemMessage?.content).toContain('搜索新闻');
+  });
+
+  it('injects skill instructions as system messages between date prompt and history', async () => {
+    const model = recordingModel([[{ type: 'text-delta', delta: 'ok' }, { type: 'done' }]]);
+    const engine = new ReActAgentEngine();
+    for await (const _event of engine.run({
+      runId: 'run-skill',
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      prompt: '帮我生成 PPT',
+      workspacePath: '.',
+      model,
+      tools: [],
+      signal: new AbortController().signal,
+      skillInstructions: [
+        { skillId: 'skill-1', name: 'PPT 专家', instruction: '请使用 python-pptx 生成演示文稿。' },
+      ],
+    }))
+      void _event;
+
+    const systemMessages = model.capturedMessages.filter((m) => m.role === 'system');
+    expect(systemMessages).toHaveLength(2);
+    expect(systemMessages[0]?.content).toContain('年');
+    expect(systemMessages[1]?.content).toContain('PPT 专家');
+    expect(systemMessages[1]?.content).toContain('python-pptx');
+
+    const userMessages = model.capturedMessages.filter((m) => m.role === 'user');
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages[0]?.content).toBe('帮我生成 PPT');
+  });
+
+  it('deduplicates skill instructions by skillId', () => {
+    const messages = buildSkillMessages([
+      { skillId: 'skill-1', name: '专家 A', instruction: '指令 A' },
+      { skillId: 'skill-1', name: '专家 A 副本', instruction: '重复指令' },
+      { skillId: 'skill-2', name: '专家 B', instruction: '指令 B' },
+    ]);
+    expect(messages).toHaveLength(2);
+    expect(messages[0]?.content).toContain('专家 A');
+    expect(messages[0]?.content).toContain('指令 A');
+    expect(messages[0]?.content).not.toContain('重复指令');
+    expect(messages[1]?.content).toContain('专家 B');
+  });
+
+  it('returns no skill messages when instructions are empty or undefined', () => {
+    expect(buildSkillMessages(undefined)).toEqual([]);
+    expect(buildSkillMessages([])).toEqual([]);
+  });
+
+  it('truncates and adds overflow hint when instructions exceed budget', () => {
+    const longInstruction = '指'.repeat(SKILL_INSTRUCTION_BUDGET + 1000);
+    const messages = buildSkillMessages([
+      { skillId: 'skill-1', name: '长指令', instruction: longInstruction },
+    ]);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.content.length).toBeLessThanOrEqual(SKILL_INSTRUCTION_BUDGET + 200);
+    expect(messages[0]?.content).toContain('skill_read_resource');
+  });
+
+  it('terminates at the tool round limit even with skill instructions', async () => {
+    const events = [];
+    const engine = new ReActAgentEngine();
+    const loopTool: AgentTool = {
+      name: 'loop',
+      description: '持续调用',
+      inputSchema: { type: 'object' },
+      execute: async () => ({ ok: true }),
+    };
+    for await (const event of engine.run({
+      runId: 'run-skill-limit',
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      prompt: '循环',
+      workspacePath: '.',
+      model: scriptedModel([
+        [
+          { type: 'tool-call', toolCall: { id: 'call-loop', name: 'loop', input: {} } },
+          { type: 'done' },
+        ],
+      ]),
+      tools: [loopTool],
+      signal: new AbortController().signal,
+      maxToolRounds: 1,
+      skillInstructions: [{ skillId: 'skill-1', name: '测试', instruction: '测试指令' }],
+    }))
+      events.push(event);
+
+    expect(events.at(-1)).toMatchObject({
+      type: 'run.failed',
+      error: 'Tool round limit exceeded: 1',
+    });
   });
 });

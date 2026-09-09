@@ -38,6 +38,12 @@ export interface AgentTool {
   execute(input: Record<string, unknown>, context: ToolExecutionContext): Promise<unknown>;
 }
 
+export interface SkillInstruction {
+  skillId: string;
+  name: string;
+  instruction: string;
+}
+
 export interface AgentRunInput {
   runId: string;
   taskId: string;
@@ -49,6 +55,7 @@ export interface AgentRunInput {
   tools: AgentTool[];
   signal: AbortSignal;
   maxToolRounds?: number;
+  skillInstructions?: SkillInstruction[];
 }
 
 export interface AgentEngine {
