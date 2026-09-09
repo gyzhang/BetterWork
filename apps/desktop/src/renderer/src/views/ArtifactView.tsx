@@ -210,8 +210,10 @@ export function ArtifactPage({
                     </div>
                   </footer>
                 </form>
-              ) : (
+              ) : 'content' in visibleVersion ? (
                 <MarkdownPreview content={visibleVersion.content} />
+              ) : (
+                <p className="page-intro">该成果为文件类型，暂不支持在此预览。</p>
               )}
             </div>
           </section>

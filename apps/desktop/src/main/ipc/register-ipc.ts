@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises';
+import { copyFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
@@ -25,12 +25,17 @@ import {
   dependencyPlanRequestSchema,
   dependencyPlanSchema,
   evidenceSummarySchema,
+  exportFileArtifactRequestSchema,
+  type ExportFileArtifactResult,
+  exportFileArtifactResultSchema,
   exportMarkdownArtifactRequestSchema,
   exportMarkdownArtifactResultSchema,
   exportSkillRequestSchema,
+  fileArtifactDetailSchema,
   getArtifactRequestSchema,
   getArtifactVersionRequestSchema,
   getDependencyOperationRequestSchema,
+  getFileArtifactRequestSchema,
   getSkillRequestSchema,
   importSkillRequestSchema,
   IpcChannel,
@@ -62,6 +67,8 @@ import {
   refreshKnowledgeDocumentRequestSchema,
   refreshSkillDependencyGrantRequestSchema,
   refreshSkillDependencyGrantResultSchema,
+  registerFileArtifactRequestSchema,
+  registerFileArtifactResultSchema,
   registerToolchainRequestSchema,
   registerToolchainResultSchema,
   removedResultSchema,
@@ -103,6 +110,7 @@ import { z, type ZodTypeAny } from 'zod';
 import { createNodeFileSystem } from '../infrastructure/dependency-adapters';
 import { listDependencyLocks, loadDependencyLock } from '../infrastructure/dependency-lock-catalog';
 import type { AppStore } from '../persistence';
+import type { FileArtifactService } from '../services/file-artifact-service';
 import type { KnowledgeVault } from '../services/knowledge-vault';
 import { probeModelConnection } from '../services/model-connectivity';
 import type { NotificationService } from '../services/notification-service';
@@ -123,6 +131,7 @@ export interface IpcDependencies {
   readonly skillService: SkillService;
   readonly dependencies: SkillDependencyService;
   readonly snapshots: ToolchainSnapshotService;
+  readonly fileArtifactService?: FileArtifactService;
   /** 随包依赖锁目录：开发态在仓库 resources 下，打包后在安装资源里。 */
   readonly dependencyLocksRoot: string;
   readonly getWindow: () => BrowserWindow | null;
@@ -316,6 +325,58 @@ function registerArtifactChannels(deps: IpcDependencies): void {
     exportMarkdownArtifactResultSchema,
     async (input) => exportMarkdown(deps, input.artifactId, input.versionId),
   );
+  handleInput(
+    IpcChannel.GetFileArtifact,
+    getFileArtifactRequestSchema,
+    fileArtifactDetailSchema.nullable(),
+    (input) => {
+      const detail = store.artifacts.getDetail(input.artifactId);
+      if (!detail || detail.type !== 'presentation') return null;
+      if (!input.versionId) return detail;
+      const version = store.artifacts.getVersionDetail(input.versionId);
+      if (!version || version.artifactId !== input.artifactId) return null;
+      if (!('mimeType' in version)) return null;
+      return {
+        id: detail.id,
+        title: detail.title,
+        mimeType: version.mimeType,
+        fileSize: version.fileSize,
+        createdAt: detail.createdAt,
+        updatedAt: detail.updatedAt,
+        ...(detail.sourceRunId ? { sourceRunId: detail.sourceRunId } : {}),
+        fileHash: version.fileHash,
+        fileKey: version.fileKey,
+        validation: version.validation,
+        ...(version.description ? { description: version.description } : {}),
+        evidence: version.evidence,
+      };
+    },
+  );
+  handleInput(
+    IpcChannel.RegisterFileArtifact,
+    registerFileArtifactRequestSchema,
+    registerFileArtifactResultSchema,
+    async (input) => {
+      const { fileArtifactService } = deps;
+      if (!fileArtifactService) throw new Error('File artifact service is not available');
+      return fileArtifactService.register({
+        runId: input.runId,
+        executionId: input.executionId,
+        outputId: input.outputId,
+        ...(input.artifactId ? { artifactId: input.artifactId } : {}),
+        title: input.title,
+        mimeType: input.mimeType,
+        ...(input.description ? { description: input.description } : {}),
+        validation: input.validation,
+      });
+    },
+  );
+  handleInput(
+    IpcChannel.ExportFileArtifact,
+    exportFileArtifactRequestSchema,
+    exportFileArtifactResultSchema,
+    async (input) => exportFileArtifact(deps, input.artifactId, input.versionId),
+  );
 }
 
 /**
@@ -331,12 +392,15 @@ async function exportMarkdown(
   const { store, notifications } = deps;
   const artifact = store.artifacts.getDetail(artifactId);
   if (!artifact) throw new Error('Artifact does not exist');
+  if (artifact.type !== 'markdown') throw new Error('Artifact is not a markdown artifact');
 
   const version = versionId ? store.artifacts.getVersionDetail(versionId) : undefined;
   if (versionId && (!version || version.artifactId !== artifactId)) {
     throw new Error('Artifact version does not belong to artifact');
   }
-  const content = version ? version.content : artifact.content;
+  if (version && !('content' in version))
+    throw new Error('Artifact version is not a markdown version');
+  const content = version && 'content' in version ? version.content : artifact.content;
 
   const result = await showSaveDialog(deps, {
     title: '导出 Markdown 成果',
@@ -366,6 +430,78 @@ async function exportMarkdown(
     target: { kind: 'artifact', artifactId: artifact.id },
   });
   return { cancelled: false, filePath: result.filePath };
+}
+
+/**
+ * 导出文件成果到用户选择的路径。
+ * 版本归属校验与 Markdown 导出一致；文件来源由 FileArtifactService 的不可变存储提供。
+ */
+async function exportFileArtifact(
+  deps: IpcDependencies,
+  artifactId: string,
+  versionId: string | undefined,
+): Promise<ExportFileArtifactResult> {
+  const { store, notifications, fileArtifactService } = deps;
+  if (!fileArtifactService) throw new Error('File artifact service is not available');
+
+  const artifact = store.artifacts.getDetail(artifactId);
+  if (!artifact || artifact.type !== 'presentation')
+    throw new Error('File artifact does not exist');
+
+  const resolvedVersionId = versionId ?? artifact.currentVersionId;
+  if (versionId) {
+    const version = store.artifacts.getVersionDetail(versionId);
+    if (!version || version.artifactId !== artifactId) {
+      throw new Error('Artifact version does not belong to artifact');
+    }
+  }
+
+  const extension = mimeToExtension(artifact.mimeType);
+  const result = await showSaveDialog(deps, {
+    title: '导出文件成果',
+    defaultPath: `${sanitizeFileName(artifact.title)}.${extension}`,
+    filters: [
+      { name: extension.toUpperCase(), extensions: [extension] },
+      { name: '所有文件', extensions: ['*'] },
+    ],
+  });
+  if (result.canceled || !result.filePath) return { cancelled: true };
+
+  const sourcePath = fileArtifactService.resolveStoredPath(resolvedVersionId);
+  try {
+    await copyFile(sourcePath, result.filePath);
+  } catch (error) {
+    notifications.create({
+      level: 'error',
+      kind: 'artifact',
+      title: `导出「${artifact.title}」失败`,
+      detail: describeError(error),
+      target: { kind: 'artifact', artifactId: artifact.id },
+    });
+    throw error;
+  }
+
+  notifications.create({
+    level: 'success',
+    kind: 'artifact',
+    title: `已导出「${artifact.title}」`,
+    detail: result.filePath,
+    target: { kind: 'artifact', artifactId: artifact.id },
+  });
+  return { cancelled: false, filePath: result.filePath };
+}
+
+const MIME_EXTENSION_MAP: Record<string, string> = {
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/pdf': 'pdf',
+  'text/plain': 'txt',
+  'text/markdown': 'md',
+};
+
+function mimeToExtension(mimeType: string): string {
+  return MIME_EXTENSION_MAP[mimeType] ?? 'bin';
 }
 
 function registerModelChannels({ store }: IpcDependencies): void {

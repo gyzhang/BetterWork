@@ -18,7 +18,11 @@ import type {
 } from '@betterwork/agent-protocol';
 import { IpcChannel } from '@betterwork/agent-protocol';
 import {
+  type ArtifactFileRegistrar,
+  type ArtifactRegisterInput,
+  type ArtifactRegisterOutput,
   calculatorTool,
+  createArtifactRegisterFileTool,
   createKnowledgeSearchTool,
   createSkillExecuteTool,
   createSkillReadResourceTool,
@@ -37,6 +41,7 @@ import {
 import type { BrowserWindow } from 'electron';
 
 import type { AppStore } from '../persistence';
+import type { FileArtifactService } from './file-artifact-service';
 import type { KnowledgeVault } from './knowledge-vault';
 import type { NotificationService } from './notification-service';
 import { createQianfanSearchClient } from './search-engine-service';
@@ -73,6 +78,7 @@ export const createRunTools = (dependencies: {
   skillResourceReader?: (input: SkillResourceReadInput) => Promise<SkillResourceReadOutput>;
   taskFileWriter?: (input: TaskFileWriteInput) => Promise<TaskFileWriteOutput>;
   skillCommandExecutor?: (input: SkillCommandExecuteInput) => Promise<SkillCommandExecuteOutput>;
+  artifactFileRegistrar?: ArtifactFileRegistrar;
 }): AgentTool[] => {
   const tools: AgentTool[] = [
     calculatorTool,
@@ -85,6 +91,8 @@ export const createRunTools = (dependencies: {
   if (dependencies.taskFileWriter) tools.push(createTaskWriteFileTool(dependencies.taskFileWriter));
   if (dependencies.skillCommandExecutor)
     tools.push(createSkillExecuteTool(dependencies.skillCommandExecutor));
+  if (dependencies.artifactFileRegistrar)
+    tools.push(createArtifactRegisterFileTool(dependencies.artifactFileRegistrar));
   return tools;
 };
 
@@ -114,6 +122,7 @@ export class RunService {
     private readonly skillExecutionService?: SkillExecutionService,
     private readonly skillAdapterService?: SkillAdapterService,
     private readonly toolchainSnapshotService?: ToolchainSnapshotService,
+    private readonly fileArtifactService?: FileArtifactService,
   ) {}
 
   start(input: StartRunRequest): string {
@@ -229,6 +238,12 @@ export class RunService {
                   this.writeTaskFile(runId, input.taskId, workspacePath, writeInput),
                 skillCommandExecutor: (execInput) =>
                   this.executeSkillCommand(runId, bindingId, execInput),
+                ...(this.fileArtifactService
+                  ? {
+                      artifactFileRegistrar: (registrarInput) =>
+                        this.registerFileArtifact(runId, registrarInput),
+                    }
+                  : {}),
               }
             : {}),
         }),
@@ -476,6 +491,35 @@ export class RunService {
       bytesWritten: contentBuffer.byteLength,
       contentHash,
       created,
+    };
+  }
+
+  /** 文件成果登记桥接：工具入参 → FileArtifactService → 结构化返回。 */
+  private async registerFileArtifact(
+    runId: string,
+    input: ArtifactRegisterInput,
+  ): Promise<ArtifactRegisterOutput> {
+    if (!this.fileArtifactService) {
+      throw new Error('File artifact service is not available');
+    }
+    const result = await this.fileArtifactService.register({
+      runId,
+      executionId: input.executionId,
+      outputId: input.outputId,
+      ...(input.artifactId ? { artifactId: input.artifactId } : {}),
+      title: input.title,
+      mimeType: input.mimeType,
+      ...(input.description ? { description: input.description } : {}),
+      validation: input.validation,
+    });
+    return {
+      artifactId: result.artifactId,
+      versionId: result.versionId,
+      versionNumber: result.versionNumber,
+      fileKey: result.fileKey,
+      fileHash: result.fileHash,
+      fileSize: result.fileSize,
+      message: `文件成果已登记：${input.title}`,
     };
   }
 
