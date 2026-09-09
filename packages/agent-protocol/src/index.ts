@@ -1194,6 +1194,23 @@ export type RefreshSkillDependencyGrantResult = z.infer<
   typeof refreshSkillDependencyGrantResultSchema
 >;
 
+export const testSkillRunRequestSchema = z
+  .object({
+    skillId: z.string().min(1),
+    prompt: z.string().trim().min(1).optional(),
+  })
+  .strict();
+export type TestSkillRunRequest = z.infer<typeof testSkillRunRequestSchema>;
+
+export const testSkillRunResultSchema = z
+  .object({
+    runId: z.string().min(1),
+    taskId: z.string().min(1),
+    sessionId: z.string().min(1),
+  })
+  .strict();
+export type TestSkillRunResult = z.infer<typeof testSkillRunResultSchema>;
+
 export const IpcChannel = {
   StartRun: 'run:start',
   CancelRun: 'run:cancel',
@@ -1237,6 +1254,7 @@ export const IpcChannel = {
   ExportSkill: 'skill:export',
   DeleteSkill: 'skill:delete',
   RefreshSkillDependencyGrant: 'skill:refresh-dependency-grant',
+  TestSkillRun: 'skill:test-run',
   ListDependencyOptions: 'dependency:list-options',
   InspectDependencyPlan: 'dependency:inspect-plan',
   PrepareDependencyEnvironment: 'dependency:prepare',
@@ -1330,6 +1348,7 @@ export interface BetterWorkDesktopApi {
     refreshDependencyGrant(
       input: RefreshSkillDependencyGrantRequest,
     ): Promise<RefreshSkillDependencyGrantResult>;
+    testRun(input: TestSkillRunRequest): Promise<TestSkillRunResult>;
   };
   dependencies: {
     listOptions(): Promise<DependencyOptions>;
