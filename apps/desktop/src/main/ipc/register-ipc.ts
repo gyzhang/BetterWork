@@ -545,7 +545,7 @@ function skillSummary(skill: ReturnType<SkillService['setTrustPreference']>) {
 }
 
 function registerSkillChannels(deps: IpcDependencies): void {
-  const { skillService, store } = deps;
+  const { skillService, store, runs } = deps;
   handleNoInput(IpcChannel.ListSkills, listSkillsRequestSchema, z.array(skillSummarySchema), () =>
     store.skills.list(),
   );
@@ -591,7 +591,9 @@ function registerSkillChannels(deps: IpcDependencies): void {
     revokeSkillTrustRequestSchema,
     skillMutationResultSchema,
     async (input) => {
-      await skillService.revokeTrust(input.skillId);
+      await skillService.revokeTrust(input.skillId, {
+        cancelForSkill: (skillId) => runs.cancelRunsForSkill(skillId),
+      });
       const skill = store.skills.get(input.skillId);
       if (!skill) throw new Error('Skill does not exist');
       return { skill: skillSummary(skill) };
