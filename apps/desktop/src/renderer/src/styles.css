@@ -1383,6 +1383,8 @@ p {
 .skill-detail-actions {
   display: flex;
   gap: 6px;
+  flex-shrink: 0;
+  align-self: flex-start;
 }
 .skill-detail-section button {
   min-height: 32px;
