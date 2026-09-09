@@ -155,7 +155,7 @@ const installApi = (
 };
 
 function Harness({ skill }: { skill: SkillDetail }): React.JSX.Element {
-  const state = useSkillDependencies(skill);
+  const state = useSkillDependencies(skill, () => {});
   return <DependencyPanel skill={skill} state={state} />;
 }
 

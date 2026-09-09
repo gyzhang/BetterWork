@@ -112,7 +112,7 @@ function readStoredViewMode(): ViewMode {
 
 export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element {
   const { selected } = state;
-  const dependencies = useSkillDependencies(selected);
+  const dependencies = useSkillDependencies(selected, state.refresh);
   const toast = state.toast || dependencies.toast;
   const dismissToast = (): void => {
     state.dismissToast();

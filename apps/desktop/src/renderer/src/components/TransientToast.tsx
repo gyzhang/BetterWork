@@ -16,7 +16,7 @@ export function TransientToast({
   useEffect(() => {
     const timer = window.setTimeout(onDismiss, tone === 'error' ? 6_000 : 4_000);
     return () => window.clearTimeout(timer);
-  }, [onDismiss, tone]);
+  }, [onDismiss, tone, message]);
 
   return (
     <div className="page-toast-host" aria-live="polite">

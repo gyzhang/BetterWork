@@ -47,7 +47,10 @@ export interface SkillDependenciesState {
 const isPending = (operation: DependencyOperation | undefined): boolean =>
   operation?.status === 'queued' || operation?.status === 'running';
 
-export function useSkillDependencies(skill: SkillDetail | undefined): SkillDependenciesState {
+export function useSkillDependencies(
+  skill: SkillDetail | undefined,
+  refreshSkills: () => void,
+): SkillDependenciesState {
   const [options, setOptions] = useState<DependencyOptions>();
   const [plan, setPlan] = useState<DependencyPlan>();
   const [operation, setOperation] = useState<DependencyOperation>();
@@ -191,6 +194,7 @@ export function useSkillDependencies(skill: SkillDetail | undefined): SkillDepen
             setPreparing(false);
             prepareInFlight.current = false;
             setToast('环境已就绪。');
+            refreshSkills();
             if (base && lockId) inspect(base, lockId, token);
             if (skillId) reviewGrant(skillId, lockId, snapshotId, token);
           }
@@ -203,7 +207,18 @@ export function useSkillDependencies(skill: SkillDetail | undefined): SkillDepen
       );
     }, pollIntervalMs);
     return stopPolling;
-  }, [operation, plan, base, lockId, snapshotId, skillId, inspect, reviewGrant, stopPolling]);
+  }, [
+    operation,
+    plan,
+    base,
+    lockId,
+    snapshotId,
+    skillId,
+    inspect,
+    reviewGrant,
+    stopPolling,
+    refreshSkills,
+  ]);
 
   useEffect(() => stopPolling, [stopPolling]);
 
