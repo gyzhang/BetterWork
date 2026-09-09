@@ -272,12 +272,17 @@ function SkillDetail({
         <div className="skill-detail-actions">
           <button
             type="button"
+            className="secondary-button"
             onClick={() => state.copy(skill)}
             disabled={skill.sourceKind === 'user'}
           >
             {skill.sourceKind === 'builtin' ? '复制并编辑' : '用户副本'}
           </button>
-          <button type="button" onClick={() => state.exportSkill(skill)}>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => state.exportSkill(skill)}
+          >
             导出
           </button>
         </div>
