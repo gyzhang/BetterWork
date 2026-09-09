@@ -1385,7 +1385,6 @@ p {
   display: flex;
   gap: 6px;
 }
-.skill-detail-actions button,
 .skill-detail-section button {
   min-height: 32px;
   padding: 6px 11px;
@@ -1395,7 +1394,6 @@ p {
   border-radius: 7px;
   font-size: 13px;
 }
-.skill-detail-actions button:hover,
 .skill-detail-section button:hover {
   background: var(--surface-hover);
 }
