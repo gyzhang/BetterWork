@@ -1374,7 +1374,7 @@ p {
   margin: 6px 0;
   font-size: 21px;
 }
-.skill-detail-heading p:last-child,
+.skill-detail-description,
 .skill-detail-section > p {
   color: var(--text-secondary);
   font-size: 13px;
