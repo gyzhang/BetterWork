@@ -1380,8 +1380,7 @@ p {
   font-size: 13px;
   line-height: 1.6;
 }
-.skill-detail-actions,
-.skill-detail-section button + button {
+.skill-detail-actions {
   display: flex;
   gap: 6px;
 }
