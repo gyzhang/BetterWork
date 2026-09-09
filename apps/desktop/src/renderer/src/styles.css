@@ -1387,17 +1387,17 @@ p {
 }
 .skill-detail-actions button,
 .skill-detail-section button {
-  padding: 6px 8px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-  font-size: 12px;
+  min-height: 32px;
+  padding: 6px 11px;
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 13px;
 }
 .skill-detail-actions button:hover,
 .skill-detail-section button:hover {
-  color: var(--text-primary);
-  background: var(--surface-raised);
+  background: var(--surface-hover);
 }
 .skill-state-grid {
   display: grid;
