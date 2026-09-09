@@ -699,7 +699,25 @@ export interface EvidenceSummary {
 
 export type ArtifactVersionOrigin = 'assistant-run' | 'user-edit';
 
-export interface ArtifactSummary {
+export type ArtifactType = 'markdown' | 'presentation';
+
+export type ValidationStatus = 'pending' | 'passed' | 'failed' | 'not-checked';
+
+export interface ValidationState {
+  structure: ValidationStatus;
+  visual: ValidationStatus;
+  manualEdit: ValidationStatus;
+}
+
+export interface FileArtifactMeta {
+  mimeType: string;
+  fileSize: number;
+  fileHash: string;
+  fileKey: string;
+  validation: ValidationState;
+}
+
+export interface MarkdownArtifactSummary {
   id: string;
   workspaceId: string;
   taskId: string;
@@ -713,13 +731,41 @@ export interface ArtifactSummary {
   updatedAt: number;
 }
 
-export interface ArtifactDetail extends ArtifactSummary {
+export interface FileArtifactSummary {
+  id: string;
+  workspaceId: string;
+  taskId: string;
+  type: 'presentation';
+  title: string;
+  currentVersionId: string;
+  versionNumber: number;
+  origin: ArtifactVersionOrigin;
+  sourceRunId?: string;
+  mimeType: string;
+  fileSize: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type ArtifactSummary = MarkdownArtifactSummary | FileArtifactSummary;
+
+export interface MarkdownArtifactDetail extends MarkdownArtifactSummary {
   content: string;
   contentHash: string;
   evidence: EvidenceSummary[];
 }
 
-export interface ArtifactVersionSummary {
+export interface FileArtifactDetail extends FileArtifactSummary {
+  fileHash: string;
+  fileKey: string;
+  validation: ValidationState;
+  description?: string;
+  evidence: EvidenceSummary[];
+}
+
+export type ArtifactDetail = MarkdownArtifactDetail | FileArtifactDetail;
+
+export interface MarkdownArtifactVersionSummary {
   id: string;
   artifactId: string;
   versionNumber: number;
@@ -728,11 +774,28 @@ export interface ArtifactVersionSummary {
   createdAt: number;
 }
 
-export interface ArtifactVersionDetail extends ArtifactVersionSummary {
+export interface FileArtifactVersionSummary extends MarkdownArtifactVersionSummary {
+  mimeType: string;
+  fileSize: number;
+  validation: ValidationState;
+}
+
+export type ArtifactVersionSummary = MarkdownArtifactVersionSummary | FileArtifactVersionSummary;
+
+export interface MarkdownArtifactVersionDetail extends MarkdownArtifactVersionSummary {
   content: string;
   contentHash: string;
   evidence: EvidenceSummary[];
 }
+
+export interface FileArtifactVersionDetail extends FileArtifactVersionSummary {
+  fileHash: string;
+  fileKey: string;
+  description?: string;
+  evidence: EvidenceSummary[];
+}
+
+export type ArtifactVersionDetail = MarkdownArtifactVersionDetail | FileArtifactVersionDetail;
 
 export const saveMarkdownArtifactRequestSchema = z
   .object({
@@ -771,6 +834,67 @@ export const exportMarkdownArtifactRequestSchema = z.object({
 });
 export type ExportMarkdownArtifactRequest = z.infer<typeof exportMarkdownArtifactRequestSchema>;
 export interface ExportMarkdownArtifactResult {
+  cancelled: boolean;
+  filePath?: string;
+}
+
+export const validationStatusSchema = z.enum(['pending', 'passed', 'failed', 'not-checked']);
+export type ValidationStatusInput = z.infer<typeof validationStatusSchema>;
+
+export const validationStateSchema = z
+  .object({
+    structure: validationStatusSchema,
+    visual: validationStatusSchema,
+    manualEdit: validationStatusSchema,
+  })
+  .strict();
+export type ValidationStateInput = z.infer<typeof validationStateSchema>;
+
+export const registerFileArtifactRequestSchema = z
+  .object({
+    runId: z.string().min(1),
+    executionId: z.string().min(1),
+    outputId: z.string().min(1),
+    artifactId: z.string().min(1).optional(),
+    title: z.string().trim().min(1).max(160),
+    mimeType: z.string().trim().min(1).max(120),
+    description: z.string().trim().max(10_000).optional(),
+    validation: validationStateSchema,
+  })
+  .superRefine((input, context) => {
+    if (input.validation.structure === 'failed') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: '结构校验失败的成果不可登记为可交付版本',
+        path: ['validation', 'structure'],
+      });
+    }
+  });
+export type RegisterFileArtifactRequest = z.infer<typeof registerFileArtifactRequestSchema>;
+
+export interface RegisterFileArtifactResult {
+  artifactId: string;
+  versionId: string;
+  versionNumber: number;
+  fileKey: string;
+  fileHash: string;
+  fileSize: number;
+  validation: ValidationState;
+}
+
+export const getFileArtifactRequestSchema = z.object({
+  artifactId: z.string().min(1),
+  versionId: z.string().min(1).optional(),
+});
+export type GetFileArtifactRequest = z.infer<typeof getFileArtifactRequestSchema>;
+
+export const exportFileArtifactRequestSchema = z.object({
+  artifactId: z.string().min(1),
+  versionId: z.string().min(1).optional(),
+});
+export type ExportFileArtifactRequest = z.infer<typeof exportFileArtifactRequestSchema>;
+
+export interface ExportFileArtifactResult {
   cancelled: boolean;
   filePath?: string;
 }
@@ -931,7 +1055,7 @@ export const evidenceSummarySchema = z.object({
   contentHash: z.string().min(1),
   capturedAt: z.number().int().nonnegative(),
 });
-export const artifactSummarySchema = z.object({
+export const markdownArtifactSummarySchema = z.object({
   id: z.string().min(1),
   workspaceId: z.string().min(1),
   taskId: z.string().min(1),
@@ -944,12 +1068,42 @@ export const artifactSummarySchema = z.object({
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
 });
-export const artifactDetailSchema = artifactSummarySchema.extend({
+export const fileArtifactSummarySchema = z.object({
+  id: z.string().min(1),
+  workspaceId: z.string().min(1),
+  taskId: z.string().min(1),
+  type: z.literal('presentation'),
+  title: z.string(),
+  currentVersionId: z.string().min(1),
+  versionNumber: z.number().int().positive(),
+  origin: z.enum(['assistant-run', 'user-edit']),
+  sourceRunId: z.string().min(1).optional(),
+  mimeType: z.string().min(1),
+  fileSize: z.number().int().nonnegative(),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+});
+export const artifactSummarySchema = z.discriminatedUnion('type', [
+  markdownArtifactSummarySchema,
+  fileArtifactSummarySchema,
+]);
+export const markdownArtifactDetailSchema = markdownArtifactSummarySchema.extend({
   content: z.string(),
   contentHash: z.string().min(1),
   evidence: z.array(evidenceSummarySchema),
 });
-export const artifactVersionSummarySchema = z.object({
+export const fileArtifactDetailSchema = fileArtifactSummarySchema.extend({
+  fileHash: z.string().min(1),
+  fileKey: z.string().min(1),
+  validation: validationStateSchema,
+  description: z.string().trim().max(10_000).optional(),
+  evidence: z.array(evidenceSummarySchema),
+});
+export const artifactDetailSchema = z.discriminatedUnion('type', [
+  markdownArtifactDetailSchema,
+  fileArtifactDetailSchema,
+]);
+export const markdownArtifactVersionSummarySchema = z.object({
   id: z.string().min(1),
   artifactId: z.string().min(1),
   versionNumber: z.number().int().positive(),
@@ -957,11 +1111,30 @@ export const artifactVersionSummarySchema = z.object({
   sourceRunId: z.string().min(1).optional(),
   createdAt: z.number().int().nonnegative(),
 });
-export const artifactVersionDetailSchema = artifactVersionSummarySchema.extend({
+export const fileArtifactVersionSummarySchema = markdownArtifactVersionSummarySchema.extend({
+  mimeType: z.string().min(1),
+  fileSize: z.number().int().nonnegative(),
+  validation: validationStateSchema,
+});
+export const artifactVersionSummarySchema = z.discriminatedUnion('type', [
+  markdownArtifactVersionSummarySchema.extend({ type: z.literal('markdown') }),
+  fileArtifactVersionSummarySchema.extend({ type: z.literal('presentation') }),
+]);
+export const markdownArtifactVersionDetailSchema = markdownArtifactVersionSummarySchema.extend({
   content: z.string(),
   contentHash: z.string().min(1),
   evidence: z.array(evidenceSummarySchema),
 });
+export const fileArtifactVersionDetailSchema = fileArtifactVersionSummarySchema.extend({
+  fileHash: z.string().min(1),
+  fileKey: z.string().min(1),
+  description: z.string().trim().max(10_000).optional(),
+  evidence: z.array(evidenceSummarySchema),
+});
+export const artifactVersionDetailSchema = z.discriminatedUnion('type', [
+  markdownArtifactVersionDetailSchema.extend({ type: z.literal('markdown') }),
+  fileArtifactVersionDetailSchema.extend({ type: z.literal('presentation') }),
+]);
 export const modelProfileSummarySchema = z.object({
   id: z.string().min(1),
   name: z.string(),
@@ -1019,6 +1192,19 @@ export const searchEngineSummarySchema = z.object({
 });
 export const connectionTestResultSchema = z.object({ ok: z.boolean(), message: z.string() });
 export const exportMarkdownArtifactResultSchema = z.object({
+  cancelled: z.boolean(),
+  filePath: z.string().min(1).optional(),
+});
+export const registerFileArtifactResultSchema = z.object({
+  artifactId: z.string().min(1),
+  versionId: z.string().min(1),
+  versionNumber: z.number().int().positive(),
+  fileKey: z.string().min(1),
+  fileHash: z.string().min(1),
+  fileSize: z.number().int().nonnegative(),
+  validation: validationStateSchema,
+});
+export const exportFileArtifactResultSchema = z.object({
   cancelled: z.boolean(),
   filePath: z.string().min(1).optional(),
 });
@@ -1228,6 +1414,9 @@ export const IpcChannel = {
   GetArtifactVersion: 'artifact:get-version',
   SaveMarkdownArtifact: 'artifact:save-markdown',
   ExportMarkdownArtifact: 'artifact:export-markdown',
+  RegisterFileArtifact: 'artifact:register-file',
+  GetFileArtifact: 'artifact:get-file',
+  ExportFileArtifact: 'artifact:export-file',
   ListModels: 'model:list',
   SaveModel: 'model:save',
   DeleteModel: 'model:delete',
@@ -1298,6 +1487,9 @@ export interface BetterWorkDesktopApi {
     getVersion(input: { id: string }): Promise<ArtifactVersionDetail | null>;
     saveMarkdown(input: SaveMarkdownArtifactRequest): Promise<ArtifactSummary>;
     exportMarkdown(input: ExportMarkdownArtifactRequest): Promise<ExportMarkdownArtifactResult>;
+    registerFile(input: RegisterFileArtifactRequest): Promise<RegisterFileArtifactResult>;
+    getFileDetail(input: GetFileArtifactRequest): Promise<FileArtifactDetail | null>;
+    exportFile(input: ExportFileArtifactRequest): Promise<ExportFileArtifactResult>;
   };
   models: {
     list(): Promise<ModelProfileSummary[]>;

@@ -519,6 +519,59 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 7,
+    name: 'add file artifact support with artifact_files table',
+    up(db: Database.Database): void {
+      // 文件型成果的版本不在 DB 里存内容，content 改为可空；
+      // content_hash 保留非空，两种类型都用它做内容寻址。
+      rebuildTable(
+        db,
+        'artifact_versions',
+        `CREATE TABLE artifact_versions (
+          id TEXT PRIMARY KEY,
+          artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
+          version_number INTEGER NOT NULL,
+          content TEXT,
+          content_hash TEXT NOT NULL,
+          source_run_id TEXT NOT NULL,
+          origin TEXT NOT NULL DEFAULT 'assistant-run',
+          created_at INTEGER NOT NULL,
+          UNIQUE(artifact_id, version_number)
+        )`,
+        [
+          'id',
+          'artifact_id',
+          'version_number',
+          'content',
+          'content_hash',
+          'source_run_id',
+          'origin',
+          'created_at',
+        ],
+      );
+
+      // artifact_files 与 version 一一对应；file_key 是 userData/artifact-files/<versionId>/ 下的相对路径。
+      // 不与 script_executions 建外键——执行记录可被清理，文件归属由 artifact_versions 链路保证。
+      db.exec(`
+        CREATE TABLE artifact_files (
+          version_id TEXT PRIMARY KEY REFERENCES artifact_versions(id) ON DELETE CASCADE,
+          mime_type TEXT NOT NULL,
+          file_size INTEGER NOT NULL,
+          file_hash TEXT NOT NULL,
+          file_key TEXT NOT NULL,
+          execution_id TEXT NOT NULL,
+          description TEXT,
+          validation_structure TEXT NOT NULL
+            CHECK (validation_structure IN ('pending', 'passed', 'failed', 'not-checked')),
+          validation_visual TEXT NOT NULL
+            CHECK (validation_visual IN ('pending', 'passed', 'failed', 'not-checked')),
+          validation_manual_edit TEXT NOT NULL
+            CHECK (validation_manual_edit IN ('pending', 'passed', 'failed', 'not-checked'))
+        );
+      `);
+    },
+  },
 ];
 
 /**

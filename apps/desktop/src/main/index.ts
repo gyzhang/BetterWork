@@ -1,3 +1,4 @@
+import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 
 import { app, BrowserWindow } from 'electron';
@@ -14,6 +15,7 @@ import {
 } from './infrastructure/mac-process-supervisor';
 import { registerIpc } from './ipc/register-ipc';
 import { AppStore } from './persistence';
+import { FileArtifactService } from './services/file-artifact-service';
 import { KnowledgeVault } from './services/knowledge-vault';
 import { NotificationService } from './services/notification-service';
 import { pptGenerationAdapterFactory } from './services/ppt-generation-preset';
@@ -137,6 +139,30 @@ function bootstrap(): ApplicationContext {
   }
   const skillAdapterService = new SkillAdapterService();
   skillAdapterService.register(pptGenerationAdapterFactory, []);
+  const artifactFilesRoot = path.join(userData, 'artifact-files');
+  mkdirSync(artifactFilesRoot, { recursive: true });
+  const fileArtifactService = new FileArtifactService(
+    store,
+    artifactFilesRoot,
+    async (executionId, outputId) => {
+      const execution = store.executions.getExecution(executionId);
+      if (!execution) throw new Error(`Execution ${executionId} does not exist`);
+      const run = store.runs.get(execution.runId);
+      if (!run) throw new Error(`Run ${execution.runId} does not exist`);
+      const context = store.tasks.getRunContext(run.taskId, run.sessionId);
+      if (!context) throw new Error('Run context is not available');
+      return path.join(
+        context.workspacePath,
+        '.betterwork',
+        'tasks',
+        run.taskId,
+        'runs',
+        execution.runId,
+        'work',
+        outputId,
+      );
+    },
+  );
   const runs = new RunService(
     store,
     knowledgeVault,
@@ -146,6 +172,7 @@ function bootstrap(): ApplicationContext {
     skillExecutionService,
     skillAdapterService,
     snapshots,
+    fileArtifactService,
   );
   started.runs = runs;
 
@@ -157,6 +184,7 @@ function bootstrap(): ApplicationContext {
     skillService,
     dependencies,
     snapshots,
+    fileArtifactService,
     dependencyLocksRoot,
     getWindow,
     getDefaultWorkspaceRoot,

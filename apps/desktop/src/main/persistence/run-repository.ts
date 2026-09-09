@@ -102,6 +102,11 @@ export class RunRepository {
     return rows.map(toSummary);
   }
 
+  get(runId: string): RunSummary | undefined {
+    const row = this.db.prepare('SELECT * FROM runs WHERE id = ?').get(runId) as RunRow | undefined;
+    return row ? toSummary(row) : undefined;
+  }
+
   /** 按时间正序返回 Task 下所有 Run，用于构建跨 Run 对话历史。 */
   listByTask(taskId: string): RunSummary[] {
     const rows = this.db
@@ -121,6 +126,12 @@ export class RunRepository {
     const row = this.db.prepare('SELECT task_id FROM runs WHERE id = ?').get(runId) as
       { task_id: string } | undefined;
     return row?.task_id === taskId;
+  }
+
+  getTaskId(runId: string): string | undefined {
+    const row = this.db.prepare('SELECT task_id FROM runs WHERE id = ?').get(runId) as
+      { task_id: string } | undefined;
+    return row?.task_id;
   }
 
   /**

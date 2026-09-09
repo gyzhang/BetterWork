@@ -24,17 +24,20 @@ export interface ArtifactViewer {
   selectVersion: (version: ArtifactVersionSummary) => Promise<void>;
 }
 
-const toVersionDetail = (artifact: ArtifactDetail): ArtifactVersionDetail => ({
-  id: artifact.currentVersionId,
-  artifactId: artifact.id,
-  versionNumber: artifact.versionNumber,
-  origin: artifact.origin,
-  ...(artifact.sourceRunId ? { sourceRunId: artifact.sourceRunId } : {}),
-  createdAt: artifact.updatedAt,
-  content: artifact.content,
-  contentHash: artifact.contentHash,
-  evidence: artifact.evidence,
-});
+const toVersionDetail = (artifact: ArtifactDetail): ArtifactVersionDetail | undefined => {
+  if (artifact.type !== 'markdown') return undefined;
+  return {
+    id: artifact.currentVersionId,
+    artifactId: artifact.id,
+    versionNumber: artifact.versionNumber,
+    origin: artifact.origin,
+    ...(artifact.sourceRunId ? { sourceRunId: artifact.sourceRunId } : {}),
+    createdAt: artifact.updatedAt,
+    content: artifact.content,
+    contentHash: artifact.contentHash,
+    evidence: artifact.evidence,
+  };
+};
 
 /**
  * 成果预览页的状态与数据加载。
@@ -59,7 +62,7 @@ export function useArtifactViewer(selected: ArtifactDetail | undefined): Artifac
     setEditing(false);
     setError('');
     setTitle(selected?.title ?? '');
-    setContent(selected?.content ?? '');
+    setContent(selected?.type === 'markdown' ? selected.content : '');
     setViewingVersion(undefined);
     if (!selected) {
       setVersions([]);
@@ -90,7 +93,7 @@ export function useArtifactViewer(selected: ArtifactDetail | undefined): Artifac
   };
 
   const beginEditing = (): void => {
-    if (!selected || !visibleVersion) return;
+    if (!selected || !visibleVersion || !('content' in visibleVersion)) return;
     setTitle(selected.title);
     setContent(visibleVersion.content);
     setEditing(true);
@@ -101,7 +104,7 @@ export function useArtifactViewer(selected: ArtifactDetail | undefined): Artifac
   const cancelEditing = (): void => {
     setEditing(false);
     setError('');
-    if (!selected || !visibleVersion) return;
+    if (!selected || !visibleVersion || !('content' in visibleVersion)) return;
     setTitle(selected.title);
     setContent(visibleVersion.content);
   };
