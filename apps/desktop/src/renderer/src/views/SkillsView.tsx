@@ -267,7 +267,6 @@ function SkillDetail({
         <div>
           <p className="eyebrow">{sourceName[skill.sourceKind]} Skill</p>
           <h2>{skill.name}</h2>
-          <p>{skill.description || '暂无描述'}</p>
         </div>
         <div className="skill-detail-actions">
           <button
@@ -287,6 +286,7 @@ function SkillDetail({
           </button>
         </div>
       </div>
+      <p className="skill-detail-description">{skill.description || '暂无描述'}</p>
       <div className="skill-state-grid">
         <div>
           <span>来源</span>
