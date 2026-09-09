@@ -50,6 +50,7 @@ const isPending = (operation: DependencyOperation | undefined): boolean =>
 export function useSkillDependencies(
   skill: SkillDetail | undefined,
   refreshSkills: () => void,
+  refreshSkillDetail?: (skillId: string) => void,
 ): SkillDependenciesState {
   const [options, setOptions] = useState<DependencyOptions>();
   const [plan, setPlan] = useState<DependencyPlan>();
@@ -195,6 +196,7 @@ export function useSkillDependencies(
             prepareInFlight.current = false;
             setToast('环境已就绪。');
             refreshSkills();
+            if (skillId && refreshSkillDetail) refreshSkillDetail(skillId);
             if (base && lockId) inspect(base, lockId, token);
             if (skillId) reviewGrant(skillId, lockId, snapshotId, token);
           }
@@ -218,6 +220,7 @@ export function useSkillDependencies(
     reviewGrant,
     stopPolling,
     refreshSkills,
+    refreshSkillDetail,
   ]);
 
   useEffect(() => stopPolling, [stopPolling]);
@@ -345,6 +348,9 @@ export function useSkillDependencies(
     );
   }, [lockId, skillId, snapshotId]);
 
+  const dismissToast = useCallback((): void => setToast(''), []);
+  const clearError = useCallback((): void => setError(''), []);
+
   return {
     options,
     plan,
@@ -376,7 +382,7 @@ export function useSkillDependencies(
     prepare,
     cancel,
     confirmGrant,
-    dismissToast: (): void => setToast(''),
-    clearError: (): void => setError(''),
+    dismissToast,
+    clearError,
   };
 }
