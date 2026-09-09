@@ -10,6 +10,7 @@ import { AppStore } from '../persistence';
 import { KnowledgeVault } from './knowledge-vault';
 import { NotificationService } from './notification-service';
 import { createRunTools, RunService } from './run-service';
+import type { SkillExecutionService } from './skill-execution-service';
 import { SkillService } from './skill-service';
 
 const temporaryDirectories: string[] = [];
@@ -92,13 +93,18 @@ const createFixture = async (): Promise<Fixture> => {
   };
 };
 
-const createService = (fixture: Fixture, window?: WindowStub): RunService =>
+const createService = (
+  fixture: Fixture,
+  window?: WindowStub,
+  skillExecutionService?: SkillExecutionService,
+): RunService =>
   new RunService(
     fixture.store,
     fixture.vault,
     new NotificationService(fixture.store.notifications, () => window?.asBrowserWindow ?? null),
     fixture.skillService,
     () => window?.asBrowserWindow ?? null,
+    skillExecutionService,
   );
 
 const statusOf = (fixture: Fixture, runId: string): string | undefined =>
@@ -376,5 +382,168 @@ describe('RunService', () => {
     const events = fixture.store.runs.listEvents(runId);
     const error = (events.at(-1) as { type: 'run.failed'; error: string }).error;
     expect(error).toContain('已停用');
+  });
+
+  /** 创建一个已信任且已启用的 Skill，返回 skillId 供后续绑定。 */
+  const createTrustedSkill = async (
+    fixture: Fixture,
+    id: string,
+    name = '测试 Skill',
+  ): Promise<string> => {
+    const contentHash = id.repeat(32).slice(0, 64);
+    const resourceKey = `user/${id}/revisions/${contentHash}`;
+    const skillDir = path.join(fixture.directory, 'skills', id, 'revisions', contentHash);
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(path.join(skillDir, 'SKILL.md'), `---\nname: ${name}\n---\n指令内容`);
+    fixture.store.skills.save({
+      id,
+      name,
+      description: '用于测试',
+      sourceKind: 'user',
+      currentRevisionId: 'pending',
+    });
+    const revisionId = fixture.store.skills.saveRevision({
+      skillId: id,
+      contentHash,
+      resourceKey,
+      frontmatter: { name },
+    });
+    const profileHash = `${id}-profile-hash`;
+    const profileId = fixture.store.skills.saveProfile({
+      skillId: id,
+      profileHash,
+      profile: {
+        commands: [],
+        environmentRequirements: [],
+        outputContract: { outputPaths: [] },
+      },
+    });
+    fixture.store.skills.save({
+      id,
+      name,
+      description: '用于测试',
+      sourceKind: 'user',
+      currentRevisionId: revisionId,
+      currentProfileRevisionId: profileId,
+    });
+    fixture.store.skills.setEnabled(id, true);
+    fixture.store.skills.setTrustPreference(id, 'trusted');
+    fixture.store.skills.saveTrustGrant({
+      skillId: id,
+      revisionId,
+      profileHash,
+      dependencyFingerprint: 'fp',
+      scopeHash: 'scope',
+      source: 'user',
+    });
+    return id;
+  };
+
+  it('calls finishRun before publishing the terminal event for a skill-bound run', async () => {
+    const fixture = await createFixture();
+    const window = createWindowStub();
+    const skillId = await createTrustedSkill(fixture, 'skill-a15-order');
+    const callOrder: string[] = [];
+    const mockExecution = {
+      createBinding: () => ({ id: 'binding-test' }),
+      async finishRun(): Promise<{ cancelled: number; cleanupFailed: number }> {
+        callOrder.push('finishRun');
+        return { cancelled: 0, cleanupFailed: 0 };
+      },
+    } as unknown as SkillExecutionService;
+    const service = createService(fixture, window, mockExecution);
+
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '随便聊聊',
+      skillBinding: { skillId },
+    });
+    await waitForCompletion(fixture, runId);
+
+    const events = fixture.store.runs.listEvents(runId);
+    const terminalIndex = events.findIndex(
+      (e) => e.type === 'run.completed' || e.type === 'run.failed' || e.type === 'run.cancelled',
+    );
+    expect(terminalIndex).toBeGreaterThan(0);
+    expect(callOrder).toEqual(['finishRun']);
+    expect(statusOf(fixture, runId)).toBe('completed');
+  });
+
+  it('synthesizes run.failed when finishRun throws during cleanup', async () => {
+    const fixture = await createFixture();
+    const window = createWindowStub();
+    const skillId = await createTrustedSkill(fixture, 'skill-a15-cleanup');
+    const mockExecution = {
+      createBinding: () => ({ id: 'binding-cleanup' }),
+      async finishRun(): Promise<{ cancelled: number; cleanupFailed: number }> {
+        throw new Error('子进程清理超时');
+      },
+    } as unknown as SkillExecutionService;
+    const service = createService(fixture, window, mockExecution);
+
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '随便聊聊',
+      skillBinding: { skillId },
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('failed');
+    const events = fixture.store.runs.listEvents(runId);
+    const error = (events.at(-1) as { type: 'run.failed'; error: string }).error;
+    expect(error).toContain('子进程清理失败');
+    expect(error).toContain('子进程清理超时');
+    expect(window.runEventTypes()).toContain('run.failed');
+  });
+
+  it('shutdown() aborts all active runs and waits for them to settle', async () => {
+    const fixture = await createFixture();
+    const window = createWindowStub();
+    const service = createService(fixture, window);
+
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '随便聊聊',
+    });
+    expect(service.isActive(runId)).toBe(true);
+
+    await service.shutdown();
+
+    expect(statusOf(fixture, runId)).toBe('cancelled');
+    expect(service.isActive(runId)).toBe(false);
+    // shutdown 是批量取消，不产生通知
+    expect(fixture.store.notifications.list()).toEqual([]);
+  });
+
+  it('cancelRunsForSkill() only cancels runs bound to the matching skill', async () => {
+    const fixture = await createFixture();
+    const window = createWindowStub();
+    const targetSkill = await createTrustedSkill(fixture, 'skill-target', '目标 Skill');
+    const otherSkill = await createTrustedSkill(fixture, 'skill-other', '其他 Skill');
+    const service = createService(fixture, window);
+
+    const targetRunId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '随便聊聊',
+      skillBinding: { skillId: targetSkill },
+    });
+    const otherRunId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '随便聊聊',
+      skillBinding: { skillId: otherSkill },
+    });
+
+    const cancelled = await service.cancelRunsForSkill(targetSkill);
+    expect(cancelled).toBe(1);
+    await waitForCompletion(fixture, targetRunId);
+    await waitForCompletion(fixture, otherRunId);
+
+    expect(statusOf(fixture, targetRunId)).toBe('cancelled');
+    expect(statusOf(fixture, otherRunId)).toBe('completed');
   });
 });

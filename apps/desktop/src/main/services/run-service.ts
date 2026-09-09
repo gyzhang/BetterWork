@@ -49,6 +49,7 @@ interface ActiveRun {
   prompt: string;
   controller: AbortController;
   workspacePath: string;
+  skillId?: string;
   bindingId?: string;
   /** toolCallId -> 工具名，用于在 tool.completed 时判断该不该登记 Evidence。 */
   toolNames: Map<string, string>;
@@ -98,6 +99,7 @@ const truncate = (value: string, max: number): string =>
  */
 export class RunService {
   private readonly activeRuns = new Map<string, ActiveRun>();
+  private readonly consumePromises = new Map<string, Promise<void>>();
   private readonly engine = new ReActAgentEngine();
   private readonly fallbackModel = new FakeModelProvider();
 
@@ -121,6 +123,7 @@ export class RunService {
       prompt: input.prompt,
       controller,
       workspacePath: context.workspacePath,
+      ...(input.skillBinding ? { skillId: input.skillBinding.skillId } : {}),
       toolNames: new Map(),
     });
 
@@ -137,9 +140,14 @@ export class RunService {
     });
 
     // 事件流是异步消费的；错误全部在 consume 内部收口，这里不会有未处理 rejection。
-    this.consume(runId, input, context.workspacePath, controller).catch((error: unknown) => {
-      console.error(`Run ${runId} could not be finalized`, error);
-    });
+    const consumePromise = this.consume(runId, input, context.workspacePath, controller)
+      .catch((error: unknown) => {
+        console.error(`Run ${runId} could not be finalized`, error);
+      })
+      .finally(() => {
+        this.consumePromises.delete(runId);
+      });
+    this.consumePromises.set(runId, consumePromise);
     return runId;
   }
 
@@ -154,18 +162,47 @@ export class RunService {
     return this.activeRuns.has(runId);
   }
 
+  /** 应用关闭前调用：取消所有活跃 Run，等待全部消费结束。 */
+  async shutdown(): Promise<void> {
+    for (const active of this.activeRuns.values()) {
+      active.controller.abort();
+    }
+    const pending = [...this.consumePromises.values()];
+    if (pending.length > 0) {
+      await Promise.allSettled(pending);
+    }
+  }
+
+  /** 撤销信任级联：取消绑定到指定 Skill 的所有活跃 Run。 */
+  async cancelRunsForSkill(skillId: string): Promise<number> {
+    let cancelled = 0;
+    for (const [runId, active] of this.activeRuns) {
+      if (active.skillId === skillId) {
+        active.controller.abort();
+        cancelled += 1;
+        const pending = this.consumePromises.get(runId);
+        if (pending) await pending;
+      }
+    }
+    return cancelled;
+  }
+
   private async consume(
     runId: string,
     input: StartRunRequest,
     workspacePath: string,
     controller: AbortController,
   ): Promise<void> {
-    let terminated = false;
+    let terminalEvent: AgentRuntimeEvent | undefined;
     try {
       const model = this.resolveModel();
       const webSearch = this.resolveWebSearch();
       const skillInstructions = await this.resolveSkillInstructions(input);
       const bindingId = await this.resolveBindingId(runId, input);
+      if (bindingId) {
+        const active = this.activeRuns.get(runId);
+        if (active) active.bindingId = bindingId;
+      }
       const events = this.engine.run({
         runId,
         taskId: input.taskId,
@@ -196,12 +233,26 @@ export class RunService {
       });
 
       for await (const event of events) {
+        if (isTerminalEvent(event)) {
+          terminalEvent = event;
+          break;
+        }
         this.publish(event);
-        if (isTerminalEvent(event)) terminated = true;
       }
-      if (!terminated) {
+      if (!terminalEvent) {
         throw new Error('Agent 事件流结束时没有给出终态事件');
       }
+      // 设计 §8：先清理子进程，再发布终态；清理失败走 forceFailure 兜底。
+      if (this.skillExecutionService) {
+        try {
+          await this.skillExecutionService.finishRun(runId);
+        } catch (error) {
+          terminalEvent = undefined;
+          this.finalizeFailure(runId, `子进程清理失败：${describeError(error)}`);
+          return;
+        }
+      }
+      this.publish(terminalEvent);
     } catch (error) {
       this.finalizeFailure(runId, describeError(error));
     } finally {

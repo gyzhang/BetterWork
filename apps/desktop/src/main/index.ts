@@ -33,6 +33,7 @@ import { createMainWindow } from './window';
 interface ApplicationContext {
   store: AppStore;
   knowledgeVault: KnowledgeVault;
+  runs?: RunService;
   window: BrowserWindow | null;
 }
 
@@ -140,6 +141,7 @@ function bootstrap(): ApplicationContext {
     getWindow,
     skillExecutionService,
   );
+  started.runs = runs;
 
   registerIpc({
     store,
@@ -176,8 +178,18 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-  // 知识库先关：它可能还持有从应用状态库读到的路径引用
-  context?.knowledgeVault.close();
-  context?.store.close();
-  context = null;
+  // 设计 §8：正常关闭先取消所有活跃 Run 并等待子进程清理，再关闭存储。
+  const shutdown = context?.runs?.shutdown() ?? Promise.resolve();
+  shutdown
+    .then(() => {
+      context?.knowledgeVault.close();
+      context?.store.close();
+      context = null;
+    })
+    .catch((error: unknown) => {
+      console.error('RunService shutdown failed:', error);
+      context?.knowledgeVault.close();
+      context?.store.close();
+      context = null;
+    });
 });
