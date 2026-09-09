@@ -56,6 +56,29 @@ export function summarizeToolOutput(
       const found = countResults(output);
       return found === undefined ? '已完成联网搜索' : `搜索到 ${found} 条网页结果`;
     }
+    case 'skill_read_resource': {
+      if (message) return message;
+      if (!isRecord(output)) break;
+      const resourcePath = readText(output.relativePath);
+      return resourcePath ? `已读取 ${resourcePath}` : '已读取技能资源';
+    }
+    case 'task_write_file': {
+      if (message) return message;
+      if (!isRecord(output)) break;
+      const filePath = readText(output.relativePath);
+      if (!filePath) break;
+      return output.created === true ? `已创建 ${filePath}` : `已更新 ${filePath}`;
+    }
+    case 'skill_execute': {
+      if (message) return message;
+      if (!isRecord(output)) break;
+      const status = readText(output.status);
+      if (status === 'succeeded') return '命令执行成功';
+      if (status === 'failed') return `命令执行失败：${readText(output.reason) || '未知原因'}`;
+      if (status === 'timed-out') return '命令执行超时';
+      if (status === 'cancelled') return '命令已取消';
+      break;
+    }
     default:
       break;
   }

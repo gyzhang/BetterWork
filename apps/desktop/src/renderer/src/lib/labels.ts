@@ -44,6 +44,9 @@ const TOOL_LABELS: Readonly<Record<string, string>> = {
   read_text_file: '阅读资料',
   knowledge_search: '查阅个人资料',
   web_search: '搜索网络资料',
+  skill_read_resource: '读取技能资源',
+  task_write_file: '写入任务文件',
+  skill_execute: '执行技能命令',
 };
 
 export const FALLBACK_TOOL_LABEL = '处理工作材料';

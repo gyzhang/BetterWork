@@ -7,12 +7,18 @@ import {
   createNodeFileSystem,
   createNodeProcessRunner,
 } from './infrastructure/dependency-adapters';
+import type { ExecutionLogSink, ExecutionLogStream } from './infrastructure/mac-process-supervisor';
+import {
+  createMacProcessSupervisor,
+  resolveGuardianRuntime,
+} from './infrastructure/mac-process-supervisor';
 import { registerIpc } from './ipc/register-ipc';
 import { AppStore } from './persistence';
 import { KnowledgeVault } from './services/knowledge-vault';
 import { NotificationService } from './services/notification-service';
 import { RunService } from './services/run-service';
 import { SkillDependencyService } from './services/skill-dependency-service';
+import { SkillExecutionService } from './services/skill-execution-service';
 import { SkillService } from './services/skill-service';
 import { ToolchainSnapshotService } from './services/toolchain-snapshot-service';
 import { createMainWindow } from './window';
@@ -106,7 +112,34 @@ function bootstrap(): ApplicationContext {
 
   started.window = createMainWindow();
   const notifications = new NotificationService(store.notifications, getWindow);
-  const runs = new RunService(store, knowledgeVault, notifications, skillService, getWindow);
+  const supervisor = createMacProcessSupervisor({
+    guardian: resolveGuardianRuntime(__dirname),
+    createLogSink: (executionId): ExecutionLogSink => {
+      const chunks: string[] = [];
+      return {
+        key: executionId,
+        write(_stream: ExecutionLogStream, text: string) {
+          chunks.push(text);
+        },
+        async close() {
+          chunks.length = 0;
+        },
+      };
+    },
+  });
+  const skillExecutionService = new SkillExecutionService(store, supervisor);
+  const interruptedExecutions = skillExecutionService.recoverInterruptedExecutions();
+  if (interruptedExecutions > 0) {
+    console.warn(`Marked ${interruptedExecutions} interrupted execution(s) as failed on startup`);
+  }
+  const runs = new RunService(
+    store,
+    knowledgeVault,
+    notifications,
+    skillService,
+    getWindow,
+    skillExecutionService,
+  );
 
   registerIpc({
     store,
