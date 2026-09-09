@@ -497,6 +497,26 @@ describe('registerIpc', () => {
     expect(result.blockedReason).toContain('撤销');
   });
 
+  it('refuses test run for unauthorized Skills', async () => {
+    const untrustedId = seedDependencySkill('test-run-untrusted');
+    store.skills.setEnabled(untrustedId, true);
+    store.skills.setTrustPreference(untrustedId, 'revoked');
+    await expect(invoke(IpcChannel.TestSkillRun, { skillId: untrustedId })).rejects.toThrow(
+      '尚未信任',
+    );
+
+    const disabledId = seedDependencySkill('test-run-disabled');
+    store.skills.setTrustPreference(disabledId, 'trusted');
+    store.skills.setEnabled(disabledId, false);
+    await expect(invoke(IpcChannel.TestSkillRun, { skillId: disabledId })).rejects.toThrow(
+      '已停用',
+    );
+
+    await expect(invoke(IpcChannel.TestSkillRun, { skillId: 'nonexistent-skill' })).rejects.toThrow(
+      'Skill does not exist',
+    );
+  });
+
   it('rejects malformed dependency requests before they reach the services', async () => {
     await expect(
       invoke(IpcChannel.InspectDependencyPlan, {

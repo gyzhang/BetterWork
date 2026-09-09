@@ -23,6 +23,7 @@ export interface SkillsState {
   exportSkill: (skill: SkillSummary) => void;
   deleteSkill: (skill: SkillSummary) => Promise<void>;
   saveProfile: (skillId: string, profile: RuntimeProfileDraft) => Promise<void>;
+  testRun: (skill: SkillSummary) => void;
   dismissToast: () => void;
   clearError: () => void;
 }
@@ -165,6 +166,15 @@ export function useSkills(): SkillsState {
     },
     [select],
   );
+  const testRun = useCallback((skill: SkillSummary): void => {
+    reportAction(
+      window.betterwork.skills.testRun({ skillId: skill.id }).then((result) => {
+        setToast(`已启动试运行（Run ${result.runId.slice(0, 8)}）。`);
+      }),
+      setError,
+      '试运行启动失败。',
+    );
+  }, []);
 
   return {
     skills,
@@ -186,6 +196,7 @@ export function useSkills(): SkillsState {
     exportSkill,
     deleteSkill,
     saveProfile,
+    testRun,
     dismissToast,
     clearError: () => setError(''),
   };

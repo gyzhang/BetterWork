@@ -368,10 +368,12 @@ function SkillDetail({
         <button
           type="button"
           className="secondary-button"
-          disabled
-          title="执行能力将在后续任务实现"
+          disabled={
+            skill.trustStatus !== 'trusted' || !skill.enabled || skill.blockedReasons.length > 0
+          }
+          onClick={() => state.testRun(skill)}
         >
-          试运行（A07 后开放）
+          试运行
         </button>
       </div>
       <div className="skill-detail-section">

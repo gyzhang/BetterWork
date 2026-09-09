@@ -34,6 +34,8 @@ import {
   skillImportResultSchema,
   skillMutationResultSchema,
   skillSummarySchema,
+  testSkillRunRequestSchema,
+  testSkillRunResultSchema,
 } from '@betterwork/agent-protocol';
 import { contextBridge, ipcRenderer } from 'electron';
 import { z, type ZodTypeAny } from 'zod';
@@ -185,6 +187,12 @@ const api: BetterWorkDesktopApi = {
         IpcChannel.RefreshSkillDependencyGrant,
         refreshSkillDependencyGrantRequestSchema.parse(input),
         refreshSkillDependencyGrantResultSchema,
+      ),
+    testRun: (input) =>
+      invokeValidated(
+        IpcChannel.TestSkillRun,
+        testSkillRunRequestSchema.parse(input),
+        testSkillRunResultSchema,
       ),
   },
   dependencies: {

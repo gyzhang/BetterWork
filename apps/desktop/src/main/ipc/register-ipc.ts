@@ -88,6 +88,8 @@ import {
   startRunResultSchema,
   testModelRequestSchema,
   testSearchEngineRequestSchema,
+  testSkillRunRequestSchema,
+  testSkillRunResultSchema,
   unreadCountResultSchema,
   updatedResultSchema,
   updateWindowThemeRequestSchema,
@@ -641,6 +643,34 @@ function registerSkillChannels(deps: IpcDependencies): void {
     deleteSkillRequestSchema,
     deletedResultSchema,
     async (input) => ({ deleted: await skillService.deleteUserSkill(input.skillId) }),
+  );
+  handleInput(
+    IpcChannel.TestSkillRun,
+    testSkillRunRequestSchema,
+    testSkillRunResultSchema,
+    (input) => {
+      const skill = store.skills.get(input.skillId);
+      if (!skill) throw new Error('Skill does not exist');
+      if (!skill.enabled) throw new Error(`Skill「${skill.name}」已停用`);
+      if (skill.trustStatus !== 'trusted')
+        throw new Error(`Skill「${skill.name}」尚未信任，无法试运行`);
+      const workspace = store.workspaces.getOrCreate(deps.getDefaultWorkspaceRoot(), '我的工作区');
+      const created = store.tasks.create(
+        workspace.id,
+        `Skill 试运行：${skill.name}`,
+        'Skill 试运行任务',
+      );
+      const runId = runs.start({
+        taskId: created.task.id,
+        sessionId: created.sessionId,
+        prompt: input.prompt ?? `请运行 Skill「${skill.name}」的完整流程`,
+        skillBinding: {
+          skillId: skill.id,
+          ...(skill.currentRevisionId ? { revisionId: skill.currentRevisionId } : {}),
+        },
+      });
+      return { runId, taskId: created.task.id, sessionId: created.sessionId };
+    },
   );
 }
 
