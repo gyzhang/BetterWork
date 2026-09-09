@@ -73,6 +73,7 @@ describe('registerIpc', () => {
     const { SkillService } = await import('../services/skill-service');
     const { SkillDependencyService } = await import('../services/skill-dependency-service');
     const { ToolchainSnapshotService } = await import('../services/toolchain-snapshot-service');
+    const { FileArtifactService } = await import('../services/file-artifact-service');
     const { FakeDownloader, FakeFileSystem, FakePythonRunner, scenarioOf } =
       await import('../services/fixtures/fake-python-runtime');
     const { registerIpc } = await import('./register-ipc');
@@ -123,6 +124,13 @@ describe('registerIpc', () => {
       filesystem: fakeFilesystem,
       process: fakeProcess,
     });
+    const artifactFilesRoot = path.join(temporaryDirectory, 'artifact-files');
+    mkdirSync(artifactFilesRoot, { recursive: true });
+    const fileArtifactService = new FileArtifactService(
+      store,
+      artifactFilesRoot,
+      async () => '/tmp/no-source',
+    );
     dependencyTestContext = { dependencies, snapshots, locksRoot, interpreterPath };
 
     registerIpc({
@@ -133,6 +141,7 @@ describe('registerIpc', () => {
       skillService,
       dependencies,
       snapshots,
+      fileArtifactService,
       dependencyLocksRoot: locksRoot,
       getWindow: () => null,
       getDefaultWorkspaceRoot: () => temporaryDirectory,
@@ -538,5 +547,33 @@ describe('registerIpc', () => {
       }),
     ).rejects.toThrow();
     await expect(invoke(IpcChannel.ListDependencyOptions, { injected: true })).rejects.toThrow();
+  });
+
+  it('refuses to open a non-existent or markdown artifact as a file', async () => {
+    const notFound = (await invoke(IpcChannel.OpenFileArtifact, {
+      artifactId: 'nonexistent-artifact',
+    })) as { opened: boolean; error: string };
+    expect(notFound.opened).toBe(false);
+    expect(notFound.error).toContain('不存在');
+
+    const workspace = (await invoke(IpcChannel.GetDefaultWorkspace, {})) as { id: string };
+    const task = (await invoke(IpcChannel.CreateTask, {
+      workspaceId: workspace.id,
+      title: 'Markdown 任务',
+      goal: '测试',
+    })) as { task: { id: string }; sessionId: string };
+    const markdownArtifact = (await invoke(IpcChannel.SaveMarkdownArtifact, {
+      taskId: task.task.id,
+      origin: 'user-edit',
+      title: 'Markdown 成果',
+      content: '# 测试',
+    })) as { id: string };
+
+    const wrongType = (await invoke(IpcChannel.OpenFileArtifact, {
+      artifactId: markdownArtifact.id,
+    })) as { opened: boolean; error: string };
+    expect(wrongType.opened).toBe(false);
+    expect(wrongType.error).toContain('不是文件类型');
+    expect(mocks.openPath).not.toHaveBeenCalled();
   });
 });

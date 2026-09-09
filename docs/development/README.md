@@ -66,8 +66,8 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | A15 | 取消、撤销、终态与恢复收口 | A14 | done | [RunService 测试](../../apps/desktop/src/main/services/run-service.test.ts)（取消/撤销/终态/恢复场景）；`npm run verify` 退出 0，2026-09-09 22:31 |
 | A16 | PPT Skill 适配预设与报告契约 | A15 | done | [skill-adapter 测试](../../apps/desktop/src/main/services/skill-adapter.test.ts)、[ppt-generation-preset 测试](../../apps/desktop/src/main/services/ppt-generation-preset.test.ts)；`npm run verify` 退出 0，2026-09-09 22:53 |
 | A17 | 真实 Skill 试运行与 A3 验收 | A16 | done | [IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)、[协议测试](../../packages/agent-protocol/src/index.test.ts)；`npm run verify` 退出 0（327 测试），2026-09-09 23:09 |
-| A18 | PPTX 文件成果与验证状态 | A17 | todo | — |
-| A19 | 文件成果 UI、打开与导出 | A18 | todo | — |
+| A18 | PPTX 文件成果与验证状态 | A17 | done | [file-artifact-service 测试](../../apps/desktop/src/main/services/file-artifact-service.test.ts)、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)、[IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)；`npm run verify` 退出 0（34 文件 / 342 测试），2026-09-09 00:56 |
+| A19 | 文件成果 UI、打开与导出 | A18 | done | [ArtifactView 测试](../../apps/desktop/src/renderer/src/views/ArtifactView.test.tsx)、[use-artifact-viewer 测试](../../apps/desktop/src/renderer/src/hooks/use-artifact-viewer.test.tsx)、[IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)；`npm run verify` 退出 0（34 文件 / 342 测试），2026-09-09 00:56。**待手工验收**：打开/导出/版本切换/Markdown 回归 |
 | A20 | 内置目录与依赖制品打包 | A19 | todo | — |
 | A21 | 安装包验收与阶段 A 收尾 | A20 | todo | — |
 

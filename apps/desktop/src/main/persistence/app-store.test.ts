@@ -319,15 +319,27 @@ describe('AppStore', () => {
       evidence: [expect.objectContaining({ title: '客户访谈', locator: '段落 2' })],
     });
     expect(store.artifacts.listVersions(first.id)).toEqual([
-      expect.objectContaining({ versionNumber: 3, origin: 'user-edit' }),
-      expect.objectContaining({ versionNumber: 2, origin: 'assistant-run', sourceRunId: 'run-2' }),
-      expect.objectContaining({ versionNumber: 1, origin: 'assistant-run', sourceRunId: 'run-1' }),
+      expect.objectContaining({ type: 'markdown', versionNumber: 3, origin: 'user-edit' }),
+      expect.objectContaining({
+        type: 'markdown',
+        versionNumber: 2,
+        origin: 'assistant-run',
+        sourceRunId: 'run-2',
+      }),
+      expect.objectContaining({
+        type: 'markdown',
+        versionNumber: 1,
+        origin: 'assistant-run',
+        sourceRunId: 'run-1',
+      }),
     ]);
     const version = store.artifacts.listVersions(first.id).find((item) => item.versionNumber === 2);
     expect(version).toBeDefined();
     if (!version) throw new Error('Expected the second artifact version');
+    expect(version.type).toBe('markdown');
     expect(store.artifacts.getVersionDetail(version.id)).toMatchObject({
       id: version.id,
+      type: 'markdown',
       content: '# 第二版',
       versionNumber: 2,
       sourceRunId: 'run-2',

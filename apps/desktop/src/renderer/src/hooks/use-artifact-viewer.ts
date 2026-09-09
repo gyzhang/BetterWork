@@ -25,7 +25,20 @@ export interface ArtifactViewer {
 }
 
 const toVersionDetail = (artifact: ArtifactDetail): ArtifactVersionDetail | undefined => {
-  if (artifact.type !== 'markdown') return undefined;
+  if (artifact.type === 'markdown') {
+    return {
+      id: artifact.currentVersionId,
+      artifactId: artifact.id,
+      versionNumber: artifact.versionNumber,
+      origin: artifact.origin,
+      ...(artifact.sourceRunId ? { sourceRunId: artifact.sourceRunId } : {}),
+      createdAt: artifact.updatedAt,
+      type: 'markdown',
+      content: artifact.content,
+      contentHash: artifact.contentHash,
+      evidence: artifact.evidence,
+    };
+  }
   return {
     id: artifact.currentVersionId,
     artifactId: artifact.id,
@@ -33,8 +46,13 @@ const toVersionDetail = (artifact: ArtifactDetail): ArtifactVersionDetail | unde
     origin: artifact.origin,
     ...(artifact.sourceRunId ? { sourceRunId: artifact.sourceRunId } : {}),
     createdAt: artifact.updatedAt,
-    content: artifact.content,
-    contentHash: artifact.contentHash,
+    type: 'presentation',
+    mimeType: artifact.mimeType,
+    fileSize: artifact.fileSize,
+    validation: artifact.validation,
+    fileHash: artifact.fileHash,
+    fileKey: artifact.fileKey,
+    ...(artifact.description ? { description: artifact.description } : {}),
     evidence: artifact.evidence,
   };
 };
