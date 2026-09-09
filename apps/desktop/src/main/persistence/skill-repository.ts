@@ -182,7 +182,8 @@ export class SkillRepository {
     if (status === 'untrusted') blockedReasons.push('untrusted');
     if (status === 'needs-review') blockedReasons.push('trust-needs-review');
     if (status === 'revoked') blockedReasons.push('trust-revoked');
-    blockedReasons.push('environment-unprepared');
+    const environmentStatus = this.getEnvironmentStatus();
+    if (environmentStatus !== 'ready') blockedReasons.push('environment-unprepared');
     if (!profile) blockedReasons.push('missing-runtime-profile');
     return {
       id: row.id,
@@ -192,9 +193,21 @@ export class SkillRepository {
       enabled: row.enabled === 1,
       currentRevisionId: row.current_revision_id,
       trustStatus: status,
-      environmentStatus: 'unprepared',
+      environmentStatus,
       blockedReasons,
     };
+  }
+
+  private getEnvironmentStatus(): SkillSummary['environmentStatus'] {
+    const environment = this.db
+      .prepare(
+        `SELECT status FROM runtime_environments
+         ORDER BY CASE status WHEN 'ready' THEN 1 WHEN 'preparing' THEN 2 ELSE 3 END,
+                  updated_at DESC
+         LIMIT 1`,
+      )
+      .get() as { status: SkillSummary['environmentStatus'] } | undefined;
+    return environment?.status ?? 'unprepared';
   }
 
   list(): SkillSummary[] {

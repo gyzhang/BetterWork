@@ -689,4 +689,62 @@ describe('AppStore', () => {
     expect(listed[0]?.title).toBe('通知 204');
     expect(listed.at(-1)?.title).toBe('通知 5');
   });
+
+  it('returns actual environment status from runtime_environments table', () => {
+    const store = openStore();
+    store.skills.save({
+      id: 'skill-env-test',
+      name: 'Env Test',
+      description: '',
+      sourceKind: 'user',
+      currentRevisionId: 'revision-placeholder',
+    });
+    const revision = store.skills.saveRevision({
+      skillId: 'skill-env-test',
+      contentHash: 'hash-env',
+      resourceKey: 'skills/env-test',
+      frontmatter: { name: 'Env Test' },
+    });
+    store.skills.save({
+      id: 'skill-env-test',
+      name: 'Env Test',
+      description: '',
+      sourceKind: 'user',
+      currentRevisionId: revision,
+    });
+
+    expect(store.skills.get('skill-env-test')?.environmentStatus).toBe('unprepared');
+
+    store.environments.createEnvironment({
+      environmentKey: 'env-key-1',
+      base: {
+        kind: 'managed',
+        distributionId: 'cpython-3.12',
+        version: '3.12.0',
+        sha256: 'a'.repeat(64),
+      },
+      platform: { os: 'darwin', arch: 'arm64', abi: 'cp312' },
+      lockHash: 'lock-hash-1',
+      lock: {
+        lockVersion: 1,
+        platform: { os: 'darwin', arch: 'arm64', abi: 'cp312' },
+        pythonRequirement: '3.12',
+        packages: [],
+        importProbes: ['pptx'],
+      },
+      pathKey: 'environments/env-key-1/instance-1',
+    });
+
+    expect(store.skills.get('skill-env-test')?.environmentStatus).toBe('unprepared');
+
+    const environments = store.environments.listEnvironments();
+    const envId = environments[0]?.id;
+    expect(envId).toBeDefined();
+    store.environments.updateStatus(envId!, 'preparing');
+    expect(store.skills.get('skill-env-test')?.environmentStatus).toBe('preparing');
+
+    store.environments.updateStatus(envId!, 'ready', { readyAt: Date.now() });
+    expect(store.skills.get('skill-env-test')?.environmentStatus).toBe('ready');
+    expect(store.skills.list()[0]?.environmentStatus).toBe('ready');
+  });
 });
