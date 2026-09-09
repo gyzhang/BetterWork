@@ -49,6 +49,7 @@ describe('ArtifactPage', () => {
         onSave={vi.fn(async () => undefined)}
         onExport={vi.fn(async () => ({ cancelled: true }))}
         onOpenSource={vi.fn(async () => undefined)}
+        onOpenFile={vi.fn(async () => ({ opened: true }))}
         onBack={vi.fn()}
       />,
     );

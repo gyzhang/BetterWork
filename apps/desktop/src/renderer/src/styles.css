@@ -2444,6 +2444,30 @@ p {
   background: var(--brand-soft);
   font-size: 9px;
 }
+.completed-work-icon.file {
+  color: var(--info);
+  background: var(--info-soft);
+  font-size: 9px;
+}
+.artifact-file-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+.artifact-file-info-row {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+}
+.artifact-file-info-label {
+  flex: none;
+  width: 64px;
+  color: var(--text-secondary);
+}
 .back-button {
   padding: 5px 0;
   color: var(--text-secondary);

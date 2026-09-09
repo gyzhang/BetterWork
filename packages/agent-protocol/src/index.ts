@@ -766,6 +766,7 @@ export interface FileArtifactDetail extends FileArtifactSummary {
 export type ArtifactDetail = MarkdownArtifactDetail | FileArtifactDetail;
 
 export interface MarkdownArtifactVersionSummary {
+  type: 'markdown';
   id: string;
   artifactId: string;
   versionNumber: number;
@@ -774,7 +775,14 @@ export interface MarkdownArtifactVersionSummary {
   createdAt: number;
 }
 
-export interface FileArtifactVersionSummary extends MarkdownArtifactVersionSummary {
+export interface FileArtifactVersionSummary {
+  type: 'presentation';
+  id: string;
+  artifactId: string;
+  versionNumber: number;
+  origin: ArtifactVersionOrigin;
+  sourceRunId?: string;
+  createdAt: number;
   mimeType: string;
   fileSize: number;
   validation: ValidationState;
@@ -1208,6 +1216,20 @@ export const exportFileArtifactResultSchema = z.object({
   cancelled: z.boolean(),
   filePath: z.string().min(1).optional(),
 });
+
+export const openFileArtifactRequestSchema = z.object({
+  artifactId: z.string().min(1),
+  versionId: z.string().min(1).optional(),
+});
+export type OpenFileArtifactRequest = z.infer<typeof openFileArtifactRequestSchema>;
+export const openFileArtifactResultSchema = z.object({
+  opened: z.boolean(),
+  error: z.string().optional(),
+});
+export interface OpenFileArtifactResult {
+  opened: boolean;
+  error?: string;
+}
 export const startRunResultSchema = z.object({ runId: z.string().min(1) });
 export const cancelledResultSchema = z.object({ cancelled: z.boolean() });
 export const deletedResultSchema = z.object({ deleted: z.boolean() });
@@ -1417,6 +1439,7 @@ export const IpcChannel = {
   RegisterFileArtifact: 'artifact:register-file',
   GetFileArtifact: 'artifact:get-file',
   ExportFileArtifact: 'artifact:export-file',
+  OpenFileArtifact: 'artifact:open-file',
   ListModels: 'model:list',
   SaveModel: 'model:save',
   DeleteModel: 'model:delete',
@@ -1490,6 +1513,7 @@ export interface BetterWorkDesktopApi {
     registerFile(input: RegisterFileArtifactRequest): Promise<RegisterFileArtifactResult>;
     getFileDetail(input: GetFileArtifactRequest): Promise<FileArtifactDetail | null>;
     exportFile(input: ExportFileArtifactRequest): Promise<ExportFileArtifactResult>;
+    openFile(input: OpenFileArtifactRequest): Promise<OpenFileArtifactResult>;
   };
   models: {
     list(): Promise<ModelProfileSummary[]>;

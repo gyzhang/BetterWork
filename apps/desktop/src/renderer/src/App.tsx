@@ -404,9 +404,24 @@ export function App(): React.JSX.Element {
   const exportArtifact = (
     artifact: ArtifactDetail,
     versionId?: string,
-  ): Promise<{ cancelled: boolean; filePath?: string }> =>
-    window.betterwork.artifacts.exportMarkdown({
+  ): Promise<{ cancelled: boolean; filePath?: string }> => {
+    if (artifact.type === 'presentation') {
+      return window.betterwork.artifacts.exportFile({
+        artifactId: artifact.id,
+        ...(versionId ? { versionId } : {}),
+      });
+    }
+    return window.betterwork.artifacts.exportMarkdown({
       artifactId: artifact.id,
+      ...(versionId ? { versionId } : {}),
+    });
+  };
+  const openFileArtifact = (
+    artifactId: string,
+    versionId?: string,
+  ): Promise<{ opened: boolean; error?: string }> =>
+    window.betterwork.artifacts.openFile({
+      artifactId,
       ...(versionId ? { versionId } : {}),
     });
   const openKnowledge = (): void => {
@@ -779,6 +794,7 @@ export function App(): React.JSX.Element {
             }
             onSave={reviseArtifact}
             onExport={exportArtifact}
+            onOpenFile={openFileArtifact}
             onOpenSource={knowledge.onOpenSource}
             onBack={() => setSelectedArtifact(undefined)}
           />

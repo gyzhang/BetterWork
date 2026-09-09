@@ -83,6 +83,7 @@ const api: BetterWorkDesktopApi = {
     registerFile: (input) => ipcRenderer.invoke(IpcChannel.RegisterFileArtifact, input),
     getFileDetail: (input) => ipcRenderer.invoke(IpcChannel.GetFileArtifact, input),
     exportFile: (input) => ipcRenderer.invoke(IpcChannel.ExportFileArtifact, input),
+    openFile: (input) => ipcRenderer.invoke(IpcChannel.OpenFileArtifact, input),
   },
   models: {
     list: () => ipcRenderer.invoke(IpcChannel.ListModels),

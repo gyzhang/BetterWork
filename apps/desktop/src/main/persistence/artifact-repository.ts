@@ -120,6 +120,7 @@ const toVersionSummary = (row: ArtifactVersionRow): ArtifactVersionSummary => {
   ) {
     return {
       ...common,
+      type: 'presentation',
       mimeType: row.mime_type,
       fileSize: row.file_size,
       validation: {
@@ -129,7 +130,7 @@ const toVersionSummary = (row: ArtifactVersionRow): ArtifactVersionSummary => {
       },
     };
   }
-  return common;
+  return { ...common, type: 'markdown' };
 };
 
 const toEvidence = (row: EvidenceRow): EvidenceSummary => ({
@@ -444,6 +445,7 @@ export class ArtifactRepository {
     if (row.content !== undefined && row.content !== null && row.content_hash !== undefined) {
       return {
         ...toVersionSummary(row),
+        type: 'markdown' as const,
         content: row.content,
         contentHash: row.content_hash,
         evidence: this.listVersionEvidence(row.id),
@@ -459,6 +461,7 @@ export class ArtifactRepository {
       origin: row.origin,
       ...(row.source_run_id ? { sourceRunId: row.source_run_id } : {}),
       createdAt: row.created_at,
+      type: 'presentation' as const,
       mimeType: file.mime_type,
       fileSize: file.file_size,
       validation: {

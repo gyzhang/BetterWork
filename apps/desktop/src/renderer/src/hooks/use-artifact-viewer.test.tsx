@@ -38,6 +38,7 @@ const artifact = (id: string): ArtifactDetail => ({
 });
 
 const version = (id: string, artifactId: string): ArtifactVersionSummary => ({
+  type: 'markdown',
   id,
   artifactId,
   versionNumber: 1,
