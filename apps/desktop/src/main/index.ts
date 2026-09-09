@@ -1,4 +1,5 @@
 import { mkdirSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { app, BrowserWindow } from 'electron';
@@ -23,7 +24,7 @@ import { RunService } from './services/run-service';
 import { SkillAdapterService } from './services/skill-adapter';
 import { SkillDependencyService } from './services/skill-dependency-service';
 import { SkillExecutionService } from './services/skill-execution-service';
-import { SkillService } from './services/skill-service';
+import { type BuiltinReleaseManifest, SkillService } from './services/skill-service';
 import { ToolchainSnapshotService } from './services/toolchain-snapshot-service';
 import { createMainWindow } from './window';
 
@@ -59,6 +60,21 @@ function bootstrap(): ApplicationContext {
     installedBuiltinRoot: path.join(process.resourcesPath, 'skills'),
     userRoot: path.join(userData, 'skills'),
   });
+
+  const builtinRoot = app.isPackaged
+    ? path.join(process.resourcesPath, 'skills')
+    : path.resolve(app.getAppPath(), '../../resources/skills');
+  readFile(path.join(builtinRoot, 'release-manifest.json'), 'utf8')
+    .then((content) => JSON.parse(content) as BuiltinReleaseManifest)
+    .then((manifest) => skillService.registerBuiltinRelease(manifest))
+    .then((registered) => {
+      if (registered.length > 0) {
+        console.warn(`Registered ${registered.length} builtin skill(s)`);
+      }
+    })
+    .catch((error: unknown) => {
+      console.error('Builtin skill registration failed', error);
+    });
 
   // 受管资产目录（设计 §5）：基础 Python、专属环境与工具链快照都落在用户数据目录，
   // 不进仓库也不随安装包复制整套 venv。

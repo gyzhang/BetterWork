@@ -1,4 +1,23 @@
 {
   "formatVersion": 1,
-  "skills": []
+  "skills": [
+    {
+      "skillId": "builtin-sample-assistant",
+      "resourceName": "sample-assistant",
+      "name": "Sample Assistant",
+      "description": "A minimal built-in Skill that demonstrates the packaging pattern.",
+      "contentHash": "e676ca0e8966efd49fcba0b9b4aa70068df829caa21b14ec3db760d2efcfc222",
+      "originalVersion": "0.0.1",
+      "profileHash": "7b1d48986dabfd1a1eb10579d85053ad5f13b87d7d6fecbdb8a903d0ac8df24e",
+      "dependencyFingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "scopeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "profile": {
+        "commands": [],
+        "environmentRequirements": [],
+        "outputContract": {
+          "outputPaths": []
+        }
+      }
+    }
+  ]
 }

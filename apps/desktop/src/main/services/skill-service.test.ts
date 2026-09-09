@@ -322,5 +322,219 @@ describe('SkillService', () => {
     expect(instruction.instruction).not.toContain('name:');
     store.close();
   });
+
+  it('prefers the development root when both builtin roots contain the resource', async () => {
+    const directory = temporaryDirectory();
+    const roots = rootsFor(directory);
+    const devContent = '---\nname: Example\n---\ndev';
+    const installedContent = '---\nname: Example\n---\ninstalled';
+    const devBuiltin = path.join(roots.developmentBuiltinRoot, 'example');
+    const installedBuiltin = path.join(roots.installedBuiltinRoot, 'example');
+    mkdirSync(devBuiltin, { recursive: true });
+    mkdirSync(installedBuiltin, { recursive: true });
+    writeFileSync(path.join(devBuiltin, 'SKILL.md'), devContent);
+    writeFileSync(path.join(installedBuiltin, 'SKILL.md'), installedContent);
+    const store = AppStore.open(path.join(directory, 'app.sqlite'));
+    const service = new SkillService(store, roots);
+
+    await service.registerBuiltinRelease({
+      formatVersion: 1,
+      skills: [
+        {
+          skillId: 'builtin-example',
+          resourceName: 'example',
+          name: 'Example',
+          description: 'Example',
+          contentHash: contentHash(devContent),
+          profileHash: 'profile',
+          dependencyFingerprint: 'deps',
+          scopeHash: 'scope',
+        },
+      ],
+    });
+
+    const skill = store.skills.get('builtin-example');
+    expect(skill).toBeDefined();
+    expect(skill?.sourceKind).toBe('builtin');
+    store.close();
+  });
+
+  it('falls back to the installed root when the development root lacks the resource', async () => {
+    const directory = temporaryDirectory();
+    const roots = rootsFor(directory);
+    const installedContent = '---\nname: Example\n---\ninstalled';
+    const installedBuiltin = path.join(roots.installedBuiltinRoot, 'example');
+    mkdirSync(installedBuiltin, { recursive: true });
+    writeFileSync(path.join(installedBuiltin, 'SKILL.md'), installedContent);
+    const store = AppStore.open(path.join(directory, 'app.sqlite'));
+    const service = new SkillService(store, roots);
+
+    await service.registerBuiltinRelease({
+      formatVersion: 1,
+      skills: [
+        {
+          skillId: 'builtin-example',
+          resourceName: 'example',
+          name: 'Example',
+          description: 'Example',
+          contentHash: contentHash(installedContent),
+          profileHash: 'profile',
+          dependencyFingerprint: 'deps',
+          scopeHash: 'scope',
+        },
+      ],
+    });
+
+    expect(store.skills.get('builtin-example')).toBeDefined();
+    store.close();
+  });
+
+  it('rejects builtin registration when no root contains the resource', async () => {
+    const directory = temporaryDirectory();
+    const roots = rootsFor(directory);
+    const store = AppStore.open(path.join(directory, 'app.sqlite'));
+    const service = new SkillService(store, roots);
+
+    await expect(
+      service.registerBuiltinRelease({
+        formatVersion: 1,
+        skills: [
+          {
+            skillId: 'builtin-missing',
+            resourceName: 'missing',
+            name: 'Missing',
+            description: 'Not present on disk',
+            contentHash: 'does-not-matter',
+            profileHash: 'profile',
+            dependencyFingerprint: 'deps',
+            scopeHash: 'scope',
+          },
+        ],
+      }),
+    ).rejects.toThrow(/not available/iu);
+    expect(store.skills.get('builtin-missing')).toBeUndefined();
+    store.close();
+  });
+
+  it('preserves user copy resources after the builtin source is updated', async () => {
+    const directory = temporaryDirectory();
+    const roots = rootsFor(directory);
+    const builtin = path.join(roots.developmentBuiltinRoot, 'example');
+    mkdirSync(builtin, { recursive: true });
+    const originalContent = '---\nname: Example\n---\noriginal';
+    writeFileSync(path.join(builtin, 'SKILL.md'), originalContent);
+    const store = AppStore.open(path.join(directory, 'app.sqlite'));
+    const service = new SkillService(store, roots);
+
+    await service.registerBuiltinRelease({
+      formatVersion: 1,
+      skills: [
+        {
+          skillId: 'builtin-example',
+          resourceName: 'example',
+          name: 'Example',
+          description: 'Example',
+          contentHash: contentHash(originalContent),
+          profileHash: 'profile',
+          dependencyFingerprint: 'deps',
+          scopeHash: 'scope',
+        },
+      ],
+    });
+    const copied = await service.copyAsUser('builtin-example');
+    expect(readFileSync(path.join(copied.resourceRoot, 'SKILL.md'), 'utf8')).toContain('original');
+
+    const updatedContent = '---\nname: Example\n---\nupdated';
+    writeFileSync(path.join(builtin, 'SKILL.md'), updatedContent);
+    await service.registerBuiltinRelease({
+      formatVersion: 1,
+      skills: [
+        {
+          skillId: 'builtin-example',
+          resourceName: 'example',
+          name: 'Example',
+          description: 'Example',
+          contentHash: contentHash(updatedContent),
+          profileHash: 'profile',
+          dependencyFingerprint: 'deps',
+          scopeHash: 'scope',
+        },
+      ],
+    });
+
+    expect(readFileSync(path.join(copied.resourceRoot, 'SKILL.md'), 'utf8')).toContain('original');
+    store.close();
+  });
+
+  it('allows a user Skill and a builtin Skill to share the same display name', async () => {
+    const directory = temporaryDirectory();
+    const roots = rootsFor(directory);
+    const builtin = path.join(roots.developmentBuiltinRoot, 'assistant');
+    mkdirSync(builtin, { recursive: true });
+    const builtinContent = '---\nname: Assistant\n---\nbuiltin';
+    writeFileSync(path.join(builtin, 'SKILL.md'), builtinContent);
+
+    const userSource = path.join(directory, 'user-assistant');
+    mkdirSync(userSource, { recursive: true });
+    const userContent = '---\nname: Assistant\n---\nuser';
+    writeFileSync(path.join(userSource, 'SKILL.md'), userContent);
+
+    const store = AppStore.open(path.join(directory, 'app.sqlite'));
+    const service = new SkillService(store, roots);
+
+    await service.registerBuiltinRelease({
+      formatVersion: 1,
+      skills: [
+        {
+          skillId: 'builtin-assistant',
+          resourceName: 'assistant',
+          name: 'Assistant',
+          description: 'Builtin assistant',
+          contentHash: contentHash(builtinContent),
+          profileHash: 'profile',
+          dependencyFingerprint: 'deps',
+          scopeHash: 'scope',
+        },
+      ],
+    });
+    const imported = await service.importDirectory(userSource);
+
+    const builtinSkill = store.skills.get('builtin-assistant');
+    const userSkill = store.skills.get(imported.skill.id);
+    expect(builtinSkill?.name).toBe('Assistant');
+    expect(userSkill?.name).toBe('Assistant');
+    expect(builtinSkill?.sourceKind).toBe('builtin');
+    expect(userSkill?.sourceKind).toBe('user');
+    store.close();
+  });
+
+  it('does not include sensitive material in the builtin resource directory', () => {
+    const resourcesRoot = path.resolve(__dirname, '../../../../../../resources/skills');
+    if (!existsSync(resourcesRoot)) return;
+    const forbidden: string[] = [];
+    const scan = (current: string): void => {
+      for (const entry of readdirSync(current, { withFileTypes: true })) {
+        const absolute = path.join(current, entry.name);
+        if (entry.isDirectory()) {
+          scan(absolute);
+          continue;
+        }
+        const lower = entry.name.toLowerCase();
+        if (
+          lower.endsWith('.key') ||
+          lower.endsWith('.pem') ||
+          lower.endsWith('.p12') ||
+          lower.endsWith('.sqlite') ||
+          lower.endsWith('.db') ||
+          lower === '.env' ||
+          lower.endsWith('.env.local')
+        ) {
+          forbidden.push(path.relative(resourcesRoot, absolute));
+        }
+      }
+    };
+    scan(resourcesRoot);
+    expect(forbidden).toEqual([]);
+  });
 });
 import { createHash } from 'node:crypto';
