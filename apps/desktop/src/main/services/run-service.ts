@@ -40,8 +40,10 @@ import type { AppStore } from '../persistence';
 import type { KnowledgeVault } from './knowledge-vault';
 import type { NotificationService } from './notification-service';
 import { createQianfanSearchClient } from './search-engine-service';
+import type { AdapterContext, SkillAdapter, SkillAdapterService } from './skill-adapter';
 import type { SkillExecutionService } from './skill-execution-service';
 import type { SkillService } from './skill-service';
+import type { ToolchainSnapshotService } from './toolchain-snapshot-service';
 
 /** 一次执行期间的内存态；Run 结束后整条丢弃。 */
 interface ActiveRun {
@@ -110,6 +112,8 @@ export class RunService {
     private readonly skillService: SkillService,
     private readonly getWindow: () => BrowserWindow | null,
     private readonly skillExecutionService?: SkillExecutionService,
+    private readonly skillAdapterService?: SkillAdapterService,
+    private readonly toolchainSnapshotService?: ToolchainSnapshotService,
   ) {}
 
   start(input: StartRunRequest): string {
@@ -501,7 +505,6 @@ export class RunService {
     if (!command) {
       throw new Error(`Command ${input.commandId} is not registered in this Skill profile`);
     }
-    const argv = this.buildArgv(command, input.args);
     const activeRun = this.activeRuns.get(runId);
     if (!activeRun) throw new Error(`Run ${runId} is not active`);
     const cwd = path.join(
@@ -514,6 +517,13 @@ export class RunService {
       'work',
     );
     await mkdir(cwd, { recursive: true });
+
+    const adapter = this.skillAdapterService?.findAdapter(skill.revision.contentHash);
+    if (adapter) {
+      return this.executeWithAdapter(runId, bindingId, input, command, skill, adapter, cwd);
+    }
+
+    const argv = this.buildArgv(command, input.args);
     const env = this.buildCleanEnv();
     const execution = await this.skillExecutionService.startExecution({
       runId,
@@ -534,6 +544,70 @@ export class RunService {
     });
     const awaited = await this.skillExecutionService.awaitExecution(execution.id);
     return this.formatExecutionResult(awaited);
+  }
+
+  /** 适配预设路径：adapter 解析 executable/argv/env，执行后可覆盖结果解释。 */
+  private async executeWithAdapter(
+    runId: string,
+    bindingId: string,
+    input: SkillCommandExecuteInput,
+    command: RuntimeProfileCommand,
+    skill: NonNullable<ReturnType<typeof this.findSkillByRevision>>,
+    adapter: SkillAdapter,
+    cwd: string,
+  ): Promise<SkillCommandExecuteOutput> {
+    if (!this.skillExecutionService) {
+      throw new Error('Skill execution service is not available');
+    }
+    const skillScriptsRoot = await this.skillService.resolveResourceRoot(skill);
+    const toolchainSnapshotRoot = this.resolveToolchainSnapshotRoot();
+    const adapterContext: AdapterContext = {
+      skillScriptsRoot,
+      ...(toolchainSnapshotRoot ? { toolchainSnapshotRoot, pptmHome: toolchainSnapshotRoot } : {}),
+      managedPythonPath: 'python3',
+      runWorkDir: cwd,
+    };
+    const resolved = adapter.resolveCommand(input.commandId, input.args, adapterContext);
+    if (!resolved) {
+      throw new Error(`Adapter ${adapter.name} cannot resolve command ${input.commandId}`);
+    }
+    const execution = await this.skillExecutionService.startExecution({
+      runId,
+      bindingId,
+      toolCallId: input.toolCallId,
+      commandId: input.commandId,
+      args: input.args,
+      argv: resolved.argv,
+      executable: resolved.executable,
+      cwd: resolved.cwd,
+      env: resolved.env,
+      timeoutMs: command.timeoutMs,
+      maxOutputBytes: 32 * 1024,
+      maxLogBytes: 10 * 1024 * 1024,
+      expectedOutputs: command.expectedOutputs,
+      ...(command.validatorId ? { validatorId: command.validatorId } : {}),
+      workDirKey: createHash('sha256').update(cwd).digest('hex'),
+    });
+    const awaited = await this.skillExecutionService.awaitExecution(execution.id);
+    if (adapter.interpretOutput) {
+      const overridden = adapter.interpretOutput(input.commandId, {
+        executionId: awaited.execution.id,
+        status: awaited.execution.status,
+        stdout: awaited.stdout,
+        stderr: awaited.stderr,
+      });
+      if (overridden) return overridden;
+    }
+    return this.formatExecutionResult(awaited);
+  }
+
+  /** 取最新登记的工具链快照作为 PPTM_HOME；尚无快照或服务时返回 undefined。 */
+  private resolveToolchainSnapshotRoot(): string | undefined {
+    if (!this.toolchainSnapshotService) return undefined;
+    const snapshots = this.store.snapshots.listSnapshots();
+    const latest = snapshots[0];
+    if (!latest) return undefined;
+    return this.toolchainSnapshotService.resolveSnapshotRoot(latest);
   }
 
   private findSkillByRevision(revisionId: string) {

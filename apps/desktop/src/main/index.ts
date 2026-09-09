@@ -16,7 +16,9 @@ import { registerIpc } from './ipc/register-ipc';
 import { AppStore } from './persistence';
 import { KnowledgeVault } from './services/knowledge-vault';
 import { NotificationService } from './services/notification-service';
+import { pptGenerationAdapterFactory } from './services/ppt-generation-preset';
 import { RunService } from './services/run-service';
+import { SkillAdapterService } from './services/skill-adapter';
 import { SkillDependencyService } from './services/skill-dependency-service';
 import { SkillExecutionService } from './services/skill-execution-service';
 import { SkillService } from './services/skill-service';
@@ -133,6 +135,8 @@ function bootstrap(): ApplicationContext {
   if (interruptedExecutions > 0) {
     console.warn(`Marked ${interruptedExecutions} interrupted execution(s) as failed on startup`);
   }
+  const skillAdapterService = new SkillAdapterService();
+  skillAdapterService.register(pptGenerationAdapterFactory, []);
   const runs = new RunService(
     store,
     knowledgeVault,
@@ -140,6 +144,8 @@ function bootstrap(): ApplicationContext {
     skillService,
     getWindow,
     skillExecutionService,
+    skillAdapterService,
+    snapshots,
   );
   started.runs = runs;
 
