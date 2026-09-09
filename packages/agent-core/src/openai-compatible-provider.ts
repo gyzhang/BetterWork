@@ -15,7 +15,7 @@ export interface OpenAICompatibleProviderOptions {
   streamTimeoutMs?: number;
 }
 
-const DEFAULT_STREAM_TIMEOUT_MS = 120_000;
+const DEFAULT_STREAM_TIMEOUT_MS = 300_000;
 
 /**
  * 归一化用户填写的 base URL。

@@ -117,7 +117,7 @@ interface AgentEngine {
 }
 ```
 
-`workspacePath` 由 Application 层从 Workspace 注入，是 Tool 的文件系统沙箱边界来源；`messages` 用于携带既有历史，首版执行链路尚未把完整历史作为上下文传入；`maxToolRounds` 默认 8，超限以 `run.failed` 终止而不是静默截断。
+`workspacePath` 由 Application 层从 Workspace 注入，是 Tool 的文件系统沙箱边界来源；`messages` 用于携带既有历史，首版执行链路尚未把完整历史作为上下文传入；`maxToolRounds` 默认 20，超限以 `run.failed` 终止而不是静默截断。
 
 使用 `AsyncIterable` 表达一次执行的顺序事件，便于取消、测试、多任务并发和在 CLI 中复用。
 
@@ -250,7 +250,7 @@ SQLite 是产品状态真相源；向量索引、缩略图和解析缓存均可�
 
 一个 ModelProfile 只承担一个角色；[UI/UX 体系](10-ui-ux-system.md) §11.4 提出的「同一模型可以承担多个角色」需要改动表结构，属后续切片。`reranker` 与 `ocr` 角色未落地。
 
-Provider 侧现有 `FakeModelProvider`（教学，按前缀正则触发工具）与 `OpenAICompatibleProvider`（SSE 流式，支持 `reasoning_content` 与 `tool_calls` 增量拼接）。后者以 120 秒整体超时包住请求与流读取，要求 `[DONE]` 或服务端 `finish_reason` 作为完成信号；用户取消优先映射为 Run 取消，提前 EOF 作为失败处理。尚未抽象出独立的 Provider Adapter 层，新增非 OpenAI 兼容协议时需要先在 `agent-core` 增加实现。API Key 明文存于本地 SQLite，列表接口只回 `apiKeyConfigured`；迁移到系统钥匙串须先新增 ADR。
+Provider 侧现有 `FakeModelProvider`（教学，按前缀正则触发工具）与 `OpenAICompatibleProvider`（SSE 流式，支持 `reasoning_content` 与 `tool_calls` 增量拼接）。后者以 300 秒整体超时包住请求与流读取，要求 `[DONE]` 或服务端 `finish_reason` 作为完成信号；用户取消优先映射为 Run 取消，提前 EOF 作为失败处理。尚未抽象出独立的 Provider Adapter 层，新增非 OpenAI 兼容协议时需要先在 `agent-core` 增加实现。API Key 明文存于本地 SQLite，列表接口只回 `apiKeyConfigured`；迁移到系统钥匙串须先新增 ADR。
 
 ## 10. 前端
 

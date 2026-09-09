@@ -98,7 +98,7 @@ export class ReActAgentEngine implements AgentEngine {
       { id: randomUUID(), role: 'user', content: input.prompt },
     ];
     const tools = new Map(input.tools.map((tool) => [tool.name, tool]));
-    const maxToolRounds = input.maxToolRounds ?? 8;
+    const maxToolRounds = input.maxToolRounds ?? 20;
 
     yield events.create({ type: 'run.started', taskId: input.taskId, sessionId: input.sessionId });
 
