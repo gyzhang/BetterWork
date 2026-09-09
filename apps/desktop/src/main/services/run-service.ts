@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import type { AgentTool, ModelProvider, SkillInstruction } from '@betterwork/agent-core';
 import {
@@ -7,14 +9,29 @@ import {
   OpenAICompatibleProvider,
   ReActAgentEngine,
 } from '@betterwork/agent-core';
-import type { AgentMessage, AgentRuntimeEvent, StartRunRequest } from '@betterwork/agent-protocol';
+import type {
+  AgentMessage,
+  AgentRuntimeEvent,
+  RuntimeProfileCommand,
+  ScriptExecution,
+  StartRunRequest,
+} from '@betterwork/agent-protocol';
 import { IpcChannel } from '@betterwork/agent-protocol';
 import {
   calculatorTool,
   createKnowledgeSearchTool,
+  createSkillExecuteTool,
+  createSkillReadResourceTool,
+  createTaskWriteFileTool,
   createWebSearchTool,
   type KnowledgeSearchItem,
   readTextFileTool,
+  type SkillCommandExecuteInput,
+  type SkillCommandExecuteOutput,
+  type SkillResourceReadInput,
+  type SkillResourceReadOutput,
+  type TaskFileWriteInput,
+  type TaskFileWriteOutput,
   type WebSearch,
 } from '@betterwork/tool-runtime';
 import type { BrowserWindow } from 'electron';
@@ -23,6 +40,7 @@ import type { AppStore } from '../persistence';
 import type { KnowledgeVault } from './knowledge-vault';
 import type { NotificationService } from './notification-service';
 import { createQianfanSearchClient } from './search-engine-service';
+import type { SkillExecutionService } from './skill-execution-service';
 import type { SkillService } from './skill-service';
 
 /** 一次执行期间的内存态；Run 结束后整条丢弃。 */
@@ -30,6 +48,8 @@ interface ActiveRun {
   taskId: string;
   prompt: string;
   controller: AbortController;
+  workspacePath: string;
+  bindingId?: string;
   /** toolCallId -> 工具名，用于在 tool.completed 时判断该不该登记 Evidence。 */
   toolNames: Map<string, string>;
 }
@@ -41,17 +61,28 @@ const FAILURE_DETAIL_LENGTH = 500;
  * 组装一次 Run 可用的工具集。
  * `web_search` 只在存在已启用且配置了 Key 的搜索引擎时注册——
  * 给模型一个必然失败的工具只会浪费一轮调用。
+ *
+ * Skill 工具只在提供对应依赖时注册：无绑定的 Run 不需要它们。
  */
 export const createRunTools = (dependencies: {
   knowledgeSearch: (query: string) => KnowledgeSearchItem[];
   webSearch?: WebSearch;
+  skillResourceReader?: (input: SkillResourceReadInput) => Promise<SkillResourceReadOutput>;
+  taskFileWriter?: (input: TaskFileWriteInput) => Promise<TaskFileWriteOutput>;
+  skillCommandExecutor?: (input: SkillCommandExecuteInput) => Promise<SkillCommandExecuteOutput>;
 }): AgentTool[] => {
   const tools: AgentTool[] = [
     calculatorTool,
     readTextFileTool,
     createKnowledgeSearchTool(dependencies.knowledgeSearch),
   ];
-  return dependencies.webSearch ? [...tools, createWebSearchTool(dependencies.webSearch)] : tools;
+  if (dependencies.webSearch) tools.push(createWebSearchTool(dependencies.webSearch));
+  if (dependencies.skillResourceReader)
+    tools.push(createSkillReadResourceTool(dependencies.skillResourceReader));
+  if (dependencies.taskFileWriter) tools.push(createTaskWriteFileTool(dependencies.taskFileWriter));
+  if (dependencies.skillCommandExecutor)
+    tools.push(createSkillExecuteTool(dependencies.skillCommandExecutor));
+  return tools;
 };
 
 const truncate = (value: string, max: number): string =>
@@ -76,6 +107,7 @@ export class RunService {
     private readonly notifications: NotificationService,
     private readonly skillService: SkillService,
     private readonly getWindow: () => BrowserWindow | null,
+    private readonly skillExecutionService?: SkillExecutionService,
   ) {}
 
   start(input: StartRunRequest): string {
@@ -88,6 +120,7 @@ export class RunService {
       taskId: input.taskId,
       prompt: input.prompt,
       controller,
+      workspacePath: context.workspacePath,
       toolNames: new Map(),
     });
 
@@ -132,6 +165,7 @@ export class RunService {
       const model = this.resolveModel();
       const webSearch = this.resolveWebSearch();
       const skillInstructions = await this.resolveSkillInstructions(input);
+      const bindingId = await this.resolveBindingId(runId, input);
       const events = this.engine.run({
         runId,
         taskId: input.taskId,
@@ -146,6 +180,16 @@ export class RunService {
               .search(query)
               .map(({ document, locator, excerpt }) => ({ ...document, locator, excerpt })),
           ...(webSearch ? { webSearch } : {}),
+          ...(bindingId
+            ? {
+                skillResourceReader: (resourceInput) =>
+                  this.readSkillResource(bindingId, resourceInput),
+                taskFileWriter: (writeInput) =>
+                  this.writeTaskFile(runId, input.taskId, workspacePath, writeInput),
+                skillCommandExecutor: (execInput) =>
+                  this.executeSkillCommand(runId, bindingId, execInput),
+              }
+            : {}),
         }),
         signal: controller.signal,
         ...(skillInstructions ? { skillInstructions } : {}),
@@ -307,6 +351,213 @@ export class RunService {
     const instruction = await this.skillService.readSkillInstruction(skill);
     return [instruction];
   }
+
+  /** 有 Skill 绑定时创建 RunSkillBinding；无绑定或无执行服务时返回 undefined。 */
+  private async resolveBindingId(
+    runId: string,
+    input: StartRunRequest,
+  ): Promise<string | undefined> {
+    if (!input.skillBinding || !this.skillExecutionService) return undefined;
+    const binding = this.skillExecutionService.createBinding({
+      runId,
+      skillId: input.skillBinding.skillId,
+    });
+    return binding.id;
+  }
+
+  /** 资源读取桥接：bindingId → Skill → 资源根 → 路径校验 → 读取。 */
+  private async readSkillResource(
+    bindingId: string,
+    input: SkillResourceReadInput,
+  ): Promise<SkillResourceReadOutput> {
+    const binding = this.store.executions.getBinding(bindingId);
+    if (!binding) throw new Error(`Binding ${bindingId} does not exist`);
+    const skill = this.findSkillByRevision(binding.skillRevisionId);
+    if (!skill) throw new Error('Skill not found for binding');
+    if (!skill.enabled) throw new Error(`Skill「${skill.name}」已停用`);
+    if (skill.trustStatus !== 'trusted') throw new Error(`Skill「${skill.name}」尚未信任`);
+    const resourceRoot = await this.skillService.resolveResourceRoot(skill);
+    const target = path.resolve(resourceRoot, input.path);
+    const realRoot = await realpath(resourceRoot);
+    const realTarget = await realpath(target).catch(() => target);
+    if (!isWithinRoot(realRoot, realTarget)) {
+      throw new Error(`Resource path escapes skill root: ${input.path}`);
+    }
+    const content = await readFile(realTarget);
+    return { content, relativePath: path.relative(realRoot, realTarget) };
+  }
+
+  /** 任务文件写入桥接：解析工作目录 → 路径校验 → 冲突检测 → 写入。 */
+  private async writeTaskFile(
+    runId: string,
+    taskId: string,
+    workspacePath: string,
+    input: TaskFileWriteInput,
+  ): Promise<TaskFileWriteOutput> {
+    const workDir = path.join(workspacePath, '.betterwork', 'tasks', taskId, 'runs', runId, 'work');
+    await mkdir(workDir, { recursive: true });
+    const target = path.resolve(workDir, input.path);
+    const realWorkDir = await realpath(workDir);
+    const realTarget = await realpath(target).catch(() => target);
+    if (!isWithinRoot(realWorkDir, realTarget)) {
+      throw new Error(`Task file path escapes work directory: ${input.path}`);
+    }
+    const contentBuffer = Buffer.from(input.content, 'utf8');
+    const contentHash = createHash('sha256').update(contentBuffer).digest('hex');
+    const existing = await readFile(realTarget).catch(() => null);
+    const created = existing === null;
+    if (!created && input.expectedHash) {
+      const actualHash = createHash('sha256').update(existing).digest('hex');
+      if (actualHash !== input.expectedHash) {
+        throw new Error(
+          `File ${input.path} has changed (expected ${input.expectedHash}, got ${actualHash}); re-read before overwriting.`,
+        );
+      }
+    }
+    await mkdir(path.dirname(realTarget), { recursive: true });
+    await writeFile(realTarget, contentBuffer);
+    return {
+      relativePath: path.relative(realWorkDir, realTarget),
+      bytesWritten: contentBuffer.byteLength,
+      contentHash,
+      created,
+    };
+  }
+
+  /** 命令执行桥接：binding → profile → command → 构建执行规格 → 启动 → 等待结果。 */
+  private async executeSkillCommand(
+    runId: string,
+    bindingId: string,
+    input: SkillCommandExecuteInput,
+  ): Promise<SkillCommandExecuteOutput> {
+    if (!this.skillExecutionService) {
+      throw new Error('Skill execution service is not available');
+    }
+    const binding = this.store.executions.getBinding(bindingId);
+    if (!binding) throw new Error(`Binding ${bindingId} does not exist`);
+    if (binding.runId !== runId) {
+      throw new Error(`Binding ${bindingId} does not belong to run ${runId}`);
+    }
+    const skill = this.findSkillByRevision(binding.skillRevisionId);
+    if (!skill) throw new Error('Skill not found for binding');
+    if (!skill.enabled) throw new Error(`Skill「${skill.name}」已停用`);
+    if (skill.trustStatus !== 'trusted') {
+      throw new Error(`Skill「${skill.name}」尚未信任`);
+    }
+    const profile = skill.runtimeProfile;
+    if (!profile) throw new Error('Skill has no runtime profile');
+    const command = profile.profile.commands.find((cmd) => cmd.commandId === input.commandId);
+    if (!command) {
+      throw new Error(`Command ${input.commandId} is not registered in this Skill profile`);
+    }
+    const argv = this.buildArgv(command, input.args);
+    const activeRun = this.activeRuns.get(runId);
+    if (!activeRun) throw new Error(`Run ${runId} is not active`);
+    const cwd = path.join(
+      activeRun.workspacePath,
+      '.betterwork',
+      'tasks',
+      activeRun.taskId,
+      'runs',
+      runId,
+      'work',
+    );
+    await mkdir(cwd, { recursive: true });
+    const env = this.buildCleanEnv();
+    const execution = await this.skillExecutionService.startExecution({
+      runId,
+      bindingId,
+      toolCallId: input.toolCallId,
+      commandId: input.commandId,
+      args: input.args,
+      argv,
+      executable: command.executableKey,
+      cwd,
+      env,
+      timeoutMs: command.timeoutMs,
+      maxOutputBytes: 32 * 1024,
+      maxLogBytes: 10 * 1024 * 1024,
+      expectedOutputs: command.expectedOutputs,
+      ...(command.validatorId ? { validatorId: command.validatorId } : {}),
+      workDirKey: createHash('sha256').update(cwd).digest('hex'),
+    });
+    const awaited = await this.skillExecutionService.awaitExecution(execution.id);
+    return this.formatExecutionResult(awaited);
+  }
+
+  private findSkillByRevision(revisionId: string) {
+    const summary = this.store.skills.list().find((s) => s.currentRevisionId === revisionId);
+    if (!summary) return undefined;
+    return this.store.skills.get(summary.id);
+  }
+
+  private buildArgv(command: RuntimeProfileCommand, args: Record<string, unknown>): string[] {
+    const argv: string[] = [];
+    for (const [key, value] of Object.entries(args)) {
+      if (value === undefined || value === null) continue;
+      argv.push(`--${key}`);
+      if (typeof value === 'boolean') continue;
+      if (typeof value === 'string' || typeof value === 'number') {
+        argv.push(String(value));
+      } else {
+        argv.push(JSON.stringify(value));
+      }
+    }
+    return argv;
+  }
+
+  private buildCleanEnv(): Record<string, string> {
+    return {
+      PATH: '/usr/local/bin:/usr/bin:/bin',
+      LANG: 'en_US.UTF-8',
+      LC_ALL: 'en_US.UTF-8',
+      TZ: 'UTC',
+      PYTHONDONTWRITEBYTECODE: '1',
+      PYTHONUNBUFFERED: '1',
+      PYTHONNOUSERSITE: '1',
+    };
+  }
+
+  private formatExecutionResult(awaited: {
+    execution: ScriptExecution;
+    stdout: string;
+    stderr: string;
+    outputTruncated: boolean;
+  }): SkillCommandExecuteOutput {
+    const { execution, stdout, stderr } = awaited;
+    const common = {
+      executionId: execution.id,
+      ...(stdout ? { stdout } : {}),
+      ...(stderr ? { stderr } : {}),
+      ...(execution.reportHash ? { reportHash: execution.reportHash } : {}),
+      ...(execution.outputIds.length > 0 ? { outputIds: execution.outputIds } : {}),
+    };
+    if (execution.status === 'succeeded') {
+      return { ...common, status: 'succeeded', message: `命令执行成功` };
+    }
+    if (execution.status === 'failed') {
+      return {
+        ...common,
+        status: 'failed',
+        ...(execution.reason ? { reason: execution.reason } : {}),
+        message: `命令执行失败：${execution.reason ?? 'unknown'}`,
+      };
+    }
+    if (execution.status === 'timed-out') {
+      return {
+        ...common,
+        status: 'timed-out',
+        ...(execution.reason ? { reason: execution.reason } : {}),
+        message: `命令执行超时`,
+      };
+    }
+    return {
+      ...common,
+      status: 'cancelled',
+      ...(execution.reason ? { reason: execution.reason } : {}),
+      message: `命令已取消`,
+    };
+  }
 }
 
 const isTerminalEvent = (event: AgentRuntimeEvent): boolean =>
@@ -357,3 +608,11 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
 const isString = (value: unknown): value is string => typeof value === 'string';
+
+const isWithinRoot = (root: string, target: string): boolean => {
+  const relative = path.relative(root, target);
+  return (
+    relative === '' ||
+    (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))
+  );
+};

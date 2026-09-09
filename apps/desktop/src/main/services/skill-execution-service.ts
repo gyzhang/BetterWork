@@ -58,9 +58,20 @@ const digestArguments = (args: Record<string, unknown>): string =>
  * 本服务不解析目录、不选择解释器：executable / cwd / env 由调用方（A13/A14 的
  * 工具层）经 Main 解析后传入，模型只能提交 bindingId + commandId + 结构化参数。
  */
+export interface AwaitedExecution {
+  execution: ScriptExecution;
+  stdout: string;
+  stderr: string;
+  outputTruncated: boolean;
+}
+
 export class SkillExecutionService {
   private readonly handles = new Map<string, SupervisorHandle>();
   private readonly settling = new Map<string, Promise<void>>();
+  private readonly captures = new Map<
+    string,
+    { stdout: string; stderr: string; truncated: boolean }
+  >();
   private readonly cancelling = new Set<string>();
   private readonly finishingRuns = new Set<string>();
 
@@ -240,9 +251,31 @@ export class SkillExecutionService {
     return this.store.executions.failInterruptedExecutions(Date.now());
   }
 
+  /** 等待指定执行收口并返回终态与输出快照；工具层桥接用。 */
+  async awaitExecution(executionId: string): Promise<AwaitedExecution> {
+    const pending = this.settling.get(executionId);
+    if (pending) await pending;
+    const execution = this.store.executions.getExecution(executionId);
+    if (!execution) throw new Error(`Execution ${executionId} is not available`);
+    const captured = this.captures.get(executionId);
+    this.captures.delete(executionId);
+    return {
+      execution,
+      stdout: captured?.stdout ?? '',
+      stderr: captured?.stderr ?? '',
+      outputTruncated: captured?.truncated ?? false,
+    };
+  }
+
   private async settle(executionId: string, handle: SupervisorHandle): Promise<void> {
     try {
       const result = await handle.result;
+      const snapshot = handle.capture();
+      this.captures.set(executionId, {
+        stdout: snapshot.stdout,
+        stderr: snapshot.stderr,
+        truncated: snapshot.truncated,
+      });
       this.recordResult(executionId, result);
     } finally {
       this.handles.delete(executionId);
