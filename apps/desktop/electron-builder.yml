@@ -11,21 +11,16 @@ files:
   - package.json
 
 extraResources:
-  - from: resources/skills
+  - from: ../../resources/skills
     to: skills
     filter:
       - '**/*'
       - '!.DS_Store'
       - '!._*'
-  - from: resources/dependency-locks
+  - from: ../../resources/dependency-locks
     to: dependency-locks
     filter:
       - '*.json'
-  - from: resources/wheelhouse
-    to: wheelhouse
-    filter:
-      - '*.whl'
-    errorOnMissing: false
 
 mac:
   target:
