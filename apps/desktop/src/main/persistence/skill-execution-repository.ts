@@ -5,7 +5,9 @@ import type {
   ScriptExecution,
   ScriptExecutionReason,
   ScriptExecutionStatus,
+  VerifiedExecutionOutput,
 } from '@betterwork/agent-protocol';
+import { verifiedExecutionOutputSchema } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 
 export interface CreateBindingInput {
@@ -231,7 +233,7 @@ export class SkillExecutionRepository {
         `SELECT id FROM skill_trust_grants
          WHERE skill_id = ? AND revision_id = ? AND profile_hash = ? AND revoked_at IS NULL
            AND (? IS NULL OR dependency_fingerprint = ?)
-         ORDER BY granted_at DESC LIMIT 1`,
+         ORDER BY granted_at DESC, rowid DESC LIMIT 1`,
       )
       .get(
         skillId,
@@ -241,6 +243,42 @@ export class SkillExecutionRepository {
         dependencyFingerprint ?? null,
       ) as { id: string } | undefined;
     return row;
+  }
+
+  saveVerifiedOutputs(executionId: string, outputs: VerifiedExecutionOutput[]): void {
+    this.db
+      .prepare(
+        "UPDATE script_executions SET verified_outputs_json = ? WHERE id = ? AND status IN ('queued', 'running')",
+      )
+      .run(JSON.stringify(outputs), executionId);
+  }
+
+  getVerifiedOutputs(executionId: string): VerifiedExecutionOutput[] {
+    const row = this.db
+      .prepare('SELECT verified_outputs_json FROM script_executions WHERE id = ?')
+      .get(executionId) as { verified_outputs_json: string } | undefined;
+    return row
+      ? verifiedExecutionOutputSchema
+          .array()
+          .parse(JSON.parse(row.verified_outputs_json) as unknown)
+      : [];
+  }
+
+  isBindingAuthorized(bindingId: string): boolean {
+    return Boolean(
+      this.db
+        .prepare(
+          `SELECT b.id FROM run_skill_bindings b
+      JOIN skill_revisions r ON r.id = b.skill_revision_id
+      JOIN skills s ON s.id = r.skill_id
+      JOIN skill_preferences p ON p.skill_id = s.id
+      JOIN skill_trust_grants g ON g.id = b.grant_id
+      JOIN skill_runtime_profiles profile ON profile.id = b.profile_revision_id
+      WHERE b.id = ? AND s.enabled = 1 AND p.trust_preference = 'trusted'
+        AND g.revoked_at IS NULL AND g.revision_id = b.skill_revision_id AND g.profile_hash = profile.profile_hash`,
+        )
+        .get(bindingId),
+    );
   }
 
   markRunning(id: string, startedAt: number): boolean {

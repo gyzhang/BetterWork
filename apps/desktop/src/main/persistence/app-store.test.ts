@@ -749,6 +749,29 @@ describe('AppStore', () => {
 
     expect(store.skills.get('skill-env-test')?.environmentStatus).toBe('unprepared');
 
+    const profileId = store.skills.saveProfile({
+      skillId: 'skill-env-test',
+      profileHash: 'p',
+      profile: { commands: [], environmentRequirements: [], outputContract: { outputPaths: [] } },
+    });
+    store.skills.save({
+      id: 'skill-env-test',
+      name: 'Env Test',
+      description: '',
+      sourceKind: 'user',
+      currentRevisionId: revision,
+      currentProfileRevisionId: profileId,
+    });
+    const grantId = store.skills.saveTrustGrant({
+      skillId: 'skill-env-test',
+      revisionId: revision,
+      profileHash: 'p',
+      dependencyFingerprint: 'dep',
+      scopeHash: 's',
+      source: 'user',
+    });
+    store.skills.saveDependencySelection(grantId, 'lock-hash-1', []);
+
     const environments = store.environments.listEnvironments();
     const envId = environments[0]?.id;
     expect(envId).toBeDefined();

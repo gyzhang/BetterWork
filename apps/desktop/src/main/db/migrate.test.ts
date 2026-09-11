@@ -646,3 +646,31 @@ describe('knowledge database migrations', () => {
     db.close();
   });
 });
+
+it('migrates v7 to v8 without inventing verified outputs or losing Markdown versions', () => {
+  const file = path.join(temporaryDirectory(), 'v7.sqlite');
+  const db = new Database(file);
+  db.pragma('foreign_keys = ON');
+  migrate(db, { migrations: appMigrations.filter((migration) => migration.version <= 7) });
+  seedLegacyWork(db);
+  migrate(db, { migrations: appMigrations });
+  expect(readSchemaVersion(db)).toBe(8);
+  expect(db.prepare('SELECT content FROM artifact_versions WHERE id = ?').get('ver-1')).toEqual({
+    content: '# 复盘',
+  });
+  const columns = db.prepare('PRAGMA table_info(script_executions)').all() as Array<{
+    name: string;
+    dflt_value: string;
+  }>;
+  expect(columns.find((column) => column.name === 'verified_outputs_json')?.dflt_value).toBe(
+    "'[]'",
+  );
+  expect(() =>
+    db
+      .prepare('INSERT INTO skill_dependency_selections VALUES (?, ?, ?)')
+      .run('missing-grant', 'hash', '[]'),
+  ).toThrow('FOREIGN KEY');
+  migrate(db, { migrations: appMigrations });
+  expect(db.pragma('foreign_key_check')).toEqual([]);
+  db.close();
+});

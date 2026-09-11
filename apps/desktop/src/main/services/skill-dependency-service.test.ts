@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { realpath } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -683,7 +684,13 @@ describeReal('真实解释器验收（离线、临时目录）', () => {
     }).result;
     expect(purelib.exitCode).toBe(0);
     const sitePackages = purelib.stdout.trim();
-    expect(sitePackages.startsWith(venvRoot)).toBe(true);
+    const canonicalRoot = await realpath(venvRoot);
+    const canonicalPackages = await realpath(sitePackages);
+    const relativePackages = path.relative(canonicalRoot, canonicalPackages);
+    expect(relativePackages).not.toBe('');
+    expect(relativePackages).not.toBe('..');
+    expect(relativePackages.startsWith(`..${path.sep}`)).toBe(false);
+    expect(path.isAbsolute(relativePackages)).toBe(false);
     await filesystem.writeFile(
       path.join(sitePackages, 'betterwork_probe_marker.py'),
       'MARKER = "betterwork-isolated"\n',

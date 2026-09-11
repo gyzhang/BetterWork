@@ -1,6 +1,6 @@
 # Qoder 开发交接：算台 BetterWork
 
-> 后续范围更新：阶段 A 必须支持脚本型 `ppt-generation-expert`，详见 [ADR-0009](adr/0009-script-skill-baseline.md)。当前执行器与 PPTX 能力尚未落地；仅指令配置不能满足新的兼容基线。
+> 后续范围更新：阶段 A 必须支持脚本型 `ppt-generation-expert`，详见 [ADR-0009](adr/0009-script-skill-baseline.md)。截至 2026-09-11，macOS 执行器、依赖绑定与 PPTX 文件成果已有实现，代码补救门禁通过；真实样本、Office 编辑与安装验收尚未完成，见[修正记录](reviews/2026-09-11-phase-a-repairs.md)。
 
 > 交接日期：2026-09-05
 >
@@ -12,7 +12,7 @@
 
 本文是「当前到底实现了什么」的唯一入口。其他产品文档（`01`–`06`、`08`、`10`）以长期目标为主，已按章节补注实现状态，但判断现状仍以本文为准。
 
-> 最新产品确认：Skill 信任选项与本地目录分发见 [ADR-0011](adr/0011-skill-trust-and-local-distribution.md)，尚未实现；ADR-0010 其余执行技术仍为 Proposed。
+> 最新产品确认：Skill 信任选项与本地目录分发见 [ADR-0011](adr/0011-skill-trust-and-local-distribution.md)，管理与授权实现已落地，安装分发仍待完整验收；ADR-0010 其余执行技术仍为 Proposed。
 
 ## 1. 产品与当前边界
 

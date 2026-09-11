@@ -367,7 +367,26 @@ export class SkillDependencyService {
       profile.profileHash,
       fingerprint,
     );
-    if (existing) return { fingerprint, grantActive: true, grantCreated: false };
+    const snapshotIds = input.snapshotManifestHashes.map((hash) => {
+      const snapshot = this.store.snapshots
+        .listSnapshots()
+        .find((entry) => entry.manifestHash === hash);
+      if (!snapshot) throw new Error('Selected toolchain snapshot is not registered');
+      return snapshot.id;
+    });
+    if (existing) {
+      if (!this.store.skills.getDependencySelection(existing.id) && input.confirm !== true) {
+        return {
+          fingerprint,
+          grantActive: false,
+          grantCreated: false,
+          blockedReason: '旧授权缺少依赖选择记录，请重新确认依赖授权',
+        };
+      }
+      if (input.confirm === true)
+        this.store.skills.saveDependencySelection(existing.id, input.lockHash, snapshotIds);
+      return { fingerprint, grantActive: true, grantCreated: false };
+    }
     // 只复核不建立：打开面板或切换选择不能悄悄产生一条授权。
     if (input.confirm !== true) {
       return {
@@ -377,7 +396,7 @@ export class SkillDependencyService {
         blockedReason: '依赖已确定但没有覆盖它的授权，需要用户确认后建立',
       };
     }
-    this.store.skills.saveTrustGrant({
+    const grantId = this.store.skills.saveTrustGrant({
       skillId,
       revisionId: skill.revision.id,
       profileHash: profile.profileHash,
@@ -385,7 +404,18 @@ export class SkillDependencyService {
       scopeHash,
       source: 'user',
     });
+    this.store.skills.saveDependencySelection(grantId, input.lockHash, snapshotIds);
     return { fingerprint, grantActive: true, grantCreated: true };
+  }
+
+  resolveEnvironmentPython(environmentId: string): string {
+    const environment = this.store.environments.getEnvironment(environmentId);
+    if (!environment || environment.status !== 'ready') throw new Error('运行环境尚未就绪');
+    return path.join(
+      this.roots.paths.userDataRoot,
+      environment.pathKey,
+      environment.platform.os === 'win32' ? 'Scripts/python.exe' : 'bin/python3',
+    );
   }
 
   getEnvironment(environmentId: string): RuntimeEnvironment | undefined {

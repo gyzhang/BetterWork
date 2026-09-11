@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import type { ProcessSupervisor, SupervisorHandle } from '../infrastructure/process-supervisor';
 import { AppStore } from '../persistence';
+import { computeDependencyFingerprint } from './skill-dependency-service';
 import { SkillExecutionService, type StartExecutionInput } from './skill-execution-service';
 
 const temporaryDirectories: string[] = [];
@@ -348,4 +349,134 @@ describe('SkillExecutionService', () => {
     expect(service.recoverInterruptedExecutions()).toBe(0);
     store.close();
   });
+});
+
+it('keeps a prepared environment bound to the authorized dependency selection', () => {
+  const { store, service } = openFixture();
+  seedRun(store, 'run-binding');
+  seedSkill(store, 'skill-binding', false);
+  const platform = {
+    os:
+      process.platform === 'darwin'
+        ? ('darwin' as const)
+        : process.platform === 'win32'
+          ? ('win32' as const)
+          : ('linux' as const),
+    arch: process.arch === 'arm64' ? ('arm64' as const) : ('x64' as const),
+    abi: 'cp312',
+  };
+  const profileId = store.skills.saveProfile({
+    skillId: 'skill-binding',
+    profileHash: 'executable-profile',
+    profile: {
+      commands: [
+        {
+          commandId: 'test',
+          label: 'test',
+          executableKey: 'scripts/test.py',
+          argumentSchema: {},
+          timeoutMs: 1000,
+          expectedOutputs: [],
+        },
+      ],
+      environmentRequirements: ['python'],
+      outputContract: { outputPaths: [] },
+    },
+  });
+  store.skills.save({
+    id: 'skill-binding',
+    name: 'binding',
+    description: '',
+    sourceKind: 'user',
+    currentRevisionId: 'skill-binding-rev',
+    currentProfileRevisionId: profileId,
+  });
+  const grantId = store.skills.saveTrustGrant({
+    skillId: 'skill-binding',
+    revisionId: 'skill-binding-rev',
+    profileHash: 'executable-profile',
+    dependencyFingerprint: computeDependencyFingerprint({ lockHash: 'lock' }),
+    scopeHash: 'scope',
+    source: 'user',
+  });
+  store.skills.setTrustPreference('skill-binding', 'trusted');
+  expect(() => service.createBinding({ runId: 'run-binding', skillId: 'skill-binding' })).toThrow(
+    '重新确认',
+  );
+  store.skills.saveDependencySelection(grantId, 'lock', []);
+  expect(() => service.createBinding({ runId: 'run-binding', skillId: 'skill-binding' })).toThrow(
+    '尚未就绪',
+  );
+  const environment = store.environments.createEnvironment({
+    environmentKey: 'env',
+    base: { kind: 'local', path: '/python', version: '3.12.0' },
+    platform,
+    lockHash: 'lock',
+    lock: { lockVersion: 1, platform, pythonRequirement: '3.12', packages: [], importProbes: [] },
+    pathKey: 'environments/env/instance',
+  });
+  store.environments.updateStatus(environment.id, 'ready');
+  const binding = service.createBinding({ runId: 'run-binding', skillId: 'skill-binding' });
+  expect(binding.environmentId).toBe(environment.id);
+  const newProfile = store.skills.saveProfile({
+    skillId: 'skill-binding',
+    profileHash: 'new-profile',
+    profile: { commands: [], environmentRequirements: [], outputContract: { outputPaths: [] } },
+  });
+  store.skills.save({
+    id: 'skill-binding',
+    name: 'binding',
+    description: '',
+    sourceKind: 'user',
+    currentRevisionId: 'skill-binding-rev',
+    currentProfileRevisionId: newProfile,
+  });
+  expect(
+    store.skills.getBoundDetail(binding.skillRevisionId, binding.profileRevisionId)?.runtimeProfile
+      ?.profileHash,
+  ).toBe('executable-profile');
+  expect(store.executions.isBindingAuthorized(binding.id)).toBe(true);
+  store.skills.setTrustPreference('skill-binding', 'revoked');
+  expect(store.executions.isBindingAuthorized(binding.id)).toBe(false);
+  store.close();
+});
+
+it('waits for a pending launch and cancels the returned handle before finishing the Run', async () => {
+  const { store, supervisor } = openFixture();
+  seedRun(store, 'race-run');
+  seedSkill(store, 'race-skill', true);
+  let release: (() => void) | undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const service = new SkillExecutionService(store, {
+    async launch(spec) {
+      const handle = await supervisor.launch(spec);
+      await gate;
+      return handle;
+    },
+  });
+  const binding = service.createBinding({ runId: 'race-run', skillId: 'race-skill' });
+  const starting = service.startExecution(startInput('race-run', binding.id, 'race-tool'));
+  const finishing = service.finishRun('race-run');
+  release?.();
+  const [execution, cleanup] = await Promise.all([starting, finishing]);
+  expect(cleanup.cleanupFailed).toBe(0);
+  expect(supervisor.jobs[0]?.cancelled).toBe(true);
+  expect(store.executions.getExecution(execution.id)?.status).toBe('cancelled');
+  await service.awaitExecution(execution.id);
+  store.close();
+});
+
+it('blocks a revoked binding immediately before launching a process', async () => {
+  const { store, supervisor, service } = openFixture();
+  seedRun(store, 'r');
+  seedSkill(store, 's', true);
+  const binding = service.createBinding({ runId: 'r', skillId: 's' });
+  store.skills.setTrustPreference('s', 'revoked');
+  await expect(service.startExecution(startInput('r', binding.id, 't'))).rejects.toThrow(
+    'authorization',
+  );
+  expect(supervisor.jobs).toHaveLength(0);
+  store.close();
 });

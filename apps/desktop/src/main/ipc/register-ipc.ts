@@ -361,9 +361,9 @@ function registerArtifactChannels(deps: IpcDependencies): void {
         outputId: input.outputId,
         ...(input.artifactId ? { artifactId: input.artifactId } : {}),
         title: input.title,
-        mimeType: input.mimeType,
+        ...(input.mimeType ? { mimeType: input.mimeType } : {}),
         ...(input.description ? { description: input.description } : {}),
-        validation: input.validation,
+        ...(input.validation ? { validation: input.validation } : {}),
       });
     },
   );
@@ -738,9 +738,11 @@ function registerSkillChannels(deps: IpcDependencies): void {
     IpcChannel.SetSkillTrust,
     setSkillTrustRequestSchema,
     skillMutationResultSchema,
-    (input) => ({
-      skill: skillSummary(skillService.setTrustPreference(input.skillId, input.trusted)),
-    }),
+    async (input) => {
+      const updated = skillService.setTrustPreference(input.skillId, input.trusted);
+      if (!input.trusted) await runs.cancelRunsForSkill(input.skillId);
+      return { skill: skillSummary(updated) };
+    },
   );
   handleInput(
     IpcChannel.RevokeSkillTrust,
@@ -759,9 +761,10 @@ function registerSkillChannels(deps: IpcDependencies): void {
     IpcChannel.SetSkillEnabled,
     setSkillEnabledRequestSchema,
     skillMutationResultSchema,
-    (input) => {
+    async (input) => {
       if (!store.skills.setEnabled(input.skillId, input.enabled))
         throw new Error('Skill does not exist');
+      if (!input.enabled) await runs.cancelRunsForSkill(input.skillId);
       const skill = store.skills.get(input.skillId);
       if (!skill) throw new Error('Skill does not exist');
       return { skill: skillSummary(skill) };

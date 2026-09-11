@@ -7,6 +7,7 @@ import type { RuntimeProfileDraft, SkillDetail } from '@betterwork/agent-protoco
 import { parse } from 'yaml';
 
 import { type AppStore } from '../persistence';
+import { suggestedPptProfile } from './ppt-generation-preset';
 
 const skillFileName = 'SKILL.md';
 const maxFiles = 2_000;
@@ -268,6 +269,8 @@ export class SkillService {
         });
         return createdRevisionId;
       });
+      const suggestedProfile = suggestedPptProfile(contentHash);
+      if (suggestedProfile) this.saveRuntimeProfile(skillId, suggestedProfile);
       const skill = this.store.skills.get(skillId);
       if (!skill) throw new Error('Imported Skill was not available after database registration');
       return { skill, contentHash, resourceRoot };
@@ -280,6 +283,14 @@ export class SkillService {
   async resolveResourceRoot(skill: SkillDetail): Promise<string> {
     if (skill.sourceKind === 'user') return this.userRevisionRoot(skill);
     return this.resolveBuiltinResource(skill.revision.resourceKey.replace(/^builtin\//u, ''));
+  }
+
+  async verifyResourceRoot(skill: SkillDetail): Promise<string> {
+    const root = await this.resolveResourceRoot(skill);
+    const data = await readPackage(root);
+    if (hashFiles(data.files) !== skill.revision.contentHash)
+      throw new Error('Skill 内容 hash 已变化，请重新导入并确认信任');
+    return root;
   }
 
   async readSkillInstruction(skill: SkillDetail): Promise<SkillInstruction> {

@@ -10,6 +10,8 @@ import type {
 
 import type { ProcessSupervisor, SupervisorHandle } from '../infrastructure/process-supervisor';
 import { type AppStore, isTerminalExecutionStatus } from '../persistence';
+import type { ExecutionOutputService } from './execution-output-service';
+import { computeDependencyFingerprint } from './skill-dependency-service';
 
 /** 设计 §8：Run 收口时清理最长 5 秒，超时走既有失败兜底并说明可能残留。 */
 const CLEANUP_GRACE_MS = 5_000;
@@ -22,6 +24,7 @@ export interface CreateExecutionBindingInput {
 }
 
 export interface StartExecutionInput {
+  signal?: AbortSignal;
   runId: string;
   bindingId: string;
   toolCallId: string;
@@ -66,6 +69,7 @@ export interface AwaitedExecution {
 }
 
 export class SkillExecutionService {
+  private readonly launches = new Map<string, Promise<SupervisorHandle>>();
   private readonly handles = new Map<string, SupervisorHandle>();
   private readonly settling = new Map<string, Promise<void>>();
   private readonly captures = new Map<
@@ -78,6 +82,7 @@ export class SkillExecutionService {
   constructor(
     private readonly store: AppStore,
     private readonly supervisor: ProcessSupervisor,
+    private readonly outputs?: ExecutionOutputService,
   ) {}
 
   createBinding(input: CreateExecutionBindingInput): RunSkillBinding {
@@ -92,17 +97,55 @@ export class SkillExecutionService {
       profile.profileHash,
     );
     if (!grant) throw new Error(`Skill ${input.skillId} has no active trust grant`);
+    let environmentId = input.environmentId;
+    let snapshotIds = input.dependencySnapshotIds ?? [];
+    if (profile.profile.commands.length > 0) {
+      const selection = this.store.skills.getDependencySelection(grant.id);
+      if (!selection) throw new Error('请在环境面板重新确认依赖授权，固定运行环境与工具链');
+      const environment = this.store.environments
+        .listEnvironments()
+        .find(
+          (entry) =>
+            entry.lockHash === selection.lockHash &&
+            entry.status === 'ready' &&
+            entry.platform.os === process.platform &&
+            entry.platform.arch === process.arch &&
+            (!environmentId || entry.id === environmentId),
+        );
+      if (!environment) throw new Error('授权对应的运行环境尚未就绪');
+      environmentId = environment.id;
+      snapshotIds = selection.snapshotIds;
+      const snapshotManifestHashes = snapshotIds.map((id) => {
+        const snapshot = this.store.snapshots.getSnapshot(id);
+        if (!snapshot) throw new Error('Bound toolchain snapshot is missing');
+        return snapshot.manifestHash;
+      });
+      const fingerprint = computeDependencyFingerprint({
+        lockHash: environment.lockHash,
+        snapshotManifestHashes,
+      });
+      if (
+        this.store.executions.findActiveGrant(
+          input.skillId,
+          detail.revision.id,
+          profile.profileHash,
+          fingerprint,
+        )?.id !== grant.id
+      )
+        throw new Error('Dependency selection no longer matches the grant');
+    }
     return this.store.executions.createBinding({
       runId: input.runId,
       skillRevisionId: detail.revision.id,
       profileRevisionId: profile.id,
-      ...(input.environmentId ? { environmentId: input.environmentId } : {}),
-      dependencySnapshotIds: input.dependencySnapshotIds ?? [],
+      ...(environmentId ? { environmentId } : {}),
+      dependencySnapshotIds: snapshotIds,
       grantId: grant.id,
     });
   }
 
   async startExecution(input: StartExecutionInput): Promise<ScriptExecution> {
+    if (input.signal?.aborted) throw new Error('Run is cancelled');
     if (this.finishingRuns.has(input.runId)) {
       throw new Error(`Run ${input.runId} is finishing; new executions are blocked`);
     }
@@ -112,6 +155,17 @@ export class SkillExecutionService {
       throw new Error(`Binding ${input.bindingId} does not belong to run ${input.runId}`);
     }
 
+    if (
+      this.store.runs.get(input.runId)?.status !== 'running' ||
+      !this.store.executions.isBindingAuthorized(input.bindingId)
+    ) {
+      throw new Error('Run or Skill authorization is no longer active');
+    }
+    if (
+      binding.environmentId &&
+      this.store.environments.getEnvironment(binding.environmentId)?.status !== 'ready'
+    )
+      throw new Error('Bound environment is no longer ready');
     const executionId = randomUUID();
     this.store.executions.createExecution({
       id: executionId,
@@ -145,8 +199,14 @@ export class SkillExecutionService {
 
     let handle: SupervisorHandle;
     try {
-      handle = await this.supervisor.launch(spec);
+      this.outputs?.prepare(spec);
+      const launching = this.supervisor.launch(spec);
+      this.launches.set(executionId, launching);
+      handle = await launching;
+      this.launches.delete(executionId);
     } catch (error) {
+      this.launches.delete(executionId);
+      this.outputs?.discard(executionId);
       this.store.executions.finishExecution(executionId, 'failed', {
         reason: 'spawn-failed',
         finishedAt: Date.now(),
@@ -155,10 +215,18 @@ export class SkillExecutionService {
     }
 
     this.handles.set(executionId, handle);
+    if (
+      input.signal?.aborted ||
+      this.finishingRuns.has(input.runId) ||
+      this.store.runs.get(input.runId)?.status !== 'running' ||
+      !this.store.executions.isBindingAuthorized(input.bindingId)
+    ) {
+      await this.cancelExecution(executionId, 'cancelled-by-run');
+    }
     this.store.executions.markRunning(executionId, Date.now());
     this.settling.set(
       executionId,
-      this.settle(executionId, handle).catch((error: unknown) => {
+      this.settle(executionId, handle, spec).catch((error: unknown) => {
         console.error(`Execution ${executionId} could not be settled`, error);
       }),
     );
@@ -184,6 +252,12 @@ export class SkillExecutionService {
         finishedAt: Date.now(),
       });
     }
+    if ((result.kind === 'timed-out' || result.kind === 'cancelled') && !result.cleanupCompleted) {
+      return this.store.executions.finishExecution(executionId, 'failed', {
+        reason: 'cleanup-failed',
+        finishedAt: Date.now(),
+      });
+    }
     if (result.kind === 'timed-out') {
       return this.store.executions.finishExecution(executionId, 'timed-out', {
         reason: 'timed-out',
@@ -204,10 +278,12 @@ export class SkillExecutionService {
     if (!execution || isTerminalExecutionStatus(execution.status)) {
       return { applied: false, cleanupCompleted: true };
     }
-    const handle = this.handles.get(executionId);
     this.cancelling.add(executionId);
     try {
-      const cleanup = handle ? await handle.cancel() : { cleanupCompleted: true };
+      const cleanup = await boundedCleanup(async () => {
+        const handle = this.handles.get(executionId) ?? (await this.launches.get(executionId));
+        return handle ? handle.cancel() : { cleanupCompleted: false };
+      });
       const applied = cleanup.cleanupCompleted
         ? this.store.executions.finishExecution(executionId, 'cancelled', {
             reason,
@@ -234,15 +310,10 @@ export class SkillExecutionService {
       const report = await this.cancelExecution(execution.id, 'cancelled-by-run');
       if (!report.cleanupCompleted) cleanupFailed += 1;
     }
-    const pending = open
-      .map((execution) => this.settling.get(execution.id))
-      .filter((promise): promise is Promise<void> => promise !== undefined);
-    await Promise.race([
-      Promise.all(pending),
-      new Promise<void>((resolve) => {
-        setTimeout(resolve, CLEANUP_GRACE_MS);
-      }),
-    ]);
+    const failures = this.store.executions
+      .listExecutionsByRun(runId)
+      .filter((entry) => entry.reason === 'cleanup-failed');
+    cleanupFailed = Math.max(cleanupFailed, failures.length);
     return { cancelled: open.length, cleanupFailed };
   }
 
@@ -267,7 +338,11 @@ export class SkillExecutionService {
     };
   }
 
-  private async settle(executionId: string, handle: SupervisorHandle): Promise<void> {
+  private async settle(
+    executionId: string,
+    handle: SupervisorHandle,
+    spec: JobSpec,
+  ): Promise<void> {
     try {
       const result = await handle.result;
       const snapshot = handle.capture();
@@ -276,10 +351,68 @@ export class SkillExecutionService {
         stderr: snapshot.stderr,
         truncated: snapshot.truncated,
       });
-      this.recordResult(executionId, result);
+      if (result.kind === 'succeeded' && this.outputs) {
+        if (
+          this.finishingRuns.has(spec.runId) ||
+          !this.store.executions.isBindingAuthorized(spec.bindingId) ||
+          this.store.runs.get(spec.runId)?.status !== 'running'
+        ) {
+          this.recordResult(executionId, {
+            kind: 'cancelled',
+            cleanupCompleted: true,
+            diagnosticOutputIds: [],
+          });
+          return;
+        }
+        try {
+          const verified = this.outputs.collect(spec, snapshot);
+          this.store.transaction(() => {
+            this.store.executions.saveVerifiedOutputs(executionId, verified);
+            this.recordResult(executionId, {
+              ...result,
+              outputIds: verified.map((output) => output.outputId),
+              ...(verified[0] ? { reportHash: verified[0].reportHash } : {}),
+            });
+          });
+        } catch (error) {
+          this.recordResult(executionId, {
+            kind: 'failed',
+            phase: 'validate',
+            code: 'invalid-output',
+            summary: error instanceof Error ? error.message : 'Output verification failed',
+            retryable: true,
+          });
+        }
+      } else this.recordResult(executionId, result);
+    } catch (error) {
+      const cleanup = await boundedCleanup(() => handle.cancel());
+      this.recordResult(executionId, {
+        kind: 'failed',
+        phase: cleanup.cleanupCompleted ? 'execute' : 'cleanup',
+        code: 'supervisor-result-failed',
+        summary: error instanceof Error ? error.message : 'Supervisor result failed',
+        retryable: false,
+      });
     } finally {
+      this.outputs?.discard(executionId);
       this.handles.delete(executionId);
       this.settling.delete(executionId);
     }
+  }
+}
+
+async function boundedCleanup(
+  operation: () => Promise<{ cleanupCompleted: boolean }>,
+): Promise<{ cleanupCompleted: boolean }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation().catch(() => ({ cleanupCompleted: false })),
+      new Promise<{ cleanupCompleted: boolean }>((resolve) => {
+        timer = setTimeout(() => resolve({ cleanupCompleted: false }), CLEANUP_GRACE_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }

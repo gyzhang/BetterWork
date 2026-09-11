@@ -572,6 +572,20 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 8,
+    name: 'verified-execution-outputs-and-dependency-selection',
+    up(db: Database.Database): void {
+      db.exec(`
+        ALTER TABLE script_executions ADD COLUMN verified_outputs_json TEXT NOT NULL DEFAULT '[]';
+        CREATE TABLE skill_dependency_selections (
+          grant_id TEXT PRIMARY KEY REFERENCES skill_trust_grants(id) ON DELETE CASCADE,
+          lock_hash TEXT NOT NULL,
+          snapshot_ids_json TEXT NOT NULL
+        );
+      `);
+    },
+  },
 ];
 
 /**

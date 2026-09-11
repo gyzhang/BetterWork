@@ -481,10 +481,7 @@ const resultFromCleanup = (job: HostJob, event: CleanupEvent): JobResult => {
   const signal = event.signal ?? job.signal;
   if (exitCode === 0) {
     if (!event.cleanupCompleted) {
-      // 脚本自己成功了，但后代没清干净：不把成果判为失败，但必须让用户看得见。
-      console.error(
-        `[skill-supervisor] execution ${job.spec.executionId} finished with residual processes`,
-      );
+      return failureResult(job, 'cleanup', 'residual-processes', '未能确认全部子进程已停止', false);
     }
     return { kind: 'succeeded', exitCode: 0, outputIds: [], durationMs: event.durationMs };
   }

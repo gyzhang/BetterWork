@@ -498,6 +498,28 @@ describe('RunService', () => {
     expect(window.runEventTypes()).toContain('run.failed');
   });
 
+  it('fails the Run when finishRun returns a cleanup failure report', async () => {
+    const fixture = await createFixture();
+    const window = createWindowStub();
+    const execution = {
+      async finishRun() {
+        return { cancelled: 1, cleanupFailed: 1 };
+      },
+    } as unknown as SkillExecutionService;
+    const service = createService(fixture, window, execution);
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: 'hello',
+    });
+    await waitForCompletion(fixture, runId);
+    expect(statusOf(fixture, runId)).toBe('failed');
+    const terminals = window
+      .runEventTypes()
+      .filter((type) => ['run.completed', 'run.failed', 'run.cancelled'].includes(type));
+    expect(terminals).toEqual(['run.failed']);
+  });
+
   it('shutdown() aborts all active runs and waits for them to settle', async () => {
     const fixture = await createFixture();
     const window = createWindowStub();
