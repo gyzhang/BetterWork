@@ -858,6 +858,19 @@ export const validationStateSchema = z
   .strict();
 export type ValidationStateInput = z.infer<typeof validationStateSchema>;
 
+/** Host-owned output metadata; never supplied by the model. */
+export const verifiedExecutionOutputSchema = z
+  .object({
+    outputId: z.string().min(1),
+    relativePath: z.string().min(1),
+    fileHash: z.string().regex(/^[a-f0-9]{64}$/u),
+    fileSize: z.number().int().nonnegative(),
+    reportHash: z.string().regex(/^[a-f0-9]{64}$/u),
+    validation: validationStateSchema,
+  })
+  .strict();
+export type VerifiedExecutionOutput = z.infer<typeof verifiedExecutionOutputSchema>;
+
 export const registerFileArtifactRequestSchema = z
   .object({
     runId: z.string().min(1),
@@ -865,12 +878,12 @@ export const registerFileArtifactRequestSchema = z
     outputId: z.string().min(1),
     artifactId: z.string().min(1).optional(),
     title: z.string().trim().min(1).max(160),
-    mimeType: z.string().trim().min(1).max(120),
+    mimeType: z.string().trim().min(1).max(120).optional(),
     description: z.string().trim().max(10_000).optional(),
-    validation: validationStateSchema,
+    validation: validationStateSchema.optional(),
   })
   .superRefine((input, context) => {
-    if (input.validation.structure === 'failed') {
+    if (input.validation?.structure === 'failed') {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: '结构校验失败的成果不可登记为可交付版本',

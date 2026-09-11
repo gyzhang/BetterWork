@@ -6,15 +6,15 @@
 
 | 阶段 | 已确认方向 | 范围与验收状态 |
 | --- | --- | --- |
-| A | Skill 管理、配置与脚本运行先行 | 尚未实现；必须真实支持 ppt-generation-expert，含 Python/CLI、外部依赖、文件生成、质量门与最小 PPTX 产物登记 |
+| A | Skill 管理、配置与脚本运行先行 | 管理、macOS 执行依赖、PPT 接线与文件成果已有实现；2026-09-11 补救门禁通过，真实样本、Office 编辑与冷安装验收仍待完成，Windows 受阻 |
 | B | 专家配置接续，绑定多项 Skill | 尚未实现；配置字段、知识范围和执行接线建议见修订稿 §4 |
 | C | 长期目录下完成研究、场景方案、报告和公司模板可编辑 PPT | 尚未实现；六个讨论节点已确认，具体切片与验收建议见修订稿 §5 |
 
-[产品修订稿](reviews/2026-09-08-product-scope.md) 区分已确认决策和待审阅建议；[ADR-0008](adr/0008-personal-workbench-and-capability-first.md) 固定本次产品及职责决策。A/B/C 是新的交付顺序，不代表下方旧 Phase 已完成，也不自动批准修订稿中的技术提议。后续已确认首个脚本型 Skill 必须从 A 支持，见 [ADR-0009](adr/0009-script-skill-baseline.md) 与 [样本边界](reviews/2026-09-08-skill-runtime-boundary.md)；「首轮仅指令、脚本后置」建议撤回。执行器、依赖准备和文件边界已形成 [设计提案](designs/skill-executor-and-dependencies.md) 与 [ADR-0010](adr/0010-skill-executor-and-dependencies.md)（Proposed）；A1–A4 的实现次序和验收已列出，当前不开始业务代码开发。
+[产品修订稿](reviews/2026-09-08-product-scope.md) 区分已确认决策和待审阅建议；[ADR-0008](adr/0008-personal-workbench-and-capability-first.md) 固定本次产品及职责决策。A/B/C 是新的交付顺序，不代表下方旧 Phase 已完成，也不自动批准修订稿中的技术提议。后续已确认首个脚本型 Skill 必须从 A 支持，见 [ADR-0009](adr/0009-script-skill-baseline.md) 与 [样本边界](reviews/2026-09-08-skill-runtime-boundary.md)；「首轮仅指令、脚本后置」建议撤回。执行器、依赖准备和文件边界已形成 [设计提案](designs/skill-executor-and-dependencies.md) 与 [ADR-0010](adr/0010-skill-executor-and-dependencies.md)（Proposed）；A1–A4 的实现次序和验收已列出，当前实现与验收缺口见阶段 A 任务板。
 
 阶段 A 同时纳入已确认的 [Skill 信任与本地分发规则](adr/0011-skill-trust-and-local-distribution.md)：内置默认信任、导入显式选择、更新与撤销语义、三类目录、用户副本和共享依赖分发。配置验收必须覆盖启用/信任/依赖状态分离以及更新不覆盖用户选择。
 
-开发已拆为 [阶段 A 执行手册](development/README.md) 的 A00–A21 顺序任务（供 5.6 Luna 使用），分组对应 A1 管理配置、A2 执行依赖、A3 样本接线、A4 成果分发。任务状态以手册任务板为准；本次只编写规划，尚未开始实现。
+开发已拆为 [阶段 A 执行手册](development/README.md) 的 A00–A21 顺序任务（供 5.6 Luna 使用），分组对应 A1 管理配置、A2 执行依赖、A3 样本接线、A4 成果分发。任务状态以手册任务板为准；代码补救及验证见 [2026-09-11 修正记录](reviews/2026-09-11-phase-a-repairs.md)，阶段 A 尚未通过完整验收。
 
 首个完整场景为「集团智能体场景落地」，阶段内部自主推进，六次讨论依次为：理解与计划、网络调研、报告大纲、报告完成、PPT 大纲、PPT 完成与迭代。用户最终手工编辑 PPT 后汇报。
 

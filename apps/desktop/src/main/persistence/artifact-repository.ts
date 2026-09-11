@@ -247,11 +247,37 @@ export class ArtifactRepository {
     return saved;
   }
 
+  findRegisteredFile(fileKey: string): RegisterFileArtifactResult | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT af.*, v.artifact_id, v.version_number FROM artifact_files af
+      JOIN artifact_versions v ON v.id = af.version_id WHERE af.file_key = ? ORDER BY v.created_at LIMIT 1`,
+      )
+      .get(fileKey) as
+      (ArtifactFileRow & { artifact_id: string; version_number: number }) | undefined;
+    if (!row) return undefined;
+    return {
+      artifactId: row.artifact_id,
+      versionId: row.version_id,
+      versionNumber: row.version_number,
+      fileKey: row.file_key,
+      fileHash: row.file_hash,
+      fileSize: row.file_size,
+      validation: {
+        structure: row.validation_structure,
+        visual: row.validation_visual,
+        manualEdit: row.validation_manual_edit,
+      },
+    };
+  }
+
   registerFile(input: RegisterFileInput): RegisterFileArtifactResult {
     const workspaceId = this.readTaskWorkspaceId(input.taskId);
     this.assertRunBelongsToTask(input.runId, input.taskId);
 
     const existing = this.readExistingArtifact(input.artifactId);
+    if (existing && this.getDetail(existing.id)?.type !== 'presentation')
+      throw new Error('Artifact is not a presentation');
     if (
       input.artifactId &&
       (!existing || existing.task_id !== input.taskId || existing.workspace_id !== workspaceId)

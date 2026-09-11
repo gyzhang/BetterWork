@@ -51,7 +51,12 @@ describe('parseValidateIssues', () => {
 
 describe('interpretValidateOutput', () => {
   it('returns succeeded when exit=0 and no issues', () => {
-    const result = interpretValidateOutput(makeSnapshot({ status: 'succeeded', stdout: 'OK' }));
+    const result = interpretValidateOutput(
+      makeSnapshot({
+        status: 'succeeded',
+        stdout: '== deck.pptx  (parts=20, slides=2)\n   OK: 未发现触发修复的结构问题',
+      }),
+    );
     expect(result.status).toBe('succeeded');
     expect(result.executionId).toBe('exec-1');
   });
@@ -204,7 +209,7 @@ describe('PptGenerationAdapter', () => {
     });
 
     it('preserves absolute paths as-is', () => {
-      const absPath = '/absolute/path/output.pptx';
+      const absPath = path.join(WORK_DIR, 'output.pptx');
       const resolved = adapter.resolveCommand(
         'pptx-validate',
         { pptx_path: absPath },
@@ -264,10 +269,17 @@ describe('PptGenerationAdapter', () => {
         'pptx-validate',
         makeSnapshot({
           status: 'succeeded',
-          stdout: 'All checks passed',
+          stdout: '== deck.pptx  (parts=20, slides=2)\n   OK: 未发现触发修复的结构问题',
         }),
       );
       expect(result?.status).toBe('succeeded');
     });
   });
 });
+
+it.each(['', 'OK', 'invalid JSON', '{"issues":["broken"]}', '== deck.pptx  (parts=20, slides=2)'])(
+  'rejects incomplete report: %s',
+  (stdout) => {
+    expect(interpretValidateOutput(makeSnapshot({ stdout })).status).toBe('failed');
+  },
+);

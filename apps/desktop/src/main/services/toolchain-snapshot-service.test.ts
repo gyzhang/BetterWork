@@ -462,6 +462,20 @@ describe('外部工具链快照', () => {
     expect(harness.service.listSnapshots()).toHaveLength(2);
   });
 
+  it('rejects an edited manifest instead of trusting its replacement hashes', async () => {
+    const harness = openHarness();
+    const receipt = await harness.service.createSnapshot({ origin: harness.origin });
+    const root = harness.service.resolveSnapshotRoot(receipt.snapshot);
+    harness.tree.write(
+      `${root}/.betterwork-snapshot-manifest.json`,
+      JSON.stringify({ manifestVersion: 1, files: [] }),
+    );
+    expect(await harness.service.verifySnapshot(receipt.snapshot.id)).toMatchObject({
+      valid: false,
+      checkedFiles: 0,
+    });
+  });
+
   it('授权指纹随包锁或快照变化失效，旧授权不再放行', async () => {
     const harness = openHarness();
     const first = await harness.service.createSnapshot({ origin: harness.origin });

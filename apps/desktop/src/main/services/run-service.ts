@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
+import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { AgentTool, ModelProvider, SkillInstruction } from '@betterwork/agent-core';
@@ -39,13 +39,17 @@ import {
   type WebSearch,
 } from '@betterwork/tool-runtime';
 import type { BrowserWindow } from 'electron';
+import { z } from 'zod';
 
+import { managedPath, writeManagedText } from '../infrastructure/managed-files';
 import type { AppStore } from '../persistence';
 import type { FileArtifactService } from './file-artifact-service';
 import type { KnowledgeVault } from './knowledge-vault';
 import type { NotificationService } from './notification-service';
+import { preparePptAttempt } from './ppt-execution-attempt';
 import { createQianfanSearchClient } from './search-engine-service';
 import type { AdapterContext, SkillAdapter, SkillAdapterService } from './skill-adapter';
+import type { SkillDependencyService } from './skill-dependency-service';
 import type { SkillExecutionService } from './skill-execution-service';
 import type { SkillService } from './skill-service';
 import type { ToolchainSnapshotService } from './toolchain-snapshot-service';
@@ -123,6 +127,7 @@ export class RunService {
     private readonly skillAdapterService?: SkillAdapterService,
     private readonly toolchainSnapshotService?: ToolchainSnapshotService,
     private readonly fileArtifactService?: FileArtifactService,
+    private readonly dependencies?: SkillDependencyService,
   ) {}
 
   start(input: StartRunRequest): string {
@@ -175,6 +180,11 @@ export class RunService {
     return this.activeRuns.has(runId);
   }
 
+  acceptsOutput(runId: string): boolean {
+    const active = this.activeRuns.get(runId);
+    return Boolean(active && !active.controller.signal.aborted);
+  }
+
   /** 应用关闭前调用：取消所有活跃 Run，等待全部消费结束。 */
   async shutdown(): Promise<void> {
     for (const active of this.activeRuns.values()) {
@@ -210,8 +220,8 @@ export class RunService {
     try {
       const model = this.resolveModel();
       const webSearch = this.resolveWebSearch();
-      const skillInstructions = await this.resolveSkillInstructions(input);
       const bindingId = await this.resolveBindingId(runId, input);
+      const skillInstructions = await this.resolveSkillInstructions(input, bindingId);
       if (bindingId) {
         const active = this.activeRuns.get(runId);
         if (active) active.bindingId = bindingId;
@@ -248,6 +258,7 @@ export class RunService {
             : {}),
         }),
         signal: controller.signal,
+        ...(bindingId ? { maxToolRounds: 40 } : {}),
         ...(skillInstructions ? { skillInstructions } : {}),
       });
 
@@ -264,7 +275,8 @@ export class RunService {
       // 设计 §8：先清理子进程，再发布终态；清理失败走 forceFailure 兜底。
       if (this.skillExecutionService) {
         try {
-          await this.skillExecutionService.finishRun(runId);
+          const cleanup = await this.skillExecutionService.finishRun(runId);
+          if (cleanup.cleanupFailed > 0) throw new Error('未能确认全部子进程已停止');
         } catch (error) {
           terminalEvent = undefined;
           this.finalizeFailure(runId, `子进程清理失败：${describeError(error)}`);
@@ -273,7 +285,14 @@ export class RunService {
       }
       this.publish(terminalEvent);
     } catch (error) {
-      this.finalizeFailure(runId, describeError(error));
+      let message = describeError(error);
+      try {
+        const cleanup = await this.skillExecutionService?.finishRun(runId);
+        if (cleanup && cleanup.cleanupFailed > 0) message += '；子进程清理失败';
+      } catch (cleanupError) {
+        message += `；子进程清理失败：${describeError(cleanupError)}`;
+      }
+      this.finalizeFailure(runId, message);
     } finally {
       this.activeRuns.delete(runId);
     }
@@ -411,14 +430,33 @@ export class RunService {
    */
   private async resolveSkillInstructions(
     input: StartRunRequest,
+    bindingId?: string,
   ): Promise<SkillInstruction[] | undefined> {
     if (!input.skillBinding) return undefined;
-    const skill = this.store.skills.get(input.skillBinding.skillId);
+    const binding = bindingId ? this.store.executions.getBinding(bindingId) : undefined;
+    const skill = binding
+      ? this.store.skills.getBoundDetail(binding.skillRevisionId, binding.profileRevisionId)
+      : this.store.skills.get(input.skillBinding.skillId);
     if (!skill) throw new Error('Skill does not exist');
+    if (input.skillBinding.revisionId && input.skillBinding.revisionId !== skill.revision.id)
+      throw new Error('Skill revision changed; please restart');
     if (!skill.enabled) throw new Error(`Skill「${skill.name}」已停用`);
-    if (skill.trustStatus !== 'trusted')
+    if (
+      binding
+        ? !this.store.executions.isBindingAuthorized(binding.id)
+        : skill.trustStatus !== 'trusted'
+    )
       throw new Error(`Skill「${skill.name}」尚未信任，无法运行`);
+    if (skill.runtimeProfile?.profile.commands.length)
+      await this.skillService.verifyResourceRoot(skill);
     const instruction = await this.skillService.readSkillInstruction(skill);
+    if (binding && skill.runtimeProfile?.profile.commands.length) {
+      const commands = skill.runtimeProfile.profile.commands.map((command) => ({
+        commandId: command.commandId,
+        argumentSchema: command.argumentSchema,
+      }));
+      instruction.instruction += `\n\n算台运行约定：使用 skill_execute 调用以下固定命令，不执行原文中的 Shell、pip 或开发机路径。task_write_file 写入本 Run 的 work 目录（相对路径）；覆盖已有文件必须提供 expectedHash。skill_read_resource 读取本 Skill 相对路径。模板参数 assets/... 指向只读 Skill 模板。svg-export 和 template-merge 在独立 attempt 中执行，后续步骤使用返回的实际输出路径。pptx-validate 成功后才能用返回的 executionId/outputIds 调用 artifact_register_file；不自行声明验证状态。\n命令：${JSON.stringify(commands)}`;
+    }
     return [instruction];
   }
 
@@ -442,10 +480,14 @@ export class RunService {
   ): Promise<SkillResourceReadOutput> {
     const binding = this.store.executions.getBinding(bindingId);
     if (!binding) throw new Error(`Binding ${bindingId} does not exist`);
-    const skill = this.findSkillByRevision(binding.skillRevisionId);
+    const skill = this.store.skills.getBoundDetail(
+      binding.skillRevisionId,
+      binding.profileRevisionId,
+    );
     if (!skill) throw new Error('Skill not found for binding');
     if (!skill.enabled) throw new Error(`Skill「${skill.name}」已停用`);
-    if (skill.trustStatus !== 'trusted') throw new Error(`Skill「${skill.name}」尚未信任`);
+    if (!this.store.executions.isBindingAuthorized(bindingId))
+      throw new Error(`Skill「${skill.name}」尚未信任`);
     const resourceRoot = await this.skillService.resolveResourceRoot(skill);
     const target = path.resolve(resourceRoot, input.path);
     const realRoot = await realpath(resourceRoot);
@@ -465,33 +507,11 @@ export class RunService {
     input: TaskFileWriteInput,
   ): Promise<TaskFileWriteOutput> {
     const workDir = path.join(workspacePath, '.betterwork', 'tasks', taskId, 'runs', runId, 'work');
-    await mkdir(workDir, { recursive: true });
-    const target = path.resolve(workDir, input.path);
-    const realWorkDir = await realpath(workDir);
-    const realTarget = await realpath(target).catch(() => target);
-    if (!isWithinRoot(realWorkDir, realTarget)) {
-      throw new Error(`Task file path escapes work directory: ${input.path}`);
-    }
-    const contentBuffer = Buffer.from(input.content, 'utf8');
-    const contentHash = createHash('sha256').update(contentBuffer).digest('hex');
-    const existing = await readFile(realTarget).catch(() => null);
-    const created = existing === null;
-    if (!created && input.expectedHash) {
-      const actualHash = createHash('sha256').update(existing).digest('hex');
-      if (actualHash !== input.expectedHash) {
-        throw new Error(
-          `File ${input.path} has changed (expected ${input.expectedHash}, got ${actualHash}); re-read before overwriting.`,
-        );
-      }
-    }
-    await mkdir(path.dirname(realTarget), { recursive: true });
-    await writeFile(realTarget, contentBuffer);
-    return {
-      relativePath: path.relative(realWorkDir, realTarget),
-      bytesWritten: contentBuffer.byteLength,
-      contentHash,
-      created,
-    };
+    const relativeDirectory = path.relative(workspacePath, workDir);
+    managedPath(workspacePath, path.join(relativeDirectory, input.path), true);
+    const active = this.activeRuns.get(runId);
+    if (!active || active.controller.signal.aborted) throw new Error('Run is no longer active');
+    return writeManagedText(workDir, input.path, input.content, input.expectedHash);
   }
 
   /** 文件成果登记桥接：工具入参 → FileArtifactService → 结构化返回。 */
@@ -508,9 +528,9 @@ export class RunService {
       outputId: input.outputId,
       ...(input.artifactId ? { artifactId: input.artifactId } : {}),
       title: input.title,
-      mimeType: input.mimeType,
+      ...(input.mimeType ? { mimeType: input.mimeType } : {}),
       ...(input.description ? { description: input.description } : {}),
-      validation: input.validation,
+      ...(input.validation ? { validation: input.validation } : {}),
     });
     return {
       artifactId: result.artifactId,
@@ -537,10 +557,13 @@ export class RunService {
     if (binding.runId !== runId) {
       throw new Error(`Binding ${bindingId} does not belong to run ${runId}`);
     }
-    const skill = this.findSkillByRevision(binding.skillRevisionId);
+    const skill = this.store.skills.getBoundDetail(
+      binding.skillRevisionId,
+      binding.profileRevisionId,
+    );
     if (!skill) throw new Error('Skill not found for binding');
     if (!skill.enabled) throw new Error(`Skill「${skill.name}」已停用`);
-    if (skill.trustStatus !== 'trusted') {
+    if (!this.store.executions.isBindingAuthorized(bindingId)) {
       throw new Error(`Skill「${skill.name}」尚未信任`);
     }
     const profile = skill.runtimeProfile;
@@ -550,9 +573,10 @@ export class RunService {
       throw new Error(`Command ${input.commandId} is not registered in this Skill profile`);
     }
     const activeRun = this.activeRuns.get(runId);
-    if (!activeRun) throw new Error(`Run ${runId} is not active`);
-    const cwd = path.join(
-      activeRun.workspacePath,
+    if (!activeRun || activeRun.controller.signal.aborted)
+      throw new Error(`Run ${runId} is not active`);
+    z.fromJSONSchema(command.argumentSchema).parse(input.args);
+    const workRelativePath = path.join(
       '.betterwork',
       'tasks',
       activeRun.taskId,
@@ -560,23 +584,37 @@ export class RunService {
       runId,
       'work',
     );
-    await mkdir(cwd, { recursive: true });
+    const cwd = path.dirname(
+      managedPath(activeRun.workspacePath, path.join(workRelativePath, '.ready'), true),
+    );
 
     const adapter = this.skillAdapterService?.findAdapter(skill.revision.contentHash);
     if (adapter) {
       return this.executeWithAdapter(runId, bindingId, input, command, skill, adapter, cwd);
     }
 
-    const argv = this.buildArgv(command, input.args);
+    if (
+      !command.executableKey.startsWith('scripts/') ||
+      !command.executableKey.endsWith('.py') ||
+      command.validatorId
+    ) {
+      throw new Error('未匹配受支持的执行适配预设；通用入口必须是 Skill 内已授权的 scripts/*.py');
+    }
+    const resourceRoot = await this.skillService.verifyResourceRoot(skill);
+    const script = managedPath(resourceRoot, command.executableKey);
+    if (!binding.environmentId || !this.dependencies) throw new Error('绑定的运行环境不可用');
+    const python = this.dependencies.resolveEnvironmentPython(binding.environmentId);
+    const argv = [script, ...this.buildArgv(command, input.args)];
     const env = this.buildCleanEnv();
     const execution = await this.skillExecutionService.startExecution({
       runId,
       bindingId,
+      signal: this.runSignal(runId),
       toolCallId: input.toolCallId,
       commandId: input.commandId,
       args: input.args,
       argv,
-      executable: command.executableKey,
+      executable: python,
       cwd,
       env,
       timeoutMs: command.timeoutMs,
@@ -596,28 +634,36 @@ export class RunService {
     bindingId: string,
     input: SkillCommandExecuteInput,
     command: RuntimeProfileCommand,
-    skill: NonNullable<ReturnType<typeof this.findSkillByRevision>>,
+    skill: NonNullable<ReturnType<AppStore['skills']['getBoundDetail']>>,
     adapter: SkillAdapter,
     cwd: string,
   ): Promise<SkillCommandExecuteOutput> {
     if (!this.skillExecutionService) {
       throw new Error('Skill execution service is not available');
     }
-    const skillScriptsRoot = await this.skillService.resolveResourceRoot(skill);
-    const toolchainSnapshotRoot = this.resolveToolchainSnapshotRoot();
+    const skillScriptsRoot = await this.skillService.verifyResourceRoot(skill);
+    const binding = this.store.executions.getBinding(bindingId);
+    if (!binding?.environmentId || !this.dependencies) throw new Error('绑定的运行环境不可用');
+    const toolchainSnapshotRoot = this.resolveToolchainSnapshotRoot(binding.dependencySnapshotIds);
+    for (const snapshotId of binding.dependencySnapshotIds) {
+      const verification = await this.toolchainSnapshotService?.verifySnapshot(snapshotId);
+      if (!verification?.valid) throw new Error('绑定的工具链快照内容已变化，请重新登记并确认授权');
+    }
     const adapterContext: AdapterContext = {
       skillScriptsRoot,
       ...(toolchainSnapshotRoot ? { toolchainSnapshotRoot, pptmHome: toolchainSnapshotRoot } : {}),
-      managedPythonPath: 'python3',
+      managedPythonPath: this.dependencies.resolveEnvironmentPython(binding.environmentId),
       runWorkDir: cwd,
     };
-    const resolved = adapter.resolveCommand(input.commandId, input.args, adapterContext);
+    const attemptArgs = preparePptAttempt(input.commandId, input.args, cwd, skillScriptsRoot);
+    const resolved = adapter.resolveCommand(input.commandId, attemptArgs, adapterContext);
     if (!resolved) {
       throw new Error(`Adapter ${adapter.name} cannot resolve command ${input.commandId}`);
     }
     const execution = await this.skillExecutionService.startExecution({
       runId,
       bindingId,
+      signal: this.runSignal(runId),
       toolCallId: input.toolCallId,
       commandId: input.commandId,
       args: input.args,
@@ -628,44 +674,40 @@ export class RunService {
       timeoutMs: command.timeoutMs,
       maxOutputBytes: 32 * 1024,
       maxLogBytes: 10 * 1024 * 1024,
-      expectedOutputs: command.expectedOutputs,
-      ...(command.validatorId ? { validatorId: command.validatorId } : {}),
+      expectedOutputs:
+        input.commandId === 'pptx-validate' && resolved.argv[1]
+          ? [path.relative(cwd, resolved.argv[1])]
+          : command.expectedOutputs,
+      ...(input.commandId === 'pptx-validate' ? { validatorId: 'pptx-validate' } : {}),
       workDirKey: createHash('sha256').update(cwd).digest('hex'),
     });
     const awaited = await this.skillExecutionService.awaitExecution(execution.id);
-    if (adapter.interpretOutput) {
-      const overridden = adapter.interpretOutput(input.commandId, {
-        executionId: awaited.execution.id,
-        status: awaited.execution.status,
-        stdout: awaited.stdout,
-        stderr: awaited.stderr,
-      });
-      if (overridden) return overridden;
-    }
-    return this.formatExecutionResult(awaited);
+    const result = this.formatExecutionResult(awaited);
+    return { ...result, message: `${result.message}；本次参数：${JSON.stringify(attemptArgs)}` };
   }
 
-  /** 取最新登记的工具链快照作为 PPTM_HOME；尚无快照或服务时返回 undefined。 */
-  private resolveToolchainSnapshotRoot(): string | undefined {
-    if (!this.toolchainSnapshotService) return undefined;
-    const snapshots = this.store.snapshots.listSnapshots();
-    const latest = snapshots[0];
-    if (!latest) return undefined;
-    return this.toolchainSnapshotService.resolveSnapshotRoot(latest);
+  private resolveToolchainSnapshotRoot(snapshotIds: string[]): string | undefined {
+    if (!this.toolchainSnapshotService || snapshotIds.length === 0) return undefined;
+    if (snapshotIds.length !== 1) throw new Error('PPT 预设需要明确绑定一个工具链快照');
+    const id = snapshotIds[0];
+    const snapshot = id ? this.store.snapshots.getSnapshot(id) : undefined;
+    if (!snapshot) throw new Error('绑定的工具链快照不存在');
+    return this.toolchainSnapshotService.resolveSnapshotRoot(snapshot);
   }
 
-  private findSkillByRevision(revisionId: string) {
-    const summary = this.store.skills.list().find((s) => s.currentRevisionId === revisionId);
-    if (!summary) return undefined;
-    return this.store.skills.get(summary.id);
+  private runSignal(runId: string): AbortSignal {
+    const active = this.activeRuns.get(runId);
+    if (!active || active.controller.signal.aborted) throw new Error('Run is no longer active');
+    return active.controller.signal;
   }
 
   private buildArgv(command: RuntimeProfileCommand, args: Record<string, unknown>): string[] {
     const argv: string[] = [];
     for (const [key, value] of Object.entries(args)) {
       if (value === undefined || value === null) continue;
+      if (value === false) continue;
       argv.push(`--${key}`);
-      if (typeof value === 'boolean') continue;
+      if (value === true) continue;
       if (typeof value === 'string' || typeof value === 'number') {
         argv.push(String(value));
       } else {

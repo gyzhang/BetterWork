@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 
 import type { DependencySnapshot, DependencySnapshotExclusion } from '@betterwork/agent-protocol';
+import { z } from 'zod';
 
 import type {
   DependencyFileSystem,
@@ -260,10 +261,36 @@ export class ToolchainSnapshotService {
         mismatched: [],
       };
     }
-    const manifest = JSON.parse(new TextDecoder().decode(manifestBytes)) as {
-      files?: Array<{ path?: string; sha256?: string }>;
-    };
-    const files = manifest.files ?? [];
+    let rawManifest: unknown;
+    try {
+      rawManifest = JSON.parse(new TextDecoder().decode(manifestBytes)) as unknown;
+    } catch {
+      return { valid: false, checkedFiles: 0, missing: [], mismatched: [snapshotManifestFileName] };
+    }
+    const parsed = z
+      .object({
+        manifestVersion: z.literal(1),
+        files: z.array(
+          z
+            .object({
+              path: z.string().min(1),
+              sha256: z.string().regex(/^[a-f0-9]{64}$/u),
+              bytes: z.number().int().nonnegative(),
+            })
+            .strict(),
+        ),
+      })
+      .passthrough()
+      .safeParse(rawManifest);
+    if (
+      !parsed.success ||
+      sha256Of(
+        new TextEncoder().encode(JSON.stringify({ version: 1, files: parsed.data.files })),
+      ) !== snapshot.manifestHash
+    ) {
+      return { valid: false, checkedFiles: 0, missing: [], mismatched: [snapshotManifestFileName] };
+    }
+    const files = parsed.data.files;
     const missing: string[] = [];
     const mismatched: string[] = [];
     for (const file of files) {

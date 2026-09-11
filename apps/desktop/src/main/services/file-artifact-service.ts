@@ -1,9 +1,10 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { copyFile, lstat, mkdir, readFile, rm } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import type { RegisterFileArtifactResult, ValidationState } from '@betterwork/agent-protocol';
 
+import { hashBytes, readManagedFile } from '../infrastructure/managed-files';
 import type { AppStore } from '../persistence';
 
 export type ArtifactFileSourceResolver = (executionId: string, outputId: string) => Promise<string>;
@@ -14,9 +15,9 @@ export interface RegisterFileServiceInput {
   outputId: string;
   artifactId?: string;
   title: string;
-  mimeType: string;
+  mimeType?: string;
   description?: string;
-  validation: ValidationState;
+  validation?: ValidationState;
 }
 
 /**
@@ -30,6 +31,7 @@ export class FileArtifactService {
     private readonly store: AppStore,
     private readonly artifactFilesRoot: string,
     private readonly sourceResolver: ArtifactFileSourceResolver,
+    private readonly acceptsRun: (runId: string) => boolean = () => true,
   ) {}
 
   async register(input: RegisterFileServiceInput): Promise<RegisterFileArtifactResult> {
@@ -50,54 +52,71 @@ export class FileArtifactService {
 
     const sourcePath = await this.sourceResolver(input.executionId, input.outputId);
 
-    const stat = await lstat(sourcePath);
-    if (!stat.isFile()) {
-      throw new Error('Output path is not a regular file');
-    }
-
-    const fileBuffer = await readFile(sourcePath);
-    const fileHash = createHash('sha256').update(fileBuffer).digest('hex');
-    const fileSize = stat.size;
-
-    const versionId = randomUUID();
+    const run = this.store.runs.get(input.runId);
+    const context = run ? this.store.tasks.getRunContext(run.taskId, run.sessionId) : undefined;
+    if (!context) throw new Error('Run context is not available');
+    const output = this.store.executions
+      .getVerifiedOutputs(input.executionId)
+      .find((entry) => entry.outputId === input.outputId);
+    if (!output || output.validation.structure !== 'passed')
+      throw new Error('Host-verified structure report is required');
+    if (input.validation?.structure === 'failed') throw new Error('Structure validation failed');
+    const fileBuffer = readManagedFile(
+      context.workspacePath,
+      path.relative(context.workspacePath, sourcePath),
+    );
+    const fileHash = hashBytes(fileBuffer);
+    if (fileHash !== output.fileHash || fileBuffer.length !== output.fileSize)
+      throw new Error('Output hash does not match its validation report');
+    const reportPath = `${sourcePath}.report.json`;
+    const report = readManagedFile(
+      context.workspacePath,
+      path.relative(context.workspacePath, reportPath),
+    );
+    if (hashBytes(report) !== output.reportHash) throw new Error('Validation report hash mismatch');
+    const fileSize = fileBuffer.length;
     const fileKey = `${input.executionId}/${input.outputId}`;
-
+    const versionId = randomUUID();
     const destDir = path.join(this.artifactFilesRoot, versionId);
     const destPath = path.join(destDir, 'output');
-    await mkdir(destDir, { recursive: true });
-    await copyFile(sourcePath, destPath);
-
     try {
-      return this.store.artifacts.registerFile({
-        taskId,
-        ...(input.artifactId ? { artifactId: input.artifactId } : {}),
-        versionId,
-        title: input.title,
-        runId: input.runId,
-        mimeType: input.mimeType,
-        fileSize,
-        fileHash,
-        fileKey,
-        executionId: input.executionId,
-        ...(input.description ? { description: input.description } : {}),
-        validation: input.validation,
+      return this.store.transaction(() => {
+        if (
+          this.store.runs.get(input.runId)?.status !== 'running' ||
+          !this.acceptsRun(input.runId) ||
+          !this.store.executions.isBindingAuthorized(execution.bindingId)
+        )
+          throw new Error('Run or Skill authorization is no longer active');
+        const existing = this.store.artifacts.findRegisteredFile(fileKey);
+        if (existing) {
+          if (input.artifactId && input.artifactId !== existing.artifactId)
+            throw new Error('Output already belongs to another artifact');
+          return existing;
+        }
+        mkdirSync(destDir, { recursive: true });
+        writeFileSync(destPath, fileBuffer, { flag: 'wx', mode: 0o400 });
+        return this.store.artifacts.registerFile({
+          taskId,
+          ...(input.artifactId ? { artifactId: input.artifactId } : {}),
+          versionId,
+          title: input.title,
+          runId: input.runId,
+          mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          fileSize,
+          fileHash,
+          fileKey,
+          executionId: input.executionId,
+          ...(input.description ? { description: input.description } : {}),
+          validation: output.validation,
+        });
       });
     } catch (error) {
-      await this.removeQuietly(destPath);
-      await this.removeQuietly(destDir);
+      rmSync(destDir, { recursive: true, force: true });
       throw error;
     }
   }
 
   resolveStoredPath(versionId: string): string {
     return path.join(this.artifactFilesRoot, versionId, 'output');
-  }
-
-  private async removeQuietly(target: string): Promise<void> {
-    try {
-      await rm(target, { force: true });
-    } catch {
-      // cleanup is best-effort
-    }
   }
 }

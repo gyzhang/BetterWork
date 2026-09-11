@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { symlink } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -72,6 +72,7 @@ const seedSkill = (store: AppStore): { grantId: string; profileRevisionId: strin
     scopeHash: 'scope',
     source: 'user',
   });
+  store.skills.setTrustPreference('skill-1', 'trusted');
   return { grantId, profileRevisionId: profileId };
 };
 
@@ -137,221 +138,175 @@ const openService = (
   return { store, service };
 };
 
+const hash = (value: string): string => createHash('sha256').update(value).digest('hex');
+const fixture = () => {
+  const root = temporaryDirectory();
+  const file = path.join(root, 'slides.pptx');
+  const report = JSON.stringify({ issues: [], fileHash: hash('PK-content') });
+  writeFileSync(file, 'PK-content');
+  writeFileSync(`${file}.report.json`, report);
+  const { store, service } = openService(temporaryDirectory(), async () => file);
+  seedExecution(store, root, { status: 'queued', outputIds: [] });
+  const output = {
+    outputId: 'slides.pptx',
+    relativePath: 'slides.pptx',
+    fileHash: hash('PK-content'),
+    fileSize: 10,
+    reportHash: hash(report),
+    validation: { ...passedValidation, visual: 'not-checked' as const },
+  };
+  store.executions.saveVerifiedOutputs('exec-1', [output]);
+  store.executions.finishExecution('exec-1', 'succeeded', {
+    outputIds: ['slides.pptx'],
+    finishedAt: Date.now(),
+  });
+  const input = {
+    runId: 'run-1',
+    executionId: 'exec-1',
+    outputId: 'slides.pptx',
+    title: '季度报告',
+    mimeType,
+    validation: passedValidation,
+  };
+  return { root, file, store, service, output, input };
+};
+
 describe('FileArtifactService', () => {
-  it('registers a file artifact from a succeeded execution output', async () => {
-    const workDir = temporaryDirectory();
-    const artifactFilesRoot = temporaryDirectory();
-    const outputDir = path.join(workDir, 'output');
-    mkdirSync(outputDir, { recursive: true });
-    const outputFile = path.join(outputDir, 'slides.pptx');
-    const fileContent = Buffer.from('PK-fake-pptx-content');
-    writeFileSync(outputFile, fileContent);
-
-    const { store, service } = openService(artifactFilesRoot, async () => outputFile);
-    const seed = seedExecution(store, workDir);
-
-    const result = await service.register({
-      runId: seed.runId,
-      executionId: seed.executionId,
-      outputId: 'slides.pptx',
-      title: '季度报告',
-      mimeType,
-      validation: passedValidation,
+  it('registers host-verified bytes and preserves unchecked visual status despite model claims', async () => {
+    const f = fixture();
+    const result = await f.service.register(f.input);
+    expect(result.validation.visual).toBe('not-checked');
+    expect(result.fileHash).toBe(f.output.fileHash);
+    const { readFile } = await import('node:fs/promises');
+    expect((await readFile(f.service.resolveStoredPath(result.versionId))).toString()).toBe(
+      'PK-content',
+    );
+    f.store.close();
+  });
+  it('deduplicates concurrent registrations for the same execution and output', async () => {
+    const f = fixture();
+    const [first, second] = await Promise.all([
+      f.service.register(f.input),
+      f.service.register(f.input),
+    ]);
+    expect(first).toEqual(second);
+    expect(f.store.artifacts.list()).toHaveLength(1);
+    f.store.close();
+  });
+  it('adds a version only for a new validated execution output', async () => {
+    const f = fixture();
+    const first = await f.service.register(f.input);
+    const original = f.store.executions.getExecution('exec-1')!;
+    f.store.executions.createExecution({
+      id: 'exec-2',
+      runId: 'run-1',
+      bindingId: original.bindingId,
+      toolCallId: 'second',
+      commandId: 'pptx-validate',
+      argumentDigest: 'args',
+      inputHashes: [],
+      workDirKey: 'work',
+      attemptKey: 'second',
     });
-
-    expect(result.artifactId).toBeTruthy();
-    expect(result.versionId).toBeTruthy();
-    expect(result.versionNumber).toBe(1);
-    expect(result.fileHash).toBe(createHash('sha256').update(fileContent).digest('hex'));
-    expect(result.fileSize).toBe(fileContent.length);
-    expect(service.resolveStoredPath(result.versionId)).toContain(artifactFilesRoot);
-  });
-
-  it('rejects when execution does not belong to the run', async () => {
-    const workDir = temporaryDirectory();
-    const artifactFilesRoot = temporaryDirectory();
-    const { store, service } = openService(artifactFilesRoot, async () => '/tmp/nope');
-    seedExecution(store, workDir);
-
-    const otherWorkspace = store.workspaces.getOrCreate('/tmp/other', '其他');
-    const otherTask = store.tasks.create(otherWorkspace.id, '其他任务', '描述');
-    const otherRunId = 'run-other';
-    store.runs.create({
-      id: otherRunId,
-      taskId: otherTask.task.id,
-      sessionId: otherTask.sessionId,
-      prompt: 'prompt',
-      status: 'running',
-      createdAt: Date.now(),
+    f.store.executions.saveVerifiedOutputs('exec-2', [f.output]);
+    f.store.executions.finishExecution('exec-2', 'succeeded', {
+      outputIds: ['slides.pptx'],
+      finishedAt: Date.now(),
     });
-
-    await expect(
-      service.register({
-        runId: otherRunId,
-        executionId: 'exec-1',
-        outputId: 'slides.pptx',
-        title: '季度报告',
-        mimeType,
-        validation: passedValidation,
-      }),
-    ).rejects.toThrow(/does not belong to this run/);
-  });
-
-  it('rejects when execution has not succeeded', async () => {
-    const workDir = temporaryDirectory();
-    const artifactFilesRoot = temporaryDirectory();
-    const { store, service } = openService(artifactFilesRoot, async () => '/tmp/nope');
-    seedExecution(store, workDir, { status: 'failed', outputIds: [] });
-
-    await expect(
-      service.register({
-        runId: 'run-1',
-        executionId: 'exec-1',
-        outputId: 'slides.pptx',
-        title: '季度报告',
-        mimeType,
-        validation: passedValidation,
-      }),
-    ).rejects.toThrow(/Only succeeded executions/);
-  });
-
-  it('rejects when output is not registered for the execution', async () => {
-    const workDir = temporaryDirectory();
-    const artifactFilesRoot = temporaryDirectory();
-    const { store, service } = openService(artifactFilesRoot, async () => '/tmp/nope');
-    seedExecution(store, workDir, { status: 'succeeded', outputIds: ['other-file.xlsx'] });
-
-    await expect(
-      service.register({
-        runId: 'run-1',
-        executionId: 'exec-1',
-        outputId: 'slides.pptx',
-        title: '季度报告',
-        mimeType,
-        validation: passedValidation,
-      }),
-    ).rejects.toThrow(/Output is not registered/);
-  });
-
-  it('rejects symbolic link output paths', async () => {
-    const workDir = temporaryDirectory();
-    const artifactFilesRoot = temporaryDirectory();
-    const outputDir = path.join(workDir, 'output');
-    mkdirSync(outputDir, { recursive: true });
-
-    const realFile = path.join(outputDir, 'real.pptx');
-    writeFileSync(realFile, 'real-content');
-    const linkFile = path.join(outputDir, 'slides.pptx');
-    await symlink(realFile, linkFile);
-
-    const { store, service } = openService(artifactFilesRoot, async () => linkFile);
-    seedExecution(store, workDir);
-
-    await expect(
-      service.register({
-        runId: 'run-1',
-        executionId: 'exec-1',
-        outputId: 'slides.pptx',
-        title: '季度报告',
-        mimeType,
-        validation: passedValidation,
-      }),
-    ).rejects.toThrow(/not a regular file/);
-  });
-
-  it('cleans up copied file when DB registration fails', async () => {
-    const workDir = temporaryDirectory();
-    const artifactFilesRoot = temporaryDirectory();
-    const outputDir = path.join(workDir, 'output');
-    mkdirSync(outputDir, { recursive: true });
-    const outputFile = path.join(outputDir, 'slides.pptx');
-    writeFileSync(outputFile, 'file-content');
-
-    const { store, service } = openService(artifactFilesRoot, async () => outputFile);
-    seedExecution(store, workDir);
-
-    store.close();
-
-    await expect(
-      service.register({
-        runId: 'run-1',
-        executionId: 'exec-1',
-        outputId: 'slides.pptx',
-        title: '季度报告',
-        mimeType,
-        validation: passedValidation,
-      }),
-    ).rejects.toThrow();
-
-    const { readdir } = await import('node:fs/promises');
-    const files = await readdir(artifactFilesRoot).catch(() => []);
-    expect(files).toHaveLength(0);
-  });
-
-  it('creates a new version when registering the same artifact twice', async () => {
-    const workDir = temporaryDirectory();
-    const artifactFilesRoot = temporaryDirectory();
-    const outputDir = path.join(workDir, 'output');
-    mkdirSync(outputDir, { recursive: true });
-    const outputFile = path.join(outputDir, 'slides.pptx');
-    writeFileSync(outputFile, 'version-1-content');
-
-    const { store, service } = openService(artifactFilesRoot, async () => outputFile);
-    const seed = seedExecution(store, workDir);
-
-    const first = await service.register({
-      runId: seed.runId,
-      executionId: seed.executionId,
-      outputId: 'slides.pptx',
-      title: '季度报告',
-      mimeType,
-      validation: passedValidation,
-    });
-
-    writeFileSync(outputFile, 'version-2-content');
-
-    const second = await service.register({
-      runId: seed.runId,
-      executionId: seed.executionId,
-      outputId: 'slides.pptx',
+    const second = await f.service.register({
+      ...f.input,
+      executionId: 'exec-2',
       artifactId: first.artifactId,
-      title: '季度报告',
-      mimeType,
-      validation: passedValidation,
     });
-
-    expect(second.artifactId).toBe(first.artifactId);
-    expect(second.versionId).not.toBe(first.versionId);
     expect(second.versionNumber).toBe(2);
-    expect(second.fileHash).not.toBe(first.fileHash);
+    expect(second.versionId).not.toBe(first.versionId);
+    f.store.close();
   });
-
-  it('stored path points to a readable file after registration', async () => {
-    const workDir = temporaryDirectory();
-    const artifactFilesRoot = temporaryDirectory();
-    const outputDir = path.join(workDir, 'output');
-    mkdirSync(outputDir, { recursive: true });
-    const content = Buffer.from('PK-fake-pptx');
-    const outputFile = path.join(outputDir, 'slides.pptx');
-    writeFileSync(outputFile, content);
-
-    const { store, service } = openService(artifactFilesRoot, async () => outputFile);
-    const seed = seedExecution(store, workDir);
-
-    const result = await service.register({
-      runId: seed.runId,
-      executionId: seed.executionId,
-      outputId: 'slides.pptx',
-      title: '季度报告',
-      mimeType,
-      validation: passedValidation,
+  it('rejects cross-run and unknown output references', async () => {
+    const f = fixture();
+    await expect(f.service.register({ ...f.input, runId: 'other' })).rejects.toThrow(
+      'does not belong',
+    );
+    await expect(f.service.register({ ...f.input, outputId: 'unknown' })).rejects.toThrow(
+      'not registered',
+    );
+    f.store.close();
+  });
+  it('rejects modified bytes and modified reports', async () => {
+    const f = fixture();
+    writeFileSync(f.file, 'PK-changed');
+    await expect(f.service.register(f.input)).rejects.toThrow('hash');
+    writeFileSync(f.file, 'PK-content');
+    writeFileSync(`${f.file}.report.json`, '{}');
+    await expect(f.service.register(f.input)).rejects.toThrow('report hash');
+    f.store.close();
+  });
+  it('rejects failed or absent host validation even if model says passed', async () => {
+    const f = fixture();
+    await expect(
+      f.service.register({ ...f.input, validation: { ...passedValidation, structure: 'failed' } }),
+    ).rejects.toThrow('validation failed');
+    const missing = f.store.executions.getExecution('exec-1')!;
+    f.store.executions.createExecution({
+      id: 'unverified',
+      runId: 'run-1',
+      bindingId: missing.bindingId,
+      toolCallId: 'u',
+      commandId: 'fake',
+      argumentDigest: 'a',
+      inputHashes: [],
+      workDirKey: 'w',
+      attemptKey: 'u',
     });
-
-    const { readFile, stat } = await import('node:fs/promises');
-    const storedPath = service.resolveStoredPath(result.versionId);
-    const storedContent = await readFile(storedPath);
-    const storedStat = await stat(storedPath);
-    expect(storedContent).toEqual(content);
-    expect(storedStat.size).toBe(content.length);
+    f.store.executions.finishExecution('unverified', 'succeeded', {
+      outputIds: ['slides.pptx'],
+      finishedAt: Date.now(),
+    });
+    await expect(f.service.register({ ...f.input, executionId: 'unverified' })).rejects.toThrow(
+      'Host-verified',
+    );
+    f.store.close();
+  });
+  it('rejects symlinks and hard links without modifying their targets', async () => {
+    const f = fixture();
+    const { unlink, link } = await import('node:fs/promises');
+    const target = path.join(f.root, 'target.pptx');
+    writeFileSync(target, 'PK-content');
+    await unlink(f.file);
+    await symlink(target, f.file);
+    await expect(f.service.register(f.input)).rejects.toThrow('symbolic link');
+    await unlink(f.file);
+    await link(target, f.file);
+    await expect(f.service.register(f.input)).rejects.toThrow('regular');
+    f.store.close();
+  });
+  it('rechecks cancellation and revoked trust after asynchronous source resolution', async () => {
+    const f = fixture();
+    const cancellation = new FileArtifactService(f.store, temporaryDirectory(), async () => {
+      f.store.runs.forceFailure('run-1', 'cancelled during resolution', Date.now());
+      return f.file;
+    });
+    await expect(cancellation.register(f.input)).rejects.toThrow('no longer active');
+    expect(f.store.artifacts.list()).toHaveLength(0);
+    f.store.close();
+    const g = fixture();
+    const revoked = new FileArtifactService(g.store, temporaryDirectory(), async () => {
+      g.store.skills.setTrustPreference('skill-1', 'revoked');
+      return g.file;
+    });
+    await expect(revoked.register(g.input)).rejects.toThrow('no longer active');
+    expect(g.store.artifacts.list()).toHaveLength(0);
+    g.store.close();
+  });
+  it('cleans copied files if the database rejects registration', async () => {
+    const f = fixture();
+    const filesRoot = temporaryDirectory();
+    const service = new FileArtifactService(f.store, filesRoot, async () => f.file);
+    await expect(service.register({ ...f.input, artifactId: 'missing' })).rejects.toThrow(
+      'does not belong',
+    );
+    const { readdir } = await import('node:fs/promises');
+    expect(await readdir(filesRoot)).toEqual([]);
+    f.store.close();
   });
 });

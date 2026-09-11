@@ -1,5 +1,6 @@
 import path from 'node:path';
 
+import type { RuntimeProfileDraft } from '@betterwork/agent-protocol';
 import type { SkillCommandExecuteOutput } from '@betterwork/tool-runtime';
 
 import type {
@@ -39,8 +40,13 @@ const stringArg = (args: Record<string, unknown>, key: string): string => {
   return value;
 };
 
-const resolveWorkPath = (value: string, workDir: string): string =>
-  path.isAbsolute(value) ? value : path.resolve(workDir, value);
+const resolveWorkPath = (value: string, workDir: string): string => {
+  const target = path.resolve(workDir, value);
+  const relative = path.relative(workDir, target);
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative))
+    throw new Error('Command path escapes work directory');
+  return target;
+};
 
 class PptGenerationAdapter implements SkillAdapter {
   readonly name = 'ppt-generation';
@@ -89,6 +95,13 @@ class PptGenerationAdapter implements SkillAdapter {
       throw new Error('project-init requires PPTM_HOME or toolchain snapshot');
     }
     const projectName = stringArg(args, 'project_name');
+    if (
+      projectName.startsWith('-') ||
+      projectName === '.' ||
+      projectName === '..' ||
+      /[\\/]/u.test(projectName)
+    )
+      throw new Error('Project name must not be a path or option');
     const script = path.join(pptmHome, 'skills', 'ppt-master', 'scripts', 'project_manager.py');
     const argv = [
       script,
@@ -152,7 +165,10 @@ class PptGenerationAdapter implements SkillAdapter {
     context: AdapterContext,
   ): ResolvedCommand {
     const sourcePptx = resolveWorkPath(stringArg(args, 'source_pptx'), context.runWorkDir);
-    const templatePath = resolveWorkPath(stringArg(args, 'template_path'), context.runWorkDir);
+    const templateArg = stringArg(args, 'template_path');
+    const templatePath = templateArg.startsWith('assets/')
+      ? resolveWorkPath(templateArg, context.skillScriptsRoot)
+      : resolveWorkPath(templateArg, context.runWorkDir);
     const finalOutput = resolveWorkPath(stringArg(args, 'final_output'), context.runWorkDir);
     const configPath = resolveWorkPath(stringArg(args, 'config_path'), context.runWorkDir);
     const script = path.join(context.skillScriptsRoot, 'scripts', 'merge_into_template.py');
@@ -210,7 +226,7 @@ class PptGenerationAdapter implements SkillAdapter {
  */
 const interpretValidateOutput = (raw: AwaitedExecutionSnapshot): SkillCommandExecuteOutput => {
   const issues = parseValidateIssues(raw.stdout);
-  if (issues.length === 0 && raw.status === 'succeeded') {
+  if (issues.length === 0 && raw.status === 'succeeded' && isCompleteValidationReport(raw.stdout)) {
     return {
       executionId: raw.executionId,
       status: 'succeeded',
@@ -233,6 +249,18 @@ const interpretValidateOutput = (raw: AwaitedExecutionSnapshot): SkillCommandExe
   };
 };
 
+export const isCompleteValidationReport = (stdout: string): boolean => {
+  const lines = stdout
+    .trim()
+    .split(/\r?\n/u)
+    .map((line) => line.trim());
+  return (
+    lines.length === 2 &&
+    /^== .+ {2}\(parts=[1-9]\d*, slides=[1-9]\d*\)$/u.test(lines[0] ?? '') &&
+    lines[1] === 'OK: 未发现触发修复的结构问题'
+  );
+};
+
 const parseValidateIssues = (stdout: string): string[] => {
   const issues: string[] = [];
   for (const line of stdout.split('\n')) {
@@ -252,3 +280,42 @@ export const pptGenerationAdapterFactory: SkillAdapterFactory = {
 
 /** 导出供测试使用。 */
 export const __internal = { parseValidateIssues, interpretValidateOutput };
+
+/** Exact source package reviewed locally; no private content is distributed. */
+export const supportedPptContentHashes = [
+  '4681d64c1736d8162493e9b2da6d2a54bd079338ec46dd92ecdbdaa2f1ee52e1',
+];
+
+export function suggestedPptProfile(contentHash: string): RuntimeProfileDraft | undefined {
+  if (!supportedPptContentHashes.includes(contentHash)) return undefined;
+  const argumentsByCommand: Record<string, string[]> = {
+    'project-init': ['project_name'],
+    'icon-sync': ['project_dir', 'icons'],
+    'svg-export': ['project_dir'],
+    'template-merge': ['source_pptx', 'template_path', 'final_output', 'config_path'],
+    'pptx-validate': ['pptx_path'],
+  };
+  return {
+    commands: Object.entries(argumentsByCommand).map(([commandId, keys]) => ({
+      commandId,
+      label: commandId,
+      executableKey: 'managed-python',
+      timeoutMs: 300_000,
+      argumentSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: Object.fromEntries(
+          keys.map((key) => [
+            key,
+            key === 'icons' ? { type: 'array', items: { type: 'string' } } : { type: 'string' },
+          ]),
+        ),
+        required: keys,
+      },
+      expectedOutputs: [],
+      ...(commandId === 'pptx-validate' ? { validatorId: 'pptx-validate' } : {}),
+    })),
+    environmentRequirements: ['python', 'ppt-master'],
+    outputContract: { outputPaths: [] },
+  };
+}

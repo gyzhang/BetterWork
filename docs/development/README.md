@@ -1,7 +1,7 @@
 # 阶段 A 开发执行手册（供 5.6 Luna 使用）
 
 - 日期：2026-09-08
-- 状态：任务规划完成，所有实现任务尚未开始。本手册不自动把 Proposed ADR 改为 Accepted。
+- 状态：阶段 A 已有实现；2026-09-11 完成一轮代码补救，真实样本与安装验收仍未完成。本手册不自动把 Proposed ADR 改为 Accepted。
 - 适用：用户逐项交给 5.6 Luna 执行；任务卡给出明确输入/输出和验收，不依赖模型猜测历史对话，不对模型能力作额外假设。
 - 代码基线：编写时 HEAD `3720b25`，开始每项任务必须重新核对 HEAD 与工作区，不用本文旧基线覆盖新代码。
 
@@ -44,7 +44,7 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 
 ## 3. 任务板
 
-状态只使用 todo / doing / blocked / done。实现者只更新本次任务行，记录实际完成时间和证据链接；当前全部 todo，不表示当前所有任务都满足开工条件。
+状态只使用 todo / doing / blocked / done。实现者只更新本次任务行，记录实际完成时间和证据链接；状态按实际验收证据记录，不表示后续任务都满足开工条件。2026-09-11 根据[审查](../reviews/2026-09-10-phase-a-progress-quality.md)与[修正记录](../reviews/2026-09-11-phase-a-repairs.md)将缺少必需验收的 A16/A17/A19/A20 回退为 doing，保留历史实现证据。
 
 | 编号 | 工作 | 前置 | 状态 | 证据/完成时间 |
 | --- | --- | --- | --- | --- |
@@ -60,15 +60,15 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | A09 | Windows Job supervisor | A08 | blocked | 本机无 Windows 构建与运行环境。2026-09-09 用户明确授权跳过本卡先行推进 A10–A12；A2/A21 的跨平台门槛保留，不得据此把 Windows 标为已验收 |
 | A10 | Python 环境准备作业 | A09 | done | [依赖服务测试](../../apps/desktop/src/main/services/skill-dependency-service.test.ts)（20 项离线注入 + 真实 venv/import 探测验收）、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)、[依赖验证记录](dependency-verification.md)，2026-09-09 02:04；按用户授权在 A09 blocked 时先行 |
 | A11 | 外部工具链快照与依赖锁 | A10 | done | [快照服务测试](../../apps/desktop/src/main/services/toolchain-snapshot-service.test.ts)、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)、[样本包锁](../../resources/dependency-locks/ppt-generation-expert-darwin-arm64-cp312.json)；真实快照 12,981 文件 + 真实环境准备 + CLI 探测于 macOS arm64 通过，见[依赖验证记录](dependency-verification.md) §4/§5，2026-09-09 02:33 |
-| A12 | 运行配置/环境 UI 与 A2 验收 | A11 | doing | 代码与自动测试完成：[IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)、[面板测试](../../apps/desktop/src/renderer/src/components/skills/DependencyPanel.test.tsx)、`npm run verify` 退出 0（32 文件 / 263 测试），真实启动核对 v6 迁移与无错误日志，2026-09-09 03:13。**A2 里程碑的本机手工旅程待人执行**，通过后才可标 done；Windows 未验收，A2 不标跨平台完成 |
+| A12 | 运行配置/环境 UI 与 A2 验收 | A11 | doing | 代码与自动测试完成：[IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)、[面板测试](../../apps/desktop/src/renderer/src/components/skills/DependencyPanel.test.tsx)、`npm run verify` 退出 0（32 文件 / 263 测试），真实启动核对 v6 迁移与无错误日志，2026-09-09 03:13。09-09 日志另记 17:56 本机手工验收通过；本轮绑定与依赖修正后仍需桌面回归。Windows 未验收，A2 不标跨平台完成 |
 | A13 | Skill 指令及运行绑定进入 Agent | A12 | done | [agent-engine 测试](../../packages/agent-core/src/agent-engine.test.ts)、[协议测试](../../packages/agent-protocol/src/index.test.ts)、[RunService 测试](../../apps/desktop/src/main/services/run-service.test.ts)、[SkillService 测试](../../apps/desktop/src/main/services/skill-service.test.ts)；`npm run verify` 退出 0（276 测试），2026-09-09 20:39 |
 | A14 | 资源读取/任务写文件/执行工具 | A13 | done | [skill-read-resource 测试](../../packages/tool-runtime/src/skill-read-resource.test.ts)、[task-write-file 测试](../../packages/tool-runtime/src/task-write-file.test.ts)、[skill-execute 测试](../../packages/tool-runtime/src/skill-execute.test.ts)；`npm run verify` 退出 0，2026-09-09 22:12 |
 | A15 | 取消、撤销、终态与恢复收口 | A14 | done | [RunService 测试](../../apps/desktop/src/main/services/run-service.test.ts)（取消/撤销/终态/恢复场景）；`npm run verify` 退出 0，2026-09-09 22:31 |
-| A16 | PPT Skill 适配预设与报告契约 | A15 | done | [skill-adapter 测试](../../apps/desktop/src/main/services/skill-adapter.test.ts)、[ppt-generation-preset 测试](../../apps/desktop/src/main/services/ppt-generation-preset.test.ts)；`npm run verify` 退出 0，2026-09-09 22:53 |
-| A17 | 真实 Skill 试运行与 A3 验收 | A16 | done | [IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)、[协议测试](../../packages/agent-protocol/src/index.test.ts)；`npm run verify` 退出 0（327 测试），2026-09-09 23:09 |
+| A16 | PPT Skill 适配预设与报告契约 | A15 | doing | [skill-adapter 测试](../../apps/desktop/src/main/services/skill-adapter.test.ts)、[ppt-generation-preset 测试](../../apps/desktop/src/main/services/ppt-generation-preset.test.ts)；`npm run verify` 退出 0，2026-09-09 22:53 |
+| A17 | 真实 Skill 试运行与 A3 验收 | A16 | doing | [IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)、[协议测试](../../packages/agent-protocol/src/index.test.ts)；`npm run verify` 退出 0（327 测试），2026-09-09 23:09 |
 | A18 | PPTX 文件成果与验证状态 | A17 | done | [file-artifact-service 测试](../../apps/desktop/src/main/services/file-artifact-service.test.ts)、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)、[IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)；`npm run verify` 退出 0（34 文件 / 342 测试），2026-09-09 00:56 |
-| A19 | 文件成果 UI、打开与导出 | A18 | done | [ArtifactView 测试](../../apps/desktop/src/renderer/src/views/ArtifactView.test.tsx)、[use-artifact-viewer 测试](../../apps/desktop/src/renderer/src/hooks/use-artifact-viewer.test.tsx)、[IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)；`npm run verify` 退出 0（34 文件 / 342 测试），2026-09-09 00:56。**待手工验收**：打开/导出/版本切换/Markdown 回归 |
-| A20 | 内置目录与依赖制品打包 | A19 | done | [electron-builder 配置](../../apps/desktop/electron-builder.yml)、[启动注册](../../apps/desktop/src/main/index.ts)、[SkillService 测试](../../apps/desktop/src/main/services/skill-service.test.ts)（6 项新增：开发/安装寻址、缺资源拒绝、用户副本独立、同名并存、无敏感材料）；`npm run verify` 退出 0（39 文件 / 348 测试），2026-09-10 01:06 |
+| A19 | 文件成果 UI、打开与导出 | A18 | doing | [ArtifactView 测试](../../apps/desktop/src/renderer/src/views/ArtifactView.test.tsx)、[use-artifact-viewer 测试](../../apps/desktop/src/renderer/src/hooks/use-artifact-viewer.test.tsx)、[IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)；`npm run verify` 退出 0（34 文件 / 342 测试），2026-09-09 00:56。**待手工验收**：打开/导出/版本切换/Markdown 回归 |
+| A20 | 内置目录与依赖制品打包 | A19 | doing | [electron-builder 配置](../../apps/desktop/electron-builder.yml)、[启动注册](../../apps/desktop/src/main/index.ts)、[SkillService 测试](../../apps/desktop/src/main/services/skill-service.test.ts)（6 项新增：开发/安装寻址、缺资源拒绝、用户副本独立、同名并存、无敏感材料）；`npm run verify` 退出 0（39 文件 / 348 测试），2026-09-10 01:06 |
 | A21 | 安装包验收与阶段 A 收尾 | A20 | todo | — |
 
 串行是有意选择：共享协议、迁移、App.tsx、RunService 等容易冲突。没有用户要求不并行派发。A09 的真实 Windows 验收若缺设备，标 blocked；用户可明确允许后续非 Windows 任务先行，但 A2/A21 跨平台门槛不因此取消。

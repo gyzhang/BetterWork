@@ -161,7 +161,7 @@ export class SkillRepository {
       .prepare(
         `SELECT revision_id, profile_hash FROM skill_trust_grants
           WHERE skill_id = ? AND revision_id = ? AND profile_hash = ? AND revoked_at IS NULL
-          ORDER BY granted_at DESC LIMIT 1`,
+          ORDER BY granted_at DESC, rowid DESC LIMIT 1`,
       )
       .get(skillId, revisionId, profileHash) as GrantRow | undefined;
   }
@@ -182,7 +182,7 @@ export class SkillRepository {
     if (status === 'untrusted') blockedReasons.push('untrusted');
     if (status === 'needs-review') blockedReasons.push('trust-needs-review');
     if (status === 'revoked') blockedReasons.push('trust-revoked');
-    const environmentStatus = this.getEnvironmentStatus();
+    const environmentStatus = this.getEnvironmentStatus(row.id, revision.id, profile?.profile_hash);
     if (environmentStatus !== 'ready') blockedReasons.push('environment-unprepared');
     if (!profile) blockedReasons.push('missing-runtime-profile');
     return {
@@ -198,15 +198,22 @@ export class SkillRepository {
     };
   }
 
-  private getEnvironmentStatus(): SkillSummary['environmentStatus'] {
+  private getEnvironmentStatus(
+    skillId: string,
+    revisionId: string,
+    profileHash?: string,
+  ): SkillSummary['environmentStatus'] {
+    if (!profileHash) return 'unprepared';
     const environment = this.db
       .prepare(
-        `SELECT status FROM runtime_environments
-         ORDER BY CASE status WHEN 'ready' THEN 1 WHEN 'preparing' THEN 2 ELSE 3 END,
-                  updated_at DESC
-         LIMIT 1`,
+        `SELECT e.status FROM runtime_environments e
+      JOIN skill_dependency_selections d ON d.lock_hash = e.lock_hash
+      JOIN skill_trust_grants g ON g.id = d.grant_id
+      WHERE g.skill_id = ? AND g.revision_id = ? AND g.profile_hash = ?
+      ORDER BY g.granted_at DESC, CASE e.status WHEN 'ready' THEN 1 WHEN 'preparing' THEN 2 ELSE 3 END, e.updated_at DESC LIMIT 1`,
       )
-      .get() as { status: SkillSummary['environmentStatus'] } | undefined;
+      .get(skillId, revisionId, profileHash) as
+      { status: SkillSummary['environmentStatus'] } | undefined;
     return environment?.status ?? 'unprepared';
   }
 
@@ -239,6 +246,42 @@ export class SkillRepository {
       revision: toRevision(revision),
       ...(profile ? { runtimeProfile: toProfile(profile) } : {}),
     };
+  }
+
+  getBoundDetail(revisionId: string, profileId: string): SkillDetail | undefined {
+    const revision = this.getRevision(revisionId);
+    const profile = this.getProfile(profileId);
+    if (!revision || !profile || profile.skill_id !== revision.skill_id) return undefined;
+    const current = this.get(revision.skill_id);
+    if (!current) return undefined;
+    return {
+      ...current,
+      currentRevisionId: revisionId,
+      revision: toRevision(revision),
+      runtimeProfile: toProfile(profile),
+    };
+  }
+
+  saveDependencySelection(grantId: string, lockHash: string, snapshotIds: string[]): void {
+    this.db
+      .prepare(
+        `INSERT INTO skill_dependency_selections (grant_id, lock_hash, snapshot_ids_json)
+      VALUES (?, ?, ?) ON CONFLICT(grant_id) DO NOTHING`,
+      )
+      .run(grantId, lockHash, JSON.stringify(snapshotIds));
+  }
+
+  getDependencySelection(grantId: string): { lockHash: string; snapshotIds: string[] } | undefined {
+    const row = this.db
+      .prepare(
+        'SELECT lock_hash, snapshot_ids_json FROM skill_dependency_selections WHERE grant_id = ?',
+      )
+      .get(grantId) as { lock_hash: string; snapshot_ids_json: string } | undefined;
+    if (!row) return undefined;
+    const ids: unknown = JSON.parse(row.snapshot_ids_json);
+    if (!Array.isArray(ids) || !ids.every((id): id is string => typeof id === 'string'))
+      throw new Error('Invalid dependency selection');
+    return { lockHash: row.lock_hash, snapshotIds: ids };
   }
 
   saveRevision(input: SaveSkillRevisionInput): string {
