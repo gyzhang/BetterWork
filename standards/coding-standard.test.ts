@@ -231,6 +231,23 @@ describe('架构边界', () => {
     expect(offenders, 'Renderer 只能经 preload 的类型化 API 访问主进程能力').toEqual([]);
   });
 
+  it('协议内联的图片数据在 Renderer CSP 里被放行', () => {
+    const protocol = read('packages/agent-protocol/src/index.ts');
+    const html = read('apps/desktop/src/renderer/index.html');
+    // CSP 没声明 img-src 时按 default-src 'self' 处理，data: URL 会被静默拦下：
+    // 图片只剩 alt 文本，lint/typecheck/单测全绿，只有真机打开界面才看得见（ADR-0013 决策 3）。
+    expect(
+      protocol.includes("startsWith('data:image/')"),
+      '协议已不再输出 data URL，请同步收紧 CSP 的 img-src 并更新 ADR-0013',
+    ).toBe(true);
+    const imgSrc = /img-src\s+([^";]+)/.exec(html)?.[1];
+    expect(
+      imgSrc,
+      'CSP 必须显式声明 img-src：default-src 不含 data:，内联预览图会打不开',
+    ).toBeDefined();
+    expect(imgSrc ?? '', '幻灯片预览走 data URL，img-src 必须包含 data:').toContain('data:');
+  });
+
   it('视图与组件不直接调用 IPC', () => {
     const offenders = pathsUnder(
       'apps/desktop/src/renderer/src/views/',
