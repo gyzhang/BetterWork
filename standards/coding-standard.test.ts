@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,6 +27,8 @@ function collectFiles(directory: string): string[] {
   const collected: string[] = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     if (PRUNED_DIRECTORIES.has(entry.name)) continue;
+    // CodeArts 本地索引缓存（docs/12 §10）；仅仓库根豁免，另查 Git 防止误提交。
+    if (directory === REPO_ROOT && entry.name === '.codeartsdoer') continue;
     const absolute = path.join(directory, entry.name);
     if (entry.isDirectory()) {
       collected.push(...collectFiles(absolute));
@@ -263,6 +266,13 @@ describe('架构边界', () => {
   });
 
   it('仓库工作区内没有密钥文件与数据库文件', () => {
+    expect(
+      execFileSync('git', ['ls-files', '--', '.codeartsdoer'], {
+        cwd: REPO_ROOT,
+        encoding: 'utf8',
+      }).trim(),
+      'CodeArts 本地缓存不得被 Git 跟踪',
+    ).toBe('');
     const offenders = REPO_FILES.filter((relative) => {
       if (relative.endsWith('.env.example')) return false;
       return /(^|\/)\.env(\.[^/]*)?$/.test(relative) || /\.(db|sqlite|sqlite3)$/.test(relative);

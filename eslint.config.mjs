@@ -19,7 +19,15 @@ import globals from 'globals';
 export default tseslint.config(
   {
     name: 'betterwork/ignores',
-    ignores: ['**/node_modules/**', '**/dist/**', '**/out/**', '**/release/**', '**/coverage/**'],
+    // CodeArts 的本地索引与工具配置不是产品源码（docs/12 §10）。
+    ignores: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/out/**',
+      '**/release/**',
+      '**/coverage/**',
+      '.codeartsdoer/**',
+    ],
   },
 
   js.configs.recommended,
