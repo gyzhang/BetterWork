@@ -508,6 +508,37 @@ describe('ReActAgentEngine', () => {
     expect(messages[1]?.content).toContain('专家 B');
   });
 
+  it('injects each skill as its own system message, preserving the user-picked order', async () => {
+    const model = recordingModel([[{ type: 'text-delta', delta: 'ok' }, { type: 'done' }]]);
+    const engine = new ReActAgentEngine();
+    for await (const _event of engine.run({
+      runId: 'run-two-skills',
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      prompt: '两技能协作',
+      workspacePath: '.',
+      model,
+      tools: [],
+      signal: new AbortController().signal,
+      skillInstructions: [
+        { skillId: 'ppt', name: 'PPT 生成专家', instruction: 'PPT 专属口径' },
+        { skillId: 'research', name: '研究助手', instruction: '研究助手口径' },
+      ],
+    }))
+      void _event;
+
+    const systemMessages = model.capturedMessages.filter((m) => m.role === 'system');
+    // 日期段 + 两个 Skill 段，共 3 条。
+    expect(systemMessages).toHaveLength(3);
+    expect(systemMessages[1]?.content).toContain('PPT 生成专家');
+    expect(systemMessages[1]?.content).toContain('PPT 专属口径');
+    expect(systemMessages[2]?.content).toContain('研究助手');
+    expect(systemMessages[2]?.content).toContain('研究助手口径');
+    // 数组顺序即注入顺序：第一条是 PPT，第二条是研究助手。
+    expect(systemMessages[1]?.content).not.toContain('研究助手');
+    expect(systemMessages[2]?.content).not.toContain('PPT');
+  });
+
   it('returns no skill messages when instructions are empty or undefined', () => {
     expect(buildSkillMessages(undefined)).toEqual([]);
     expect(buildSkillMessages([])).toEqual([]);

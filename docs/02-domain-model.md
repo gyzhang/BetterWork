@@ -114,7 +114,7 @@ interface CapabilityBinding {
 - 撤销信任或停用某个 Skill 会取消所有包含它的活跃 Run，即使它只是多个绑定中的一个。
 - 运行期不增删绑定；调整绑定属于下一次 Run。
 
-当前实现状态：`RunSkillBinding` 与 `run_skill_bindings` 表已按上述结构落地，表上 `run_id` 只有普通索引、无唯一约束，存储层天然支持一个 Run 多条绑定；`skill_read_resource` 与 `skill_execute` 的入参携带 `bindingId`，`AgentRunInput.skillInstructions` 是数组。应用层已按本节约束改造：`StartRunRequest.skillBindings` 是 1–6 项数组（顺序即注入顺序，重复 `skillId` 在 Schema 层拒绝），RunService 先整体校验前置条件再逐个建立快照，任一不合格则整个 Run 不启动且不留下任何绑定记录；工具桥接按模型传入的 `bindingId` 寻址，并先校验该绑定属于本 Run。「未显式指定时延续同 Task 最近一次绑定」的隐式继承连同其查询已删除。剩余缺口在界面：Composer 还没有能力选择入口，技能仍只能从 Skill 试运行带入，chip 条与 `+` 菜单见 [ADR-0012](adr/0012-composer-capability-binding.md)。
+当前实现状态：`RunSkillBinding` 与 `run_skill_bindings` 表已按上述结构落地，表上 `run_id` 只有普通索引、无唯一约束，存储层天然支持一个 Run 多条绑定；`skill_read_resource` 与 `skill_execute` 的入参携带 `bindingId`，`AgentRunInput.skillInstructions` 是数组。应用层已按本节约束改造：`StartRunRequest.skillBindings` 是 1–6 项数组（顺序即注入顺序，重复 `skillId` 在 Schema 层拒绝），RunService 先整体校验前置条件再逐个建立快照，任一不合格则整个 Run 不启动且不留下任何绑定记录；工具桥接按模型传入的 `bindingId` 寻址，并先校验该绑定属于本 Run。「未显式指定时延续同 Task 最近一次绑定」的隐式继承连同其查询已删除。运行约定已分层：通用契约（`bindingId`、`expectedHash`、work 目录、不自行声明验证状态）由 `skill-runtime-conventions` 统一持有，样本专属口径（如 PPT 的 attempt 合并与校验闸门）由适配预设按 `contentHash` 匹配后提供，不再泄漏给其他 Skill。剩余缺口在界面：Composer 还没有能力选择入口，技能仍只能从 Skill 试运行带入，chip 条与 `+` 菜单见 [ADR-0012](adr/0012-composer-capability-binding.md)。
 
 ## 5. Step
 

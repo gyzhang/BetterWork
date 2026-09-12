@@ -91,6 +91,8 @@
 1. **前置校验原本只在有绑定快照时生效。** 旧 `resolveSkillInstructions` 在 `skillExecutionService` 缺失时走 `trustStatus` 分支，有快照时走 `isBindingAuthorized` 分支；拆成「先建快照、后读指令」两步后，若快照建立前短路，一个技能都不会被校验。现改为单次遍历内先整体校验后落快照。
 2. **不合格绑定会留下半个快照。** 逐个处理时，第一个技能已写入 `run_skill_bindings`，第二个才报错，于是一个失败 Run 持有授权记录。现在校验全部通过后才开始建立快照，失败 Run 的绑定记录为空。
 
+2026-09-13 B00-2 已落地：运行约定拆为通用层（`skill-runtime-conventions.ts`）与预设层（`SkillAdapter.runtimeConventions`）。`svg-export` / `template-merge` / `pptx-validate` 等样本专属口径移入 `ppt-generation-preset`，只对该预设匹配的 Skill 生效；通用层负责 `bindingId`、`expectedHash`、work 目录、不自行声明验证状态等对所有带命令 Skill 都成立的契约。命令表每项显式带上 `bindingId` 与 `skillName`，多绑定下模型能寻址到正确 Skill。正文为空的 Skill 不再注入空 system 段。
+
 顺带删除：`SkillExecutionRepository.findLatestBindingByTask`——它只服务隐式继承，没有别的调用方。不保留备用查询：界面需要的是「某任务最近一个 Run 的绑定集合」（多条），不是「最近一条」；到 B00-4 按真实需求重新定义。
 
 ## 被否决的方案

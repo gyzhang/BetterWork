@@ -52,6 +52,7 @@ import { createQianfanSearchClient } from './search-engine-service';
 import type { AdapterContext, SkillAdapter, SkillAdapterService } from './skill-adapter';
 import type { SkillDependencyService } from './skill-dependency-service';
 import type { SkillExecutionService } from './skill-execution-service';
+import { composeRuntimeConvention } from './skill-runtime-conventions';
 import type { SkillService } from './skill-service';
 import type { ToolchainSnapshotService } from './toolchain-snapshot-service';
 
@@ -468,15 +469,21 @@ export class RunService {
         await this.skillService.verifyResourceRoot(snapshot);
       const instruction = await this.skillService.readSkillInstruction(snapshot);
       if (binding && snapshot.runtimeProfile?.profile.commands.length) {
-        // 命令表必须带上自己的 bindingId：多绑定下模型只有 commandId 无法寻址到哪个 Skill。
-        const commands = snapshot.runtimeProfile.profile.commands.map((command) => ({
+        // 命令表逐条带上自己的 bindingId 与技能名：多绑定下模型只拿 commandId 无法寻址到哪个 Skill。
+        const commands = snapshot.runtimeProfile.profile.commands;
+        const adapter = this.skillAdapterService?.findAdapter(snapshot.revision.contentHash);
+        const presetConventions = adapter?.runtimeConventions?.(
+          new Set(commands.map((command) => command.commandId)),
+        );
+        instruction.instruction += composeRuntimeConvention({
           bindingId: binding.id,
-          commandId: command.commandId,
-          argumentSchema: command.argumentSchema,
-        }));
-        instruction.instruction += `\n\n算台运行约定：使用 skill_execute 调用以下固定命令，不执行原文中的 Shell、pip 或开发机路径。task_write_file 写入本 Run 的 work 目录（相对路径）；覆盖已有文件必须提供 expectedHash。skill_read_resource 读取本 Skill 相对路径。模板参数 assets/... 指向只读 Skill 模板。svg-export 和 template-merge 在独立 attempt 中执行，后续步骤使用返回的实际输出路径。pptx-validate 成功后才能用返回的 executionId/outputIds 调用 artifact_register_file；不自行声明验证状态。\n命令：${JSON.stringify(commands)}`;
+          skillName: skill.name,
+          commands,
+          ...(presetConventions ? { presetConventions } : {}),
+        });
       }
-      instructions.push(instruction);
+      // 正文为空时不注入：否则会给模型一条只剩标题的空 system 段。
+      if (instruction.instruction.trim().length > 0) instructions.push(instruction);
     }
     return { bindingIds, instructions };
   }
