@@ -17,6 +17,21 @@ import { EmptyContext } from './EmptyState';
 import { ToolActivity } from './ToolActivity';
 import { type ToastTone, TransientToast } from './TransientToast';
 
+const MIME_LABEL_MAP: Record<string, string> = {
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
+  'application/pdf': 'PDF',
+  'text/plain': 'TXT',
+};
+
+const artifactTypeLabel = (artifact: ArtifactSummary): string => {
+  if (artifact.type === 'presentation' && artifact.mimeType) {
+    return MIME_LABEL_MAP[artifact.mimeType] ?? artifact.mimeType.split('/').pop()?.toUpperCase() ?? 'FILE';
+  }
+  return 'Markdown';
+};
+
 export function ContextPanel({
   open,
   setOpen,
@@ -186,7 +201,7 @@ export function ContextPanel({
                     </span>
                     <div>
                       <strong>{artifact.title}</strong>
-                      <small>Markdown · v{artifact.versionNumber}</small>
+                      <small>{artifactTypeLabel(artifact)} · v{artifact.versionNumber}</small>
                     </div>
                   </article>
                 ))}
