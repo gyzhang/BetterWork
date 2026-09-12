@@ -1,17 +1,27 @@
-import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { promisify } from 'node:util';
 
-import type { RegisterFileArtifactResult, ValidationState } from '@betterwork/agent-protocol';
+import type {
+  ArtifactThumbnail,
+  RegisterFileArtifactResult,
+  ValidationState,
+} from '@betterwork/agent-protocol';
 
 import { hashBytes, readManagedFile } from '../infrastructure/managed-files';
+import type { PptxRenderer, RenderedSlide } from '../infrastructure/pptx-renderer';
 import type { AppStore } from '../persistence';
 
-const execFileAsync = promisify(execFile);
+const describeError = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 export type ArtifactFileSourceResolver = (executionId: string, outputId: string) => Promise<string>;
+
+/** 幻灯片预览的生成结果；失败以 `error` 返回，让界面保留「打开」通路并解释原因。 */
+export interface SlidePreviewResult {
+  thumbnails: ArtifactThumbnail[];
+  error?: string;
+}
 
 export interface RegisterFileServiceInput {
   runId: string;
@@ -36,6 +46,7 @@ export class FileArtifactService {
     private readonly artifactFilesRoot: string,
     private readonly sourceResolver: ArtifactFileSourceResolver,
     private readonly acceptsRun: (runId: string) => boolean = () => true,
+    private readonly pptxRenderer: PptxRenderer,
   ) {}
 
   async register(input: RegisterFileServiceInput): Promise<RegisterFileArtifactResult> {
@@ -124,85 +135,60 @@ export class FileArtifactService {
     return path.join(this.artifactFilesRoot, versionId, 'output');
   }
 
-  /** 缩略图目录路径 */
+  /** 派生缓存目录：随版本产生、可随时删除重建，不参与成果真实性校验。 */
   private thumbnailDir(versionId: string): string {
     return path.join(this.artifactFilesRoot, versionId, 'thumbnails');
   }
 
-  /** 列出已有缩略图，返回按 slideIndex 排序的列表 */
-  listThumbnails(versionId: string): { slideIndex: number; filePath: string }[] {
+  /** 读取已缓存的幻灯片预览。文件名即页序：`slide-<n>.png`。 */
+  listThumbnails(versionId: string): ArtifactThumbnail[] {
     const dir = this.thumbnailDir(versionId);
     if (!existsSync(dir)) return [];
-    const files = readdirSync(dir).filter((f) => f.startsWith('slide-') && f.endsWith('.png'));
-    return files
-      .map((f) => {
-        const match = /^slide-(\d+)\.png$/.exec(f);
-        if (!match || !match[1]) return null;
-        const idx = Number.parseInt(match[1], 10);
-        return { slideIndex: idx, filePath: path.join(dir, f) };
-      })
-      .filter((t): t is { slideIndex: number; filePath: string } => t !== null)
-      .sort((a, b) => a.slideIndex - b.slideIndex);
+    const thumbnails: ArtifactThumbnail[] = [];
+    for (const entry of readdirSync(dir)) {
+      const indexed = /^slide-(\d+)\.png$/.exec(entry)?.[1];
+      if (!indexed) continue;
+      thumbnails.push({
+        slideIndex: Number.parseInt(indexed, 10),
+        dataUrl: `data:image/png;base64,${readFileSync(path.join(dir, entry)).toString('base64')}`,
+      });
+    }
+    return thumbnails.sort((left, right) => left.slideIndex - right.slideIndex);
   }
 
   /**
-   * 懒生成 PPTX 缩略图。
-   * 使用 LibreOffice headless 将 PPTX 转为 PNG，输出到 thumbnails/ 目录。
-   * 如果 LibreOffice 不可用，返回空列表并附带错误信息。
+   * 懒生成幻灯片预览：命中缓存直接返回，否则整份渲染后落盘。
+   *
+   * 渲染是进程内的纯 JS 计算，不拉起任何外部应用；写入失败时清掉半成品目录，
+   * 让下一次请求完整重建，而不是留下缺页的缓存。
    */
-  async generateThumbnails(versionId: string): Promise<{
-    thumbnails: { slideIndex: number; filePath: string }[];
-    error?: string;
-  }> {
-    const existing = this.listThumbnails(versionId);
-    if (existing.length > 0) return { thumbnails: existing };
+  async generateThumbnails(versionId: string): Promise<SlidePreviewResult> {
+    const cached = this.listThumbnails(versionId);
+    if (cached.length > 0) return { thumbnails: cached };
 
     const pptxPath = this.resolveStoredPath(versionId);
-    if (!existsSync(pptxPath)) return { thumbnails: [], error: 'PPTX 文件不存在' };
+    if (!existsSync(pptxPath)) return { thumbnails: [], error: '成果文件不存在，可能已被清理。' };
 
-    const sofficePath = '/Applications/LibreOffice.app/Contents/MacOS/soffice';
-    if (!existsSync(sofficePath)) {
-      return {
-        thumbnails: [],
-        error: 'LibreOffice 未安装，无法生成预览。请从 libreoffice.org 下载安装。',
-      };
+    let slides: RenderedSlide[];
+    try {
+      slides = await this.pptxRenderer.render(pptxPath);
+    } catch (error) {
+      return { thumbnails: [], error: `幻灯片预览生成失败：${describeError(error)}` };
+    }
+    if (slides.length === 0) {
+      return { thumbnails: [], error: '未能从该文件渲染出任何页面。' };
     }
 
     const thumbDir = this.thumbnailDir(versionId);
-    mkdirSync(thumbDir, { recursive: true });
-
-    const tmpDir = path.join(this.artifactFilesRoot, versionId, '.tmp-convert');
-    mkdirSync(tmpDir, { recursive: true });
-
     try {
-      await execFileAsync(sofficePath, [
-        '--headless',
-        '--convert-to',
-        'png',
-        '--outdir',
-        tmpDir,
-        pptxPath,
-      ]);
-
-      const converted = readdirSync(tmpDir)
-        .filter((f) => f.endsWith('.png'))
-        .sort();
-
-      for (let i = 0; i < converted.length; i++) {
-        const srcFile = converted[i];
-        if (!srcFile) continue;
-        const src = path.join(tmpDir, srcFile);
-        const dest = path.join(thumbDir, `slide-${i}.png`);
-        renameSync(src, dest);
+      mkdirSync(thumbDir, { recursive: true });
+      for (const slide of slides) {
+        writeFileSync(path.join(thumbDir, `slide-${slide.slideIndex}.png`), slide.png);
       }
-
-      return { thumbnails: this.listThumbnails(versionId) };
     } catch (error) {
       rmSync(thumbDir, { recursive: true, force: true });
-      const message = error instanceof Error ? error.message : String(error);
-      return { thumbnails: [], error: `缩略图生成失败：${message}` };
-    } finally {
-      rmSync(tmpDir, { recursive: true, force: true });
+      return { thumbnails: [], error: `幻灯片预览写入失败：${describeError(error)}` };
     }
+    return { thumbnails: this.listThumbnails(versionId) };
   }
 }

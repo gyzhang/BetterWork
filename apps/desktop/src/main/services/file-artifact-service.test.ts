@@ -1,11 +1,17 @@
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { symlink } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
+import type { RecordingPptxRenderer } from '../infrastructure/fixtures/fake-pptx-renderer';
+import {
+  emptyPptxRenderer,
+  failingPptxRenderer,
+  fakePptxRenderer,
+} from '../infrastructure/fixtures/fake-pptx-renderer';
 import { AppStore } from '../persistence';
 import { type ArtifactFileSourceResolver, FileArtifactService } from './file-artifact-service';
 
@@ -132,20 +138,22 @@ const seedExecution = (
 const openService = (
   artifactFilesRoot: string,
   resolver: ArtifactFileSourceResolver,
-): { store: AppStore; service: FileArtifactService } => {
+  renderer: RecordingPptxRenderer = fakePptxRenderer(),
+): { store: AppStore; service: FileArtifactService; renderer: RecordingPptxRenderer } => {
   const store = AppStore.open(path.join(temporaryDirectory(), 'app.sqlite'));
-  const service = new FileArtifactService(store, artifactFilesRoot, resolver);
-  return { store, service };
+  const service = new FileArtifactService(store, artifactFilesRoot, resolver, () => true, renderer);
+  return { store, service, renderer };
 };
 
 const hash = (value: string): string => createHash('sha256').update(value).digest('hex');
-const fixture = () => {
+const fixture = (renderer: RecordingPptxRenderer = fakePptxRenderer()) => {
   const root = temporaryDirectory();
   const file = path.join(root, 'slides.pptx');
   const report = JSON.stringify({ issues: [], fileHash: hash('PK-content') });
   writeFileSync(file, 'PK-content');
   writeFileSync(`${file}.report.json`, report);
-  const { store, service } = openService(temporaryDirectory(), async () => file);
+  const filesRoot = temporaryDirectory();
+  const { store, service } = openService(filesRoot, async () => file, renderer);
   seedExecution(store, root, { status: 'queued', outputIds: [] });
   const output = {
     outputId: 'slides.pptx',
@@ -168,7 +176,7 @@ const fixture = () => {
     mimeType,
     validation: passedValidation,
   };
-  return { root, file, store, service, output, input };
+  return { root, filesRoot, file, store, service, renderer, output, input };
 };
 
 describe('FileArtifactService', () => {
@@ -282,18 +290,30 @@ describe('FileArtifactService', () => {
   });
   it('rechecks cancellation and revoked trust after asynchronous source resolution', async () => {
     const f = fixture();
-    const cancellation = new FileArtifactService(f.store, temporaryDirectory(), async () => {
-      f.store.runs.forceFailure('run-1', 'cancelled during resolution', Date.now());
-      return f.file;
-    });
+    const cancellation = new FileArtifactService(
+      f.store,
+      temporaryDirectory(),
+      async () => {
+        f.store.runs.forceFailure('run-1', 'cancelled during resolution', Date.now());
+        return f.file;
+      },
+      () => true,
+      fakePptxRenderer(),
+    );
     await expect(cancellation.register(f.input)).rejects.toThrow('no longer active');
     expect(f.store.artifacts.list()).toHaveLength(0);
     f.store.close();
     const g = fixture();
-    const revoked = new FileArtifactService(g.store, temporaryDirectory(), async () => {
-      g.store.skills.setTrustPreference('skill-1', 'revoked');
-      return g.file;
-    });
+    const revoked = new FileArtifactService(
+      g.store,
+      temporaryDirectory(),
+      async () => {
+        g.store.skills.setTrustPreference('skill-1', 'revoked');
+        return g.file;
+      },
+      () => true,
+      fakePptxRenderer(),
+    );
     await expect(revoked.register(g.input)).rejects.toThrow('no longer active');
     expect(g.store.artifacts.list()).toHaveLength(0);
     g.store.close();
@@ -301,12 +321,73 @@ describe('FileArtifactService', () => {
   it('cleans copied files if the database rejects registration', async () => {
     const f = fixture();
     const filesRoot = temporaryDirectory();
-    const service = new FileArtifactService(f.store, filesRoot, async () => f.file);
+    const service = new FileArtifactService(
+      f.store,
+      filesRoot,
+      async () => f.file,
+      () => true,
+      fakePptxRenderer(),
+    );
     await expect(service.register({ ...f.input, artifactId: 'missing' })).rejects.toThrow(
       'does not belong',
     );
     const { readdir } = await import('node:fs/promises');
     expect(await readdir(filesRoot)).toEqual([]);
+    f.store.close();
+  });
+});
+
+describe('slide previews', () => {
+  it('renders the deck on demand, names cached pages by slide index, and reuses them', async () => {
+    const f = fixture();
+    const registered = await f.service.register(f.input);
+
+    const first = await f.service.generateThumbnails(registered.versionId);
+    expect(first.error).toBeUndefined();
+    expect(first.thumbnails.map((thumb) => thumb.slideIndex)).toEqual([0, 1]);
+    expect(first.thumbnails[0]?.dataUrl.startsWith('data:image/png;base64,')).toBe(true);
+    expect(readdirSync(path.join(f.filesRoot, registered.versionId, 'thumbnails')).sort()).toEqual([
+      'slide-0.png',
+      'slide-1.png',
+    ]);
+
+    const second = await f.service.generateThumbnails(registered.versionId);
+    expect(second.thumbnails).toEqual(first.thumbnails);
+    // 命中缓存不得重算：预览是 CPU 密集的派生缓存，可重建但不是每次查看都重渲染。
+    expect(f.renderer.calls).toHaveLength(1);
+    f.store.close();
+  });
+
+  it('reports render failures without leaving a partial cache behind', async () => {
+    const f = fixture(failingPptxRenderer('missing CJK font'));
+    const registered = await f.service.register(f.input);
+
+    const result = await f.service.generateThumbnails(registered.versionId);
+    expect(result.thumbnails).toEqual([]);
+    expect(result.error).toContain('missing CJK font');
+    expect(existsSync(path.join(f.filesRoot, registered.versionId, 'thumbnails'))).toBe(false);
+    f.store.close();
+  });
+
+  it('treats a zero-page render as an error instead of caching an empty preview', async () => {
+    const f = fixture(emptyPptxRenderer());
+    const registered = await f.service.register(f.input);
+
+    const result = await f.service.generateThumbnails(registered.versionId);
+    expect(result.error).toContain('未能从该文件渲染出任何页面');
+    // 空结果不能落盘：否则下一次请求会把它当成有效缓存直接返回。
+    expect(readdirSync(path.join(f.filesRoot, registered.versionId))).toEqual(['output']);
+    f.store.close();
+  });
+
+  it('asks the user to open externally when the stored file is gone, without rendering', async () => {
+    const f = fixture();
+    const registered = await f.service.register(f.input);
+    rmSync(f.service.resolveStoredPath(registered.versionId));
+
+    const result = await f.service.generateThumbnails(registered.versionId);
+    expect(result.error).toContain('成果文件不存在');
+    expect(f.renderer.calls).toHaveLength(0);
     f.store.close();
   });
 });

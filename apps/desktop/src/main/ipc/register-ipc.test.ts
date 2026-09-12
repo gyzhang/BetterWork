@@ -74,6 +74,7 @@ describe('registerIpc', () => {
     const { SkillDependencyService } = await import('../services/skill-dependency-service');
     const { ToolchainSnapshotService } = await import('../services/toolchain-snapshot-service');
     const { FileArtifactService } = await import('../services/file-artifact-service');
+    const { fakePptxRenderer } = await import('../infrastructure/fixtures/fake-pptx-renderer');
     const { FakeDownloader, FakeFileSystem, FakePythonRunner, scenarioOf } =
       await import('../services/fixtures/fake-python-runtime');
     const { registerIpc } = await import('./register-ipc');
@@ -130,6 +131,8 @@ describe('registerIpc', () => {
       store,
       artifactFilesRoot,
       async () => '/tmp/no-source',
+      () => true,
+      fakePptxRenderer(),
     );
     dependencyTestContext = { dependencies, snapshots, locksRoot, interpreterPath };
 

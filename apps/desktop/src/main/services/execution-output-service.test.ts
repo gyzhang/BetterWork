@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { JobSpec } from '@betterwork/agent-protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { fakePptxRenderer } from '../infrastructure/fixtures/fake-pptx-renderer';
 import { createMacProcessSupervisor } from '../infrastructure/mac-process-supervisor';
 import { AppStore } from '../persistence';
 import { ExecutionOutputService } from './execution-output-service';
@@ -152,8 +153,12 @@ describe('execution output validation', () => {
     expect(result.execution.status).toBe('succeeded');
     expect(result.execution.outputIds).toHaveLength(1);
     const output = store.executions.getVerifiedOutputs(execution.id)[0]!;
-    const artifacts = new FileArtifactService(store, path.join(root, 'artifacts'), async () =>
-      path.join(root, output.relativePath),
+    const artifacts = new FileArtifactService(
+      store,
+      path.join(root, 'artifacts'),
+      async () => path.join(root, output.relativePath),
+      () => true,
+      fakePptxRenderer(),
     );
     const registered = await artifacts.register({
       runId: 'r',

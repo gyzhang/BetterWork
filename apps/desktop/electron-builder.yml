@@ -21,6 +21,12 @@ extraResources:
     to: dependency-locks
     filter:
       - '*.json'
+  # 幻灯片预览的中文字体：系统自带中文字体是 TTC + AAT，opentype.js 解析不了，必须随包。
+  - from: ../../resources/fonts
+    to: fonts
+    filter:
+      - '*.otf'
+      - '*.ttf'
 
 mac:
   target:

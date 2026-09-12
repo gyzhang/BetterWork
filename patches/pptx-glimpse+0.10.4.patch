@@ -1,0 +1,223 @@
+diff --git a/node_modules/pptx-glimpse/dist/index.cjs b/node_modules/pptx-glimpse/dist/index.cjs
+index e3f23e6..bd1c7fe 100644
+--- a/node_modules/pptx-glimpse/dist/index.cjs
++++ b/node_modules/pptx-glimpse/dist/index.cjs
+@@ -1220,6 +1220,7 @@ var CJK_TTC_PATTERNS = [
+   // macOS
+   "Hiragino",
+   "\u30D2\u30E9\u30AE\u30CE",
++  "PingFang",
+   // Windows
+   "YuGoth",
+   "YuMin",
+@@ -1260,14 +1261,15 @@ function walk(dir, result) {
+   } catch {
+   }
+ }
+-function collectFontFilePaths(additionalDirs) {
++function collectFontFilePaths(additionalDirs, exclusiveDirs) {
+   const dirs = additionalDirs ?? [];
+   const dirsKey = dirs.join("\0");
+   const cachedKey = cachedAdditionalDirs?.join("\0") ?? null;
+   if (cachedPaths !== null && dirsKey === cachedKey) {
+     return cachedPaths;
+   }
+-  const allDirs = [...getSystemFontDirs(), ...dirs];
++  const allDirs =
++    exclusiveDirs && dirs.length > 0 ? [...dirs] : [...getSystemFontDirs(), ...dirs];
+   const result = [];
+   for (const dir of allDirs) {
+     walk(dir, result);
+@@ -1503,6 +1505,10 @@ async function createOpentypeSetupFromBuffers(fontBuffers, fontMapping) {
+         } else if (buffer.name) {
+           registerFont(buffer.name, font, reverseMap, measurerFonts, resolverFonts);
+         }
++        const fontNames = collectFontNames(font);
++        for (const name of fontNames) {
++          registerFont(name, font, reverseMap, measurerFonts, resolverFonts);
++        }
+       }
+     } catch {
+     }
+@@ -1543,12 +1549,21 @@ function collectFontNames(font) {
+       names.add(name);
+     }
+   }
++  for (const plat of ["windows", "macintosh"]) {
++    const p = font.names[plat];
++    if (!p) continue;
++    for (const k of ["fontFamily", "preferredFamily", "fullName"]) {
++      if (p[k]) {
++        for (const v of Object.values(p[k])) names.add(v);
++      }
++    }
++  }
+   return names;
+ }
+-function buildCacheKey(additionalFontDirs, fontMapping) {
++function buildCacheKey(additionalFontDirs, fontMapping, exclusiveDirs) {
+   const dirsKey = additionalFontDirs ? [...additionalFontDirs].sort().join("\0") : "";
+   const mappingKey = fontMapping ? JSON.stringify(fontMapping, Object.keys(fontMapping).sort()) : "";
+-  return `${dirsKey}
++  return `${exclusiveDirs ? "only\0" : ""}${dirsKey}
+ ${mappingKey}`;
+ }
+ var cachedSetup = null;
+@@ -1557,14 +1572,14 @@ function clearFontCache() {
+   cachedSetup = null;
+   cachedSetupKey = null;
+ }
+-async function createOpentypeSetupFromSystem(additionalFontDirs, fontMapping) {
+-  const key = buildCacheKey(additionalFontDirs, fontMapping);
++async function createOpentypeSetupFromSystem(additionalFontDirs, fontMapping, exclusiveDirs) {
++  const key = buildCacheKey(additionalFontDirs, fontMapping, exclusiveDirs);
+   if (cachedSetup && cachedSetupKey === key) {
+     return cachedSetup;
+   }
+   const opentype = await tryLoadOpentype();
+   if (!opentype) return null;
+-  const fontFilePaths = collectFontFilePaths(additionalFontDirs);
++  const fontFilePaths = collectFontFilePaths(additionalFontDirs, exclusiveDirs);
+   if (fontFilePaths.length === 0) return null;
+   const mapping = createFontMapping(fontMapping);
+   const reverseMap = buildReverseMapping(mapping);
+@@ -4727,7 +4742,7 @@ function parseFontScheme(fontScheme) {
+ function resolveEaFont(fontNode) {
+   const eaTypeface = fontNode?.ea?.["@_typeface"];
+   if (eaTypeface) return eaTypeface;
+-  return findScriptFont(fontNode, "Jpan");
++  return findScriptFont(fontNode, "Hans") || findScriptFont(fontNode, "Hant") || findScriptFont(fontNode, "Jpan");
+ }
+ function findScriptFont(fontNode, script) {
+   const fontItems = fontNode?.font;
+@@ -9113,7 +9128,11 @@ function escapeXmlAttr(str) {
+ 
+ // src/converter.ts
+ async function convertPptxToSvg(input, options) {
+-  const setup = await createOpentypeSetupFromSystem(options?.fontDirs, options?.fontMapping);
++  const setup = await createOpentypeSetupFromSystem(
++    options?.fontDirs,
++    options?.fontMapping,
++    options?.onlyFontDirs
++  );
+   if (setup) {
+     setTextMeasurer(setup.measurer);
+     setTextPathFontResolver(setup.fontResolver);
+diff --git a/node_modules/pptx-glimpse/dist/index.d.ts b/node_modules/pptx-glimpse/dist/index.d.ts
+index 86b7424..0f59695 100644
+--- a/node_modules/pptx-glimpse/dist/index.d.ts
++++ b/node_modules/pptx-glimpse/dist/index.d.ts
+@@ -44,6 +44,8 @@ interface ConvertOptions {
+     logLevel?: LogLevel;
+     /** 追加のフォントディレクトリパス。システムフォントに加えて検索する */
+     fontDirs?: string[];
++    /** fontDirs を指定したときシステムフォントディレクトリを走査しない（true: fontDirs のみ使用） */
++    onlyFontDirs?: boolean;
+     /** PPTX フォント名 → OSS 代替フォントのカスタムマッピング。デフォルトマッピングにマージされる */
+     fontMapping?: FontMapping;
+ }
+diff --git a/node_modules/pptx-glimpse/dist/index.js b/node_modules/pptx-glimpse/dist/index.js
+index 05c60e4..ae851a2 100644
+--- a/node_modules/pptx-glimpse/dist/index.js
++++ b/node_modules/pptx-glimpse/dist/index.js
+@@ -1183,6 +1183,7 @@ var CJK_TTC_PATTERNS = [
+   // macOS
+   "Hiragino",
+   "\u30D2\u30E9\u30AE\u30CE",
++  "PingFang",
+   // Windows
+   "YuGoth",
+   "YuMin",
+@@ -1223,14 +1224,15 @@ function walk(dir, result) {
+   } catch {
+   }
+ }
+-function collectFontFilePaths(additionalDirs) {
++function collectFontFilePaths(additionalDirs, exclusiveDirs) {
+   const dirs = additionalDirs ?? [];
+   const dirsKey = dirs.join("\0");
+   const cachedKey = cachedAdditionalDirs?.join("\0") ?? null;
+   if (cachedPaths !== null && dirsKey === cachedKey) {
+     return cachedPaths;
+   }
+-  const allDirs = [...getSystemFontDirs(), ...dirs];
++  const allDirs =
++    exclusiveDirs && dirs.length > 0 ? [...dirs] : [...getSystemFontDirs(), ...dirs];
+   const result = [];
+   for (const dir of allDirs) {
+     walk(dir, result);
+@@ -1466,6 +1468,10 @@ async function createOpentypeSetupFromBuffers(fontBuffers, fontMapping) {
+         } else if (buffer.name) {
+           registerFont(buffer.name, font, reverseMap, measurerFonts, resolverFonts);
+         }
++        const fontNames = collectFontNames(font);
++        for (const name of fontNames) {
++          registerFont(name, font, reverseMap, measurerFonts, resolverFonts);
++        }
+       }
+     } catch {
+     }
+@@ -1506,12 +1512,21 @@ function collectFontNames(font) {
+       names.add(name);
+     }
+   }
++  for (const plat of ["windows", "macintosh"]) {
++    const p = font.names[plat];
++    if (!p) continue;
++    for (const k of ["fontFamily", "preferredFamily", "fullName"]) {
++      if (p[k]) {
++        for (const v of Object.values(p[k])) names.add(v);
++      }
++    }
++  }
+   return names;
+ }
+-function buildCacheKey(additionalFontDirs, fontMapping) {
++function buildCacheKey(additionalFontDirs, fontMapping, exclusiveDirs) {
+   const dirsKey = additionalFontDirs ? [...additionalFontDirs].sort().join("\0") : "";
+   const mappingKey = fontMapping ? JSON.stringify(fontMapping, Object.keys(fontMapping).sort()) : "";
+-  return `${dirsKey}
++  return `${exclusiveDirs ? "only\0" : ""}${dirsKey}
+ ${mappingKey}`;
+ }
+ var cachedSetup = null;
+@@ -1520,14 +1535,14 @@ function clearFontCache() {
+   cachedSetup = null;
+   cachedSetupKey = null;
+ }
+-async function createOpentypeSetupFromSystem(additionalFontDirs, fontMapping) {
+-  const key = buildCacheKey(additionalFontDirs, fontMapping);
++async function createOpentypeSetupFromSystem(additionalFontDirs, fontMapping, exclusiveDirs) {
++  const key = buildCacheKey(additionalFontDirs, fontMapping, exclusiveDirs);
+   if (cachedSetup && cachedSetupKey === key) {
+     return cachedSetup;
+   }
+   const opentype = await tryLoadOpentype();
+   if (!opentype) return null;
+-  const fontFilePaths = collectFontFilePaths(additionalFontDirs);
++  const fontFilePaths = collectFontFilePaths(additionalFontDirs, exclusiveDirs);
+   if (fontFilePaths.length === 0) return null;
+   const mapping = createFontMapping(fontMapping);
+   const reverseMap = buildReverseMapping(mapping);
+@@ -4689,7 +4704,7 @@ function parseFontScheme(fontScheme) {
+ function resolveEaFont(fontNode) {
+   const eaTypeface = fontNode?.ea?.["@_typeface"];
+   if (eaTypeface) return eaTypeface;
+-  return findScriptFont(fontNode, "Jpan");
++  return findScriptFont(fontNode, "Hans") || findScriptFont(fontNode, "Hant") || findScriptFont(fontNode, "Jpan");
+ }
+ function findScriptFont(fontNode, script) {
+   const fontItems = fontNode?.font;
+@@ -9075,7 +9090,11 @@ function escapeXmlAttr(str) {
+ 
+ // src/converter.ts
+ async function convertPptxToSvg(input, options) {
+-  const setup = await createOpentypeSetupFromSystem(options?.fontDirs, options?.fontMapping);
++  const setup = await createOpentypeSetupFromSystem(
++    options?.fontDirs,
++    options?.fontMapping,
++    options?.onlyFontDirs
++  );
+   if (setup) {
+     setTextMeasurer(setup.measurer);
+     setTextPathFontResolver(setup.fontResolver);
