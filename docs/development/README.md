@@ -44,6 +44,8 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 
 ## 3. 任务板
 
+2026-09-12 用户授权继续完成 macOS 阶段 A；Windows 延后，不纳入本轮完成门槛。A09 继续记录 blocked（本轮不实施），A2/A21 只按实际 macOS 证据验收，不宣称跨平台完成。
+
 状态只使用 todo / doing / blocked / done。实现者只更新本次任务行，记录实际完成时间和证据链接；状态按实际验收证据记录，不表示后续任务都满足开工条件。2026-09-11 根据[审查](../reviews/2026-09-10-phase-a-progress-quality.md)与[修正记录](../reviews/2026-09-11-phase-a-repairs.md)将缺少必需验收的 A16/A17/A19/A20 回退为 doing，保留历史实现证据。
 
 | 编号 | 工作 | 前置 | 状态 | 证据/完成时间 |
@@ -71,7 +73,7 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | A20 | 内置目录与依赖制品打包 | A19 | doing | [electron-builder 配置](../../apps/desktop/electron-builder.yml)、[启动注册](../../apps/desktop/src/main/index.ts)、[SkillService 测试](../../apps/desktop/src/main/services/skill-service.test.ts)（6 项新增：开发/安装寻址、缺资源拒绝、用户副本独立、同名并存、无敏感材料）；`npm run verify` 退出 0（39 文件 / 348 测试），2026-09-10 01:06 |
 | A21 | 安装包验收与阶段 A 收尾 | A20 | todo | — |
 
-串行是有意选择：共享协议、迁移、App.tsx、RunService 等容易冲突。没有用户要求不并行派发。A09 的真实 Windows 验收若缺设备，标 blocked；用户可明确允许后续非 Windows 任务先行，但 A2/A21 跨平台门槛不因此取消。
+串行是有意选择：共享协议、迁移、App.tsx、RunService 等容易冲突。没有用户要求不并行派发。A09 的真实 Windows 验收若缺设备，标 blocked；用户可明确允许后续非 Windows 任务先行，但 历史跨平台门槛已按 2026-09-12 用户授权缩为本轮 macOS 验收；Windows 单独保留未完成记录。
 
 ## 4. 每项任务的执行规则
 
