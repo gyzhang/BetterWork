@@ -3,7 +3,7 @@ import type {
   ArtifactVersionDetail,
   ArtifactVersionSummary,
 } from '@betterwork/agent-protocol';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { reportAction } from '../lib/async-action';
 
@@ -97,7 +97,13 @@ export function useArtifactViewer(selected: ArtifactDetail | undefined): Artifac
     );
   }, [selected]);
 
-  const visibleVersion = viewingVersion ?? (selected ? toVersionDetail(selected) : undefined);
+  // 必须 memo：`toVersionDetail` 每次调用都返回新对象，若不收口，调用方把
+  // `visibleVersion` 放进 useEffect / useCallback 依赖数组时会因引用永远变化而无限重跑。
+  // `react-hooks/exhaustive-deps` 查不出这种错误——依赖在语法上是完整的。
+  const visibleVersion = useMemo(
+    () => viewingVersion ?? (selected ? toVersionDetail(selected) : undefined),
+    [viewingVersion, selected],
+  );
 
   const selectVersion = async (version: ArtifactVersionSummary): Promise<void> => {
     const requestId = versionRequestRef.current + 1;
