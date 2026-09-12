@@ -1,11 +1,15 @@
+import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { promisify } from 'node:util';
 
 import type { RegisterFileArtifactResult, ValidationState } from '@betterwork/agent-protocol';
 
 import { hashBytes, readManagedFile } from '../infrastructure/managed-files';
 import type { AppStore } from '../persistence';
+
+const execFileAsync = promisify(execFile);
 
 export type ArtifactFileSourceResolver = (executionId: string, outputId: string) => Promise<string>;
 
@@ -118,5 +122,87 @@ export class FileArtifactService {
 
   resolveStoredPath(versionId: string): string {
     return path.join(this.artifactFilesRoot, versionId, 'output');
+  }
+
+  /** 缩略图目录路径 */
+  private thumbnailDir(versionId: string): string {
+    return path.join(this.artifactFilesRoot, versionId, 'thumbnails');
+  }
+
+  /** 列出已有缩略图，返回按 slideIndex 排序的列表 */
+  listThumbnails(versionId: string): { slideIndex: number; filePath: string }[] {
+    const dir = this.thumbnailDir(versionId);
+    if (!existsSync(dir)) return [];
+    const files = readdirSync(dir).filter((f) => f.startsWith('slide-') && f.endsWith('.png'));
+    return files
+      .map((f) => {
+        const match = /^slide-(\d+)\.png$/.exec(f);
+        if (!match || !match[1]) return null;
+        const idx = Number.parseInt(match[1], 10);
+        return { slideIndex: idx, filePath: path.join(dir, f) };
+      })
+      .filter((t): t is { slideIndex: number; filePath: string } => t !== null)
+      .sort((a, b) => a.slideIndex - b.slideIndex);
+  }
+
+  /**
+   * 懒生成 PPTX 缩略图。
+   * 使用 LibreOffice headless 将 PPTX 转为 PNG，输出到 thumbnails/ 目录。
+   * 如果 LibreOffice 不可用，返回空列表并附带错误信息。
+   */
+  async generateThumbnails(versionId: string): Promise<{
+    thumbnails: { slideIndex: number; filePath: string }[];
+    error?: string;
+  }> {
+    const existing = this.listThumbnails(versionId);
+    if (existing.length > 0) return { thumbnails: existing };
+
+    const pptxPath = this.resolveStoredPath(versionId);
+    if (!existsSync(pptxPath)) return { thumbnails: [], error: 'PPTX 文件不存在' };
+
+    const sofficePath = '/Applications/LibreOffice.app/Contents/MacOS/soffice';
+    if (!existsSync(sofficePath)) {
+      return {
+        thumbnails: [],
+        error: 'LibreOffice 未安装，无法生成预览。请从 libreoffice.org 下载安装。',
+      };
+    }
+
+    const thumbDir = this.thumbnailDir(versionId);
+    mkdirSync(thumbDir, { recursive: true });
+
+    const tmpDir = path.join(this.artifactFilesRoot, versionId, '.tmp-convert');
+    mkdirSync(tmpDir, { recursive: true });
+
+    try {
+      await execFileAsync(sofficePath, [
+        '--headless',
+        '--convert-to',
+        'png',
+        '--outdir',
+        tmpDir,
+        pptxPath,
+      ]);
+
+      const converted = readdirSync(tmpDir)
+        .filter((f) => f.endsWith('.png'))
+        .sort();
+
+      for (let i = 0; i < converted.length; i++) {
+        const srcFile = converted[i];
+        if (!srcFile) continue;
+        const src = path.join(tmpDir, srcFile);
+        const dest = path.join(thumbDir, `slide-${i}.png`);
+        renameSync(src, dest);
+      }
+
+      return { thumbnails: this.listThumbnails(versionId) };
+    } catch (error) {
+      rmSync(thumbDir, { recursive: true, force: true });
+      const message = error instanceof Error ? error.message : String(error);
+      return { thumbnails: [], error: `缩略图生成失败：${message}` };
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   }
 }

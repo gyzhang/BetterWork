@@ -1,10 +1,11 @@
 import type {
   ArtifactDetail,
   ArtifactSummary,
+  ArtifactThumbnail,
   ArtifactVersionDetail,
   ValidationStatus,
 } from '@betterwork/agent-protocol';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { EmptyPage } from '../components/EmptyState';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -82,7 +83,47 @@ export function ArtifactPage({
     selectVersion,
   } = useArtifactViewer(selected);
   const [toast, setToast] = useState<{ tone: ToastTone; message: string }>();
+  const [thumbnails, setThumbnails] = useState<ArtifactThumbnail[]>([]);
+  const [thumbnailError, setThumbnailError] = useState<string>();
+  const [thumbnailLoading, setThumbnailLoading] = useState(false);
+  const thumbRequestRef = useRef(0);
   const dismissToast = useCallback(() => setToast(undefined), []);
+
+  useEffect(() => {
+    if (!selected || selected.type !== 'presentation' || !visibleVersion) {
+      setThumbnails([]);
+      setThumbnailError(undefined);
+      setThumbnailLoading(false);
+      return;
+    }
+    const requestId = thumbRequestRef.current + 1;
+    thumbRequestRef.current = requestId;
+    setThumbnailLoading(true);
+    setThumbnailError(undefined);
+    const promise = window.betterwork.artifacts.getThumbnails({
+      artifactId: selected.id,
+      versionId: visibleVersion.id,
+    });
+    reportAction(
+      promise.then((result) => {
+        if (thumbRequestRef.current === requestId) {
+          setThumbnails(result.thumbnails);
+          if (result.error) setThumbnailError(result.error);
+        }
+      }),
+      (message) => {
+        if (thumbRequestRef.current === requestId) setThumbnailError(message);
+      },
+      '缩略图加载失败，请重试。',
+    );
+    promise
+      .catch(() => {
+        /* reportAction already handles errors */
+      })
+      .finally(() => {
+        if (thumbRequestRef.current === requestId) setThumbnailLoading(false);
+      });
+  }, [selected, visibleVersion]);
   if (selected && visibleVersion)
     return (
       <>
@@ -276,7 +317,12 @@ export function ArtifactPage({
                   <MarkdownPreview content={(visibleVersion as { content: string }).content} />
                 )
               ) : (
-                <FileInfoPanel version={visibleVersion} />
+                <PresentationPreview
+                  version={visibleVersion}
+                  thumbnails={thumbnails}
+                  loading={thumbnailLoading}
+                  error={thumbnailError}
+                />
               )}
             </div>
           </section>
@@ -338,32 +384,92 @@ export function ArtifactPage({
   );
 }
 
-function FileInfoPanel({ version }: { version: ArtifactVersionDetail }): React.JSX.Element {
+function PresentationPreview({
+  version,
+  thumbnails,
+  loading,
+  error,
+}: {
+  version: ArtifactVersionDetail;
+  thumbnails: ArtifactThumbnail[];
+  loading: boolean;
+  error?: string | undefined;
+}): React.JSX.Element {
   if (version.type !== 'presentation') return <></>;
-  return (
-    <div className="artifact-file-info">
-      <div className="artifact-file-info-row">
-        <span className="artifact-file-info-label">文件类型</span>
-        <span>{fileTypeLabel(version.mimeType)}</span>
-      </div>
-      <div className="artifact-file-info-row">
-        <span className="artifact-file-info-label">文件大小</span>
-        <span>{formatFileSize(version.fileSize)}</span>
-      </div>
-      <div className="artifact-file-info-row">
-        <span className="artifact-file-info-label">结构校验</span>
-        <span>{VALIDATION_LABEL[version.validation.structure]}</span>
-      </div>
-      <div className="artifact-file-info-row">
-        <span className="artifact-file-info-label">视觉检查</span>
-        <span>{VALIDATION_LABEL[version.validation.visual]}</span>
-      </div>
-      {version.description && (
+  if (loading) {
+    return (
+      <div className="artifact-file-info">
         <div className="artifact-file-info-row">
-          <span className="artifact-file-info-label">说明</span>
-          <span>{version.description}</span>
+          <span>正在生成幻灯片预览…</span>
         </div>
-      )}
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="artifact-file-info">
+        <div className="artifact-file-info-row">
+          <span className="artifact-file-info-label">预览</span>
+          <span>{error}</span>
+        </div>
+        <div className="artifact-file-info-row">
+          <span className="artifact-file-info-label">文件类型</span>
+          <span>{fileTypeLabel(version.mimeType)}</span>
+        </div>
+        <div className="artifact-file-info-row">
+          <span className="artifact-file-info-label">文件大小</span>
+          <span>{formatFileSize(version.fileSize)}</span>
+        </div>
+      </div>
+    );
+  }
+  if (thumbnails.length === 0) {
+    return (
+      <div className="artifact-file-info">
+        <div className="artifact-file-info-row">
+          <span>暂无预览，可通过「打开」用系统应用查看。</span>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="artifact-presentation-preview">
+      <div className="artifact-file-info">
+        <div className="artifact-file-info-row">
+          <span className="artifact-file-info-label">文件类型</span>
+          <span>{fileTypeLabel(version.mimeType)}</span>
+        </div>
+        <div className="artifact-file-info-row">
+          <span className="artifact-file-info-label">文件大小</span>
+          <span>{formatFileSize(version.fileSize)}</span>
+        </div>
+        <div className="artifact-file-info-row">
+          <span className="artifact-file-info-label">结构校验</span>
+          <span>{VALIDATION_LABEL[version.validation.structure]}</span>
+        </div>
+        <div className="artifact-file-info-row">
+          <span className="artifact-file-info-label">视觉检查</span>
+          <span>{VALIDATION_LABEL[version.validation.visual]}</span>
+        </div>
+        {version.description && (
+          <div className="artifact-file-info-row">
+            <span className="artifact-file-info-label">说明</span>
+            <span>{version.description}</span>
+          </div>
+        )}
+      </div>
+      <div className="artifact-thumbnail-gallery">
+        {thumbnails.map((thumb) => (
+          <div key={thumb.slideIndex} className="artifact-thumbnail-item">
+            <span className="artifact-thumbnail-index">{thumb.slideIndex + 1}</span>
+            <img
+              src={`file://${thumb.filePath}`}
+              alt={`幻灯片 ${thumb.slideIndex + 1}`}
+              className="artifact-thumbnail-image"
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -33,6 +33,8 @@ import {
   exportSkillRequestSchema,
   fileArtifactDetailSchema,
   getArtifactRequestSchema,
+  getArtifactThumbnailsRequestSchema,
+  getArtifactThumbnailsResultSchema,
   getArtifactVersionRequestSchema,
   getDependencyOperationRequestSchema,
   getFileArtifactRequestSchema,
@@ -393,6 +395,26 @@ function registerArtifactChannels(deps: IpcDependencies): void {
       const storedPath = fileArtifactService.resolveStoredPath(resolvedVersionId);
       const error = await shell.openPath(storedPath);
       return error ? { opened: false, error } : { opened: true };
+    },
+  );
+  handleInput(
+    IpcChannel.GetArtifactThumbnails,
+    getArtifactThumbnailsRequestSchema,
+    getArtifactThumbnailsResultSchema,
+    async (input) => {
+      const { store, fileArtifactService } = deps;
+      if (!fileArtifactService) throw new Error('File artifact service is not available');
+      const artifact = store.artifacts.getDetail(input.artifactId);
+      if (!artifact || artifact.type !== 'presentation')
+        return { thumbnails: [], error: '该成果不存在或不是文件类型。' };
+      const resolvedVersionId = input.versionId ?? artifact.currentVersionId;
+      if (
+        input.versionId &&
+        !store.artifacts.versionBelongsToArtifact(input.versionId, input.artifactId)
+      ) {
+        return { thumbnails: [], error: '该版本不属于此成果。' };
+      }
+      return fileArtifactService.generateThumbnails(resolvedVersionId);
     },
   );
 }

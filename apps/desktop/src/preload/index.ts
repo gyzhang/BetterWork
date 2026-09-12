@@ -12,6 +12,8 @@ import {
   dependencyPlanRequestSchema,
   dependencyPlanSchema,
   exportSkillRequestSchema,
+  getArtifactThumbnailsRequestSchema,
+  getArtifactThumbnailsResultSchema,
   getDependencyOperationRequestSchema,
   getSkillRequestSchema,
   importSkillRequestSchema,
@@ -84,6 +86,12 @@ const api: BetterWorkDesktopApi = {
     getFileDetail: (input) => ipcRenderer.invoke(IpcChannel.GetFileArtifact, input),
     exportFile: (input) => ipcRenderer.invoke(IpcChannel.ExportFileArtifact, input),
     openFile: (input) => ipcRenderer.invoke(IpcChannel.OpenFileArtifact, input),
+    getThumbnails: (input) =>
+      invokeValidated(
+        IpcChannel.GetArtifactThumbnails,
+        getArtifactThumbnailsRequestSchema.parse(input),
+        getArtifactThumbnailsResultSchema,
+      ),
   },
   models: {
     list: () => ipcRenderer.invoke(IpcChannel.ListModels),
