@@ -35,12 +35,13 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | [A07–A12：执行依赖](tasks-a2.md) | 执行契约、macOS/Windows supervisor、环境准备、快照、管理 UI |
 | [A13–A17：样本接线](tasks-a3.md) | 模型指令、文件工具、Run 收口、PPT 样本适配、真实试运行 |
 | [A18–A21：成果分发](tasks-a4.md) | 文件成果、成果 UI、安装资源、跨平台验收 |
+| [B0：对话内能力绑定](tasks-b0.md) | 阶段 B 前置切片：Run↔Skill 1:N、指令按序注入、Composer `+` 菜单与 chip 条、撤销级联；依据 [ADR-0012](../adr/0012-composer-capability-binding.md) |
 | [后续 B/C](phase-b-c-roadmap.md) | 专家配置与研究汇报路径，阶段 A 完成后按模板细化 |
 | [依赖验证记录](dependency-verification.md) | 基础 Python 候选、逐字抄录的上游校验值、本机探测结果与待验证清单 |
 
 产品真相源仍是 [产品定义](../01-product-definition.md)、[能力体系](../05-capability-system.md)、[路线图](../07-mvp-and-roadmap.md)、[UI 规范](../10-ui-ux-system.md)、[工程规范](../12-engineering-standards.md)；本文不创建第二套编码规范。
 
-必须区分：ADR-0008/0009/0011 的产品规则已接受；[ADR-0010](../adr/0010-skill-executor-and-dependencies.md) 的执行技术仍 Proposed；[执行器设计](../designs/skill-executor-and-dependencies.md) 给出推荐实现。后者若调整，在 A00/对应决策记录中说明，不能静默偏离。
+必须区分：ADR-0008/0009/0011 的产品规则已接受；[ADR-0010](../adr/0010-skill-executor-and-dependencies.md) 的执行技术仍 Proposed；[ADR-0012](../adr/0012-composer-capability-binding.md) 的产品与领域关系决策已接受但实现尚未落地，其成本结论（无新增迁移）待编码验证；[执行器设计](../designs/skill-executor-and-dependencies.md) 给出推荐实现。后者若调整，在 A00/对应决策记录中说明，不能静默偏离。
 
 ## 3. 任务板
 

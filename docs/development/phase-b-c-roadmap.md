@@ -8,12 +8,13 @@
 
 | 编号 | 工作与边界 | 必读/主要落点 | 必须证明 |
 | --- | --- | --- | --- |
+| B00 | 对话内能力绑定（前置切片，已拆卡）：Composer `+` 菜单与 chip 条、Run↔Skill 1:N、指令按序注入、撤销级联 | [ADR-0012](../adr/0012-composer-capability-binding.md)、[tasks-b0.md](tasks-b0.md)；agent-protocol、RunService、App.tsx Composer | 一个 Run 同时带两个技能真实执行且快照不串；绑定在界面上可见可撤；无新增迁移；撤销其一取消含它的活跃 Run |
 | B01 | ExpertDefinition、专家修订、Skill 绑定、模型/输出偏好、共用与专属知识范围；先写领域/协议设计再迁移 | docs/02/04/05，agent-protocol、persistence、ADR | source/role/instructions 与项目事实分离；引用不存在/停用 Skill 可保存草稿但不能假装就绪 |
 | B02 | 专家执行配置解析、有效工具与知识范围过滤、Run 固定快照 | RunService、Knowledge 服务、AgentRunInput | 两专家不同知识范围不串资料；同一专家两 Skill 共用任务上下文；不自动给全部工具 |
 | B03 | 专家管理 UI：创建、编辑、副本、启停、Skill 多选、模型、知识、默认输出 | docs/10、views/hooks、typed IPC | 配置实际影响执行；状态可理解；缺模型/Skill/知识资源有定位入口 |
 | B04 | 内置专家分发、任务选择专家与阶段验收 | resources/experts、资源定位器、Task 创建 | 安装后选择一个专家，先研究方法后 PPT Skill，无需切换专家；重启/更新不丢用户配置 |
 
-B01 前将上述行各拆为 A 任务卡同等细度（必读、文件边界、接口、失败、测试、完成条件），并明确知识范围最小方案。不得把范围过滤仅写成 system prompt。B 验收既要有配置界面，也要有真实运行证据。
+B00 已在 2026-09-12 由用户确认交互形态（`+` 菜单）、绑定粒度（1:N）与时机（先出设计），已拆为同等细度任务卡，见 [tasks-b0.md](tasks-b0.md)；它把 B04 中「任务选择 Skill」的部分前移，专家选择仍属 B04。B01 前将上述行各拆为 A 任务卡同等细度（必读、文件边界、接口、失败、测试、完成条件），并明确知识范围最小方案。不得把范围过滤仅写成 system prompt。B 验收既要有配置界面，也要有真实运行证据。
 
 ## 阶段 C：集团智能体场景研究到汇报
 
