@@ -8,6 +8,7 @@ import {
   importSkillRequestSchema,
   jobResultSchema,
   jobSpecSchema,
+  MAX_RUN_SKILL_BINDINGS,
   runtimeEnvironmentSchema,
   runtimeProfileDraftSchema,
   scriptExecutionSchema,
@@ -38,39 +39,44 @@ describe('run protocol', () => {
     ).toThrow();
   });
 
-  it('accepts an optional skill binding with skillId and optional revisionId', () => {
+  it('accepts 1..6 skill bindings and keeps the selected order as the injection order', () => {
     expect(
       startRunRequestSchema.parse({
         taskId: 'task-1',
         sessionId: 'session-1',
         prompt: '生成 PPT',
-        skillBinding: { skillId: 'skill-1' },
+        skillBindings: [{ skillId: 'skill-1' }],
       }),
     ).toEqual({
       taskId: 'task-1',
       sessionId: 'session-1',
       prompt: '生成 PPT',
-      skillBinding: { skillId: 'skill-1' },
+      skillBindings: [{ skillId: 'skill-1' }],
     });
     expect(
       startRunRequestSchema.parse({
         taskId: 'task-1',
         sessionId: 'session-1',
         prompt: '生成 PPT',
-        skillBinding: { skillId: 'skill-1', revisionId: 'rev-1' },
-      }),
-    ).toEqual({
-      taskId: 'task-1',
-      sessionId: 'session-1',
-      prompt: '生成 PPT',
-      skillBinding: { skillId: 'skill-1', revisionId: 'rev-1' },
-    });
+        skillBindings: [{ skillId: 'skill-1', revisionId: 'rev-1' }, { skillId: 'skill-2' }],
+      }).skillBindings,
+    ).toEqual([{ skillId: 'skill-1', revisionId: 'rev-1' }, { skillId: 'skill-2' }]);
+    expect(
+      startRunRequestSchema.parse({
+        taskId: 'task-1',
+        sessionId: 'session-1',
+        prompt: '生成 PPT',
+        skillBindings: Array.from({ length: MAX_RUN_SKILL_BINDINGS }, (_, index) => ({
+          skillId: `skill-${index + 1}`,
+        })),
+      }).skillBindings,
+    ).toHaveLength(MAX_RUN_SKILL_BINDINGS);
     expect(() =>
       startRunRequestSchema.parse({
         taskId: 'task-1',
         sessionId: 'session-1',
         prompt: '生成 PPT',
-        skillBinding: { skillId: '' },
+        skillBindings: [],
       }),
     ).toThrow();
     expect(() =>
@@ -78,7 +84,42 @@ describe('run protocol', () => {
         taskId: 'task-1',
         sessionId: 'session-1',
         prompt: '生成 PPT',
-        skillBinding: { skillId: 'skill-1', extra: true },
+        skillBindings: Array.from({ length: MAX_RUN_SKILL_BINDINGS + 1 }, (_, index) => ({
+          skillId: `skill-${index + 1}`,
+        })),
+      }),
+    ).toThrow();
+    // 重复 skillId 会让同一份指令注入两次，且绑定快照无法去重回溯。
+    expect(() =>
+      startRunRequestSchema.parse({
+        taskId: 'task-1',
+        sessionId: 'session-1',
+        prompt: '生成 PPT',
+        skillBindings: [{ skillId: 'skill-1' }, { skillId: 'skill-1', revisionId: 'rev-1' }],
+      }),
+    ).toThrow();
+    expect(() =>
+      startRunRequestSchema.parse({
+        taskId: 'task-1',
+        sessionId: 'session-1',
+        prompt: '生成 PPT',
+        skillBinding: { skillId: 'skill-1' },
+      }),
+    ).toThrow();
+    expect(() =>
+      startRunRequestSchema.parse({
+        taskId: 'task-1',
+        sessionId: 'session-1',
+        prompt: '生成 PPT',
+        skillBindings: [{ skillId: '' }],
+      }),
+    ).toThrow();
+    expect(() =>
+      startRunRequestSchema.parse({
+        taskId: 'task-1',
+        sessionId: 'session-1',
+        prompt: '生成 PPT',
+        skillBindings: [{ skillId: 'skill-1', extra: true }],
       }),
     ).toThrow();
     expect(() => skillBindingSchema.parse({ skillId: '' })).toThrow();

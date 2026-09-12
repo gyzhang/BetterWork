@@ -318,7 +318,7 @@ describe('RunService', () => {
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
       prompt: '使用 Skill',
-      skillBinding: { skillId },
+      skillBindings: [{ skillId }],
     });
     await waitForCompletion(fixture, runId);
 
@@ -375,7 +375,7 @@ describe('RunService', () => {
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
       prompt: '使用 Skill',
-      skillBinding: { skillId },
+      skillBindings: [{ skillId }],
     });
     await waitForCompletion(fixture, runId);
 
@@ -445,8 +445,11 @@ describe('RunService', () => {
     const window = createWindowStub();
     const skillId = await createTrustedSkill(fixture, 'skill-a15-order');
     const callOrder: string[] = [];
+    // 绑定必须是库里的真行：指令注入现在只读快照，伪造的 bindingId 会被当场拒绝。
+    const execution = createRealExecutionService(fixture);
     const mockExecution = {
-      createBinding: () => ({ id: 'binding-test' }),
+      createBinding: (bindingInput: { runId: string; skillId: string }) =>
+        execution.createBinding(bindingInput),
       async finishRun(): Promise<{ cancelled: number; cleanupFailed: number }> {
         callOrder.push('finishRun');
         return { cancelled: 0, cleanupFailed: 0 };
@@ -458,7 +461,7 @@ describe('RunService', () => {
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
       prompt: '随便聊聊',
-      skillBinding: { skillId },
+      skillBindings: [{ skillId }],
     });
     await waitForCompletion(fixture, runId);
 
@@ -475,8 +478,10 @@ describe('RunService', () => {
     const fixture = await createFixture();
     const window = createWindowStub();
     const skillId = await createTrustedSkill(fixture, 'skill-a15-cleanup');
+    const execution = createRealExecutionService(fixture);
     const mockExecution = {
-      createBinding: () => ({ id: 'binding-cleanup' }),
+      createBinding: (bindingInput: { runId: string; skillId: string }) =>
+        execution.createBinding(bindingInput),
       async finishRun(): Promise<{ cancelled: number; cleanupFailed: number }> {
         throw new Error('子进程清理超时');
       },
@@ -487,7 +492,7 @@ describe('RunService', () => {
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
       prompt: '随便聊聊',
-      skillBinding: { skillId },
+      skillBindings: [{ skillId }],
     });
     await waitForCompletion(fixture, runId);
 
@@ -552,13 +557,13 @@ describe('RunService', () => {
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
       prompt: '随便聊聊',
-      skillBinding: { skillId: targetSkill },
+      skillBindings: [{ skillId: targetSkill }],
     });
     const otherRunId = service.start({
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
       prompt: '随便聊聊',
-      skillBinding: { skillId: otherSkill },
+      skillBindings: [{ skillId: otherSkill }],
     });
 
     const cancelled = await service.cancelRunsForSkill(targetSkill);
@@ -580,94 +585,194 @@ describe('RunService', () => {
   const createRealExecutionService = (fixture: Fixture): SkillExecutionService =>
     new SkillExecutionService(fixture.store, createUnusedSupervisor());
 
-  it('continues the skill binding for follow-up runs in the same skill test-run task', async () => {
+  /** 记录 createBinding 的调用顺序，用于断言绑定建立即注入顺序。 */
+  const createRecordingExecutionService = (
+    fixture: Fixture,
+    onBinding: (skillId: string) => void,
+  ): SkillExecutionService => {
+    const execution = createRealExecutionService(fixture);
+    return {
+      createBinding: (input: { runId: string; skillId: string }) => {
+        onBinding(input.skillId);
+        return execution.createBinding(input);
+      },
+      finishRun: (runId: string) => execution.finishRun(runId),
+    } as unknown as SkillExecutionService;
+  };
+
+  it('records one binding snapshot per skill, in the order the user picked them', async () => {
     const fixture = await createFixture();
     const window = createWindowStub();
-    const skillId = await createTrustedSkill(fixture, 'skill-continue');
+    const researchSkill = await createTrustedSkill(fixture, 'skill-multi-a', '研究 Skill');
+    const reportSkill = await createTrustedSkill(fixture, 'skill-multi-b', '报告 Skill');
+    const bindingOrder: string[] = [];
+    const service = createService(
+      fixture,
+      window,
+      createRecordingExecutionService(fixture, (skillId) => bindingOrder.push(skillId)),
+    );
+
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '先研究再成稿',
+      skillBindings: [{ skillId: researchSkill }, { skillId: reportSkill }],
+    });
+    await waitForCompletion(fixture, runId);
+    expect(statusOf(fixture, runId)).toBe('completed');
+
+    expect(bindingOrder).toEqual([researchSkill, reportSkill]);
+    const bindings = fixture.store.executions.listBindingsByRun(runId);
+    expect(bindings).toHaveLength(2);
+    const snapshotOf = (skillId: string): { revisionId: string; profileId: string } => {
+      const skill = fixture.store.skills.get(skillId);
+      if (!skill?.runtimeProfile) throw new Error(`测试夹具缺少 Skill ${skillId}`);
+      return { revisionId: skill.revision.id, profileId: skill.runtimeProfile.id };
+    };
+    const byRevision = new Map(
+      bindings.map((binding) => [binding.skillRevisionId, binding] as const),
+    );
+    expect(byRevision.size).toBe(2);
+    for (const skillId of [researchSkill, reportSkill]) {
+      const { revisionId, profileId } = snapshotOf(skillId);
+      const binding = byRevision.get(revisionId);
+      // 每个技能必须各自快照，且只能用自己那份 grant，否则一个技能的授权会被另一个继承。
+      expect(binding?.profileRevisionId).toBe(profileId);
+      expect(fixture.store.executions.isBindingAuthorized(binding?.id ?? '')).toBe(true);
+    }
+  });
+
+  it('fails the whole run and records no binding when a later skill is untrusted', async () => {
+    const fixture = await createFixture();
+    const window = createWindowStub();
+    const trustedSkill = await createTrustedSkill(fixture, 'skill-pair-trusted', '已信任 Skill');
+    const untrustedSkill = await createTrustedSkill(
+      fixture,
+      'skill-pair-untrusted',
+      '未信任 Skill',
+    );
+    fixture.store.skills.setTrustPreference(untrustedSkill, 'untrusted');
+    const service = createService(fixture, window, createRealExecutionService(fixture));
+
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '两个技能一起用',
+      skillBindings: [{ skillId: trustedSkill }, { skillId: untrustedSkill }],
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('failed');
+    const error = (
+      fixture.store.runs.listEvents(runId).at(-1) as { type: 'run.failed'; error: string }
+    ).error;
+    // 错误必须指名是哪个技能挡住整个 Run，否则用户无法从六个绑定里找出原因。
+    expect(error).toContain('未信任 Skill');
+    expect(error).toContain('尚未信任');
+    expect(fixture.store.executions.listBindingsByRun(runId)).toEqual([]);
+  });
+
+  it('rejects a stale revisionId before creating any binding', async () => {
+    const fixture = await createFixture();
+    const window = createWindowStub();
+    const skillId = await createTrustedSkill(fixture, 'skill-stale-revision');
+    const service = createService(fixture, window, createRealExecutionService(fixture));
+
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '使用旧修订运行',
+      skillBindings: [{ skillId, revisionId: 'revision-from-another-skill' }],
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('failed');
+    const error = (
+      fixture.store.runs.listEvents(runId).at(-1) as { type: 'run.failed'; error: string }
+    ).error;
+    expect(error).toContain('修订已变化');
+    expect(fixture.store.executions.listBindingsByRun(runId)).toEqual([]);
+  });
+
+  it('starts a skill-free run in a task whose earlier run was bound to a skill', async () => {
+    const fixture = await createFixture();
+    const window = createWindowStub();
+    const skillId = await createTrustedSkill(fixture, 'skill-no-inherit');
     const service = createService(fixture, window, createRealExecutionService(fixture));
 
     const firstRunId = service.start({
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
       prompt: '请运行 Skill 的完整流程',
-      skillBinding: { skillId },
+      skillBindings: [{ skillId }],
     });
     await waitForCompletion(fixture, firstRunId);
-    expect(statusOf(fixture, firstRunId)).toBe('completed');
+    expect(fixture.store.executions.listBindingsByRun(firstRunId)).toHaveLength(1);
 
-    // 试运行会话的后续消息不带 skillBinding，必须延续同 Task 的历史绑定。
+    // 绑定属于 Run 而不是 Task：后续消息不显式选择技能，就必须什都拿不到。
     const secondRunId = service.start({
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
-      prompt: '使用模板继续生成',
+      prompt: '把结论改写成图表',
     });
     await waitForCompletion(fixture, secondRunId);
-    expect(statusOf(fixture, secondRunId)).toBe('completed');
 
-    const firstBindings = fixture.store.executions.listBindingsByRun(firstRunId);
-    const secondBindings = fixture.store.executions.listBindingsByRun(secondRunId);
-    expect(secondBindings).toHaveLength(1);
-    expect(secondBindings[0]?.skillRevisionId).toBe(firstBindings[0]?.skillRevisionId);
-    expect(secondBindings[0]?.profileRevisionId).toBe(firstBindings[0]?.profileRevisionId);
+    expect(statusOf(fixture, secondRunId)).toBe('completed');
+    expect(fixture.store.executions.listBindingsByRun(secondRunId)).toEqual([]);
   });
 
-  it('fails a follow-up run when the continued skill has been disabled', async () => {
+  it('keeps a skill-free run alive when an earlier skill was disabled mid-task', async () => {
     const fixture = await createFixture();
     const window = createWindowStub();
-    const skillId = await createTrustedSkill(fixture, 'skill-continue-disabled');
+    const skillId = await createTrustedSkill(fixture, 'skill-disabled-unrelated');
     const service = createService(fixture, window, createRealExecutionService(fixture));
 
     const firstRunId = service.start({
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
       prompt: '请运行 Skill 的完整流程',
-      skillBinding: { skillId },
+      skillBindings: [{ skillId }],
     });
     await waitForCompletion(fixture, firstRunId);
-    expect(statusOf(fixture, firstRunId)).toBe('completed');
-
     fixture.store.skills.setEnabled(skillId, false);
 
+    // 隐式继承曾让停用技能连带阻断同任务里毫不相干的后续 Run。
     const secondRunId = service.start({
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
-      prompt: '使用模板继续生成',
+      prompt: '把结论改写成图表',
     });
     await waitForCompletion(fixture, secondRunId);
-    expect(statusOf(fixture, secondRunId)).toBe('failed');
-    const error = (
-      fixture.store.runs.listEvents(secondRunId).at(-1) as { type: 'run.failed'; error: string }
-    ).error;
-    expect(error).toContain('disabled');
+
+    expect(statusOf(fixture, secondRunId)).toBe('completed');
   });
 
-  it('cancelRunsForSkill() also cancels a run that continued the binding', async () => {
+  it('cancelRunsForSkill() leaves runs that never bound the skill', async () => {
     const fixture = await createFixture();
     const window = createWindowStub();
-    const skillId = await createTrustedSkill(fixture, 'skill-continue-cancel');
+    const skillId = await createTrustedSkill(fixture, 'skill-cancel-unbound');
     const service = createService(fixture, window, createRealExecutionService(fixture));
 
-    const firstRunId = service.start({
+    const boundRunId = service.start({
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
       prompt: '请运行 Skill 的完整流程',
-      skillBinding: { skillId },
+      skillBindings: [{ skillId }],
     });
-    await waitForCompletion(fixture, firstRunId);
+    await waitForCompletion(fixture, boundRunId);
 
-    const secondRunId = service.start({
+    const unboundRunId = service.start({
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
-      prompt: '使用模板继续生成',
+      prompt: '把结论改写成图表',
     });
     for (let attempt = 0; attempt < 200; attempt += 1) {
-      if (fixture.store.executions.listBindingsByRun(secondRunId).length > 0) break;
+      if (service.isActive(unboundRunId)) break;
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
-    expect(fixture.store.executions.listBindingsByRun(secondRunId)).toHaveLength(1);
 
-    expect(await service.cancelRunsForSkill(skillId)).toBe(1);
-    await waitForCompletion(fixture, secondRunId);
-    expect(statusOf(fixture, secondRunId)).toBe('cancelled');
+    expect(await service.cancelRunsForSkill(skillId)).toBe(0);
+    await waitForCompletion(fixture, unboundRunId);
+    expect(statusOf(fixture, unboundRunId)).toBe('completed');
   });
 });
