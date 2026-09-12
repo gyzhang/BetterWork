@@ -2,6 +2,8 @@
 
 > 2026-09-08 产品关系补充：长期目录承接 Workspace，一个专家调用多项 Skill 持续完成任务，成果是持续协作对象。见 [ADR-0008](adr/0008-personal-workbench-and-capability-first.md)。本文接口仍需按实现状态阅读；配置快照、知识范围和持久化讨论节点的具体 Schema 待实现 ADR，不视为已落地。
 
+> 2026-09-12 领域关系变更：Run 与 Skill 由 1:1 改为 1:N，命名为能力绑定，见 §4.1 与 [ADR-0012](adr/0012-composer-capability-binding.md)。该变更尚未实现。
+
 ## 1. 总览
 
 ```text
@@ -87,6 +89,32 @@ interface Run {
 不得通过拼接字符串表达这些关系。
 
 当前实现状态：`status` 只落地 `running | completed | failed | cancelled`；`queued` 与 `waiting` 依赖尚未建设的审批/确认点语义（需要先在 `agent-protocol` 增加对应事件，见 [系统架构](03-system-architecture.md) §5）。`error` 以 `run.failed` 事件的形式持久化在 Run Event Journal 中，不是 `runs` 表的列。
+
+### 4.1 能力绑定
+
+Run 通过能力绑定使用 Skill。一个 Run 绑定 1–6 个 Skill，每个绑定是一次不可变快照：固定 Skill 修订、运行配置修订、环境、依赖快照与信任授权。绑定顺序即指令注入顺序。
+
+```ts
+interface CapabilityBinding {
+  id: string;
+  runId: string;
+  skillRevisionId: string;
+  profileRevisionId: string;
+  environmentId?: string;
+  dependencySnapshotIds: string[];
+  grantId: string;
+  createdAt: number;
+}
+```
+
+约束：
+
+- 绑定属于 Run，不属于 Task 或 Session。Task 的「当前绑定」由其最近一个 Run 的绑定集合推导，只用于界面呈现，不是独立存储的事实；不得存在界面上看不见、也撤不掉的隐式绑定。
+- 任一绑定不满足启用、信任或依赖前置条件时整个 Run 不启动，不静默剔除后继续。
+- 撤销信任或停用某个 Skill 会取消所有包含它的活跃 Run，即使它只是多个绑定中的一个。
+- 运行期不增删绑定；调整绑定属于下一次 Run。
+
+当前实现状态：`RunSkillBinding` 与 `run_skill_bindings` 表已按上述结构落地，表上 `run_id` 只有普通索引、无唯一约束，存储层已允许一个 Run 多条绑定；`skill_read_resource` 与 `skill_execute` 的入参也已携带 `bindingId`，`AgentRunInput.skillInstructions` 已是数组。缺口集中在应用层：`StartRunRequest.skillBinding` 仍是单个对象，RunService 每次只解析一条绑定，且未显式指定时会自动延续同任务最近一次绑定；Composer 没有能力选择入口，技能只能从 Skill 试运行带入。改造范围见 [ADR-0012](adr/0012-composer-capability-binding.md)。
 
 ## 5. Step
 
@@ -204,6 +232,8 @@ Capability 是运行时可使用能力的统一抽象，来源包括：
 - MCP Tool
 - Skill
 - Kit 安装的能力
+
+Skill 进入某次运行的唯一途径是能力绑定（§4.1）：启用与信任是 Skill 的全局状态，绑定才是本次运行的授权依据。
 
 具体语义见 [能力体系](05-capability-system.md)。
 
