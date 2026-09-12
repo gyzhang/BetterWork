@@ -1243,6 +1243,27 @@ export interface OpenFileArtifactResult {
   opened: boolean;
   error?: string;
 }
+
+export const getArtifactThumbnailsRequestSchema = z.object({
+  artifactId: z.string().min(1),
+  versionId: z.string().min(1).optional(),
+});
+export type GetArtifactThumbnailsRequest = z.infer<typeof getArtifactThumbnailsRequestSchema>;
+
+export const artifactThumbnailSchema = z.object({
+  slideIndex: z.number().int().nonnegative(),
+  filePath: z.string().min(1),
+});
+export type ArtifactThumbnail = z.infer<typeof artifactThumbnailSchema>;
+
+export const getArtifactThumbnailsResultSchema = z.object({
+  thumbnails: z.array(artifactThumbnailSchema),
+  error: z.string().optional(),
+});
+export interface GetArtifactThumbnailsResult {
+  thumbnails: ArtifactThumbnail[];
+  error?: string | undefined;
+}
 export const startRunResultSchema = z.object({ runId: z.string().min(1) });
 export const cancelledResultSchema = z.object({ cancelled: z.boolean() });
 export const deletedResultSchema = z.object({ deleted: z.boolean() });
@@ -1453,6 +1474,7 @@ export const IpcChannel = {
   GetFileArtifact: 'artifact:get-file',
   ExportFileArtifact: 'artifact:export-file',
   OpenFileArtifact: 'artifact:open-file',
+  GetArtifactThumbnails: 'artifact:get-thumbnails',
   ListModels: 'model:list',
   SaveModel: 'model:save',
   DeleteModel: 'model:delete',
@@ -1527,6 +1549,7 @@ export interface BetterWorkDesktopApi {
     getFileDetail(input: GetFileArtifactRequest): Promise<FileArtifactDetail | null>;
     exportFile(input: ExportFileArtifactRequest): Promise<ExportFileArtifactResult>;
     openFile(input: OpenFileArtifactRequest): Promise<OpenFileArtifactResult>;
+    getThumbnails(input: GetArtifactThumbnailsRequest): Promise<GetArtifactThumbnailsResult>;
   };
   models: {
     list(): Promise<ModelProfileSummary[]>;

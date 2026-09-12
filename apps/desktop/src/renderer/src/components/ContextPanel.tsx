@@ -27,7 +27,11 @@ const MIME_LABEL_MAP: Record<string, string> = {
 
 const artifactTypeLabel = (artifact: ArtifactSummary): string => {
   if (artifact.type === 'presentation' && artifact.mimeType) {
-    return MIME_LABEL_MAP[artifact.mimeType] ?? artifact.mimeType.split('/').pop()?.toUpperCase() ?? 'FILE';
+    return (
+      MIME_LABEL_MAP[artifact.mimeType] ??
+      artifact.mimeType.split('/').pop()?.toUpperCase() ??
+      'FILE'
+    );
   }
   return 'Markdown';
 };
@@ -201,7 +205,9 @@ export function ContextPanel({
                     </span>
                     <div>
                       <strong>{artifact.title}</strong>
-                      <small>{artifactTypeLabel(artifact)} · v{artifact.versionNumber}</small>
+                      <small>
+                        {artifactTypeLabel(artifact)} · v{artifact.versionNumber}
+                      </small>
                     </div>
                   </article>
                 ))}
