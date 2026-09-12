@@ -5,6 +5,8 @@ out/
 release/
 coverage/
 package-lock.json
+# CodeArts 本地工具缓存，禁止进入版本控制（docs/12 §10）
+.codeartsdoer/
 
 # 文档与品牌资产不参与代码格式化：
 # 中文长行经格式化后难以逐字回读校验，SVG 标志为人工定稿资产

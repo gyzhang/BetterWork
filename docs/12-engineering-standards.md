@@ -175,6 +175,8 @@ standards/
 
 ## 10. 例外机制
 
+仓库根 `.codeartsdoer/` 是 CodeArts 自动生成的本地索引与工具配置，不是产品源码。Git、ESLint、Prettier 和结构扫描排除此根目录；护栏另外检查它没有被 Git 跟踪。该例外不允许产品数据库或密钥进入源码目录，也不豁免其他位置的同名目录。
+
 规范可以有例外，但例外必须**写在配置里并说明理由**，不允许散落在源码中。
 
 - 源码里**不接受单点豁免**：`eslint-disable`、`@ts-ignore`、`@ts-expect-error`、`prettier-ignore` 一律为零，由结构护栏强制。真要放宽某条规则，改 `eslint.config.mjs` 并在配置注释里写清理由——这会迫使例外可见、可评审，而不是藏进一行注释。
