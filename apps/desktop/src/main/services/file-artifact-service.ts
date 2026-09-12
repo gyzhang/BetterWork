@@ -140,10 +140,31 @@ export class FileArtifactService {
     return path.join(this.artifactFilesRoot, versionId, 'thumbnails');
   }
 
+  /**
+   * 缓存所属的渲染语义版本。以点开头，不会被 `slide-<n>.png` 的扫页匹配到。
+   *
+   * 缺失或不一致就当未命中：宁可多渲染一次，也不把旧渲染器留下的图当成有效缓存。
+   */
+  private readCachedRevision(versionId: string): number | undefined {
+    const marker = path.join(this.thumbnailDir(versionId), '.revision');
+    if (!existsSync(marker)) return undefined;
+    try {
+      const recorded = Number.parseInt(readFileSync(marker, 'utf8').trim(), 10);
+      return Number.isFinite(recorded) ? recorded : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   /** 读取已缓存的幻灯片预览。文件名即页序：`slide-<n>.png`。 */
   listThumbnails(versionId: string): ArtifactThumbnail[] {
     const dir = this.thumbnailDir(versionId);
     if (!existsSync(dir)) return [];
+    if (this.readCachedRevision(versionId) !== this.pptxRenderer.previewRevision) {
+      // 渲染器换过了：整目录作废，由下一次请求完整重建，不留新旧混用的残页。
+      rmSync(dir, { recursive: true, force: true });
+      return [];
+    }
     const thumbnails: ArtifactThumbnail[] = [];
     for (const entry of readdirSync(dir)) {
       const indexed = /^slide-(\d+)\.png$/.exec(entry)?.[1];
@@ -185,6 +206,8 @@ export class FileArtifactService {
       for (const slide of slides) {
         writeFileSync(path.join(thumbDir, `slide-${slide.slideIndex}.png`), slide.png);
       }
+      // 版本标记最后写：中途崩溃只会留下无标记的目录，下次读取作废而不是当成有效缓存。
+      writeFileSync(path.join(thumbDir, '.revision'), `${this.pptxRenderer.previewRevision}\n`);
     } catch (error) {
       rmSync(thumbDir, { recursive: true, force: true });
       return { thumbnails: [], error: `幻灯片预览写入失败：${describeError(error)}` };

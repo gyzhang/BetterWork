@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { symlink } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -347,6 +347,7 @@ describe('slide previews', () => {
     expect(first.thumbnails.map((thumb) => thumb.slideIndex)).toEqual([0, 1]);
     expect(first.thumbnails[0]?.dataUrl.startsWith('data:image/png;base64,')).toBe(true);
     expect(readdirSync(path.join(f.filesRoot, registered.versionId, 'thumbnails')).sort()).toEqual([
+      '.revision',
       'slide-0.png',
       'slide-1.png',
     ]);
@@ -388,6 +389,55 @@ describe('slide previews', () => {
     const result = await f.service.generateThumbnails(registered.versionId);
     expect(result.error).toContain('成果文件不存在');
     expect(f.renderer.calls).toHaveLength(0);
+    f.store.close();
+  });
+
+  // 渲染语义变了（本地补丁、字体映射、几何处理）而成果文件本身没变，是预览缺陷最难发现的一种
+  // 残留：修好了渲染器，用户打开还是旧图。缓存只按 versionId 键控接不到这个信号，
+  // 所以由渲染器携带 previewRevision，不一致就整目录作废。
+  it('discards cached pages left behind by a different renderer revision', async () => {
+    const f = fixture();
+    const registered = await f.service.register(f.input);
+    await f.service.generateThumbnails(registered.versionId);
+    expect(f.renderer.calls).toHaveLength(1);
+
+    const thumbDir = path.join(f.filesRoot, registered.versionId, 'thumbnails');
+    const upgraded = openService(
+      f.filesRoot,
+      async () => f.file,
+      fakePptxRenderer({ previewRevision: f.renderer.previewRevision + 1 }),
+    );
+    const result = await upgraded.service.generateThumbnails(registered.versionId);
+
+    expect(result.error).toBeUndefined();
+    expect(upgraded.renderer.calls).toHaveLength(1);
+    // 重建后标记写的是新版本，不会每进一次页面都重渲染一次。
+    expect(readFileSync(path.join(thumbDir, '.revision'), 'utf8').trim()).toBe(
+      String(f.renderer.previewRevision + 1),
+    );
+    const third = await upgraded.service.generateThumbnails(registered.versionId);
+    expect(third.thumbnails).toEqual(result.thumbnails);
+    expect(upgraded.renderer.calls).toHaveLength(1);
+    f.store.close();
+    upgraded.store.close();
+  });
+
+  it('discards a cache directory that carries no renderer revision marker', async () => {
+    const f = fixture();
+    const registered = await f.service.register(f.input);
+    await f.service.generateThumbnails(registered.versionId);
+
+    // 引入标记之前已经存在的缓存就是这样：图在、没有版本可判，只能当无效处理。
+    rmSync(path.join(f.filesRoot, registered.versionId, 'thumbnails', '.revision'));
+
+    const listed = f.service.listThumbnails(registered.versionId);
+    expect(listed).toEqual([]);
+    expect(existsSync(path.join(f.filesRoot, registered.versionId, 'thumbnails'))).toBe(false);
+
+    const regenerated = await f.service.generateThumbnails(registered.versionId);
+    expect(regenerated.error).toBeUndefined();
+    expect(regenerated.thumbnails).toHaveLength(2);
+    expect(f.renderer.calls).toHaveLength(2);
     f.store.close();
   });
 });

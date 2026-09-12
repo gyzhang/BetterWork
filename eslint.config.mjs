@@ -20,6 +20,8 @@ export default tseslint.config(
   {
     name: 'betterwork/ignores',
     // CodeArts 的本地索引与工具配置不是产品源码（docs/12 §10）。
+    // `.betterwork/` 是应用自己的本地数据目录（任务工作区、Skill 生成的脚本），
+    // 已同时被 git 与 Prettier 忽略；不挡在这里的话，跑一次任务就能把 npm run verify 刷红。
     ignores: [
       '**/node_modules/**',
       '**/dist/**',
@@ -27,6 +29,7 @@ export default tseslint.config(
       '**/release/**',
       '**/coverage/**',
       '.codeartsdoer/**',
+      '.betterwork/**',
     ],
   },
 

@@ -1,5 +1,5 @@
 diff --git a/node_modules/pptx-glimpse/dist/index.cjs b/node_modules/pptx-glimpse/dist/index.cjs
-index e3f23e6..bd1c7fe 100644
+index e3f23e6..95b0085 100644
 --- a/node_modules/pptx-glimpse/dist/index.cjs
 +++ b/node_modules/pptx-glimpse/dist/index.cjs
 @@ -1220,6 +1220,7 @@ var CJK_TTC_PATTERNS = [
@@ -90,7 +90,56 @@ index e3f23e6..bd1c7fe 100644
  }
  function findScriptFont(fontNode, script) {
    const fontItems = fontNode?.font;
-@@ -9113,7 +9128,11 @@ function escapeXmlAttr(str) {
+@@ -7574,10 +7589,47 @@ function renderCustomGeometry(paths, shapeWidth, shapeHeight) {
+   parts.push("</g>");
+   return parts.join("");
+ }
++function scalePathNumber(value, factor) {
++  return String(Math.round(value * factor * 1e3) / 1e3);
++}
++function scalePathCommands(commands, scaleX, scaleY) {
++  const tokens = commands.match(/[A-Za-z]|[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/g);
++  if (!tokens) return commands;
++  const out = [];
++  let cmd = "";
++  let index = 0;
++  for (const token of tokens) {
++    if (/^[A-Za-z]$/.test(token)) {
++      cmd = token;
++      index = 0;
++      out.push(token);
++      continue;
++    }
++    const upper = cmd.toUpperCase();
++    if (upper === "Z") {
++      out.push(token);
++      continue;
++    }
++    const value = Number(token);
++    if (upper === "A") {
++      const slot = index % 7;
++      if (slot === 2 || slot === 3 || slot === 4) {
++        out.push(token);
++      } else {
++        out.push(scalePathNumber(value, slot === 0 || slot === 5 ? scaleX : scaleY));
++      }
++      index++;
++      continue;
++    }
++    out.push(scalePathNumber(value, index % 2 === 0 ? scaleX : scaleY));
++    index++;
++  }
++  return out.join(" ");
++}
+ function renderCustomPath(path, shapeWidth, shapeHeight) {
+   const scaleX = path.width > 0 ? shapeWidth / path.width : 1;
+   const scaleY = path.height > 0 ? shapeHeight / path.height : 1;
+-  return `<path d="${path.commands}" transform="scale(${scaleX}, ${scaleY})"/>`;
++  return `<path d="${scalePathCommands(path.commands, scaleX, scaleY)}"/>`;
+ }
+ 
+ // src/utils/text-wrap.ts
+@@ -9113,7 +9165,11 @@ function escapeXmlAttr(str) {
  
  // src/converter.ts
  async function convertPptxToSvg(input, options) {
@@ -117,7 +166,7 @@ index 86b7424..0f59695 100644
      fontMapping?: FontMapping;
  }
 diff --git a/node_modules/pptx-glimpse/dist/index.js b/node_modules/pptx-glimpse/dist/index.js
-index 05c60e4..ae851a2 100644
+index 05c60e4..5d41b31 100644
 --- a/node_modules/pptx-glimpse/dist/index.js
 +++ b/node_modules/pptx-glimpse/dist/index.js
 @@ -1183,6 +1183,7 @@ var CJK_TTC_PATTERNS = [
@@ -208,7 +257,56 @@ index 05c60e4..ae851a2 100644
  }
  function findScriptFont(fontNode, script) {
    const fontItems = fontNode?.font;
-@@ -9075,7 +9090,11 @@ function escapeXmlAttr(str) {
+@@ -7536,10 +7551,47 @@ function renderCustomGeometry(paths, shapeWidth, shapeHeight) {
+   parts.push("</g>");
+   return parts.join("");
+ }
++function scalePathNumber(value, factor) {
++  return String(Math.round(value * factor * 1e3) / 1e3);
++}
++function scalePathCommands(commands, scaleX, scaleY) {
++  const tokens = commands.match(/[A-Za-z]|[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/g);
++  if (!tokens) return commands;
++  const out = [];
++  let cmd = "";
++  let index = 0;
++  for (const token of tokens) {
++    if (/^[A-Za-z]$/.test(token)) {
++      cmd = token;
++      index = 0;
++      out.push(token);
++      continue;
++    }
++    const upper = cmd.toUpperCase();
++    if (upper === "Z") {
++      out.push(token);
++      continue;
++    }
++    const value = Number(token);
++    if (upper === "A") {
++      const slot = index % 7;
++      if (slot === 2 || slot === 3 || slot === 4) {
++        out.push(token);
++      } else {
++        out.push(scalePathNumber(value, slot === 0 || slot === 5 ? scaleX : scaleY));
++      }
++      index++;
++      continue;
++    }
++    out.push(scalePathNumber(value, index % 2 === 0 ? scaleX : scaleY));
++    index++;
++  }
++  return out.join(" ");
++}
+ function renderCustomPath(path, shapeWidth, shapeHeight) {
+   const scaleX = path.width > 0 ? shapeWidth / path.width : 1;
+   const scaleY = path.height > 0 ? shapeHeight / path.height : 1;
+-  return `<path d="${path.commands}" transform="scale(${scaleX}, ${scaleY})"/>`;
++  return `<path d="${scalePathCommands(path.commands, scaleX, scaleY)}"/>`;
+ }
+ 
+ // src/utils/text-wrap.ts
+@@ -9075,7 +9127,11 @@ function escapeXmlAttr(str) {
  
  // src/converter.ts
  async function convertPptxToSvg(input, options) {
