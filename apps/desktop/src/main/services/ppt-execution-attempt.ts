@@ -18,7 +18,11 @@ export function preparePptAttempt(
   };
   if (commandId === 'svg-export') {
     const project = resolve('project_dir');
-    const target = managedPath(workDir, `.attempts/${randomUUID()}/project`, true);
+    const target = managedPath(
+      workDir,
+      `.attempts/${randomUUID()}/${path.basename(project)}`,
+      true,
+    );
     cpSync(project, target, {
       recursive: true,
       errorOnExist: true,
