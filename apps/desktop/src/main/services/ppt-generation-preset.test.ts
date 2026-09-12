@@ -275,6 +275,36 @@ describe('PptGenerationAdapter', () => {
       expect(result?.status).toBe('succeeded');
     });
   });
+
+  describe('runtimeConventions', () => {
+    it('returns undefined when none of the preset commands are present', () => {
+      expect(adapter.runtimeConventions?.(new Set(['analyze']))).toBeUndefined();
+    });
+
+    it('mentions only the commands actually declared by the binding', () => {
+      const onlyValidate = adapter.runtimeConventions?.(new Set(['pptx-validate']));
+      expect(onlyValidate).toContain('pptx-validate');
+      expect(onlyValidate).not.toContain('svg-export');
+      expect(onlyValidate).not.toContain('template-merge');
+    });
+
+    it('describes the attempt separation only when both export and merge are bound', () => {
+      const both = adapter.runtimeConventions?.(new Set(['svg-export', 'template-merge']));
+      expect(both).toContain('svg-export');
+      expect(both).toContain('template-merge');
+      expect(both).toContain('attempt');
+      // 只有 svg-export 时没有任何预设口径——attempt 合并规则要求两个命令都在。
+      expect(adapter.runtimeConventions?.(new Set(['svg-export']))).toBeUndefined();
+    });
+
+    it('keeps the artifact registration gate tied to pptx-validate', () => {
+      const withValidate = adapter.runtimeConventions?.(
+        new Set(['svg-export', 'template-merge', 'pptx-validate']),
+      );
+      expect(withValidate).toContain('artifact_register_file');
+      expect(withValidate).toContain('pptx-validate');
+    });
+  });
 });
 
 it.each(['', 'OK', 'invalid JSON', '{"issues":["broken"]}', '== deck.pptx  (parts=20, slides=2)'])(

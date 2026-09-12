@@ -86,6 +86,27 @@ class PptGenerationAdapter implements SkillAdapter {
     return interpretValidateOutput(raw);
   }
 
+  runtimeConventions(commandIds: ReadonlySet<string>): string | undefined {
+    const clauses: string[] = [];
+    if (commandIds.has('svg-export') && commandIds.has('template-merge')) {
+      clauses.push(
+        'svg-export 与 template-merge 各自在独立 attempt 目录中执行，后续步骤必须使用它们返回的实际输出路径，不得自行拼接路径。',
+      );
+    }
+    if (commandIds.has('template-merge')) {
+      clauses.push(
+        'template-merge 的 template_path 传 assets/... 时指向本 Skill 自带的只读公司模板，不要复制到其他位置后引用副本。',
+      );
+    }
+    if (commandIds.has('pptx-validate')) {
+      clauses.push(
+        'pptx-validate 返回成功后，才能用该次执行的 executionId 与 outputIds 调用 artifact_register_file 登记 PPTX 成果。',
+      );
+    }
+    if (clauses.length === 0) return undefined;
+    return `PPT 生成补充约定：${clauses.join('')}`;
+  }
+
   private resolveProjectInit(
     args: Record<string, unknown>,
     context: AdapterContext,

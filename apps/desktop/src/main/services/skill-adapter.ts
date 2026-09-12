@@ -34,6 +34,14 @@ export interface SkillAdapter {
     commandId: string,
     raw: AwaitedExecutionSnapshot,
   ): SkillCommandExecuteOutput | undefined;
+  /**
+   * 本预设专属的运行约定段落，会被追加到该 Skill 的指令末尾（ADR-0012 决策 4）。
+   *
+   * 只允许写「这个样本的命令该怎么用」，通用约束（work 目录、expectedHash、bindingId、
+   * 不自行声明验证状态）由 `skill-runtime-conventions` 统一持有，不得在此重复。
+   * 参数是本次绑定里该 Skill 实际声明的命令 id：用不到的命令不得出现在文案里。
+   */
+  runtimeConventions?(commandIds: ReadonlySet<string>): string | undefined;
 }
 
 export interface AwaitedExecutionSnapshot {
