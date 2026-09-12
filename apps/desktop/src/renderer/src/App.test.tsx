@@ -142,7 +142,7 @@ describe('Skill test run in the task composer', () => {
         taskId: 'new-task',
         sessionId: 'new-session',
         prompt: goal,
-        skillBinding: { skillId: skill.id, revisionId: skill.currentRevisionId },
+        skillBindings: [{ skillId: skill.id, revisionId: skill.currentRevisionId }],
       }),
     );
     expect(api.tasks.create).toHaveBeenCalledExactlyOnceWith({
@@ -198,7 +198,7 @@ describe('Skill test run in the task composer', () => {
     expect(api.runs.start).toHaveBeenLastCalledWith(
       expect.objectContaining({
         prompt: goal,
-        skillBinding: { skillId: skill.id, revisionId: skill.currentRevisionId },
+        skillBindings: [{ skillId: skill.id, revisionId: skill.currentRevisionId }],
       }),
     );
   });

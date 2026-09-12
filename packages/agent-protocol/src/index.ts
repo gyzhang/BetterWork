@@ -80,12 +80,35 @@ export const skillBindingSchema = z
   .strict();
 export type SkillBinding = z.infer<typeof skillBindingSchema>;
 
+/**
+ * 一次 Run 可绑定的 Skill 上限（ADR-0012 决策 3）。
+ * 取值受两个约束：Skill 指令注入共用 `SKILL_INSTRUCTION_BUDGET`，
+ * 以及 Composer chip 条的可读性；不是技术极限。
+ */
+export const MAX_RUN_SKILL_BINDINGS = 6;
+
+/**
+ * 一次 Run 的能力绑定集合。顺序即指令注入顺序，同一 skillId 不得重复——
+ * 重复会让同一份指令注入两次，且绑定快照无法去重回溯（ADR-0012 决策 3）。
+ */
+const runSkillBindingsSchema = z
+  .array(skillBindingSchema)
+  .min(1)
+  .max(MAX_RUN_SKILL_BINDINGS)
+  .refine(
+    (bindings) => new Set(bindings.map((binding) => binding.skillId)).size === bindings.length,
+    {
+      message: 'skillBindings 中存在重复的 skillId',
+    },
+  );
+
 export const startRunRequestSchema = z
   .object({
     taskId: z.string().min(1),
     sessionId: z.string().min(1),
     prompt: z.string().trim().min(1),
-    skillBinding: skillBindingSchema.optional(),
+    /** 缺失表示本次 Run 不携带任何 Skill——不延续同 Task 的历史绑定。 */
+    skillBindings: runSkillBindingsSchema.optional(),
   })
   .strict();
 export type StartRunRequest = z.infer<typeof startRunRequestSchema>;

@@ -301,7 +301,7 @@ export function App(): React.JSX.Element {
         sessionId: task.sessionId,
         prompt,
         ...(taskSkill
-          ? { skillBinding: { skillId: taskSkill.id, revisionId: taskSkill.currentRevisionId } }
+          ? { skillBindings: [{ skillId: taskSkill.id, revisionId: taskSkill.currentRevisionId }] }
           : {}),
       });
       runSelectionRequestRef.current += 1;

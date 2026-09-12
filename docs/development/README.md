@@ -41,7 +41,7 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 
 产品真相源仍是 [产品定义](../01-product-definition.md)、[能力体系](../05-capability-system.md)、[路线图](../07-mvp-and-roadmap.md)、[UI 规范](../10-ui-ux-system.md)、[工程规范](../12-engineering-standards.md)；本文不创建第二套编码规范。
 
-必须区分：ADR-0008/0009/0011 的产品规则已接受；[ADR-0010](../adr/0010-skill-executor-and-dependencies.md) 的执行技术仍 Proposed；[ADR-0012](../adr/0012-composer-capability-binding.md) 的产品与领域关系决策已接受但实现尚未落地，其成本结论（无新增迁移）待编码验证；[执行器设计](../designs/skill-executor-and-dependencies.md) 给出推荐实现。后者若调整，在 A00/对应决策记录中说明，不能静默偏离。
+必须区分：ADR-0008/0009/0011 的产品规则已接受；[ADR-0010](../adr/0010-skill-executor-and-dependencies.md) 的执行技术仍 Proposed；[ADR-0012](../adr/0012-composer-capability-binding.md) 的产品与领域关系决策已接受，其中绑定解析与协议部分已落地、成本结论（无新增迁移）已经代码验证，界面部分仍待实现，逐项进度见该 ADR §实现进度与下方任务板 B00 行；[执行器设计](../designs/skill-executor-and-dependencies.md) 给出推荐实现。后者若调整，在 A00/对应决策记录中说明，不能静默偏离。
 
 ## 3. 任务板
 
@@ -73,6 +73,11 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | A19 | 文件成果 UI、打开与导出 | A18 | doing | [ArtifactView 测试](../../apps/desktop/src/renderer/src/views/ArtifactView.test.tsx)、[use-artifact-viewer 测试](../../apps/desktop/src/renderer/src/hooks/use-artifact-viewer.test.tsx)、[IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)；`npm run verify` 退出 0（34 文件 / 342 测试），2026-09-09 00:56。**待手工验收**：打开/导出/版本切换/Markdown 回归 |
 | A20 | 内置目录与依赖制品打包 | A19 | doing | [electron-builder 配置](../../apps/desktop/electron-builder.yml)、[启动注册](../../apps/desktop/src/main/index.ts)、[SkillService 测试](../../apps/desktop/src/main/services/skill-service.test.ts)（6 项新增：开发/安装寻址、缺资源拒绝、用户副本独立、同名并存、无敏感材料）；`npm run verify` 退出 0（39 文件 / 348 测试），2026-09-10 01:06 |
 | A21 | 安装包验收与阶段 A 收尾 | A20 | todo | — |
+| B00-1 | StartRun 协议与绑定解析改 1:N | 无 | done | [协议测试](../../packages/agent-protocol/src/index.test.ts)（1–6 项、去重、超上限拒绝、旧单数字段拒绝）、[RunService 测试](../../apps/desktop/src/main/services/run-service.test.ts)（两技能各自快照且不串、后一技能未信任时整 Run 失败且不留下任何绑定、revisionId 过时拒绝、后续 Run 不再继承绑定、停用技能不连带无关 Run、无绑定 Run 不被误取消）；未改动 schema，无新增迁移；`npm run verify` 退出 0（50 文件 / 411 测试），2026-09-13 00:46。真实开发窗口的双技能运行属于 B00-5 |
+| B00-2 | 指令注入顺序与运行约定解耦 | B00-1 | todo | — |
+| B00-3 | 受控弹层基座 | 无 | todo | — |
+| B00-4 | Composer `+` 菜单与 chip 条 | B00-1、B00-3 | todo | — |
+| B00-5 | 撤销级联与 B0 验收 | B00-2、B00-4 | todo | — |
 
 串行是有意选择：共享协议、迁移、App.tsx、RunService 等容易冲突。没有用户要求不并行派发。A09 的真实 Windows 验收若缺设备，标 blocked；用户可明确允许后续非 Windows 任务先行，但 历史跨平台门槛已按 2026-09-12 用户授权缩为本轮 macOS 验收；Windows 单独保留未完成记录。
 

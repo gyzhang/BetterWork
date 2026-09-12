@@ -55,14 +55,22 @@ import type { SkillExecutionService } from './skill-execution-service';
 import type { SkillService } from './skill-service';
 import type { ToolchainSnapshotService } from './toolchain-snapshot-service';
 
+/** 一次执行的绑定解析结果；仅在 Run 启动前有效。 */
+interface ResolvedSkillBindings {
+  /** 本次 Run 建立的绑定快照 ID，顺序即注入顺序；空表示不开放 Skill 工具。 */
+  bindingIds: string[];
+  /** 无绑定时为 undefined，避免向模型注入空的 system 指令段。 */
+  instructions?: SkillInstruction[];
+}
+
 /** 一次执行期间的内存态；Run 结束后整条丢弃。 */
 interface ActiveRun {
   taskId: string;
   prompt: string;
   controller: AbortController;
   workspacePath: string;
-  skillId?: string;
-  bindingId?: string;
+  /** 本次 Run 绑定的 Skill，仅用于撤销/停用级联；顺序与用户选择顺序一致。 */
+  skillIds: string[];
   /** toolCallId -> 工具名，用于在 tool.completed 时判断该不该登记 Evidence。 */
   toolNames: Map<string, string>;
 }
@@ -142,7 +150,7 @@ export class RunService {
       prompt: input.prompt,
       controller,
       workspacePath: context.workspacePath,
-      ...(input.skillBinding ? { skillId: input.skillBinding.skillId } : {}),
+      skillIds: (input.skillBindings ?? []).map((binding) => binding.skillId),
       toolNames: new Map(),
     });
 
@@ -197,11 +205,12 @@ export class RunService {
     }
   }
 
-  /** 撤销信任级联：取消绑定到指定 Skill 的所有活跃 Run。 */
+  /** 撤销信任级联：取消绑定中包含指定 Skill 的所有活跃 Run。 */
   async cancelRunsForSkill(skillId: string): Promise<number> {
     let cancelled = 0;
     for (const [runId, active] of this.activeRuns) {
-      if (active.skillId === skillId) {
+      // 多绑定下按成员判断：指定 Skill 只是其中一个绑定时，整个 Run 仍必须停止（ADR-0012 决策 6）。
+      if (active.skillIds.includes(skillId)) {
         active.controller.abort();
         cancelled += 1;
         const pending = this.consumePromises.get(runId);
@@ -221,12 +230,10 @@ export class RunService {
     try {
       const model = this.resolveModel();
       const webSearch = this.resolveWebSearch();
-      const bindingId = await this.resolveBindingId(runId, input);
-      const skillInstructions = await this.resolveSkillInstructions(input, bindingId);
-      if (bindingId) {
-        const active = this.activeRuns.get(runId);
-        if (active) active.bindingId = bindingId;
-      }
+      const { bindingIds, instructions: skillInstructions } = await this.resolveSkillBindings(
+        runId,
+        input,
+      );
       const events = this.engine.run({
         runId,
         taskId: input.taskId,
@@ -241,14 +248,13 @@ export class RunService {
               .search(query)
               .map(({ document, locator, excerpt }) => ({ ...document, locator, excerpt })),
           ...(webSearch ? { webSearch } : {}),
-          ...(bindingId
+          ...(bindingIds.length > 0
             ? {
                 skillResourceReader: (resourceInput) =>
-                  this.readSkillResource(bindingId, resourceInput),
+                  this.readSkillResource(runId, resourceInput),
                 taskFileWriter: (writeInput) =>
                   this.writeTaskFile(runId, input.taskId, workspacePath, writeInput),
-                skillCommandExecutor: (execInput) =>
-                  this.executeSkillCommand(runId, bindingId, execInput),
+                skillCommandExecutor: (execInput) => this.executeSkillCommand(runId, execInput),
                 ...(this.fileArtifactService
                   ? {
                       artifactFileRegistrar: (registrarInput) =>
@@ -259,7 +265,7 @@ export class RunService {
             : {}),
         }),
         signal: controller.signal,
-        ...(bindingId ? { maxToolRounds: 40 } : {}),
+        ...(bindingIds.length > 0 ? { maxToolRounds: 40 } : {}),
         ...(skillInstructions ? { skillInstructions } : {}),
       });
 
@@ -426,86 +432,75 @@ export class RunService {
   }
 
   /**
-   * 绑定快照：Run 启动时一次性解析 Skill 指令，运行期间不受后续编辑影响。
-   * 未启用或未信任的 Skill 直接抛错，由 consume 兜底为 run.failed。
+   * 能力绑定解析（ADR-0012 决策 3/5）：按用户选择顺序先整体校验前置条件，再逐个建立绑定快照、读取指令快照。
+   * 任一 Skill 不满足条件即抛错，整个 Run 不启动——不允许静默少装一个技能。
+   * 没有显式绑定时什么都不做：不延续同 Task 的历史绑定。
+   * 没有执行服务时只注入指令、不开放 Skill 工具，保持提示词试运行的既有语义。
    */
-  private async resolveSkillInstructions(
-    input: StartRunRequest,
-    bindingId?: string,
-  ): Promise<SkillInstruction[] | undefined> {
-    const binding = bindingId ? this.store.executions.getBinding(bindingId) : undefined;
-    if (!input.skillBinding && !binding) return undefined;
-    const skill = binding
-      ? this.store.skills.getBoundDetail(binding.skillRevisionId, binding.profileRevisionId)
-      : input.skillBinding
-        ? this.store.skills.get(input.skillBinding.skillId)
-        : undefined;
-    if (!skill) throw new Error('Skill does not exist');
-    if (input.skillBinding?.revisionId && input.skillBinding.revisionId !== skill.revision.id)
-      throw new Error('Skill revision changed; please restart');
-    if (!skill.enabled) throw new Error(`Skill「${skill.name}」已停用`);
-    if (
-      binding
-        ? !this.store.executions.isBindingAuthorized(binding.id)
-        : skill.trustStatus !== 'trusted'
-    )
-      throw new Error(`Skill「${skill.name}」尚未信任，无法运行`);
-    if (skill.runtimeProfile?.profile.commands.length)
-      await this.skillService.verifyResourceRoot(skill);
-    const instruction = await this.skillService.readSkillInstruction(skill);
-    if (binding && skill.runtimeProfile?.profile.commands.length) {
-      const commands = skill.runtimeProfile.profile.commands.map((command) => ({
-        commandId: command.commandId,
-        argumentSchema: command.argumentSchema,
-      }));
-      instruction.instruction += `\n\n算台运行约定：使用 skill_execute 调用以下固定命令，不执行原文中的 Shell、pip 或开发机路径。task_write_file 写入本 Run 的 work 目录（相对路径）；覆盖已有文件必须提供 expectedHash。skill_read_resource 读取本 Skill 相对路径。模板参数 assets/... 指向只读 Skill 模板。svg-export 和 template-merge 在独立 attempt 中执行，后续步骤使用返回的实际输出路径。pptx-validate 成功后才能用返回的 executionId/outputIds 调用 artifact_register_file；不自行声明验证状态。\n命令：${JSON.stringify(commands)}`;
-    }
-    return [instruction];
-  }
-
-  /** 有显式绑定时创建 RunSkillBinding；无绑定时延续同 Task 最近的历史绑定（试运行会话）。 */
-  private async resolveBindingId(
+  private async resolveSkillBindings(
     runId: string,
     input: StartRunRequest,
-  ): Promise<string | undefined> {
-    if (!this.skillExecutionService) return undefined;
-    if (input.skillBinding) {
-      const binding = this.skillExecutionService.createBinding({
-        runId,
-        skillId: input.skillBinding.skillId,
-      });
-      return binding.id;
-    }
-    const previous = this.store.executions.findLatestBindingByTask(input.taskId);
-    if (!previous) return undefined;
-    const skill = this.store.skills.getBoundDetail(
-      previous.skillRevisionId,
-      previous.profileRevisionId,
-    );
-    if (!skill) throw new Error('试运行会话绑定的 Skill 已不存在，无法继续');
-    const binding = this.skillExecutionService.createBinding({
-      runId,
-      skillId: skill.id,
+  ): Promise<ResolvedSkillBindings> {
+    const requested = input.skillBindings ?? [];
+    if (requested.length === 0) return { bindingIds: [] };
+    // 先整体校验再落快照：任一技能不合格时，不得留下半个绑定记录。
+    const selected = requested.map(({ skillId, revisionId }) => {
+      const skill = this.store.skills.get(skillId);
+      if (!skill) throw new Error(`Skill ${skillId} does not exist`);
+      if (revisionId && revisionId !== skill.revision.id)
+        throw new Error(`Skill「${skill.name}」的修订已变化，请重新选择后再运行`);
+      if (!skill.enabled) throw new Error(`Skill「${skill.name}」已停用`);
+      if (skill.trustStatus !== 'trusted')
+        throw new Error(`Skill「${skill.name}」尚未信任，无法运行`);
+      return skill;
     });
-    const active = this.activeRuns.get(runId);
-    if (active) active.skillId = skill.id;
-    return binding.id;
+    const bindingIds: string[] = [];
+    const instructions: SkillInstruction[] = [];
+    for (const skill of selected) {
+      const binding = this.skillExecutionService?.createBinding({ runId, skillId: skill.id });
+      if (binding) bindingIds.push(binding.id);
+      // 有快照时按快照读，运行期间不受后续编辑影响；无快照时退回当前修订。
+      const snapshot = binding
+        ? this.store.skills.getBoundDetail(binding.skillRevisionId, binding.profileRevisionId)
+        : skill;
+      if (!snapshot) throw new Error(`Skill「${skill.name}」的绑定快照缺失，无法运行`);
+      if (snapshot.runtimeProfile?.profile.commands.length)
+        await this.skillService.verifyResourceRoot(snapshot);
+      const instruction = await this.skillService.readSkillInstruction(snapshot);
+      if (binding && snapshot.runtimeProfile?.profile.commands.length) {
+        // 命令表必须带上自己的 bindingId：多绑定下模型只有 commandId 无法寻址到哪个 Skill。
+        const commands = snapshot.runtimeProfile.profile.commands.map((command) => ({
+          bindingId: binding.id,
+          commandId: command.commandId,
+          argumentSchema: command.argumentSchema,
+        }));
+        instruction.instruction += `\n\n算台运行约定：使用 skill_execute 调用以下固定命令，不执行原文中的 Shell、pip 或开发机路径。task_write_file 写入本 Run 的 work 目录（相对路径）；覆盖已有文件必须提供 expectedHash。skill_read_resource 读取本 Skill 相对路径。模板参数 assets/... 指向只读 Skill 模板。svg-export 和 template-merge 在独立 attempt 中执行，后续步骤使用返回的实际输出路径。pptx-validate 成功后才能用返回的 executionId/outputIds 调用 artifact_register_file；不自行声明验证状态。\n命令：${JSON.stringify(commands)}`;
+      }
+      instructions.push(instruction);
+    }
+    return { bindingIds, instructions };
   }
 
-  /** 资源读取桥接：bindingId → Skill → 资源根 → 路径校验 → 读取。 */
+  /**
+   * 资源读取桥接：bindingId → Skill → 资源根 → 路径校验 → 读取。
+   * bindingId 由模型提供，因此必须先确认它属于本 Run，不能只靠存在性检查。
+   */
   private async readSkillResource(
-    bindingId: string,
+    runId: string,
     input: SkillResourceReadInput,
   ): Promise<SkillResourceReadOutput> {
-    const binding = this.store.executions.getBinding(bindingId);
-    if (!binding) throw new Error(`Binding ${bindingId} does not exist`);
+    const binding = this.store.executions.getBinding(input.bindingId);
+    if (!binding) throw new Error(`Binding ${input.bindingId} does not exist`);
+    if (binding.runId !== runId) {
+      throw new Error(`Binding ${input.bindingId} does not belong to run ${runId}`);
+    }
     const skill = this.store.skills.getBoundDetail(
       binding.skillRevisionId,
       binding.profileRevisionId,
     );
     if (!skill) throw new Error('Skill not found for binding');
     if (!skill.enabled) throw new Error(`Skill「${skill.name}」已停用`);
-    if (!this.store.executions.isBindingAuthorized(bindingId))
+    if (!this.store.executions.isBindingAuthorized(binding.id))
       throw new Error(`Skill「${skill.name}」尚未信任`);
     const resourceRoot = await this.skillService.resolveResourceRoot(skill);
     const target = path.resolve(resourceRoot, input.path);
@@ -562,15 +557,18 @@ export class RunService {
     };
   }
 
-  /** 命令执行桥接：binding → profile → command → 构建执行规格 → 启动 → 等待结果。 */
+  /**
+   * 命令执行桥接：binding → profile → command → 构建执行规格 → 启动 → 等待结果。
+   * bindingId 由模型从指令里的命令表取得，必须先确认它属于本 Run 才能取用其环境与授权。
+   */
   private async executeSkillCommand(
     runId: string,
-    bindingId: string,
     input: SkillCommandExecuteInput,
   ): Promise<SkillCommandExecuteOutput> {
     if (!this.skillExecutionService) {
       throw new Error('Skill execution service is not available');
     }
+    const bindingId = input.bindingId;
     const binding = this.store.executions.getBinding(bindingId);
     if (!binding) throw new Error(`Binding ${bindingId} does not exist`);
     if (binding.runId !== runId) {

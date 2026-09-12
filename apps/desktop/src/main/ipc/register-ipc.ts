@@ -843,10 +843,12 @@ function registerSkillChannels(deps: IpcDependencies): void {
         taskId: created.task.id,
         sessionId: created.sessionId,
         prompt: input.prompt ?? `请运行 Skill「${skill.name}」的完整流程`,
-        skillBinding: {
-          skillId: skill.id,
-          ...(skill.currentRevisionId ? { revisionId: skill.currentRevisionId } : {}),
-        },
+        skillBindings: [
+          {
+            skillId: skill.id,
+            ...(skill.currentRevisionId ? { revisionId: skill.currentRevisionId } : {}),
+          },
+        ],
       });
       return { runId, taskId: created.task.id, sessionId: created.sessionId };
     },
