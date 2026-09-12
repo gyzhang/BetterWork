@@ -18,3 +18,6 @@ coverage/
 .idea/
 .vscode/
 .codeartsdoer/
+
+# Runtime task working directories
+.betterwork/
