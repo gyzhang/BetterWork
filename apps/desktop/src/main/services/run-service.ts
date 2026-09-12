@@ -433,13 +433,15 @@ export class RunService {
     input: StartRunRequest,
     bindingId?: string,
   ): Promise<SkillInstruction[] | undefined> {
-    if (!input.skillBinding) return undefined;
     const binding = bindingId ? this.store.executions.getBinding(bindingId) : undefined;
+    if (!input.skillBinding && !binding) return undefined;
     const skill = binding
       ? this.store.skills.getBoundDetail(binding.skillRevisionId, binding.profileRevisionId)
-      : this.store.skills.get(input.skillBinding.skillId);
+      : input.skillBinding
+        ? this.store.skills.get(input.skillBinding.skillId)
+        : undefined;
     if (!skill) throw new Error('Skill does not exist');
-    if (input.skillBinding.revisionId && input.skillBinding.revisionId !== skill.revision.id)
+    if (input.skillBinding?.revisionId && input.skillBinding.revisionId !== skill.revision.id)
       throw new Error('Skill revision changed; please restart');
     if (!skill.enabled) throw new Error(`Skill「${skill.name}」已停用`);
     if (
@@ -461,16 +463,32 @@ export class RunService {
     return [instruction];
   }
 
-  /** 有 Skill 绑定时创建 RunSkillBinding；无绑定或无执行服务时返回 undefined。 */
+  /** 有显式绑定时创建 RunSkillBinding；无绑定时延续同 Task 最近的历史绑定（试运行会话）。 */
   private async resolveBindingId(
     runId: string,
     input: StartRunRequest,
   ): Promise<string | undefined> {
-    if (!input.skillBinding || !this.skillExecutionService) return undefined;
+    if (!this.skillExecutionService) return undefined;
+    if (input.skillBinding) {
+      const binding = this.skillExecutionService.createBinding({
+        runId,
+        skillId: input.skillBinding.skillId,
+      });
+      return binding.id;
+    }
+    const previous = this.store.executions.findLatestBindingByTask(input.taskId);
+    if (!previous) return undefined;
+    const skill = this.store.skills.getBoundDetail(
+      previous.skillRevisionId,
+      previous.profileRevisionId,
+    );
+    if (!skill) throw new Error('试运行会话绑定的 Skill 已不存在，无法继续');
     const binding = this.skillExecutionService.createBinding({
       runId,
-      skillId: input.skillBinding.skillId,
+      skillId: skill.id,
     });
+    const active = this.activeRuns.get(runId);
+    if (active) active.skillId = skill.id;
     return binding.id;
   }
 

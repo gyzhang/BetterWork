@@ -28,7 +28,12 @@ export interface SkillsState {
   clearError: () => void;
 }
 
-export function useSkills(): SkillsState {
+export interface UseSkillsOptions {
+  /** 打开带 Skill 选择的新任务草稿，等待用户输入后提交。 */
+  onTestRunRequested: (skill: SkillSummary) => void;
+}
+
+export function useSkills(options: UseSkillsOptions): SkillsState {
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [selected, setSelected] = useState<SkillDetail>();
   const [selectedId, setSelectedId] = useState<string>();
@@ -166,15 +171,6 @@ export function useSkills(): SkillsState {
     },
     [select],
   );
-  const testRun = useCallback((skill: SkillSummary): void => {
-    reportAction(
-      window.betterwork.skills.testRun({ skillId: skill.id }).then((result) => {
-        setToast(`已启动试运行（Run ${result.runId.slice(0, 8)}）。`);
-      }),
-      setError,
-      '试运行启动失败。',
-    );
-  }, []);
 
   return {
     skills,
@@ -196,7 +192,7 @@ export function useSkills(): SkillsState {
     exportSkill,
     deleteSkill,
     saveProfile,
-    testRun,
+    testRun: options.onTestRunRequested,
     dismissToast,
     clearError: () => setError(''),
   };

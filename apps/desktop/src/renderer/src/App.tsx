@@ -7,6 +7,7 @@ import type {
   NotificationTarget,
   RecentTaskSummary,
   RunSummary,
+  SkillSummary,
   WorkspaceSummary,
 } from '@betterwork/agent-protocol';
 import type { FormEvent, KeyboardEvent } from 'react';
@@ -17,17 +18,18 @@ import { BrandLogo } from './brand-logo';
 import { ContextPanel } from './components/ContextPanel';
 import { PageHeader } from './components/layout/PageHeader';
 import { ModelEditor } from './components/ModelEditorSheet';
+import { ToolActivity } from './components/ToolActivity';
 import { Welcome } from './components/Welcome';
 import { useAppearance } from './hooks/use-appearance';
 import { useKnowledgeLibrary } from './hooks/use-knowledge-library';
 import { useModelSettings } from './hooks/use-model-settings';
 import { useSkills } from './hooks/use-skills';
+import { useTaskScroll } from './hooks/use-task-scroll';
 import {
   AlertIcon,
   ArrowUpIcon,
   ArtifactIcon,
   CapabilityIcon,
-  CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   CloseIcon,
@@ -38,16 +40,10 @@ import {
 } from './icons';
 import { reportAction, trackAction } from './lib/async-action';
 import { formatTime } from './lib/format';
-import { runStatusName, toolStageLabel } from './lib/labels';
+import { runStatusName } from './lib/labels';
 import { buildResearchPrompt } from './lib/research-prompt';
-import {
-  extractAssistantText,
-  extractCompletedTools,
-  finalRunContent,
-  mergeRunEvents,
-} from './lib/run-events';
+import { extractAssistantText, finalRunContent, mergeRunEvents } from './lib/run-events';
 import { handleTitlebarDoubleClick } from './lib/titlebar';
-import { summarizeToolOutput } from './lib/tool-summary';
 import type { AppView, ContextTab, SettingsTab } from './lib/view-types';
 import { MarkdownPreview } from './markdown-preview';
 import { NotificationCenter, ToastHost, useNotifications } from './notifications';
@@ -67,11 +63,14 @@ export function App(): React.JSX.Element {
   const refreshKnowledge = knowledge.refresh;
 
   const modelSettings = useModelSettings();
-  const skills = useSkills();
   const activeLanguageModel = modelSettings.activeLanguageModel;
   const refreshModels = modelSettings.refresh;
 
   const [prompt, setPrompt] = useState('计算: (12 + 8) * 3');
+  const [taskSkill, setTaskSkill] = useState<SkillSummary>();
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const startingRef = useRef(false);
+  const [isStarting, setIsStarting] = useState(false);
   const [workspace, setWorkspace] = useState<WorkspaceSummary>();
   const workspaceIdRef = useRef<string | undefined>(undefined);
   const [activeTask, setActiveTask] = useState<{ id: string; sessionId: string; title: string }>();
@@ -87,7 +86,11 @@ export function App(): React.JSX.Element {
   const [events, setEvents] = useState<AgentRuntimeEvent[]>([]);
   const [taskAllRuns, setTaskAllRuns] = useState<RunSummary[]>([]);
   const [taskAllEvents, setTaskAllEvents] = useState<Map<string, AgentRuntimeEvent[]>>(new Map());
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { containerRef, latestReplyRef, detached, onScroll, jumpToLatest } = useTaskScroll(
+    activeTask?.id,
+    taskAllEvents,
+    taskAllRuns.length,
+  );
   const [evidence, setEvidence] = useState<EvidenceSummary[]>([]);
   const [artifacts, setArtifacts] = useState<ArtifactSummary[]>([]);
   const [selectedArtifact, setSelectedArtifact] = useState<ArtifactDetail>();
@@ -100,9 +103,13 @@ export function App(): React.JSX.Element {
     () => window.localStorage.getItem('betterwork-sidebar-collapsed') === 'true',
   );
   const [contextTab, setContextTab] = useState<ContextTab>('process');
-  const [contextOpen, setContextOpen] = useState(true);
+  const [contextOpen, setContextOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('models');
   const [notificationCenterOpen, setNotificationCenterOpen] = useState(false);
+
+  useEffect(() => {
+    if (view === 'work' && taskSkill) composerRef.current?.focus();
+  }, [view, taskSkill]);
   /**
    * 列表刷新属于后台同步：失败时用户无法据以行动，但也不能完全无痕。
    * 统一走 trackAction 记录到控制台，并对调用方保证「永不 reject」，
@@ -164,6 +171,7 @@ export function App(): React.JSX.Element {
             eventsMap.set(run.id, runEvents);
           }),
         );
+        if (activeTaskIdRef.current !== taskId) return;
         setTaskAllRuns(ordered);
         setTaskAllEvents(eventsMap);
       })(),
@@ -223,12 +231,6 @@ export function App(): React.JSX.Element {
     window.localStorage.setItem('betterwork-sidebar-collapsed', String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
-  useEffect(() => {
-    if (taskAllRuns.length > 0) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [taskAllEvents, taskAllRuns.length]);
-
   const activeRun = runs.find((run) => run.id === activeRunId);
   const latestCompletedRun = useMemo(() => {
     for (let i = taskAllRuns.length - 1; i >= 0; i--) {
@@ -259,56 +261,77 @@ export function App(): React.JSX.Element {
     setActiveRunId(undefined);
     setActiveTask(undefined);
     setTaskRuns([]);
+    setTaskAllRuns([]);
+    setTaskAllEvents(new Map());
+    setTaskSkill(undefined);
+    setActionError('');
     setEvidence([]);
     setEvents([]);
     setPrompt('');
     setArtifactNote(undefined);
     setView('work');
   };
+  const skills = useSkills({
+    onTestRunRequested: (skill) => {
+      startNewTask();
+      setTaskSkill(skill);
+      setContextOpen(false);
+    },
+  });
   const startRun = async (): Promise<void> => {
-    if (isRunning || !prompt.trim() || !workspace) return;
-    const goal = prompt.trim();
-    let task = activeTask;
-    if (!task) {
-      const created = await window.betterwork.tasks.create({
-        workspaceId: workspace.id,
-        title: goal.slice(0, 80),
-        goal,
+    if (startingRef.current || isRunning || !prompt.trim() || !workspace) return;
+    startingRef.current = true;
+    setIsStarting(true);
+    setActionError('');
+    try {
+      const goal = prompt.trim();
+      let task = activeTask;
+      if (!task) {
+        const created = await window.betterwork.tasks.create({
+          workspaceId: workspace.id,
+          title: goal.slice(0, 80),
+          goal,
+        });
+        task = { id: created.task.id, sessionId: created.sessionId, title: created.task.title };
+        activeTaskIdRef.current = task.id;
+        setActiveTask(task);
+      }
+      const result = await window.betterwork.runs.start({
+        taskId: task.id,
+        sessionId: task.sessionId,
+        prompt,
+        ...(taskSkill
+          ? { skillBinding: { skillId: taskSkill.id, revisionId: taskSkill.currentRevisionId } }
+          : {}),
       });
-      task = { id: created.task.id, sessionId: created.sessionId, title: created.task.title };
-      activeTaskIdRef.current = task.id;
-      setActiveTask(task);
+      runSelectionRequestRef.current += 1;
+      activeRunIdRef.current = result.runId;
+      setActiveRunId(result.runId);
+      setEvents([]);
+      setPrompt('');
+      setArtifactNote(undefined);
+      setContextTab('process');
+      const newRun: RunSummary = {
+        id: result.runId,
+        taskId: task.id,
+        sessionId: task.sessionId,
+        prompt,
+        status: 'running',
+        createdAt: Date.now(),
+      };
+      setTaskAllRuns((prev) => [...prev, newRun]);
+      setTaskAllEvents((prev) => {
+        const next = new Map(prev);
+        next.set(result.runId, []);
+        return next;
+      });
+      refreshRuns();
+      refreshTaskRuns(task.id);
+      refreshTasks();
+    } finally {
+      startingRef.current = false;
+      setIsStarting(false);
     }
-    const result = await window.betterwork.runs.start({
-      taskId: task.id,
-      sessionId: task.sessionId,
-      prompt,
-    });
-    runSelectionRequestRef.current += 1;
-    activeRunIdRef.current = result.runId;
-    setActiveRunId(result.runId);
-    setEvents([]);
-    setPrompt('');
-    setArtifactNote(undefined);
-    setContextTab('process');
-    setContextOpen(true);
-    const newRun: RunSummary = {
-      id: result.runId,
-      taskId: task.id,
-      sessionId: task.sessionId,
-      prompt,
-      status: 'running',
-      createdAt: Date.now(),
-    };
-    setTaskAllRuns((prev) => [...prev, newRun]);
-    setTaskAllEvents((prev) => {
-      const next = new Map(prev);
-      next.set(result.runId, []);
-      return next;
-    });
-    refreshRuns();
-    refreshTaskRuns(task.id);
-    refreshTasks();
   };
   const submit = (event: FormEvent): void => {
     event.preventDefault();
@@ -325,6 +348,7 @@ export function App(): React.JSX.Element {
     reportAction(startRun(), setActionError, '无法开始这项工作，请重试。');
   };
   const selectRun = async (run: RunSummary): Promise<void> => {
+    setTaskSkill(undefined);
     const requestId = runSelectionRequestRef.current + 1;
     runSelectionRequestRef.current = requestId;
     activeRunIdRef.current = run.id;
@@ -343,6 +367,10 @@ export function App(): React.JSX.Element {
     setView('work');
   };
   const selectTask = async (task: RecentTaskSummary): Promise<void> => {
+    setTaskAllRuns([]);
+    setTaskAllEvents(new Map());
+    setTaskRuns([]);
+    setTaskSkill(undefined);
     runSelectionRequestRef.current += 1;
     activeRunIdRef.current = undefined;
     activeTaskIdRef.current = task.id;
@@ -353,7 +381,18 @@ export function App(): React.JSX.Element {
     setEvents([]);
     loadAllTaskRuns(task.id);
     refreshEvidence(task.id);
+    refreshTaskRuns(task.id);
     setView('work');
+    const selectionId = runSelectionRequestRef.current;
+    const loadedRuns = await window.betterwork.runs.list({ taskId: task.id });
+    if (selectionId !== runSelectionRequestRef.current) return;
+    const latest = [...loadedRuns].sort((a, b) => b.createdAt - a.createdAt)[0];
+    if (!latest) return;
+    activeRunIdRef.current = latest.id;
+    setActiveRunId(latest.id);
+    const snapshot = await window.betterwork.runs.listEvents({ runId: latest.id });
+    if (selectionId !== runSelectionRequestRef.current) return;
+    setEvents((current) => mergeRunEvents(snapshot, current));
   };
   const saveCurrentArtifact = async (): Promise<void> => {
     if (!activeTask || !latestCompletedRun) return;
@@ -615,23 +654,25 @@ export function App(): React.JSX.Element {
               }
             />
             <div className="workspace">
-              <div className="messages">
+              <div className="messages" ref={containerRef} onScroll={onScroll}>
                 <div className="page-body">
                   {taskAllRuns.length === 0 && !activeRunId ? (
-                    <Welcome setPrompt={setPrompt} />
+                    taskSkill ? (
+                      <div className="welcome">
+                        <p className="eyebrow">Skill 试运行</p>
+                        <h2>{taskSkill.name}</h2>
+                        <p>输入这次任务的具体要求，点击「开始工作」后执行。</p>
+                      </div>
+                    ) : (
+                      <Welcome setPrompt={setPrompt} />
+                    )
                   ) : (
                     <>
                       {taskAllRuns.map((run, idx) => {
                         const runEvents = taskAllEvents.get(run.id) ?? [];
-                        const runAssistantText = extractAssistantText(runEvents);
-                        const runTools = extractCompletedTools(runEvents);
+                        const runAssistantText =
+                          finalRunContent(runEvents) ?? extractAssistantText(runEvents);
                         const isRunActive = run.id === activeRunId;
-                        const runToolNameById = new Map<string, string>();
-                        for (const event of runEvents) {
-                          if (event.type === 'tool.requested' || event.type === 'tool.started') {
-                            runToolNameById.set(event.toolCall.id, event.toolCall.name);
-                          }
-                        }
                         const runIsCompleted = runEvents.some(
                           (event) => event.type === 'run.completed',
                         );
@@ -654,10 +695,14 @@ export function App(): React.JSX.Element {
                               <span>你</span>
                               <p>{run.prompt}</p>
                             </div>
+                            <ToolActivity key={run.id} events={runEvents} />
                             {runAssistantText && (
-                              <div className="message assistant">
+                              <div
+                                className="message assistant"
+                                ref={idx === taskAllRuns.length - 1 ? latestReplyRef : undefined}
+                              >
                                 <span>算台</span>
-                                <MarkdownPreview content={runAssistantText} />
+                                <MarkdownPreview content={runAssistantText} variant="message" />
                               </div>
                             )}
                             {isLatestCompleted && runAssistantText && (
@@ -682,30 +727,6 @@ export function App(): React.JSX.Element {
                                 )}
                               </div>
                             )}
-                            {runTools.map((event) => {
-                              const toolName = runToolNameById.get(event.toolCallId);
-                              const failed = event.type === 'tool.failed';
-                              return (
-                                <div
-                                  className={failed ? 'tool-card failed' : 'tool-card'}
-                                  key={event.id}
-                                >
-                                  <div>
-                                    <span className="tool-icon" aria-hidden="true">
-                                      {failed ? <AlertIcon size={11} /> : <CheckIcon size={11} />}
-                                    </span>
-                                    <strong>
-                                      {failed ? '工作步骤未完成' : toolStageLabel(toolName)}
-                                    </strong>
-                                  </div>
-                                  <p className="tool-summary">
-                                    {failed
-                                      ? event.error
-                                      : summarizeToolOutput(toolName, event.output)}
-                                  </p>
-                                </div>
-                              );
-                            })}
                             {isRunActive &&
                               runEvents.length > 0 &&
                               !runEvents.some((event) =>
@@ -716,11 +737,17 @@ export function App(): React.JSX.Element {
                           </div>
                         );
                       })}
-                      <div ref={messagesEndRef} />
                     </>
                   )}
                 </div>
               </div>
+              {detached && (
+                <div className="latest-message-control">
+                  <button type="button" className="secondary-button" onClick={jumpToLatest}>
+                    回到最新
+                  </button>
+                </div>
+              )}
               <form className="composer" onSubmit={submit}>
                 <div className="workspace-row">
                   <span>工作区</span>
@@ -733,6 +760,7 @@ export function App(): React.JSX.Element {
                         window.betterwork.workspace.selectDirectory().then((selected) => {
                           if (selected) {
                             startNewTask();
+                            setTaskSkill(taskSkill);
                             workspaceIdRef.current = selected.id;
                             setWorkspace(selected);
                             refreshTasks(selected.id);
@@ -746,7 +774,9 @@ export function App(): React.JSX.Element {
                     选择
                   </button>
                 </div>
+                {taskSkill && <p className="action-note">已选择 Skill：{taskSkill.name}</p>}
                 <textarea
+                  ref={composerRef}
                   aria-label="任务输入，按 Command 或 Control 加 Enter 开始工作"
                   value={prompt}
                   onChange={(event) => setPrompt(event.target.value)}
@@ -776,8 +806,8 @@ export function App(): React.JSX.Element {
                       停止
                     </button>
                   ) : (
-                    <button type="submit" disabled={!prompt.trim() || !workspace}>
-                      开始工作 <ArrowUpIcon size={13} />
+                    <button type="submit" disabled={isStarting || !prompt.trim() || !workspace}>
+                      {isStarting ? '正在启动…' : '开始工作'} <ArrowUpIcon size={13} />
                     </button>
                   )}
                 </div>

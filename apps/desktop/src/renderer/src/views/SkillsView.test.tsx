@@ -31,7 +31,7 @@ const detail: SkillDetail = {
 };
 
 function Harness(): React.JSX.Element {
-  const state = useSkills();
+  const state = useSkills({ onTestRunRequested: vi.fn() });
   return <SkillsPage state={state} />;
 }
 

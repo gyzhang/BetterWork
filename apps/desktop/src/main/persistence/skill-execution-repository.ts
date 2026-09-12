@@ -164,6 +164,20 @@ export class SkillExecutionRepository {
     return rows.map(toBinding);
   }
 
+  /** 同一 Task 最近一次 Skill 绑定，用于试运行会话的后续 Run 延续绑定。 */
+  findLatestBindingByTask(taskId: string): RunSkillBinding | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT b.* FROM run_skill_bindings b
+         JOIN runs r ON r.id = b.run_id
+         WHERE r.task_id = ?
+         ORDER BY b.created_at DESC
+         LIMIT 1`,
+      )
+      .get(taskId) as BindingRow | undefined;
+    return row ? toBinding(row) : undefined;
+  }
+
   /** 执行实例在 supervisor 启动之前登记，先有 queued 行再可能有进程。 */
   createExecution(input: CreateExecutionInput): ScriptExecution {
     const id = input.id ?? randomUUID();

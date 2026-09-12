@@ -10,11 +10,11 @@ import type { ActivityGroup } from '../activity';
 import { ArtifactIcon, ChevronRightIcon, GlobeIcon, KnowledgeIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
-import { runStatusName, toolStageLabel } from '../lib/labels';
+import { runStatusName } from '../lib/labels';
 import { handleTitlebarDoubleClick } from '../lib/titlebar';
-import { rawToolOutput } from '../lib/tool-summary';
 import type { ContextTab } from '../lib/view-types';
 import { EmptyContext } from './EmptyState';
+import { ToolActivity } from './ToolActivity';
 import { type ToastTone, TransientToast } from './TransientToast';
 
 export function ContextPanel({
@@ -46,18 +46,6 @@ export function ContextPanel({
 }): React.JSX.Element | null {
   const [sourceToast, setSourceToast] = useState<{ tone: ToastTone; message: string }>();
   const dismissSourceToast = useCallback(() => setSourceToast(undefined), []);
-
-  // 终态工具事件只带 toolCallId，工具名要从 requested/started 事件里取回
-  const toolNameById = new Map<string, string>();
-  for (const event of events) {
-    if (event.type === 'tool.requested' || event.type === 'tool.started') {
-      toolNameById.set(event.toolCall.id, event.toolCall.name);
-    }
-  }
-  const toolOutputs = events.filter(
-    (event): event is Extract<AgentRuntimeEvent, { type: 'tool.completed' }> =>
-      event.type === 'tool.completed',
-  );
 
   if (!open) return null;
   return (
@@ -109,17 +97,7 @@ export function ContextPanel({
                 {activityGroups.map((group) => (
                   <ActivityGroupRow group={group} key={group.id} />
                 ))}
-                {toolOutputs.length > 0 && (
-                  <details className="raw-tool-output">
-                    <summary>原始工具输出 · {toolOutputs.length} 次</summary>
-                    {toolOutputs.map((event) => (
-                      <article key={event.id}>
-                        <strong>{toolStageLabel(toolNameById.get(event.toolCallId))}</strong>
-                        <code>{rawToolOutput(event.output)}</code>
-                      </article>
-                    ))}
-                  </details>
-                )}
+                <ToolActivity key={activeRun?.id ?? events[0]?.runId} events={events} />
                 {taskRuns.length > 1 && (
                   <details className="task-run-history">
                     <summary>执行记录 · {taskRuns.length} 次</summary>

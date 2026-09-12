@@ -53,10 +53,28 @@ const components: Components = {
   code: CodeBlock,
 };
 
-export function MarkdownPreview({ content }: { content: string }): React.JSX.Element {
+const messageComponents: Components = {
+  ...components,
+  table: ({ children }) => (
+    <div className="message-table" tabIndex={0}>
+      <table>{children}</table>
+    </div>
+  ),
+};
+
+export function MarkdownPreview({
+  content,
+  variant = 'document',
+}: {
+  content: string;
+  variant?: 'document' | 'message';
+}): React.JSX.Element {
   return (
     <article className="markdown-preview">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={variant === 'message' ? messageComponents : components}
+      >
         {content}
       </ReactMarkdown>
     </article>

@@ -756,47 +756,6 @@ p {
 .message.user p {
   background: var(--selection);
 }
-.tool-card {
-  display: flex;
-  margin: 0 0 16px;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px;
-  background: var(--success-soft);
-  border: 1px solid var(--border);
-  border-radius: 9px;
-}
-.tool-card.failed {
-  background: var(--danger-soft);
-}
-.tool-card > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.tool-card strong {
-  color: var(--text-primary);
-  font-size: 12px;
-}
-.tool-icon {
-  display: grid;
-  width: 18px;
-  height: 18px;
-  place-items: center;
-  color: var(--on-brand);
-  background: var(--success);
-  border-radius: 50%;
-  font-weight: 700;
-}
-.failed .tool-icon {
-  background: var(--danger);
-}
-.tool-summary {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.55;
-}
 .composer {
   width: min(860px, calc(100% - 48px));
   margin: 0 auto 20px;
@@ -3284,48 +3243,6 @@ p {
   }
 }
 
-/* 原始工具输出只在这里出现，默认折叠（docs/10 §11.1）。
-   主界面的工具卡片只呈现阶段名与一句摘要。 */
-.raw-tool-output {
-  margin-top: 16px;
-  border-top: 1px solid var(--border-subtle);
-}
-.raw-tool-output summary {
-  padding: 12px 2px 8px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  cursor: pointer;
-}
-.raw-tool-output[open] summary {
-  color: var(--text-primary);
-}
-.raw-tool-output article {
-  padding: 8px 2px;
-  border-top: 1px solid var(--border-subtle);
-}
-.raw-tool-output strong {
-  display: block;
-  color: var(--text-primary);
-  font-size: 12px;
-}
-.raw-tool-output code {
-  display: block;
-  overflow: auto;
-  margin-top: 6px;
-  padding: 8px;
-  color: var(--text-secondary);
-  background: var(--surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  font:
-    12px/1.55 ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    monospace;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
 /* 跨视图的动作错误条：固定悬浮，不挤动任何视图的页头带与版心 */
 .action-error-banner {
   position: fixed;
@@ -3440,7 +3357,6 @@ select,
 }
 
 .context-panel,
-.raw-tool-output,
 .task-run-history,
 .artifact-detail-layout,
 .activity-row {
@@ -3489,4 +3405,240 @@ select,
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* 对话正文与可按需查看的工具过程；不影响成果预览。 */
+.messages {
+  overflow-x: hidden;
+  overflow-anchor: none;
+}
+.run-group {
+  min-width: 0;
+  padding-bottom: 24px;
+}
+.message.user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-bottom: 24px;
+}
+.message.user p {
+  max-width: 90%;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.message.assistant .markdown-preview {
+  margin-top: 12px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+.message.assistant .markdown-preview p {
+  padding: 0;
+  border-radius: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.message.assistant .markdown-preview {
+  overflow-wrap: anywhere;
+}
+.message.assistant .markdown-preview h1 {
+  font-size: 24px;
+}
+.message.assistant .markdown-preview h2 {
+  font-size: 20px;
+}
+.message.assistant .markdown-preview pre {
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.message-table {
+  max-width: 100%;
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+.message-table table {
+  min-width: 480px;
+}
+.message-table th {
+  white-space: nowrap;
+}
+.message.assistant .markdown-preview hr {
+  margin: 24px 0;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.tool-activity {
+  min-width: 0;
+  margin: 0 0 20px;
+  color: var(--text-secondary);
+}
+.tool-activity-toggle {
+  display: flex;
+  max-width: 100%;
+  min-height: 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 13px;
+}
+.tool-activity-toggle:hover {
+  background: var(--surface-raised);
+  color: var(--text-primary);
+}
+.tool-activity-toggle > span:first-of-type {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool-activity-toggle > svg {
+  flex-shrink: 0;
+}
+.tool-activity-toggle[aria-expanded='true'] > svg:last-child {
+  transform: rotate(90deg);
+}
+.tool-activity.running .tool-activity-toggle > svg:first-child {
+  color: var(--brand);
+}
+.tool-failure-count,
+.tool-pill.failed .tool-pill-status {
+  color: var(--danger);
+}
+.tool-activity-body {
+  min-width: 0;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--surface);
+  max-height: 440px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.tool-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tool-pill {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: left;
+}
+.tool-pill:hover,
+.tool-pill[aria-expanded='true'] {
+  color: var(--text-primary);
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+.tool-pill-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.tool-pill-number,
+.tool-pill-status {
+  flex-shrink: 0;
+}
+.tool-pill-number {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.tool-pill.completed .tool-pill-status {
+  color: var(--success);
+}
+.tool-pill.running .tool-pill-status {
+  color: var(--brand);
+}
+.tool-call-detail {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+  overflow-wrap: anywhere;
+}
+.tool-detail-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+.tool-detail-name {
+  margin: 4px 0 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.tool-detail-error {
+  padding: 8px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  white-space: pre-wrap;
+}
+.tool-payload {
+  min-width: 0;
+  margin-top: 12px;
+}
+.tool-payload h4 {
+  margin: 0 0 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.tool-field {
+  margin: 4px 0;
+  font-size: 12px;
+}
+.tool-field summary {
+  min-height: 32px;
+  padding: 8px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.tool-field pre {
+  max-height: 240px;
+  margin: 0 0 8px;
+  padding: 12px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  font:
+    12px/1.7 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+.latest-message-control {
+  display: flex;
+  justify-content: center;
+  height: 0;
+  position: relative;
+  z-index: 1;
+}
+.latest-message-control button {
+  position: absolute;
+  bottom: 12px;
+  border-radius: 999px;
+  box-shadow: 0 4px 12px var(--shadow-color-soft);
 }
