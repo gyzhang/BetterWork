@@ -50,3 +50,12 @@ it('rejects symlink input projects before execution', () => {
     'symbolic link',
   );
 });
+
+it('preserves the project name used by the native scaffold to derive its canvas', () => {
+  const root = temporary();
+  const name = '验收_ppt169_20260912';
+  mkdirSync(path.join(root, name, 'svg_output'), { recursive: true });
+  const prepared = preparePptAttempt('svg-export', { project_dir: name }, root, root);
+  expect(path.basename(prepared.project_dir as string)).toBe(name);
+  expect(path.relative(root, prepared.project_dir as string)).toMatch(/^\.attempts\//u);
+});

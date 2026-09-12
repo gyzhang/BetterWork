@@ -47,6 +47,7 @@ import type { FileArtifactService } from './file-artifact-service';
 import type { KnowledgeVault } from './knowledge-vault';
 import type { NotificationService } from './notification-service';
 import { preparePptAttempt } from './ppt-execution-attempt';
+import { adaptPptCommand } from './ppt-script-adaptation';
 import { createQianfanSearchClient } from './search-engine-service';
 import type { AdapterContext, SkillAdapter, SkillAdapterService } from './skill-adapter';
 import type { SkillDependencyService } from './skill-dependency-service';
@@ -656,10 +657,11 @@ export class RunService {
       runWorkDir: cwd,
     };
     const attemptArgs = preparePptAttempt(input.commandId, input.args, cwd, skillScriptsRoot);
-    const resolved = adapter.resolveCommand(input.commandId, attemptArgs, adapterContext);
-    if (!resolved) {
+    const candidate = adapter.resolveCommand(input.commandId, attemptArgs, adapterContext);
+    if (!candidate) {
       throw new Error(`Adapter ${adapter.name} cannot resolve command ${input.commandId}`);
     }
+    const resolved = adaptPptCommand(input.commandId, candidate, skillScriptsRoot);
     const execution = await this.skillExecutionService.startExecution({
       runId,
       bindingId,
