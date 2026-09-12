@@ -5,7 +5,9 @@ import type {
   ArtifactVersionDetail,
   ValidationStatus,
 } from '@betterwork/agent-protocol';
-import { useCallback, useState } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { EmptyPage } from '../components/EmptyState';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -360,6 +362,10 @@ function PresentationPreview({
   loading: boolean;
   error?: string | undefined;
 }): React.JSX.Element {
+  // 放大查看的页号。必须满足两点：
+  // 1）在所有早退分支之前声明，否则违反 Hook 调用顺序；
+  // 2）绑定 versionId，否则切换版本后旧页号会把新 deck 的同号页面当成用户要看的那一页。
+  const [expanded, setExpanded] = useState<{ versionId: string; slideIndex: number }>();
   if (version.type !== 'presentation') return <></>;
   if (loading) {
     return (
@@ -426,15 +432,135 @@ function PresentationPreview({
       <div className="artifact-thumbnail-gallery">
         {thumbnails.map((thumb) => (
           <div key={thumb.slideIndex} className="artifact-thumbnail-item">
-            <img
-              src={`file://${thumb.filePath}`}
-              alt={`幻灯片 ${thumb.slideIndex + 1}`}
-              className="artifact-thumbnail-image"
-            />
+            <button
+              type="button"
+              className="artifact-thumbnail-trigger"
+              aria-label={`放大查看第 ${thumb.slideIndex + 1} 页`}
+              onClick={() => setExpanded({ versionId: version.id, slideIndex: thumb.slideIndex })}
+            >
+              <img
+                src={thumb.dataUrl}
+                alt={`幻灯片 ${thumb.slideIndex + 1}`}
+                className="artifact-thumbnail-image"
+                loading="lazy"
+              />
+            </button>
             <span className="artifact-thumbnail-index">第 {thumb.slideIndex + 1} 页</span>
           </div>
         ))}
       </div>
+      <SlideViewer
+        versionId={version.id}
+        thumbnails={thumbnails}
+        expanded={expanded}
+        onExpand={(slideIndex) => setExpanded({ versionId: version.id, slideIndex })}
+        onClose={() => setExpanded(undefined)}
+      />
     </div>
+  );
+}
+
+/**
+ * 幻灯片放大查看层。复用 `.dialog-backdrop` 的遮罩与层级，不另建一套弹框体系；
+ * 渲染的是主进程解码成 `data:` URL 的本地图片，不发起任何网络或文件请求。
+ */
+function SlideViewer({
+  versionId,
+  thumbnails,
+  expanded,
+  onExpand,
+  onClose,
+}: {
+  versionId: string;
+  thumbnails: ArtifactThumbnail[];
+  expanded: { versionId: string; slideIndex: number } | undefined;
+  onExpand: (slideIndex: number) => void;
+  onClose: () => void;
+}): React.JSX.Element {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const position =
+    expanded && expanded.versionId === versionId
+      ? thumbnails.findIndex((thumb) => thumb.slideIndex === expanded.slideIndex)
+      : -1;
+  const active = position >= 0 ? thumbnails[position] : undefined;
+  // 依赖用布尔量而不是 `active` 对象：把派生对象放进依赖数组一旦引用每次渲染都变，
+  // 就会复现本次修掉的死循环（见 use-artifact-viewer.ts 的同名注释）。
+  const isOpen = active !== undefined;
+
+  useEffect(() => {
+    if (isOpen) closeRef.current?.focus();
+  }, [isOpen]);
+
+  if (!active) return <></>;
+
+  const step = (delta: number): void => {
+    const target = thumbnails[position + delta];
+    if (target) onExpand(target.slideIndex);
+  };
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLElement>): void => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      step(-1);
+      return;
+    }
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      step(1);
+    }
+  };
+
+  const pageNumber = position + 1;
+  const pageCount = thumbnails.length;
+  return createPortal(
+    <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="slide-viewer"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`幻灯片第 ${pageNumber} 页，共 ${pageCount} 页`}
+        tabIndex={-1}
+        onKeyDown={handleKeyDown}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="slide-viewer-bar">
+          <span className="slide-viewer-counter">
+            第 {pageNumber} / {pageCount} 页
+          </span>
+          <div>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={pageNumber <= 1}
+              onClick={() => step(-1)}
+            >
+              上一页
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={pageNumber >= pageCount}
+              onClick={() => step(1)}
+            >
+              下一页
+            </button>
+            <button ref={closeRef} className="secondary-button" type="button" onClick={onClose}>
+              关闭
+            </button>
+          </div>
+        </header>
+        <img
+          className="slide-viewer-image"
+          src={active.dataUrl}
+          alt={`幻灯片第 ${pageNumber} 页放大预览`}
+        />
+      </section>
+    </div>,
+    document.body,
   );
 }

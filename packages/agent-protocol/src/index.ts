@@ -1252,7 +1252,9 @@ export type GetArtifactThumbnailsRequest = z.infer<typeof getArtifactThumbnailsR
 
 export const artifactThumbnailSchema = z.object({
   slideIndex: z.number().int().nonnegative(),
-  filePath: z.string().min(1),
+  // 直接内联图片数据而不是本机路径：Renderer 不得接触文件系统，且开发模式下页面
+  // 源是 http://localhost，`file://` 子资源会被拦下。
+  dataUrl: z.string().startsWith('data:image/'),
 });
 export type ArtifactThumbnail = z.infer<typeof artifactThumbnailSchema>;
 

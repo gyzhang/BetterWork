@@ -14,6 +14,7 @@ import {
   createMacProcessSupervisor,
   resolveGuardianRuntime,
 } from './infrastructure/mac-process-supervisor';
+import { createPptxRenderer } from './infrastructure/pptx-renderer';
 import { registerIpc } from './ipc/register-ipc';
 import { AppStore } from './persistence';
 import { createQuitHandler } from './services/application-shutdown';
@@ -156,6 +157,11 @@ function bootstrap(): ApplicationContext {
   skillAdapterService.register(pptGenerationAdapterFactory, supportedPptContentHashes);
   const artifactFilesRoot = path.join(userData, 'artifact-files');
   mkdirSync(artifactFilesRoot, { recursive: true });
+  // 中文幻灯片预览依赖随包的思源黑体：系统自带的中文字体是 TTC + AAT，解析不了。
+  const fontResourceRoot = app.isPackaged
+    ? path.join(process.resourcesPath, 'fonts')
+    : path.resolve(app.getAppPath(), '../../resources/fonts');
+  const pptxRenderer = createPptxRenderer(fontResourceRoot);
   const fileArtifactService = new FileArtifactService(
     store,
     artifactFilesRoot,
@@ -182,6 +188,7 @@ function bootstrap(): ApplicationContext {
       );
     },
     (runId) => started.runs?.acceptsOutput(runId) ?? false,
+    pptxRenderer,
   );
   const runs = new RunService(
     store,
