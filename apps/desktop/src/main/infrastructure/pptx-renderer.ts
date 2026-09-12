@@ -8,7 +8,18 @@ export interface RenderedSlide {
   png: Buffer;
 }
 
+/**
+ * 渲染语义版本。凡是会改变输出像素的改动——本地补丁、字体映射表、输出宽度、
+ * 几何与配色处理——都必须递增它。派生缓存按它整体作废。
+ *
+ * 不这么做就会留下「渲染器已修好，用户仍看到旧图」：缓存只按 versionId 键控，
+ * 成果文件本身没变，没有任何信号能判定那批 PNG 是旧渲染器留下的。
+ */
+export const PREVIEW_REVISION = 1;
+
 export interface PptxRenderer {
+  /** 归属渲染器而不是调用方：谁产出这些字节，谁就决定缓存何时作废。 */
+  readonly previewRevision: number;
   render(pptxPath: string): Promise<RenderedSlide[]>;
 }
 
@@ -46,7 +57,7 @@ export const CHINESE_FONT_MAPPING: Readonly<Record<string, string>> = {
 };
 
 /** 缩略图输出宽度。像素高度由幻灯片比例推导，不指定。 */
-const PREVIEW_WIDTH = 800;
+export const PREVIEW_WIDTH = 800;
 
 const hasFontFile = (dir: string): boolean => {
   if (!existsSync(dir)) return false;
@@ -66,6 +77,7 @@ const hasFontFile = (dir: string): boolean => {
  */
 export function createPptxRenderer(fontResourceDir: string): PptxRenderer {
   return {
+    previewRevision: PREVIEW_REVISION,
     async render(pptxPath: string): Promise<RenderedSlide[]> {
       if (!hasFontFile(fontResourceDir)) {
         throw new Error(

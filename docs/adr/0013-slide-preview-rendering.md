@@ -8,12 +8,13 @@
 ## 决策
 
 1. **PPTX 页面预览由主进程内的纯 JS 渲染器 `pptx-glimpse` 完成**，不引入 LibreOffice、PowerPoint、Keynote 或任何外部应用、常驻服务、HTTP 服务。渲染器以 `PptxRenderer` 接口注入 `FileArtifactService`，测试用假实现替换。
-2. **渲染结果是派生缓存，不是成果**：落在 `userData/artifact-files/<versionId>/thumbnails/slide-<n>.png`，文件名即页号，可随时整目录删除并由下一次请求完整重建；不参与成果真实性校验，不进入导出与版本谱系。写入失败清掉半成品目录，宁可重来，不留缺页缓存。
+2. **渲染结果是派生缓存，不是成果**：落在 `userData/artifact-files/<versionId>/thumbnails/slide-<n>.png`，文件名即页号，可随时整目录删除并由下一次请求完整重建；不参与成果真实性校验，不进入导出与版本谱系。写入失败清掉半成品目录，宁可重来，不留缺页缓存。缓存目录里另写一个 `.revision` 标记，内容是 `PptxRenderer.previewRevision`：**渲染语义版本由渲染器携带，不由缓存目录名携带**。只按 `versionId` 键控接不到「渲染器换了但成果文件没变」这个信号，后果是修好渲染缺陷后用户仍看到旧图（本次实际发生：`custGeom` 修复上线后，已预览过的版本缓存里仍是丢图形的旧 PNG）。读取时标记缺失或不一致就整目录作废重建；标记**最后写**，中途崩溃只会留下无标记目录而不会留下有效假象。
 3. **跨 IPC 内联图片数据，不传本机路径**：`artifactThumbnailSchema` 输出 `dataUrl`（`data:image/…`）。Renderer 不得接触文件系统（ADR-0003），且开发模式页面源是 `http://localhost`，`file://` 子资源会被拦下。**这条决定要求 CSP 显式放行 `img-src … data:`**：`index.html` 的 CSP 原本只写了 `default-src 'self'` 而没有 `img-src`，按规范会回退到 `default-src`，而 `'self'` 不含 `data:`——后果是预览图全部加载失败、界面只剩 alt 文本，而 lint、typecheck、单测与构建全部通过。该契约由 `standards/coding-standard.test.ts` 的结构护栏守住（协议输出 `data:image/` 时 CSP 必须声明含 `data:` 的 `img-src`），因为它在单元层不可测。
 4. **中文字体随包分发并显式映射**：应用自带 `resources/fonts/SourceHanSansSC-Regular.otf`，并把微软雅黑／黑体／宋体／楷体／仿宋／等线等常见字体名统一映射到它。macOS 自带中文字体是 `*.ttc` 集合加 AAT 表头，`opentype.js` 解析不了。映射不改变当前输出（只随包一份字体时，未命中名字会兜底到已加载的第一份字体，带与不带映射的 PNG **字节完全相同**，已实测）；保留它是因为一旦随包第二种字族，兜底结果就取决于加载顺序而不是字体名。不得把它当作防空框的手段而删去，也不得在文档里声称它今天单独在防空框。见 [字体资源说明](../../resources/fonts/README.md)。
 5. **渲染只认随包字体目录，不扫描系统字体**（本地补丁新增 `onlyFontDirs` 选项，默认 `false` 保持上游语义）。上游默认会递归扫描 `/System/Library/Fonts` 等三个目录并**逐个解析全部字体**：本机实测 263 个文件 / 300MB，冷渲染 3746ms、渲染后常驻堆 2485MB（RSS 3.1GB），而默认堆上限 4192MB——这在 Electron 主进程里是一次真正的 OOM 风险，且耗时与内存完全取决于用户装了什么字体。限制后同一渲染 303ms / 236MB（约 12 倍与 10 倍改善），输出字节与限制前一致（已目视核对中文与版面）。代价是拉丁字体名（Arial 等）不再命中真字体，退回思源黑体的拉丁字形——预览要的是版式辨识，不是排印还原。
-6. **三方依赖的必要修改用 `patch-package` 管理**：补丁随仓库提交在 `patches/`（15 个 hunk，同时打在 `dist/index.js`、`dist/index.cjs` 与 `dist/index.d.ts`），由根 `package.json` 的 `postinstall` 应用；被修改的依赖 pin 到确切版本，使「补丁失配」在装包时立即失败而不是静默降级。补丁承担两类修复：中日韩字体名与字体子表登记，以及上述 `onlyFontDirs`。上游发布包含对应能力的版本后应删除补丁。
-7. **懒生成、可解释失败**：预览只在用户打开该版本时生成，命中缓存直接返回；渲染器抛错、渲染出零页、成果文件已被清理，都返回带中文说明的 `error`，界面回落到「可通过『打开』用系统应用查看」，不静默显示空白。
+6. **自定义几何的缩放必须烘进路径坐标，不能交给 `transform="scale()"`**（本地补丁修改 `renderCustomPath`）。`resvg` 会**整条丢弃**有效缩放 ≤ 1/4096 的 path——实测边界干净得可疑：1/4095 画得出，1/4096 画不出。而 PPTX 的 `<a:custGeom>` 自带一个以 EMU 为单位的坐标空间（`<a:path w="5143500" h="438150">`），上游把它原样留在 `d` 里、只挂一个 EMU→px 的 `scale(1.05e-4)`，比值恒定低于那道门槛，于是**所有自定义图形在预览里静默消失**：不报错、PNG 依然合法、tsc 与单测全绿。公司模板的卡片标题条、平行四边形、直角三角形、菱形全是 `custGeom`，所以这不是边角料。补丁改为按 `scaleX/scaleY` 逐点重写 `d`（`M/L/C/Q/T/S` 按坐标对缩放，`A` 按 `rx ry … x y` 的槽位缩放，`Z` 原样），不再输出 transform。代价：`A` 圆弧在非等比缩放下不是精确变换——三份子样本里 `arcTo` 出现 0 次，且它今天本来就被整条丢弃，近似严格优于消失。
+7. **三方依赖的必要修改用 `patch-package` 管理**：补丁随仓库提交在 `patches/`（17 个 hunk，同时打在 `dist/index.js`、`dist/index.cjs` 与 `dist/index.d.ts`），由根 `package.json` 的 `postinstall` 应用；被修改的依赖 pin 到确切版本，使「补丁失配」在装包时立即失败而不是静默降级。补丁承担三类修复：中日韩字体名与字体子表登记、上述 `onlyFontDirs`、以及上述自定义几何的缩放烘入。上游发布包含对应能力的版本后应删除补丁。
+8. **懒生成、可解释失败**：预览只在用户打开该版本时生成，命中缓存直接返回；渲染器抛错、渲染出零页、成果文件已被清理，都返回带中文说明的 `error`，界面回落到「可通过『打开』用系统应用查看」，不静默显示空白。
 
 ## 为什么不是原计划的 python-pptx + Pillow
 
@@ -33,12 +34,16 @@
 - 冷渲染 303ms、热渲染（同一字体集已缓存）约 25ms，跑在 Electron 主进程上。**当前接受**：预览懒加载、按版本触发、结果落盘后不再重算，且有明确 loading 态；300ms 量级不需要 `worker_threads`。若未来放开系统字体扫描或支持超大 deck，内存与耗时按决策 5 的实测口径重新评估，届时迁 worker 属于新的技术选择，需另行记录。
 - 渲染器的字体集缓存在模块级变量里，键包含 `fontDirs` 与 `fontMapping`；因此传给 `convertPptxToPng` 的映射表必须是同一个常量对象，否则每次渲染都会重新解析字体。`createPptxRenderer` 用的是模块常量 `CHINESE_FONT_MAPPING`，不得改成每次调用现构造。
 - 同一版本的并发首次请求会各自渲染一次，结果幂等、最坏是重复计算，不做进程内去重锁。
+- 递增 `PREVIEW_REVISION` 会让每个已预览过的版本各重渲染一次，这是它的代价而不是缺陷；只在输出像素真的变化时递增，纯重构不要递增，否则把它变成了噪音。
 - `patch-package` 是安装期脚本，与 npm 的 `allowScripts` 门禁共存；新增依赖若带安装脚本仍需显式放行。
+- **渲染保真度是逐步逼近的，不是完备的**：预览只保证版面可辨识。母版级联、autofit 缩放、SmartArt、艺术字、图表细节仍可能与 PowerPoint 有差异；发现新的「整类元素静默消失」按决策 6 的口径处理——先看 `convertPptxToSvg` 的输出里元素在不在、坐标量级对不对，再决定是补上游还是明确写进本 ADR 的代价。
 - 打包路径（`electron-builder.yml` 的 `extraResources` 字体项）在真实 `npm run dist` 产物上尚未验证；monorepo 依赖提升下的 `node_modules` 收集是既有的未验证项，不因本次改动引入。
 
 ## 验收要求
 
 - 中文 PPTX 在 light/dark 与全部色系下预览文字完整、无空框；应用主题不改变幻灯片自身配色（文档画布用 `--artifact-canvas`）。
+- 用 `custGeom` 画出的元素（卡片标题条、平行四边形、三角形、菱形）在预览里可见，与 PowerPoint 打开同一文件的结果一致；该条由 `pptx-renderer.test.ts` 的几何回归用例守住，不靠目视。
+- 修改渲染器输出后，重新打开一个**早已预览过**的成果就能看到新结果，不需要手工删缓存；该条由 `file-artifact-service.test.ts` 的两条 revision 用例守住（版本不一致、标记缺失各一条，且拆掉机制后两条都会失败）。
 - 删除 `thumbnails/` 目录后再次打开同一版本可完整重建；重建期间不重复渲染已有缓存。
 - 未安装 LibreOffice、未配置 Python 运行时的机器上，预览功能可用。
 - `npm ci` 后补丁自动生效；改动被补丁的文件或升级该依赖而不更新补丁时，装包阶段即失败。
