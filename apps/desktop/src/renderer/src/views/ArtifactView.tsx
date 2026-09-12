@@ -5,13 +5,14 @@ import type {
   ArtifactVersionDetail,
   ValidationStatus,
 } from '@betterwork/agent-protocol';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { EmptyPage } from '../components/EmptyState';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
 import { ViewContainer } from '../components/layout/ViewContainer';
 import { type ToastTone, TransientToast } from '../components/TransientToast';
+import { useArtifactThumbnails } from '../hooks/use-artifact-thumbnails';
 import { useArtifactViewer } from '../hooks/use-artifact-viewer';
 import { ChevronLeftIcon, ChevronRightIcon, GlobeIcon, KnowledgeIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
@@ -83,47 +84,11 @@ export function ArtifactPage({
     selectVersion,
   } = useArtifactViewer(selected);
   const [toast, setToast] = useState<{ tone: ToastTone; message: string }>();
-  const [thumbnails, setThumbnails] = useState<ArtifactThumbnail[]>([]);
-  const [thumbnailError, setThumbnailError] = useState<string>();
-  const [thumbnailLoading, setThumbnailLoading] = useState(false);
-  const thumbRequestRef = useRef(0);
   const dismissToast = useCallback(() => setToast(undefined), []);
-
-  useEffect(() => {
-    if (!selected || selected.type !== 'presentation' || !visibleVersion) {
-      setThumbnails([]);
-      setThumbnailError(undefined);
-      setThumbnailLoading(false);
-      return;
-    }
-    const requestId = thumbRequestRef.current + 1;
-    thumbRequestRef.current = requestId;
-    setThumbnailLoading(true);
-    setThumbnailError(undefined);
-    const promise = window.betterwork.artifacts.getThumbnails({
-      artifactId: selected.id,
-      versionId: visibleVersion.id,
-    });
-    reportAction(
-      promise.then((result) => {
-        if (thumbRequestRef.current === requestId) {
-          setThumbnails(result.thumbnails);
-          if (result.error) setThumbnailError(result.error);
-        }
-      }),
-      (message) => {
-        if (thumbRequestRef.current === requestId) setThumbnailError(message);
-      },
-      '缩略图加载失败，请重试。',
-    );
-    promise
-      .catch(() => {
-        /* reportAction already handles errors */
-      })
-      .finally(() => {
-        if (thumbRequestRef.current === requestId) setThumbnailLoading(false);
-      });
-  }, [selected, visibleVersion]);
+  const thumbnails = useArtifactThumbnails({
+    artifactId: selected?.type === 'presentation' ? selected.id : undefined,
+    versionId: selected?.type === 'presentation' ? visibleVersion?.id : undefined,
+  });
   if (selected && visibleVersion)
     return (
       <>
@@ -319,9 +284,9 @@ export function ArtifactPage({
               ) : (
                 <PresentationPreview
                   version={visibleVersion}
-                  thumbnails={thumbnails}
-                  loading={thumbnailLoading}
-                  error={thumbnailError}
+                  thumbnails={thumbnails.items}
+                  loading={thumbnails.loading}
+                  error={thumbnails.error}
                 />
               )}
             </div>
@@ -461,12 +426,12 @@ function PresentationPreview({
       <div className="artifact-thumbnail-gallery">
         {thumbnails.map((thumb) => (
           <div key={thumb.slideIndex} className="artifact-thumbnail-item">
-            <span className="artifact-thumbnail-index">{thumb.slideIndex + 1}</span>
             <img
               src={`file://${thumb.filePath}`}
               alt={`幻灯片 ${thumb.slideIndex + 1}`}
               className="artifact-thumbnail-image"
             />
+            <span className="artifact-thumbnail-index">第 {thumb.slideIndex + 1} 页</span>
           </div>
         ))}
       </div>

@@ -271,6 +271,7 @@
 }
 :root[data-theme='light'] {
   --scrim: rgba(0, 0, 0, 0.35);
+  --artifact-canvas: #e6e6e4;
   --shadow-color-strong: rgba(0, 0, 0, 0.18);
   --shadow-color-overlay: rgba(0, 0, 0, 0.16);
   --shadow-color-drawer: rgba(0, 0, 0, 0.12);
@@ -279,6 +280,7 @@
 }
 :root[data-theme='dark'] {
   --scrim: rgba(0, 0, 0, 0.55);
+  --artifact-canvas: #2a2a29;
   --shadow-color-strong: rgba(0, 0, 0, 0.5);
   --shadow-color-overlay: rgba(0, 0, 0, 0.45);
   --shadow-color-drawer: rgba(0, 0, 0, 0.4);
@@ -2427,6 +2429,11 @@ p {
   width: 64px;
   color: var(--text-secondary);
 }
+.artifact-presentation-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 .artifact-thumbnail-gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -2434,30 +2441,25 @@ p {
   padding: 12px;
 }
 .artifact-thumbnail-item {
-  position: relative;
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
   background: var(--surface-raised);
-}
-.artifact-thumbnail-index {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 4px;
-  z-index: 1;
 }
 .artifact-thumbnail-image {
   display: block;
   width: 100%;
   aspect-ratio: 16 / 9;
   object-fit: contain;
-  background: #fff;
+  background: var(--artifact-canvas);
+}
+.artifact-thumbnail-index {
+  padding: 6px 10px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
 }
 .back-button {
   padding: 5px 0;

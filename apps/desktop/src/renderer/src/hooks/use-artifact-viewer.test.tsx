@@ -91,4 +91,37 @@ describe('useArtifactViewer', () => {
     });
     expect(result.current.versions).toEqual([version('version-second', 'second')]);
   });
+
+  it('keeps visibleVersion referentially stable while the selected Artifact is unchanged', () => {
+    // 回归：`toVersionDetail` 每次调用都新建对象。未 memo 时引用每次都变，调用方把
+    // visibleVersion 放进 useEffect 依赖数组就会无限重跑——表现为每次渲染都再发一次
+    // 缩略图请求，在外层反复拉起转换进程。`react-hooks/exhaustive-deps` 查不出这种错误。
+    const selected = artifact('stable');
+    installArtifactApi({ listVersions: async () => [] });
+    const { result, rerender } = renderHook(({ selected }) => useArtifactViewer(selected), {
+      initialProps: { selected },
+    });
+
+    const initial = result.current.visibleVersion;
+    expect(initial).toBeDefined();
+
+    rerender({ selected });
+    rerender({ selected });
+    rerender({ selected });
+
+    expect(result.current.visibleVersion).toBe(initial);
+  });
+
+  it('recomputes visibleVersion when the selected Artifact changes', () => {
+    installArtifactApi({ listVersions: async () => [] });
+    const { result, rerender } = renderHook(({ selected }) => useArtifactViewer(selected), {
+      initialProps: { selected: artifact('first') },
+    });
+
+    const initial = result.current.visibleVersion;
+    rerender({ selected: artifact('second') });
+
+    expect(result.current.visibleVersion).not.toBe(initial);
+    expect(result.current.visibleVersion?.artifactId).toBe('second');
+  });
 });
