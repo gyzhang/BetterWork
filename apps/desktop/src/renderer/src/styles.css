@@ -1908,6 +1908,58 @@ p {
 .danger-confirm-button:hover {
   background: var(--danger-hover);
 }
+
+/* === PopoverMenu 基座（ADR-0012 §UI / B00-3） === */
+.popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 11;
+  background: transparent;
+}
+.popover-menu {
+  position: fixed;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  max-width: 320px;
+  max-height: 320px;
+  padding: 4px;
+  overflow-y: auto;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px var(--shadow-color-overlay);
+}
+.popover-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.popover-menu-item.active:not([aria-disabled]) {
+  background: var(--selection);
+}
+.popover-menu-item[aria-disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+.popover-menu-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.popover-menu-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
 .model-sheet {
   position: absolute;
   top: 0;
@@ -3461,6 +3513,12 @@ select,
 }
 .notification-panel {
   animation: betterwork-rise-in var(--motion-expand) var(--motion-easing);
+}
+.popover-menu {
+  animation: betterwork-rise-in var(--motion-instant) var(--motion-easing);
+}
+.popover-backdrop {
+  animation: betterwork-fade-in var(--motion-instant) var(--motion-easing);
 }
 .notification-overlay {
   animation: betterwork-fade-in var(--motion-expand) var(--motion-easing);
