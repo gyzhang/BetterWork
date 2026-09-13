@@ -75,7 +75,7 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | A21 | 安装包验收与阶段 A 收尾 | A20 | todo | — |
 | B00-1 | StartRun 协议与绑定解析改 1:N | 无 | done | [协议测试](../../packages/agent-protocol/src/index.test.ts)（1–6 项、去重、超上限拒绝、旧单数字段拒绝）、[RunService 测试](../../apps/desktop/src/main/services/run-service.test.ts)（两技能各自快照且不串、后一技能未信任时整 Run 失败且不留下任何绑定、revisionId 过时拒绝、后续 Run 不再继承绑定、停用技能不连带无关 Run、无绑定 Run 不被误取消）；未改动 schema，无新增迁移；`npm run verify` 退出 0（50 文件 / 411 测试），2026-09-13 00:46。真实开发窗口的双技能运行属于 B00-5 |
 | B00-2 | 指令注入顺序与运行约定解耦 | B00-1 | done | [skill-runtime-conventions 测试](../../apps/desktop/src/main/services/skill-runtime-conventions.test.ts)（通用层完整、样本专属口径泄漏锁、命令表带 bindingId 与 skillName、两绑定命令表不相交）、[ppt-generation-preset 测试](../../apps/desktop/src/main/services/ppt-generation-preset.test.ts)（预设段落只在匹配命令时出现、attempt 合并要求两个命令都在、artifact 登记闸门绑定 pptx-validate）、[agent-engine 测试](../../packages/agent-core/src/agent-engine.test.ts)（两技能各一条 system 段、顺序即用户选择顺序、互不串内容）；`npm run verify` 退出 0（51 文件 / 421 测试），2026-09-13 01:11 |
-| B00-3 | 受控弹层基座 | 无 | todo | — |
+| B00-3 | 受控弹层基座 | 无 | done | [PopoverMenu 测试](../../apps/desktop/src/renderer/src/components/PopoverMenu.test.tsx)（11 项：焦点进入首项、Esc 关闭、背板点击关闭、ArrowDown/Up 跳过 disabled 且 wrap、Home/End、Enter 选中、disabled 不可选、hint 渲染、ARIA 属性、无 emoji）；样式只消费 `--surface-raised` / `--border` / `--shadow-color-overlay` / `--selection`，命中区 32px；`npm run verify` 退出 0（52 文件），2026-09-13 08:16 |
 | B00-4 | Composer `+` 菜单与 chip 条 | B00-1、B00-3 | todo | — |
 | B00-5 | 撤销级联与 B0 验收 | B00-2、B00-4 | todo | — |
 
