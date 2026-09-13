@@ -95,6 +95,8 @@
 
 顺带删除：`SkillExecutionRepository.findLatestBindingByTask`——它只服务隐式继承，没有别的调用方。不保留备用查询：界面需要的是「某任务最近一个 Run 的绑定集合」（多条），不是「最近一条」；到 B00-4 按真实需求重新定义。
 
+2026-09-13 B00-4 已落地：Composer `+` 菜单与 chip 条。`RunSummary` 协议扩展 `bindings?: RunSkillBindingSummary[]`，`runs.list` IPC 在返回时附带每次 Run 的绑定集合（`skillId` + `skillName`），不新增 IPC channel，符合 §协议 的「绑定集合的展示复用 `RunSkillBinding` 的读取」。新增 `ComposerCapabilityPicker` 组件，一级菜单为技能 / 专家（禁用，阶段 B 提供）/ 添加文件（禁用，尚未开放），技能二级列表带搜索、多选、`blockedReasons` 置灰与定位入口。已选能力以 chip 条显示于工作区行与 textarea 之间，替换原「已选择 Skill：{name}」纯文本。试运行入口改为写入同一 `taskBindings` 状态，不再另设草稿字段。切换历史任务时从最近 Run 的 `bindings` 恢复 chip 条，新任务从空开始。运行中禁止修改绑定并给出可见原因。
+
 ## 被否决的方案
 
 - **保留试运行专用入口，对话内不做选择**：能力入口只服务教学演示，与「个人工作台」定位冲突。

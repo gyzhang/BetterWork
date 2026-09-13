@@ -247,7 +247,13 @@ function registerRunChannels({ store, runs }: IpcDependencies): void {
     IpcChannel.ListRuns,
     listRunsRequestSchema,
     z.array(runSummarySchema),
-    (input) => store.runs.list(input.taskId),
+    (input) => {
+      const runs = store.runs.list(input.taskId);
+      return runs.map((run) => {
+        const bindings = store.executions.listBindingSummariesForRun(run.id);
+        return bindings.length > 0 ? { ...run, bindings } : run;
+      });
+    },
   );
 }
 

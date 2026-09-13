@@ -987,6 +987,11 @@ export interface SearchEngineSummary {
   updatedAt: number;
 }
 
+export interface RunSkillBindingSummary {
+  skillId: string;
+  skillName: string;
+}
+
 export interface RunSummary {
   id: string;
   taskId: string;
@@ -995,6 +1000,8 @@ export interface RunSummary {
   status: 'running' | 'completed' | 'failed' | 'cancelled';
   createdAt: number;
   completedAt?: number;
+  /** 本次 Run 绑定的技能集合（按绑定顺序），用于界面恢复 chip 条。 */
+  bindings?: RunSkillBindingSummary[];
 }
 
 export const notificationLevelSchema = z.enum(['info', 'success', 'warning', 'error']);
@@ -1062,6 +1069,10 @@ export const workspaceSummarySchema = z.object({
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
 });
+export const runSkillBindingSummarySchema = z.object({
+  skillId: z.string().min(1),
+  skillName: z.string().min(1),
+});
 export const runSummarySchema = z.object({
   id: z.string().min(1),
   taskId: z.string().min(1),
@@ -1070,6 +1081,7 @@ export const runSummarySchema = z.object({
   status: z.enum(['running', 'completed', 'failed', 'cancelled']),
   createdAt: z.number().int().nonnegative(),
   completedAt: z.number().int().nonnegative().optional(),
+  bindings: z.array(runSkillBindingSummarySchema).optional(),
 });
 export const taskSummarySchema = z.object({
   id: z.string().min(1),

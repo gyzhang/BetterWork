@@ -97,7 +97,9 @@ async function openTestRun(): Promise<void> {
   fireEvent.click(screen.getByRole('button', { name: '能力' }));
   fireEvent.click(await screen.findByRole('button', { name: /演示生成专家/ }));
   fireEvent.click(await screen.findByRole('button', { name: '试运行' }));
-  await screen.findByText('已选择 Skill：演示生成专家');
+  // 现在以 chip 条形式显示已选技能，查找 aria-label 为“已选能力”的列表。
+  const chipBar = await screen.findByRole('list', { name: '已选能力' });
+  expect(chipBar.textContent).toContain('演示生成专家');
 }
 
 function composer(): HTMLElement {
@@ -190,7 +192,8 @@ describe('Skill test run in the task composer', () => {
     expect(api.tasks.create).toHaveBeenCalledTimes(1);
     expect(api.runs.start).toHaveBeenCalledTimes(1);
     expect(composer()).toHaveProperty('value', goal);
-    expect(screen.getByText('已选择 Skill：演示生成专家')).toBeTruthy();
+    // chip 条应该保留。
+    expect(screen.getByRole('list', { name: '已选能力' }).textContent).toContain('演示生成专家');
 
     fireEvent.click(screen.getByRole('button', { name: '开始工作' }));
     await waitFor(() => expect(api.runs.start).toHaveBeenCalledTimes(2));
@@ -208,7 +211,8 @@ describe('Skill test run in the task composer', () => {
     render(<App />);
     await openTestRun();
     fireEvent.click(screen.getByRole('button', { name: new RegExp(destination) }));
-    expect(screen.queryByText('已选择 Skill：演示生成专家')).toBeNull();
+    // chip 条应该被清空。
+    expect(screen.queryByRole('list', { name: '已选能力' })).toBeNull();
     fireEvent.change(composer(), { target: { value: '普通要求' } });
     fireEvent.click(screen.getByRole('button', { name: '开始工作' }));
     await waitFor(() => expect(api.runs.start).toHaveBeenCalledTimes(1));

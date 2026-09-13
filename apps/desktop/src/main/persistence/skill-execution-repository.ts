@@ -164,6 +164,24 @@ export class SkillExecutionRepository {
     return rows.map(toBinding);
   }
 
+  /**
+   * 返回某次 Run 的绑定集合，附带技能名，用于界面恢复 chip 条。
+   * 顺序即绑定创建顺序（= 用户选择顺序）。
+   */
+  listBindingSummariesForRun(runId: string): Array<{ skillId: string; skillName: string }> {
+    const rows = this.db
+      .prepare(
+        `SELECT s.id AS skill_id, s.name AS skill_name
+         FROM run_skill_bindings b
+         JOIN skill_revisions r ON r.id = b.skill_revision_id
+         JOIN skills s ON s.id = r.skill_id
+         WHERE b.run_id = ?
+         ORDER BY b.created_at`,
+      )
+      .all(runId) as Array<{ skill_id: string; skill_name: string }>;
+    return rows.map((row) => ({ skillId: row.skill_id, skillName: row.skill_name }));
+  }
+
   /** 执行实例在 supervisor 启动之前登记，先有 queued 行再可能有进程。 */
   createExecution(input: CreateExecutionInput): ScriptExecution {
     const id = input.id ?? randomUUID();
