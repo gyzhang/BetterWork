@@ -575,6 +575,32 @@ describe('RunService', () => {
     expect(statusOf(fixture, otherRunId)).toBe('completed');
   });
 
+  it('cancelRunsForSkill() includes skill name in cancellation reason', async () => {
+    const fixture = await createFixture();
+    const window = createWindowStub();
+    const skillId = await createTrustedSkill(fixture, 'skill-ppt', 'PPT 生成专家');
+    const service = createService(fixture, window);
+
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '生成 PPT',
+      skillBindings: [{ skillId }],
+    });
+
+    await service.cancelRunsForSkill(skillId);
+    await waitForCompletion(fixture, runId);
+
+    const events = fixture.store.runs.listEvents(runId);
+    const cancelledEvent = events.find((event) => event.type === 'run.cancelled');
+    expect(cancelledEvent).toBeDefined();
+    expect(cancelledEvent?.type).toBe('run.cancelled');
+    if (cancelledEvent?.type === 'run.cancelled') {
+      expect(cancelledEvent.reason).toContain('PPT 生成专家');
+      expect(cancelledEvent.reason).toContain('信任已被撤销');
+    }
+  });
+
   /** 不启动任何进程的 supervisor：绑定登记不涉及 launch，Fake 模型也不会执行工具。 */
   const createUnusedSupervisor = (): ProcessSupervisor => ({
     launch: () => {

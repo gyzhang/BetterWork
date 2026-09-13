@@ -64,7 +64,7 @@ export const agentRuntimeEventSchema = z.discriminatedUnion('type', [
   }),
   eventBaseSchema.extend({ type: z.literal('run.completed'), finalContent: z.string() }),
   eventBaseSchema.extend({ type: z.literal('run.failed'), error: z.string() }),
-  eventBaseSchema.extend({ type: z.literal('run.cancelled') }),
+  eventBaseSchema.extend({ type: z.literal('run.cancelled'), reason: z.string().optional() }),
 ]);
 export type AgentRuntimeEvent = z.infer<typeof agentRuntimeEventSchema>;
 type WithoutEventEnvelope<T> = T extends unknown

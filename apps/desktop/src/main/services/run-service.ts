@@ -208,11 +208,14 @@ export class RunService {
 
   /** 撤销信任级联：取消绑定中包含指定 Skill 的所有活跃 Run。 */
   async cancelRunsForSkill(skillId: string): Promise<number> {
+    const skill = this.store.skills.get(skillId);
+    const skillName = skill?.name ?? '未知技能';
+    const reason = `技能「${skillName}」的信任已被撤销，本次运行被终止`;
     let cancelled = 0;
     for (const [runId, active] of this.activeRuns) {
       // 多绑定下按成员判断：指定 Skill 只是其中一个绑定时，整个 Run 仍必须停止（ADR-0012 决策 6）。
       if (active.skillIds.includes(skillId)) {
-        active.controller.abort();
+        active.controller.abort(reason);
         cancelled += 1;
         const pending = this.consumePromises.get(runId);
         if (pending) await pending;

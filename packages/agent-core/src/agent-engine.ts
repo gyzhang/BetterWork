@@ -236,7 +236,11 @@ export class ReActAgentEngine implements AgentEngine {
       }
     } catch (error) {
       if (input.signal.aborted || isAbortError(error)) {
-        yield events.create({ type: 'run.cancelled' });
+        const reason = typeof input.signal.reason === 'string' ? input.signal.reason : undefined;
+        yield events.create({
+          type: 'run.cancelled',
+          ...(reason ? { reason } : {}),
+        });
         return;
       }
       yield events.create({ type: 'run.failed', error: describeError(error) });
