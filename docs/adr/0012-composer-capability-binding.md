@@ -97,6 +97,8 @@
 
 2026-09-13 B00-4 已落地：Composer `+` 菜单与 chip 条。`RunSummary` 协议扩展 `bindings?: RunSkillBindingSummary[]`，`runs.list` IPC 在返回时附带每次 Run 的绑定集合（`skillId` + `skillName`），不新增 IPC channel，符合 §协议 的「绑定集合的展示复用 `RunSkillBinding` 的读取」。新增 `ComposerCapabilityPicker` 组件，一级菜单为技能 / 专家（禁用，阶段 B 提供）/ 添加文件（禁用，尚未开放），技能二级列表带搜索、多选、`blockedReasons` 置灰与定位入口。已选能力以 chip 条显示于工作区行与 textarea 之间，替换原「已选择 Skill：{name}」纯文本。试运行入口改为写入同一 `taskBindings` 状态，不再另设草稿字段。切换历史任务时从最近 Run 的 `bindings` 恢复 chip 条，新任务从空开始。运行中禁止修改绑定并给出可见原因。
 
+2026-09-13 B00-5 已落地：撤销级联原因文案。`run.cancelled` 事件协议扩展可选 `reason?: string`；`cancelRunsForSkill` 查找技能名并写入「技能「XXX」的信任已被撤销，本次运行被终止」作为 abort reason；agent-engine 从 `signal.reason` 读取并带入取消事件。B00-1 已完成的级联判断（成员判断而非相等判断）与本卡共同构成完整的撤销级联语义。
+
 ## 被否决的方案
 
 - **保留试运行专用入口，对话内不做选择**：能力入口只服务教学演示，与「个人工作台」定位冲突。
