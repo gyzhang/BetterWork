@@ -29,6 +29,10 @@ export interface PopoverMenuProps {
   align?: 'start' | 'end';
   /** 浮动方向：bottom = 在触发器下方展开（默认），top = 在上方展开。 */
   placement?: 'bottom' | 'top';
+  /** 可选头部，渲染在列表上方（如搜索框）。 */
+  header?: React.ReactNode;
+  /** 可选底部，渲染在列表下方（如操作链接）。 */
+  footer?: React.ReactNode;
   onDismiss: () => void;
   onSelect: (id: string) => void;
 }
@@ -42,6 +46,8 @@ export function PopoverMenu({
   label,
   align = 'start',
   placement = 'bottom',
+  header,
+  footer,
   onDismiss,
   onSelect,
 }: PopoverMenuProps): React.JSX.Element | null {
@@ -148,6 +154,7 @@ export function PopoverMenu({
         style={position}
         onKeyDown={handleKeyDown}
       >
+        {header ? <div className="popover-menu-header">{header}</div> : undefined}
         {items.map((item, index) => (
           <div
             key={item.id}
@@ -169,6 +176,7 @@ export function PopoverMenu({
             {item.hint ? <span className="popover-menu-hint">{item.hint}</span> : undefined}
           </div>
         ))}
+        {footer ? <div className="popover-menu-footer">{footer}</div> : undefined}
       </div>
     </>,
     document.body,

@@ -7,7 +7,6 @@ import type {
   NotificationTarget,
   RecentTaskSummary,
   RunSummary,
-  SkillSummary,
   WorkspaceSummary,
 } from '@betterwork/agent-protocol';
 import type { FormEvent, KeyboardEvent } from 'react';
@@ -15,6 +14,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { deriveActivityGroups } from './activity';
 import { BrandLogo } from './brand-logo';
+import {
+  type CapabilityChip,
+  ComposerCapabilityPicker,
+} from './components/ComposerCapabilityPicker';
 import { ContextPanel } from './components/ContextPanel';
 import { PageHeader } from './components/layout/PageHeader';
 import { ModelEditor } from './components/ModelEditorSheet';
@@ -67,7 +70,7 @@ export function App(): React.JSX.Element {
   const refreshModels = modelSettings.refresh;
 
   const [prompt, setPrompt] = useState('计算: (12 + 8) * 3');
-  const [taskSkill, setTaskSkill] = useState<SkillSummary>();
+  const [taskBindings, setTaskBindings] = useState<CapabilityChip[]>([]);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const startingRef = useRef(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -108,8 +111,8 @@ export function App(): React.JSX.Element {
   const [notificationCenterOpen, setNotificationCenterOpen] = useState(false);
 
   useEffect(() => {
-    if (view === 'work' && taskSkill) composerRef.current?.focus();
-  }, [view, taskSkill]);
+    if (view === 'work' && taskBindings.length > 0) composerRef.current?.focus();
+  }, [view, taskBindings.length]);
   /**
    * 列表刷新属于后台同步：失败时用户无法据以行动，但也不能完全无痕。
    * 统一走 trackAction 记录到控制台，并对调用方保证「永不 reject」，
@@ -263,7 +266,7 @@ export function App(): React.JSX.Element {
     setTaskRuns([]);
     setTaskAllRuns([]);
     setTaskAllEvents(new Map());
-    setTaskSkill(undefined);
+    setTaskBindings([]);
     setActionError('');
     setEvidence([]);
     setEvents([]);
@@ -274,7 +277,7 @@ export function App(): React.JSX.Element {
   const skills = useSkills({
     onTestRunRequested: (skill) => {
       startNewTask();
-      setTaskSkill(skill);
+      setTaskBindings([{ kind: 'skill', id: skill.id, name: skill.name, status: 'ready' }]);
       setContextOpen(false);
     },
   });
@@ -300,8 +303,13 @@ export function App(): React.JSX.Element {
         taskId: task.id,
         sessionId: task.sessionId,
         prompt,
-        ...(taskSkill
-          ? { skillBindings: [{ skillId: taskSkill.id, revisionId: taskSkill.currentRevisionId }] }
+        ...(taskBindings.length > 0
+          ? {
+              skillBindings: taskBindings.map((chip) => {
+                const skill = skills.skills.find((s) => s.id === chip.id);
+                return { skillId: chip.id, revisionId: skill?.currentRevisionId };
+              }),
+            }
           : {}),
       });
       runSelectionRequestRef.current += 1;
@@ -348,7 +356,7 @@ export function App(): React.JSX.Element {
     reportAction(startRun(), setActionError, '无法开始这项工作，请重试。');
   };
   const selectRun = async (run: RunSummary): Promise<void> => {
-    setTaskSkill(undefined);
+    setTaskBindings([]);
     const requestId = runSelectionRequestRef.current + 1;
     runSelectionRequestRef.current = requestId;
     activeRunIdRef.current = run.id;
@@ -370,7 +378,7 @@ export function App(): React.JSX.Element {
     setTaskAllRuns([]);
     setTaskAllEvents(new Map());
     setTaskRuns([]);
-    setTaskSkill(undefined);
+    setTaskBindings([]);
     runSelectionRequestRef.current += 1;
     activeRunIdRef.current = undefined;
     activeTaskIdRef.current = task.id;
@@ -388,6 +396,17 @@ export function App(): React.JSX.Element {
     if (selectionId !== runSelectionRequestRef.current) return;
     const latest = [...loadedRuns].sort((a, b) => b.createdAt - a.createdAt)[0];
     if (!latest) return;
+    // 恢复该任务最近一次 Run 的绑定集合为 chip 条。
+    if (latest.bindings && latest.bindings.length > 0) {
+      setTaskBindings(
+        latest.bindings.map((binding) => ({
+          kind: 'skill' as const,
+          id: binding.skillId,
+          name: binding.skillName,
+          status: 'ready' as const,
+        })),
+      );
+    }
     activeRunIdRef.current = latest.id;
     setActiveRunId(latest.id);
     const snapshot = await window.betterwork.runs.listEvents({ runId: latest.id });
@@ -657,10 +676,10 @@ export function App(): React.JSX.Element {
               <div className="messages" ref={containerRef} onScroll={onScroll}>
                 <div className="page-body">
                   {taskAllRuns.length === 0 && !activeRunId ? (
-                    taskSkill ? (
+                    taskBindings.length > 0 ? (
                       <div className="welcome">
                         <p className="eyebrow">Skill 试运行</p>
-                        <h2>{taskSkill.name}</h2>
+                        <h2>{taskBindings.map((chip) => chip.name).join('、')}</h2>
                         <p>输入这次任务的具体要求，点击「开始工作」后执行。</p>
                       </div>
                     ) : (
@@ -760,7 +779,7 @@ export function App(): React.JSX.Element {
                         window.betterwork.workspace.selectDirectory().then((selected) => {
                           if (selected) {
                             startNewTask();
-                            setTaskSkill(taskSkill);
+                            setTaskBindings(taskBindings);
                             workspaceIdRef.current = selected.id;
                             setWorkspace(selected);
                             refreshTasks(selected.id);
@@ -774,7 +793,21 @@ export function App(): React.JSX.Element {
                     选择
                   </button>
                 </div>
-                {taskSkill && <p className="action-note">已选择 Skill：{taskSkill.name}</p>}
+                <div className="composer-capability-row">
+                  <ComposerCapabilityPicker
+                    skills={skills.skills}
+                    selected={taskBindings}
+                    disabled={isRunning}
+                    {...(isRunning ? { disabledReason: '运行中不可修改' } : {})}
+                    onAdd={(chip) => setTaskBindings((prev) => [...prev, chip])}
+                    onRemove={(id) =>
+                      setTaskBindings((prev) => prev.filter((chip) => chip.id !== id))
+                    }
+                    onRequestSkillDetail={() => {
+                      setView('skills');
+                    }}
+                  />
+                </div>
                 <textarea
                   ref={composerRef}
                   aria-label="任务输入，按 Command 或 Control 加 Enter 开始工作"
