@@ -77,6 +77,7 @@ describe('registerIpc', () => {
     const { ExpertService } = await import('../services/expert-service');
     const { InputSnapshotService } = await import('../services/input-snapshot-service');
     const { TaskMaterialService } = await import('../services/task-material-service');
+    const { MemoryService } = await import('../services/memory-service');
     const { fakePptxRenderer } = await import('../infrastructure/fixtures/fake-pptx-renderer');
     const { FakeDownloader, FakeFileSystem, FakePythonRunner, scenarioOf } =
       await import('../services/fixtures/fake-python-runtime');
@@ -94,6 +95,7 @@ describe('registerIpc', () => {
     const expertService = new ExpertService(store);
     const inputSnapshots = new InputSnapshotService(store, temporaryDirectory);
     const taskMaterials = new TaskMaterialService({ store, knowledgeVault, inputSnapshots });
+    const memories = new MemoryService(store, temporaryDirectory);
 
     // 依赖通道用离线替身根：不触网、不碰系统 Python，也不写受管目录之外的位置。
     const fakeFilesystem = new FakeFileSystem();
@@ -146,6 +148,7 @@ describe('registerIpc', () => {
       store,
       knowledgeVault,
       taskMaterials,
+      memories,
       notifications,
       runs,
       skillService,

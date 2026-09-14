@@ -23,6 +23,7 @@ import { type BuiltinExpertReleaseManifest, ExpertService } from './services/exp
 import { FileArtifactService } from './services/file-artifact-service';
 import { InputSnapshotService } from './services/input-snapshot-service';
 import { KnowledgeVault } from './services/knowledge-vault';
+import { MemoryService } from './services/memory-service';
 import { NotificationService } from './services/notification-service';
 import {
   pptGenerationAdapterFactory,
@@ -66,6 +67,10 @@ function bootstrap(): ApplicationContext {
     path.join(userData, 'vaults', 'default', 'vault.sqlite'),
   );
   const inputSnapshots = new InputSnapshotService(store, userData);
+  const memories = new MemoryService(store, userData);
+  memories.rebuildProjection().catch((error: unknown) => {
+    console.error('Memory projection rebuild failed', error);
+  });
   const taskMaterials = new TaskMaterialService({ store, knowledgeVault, inputSnapshots });
   inputSnapshots
     .recover()
@@ -236,6 +241,7 @@ function bootstrap(): ApplicationContext {
     dependencies,
     inputSnapshots,
     taskMaterials,
+    memories,
   );
   started.runs = runs;
 
@@ -243,6 +249,7 @@ function bootstrap(): ApplicationContext {
     store,
     knowledgeVault,
     taskMaterials,
+    memories,
     notifications,
     runs,
     skillService,

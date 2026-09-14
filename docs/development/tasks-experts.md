@@ -52,7 +52,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E24 | 读取足迹与成果输入来源 | E23 | done | [读取/成果来源测试](../../apps/desktop/src/main/services/run-service.test.ts)：v14 保存 RunMaterialRead 与 ArtifactInputRelation；搜索、输入快照和成果读取留下精确足迹，Markdown/文件成果只允许关联同一 Run 已读取材料。`npm run verify` 退出 0（60 文件 / 473 测试 / Electron build），2026-09-14。 |
 | E25 | 材料 UI、成果复用与 E2 验收 | E24 | done | Composer 与资料面板支持文件/知识/成果选择、用途调整、失效提示和取消；成果详情可引用精确 Markdown 版本开始新任务；现有格式材料链路完成，Office 输入明确留 E51；`npm run verify` 退出 0（61 文件 / 475 测试 / Electron build），2026-09-14。 |
 | E30 | 记忆投影与治理实现 ADR | E25 | done | 新增 [ADR-0015](../adr/0015-memory-scope-and-governance.md)：SQLite 唯一真相源、User/Workspace/Expert/Expert×Workspace 判别范围、candidate/confirmed/过期/删除状态、来源、预算、运行快照、投影重建和失败恢复语义已定案。 |
-| E31 | 记忆存储、检索与运行注入 | E30 | todo | — |
+| E31 | 记忆存储、检索与运行注入 | E30 | done | [MemoryRepository/Service 与 RunService 测试](../../apps/desktop/src/main/persistence/memory-repository.test.ts)：应用库 v15 增加不可变记忆修订与 Run 读取足迹；四种作用域按隔离规则检索，confirmed 记录按 16 条/6,000 字符预算注入新 Run，候选不会注入；IPC/Preload 已接通，Markdown 只读投影按作用域重建。`npm run verify` 退出 0（63 文件 / 480 测试），2026-09-14。 |
 | E32 | 记忆管理、对话确认与 E3 验收 | E31 | todo | — |
 | E40 | MCP 接入实现 ADR 与探测样本 | E32 | todo | — |
 | E41 | MCP 连接、工具适配与取消 | E40 | todo | — |

@@ -15,6 +15,7 @@ import type {
   BuiltinToolPolicy,
   ExpertModelReference,
   MaterialReference,
+  MemoryRecord,
   RuntimeProfileCommand,
   ScriptExecution,
   StartRunRequest,
@@ -54,6 +55,7 @@ import { type AppStore, type InputSnapshot, materialReferenceKey } from '../pers
 import type { FileArtifactService } from './file-artifact-service';
 import type { InputSnapshotService } from './input-snapshot-service';
 import type { KnowledgeVault } from './knowledge-vault';
+import type { MemoryService } from './memory-service';
 import type { NotificationService } from './notification-service';
 import { preparePptAttempt } from './ppt-execution-attempt';
 import { adaptPptCommand } from './ppt-script-adaptation';
@@ -82,6 +84,8 @@ interface ResolvedRunContext {
   materials: TaskMaterialSelection[];
   materialScope: boolean;
   taskContextRevisionId?: string;
+  expertId?: string;
+  memoryRecords: MemoryRecord[];
 }
 
 /** 一次执行期间的内存态；Run 结束后整条丢弃。 */
@@ -175,12 +179,19 @@ export class RunService {
     private readonly dependencies?: SkillDependencyService,
     private readonly inputSnapshots?: InputSnapshotService,
     private readonly taskMaterials?: TaskMaterialService,
+    private readonly memories?: MemoryService,
   ) {}
 
   start(input: StartRunRequest): string {
     const context = this.store.tasks.getRunContext(input.taskId, input.sessionId);
     if (!context) throw new Error('Session does not belong to task');
-    const executionContext = this.resolveRunContext(input);
+    const workspaceId = this.store.tasks.getWorkspaceId(input.taskId);
+    if (!workspaceId) throw new Error('Task workspace does not exist');
+    const resolvedContext = this.resolveRunContext(input);
+    const executionContext: ResolvedRunContext = {
+      ...resolvedContext,
+      memoryRecords: this.memories?.getApplicable(workspaceId, resolvedContext.expertId) ?? [],
+    };
     const resolvedInput = {
       ...input,
       ...(executionContext.skillBindings ? { skillBindings: executionContext.skillBindings } : {}),
@@ -209,8 +220,6 @@ export class RunService {
           status: 'running',
           createdAt: Date.now(),
         });
-        const workspaceId = this.store.tasks.getWorkspaceId(input.taskId);
-        if (!workspaceId) throw new Error('Task workspace does not exist');
         this.store.runContextSnapshots.create({
           runId,
           taskId: input.taskId,
@@ -222,6 +231,15 @@ export class RunService {
           materials: executionContext.materials,
           createdAt: Date.now(),
         });
+        if (executionContext.memoryRecords.length > 0 && this.memories) {
+          this.memories.recordReads(
+            executionContext.memoryRecords.map((memory) => ({
+              runId,
+              memory,
+              capturedAt: Date.now(),
+            })),
+          );
+        }
         this.store.tasks.touch(input.taskId, Date.now());
       });
     } catch (error) {
@@ -323,6 +341,7 @@ export class RunService {
           input.taskId,
           runId,
           executionContext.materialScope ? this.activeRuns.get(runId)?.contextSegmentId : undefined,
+          executionContext.memoryRecords,
         ),
         model,
         tools: createRunTools({
@@ -418,6 +437,7 @@ export class RunService {
     taskId: string,
     currentRunId: string,
     contextSegmentId?: string,
+    memoryRecords: readonly MemoryRecord[] = [],
   ): AgentMessage[] {
     const previousRuns = this.store.runs.listByTask(taskId).filter((run) => {
       if (run.status !== 'completed' || run.id === currentRunId) return false;
@@ -426,6 +446,19 @@ export class RunService {
     });
 
     const messages: AgentMessage[] = [];
+    if (memoryRecords.length > 0) {
+      messages.push({
+        id: randomUUID(),
+        role: 'system',
+        content: [
+          '以下是本次任务可参考的长期记忆。它们来自用户管理的记忆记录，仅作为工作背景；如与本次任务材料或用户最新指示冲突，以后者为准。',
+          '',
+          ...memoryRecords.map(
+            (memory) => `- [${memory.kind}][${memory.scope.kind}] ${memory.content}`,
+          ),
+        ].join('\n'),
+      });
+    }
     for (const run of previousRuns) {
       messages.push({ id: randomUUID(), role: 'user', content: run.prompt });
 
@@ -748,6 +781,7 @@ export class RunService {
         ...(input.skillBindings ? { skillBindings: input.skillBindings } : {}),
         materials: [],
         materialScope: false,
+        memoryRecords: [],
       };
     }
     const expected = input.expectedTaskContextRevision;
@@ -768,6 +802,7 @@ export class RunService {
         materials: context.materials ?? [],
         materialScope: true,
         taskContextRevisionId: context.id,
+        memoryRecords: [],
       };
     }
     const expert = this.store.experts.get(context.executor.expertId);
@@ -786,6 +821,8 @@ export class RunService {
       materials: context.materials ?? [],
       materialScope: true,
       taskContextRevisionId: context.id,
+      expertId: context.executor.expertId,
+      memoryRecords: [],
     };
   }
 

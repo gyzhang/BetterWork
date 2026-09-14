@@ -6,6 +6,7 @@ import {
   chooseInterpreterResultSchema,
   copyExpertRequestSchema,
   copySkillRequestSchema,
+  createMemoryRequestSchema,
   deletedResultSchema,
   deleteSkillRequestSchema,
   dependencyOperationSchema,
@@ -28,8 +29,11 @@ import {
   IpcChannel,
   listDependencyOptionsRequestSchema,
   listExpertsRequestSchema,
+  listMemoriesRequestSchema,
   listTaskMaterialCandidatesRequestSchema,
   materialCandidateSchema,
+  memoryMutationResultSchema,
+  memoryRecordSchema,
   notificationActivatedSchema,
   notificationChangeEventSchema,
   prepareDependencyRequestSchema,
@@ -44,6 +48,7 @@ import {
   saveSkillRuntimeProfileRequestSchema,
   saveTaskContextRequestSchema,
   setExpertLifecycleRequestSchema,
+  setMemoryStatusRequestSchema,
   setSkillEnabledRequestSchema,
   setSkillTrustRequestSchema,
   skillDetailSchema,
@@ -55,6 +60,7 @@ import {
   taskContextRevisionSchema,
   testSkillRunRequestSchema,
   testSkillRunResultSchema,
+  updateMemoryRequestSchema,
 } from '@betterwork/agent-protocol';
 import { contextBridge, ipcRenderer } from 'electron';
 import { z, type ZodTypeAny } from 'zod';
@@ -288,6 +294,32 @@ const api: BetterWorkDesktopApi = {
         IpcChannel.PrepareWorkspaceInputSnapshot,
         prepareWorkspaceInputSnapshotRequestSchema.parse(input),
         inputSnapshotSchema.nullable(),
+      ),
+  },
+  memories: {
+    list: (input) =>
+      invokeValidated(
+        IpcChannel.ListMemories,
+        listMemoriesRequestSchema.parse(input ?? {}),
+        memoryRecordSchema.array(),
+      ),
+    create: (input) =>
+      invokeValidated(
+        IpcChannel.CreateMemory,
+        createMemoryRequestSchema.parse(input),
+        memoryMutationResultSchema,
+      ),
+    update: (input) =>
+      invokeValidated(
+        IpcChannel.UpdateMemory,
+        updateMemoryRequestSchema.parse(input),
+        memoryMutationResultSchema,
+      ),
+    setStatus: (input) =>
+      invokeValidated(
+        IpcChannel.SetMemoryStatus,
+        setMemoryStatusRequestSchema.parse(input),
+        memoryMutationResultSchema,
       ),
   },
   dependencies: {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   artifactInputRelationSchema,
+  createMemoryRequestSchema,
   deleteSkillRequestSchema,
   dependencyLockSchema,
   dependencyOperationSchema,
@@ -10,6 +11,7 @@ import {
   jobResultSchema,
   jobSpecSchema,
   MAX_RUN_SKILL_BINDINGS,
+  memoryRecordSchema,
   runMaterialReadSchema,
   runtimeEnvironmentSchema,
   runtimeProfileDraftSchema,
@@ -24,6 +26,41 @@ import {
 } from './index';
 
 describe('run protocol', () => {
+  it('models scoped memory records and rejects invalid validity windows', () => {
+    const record = memoryRecordSchema.parse({
+      id: 'memory-1',
+      revisionId: 'memory-1-r1',
+      revision: 1,
+      scope: { kind: 'expert-workspace', expertId: 'expert-1', workspaceId: 'workspace-1' },
+      kind: 'procedural',
+      content: '月报先核对财务规则。',
+      sourceType: 'user-explicit',
+      confidence: 1,
+      status: 'confirmed',
+      validFrom: 10,
+      validUntil: 20,
+      contentHash: 'hash-1',
+      createdAt: 10,
+      updatedAt: 10,
+    });
+    expect(record.scope.kind).toBe('expert-workspace');
+    expect(
+      createMemoryRequestSchema.parse({
+        scope: { kind: 'user' },
+        kind: 'semantic',
+        content: '用户偏好',
+        sourceType: 'conversation',
+      }),
+    ).toMatchObject({ confidence: 1, status: 'candidate' });
+    expect(() =>
+      memoryRecordSchema.parse({
+        ...record,
+        validFrom: 20,
+        validUntil: 20,
+      }),
+    ).toThrow();
+  });
+
   it('keeps material reads and artifact inputs tied to exact revisions', () => {
     const material = {
       kind: 'knowledge-revision' as const,

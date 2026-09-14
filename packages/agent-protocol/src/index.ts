@@ -464,6 +464,128 @@ export const runMaterialReadSchema = z
   .strict();
 export type RunMaterialRead = z.infer<typeof runMaterialReadSchema>;
 
+export const memoryScopeSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('user') }).strict(),
+  z.object({ kind: z.literal('workspace'), workspaceId: z.string().min(1) }).strict(),
+  z.object({ kind: z.literal('expert'), expertId: z.string().min(1) }).strict(),
+  z
+    .object({
+      kind: z.literal('expert-workspace'),
+      expertId: z.string().min(1),
+      workspaceId: z.string().min(1),
+    })
+    .strict(),
+]);
+export type MemoryScope = z.infer<typeof memoryScopeSchema>;
+export const memoryKindSchema = z.enum(['semantic', 'episodic', 'procedural', 'preference']);
+export type MemoryKind = z.infer<typeof memoryKindSchema>;
+export const memorySourceTypeSchema = z.enum([
+  'user-explicit',
+  'conversation',
+  'artifact',
+  'reflection',
+]);
+export type MemorySourceType = z.infer<typeof memorySourceTypeSchema>;
+export const memoryStatusSchema = z.enum([
+  'candidate',
+  'confirmed',
+  'superseded',
+  'expired',
+  'deleted',
+]);
+export type MemoryStatus = z.infer<typeof memoryStatusSchema>;
+export const memoryRecordSchema = z
+  .object({
+    id: z.string().min(1),
+    revisionId: z.string().min(1),
+    revision: z.number().int().positive(),
+    scope: memoryScopeSchema,
+    kind: memoryKindSchema,
+    content: z.string().trim().min(1).max(2_000),
+    sourceType: memorySourceTypeSchema,
+    sourceId: z.string().min(1).optional(),
+    sourceLocator: z.string().min(1).optional(),
+    confidence: z.number().min(0).max(1),
+    status: memoryStatusSchema,
+    validFrom: z.number().int().nonnegative().optional(),
+    validUntil: z.number().int().nonnegative().optional(),
+    supersedesId: z.string().min(1).optional(),
+    contentHash: z.string().min(1),
+    createdAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (
+      value.validUntil !== undefined &&
+      value.validFrom !== undefined &&
+      value.validUntil <= value.validFrom
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'validUntil 必须晚于 validFrom',
+        path: ['validUntil'],
+      });
+    }
+  });
+export type MemoryRecord = z.infer<typeof memoryRecordSchema>;
+export const createMemoryRequestSchema = z
+  .object({
+    scope: memoryScopeSchema,
+    kind: memoryKindSchema,
+    content: z.string().trim().min(1).max(2_000),
+    sourceType: memorySourceTypeSchema,
+    sourceId: z.string().min(1).optional(),
+    sourceLocator: z.string().min(1).optional(),
+    confidence: z.number().min(0).max(1).default(1),
+    status: memoryStatusSchema.default('candidate'),
+    validFrom: z.number().int().nonnegative().optional(),
+    validUntil: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+export type CreateMemoryRequest = z.input<typeof createMemoryRequestSchema>;
+export const updateMemoryRequestSchema = z
+  .object({
+    id: z.string().min(1),
+    expectedRevision: z.number().int().positive(),
+    content: z.string().trim().min(1).max(2_000).optional(),
+    kind: memoryKindSchema.optional(),
+    confidence: z.number().min(0).max(1).optional(),
+    validFrom: z.number().int().nonnegative().optional(),
+    validUntil: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+export type UpdateMemoryRequest = z.infer<typeof updateMemoryRequestSchema>;
+export const setMemoryStatusRequestSchema = z
+  .object({
+    id: z.string().min(1),
+    expectedRevision: z.number().int().positive(),
+    status: memoryStatusSchema,
+  })
+  .strict();
+export type SetMemoryStatusRequest = z.infer<typeof setMemoryStatusRequestSchema>;
+export const listMemoriesRequestSchema = z
+  .object({
+    workspaceId: z.string().min(1).optional(),
+    expertId: z.string().min(1).optional(),
+    includeCandidates: z.boolean().default(true),
+  })
+  .strict();
+export type ListMemoriesRequest = z.input<typeof listMemoriesRequestSchema>;
+export const memoryMutationResultSchema = z.object({ memory: memoryRecordSchema }).strict();
+export type MemoryMutationResult = z.infer<typeof memoryMutationResultSchema>;
+export const memoryReadSchema = z
+  .object({
+    id: z.string().min(1),
+    runId: z.string().min(1),
+    memoryId: z.string().min(1),
+    memoryRevisionId: z.string().min(1),
+    contentHash: z.string().min(1),
+    capturedAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type MemoryRead = z.infer<typeof memoryReadSchema>;
+
 export const artifactInputRelationKindSchema = z.enum([
   'data',
   'rule',
@@ -1906,6 +2028,10 @@ export const IpcChannel = {
   SaveTaskContext: 'task-context:save',
   ListTaskMaterialCandidates: 'task-material:list-candidates',
   PrepareWorkspaceInputSnapshot: 'task-material:prepare-input-snapshot',
+  ListMemories: 'memory:list',
+  CreateMemory: 'memory:create',
+  UpdateMemory: 'memory:update',
+  SetMemoryStatus: 'memory:set-status',
   ListDependencyOptions: 'dependency:list-options',
   InspectDependencyPlan: 'dependency:inspect-plan',
   PrepareDependencyEnvironment: 'dependency:prepare',
@@ -2023,6 +2149,12 @@ export interface BetterWorkDesktopApi {
     prepareInputSnapshot(
       input: PrepareWorkspaceInputSnapshotRequest,
     ): Promise<InputSnapshot | null>;
+  };
+  memories: {
+    list(input: ListMemoriesRequest): Promise<MemoryRecord[]>;
+    create(input: CreateMemoryRequest): Promise<MemoryMutationResult>;
+    update(input: UpdateMemoryRequest): Promise<MemoryMutationResult>;
+    setStatus(input: SetMemoryStatusRequest): Promise<MemoryMutationResult>;
   };
   dependencies: {
     listOptions(): Promise<DependencyOptions>;
