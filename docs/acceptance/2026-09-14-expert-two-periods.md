@@ -65,3 +65,17 @@
 
 - 新增 `npm run expert:acceptance-preflight -- --model-url <url> --skip-signing`，模型端点检查使用 5 秒取消边界；可选从指定环境变量读取 API Key，不在输出中显示密钥。
 - 当前端点执行预检返回“模型端点在 5000ms 内无响应”，退出码 1；E55 仍保持 `partial`。
+
+## 2026-09-15 真实材料与网页旅程（模型服务恢复后）
+
+- 使用 BetterWork 开发窗口从“专家 → 研究分析专家 → 召唤”直接进入工作台；没有出现启动前任务准备表单。为避免触碰公司资料，本次只在本机临时目录创建三份脱敏 Markdown：财务规则、2026-08 报告和 2026-09 数据，验收结束后删除目录。
+- 在同一 Task 中显式添加三份工作区文件，并把用途分别设为“规则口径 / 历史对比 / 本期输入”。真实 Run `55713063-1fbe-41d2-938b-ad8a18fc097c` 完成，SQLite `run_context_snapshots` 保存 `builtin-research-analyst` 与修订 `88c4ef3a-42bf-4d9f-b33c-30ff93942aae`；`run_material_reads` 记录 3 条读取足迹。
+- 该 Run 的工具请求实际为 3 次 `read_text_file` 和 1 次 `analyze_business_metrics`。界面输出与脱敏材料一致：9 月收入 120、预算 110、8 月收入 100，预算差异 +10（+9.09%），环比 +20（+20%），并给出现金流回款时点和续约客户动作。
+- 第二次真实 Run `c13516ff-2030-4854-a695-c565c2150359` 实际调用 `web_fetch`、`web_search` 和再次 `web_fetch`。Investopedia 返回 HTTP 403 后，专家通过搜索切换到 Microsoft Learn；最终正文读取成功，Evidence 记录了 `https://learn.microsoft.com/en-us/dynamics365/finance/cash-bank-management/cash-flow-forecasting` 的标题、最终 URL 和 HTTP 200。
+- 取消/重启走查也完成：Run `eb2fac48-f633-4d14-b297-9edcca697336` 在界面点击“停止”后以唯一 `run.cancelled` 终态收口；同一 Task/固定上下文随后重启为 Run `b9bf6d15-3975-45f4-a046-7fd0460b3a43` 并得到 `run.completed`。两个 Run 都保留同一 Expert 修订快照。
+
+### 仍未通过的边界
+
+- 本次没有配置真实 MCP 连接（`mcp_connections` 当前为空），因此不能把离线 MCP 替身升级为真实业务 MCP 验收；E55/E4 保持 `partial`。
+- 重启 Run 的模型回复混入了脱敏材料中不存在的现金流和续约数字（例如 5/15 万元、3/5 个客户）。该回复没有被计入业务结论，暴露出同一 Task 历史对话在重启时仍可能诱发模型使用未核实数字；需要后续增加基于材料读取足迹的事实约束/引用门禁后，才能把“连续两期真实业务闭环”标为通过。
+- 当前凭据下 `expert:acceptance-preflight` 的模型检查已经通过；`security find-identity` 仍找不到 Developer ID Application，因此 E56 的签名安装验收继续保持 `partial`。
