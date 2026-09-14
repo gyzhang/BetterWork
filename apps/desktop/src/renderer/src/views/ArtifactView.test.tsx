@@ -28,6 +28,55 @@ afterEach(() => {
 });
 
 describe('ArtifactPage', () => {
+  it('shows MCP evidence as a read-only source without an original-file action', async () => {
+    const mcpArtifact: ArtifactDetail = {
+      ...selectedArtifact,
+      evidence: [
+        {
+          id: 'evidence-mcp',
+          taskId: selectedArtifact.taskId,
+          runId: selectedArtifact.sourceRunId ?? 'run-1',
+          sourceType: 'mcp-tool',
+          sourceUri: 'mcp:finance_monthly_summary',
+          title: 'mcp_finance_monthly_summary',
+          locator: 'MCP 工具结果',
+          excerpt: '{"month":"2026-08","revenue":120}',
+          contentHash: 'hash-mcp',
+          capturedAt: 1,
+        },
+      ],
+    };
+    const onOpenSource = vi.fn(async () => undefined);
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        artifacts: {
+          listVersions: vi.fn(async () => []),
+          getVersion: vi.fn(async () => null),
+        },
+      },
+    });
+
+    render(
+      <ArtifactPage
+        artifacts={[mcpArtifact]}
+        selected={mcpArtifact}
+        onSelect={vi.fn()}
+        onSave={vi.fn(async () => undefined)}
+        onExport={vi.fn(async () => ({ cancelled: true }))}
+        onOpenSource={onOpenSource}
+        onOpenFile={vi.fn(async () => ({ opened: true }))}
+        onStartFromVersion={vi.fn(async () => undefined)}
+        onBack={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText((content) => content.includes('MCP 工具'))).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '原文' })).toBeNull();
+    expect(onOpenSource).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
   it('shows a version-list loading failure while previewing the Artifact', async () => {
     Object.defineProperty(window, 'betterwork', {
       configurable: true,
