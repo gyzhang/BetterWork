@@ -10,6 +10,7 @@
 2. `npm run dist:mac --workspace @betterwork/desktop` 退出码为 0，生成 arm64 与 x64 DMG 及对应 App 目录。构建日志确认 `resources/skills`、`resources/experts`、`resources/dependency-locks` 已进入安装资源目录。
 3. `npm run expert:preflight -- --packaged-root apps/desktop/dist/mac-arm64/BetterWork.app/Contents/Resources` 通过，验证了打包后的清单、Skill 目录和内容 hash。
 4. 挂载 arm64 DMG 后，把其中的 `BetterWork.app` 复制到临时安装目录并启动；打包副本的 macOS 可访问性树显示：专家列表 →“研究分析专家”→“召唤”→工作输入框，并显示“当前专家”。路径没有“返回任务准备”或启动前配置表单；窗口可正常关闭。
+5. 在修复内置 Skill 启动幂等后连续启动两次开发 App，SQLite 中两个内置 Skill 均保持 1 个 revision，第二次启动没有新增 revision 或 active grant（历史重复 grant 仍保留，未在用户库中做破坏性清理）。
 
 ## 限制与后续
 
