@@ -34,6 +34,37 @@ const materialKey = (reference: MaterialReference): string => {
   return `${parsed.kind}:${parsed.snapshotId}`;
 };
 
+const sameMaterialReference = (left: MaterialReference, right: MaterialReference): boolean => {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === 'knowledge-revision' && right.kind === 'knowledge-revision') {
+    return (
+      left.knowledgeDocumentId === right.knowledgeDocumentId &&
+      left.knowledgeRevisionId === right.knowledgeRevisionId &&
+      left.contentHash === right.contentHash &&
+      left.sourcePath === right.sourcePath &&
+      left.originWorkspaceId === right.originWorkspaceId
+    );
+  }
+  if (left.kind === 'artifact-version' && right.kind === 'artifact-version') {
+    return (
+      left.artifactId === right.artifactId &&
+      left.artifactVersionId === right.artifactVersionId &&
+      left.contentHash === right.contentHash &&
+      left.originWorkspaceId === right.originWorkspaceId
+    );
+  }
+  if (left.kind === 'workspace-input-snapshot' && right.kind === 'workspace-input-snapshot') {
+    return (
+      left.snapshotId === right.snapshotId &&
+      left.workspaceId === right.workspaceId &&
+      left.contentHash === right.contentHash &&
+      left.format === right.format &&
+      left.fileKey === right.fileKey
+    );
+  }
+  return false;
+};
+
 const parseMaterials = (value: string): RunMaterialRead['material'][] => {
   const parsed: unknown = JSON.parse(value);
   if (!Array.isArray(parsed)) throw new Error('Stored run materials must be an array');
@@ -70,7 +101,11 @@ export class RunMaterialReadRepository {
         const selected = materials.find(
           (material) => materialKey(material) === materialKey(parsed.material),
         );
-        if (!selected || selected.contentHash !== parsed.contentHash) {
+        if (
+          !selected ||
+          !sameMaterialReference(selected, parsed.material) ||
+          selected.contentHash !== parsed.contentHash
+        ) {
           throw new Error('Run material read is outside the snapshot scope');
         }
       }
