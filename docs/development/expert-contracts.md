@@ -63,6 +63,7 @@ interface ExpertRevision {
   skillPreset: ExpertSkillPreset[];
   builtinToolPolicy: BuiltinToolPolicy;
   modelReference: ExpertModelReference;
+  mcpToolBindings?: McpToolBinding[];
   referenceMaterials?: ExpertReferenceMaterial[];
   createdAt: number;
 }
