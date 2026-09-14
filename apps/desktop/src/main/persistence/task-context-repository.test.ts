@@ -73,6 +73,22 @@ describe('TaskContextRepository', () => {
     expect(store.taskContexts.getLatest(task.task.id)).toBeUndefined();
   });
 
+  it('rejects duplicate MCP bindings before writing a revision', () => {
+    const store = openStore();
+    const task = taskOf(store);
+    expect(() =>
+      store.taskContexts.save(task.task.id, {
+        executor: { kind: 'general' },
+        skillBindings: [],
+        mcpToolBindings: [
+          { connectionId: 'finance', toolId: 'finance/monthly_summary' },
+          { connectionId: 'finance', toolId: 'finance/monthly_summary' },
+        ],
+      }),
+    ).toThrow('Task context MCP bindings must not repeat a tool');
+    expect(store.taskContexts.getLatest(task.task.id)).toBeUndefined();
+  });
+
   it('persists exact material references and their purpose with the draft', () => {
     const store = openStore();
     const task = taskOf(store);

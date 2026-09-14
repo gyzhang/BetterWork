@@ -13,7 +13,8 @@ export type ExpertErrorCode =
   | 'expert_not_found'
   | 'expert_builtin_readonly'
   | 'expert_revision_conflict'
-  | 'expert_invalid_tool';
+  | 'expert_invalid_tool'
+  | 'expert_invalid_mcp';
 
 export class ExpertServiceError extends Error {
   constructor(
@@ -47,6 +48,13 @@ const validateDraft = (draft: ExpertRevisionDraft): ExpertRevisionDraft => {
       'expert_invalid_tool',
       'Expert 包含尚未登记的内置工具，请移除后重试',
     );
+  }
+  const mcpToolBindings = parsed.mcpToolBindings ?? [];
+  if (
+    new Set(mcpToolBindings.map((binding) => `${binding.connectionId}\u0000${binding.toolId}`))
+      .size !== mcpToolBindings.length
+  ) {
+    throw new ExpertServiceError('expert_invalid_mcp', 'Expert 的 MCP 工具绑定不能重复');
   }
   return parsed;
 };
