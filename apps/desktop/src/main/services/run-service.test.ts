@@ -792,6 +792,14 @@ describe('RunService', () => {
           output: expect.stringContaining('fixture-ledger'),
         }),
       );
+      expect(fixture.store.evidence.listByTask(fixture.taskId)).toEqual([
+        expect.objectContaining({
+          runId,
+          sourceType: 'mcp-tool',
+          sourceUri: `mcp:${agentTool.name}`,
+          excerpt: expect.stringContaining('fixture-ledger'),
+        }),
+      ]);
       expect(fetchMock).toHaveBeenCalledTimes(2);
       const firstCall = fetchMock.mock.calls[0] as unknown[] | undefined;
       const firstRequest = firstCall?.[1] as RequestInit | undefined;

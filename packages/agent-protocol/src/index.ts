@@ -1314,7 +1314,7 @@ export interface EvidenceSummary {
   id: string;
   taskId: string;
   runId: string;
-  sourceType: 'local-file' | 'web-page';
+  sourceType: 'local-file' | 'web-page' | 'mcp-tool';
   sourceUri: string;
   title: string;
   locator: string;
@@ -1712,7 +1712,7 @@ export const evidenceSummarySchema = z.object({
   id: z.string().min(1),
   taskId: z.string().min(1),
   runId: z.string().min(1),
-  sourceType: z.enum(['local-file', 'web-page']),
+  sourceType: z.enum(['local-file', 'web-page', 'mcp-tool']),
   sourceUri: z.string().min(1),
   title: z.string(),
   locator: z.string(),

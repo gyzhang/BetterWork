@@ -48,6 +48,10 @@ export class EvidenceRepository {
     this.save('web-page', input);
   }
 
+  saveMcp(input: NewEvidence): void {
+    this.save('mcp-tool', input);
+  }
+
   get(id: string): EvidenceSummary | undefined {
     const row = this.db.prepare('SELECT * FROM evidence WHERE id = ?').get(id) as
       EvidenceRow | undefined;

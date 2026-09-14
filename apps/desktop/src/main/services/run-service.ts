@@ -115,6 +115,15 @@ interface ActiveRun {
 const PROMPT_SUMMARY_LENGTH = 80;
 const FAILURE_DETAIL_LENGTH = 500;
 
+const serializeToolOutput = (output: unknown): string => {
+  if (typeof output === 'string') return output;
+  try {
+    return JSON.stringify(output) ?? 'undefined';
+  } catch (error) {
+    return `MCP 工具结果无法序列化：${describeError(error)}`;
+  }
+};
+
 const officeFormatFromSnapshot = (format: string): OfficeFormat => {
   if (format === 'pptx' || format === 'xlsx' || format === 'csv') return format;
   throw new Error(`不支持的 Office 输入格式：${format}`);
@@ -778,6 +787,20 @@ export class RunService {
         contentHash: createHash('sha256')
           .update(`${event.output.url}\n${event.output.content}`)
           .digest('hex'),
+      });
+      return;
+    }
+    if (toolName?.startsWith('mcp_')) {
+      const sourceUri = `mcp:${toolName}`;
+      const excerpt = serializeToolOutput(event.output).slice(0, 2_000);
+      this.store.evidence.saveMcp({
+        taskId,
+        runId: event.runId,
+        sourceUri,
+        title: toolName,
+        locator: 'MCP 工具结果',
+        excerpt,
+        contentHash: createHash('sha256').update(`${sourceUri}\n${excerpt}`).digest('hex'),
       });
     }
   }

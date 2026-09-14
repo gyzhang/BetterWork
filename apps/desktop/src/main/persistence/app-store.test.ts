@@ -625,6 +625,26 @@ describe('AppStore', () => {
     ]);
   });
 
+  it('persists deduplicated MCP evidence with an mcp-tool source type', () => {
+    const store = openStore();
+    const task = seedTask(store, '/work/mcp-evidence', 'MCP 证据工作区');
+    seedRun(store, task, 'run-1');
+    const evidence = {
+      taskId: task.task.id,
+      runId: 'run-1',
+      sourceUri: 'mcp:finance_monthly_summary',
+      title: 'mcp_finance_monthly_summary',
+      locator: 'MCP 工具结果',
+      excerpt: '{"month":"2026-08","revenue":1200000}',
+      contentHash: 'hash-mcp',
+    };
+    store.evidence.saveMcp(evidence);
+    store.evidence.saveMcp(evidence);
+    expect(store.evidence.listByTask(task.task.id)).toEqual([
+      expect.objectContaining({ ...evidence, sourceType: 'mcp-tool' }),
+    ]);
+  });
+
   it('keeps the connection result of a test that ran before the first save', () => {
     const store = openStore();
     store.searchEngines.recordConnection('baidu_qianfan', 'connected', 'tested-key');

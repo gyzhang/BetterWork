@@ -22,5 +22,6 @@
 | [0018](0018-office-input-parsing-boundary.md) | Office 输入解析边界与依赖 | Accepted（E50） |
 | [0019](0019-discussion-checkpoints-and-rework.md) | 讨论节点、恢复与返工边界 | Accepted（E52） |
 | [0020](0020-deterministic-business-analysis.md) | 经营分析的确定性数值边界 | Accepted（E53） |
+| [0021](0021-mcp-evidence-provenance.md) | MCP 工具结果的来源证据 | Accepted（E42/E55） |
 
 ADR 一经 Accepted 不直接重写历史；需要改变时新增 ADR 并标记替代关系。
