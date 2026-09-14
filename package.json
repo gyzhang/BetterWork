@@ -24,7 +24,8 @@
     "setup:runtime": "node node_modules/electron/install.js && electron-rebuild -f -w better-sqlite3",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
     "office:probe": "node scripts/office-input-probe.mjs",
-    "expert:preflight": "node scripts/expert-release-preflight.mjs"
+    "expert:preflight": "node scripts/expert-release-preflight.mjs",
+    "expert:acceptance-preflight": "node scripts/expert-acceptance-preflight.mjs"
   },
   "engines": {
     "node": ">=22.12.0"

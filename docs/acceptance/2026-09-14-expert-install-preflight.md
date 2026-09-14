@@ -44,3 +44,8 @@
 
 - `security find-identity -v -p codesigning` 返回 `0 valid identities found`；当前没有可用于 `--signed-app` 成功校验的 Developer ID 身份。
 - 资源预检仍可独立通过；签名安装、Gatekeeper 与升级保留继续保持未验收。
+
+## 2026-09-15 验收预检入口
+
+- 新增 `npm run expert:acceptance-preflight`：可独立检查模型端点与 macOS 代码签名身份，支持跳过其中一项但禁止两项同时跳过；CLI 使用本地 HTTP 替身覆盖成功、不可用端点和参数边界。
+- 当前机器的签名身份检查仍返回 0 个有效身份；E56 签名安装、Gatekeeper 和升级保留继续保持未验收。

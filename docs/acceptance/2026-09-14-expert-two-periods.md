@@ -60,3 +60,8 @@
 
 - 未携带凭据请求 `http://10.62.64.38:30808/api/inference/v1/models`，6 秒上限内返回 0 字节（curl exit 52，约 5 秒）；认证探测也得到同样的空响应。
 - E55 继续保持 `partial`；本次未把失败探测写成成功运行或连续两期业务证据。
+
+## 2026-09-15 验收预检 CLI
+
+- 新增 `npm run expert:acceptance-preflight -- --model-url <url> --skip-signing`，模型端点检查使用 5 秒取消边界；可选从指定环境变量读取 API Key，不在输出中显示密钥。
+- 当前端点执行预检返回“模型端点在 5000ms 内无响应”，退出码 1；E55 仍保持 `partial`。
