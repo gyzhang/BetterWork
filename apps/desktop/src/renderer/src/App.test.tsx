@@ -83,6 +83,23 @@ const expertDetail: ExpertDetail = {
     createdAt: 1,
   },
 };
+const languageModel: ModelProfileSummary = {
+  id: 'model-language-1',
+  name: '本地语言模型',
+  provider: 'openai-compatible',
+  baseUrl: 'http://127.0.0.1:30808/v1',
+  model: 'local-model',
+  role: 'language',
+  apiKeyConfigured: false,
+  enabled: true,
+  priority: 0,
+  connectionStatus: 'connected',
+  maxContextTokens: 8192,
+  maxOutputTokens: 4096,
+  temperature: 0.7,
+  createdAt: 1,
+  updatedAt: 1,
+};
 
 function installApi(options?: {
   expert?: boolean;
@@ -370,6 +387,23 @@ describe('Expert summon in the task composer', () => {
     );
   });
 
+  it('shows the summoned Expert model in the task composer', async () => {
+    const api = installApi({ expert: true, models: [languageModel] });
+    api.experts.get.mockResolvedValue({
+      ...expertDetail,
+      revision: {
+        ...expertDetail.revision,
+        modelReference: { mode: 'profile', modelProfileId: languageModel.id },
+      },
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
+    fireEvent.click(await screen.findByRole('button', { name: '召唤' }));
+
+    expect(await screen.findByText('openai-compatible · local-model')).toBeTruthy();
+    expect(api.experts.get).toHaveBeenCalledWith({ id: expertSummary.id });
+  });
+
   it('carries the Expert common references into the next TaskContext', async () => {
     const api = installApi({ expert: true });
     const reference = {
@@ -532,25 +566,7 @@ describe('Expert configuration', () => {
   it('allows an Expert to pin a language model profile or inherit the application default', async () => {
     const api = installApi({
       expert: true,
-      models: [
-        {
-          id: 'model-language-1',
-          name: '本地语言模型',
-          provider: 'openai-compatible',
-          baseUrl: 'http://127.0.0.1:30808/v1',
-          model: 'local-model',
-          role: 'language',
-          apiKeyConfigured: false,
-          enabled: true,
-          priority: 0,
-          connectionStatus: 'connected',
-          maxContextTokens: 8192,
-          maxOutputTokens: 4096,
-          temperature: 0.7,
-          createdAt: 1,
-          updatedAt: 1,
-        },
-      ],
+      models: [languageModel],
     });
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: '专家' }));
