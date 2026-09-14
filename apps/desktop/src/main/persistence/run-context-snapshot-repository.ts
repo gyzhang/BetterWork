@@ -1,5 +1,11 @@
 import {
+  type BuiltinToolPolicy,
+  builtinToolPolicySchema,
+  type ExpertModelReference,
+  expertModelReferenceSchema,
   materialReferenceSchema,
+  type McpToolBinding,
+  mcpToolBindingSchema,
   type TaskMaterialSelection,
   taskMaterialSelectionSchema,
 } from '@betterwork/agent-protocol';
@@ -12,6 +18,9 @@ export interface RunContextSnapshot {
   taskContextRevisionId?: string;
   expertId?: string;
   expertRevisionId?: string;
+  modelReference?: ExpertModelReference;
+  builtinToolPolicy?: BuiltinToolPolicy;
+  mcpToolBindings?: McpToolBinding[];
   contextSegmentId: string;
   materials: TaskMaterialSelection[];
   createdAt: number;
@@ -24,6 +33,9 @@ interface RunContextSnapshotRow {
   task_context_revision_id: string | null;
   expert_id: string | null;
   expert_revision_id: string | null;
+  model_reference_json: string | null;
+  builtin_tool_policy_json: string | null;
+  mcp_tool_bindings_json: string | null;
   context_segment_id: string;
   materials_json: string;
   created_at: number;
@@ -35,6 +47,9 @@ const parseMaterials = (value: string): TaskMaterialSelection[] => {
   return parsed.map((item) => taskMaterialSelectionSchema.parse(item));
 };
 
+const parseOptionalJson = (value: string | null): unknown =>
+  value === null ? undefined : JSON.parse(value);
+
 const toSnapshot = (row: RunContextSnapshotRow): RunContextSnapshot => ({
   runId: row.run_id,
   taskId: row.task_id,
@@ -42,6 +57,22 @@ const toSnapshot = (row: RunContextSnapshotRow): RunContextSnapshot => ({
   ...(row.task_context_revision_id ? { taskContextRevisionId: row.task_context_revision_id } : {}),
   ...(row.expert_id ? { expertId: row.expert_id } : {}),
   ...(row.expert_revision_id ? { expertRevisionId: row.expert_revision_id } : {}),
+  ...(row.model_reference_json
+    ? { modelReference: expertModelReferenceSchema.parse(JSON.parse(row.model_reference_json)) }
+    : {}),
+  ...(row.builtin_tool_policy_json
+    ? {
+        builtinToolPolicy: builtinToolPolicySchema.parse(JSON.parse(row.builtin_tool_policy_json)),
+      }
+    : {}),
+  ...(row.mcp_tool_bindings_json
+    ? {
+        mcpToolBindings: mcpToolBindingSchema
+          .array()
+          .max(50)
+          .parse(parseOptionalJson(row.mcp_tool_bindings_json)),
+      }
+    : {}),
   contextSegmentId: row.context_segment_id,
   materials: parseMaterials(row.materials_json),
   createdAt: row.created_at,
@@ -63,13 +94,27 @@ export class RunContextSnapshotRepository {
         throw new Error('Run expert revision does not belong to expert');
       }
     }
+    const modelReference =
+      input.modelReference === undefined
+        ? undefined
+        : expertModelReferenceSchema.parse(input.modelReference);
+    const builtinToolPolicy =
+      input.builtinToolPolicy === undefined
+        ? undefined
+        : builtinToolPolicySchema.parse(input.builtinToolPolicy);
+    const mcpToolBindings =
+      input.mcpToolBindings === undefined
+        ? undefined
+        : mcpToolBindingSchema.array().max(50).parse(input.mcpToolBindings);
     const materials = taskMaterialSelectionSchema.array().max(50).parse(input.materials);
     this.db
       .prepare(
         `INSERT INTO run_context_snapshots (
            run_id, task_id, workspace_id, task_context_revision_id,
-           expert_id, expert_revision_id, context_segment_id, materials_json, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           expert_id, expert_revision_id, model_reference_json,
+           builtin_tool_policy_json, mcp_tool_bindings_json,
+           context_segment_id, materials_json, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.runId,
@@ -78,6 +123,9 @@ export class RunContextSnapshotRepository {
         input.taskContextRevisionId ?? null,
         input.expertId ?? null,
         input.expertRevisionId ?? null,
+        modelReference ? JSON.stringify(modelReference) : null,
+        builtinToolPolicy ? JSON.stringify(builtinToolPolicy) : null,
+        mcpToolBindings ? JSON.stringify(mcpToolBindings) : null,
         input.contextSegmentId,
         JSON.stringify(materials),
         input.createdAt,

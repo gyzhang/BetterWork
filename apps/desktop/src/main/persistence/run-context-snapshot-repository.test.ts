@@ -91,6 +91,9 @@ describe('RunContextSnapshotRepository', () => {
       workspaceId: workspace.id,
       expertId: expert.id,
       expertRevisionId: expert.revision.id,
+      modelReference: { mode: 'application-default' },
+      builtinToolPolicy: { mode: 'allow-list', toolNames: ['calculator'] },
+      mcpToolBindings: [{ connectionId: 'mcp-finance', toolId: 'mcp-finance/monthly_summary' }],
       contextSegmentId: 'segment-expert-1',
       materials: [],
       createdAt: 2,
@@ -99,6 +102,9 @@ describe('RunContextSnapshotRepository', () => {
     expect(store.runContextSnapshots.get('run-expert-snapshot-1')).toMatchObject({
       expertId: expert.id,
       expertRevisionId: expert.revision.id,
+      modelReference: { mode: 'application-default' },
+      builtinToolPolicy: { mode: 'allow-list', toolNames: ['calculator'] },
+      mcpToolBindings: [{ connectionId: 'mcp-finance', toolId: 'mcp-finance/monthly_summary' }],
     });
   });
 

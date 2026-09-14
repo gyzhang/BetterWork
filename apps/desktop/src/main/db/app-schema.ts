@@ -870,6 +870,20 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 22,
+    name: 'add run capability binding snapshot',
+    up(db: Database.Database): void {
+      db.exec(`
+        ALTER TABLE run_context_snapshots
+          ADD COLUMN model_reference_json TEXT;
+        ALTER TABLE run_context_snapshots
+          ADD COLUMN builtin_tool_policy_json TEXT;
+        ALTER TABLE run_context_snapshots
+          ADD COLUMN mcp_tool_bindings_json TEXT;
+      `);
+    },
+  },
 ];
 
 /**
