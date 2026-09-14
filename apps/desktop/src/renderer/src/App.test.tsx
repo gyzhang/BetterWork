@@ -628,6 +628,7 @@ describe('Expert configuration', () => {
     expect(screen.getByText(workspaceMemory.content)).toBeTruthy();
     expect(screen.queryByText(otherWorkspaceMemory.content)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '管理记忆' }));
+    expect(await screen.findByText('当前范围：经营分析专家 · 当前工作空间')).toBeTruthy();
     expect(
       await screen.findByRole('heading', { name: '让长期经验可查看、可确认、可撤回' }),
     ).toBeTruthy();

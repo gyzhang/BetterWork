@@ -644,7 +644,7 @@ export function ExpertsPage({
   actions: Pick<ExpertsState, 'get' | 'create' | 'saveRevision' | 'copy' | 'setLifecycle'>;
   onSummon: (expert: ExpertSummary) => Promise<void>;
   onError: (message: string) => void;
-  onManageMemories: () => void;
+  onManageMemories: (expert: ExpertDetail) => void;
 }): React.JSX.Element {
   const [selected, setSelected] = useState<ExpertDetail>();
   const [draft, setDraft] = useState<ExpertRevisionDraft>();
@@ -757,7 +757,7 @@ export function ExpertsPage({
         onSummon={() => reportAction(onSummon(selected), onError, '无法召唤该专家。')}
         onBack={() => setSelected(undefined)}
         onLifecycle={setLifecycle}
-        onManageMemories={onManageMemories}
+        onManageMemories={() => onManageMemories(selected)}
       />
     );
   }

@@ -70,6 +70,7 @@ import { NotificationCenter, ToastHost, useNotifications } from './notifications
 import { ArtifactPage } from './views/ArtifactView';
 import { ExpertsPage } from './views/ExpertsView';
 import { KnowledgePage } from './views/KnowledgeView';
+import type { MemoryManagementTarget } from './views/MemoryView';
 import { SettingsPage } from './views/SettingsView';
 import { SkillsPage } from './views/SkillsView';
 
@@ -174,6 +175,7 @@ export function App(): React.JSX.Element {
   const [contextTab, setContextTab] = useState<ContextTab>('process');
   const [contextOpen, setContextOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('models');
+  const [memoryManagementTarget, setMemoryManagementTarget] = useState<MemoryManagementTarget>();
   const [notificationCenterOpen, setNotificationCenterOpen] = useState(false);
 
   useEffect(() => {
@@ -1030,6 +1032,7 @@ export function App(): React.JSX.Element {
             onClick={() => {
               setView('settings');
               setSettingsTab('models');
+              setMemoryManagementTarget(undefined);
               refreshModels();
             }}
           >
@@ -1438,7 +1441,12 @@ export function App(): React.JSX.Element {
             actions={experts}
             onSummon={summonExpert}
             onError={setActionError}
-            onManageMemories={() => {
+            onManageMemories={(expert) => {
+              setMemoryManagementTarget({
+                expertId: expert.id,
+                expertName: expert.name,
+                ...(workspace ? { workspaceId: workspace.id } : {}),
+              });
               setView('settings');
               setSettingsTab('memory');
             }}
@@ -1465,6 +1473,8 @@ export function App(): React.JSX.Element {
             modelMessage={modelSettings.message}
             skills={skills}
             memories={memoriesState}
+            {...(memoryManagementTarget ? { memoryTarget: memoryManagementTarget } : {})}
+            onClearMemoryTarget={() => setMemoryManagementTarget(undefined)}
             mcp={mcpState}
           />
         )}
