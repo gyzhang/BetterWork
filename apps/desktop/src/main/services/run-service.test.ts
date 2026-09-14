@@ -494,6 +494,7 @@ describe('RunService', () => {
     const knowledgeSearch = (): [] => [];
     expect(createRunTools({ knowledgeSearch }).map((tool) => tool.name)).toEqual([
       'calculator',
+      'analyze_business_metrics',
       'read_text_file',
       'knowledge_search',
     ]);
@@ -501,7 +502,13 @@ describe('RunService', () => {
       createRunTools({ knowledgeSearch, webSearch: async () => ({ results: [] }) }).map(
         (tool) => tool.name,
       ),
-    ).toEqual(['calculator', 'read_text_file', 'knowledge_search', 'web_search']);
+    ).toEqual([
+      'calculator',
+      'analyze_business_metrics',
+      'read_text_file',
+      'knowledge_search',
+      'web_search',
+    ]);
     expect(
       createRunTools({
         knowledgeSearch,
@@ -515,13 +522,25 @@ describe('RunService', () => {
           truncated: false,
         }),
       }).map((tool) => tool.name),
-    ).toEqual(['calculator', 'read_text_file', 'knowledge_search', 'web_fetch']);
+    ).toEqual([
+      'calculator',
+      'analyze_business_metrics',
+      'read_text_file',
+      'knowledge_search',
+      'web_fetch',
+    ]);
     expect(
       createRunTools({
         knowledgeSearch,
         officeMaterialReader: async (input) => ({ sourceKind: input.sourceKind }),
       }).map((tool) => tool.name),
-    ).toEqual(['calculator', 'read_text_file', 'knowledge_search', 'read_office_material']);
+    ).toEqual([
+      'calculator',
+      'analyze_business_metrics',
+      'read_text_file',
+      'knowledge_search',
+      'read_office_material',
+    ]);
   });
 
   it('applies an Expert built-in tool allow-list without exposing omitted tools', () => {

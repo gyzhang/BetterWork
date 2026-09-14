@@ -12,7 +12,12 @@
       ],
       "inputRequirements": ["先确认目标、范围和交付形式；信息不足时先提出澄清问题。"],
       "deliveryRequirements": ["交付内容要有结论、依据和下一步行动。"],
-      "skillPreset": [],
+      "skillPreset": [
+        {
+          "skillId": "builtin-business-analysis",
+          "revisionId": "pending"
+        }
+      ],
       "builtinToolPolicy": { "mode": "application-defaults" },
       "modelReference": { "mode": "application-default" }
     }

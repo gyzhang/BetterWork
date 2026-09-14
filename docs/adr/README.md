@@ -21,5 +21,6 @@
 | [0017](0017-web-fetch-and-evidence-boundary.md) | 公开网页正文读取与证据边界 | Accepted（E43） |
 | [0018](0018-office-input-parsing-boundary.md) | Office 输入解析边界与依赖 | Accepted（E50） |
 | [0019](0019-discussion-checkpoints-and-rework.md) | 讨论节点、恢复与返工边界 | Accepted（E52） |
+| [0020](0020-deterministic-business-analysis.md) | 经营分析的确定性数值边界 | Accepted（E53） |
 
 ADR 一经 Accepted 不直接重写历史；需要改变时新增 ADR 并标记替代关系。

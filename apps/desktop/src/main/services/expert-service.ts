@@ -28,6 +28,7 @@ export class ExpertServiceError extends Error {
 
 const BUILTIN_TOOL_NAMES = new Set([
   'calculator',
+  'analyze_business_metrics',
   'read_text_file',
   'read_artifact',
   'knowledge_search',
@@ -116,6 +117,16 @@ export class ExpertService {
         registered.push(existing);
         continue;
       }
+      const skillPreset = entry.skillPreset.map((binding) => {
+        if (binding.revisionId !== 'pending') return binding;
+        const skill = this.store.skills.get(binding.skillId);
+        if (!skill)
+          throw new ExpertServiceError(
+            'expert_invalid_tool',
+            `内置 Skill 不存在：${binding.skillId}`,
+          );
+        return { skillId: binding.skillId, revisionId: skill.revision.id };
+      });
       const draft = validateDraft({
         name: entry.name,
         summary: entry.summary,
@@ -123,7 +134,7 @@ export class ExpertService {
         principles: entry.principles,
         inputRequirements: entry.inputRequirements,
         deliveryRequirements: entry.deliveryRequirements,
-        skillPreset: entry.skillPreset,
+        skillPreset,
         builtinToolPolicy: entry.builtinToolPolicy,
         modelReference: entry.modelReference,
       });

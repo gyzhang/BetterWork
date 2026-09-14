@@ -61,7 +61,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E50 | Office 输入解析技术定案 | E43 | done | [ADR-0018](../adr/0018-office-input-parsing-boundary.md)、`scripts/office-input-probe.mjs`：JSZip + fast-xml-parser 解析 PPTX，ExcelJS 读取 XLSX，受限 UTF-8/BOM CSV；固定大小、解压、页数和公式缓存边界，`npm run verify` 退出 0，2026-09-14。 |
 | E51 | PPTX/XLSX/CSV 读取与定位 | E50 | done | `OfficeParserService`、`read_office_material` 和材料候选状态已接入；只读 E21 输入快照或精确选中的 PPTX 成果版本，支持 slide/table/notes、Sheet/Range、CSV rows 定位，登记 `parse` 材料足迹；定向测试通过，2026-09-14。 |
 | E52 | 讨论节点与重启后继续/返工 | E51 | done | [ADR-0019](../adr/0019-discussion-checkpoints-and-rework.md)、`DiscussionCheckpointRepository/Service`、IPC 和工作页节点条已接入；客户端 ID 幂等、旧节点替代、重启查询恢复和成果版本归属校验已覆盖，2026-09-14。 |
-| E53 | 经营分析方法与数值校验 | E52 | todo | — |
+| E53 | 经营分析方法与数值校验 | E52 | done | [ADR-0020](../adr/0020-deterministic-business-analysis.md)、`analyze_business_metrics` 确定性工具和内置「经营分析方法」Skill 已接入；期间变化、预算偏差、零基数和缺失指标有结构化结果/警告，2026-09-14。 |
 | E54 | 报告/PPT 交付、修订及来源 | E53 | todo | — |
 | E55 | 连续两期真实桌面验收 | E54 | todo | — |
 | E56 | macOS 安装态与整体收尾 | E55 | todo | — |
@@ -177,7 +177,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 - 工作：“＋”添加文件/引用知识/引用成果；用途默认推导、详情可改。常驻只显示摘要，完整清单可收起。成果“基于此成果开始新任务”精确引用版本、沿用专家、清空期间和本期输入。
 - 失败/取消：选择器取消不改变原选项，失效项原地修复；缺材料通过对话补充，绝不跳配置向导；重启草稿不丢。
 - 必测/手验：引用非最新版、补材料继续、跨空间显式来源、范围收缩、新一期不带旧聊天；三档外观/窄屏/键盘。
-- 完成：Composer `+` 菜单与右侧资料面板共用任务材料草稿，支持当前工作空间文件快照、Knowledge revision、ArtifactVersion 的候选选择；选择器取消不改原清单，材料芯片可调整用途并显示失效状态。成果详情可对精确 Markdown 版本执行“基于此版本开始新任务”，沿用仍有效的专家、清空旧任务上下文与本期输入并保留精确历史成果引用；跨 Workspace 成果显式标记来源。候选查询支持尚未创建 Task 的新任务草稿。PPTX/XLSX 输入仍显示为不可读取并留待 E51，不把它们算作 E2 已支持。`npm run verify` 退出 0（61 文件 / 475 测试 / Electron build），2026-09-14。
+- 完成：Composer `+` 菜单与右侧资料面板共用任务材料草稿，支持当前工作空间文件快照、Knowledge revision、ArtifactVersion 的候选选择；选择器取消不改原清单，材料芯片可调整用途并显示失效状态。成果详情可对精确 Markdown 版本执行“基于此版本开始新任务”，沿用仍有效的专家、清空旧任务上下文与本期输入并保留精确历史成果引用；跨 Workspace 成果显式标记来源。候选查询支持尚未创建 Task 的新任务草稿。E51 后 PPTX/XLSX/CSV 可读状态由具体格式和快照完整性决定。`npm run verify` 退出 0（61 文件 / 475 测试 / Electron build），2026-09-14。
 
 ### E30 记忆实现 ADR（已完成）
 
@@ -268,6 +268,9 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 - 失败/取消：缺同期/预算数据不输出对应结论；零分母、单位、异常值和缺失值明确；脚本异常/取消不发布成功结果。
 - 必测：已知数值、单位/期间不匹配、缺输入、零值、脚本取消和来源定位。
 - 完成：专家真实调用分析方法，避免只写提示词要求模型心算。
+
+- 实现：新增 `analyze_business_metrics` Tool Runtime，并纳入 Expert 内置工具 allow-list、过程标签和摘要；工具只接受当前值、对比值和预算值，输出不四舍五入的变化额/比例和零基数 warning。新增内置 Skill `builtin-business-analysis`，说明口径确认与工具调用边界；内置研究分析专家预设该 Skill。
+- 验证：合成指标覆盖正负变化、预算偏差、缺失值、零基数和取消；不把公司财务规则写入工具，规则仍由任务材料提供。
 
 ### E54 报告、PPT 与来源交付
 

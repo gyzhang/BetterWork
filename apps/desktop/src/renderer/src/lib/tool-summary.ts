@@ -38,6 +38,8 @@ export function summarizeToolOutput(
       if (expression && result !== undefined) return `${expression} = ${result}`;
       break;
     }
+    case 'analyze_business_metrics':
+      return message || '已完成经营指标计算';
     case 'read_text_file': {
       if (!isRecord(output)) break;
       const path = readText(output.path);

@@ -2,6 +2,24 @@
   "formatVersion": 1,
   "skills": [
     {
+      "skillId": "builtin-business-analysis",
+      "resourceName": "business-analysis",
+      "name": "经营分析方法",
+      "description": "用确定性工具计算期间变化和预算偏差，再把结论写成可审阅的经营分析。",
+      "contentHash": "8ec64936eb612823e7398154966e4e649a7c792c644c4e1b80f25a3855d53f52",
+      "originalVersion": "0.1.0",
+      "profileHash": "7b1d48986dabfd1a1eb10579d85053ad5f13b87d7d6fecbdb8a903d0ac8df24e",
+      "dependencyFingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "scopeHash": "5b9db745bf0336432d4832d60986a7d0c5b876d236a2a0482d9b166c88bc7aba",
+      "profile": {
+        "commands": [],
+        "environmentRequirements": [],
+        "outputContract": {
+          "outputPaths": []
+        }
+      }
+    },
+    {
       "skillId": "builtin-sample-assistant",
       "resourceName": "sample-assistant",
       "name": "Sample Assistant",
