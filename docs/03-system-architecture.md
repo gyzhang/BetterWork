@@ -227,7 +227,7 @@ app_settings
 
 知识和记忆表见对应专题文档。
 
-E11 已通过版本化迁移创建 `experts`、`expert_revisions`；E12–E13 再增加 `task_context_revisions` 和 `run_context_snapshots`，不在 `tasks` 上用一个未定义的 `expert_id` 占位。旧 Task 缺少上下文时按通用助手解释，首次编辑/发送再以版本化迁移创建草稿。所有迁移保持启动幂等、可回滚并通过 `foreign_key_check`；历史 Run 没有专家事实时不补造。
+E11 已通过版本化迁移创建 `experts`、`expert_revisions`；E12 已增加 `task_context_revisions`，E13 已将其接入召唤、首条消息和任务恢复；未来 E15 再增加 `run_context_snapshots`，不在 `tasks` 上用一个未定义的 `expert_id` 占位。旧 Task 缺少上下文时按通用助手解释，首次编辑/发送再以版本化迁移创建草稿。所有迁移保持启动幂等、可回滚并通过 `foreign_key_check`；历史 Run 没有专家事实时不补造。
 
 SQLite 是产品状态真相源；向量索引、缩略图和解析缓存均可重建。
 

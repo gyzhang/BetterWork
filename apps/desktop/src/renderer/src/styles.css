@@ -1261,6 +1261,73 @@ p {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.experts-page {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.experts-page > .page-header {
+  flex: none;
+}
+.expert-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.expert-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.expert-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.expert-card-mark {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  place-items: center;
+  color: var(--brand);
+  background: var(--brand-soft);
+  border-radius: 8px;
+}
+.expert-card-head strong,
+.expert-card-head small {
+  display: block;
+}
+.expert-card-head strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.expert-card-head small {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.expert-card-desc {
+  min-height: 40px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.expert-card-status {
+  margin: 0;
+  color: var(--warning);
+  font-size: 12px;
+}
+.expert-summon-button {
+  align-self: flex-start;
+}
 .skill-chips {
   display: flex;
   flex-wrap: wrap;
@@ -2072,6 +2139,22 @@ p {
   align-items: center;
   gap: 8px;
   padding: 4px 0;
+}
+.expert-chip-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.expert-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  color: var(--brand);
+  background: var(--brand-soft);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
 }
 .model-sheet {
   position: absolute;

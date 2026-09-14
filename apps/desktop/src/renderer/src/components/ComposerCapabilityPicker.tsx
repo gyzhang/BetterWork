@@ -7,7 +7,7 @@ import { PopoverMenu } from './PopoverMenu';
 /**
  * Composer 能力选择器（ADR-0012 §UI / B00-4）。
  *
- * 一级菜单：技能 / 专家（禁用）/ 添加文件（禁用）。
+ * 一级菜单：技能 / 专家 / 添加文件（材料选择仍待后续阶段）。
  * 二级：技能列表，带搜索、多选、blockedReasons 置灰与定位入口。
  * 已选能力以 chip 条形式显示于输入框上方。
  */
@@ -16,7 +16,9 @@ export interface CapabilityChip {
   kind: 'skill';
   id: string;
   name: string;
+  revisionId?: string;
   status: 'ready' | 'disabled' | 'untrusted' | 'dependency-missing';
+  source?: 'expert-preset' | 'task-selection';
 }
 
 export interface ComposerCapabilityPickerProps {
@@ -27,6 +29,7 @@ export interface ComposerCapabilityPickerProps {
   onAdd: (chip: CapabilityChip) => void;
   onRemove: (id: string) => void;
   onRequestSkillDetail: (skillId: string) => void;
+  onRequestExpert: () => void;
 }
 
 const computeSkillStatus = (skill: SkillSummary): CapabilityChip['status'] => {
@@ -49,6 +52,7 @@ export function ComposerCapabilityPicker({
   onAdd,
   onRemove,
   onRequestSkillDetail,
+  onRequestExpert,
 }: ComposerCapabilityPickerProps): React.JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
@@ -67,14 +71,20 @@ export function ComposerCapabilityPicker({
     );
   }, [skills, searchQuery]);
 
-  const handleTopLevelSelect = useCallback((id: string) => {
-    if (id === 'skills') {
-      setMenuOpen(false);
-      setSkillPickerOpen(true);
-      setSearchQuery('');
-    }
-    // 'experts' and 'files' are disabled, no action.
-  }, []);
+  const handleTopLevelSelect = useCallback(
+    (id: string) => {
+      if (id === 'skills') {
+        setMenuOpen(false);
+        setSkillPickerOpen(true);
+        setSearchQuery('');
+      } else if (id === 'experts') {
+        setMenuOpen(false);
+        onRequestExpert();
+      }
+      // 'files' is disabled, no action.
+    },
+    [onRequestExpert],
+  );
 
   const handleSkillSelect = useCallback(
     (skillId: string) => {
@@ -82,7 +92,14 @@ export function ComposerCapabilityPicker({
       if (!skill || selectedIds.has(skillId)) return;
       const status = computeSkillStatus(skill);
       if (status !== 'ready') return;
-      onAdd({ kind: 'skill', id: skill.id, name: skill.name, status });
+      onAdd({
+        kind: 'skill',
+        id: skill.id,
+        name: skill.name,
+        revisionId: skill.currentRevisionId,
+        status,
+        source: 'task-selection',
+      });
       setSkillPickerOpen(false);
       setSearchQuery('');
     },
@@ -91,7 +108,7 @@ export function ComposerCapabilityPicker({
 
   const topLevelItems = [
     { id: 'skills', label: '技能' },
-    { id: 'experts', label: '专家', disabled: true, hint: '阶段 B 提供' },
+    { id: 'experts', label: '专家', hint: '打开专家列表' },
     { id: 'files', label: '添加文件', disabled: true, hint: '尚未开放' },
   ];
 

@@ -45,6 +45,7 @@ import {
   getExpertRequestSchema,
   getFileArtifactRequestSchema,
   getSkillRequestSchema,
+  getTaskContextRequestSchema,
   importSkillRequestSchema,
   IpcChannel,
   knowledgeDocumentSummarySchema,
@@ -91,6 +92,7 @@ import {
   saveModelProfileRequestSchema,
   saveSearchEngineRequestSchema,
   saveSkillRuntimeProfileRequestSchema,
+  saveTaskContextRequestSchema,
   searchEngineSaveResultSchema,
   searchEngineSummarySchema,
   searchKnowledgeRequestSchema,
@@ -106,6 +108,8 @@ import {
   skillSummarySchema,
   startRunRequestSchema,
   startRunResultSchema,
+  taskContextMutationResultSchema,
+  taskContextRevisionSchema,
   testModelRequestSchema,
   testSearchEngineRequestSchema,
   testSkillRunRequestSchema,
@@ -305,6 +309,29 @@ function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
     listEvidenceRequestSchema,
     z.array(evidenceSummarySchema),
     (input) => store.evidence.listByTask(input.taskId),
+  );
+  handleInput(
+    IpcChannel.GetTaskContext,
+    getTaskContextRequestSchema,
+    taskContextRevisionSchema.nullable(),
+    (input) => store.taskContexts.getLatest(input.taskId) ?? null,
+  );
+  handleInput(
+    IpcChannel.SaveTaskContext,
+    saveTaskContextRequestSchema,
+    taskContextMutationResultSchema,
+    (input) => ({
+      context: store.taskContexts.save(
+        input.taskId,
+        {
+          executor: input.executor,
+          skillBindings: input.skillBindings,
+          ...(input.modelReference ? { modelReference: input.modelReference } : {}),
+          ...(input.builtinToolPolicy ? { builtinToolPolicy: input.builtinToolPolicy } : {}),
+        },
+        input.expectedRevision,
+      ),
+    }),
   );
 }
 

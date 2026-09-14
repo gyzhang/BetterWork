@@ -184,6 +184,32 @@ describe('registerIpc', () => {
     ).rejects.toThrow();
   });
 
+  it('persists and reads a task context through validated IPC', async () => {
+    const workspace = (await invoke(IpcChannel.GetDefaultWorkspace, {})) as { id: string };
+    const created = (await invoke(IpcChannel.CreateTask, {
+      workspaceId: workspace.id,
+      title: '上下文测试',
+      goal: '验证专家身份',
+    })) as { task: { id: string }; sessionId: string };
+    const saved = (await invoke(IpcChannel.SaveTaskContext, {
+      taskId: created.task.id,
+      executor: { kind: 'general' },
+      skillBindings: [],
+    })) as { context: { id: string; revision: number; taskId: string } };
+    expect(saved.context).toMatchObject({ taskId: created.task.id, revision: 1 });
+    await expect(
+      invoke(IpcChannel.GetTaskContext, { taskId: created.task.id }),
+    ).resolves.toMatchObject({ id: saved.context.id, revision: 1 });
+    await expect(
+      invoke(IpcChannel.SaveTaskContext, {
+        taskId: created.task.id,
+        expectedRevision: 2,
+        executor: { kind: 'general' },
+        skillBindings: [],
+      }),
+    ).rejects.toThrow('Task context revision conflict');
+  });
+
   it('rejects unexpected data for a no-input dialog channel before opening the dialog', async () => {
     await expect(invoke(IpcChannel.SelectWorkspace, { injected: true })).rejects.toThrow();
     expect(mocks.showOpenDialog).not.toHaveBeenCalled();

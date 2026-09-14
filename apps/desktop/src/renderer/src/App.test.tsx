@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 
-import type { RecentTaskSummary, RunSummary, SkillDetail } from '@betterwork/agent-protocol';
+import type {
+  ExpertDetail,
+  ExpertSummary,
+  RecentTaskSummary,
+  RunSummary,
+  SkillDetail,
+  TaskContextRevision,
+} from '@betterwork/agent-protocol';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -44,7 +51,37 @@ const previousTask: RecentTaskSummary = {
   updatedAt: 1,
 };
 
-function installApi() {
+const expertSummary: ExpertSummary = {
+  id: 'expert-finance',
+  sourceKind: 'user',
+  lifecycle: 'active',
+  name: '经营分析专家',
+  summary: '按月度规则分析经营数字。',
+  currentRevision: 1,
+  blockedReasons: [],
+  createdAt: 1,
+  updatedAt: 1,
+};
+const expertDetail: ExpertDetail = {
+  ...expertSummary,
+  revision: {
+    id: 'expert-revision-1',
+    expertId: expertSummary.id,
+    revision: 1,
+    name: expertSummary.name,
+    summary: expertSummary.summary,
+    identity: '负责经营分析。',
+    principles: [],
+    inputRequirements: [],
+    deliveryRequirements: [],
+    skillPreset: [],
+    builtinToolPolicy: { mode: 'application-defaults' },
+    modelReference: { mode: 'application-default' },
+    createdAt: 1,
+  },
+};
+
+function installApi(options?: { expert?: boolean; context?: TaskContextRevision }) {
   const api = {
     chrome: { updateTheme: vi.fn(async () => undefined) },
     workspace: {
@@ -65,6 +102,31 @@ function installApi() {
         task: { id: 'new-task', title: goal },
         sessionId: 'new-session',
       })),
+    },
+    taskContexts: {
+      get: vi.fn(async (): Promise<TaskContextRevision | null> => options?.context ?? null),
+      save: vi.fn(
+        async (input: {
+          taskId: string;
+          expectedRevision?: number;
+          executor: TaskContextRevision['executor'];
+          skillBindings: TaskContextRevision['skillBindings'];
+        }) => ({
+          context: {
+            id: 'context-1',
+            taskId: input.taskId,
+            revision: 1,
+            executor: input.executor,
+            skillBindings: input.skillBindings,
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        }),
+      ),
+    },
+    experts: {
+      list: vi.fn(async () => (options?.expert ? [expertSummary] : [])),
+      get: vi.fn(async () => (options?.expert ? expertDetail : null)),
     },
     runs: {
       list: vi.fn(async (input?: { taskId?: string }): Promise<RunSummary[]> =>
@@ -128,7 +190,7 @@ describe('Skill test run in the task composer', () => {
     render(<App />);
     await openTestRun();
 
-    expect(composer()).toHaveProperty('value', '');
+    expect(await screen.findByRole('textbox', { name: /任务输入/ })).toHaveProperty('value', '');
     expect(document.activeElement).toBe(composer());
     expect(screen.getByRole('button', { name: '开始工作' })).toHaveProperty('disabled', true);
     fireEvent.keyDown(composer(), { key: 'Enter', metaKey: true });
@@ -144,7 +206,8 @@ describe('Skill test run in the task composer', () => {
         taskId: 'new-task',
         sessionId: 'new-session',
         prompt: goal,
-        skillBindings: [{ skillId: skill.id, revisionId: skill.currentRevisionId }],
+        taskContextRevisionId: 'context-1',
+        expectedTaskContextRevision: 1,
       }),
     );
     expect(api.tasks.create).toHaveBeenCalledExactlyOnceWith({
@@ -176,7 +239,7 @@ describe('Skill test run in the task composer', () => {
       resolveEvents?.([]);
     });
     expect(screen.queryByText('旧任务的要求')).toBeNull();
-    expect(composer()).toHaveProperty('value', '');
+    expect(await screen.findByRole('textbox', { name: /任务输入/ })).toHaveProperty('value', '');
     expect(api.runs.start).not.toHaveBeenCalled();
   });
 
@@ -201,7 +264,8 @@ describe('Skill test run in the task composer', () => {
     expect(api.runs.start).toHaveBeenLastCalledWith(
       expect.objectContaining({
         prompt: goal,
-        skillBindings: [{ skillId: skill.id, revisionId: skill.currentRevisionId }],
+        taskContextRevisionId: 'context-1',
+        expectedTaskContextRevision: 1,
       }),
     );
   });
@@ -220,6 +284,64 @@ describe('Skill test run in the task composer', () => {
       taskId: destination === '旧任务' ? 'previous-task' : 'new-task',
       sessionId: destination === '旧任务' ? 'previous-session' : 'new-session',
       prompt: '普通要求',
+      taskContextRevisionId: 'context-1',
+      expectedTaskContextRevision: 1,
     });
+  });
+});
+
+describe('Expert summon in the task composer', () => {
+  it('summons an Expert into a blank task and pins its revision on first send', async () => {
+    const api = installApi({ expert: true });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
+    fireEvent.click(await screen.findByRole('button', { name: '召唤' }));
+
+    expect(await screen.findByRole('textbox', { name: /任务输入/ })).toHaveProperty('value', '');
+    expect(screen.getByRole('list', { name: '当前专家' }).textContent).toContain('经营分析专家');
+    fireEvent.change(composer(), { target: { value: '分析本月经营数字' } });
+    fireEvent.click(screen.getByRole('button', { name: '开始工作' }));
+
+    await waitFor(() => expect(api.taskContexts.save).toHaveBeenCalledTimes(1));
+    expect(api.taskContexts.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        executor: {
+          kind: 'expert',
+          expertId: expertSummary.id,
+          expertRevisionId: expertDetail.revision.id,
+        },
+      }),
+    );
+    await waitFor(() => expect(api.runs.start).toHaveBeenCalledTimes(1));
+    expect(api.runs.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskContextRevisionId: 'context-1',
+        expectedTaskContextRevision: 1,
+      }),
+    );
+  });
+});
+
+describe('Task context restoration', () => {
+  it('restores the saved Skill selection when reopening a task', async () => {
+    const api = installApi({
+      context: {
+        id: 'context-previous',
+        taskId: previousTask.id,
+        revision: 1,
+        executor: { kind: 'general' },
+        skillBindings: [
+          { skillId: skill.id, revisionId: skill.currentRevisionId, source: 'task-selection' },
+        ],
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
+    expect((await screen.findByRole('list', { name: '已选能力' })).textContent).toContain(
+      skill.name,
+    );
+    expect(api.taskContexts.get).toHaveBeenCalledWith({ taskId: previousTask.id });
   });
 });
