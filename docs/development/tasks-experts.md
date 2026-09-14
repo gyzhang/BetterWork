@@ -43,14 +43,14 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E11 | 专家修订、管理服务与迁移 | E00、E10 | done | [ExpertRepository/Service 测试](../../apps/desktop/src/main/persistence/expert-repository.test.ts)、[迁移与 IPC 测试](../../apps/desktop/src/main/db/migrate.test.ts)；v9 experts/expert_revisions 迁移、创建/修订/复制/启停归档、并发冲突、缺项状态及 Preload/IPC 已接通；`npm run verify` 退出 0（54 文件 / 441 测试），2026-09-14 13:54。执行注入与召唤留 E12–E13 |
 | E12 | 专家执行注入与能力裁决 | E11 | done | [TaskContext/Run 测试](../../apps/desktop/src/main/services/run-service.test.ts)、[Agent Core 测试](../../packages/agent-core/src/agent-engine.test.ts)、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)：v10 TaskContextRevision、CAS/归属隔离、专家人格指令、模型引用、内置工具 allow-list 与 Run 接入；`npm run verify` 退出 0（55 文件 / 448 测试 / Electron build），2026-09-14 14:05 |
 | E13 | 对话草稿、召唤与身份切换 | E12 | done | [App/IPC 测试](../../apps/desktop/src/renderer/src/App.test.tsx)、[IPC 注册测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)：专家列表“召唤”直达空白任务，首条消息保存 TaskContextRevision 后启动 Run；任务重开恢复专家/Skill 选择，`+ → 专家` 打开专家列表；`npm run verify` 退出 0（55 文件 / 451 测试 / Electron build），2026-09-14 14:15 |
-| E14 | 专家管理与按需配置 UI | E13 | done | [专家配置 UI 测试](../../apps/desktop/src/renderer/src/App.test.tsx)：专家列表/详情、独立编辑器、新建与不可变修订保存、Skill 预设、内置工具 allow-list、生命周期操作和内置复制均复用 E11 IPC；`npm run verify` 退出 0（55 文件 / 452 测试 / Electron build），2026-09-14 14:24 |
+| E14 | 专家管理与按需配置 UI | E13 | done | [专家配置 UI 测试](../../apps/desktop/src/renderer/src/App.test.tsx)：专家列表/详情、独立编辑器、新建与不可变修订保存、Skill 预设、内置工具 allow-list、常用参考选择、生命周期操作和内置复制均复用 E11 IPC；本阶段新增常用参考持久化与召唤注入回归，完整门禁见日志。 |
 | E15 | 内置专家分发与 E1 验收 | E14 | done | [内置 Expert 服务测试](../../apps/desktop/src/main/services/expert-service.test.ts)：新增 `resources/experts/release-manifest.json`，启动幂等注册 stable builtin Expert；发布同一 ID 的变更追加 builtin 修订并保留用户副本与生命周期选择；打包资源同步进入 `experts/`，内置修订只读且可复制；`npm run verify` 退出 0（55 文件 / 453 测试 / Electron build），2026-09-14 14:27 |
 | E20 | 材料与快照精确契约 | E15 | done | [材料、快照与运行来源契约](material-contracts.md)：定稿候选/选择/读取分离、Knowledge revision、ArtifactVersion、Workspace 输入快照、用途、RunContextSnapshot、两库与文件恢复/回收、范围校验入口、读取足迹和 ArtifactInputRelation；明确源变更、缺失、重复、跨空间、取消、归档、旧任务和范围收缩语义。文档差异检查通过，2026-09-14。 |
 | E21 | 知识修订、文件快照与恢复 | E20 | done | [KnowledgeVault 修订与快照测试](../../apps/desktop/src/main/services/knowledge-vault.test.ts)、[输入快照测试](../../apps/desktop/src/main/services/input-snapshot-service.test.ts)、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)：知识库 v3 保留不可变内容/分块修订；应用库 v11 增加 Workspace 所属输入快照状态；稳定读取、哈希寻址复制、取消、符号链接/特殊文件拒绝、缺失/孤儿恢复已接通启动装配；`npm run verify` 退出 0（56 文件 / 459 测试 / Electron build），2026-09-14 15:04。 |
-| E22 | 材料选择与草稿持久化 | E21 | done | [TaskMaterialService/TaskContext 测试](../../apps/desktop/src/main/services/task-material-service.test.ts)、[TaskContextRepository 测试](../../apps/desktop/src/main/persistence/task-context-repository.test.ts)：TaskContextRevision v12 保存材料判别引用、用途、备注和添加来源；候选查询覆盖 Knowledge revision、Workspace ArtifactVersion、ready 输入快照；保存边界校验修订哈希、快照状态、重复项和 Workspace 归属；新增候选/输入快照 IPC 与 Preload；`npm run verify` 退出 0（57 文件 / 463 测试 / Electron build），2026-09-14 15:19。 |
+| E22 | 材料选择与草稿持久化 | E21 | done | [TaskMaterialService/TaskContext 测试](../../apps/desktop/src/main/services/task-material-service.test.ts)、[TaskContextRepository 测试](../../apps/desktop/src/main/persistence/task-context-repository.test.ts)：TaskContextRevision v12 保存材料判别引用、用途、备注和添加来源；候选查询覆盖 Knowledge revision、Workspace ArtifactVersion、ready 输入快照；ExpertRevision v20 保存最多 50 个 Knowledge/ArtifactVersion 常用参考，召唤时以 `expert-reference` 注入新任务；保存边界校验修订哈希、快照状态、重复项和 Workspace 归属；新增候选/输入快照 IPC 与 Preload；本阶段决策见 [ADR-0022](../adr/0022-expert-reference-materials.md)。 |
 | E23 | 宿主范围与上下文收缩 | E22 | done | [RunService/快照/工具测试](../../apps/desktop/src/main/services/run-service.test.ts)：Run 绑定不可变 `run_context_snapshots`，Knowledge revision、输入快照和 Markdown ArtifactVersion 通过宿主范围校验；材料收缩创建新上下文段并过滤旧段历史。`npm run verify` 退出 0（59 文件 / 470 测试 / Electron build），2026-09-14。 |
 | E24 | 读取足迹与成果输入来源 | E23 | done | [读取/成果来源测试](../../apps/desktop/src/main/services/run-service.test.ts)：v14 保存 RunMaterialRead 与 ArtifactInputRelation；搜索、输入快照和成果读取留下精确足迹，Markdown/文件成果只允许关联同一 Run 已读取材料。`npm run verify` 退出 0（60 文件 / 473 测试 / Electron build），2026-09-14。 |
-| E25 | 材料 UI、成果复用与 E2 验收 | E24 | done | Composer 与资料面板支持文件/知识/成果选择、用途调整、失效提示和取消；成果详情可引用精确 Markdown 版本开始新任务；Office 材料在 E51 接入后进入可读候选；`npm run verify` 退出 0（61 文件 / 475 测试 / Electron build），2026-09-14。 |
+| E25 | 材料 UI、成果复用与 E2 验收 | E24 | done | Composer 与资料面板支持文件/知识/成果选择、用途调整、失效提示和取消；专家编辑器可选择常用参考，专家“召唤”直接把引用带入 TaskContext，任务仍可移除/补充；成果详情可引用精确 Markdown 版本开始新任务；Office 材料在 E51 接入后进入可读候选；本阶段跨 Workspace 专家成果引用增加显式来源校验。 |
 | E30 | 记忆投影与治理实现 ADR | E25 | done | 新增 [ADR-0015](../adr/0015-memory-scope-and-governance.md)：SQLite 唯一真相源、User/Workspace/Expert/Expert×Workspace 判别范围、candidate/confirmed/过期/删除状态、来源、预算、运行快照、投影重建和失败恢复语义已定案。 |
 | E31 | 记忆存储、检索与运行注入 | E30 | done | [MemoryRepository/Service 与 RunService 测试](../../apps/desktop/src/main/persistence/memory-repository.test.ts)：应用库 v15 增加不可变记忆修订与 Run 读取足迹；四种作用域按隔离规则检索，confirmed 记录按 16 条/6,000 字符预算注入新 Run，候选不会注入；IPC/Preload 已接通，Markdown 只读投影按作用域重建。`npm run verify` 退出 0（63 文件 / 480 测试），2026-09-14。 |
 | E32 | 记忆管理、对话确认与 E3 验收 | E31 | done | [记忆管理与运行测试](../../apps/desktop/src/renderer/src/views/MemoryView.test.tsx)：设置页支持用户记忆创建、候选确认、编辑和删除；对话完成消息提供“记住这段经验”确认表单，可选择 User/Workspace/Expert×Workspace 作用域；任务资料面板支持“本任务不用”，排除项保存进 TaskContextRevision 并只影响后续该任务运行。迁移 v16、协议/运行/Renderer 测试已覆盖；`npm run verify` 退出 0（64 文件 / 483 测试），2026-09-14。 |
@@ -119,9 +119,9 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 ### E14 专家管理与对话 UI
 
 - 必读/落点：docs/10、views/SkillsView、ComposerCapabilityPicker、PopoverMenu、App/hook、styles/icons。
-- 工作：专家列表/详情“召唤”，独立编辑配置，内置复制编辑；对话内查看专家使用可关闭面板；能力简要显示、详细选择按需展开。复用 E11–E13，不造第二套运行入口。
+- 工作：专家列表/详情“召唤”，独立编辑配置，内置复制编辑；可从工作区候选选择 Knowledge 修订和 ArtifactVersion 作为常用参考；对话内查看专家使用可关闭面板；能力简要显示、详细选择按需展开。复用 E11–E13，不造第二套运行入口。
 - 失败/取消：列表读取失败与空列表不同；保存失败留在编辑器；关闭查看回原输入并还原焦点；长操作复用状态/取消，反馈不自造 Toast。
-- 必测/手验：从专家页召唤→发需求→编辑专家→回任务草稿不丢；键盘、三档外观、窄窗口；无准备表单与强制依据预览。
+- 必测/手验：从专家页召唤→发需求→编辑专家→回任务草稿不丢；召唤后常用参考进入任务且可移除；键盘、三档外观、窄窗口；无准备表单与强制依据预览。
 - 完成：功能真实接线，不从示例草图复制 mock 行为；无 9–10px 字号、硬编码颜色或新 UI 框架。
 
 ### E15 内置资源与 E1 验收
@@ -149,11 +149,11 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 
 ### E22 材料选择服务与草稿
 
-- 落点：材料服务/仓储、专家常用参考、TaskContextRevision、IPC/preload。
-- 工作：工作空间候选与任务实际选择分离；支持具体知识、现有可读成果版本和当前文件。常用参考仅匹配 Workspace 后带入，同清单可移除；显式跨空间引用标来源。
+- 落点：材料服务/仓储、ExpertRevision 常用参考、TaskContextRevision、IPC/preload。
+- 工作：工作空间候选与任务实际选择分离；支持具体知识、现有可读成果版本和当前文件。常用参考从当前 Workspace 候选选择后带入，同清单可移除；跨 Workspace ArtifactVersion 仅由显式专家引用或全局搜索来源带入并标记来源。
 - 失败/取消：无访问登记的任意 ID/路径拒绝；源版本变化给差异，不追随最新；取消选择不改草稿；超限和不可读格式有具体原因。
-- 必测：候选不等于授权、常用参考不跨公司、并发草稿版本、重复引用去重、移除不会被预设自动补回。
-- 完成：`TaskContextRevision` v12 新增 `materials_json`；协议定义 `MaterialReference`、六类用途和 `addedFrom`，`TaskMaterialService` 提供 Knowledge revision、当前 Workspace ArtifactVersion、ready 输入快照候选，并在保存时校验内容哈希、快照完整性、重复引用、跨空间和失效状态。新增材料候选查询与 Workspace 文件快照 IPC/Preload，App 保存并恢复材料草稿；`npm run verify` 退出 0（57 文件 / 463 测试 / Electron build），2026-09-14 15:19。当前工具仍可读整个 Knowledge Vault/Workspace，范围收紧留 E23；空材料仍允许澄清任务。
+- 必测：候选不等于授权、常用参考引用版本稳定、跨 Workspace 来源明确、并发草稿版本、重复引用去重、移除不会被预设自动补回。
+- 完成：`TaskContextRevision` v12 新增 `materials_json`；`ExpertRevision` v20 新增 `reference_materials_json`，协议定义 `MaterialReference`、六类用途和 `addedFrom`，`TaskMaterialService` 提供 Knowledge revision、当前 Workspace ArtifactVersion、ready 输入快照候选，并在保存时校验内容哈希、快照完整性、重复引用、跨空间和失效状态。专家编辑器保存常用参考，召唤把稳定引用以 `expert-reference` 复制到新 TaskContext，任务可继续移除或补充；新增材料候选查询与 Workspace 文件快照 IPC/Preload，App 保存并恢复材料草稿；[ADR-0022](../adr/0022-expert-reference-materials.md) 固化边界。当前工具仍可读整个 Knowledge Vault/Workspace，范围收紧留 E23；空材料仍允许澄清任务。
 
 ### E23 范围与历史上下文
 
@@ -177,7 +177,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 - 工作：“＋”添加文件/引用知识/引用成果；用途默认推导、详情可改。常驻只显示摘要，完整清单可收起。成果“基于此成果开始新任务”精确引用版本、沿用专家、清空期间和本期输入。
 - 失败/取消：选择器取消不改变原选项，失效项原地修复；缺材料通过对话补充，绝不跳配置向导；重启草稿不丢。
 - 必测/手验：引用非最新版、补材料继续、跨空间显式来源、范围收缩、新一期不带旧聊天；三档外观/窄屏/键盘。
-- 完成：Composer `+` 菜单与右侧资料面板共用任务材料草稿，支持当前工作空间文件快照、Knowledge revision、ArtifactVersion 的候选选择；选择器取消不改原清单，材料芯片可调整用途并显示失效状态。成果详情可对精确 Markdown 版本执行“基于此版本开始新任务”，沿用仍有效的专家、清空旧任务上下文与本期输入并保留精确历史成果引用；跨 Workspace 成果显式标记来源。候选查询支持尚未创建 Task 的新任务草稿。E51 后 PPTX/XLSX/CSV 可读状态由具体格式和快照完整性决定。`npm run verify` 退出 0（61 文件 / 475 测试 / Electron build），2026-09-14。
+- 完成：Composer `+` 菜单与右侧资料面板共用任务材料草稿，支持当前工作空间文件快照、Knowledge revision、ArtifactVersion 的候选选择；选择器取消不改原清单，材料芯片可调整用途并显示失效状态。专家编辑器可选择常用参考，专家“召唤”直接注入新任务并允许移除/补充；成果详情可对精确 Markdown 版本执行“基于此版本开始新任务”，沿用仍有效的专家、清空旧任务上下文与本期输入并保留精确历史成果引用；跨 Workspace 成果显式标记来源。候选查询支持尚未创建 Task 的新任务草稿。E51 后 PPTX/XLSX/CSV 可读状态由具体格式和快照完整性决定。`npm run verify` 的本阶段结果见 2026-09-14 日志。
 
 ### E30 记忆实现 ADR（已完成）
 

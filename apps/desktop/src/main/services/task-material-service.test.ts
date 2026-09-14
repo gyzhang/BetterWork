@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -122,6 +123,45 @@ describe('TaskMaterialService', () => {
         },
       ]),
     ).rejects.toMatchObject({ code: 'material_workspace_mismatch' });
+
+    const otherRoot = temporaryDirectory('betterwork-material-other-workspace-');
+    const otherWorkspace = store.workspaces.getOrCreate(otherRoot, '另一个工作区');
+    const otherTask = store.tasks.create(otherWorkspace.id, '上月报告', '准备上月报告');
+    const otherRunId = randomUUID();
+    store.runs.create({
+      id: otherRunId,
+      taskId: otherTask.task.id,
+      sessionId: otherTask.sessionId,
+      prompt: '生成上月报告',
+      status: 'completed',
+      createdAt: 1,
+      completedAt: 2,
+    });
+    const artifact = store.artifacts.saveMarkdown({
+      taskId: otherTask.task.id,
+      runId: otherRunId,
+      title: '上月经营报告',
+      content: '# 上月经营报告\n\n收入 100',
+      origin: 'assistant-run',
+    });
+    const version = store.artifacts.getVersionDetail(artifact.currentVersionId);
+    if (!version || version.type !== 'markdown')
+      throw new Error('artifact fixture was not created');
+    await expect(
+      service.validateSelections(task.task.id, [
+        {
+          reference: {
+            kind: 'artifact-version',
+            artifactId: artifact.id,
+            artifactVersionId: version.id,
+            contentHash: version.contentHash,
+            originWorkspaceId: otherWorkspace.id,
+          },
+          purpose: 'historical-comparison',
+          addedFrom: 'expert-reference',
+        },
+      ]),
+    ).resolves.toBeUndefined();
     vault.close();
   });
 });

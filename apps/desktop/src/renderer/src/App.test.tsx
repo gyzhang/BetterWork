@@ -3,6 +3,7 @@
 import type {
   ExpertDetail,
   ExpertSummary,
+  MaterialCandidate,
   RecentTaskSummary,
   RunSummary,
   SkillDetail,
@@ -129,7 +130,7 @@ function installApi(options?: { expert?: boolean; context?: TaskContextRevision 
       create: vi.fn(async () => ({ checkpoint: undefined })),
     },
     materials: {
-      listCandidates: vi.fn(async () => []),
+      listCandidates: vi.fn(async (): Promise<MaterialCandidate[]> => []),
       prepareInputSnapshot: vi.fn(async () => null),
     },
     memories: {
@@ -357,6 +358,46 @@ describe('Expert summon in the task composer', () => {
       expect.objectContaining({
         taskContextRevisionId: 'context-1',
         expectedTaskContextRevision: 1,
+      }),
+    );
+  });
+
+  it('carries the Expert common references into the next TaskContext', async () => {
+    const api = installApi({ expert: true });
+    const reference = {
+      reference: {
+        kind: 'knowledge-revision' as const,
+        knowledgeDocumentId: 'finance-rules',
+        knowledgeRevisionId: 'finance-rules-v2',
+        contentHash: 'rules-hash',
+        sourcePath: '/rules/finance.md',
+      },
+      purpose: 'rule' as const,
+    };
+    api.experts.get.mockResolvedValue({
+      ...expertDetail,
+      revision: { ...expertDetail.revision, referenceMaterials: [reference] },
+    });
+    api.materials.listCandidates.mockResolvedValue([
+      {
+        reference: reference.reference,
+        title: '公司财务规则',
+        sourceLabel: '知识 · finance.md',
+        status: 'ready',
+      },
+    ]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
+    fireEvent.click(await screen.findByRole('button', { name: '召唤' }));
+    fireEvent.change(await screen.findByRole('textbox', { name: /任务输入/ }), {
+      target: { value: '分析本月经营数字' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '开始工作' }));
+
+    await waitFor(() => expect(api.taskContexts.save).toHaveBeenCalledTimes(1));
+    expect(api.taskContexts.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        materials: [{ ...reference, addedFrom: 'expert-reference' }],
       }),
     );
   });

@@ -65,7 +65,9 @@ const sameRevision = (current: ExpertDetail['revision'], draft: ExpertRevisionDr
   JSON.stringify(current.skillPreset) === JSON.stringify(draft.skillPreset) &&
   JSON.stringify(current.builtinToolPolicy) === JSON.stringify(draft.builtinToolPolicy) &&
   JSON.stringify(current.modelReference) === JSON.stringify(draft.modelReference) &&
-  JSON.stringify(current.mcpToolBindings ?? []) === JSON.stringify(draft.mcpToolBindings ?? []);
+  JSON.stringify(current.mcpToolBindings ?? []) === JSON.stringify(draft.mcpToolBindings ?? []) &&
+  JSON.stringify(current.referenceMaterials ?? []) ===
+    JSON.stringify(draft.referenceMaterials ?? []);
 
 export interface BuiltinExpertReleaseEntry {
   expertId: string;

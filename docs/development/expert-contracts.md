@@ -4,6 +4,7 @@
 - 日期：2026-09-14。
 - 依据：[专家与任务材料设计 v0.2](../designs/experts-and-task-materials.md)、[ADR-0014](../adr/0014-expert-context-and-material-binding.md)、[ADR-0012](../adr/0012-composer-capability-binding.md)。
 - 范围：本文件定义 E1 专家管理、召唤、执行身份、Skill 预设、内置工具策略、模型引用和任务草稿的精确边界。材料的候选、版本、快照、读取足迹和成果输入关系已在 [材料、快照与运行来源契约](material-contracts.md)（E20）中定案；记忆、MCP 和 Office 输入仍分别由 E30、E40、E50 定案。本文件和 E20 契约都不为尚未实施的切片创建空字段或空表。
+- 当前实现补充：E22/E25 已将稳定的 Knowledge 修订与 ArtifactVersion 引用扩展到 `ExpertRevision.referenceMaterials`。它们只在召唤时复制为当前 TaskContext 的 `expert-reference` 材料，任务仍可移除、补充或调整用途；Workspace 输入快照不进入专家修订。字段和跨 Workspace 来源边界见 [ADR-0022](../adr/0022-expert-reference-materials.md)。
 
 ## 1. 术语与不变量
 
@@ -62,7 +63,14 @@ interface ExpertRevision {
   skillPreset: ExpertSkillPreset[];
   builtinToolPolicy: BuiltinToolPolicy;
   modelReference: ExpertModelReference;
+  referenceMaterials?: ExpertReferenceMaterial[];
   createdAt: number;
+}
+
+interface ExpertReferenceMaterial {
+  reference: MaterialReference;
+  purpose: MaterialPurpose;
+  note?: string;
 }
 
 interface ExpertSkillPreset {

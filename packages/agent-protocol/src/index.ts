@@ -248,6 +248,70 @@ export const expertBlockedReasonSchema = z.enum([
 ]);
 export type ExpertBlockedReason = z.infer<typeof expertBlockedReasonSchema>;
 
+export const materialPurposeSchema = z.enum([
+  'rule',
+  'current-input',
+  'historical-comparison',
+  'structure-reference',
+  'template',
+  'background',
+]);
+export type MaterialPurpose = z.infer<typeof materialPurposeSchema>;
+
+const knowledgeMaterialReferenceSchema = z
+  .object({
+    kind: z.literal('knowledge-revision'),
+    knowledgeDocumentId: z.string().min(1),
+    knowledgeRevisionId: z.string().min(1),
+    contentHash: z.string().min(1),
+    sourcePath: z.string().min(1),
+    originWorkspaceId: z.string().min(1).optional(),
+  })
+  .strict();
+const artifactMaterialReferenceSchema = z
+  .object({
+    kind: z.literal('artifact-version'),
+    artifactId: z.string().min(1),
+    artifactVersionId: z.string().min(1),
+    contentHash: z.string().min(1),
+    originWorkspaceId: z.string().min(1),
+  })
+  .strict();
+const inputSnapshotMaterialReferenceSchema = z
+  .object({
+    kind: z.literal('workspace-input-snapshot'),
+    snapshotId: z.string().min(1),
+    workspaceId: z.string().min(1),
+    contentHash: z.string().min(1),
+    format: z.string().min(1),
+    fileKey: z.string().min(1),
+  })
+  .strict();
+export const materialReferenceSchema = z.discriminatedUnion('kind', [
+  knowledgeMaterialReferenceSchema,
+  artifactMaterialReferenceSchema,
+  inputSnapshotMaterialReferenceSchema,
+]);
+export type MaterialReference = z.infer<typeof materialReferenceSchema>;
+
+export const expertReferenceMaterialSchema = z
+  .object({
+    reference: materialReferenceSchema,
+    purpose: materialPurposeSchema,
+    note: z.string().trim().max(1_000).optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.reference.kind === 'workspace-input-snapshot') {
+      context.addIssue({
+        code: 'custom',
+        path: ['reference'],
+        message: 'Expert 常用参考只能保存 Knowledge 修订或成果版本。',
+      });
+    }
+  })
+  .strict();
+export type ExpertReferenceMaterial = z.infer<typeof expertReferenceMaterialSchema>;
+
 export const expertSkillPresetSchema = z
   .array(z.object({ skillId: skillIdSchema, revisionId: skillRevisionIdSchema }).strict())
   .max(MAX_RUN_SKILL_BINDINGS)
@@ -294,6 +358,7 @@ export const expertRevisionDraftSchema = z
     builtinToolPolicy: builtinToolPolicySchema,
     modelReference: expertModelReferenceSchema,
     mcpToolBindings: z.array(mcpToolBindingSchema).max(50).optional(),
+    referenceMaterials: z.array(expertReferenceMaterialSchema).max(50).optional(),
   })
   .strict();
 export type ExpertRevisionDraft = z.infer<typeof expertRevisionDraftSchema>;
@@ -387,52 +452,6 @@ export const taskContextSkillBindingSchema = z
   })
   .strict();
 export type TaskContextSkillBinding = z.infer<typeof taskContextSkillBindingSchema>;
-
-export const materialPurposeSchema = z.enum([
-  'rule',
-  'current-input',
-  'historical-comparison',
-  'structure-reference',
-  'template',
-  'background',
-]);
-export type MaterialPurpose = z.infer<typeof materialPurposeSchema>;
-
-const knowledgeMaterialReferenceSchema = z
-  .object({
-    kind: z.literal('knowledge-revision'),
-    knowledgeDocumentId: z.string().min(1),
-    knowledgeRevisionId: z.string().min(1),
-    contentHash: z.string().min(1),
-    sourcePath: z.string().min(1),
-    originWorkspaceId: z.string().min(1).optional(),
-  })
-  .strict();
-const artifactMaterialReferenceSchema = z
-  .object({
-    kind: z.literal('artifact-version'),
-    artifactId: z.string().min(1),
-    artifactVersionId: z.string().min(1),
-    contentHash: z.string().min(1),
-    originWorkspaceId: z.string().min(1),
-  })
-  .strict();
-const inputSnapshotMaterialReferenceSchema = z
-  .object({
-    kind: z.literal('workspace-input-snapshot'),
-    snapshotId: z.string().min(1),
-    workspaceId: z.string().min(1),
-    contentHash: z.string().min(1),
-    format: z.string().min(1),
-    fileKey: z.string().min(1),
-  })
-  .strict();
-export const materialReferenceSchema = z.discriminatedUnion('kind', [
-  knowledgeMaterialReferenceSchema,
-  artifactMaterialReferenceSchema,
-  inputSnapshotMaterialReferenceSchema,
-]);
-export type MaterialReference = z.infer<typeof materialReferenceSchema>;
 
 export const taskMaterialSelectionSchema = z
   .object({

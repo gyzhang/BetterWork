@@ -216,7 +216,11 @@ export class TaskMaterialService {
       return;
     }
     if (reference.kind === 'artifact-version') {
-      if (reference.originWorkspaceId !== workspaceId && selection.addedFrom !== 'global-search') {
+      if (
+        reference.originWorkspaceId !== workspaceId &&
+        selection.addedFrom !== 'global-search' &&
+        selection.addedFrom !== 'expert-reference'
+      ) {
         throw new TaskMaterialError(
           'material_workspace_mismatch',
           '成果来自其他工作空间，请通过显式来源入口重新选择。',
