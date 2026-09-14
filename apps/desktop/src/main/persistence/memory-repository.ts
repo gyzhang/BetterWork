@@ -301,14 +301,25 @@ export class MemoryRepository {
         (id, run_id, memory_id, memory_revision_id, content_hash, captured_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
     );
+    const getStored = this.db.prepare(
+      'SELECT id, content_hash FROM memory_records WHERE revision_id = ?',
+    );
     const transaction = this.db.transaction(() => {
       for (const read of reads) {
+        const memory = memoryRecordSchema.parse(read.memory);
+        const stored = getStored.get(memory.revisionId) as
+          { id: string; content_hash: string } | undefined;
+        if (!stored) throw new MemoryValidationError('记忆修订不存在。');
+        if (stored.id !== memory.id) throw new MemoryValidationError('记忆修订身份不一致。');
+        if (stored.content_hash !== memory.contentHash) {
+          throw new MemoryValidationError('记忆内容哈希不一致。');
+        }
         insert.run(
           randomUUID(),
           read.runId,
-          read.memory.id,
-          read.memory.revisionId,
-          read.memory.contentHash,
+          memory.id,
+          memory.revisionId,
+          memory.contentHash,
           read.capturedAt,
         );
       }

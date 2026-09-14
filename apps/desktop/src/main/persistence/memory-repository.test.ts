@@ -123,4 +123,35 @@ describe('MemoryRepository', () => {
     repository.recordReads([{ runId, memory, capturedAt: 124 }]);
     expect(repository.listReads(runId)).toHaveLength(1);
   });
+
+  it('rejects a memory read with a stale content hash', () => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    const repository = store.memories;
+    const workspace = store.workspaces.getOrCreate('/tmp/memory-read-hash', 'Memory Read Hash');
+    const task = store.tasks.create(workspace.id, '读记忆', '校验哈希');
+    const runId = randomUUID();
+    store.runs.create({
+      id: runId,
+      taskId: task.task.id,
+      sessionId: task.sessionId,
+      prompt: 'test',
+      status: 'running',
+      createdAt: Date.now(),
+    });
+    const memory = repository.create({
+      scope: { kind: 'workspace', workspaceId: workspace.id },
+      kind: 'semantic',
+      content: '可追溯记忆',
+      sourceType: 'user-explicit',
+      status: 'confirmed',
+    });
+
+    expect(() =>
+      repository.recordReads([
+        { runId, memory: { ...memory, contentHash: 'stale-hash' }, capturedAt: 123 },
+      ]),
+    ).toThrow('记忆内容哈希不一致');
+    expect(repository.listReads(runId)).toHaveLength(0);
+  });
 });
