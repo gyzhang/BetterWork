@@ -467,6 +467,7 @@ function ExpertDetailPanel({
   detail,
   memories,
   models,
+  workspaceId,
   onEdit,
   onCopy,
   onSummon,
@@ -477,6 +478,7 @@ function ExpertDetailPanel({
   detail: ExpertDetail;
   memories: MemoryRecord[];
   models: ModelProfileSummary[];
+  workspaceId?: string;
   onEdit: () => void;
   onCopy: () => void;
   onSummon: () => void;
@@ -493,9 +495,11 @@ function ExpertDetailPanel({
     : undefined;
   const expertMemories = memories.filter((memory) => {
     if (memory.status === 'deleted') return false;
+    if (memory.scope.kind === 'expert') return memory.scope.expertId === detail.id;
     return (
-      (memory.scope.kind === 'expert' || memory.scope.kind === 'expert-workspace') &&
-      memory.scope.expertId === detail.id
+      memory.scope.kind === 'expert-workspace' &&
+      memory.scope.expertId === detail.id &&
+      memory.scope.workspaceId === workspaceId
     );
   });
   const confirmedMemoryCount = expertMemories.filter(
@@ -747,6 +751,7 @@ export function ExpertsPage({
         detail={selected}
         memories={memories}
         models={models}
+        {...(workspaceId ? { workspaceId } : {})}
         onEdit={openEdit}
         onCopy={copy}
         onSummon={() => reportAction(onSummon(selected), onError, '无法召唤该专家。')}

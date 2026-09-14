@@ -603,13 +603,30 @@ describe('Expert configuration', () => {
       createdAt: 1,
       updatedAt: 1,
     };
-    installApi({ expert: true, memories: [memory] });
+    const workspaceMemory: MemoryRecord = {
+      ...memory,
+      id: 'expert-workspace-memory-1',
+      revisionId: 'expert-workspace-memory-1-r1',
+      scope: { kind: 'expert-workspace', expertId: expertSummary.id, workspaceId: 'workspace-1' },
+      content: '当前工作空间的月报需要附上预算偏差。',
+      status: 'candidate',
+    };
+    const otherWorkspaceMemory: MemoryRecord = {
+      ...memory,
+      id: 'expert-workspace-memory-2',
+      revisionId: 'expert-workspace-memory-2-r1',
+      scope: { kind: 'expert-workspace', expertId: expertSummary.id, workspaceId: 'workspace-2' },
+      content: '其他工作空间的内容不应出现在这里。',
+    };
+    installApi({ expert: true, memories: [memory, workspaceMemory, otherWorkspaceMemory] });
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: '专家' }));
     fireEvent.click(await screen.findByRole('button', { name: '查看配置' }));
 
-    expect(await screen.findByText('1 条已确认')).toBeTruthy();
+    expect(await screen.findByText('1 条已确认 · 1 条待确认')).toBeTruthy();
     expect(screen.getByText(memory.content)).toBeTruthy();
+    expect(screen.getByText(workspaceMemory.content)).toBeTruthy();
+    expect(screen.queryByText(otherWorkspaceMemory.content)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '管理记忆' }));
     expect(
       await screen.findByRole('heading', { name: '让长期经验可查看、可确认、可撤回' }),
