@@ -133,7 +133,7 @@ Expert、ExpertRevision 和 TaskContextRevision 都由 Application 层解析。�
 
 材料候选、TaskContextRevision 的显式选择、运行快照、读取足迹和成果输入关系由 Application 层解析。`RunContextSnapshot` 固定 Knowledge 内容修订、ArtifactVersion 和受管输入快照；Agent Core 只收到已经过滤的指令、消息和工具，不读取两个 SQLite 库，也不根据路径自行扩大范围。
 
-材料契约要求 `read_text_file` 在真实 Workspace 路径校验之外匹配当前 Run 的输入快照，`knowledge_search` 接收允许的 Knowledge revision 集合，成果读取按精确 `artifactVersionId` 进行。现有工具仍是 E1 的全应用能力，尚未满足这些过滤要求，E23 才接入；具体身份、恢复和失败语义见[材料、快照与运行来源契约](development/material-contracts.md)。
+材料契约要求 `read_text_file` 在真实 Workspace 路径校验之外匹配当前 Run 的输入快照，`knowledge_search` 接收允许的 Knowledge revision 集合，成果读取按精确 `artifactVersionId` 进行。E23 已将这些过滤接入带 `TaskContext` 的 Run；没有材料范围的旧通用 Run 仍按兼容路径运行。具体身份、恢复和失败语义见[材料、快照与运行来源契约](development/material-contracts.md)。
 
 脚本和 Python Worker 继续以本机用户权限执行。受管输入目录、工作路径和 Application 过滤是产品范围约束，不是 OS 进程沙箱，架构文档不宣称能阻止受信任脚本主动访问本机其他路径。
 
