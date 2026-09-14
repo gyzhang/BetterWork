@@ -13,6 +13,7 @@
 5. 经营分析 Expert 修订保存第一期 ArtifactVersion 作为常用参考；第二期 TaskContext 固定同一 Expert 修订，并以 `expert-reference` 来源注入第一期精确版本。
 6. 第二期 Run 的 `RunContextSnapshot` 直接保存 `expertId + expertRevisionId`，因此即使 Task 草稿继续编辑，历史运行仍能回溯实际采用的专家修订。
 7. 第二期仅读取当前工作空间下该 Expert 的已确认方法记忆；同一 Expert 在其他工作空间的记忆被排除，并将实际读取写入 `run_memory_reads`。
+8. 第二期通过独立 Task/Session/Run 发起，提交给模型的消息只包含第二期目标，不携带第一期对话；两期仍固定同一 Expert 修订。
 
 自动化证据位于 [`expert-two-period-acceptance.test.ts`](../../apps/desktop/src/main/services/expert-two-period-acceptance.test.ts)。真实桌面验收仍需在 macOS 上用脱敏的规则、上期 PPT 和本期表格执行 E55 路径，并记录人工核定数值、网页/MCP 来源和取消/重启操作。自动化测试覆盖 Expert 绑定，但不替代真实窗口走查。
 
