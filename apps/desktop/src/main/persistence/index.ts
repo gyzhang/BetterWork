@@ -5,6 +5,7 @@ import { ArtifactInputRelationRepository } from './artifact-input-relation-repos
 import { ArtifactRepository } from './artifact-repository';
 import { DependencyOperationRepository } from './dependency-operation-repository';
 import { DependencySnapshotRepository } from './dependency-snapshot-repository';
+import { DiscussionCheckpointRepository } from './discussion-checkpoint-repository';
 import { EvidenceRepository } from './evidence-repository';
 import { ExpertRepository } from './expert-repository';
 import { InputSnapshotRepository } from './input-snapshot-repository';
@@ -54,6 +55,7 @@ export class AppStore {
   readonly environments: RuntimeEnvironmentRepository;
   readonly dependencyOperations: DependencyOperationRepository;
   readonly snapshots: DependencySnapshotRepository;
+  readonly discussionCheckpoints: DiscussionCheckpointRepository;
 
   private constructor(private readonly db: Database.Database) {
     this.workspaces = new WorkspaceRepository(db);
@@ -77,6 +79,7 @@ export class AppStore {
     this.environments = new RuntimeEnvironmentRepository(db);
     this.dependencyOperations = new DependencyOperationRepository(db);
     this.snapshots = new DependencySnapshotRepository(db);
+    this.discussionCheckpoints = new DiscussionCheckpointRepository(db);
   }
 
   static open(filePath: string): AppStore {
@@ -110,6 +113,7 @@ export {
   type CreateSnapshotInput,
   DependencySnapshotRepository,
 } from './dependency-snapshot-repository';
+export { DiscussionCheckpointRepository } from './discussion-checkpoint-repository';
 export { EvidenceRepository, type NewEvidence } from './evidence-repository';
 export { type CreateExpertInput, ExpertRepository } from './expert-repository';
 export {

@@ -6,6 +6,7 @@ import {
   chooseInterpreterResultSchema,
   copyExpertRequestSchema,
   copySkillRequestSchema,
+  createDiscussionCheckpointRequestSchema,
   createMemoryRequestSchema,
   deletedResultSchema,
   deleteMcpConnectionRequestSchema,
@@ -14,6 +15,8 @@ import {
   dependencyOptionsSchema,
   dependencyPlanRequestSchema,
   dependencyPlanSchema,
+  discussionCheckpointMutationResultSchema,
+  discussionCheckpointSchema,
   expertDetailSchema,
   expertMutationResultSchema,
   expertRevisionDraftSchema,
@@ -30,6 +33,7 @@ import {
   inputSnapshotSchema,
   IpcChannel,
   listDependencyOptionsRequestSchema,
+  listDiscussionCheckpointsRequestSchema,
   listExpertsRequestSchema,
   listMemoriesRequestSchema,
   listTaskMaterialCandidatesRequestSchema,
@@ -286,6 +290,20 @@ const api: BetterWorkDesktopApi = {
         IpcChannel.SaveTaskContext,
         saveTaskContextRequestSchema.parse(input),
         taskContextMutationResultSchema,
+      ),
+  },
+  discussionCheckpoints: {
+    list: (input) =>
+      invokeValidated(
+        IpcChannel.ListDiscussionCheckpoints,
+        listDiscussionCheckpointsRequestSchema.parse(input),
+        discussionCheckpointSchema.array(),
+      ),
+    create: (input) =>
+      invokeValidated(
+        IpcChannel.CreateDiscussionCheckpoint,
+        createDiscussionCheckpointRequestSchema.parse(input),
+        discussionCheckpointMutationResultSchema,
       ),
   },
   materials: {

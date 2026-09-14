@@ -124,6 +124,10 @@ function installApi(options?: { expert?: boolean; context?: TaskContextRevision 
         }),
       ),
     },
+    discussionCheckpoints: {
+      list: vi.fn(async () => []),
+      create: vi.fn(async () => ({ checkpoint: undefined })),
+    },
     materials: {
       listCandidates: vi.fn(async () => []),
       prepareInputSnapshot: vi.fn(async () => null),

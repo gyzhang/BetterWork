@@ -755,6 +755,55 @@ export const taskContextMutationResultSchema = z
   .strict();
 export type TaskContextMutationResult = z.infer<typeof taskContextMutationResultSchema>;
 
+export const discussionCheckpointStageSchema = z.enum([
+  'understanding',
+  'research-complete',
+  'report-outline',
+  'report',
+  'ppt-outline',
+  'ppt-complete',
+  'iteration',
+]);
+export type DiscussionCheckpointStage = z.infer<typeof discussionCheckpointStageSchema>;
+export const discussionCheckpointStatusSchema = z.enum(['open', 'superseded']);
+export type DiscussionCheckpointStatus = z.infer<typeof discussionCheckpointStatusSchema>;
+export const discussionCheckpointSchema = z
+  .object({
+    id: z.string().min(1),
+    taskId: z.string().min(1),
+    runId: z.string().min(1).optional(),
+    stage: discussionCheckpointStageSchema,
+    status: discussionCheckpointStatusSchema,
+    title: z.string().trim().min(1).max(200),
+    summary: z.string().trim().max(20_000),
+    artifactVersionIds: z.array(z.string().min(1)).max(20),
+    feedback: z.string().trim().max(10_000).optional(),
+    nextAction: z.string().trim().max(10_000).optional(),
+    supersedesId: z.string().min(1).optional(),
+    createdAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type DiscussionCheckpoint = z.infer<typeof discussionCheckpointSchema>;
+export const listDiscussionCheckpointsRequestSchema = z
+  .object({ taskId: z.string().min(1) })
+  .strict();
+export type ListDiscussionCheckpointsRequest = z.infer<
+  typeof listDiscussionCheckpointsRequestSchema
+>;
+export const createDiscussionCheckpointRequestSchema = discussionCheckpointSchema
+  .omit({ status: true, createdAt: true, updatedAt: true })
+  .strict();
+export type CreateDiscussionCheckpointRequest = z.infer<
+  typeof createDiscussionCheckpointRequestSchema
+>;
+export const discussionCheckpointMutationResultSchema = z
+  .object({ checkpoint: discussionCheckpointSchema })
+  .strict();
+export type DiscussionCheckpointMutationResult = z.infer<
+  typeof discussionCheckpointMutationResultSchema
+>;
+
 export const listTaskMaterialCandidatesRequestSchema = z
   .object({ taskId: z.string().min(1).optional(), workspaceId: z.string().min(1).optional() })
   .strict()
@@ -2103,6 +2152,8 @@ export const IpcChannel = {
   SetExpertLifecycle: 'expert:set-lifecycle',
   GetTaskContext: 'task-context:get',
   SaveTaskContext: 'task-context:save',
+  ListDiscussionCheckpoints: 'discussion-checkpoint:list',
+  CreateDiscussionCheckpoint: 'discussion-checkpoint:create',
   ListTaskMaterialCandidates: 'task-material:list-candidates',
   PrepareWorkspaceInputSnapshot: 'task-material:prepare-input-snapshot',
   ListMemories: 'memory:list',
@@ -2225,6 +2276,10 @@ export interface BetterWorkDesktopApi {
   taskContexts: {
     get(input: GetTaskContextRequest): Promise<TaskContextRevision | null>;
     save(input: SaveTaskContextRequest): Promise<TaskContextMutationResult>;
+  };
+  discussionCheckpoints: {
+    list(input: ListDiscussionCheckpointsRequest): Promise<DiscussionCheckpoint[]>;
+    create(input: CreateDiscussionCheckpointRequest): Promise<DiscussionCheckpointMutationResult>;
   };
   materials: {
     listCandidates(input: ListTaskMaterialCandidatesRequest): Promise<MaterialCandidate[]>;

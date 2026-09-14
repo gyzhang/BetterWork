@@ -60,7 +60,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E43 | 网页正文、来源与 E4 验收 | E42 | done | [ADR-0017](../adr/0017-web-fetch-and-evidence-boundary.md) 与 `web_fetch`：Main 注入可取消、15 秒超时、1 MiB 上限、HTTP(S)/公开主机和重定向校验；HTML 正文提取后登记最终 URL/时间/哈希/定位 Evidence。替身覆盖正文、私网、重定向、非正文和取消；真实外网旅程留人工验收。|
 | E50 | Office 输入解析技术定案 | E43 | done | [ADR-0018](../adr/0018-office-input-parsing-boundary.md)、`scripts/office-input-probe.mjs`：JSZip + fast-xml-parser 解析 PPTX，ExcelJS 读取 XLSX，受限 UTF-8/BOM CSV；固定大小、解压、页数和公式缓存边界，`npm run verify` 退出 0，2026-09-14。 |
 | E51 | PPTX/XLSX/CSV 读取与定位 | E50 | done | `OfficeParserService`、`read_office_material` 和材料候选状态已接入；只读 E21 输入快照或精确选中的 PPTX 成果版本，支持 slide/table/notes、Sheet/Range、CSV rows 定位，登记 `parse` 材料足迹；定向测试通过，2026-09-14。 |
-| E52 | 讨论节点与重启后继续/返工 | E51 | todo | — |
+| E52 | 讨论节点与重启后继续/返工 | E51 | done | [ADR-0019](../adr/0019-discussion-checkpoints-and-rework.md)、`DiscussionCheckpointRepository/Service`、IPC 和工作页节点条已接入；客户端 ID 幂等、旧节点替代、重启查询恢复和成果版本归属校验已覆盖，2026-09-14。 |
 | E53 | 经营分析方法与数值校验 | E52 | todo | — |
 | E54 | 报告/PPT 交付、修订及来源 | E53 | todo | — |
 | E55 | 连续两期真实桌面验收 | E54 | todo | — |
@@ -257,6 +257,9 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 - 失败/取消：重启恢复待审内容；过期版本反馈有冲突提示；返工不覆盖后续旧成果，也不自动重发旧请求；取消不丢已完成节点。
 - 必测：推进、返工、双重提交、重启、材料变化导致依赖重新确认、Run 终态唯一。
 - 完成：同一专家真实持续协作，不引入通用 DAG 或 run.waiting。
+
+- 实现：迁移 v19 新增 `discussion_checkpoints`；结构化请求保存阶段、结论、反馈、下一步、来源 Run 和 ArtifactVersion。工作页显示当前节点、历史替代状态和轻量记录表单；保存返工节点会原子标记上一节点为 `superseded`，重启后通过 IPC 从 SQLite 恢复。
+- 验证：Repository 覆盖客户端 ID 幂等与替代，Service 覆盖 Task/Run/成果归属，IPC 注册与 Renderer 表单覆盖结构化提交；不自动解析自然语言或维持运行中等待。
 
 ### E53 经营分析方法与确定性结果
 

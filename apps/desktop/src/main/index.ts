@@ -19,6 +19,7 @@ import { createPptxRenderer } from './infrastructure/pptx-renderer';
 import { registerIpc } from './ipc/register-ipc';
 import { AppStore } from './persistence';
 import { createQuitHandler } from './services/application-shutdown';
+import { DiscussionCheckpointService } from './services/discussion-checkpoint-service';
 import { ExecutionOutputService } from './services/execution-output-service';
 import { type BuiltinExpertReleaseManifest, ExpertService } from './services/expert-service';
 import { FileArtifactService } from './services/file-artifact-service';
@@ -79,6 +80,7 @@ function bootstrap(): ApplicationContext {
     console.error('Memory projection rebuild failed', error);
   });
   const taskMaterials = new TaskMaterialService({ store, knowledgeVault, inputSnapshots });
+  const discussionCheckpoints = new DiscussionCheckpointService(store);
   inputSnapshots
     .recover()
     .then((recovered) => {
@@ -265,6 +267,7 @@ function bootstrap(): ApplicationContext {
     store,
     knowledgeVault,
     taskMaterials,
+    discussionCheckpoints,
     memories,
     mcpClientService,
     notifications,
