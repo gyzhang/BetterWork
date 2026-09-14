@@ -42,3 +42,9 @@
 - CUA 能看到 Chrome 标签页，但原生 macOS 窗口仍处于锁屏状态，无法启动或操作 BetterWork Electron 窗口。
 - 模型端点 `http://10.62.64.38:30808/api/inference/v1/models` 仍在 4 秒内无响应（curl exit 28）。
 - 因此真实两期 Run、取消/重启、MCP 业务调用和安装态旅程仍没有可记录的新证据。
+
+## 2026-09-15 真实窗口召唤走查
+
+- CUA 已确认 macOS 解锁并启动开发态 Electron 窗口；从“专家”列表点击“研究分析专家 → 召唤”后，工作台显示当前专家和“经营分析方法” Skill，未出现任务准备表单或二次确认页。
+- 使用脱敏的经营分析输入启动一次真实 Run；界面先进入“进行中”，随后进入“失败”，消息中心显示具体原因：`无法连接模型服务（http://10.62.64.38:30808/api/inference/v1）：fetch failed`。SQLite `run_events` 同步记录 `run.started → run.failed`，Run 终态完整。
+- 本次走查证明专家召唤和失败反馈已真实接线；模型服务不可用，因此不把该次 Run 记为连续两期业务成功，E55/E56 继续保持 `partial`。
