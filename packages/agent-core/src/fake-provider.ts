@@ -46,6 +46,19 @@ const TOOL_TRIGGERS: readonly ToolTrigger[] = [
     toInput: (url) => ({ url: url.trim() }),
   },
   {
+    pattern: /^(?:读取 Office|读取表格|read office)\s*[:：]?\s*(.+)$/iu,
+    tool: 'read_office_material',
+    reasoning: '读取用户明确选择的 Office 材料片段。',
+    toInput: (value) => {
+      try {
+        const parsed: unknown = JSON.parse(value);
+        return isRecord(parsed) ? parsed : {};
+      } catch {
+        return { sourceKind: 'workspace-input-snapshot', snapshotId: value.trim() };
+      }
+    },
+  },
+  {
     pattern: /^(?:读取|read)\s*[:：]?\s*(.+)$/iu,
     tool: 'read_text_file',
     reasoning: '读取工作区内的文本文件。',
@@ -107,6 +120,10 @@ function summarizeToolResult(toolName: string | undefined, rawContent: string): 
 
   if (toolName === 'web_fetch') {
     return `网页正文如下：\n\n${readText(output?.content) || rawContent}`;
+  }
+
+  if (toolName === 'read_office_material') {
+    return `Office 材料片段如下：\n\n${rawContent}`;
   }
 
   return `文件内容如下：\n\n${readText(output?.content) || rawContent}`;

@@ -7,6 +7,7 @@ import type { WebFetch } from '@betterwork/tool-runtime';
 import type { BrowserWindow } from 'electron';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { OfficeParserService } from '../infrastructure/office-parser';
 import type { ProcessSupervisor } from '../infrastructure/process-supervisor';
 import { AppStore } from '../persistence';
 import { InputSnapshotService } from './input-snapshot-service';
@@ -112,6 +113,7 @@ const createService = (
   window?: WindowStub,
   skillExecutionService?: SkillExecutionService,
   webFetch?: WebFetch,
+  officeParser?: OfficeParserService,
 ): RunService =>
   new RunService(
     fixture.store,
@@ -129,13 +131,18 @@ const createService = (
     fixture.memories,
     undefined,
     webFetch,
+    officeParser,
   );
 
 const statusOf = (fixture: Fixture, runId: string): string | undefined =>
   fixture.store.runs.list().find((run) => run.id === runId)?.status;
 
-const waitForCompletion = async (fixture: Fixture, runId: string): Promise<void> => {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
+const waitForCompletion = async (
+  fixture: Fixture,
+  runId: string,
+  maxAttempts = 200,
+): Promise<void> => {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     if (statusOf(fixture, runId) !== 'running') return;
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
@@ -589,6 +596,75 @@ describe('RunService', () => {
         title: '财务规则页面',
         locator: 'text/html · HTTP 200',
       }),
+    ]);
+  });
+
+  it('parses a selected CSV through read_office_material and records its locator', async () => {
+    const fixture = await createFixture();
+    const sourcePath = path.join(fixture.directory, 'monthly.csv');
+    await writeFile(sourcePath, 'month,revenue\n2026-09,120\n');
+    const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+    if (!workspaceId) throw new Error('workspace missing');
+    const receipt = await fixture.inputSnapshots.create({
+      workspaceId,
+      workspaceRoot: fixture.directory,
+      sourcePath,
+    });
+    const context = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+      builtinToolPolicy: { mode: 'allow-list', toolNames: ['read_office_material'] },
+      materials: [
+        {
+          reference: {
+            kind: 'workspace-input-snapshot',
+            snapshotId: receipt.snapshot.id,
+            workspaceId,
+            contentHash: receipt.snapshot.contentHash,
+            format: receipt.snapshot.format,
+            fileKey: receipt.snapshot.fileKey,
+          },
+          purpose: 'current-input',
+          addedFrom: 'user-input',
+        },
+      ],
+    });
+    const service = createService(
+      fixture,
+      undefined,
+      undefined,
+      undefined,
+      new OfficeParserService(),
+    );
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: `读取 Office: ${JSON.stringify({
+        sourceKind: 'workspace-input-snapshot',
+        snapshotId: receipt.snapshot.id,
+      })}`,
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    await waitForCompletion(fixture, runId, 800);
+
+    expect(statusOf(fixture, runId)).toBe('completed');
+    expect(fixture.store.runs.listEvents(runId)).toContainEqual(
+      expect.objectContaining({
+        type: 'tool.completed',
+        output: expect.objectContaining({
+          format: 'csv',
+          sections: [
+            expect.objectContaining({
+              locator: 'rows:1-2',
+              kind: 'cells',
+            }),
+          ],
+        }),
+      }),
+    );
+    expect(fixture.store.materialReads.listByRun(runId)).toEqual([
+      expect.objectContaining({ runId, operation: 'parse', locator: 'rows:1-2' }),
     ]);
   });
 
