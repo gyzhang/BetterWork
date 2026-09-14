@@ -154,4 +154,34 @@ describe('MemoryRepository', () => {
     ).toThrow('记忆内容哈希不一致');
     expect(repository.listReads(runId)).toHaveLength(0);
   });
+
+  it('rejects a memory read outside the Run workspace', () => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    const repository = store.memories;
+    const firstWorkspace = store.workspaces.getOrCreate('/tmp/memory-scope-a', '空间一');
+    const secondWorkspace = store.workspaces.getOrCreate('/tmp/memory-scope-b', '空间二');
+    const task = store.tasks.create(firstWorkspace.id, '读记忆', '校验范围');
+    const runId = randomUUID();
+    store.runs.create({
+      id: runId,
+      taskId: task.task.id,
+      sessionId: task.sessionId,
+      prompt: 'test',
+      status: 'running',
+      createdAt: Date.now(),
+    });
+    const memory = repository.create({
+      scope: { kind: 'workspace', workspaceId: secondWorkspace.id },
+      kind: 'semantic',
+      content: '另一空间记忆',
+      sourceType: 'user-explicit',
+      status: 'confirmed',
+    });
+
+    expect(() => repository.recordReads([{ runId, memory, capturedAt: Date.now() }])).toThrow(
+      '记忆范围不适用于该 Run',
+    );
+    expect(repository.listReads(runId)).toHaveLength(0);
+  });
 });
