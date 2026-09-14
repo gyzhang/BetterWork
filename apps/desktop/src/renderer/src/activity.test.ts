@@ -97,4 +97,20 @@ describe('deriveActivityGroups', () => {
       }),
     );
   });
+
+  it('shows the cancellation reason when a capability revocation stops a run', () => {
+    const groups = deriveActivityGroups([
+      event('run.started', { taskId: 'task-1', sessionId: 'session-1' }, 0),
+      event('run.cancelled', { reason: '技能「经营分析方法」的信任已被撤销，本次运行被终止' }, 1),
+    ]);
+
+    expect(groups).toContainEqual(
+      expect.objectContaining({
+        id: 'finish',
+        title: '任务已停止',
+        description: '技能「经营分析方法」的信任已被撤销，本次运行被终止',
+        status: 'cancelled',
+      }),
+    );
+  });
 });

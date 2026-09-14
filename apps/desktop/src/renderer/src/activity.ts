@@ -117,7 +117,9 @@ export function deriveActivityGroups(events: AgentRuntimeEvent[]): ActivityGroup
         terminalStatus === 'completed'
           ? '本次工作已保存到最近任务'
           : terminalStatus === 'cancelled'
-            ? '你可以随时重新开始这项工作'
+            ? latest.type === 'run.cancelled' && latest.reason
+              ? latest.reason
+              : '你可以随时重新开始这项工作'
             : latest.type === 'run.failed'
               ? latest.error
               : '',
