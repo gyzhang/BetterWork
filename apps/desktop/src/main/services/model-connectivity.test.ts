@@ -104,8 +104,22 @@ describe('probeModelConnection', () => {
     });
     const result = await probeModelConnection(target());
     expect(result.ok).toBe(false);
+    expect(result.message).toContain('https://host/v1/chat/completions');
     expect(result.message).toContain('ECONNREFUSED');
     expect(result.message).not.toContain('secret-key');
+  });
+
+  it('redacts credentials and query parameters from an endpoint diagnostic', async () => {
+    stubFetch(() => {
+      throw new Error('fetch failed');
+    });
+    const result = await probeModelConnection(
+      target({ baseUrl: 'https://user:secret@host/v1?api_key=query-secret' }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('https://host/v1/chat/completions');
+    expect(result.message).not.toContain('secret');
+    expect(result.message).not.toContain('query-secret');
   });
 
   it('turns an invalid base url into a failed probe instead of throwing', async () => {

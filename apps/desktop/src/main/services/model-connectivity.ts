@@ -25,16 +25,18 @@ const PROBE_MAX_TOKENS = 8;
  * 而这里要拿它去发起网络请求，必须在边界上收窄。
  */
 export function resolveEndpoint(baseUrl: string, role: ModelRole): string {
-  const normalized = baseUrl.replace(/\/+$/, '');
-  const url = new URL(normalized);
+  const url = new URL(baseUrl);
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new Error('模型 API 地址必须是 http 或 https');
   }
+  const normalizedPath = url.pathname.replace(/\/+$/, '');
   // 用户可能已经写全了端点，两种后缀都要认，否则会被再拼一次路径
-  if (normalized.endsWith('/chat/completions') || normalized.endsWith('/embeddings')) {
-    return normalized;
+  if (normalizedPath.endsWith('/chat/completions') || normalizedPath.endsWith('/embeddings')) {
+    url.pathname = normalizedPath;
+    return url.toString();
   }
-  return `${normalized}/${role === 'embedding' ? 'embeddings' : 'chat/completions'}`;
+  url.pathname = `${normalizedPath}/${role === 'embedding' ? 'embeddings' : 'chat/completions'}`;
+  return url.toString();
 }
 
 const buildProbeBody = (target: ModelConnectionTarget): unknown =>
@@ -48,6 +50,19 @@ const buildProbeBody = (target: ModelConnectionTarget): unknown =>
 
 const successMessage = (role: ModelRole): string =>
   role === 'embedding' ? 'Embedding 模型连接成功' : '模型连接成功';
+
+const displayEndpoint = (value: string): string => {
+  try {
+    const url = new URL(value);
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return value;
+  }
+};
 
 /**
  * 用一次最小请求验证模型服务可达。
@@ -83,6 +98,10 @@ export async function probeModelConnection(
     if (error instanceof Error && error.name === 'TimeoutError') {
       return { ok: false, message: `连接超时（超过 ${PROBE_TIMEOUT_MS / 1000} 秒）` };
     }
-    return { ok: false, message: error instanceof Error ? error.message : '连接失败' };
+    const detail = error instanceof Error ? error.message : '连接失败';
+    return {
+      ok: false,
+      message: `无法连接模型服务（${displayEndpoint(endpoint)}）：${detail}`,
+    };
   }
 }
