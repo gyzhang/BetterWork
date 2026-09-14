@@ -55,6 +55,7 @@ export interface AgentRunInput {
   tools: AgentTool[];
   signal: AbortSignal;
   maxToolRounds?: number;
+  expertInstruction?: string;
   skillInstructions?: SkillInstruction[];
 }
 

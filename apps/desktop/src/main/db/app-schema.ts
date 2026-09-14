@@ -624,6 +624,28 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 10,
+    name: 'add task context revisions',
+    up(db: Database.Database): void {
+      db.exec(`
+        CREATE TABLE task_context_revisions (
+          id TEXT PRIMARY KEY,
+          task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          revision INTEGER NOT NULL CHECK (revision > 0),
+          executor_json TEXT NOT NULL,
+          skill_bindings_json TEXT NOT NULL,
+          model_reference_json TEXT,
+          builtin_tool_policy_json TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          UNIQUE(task_id, revision)
+        );
+        CREATE INDEX idx_task_context_revisions_task
+          ON task_context_revisions(task_id, revision DESC);
+      `);
+    },
+  },
 ];
 
 /**

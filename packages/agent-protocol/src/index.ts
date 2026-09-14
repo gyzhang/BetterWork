@@ -109,8 +109,20 @@ export const startRunRequestSchema = z
     prompt: z.string().trim().min(1),
     /** 缺失表示本次 Run 不携带任何 Skill——不延续同 Task 的历史绑定。 */
     skillBindings: runSkillBindingsSchema.optional(),
+    /** E12 起可显式提交 TaskContextRevision；缺失保持旧通用助手路径。 */
+    taskContextRevisionId: z.string().min(1).optional(),
+    expectedTaskContextRevision: z.number().int().positive().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((input, context) => {
+    if (input.taskContextRevisionId && input.expectedTaskContextRevision === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['expectedTaskContextRevision'],
+        message: '提交 TaskContextRevision 时必须带 expectedTaskContextRevision',
+      });
+    }
+  });
 export type StartRunRequest = z.infer<typeof startRunRequestSchema>;
 
 export const skillSourceKindSchema = z.enum(['builtin', 'user']);
@@ -347,6 +359,48 @@ export type SetExpertLifecycleRequest = z.infer<typeof setExpertLifecycleRequest
 
 export const expertMutationResultSchema = z.object({ expert: expertDetailSchema }).strict();
 export type ExpertMutationResult = z.infer<typeof expertMutationResultSchema>;
+
+export const taskContextExecutorSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('general') }).strict(),
+  z
+    .object({
+      kind: z.literal('expert'),
+      expertId: z.string().min(1),
+      expertRevisionId: z.string().min(1),
+    })
+    .strict(),
+]);
+export type TaskContextExecutor = z.infer<typeof taskContextExecutorSchema>;
+
+export const taskContextSkillBindingSchema = z
+  .object({
+    skillId: z.string().min(1),
+    revisionId: z.string().min(1),
+    source: z.enum(['expert-preset', 'task-selection']),
+  })
+  .strict();
+export type TaskContextSkillBinding = z.infer<typeof taskContextSkillBindingSchema>;
+
+export const taskContextRevisionSchema = z
+  .object({
+    id: z.string().min(1),
+    taskId: z.string().min(1),
+    revision: z.number().int().positive(),
+    executor: taskContextExecutorSchema,
+    skillBindings: z
+      .array(taskContextSkillBindingSchema)
+      .max(MAX_RUN_SKILL_BINDINGS)
+      .refine(
+        (bindings) => new Set(bindings.map((binding) => binding.skillId)).size === bindings.length,
+        { message: 'skillBindings 中存在重复的 skillId' },
+      ),
+    modelReference: expertModelReferenceSchema.optional(),
+    builtinToolPolicy: builtinToolPolicySchema.optional(),
+    createdAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type TaskContextRevision = z.infer<typeof taskContextRevisionSchema>;
 
 export const listSkillsRequestSchema = z.object({}).strict();
 export type ListSkillsRequest = z.infer<typeof listSkillsRequestSchema>;
