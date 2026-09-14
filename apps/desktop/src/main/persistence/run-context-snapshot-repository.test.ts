@@ -54,4 +54,81 @@ describe('RunContextSnapshotRepository', () => {
     });
     expect(store.runContextSnapshots.latestByTask(task.task.id)?.runId).toBe('run-snapshot-1');
   });
+
+  it('persists the immutable Expert identity and revision used by a Run', () => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    const workspace = store.workspaces.getOrCreate(
+      '/tmp/betterwork-expert-snapshot-test',
+      '专家工作区',
+    );
+    const task = store.tasks.create(workspace.id, '专家任务', '验证专家快照');
+    const expert = store.experts.create({
+      sourceKind: 'user',
+      revision: {
+        name: '月报专家',
+        summary: '测试',
+        identity: '负责月报',
+        principles: [],
+        inputRequirements: [],
+        deliveryRequirements: [],
+        skillPreset: [],
+        builtinToolPolicy: { mode: 'application-defaults' },
+        modelReference: { mode: 'application-default' },
+      },
+    });
+    store.runs.create({
+      id: 'run-expert-snapshot-1',
+      taskId: task.task.id,
+      sessionId: task.sessionId,
+      prompt: '测试',
+      status: 'running',
+      createdAt: 1,
+    });
+    store.runContextSnapshots.create({
+      runId: 'run-expert-snapshot-1',
+      taskId: task.task.id,
+      workspaceId: workspace.id,
+      expertId: expert.id,
+      expertRevisionId: expert.revision.id,
+      contextSegmentId: 'segment-expert-1',
+      materials: [],
+      createdAt: 2,
+    });
+
+    expect(store.runContextSnapshots.get('run-expert-snapshot-1')).toMatchObject({
+      expertId: expert.id,
+      expertRevisionId: expert.revision.id,
+    });
+  });
+
+  it('rejects a partially specified Expert binding', () => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    const workspace = store.workspaces.getOrCreate(
+      '/tmp/betterwork-partial-expert-snapshot-test',
+      '工作区',
+    );
+    const task = store.tasks.create(workspace.id, '任务', '验证');
+    store.runs.create({
+      id: 'run-partial-expert-snapshot-1',
+      taskId: task.task.id,
+      sessionId: task.sessionId,
+      prompt: '测试',
+      status: 'running',
+      createdAt: 1,
+    });
+
+    expect(() =>
+      store.runContextSnapshots.create({
+        runId: 'run-partial-expert-snapshot-1',
+        taskId: task.task.id,
+        workspaceId: workspace.id,
+        expertId: 'expert-only',
+        contextSegmentId: 'segment-partial-1',
+        materials: [],
+        createdAt: 2,
+      }),
+    ).toThrow('Run expert snapshot must include both expertId and expertRevisionId');
+  });
 });

@@ -858,6 +858,18 @@ export const appMigrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 21,
+    name: 'add run expert binding snapshot',
+    up(db: Database.Database): void {
+      db.exec(`
+        ALTER TABLE run_context_snapshots
+          ADD COLUMN expert_id TEXT REFERENCES experts(id) ON DELETE RESTRICT;
+        ALTER TABLE run_context_snapshots
+          ADD COLUMN expert_revision_id TEXT REFERENCES expert_revisions(id) ON DELETE RESTRICT;
+      `);
+    },
+  },
 ];
 
 /**

@@ -94,6 +94,7 @@ interface ResolvedRunContext {
   materialScope: boolean;
   taskContextRevisionId?: string;
   expertId?: string;
+  expertRevisionId?: string;
   memoryRecords: MemoryRecord[];
   excludedMemoryIds: string[];
   mcpToolBindings: McpToolBinding[];
@@ -278,6 +279,10 @@ export class RunService {
           workspaceId,
           ...(executionContext.taskContextRevisionId
             ? { taskContextRevisionId: executionContext.taskContextRevisionId }
+            : {}),
+          ...(executionContext.expertId ? { expertId: executionContext.expertId } : {}),
+          ...(executionContext.expertRevisionId
+            ? { expertRevisionId: executionContext.expertRevisionId }
             : {}),
           contextSegmentId,
           materials: executionContext.materials,
@@ -1015,6 +1020,7 @@ export class RunService {
       materialScope: true,
       taskContextRevisionId: context.id,
       expertId: context.executor.expertId,
+      expertRevisionId: context.executor.expertRevisionId,
       memoryRecords: [],
       excludedMemoryIds: context.excludedMemoryIds ?? [],
       mcpToolBindings: context.mcpToolBindings ?? [],
