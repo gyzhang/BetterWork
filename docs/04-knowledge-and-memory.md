@@ -109,56 +109,53 @@ E22 已能把具体 Knowledge revision 的身份、哈希和用途保存到 Task
 
 ## 6. 三层记忆体系
 
-> **现状：E30 已完成记忆治理定案，E31/E32 尚未实现。** 属 E3 范围（见 [开发计划](development/tasks-experts.md)），架构决策见 [ADR-0004](adr/0004-hybrid-memory.md) 与 [ADR-0015](adr/0015-memory-scope-and-governance.md)。当前没有 `memory/` 目录、没有 `MemoryRecord` 表、没有记忆中心与后台反思。Run 历史与 Session 标识已持久化，但执行链路尚未把记忆作为模型上下文传入，因此不会把历史聊天当作隐式记忆。
+> **现状：E31 已完成记忆存储、作用域检索、运行注入和受管投影，E32 尚未实现管理 UI 与对话确认。** 属 E3 范围（见 [开发计划](development/tasks-experts.md)），架构决策见 [ADR-0004](adr/0004-hybrid-memory.md) 与 [ADR-0015](adr/0015-memory-scope-and-governance.md)。SQLite 的 `MemoryRecord` 修订是唯一真相源；每次新 Run 只注入有效的 `confirmed` 记录，最多 16 条且总内容不超过 6,000 个 Unicode 字符，并记录实际读取的修订与哈希。Markdown 只读投影按 User/Workspace/Expert/Expert×Workspace 作用域重建，不能回写数据库。当前没有自动反思、Embedding 或向量索引，候选确认、编辑、删除和“本任务不用”仍留 E32。
 
-### Core Memory Files（E31 投影目标）
+### Core Memory Files（E31 已实现的受管投影）
 
 短小、透明、可编辑的渐进文档：
 
 ```text
 memory/
 ├── user/
-│   ├── index.md
-│   ├── profile.md
-│   ├── preferences.md
-│   └── terminology.md
-├── workspaces/<id>/
-│   ├── index.md
-│   ├── context.md
-│   ├── conventions.md
-│   └── decisions.md
-└── experts/<id>/
-    ├── index.md
-    ├── methods.md
-    └── lessons.md
+│   └── index.md
+├── workspaces/<id>/index.md
+├── experts/<id>/index.md
+└── expert-workspaces/<expertId>/<workspaceId>/index.md
 ```
 
-索引文件提供概要和链接；详细文档按需加载。
+E31 先生成每个作用域的单一 `index.md`；后续切片再增加可按需加载的详细文档和检索索引。
 
-### Structured Memory Store（E31 实现目标）
+### Structured Memory Store（E31 已实现）
 
 SQLite 保存来源、Scope、置信度、状态和时间语义：
 
 ```ts
 interface MemoryRecord {
   id: string;
-  scope: "user" | "workspace" | "expert" | "task";
-  scopeId: string;
+  revisionId: string;
+  revision: number;
+  scope:
+    | { kind: "user" }
+    | { kind: "workspace"; workspaceId: string }
+    | { kind: "expert"; expertId: string }
+    | { kind: "expert-workspace"; expertId: string; workspaceId: string };
   kind: "semantic" | "episodic" | "procedural" | "preference";
   content: string;
   sourceType: "user-explicit" | "conversation" | "artifact" | "reflection";
   sourceId?: string;
   confidence: number;
-  status: "candidate" | "confirmed" | "superseded" | "deleted";
+  status: "candidate" | "confirmed" | "superseded" | "expired" | "deleted";
   validFrom?: number;
   validUntil?: number;
   supersedesId?: string;
+  contentHash: string;
   createdAt: number;
   updatedAt: number;
 }
 ```
 
-### Derived Retrieval Index（E31 首轮只做 FTS/稳定前缀）
+### Derived Retrieval Index（后续切片）
 
 Memory 文件和 MemoryRecord 共同生成全文与向量索引。索引不是长期真相源，可以随时重建。
 

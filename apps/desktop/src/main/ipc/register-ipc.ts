@@ -18,6 +18,7 @@ import {
   copyExpertRequestSchema,
   copySkillRequestSchema,
   createdTaskSchema,
+  createMemoryRequestSchema,
   createTaskRequestSchema,
   deletedResultSchema,
   deleteSkillRequestSchema,
@@ -59,6 +60,7 @@ import {
   listDependencyOptionsRequestSchema,
   listEvidenceRequestSchema,
   listExpertsRequestSchema,
+  listMemoriesRequestSchema,
   listRunEventsRequestSchema,
   listRunsRequestSchema,
   listSkillsRequestSchema,
@@ -68,6 +70,8 @@ import {
   markNotificationReadRequestSchema,
   materialCandidateSchema,
   maximizedResultSchema,
+  memoryMutationResultSchema,
+  memoryRecordSchema,
   modelProfileIdSchema,
   modelProfileSummarySchema,
   modelSaveResultSchema,
@@ -102,6 +106,7 @@ import {
   searchKnowledgeRequestSchema,
   setDefaultModelRequestSchema,
   setExpertLifecycleRequestSchema,
+  setMemoryStatusRequestSchema,
   setModelEnabledRequestSchema,
   setSkillEnabledRequestSchema,
   setSkillTrustRequestSchema,
@@ -120,6 +125,7 @@ import {
   testSkillRunResultSchema,
   unreadCountResultSchema,
   updatedResultSchema,
+  updateMemoryRequestSchema,
   updateWindowThemeRequestSchema,
   voidResultSchema,
   windowToggleMaximizeRequestSchema,
@@ -134,6 +140,7 @@ import type { AppStore } from '../persistence';
 import type { ExpertService } from '../services/expert-service';
 import type { FileArtifactService } from '../services/file-artifact-service';
 import type { KnowledgeVault } from '../services/knowledge-vault';
+import type { MemoryService } from '../services/memory-service';
 import { probeModelConnection } from '../services/model-connectivity';
 import type { NotificationService } from '../services/notification-service';
 import type { RunService } from '../services/run-service';
@@ -154,6 +161,7 @@ export interface IpcDependencies {
   readonly runs: RunService;
   readonly skillService: SkillService;
   readonly expertService: ExpertService;
+  readonly memories: MemoryService;
   readonly dependencies: SkillDependencyService;
   readonly snapshots: ToolchainSnapshotService;
   readonly fileArtifactService?: FileArtifactService;
@@ -247,6 +255,7 @@ export function registerIpc(deps: IpcDependencies): void {
   registerSearchEngineChannels(deps);
   registerSkillChannels(deps);
   registerExpertChannels(deps);
+  registerMemoryChannels(deps);
   registerDependencyChannels(deps);
   registerNotificationChannels(deps);
   registerWindowChannels(deps);
@@ -1035,6 +1044,33 @@ function registerExpertChannels({ expertService }: IpcDependencies): void {
     (input) => ({
       expert: expertService.setLifecycle(input.expertId, input.lifecycle, input.expectedRevision),
     }),
+  );
+}
+
+function registerMemoryChannels({ memories }: IpcDependencies): void {
+  handleOptionalInput(
+    IpcChannel.ListMemories,
+    listMemoriesRequestSchema,
+    z.array(memoryRecordSchema),
+    (input) => memories.list(input),
+  );
+  handleInput(
+    IpcChannel.CreateMemory,
+    createMemoryRequestSchema,
+    memoryMutationResultSchema,
+    (input) => ({ memory: memories.create(input) }),
+  );
+  handleInput(
+    IpcChannel.UpdateMemory,
+    updateMemoryRequestSchema,
+    memoryMutationResultSchema,
+    (input) => ({ memory: memories.update(input) }),
+  );
+  handleInput(
+    IpcChannel.SetMemoryStatus,
+    setMemoryStatusRequestSchema,
+    memoryMutationResultSchema,
+    (input) => ({ memory: memories.setStatus(input) }),
   );
 }
 

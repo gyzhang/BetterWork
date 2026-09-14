@@ -8,6 +8,7 @@ import { DependencySnapshotRepository } from './dependency-snapshot-repository';
 import { EvidenceRepository } from './evidence-repository';
 import { ExpertRepository } from './expert-repository';
 import { InputSnapshotRepository } from './input-snapshot-repository';
+import { MemoryRepository } from './memory-repository';
 import { ModelRepository } from './model-repository';
 import { NotificationRepository } from './notification-repository';
 import { RunContextSnapshotRepository } from './run-context-snapshot-repository';
@@ -43,6 +44,7 @@ export class AppStore {
   readonly artifacts: ArtifactRepository;
   readonly artifactInputRelations: ArtifactInputRelationRepository;
   readonly models: ModelRepository;
+  readonly memories: MemoryRepository;
   readonly searchEngines: SearchEngineRepository;
   readonly notifications: NotificationRepository;
   readonly skills: SkillRepository;
@@ -64,6 +66,7 @@ export class AppStore {
     this.artifacts = new ArtifactRepository(db);
     this.artifactInputRelations = new ArtifactInputRelationRepository(db);
     this.models = new ModelRepository(db);
+    this.memories = new MemoryRepository(db);
     this.searchEngines = new SearchEngineRepository(db);
     this.notifications = new NotificationRepository(db);
     this.skills = new SkillRepository(db);
@@ -112,6 +115,12 @@ export {
   InputSnapshotRepository,
   type InputSnapshotStatus,
 } from './input-snapshot-repository';
+export {
+  MemoryConflictError,
+  type MemoryReadInput,
+  MemoryRepository,
+  MemoryValidationError,
+} from './memory-repository';
 export { ModelRepository, type RunnableModel } from './model-repository';
 export { NotificationRepository } from './notification-repository';
 export {

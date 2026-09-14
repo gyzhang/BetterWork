@@ -10,6 +10,7 @@ import type { ProcessSupervisor } from '../infrastructure/process-supervisor';
 import { AppStore } from '../persistence';
 import { InputSnapshotService } from './input-snapshot-service';
 import { KnowledgeVault } from './knowledge-vault';
+import { MemoryService } from './memory-service';
 import { NotificationService } from './notification-service';
 import { createRunTools, RunService } from './run-service';
 import { SkillExecutionService } from './skill-execution-service';
@@ -65,6 +66,7 @@ interface Fixture {
   skillService: SkillService;
   inputSnapshots: InputSnapshotService;
   taskMaterials: TaskMaterialService;
+  memories: MemoryService;
   taskId: string;
   sessionId: string;
 }
@@ -82,6 +84,7 @@ const createFixture = async (): Promise<Fixture> => {
   openVaults.push(vault);
   const inputSnapshots = new InputSnapshotService(store, directory);
   const taskMaterials = new TaskMaterialService({ store, knowledgeVault: vault, inputSnapshots });
+  const memories = new MemoryService(store, directory);
   const skillService = new SkillService(store, {
     developmentBuiltinRoot: path.join(directory, 'builtin-dev'),
     installedBuiltinRoot: path.join(directory, 'builtin-installed'),
@@ -97,6 +100,7 @@ const createFixture = async (): Promise<Fixture> => {
     skillService,
     inputSnapshots,
     taskMaterials,
+    memories,
     taskId: created.task.id,
     sessionId: created.sessionId,
   };
@@ -120,6 +124,7 @@ const createService = (
     undefined,
     fixture.inputSnapshots,
     fixture.taskMaterials,
+    fixture.memories,
   );
 
 const statusOf = (fixture: Fixture, runId: string): string | undefined =>
@@ -134,6 +139,29 @@ const waitForCompletion = async (fixture: Fixture, runId: string): Promise<void>
 };
 
 describe('RunService', () => {
+  it('injects confirmed workspace memories and records their exact revisions', async () => {
+    const fixture = await createFixture();
+    const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+    if (!workspaceId) throw new Error('workspace missing');
+    const memory = fixture.store.memories.create({
+      scope: { kind: 'workspace', workspaceId },
+      kind: 'procedural',
+      content: '经营月报必须先核对财务规则。',
+      sourceType: 'user-explicit',
+      status: 'confirmed',
+    });
+    const service = createService(fixture);
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '准备本月经营分析。',
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('completed');
+    expect(fixture.store.memories.listReads(runId)).toEqual([memory]);
+  });
+
   it('records local knowledge search results as task evidence', async () => {
     const fixture = await createFixture();
     const note = path.join(fixture.directory, '客户资料.md');

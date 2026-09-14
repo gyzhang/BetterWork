@@ -734,6 +734,49 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 15,
+    name: 'add memory records and run memory reads',
+    up(db: Database.Database): void {
+      db.exec(`
+        CREATE TABLE memory_records (
+          revision_id TEXT PRIMARY KEY,
+          id TEXT NOT NULL,
+          revision INTEGER NOT NULL CHECK (revision > 0),
+          scope_kind TEXT NOT NULL CHECK (scope_kind IN ('user', 'workspace', 'expert', 'expert-workspace')),
+          scope_id TEXT NOT NULL,
+          expert_id TEXT REFERENCES experts(id) ON DELETE CASCADE,
+          workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
+          kind TEXT NOT NULL CHECK (kind IN ('semantic', 'episodic', 'procedural', 'preference')),
+          content TEXT NOT NULL,
+          source_type TEXT NOT NULL CHECK (source_type IN ('user-explicit', 'conversation', 'artifact', 'reflection')),
+          source_id TEXT,
+          source_locator TEXT,
+          confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+          status TEXT NOT NULL CHECK (status IN ('candidate', 'confirmed', 'superseded', 'expired', 'deleted')),
+          valid_from INTEGER,
+          valid_until INTEGER,
+          supersedes_id TEXT,
+          content_hash TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          UNIQUE(id, revision)
+        );
+        CREATE INDEX idx_memory_records_latest ON memory_records(id, revision DESC);
+        CREATE INDEX idx_memory_records_scope ON memory_records(scope_kind, scope_id, status, updated_at DESC);
+        CREATE TABLE run_memory_reads (
+          id TEXT PRIMARY KEY,
+          run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+          memory_id TEXT NOT NULL,
+          memory_revision_id TEXT NOT NULL REFERENCES memory_records(revision_id) ON DELETE RESTRICT,
+          content_hash TEXT NOT NULL,
+          captured_at INTEGER NOT NULL,
+          UNIQUE(run_id, memory_revision_id)
+        );
+        CREATE INDEX idx_run_memory_reads_run ON run_memory_reads(run_id, captured_at ASC);
+      `);
+    },
+  },
 ];
 
 /**
