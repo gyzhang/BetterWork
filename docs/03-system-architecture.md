@@ -129,6 +129,14 @@ Expert、ExpertRevision 和 TaskContextRevision 都由 Application 层解析。�
 
 启动事务先登记运行所需的 Expert/模型/工具引用和 `run_skill_bindings`，成功提交后才把 `AgentRunInput` 交给 Agent Core。事务失败不留下半个可执行 Run；配置编辑不热换运行中的输入。Agent Core 不读取 Expert、TaskContext、SQLite 或文件，它只接收已解析的指令、消息、工具和模型。精确字段、错误码和旧 Task 迁移见[专家与任务上下文契约](development/expert-contracts.md)。
 
+### 4.2 材料范围与快照边界（E2 目标）
+
+材料候选、TaskContextRevision 的显式选择、运行快照、读取足迹和成果输入关系由 Application 层解析。`RunContextSnapshot` 固定 Knowledge 内容修订、ArtifactVersion 和受管输入快照；Agent Core 只收到已经过滤的指令、消息和工具，不读取两个 SQLite 库，也不根据路径自行扩大范围。
+
+材料契约要求 `read_text_file` 在真实 Workspace 路径校验之外匹配当前 Run 的输入快照，`knowledge_search` 接收允许的 Knowledge revision 集合，成果读取按精确 `artifactVersionId` 进行。现有工具仍是 E1 的全应用能力，尚未满足这些过滤要求，E23 才接入；具体身份、恢复和失败语义见[材料、快照与运行来源契约](development/material-contracts.md)。
+
+脚本和 Python Worker 继续以本机用户权限执行。受管输入目录、工作路径和 Application 过滤是产品范围约束，不是 OS 进程沙箱，架构文档不宣称能阻止受信任脚本主动访问本机其他路径。
+
 ## 5. 运行时事件
 
 第一版事件至少包括：
@@ -227,7 +235,7 @@ app_settings
 
 知识和记忆表见对应专题文档。
 
-E11 已通过版本化迁移创建 `experts`、`expert_revisions`；E12 已增加 `task_context_revisions`，E13 已将其接入召唤、首条消息和任务恢复；未来 E15 再增加 `run_context_snapshots`，不在 `tasks` 上用一个未定义的 `expert_id` 占位。旧 Task 缺少上下文时按通用助手解释，首次编辑/发送再以版本化迁移创建草稿。所有迁移保持启动幂等、可回滚并通过 `foreign_key_check`；历史 Run 没有专家事实时不补造。
+E11 已通过版本化迁移创建 `experts`、`expert_revisions`；E12 已增加 `task_context_revisions`，E13–E15 已将其接入召唤、首条消息、任务恢复和内置分发。E21–E24 将按材料契约增加运行快照、输入快照、读取足迹和成果输入关系，不在 `tasks` 上用未定义的 `expert_id`、`materials` 或 `memory` 占位。知识索引仍在独立 `vault.sqlite`，应用库保存授权和运行真相；两库没有跨库事务，启动时先验证内容修订再写应用库事务。旧 Task 缺少上下文时按通用助手和空材料解释，首次编辑/发送再以版本化迁移创建草稿。所有迁移保持启动幂等、可回滚并通过 `foreign_key_check`；历史 Run 没有专家或材料事实时不补造。
 
 SQLite 是产品状态真相源；向量索引、缩略图和解析缓存均可重建。
 

@@ -1,8 +1,8 @@
 # 领域模型
 
-> 2026-09-14：专家修订、TaskContextRevision、材料引用/运行快照、上下文段和成果输入关系已随用户对设计 v0.2 的评审通过而定稿，见 [ADR-0014](adr/0014-expert-context-and-material-binding.md)与[开发计划](development/tasks-experts.md)。下文会标注已落地的 E11–E13 与仍待实现的材料/记忆/MCP 增量；历史接口不能替代该设计的增量契约。
+> 2026-09-14：专家修订、TaskContextRevision、材料引用/运行快照、上下文段和成果输入关系已随用户对设计 v0.2 的评审通过而定稿，见 [ADR-0014](adr/0014-expert-context-and-material-binding.md)、[专家与任务上下文契约](development/expert-contracts.md) 和 [材料、快照与运行来源契约](development/material-contracts.md)。下文会标注已落地的 E11–E15 与仍待实现的材料/记忆/MCP 增量；历史接口不能替代该设计的增量契约。
 
-> 2026-09-08 产品关系补充：长期目录承接 Workspace，一个专家调用多项 Skill 持续完成任务，成果是持续协作对象。见 [ADR-0008](adr/0008-personal-workbench-and-capability-first.md)。本文接口仍需按实现状态阅读；配置快照、知识范围和持久化讨论节点的具体 Schema 待实现 ADR，不视为已落地。
+> 2026-09-08 产品关系补充：长期目录承接 Workspace，一个专家调用多项 Skill 持续完成任务，成果是持续协作对象。见 [ADR-0008](adr/0008-personal-workbench-and-capability-first.md)。本文接口仍需按实现状态阅读；材料快照、知识范围和持久化讨论节点的具体 Schema 按开发计划实施，不视为已落地。
 
 > 2026-09-12 领域关系变更：Run 与 Skill 由 1:1 改为 1:N，命名为能力绑定，见 §4.1 与 [ADR-0012](adr/0012-composer-capability-binding.md)。协议、绑定解析、指令注入和 Composer 选择已落地；真实双技能桌面旅程仍待 B00-5 人工验收。
 
@@ -75,6 +75,10 @@ TaskContextRevision 是 Task 下一次运行的可见草稿，不是权限本身
 
 旧 Task 没有专家事实时按通用助手解释，首次编辑/发送再创建草稿；不能从旧 prompt、Skill 或文件路径补造 Expert。当前 E12 已支持显式提交草稿修订号并在 Run 启动时校验归属与 CAS 版本；召唤和草稿创建仍由 E13 接入。完整字段和迁移见[专家与任务上下文契约](development/expert-contracts.md) §3–§5。
 
+### 3.3 材料选择
+
+TaskContextRevision 的材料项是 `knowledge-revision`、`artifact-version` 或 `workspace-input-snapshot` 的判别联合，并同时保存用途、来源入口和可选备注。Workspace 只提供候选清单，Task 的显式材料选择才授予本次读取权；候选、选择、实际读取和成果输入关系分别记录。精确字段、跨 Workspace 规则、快照恢复和失败语义见[材料、快照与运行来源契约](development/material-contracts.md)。
+
 ## 4. Run
 
 Run 表示一次 Agent 执行，而不是一整段对话。
@@ -103,6 +107,8 @@ interface Run {
 不得通过拼接字符串表达这些关系。
 
 当前实现状态：`status` 只落地 `running | completed | failed | cancelled`；`queued` 与 `waiting` 依赖尚未建设的审批/确认点语义（需要先在 `agent-protocol` 增加对应事件，见 [系统架构](03-system-architecture.md) §5）。`error` 以 `run.failed` 事件的形式持久化在 Run Event Journal 中，不是 `runs` 表的列。
+
+E20 定义的 `RunContextSnapshot` 在 Run 启动前固定 TaskContextRevision、Workspace、上下文段和精确材料版本；后续实现不得通过查询 Knowledge 最新行、Artifact 当前版本或工作空间新文件扩大读取范围。`RunMaterialRead` 记录实际检索/读取定位，不能由“已选择”或旧 Evidence 推断。
 
 ### 4.1 能力绑定
 
@@ -195,6 +201,8 @@ type ArtifactVersionOrigin = "assistant-run" | "user-edit";
 
 `assistant-run` 必须关联真实 Run 并持久化该 Run 实际使用的 Evidence；`user-edit` 不得伪装为 AI 运行产物，并继承前一版本的来源关系。
 
+新版本还可通过 `ArtifactInputRelation` 关联实际采用的 Knowledge 修订、ArtifactVersion、输入快照或 Evidence。选择但未读取的材料、读取但未采用的背景资料不能自动写成成果来源；当前实现尚未落地该关系。
+
 当前实现状态：`ArtifactType` 只落地 `markdown`；ArtifactVersion 已实装内容、内容 Hash、`versionNumber`、`origin`、创建它的 Run（`sourceRunId`）与 Evidence 关联，预览以文档化 Markdown 渲染呈现。生成参数、缩略图和验证状态尚未实装。
 
 ## 7. Evidence、Claim 与 Citation
@@ -228,6 +236,8 @@ Knowledge Vault 是由用户管理的一组本地知识来源，具有独立索�
 
 知识来源可以同时被多个 Workspace 引用，但默认不复制原始文件。
 
+Knowledge Vault 使用 `userData/vaults/<id>/vault.sqlite`，应用状态、Task 材料选择、Run 快照和成果关系使用 `userData/betterwork.db`。两库没有跨库事务：运行准备先确认具体 Knowledge 内容修订，再在应用库事务中登记引用。当前库只保存每个文档最新提取内容与 `content_hash`，E21 才将刷新升级为不可变修订；不能把 `updated_at` 或默认搜索结果当成历史 Run 的版本事实。
+
 ## 9. Memory Scope
 
 记忆至少分为：
@@ -239,7 +249,7 @@ Knowledge Vault 是由用户管理的一组本地知识来源，具有独立索�
 
 ## 10. Capability
 
-2026-09-14 已接受的增量关系：Expert 保存不可变修订；TaskContextRevision 保存下一次运行的可见草稿；RunContextSnapshot 固定实际专家、工具/Skill、资料引用与记忆适用范围。E10 已定案 Expert/Revision 与 E1 草稿字段，E11 已实现 Expert 身份、修订和管理 IPC，E12 已实现 TaskContextRevision 与运行时人格/能力裁决，E13 已实现召唤、草稿保存和身份恢复。材料引用区分知识内容修订、成果版本和文件快照，按 E20 定案。任务缩小范围时按上下文段排除旧模型输入；新成果版本可关联输入成果版本。完整字段不是本节示例接口的已发布 Schema，实施必须遵循[专家与任务上下文契约](development/expert-contracts.md)。
+2026-09-14 已接受的增量关系：Expert 保存不可变修订；TaskContextRevision 保存下一次运行的可见草稿；RunContextSnapshot 固定实际专家、工具/Skill、资料引用与记忆适用范围。E10 已定案 Expert/Revision 与 E1 草稿字段，E11 已实现 Expert 身份、修订和管理 IPC，E12 已实现 TaskContextRevision 与运行时人格/能力裁决，E13–E15 已实现召唤、草稿保存、身份恢复、配置 UI 和内置分发。材料引用区分知识内容修订、成果版本和文件快照，按 [材料、快照与运行来源契约](development/material-contracts.md) 定案。任务缩小范围时按上下文段排除旧模型输入；新成果版本可关联输入材料。完整字段不是本节示例接口的已发布 Schema，实施必须遵循两份开发契约。
 
 Capability 是运行时可使用能力的统一抽象，来源包括：
 

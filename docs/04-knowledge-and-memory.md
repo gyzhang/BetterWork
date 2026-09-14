@@ -1,6 +1,6 @@
 # 知识库与记忆
 
-> 2026-09-14：用户已接受[专家与任务材料设计](designs/experts-and-task-materials.md)。知识按文档选取并固定内容修订、Expert/Workspace 适用记忆和范围缩小后的上下文处理按 [ADR-0014](adr/0014-expert-context-and-material-binding.md)落实；E2/E3 的唯一执行入口为[开发计划](development/tasks-experts.md)。长期记忆仍未实现；现有 RunService 已重建本 Task 历史回复，下文“不读取历史”属于旧实现说明。
+> 2026-09-14：用户已接受[专家与任务材料设计](designs/experts-and-task-materials.md)。知识按文档选取并固定内容修订、Expert/Workspace 适用记忆和范围缩小后的上下文处理按 [ADR-0014](adr/0014-expert-context-and-material-binding.md) 和 [材料、快照与运行来源契约](development/material-contracts.md) 落实；E2/E3 的唯一执行入口为[开发计划](development/tasks-experts.md)。长期记忆仍未实现；现有 RunService 已重建本 Task 历史回复，下文“不读取历史”属于旧实现说明。
 
 > 2026-09-08：长期工作目录与已有知识共同支撑任务，不要求先建完整知识库；一个专家持续协作不等于无限累加聊天历史。最小记忆随研究到汇报路径规划，完整记忆系统和其他格式的旧 Phase 编号以 [新版顺序](07-mvp-and-roadmap.md#0-2026-09-08-生效的开发顺序) 为准。目录发现与记忆实现建议见 [修订稿](reviews/2026-09-08-product-scope.md)，尚未实现。
 
@@ -33,6 +33,8 @@ vaults/<vault-id>/
 当前落盘结构只有 `vaults/default/vault.sqlite` 一个文件——上面的 `originals/`、`extracted/`、`thumbnails/`、`index/` 子目录均未创建，因为现行策略是引用原位置、不复制原件，提取文本与索引直接存放在 SQLite 内。引入缩略图或需要落盘的中间产物时再按需创建对应子目录。
 
 当前实现状态：Markdown/Text 以“全文”为 Locator；PDF 使用跨平台解析器按页提取，检索结果保留“第 N 页”Locator；DOCX 使用 Mammoth 提取文本并以“段落 N”定位。原件仍引用原路径，SQLite 中保存的是可重建的提取文本和索引。
+
+Knowledge Vault 与应用状态库是两个独立的 SQLite 文件：Vault 保存提取内容、块和 FTS；`betterwork.db` 保存 Workspace、Task、材料选择、Run 快照、读取足迹和成果关系。两库没有跨库事务。E21 会为刷新产生不可变 Knowledge 内容修订，运行只能引用修订 ID 与 `content_hash`；当前 `knowledge_documents` 的单行更新和 `updated_at` 不能作为历史版本。
 
 ## 3. 支持格式
 
@@ -100,6 +102,8 @@ VectorIndex 必须可替换。第一版优先考虑 SQLite + sqlite-vec；规模
 当前实现状态：只有关键词一路。查询按空白与标点切词，每个词加引号后以 `AND` 连接交给 FTS5 `MATCH`，按 `rank` 排序；若命中为空，回退到对标题与分块内容的 `LIKE` 子串匹配（用于覆盖 FTS5 分词器切不出的中文子串，例如检索 `etterWork` 命中 `BetterWork`）。两路结果都带 Locator 与围绕命中位置截取的摘要。
 
 结果上限 50 条；`knowledge_search` Tool 侧再截到 8 条，避免把长清单塞进模型上下文。向量检索、元数据过滤、融合与 Rerank 均未落地，Embedding 按 AGENTS.md 的范围约束留待后续切片。
+
+材料契约要求运行中的检索接收允许的 Knowledge revision 集合，只返回选定修订的 Locator、摘要和内容哈希；未选文档不能因为同一 Vault 的全局搜索命中而进入 Run。当前 `KnowledgeVault.search(query)` 仍是未过滤的应用级搜索，E23 才增加范围参数与运行读取足迹，不能把现有结果当作 E2 的材料隔离证据。
 
 ## 6. 三层记忆体系
 

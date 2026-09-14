@@ -45,7 +45,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E13 | 对话草稿、召唤与身份切换 | E12 | done | [App/IPC 测试](../../apps/desktop/src/renderer/src/App.test.tsx)、[IPC 注册测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)：专家列表“召唤”直达空白任务，首条消息保存 TaskContextRevision 后启动 Run；任务重开恢复专家/Skill 选择，`+ → 专家` 打开专家列表；`npm run verify` 退出 0（55 文件 / 451 测试 / Electron build），2026-09-14 14:15 |
 | E14 | 专家管理与按需配置 UI | E13 | done | [专家配置 UI 测试](../../apps/desktop/src/renderer/src/App.test.tsx)：专家列表/详情、独立编辑器、新建与不可变修订保存、Skill 预设、内置工具 allow-list、生命周期操作和内置复制均复用 E11 IPC；`npm run verify` 退出 0（55 文件 / 452 测试 / Electron build），2026-09-14 14:24 |
 | E15 | 内置专家分发与 E1 验收 | E14 | done | [内置 Expert 服务测试](../../apps/desktop/src/main/services/expert-service.test.ts)：新增 `resources/experts/release-manifest.json`，启动幂等注册 stable builtin Expert；打包资源同步进入 `experts/`，内置修订只读且可复制；`npm run verify` 退出 0（55 文件 / 453 测试 / Electron build），2026-09-14 14:27 |
-| E20 | 材料与快照精确契约 | E15 | todo | — |
+| E20 | 材料与快照精确契约 | E15 | done | [材料、快照与运行来源契约](material-contracts.md)：定稿候选/选择/读取分离、Knowledge revision、ArtifactVersion、Workspace 输入快照、用途、RunContextSnapshot、两库与文件恢复/回收、范围校验入口、读取足迹和 ArtifactInputRelation；明确源变更、缺失、重复、跨空间、取消、归档、旧任务和范围收缩语义。文档差异检查通过，2026-09-14。 |
 | E21 | 知识修订、文件快照与恢复 | E20 | todo | — |
 | E22 | 材料选择与草稿持久化 | E21 | todo | — |
 | E23 | 宿主范围与上下文收缩 | E22 | todo | — |
@@ -137,7 +137,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 - 必读/落点：docs/04、ADR-0005/0014、KnowledgeVault、Artifact/FileArtifactService、Workspace/TaskRepository；扩展 expert-contracts。
 - 工作：定稿工作空间候选关联、任务选材修订、Knowledge 内容修订、ArtifactVersion 引用、本地输入快照、材料用途、Run 读取足迹和成果输入关系；明确两库与文件资产的恢复和回收。
 - 失败语义：源文件变化、缺失、重复引用、非法跨空间请求、快照取消、归档对象仍被引用、旧任务继续执行、范围缩小后的历史筛选逐项定义。
-- 完成：所有读取入口列出范围校验落点，特别是现有 read_text_file 和 knowledge_search；覆盖脚本路径策略的实际能力限制，不宣称 OS 沙箱。
+- 完成：见[材料、快照与运行来源契约](material-contracts.md)。已定稿工作空间候选与任务授权、六类用途、Knowledge 内容修订、ArtifactVersion、本地输入快照、RunContextSnapshot、读取足迹和成果输入关系；明确两库与受管文件恢复/回收、所有读取入口的范围校验落点，以及源变化、缺失、重复、跨空间、取消、归档、旧任务和范围收缩语义。特别标明现有 `read_text_file` 与 `knowledge_search` 尚未完成 E2 隔离，脚本按本机用户权限运行，不宣称 OS 沙箱。仅文档变更，`git diff --check` 和 Markdown 关系检查通过，2026-09-14。
 
 ### E21 修订、快照与恢复
 
