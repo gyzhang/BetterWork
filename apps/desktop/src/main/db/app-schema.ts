@@ -700,6 +700,40 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 14,
+    name: 'add run material reads and artifact input relations',
+    up(db: Database.Database): void {
+      db.exec(`
+        CREATE TABLE run_material_reads (
+          id TEXT PRIMARY KEY,
+          run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+          material_json TEXT NOT NULL,
+          material_key TEXT NOT NULL,
+          operation TEXT NOT NULL CHECK (operation IN ('preview', 'search', 'read', 'parse')),
+          locator TEXT,
+          content_hash TEXT NOT NULL,
+          excerpt_hash TEXT,
+          captured_at INTEGER NOT NULL,
+          UNIQUE(run_id, material_key, operation, locator)
+        );
+        CREATE INDEX idx_run_material_reads_run
+          ON run_material_reads(run_id, captured_at ASC);
+        CREATE TABLE artifact_input_relations (
+          id TEXT PRIMARY KEY,
+          output_version_id TEXT NOT NULL REFERENCES artifact_versions(id) ON DELETE CASCADE,
+          run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+          input_json TEXT NOT NULL,
+          input_key TEXT NOT NULL,
+          relation TEXT NOT NULL CHECK (relation IN ('data', 'rule', 'comparison', 'structure', 'template', 'background')),
+          created_at INTEGER NOT NULL,
+          UNIQUE(output_version_id, input_key, relation)
+        );
+        CREATE INDEX idx_artifact_input_relations_run
+          ON artifact_input_relations(run_id, created_at ASC);
+      `);
+    },
+  },
 ];
 
 /**

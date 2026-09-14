@@ -49,7 +49,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E21 | 知识修订、文件快照与恢复 | E20 | done | [KnowledgeVault 修订与快照测试](../../apps/desktop/src/main/services/knowledge-vault.test.ts)、[输入快照测试](../../apps/desktop/src/main/services/input-snapshot-service.test.ts)、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)：知识库 v3 保留不可变内容/分块修订；应用库 v11 增加 Workspace 所属输入快照状态；稳定读取、哈希寻址复制、取消、符号链接/特殊文件拒绝、缺失/孤儿恢复已接通启动装配；`npm run verify` 退出 0（56 文件 / 459 测试 / Electron build），2026-09-14 15:04。 |
 | E22 | 材料选择与草稿持久化 | E21 | done | [TaskMaterialService/TaskContext 测试](../../apps/desktop/src/main/services/task-material-service.test.ts)、[TaskContextRepository 测试](../../apps/desktop/src/main/persistence/task-context-repository.test.ts)：TaskContextRevision v12 保存材料判别引用、用途、备注和添加来源；候选查询覆盖 Knowledge revision、Workspace ArtifactVersion、ready 输入快照；保存边界校验修订哈希、快照状态、重复项和 Workspace 归属；新增候选/输入快照 IPC 与 Preload；`npm run verify` 退出 0（57 文件 / 463 测试 / Electron build），2026-09-14 15:19。 |
 | E23 | 宿主范围与上下文收缩 | E22 | done | [RunService/快照/工具测试](../../apps/desktop/src/main/services/run-service.test.ts)：Run 绑定不可变 `run_context_snapshots`，Knowledge revision、输入快照和 Markdown ArtifactVersion 通过宿主范围校验；材料收缩创建新上下文段并过滤旧段历史。`npm run verify` 退出 0（59 文件 / 470 测试 / Electron build），2026-09-14。 |
-| E24 | 读取足迹与成果输入来源 | E23 | todo | — |
+| E24 | 读取足迹与成果输入来源 | E23 | done | [读取/成果来源测试](../../apps/desktop/src/main/services/run-service.test.ts)：v14 保存 RunMaterialRead 与 ArtifactInputRelation；搜索、输入快照和成果读取留下精确足迹，Markdown/文件成果只允许关联同一 Run 已读取材料。`npm run verify` 退出 0（60 文件 / 473 测试 / Electron build），2026-09-14。 |
 | E25 | 材料 UI、成果复用与 E2 验收 | E24 | todo | — |
 | E30 | 记忆投影与治理实现 ADR | E25 | todo | — |
 | E31 | 记忆存储、检索与运行注入 | E30 | todo | — |
@@ -169,7 +169,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 - 工作：分别保存已选、实际读取及成果来源；新成果版本关联输入 ArtifactVersion；保留片段定位和源修订。上期所有 Evidence 不自动标成本期查阅结果。
 - 失败/取消：重复读取去重不丢定位；迟到读取/产物不能越过取消终态登记；源已归档仍可按历史引用解释。
 - 必测：选但未读不算读取、读但未用不伪造正文引用、版本关联不漂移、人工修订遵守 ADR-0005 继承语义。
-- 完成：Markdown 和已有文件成果均可追溯所选上期版本，不声称已有逐句 Citation。
+- 完成：应用库 v14 新增 `run_material_reads` 与 `artifact_input_relations`；RunService 对知识搜索、输入快照和成果读取记录具体修订、定位、内容哈希和摘要哈希。Markdown 与文件成果的显式输入关系在 Main 校验同一 Run 已实际读取，选中但未读取、旧 Run Evidence 或人工修订不能伪装成来源。`npm run verify` 退出 0（60 文件 / 473 测试 / Electron build），2026-09-14。仍不声称已有逐句 Citation。
 
 ### E25 材料交互、成果复用与 E2 验收
 

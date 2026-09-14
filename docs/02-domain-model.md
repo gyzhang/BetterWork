@@ -201,7 +201,7 @@ type ArtifactVersionOrigin = "assistant-run" | "user-edit";
 
 `assistant-run` 必须关联真实 Run 并持久化该 Run 实际使用的 Evidence；`user-edit` 不得伪装为 AI 运行产物，并继承前一版本的来源关系。
 
-新版本还可通过 `ArtifactInputRelation` 关联实际采用的 Knowledge 修订、ArtifactVersion、输入快照或 Evidence。选择但未读取的材料、读取但未采用的背景资料不能自动写成成果来源；当前实现尚未落地该关系。
+新版本还可通过 `ArtifactInputRelation` 关联实际采用的 Knowledge 修订、ArtifactVersion、输入快照或 Evidence。选择但未读取的材料、读取但未采用的背景资料不能自动写成成果来源；E24 已在应用库 v14 落地关系表，并在成果登记边界校验同一 Run 的实际读取足迹。
 
 当前实现状态：`ArtifactType` 只落地 `markdown`；ArtifactVersion 已实装内容、内容 Hash、`versionNumber`、`origin`、创建它的 Run（`sourceRunId`）与 Evidence 关联，预览以文档化 Markdown 渲染呈现。生成参数、缩略图和验证状态尚未实装。
 

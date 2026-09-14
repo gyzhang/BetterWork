@@ -448,6 +448,51 @@ export const materialCandidateSchema = z
   .strict();
 export type MaterialCandidate = z.infer<typeof materialCandidateSchema>;
 
+export const runMaterialReadOperationSchema = z.enum(['preview', 'search', 'read', 'parse']);
+export type RunMaterialReadOperation = z.infer<typeof runMaterialReadOperationSchema>;
+export const runMaterialReadSchema = z
+  .object({
+    id: z.string().min(1),
+    runId: z.string().min(1),
+    material: materialReferenceSchema,
+    operation: runMaterialReadOperationSchema,
+    locator: z.string().min(1).optional(),
+    contentHash: z.string().min(1),
+    excerptHash: z.string().min(1).optional(),
+    capturedAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type RunMaterialRead = z.infer<typeof runMaterialReadSchema>;
+
+export const artifactInputRelationKindSchema = z.enum([
+  'data',
+  'rule',
+  'comparison',
+  'structure',
+  'template',
+  'background',
+]);
+export type ArtifactInputRelationKind = z.infer<typeof artifactInputRelationKindSchema>;
+export const artifactInputSchema = z.discriminatedUnion('kind', [
+  materialReferenceSchema,
+  z.object({ kind: z.literal('evidence'), evidenceId: z.string().min(1) }).strict(),
+]);
+export type ArtifactInput = z.infer<typeof artifactInputSchema>;
+export const artifactInputRelationSchema = z
+  .object({
+    outputVersionId: z.string().min(1),
+    input: artifactInputSchema,
+    relation: artifactInputRelationKindSchema,
+    createdAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type ArtifactInputRelation = z.infer<typeof artifactInputRelationSchema>;
+
+export const artifactInputRelationInputSchema = z
+  .object({ input: artifactInputSchema, relation: artifactInputRelationKindSchema })
+  .strict();
+export type ArtifactInputRelationInput = z.infer<typeof artifactInputRelationInputSchema>;
+
 export const inputSnapshotStatusSchema = z.enum(['preparing', 'ready', 'failed', 'cancelled']);
 export type InputSnapshotStatus = z.infer<typeof inputSnapshotStatusSchema>;
 export const inputSnapshotSchema = z
@@ -1140,6 +1185,7 @@ export const saveMarkdownArtifactRequestSchema = z
     runId: z.string().min(1).optional(),
     title: z.string().trim().min(1).max(160),
     content: z.string().trim().min(1).max(2_000_000),
+    inputRelations: artifactInputRelationInputSchema.array().max(50).optional(),
   })
   .superRefine((input, context) => {
     if (input.origin === 'assistant-run' && !input.runId) {
@@ -1208,6 +1254,7 @@ export const registerFileArtifactRequestSchema = z
     mimeType: z.string().trim().min(1).max(120).optional(),
     description: z.string().trim().max(10_000).optional(),
     validation: validationStateSchema.optional(),
+    inputRelations: artifactInputRelationInputSchema.array().max(50).optional(),
   })
   .superRefine((input, context) => {
     if (input.validation?.structure === 'failed') {

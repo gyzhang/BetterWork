@@ -58,3 +58,4 @@
 - 2026-09-14：E21 已落地 Knowledge Vault v3 不可变内容/分块修订、应用库 v11 `input_snapshots`、稳定读取与哈希寻址受管复制、取消和启动恢复；原始文件仍只读，输入快照不冒充 Artifact。材料绑定、运行范围过滤、读取足迹和成果输入关系仍分别留 E22–E24。
 - 2026-09-14：E22 已将 `MaterialReference`、用途、备注和添加来源加入 TaskContextRevision v12；TaskMaterialService/IPC 校验 Knowledge revision、ArtifactVersion、ready 输入快照、重复引用和 Workspace 归属，并提供候选查询与 Workspace 文件快照入口。`read_text_file` 与 `knowledge_search` 仍未按 Run 过滤，留 E23；读取足迹和成果输入关系留 E24。
 - 2026-09-14：E23 已将运行时材料范围接入 RunContextSnapshot（应用库 v13）。Knowledge 搜索、输入快照文件读取和 Markdown ArtifactVersion 读取均在宿主边界按精确引用校验；材料集合收缩时新建上下文段并排除旧段历史。读取足迹和成果输入关系仍留 E24；脚本权限仍是本机用户权限，不宣称 OS 沙箱。
+- 2026-09-14：E24 已新增 `run_material_reads` 与 `artifact_input_relations`（应用库 v14）。完成的搜索/读取保存材料修订、定位和哈希；成果输入关系只能引用同一 Run 已读取的材料或该 Run 的 Evidence，人工修订不伪装成新的 Assistant 来源。

@@ -43,7 +43,7 @@ Phase 0 与原 Phase 1 的知识库、搜索和 Markdown 成果部分能力已�
 
 实际可用性优先于教学目标；长期工作目录承接持续项目。已确认决策见 [ADR-0008](docs/adr/0008-personal-workbench-and-capability-first.md)。阶段顺序以 [路线图](docs/07-mvp-and-roadmap.md) §0 为准，具体配置范围及验收建议见 [产品修订稿](docs/reviews/2026-09-08-product-scope.md)。本轮为文档修订，不代表上述功能已实现；修订稿中建议项仍需产品审阅，相应协议、存储、运行时和权限变更在实现前新增 ADR。
 
-现有能力必须保持：类型化 IPC、Agent Core、Provider、Calculator / 受 Workspace 与 Run 材料范围限制的 Read Text File / Knowledge Search / Markdown Artifact Read / 已配置服务的 Web Search、流式消息、取消与终态、SQLite Run Journal、Workspace / Task / Session、本地 Markdown/Text/PDF/DOCX 导入与只读索引管理、来源登记、版本化 Markdown Artifact 的查看/修订/导出。
+现有能力必须保持：类型化 IPC、Agent Core、Provider、Calculator / 受 Workspace 与 Run 材料范围限制的 Read Text File / Knowledge Search / Markdown Artifact Read、读取足迹与成果输入关系 / 已配置服务的 Web Search、流式消息、取消与终态、SQLite Run Journal、Workspace / Task / Session、本地 Markdown/Text/PDF/DOCX 导入与只读索引管理、来源登记、版本化 Markdown Artifact 的查看/修订/导出。
 
 首个必需兼容样本为用户提供的 `ppt-generation-expert`。阶段 A 必须支持文件夹 Skill、Python 脚本/CLI、外部本地工具链与依赖准备、任务文件读写、子进程取消/超时、质量报告及最小 PPTX 产物登记，见 [ADR-0009](docs/adr/0009-script-skill-baseline.md) 与 [运行边界](docs/reviews/2026-09-08-skill-runtime-boundary.md)。先设计执行约束和协议，再实现；不能以脚本后置或仅提示词试运行代替支持该样本。
 
