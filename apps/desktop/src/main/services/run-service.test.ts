@@ -668,6 +668,40 @@ describe('RunService', () => {
     ]);
   });
 
+  it('runs the deterministic business analysis tool under an Expert allow-list', async () => {
+    const fixture = await createFixture();
+    const context = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+      builtinToolPolicy: { mode: 'allow-list', toolNames: ['analyze_business_metrics'] },
+      materials: [],
+    });
+    const service = createService(fixture);
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: `经营分析: ${JSON.stringify({
+        period: '2026-09',
+        current: { revenue: 120 },
+        previous: { revenue: 100 },
+      })}`,
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('completed');
+    expect(fixture.store.runs.listEvents(runId)).toContainEqual(
+      expect.objectContaining({
+        type: 'tool.completed',
+        output: expect.objectContaining({
+          period: '2026-09',
+          metrics: [expect.objectContaining({ metric: 'revenue', change: 20, changeRate: 0.2 })],
+        }),
+      }),
+    );
+  });
+
   it('applies an Expert built-in tool allow-list without exposing omitted tools', () => {
     const knowledgeSearch = (): [] => [];
     expect(

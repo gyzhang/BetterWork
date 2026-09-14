@@ -25,6 +25,19 @@ const TOOL_TRIGGERS: readonly ToolTrigger[] = [
     toInput: (expression) => ({ expression }),
   },
   {
+    pattern: /^(?:经营分析|分析指标|analyze business)\s*[:：]?\s*(.+)$/iu,
+    tool: 'analyze_business_metrics',
+    reasoning: '使用确定性经营指标工具计算期间变化和预算偏差。',
+    toInput: (value) => {
+      try {
+        const parsed: unknown = JSON.parse(value);
+        return isRecord(parsed) ? parsed : {};
+      } catch {
+        return { period: value.trim(), current: {} };
+      }
+    },
+  },
+  {
     pattern: /^(?:搜索知识|检索知识|search knowledge)\s*[:：]?\s*(.+)$/iu,
     tool: 'knowledge_search',
     reasoning: '检索个人资料库中的相关内容。',
