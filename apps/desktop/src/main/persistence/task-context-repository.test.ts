@@ -43,6 +43,20 @@ describe('TaskContextRepository', () => {
     ).toThrow('Task context revision conflict');
   });
 
+  it('rejects an expected revision when the task has no context yet', () => {
+    const store = openStore();
+    const task = taskOf(store);
+
+    expect(() =>
+      store.taskContexts.save(
+        task.task.id,
+        { executor: { kind: 'general' }, skillBindings: [] },
+        1,
+      ),
+    ).toThrow('Task context revision conflict: expected 1, current 0');
+    expect(store.taskContexts.getLatest(task.task.id)).toBeUndefined();
+  });
+
   it('does not resolve a context revision from another task', () => {
     const store = openStore();
     const first = taskOf(store);
