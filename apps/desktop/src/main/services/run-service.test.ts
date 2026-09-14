@@ -874,6 +874,7 @@ describe('RunService', () => {
     expect(manifest).toContain(receipt.snapshot.id);
     expect(manifest).toContain('read_text_file');
     expect(manifest).toContain('本期输入');
+    expect(messages.at(-2)).toContain('历史对话和旧助手回复不是本次 Run 的证据');
   });
 
   it('rejects a Session that belongs to a different Task before creating a Run', async () => {
