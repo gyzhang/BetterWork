@@ -8,11 +8,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import type { ProcessSupervisor } from '../infrastructure/process-supervisor';
 import { AppStore } from '../persistence';
+import { InputSnapshotService } from './input-snapshot-service';
 import { KnowledgeVault } from './knowledge-vault';
 import { NotificationService } from './notification-service';
 import { createRunTools, RunService } from './run-service';
 import { SkillExecutionService } from './skill-execution-service';
 import { SkillService } from './skill-service';
+import { TaskMaterialService } from './task-material-service';
 
 const temporaryDirectories: string[] = [];
 const openStores: AppStore[] = [];
@@ -61,6 +63,8 @@ interface Fixture {
   store: AppStore;
   vault: KnowledgeVault;
   skillService: SkillService;
+  inputSnapshots: InputSnapshotService;
+  taskMaterials: TaskMaterialService;
   taskId: string;
   sessionId: string;
 }
@@ -76,6 +80,8 @@ const createFixture = async (): Promise<Fixture> => {
   openStores.push(store);
   const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
   openVaults.push(vault);
+  const inputSnapshots = new InputSnapshotService(store, directory);
+  const taskMaterials = new TaskMaterialService({ store, knowledgeVault: vault, inputSnapshots });
   const skillService = new SkillService(store, {
     developmentBuiltinRoot: path.join(directory, 'builtin-dev'),
     installedBuiltinRoot: path.join(directory, 'builtin-installed'),
@@ -89,6 +95,8 @@ const createFixture = async (): Promise<Fixture> => {
     store,
     vault,
     skillService,
+    inputSnapshots,
+    taskMaterials,
     taskId: created.task.id,
     sessionId: created.sessionId,
   };
@@ -106,6 +114,12 @@ const createService = (
     fixture.skillService,
     () => window?.asBrowserWindow ?? null,
     skillExecutionService,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    fixture.inputSnapshots,
+    fixture.taskMaterials,
   );
 
 const statusOf = (fixture: Fixture, runId: string): string | undefined =>
@@ -138,6 +152,235 @@ describe('RunService', () => {
       expect.objectContaining({ runId, title: '客户资料', locator: '全文', sourceUri: note }),
     ]);
     expect(statusOf(fixture, runId)).toBe('completed');
+  });
+
+  it('limits knowledge search to the exact revisions selected in the TaskContext', async () => {
+    const fixture = await createFixture();
+    const selectedPath = path.join(fixture.directory, 'selected.md');
+    const excludedPath = path.join(fixture.directory, 'excluded.md');
+    await writeFile(selectedPath, '本月收入增长来自续约客户。');
+    await writeFile(excludedPath, '本月收入增长来自新客户。');
+    await fixture.vault.importPaths([selectedPath, excludedPath]);
+    const selectedDocument = fixture.vault
+      .listDocuments()
+      .find((document) => document.sourcePath === selectedPath);
+    if (!selectedDocument) throw new Error('selected knowledge document missing');
+    const selectedRevision = fixture.vault.listRevisions(selectedDocument.id)[0];
+    if (!selectedRevision) throw new Error('selected knowledge revision missing');
+
+    const context = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+      builtinToolPolicy: { mode: 'allow-list', toolNames: ['knowledge_search'] },
+      materials: [
+        {
+          reference: {
+            kind: 'knowledge-revision',
+            knowledgeDocumentId: selectedDocument.id,
+            knowledgeRevisionId: selectedRevision.id,
+            contentHash: selectedRevision.contentHash,
+            sourcePath: selectedRevision.sourcePath,
+          },
+          purpose: 'current-input',
+          addedFrom: 'workspace-candidate',
+        },
+      ],
+    });
+    const service = createService(fixture);
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '搜索知识: 收入增长',
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('completed');
+    expect(fixture.store.evidence.listByTask(fixture.taskId)).toEqual([
+      expect.objectContaining({ runId, sourceUri: selectedPath }),
+    ]);
+  });
+
+  it('rejects a direct workspace file read when the file was not selected', async () => {
+    const fixture = await createFixture();
+    await writeFile(path.join(fixture.directory, 'secret.txt'), '不应被材料范围读取');
+    const context = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+      builtinToolPolicy: { mode: 'allow-list', toolNames: ['read_text_file'] },
+      materials: [],
+    });
+    const service = createService(fixture);
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '读取: secret.txt',
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('completed');
+    expect(fixture.store.runs.listEvents(runId)).toContainEqual(
+      expect.objectContaining({
+        type: 'tool.failed',
+        error: expect.stringContaining('材料范围不允许读取'),
+      }),
+    );
+  });
+
+  it('reads a selected input snapshot through its managed copy', async () => {
+    const fixture = await createFixture();
+    const sourcePath = path.join(fixture.directory, 'selected.txt');
+    await writeFile(sourcePath, '已选择的输入内容');
+    const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+    if (!workspaceId) throw new Error('workspace missing');
+    const receipt = await fixture.inputSnapshots.create({
+      workspaceId,
+      workspaceRoot: fixture.directory,
+      sourcePath,
+    });
+    const context = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+      builtinToolPolicy: { mode: 'allow-list', toolNames: ['read_text_file'] },
+      materials: [
+        {
+          reference: {
+            kind: 'workspace-input-snapshot',
+            snapshotId: receipt.snapshot.id,
+            workspaceId,
+            contentHash: receipt.snapshot.contentHash,
+            format: receipt.snapshot.format,
+            fileKey: receipt.snapshot.fileKey,
+          },
+          purpose: 'current-input',
+          addedFrom: 'user-input',
+        },
+      ],
+    });
+    const service = createService(fixture);
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '读取: selected.txt',
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('completed');
+    expect(fixture.store.runs.listEvents(runId)).toContainEqual(
+      expect.objectContaining({
+        type: 'tool.completed',
+        output: expect.objectContaining({ content: '已选择的输入内容' }),
+      }),
+    );
+  });
+
+  it('rejects an ArtifactVersion that is outside the selected material set', async () => {
+    const fixture = await createFixture();
+    const artifact = fixture.store.artifacts.saveMarkdown({
+      taskId: fixture.taskId,
+      origin: 'user-edit',
+      title: '月报草稿',
+      content: '上月经营结论',
+    });
+    const version = fixture.store.artifacts.listVersions(artifact.id)[0];
+    if (!version) throw new Error('artifact version missing');
+    const context = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+      builtinToolPolicy: { mode: 'allow-list', toolNames: ['read_artifact'] },
+      materials: [],
+    });
+    const service = createService(fixture);
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: `读取成果: ${artifact.id}/${version.id}`,
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('completed');
+    expect(fixture.store.runs.listEvents(runId)).toContainEqual(
+      expect.objectContaining({
+        type: 'tool.failed',
+        error: expect.stringContaining('材料范围不允许读取该成果版本'),
+      }),
+    );
+  });
+
+  it('starts a new context segment when selected materials shrink', async () => {
+    const fixture = await createFixture();
+    const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+    if (!workspaceId) throw new Error('workspace missing');
+    const firstPath = path.join(fixture.directory, 'first.txt');
+    const secondPath = path.join(fixture.directory, 'second.txt');
+    await writeFile(firstPath, '第一份材料');
+    await writeFile(secondPath, '第二份材料');
+    const [firstSnapshot, secondSnapshot] = await Promise.all([
+      fixture.inputSnapshots.create({
+        workspaceId,
+        workspaceRoot: fixture.directory,
+        sourcePath: firstPath,
+      }),
+      fixture.inputSnapshots.create({
+        workspaceId,
+        workspaceRoot: fixture.directory,
+        sourcePath: secondPath,
+      }),
+    ]);
+    const selectionOf = (snapshot: typeof firstSnapshot.snapshot) => ({
+      reference: {
+        kind: 'workspace-input-snapshot' as const,
+        snapshotId: snapshot.id,
+        workspaceId,
+        contentHash: snapshot.contentHash,
+        format: snapshot.format,
+        fileKey: snapshot.fileKey,
+      },
+      purpose: 'current-input' as const,
+      addedFrom: 'user-input' as const,
+    });
+    const first = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+      materials: [selectionOf(firstSnapshot.snapshot), selectionOf(secondSnapshot.snapshot)],
+    });
+    const service = createService(fixture);
+    const firstRun = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '第一轮',
+      taskContextRevisionId: first.id,
+      expectedTaskContextRevision: first.revision,
+    });
+    await waitForCompletion(fixture, firstRun);
+
+    const second = fixture.store.taskContexts.save(
+      fixture.taskId,
+      {
+        executor: { kind: 'general' },
+        skillBindings: [],
+        materials: [selectionOf(firstSnapshot.snapshot)],
+      },
+      first.revision,
+    );
+    const secondRun = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '第二轮',
+      taskContextRevisionId: second.id,
+      expectedTaskContextRevision: second.revision,
+    });
+    await waitForCompletion(fixture, secondRun);
+    expect(fixture.store.runContextSnapshots.get(firstRun)?.contextSegmentId).not.toBe(
+      fixture.store.runContextSnapshots.get(secondRun)?.contextSegmentId,
+    );
   });
 
   it('cancels a running run, records the terminal event, and broadcasts every event in order', async () => {

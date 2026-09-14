@@ -25,16 +25,25 @@ const TOOL_TRIGGERS: readonly ToolTrigger[] = [
     toInput: (expression) => ({ expression }),
   },
   {
-    pattern: /^(?:读取|read)\s*[:：]?\s*(.+)$/iu,
-    tool: 'read_text_file',
-    reasoning: '读取工作区内的文本文件。',
-    toInput: (target) => ({ path: target.trim() }),
-  },
-  {
     pattern: /^(?:搜索知识|检索知识|search knowledge)\s*[:：]?\s*(.+)$/iu,
     tool: 'knowledge_search',
     reasoning: '检索个人资料库中的相关内容。',
     toInput: (query) => ({ query: query.trim() }),
+  },
+  {
+    pattern: /^(?:读取成果|read artifact)\s*[:：]?\s*(.+)$/iu,
+    tool: 'read_artifact',
+    reasoning: '读取用户明确选择的成果版本。',
+    toInput: (value) => {
+      const [artifactId, versionId] = value.split('/').map((item) => item.trim());
+      return { artifactId: artifactId ?? '', versionId: versionId ?? '' };
+    },
+  },
+  {
+    pattern: /^(?:读取|read)\s*[:：]?\s*(.+)$/iu,
+    tool: 'read_text_file',
+    reasoning: '读取工作区内的文本文件。',
+    toInput: (target) => ({ path: target.trim() }),
   },
 ];
 
@@ -84,6 +93,10 @@ function summarizeToolResult(toolName: string | undefined, rawContent: string): 
       return title ? `- ${title}：${excerpt}` : '';
     });
     return `${heading}${readText(output?.message)}\n\n${lines.filter(Boolean).join('\n')}`.trimEnd();
+  }
+
+  if (toolName === 'read_artifact') {
+    return `成果版本内容如下：\n\n${readText(output?.content) || rawContent}`;
   }
 
   return `文件内容如下：\n\n${readText(output?.content) || rawContent}`;

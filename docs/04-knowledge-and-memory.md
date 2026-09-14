@@ -103,9 +103,9 @@ VectorIndex 必须可替换。第一版优先考虑 SQLite + sqlite-vec；规模
 
 结果上限 50 条；`knowledge_search` Tool 侧再截到 8 条，避免把长清单塞进模型上下文。向量检索、元数据过滤、融合与 Rerank 均未落地，Embedding 按 AGENTS.md 的范围约束留待后续切片。
 
-材料契约要求运行中的检索接收允许的 Knowledge revision 集合，只返回选定修订的 Locator、摘要和内容哈希；未选文档不能因为同一 Vault 的全局搜索命中而进入 Run。当前 `KnowledgeVault.search(query)` 仍是未过滤的应用级搜索，E23 才增加范围参数与运行读取足迹，不能把现有结果当作 E2 的材料隔离证据。
+材料契约要求运行中的检索接收允许的 Knowledge revision 集合，只返回选定修订的 Locator、摘要和内容哈希；未选文档不能因为同一 Vault 的全局搜索命中而进入 Run。E23 已增加范围参数并由 RunContextSnapshot 提供固定 revision 集合；运行读取足迹留 E24，不能把“已选择”本身当作读取证据。
 
-E22 已能把具体 Knowledge revision 的身份、哈希和用途保存到 TaskContextRevision；这只证明材料选择可恢复，不代表正文已经注入或检索已经按 Run 隔离。未选资料仍不得由后续 E23 之外的实现自行读取。
+E22 已能把具体 Knowledge revision 的身份、哈希和用途保存到 TaskContextRevision；E23 已把该选择绑定到 Run 并限制 `knowledge_search`，未选资料不能通过运行时搜索进入模型。
 
 ## 6. 三层记忆体系
 

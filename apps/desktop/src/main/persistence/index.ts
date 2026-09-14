@@ -9,6 +9,7 @@ import { ExpertRepository } from './expert-repository';
 import { InputSnapshotRepository } from './input-snapshot-repository';
 import { ModelRepository } from './model-repository';
 import { NotificationRepository } from './notification-repository';
+import { RunContextSnapshotRepository } from './run-context-snapshot-repository';
 import { RunRepository } from './run-repository';
 import { RuntimeEnvironmentRepository } from './runtime-environment-repository';
 import { SearchEngineRepository } from './search-engine-repository';
@@ -32,6 +33,7 @@ export class AppStore {
   readonly tasks: TaskRepository;
   readonly taskContexts: TaskContextRepository;
   readonly runs: RunRepository;
+  readonly runContextSnapshots: RunContextSnapshotRepository;
   readonly evidence: EvidenceRepository;
   readonly experts: ExpertRepository;
   readonly inputSnapshots: InputSnapshotRepository;
@@ -50,6 +52,7 @@ export class AppStore {
     this.tasks = new TaskRepository(db);
     this.taskContexts = new TaskContextRepository(db);
     this.runs = new RunRepository(db);
+    this.runContextSnapshots = new RunContextSnapshotRepository(db);
     this.evidence = new EvidenceRepository(db);
     this.experts = new ExpertRepository(db);
     this.inputSnapshots = new InputSnapshotRepository(db);
@@ -104,6 +107,11 @@ export {
 } from './input-snapshot-repository';
 export { ModelRepository, type RunnableModel } from './model-repository';
 export { NotificationRepository } from './notification-repository';
+export {
+  materialReferenceKey,
+  type RunContextSnapshot,
+  RunContextSnapshotRepository,
+} from './run-context-snapshot-repository';
 export { RunRepository } from './run-repository';
 export {
   type CreateEnvironmentInput,

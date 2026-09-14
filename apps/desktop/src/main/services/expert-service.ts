@@ -29,6 +29,7 @@ export class ExpertServiceError extends Error {
 const BUILTIN_TOOL_NAMES = new Set([
   'calculator',
   'read_text_file',
+  'read_artifact',
   'knowledge_search',
   'web_search',
 ]);

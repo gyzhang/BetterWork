@@ -71,13 +71,13 @@ E10 的字段、生命周期、错误码和 IPC 语义见[专家与任务上下�
 
 ### 3.2 TaskContextRevision
 
-TaskContextRevision 是 Task 下一次运行的可见草稿，不是权限本身。E1 子集保存通用助手或固定 ExpertRevision、有效顺序的 Skill 选择、可选模型引用和内置工具策略；E22 已增加材料判别引用、用途、备注和添加来源，记忆、MCP 仍不放入空字段。保存采用期望修订号的 compare-and-swap，召唤只进入草稿，不创建 Run；发送时由 Application 将其解析为 RunContextSnapshot 和现有 RunSkillBinding。
+TaskContextRevision 是 Task 下一次运行的可见草稿，不是权限本身。E1 子集保存通用助手或固定 ExpertRevision、有效顺序的 Skill 选择、可选模型引用和内置工具策略；E22 已增加材料判别引用、用途、备注和添加来源，记忆、MCP 仍不放入空字段。保存采用期望修订号的 compare-and-swap，召唤只进入草稿，不创建 Run；发送时由 Application 将其解析为 RunContextSnapshot 和现有 RunSkillBinding，E23 已由运行快照落实工具范围。
 
 旧 Task 没有专家事实时按通用助手解释，首次编辑/发送再创建草稿；不能从旧 prompt、Skill 或文件路径补造 Expert。当前 E12 已支持显式提交草稿修订号并在 Run 启动时校验归属与 CAS 版本；召唤和草稿创建仍由 E13 接入。完整字段和迁移见[专家与任务上下文契约](development/expert-contracts.md) §3–§5。
 
 ### 3.3 材料选择
 
-TaskContextRevision 的材料项是 `knowledge-revision`、`artifact-version` 或 `workspace-input-snapshot` 的判别联合，并同时保存用途、来源入口和可选备注。E22 已在 v12 `materials_json` 中保存并在 Main 校验具体修订、哈希、快照状态、重复项和 Workspace 归属。Workspace 只提供候选清单，Task 的显式材料选择才授予本次读取权；候选、选择、实际读取和成果输入关系分别记录。精确字段、跨 Workspace 规则、快照恢复和失败语义见[材料、快照与运行来源契约](development/material-contracts.md)。
+TaskContextRevision 的材料项是 `knowledge-revision`、`artifact-version` 或 `workspace-input-snapshot` 的判别联合，并同时保存用途、来源入口和可选备注。E22 已在 v12 `materials_json` 中保存并在 Main 校验具体修订、哈希、快照状态、重复项和 Workspace 归属；E23 在 v13 `run_context_snapshots` 中固定每次 Run 的授权集合。Workspace 只提供候选清单，Task 的显式材料选择才授予本次读取权；候选、选择、实际读取和成果输入关系分别记录。精确字段、跨 Workspace 规则、快照恢复和失败语义见[材料、快照与运行来源契约](development/material-contracts.md)。
 
 ## 4. Run
 

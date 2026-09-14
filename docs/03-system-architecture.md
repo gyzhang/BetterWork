@@ -197,9 +197,9 @@ Schema 校验
 - MCP Tool
 - Desktop Integration Tool
 
-当前实现状态：只有 TypeScript Tool 一种后端，落地四个工具——`calculator`、`read_text_file`、`knowledge_search`、`web_search`。管线中已实装的是 Schema 校验（Zod）、执行、进度上报（`reportProgress`）与结构化结果；进度事件在 Tool 仍在执行时立即进入 `AsyncIterable`，取消信号同时传入 Tool 与联网搜索请求。Policy 检查、用户审批与审计记录尚未建设。
+当前实现状态：只有 TypeScript Tool 一种后端，落地 `calculator`、`read_text_file`、`knowledge_search`、`read_artifact`、`web_search` 五个工具。管线中已实装的是 Schema 校验（Zod）、执行、进度上报（`reportProgress`）与结构化结果；进度事件在 Tool 仍在执行时立即进入 `AsyncIterable`，取消信号同时传入 Tool 与联网搜索请求。Policy 检查、用户审批与审计记录尚未建设。
 
-唯一强制的安全约束是 `read_text_file` 内建的 Workspace 路径边界（对真实路径校验，符号链接也不得越界）。Evidence 与 Artifact 的登记不在 Tool Runtime 内完成，而是由 Application 层（`RunService`）在观察到 `tool.completed` 事件后落库。
+唯一强制的安全约束是 `read_text_file` 内建的 Workspace 路径边界（对真实路径校验，符号链接也不得越界）；E23 对带 TaskContext 的 Run 进一步要求路径命中所选输入快照，`knowledge_search` 和 `read_artifact` 也按精确材料引用过滤。Evidence 与 Artifact 的登记不在 Tool Runtime 内完成，而是由 Application 层（`RunService`）在观察到 `tool.completed` 事件后落库。
 
 ## 7. Python Worker
 
@@ -235,7 +235,7 @@ app_settings
 
 知识和记忆表见对应专题文档。
 
-E11 已通过版本化迁移创建 `experts`、`expert_revisions`；E12 已增加 `task_context_revisions`，E13–E15 已将其接入召唤、首条消息、任务恢复和内置分发；E21 已增加知识内容修订和 Workspace 所属输入快照；E22 已在 v12 保存材料引用和用途并通过 Application 校验来源。E23–E24 将按材料契约增加运行快照、读取足迹和成果输入关系，不在 `tasks` 上用未定义的 `expert_id`、`memory` 或未验证的读取范围占位。知识索引仍在独立 `vault.sqlite`，应用库保存授权和运行真相；两库没有跨库事务，启动时先验证内容修订再写应用库事务。旧 Task 缺少上下文时按通用助手和空材料解释，首次编辑/发送再以版本化迁移创建草稿。所有迁移保持启动幂等、可回滚并通过 `foreign_key_check`；历史 Run 没有专家或材料事实时不补造。
+E11 已通过版本化迁移创建 `experts`、`expert_revisions`；E12 已增加 `task_context_revisions`，E13–E15 已将其接入召唤、首条消息、任务恢复和内置分发；E21 已增加知识内容修订和 Workspace 所属输入快照；E22 已在 v12 保存材料引用和用途并通过 Application 校验来源；E23 已在 v13 增加 `run_context_snapshots` 并接入运行范围过滤。E24 将按材料契约增加读取足迹和成果输入关系，不在 `tasks` 上用未定义的 `expert_id`、`memory` 或未验证的读取范围占位。知识索引仍在独立 `vault.sqlite`，应用库保存授权和运行真相；两库没有跨库事务，启动时先验证内容修订再写应用库事务。旧 Task 缺少上下文时按通用助手和空材料解释，首次编辑/发送再以版本化迁移创建草稿。所有迁移保持启动幂等、可回滚并通过 `foreign_key_check`；历史 Run 没有专家或材料事实时不补造。
 
 SQLite 是产品状态真相源；向量索引、缩略图和解析缓存均可重建。
 

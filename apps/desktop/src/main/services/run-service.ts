@@ -17,20 +17,25 @@ import type {
   RuntimeProfileCommand,
   ScriptExecution,
   StartRunRequest,
+  TaskMaterialSelection,
 } from '@betterwork/agent-protocol';
 import { IpcChannel } from '@betterwork/agent-protocol';
 import {
   type ArtifactFileRegistrar,
+  type ArtifactReader,
   type ArtifactRegisterInput,
   type ArtifactRegisterOutput,
   calculatorTool,
+  createArtifactReadTool,
   createArtifactRegisterFileTool,
   createKnowledgeSearchTool,
+  createReadTextFileTool,
   createSkillExecuteTool,
   createSkillReadResourceTool,
   createTaskWriteFileTool,
   createWebSearchTool,
   type KnowledgeSearchItem,
+  type ReadTextFile,
   readTextFileTool,
   type SkillCommandExecuteInput,
   type SkillCommandExecuteOutput,
@@ -44,8 +49,9 @@ import type { BrowserWindow } from 'electron';
 import { z } from 'zod';
 
 import { managedPath, writeManagedText } from '../infrastructure/managed-files';
-import type { AppStore } from '../persistence';
+import { type AppStore, type InputSnapshot, materialReferenceKey } from '../persistence';
 import type { FileArtifactService } from './file-artifact-service';
+import type { InputSnapshotService } from './input-snapshot-service';
 import type { KnowledgeVault } from './knowledge-vault';
 import type { NotificationService } from './notification-service';
 import { preparePptAttempt } from './ppt-execution-attempt';
@@ -56,6 +62,7 @@ import type { SkillDependencyService } from './skill-dependency-service';
 import type { SkillExecutionService } from './skill-execution-service';
 import { composeRuntimeConvention } from './skill-runtime-conventions';
 import type { SkillService } from './skill-service';
+import type { TaskMaterialService } from './task-material-service';
 import type { ToolchainSnapshotService } from './toolchain-snapshot-service';
 
 /** 一次执行的绑定解析结果；仅在 Run 启动前有效。 */
@@ -71,6 +78,9 @@ interface ResolvedRunContext {
   expertInstruction?: string;
   modelReference?: ExpertModelReference;
   builtinToolPolicy?: BuiltinToolPolicy;
+  materials: TaskMaterialSelection[];
+  materialScope: boolean;
+  taskContextRevisionId?: string;
 }
 
 /** 一次执行期间的内存态；Run 结束后整条丢弃。 */
@@ -83,6 +93,7 @@ interface ActiveRun {
   skillIds: string[];
   /** toolCallId -> 工具名，用于在 tool.completed 时判断该不该登记 Evidence。 */
   toolNames: Map<string, string>;
+  contextSegmentId: string;
 }
 
 const PROMPT_SUMMARY_LENGTH = 80;
@@ -97,6 +108,8 @@ const FAILURE_DETAIL_LENGTH = 500;
  */
 export const createRunTools = (dependencies: {
   knowledgeSearch: (query: string) => KnowledgeSearchItem[];
+  readTextFile?: ReadTextFile;
+  artifactReader?: ArtifactReader;
   webSearch?: WebSearch;
   allowedBuiltinToolNames?: ReadonlySet<string>;
   skillResourceReader?: (input: SkillResourceReadInput) => Promise<SkillResourceReadOutput>;
@@ -108,9 +121,17 @@ export const createRunTools = (dependencies: {
     !dependencies.allowedBuiltinToolNames || dependencies.allowedBuiltinToolNames.has(name);
   const tools: AgentTool[] = [];
   if (allows(calculatorTool.name)) tools.push(calculatorTool);
-  if (allows(readTextFileTool.name)) tools.push(readTextFileTool);
+  if (allows(readTextFileTool.name)) {
+    tools.push(
+      dependencies.readTextFile
+        ? createReadTextFileTool(dependencies.readTextFile)
+        : readTextFileTool,
+    );
+  }
   if (allows('knowledge_search'))
     tools.push(createKnowledgeSearchTool(dependencies.knowledgeSearch));
+  if (dependencies.artifactReader && allows('read_artifact'))
+    tools.push(createArtifactReadTool(dependencies.artifactReader));
   if (dependencies.webSearch && allows('web_search'))
     tools.push(createWebSearchTool(dependencies.webSearch));
   if (dependencies.skillResourceReader)
@@ -151,6 +172,8 @@ export class RunService {
     private readonly toolchainSnapshotService?: ToolchainSnapshotService,
     private readonly fileArtifactService?: FileArtifactService,
     private readonly dependencies?: SkillDependencyService,
+    private readonly inputSnapshots?: InputSnapshotService,
+    private readonly taskMaterials?: TaskMaterialService,
   ) {}
 
   start(input: StartRunRequest): string {
@@ -164,6 +187,7 @@ export class RunService {
 
     const runId = randomUUID();
     const controller = new AbortController();
+    const contextSegmentId = this.resolveContextSegment(input.taskId, executionContext.materials);
     this.activeRuns.set(runId, {
       taskId: input.taskId,
       prompt: input.prompt,
@@ -171,19 +195,38 @@ export class RunService {
       workspacePath: context.workspacePath,
       skillIds: (resolvedInput.skillBindings ?? []).map((binding) => binding.skillId),
       toolNames: new Map(),
+      contextSegmentId,
     });
 
-    this.store.transaction(() => {
-      this.store.runs.create({
-        id: runId,
-        taskId: input.taskId,
-        sessionId: input.sessionId,
-        prompt: input.prompt,
-        status: 'running',
-        createdAt: Date.now(),
+    try {
+      this.store.transaction(() => {
+        this.store.runs.create({
+          id: runId,
+          taskId: input.taskId,
+          sessionId: input.sessionId,
+          prompt: input.prompt,
+          status: 'running',
+          createdAt: Date.now(),
+        });
+        const workspaceId = this.store.tasks.getWorkspaceId(input.taskId);
+        if (!workspaceId) throw new Error('Task workspace does not exist');
+        this.store.runContextSnapshots.create({
+          runId,
+          taskId: input.taskId,
+          workspaceId,
+          ...(executionContext.taskContextRevisionId
+            ? { taskContextRevisionId: executionContext.taskContextRevisionId }
+            : {}),
+          contextSegmentId,
+          materials: executionContext.materials,
+          createdAt: Date.now(),
+        });
+        this.store.tasks.touch(input.taskId, Date.now());
       });
-      this.store.tasks.touch(input.taskId, Date.now());
-    });
+    } catch (error) {
+      this.activeRuns.delete(runId);
+      throw error;
+    }
 
     // 事件流是异步消费的；错误全部在 consume 内部收口，这里不会有未处理 rejection。
     const consumePromise = this.consume(
@@ -257,6 +300,9 @@ export class RunService {
   ): Promise<void> {
     let terminalEvent: AgentRuntimeEvent | undefined;
     try {
+      if (executionContext.materialScope && this.taskMaterials) {
+        await this.taskMaterials.validateSelections(input.taskId, executionContext.materials);
+      }
       const model = this.resolveModel(executionContext.modelReference);
       const webSearch = this.resolveWebSearch();
       const allowedBuiltinToolNames = this.allowedBuiltinToolNames(
@@ -272,13 +318,28 @@ export class RunService {
         sessionId: input.sessionId,
         prompt: input.prompt,
         workspacePath,
-        messages: this.buildPreviousMessages(input.taskId, runId),
+        messages: this.buildPreviousMessages(
+          input.taskId,
+          runId,
+          executionContext.materialScope ? this.activeRuns.get(runId)?.contextSegmentId : undefined,
+        ),
         model,
         tools: createRunTools({
-          knowledgeSearch: (query) =>
-            this.knowledgeVault
-              .search(query)
-              .map(({ document, locator, excerpt }) => ({ ...document, locator, excerpt })),
+          knowledgeSearch: (query) => this.searchKnowledge(query, executionContext),
+          ...(executionContext.materialScope && this.inputSnapshots
+            ? {
+                readTextFile: this.createScopedReadTextFile(
+                  executionContext.materials,
+                  workspacePath,
+                ),
+              }
+            : {}),
+          ...(executionContext.materialScope
+            ? {
+                artifactReader: (readInput, readContext) =>
+                  this.readScopedArtifact(executionContext.materials, readInput, readContext),
+              }
+            : {}),
           ...(webSearch ? { webSearch } : {}),
           ...(allowedBuiltinToolNames ? { allowedBuiltinToolNames } : {}),
           ...(bindingIds.length > 0
@@ -352,10 +413,16 @@ export class RunService {
    * 把同一 Task 下早于当前 Run 的已完成对话轮次重建为消息历史，
    * 只取用户提问与助手最终回复，跳过工具调用细节以避免跨 Run 的工具 ID 配对问题。
    */
-  private buildPreviousMessages(taskId: string, currentRunId: string): AgentMessage[] {
-    const previousRuns = this.store.runs
-      .listByTask(taskId)
-      .filter((run) => run.status === 'completed' && run.id !== currentRunId);
+  private buildPreviousMessages(
+    taskId: string,
+    currentRunId: string,
+    contextSegmentId?: string,
+  ): AgentMessage[] {
+    const previousRuns = this.store.runs.listByTask(taskId).filter((run) => {
+      if (run.status !== 'completed' || run.id === currentRunId) return false;
+      if (!contextSegmentId) return true;
+      return this.store.runContextSnapshots.get(run.id)?.contextSegmentId === contextSegmentId;
+    });
 
     const messages: AgentMessage[] = [];
     for (const run of previousRuns) {
@@ -371,6 +438,97 @@ export class RunService {
       }
     }
     return messages;
+  }
+
+  private searchKnowledge(query: string, context: ResolvedRunContext): KnowledgeSearchItem[] {
+    const revisionIds = context.materials
+      .filter((selection) => selection.reference.kind === 'knowledge-revision')
+      .map((selection) =>
+        selection.reference.kind === 'knowledge-revision'
+          ? selection.reference.knowledgeRevisionId
+          : '',
+      )
+      .filter(Boolean);
+    return this.knowledgeVault
+      .search(query, context.materialScope ? { revisionIds } : undefined)
+      .map(({ document, locator, excerpt }) => ({ ...document, locator, excerpt }));
+  }
+
+  private resolveContextSegment(
+    taskId: string,
+    materials: readonly TaskMaterialSelection[],
+  ): string {
+    const previous = this.store.runContextSnapshots.latestByTask(taskId);
+    if (!previous) return randomUUID();
+    const previousKeys = new Set(previous.materials.map(materialReferenceKey));
+    const currentKeys = new Set(materials.map(materialReferenceKey));
+    const isShrink =
+      currentKeys.size < previousKeys.size &&
+      [...currentKeys].every((key) => previousKeys.has(key));
+    return isShrink ? randomUUID() : previous.contextSegmentId;
+  }
+
+  private createScopedReadTextFile(
+    materials: readonly TaskMaterialSelection[],
+    workspacePath: string,
+  ): ReadTextFile {
+    const snapshots = new Map<string, InputSnapshot>();
+    for (const selection of materials) {
+      if (selection.reference.kind !== 'workspace-input-snapshot') continue;
+      const snapshot = this.store.inputSnapshots.get(selection.reference.snapshotId);
+      if (snapshot) snapshots.set(path.normalize(snapshot.sourcePath), snapshot);
+    }
+    return async (input, context) => {
+      const relative = path.normalize(input.path);
+      const snapshot = snapshots.get(relative);
+      if (!snapshot) throw new Error('材料范围不允许读取该工作区文件，请先选择输入材料。');
+      if (
+        snapshot.workspaceId !==
+        this.store.tasks.getWorkspaceId(this.store.runs.get(context.runId)?.taskId ?? '')
+      ) {
+        throw new Error('输入快照不属于当前工作空间。');
+      }
+      if (!this.inputSnapshots || !(await this.inputSnapshots.verify(snapshot))) {
+        throw new Error('输入快照缺失或已损坏，无法读取。');
+      }
+      if (context.signal.aborted) throw new Error('读取已取消。');
+      context.reportProgress(`正在读取 ${relative}`);
+      const content = await readFile(this.inputSnapshots.resolvePath(snapshot), 'utf8');
+      return {
+        path: path.relative(workspacePath, path.resolve(workspacePath, relative)),
+        content: content.slice(0, 20_000),
+        truncated: content.length > 20_000,
+      };
+    };
+  }
+
+  private async readScopedArtifact(
+    materials: readonly TaskMaterialSelection[],
+    input: Parameters<ArtifactReader>[0],
+    context: Parameters<ArtifactReader>[1],
+  ): Promise<unknown> {
+    const selected = materials.find(
+      (selection) =>
+        selection.reference.kind === 'artifact-version' &&
+        selection.reference.artifactId === input.artifactId &&
+        selection.reference.artifactVersionId === input.versionId,
+    );
+    if (!selected) throw new Error('材料范围不允许读取该成果版本，请先选择准确版本。');
+    if (context.signal.aborted) throw new Error('读取已取消。');
+    const detail = this.store.artifacts.getVersionDetail(input.versionId);
+    if (!detail || detail.artifactId !== input.artifactId) {
+      throw new Error('成果版本不存在或已不可读取。');
+    }
+    if (detail.type !== 'markdown') {
+      throw new Error('当前成果版本为演示文件，文本读取将在文件解析阶段提供。');
+    }
+    return {
+      artifactId: detail.artifactId,
+      versionId: detail.id,
+      versionNumber: detail.versionNumber,
+      content: detail.content,
+      contentHash: detail.contentHash,
+    };
   }
 
   /** 落库后再分发；顺序不可颠倒，否则 UI 可能看到库里还不存在的事件。 */
@@ -474,7 +632,11 @@ export class RunService {
 
   private resolveRunContext(input: StartRunRequest): ResolvedRunContext {
     if (!input.taskContextRevisionId) {
-      return input.skillBindings ? { skillBindings: input.skillBindings } : {};
+      return {
+        ...(input.skillBindings ? { skillBindings: input.skillBindings } : {}),
+        materials: [],
+        materialScope: false,
+      };
     }
     const expected = input.expectedTaskContextRevision;
     if (expected === undefined) throw new Error('TaskContextRevision 缺少期望修订号');
@@ -491,6 +653,9 @@ export class RunService {
         ...(context.skillBindings.length > 0 ? { skillBindings: context.skillBindings } : {}),
         ...(context.modelReference ? { modelReference: context.modelReference } : {}),
         ...(context.builtinToolPolicy ? { builtinToolPolicy: context.builtinToolPolicy } : {}),
+        materials: context.materials ?? [],
+        materialScope: true,
+        taskContextRevisionId: context.id,
       };
     }
     const expert = this.store.experts.get(context.executor.expertId);
@@ -506,6 +671,9 @@ export class RunService {
       expertInstruction: this.composeExpertInstruction(revision),
       modelReference: context.modelReference ?? revision.modelReference,
       builtinToolPolicy: context.builtinToolPolicy ?? revision.builtinToolPolicy,
+      materials: context.materials ?? [],
+      materialScope: true,
+      taskContextRevisionId: context.id,
     };
   }
 
