@@ -973,6 +973,36 @@ describe('RunService', () => {
     expect(statusOf(fixture, otherRunId)).toBe('completed');
   });
 
+  it('cancels a multi-skill run once when one bound skill is revoked', async () => {
+    const fixture = await createFixture();
+    const window = createWindowStub();
+    const targetSkill = await createTrustedSkill(fixture, 'skill-target-multi', '目标 Skill');
+    const otherSkill = await createTrustedSkill(fixture, 'skill-other-multi', '其他 Skill');
+    const service = createService(fixture, window);
+
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '同时使用两个 Skill',
+      skillBindings: [{ skillId: targetSkill }, { skillId: otherSkill }],
+    });
+
+    expect(await service.cancelRunsForSkill(targetSkill)).toBe(1);
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('cancelled');
+    const cancelledEvents = fixture.store.runs
+      .listEvents(runId)
+      .filter((event) => event.type === 'run.cancelled');
+    expect(cancelledEvents).toHaveLength(1);
+    const cancelledEvent = cancelledEvents[0];
+    expect(cancelledEvent?.type).toBe('run.cancelled');
+    if (cancelledEvent?.type === 'run.cancelled') {
+      expect(cancelledEvent.reason).toContain('目标 Skill');
+      expect(cancelledEvent.reason).toContain('信任已被撤销');
+    }
+  });
+
   it('cancelRunsForSkill() includes skill name in cancellation reason', async () => {
     const fixture = await createFixture();
     const window = createWindowStub();

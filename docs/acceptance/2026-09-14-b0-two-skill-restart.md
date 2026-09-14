@@ -15,3 +15,8 @@
 
 - 当前配置的模型 endpoint 返回 `fetch failed`，因此该次 Run 终态为 failed，没有成功的模型请求、工具活动或 PPT 产物；这不能冒充“带指令注入的成功执行”。离线单元测试仍覆盖双 Skill 指令顺序、绑定快照和撤销原因。
 - 尚未在真实窗口执行撤销/停用其中一个 Skill 后只取消包含它的活跃 Run；B00-5 继续保持 `doing`。
+
+## 自动化补充证据
+
+- `run-service.test.ts` 新增同一 Run 双 Skill 撤销回归：撤销其中一个绑定后 Run 只产生一个 `run.cancelled` 终态，原因同时包含 Skill 名称和“信任已被撤销”；独立的其他 Run 不受影响的既有用例继续通过。
+- `npm run verify` 通过（74 个测试文件 / 513 项测试 / Electron build），但该证据不能替代真实模型请求和窗口中的撤销操作。
