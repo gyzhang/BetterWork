@@ -16,7 +16,7 @@ import { ArtifactIcon, CapabilityIcon, ChevronRightIcon, GlobeIcon, KnowledgeIco
 import { reportAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
 import { runStatusName } from '../lib/labels';
-import { canToggleMcpTool } from '../lib/mcp-selection';
+import { canToggleMcpTool, hasMcpToolBinding, setMcpToolBinding } from '../lib/mcp-selection';
 import { handleTitlebarDoubleClick } from '../lib/titlebar';
 import type { ContextTab } from '../lib/view-types';
 import { EmptyContext } from './EmptyState';
@@ -278,8 +278,10 @@ export function ContextPanel({
                         ) : (
                           <div className="expert-option-list">
                             {connection.tools.map((tool) => {
-                              const checked = mcpToolBindings.some(
-                                (binding) => binding.toolId === tool.id,
+                              const checked = hasMcpToolBinding(
+                                mcpToolBindings,
+                                connection.id,
+                                tool.id,
                               );
                               const enabled = canToggleMcpTool(connection.status, checked);
                               return (
@@ -290,14 +292,12 @@ export function ContextPanel({
                                     disabled={!enabled}
                                     onChange={(event) =>
                                       onMcpToolBindingsChange(
-                                        event.target.checked
-                                          ? [
-                                              ...mcpToolBindings,
-                                              { connectionId: connection.id, toolId: tool.id },
-                                            ]
-                                          : mcpToolBindings.filter(
-                                              (binding) => binding.toolId !== tool.id,
-                                            ),
+                                        setMcpToolBinding(
+                                          mcpToolBindings,
+                                          connection.id,
+                                          tool.id,
+                                          event.target.checked,
+                                        ),
                                       )
                                     }
                                   />

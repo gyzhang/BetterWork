@@ -14,7 +14,7 @@ import { PageHeader } from '../components/layout/PageHeader';
 import type { ExpertsState } from '../hooks/use-experts';
 import { ExpertIcon, PlusIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
-import { canToggleMcpTool } from '../lib/mcp-selection';
+import { canToggleMcpTool, hasMcpToolBinding, setMcpToolBinding } from '../lib/mcp-selection';
 
 const lifecycleName = {
   active: '可召唤',
@@ -321,7 +321,7 @@ function ExpertEditor({
                       <div className="expert-option-list">
                         {connection.tools.map((tool) => {
                           const bindings = draft.mcpToolBindings ?? [];
-                          const checked = bindings.some((binding) => binding.toolId === tool.id);
+                          const checked = hasMcpToolBinding(bindings, connection.id, tool.id);
                           return (
                             <label className="expert-option" key={tool.id}>
                               <input
@@ -331,12 +331,12 @@ function ExpertEditor({
                                 onChange={(event) =>
                                   onChange({
                                     ...draft,
-                                    mcpToolBindings: event.target.checked
-                                      ? [
-                                          ...bindings,
-                                          { connectionId: connection.id, toolId: tool.id },
-                                        ]
-                                      : bindings.filter((binding) => binding.toolId !== tool.id),
+                                    mcpToolBindings: setMcpToolBinding(
+                                      bindings,
+                                      connection.id,
+                                      tool.id,
+                                      event.target.checked,
+                                    ),
                                   })
                                 }
                               />
