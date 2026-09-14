@@ -296,6 +296,21 @@ describe('OpenAICompatibleProvider failures', () => {
     );
   });
 
+  it('does not expose the API key in a connection diagnostic', async () => {
+    stubFetch(() => {
+      throw new Error('fetch failed');
+    });
+    const error = await collect(provider({ apiKey: 'secret-api-key' }).stream(request())).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    if (error instanceof Error) {
+      expect(error.message).toContain('无法连接模型服务');
+      expect(error.message).not.toContain('secret-api-key');
+    }
+  });
+
   it('rejects a malformed data line instead of silently dropping it', async () => {
     stubFetch(() => streamOf(['data: {not json}\n\n']));
     await expect(collect(provider().stream(request()))).rejects.toThrow();
