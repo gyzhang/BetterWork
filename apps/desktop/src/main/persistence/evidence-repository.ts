@@ -66,6 +66,10 @@ export class EvidenceRepository {
   }
 
   private save(sourceType: EvidenceSummary['sourceType'], input: NewEvidence): void {
+    const run = this.db.prepare('SELECT task_id FROM runs WHERE id = ?').get(input.runId) as
+      { task_id: string } | undefined;
+    if (!run) throw new Error('Evidence Run does not exist');
+    if (run.task_id !== input.taskId) throw new Error('Evidence Run does not belong to task');
     this.db
       .prepare(
         `INSERT OR IGNORE INTO evidence
