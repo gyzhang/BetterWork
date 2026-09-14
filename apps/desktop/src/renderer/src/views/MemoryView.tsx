@@ -4,6 +4,12 @@ import { useState } from 'react';
 import type { MemoriesState } from '../hooks/use-memories';
 import { trackAction } from '../lib/async-action';
 
+export interface MemoryManagementTarget {
+  expertId: string;
+  expertName: string;
+  workspaceId?: string;
+}
+
 const statusLabel: Record<MemoryRecord['status'], string> = {
   candidate: '待确认',
   confirmed: '已确认',
@@ -25,11 +31,49 @@ const scopeLabel = (memory: MemoryRecord): string => {
   }
 };
 
-export function MemoryPage({ state }: { state: MemoriesState }): React.JSX.Element {
+const memoryMatchesTarget = (
+  memory: MemoryRecord,
+  target: MemoryManagementTarget | undefined,
+): boolean => {
+  if (!target) return true;
+  if (memory.scope.kind === 'expert') return memory.scope.expertId === target.expertId;
+  return (
+    memory.scope.kind === 'expert-workspace' &&
+    target.workspaceId !== undefined &&
+    memory.scope.expertId === target.expertId &&
+    memory.scope.workspaceId === target.workspaceId
+  );
+};
+
+const memoryScopeForTarget = (
+  target: MemoryManagementTarget | undefined,
+): MemoryRecord['scope'] => {
+  if (!target) return { kind: 'user' };
+  if (target.workspaceId) {
+    return {
+      kind: 'expert-workspace',
+      expertId: target.expertId,
+      workspaceId: target.workspaceId,
+    };
+  }
+  return { kind: 'expert', expertId: target.expertId };
+};
+
+export function MemoryPage({
+  state,
+  scopeTarget,
+  onClearScope,
+}: {
+  state: MemoriesState;
+  scopeTarget?: MemoryManagementTarget;
+  onClearScope?: () => void;
+}): React.JSX.Element {
   const [draft, setDraft] = useState('');
   const [editingId, setEditingId] = useState<string>();
   const [editingContent, setEditingContent] = useState('');
-  const visible = state.memories.filter((memory) => memory.status !== 'deleted');
+  const visible = state.memories.filter(
+    (memory) => memory.status !== 'deleted' && memoryMatchesTarget(memory, scopeTarget),
+  );
 
   const beginEdit = (memory: MemoryRecord): void => {
     setEditingId(memory.id);
@@ -42,16 +86,29 @@ export function MemoryPage({ state }: { state: MemoriesState }): React.JSX.Eleme
         <div>
           <p className="eyebrow">记忆</p>
           <h2>让长期经验可查看、可确认、可撤回</h2>
-          <p>只有已确认的记忆会在新任务中作为背景使用。候选记忆不会自动进入模型上下文。</p>
+          <p>
+            {scopeTarget
+              ? `当前范围：${scopeTarget.expertName}${scopeTarget.workspaceId ? ' · 当前工作空间' : ''}`
+              : '只有已确认的记忆会在新任务中作为背景使用。候选记忆不会自动进入模型上下文。'}
+          </p>
         </div>
-        <button className="secondary-button" onClick={state.refresh}>
-          刷新
-        </button>
+        <div className="memory-heading-actions">
+          {scopeTarget && onClearScope && (
+            <button className="text-button" type="button" onClick={onClearScope}>
+              查看全部记忆
+            </button>
+          )}
+          <button className="secondary-button" type="button" onClick={state.refresh}>
+            刷新
+          </button>
+        </div>
       </div>
       {state.error && <p className="inline-message error">{state.error}</p>}
       <div className="memory-create-form">
         <label>
-          记住一条用户偏好或工作方法
+          {scopeTarget
+            ? `记住一条${scopeTarget.expertName}的工作方法`
+            : '记住一条用户偏好或工作方法'}
           <textarea
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
@@ -66,7 +123,7 @@ export function MemoryPage({ state }: { state: MemoriesState }): React.JSX.Eleme
             trackAction(
               state
                 .create({
-                  scope: { kind: 'user' },
+                  scope: memoryScopeForTarget(scopeTarget),
                   kind: 'procedural',
                   content: draft.trim(),
                   sourceType: 'user-explicit',

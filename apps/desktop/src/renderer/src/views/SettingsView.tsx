@@ -20,7 +20,7 @@ import { CheckIcon, PlusIcon } from '../icons';
 import { trackAction } from '../lib/async-action';
 import { connectionStatusName, roleName } from '../lib/labels';
 import type { SettingsTab } from '../lib/view-types';
-import { MemoryPage } from './MemoryView';
+import { type MemoryManagementTarget, MemoryPage } from './MemoryView';
 import { SkillsPage } from './SkillsView';
 
 export interface SettingsPageProps {
@@ -43,6 +43,8 @@ export interface SettingsPageProps {
   modelMessage: string;
   skills: SkillsState;
   memories: MemoriesState;
+  memoryTarget?: MemoryManagementTarget;
+  onClearMemoryTarget: () => void;
   mcp: McpConnectionsState;
 }
 export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
@@ -82,7 +84,13 @@ export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
         {tab === 'models' && <ModelSettings {...props} />}
         {tab === 'search' && <SearchSettings />}
         {tab === 'appearance' && <AppearanceSettings {...props} />}
-        {tab === 'memory' && <MemoryPage state={props.memories} />}
+        {tab === 'memory' && (
+          <MemoryPage
+            state={props.memories}
+            {...(props.memoryTarget ? { scopeTarget: props.memoryTarget } : {})}
+            onClearScope={props.onClearMemoryTarget}
+          />
+        )}
         {tab === 'mcp' && <McpSettings state={props.mcp} />}
         {tab === 'general' && (
           <section className="settings-section">
