@@ -287,6 +287,7 @@ export class McpClientService {
         structuredContent: result.structuredContent,
       });
     } catch (error) {
+      if (error instanceof McpClientError) throw error;
       throw new McpClientError(`MCP 工具调用失败：${tool.name}`, { cause: error });
     }
   }
