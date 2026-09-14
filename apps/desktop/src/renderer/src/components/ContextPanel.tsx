@@ -315,7 +315,7 @@ export function ContextPanel({
               {evidence.length === 0 ? (
                 <EmptyContext
                   title="尚无已查阅来源"
-                  detail="本次运行实际读取的本地资料与网页来源会显示在这里。"
+                  detail="本次运行实际读取的本地资料、网页与 MCP 来源会显示在这里。"
                 />
               ) : (
                 <div className="evidence-list">
