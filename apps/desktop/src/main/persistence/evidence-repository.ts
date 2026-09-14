@@ -33,7 +33,7 @@ const toSummary = (row: EvidenceRow): EvidenceSummary => ({
 });
 
 /**
- * Evidence 是可回溯证据。本地资料与网页来源共用一张表，
+ * Evidence 是可回溯证据。本地资料、网页与 MCP 来源共用一张表，
  * 靠 `UNIQUE(run_id, source_uri, locator)` 在同一次 Run 内天然去重，
  * 因此重复登记同一条来源是安全的 INSERT OR IGNORE。
  */
