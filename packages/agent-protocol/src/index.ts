@@ -557,14 +557,20 @@ export const taskContextMutationResultSchema = z
 export type TaskContextMutationResult = z.infer<typeof taskContextMutationResultSchema>;
 
 export const listTaskMaterialCandidatesRequestSchema = z
-  .object({ taskId: z.string().min(1) })
-  .strict();
+  .object({ taskId: z.string().min(1).optional(), workspaceId: z.string().min(1).optional() })
+  .strict()
+  .refine((input) => Boolean(input.taskId ?? input.workspaceId), {
+    message: 'taskId 或 workspaceId 至少提供一个',
+  });
 export type ListTaskMaterialCandidatesRequest = z.infer<
   typeof listTaskMaterialCandidatesRequestSchema
 >;
 export const prepareWorkspaceInputSnapshotRequestSchema = z
-  .object({ taskId: z.string().min(1) })
-  .strict();
+  .object({ taskId: z.string().min(1).optional(), workspaceId: z.string().min(1).optional() })
+  .strict()
+  .refine((input) => Boolean(input.taskId ?? input.workspaceId), {
+    message: 'taskId 或 workspaceId 至少提供一个',
+  });
 export type PrepareWorkspaceInputSnapshotRequest = z.infer<
   typeof prepareWorkspaceInputSnapshotRequestSchema
 >;

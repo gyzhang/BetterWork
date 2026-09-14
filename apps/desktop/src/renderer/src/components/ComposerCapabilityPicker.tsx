@@ -1,5 +1,10 @@
-import type { SkillSummary } from '@betterwork/agent-protocol';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import type {
+  MaterialCandidate,
+  MaterialPurpose,
+  SkillSummary,
+  TaskMaterialSelection,
+} from '@betterwork/agent-protocol';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { CapabilityIcon, CloseIcon, PlusIcon } from '../icons';
 import { PopoverMenu } from './PopoverMenu';
@@ -7,7 +12,7 @@ import { PopoverMenu } from './PopoverMenu';
 /**
  * Composer 能力选择器（ADR-0012 §UI / B00-4）。
  *
- * 一级菜单：技能 / 专家 / 添加文件（材料选择仍待后续阶段）。
+ * 一级菜单：技能 / 专家 / 添加文件 / 引用知识 / 引用成果。
  * 二级：技能列表，带搜索、多选、blockedReasons 置灰与定位入口。
  * 已选能力以 chip 条形式显示于输入框上方。
  */
@@ -30,7 +35,56 @@ export interface ComposerCapabilityPickerProps {
   onRemove: (id: string) => void;
   onRequestSkillDetail: (skillId: string) => void;
   onRequestExpert: () => void;
+  materials: TaskMaterialSelection[];
+  materialCandidates: MaterialCandidate[];
+  workspaceId?: string;
+  materialPickerKind?: 'knowledge' | 'artifact';
+  materialsLoading?: boolean;
+  materialPickerError?: string;
+  onRequestMaterials: (kind: 'file' | 'knowledge' | 'artifact') => void;
+  onDismissMaterialPicker: () => void;
+  onCommitMaterials: (materials: TaskMaterialSelection[]) => void;
 }
+
+const PURPOSE_LABELS: Record<MaterialPurpose, string> = {
+  rule: '规则口径',
+  'current-input': '本期输入',
+  'historical-comparison': '历史对比',
+  'structure-reference': '结构参考',
+  template: '模板',
+  background: '背景参考',
+};
+
+const materialKey = (selection: TaskMaterialSelection): string => {
+  const reference = selection.reference;
+  if (reference.kind === 'knowledge-revision') return `knowledge:${reference.knowledgeRevisionId}`;
+  if (reference.kind === 'artifact-version') return `artifact:${reference.artifactVersionId}`;
+  return `snapshot:${reference.snapshotId}`;
+};
+
+const candidateKey = (candidate: MaterialCandidate): string => {
+  const reference = candidate.reference;
+  if (reference.kind === 'knowledge-revision') return `knowledge:${reference.knowledgeRevisionId}`;
+  if (reference.kind === 'artifact-version') return `artifact:${reference.artifactVersionId}`;
+  return `snapshot:${reference.snapshotId}`;
+};
+
+const defaultPurpose = (candidate: MaterialCandidate): MaterialPurpose => {
+  if (candidate.reference.kind === 'knowledge-revision') return 'rule';
+  if (candidate.reference.kind === 'artifact-version') return 'historical-comparison';
+  return 'current-input';
+};
+
+const materialTitle = (
+  selection: TaskMaterialSelection,
+  candidates: MaterialCandidate[],
+): string => {
+  const candidate = candidates.find((item) => candidateKey(item) === materialKey(selection));
+  if (candidate) return candidate.title;
+  if (selection.reference.kind === 'knowledge-revision') return '知识修订';
+  if (selection.reference.kind === 'artifact-version') return '成果版本';
+  return '工作区文件';
+};
 
 const computeSkillStatus = (skill: SkillSummary): CapabilityChip['status'] => {
   if (!skill.enabled) return 'disabled';
@@ -53,14 +107,32 @@ export function ComposerCapabilityPicker({
   onRemove,
   onRequestSkillDetail,
   onRequestExpert,
+  materials,
+  materialCandidates,
+  workspaceId,
+  materialPickerKind,
+  materialsLoading = false,
+  materialPickerError,
+  onRequestMaterials,
+  onDismissMaterialPicker,
+  onCommitMaterials,
 }: ComposerCapabilityPickerProps): React.JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const buttonRef = useRef<HTMLButtonElement>(null);
   const skillButtonRef = useRef<HTMLButtonElement>(null);
+  const [materialDraft, setMaterialDraft] = useState<TaskMaterialSelection[]>(materials);
+  const [showGlobalArtifacts, setShowGlobalArtifacts] = useState(false);
 
   const selectedIds = useMemo(() => new Set(selected.map((chip) => chip.id)), [selected]);
+
+  useEffect(() => {
+    if (materialPickerKind) {
+      setMaterialDraft(materials);
+      setShowGlobalArtifacts(false);
+    }
+  }, [materialPickerKind, materials]);
 
   const filteredSkills = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -80,10 +152,12 @@ export function ComposerCapabilityPicker({
       } else if (id === 'experts') {
         setMenuOpen(false);
         onRequestExpert();
+      } else if (id === 'files' || id === 'knowledge' || id === 'artifact') {
+        setMenuOpen(false);
+        onRequestMaterials(id === 'files' ? 'file' : id);
       }
-      // 'files' is disabled, no action.
     },
-    [onRequestExpert],
+    [onRequestExpert, onRequestMaterials],
   );
 
   const handleSkillSelect = useCallback(
@@ -109,7 +183,9 @@ export function ComposerCapabilityPicker({
   const topLevelItems = [
     { id: 'skills', label: '技能' },
     { id: 'experts', label: '专家', hint: '打开专家列表' },
-    { id: 'files', label: '添加文件', disabled: true, hint: '尚未开放' },
+    { id: 'files', label: '添加文件', hint: '从当前工作空间选择' },
+    { id: 'knowledge', label: '引用知识', hint: '选择具体修订' },
+    { id: 'artifact', label: '引用成果', hint: '选择具体版本' },
   ];
 
   const skillItems = useMemo(
@@ -128,6 +204,39 @@ export function ComposerCapabilityPicker({
         };
       }),
     [filteredSkills, selectedIds],
+  );
+
+  const visibleMaterialCandidates = useMemo(
+    () =>
+      materialCandidates.filter((candidate) =>
+        materialPickerKind === 'knowledge'
+          ? candidate.reference.kind === 'knowledge-revision'
+          : candidate.reference.kind === 'artifact-version' &&
+            (showGlobalArtifacts || candidate.reference.originWorkspaceId === workspaceId),
+      ),
+    [materialCandidates, materialPickerKind, showGlobalArtifacts, workspaceId],
+  );
+  const hasGlobalArtifacts = materialCandidates.some(
+    (candidate) =>
+      candidate.reference.kind === 'artifact-version' &&
+      candidate.reference.originWorkspaceId !== workspaceId,
+  );
+  const materialItems = useMemo(
+    () =>
+      visibleMaterialCandidates.map((candidate) => {
+        const key = candidateKey(candidate);
+        const isSelected = materialDraft.some((selection) => materialKey(selection) === key);
+        const hint = [candidate.sourceLabel, candidate.detail, isSelected ? '已选择' : '']
+          .filter(Boolean)
+          .join(' · ');
+        return {
+          id: key,
+          label: candidate.title,
+          disabled: candidate.status !== 'ready',
+          ...(hint ? { hint } : {}),
+        };
+      }),
+    [materialDraft, visibleMaterialCandidates],
   );
 
   return (
@@ -149,6 +258,59 @@ export function ComposerCapabilityPicker({
               </button>
             </div>
           ))}
+        </div>
+      )}
+      {materials.length > 0 && (
+        <div className="material-chip-bar" role="list" aria-label="本次材料">
+          {materials.map((selection) => {
+            const title = materialTitle(selection, materialCandidates);
+            const candidate = materialCandidates.find(
+              (item) => candidateKey(item) === materialKey(selection),
+            );
+            return (
+              <div
+                key={materialKey(selection)}
+                className={`material-chip${candidate?.status === 'unavailable' ? ' unavailable' : ''}`}
+                role="listitem"
+              >
+                <span className="material-chip-title" title={title}>
+                  {title}
+                </span>
+                <select
+                  aria-label={`${title}用途`}
+                  value={selection.purpose}
+                  disabled={disabled}
+                  onChange={(event) => {
+                    const purpose = event.target.value as MaterialPurpose;
+                    onCommitMaterials(
+                      materials.map((item) =>
+                        materialKey(item) === materialKey(selection) ? { ...item, purpose } : item,
+                      ),
+                    );
+                  }}
+                >
+                  {Object.entries(PURPOSE_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="capability-chip-remove"
+                  aria-label={`移除材料 ${title}`}
+                  onClick={() =>
+                    onCommitMaterials(
+                      materials.filter((item) => materialKey(item) !== materialKey(selection)),
+                    )
+                  }
+                  disabled={disabled}
+                >
+                  <CloseIcon size={10} />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
       <button
@@ -212,6 +374,65 @@ export function ComposerCapabilityPicker({
               查看不可用原因
             </button>
           ) : undefined
+        }
+      />
+      <PopoverMenu
+        open={Boolean(materialPickerKind)}
+        anchorRef={buttonRef}
+        items={materialItems}
+        label={materialPickerKind === 'knowledge' ? '引用知识' : '引用成果'}
+        onDismiss={onDismissMaterialPicker}
+        onSelect={(id) => {
+          const candidate = visibleMaterialCandidates.find((item) => candidateKey(item) === id);
+          if (!candidate || candidate.status !== 'ready') return;
+          setMaterialDraft((current) => {
+            const existing = current.findIndex((selection) => materialKey(selection) === id);
+            if (existing >= 0) return current.filter((_, index) => index !== existing);
+            const addedFrom =
+              candidate.reference.kind === 'artifact-version' &&
+              candidate.reference.originWorkspaceId !== workspaceId
+                ? 'global-search'
+                : 'workspace-candidate';
+            return [
+              ...current,
+              { reference: candidate.reference, purpose: defaultPurpose(candidate), addedFrom },
+            ];
+          });
+        }}
+        header={
+          materialsLoading ||
+          materialPickerError ||
+          (materialPickerKind === 'artifact' && hasGlobalArtifacts) ? (
+            <div className="material-picker-status">
+              {materialsLoading ? '正在加载候选材料…' : materialPickerError}
+              {materialPickerKind === 'artifact' && hasGlobalArtifacts && !materialsLoading && (
+                <button
+                  type="button"
+                  className="material-global-toggle"
+                  onClick={() => setShowGlobalArtifacts((current) => !current)}
+                >
+                  {showGlobalArtifacts ? '仅显示当前工作空间' : '显示其他工作空间成果'}
+                </button>
+              )}
+            </div>
+          ) : undefined
+        }
+        footer={
+          <div className="material-picker-actions">
+            <button type="button" className="text-button" onClick={onDismissMaterialPicker}>
+              取消
+            </button>
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => {
+                onCommitMaterials(materialDraft);
+                onDismissMaterialPicker();
+              }}
+            >
+              添加已选材料
+            </button>
+          </div>
         }
       />
       {disabled && disabledReason ? (

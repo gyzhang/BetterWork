@@ -2,7 +2,9 @@ import type {
   AgentRuntimeEvent,
   ArtifactSummary,
   EvidenceSummary,
+  MaterialCandidate,
   RunSummary,
+  TaskMaterialSelection,
 } from '@betterwork/agent-protocol';
 import { useCallback, useState } from 'react';
 
@@ -36,6 +38,29 @@ const artifactTypeLabel = (artifact: ArtifactSummary): string => {
   return 'Markdown';
 };
 
+const materialKey = (selection: TaskMaterialSelection): string => {
+  const reference = selection.reference;
+  if (reference.kind === 'knowledge-revision') return `knowledge:${reference.knowledgeRevisionId}`;
+  if (reference.kind === 'artifact-version') return `artifact:${reference.artifactVersionId}`;
+  return `snapshot:${reference.snapshotId}`;
+};
+
+const candidateKey = (candidate: MaterialCandidate): string => {
+  const reference = candidate.reference;
+  if (reference.kind === 'knowledge-revision') return `knowledge:${reference.knowledgeRevisionId}`;
+  if (reference.kind === 'artifact-version') return `artifact:${reference.artifactVersionId}`;
+  return `snapshot:${reference.snapshotId}`;
+};
+
+const purposeLabel: Record<TaskMaterialSelection['purpose'], string> = {
+  rule: '规则口径',
+  'current-input': '本期输入',
+  'historical-comparison': '历史对比',
+  'structure-reference': '结构参考',
+  template: '模板',
+  background: '背景参考',
+};
+
 export function ContextPanel({
   open,
   setOpen,
@@ -49,6 +74,9 @@ export function ContextPanel({
   activityGroups,
   onSelectRun,
   onOpenSource,
+  materials,
+  materialCandidates,
+  onRequestMaterials,
 }: {
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -62,6 +90,9 @@ export function ContextPanel({
   activityGroups: ActivityGroup[];
   onSelectRun: (run: RunSummary) => void;
   onOpenSource: (sourcePath: string) => Promise<void>;
+  materials: TaskMaterialSelection[];
+  materialCandidates: MaterialCandidate[];
+  onRequestMaterials: (kind: 'file' | 'knowledge' | 'artifact') => void;
 }): React.JSX.Element | null {
   const [sourceToast, setSourceToast] = useState<{ tone: ToastTone; message: string }>();
   const dismissSourceToast = useCallback(() => setSourceToast(undefined), []);
@@ -135,61 +166,104 @@ export function ContextPanel({
                 )}
               </div>
             ))}
-          {tab === 'sources' &&
-            (evidence.length === 0 ? (
-              <EmptyContext
-                title="尚无引用资料"
-                detail="检索到的本地资料与网页来源会显示在这里。"
-              />
-            ) : (
-              <div className="evidence-list">
-                {evidence.map((item) =>
-                  item.sourceType === 'web-page' ? (
-                    <article className="evidence-row" key={item.id}>
-                      <span aria-hidden="true">
-                        <GlobeIcon size={12} />
-                      </span>
-                      <div>
-                        <strong>{item.title}</strong>
-                        <small>{item.locator} · 网页来源</small>
-                        <p>{item.excerpt}</p>
-                      </div>
-                    </article>
-                  ) : (
-                    <article className="evidence-row" key={item.id}>
-                      <span aria-hidden="true">
-                        <KnowledgeIcon size={12} />
-                      </span>
-                      <div>
-                        <strong>{item.title}</strong>
-                        <small>{item.locator} · 本地资料</small>
-                        <p>{item.excerpt}</p>
-                      </div>
-                      <button
-                        className="evidence-open-button"
-                        onClick={() =>
-                          reportAction(
-                            onOpenSource(item.sourceUri).then(() =>
-                              setSourceToast({
-                                tone: 'success',
-                                message: `已打开「${item.title}」的原始资料。`,
-                              }),
-                            ),
-                            (errorMessage) =>
-                              setSourceToast({
-                                tone: 'error',
-                                message: errorMessage || '无法打开原始资料。',
-                              }),
-                          )
-                        }
-                      >
-                        原文
-                      </button>
-                    </article>
-                  ),
+          {tab === 'sources' && (
+            <>
+              <section className="selected-materials-panel">
+                <div className="selected-materials-heading">
+                  <div>
+                    <strong>本次材料</strong>
+                    <small>
+                      {materials.length > 0 ? `${materials.length} 项已选择` : '尚未选择'}
+                    </small>
+                  </div>
+                  <div className="selected-materials-actions">
+                    <button type="button" onClick={() => onRequestMaterials('file')}>
+                      文件
+                    </button>
+                    <button type="button" onClick={() => onRequestMaterials('knowledge')}>
+                      知识
+                    </button>
+                    <button type="button" onClick={() => onRequestMaterials('artifact')}>
+                      成果
+                    </button>
+                  </div>
+                </div>
+                {materials.length > 0 && (
+                  <div className="selected-materials-list">
+                    {materials.map((selection) => {
+                      const candidate = materialCandidates.find(
+                        (item) => candidateKey(item) === materialKey(selection),
+                      );
+                      return (
+                        <div className="selected-material-row" key={materialKey(selection)}>
+                          <strong>{candidate?.title ?? '已选材料'}</strong>
+                          <small>
+                            {candidate?.sourceLabel ?? selection.reference.kind} ·{' '}
+                            {purposeLabel[selection.purpose]}
+                            {candidate?.status === 'unavailable' ? ' · 不可读取' : ''}
+                          </small>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
-              </div>
-            ))}
+              </section>
+              {evidence.length === 0 ? (
+                <EmptyContext
+                  title="尚无已查阅来源"
+                  detail="本次运行实际读取的本地资料与网页来源会显示在这里。"
+                />
+              ) : (
+                <div className="evidence-list">
+                  {evidence.map((item) =>
+                    item.sourceType === 'web-page' ? (
+                      <article className="evidence-row" key={item.id}>
+                        <span aria-hidden="true">
+                          <GlobeIcon size={12} />
+                        </span>
+                        <div>
+                          <strong>{item.title}</strong>
+                          <small>{item.locator} · 网页来源</small>
+                          <p>{item.excerpt}</p>
+                        </div>
+                      </article>
+                    ) : (
+                      <article className="evidence-row" key={item.id}>
+                        <span aria-hidden="true">
+                          <KnowledgeIcon size={12} />
+                        </span>
+                        <div>
+                          <strong>{item.title}</strong>
+                          <small>{item.locator} · 本地资料</small>
+                          <p>{item.excerpt}</p>
+                        </div>
+                        <button
+                          className="evidence-open-button"
+                          onClick={() =>
+                            reportAction(
+                              onOpenSource(item.sourceUri).then(() =>
+                                setSourceToast({
+                                  tone: 'success',
+                                  message: `已打开「${item.title}」的原始资料。`,
+                                }),
+                              ),
+                              (errorMessage) =>
+                                setSourceToast({
+                                  tone: 'error',
+                                  message: errorMessage || '无法打开原始资料。',
+                                }),
+                            )
+                          }
+                        >
+                          原文
+                        </button>
+                      </article>
+                    ),
+                  )}
+                </div>
+              )}
+            </>
+          )}
           {tab === 'artifacts' &&
             (artifacts.length === 0 ? (
               <EmptyContext
