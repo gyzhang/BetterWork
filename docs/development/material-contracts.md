@@ -94,7 +94,7 @@ interface WorkspaceMaterialCandidate {
 跨 Workspace 的规则如下：
 
 - `workspace-input-snapshot` 必须属于当前 Task 的 Workspace；用另一个 Workspace 的路径或快照 ID 直接提交一律拒绝。
-- Knowledge 和 Artifact 可以通过“我的全部知识/成果”的显式选择入口跨 Workspace 引用；引用必须携带 `originWorkspaceId`（Knowledge 若没有归属则明确标为全局），在界面显示来源。ExpertRevision 中保存的 ArtifactVersion 常用参考同样属于显式来源，召唤时以 `expert-reference` 标记带入；路径字符串或旧历史消息仍不能自动跨空间带入。
+- Knowledge 和 Artifact 可以通过“我的全部知识/成果”的显式选择入口跨 Workspace 引用；引用必须携带 `originWorkspaceId`（Knowledge 若没有归属则明确标为全局），在界面显示来源。ExpertRevision 中保存的 ArtifactVersion 常用参考只在其来源 Workspace 适用；召唤到其他 Workspace 时不自动带入，仍需通过任务的显式全局来源选择。路径字符串或旧历史消息不能自动跨空间带入。
 - 任意材料 ID 先在 Main 解析归属、生命周期和内容修订，再写入 TaskContextRevision；Renderer 传来的 ID 不是权限证明。
 
 ## 3. 版本、快照与 Run

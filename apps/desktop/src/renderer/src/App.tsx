@@ -9,6 +9,7 @@ import type {
   EvidenceSummary,
   ExpertSummary,
   MaterialCandidate,
+  MaterialReference,
   McpToolBinding,
   MemoryRecord,
   NotificationSummary,
@@ -70,6 +71,14 @@ import { ExpertsPage } from './views/ExpertsView';
 import { KnowledgePage } from './views/KnowledgeView';
 import { SettingsPage } from './views/SettingsView';
 import { SkillsPage } from './views/SkillsView';
+
+const expertReferenceApplicableToWorkspace = (
+  reference: MaterialReference,
+  workspaceId?: string,
+): boolean => {
+  if (reference.kind !== 'artifact-version') return true;
+  return Boolean(workspaceId && reference.originWorkspaceId === workspaceId);
+};
 
 export function App(): React.JSX.Element {
   // 三个自包含的状态簇各自成 hook；App 只保留跨簇的编排与布局。
@@ -456,10 +465,11 @@ export function App(): React.JSX.Element {
       startNewTask();
       setActiveExpert({ id: detail.id, revisionId: detail.revision.id, name: detail.name });
       setTaskMaterials(
-        (detail.revision.referenceMaterials ?? []).map((material) => ({
-          ...material,
-          addedFrom: 'expert-reference' as const,
-        })),
+        (detail.revision.referenceMaterials ?? [])
+          .filter((material) =>
+            expertReferenceApplicableToWorkspace(material.reference, workspace?.id),
+          )
+          .map((material) => ({ ...material, addedFrom: 'expert-reference' as const })),
       );
       setMaterialCandidates(expertMaterialCandidates);
       setMcpToolBindings(detail.revision.mcpToolBindings ?? []);
@@ -470,7 +480,7 @@ export function App(): React.JSX.Element {
       );
       setView('work');
     },
-    [expertMaterialCandidates, skillChipForBinding],
+    [expertMaterialCandidates, skillChipForBinding, workspace?.id],
   );
   const commitTaskMaterials = useCallback((materials: TaskMaterialSelection[]): void => {
     setTaskMaterials(materials);
@@ -1394,6 +1404,7 @@ export function App(): React.JSX.Element {
             skills={skills.skills}
             mcpConnections={mcpState.connections}
             materialCandidates={expertMaterialCandidates}
+            {...(workspace ? { workspaceId: workspace.id } : {})}
             actions={experts}
             onSummon={summonExpert}
             onError={setActionError}

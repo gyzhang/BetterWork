@@ -401,6 +401,42 @@ describe('Expert summon in the task composer', () => {
       }),
     );
   });
+
+  it('does not carry an Expert artifact reference from another workspace', async () => {
+    const api = installApi({ expert: true });
+    const reference = {
+      reference: {
+        kind: 'artifact-version' as const,
+        artifactId: 'previous-report',
+        artifactVersionId: 'previous-report-v3',
+        contentHash: 'previous-report-hash',
+        originWorkspaceId: 'other-workspace',
+      },
+      purpose: 'historical-comparison' as const,
+    };
+    api.experts.get.mockResolvedValue({
+      ...expertDetail,
+      revision: { ...expertDetail.revision, referenceMaterials: [reference] },
+    });
+    api.materials.listCandidates.mockResolvedValue([
+      {
+        reference: reference.reference,
+        title: '上月经营报告',
+        sourceLabel: '成果 · 上月经营报告 · 其他工作空间',
+        status: 'ready',
+      },
+    ]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
+    fireEvent.click(await screen.findByRole('button', { name: '召唤' }));
+    fireEvent.change(await screen.findByRole('textbox', { name: /任务输入/ }), {
+      target: { value: '分析本月经营数字' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '开始工作' }));
+
+    await waitFor(() => expect(api.taskContexts.save).toHaveBeenCalledTimes(1));
+    expect(api.taskContexts.save).toHaveBeenCalledWith(expect.objectContaining({ materials: [] }));
+  });
 });
 
 describe('Task context restoration', () => {
