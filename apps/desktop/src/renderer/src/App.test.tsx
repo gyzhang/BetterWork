@@ -5,6 +5,7 @@ import type {
   ExpertDetail,
   ExpertSummary,
   MaterialCandidate,
+  MemoryRecord,
   ModelProfileSummary,
   RecentTaskSummary,
   RunSummary,
@@ -104,6 +105,7 @@ const languageModel: ModelProfileSummary = {
 function installApi(options?: {
   expert?: boolean;
   context?: TaskContextRevision;
+  memories?: MemoryRecord[];
   models?: ModelProfileSummary[];
 }) {
   const api = {
@@ -159,7 +161,7 @@ function installApi(options?: {
       prepareInputSnapshot: vi.fn(async () => null),
     },
     memories: {
-      list: vi.fn(async () => []),
+      list: vi.fn(async (): Promise<MemoryRecord[]> => options?.memories ?? []),
       create: vi.fn(async () => ({
         memory: {
           id: 'memory-1',
@@ -586,6 +588,34 @@ describe('Task context restoration', () => {
 });
 
 describe('Expert configuration', () => {
+  it('shows the Expert memory summary and opens memory management', async () => {
+    const memory: MemoryRecord = {
+      id: 'expert-memory-1',
+      revisionId: 'expert-memory-1-r1',
+      revision: 1,
+      scope: { kind: 'expert', expertId: expertSummary.id },
+      kind: 'procedural',
+      content: '经营月报先核对财务规则。',
+      sourceType: 'user-explicit',
+      confidence: 1,
+      status: 'confirmed',
+      contentHash: 'expert-memory-hash',
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    installApi({ expert: true, memories: [memory] });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
+    fireEvent.click(await screen.findByRole('button', { name: '查看配置' }));
+
+    expect(await screen.findByText('1 条已确认')).toBeTruthy();
+    expect(screen.getByText(memory.content)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '管理记忆' }));
+    expect(
+      await screen.findByRole('heading', { name: '让长期经验可查看、可确认、可撤回' }),
+    ).toBeTruthy();
+  });
+
   it('allows an Expert to pin a language model profile or inherit the application default', async () => {
     const api = installApi({
       expert: true,

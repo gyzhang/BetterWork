@@ -5,6 +5,7 @@ import type {
   MaterialCandidate,
   MaterialReference,
   McpConnectionSummary,
+  MemoryRecord,
   ModelProfileSummary,
   SkillSummary,
 } from '@betterwork/agent-protocol';
@@ -464,20 +465,24 @@ function ExpertEditor({
 
 function ExpertDetailPanel({
   detail,
+  memories,
   models,
   onEdit,
   onCopy,
   onSummon,
   onBack,
   onLifecycle,
+  onManageMemories,
 }: {
   detail: ExpertDetail;
+  memories: MemoryRecord[];
   models: ModelProfileSummary[];
   onEdit: () => void;
   onCopy: () => void;
   onSummon: () => void;
   onBack: () => void;
   onLifecycle: (lifecycle: 'active' | 'disabled' | 'archived') => void;
+  onManageMemories: () => void;
 }): React.JSX.Element {
   const selectedModelProfileId =
     detail.revision.modelReference.mode === 'profile'
@@ -486,6 +491,19 @@ function ExpertDetailPanel({
   const selectedModel = selectedModelProfileId
     ? models.find((model) => model.id === selectedModelProfileId)
     : undefined;
+  const expertMemories = memories.filter((memory) => {
+    if (memory.status === 'deleted') return false;
+    return (
+      (memory.scope.kind === 'expert' || memory.scope.kind === 'expert-workspace') &&
+      memory.scope.expertId === detail.id
+    );
+  });
+  const confirmedMemoryCount = expertMemories.filter(
+    (memory) => memory.status === 'confirmed',
+  ).length;
+  const candidateMemoryCount = expertMemories.filter(
+    (memory) => memory.status === 'candidate',
+  ).length;
   return (
     <section className="expert-detail-page">
       <PageHeader
@@ -541,6 +559,26 @@ function ExpertDetailPanel({
             </small>
           </section>
           <section className="expert-detail-section">
+            <h2>记忆</h2>
+            <p>
+              {confirmedMemoryCount} 条已确认
+              {candidateMemoryCount > 0 ? ` · ${candidateMemoryCount} 条待确认` : ''}
+            </p>
+            {expertMemories.length > 0 && (
+              <ul className="expert-memory-summary">
+                {expertMemories.slice(0, 3).map((memory) => (
+                  <li key={memory.id}>{memory.content}</li>
+                ))}
+              </ul>
+            )}
+            {expertMemories.length === 0 && (
+              <small className="muted-text">还没有与此专家关联的记忆，可在任务中确认经验。</small>
+            )}
+            <button className="text-button" type="button" onClick={onManageMemories}>
+              管理记忆
+            </button>
+          </section>
+          <section className="expert-detail-section">
             <h2>生命周期</h2>
             <div className="expert-detail-actions">
               {detail.lifecycle === 'active' && (
@@ -583,22 +621,26 @@ export function ExpertsPage({
   state,
   skills,
   mcpConnections,
+  memories,
   models,
   materialCandidates,
   workspaceId,
   actions,
   onSummon,
   onError,
+  onManageMemories,
 }: {
   state: ExpertsState;
   skills: SkillSummary[];
   mcpConnections: McpConnectionSummary[];
+  memories: MemoryRecord[];
   models: ModelProfileSummary[];
   materialCandidates: MaterialCandidate[];
   workspaceId?: string;
   actions: Pick<ExpertsState, 'get' | 'create' | 'saveRevision' | 'copy' | 'setLifecycle'>;
   onSummon: (expert: ExpertSummary) => Promise<void>;
   onError: (message: string) => void;
+  onManageMemories: () => void;
 }): React.JSX.Element {
   const [selected, setSelected] = useState<ExpertDetail>();
   const [draft, setDraft] = useState<ExpertRevisionDraft>();
@@ -703,12 +745,14 @@ export function ExpertsPage({
     return (
       <ExpertDetailPanel
         detail={selected}
+        memories={memories}
         models={models}
         onEdit={openEdit}
         onCopy={copy}
         onSummon={() => reportAction(onSummon(selected), onError, '无法召唤该专家。')}
         onBack={() => setSelected(undefined)}
         onLifecycle={setLifecycle}
+        onManageMemories={onManageMemories}
       />
     );
   }
