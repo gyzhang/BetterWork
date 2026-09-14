@@ -75,6 +75,38 @@ export class DiscussionCheckpointRepository {
     const parsed = discussionCheckpointSchema
       .omit({ status: true, createdAt: true, updatedAt: true })
       .parse({ ...input, taskId });
+    const task = this.db.prepare('SELECT id FROM tasks WHERE id = ?').get(taskId);
+    if (!task) throw new Error('Discussion checkpoint Task does not exist');
+    if (parsed.runId) {
+      const run = this.db.prepare('SELECT task_id FROM runs WHERE id = ?').get(parsed.runId) as
+        { task_id: string } | undefined;
+      if (!run) throw new Error('Discussion checkpoint Run does not exist');
+      if (run.task_id !== taskId)
+        throw new Error('Discussion checkpoint Run does not belong to Task');
+    }
+    if (parsed.supersedesId) {
+      const previous = this.db
+        .prepare('SELECT task_id FROM discussion_checkpoints WHERE id = ?')
+        .get(parsed.supersedesId) as { task_id: string } | undefined;
+      if (!previous || previous.task_id !== taskId) {
+        throw new Error('Discussion checkpoint to supersede does not belong to Task');
+      }
+    }
+    for (const versionId of parsed.artifactVersionIds) {
+      const version = this.db
+        .prepare(
+          `SELECT a.task_id AS task_id
+           FROM artifact_versions v
+           JOIN artifacts a ON a.id = v.artifact_id
+           WHERE v.id = ?`,
+        )
+        .get(versionId) as { task_id: string } | undefined;
+      if (!version)
+        throw new Error(`Discussion checkpoint ArtifactVersion does not exist: ${versionId}`);
+      if (version.task_id !== taskId) {
+        throw new Error('Discussion checkpoint ArtifactVersion does not belong to Task');
+      }
+    }
     const now = Date.now();
     const insert = this.db.transaction(() => {
       const existing = this.get(parsed.id);
