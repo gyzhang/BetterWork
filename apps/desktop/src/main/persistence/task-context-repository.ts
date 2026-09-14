@@ -166,9 +166,9 @@ export class TaskContextRepository {
       throw new Error('Task context MCP bindings must not repeat a tool');
     }
     const latest = this.getLatest(taskId);
-    if (expectedRevision !== undefined && latest && latest.revision !== expectedRevision) {
+    if (expectedRevision !== undefined && (latest?.revision ?? 0) !== expectedRevision) {
       throw new Error(
-        `Task context revision conflict: expected ${expectedRevision}, current ${latest.revision}`,
+        `Task context revision conflict: expected ${expectedRevision}, current ${latest?.revision ?? 0}`,
       );
     }
     const revision = (latest?.revision ?? 0) + 1;
