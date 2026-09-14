@@ -99,8 +99,8 @@ describe('McpClientService', () => {
       { connectionId: connection.id, toolId: tool.id },
     ]);
 
-    try {
-      await agentTools[0]?.execute(
+    await expect(
+      agentTools[0]?.execute(
         { month: '2099-99' },
         {
           runId: 'run-large-output',
@@ -109,15 +109,8 @@ describe('McpClientService', () => {
           signal: new AbortController().signal,
           reportProgress: () => undefined,
         },
-      );
-      throw new Error('expected MCP output limit failure');
-    } catch (error) {
-      if (!(error instanceof Error)) throw error;
-      expect(error.message).toContain('MCP 工具调用失败');
-      const cause = error.cause;
-      if (!(cause instanceof Error)) throw cause;
-      expect(cause.message).toContain('MCP 工具输出超过');
-    }
+      ),
+    ).rejects.toThrow('MCP 工具输出超过');
     await service.shutdown();
   });
 
