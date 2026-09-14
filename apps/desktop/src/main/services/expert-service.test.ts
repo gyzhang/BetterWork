@@ -48,12 +48,14 @@ describe('ExpertService', () => {
     expect(service.registerBuiltinRelease([entry])).toHaveLength(1);
     const registered = service.get(entry.expertId);
     expect(registered?.sourceKind).toBe('builtin');
+    service.setLifecycle(entry.expertId, 'disabled', registered?.currentRevision ?? 1);
     const copy = service.copy(entry.expertId, '我的研究分析专家');
     const upgraded = service.registerBuiltinRelease([
       { ...entry, summary: '整理可验证的分析结论（新版）' },
     ]);
     expect(upgraded[0]).toMatchObject({
       currentRevision: 2,
+      lifecycle: 'disabled',
       summary: '整理可验证的分析结论（新版）',
     });
     expect(service.get(copy.id)).toMatchObject({ currentRevision: 1, summary: entry.summary });
