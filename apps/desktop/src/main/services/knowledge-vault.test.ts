@@ -146,6 +146,26 @@ describe('KnowledgeVault', () => {
     expect(result.skipped[0]?.sourcePath).toBe(pdf);
     expect(result.skipped[0]?.reason).toMatch(/^导入失败：/u);
     expect(vault.search('新的方向')[0]?.document.id).toBe(first.id);
+    expect(vault.listRevisions(first.id)).toHaveLength(2);
+    expect(vault.getRevision(vault.listRevisions(first.id)[1]!.id)).toMatchObject({
+      documentId: first.id,
+      content: '第一版计划',
+      chunks: [{ locator: '全文', content: '第一版计划' }],
+    });
+    vault.close();
+  });
+
+  it('keeps one immutable revision when the same content is imported again', async () => {
+    const directory = temporaryDirectory();
+    const text = path.join(directory, '稳定资料.txt');
+    writeFileSync(text, '相同内容不应重复创建修订。');
+    const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
+    const first = (await vault.importPaths([text])).imported[0]!;
+    await vault.importPaths([text]);
+    expect(vault.listRevisions(first.id)).toHaveLength(1);
+    expect(vault.getRevision(vault.listRevisions(first.id)[0]!.id)?.content).toBe(
+      '相同内容不应重复创建修订。',
+    );
     vault.close();
   });
 

@@ -34,7 +34,7 @@ vaults/<vault-id>/
 
 当前实现状态：Markdown/Text 以“全文”为 Locator；PDF 使用跨平台解析器按页提取，检索结果保留“第 N 页”Locator；DOCX 使用 Mammoth 提取文本并以“段落 N”定位。原件仍引用原路径，SQLite 中保存的是可重建的提取文本和索引。
 
-Knowledge Vault 与应用状态库是两个独立的 SQLite 文件：Vault 保存提取内容、块和 FTS；`betterwork.db` 保存 Workspace、Task、材料选择、Run 快照、读取足迹和成果关系。两库没有跨库事务。E21 会为刷新产生不可变 Knowledge 内容修订，运行只能引用修订 ID 与 `content_hash`；当前 `knowledge_documents` 的单行更新和 `updated_at` 不能作为历史版本。
+Knowledge Vault 与应用状态库是两个独立的 SQLite 文件：Vault 保存提取内容、块、FTS 和 v3 的不可变内容修订；`betterwork.db` 保存 Workspace、Task、材料选择、Run 快照、读取足迹、成果关系和 Workspace 所属输入快照。两库没有跨库事务。Knowledge 刷新会追加 `knowledge_revisions` 与对应分块，运行引用修订 ID 与 `content_hash`；`knowledge_documents` 仍是当前索引投影，`updated_at` 不能作为历史版本。
 
 ## 3. 支持格式
 

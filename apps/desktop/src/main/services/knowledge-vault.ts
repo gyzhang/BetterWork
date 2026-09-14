@@ -24,6 +24,44 @@ interface KnowledgeRow {
   imported_at: number;
   updated_at: number;
 }
+
+export interface KnowledgeRevisionSummary {
+  id: string;
+  documentId: string;
+  revision: number;
+  title: string;
+  sourcePath: string;
+  format: KnowledgeFormat;
+  byteSize: number;
+  contentHash: string;
+  pageCount?: number;
+  parserVersion: string;
+  chunkingVersion: string;
+  importedAt: number;
+  createdAt: number;
+}
+
+export interface KnowledgeRevisionDetail extends KnowledgeRevisionSummary {
+  content: string;
+  chunks: Array<{ locator: string; ordinal: number; content: string }>;
+}
+
+interface KnowledgeRevisionRow {
+  id: string;
+  document_id: string;
+  revision: number;
+  title: string;
+  source_path: string;
+  format: KnowledgeFormat;
+  byte_size: number;
+  content_hash: string;
+  content: string;
+  page_count: number | null;
+  parser_version: string;
+  chunking_version: string;
+  imported_at: number;
+  created_at: number;
+}
 interface KnowledgeChunk {
   id: string;
   locator: string;
@@ -128,6 +166,40 @@ export class KnowledgeVault {
     }));
   }
 
+  listRevisions(documentId: string): KnowledgeRevisionSummary[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, document_id, revision, title, source_path, format, byte_size, content_hash,
+                content, page_count, parser_version, chunking_version, imported_at, created_at
+           FROM knowledge_revisions
+          WHERE document_id = ?
+          ORDER BY revision DESC`,
+      )
+      .all(documentId) as KnowledgeRevisionRow[];
+    return rows.map((row) => this.toRevisionSummary(row));
+  }
+
+  getRevision(revisionId: string): KnowledgeRevisionDetail | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT id, document_id, revision, title, source_path, format, byte_size, content_hash,
+                content, page_count, parser_version, chunking_version, imported_at, created_at
+           FROM knowledge_revisions
+          WHERE id = ?`,
+      )
+      .get(revisionId) as KnowledgeRevisionRow | undefined;
+    if (!row) return undefined;
+    const chunks = this.db
+      .prepare(
+        `SELECT locator, ordinal, content
+           FROM knowledge_revision_chunks
+          WHERE revision_id = ?
+          ORDER BY ordinal`,
+      )
+      .all(revisionId) as Array<{ locator: string; ordinal: number; content: string }>;
+    return { ...this.toRevisionSummary(row), content: row.content, chunks };
+  }
+
   getRegisteredSourcePath(sourcePath: string): string | undefined {
     const row = this.db
       .prepare('SELECT source_path FROM knowledge_documents WHERE source_path = ?')
@@ -226,6 +298,53 @@ export class KnowledgeVault {
         insertChunk.run(chunkId, id, chunk.locator, chunk.ordinal, chunk.content);
         insertFts.run(id, chunkId, title, chunk.content);
       }
+      const revisionExists = this.db
+        .prepare('SELECT id FROM knowledge_revisions WHERE document_id = ? AND content_hash = ?')
+        .get(id, hash) as { id: string } | undefined;
+      if (!revisionExists) {
+        const nextRevision = this.db
+          .prepare(
+            'SELECT COALESCE(MAX(revision), 0) + 1 AS next FROM knowledge_revisions WHERE document_id = ?',
+          )
+          .get(id) as { next: number };
+        const revisionId = randomUUID();
+        this.db
+          .prepare(
+            `INSERT INTO knowledge_revisions
+              (id, document_id, revision, title, source_path, format, byte_size, content_hash,
+               content, page_count, parser_version, chunking_version, imported_at, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            revisionId,
+            id,
+            nextRevision.next,
+            title,
+            sourcePath,
+            extracted.format,
+            byteSize,
+            hash,
+            extracted.content,
+            extracted.pageCount ?? null,
+            'text-extract-v1',
+            'format-locator-v1',
+            existing?.imported_at ?? now,
+            now,
+          );
+        const insertRevisionChunk = this.db.prepare(
+          `INSERT INTO knowledge_revision_chunks
+            (id, revision_id, locator, ordinal, content) VALUES (?, ?, ?, ?, ?)`,
+        );
+        for (const chunk of extracted.chunks) {
+          insertRevisionChunk.run(
+            randomUUID(),
+            revisionId,
+            chunk.locator,
+            chunk.ordinal,
+            chunk.content,
+          );
+        }
+      }
     });
     write();
     const row = this.db
@@ -247,6 +366,24 @@ export class KnowledgeVault {
       ...(row.page_count === null ? {} : { pageCount: row.page_count }),
       importedAt: row.imported_at,
       updatedAt: row.updated_at,
+    };
+  }
+
+  private toRevisionSummary(row: KnowledgeRevisionRow): KnowledgeRevisionSummary {
+    return {
+      id: row.id,
+      documentId: row.document_id,
+      revision: row.revision,
+      title: row.title,
+      sourcePath: row.source_path,
+      format: row.format,
+      byteSize: row.byte_size,
+      contentHash: row.content_hash,
+      ...(row.page_count === null ? {} : { pageCount: row.page_count }),
+      parserVersion: row.parser_version,
+      chunkingVersion: row.chunking_version,
+      importedAt: row.imported_at,
+      createdAt: row.created_at,
     };
   }
 }

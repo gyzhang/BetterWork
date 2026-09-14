@@ -236,7 +236,7 @@ Knowledge Vault 是由用户管理的一组本地知识来源，具有独立索�
 
 知识来源可以同时被多个 Workspace 引用，但默认不复制原始文件。
 
-Knowledge Vault 使用 `userData/vaults/<id>/vault.sqlite`，应用状态、Task 材料选择、Run 快照和成果关系使用 `userData/betterwork.db`。两库没有跨库事务：运行准备先确认具体 Knowledge 内容修订，再在应用库事务中登记引用。当前库只保存每个文档最新提取内容与 `content_hash`，E21 才将刷新升级为不可变修订；不能把 `updated_at` 或默认搜索结果当成历史 Run 的版本事实。
+Knowledge Vault 使用 `userData/vaults/<id>/vault.sqlite`，应用状态、Task 材料选择、Run 快照和成果关系使用 `userData/betterwork.db`。两库没有跨库事务：运行准备先确认具体 Knowledge 内容修订，再在应用库事务中登记引用。E21 已让刷新追加不可变修订与分块，`knowledge_documents` 仍是当前索引投影；不能把 `updated_at` 或默认搜索结果当成历史 Run 的版本事实。
 
 ## 9. Memory Scope
 
