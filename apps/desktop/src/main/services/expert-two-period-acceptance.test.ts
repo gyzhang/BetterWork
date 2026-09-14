@@ -78,6 +78,25 @@ describe('Expert two-period acceptance path', () => {
         ],
       },
     });
+    const confirmedMethod = store.memories.create({
+      scope: { kind: 'expert-workspace', expertId: expert.id, workspaceId: workspace.id },
+      kind: 'procedural',
+      content: '先核对财务规则，再比较期间变化。',
+      sourceType: 'user-explicit',
+      status: 'confirmed',
+    });
+    const otherWorkspace = store.workspaces.getOrCreate('/tmp/two-periods-other', '其他公司');
+    const otherCompanyMethod = store.memories.create({
+      scope: { kind: 'expert-workspace', expertId: expert.id, workspaceId: otherWorkspace.id },
+      kind: 'procedural',
+      content: '其他公司的经营分析方法。',
+      sourceType: 'user-explicit',
+      status: 'confirmed',
+    });
+    expect(store.memories.listApplicable(workspace.id, expert.id)).toContainEqual(confirmedMethod);
+    expect(store.memories.listApplicable(workspace.id, expert.id)).not.toContainEqual(
+      otherCompanyMethod,
+    );
     const secondContext = store.taskContexts.save(secondTask.task.id, {
       executor: {
         kind: 'expert',
@@ -126,6 +145,8 @@ describe('Expert two-period acceptance path', () => {
       expertRevisionId: expert.revision.id,
       taskContextRevisionId: secondContext.id,
     });
+    store.memories.recordReads([{ runId: secondRunId, memory: confirmedMethod, capturedAt: 3 }]);
+    expect(store.memories.listReads(secondRunId)).toEqual([confirmedMethod]);
     const secondArtifact = store.artifacts.saveMarkdown({
       taskId: secondTask.task.id,
       runId: secondRunId,
