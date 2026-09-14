@@ -12,7 +12,7 @@ import type {
 import { useCallback, useState } from 'react';
 
 import type { ActivityGroup } from '../activity';
-import { ArtifactIcon, ChevronRightIcon, GlobeIcon, KnowledgeIcon } from '../icons';
+import { ArtifactIcon, CapabilityIcon, ChevronRightIcon, GlobeIcon, KnowledgeIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
 import { runStatusName } from '../lib/labels';
@@ -319,51 +319,48 @@ export function ContextPanel({
                 />
               ) : (
                 <div className="evidence-list">
-                  {evidence.map((item) =>
-                    item.sourceType === 'web-page' ? (
+                  {evidence.map((item) => {
+                    const isWeb = item.sourceType === 'web-page';
+                    const isMcp = item.sourceType === 'mcp-tool';
+                    const Icon = isWeb ? GlobeIcon : isMcp ? CapabilityIcon : KnowledgeIcon;
+                    const sourceLabel = isWeb ? '网页来源' : isMcp ? 'MCP 工具' : '本地资料';
+                    return (
                       <article className="evidence-row" key={item.id}>
                         <span aria-hidden="true">
-                          <GlobeIcon size={12} />
+                          <Icon size={12} />
                         </span>
                         <div>
                           <strong>{item.title}</strong>
-                          <small>{item.locator} · 网页来源</small>
+                          <small>
+                            {item.locator} · {sourceLabel}
+                          </small>
                           <p>{item.excerpt}</p>
                         </div>
+                        {!isWeb && !isMcp && (
+                          <button
+                            className="evidence-open-button"
+                            onClick={() =>
+                              reportAction(
+                                onOpenSource(item.sourceUri).then(() =>
+                                  setSourceToast({
+                                    tone: 'success',
+                                    message: `已打开「${item.title}」的原始资料。`,
+                                  }),
+                                ),
+                                (errorMessage) =>
+                                  setSourceToast({
+                                    tone: 'error',
+                                    message: errorMessage || '无法打开原始资料。',
+                                  }),
+                              )
+                            }
+                          >
+                            原文
+                          </button>
+                        )}
                       </article>
-                    ) : (
-                      <article className="evidence-row" key={item.id}>
-                        <span aria-hidden="true">
-                          <KnowledgeIcon size={12} />
-                        </span>
-                        <div>
-                          <strong>{item.title}</strong>
-                          <small>{item.locator} · 本地资料</small>
-                          <p>{item.excerpt}</p>
-                        </div>
-                        <button
-                          className="evidence-open-button"
-                          onClick={() =>
-                            reportAction(
-                              onOpenSource(item.sourceUri).then(() =>
-                                setSourceToast({
-                                  tone: 'success',
-                                  message: `已打开「${item.title}」的原始资料。`,
-                                }),
-                              ),
-                              (errorMessage) =>
-                                setSourceToast({
-                                  tone: 'error',
-                                  message: errorMessage || '无法打开原始资料。',
-                                }),
-                            )
-                          }
-                        >
-                          原文
-                        </button>
-                      </article>
-                    ),
-                  )}
+                    );
+                  })}
                 </div>
               )}
             </>

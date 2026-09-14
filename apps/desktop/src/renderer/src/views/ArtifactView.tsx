@@ -17,7 +17,13 @@ import { ViewContainer } from '../components/layout/ViewContainer';
 import { type ToastTone, TransientToast } from '../components/TransientToast';
 import { useArtifactThumbnails } from '../hooks/use-artifact-thumbnails';
 import { useArtifactViewer } from '../hooks/use-artifact-viewer';
-import { ChevronLeftIcon, ChevronRightIcon, GlobeIcon, KnowledgeIcon } from '../icons';
+import {
+  CapabilityIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  GlobeIcon,
+  KnowledgeIcon,
+} from '../icons';
 import { reportAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
 import { MarkdownPreview } from '../markdown-preview';
@@ -218,44 +224,48 @@ export function ArtifactPage({
                 {visibleVersion.evidence.length > 0 && (
                   <div className="artifact-evidence-list">
                     <strong>本版来源</strong>
-                    {visibleVersion.evidence.map((item) => (
-                      <article key={item.id}>
-                        <b>
-                          {item.sourceType === 'web-page' ? (
-                            <GlobeIcon size={10} />
-                          ) : (
-                            <KnowledgeIcon size={10} />
+                    {visibleVersion.evidence.map((item) => {
+                      const isWeb = item.sourceType === 'web-page';
+                      const isMcp = item.sourceType === 'mcp-tool';
+                      const Icon = isWeb ? GlobeIcon : isMcp ? CapabilityIcon : KnowledgeIcon;
+                      return (
+                        <article key={item.id}>
+                          <b>
+                            <Icon size={10} />
+                          </b>
+                          <div className="artifact-evidence-main">
+                            <span>{item.title}</span>
+                            <small>
+                              {item.locator} ·{' '}
+                              {isMcp ? 'MCP 工具' : isWeb ? '网页来源' : '本地资料'}
+                            </small>
+                          </div>
+                          {!isWeb && !isMcp && (
+                            <button
+                              className="evidence-open-button"
+                              type="button"
+                              onClick={() =>
+                                reportAction(
+                                  onOpenSource(item.sourceUri).then(() =>
+                                    setToast({
+                                      tone: 'success',
+                                      message: `已打开「${item.title}」的原始资料。`,
+                                    }),
+                                  ),
+                                  (errorMessage) =>
+                                    setToast({
+                                      tone: 'error',
+                                      message: errorMessage || '无法打开原始资料。',
+                                    }),
+                                )
+                              }
+                            >
+                              原文
+                            </button>
                           )}
-                        </b>
-                        <div className="artifact-evidence-main">
-                          <span>{item.title}</span>
-                          <small>{item.locator}</small>
-                        </div>
-                        {item.sourceType === 'local-file' && (
-                          <button
-                            className="evidence-open-button"
-                            type="button"
-                            onClick={() =>
-                              reportAction(
-                                onOpenSource(item.sourceUri).then(() =>
-                                  setToast({
-                                    tone: 'success',
-                                    message: `已打开「${item.title}」的原始资料。`,
-                                  }),
-                                ),
-                                (errorMessage) =>
-                                  setToast({
-                                    tone: 'error',
-                                    message: errorMessage || '无法打开原始资料。',
-                                  }),
-                              )
-                            }
-                          >
-                            原文
-                          </button>
-                        )}
-                      </article>
-                    ))}
+                        </article>
+                      );
+                    })}
                   </div>
                 )}
                 {visibleVersion.inputRelations && visibleVersion.inputRelations.length > 0 && (
