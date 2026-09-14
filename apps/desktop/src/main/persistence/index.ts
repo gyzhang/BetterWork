@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 
 import { openAppDatabase } from '../db';
+import { ArtifactInputRelationRepository } from './artifact-input-relation-repository';
 import { ArtifactRepository } from './artifact-repository';
 import { DependencyOperationRepository } from './dependency-operation-repository';
 import { DependencySnapshotRepository } from './dependency-snapshot-repository';
@@ -10,6 +11,7 @@ import { InputSnapshotRepository } from './input-snapshot-repository';
 import { ModelRepository } from './model-repository';
 import { NotificationRepository } from './notification-repository';
 import { RunContextSnapshotRepository } from './run-context-snapshot-repository';
+import { RunMaterialReadRepository } from './run-material-read-repository';
 import { RunRepository } from './run-repository';
 import { RuntimeEnvironmentRepository } from './runtime-environment-repository';
 import { SearchEngineRepository } from './search-engine-repository';
@@ -34,10 +36,12 @@ export class AppStore {
   readonly taskContexts: TaskContextRepository;
   readonly runs: RunRepository;
   readonly runContextSnapshots: RunContextSnapshotRepository;
+  readonly materialReads: RunMaterialReadRepository;
   readonly evidence: EvidenceRepository;
   readonly experts: ExpertRepository;
   readonly inputSnapshots: InputSnapshotRepository;
   readonly artifacts: ArtifactRepository;
+  readonly artifactInputRelations: ArtifactInputRelationRepository;
   readonly models: ModelRepository;
   readonly searchEngines: SearchEngineRepository;
   readonly notifications: NotificationRepository;
@@ -53,10 +57,12 @@ export class AppStore {
     this.taskContexts = new TaskContextRepository(db);
     this.runs = new RunRepository(db);
     this.runContextSnapshots = new RunContextSnapshotRepository(db);
+    this.materialReads = new RunMaterialReadRepository(db);
     this.evidence = new EvidenceRepository(db);
     this.experts = new ExpertRepository(db);
     this.inputSnapshots = new InputSnapshotRepository(db);
     this.artifacts = new ArtifactRepository(db);
+    this.artifactInputRelations = new ArtifactInputRelationRepository(db);
     this.models = new ModelRepository(db);
     this.searchEngines = new SearchEngineRepository(db);
     this.notifications = new NotificationRepository(db);
@@ -85,6 +91,7 @@ export class AppStore {
   }
 }
 
+export { ArtifactInputRelationRepository } from './artifact-input-relation-repository';
 export { ArtifactRepository } from './artifact-repository';
 export {
   type CreateOperationInput,
@@ -112,6 +119,7 @@ export {
   type RunContextSnapshot,
   RunContextSnapshotRepository,
 } from './run-context-snapshot-repository';
+export { RunMaterialReadRepository } from './run-material-read-repository';
 export { RunRepository } from './run-repository';
 export {
   type CreateEnvironmentInput,

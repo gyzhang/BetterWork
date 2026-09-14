@@ -14,6 +14,7 @@ import type {
   AgentRuntimeEvent,
   BuiltinToolPolicy,
   ExpertModelReference,
+  MaterialReference,
   RuntimeProfileCommand,
   ScriptExecution,
   StartRunRequest,
@@ -541,6 +542,7 @@ export class RunService {
     const active = this.activeRuns.get(event.runId);
     if (active) this.recordToolProgress(active, event);
     if (event.type === 'tool.completed' && active) {
+      this.persistMaterialReads(event, active.toolNames);
       this.persistEvidence(active.taskId, event, active.toolNames);
     }
     this.broadcast(event);
@@ -580,7 +582,8 @@ export class RunService {
   ): void {
     const toolName = toolNames.get(event.toolCallId);
     if (toolName === 'knowledge_search' && isKnowledgeSearchOutput(event.output)) {
-      for (const result of event.output.results) {
+      const output = event.output;
+      for (const result of output.results) {
         this.store.evidence.saveLocal({
           taskId,
           runId: event.runId,
@@ -609,6 +612,115 @@ export class RunService {
         });
       }
     }
+  }
+
+  private persistMaterialReads(
+    event: Extract<AgentRuntimeEvent, { type: 'tool.completed' }>,
+    toolNames: Map<string, string>,
+  ): void {
+    const snapshot = this.store.runContextSnapshots.get(event.runId);
+    if (!snapshot) return;
+    const toolName = toolNames.get(event.toolCallId);
+    if (toolName === 'knowledge_search' && isKnowledgeSearchOutput(event.output)) {
+      for (const result of event.output.results) {
+        const selectedMaterial = snapshot.materials.find(
+          (selection) =>
+            selection.reference.kind === 'knowledge-revision' &&
+            selection.reference.sourcePath === result.sourcePath &&
+            selection.reference.contentHash === result.contentHash,
+        )?.reference;
+        const revision =
+          selectedMaterial?.kind === 'knowledge-revision'
+            ? undefined
+            : this.knowledgeVault.findRevisionBySource(result.sourcePath, result.contentHash);
+        const material: MaterialReference | undefined =
+          selectedMaterial ??
+          (snapshot.taskContextRevisionId || !revision
+            ? undefined
+            : {
+                kind: 'knowledge-revision',
+                knowledgeDocumentId: revision.documentId,
+                knowledgeRevisionId: revision.id,
+                contentHash: revision.contentHash,
+                sourcePath: revision.sourcePath,
+              });
+        if (!material) continue;
+        this.saveMaterialRead(
+          event.runId,
+          material,
+          'search',
+          result.locator,
+          result.contentHash,
+          result.excerpt,
+        );
+      }
+      return;
+    }
+    if (toolName === 'read_text_file' && isReadTextFileOutput(event.output)) {
+      const output = event.output;
+      const material = snapshot.materials
+        .filter((selection) => selection.reference.kind === 'workspace-input-snapshot')
+        .map((selection) => selection.reference)
+        .find((reference) => {
+          if (reference.kind !== 'workspace-input-snapshot') return false;
+          const snapshotRecord = this.store.inputSnapshots.get(reference.snapshotId);
+          return (
+            snapshotRecord !== undefined &&
+            path.normalize(snapshotRecord.sourcePath) === path.normalize(output.path)
+          );
+        });
+      if (material && material.kind === 'workspace-input-snapshot') {
+        this.saveMaterialRead(
+          event.runId,
+          material,
+          'read',
+          output.path,
+          material.contentHash,
+          output.content,
+        );
+      }
+      return;
+    }
+    if (toolName === 'read_artifact' && isReadArtifactOutput(event.output)) {
+      const output = event.output;
+      const material = snapshot.materials.find(
+        (selection) =>
+          selection.reference.kind === 'artifact-version' &&
+          selection.reference.artifactId === output.artifactId &&
+          selection.reference.artifactVersionId === output.versionId &&
+          selection.reference.contentHash === output.contentHash,
+      )?.reference;
+      if (material) {
+        this.saveMaterialRead(
+          event.runId,
+          material,
+          'read',
+          `artifact-version:${output.versionId}`,
+          output.contentHash,
+          output.content,
+        );
+      }
+    }
+  }
+
+  private saveMaterialRead(
+    runId: string,
+    material: MaterialReference,
+    operation: 'search' | 'read',
+    locator: string,
+    contentHash: string,
+    excerpt: string,
+  ): void {
+    this.store.materialReads.save({
+      id: randomUUID(),
+      runId,
+      material,
+      operation,
+      locator,
+      contentHash,
+      excerptHash: createHash('sha256').update(excerpt).digest('hex'),
+      capturedAt: Date.now(),
+    });
   }
 
   /** 未配置语言模型时回落到教学 Provider，保证链路始终可复现。 */
@@ -1097,6 +1209,28 @@ const isKnowledgeSearchOutput = (
       isString(result.contentHash),
   );
 };
+
+interface ReadTextFileOutput {
+  path: string;
+  content: string;
+}
+
+const isReadTextFileOutput = (value: unknown): value is ReadTextFileOutput =>
+  isRecord(value) && isString(value.path) && isString(value.content);
+
+interface ReadArtifactOutput {
+  artifactId: string;
+  versionId: string;
+  contentHash: string;
+  content: string;
+}
+
+const isReadArtifactOutput = (value: unknown): value is ReadArtifactOutput =>
+  isRecord(value) &&
+  isString(value.artifactId) &&
+  isString(value.versionId) &&
+  isString(value.contentHash) &&
+  isString(value.content);
 
 interface WebSearchOutputItem {
   title: string;

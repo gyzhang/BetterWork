@@ -244,6 +244,22 @@ export class KnowledgeVault {
     return { ...this.toRevisionSummary(row), content: row.content, chunks };
   }
 
+  findRevisionBySource(
+    sourcePath: string,
+    contentHash: string,
+  ): KnowledgeRevisionSummary | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT id, document_id, revision, title, source_path, format, byte_size, content_hash,
+                content, page_count, parser_version, chunking_version, imported_at, created_at
+           FROM knowledge_revisions
+          WHERE source_path = ? AND content_hash = ?
+          ORDER BY revision DESC LIMIT 1`,
+      )
+      .get(sourcePath, contentHash) as KnowledgeRevisionRow | undefined;
+    return row ? this.toRevisionSummary(row) : undefined;
+  }
+
   getRegisteredSourcePath(sourcePath: string): string | undefined {
     const row = this.db
       .prepare('SELECT source_path FROM knowledge_documents WHERE source_path = ?')

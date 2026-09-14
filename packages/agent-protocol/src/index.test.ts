@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  artifactInputRelationSchema,
   deleteSkillRequestSchema,
   dependencyLockSchema,
   dependencyOperationSchema,
@@ -9,6 +10,7 @@ import {
   jobResultSchema,
   jobSpecSchema,
   MAX_RUN_SKILL_BINDINGS,
+  runMaterialReadSchema,
   runtimeEnvironmentSchema,
   runtimeProfileDraftSchema,
   scriptExecutionSchema,
@@ -22,6 +24,43 @@ import {
 } from './index';
 
 describe('run protocol', () => {
+  it('keeps material reads and artifact inputs tied to exact revisions', () => {
+    const material = {
+      kind: 'knowledge-revision' as const,
+      knowledgeDocumentId: 'doc-1',
+      knowledgeRevisionId: 'revision-1',
+      contentHash: 'hash-1',
+      sourcePath: '/rules.md',
+    };
+    expect(
+      runMaterialReadSchema.parse({
+        id: 'read-1',
+        runId: 'run-1',
+        material,
+        operation: 'search',
+        locator: '全文',
+        contentHash: 'hash-1',
+        capturedAt: 1,
+      }),
+    ).toMatchObject({ material, operation: 'search' });
+    expect(
+      artifactInputRelationSchema.parse({
+        outputVersionId: 'version-1',
+        input: material,
+        relation: 'rule',
+        createdAt: 2,
+      }),
+    ).toMatchObject({ input: material, relation: 'rule' });
+    expect(() =>
+      artifactInputRelationSchema.parse({
+        outputVersionId: 'version-1',
+        input: material,
+        relation: 'citation',
+        createdAt: 2,
+      }),
+    ).toThrow();
+  });
+
   it('accepts only identifiers and prompt, leaving the workspace boundary to Main', () => {
     expect(
       startRunRequestSchema.parse({

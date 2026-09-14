@@ -48,6 +48,12 @@ export class EvidenceRepository {
     this.save('web-page', input);
   }
 
+  get(id: string): EvidenceSummary | undefined {
+    const row = this.db.prepare('SELECT * FROM evidence WHERE id = ?').get(id) as
+      EvidenceRow | undefined;
+    return row ? toSummary(row) : undefined;
+  }
+
   listByTask(taskId: string): EvidenceSummary[] {
     const rows = this.db
       .prepare('SELECT * FROM evidence WHERE task_id = ? ORDER BY captured_at DESC, rowid DESC')

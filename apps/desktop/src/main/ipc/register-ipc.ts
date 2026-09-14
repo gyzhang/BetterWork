@@ -396,7 +396,36 @@ function registerArtifactChannels(deps: IpcDependencies): void {
     IpcChannel.SaveMarkdownArtifact,
     saveMarkdownArtifactRequestSchema,
     artifactSummarySchema,
-    (input) => store.artifacts.saveMarkdown(input),
+    (input) => {
+      return store.transaction(() => {
+        const saved = store.artifacts.saveMarkdown(input);
+        if (!input.inputRelations || input.inputRelations.length === 0) return saved;
+        const runId = input.runId;
+        if (input.origin !== 'assistant-run' || !runId) {
+          throw new Error('只有 Assistant Run 产生的成果才能声明本次输入来源');
+        }
+        const version = store.artifacts.getVersionDetail(saved.currentVersionId);
+        if (!version || version.sourceRunId !== runId) {
+          throw new Error('成果版本不属于声明来源的 Run');
+        }
+        store.artifactInputRelations.saveForRun(
+          saved.currentVersionId,
+          runId,
+          input.inputRelations,
+          (relationInput) => {
+            if (relationInput.kind === 'evidence') {
+              return store.evidence.get(relationInput.evidenceId)?.runId === runId;
+            }
+            return store.materialReads.hasMaterialRead(
+              runId,
+              JSON.stringify(relationInput),
+              relationInput.contentHash,
+            );
+          },
+        );
+        return saved;
+      });
+    },
   );
   handleInput(
     IpcChannel.ExportMarkdownArtifact,
@@ -430,9 +459,23 @@ function registerArtifactChannels(deps: IpcDependencies): void {
     registerFileArtifactRequestSchema,
     registerFileArtifactResultSchema,
     async (input) => {
-      const { fileArtifactService } = deps;
+      const { fileArtifactService, store } = deps;
       if (!fileArtifactService) throw new Error('File artifact service is not available');
-      return fileArtifactService.register({
+      const relations = input.inputRelations ?? [];
+      if (
+        relations.some((relation) =>
+          relation.input.kind === 'evidence'
+            ? store.evidence.get(relation.input.evidenceId)?.runId !== input.runId
+            : !store.materialReads.hasMaterialRead(
+                input.runId,
+                JSON.stringify(relation.input),
+                relation.input.contentHash,
+              ),
+        )
+      ) {
+        throw new Error('文件成果输入必须先由同一 Run 实际读取');
+      }
+      const result = await fileArtifactService.register({
         runId: input.runId,
         executionId: input.executionId,
         outputId: input.outputId,
@@ -442,6 +485,22 @@ function registerArtifactChannels(deps: IpcDependencies): void {
         ...(input.description ? { description: input.description } : {}),
         ...(input.validation ? { validation: input.validation } : {}),
       });
+      if (relations.length > 0) {
+        store.artifactInputRelations.saveForRun(
+          result.versionId,
+          input.runId,
+          relations,
+          (relationInput) =>
+            relationInput.kind === 'evidence'
+              ? store.evidence.get(relationInput.evidenceId)?.runId === input.runId
+              : store.materialReads.hasMaterialRead(
+                  input.runId,
+                  JSON.stringify(relationInput),
+                  relationInput.contentHash,
+                ),
+        );
+      }
+      return result;
     },
   );
   handleInput(

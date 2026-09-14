@@ -151,6 +151,9 @@ describe('RunService', () => {
     expect(fixture.store.evidence.listByTask(fixture.taskId)).toEqual([
       expect.objectContaining({ runId, title: '客户资料', locator: '全文', sourceUri: note }),
     ]);
+    expect(fixture.store.materialReads.listByRun(runId)).toEqual([
+      expect.objectContaining({ runId, operation: 'search', locator: '全文' }),
+    ]);
     expect(statusOf(fixture, runId)).toBe('completed');
   });
 
@@ -277,6 +280,9 @@ describe('RunService', () => {
         output: expect.objectContaining({ content: '已选择的输入内容' }),
       }),
     );
+    expect(fixture.store.materialReads.listByRun(runId)).toEqual([
+      expect.objectContaining({ runId, operation: 'read', locator: 'selected.txt' }),
+    ]);
   });
 
   it('rejects an ArtifactVersion that is outside the selected material set', async () => {
