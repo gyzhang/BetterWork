@@ -16,6 +16,7 @@ import { ArtifactIcon, ChevronRightIcon, GlobeIcon, KnowledgeIcon } from '../ico
 import { reportAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
 import { runStatusName } from '../lib/labels';
+import { canToggleMcpTool } from '../lib/mcp-selection';
 import { handleTitlebarDoubleClick } from '../lib/titlebar';
 import type { ContextTab } from '../lib/view-types';
 import { EmptyContext } from './EmptyState';
@@ -280,7 +281,7 @@ export function ContextPanel({
                               const checked = mcpToolBindings.some(
                                 (binding) => binding.toolId === tool.id,
                               );
-                              const enabled = connection.status === 'ready';
+                              const enabled = canToggleMcpTool(connection.status, checked);
                               return (
                                 <label className="expert-option" key={tool.id}>
                                   <input

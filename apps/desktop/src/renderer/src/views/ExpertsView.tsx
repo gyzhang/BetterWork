@@ -12,6 +12,7 @@ import { PageHeader } from '../components/layout/PageHeader';
 import type { ExpertsState } from '../hooks/use-experts';
 import { ExpertIcon, PlusIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
+import { canToggleMcpTool } from '../lib/mcp-selection';
 
 const lifecycleName = {
   active: '可召唤',
@@ -300,7 +301,7 @@ function ExpertEditor({
                               <input
                                 type="checkbox"
                                 checked={checked}
-                                disabled={connection.status !== 'ready'}
+                                disabled={!canToggleMcpTool(connection.status, checked)}
                                 onChange={(event) =>
                                   onChange({
                                     ...draft,
