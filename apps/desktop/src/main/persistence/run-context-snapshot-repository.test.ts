@@ -196,4 +196,73 @@ describe('RunContextSnapshotRepository', () => {
       }),
     ).toThrow('Run expert revision does not belong to expert');
   });
+
+  it('rejects snapshot metadata that belongs to another Task or Workspace', () => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    const firstWorkspace = store.workspaces.getOrCreate(
+      '/tmp/betterwork-snapshot-owner-a',
+      '工作区一',
+    );
+    const secondWorkspace = store.workspaces.getOrCreate(
+      '/tmp/betterwork-snapshot-owner-b',
+      '工作区二',
+    );
+    const firstTask = store.tasks.create(firstWorkspace.id, '任务一', '验证');
+    const secondTask = store.tasks.create(secondWorkspace.id, '任务二', '验证');
+    store.runs.create({
+      id: 'run-snapshot-owner-1',
+      taskId: firstTask.task.id,
+      sessionId: firstTask.sessionId,
+      prompt: '测试',
+      status: 'running',
+      createdAt: 1,
+    });
+
+    expect(() =>
+      store.runContextSnapshots.create({
+        runId: 'run-snapshot-owner-1',
+        taskId: secondTask.task.id,
+        workspaceId: secondWorkspace.id,
+        contextSegmentId: 'segment-owner-mismatch',
+        materials: [],
+        createdAt: 2,
+      }),
+    ).toThrow('Run context snapshot task does not match Run');
+  });
+
+  it('rejects a TaskContextRevision that belongs to another Task', () => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    const workspace = store.workspaces.getOrCreate(
+      '/tmp/betterwork-snapshot-context-owner',
+      '工作区',
+    );
+    const firstTask = store.tasks.create(workspace.id, '任务一', '验证');
+    const secondTask = store.tasks.create(workspace.id, '任务二', '验证');
+    const context = store.taskContexts.save(secondTask.task.id, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+    });
+    store.runs.create({
+      id: 'run-snapshot-context-owner-1',
+      taskId: firstTask.task.id,
+      sessionId: firstTask.sessionId,
+      prompt: '测试',
+      status: 'running',
+      createdAt: 1,
+    });
+
+    expect(() =>
+      store.runContextSnapshots.create({
+        runId: 'run-snapshot-context-owner-1',
+        taskId: firstTask.task.id,
+        workspaceId: workspace.id,
+        taskContextRevisionId: context.id,
+        contextSegmentId: 'segment-context-owner-mismatch',
+        materials: [],
+        createdAt: 2,
+      }),
+    ).toThrow('Run context revision does not belong to task');
+  });
 });

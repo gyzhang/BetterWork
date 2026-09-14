@@ -82,6 +82,30 @@ export class RunContextSnapshotRepository {
   constructor(private readonly db: Database.Database) {}
 
   create(input: RunContextSnapshot): void {
+    const run = this.db
+      .prepare(
+        `SELECT runs.task_id AS task_id, tasks.workspace_id AS workspace_id
+         FROM runs
+         JOIN tasks ON tasks.id = runs.task_id
+         WHERE runs.id = ?`,
+      )
+      .get(input.runId) as { task_id: string; workspace_id: string } | undefined;
+    if (!run) throw new Error('Run does not exist for context snapshot');
+    if (run.task_id !== input.taskId) {
+      throw new Error('Run context snapshot task does not match Run');
+    }
+    if (run.workspace_id !== input.workspaceId) {
+      throw new Error('Run context snapshot workspace does not match Run');
+    }
+    if (input.taskContextRevisionId) {
+      const context = this.db
+        .prepare('SELECT task_id FROM task_context_revisions WHERE id = ?')
+        .get(input.taskContextRevisionId) as { task_id: string } | undefined;
+      if (!context) throw new Error('Run context revision does not exist');
+      if (context.task_id !== input.taskId) {
+        throw new Error('Run context revision does not belong to task');
+      }
+    }
     if ((input.expertId === undefined) !== (input.expertRevisionId === undefined)) {
       throw new Error('Run expert snapshot must include both expertId and expertRevisionId');
     }
