@@ -49,6 +49,13 @@ const handle = (message) => {
       error(message.id, -32602, 'month must use YYYY-MM');
       return;
     }
+    if (month === '2099-98') {
+      reply(message.id, {
+        structuredContent: { payload: 'x'.repeat(100_001) },
+        isError: false,
+      });
+      return;
+    }
     const text =
       month === '2099-99'
         ? 'x'.repeat(100_001)
