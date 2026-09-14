@@ -29,6 +29,7 @@ const blockedReasonName: Record<string, string> = {
 
 const builtinToolNames = [
   'calculator',
+  'analyze_business_metrics',
   'read_text_file',
   'knowledge_search',
   'web_search',

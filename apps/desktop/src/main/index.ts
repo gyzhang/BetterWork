@@ -103,23 +103,23 @@ function bootstrap(): ApplicationContext {
   const builtinRoot = app.isPackaged
     ? path.join(process.resourcesPath, 'skills')
     : path.resolve(app.getAppPath(), '../../resources/skills');
-  readFile(path.join(builtinRoot, 'release-manifest.json'), 'utf8')
+  const builtinSkillsReady = readFile(path.join(builtinRoot, 'release-manifest.json'), 'utf8')
     .then((content) => JSON.parse(content) as BuiltinReleaseManifest)
     .then((manifest) => skillService.registerBuiltinRelease(manifest))
     .then((registered) => {
       if (registered.length > 0) {
         console.warn(`Registered ${registered.length} builtin skill(s)`);
       }
-    })
-    .catch((error: unknown) => {
-      console.error('Builtin skill registration failed', error);
     });
   const builtinExpertRoot = app.isPackaged
     ? path.join(process.resourcesPath, 'experts')
     : path.resolve(app.getAppPath(), '../../resources/experts');
   readFile(path.join(builtinExpertRoot, 'release-manifest.json'), 'utf8')
     .then((content) => JSON.parse(content) as BuiltinExpertReleaseManifest)
-    .then((manifest) => expertService.registerBuiltinRelease(manifest.experts))
+    .then(async (manifest) => {
+      await builtinSkillsReady;
+      return expertService.registerBuiltinRelease(manifest.experts);
+    })
     .then((registered) => {
       if (registered.length > 0) {
         console.warn(`Registered ${registered.length} builtin expert(s)`);

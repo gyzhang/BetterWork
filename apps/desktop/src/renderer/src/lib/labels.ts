@@ -41,6 +41,7 @@ export const connectionStatusName: Record<ModelProfileSummary['connectionStatus'
  */
 const TOOL_LABELS: Readonly<Record<string, string>> = {
   calculator: '计算数据',
+  analyze_business_metrics: '分析经营指标',
   read_text_file: '阅读资料',
   knowledge_search: '查阅个人资料',
   web_search: '搜索网络资料',

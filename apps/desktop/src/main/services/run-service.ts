@@ -28,6 +28,7 @@ import {
   type ArtifactReader,
   type ArtifactRegisterInput,
   type ArtifactRegisterOutput,
+  businessMetricsTool,
   calculatorTool,
   createArtifactReadTool,
   createArtifactRegisterFileTool,
@@ -153,6 +154,7 @@ export const createRunTools = (dependencies: {
     !dependencies.allowedBuiltinToolNames || dependencies.allowedBuiltinToolNames.has(name);
   const tools: AgentTool[] = [];
   if (allows(calculatorTool.name)) tools.push(calculatorTool);
+  if (allows(businessMetricsTool.name)) tools.push(businessMetricsTool);
   if (allows(readTextFileTool.name)) {
     tools.push(
       dependencies.readTextFile
