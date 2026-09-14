@@ -207,7 +207,10 @@ export class TaskMaterialService {
       if (!revision || revision.documentId !== reference.knowledgeDocumentId) {
         throw new TaskMaterialError('material_revision_missing', '知识内容修订不存在。');
       }
-      if (revision.contentHash !== reference.contentHash) {
+      if (
+        revision.contentHash !== reference.contentHash ||
+        revision.sourcePath !== reference.sourcePath
+      ) {
         throw new TaskMaterialError(
           'material_revision_conflict',
           '知识内容已变化，请重新选择修订。',

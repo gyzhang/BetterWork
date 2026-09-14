@@ -110,6 +110,14 @@ describe('TaskMaterialService', () => {
     await expect(
       service.validateSelections(task.task.id, [
         {
+          ...selection,
+          reference: { ...selection.reference, sourcePath: '/other/workspace/rules.md' },
+        },
+      ]),
+    ).rejects.toMatchObject({ code: 'material_revision_conflict' });
+    await expect(
+      service.validateSelections(task.task.id, [
+        {
           reference: {
             kind: 'workspace-input-snapshot',
             snapshotId: 'foreign-snapshot',
