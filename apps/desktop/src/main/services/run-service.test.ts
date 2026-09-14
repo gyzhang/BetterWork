@@ -467,6 +467,60 @@ describe('RunService', () => {
     ]);
   });
 
+  it('rejects ambiguous text reads when multiple selected snapshots share a path', async () => {
+    const fixture = await createFixture();
+    const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+    if (!workspaceId) throw new Error('workspace missing');
+    const sourcePath = path.join(fixture.directory, 'versioned.txt');
+    await writeFile(sourcePath, '旧版本');
+    const first = await fixture.inputSnapshots.create({
+      workspaceId,
+      workspaceRoot: fixture.directory,
+      sourcePath,
+    });
+    await writeFile(sourcePath, '新版本');
+    const second = await fixture.inputSnapshots.create({
+      workspaceId,
+      workspaceRoot: fixture.directory,
+      sourcePath,
+    });
+    const selectionOf = (snapshot: typeof first.snapshot) => ({
+      reference: {
+        kind: 'workspace-input-snapshot' as const,
+        snapshotId: snapshot.id,
+        workspaceId: snapshot.workspaceId,
+        contentHash: snapshot.contentHash,
+        format: snapshot.format,
+        fileKey: snapshot.fileKey,
+      },
+      purpose: 'current-input' as const,
+      addedFrom: 'user-input' as const,
+    });
+    const context = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+      builtinToolPolicy: { mode: 'allow-list', toolNames: ['read_text_file'] },
+      materials: [selectionOf(first.snapshot), selectionOf(second.snapshot)],
+    });
+    const service = createService(fixture);
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '读取: versioned.txt',
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('completed');
+    expect(fixture.store.runs.listEvents(runId)).toContainEqual(
+      expect.objectContaining({
+        type: 'tool.failed',
+        error: expect.stringContaining('多个输入快照'),
+      }),
+    );
+  });
+
   it('rejects an ArtifactVersion that is outside the selected material set', async () => {
     const fixture = await createFixture();
     const artifact = fixture.store.artifacts.saveMarkdown({

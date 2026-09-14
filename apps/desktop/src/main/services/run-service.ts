@@ -585,13 +585,23 @@ export class RunService {
     workspacePath: string,
   ): ReadTextFile {
     const snapshots = new Map<string, InputSnapshot>();
+    const ambiguousPaths = new Set<string>();
     for (const selection of materials) {
       if (selection.reference.kind !== 'workspace-input-snapshot') continue;
       const snapshot = this.store.inputSnapshots.get(selection.reference.snapshotId);
-      if (snapshot) snapshots.set(path.normalize(snapshot.sourcePath), snapshot);
+      if (!snapshot) continue;
+      const key = path.normalize(snapshot.sourcePath);
+      if (snapshots.has(key)) {
+        ambiguousPaths.add(key);
+        continue;
+      }
+      snapshots.set(key, snapshot);
     }
     return async (input, context) => {
       const relative = path.normalize(input.path);
+      if (ambiguousPaths.has(relative)) {
+        throw new Error('材料范围包含同一路径的多个输入快照，请只选择一个版本。');
+      }
       const snapshot = snapshots.get(relative);
       if (!snapshot) throw new Error('材料范围不允许读取该工作区文件，请先选择输入材料。');
       if (
