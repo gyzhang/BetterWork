@@ -31,6 +31,13 @@ export class ArtifactInputRelationRepository {
     inputs: readonly ArtifactInputRelationInput[],
     hasRead: (input: ArtifactInputRelationInput['input']) => boolean,
   ): ArtifactInputRelation[] {
+    const version = this.db
+      .prepare('SELECT source_run_id FROM artifact_versions WHERE id = ?')
+      .get(outputVersionId) as { source_run_id: string } | undefined;
+    if (!version) throw new Error('Artifact version does not exist');
+    if (version.source_run_id !== runId) {
+      throw new Error('Artifact version does not belong to source Run');
+    }
     const saved: ArtifactInputRelation[] = [];
     const write = this.db.transaction(() => {
       const now = Date.now();
