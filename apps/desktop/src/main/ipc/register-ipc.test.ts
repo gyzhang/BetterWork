@@ -77,6 +77,8 @@ describe('registerIpc', () => {
     const { ExpertService } = await import('../services/expert-service');
     const { InputSnapshotService } = await import('../services/input-snapshot-service');
     const { TaskMaterialService } = await import('../services/task-material-service');
+    const { DiscussionCheckpointService } =
+      await import('../services/discussion-checkpoint-service');
     const { MemoryService } = await import('../services/memory-service');
     const { McpClientService } = await import('../services/mcp-client-service');
     const { fakePptxRenderer } = await import('../infrastructure/fixtures/fake-pptx-renderer');
@@ -96,6 +98,7 @@ describe('registerIpc', () => {
     const expertService = new ExpertService(store);
     const inputSnapshots = new InputSnapshotService(store, temporaryDirectory);
     const taskMaterials = new TaskMaterialService({ store, knowledgeVault, inputSnapshots });
+    const discussionCheckpoints = new DiscussionCheckpointService(store);
     const memories = new MemoryService(store, temporaryDirectory);
     const mcpClientService = new McpClientService(store);
 
@@ -150,6 +153,7 @@ describe('registerIpc', () => {
       store,
       knowledgeVault,
       taskMaterials,
+      discussionCheckpoints,
       memories,
       mcpClientService,
       notifications,

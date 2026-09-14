@@ -4,6 +4,8 @@ import type {
   ArtifactInputRelationInput,
   ArtifactSummary,
   ArtifactVersionDetail,
+  CreateDiscussionCheckpointRequest,
+  DiscussionCheckpoint,
   EvidenceSummary,
   ExpertSummary,
   MaterialCandidate,
@@ -27,6 +29,7 @@ import {
   ComposerCapabilityPicker,
 } from './components/ComposerCapabilityPicker';
 import { ContextPanel } from './components/ContextPanel';
+import { DiscussionCheckpointPanel } from './components/DiscussionCheckpointPanel';
 import { PageHeader } from './components/layout/PageHeader';
 import { ModelEditor } from './components/ModelEditorSheet';
 import { ToolActivity } from './components/ToolActivity';
@@ -53,7 +56,7 @@ import {
   SettingsIcon,
   WorkIcon,
 } from './icons';
-import { reportAction, trackAction } from './lib/async-action';
+import { describeActionError, reportAction, trackAction } from './lib/async-action';
 import { formatTime } from './lib/format';
 import { runStatusName } from './lib/labels';
 import { buildResearchPrompt } from './lib/research-prompt';
@@ -97,6 +100,7 @@ export function App(): React.JSX.Element {
   const [taskMemories, setTaskMemories] = useState<MemoryRecord[]>([]);
   const [excludedMemoryIds, setExcludedMemoryIds] = useState<string[]>([]);
   const [mcpToolBindings, setMcpToolBindings] = useState<McpToolBinding[]>([]);
+  const [discussionCheckpoints, setDiscussionCheckpoints] = useState<DiscussionCheckpoint[]>([]);
   const [memoryCapture, setMemoryCapture] = useState<{ content: string; runId: string }>();
   const [memoryCaptureScope, setMemoryCaptureScope] = useState<
     'user' | 'workspace' | 'expert-workspace'
@@ -206,6 +210,16 @@ export function App(): React.JSX.Element {
       '刷新引用资料',
     );
   }, []);
+  const refreshDiscussionCheckpoints = useCallback((taskId = activeTaskIdRef.current): void => {
+    if (!taskId) {
+      setDiscussionCheckpoints([]);
+      return;
+    }
+    trackAction(
+      window.betterwork.discussionCheckpoints.list({ taskId }).then(setDiscussionCheckpoints),
+      '刷新讨论节点',
+    );
+  }, []);
   const refreshArtifacts = useCallback((): void => {
     trackAction(window.betterwork.artifacts.list().then(setArtifacts), '刷新成果列表');
   }, []);
@@ -262,6 +276,7 @@ export function App(): React.JSX.Element {
         refreshTaskRuns();
         refreshTasks();
         refreshEvidence();
+        refreshDiscussionCheckpoints();
         refreshArtifacts();
         if (activeTaskIdRef.current) loadAllTaskRuns(activeTaskIdRef.current);
       }
@@ -274,6 +289,7 @@ export function App(): React.JSX.Element {
     refreshTasks,
     refreshTaskRuns,
     refreshEvidence,
+    refreshDiscussionCheckpoints,
     loadAllTaskRuns,
   ]);
 
@@ -339,6 +355,7 @@ export function App(): React.JSX.Element {
     setTaskMemories([]);
     setExcludedMemoryIds([]);
     setMcpToolBindings([]);
+    setDiscussionCheckpoints([]);
     setMemoryCapture(undefined);
     setMaterialCandidates([]);
     setMaterialPickerKind(undefined);
@@ -573,6 +590,17 @@ export function App(): React.JSX.Element {
     event.preventDefault();
     reportAction(startRun(), setActionError, '无法开始这项工作，请重试。');
   };
+  const createDiscussionCheckpoint = async (
+    input: CreateDiscussionCheckpointRequest,
+  ): Promise<void> => {
+    try {
+      const result = await window.betterwork.discussionCheckpoints.create(input);
+      setDiscussionCheckpoints((current) => [...current, result.checkpoint]);
+    } catch (error: unknown) {
+      setActionError(describeActionError(error, '无法保存讨论节点，请重试。'));
+      throw error;
+    }
+  };
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (
       event.key !== 'Enter' ||
@@ -603,6 +631,7 @@ export function App(): React.JSX.Element {
     setEvents((current) => mergeRunEvents(snapshot, current));
     refreshTaskRuns(run.taskId);
     refreshEvidence(run.taskId);
+    refreshDiscussionCheckpoints(run.taskId);
     loadAllTaskRuns(run.taskId);
     setView('work');
   };
@@ -626,6 +655,7 @@ export function App(): React.JSX.Element {
     if (selectionId !== runSelectionRequestRef.current) return;
     loadAllTaskRuns(task.id);
     refreshEvidence(task.id);
+    refreshDiscussionCheckpoints(task.id);
     refreshTaskRuns(task.id);
     setView('work');
     const loadedRuns = await window.betterwork.runs.list({ taskId: task.id });
@@ -983,6 +1013,15 @@ export function App(): React.JSX.Element {
               }
             />
             <div className="workspace">
+              {activeTask && (
+                <DiscussionCheckpointPanel
+                  taskId={activeTask.id}
+                  {...(activeRunId ? { runId: activeRunId } : {})}
+                  checkpoints={discussionCheckpoints}
+                  artifacts={currentTaskArtifacts}
+                  onCreate={createDiscussionCheckpoint}
+                />
+              )}
               <div className="messages" ref={containerRef} onScroll={onScroll}>
                 <div className="page-body">
                   {taskAllRuns.length === 0 && !activeRunId ? (

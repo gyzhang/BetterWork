@@ -17,6 +17,7 @@ import {
   connectionTestResultSchema,
   copyExpertRequestSchema,
   copySkillRequestSchema,
+  createDiscussionCheckpointRequestSchema,
   createdTaskSchema,
   createMemoryRequestSchema,
   createTaskRequestSchema,
@@ -27,6 +28,8 @@ import {
   dependencyOptionsSchema,
   dependencyPlanRequestSchema,
   dependencyPlanSchema,
+  discussionCheckpointMutationResultSchema,
+  discussionCheckpointSchema,
   evidenceSummarySchema,
   expertDetailSchema,
   expertMutationResultSchema,
@@ -60,6 +63,7 @@ import {
   listArtifactsRequestSchema,
   listArtifactVersionsRequestSchema,
   listDependencyOptionsRequestSchema,
+  listDiscussionCheckpointsRequestSchema,
   listEvidenceRequestSchema,
   listExpertsRequestSchema,
   listMemoriesRequestSchema,
@@ -143,6 +147,7 @@ import { z, type ZodTypeAny } from 'zod';
 import { createNodeFileSystem } from '../infrastructure/dependency-adapters';
 import { listDependencyLocks, loadDependencyLock } from '../infrastructure/dependency-lock-catalog';
 import type { AppStore } from '../persistence';
+import type { DiscussionCheckpointService } from '../services/discussion-checkpoint-service';
 import type { ExpertService } from '../services/expert-service';
 import type { FileArtifactService } from '../services/file-artifact-service';
 import type { KnowledgeVault } from '../services/knowledge-vault';
@@ -168,6 +173,7 @@ export interface IpcDependencies {
   readonly runs: RunService;
   readonly skillService: SkillService;
   readonly expertService: ExpertService;
+  readonly discussionCheckpoints: DiscussionCheckpointService;
   readonly memories: MemoryService;
   readonly mcpClientService: McpClientService;
   readonly dependencies: SkillDependencyService;
@@ -263,6 +269,7 @@ export function registerIpc(deps: IpcDependencies): void {
   registerSearchEngineChannels(deps);
   registerSkillChannels(deps);
   registerExpertChannels(deps);
+  registerDiscussionCheckpointChannels(deps);
   registerMemoryChannels(deps);
   registerMcpChannels(deps);
   registerDependencyChannels(deps);
@@ -386,6 +393,21 @@ function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
       if (!input.workspaceId) throw new Error('缺少工作空间标识。');
       return taskMaterials.prepareInputSnapshotForWorkspace(input.workspaceId, sourcePath);
     },
+  );
+}
+
+function registerDiscussionCheckpointChannels({ discussionCheckpoints }: IpcDependencies): void {
+  handleInput(
+    IpcChannel.ListDiscussionCheckpoints,
+    listDiscussionCheckpointsRequestSchema,
+    discussionCheckpointSchema.array(),
+    (input) => discussionCheckpoints.list(input.taskId),
+  );
+  handleInput(
+    IpcChannel.CreateDiscussionCheckpoint,
+    createDiscussionCheckpointRequestSchema,
+    discussionCheckpointMutationResultSchema,
+    (input) => ({ checkpoint: discussionCheckpoints.create(input.taskId, input) }),
   );
 }
 

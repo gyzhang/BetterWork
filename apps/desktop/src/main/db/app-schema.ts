@@ -822,6 +822,33 @@ export const appMigrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 19,
+    name: 'add discussion checkpoints',
+    up(db: Database.Database): void {
+      db.exec(`
+        CREATE TABLE discussion_checkpoints (
+          id TEXT PRIMARY KEY,
+          task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
+          stage TEXT NOT NULL CHECK (stage IN ('understanding', 'research-complete', 'report-outline', 'report', 'ppt-outline', 'ppt-complete', 'iteration')),
+          status TEXT NOT NULL CHECK (status IN ('open', 'superseded')),
+          title TEXT NOT NULL,
+          summary TEXT NOT NULL,
+          artifact_version_ids_json TEXT NOT NULL DEFAULT '[]',
+          feedback TEXT,
+          next_action TEXT,
+          supersedes_id TEXT REFERENCES discussion_checkpoints(id) ON DELETE SET NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX idx_discussion_checkpoints_task
+          ON discussion_checkpoints(task_id, created_at ASC, id ASC);
+        CREATE INDEX idx_discussion_checkpoints_open
+          ON discussion_checkpoints(task_id, status, updated_at DESC);
+      `);
+    },
+  },
 ];
 
 /**
