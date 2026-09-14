@@ -216,6 +216,18 @@ export class TaskMaterialService {
       return;
     }
     if (reference.kind === 'artifact-version') {
+      const artifact = this.dependencies.store.artifacts
+        .list()
+        .find((candidate) => candidate.id === reference.artifactId);
+      if (!artifact) {
+        throw new TaskMaterialError('material_artifact_missing', '成果不存在。');
+      }
+      if (artifact.workspaceId !== reference.originWorkspaceId) {
+        throw new TaskMaterialError(
+          'material_workspace_mismatch',
+          '成果来源工作空间与登记信息不一致。',
+        );
+      }
       if (
         reference.originWorkspaceId !== workspaceId &&
         selection.addedFrom !== 'global-search' &&
