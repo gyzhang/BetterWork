@@ -36,6 +36,7 @@ import {
   createSkillExecuteTool,
   createSkillReadResourceTool,
   createTaskWriteFileTool,
+  createWebFetchTool,
   createWebSearchTool,
   type KnowledgeSearchItem,
   type ReadTextFile,
@@ -46,6 +47,7 @@ import {
   type SkillResourceReadOutput,
   type TaskFileWriteInput,
   type TaskFileWriteOutput,
+  type WebFetch,
   type WebSearch,
 } from '@betterwork/tool-runtime';
 import type { BrowserWindow } from 'electron';
@@ -120,6 +122,7 @@ export const createRunTools = (dependencies: {
   readTextFile?: ReadTextFile;
   artifactReader?: ArtifactReader;
   webSearch?: WebSearch;
+  webFetch?: WebFetch;
   allowedBuiltinToolNames?: ReadonlySet<string>;
   skillResourceReader?: (input: SkillResourceReadInput) => Promise<SkillResourceReadOutput>;
   taskFileWriter?: (input: TaskFileWriteInput) => Promise<TaskFileWriteOutput>;
@@ -144,6 +147,8 @@ export const createRunTools = (dependencies: {
     tools.push(createArtifactReadTool(dependencies.artifactReader));
   if (dependencies.webSearch && allows('web_search'))
     tools.push(createWebSearchTool(dependencies.webSearch));
+  if (dependencies.webFetch && allows('web_fetch'))
+    tools.push(createWebFetchTool(dependencies.webFetch));
   if (dependencies.skillResourceReader)
     tools.push(createSkillReadResourceTool(dependencies.skillResourceReader));
   if (dependencies.taskFileWriter) tools.push(createTaskWriteFileTool(dependencies.taskFileWriter));
@@ -187,6 +192,7 @@ export class RunService {
     private readonly taskMaterials?: TaskMaterialService,
     private readonly memories?: MemoryService,
     private readonly mcpClientService?: McpClientService,
+    private readonly webFetch?: WebFetch,
   ) {}
 
   start(input: StartRunRequest): string {
@@ -378,6 +384,7 @@ export class RunService {
               }
             : {}),
           ...(webSearch ? { webSearch } : {}),
+          ...(this.webFetch ? { webFetch: this.webFetch } : {}),
           ...(allowedBuiltinToolNames ? { allowedBuiltinToolNames } : {}),
           ...(bindingIds.length > 0
             ? {
@@ -662,6 +669,19 @@ export class RunService {
             .digest('hex'),
         });
       }
+    }
+    if (toolName === 'web_fetch' && isWebFetchOutput(event.output)) {
+      this.store.evidence.saveWeb({
+        taskId,
+        runId: event.runId,
+        sourceUri: event.output.url,
+        title: event.output.title,
+        locator: `${event.output.contentType} · HTTP ${event.output.status}`,
+        excerpt: event.output.content.slice(0, 2_000),
+        contentHash: createHash('sha256')
+          .update(`${event.output.url}\n${event.output.content}`)
+          .digest('hex'),
+      });
     }
   }
 
@@ -1299,6 +1319,22 @@ interface WebSearchOutputItem {
   snippet: string;
   site?: string;
 }
+
+interface WebFetchOutput {
+  url: string;
+  title: string;
+  content: string;
+  contentType: string;
+  status: number;
+}
+
+const isWebFetchOutput = (value: unknown): value is WebFetchOutput =>
+  isRecord(value) &&
+  isString(value.url) &&
+  isString(value.title) &&
+  isString(value.content) &&
+  isString(value.contentType) &&
+  typeof value.status === 'number';
 
 const isWebSearchOutput = (value: unknown): value is { results: WebSearchOutputItem[] } => {
   if (!isRecord(value) || !Array.isArray(value.results)) return false;

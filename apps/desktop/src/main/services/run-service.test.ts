@@ -502,6 +502,20 @@ describe('RunService', () => {
         (tool) => tool.name,
       ),
     ).toEqual(['calculator', 'read_text_file', 'knowledge_search', 'web_search']);
+    expect(
+      createRunTools({
+        knowledgeSearch,
+        webFetch: async (url) => ({
+          url,
+          title: '页面',
+          content: '正文',
+          contentType: 'text/html',
+          status: 200,
+          retrievedAt: 1,
+          truncated: false,
+        }),
+      }).map((tool) => tool.name),
+    ).toEqual(['calculator', 'read_text_file', 'knowledge_search', 'web_fetch']);
   });
 
   it('applies an Expert built-in tool allow-list without exposing omitted tools', () => {

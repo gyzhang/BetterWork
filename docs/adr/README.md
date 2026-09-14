@@ -18,5 +18,6 @@
 | [0014](0014-expert-context-and-material-binding.md) | 专家、任务准备与运行材料快照 | Accepted（E11–E25 已实现） |
 | [0015](0015-memory-scope-and-governance.md) | 最小记忆的范围、确认与治理 | Accepted（E30 定案） |
 | [0016](0016-mcp-transport-and-lifecycle.md) | MCP 首轮 stdio 传输、工具发现与生命周期 | Accepted（E40 定案） |
+| [0017](0017-web-fetch-and-evidence-boundary.md) | 公开网页正文读取与证据边界 | Accepted（E43） |
 
 ADR 一经 Accepted 不直接重写历史；需要改变时新增 ADR 并标记替代关系。
