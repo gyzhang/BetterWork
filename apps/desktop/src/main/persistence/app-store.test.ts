@@ -235,6 +235,24 @@ describe('AppStore', () => {
     ]);
   });
 
+  it('rejects evidence whose Run belongs to another task', () => {
+    const store = openStore();
+    const firstTask = seedTask(store, '/work/evidence-owner-a', '客户 A');
+    const secondTask = seedTask(store, '/work/evidence-owner-b', '客户 B');
+    seedRun(store, firstTask, 'run-owner-1');
+    expect(() =>
+      store.evidence.saveLocal({
+        taskId: secondTask.task.id,
+        runId: 'run-owner-1',
+        sourceUri: '/notes/mismatch.md',
+        title: '错误归属',
+        locator: '全文',
+        excerpt: '不应写入。',
+        contentHash: 'hash-mismatch',
+      }),
+    ).toThrow('Evidence Run does not belong to task');
+  });
+
   it('creates a Markdown artifact and appends revisions without overwriting history', () => {
     const store = openStore();
     const workspace = store.workspaces.getOrCreate('/work/customer-a', '客户 A');
