@@ -64,7 +64,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E53 | 经营分析方法与数值校验 | E52 | done | [ADR-0020](../adr/0020-deterministic-business-analysis.md)、`analyze_business_metrics` 确定性工具和内置「经营分析方法」Skill 已接入；期间变化、预算偏差、零基数和缺失指标有结构化结果/警告；`run-service.test.ts` 另覆盖 Expert allow-list 到确定性结果的离线 Run 集成，2026-09-14。 |
 | E54 | 报告/PPT 交付、修订及来源 | E53 | done | 复用现有 Markdown/FileArtifactService 版本路径；ArtifactVersion 详情通过 IPC 返回本版 `inputRelations`，成果页显示证据和材料输入；旧版本、导出、继续编辑与来源关系保持精确，2026-09-14。 |
 | E55 | 连续两期真实桌面验收 | E54 | partial | [合成两期验收记录](../acceptance/2026-09-14-expert-two-periods.md) 已覆盖两期独立 Task/Session/Run、旧对话不跨任务注入、Expert 修订与 `expert-reference` 历史成果绑定、已确认方法记忆按 Expert×Workspace 隔离并登记第二期读取足迹；RunContextSnapshot 直接保存 `expertId + expertRevisionId`。RunService 新增 Expert 取消后快照保留、同一 Task 可用固定上下文重新启动的自动化回归。2026-09-15 已在真实窗口核对“专家 → 召唤 → 工作台”及 `run.started → run.failed` 失败反馈；模型端点不可用，真实材料/网页/MCP/取消重启与连续两期成功旅程仍待执行。 |
-| E56 | macOS 安装态与整体收尾 | E55 | partial | [安装资源预检记录](../acceptance/2026-09-14-expert-install-preflight.md)：macOS arm64/x64 DMG 构建、两种架构 App Resources 资源校验、资源绝对路径泄漏扫描和打包 App 召唤冒烟通过；发布预检新增 `--signed-app` 严格签名校验入口，新增 `expert:acceptance-preflight` 检查模型端点与签名身份并有 CLI 回归测试，签名安装与真实业务旅程仍待执行。 |
+| E56 | macOS 安装态与整体收尾 | E55 | partial | [安装资源预检记录](../acceptance/2026-09-14-expert-install-preflight.md)：macOS arm64/x64 DMG 构建、两种架构 App Resources 资源校验、资源绝对路径泄漏扫描和打包 App 召唤冒烟通过；发布预检新增 `--signed-app` 严格签名校验入口，新增 `expert:acceptance-preflight` 检查模型端点与 Developer ID Application 签名身份并有 CLI 回归测试，签名安装与真实业务旅程仍待执行。 |
 
 ## 4. 开发任务卡
 

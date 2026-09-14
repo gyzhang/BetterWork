@@ -81,6 +81,9 @@ const checkSigningIdentity = async () => {
   const match = output.stdout.match(/(\d+) valid identities found/);
   const count = Number(match?.[1] ?? 0);
   if (count < 1) fail('未找到有效的 macOS 代码签名身份');
+  if (!/Developer ID Application:/.test(output.stdout)) {
+    fail('未找到 Developer ID Application 签名身份');
+  }
   return count;
 };
 
