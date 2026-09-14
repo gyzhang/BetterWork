@@ -1,6 +1,6 @@
 # ADR-0014：专家、任务准备与运行材料快照
 
-- 状态：Accepted（2026-09-14 用户通过设计 v0.2 评审；尚未实现）。
+- 状态：Accepted（2026-09-14 用户通过设计 v0.2 评审）。E11/E12 已落地专家持久化与执行注入；召唤对话、专家 UI 与内置分发留 E13–E15，见[开发计划](../development/tasks-experts.md)。
 - 日期：2026-09-13。
 - 2026-09-14 交互修正已确认：专家页“召唤”直接进入对话，缺少业务材料通过对话补充；TaskContextRevision 是宿主保存的对话草稿配置，不要求独立任务准备页。本文关系决策随用户对 v0.2 的整体评审通过而接受；具体实施技术由任务卡落实。
 - 依据：[专家与任务材料设计](../designs/experts-and-task-materials.md)。
@@ -52,3 +52,4 @@
 - 2026-09-14：E11 已落地 `experts` / `expert_revisions` v9 迁移、ExpertRepository、ExpertService、共享协议、IPC 与 Preload；支持不可变修订、内置复制、启停/归档、并发冲突和缺项状态。
 - 2026-09-14：E12 已落地 `task_context_revisions` v10、TaskContextRepository 的 CAS/任务归属校验，并将显式 ExpertRevision 的人格指令、模型引用、顺序 Skill 和内置工具 allow-list 接入 Run；E2 材料范围、记忆和 MCP 仍未提前实现。
 - 2026-09-14：E13 已接入专家列表召唤、TaskContext 保存、首条消息启动和任务重开恢复；召唤不创建 Run，空白草稿保留在 Composer，材料/记忆/MCP 仍由后续切片实现。
+- 2026-09-14：E14 已接入独立专家配置 UI，编辑只生成新修订；Skill 预设和内置工具按需选择，内置专家复制为 user Expert，生命周期操作复用 E11 管理 IPC。

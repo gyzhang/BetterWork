@@ -1,4 +1,10 @@
-import type { ExpertSummary } from '@betterwork/agent-protocol';
+import type {
+  ExpertDetail,
+  ExpertLifecycle,
+  ExpertMutationResult,
+  ExpertRevisionDraft,
+  ExpertSummary,
+} from '@betterwork/agent-protocol';
 import { useCallback, useEffect, useState } from 'react';
 
 import { trackAction } from '../lib/async-action';
@@ -8,6 +14,19 @@ export interface ExpertsState {
   loading: boolean;
   error: string;
   refresh: () => void;
+  get: (id: string) => Promise<ExpertDetail | null>;
+  create: (draft: ExpertRevisionDraft) => Promise<ExpertMutationResult>;
+  saveRevision: (input: {
+    expertId: string;
+    expectedRevision: number;
+    revision: ExpertRevisionDraft;
+  }) => Promise<ExpertMutationResult>;
+  copy: (expertId: string) => Promise<ExpertMutationResult>;
+  setLifecycle: (input: {
+    expertId: string;
+    lifecycle: ExpertLifecycle;
+    expectedRevision: number;
+  }) => Promise<ExpertMutationResult>;
 }
 
 export function useExperts(): ExpertsState {
@@ -29,5 +48,33 @@ export function useExperts(): ExpertsState {
 
   useEffect(() => refresh(), [refresh]);
 
-  return { experts, loading, error, refresh };
+  const get = useCallback((id: string): Promise<ExpertDetail | null> => {
+    return window.betterwork.experts.get({ id });
+  }, []);
+  const create = useCallback((draft: ExpertRevisionDraft): Promise<ExpertMutationResult> => {
+    return window.betterwork.experts.create(draft);
+  }, []);
+  const saveRevision = useCallback(
+    (input: {
+      expertId: string;
+      expectedRevision: number;
+      revision: ExpertRevisionDraft;
+    }): Promise<ExpertMutationResult> => window.betterwork.experts.saveRevision(input),
+    [],
+  );
+  const copy = useCallback(
+    (expertId: string): Promise<ExpertMutationResult> =>
+      window.betterwork.experts.copy({ expertId }),
+    [],
+  );
+  const setLifecycle = useCallback(
+    (input: {
+      expertId: string;
+      lifecycle: ExpertLifecycle;
+      expectedRevision: number;
+    }): Promise<ExpertMutationResult> => window.betterwork.experts.setLifecycle(input),
+    [],
+  );
+
+  return { experts, loading, error, refresh, get, create, saveRevision, copy, setLifecycle };
 }

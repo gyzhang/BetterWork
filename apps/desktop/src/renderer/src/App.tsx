@@ -1009,7 +1009,13 @@ export function App(): React.JSX.Element {
         )}
         {view === 'skills' && <SkillsPage state={skills} />}
         {view === 'experts' && (
-          <ExpertsPage state={experts} onSummon={summonExpert} onError={setActionError} />
+          <ExpertsPage
+            state={experts}
+            skills={skills.skills}
+            actions={experts}
+            onSummon={summonExpert}
+            onError={setActionError}
+          />
         )}
         {view === 'settings' && (
           <SettingsPage
