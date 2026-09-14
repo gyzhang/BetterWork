@@ -87,7 +87,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
         signal,
       });
     } catch (error) {
-      throw this.streamError(error, request.signal, timeout);
+      throw this.requestError(error, request.signal, timeout);
     }
     if (!response.ok) throw new Error(`模型请求失败（HTTP ${response.status}）`);
     if (!response.body) throw new Error('模型服务没有返回流式响应');
@@ -172,5 +172,16 @@ export class OpenAICompatibleProvider implements ModelProvider {
       });
     }
     return error instanceof Error ? error : new Error('模型流请求失败', { cause: error });
+  }
+
+  private requestError(error: unknown, requestSignal: AbortSignal, timeout: AbortSignal): Error {
+    if (requestSignal.aborted) return abortError();
+    if (timeout.aborted) {
+      return new Error(`模型流响应超时（超过 ${this.streamTimeoutMs / 1000} 秒）`, {
+        cause: error,
+      });
+    }
+    const detail = error instanceof Error ? error.message : '未知网络错误';
+    return new Error(`无法连接模型服务（${this.config.baseUrl}）：${detail}`, { cause: error });
   }
 }

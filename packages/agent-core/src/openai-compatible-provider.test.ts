@@ -287,11 +287,13 @@ describe('OpenAICompatibleProvider failures', () => {
     await expect(collect(provider().stream(request()))).rejects.toThrow('模型服务没有返回流式响应');
   });
 
-  it('surfaces a network error from fetch', async () => {
+  it('surfaces the model endpoint when the initial request cannot connect', async () => {
     stubFetch(() => {
       throw new Error('ECONNREFUSED');
     });
-    await expect(collect(provider().stream(request()))).rejects.toThrow('ECONNREFUSED');
+    await expect(collect(provider().stream(request()))).rejects.toThrow(
+      '无法连接模型服务（https://host/v1）：ECONNREFUSED',
+    );
   });
 
   it('rejects a malformed data line instead of silently dropping it', async () => {
