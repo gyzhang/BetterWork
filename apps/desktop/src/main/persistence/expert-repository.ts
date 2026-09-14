@@ -190,6 +190,38 @@ export class ExpertRepository {
     return updated;
   }
 
+  saveBuiltinRevision(
+    id: string,
+    revision: ExpertRevisionDraft,
+    expectedRevision: number,
+  ): ExpertDetail {
+    const row = this.getRow(id);
+    if (!row) throw new Error(`Expert does not exist: ${id}`);
+    if (row.source_kind !== 'builtin')
+      throw new Error('Only builtin Experts can use the builtin release path');
+    const current = this.getCurrentRevision(row);
+    if (current.revision !== expectedRevision) {
+      throw new Error(
+        `Expert revision conflict: expected ${expectedRevision}, current ${current.revision}`,
+      );
+    }
+    const revisionId = randomUUID();
+    const now = Date.now();
+    const save = this.db.transaction(() => {
+      this.insertRevision(id, revisionId, current.revision + 1, revision, now);
+      this.db
+        .prepare(
+          `UPDATE experts SET current_revision_id = ?, updated_at = ?
+           WHERE id = ? AND current_revision_id = ?`,
+        )
+        .run(revisionId, now, id, row.current_revision_id);
+    });
+    save();
+    const updated = this.get(id);
+    if (!updated) throw new Error('Expert was not available after builtin revision save');
+    return updated;
+  }
+
   copy(id: string, name?: string): ExpertDetail {
     const source = this.get(id);
     if (!source) throw new Error(`Expert does not exist: ${id}`);

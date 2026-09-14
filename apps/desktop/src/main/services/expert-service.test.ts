@@ -29,7 +29,7 @@ afterEach(() => {
 });
 
 describe('ExpertService', () => {
-  it('registers a built-in release idempotently and keeps it read-only', () => {
+  it('registers a built-in release idempotently, upgrades revisions, and keeps copies independent', () => {
     const store = openStore();
     const service = new ExpertService(store);
     const entry = {
@@ -48,6 +48,15 @@ describe('ExpertService', () => {
     expect(service.registerBuiltinRelease([entry])).toHaveLength(1);
     const registered = service.get(entry.expertId);
     expect(registered?.sourceKind).toBe('builtin');
+    const copy = service.copy(entry.expertId, '我的研究分析专家');
+    const upgraded = service.registerBuiltinRelease([
+      { ...entry, summary: '整理可验证的分析结论（新版）' },
+    ]);
+    expect(upgraded[0]).toMatchObject({
+      currentRevision: 2,
+      summary: '整理可验证的分析结论（新版）',
+    });
+    expect(service.get(copy.id)).toMatchObject({ currentRevision: 1, summary: entry.summary });
     expect(() => service.saveRevision(entry.expertId, draft(), 1)).toThrowError(
       expect.objectContaining<Partial<ExpertServiceError>>({ code: 'expert_builtin_readonly' }),
     );

@@ -43,7 +43,7 @@ interface Expert {
 }
 ```
 
-`builtin` Expert 由安装资源提供，用户不能覆盖其原始修订；用户修改时先复制为 `user` Expert。`archived` Expert 不出现在默认召唤列表，也不能启动新 Run，但旧 Task、Run、Artifact 和修订仍可读取。停用与归档均不删除历史。
+`builtin` Expert 由安装资源提供，用户不能覆盖其原始修订；用户修改时先复制为 `user` Expert。产品发布同一稳定 ID 的新版本时，追加新的 builtin 修订并保留旧修订，沿用用户对该 Expert 的停用/归档状态；用户副本不随发布更新。`archived` Expert 不出现在默认召唤列表，也不能启动新 Run，但旧 Task、Run、Artifact 和修订仍可读取。停用与归档均不删除历史。
 
 ### 2.2 ExpertRevision 字段
 
