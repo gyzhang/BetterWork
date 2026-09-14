@@ -650,6 +650,70 @@ describe('RunService', () => {
     expect(service.cancel(runId)).toBe(false);
   });
 
+  it('keeps an Expert snapshot on cancellation and allows a fresh Run to restart', async () => {
+    const fixture = await createFixture();
+    const expert = fixture.store.experts.create({
+      sourceKind: 'user',
+      revision: {
+        name: '经营分析专家',
+        summary: '取消后仍保留本次运行的专家身份',
+        identity: '负责经营分析。',
+        principles: [],
+        inputRequirements: [],
+        deliveryRequirements: [],
+        skillPreset: [],
+        builtinToolPolicy: { mode: 'application-defaults' },
+        modelReference: { mode: 'application-default' },
+      },
+    });
+    const context = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: {
+        kind: 'expert',
+        expertId: expert.id,
+        expertRevisionId: expert.revision.id,
+      },
+      skillBindings: [],
+    });
+    const service = createService(fixture);
+
+    const cancelledRunId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '取消本期经营分析',
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    expect(service.cancel(cancelledRunId)).toBe(true);
+    await waitForCompletion(fixture, cancelledRunId);
+
+    expect(statusOf(fixture, cancelledRunId)).toBe('cancelled');
+    expect(fixture.store.runContextSnapshots.get(cancelledRunId)).toMatchObject({
+      taskContextRevisionId: context.id,
+      expertId: expert.id,
+      expertRevisionId: expert.revision.id,
+    });
+
+    const restartedRunId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '重新生成本期经营分析',
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    await waitForCompletion(fixture, restartedRunId);
+
+    expect(restartedRunId).not.toBe(cancelledRunId);
+    expect(statusOf(fixture, restartedRunId)).toBe('completed');
+    expect(fixture.store.runContextSnapshots.get(restartedRunId)).toMatchObject({
+      taskContextRevisionId: context.id,
+      expertId: expert.id,
+      expertRevisionId: expert.revision.id,
+    });
+    expect(fixture.store.runs.listEvents(cancelledRunId).at(-1)).toMatchObject({
+      type: 'run.cancelled',
+    });
+  });
+
   it('rejects a Session that belongs to a different Task before creating a Run', async () => {
     const fixture = await createFixture();
     const otherTask = fixture.store.tasks.create(
