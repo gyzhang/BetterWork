@@ -88,6 +88,7 @@ describe('OpenAICompatibleProvider endpoint resolution', () => {
     ['https://host/v1///', 'https://host/v1/chat/completions'],
     ['https://host/v1/chat/completions', 'https://host/v1/chat/completions'],
     ['https://host/v1/chat/completions/', 'https://host/v1/chat/completions'],
+    ['https://host/v1?tenant=acme', 'https://host/v1/chat/completions?tenant=acme'],
   ];
 
   it.each(cases)('resolves %s to %s', async (baseUrl, expected) => {
@@ -308,6 +309,22 @@ describe('OpenAICompatibleProvider failures', () => {
     if (error instanceof Error) {
       expect(error.message).toContain('无法连接模型服务');
       expect(error.message).not.toContain('secret-api-key');
+    }
+  });
+
+  it('does not expose credentials embedded in the base URL', async () => {
+    stubFetch(() => {
+      throw new Error('fetch failed');
+    });
+    const error = await collect(
+      provider({ baseUrl: 'https://user:secret@host/v1?api_key=query-secret' }).stream(request()),
+    ).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(Error);
+    if (error instanceof Error) {
+      expect(error.message).toContain('无法连接模型服务（https://host/v1）');
+      expect(error.message).not.toContain('secret');
+      expect(error.message).not.toContain('query-secret');
     }
   });
 
