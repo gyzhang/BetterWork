@@ -162,6 +162,30 @@ describe('TaskMaterialService', () => {
 
     const otherRoot = temporaryDirectory('betterwork-material-other-workspace-');
     const otherWorkspace = store.workspaces.getOrCreate(otherRoot, '另一个工作区');
+    const otherInput = path.join(otherRoot, '本月数据.csv');
+    writeFileSync(otherInput, 'month,revenue\n2026-09,100\n');
+    const foreignSnapshot = await inputSnapshots.create({
+      workspaceId: otherWorkspace.id,
+      workspaceRoot: otherRoot,
+      sourcePath: otherInput,
+    });
+    await expect(
+      service.validateSelections(task.task.id, [
+        {
+          reference: {
+            kind: 'workspace-input-snapshot',
+            snapshotId: foreignSnapshot.snapshot.id,
+            workspaceId: workspace.id,
+            contentHash: foreignSnapshot.snapshot.contentHash,
+            format: foreignSnapshot.snapshot.format,
+            fileKey: foreignSnapshot.snapshot.fileKey,
+          },
+          purpose: 'current-input',
+          addedFrom: 'user-input',
+        },
+      ]),
+    ).rejects.toMatchObject({ code: 'material_workspace_mismatch' });
+
     const otherTask = store.tasks.create(otherWorkspace.id, '上月报告', '准备上月报告');
     const otherRunId = randomUUID();
     store.runs.create({

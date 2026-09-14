@@ -252,6 +252,12 @@ export class TaskMaterialService {
     }
     const snapshot = this.dependencies.store.inputSnapshots.get(reference.snapshotId);
     if (!snapshot) throw new TaskMaterialError('material_snapshot_missing', '输入快照不存在。');
+    if (snapshot.workspaceId !== reference.workspaceId || snapshot.format !== reference.format) {
+      throw new TaskMaterialError(
+        'material_workspace_mismatch',
+        '输入快照来源工作空间或格式与登记信息不一致。',
+      );
+    }
     if (snapshot.status !== 'ready') {
       throw new TaskMaterialError('material_snapshot_not_ready', '输入快照尚未准备完成。');
     }
