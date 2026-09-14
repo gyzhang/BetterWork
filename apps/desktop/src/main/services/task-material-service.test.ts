@@ -124,6 +124,42 @@ describe('TaskMaterialService', () => {
       ]),
     ).rejects.toMatchObject({ code: 'material_workspace_mismatch' });
 
+    const currentRunId = randomUUID();
+    store.runs.create({
+      id: currentRunId,
+      taskId: task.task.id,
+      sessionId: task.sessionId,
+      prompt: '生成当前工作区报告',
+      status: 'completed',
+      createdAt: 1,
+      completedAt: 2,
+    });
+    const currentArtifact = store.artifacts.saveMarkdown({
+      taskId: task.task.id,
+      runId: currentRunId,
+      title: '当前工作区报告',
+      content: '# 当前工作区报告\n\n收入 120',
+      origin: 'assistant-run',
+    });
+    const currentVersion = store.artifacts.getVersionDetail(currentArtifact.currentVersionId);
+    if (!currentVersion || currentVersion.type !== 'markdown')
+      throw new Error('current artifact fixture was not created');
+    await expect(
+      service.validateSelections(task.task.id, [
+        {
+          reference: {
+            kind: 'artifact-version',
+            artifactId: currentArtifact.id,
+            artifactVersionId: currentVersion.id,
+            contentHash: currentVersion.contentHash,
+            originWorkspaceId: workspace.id,
+          },
+          purpose: 'historical-comparison',
+          addedFrom: 'expert-reference',
+        },
+      ]),
+    ).resolves.toBeUndefined();
+
     const otherRoot = temporaryDirectory('betterwork-material-other-workspace-');
     const otherWorkspace = store.workspaces.getOrCreate(otherRoot, '另一个工作区');
     const otherTask = store.tasks.create(otherWorkspace.id, '上月报告', '准备上月报告');
@@ -161,7 +197,7 @@ describe('TaskMaterialService', () => {
           addedFrom: 'expert-reference',
         },
       ]),
-    ).resolves.toBeUndefined();
+    ).rejects.toMatchObject({ code: 'material_workspace_mismatch' });
     await expect(
       service.validateSelections(task.task.id, [
         {

@@ -228,11 +228,7 @@ export class TaskMaterialService {
           '成果来源工作空间与登记信息不一致。',
         );
       }
-      if (
-        reference.originWorkspaceId !== workspaceId &&
-        selection.addedFrom !== 'global-search' &&
-        selection.addedFrom !== 'expert-reference'
-      ) {
+      if (reference.originWorkspaceId !== workspaceId && selection.addedFrom !== 'global-search') {
         throw new TaskMaterialError(
           'material_workspace_mismatch',
           '成果来自其他工作空间，请通过显式来源入口重新选择。',

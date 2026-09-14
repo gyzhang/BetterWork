@@ -84,6 +84,14 @@ const referenceKey = (reference: MaterialReference): string => {
 const referencePurpose = (candidate: MaterialCandidate): 'rule' | 'historical-comparison' =>
   candidate.reference.kind === 'knowledge-revision' ? 'rule' : 'historical-comparison';
 
+const referenceApplicableToWorkspace = (
+  candidate: MaterialCandidate,
+  workspaceId?: string,
+): boolean => {
+  if (candidate.reference.kind !== 'artifact-version') return true;
+  return Boolean(workspaceId && candidate.reference.originWorkspaceId === workspaceId);
+};
+
 function ExpertCard({
   expert,
   onOpen,
@@ -139,6 +147,7 @@ function ExpertEditor({
   skills,
   mcpConnections,
   materialCandidates,
+  workspaceId,
   editing,
   saving,
   onChange,
@@ -149,6 +158,7 @@ function ExpertEditor({
   skills: SkillSummary[];
   mcpConnections: McpConnectionSummary[];
   materialCandidates: MaterialCandidate[];
+  workspaceId?: string;
   editing: boolean;
   saving: boolean;
   onChange: (draft: ExpertRevisionDraft) => void;
@@ -359,12 +369,13 @@ function ExpertEditor({
                     const checked = referenceMaterials.some(
                       (item) => referenceKey(item.reference) === key,
                     );
+                    const applicable = referenceApplicableToWorkspace(candidate, workspaceId);
                     return (
                       <label className="expert-option" key={key}>
                         <input
                           type="checkbox"
                           checked={checked}
-                          disabled={candidate.status === 'unavailable' && !checked}
+                          disabled={(!applicable || candidate.status === 'unavailable') && !checked}
                           onChange={(event) =>
                             onChange({
                               ...draft,
@@ -385,6 +396,7 @@ function ExpertEditor({
                         <span>
                           {candidate.title} · {candidate.sourceLabel}
                           {candidate.detail ? ` · ${candidate.detail}` : ''}
+                          {!applicable ? ' · 不适用于当前工作空间' : ''}
                         </span>
                       </label>
                     );
@@ -513,6 +525,7 @@ export function ExpertsPage({
   skills,
   mcpConnections,
   materialCandidates,
+  workspaceId,
   actions,
   onSummon,
   onError,
@@ -521,6 +534,7 @@ export function ExpertsPage({
   skills: SkillSummary[];
   mcpConnections: McpConnectionSummary[];
   materialCandidates: MaterialCandidate[];
+  workspaceId?: string;
   actions: Pick<ExpertsState, 'get' | 'create' | 'saveRevision' | 'copy' | 'setLifecycle'>;
   onSummon: (expert: ExpertSummary) => Promise<void>;
   onError: (message: string) => void;
@@ -614,6 +628,7 @@ export function ExpertsPage({
         skills={skills}
         mcpConnections={mcpConnections}
         materialCandidates={materialCandidates}
+        {...(workspaceId ? { workspaceId } : {})}
         editing={Boolean(selected)}
         saving={saving}
         onChange={setDraft}
