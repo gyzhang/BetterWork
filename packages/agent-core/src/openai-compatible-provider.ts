@@ -23,8 +23,27 @@ const DEFAULT_STREAM_TIMEOUT_MS = 300_000;
  * 以及已经写全的 `https://host/v1/chat/completions`。
  */
 const endpoint = (baseUrl: string): string => {
-  const normalized = baseUrl.replace(/\/+$/, '');
-  return normalized.endsWith('/chat/completions') ? normalized : `${normalized}/chat/completions`;
+  const url = new URL(baseUrl);
+  const normalizedPath = url.pathname.replace(/\/+$/, '');
+  if (!normalizedPath.endsWith('/chat/completions')) {
+    url.pathname = `${normalizedPath}/chat/completions`;
+  } else {
+    url.pathname = normalizedPath;
+  }
+  return url.toString();
+};
+
+const displayBaseUrl = (baseUrl: string): string => {
+  try {
+    const url = new URL(baseUrl);
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return '配置的模型地址';
+  }
 };
 
 export class OpenAICompatibleProvider implements ModelProvider {
@@ -182,6 +201,8 @@ export class OpenAICompatibleProvider implements ModelProvider {
       });
     }
     const detail = error instanceof Error ? error.message : '未知网络错误';
-    return new Error(`无法连接模型服务（${this.config.baseUrl}）：${detail}`, { cause: error });
+    return new Error(`无法连接模型服务（${displayBaseUrl(this.config.baseUrl)}）：${detail}`, {
+      cause: error,
+    });
   }
 }
