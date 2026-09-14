@@ -131,7 +131,7 @@ Expert、ExpertRevision 和 TaskContextRevision 都由 Application 层解析。�
 
 ### 4.2 材料范围与快照边界（E2 目标）
 
-材料候选、TaskContextRevision 的显式选择、运行快照、读取足迹和成果输入关系由 Application 层解析。`RunContextSnapshot` 固定 Knowledge 内容修订、ArtifactVersion 和受管输入快照；Agent Core 只收到已经过滤的指令、消息和工具，不读取两个 SQLite 库，也不根据路径自行扩大范围。
+材料候选、TaskContextRevision 的显式选择、运行快照、读取足迹和成果输入关系由 Application 层解析。`RunContextSnapshot` 固定实际 Expert 身份/修订、Knowledge 内容修订、ArtifactVersion 和受管输入快照；Agent Core 只收到已经过滤的指令、消息和工具，不读取两个 SQLite 库，也不根据路径自行扩大范围。
 
 材料契约要求 `read_text_file` 在真实 Workspace 路径校验之外匹配当前 Run 的输入快照，`knowledge_search` 接收允许的 Knowledge revision 集合，成果读取按精确 `artifactVersionId` 进行。E23 已将这些过滤接入带 `TaskContext` 的 Run；没有材料范围的旧通用 Run 仍按兼容路径运行。具体身份、恢复和失败语义见[材料、快照与运行来源契约](development/material-contracts.md)。
 
@@ -235,7 +235,7 @@ app_settings
 
 知识和记忆表见对应专题文档。
 
-E11 已通过版本化迁移创建 `experts`、`expert_revisions`；E12 已增加 `task_context_revisions`，E13–E15 已将其接入召唤、首条消息、任务恢复和内置分发；E21 已增加知识内容修订和 Workspace 所属输入快照；E22 已在 v12 保存材料引用和用途并通过 Application 校验来源；E23 已在 v13 增加 `run_context_snapshots` 并接入运行范围过滤；E24 已在 v14 增加读取足迹和成果输入关系；E25 已把候选查询、材料草稿与精确成果版本复用接入 Composer 和资料面板；E31/E32 已接入四种作用域的确认记忆与运行读取足迹；E40–E43 已接入 MCP 只读工具、网页正文抓取和来源 Evidence；E50–E54 已接入 Office 输入解析、讨论节点、确定性经营分析及成果输入关系。知识索引仍在独立 `vault.sqlite`，应用库保存授权和运行真相；两库没有跨库事务，启动时先验证内容修订再写应用库事务。旧 Task 缺少上下文时按通用助手和空材料解释，首次编辑/发送再以版本化迁移创建草稿。所有迁移保持启动幂等、可回滚并通过 `foreign_key_check`；历史 Run 没有专家或材料事实时不补造。
+E11 已通过版本化迁移创建 `experts`、`expert_revisions`；E12 已增加 `task_context_revisions`，E13–E15 已将其接入召唤、首条消息、任务恢复和内置分发；E21 已增加知识内容修订和 Workspace 所属输入快照；E22 已在 v12 保存材料引用和用途并通过 Application 校验来源；E23 已在 v13 增加 `run_context_snapshots` 并接入运行范围过滤；E24 已在 v14 增加读取足迹和成果输入关系；E25 已把候选查询、材料草稿与精确成果版本复用接入 Composer 和资料面板；E31/E32 已接入四种作用域的确认记忆与运行读取足迹；E40–E43 已接入 MCP 只读工具、网页正文抓取和来源 Evidence；E50–E54 已接入 Office 输入解析、讨论节点、确定性经营分析及成果输入关系；v21 已为运行快照补齐 Expert 身份与修订外键。知识索引仍在独立 `vault.sqlite`，应用库保存授权和运行真相；两库没有跨库事务，启动时先验证内容修订再写应用库事务。旧 Task 缺少上下文时按通用助手和空材料解释，首次编辑/发送再以版本化迁移创建草稿。所有迁移保持启动幂等、可回滚并通过 `foreign_key_check`；历史 Run 没有专家或材料事实时不补造。
 
 SQLite 是产品状态真相源；向量索引、缩略图和解析缓存均可重建。
 

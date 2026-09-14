@@ -58,6 +58,7 @@
 - 2026-09-14：E21 已落地 Knowledge Vault v3 不可变内容/分块修订、应用库 v11 `input_snapshots`、稳定读取与哈希寻址受管复制、取消和启动恢复；原始文件仍只读，输入快照不冒充 Artifact。材料绑定、运行范围过滤、读取足迹和成果输入关系仍分别留 E22–E24。
 - 2026-09-14：E22 已将 `MaterialReference`、用途、备注和添加来源加入 TaskContextRevision v12；TaskMaterialService/IPC 校验 Knowledge revision、ArtifactVersion、ready 输入快照、重复引用和 Workspace 归属，并提供候选查询与 Workspace 文件快照入口。`read_text_file` 与 `knowledge_search` 仍未按 Run 过滤，留 E23；读取足迹和成果输入关系留 E24。
 - 2026-09-14：E23 已将运行时材料范围接入 RunContextSnapshot（应用库 v13）。Knowledge 搜索、输入快照文件读取和 Markdown ArtifactVersion 读取均在宿主边界按精确引用校验；材料集合收缩时新建上下文段并排除旧段历史。读取足迹和成果输入关系仍留 E24；脚本权限仍是本机用户权限，不宣称 OS 沙箱。
+- 2026-09-15：应用库 v21 为 RunContextSnapshot 增加 `expert_id` 与 `expert_revision_id` 外键；专家 Run 直接固定实际采用的 Expert 修订，通用助手保持空值，旧历史不补造专家事实。
 - 2026-09-14：E24 已新增 `run_material_reads` 与 `artifact_input_relations`（应用库 v14）。完成的搜索/读取保存材料修订、定位和哈希；成果输入关系只能引用同一 Run 已读取的材料或该 Run 的 Evidence，人工修订不伪装成新的 Assistant 来源。
 - 2026-09-14：E25 已将材料选择接入 Composer `+` 菜单与右侧资料面板，候选查询支持已有 Task 或当前 Workspace；文件通过输入快照进入草稿，知识和成果按精确修订/版本选择并可调整用途。成果详情可从精确 Markdown 版本创建沿用专家的新任务，清空旧上下文与本期输入；PPTX/XLSX 输入明确留待 E51。
 - 2026-09-14：E22/E25 扩展已落地 [ADR-0022](0022-expert-reference-materials.md)：ExpertRevision v20 保存可复用 Knowledge revision/ArtifactVersion，专家配置页按当前工作区候选选择；召唤把引用以 `expert-reference` 注入新 TaskContext，任务仍可移除或补充，跨工作区成果引用由来源标记和哈希校验保护。

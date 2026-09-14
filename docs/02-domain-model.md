@@ -108,7 +108,7 @@ interface Run {
 
 当前实现状态：`status` 只落地 `running | completed | failed | cancelled`；`queued` 与 `waiting` 依赖尚未建设的审批/确认点语义（需要先在 `agent-protocol` 增加对应事件，见 [系统架构](03-system-architecture.md) §5）。`error` 以 `run.failed` 事件的形式持久化在 Run Event Journal 中，不是 `runs` 表的列。
 
-E20 定义的 `RunContextSnapshot` 在 Run 启动前固定 TaskContextRevision、Workspace、上下文段和精确材料版本；后续实现不得通过查询 Knowledge 最新行、Artifact 当前版本或工作空间新文件扩大读取范围。`RunMaterialRead` 记录实际检索/读取定位，不能由“已选择”或旧 Evidence 推断。
+E20 定义的 `RunContextSnapshot` 在 Run 启动前固定 TaskContextRevision、实际 Expert 身份/修订、Workspace、上下文段和精确材料版本；后续实现不得通过查询 Knowledge 最新行、Artifact 当前版本或工作空间新文件扩大读取范围。`RunMaterialRead` 记录实际检索/读取定位，不能由“已选择”或旧 Evidence 推断。
 
 ### 4.1 能力绑定
 
