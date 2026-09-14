@@ -99,4 +99,53 @@ describe('RunMaterialReadRepository', () => {
     });
     expect(store.materialReads.listByRun('run-material-read-legacy')).toHaveLength(1);
   });
+
+  it('rejects a scoped read with forged material metadata', () => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    const workspace = store.workspaces.getOrCreate('/tmp/material-read-metadata', '材料元数据');
+    const task = store.tasks.create(workspace.id, '材料任务', '验证材料身份');
+    const material = {
+      kind: 'knowledge-revision' as const,
+      knowledgeDocumentId: 'rules',
+      knowledgeRevisionId: 'rules-v1',
+      contentHash: 'rules-hash',
+      sourcePath: '/tmp/rules.md',
+    };
+    const context = store.taskContexts.save(task.task.id, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+      materials: [{ reference: material, purpose: 'rule', addedFrom: 'workspace-candidate' }],
+    });
+    const runId = 'run-material-read-metadata';
+    store.runs.create({
+      id: runId,
+      taskId: task.task.id,
+      sessionId: task.sessionId,
+      prompt: '读取规则',
+      status: 'running',
+      createdAt: 1,
+    });
+    store.runContextSnapshots.create({
+      runId,
+      taskId: task.task.id,
+      workspaceId: workspace.id,
+      taskContextRevisionId: context.id,
+      contextSegmentId: 'segment-1',
+      materials: context.materials ?? [],
+      createdAt: 2,
+    });
+
+    expect(() =>
+      store.materialReads.save({
+        id: 'read-forged-metadata',
+        runId,
+        material: { ...material, sourcePath: '/tmp/forged.md' },
+        operation: 'read',
+        locator: '全文',
+        contentHash: material.contentHash,
+        capturedAt: 3,
+      }),
+    ).toThrow('Run material read is outside the snapshot scope');
+  });
 });
