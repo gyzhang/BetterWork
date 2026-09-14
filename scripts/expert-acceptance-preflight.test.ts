@@ -63,6 +63,30 @@ describe('expert acceptance preflight CLI', () => {
     expect(result.stderr).toContain('模型端点检查失败');
   });
 
+  it('reports an empty successful response clearly', async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('test server did not bind');
+
+    try {
+      const result = await runPreflight([
+        '--model-url',
+        `http://127.0.0.1:${address.port}/api/inference/v1`,
+        '--skip-signing',
+      ]);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('模型端点返回空响应');
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+
   it('does not allow skipping every acceptance check', async () => {
     const result = await runPreflight(['--skip-model', '--skip-signing']);
     expect(result.status).toBe(1);
