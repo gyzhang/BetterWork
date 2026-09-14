@@ -220,6 +220,134 @@ export const skillDetailSchema = skillSummarySchema
   .strict();
 export type SkillDetail = z.infer<typeof skillDetailSchema>;
 
+export const expertSourceKindSchema = z.enum(['builtin', 'user']);
+export type ExpertSourceKind = z.infer<typeof expertSourceKindSchema>;
+
+export const expertLifecycleSchema = z.enum(['active', 'disabled', 'archived']);
+export type ExpertLifecycle = z.infer<typeof expertLifecycleSchema>;
+
+export const expertBlockedReasonSchema = z.enum([
+  'missing-skill',
+  'skill-blocked',
+  'missing-model',
+  'model-disabled',
+  'invalid-tool',
+]);
+export type ExpertBlockedReason = z.infer<typeof expertBlockedReasonSchema>;
+
+export const expertSkillPresetSchema = z
+  .array(z.object({ skillId: skillIdSchema, revisionId: skillRevisionIdSchema }).strict())
+  .max(MAX_RUN_SKILL_BINDINGS)
+  .refine(
+    (bindings) => new Set(bindings.map((binding) => binding.skillId)).size === bindings.length,
+    {
+      message: 'skillPreset 中存在重复的 skillId',
+    },
+  );
+export type ExpertSkillPreset = z.infer<typeof expertSkillPresetSchema>[number];
+
+export const builtinToolPolicySchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('application-defaults') }).strict(),
+  z
+    .object({
+      mode: z.literal('allow-list'),
+      toolNames: z.array(z.string().trim().min(1).max(100)).max(50),
+    })
+    .strict(),
+]);
+export type BuiltinToolPolicy = z.infer<typeof builtinToolPolicySchema>;
+
+export const expertModelReferenceSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('application-default') }).strict(),
+  z.object({ mode: z.literal('profile'), modelProfileId: z.string().min(1) }).strict(),
+]);
+export type ExpertModelReference = z.infer<typeof expertModelReferenceSchema>;
+
+export const expertRevisionDraftSchema = z
+  .object({
+    name: z.string().trim().min(1).max(160),
+    summary: z.string().trim().max(2_000),
+    avatarKey: z.string().trim().min(1).max(160).optional(),
+    identity: z.string().trim().min(1).max(20_000),
+    principles: z.array(z.string().trim().min(1).max(2_000)).max(100),
+    inputRequirements: z.array(z.string().trim().min(1).max(2_000)).max(100),
+    deliveryRequirements: z.array(z.string().trim().min(1).max(2_000)).max(100),
+    skillPreset: expertSkillPresetSchema,
+    builtinToolPolicy: builtinToolPolicySchema,
+    modelReference: expertModelReferenceSchema,
+  })
+  .strict();
+export type ExpertRevisionDraft = z.infer<typeof expertRevisionDraftSchema>;
+
+export const expertRevisionSchema = expertRevisionDraftSchema
+  .extend({
+    id: z.string().min(1),
+    expertId: z.string().min(1),
+    revision: z.number().int().positive(),
+    createdAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type ExpertRevision = z.infer<typeof expertRevisionSchema>;
+
+export const expertSummarySchema = z
+  .object({
+    id: z.string().min(1),
+    sourceKind: expertSourceKindSchema,
+    lifecycle: expertLifecycleSchema,
+    name: z.string(),
+    summary: z.string(),
+    currentRevision: z.number().int().positive(),
+    blockedReasons: z.array(expertBlockedReasonSchema),
+    createdAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type ExpertSummary = z.infer<typeof expertSummarySchema>;
+
+export const expertDetailSchema = expertSummarySchema
+  .extend({
+    revision: expertRevisionSchema,
+  })
+  .strict();
+export type ExpertDetail = z.infer<typeof expertDetailSchema>;
+
+export const listExpertsRequestSchema = z
+  .object({ includeArchived: z.boolean().optional().default(false) })
+  .strict();
+export type ListExpertsRequest = z.infer<typeof listExpertsRequestSchema>;
+
+export const getExpertRequestSchema = z.object({ id: z.string().min(1) }).strict();
+export type GetExpertRequest = z.infer<typeof getExpertRequestSchema>;
+
+export const createExpertRequestSchema = expertRevisionDraftSchema;
+export type CreateExpertRequest = z.infer<typeof createExpertRequestSchema>;
+
+export const saveExpertRevisionRequestSchema = z
+  .object({
+    expertId: z.string().min(1),
+    expectedRevision: z.number().int().positive(),
+    revision: expertRevisionDraftSchema,
+  })
+  .strict();
+export type SaveExpertRevisionRequest = z.infer<typeof saveExpertRevisionRequestSchema>;
+
+export const copyExpertRequestSchema = z
+  .object({ expertId: z.string().min(1), name: z.string().trim().min(1).max(160).optional() })
+  .strict();
+export type CopyExpertRequest = z.infer<typeof copyExpertRequestSchema>;
+
+export const setExpertLifecycleRequestSchema = z
+  .object({
+    expertId: z.string().min(1),
+    lifecycle: expertLifecycleSchema,
+    expectedRevision: z.number().int().positive(),
+  })
+  .strict();
+export type SetExpertLifecycleRequest = z.infer<typeof setExpertLifecycleRequestSchema>;
+
+export const expertMutationResultSchema = z.object({ expert: expertDetailSchema }).strict();
+export type ExpertMutationResult = z.infer<typeof expertMutationResultSchema>;
+
 export const listSkillsRequestSchema = z.object({}).strict();
 export type ListSkillsRequest = z.infer<typeof listSkillsRequestSchema>;
 
@@ -1539,6 +1667,12 @@ export const IpcChannel = {
   DeleteSkill: 'skill:delete',
   RefreshSkillDependencyGrant: 'skill:refresh-dependency-grant',
   TestSkillRun: 'skill:test-run',
+  ListExperts: 'expert:list',
+  GetExpert: 'expert:get',
+  CreateExpert: 'expert:create',
+  SaveExpertRevision: 'expert:save-revision',
+  CopyExpert: 'expert:copy',
+  SetExpertLifecycle: 'expert:set-lifecycle',
   ListDependencyOptions: 'dependency:list-options',
   InspectDependencyPlan: 'dependency:inspect-plan',
   PrepareDependencyEnvironment: 'dependency:prepare',
@@ -1638,6 +1772,14 @@ export interface BetterWorkDesktopApi {
       input: RefreshSkillDependencyGrantRequest,
     ): Promise<RefreshSkillDependencyGrantResult>;
     testRun(input: TestSkillRunRequest): Promise<TestSkillRunResult>;
+  };
+  experts: {
+    list(input?: ListExpertsRequest): Promise<ExpertSummary[]>;
+    get(input: GetExpertRequest): Promise<ExpertDetail | null>;
+    create(input: CreateExpertRequest): Promise<ExpertMutationResult>;
+    saveRevision(input: SaveExpertRevisionRequest): Promise<ExpertMutationResult>;
+    copy(input: CopyExpertRequest): Promise<ExpertMutationResult>;
+    setLifecycle(input: SetExpertLifecycleRequest): Promise<ExpertMutationResult>;
   };
   dependencies: {
     listOptions(): Promise<DependencyOptions>;

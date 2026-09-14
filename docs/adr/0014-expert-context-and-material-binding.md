@@ -45,3 +45,8 @@
 代价是需要专家修订、任务草稿、来源修订、运行快照、上下文段与成果输入关系的版本化迁移，并为文件快照增加恢复与存储回收策略。收益是能力、材料、记忆和成果复用遵循同一条可解释的运行链路。
 
 实现前按 E1–E5 拆为独立任务卡，先定义共享 Zod 协议、迁移与失败/取消语义。PPTX/XLSX 输入处理、记忆实现、MCP 和讨论节点均需明确验收；本 ADR 已接受，不能据此声称任何功能已落地。具体任务、前置与证据门槛以[开发计划](../development/tasks-experts.md)为准。
+
+## 实现进度
+
+- 2026-09-14：E10 已定案[专家与任务上下文契约](../development/expert-contracts.md)。
+- 2026-09-14：E11 已落地 `experts` / `expert_revisions` v9 迁移、ExpertRepository、ExpertService、共享协议、IPC 与 Preload；支持不可变修订、内置复制、启停/归档、并发冲突和缺项状态。Expert 尚未接入召唤、TaskContextRevision 或 Run 执行注入，后续按 E12–E14 继续。

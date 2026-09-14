@@ -586,6 +586,44 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 9,
+    name: 'add experts and immutable expert revisions',
+    up(db: Database.Database): void {
+      db.exec(`
+        CREATE TABLE experts (
+          id TEXT PRIMARY KEY,
+          source_kind TEXT NOT NULL CHECK (source_kind IN ('builtin', 'user')),
+          lifecycle TEXT NOT NULL DEFAULT 'active'
+            CHECK (lifecycle IN ('active', 'disabled', 'archived')),
+          current_revision_id TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE expert_revisions (
+          id TEXT PRIMARY KEY,
+          expert_id TEXT NOT NULL REFERENCES experts(id) ON DELETE CASCADE,
+          revision INTEGER NOT NULL CHECK (revision > 0),
+          name TEXT NOT NULL,
+          summary TEXT NOT NULL,
+          avatar_key TEXT,
+          identity TEXT NOT NULL,
+          principles_json TEXT NOT NULL,
+          input_requirements_json TEXT NOT NULL,
+          delivery_requirements_json TEXT NOT NULL,
+          skill_preset_json TEXT NOT NULL,
+          builtin_tool_policy_json TEXT NOT NULL,
+          model_reference_json TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          UNIQUE(expert_id, revision)
+        );
+        CREATE INDEX idx_expert_revisions_expert
+          ON expert_revisions(expert_id, revision DESC);
+        CREATE INDEX idx_experts_lifecycle
+          ON experts(lifecycle, updated_at DESC);
+      `);
+    },
+  },
 ];
 
 /**

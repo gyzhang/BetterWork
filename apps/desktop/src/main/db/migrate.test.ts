@@ -647,14 +647,14 @@ describe('knowledge database migrations', () => {
   });
 });
 
-it('migrates v7 to v8 without inventing verified outputs or losing Markdown versions', () => {
+it('migrates v7 through the latest schema without losing Markdown versions', () => {
   const file = path.join(temporaryDirectory(), 'v7.sqlite');
   const db = new Database(file);
   db.pragma('foreign_keys = ON');
   migrate(db, { migrations: appMigrations.filter((migration) => migration.version <= 7) });
   seedLegacyWork(db);
   migrate(db, { migrations: appMigrations });
-  expect(readSchemaVersion(db)).toBe(8);
+  expect(readSchemaVersion(db)).toBe(appMigrations.length);
   expect(db.prepare('SELECT content FROM artifact_versions WHERE id = ?').get('ver-1')).toEqual({
     content: '# 复盘',
   });
@@ -672,5 +672,64 @@ it('migrates v7 to v8 without inventing verified outputs or losing Markdown vers
   ).toThrow('FOREIGN KEY');
   migrate(db, { migrations: appMigrations });
   expect(db.pragma('foreign_key_check')).toEqual([]);
+  db.close();
+});
+
+it('adds immutable expert revision tables and keeps their ownership constraints', () => {
+  const db = new Database(':memory:');
+  migrate(db, { migrations: appMigrations });
+  const now = 1_700_000_000_000;
+  db.prepare(
+    `INSERT INTO experts (id, source_kind, lifecycle, current_revision_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run('expert-1', 'user', 'active', 'expert-revision-1', now, now);
+  db.prepare(
+    `INSERT INTO expert_revisions (
+       id, expert_id, revision, name, summary, identity, principles_json,
+       input_requirements_json, delivery_requirements_json, skill_preset_json,
+       builtin_tool_policy_json, model_reference_json, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    'expert-revision-1',
+    'expert-1',
+    1,
+    '经营分析专家',
+    '按规则完成经营分析',
+    '负责经营分析',
+    '[]',
+    '[]',
+    '[]',
+    '[]',
+    '{"mode":"application-defaults"}',
+    '{"mode":"application-default"}',
+    now,
+  );
+  expect(() =>
+    db
+      .prepare(
+        `INSERT INTO expert_revisions (
+           id, expert_id, revision, name, summary, identity, principles_json,
+           input_requirements_json, delivery_requirements_json, skill_preset_json,
+           builtin_tool_policy_json, model_reference_json, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        'expert-revision-duplicate',
+        'expert-1',
+        1,
+        '重复',
+        '',
+        '身份',
+        '[]',
+        '[]',
+        '[]',
+        '[]',
+        '{"mode":"application-defaults"}',
+        '{"mode":"application-default"}',
+        now,
+      ),
+  ).toThrow('UNIQUE');
+  db.prepare('DELETE FROM experts WHERE id = ?').run('expert-1');
+  expect(countRows(db, 'expert_revisions')).toBe(0);
   db.close();
 });

@@ -19,6 +19,7 @@ import { registerIpc } from './ipc/register-ipc';
 import { AppStore } from './persistence';
 import { createQuitHandler } from './services/application-shutdown';
 import { ExecutionOutputService } from './services/execution-output-service';
+import { ExpertService } from './services/expert-service';
 import { FileArtifactService } from './services/file-artifact-service';
 import { KnowledgeVault } from './services/knowledge-vault';
 import { NotificationService } from './services/notification-service';
@@ -66,6 +67,7 @@ function bootstrap(): ApplicationContext {
     installedBuiltinRoot: path.join(process.resourcesPath, 'skills'),
     userRoot: path.join(userData, 'skills'),
   });
+  const expertService = new ExpertService(store);
 
   const builtinRoot = app.isPackaged
     ? path.join(process.resourcesPath, 'skills')
@@ -210,6 +212,7 @@ function bootstrap(): ApplicationContext {
     notifications,
     runs,
     skillService,
+    expertService,
     dependencies,
     snapshots,
     fileArtifactService,
