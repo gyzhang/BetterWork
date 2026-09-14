@@ -162,6 +162,21 @@ describe('TaskMaterialService', () => {
         },
       ]),
     ).resolves.toBeUndefined();
+    await expect(
+      service.validateSelections(task.task.id, [
+        {
+          reference: {
+            kind: 'artifact-version',
+            artifactId: artifact.id,
+            artifactVersionId: version.id,
+            contentHash: version.contentHash,
+            originWorkspaceId: workspace.id,
+          },
+          purpose: 'historical-comparison',
+          addedFrom: 'expert-reference',
+        },
+      ]),
+    ).rejects.toMatchObject({ code: 'material_workspace_mismatch' });
     vault.close();
   });
 });
