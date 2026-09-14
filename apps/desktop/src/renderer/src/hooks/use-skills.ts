@@ -77,7 +77,8 @@ export function useSkills(options: UseSkillsOptions): SkillsState {
   const deselect = useCallback((): void => {
     setSelected(undefined);
     setSelectedId(undefined);
-  }, []);
+    refresh();
+  }, [refresh]);
 
   const applyMutation = useCallback(
     (action: Promise<{ skill: SkillSummary }>, successMessage: string): void => {

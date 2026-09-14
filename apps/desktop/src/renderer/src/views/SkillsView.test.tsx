@@ -134,6 +134,28 @@ describe('SkillsPage', () => {
     expect(screen.getByRole('heading', { name: '第二个 Skill' })).toBeTruthy();
   });
 
+  it('refreshes the list after returning from a detail mutation', async () => {
+    const list = vi.fn(async () => [summary]);
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        dependencies: dependencyStub(),
+        skills: {
+          refreshDependencyGrant: grantStub(),
+          list,
+          get: vi.fn(async () => detail),
+        },
+      },
+    });
+
+    render(<Harness />);
+    await waitFor(() => expect(screen.getByText('研究方法')).toBeTruthy());
+    screen.getByRole('button', { name: /研究方法/ }).click();
+    await waitFor(() => expect(screen.getByRole('heading', { name: '研究方法' })).toBeTruthy());
+    screen.getByRole('button', { name: '返回' }).click();
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+  });
+
   it('keeps the trust intent checked while runtime setup still needs review', async () => {
     const trustedSummary: SkillSummary = {
       ...summary,
