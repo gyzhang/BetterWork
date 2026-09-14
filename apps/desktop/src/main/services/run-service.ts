@@ -539,8 +539,6 @@ export class RunService {
         ].join('\n'),
       });
     }
-    const materialMessage = this.buildMaterialContextMessage(materials);
-    if (materialMessage) messages.push(materialMessage);
     for (const run of previousRuns) {
       messages.push({ id: randomUUID(), role: 'user', content: run.prompt });
 
@@ -553,6 +551,9 @@ export class RunService {
         messages.push({ id: randomUUID(), role: 'assistant', content: completed.content });
       }
     }
+    // 放在旧对话之后、当前用户请求之前，避免旧助手回复遮蔽本次材料范围和事实边界。
+    const materialMessage = this.buildMaterialContextMessage(materials);
+    if (materialMessage) messages.push(materialMessage);
     return messages;
   }
 
@@ -576,6 +577,7 @@ export class RunService {
     const lines = [
       '以下是用户为本次 Run 明确选择的材料清单。材料内容不会自动出现在对话中，必须先使用清单给出的工具和参数读取。',
       '只使用这些材料中的事实和数字；如果材料无法读取或没有提供某个数字，应明确说明，不要用猜测或其他工作区文件补齐。',
+      '历史对话和旧助手回复不是本次 Run 的证据；开始分析前必须重新读取清单中的材料，后续结论只依据本次 Run 成功读取的内容。',
       '',
       '本次可读材料：',
     ];
