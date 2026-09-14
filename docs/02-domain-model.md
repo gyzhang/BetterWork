@@ -67,7 +67,7 @@ interface Workspace {
 
 Expert 是可被召唤的长期工作方式身份；ExpertRevision 是不可变的人格、工作原则、输入/交付要求、Skill 顺序、内置工具策略和模型引用。编辑 Expert 只生成新修订，不热改已有 Task 或 Run。内置 Expert 不能覆盖原始修订，用户通过复制得到可编辑的 user Expert；停用/归档不删除历史。
 
-E10 的字段、生命周期、错误码和 IPC 语义见[专家与任务上下文契约](development/expert-contracts.md) §2。E11 才新增 SQLite 表和管理 API，当前代码尚未提供 Expert。
+E10 的字段、生命周期、错误码和 IPC 语义见[专家与任务上下文契约](development/expert-contracts.md) §2。E11 已新增 `experts` / `expert_revisions` SQLite 表、Repository、Service 和管理 IPC；召唤、TaskContextRevision 与执行注入仍由 E12–E14 实现。
 
 ### 3.2 TaskContextRevision
 
@@ -239,7 +239,7 @@ Knowledge Vault 是由用户管理的一组本地知识来源，具有独立索�
 
 ## 10. Capability
 
-2026-09-14 已接受的增量关系：Expert 保存不可变修订；TaskContextRevision 保存下一次运行的可见草稿；RunContextSnapshot 固定实际专家、工具/Skill、资料引用与记忆适用范围。E10 已定案 Expert/Revision 与 E1 草稿字段，代码和迁移留在 E11–E13；材料引用区分知识内容修订、成果版本和文件快照，按 E20 定案。任务缩小范围时按上下文段排除旧模型输入；新成果版本可关联输入成果版本。完整字段不是本节示例接口的已发布 Schema，实施必须遵循[专家与任务上下文契约](development/expert-contracts.md)。
+2026-09-14 已接受的增量关系：Expert 保存不可变修订；TaskContextRevision 保存下一次运行的可见草稿；RunContextSnapshot 固定实际专家、工具/Skill、资料引用与记忆适用范围。E10 已定案 Expert/Revision 与 E1 草稿字段，E11 已实现 Expert 身份、修订和管理 IPC；TaskContextRevision 与运行快照留在 E12–E13。材料引用区分知识内容修订、成果版本和文件快照，按 E20 定案。任务缩小范围时按上下文段排除旧模型输入；新成果版本可关联输入成果版本。完整字段不是本节示例接口的已发布 Schema，实施必须遵循[专家与任务上下文契约](development/expert-contracts.md)。
 
 Capability 是运行时可使用能力的统一抽象，来源包括：
 

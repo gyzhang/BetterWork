@@ -233,6 +233,13 @@ export class SkillRepository {
     return rows.map(toRevision);
   }
 
+  hasRevision(skillId: string, revisionId: string): boolean {
+    const row = this.db
+      .prepare('SELECT 1 AS present FROM skill_revisions WHERE id = ? AND skill_id = ?')
+      .get(revisionId, skillId) as { present: number } | undefined;
+    return row?.present === 1;
+  }
+
   get(id: string): SkillDetail | undefined {
     const row = this.getRow(id);
     if (!row) return undefined;

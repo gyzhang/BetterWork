@@ -5,6 +5,7 @@ import { ArtifactRepository } from './artifact-repository';
 import { DependencyOperationRepository } from './dependency-operation-repository';
 import { DependencySnapshotRepository } from './dependency-snapshot-repository';
 import { EvidenceRepository } from './evidence-repository';
+import { ExpertRepository } from './expert-repository';
 import { ModelRepository } from './model-repository';
 import { NotificationRepository } from './notification-repository';
 import { RunRepository } from './run-repository';
@@ -29,6 +30,7 @@ export class AppStore {
   readonly tasks: TaskRepository;
   readonly runs: RunRepository;
   readonly evidence: EvidenceRepository;
+  readonly experts: ExpertRepository;
   readonly artifacts: ArtifactRepository;
   readonly models: ModelRepository;
   readonly searchEngines: SearchEngineRepository;
@@ -44,6 +46,7 @@ export class AppStore {
     this.tasks = new TaskRepository(db);
     this.runs = new RunRepository(db);
     this.evidence = new EvidenceRepository(db);
+    this.experts = new ExpertRepository(db);
     this.artifacts = new ArtifactRepository(db);
     this.models = new ModelRepository(db);
     this.searchEngines = new SearchEngineRepository(db);
@@ -86,6 +89,7 @@ export {
   DependencySnapshotRepository,
 } from './dependency-snapshot-repository';
 export { EvidenceRepository, type NewEvidence } from './evidence-repository';
+export { type CreateExpertInput, ExpertRepository } from './expert-repository';
 export { ModelRepository, type RunnableModel } from './model-repository';
 export { NotificationRepository } from './notification-repository';
 export { RunRepository } from './run-repository';

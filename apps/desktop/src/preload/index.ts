@@ -4,6 +4,7 @@ import {
   cancelDependencyRequestSchema,
   cancelDependencyResultSchema,
   chooseInterpreterResultSchema,
+  copyExpertRequestSchema,
   copySkillRequestSchema,
   deletedResultSchema,
   deleteSkillRequestSchema,
@@ -11,14 +12,20 @@ import {
   dependencyOptionsSchema,
   dependencyPlanRequestSchema,
   dependencyPlanSchema,
+  expertDetailSchema,
+  expertMutationResultSchema,
+  expertRevisionDraftSchema,
+  expertSummarySchema,
   exportSkillRequestSchema,
   getArtifactThumbnailsRequestSchema,
   getArtifactThumbnailsResultSchema,
   getDependencyOperationRequestSchema,
+  getExpertRequestSchema,
   getSkillRequestSchema,
   importSkillRequestSchema,
   IpcChannel,
   listDependencyOptionsRequestSchema,
+  listExpertsRequestSchema,
   notificationActivatedSchema,
   notificationChangeEventSchema,
   prepareDependencyRequestSchema,
@@ -28,7 +35,9 @@ import {
   registerToolchainRequestSchema,
   registerToolchainResultSchema,
   revokeSkillTrustRequestSchema,
+  saveExpertRevisionRequestSchema,
   saveSkillRuntimeProfileRequestSchema,
+  setExpertLifecycleRequestSchema,
   setSkillEnabledRequestSchema,
   setSkillTrustRequestSchema,
   skillDetailSchema,
@@ -205,6 +214,44 @@ const api: BetterWorkDesktopApi = {
         IpcChannel.TestSkillRun,
         testSkillRunRequestSchema.parse(input),
         testSkillRunResultSchema,
+      ),
+  },
+  experts: {
+    list: (input) =>
+      invokeValidated(
+        IpcChannel.ListExperts,
+        listExpertsRequestSchema.parse(input ?? {}),
+        z.array(expertSummarySchema),
+      ),
+    get: (input) =>
+      invokeValidated(
+        IpcChannel.GetExpert,
+        getExpertRequestSchema.parse(input),
+        expertDetailSchema.nullable(),
+      ),
+    create: (input) =>
+      invokeValidated(
+        IpcChannel.CreateExpert,
+        expertRevisionDraftSchema.parse(input),
+        expertMutationResultSchema,
+      ),
+    saveRevision: (input) =>
+      invokeValidated(
+        IpcChannel.SaveExpertRevision,
+        saveExpertRevisionRequestSchema.parse(input),
+        expertMutationResultSchema,
+      ),
+    copy: (input) =>
+      invokeValidated(
+        IpcChannel.CopyExpert,
+        copyExpertRequestSchema.parse(input),
+        expertMutationResultSchema,
+      ),
+    setLifecycle: (input) =>
+      invokeValidated(
+        IpcChannel.SetExpertLifecycle,
+        setExpertLifecycleRequestSchema.parse(input),
+        expertMutationResultSchema,
       ),
   },
   dependencies: {

@@ -15,6 +15,7 @@ import {
   clearedResultSchema,
   clearNotificationsRequestSchema,
   connectionTestResultSchema,
+  copyExpertRequestSchema,
   copySkillRequestSchema,
   createdTaskSchema,
   createTaskRequestSchema,
@@ -25,6 +26,10 @@ import {
   dependencyPlanRequestSchema,
   dependencyPlanSchema,
   evidenceSummarySchema,
+  expertDetailSchema,
+  expertMutationResultSchema,
+  expertRevisionDraftSchema,
+  expertSummarySchema,
   exportFileArtifactRequestSchema,
   type ExportFileArtifactResult,
   exportFileArtifactResultSchema,
@@ -37,6 +42,7 @@ import {
   getArtifactThumbnailsResultSchema,
   getArtifactVersionRequestSchema,
   getDependencyOperationRequestSchema,
+  getExpertRequestSchema,
   getFileArtifactRequestSchema,
   getSkillRequestSchema,
   importSkillRequestSchema,
@@ -50,6 +56,7 @@ import {
   listArtifactVersionsRequestSchema,
   listDependencyOptionsRequestSchema,
   listEvidenceRequestSchema,
+  listExpertsRequestSchema,
   listRunEventsRequestSchema,
   listRunsRequestSchema,
   listSkillsRequestSchema,
@@ -79,6 +86,7 @@ import {
   removeKnowledgeDocumentRequestSchema,
   revokeSkillTrustRequestSchema,
   runSummarySchema,
+  saveExpertRevisionRequestSchema,
   saveMarkdownArtifactRequestSchema,
   saveModelProfileRequestSchema,
   saveSearchEngineRequestSchema,
@@ -87,6 +95,7 @@ import {
   searchEngineSummarySchema,
   searchKnowledgeRequestSchema,
   setDefaultModelRequestSchema,
+  setExpertLifecycleRequestSchema,
   setModelEnabledRequestSchema,
   setSkillEnabledRequestSchema,
   setSkillTrustRequestSchema,
@@ -114,6 +123,7 @@ import { z, type ZodTypeAny } from 'zod';
 import { createNodeFileSystem } from '../infrastructure/dependency-adapters';
 import { listDependencyLocks, loadDependencyLock } from '../infrastructure/dependency-lock-catalog';
 import type { AppStore } from '../persistence';
+import type { ExpertService } from '../services/expert-service';
 import type { FileArtifactService } from '../services/file-artifact-service';
 import type { KnowledgeVault } from '../services/knowledge-vault';
 import { probeModelConnection } from '../services/model-connectivity';
@@ -133,6 +143,7 @@ export interface IpcDependencies {
   readonly notifications: NotificationService;
   readonly runs: RunService;
   readonly skillService: SkillService;
+  readonly expertService: ExpertService;
   readonly dependencies: SkillDependencyService;
   readonly snapshots: ToolchainSnapshotService;
   readonly fileArtifactService?: FileArtifactService;
@@ -225,6 +236,7 @@ export function registerIpc(deps: IpcDependencies): void {
   registerKnowledgeChannels(deps);
   registerSearchEngineChannels(deps);
   registerSkillChannels(deps);
+  registerExpertChannels(deps);
   registerDependencyChannels(deps);
   registerNotificationChannels(deps);
   registerWindowChannels(deps);
@@ -858,6 +870,49 @@ function registerSkillChannels(deps: IpcDependencies): void {
       });
       return { runId, taskId: created.task.id, sessionId: created.sessionId };
     },
+  );
+}
+
+function registerExpertChannels({ expertService }: IpcDependencies): void {
+  handleOptionalInput(
+    IpcChannel.ListExperts,
+    listExpertsRequestSchema,
+    z.array(expertSummarySchema),
+    (input) => expertService.list(input.includeArchived),
+  );
+  handleInput(
+    IpcChannel.GetExpert,
+    getExpertRequestSchema,
+    expertDetailSchema.nullable(),
+    (input) => expertService.get(input.id) ?? null,
+  );
+  handleInput(
+    IpcChannel.CreateExpert,
+    expertRevisionDraftSchema,
+    expertMutationResultSchema,
+    (input) => ({ expert: expertService.create(input) }),
+  );
+  handleInput(
+    IpcChannel.SaveExpertRevision,
+    saveExpertRevisionRequestSchema,
+    expertMutationResultSchema,
+    (input) => ({
+      expert: expertService.saveRevision(input.expertId, input.revision, input.expectedRevision),
+    }),
+  );
+  handleInput(
+    IpcChannel.CopyExpert,
+    copyExpertRequestSchema,
+    expertMutationResultSchema,
+    (input) => ({ expert: expertService.copy(input.expertId, input.name) }),
+  );
+  handleInput(
+    IpcChannel.SetExpertLifecycle,
+    setExpertLifecycleRequestSchema,
+    expertMutationResultSchema,
+    (input) => ({
+      expert: expertService.setLifecycle(input.expertId, input.lifecycle, input.expectedRevision),
+    }),
   );
 }
 
