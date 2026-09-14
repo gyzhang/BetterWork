@@ -130,6 +130,23 @@ describe('ExpertService', () => {
     expect(expert.blockedReasons).toEqual(['mcp-unavailable']);
   });
 
+  it('rejects duplicate MCP presets at the Expert boundary', () => {
+    const store = openStore();
+    const service = new ExpertService(store);
+    expect(() =>
+      service.create(
+        draft({
+          mcpToolBindings: [
+            { connectionId: 'finance', toolId: 'finance/monthly_summary' },
+            { connectionId: 'finance', toolId: 'finance/monthly_summary' },
+          ],
+        }),
+      ),
+    ).toThrowError(
+      expect.objectContaining<Partial<ExpertServiceError>>({ code: 'expert_invalid_mcp' }),
+    );
+  });
+
   it('rejects unknown built-in tools at the management boundary', () => {
     const store = openStore();
     const service = new ExpertService(store);

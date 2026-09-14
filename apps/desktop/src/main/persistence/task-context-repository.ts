@@ -159,6 +159,12 @@ export class TaskContextRepository {
       .array()
       .max(50)
       .parse(input.mcpToolBindings ?? []);
+    if (
+      new Set(mcpToolBindings.map((binding) => `${binding.connectionId}\u0000${binding.toolId}`))
+        .size !== mcpToolBindings.length
+    ) {
+      throw new Error('Task context MCP bindings must not repeat a tool');
+    }
     const latest = this.getLatest(taskId);
     if (expectedRevision !== undefined && latest && latest.revision !== expectedRevision) {
       throw new Error(

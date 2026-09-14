@@ -212,6 +212,6 @@ E10 完成后，E11 才开始迁移和管理服务，E12 才开始运行注入�
 
 ## 6. MCP 工具选择增量（E42）
 
-`ExpertRevision` 可以保存 `mcpToolBindings` 作为长期预设；`TaskContextRevision` 保存本次任务的显式绑定。两者都引用 `connectionId + toolId`，而不是保存可变的工具描述。设置页检测到的工具只是候选，专家和任务分别选择后才进入 Run；连接删除、工具目录变化或服务断线不会改写历史修订。
+`ExpertRevision` 可以保存 `mcpToolBindings` 作为长期预设；`TaskContextRevision` 保存本次任务的显式绑定。两者都引用 `connectionId + toolId`，而不是保存可变的工具描述，并在保存边界拒绝重复绑定。设置页检测到的工具只是候选，专家和任务分别选择后才进入 Run；连接删除、工具目录变化或服务断线不会改写历史修订。
 
 当连接或具体工具不存在时，Expert 状态标记 `mcp-unavailable`，用户仍可查看和编辑修订；发送边界由 Main/RunService 再次确认，并将失效绑定收口为可解释失败。
