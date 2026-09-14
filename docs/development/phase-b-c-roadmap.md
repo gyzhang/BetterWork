@@ -10,7 +10,7 @@
 
 2026-09-13 需求补充：专家用于固定重复工作，包含独立人格、工具/MCP、Skill 和记忆，通用助手保留临时能力组合。见[专家工作模型讨论稿](../reviews/2026-09-13-expert-work-model.md)。以下 B01–B04 仍为原任务框架，实施前须补 MCP 与最小专家记忆的 ADR、任务卡和验收；C08 保留项目沉淀与完整路径复用，不再作为专家记忆唯一入口。MCP 的具体接入范围与实现顺序仍待细化。
 
-已定稿设计入口：[专家与任务材料 v0.2](../designs/experts-and-task-materials.md)、[ADR-0014](../adr/0014-expert-context-and-material-binding.md)（Accepted，未实现）。新增需求包括任务选择知识/成果版本/当期文件、用途、输入快照、实际读取追踪、记忆范围及上下文收缩。E1–E5 已转为新计划中的任务卡；下方旧 B/C 任务均按映射归并，不重复开发。
+已定稿设计入口：[专家与任务材料 v0.2](../designs/experts-and-task-materials.md)、[ADR-0014](../adr/0014-expert-context-and-material-binding.md)（Accepted）。E1–E5 已按[专家开发计划](tasks-experts.md)落地到 E11–E54；E55/E56 的真实业务、签名安装与连续两期人工验收仍保留部分状态。下方旧 B/C 任务仅作历史映射，不重复开发。
 
 前置：阶段 A 通过；单专家多 Skill、信任/目录规则保持。专家配置不能绕过任一 Skill 的授权、停用和依赖限制。
 

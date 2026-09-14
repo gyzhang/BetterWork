@@ -21,8 +21,8 @@
 | 阶段 | 已确认方向 | 范围与验收状态 |
 | --- | --- | --- |
 | A | Skill 管理、配置与脚本运行先行 | 管理、macOS 执行依赖、PPT 接线与文件成果已有实现；2026-09-11 补救门禁通过，真实样本、Office 编辑与冷安装验收仍待完成，Windows 受阻 |
-| B | 专家配置接续，绑定多项 Skill | 尚未实现；前置切片 B0（对话内能力绑定与 1:N 绑定）已规划，见 [tasks-b0](development/tasks-b0.md)；配置字段、知识范围和执行接线建议见修订稿 §4 |
-| C | 长期目录下完成研究、场景方案、报告和公司模板可编辑 PPT | 尚未实现；六个讨论节点已确认，具体切片与验收建议见修订稿 §5 |
+| B | 专家配置接续，绑定多项 Skill | E11–E15 已完成专家管理、召唤、执行注入与内置分发；B0 双 Skill 的真实成功执行与撤销走查仍待可用模型 endpoint，见 [专家开发计划](development/tasks-experts.md) B00-5。 |
+| C | 长期目录下完成研究、场景方案、报告和公司模板可编辑 PPT | E20–E54 已完成材料范围、记忆、MCP/网页、Office 输入、讨论节点、经营分析和来源交付；E55/E56 的真实业务连续两期与签名安装验收仍待执行。 |
 
 [产品修订稿](reviews/2026-09-08-product-scope.md) 区分已确认决策和待审阅建议；[ADR-0008](adr/0008-personal-workbench-and-capability-first.md) 固定本次产品及职责决策。A/B/C 是新的交付顺序，不代表下方旧 Phase 已完成，也不自动批准修订稿中的技术提议。后续已确认首个脚本型 Skill 必须从 A 支持，见 [ADR-0009](adr/0009-script-skill-baseline.md) 与 [样本边界](reviews/2026-09-08-skill-runtime-boundary.md)；「首轮仅指令、脚本后置」建议撤回。执行器、依赖准备和文件边界已形成 [设计提案](designs/skill-executor-and-dependencies.md) 与 [ADR-0010](adr/0010-skill-executor-and-dependencies.md)（Proposed）；A1–A4 的实现次序和验收已列出，当前实现与验收缺口见阶段 A 任务板。
 
