@@ -6,6 +6,7 @@ import {
   deleteSkillRequestSchema,
   dependencyLockSchema,
   dependencyOperationSchema,
+  expertReferenceMaterialSchema,
   exportMarkdownArtifactRequestSchema,
   importSkillRequestSchema,
   jobResultSchema,
@@ -130,6 +131,34 @@ describe('run protocol', () => {
       connectionId: 'connection-1',
       toolId: tool.id,
     });
+  });
+
+  it('limits expert reference materials to reusable knowledge and artifact versions', () => {
+    expect(
+      expertReferenceMaterialSchema.parse({
+        reference: {
+          kind: 'knowledge-revision',
+          knowledgeDocumentId: 'rules',
+          knowledgeRevisionId: 'rules-v1',
+          contentHash: 'hash-rules',
+          sourcePath: '/rules.md',
+        },
+        purpose: 'rule',
+      }),
+    ).toMatchObject({ purpose: 'rule' });
+    expect(() =>
+      expertReferenceMaterialSchema.parse({
+        reference: {
+          kind: 'workspace-input-snapshot',
+          snapshotId: 'snapshot-1',
+          workspaceId: 'workspace-1',
+          contentHash: 'hash-input',
+          format: 'csv',
+          fileKey: 'input.csv',
+        },
+        purpose: 'current-input',
+      }),
+    ).toThrow();
   });
 
   it('accepts only identifiers and prompt, leaving the workspace boundary to Main', () => {

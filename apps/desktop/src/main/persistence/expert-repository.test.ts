@@ -58,6 +58,28 @@ describe('ExpertRepository', () => {
     expect(copy.revision.mcpToolBindings).toEqual(created.revision.mcpToolBindings);
   });
 
+  it('persists expert reference materials and copies them with the expert', () => {
+    const store = openStore();
+    const reference = {
+      reference: {
+        kind: 'knowledge-revision' as const,
+        knowledgeDocumentId: 'finance-rules',
+        knowledgeRevisionId: 'finance-rules-v2',
+        contentHash: 'rules-hash',
+        sourcePath: '/rules/finance.md',
+      },
+      purpose: 'rule' as const,
+      note: '公司财务口径',
+    };
+    const created = store.experts.create({
+      sourceKind: 'user',
+      revision: draft({ referenceMaterials: [reference] }),
+    });
+    expect(created.revision.referenceMaterials).toEqual([reference]);
+    const copy = store.experts.copy(created.id);
+    expect(copy.revision.referenceMaterials).toEqual([reference]);
+  });
+
   it('copies a built-in expert as an independent user expert', () => {
     const store = openStore();
     const builtin = store.experts.create({ sourceKind: 'builtin', revision: draft('内置分析') });

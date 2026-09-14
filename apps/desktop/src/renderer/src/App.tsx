@@ -106,6 +106,7 @@ export function App(): React.JSX.Element {
     'user' | 'workspace' | 'expert-workspace'
   >('user');
   const [materialCandidates, setMaterialCandidates] = useState<MaterialCandidate[]>([]);
+  const [expertMaterialCandidates, setExpertMaterialCandidates] = useState<MaterialCandidate[]>([]);
   const [materialPickerKind, setMaterialPickerKind] = useState<'knowledge' | 'artifact'>();
   const [materialsLoading, setMaterialsLoading] = useState(false);
   const [materialPickerError, setMaterialPickerError] = useState('');
@@ -124,6 +125,7 @@ export function App(): React.JSX.Element {
   const runSelectionRequestRef = useRef(0);
   const taskRunsRequestRef = useRef(0);
   const evidenceRequestRef = useRef(0);
+  const expertMaterialCandidatesRequestRef = useRef(0);
   const [events, setEvents] = useState<AgentRuntimeEvent[]>([]);
   const [taskAllRuns, setTaskAllRuns] = useState<RunSummary[]>([]);
   const [taskAllEvents, setTaskAllEvents] = useState<Map<string, AgentRuntimeEvent[]>>(new Map());
@@ -160,6 +162,25 @@ export function App(): React.JSX.Element {
       '加载当前任务记忆',
     );
   }, [workspace, activeExpert]);
+
+  useEffect(() => {
+    const requestId = expertMaterialCandidatesRequestRef.current + 1;
+    expertMaterialCandidatesRequestRef.current = requestId;
+    if (view !== 'experts' || !workspace) {
+      setExpertMaterialCandidates([]);
+      return;
+    }
+    trackAction(
+      window.betterwork.materials
+        .listCandidates({ workspaceId: workspace.id })
+        .then((candidates) => {
+          if (expertMaterialCandidatesRequestRef.current === requestId) {
+            setExpertMaterialCandidates(candidates);
+          }
+        }),
+      '加载专家常用参考候选',
+    );
+  }, [view, workspace]);
 
   useEffect(() => {
     if (view === 'work' && taskBindings.length > 0) composerRef.current?.focus();
@@ -434,6 +455,13 @@ export function App(): React.JSX.Element {
       if (!detail) throw new Error('专家已不存在，请刷新后重试。');
       startNewTask();
       setActiveExpert({ id: detail.id, revisionId: detail.revision.id, name: detail.name });
+      setTaskMaterials(
+        (detail.revision.referenceMaterials ?? []).map((material) => ({
+          ...material,
+          addedFrom: 'expert-reference' as const,
+        })),
+      );
+      setMaterialCandidates(expertMaterialCandidates);
       setMcpToolBindings(detail.revision.mcpToolBindings ?? []);
       setTaskBindings(
         detail.revision.skillPreset.map((binding) =>
@@ -442,7 +470,7 @@ export function App(): React.JSX.Element {
       );
       setView('work');
     },
-    [skillChipForBinding],
+    [expertMaterialCandidates, skillChipForBinding],
   );
   const commitTaskMaterials = useCallback((materials: TaskMaterialSelection[]): void => {
     setTaskMaterials(materials);
@@ -1365,6 +1393,7 @@ export function App(): React.JSX.Element {
             state={experts}
             skills={skills.skills}
             mcpConnections={mcpState.connections}
+            materialCandidates={expertMaterialCandidates}
             actions={experts}
             onSummon={summonExpert}
             onError={setActionError}

@@ -2,6 +2,8 @@ import type {
   ExpertDetail,
   ExpertRevisionDraft,
   ExpertSummary,
+  MaterialCandidate,
+  MaterialReference,
   McpConnectionSummary,
   SkillSummary,
 } from '@betterwork/agent-protocol';
@@ -49,6 +51,7 @@ const defaultDraft = (): ExpertRevisionDraft => ({
   builtinToolPolicy: { mode: 'application-defaults' },
   modelReference: { mode: 'application-default' },
   mcpToolBindings: [],
+  referenceMaterials: [],
 });
 
 const linesOf = (value: string): string[] =>
@@ -69,7 +72,17 @@ const draftOf = (detail: ExpertDetail): ExpertRevisionDraft => ({
   builtinToolPolicy: detail.revision.builtinToolPolicy,
   modelReference: detail.revision.modelReference,
   mcpToolBindings: detail.revision.mcpToolBindings ?? [],
+  referenceMaterials: detail.revision.referenceMaterials ?? [],
 });
+
+const referenceKey = (reference: MaterialReference): string => {
+  if (reference.kind === 'knowledge-revision') return `knowledge:${reference.knowledgeRevisionId}`;
+  if (reference.kind === 'artifact-version') return `artifact:${reference.artifactVersionId}`;
+  return `snapshot:${reference.snapshotId}`;
+};
+
+const referencePurpose = (candidate: MaterialCandidate): 'rule' | 'historical-comparison' =>
+  candidate.reference.kind === 'knowledge-revision' ? 'rule' : 'historical-comparison';
 
 function ExpertCard({
   expert,
@@ -125,6 +138,7 @@ function ExpertEditor({
   draft,
   skills,
   mcpConnections,
+  materialCandidates,
   editing,
   saving,
   onChange,
@@ -134,6 +148,7 @@ function ExpertEditor({
   draft: ExpertRevisionDraft;
   skills: SkillSummary[];
   mcpConnections: McpConnectionSummary[];
+  materialCandidates: MaterialCandidate[];
   editing: boolean;
   saving: boolean;
   onChange: (draft: ExpertRevisionDraft) => void;
@@ -142,6 +157,7 @@ function ExpertEditor({
 }): React.JSX.Element {
   const toolNames =
     draft.builtinToolPolicy.mode === 'allow-list' ? draft.builtinToolPolicy.toolNames : [];
+  const referenceMaterials = draft.referenceMaterials ?? [];
   const updateLines = (
     key: 'principles' | 'inputRequirements' | 'deliveryRequirements',
     value: string,
@@ -325,6 +341,57 @@ function ExpertEditor({
               </div>
             )}
           </fieldset>
+          <fieldset>
+            <legend>常用参考</legend>
+            <small className="muted-text">
+              召唤专家时带入选定的知识修订或历史成果；本期任务仍可移除或补充。
+            </small>
+            <div className="expert-option-list">
+              {materialCandidates.filter(
+                (candidate) => candidate.reference.kind !== 'workspace-input-snapshot',
+              ).length === 0 ? (
+                <span className="muted-text">当前工作空间还没有可引用的知识或成果。</span>
+              ) : (
+                materialCandidates
+                  .filter((candidate) => candidate.reference.kind !== 'workspace-input-snapshot')
+                  .map((candidate) => {
+                    const key = referenceKey(candidate.reference);
+                    const checked = referenceMaterials.some(
+                      (item) => referenceKey(item.reference) === key,
+                    );
+                    return (
+                      <label className="expert-option" key={key}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={candidate.status === 'unavailable' && !checked}
+                          onChange={(event) =>
+                            onChange({
+                              ...draft,
+                              referenceMaterials: event.target.checked
+                                ? [
+                                    ...referenceMaterials,
+                                    {
+                                      reference: candidate.reference,
+                                      purpose: referencePurpose(candidate),
+                                    },
+                                  ]
+                                : referenceMaterials.filter(
+                                    (item) => referenceKey(item.reference) !== key,
+                                  ),
+                            })
+                          }
+                        />
+                        <span>
+                          {candidate.title} · {candidate.sourceLabel}
+                          {candidate.detail ? ` · ${candidate.detail}` : ''}
+                        </span>
+                      </label>
+                    );
+                  })
+              )}
+            </div>
+          </fieldset>
           <div className="expert-editor-actions">
             <button className="primary-button" type="button" disabled={saving} onClick={onSave}>
               {saving ? '正在保存…' : '保存修订'}
@@ -397,6 +464,9 @@ function ExpertDetailPanel({
               {detail.revision.mcpToolBindings?.length
                 ? ` · ${detail.revision.mcpToolBindings.length} 个 MCP 工具预设`
                 : ''}
+              {detail.revision.referenceMaterials?.length
+                ? ` · ${detail.revision.referenceMaterials.length} 个常用参考`
+                : ''}
             </p>
           </section>
           <section className="expert-detail-section">
@@ -442,6 +512,7 @@ export function ExpertsPage({
   state,
   skills,
   mcpConnections,
+  materialCandidates,
   actions,
   onSummon,
   onError,
@@ -449,6 +520,7 @@ export function ExpertsPage({
   state: ExpertsState;
   skills: SkillSummary[];
   mcpConnections: McpConnectionSummary[];
+  materialCandidates: MaterialCandidate[];
   actions: Pick<ExpertsState, 'get' | 'create' | 'saveRevision' | 'copy' | 'setLifecycle'>;
   onSummon: (expert: ExpertSummary) => Promise<void>;
   onError: (message: string) => void;
@@ -541,6 +613,7 @@ export function ExpertsPage({
         draft={draft}
         skills={skills}
         mcpConnections={mcpConnections}
+        materialCandidates={materialCandidates}
         editing={Boolean(selected)}
         saving={saving}
         onChange={setDraft}

@@ -849,6 +849,15 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 20,
+    name: 'add expert reference materials',
+    up(db: Database.Database): void {
+      db.exec(
+        "ALTER TABLE expert_revisions ADD COLUMN reference_materials_json TEXT NOT NULL DEFAULT '[]'",
+      );
+    },
+  },
 ];
 
 /**

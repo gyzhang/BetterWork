@@ -768,6 +768,13 @@ it('adds immutable expert revision tables and keeps their ownership constraints'
         now,
       ),
   ).toThrow('UNIQUE');
+  const expertColumns = db.prepare('PRAGMA table_info(expert_revisions)').all() as Array<{
+    name: string;
+    dflt_value: string | null;
+  }>;
+  expect(expertColumns.find((column) => column.name === 'reference_materials_json')).toMatchObject({
+    dflt_value: "'[]'",
+  });
   db.prepare('DELETE FROM experts WHERE id = ?').run('expert-1');
   expect(countRows(db, 'expert_revisions')).toBe(0);
   db.close();

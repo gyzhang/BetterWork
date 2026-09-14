@@ -5,6 +5,7 @@ import {
   type ExpertDetail,
   type ExpertLifecycle,
   expertModelReferenceSchema,
+  expertReferenceMaterialSchema,
   type ExpertRevision,
   type ExpertRevisionDraft,
   expertSkillPresetSchema,
@@ -37,6 +38,7 @@ interface ExpertRevisionRow {
   builtin_tool_policy_json: string;
   model_reference_json: string;
   mcp_tool_bindings_json: string;
+  reference_materials_json: string;
   created_at: number;
 }
 
@@ -79,6 +81,11 @@ const toRevision = (row: ExpertRevisionRow): ExpertRevision => ({
     const bindings = JSON.parse(row.mcp_tool_bindings_json) as unknown;
     const parsed = mcpToolBindingSchema.array().max(50).parse(bindings);
     return parsed.length > 0 ? { mcpToolBindings: parsed } : {};
+  })(),
+  ...(() => {
+    const materials = JSON.parse(row.reference_materials_json) as unknown;
+    const parsed = expertReferenceMaterialSchema.array().max(50).parse(materials);
+    return parsed.length > 0 ? { referenceMaterials: parsed } : {};
   })(),
   createdAt: row.created_at,
 });
@@ -241,6 +248,9 @@ export class ExpertRepository {
         ...(source.revision.mcpToolBindings
           ? { mcpToolBindings: source.revision.mcpToolBindings }
           : {}),
+        ...(source.revision.referenceMaterials
+          ? { referenceMaterials: source.revision.referenceMaterials }
+          : {}),
       },
     });
   }
@@ -274,8 +284,9 @@ export class ExpertRepository {
         `INSERT INTO expert_revisions (
            id, expert_id, revision, name, summary, avatar_key, identity,
            principles_json, input_requirements_json, delivery_requirements_json,
-           skill_preset_json, builtin_tool_policy_json, model_reference_json, mcp_tool_bindings_json, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           skill_preset_json, builtin_tool_policy_json, model_reference_json, mcp_tool_bindings_json,
+           reference_materials_json, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         revisionId,
@@ -292,6 +303,7 @@ export class ExpertRepository {
         JSON.stringify(draft.builtinToolPolicy),
         JSON.stringify(draft.modelReference),
         JSON.stringify(draft.mcpToolBindings ?? []),
+        JSON.stringify(draft.referenceMaterials ?? []),
         createdAt,
       );
   }
