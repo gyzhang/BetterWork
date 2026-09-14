@@ -19,7 +19,7 @@ import { registerIpc } from './ipc/register-ipc';
 import { AppStore } from './persistence';
 import { createQuitHandler } from './services/application-shutdown';
 import { ExecutionOutputService } from './services/execution-output-service';
-import { ExpertService } from './services/expert-service';
+import { type BuiltinExpertReleaseManifest, ExpertService } from './services/expert-service';
 import { FileArtifactService } from './services/file-artifact-service';
 import { KnowledgeVault } from './services/knowledge-vault';
 import { NotificationService } from './services/notification-service';
@@ -82,6 +82,20 @@ function bootstrap(): ApplicationContext {
     })
     .catch((error: unknown) => {
       console.error('Builtin skill registration failed', error);
+    });
+  const builtinExpertRoot = app.isPackaged
+    ? path.join(process.resourcesPath, 'experts')
+    : path.resolve(app.getAppPath(), '../../resources/experts');
+  readFile(path.join(builtinExpertRoot, 'release-manifest.json'), 'utf8')
+    .then((content) => JSON.parse(content) as BuiltinExpertReleaseManifest)
+    .then((manifest) => expertService.registerBuiltinRelease(manifest.experts))
+    .then((registered) => {
+      if (registered.length > 0) {
+        console.warn(`Registered ${registered.length} builtin expert(s)`);
+      }
+    })
+    .catch((error: unknown) => {
+      console.error('Builtin expert registration failed', error);
     });
 
   // 受管资产目录（设计 §5）：基础 Python、专属环境与工具链快照都落在用户数据目录，

@@ -51,6 +51,24 @@ const addReason = (reasons: Set<ExpertBlockedReason>, reason: ExpertBlockedReaso
   reasons.add(reason);
 };
 
+export interface BuiltinExpertReleaseEntry {
+  expertId: string;
+  name: string;
+  summary: string;
+  identity: string;
+  principles: string[];
+  inputRequirements: string[];
+  deliveryRequirements: string[];
+  skillPreset: ExpertRevisionDraft['skillPreset'];
+  builtinToolPolicy: ExpertRevisionDraft['builtinToolPolicy'];
+  modelReference: ExpertRevisionDraft['modelReference'];
+}
+
+export interface BuiltinExpertReleaseManifest {
+  formatVersion: 1;
+  experts: BuiltinExpertReleaseEntry[];
+}
+
 export class ExpertService {
   constructor(private readonly store: AppStore) {}
 
@@ -79,6 +97,42 @@ export class ExpertService {
   create(draft: ExpertRevisionDraft): ExpertDetail {
     const revision = validateDraft(draft);
     return this.withStatus(this.store.experts.create({ sourceKind: 'user', revision }));
+  }
+
+  registerBuiltinRelease(entries: readonly BuiltinExpertReleaseEntry[]): ExpertDetail[] {
+    const registered: ExpertDetail[] = [];
+    for (const entry of entries) {
+      const existing = this.store.experts.get(entry.expertId);
+      if (existing) {
+        if (existing.sourceKind !== 'builtin') {
+          throw new ExpertServiceError(
+            'expert_not_found',
+            `内置 Expert ID 与用户 Expert 冲突：${entry.expertId}`,
+          );
+        }
+        registered.push(existing);
+        continue;
+      }
+      const draft = validateDraft({
+        name: entry.name,
+        summary: entry.summary,
+        identity: entry.identity,
+        principles: entry.principles,
+        inputRequirements: entry.inputRequirements,
+        deliveryRequirements: entry.deliveryRequirements,
+        skillPreset: entry.skillPreset,
+        builtinToolPolicy: entry.builtinToolPolicy,
+        modelReference: entry.modelReference,
+      });
+      registered.push(
+        this.store.experts.create({
+          id: entry.expertId,
+          sourceKind: 'builtin',
+          revision: draft,
+        }),
+      );
+    }
+    return registered;
   }
 
   saveRevision(id: string, draft: ExpertRevisionDraft, expectedRevision: number): ExpertDetail {

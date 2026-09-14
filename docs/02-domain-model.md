@@ -67,7 +67,7 @@ interface Workspace {
 
 Expert 是可被召唤的长期工作方式身份；ExpertRevision 是不可变的人格、工作原则、输入/交付要求、Skill 顺序、内置工具策略和模型引用。编辑 Expert 只生成新修订，不热改已有 Task 或 Run。内置 Expert 不能覆盖原始修订，用户通过复制得到可编辑的 user Expert；停用/归档不删除历史。
 
-E10 的字段、生命周期、错误码和 IPC 语义见[专家与任务上下文契约](development/expert-contracts.md) §2。E11 已新增 `experts` / `expert_revisions` SQLite 表、Repository、Service 和管理 IPC；E12 已新增 `task_context_revisions`、TaskContextRepository，并将专家人格、模型引用、Skill 顺序和内置工具策略接入 Run；E13–E14 已接入召唤、任务草稿恢复和独立配置 UI。
+E10 的字段、生命周期、错误码和 IPC 语义见[专家与任务上下文契约](development/expert-contracts.md) §2。E11 已新增 `experts` / `expert_revisions` SQLite 表、Repository、Service 和管理 IPC；E12 已新增 `task_context_revisions`、TaskContextRepository，并将专家人格、模型引用、Skill 顺序和内置工具策略接入 Run；E13–E15 已接入召唤、任务草稿恢复、独立配置 UI 和幂等内置 Expert 分发。
 
 ### 3.2 TaskContextRevision
 

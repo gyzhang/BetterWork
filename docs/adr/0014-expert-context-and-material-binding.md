@@ -53,3 +53,4 @@
 - 2026-09-14：E12 已落地 `task_context_revisions` v10、TaskContextRepository 的 CAS/任务归属校验，并将显式 ExpertRevision 的人格指令、模型引用、顺序 Skill 和内置工具 allow-list 接入 Run；E2 材料范围、记忆和 MCP 仍未提前实现。
 - 2026-09-14：E13 已接入专家列表召唤、TaskContext 保存、首条消息启动和任务重开恢复；召唤不创建 Run，空白草稿保留在 Composer，材料/记忆/MCP 仍由后续切片实现。
 - 2026-09-14：E14 已接入独立专家配置 UI，编辑只生成新修订；Skill 预设和内置工具按需选择，内置专家复制为 user Expert，生命周期操作复用 E11 管理 IPC。
+- 2026-09-14：E15 已加入 `resources/experts/release-manifest.json` 与启动幂等注册，首个内置研究分析专家随安装资源分发；内置原件只读，复制后才可编辑。
