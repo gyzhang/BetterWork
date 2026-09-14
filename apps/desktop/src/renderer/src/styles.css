@@ -1627,6 +1627,15 @@ p {
   font-size: 13px;
   line-height: 1.6;
 }
+.expert-memory-summary {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 10px;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
 .muted-text {
   color: var(--text-muted);
   font-size: 12px;

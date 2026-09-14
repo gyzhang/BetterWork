@@ -1431,12 +1431,17 @@ export function App(): React.JSX.Element {
             state={experts}
             skills={skills.skills}
             mcpConnections={mcpState.connections}
+            memories={memoriesState.memories}
             models={modelSettings.models}
             materialCandidates={expertMaterialCandidates}
             {...(workspace ? { workspaceId: workspace.id } : {})}
             actions={experts}
             onSummon={summonExpert}
             onError={setActionError}
+            onManageMemories={() => {
+              setView('settings');
+              setSettingsTab('memory');
+            }}
           />
         )}
         {view === 'settings' && (
