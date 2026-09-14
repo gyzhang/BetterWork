@@ -150,8 +150,8 @@ describe('application database migrations', () => {
     db.close();
   });
 
-  it('adds Expert identity columns to existing run snapshots at v21', () => {
-    const file = path.join(temporaryDirectory(), 'expert-run-snapshot-v21.sqlite');
+  it('adds Expert and capability columns to existing run snapshots', () => {
+    const file = path.join(temporaryDirectory(), 'run-snapshot-v22.sqlite');
     const db = new Database(file);
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
@@ -161,6 +161,7 @@ describe('application database migrations', () => {
       name: string;
     }>;
     expect(before.some((column) => column.name === 'expert_id')).toBe(false);
+    expect(before.some((column) => column.name === 'model_reference_json')).toBe(false);
 
     migrate(db, { migrations: appMigrations });
 
@@ -169,7 +170,13 @@ describe('application database migrations', () => {
       name: string;
     }>;
     expect(after.map((column) => column.name)).toEqual(
-      expect.arrayContaining(['expert_id', 'expert_revision_id']),
+      expect.arrayContaining([
+        'expert_id',
+        'expert_revision_id',
+        'model_reference_json',
+        'builtin_tool_policy_json',
+        'mcp_tool_bindings_json',
+      ]),
     );
     expect(() =>
       db

@@ -284,6 +284,15 @@ export class RunService {
           ...(executionContext.expertRevisionId
             ? { expertRevisionId: executionContext.expertRevisionId }
             : {}),
+          ...(executionContext.modelReference
+            ? { modelReference: executionContext.modelReference }
+            : {}),
+          ...(executionContext.builtinToolPolicy
+            ? { builtinToolPolicy: executionContext.builtinToolPolicy }
+            : {}),
+          ...(executionContext.taskContextRevisionId
+            ? { mcpToolBindings: executionContext.mcpToolBindings }
+            : {}),
           contextSegmentId,
           materials: executionContext.materials,
           createdAt: Date.now(),
