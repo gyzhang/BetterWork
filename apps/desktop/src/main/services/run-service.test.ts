@@ -516,6 +516,12 @@ describe('RunService', () => {
         }),
       }).map((tool) => tool.name),
     ).toEqual(['calculator', 'read_text_file', 'knowledge_search', 'web_fetch']);
+    expect(
+      createRunTools({
+        knowledgeSearch,
+        officeMaterialReader: async (input) => ({ sourceKind: input.sourceKind }),
+      }).map((tool) => tool.name),
+    ).toEqual(['calculator', 'read_text_file', 'knowledge_search', 'read_office_material']);
   });
 
   it('applies an Expert built-in tool allow-list without exposing omitted tools', () => {

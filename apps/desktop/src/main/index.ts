@@ -14,6 +14,7 @@ import {
   createMacProcessSupervisor,
   resolveGuardianRuntime,
 } from './infrastructure/mac-process-supervisor';
+import { OfficeParserService } from './infrastructure/office-parser';
 import { createPptxRenderer } from './infrastructure/pptx-renderer';
 import { registerIpc } from './ipc/register-ipc';
 import { AppStore } from './persistence';
@@ -73,6 +74,7 @@ function bootstrap(): ApplicationContext {
   const memories = new MemoryService(store, userData);
   const mcpClientService = new McpClientService(store);
   const webFetchService = new WebFetchService();
+  const officeParser = new OfficeParserService();
   memories.rebuildProjection().catch((error: unknown) => {
     console.error('Memory projection rebuild failed', error);
   });
@@ -255,6 +257,7 @@ function bootstrap(): ApplicationContext {
     memories,
     mcpClientService,
     (url, signal) => webFetchService.fetch(url, signal),
+    officeParser,
   );
   started.runs = runs;
 

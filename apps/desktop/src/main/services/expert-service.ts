@@ -33,6 +33,7 @@ const BUILTIN_TOOL_NAMES = new Set([
   'knowledge_search',
   'web_search',
   'web_fetch',
+  'read_office_material',
 ]);
 
 const validateDraft = (draft: ExpertRevisionDraft): ExpertRevisionDraft => {

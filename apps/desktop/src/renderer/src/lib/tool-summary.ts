@@ -58,6 +58,8 @@ export function summarizeToolOutput(
     }
     case 'web_fetch':
       return message || '已读取网页正文';
+    case 'read_office_material':
+      return message || '已读取 Office 材料';
     case 'skill_read_resource': {
       if (message) return message;
       if (!isRecord(output)) break;

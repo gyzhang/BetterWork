@@ -2,7 +2,7 @@
 
 ## 0. 2026-09-08 生效的开发顺序
 
-**2026-09-14 当前有效计划**：用户已通过[专家与任务材料设计 v0.2](designs/experts-and-task-materials.md)整体评审，[ADR-0014](adr/0014-expert-context-and-material-binding.md)转为 Accepted。E1 专家召唤与执行（E11–E15）、E2 材料范围与来源（E20–E25）、E3 最小记忆（E30–E32）、E40 MCP stdio 协议探测、E41 MCP 运行适配和 E42 MCP 设置/工具选择已按[专家计划](development/tasks-experts.md)完成；E43 网页正文已接入，E50 Office 输入解析边界已定案，后续推进 E51 读取实现与 E5 两期交付。旧 B01–B04、C01–C08 已映射归并，只有新计划维护 E 系列状态。下面的早期“待评审/尚未拆卡”记录为历史，不阻止执行已接受设计。阶段 A/macOS 和 B0 的真实验收尾项仍需按原卡核对，不能将设计接受当作验收通过。
+**2026-09-14 当前有效计划**：用户已通过[专家与任务材料设计 v0.2](designs/experts-and-task-materials.md)整体评审，[ADR-0014](adr/0014-expert-context-and-material-binding.md)转为 Accepted。E1 专家召唤与执行（E11–E15）、E2 材料范围与来源（E20–E25）、E3 最小记忆（E30–E32）、E40 MCP stdio 协议探测、E41 MCP 运行适配、E42 MCP 设置/工具选择、E43 网页正文和 E50/E51 Office 输入解析与读取已按[专家计划](development/tasks-experts.md)完成；后续推进 E5 两期交付。旧 B01–B04、C01–C08 已映射归并，只有新计划维护 E 系列状态。下面的早期“待评审/尚未拆卡”记录为历史，不阻止执行已接受设计。阶段 A/macOS 和 B0 的真实验收尾项仍需按原卡核对，不能将设计接受当作验收通过。
 
 2026-09-14 用户评审确认交互简化：专家页“召唤”直接开始该专家的任务对话，材料缺项在协作中补充，能力和资料详情按需展开。设计已修订为 [v0.2](designs/experts-and-task-materials.md)；不再将任务准备表单或工作依据预览设为启动门槛，业务能力范围和已有验收状态保持。
 

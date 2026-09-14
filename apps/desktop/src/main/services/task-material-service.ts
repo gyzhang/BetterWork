@@ -109,7 +109,7 @@ export class TaskMaterialService {
           });
           continue;
         }
-        const readable = detail.type === 'markdown';
+        const readable = detail.type === 'markdown' || detail.type === 'presentation';
         candidates.push({
           reference: {
             kind: 'artifact-version',
@@ -125,8 +125,10 @@ export class TaskMaterialService {
               : `成果 · ${artifact.title} · 其他工作空间`,
           status: readable ? 'ready' : 'unavailable',
           detail: readable
-            ? `v${version.versionNumber}`
-            : `v${version.versionNumber}（Office 输入将在后续版本支持）`,
+            ? detail.type === 'presentation'
+              ? `v${version.versionNumber} · PPTX`
+              : `v${version.versionNumber}`
+            : `v${version.versionNumber}（文件内容不可读取）`,
         });
       }
     }
