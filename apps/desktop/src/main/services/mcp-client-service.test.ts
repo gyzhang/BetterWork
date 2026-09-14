@@ -71,6 +71,18 @@ describe('McpClientService', () => {
 
     await expect(
       agentTools[0]?.execute(
+        { month: '2099-98' },
+        {
+          runId: 'run-large-structured-output',
+          toolCallId: 'call-large-structured-output',
+          workspacePath: '/tmp',
+          signal: new AbortController().signal,
+          reportProgress: () => undefined,
+        },
+      ),
+    ).rejects.toThrow('MCP 工具输出超过');
+    await expect(
+      agentTools[0]?.execute(
         { month: 'invalid-month' },
         {
           runId: 'run-invalid-input',
