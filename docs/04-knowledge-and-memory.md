@@ -105,7 +105,7 @@ VectorIndex 必须可替换。第一版优先考虑 SQLite + sqlite-vec；规模
 
 材料契约要求运行中的检索接收允许的 Knowledge revision 集合，只返回选定修订的 Locator、摘要和内容哈希；未选文档不能因为同一 Vault 的全局搜索命中而进入 Run。E23 已增加范围参数并由 RunContextSnapshot 提供固定 revision 集合；运行读取足迹留 E24，不能把“已选择”本身当作读取证据。
 
-E22 已能把具体 Knowledge revision 的身份、哈希和用途保存到 TaskContextRevision；E23 已把该选择绑定到 Run 并限制 `knowledge_search`，E24 会把返回的修订、Locator 和摘要哈希保存为读取足迹，未选资料不能通过运行时搜索进入模型。
+E22 已能把具体 Knowledge revision 的身份、哈希和用途保存到 TaskContextRevision；E23 已把该选择绑定到 Run 并限制 `knowledge_search`，E24 已把返回的修订、Locator 和摘要哈希保存为读取足迹，未选资料不能通过运行时搜索进入模型。E25 已将选择、用途和实际来源呈现在 Composer 与资料面板。
 
 ## 6. 三层记忆体系
 

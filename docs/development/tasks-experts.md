@@ -2,7 +2,7 @@
 
 - 生效：2026-09-14，用户通过[设计 v0.2](../designs/experts-and-task-materials.md)评审并要求落实设计、形成开发计划。
 - 决策：[ADR-0014](../adr/0014-expert-context-and-material-binding.md) 已接受；具体字段、记忆投影、MCP 与解析器实施选择按本计划对应任务落档，不把设计接受写成代码完成。
-- 核对基线：BetterWork `94263d2`，工作区有本系列设计文档及既有调研记录的未提交改动。本轮仅编制计划，未运行产品测试或验收。
+- 核对基线：BetterWork `bdaece5`，E11–E24 已按本计划提交并推送；后续每张任务卡继续独立提交、推送并记录门禁结果。
 - 平台：本轮 macOS；Windows 保留原待办，不扩大自动调度、多 Agent、通用 DAG 或企业权限。
 - 执行方式：串行、每次一张任务卡；遵守 [执行手册](README.md)与全仓唯一 [工程规范](../12-engineering-standards.md)。不创建新规范或单独测试门禁。
 
@@ -50,7 +50,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E22 | 材料选择与草稿持久化 | E21 | done | [TaskMaterialService/TaskContext 测试](../../apps/desktop/src/main/services/task-material-service.test.ts)、[TaskContextRepository 测试](../../apps/desktop/src/main/persistence/task-context-repository.test.ts)：TaskContextRevision v12 保存材料判别引用、用途、备注和添加来源；候选查询覆盖 Knowledge revision、Workspace ArtifactVersion、ready 输入快照；保存边界校验修订哈希、快照状态、重复项和 Workspace 归属；新增候选/输入快照 IPC 与 Preload；`npm run verify` 退出 0（57 文件 / 463 测试 / Electron build），2026-09-14 15:19。 |
 | E23 | 宿主范围与上下文收缩 | E22 | done | [RunService/快照/工具测试](../../apps/desktop/src/main/services/run-service.test.ts)：Run 绑定不可变 `run_context_snapshots`，Knowledge revision、输入快照和 Markdown ArtifactVersion 通过宿主范围校验；材料收缩创建新上下文段并过滤旧段历史。`npm run verify` 退出 0（59 文件 / 470 测试 / Electron build），2026-09-14。 |
 | E24 | 读取足迹与成果输入来源 | E23 | done | [读取/成果来源测试](../../apps/desktop/src/main/services/run-service.test.ts)：v14 保存 RunMaterialRead 与 ArtifactInputRelation；搜索、输入快照和成果读取留下精确足迹，Markdown/文件成果只允许关联同一 Run 已读取材料。`npm run verify` 退出 0（60 文件 / 473 测试 / Electron build），2026-09-14。 |
-| E25 | 材料 UI、成果复用与 E2 验收 | E24 | todo | — |
+| E25 | 材料 UI、成果复用与 E2 验收 | E24 | done | Composer 与资料面板支持文件/知识/成果选择、用途调整、失效提示和取消；成果详情可引用精确 Markdown 版本开始新任务；现有格式材料链路完成，Office 输入明确留 E51；`npm run verify` 退出 0（61 文件 / 475 测试 / Electron build），2026-09-14。 |
 | E30 | 记忆投影与治理实现 ADR | E25 | todo | — |
 | E31 | 记忆存储、检索与运行注入 | E30 | todo | — |
 | E32 | 记忆管理、对话确认与 E3 验收 | E31 | todo | — |
@@ -171,13 +171,13 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 - 必测：选但未读不算读取、读但未用不伪造正文引用、版本关联不漂移、人工修订遵守 ADR-0005 继承语义。
 - 完成：应用库 v14 新增 `run_material_reads` 与 `artifact_input_relations`；RunService 对知识搜索、输入快照和成果读取记录具体修订、定位、内容哈希和摘要哈希。Markdown 与文件成果的显式输入关系在 Main 校验同一 Run 已实际读取，选中但未读取、旧 Run Evidence 或人工修订不能伪装成来源。`npm run verify` 退出 0（60 文件 / 473 测试 / Electron build），2026-09-14。仍不声称已有逐句 Citation。
 
-### E25 材料交互、成果复用与 E2 验收
+### E25 材料交互、成果复用与 E2 验收（已完成）
 
 - 落点：Composer、上下文资料面板、知识/成果选择器、ArtifactView、对应 hooks。
 - 工作：“＋”添加文件/引用知识/引用成果；用途默认推导、详情可改。常驻只显示摘要，完整清单可收起。成果“基于此成果开始新任务”精确引用版本、沿用专家、清空期间和本期输入。
 - 失败/取消：选择器取消不改变原选项，失效项原地修复；缺材料通过对话补充，绝不跳配置向导；重启草稿不丢。
 - 必测/手验：引用非最新版、补材料继续、跨空间显式来源、范围收缩、新一期不带旧聊天；三档外观/窄屏/键盘。
-- 完成：现有格式全链路通过；PPTX/XLSX 输入尚在 E51 时不可当成 E2 已支持。
+- 完成：Composer `+` 菜单与右侧资料面板共用任务材料草稿，支持当前工作空间文件快照、Knowledge revision、ArtifactVersion 的候选选择；选择器取消不改原清单，材料芯片可调整用途并显示失效状态。成果详情可对精确 Markdown 版本执行“基于此版本开始新任务”，沿用仍有效的专家、清空旧任务上下文与本期输入并保留精确历史成果引用；跨 Workspace 成果显式标记来源。候选查询支持尚未创建 Task 的新任务草稿。PPTX/XLSX 输入仍显示为不可读取并留待 E51，不把它们算作 E2 已支持。`npm run verify` 退出 0（61 文件 / 475 测试 / Electron build），2026-09-14。
 
 ### E30 记忆实现 ADR
 

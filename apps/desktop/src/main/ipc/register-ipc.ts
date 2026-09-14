@@ -347,7 +347,11 @@ function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
     IpcChannel.ListTaskMaterialCandidates,
     listTaskMaterialCandidatesRequestSchema,
     z.array(materialCandidateSchema),
-    (input) => taskMaterials.listCandidates(input.taskId),
+    (input) => {
+      if (input.taskId) return taskMaterials.listCandidates(input.taskId);
+      if (!input.workspaceId) throw new Error('缺少工作空间标识。');
+      return taskMaterials.listCandidatesForWorkspace(input.workspaceId);
+    },
   );
   handleInput(
     IpcChannel.PrepareWorkspaceInputSnapshot,
@@ -360,7 +364,9 @@ function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
       });
       const sourcePath = result.filePaths[0];
       if (result.canceled || !sourcePath) return null;
-      return taskMaterials.prepareInputSnapshot(input.taskId, sourcePath);
+      if (input.taskId) return taskMaterials.prepareInputSnapshot(input.taskId, sourcePath);
+      if (!input.workspaceId) throw new Error('缺少工作空间标识。');
+      return taskMaterials.prepareInputSnapshotForWorkspace(input.workspaceId, sourcePath);
     },
   );
 }

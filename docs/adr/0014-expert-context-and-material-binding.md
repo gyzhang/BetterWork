@@ -1,6 +1,6 @@
 # ADR-0014：专家、任务准备与运行材料快照
 
-- 状态：Accepted（2026-09-14 用户通过设计 v0.2 评审）。E11–E15 已落地专家持久化、执行注入、召唤对话、配置 UI 与内置分发；E20 已定案材料、快照和来源契约，E21–E25 待实现，见[开发计划](../development/tasks-experts.md)。
+- 状态：Accepted（2026-09-14 用户通过设计 v0.2 评审）。E11–E15 已落地专家持久化、执行注入、召唤对话、配置 UI 与内置分发；E20 已定案材料、快照和来源契约，E21–E25 已落地，见[开发计划](../development/tasks-experts.md)。
 - 日期：2026-09-13。
 - 2026-09-14 交互修正已确认：专家页“召唤”直接进入对话，缺少业务材料通过对话补充；TaskContextRevision 是宿主保存的对话草稿配置，不要求独立任务准备页。本文关系决策随用户对 v0.2 的整体评审通过而接受；具体实施技术由任务卡落实。
 - 依据：[专家与任务材料设计](../designs/experts-and-task-materials.md)。
@@ -59,3 +59,4 @@
 - 2026-09-14：E22 已将 `MaterialReference`、用途、备注和添加来源加入 TaskContextRevision v12；TaskMaterialService/IPC 校验 Knowledge revision、ArtifactVersion、ready 输入快照、重复引用和 Workspace 归属，并提供候选查询与 Workspace 文件快照入口。`read_text_file` 与 `knowledge_search` 仍未按 Run 过滤，留 E23；读取足迹和成果输入关系留 E24。
 - 2026-09-14：E23 已将运行时材料范围接入 RunContextSnapshot（应用库 v13）。Knowledge 搜索、输入快照文件读取和 Markdown ArtifactVersion 读取均在宿主边界按精确引用校验；材料集合收缩时新建上下文段并排除旧段历史。读取足迹和成果输入关系仍留 E24；脚本权限仍是本机用户权限，不宣称 OS 沙箱。
 - 2026-09-14：E24 已新增 `run_material_reads` 与 `artifact_input_relations`（应用库 v14）。完成的搜索/读取保存材料修订、定位和哈希；成果输入关系只能引用同一 Run 已读取的材料或该 Run 的 Evidence，人工修订不伪装成新的 Assistant 来源。
+- 2026-09-14：E25 已将材料选择接入 Composer `+` 菜单与右侧资料面板，候选查询支持已有 Task 或当前 Workspace；文件通过输入快照进入草稿，知识和成果按精确修订/版本选择并可调整用途。成果详情可从精确 Markdown 版本创建沿用专家的新任务，清空旧上下文与本期输入；PPTX/XLSX 输入明确留待 E51。

@@ -53,6 +53,7 @@ export function ArtifactPage({
   onExport,
   onOpenFile,
   onOpenSource,
+  onStartFromVersion,
   onBack,
 }: {
   artifacts: ArtifactSummary[];
@@ -68,6 +69,7 @@ export function ArtifactPage({
     versionId?: string,
   ) => Promise<{ opened: boolean; error?: string }>;
   onOpenSource: (sourcePath: string) => Promise<void>;
+  onStartFromVersion: (artifact: ArtifactDetail, version: ArtifactVersionDetail) => Promise<void>;
   onBack: () => void;
 }): React.JSX.Element {
   const {
@@ -145,6 +147,18 @@ export function ArtifactPage({
                 >
                   {selected.type === 'markdown' ? '导出 Markdown' : '导出文件'}
                 </button>
+                {selected.type === 'markdown' && (
+                  <button
+                    className="secondary-button"
+                    onClick={() =>
+                      reportAction(onStartFromVersion(selected, visibleVersion), (errorMessage) =>
+                        setToast({ tone: 'error', message: errorMessage || '无法开始新任务。' }),
+                      )
+                    }
+                  >
+                    基于此版本开始新任务
+                  </button>
+                )}
                 {selected.type === 'markdown' && (
                   <button className="primary-button" onClick={beginEditing}>
                     编辑此版本

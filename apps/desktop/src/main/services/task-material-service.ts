@@ -61,7 +61,13 @@ export class TaskMaterialService {
   constructor(private readonly dependencies: TaskMaterialServiceDependencies) {}
 
   async listCandidates(taskId: string): Promise<MaterialCandidate[]> {
-    const workspaceId = this.workspaceId(taskId);
+    return this.listCandidatesForWorkspace(this.workspaceId(taskId));
+  }
+
+  async listCandidatesForWorkspace(workspaceId: string): Promise<MaterialCandidate[]> {
+    if (!this.dependencies.store.workspaces.get(workspaceId)) {
+      throw new TaskMaterialError('task_not_found', '任务工作空间不存在。');
+    }
     const candidates: MaterialCandidate[] = [];
     for (const document of this.dependencies.knowledgeVault.listDocuments()) {
       for (const revision of this.dependencies.knowledgeVault.listRevisions(document.id)) {
@@ -81,7 +87,7 @@ export class TaskMaterialService {
         });
       }
     }
-    for (const artifact of this.dependencies.store.artifacts.listByWorkspace(workspaceId)) {
+    for (const artifact of this.dependencies.store.artifacts.list()) {
       for (const version of this.dependencies.store.artifacts.listVersions(artifact.id)) {
         const detail = this.dependencies.store.artifacts.getVersionDetail(version.id);
         if (!detail) {
@@ -94,12 +100,16 @@ export class TaskMaterialService {
               originWorkspaceId: artifact.workspaceId,
             },
             title: artifact.title,
-            sourceLabel: `成果 · ${artifact.title}`,
+            sourceLabel:
+              artifact.workspaceId === workspaceId
+                ? `成果 · ${artifact.title}`
+                : `成果 · ${artifact.title} · 其他工作空间`,
             status: 'unavailable',
             detail: `v${version.versionNumber} 不可读取`,
           });
           continue;
         }
+        const readable = detail.type === 'markdown';
         candidates.push({
           reference: {
             kind: 'artifact-version',
@@ -109,9 +119,14 @@ export class TaskMaterialService {
             originWorkspaceId: artifact.workspaceId,
           },
           title: artifact.title,
-          sourceLabel: `成果 · ${artifact.title}`,
-          status: 'ready',
-          detail: `v${version.versionNumber}`,
+          sourceLabel:
+            artifact.workspaceId === workspaceId
+              ? `成果 · ${artifact.title}`
+              : `成果 · ${artifact.title} · 其他工作空间`,
+          status: readable ? 'ready' : 'unavailable',
+          detail: readable
+            ? `v${version.versionNumber}`
+            : `v${version.versionNumber}（Office 输入将在后续版本支持）`,
         });
       }
     }
@@ -139,6 +154,13 @@ export class TaskMaterialService {
   async prepareInputSnapshot(taskId: string, sourcePath: string): Promise<InputSnapshot> {
     const workspaceId = this.dependencies.store.tasks.getWorkspaceId(taskId);
     if (!workspaceId) throw new TaskMaterialError('task_not_found', '任务不存在。');
+    return this.prepareInputSnapshotForWorkspace(workspaceId, sourcePath);
+  }
+
+  async prepareInputSnapshotForWorkspace(
+    workspaceId: string,
+    sourcePath: string,
+  ): Promise<InputSnapshot> {
     const workspace = this.dependencies.store.workspaces.get(workspaceId);
     if (!workspace) throw new TaskMaterialError('task_not_found', '任务工作空间不存在。');
     try {

@@ -1,9 +1,12 @@
 import type {
   AgentRuntimeEvent,
   ArtifactDetail,
+  ArtifactInputRelationInput,
   ArtifactSummary,
+  ArtifactVersionDetail,
   EvidenceSummary,
   ExpertSummary,
+  MaterialCandidate,
   NotificationSummary,
   NotificationTarget,
   RecentTaskSummary,
@@ -85,6 +88,10 @@ export function App(): React.JSX.Element {
   }>();
   const [taskContext, setTaskContext] = useState<TaskContextRevision>();
   const [taskMaterials, setTaskMaterials] = useState<TaskMaterialSelection[]>([]);
+  const [materialCandidates, setMaterialCandidates] = useState<MaterialCandidate[]>([]);
+  const [materialPickerKind, setMaterialPickerKind] = useState<'knowledge' | 'artifact'>();
+  const [materialsLoading, setMaterialsLoading] = useState(false);
+  const [materialPickerError, setMaterialPickerError] = useState('');
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const startingRef = useRef(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -270,6 +277,25 @@ export function App(): React.JSX.Element {
       ));
   const activityGroups = useMemo(() => deriveActivityGroups(events), [events]);
   const currentTaskArtifacts = artifacts.filter((artifact) => artifact.taskId === activeTask?.id);
+  const artifactInputRelations = useMemo<ArtifactInputRelationInput[]>(
+    () =>
+      taskMaterials.map((selection) => ({
+        input: selection.reference,
+        relation:
+          selection.purpose === 'rule'
+            ? 'rule'
+            : selection.purpose === 'current-input'
+              ? 'data'
+              : selection.purpose === 'historical-comparison'
+                ? 'comparison'
+                : selection.purpose === 'structure-reference'
+                  ? 'structure'
+                  : selection.purpose === 'template'
+                    ? 'template'
+                    : 'background',
+      })),
+    [taskMaterials],
+  );
 
   const startNewTask = (): void => {
     runSelectionRequestRef.current += 1;
@@ -284,6 +310,9 @@ export function App(): React.JSX.Element {
     setActiveExpert(undefined);
     setTaskContext(undefined);
     setTaskMaterials([]);
+    setMaterialCandidates([]);
+    setMaterialPickerKind(undefined);
+    setMaterialPickerError('');
     setActionError('');
     setEvidence([]);
     setEvents([]);
@@ -364,6 +393,71 @@ export function App(): React.JSX.Element {
       setView('work');
     },
     [skillChipForBinding],
+  );
+  const commitTaskMaterials = useCallback((materials: TaskMaterialSelection[]): void => {
+    setTaskMaterials(materials);
+    setMaterialPickerError('');
+  }, []);
+  const requestMaterials = useCallback(
+    (kind: 'file' | 'knowledge' | 'artifact'): void => {
+      if (!workspace) {
+        setMaterialPickerError('工作空间尚未准备好，请稍后重试。');
+        return;
+      }
+      if (kind === 'file') {
+        setMaterialPickerKind(undefined);
+        reportAction(
+          window.betterwork.materials
+            .prepareInputSnapshot({
+              ...(activeTask?.id ? { taskId: activeTask.id } : { workspaceId: workspace.id }),
+            })
+            .then((snapshot) => {
+              if (!snapshot) return;
+              const selection: TaskMaterialSelection = {
+                reference: {
+                  kind: 'workspace-input-snapshot',
+                  snapshotId: snapshot.id,
+                  workspaceId: snapshot.workspaceId,
+                  contentHash: snapshot.contentHash,
+                  format: snapshot.format,
+                  fileKey: snapshot.fileKey,
+                },
+                purpose: 'current-input',
+                addedFrom: 'user-input',
+              };
+              setTaskMaterials((current) => {
+                const exists = current.some(
+                  (item) =>
+                    item.reference.kind === 'workspace-input-snapshot' &&
+                    item.reference.snapshotId === snapshot.id,
+                );
+                return exists ? current : [...current, selection];
+              });
+              setMaterialPickerError('');
+            }),
+          setActionError,
+          '无法添加工作区文件，请重试。',
+        );
+        return;
+      }
+      setMaterialPickerKind(kind);
+      setMaterialsLoading(true);
+      setMaterialPickerError('');
+      reportAction(
+        window.betterwork.materials
+          .listCandidates({
+            ...(activeTask?.id ? { taskId: activeTask.id } : { workspaceId: workspace.id }),
+          })
+          .then(setMaterialCandidates)
+          .catch((error: unknown) => {
+            setMaterialPickerError(error instanceof Error ? error.message : '候选材料加载失败。');
+          })
+          .finally(() => setMaterialsLoading(false)),
+        setActionError,
+        '无法加载候选材料，请重试。',
+      );
+    },
+    [activeTask?.id, workspace],
   );
   const startRun = async (): Promise<void> => {
     if (startingRef.current || isRunning || !prompt.trim() || !workspace) return;
@@ -531,6 +625,7 @@ export function App(): React.JSX.Element {
         runId: latestCompletedRun.id,
         title: activeTask.title,
         content: latestCompletedRun.content,
+        ...(artifactInputRelations.length > 0 ? { inputRelations: artifactInputRelations } : {}),
       });
       setArtifactNote({
         tone: 'ok',
@@ -550,6 +645,66 @@ export function App(): React.JSX.Element {
     const detail = await window.betterwork.artifacts.get({ id: artifact.id });
     if (!detail) throw new Error('成果已不存在，可能已被移除。');
     setSelectedArtifact(detail);
+  };
+  const startFromArtifactVersion = async (
+    artifact: ArtifactDetail,
+    version: ArtifactVersionDetail,
+  ): Promise<void> => {
+    if (artifact.type !== 'markdown' || version.type !== 'markdown') {
+      throw new Error('当前仅支持以 Markdown 成果版本开始新任务。');
+    }
+    const sourceContext = await window.betterwork.taskContexts.get({ taskId: artifact.taskId });
+    let sourceExpert: { id: string; revisionId: string; name: string } | undefined;
+    if (sourceContext?.executor.kind === 'expert') {
+      const expert = await window.betterwork.experts.get({ id: sourceContext.executor.expertId });
+      if (expert?.lifecycle === 'active') {
+        sourceExpert = {
+          id: expert.id,
+          revisionId: expert.revision.id,
+          name: expert.name,
+        };
+      }
+    }
+    startNewTask();
+    setSelectedArtifact(undefined);
+    if (sourceExpert) {
+      setActiveExpert(sourceExpert);
+      setTaskBindings(
+        sourceContext?.skillBindings.map((binding) =>
+          skillChipForBinding({ ...binding, source: 'expert-preset' }),
+        ) ?? [],
+      );
+    }
+    setTaskMaterials([
+      {
+        reference: {
+          kind: 'artifact-version',
+          artifactId: artifact.id,
+          artifactVersionId: version.id,
+          contentHash: version.contentHash,
+          originWorkspaceId: artifact.workspaceId,
+        },
+        purpose: 'historical-comparison',
+        addedFrom: artifact.workspaceId === workspace?.id ? 'user-input' : 'global-search',
+      },
+    ]);
+    setMaterialCandidates([
+      {
+        reference: {
+          kind: 'artifact-version',
+          artifactId: artifact.id,
+          artifactVersionId: version.id,
+          contentHash: version.contentHash,
+          originWorkspaceId: artifact.workspaceId,
+        },
+        title: artifact.title,
+        sourceLabel: `成果 · ${artifact.title}`,
+        status: 'ready',
+        detail: `v${version.versionNumber}`,
+      },
+    ]);
+    setView('work');
+    setContextOpen(false);
   };
   const reviseArtifact = async (
     artifact: ArtifactDetail,
@@ -940,6 +1095,12 @@ export function App(): React.JSX.Element {
                   <ComposerCapabilityPicker
                     skills={skills.skills}
                     selected={taskBindings}
+                    materials={taskMaterials}
+                    materialCandidates={materialCandidates}
+                    {...(workspace ? { workspaceId: workspace.id } : {})}
+                    {...(materialPickerKind ? { materialPickerKind } : {})}
+                    materialsLoading={materialsLoading}
+                    {...(materialPickerError ? { materialPickerError } : {})}
                     disabled={isRunning}
                     {...(isRunning ? { disabledReason: '运行中不可修改' } : {})}
                     onAdd={(chip) => setTaskBindings((prev) => [...prev, chip])}
@@ -953,6 +1114,9 @@ export function App(): React.JSX.Element {
                       setView('experts');
                       experts.refresh();
                     }}
+                    onRequestMaterials={requestMaterials}
+                    onDismissMaterialPicker={() => setMaterialPickerKind(undefined)}
+                    onCommitMaterials={commitTaskMaterials}
                   />
                 </div>
                 <textarea
@@ -1006,6 +1170,7 @@ export function App(): React.JSX.Element {
             onExport={exportArtifact}
             onOpenFile={openFileArtifact}
             onOpenSource={knowledge.onOpenSource}
+            onStartFromVersion={startFromArtifactVersion}
             onBack={() => setSelectedArtifact(undefined)}
           />
         )}
@@ -1057,6 +1222,9 @@ export function App(): React.JSX.Element {
           activeRun={activeRun}
           taskRuns={taskRuns}
           activityGroups={activityGroups}
+          materials={taskMaterials}
+          materialCandidates={materialCandidates}
+          onRequestMaterials={requestMaterials}
           onSelectRun={(run) =>
             reportAction(selectRun(run), setActionError, '无法打开这次执行记录。')
           }

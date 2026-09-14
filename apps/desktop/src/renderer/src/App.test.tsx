@@ -124,6 +124,10 @@ function installApi(options?: { expert?: boolean; context?: TaskContextRevision 
         }),
       ),
     },
+    materials: {
+      listCandidates: vi.fn(async () => []),
+      prepareInputSnapshot: vi.fn(async () => null),
+    },
     experts: {
       list: vi.fn(async () => (options?.expert ? [expertSummary] : [])),
       get: vi.fn(async () => (options?.expert ? expertDetail : null)),
