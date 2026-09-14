@@ -7,6 +7,7 @@ import type {
   EvidenceSummary,
   ExpertSummary,
   MaterialCandidate,
+  MemoryRecord,
   NotificationSummary,
   NotificationTarget,
   RecentTaskSummary,
@@ -32,6 +33,7 @@ import { Welcome } from './components/Welcome';
 import { useAppearance } from './hooks/use-appearance';
 import { useExperts } from './hooks/use-experts';
 import { useKnowledgeLibrary } from './hooks/use-knowledge-library';
+import { useMemories } from './hooks/use-memories';
 import { useModelSettings } from './hooks/use-model-settings';
 import { useSkills } from './hooks/use-skills';
 import { useTaskScroll } from './hooks/use-task-scroll';
@@ -78,6 +80,7 @@ export function App(): React.JSX.Element {
   const activeLanguageModel = modelSettings.activeLanguageModel;
   const refreshModels = modelSettings.refresh;
   const experts = useExperts();
+  const memoriesState = useMemories();
 
   const [prompt, setPrompt] = useState('计算: (12 + 8) * 3');
   const [taskBindings, setTaskBindings] = useState<CapabilityChip[]>([]);
@@ -88,6 +91,12 @@ export function App(): React.JSX.Element {
   }>();
   const [taskContext, setTaskContext] = useState<TaskContextRevision>();
   const [taskMaterials, setTaskMaterials] = useState<TaskMaterialSelection[]>([]);
+  const [taskMemories, setTaskMemories] = useState<MemoryRecord[]>([]);
+  const [excludedMemoryIds, setExcludedMemoryIds] = useState<string[]>([]);
+  const [memoryCapture, setMemoryCapture] = useState<{ content: string; runId: string }>();
+  const [memoryCaptureScope, setMemoryCaptureScope] = useState<
+    'user' | 'workspace' | 'expert-workspace'
+  >('user');
   const [materialCandidates, setMaterialCandidates] = useState<MaterialCandidate[]>([]);
   const [materialPickerKind, setMaterialPickerKind] = useState<'knowledge' | 'artifact'>();
   const [materialsLoading, setMaterialsLoading] = useState(false);
@@ -130,6 +139,19 @@ export function App(): React.JSX.Element {
   const [contextOpen, setContextOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('models');
   const [notificationCenterOpen, setNotificationCenterOpen] = useState(false);
+
+  useEffect(() => {
+    if (!workspace) {
+      setTaskMemories([]);
+      return;
+    }
+    trackAction(
+      window.betterwork.memories
+        .list({ workspaceId: workspace.id, ...(activeExpert ? { expertId: activeExpert.id } : {}) })
+        .then(setTaskMemories),
+      '加载当前任务记忆',
+    );
+  }, [workspace, activeExpert]);
 
   useEffect(() => {
     if (view === 'work' && taskBindings.length > 0) composerRef.current?.focus();
@@ -310,6 +332,9 @@ export function App(): React.JSX.Element {
     setActiveExpert(undefined);
     setTaskContext(undefined);
     setTaskMaterials([]);
+    setTaskMemories([]);
+    setExcludedMemoryIds([]);
+    setMemoryCapture(undefined);
     setMaterialCandidates([]);
     setMaterialPickerKind(undefined);
     setMaterialPickerError('');
@@ -358,6 +383,7 @@ export function App(): React.JSX.Element {
       if (selectionId !== runSelectionRequestRef.current) return undefined;
       setTaskContext(context ?? undefined);
       setTaskMaterials(context?.materials ?? []);
+      setExcludedMemoryIds(context?.excludedMemoryIds ?? []);
       if (!context || context.executor.kind === 'general') {
         setActiveExpert(undefined);
       } else {
@@ -496,6 +522,7 @@ export function App(): React.JSX.Element {
           source: chip.source ?? 'task-selection',
         })),
         materials: taskMaterials,
+        excludedMemoryIds,
       });
       setTaskContext(contextResult.context);
       const result = await window.betterwork.runs.start({
@@ -1003,6 +1030,20 @@ export function App(): React.JSX.Element {
                               <div className="message-actions">
                                 <button
                                   className="message-action"
+                                  onClick={() => {
+                                    setMemoryCapture({
+                                      runId: run.id,
+                                      content: runAssistantText.slice(0, 2_000),
+                                    });
+                                    setMemoryCaptureScope(
+                                      activeExpert ? 'expert-workspace' : 'user',
+                                    );
+                                  }}
+                                >
+                                  记住这段经验
+                                </button>
+                                <button
+                                  className="message-action"
                                   onClick={() => trackAction(saveCurrentArtifact(), '保存成果')}
                                 >
                                   <ArtifactIcon size={13} />
@@ -1019,6 +1060,100 @@ export function App(): React.JSX.Element {
                                     {artifactNote.text}
                                   </span>
                                 )}
+                              </div>
+                            )}
+                            {memoryCapture?.runId === run.id && (
+                              <div className="memory-capture">
+                                <label>
+                                  确认要长期复用的内容
+                                  <textarea
+                                    value={memoryCapture.content}
+                                    onChange={(event) =>
+                                      setMemoryCapture((current) =>
+                                        current
+                                          ? { ...current, content: event.target.value }
+                                          : current,
+                                      )
+                                    }
+                                    rows={4}
+                                    maxLength={2_000}
+                                  />
+                                </label>
+                                <div className="memory-capture-footer">
+                                  <select
+                                    aria-label="记忆适用范围"
+                                    value={memoryCaptureScope}
+                                    onChange={(event) =>
+                                      setMemoryCaptureScope(
+                                        event.target.value as typeof memoryCaptureScope,
+                                      )
+                                    }
+                                  >
+                                    <option value="user">所有工作</option>
+                                    {workspace && <option value="workspace">当前工作空间</option>}
+                                    {workspace && activeExpert && (
+                                      <option value="expert-workspace">当前专家与工作空间</option>
+                                    )}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    className="secondary-button"
+                                    onClick={() => setMemoryCapture(undefined)}
+                                  >
+                                    取消
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="primary-button"
+                                    disabled={!memoryCapture.content.trim()}
+                                    onClick={() => {
+                                      const content = memoryCapture.content.trim();
+                                      const scope =
+                                        memoryCaptureScope === 'workspace' && workspace
+                                          ? {
+                                              kind: 'workspace' as const,
+                                              workspaceId: workspace.id,
+                                            }
+                                          : memoryCaptureScope === 'expert-workspace' &&
+                                              workspace &&
+                                              activeExpert
+                                            ? {
+                                                kind: 'expert-workspace' as const,
+                                                expertId: activeExpert.id,
+                                                workspaceId: workspace.id,
+                                              }
+                                            : { kind: 'user' as const };
+                                      trackAction(
+                                        memoriesState
+                                          .create({
+                                            scope,
+                                            kind: 'procedural',
+                                            content,
+                                            sourceType: 'user-explicit',
+                                            sourceId: run.id,
+                                            status: 'confirmed',
+                                          })
+                                          .then(() => {
+                                            setMemoryCapture(undefined);
+                                            if (workspace) {
+                                              return window.betterwork.memories
+                                                .list({
+                                                  workspaceId: workspace.id,
+                                                  ...(activeExpert
+                                                    ? { expertId: activeExpert.id }
+                                                    : {}),
+                                                })
+                                                .then(setTaskMemories);
+                                            }
+                                            return undefined;
+                                          }),
+                                        '保存长期记忆',
+                                      );
+                                    }}
+                                  >
+                                    确认并记住
+                                  </button>
+                                </div>
                               </div>
                             )}
                             {isRunActive &&
@@ -1207,6 +1342,7 @@ export function App(): React.JSX.Element {
             onScheme={(scheme) => setAppearanceValue({ ...appearance, scheme })}
             modelMessage={modelSettings.message}
             skills={skills}
+            memories={memoriesState}
           />
         )}
       </section>
@@ -1223,6 +1359,15 @@ export function App(): React.JSX.Element {
           taskRuns={taskRuns}
           activityGroups={activityGroups}
           materials={taskMaterials}
+          memories={taskMemories}
+          excludedMemoryIds={excludedMemoryIds}
+          onToggleMemory={(memoryId) =>
+            setExcludedMemoryIds((current) =>
+              current.includes(memoryId)
+                ? current.filter((id) => id !== memoryId)
+                : [...current, memoryId],
+            )
+          }
           materialCandidates={materialCandidates}
           onRequestMaterials={requestMaterials}
           onSelectRun={(run) =>

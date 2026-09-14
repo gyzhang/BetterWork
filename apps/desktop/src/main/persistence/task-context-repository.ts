@@ -27,6 +27,7 @@ interface TaskContextRow {
   created_at: number;
   updated_at: number;
   materials_json: string;
+  excluded_memory_ids_json: string;
 }
 
 export interface SaveTaskContextInput {
@@ -35,6 +36,7 @@ export interface SaveTaskContextInput {
   modelReference?: ExpertModelReference;
   builtinToolPolicy?: BuiltinToolPolicy;
   materials?: TaskMaterialSelection[];
+  excludedMemoryIds?: string[];
 }
 
 const parseSkillBindings = (value: string): TaskContextSkillBinding[] => {
@@ -49,22 +51,43 @@ const parseMaterials = (value: string): TaskMaterialSelection[] => {
   return parsed.map((item) => taskMaterialSelectionSchema.parse(item));
 };
 
-const toRevision = (row: TaskContextRow): TaskContextRevision => ({
-  id: row.id,
-  taskId: row.task_id,
-  revision: row.revision,
-  executor: taskContextExecutorSchema.parse(JSON.parse(row.executor_json)),
-  skillBindings: parseSkillBindings(row.skill_bindings_json),
-  ...(row.model_reference_json
-    ? { modelReference: expertModelReferenceSchema.parse(JSON.parse(row.model_reference_json)) }
-    : {}),
-  ...(row.builtin_tool_policy_json
-    ? { builtinToolPolicy: builtinToolPolicySchema.parse(JSON.parse(row.builtin_tool_policy_json)) }
-    : {}),
-  materials: parseMaterials(row.materials_json),
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-});
+const parseMemoryIds = (value: string): string[] => {
+  const parsed: unknown = JSON.parse(value);
+  if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== 'string')) {
+    throw new Error('Stored TaskContext memory exclusions must be an array');
+  }
+  const ids: string[] = [];
+  for (const item of parsed) {
+    if (typeof item !== 'string') throw new Error('Stored TaskContext memory exclusion is invalid');
+    ids.push(item);
+  }
+  return ids;
+};
+
+const toRevision = (row: TaskContextRow): TaskContextRevision => {
+  const excludedMemoryIds = parseMemoryIds(row.excluded_memory_ids_json);
+  return {
+    id: row.id,
+    taskId: row.task_id,
+    revision: row.revision,
+    executor: taskContextExecutorSchema.parse(JSON.parse(row.executor_json)),
+    skillBindings: parseSkillBindings(row.skill_bindings_json),
+    ...(row.model_reference_json
+      ? { modelReference: expertModelReferenceSchema.parse(JSON.parse(row.model_reference_json)) }
+      : {}),
+    ...(row.builtin_tool_policy_json
+      ? {
+          builtinToolPolicy: builtinToolPolicySchema.parse(
+            JSON.parse(row.builtin_tool_policy_json),
+          ),
+        }
+      : {}),
+    materials: parseMaterials(row.materials_json),
+    ...(excludedMemoryIds.length > 0 ? { excludedMemoryIds } : {}),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+};
 
 export class TaskContextRepository {
   constructor(private readonly db: Database.Database) {}
@@ -116,6 +139,10 @@ export class TaskContextRepository {
       .array()
       .max(50)
       .parse(input.materials ?? []);
+    const excludedMemoryIds = [...new Set(input.excludedMemoryIds ?? [])];
+    if (excludedMemoryIds.length > 100 || excludedMemoryIds.some((id) => !id)) {
+      throw new Error('Task context memory exclusions are invalid');
+    }
     const latest = this.getLatest(taskId);
     if (expectedRevision !== undefined && latest && latest.revision !== expectedRevision) {
       throw new Error(
@@ -129,8 +156,9 @@ export class TaskContextRepository {
       .prepare(
         `INSERT INTO task_context_revisions (
            id, task_id, revision, executor_json, skill_bindings_json,
-           model_reference_json, builtin_tool_policy_json, created_at, updated_at, materials_json
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           model_reference_json, builtin_tool_policy_json, created_at, updated_at, materials_json,
+           excluded_memory_ids_json
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -143,6 +171,7 @@ export class TaskContextRepository {
         now,
         now,
         JSON.stringify(materials),
+        JSON.stringify(excludedMemoryIds),
       );
     const saved = this.get(id, taskId);
     if (!saved) throw new Error('Task context was not available after save');

@@ -86,6 +86,7 @@ interface ResolvedRunContext {
   taskContextRevisionId?: string;
   expertId?: string;
   memoryRecords: MemoryRecord[];
+  excludedMemoryIds: string[];
 }
 
 /** 一次执行期间的内存态；Run 结束后整条丢弃。 */
@@ -190,7 +191,13 @@ export class RunService {
     const resolvedContext = this.resolveRunContext(input);
     const executionContext: ResolvedRunContext = {
       ...resolvedContext,
-      memoryRecords: this.memories?.getApplicable(workspaceId, resolvedContext.expertId) ?? [],
+      memoryRecords:
+        this.memories?.getApplicable(
+          workspaceId,
+          resolvedContext.expertId,
+          Date.now(),
+          resolvedContext.excludedMemoryIds,
+        ) ?? [],
     };
     const resolvedInput = {
       ...input,
@@ -782,6 +789,7 @@ export class RunService {
         materials: [],
         materialScope: false,
         memoryRecords: [],
+        excludedMemoryIds: [],
       };
     }
     const expected = input.expectedTaskContextRevision;
@@ -803,6 +811,7 @@ export class RunService {
         materialScope: true,
         taskContextRevisionId: context.id,
         memoryRecords: [],
+        excludedMemoryIds: context.excludedMemoryIds ?? [],
       };
     }
     const expert = this.store.experts.get(context.executor.expertId);
@@ -823,6 +832,7 @@ export class RunService {
       taskContextRevisionId: context.id,
       expertId: context.executor.expertId,
       memoryRecords: [],
+      excludedMemoryIds: context.excludedMemoryIds ?? [],
     };
   }
 

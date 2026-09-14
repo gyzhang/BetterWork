@@ -162,6 +162,35 @@ describe('RunService', () => {
     expect(fixture.store.memories.listReads(runId)).toEqual([memory]);
   });
 
+  it('honors a TaskContext memory exclusion for only the next run', async () => {
+    const fixture = await createFixture();
+    const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+    if (!workspaceId) throw new Error('workspace missing');
+    const memory = fixture.store.memories.create({
+      scope: { kind: 'workspace', workspaceId },
+      kind: 'semantic',
+      content: '本任务暂不参考。',
+      sourceType: 'user-explicit',
+      status: 'confirmed',
+    });
+    const context = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+      excludedMemoryIds: [memory.id],
+    });
+    const service = createService(fixture);
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '不使用这条记忆。',
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(fixture.store.memories.listReads(runId)).toEqual([]);
+  });
+
   it('records local knowledge search results as task evidence', async () => {
     const fixture = await createFixture();
     const note = path.join(fixture.directory, '客户资料.md');

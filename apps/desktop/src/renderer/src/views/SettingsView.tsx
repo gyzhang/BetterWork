@@ -7,12 +7,14 @@ import type {
   ResolvedAppearance,
 } from '../appearance';
 import { colorSchemes } from '../appearance';
+import type { MemoriesState } from '../hooks/use-memories';
 import { useSearchEngineSettings } from '../hooks/use-search-engine-settings';
 import type { SkillsState } from '../hooks/use-skills';
 import { CheckIcon, PlusIcon } from '../icons';
 import { trackAction } from '../lib/async-action';
 import { connectionStatusName, roleName } from '../lib/labels';
 import type { SettingsTab } from '../lib/view-types';
+import { MemoryPage } from './MemoryView';
 import { SkillsPage } from './SkillsView';
 
 export interface SettingsPageProps {
@@ -34,6 +36,7 @@ export interface SettingsPageProps {
   onScheme: (scheme: ColorScheme) => void;
   modelMessage: string;
   skills: SkillsState;
+  memories: MemoriesState;
 }
 export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
   const { tab, setTab } = props;
@@ -57,6 +60,9 @@ export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
         >
           外观
         </button>
+        <button className={tab === 'memory' ? 'active' : ''} onClick={() => setTab('memory')}>
+          记忆
+        </button>
         <button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>
           通用
         </button>
@@ -66,6 +72,7 @@ export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
         {tab === 'models' && <ModelSettings {...props} />}
         {tab === 'search' && <SearchSettings />}
         {tab === 'appearance' && <AppearanceSettings {...props} />}
+        {tab === 'memory' && <MemoryPage state={props.memories} />}
         {tab === 'general' && (
           <section className="settings-section">
             <p className="eyebrow">通用</p>

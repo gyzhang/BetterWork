@@ -61,8 +61,16 @@ export class MemoryService {
     return record;
   }
 
-  getApplicable(workspaceId: string, expertId?: string, now = Date.now()): MemoryRecord[] {
-    return this.store.memories.listApplicable(workspaceId, expertId, now);
+  getApplicable(
+    workspaceId: string,
+    expertId?: string,
+    now = Date.now(),
+    excludedMemoryIds: readonly string[] = [],
+  ): MemoryRecord[] {
+    const excluded = new Set(excludedMemoryIds);
+    return this.store.memories
+      .listApplicable(workspaceId, expertId, now)
+      .filter((memory) => !excluded.has(memory.id));
   }
 
   recordReads(reads: readonly MemoryReadInput[]): void {

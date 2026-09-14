@@ -53,7 +53,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E25 | 材料 UI、成果复用与 E2 验收 | E24 | done | Composer 与资料面板支持文件/知识/成果选择、用途调整、失效提示和取消；成果详情可引用精确 Markdown 版本开始新任务；现有格式材料链路完成，Office 输入明确留 E51；`npm run verify` 退出 0（61 文件 / 475 测试 / Electron build），2026-09-14。 |
 | E30 | 记忆投影与治理实现 ADR | E25 | done | 新增 [ADR-0015](../adr/0015-memory-scope-and-governance.md)：SQLite 唯一真相源、User/Workspace/Expert/Expert×Workspace 判别范围、candidate/confirmed/过期/删除状态、来源、预算、运行快照、投影重建和失败恢复语义已定案。 |
 | E31 | 记忆存储、检索与运行注入 | E30 | done | [MemoryRepository/Service 与 RunService 测试](../../apps/desktop/src/main/persistence/memory-repository.test.ts)：应用库 v15 增加不可变记忆修订与 Run 读取足迹；四种作用域按隔离规则检索，confirmed 记录按 16 条/6,000 字符预算注入新 Run，候选不会注入；IPC/Preload 已接通，Markdown 只读投影按作用域重建。`npm run verify` 退出 0（63 文件 / 480 测试），2026-09-14。 |
-| E32 | 记忆管理、对话确认与 E3 验收 | E31 | todo | — |
+| E32 | 记忆管理、对话确认与 E3 验收 | E31 | done | [记忆管理与运行测试](../../apps/desktop/src/renderer/src/views/MemoryView.test.tsx)：设置页支持用户记忆创建、候选确认、编辑和删除；对话完成消息提供“记住这段经验”确认表单，可选择 User/Workspace/Expert×Workspace 作用域；任务资料面板支持“本任务不用”，排除项保存进 TaskContextRevision 并只影响后续该任务运行。迁移 v16、协议/运行/Renderer 测试已覆盖；`npm run verify` 退出 0（64 文件 / 483 测试），2026-09-14。 |
 | E40 | MCP 接入实现 ADR 与探测样本 | E32 | todo | — |
 | E41 | MCP 连接、工具适配与取消 | E40 | todo | — |
 | E42 | MCP 配置及专家/任务工具选择 | E41 | todo | — |

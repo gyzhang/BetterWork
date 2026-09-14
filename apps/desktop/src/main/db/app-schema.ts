@@ -777,6 +777,15 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 16,
+    name: 'add task context memory exclusions',
+    up(db: Database.Database): void {
+      db.exec(
+        "ALTER TABLE task_context_revisions ADD COLUMN excluded_memory_ids_json TEXT NOT NULL DEFAULT '[]'",
+      );
+    },
+  },
 ];
 
 /**

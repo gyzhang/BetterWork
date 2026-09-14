@@ -109,7 +109,7 @@ E22 已能把具体 Knowledge revision 的身份、哈希和用途保存到 Task
 
 ## 6. 三层记忆体系
 
-> **现状：E31 已完成记忆存储、作用域检索、运行注入和受管投影，E32 尚未实现管理 UI 与对话确认。** 属 E3 范围（见 [开发计划](development/tasks-experts.md)），架构决策见 [ADR-0004](adr/0004-hybrid-memory.md) 与 [ADR-0015](adr/0015-memory-scope-and-governance.md)。SQLite 的 `MemoryRecord` 修订是唯一真相源；每次新 Run 只注入有效的 `confirmed` 记录，最多 16 条且总内容不超过 6,000 个 Unicode 字符，并记录实际读取的修订与哈希。Markdown 只读投影按 User/Workspace/Expert/Expert×Workspace 作用域重建，不能回写数据库。当前没有自动反思、Embedding 或向量索引，候选确认、编辑、删除和“本任务不用”仍留 E32。
+> **现状：E31/E32 已完成最小记忆闭环。** 属 E3 范围（见 [开发计划](development/tasks-experts.md)），架构决策见 [ADR-0004](adr/0004-hybrid-memory.md) 与 [ADR-0015](adr/0015-memory-scope-and-governance.md)。SQLite 的 `MemoryRecord` 修订是唯一真相源；每次新 Run 只注入有效的 `confirmed` 记录，最多 16 条且总内容不超过 6,000 个 Unicode 字符，并记录实际读取的修订与哈希。设置页支持创建、查看、确认、编辑和删除；对话完成消息支持用户确认后形成记忆；任务资料面板的“本任务不用”只写入当前 TaskContextRevision。Markdown 只读投影按 User/Workspace/Expert/Expert×Workspace 作用域重建，不能回写数据库。自动反思、Embedding、向量索引和批量记忆维护仍未实现。
 
 ### Core Memory Files（E31 已实现的受管投影）
 

@@ -649,6 +649,7 @@ export const taskContextRevisionSchema = z
         { message: 'skillBindings 中存在重复的 skillId' },
       ),
     materials: taskMaterialSelectionSchema.array().max(50).optional(),
+    excludedMemoryIds: z.array(z.string().min(1)).max(100).optional(),
     modelReference: expertModelReferenceSchema.optional(),
     builtinToolPolicy: builtinToolPolicySchema.optional(),
     createdAt: z.number().int().nonnegative(),
@@ -667,6 +668,7 @@ export const saveTaskContextRequestSchema = z
     executor: taskContextExecutorSchema,
     skillBindings: taskContextRevisionSchema.shape.skillBindings,
     materials: taskMaterialSelectionSchema.array().max(50).optional(),
+    excludedMemoryIds: taskContextRevisionSchema.shape.excludedMemoryIds,
     modelReference: expertModelReferenceSchema.optional(),
     builtinToolPolicy: builtinToolPolicySchema.optional(),
   })
