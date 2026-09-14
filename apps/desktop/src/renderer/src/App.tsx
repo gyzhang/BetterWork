@@ -9,6 +9,7 @@ import type {
   RecentTaskSummary,
   RunSummary,
   TaskContextRevision,
+  TaskMaterialSelection,
   WorkspaceSummary,
 } from '@betterwork/agent-protocol';
 import type { FormEvent, KeyboardEvent } from 'react';
@@ -83,6 +84,7 @@ export function App(): React.JSX.Element {
     name: string;
   }>();
   const [taskContext, setTaskContext] = useState<TaskContextRevision>();
+  const [taskMaterials, setTaskMaterials] = useState<TaskMaterialSelection[]>([]);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const startingRef = useRef(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -281,6 +283,7 @@ export function App(): React.JSX.Element {
     setTaskBindings([]);
     setActiveExpert(undefined);
     setTaskContext(undefined);
+    setTaskMaterials([]);
     setActionError('');
     setEvidence([]);
     setEvents([]);
@@ -325,6 +328,7 @@ export function App(): React.JSX.Element {
       const context = await window.betterwork.taskContexts.get({ taskId });
       if (selectionId !== runSelectionRequestRef.current) return undefined;
       setTaskContext(context ?? undefined);
+      setTaskMaterials(context?.materials ?? []);
       if (!context || context.executor.kind === 'general') {
         setActiveExpert(undefined);
       } else {
@@ -397,6 +401,7 @@ export function App(): React.JSX.Element {
             '',
           source: chip.source ?? 'task-selection',
         })),
+        materials: taskMaterials,
       });
       setTaskContext(contextResult.context);
       const result = await window.betterwork.runs.start({

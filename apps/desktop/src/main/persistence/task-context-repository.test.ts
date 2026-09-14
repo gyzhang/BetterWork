@@ -72,4 +72,35 @@ describe('TaskContextRepository', () => {
     ).toThrow('Task context skill bindings must not repeat a skill');
     expect(store.taskContexts.getLatest(task.task.id)).toBeUndefined();
   });
+
+  it('persists exact material references and their purpose with the draft', () => {
+    const store = openStore();
+    const task = taskOf(store);
+    const saved = store.taskContexts.save(task.task.id, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+      materials: [
+        {
+          reference: {
+            kind: 'knowledge-revision',
+            knowledgeDocumentId: 'document-1',
+            knowledgeRevisionId: 'revision-1',
+            contentHash: 'hash-1',
+            sourcePath: '/tmp/rules.md',
+          },
+          purpose: 'rule',
+          note: '财务指标口径',
+          addedFrom: 'global-search',
+        },
+      ],
+    });
+    expect(saved.materials).toEqual([
+      expect.objectContaining({
+        purpose: 'rule',
+        note: '财务指标口径',
+        reference: expect.objectContaining({ knowledgeRevisionId: 'revision-1' }),
+      }),
+    ]);
+    expect(store.taskContexts.get(saved.id, task.task.id)?.materials).toEqual(saved.materials);
+  });
 });

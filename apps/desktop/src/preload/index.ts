@@ -24,13 +24,17 @@ import {
   getSkillRequestSchema,
   getTaskContextRequestSchema,
   importSkillRequestSchema,
+  inputSnapshotSchema,
   IpcChannel,
   listDependencyOptionsRequestSchema,
   listExpertsRequestSchema,
+  listTaskMaterialCandidatesRequestSchema,
+  materialCandidateSchema,
   notificationActivatedSchema,
   notificationChangeEventSchema,
   prepareDependencyRequestSchema,
   prepareDependencyResultSchema,
+  prepareWorkspaceInputSnapshotRequestSchema,
   refreshSkillDependencyGrantRequestSchema,
   refreshSkillDependencyGrantResultSchema,
   registerToolchainRequestSchema,
@@ -270,6 +274,20 @@ const api: BetterWorkDesktopApi = {
         IpcChannel.SaveTaskContext,
         saveTaskContextRequestSchema.parse(input),
         taskContextMutationResultSchema,
+      ),
+  },
+  materials: {
+    listCandidates: (input) =>
+      invokeValidated(
+        IpcChannel.ListTaskMaterialCandidates,
+        listTaskMaterialCandidatesRequestSchema.parse(input),
+        materialCandidateSchema.array(),
+      ),
+    prepareInputSnapshot: (input) =>
+      invokeValidated(
+        IpcChannel.PrepareWorkspaceInputSnapshot,
+        prepareWorkspaceInputSnapshotRequestSchema.parse(input),
+        inputSnapshotSchema.nullable(),
       ),
   },
   dependencies: {

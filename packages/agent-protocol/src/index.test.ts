@@ -17,6 +17,7 @@ import {
   skillRevisionSummarySchema,
   skillSummarySchema,
   startRunRequestSchema,
+  taskContextRevisionSchema,
   updateWindowThemeRequestSchema,
 } from './index';
 
@@ -124,6 +125,43 @@ describe('run protocol', () => {
     ).toThrow();
     expect(() => skillBindingSchema.parse({ skillId: '' })).toThrow();
     expect(() => skillBindingSchema.parse({ skillId: 'skill-1', revisionId: '' })).toThrow();
+  });
+});
+
+describe('task material protocol', () => {
+  it('keeps exact source revisions at the IPC boundary', () => {
+    const context = taskContextRevisionSchema.parse({
+      id: 'context-1',
+      taskId: 'task-1',
+      revision: 1,
+      executor: { kind: 'general' },
+      skillBindings: [],
+      materials: [
+        {
+          reference: {
+            kind: 'artifact-version',
+            artifactId: 'artifact-1',
+            artifactVersionId: 'version-1',
+            contentHash: 'hash-1',
+            originWorkspaceId: 'workspace-1',
+          },
+          purpose: 'historical-comparison',
+          addedFrom: 'workspace-candidate',
+        },
+      ],
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    expect(context.materials?.[0]).toMatchObject({
+      purpose: 'historical-comparison',
+      reference: { artifactVersionId: 'version-1' },
+    });
+    expect(() =>
+      taskContextRevisionSchema.parse({
+        ...context,
+        materials: [context.materials?.[0], context.materials?.[0]],
+      }),
+    ).not.toThrow();
   });
 });
 
