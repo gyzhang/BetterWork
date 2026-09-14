@@ -37,6 +37,7 @@ import { SkillExecutionService } from './services/skill-execution-service';
 import { type BuiltinReleaseManifest, SkillService } from './services/skill-service';
 import { TaskMaterialService } from './services/task-material-service';
 import { ToolchainSnapshotService } from './services/toolchain-snapshot-service';
+import { WebFetchService } from './services/web-fetch-service';
 import { createMainWindow } from './window';
 
 /**
@@ -71,6 +72,7 @@ function bootstrap(): ApplicationContext {
   const inputSnapshots = new InputSnapshotService(store, userData);
   const memories = new MemoryService(store, userData);
   const mcpClientService = new McpClientService(store);
+  const webFetchService = new WebFetchService();
   memories.rebuildProjection().catch((error: unknown) => {
     console.error('Memory projection rebuild failed', error);
   });
@@ -252,6 +254,7 @@ function bootstrap(): ApplicationContext {
     taskMaterials,
     memories,
     mcpClientService,
+    (url, signal) => webFetchService.fetch(url, signal),
   );
   started.runs = runs;
 

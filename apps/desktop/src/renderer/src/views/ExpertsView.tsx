@@ -32,6 +32,7 @@ const builtinToolNames = [
   'read_text_file',
   'knowledge_search',
   'web_search',
+  'web_fetch',
 ] as const;
 
 const defaultDraft = (): ExpertRevisionDraft => ({

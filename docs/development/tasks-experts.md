@@ -57,7 +57,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E40 | MCP 接入实现 ADR 与探测样本 | E32 | done | [ADR-0016](../adr/0016-mcp-transport-and-lifecycle.md) 与离线探测脚本 [`scripts/mcp-probe.mjs`](../../scripts/mcp-probe.mjs)：首轮选定官方 `@modelcontextprotocol/client` v2.0.0 的 stdio 传输，明确稳定工具 ID、候选/授权分离、取消/超时/断线/退出语义；只读 `finance.monthly_summary` 替身完成 initialize → tools/list → tools/call → clean close。无外部业务账号，真实连接验收保持阻塞。 |
 | E41 | MCP 连接、工具适配与取消 | E40 | done | [McpClientService 测试](../../apps/desktop/src/main/services/mcp-client-service.test.ts)：应用库 v17 持久化 stdio 连接与工具 Schema 目录；官方 `@modelcontextprotocol/client@2.0.0` 接入 Main，发现工具映射为稳定 `connectionId/toolName`，只有 TaskContext 显式绑定才适配成 `AgentTool`；输出上限、Schema 校验、进度、超时、AbortSignal、断线与退出清理沿现有 Run 终态。`npm run verify` 退出 0，2026-09-14。 |
 | E42 | MCP 配置及专家/任务工具选择 | E41 | done | 设置页支持 stdio 连接新增/编辑/删除/检测；专家修订保存具体 MCP 工具预设；任务资料面板可按连接选择本次工具并持久化到 TaskContext。历史绑定不随发现变化，失效连接会定位为 MCP 工具不可用。协议/迁移/ExpertService/Renderer 覆盖已补齐。|
-| E43 | 网页正文、来源与 E4 验收 | E42 | todo | — |
+| E43 | 网页正文、来源与 E4 验收 | E42 | done | [ADR-0017](../adr/0017-web-fetch-and-evidence-boundary.md) 与 `web_fetch`：Main 注入可取消、15 秒超时、1 MiB 上限、HTTP(S)/公开主机和重定向校验；HTML 正文提取后登记最终 URL/时间/哈希/定位 Evidence。替身覆盖正文、私网、重定向、非正文和取消；真实外网旅程留人工验收。|
 | E50 | Office 输入解析技术定案 | E43 | todo | — |
 | E51 | PPTX/XLSX/CSV 读取与定位 | E50 | todo | — |
 | E52 | 讨论节点与重启后继续/返工 | E51 | todo | — |

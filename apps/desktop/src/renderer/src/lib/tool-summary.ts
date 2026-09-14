@@ -56,6 +56,8 @@ export function summarizeToolOutput(
       const found = countResults(output);
       return found === undefined ? '已完成联网搜索' : `搜索到 ${found} 条网页结果`;
     }
+    case 'web_fetch':
+      return message || '已读取网页正文';
     case 'skill_read_resource': {
       if (message) return message;
       if (!isRecord(output)) break;
