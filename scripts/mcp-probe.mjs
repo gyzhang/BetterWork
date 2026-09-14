@@ -60,6 +60,17 @@ try {
   if (result.isError || !result.content?.[0]?.text?.includes('2026-08')) {
     throw new Error('finance tool result was invalid');
   }
+  try {
+    await request('tools/call', {
+      name: 'finance.monthly_summary',
+      arguments: { month: 'invalid-month' },
+    });
+    throw new Error('invalid tool input unexpectedly succeeded');
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes('month must use YYYY-MM')) {
+      throw error;
+    }
+  }
   child.stdin.end();
   await once(child, 'close');
   if (child.exitCode !== 0) throw new Error(`MCP fixture exited with ${child.exitCode}`);
