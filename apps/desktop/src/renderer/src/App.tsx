@@ -1409,6 +1409,7 @@ export function App(): React.JSX.Element {
             state={experts}
             skills={skills.skills}
             mcpConnections={mcpState.connections}
+            models={modelSettings.models}
             materialCandidates={expertMaterialCandidates}
             {...(workspace ? { workspaceId: workspace.id } : {})}
             actions={experts}
