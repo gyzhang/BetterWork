@@ -162,7 +162,14 @@ describe('SkillService', () => {
     );
     expect(store.skills.get('builtin-example')).toBeUndefined();
 
-    await service.registerBuiltinRelease(manifest(contentHash(firstContent)));
+    const firstRegistration = await service.registerBuiltinRelease(
+      manifest(contentHash(firstContent)),
+    );
+    expect(firstRegistration[0]?.revision.contentHash).toBe(contentHash(firstContent));
+    const secondRegistration = await service.registerBuiltinRelease(
+      manifest(contentHash(firstContent)),
+    );
+    expect(secondRegistration[0]?.revision.id).toBe(firstRegistration[0]?.revision.id);
     expect(store.skills.get('builtin-example')).toMatchObject({
       sourceKind: 'builtin',
       trustStatus: 'trusted',
