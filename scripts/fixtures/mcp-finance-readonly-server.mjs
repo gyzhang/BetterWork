@@ -49,11 +49,15 @@ const handle = (message) => {
       error(message.id, -32602, 'month must use YYYY-MM');
       return;
     }
+    const text =
+      month === '2099-99'
+        ? 'x'.repeat(100_001)
+        : JSON.stringify({ month, revenue: 1200000, cost: 760000, source: 'fixture-ledger' });
     reply(message.id, {
       content: [
         {
           type: 'text',
-          text: JSON.stringify({ month, revenue: 1200000, cost: 760000, source: 'fixture-ledger' }),
+          text,
         },
       ],
       isError: false,
