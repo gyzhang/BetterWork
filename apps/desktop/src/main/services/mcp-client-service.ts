@@ -132,8 +132,9 @@ export class McpClientService {
     const seen = new Set<string>();
     for (const rawBinding of bindings) {
       const binding = mcpToolBindingSchema.parse(rawBinding);
-      if (seen.has(binding.toolId)) continue;
-      seen.add(binding.toolId);
+      const bindingKey = `${binding.connectionId}\u0000${binding.toolId}`;
+      if (seen.has(bindingKey)) continue;
+      seen.add(bindingKey);
       const connectionId = binding.connectionId;
       const state = await this.ensureConnected(connectionId);
       if (state.tools.size === 0) await this.discover(connectionId, false);
