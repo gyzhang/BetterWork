@@ -128,6 +128,27 @@ function installApi(options?: { expert?: boolean; context?: TaskContextRevision 
       listCandidates: vi.fn(async () => []),
       prepareInputSnapshot: vi.fn(async () => null),
     },
+    memories: {
+      list: vi.fn(async () => []),
+      create: vi.fn(async () => ({
+        memory: {
+          id: 'memory-1',
+          revisionId: 'memory-1-r1',
+          revision: 1,
+          scope: { kind: 'user' as const },
+          kind: 'semantic' as const,
+          content: 'test',
+          sourceType: 'user-explicit' as const,
+          confidence: 1,
+          status: 'confirmed' as const,
+          contentHash: 'hash',
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      })),
+      update: vi.fn(async () => ({ memory: undefined })),
+      setStatus: vi.fn(async () => ({ memory: undefined })),
+    },
     experts: {
       list: vi.fn(async () => (options?.expert ? [expertSummary] : [])),
       get: vi.fn(async () => (options?.expert ? expertDetail : null)),

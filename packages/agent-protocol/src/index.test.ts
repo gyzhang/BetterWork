@@ -98,6 +98,20 @@ describe('run protocol', () => {
     ).toThrow();
   });
 
+  it('allows a task to exclude selected memory identities without changing memory scope', () => {
+    const context = taskContextRevisionSchema.parse({
+      id: 'context-1',
+      taskId: 'task-1',
+      revision: 1,
+      executor: { kind: 'general' },
+      skillBindings: [],
+      excludedMemoryIds: ['memory-1'],
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    expect(context.excludedMemoryIds).toEqual(['memory-1']);
+  });
+
   it('accepts only identifiers and prompt, leaving the workspace boundary to Main', () => {
     expect(
       startRunRequestSchema.parse({

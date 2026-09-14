@@ -3,6 +3,7 @@ import type {
   ArtifactSummary,
   EvidenceSummary,
   MaterialCandidate,
+  MemoryRecord,
   RunSummary,
   TaskMaterialSelection,
 } from '@betterwork/agent-protocol';
@@ -75,6 +76,9 @@ export function ContextPanel({
   onSelectRun,
   onOpenSource,
   materials,
+  memories,
+  excludedMemoryIds,
+  onToggleMemory,
   materialCandidates,
   onRequestMaterials,
 }: {
@@ -91,6 +95,9 @@ export function ContextPanel({
   onSelectRun: (run: RunSummary) => void;
   onOpenSource: (sourcePath: string) => Promise<void>;
   materials: TaskMaterialSelection[];
+  memories: MemoryRecord[];
+  excludedMemoryIds: string[];
+  onToggleMemory: (memoryId: string) => void;
   materialCandidates: MaterialCandidate[];
   onRequestMaterials: (kind: 'file' | 'knowledge' | 'artifact') => void;
 }): React.JSX.Element | null {
@@ -208,6 +215,37 @@ export function ContextPanel({
                   </div>
                 )}
               </section>
+              {memories.length > 0 && (
+                <section className="selected-memories-panel">
+                  <div className="selected-materials-heading">
+                    <div>
+                      <strong>可用记忆</strong>
+                      <small>已确认的长期背景</small>
+                    </div>
+                  </div>
+                  <div className="selected-materials-list">
+                    {memories
+                      .filter((memory) => memory.status === 'confirmed')
+                      .map((memory) => {
+                        const excluded = excludedMemoryIds.includes(memory.id);
+                        return (
+                          <div className="selected-material-row" key={memory.id}>
+                            <div>
+                              <strong>{memory.content}</strong>
+                              <small>
+                                {memory.kind} · v{memory.revision} ·{' '}
+                                {excluded ? '本任务不使用' : '会随专家/工作空间注入'}
+                              </small>
+                            </div>
+                            <button type="button" onClick={() => onToggleMemory(memory.id)}>
+                              {excluded ? '恢复使用' : '本任务不用'}
+                            </button>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </section>
+              )}
               {evidence.length === 0 ? (
                 <EmptyContext
                   title="尚无已查阅来源"
