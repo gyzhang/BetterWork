@@ -55,6 +55,18 @@ const addReason = (reasons: Set<ExpertBlockedReason>, reason: ExpertBlockedReaso
   reasons.add(reason);
 };
 
+const sameRevision = (current: ExpertDetail['revision'], draft: ExpertRevisionDraft): boolean =>
+  current.name === draft.name &&
+  current.summary === draft.summary &&
+  current.identity === draft.identity &&
+  JSON.stringify(current.principles) === JSON.stringify(draft.principles) &&
+  JSON.stringify(current.inputRequirements) === JSON.stringify(draft.inputRequirements) &&
+  JSON.stringify(current.deliveryRequirements) === JSON.stringify(draft.deliveryRequirements) &&
+  JSON.stringify(current.skillPreset) === JSON.stringify(draft.skillPreset) &&
+  JSON.stringify(current.builtinToolPolicy) === JSON.stringify(draft.builtinToolPolicy) &&
+  JSON.stringify(current.modelReference) === JSON.stringify(draft.modelReference) &&
+  JSON.stringify(current.mcpToolBindings ?? []) === JSON.stringify(draft.mcpToolBindings ?? []);
+
 export interface BuiltinExpertReleaseEntry {
   expertId: string;
   name: string;
@@ -106,17 +118,6 @@ export class ExpertService {
   registerBuiltinRelease(entries: readonly BuiltinExpertReleaseEntry[]): ExpertDetail[] {
     const registered: ExpertDetail[] = [];
     for (const entry of entries) {
-      const existing = this.store.experts.get(entry.expertId);
-      if (existing) {
-        if (existing.sourceKind !== 'builtin') {
-          throw new ExpertServiceError(
-            'expert_not_found',
-            `内置 Expert ID 与用户 Expert 冲突：${entry.expertId}`,
-          );
-        }
-        registered.push(existing);
-        continue;
-      }
       const skillPreset = entry.skillPreset.map((binding) => {
         if (binding.revisionId !== 'pending') return binding;
         const skill = this.store.skills.get(binding.skillId);
@@ -138,6 +139,40 @@ export class ExpertService {
         builtinToolPolicy: entry.builtinToolPolicy,
         modelReference: entry.modelReference,
       });
+      const existing = this.store.experts.get(entry.expertId);
+      if (existing) {
+        if (existing.sourceKind !== 'builtin') {
+          throw new ExpertServiceError(
+            'expert_not_found',
+            `内置 Expert ID 与用户 Expert 冲突：${entry.expertId}`,
+          );
+        }
+        if (sameRevision(existing.revision, draft)) {
+          registered.push(existing);
+          continue;
+        }
+        try {
+          registered.push(
+            this.withStatus(
+              this.store.experts.saveBuiltinRevision(
+                entry.expertId,
+                draft,
+                existing.currentRevision,
+              ),
+            ),
+          );
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith('Expert revision conflict')) {
+            throw new ExpertServiceError(
+              'expert_revision_conflict',
+              '内置 Expert 已被其他启动流程更新，请重新加载后重试',
+              { cause: error },
+            );
+          }
+          throw error;
+        }
+        continue;
+      }
       registered.push(
         this.store.experts.create({
           id: entry.expertId,
