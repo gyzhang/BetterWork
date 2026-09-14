@@ -112,7 +112,7 @@ export function App(): React.JSX.Element {
   const [discussionCheckpoints, setDiscussionCheckpoints] = useState<DiscussionCheckpoint[]>([]);
   const [memoryCapture, setMemoryCapture] = useState<{ content: string; runId: string }>();
   const [memoryCaptureScope, setMemoryCaptureScope] = useState<
-    'user' | 'workspace' | 'expert-workspace'
+    'user' | 'workspace' | 'expert' | 'expert-workspace'
   >('user');
   const [materialCandidates, setMaterialCandidates] = useState<MaterialCandidate[]>([]);
   const [expertMaterialCandidates, setExpertMaterialCandidates] = useState<MaterialCandidate[]>([]);
@@ -1176,6 +1176,7 @@ export function App(): React.JSX.Element {
                                   >
                                     <option value="user">所有工作</option>
                                     {workspace && <option value="workspace">当前工作空间</option>}
+                                    {activeExpert && <option value="expert">当前专家</option>}
                                     {workspace && activeExpert && (
                                       <option value="expert-workspace">当前专家与工作空间</option>
                                     )}
@@ -1199,15 +1200,20 @@ export function App(): React.JSX.Element {
                                               kind: 'workspace' as const,
                                               workspaceId: workspace.id,
                                             }
-                                          : memoryCaptureScope === 'expert-workspace' &&
-                                              workspace &&
-                                              activeExpert
+                                          : memoryCaptureScope === 'expert' && activeExpert
                                             ? {
-                                                kind: 'expert-workspace' as const,
+                                                kind: 'expert' as const,
                                                 expertId: activeExpert.id,
-                                                workspaceId: workspace.id,
                                               }
-                                            : { kind: 'user' as const };
+                                            : memoryCaptureScope === 'expert-workspace' &&
+                                                workspace &&
+                                                activeExpert
+                                              ? {
+                                                  kind: 'expert-workspace' as const,
+                                                  expertId: activeExpert.id,
+                                                  workspaceId: workspace.id,
+                                                }
+                                              : { kind: 'user' as const };
                                       trackAction(
                                         memoriesState
                                           .create({

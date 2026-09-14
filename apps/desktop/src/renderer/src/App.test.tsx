@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import type {
+  AgentRuntimeEvent,
   ExpertDetail,
   ExpertSummary,
   MaterialCandidate,
@@ -173,7 +174,7 @@ function installApi(options?: { expert?: boolean; context?: TaskContextRevision 
       list: vi.fn(async (input?: { taskId?: string }): Promise<RunSummary[]> =>
         input?.taskId === previousTask.id ? [previousRun] : [],
       ),
-      listEvents: vi.fn(async () => []),
+      listEvents: vi.fn(async (): Promise<AgentRuntimeEvent[]> => []),
       start: vi.fn(async () => ({ runId: 'new-run' })),
       onEvent: vi.fn(() => () => undefined),
     },
@@ -460,6 +461,63 @@ describe('Task context restoration', () => {
       skill.name,
     );
     expect(api.taskContexts.get).toHaveBeenCalledWith({ taskId: previousTask.id });
+  });
+
+  it('offers Expert-scoped memory capture for an Expert task', async () => {
+    const api = installApi({
+      expert: true,
+      context: {
+        id: 'context-previous',
+        taskId: previousTask.id,
+        revision: 1,
+        executor: {
+          kind: 'expert',
+          expertId: expertSummary.id,
+          expertRevisionId: expertDetail.revision.id,
+        },
+        skillBindings: [],
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    });
+    api.runs.listEvents.mockResolvedValue([
+      {
+        id: 'message-event',
+        runId: previousRun.id,
+        sequence: 1,
+        createdAt: 2,
+        type: 'message.completed',
+        messageId: 'message-1',
+        content: '经营分析应先核对规则。',
+      },
+      {
+        id: 'completed-event',
+        runId: previousRun.id,
+        sequence: 2,
+        createdAt: 3,
+        type: 'run.completed',
+        finalContent: '经营分析应先核对规则。',
+      },
+    ]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
+    fireEvent.click(await screen.findByRole('button', { name: '记住这段经验' }));
+    fireEvent.change(screen.getByRole('combobox', { name: '记忆适用范围' }), {
+      target: { value: 'expert' },
+    });
+    expect(screen.getByRole('combobox', { name: '记忆适用范围' })).toHaveProperty(
+      'value',
+      'expert',
+    );
+    fireEvent.click(screen.getByRole('button', { name: '确认并记住' }));
+
+    await waitFor(() => expect(api.memories.create).toHaveBeenCalledTimes(1));
+    expect(api.memories.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: { kind: 'expert', expertId: expertSummary.id },
+        sourceId: previousRun.id,
+      }),
+    );
   });
 });
 
