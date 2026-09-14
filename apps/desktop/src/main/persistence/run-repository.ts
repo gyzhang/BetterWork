@@ -44,6 +44,11 @@ export class RunRepository {
   constructor(private readonly db: Database.Database) {}
 
   create(run: RunSummary): void {
+    const session = this.db
+      .prepare('SELECT task_id FROM sessions WHERE id = ?')
+      .get(run.sessionId) as { task_id: string } | undefined;
+    if (!session) throw new Error('Run session does not exist');
+    if (session.task_id !== run.taskId) throw new Error('Run session does not belong to task');
     this.db
       .prepare(
         `INSERT INTO runs (id, task_id, session_id, prompt, status, created_at, completed_at)

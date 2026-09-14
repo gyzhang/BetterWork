@@ -43,6 +43,23 @@ afterEach(() => {
 });
 
 describe('AppStore', () => {
+  it('rejects a Run whose Session belongs to another Task', () => {
+    const store = openStore();
+    const first = seedTask(store, '/workspace-run-owner-a', '任务一');
+    const second = seedTask(store, '/workspace-run-owner-b', '任务二');
+
+    expect(() =>
+      store.runs.create({
+        id: 'run-session-owner-mismatch',
+        taskId: second.task.id,
+        sessionId: first.sessionId,
+        prompt: '验证运行归属',
+        status: 'running',
+        createdAt: 1,
+      }),
+    ).toThrow('Run session does not belong to task');
+  });
+
   it('keeps disable and revoked preferences after reopening the database', () => {
     const directory = mkdtempSync(path.join(os.tmpdir(), 'betterwork-skills-'));
     temporaryDirectories.push(directory);
