@@ -1,11 +1,14 @@
 import { Buffer } from 'node:buffer';
+import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const execFileAsync = promisify(execFile);
 const fail = (message) => {
   throw new Error(message);
 };
@@ -151,12 +154,43 @@ const verifyBuilderResources = async () => {
   }
 };
 
+const verifySignedApp = async (appPathArgument) => {
+  if (process.platform !== 'darwin') {
+    fail('--signed-app 只支持在 macOS 上校验 .app 签名');
+  }
+  const appPath = path.resolve(process.cwd(), appPathArgument);
+  const appInfo = await stat(appPath).catch(() => undefined);
+  if (!appInfo?.isDirectory() || !appPath.endsWith('.app')) {
+    fail(`--signed-app 必须指向存在的 .app 目录：${appPath}`);
+  }
+  try {
+    await execFileAsync('codesign', ['--verify', '--deep', '--strict', appPath], {
+      maxBuffer: 1_000_000,
+    });
+  } catch (error) {
+    const details =
+      error && typeof error === 'object' && 'stderr' in error && typeof error.stderr === 'string'
+        ? error.stderr.trim()
+        : error instanceof Error
+          ? error.message
+          : String(error);
+    fail(`签名校验失败：${details || appPath}`);
+  }
+  return appPath;
+};
+
 const main = async () => {
   const packagedRootArgumentIndex = process.argv.indexOf('--packaged-root');
   const packagedRootArgument =
     packagedRootArgumentIndex >= 0 ? process.argv[packagedRootArgumentIndex + 1] : undefined;
   if (packagedRootArgumentIndex >= 0 && !packagedRootArgument) {
     fail('--packaged-root requires a Resources directory');
+  }
+  const signedAppArgumentIndex = process.argv.indexOf('--signed-app');
+  const signedAppArgument =
+    signedAppArgumentIndex >= 0 ? process.argv[signedAppArgumentIndex + 1] : undefined;
+  if (signedAppArgumentIndex >= 0 && !signedAppArgument) {
+    fail('--signed-app requires an application bundle');
   }
   const counts = await verifyResourceSet(
     path.join(repositoryRoot, 'resources'),
@@ -169,8 +203,13 @@ const main = async () => {
     await verifyResourceSet(packagedRoot, 'packaged Resources');
     packagedMessage = ` Packaged Resources verified at ${packagedRoot}.`;
   }
+  let signedMessage = '';
+  if (signedAppArgument) {
+    const signedAppPath = await verifySignedApp(signedAppArgument);
+    signedMessage = ` Signed app verified at ${signedAppPath}.`;
+  }
   process.stdout.write(
-    `Expert release preflight passed: ${counts.experts} expert(s), ${counts.skills} Skill(s), builder resources verified.${packagedMessage}`,
+    `Expert release preflight passed: ${counts.experts} expert(s), ${counts.skills} Skill(s), builder resources verified.${packagedMessage}${signedMessage}`,
   );
 };
 

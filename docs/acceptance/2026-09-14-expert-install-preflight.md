@@ -29,6 +29,11 @@
 - `expert-release-preflight` 现在对 `skills/`、`experts/` 和 `dependency-locks/` 资源扫描仓库/用户目录绝对路径，并拒绝 Skill manifest 的资源路径逃逸。
 - 正常资源预检通过；临时打包副本注入 `/Users/kevin/Dev4AI/BetterWork` 后按预期失败。该检查不能替代真实签名安装和升级旅程。
 
+## 2026-09-15 签名校验入口
+
+- `expert-release-preflight` 新增 `--signed-app <path/to/BetterWork.app>`，在 macOS 上调用 `codesign --verify --deep --strict`，将签名校验纳入同一发布预检入口；不带该参数时仍只校验资源，便于开发态使用。
+- 本机用不存在的 `.app` 路径验证参数失败诊断；当前没有 Developer ID 身份，待生成签名 App 后再执行成功路径。该入口不会把未签名构建误报为可安装发布。
+
 ## 2026-09-15 模型显示改动后的打包复核
 
 - `npm run dist:mac --workspace @betterwork/desktop` 通过，重新生成 arm64/x64 DMG 与 App 目录；构建日志仍明确记录未找到 Developer ID Application 身份并跳过签名。
