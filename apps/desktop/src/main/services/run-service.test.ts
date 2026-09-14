@@ -185,6 +185,108 @@ describe('RunService', () => {
     expect(fixture.store.memories.listReads(runId)).toEqual([memory]);
   });
 
+  it('injects only memories applicable to the selected Expert and Workspace', async () => {
+    const fixture = await createFixture();
+    const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+    if (!workspaceId) throw new Error('workspace missing');
+    const expert = fixture.store.experts.create({
+      sourceKind: 'user',
+      revision: {
+        name: '经营分析专家',
+        summary: '使用工作区规则完成经营分析',
+        identity: '负责经营分析。',
+        principles: [],
+        inputRequirements: [],
+        deliveryRequirements: [],
+        skillPreset: [],
+        builtinToolPolicy: { mode: 'application-defaults' },
+        modelReference: { mode: 'application-default' },
+      },
+    });
+    const otherExpert = fixture.store.experts.create({
+      sourceKind: 'user',
+      revision: {
+        name: '其他专家',
+        summary: '其他专家',
+        identity: '不应被当前专家读取。',
+        principles: [],
+        inputRequirements: [],
+        deliveryRequirements: [],
+        skillPreset: [],
+        builtinToolPolicy: { mode: 'application-defaults' },
+        modelReference: { mode: 'application-default' },
+      },
+    });
+    const otherWorkspace = fixture.store.workspaces.getOrCreate(
+      '/tmp/other-memory-workspace',
+      '其他工作区',
+    );
+    const applicable = [
+      fixture.store.memories.create({
+        scope: { kind: 'workspace', workspaceId },
+        kind: 'procedural',
+        content: '当前工作区规则。',
+        sourceType: 'user-explicit',
+        status: 'confirmed',
+      }),
+      fixture.store.memories.create({
+        scope: { kind: 'expert', expertId: expert.id },
+        kind: 'semantic',
+        content: '经营分析专家通用方法。',
+        sourceType: 'user-explicit',
+        status: 'confirmed',
+      }),
+      fixture.store.memories.create({
+        scope: { kind: 'expert-workspace', expertId: expert.id, workspaceId },
+        kind: 'procedural',
+        content: '本公司经营分析方法。',
+        sourceType: 'user-explicit',
+        status: 'confirmed',
+      }),
+    ];
+    const excluded = [
+      fixture.store.memories.create({
+        scope: { kind: 'expert', expertId: otherExpert.id },
+        kind: 'semantic',
+        content: '其他专家的记忆。',
+        sourceType: 'user-explicit',
+        status: 'confirmed',
+      }),
+      fixture.store.memories.create({
+        scope: { kind: 'expert-workspace', expertId: expert.id, workspaceId: otherWorkspace.id },
+        kind: 'procedural',
+        content: '其他工作区的记忆。',
+        sourceType: 'user-explicit',
+        status: 'confirmed',
+      }),
+    ];
+    const context = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: {
+        kind: 'expert',
+        expertId: expert.id,
+        expertRevisionId: expert.revision.id,
+      },
+      skillBindings: [],
+    });
+    const service = createService(fixture);
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '整理本月经营分析。',
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('completed');
+    expect(fixture.store.memories.listReads(runId).map((memory) => memory.id)).toEqual(
+      expect.arrayContaining(applicable.map((memory) => memory.id)),
+    );
+    expect(fixture.store.memories.listReads(runId).map((memory) => memory.id)).not.toEqual(
+      expect.arrayContaining(excluded.map((memory) => memory.id)),
+    );
+  });
+
   it('honors a TaskContext memory exclusion for only the next run', async () => {
     const fixture = await createFixture();
     const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
