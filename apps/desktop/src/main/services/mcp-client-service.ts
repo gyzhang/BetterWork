@@ -13,6 +13,7 @@ import {
 } from '@betterwork/agent-protocol';
 import { Client, type Tool as SdkTool } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import { z } from 'zod';
 
 import type { AppStore } from '../persistence';
 
@@ -54,6 +55,11 @@ const toToolSummary = (
   discoveredAt: number,
 ): McpToolSummary => {
   const inputSchema = schemaRecord(tool.inputSchema);
+  try {
+    z.fromJSONSchema(inputSchema);
+  } catch (error) {
+    throw new McpClientError(`MCP 工具输入 Schema 无法验证：${tool.name}`, { cause: error });
+  }
   return mcpToolSummarySchema.parse({
     id: stableToolId(connectionId, tool.name),
     connectionId,
@@ -71,7 +77,13 @@ const safeResult = (result: {
   structuredContent: unknown;
 }): unknown => {
   if (result.isError) throw new McpClientError('MCP 工具返回了工具级错误。');
-  if (result.structuredContent !== undefined) return result.structuredContent;
+  if (result.structuredContent !== undefined) {
+    const serialized = JSON.stringify(result.structuredContent);
+    if (serialized && serialized.length > maxOutputChars) {
+      throw new McpClientError(`MCP 工具输出超过 ${maxOutputChars} 字符上限。`);
+    }
+    return result.structuredContent;
+  }
   const content = result.content ?? [];
   const textParts = content.flatMap((item) => {
     if (!item || typeof item !== 'object') return [];
@@ -84,6 +96,20 @@ const safeResult = (result: {
     throw new McpClientError(`MCP 工具输出超过 ${maxOutputChars} 字符上限。`);
   }
   return value;
+};
+
+const validateToolInput = (tool: McpToolSummary, input: Record<string, unknown>): void => {
+  try {
+    const parsed = z.fromJSONSchema(tool.inputSchema).safeParse(input);
+    if (!parsed.success) {
+      throw new McpClientError(`MCP 工具输入不符合 Schema：${tool.name}`, {
+        cause: parsed.error,
+      });
+    }
+  } catch (error) {
+    if (error instanceof McpClientError) throw error;
+    throw new McpClientError(`MCP 工具输入 Schema 无法验证：${tool.name}`, { cause: error });
+  }
 };
 
 export class McpClientService {
@@ -146,7 +172,10 @@ export class McpClientService {
         name: toolNameForModel(tool),
         description: `${tool.description}（MCP：${tool.connectionId}）`,
         inputSchema: tool.inputSchema,
-        execute: (input, context) => this.callTool(tool, input, context),
+        execute: async (input, context) => {
+          validateToolInput(tool, input);
+          return await this.callTool(tool, input, context);
+        },
       });
     }
     return tools;

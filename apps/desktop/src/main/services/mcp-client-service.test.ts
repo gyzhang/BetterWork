@@ -54,6 +54,73 @@ describe('McpClientService', () => {
     await service.shutdown();
   });
 
+  it('validates MCP tool input against the discovered JSON Schema before calling', async () => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    const service = new McpClientService(store);
+    const connection = store.mcpConnections.save({
+      name: '财务替身',
+      transport: { kind: 'stdio', command: process.execPath, args: [fixturePath] },
+    });
+    const discovered = await service.testConnection(connection.id);
+    const tool = discovered.tools[0];
+    if (!tool) throw new Error('MCP tool was not discovered');
+    const agentTools = await service.createAgentTools([
+      { connectionId: connection.id, toolId: tool.id },
+    ]);
+
+    await expect(
+      agentTools[0]?.execute(
+        { month: 'invalid-month' },
+        {
+          runId: 'run-invalid-input',
+          toolCallId: 'call-invalid-input',
+          workspacePath: '/tmp',
+          signal: new AbortController().signal,
+          reportProgress: () => undefined,
+        },
+      ),
+    ).rejects.toThrow('MCP 工具输入不符合 Schema');
+    await service.shutdown();
+  });
+
+  it('enforces the output limit for MCP structured and text results', async () => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    const service = new McpClientService(store);
+    const connection = store.mcpConnections.save({
+      name: '财务替身',
+      transport: { kind: 'stdio', command: process.execPath, args: [fixturePath] },
+    });
+    const discovered = await service.testConnection(connection.id);
+    const tool = discovered.tools[0];
+    if (!tool) throw new Error('MCP tool was not discovered');
+    const agentTools = await service.createAgentTools([
+      { connectionId: connection.id, toolId: tool.id },
+    ]);
+
+    try {
+      await agentTools[0]?.execute(
+        { month: '2099-99' },
+        {
+          runId: 'run-large-output',
+          toolCallId: 'call-large-output',
+          workspacePath: '/tmp',
+          signal: new AbortController().signal,
+          reportProgress: () => undefined,
+        },
+      );
+      throw new Error('expected MCP output limit failure');
+    } catch (error) {
+      if (!(error instanceof Error)) throw error;
+      expect(error.message).toContain('MCP 工具调用失败');
+      const cause = error.cause;
+      if (!(cause instanceof Error)) throw cause;
+      expect(cause.message).toContain('MCP 工具输出超过');
+    }
+    await service.shutdown();
+  });
+
   it('rejects an unbound or unknown tool instead of exposing the full catalog', async () => {
     const store = AppStore.open(':memory:');
     stores.push(store);
