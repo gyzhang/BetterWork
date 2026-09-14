@@ -109,7 +109,7 @@ interface RunContextSnapshot {
   runId: string;
   taskId: string;
   workspaceId: string;
-  taskContextRevisionId: string;
+  taskContextRevisionId?: string;
   expertId?: string;
   expertRevisionId?: string;
   contextSegmentId: string;
