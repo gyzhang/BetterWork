@@ -22,7 +22,7 @@ import type {
   StartRunRequest,
   TaskMaterialSelection,
 } from '@betterwork/agent-protocol';
-import { IpcChannel } from '@betterwork/agent-protocol';
+import { IpcChannel, materialReferenceSchema } from '@betterwork/agent-protocol';
 import {
   type ArtifactFileRegistrar,
   type ArtifactReader,
@@ -32,6 +32,7 @@ import {
   createArtifactReadTool,
   createArtifactRegisterFileTool,
   createKnowledgeSearchTool,
+  createReadOfficeMaterialTool,
   createReadTextFileTool,
   createSkillExecuteTool,
   createSkillReadResourceTool,
@@ -39,6 +40,8 @@ import {
   createWebFetchTool,
   createWebSearchTool,
   type KnowledgeSearchItem,
+  type OfficeMaterialReader,
+  type ReadOfficeMaterialInput,
   type ReadTextFile,
   readTextFileTool,
   type SkillCommandExecuteInput,
@@ -54,6 +57,7 @@ import type { BrowserWindow } from 'electron';
 import { z } from 'zod';
 
 import { managedPath, writeManagedText } from '../infrastructure/managed-files';
+import type { OfficeFormat, OfficeParserService } from '../infrastructure/office-parser';
 import { type AppStore, type InputSnapshot, materialReferenceKey } from '../persistence';
 import type { FileArtifactService } from './file-artifact-service';
 import type { InputSnapshotService } from './input-snapshot-service';
@@ -110,6 +114,20 @@ interface ActiveRun {
 const PROMPT_SUMMARY_LENGTH = 80;
 const FAILURE_DETAIL_LENGTH = 500;
 
+const officeFormatFromSnapshot = (format: string): OfficeFormat => {
+  if (format === 'pptx' || format === 'xlsx' || format === 'csv') return format;
+  throw new Error(`不支持的 Office 输入格式：${format}`);
+};
+
+const officeFormatFromMimeType = (mimeType: string): OfficeFormat => {
+  if (mimeType === 'text/csv') return 'csv';
+  if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    return 'xlsx';
+  if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation')
+    return 'pptx';
+  throw new Error(`不支持的 Office 成果类型：${mimeType}`);
+};
+
 /**
  * 组装一次 Run 可用的工具集。
  * `web_search` 只在存在已启用且配置了 Key 的搜索引擎时注册——
@@ -123,6 +141,7 @@ export const createRunTools = (dependencies: {
   artifactReader?: ArtifactReader;
   webSearch?: WebSearch;
   webFetch?: WebFetch;
+  officeMaterialReader?: OfficeMaterialReader;
   allowedBuiltinToolNames?: ReadonlySet<string>;
   skillResourceReader?: (input: SkillResourceReadInput) => Promise<SkillResourceReadOutput>;
   taskFileWriter?: (input: TaskFileWriteInput) => Promise<TaskFileWriteOutput>;
@@ -149,6 +168,8 @@ export const createRunTools = (dependencies: {
     tools.push(createWebSearchTool(dependencies.webSearch));
   if (dependencies.webFetch && allows('web_fetch'))
     tools.push(createWebFetchTool(dependencies.webFetch));
+  if (dependencies.officeMaterialReader && allows('read_office_material'))
+    tools.push(createReadOfficeMaterialTool(dependencies.officeMaterialReader));
   if (dependencies.skillResourceReader)
     tools.push(createSkillReadResourceTool(dependencies.skillResourceReader));
   if (dependencies.taskFileWriter) tools.push(createTaskWriteFileTool(dependencies.taskFileWriter));
@@ -193,6 +214,7 @@ export class RunService {
     private readonly memories?: MemoryService,
     private readonly mcpClientService?: McpClientService,
     private readonly webFetch?: WebFetch,
+    private readonly officeParser?: OfficeParserService,
   ) {}
 
   start(input: StartRunRequest): string {
@@ -385,6 +407,12 @@ export class RunService {
             : {}),
           ...(webSearch ? { webSearch } : {}),
           ...(this.webFetch ? { webFetch: this.webFetch } : {}),
+          ...(executionContext.materialScope && this.officeParser
+            ? {
+                officeMaterialReader: (readInput, readContext) =>
+                  this.readScopedOfficeMaterial(executionContext.materials, readInput, readContext),
+              }
+            : {}),
           ...(allowedBuiltinToolNames ? { allowedBuiltinToolNames } : {}),
           ...(bindingIds.length > 0
             ? {
@@ -590,6 +618,73 @@ export class RunService {
     };
   }
 
+  private async readScopedOfficeMaterial(
+    materials: readonly TaskMaterialSelection[],
+    input: ReadOfficeMaterialInput,
+    context: Parameters<OfficeMaterialReader>[1],
+  ): Promise<unknown> {
+    if (!this.officeParser) throw new Error('Office 材料解析器不可用。');
+    if (context.signal.aborted) throw new Error('Office 材料读取已取消。');
+    const selected = materials.find((selection) => {
+      const reference = selection.reference;
+      if (input.sourceKind === 'workspace-input-snapshot') {
+        return (
+          reference.kind === 'workspace-input-snapshot' && reference.snapshotId === input.snapshotId
+        );
+      }
+      return (
+        reference.kind === 'artifact-version' &&
+        reference.artifactId === input.artifactId &&
+        reference.artifactVersionId === input.versionId
+      );
+    });
+    if (!selected) throw new Error('材料范围不允许读取该 Office 材料，请先选择准确材料。');
+    const reference = selected.reference;
+
+    let filePath: string;
+    let format: OfficeFormat;
+    let contentHash: string;
+    if (reference.kind === 'workspace-input-snapshot') {
+      const snapshot = this.store.inputSnapshots.get(reference.snapshotId);
+      if (!snapshot || snapshot.status !== 'ready')
+        throw new Error('输入快照不存在或尚未准备完成。');
+      if (!this.inputSnapshots || !(await this.inputSnapshots.verify(snapshot)))
+        throw new Error('输入快照缺失或已损坏，无法读取。');
+      filePath = this.inputSnapshots.resolvePath(snapshot);
+      format = officeFormatFromSnapshot(snapshot.format);
+      contentHash = snapshot.contentHash;
+    } else if (reference.kind === 'artifact-version') {
+      const detail = this.store.artifacts.getVersionDetail(reference.artifactVersionId);
+      if (!detail || detail.artifactId !== reference.artifactId)
+        throw new Error('成果版本不存在或已不可读取。');
+      if (detail.type !== 'presentation') throw new Error('该成果版本不是 Office 演示文件。');
+      if (!this.fileArtifactService) throw new Error('成果文件服务不可用。');
+      filePath = this.fileArtifactService.resolveStoredPath(detail.id);
+      format = officeFormatFromMimeType(detail.mimeType);
+      contentHash = detail.fileHash;
+    } else {
+      throw new Error('知识材料不能通过 Office 解析器读取。');
+    }
+    const result = await this.officeParser.parseFile(filePath, format, {
+      ...(input.locator ? { locator: input.locator } : {}),
+      signal: context.signal,
+    });
+    return {
+      sourceKind: input.sourceKind,
+      ...(reference.kind === 'workspace-input-snapshot'
+        ? { snapshotId: reference.snapshotId }
+        : reference.kind === 'artifact-version'
+          ? { artifactId: reference.artifactId, versionId: reference.artifactVersionId }
+          : {}),
+      material: reference,
+      format: result.format,
+      sections: result.sections,
+      warnings: result.warnings,
+      contentHash,
+      message: `已读取 ${result.sections.length} 个 Office 材料片段。`,
+    };
+  }
+
   /** 落库后再分发；顺序不可颠倒，否则 UI 可能看到库里还不存在的事件。 */
   private publish(event: AgentRuntimeEvent): void {
     this.store.runs.appendEvent(event);
@@ -771,13 +866,44 @@ export class RunService {
           output.content,
         );
       }
+      return;
+    }
+    if (toolName === 'read_office_material' && isOfficeMaterialReadOutput(event.output)) {
+      const output = event.output;
+      const selectedMaterial = snapshot.materials.find((selection) =>
+        sameMaterialReference(selection.reference, output.material),
+      )?.reference;
+      if (!selectedMaterial) return;
+      const sections = output.sections;
+      if (sections.length === 0) {
+        this.saveMaterialRead(
+          event.runId,
+          selectedMaterial,
+          'parse',
+          'document',
+          output.contentHash,
+          'Office 材料未产生可读取片段。',
+        );
+        return;
+      }
+      for (const section of sections) {
+        const excerpt = JSON.stringify(section.content).slice(0, 20_000);
+        this.saveMaterialRead(
+          event.runId,
+          selectedMaterial,
+          'parse',
+          section.locator,
+          output.contentHash,
+          excerpt,
+        );
+      }
     }
   }
 
   private saveMaterialRead(
     runId: string,
     material: MaterialReference,
-    operation: 'search' | 'read',
+    operation: 'search' | 'read' | 'parse',
     locator: string,
     contentHash: string,
     excerpt: string,
@@ -1327,6 +1453,40 @@ interface WebFetchOutput {
   contentType: string;
   status: number;
 }
+
+interface OfficeMaterialReadOutput {
+  material: MaterialReference;
+  format: OfficeFormat;
+  sections: Array<{ locator: string; content: unknown }>;
+  contentHash: string;
+}
+
+const isOfficeMaterialReadOutput = (value: unknown): value is OfficeMaterialReadOutput => {
+  if (!isRecord(value) || !materialReferenceSchema.safeParse(value.material).success) return false;
+  if (
+    !isOfficeFormat(value.format) ||
+    !isString(value.contentHash) ||
+    !Array.isArray(value.sections)
+  )
+    return false;
+  return value.sections.every(
+    (section) => isRecord(section) && isString(section.locator) && 'content' in section,
+  );
+};
+
+const isOfficeFormat = (value: unknown): value is OfficeFormat =>
+  value === 'pptx' || value === 'xlsx' || value === 'csv';
+
+const sameMaterialReference = (left: MaterialReference, right: MaterialReference): boolean => {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === 'knowledge-revision' && right.kind === 'knowledge-revision')
+    return left.knowledgeRevisionId === right.knowledgeRevisionId;
+  if (left.kind === 'artifact-version' && right.kind === 'artifact-version')
+    return left.artifactVersionId === right.artifactVersionId;
+  if (left.kind === 'workspace-input-snapshot' && right.kind === 'workspace-input-snapshot')
+    return left.snapshotId === right.snapshotId;
+  return false;
+};
 
 const isWebFetchOutput = (value: unknown): value is WebFetchOutput =>
   isRecord(value) &&

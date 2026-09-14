@@ -50,7 +50,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E22 | 材料选择与草稿持久化 | E21 | done | [TaskMaterialService/TaskContext 测试](../../apps/desktop/src/main/services/task-material-service.test.ts)、[TaskContextRepository 测试](../../apps/desktop/src/main/persistence/task-context-repository.test.ts)：TaskContextRevision v12 保存材料判别引用、用途、备注和添加来源；候选查询覆盖 Knowledge revision、Workspace ArtifactVersion、ready 输入快照；保存边界校验修订哈希、快照状态、重复项和 Workspace 归属；新增候选/输入快照 IPC 与 Preload；`npm run verify` 退出 0（57 文件 / 463 测试 / Electron build），2026-09-14 15:19。 |
 | E23 | 宿主范围与上下文收缩 | E22 | done | [RunService/快照/工具测试](../../apps/desktop/src/main/services/run-service.test.ts)：Run 绑定不可变 `run_context_snapshots`，Knowledge revision、输入快照和 Markdown ArtifactVersion 通过宿主范围校验；材料收缩创建新上下文段并过滤旧段历史。`npm run verify` 退出 0（59 文件 / 470 测试 / Electron build），2026-09-14。 |
 | E24 | 读取足迹与成果输入来源 | E23 | done | [读取/成果来源测试](../../apps/desktop/src/main/services/run-service.test.ts)：v14 保存 RunMaterialRead 与 ArtifactInputRelation；搜索、输入快照和成果读取留下精确足迹，Markdown/文件成果只允许关联同一 Run 已读取材料。`npm run verify` 退出 0（60 文件 / 473 测试 / Electron build），2026-09-14。 |
-| E25 | 材料 UI、成果复用与 E2 验收 | E24 | done | Composer 与资料面板支持文件/知识/成果选择、用途调整、失效提示和取消；成果详情可引用精确 Markdown 版本开始新任务；现有格式材料链路完成，Office 输入明确留 E51；`npm run verify` 退出 0（61 文件 / 475 测试 / Electron build），2026-09-14。 |
+| E25 | 材料 UI、成果复用与 E2 验收 | E24 | done | Composer 与资料面板支持文件/知识/成果选择、用途调整、失效提示和取消；成果详情可引用精确 Markdown 版本开始新任务；Office 材料在 E51 接入后进入可读候选；`npm run verify` 退出 0（61 文件 / 475 测试 / Electron build），2026-09-14。 |
 | E30 | 记忆投影与治理实现 ADR | E25 | done | 新增 [ADR-0015](../adr/0015-memory-scope-and-governance.md)：SQLite 唯一真相源、User/Workspace/Expert/Expert×Workspace 判别范围、candidate/confirmed/过期/删除状态、来源、预算、运行快照、投影重建和失败恢复语义已定案。 |
 | E31 | 记忆存储、检索与运行注入 | E30 | done | [MemoryRepository/Service 与 RunService 测试](../../apps/desktop/src/main/persistence/memory-repository.test.ts)：应用库 v15 增加不可变记忆修订与 Run 读取足迹；四种作用域按隔离规则检索，confirmed 记录按 16 条/6,000 字符预算注入新 Run，候选不会注入；IPC/Preload 已接通，Markdown 只读投影按作用域重建。`npm run verify` 退出 0（63 文件 / 480 测试），2026-09-14。 |
 | E32 | 记忆管理、对话确认与 E3 验收 | E31 | done | [记忆管理与运行测试](../../apps/desktop/src/renderer/src/views/MemoryView.test.tsx)：设置页支持用户记忆创建、候选确认、编辑和删除；对话完成消息提供“记住这段经验”确认表单，可选择 User/Workspace/Expert×Workspace 作用域；任务资料面板支持“本任务不用”，排除项保存进 TaskContextRevision 并只影响后续该任务运行。迁移 v16、协议/运行/Renderer 测试已覆盖；`npm run verify` 退出 0（64 文件 / 483 测试），2026-09-14。 |
@@ -58,8 +58,8 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E41 | MCP 连接、工具适配与取消 | E40 | done | [McpClientService 测试](../../apps/desktop/src/main/services/mcp-client-service.test.ts)：应用库 v17 持久化 stdio 连接与工具 Schema 目录；官方 `@modelcontextprotocol/client@2.0.0` 接入 Main，发现工具映射为稳定 `connectionId/toolName`，只有 TaskContext 显式绑定才适配成 `AgentTool`；输出上限、Schema 校验、进度、超时、AbortSignal、断线与退出清理沿现有 Run 终态。`npm run verify` 退出 0，2026-09-14。 |
 | E42 | MCP 配置及专家/任务工具选择 | E41 | done | 设置页支持 stdio 连接新增/编辑/删除/检测；专家修订保存具体 MCP 工具预设；任务资料面板可按连接选择本次工具并持久化到 TaskContext。历史绑定不随发现变化，失效连接会定位为 MCP 工具不可用。协议/迁移/ExpertService/Renderer 覆盖已补齐。|
 | E43 | 网页正文、来源与 E4 验收 | E42 | done | [ADR-0017](../adr/0017-web-fetch-and-evidence-boundary.md) 与 `web_fetch`：Main 注入可取消、15 秒超时、1 MiB 上限、HTTP(S)/公开主机和重定向校验；HTML 正文提取后登记最终 URL/时间/哈希/定位 Evidence。替身覆盖正文、私网、重定向、非正文和取消；真实外网旅程留人工验收。|
-| E50 | Office 输入解析技术定案 | E43 | todo | — |
-| E51 | PPTX/XLSX/CSV 读取与定位 | E50 | todo | — |
+| E50 | Office 输入解析技术定案 | E43 | done | [ADR-0018](../adr/0018-office-input-parsing-boundary.md)、`scripts/office-input-probe.mjs`：JSZip + fast-xml-parser 解析 PPTX，ExcelJS 读取 XLSX，受限 UTF-8/BOM CSV；固定大小、解压、页数和公式缓存边界，`npm run verify` 退出 0，2026-09-14。 |
+| E51 | PPTX/XLSX/CSV 读取与定位 | E50 | done | `OfficeParserService`、`read_office_material` 和材料候选状态已接入；只读 E21 输入快照或精确选中的 PPTX 成果版本，支持 slide/table/notes、Sheet/Range、CSV rows 定位，登记 `parse` 材料足迹；定向测试通过，2026-09-14。 |
 | E52 | 讨论节点与重启后继续/返工 | E51 | todo | — |
 | E53 | 经营分析方法与数值校验 | E52 | todo | — |
 | E54 | 报告/PPT 交付、修订及来源 | E53 | todo | — |
@@ -247,6 +247,8 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 - 失败/取消：损坏/加密/过大/不支持类型不崩溃，公式无可靠值明确告知，宏/外部链接不执行；取消后不登记成功解析。
 - 必测：合成 PPT 文本表格备注、XLSX 公式/缓存缺失、CSV 中文、压缩包异常、定位、旧版本读取、跨材料越界。
 - 完成：能实际读取上期 PPT 与本期表格；界面选择前后可解释是否可读。
+- 实现：`OfficeParserService` 仅从受管输入快照或 FileArtifactService 保存的精确版本读取；`read_office_material` 由 Run 的材料范围注入，输出结构化片段和解析警告，并将每个定位片段登记为 `RunMaterialRead(operation=parse)`。候选列表将可解析的 PPTX 成果和 PPTX/XLSX/CSV 输入标为可读，其他文件继续显示不可读。
+- 验证：合成 PPTX 文本/表格/备注与定位、XLSX 缓存/无缓存公式、中文 BOM CSV 行范围、损坏压缩包和取消均有测试；工具参数、材料范围和现有 Run 工具注册覆盖通过。
 
 ### E52 讨论节点与继续/返工
 

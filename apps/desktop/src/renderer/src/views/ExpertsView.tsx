@@ -33,6 +33,7 @@ const builtinToolNames = [
   'knowledge_search',
   'web_search',
   'web_fetch',
+  'read_office_material',
 ] as const;
 
 const defaultDraft = (): ExpertRevisionDraft => ({
