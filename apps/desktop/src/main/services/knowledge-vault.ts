@@ -135,7 +135,8 @@ export class KnowledgeVault {
     return { imported, skipped };
   }
 
-  search(query: string): KnowledgeSearchResult[] {
+  search(query: string, options?: { revisionIds?: readonly string[] }): KnowledgeSearchResult[] {
+    if (options?.revisionIds) return this.searchRevisions(query, options.revisionIds);
     const terms = query
       .trim()
       .split(/[\s\p{P}]+/u)
@@ -164,6 +165,49 @@ export class KnowledgeVault {
       locator: row.locator,
       excerpt: makeExcerpt(row.content, query),
     }));
+  }
+
+  /**
+   * 运行时材料范围内的检索。修订 ID 为空时明确返回空结果，避免把“没有选材料”
+   * 意外降级成整个知识库搜索。
+   */
+  private searchRevisions(query: string, revisionIds: readonly string[]): KnowledgeSearchResult[] {
+    const terms = query
+      .trim()
+      .toLocaleLowerCase()
+      .split(/[\s\p{P}]+/u)
+      .filter(Boolean);
+    if (terms.length === 0 || revisionIds.length === 0) return [];
+
+    const results: KnowledgeSearchResult[] = [];
+    const seen = new Set<string>();
+    for (const revisionId of revisionIds) {
+      if (seen.has(revisionId)) continue;
+      seen.add(revisionId);
+      const revision = this.getRevision(revisionId);
+      if (!revision) continue;
+      for (const chunk of revision.chunks) {
+        const haystack = `${revision.title}\n${chunk.content}`.toLocaleLowerCase();
+        if (!terms.every((term) => haystack.includes(term))) continue;
+        results.push({
+          document: {
+            id: revision.documentId,
+            title: revision.title,
+            sourcePath: revision.sourcePath,
+            format: revision.format,
+            byteSize: revision.byteSize,
+            contentHash: revision.contentHash,
+            ...(revision.pageCount === undefined ? {} : { pageCount: revision.pageCount }),
+            importedAt: revision.importedAt,
+            updatedAt: revision.createdAt,
+          },
+          locator: chunk.locator,
+          excerpt: makeExcerpt(chunk.content, query),
+        });
+        if (results.length >= 50) return results;
+      }
+    }
+    return results;
   }
 
   listRevisions(documentId: string): KnowledgeRevisionSummary[] {

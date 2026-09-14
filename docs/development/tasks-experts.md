@@ -48,7 +48,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E20 | 材料与快照精确契约 | E15 | done | [材料、快照与运行来源契约](material-contracts.md)：定稿候选/选择/读取分离、Knowledge revision、ArtifactVersion、Workspace 输入快照、用途、RunContextSnapshot、两库与文件恢复/回收、范围校验入口、读取足迹和 ArtifactInputRelation；明确源变更、缺失、重复、跨空间、取消、归档、旧任务和范围收缩语义。文档差异检查通过，2026-09-14。 |
 | E21 | 知识修订、文件快照与恢复 | E20 | done | [KnowledgeVault 修订与快照测试](../../apps/desktop/src/main/services/knowledge-vault.test.ts)、[输入快照测试](../../apps/desktop/src/main/services/input-snapshot-service.test.ts)、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)：知识库 v3 保留不可变内容/分块修订；应用库 v11 增加 Workspace 所属输入快照状态；稳定读取、哈希寻址复制、取消、符号链接/特殊文件拒绝、缺失/孤儿恢复已接通启动装配；`npm run verify` 退出 0（56 文件 / 459 测试 / Electron build），2026-09-14 15:04。 |
 | E22 | 材料选择与草稿持久化 | E21 | done | [TaskMaterialService/TaskContext 测试](../../apps/desktop/src/main/services/task-material-service.test.ts)、[TaskContextRepository 测试](../../apps/desktop/src/main/persistence/task-context-repository.test.ts)：TaskContextRevision v12 保存材料判别引用、用途、备注和添加来源；候选查询覆盖 Knowledge revision、Workspace ArtifactVersion、ready 输入快照；保存边界校验修订哈希、快照状态、重复项和 Workspace 归属；新增候选/输入快照 IPC 与 Preload；`npm run verify` 退出 0（57 文件 / 463 测试 / Electron build），2026-09-14 15:19。 |
-| E23 | 宿主范围与上下文收缩 | E22 | todo | — |
+| E23 | 宿主范围与上下文收缩 | E22 | done | [RunService/快照/工具测试](../../apps/desktop/src/main/services/run-service.test.ts)：Run 绑定不可变 `run_context_snapshots`，Knowledge revision、输入快照和 Markdown ArtifactVersion 通过宿主范围校验；材料收缩创建新上下文段并过滤旧段历史。`npm run verify` 退出 0（59 文件 / 470 测试 / Electron build），2026-09-14。 |
 | E24 | 读取足迹与成果输入来源 | E23 | todo | — |
 | E25 | 材料 UI、成果复用与 E2 验收 | E24 | todo | — |
 | E30 | 记忆投影与治理实现 ADR | E25 | todo | — |
@@ -161,7 +161,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 - 工作：每 Run 绑定精确清单与快照；检索和读取只能访问该集合。缩小范围创建上下文段，后续排除旧段助手回复以及旧消息中的自动附件/工具摘要；仅保留明确的当前目标与用户选定成果。
 - 失败/取消：未知材料、旧 binding、别的 Run 句柄不能读取；启动裁决与撤销串行；运行中快照不热换；旧历史 UI 保留。
 - 必测：直接文件路径/知识检索/成果 ID 三条越界；跨公司；材料移除后检查完整模型输入无旧内容；取消和错误唯一终态。
-- 完成：宿主执行层保证范围，不只靠提示词；脚本以本机用户权限运行的限制明确记录。
+- 完成：应用库 v13 新增 `run_context_snapshots`，Run 启动事务固定 TaskContext 的材料清单、工作空间、上下文段和修订号。`RunService` 将 Knowledge 搜索限制在所选 revision，将 `read_text_file` 映射到所选输入快照的受管副本，并新增精确 `read_artifact` 版本读取；未知材料、越界路径和未选成果版本都会在工具边界拒绝。材料集合严格缩小时创建新上下文段，旧段的助手回复不会进入本次模型输入；普通未绑定材料的旧任务仍保留原历史。新增运行范围、快照仓储和工具工厂测试；`npm run verify` 退出 0（59 文件 / 470 测试 / Electron build），2026-09-14。脚本仍以本机用户权限运行，以上是应用层约束，不宣称 OS 沙箱。
 
 ### E24 读取与成果来源
 

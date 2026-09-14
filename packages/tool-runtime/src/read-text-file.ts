@@ -7,7 +7,12 @@ import { z } from 'zod';
 const inputSchema = z.object({ path: z.string().min(1) });
 const maxChars = 20_000;
 
-export const readTextFileTool: AgentTool = {
+export type ReadTextFile = (
+  input: { path: string },
+  context: Parameters<AgentTool['execute']>[1],
+) => Promise<unknown>;
+
+export const createReadTextFileTool = (reader?: ReadTextFile): AgentTool => ({
   name: 'read_text_file',
   description: 'Read a UTF-8 text file inside the active workspace.',
   inputSchema: {
@@ -18,6 +23,7 @@ export const readTextFileTool: AgentTool = {
   },
   async execute(rawInput, context) {
     const input = inputSchema.parse(rawInput);
+    if (reader) return reader(input, context);
     const workspace = await realpath(context.workspacePath);
     const requestedTarget = path.resolve(workspace, input.path);
     const target = await realpath(requestedTarget);
@@ -33,4 +39,6 @@ export const readTextFileTool: AgentTool = {
       truncated: content.length > maxChars,
     };
   },
-};
+});
+
+export const readTextFileTool: AgentTool = createReadTextFileTool();

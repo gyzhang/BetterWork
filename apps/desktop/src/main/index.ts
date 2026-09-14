@@ -234,6 +234,8 @@ function bootstrap(): ApplicationContext {
     snapshots,
     fileArtifactService,
     dependencies,
+    inputSnapshots,
+    taskMaterials,
   );
   started.runs = runs;
 

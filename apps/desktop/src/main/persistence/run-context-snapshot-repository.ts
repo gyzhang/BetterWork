@@ -1,0 +1,102 @@
+import {
+  materialReferenceSchema,
+  type TaskMaterialSelection,
+  taskMaterialSelectionSchema,
+} from '@betterwork/agent-protocol';
+import type Database from 'better-sqlite3';
+
+export interface RunContextSnapshot {
+  runId: string;
+  taskId: string;
+  workspaceId: string;
+  taskContextRevisionId?: string;
+  contextSegmentId: string;
+  materials: TaskMaterialSelection[];
+  createdAt: number;
+}
+
+interface RunContextSnapshotRow {
+  run_id: string;
+  task_id: string;
+  workspace_id: string;
+  task_context_revision_id: string | null;
+  context_segment_id: string;
+  materials_json: string;
+  created_at: number;
+}
+
+const parseMaterials = (value: string): TaskMaterialSelection[] => {
+  const parsed: unknown = JSON.parse(value);
+  if (!Array.isArray(parsed)) throw new Error('Stored run materials must be an array');
+  return parsed.map((item) => taskMaterialSelectionSchema.parse(item));
+};
+
+const toSnapshot = (row: RunContextSnapshotRow): RunContextSnapshot => ({
+  runId: row.run_id,
+  taskId: row.task_id,
+  workspaceId: row.workspace_id,
+  ...(row.task_context_revision_id ? { taskContextRevisionId: row.task_context_revision_id } : {}),
+  contextSegmentId: row.context_segment_id,
+  materials: parseMaterials(row.materials_json),
+  createdAt: row.created_at,
+});
+
+export class RunContextSnapshotRepository {
+  constructor(private readonly db: Database.Database) {}
+
+  create(input: RunContextSnapshot): void {
+    const materials = taskMaterialSelectionSchema.array().max(50).parse(input.materials);
+    this.db
+      .prepare(
+        `INSERT INTO run_context_snapshots (
+           run_id, task_id, workspace_id, task_context_revision_id,
+           context_segment_id, materials_json, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        input.runId,
+        input.taskId,
+        input.workspaceId,
+        input.taskContextRevisionId ?? null,
+        input.contextSegmentId,
+        JSON.stringify(materials),
+        input.createdAt,
+      );
+  }
+
+  get(runId: string): RunContextSnapshot | undefined {
+    const row = this.db
+      .prepare('SELECT * FROM run_context_snapshots WHERE run_id = ?')
+      .get(runId) as RunContextSnapshotRow | undefined;
+    return row ? toSnapshot(row) : undefined;
+  }
+
+  listByTask(taskId: string): RunContextSnapshot[] {
+    const rows = this.db
+      .prepare(
+        'SELECT * FROM run_context_snapshots WHERE task_id = ? ORDER BY created_at ASC, rowid ASC',
+      )
+      .all(taskId) as RunContextSnapshotRow[];
+    return rows.map(toSnapshot);
+  }
+
+  /** 供上下文收缩比较使用；没有快照的历史 Run 不会被误当作当前材料段。 */
+  latestByTask(taskId: string): RunContextSnapshot | undefined {
+    const row = this.db
+      .prepare(
+        'SELECT * FROM run_context_snapshots WHERE task_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1',
+      )
+      .get(taskId) as RunContextSnapshotRow | undefined;
+    return row ? toSnapshot(row) : undefined;
+  }
+}
+
+/** 只比较稳定材料身份；用途和备注变化不会伪造上下文范围变化。 */
+export const materialReferenceKey = (selection: TaskMaterialSelection): string => {
+  const reference = materialReferenceSchema.parse(selection.reference);
+  if (reference.kind === 'knowledge-revision')
+    return `${reference.kind}:${reference.knowledgeRevisionId}`;
+  if (reference.kind === 'artifact-version')
+    return `${reference.kind}:${reference.artifactVersionId}`;
+  return `${reference.kind}:${reference.snapshotId}`;
+};

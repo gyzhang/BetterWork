@@ -681,6 +681,25 @@ export const appMigrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 13,
+    name: 'add run context snapshots',
+    up(db: Database.Database): void {
+      db.exec(`
+        CREATE TABLE run_context_snapshots (
+          run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+          task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+          task_context_revision_id TEXT REFERENCES task_context_revisions(id) ON DELETE SET NULL,
+          context_segment_id TEXT NOT NULL,
+          materials_json TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+        CREATE INDEX idx_run_context_snapshots_task
+          ON run_context_snapshots(task_id, created_at ASC);
+      `);
+    },
+  },
 ];
 
 /**
