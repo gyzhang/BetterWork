@@ -51,7 +51,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E23 | 宿主范围与上下文收缩 | E22 | done | [RunService/快照/工具测试](../../apps/desktop/src/main/services/run-service.test.ts)：Run 绑定不可变 `run_context_snapshots`，Knowledge revision、输入快照和 Markdown ArtifactVersion 通过宿主范围校验；材料收缩创建新上下文段并过滤旧段历史。`npm run verify` 退出 0（59 文件 / 470 测试 / Electron build），2026-09-14。 |
 | E24 | 读取足迹与成果输入来源 | E23 | done | [读取/成果来源测试](../../apps/desktop/src/main/services/run-service.test.ts)：v14 保存 RunMaterialRead 与 ArtifactInputRelation；搜索、输入快照和成果读取留下精确足迹，Markdown/文件成果只允许关联同一 Run 已读取材料。`npm run verify` 退出 0（60 文件 / 473 测试 / Electron build），2026-09-14。 |
 | E25 | 材料 UI、成果复用与 E2 验收 | E24 | done | Composer 与资料面板支持文件/知识/成果选择、用途调整、失效提示和取消；成果详情可引用精确 Markdown 版本开始新任务；现有格式材料链路完成，Office 输入明确留 E51；`npm run verify` 退出 0（61 文件 / 475 测试 / Electron build），2026-09-14。 |
-| E30 | 记忆投影与治理实现 ADR | E25 | todo | — |
+| E30 | 记忆投影与治理实现 ADR | E25 | done | 新增 [ADR-0015](../adr/0015-memory-scope-and-governance.md)：SQLite 唯一真相源、User/Workspace/Expert/Expert×Workspace 判别范围、candidate/confirmed/过期/删除状态、来源、预算、运行快照、投影重建和失败恢复语义已定案。 |
 | E31 | 记忆存储、检索与运行注入 | E30 | todo | — |
 | E32 | 记忆管理、对话确认与 E3 验收 | E31 | todo | — |
 | E40 | MCP 接入实现 ADR 与探测样本 | E32 | todo | — |
@@ -179,12 +179,12 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 - 必测/手验：引用非最新版、补材料继续、跨空间显式来源、范围收缩、新一期不带旧聊天；三档外观/窄屏/键盘。
 - 完成：Composer `+` 菜单与右侧资料面板共用任务材料草稿，支持当前工作空间文件快照、Knowledge revision、ArtifactVersion 的候选选择；选择器取消不改原清单，材料芯片可调整用途并显示失效状态。成果详情可对精确 Markdown 版本执行“基于此版本开始新任务”，沿用仍有效的专家、清空旧任务上下文与本期输入并保留精确历史成果引用；跨 Workspace 成果显式标记来源。候选查询支持尚未创建 Task 的新任务草稿。PPTX/XLSX 输入仍显示为不可读取并留待 E51，不把它们算作 E2 已支持。`npm run verify` 退出 0（61 文件 / 475 测试 / Electron build），2026-09-14。
 
-### E30 记忆实现 ADR
+### E30 记忆实现 ADR（已完成）
 
 - 必读：ADR-0004/0014、docs/04、E23 的上下文段；新增记忆实现 ADR 并更新契约。
 - 工作：定稿 User/Workspace/Expert/Expert×Workspace、修订、candidate/confirmed/失效状态、来源和有效期；SQLite 权威，Markdown 可重建。规定手改投影的导入校验/冲突处理或首版只允许 UI 编辑，不留双真相源。
 - 定案：预算、检索排序、读取快照、删除后缓存/投影失效、活跃 Run 与后续 Run 语义、用户“记住这个”和模型建议的区别；不先建设向量库/后台反思。
-- 完成：迁移及状态转移表、投影恢复和泄漏测试清单齐全；已有授权内技术选型落档即可，不再次请求同一产品批准。
+- 完成：新增 ADR-0015，定稿 SQLite 唯一真相源与可重建 Markdown 投影、四种范围判别联合、来源与确认状态转移、有效期、16 条/6,000 字符预算、Run 快照、范围收缩、并发冲突、投影失败和重启恢复；明确不做自动反思、Embedding、向量库或 Task 长期记忆。E31/E32 按该 ADR 实现，不再重复请求同一产品批准。
 
 ### E31 记忆存储与注入
 

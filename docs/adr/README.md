@@ -15,6 +15,7 @@
 | [0011](0011-skill-trust-and-local-distribution.md) | Skill 信任授权与本地目录分发 | Accepted |
 | [0012](0012-composer-capability-binding.md) | 对话内能力绑定与 Composer `+` 菜单（Run↔Skill 改为 1:N） | Accepted（实现尚未落地） |
 | [0013](0013-slide-preview-rendering.md) | 幻灯片预览的进程内渲染与本地补丁分发 | Accepted |
-| [0014](0014-expert-context-and-material-binding.md) | 专家、任务准备与运行材料快照 | Accepted（待实现） |
+| [0014](0014-expert-context-and-material-binding.md) | 专家、任务准备与运行材料快照 | Accepted（E11–E25 已实现） |
+| [0015](0015-memory-scope-and-governance.md) | 最小记忆的范围、确认与治理 | Accepted（E30 定案） |
 
 ADR 一经 Accepted 不直接重写历史；需要改变时新增 ADR 并标记替代关系。

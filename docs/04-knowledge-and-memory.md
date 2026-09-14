@@ -109,9 +109,9 @@ E22 已能把具体 Knowledge revision 的身份、哈希和用途保存到 Task
 
 ## 6. 三层记忆体系
 
-> **现状：本节至 §8 全部为设计目标，Memory 零实现。** 属 Phase 4 范围（见 [MVP 与路线图](07-mvp-and-roadmap.md) §6），架构决策见 [ADR-0004](adr/0004-hybrid-memory.md)。当前没有 `memory/` 目录、没有 `MemoryRecord` 表、没有记忆中心与后台反思。Run 历史与 Session 标识已持久化，但执行链路尚未把历史作为模型上下文传入，因此也不存在任何形式的隐式记忆。
+> **现状：E30 已完成记忆治理定案，E31/E32 尚未实现。** 属 E3 范围（见 [开发计划](development/tasks-experts.md)），架构决策见 [ADR-0004](adr/0004-hybrid-memory.md) 与 [ADR-0015](adr/0015-memory-scope-and-governance.md)。当前没有 `memory/` 目录、没有 `MemoryRecord` 表、没有记忆中心与后台反思。Run 历史与 Session 标识已持久化，但执行链路尚未把记忆作为模型上下文传入，因此不会把历史聊天当作隐式记忆。
 
-### Core Memory Files
+### Core Memory Files（E31 投影目标）
 
 短小、透明、可编辑的渐进文档：
 
@@ -135,7 +135,7 @@ memory/
 
 索引文件提供概要和链接；详细文档按需加载。
 
-### Structured Memory Store
+### Structured Memory Store（E31 实现目标）
 
 SQLite 保存来源、Scope、置信度、状态和时间语义：
 
@@ -158,7 +158,7 @@ interface MemoryRecord {
 }
 ```
 
-### Derived Retrieval Index
+### Derived Retrieval Index（E31 首轮只做 FTS/稳定前缀）
 
 Memory 文件和 MemoryRecord 共同生成全文与向量索引。索引不是长期真相源，可以随时重建。
 
