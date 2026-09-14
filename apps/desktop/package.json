@@ -18,6 +18,8 @@
     "@betterwork/tool-runtime": "*",
     "@modelcontextprotocol/client": "^2.0.0",
     "better-sqlite3": "^13.0.3",
+    "exceljs": "^4.4.0",
+    "fast-xml-parser": "^5.11.1",
     "mammoth": "^1.12.2",
     "pdf-parse": "^2.4.5",
     "pptx-glimpse": "0.10.4",
@@ -25,7 +27,8 @@
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0",
     "yaml": "2.9.0",
-    "zod": "^4.5.4"
+    "zod": "^4.5.4",
+    "jszip": "^3.10.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
@@ -35,7 +38,6 @@
     "electron": "44.1.1",
     "electron-builder": "^25.1.8",
     "electron-vite": "^5.0.0",
-    "jszip": "^3.10.1",
     "vite": "^7.3.1"
   }
 }
