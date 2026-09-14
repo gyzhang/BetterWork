@@ -10,6 +10,8 @@ export interface RunContextSnapshot {
   taskId: string;
   workspaceId: string;
   taskContextRevisionId?: string;
+  expertId?: string;
+  expertRevisionId?: string;
   contextSegmentId: string;
   materials: TaskMaterialSelection[];
   createdAt: number;
@@ -20,6 +22,8 @@ interface RunContextSnapshotRow {
   task_id: string;
   workspace_id: string;
   task_context_revision_id: string | null;
+  expert_id: string | null;
+  expert_revision_id: string | null;
   context_segment_id: string;
   materials_json: string;
   created_at: number;
@@ -36,6 +40,8 @@ const toSnapshot = (row: RunContextSnapshotRow): RunContextSnapshot => ({
   taskId: row.task_id,
   workspaceId: row.workspace_id,
   ...(row.task_context_revision_id ? { taskContextRevisionId: row.task_context_revision_id } : {}),
+  ...(row.expert_id ? { expertId: row.expert_id } : {}),
+  ...(row.expert_revision_id ? { expertRevisionId: row.expert_revision_id } : {}),
   contextSegmentId: row.context_segment_id,
   materials: parseMaterials(row.materials_json),
   createdAt: row.created_at,
@@ -45,19 +51,24 @@ export class RunContextSnapshotRepository {
   constructor(private readonly db: Database.Database) {}
 
   create(input: RunContextSnapshot): void {
+    if ((input.expertId === undefined) !== (input.expertRevisionId === undefined)) {
+      throw new Error('Run expert snapshot must include both expertId and expertRevisionId');
+    }
     const materials = taskMaterialSelectionSchema.array().max(50).parse(input.materials);
     this.db
       .prepare(
         `INSERT INTO run_context_snapshots (
            run_id, task_id, workspace_id, task_context_revision_id,
-           context_segment_id, materials_json, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           expert_id, expert_revision_id, context_segment_id, materials_json, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.runId,
         input.taskId,
         input.workspaceId,
         input.taskContextRevisionId ?? null,
+        input.expertId ?? null,
+        input.expertRevisionId ?? null,
         input.contextSegmentId,
         JSON.stringify(materials),
         input.createdAt,

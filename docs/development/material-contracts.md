@@ -110,13 +110,15 @@ interface RunContextSnapshot {
   taskId: string;
   workspaceId: string;
   taskContextRevisionId: string;
+  expertId?: string;
+  expertRevisionId?: string;
   contextSegmentId: string;
   materials: TaskMaterialSelection[];
   createdAt: number;
 }
 ```
 
-快照保存后，Run 只能访问其中的具体内容修订和输入快照；运行期间不重新查询“当前知识”“最新成果”或 Task 的可变草稿来扩大范围。Expert、Skill、模型和内置工具的固定配置仍遵循 E10/E12 的解析与实时撤销规则。
+专家 Run 同时固定 `expertId` 与 `expertRevisionId`；通用助手 Run 省略这两个字段。快照保存后，Run 只能访问其中的具体内容修订和输入快照；运行期间不重新查询“当前知识”“最新成果”或 Task 的可变草稿来扩大范围。Expert、Skill、模型和内置工具的固定配置仍遵循 E10/E12 的解析与实时撤销规则。
 
 运行准备必须在创建可执行 Run 前完成：校验归属、修订状态、快照文件、哈希和能力；任一步失败都不留下半个可执行 Run。材料准备可以取消，取消不创建 RunContextSnapshot 的可用状态。
 

@@ -150,6 +150,49 @@ describe('application database migrations', () => {
     db.close();
   });
 
+  it('adds Expert identity columns to existing run snapshots at v21', () => {
+    const file = path.join(temporaryDirectory(), 'expert-run-snapshot-v21.sqlite');
+    const db = new Database(file);
+    db.pragma('journal_mode = WAL');
+    db.pragma('foreign_keys = ON');
+    migrate(db, { migrations: appMigrations.slice(0, 20) });
+    expect(readSchemaVersion(db)).toBe(20);
+    const before = db.prepare('PRAGMA table_info(run_context_snapshots)').all() as Array<{
+      name: string;
+    }>;
+    expect(before.some((column) => column.name === 'expert_id')).toBe(false);
+
+    migrate(db, { migrations: appMigrations });
+
+    expect(readSchemaVersion(db)).toBe(appMigrations.length);
+    const after = db.prepare('PRAGMA table_info(run_context_snapshots)').all() as Array<{
+      name: string;
+    }>;
+    expect(after.map((column) => column.name)).toEqual(
+      expect.arrayContaining(['expert_id', 'expert_revision_id']),
+    );
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO run_context_snapshots (
+             run_id, task_id, workspace_id, expert_id, expert_revision_id,
+             context_segment_id, materials_json, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          'missing-run',
+          'missing-task',
+          'missing-workspace',
+          'missing-expert',
+          'missing-revision',
+          'segment',
+          '[]',
+          1,
+        ),
+    ).toThrow(/FOREIGN KEY/iu);
+    db.close();
+  });
+
   it('adopts a pre-migration database, keeps every row, and stamps only the baseline', () => {
     const file = path.join(temporaryDirectory(), 'legacy.sqlite');
     const legacy = createLegacyAppDatabase(file);

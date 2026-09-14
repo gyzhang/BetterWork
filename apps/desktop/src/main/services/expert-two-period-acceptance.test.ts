@@ -110,6 +110,22 @@ describe('Expert two-period acceptance path', () => {
         addedFrom: 'expert-reference',
       }),
     ]);
+    store.runContextSnapshots.create({
+      runId: secondRunId,
+      taskId: secondTask.task.id,
+      workspaceId: workspace.id,
+      taskContextRevisionId: secondContext.id,
+      expertId: expert.id,
+      expertRevisionId: expert.revision.id,
+      contextSegmentId: 'segment-september-report',
+      materials: secondContext.materials ?? [],
+      createdAt: 3,
+    });
+    expect(store.runContextSnapshots.get(secondRunId)).toMatchObject({
+      expertId: expert.id,
+      expertRevisionId: expert.revision.id,
+      taskContextRevisionId: secondContext.id,
+    });
     const secondArtifact = store.artifacts.saveMarkdown({
       taskId: secondTask.task.id,
       runId: secondRunId,

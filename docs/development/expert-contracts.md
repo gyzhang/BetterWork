@@ -160,7 +160,7 @@ E12 的启动入口必须接收 `taskContextRevisionId` 和 `expectedTaskContext
 6. 在一个 Application/SQLite 事务中登记 Run、专家/模型/工具引用快照，并建立现有 `run_skill_bindings`。事务提交后才把解析后的 `AgentRunInput` 交给 Agent Core；事务失败不留下半个 Run 或半套绑定。
 7. 运行中 ExpertRevision、TaskContextRevision 和模型配置不热换；取消、停用和撤销仍按现有唯一终态与级联规则收口。
 
-`RunContextSnapshot` 是 E12 的持久化目标。E10 不新增迁移；E11 会用版本化迁移新增专家身份、修订和 TaskContextRevision，E12 再新增运行快照关联。迁移必须可回滚、可重开幂等，并以旧库的空上下文解释通用模式。
+`RunContextSnapshot` 是 E12 的持久化目标。专家 Run 直接保存 `expertId + expertRevisionId`，通用助手省略这两个字段；`taskContextRevisionId` 仍用于回溯本次任务草稿。E10 不新增迁移；E11 会用版本化迁移新增专家身份、修订和 TaskContextRevision，E12 再新增运行快照关联。后续补齐专家快照字段使用独立版本化迁移，迁移必须可回滚、可重开幂等，并以旧库的空上下文解释通用模式。
 
 ## 5. 版本、旧任务与历史
 
