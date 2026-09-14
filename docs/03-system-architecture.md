@@ -123,6 +123,12 @@ interface AgentEngine {
 
 使用 `AsyncIterable` 表达一次执行的顺序事件，便于取消、测试、多任务并发和在 CLI 中复用。
 
+### 4.1 Expert 与任务上下文装配（E1 目标）
+
+Expert、ExpertRevision 和 TaskContextRevision 都由 Application 层解析。通用助手是无 Expert 的合法路径；Expert 模式固定一个不可变修订，按任务草稿确定本次有效 Skill 顺序、模型引用和内置工具策略。Application 将人格字段合成为唯一 Expert 指令，按既有 `StartRunRequest.skillBindings` 解析 Skill，并在启动前完成启用、信任、环境、依赖和模型校验。
+
+启动事务先登记运行所需的 Expert/模型/工具引用和 `run_skill_bindings`，成功提交后才把 `AgentRunInput` 交给 Agent Core。事务失败不留下半个可执行 Run；配置编辑不热换运行中的输入。Agent Core 不读取 Expert、TaskContext、SQLite 或文件，它只接收已解析的指令、消息、工具和模型。精确字段、错误码和旧 Task 迁移见[专家与任务上下文契约](development/expert-contracts.md)。
+
 ## 5. 运行时事件
 
 第一版事件至少包括：
@@ -220,6 +226,8 @@ app_settings
 ```
 
 知识和记忆表见对应专题文档。
+
+E11–E13 的目标增量表为 `experts`、`expert_revisions`、`task_context_revisions` 和 `run_context_snapshots`；E10 不提前创建它们，也不在 `tasks` 上用一个未定义的 `expert_id` 占位。旧 Task 缺少上下文时按通用助手解释，首次编辑/发送再以版本化迁移创建草稿。所有迁移保持启动幂等、可回滚并通过 `foreign_key_check`；历史 Run 没有专家事实时不补造。
 
 SQLite 是产品状态真相源；向量索引、缩略图和解析缓存均可重建。
 
