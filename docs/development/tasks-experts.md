@@ -62,7 +62,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E51 | PPTX/XLSX/CSV 读取与定位 | E50 | done | `OfficeParserService`、`read_office_material` 和材料候选状态已接入；只读 E21 输入快照或精确选中的 PPTX 成果版本，支持 slide/table/notes、Sheet/Range、CSV rows 定位，登记 `parse` 材料足迹；定向测试通过，2026-09-14。 |
 | E52 | 讨论节点与重启后继续/返工 | E51 | done | [ADR-0019](../adr/0019-discussion-checkpoints-and-rework.md)、`DiscussionCheckpointRepository/Service`、IPC 和工作页节点条已接入；客户端 ID 幂等、旧节点替代、重启查询恢复和成果版本归属校验已覆盖，2026-09-14。 |
 | E53 | 经营分析方法与数值校验 | E52 | done | [ADR-0020](../adr/0020-deterministic-business-analysis.md)、`analyze_business_metrics` 确定性工具和内置「经营分析方法」Skill 已接入；期间变化、预算偏差、零基数和缺失指标有结构化结果/警告，2026-09-14。 |
-| E54 | 报告/PPT 交付、修订及来源 | E53 | todo | — |
+| E54 | 报告/PPT 交付、修订及来源 | E53 | done | 复用现有 Markdown/FileArtifactService 版本路径；ArtifactVersion 详情通过 IPC 返回本版 `inputRelations`，成果页显示证据和材料输入；旧版本、导出、继续编辑与来源关系保持精确，2026-09-14。 |
 | E55 | 连续两期真实桌面验收 | E54 | todo | — |
 | E56 | macOS 安装态与整体收尾 | E55 | todo | — |
 
@@ -279,6 +279,9 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 - 失败/取消：生成/验证失败保留可解释诊断，不冒充正式交付；旧版本不覆盖；材料变化后明确重新生成范围。
 - 必测/手验：报告到 PPT 版本关系、源数据数值一致性、模板资源、结构失败、人工可编辑、取消与来源继承。
 - 完成：报告和 PPT 可打开/导出/继续修改；DOCX 与任意人工 Office 改件回收不自动扩入本轮。
+
+- 实现：GetArtifact/GetArtifactVersion/GetFileArtifact 在主进程按精确版本补充 `artifactInputRelations`，成果详情页显示本版输入材料与关系类型；Markdown 与 PPT 继续沿用现有版本化保存、导出、缩略图和人工打开路径，不覆盖历史版本。
+- 验证：IPC/协议允许可选输入关系，成果输入关系仓储和 Artifact 页面测试通过；输入关系仍要求同一 Run 先实际读取，不能用旧 Evidence 或标题补造来源。
 
 ### E55 连续两期真实验收
 

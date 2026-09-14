@@ -3544,6 +3544,26 @@ p {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.artifact-input-list {
+  display: grid;
+  gap: 5px;
+  margin-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 10px;
+}
+
+.artifact-input-list strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.artifact-input-list span {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
 .artifact-evidence-list span {
   color: var(--text-primary);
   font-size: 12px;

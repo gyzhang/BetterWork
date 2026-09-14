@@ -1,5 +1,6 @@
 import type {
   ArtifactDetail,
+  ArtifactInput,
   ArtifactSummary,
   ArtifactThumbnail,
   ArtifactVersionDetail,
@@ -31,6 +32,13 @@ const MIME_LABEL_MAP: Record<string, string> = {
 
 const fileTypeLabel = (mimeType: string): string =>
   MIME_LABEL_MAP[mimeType] ?? mimeType.split('/').pop()?.toUpperCase() ?? 'FILE';
+
+const inputLabel = (input: ArtifactInput): string => {
+  if (input.kind === 'evidence') return `证据 · ${input.evidenceId}`;
+  if (input.kind === 'knowledge-revision') return `知识修订 · ${input.knowledgeRevisionId}`;
+  if (input.kind === 'artifact-version') return `成果版本 · ${input.artifactVersionId}`;
+  return `工作区输入 · ${input.snapshotId}`;
+};
 
 const VALIDATION_LABEL: Record<ValidationStatus, string> = {
   passed: '通过',
@@ -247,6 +255,16 @@ export function ArtifactPage({
                           </button>
                         )}
                       </article>
+                    ))}
+                  </div>
+                )}
+                {visibleVersion.inputRelations && visibleVersion.inputRelations.length > 0 && (
+                  <div className="artifact-input-list">
+                    <strong>本版输入</strong>
+                    {visibleVersion.inputRelations.map((relation) => (
+                      <span key={`${relation.outputVersionId}:${JSON.stringify(relation.input)}`}>
+                        {inputLabel(relation.input)} · {relation.relation}
+                      </span>
                     ))}
                   </div>
                 )}
