@@ -29,7 +29,9 @@ describe('McpClientService', () => {
     if (!tool) throw new Error('MCP tool was not discovered');
     const agentTools = await service.createAgentTools([
       { connectionId: connection.id, toolId: tool.id },
+      { connectionId: connection.id, toolId: tool.id },
     ]);
+    expect(agentTools).toHaveLength(1);
     const result = await agentTools[0]?.execute(
       { month: '2026-08' },
       {
