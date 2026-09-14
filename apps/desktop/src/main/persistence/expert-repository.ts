@@ -41,6 +41,8 @@ interface ExpertRevisionRow {
 export interface CreateExpertInput {
   sourceKind: ExpertSourceKind;
   lifecycle?: ExpertLifecycle;
+  id?: string;
+  revisionId?: string;
   revision: ExpertRevisionDraft;
 }
 
@@ -135,8 +137,8 @@ export class ExpertRepository {
 
   create(input: CreateExpertInput): ExpertDetail {
     const now = Date.now();
-    const expertId = randomUUID();
-    const revisionId = randomUUID();
+    const expertId = input.id ?? randomUUID();
+    const revisionId = input.revisionId ?? randomUUID();
     const insert = this.db.transaction(() => {
       this.db
         .prepare(

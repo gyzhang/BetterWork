@@ -29,6 +29,30 @@ afterEach(() => {
 });
 
 describe('ExpertService', () => {
+  it('registers a built-in release idempotently and keeps it read-only', () => {
+    const store = openStore();
+    const service = new ExpertService(store);
+    const entry = {
+      expertId: 'builtin-research-analyst',
+      name: '研究分析专家',
+      summary: '整理可验证的分析结论',
+      identity: '你负责研究分析。',
+      principles: ['区分事实和推断'],
+      inputRequirements: [],
+      deliveryRequirements: ['给出依据'],
+      skillPreset: [],
+      builtinToolPolicy: { mode: 'application-defaults' as const },
+      modelReference: { mode: 'application-default' as const },
+    };
+    expect(service.registerBuiltinRelease([entry])).toHaveLength(1);
+    expect(service.registerBuiltinRelease([entry])).toHaveLength(1);
+    const registered = service.get(entry.expertId);
+    expect(registered?.sourceKind).toBe('builtin');
+    expect(() => service.saveRevision(entry.expertId, draft(), 1)).toThrowError(
+      expect.objectContaining<Partial<ExpertServiceError>>({ code: 'expert_builtin_readonly' }),
+    );
+  });
+
   it('reports missing skills without preventing a draft from being saved', () => {
     const store = openStore();
     const service = new ExpertService(store);

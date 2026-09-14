@@ -17,6 +17,12 @@ extraResources:
       - '**/*'
       - '!.DS_Store'
       - '!._*'
+  - from: ../../resources/experts
+    to: experts
+    filter:
+      - '**/*'
+      - '!.DS_Store'
+      - '!._*'
   - from: ../../resources/dependency-locks
     to: dependency-locks
     filter:
