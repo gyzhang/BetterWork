@@ -122,13 +122,15 @@ export function App(): React.JSX.Element {
       ? modelSettings.models.find((model) => model.id === expertModelReference.modelProfileId)
       : undefined;
   const composerModelLabel =
-    activeExpert && expertModelReference?.mode === 'profile'
-      ? expertModel && expertModel.enabled
-        ? `${expertModel.provider} · ${expertModel.model}`
-        : '专家指定模型不可用'
-      : activeLanguageModel
-        ? `${activeLanguageModel.provider} · ${activeLanguageModel.model}`
-        : '未配置模型时使用教学 Provider';
+    activeExpert && !expertModelReference
+      ? '专家修订模型（历史版本）'
+      : activeExpert && expertModelReference?.mode === 'profile'
+        ? expertModel && expertModel.enabled
+          ? `${expertModel.provider} · ${expertModel.model}`
+          : '专家指定模型不可用'
+        : activeLanguageModel
+          ? `${activeLanguageModel.provider} · ${activeLanguageModel.model}`
+          : '未配置模型时使用教学 Provider';
   const [materialCandidates, setMaterialCandidates] = useState<MaterialCandidate[]>([]);
   const [expertMaterialCandidates, setExpertMaterialCandidates] = useState<MaterialCandidate[]>([]);
   const [materialPickerKind, setMaterialPickerKind] = useState<'knowledge' | 'artifact'>();
