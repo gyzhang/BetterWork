@@ -49,4 +49,5 @@
 ## 实现进度
 
 - 2026-09-14：E10 已定案[专家与任务上下文契约](../development/expert-contracts.md)。
-- 2026-09-14：E11 已落地 `experts` / `expert_revisions` v9 迁移、ExpertRepository、ExpertService、共享协议、IPC 与 Preload；支持不可变修订、内置复制、启停/归档、并发冲突和缺项状态。Expert 尚未接入召唤、TaskContextRevision 或 Run 执行注入，后续按 E12–E14 继续。
+- 2026-09-14：E11 已落地 `experts` / `expert_revisions` v9 迁移、ExpertRepository、ExpertService、共享协议、IPC 与 Preload；支持不可变修订、内置复制、启停/归档、并发冲突和缺项状态。
+- 2026-09-14：E12 已落地 `task_context_revisions` v10、TaskContextRepository 的 CAS/任务归属校验，并将显式 ExpertRevision 的人格指令、模型引用、顺序 Skill 和内置工具 allow-list 接入 Run；E2 材料范围、记忆和 MCP 仍未提前实现。

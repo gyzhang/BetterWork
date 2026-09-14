@@ -12,6 +12,8 @@ import {
 import type {
   AgentMessage,
   AgentRuntimeEvent,
+  BuiltinToolPolicy,
+  ExpertModelReference,
   RuntimeProfileCommand,
   ScriptExecution,
   StartRunRequest,
@@ -64,6 +66,13 @@ interface ResolvedSkillBindings {
   instructions?: SkillInstruction[];
 }
 
+interface ResolvedRunContext {
+  skillBindings?: StartRunRequest['skillBindings'];
+  expertInstruction?: string;
+  modelReference?: ExpertModelReference;
+  builtinToolPolicy?: BuiltinToolPolicy;
+}
+
 /** 一次执行期间的内存态；Run 结束后整条丢弃。 */
 interface ActiveRun {
   taskId: string;
@@ -89,17 +98,21 @@ const FAILURE_DETAIL_LENGTH = 500;
 export const createRunTools = (dependencies: {
   knowledgeSearch: (query: string) => KnowledgeSearchItem[];
   webSearch?: WebSearch;
+  allowedBuiltinToolNames?: ReadonlySet<string>;
   skillResourceReader?: (input: SkillResourceReadInput) => Promise<SkillResourceReadOutput>;
   taskFileWriter?: (input: TaskFileWriteInput) => Promise<TaskFileWriteOutput>;
   skillCommandExecutor?: (input: SkillCommandExecuteInput) => Promise<SkillCommandExecuteOutput>;
   artifactFileRegistrar?: ArtifactFileRegistrar;
 }): AgentTool[] => {
-  const tools: AgentTool[] = [
-    calculatorTool,
-    readTextFileTool,
-    createKnowledgeSearchTool(dependencies.knowledgeSearch),
-  ];
-  if (dependencies.webSearch) tools.push(createWebSearchTool(dependencies.webSearch));
+  const allows = (name: string): boolean =>
+    !dependencies.allowedBuiltinToolNames || dependencies.allowedBuiltinToolNames.has(name);
+  const tools: AgentTool[] = [];
+  if (allows(calculatorTool.name)) tools.push(calculatorTool);
+  if (allows(readTextFileTool.name)) tools.push(readTextFileTool);
+  if (allows('knowledge_search'))
+    tools.push(createKnowledgeSearchTool(dependencies.knowledgeSearch));
+  if (dependencies.webSearch && allows('web_search'))
+    tools.push(createWebSearchTool(dependencies.webSearch));
   if (dependencies.skillResourceReader)
     tools.push(createSkillReadResourceTool(dependencies.skillResourceReader));
   if (dependencies.taskFileWriter) tools.push(createTaskWriteFileTool(dependencies.taskFileWriter));
@@ -143,6 +156,11 @@ export class RunService {
   start(input: StartRunRequest): string {
     const context = this.store.tasks.getRunContext(input.taskId, input.sessionId);
     if (!context) throw new Error('Session does not belong to task');
+    const executionContext = this.resolveRunContext(input);
+    const resolvedInput = {
+      ...input,
+      ...(executionContext.skillBindings ? { skillBindings: executionContext.skillBindings } : {}),
+    };
 
     const runId = randomUUID();
     const controller = new AbortController();
@@ -151,7 +169,7 @@ export class RunService {
       prompt: input.prompt,
       controller,
       workspacePath: context.workspacePath,
-      skillIds: (input.skillBindings ?? []).map((binding) => binding.skillId),
+      skillIds: (resolvedInput.skillBindings ?? []).map((binding) => binding.skillId),
       toolNames: new Map(),
     });
 
@@ -168,7 +186,13 @@ export class RunService {
     });
 
     // 事件流是异步消费的；错误全部在 consume 内部收口，这里不会有未处理 rejection。
-    const consumePromise = this.consume(runId, input, context.workspacePath, controller)
+    const consumePromise = this.consume(
+      runId,
+      resolvedInput,
+      context.workspacePath,
+      controller,
+      executionContext,
+    )
       .catch((error: unknown) => {
         console.error(`Run ${runId} could not be finalized`, error);
       })
@@ -229,11 +253,15 @@ export class RunService {
     input: StartRunRequest,
     workspacePath: string,
     controller: AbortController,
+    executionContext: ResolvedRunContext,
   ): Promise<void> {
     let terminalEvent: AgentRuntimeEvent | undefined;
     try {
-      const model = this.resolveModel();
+      const model = this.resolveModel(executionContext.modelReference);
       const webSearch = this.resolveWebSearch();
+      const allowedBuiltinToolNames = this.allowedBuiltinToolNames(
+        executionContext.builtinToolPolicy,
+      );
       const { bindingIds, instructions: skillInstructions } = await this.resolveSkillBindings(
         runId,
         input,
@@ -252,6 +280,7 @@ export class RunService {
               .search(query)
               .map(({ document, locator, excerpt }) => ({ ...document, locator, excerpt })),
           ...(webSearch ? { webSearch } : {}),
+          ...(allowedBuiltinToolNames ? { allowedBuiltinToolNames } : {}),
           ...(bindingIds.length > 0
             ? {
                 skillResourceReader: (resourceInput) =>
@@ -270,6 +299,9 @@ export class RunService {
         }),
         signal: controller.signal,
         ...(bindingIds.length > 0 ? { maxToolRounds: 40 } : {}),
+        ...(executionContext.expertInstruction
+          ? { expertInstruction: executionContext.expertInstruction }
+          : {}),
         ...(skillInstructions ? { skillInstructions } : {}),
       });
 
@@ -422,9 +454,82 @@ export class RunService {
   }
 
   /** 未配置语言模型时回落到教学 Provider，保证链路始终可复现。 */
-  private resolveModel(): ModelProvider {
+  private resolveModel(reference?: ExpertModelReference): ModelProvider {
+    if (reference?.mode === 'profile') {
+      const configured = this.store.models.getWithSecret(reference.modelProfileId);
+      if (!configured) throw new Error(`指定的模型配置不存在：${reference.modelProfileId}`);
+      if (!configured.enabled || configured.role !== 'language') {
+        throw new Error(`指定的模型配置不可用于语言模型运行：${configured.name}`);
+      }
+      return new OpenAICompatibleProvider(configured);
+    }
     const configured = this.store.models.getForRun('language');
     return configured ? new OpenAICompatibleProvider(configured) : this.fallbackModel;
+  }
+
+  private allowedBuiltinToolNames(policy?: BuiltinToolPolicy): ReadonlySet<string> | undefined {
+    if (!policy || policy.mode === 'application-defaults') return undefined;
+    return new Set(policy.toolNames);
+  }
+
+  private resolveRunContext(input: StartRunRequest): ResolvedRunContext {
+    if (!input.taskContextRevisionId) {
+      return input.skillBindings ? { skillBindings: input.skillBindings } : {};
+    }
+    const expected = input.expectedTaskContextRevision;
+    if (expected === undefined) throw new Error('TaskContextRevision 缺少期望修订号');
+    const context = this.store.taskContexts.get(input.taskContextRevisionId, input.taskId);
+    if (!context) throw new Error('TaskContextRevision 不存在或不属于当前 Task');
+    if (context.revision !== expected) {
+      throw new Error(`TaskContextRevision 已更新：期望 ${expected}，当前为 ${context.revision}`);
+    }
+    if (input.skillBindings && input.skillBindings.length > 0) {
+      throw new Error('TaskContextRevision 与直接 Skill 绑定不能同时提交');
+    }
+    if (context.executor.kind === 'general') {
+      return {
+        ...(context.skillBindings.length > 0 ? { skillBindings: context.skillBindings } : {}),
+        ...(context.modelReference ? { modelReference: context.modelReference } : {}),
+        ...(context.builtinToolPolicy ? { builtinToolPolicy: context.builtinToolPolicy } : {}),
+      };
+    }
+    const expert = this.store.experts.get(context.executor.expertId);
+    if (!expert) throw new Error(`Expert 不存在：${context.executor.expertId}`);
+    if (expert.lifecycle !== 'active') throw new Error(`Expert「${expert.name}」当前不可用`);
+    const revision = this.store.experts.getRevision(
+      context.executor.expertId,
+      context.executor.expertRevisionId,
+    );
+    if (!revision) throw new Error('Expert 修订不存在或不属于该 Expert');
+    return {
+      skillBindings: context.skillBindings,
+      expertInstruction: this.composeExpertInstruction(revision),
+      modelReference: context.modelReference ?? revision.modelReference,
+      builtinToolPolicy: context.builtinToolPolicy ?? revision.builtinToolPolicy,
+    };
+  }
+
+  private composeExpertInstruction(revision: {
+    identity: string;
+    principles: string[];
+    inputRequirements: string[];
+    deliveryRequirements: string[];
+  }): string {
+    const lines = ['以下是当前 Expert 的工作方式，请在本次任务中遵循：', '', revision.identity];
+    if (revision.principles.length > 0) {
+      lines.push('', '工作原则：', ...revision.principles.map((item) => `- ${item}`));
+    }
+    if (revision.inputRequirements.length > 0) {
+      lines.push('', '输入要求：', ...revision.inputRequirements.map((item) => `- ${item}`));
+    }
+    if (revision.deliveryRequirements.length > 0) {
+      lines.push(
+        '',
+        '交付与检查要求：',
+        ...revision.deliveryRequirements.map((item) => `- ${item}`),
+      );
+    }
+    return lines.join('\n');
   }
 
   private resolveWebSearch(): WebSearch | undefined {

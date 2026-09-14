@@ -67,13 +67,13 @@ interface Workspace {
 
 Expert 是可被召唤的长期工作方式身份；ExpertRevision 是不可变的人格、工作原则、输入/交付要求、Skill 顺序、内置工具策略和模型引用。编辑 Expert 只生成新修订，不热改已有 Task 或 Run。内置 Expert 不能覆盖原始修订，用户通过复制得到可编辑的 user Expert；停用/归档不删除历史。
 
-E10 的字段、生命周期、错误码和 IPC 语义见[专家与任务上下文契约](development/expert-contracts.md) §2。E11 已新增 `experts` / `expert_revisions` SQLite 表、Repository、Service 和管理 IPC；召唤、TaskContextRevision 与执行注入仍由 E12–E14 实现。
+E10 的字段、生命周期、错误码和 IPC 语义见[专家与任务上下文契约](development/expert-contracts.md) §2。E11 已新增 `experts` / `expert_revisions` SQLite 表、Repository、Service 和管理 IPC；E12 已新增 `task_context_revisions`、TaskContextRepository，并将专家人格、模型引用、Skill 顺序和内置工具策略接入 Run。召唤与任务草稿 UI 仍由 E13–E14 实现。
 
 ### 3.2 TaskContextRevision
 
 TaskContextRevision 是 Task 下一次运行的可见草稿，不是权限本身。E1 子集只保存通用助手或固定 ExpertRevision、有效顺序的 Skill 选择、可选模型引用和内置工具策略；材料、记忆、MCP 不提前放入空字段。保存采用期望修订号的 compare-and-swap，召唤只进入草稿，不创建 Run；发送时由 Application 将其解析为 RunContextSnapshot 和现有 RunSkillBinding。
 
-旧 Task 没有专家事实时按通用助手解释，首次编辑/发送再创建草稿；不能从旧 prompt、Skill 或文件路径补造 Expert。完整字段和迁移见[专家与任务上下文契约](development/expert-contracts.md) §3–§5。
+旧 Task 没有专家事实时按通用助手解释，首次编辑/发送再创建草稿；不能从旧 prompt、Skill 或文件路径补造 Expert。当前 E12 已支持显式提交草稿修订号并在 Run 启动时校验归属与 CAS 版本；召唤和草稿创建仍由 E13 接入。完整字段和迁移见[专家与任务上下文契约](development/expert-contracts.md) §3–§5。
 
 ## 4. Run
 
@@ -128,7 +128,7 @@ interface CapabilityBinding {
 - 撤销信任或停用某个 Skill 会取消所有包含它的活跃 Run，即使它只是多个绑定中的一个。
 - 运行期不增删绑定；调整绑定属于下一次 Run。
 
-当前实现状态：`RunSkillBinding` 与 `run_skill_bindings` 表已按上述结构落地，表上 `run_id` 只有普通索引、无唯一约束，存储层天然支持一个 Run 多条绑定；`skill_read_resource` 与 `skill_execute` 的入参携带 `bindingId`，`AgentRunInput.skillInstructions` 是数组。应用层已按本节约束改造：`StartRunRequest.skillBindings` 是 1–6 项数组（顺序即注入顺序，重复 `skillId` 在 Schema 层拒绝），RunService 先整体校验前置条件再逐个建立快照，任一不合格则整个 Run 不启动且不留下任何绑定记录；工具桥接按模型传入的 `bindingId` 寻址，并先校验该绑定属于本 Run。「未显式指定时延续同 Task 最近一次绑定」的隐式继承连同其查询已删除。运行约定已分层：通用契约（`bindingId`、`expectedHash`、work 目录、不自行声明验证状态）由 `skill-runtime-conventions` 统一持有，样本专属口径（如 PPT 的 attempt 合并与校验闸门）由适配预设按 `contentHash` 匹配后提供，不再泄漏给其他 Skill。Composer 的 `+` 菜单与 chip 条已落地；B00-5 的真实双技能运行与重启后历史绑定回看仍待人工验收。专家身份与 TaskContextRevision 尚未进入代码，按 E10 契约由 E11–E13 实现。
+当前实现状态：`RunSkillBinding` 与 `run_skill_bindings` 表已按上述结构落地，表上 `run_id` 只有普通索引、无唯一约束，存储层天然支持一个 Run 多条绑定；`skill_read_resource` 与 `skill_execute` 的入参携带 `bindingId`，`AgentRunInput.skillInstructions` 是数组。应用层已按本节约束改造：`StartRunRequest.skillBindings` 是 1–6 项数组（顺序即注入顺序，重复 `skillId` 在 Schema 层拒绝），RunService 先整体校验前置条件再逐个建立快照，任一不合格则整个 Run 不启动且不留下任何绑定记录；工具桥接按模型传入的 `bindingId` 寻址，并先校验该绑定属于本 Run。「未显式指定时延续同 Task 最近一次绑定」的隐式继承连同其查询已删除。运行约定已分层：通用契约（`bindingId`、`expectedHash`、work 目录、不自行声明验证状态）由 `skill-runtime-conventions` 统一持有，样本专属口径（如 PPT 的 attempt 合并与校验闸门）由适配预设按 `contentHash` 匹配后提供，不再泄漏给其他 Skill。Composer 的 `+` 菜单与 chip 条已落地；B00-5 的真实双技能运行与重启后历史绑定回看仍待人工验收。E11 已落地专家身份管理，E12 已落地 TaskContextRevision 与运行时人格/模型/内置工具裁决；召唤与材料范围仍按 E13–E25 实现。
 
 ## 5. Step
 

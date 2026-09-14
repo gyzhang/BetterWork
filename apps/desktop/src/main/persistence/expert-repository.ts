@@ -126,6 +126,13 @@ export class ExpertRepository {
     return row ? this.toDetail(row) : undefined;
   }
 
+  getRevision(id: string, revisionId: string): ExpertRevision | undefined {
+    const row = this.getRow(id);
+    const revision = this.getRevisionRow(revisionId);
+    if (!row || !revision || revision.expert_id !== id) return undefined;
+    return toRevision(revision);
+  }
+
   create(input: CreateExpertInput): ExpertDetail {
     const now = Date.now();
     const expertId = randomUUID();

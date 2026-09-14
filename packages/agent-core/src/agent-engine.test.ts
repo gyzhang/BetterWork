@@ -495,6 +495,29 @@ describe('ReActAgentEngine', () => {
     expect(userMessages[0]?.content).toBe('帮我生成 PPT');
   });
 
+  it('injects one Expert instruction before ordered Skill instructions', async () => {
+    const model = recordingModel([[{ type: 'text-delta', delta: 'ok' }, { type: 'done' }]]);
+    const engine = new ReActAgentEngine();
+    for await (const _event of engine.run({
+      runId: 'run-expert',
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      prompt: '开始经营分析',
+      workspacePath: '.',
+      model,
+      tools: [],
+      signal: new AbortController().signal,
+      expertInstruction: '你是经营分析专家，请先核对财务口径。',
+      skillInstructions: [{ skillId: 'skill-1', name: '分析 Skill', instruction: '按模板输出。' }],
+    }))
+      void _event;
+
+    const systemMessages = model.capturedMessages.filter((message) => message.role === 'system');
+    expect(systemMessages).toHaveLength(3);
+    expect(systemMessages[1]?.content).toContain('经营分析专家');
+    expect(systemMessages[2]?.content).toContain('分析 Skill');
+  });
+
   it('deduplicates skill instructions by skillId', () => {
     const messages = buildSkillMessages([
       { skillId: 'skill-1', name: '专家 A', instruction: '指令 A' },

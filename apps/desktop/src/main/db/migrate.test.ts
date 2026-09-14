@@ -733,3 +733,56 @@ it('adds immutable expert revision tables and keeps their ownership constraints'
   expect(countRows(db, 'expert_revisions')).toBe(0);
   db.close();
 });
+
+it('adds task context revisions with ordered snapshots and task ownership', () => {
+  const db = new Database(':memory:');
+  migrate(db, { migrations: appMigrations });
+  const now = 1_700_000_000_000;
+  db.prepare(
+    `INSERT INTO workspaces (id, name, root_path, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  ).run('ws-context', '工作区', '/tmp/context', now, now);
+  db.prepare(
+    `INSERT INTO tasks (id, workspace_id, title, goal, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run('task-context', 'ws-context', '月度经营报告', '形成本月报告', now, now);
+  db.prepare(
+    `INSERT INTO task_context_revisions (
+       id, task_id, revision, executor_json, skill_bindings_json,
+       model_reference_json, builtin_tool_policy_json, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    'context-revision-1',
+    'task-context',
+    1,
+    '{"kind":"general"}',
+    '[{"skillId":"skill-a","revisionId":"revision-a","source":"task-selection"}]',
+    null,
+    '{"mode":"allow-list","toolNames":["calculator"]}',
+    now,
+    now,
+  );
+  expect(() =>
+    db
+      .prepare(
+        `INSERT INTO task_context_revisions (
+           id, task_id, revision, executor_json, skill_bindings_json,
+           model_reference_json, builtin_tool_policy_json, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        'context-revision-duplicate',
+        'task-context',
+        1,
+        '{"kind":"general"}',
+        '[]',
+        null,
+        null,
+        now,
+        now,
+      ),
+  ).toThrow('UNIQUE');
+  db.prepare('DELETE FROM tasks WHERE id = ?').run('task-context');
+  expect(countRows(db, 'task_context_revisions')).toBe(0);
+  db.close();
+});

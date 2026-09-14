@@ -198,6 +198,59 @@ describe('RunService', () => {
     ).toEqual(['calculator', 'read_text_file', 'knowledge_search', 'web_search']);
   });
 
+  it('applies an Expert built-in tool allow-list without exposing omitted tools', () => {
+    const knowledgeSearch = (): [] => [];
+    expect(
+      createRunTools({
+        knowledgeSearch,
+        webSearch: async () => ({ results: [] }),
+        allowedBuiltinToolNames: new Set(['calculator']),
+      }).map((tool) => tool.name),
+    ).toEqual(['calculator']);
+  });
+
+  it('routes an Expert TaskContext to its pinned tool policy before a Run starts', async () => {
+    const fixture = await createFixture();
+    const expert = fixture.store.experts.create({
+      sourceKind: 'user',
+      revision: {
+        name: '只读专家',
+        summary: '只允许读取工作区文件',
+        identity: '负责只读检查。',
+        principles: [],
+        inputRequirements: [],
+        deliveryRequirements: [],
+        skillPreset: [],
+        builtinToolPolicy: { mode: 'allow-list', toolNames: ['read_text_file'] },
+        modelReference: { mode: 'application-default' },
+      },
+    });
+    const context = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: {
+        kind: 'expert',
+        expertId: expert.id,
+        expertRevisionId: expert.revision.id,
+      },
+      skillBindings: [],
+    });
+
+    const service = createService(fixture);
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '计算: 1 + 1',
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('failed');
+    expect(fixture.store.runs.listEvents(runId).at(-1)).toMatchObject({
+      type: 'run.failed',
+      error: 'Unknown tool: calculator',
+    });
+  });
+
   it('creates a notification with a task target when a run completes', async () => {
     const fixture = await createFixture();
     const window = createWindowStub({ focused: true });

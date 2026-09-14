@@ -93,6 +93,9 @@ export class ReActAgentEngine implements AgentEngine {
     const skillMessages = buildSkillMessages(input.skillInstructions);
     const messages: AgentMessage[] = [
       { id: randomUUID(), role: 'system', content: SYSTEM_PROMPT() },
+      ...(input.expertInstruction
+        ? [{ id: randomUUID(), role: 'system' as const, content: input.expertInstruction }]
+        : []),
       ...skillMessages,
       ...(input.messages ?? []),
       { id: randomUUID(), role: 'user', content: input.prompt },

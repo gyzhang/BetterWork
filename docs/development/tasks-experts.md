@@ -41,7 +41,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E00 | A/macOS 与 B0 前置核对收尾 | 原 A/B0 卡 | done | [2026-09-14 日志](../logs/2026-09-14.md)：`npm run verify` 全绿；通过 `scripts/dev-start.sh` 启动真实 macOS Electron 窗口并核对 `+ → 技能 → ppt-generation-expert → chip` 路径；B00-5 双技能真实运行与重启回看缺少记录，已将原卡恢复为 doing，不伪造通过 |
 | E10 | 专家、草稿与运行精确契约 | 本设计已接受 | done | [专家与任务上下文契约](expert-contracts.md)：Expert/Revision、E1 TaskContextRevision、Skill/模型/内置工具解析、启动事务、旧任务迁移、冲突和错误码已定案；仅文档，未创建表或 IPC |
 | E11 | 专家修订、管理服务与迁移 | E00、E10 | done | [ExpertRepository/Service 测试](../../apps/desktop/src/main/persistence/expert-repository.test.ts)、[迁移与 IPC 测试](../../apps/desktop/src/main/db/migrate.test.ts)；v9 experts/expert_revisions 迁移、创建/修订/复制/启停归档、并发冲突、缺项状态及 Preload/IPC 已接通；`npm run verify` 退出 0（54 文件 / 441 测试），2026-09-14 13:54。执行注入留 E12 |
-| E12 | 专家执行注入与能力裁决 | E11 | todo | — |
+| E12 | 专家执行注入与能力裁决 | E11 | done | [TaskContext/Run 测试](../../apps/desktop/src/main/services/run-service.test.ts)、[Agent Core 测试](../../packages/agent-core/src/agent-engine.test.ts)、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)：v10 TaskContextRevision、CAS/归属隔离、专家人格指令、模型引用、内置工具 allow-list 与 Run 接入；`npm run verify` 退出 0（55 文件 / 448 测试 / Electron build），2026-09-14 14:05 |
 | E13 | 对话草稿、召唤与身份切换 | E12 | todo | — |
 | E14 | 专家管理与按需配置 UI | E13 | todo | — |
 | E15 | 内置专家分发与 E1 验收 | E14 | todo | — |
@@ -102,11 +102,11 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 
 ### E12 执行注入与能力裁决
 
-- 落点：RunService、agent-core/types/agent-engine、tool-runtime 工厂、协议和 run-service/engine/IPC tests。
+- 落点：RunService、TaskContextRepository、agent-core/types/agent-engine、tool-runtime 工厂、协议和 run-service/engine/IPC tests。
 - 工作：加载专家修订和模型引用，组装人格与有序 Skill 指令，固定本次有效工具；Skill 仍走原启用/信任/依赖/6 项上限与绑定事务。E1 未实现的资料/记忆/MCP 不能显示为可配置且生效。
 - 失败/取消：无效专家或能力在启动边界拒绝，明确原因；不影响无专家普通 Run；撤销仍级联取消，清理后唯一终态。
 - 必测：两专家实际 messages 与 tools 不同；旧 Run 不随编辑变化；第二项 Skill 不可用时整体不启动；禁止工具既不暴露也不可调用；取消与重启兜底回归。
-- 完成：主进程集成旅程证明配置影响真实执行。E1 不宣称当前知识工具已经具有 E2 的材料范围隔离。
+- 完成：主进程集成旅程证明配置影响真实执行；E12 已通过 TaskContextRevision 读取与 CAS、专家人格注入、模型引用和内置工具裁决接入 Run。E1 不宣称当前知识工具已经具有 E2 的材料范围隔离。
 
 ### E13 草稿、召唤与任务身份
 

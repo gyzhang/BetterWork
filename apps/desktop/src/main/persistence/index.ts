@@ -13,6 +13,7 @@ import { RuntimeEnvironmentRepository } from './runtime-environment-repository';
 import { SearchEngineRepository } from './search-engine-repository';
 import { SkillExecutionRepository } from './skill-execution-repository';
 import { SkillRepository } from './skill-repository';
+import { TaskContextRepository } from './task-context-repository';
 import { TaskRepository } from './task-repository';
 import { WorkspaceRepository } from './workspace-repository';
 
@@ -28,6 +29,7 @@ import { WorkspaceRepository } from './workspace-repository';
 export class AppStore {
   readonly workspaces: WorkspaceRepository;
   readonly tasks: TaskRepository;
+  readonly taskContexts: TaskContextRepository;
   readonly runs: RunRepository;
   readonly evidence: EvidenceRepository;
   readonly experts: ExpertRepository;
@@ -44,6 +46,7 @@ export class AppStore {
   private constructor(private readonly db: Database.Database) {
     this.workspaces = new WorkspaceRepository(db);
     this.tasks = new TaskRepository(db);
+    this.taskContexts = new TaskContextRepository(db);
     this.runs = new RunRepository(db);
     this.evidence = new EvidenceRepository(db);
     this.experts = new ExpertRepository(db);
@@ -115,5 +118,6 @@ export {
   type SkillTrustGrantSource,
   type SkillTrustPreference,
 } from './skill-repository';
+export { type SaveTaskContextInput, TaskContextRepository } from './task-context-repository';
 export { TaskRepository } from './task-repository';
 export { WorkspaceRepository } from './workspace-repository';
