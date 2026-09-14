@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { IpcChannel } from '@betterwork/agent-protocol';
+import type { WebFetch } from '@betterwork/tool-runtime';
 import type { BrowserWindow } from 'electron';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -110,6 +111,7 @@ const createService = (
   fixture: Fixture,
   window?: WindowStub,
   skillExecutionService?: SkillExecutionService,
+  webFetch?: WebFetch,
 ): RunService =>
   new RunService(
     fixture.store,
@@ -125,6 +127,8 @@ const createService = (
     fixture.inputSnapshots,
     fixture.taskMaterials,
     fixture.memories,
+    undefined,
+    webFetch,
   );
 
 const statusOf = (fixture: Fixture, runId: string): string | undefined =>
@@ -540,6 +544,51 @@ describe('RunService', () => {
       'read_text_file',
       'knowledge_search',
       'read_office_material',
+    ]);
+  });
+
+  it('runs selected web_fetch and records the fetched page as web evidence', async () => {
+    const fixture = await createFixture();
+    const fetchedUrl = 'https://example.com/finance';
+    const service = createService(fixture, undefined, undefined, async (url) => ({
+      url,
+      title: '财务规则页面',
+      content: '公开页面中的财务规则正文。',
+      contentType: 'text/html',
+      status: 200,
+      retrievedAt: 1,
+      truncated: false,
+    }));
+    const context = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+      builtinToolPolicy: { mode: 'allow-list', toolNames: ['web_fetch'] },
+      materials: [],
+    });
+
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: `抓取网页: ${fetchedUrl}`,
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('completed');
+    expect(fixture.store.runs.listEvents(runId)).toContainEqual(
+      expect.objectContaining({
+        type: 'tool.completed',
+        output: expect.objectContaining({ url: fetchedUrl, title: '财务规则页面' }),
+      }),
+    );
+    expect(fixture.store.evidence.listByTask(fixture.taskId)).toEqual([
+      expect.objectContaining({
+        runId,
+        sourceUri: fetchedUrl,
+        title: '财务规则页面',
+        locator: 'text/html · HTTP 200',
+      }),
     ]);
   });
 

@@ -40,6 +40,12 @@ const TOOL_TRIGGERS: readonly ToolTrigger[] = [
     },
   },
   {
+    pattern: /^(?:抓取网页|读取网页|fetch web)\s*[:：]?\s*(.+)$/iu,
+    tool: 'web_fetch',
+    reasoning: '读取用户指定网页的正文并保留来源。',
+    toInput: (url) => ({ url: url.trim() }),
+  },
+  {
     pattern: /^(?:读取|read)\s*[:：]?\s*(.+)$/iu,
     tool: 'read_text_file',
     reasoning: '读取工作区内的文本文件。',
@@ -97,6 +103,10 @@ function summarizeToolResult(toolName: string | undefined, rawContent: string): 
 
   if (toolName === 'read_artifact') {
     return `成果版本内容如下：\n\n${readText(output?.content) || rawContent}`;
+  }
+
+  if (toolName === 'web_fetch') {
+    return `网页正文如下：\n\n${readText(output?.content) || rawContent}`;
   }
 
   return `文件内容如下：\n\n${readText(output?.content) || rawContent}`;
