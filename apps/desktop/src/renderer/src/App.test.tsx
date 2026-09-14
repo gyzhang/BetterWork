@@ -504,6 +504,29 @@ describe('Task context restoration', () => {
     expect(api.taskContexts.get).toHaveBeenCalledWith({ taskId: previousTask.id });
   });
 
+  it('does not claim the current default model for an historical Expert revision', async () => {
+    installApi({
+      expert: true,
+      context: {
+        id: 'context-previous',
+        taskId: previousTask.id,
+        revision: 1,
+        executor: {
+          kind: 'expert',
+          expertId: expertSummary.id,
+          expertRevisionId: 'historical-expert-revision',
+        },
+        skillBindings: [],
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
+
+    expect(await screen.findByText('专家修订模型（历史版本）')).toBeTruthy();
+  });
+
   it('offers Expert-scoped memory capture for an Expert task', async () => {
     const api = installApi({
       expert: true,
