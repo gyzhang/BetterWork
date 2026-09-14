@@ -903,6 +903,10 @@ describe('RunService', () => {
         }),
       ]);
       expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fixture.store.runContextSnapshots.get(runId)).toMatchObject({
+        taskContextRevisionId: context.id,
+        mcpToolBindings: [{ connectionId: connection.id, toolId: discoveredTool.id }],
+      });
       const firstCall = fetchMock.mock.calls[0] as unknown[] | undefined;
       const firstRequest = firstCall?.[1] as RequestInit | undefined;
       const requestBody = JSON.parse(String(firstRequest?.body)) as {
@@ -961,6 +965,14 @@ describe('RunService', () => {
     await waitForCompletion(fixture, runId);
 
     expect(statusOf(fixture, runId)).toBe('failed');
+    expect(fixture.store.runContextSnapshots.get(runId)).toMatchObject({
+      taskContextRevisionId: context.id,
+      expertId: expert.id,
+      expertRevisionId: expert.revision.id,
+      modelReference: { mode: 'application-default' },
+      builtinToolPolicy: { mode: 'allow-list', toolNames: ['read_text_file'] },
+      mcpToolBindings: [],
+    });
     expect(fixture.store.runs.listEvents(runId).at(-1)).toMatchObject({
       type: 'run.failed',
       error: 'Unknown tool: calculator',
