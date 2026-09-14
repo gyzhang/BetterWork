@@ -1285,6 +1285,21 @@ p {
   border: 1px solid var(--border);
   border-radius: 10px;
 }
+.expert-card-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.expert-card-main:hover .expert-card-head strong {
+  color: var(--brand);
+}
 .expert-card-head {
   display: flex;
   align-items: center;
@@ -1327,6 +1342,117 @@ p {
 }
 .expert-summon-button {
   align-self: flex-start;
+}
+.expert-card-actions,
+.expert-detail-actions,
+.expert-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.expert-editor,
+.expert-detail-page {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.expert-editor > .page-header,
+.expert-detail-page > .page-header {
+  flex: none;
+}
+.expert-editor-body,
+.expert-detail-body {
+  width: min(720px, 100%);
+  padding-top: 20px;
+}
+.expert-editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.expert-editor-body > label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.expert-editor-body input,
+.expert-editor-body textarea {
+  width: 100%;
+  padding: 9px 10px;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  resize: vertical;
+}
+.expert-editor-body input:focus,
+.expert-editor-body textarea:focus {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.expert-editor-body fieldset {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.expert-editor-body legend {
+  padding: 0 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.expert-option-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 8px;
+}
+.expert-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 400;
+}
+.expert-option input {
+  width: 14px;
+  height: 14px;
+}
+.expert-detail-summary {
+  margin: 0 0 22px;
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.expert-detail-section {
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+.expert-detail-section h2 {
+  margin: 0 0 7px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.expert-detail-section p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.muted-text {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.danger {
+  color: var(--danger);
 }
 .skill-chips {
   display: flex;

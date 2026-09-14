@@ -28,7 +28,7 @@
 | Run 多 Skill、顺序注入、Composer 与撤销 | B00-1…4 任务板标 done，B00-5 doing | UI 双 Skill 运行与重启恢复仍有人工验收尾项（B00-5 原卡），E00 核对 |
 | A12/A16/A17/A19/A20/A21 | 任务板仍有 doing/todo | E00 按对应原卡核对/收尾，不悄悄视为通过 |
 | Workspace/Task/Session、Artifact、Knowledge | 已有仓储、服务及 UI | 沿用 ID 与既有对象关系；输入格式与精确范围需新增 |
-| Expert、Memory、MCP | 本轮源码目录核对未发现对应实现 | 从协议与最小垂直路径实施，不以设计类型占位冒充可用 |
+| Memory、MCP | 本轮源码目录核对未发现对应实现 | 从协议与最小垂直路径实施，不以设计类型占位冒充可用；Expert 已由 E11–E14 落地 |
 
 E00 不重复此前已证实且未受变更影响的测试；以最新提交、真实日志和任务板对照，缺证据才补。未完成的 A 卡继续在原任务板维护，不能复制一个 done 到本计划覆盖原状态。首个业务实现 E11 在 E00/E10 完成后开展；E10 的契约细化可在 E00 收尾期间做文档工作。
 
@@ -43,7 +43,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E11 | 专家修订、管理服务与迁移 | E00、E10 | done | [ExpertRepository/Service 测试](../../apps/desktop/src/main/persistence/expert-repository.test.ts)、[迁移与 IPC 测试](../../apps/desktop/src/main/db/migrate.test.ts)；v9 experts/expert_revisions 迁移、创建/修订/复制/启停归档、并发冲突、缺项状态及 Preload/IPC 已接通；`npm run verify` 退出 0（54 文件 / 441 测试），2026-09-14 13:54。执行注入与召唤留 E12–E13 |
 | E12 | 专家执行注入与能力裁决 | E11 | done | [TaskContext/Run 测试](../../apps/desktop/src/main/services/run-service.test.ts)、[Agent Core 测试](../../packages/agent-core/src/agent-engine.test.ts)、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)：v10 TaskContextRevision、CAS/归属隔离、专家人格指令、模型引用、内置工具 allow-list 与 Run 接入；`npm run verify` 退出 0（55 文件 / 448 测试 / Electron build），2026-09-14 14:05 |
 | E13 | 对话草稿、召唤与身份切换 | E12 | done | [App/IPC 测试](../../apps/desktop/src/renderer/src/App.test.tsx)、[IPC 注册测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)：专家列表“召唤”直达空白任务，首条消息保存 TaskContextRevision 后启动 Run；任务重开恢复专家/Skill 选择，`+ → 专家` 打开专家列表；`npm run verify` 退出 0（55 文件 / 451 测试 / Electron build），2026-09-14 14:15 |
-| E14 | 专家管理与按需配置 UI | E13 | todo | — |
+| E14 | 专家管理与按需配置 UI | E13 | done | [专家配置 UI 测试](../../apps/desktop/src/renderer/src/App.test.tsx)：专家列表/详情、独立编辑器、新建与不可变修订保存、Skill 预设、内置工具 allow-list、生命周期操作和内置复制均复用 E11 IPC；`npm run verify` 退出 0（55 文件 / 452 测试 / Electron build），2026-09-14 14:24 |
 | E15 | 内置专家分发与 E1 验收 | E14 | todo | — |
 | E20 | 材料与快照精确契约 | E15 | todo | — |
 | E21 | 知识修订、文件快照与恢复 | E20 | todo | — |

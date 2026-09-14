@@ -127,6 +127,10 @@ function installApi(options?: { expert?: boolean; context?: TaskContextRevision 
     experts: {
       list: vi.fn(async () => (options?.expert ? [expertSummary] : [])),
       get: vi.fn(async () => (options?.expert ? expertDetail : null)),
+      create: vi.fn(async () => ({ expert: expertDetail })),
+      saveRevision: vi.fn(async () => ({ expert: expertDetail })),
+      copy: vi.fn(async () => ({ expert: expertDetail })),
+      setLifecycle: vi.fn(async () => ({ expert: expertDetail })),
     },
     runs: {
       list: vi.fn(async (input?: { taskId?: string }): Promise<RunSummary[]> =>
@@ -343,5 +347,26 @@ describe('Task context restoration', () => {
       skill.name,
     );
     expect(api.taskContexts.get).toHaveBeenCalledWith({ taskId: previousTask.id });
+  });
+});
+
+describe('Expert configuration', () => {
+  it('opens a separate editor and saves a new immutable revision', async () => {
+    const api = installApi({ expert: true });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
+    fireEvent.click(await screen.findByRole('button', { name: '查看配置' }));
+    fireEvent.click(await screen.findByRole('button', { name: '编辑配置' }));
+    const identity = await screen.findByRole('textbox', { name: '人格与职责' });
+    fireEvent.change(identity, { target: { value: '负责经营分析并检查交付。' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存修订' }));
+    await waitFor(() => expect(api.experts.saveRevision).toHaveBeenCalledTimes(1));
+    expect(api.experts.saveRevision).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expertId: expertSummary.id,
+        expectedRevision: 1,
+        revision: expect.objectContaining({ identity: '负责经营分析并检查交付。' }),
+      }),
+    );
   });
 });

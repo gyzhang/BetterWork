@@ -33,7 +33,7 @@
 
 ## 2. 当前阶段
 
-2026-09-14 用户已通过[专家与任务材料设计 v0.2](docs/designs/experts-and-task-materials.md)评审，[ADR-0014](docs/adr/0014-expert-context-and-material-binding.md)已接受；E11/E12 已落地专家持久化与执行注入，召唤对话与专家 UI 留 E13–E15。后续以[专家开发计划](docs/development/tasks-experts.md)为唯一新任务入口：E00 核对 A/macOS 与 B0 尾项，E1 专家召唤与执行、E2 材料与来源、E3 最小记忆、E4 MCP/网页正文、E5 Office 输入与连续两期交付。专家页“召唤”直接进入对话，不设启动前任务准备表单；材料按需选择并受运行范围约束。下文早期“记忆随 C、MCP 独立确认、建议待审阅”排期按此更新；已接受范围无需重复确认，具体技术决策在计划指定卡中落实。
+2026-09-14 用户已通过[专家与任务材料设计 v0.2](docs/designs/experts-and-task-materials.md)评审，[ADR-0014](docs/adr/0014-expert-context-and-material-binding.md)已接受；E11–E14 已落地专家持久化、执行注入、召唤对话和配置 UI，内置专家分发留 E15。后续以[专家开发计划](docs/development/tasks-experts.md)为唯一新任务入口：E00 核对 A/macOS 与 B0 尾项，E1 专家召唤与执行、E2 材料与来源、E3 最小记忆、E4 MCP/网页正文、E5 Office 输入与连续两期交付。专家页“召唤”直接进入对话，不设启动前任务准备表单；材料按需选择并受运行范围约束。下文早期“记忆随 C、MCP 独立确认、建议待审阅”排期按此更新；已接受范围无需重复确认，具体技术决策在计划指定卡中落实。
 
 Phase 0 与原 Phase 1 的知识库、搜索和 Markdown 成果部分能力已实现。2026-09-08 用户已确认后续顺序：
 
