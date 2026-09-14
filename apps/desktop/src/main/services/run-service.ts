@@ -412,6 +412,7 @@ export class RunService {
           runId,
           executionContext.materialScope ? this.activeRuns.get(runId)?.contextSegmentId : undefined,
           executionContext.memoryRecords,
+          executionContext.materials,
         ),
         model,
         tools: createRunTools({
@@ -516,6 +517,7 @@ export class RunService {
     currentRunId: string,
     contextSegmentId?: string,
     memoryRecords: readonly MemoryRecord[] = [],
+    materials: readonly TaskMaterialSelection[] = [],
   ): AgentMessage[] {
     const previousRuns = this.store.runs.listByTask(taskId).filter((run) => {
       if (run.status !== 'completed' || run.id === currentRunId) return false;
@@ -537,6 +539,8 @@ export class RunService {
         ].join('\n'),
       });
     }
+    const materialMessage = this.buildMaterialContextMessage(materials);
+    if (materialMessage) messages.push(materialMessage);
     for (const run of previousRuns) {
       messages.push({ id: randomUUID(), role: 'user', content: run.prompt });
 
@@ -550,6 +554,60 @@ export class RunService {
       }
     }
     return messages;
+  }
+
+  /**
+   * 将本次明确选择的材料变成模型可执行的读取清单。
+   * 材料内容仍只通过受范围限制的工具提供，清单只暴露稳定身份、用途和正确的工具参数。
+   */
+  private buildMaterialContextMessage(
+    materials: readonly TaskMaterialSelection[],
+  ): AgentMessage | undefined {
+    if (materials.length === 0) return undefined;
+
+    const purposeLabels: Record<TaskMaterialSelection['purpose'], string> = {
+      rule: '规则口径',
+      'current-input': '本期输入',
+      'historical-comparison': '历史对比',
+      'structure-reference': '结构参考',
+      template: '模板',
+      background: '背景参考',
+    };
+    const lines = [
+      '以下是用户为本次 Run 明确选择的材料清单。材料内容不会自动出现在对话中，必须先使用清单给出的工具和参数读取。',
+      '只使用这些材料中的事实和数字；如果材料无法读取或没有提供某个数字，应明确说明，不要用猜测或其他工作区文件补齐。',
+      '',
+      '本次可读材料：',
+    ];
+
+    for (const [index, selection] of materials.entries()) {
+      const reference = selection.reference;
+      const purpose = purposeLabels[selection.purpose];
+      if (reference.kind === 'workspace-input-snapshot') {
+        const snapshot = this.store.inputSnapshots.get(reference.snapshotId);
+        const sourcePath = snapshot?.sourcePath ?? reference.fileKey;
+        lines.push(
+          `${index + 1}. 工作区文件「${sourcePath}」【${purpose}】`,
+          `   - 文本/Markdown 使用 read_text_file，path="${sourcePath}"。`,
+          `   - Office 使用 read_office_material，sourceKind="workspace-input-snapshot"，snapshotId="${reference.snapshotId}"。`,
+        );
+        continue;
+      }
+      if (reference.kind === 'knowledge-revision') {
+        lines.push(
+          `${index + 1}. 知识修订「${reference.sourcePath}」【${purpose}】`,
+          `   - 使用 knowledge_search；检索范围已限制为 knowledgeRevisionId="${reference.knowledgeRevisionId}"。`,
+        );
+        continue;
+      }
+      lines.push(
+        `${index + 1}. 成果版本「${reference.artifactId} / ${reference.artifactVersionId}」【${purpose}】`,
+        `   - Markdown 使用 read_artifact，artifactId="${reference.artifactId}"，versionId="${reference.artifactVersionId}"。`,
+        '   - Office 使用 read_office_material，并提供对应的 artifactId 和 versionId。',
+      );
+    }
+
+    return { id: randomUUID(), role: 'system', content: lines.join('\n') };
   }
 
   private searchKnowledge(query: string, context: ResolvedRunContext): KnowledgeSearchItem[] {

@@ -79,3 +79,14 @@
 - 本次没有配置真实 MCP 连接（`mcp_connections` 当前为空），因此不能把离线 MCP 替身升级为真实业务 MCP 验收；E55/E4 保持 `partial`。
 - 重启 Run 的模型回复混入了脱敏材料中不存在的现金流和续约数字（例如 5/15 万元、3/5 个客户）。该回复没有被计入业务结论，暴露出同一 Task 历史对话在重启时仍可能诱发模型使用未核实数字；需要后续增加基于材料读取足迹的事实约束/引用门禁后，才能把“连续两期真实业务闭环”标为通过。
 - 当前凭据下 `expert:acceptance-preflight` 的模型检查已经通过；`security find-identity` 仍找不到 Developer ID Application，因此 E56 的签名安装验收继续保持 `partial`。
+
+## 2026-09-15 选定材料清单修复与独立任务复测
+
+- 修复 `RunService`：每次带材料范围的 Run 都向模型注入稳定的材料读取清单，包含工作区相对路径、材料用途和精确的输入快照 ID；清单明确要求只使用选定材料，并在无法读取或缺少数字时停止猜测。补充回归测试验证 Markdown 路径、快照 ID、读取工具和用途均进入模型请求。
+- 修复前的独立 Task `287a3d5c-602c-4661-8f68-acca87a1e549` / Run `69a41a1f-70ee-46e4-8f9f-07ca8c2f2da8` 已证明缺口：材料快照虽然写入 `run_context_snapshots`，模型却自行构造 `snapshot1/2/3`、`artifact1/2/3`，没有产生材料读取足迹。
+- 重启桌面主进程加载修复后，以同一 Task 的固定材料范围重新执行 Run `31813b3b-a6dc-4306-bd08-d5f439d0e747`，状态为 `completed`。SQLite `run_context_snapshots` 保存 `builtin-research-analyst`、修订 `88c4ef3a-42bf-4d9f-b33c-30ff93942aae` 和三份材料用途；`run_material_reads` 精确记录以下三条成功读取：
+  - `e55-samples/financial-rules.md`（规则口径，快照 `766981ac-54b4-452d-8bf1-8f1ab923216b`）；
+  - `e55-samples/2026-09-report.md`（历史对比，快照 `99a8afb5-7d6f-4251-9228-04cca22f78f8`）；
+  - `e55-samples/2026-10-data.md`（本期输入，快照 `a0da2ecc-b778-4e14-9ccf-88218cf5b245`）。
+- 工具足迹为三次 `read_text_file`、一次 `analyze_business_metrics` 和一次 `task_write_file`。界面最终输出 10 月收入 130、预算 125、9 月收入 120、费用 60/58，计算出预算差异 +5（+4.0%）和环比 +10（+8.33%），并只引用材料中出现的回款延期与续约待确认事实；输出的五页 PPT 摘要结构可继续交给成果/PPT 流程。
+- 这次复测证明“召唤专家 → 选择材料 → 按范围读取 → 调用方法工具 → 输出摘要”的路径已真实接通。E55 仍保持 `partial`：当前任务还没有配置真实业务 MCP，且前述跨 Run 重启的事实约束问题尚未通过独立门禁；E56 的 Developer ID 签名条件也仍未满足。
