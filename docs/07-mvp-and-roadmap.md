@@ -97,8 +97,10 @@
 | FTS5 检索 | 已落地 | 关键词匹配加子串兜底 |
 | Embedding / 向量检索 | 移出当前切片 | 按 AGENTS.md 范围约束留待后续切片单独实现；开工前需先确认向量存储选型（[知识库与记忆](04-knowledge-and-memory.md) §5 建议 sqlite-vec）并新增 ADR |
 | Web Search | 已落地 | 搜索引擎配置 + `web_search` Tool，见 [ADR-0007](adr/0007-search-engine-config-and-web-search-tool.md) |
-| Web Fetch（网页正文） | 未落地 | Phase 1 后续切片 |
-| Evidence | 已落地 | 本地与网页来源共用一张表，Run 内去重登记 |
+| Web Fetch（网页正文） | 已落地 | 公开网页正文、重定向/大小/超时边界与 `web-page` Evidence，见 [ADR-0017](adr/0017-web-fetch-and-evidence-boundary.md) |
+| MCP 只读工具 | 已落地 | stdio 连接、具体工具绑定、Run 调用和 `mcp-tool` Evidence，真实业务账号仍待 E55 |
+| Office 输入读取 | 已落地 | PPTX/XLSX/CSV 受管输入快照读取与定位足迹，见开发计划 E50/E51 |
+| Evidence | 已落地 | 本地、网页和 MCP 来源共用一张表，Run 内去重登记；MCP 结果只在算台内回看 |
 | Markdown Artifact + Version | 已落地 | 保存、预览、`user-edit` 修订、导出、版本—Evidence 关联 |
 | 精简 Research Workflow | 部分落地 | 已落地子集与仍缺步骤见 [知识工作流](06-knowledge-workflows.md) §2 |
 | 大纲确认 | 未落地 | 阻塞在协议层：需先定义 `approval.requested` / `run.waiting` 事件并新增 ADR |

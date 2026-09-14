@@ -197,7 +197,7 @@ Schema 校验
 - MCP Tool
 - Desktop Integration Tool
 
-当前实现状态：只有 TypeScript Tool 一种后端，落地 `calculator`、`read_text_file`、`knowledge_search`、`read_artifact`、`web_search` 五个工具。管线中已实装的是 Schema 校验（Zod）、执行、进度上报（`reportProgress`）与结构化结果；进度事件在 Tool 仍在执行时立即进入 `AsyncIterable`，取消信号同时传入 Tool 与联网搜索请求。Policy 检查、用户审批与审计记录尚未建设。
+当前实现状态：TypeScript Tool 后端已落地 `calculator`、`read_text_file`、`knowledge_search`、`read_artifact`、`web_search`、`web_fetch`、`read_office_material` 与 `analyze_business_metrics`；MCP 只读工具通过 Application 注入同一 `AgentTool` 形状，并按连接/工具绑定进入 Run。管线中已实装 Schema 校验（Zod）、执行、进度上报（`reportProgress`）、结构化结果、取消与 Run 终态；Evidence 由 Application 在 `tool.completed` 后登记。通用 Policy 检查、用户审批与审计记录尚未建设。
 
 唯一强制的安全约束是 `read_text_file` 内建的 Workspace 路径边界（对真实路径校验，符号链接也不得越界）；E23 对带 TaskContext 的 Run 进一步要求路径命中所选输入快照，`knowledge_search` 和 `read_artifact` 也按精确材料引用过滤。Evidence 与 Artifact 的登记不在 Tool Runtime 内完成，而是由 Application 层（`RunService`）在观察到 `tool.completed` 事件后落库。
 
@@ -235,7 +235,7 @@ app_settings
 
 知识和记忆表见对应专题文档。
 
-E11 已通过版本化迁移创建 `experts`、`expert_revisions`；E12 已增加 `task_context_revisions`，E13–E15 已将其接入召唤、首条消息、任务恢复和内置分发；E21 已增加知识内容修订和 Workspace 所属输入快照；E22 已在 v12 保存材料引用和用途并通过 Application 校验来源；E23 已在 v13 增加 `run_context_snapshots` 并接入运行范围过滤；E24 已在 v14 增加读取足迹和成果输入关系；E25 已把候选查询、材料草稿与精确成果版本复用接入 Composer 和资料面板。知识索引仍在独立 `vault.sqlite`，应用库保存授权和运行真相；两库没有跨库事务，启动时先验证内容修订再写应用库事务。旧 Task 缺少上下文时按通用助手和空材料解释，首次编辑/发送再以版本化迁移创建草稿。所有迁移保持启动幂等、可回滚并通过 `foreign_key_check`；历史 Run 没有专家或材料事实时不补造。
+E11 已通过版本化迁移创建 `experts`、`expert_revisions`；E12 已增加 `task_context_revisions`，E13–E15 已将其接入召唤、首条消息、任务恢复和内置分发；E21 已增加知识内容修订和 Workspace 所属输入快照；E22 已在 v12 保存材料引用和用途并通过 Application 校验来源；E23 已在 v13 增加 `run_context_snapshots` 并接入运行范围过滤；E24 已在 v14 增加读取足迹和成果输入关系；E25 已把候选查询、材料草稿与精确成果版本复用接入 Composer 和资料面板；E31/E32 已接入四种作用域的确认记忆与运行读取足迹；E40–E43 已接入 MCP 只读工具、网页正文抓取和来源 Evidence；E50–E54 已接入 Office 输入解析、讨论节点、确定性经营分析及成果输入关系。知识索引仍在独立 `vault.sqlite`，应用库保存授权和运行真相；两库没有跨库事务，启动时先验证内容修订再写应用库事务。旧 Task 缺少上下文时按通用助手和空材料解释，首次编辑/发送再以版本化迁移创建草稿。所有迁移保持启动幂等、可回滚并通过 `foreign_key_check`；历史 Run 没有专家或材料事实时不补造。
 
 SQLite 是产品状态真相源；向量索引、缩略图和解析缓存均可重建。
 

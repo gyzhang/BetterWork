@@ -219,8 +219,10 @@ MVP 期间不建设通用 DAG 引擎，只支持顺序步骤、条件步骤、�
 | --- | --- | --- |
 | Knowledge Search | 已落地 | `knowledge_search` Tool + 知识页手动检索，FTS5 关键词加子串兜底 |
 | Web Search | 已落地 | `web_search` Tool，百度千帆 AI 搜索先行（[ADR-0007](adr/0007-search-engine-config-and-web-search-tool.md)） |
-| Web Fetch | 未落地 | Phase 1 后续切片：抓取网页正文 |
-| Evidence 登记 | 已落地 | 不是独立 Tool：Application 层观察 `knowledge_search` / `web_search` 的 `tool.completed` 输出后自动去重落库 |
+| Web Fetch | 已落地 | `web_fetch` 抓取公开网页正文，限制协议、重定向、大小与超时；见 [ADR-0017](adr/0017-web-fetch-and-evidence-boundary.md) |
+| MCP 只读工具 | 已落地 | stdio 连接、具体工具选择、Schema/输出限制和取消；结果以 `mcp-tool` Evidence 回看；见 [ADR-0016](adr/0016-mcp-transport-and-lifecycle.md) 与 [ADR-0021](adr/0021-mcp-evidence-provenance.md) |
+| Office 材料读取 | 已落地 | `read_office_material` 读取受管 PPTX/XLSX/CSV 输入并记录 slide/Sheet/Range/rows 定位 |
+| Evidence 登记 | 已落地 | 不是独立 Tool：Application 层观察 `knowledge_search` / `web_search` / `web_fetch` / MCP 的 `tool.completed` 输出后自动去重落库 |
 | Markdown Artifact | 已落地 | 保存、预览、`user-edit` 修订、导出 `.md` |
 | Artifact Version | 已落地 | 版本历史、按版本查看与导出、版本—Evidence 关联（[ADR-0005](adr/0005-artifact-version-evidence.md)） |
 | File Preview | 部分落地 | 已落地：成果 Markdown 的文档化预览、按登记白名单用系统应用打开原文。未落地：应用内 PDF/DOCX/图片预览 |

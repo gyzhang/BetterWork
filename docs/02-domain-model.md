@@ -214,7 +214,7 @@ type ArtifactVersionOrigin = "assistant-run" | "user-edit";
 ```ts
 interface Evidence {
   id: string;
-  sourceType: "local-file" | "web-page" | "database" | "user";
+  sourceType: "local-file" | "web-page" | "mcp-tool" | "database" | "user";
   sourceUri: string;
   title?: string;
   locator?: string;
@@ -228,7 +228,7 @@ interface Evidence {
 
 `locator` 可以是页码、段落、Sheet 和 Range、Slide 编号或网页区块。
 
-当前实装取值为 `local-file`（本地 Knowledge 检索结果）与 `web-page`（`web_search` 返回的网页引用）；`database` 与 `user` 为后续阶段预留。
+当前实装取值为 `local-file`（本地 Knowledge 检索结果）、`web-page`（`web_search` / `web_fetch` 的网页来源）和 `mcp-tool`（本次 Run 选定的只读 MCP 工具结果）；`database` 与 `user` 为后续阶段预留。MCP Evidence 只在算台内回看，不提供本地原文打开动作。
 
 ## 8. Knowledge Vault
 

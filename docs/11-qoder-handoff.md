@@ -1,6 +1,6 @@
 # Qoder 开发交接：算台 BetterWork
 
-> 后续范围更新：阶段 A 必须支持脚本型 `ppt-generation-expert`，详见 [ADR-0009](adr/0009-script-skill-baseline.md)。截至 2026-09-11，macOS 执行器、依赖绑定与 PPTX 文件成果已有实现，代码补救门禁通过；真实样本、Office 编辑与安装验收尚未完成，见[修正记录](reviews/2026-09-11-phase-a-repairs.md)。
+> 后续范围更新：阶段 A 必须支持脚本型 `ppt-generation-expert`，详见 [ADR-0009](adr/0009-script-skill-baseline.md)。截至 2026-09-14，macOS 执行器、依赖绑定、PPTX 文件成果、专家、材料、记忆、MCP、网页正文和 Office 输入已有代码与自动化验证；真实业务两期旅程、取消走查和签名安装仍见[专家开发计划](development/tasks-experts.md)的 E55/E56。
 
 > 交接日期：2026-09-05
 >
@@ -32,11 +32,11 @@ BetterWork 优先成为个人实际使用的工作台，再供周边同事用于
 | --- | --- |
 | 应用与交互 | Electron 桌面应用；任务工作区、可完全收起的过程/资料/成果上下文面板、成果页、资料页、设置页；`system / light / dark` 与 jade、ink、ocean、sand 四套成对色系；统一页面骨架（70px 页头带 + 860px 版心）。 |
 | 模型 | Fake Provider 与 OpenAI-compatible Provider（SSE 流式，支持 `reasoning_content` 与 `tool_calls` 增量拼接）；语言、视觉、嵌入三种角色可保存、启停、设默认与连通性测试。目前只有语言模型进入 Agent 执行，另两类仅完成配置层。 |
-| Agent | `AsyncIterable<AgentRuntimeEvent>` 事件协议（13 种事件）、流式回复、工具卡片、取消、执行历史；四个工具：Calculator、受 Workspace 限制的 Read Text File、只读 Knowledge Search、Web Search。 |
+| Agent | `AsyncIterable<AgentRuntimeEvent>` 事件协议、流式回复、工具卡片、取消、执行历史；按 Expert/TaskContext 裁决 Calculator、Read Text File、Knowledge Search、Artifact/Office 读取、Web Search/Fetch、经营分析和选定 MCP 只读工具。 |
 | 任务数据 | Workspace、Task、Session、Run、Run Event 均有稳定持久化标识；侧栏按真实 Task 展示近期工作，可按 Task 回看历史 Run 与对应事件。 |
 | 本地 Knowledge | 可导入 Markdown、Text、PDF、DOCX（单文件上限 20 MB）；保存源路径和内容哈希，PDF 按页、DOCX 按提取段落建立 SQLite FTS5 索引，命中为空时回退子串匹配；可检索、刷新索引、从资料库索引移除、打开已登记源文件。所有这些操作不得修改或删除用户源文件。 |
 | 联网搜索 | 搜索引擎配置（百度千帆 AI 搜索先行，每服务商一行、`enabled` 全局唯一）；仅在存在已启用且配置了 Key 的引擎时注册 `web_search` 工具。见 [ADR-0007](adr/0007-search-engine-config-and-web-search-tool.md)。 |
-| Evidence | `knowledge_search` 与 `web_search` 的结果会在 Run 中去重持久化为 Evidence（`local-file` / `web-page` 共用一张表）；任务侧栏可回看，本地来源可打开原始文件。 |
+| Evidence | `knowledge_search`、`web_search`、`web_fetch` 与选定 MCP 工具的结果会在 Run 中去重持久化为 Evidence（`local-file` / `web-page` / `mcp-tool` 共用一张表）；任务侧栏和成果版本可回看，本地来源可打开原始文件，网页与 MCP 来源只读展示。 |
 | Artifact | 将任务最终回复保存为版本化 Markdown Artifact；可预览、查看版本历史、从任意版本创建 `user-edit` 修订、导出任意版本为 Markdown。AI 版本关联该 Run 实际 Evidence，人工修订继承前一版本的来源关系。 |
 | 通知 | 三层反馈：页面内联反馈 / Toast（同页抑制、右下角、常规 4s 错误 6s、堆叠上限 4、hover 暂停）/ 消息中心（侧栏铃铛 + 下拉面板、SQLite 200 条滚动上限、单条与全部已读、清空需确认）。通知携带可跳转 target，点击复用既有导航入口。窗口失焦且 run 终态时发系统通知，点击聚焦并跳转；run 取消静默。见 [ADR-0006](adr/0006-notification-feedback.md)。 |
 
@@ -72,7 +72,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 
 **不要把 verify 的输出接管道后只看末尾**（`npm run verify | tail` 的退出码是 `tail` 的，永远为 0，会把失败读成成功）。需要截取输出时用 `npm run verify > /tmp/verify.log 2>&1; echo $?`。
 
-目前测试覆盖 **20 个测试文件、131 个测试**（含 `standards/coding-standard.test.ts` 的 17 条规范护栏），ESLint 全仓零错误。生产构建存在两条来自 Zod 的 Rollup `@PURE` 注释警告；在不影响构建成功的前提下，它们是已知警告，不应因此作无关依赖升级。
+当前门禁覆盖 **74 个测试文件、518 项测试**（含 `standards/coding-standard.test.ts` 的规范护栏），ESLint、格式检查、类型检查与 Electron 构建均通过。生产构建存在两条来自 Zod 的 Rollup `@PURE` 注释警告；在不影响构建成功的前提下，它们是已知警告，不应因此作无关依赖升级。
 
 `knowledge-vault.test.ts` 的 PDF 与 DOCX 两个用例已显式提高超时——它们首次运行需要现场转换 `pdf-parse` 与 `mammoth`，冷 Vite 缓存下会超过默认的 5 秒。
 
