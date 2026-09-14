@@ -210,8 +210,15 @@ describe('registerIpc', () => {
       taskId: created.task.id,
       executor: { kind: 'general' },
       skillBindings: [],
+      excludedMemoryIds: ['memory-to-exclude'],
+      mcpToolBindings: [{ connectionId: 'connection-1', toolId: 'tool-1' }],
     })) as { context: { id: string; revision: number; taskId: string } };
-    expect(saved.context).toMatchObject({ taskId: created.task.id, revision: 1 });
+    expect(saved.context).toMatchObject({
+      taskId: created.task.id,
+      revision: 1,
+      excludedMemoryIds: ['memory-to-exclude'],
+      mcpToolBindings: [{ connectionId: 'connection-1', toolId: 'tool-1' }],
+    });
     await expect(
       invoke(IpcChannel.GetTaskContext, { taskId: created.task.id }),
     ).resolves.toMatchObject({ id: saved.context.id, revision: 1 });

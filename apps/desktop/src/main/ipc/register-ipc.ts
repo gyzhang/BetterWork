@@ -362,6 +362,8 @@ function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
             ...(input.modelReference ? { modelReference: input.modelReference } : {}),
             ...(input.builtinToolPolicy ? { builtinToolPolicy: input.builtinToolPolicy } : {}),
             ...(input.materials ? { materials: input.materials } : {}),
+            ...(input.excludedMemoryIds ? { excludedMemoryIds: input.excludedMemoryIds } : {}),
+            ...(input.mcpToolBindings ? { mcpToolBindings: input.mcpToolBindings } : {}),
           },
           input.expectedRevision,
         ),
