@@ -54,6 +54,15 @@ export class RunContextSnapshotRepository {
     if ((input.expertId === undefined) !== (input.expertRevisionId === undefined)) {
       throw new Error('Run expert snapshot must include both expertId and expertRevisionId');
     }
+    if (input.expertId && input.expertRevisionId) {
+      const revision = this.db
+        .prepare('SELECT expert_id FROM expert_revisions WHERE id = ?')
+        .get(input.expertRevisionId) as { expert_id: string } | undefined;
+      if (!revision) throw new Error('Run expert revision does not exist');
+      if (revision.expert_id !== input.expertId) {
+        throw new Error('Run expert revision does not belong to expert');
+      }
+    }
     const materials = taskMaterialSelectionSchema.array().max(50).parse(input.materials);
     this.db
       .prepare(
