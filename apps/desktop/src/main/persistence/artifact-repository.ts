@@ -385,6 +385,17 @@ export class ArtifactRepository {
     return rows.map(toSummary);
   }
 
+  listByWorkspace(workspaceId: string): ArtifactSummary[] {
+    const rows = this.db
+      .prepare(
+        `SELECT ${SUMMARY_COLUMNS} FROM ${SUMMARY_JOIN}
+          WHERE a.workspace_id = ?
+          ORDER BY a.updated_at DESC, a.rowid DESC`,
+      )
+      .all(workspaceId) as ArtifactRow[];
+    return rows.map(toSummary);
+  }
+
   getDetail(id: string): ArtifactDetail | undefined {
     const row = this.db
       .prepare(

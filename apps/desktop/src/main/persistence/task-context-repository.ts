@@ -11,6 +11,8 @@ import {
   type TaskContextRevision,
   type TaskContextSkillBinding,
   taskContextSkillBindingSchema,
+  type TaskMaterialSelection,
+  taskMaterialSelectionSchema,
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 
@@ -24,6 +26,7 @@ interface TaskContextRow {
   builtin_tool_policy_json: string | null;
   created_at: number;
   updated_at: number;
+  materials_json: string;
 }
 
 export interface SaveTaskContextInput {
@@ -31,12 +34,19 @@ export interface SaveTaskContextInput {
   skillBindings: TaskContextSkillBinding[];
   modelReference?: ExpertModelReference;
   builtinToolPolicy?: BuiltinToolPolicy;
+  materials?: TaskMaterialSelection[];
 }
 
 const parseSkillBindings = (value: string): TaskContextSkillBinding[] => {
   const parsed: unknown = JSON.parse(value);
   if (!Array.isArray(parsed)) throw new Error('Stored TaskContext skill bindings must be an array');
   return parsed.map((item) => taskContextSkillBindingSchema.parse(item));
+};
+
+const parseMaterials = (value: string): TaskMaterialSelection[] => {
+  const parsed: unknown = JSON.parse(value);
+  if (!Array.isArray(parsed)) throw new Error('Stored TaskContext materials must be an array');
+  return parsed.map((item) => taskMaterialSelectionSchema.parse(item));
 };
 
 const toRevision = (row: TaskContextRow): TaskContextRevision => ({
@@ -51,6 +61,7 @@ const toRevision = (row: TaskContextRow): TaskContextRevision => ({
   ...(row.builtin_tool_policy_json
     ? { builtinToolPolicy: builtinToolPolicySchema.parse(JSON.parse(row.builtin_tool_policy_json)) }
     : {}),
+  materials: parseMaterials(row.materials_json),
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -101,6 +112,10 @@ export class TaskContextRepository {
     const builtinToolPolicy = input.builtinToolPolicy
       ? builtinToolPolicySchema.parse(input.builtinToolPolicy)
       : undefined;
+    const materials = taskMaterialSelectionSchema
+      .array()
+      .max(50)
+      .parse(input.materials ?? []);
     const latest = this.getLatest(taskId);
     if (expectedRevision !== undefined && latest && latest.revision !== expectedRevision) {
       throw new Error(
@@ -114,8 +129,8 @@ export class TaskContextRepository {
       .prepare(
         `INSERT INTO task_context_revisions (
            id, task_id, revision, executor_json, skill_bindings_json,
-           model_reference_json, builtin_tool_policy_json, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           model_reference_json, builtin_tool_policy_json, created_at, updated_at, materials_json
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -127,6 +142,7 @@ export class TaskContextRepository {
         builtinToolPolicy ? JSON.stringify(builtinToolPolicy) : null,
         now,
         now,
+        JSON.stringify(materials),
       );
     const saved = this.get(id, taskId);
     if (!saved) throw new Error('Task context was not available after save');

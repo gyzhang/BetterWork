@@ -381,6 +381,93 @@ export const taskContextSkillBindingSchema = z
   .strict();
 export type TaskContextSkillBinding = z.infer<typeof taskContextSkillBindingSchema>;
 
+export const materialPurposeSchema = z.enum([
+  'rule',
+  'current-input',
+  'historical-comparison',
+  'structure-reference',
+  'template',
+  'background',
+]);
+export type MaterialPurpose = z.infer<typeof materialPurposeSchema>;
+
+const knowledgeMaterialReferenceSchema = z
+  .object({
+    kind: z.literal('knowledge-revision'),
+    knowledgeDocumentId: z.string().min(1),
+    knowledgeRevisionId: z.string().min(1),
+    contentHash: z.string().min(1),
+    sourcePath: z.string().min(1),
+    originWorkspaceId: z.string().min(1).optional(),
+  })
+  .strict();
+const artifactMaterialReferenceSchema = z
+  .object({
+    kind: z.literal('artifact-version'),
+    artifactId: z.string().min(1),
+    artifactVersionId: z.string().min(1),
+    contentHash: z.string().min(1),
+    originWorkspaceId: z.string().min(1),
+  })
+  .strict();
+const inputSnapshotMaterialReferenceSchema = z
+  .object({
+    kind: z.literal('workspace-input-snapshot'),
+    snapshotId: z.string().min(1),
+    workspaceId: z.string().min(1),
+    contentHash: z.string().min(1),
+    format: z.string().min(1),
+    fileKey: z.string().min(1),
+  })
+  .strict();
+export const materialReferenceSchema = z.discriminatedUnion('kind', [
+  knowledgeMaterialReferenceSchema,
+  artifactMaterialReferenceSchema,
+  inputSnapshotMaterialReferenceSchema,
+]);
+export type MaterialReference = z.infer<typeof materialReferenceSchema>;
+
+export const taskMaterialSelectionSchema = z
+  .object({
+    reference: materialReferenceSchema,
+    purpose: materialPurposeSchema,
+    note: z.string().trim().max(1_000).optional(),
+    addedFrom: z.enum(['workspace-candidate', 'global-search', 'expert-reference', 'user-input']),
+  })
+  .strict();
+export type TaskMaterialSelection = z.infer<typeof taskMaterialSelectionSchema>;
+
+export const materialCandidateSchema = z
+  .object({
+    reference: materialReferenceSchema,
+    title: z.string().min(1),
+    sourceLabel: z.string().min(1),
+    status: z.enum(['ready', 'unavailable']),
+    detail: z.string().optional(),
+  })
+  .strict();
+export type MaterialCandidate = z.infer<typeof materialCandidateSchema>;
+
+export const inputSnapshotStatusSchema = z.enum(['preparing', 'ready', 'failed', 'cancelled']);
+export type InputSnapshotStatus = z.infer<typeof inputSnapshotStatusSchema>;
+export const inputSnapshotSchema = z
+  .object({
+    id: z.string().min(1),
+    workspaceId: z.string().min(1),
+    sourcePath: z.string().min(1),
+    contentHash: z.string().min(1),
+    byteSize: z.number().int().nonnegative(),
+    format: z.string().min(1),
+    fileKey: z.string().min(1),
+    status: inputSnapshotStatusSchema,
+    failureCode: z.string().min(1).optional(),
+    failureMessage: z.string().min(1).optional(),
+    createdAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type InputSnapshot = z.infer<typeof inputSnapshotSchema>;
+
 export const taskContextRevisionSchema = z
   .object({
     id: z.string().min(1),
@@ -394,6 +481,7 @@ export const taskContextRevisionSchema = z
         (bindings) => new Set(bindings.map((binding) => binding.skillId)).size === bindings.length,
         { message: 'skillBindings 中存在重复的 skillId' },
       ),
+    materials: taskMaterialSelectionSchema.array().max(50).optional(),
     modelReference: expertModelReferenceSchema.optional(),
     builtinToolPolicy: builtinToolPolicySchema.optional(),
     createdAt: z.number().int().nonnegative(),
@@ -411,6 +499,7 @@ export const saveTaskContextRequestSchema = z
     expectedRevision: z.number().int().positive().optional(),
     executor: taskContextExecutorSchema,
     skillBindings: taskContextRevisionSchema.shape.skillBindings,
+    materials: taskMaterialSelectionSchema.array().max(50).optional(),
     modelReference: expertModelReferenceSchema.optional(),
     builtinToolPolicy: builtinToolPolicySchema.optional(),
   })
@@ -421,6 +510,19 @@ export const taskContextMutationResultSchema = z
   .object({ context: taskContextRevisionSchema })
   .strict();
 export type TaskContextMutationResult = z.infer<typeof taskContextMutationResultSchema>;
+
+export const listTaskMaterialCandidatesRequestSchema = z
+  .object({ taskId: z.string().min(1) })
+  .strict();
+export type ListTaskMaterialCandidatesRequest = z.infer<
+  typeof listTaskMaterialCandidatesRequestSchema
+>;
+export const prepareWorkspaceInputSnapshotRequestSchema = z
+  .object({ taskId: z.string().min(1) })
+  .strict();
+export type PrepareWorkspaceInputSnapshotRequest = z.infer<
+  typeof prepareWorkspaceInputSnapshotRequestSchema
+>;
 
 export const listSkillsRequestSchema = z.object({}).strict();
 export type ListSkillsRequest = z.infer<typeof listSkillsRequestSchema>;
@@ -1749,6 +1851,8 @@ export const IpcChannel = {
   SetExpertLifecycle: 'expert:set-lifecycle',
   GetTaskContext: 'task-context:get',
   SaveTaskContext: 'task-context:save',
+  ListTaskMaterialCandidates: 'task-material:list-candidates',
+  PrepareWorkspaceInputSnapshot: 'task-material:prepare-input-snapshot',
   ListDependencyOptions: 'dependency:list-options',
   InspectDependencyPlan: 'dependency:inspect-plan',
   PrepareDependencyEnvironment: 'dependency:prepare',
@@ -1860,6 +1964,12 @@ export interface BetterWorkDesktopApi {
   taskContexts: {
     get(input: GetTaskContextRequest): Promise<TaskContextRevision | null>;
     save(input: SaveTaskContextRequest): Promise<TaskContextMutationResult>;
+  };
+  materials: {
+    listCandidates(input: ListTaskMaterialCandidatesRequest): Promise<MaterialCandidate[]>;
+    prepareInputSnapshot(
+      input: PrepareWorkspaceInputSnapshotRequest,
+    ): Promise<InputSnapshot | null>;
   };
   dependencies: {
     listOptions(): Promise<DependencyOptions>;

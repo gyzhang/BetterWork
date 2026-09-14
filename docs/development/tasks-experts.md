@@ -47,7 +47,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E15 | 内置专家分发与 E1 验收 | E14 | done | [内置 Expert 服务测试](../../apps/desktop/src/main/services/expert-service.test.ts)：新增 `resources/experts/release-manifest.json`，启动幂等注册 stable builtin Expert；打包资源同步进入 `experts/`，内置修订只读且可复制；`npm run verify` 退出 0（55 文件 / 453 测试 / Electron build），2026-09-14 14:27 |
 | E20 | 材料与快照精确契约 | E15 | done | [材料、快照与运行来源契约](material-contracts.md)：定稿候选/选择/读取分离、Knowledge revision、ArtifactVersion、Workspace 输入快照、用途、RunContextSnapshot、两库与文件恢复/回收、范围校验入口、读取足迹和 ArtifactInputRelation；明确源变更、缺失、重复、跨空间、取消、归档、旧任务和范围收缩语义。文档差异检查通过，2026-09-14。 |
 | E21 | 知识修订、文件快照与恢复 | E20 | done | [KnowledgeVault 修订与快照测试](../../apps/desktop/src/main/services/knowledge-vault.test.ts)、[输入快照测试](../../apps/desktop/src/main/services/input-snapshot-service.test.ts)、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)：知识库 v3 保留不可变内容/分块修订；应用库 v11 增加 Workspace 所属输入快照状态；稳定读取、哈希寻址复制、取消、符号链接/特殊文件拒绝、缺失/孤儿恢复已接通启动装配；`npm run verify` 退出 0（56 文件 / 459 测试 / Electron build），2026-09-14 15:04。 |
-| E22 | 材料选择与草稿持久化 | E21 | todo | — |
+| E22 | 材料选择与草稿持久化 | E21 | done | [TaskMaterialService/TaskContext 测试](../../apps/desktop/src/main/services/task-material-service.test.ts)、[TaskContextRepository 测试](../../apps/desktop/src/main/persistence/task-context-repository.test.ts)：TaskContextRevision v12 保存材料判别引用、用途、备注和添加来源；候选查询覆盖 Knowledge revision、Workspace ArtifactVersion、ready 输入快照；保存边界校验修订哈希、快照状态、重复项和 Workspace 归属；新增候选/输入快照 IPC 与 Preload；`npm run verify` 退出 0（57 文件 / 463 测试 / Electron build），2026-09-14 15:19。 |
 | E23 | 宿主范围与上下文收缩 | E22 | todo | — |
 | E24 | 读取足迹与成果输入来源 | E23 | todo | — |
 | E25 | 材料 UI、成果复用与 E2 验收 | E24 | todo | — |
@@ -153,7 +153,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 - 工作：工作空间候选与任务实际选择分离；支持具体知识、现有可读成果版本和当前文件。常用参考仅匹配 Workspace 后带入，同清单可移除；显式跨空间引用标来源。
 - 失败/取消：无访问登记的任意 ID/路径拒绝；源版本变化给差异，不追随最新；取消选择不改草稿；超限和不可读格式有具体原因。
 - 必测：候选不等于授权、常用参考不跨公司、并发草稿版本、重复引用去重、移除不会被预设自动补回。
-- 完成：重启恢复完整材料清单及用途；空材料仍允许澄清任务。
+- 完成：`TaskContextRevision` v12 新增 `materials_json`；协议定义 `MaterialReference`、六类用途和 `addedFrom`，`TaskMaterialService` 提供 Knowledge revision、当前 Workspace ArtifactVersion、ready 输入快照候选，并在保存时校验内容哈希、快照完整性、重复引用、跨空间和失效状态。新增材料候选查询与 Workspace 文件快照 IPC/Preload，App 保存并恢复材料草稿；`npm run verify` 退出 0（57 文件 / 463 测试 / Electron build），2026-09-14 15:19。当前工具仍可读整个 Knowledge Vault/Workspace，范围收紧留 E23；空材料仍允许澄清任务。
 
 ### E23 范围与历史上下文
 

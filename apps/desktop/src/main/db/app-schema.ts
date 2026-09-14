@@ -672,6 +672,15 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 12,
+    name: 'add task context material selections',
+    up(db: Database.Database): void {
+      db.exec(
+        "ALTER TABLE task_context_revisions ADD COLUMN materials_json TEXT NOT NULL DEFAULT '[]'",
+      );
+    },
+  },
 ];
 
 /**

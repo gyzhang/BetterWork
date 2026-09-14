@@ -56,3 +56,4 @@
 - 2026-09-14：E15 已加入 `resources/experts/release-manifest.json` 与启动幂等注册，首个内置研究分析专家随安装资源分发；内置原件只读，复制后才可编辑。
 - 2026-09-14：E20 已新增[材料、快照与运行来源契约](../development/material-contracts.md)，定稿 Knowledge revision、ArtifactVersion、Workspace 输入快照、材料用途、候选与任务授权、两库和受管文件恢复/回收、Run 读取足迹、ArtifactInputRelation，以及源变更、重复引用、跨空间、取消、归档、旧任务和范围收缩语义。现有 `read_text_file` 与 `knowledge_search` 的全范围行为明确标记为 E23 待收紧，未提前宣称 E2 已完成。
 - 2026-09-14：E21 已落地 Knowledge Vault v3 不可变内容/分块修订、应用库 v11 `input_snapshots`、稳定读取与哈希寻址受管复制、取消和启动恢复；原始文件仍只读，输入快照不冒充 Artifact。材料绑定、运行范围过滤、读取足迹和成果输入关系仍分别留 E22–E24。
+- 2026-09-14：E22 已将 `MaterialReference`、用途、备注和添加来源加入 TaskContextRevision v12；TaskMaterialService/IPC 校验 Knowledge revision、ArtifactVersion、ready 输入快照、重复引用和 Workspace 归属，并提供候选查询与 Workspace 文件快照入口。`read_text_file` 与 `knowledge_search` 仍未按 Run 过滤，留 E23；读取足迹和成果输入关系留 E24。

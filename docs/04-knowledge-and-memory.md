@@ -105,6 +105,8 @@ VectorIndex 必须可替换。第一版优先考虑 SQLite + sqlite-vec；规模
 
 材料契约要求运行中的检索接收允许的 Knowledge revision 集合，只返回选定修订的 Locator、摘要和内容哈希；未选文档不能因为同一 Vault 的全局搜索命中而进入 Run。当前 `KnowledgeVault.search(query)` 仍是未过滤的应用级搜索，E23 才增加范围参数与运行读取足迹，不能把现有结果当作 E2 的材料隔离证据。
 
+E22 已能把具体 Knowledge revision 的身份、哈希和用途保存到 TaskContextRevision；这只证明材料选择可恢复，不代表正文已经注入或检索已经按 Run 隔离。未选资料仍不得由后续 E23 之外的实现自行读取。
+
 ## 6. 三层记忆体系
 
 > **现状：本节至 §8 全部为设计目标，Memory 零实现。** 属 Phase 4 范围（见 [MVP 与路线图](07-mvp-and-roadmap.md) §6），架构决策见 [ADR-0004](adr/0004-hybrid-memory.md)。当前没有 `memory/` 目录、没有 `MemoryRecord` 表、没有记忆中心与后台反思。Run 历史与 Session 标识已持久化，但执行链路尚未把历史作为模型上下文传入，因此也不存在任何形式的隐式记忆。

@@ -47,6 +47,7 @@ import {
   getSkillRequestSchema,
   getTaskContextRequestSchema,
   importSkillRequestSchema,
+  inputSnapshotSchema,
   IpcChannel,
   knowledgeDocumentSummarySchema,
   type KnowledgeImportResult,
@@ -61,9 +62,11 @@ import {
   listRunEventsRequestSchema,
   listRunsRequestSchema,
   listSkillsRequestSchema,
+  listTaskMaterialCandidatesRequestSchema,
   listTasksRequestSchema,
   markAllNotificationsReadRequestSchema,
   markNotificationReadRequestSchema,
+  materialCandidateSchema,
   maximizedResultSchema,
   modelProfileIdSchema,
   modelProfileSummarySchema,
@@ -75,6 +78,7 @@ import {
   openKnowledgeSourceResultSchema,
   prepareDependencyRequestSchema,
   prepareDependencyResultSchema,
+  prepareWorkspaceInputSnapshotRequestSchema,
   recentTaskSummarySchema,
   refreshKnowledgeDocumentRequestSchema,
   refreshSkillDependencyGrantRequestSchema,
@@ -139,11 +143,13 @@ import {
   type SkillDependencyService,
 } from '../services/skill-dependency-service';
 import type { SkillService } from '../services/skill-service';
+import type { TaskMaterialService } from '../services/task-material-service';
 import type { ToolchainSnapshotService } from '../services/toolchain-snapshot-service';
 
 export interface IpcDependencies {
   readonly store: AppStore;
   readonly knowledgeVault: KnowledgeVault;
+  readonly taskMaterials: TaskMaterialService;
   readonly notifications: NotificationService;
   readonly runs: RunService;
   readonly skillService: SkillService;
@@ -274,7 +280,7 @@ function registerRunChannels({ store, runs }: IpcDependencies): void {
 }
 
 function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
-  const { store, getDefaultWorkspaceRoot } = deps;
+  const { store, getDefaultWorkspaceRoot, taskMaterials } = deps;
 
   handleNoInput(IpcChannel.GetDefaultWorkspace, emptyRequestSchema, workspaceSummarySchema, () =>
     store.workspaces.getOrCreate(getDefaultWorkspaceRoot(), '我的工作区'),
@@ -320,18 +326,42 @@ function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
     IpcChannel.SaveTaskContext,
     saveTaskContextRequestSchema,
     taskContextMutationResultSchema,
-    (input) => ({
-      context: store.taskContexts.save(
-        input.taskId,
-        {
-          executor: input.executor,
-          skillBindings: input.skillBindings,
-          ...(input.modelReference ? { modelReference: input.modelReference } : {}),
-          ...(input.builtinToolPolicy ? { builtinToolPolicy: input.builtinToolPolicy } : {}),
-        },
-        input.expectedRevision,
-      ),
-    }),
+    async (input) => {
+      await taskMaterials.validateSelections(input.taskId, input.materials ?? []);
+      return {
+        context: store.taskContexts.save(
+          input.taskId,
+          {
+            executor: input.executor,
+            skillBindings: input.skillBindings,
+            ...(input.modelReference ? { modelReference: input.modelReference } : {}),
+            ...(input.builtinToolPolicy ? { builtinToolPolicy: input.builtinToolPolicy } : {}),
+            ...(input.materials ? { materials: input.materials } : {}),
+          },
+          input.expectedRevision,
+        ),
+      };
+    },
+  );
+  handleInput(
+    IpcChannel.ListTaskMaterialCandidates,
+    listTaskMaterialCandidatesRequestSchema,
+    z.array(materialCandidateSchema),
+    (input) => taskMaterials.listCandidates(input.taskId),
+  );
+  handleInput(
+    IpcChannel.PrepareWorkspaceInputSnapshot,
+    prepareWorkspaceInputSnapshotRequestSchema,
+    inputSnapshotSchema.nullable(),
+    async (input) => {
+      const result = await showOpenDialog(deps, {
+        title: '选择本次工作需要的文件',
+        properties: ['openFile'],
+      });
+      const sourcePath = result.filePaths[0];
+      if (result.canceled || !sourcePath) return null;
+      return taskMaterials.prepareInputSnapshot(input.taskId, sourcePath);
+    },
   );
 }
 

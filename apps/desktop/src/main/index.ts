@@ -33,6 +33,7 @@ import { SkillAdapterService } from './services/skill-adapter';
 import { SkillDependencyService } from './services/skill-dependency-service';
 import { SkillExecutionService } from './services/skill-execution-service';
 import { type BuiltinReleaseManifest, SkillService } from './services/skill-service';
+import { TaskMaterialService } from './services/task-material-service';
 import { ToolchainSnapshotService } from './services/toolchain-snapshot-service';
 import { createMainWindow } from './window';
 
@@ -65,6 +66,7 @@ function bootstrap(): ApplicationContext {
     path.join(userData, 'vaults', 'default', 'vault.sqlite'),
   );
   const inputSnapshots = new InputSnapshotService(store, userData);
+  const taskMaterials = new TaskMaterialService({ store, knowledgeVault, inputSnapshots });
   inputSnapshots
     .recover()
     .then((recovered) => {
@@ -238,6 +240,7 @@ function bootstrap(): ApplicationContext {
   registerIpc({
     store,
     knowledgeVault,
+    taskMaterials,
     notifications,
     runs,
     skillService,
