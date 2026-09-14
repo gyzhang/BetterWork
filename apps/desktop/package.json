@@ -16,6 +16,7 @@
     "@betterwork/agent-core": "*",
     "@betterwork/agent-protocol": "*",
     "@betterwork/tool-runtime": "*",
+    "@modelcontextprotocol/client": "^2.0.0",
     "better-sqlite3": "^13.0.3",
     "mammoth": "^1.12.2",
     "pdf-parse": "^2.4.5",

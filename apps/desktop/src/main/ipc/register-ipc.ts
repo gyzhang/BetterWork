@@ -21,6 +21,7 @@ import {
   createMemoryRequestSchema,
   createTaskRequestSchema,
   deletedResultSchema,
+  deleteMcpConnectionRequestSchema,
   deleteSkillRequestSchema,
   dependencyOperationSchema,
   dependencyOptionsSchema,
@@ -45,6 +46,7 @@ import {
   getDependencyOperationRequestSchema,
   getExpertRequestSchema,
   getFileArtifactRequestSchema,
+  getMcpConnectionRequestSchema,
   getSkillRequestSchema,
   getTaskContextRequestSchema,
   importSkillRequestSchema,
@@ -70,6 +72,9 @@ import {
   markNotificationReadRequestSchema,
   materialCandidateSchema,
   maximizedResultSchema,
+  mcpConnectionSummarySchema,
+  mcpMutationResultSchema,
+  mcpTestResultSchema,
   memoryMutationResultSchema,
   memoryRecordSchema,
   modelProfileIdSchema,
@@ -97,6 +102,7 @@ import {
   runSummarySchema,
   saveExpertRevisionRequestSchema,
   saveMarkdownArtifactRequestSchema,
+  saveMcpConnectionRequestSchema,
   saveModelProfileRequestSchema,
   saveSearchEngineRequestSchema,
   saveSkillRuntimeProfileRequestSchema,
@@ -140,6 +146,7 @@ import type { AppStore } from '../persistence';
 import type { ExpertService } from '../services/expert-service';
 import type { FileArtifactService } from '../services/file-artifact-service';
 import type { KnowledgeVault } from '../services/knowledge-vault';
+import type { McpClientService } from '../services/mcp-client-service';
 import type { MemoryService } from '../services/memory-service';
 import { probeModelConnection } from '../services/model-connectivity';
 import type { NotificationService } from '../services/notification-service';
@@ -162,6 +169,7 @@ export interface IpcDependencies {
   readonly skillService: SkillService;
   readonly expertService: ExpertService;
   readonly memories: MemoryService;
+  readonly mcpClientService: McpClientService;
   readonly dependencies: SkillDependencyService;
   readonly snapshots: ToolchainSnapshotService;
   readonly fileArtifactService?: FileArtifactService;
@@ -256,6 +264,7 @@ export function registerIpc(deps: IpcDependencies): void {
   registerSkillChannels(deps);
   registerExpertChannels(deps);
   registerMemoryChannels(deps);
+  registerMcpChannels(deps);
   registerDependencyChannels(deps);
   registerNotificationChannels(deps);
   registerWindowChannels(deps);
@@ -1071,6 +1080,39 @@ function registerMemoryChannels({ memories }: IpcDependencies): void {
     setMemoryStatusRequestSchema,
     memoryMutationResultSchema,
     (input) => ({ memory: memories.setStatus(input) }),
+  );
+}
+
+function registerMcpChannels({ mcpClientService }: IpcDependencies): void {
+  handleNoInput(
+    IpcChannel.ListMcpConnections,
+    emptyRequestSchema,
+    z.array(mcpConnectionSummarySchema),
+    () => mcpClientService.listConnections(),
+  );
+  handleInput(
+    IpcChannel.GetMcpConnection,
+    getMcpConnectionRequestSchema,
+    mcpConnectionSummarySchema.nullable(),
+    (input) => mcpClientService.getConnection(input.id),
+  );
+  handleInput(
+    IpcChannel.SaveMcpConnection,
+    saveMcpConnectionRequestSchema,
+    mcpMutationResultSchema,
+    async (input) => ({ connection: await mcpClientService.saveConnection(input) }),
+  );
+  handleInput(
+    IpcChannel.DeleteMcpConnection,
+    deleteMcpConnectionRequestSchema,
+    deletedResultSchema,
+    async (input) => ({ deleted: await mcpClientService.deleteConnection(input.id) }),
+  );
+  handleInput(
+    IpcChannel.TestMcpConnection,
+    getMcpConnectionRequestSchema,
+    mcpTestResultSchema,
+    (input) => mcpClientService.testConnection(input.id),
   );
 }
 

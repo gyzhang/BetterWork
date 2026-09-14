@@ -11,6 +11,8 @@ import {
   jobResultSchema,
   jobSpecSchema,
   MAX_RUN_SKILL_BINDINGS,
+  mcpToolBindingSchema,
+  mcpToolSummarySchema,
   memoryRecordSchema,
   runMaterialReadSchema,
   runtimeEnvironmentSchema,
@@ -110,6 +112,24 @@ describe('run protocol', () => {
       updatedAt: 1,
     });
     expect(context.excludedMemoryIds).toEqual(['memory-1']);
+  });
+
+  it('keeps MCP tool bindings stable and separate from discovered descriptions', () => {
+    const tool = mcpToolSummarySchema.parse({
+      id: 'connection-1/finance.monthly_summary',
+      connectionId: 'connection-1',
+      name: 'finance.monthly_summary',
+      description: '只读查询',
+      inputSchema: { type: 'object' },
+      schemaHash: 'hash-1',
+      discoveredAt: 1,
+    });
+    expect(
+      mcpToolBindingSchema.parse({ connectionId: tool.connectionId, toolId: tool.id }),
+    ).toEqual({
+      connectionId: 'connection-1',
+      toolId: tool.id,
+    });
   });
 
   it('accepts only identifiers and prompt, leaving the workspace boundary to Main', () => {

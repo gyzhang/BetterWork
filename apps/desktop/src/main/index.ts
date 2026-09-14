@@ -23,6 +23,7 @@ import { type BuiltinExpertReleaseManifest, ExpertService } from './services/exp
 import { FileArtifactService } from './services/file-artifact-service';
 import { InputSnapshotService } from './services/input-snapshot-service';
 import { KnowledgeVault } from './services/knowledge-vault';
+import { McpClientService } from './services/mcp-client-service';
 import { MemoryService } from './services/memory-service';
 import { NotificationService } from './services/notification-service';
 import {
@@ -49,6 +50,7 @@ interface ApplicationContext {
   store: AppStore;
   knowledgeVault: KnowledgeVault;
   inputSnapshots: InputSnapshotService;
+  mcpClientService: McpClientService;
   runs?: RunService;
   window: BrowserWindow | null;
 }
@@ -68,6 +70,7 @@ function bootstrap(): ApplicationContext {
   );
   const inputSnapshots = new InputSnapshotService(store, userData);
   const memories = new MemoryService(store, userData);
+  const mcpClientService = new McpClientService(store);
   memories.rebuildProjection().catch((error: unknown) => {
     console.error('Memory projection rebuild failed', error);
   });
@@ -169,7 +172,13 @@ function bootstrap(): ApplicationContext {
       console.error('Dependency preparation recovery failed', error);
     });
 
-  const started: ApplicationContext = { store, knowledgeVault, inputSnapshots, window: null };
+  const started: ApplicationContext = {
+    store,
+    knowledgeVault,
+    inputSnapshots,
+    mcpClientService,
+    window: null,
+  };
   const getWindow = (): BrowserWindow | null => {
     const window = started.window;
     return window && !window.isDestroyed() ? window : null;
@@ -242,6 +251,7 @@ function bootstrap(): ApplicationContext {
     inputSnapshots,
     taskMaterials,
     memories,
+    mcpClientService,
   );
   started.runs = runs;
 
@@ -250,6 +260,7 @@ function bootstrap(): ApplicationContext {
     knowledgeVault,
     taskMaterials,
     memories,
+    mcpClientService,
     notifications,
     runs,
     skillService,
@@ -288,6 +299,7 @@ app.on(
   createQuitHandler(
     async () => {
       await context?.runs?.shutdown();
+      await context?.mcpClientService.shutdown();
     },
     () => {
       context?.knowledgeVault.close();

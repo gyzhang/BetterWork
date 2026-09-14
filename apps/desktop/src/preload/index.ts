@@ -8,6 +8,7 @@ import {
   copySkillRequestSchema,
   createMemoryRequestSchema,
   deletedResultSchema,
+  deleteMcpConnectionRequestSchema,
   deleteSkillRequestSchema,
   dependencyOperationSchema,
   dependencyOptionsSchema,
@@ -22,6 +23,7 @@ import {
   getArtifactThumbnailsResultSchema,
   getDependencyOperationRequestSchema,
   getExpertRequestSchema,
+  getMcpConnectionRequestSchema,
   getSkillRequestSchema,
   getTaskContextRequestSchema,
   importSkillRequestSchema,
@@ -32,6 +34,9 @@ import {
   listMemoriesRequestSchema,
   listTaskMaterialCandidatesRequestSchema,
   materialCandidateSchema,
+  mcpConnectionSummarySchema,
+  mcpMutationResultSchema,
+  mcpTestResultSchema,
   memoryMutationResultSchema,
   memoryRecordSchema,
   notificationActivatedSchema,
@@ -45,6 +50,7 @@ import {
   registerToolchainResultSchema,
   revokeSkillTrustRequestSchema,
   saveExpertRevisionRequestSchema,
+  saveMcpConnectionRequestSchema,
   saveSkillRuntimeProfileRequestSchema,
   saveTaskContextRequestSchema,
   setExpertLifecycleRequestSchema,
@@ -320,6 +326,34 @@ const api: BetterWorkDesktopApi = {
         IpcChannel.SetMemoryStatus,
         setMemoryStatusRequestSchema.parse(input),
         memoryMutationResultSchema,
+      ),
+  },
+  mcp: {
+    listConnections: () =>
+      invokeValidated(IpcChannel.ListMcpConnections, {}, mcpConnectionSummarySchema.array()),
+    getConnection: (input) =>
+      invokeValidated(
+        IpcChannel.GetMcpConnection,
+        getMcpConnectionRequestSchema.parse(input),
+        mcpConnectionSummarySchema.nullable(),
+      ),
+    saveConnection: (input) =>
+      invokeValidated(
+        IpcChannel.SaveMcpConnection,
+        saveMcpConnectionRequestSchema.parse(input),
+        mcpMutationResultSchema,
+      ),
+    deleteConnection: (input) =>
+      invokeValidated(
+        IpcChannel.DeleteMcpConnection,
+        deleteMcpConnectionRequestSchema.parse(input),
+        deletedResultSchema,
+      ),
+    testConnection: (input) =>
+      invokeValidated(
+        IpcChannel.TestMcpConnection,
+        getMcpConnectionRequestSchema.parse(input),
+        mcpTestResultSchema,
       ),
   },
   dependencies: {

@@ -586,6 +586,76 @@ export const memoryReadSchema = z
   .strict();
 export type MemoryRead = z.infer<typeof memoryReadSchema>;
 
+export const mcpConnectionStatusSchema = z.enum([
+  'unconfigured',
+  'connecting',
+  'ready',
+  'failed',
+  'disconnected',
+]);
+export type McpConnectionStatus = z.infer<typeof mcpConnectionStatusSchema>;
+export const mcpTransportSchema = z
+  .object({
+    kind: z.literal('stdio'),
+    command: z.string().trim().min(1).max(2_000),
+    args: z.array(z.string().max(2_000)).max(100).default([]),
+    cwd: z.string().trim().min(1).max(4_000).optional(),
+  })
+  .strict();
+export type McpTransport = z.input<typeof mcpTransportSchema>;
+export const mcpToolSummarySchema = z
+  .object({
+    id: z.string().min(1),
+    connectionId: z.string().min(1),
+    name: z.string().trim().min(1).max(200),
+    description: z.string().max(4_000),
+    inputSchema: z.record(z.string(), z.unknown()),
+    schemaHash: z.string().min(1),
+    discoveredAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type McpToolSummary = z.infer<typeof mcpToolSummarySchema>;
+export const mcpConnectionSummarySchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().trim().min(1).max(160),
+    transport: mcpTransportSchema,
+    status: mcpConnectionStatusSchema,
+    serverName: z.string().min(1).optional(),
+    serverVersion: z.string().min(1).optional(),
+    tools: mcpToolSummarySchema.array().max(200),
+    failureMessage: z.string().min(1).optional(),
+    lastCheckedAt: z.number().int().nonnegative().optional(),
+    createdAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type McpConnectionSummary = z.infer<typeof mcpConnectionSummarySchema>;
+export const saveMcpConnectionRequestSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    name: z.string().trim().min(1).max(160),
+    transport: mcpTransportSchema,
+  })
+  .strict();
+export type SaveMcpConnectionRequest = z.input<typeof saveMcpConnectionRequestSchema>;
+export const getMcpConnectionRequestSchema = z.object({ id: z.string().min(1) }).strict();
+export type GetMcpConnectionRequest = z.infer<typeof getMcpConnectionRequestSchema>;
+export const deleteMcpConnectionRequestSchema = z.object({ id: z.string().min(1) }).strict();
+export type DeleteMcpConnectionRequest = z.infer<typeof deleteMcpConnectionRequestSchema>;
+export const mcpMutationResultSchema = z
+  .object({ connection: mcpConnectionSummarySchema })
+  .strict();
+export type McpMutationResult = z.infer<typeof mcpMutationResultSchema>;
+export const mcpToolBindingSchema = z
+  .object({ connectionId: z.string().min(1), toolId: z.string().min(1) })
+  .strict();
+export type McpToolBinding = z.infer<typeof mcpToolBindingSchema>;
+export const mcpTestResultSchema = z
+  .object({ connection: mcpConnectionSummarySchema, tools: mcpToolSummarySchema.array() })
+  .strict();
+export type McpTestResult = z.infer<typeof mcpTestResultSchema>;
+
 export const artifactInputRelationKindSchema = z.enum([
   'data',
   'rule',
@@ -650,6 +720,7 @@ export const taskContextRevisionSchema = z
       ),
     materials: taskMaterialSelectionSchema.array().max(50).optional(),
     excludedMemoryIds: z.array(z.string().min(1)).max(100).optional(),
+    mcpToolBindings: z.array(mcpToolBindingSchema).max(50).optional(),
     modelReference: expertModelReferenceSchema.optional(),
     builtinToolPolicy: builtinToolPolicySchema.optional(),
     createdAt: z.number().int().nonnegative(),
@@ -669,6 +740,7 @@ export const saveTaskContextRequestSchema = z
     skillBindings: taskContextRevisionSchema.shape.skillBindings,
     materials: taskMaterialSelectionSchema.array().max(50).optional(),
     excludedMemoryIds: taskContextRevisionSchema.shape.excludedMemoryIds,
+    mcpToolBindings: taskContextRevisionSchema.shape.mcpToolBindings,
     modelReference: expertModelReferenceSchema.optional(),
     builtinToolPolicy: builtinToolPolicySchema.optional(),
   })
@@ -2034,6 +2106,11 @@ export const IpcChannel = {
   CreateMemory: 'memory:create',
   UpdateMemory: 'memory:update',
   SetMemoryStatus: 'memory:set-status',
+  ListMcpConnections: 'mcp:list-connections',
+  GetMcpConnection: 'mcp:get-connection',
+  SaveMcpConnection: 'mcp:save-connection',
+  DeleteMcpConnection: 'mcp:delete-connection',
+  TestMcpConnection: 'mcp:test-connection',
   ListDependencyOptions: 'dependency:list-options',
   InspectDependencyPlan: 'dependency:inspect-plan',
   PrepareDependencyEnvironment: 'dependency:prepare',
@@ -2157,6 +2234,13 @@ export interface BetterWorkDesktopApi {
     create(input: CreateMemoryRequest): Promise<MemoryMutationResult>;
     update(input: UpdateMemoryRequest): Promise<MemoryMutationResult>;
     setStatus(input: SetMemoryStatusRequest): Promise<MemoryMutationResult>;
+  };
+  mcp: {
+    listConnections(): Promise<McpConnectionSummary[]>;
+    getConnection(input: GetMcpConnectionRequest): Promise<McpConnectionSummary | null>;
+    saveConnection(input: SaveMcpConnectionRequest): Promise<McpMutationResult>;
+    deleteConnection(input: DeleteMcpConnectionRequest): Promise<{ deleted: boolean }>;
+    testConnection(input: GetMcpConnectionRequest): Promise<McpTestResult>;
   };
   dependencies: {
     listOptions(): Promise<DependencyOptions>;

@@ -15,6 +15,7 @@ import type {
   BuiltinToolPolicy,
   ExpertModelReference,
   MaterialReference,
+  McpToolBinding,
   MemoryRecord,
   RuntimeProfileCommand,
   ScriptExecution,
@@ -55,6 +56,7 @@ import { type AppStore, type InputSnapshot, materialReferenceKey } from '../pers
 import type { FileArtifactService } from './file-artifact-service';
 import type { InputSnapshotService } from './input-snapshot-service';
 import type { KnowledgeVault } from './knowledge-vault';
+import type { McpClientService } from './mcp-client-service';
 import type { MemoryService } from './memory-service';
 import type { NotificationService } from './notification-service';
 import { preparePptAttempt } from './ppt-execution-attempt';
@@ -87,6 +89,7 @@ interface ResolvedRunContext {
   expertId?: string;
   memoryRecords: MemoryRecord[];
   excludedMemoryIds: string[];
+  mcpToolBindings: McpToolBinding[];
 }
 
 /** 一次执行期间的内存态；Run 结束后整条丢弃。 */
@@ -122,6 +125,7 @@ export const createRunTools = (dependencies: {
   taskFileWriter?: (input: TaskFileWriteInput) => Promise<TaskFileWriteOutput>;
   skillCommandExecutor?: (input: SkillCommandExecuteInput) => Promise<SkillCommandExecuteOutput>;
   artifactFileRegistrar?: ArtifactFileRegistrar;
+  mcpTools?: AgentTool[];
 }): AgentTool[] => {
   const allows = (name: string): boolean =>
     !dependencies.allowedBuiltinToolNames || dependencies.allowedBuiltinToolNames.has(name);
@@ -147,6 +151,7 @@ export const createRunTools = (dependencies: {
     tools.push(createSkillExecuteTool(dependencies.skillCommandExecutor));
   if (dependencies.artifactFileRegistrar)
     tools.push(createArtifactRegisterFileTool(dependencies.artifactFileRegistrar));
+  if (dependencies.mcpTools) tools.push(...dependencies.mcpTools);
   return tools;
 };
 
@@ -181,6 +186,7 @@ export class RunService {
     private readonly inputSnapshots?: InputSnapshotService,
     private readonly taskMaterials?: TaskMaterialService,
     private readonly memories?: MemoryService,
+    private readonly mcpClientService?: McpClientService,
   ) {}
 
   start(input: StartRunRequest): string {
@@ -338,6 +344,10 @@ export class RunService {
         runId,
         input,
       );
+      const mcpTools =
+        this.mcpClientService && executionContext.mcpToolBindings.length > 0
+          ? await this.mcpClientService.createAgentTools(executionContext.mcpToolBindings)
+          : [];
       const events = this.engine.run({
         runId,
         taskId: input.taskId,
@@ -384,6 +394,7 @@ export class RunService {
                   : {}),
               }
             : {}),
+          ...(mcpTools.length > 0 ? { mcpTools } : {}),
         }),
         signal: controller.signal,
         ...(bindingIds.length > 0 ? { maxToolRounds: 40 } : {}),
@@ -790,6 +801,7 @@ export class RunService {
         materialScope: false,
         memoryRecords: [],
         excludedMemoryIds: [],
+        mcpToolBindings: [],
       };
     }
     const expected = input.expectedTaskContextRevision;
@@ -812,6 +824,7 @@ export class RunService {
         taskContextRevisionId: context.id,
         memoryRecords: [],
         excludedMemoryIds: context.excludedMemoryIds ?? [],
+        mcpToolBindings: context.mcpToolBindings ?? [],
       };
     }
     const expert = this.store.experts.get(context.executor.expertId);
@@ -833,6 +846,7 @@ export class RunService {
       expertId: context.executor.expertId,
       memoryRecords: [],
       excludedMemoryIds: context.excludedMemoryIds ?? [],
+      mcpToolBindings: context.mcpToolBindings ?? [],
     };
   }
 

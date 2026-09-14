@@ -149,6 +149,13 @@ function installApi(options?: { expert?: boolean; context?: TaskContextRevision 
       update: vi.fn(async () => ({ memory: undefined })),
       setStatus: vi.fn(async () => ({ memory: undefined })),
     },
+    mcp: {
+      listConnections: vi.fn(async () => []),
+      getConnection: vi.fn(async () => null),
+      saveConnection: vi.fn(async () => ({ connection: undefined })),
+      deleteConnection: vi.fn(async () => ({ deleted: true })),
+      testConnection: vi.fn(async () => ({ connection: undefined, tools: [] })),
+    },
     experts: {
       list: vi.fn(async () => (options?.expert ? [expertSummary] : [])),
       get: vi.fn(async () => (options?.expert ? expertDetail : null)),

@@ -786,6 +786,33 @@ export const appMigrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 17,
+    name: 'add mcp connections and task tool bindings',
+    up(db: Database.Database): void {
+      db.exec(`
+        ALTER TABLE task_context_revisions
+          ADD COLUMN mcp_tool_bindings_json TEXT NOT NULL DEFAULT '[]';
+        CREATE TABLE mcp_connections (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          transport_kind TEXT NOT NULL CHECK (transport_kind = 'stdio'),
+          command TEXT NOT NULL,
+          args_json TEXT NOT NULL,
+          cwd TEXT,
+          status TEXT NOT NULL CHECK (status IN ('unconfigured', 'connecting', 'ready', 'failed', 'disconnected')),
+          server_name TEXT,
+          server_version TEXT,
+          tools_json TEXT NOT NULL DEFAULT '[]',
+          failure_message TEXT,
+          last_checked_at INTEGER,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX idx_mcp_connections_updated ON mcp_connections(updated_at DESC, id ASC);
+      `);
+    },
+  },
 ];
 
 /**
