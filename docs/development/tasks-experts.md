@@ -2,7 +2,7 @@
 
 - 生效：2026-09-14，用户通过[设计 v0.2](../designs/experts-and-task-materials.md)评审并要求落实设计、形成开发计划。
 - 决策：[ADR-0014](../adr/0014-expert-context-and-material-binding.md) 已接受；具体字段、记忆投影、MCP 与解析器实施选择按本计划对应任务落档，不把设计接受写成代码完成。
-- 核对基线：BetterWork `bdaece5`，E11–E24 已按本计划提交并推送；后续每张任务卡继续独立提交、推送并记录门禁结果。
+- 核对基线：BetterWork `3bd51c4`，E11–E54 已按本计划提交并推送；E55/E56 仍按真实条件保持 partial。后续每张任务卡继续独立提交、推送并记录门禁结果。
 - 平台：本轮 macOS；Windows 保留原待办，不扩大自动调度、多 Agent、通用 DAG 或企业权限。
 - 执行方式：串行、每次一张任务卡；遵守 [执行手册](README.md)与全仓唯一 [工程规范](../12-engineering-standards.md)。不创建新规范或单独测试门禁。
 
@@ -52,8 +52,8 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E24 | 读取足迹与成果输入来源 | E23 | done | [读取/成果来源测试](../../apps/desktop/src/main/services/run-service.test.ts)：v14 保存 RunMaterialRead 与 ArtifactInputRelation；搜索、输入快照和成果读取留下精确足迹，Markdown/文件成果只允许关联同一 Run 已读取材料。`npm run verify` 退出 0（60 文件 / 473 测试 / Electron build），2026-09-14。 |
 | E25 | 材料 UI、成果复用与 E2 验收 | E24 | done | Composer 与资料面板支持文件/知识/成果选择、用途调整、失效提示和取消；专家编辑器可选择当前工作区适用的常用参考，专家“召唤”只把适用引用带入 TaskContext，任务仍可移除/补充；成果详情可引用精确 Markdown 版本开始新任务；Office 材料在 E51 接入后进入可读候选；跨 Workspace 材料需通过任务内显式来源选择。 |
 | E30 | 记忆投影与治理实现 ADR | E25 | done | 新增 [ADR-0015](../adr/0015-memory-scope-and-governance.md)：SQLite 唯一真相源、User/Workspace/Expert/Expert×Workspace 判别范围、candidate/confirmed/过期/删除状态、来源、预算、运行快照、投影重建和失败恢复语义已定案。 |
-| E31 | 记忆存储、检索与运行注入 | E30 | done | [MemoryRepository/Service 与 RunService 测试](../../apps/desktop/src/main/persistence/memory-repository.test.ts)：应用库 v15 增加不可变记忆修订与 Run 读取足迹；四种作用域按隔离规则检索，confirmed 记录按 16 条/6,000 字符预算注入新 Run，候选不会注入；新增 Expert 与 Expert×Workspace 运行隔离回归；IPC/Preload 已接通，Markdown 只读投影按作用域重建。最新 `npm run verify` 退出 0（74 文件 / 528 测试），2026-09-15。 |
-| E32 | 记忆管理、对话确认与 E3 验收 | E31 | done | [记忆管理与运行测试](../../apps/desktop/src/renderer/src/views/MemoryView.test.tsx)：设置页支持用户记忆创建、候选确认、编辑和删除；对话完成消息提供“记住这段经验”确认表单，可选择 User/Workspace/Expert/Expert×Workspace 作用域；任务资料面板支持“本任务不用”，排除项保存进 TaskContextRevision 并只影响后续该任务运行。新增 Expert 作用域捕获回归。迁移 v16、协议/运行/Renderer 测试已覆盖；RunContextSnapshot 的专家身份直接快照回归已补入，最新 `npm run verify` 退出 0（74 文件 / 528 测试），2026-09-15。 |
+| E31 | 记忆存储、检索与运行注入 | E30 | done | [MemoryRepository/Service 与 RunService 测试](../../apps/desktop/src/main/persistence/memory-repository.test.ts)：应用库 v15 增加不可变记忆修订与 Run 读取足迹；四种作用域按隔离规则检索，confirmed 记录按 16 条/6,000 字符预算注入新 Run，候选不会注入；新增 Expert 与 Expert×Workspace 运行隔离回归；IPC/Preload 已接通，Markdown 只读投影按作用域重建。最新 `npm run verify` 退出 0（74 文件 / 529 测试），2026-09-15。 |
+| E32 | 记忆管理、对话确认与 E3 验收 | E31 | done | [记忆管理与运行测试](../../apps/desktop/src/renderer/src/views/MemoryView.test.tsx)：设置页支持用户记忆创建、候选确认、编辑和删除；对话完成消息提供“记住这段经验”确认表单，可选择 User/Workspace/Expert/Expert×Workspace 作用域；任务资料面板支持“本任务不用”，排除项保存进 TaskContextRevision 并只影响后续该任务运行。新增 Expert 作用域捕获回归。迁移 v16、协议/运行/Renderer 测试已覆盖；RunContextSnapshot 的专家身份直接快照和跨 Expert 修订归属回归已补入，最新 `npm run verify` 退出 0（74 文件 / 529 测试），2026-09-15。 |
 | E40 | MCP 接入实现 ADR 与探测样本 | E32 | done | [ADR-0016](../adr/0016-mcp-transport-and-lifecycle.md) 与离线探测脚本 [`scripts/mcp-probe.mjs`](../../scripts/mcp-probe.mjs)：首轮选定官方 `@modelcontextprotocol/client` v2.0.0 的 stdio 传输，明确稳定工具 ID、候选/授权分离、取消/超时/断线/退出语义；只读 `finance.monthly_summary` 替身完成 initialize → tools/list → tools/call → clean close。无外部业务账号，真实连接验收保持阻塞。 |
 | E41 | MCP 连接、工具适配与取消 | E40 | done | [McpClientService 测试](../../apps/desktop/src/main/services/mcp-client-service.test.ts)：应用库 v17 持久化 stdio 连接与工具 Schema 目录；官方 `@modelcontextprotocol/client@2.0.0` 接入 Main，发现工具映射为稳定 `connectionId/toolName`，只有 TaskContext 显式绑定才适配成 `AgentTool`；输出上限、Schema 校验、进度、超时、AbortSignal、断线与退出清理沿现有 Run 终态。`npm run verify` 退出 0，2026-09-14。 |
 | E42 | MCP 配置及专家/任务工具选择 | E41 | done | 设置页支持 stdio 连接新增/编辑/删除/检测；专家修订保存具体 MCP 工具预设；任务资料面板可按连接选择本次工具并持久化到 TaskContext。`run-service.test.ts` 另覆盖选定 MCP 工具进入模型工具目录、完成本地只读替身调用、登记 `mcp-tool` Evidence 并收口 Run；[ADR-0021](../adr/0021-mcp-evidence-provenance.md) 定义来源契约；历史绑定不随发现变化，失效连接会定位为 MCP 工具不可用且仍可从配置中移除；协议/迁移/ExpertService/Renderer 覆盖已补齐。|
