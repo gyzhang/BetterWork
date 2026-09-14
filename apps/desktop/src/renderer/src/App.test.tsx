@@ -5,6 +5,7 @@ import type {
   ExpertDetail,
   ExpertSummary,
   MaterialCandidate,
+  ModelProfileSummary,
   RecentTaskSummary,
   RunSummary,
   SkillDetail,
@@ -83,13 +84,19 @@ const expertDetail: ExpertDetail = {
   },
 };
 
-function installApi(options?: { expert?: boolean; context?: TaskContextRevision }) {
+function installApi(options?: {
+  expert?: boolean;
+  context?: TaskContextRevision;
+  models?: ModelProfileSummary[];
+}) {
   const api = {
     chrome: { updateTheme: vi.fn(async () => undefined) },
     workspace: {
       getDefault: vi.fn(async () => ({ id: 'workspace-1', rootPath: '/workspace' })),
     },
-    models: { list: vi.fn(async () => []) },
+    models: {
+      list: vi.fn(async (): Promise<ModelProfileSummary[]> => options?.models ?? []),
+    },
     knowledge: { list: vi.fn(async () => []) },
     artifacts: { list: vi.fn(async () => []) },
     evidence: { list: vi.fn(async () => []) },
@@ -522,6 +529,49 @@ describe('Task context restoration', () => {
 });
 
 describe('Expert configuration', () => {
+  it('allows an Expert to pin a language model profile or inherit the application default', async () => {
+    const api = installApi({
+      expert: true,
+      models: [
+        {
+          id: 'model-language-1',
+          name: '本地语言模型',
+          provider: 'openai-compatible',
+          baseUrl: 'http://127.0.0.1:30808/v1',
+          model: 'local-model',
+          role: 'language',
+          apiKeyConfigured: false,
+          enabled: true,
+          priority: 0,
+          connectionStatus: 'connected',
+          maxContextTokens: 8192,
+          maxOutputTokens: 4096,
+          temperature: 0.7,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
+    fireEvent.click(await screen.findByRole('button', { name: '查看配置' }));
+    fireEvent.click(await screen.findByRole('button', { name: '编辑配置' }));
+
+    const modelSelect = await screen.findByRole('combobox', { name: '专家模型偏好' });
+    expect(modelSelect).toHaveProperty('value', 'application-default');
+    fireEvent.change(modelSelect, { target: { value: 'model-language-1' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存修订' }));
+
+    await waitFor(() => expect(api.experts.saveRevision).toHaveBeenCalledTimes(1));
+    expect(api.experts.saveRevision).toHaveBeenCalledWith(
+      expect.objectContaining({
+        revision: expect.objectContaining({
+          modelReference: { mode: 'profile', modelProfileId: 'model-language-1' },
+        }),
+      }),
+    );
+  });
+
   it('opens a separate editor and saves a new immutable revision', async () => {
     const api = installApi({ expert: true });
     render(<App />);

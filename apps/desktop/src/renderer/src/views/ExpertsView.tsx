@@ -5,6 +5,7 @@ import type {
   MaterialCandidate,
   MaterialReference,
   McpConnectionSummary,
+  ModelProfileSummary,
   SkillSummary,
 } from '@betterwork/agent-protocol';
 import { useState } from 'react';
@@ -146,6 +147,7 @@ function ExpertEditor({
   draft,
   skills,
   mcpConnections,
+  models,
   materialCandidates,
   workspaceId,
   editing,
@@ -157,6 +159,7 @@ function ExpertEditor({
   draft: ExpertRevisionDraft;
   skills: SkillSummary[];
   mcpConnections: McpConnectionSummary[];
+  models: ModelProfileSummary[];
   materialCandidates: MaterialCandidate[];
   workspaceId?: string;
   editing: boolean;
@@ -168,6 +171,9 @@ function ExpertEditor({
   const toolNames =
     draft.builtinToolPolicy.mode === 'allow-list' ? draft.builtinToolPolicy.toolNames : [];
   const referenceMaterials = draft.referenceMaterials ?? [];
+  const languageModels = models.filter((model) => model.role === 'language');
+  const selectedModelProfileId =
+    draft.modelReference.mode === 'profile' ? draft.modelReference.modelProfileId : undefined;
   const updateLines = (
     key: 'principles' | 'inputRequirements' | 'deliveryRequirements',
     value: string,
@@ -307,6 +313,44 @@ function ExpertEditor({
             )}
           </fieldset>
           <fieldset>
+            <legend>模型偏好</legend>
+            <label>
+              <span className="muted-text">新任务默认使用的语言模型</span>
+              <select
+                aria-label="专家模型偏好"
+                value={
+                  draft.modelReference.mode === 'profile'
+                    ? draft.modelReference.modelProfileId
+                    : 'application-default'
+                }
+                onChange={(event) =>
+                  onChange({
+                    ...draft,
+                    modelReference:
+                      event.target.value === 'application-default'
+                        ? { mode: 'application-default' }
+                        : { mode: 'profile', modelProfileId: event.target.value },
+                  })
+                }
+              >
+                <option value="application-default">应用默认模型</option>
+                {selectedModelProfileId &&
+                  !languageModels.some((model) => model.id === selectedModelProfileId) && (
+                    <option value={selectedModelProfileId}>当前配置的模型不可用</option>
+                  )}
+                {languageModels.map((model) => (
+                  <option key={model.id} value={model.id} disabled={!model.enabled}>
+                    {model.name} · {model.model}
+                    {!model.enabled ? '（已停用）' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {languageModels.length === 0 && (
+              <small className="muted-text">还没有配置语言模型，当前任务会使用应用默认模型。</small>
+            )}
+          </fieldset>
+          <fieldset>
             <legend>MCP 工具预设</legend>
             {mcpConnections.length === 0 ? (
               <span className="muted-text">请先在设置 → MCP 工具中配置并检测连接。</span>
@@ -420,6 +464,7 @@ function ExpertEditor({
 
 function ExpertDetailPanel({
   detail,
+  models,
   onEdit,
   onCopy,
   onSummon,
@@ -427,12 +472,20 @@ function ExpertDetailPanel({
   onLifecycle,
 }: {
   detail: ExpertDetail;
+  models: ModelProfileSummary[];
   onEdit: () => void;
   onCopy: () => void;
   onSummon: () => void;
   onBack: () => void;
   onLifecycle: (lifecycle: 'active' | 'disabled' | 'archived') => void;
 }): React.JSX.Element {
+  const selectedModelProfileId =
+    detail.revision.modelReference.mode === 'profile'
+      ? detail.revision.modelReference.modelProfileId
+      : undefined;
+  const selectedModel = selectedModelProfileId
+    ? models.find((model) => model.id === selectedModelProfileId)
+    : undefined;
   return (
     <section className="expert-detail-page">
       <PageHeader
@@ -480,6 +533,12 @@ function ExpertDetailPanel({
                 ? ` · ${detail.revision.referenceMaterials.length} 个常用参考`
                 : ''}
             </p>
+            <small className="muted-text">
+              模型偏好：
+              {detail.revision.modelReference.mode === 'application-default'
+                ? '应用默认模型'
+                : (selectedModel?.name ?? '指定模型（当前不可用）')}
+            </small>
           </section>
           <section className="expert-detail-section">
             <h2>生命周期</h2>
@@ -524,6 +583,7 @@ export function ExpertsPage({
   state,
   skills,
   mcpConnections,
+  models,
   materialCandidates,
   workspaceId,
   actions,
@@ -533,6 +593,7 @@ export function ExpertsPage({
   state: ExpertsState;
   skills: SkillSummary[];
   mcpConnections: McpConnectionSummary[];
+  models: ModelProfileSummary[];
   materialCandidates: MaterialCandidate[];
   workspaceId?: string;
   actions: Pick<ExpertsState, 'get' | 'create' | 'saveRevision' | 'copy' | 'setLifecycle'>;
@@ -627,6 +688,7 @@ export function ExpertsPage({
         draft={draft}
         skills={skills}
         mcpConnections={mcpConnections}
+        models={models}
         materialCandidates={materialCandidates}
         {...(workspaceId ? { workspaceId } : {})}
         editing={Boolean(selected)}
@@ -641,6 +703,7 @@ export function ExpertsPage({
     return (
       <ExpertDetailPanel
         detail={selected}
+        models={models}
         onEdit={openEdit}
         onCopy={copy}
         onSummon={() => reportAction(onSummon(selected), onError, '无法召唤该专家。')}
