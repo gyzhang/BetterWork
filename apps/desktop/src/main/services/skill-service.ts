@@ -337,6 +337,35 @@ export class SkillService {
         throw new Error(`Builtin Skill ID conflicts with a user Skill: ${entry.skillId}`);
       }
       const preference = this.store.skills.getTrustPreference(entry.skillId);
+      const profileMatches = entry.profile
+        ? existing?.runtimeProfile?.profileHash === entry.profileHash
+        : existing?.runtimeProfile === undefined;
+      const sameRelease =
+        existing?.sourceKind === 'builtin' &&
+        existing.revision.contentHash === entry.contentHash &&
+        existing.revision.resourceKey === `builtin/${entry.resourceName}` &&
+        profileMatches;
+      if (sameRelease && existing) {
+        if (
+          preference !== 'revoked' &&
+          !this.store.executions.findActiveGrant(
+            entry.skillId,
+            existing.revision.id,
+            entry.profileHash,
+          )
+        ) {
+          this.store.skills.saveTrustGrant({
+            skillId: entry.skillId,
+            revisionId: existing.revision.id,
+            profileHash: entry.profileHash,
+            dependencyFingerprint: entry.dependencyFingerprint,
+            scopeHash: entry.scopeHash,
+            source: 'builtin-release',
+          });
+        }
+        registered.push(existing);
+        continue;
+      }
       this.store.transaction(() => {
         this.store.skills.save({
           id: entry.skillId,
