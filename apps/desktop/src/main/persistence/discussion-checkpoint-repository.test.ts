@@ -48,4 +48,58 @@ describe('DiscussionCheckpointRepository', () => {
       }),
     ).toEqual(retry);
   });
+
+  it('rejects a Run from another Task', () => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    const workspace = store.workspaces.getOrCreate('/tmp/checkpoints-owner', '检查点');
+    const firstTask = store.tasks.create(workspace.id, '任务一', '验证');
+    const secondTask = store.tasks.create(workspace.id, '任务二', '验证');
+    store.runs.create({
+      id: 'checkpoint-owner-run',
+      taskId: firstTask.task.id,
+      sessionId: firstTask.sessionId,
+      prompt: '验证',
+      status: 'running',
+      createdAt: 1,
+    });
+
+    expect(() =>
+      store.discussionCheckpoints.create(secondTask.task.id, {
+        id: 'checkpoint-owner-mismatch',
+        taskId: secondTask.task.id,
+        runId: 'checkpoint-owner-run',
+        stage: 'report',
+        title: '错误归属',
+        summary: '不应写入。',
+        artifactVersionIds: [],
+      }),
+    ).toThrow('Discussion checkpoint Run does not belong to Task');
+  });
+
+  it('rejects an ArtifactVersion from another Task', () => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    const firstWorkspace = store.workspaces.getOrCreate('/tmp/checkpoints-artifact-a', '检查点一');
+    const secondWorkspace = store.workspaces.getOrCreate('/tmp/checkpoints-artifact-b', '检查点二');
+    const firstTask = store.tasks.create(firstWorkspace.id, '任务一', '验证');
+    const secondTask = store.tasks.create(secondWorkspace.id, '任务二', '验证');
+    const artifact = store.artifacts.saveMarkdown({
+      taskId: firstTask.task.id,
+      origin: 'user-edit',
+      title: '其他任务成果',
+      content: '正文',
+    });
+
+    expect(() =>
+      store.discussionCheckpoints.create(secondTask.task.id, {
+        id: 'checkpoint-artifact-mismatch',
+        taskId: secondTask.task.id,
+        stage: 'report',
+        title: '错误成果',
+        summary: '不应写入。',
+        artifactVersionIds: [artifact.currentVersionId],
+      }),
+    ).toThrow('Discussion checkpoint ArtifactVersion does not belong to Task');
+  });
 });
