@@ -714,6 +714,98 @@ describe('RunService', () => {
     });
   });
 
+  it('does not carry the first period conversation into a new Expert Task', async () => {
+    const fixture = await createFixture();
+    const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+    if (!workspaceId) throw new Error('workspace missing');
+    const secondTask = fixture.store.tasks.create(workspaceId, '第二期报告', '独立的下一期任务');
+    const expert = fixture.store.experts.create({
+      sourceKind: 'user',
+      revision: {
+        name: '连续报告专家',
+        summary: '每期独立执行的报告专家',
+        identity: '负责连续期间报告。',
+        principles: [],
+        inputRequirements: [],
+        deliveryRequirements: [],
+        skillPreset: [],
+        builtinToolPolicy: { mode: 'application-defaults' },
+        modelReference: { mode: 'application-default' },
+      },
+    });
+    const firstContext = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: {
+        kind: 'expert',
+        expertId: expert.id,
+        expertRevisionId: expert.revision.id,
+      },
+      skillBindings: [],
+    });
+    const secondContext = fixture.store.taskContexts.save(secondTask.task.id, {
+      executor: {
+        kind: 'expert',
+        expertId: expert.id,
+        expertRevisionId: expert.revision.id,
+      },
+      skillBindings: [],
+    });
+    const fetchMock = vi.fn(async () =>
+      sseResponse(JSON.stringify({ choices: [{ delta: { content: '本期报告已完成。' } }] })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    fixture.store.models.save({
+      name: '连续报告测试模型',
+      provider: 'openai-compatible',
+      baseUrl: 'http://model.test/v1',
+      model: 'fixture-model',
+      role: 'language',
+      apiKey: '',
+      maxContextTokens: 8_192,
+      maxOutputTokens: 1_024,
+      temperature: 0,
+      enabled: true,
+    });
+    const service = createService(fixture);
+
+    const firstRunId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '第一期私密经营数据：收入 100',
+      taskContextRevisionId: firstContext.id,
+      expectedTaskContextRevision: firstContext.revision,
+    });
+    await waitForCompletion(fixture, firstRunId);
+    const secondRunId = service.start({
+      taskId: secondTask.task.id,
+      sessionId: secondTask.sessionId,
+      prompt: '第二期公开经营数据：收入 120',
+      taskContextRevisionId: secondContext.id,
+      expectedTaskContextRevision: secondContext.revision,
+    });
+    await waitForCompletion(fixture, secondRunId);
+
+    expect(statusOf(fixture, firstRunId)).toBe('completed');
+    expect(statusOf(fixture, secondRunId)).toBe('completed');
+    expect(firstRunId).not.toBe(secondRunId);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const secondCall = fetchMock.mock.calls[1] as unknown[] | undefined;
+    const secondRequest = secondCall?.[1] as RequestInit | undefined;
+    const secondBody = JSON.parse(String(secondRequest?.body)) as {
+      messages?: Array<{ content?: string }>;
+    };
+    const secondMessages = secondBody.messages?.map((message) => message.content ?? '') ?? [];
+    expect(secondMessages).toContain('第二期公开经营数据：收入 120');
+    expect(secondMessages).not.toContain('第一期私密经营数据：收入 100');
+    expect(fixture.store.runContextSnapshots.get(firstRunId)).toMatchObject({
+      expertId: expert.id,
+      expertRevisionId: expert.revision.id,
+    });
+    expect(fixture.store.runContextSnapshots.get(secondRunId)).toMatchObject({
+      expertId: expert.id,
+      expertRevisionId: expert.revision.id,
+    });
+  });
+
   it('rejects a Session that belongs to a different Task before creating a Run', async () => {
     const fixture = await createFixture();
     const otherTask = fixture.store.tasks.create(
