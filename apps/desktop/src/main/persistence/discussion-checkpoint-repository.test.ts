@@ -102,4 +102,31 @@ describe('DiscussionCheckpointRepository', () => {
       }),
     ).toThrow('Discussion checkpoint ArtifactVersion does not belong to Task');
   });
+
+  it('rejects a client id already owned by another Task', () => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    const workspace = store.workspaces.getOrCreate('/tmp/checkpoints-id-owner', '检查点');
+    const firstTask = store.tasks.create(workspace.id, '任务一', '验证');
+    const secondTask = store.tasks.create(workspace.id, '任务二', '验证');
+    store.discussionCheckpoints.create(firstTask.task.id, {
+      id: 'checkpoint-shared-client-id',
+      taskId: firstTask.task.id,
+      stage: 'report',
+      title: '任务一节点',
+      summary: '属于任务一。',
+      artifactVersionIds: [],
+    });
+
+    expect(() =>
+      store.discussionCheckpoints.create(secondTask.task.id, {
+        id: 'checkpoint-shared-client-id',
+        taskId: secondTask.task.id,
+        stage: 'report',
+        title: '任务二节点',
+        summary: '不应读取任务一节点。',
+        artifactVersionIds: [],
+      }),
+    ).toThrow('Discussion checkpoint id already belongs to another Task');
+  });
 });
