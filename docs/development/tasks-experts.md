@@ -61,7 +61,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E50 | Office 输入解析技术定案 | E43 | done | [ADR-0018](../adr/0018-office-input-parsing-boundary.md)、`scripts/office-input-probe.mjs`：JSZip + fast-xml-parser 解析 PPTX，ExcelJS 读取 XLSX，受限 UTF-8/BOM CSV；固定大小、解压、页数和公式缓存边界，`npm run verify` 退出 0，2026-09-14。 |
 | E51 | PPTX/XLSX/CSV 读取与定位 | E50 | done | `OfficeParserService`、`read_office_material` 和材料候选状态已接入；只读 E21 输入快照或精确选中的 PPTX 成果版本，支持 slide/table/notes、Sheet/Range、CSV rows 定位，登记 `parse` 材料足迹；`run-service.test.ts` 另覆盖选定 CSV 从 Run 工具调用到定位足迹的离线集成；定向测试通过，2026-09-14。 |
 | E52 | 讨论节点与重启后继续/返工 | E51 | done | [ADR-0019](../adr/0019-discussion-checkpoints-and-rework.md)、`DiscussionCheckpointRepository/Service`、IPC 和工作页节点条已接入；客户端 ID 幂等、旧节点替代、重启查询恢复和成果版本归属校验已覆盖，2026-09-14。 |
-| E53 | 经营分析方法与数值校验 | E52 | done | [ADR-0020](../adr/0020-deterministic-business-analysis.md)、`analyze_business_metrics` 确定性工具和内置「经营分析方法」Skill 已接入；期间变化、预算偏差、零基数和缺失指标有结构化结果/警告，2026-09-14。 |
+| E53 | 经营分析方法与数值校验 | E52 | done | [ADR-0020](../adr/0020-deterministic-business-analysis.md)、`analyze_business_metrics` 确定性工具和内置「经营分析方法」Skill 已接入；期间变化、预算偏差、零基数和缺失指标有结构化结果/警告；`run-service.test.ts` 另覆盖 Expert allow-list 到确定性结果的离线 Run 集成，2026-09-14。 |
 | E54 | 报告/PPT 交付、修订及来源 | E53 | done | 复用现有 Markdown/FileArtifactService 版本路径；ArtifactVersion 详情通过 IPC 返回本版 `inputRelations`，成果页显示证据和材料输入；旧版本、导出、继续编辑与来源关系保持精确，2026-09-14。 |
 | E55 | 连续两期真实桌面验收 | E54 | partial | [合成两期验收记录](../acceptance/2026-09-14-expert-two-periods.md) 与自动化路径已通过；macOS 真实材料/网页/MCP/取消重启的人工旅程仍待执行，未把合成数据当作业务验收。 |
 | E56 | macOS 安装态与整体收尾 | E55 | partial | [安装资源预检记录](../acceptance/2026-09-14-expert-install-preflight.md)：macOS arm64/x64 DMG 构建、两种架构 App Resources 资源校验和打包 App 召唤冒烟通过；签名安装与真实业务旅程仍待执行。 |
