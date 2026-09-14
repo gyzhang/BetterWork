@@ -7,6 +7,7 @@ import type {
   CreateDiscussionCheckpointRequest,
   DiscussionCheckpoint,
   EvidenceSummary,
+  ExpertModelReference,
   ExpertSummary,
   MaterialCandidate,
   MaterialReference,
@@ -103,6 +104,7 @@ export function App(): React.JSX.Element {
     id: string;
     revisionId: string;
     name: string;
+    modelReference?: ExpertModelReference;
   }>();
   const [taskContext, setTaskContext] = useState<TaskContextRevision>();
   const [taskMaterials, setTaskMaterials] = useState<TaskMaterialSelection[]>([]);
@@ -114,6 +116,19 @@ export function App(): React.JSX.Element {
   const [memoryCaptureScope, setMemoryCaptureScope] = useState<
     'user' | 'workspace' | 'expert' | 'expert-workspace'
   >('user');
+  const expertModelReference = activeExpert?.modelReference;
+  const expertModel =
+    expertModelReference?.mode === 'profile'
+      ? modelSettings.models.find((model) => model.id === expertModelReference.modelProfileId)
+      : undefined;
+  const composerModelLabel =
+    activeExpert && expertModelReference?.mode === 'profile'
+      ? expertModel && expertModel.enabled
+        ? `${expertModel.provider} · ${expertModel.model}`
+        : '专家指定模型不可用'
+      : activeLanguageModel
+        ? `${activeLanguageModel.provider} · ${activeLanguageModel.model}`
+        : '未配置模型时使用教学 Provider';
   const [materialCandidates, setMaterialCandidates] = useState<MaterialCandidate[]>([]);
   const [expertMaterialCandidates, setExpertMaterialCandidates] = useState<MaterialCandidate[]>([]);
   const [materialPickerKind, setMaterialPickerKind] = useState<'knowledge' | 'artifact'>();
@@ -447,6 +462,9 @@ export function App(): React.JSX.Element {
             id: expert.id,
             revisionId: context.executor.expertRevisionId,
             name: expert.name,
+            ...(expert.revision.id === context.executor.expertRevisionId
+              ? { modelReference: expert.revision.modelReference }
+              : {}),
           });
         } else {
           setActiveExpert(undefined);
@@ -463,7 +481,12 @@ export function App(): React.JSX.Element {
       const detail = await window.betterwork.experts.get({ id: summary.id });
       if (!detail) throw new Error('专家已不存在，请刷新后重试。');
       startNewTask();
-      setActiveExpert({ id: detail.id, revisionId: detail.revision.id, name: detail.name });
+      setActiveExpert({
+        id: detail.id,
+        revisionId: detail.revision.id,
+        name: detail.name,
+        modelReference: detail.revision.modelReference,
+      });
       setTaskMaterials(
         (detail.revision.referenceMaterials ?? [])
           .filter((material) =>
@@ -1356,10 +1379,7 @@ export function App(): React.JSX.Element {
                 />
                 <div className="composer-footer">
                   <span>
-                    {activeLanguageModel
-                      ? `${activeLanguageModel.provider} · ${activeLanguageModel.model}`
-                      : '未配置模型时使用教学 Provider'}{' '}
-                    <kbd>⌘/Ctrl ↵</kbd>
+                    {composerModelLabel} <kbd>⌘/Ctrl ↵</kbd>
                   </span>
                   {isRunning && activeRunId ? (
                     <button
