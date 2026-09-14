@@ -4361,3 +4361,103 @@ select,
   border-radius: 999px;
   box-shadow: 0 4px 12px var(--shadow-color-soft);
 }
+
+.mcp-connection-list {
+  margin-top: 24px;
+  border-top: 1px solid var(--border);
+}
+.mcp-connection-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  padding: 16px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.mcp-connection-main {
+  min-width: 0;
+}
+.mcp-connection-main strong,
+.mcp-connection-main p,
+.mcp-connection-main small {
+  display: block;
+}
+.mcp-connection-main p {
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mcp-connection-main small {
+  margin-top: 5px;
+  font-size: 12px;
+}
+.mcp-tool-summary {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mcp-editor {
+  display: flex;
+  max-width: 520px;
+  margin-top: 24px;
+  padding: 16px;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+.mcp-editor h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.mcp-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.mcp-editor input,
+.mcp-editor textarea {
+  padding: 8px 9px;
+  color: var(--text-primary);
+  background: var(--canvas);
+  border: 1px solid var(--input-border);
+  border-radius: 7px;
+  font: inherit;
+  font-size: 13px;
+}
+.mcp-editor-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.selected-mcp-panel {
+  margin-top: 14px;
+  padding: 12px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.selected-mcp-list,
+.selected-mcp-connection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.selected-mcp-list {
+  margin-top: 10px;
+  gap: 12px;
+}
+.selected-mcp-connection + .selected-mcp-connection {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.selected-mcp-connection > strong {
+  color: var(--text-secondary);
+  font-size: 12px;
+}

@@ -2,6 +2,7 @@ import type {
   ExpertDetail,
   ExpertRevisionDraft,
   ExpertSummary,
+  McpConnectionSummary,
   SkillSummary,
 } from '@betterwork/agent-protocol';
 import { useState } from 'react';
@@ -17,6 +18,14 @@ const lifecycleName = {
   disabled: '已停用',
   archived: '已归档',
 } as const;
+const blockedReasonName: Record<string, string> = {
+  'missing-skill': '缺少 Skill',
+  'skill-blocked': 'Skill 不可用',
+  'missing-model': '缺少模型',
+  'model-disabled': '模型已停用',
+  'invalid-tool': '内置工具无效',
+  'mcp-unavailable': 'MCP 工具不可用',
+};
 
 const builtinToolNames = [
   'calculator',
@@ -35,6 +44,7 @@ const defaultDraft = (): ExpertRevisionDraft => ({
   skillPreset: [],
   builtinToolPolicy: { mode: 'application-defaults' },
   modelReference: { mode: 'application-default' },
+  mcpToolBindings: [],
 });
 
 const linesOf = (value: string): string[] =>
@@ -54,6 +64,7 @@ const draftOf = (detail: ExpertDetail): ExpertRevisionDraft => ({
   skillPreset: detail.revision.skillPreset,
   builtinToolPolicy: detail.revision.builtinToolPolicy,
   modelReference: detail.revision.modelReference,
+  mcpToolBindings: detail.revision.mcpToolBindings ?? [],
 });
 
 function ExpertCard({
@@ -84,7 +95,10 @@ function ExpertCard({
         <p className="expert-card-desc">{expert.summary || '暂无说明'}</p>
       </button>
       {blocked && (
-        <p className="expert-card-status">配置待补全：{expert.blockedReasons.join('、')}</p>
+        <p className="expert-card-status">
+          配置待补全：
+          {expert.blockedReasons.map((reason) => blockedReasonName[reason] ?? reason).join('、')}
+        </p>
       )}
       <div className="expert-card-actions">
         <button
@@ -106,6 +120,7 @@ function ExpertCard({
 function ExpertEditor({
   draft,
   skills,
+  mcpConnections,
   editing,
   saving,
   onChange,
@@ -114,6 +129,7 @@ function ExpertEditor({
 }: {
   draft: ExpertRevisionDraft;
   skills: SkillSummary[];
+  mcpConnections: McpConnectionSummary[];
   editing: boolean;
   saving: boolean;
   onChange: (draft: ExpertRevisionDraft) => void;
@@ -260,6 +276,51 @@ function ExpertEditor({
               </div>
             )}
           </fieldset>
+          <fieldset>
+            <legend>MCP 工具预设</legend>
+            {mcpConnections.length === 0 ? (
+              <span className="muted-text">请先在设置 → MCP 工具中配置并检测连接。</span>
+            ) : (
+              <div className="selected-mcp-list">
+                {mcpConnections.map((connection) => (
+                  <div className="selected-mcp-connection" key={connection.id}>
+                    <strong>{connection.name}</strong>
+                    {connection.tools.length === 0 ? (
+                      <small className="muted-text">尚未检测到工具</small>
+                    ) : (
+                      <div className="expert-option-list">
+                        {connection.tools.map((tool) => {
+                          const bindings = draft.mcpToolBindings ?? [];
+                          const checked = bindings.some((binding) => binding.toolId === tool.id);
+                          return (
+                            <label className="expert-option" key={tool.id}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                disabled={connection.status !== 'ready'}
+                                onChange={(event) =>
+                                  onChange({
+                                    ...draft,
+                                    mcpToolBindings: event.target.checked
+                                      ? [
+                                          ...bindings,
+                                          { connectionId: connection.id, toolId: tool.id },
+                                        ]
+                                      : bindings.filter((binding) => binding.toolId !== tool.id),
+                                  })
+                                }
+                              />
+                              <span title={tool.description}>{tool.name}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </fieldset>
           <div className="expert-editor-actions">
             <button className="primary-button" type="button" disabled={saving} onClick={onSave}>
               {saving ? '正在保存…' : '保存修订'}
@@ -329,6 +390,9 @@ function ExpertDetailPanel({
               {detail.revision.builtinToolPolicy.mode === 'application-defaults'
                 ? '使用算台默认工具'
                 : `${detail.revision.builtinToolPolicy.toolNames.length} 个内置工具`}
+              {detail.revision.mcpToolBindings?.length
+                ? ` · ${detail.revision.mcpToolBindings.length} 个 MCP 工具预设`
+                : ''}
             </p>
           </section>
           <section className="expert-detail-section">
@@ -373,12 +437,14 @@ function ExpertDetailPanel({
 export function ExpertsPage({
   state,
   skills,
+  mcpConnections,
   actions,
   onSummon,
   onError,
 }: {
   state: ExpertsState;
   skills: SkillSummary[];
+  mcpConnections: McpConnectionSummary[];
   actions: Pick<ExpertsState, 'get' | 'create' | 'saveRevision' | 'copy' | 'setLifecycle'>;
   onSummon: (expert: ExpertSummary) => Promise<void>;
   onError: (message: string) => void;
@@ -470,6 +536,7 @@ export function ExpertsPage({
       <ExpertEditor
         draft={draft}
         skills={skills}
+        mcpConnections={mcpConnections}
         editing={Boolean(selected)}
         saving={saving}
         onChange={setDraft}

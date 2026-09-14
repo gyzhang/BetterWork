@@ -3,6 +3,8 @@ import type {
   ArtifactSummary,
   EvidenceSummary,
   MaterialCandidate,
+  McpConnectionSummary,
+  McpToolBinding,
   MemoryRecord,
   RunSummary,
   TaskMaterialSelection,
@@ -81,6 +83,9 @@ export function ContextPanel({
   onToggleMemory,
   materialCandidates,
   onRequestMaterials,
+  mcpConnections,
+  mcpToolBindings,
+  onMcpToolBindingsChange,
 }: {
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -100,6 +105,9 @@ export function ContextPanel({
   onToggleMemory: (memoryId: string) => void;
   materialCandidates: MaterialCandidate[];
   onRequestMaterials: (kind: 'file' | 'knowledge' | 'artifact') => void;
+  mcpConnections: McpConnectionSummary[];
+  mcpToolBindings: McpToolBinding[];
+  onMcpToolBindingsChange: (bindings: McpToolBinding[]) => void;
 }): React.JSX.Element | null {
   const [sourceToast, setSourceToast] = useState<{ tone: ToastTone; message: string }>();
   const dismissSourceToast = useCallback(() => setSourceToast(undefined), []);
@@ -246,6 +254,63 @@ export function ContextPanel({
                   </div>
                 </section>
               )}
+              <section className="selected-mcp-panel">
+                <div className="selected-materials-heading">
+                  <div>
+                    <strong>本次 MCP 工具</strong>
+                    <small>
+                      {mcpToolBindings.length > 0
+                        ? `${mcpToolBindings.length} 项已选择`
+                        : '未选择，专家预设也不会自动加入'}
+                    </small>
+                  </div>
+                </div>
+                {mcpConnections.length === 0 ? (
+                  <p className="muted-text">请先在设置 → MCP 工具中配置连接。</p>
+                ) : (
+                  <div className="selected-mcp-list">
+                    {mcpConnections.map((connection) => (
+                      <div className="selected-mcp-connection" key={connection.id}>
+                        <strong>{connection.name}</strong>
+                        {connection.tools.length === 0 ? (
+                          <small className="muted-text">尚未检测到工具</small>
+                        ) : (
+                          <div className="expert-option-list">
+                            {connection.tools.map((tool) => {
+                              const checked = mcpToolBindings.some(
+                                (binding) => binding.toolId === tool.id,
+                              );
+                              const enabled = connection.status === 'ready';
+                              return (
+                                <label className="expert-option" key={tool.id}>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    disabled={!enabled}
+                                    onChange={(event) =>
+                                      onMcpToolBindingsChange(
+                                        event.target.checked
+                                          ? [
+                                              ...mcpToolBindings,
+                                              { connectionId: connection.id, toolId: tool.id },
+                                            ]
+                                          : mcpToolBindings.filter(
+                                              (binding) => binding.toolId !== tool.id,
+                                            ),
+                                      )
+                                    }
+                                  />
+                                  <span title={tool.description}>{tool.name}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
               {evidence.length === 0 ? (
                 <EmptyContext
                   title="尚无已查阅来源"

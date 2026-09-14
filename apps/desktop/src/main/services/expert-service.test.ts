@@ -63,6 +63,62 @@ describe('ExpertService', () => {
     expect(service.list()[0]?.blockedReasons).toEqual(['missing-skill']);
   });
 
+  it('allows two experts to choose different tools from one ready connection', () => {
+    const store = openStore();
+    const connection = store.mcpConnections.save({
+      name: '财务服务',
+      transport: { kind: 'stdio', command: 'node', args: [] },
+    });
+    store.mcpConnections.updateDiscovery(connection.id, {
+      status: 'ready',
+      tools: [
+        {
+          id: `${connection.id}/revenue`,
+          connectionId: connection.id,
+          name: 'revenue',
+          description: '',
+          inputSchema: { type: 'object' },
+          schemaHash: 'hash-revenue',
+          discoveredAt: 1,
+        },
+        {
+          id: `${connection.id}/cost`,
+          connectionId: connection.id,
+          name: 'cost',
+          description: '',
+          inputSchema: { type: 'object' },
+          schemaHash: 'hash-cost',
+          discoveredAt: 1,
+        },
+      ],
+      lastCheckedAt: 1,
+    });
+    const service = new ExpertService(store);
+    const revenue = service.create(
+      draft({
+        mcpToolBindings: [{ connectionId: connection.id, toolId: `${connection.id}/revenue` }],
+      }),
+    );
+    const cost = service.create(
+      draft({
+        mcpToolBindings: [{ connectionId: connection.id, toolId: `${connection.id}/cost` }],
+      }),
+    );
+    expect(revenue.blockedReasons).toEqual([]);
+    expect(cost.blockedReasons).toEqual([]);
+  });
+
+  it('marks MCP presets unavailable until the connection has discovered the tool', () => {
+    const store = openStore();
+    const service = new ExpertService(store);
+    const expert = service.create(
+      draft({
+        mcpToolBindings: [{ connectionId: 'finance', toolId: 'finance/monthly_summary' }],
+      }),
+    );
+    expect(expert.blockedReasons).toEqual(['mcp-unavailable']);
+  });
+
   it('rejects unknown built-in tools at the management boundary', () => {
     const store = openStore();
     const service = new ExpertService(store);

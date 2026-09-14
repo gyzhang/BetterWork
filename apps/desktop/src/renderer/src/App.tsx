@@ -34,6 +34,7 @@ import { Welcome } from './components/Welcome';
 import { useAppearance } from './hooks/use-appearance';
 import { useExperts } from './hooks/use-experts';
 import { useKnowledgeLibrary } from './hooks/use-knowledge-library';
+import { useMcpConnections } from './hooks/use-mcp-connections';
 import { useMemories } from './hooks/use-memories';
 import { useModelSettings } from './hooks/use-model-settings';
 import { useSkills } from './hooks/use-skills';
@@ -82,6 +83,7 @@ export function App(): React.JSX.Element {
   const refreshModels = modelSettings.refresh;
   const experts = useExperts();
   const memoriesState = useMemories();
+  const mcpState = useMcpConnections();
 
   const [prompt, setPrompt] = useState('计算: (12 + 8) * 3');
   const [taskBindings, setTaskBindings] = useState<CapabilityChip[]>([]);
@@ -415,6 +417,7 @@ export function App(): React.JSX.Element {
       if (!detail) throw new Error('专家已不存在，请刷新后重试。');
       startNewTask();
       setActiveExpert({ id: detail.id, revisionId: detail.revision.id, name: detail.name });
+      setMcpToolBindings(detail.revision.mcpToolBindings ?? []);
       setTaskBindings(
         detail.revision.skillPreset.map((binding) =>
           skillChipForBinding({ ...binding, source: 'expert-preset' }),
@@ -1322,6 +1325,7 @@ export function App(): React.JSX.Element {
           <ExpertsPage
             state={experts}
             skills={skills.skills}
+            mcpConnections={mcpState.connections}
             actions={experts}
             onSummon={summonExpert}
             onError={setActionError}
@@ -1348,6 +1352,7 @@ export function App(): React.JSX.Element {
             modelMessage={modelSettings.message}
             skills={skills}
             memories={memoriesState}
+            mcp={mcpState}
           />
         )}
       </section>
@@ -1375,6 +1380,9 @@ export function App(): React.JSX.Element {
           }
           materialCandidates={materialCandidates}
           onRequestMaterials={requestMaterials}
+          mcpConnections={mcpState.connections}
+          mcpToolBindings={mcpToolBindings}
+          onMcpToolBindingsChange={setMcpToolBindings}
           onSelectRun={(run) =>
             reportAction(selectRun(run), setActionError, '无法打开这次执行记录。')
           }

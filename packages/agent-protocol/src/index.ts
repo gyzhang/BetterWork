@@ -244,6 +244,7 @@ export const expertBlockedReasonSchema = z.enum([
   'missing-model',
   'model-disabled',
   'invalid-tool',
+  'mcp-unavailable',
 ]);
 export type ExpertBlockedReason = z.infer<typeof expertBlockedReasonSchema>;
 
@@ -275,6 +276,11 @@ export const expertModelReferenceSchema = z.discriminatedUnion('mode', [
 ]);
 export type ExpertModelReference = z.infer<typeof expertModelReferenceSchema>;
 
+export const mcpToolBindingSchema = z
+  .object({ connectionId: z.string().min(1), toolId: z.string().min(1) })
+  .strict();
+export type McpToolBinding = z.infer<typeof mcpToolBindingSchema>;
+
 export const expertRevisionDraftSchema = z
   .object({
     name: z.string().trim().min(1).max(160),
@@ -287,6 +293,7 @@ export const expertRevisionDraftSchema = z
     skillPreset: expertSkillPresetSchema,
     builtinToolPolicy: builtinToolPolicySchema,
     modelReference: expertModelReferenceSchema,
+    mcpToolBindings: z.array(mcpToolBindingSchema).max(50).optional(),
   })
   .strict();
 export type ExpertRevisionDraft = z.infer<typeof expertRevisionDraftSchema>;
@@ -647,10 +654,6 @@ export const mcpMutationResultSchema = z
   .object({ connection: mcpConnectionSummarySchema })
   .strict();
 export type McpMutationResult = z.infer<typeof mcpMutationResultSchema>;
-export const mcpToolBindingSchema = z
-  .object({ connectionId: z.string().min(1), toolId: z.string().min(1) })
-  .strict();
-export type McpToolBinding = z.infer<typeof mcpToolBindingSchema>;
 export const mcpTestResultSchema = z
   .object({ connection: mcpConnectionSummarySchema, tools: mcpToolSummarySchema.array() })
   .strict();
