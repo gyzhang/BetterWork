@@ -55,6 +55,14 @@ export const CapabilityIcon = (props: IconProps): React.JSX.Element => (
   </Icon>
 );
 
+export const ExpertIcon = (props: IconProps): React.JSX.Element => (
+  <Icon {...props}>
+    <circle cx="12" cy="8" r="3.2" />
+    <path d="M5.5 19.5c.8-3.2 3.1-5 6.5-5s5.7 1.8 6.5 5" />
+    <path d="M4 5.5h2M18 5.5h2M12 2.5v2" />
+  </Icon>
+);
+
 export const GlobeIcon = (props: IconProps): React.JSX.Element => (
   <Icon {...props}>
     <circle cx="12" cy="12" r="8.5" />

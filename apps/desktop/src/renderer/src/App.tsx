@@ -3,10 +3,12 @@ import type {
   ArtifactDetail,
   ArtifactSummary,
   EvidenceSummary,
+  ExpertSummary,
   NotificationSummary,
   NotificationTarget,
   RecentTaskSummary,
   RunSummary,
+  TaskContextRevision,
   WorkspaceSummary,
 } from '@betterwork/agent-protocol';
 import type { FormEvent, KeyboardEvent } from 'react';
@@ -24,6 +26,7 @@ import { ModelEditor } from './components/ModelEditorSheet';
 import { ToolActivity } from './components/ToolActivity';
 import { Welcome } from './components/Welcome';
 import { useAppearance } from './hooks/use-appearance';
+import { useExperts } from './hooks/use-experts';
 import { useKnowledgeLibrary } from './hooks/use-knowledge-library';
 import { useModelSettings } from './hooks/use-model-settings';
 import { useSkills } from './hooks/use-skills';
@@ -36,6 +39,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CloseIcon,
+  ExpertIcon,
   KnowledgeIcon,
   PlusIcon,
   SettingsIcon,
@@ -51,6 +55,7 @@ import type { AppView, ContextTab, SettingsTab } from './lib/view-types';
 import { MarkdownPreview } from './markdown-preview';
 import { NotificationCenter, ToastHost, useNotifications } from './notifications';
 import { ArtifactPage } from './views/ArtifactView';
+import { ExpertsPage } from './views/ExpertsView';
 import { KnowledgePage } from './views/KnowledgeView';
 import { SettingsPage } from './views/SettingsView';
 import { SkillsPage } from './views/SkillsView';
@@ -68,9 +73,16 @@ export function App(): React.JSX.Element {
   const modelSettings = useModelSettings();
   const activeLanguageModel = modelSettings.activeLanguageModel;
   const refreshModels = modelSettings.refresh;
+  const experts = useExperts();
 
   const [prompt, setPrompt] = useState('计算: (12 + 8) * 3');
   const [taskBindings, setTaskBindings] = useState<CapabilityChip[]>([]);
+  const [activeExpert, setActiveExpert] = useState<{
+    id: string;
+    revisionId: string;
+    name: string;
+  }>();
+  const [taskContext, setTaskContext] = useState<TaskContextRevision>();
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const startingRef = useRef(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -267,6 +279,8 @@ export function App(): React.JSX.Element {
     setTaskAllRuns([]);
     setTaskAllEvents(new Map());
     setTaskBindings([]);
+    setActiveExpert(undefined);
+    setTaskContext(undefined);
     setActionError('');
     setEvidence([]);
     setEvents([]);
@@ -281,6 +295,72 @@ export function App(): React.JSX.Element {
       setContextOpen(false);
     },
   });
+  const skillChipForBinding = useCallback(
+    (binding: {
+      skillId: string;
+      revisionId: string;
+      source?: 'expert-preset' | 'task-selection';
+    }): CapabilityChip => {
+      const skill = skills.skills.find((item) => item.id === binding.skillId);
+      const status: CapabilityChip['status'] =
+        skill &&
+        skill.enabled &&
+        skill.trustStatus === 'trusted' &&
+        skill.environmentStatus === 'ready'
+          ? 'ready'
+          : 'dependency-missing';
+      return {
+        kind: 'skill',
+        id: binding.skillId,
+        name: skill?.name ?? binding.skillId,
+        revisionId: binding.revisionId,
+        status,
+        ...(binding.source ? { source: binding.source } : {}),
+      };
+    },
+    [skills.skills],
+  );
+  const loadTaskContext = useCallback(
+    async (taskId: string, selectionId: number): Promise<TaskContextRevision | undefined> => {
+      const context = await window.betterwork.taskContexts.get({ taskId });
+      if (selectionId !== runSelectionRequestRef.current) return undefined;
+      setTaskContext(context ?? undefined);
+      if (!context || context.executor.kind === 'general') {
+        setActiveExpert(undefined);
+      } else {
+        const expert = await window.betterwork.experts.get({ id: context.executor.expertId });
+        if (selectionId !== runSelectionRequestRef.current) return undefined;
+        if (expert) {
+          setActiveExpert({
+            id: expert.id,
+            revisionId: context.executor.expertRevisionId,
+            name: expert.name,
+          });
+        } else {
+          setActiveExpert(undefined);
+        }
+      }
+      setTaskBindings(context?.skillBindings.map(skillChipForBinding) ?? []);
+      return context ?? undefined;
+    },
+    [skillChipForBinding],
+  );
+  const summonExpert = useCallback(
+    async (summary: ExpertSummary): Promise<void> => {
+      if (summary.lifecycle !== 'active') throw new Error('该专家已停用或归档。');
+      const detail = await window.betterwork.experts.get({ id: summary.id });
+      if (!detail) throw new Error('专家已不存在，请刷新后重试。');
+      startNewTask();
+      setActiveExpert({ id: detail.id, revisionId: detail.revision.id, name: detail.name });
+      setTaskBindings(
+        detail.revision.skillPreset.map((binding) =>
+          skillChipForBinding({ ...binding, source: 'expert-preset' }),
+        ),
+      );
+      setView('work');
+    },
+    [skillChipForBinding],
+  );
   const startRun = async (): Promise<void> => {
     if (startingRef.current || isRunning || !prompt.trim() || !workspace) return;
     startingRef.current = true;
@@ -299,18 +379,32 @@ export function App(): React.JSX.Element {
         activeTaskIdRef.current = task.id;
         setActiveTask(task);
       }
+      const contextResult = await window.betterwork.taskContexts.save({
+        taskId: task.id,
+        ...(taskContext ? { expectedRevision: taskContext.revision } : {}),
+        executor: activeExpert
+          ? {
+              kind: 'expert',
+              expertId: activeExpert.id,
+              expertRevisionId: activeExpert.revisionId,
+            }
+          : { kind: 'general' },
+        skillBindings: taskBindings.map((chip) => ({
+          skillId: chip.id,
+          revisionId:
+            chip.revisionId ??
+            skills.skills.find((skill) => skill.id === chip.id)?.currentRevisionId ??
+            '',
+          source: chip.source ?? 'task-selection',
+        })),
+      });
+      setTaskContext(contextResult.context);
       const result = await window.betterwork.runs.start({
         taskId: task.id,
         sessionId: task.sessionId,
         prompt,
-        ...(taskBindings.length > 0
-          ? {
-              skillBindings: taskBindings.map((chip) => {
-                const skill = skills.skills.find((s) => s.id === chip.id);
-                return { skillId: chip.id, revisionId: skill?.currentRevisionId };
-              }),
-            }
-          : {}),
+        taskContextRevisionId: contextResult.context.id,
+        expectedTaskContextRevision: contextResult.context.revision,
       });
       runSelectionRequestRef.current += 1;
       activeRunIdRef.current = result.runId;
@@ -357,6 +451,8 @@ export function App(): React.JSX.Element {
   };
   const selectRun = async (run: RunSummary): Promise<void> => {
     setTaskBindings([]);
+    setActiveExpert(undefined);
+    setTaskContext(undefined);
     const requestId = runSelectionRequestRef.current + 1;
     runSelectionRequestRef.current = requestId;
     activeRunIdRef.current = run.id;
@@ -366,6 +462,8 @@ export function App(): React.JSX.Element {
     setPrompt('');
     setArtifactNote(undefined);
     setEvents([]);
+    await loadTaskContext(run.taskId, requestId);
+    if (runSelectionRequestRef.current !== requestId) return;
     const snapshot = await window.betterwork.runs.listEvents({ runId: run.id });
     if (runSelectionRequestRef.current !== requestId) return;
     setEvents((current) => mergeRunEvents(snapshot, current));
@@ -379,6 +477,8 @@ export function App(): React.JSX.Element {
     setTaskAllEvents(new Map());
     setTaskRuns([]);
     setTaskBindings([]);
+    setActiveExpert(undefined);
+    setTaskContext(undefined);
     runSelectionRequestRef.current += 1;
     activeRunIdRef.current = undefined;
     activeTaskIdRef.current = task.id;
@@ -387,22 +487,25 @@ export function App(): React.JSX.Element {
     setPrompt('');
     setArtifactNote(undefined);
     setEvents([]);
+    const selectionId = runSelectionRequestRef.current;
+    const loadedContext = await loadTaskContext(task.id, selectionId);
+    if (selectionId !== runSelectionRequestRef.current) return;
     loadAllTaskRuns(task.id);
     refreshEvidence(task.id);
     refreshTaskRuns(task.id);
     setView('work');
-    const selectionId = runSelectionRequestRef.current;
     const loadedRuns = await window.betterwork.runs.list({ taskId: task.id });
     if (selectionId !== runSelectionRequestRef.current) return;
     const latest = [...loadedRuns].sort((a, b) => b.createdAt - a.createdAt)[0];
     if (!latest) return;
-    // 恢复该任务最近一次 Run 的绑定集合为 chip 条。
-    if (latest.bindings && latest.bindings.length > 0) {
+    // 旧任务没有 TaskContextRevision 时，才兼容恢复最近一次 Run 的 Skill chip；不补造 Expert 身份。
+    if (!loadedContext && latest.bindings && latest.bindings.length > 0) {
       setTaskBindings(
         latest.bindings.map((binding) => ({
           kind: 'skill' as const,
           id: binding.skillId,
           name: binding.skillName,
+          source: 'task-selection' as const,
           status: 'ready' as const,
         })),
       );
@@ -601,6 +704,18 @@ export function App(): React.JSX.Element {
             </span>{' '}
             能力
           </button>
+          <button
+            className={view === 'experts' ? 'active' : ''}
+            onClick={() => {
+              setView('experts');
+              experts.refresh();
+            }}
+          >
+            <span aria-hidden="true">
+              <ExpertIcon size={15} />
+            </span>{' '}
+            专家
+          </button>
         </nav>
         <div className="sidebar-divider" />
         <p className="section-label">最近任务</p>
@@ -794,6 +909,29 @@ export function App(): React.JSX.Element {
                   </button>
                 </div>
                 <div className="composer-capability-row">
+                  {activeExpert && (
+                    <div className="expert-chip-bar" role="list" aria-label="当前专家">
+                      <div className="expert-chip" role="listitem">
+                        <ExpertIcon size={12} />
+                        <span>{activeExpert.name}</span>
+                        <button
+                          type="button"
+                          className="capability-chip-remove"
+                          aria-label={`移除专家 ${activeExpert.name}`}
+                          onClick={() => {
+                            setActiveExpert(undefined);
+                            setTaskContext(undefined);
+                            setTaskBindings((current) =>
+                              current.filter((chip) => chip.source !== 'expert-preset'),
+                            );
+                          }}
+                          disabled={isRunning}
+                        >
+                          <CloseIcon size={10} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <ComposerCapabilityPicker
                     skills={skills.skills}
                     selected={taskBindings}
@@ -805,6 +943,10 @@ export function App(): React.JSX.Element {
                     }
                     onRequestSkillDetail={() => {
                       setView('skills');
+                    }}
+                    onRequestExpert={() => {
+                      setView('experts');
+                      experts.refresh();
                     }}
                   />
                 </div>
@@ -866,6 +1008,9 @@ export function App(): React.JSX.Element {
           <KnowledgePage library={knowledge} onStartResearch={startResearchFromKnowledge} />
         )}
         {view === 'skills' && <SkillsPage state={skills} />}
+        {view === 'experts' && (
+          <ExpertsPage state={experts} onSummon={summonExpert} onError={setActionError} />
+        )}
         {view === 'settings' && (
           <SettingsPage
             tab={settingsTab}

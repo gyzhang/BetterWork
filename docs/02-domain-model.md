@@ -1,6 +1,6 @@
 # 领域模型
 
-> 2026-09-14：专家修订、TaskContextRevision、材料引用/运行快照、上下文段和成果输入关系已随用户对设计 v0.2 的评审通过而定稿，见 [ADR-0014](adr/0014-expert-context-and-material-binding.md)与[开发计划](development/tasks-experts.md)。尚未实施；下文历史接口不能替代该设计的增量契约。
+> 2026-09-14：专家修订、TaskContextRevision、材料引用/运行快照、上下文段和成果输入关系已随用户对设计 v0.2 的评审通过而定稿，见 [ADR-0014](adr/0014-expert-context-and-material-binding.md)与[开发计划](development/tasks-experts.md)。下文会标注已落地的 E11–E13 与仍待实现的材料/记忆/MCP 增量；历史接口不能替代该设计的增量契约。
 
 > 2026-09-08 产品关系补充：长期目录承接 Workspace，一个专家调用多项 Skill 持续完成任务，成果是持续协作对象。见 [ADR-0008](adr/0008-personal-workbench-and-capability-first.md)。本文接口仍需按实现状态阅读；配置快照、知识范围和持久化讨论节点的具体 Schema 待实现 ADR，不视为已落地。
 
@@ -239,7 +239,7 @@ Knowledge Vault 是由用户管理的一组本地知识来源，具有独立索�
 
 ## 10. Capability
 
-2026-09-14 已接受的增量关系：Expert 保存不可变修订；TaskContextRevision 保存下一次运行的可见草稿；RunContextSnapshot 固定实际专家、工具/Skill、资料引用与记忆适用范围。E10 已定案 Expert/Revision 与 E1 草稿字段，E11 已实现 Expert 身份、修订和管理 IPC；TaskContextRevision 与运行快照留在 E12–E13。材料引用区分知识内容修订、成果版本和文件快照，按 E20 定案。任务缩小范围时按上下文段排除旧模型输入；新成果版本可关联输入成果版本。完整字段不是本节示例接口的已发布 Schema，实施必须遵循[专家与任务上下文契约](development/expert-contracts.md)。
+2026-09-14 已接受的增量关系：Expert 保存不可变修订；TaskContextRevision 保存下一次运行的可见草稿；RunContextSnapshot 固定实际专家、工具/Skill、资料引用与记忆适用范围。E10 已定案 Expert/Revision 与 E1 草稿字段，E11 已实现 Expert 身份、修订和管理 IPC，E12 已实现 TaskContextRevision 与运行时人格/能力裁决，E13 已实现召唤、草稿保存和身份恢复。材料引用区分知识内容修订、成果版本和文件快照，按 E20 定案。任务缩小范围时按上下文段排除旧模型输入；新成果版本可关联输入成果版本。完整字段不是本节示例接口的已发布 Schema，实施必须遵循[专家与任务上下文契约](development/expert-contracts.md)。
 
 Capability 是运行时可使用能力的统一抽象，来源包括：
 

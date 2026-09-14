@@ -2,7 +2,7 @@
 
 > 2026-09-14 扩展关系：[ADR-0014](0014-expert-context-and-material-binding.md)已接受，新增可见任务上下文草稿持久化，补充本 ADR 仅由最近 Run 推导选择的界面策略。Run 的 Skill 事实绑定、显式提交、顺序和撤销语义保持。此为后续 ADR 衔接，不重写本 ADR 历史决策；实现由 E 系列计划跟踪。
 
-- 状态：Accepted（决策 3/4/5 与决策 8 的成本结论已落地并经代码验证；决策 1/2 的界面与决策 6 的原因文案待 B00-3…B00-5）
+- 状态：Accepted（决策与原因文案已随 B00-1…B00-5 落地并经代码验证；B00-5 的真实双技能运行与重启回看仍待人工验收，见开发任务板）
 - 日期：2026-09-12
 - 背景：任务对话目前无法选择技能。唯一入口是 Skill 详情页的「试运行」，它把所选 Skill 放进一张新任务草稿；对话界面本身既不能选、不能看全、也不能撤销。用户要求参考 WorkBuddy 的 `+` 菜单与 ClawBible Desktop 的模式选择器，并指出后续还要在对话中召唤专家。
 - 关系：把 [阶段 B](../development/phase-b-c-roadmap.md) B04 的「任务选择专家与 Skill」前置为独立切片，为 B01–B03 建立领域前提；落实 [ADR-0008](0008-personal-workbench-and-capability-first.md) 的「一个专家调用多项 Skill」中「多项 Skill」这一半；不改变 [ADR-0011](0011-skill-trust-and-local-distribution.md) 的信任、启用、依赖三态分离规则，只扩展其级联语义。

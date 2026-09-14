@@ -22,6 +22,7 @@ import {
   getDependencyOperationRequestSchema,
   getExpertRequestSchema,
   getSkillRequestSchema,
+  getTaskContextRequestSchema,
   importSkillRequestSchema,
   IpcChannel,
   listDependencyOptionsRequestSchema,
@@ -37,6 +38,7 @@ import {
   revokeSkillTrustRequestSchema,
   saveExpertRevisionRequestSchema,
   saveSkillRuntimeProfileRequestSchema,
+  saveTaskContextRequestSchema,
   setExpertLifecycleRequestSchema,
   setSkillEnabledRequestSchema,
   setSkillTrustRequestSchema,
@@ -45,6 +47,8 @@ import {
   skillImportResultSchema,
   skillMutationResultSchema,
   skillSummarySchema,
+  taskContextMutationResultSchema,
+  taskContextRevisionSchema,
   testSkillRunRequestSchema,
   testSkillRunResultSchema,
 } from '@betterwork/agent-protocol';
@@ -252,6 +256,20 @@ const api: BetterWorkDesktopApi = {
         IpcChannel.SetExpertLifecycle,
         setExpertLifecycleRequestSchema.parse(input),
         expertMutationResultSchema,
+      ),
+  },
+  taskContexts: {
+    get: (input) =>
+      invokeValidated(
+        IpcChannel.GetTaskContext,
+        getTaskContextRequestSchema.parse(input),
+        taskContextRevisionSchema.nullable(),
+      ),
+    save: (input) =>
+      invokeValidated(
+        IpcChannel.SaveTaskContext,
+        saveTaskContextRequestSchema.parse(input),
+        taskContextMutationResultSchema,
       ),
   },
   dependencies: {

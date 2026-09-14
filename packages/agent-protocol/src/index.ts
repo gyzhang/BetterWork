@@ -402,6 +402,26 @@ export const taskContextRevisionSchema = z
   .strict();
 export type TaskContextRevision = z.infer<typeof taskContextRevisionSchema>;
 
+export const getTaskContextRequestSchema = z.object({ taskId: z.string().min(1) }).strict();
+export type GetTaskContextRequest = z.infer<typeof getTaskContextRequestSchema>;
+
+export const saveTaskContextRequestSchema = z
+  .object({
+    taskId: z.string().min(1),
+    expectedRevision: z.number().int().positive().optional(),
+    executor: taskContextExecutorSchema,
+    skillBindings: taskContextRevisionSchema.shape.skillBindings,
+    modelReference: expertModelReferenceSchema.optional(),
+    builtinToolPolicy: builtinToolPolicySchema.optional(),
+  })
+  .strict();
+export type SaveTaskContextRequest = z.infer<typeof saveTaskContextRequestSchema>;
+
+export const taskContextMutationResultSchema = z
+  .object({ context: taskContextRevisionSchema })
+  .strict();
+export type TaskContextMutationResult = z.infer<typeof taskContextMutationResultSchema>;
+
 export const listSkillsRequestSchema = z.object({}).strict();
 export type ListSkillsRequest = z.infer<typeof listSkillsRequestSchema>;
 
@@ -1727,6 +1747,8 @@ export const IpcChannel = {
   SaveExpertRevision: 'expert:save-revision',
   CopyExpert: 'expert:copy',
   SetExpertLifecycle: 'expert:set-lifecycle',
+  GetTaskContext: 'task-context:get',
+  SaveTaskContext: 'task-context:save',
   ListDependencyOptions: 'dependency:list-options',
   InspectDependencyPlan: 'dependency:inspect-plan',
   PrepareDependencyEnvironment: 'dependency:prepare',
@@ -1834,6 +1856,10 @@ export interface BetterWorkDesktopApi {
     saveRevision(input: SaveExpertRevisionRequest): Promise<ExpertMutationResult>;
     copy(input: CopyExpertRequest): Promise<ExpertMutationResult>;
     setLifecycle(input: SetExpertLifecycleRequest): Promise<ExpertMutationResult>;
+  };
+  taskContexts: {
+    get(input: GetTaskContextRequest): Promise<TaskContextRevision | null>;
+    save(input: SaveTaskContextRequest): Promise<TaskContextMutationResult>;
   };
   dependencies: {
     listOptions(): Promise<DependencyOptions>;
