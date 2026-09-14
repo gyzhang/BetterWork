@@ -137,7 +137,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 - 必读/落点：docs/04、ADR-0005/0014、KnowledgeVault、Artifact/FileArtifactService、Workspace/TaskRepository；扩展 expert-contracts。
 - 工作：定稿工作空间候选关联、任务选材修订、Knowledge 内容修订、ArtifactVersion 引用、本地输入快照、材料用途、Run 读取足迹和成果输入关系；明确两库与文件资产的恢复和回收。
 - 失败语义：源文件变化、缺失、重复引用、非法跨空间请求、快照取消、归档对象仍被引用、旧任务继续执行、范围缩小后的历史筛选逐项定义。
-- 完成：见[材料、快照与运行来源契约](material-contracts.md)。已定稿工作空间候选与任务授权、六类用途、Knowledge 内容修订、ArtifactVersion、本地输入快照、RunContextSnapshot、读取足迹和成果输入关系；明确两库与受管文件恢复/回收、所有读取入口的范围校验落点，以及源变化、缺失、重复、跨空间、取消、归档、旧任务和范围收缩语义。特别标明现有 `read_text_file` 与 `knowledge_search` 尚未完成 E2 隔离，脚本按本机用户权限运行，不宣称 OS 沙箱。仅文档变更，`git diff --check` 和 Markdown 关系检查通过，2026-09-14。
+- 完成：见[材料、快照与运行来源契约](material-contracts.md)。已定稿工作空间候选与任务授权、六类用途、Knowledge 内容修订、ArtifactVersion、本地输入快照、RunContextSnapshot、读取足迹和成果输入关系；明确两库与受管文件恢复/回收、所有读取入口的范围校验落点，以及源变化、缺失、重复、跨空间、取消、归档、旧任务和范围收缩语义。E23 已将带 `TaskContext` 的 `read_text_file` 与 `knowledge_search` 接入 Run 范围过滤；脚本按本机用户权限运行，不宣称 OS 沙箱。仅文档变更，`git diff --check` 和 Markdown 关系检查通过，2026-09-14。
 
 ### E21 修订、快照与恢复
 
