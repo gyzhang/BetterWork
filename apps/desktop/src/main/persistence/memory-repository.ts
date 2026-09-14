@@ -59,6 +59,11 @@ interface MemoryReadInput {
   capturedAt: number;
 }
 
+interface MemoryReadRunRow {
+  workspace_id: string;
+  expert_id: string | null;
+}
+
 const hashContent = (content: string): string => createHash('sha256').update(content).digest('hex');
 
 const scopeToColumns = (
@@ -304,9 +309,28 @@ export class MemoryRepository {
     const getStored = this.db.prepare(
       'SELECT id, content_hash FROM memory_records WHERE revision_id = ?',
     );
+    const getRun = this.db.prepare(
+      `SELECT tasks.workspace_id, run_context_snapshots.expert_id
+         FROM runs
+         JOIN tasks ON tasks.id = runs.task_id
+         LEFT JOIN run_context_snapshots ON run_context_snapshots.run_id = runs.id
+        WHERE runs.id = ?`,
+    );
     const transaction = this.db.transaction(() => {
       for (const read of reads) {
         const memory = memoryRecordSchema.parse(read.memory);
+        const run = getRun.get(read.runId) as MemoryReadRunRow | undefined;
+        if (!run) throw new MemoryValidationError('运行不存在。');
+        if (!this.memoryAppliesToRun(memory, run)) {
+          throw new MemoryValidationError('记忆范围不适用于该 Run。');
+        }
+        if (
+          memory.status !== 'confirmed' ||
+          (memory.validFrom !== undefined && memory.validFrom > read.capturedAt) ||
+          (memory.validUntil !== undefined && memory.validUntil <= read.capturedAt)
+        ) {
+          throw new MemoryValidationError('只能记录运行实际注入的有效记忆。');
+        }
         const stored = getStored.get(memory.revisionId) as
           { id: string; content_hash: string } | undefined;
         if (!stored) throw new MemoryValidationError('记忆修订不存在。');
@@ -390,6 +414,21 @@ export class MemoryRepository {
       const expertId = scope.expertId;
       const expert = this.db.prepare('SELECT id FROM experts WHERE id = ?').get(expertId);
       if (!expert) throw new MemoryValidationError('专家不存在。');
+    }
+  }
+
+  private memoryAppliesToRun(memory: MemoryRecord, run: MemoryReadRunRow): boolean {
+    switch (memory.scope.kind) {
+      case 'user':
+        return true;
+      case 'workspace':
+        return memory.scope.workspaceId === run.workspace_id;
+      case 'expert':
+        return memory.scope.expertId === run.expert_id;
+      case 'expert-workspace':
+        return (
+          memory.scope.expertId === run.expert_id && memory.scope.workspaceId === run.workspace_id
+        );
     }
   }
 }
