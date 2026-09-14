@@ -5,13 +5,14 @@ import path from 'node:path';
 import { IpcChannel } from '@betterwork/agent-protocol';
 import type { WebFetch } from '@betterwork/tool-runtime';
 import type { BrowserWindow } from 'electron';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { OfficeParserService } from '../infrastructure/office-parser';
 import type { ProcessSupervisor } from '../infrastructure/process-supervisor';
 import { AppStore } from '../persistence';
 import { InputSnapshotService } from './input-snapshot-service';
 import { KnowledgeVault } from './knowledge-vault';
+import { McpClientService } from './mcp-client-service';
 import { MemoryService } from './memory-service';
 import { NotificationService } from './notification-service';
 import { createRunTools, RunService } from './run-service';
@@ -22,8 +23,18 @@ import { TaskMaterialService } from './task-material-service';
 const temporaryDirectories: string[] = [];
 const openStores: AppStore[] = [];
 const openVaults: KnowledgeVault[] = [];
+const mcpFixturePath = path.resolve(
+  process.cwd(),
+  'scripts/fixtures/mcp-finance-readonly-server.mjs',
+);
+
+const sseResponse = (...payloads: string[]): Response =>
+  new Response(`${payloads.map((payload) => `data: ${payload}\n\n`).join('')}data: [DONE]\n\n`, {
+    headers: { 'content-type': 'text/event-stream' },
+  });
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
   for (const vault of openVaults.splice(0)) vault.close();
   for (const store of openStores.splice(0)) store.close();
   await Promise.all(
@@ -114,6 +125,7 @@ const createService = (
   skillExecutionService?: SkillExecutionService,
   webFetch?: WebFetch,
   officeParser?: OfficeParserService,
+  mcpClientService?: McpClientService,
 ): RunService =>
   new RunService(
     fixture.store,
@@ -129,7 +141,7 @@ const createService = (
     fixture.inputSnapshots,
     fixture.taskMaterials,
     fixture.memories,
-    undefined,
+    mcpClientService,
     webFetch,
     officeParser,
   );
@@ -700,6 +712,96 @@ describe('RunService', () => {
         }),
       }),
     );
+  });
+
+  it('routes a selected MCP tool through the Run model tool boundary', async () => {
+    const fixture = await createFixture();
+    const mcp = new McpClientService(fixture.store);
+    const connection = fixture.store.mcpConnections.save({
+      name: '财务替身',
+      transport: { kind: 'stdio', command: process.execPath, args: [mcpFixturePath] },
+    });
+    const discovered = await mcp.testConnection(connection.id);
+    const discoveredTool = discovered.tools[0];
+    if (!discoveredTool) throw new Error('MCP tool was not discovered');
+    const agentTool = (
+      await mcp.createAgentTools([{ connectionId: connection.id, toolId: discoveredTool.id }])
+    )[0];
+    if (!agentTool) throw new Error('MCP AgentTool was not created');
+
+    const fetchMock = vi.fn(async () =>
+      fetchMock.mock.calls.length === 1
+        ? sseResponse(
+            JSON.stringify({
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: 'mcp-call-1',
+                        function: {
+                          name: agentTool.name,
+                          arguments: JSON.stringify({ month: '2026-08' }),
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+          )
+        : sseResponse(
+            JSON.stringify({ choices: [{ delta: { content: '已读取 MCP 财务数据。' } }] }),
+          ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    fixture.store.models.save({
+      name: '测试兼容模型',
+      provider: 'openai-compatible',
+      baseUrl: 'http://model.test/v1',
+      model: 'fixture-model',
+      role: 'language',
+      apiKey: '',
+      maxContextTokens: 8_192,
+      maxOutputTokens: 1_024,
+      temperature: 0,
+      enabled: true,
+    });
+    const context = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+      materials: [],
+      mcpToolBindings: [{ connectionId: connection.id, toolId: discoveredTool.id }],
+    });
+    const service = createService(fixture, undefined, undefined, undefined, undefined, mcp);
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '读取 2026-08 的 MCP 财务数据',
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+
+    try {
+      await waitForCompletion(fixture, runId, 800);
+      expect(statusOf(fixture, runId)).toBe('completed');
+      expect(fixture.store.runs.listEvents(runId)).toContainEqual(
+        expect.objectContaining({
+          type: 'tool.completed',
+          output: expect.stringContaining('fixture-ledger'),
+        }),
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const firstCall = fetchMock.mock.calls[0] as unknown[] | undefined;
+      const firstRequest = firstCall?.[1] as RequestInit | undefined;
+      const requestBody = JSON.parse(String(firstRequest?.body)) as {
+        tools?: Array<{ function?: { name?: string } }>;
+      };
+      expect(requestBody.tools?.map((tool) => tool.function?.name)).toContain(agentTool.name);
+    } finally {
+      await mcp.shutdown();
+    }
   });
 
   it('applies an Expert built-in tool allow-list without exposing omitted tools', () => {
