@@ -23,3 +23,8 @@
 
 - `npm run expert:preflight` 重新通过：1 个内置 Expert、2 个内置 Skill，清单、内容哈希和 builder 资源规则均匹配。
 - 本次只复核静态发布资源，没有把锁屏状态下无法执行的安装/业务窗口验收记为通过。
+
+## 2026-09-15 资源路径泄漏预检补强
+
+- `expert-release-preflight` 现在对 `skills/`、`experts/` 和 `dependency-locks/` 资源扫描仓库/用户目录绝对路径，并拒绝 Skill manifest 的资源路径逃逸。
+- 正常资源预检通过；临时打包副本注入 `/Users/kevin/Dev4AI/BetterWork` 后按预期失败。该检查不能替代真实签名安装和升级旅程。

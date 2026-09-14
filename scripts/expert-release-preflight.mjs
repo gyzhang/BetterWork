@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -21,6 +22,13 @@ const readJson = async (filePath) => {
 
 const isIgnored = (name) =>
   name === '.DS_Store' || name === 'Thumbs.db' || name === 'desktop.ini' || name.startsWith('._');
+
+const assertChildPath = (root, child, label) => {
+  const relative = path.relative(root, child);
+  if (relative === '' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    fail(`${label} escapes resource root: ${child}`);
+  }
+};
 
 const collectFiles = async (root, directory = root) => {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -80,7 +88,8 @@ const verifyResourceSet = async (resourceRoot, label) => {
     if (typeof entry.resourceName !== 'string' || entry.resourceName.length === 0) {
       fail(`Skill ${entry.skillId} has no resourceName`);
     }
-    const skillRoot = path.join(resourceRoot, 'skills', entry.resourceName);
+    const skillRoot = path.resolve(resourceRoot, 'skills', entry.resourceName);
+    assertChildPath(path.resolve(resourceRoot, 'skills'), skillRoot, `Skill ${entry.skillId}`);
     const resourceInfo = await stat(skillRoot).catch(() => undefined);
     if (!resourceInfo?.isDirectory())
       fail(`missing Skill resource in ${label}: ${entry.resourceName}`);
@@ -105,10 +114,32 @@ const verifyResourceSet = async (resourceRoot, label) => {
       }
     }
   }
+  await verifyNoDevelopmentPathLeak(resourceRoot, label);
   return {
     experts: expertManifest.experts.length,
     skills: skillManifest.skills.length,
   };
+};
+
+const verifyNoDevelopmentPathLeak = async (resourceRoot, label) => {
+  const markers = [repositoryRoot, process.env.HOME, process.env.USERPROFILE].filter(
+    (marker) => typeof marker === 'string' && marker.length > 0,
+  );
+  if (markers.length === 0) return;
+  for (const directoryName of ['skills', 'experts', 'dependency-locks']) {
+    const directory = path.join(resourceRoot, directoryName);
+    const info = await stat(directory).catch(() => undefined);
+    if (!info?.isDirectory()) continue;
+    for (const file of await collectFiles(resourceRoot, directory)) {
+      const content = await readFile(file);
+      const marker = markers.find((candidate) => content.includes(Buffer.from(candidate)));
+      if (marker) {
+        fail(
+          `${label} contains a development path in ${path.relative(resourceRoot, file)}: ${marker}`,
+        );
+      }
+    }
+  }
 };
 
 const verifyBuilderResources = async () => {
