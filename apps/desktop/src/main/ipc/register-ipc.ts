@@ -424,7 +424,12 @@ function registerArtifactChannels(deps: IpcDependencies): void {
     IpcChannel.GetArtifact,
     getArtifactRequestSchema,
     artifactDetailSchema.nullable(),
-    (input) => store.artifacts.getDetail(input.id) ?? null,
+    (input) => {
+      const detail = store.artifacts.getDetail(input.id);
+      if (!detail) return null;
+      const inputRelations = store.artifactInputRelations.listByVersion(detail.currentVersionId);
+      return inputRelations.length > 0 ? { ...detail, inputRelations } : detail;
+    },
   );
   handleInput(
     IpcChannel.ListArtifactVersions,
@@ -436,7 +441,12 @@ function registerArtifactChannels(deps: IpcDependencies): void {
     IpcChannel.GetArtifactVersion,
     getArtifactVersionRequestSchema,
     artifactVersionDetailSchema.nullable(),
-    (input) => store.artifacts.getVersionDetail(input.id) ?? null,
+    (input) => {
+      const detail = store.artifacts.getVersionDetail(input.id);
+      if (!detail) return null;
+      const inputRelations = store.artifactInputRelations.listByVersion(detail.id);
+      return inputRelations.length > 0 ? { ...detail, inputRelations } : detail;
+    },
   );
   handleInput(
     IpcChannel.SaveMarkdownArtifact,
@@ -490,6 +500,7 @@ function registerArtifactChannels(deps: IpcDependencies): void {
       if (!store.artifacts.versionBelongsToArtifact(input.versionId, input.artifactId)) return null;
       const version = store.artifacts.getVersionDetail(input.versionId);
       if (!version || version.type !== 'presentation') return null;
+      const inputRelations = store.artifactInputRelations.listByVersion(version.id);
       return {
         ...detail,
         fileHash: version.fileHash,
@@ -497,6 +508,7 @@ function registerArtifactChannels(deps: IpcDependencies): void {
         validation: version.validation,
         ...(version.description ? { description: version.description } : {}),
         evidence: version.evidence,
+        ...(inputRelations.length > 0 ? { inputRelations } : {}),
       };
     },
   );

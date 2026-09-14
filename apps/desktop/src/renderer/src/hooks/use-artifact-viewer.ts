@@ -37,6 +37,7 @@ const toVersionDetail = (artifact: ArtifactDetail): ArtifactVersionDetail | unde
       content: artifact.content,
       contentHash: artifact.contentHash,
       evidence: artifact.evidence,
+      ...(artifact.inputRelations ? { inputRelations: artifact.inputRelations } : {}),
     };
   }
   return {
@@ -54,6 +55,7 @@ const toVersionDetail = (artifact: ArtifactDetail): ArtifactVersionDetail | unde
     fileKey: artifact.fileKey,
     ...(artifact.description ? { description: artifact.description } : {}),
     evidence: artifact.evidence,
+    ...(artifact.inputRelations ? { inputRelations: artifact.inputRelations } : {}),
   };
 };
 

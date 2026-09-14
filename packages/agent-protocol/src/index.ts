@@ -1379,6 +1379,7 @@ export interface MarkdownArtifactDetail extends MarkdownArtifactSummary {
   content: string;
   contentHash: string;
   evidence: EvidenceSummary[];
+  inputRelations?: ArtifactInputRelation[];
 }
 
 export interface FileArtifactDetail extends FileArtifactSummary {
@@ -1387,6 +1388,7 @@ export interface FileArtifactDetail extends FileArtifactSummary {
   validation: ValidationState;
   description?: string;
   evidence: EvidenceSummary[];
+  inputRelations?: ArtifactInputRelation[];
 }
 
 export type ArtifactDetail = MarkdownArtifactDetail | FileArtifactDetail;
@@ -1420,6 +1422,7 @@ export interface MarkdownArtifactVersionDetail extends MarkdownArtifactVersionSu
   content: string;
   contentHash: string;
   evidence: EvidenceSummary[];
+  inputRelations?: ArtifactInputRelation[];
 }
 
 export interface FileArtifactVersionDetail extends FileArtifactVersionSummary {
@@ -1427,6 +1430,7 @@ export interface FileArtifactVersionDetail extends FileArtifactVersionSummary {
   fileKey: string;
   description?: string;
   evidence: EvidenceSummary[];
+  inputRelations?: ArtifactInputRelation[];
 }
 
 export type ArtifactVersionDetail = MarkdownArtifactVersionDetail | FileArtifactVersionDetail;
@@ -1752,6 +1756,7 @@ export const markdownArtifactDetailSchema = markdownArtifactSummarySchema.extend
   content: z.string(),
   contentHash: z.string().min(1),
   evidence: z.array(evidenceSummarySchema),
+  inputRelations: z.array(artifactInputRelationSchema).optional(),
 });
 export const fileArtifactDetailSchema = fileArtifactSummarySchema.extend({
   fileHash: z.string().min(1),
@@ -1759,6 +1764,7 @@ export const fileArtifactDetailSchema = fileArtifactSummarySchema.extend({
   validation: validationStateSchema,
   description: z.string().trim().max(10_000).optional(),
   evidence: z.array(evidenceSummarySchema),
+  inputRelations: z.array(artifactInputRelationSchema).optional(),
 });
 export const artifactDetailSchema = z.discriminatedUnion('type', [
   markdownArtifactDetailSchema,
@@ -1785,12 +1791,14 @@ export const markdownArtifactVersionDetailSchema = markdownArtifactVersionSummar
   content: z.string(),
   contentHash: z.string().min(1),
   evidence: z.array(evidenceSummarySchema),
+  inputRelations: z.array(artifactInputRelationSchema).optional(),
 });
 export const fileArtifactVersionDetailSchema = fileArtifactVersionSummarySchema.extend({
   fileHash: z.string().min(1),
   fileKey: z.string().min(1),
   description: z.string().trim().max(10_000).optional(),
   evidence: z.array(evidenceSummarySchema),
+  inputRelations: z.array(artifactInputRelationSchema).optional(),
 });
 export const artifactVersionDetailSchema = z.discriminatedUnion('type', [
   markdownArtifactVersionDetailSchema.extend({ type: z.literal('markdown') }),
