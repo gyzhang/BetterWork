@@ -213,7 +213,7 @@ interface ArtifactInputRelation {
 7. **Skill/Python/外部工具桥接**：使用已解析的 Run 工作目录、输入快照和 binding；工具输出写入成果前仍检查 Run 状态和授权关系。
 8. **Evidence/Artifact 登记**：只能关联当前 Run 的读取足迹和真实输出；不能用旧 Task Evidence、路径或标题补造来源。
 
-E23 已让 `read_text_file`、`knowledge_search` 和 Markdown `read_artifact` 满足第 4、5 条；RunContextSnapshot 仓储还会校验 Run、Task、Workspace 与 TaskContextRevision 的归属关系，避免单列外键存在但组合关系错误。E24 进一步把完成的搜索/读取写入 RunMaterialRead，并把成果输入关系限制到同一 Run 已读取的精确材料。脚本按本机用户权限运行，输入快照和路径策略是应用层约束，不是 OS 进程沙箱，不能宣称可以阻止受信任脚本主动读取本机其他文件。
+E23 已让 `read_text_file`、`knowledge_search` 和 Markdown `read_artifact` 满足第 4、5 条；RunContextSnapshot 仓储还会校验 Run、Task、Workspace 与 TaskContextRevision 的归属关系，避免单列外键存在但组合关系错误。E24 进一步把完成的搜索/读取写入 RunMaterialRead；有 TaskContext 的 Run 只能登记快照中选定且哈希一致的材料，旧通用 Run 保留无上下文兼容路径；成果输入关系限制到同一 Run 已读取的精确材料。脚本按本机用户权限运行，输入快照和路径策略是应用层约束，不是 OS 进程沙箱，不能宣称可以阻止受信任脚本主动读取本机其他文件。
 
 ## 7. 失败与历史语义
 

@@ -1,4 +1,10 @@
-import { type RunMaterialRead, runMaterialReadSchema } from '@betterwork/agent-protocol';
+import {
+  type MaterialReference,
+  materialReferenceSchema,
+  type RunMaterialRead,
+  runMaterialReadSchema,
+  taskMaterialSelectionSchema,
+} from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 
 interface RunMaterialReadRow {
@@ -11,6 +17,28 @@ interface RunMaterialReadRow {
   excerpt_hash: string | null;
   captured_at: number;
 }
+
+interface RunContextMaterialRow {
+  task_context_revision_id: string | null;
+  materials_json: string;
+}
+
+const materialKey = (reference: MaterialReference): string => {
+  const parsed = materialReferenceSchema.parse(reference);
+  if (parsed.kind === 'knowledge-revision') {
+    return `${parsed.kind}:${parsed.knowledgeRevisionId}`;
+  }
+  if (parsed.kind === 'artifact-version') {
+    return `${parsed.kind}:${parsed.artifactVersionId}`;
+  }
+  return `${parsed.kind}:${parsed.snapshotId}`;
+};
+
+const parseMaterials = (value: string): RunMaterialRead['material'][] => {
+  const parsed: unknown = JSON.parse(value);
+  if (!Array.isArray(parsed)) throw new Error('Stored run materials must be an array');
+  return parsed.map((item) => taskMaterialSelectionSchema.parse(item).reference);
+};
 
 const toRead = (row: RunMaterialReadRow): RunMaterialRead =>
   runMaterialReadSchema.parse({
@@ -29,7 +57,25 @@ export class RunMaterialReadRepository {
 
   save(read: RunMaterialRead): void {
     const parsed = runMaterialReadSchema.parse(read);
-    const materialKey = JSON.stringify(parsed.material);
+    const context = this.db
+      .prepare(
+        `SELECT task_context_revision_id, materials_json
+         FROM run_context_snapshots WHERE run_id = ?`,
+      )
+      .get(parsed.runId) as RunContextMaterialRow | undefined;
+    if (context) {
+      const materials = parseMaterials(context.materials_json);
+      const scoped = context.task_context_revision_id !== null || materials.length > 0;
+      if (scoped) {
+        const selected = materials.find(
+          (material) => materialKey(material) === materialKey(parsed.material),
+        );
+        if (!selected || selected.contentHash !== parsed.contentHash) {
+          throw new Error('Run material read is outside the snapshot scope');
+        }
+      }
+    }
+    const materialJsonKey = JSON.stringify(parsed.material);
     this.db
       .prepare(
         `INSERT OR IGNORE INTO run_material_reads (
@@ -41,7 +87,7 @@ export class RunMaterialReadRepository {
         parsed.id,
         parsed.runId,
         JSON.stringify(parsed.material),
-        materialKey,
+        materialJsonKey,
         parsed.operation,
         parsed.locator ?? null,
         parsed.contentHash,
