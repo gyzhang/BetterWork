@@ -813,6 +813,15 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 18,
+    name: 'add expert mcp tool presets',
+    up(db: Database.Database): void {
+      db.exec(
+        "ALTER TABLE expert_revisions ADD COLUMN mcp_tool_bindings_json TEXT NOT NULL DEFAULT '[]'",
+      );
+    },
+  },
 ];
 
 /**

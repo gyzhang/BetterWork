@@ -11,8 +11,10 @@ const openStore = (): AppStore => {
   return store;
 };
 
-const draft = (name = '经营分析专家'): ExpertRevisionDraft => ({
-  name,
+const draft = (
+  nameOrOverrides: string | Partial<ExpertRevisionDraft> = '经营分析专家',
+): ExpertRevisionDraft => ({
+  name: typeof nameOrOverrides === 'string' ? nameOrOverrides : '经营分析专家',
   summary: '按公司规则完成经营分析',
   identity: '你负责经营分析和报告交付。',
   principles: ['先核对口径，再分析数据'],
@@ -21,6 +23,7 @@ const draft = (name = '经营分析专家'): ExpertRevisionDraft => ({
   skillPreset: [],
   builtinToolPolicy: { mode: 'application-defaults' },
   modelReference: { mode: 'application-default' },
+  ...(typeof nameOrOverrides === 'string' ? {} : nameOrOverrides),
 });
 
 afterEach(() => {
@@ -38,6 +41,21 @@ describe('ExpertRepository', () => {
     expect(() => store.experts.saveRevision(created.id, draft('过期写入'), 1)).toThrow(
       'Expert revision conflict',
     );
+  });
+
+  it('persists explicit MCP tool presets with immutable revisions', () => {
+    const store = openStore();
+    const created = store.experts.create({
+      sourceKind: 'user',
+      revision: draft({
+        mcpToolBindings: [{ connectionId: 'finance', toolId: 'finance/monthly_summary' }],
+      }),
+    });
+    expect(created.revision.mcpToolBindings).toEqual([
+      { connectionId: 'finance', toolId: 'finance/monthly_summary' },
+    ]);
+    const copy = store.experts.copy(created.id);
+    expect(copy.revision.mcpToolBindings).toEqual(created.revision.mcpToolBindings);
   });
 
   it('copies a built-in expert as an independent user expert', () => {

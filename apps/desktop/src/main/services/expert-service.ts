@@ -216,6 +216,12 @@ export class ExpertService {
         addReason(blockedReasons, 'invalid-tool');
       }
     }
+    for (const binding of expert.revision.mcpToolBindings ?? []) {
+      const connection = this.store.mcpConnections.get(binding.connectionId);
+      if (!connection || !connection.tools.some((tool) => tool.id === binding.toolId)) {
+        addReason(blockedReasons, 'mcp-unavailable');
+      }
+    }
     return { ...expert, blockedReasons: [...blockedReasons] };
   }
 }

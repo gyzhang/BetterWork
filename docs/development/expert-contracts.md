@@ -1,6 +1,6 @@
 # 专家与任务上下文契约（E10）
 
-- 状态：E10 已定案并由 E11–E15 实现；材料增量由 E20 定案，待 E21–E25 实现。
+- 状态：E10 已定案并由 E11–E15 实现；E42 已为 ExpertRevision 与 TaskContext 接入 MCP 工具选择。材料增量由 E20 定案，E21–E25 已实现。
 - 日期：2026-09-14。
 - 依据：[专家与任务材料设计 v0.2](../designs/experts-and-task-materials.md)、[ADR-0014](../adr/0014-expert-context-and-material-binding.md)、[ADR-0012](../adr/0012-composer-capability-binding.md)。
 - 范围：本文件定义 E1 专家管理、召唤、执行身份、Skill 预设、内置工具策略、模型引用和任务草稿的精确边界。材料的候选、版本、快照、读取足迹和成果输入关系已在 [材料、快照与运行来源契约](material-contracts.md)（E20）中定案；记忆、MCP 和 Office 输入仍分别由 E30、E40、E50 定案。本文件和 E20 契约都不为尚未实施的切片创建空字段或空表。
@@ -198,3 +198,9 @@ E2–E5 的材料、记忆、MCP 和 Office 错误不得提前复用这些 E1 co
 - IPC 采用共享 Zod Schema；Preload 只暴露最小的专家和任务上下文方法，Renderer 调用按 `reportAction`/`trackAction` 收口。
 
 E10 完成后，E11 才开始迁移和管理服务，E12 才开始运行注入；本文件的类型是实施契约，不代表 Expert、TaskContextRevision 或 RunContextSnapshot 已经存在于当前数据库。
+
+## 6. MCP 工具选择增量（E42）
+
+`ExpertRevision` 可以保存 `mcpToolBindings` 作为长期预设；`TaskContextRevision` 保存本次任务的显式绑定。两者都引用 `connectionId + toolId`，而不是保存可变的工具描述。设置页检测到的工具只是候选，专家和任务分别选择后才进入 Run；连接删除、工具目录变化或服务断线不会改写历史修订。
+
+当连接或具体工具不存在时，Expert 状态标记 `mcp-unavailable`，用户仍可查看和编辑修订；发送边界由 Main/RunService 再次确认，并将失效绑定收口为可解释失败。

@@ -9,6 +9,7 @@ import {
   type ExpertRevisionDraft,
   expertSkillPresetSchema,
   type ExpertSourceKind,
+  mcpToolBindingSchema,
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 
@@ -35,6 +36,7 @@ interface ExpertRevisionRow {
   skill_preset_json: string;
   builtin_tool_policy_json: string;
   model_reference_json: string;
+  mcp_tool_bindings_json: string;
   created_at: number;
 }
 
@@ -73,6 +75,11 @@ const toRevision = (row: ExpertRevisionRow): ExpertRevision => ({
   skillPreset: expertSkillPresetSchema.parse(JSON.parse(row.skill_preset_json)),
   builtinToolPolicy: builtinToolPolicySchema.parse(JSON.parse(row.builtin_tool_policy_json)),
   modelReference: expertModelReferenceSchema.parse(JSON.parse(row.model_reference_json)),
+  ...(() => {
+    const bindings = JSON.parse(row.mcp_tool_bindings_json) as unknown;
+    const parsed = mcpToolBindingSchema.array().max(50).parse(bindings);
+    return parsed.length > 0 ? { mcpToolBindings: parsed } : {};
+  })(),
   createdAt: row.created_at,
 });
 
@@ -199,6 +206,9 @@ export class ExpertRepository {
         skillPreset: source.revision.skillPreset,
         builtinToolPolicy: source.revision.builtinToolPolicy,
         modelReference: source.revision.modelReference,
+        ...(source.revision.mcpToolBindings
+          ? { mcpToolBindings: source.revision.mcpToolBindings }
+          : {}),
       },
     });
   }
@@ -232,8 +242,8 @@ export class ExpertRepository {
         `INSERT INTO expert_revisions (
            id, expert_id, revision, name, summary, avatar_key, identity,
            principles_json, input_requirements_json, delivery_requirements_json,
-           skill_preset_json, builtin_tool_policy_json, model_reference_json, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           skill_preset_json, builtin_tool_policy_json, model_reference_json, mcp_tool_bindings_json, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         revisionId,
@@ -249,6 +259,7 @@ export class ExpertRepository {
         JSON.stringify(draft.skillPreset),
         JSON.stringify(draft.builtinToolPolicy),
         JSON.stringify(draft.modelReference),
+        JSON.stringify(draft.mcpToolBindings ?? []),
         createdAt,
       );
   }

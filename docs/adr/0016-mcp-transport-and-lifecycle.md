@@ -1,7 +1,7 @@
 # ADR-0016：MCP 首轮传输、工具发现与生命周期
 
-- 状态：Accepted（E40，2026-09-14）
-- 范围：MCP 连接、工具发现、调用、取消和退出的首轮宿主边界；具体设置 UI 与 Expert/Task 选择留 E42。
+- 状态：Accepted（E40；E41–E42 已实现，2026-09-14）
+- 范围：MCP 连接、工具发现、调用、取消、退出以及设置和 Expert/Task 工具选择的首轮宿主边界。
 - 前置：[ADR-0014](0014-expert-context-and-material-binding.md)、[专家与任务材料开发计划](../development/tasks-experts.md)。
 
 ## 背景
@@ -44,3 +44,7 @@ E40 的可执行验证仅覆盖离线替身与协议生命周期；未配置外�
 - 写入型业务工具、审批、批量变更和凭据导出；
 - 自动把新工具加入 Expert、Task 或普通助手；
 - MCP Resource/Prompt 全量支持；首轮只适配工具调用。
+
+## E42 UI 增量
+
+设置页只保存 stdio 启动命令、参数和工作目录，检测后展示连接状态与工具目录；Renderer 不接收凭据字段。ExpertRevision 可预设已发现的具体工具，TaskContext 可在当前任务中选择工具并覆盖专家预设。连接或工具失效时保留历史绑定并在专家状态中标记 `mcp-unavailable`，不会静默替换或自动加入新工具。
