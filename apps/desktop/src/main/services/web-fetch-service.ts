@@ -6,11 +6,13 @@ const MAX_REDIRECTS = 3;
 const TIMEOUT_MS = 15_000;
 
 const isPrivateHostname = (hostname: string): boolean => {
-  const lower = hostname.toLowerCase();
+  const lower = hostname.toLowerCase().replace(/^\[|\]$/gu, '');
   if (lower === 'localhost' || lower.endsWith('.localhost') || lower.endsWith('.local'))
     return true;
   if (
     lower === '::1' ||
+    lower === '::' ||
+    lower.startsWith('::ffff:') ||
     lower.startsWith('fe80:') ||
     lower.startsWith('fc') ||
     lower.startsWith('fd')

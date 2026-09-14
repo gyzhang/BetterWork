@@ -47,6 +47,15 @@ describe('WebFetchService', () => {
       new WebFetchService(fetchImpl).fetch('http://localhost:8080', new AbortController().signal),
     ).rejects.toThrow('不允许访问');
     await expect(
+      new WebFetchService(fetchImpl).fetch('http://[::1]/private', new AbortController().signal),
+    ).rejects.toThrow('不允许访问');
+    await expect(
+      new WebFetchService(fetchImpl).fetch(
+        'http://[::ffff:127.0.0.1]/private',
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow('不允许访问');
+    await expect(
       new WebFetchService(
         async () =>
           new Response('binary', {
@@ -65,5 +74,31 @@ describe('WebFetchService', () => {
       new WebFetchService(fetchImpl).fetch('https://example.com', controller.signal),
     ).rejects.toThrow();
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('limits redirects and truncates oversized response bodies', async () => {
+    const redirectFetch = vi.fn(
+      async () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: 'https://example.com/next' },
+        }),
+    );
+    await expect(
+      new WebFetchService(redirectFetch).fetch(
+        'https://example.com/start',
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow('重定向次数过多');
+    expect(redirectFetch).toHaveBeenCalledTimes(4);
+
+    const result = await new WebFetchService(
+      async () =>
+        new Response('x'.repeat(1_000_001), {
+          status: 200,
+          headers: { 'content-type': 'text/plain' },
+        }),
+    ).fetch('https://example.com/large', new AbortController().signal);
+    expect(result).toMatchObject({ truncated: true, content: 'x'.repeat(1_000_000) });
   });
 });
