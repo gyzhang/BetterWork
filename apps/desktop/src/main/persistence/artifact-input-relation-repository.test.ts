@@ -105,4 +105,46 @@ describe('ArtifactInputRelationRepository', () => {
       ),
     ).toThrow('must be read');
   });
+
+  it('rejects an output version produced by another Run', () => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    const workspace = store.workspaces.getOrCreate('/tmp/betterwork-relation-test-3', '测试工作区');
+    const firstTask = store.tasks.create(workspace.id, '任务一', '验证来源归属');
+    const secondTask = store.tasks.create(workspace.id, '任务二', '验证来源归属');
+    const firstRunId = 'run-relation-owner-1';
+    const secondRunId = 'run-relation-owner-2';
+    store.runs.create({
+      id: firstRunId,
+      taskId: firstTask.task.id,
+      sessionId: firstTask.sessionId,
+      prompt: '生成成果一',
+      status: 'running',
+      createdAt: 1,
+    });
+    store.runs.create({
+      id: secondRunId,
+      taskId: secondTask.task.id,
+      sessionId: secondTask.sessionId,
+      prompt: '生成成果二',
+      status: 'running',
+      createdAt: 2,
+    });
+    const artifact = store.artifacts.saveMarkdown({
+      taskId: firstTask.task.id,
+      origin: 'assistant-run',
+      runId: firstRunId,
+      title: '经营报告',
+      content: '报告正文',
+    });
+
+    expect(() =>
+      store.artifactInputRelations.saveForRun(
+        artifact.currentVersionId,
+        secondRunId,
+        [],
+        () => true,
+      ),
+    ).toThrow('Artifact version does not belong to source Run');
+  });
 });
