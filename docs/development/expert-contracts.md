@@ -108,9 +108,9 @@ Skill 预设保持用户顺序，最多 6 项；同一 `skillId` 不能重复。
 
 所有管理操作在 Main 事务中完成。用户草稿允许缺少 Skill 环境或模型，但非法 ID、重复 Skill、超过 6 项和超长文本在 IPC Schema 边界拒绝。内置 Expert 的原始修订不可被 `save revision` 覆盖，复制后才可编辑。
 
-## 3. TaskContextRevision（E1 子集）
+## 3. TaskContextRevision（E1 基线与后续扩展）
 
-E1 只持久化以下下一次运行配置；不放材料、记忆或 MCP 占位：
+E1 首版只持久化以下下一次运行配置；材料、记忆和 MCP 后续通过各自任务卡以版本化字段接入，不把空数组当作授权：
 
 ```ts
 type TaskExecutorSelection =
@@ -143,6 +143,8 @@ interface SkillBindingDraft {
 - `skillBindings` 是有效顺序的唯一来源，去重后不得超过 6 项。启动前转换为现有 `SkillBinding[]`，丢弃仅供 UI 解释的 `source` 字段。
 - `modelReference` 和 `builtinToolPolicy` 缺失表示继承 Expert 修订（Expert 模式）或应用默认（通用模式）；显式值只能引用已配置的模型和已登记的内置工具。
 - E2 之后扩展 TaskContextRevision 时，只能新增版本化字段并由对应任务卡定案；不得把 `materials: []`、`memory: []` 或 `mcp: []` 当作当前授权。
+
+当前已落地的扩展包括：E22 的 `materials`（精确 Knowledge/ArtifactVersion/输入快照引用）、E31 的记忆排除项与运行记忆快照，以及 E42 的 `mcpToolBindings`。它们仍由 Application 在保存和启动边界校验，不改变 E1 的 Expert 身份固定规则。
 
 草稿更新采用 compare-and-swap：调用方提交 `expectedRevision`，当前修订不同就返回 `task_context_conflict`，保留用户本地草稿供重试。召唤只创建/切换草稿并聚焦输入框，不自动发送或创建 Run；首条非空消息才提交启动。
 

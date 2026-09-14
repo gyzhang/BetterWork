@@ -52,6 +52,64 @@ describe('Expert two-period acceptance path', () => {
     const firstVersion = store.artifacts.getVersionDetail(firstArtifact.currentVersionId);
     if (!firstVersion || firstVersion.type !== 'markdown')
       throw new Error('first artifact missing');
+    const expert = store.experts.create({
+      sourceKind: 'user',
+      revision: {
+        name: '经营分析专家',
+        summary: '复用规则和历史报告完成月度分析',
+        identity: '负责月度经营分析和报告交付。',
+        principles: ['先核对规则，再比较期间数据'],
+        inputRequirements: ['本期经营数据'],
+        deliveryRequirements: ['交付可追溯报告'],
+        skillPreset: [],
+        builtinToolPolicy: { mode: 'allow-list', toolNames: ['analyze_business_metrics'] },
+        modelReference: { mode: 'application-default' },
+        referenceMaterials: [
+          {
+            reference: {
+              kind: 'artifact-version',
+              artifactId: firstArtifact.id,
+              artifactVersionId: firstVersion.id,
+              contentHash: firstVersion.contentHash,
+              originWorkspaceId: workspace.id,
+            },
+            purpose: 'historical-comparison',
+          },
+        ],
+      },
+    });
+    const secondContext = store.taskContexts.save(secondTask.task.id, {
+      executor: {
+        kind: 'expert',
+        expertId: expert.id,
+        expertRevisionId: expert.revision.id,
+      },
+      skillBindings: [],
+      materials: [
+        {
+          reference: {
+            kind: 'artifact-version',
+            artifactId: firstArtifact.id,
+            artifactVersionId: firstVersion.id,
+            contentHash: firstVersion.contentHash,
+            originWorkspaceId: workspace.id,
+          },
+          purpose: 'historical-comparison',
+          addedFrom: 'expert-reference',
+        },
+      ],
+    });
+    expect(secondContext.executor).toEqual({
+      kind: 'expert',
+      expertId: expert.id,
+      expertRevisionId: expert.revision.id,
+    });
+    expect(secondContext.materials).toEqual([
+      expect.objectContaining({
+        reference: expect.objectContaining({ artifactVersionId: firstVersion.id }),
+        addedFrom: 'expert-reference',
+      }),
+    ]);
     const secondArtifact = store.artifacts.saveMarkdown({
       taskId: secondTask.task.id,
       runId: secondRunId,
