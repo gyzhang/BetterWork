@@ -646,6 +646,32 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 11,
+    name: 'add managed input snapshots',
+    up(db: Database.Database): void {
+      db.exec(`
+        CREATE TABLE input_snapshots (
+          id TEXT PRIMARY KEY,
+          workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+          source_path TEXT NOT NULL,
+          content_hash TEXT NOT NULL,
+          byte_size INTEGER NOT NULL,
+          format TEXT NOT NULL,
+          file_key TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN ('preparing', 'ready', 'failed', 'cancelled')),
+          failure_code TEXT,
+          failure_message TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX idx_input_snapshots_workspace
+          ON input_snapshots(workspace_id, updated_at DESC);
+        CREATE INDEX idx_input_snapshots_hash
+          ON input_snapshots(workspace_id, content_hash, status);
+      `);
+    },
+  },
 ];
 
 /**

@@ -41,6 +41,40 @@ const INITIAL_SCHEMA = `
   );
 `;
 
+const REVISION_SCHEMA = `
+  CREATE TABLE knowledge_revisions (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL,
+    revision INTEGER NOT NULL CHECK (revision > 0),
+    title TEXT NOT NULL,
+    source_path TEXT NOT NULL,
+    format TEXT NOT NULL,
+    byte_size INTEGER NOT NULL,
+    content_hash TEXT NOT NULL,
+    content TEXT NOT NULL,
+    page_count INTEGER,
+    parser_version TEXT NOT NULL,
+    chunking_version TEXT NOT NULL,
+    imported_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE(document_id, revision),
+    UNIQUE(document_id, content_hash)
+  );
+  CREATE INDEX idx_knowledge_revisions_document
+    ON knowledge_revisions(document_id, revision DESC);
+  CREATE TABLE knowledge_revision_chunks (
+    id TEXT PRIMARY KEY,
+    revision_id TEXT NOT NULL REFERENCES knowledge_revisions(id) ON DELETE CASCADE,
+    locator TEXT NOT NULL,
+    ordinal INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    UNIQUE(revision_id, ordinal)
+  );
+`;
+
+const parserVersion = 'text-extract-v1';
+const chunkingVersion = 'format-locator-v1';
+
 interface LegacyDocumentRow {
   id: string;
   content: string;
@@ -114,6 +148,70 @@ export const knowledgeMigrations: readonly Migration[] = [
         )`,
         ['id', 'document_id', 'locator', 'ordinal', 'content'],
       );
+    },
+  },
+  {
+    version: 3,
+    name: 'add immutable knowledge content revisions',
+    up(db: Database.Database): void {
+      db.exec(REVISION_SCHEMA);
+      const documents = db
+        .prepare(
+          `SELECT d.id, d.title, d.source_path, d.format, d.byte_size, d.content_hash,
+                  d.content, d.page_count, d.imported_at, d.updated_at
+             FROM knowledge_documents d`,
+        )
+        .all() as Array<{
+        id: string;
+        title: string;
+        source_path: string;
+        format: string;
+        byte_size: number;
+        content_hash: string;
+        content: string;
+        page_count: number | null;
+        imported_at: number;
+        updated_at: number;
+      }>;
+      const insertRevision = db.prepare(
+        `INSERT INTO knowledge_revisions
+          (id, document_id, revision, title, source_path, format, byte_size, content_hash,
+           content, page_count, parser_version, chunking_version, imported_at, created_at)
+         VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      const selectChunks = db.prepare(
+        'SELECT locator, ordinal, content FROM knowledge_chunks WHERE document_id = ? ORDER BY ordinal',
+      );
+      const insertChunk = db.prepare(
+        `INSERT INTO knowledge_revision_chunks
+          (id, revision_id, locator, ordinal, content) VALUES (?, ?, ?, ?, ?)`,
+      );
+      for (const document of documents) {
+        const revisionId = randomUUID();
+        insertRevision.run(
+          revisionId,
+          document.id,
+          document.title,
+          document.source_path,
+          document.format,
+          document.byte_size,
+          document.content_hash,
+          document.content,
+          document.page_count,
+          parserVersion,
+          chunkingVersion,
+          document.imported_at,
+          document.updated_at,
+        );
+        const chunks = selectChunks.all(document.id) as Array<{
+          locator: string;
+          ordinal: number;
+          content: string;
+        }>;
+        for (const chunk of chunks) {
+          insertChunk.run(randomUUID(), revisionId, chunk.locator, chunk.ordinal, chunk.content);
+        }
+      }
     },
   },
 ];

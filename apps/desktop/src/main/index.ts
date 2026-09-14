@@ -21,6 +21,7 @@ import { createQuitHandler } from './services/application-shutdown';
 import { ExecutionOutputService } from './services/execution-output-service';
 import { type BuiltinExpertReleaseManifest, ExpertService } from './services/expert-service';
 import { FileArtifactService } from './services/file-artifact-service';
+import { InputSnapshotService } from './services/input-snapshot-service';
 import { KnowledgeVault } from './services/knowledge-vault';
 import { NotificationService } from './services/notification-service';
 import {
@@ -45,6 +46,7 @@ import { createMainWindow } from './window';
 interface ApplicationContext {
   store: AppStore;
   knowledgeVault: KnowledgeVault;
+  inputSnapshots: InputSnapshotService;
   runs?: RunService;
   window: BrowserWindow | null;
 }
@@ -62,6 +64,19 @@ function bootstrap(): ApplicationContext {
   const knowledgeVault = new KnowledgeVault(
     path.join(userData, 'vaults', 'default', 'vault.sqlite'),
   );
+  const inputSnapshots = new InputSnapshotService(store, userData);
+  inputSnapshots
+    .recover()
+    .then((recovered) => {
+      if (recovered.cancelled > 0 || recovered.failed > 0 || recovered.removedFiles > 0) {
+        console.warn(
+          `Recovered input snapshots: ${recovered.cancelled} cancelled, ${recovered.failed} failed, ${recovered.removedFiles} orphan file group(s) removed`,
+        );
+      }
+    })
+    .catch((error: unknown) => {
+      console.error('Input snapshot recovery failed', error);
+    });
   const skillService = new SkillService(store, {
     developmentBuiltinRoot: path.resolve(app.getAppPath(), '../../resources/skills'),
     installedBuiltinRoot: path.join(process.resourcesPath, 'skills'),
@@ -147,7 +162,7 @@ function bootstrap(): ApplicationContext {
       console.error('Dependency preparation recovery failed', error);
     });
 
-  const started: ApplicationContext = { store, knowledgeVault, window: null };
+  const started: ApplicationContext = { store, knowledgeVault, inputSnapshots, window: null };
   const getWindow = (): BrowserWindow | null => {
     const window = started.window;
     return window && !window.isDestroyed() ? window : null;

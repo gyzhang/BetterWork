@@ -235,7 +235,7 @@ app_settings
 
 知识和记忆表见对应专题文档。
 
-E11 已通过版本化迁移创建 `experts`、`expert_revisions`；E12 已增加 `task_context_revisions`，E13–E15 已将其接入召唤、首条消息、任务恢复和内置分发。E21–E24 将按材料契约增加运行快照、输入快照、读取足迹和成果输入关系，不在 `tasks` 上用未定义的 `expert_id`、`materials` 或 `memory` 占位。知识索引仍在独立 `vault.sqlite`，应用库保存授权和运行真相；两库没有跨库事务，启动时先验证内容修订再写应用库事务。旧 Task 缺少上下文时按通用助手和空材料解释，首次编辑/发送再以版本化迁移创建草稿。所有迁移保持启动幂等、可回滚并通过 `foreign_key_check`；历史 Run 没有专家或材料事实时不补造。
+E11 已通过版本化迁移创建 `experts`、`expert_revisions`；E12 已增加 `task_context_revisions`，E13–E15 已将其接入召唤、首条消息、任务恢复和内置分发；E21 已增加知识内容修订和 Workspace 所属输入快照。E22–E24 将按材料契约增加任务材料绑定、运行快照、读取足迹和成果输入关系，不在 `tasks` 上用未定义的 `expert_id`、`materials` 或 `memory` 占位。知识索引仍在独立 `vault.sqlite`，应用库保存授权和运行真相；两库没有跨库事务，启动时先验证内容修订再写应用库事务。旧 Task 缺少上下文时按通用助手和空材料解释，首次编辑/发送再以版本化迁移创建草稿。所有迁移保持启动幂等、可回滚并通过 `foreign_key_check`；历史 Run 没有专家或材料事实时不补造。
 
 SQLite 是产品状态真相源；向量索引、缩略图和解析缓存均可重建。
 

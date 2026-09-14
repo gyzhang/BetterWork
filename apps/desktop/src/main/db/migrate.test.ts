@@ -639,12 +639,51 @@ describe('knowledge database migrations', () => {
       )
       .all('"retention"') as Array<{ locator: string }>;
     expect(hits).toEqual([{ locator: '全文' }]);
+    expect(countRows(db, 'knowledge_revisions')).toBe(1);
+    expect(
+      db
+        .prepare('SELECT revision, content_hash FROM knowledge_revisions WHERE document_id = ?')
+        .get('doc-1'),
+    ).toEqual({ revision: 1, content_hash: 'hash' });
 
     // 分块外键生效：删文档带走分块
     db.prepare('DELETE FROM knowledge_documents WHERE id = ?').run('doc-1');
     expect(countRows(db, 'knowledge_chunks')).toBe(0);
+    // 修订没有随当前索引记录删除，历史材料仍可解释；未来引用关系负责阻止物理回收。
+    expect(countRows(db, 'knowledge_revisions')).toBe(1);
     db.close();
   });
+});
+
+it('creates managed input snapshot state with workspace ownership', () => {
+  const db = openAppDatabase(':memory:');
+  const now = 1_700_000_000_000;
+  db.prepare(
+    'INSERT INTO workspaces (id, name, root_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+  ).run('snapshot-workspace', '快照工作区', '/tmp/snapshot-workspace', now, now);
+  db.prepare(
+    `INSERT INTO input_snapshots
+      (id, workspace_id, source_path, content_hash, byte_size, format, file_key, status,
+       created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    'input-1',
+    'snapshot-workspace',
+    'data.csv',
+    'hash-1',
+    10,
+    'csv',
+    'input-snapshots/hash-1/content',
+    'preparing',
+    now,
+    now,
+  );
+  expect(db.prepare('SELECT status FROM input_snapshots WHERE id = ?').get('input-1')).toEqual({
+    status: 'preparing',
+  });
+  db.prepare('DELETE FROM workspaces WHERE id = ?').run('snapshot-workspace');
+  expect(countRows(db, 'input_snapshots')).toBe(0);
+  db.close();
 });
 
 it('migrates v7 through the latest schema without losing Markdown versions', () => {

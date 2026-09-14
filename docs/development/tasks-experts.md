@@ -46,7 +46,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E14 | 专家管理与按需配置 UI | E13 | done | [专家配置 UI 测试](../../apps/desktop/src/renderer/src/App.test.tsx)：专家列表/详情、独立编辑器、新建与不可变修订保存、Skill 预设、内置工具 allow-list、生命周期操作和内置复制均复用 E11 IPC；`npm run verify` 退出 0（55 文件 / 452 测试 / Electron build），2026-09-14 14:24 |
 | E15 | 内置专家分发与 E1 验收 | E14 | done | [内置 Expert 服务测试](../../apps/desktop/src/main/services/expert-service.test.ts)：新增 `resources/experts/release-manifest.json`，启动幂等注册 stable builtin Expert；打包资源同步进入 `experts/`，内置修订只读且可复制；`npm run verify` 退出 0（55 文件 / 453 测试 / Electron build），2026-09-14 14:27 |
 | E20 | 材料与快照精确契约 | E15 | done | [材料、快照与运行来源契约](material-contracts.md)：定稿候选/选择/读取分离、Knowledge revision、ArtifactVersion、Workspace 输入快照、用途、RunContextSnapshot、两库与文件恢复/回收、范围校验入口、读取足迹和 ArtifactInputRelation；明确源变更、缺失、重复、跨空间、取消、归档、旧任务和范围收缩语义。文档差异检查通过，2026-09-14。 |
-| E21 | 知识修订、文件快照与恢复 | E20 | todo | — |
+| E21 | 知识修订、文件快照与恢复 | E20 | done | [KnowledgeVault 修订与快照测试](../../apps/desktop/src/main/services/knowledge-vault.test.ts)、[输入快照测试](../../apps/desktop/src/main/services/input-snapshot-service.test.ts)、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)：知识库 v3 保留不可变内容/分块修订；应用库 v11 增加 Workspace 所属输入快照状态；稳定读取、哈希寻址复制、取消、符号链接/特殊文件拒绝、缺失/孤儿恢复已接通启动装配；`npm run verify` 退出 0（56 文件 / 459 测试 / Electron build），2026-09-14 15:04。 |
 | E22 | 材料选择与草稿持久化 | E21 | todo | — |
 | E23 | 宿主范围与上下文收缩 | E22 | todo | — |
 | E24 | 读取足迹与成果输入来源 | E23 | todo | — |
@@ -145,7 +145,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 - 工作：知识刷新生成修订；外部文件只读复制到受管输入快照，哈希去重；数据库记录可恢复准备状态，成功后才用于 Run。文件并发修改需稳定读/重试或明确拒绝，快照哈希与解析内容一致。
 - 失败/取消：快照准备可取消；断电/崩溃后恢复或清理孤立文件，不破坏被历史成果引用的资产；路径穿越/符号链接越界/特殊文件拒绝。
 - 必测：新旧库迁移、修改期间读取、失败事务、取消、重启清理、共享引用回收、旧知识修订仍可读取。
-- 完成：重启后精确输入可重现；原文件无修改，临时资源不冒充 Artifact。
+- 完成：Knowledge Vault v3 新增不可变 `knowledge_revisions`/`knowledge_revision_chunks`，旧库迁移自动生成 revision 1，刷新只追加新内容哈希修订；应用库 v11 新增 `input_snapshots`，`InputSnapshotService` 完成 Workspace/路径/符号链接/特殊文件校验、稳定读取重试、SHA-256 内容寻址复制、`preparing → ready/failed/cancelled` 收口、取消和启动恢复/孤儿清理。原文件保持只读，输入快照不冒充 Artifact；`npm run verify` 退出 0（56 文件 / 459 测试 / Electron build），2026-09-14 15:04。材料选择绑定、运行读取过滤和来源关系留 E22–E24。
 
 ### E22 材料选择服务与草稿
 
