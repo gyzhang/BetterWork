@@ -1,5 +1,7 @@
 # 知识库与记忆
 
+> 2026-09-14：用户已接受[专家与任务材料设计](designs/experts-and-task-materials.md)。知识按文档选取并固定内容修订、Expert/Workspace 适用记忆和范围缩小后的上下文处理按 [ADR-0014](adr/0014-expert-context-and-material-binding.md)落实；E2/E3 的唯一执行入口为[开发计划](development/tasks-experts.md)。长期记忆仍未实现；现有 RunService 已重建本 Task 历史回复，下文“不读取历史”属于旧实现说明。
+
 > 2026-09-08：长期工作目录与已有知识共同支撑任务，不要求先建完整知识库；一个专家持续协作不等于无限累加聊天历史。最小记忆随研究到汇报路径规划，完整记忆系统和其他格式的旧 Phase 编号以 [新版顺序](07-mvp-and-roadmap.md#0-2026-09-08-生效的开发顺序) 为准。目录发现与记忆实现建议见 [修订稿](reviews/2026-09-08-product-scope.md)，尚未实现。
 
 ## 1. 核心区分

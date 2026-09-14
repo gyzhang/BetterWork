@@ -1,5 +1,7 @@
 # 领域模型
 
+> 2026-09-14：专家修订、TaskContextRevision、材料引用/运行快照、上下文段和成果输入关系已随用户对设计 v0.2 的评审通过而定稿，见 [ADR-0014](adr/0014-expert-context-and-material-binding.md)与[开发计划](development/tasks-experts.md)。尚未实施；下文历史接口不能替代该设计的增量契约。
+
 > 2026-09-08 产品关系补充：长期目录承接 Workspace，一个专家调用多项 Skill 持续完成任务，成果是持续协作对象。见 [ADR-0008](adr/0008-personal-workbench-and-capability-first.md)。本文接口仍需按实现状态阅读；配置快照、知识范围和持久化讨论节点的具体 Schema 待实现 ADR，不视为已落地。
 
 > 2026-09-12 领域关系变更：Run 与 Skill 由 1:1 改为 1:N，命名为能力绑定，见 §4.1 与 [ADR-0012](adr/0012-composer-capability-binding.md)。该变更尚未实现。
@@ -225,6 +227,8 @@ Knowledge Vault 是由用户管理的一组本地知识来源，具有独立索�
 
 ## 10. Capability
 
+2026-09-14 已接受的增量关系：Expert 保存不可变修订；TaskContextRevision 保存下一次运行的可见草稿；RunContextSnapshot 固定实际专家、工具/Skill、资料引用与记忆适用范围。材料引用区分知识内容修订、成果版本和文件快照。任务缩小范围时按上下文段排除旧模型输入；新成果版本可关联输入成果版本。具体字段按[开发计划](development/tasks-experts.md) E10/E20 定稿后更新共享协议与迁移；在此之前不把下文示例接口视作已发布 Schema。
+
 Capability 是运行时可使用能力的统一抽象，来源包括：
 
 - 内置 Tool
@@ -266,4 +270,3 @@ type NotificationTarget =
 - 与 Run 的关系是弱引用：`kind: "run"` 的通知通过 `target.taskId` 指向任务，不在 Notification 上冗余 Run 状态。
 
 当前实现状态：与 Run Journal 同库的 `notifications` 表已落地，200 条滚动上限、超限淘汰最旧；触发源为 run 完成/失败（取消静默）、知识导入结果与成果导出结果；窗口失焦且 run 终态时额外发系统通知。通知偏好与免打扰尚未建设。
-

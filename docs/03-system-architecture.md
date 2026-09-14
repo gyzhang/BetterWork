@@ -1,5 +1,7 @@
 # 系统架构
 
+> 2026-09-14 增量架构已接受：专家和任务上下文由 Application 解析，Run 固定能力与材料快照，宿主过滤检索/文件读取与历史上下文，成果关联输入版本。见 [ADR-0014](adr/0014-expert-context-and-material-binding.md)及[开发计划](development/tasks-experts.md)。保留现有依赖方向，不建立第二个 Agent 引擎；下文已有代码状态与新增目标分开阅读。
+
 > 对应运行设计现见 [Skill 执行器与依赖管理](designs/skill-executor-and-dependencies.md)（[ADR-0010](adr/0010-skill-executor-and-dependencies.md)，Proposed），明确进程生命周期、信任限制及文件成果接点；不改变本文记录的当前实现状态。
 
 > 2026-09-08 运行能力增量：阶段 A 需支持脚本型 Skill 的 Python/CLI、外部本地依赖、子进程管理及任务输出，见 [ADR-0009](adr/0009-script-skill-baseline.md)。下文是既有架构与实现状态；执行器留在宿主 Application/Tool Runtime 边界，隔离与协议方案尚待实现 ADR。
