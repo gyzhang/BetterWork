@@ -6,6 +6,8 @@ import {
   type ExpertModelReference,
   expertModelReferenceSchema,
   MAX_RUN_SKILL_BINDINGS,
+  type McpToolBinding,
+  mcpToolBindingSchema,
   type TaskContextExecutor,
   taskContextExecutorSchema,
   type TaskContextRevision,
@@ -28,6 +30,7 @@ interface TaskContextRow {
   updated_at: number;
   materials_json: string;
   excluded_memory_ids_json: string;
+  mcp_tool_bindings_json: string;
 }
 
 export interface SaveTaskContextInput {
@@ -37,6 +40,7 @@ export interface SaveTaskContextInput {
   builtinToolPolicy?: BuiltinToolPolicy;
   materials?: TaskMaterialSelection[];
   excludedMemoryIds?: string[];
+  mcpToolBindings?: McpToolBinding[];
 }
 
 const parseSkillBindings = (value: string): TaskContextSkillBinding[] => {
@@ -64,8 +68,15 @@ const parseMemoryIds = (value: string): string[] => {
   return ids;
 };
 
+const parseMcpToolBindings = (value: string): McpToolBinding[] => {
+  const parsed: unknown = JSON.parse(value);
+  if (!Array.isArray(parsed)) throw new Error('Stored TaskContext MCP bindings must be an array');
+  return parsed.map((item) => mcpToolBindingSchema.parse(item));
+};
+
 const toRevision = (row: TaskContextRow): TaskContextRevision => {
   const excludedMemoryIds = parseMemoryIds(row.excluded_memory_ids_json);
+  const mcpToolBindings = parseMcpToolBindings(row.mcp_tool_bindings_json);
   return {
     id: row.id,
     taskId: row.task_id,
@@ -84,6 +95,7 @@ const toRevision = (row: TaskContextRow): TaskContextRevision => {
       : {}),
     materials: parseMaterials(row.materials_json),
     ...(excludedMemoryIds.length > 0 ? { excludedMemoryIds } : {}),
+    ...(mcpToolBindings.length > 0 ? { mcpToolBindings } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -143,6 +155,10 @@ export class TaskContextRepository {
     if (excludedMemoryIds.length > 100 || excludedMemoryIds.some((id) => !id)) {
       throw new Error('Task context memory exclusions are invalid');
     }
+    const mcpToolBindings = mcpToolBindingSchema
+      .array()
+      .max(50)
+      .parse(input.mcpToolBindings ?? []);
     const latest = this.getLatest(taskId);
     if (expectedRevision !== undefined && latest && latest.revision !== expectedRevision) {
       throw new Error(
@@ -157,8 +173,8 @@ export class TaskContextRepository {
         `INSERT INTO task_context_revisions (
            id, task_id, revision, executor_json, skill_bindings_json,
            model_reference_json, builtin_tool_policy_json, created_at, updated_at, materials_json,
-           excluded_memory_ids_json
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           excluded_memory_ids_json, mcp_tool_bindings_json
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -172,6 +188,7 @@ export class TaskContextRepository {
         now,
         JSON.stringify(materials),
         JSON.stringify(excludedMemoryIds),
+        JSON.stringify(mcpToolBindings),
       );
     const saved = this.get(id, taskId);
     if (!saved) throw new Error('Task context was not available after save');

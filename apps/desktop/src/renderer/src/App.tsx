@@ -7,6 +7,7 @@ import type {
   EvidenceSummary,
   ExpertSummary,
   MaterialCandidate,
+  McpToolBinding,
   MemoryRecord,
   NotificationSummary,
   NotificationTarget,
@@ -93,6 +94,7 @@ export function App(): React.JSX.Element {
   const [taskMaterials, setTaskMaterials] = useState<TaskMaterialSelection[]>([]);
   const [taskMemories, setTaskMemories] = useState<MemoryRecord[]>([]);
   const [excludedMemoryIds, setExcludedMemoryIds] = useState<string[]>([]);
+  const [mcpToolBindings, setMcpToolBindings] = useState<McpToolBinding[]>([]);
   const [memoryCapture, setMemoryCapture] = useState<{ content: string; runId: string }>();
   const [memoryCaptureScope, setMemoryCaptureScope] = useState<
     'user' | 'workspace' | 'expert-workspace'
@@ -334,6 +336,7 @@ export function App(): React.JSX.Element {
     setTaskMaterials([]);
     setTaskMemories([]);
     setExcludedMemoryIds([]);
+    setMcpToolBindings([]);
     setMemoryCapture(undefined);
     setMaterialCandidates([]);
     setMaterialPickerKind(undefined);
@@ -384,6 +387,7 @@ export function App(): React.JSX.Element {
       setTaskContext(context ?? undefined);
       setTaskMaterials(context?.materials ?? []);
       setExcludedMemoryIds(context?.excludedMemoryIds ?? []);
+      setMcpToolBindings(context?.mcpToolBindings ?? []);
       if (!context || context.executor.kind === 'general') {
         setActiveExpert(undefined);
       } else {
@@ -523,6 +527,7 @@ export function App(): React.JSX.Element {
         })),
         materials: taskMaterials,
         excludedMemoryIds,
+        mcpToolBindings,
       });
       setTaskContext(contextResult.context);
       const result = await window.betterwork.runs.start({

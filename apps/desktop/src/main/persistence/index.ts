@@ -8,6 +8,7 @@ import { DependencySnapshotRepository } from './dependency-snapshot-repository';
 import { EvidenceRepository } from './evidence-repository';
 import { ExpertRepository } from './expert-repository';
 import { InputSnapshotRepository } from './input-snapshot-repository';
+import { McpConnectionRepository } from './mcp-connection-repository';
 import { MemoryRepository } from './memory-repository';
 import { ModelRepository } from './model-repository';
 import { NotificationRepository } from './notification-repository';
@@ -45,6 +46,7 @@ export class AppStore {
   readonly artifactInputRelations: ArtifactInputRelationRepository;
   readonly models: ModelRepository;
   readonly memories: MemoryRepository;
+  readonly mcpConnections: McpConnectionRepository;
   readonly searchEngines: SearchEngineRepository;
   readonly notifications: NotificationRepository;
   readonly skills: SkillRepository;
@@ -67,6 +69,7 @@ export class AppStore {
     this.artifactInputRelations = new ArtifactInputRelationRepository(db);
     this.models = new ModelRepository(db);
     this.memories = new MemoryRepository(db);
+    this.mcpConnections = new McpConnectionRepository(db);
     this.searchEngines = new SearchEngineRepository(db);
     this.notifications = new NotificationRepository(db);
     this.skills = new SkillRepository(db);
@@ -115,6 +118,7 @@ export {
   InputSnapshotRepository,
   type InputSnapshotStatus,
 } from './input-snapshot-repository';
+export { McpConnectionRepository, type McpDiscoveryPatch } from './mcp-connection-repository';
 export {
   MemoryConflictError,
   type MemoryReadInput,
