@@ -150,7 +150,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 ### E22 材料选择服务与草稿
 
 - 落点：材料服务/仓储、ExpertRevision 常用参考、TaskContextRevision、IPC/preload。
-- 工作：工作空间候选与任务实际选择分离；支持具体知识、现有可读成果版本和当前文件。常用参考从当前 Workspace 候选选择后带入，同清单可移除；跨 Workspace ArtifactVersion 仅由显式专家引用或全局搜索来源带入并标记来源。
+- 工作：工作空间候选与任务实际选择分离；支持具体知识、现有可读成果版本和当前文件。常用参考从当前 Workspace 候选选择后带入，同清单可移除；跨 Workspace ArtifactVersion 只能通过任务内显式全局来源选择，不能由专家常用参考自动带入。
 - 失败/取消：无访问登记的任意 ID/路径拒绝；源版本变化给差异，不追随最新；取消选择不改草稿；超限和不可读格式有具体原因。
 - 必测：候选不等于授权、常用参考引用版本稳定、跨 Workspace 来源明确、并发草稿版本、重复引用去重、移除不会被预设自动补回。
 - 完成：`TaskContextRevision` v12 新增 `materials_json`；`ExpertRevision` v20 新增 `reference_materials_json`，协议定义 `MaterialReference`、六类用途和 `addedFrom`，`TaskMaterialService` 提供 Knowledge revision、当前 Workspace ArtifactVersion、ready 输入快照候选，并在保存时校验内容哈希、快照完整性、重复引用、跨空间和失效状态。专家编辑器保存全局知识或当前工作区适用的常用参考，召唤把适用引用以 `expert-reference` 复制到新 TaskContext，任务可继续移除或补充；新增材料候选查询与 Workspace 文件快照 IPC/Preload，App 保存并恢复材料草稿；[ADR-0022](../adr/0022-expert-reference-materials.md) 固化边界。当前工具仍可读整个 Knowledge Vault/Workspace，范围收紧留 E23；空材料仍允许澄清任务。
