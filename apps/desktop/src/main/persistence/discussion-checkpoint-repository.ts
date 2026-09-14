@@ -110,7 +110,12 @@ export class DiscussionCheckpointRepository {
     const now = Date.now();
     const insert = this.db.transaction(() => {
       const existing = this.get(parsed.id);
-      if (existing) return existing;
+      if (existing) {
+        if (existing.taskId !== taskId) {
+          throw new Error('Discussion checkpoint id already belongs to another Task');
+        }
+        return existing;
+      }
       if (parsed.supersedesId) {
         this.db
           .prepare(
