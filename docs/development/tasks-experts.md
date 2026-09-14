@@ -63,7 +63,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E52 | 讨论节点与重启后继续/返工 | E51 | done | [ADR-0019](../adr/0019-discussion-checkpoints-and-rework.md)、`DiscussionCheckpointRepository/Service`、IPC 和工作页节点条已接入；客户端 ID 幂等、旧节点替代、重启查询恢复，以及仓储层 Run/Task/ArtifactVersion 归属校验已覆盖；重复客户端 ID 不能跨 Task 读取或复用节点，2026-09-15。 |
 | E53 | 经营分析方法与数值校验 | E52 | done | [ADR-0020](../adr/0020-deterministic-business-analysis.md)、`analyze_business_metrics` 确定性工具和内置「经营分析方法」Skill 已接入；期间变化、预算偏差、零基数和缺失指标有结构化结果/警告；`run-service.test.ts` 另覆盖 Expert allow-list 到确定性结果的离线 Run 集成，2026-09-14。 |
 | E54 | 报告/PPT 交付、修订及来源 | E53 | done | 复用现有 Markdown/FileArtifactService 版本路径；ArtifactVersion 详情通过 IPC 返回本版 `inputRelations`，成果页显示证据和材料输入；旧版本、导出、继续编辑与来源关系保持精确，2026-09-14。 |
-| E55 | 连续两期真实桌面验收 | E54 | partial | [真实与合成验收记录](../acceptance/2026-09-14-expert-two-periods.md) 已覆盖两期独立 Task/Session/Run、旧对话不跨任务注入、Expert 修订与 `expert-reference` 历史成果绑定、已确认方法记忆按 Expert×Workspace 隔离并登记第二期读取足迹；2026-09-15 又完成真实专家召唤、三份脱敏材料选择与用途绑定、文件读取/经营指标工具、公开网页搜索/正文 Evidence、取消后重启。仍缺独立两期业务窗口、真实 MCP 连接和重启回复的事实约束门禁。 |
+| E55 | 连续两期真实桌面验收 | E54 | partial | [真实与合成验收记录](../acceptance/2026-09-14-expert-two-periods.md) 已覆盖两期独立 Task/Session/Run、旧对话不跨任务注入、Expert 修订与 `expert-reference` 历史成果绑定、已确认方法记忆按 Expert×Workspace 隔离并登记读取足迹；2026-09-15 又完成真实专家召唤、三份脱敏材料选择与用途绑定、修复后的材料读取清单、3 次 `read_text_file`、`analyze_business_metrics`、`task_write_file`、公开网页搜索/正文 Evidence、取消后重启。仍缺真实 MCP 连接和跨 Run 重启回复的事实约束门禁。 |
 | E56 | macOS 安装态与整体收尾 | E55 | partial | [安装资源预检记录](../acceptance/2026-09-14-expert-install-preflight.md) 与 [真实验收记录](../acceptance/2026-09-14-expert-two-periods.md)：macOS arm64/x64 DMG 构建、两种架构 App Resources 资源校验、资源绝对路径泄漏扫描和打包 App 召唤冒烟通过；模型凭据下端点预检已通过，但 Developer ID Application 仍缺失，签名安装和 E55 剩余证据继续等待。 |
 
 ## 4. 开发任务卡

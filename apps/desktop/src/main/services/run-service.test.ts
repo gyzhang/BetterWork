@@ -806,6 +806,76 @@ describe('RunService', () => {
     });
   });
 
+  it('injects a stable read manifest for the materials selected in the TaskContext', async () => {
+    const fixture = await createFixture();
+    const sourcePath = path.join(fixture.directory, 'selected.md');
+    await writeFile(sourcePath, '# 本期输入\n收入：130万元。');
+    const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+    if (!workspaceId) throw new Error('workspace missing');
+    const receipt = await fixture.inputSnapshots.create({
+      workspaceId,
+      workspaceRoot: fixture.directory,
+      sourcePath,
+    });
+    const context = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+      materials: [
+        {
+          reference: {
+            kind: 'workspace-input-snapshot',
+            snapshotId: receipt.snapshot.id,
+            workspaceId,
+            contentHash: receipt.snapshot.contentHash,
+            format: receipt.snapshot.format,
+            fileKey: receipt.snapshot.fileKey,
+          },
+          purpose: 'current-input',
+          addedFrom: 'user-input',
+        },
+      ],
+    });
+    const fetchMock = vi.fn(async () =>
+      sseResponse(JSON.stringify({ choices: [{ delta: { content: '已完成。' } }] })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    fixture.store.models.save({
+      name: '材料清单测试模型',
+      provider: 'openai-compatible',
+      baseUrl: 'http://model.test/v1',
+      model: 'fixture-model',
+      role: 'language',
+      apiKey: '',
+      maxContextTokens: 8_192,
+      maxOutputTokens: 1_024,
+      temperature: 0,
+      enabled: true,
+    });
+    const service = createService(fixture);
+
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '读取本次选择的材料并完成经营分析。',
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('completed');
+    const request = (fetchMock.mock.calls[0] as unknown[] | undefined)?.[1] as
+      RequestInit | undefined;
+    const body = JSON.parse(String(request?.body)) as {
+      messages?: Array<{ content?: string }>;
+    };
+    const messages = body.messages?.map((message) => message.content ?? '') ?? [];
+    const manifest = messages.find((message) => message.includes('本次可读材料'));
+    expect(manifest).toContain('selected.md');
+    expect(manifest).toContain(receipt.snapshot.id);
+    expect(manifest).toContain('read_text_file');
+    expect(manifest).toContain('本期输入');
+  });
+
   it('rejects a Session that belongs to a different Task before creating a Run', async () => {
     const fixture = await createFixture();
     const otherTask = fixture.store.tasks.create(
