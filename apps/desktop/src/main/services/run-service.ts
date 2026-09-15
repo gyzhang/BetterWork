@@ -111,10 +111,88 @@ interface ActiveRun {
   /** toolCallId -> 工具名，用于在 tool.completed 时判断该不该登记 Evidence。 */
   toolNames: Map<string, string>;
   contextSegmentId: string;
+  materialFacts: MaterialFactLedger;
 }
 
 const PROMPT_SUMMARY_LENGTH = 80;
 const FAILURE_DETAIL_LENGTH = 500;
+
+interface MaterialFactLedger {
+  readonly enabled: boolean;
+  materialReadCount: number;
+  readonly rawNumbers: Set<number>;
+  readonly allowedNumbers: Set<number>;
+}
+
+const numberPattern = /[-+]?\d+(?:\.\d+)?/gu;
+const claimNumberPattern = /([-+]?\d+(?:\.\d+)?)(\s*(?:%|％|万元|万|元|家|户|客户))/gu;
+const labeledCountPattern = /(?:客户数|客户数量)\s*(?:为|是|[:：])?\s*([-+]?\d+(?:\.\d+)?)/gu;
+
+const numbersIn = (text: string): number[] =>
+  [...text.matchAll(numberPattern)]
+    .map((match) => Number(match[0]))
+    .filter((value) => Number.isFinite(value));
+
+const addNormalizedNumber = (target: Set<number>, value: number): void => {
+  if (!Number.isFinite(value)) return;
+  for (const precision of [0, 1, 2, 3, 4]) {
+    target.add(Number(value.toFixed(precision)));
+  }
+  if (Math.abs(value) <= 1) {
+    const percentage = value * 100;
+    for (const precision of [0, 1, 2, 3, 4]) {
+      target.add(Number(percentage.toFixed(precision)));
+    }
+  }
+};
+
+const createMaterialFactLedger = (enabled: boolean, prompt: string): MaterialFactLedger => {
+  const ledger: MaterialFactLedger = {
+    enabled,
+    materialReadCount: 0,
+    rawNumbers: new Set<number>(),
+    allowedNumbers: new Set<number>(),
+  };
+  // 用户在当前请求中明确给出的带业务单位数字属于本 Run 输入，允许模型继续引用。
+  for (const match of prompt.matchAll(claimNumberPattern)) {
+    const value = Number(match[1]);
+    if (!Number.isFinite(value)) continue;
+    ledger.rawNumbers.add(value);
+    addNormalizedNumber(ledger.allowedNumbers, value);
+  }
+  for (const match of prompt.matchAll(labeledCountPattern)) {
+    const value = Number(match[1]);
+    if (!Number.isFinite(value)) continue;
+    ledger.rawNumbers.add(value);
+    addNormalizedNumber(ledger.allowedNumbers, value);
+  }
+  return ledger;
+};
+
+const recordMaterialFacts = (ledger: MaterialFactLedger, text: string): void => {
+  if (!ledger.enabled) return;
+  const values = numbersIn(text);
+  for (const value of values) {
+    ledger.rawNumbers.add(value);
+    addNormalizedNumber(ledger.allowedNumbers, value);
+  }
+  const raw = [...ledger.rawNumbers];
+  for (const current of raw) {
+    for (const comparison of raw) {
+      if (comparison === 0) continue;
+      addNormalizedNumber(ledger.allowedNumbers, current - comparison);
+      addNormalizedNumber(
+        ledger.allowedNumbers,
+        ((current - comparison) / Math.abs(comparison)) * 100,
+      );
+    }
+  }
+};
+
+const hasAllowedNumber = (ledger: MaterialFactLedger, value: number, rawOnly: boolean): boolean => {
+  const candidates = rawOnly ? ledger.rawNumbers : ledger.allowedNumbers;
+  return [...candidates].some((candidate) => Math.abs(candidate - value) < 0.01);
+};
 
 const serializeToolOutput = (output: unknown): string => {
   if (typeof output === 'string') return output;
@@ -261,6 +339,10 @@ export class RunService {
       skillIds: (resolvedInput.skillBindings ?? []).map((binding) => binding.skillId),
       toolNames: new Map(),
       contextSegmentId,
+      materialFacts: createMaterialFactLedger(
+        resolvedContext.materialScope && resolvedContext.materials.length > 0,
+        input.prompt,
+      ),
     });
 
     try {
@@ -467,6 +549,10 @@ export class RunService {
 
       for await (const event of events) {
         if (isTerminalEvent(event)) {
+          if (event.type === 'run.completed') {
+            const factError = this.auditMaterialFacts(runId, event.finalContent);
+            if (factError) throw new Error(factError);
+          }
           terminalEvent = event;
           break;
         }
@@ -791,11 +877,71 @@ export class RunService {
     const active = this.activeRuns.get(event.runId);
     if (active) this.recordToolProgress(active, event);
     if (event.type === 'tool.completed' && active) {
+      this.recordMaterialFactsFromTool(active, event);
       this.persistMaterialReads(event, active.toolNames);
       this.persistEvidence(active.taskId, event, active.toolNames);
     }
     this.broadcast(event);
     if (isTerminalEvent(event) && active) this.notifyTerminal(active, event);
+  }
+
+  private recordMaterialFactsFromTool(
+    active: ActiveRun,
+    event: Extract<AgentRuntimeEvent, { type: 'tool.completed' }>,
+  ): void {
+    const toolName = active.toolNames.get(event.toolCallId);
+    if (!toolName) return;
+    if (toolName === 'read_text_file' && isReadTextFileOutput(event.output)) {
+      active.materialFacts.materialReadCount += 1;
+      recordMaterialFacts(active.materialFacts, event.output.content);
+      return;
+    }
+    if (toolName === 'read_artifact' && isReadArtifactOutput(event.output)) {
+      active.materialFacts.materialReadCount += 1;
+      recordMaterialFacts(active.materialFacts, event.output.content);
+      return;
+    }
+    if (toolName === 'read_office_material' && isOfficeMaterialReadOutput(event.output)) {
+      active.materialFacts.materialReadCount += 1;
+      recordMaterialFacts(active.materialFacts, JSON.stringify(event.output.sections));
+      return;
+    }
+    if (toolName === 'knowledge_search' && isKnowledgeSearchOutput(event.output)) {
+      active.materialFacts.materialReadCount += 1;
+      recordMaterialFacts(
+        active.materialFacts,
+        event.output.results.map((result) => result.excerpt).join('\n'),
+      );
+      return;
+    }
+    if (toolName === 'analyze_business_metrics') {
+      recordMaterialFacts(active.materialFacts, serializeToolOutput(event.output));
+    }
+  }
+
+  private auditMaterialFacts(runId: string, content: string): string | undefined {
+    const active = this.activeRuns.get(runId);
+    if (!active?.materialFacts.enabled) return undefined;
+    if (active.materialFacts.materialReadCount === 0) {
+      return '材料事实校验失败：本次 Run 选择了材料，但没有成功读取任何材料。请先读取清单中的材料后再完成输出。';
+    }
+    const unsupported = new Set<number>();
+    for (const match of content.matchAll(claimNumberPattern)) {
+      const value = Number(match[1]);
+      if (!Number.isFinite(value)) continue;
+      const unit = match[2]?.trim();
+      if (!unit) continue;
+      const rawOnly = unit === '家' || unit === '户' || unit === '客户';
+      if (!hasAllowedNumber(active.materialFacts, value, rawOnly)) unsupported.add(value);
+    }
+    for (const match of content.matchAll(labeledCountPattern)) {
+      const value = Number(match[1]);
+      if (Number.isFinite(value) && !hasAllowedNumber(active.materialFacts, value, true)) {
+        unsupported.add(value);
+      }
+    }
+    if (unsupported.size === 0) return undefined;
+    return `材料事实校验失败：最终输出包含本次 Run 材料或确定性工具未提供的数字（${[...unsupported].join('、')}）。请重新读取材料，并将缺失数据明确写为“材料未提供”。`;
   }
 
   private recordToolProgress(active: ActiveRun, event: AgentRuntimeEvent): void {
