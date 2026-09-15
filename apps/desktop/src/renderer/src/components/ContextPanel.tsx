@@ -88,6 +88,7 @@ export function ContextPanel({
   mcpConnections,
   mcpToolBindings,
   onMcpToolBindingsChange,
+  onSelectArtifact,
 }: {
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -110,6 +111,7 @@ export function ContextPanel({
   mcpConnections: McpConnectionSummary[];
   mcpToolBindings: McpToolBinding[];
   onMcpToolBindingsChange: (bindings: McpToolBinding[]) => void;
+  onSelectArtifact?: (artifact: ArtifactSummary) => void;
 }): React.JSX.Element | null {
   const [sourceToast, setSourceToast] = useState<{ tone: ToastTone; message: string }>();
   const dismissSourceToast = useCallback(() => setSourceToast(undefined), []);
@@ -375,7 +377,13 @@ export function ContextPanel({
             ) : (
               <div className="evidence-list">
                 {artifacts.map((artifact) => (
-                  <article className="evidence-row" key={artifact.id}>
+                  <button
+                    key={artifact.id}
+                    type="button"
+                    className="evidence-row artifact-row-clickable"
+                    onClick={() => onSelectArtifact?.(artifact)}
+                    aria-label={`查看成果「${artifact.title}」`}
+                  >
                     <span aria-hidden="true">
                       <ArtifactIcon size={12} />
                     </span>
@@ -385,7 +393,8 @@ export function ContextPanel({
                         {artifactTypeLabel(artifact)} · v{artifact.versionNumber}
                       </small>
                     </div>
-                  </article>
+                    <ChevronRightIcon size={12} className="artifact-row-chevron" />
+                  </button>
                 ))}
               </div>
             ))}

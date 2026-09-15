@@ -286,6 +286,8 @@ const inputSnapshotMaterialReferenceSchema = z
     contentHash: z.string().min(1),
     format: z.string().min(1),
     fileKey: z.string().min(1),
+    /** 原始文件路径；由后端读取时填充，写入时可不传。 */
+    sourcePath: z.string().min(1).optional(),
   })
   .strict();
 export const materialReferenceSchema = z.discriminatedUnion('kind', [

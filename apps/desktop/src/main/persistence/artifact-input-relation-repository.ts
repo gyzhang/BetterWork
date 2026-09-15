@@ -12,15 +12,26 @@ interface RelationRow {
   input_key: string;
   relation: ArtifactInputRelation['relation'];
   created_at: number;
+  /** LEFT JOIN input_snapshots 带来的原始文件路径；非快照类输入为 null。 */
+  source_path: string | null;
 }
 
-const toRelation = (row: RelationRow): ArtifactInputRelation =>
-  artifactInputRelationSchema.parse({
+const toRelation = (row: RelationRow): ArtifactInputRelation => {
+  const input = JSON.parse(row.input_json) as Record<string, unknown>;
+  if (
+    row.source_path &&
+    input.kind === 'workspace-input-snapshot' &&
+    typeof input.sourcePath !== 'string'
+  ) {
+    input.sourcePath = row.source_path;
+  }
+  return artifactInputRelationSchema.parse({
     outputVersionId: row.output_version_id,
-    input: JSON.parse(row.input_json) as unknown,
+    input,
     relation: row.relation,
     createdAt: row.created_at,
   });
+};
 
 export class ArtifactInputRelationRepository {
   constructor(private readonly db: Database.Database) {}
@@ -83,7 +94,13 @@ export class ArtifactInputRelationRepository {
   listByVersion(outputVersionId: string): ArtifactInputRelation[] {
     const rows = this.db
       .prepare(
-        'SELECT * FROM artifact_input_relations WHERE output_version_id = ? ORDER BY created_at ASC, rowid ASC',
+        `SELECT r.id, r.output_version_id, r.input_json, r.input_key, r.relation, r.created_at,
+                s.source_path
+           FROM artifact_input_relations r
+           LEFT JOIN input_snapshots s
+             ON s.id = json_extract(r.input_json, '$.snapshotId')
+          WHERE r.output_version_id = ?
+          ORDER BY r.created_at ASC, r.rowid ASC`,
       )
       .all(outputVersionId) as RelationRow[];
     return rows.map(toRelation);

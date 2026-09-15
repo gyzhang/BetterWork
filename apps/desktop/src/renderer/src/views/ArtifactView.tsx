@@ -18,6 +18,7 @@ import { type ToastTone, TransientToast } from '../components/TransientToast';
 import { useArtifactThumbnails } from '../hooks/use-artifact-thumbnails';
 import { useArtifactViewer } from '../hooks/use-artifact-viewer';
 import {
+  ArtifactIcon,
   CapabilityIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -43,7 +44,15 @@ const inputLabel = (input: ArtifactInput): string => {
   if (input.kind === 'evidence') return `证据 · ${input.evidenceId}`;
   if (input.kind === 'knowledge-revision') return `知识修订 · ${input.knowledgeRevisionId}`;
   if (input.kind === 'artifact-version') return `成果版本 · ${input.artifactVersionId}`;
-  return `工作区输入 · ${input.snapshotId}`;
+  if (input.sourcePath) return input.sourcePath.split('/').pop() ?? input.snapshotId;
+  return input.snapshotId;
+};
+
+const inputSourceLabel = (input: ArtifactInput): string => {
+  if (input.kind === 'evidence') return '证据';
+  if (input.kind === 'knowledge-revision') return '知识修订';
+  if (input.kind === 'artifact-version') return '成果版本';
+  return '工作区输入';
 };
 
 const VALIDATION_LABEL: Record<ValidationStatus, string> = {
@@ -200,6 +209,30 @@ export function ArtifactPage({
                 {error}
               </p>
             )}
+            {visibleVersion.inputRelations && visibleVersion.inputRelations.length > 0 && (
+              <div className="artifact-input-bar">
+                <span className="artifact-input-bar-label">本版输入</span>
+                <div className="artifact-input-chips">
+                  {visibleVersion.inputRelations.map((relation) => {
+                    const fileName = inputLabel(relation.input);
+                    const sourceLabel = inputSourceLabel(relation.input);
+                    const isSnapshot = relation.input.kind === 'workspace-input-snapshot';
+                    const Icon = isSnapshot ? KnowledgeIcon : ArtifactIcon;
+                    return (
+                      <span
+                        key={`${relation.outputVersionId}:${JSON.stringify(relation.input)}`}
+                        className="artifact-input-chip"
+                        title={`${fileName} · ${relation.relation} · ${sourceLabel}`}
+                      >
+                        <Icon size={12} />
+                        <span className="artifact-input-chip-name">{fileName}</span>
+                        <span className="artifact-input-chip-relation">{relation.relation}</span>
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="artifact-detail-layout">
               <aside className="artifact-version-list">
                 <div>
@@ -266,16 +299,6 @@ export function ArtifactPage({
                         </article>
                       );
                     })}
-                  </div>
-                )}
-                {visibleVersion.inputRelations && visibleVersion.inputRelations.length > 0 && (
-                  <div className="artifact-input-list">
-                    <strong>本版输入</strong>
-                    {visibleVersion.inputRelations.map((relation) => (
-                      <span key={`${relation.outputVersionId}:${JSON.stringify(relation.input)}`}>
-                        {inputLabel(relation.input)} · {relation.relation}
-                      </span>
-                    ))}
                   </div>
                 )}
               </aside>
