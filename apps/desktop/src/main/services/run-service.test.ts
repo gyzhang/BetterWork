@@ -161,6 +161,37 @@ const waitForCompletion = async (
   throw new Error('Run did not complete in time');
 };
 
+const saveSingleMaterialContext = async (fixture: Fixture, content: string) => {
+  const sourcePath = path.join(fixture.directory, 'selected.md');
+  await writeFile(sourcePath, content);
+  const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+  if (!workspaceId) throw new Error('workspace missing');
+  const receipt = await fixture.inputSnapshots.create({
+    workspaceId,
+    workspaceRoot: fixture.directory,
+    sourcePath,
+  });
+  return fixture.store.taskContexts.save(fixture.taskId, {
+    executor: { kind: 'general' },
+    skillBindings: [],
+    builtinToolPolicy: { mode: 'allow-list', toolNames: ['read_text_file'] },
+    materials: [
+      {
+        reference: {
+          kind: 'workspace-input-snapshot',
+          snapshotId: receipt.snapshot.id,
+          workspaceId,
+          contentHash: receipt.snapshot.contentHash,
+          format: receipt.snapshot.format,
+          fileKey: receipt.snapshot.fileKey,
+        },
+        purpose: 'current-input',
+        addedFrom: 'user-input',
+      },
+    ],
+  });
+};
+
 describe('RunService', () => {
   it('injects confirmed workspace memories and records their exact revisions', async () => {
     const fixture = await createFixture();
@@ -1156,6 +1187,72 @@ describe('RunService', () => {
       expect.objectContaining({
         type: 'run.failed',
         error: expect.stringContaining('定性事实'),
+      }),
+    );
+  });
+
+  it('does not reuse an amount as a customer count', async () => {
+    const fixture = await createFixture();
+    const context = await saveSingleMaterialContext(
+      fixture,
+      '# 本期输入\n收入：130万元，预算：125万元。客户数量未提供。',
+    );
+    let requestCount = 0;
+    const fetchMock = vi.fn(async () => {
+      requestCount += 1;
+      if (requestCount === 1) {
+        return sseResponse(
+          JSON.stringify({
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: 'call-read-unit-boundary',
+                      function: {
+                        name: 'read_text_file',
+                        arguments: JSON.stringify({ path: 'selected.md' }),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+        );
+      }
+      return sseResponse(JSON.stringify({ choices: [{ delta: { content: '客户数：130家。' } }] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    fixture.store.models.save({
+      name: '单位边界测试模型',
+      provider: 'openai-compatible',
+      baseUrl: 'http://model.test/v1',
+      model: 'fixture-model',
+      role: 'language',
+      apiKey: '',
+      maxContextTokens: 8_192,
+      maxOutputTokens: 1_024,
+      temperature: 0,
+      enabled: true,
+    });
+    const service = createService(fixture);
+
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '读取材料并整理经营摘要。',
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('failed');
+    expect(fixture.store.runs.listEvents(runId)).toContainEqual(
+      expect.objectContaining({
+        type: 'run.failed',
+        error: expect.stringContaining('材料事实校验失败'),
       }),
     );
   });
