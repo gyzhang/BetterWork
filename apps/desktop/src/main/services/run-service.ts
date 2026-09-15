@@ -122,11 +122,23 @@ interface MaterialFactLedger {
   materialReadCount: number;
   readonly rawNumbers: Set<number>;
   readonly allowedNumbers: Set<number>;
+  readonly supportedQualitativeClaims: Set<string>;
 }
 
 const numberPattern = /[-+]?\d+(?:\.\d+)?/gu;
 const claimNumberPattern = /([-+]?\d+(?:\.\d+)?)(\s*(?:%|％|万元|万|元|家|户|客户))/gu;
 const labeledCountPattern = /(?:客户数|客户数量)\s*(?:为|是|[:：])?\s*([-+]?\d+(?:\.\d+)?)/gu;
+const qualitativeClaimPatterns = [
+  { phrase: '已续约', label: '已续约状态' },
+  { phrase: '已流失', label: '已流失状态' },
+  { phrase: '平均客单价', label: '平均客单价' },
+  { phrase: '续约率', label: '续约率' },
+  { phrase: '流失率', label: '流失率' },
+  { phrase: '客户总数', label: '客户总数' },
+  { phrase: '总客户数', label: '总客户数' },
+] as const;
+const qualitativeNegationPattern =
+  /材料(?:未|没有)|未(?:提供|提及|确认)|不可推断|无法(?:判断|确认|推断)|待确认|不确定|未知|没有给出|不能/iu;
 
 const numbersIn = (text: string): number[] =>
   [...text.matchAll(numberPattern)]
@@ -152,6 +164,7 @@ const createMaterialFactLedger = (enabled: boolean, prompt: string): MaterialFac
     materialReadCount: 0,
     rawNumbers: new Set<number>(),
     allowedNumbers: new Set<number>(),
+    supportedQualitativeClaims: new Set<string>(),
   };
   // 用户在当前请求中明确给出的带业务单位数字属于本 Run 输入，允许模型继续引用。
   for (const match of prompt.matchAll(claimNumberPattern)) {
@@ -171,6 +184,16 @@ const createMaterialFactLedger = (enabled: boolean, prompt: string): MaterialFac
 
 const recordMaterialFacts = (ledger: MaterialFactLedger, text: string): void => {
   if (!ledger.enabled) return;
+  for (const claim of qualitativeClaimPatterns) {
+    let index = text.indexOf(claim.phrase);
+    while (index >= 0) {
+      if (!hasNegatedQualitativeClaim(text, claim.phrase, index)) {
+        ledger.supportedQualitativeClaims.add(claim.phrase);
+        break;
+      }
+      index = text.indexOf(claim.phrase, index + claim.phrase.length);
+    }
+  }
   const values = numbersIn(text);
   for (const value of values) {
     ledger.rawNumbers.add(value);
@@ -192,6 +215,11 @@ const recordMaterialFacts = (ledger: MaterialFactLedger, text: string): void => 
 const hasAllowedNumber = (ledger: MaterialFactLedger, value: number, rawOnly: boolean): boolean => {
   const candidates = rawOnly ? ledger.rawNumbers : ledger.allowedNumbers;
   return [...candidates].some((candidate) => Math.abs(candidate - value) < 0.01);
+};
+
+const hasNegatedQualitativeClaim = (content: string, phrase: string, index: number): boolean => {
+  const context = content.slice(Math.max(0, index - 50), index + phrase.length + 50);
+  return qualitativeNegationPattern.test(context);
 };
 
 const serializeToolOutput = (output: unknown): string => {
@@ -940,8 +968,24 @@ export class RunService {
         unsupported.add(value);
       }
     }
-    if (unsupported.size === 0) return undefined;
-    return `材料事实校验失败：最终输出包含本次 Run 材料或确定性工具未提供的数字（${[...unsupported].join('、')}）。请重新读取材料，并将缺失数据明确写为“材料未提供”。`;
+    const unsupportedQualitative = qualitativeClaimPatterns
+      .filter((claim) => !active.materialFacts.supportedQualitativeClaims.has(claim.phrase))
+      .filter((claim) => {
+        let index = content.indexOf(claim.phrase);
+        while (index >= 0) {
+          if (!hasNegatedQualitativeClaim(content, claim.phrase, index)) return true;
+          index = content.indexOf(claim.phrase, index + claim.phrase.length);
+        }
+        return false;
+      })
+      .map((claim) => claim.label);
+    if (unsupported.size > 0) {
+      return `材料事实校验失败：最终输出包含本次 Run 材料或确定性工具未提供的数字（${[...unsupported].join('、')}）。请重新读取材料，并将缺失数据明确写为“材料未提供”。`;
+    }
+    if (unsupportedQualitative.length > 0) {
+      return `材料事实校验失败：最终输出包含材料未提供的定性事实（${unsupportedQualitative.join('、')}）。请将缺失状态明确写为“材料未提供”或“不可推断”。`;
+    }
+    return undefined;
   }
 
   private recordToolProgress(active: ActiveRun, event: AgentRuntimeEvent): void {
