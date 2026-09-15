@@ -123,6 +123,7 @@ interface MaterialFactLedger {
   readonly rawNumbers: Set<number>;
   readonly rawCountNumbers: Set<number>;
   readonly allowedNumbers: Set<number>;
+  readonly allowedPercentages: Set<number>;
   readonly supportedQualitativeClaims: Set<string>;
 }
 
@@ -168,6 +169,7 @@ const createMaterialFactLedger = (enabled: boolean, prompt: string): MaterialFac
     rawNumbers: new Set<number>(),
     rawCountNumbers: new Set<number>(),
     allowedNumbers: new Set<number>(),
+    allowedPercentages: new Set<number>(),
     supportedQualitativeClaims: new Set<string>(),
   };
   // 用户在当前请求中明确给出的带业务单位数字属于本 Run 输入，允许模型继续引用。
@@ -177,6 +179,7 @@ const createMaterialFactLedger = (enabled: boolean, prompt: string): MaterialFac
     ledger.rawNumbers.add(value);
     if (isCountUnit(match[2])) ledger.rawCountNumbers.add(value);
     addNormalizedNumber(ledger.allowedNumbers, value);
+    if (isPercentageUnit(match[2])) addNormalizedNumber(ledger.allowedPercentages, value);
   }
   for (const match of prompt.matchAll(labeledCountPattern)) {
     const value = Number(match[1]);
@@ -194,7 +197,9 @@ const recordMaterialFacts = (ledger: MaterialFactLedger, text: string): void => 
   recordQualitativeClaims(ledger.supportedQualitativeClaims, text);
   for (const match of text.matchAll(claimNumberPattern)) {
     const value = Number(match[1]);
-    if (Number.isFinite(value) && isCountUnit(match[2])) ledger.rawCountNumbers.add(value);
+    if (!Number.isFinite(value)) continue;
+    if (isCountUnit(match[2])) ledger.rawCountNumbers.add(value);
+    if (isPercentageUnit(match[2])) addNormalizedNumber(ledger.allowedPercentages, value);
   }
   for (const match of text.matchAll(labeledCountPattern)) {
     const value = Number(match[1]);
@@ -210,16 +215,18 @@ const recordMaterialFacts = (ledger: MaterialFactLedger, text: string): void => 
     for (const comparison of raw) {
       if (comparison === 0) continue;
       addNormalizedNumber(ledger.allowedNumbers, current - comparison);
-      addNormalizedNumber(
-        ledger.allowedNumbers,
-        ((current - comparison) / Math.abs(comparison)) * 100,
-      );
+      const varianceRate = ((current - comparison) / Math.abs(comparison)) * 100;
+      addNormalizedNumber(ledger.allowedNumbers, varianceRate);
+      addNormalizedNumber(ledger.allowedPercentages, varianceRate);
+      addNormalizedNumber(ledger.allowedPercentages, (current / comparison) * 100);
     }
   }
 };
 
 const isCountUnit = (unit: string | undefined): boolean =>
   unit === '家' || unit === '户' || unit === '客户';
+
+const isPercentageUnit = (unit: string | undefined): boolean => unit === '%' || unit === '％';
 
 const recordQualitativeClaims = (target: Set<string>, text: string): void => {
   for (const claim of qualitativeClaimPatterns) {
@@ -234,8 +241,16 @@ const recordQualitativeClaims = (target: Set<string>, text: string): void => {
   }
 };
 
-const hasAllowedNumber = (ledger: MaterialFactLedger, value: number, rawOnly: boolean): boolean => {
-  const candidates = rawOnly ? ledger.rawCountNumbers : ledger.allowedNumbers;
+const hasAllowedNumber = (
+  ledger: MaterialFactLedger,
+  value: number,
+  unit: string | undefined,
+): boolean => {
+  const candidates = isCountUnit(unit)
+    ? ledger.rawCountNumbers
+    : isPercentageUnit(unit)
+      ? ledger.allowedPercentages
+      : ledger.allowedNumbers;
   return [...candidates].some((candidate) => Math.abs(candidate - value) < 0.01);
 };
 
@@ -985,12 +1000,11 @@ export class RunService {
       if (!Number.isFinite(value)) continue;
       const unit = match[2]?.trim();
       if (!unit) continue;
-      const rawOnly = unit === '家' || unit === '户' || unit === '客户';
-      if (!hasAllowedNumber(active.materialFacts, value, rawOnly)) unsupported.add(value);
+      if (!hasAllowedNumber(active.materialFacts, value, unit)) unsupported.add(value);
     }
     for (const match of content.matchAll(labeledCountPattern)) {
       const value = Number(match[1]);
-      if (Number.isFinite(value) && !hasAllowedNumber(active.materialFacts, value, true)) {
+      if (Number.isFinite(value) && !hasAllowedNumber(active.materialFacts, value, '客户')) {
         unsupported.add(value);
       }
     }
