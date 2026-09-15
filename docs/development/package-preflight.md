@@ -19,7 +19,7 @@
 - `dependency-locks/ppt-generation-expert-darwin-arm64-cp312.json`
 - `fonts/SourceHanSansSC-Regular.otf`
 
-使用 `asar list` 和资源目录扫描确认，包内没有 `artifact-files`、`betterwork.db`、`.env`、`.git`、`Downloads`、`ppt-master`、用户模板或 `/Users/kevin/Dev4AI`、`/Users/kevin/Library` 等开发机绝对路径。
+使用 `asar list`、资源目录扫描，并将 `app.asar` 解包后对文本/脚本内容执行路径扫描确认，包内没有 `artifact-files`、`betterwork.db`、`.env`、`.git`、`Downloads`、`ppt-master`、用户模板或 `/Users/kevin/Dev4AI`、`/Users/kevin/Library` 等开发机绝对路径。
 
 ## 边界
 
