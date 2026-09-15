@@ -846,7 +846,7 @@ describe('RunService', () => {
   it('injects a stable read manifest for the materials selected in the TaskContext', async () => {
     const fixture = await createFixture();
     const sourcePath = path.join(fixture.directory, 'selected.md');
-    await writeFile(sourcePath, '# 本期输入\n收入：130万元。');
+    await writeFile(sourcePath, '# 本期输入\n收入：130万元，预算：125万元。');
     const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
     if (!workspaceId) throw new Error('workspace missing');
     const receipt = await fixture.inputSnapshots.create({
@@ -898,7 +898,9 @@ describe('RunService', () => {
         );
       }
       return sseResponse(
-        JSON.stringify({ choices: [{ delta: { content: '已完成，收入 130 万元。' } }] }),
+        JSON.stringify({
+          choices: [{ delta: { content: '已完成，收入 130 万元，预算达成率 104%。' } }],
+        }),
       );
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -1227,6 +1229,74 @@ describe('RunService', () => {
     vi.stubGlobal('fetch', fetchMock);
     fixture.store.models.save({
       name: '单位边界测试模型',
+      provider: 'openai-compatible',
+      baseUrl: 'http://model.test/v1',
+      model: 'fixture-model',
+      role: 'language',
+      apiKey: '',
+      maxContextTokens: 8_192,
+      maxOutputTokens: 1_024,
+      temperature: 0,
+      enabled: true,
+    });
+    const service = createService(fixture);
+
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '读取材料并整理经营摘要。',
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('failed');
+    expect(fixture.store.runs.listEvents(runId)).toContainEqual(
+      expect.objectContaining({
+        type: 'run.failed',
+        error: expect.stringContaining('材料事实校验失败'),
+      }),
+    );
+  });
+
+  it('does not reuse an amount as a percentage', async () => {
+    const fixture = await createFixture();
+    const context = await saveSingleMaterialContext(
+      fixture,
+      '# 本期输入\n收入：130万元，预算：125万元。',
+    );
+    let requestCount = 0;
+    const fetchMock = vi.fn(async () => {
+      requestCount += 1;
+      if (requestCount === 1) {
+        return sseResponse(
+          JSON.stringify({
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: 'call-read-percentage-boundary',
+                      function: {
+                        name: 'read_text_file',
+                        arguments: JSON.stringify({ path: 'selected.md' }),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+        );
+      }
+      return sseResponse(
+        JSON.stringify({ choices: [{ delta: { content: '收入增长率：130%。' } }] }),
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    fixture.store.models.save({
+      name: '百分比单位边界测试模型',
       provider: 'openai-compatible',
       baseUrl: 'http://model.test/v1',
       model: 'fixture-model',
