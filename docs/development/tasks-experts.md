@@ -5,6 +5,7 @@
 - 核对基线：BetterWork `e283c47`，E11–E54 已按本计划提交并推送；E55/E56 仍按真实条件保持 partial。后续每张任务卡继续独立提交、推送并记录门禁结果。
 - 平台：本轮 macOS；Windows 保留原待办，不扩大自动调度、多 Agent、通用 DAG 或企业权限。
 - 执行方式：串行、每次一张任务卡；遵守 [执行手册](README.md)与全仓唯一 [工程规范](../12-engineering-standards.md)。不创建新规范或单独测试门禁。
+- 验收边界：本计划先验收 Expert/Skill/材料/工具/MCP/成果的技术链路、状态、范围与失败收口是否自洽；除非任务卡明确写出场景质量目标，不评价示例 Expert、Skill、提示词或模型产出的业务质量，也不因质量问题扩大实现范围。
 
 ## 1. 交付顺序与完成口径
 
@@ -63,8 +64,8 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 | E52 | 讨论节点与重启后继续/返工 | E51 | done | [ADR-0019](../adr/0019-discussion-checkpoints-and-rework.md)、`DiscussionCheckpointRepository/Service`、IPC 和工作页节点条已接入；客户端 ID 幂等、旧节点替代、重启查询恢复，以及仓储层 Run/Task/ArtifactVersion 归属校验已覆盖；重复客户端 ID 不能跨 Task 读取或复用节点，2026-09-15。 |
 | E53 | 经营分析方法与数值校验 | E52 | done | [ADR-0020](../adr/0020-deterministic-business-analysis.md)、`analyze_business_metrics` 确定性工具和内置「经营分析方法」Skill 已接入；期间变化、预算偏差、零基数和缺失指标有结构化结果/警告；`run-service.test.ts` 另覆盖 Expert allow-list 到确定性结果的离线 Run 集成，2026-09-14。 |
 | E54 | 报告/PPT 交付、修订及来源 | E53 | done | 复用现有 Markdown/FileArtifactService 版本路径；ArtifactVersion 详情通过 IPC 返回本版 `inputRelations`，成果页显示证据和材料输入；旧版本、导出、继续编辑与来源关系保持精确，2026-09-14。 |
-| E55 | 连续两期真实桌面验收 | E54 | partial | [真实与合成验收记录](../acceptance/2026-09-14-expert-two-periods.md) 已覆盖两期独立 Task/Session/Run、旧对话不跨任务注入、Expert 修订与 `expert-reference` 历史成果绑定、已确认方法记忆按 Expert×Workspace 隔离并登记读取足迹；2026-09-15 又完成真实专家召唤、三份脱敏材料选择与用途绑定、修复后的材料读取清单、3 次 `read_text_file`、`analyze_business_metrics`、`task_write_file`、公开网页搜索/正文 Evidence、取消后重启，并补充跨期间客户数/缺失事实约束。`RunService` 现已增加材料读取足迹、按业务单位分开的数字账本、百分比账本和关键定性状态的确定性硬门禁，自动化覆盖“无材料读取失败”“客户数越界失败”“跨单位复用失败”“金额冒充百分比失败”和“已续约等状态越界失败”；硬门禁重载后的真实 Run `65000f96-d031-4298-a234-916f41d9c40e` 已验证三份材料读取、方法工具和合规摘要可完成。仍缺真实 MCP 连接、连续两期真实硬门禁成功记录，以及更广泛的语义主张审计。 |
-| E56 | macOS 安装态与整体收尾 | E55 | partial | [安装资源预检记录](../acceptance/2026-09-14-expert-install-preflight.md) 与 [真实验收记录](../acceptance/2026-09-14-expert-two-periods.md)：macOS arm64/x64 DMG 构建、两种架构 App Resources 资源校验、资源绝对路径泄漏扫描和打包 App 召唤冒烟通过；模型凭据下端点预检已通过，但 Developer ID Application 仍缺失，签名安装和 E55 剩余证据继续等待。 |
+| E55 | 连续两期真实桌面验收 | E54 | partial | [人工验收脚本](../acceptance/2026-09-15-expert-human-acceptance.md) 定义以用户走查为主的功能验收：召唤、材料/用途、Skill/内置工具/MCP、网页来源、成果、第二期独立 Task/Session/Run、取消与重启。现有记录已覆盖部分开发态路径；真实业务 MCP、完整连续两期人工记录和用户使用自己的专家/Skill 的最终走查仍待补齐。本卡不以示例专家的提示词、Skill 文案或示例报告质量作为功能通过条件。 |
+| E56 | macOS 安装态与整体收尾 | E55 | partial | [安装资源预检记录](../acceptance/2026-09-14-expert-install-preflight.md) 与 [人工验收脚本](../acceptance/2026-09-15-expert-human-acceptance.md)：arm64/x64 打包资源和资源路径预检已有证据；安装态完整走查、Developer ID 签名、Gatekeeper 与升级保留仍待具备签名身份后完成。 |
 
 ## 4. 开发任务卡
 
@@ -320,4 +321,4 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 
 每卡交接说明：完成的具体行为（含失败/取消）、修改文件、测试命令与退出码、真实验收证据、已更新日志和任务行、下一可执行卡。若只完成代码而缺人工验收，保持 doing 并列缺项；不要依靠一句“基本完成”跨过门槛。
 
-专家计划的 E11–E54 已按任务板落地；E55/E56 与旧 B00-5 保持 partial/doing，原因和证据链接写在对应验收记录中。B00-5 的撤销原因已进入活动摘要，剩余是需要可用模型 endpoint 的成功双 Skill 运行和真实撤销走查。下一实施入口是补齐真实业务/签名安装条件后继续 E55/E56，不重新讨论已接受的召唤交互或完整选材需求。
+专家计划的 E11–E54 已按任务板落地；E55/E56 与旧 B00-5 保持 partial/doing，原因和证据链接写在对应验收记录中。B00-5 的撤销原因已进入活动摘要，剩余是可用模型 endpoint 下的用户人工功能走查、真实业务 MCP 和签名安装条件。下一实施入口是按[人工验收脚本](../acceptance/2026-09-15-expert-human-acceptance.md)补齐证据，不再把示例专家/Skill 的内容质量当作本轮功能门槛，也不重新讨论已接受的召唤交互或完整选材需求。
