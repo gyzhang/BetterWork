@@ -29,7 +29,7 @@
 - 下载地址：锁文件登记的 GitHub release 资产；下载得到的文件按锁定 SHA-256 校验，结果为 `3ee3ee547cedfeb7c2b16b2b7156039f7b470bb8f857e226fd3d2eb11db83c76`。
 - 解压结果：`python/bin/python3.12` 存在且可执行；临时目录中的原始压缩包、解压目录和探测 venv 在记录后已删除。
 - 解释器探测：版本 `3.12.14`，`platform.machine()` 为 `arm64`，`platform.system()` 为 `Darwin`，`venv` 与 `ensurepip` 均可导入。
-- 这次是上游发行制品本身的真实下载/校验/解压/探测，不把系统 Python 或离线替身冒充受管制品验收；通过 `SkillDependencyService` 的包内冷环境安装、wheelhouse 随包落地和签名安装仍属于 A20/A21。
+- 这次是上游发行制品本身的真实下载/校验/解压/探测，不把系统 Python 或离线替身冒充受管制品验收；通过 `SkillDependencyService` 的包内冷环境安装和 wheelhouse 随包落地见第 7 节，签名安装仍属于 A21。
 
 ## 3. 本机解释器探测（2026-09-09 实测）
 
@@ -74,7 +74,7 @@
 | uharfbuzz | 0.56.1 | `uharfbuzz-0.56.1-cp310-abi3-macosx_10_9_universal2.whl` | `d2fcfafe2eac8497` | Apache License 2.0（PyPI 字段） |
 | xlsxwriter | 3.2.9 | `xlsxwriter-3.2.9-py3-none-any.whl` | `9a5db42bc5dff014` | BSD License（PyPI 分类） |
 
-完整 64 位校验值与精确制品地址在锁文件里；`source` 为 `approved-index`，随包 wheelhouse 落地（A20）后同一份锁可离线安装，无需改动。
+完整 64 位校验值与精确制品地址在锁文件里；`source` 为 `approved-index`，已随包落地到 [`resources/wheelhouse`](../../resources/wheelhouse)，同一份锁可离线安装，无需改动。wheelhouse 另带 `manifest.json`，记录 8 个 wheel 的大小、hash 和锁文件许可标识。
 
 ## 6. 工具链快照与真实端到端验证（A11，2026-09-09）
 
@@ -98,13 +98,20 @@
 
 **私有内容边界**：快照里包含用户本地的公司 deck 资产（`skills/ppt-master/templates/decks/中电金信`、`中国电信`、`中汽研` 等）与公司模板。快照只存在于用户数据目录，**绝不进入 Git、内置资源或任何公共制品**；A20 打包时必须显式排除，A21 验收要核对包内没有这些内容。
 
-## 7. 待验证清单
+## 7. A20 wheelhouse 冷环境实测（2026-09-15）
+
+- 先按受管发行候选的锁定 hash 下载 CPython 3.12.14 arm64 制品，再用真实 `SkillDependencyService`、Node 文件系统/进程适配器和 `resources/wheelhouse` 运行 managed preparation；下载器只从已下载的临时压缩包返回字节，准备过程本身未再触网。
+- 作业状态为 `succeeded`，环境状态为 `ready`；服务真实创建最终 venv、用 `pip --no-index --require-hashes` 安装 8 个 wheel，并完成 `pptx / lxml / yaml / PIL / xlsxwriter / pathops / uharfbuzz` 探测。
+- venv 解释器探测输出：`3.12.14 arm64 Darwin 1.0.2 6.1.3 6.0.3 12.3.0 3.2.9`。临时 userData、受管 CPython 缓存和 venv 已清理，未改动系统 Python 或仓库外的长期目录。
+- 同一次 macOS arm64 unpacked 打包预检确认 `Contents/Resources/wheelhouse` 含 8 个 wheel、许可/大小 manifest 和说明文件；wheel 二进制合计 20,462,319 字节，包内逐文件 hash 与锁一致。
+
+## 8. 待验证清单
 
 | 项目 | 归属 | 现状 |
 | --- | --- | --- |
-| 样本真实包锁（python-pptx / lxml / PyYAML / Pillow / XlsxWriter / skia-pathops / uharfbuzz 闭包） | A11 | **已产生并实测**，见第 4、5 节 |
+| 样本真实包锁（python-pptx / lxml / PyYAML / Pillow / XlsxWriter / skia-pathops / uharfbuzz 闭包） | A11 | **已产生并实测**，见第 5、6 节 |
 | 工具链快照 + 真实环境准备 + CLI 探测（macOS arm64） | A11 | **已完成**，见第 6 节 |
-| 受管 Python 制品真实下载、校验、解压后建 venv | A20 | arm64 制品已完成真实下载、校验、解压和解释器探测；通过包内服务建 venv、随包 wheelhouse 冷环境仍待完成 |
-| wheelhouse 制品与许可清单随包分发 | A20 | 未做；锁已带逐包许可字段可直接汇总 |
+| 受管 Python 制品真实下载、校验、解压后建 venv | A20 | **macOS arm64 已完成**真实下载、校验、解压、服务建 venv、8 个 wheel 离线安装和 import 探测，见第 2、7 节 |
+| wheelhouse 制品与许可清单随包分发 | A20 | **macOS arm64 已完成**，见 `resources/wheelhouse`、第 7 节和[打包预检](package-preflight.md) |
 | Windows 平台环境与解释器 | A09/A21 | blocked，本机无 Windows 环境 |
 | 环境准备 UI（选择解释器、查看缺项、进度与取消） | A12 | 服务尚未被 `main/index.ts` 装配 |

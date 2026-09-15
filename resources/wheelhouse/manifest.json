@@ -1,0 +1,76 @@
+{
+  "manifestVersion": 1,
+  "lockFile": "ppt-generation-expert-darwin-arm64-cp312.json",
+  "platform": {
+    "os": "darwin",
+    "arch": "arm64",
+    "abi": "cp312"
+  },
+  "pythonRequirement": "3.12",
+  "packages": [
+    {
+      "name": "lxml",
+      "version": "6.1.3",
+      "wheel": "lxml-6.1.3-cp312-cp312-macosx_10_13_universal2.whl",
+      "sha256": "0c0710ac085a157b593c38fbcacd950f15c4afa8e2057527185875ab302752bc",
+      "license": "BSD-3-Clause",
+      "sizeBytes": 8602094
+    },
+    {
+      "name": "pillow",
+      "version": "12.3.0",
+      "wheel": "pillow-12.3.0-cp312-cp312-macosx_11_0_arm64.whl",
+      "sha256": "ffd0c5368496f41b0944be820fcb7a838aa6e623d250b01acf2643939c3f99d7",
+      "license": "MIT-CMU",
+      "sizeBytes": 4780323
+    },
+    {
+      "name": "python-pptx",
+      "version": "1.0.2",
+      "wheel": "python_pptx-1.0.2-py3-none-any.whl",
+      "sha256": "160838e0b8565a8b1f67947675886e9fea18aa5e795db7ae531606d68e785cba",
+      "license": "MIT",
+      "sizeBytes": 472788
+    },
+    {
+      "name": "PyYAML",
+      "version": "6.0.3",
+      "wheel": "pyyaml-6.0.3-cp312-cp312-macosx_11_0_arm64.whl",
+      "sha256": "fc09d0aa354569bc501d4e787133afc08552722d3ab34836a80547331bb5d4a0",
+      "license": "MIT",
+      "sizeBytes": 173973
+    },
+    {
+      "name": "skia-pathops",
+      "version": "0.9.2",
+      "wheel": "skia_pathops-0.9.2-cp310-abi3-macosx_10_9_universal2.whl",
+      "sha256": "c7a925b919c050df1e0545d26a69b64d9c8e1959e4dca73b06df088bf01d30f0",
+      "license": "BSD License (PyPI classifier)",
+      "sizeBytes": 2897494
+    },
+    {
+      "name": "typing_extensions",
+      "version": "4.16.0",
+      "wheel": "typing_extensions-4.16.0-py3-none-any.whl",
+      "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+      "license": "PSF-2.0",
+      "sizeBytes": 45571
+    },
+    {
+      "name": "uharfbuzz",
+      "version": "0.56.1",
+      "wheel": "uharfbuzz-0.56.1-cp310-abi3-macosx_10_9_universal2.whl",
+      "sha256": "d2fcfafe2eac8497fa3c78462babbeddcfd50980b263859248a93fe8bb222507",
+      "license": "Apache License 2.0 (PyPI license field)",
+      "sizeBytes": 3314761
+    },
+    {
+      "name": "xlsxwriter",
+      "version": "3.2.9",
+      "wheel": "xlsxwriter-3.2.9-py3-none-any.whl",
+      "sha256": "9a5db42bc5dff014806c58a20b9eae7322a134abb6fce3c92c181bfb275ec5b3",
+      "license": "BSD License (PyPI classifier)",
+      "sizeBytes": 175315
+    }
+  ]
+}
