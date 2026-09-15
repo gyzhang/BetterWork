@@ -134,7 +134,7 @@ interface MaterialFactLedger {
 const numberPattern = /[-+]?\d+(?:\.\d+)?/gu;
 const claimNumberPattern = /([-+]?\d+(?:\.\d+)?)(\s*(?:%|％|万元|万|元|家|户|客户))/gu;
 const labeledCountPattern =
-  /(?:客户数|客户数量)(?:\s*[（(][^）)]*[）)])?(?:[^\d\n]{0,24})?([-+]?\d+(?:\.\d+)?)/gu;
+  /(?:客户数|客户数量)(?:\s*[（(]\s*(?:家|户|客户)\s*[）)])?(?:\s*(?:为|是|[:：]|[|｜\t])\s*|\s*(?:本期|上期|预算|目标|当前|历史)\s*)*([-+]?\d+(?:\.\d+)?)/gu;
 const markdownArtifactRequestPattern =
   /(?:保存|生成|写入|创建|导出|产出|输出|交付).*?(?:markdown|\.md)/iu;
 const qualitativeClaimPatterns = [
