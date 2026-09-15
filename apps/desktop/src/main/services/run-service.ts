@@ -121,6 +121,7 @@ interface MaterialFactLedger {
   readonly enabled: boolean;
   materialReadCount: number;
   readonly rawNumbers: Set<number>;
+  readonly rawCountNumbers: Set<number>;
   readonly allowedNumbers: Set<number>;
   readonly supportedQualitativeClaims: Set<string>;
 }
@@ -165,6 +166,7 @@ const createMaterialFactLedger = (enabled: boolean, prompt: string): MaterialFac
     enabled,
     materialReadCount: 0,
     rawNumbers: new Set<number>(),
+    rawCountNumbers: new Set<number>(),
     allowedNumbers: new Set<number>(),
     supportedQualitativeClaims: new Set<string>(),
   };
@@ -173,12 +175,14 @@ const createMaterialFactLedger = (enabled: boolean, prompt: string): MaterialFac
     const value = Number(match[1]);
     if (!Number.isFinite(value)) continue;
     ledger.rawNumbers.add(value);
+    if (isCountUnit(match[2])) ledger.rawCountNumbers.add(value);
     addNormalizedNumber(ledger.allowedNumbers, value);
   }
   for (const match of prompt.matchAll(labeledCountPattern)) {
     const value = Number(match[1]);
     if (!Number.isFinite(value)) continue;
     ledger.rawNumbers.add(value);
+    ledger.rawCountNumbers.add(value);
     addNormalizedNumber(ledger.allowedNumbers, value);
   }
   recordQualitativeClaims(ledger.supportedQualitativeClaims, prompt);
@@ -188,6 +192,14 @@ const createMaterialFactLedger = (enabled: boolean, prompt: string): MaterialFac
 const recordMaterialFacts = (ledger: MaterialFactLedger, text: string): void => {
   if (!ledger.enabled) return;
   recordQualitativeClaims(ledger.supportedQualitativeClaims, text);
+  for (const match of text.matchAll(claimNumberPattern)) {
+    const value = Number(match[1]);
+    if (Number.isFinite(value) && isCountUnit(match[2])) ledger.rawCountNumbers.add(value);
+  }
+  for (const match of text.matchAll(labeledCountPattern)) {
+    const value = Number(match[1]);
+    if (Number.isFinite(value)) ledger.rawCountNumbers.add(value);
+  }
   const values = numbersIn(text);
   for (const value of values) {
     ledger.rawNumbers.add(value);
@@ -206,6 +218,9 @@ const recordMaterialFacts = (ledger: MaterialFactLedger, text: string): void => 
   }
 };
 
+const isCountUnit = (unit: string | undefined): boolean =>
+  unit === '家' || unit === '户' || unit === '客户';
+
 const recordQualitativeClaims = (target: Set<string>, text: string): void => {
   for (const claim of qualitativeClaimPatterns) {
     let index = text.indexOf(claim.phrase);
@@ -220,7 +235,7 @@ const recordQualitativeClaims = (target: Set<string>, text: string): void => {
 };
 
 const hasAllowedNumber = (ledger: MaterialFactLedger, value: number, rawOnly: boolean): boolean => {
-  const candidates = rawOnly ? ledger.rawNumbers : ledger.allowedNumbers;
+  const candidates = rawOnly ? ledger.rawCountNumbers : ledger.allowedNumbers;
   return [...candidates].some((candidate) => Math.abs(candidate - value) < 0.01);
 };
 
