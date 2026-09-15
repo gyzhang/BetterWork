@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -63,6 +64,7 @@ describe('registerIpc', () => {
     locksRoot: string;
     interpreterPath: string;
   };
+  let fileArtifactSourcePath: string;
 
   beforeAll(async () => {
     temporaryDirectory = mkdtempSync(path.join(os.tmpdir(), 'betterwork-ipc-'));
@@ -143,7 +145,7 @@ describe('registerIpc', () => {
     const fileArtifactService = new FileArtifactService(
       store,
       artifactFilesRoot,
-      async () => '/tmp/no-source',
+      async () => fileArtifactSourcePath,
       () => true,
       fakePptxRenderer(),
     );
@@ -167,6 +169,7 @@ describe('registerIpc', () => {
       getWindow: () => null,
       getDefaultWorkspaceRoot: () => temporaryDirectory,
     });
+    fileArtifactSourcePath = path.join(temporaryDirectory, 'file-export-source.pptx');
   });
 
   afterAll(() => {
@@ -382,6 +385,116 @@ describe('registerIpc', () => {
       invoke(IpcChannel.ExportMarkdownArtifact, { artifactId: artifact.id }),
     ).resolves.toEqual({ cancelled: false, filePath: target });
     await expect(readFile(target, 'utf8')).resolves.toContain('人工补充：跟进续约风险。');
+  });
+
+  it('makes an exported file artifact writable when the save panel pre-creates a read-only target', async () => {
+    const workspace = store.workspaces.getOrCreate(temporaryDirectory, '文件成果导出');
+    const created = store.tasks.create(workspace.id, '导出测试', '验证文件成果导出权限');
+    const runId = 'export-permission-run';
+    store.runs.create({
+      id: runId,
+      taskId: created.task.id,
+      sessionId: created.sessionId,
+      prompt: '生成可编辑文件成果',
+      status: 'running',
+      createdAt: Date.now(),
+    });
+
+    const skillId = 'export-permission-skill';
+    const revisionId = `${skillId}-revision`;
+    store.skills.save({
+      id: skillId,
+      name: '导出权限测试 Skill',
+      description: '测试文件成果导出权限',
+      sourceKind: 'user',
+      currentRevisionId: revisionId,
+    });
+    store.skills.saveRevision({
+      id: revisionId,
+      skillId,
+      contentHash: `${skillId}-content`,
+      resourceKey: `user/${skillId}/revisions/content`,
+      frontmatter: {},
+    });
+    const profileRevisionId = store.skills.saveProfile({
+      skillId,
+      profileHash: `${skillId}-profile`,
+      profile: { commands: [], environmentRequirements: [], outputContract: { outputPaths: [] } },
+    });
+    store.skills.save({
+      id: skillId,
+      name: '导出权限测试 Skill',
+      description: '测试文件成果导出权限',
+      sourceKind: 'user',
+      currentRevisionId: revisionId,
+      currentProfileRevisionId: profileRevisionId,
+    });
+    const grantId = store.skills.saveTrustGrant({
+      skillId,
+      revisionId,
+      profileHash: `${skillId}-profile`,
+      dependencyFingerprint: `${skillId}-dependencies`,
+      scopeHash: `${skillId}-scope`,
+      source: 'user',
+    });
+    store.skills.setTrustPreference(skillId, 'trusted');
+    const binding = store.executions.createBinding({
+      runId,
+      skillRevisionId: revisionId,
+      profileRevisionId,
+      dependencySnapshotIds: [],
+      grantId,
+    });
+
+    const executionId = 'export-permission-execution';
+    const outputId = 'slides.pptx';
+    const sourceBytes = Buffer.from('PK-export-permission');
+    const sourceHash = createHash('sha256').update(sourceBytes).digest('hex');
+    const report = JSON.stringify({ issues: [], fileHash: sourceHash });
+    const reportHash = createHash('sha256').update(report).digest('hex');
+    writeFileSync(fileArtifactSourcePath, sourceBytes);
+    writeFileSync(`${fileArtifactSourcePath}.report.json`, report);
+    store.executions.createExecution({
+      id: executionId,
+      runId,
+      bindingId: binding.id,
+      toolCallId: 'export-permission-tool-call',
+      commandId: 'ppt-generate',
+      argumentDigest: 'export-permission-digest',
+      inputHashes: [],
+      workDirKey: temporaryDirectory,
+      attemptKey: 'export-permission-attempt',
+    });
+    store.executions.saveVerifiedOutputs(executionId, [
+      {
+        outputId,
+        relativePath: path.basename(fileArtifactSourcePath),
+        fileHash: sourceHash,
+        fileSize: sourceBytes.length,
+        reportHash,
+        validation: { structure: 'passed', visual: 'not-checked', manualEdit: 'not-checked' },
+      },
+    ]);
+    store.executions.finishExecution(executionId, 'succeeded', {
+      outputIds: [outputId],
+      finishedAt: Date.now(),
+    });
+
+    const registered = (await invoke(IpcChannel.RegisterFileArtifact, {
+      runId,
+      executionId,
+      outputId,
+      title: '导出权限测试',
+      mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    })) as { artifactId: string };
+    const target = path.join(temporaryDirectory, 'exported-read-only-target.pptx');
+    writeFileSync(target, 'pre-created by save panel', { mode: 0o400 });
+    mocks.showSaveDialog.mockResolvedValueOnce({ canceled: false, filePath: target });
+    await expect(
+      invoke(IpcChannel.ExportFileArtifact, { artifactId: registered.artifactId }),
+    ).resolves.toEqual({ cancelled: false, filePath: target });
+    expect((await stat(target)).mode & 0o777).toBe(0o600);
+    await expect(readFile(target)).resolves.toEqual(sourceBytes);
   });
 
   /** 直接种入一个带运行配置与信任意愿的用户 Skill，用于依赖授权通道。 */
