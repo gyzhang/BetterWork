@@ -1570,6 +1570,13 @@ export function App(): React.JSX.Element {
             reportAction(selectRun(run), setActionError, '无法打开这次执行记录。')
           }
           onOpenSource={knowledge.onOpenSource}
+          onSelectArtifact={(artifact) =>
+            reportAction(
+              openArtifact(artifact).then(() => setView('artifacts')),
+              setActionError,
+              '无法打开这项成果。',
+            )
+          }
         />
       )}
       {modelSettings.editorOpen && (
