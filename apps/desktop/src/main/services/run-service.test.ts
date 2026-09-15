@@ -1070,6 +1070,96 @@ describe('RunService', () => {
     ]);
   });
 
+  it('fails a material-scoped run when the final answer invents a qualitative status', async () => {
+    const fixture = await createFixture();
+    const sourcePath = path.join(fixture.directory, 'selected.md');
+    await writeFile(sourcePath, '# 本期输入\n续约客户：续约意向待确认。');
+    const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+    if (!workspaceId) throw new Error('workspace missing');
+    const receipt = await fixture.inputSnapshots.create({
+      workspaceId,
+      workspaceRoot: fixture.directory,
+      sourcePath,
+    });
+    const context = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+      builtinToolPolicy: { mode: 'allow-list', toolNames: ['read_text_file'] },
+      materials: [
+        {
+          reference: {
+            kind: 'workspace-input-snapshot',
+            snapshotId: receipt.snapshot.id,
+            workspaceId,
+            contentHash: receipt.snapshot.contentHash,
+            format: receipt.snapshot.format,
+            fileKey: receipt.snapshot.fileKey,
+          },
+          purpose: 'current-input',
+          addedFrom: 'user-input',
+        },
+      ],
+    });
+    let requestCount = 0;
+    const fetchMock = vi.fn(async () => {
+      requestCount += 1;
+      if (requestCount === 1) {
+        return sseResponse(
+          JSON.stringify({
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: 'call-read-qualitative',
+                      function: {
+                        name: 'read_text_file',
+                        arguments: JSON.stringify({ path: 'selected.md' }),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+        );
+      }
+      return sseResponse(JSON.stringify({ choices: [{ delta: { content: '该客户已续约。' } }] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    fixture.store.models.save({
+      name: '定性事实门禁测试模型',
+      provider: 'openai-compatible',
+      baseUrl: 'http://model.test/v1',
+      model: 'fixture-model',
+      role: 'language',
+      apiKey: '',
+      maxContextTokens: 8_192,
+      maxOutputTokens: 1_024,
+      temperature: 0,
+      enabled: true,
+    });
+    const service = createService(fixture);
+
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '读取材料并整理续约风险。',
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('failed');
+    expect(fixture.store.runs.listEvents(runId)).toContainEqual(
+      expect.objectContaining({
+        type: 'run.failed',
+        error: expect.stringContaining('定性事实'),
+      }),
+    );
+  });
+
   it('rejects a Session that belongs to a different Task before creating a Run', async () => {
     const fixture = await createFixture();
     const otherTask = fixture.store.tasks.create(
