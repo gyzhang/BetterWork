@@ -1,4 +1,4 @@
-import { copyFile, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
@@ -703,7 +703,17 @@ async function exportFileArtifact(
 
   const sourcePath = fileArtifactService.resolveStoredPath(resolvedVersionId);
   try {
+    // 保存面板在某些 macOS 版本会先创建一个 0400 目标文件；先提升权限，
+    // 否则 copyFile 无法覆盖这个已存在的只读占位文件。
+    try {
+      await chmod(result.filePath, 0o600);
+    } catch (error) {
+      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+    }
     await copyFile(sourcePath, result.filePath);
+    // 成果源文件为不可变存储（0400）；导出是用户自己的工作副本，必须可继续编辑。
+    // 保存面板可能已提前创建目标文件，单靠 copyFile 不会提升它的权限。
+    await chmod(result.filePath, 0o600);
   } catch (error) {
     notifications.create({
       level: 'error',
