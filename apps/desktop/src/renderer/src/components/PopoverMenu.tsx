@@ -27,8 +27,8 @@ export interface PopoverMenuProps {
   label: string;
   /** 对齐边：start = 左对齐触发器，end = 右对齐。 */
   align?: 'start' | 'end';
-  /** 浮动方向：bottom = 在触发器下方展开（默认），top = 在上方展开。 */
-  placement?: 'bottom' | 'top';
+  /** 浮动方向：auto 会根据视口空间在上方/下方选择，亦可强制指定方向。 */
+  placement?: 'auto' | 'bottom' | 'top';
   /** 可选头部，渲染在列表上方（如搜索框）。 */
   header?: React.ReactNode;
   /** 可选底部，渲染在列表下方（如操作链接）。 */
@@ -38,6 +38,58 @@ export interface PopoverMenuProps {
 }
 
 const GAP = 6;
+const VIEWPORT_MARGIN = 8;
+const DEFAULT_MAX_HEIGHT = 320;
+
+interface PopoverPositionInput {
+  anchor: Pick<DOMRect, 'top' | 'bottom' | 'left' | 'right'>;
+  menuWidth: number;
+  menuHeight: number;
+  viewportWidth: number;
+  viewportHeight: number;
+  align: 'start' | 'end';
+  placement: 'auto' | 'bottom' | 'top';
+}
+
+export interface PopoverPosition {
+  top?: number;
+  bottom?: number;
+  left: number;
+  maxHeight: number;
+}
+
+export const calculatePopoverPosition = ({
+  anchor,
+  menuWidth,
+  menuHeight,
+  viewportWidth,
+  viewportHeight,
+  align,
+  placement,
+}: PopoverPositionInput): PopoverPosition => {
+  const availableBelow = Math.max(0, viewportHeight - anchor.bottom - GAP - VIEWPORT_MARGIN);
+  const availableAbove = Math.max(0, anchor.top - GAP - VIEWPORT_MARGIN);
+  const opensAbove =
+    placement === 'top' ||
+    (placement === 'auto' && menuHeight > availableBelow && availableAbove > availableBelow);
+  const availableHeight = opensAbove ? availableAbove : availableBelow;
+  const maxHeight = Math.max(1, Math.min(DEFAULT_MAX_HEIGHT, availableHeight));
+  const preferredLeft = align === 'start' ? anchor.left : anchor.right - menuWidth;
+  const maxLeft = Math.max(VIEWPORT_MARGIN, viewportWidth - menuWidth - VIEWPORT_MARGIN);
+  const left = Math.min(Math.max(preferredLeft, VIEWPORT_MARGIN), maxLeft);
+
+  return opensAbove
+    ? {
+        bottom: viewportHeight - anchor.top + GAP,
+        left,
+        maxHeight,
+      }
+    : {
+        top: anchor.bottom + GAP,
+        left,
+        maxHeight,
+      };
+};
 
 export function PopoverMenu({
   open,
@@ -45,7 +97,7 @@ export function PopoverMenu({
   items,
   label,
   align = 'start',
-  placement = 'bottom',
+  placement = 'auto',
   header,
   footer,
   onDismiss,
@@ -62,29 +114,41 @@ export function PopoverMenu({
   );
 
   // 定位计算（anchor rect → fixed 坐标）。
-  const [position, setPosition] = useState<Record<string, number>>({});
+  const [position, setPosition] = useState<PopoverPosition>();
 
   const computePosition = useCallback(() => {
     const anchor = anchorRef.current;
-    if (!anchor) return;
+    const menu = menuRef.current;
+    if (!anchor || !menu) return;
     const rect = anchor.getBoundingClientRect();
-    const next: Record<string, number> = {};
-    if (placement === 'bottom') {
-      next.top = rect.bottom + GAP;
-    } else {
-      // 上方展开：bottom 相对于视口底部。
-      next.bottom = window.innerHeight - rect.top + GAP;
-    }
-    if (align === 'start') {
-      next.left = rect.left;
-    } else {
-      next.right = window.innerWidth - rect.right;
-    }
-    setPosition(next);
+    const menuRect = menu.getBoundingClientRect();
+    setPosition(
+      calculatePopoverPosition({
+        anchor: rect,
+        menuWidth: menuRect.width,
+        menuHeight: menuRect.height,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        align,
+        placement,
+      }),
+    );
   }, [anchorRef, align, placement]);
 
   useLayoutEffect(() => {
-    if (open) computePosition();
+    if (!open) return;
+    computePosition();
+    window.addEventListener('resize', computePosition);
+    window.addEventListener('scroll', computePosition, true);
+    const menu = menuRef.current;
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(computePosition);
+    if (menu && resizeObserver) resizeObserver.observe(menu);
+    return () => {
+      window.removeEventListener('resize', computePosition);
+      window.removeEventListener('scroll', computePosition, true);
+      resizeObserver?.disconnect();
+    };
   }, [open, computePosition]);
 
   // 受控开关下的焦点管理：打开时聚焦首个可用项，关闭时归还焦点。

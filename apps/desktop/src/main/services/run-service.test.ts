@@ -1103,6 +1103,65 @@ describe('RunService', () => {
     ]);
   });
 
+  it('accepts a customer-count table label with a supported value', async () => {
+    const fixture = await createFixture();
+    const context = await saveSingleMaterialContext(fixture, '客户数（家） | 本期 | 1');
+    let requestCount = 0;
+    const fetchMock = vi.fn(async () => {
+      requestCount += 1;
+      if (requestCount === 1) {
+        return sseResponse(
+          JSON.stringify({
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: 'call-read-count-table',
+                      function: {
+                        name: 'read_text_file',
+                        arguments: JSON.stringify({ path: 'selected.md' }),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+        );
+      }
+      return sseResponse(
+        JSON.stringify({ choices: [{ delta: { content: '客户数（家） | 本期 | 1' } }] }),
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    fixture.store.models.save({
+      name: '客户数表格测试模型',
+      provider: 'openai-compatible',
+      baseUrl: 'http://model.test/v1',
+      model: 'fixture-model',
+      role: 'language',
+      apiKey: '',
+      maxContextTokens: 8_192,
+      maxOutputTokens: 1_024,
+      temperature: 0,
+      enabled: true,
+    });
+    const service = createService(fixture);
+
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '读取材料并整理经营摘要。',
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('completed');
+  });
+
   it('fails a material-scoped run when the final answer invents a qualitative status', async () => {
     const fixture = await createFixture();
     const sourcePath = path.join(fixture.directory, 'selected.md');
@@ -2152,6 +2211,77 @@ describe('RunService', () => {
 
   const createRealExecutionService = (fixture: Fixture): SkillExecutionService =>
     new SkillExecutionService(fixture.store, createUnusedSupervisor());
+
+  it('registers an explicitly requested Markdown work file after a successful Run', async () => {
+    const fixture = await createFixture();
+    const skillId = await createTrustedSkill(fixture, 'skill-markdown-delivery');
+    const fetchMock = vi.fn(async () =>
+      fetchMock.mock.calls.length === 1
+        ? sseResponse(
+            JSON.stringify({
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: 'write-markdown',
+                        function: {
+                          name: 'task_write_file',
+                          arguments: JSON.stringify({
+                            path: '2026-09-经营分析报告.md',
+                            content: '# 经营分析报告\n\n收入：120 万元。',
+                          }),
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+          )
+        : sseResponse(
+            JSON.stringify({ choices: [{ delta: { content: '已完成 Markdown 交付。' } }] }),
+          ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    fixture.store.models.save({
+      name: 'Markdown 成果测试模型',
+      provider: 'openai-compatible',
+      baseUrl: 'http://model.test/v1',
+      model: 'fixture-model',
+      role: 'language',
+      apiKey: '',
+      maxContextTokens: 8_192,
+      maxOutputTokens: 1_024,
+      temperature: 0,
+      enabled: true,
+    });
+    const service = createService(fixture, undefined, createRealExecutionService(fixture));
+
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '请完成工作，并把结果保存为 Markdown 成果。',
+      skillBindings: [{ skillId }],
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('completed');
+    const artifacts = fixture.store.artifacts.list(fixture.taskId);
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]).toMatchObject({
+      title: '2026-09-经营分析报告',
+      sourceRunId: runId,
+      origin: 'assistant-run',
+    });
+    const artifact = artifacts[0];
+    if (!artifact) throw new Error('artifact missing');
+    expect(fixture.store.artifacts.getDetail(artifact.id)).toMatchObject({
+      type: 'markdown',
+      content: '# 经营分析报告\n\n收入：120 万元。',
+    });
+  });
 
   /** 记录 createBinding 的调用顺序，用于断言绑定建立即注入顺序。 */
   const createRecordingExecutionService = (

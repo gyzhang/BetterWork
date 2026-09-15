@@ -91,6 +91,14 @@ describe('run protocol', () => {
         createdAt: 2,
       }),
     ).toMatchObject({ input: material, relation: 'rule' });
+    expect(
+      artifactInputRelationSchema.parse({
+        outputVersionId: 'version-1',
+        input: material,
+        relation: 'other',
+        createdAt: 2,
+      }),
+    ).toMatchObject({ input: material, relation: 'other' });
     expect(() =>
       artifactInputRelationSchema.parse({
         outputVersionId: 'version-1',
@@ -268,6 +276,33 @@ describe('run protocol', () => {
 });
 
 describe('task material protocol', () => {
+  it('accepts an explicitly unspecified material purpose', () => {
+    const context = taskContextRevisionSchema.parse({
+      id: 'context-other',
+      taskId: 'task-1',
+      revision: 1,
+      executor: { kind: 'general' },
+      skillBindings: [],
+      materials: [
+        {
+          reference: {
+            kind: 'knowledge-revision',
+            knowledgeDocumentId: 'doc-1',
+            knowledgeRevisionId: 'revision-1',
+            contentHash: 'hash-1',
+            sourcePath: '/notes.md',
+          },
+          purpose: 'other',
+          addedFrom: 'workspace-candidate',
+        },
+      ],
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    expect(context.materials?.[0]).toMatchObject({ purpose: 'other' });
+  });
+
   it('keeps exact source revisions at the IPC boundary', () => {
     const context = taskContextRevisionSchema.parse({
       id: 'context-1',

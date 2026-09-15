@@ -12,6 +12,8 @@ import {
 import type {
   AgentMessage,
   AgentRuntimeEvent,
+  ArtifactInputRelationInput,
+  ArtifactInputRelationKind,
   BuiltinToolPolicy,
   ExpertModelReference,
   MaterialReference,
@@ -57,7 +59,7 @@ import {
 import type { BrowserWindow } from 'electron';
 import { z } from 'zod';
 
-import { managedPath, writeManagedText } from '../infrastructure/managed-files';
+import { managedPath, readManagedFile, writeManagedText } from '../infrastructure/managed-files';
 import type { OfficeFormat, OfficeParserService } from '../infrastructure/office-parser';
 import { type AppStore, type InputSnapshot, materialReferenceKey } from '../persistence';
 import type { FileArtifactService } from './file-artifact-service';
@@ -112,6 +114,8 @@ interface ActiveRun {
   toolNames: Map<string, string>;
   contextSegmentId: string;
   materialFacts: MaterialFactLedger;
+  /** 本次 Run 写入的 Markdown 工作文件；同一路径只保留最后一次写入。 */
+  markdownWrites: Map<string, string>;
 }
 
 const PROMPT_SUMMARY_LENGTH = 80;
@@ -129,7 +133,10 @@ interface MaterialFactLedger {
 
 const numberPattern = /[-+]?\d+(?:\.\d+)?/gu;
 const claimNumberPattern = /([-+]?\d+(?:\.\d+)?)(\s*(?:%|％|万元|万|元|家|户|客户))/gu;
-const labeledCountPattern = /(?:客户数|客户数量)\s*(?:为|是|[:：])?\s*([-+]?\d+(?:\.\d+)?)/gu;
+const labeledCountPattern =
+  /(?:客户数|客户数量)(?:\s*[（(][^）)]*[）)])?(?:[^\d\n]{0,24})?([-+]?\d+(?:\.\d+)?)/gu;
+const markdownArtifactRequestPattern =
+  /(?:保存|生成|写入|创建|导出|产出|输出|交付).*?(?:markdown|\.md)/iu;
 const qualitativeClaimPatterns = [
   { phrase: '已续约', label: '已续约状态' },
   { phrase: '已流失', label: '已流失状态' },
@@ -227,6 +234,10 @@ const isCountUnit = (unit: string | undefined): boolean =>
   unit === '家' || unit === '户' || unit === '客户';
 
 const isPercentageUnit = (unit: string | undefined): boolean => unit === '%' || unit === '％';
+
+const requestsMarkdownArtifact = (prompt: string): boolean =>
+  markdownArtifactRequestPattern.test(prompt) &&
+  !/(?:不要|无需|不必|不需要).{0,12}(?:保存|生成|写入|创建|导出|产出|输出|交付)/u.test(prompt);
 
 const recordQualitativeClaims = (target: Set<string>, text: string): void => {
   for (const claim of qualitativeClaimPatterns) {
@@ -412,6 +423,7 @@ export class RunService {
         resolvedContext.materialScope && resolvedContext.materials.length > 0,
         input.prompt,
       ),
+      markdownWrites: new Map(),
     });
 
     try {
@@ -641,6 +653,15 @@ export class RunService {
           return;
         }
       }
+      if (terminalEvent.type === 'run.completed') {
+        await this.persistRequestedMarkdownArtifact(
+          runId,
+          input,
+          workspacePath,
+          executionContext,
+          terminalEvent.finalContent,
+        );
+      }
       this.publish(terminalEvent);
     } catch (error) {
       let message = describeError(error);
@@ -728,6 +749,7 @@ export class RunService {
       'structure-reference': '结构参考',
       template: '模板',
       background: '背景参考',
+      other: '其他（未指定用途）',
     };
     const lines = [
       '以下是用户为本次 Run 明确选择的材料清单。材料内容不会自动出现在对话中，必须先使用清单给出的工具和参数读取。',
@@ -946,6 +968,7 @@ export class RunService {
     const active = this.activeRuns.get(event.runId);
     if (active) this.recordToolProgress(active, event);
     if (event.type === 'tool.completed' && active) {
+      this.recordMarkdownWrite(active, event);
       this.recordMaterialFactsFromTool(active, event);
       this.persistMaterialReads(event, active.toolNames);
       this.persistEvidence(active.taskId, event, active.toolNames);
@@ -972,7 +995,10 @@ export class RunService {
     }
     if (toolName === 'read_office_material' && isOfficeMaterialReadOutput(event.output)) {
       active.materialFacts.materialReadCount += 1;
-      recordMaterialFacts(active.materialFacts, JSON.stringify(event.output.sections));
+      recordMaterialFacts(
+        active.materialFacts,
+        JSON.stringify(event.output.sections.map((section) => officeFactValues(section.content))),
+      );
       return;
     }
     if (toolName === 'knowledge_search' && isKnowledgeSearchOutput(event.output)) {
@@ -986,6 +1012,99 @@ export class RunService {
     if (toolName === 'analyze_business_metrics') {
       recordMaterialFacts(active.materialFacts, serializeToolOutput(event.output));
     }
+  }
+
+  private recordMarkdownWrite(
+    active: ActiveRun,
+    event: Extract<AgentRuntimeEvent, { type: 'tool.completed' }>,
+  ): void {
+    if (active.toolNames.get(event.toolCallId) !== 'task_write_file') return;
+    if (!isTaskFileWriteOutput(event.output)) return;
+    if (path.extname(event.output.path).toLowerCase() !== '.md') return;
+    active.markdownWrites.set(event.output.path, event.output.contentHash);
+  }
+
+  /**
+   * 将用户明确要求交付的 Markdown 工作文件登记为正式 Artifact。
+   * 任务 work 目录只是中间产物，只有 Run 成功且事实校验、子进程清理均通过后才进入成果表。
+   */
+  private async persistRequestedMarkdownArtifact(
+    runId: string,
+    input: StartRunRequest,
+    workspacePath: string,
+    executionContext: ResolvedRunContext,
+    finalContent: string,
+  ): Promise<void> {
+    if (!requestsMarkdownArtifact(input.prompt)) return;
+    const active = this.activeRuns.get(runId);
+    if (!active) throw new Error('Run 已结束，无法登记 Markdown 成果');
+
+    let content = finalContent;
+    let title = 'Markdown 成果';
+    const latestWrite = [...active.markdownWrites.keys()].at(-1);
+    if (latestWrite) {
+      const workDir = path.join(
+        workspacePath,
+        '.betterwork',
+        'tasks',
+        input.taskId,
+        'runs',
+        runId,
+        'work',
+      );
+      const bytes = readManagedFile(workDir, latestWrite);
+      const actualHash = createHash('sha256').update(bytes).digest('hex');
+      const expectedHash = active.markdownWrites.get(latestWrite);
+      if (expectedHash && actualHash !== expectedHash) {
+        throw new Error(`Markdown 工作文件在登记前发生变化：${latestWrite}`);
+      }
+      content = bytes.toString('utf8');
+      title = truncate(path.basename(latestWrite, path.extname(latestWrite)), 160);
+    }
+    if (content.trim().length === 0) throw new Error('未生成可登记的 Markdown 内容');
+
+    const inputRelations = this.readArtifactInputRelations(runId, executionContext.materials);
+    this.store.transaction(() => {
+      const saved = this.store.artifacts.saveMarkdown({
+        taskId: input.taskId,
+        origin: 'assistant-run',
+        runId,
+        title,
+        content,
+      });
+      if (inputRelations.length === 0) return;
+      this.store.artifactInputRelations.saveForRun(
+        saved.currentVersionId,
+        runId,
+        inputRelations,
+        (relationInput) =>
+          relationInput.kind === 'evidence'
+            ? this.store.evidence.get(relationInput.evidenceId)?.runId === runId
+            : this.store.materialReads.hasMaterialRead(
+                runId,
+                JSON.stringify(relationInput),
+                relationInput.contentHash,
+              ),
+      );
+    });
+  }
+
+  private readArtifactInputRelations(
+    runId: string,
+    materials: readonly TaskMaterialSelection[],
+  ): ArtifactInputRelationInput[] {
+    return materials
+      .filter((selection) =>
+        this.store.materialReads.hasMaterialRead(
+          runId,
+          JSON.stringify(selection.reference),
+          selection.reference.contentHash,
+        ),
+      )
+      .map((selection) => ({
+        input: selection.reference,
+        relation: artifactRelationForPurpose(selection.purpose),
+      }));
   }
 
   private auditMaterialFacts(runId: string, content: string): string | undefined {
@@ -1817,6 +1936,41 @@ const isOfficeMaterialReadOutput = (value: unknown): value is OfficeMaterialRead
 
 const isOfficeFormat = (value: unknown): value is OfficeFormat =>
   value === 'pptx' || value === 'xlsx' || value === 'csv';
+
+const officeFactValues = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(officeFactValues);
+  if (!isRecord(value)) return value;
+  if ('value' in value) return officeFactValues(value.value);
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== 'address' && key !== 'locator')
+      .map(([key, child]) => [key, officeFactValues(child)]),
+  );
+};
+
+const artifactRelationForPurpose = (
+  purpose: TaskMaterialSelection['purpose'],
+): ArtifactInputRelationKind => {
+  switch (purpose) {
+    case 'rule':
+      return 'rule';
+    case 'current-input':
+      return 'data';
+    case 'historical-comparison':
+      return 'comparison';
+    case 'structure-reference':
+      return 'structure';
+    case 'template':
+      return 'template';
+    case 'background':
+      return 'background';
+    case 'other':
+      return 'other';
+  }
+};
+
+const isTaskFileWriteOutput = (value: unknown): value is { path: string; contentHash: string } =>
+  isRecord(value) && isString(value.path) && isString(value.contentHash);
 
 const sameMaterialReference = (left: MaterialReference, right: MaterialReference): boolean => {
   if (left.kind !== right.kind) return false;

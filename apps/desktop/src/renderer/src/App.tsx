@@ -9,6 +9,7 @@ import type {
   EvidenceSummary,
   ExpertModelReference,
   ExpertSummary,
+  InputSnapshot,
   MaterialCandidate,
   MaterialReference,
   McpToolBinding,
@@ -59,7 +60,7 @@ import {
   WorkIcon,
 } from './icons';
 import { describeActionError, reportAction, trackAction } from './lib/async-action';
-import { formatTime } from './lib/format';
+import { fileNameOf, formatTime } from './lib/format';
 import { runStatusName } from './lib/labels';
 import { buildResearchPrompt } from './lib/research-prompt';
 import { extractAssistantText, finalRunContent, mergeRunEvents } from './lib/run-events';
@@ -81,6 +82,23 @@ const expertReferenceApplicableToWorkspace = (
   if (reference.kind !== 'artifact-version') return true;
   return Boolean(workspaceId && reference.originWorkspaceId === workspaceId);
 };
+
+const inputSnapshotCandidate = (snapshot: InputSnapshot): MaterialCandidate => ({
+  reference: {
+    kind: 'workspace-input-snapshot',
+    snapshotId: snapshot.id,
+    workspaceId: snapshot.workspaceId,
+    contentHash: snapshot.contentHash,
+    format: snapshot.format,
+    fileKey: snapshot.fileKey,
+  },
+  title: fileNameOf(snapshot.sourcePath),
+  sourceLabel: `工作区文件 · ${snapshot.sourcePath}`,
+  status: snapshot.status === 'ready' ? 'ready' : 'unavailable',
+  ...(snapshot.status === 'ready'
+    ? {}
+    : { detail: snapshot.failureMessage ?? '输入快照尚未准备完成' }),
+});
 
 export function App(): React.JSX.Element {
   // 三个自包含的状态簇各自成 hook；App 只保留跨簇的编排与布局。
@@ -144,6 +162,7 @@ export function App(): React.JSX.Element {
   const workspaceIdRef = useRef<string | undefined>(undefined);
   const [activeTask, setActiveTask] = useState<{ id: string; sessionId: string; title: string }>();
   const activeTaskIdRef = useRef<string | undefined>(undefined);
+  const materialCandidatesRequestRef = useRef(0);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [taskRuns, setTaskRuns] = useState<RunSummary[]>([]);
   const [recentTasks, setRecentTasks] = useState<RecentTaskSummary[]>([]);
@@ -383,7 +402,9 @@ export function App(): React.JSX.Element {
                   ? 'structure'
                   : selection.purpose === 'template'
                     ? 'template'
-                    : 'background',
+                    : selection.purpose === 'background'
+                      ? 'background'
+                      : 'other',
       })),
     [taskMaterials],
   );
@@ -448,12 +469,28 @@ export function App(): React.JSX.Element {
     },
     [skills.skills],
   );
+  const refreshMaterialCandidates = useCallback((taskId: string): void => {
+    const requestId = materialCandidatesRequestRef.current + 1;
+    materialCandidatesRequestRef.current = requestId;
+    trackAction(
+      window.betterwork.materials.listCandidates({ taskId }).then((candidates) => {
+        if (
+          materialCandidatesRequestRef.current === requestId &&
+          activeTaskIdRef.current === taskId
+        ) {
+          setMaterialCandidates(candidates);
+        }
+      }),
+      '加载任务材料候选',
+    );
+  }, []);
   const loadTaskContext = useCallback(
     async (taskId: string, selectionId: number): Promise<TaskContextRevision | undefined> => {
       const context = await window.betterwork.taskContexts.get({ taskId });
       if (selectionId !== runSelectionRequestRef.current) return undefined;
       setTaskContext(context ?? undefined);
       setTaskMaterials(context?.materials ?? []);
+      refreshMaterialCandidates(taskId);
       setExcludedMemoryIds(context?.excludedMemoryIds ?? []);
       setMcpToolBindings(context?.mcpToolBindings ?? []);
       if (!context || context.executor.kind === 'general') {
@@ -477,7 +514,7 @@ export function App(): React.JSX.Element {
       setTaskBindings(context?.skillBindings.map(skillChipForBinding) ?? []);
       return context ?? undefined;
     },
-    [skillChipForBinding],
+    [refreshMaterialCandidates, skillChipForBinding],
   );
   const summonExpert = useCallback(
     async (summary: ExpertSummary): Promise<void> => {
@@ -528,6 +565,7 @@ export function App(): React.JSX.Element {
             })
             .then((snapshot) => {
               if (!snapshot) return;
+              const candidate = inputSnapshotCandidate(snapshot);
               const selection: TaskMaterialSelection = {
                 reference: {
                   kind: 'workspace-input-snapshot',
@@ -548,6 +586,15 @@ export function App(): React.JSX.Element {
                 );
                 return exists ? current : [...current, selection];
               });
+              materialCandidatesRequestRef.current += 1;
+              setMaterialCandidates((current) => [
+                ...current.filter(
+                  (item) =>
+                    item.reference.kind !== 'workspace-input-snapshot' ||
+                    item.reference.snapshotId !== snapshot.id,
+                ),
+                candidate,
+              ]);
               setMaterialPickerError('');
             }),
           setActionError,
@@ -1106,6 +1153,7 @@ export function App(): React.JSX.Element {
                         const runEvents = taskAllEvents.get(run.id) ?? [];
                         const runAssistantText =
                           finalRunContent(runEvents) ?? extractAssistantText(runEvents);
+                        const runFailure = runEvents.find((event) => event.type === 'run.failed');
                         const isRunActive = run.id === activeRunId;
                         const runIsCompleted = runEvents.some(
                           (event) => event.type === 'run.completed',
@@ -1139,6 +1187,11 @@ export function App(): React.JSX.Element {
                                 <MarkdownPreview content={runAssistantText} variant="message" />
                               </div>
                             )}
+                            {runFailure?.type === 'run.failed' && (
+                              <p className="action-note error run-failure-note" role="alert">
+                                本次运行未完成，回复内容未登记为正式成果。{runFailure.error}
+                              </p>
+                            )}
                             {isLatestCompleted && runAssistantText && (
                               <div className="message-actions">
                                 <button
@@ -1158,9 +1211,16 @@ export function App(): React.JSX.Element {
                                 <button
                                   className="message-action"
                                   onClick={() => trackAction(saveCurrentArtifact(), '保存成果')}
+                                  disabled={currentTaskArtifacts.some(
+                                    (artifact) => artifact.sourceRunId === run.id,
+                                  )}
                                 >
                                   <ArtifactIcon size={13} />
-                                  保存为成果
+                                  {currentTaskArtifacts.some(
+                                    (artifact) => artifact.sourceRunId === run.id,
+                                  )
+                                    ? '已保存为成果'
+                                    : '保存为成果'}
                                 </button>
                                 {artifactNote && (
                                   <span

@@ -884,6 +884,33 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 23,
+    name: 'allow other artifact input relation',
+    up(db: Database.Database): void {
+      rebuildTable(
+        db,
+        'artifact_input_relations',
+        `
+          CREATE TABLE artifact_input_relations (
+            id TEXT PRIMARY KEY,
+            output_version_id TEXT NOT NULL REFERENCES artifact_versions(id) ON DELETE CASCADE,
+            run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+            input_json TEXT NOT NULL,
+            input_key TEXT NOT NULL,
+            relation TEXT NOT NULL CHECK (relation IN ('data', 'rule', 'comparison', 'structure', 'template', 'background', 'other')),
+            created_at INTEGER NOT NULL,
+            UNIQUE(output_version_id, input_key, relation)
+          );
+        `,
+        ['id', 'output_version_id', 'run_id', 'input_json', 'input_key', 'relation', 'created_at'],
+        [
+          `CREATE INDEX idx_artifact_input_relations_run
+             ON artifact_input_relations(run_id, created_at ASC);`,
+        ],
+      );
+    },
+  },
 ];
 
 /**

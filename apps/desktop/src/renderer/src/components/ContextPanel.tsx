@@ -63,6 +63,7 @@ const purposeLabel: Record<TaskMaterialSelection['purpose'], string> = {
   'structure-reference': '结构参考',
   template: '模板',
   background: '背景参考',
+  other: '其他',
 };
 
 export function ContextPanel({
