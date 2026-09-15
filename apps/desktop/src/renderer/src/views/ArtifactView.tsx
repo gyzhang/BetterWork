@@ -210,28 +210,34 @@ export function ArtifactPage({
               </p>
             )}
             {visibleVersion.inputRelations && visibleVersion.inputRelations.length > 0 && (
-              <div className="artifact-input-bar">
-                <span className="artifact-input-bar-label">本版输入</span>
-                <div className="artifact-input-chips">
+              <section className="artifact-input-grid">
+                <h4>本版输入</h4>
+                <div className="artifact-input-cards">
                   {visibleVersion.inputRelations.map((relation) => {
                     const fileName = inputLabel(relation.input);
                     const sourceLabel = inputSourceLabel(relation.input);
                     const isSnapshot = relation.input.kind === 'workspace-input-snapshot';
                     const Icon = isSnapshot ? KnowledgeIcon : ArtifactIcon;
                     return (
-                      <span
+                      <div
                         key={`${relation.outputVersionId}:${JSON.stringify(relation.input)}`}
-                        className="artifact-input-chip"
+                        className="artifact-input-card"
                         title={`${fileName} · ${relation.relation} · ${sourceLabel}`}
                       >
-                        <Icon size={12} />
-                        <span className="artifact-input-chip-name">{fileName}</span>
-                        <span className="artifact-input-chip-relation">{relation.relation}</span>
-                      </span>
+                        <span className="artifact-input-card-icon">
+                          <Icon size={16} />
+                        </span>
+                        <div className="artifact-input-card-body">
+                          <span className="artifact-input-card-name">{fileName}</span>
+                          <span className="artifact-input-card-meta">
+                            {relation.relation} · {sourceLabel}
+                          </span>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
-              </div>
+              </section>
             )}
             <div className="artifact-detail-layout">
               <aside className="artifact-version-list">
