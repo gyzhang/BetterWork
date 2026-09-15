@@ -73,4 +73,24 @@ describe('ComposerCapabilityPicker materials', () => {
       }),
     ] satisfies [TaskMaterialSelection]);
   });
+
+  it('allows a selected material to use the other purpose', () => {
+    const onCommitMaterials = vi.fn();
+    const selected: TaskMaterialSelection = {
+      reference: candidate.reference,
+      purpose: 'rule',
+      addedFrom: 'workspace-candidate',
+    };
+    render(
+      <ComposerCapabilityPicker {...pickerProps({ onCommitMaterials, materials: [selected] })} />,
+    );
+
+    fireEvent.change(screen.getByRole('combobox', { name: '财务规则用途' }), {
+      target: { value: 'other' },
+    });
+
+    expect(onCommitMaterials).toHaveBeenCalledExactlyOnceWith([
+      expect.objectContaining({ purpose: 'other' }),
+    ] satisfies [TaskMaterialSelection]);
+  });
 });

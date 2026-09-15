@@ -30,7 +30,8 @@ type MaterialPurpose =
   | 'historical-comparison'
   | 'structure-reference'
   | 'template'
-  | 'background';
+  | 'background'
+  | 'other';
 
 type MaterialReference =
   | {
@@ -195,7 +196,7 @@ Run 取消或失败后，已完成且已持久化的读取足迹可以保留；�
 interface ArtifactInputRelation {
   outputVersionId: string;
   input: MaterialReference | { kind: 'evidence'; evidenceId: string };
-  relation: 'data' | 'rule' | 'comparison' | 'structure' | 'template' | 'background';
+  relation: 'data' | 'rule' | 'comparison' | 'structure' | 'template' | 'background' | 'other';
   createdAt: number;
 }
 ```

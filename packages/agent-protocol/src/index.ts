@@ -255,6 +255,7 @@ export const materialPurposeSchema = z.enum([
   'structure-reference',
   'template',
   'background',
+  'other',
 ]);
 export type MaterialPurpose = z.infer<typeof materialPurposeSchema>;
 
@@ -685,6 +686,7 @@ export const artifactInputRelationKindSchema = z.enum([
   'structure',
   'template',
   'background',
+  'other',
 ]);
 export type ArtifactInputRelationKind = z.infer<typeof artifactInputRelationKindSchema>;
 export const artifactInputSchema = z.discriminatedUnion('kind', [

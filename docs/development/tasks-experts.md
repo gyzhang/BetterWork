@@ -138,7 +138,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 - 必读/落点：docs/04、ADR-0005/0014、KnowledgeVault、Artifact/FileArtifactService、Workspace/TaskRepository；扩展 expert-contracts。
 - 工作：定稿工作空间候选关联、任务选材修订、Knowledge 内容修订、ArtifactVersion 引用、本地输入快照、材料用途、Run 读取足迹和成果输入关系；明确两库与文件资产的恢复和回收。
 - 失败语义：源文件变化、缺失、重复引用、非法跨空间请求、快照取消、归档对象仍被引用、旧任务继续执行、范围缩小后的历史筛选逐项定义。
-- 完成：见[材料、快照与运行来源契约](material-contracts.md)。已定稿工作空间候选与任务授权、六类用途、Knowledge 内容修订、ArtifactVersion、本地输入快照、RunContextSnapshot、读取足迹和成果输入关系；明确两库与受管文件恢复/回收、所有读取入口的范围校验落点，以及源变化、缺失、重复、跨空间、取消、归档、旧任务和范围收缩语义。E23 已将带 `TaskContext` 的 `read_text_file` 与 `knowledge_search` 接入 Run 范围过滤；脚本按本机用户权限运行，不宣称 OS 沙箱。仅文档变更，`git diff --check` 和 Markdown 关系检查通过，2026-09-14。
+- 完成：见[材料、快照与运行来源契约](material-contracts.md)。已定稿工作空间候选与任务授权、七类用途、Knowledge 内容修订、ArtifactVersion、本地输入快照、RunContextSnapshot、读取足迹和成果输入关系；明确两库与受管文件恢复/回收、所有读取入口的范围校验落点，以及源变化、缺失、重复、跨空间、取消、归档、旧任务和范围收缩语义。E23 已将带 `TaskContext` 的 `read_text_file` 与 `knowledge_search` 接入 Run 范围过滤；脚本按本机用户权限运行，不宣称 OS 沙箱。仅文档变更，`git diff --check` 和 Markdown 关系检查通过，2026-09-14。
 
 ### E21 修订、快照与恢复
 
@@ -154,7 +154,7 @@ E00 不重复此前已证实且未受变更影响的测试；以最新提交、�
 - 工作：工作空间候选与任务实际选择分离；支持具体知识、现有可读成果版本和当前文件。常用参考从当前 Workspace 候选选择后带入，同清单可移除；跨 Workspace ArtifactVersion 只能通过任务内显式全局来源选择，不能由专家常用参考自动带入。
 - 失败/取消：无访问登记的任意 ID/路径拒绝；源版本变化给差异，不追随最新；取消选择不改草稿；超限和不可读格式有具体原因。
 - 必测：候选不等于授权、常用参考引用版本稳定、跨 Workspace 来源明确、并发草稿版本、重复引用去重、移除不会被预设自动补回。
-- 完成：`TaskContextRevision` v12 新增 `materials_json`；`ExpertRevision` v20 新增 `reference_materials_json`，协议定义 `MaterialReference`、六类用途和 `addedFrom`，`TaskMaterialService` 提供 Knowledge revision、当前 Workspace ArtifactVersion、ready 输入快照候选，并在保存时校验内容哈希、快照完整性、重复引用、跨空间和失效状态。专家编辑器保存全局知识或当前工作区适用的常用参考，召唤把适用引用以 `expert-reference` 复制到新 TaskContext，任务可继续移除或补充；新增材料候选查询与 Workspace 文件快照 IPC/Preload，App 保存并恢复材料草稿；[ADR-0022](../adr/0022-expert-reference-materials.md) 固化边界。当前工具仍可读整个 Knowledge Vault/Workspace，范围收紧留 E23；空材料仍允许澄清任务。
+- 完成：`TaskContextRevision` v12 新增 `materials_json`；`ExpertRevision` v20 新增 `reference_materials_json`，协议定义 `MaterialReference`、七类用途和 `addedFrom`，TaskMaterialService 提供 Knowledge revision、当前 Workspace ArtifactVersion、ready 输入快照候选，并在保存时校验内容哈希、快照完整性、重复引用、跨空间和失效状态。专家编辑器保存全局知识或当前工作区适用的常用参考，召唤把适用引用以 `expert-reference` 复制到新 TaskContext，任务可继续移除或补充；新增材料候选查询与 Workspace 文件快照 IPC/Preload，App 保存并恢复材料草稿；[ADR-0022](../adr/0022-expert-reference-materials.md) 固化边界。当前工具仍可读整个 Knowledge Vault/Workspace，范围收紧留 E23；空材料仍允许澄清任务。
 
 ### E23 范围与历史上下文
 

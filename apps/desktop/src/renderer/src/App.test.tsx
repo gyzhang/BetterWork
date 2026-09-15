@@ -4,6 +4,7 @@ import type {
   AgentRuntimeEvent,
   ExpertDetail,
   ExpertSummary,
+  InputSnapshot,
   MaterialCandidate,
   MemoryRecord,
   ModelProfileSummary,
@@ -158,7 +159,7 @@ function installApi(options?: {
     },
     materials: {
       listCandidates: vi.fn(async (): Promise<MaterialCandidate[]> => []),
-      prepareInputSnapshot: vi.fn(async () => null),
+      prepareInputSnapshot: vi.fn(async (): Promise<InputSnapshot | null> => null),
     },
     memories: {
       list: vi.fn(async (): Promise<MemoryRecord[]> => options?.memories ?? []),
@@ -480,6 +481,87 @@ describe('Expert summon in the task composer', () => {
 
     await waitFor(() => expect(api.taskContexts.save).toHaveBeenCalledTimes(1));
     expect(api.taskContexts.save).toHaveBeenCalledWith(expect.objectContaining({ materials: [] }));
+  });
+});
+
+describe('Workspace input material display', () => {
+  it('shows the filename immediately after adding a workspace file', async () => {
+    const api = installApi();
+    api.materials.prepareInputSnapshot.mockResolvedValue({
+      id: 'snapshot-new',
+      workspaceId: 'workspace-1',
+      sourcePath: '/workspace/current-data-excel.xlsx',
+      contentHash: 'hash-new',
+      byteSize: 1,
+      format: 'xlsx',
+      fileKey: 'input-snapshots/hash-new/content',
+      status: 'ready',
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: '添加能力' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /添加文件/ }));
+
+    expect(api.materials.prepareInputSnapshot).toHaveBeenCalledWith({
+      workspaceId: 'workspace-1',
+    });
+    expect(await screen.findByText('current-data-excel.xlsx')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '查看上下文' }));
+    fireEvent.click(screen.getByRole('tab', { name: '资料' }));
+    const contextPanel = document.querySelector('.context-panel');
+    expect(contextPanel?.textContent).toContain('current-data-excel.xlsx');
+  });
+
+  it('reloads the filename when reopening a task with a saved input snapshot', async () => {
+    const api = installApi({
+      context: {
+        id: 'context-previous',
+        taskId: previousTask.id,
+        revision: 1,
+        executor: { kind: 'general' },
+        skillBindings: [],
+        materials: [
+          {
+            reference: {
+              kind: 'workspace-input-snapshot',
+              snapshotId: 'snapshot-saved',
+              workspaceId: 'workspace-1',
+              contentHash: 'hash-saved',
+              format: 'xlsx',
+              fileKey: 'input-snapshots/hash-saved/content',
+            },
+            purpose: 'current-input',
+            addedFrom: 'user-input',
+          },
+        ],
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    });
+    api.materials.listCandidates.mockResolvedValue([
+      {
+        reference: {
+          kind: 'workspace-input-snapshot',
+          snapshotId: 'snapshot-saved',
+          workspaceId: 'workspace-1',
+          contentHash: 'hash-saved',
+          format: 'xlsx',
+          fileKey: 'input-snapshots/hash-saved/content',
+        },
+        title: 'current-data-excel.xlsx',
+        sourceLabel: '工作区文件 · /workspace/current-data-excel.xlsx',
+        status: 'ready',
+      },
+    ]);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
+
+    expect(await screen.findByText('current-data-excel.xlsx')).toBeTruthy();
+    expect(api.materials.listCandidates).toHaveBeenCalledWith({ taskId: previousTask.id });
   });
 });
 

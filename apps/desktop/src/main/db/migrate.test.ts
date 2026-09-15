@@ -200,6 +200,35 @@ describe('application database migrations', () => {
     db.close();
   });
 
+  it('preserves existing artifact relations and allows the other relation after v23', () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    migrate(db, { migrations: appMigrations.slice(0, 14) });
+    seedLegacyWork(db);
+    db.prepare(
+      `INSERT INTO artifact_input_relations (
+         id, output_version_id, run_id, input_json, input_key, relation, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run('relation-old', 'ver-1', 'run-1', '{"kind":"evidence"}', 'old', 'background', 1);
+
+    migrate(db, { migrations: appMigrations });
+
+    expect(readSchemaVersion(db)).toBe(appMigrations.length);
+    expect(
+      db.prepare('SELECT relation FROM artifact_input_relations WHERE id = ?').get('relation-old'),
+    ).toEqual({ relation: 'background' });
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO artifact_input_relations (
+             id, output_version_id, run_id, input_json, input_key, relation, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run('relation-other', 'ver-1', 'run-1', '{"kind":"other"}', 'other', 'other', 2),
+    ).not.toThrow();
+    db.close();
+  });
+
   it('adopts a pre-migration database, keeps every row, and stamps only the baseline', () => {
     const file = path.join(temporaryDirectory(), 'legacy.sqlite');
     const legacy = createLegacyAppDatabase(file);

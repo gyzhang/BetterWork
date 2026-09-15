@@ -5,7 +5,7 @@ import { useRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { PopoverMenuItem } from './PopoverMenu';
-import { PopoverMenu } from './PopoverMenu';
+import { calculatePopoverPosition, PopoverMenu } from './PopoverMenu';
 
 afterEach(cleanup);
 
@@ -45,6 +45,48 @@ function Wrapper({
 }
 
 describe('PopoverMenu', () => {
+  it('opens upward when the menu does not fit below the anchor', () => {
+    const position = calculatePopoverPosition({
+      anchor: { top: 680, bottom: 708, left: 100, right: 128 },
+      menuWidth: 180,
+      menuHeight: 176,
+      viewportWidth: 1_200,
+      viewportHeight: 800,
+      align: 'start',
+      placement: 'auto',
+    });
+
+    expect(position).toEqual({ bottom: 126, left: 100, maxHeight: 320 });
+  });
+
+  it('limits the menu height and keeps it inside the viewport when neither side fits', () => {
+    const position = calculatePopoverPosition({
+      anchor: { top: 190, bottom: 218, left: 100, right: 128 },
+      menuWidth: 180,
+      menuHeight: 500,
+      viewportWidth: 1_200,
+      viewportHeight: 400,
+      align: 'start',
+      placement: 'auto',
+    });
+
+    expect(position).toEqual({ bottom: 216, left: 100, maxHeight: 176 });
+  });
+
+  it('clamps the horizontal position to the viewport margin', () => {
+    const position = calculatePopoverPosition({
+      anchor: { top: 100, bottom: 128, left: 1_100, right: 1_128 },
+      menuWidth: 240,
+      menuHeight: 100,
+      viewportWidth: 1_200,
+      viewportHeight: 800,
+      align: 'start',
+      placement: 'auto',
+    });
+
+    expect(position.left).toBe(952);
+  });
+
   it('focuses the first enabled item on open and restores focus on dismiss', () => {
     const onDismiss = vi.fn();
     const onSelect = vi.fn();

@@ -53,6 +53,7 @@ const PURPOSE_LABELS: Record<MaterialPurpose, string> = {
   'structure-reference': '结构参考',
   template: '模板',
   background: '背景参考',
+  other: '其他',
 };
 
 const materialKey = (selection: TaskMaterialSelection): string => {

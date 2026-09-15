@@ -28,7 +28,7 @@ export type TaskFileWriter = (input: TaskFileWriteInput) => Promise<TaskFileWrit
 export const createTaskWriteFileTool = (writer: TaskFileWriter): AgentTool => ({
   name: 'task_write_file',
   description:
-    'Write or update a text file in the current task work directory (SVG, JSON, spec, etc.). Provide expectedHash when overwriting to avoid conflicts.',
+    'Write or update an intermediate text file in the current task work directory (Markdown, SVG, JSON, spec, etc.). This is not a formal Artifact; formal deliverables are registered separately after the Run succeeds. Provide expectedHash when overwriting to avoid conflicts.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -69,8 +69,8 @@ export const createTaskWriteFileTool = (writer: TaskFileWriter): AgentTool => ({
       contentHash: result.contentHash,
       created: result.created,
       message: result.created
-        ? `已创建 ${result.relativePath}（${result.bytesWritten} 字节）`
-        : `已更新 ${result.relativePath}（${result.bytesWritten} 字节）`,
+        ? `已创建 ${result.relativePath}（${result.bytesWritten} 字节；任务工作文件，尚未登记为正式成果）`
+        : `已更新 ${result.relativePath}（${result.bytesWritten} 字节；任务工作文件，尚未登记为正式成果）`,
     };
   },
 });
