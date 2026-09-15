@@ -240,6 +240,29 @@ describe('registerIpc', () => {
     expect(mocks.showOpenDialog).not.toHaveBeenCalled();
   });
 
+  it('opens the workspace file picker at the selected workspace root', async () => {
+    const workspaceRoot = path.join(temporaryDirectory, 'selected-workspace');
+    const workspace = store.workspaces.getOrCreate(workspaceRoot, '选定工作区');
+    const task = store.tasks.create(workspace.id, '材料任务', '选择工作区文件');
+
+    mocks.showOpenDialog.mockClear();
+    mocks.showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] });
+    await expect(
+      invoke(IpcChannel.PrepareWorkspaceInputSnapshot, { workspaceId: workspace.id }),
+    ).resolves.toBeNull();
+    expect(mocks.showOpenDialog).toHaveBeenLastCalledWith(
+      expect.objectContaining({ defaultPath: workspaceRoot }),
+    );
+
+    mocks.showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] });
+    await expect(
+      invoke(IpcChannel.PrepareWorkspaceInputSnapshot, { taskId: task.task.id }),
+    ).resolves.toBeNull();
+    expect(mocks.showOpenDialog).toHaveBeenLastCalledWith(
+      expect.objectContaining({ defaultPath: workspaceRoot }),
+    );
+  });
+
   it('returns a safe result when a source is not registered instead of opening an arbitrary path', async () => {
     await expect(
       invoke(IpcChannel.OpenKnowledgeSource, {
