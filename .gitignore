@@ -21,3 +21,4 @@ coverage/
 
 # Runtime task working directories
 .betterwork/
+/temp-asserts/
