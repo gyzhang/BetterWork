@@ -21,9 +21,17 @@
 
 - 许可：PSF-2.0；上游 `install_only` 制品另捆绑若干第三方组件（OpenSSL、zlib、libffi 等），各自许可以上游发行说明为准。随包分发前的许可清单整理属于 A20。
 - 代码落点：`apps/desktop/src/main/infrastructure/python-distribution.ts`（目录常量）＋ `services/skill-dependency-service.ts` 的下载→校验→解压流程。校验值不符一律拒绝使用并清掉半成品目录，不回退到「先跑起来再说」。
-- 状态：**机制已实现并有离线测试；制品本身未随包分发，也未在本机完整下载解压验证**（A20 负责打包与冷环境准备）。Windows 条目仅登记，A09 blocked，本机无法验收。
+- 状态：**机制已实现并有离线测试；macOS arm64 制品已按锁定 hash 完成真实下载、解压和解释器探测**（2026-09-15，结果见下方第 2 节）。制品尚未随最终安装包完成冷环境准备；Windows 条目仅登记，A09 blocked，本机无法验收。
 
-## 2. 本机解释器探测（2026-09-09 实测）
+## 2. 受管 CPython 制品实测（2026-09-15）
+
+- 目标制品：macOS arm64 `cpython-3.12.14+20260901-aarch64-apple-darwin-install_only.tar.gz`。
+- 下载地址：锁文件登记的 GitHub release 资产；下载得到的文件按锁定 SHA-256 校验，结果为 `3ee3ee547cedfeb7c2b16b2b7156039f7b470bb8f857e226fd3d2eb11db83c76`。
+- 解压结果：`python/bin/python3.12` 存在且可执行；临时目录中的原始压缩包、解压目录和探测 venv 在记录后已删除。
+- 解释器探测：版本 `3.12.14`，`platform.machine()` 为 `arm64`，`platform.system()` 为 `Darwin`，`venv` 与 `ensurepip` 均可导入。
+- 这次是上游发行制品本身的真实下载/校验/解压/探测，不把系统 Python 或离线替身冒充受管制品验收；通过 `SkillDependencyService` 的包内冷环境安装、wheelhouse 随包落地和签名安装仍属于 A20/A21。
+
+## 3. 本机解释器探测（2026-09-09 实测）
 
 探测脚本只读身份，不安装、不执行 Skill 内容：版本 / `platform.machine()` / `platform.system()` / `venv` / `ensurepip`。
 
@@ -37,7 +45,7 @@
 - 本机解释器只作为**高级选项**的基础：服务始终用它创建算台专属 venv，pip 只由 venv 内解释器执行，绝不写入其全局 site-packages，也不复用 Conda 随时变化的包集合。
 - 本机解释器的身份指纹是「解析后的真实路径 + 自报版本 + 平台」，不是二进制 hash：它不是算台管理的不可变制品，因此环境漂移由健康检查（import 探测失败即 `invalid`）兜住，而不是假装指纹能锁定内容。
 
-## 3. 真实 venv 验收（A10）
+## 4. 真实 venv 验收（A10）
 
 - 时间：2026-09-09
 - 平台：macOS arm64，Node v26，解释器 `/opt/miniconda3/bin/python3`（3.13.11，测试运行时自动发现）
@@ -47,7 +55,7 @@
 - 隔离证据：向该 venv 的 `purelib` 写入 `betterwork_probe_marker.py` 后，venv 解释器可导入并打印标记，基础解释器导入失败（退出码非 0），证明全局环境未被修改
 - 离线证据：该用例注入的下载器一旦被调用即抛错，全程未触网
 
-## 4. 样本包锁（A11 实测产生）
+## 5. 样本包锁（A11 实测产生）
 
 - 锁文件：[`resources/dependency-locks/ppt-generation-expert-darwin-arm64-cp312.json`](../../resources/dependency-locks/ppt-generation-expert-darwin-arm64-cp312.json)（描述文件，**不含任何 wheel 二进制**）
 - 目标平台：darwin / arm64 / cp312，`pythonRequirement: 3.12`
@@ -68,7 +76,7 @@
 
 完整 64 位校验值与精确制品地址在锁文件里；`source` 为 `approved-index`，随包 wheelhouse 落地（A20）后同一份锁可离线安装，无需改动。
 
-## 5. 工具链快照与真实端到端验证（A11，2026-09-09）
+## 6. 工具链快照与真实端到端验证（A11，2026-09-09）
 
 在临时 userData 目录中跑完整链路，全部为真实文件、真实网络下载、真实子进程，结束后目录删除：
 
@@ -90,13 +98,13 @@
 
 **私有内容边界**：快照里包含用户本地的公司 deck 资产（`skills/ppt-master/templates/decks/中电金信`、`中国电信`、`中汽研` 等）与公司模板。快照只存在于用户数据目录，**绝不进入 Git、内置资源或任何公共制品**；A20 打包时必须显式排除，A21 验收要核对包内没有这些内容。
 
-## 6. 待验证清单
+## 7. 待验证清单
 
 | 项目 | 归属 | 现状 |
 | --- | --- | --- |
 | 样本真实包锁（python-pptx / lxml / PyYAML / Pillow / XlsxWriter / skia-pathops / uharfbuzz 闭包） | A11 | **已产生并实测**，见第 4、5 节 |
-| 工具链快照 + 真实环境准备 + CLI 探测（macOS arm64） | A11 | **已完成**，见第 5 节 |
-| 受管 Python 制品真实下载、校验、解压后建 venv | A20 | 未做，仅有离线替身与校验失败路径测试 |
+| 工具链快照 + 真实环境准备 + CLI 探测（macOS arm64） | A11 | **已完成**，见第 6 节 |
+| 受管 Python 制品真实下载、校验、解压后建 venv | A20 | arm64 制品已完成真实下载、校验、解压和解释器探测；通过包内服务建 venv、随包 wheelhouse 冷环境仍待完成 |
 | wheelhouse 制品与许可清单随包分发 | A20 | 未做；锁已带逐包许可字段可直接汇总 |
 | Windows 平台环境与解释器 | A09/A21 | blocked，本机无 Windows 环境 |
 | 环境准备 UI（选择解释器、查看缺项、进度与取消） | A12 | 服务尚未被 `main/index.ts` 装配 |
