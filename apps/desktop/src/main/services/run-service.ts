@@ -179,21 +179,13 @@ const createMaterialFactLedger = (enabled: boolean, prompt: string): MaterialFac
     ledger.rawNumbers.add(value);
     addNormalizedNumber(ledger.allowedNumbers, value);
   }
+  recordQualitativeClaims(ledger.supportedQualitativeClaims, prompt);
   return ledger;
 };
 
 const recordMaterialFacts = (ledger: MaterialFactLedger, text: string): void => {
   if (!ledger.enabled) return;
-  for (const claim of qualitativeClaimPatterns) {
-    let index = text.indexOf(claim.phrase);
-    while (index >= 0) {
-      if (!hasNegatedQualitativeClaim(text, claim.phrase, index)) {
-        ledger.supportedQualitativeClaims.add(claim.phrase);
-        break;
-      }
-      index = text.indexOf(claim.phrase, index + claim.phrase.length);
-    }
-  }
+  recordQualitativeClaims(ledger.supportedQualitativeClaims, text);
   const values = numbersIn(text);
   for (const value of values) {
     ledger.rawNumbers.add(value);
@@ -208,6 +200,19 @@ const recordMaterialFacts = (ledger: MaterialFactLedger, text: string): void => 
         ledger.allowedNumbers,
         ((current - comparison) / Math.abs(comparison)) * 100,
       );
+    }
+  }
+};
+
+const recordQualitativeClaims = (target: Set<string>, text: string): void => {
+  for (const claim of qualitativeClaimPatterns) {
+    let index = text.indexOf(claim.phrase);
+    while (index >= 0) {
+      if (!hasNegatedQualitativeClaim(text, claim.phrase, index)) {
+        target.add(claim.phrase);
+        break;
+      }
+      index = text.indexOf(claim.phrase, index + claim.phrase.length);
     }
   }
 };
