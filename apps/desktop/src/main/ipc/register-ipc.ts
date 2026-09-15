@@ -385,9 +385,14 @@ function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
     prepareWorkspaceInputSnapshotRequestSchema,
     inputSnapshotSchema.nullable(),
     async (input) => {
+      const workspaceId = input.taskId
+        ? store.tasks.getWorkspaceId(input.taskId)
+        : input.workspaceId;
+      const workspaceRoot = workspaceId ? store.workspaces.get(workspaceId)?.rootPath : undefined;
       const result = await showOpenDialog(deps, {
         title: '选择本次工作需要的文件',
         properties: ['openFile'],
+        ...(workspaceRoot ? { defaultPath: workspaceRoot } : {}),
       });
       const sourcePath = result.filePaths[0];
       if (result.canceled || !sourcePath) return null;
