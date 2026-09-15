@@ -139,6 +139,8 @@ const qualitativeClaimPatterns = [
 ] as const;
 const qualitativeNegationPattern =
   /材料(?:未|没有)|未(?:提供|提及|确认)|不可推断|无法(?:判断|确认|推断)|待确认|不确定|未知|没有给出|不能/iu;
+const qualitativeNonAssertionPattern =
+  /是否|核实|确认|跟进|追踪|了解|检查|判断|若|如果|可能|意向|计划|建议/iu;
 
 const numbersIn = (text: string): number[] =>
   [...text.matchAll(numberPattern)]
@@ -208,7 +210,7 @@ const recordQualitativeClaims = (target: Set<string>, text: string): void => {
   for (const claim of qualitativeClaimPatterns) {
     let index = text.indexOf(claim.phrase);
     while (index >= 0) {
-      if (!hasNegatedQualitativeClaim(text, claim.phrase, index)) {
+      if (!hasNonAssertiveQualitativeClaim(text, claim.phrase, index)) {
         target.add(claim.phrase);
         break;
       }
@@ -222,9 +224,13 @@ const hasAllowedNumber = (ledger: MaterialFactLedger, value: number, rawOnly: bo
   return [...candidates].some((candidate) => Math.abs(candidate - value) < 0.01);
 };
 
-const hasNegatedQualitativeClaim = (content: string, phrase: string, index: number): boolean => {
+const hasNonAssertiveQualitativeClaim = (
+  content: string,
+  phrase: string,
+  index: number,
+): boolean => {
   const context = content.slice(Math.max(0, index - 50), index + phrase.length + 50);
-  return qualitativeNegationPattern.test(context);
+  return qualitativeNegationPattern.test(context) || qualitativeNonAssertionPattern.test(context);
 };
 
 const serializeToolOutput = (output: unknown): string => {
@@ -978,7 +984,7 @@ export class RunService {
       .filter((claim) => {
         let index = content.indexOf(claim.phrase);
         while (index >= 0) {
-          if (!hasNegatedQualitativeClaim(content, claim.phrase, index)) return true;
+          if (!hasNonAssertiveQualitativeClaim(content, claim.phrase, index)) return true;
           index = content.indexOf(claim.phrase, index + claim.phrase.length);
         }
         return false;
