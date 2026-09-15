@@ -25,4 +25,4 @@
 
 - 本次是 unpacked 静态包预检，没有安装或启动安装包，也没有把构建产物提交到 Git。
 - electron-builder 明确报告 `0 valid identities found` 并跳过 macOS 代码签名；Developer ID 安装验收仍属于 A21 的外部条件。
-- 受管 Python 制品、wheelhouse 许可清单和冷环境依赖准备尚未随包实测；A20 继续保持 `doing`。
+- 受管 Python 制品已按锁定 hash 完成 macOS arm64 真实下载、解压和 `3.12.14 / arm64 / Darwin / venv / ensurepip` 探测，详见[依赖验证记录](dependency-verification.md) §2；wheelhouse 许可清单、包内冷环境安装和签名安装仍未随包实测，A20 继续保持 `doing`。
