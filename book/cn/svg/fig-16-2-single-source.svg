@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 16-2 改一个输入：重算路径与重复数字的核对点（《智能体工程》第 16 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">改一个输入，不是改一个文本框</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">同一个数字出现在几处，就有几个核对点。改一处而漏三处，会让新旧混杂。</text>
+  </g>
+
+  <g id="fig-chain" data-pptx-bounds="70 244 1140 132">
+    <g id="link-1" data-pptx-bounds="70 260 255 100">
+      <rect x="70" y="260" width="255" height="100" rx="10" fill="#1B4593"/>
+      <text x="90" y="298" font-size="20" font-weight="bold" fill="#FFFFFF">① 改源修订</text>
+      <text x="90" y="328" font-size="18" fill="#D8E4F0">不是改输出里的文本框</text>
+    </g>
+    <g id="link-2" data-pptx-bounds="365 260 255 100">
+      <rect x="365" y="260" width="255" height="100" rx="10" fill="#2064AE"/>
+      <text x="385" y="298" font-size="20" font-weight="bold" fill="#FFFFFF">② 重算受影响指标</text>
+      <text x="385" y="328" font-size="18" fill="#D8E4F0">合计、偏差、比例、刻度</text>
+    </g>
+    <g id="link-3" data-pptx-bounds="660 260 255 100">
+      <rect x="660" y="260" width="255" height="100" rx="10" fill="#3D86D4"/>
+      <text x="680" y="298" font-size="20" font-weight="bold" fill="#FFFFFF">③ 更新内容模型</text>
+      <text x="680" y="328" font-size="18" fill="#FFFFFF">唯一事实源先改对</text>
+    </g>
+    <g id="link-4" data-pptx-bounds="955 260 255 100">
+      <rect x="955" y="260" width="255" height="100" rx="10" fill="#7FA8D9"/>
+      <text x="975" y="298" font-size="20" font-weight="bold" fill="#0C2864">④ 重新生成版本</text>
+      <text x="975" y="328" font-size="18" fill="#0C2864">旧版本保留为历史产物</text>
+    </g>
+  </g>
+
+  <g id="fig-checks" data-pptx-bounds="70 400 1140 150">
+    <rect x="70" y="400" width="1140" height="150" rx="8" fill="#F5F8FC"/>
+    <text x="98" y="436" font-size="24" font-weight="bold" fill="#0C2864">250 可能同时出现在四处：页 2 正文 · 页 2 图表 · 页 3 表格 · 页 5 行动项</text>
+    <text x="98" y="472" font-size="20" fill="#0C2864">生成之后抽取全部文本、表格与指标引用，与内容模型逐条比对。</text>
+    <text x="98" y="502" font-size="20" fill="#2064AE">图表里的数字必须另有可取的地方：可编辑的图表数据，或已登记的源数据表。</text>
+    <text x="98" y="532" font-size="18" fill="#DF203C">任何一处不一致就拒绝发布。人工可编辑性测试的副本要单独保存，不得当作交付物。</text>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 574 1140 114">
+    <rect x="70" y="574" width="1140" height="114" rx="8" fill="#EEF4FB"/>
+    <path d="M78 574 a8 8 0 0 0 -8 8 v98 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="610" font-size="24" font-weight="bold" fill="#0C2864">登记与来源能证明"这份文件从哪来"，不能证明"内容对不对"</text>
+    <text x="98" y="642" font-size="20" fill="#0C2864">哈希、注册、预览图都不等于业务正确性与原生可编辑性。那是另外四项检查。</text>
+    <text x="98" y="668" font-size="18" fill="#2064AE">注册路径的 MIME 类型是 PPTX 专用——它不是通用的 DOCX 渲染实现。</text>
+  </g>
+</svg>

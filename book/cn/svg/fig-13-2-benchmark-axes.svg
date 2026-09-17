@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 13-2 基准的六个轴与引用前必须补齐的三项（《智能体工程》第 13 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">没有「下一个 SWE-bench」，因为问题分裂了</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">六个轴各有自己的基准。把六个数压成一个排名，就是在隐藏信息。</text>
+  </g>
+
+  <g id="fig-axes-left" data-pptx-bounds="70 244 590 300">
+    <g id="ax-code" data-pptx-bounds="70 250 590 88">
+      <rect x="70" y="250" width="590" height="88" rx="10" fill="#F5F8FC"/>
+      <text x="94" y="302" font-size="20" font-weight="bold" fill="#1B4593">编码</text>
+      <text x="330" y="302" font-size="18" fill="#0C2864">仓库级缺陷修复，抗污染</text>
+    </g>
+    <g id="ax-terminal" data-pptx-bounds="70 350 590 88">
+      <rect x="70" y="350" width="590" height="88" rx="10" fill="#F5F8FC"/>
+      <text x="94" y="402" font-size="20" font-weight="bold" fill="#1B4593">终端</text>
+      <text x="330" y="402" font-size="18" fill="#0C2864">端到端的终端任务</text>
+    </g>
+    <g id="ax-tool" data-pptx-bounds="70 450 590 88">
+      <rect x="70" y="450" width="590" height="88" rx="10" fill="#F5F8FC"/>
+      <text x="94" y="502" font-size="20" font-weight="bold" fill="#1B4593">工具 + 人</text>
+      <text x="330" y="502" font-size="18" fill="#0C2864">工具调用与策略遵从的一致性</text>
+    </g>
+  </g>
+
+  <g id="fig-axes-right" data-pptx-bounds="690 244 520 300">
+    <g id="ax-gui" data-pptx-bounds="690 250 520 88">
+      <rect x="690" y="250" width="520" height="88" rx="10" fill="#EEF4FB"/>
+      <text x="714" y="302" font-size="20" font-weight="bold" fill="#2064AE">图形界面</text>
+      <text x="950" y="302" font-size="18" fill="#0C2864">桌面 GUI 长程任务</text>
+    </g>
+    <g id="ax-endure" data-pptx-bounds="690 350 520 88">
+      <rect x="690" y="350" width="520" height="88" rx="10" fill="#EEF4FB"/>
+      <text x="714" y="402" font-size="20" font-weight="bold" fill="#2064AE">长程耐力</text>
+      <text x="950" y="402" font-size="18" fill="#0C2864">可靠完成的任务时长</text>
+    </g>
+    <g id="ax-value" data-pptx-bounds="690 450 520 88">
+      <rect x="690" y="450" width="520" height="88" rx="10" fill="#EEF4FB"/>
+      <text x="714" y="502" font-size="20" font-weight="bold" fill="#2064AE">经济价值</text>
+      <text x="950" y="502" font-size="18" fill="#0C2864">专业工作流的可验证产出</text>
+    </g>
+  </g>
+
+  <g id="fig-required" data-pptx-bounds="70 560 1140 128">
+    <rect x="70" y="560" width="1140" height="128" rx="8" fill="#FDF3E3"/>
+    <path d="M78 560 a8 8 0 0 0 -8 8 v112 a8 8 0 0 0 8 8 z" fill="#DF203C"/>
+    <text x="98" y="596" font-size="24" font-weight="bold" fill="#0C2864">引用任何一个分数，必须补齐三项</text>
+    <text x="98" y="626" font-size="20" fill="#0C2864">发布日期　·　评测执行方　·　采样方式</text>
+    <text x="98" y="652" font-size="20" fill="#0C2864">采样方式要写清：是 pass@1 还是 pass@k，有没有预算限制</text>
+    <text x="98" y="676" font-size="18" fill="#DF203C">缺一项的分数，不要写进任何要给别人看的材料里。</text>
+  </g>
+</svg>

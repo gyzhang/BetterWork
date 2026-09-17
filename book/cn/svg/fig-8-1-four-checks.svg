@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 8-1 检索的三层检查（《智能体工程》第 8 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">「有依据」要拆成四次检查</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">四层各有自己的检查方式。合并成一个「相关性分数」，三轴上的错误全都看不出来。</text>
+  </g>
+
+  <g id="fig-table" data-pptx-bounds="70 248 1140 348">
+    <text x="94" y="272" font-size="18" fill="#64748B">层</text>
+    <text x="300" y="272" font-size="18" fill="#64748B">问题</text>
+    <text x="660" y="272" font-size="18" fill="#64748B">检查方式</text>
+    <text x="930" y="272" font-size="18" fill="#64748B">失败的样子</text>
+    <line x1="70" y1="286" x2="1210" y2="286" stroke="#D8E4F0" stroke-width="1.5"/>
+
+    <g id="ck-1" data-pptx-bounds="70 292 1140 76">
+      <rect x="70" y="292" width="1140" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="338" font-size="20" font-weight="bold" fill="#1B4593">① 检到</text>
+      <text x="300" y="338" font-size="20" fill="#0C2864">应该被找出来的段落找到了吗</text>
+      <text x="660" y="338" font-size="20" fill="#2064AE">用标注数据算召回率</text>
+      <text x="930" y="338" font-size="20" fill="#64748B">答案缺了关键依据</text>
+    </g>
+    <g id="ck-2" data-pptx-bounds="70 368 1140 76">
+      <text x="94" y="414" font-size="20" font-weight="bold" fill="#1B4593">② 为真</text>
+      <text x="300" y="414" font-size="20" fill="#0C2864">引用指向的东西存在且这么说吗</text>
+      <text x="660" y="414" font-size="20" fill="#2064AE">逐条回链核对</text>
+      <text x="930" y="414" font-size="20" fill="#64748B">引用了相反的意思</text>
+    </g>
+    <g id="ck-3" data-pptx-bounds="70 444 1140 76">
+      <rect x="70" y="444" width="1140" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="490" font-size="20" font-weight="bold" fill="#1B4593">③ 被读到</text>
+      <text x="300" y="490" font-size="20" fill="#0C2864">检出来的内容进了模型的判断吗</text>
+      <text x="660" y="490" font-size="20" fill="#2064AE">看上下文装配记录</text>
+      <text x="930" y="490" font-size="20" fill="#64748B">检到了但没被放进上下文</text>
+    </g>
+    <g id="ck-4" data-pptx-bounds="70 520 1140 76">
+      <text x="94" y="566" font-size="20" font-weight="bold" fill="#DF203C">④ 有用率</text>
+      <text x="300" y="566" font-size="20" fill="#0C2864">检到的里面有多少真排上了用场</text>
+      <text x="660" y="566" font-size="20" fill="#2064AE">命中率与有用率分开报</text>
+      <text x="930" y="566" font-size="20" fill="#64748B">报 92%，实际只用上 30%</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 616 1140 72">
+    <rect x="70" y="616" width="1140" height="72" rx="8" fill="#EEF4FB"/>
+    <path d="M78 616 a8 8 0 0 0 -8 8 v56 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="650" font-size="24" font-weight="bold" fill="#0C2864">定位符比内容更重要</text>
+    <text x="98" y="678" font-size="18" fill="#2064AE">回链核对需要位置级信息。缺定位符的块不进结果集——因为它无法被核对。</text>
+  </g>
+</svg>

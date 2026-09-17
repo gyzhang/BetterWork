@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 17-1 有界的阶段与阶段内的自适应（《智能体工程》第 17 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">阶段划分由人预先固定，阶段之内才允许自适应</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">停车位只在"继续下去需要你做一个原计划里没有的决定"时出现。</text>
+  </g>
+
+  <g id="fig-stages" data-pptx-bounds="70 248 1140 152">
+    <g id="stage-1" data-pptx-bounds="70 264 255 120">
+      <rect x="70" y="264" width="255" height="120" rx="10" fill="#1B4593"/>
+      <text x="90" y="300" font-size="20" font-weight="bold" fill="#FFFFFF">澄清决定 → 批准计划</text>
+      <text x="90" y="330" font-size="18" fill="#D8E4F0">边界由人预先固定</text>
+      <rect x="90" y="352" width="12" height="12" rx="3" fill="#FFFFFF"/>
+      <text x="110" y="363" font-size="18" fill="#FFFFFF">停车位</text>
+    </g>
+    <g id="stage-2" data-pptx-bounds="365 264 255 120">
+      <rect x="365" y="264" width="255" height="120" rx="10" fill="#EEF4FB" stroke="#2064AE" stroke-width="1.5"/>
+      <text x="385" y="300" font-size="20" font-weight="bold" fill="#0C2864">检索、阅读、登记</text>
+      <text x="385" y="330" font-size="18" fill="#475569">只用已批准的来源</text>
+      <rect x="385" y="352" width="12" height="12" rx="3" fill="#2064AE"/>
+      <text x="405" y="363" font-size="18" fill="#2064AE">自适应</text>
+    </g>
+    <g id="stage-3" data-pptx-bounds="660 264 255 120">
+      <rect x="660" y="264" width="255" height="120" rx="10" fill="#2064AE"/>
+      <text x="680" y="300" font-size="20" font-weight="bold" fill="#FFFFFF">比较替代方案 → 大纲</text>
+      <text x="680" y="330" font-size="18" fill="#D8E4F0">有方向缺口就停</text>
+      <rect x="680" y="352" width="12" height="12" rx="3" fill="#FFFFFF"/>
+      <text x="700" y="363" font-size="18" fill="#FFFFFF">停车位</text>
+    </g>
+    <g id="stage-4" data-pptx-bounds="955 264 255 120">
+      <rect x="955" y="264" width="255" height="120" rx="10" fill="#3D86D4"/>
+      <text x="975" y="300" font-size="20" font-weight="bold" fill="#FFFFFF">渲染三格式 → 校验</text>
+      <text x="975" y="330" font-size="18" fill="#FFFFFF">复核后作为新版本</text>
+      <rect x="975" y="352" width="12" height="12" rx="3" fill="#FFFFFF"/>
+      <text x="995" y="363" font-size="18" fill="#FFFFFF">停车位</text>
+    </g>
+  </g>
+
+  <g id="fig-layers" data-pptx-bounds="70 424 1140 160">
+    <text x="94" y="450" font-size="18" fill="#64748B">层</text>
+    <text x="300" y="450" font-size="18" fill="#64748B">谁决定</text>
+    <text x="520" y="450" font-size="18" fill="#64748B">约束</text>
+    <line x1="70" y1="462" x2="1210" y2="462" stroke="#D8E4F0" stroke-width="1.5"/>
+    <text x="94" y="490" font-size="20" font-weight="bold" fill="#1B4593">阶段划分</text>
+    <text x="300" y="490" font-size="20" fill="#0C2864">人（预先固定）</text>
+    <text x="520" y="490" font-size="20" fill="#475569">模型不可以改变阶段的划分</text>
+    <text x="94" y="518" font-size="20" font-weight="bold" fill="#1B4593">阶段内动作</text>
+    <text x="300" y="518" font-size="20" fill="#0C2864">模型（自适应）</text>
+    <text x="520" y="518" font-size="20" fill="#475569">只能使用已批准的来源与已允许的动作</text>
+    <text x="94" y="546" font-size="20" font-weight="bold" fill="#1B4593">方向改变</text>
+    <text x="300" y="546" font-size="20" fill="#0C2864">人（决策所有者）</text>
+    <text x="520" y="546" font-size="20" fill="#475569">出现方向性缺口时必须停下问人</text>
+    <text x="94" y="574" font-size="20" font-weight="bold" fill="#1B4593">研究预算</text>
+    <text x="300" y="574" font-size="20" fill="#0C2864">人（预先设定）</text>
+    <text x="520" y="574" font-size="20" fill="#DF203C">即使还有更多信息存在，预算到了就停</text>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 600 1140 88">
+    <rect x="70" y="600" width="1140" height="88" rx="8" fill="#EEF4FB"/>
+    <path d="M78 600 a8 8 0 0 0 -8 8 v72 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="632" font-size="24" font-weight="bold" fill="#0C2864">"不读未选中的来源"必须落在宿主上</text>
+    <text x="98" y="664" font-size="20" fill="#0C2864">写在提示词里是请求，写在宿主里才是边界。来源范围只能被边界解决。</text>
+  </g>
+</svg>

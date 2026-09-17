@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 14-2 指标的三权分立：定义、计算、解释（《智能体工程》第 14 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">一个指标要分给三个角色，边界是硬的</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">三者的失败模式正好互补，所以合并到一个人身上会同时失去三种保障。</text>
+  </g>
+
+  <g id="fig-roles" data-pptx-bounds="70 244 1140 300">
+    <g id="role-define" data-pptx-bounds="70 250 360 288">
+      <rect x="70" y="250" width="360" height="288" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
+      <path d="M78 250 a8 8 0 0 0 -8 8 v272 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+      <text x="98" y="288" font-size="22" font-weight="bold" fill="#1B4593">定义 · 由人拥有</text>
+      <text x="98" y="322" font-size="20" fill="#0C2864">口径怎么算，分母是什么，</text>
+      <text x="98" y="350" font-size="20" fill="#0C2864">缺失怎么处理，谁被排除。</text>
+      <line x1="98" y1="374" x2="402" y2="374" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="98" y="404" font-size="18" fill="#64748B">强项：能承担签字责任</text>
+      <text x="98" y="430" font-size="18" fill="#64748B">弱项：慢、贵、无法逐笔看</text>
+      <text x="98" y="462" font-size="18" fill="#DF203C">不能：由模型自己决定口径</text>
+    </g>
+    <g id="role-compute" data-pptx-bounds="460 250 360 288">
+      <rect x="460" y="250" width="360" height="288" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
+      <path d="M468 250 a8 8 0 0 0 -8 8 v272 a8 8 0 0 0 8 8 z" fill="#2064AE"/>
+      <text x="488" y="288" font-size="22" font-weight="bold" fill="#2064AE">计算 · 由代码拥有</text>
+      <text x="488" y="322" font-size="20" fill="#0C2864">按已确认的口径，执行</text>
+      <text x="488" y="350" font-size="20" fill="#0C2864">可重复、可测试的确定性运算。</text>
+      <line x1="488" y1="374" x2="792" y2="374" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="488" y="404" font-size="18" fill="#64748B">强项：确定性、可重复、可测</text>
+      <text x="488" y="430" font-size="18" fill="#64748B">弱项：不知道口径对不对</text>
+      <text x="488" y="462" font-size="18" fill="#DF203C">不能：猜缺失值、自己编公式</text>
+    </g>
+    <g id="role-explain" data-pptx-bounds="850 250 360 288">
+      <rect x="850" y="250" width="360" height="288" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
+      <path d="M858 250 a8 8 0 0 0 -8 8 v272 a8 8 0 0 0 8 8 z" fill="#3D86D4"/>
+      <text x="878" y="288" font-size="22" font-weight="bold" fill="#3D86D4">解释 · 由模型拥有</text>
+      <text x="878" y="322" font-size="20" fill="#0C2864">把算出来的数讲成一句</text>
+      <text x="878" y="350" font-size="20" fill="#0C2864">人话，并说明它与什么有关。</text>
+      <line x1="878" y1="374" x2="1182" y2="374" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="878" y="404" font-size="18" fill="#64748B">强项：语义理解、可读表达</text>
+      <text x="878" y="430" font-size="18" fill="#64748B">弱项：算术与确定性</text>
+      <text x="878" y="462" font-size="18" fill="#DF203C">不能：把假设说成结论</text>
+    </g>
+  </g>
+
+  <g id="fig-flow" data-pptx-bounds="70 572 1140 36">
+    <text x="98" y="598" font-size="20" fill="#475569">人确认映射</text>
+    <text x="440" y="598" font-size="20" fill="#94A3B8">→</text>
+    <text x="488" y="598" font-size="20" fill="#475569">代码执行映射</text>
+    <text x="830" y="598" font-size="20" fill="#94A3B8">→</text>
+    <text x="878" y="598" font-size="20" fill="#475569">模型解释结果</text>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 620 1140 68">
+    <rect x="70" y="620" width="1140" height="68" rx="8" fill="#EEF4FB"/>
+    <path d="M78 620 a8 8 0 0 0 -8 8 v52 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="650" font-size="22" font-weight="bold" fill="#0C2864">把三种失败模式分别关进各自的笼子，不是流程繁琐</text>
+    <text x="98" y="678" font-size="18" fill="#2064AE">差额只在一个地方：谁有权说"这个口径对"。那是人的位置，不能转让。</text>
+  </g>
+</svg>

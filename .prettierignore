@@ -14,3 +14,6 @@ package-lock.json
 # 中文长行经格式化后难以逐字回读校验，SVG 标志为人工定稿资产
 **/*.md
 docs/assets/
+# book/ 是书籍源稿与其导出产物（HTML / PDF / SVG / PNG）：
+# HTML 由 book/cn/build_html.py 生成，格式化会让导出文件与生成器输出长期漂移
+book/

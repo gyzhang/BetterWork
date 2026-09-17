@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 15-2 版本血缘与三条硬规则（《智能体工程》第 15 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">版本号的作用不是区分先后，是记录理由</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">每一次修订都指向一个明确的父版本，而不是覆盖它。</text>
+  </g>
+
+  <g id="fig-versions" data-pptx-bounds="70 248 1140 190">
+    <g id="ver-1" data-pptx-bounds="70 260 340 158">
+      <rect x="70" y="260" width="340" height="158" rx="10" fill="#F5F8FC" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="92" y="296" font-size="22" font-weight="bold" fill="#0C2864">V1 · 首次交付</text>
+      <text x="92" y="328" font-size="20" fill="#475569">内容模型修订号 1</text>
+      <text x="92" y="352" font-size="18" fill="#64748B">输入：P1 选定快照</text>
+      <text x="92" y="380" font-size="18" fill="#64748B">无父版本</text>
+      <text x="92" y="406" font-size="18" fill="#64748B">哈希 + 校验状态</text>
+    </g>
+    <g id="ver-2" data-pptx-bounds="470 260 340 158">
+      <rect x="470" y="260" width="340" height="158" rx="10" fill="#EEF4FB" stroke="#2064AE" stroke-width="1.5"/>
+      <text x="492" y="296" font-size="22" font-weight="bold" fill="#1B4593">V2 · 复核后修订</text>
+      <text x="492" y="328" font-size="20" fill="#475569">内容模型修订号 2</text>
+      <text x="492" y="352" font-size="18" fill="#64748B">父版本：V1</text>
+      <text x="492" y="380" font-size="18" fill="#64748B">改动内容 + 复核者要求</text>
+      <text x="492" y="406" font-size="18" fill="#64748B">模板 / 渲染器版本</text>
+    </g>
+    <g id="ver-3" data-pptx-bounds="870 260 340 158">
+      <rect x="870" y="260" width="340" height="158" rx="10" fill="#EEF4FB" stroke="#1B4593" stroke-width="1.5"/>
+      <text x="892" y="296" font-size="22" font-weight="bold" fill="#1B4593">V3 · 输入变更后</text>
+      <text x="892" y="328" font-size="20" fill="#475569">内容模型修订号 3</text>
+      <text x="892" y="352" font-size="18" fill="#64748B">父版本：V2</text>
+      <text x="892" y="380" font-size="18" fill="#64748B">输入改为 P1 修正快照</text>
+      <text x="892" y="406" font-size="18" fill="#64748B">全部重复数字重新核对</text>
+    </g>
+  </g>
+
+  <g id="fig-rules" data-pptx-bounds="70 462 1140 146">
+    <rect x="70" y="462" width="1140" height="146" rx="8" fill="#F5F8FC"/>
+    <text x="98" y="500" font-size="24" font-weight="bold" fill="#0C2864">三条硬规则，都在"写入之前"生效</text>
+    <text x="98" y="536" font-size="20" fill="#0C2864">一 · 不覆盖源文件：用输出改写源路径，必须在改到源之前就被拒绝。</text>
+    <text x="98" y="568" font-size="20" fill="#2064AE">二 · 不可变落盘：每个版本独立目录，排他创建，落盘即只读。</text>
+    <text x="98" y="590" font-size="18" fill="#DF203C">三 · 哈希绑定：交付前重算文件哈希，与校验报告比对，不一致即拒绝发布。</text>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 624 1140 64">
+    <rect x="70" y="624" width="1140" height="64" rx="8" fill="#EEF4FB"/>
+    <path d="M78 624 a8 8 0 0 0 -8 8 v48 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="654" font-size="22" font-weight="bold" fill="#0C2864">"final-final2.docx"不是版本模型</text>
+    <text x="98" y="680" font-size="18" fill="#2064AE">它没有记录它修订的是谁、为什么改。血缘缺了这两项，修订就不可追溯。</text>
+  </g>
+</svg>

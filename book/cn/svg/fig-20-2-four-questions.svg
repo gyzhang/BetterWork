@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 20-2 全书的四个问题与它们在各章的落点（《智能体工程》第 20 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">全书就四个问题，它们被反复追问、逐层加深</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">不是"一章讲一件事"，而是同一个问题在不同层次上又出现一次。</text>
+  </g>
+
+  <g id="fig-cards" data-pptx-bounds="70 244 1140 300">
+    <g id="q-permit" data-pptx-bounds="70 260 270 270">
+      <rect x="70" y="260" width="270" height="270" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
+      <path d="M78 260 a8 8 0 0 0 -8 8 v254 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+      <text x="92" y="298" font-size="22" font-weight="bold" fill="#1B4593">什么被允许</text>
+      <line x1="92" y1="316" x2="318" y2="316" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="92" y="350" font-size="18" fill="#0C2864">第 5 章　自由度与阶段</text>
+      <text x="92" y="382" font-size="18" fill="#0C2864">第 10 章　能力范围求交</text>
+      <text x="92" y="414" font-size="18" fill="#0C2864">第 11 章　信任边界</text>
+      <text x="92" y="446" font-size="18" fill="#0C2864">第 19 章　部署义务</text>
+      <text x="92" y="492" font-size="18" fill="#2064AE">防线由代码执行，</text>
+      <text x="92" y="516" font-size="18" fill="#2064AE">不由提示词执行。</text>
+    </g>
+    <g id="q-support" data-pptx-bounds="360 260 270 270">
+      <rect x="360" y="260" width="270" height="270" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
+      <path d="M368 260 a8 8 0 0 0 -8 8 v254 a8 8 0 0 0 8 8 z" fill="#2064AE"/>
+      <text x="382" y="298" font-size="22" font-weight="bold" fill="#2064AE">什么支撑这个结果</text>
+      <line x1="382" y1="316" x2="608" y2="316" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="382" y="350" font-size="18" fill="#0C2864">第 8 章　检索到的≠为真</text>
+      <text x="382" y="382" font-size="18" fill="#0C2864">第 14 章　颗粒度与对账</text>
+      <text x="382" y="414" font-size="18" fill="#0C2864">第 15 章　来源与版本</text>
+      <text x="382" y="446" font-size="18" fill="#0C2864">第 17 章　主张—证据表</text>
+      <text x="382" y="492" font-size="18" fill="#2064AE">说不清的数字，</text>
+      <text x="382" y="516" font-size="18" fill="#2064AE">不许留在材料里。</text>
+    </g>
+    <g id="q-fail" data-pptx-bounds="650 260 270 270">
+      <rect x="650" y="260" width="270" height="270" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
+      <path d="M658 260 a8 8 0 0 0 -8 8 v254 a8 8 0 0 0 8 8 z" fill="#3D86D4"/>
+      <text x="672" y="298" font-size="22" font-weight="bold" fill="#3D86D4">失败时发生什么</text>
+      <line x1="672" y1="316" x2="898" y2="316" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="672" y="350" font-size="18" fill="#0C2864">第 4 章　到达上限即失败</text>
+      <text x="672" y="382" font-size="18" fill="#0C2864">第 12 章　进程会死</text>
+      <text x="672" y="414" font-size="18" fill="#0C2864">第 18 章　取消与重启的终态</text>
+      <text x="672" y="446" font-size="18" fill="#0C2864">第 19 章　缺配置不许编</text>
+      <text x="672" y="492" font-size="18" fill="#DF203C">静默降级比报错</text>
+      <text x="672" y="516" font-size="18" fill="#DF203C">危险得多。</text>
+    </g>
+    <g id="q-repro" data-pptx-bounds="940 260 270 270">
+      <rect x="940" y="260" width="270" height="270" rx="10" fill="#F5F8FC" stroke="#2064AE" stroke-width="1.5"/>
+      <path d="M948 260 a8 8 0 0 0 -8 8 v254 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+      <text x="962" y="298" font-size="22" font-weight="bold" fill="#1B4593">别人能复现并修改吗</text>
+      <line x1="962" y1="316" x2="1188" y2="316" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="962" y="350" font-size="18" fill="#0C2864">第 15–16 章　可编辑与血缘</text>
+      <text x="962" y="382" font-size="18" fill="#0C2864">第 17–18 章　可复核产出</text>
+      <text x="962" y="414" font-size="18" fill="#0C2864">第 19 章　打包与交接</text>
+      <text x="962" y="446" font-size="18" fill="#0C2864">第 20 章　复述与解释</text>
+      <text x="962" y="492" font-size="18" fill="#2064AE">交付不是终点，</text>
+      <text x="962" y="516" font-size="18" fill="#2064AE">是可被接手。</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 556 1140 132">
+    <rect x="70" y="556" width="1140" height="132" rx="8" fill="#EEF4FB"/>
+    <path d="M78 556 a8 8 0 0 0 -8 8 v116 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="592" font-size="24" font-weight="bold" fill="#0C2864">一个完成的智能体应用，对这四个问题都有具体的答案</text>
+    <text x="98" y="624" font-size="20" fill="#0C2864">而且有证据说明这些答案在变化之下仍然成立——那才是这本书从头到尾要的东西。</text>
+    <text x="98" y="652" font-size="20" fill="#2064AE">书里的协议版本、基准分数、政策编号都会过期，四个问题不会。</text>
+    <text x="98" y="670" font-size="18" fill="#64748B">所有时效敏感数字的快照时点为 2026-09-18，逐条口径与局限见附录 C。</text>
+  </g>
+</svg>

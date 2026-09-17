@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 15-1 内容模型与两条渲染链：四个独立验收维度（《智能体工程》第 15 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">事实只存一处，格式只是它的两条出口</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">数字写两遍就会变成两个数字。内容模型是那个唯一的源。</text>
+  </g>
+
+  <g id="fig-chain" data-pptx-bounds="70 236 1140 200">
+    <g id="source-model" data-pptx-bounds="440 240 400 70">
+      <rect x="440" y="240" width="400" height="70" rx="10" fill="#1B4593"/>
+      <text x="460" y="270" font-size="22" font-weight="bold" fill="#FFFFFF">内容模型 · 唯一事实源</text>
+      <text x="460" y="296" font-size="18" fill="#D8E4F0">数字、主张、来源、层级都在这里，只在这里</text>
+    </g>
+    <line x1="640" y1="312" x2="430" y2="350" stroke="#7FA8D9" stroke-width="2"/>
+    <line x1="640" y1="312" x2="850" y2="350" stroke="#7FA8D9" stroke-width="2"/>
+    <g id="render-md" data-pptx-bounds="250 350 360 76">
+      <rect x="250" y="350" width="360" height="76" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="272" y="384" font-size="22" font-weight="bold" fill="#1B4593">Markdown 渲染器</text>
+      <text x="272" y="412" font-size="18" fill="#0C2864">标题 · 段落 · 表格 · 来源清单</text>
+    </g>
+    <g id="render-docx" data-pptx-bounds="670 350 360 76">
+      <rect x="670" y="350" width="360" height="76" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="692" y="384" font-size="22" font-weight="bold" fill="#2064AE">DOCX 渲染器</text>
+      <text x="692" y="412" font-size="18" fill="#0C2864">等价的原生结构</text>
+    </g>
+  </g>
+
+  <g id="fig-checks" data-pptx-bounds="70 456 1140 148">
+    <g id="check-1" data-pptx-bounds="70 460 270 140">
+      <rect x="70" y="460" width="270" height="140" rx="10" fill="#F5F8FC" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="90" y="494" font-size="22" font-weight="bold" fill="#0C2864">结构</text>
+      <text x="90" y="526" font-size="18" fill="#475569">标题层级、表格单元格</text>
+      <text x="90" y="556" font-size="18" fill="#64748B">解析器可自动验</text>
+      <text x="90" y="584" font-size="18" fill="#DF203C">漏法：用字号造假标题</text>
+    </g>
+    <g id="check-2" data-pptx-bounds="360 460 270 140">
+      <rect x="360" y="460" width="270" height="140" rx="10" fill="#F5F8FC" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="380" y="494" font-size="22" font-weight="bold" fill="#0C2864">事实</text>
+      <text x="380" y="526" font-size="18" fill="#475569">抽取全部数字逐条比对</text>
+      <text x="380" y="556" font-size="18" fill="#64748B">解析器可自动验</text>
+      <text x="380" y="584" font-size="18" fill="#DF203C">漏法：只比对第一页</text>
+    </g>
+    <g id="check-3" data-pptx-bounds="650 460 270 140">
+      <rect x="650" y="460" width="270" height="140" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="670" y="494" font-size="22" font-weight="bold" fill="#1B4593">可编辑性</text>
+      <text x="670" y="526" font-size="18" fill="#475569">改段落与单元格，存关</text>
+      <text x="670" y="554" font-size="18" fill="#475569">重开，改动仍在</text>
+      <text x="670" y="584" font-size="18" fill="#DF203C">必须用 Office 应用</text>
+    </g>
+    <g id="check-4" data-pptx-bounds="940 460 270 140">
+      <rect x="940" y="460" width="270" height="140" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="960" y="494" font-size="22" font-weight="bold" fill="#1B4593">可见版式</text>
+      <text x="960" y="526" font-size="18" fill="#475569">截断、破版、来源注</text>
+      <text x="960" y="554" font-size="18" fill="#475569">溢出</text>
+      <text x="960" y="584" font-size="18" fill="#DF203C">必须人眼逐页看</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 620 1140 68">
+    <rect x="70" y="620" width="1140" height="68" rx="8" fill="#EEF4FB"/>
+    <path d="M78 620 a8 8 0 0 0 -8 8 v52 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="650" font-size="22" font-weight="bold" fill="#0C2864">"文件能打开"完全不足以说明文档是对的</text>
+    <text x="98" y="678" font-size="18" fill="#2064AE">包结构合法、事实一致、可编辑、版式完整，是四个互相不能替代的判断。</text>
+  </g>
+</svg>

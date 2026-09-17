@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 0-1 第 0 章的四个出口与后续章节的依赖（《智能体工程》第 0 章配图）
+       逐元素手写。字号：标题 32 / 正文 20 / 注 18。内容区 y126 起。 -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">四道出口题与它们的下游</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">答得出就跳过，答不出就补对应的那一条链。不必从第一小节顺序读起。</text>
+  </g>
+
+  <g id="fig-table" data-pptx-bounds="70 248 1140 342">
+    <text x="94" y="272" font-size="18" fill="#64748B">出口题</text>
+    <text x="360" y="272" font-size="18" fill="#64748B">它测的是什么</text>
+    <text x="900" y="272" font-size="18" fill="#64748B">缺了就补这几章</text>
+    <line x1="70" y1="286" x2="1210" y2="286" stroke="#D8E4F0" stroke-width="1.5"/>
+
+    <g id="row-f01" data-pptx-bounds="70 292 1140 74">
+      <rect x="70" y="292" width="1140" height="74" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="339" font-size="20" font-weight="bold" fill="#0C2864">F01 程序与工程基础</text>
+      <text x="360" y="339" font-size="20" fill="#0C2864">跑通别人的项目，说清改动影响到谁</text>
+      <text x="900" y="339" font-size="20" fill="#2064AE">全书前置，没有下游可绕</text>
+    </g>
+    <g id="row-f02" data-pptx-bounds="70 366 1140 74">
+      <text x="94" y="413" font-size="20" font-weight="bold" fill="#0C2864">F02 数据与接口</text>
+      <text x="360" y="413" font-size="20" fill="#0C2864">校验、错误路径、密钥不外泄</text>
+      <text x="900" y="413" font-size="20" fill="#2064AE">第 3、6、7 章</text>
+    </g>
+    <g id="row-f03" data-pptx-bounds="70 440 1140 74">
+      <rect x="70" y="440" width="1140" height="74" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="487" font-size="20" font-weight="bold" fill="#0C2864">F03 异步与错误</text>
+      <text x="360" y="487" font-size="20" fill="#0C2864">分开慢、失败、被打断三件事</text>
+      <text x="900" y="487" font-size="20" fill="#2064AE">第 4、12 章</text>
+    </g>
+    <g id="row-f04" data-pptx-bounds="70 514 1140 74">
+      <text x="94" y="561" font-size="20" font-weight="bold" fill="#0C2864">F04 测试与数据素养</text>
+      <text x="360" y="561" font-size="20" fill="#0C2864">机器判定，缺失与零分开</text>
+      <text x="900" y="561" font-size="20" fill="#2064AE">第 6、13、14 章</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 604 1140 84">
+    <rect x="70" y="604" width="1140" height="84" rx="8" fill="#EEF4FB"/>
+    <path d="M78 604 a8 8 0 0 0 -8 8 v68 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="640" font-size="24" font-weight="bold" fill="#0C2864">四道题的共同形式：把原本藏在人脑子里的判断，搬到机器能检查的地方</text>
+    <text x="98" y="668" font-size="18" fill="#2064AE">数据契约 · 错误显式化 · 机器判定 · 缺失与零分开</text>
+  </g>
+</svg>

@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 5-1 自由度光谱与阶段化结构（《智能体工程》第 5 章配图）
+       逐元素手写。字号：标题 32 / 区块标题 22 / 正文 20 / 注 18。内容区 y126 起。 -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">自由度给多少，给在哪</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">不是「要不要用 ReAct」，而是「哪一段必须固定，哪一段可以自由」。</text>
+  </g>
+
+  <g id="fig-spectrum" data-pptx-bounds="70 244 1140 128">
+    <g id="spec-fixed" data-pptx-bounds="70 250 270 116">
+      <rect x="70" y="250" width="270" height="80" rx="10" fill="#1B4593"/>
+      <text x="90" y="298" font-size="22" font-weight="bold" fill="#FFFFFF">全固定工作流</text>
+      <text x="90" y="356" font-size="18" fill="#64748B">遇到没覆盖的情况静默走错</text>
+    </g>
+    <g id="spec-staged" data-pptx-bounds="360 250 270 116">
+      <rect x="360" y="250" width="270" height="80" rx="10" fill="#2064AE"/>
+      <text x="380" y="298" font-size="22" font-weight="bold" fill="#FFFFFF">阶段内自适应</text>
+      <text x="380" y="356" font-size="18" fill="#64748B">段边界划错，动作做错位置</text>
+    </g>
+    <g id="spec-free" data-pptx-bounds="650 250 270 116">
+      <rect x="650" y="250" width="270" height="80" rx="10" fill="#3D86D4"/>
+      <text x="670" y="298" font-size="22" font-weight="bold" fill="#FFFFFF">全自由循环</text>
+      <text x="670" y="356" font-size="18" fill="#64748B">无用功、越权、停不下来</text>
+    </g>
+    <g id="spec-blind" data-pptx-bounds="940 250 270 116">
+      <rect x="940" y="250" width="270" height="80" rx="10" fill="#DF203C"/>
+      <text x="960" y="298" font-size="22" font-weight="bold" fill="#FFFFFF">无观测的全自由</text>
+      <text x="960" y="356" font-size="18" fill="#64748B">以上全部，且没人知道发生过</text>
+    </g>
+  </g>
+
+  <g id="fig-chain" data-pptx-bounds="70 414 1140 124">
+    <g id="stage-fixed1" data-pptx-bounds="70 420 204 110">
+      <rect x="70" y="420" width="204" height="110" rx="10" fill="#F5F8FC"/>
+      <text x="90" y="458" font-size="20" font-weight="bold" fill="#1B4593">固定阶段</text>
+      <text x="90" y="490" font-size="18" fill="#0C2864">做哪几步不能改</text>
+    </g>
+    <g id="stage-free" data-pptx-bounds="304 420 204 110">
+      <rect x="304" y="420" width="204" height="110" rx="10" fill="#EEF4FB"/>
+      <text x="324" y="458" font-size="20" font-weight="bold" fill="#2064AE">段内自适应</text>
+      <text x="324" y="490" font-size="18" fill="#0C2864">怎么做可以自由</text>
+    </g>
+    <g id="stage-fixed2" data-pptx-bounds="538 420 204 110">
+      <rect x="538" y="420" width="204" height="110" rx="10" fill="#F5F8FC"/>
+      <text x="558" y="458" font-size="20" font-weight="bold" fill="#1B4593">固定阶段</text>
+      <text x="558" y="490" font-size="18" fill="#0C2864">产出必须被检查</text>
+    </g>
+    <g id="stage-check" data-pptx-bounds="772 420 204 110">
+      <rect x="772" y="420" width="204" height="110" rx="10" fill="#FDF3E3"/>
+      <text x="792" y="458" font-size="20" font-weight="bold" fill="#DF203C">检查点</text>
+      <text x="792" y="490" font-size="18" fill="#0C2864">停下来等人拍板</text>
+    </g>
+    <g id="stage-fixed3" data-pptx-bounds="1006 420 204 110">
+      <rect x="1006" y="420" width="204" height="110" rx="10" fill="#F5F8FC"/>
+      <text x="1026" y="458" font-size="20" font-weight="bold" fill="#1B4593">固定阶段</text>
+      <text x="1026" y="490" font-size="18" fill="#0C2864">权限重新收窄</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 566 1140 122">
+    <rect x="70" y="566" width="1140" height="122" rx="8" fill="#EEF4FB"/>
+    <path d="M78 566 a8 8 0 0 0 -8 8 v106 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="596" font-size="24" font-weight="bold" fill="#0C2864">阶段序列属于权限，不属于建议</text>
+    <text x="98" y="626" font-size="20" fill="#0C2864">模型可以改变「怎么做」，不能改变「做哪几步」。</text>
+    <text x="98" y="652" font-size="20" fill="#2064AE">阶段边界同时是权限边界，也是唯一的停车位。</text>
+    <text x="98" y="676" font-size="18" fill="#64748B">最实用的划阶段判据：这一步和下一步的动作集合不同吗？不同就分开。</text>
+  </g>
+</svg>

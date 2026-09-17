@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 10-2 有效能力范围是三层求交（《智能体工程》第 10 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">有效能力范围是一次求交</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">三种求法，只有一个是对的。另外三种都能跑通，而且都能造成越权或半途失败。</text>
+  </g>
+
+  <g id="fig-table" data-pptx-bounds="70 248 1140 348">
+    <text x="94" y="272" font-size="18" fill="#64748B">求法</text>
+    <text x="520" y="272" font-size="18" fill="#64748B">结果</text>
+    <text x="820" y="272" font-size="18" fill="#64748B">后果</text>
+    <line x1="70" y1="286" x2="1210" y2="286" stroke="#D8E4F0" stroke-width="1.5"/>
+
+    <g id="way-and" data-pptx-bounds="70 292 1140 76">
+      <rect x="70" y="292" width="1140" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="338" font-size="20" font-weight="bold" fill="#1B4593">声明 ∩ 阶段 ∩ 实际可用</text>
+      <text x="520" y="338" font-size="20" fill="#0C2864">三层都满足</text>
+      <text x="820" y="338" font-size="20" fill="#1B4593">正确，最小权限自动维持</text>
+    </g>
+    <g id="way-or" data-pptx-bounds="70 368 1140 76">
+      <text x="94" y="414" font-size="20" font-weight="bold" fill="#DF203C">声明 ∪ 实际可用</text>
+      <text x="520" y="414" font-size="20" fill="#0C2864">并集</text>
+      <text x="820" y="414" font-size="20" fill="#DF203C">越权：能用到没声明的工具</text>
+    </g>
+    <g id="way-decl" data-pptx-bounds="70 444 1140 76">
+      <rect x="70" y="444" width="1140" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="490" font-size="20" font-weight="bold" fill="#DF203C">只用声明</text>
+      <text x="520" y="490" font-size="20" fill="#0C2864">忽略运行时</text>
+      <text x="820" y="490" font-size="20" fill="#DF203C">运行到一半才发现工具没有</text>
+    </g>
+    <g id="way-actual" data-pptx-bounds="70 520 1140 76">
+      <text x="94" y="566" font-size="20" font-weight="bold" fill="#DF203C">只用实际可用</text>
+      <text x="520" y="566" font-size="20" fill="#0C2864">忽略配置</text>
+      <text x="820" y="566" font-size="20" fill="#DF203C">声明形同虚设，边界消失</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 616 1140 72">
+    <rect x="70" y="616" width="1140" height="72" rx="8" fill="#EEF4FB"/>
+    <path d="M78 616 a8 8 0 0 0 -8 8 v56 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="650" font-size="24" font-weight="bold" fill="#0C2864">交集的意义是：任何一个圆单独扩大，可用范围都不会变大</text>
+    <text x="98" y="678" font-size="18" fill="#2064AE">这是「最小权限」能够被自动维持的唯一机制。</text>
+  </g>
+</svg>

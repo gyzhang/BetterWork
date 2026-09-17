@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 10-1 工具、Skill、专家三层（《智能体工程》第 10 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">动作、方法、角色约束</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">三层的粒度是递进的。任何一层被放到错误的位置，后果都是结构性失效。</text>
+  </g>
+
+  <g id="fig-table" data-pptx-bounds="70 248 1140 320">
+    <text x="94" y="272" font-size="18" fill="#64748B">层</text>
+    <text x="310" y="272" font-size="18" fill="#64748B">是什么</text>
+    <text x="650" y="272" font-size="18" fill="#64748B">回答什么问题</text>
+    <text x="920" y="272" font-size="18" fill="#64748B">混淆的后果</text>
+    <line x1="70" y1="286" x2="1210" y2="286" stroke="#D8E4F0" stroke-width="1.5"/>
+
+    <g id="layer-tool" data-pptx-bounds="70 292 1140 88">
+      <rect x="70" y="292" width="1140" height="88" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="344" font-size="20" font-weight="bold" fill="#1B4593">工具 Tool</text>
+      <text x="310" y="344" font-size="20" fill="#0C2864">带结构化契约的可执行能力</text>
+      <text x="650" y="344" font-size="20" fill="#0C2864">能做什么动作</text>
+      <text x="920" y="344" font-size="20" fill="#DF203C">写成方法会工具爆炸</text>
+    </g>
+    <g id="layer-skill" data-pptx-bounds="70 380 1140 88">
+      <text x="94" y="432" font-size="20" font-weight="bold" fill="#1B4593">Skill</text>
+      <text x="310" y="432" font-size="20" fill="#0C2864">一套可复用的工作方法</text>
+      <text x="650" y="432" font-size="20" fill="#0C2864">按什么步骤做</text>
+      <text x="920" y="432" font-size="20" fill="#DF203C">写成工具无法保证执行</text>
+    </g>
+    <g id="layer-expert" data-pptx-bounds="70 468 1140 88">
+      <rect x="70" y="468" width="1140" height="88" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="520" font-size="20" font-weight="bold" fill="#1B4593">专家 Expert</text>
+      <text x="310" y="520" font-size="20" fill="#0C2864">一个配置化的角色约束</text>
+      <text x="650" y="520" font-size="20" fill="#0C2864">在什么约束下做事</text>
+      <text x="920" y="520" font-size="20" fill="#DF203C">做成进程会开销失控</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 588 1140 100">
+    <rect x="70" y="588" width="1140" height="100" rx="8" fill="#EEF4FB"/>
+    <path d="M78 588 a8 8 0 0 0 -8 8 v84 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="622" font-size="24" font-weight="bold" fill="#0C2864">专家是一个配置，不是一个进程</text>
+    <text x="98" y="650" font-size="20" fill="#0C2864">有效能力范围 = 专家声明 ∩ 阶段允许 ∩ 本次实际可用，必须是交集。</text>
+    <text x="98" y="676" font-size="18" fill="#2064AE">在单循环的评估通过之前，不要引入第二个进程。</text>
+  </g>
+</svg>

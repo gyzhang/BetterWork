@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 19-2 谁拥有循环：三种运行时默认值的差别（《智能体工程》第 19 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">2026 年，能力清单已经不是有效的比较方式</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">三家的能力趋同之后，真正的差别变成默认值：谁拥有循环。</text>
+  </g>
+
+  <g id="fig-cards" data-pptx-bounds="70 244 1140 296">
+    <g id="rt-claude" data-pptx-bounds="70 260 360 272">
+      <rect x="70" y="260" width="360" height="272" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
+      <path d="M78 260 a8 8 0 0 0 -8 8 v256 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+      <text x="98" y="296" font-size="22" font-weight="bold" fill="#1B4593">Claude Agent SDK</text>
+      <text x="98" y="330" font-size="20" font-weight="bold" fill="#0C2864">模型拥有循环</text>
+      <line x1="98" y1="348" x2="402" y2="348" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="98" y="380" font-size="18" fill="#64748B">心智模型：</text>
+      <text x="98" y="406" font-size="18" fill="#0C2864">"给它一台电脑，它自己开"</text>
+      <text x="98" y="444" font-size="18" fill="#64748B">最适合：</text>
+      <text x="98" y="470" font-size="18" fill="#0C2864">Claude 在仓库或文件系统</text>
+      <text x="98" y="496" font-size="18" fill="#0C2864">里干活，需要最快上手</text>
+    </g>
+    <g id="rt-langgraph" data-pptx-bounds="460 260 360 272">
+      <rect x="460" y="260" width="360" height="272" rx="10" fill="#EEF4FB" stroke="#2064AE" stroke-width="1.5"/>
+      <path d="M468 260 a8 8 0 0 0 -8 8 v256 a8 8 0 0 0 8 8 z" fill="#2064AE"/>
+      <text x="488" y="296" font-size="22" font-weight="bold" fill="#2064AE">LangGraph</text>
+      <text x="488" y="330" font-size="20" font-weight="bold" fill="#0C2864">你拥有循环（状态图）</text>
+      <line x1="488" y1="348" x2="792" y2="348" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="488" y="380" font-size="18" fill="#64748B">心智模型：</text>
+      <text x="488" y="406" font-size="18" fill="#0C2864">"我画流程图，它执行并持久化"</text>
+      <text x="488" y="444" font-size="18" fill="#64748B">最适合：</text>
+      <text x="488" y="470" font-size="18" fill="#0C2864">需要可检查、可恢复、人在</text>
+      <text x="488" y="496" font-size="18" fill="#0C2864">环中，并且要跨模型</text>
+    </g>
+    <g id="rt-openai" data-pptx-bounds="850 260 360 272">
+      <rect x="850" y="260" width="360" height="272" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
+      <path d="M858 260 a8 8 0 0 0 -8 8 v256 a8 8 0 0 0 8 8 z" fill="#3D86D4"/>
+      <text x="878" y="296" font-size="22" font-weight="bold" fill="#3D86D4">OpenAI Agents SDK</text>
+      <text x="878" y="330" font-size="20" font-weight="bold" fill="#0C2864">你拥有路由，模型拥有节点</text>
+      <line x1="878" y1="348" x2="1182" y2="348" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="878" y="380" font-size="18" fill="#64748B">心智模型：</text>
+      <text x="878" y="406" font-size="18" fill="#0C2864">"专家智能体之间用类型化移交"</text>
+      <text x="878" y="444" font-size="18" fill="#64748B">最适合：</text>
+      <text x="878" y="470" font-size="18" fill="#0C2864">已想清流程，只需模型填</text>
+      <text x="878" y="496" font-size="18" fill="#0C2864">每个节点</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 556 1140 132">
+    <rect x="70" y="556" width="1140" height="132" rx="8" fill="#EEF4FB"/>
+    <path d="M78 556 a8 8 0 0 0 -8 8 v116 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="592" font-size="24" font-weight="bold" fill="#0C2864">选型不是选"谁更强"，是选"你愿意把控制权交给谁"</text>
+    <text x="98" y="624" font-size="20" fill="#0C2864">能力可以叠加；默认值不会因为你加了功能而改变。这是这张对照表唯一要看的一列。</text>
+    <text x="98" y="652" font-size="20" fill="#2064AE">框架的线程号 / 检查点号，不会自动等于你的任务 / 会话 / 运行身份。</text>
+    <text x="98" y="670" font-size="18" fill="#DF203C">本章是职责对照，不是一次已执行的迁移，也不构成对生产就绪的背书。</text>
+  </g>
+</svg>

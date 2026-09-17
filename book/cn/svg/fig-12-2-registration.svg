@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 12-2 成果登记的五道校验与不可变落盘（《智能体工程》第 12 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">上半快速失败，下半最终判定</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">同一个动作要过两道门。这不是冗余，是因为从检查到动作之间有一段真实存在的窗口。</text>
+  </g>
+
+  <g id="fig-outside" data-pptx-bounds="70 248 590 348">
+    <text x="94" y="272" font-size="18" fill="#64748B">事务外：四道快速校验</text>
+    <line x1="70" y1="286" x2="660" y2="286" stroke="#D8E4F0" stroke-width="1.5"/>
+    <g id="out-1" data-pptx-bounds="70 292 590 76">
+      <rect x="70" y="292" width="590" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="338" font-size="20" font-weight="bold" fill="#0C2864">执行存在</text>
+      <text x="360" y="338" font-size="18" fill="#64748B">拦住对不存在的执行登记</text>
+    </g>
+    <g id="out-2" data-pptx-bounds="70 368 590 76">
+      <text x="94" y="414" font-size="20" font-weight="bold" fill="#0C2864">归属正确</text>
+      <text x="360" y="414" font-size="18" fill="#64748B">拦住跨运行的输出</text>
+    </g>
+    <g id="out-3" data-pptx-bounds="70 444 590 76">
+      <rect x="70" y="444" width="590" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="490" font-size="20" font-weight="bold" fill="#0C2864">终态是成功</text>
+      <text x="360" y="490" font-size="18" fill="#64748B">拦住把半成品当产物</text>
+    </g>
+    <g id="out-4" data-pptx-bounds="70 520 590 76">
+      <text x="94" y="566" font-size="20" font-weight="bold" fill="#0C2864">输出句柄已登记</text>
+      <text x="360" y="566" font-size="18" fill="#64748B">拦住随手指定一个输出</text>
+    </g>
+  </g>
+
+  <g id="fig-inside" data-pptx-bounds="690 248 520 348">
+    <text x="714" y="272" font-size="18" fill="#64748B">事务内：复查与落盘</text>
+    <line x1="690" y1="286" x2="1210" y2="286" stroke="#D8E4F0" stroke-width="1.5"/>
+    <g id="in-1" data-pptx-bounds="690 292 520 76">
+      <rect x="690" y="292" width="520" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="714" y="338" font-size="20" font-weight="bold" fill="#0C2864">运行仍是进行中</text>
+      <text x="950" y="338" font-size="18" fill="#64748B">拦住已取消的运行</text>
+    </g>
+    <g id="in-2" data-pptx-bounds="690 368 520 76">
+      <text x="714" y="414" font-size="20" font-weight="bold" fill="#0C2864">宿主接受这次运行</text>
+      <text x="950" y="414" font-size="18" fill="#64748B">拦住策略性拒绝</text>
+    </g>
+    <g id="in-3" data-pptx-bounds="690 444 520 76">
+      <rect x="690" y="444" width="520" height="76" rx="8" fill="#FDF3E3"/>
+      <text x="714" y="490" font-size="20" font-weight="bold" fill="#DF203C">授权仍然有效</text>
+      <text x="950" y="490" font-size="18" fill="#64748B">拦住撤销后的登记</text>
+    </g>
+    <g id="in-4" data-pptx-bounds="690 520 520 76">
+      <text x="714" y="566" font-size="20" font-weight="bold" fill="#0C2864">幂等键命中即返回</text>
+      <text x="950" y="566" font-size="18" fill="#64748B">拦住重复产生两份</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 616 1140 72">
+    <rect x="70" y="616" width="1140" height="72" rx="8" fill="#EEF4FB"/>
+    <path d="M78 616 a8 8 0 0 0 -8 8 v56 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="650" font-size="24" font-weight="bold" fill="#0C2864">权限那一项必须出现两次，因为它有有效期</text>
+    <text x="98" y="678" font-size="18" fill="#2064AE">落盘用「只在不存在时创建」加「写入后只读」——这才是不可变的实际含义。</text>
+  </g>
+</svg>

@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 18-1 两期任务的对照：哪些必须复用，哪些必须重算（《智能体工程》第 18 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">重复的是过程，不是答案</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">把"方法可以复用"理解成"数字可以复用"，是跨期报告里最常见的一类错误。</text>
+  </g>
+
+  <g id="fig-two" data-pptx-bounds="70 244 1140 292">
+    <g id="reuse" data-pptx-bounds="70 260 555 250">
+      <rect x="70" y="260" width="555" height="250" rx="10" fill="#EEF4FB" stroke="#2064AE" stroke-width="1.5"/>
+      <path d="M78 260 a8 8 0 0 0 -8 8 v234 a8 8 0 0 0 8 8 z" fill="#2064AE"/>
+      <text x="98" y="296" font-size="24" font-weight="bold" fill="#1B4593">必须复用：方法</text>
+      <text x="98" y="332" font-size="20" fill="#0C2864">叙述顺序的偏好（先讲异常）</text>
+      <text x="98" y="362" font-size="20" fill="#0C2864">指标口径与映射定义</text>
+      <text x="98" y="392" font-size="20" fill="#0C2864">图表类型的选择</text>
+      <text x="98" y="422" font-size="20" fill="#0C2864">异常判定阈值</text>
+      <text x="98" y="452" font-size="20" fill="#0C2864">模板与版式约定</text>
+      <text x="98" y="486" font-size="18" fill="#64748B">这些跨期稳定，重学一遍反而是浪费。</text>
+    </g>
+    <g id="refresh" data-pptx-bounds="655 260 555 250">
+      <rect x="655" y="260" width="555" height="250" rx="10" fill="#F5F8FC" stroke="#D8E4F0" stroke-width="1.5"/>
+      <path d="M663 260 a8 8 0 0 0 -8 8 v234 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+      <text x="683" y="296" font-size="24" font-weight="bold" fill="#1B4593">必须重算：事实</text>
+      <text x="683" y="332" font-size="20" fill="#0C2864">任何金额、数量、比例</text>
+      <text x="683" y="362" font-size="20" fill="#0C2864">任何"实际值"</text>
+      <text x="683" y="392" font-size="20" fill="#0C2864">任何期间标识</text>
+      <text x="683" y="422" font-size="20" fill="#0C2864">任何预算数</text>
+      <text x="683" y="452" font-size="20" fill="#0C2864">任何合计</text>
+      <text x="683" y="486" font-size="18" fill="#DF203C">违反这一列时，报告看起来完全正常。</text>
+    </g>
+  </g>
+
+  <g id="fig-task" data-pptx-bounds="70 552 1140 56">
+    <rect x="70" y="552" width="1140" height="56" rx="8" fill="#EEF4FB"/>
+    <path d="M78 552 a8 8 0 0 0 -8 8 v40 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="588" font-size="20" fill="#0C2864">任务 P2 是一个新任务：新的选定输入 ＋ 已批准的方法 ＋ 选定的 P1 产物。</text>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 620 1140 68">
+    <rect x="70" y="620" width="1140" height="68" rx="8" fill="#EEF4FB"/>
+    <path d="M78 620 a8 8 0 0 0 -8 8 v52 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="650" font-size="22" font-weight="bold" fill="#0C2864">"把同一个提示词再跑一次"不是对重复性的有效检验</text>
+    <text x="98" y="678" font-size="18" fill="#2064AE">它根本没有换事实——检验的只是稳定性，而稳定性是重复性里最容易的一半。</text>
+  </g>
+</svg>

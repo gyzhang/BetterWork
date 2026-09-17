@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 4-1 轮次上限的边界算术（《智能体工程》第 4 章配图）
+       逐元素手写。字号：标题 32 / 正文 20 / 注 18。内容区 y126 起。
+       数据均为教学推演，来自参考实现的循环边界与测试，非实测统计。 -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">边界算术：maxToolRounds 到底限制了什么</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">以 maxToolRounds = 1 为例手工推一遍。同一个轮次、同一次模型调用，两条不同的路。</text>
+  </g>
+
+  <g id="fig-table" data-pptx-bounds="70 248 1140 272">
+    <text x="94" y="272" font-size="18" fill="#64748B">轮次</text>
+    <text x="330" y="272" font-size="18" fill="#64748B">模型调用</text>
+    <text x="560" y="272" font-size="18" fill="#64748B">这一轮模型想做什么</text>
+    <text x="900" y="272" font-size="18" fill="#64748B">判定</text>
+    <line x1="70" y1="286" x2="1210" y2="286" stroke="#D8E4F0" stroke-width="1.5"/>
+
+    <g id="row-r0" data-pptx-bounds="70 292 1140 76">
+      <rect x="70" y="292" width="1140" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="338" font-size="20" font-weight="bold" fill="#0C2864">第 0 轮</text>
+      <text x="330" y="338" font-size="20" fill="#0C2864">第 1 次</text>
+      <text x="560" y="338" font-size="20" fill="#0C2864">请求一个工具</text>
+      <text x="900" y="338" font-size="20" fill="#2064AE">执行工具（0 不等于 1）</text>
+    </g>
+    <g id="row-r1a" data-pptx-bounds="70 368 1140 76">
+      <text x="94" y="414" font-size="20" font-weight="bold" fill="#0C2864">第 1 轮</text>
+      <text x="330" y="414" font-size="20" fill="#0C2864">第 2 次</text>
+      <text x="560" y="414" font-size="20" fill="#0C2864">给出最终答案</text>
+      <text x="900" y="414" font-size="20" font-weight="bold" fill="#1B4593">完成，唯一的正常出口</text>
+    </g>
+    <g id="row-r1b" data-pptx-bounds="70 444 1140 76">
+      <rect x="70" y="444" width="1140" height="76" rx="8" fill="#FDF3E3"/>
+      <text x="94" y="490" font-size="20" font-weight="bold" fill="#0C2864">第 1 轮</text>
+      <text x="330" y="490" font-size="20" fill="#0C2864">第 2 次</text>
+      <text x="560" y="490" font-size="20" fill="#0C2864">再要一个工具轮次</text>
+      <text x="900" y="490" font-size="20" font-weight="bold" fill="#DF203C">失败（1 等于 1）</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 548 1140 140">
+    <rect x="70" y="548" width="1140" height="140" rx="8" fill="#EEF4FB"/>
+    <path d="M78 548 a8 8 0 0 0 -8 8 v124 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="586" font-size="24" font-weight="bold" fill="#0C2864">上限只落在「工具轮次」上</text>
+    <text x="98" y="618" font-size="20" fill="#0C2864">最多 maxToolRounds + 1 次模型调用；最多 maxToolRounds 个工具轮次。</text>
+    <text x="98" y="648" font-size="20" fill="#0C2864">一轮里可以请求多个调用，它们共享同一个轮次额度。</text>
+    <text x="98" y="676" font-size="18" fill="#DF203C">它不是单轮调用数上限，也不是成本上限：需要总调用预算的应用必须另外加策略。</text>
+  </g>
+</svg>

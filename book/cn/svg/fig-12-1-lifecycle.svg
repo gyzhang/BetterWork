@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 12-1 三种身份与检查点能恢复什么（《智能体工程》第 12 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">你自己的状态能落盘，别人的调用不能</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">「我们有检查点」这句话，太容易被听成「什么都能接着跑」。</text>
+  </g>
+
+  <g id="fig-identity" data-pptx-bounds="70 246 590 320">
+    <text x="94" y="272" font-size="18" fill="#64748B">四层身份</text>
+    <line x1="70" y1="286" x2="660" y2="286" stroke="#D8E4F0" stroke-width="1.5"/>
+    <g id="id-task" data-pptx-bounds="70 292 590 72">
+      <rect x="70" y="292" width="590" height="72" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="336" font-size="20" font-weight="bold" fill="#1B4593">任务</text>
+      <text x="310" y="336" font-size="18" fill="#0C2864">用户想做的一件事，天到周</text>
+    </g>
+    <g id="id-session" data-pptx-bounds="70 364 590 72">
+      <text x="94" y="408" font-size="20" font-weight="bold" fill="#1B4593">会话</text>
+      <text x="310" y="408" font-size="18" fill="#0C2864">一次连续协作，小时到天</text>
+    </g>
+    <g id="id-run" data-pptx-bounds="70 436 590 72">
+      <rect x="70" y="436" width="590" height="72" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="480" font-size="20" font-weight="bold" fill="#1B4593">运行</text>
+      <text x="310" y="480" font-size="18" fill="#0C2864">一次执行，秒到分钟</text>
+    </g>
+    <g id="id-exec" data-pptx-bounds="70 508 590 72">
+      <text x="94" y="552" font-size="20" font-weight="bold" fill="#1B4593">执行</text>
+      <text x="310" y="552" font-size="18" fill="#0C2864">一次代码执行，产物链条末端</text>
+    </g>
+  </g>
+
+  <g id="fig-checkpoint" data-pptx-bounds="690 246 520 348">
+    <g id="cp-can" data-pptx-bounds="690 250 520 160">
+      <rect x="690" y="250" width="520" height="160" rx="10" fill="#F5F8FC"/>
+      <text x="714" y="286" font-size="22" font-weight="bold" fill="#1B4593">检查点能保存的</text>
+      <text x="714" y="318" font-size="18" fill="#0C2864">任务的当前状态</text>
+      <text x="714" y="344" font-size="18" fill="#0C2864">已产出的产物版本</text>
+      <text x="714" y="370" font-size="18" fill="#0C2864">待确认的事项</text>
+      <text x="714" y="394" font-size="18" fill="#0C2864">归属关系</text>
+    </g>
+    <g id="cp-cannot" data-pptx-bounds="690 430 520 160">
+      <rect x="690" y="430" width="520" height="160" rx="10" fill="#FDF3E3"/>
+      <text x="714" y="466" font-size="22" font-weight="bold" fill="#DF203C">检查点不能保存的</text>
+      <text x="714" y="498" font-size="18" fill="#0C2864">模型调用的中间态</text>
+      <text x="714" y="524" font-size="18" fill="#0C2864">那个调用已流过的 token</text>
+      <text x="714" y="550" font-size="18" fill="#0C2864">服务端那份请求的上下文</text>
+      <text x="714" y="574" font-size="18" fill="#0C2864">它跑到哪一行了</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 616 1140 72">
+    <rect x="70" y="616" width="1140" height="72" rx="8" fill="#EEF4FB"/>
+    <path d="M78 616 a8 8 0 0 0 -8 8 v56 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="650" font-size="24" font-weight="bold" fill="#0C2864">恢复语义是「从检查点发起一次新的运行」，不是「接着上一次跑」</text>
+    <text x="98" y="678" font-size="18" fill="#2064AE">产品的说法必须和实现一致——写成「继续上次的运行」就是承诺与实现不符。</text>
+  </g>
+</svg>

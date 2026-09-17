@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 20-1 三角验证：六种观察各自测什么（《智能体工程》第 20 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">"能复现"不在这张图里</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">它是一种入门门槛。独立能力的判据是：能解释、能改、能评估、能迁移。</text>
+  </g>
+
+  <g id="fig-grid" data-pptx-bounds="70 244 1140 344">
+    <g id="obs-1" data-pptx-bounds="70 256 360 152">
+      <rect x="70" y="256" width="360" height="152" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="92" y="292" font-size="22" font-weight="bold" fill="#1B4593">作品集复核</text>
+      <text x="92" y="322" font-size="18" fill="#475569">建立：广度</text>
+      <text x="92" y="350" font-size="18" fill="#0C2864">按成果索引：每项能力指向</text>
+      <text x="92" y="378" font-size="18" fill="#0C2864">确切的运行、文件与测试</text>
+    </g>
+    <g id="obs-2" data-pptx-bounds="460 256 360 152">
+      <rect x="460" y="256" width="360" height="152" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="482" y="292" font-size="22" font-weight="bold" fill="#1B4593">受让人复跑</text>
+      <text x="482" y="322" font-size="18" fill="#475569">建立：交付</text>
+      <text x="482" y="350" font-size="18" fill="#0C2864">别人只给交接指南，自己走通</text>
+      <text x="482" y="378" font-size="18" fill="#2064AE">你自己复跑成功不算</text>
+    </g>
+    <g id="obs-3" data-pptx-bounds="850 256 360 152">
+      <rect x="850" y="256" width="360" height="152" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="872" y="292" font-size="22" font-weight="bold" fill="#1B4593">学习者解释</text>
+      <text x="872" y="322" font-size="18" fill="#475569">建立：概念所有权</text>
+      <text x="872" y="350" font-size="18" fill="#0C2864">能说清为什么这样设计</text>
+      <text x="872" y="378" font-size="18" fill="#DF203C">背下来的说明不算</text>
+    </g>
+    <g id="obs-4" data-pptx-bounds="70 428 360 152">
+      <rect x="70" y="428" width="360" height="152" rx="10" fill="#F5F8FC" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="92" y="464" font-size="22" font-weight="bold" fill="#2064AE">未见过的输入</text>
+      <text x="92" y="494" font-size="18" fill="#475569">建立：迁移</text>
+      <text x="92" y="522" font-size="18" fill="#0C2864">先说清要改什么，再动手</text>
+      <text x="92" y="550" font-size="18" fill="#2064AE">见过的输入测的是记忆</text>
+    </g>
+    <g id="obs-5" data-pptx-bounds="460 428 360 152">
+      <rect x="460" y="428" width="360" height="152" rx="10" fill="#F5F8FC" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="482" y="464" font-size="22" font-weight="bold" fill="#2064AE">受控缺陷</text>
+      <text x="482" y="494" font-size="18" fill="#475569">建立：从证据推理</text>
+      <text x="482" y="522" font-size="18" fill="#0C2864">从"期望 vs 实际"出发，定位</text>
+      <text x="482" y="550" font-size="18" fill="#0C2864">最早被违反的那个契约</text>
+    </g>
+    <g id="obs-6" data-pptx-bounds="850 428 360 152">
+      <rect x="850" y="428" width="360" height="152" rx="10" fill="#F5F8FC" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="872" y="464" font-size="22" font-weight="bold" fill="#2064AE">迁移讨论</text>
+      <text x="872" y="494" font-size="18" fill="#475569">建立：边界判断</text>
+      <text x="872" y="522" font-size="18" fill="#0C2864">说清什么必须变、什么必须</text>
+      <text x="872" y="550" font-size="18" fill="#0C2864">原封不动地跟着走</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 608 1140 80">
+    <rect x="70" y="608" width="1140" height="80" rx="8" fill="#EEF4FB"/>
+    <path d="M78 608 a8 8 0 0 0 -8 8 v64 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="640" font-size="22" font-weight="bold" fill="#0C2864">分数是证据判断，不是提交文件数量的加总</text>
+    <text x="98" y="670" font-size="18" fill="#2064AE">交十个都不能复核的文件，不如交三个都能复核的。</text>
+  </g>
+</svg>

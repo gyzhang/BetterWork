@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 2-1 三种「不知道」及其对策（《智能体工程》第 2 章配图）
+       逐元素手写。字号：标题 32 / 卡片标题 22 / 正文 20 / 注 18。内容区 y126 起。 -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">三种「不知道」，对策完全不同</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">前两类靠喂信息解决，第三类只能靠约束输出解决。混在一起处理，就是「智能体胡说」的直接原因。</text>
+  </g>
+
+  <g id="fig-cards" data-pptx-bounds="70 248 1140 292">
+    <g id="card-gap1" data-pptx-bounds="70 248 360 292">
+      <rect x="70" y="248" width="360" height="292" rx="10" fill="#F5F8FC"/>
+      <path d="M70 258 a10 10 0 0 1 10 -10 h350 v44 h-360 z" fill="#1B4593"/>
+      <text x="90" y="280" font-size="22" font-weight="bold" fill="#FFFFFF">训练截止之后的事</text>
+      <text x="90" y="326" font-size="20" fill="#0C2864">举例</text>
+      <text x="90" y="352" font-size="20" fill="#0C2864">今天的日期、上周的新闻、</text>
+      <text x="90" y="378" font-size="20" fill="#0C2864">昨天发布的规范版本</text>
+      <text x="90" y="424" font-size="20" fill="#0C2864">对策</text>
+      <text x="90" y="450" font-size="20" fill="#2064AE">注入当前时间</text>
+      <text x="90" y="476" font-size="20" fill="#2064AE">联网检索（第 8 章）</text>
+      <text x="90" y="520" font-size="18" fill="#64748B">出口：喂信息</text>
+    </g>
+    <g id="card-gap2" data-pptx-bounds="460 248 360 292">
+      <rect x="460" y="248" width="360" height="292" rx="10" fill="#F5F8FC"/>
+      <path d="M460 258 a10 10 0 0 1 10 -10 h350 v44 h-360 z" fill="#2064AE"/>
+      <text x="480" y="280" font-size="22" font-weight="bold" fill="#FFFFFF">你的私有材料</text>
+      <text x="480" y="326" font-size="20" fill="#0C2864">举例</text>
+      <text x="480" y="352" font-size="20" fill="#0C2864">你的知识库、上传的表格、</text>
+      <text x="480" y="378" font-size="20" fill="#0C2864">你仓库里的代码</text>
+      <text x="480" y="424" font-size="20" fill="#0C2864">对策</text>
+      <text x="480" y="450" font-size="20" fill="#2064AE">检索与显式选材</text>
+      <text x="480" y="476" font-size="20" fill="#2064AE">（第 8、9 章）</text>
+      <text x="480" y="520" font-size="18" fill="#64748B">出口：喂信息</text>
+    </g>
+    <g id="card-gap3" data-pptx-bounds="850 248 360 292">
+      <rect x="850" y="248" width="360" height="292" rx="10" fill="#F5F8FC"/>
+      <path d="M850 258 a10 10 0 0 1 10 -10 h350 v44 h-360 z" fill="#DF203C"/>
+      <text x="870" y="280" font-size="22" font-weight="bold" fill="#FFFFFF">这次输入里没有的事实</text>
+      <text x="870" y="326" font-size="20" fill="#0C2864">举例</text>
+      <text x="870" y="352" font-size="20" fill="#0C2864">表里根本没有的字段，</text>
+      <text x="870" y="378" font-size="20" fill="#0C2864">却出现在「原因」里</text>
+      <text x="870" y="424" font-size="20" fill="#0C2864">对策</text>
+      <text x="870" y="450" font-size="20" fill="#2064AE">约束输出：必须标注为</text>
+      <text x="870" y="476" font-size="20" fill="#2064AE">待验证的假设</text>
+      <text x="870" y="520" font-size="18" fill="#64748B">出口：约束输出</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 572 1140 116">
+    <rect x="70" y="572" width="1140" height="116" rx="8" fill="#EEF4FB"/>
+    <path d="M78 572 a8 8 0 0 0 -8 8 v100 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="610" font-size="24" font-weight="bold" fill="#0C2864">把第三类当前两类处理，是绝大多数「智能体胡说」事故的直接原因</text>
+    <text x="98" y="642" font-size="20" fill="#0C2864">前两类是「信息没给够」，加材料就能解决；第三类是「它没有依据」，加再多材料也解决不了。</text>
+    <text x="98" y="672" font-size="18" fill="#2064AE">唯一有效的办法：在验收条件里要求「引用输入之外的解释必须标注为假设」。</text>
+  </g>
+</svg>

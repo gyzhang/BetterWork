@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 6-1 确定性工具的四条判据与检验方式（《智能体工程》第 6 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">四条判据，四条检验</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">「确定性」不是形容词，是四条可以被测出来的性质。</text>
+  </g>
+
+  <g id="fig-table" data-pptx-bounds="70 248 1140 348">
+    <text x="94" y="272" font-size="18" fill="#64748B">判据</text>
+    <text x="430" y="272" font-size="18" fill="#64748B">反例</text>
+    <text x="850" y="272" font-size="18" fill="#64748B">怎么测</text>
+    <line x1="70" y1="286" x2="1210" y2="286" stroke="#D8E4F0" stroke-width="1.5"/>
+
+    <g id="row-same" data-pptx-bounds="70 292 1140 76">
+      <rect x="70" y="292" width="1140" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="338" font-size="20" font-weight="bold" fill="#1B4593">同输入必得同输出</text>
+      <text x="430" y="338" font-size="20" fill="#0C2864">里面读了当前时间或随机数</text>
+      <text x="850" y="338" font-size="20" fill="#2064AE">同一输入跑两次比对</text>
+    </g>
+    <g id="row-state" data-pptx-bounds="70 368 1140 76">
+      <text x="94" y="414" font-size="20" font-weight="bold" fill="#1B4593">不依赖未显式传入的状态</text>
+      <text x="430" y="414" font-size="20" fill="#0C2864">从全局配置里读单位</text>
+      <text x="850" y="414" font-size="20" fill="#2064AE">换配置看结果变不变</text>
+    </g>
+    <g id="row-scope" data-pptx-bounds="70 444 1140 76">
+      <rect x="70" y="444" width="1140" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="490" font-size="20" font-weight="bold" fill="#1B4593">不做超出声明的事</text>
+      <text x="430" y="490" font-size="20" fill="#0C2864">声明「计算」却顺手写了文件</text>
+      <text x="850" y="490" font-size="20" fill="#2064AE">检查执行后的副作用</text>
+    </g>
+    <g id="row-refuse" data-pptx-bounds="70 520 1140 76">
+      <text x="94" y="566" font-size="20" font-weight="bold" fill="#1B4593">对无法计算的情形明确拒绝</text>
+      <text x="430" y="566" font-size="20" fill="#0C2864">分母为零时返回 0</text>
+      <text x="850" y="566" font-size="20" fill="#2064AE">构造零基数输入</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 616 1140 72">
+    <rect x="70" y="616" width="1140" height="72" rx="8" fill="#EEF4FB"/>
+    <path d="M78 616 a8 8 0 0 0 -8 8 v56 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="650" font-size="24" font-weight="bold" fill="#0C2864">一条判据如果没有检验动作，它就只是一句设计意图</text>
+    <text x="98" y="678" font-size="18" fill="#2064AE">四条检验都必须能被机器执行——「看一眼觉得对」不是检验。</text>
+  </g>
+</svg>

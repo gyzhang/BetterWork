@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 1-2 场景说明书的七问（《智能体工程》第 1 章配图）
+       逐元素手写，无程序化绘图。本图不含值驱动标记，故无 chart-data 声明。
+       字号约定：正文 20px、注 18px。1280 宽画布在阅读版正文栏（约 880px）内缩到 0.64 倍，
+       20px 实际呈现约 13px；本图不放小于 18px 的文字。 -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">场景说明书的七问</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">任何一问答不出，就还没到动手的时候。七问全部落纸，才允许选一种做法。</text>
+  </g>
+
+  <g id="seven-questions" data-pptx-bounds="70 244 720 394">
+    <g id="q1" data-pptx-bounds="70 250 720 50">
+      <rect x="70" y="250" width="34" height="34" rx="8" fill="#1B4593"/>
+      <text x="87" y="273" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">1</text>
+      <text x="116" y="275" font-size="20" font-weight="bold" fill="#0C2864">用户目标：他拿结果做什么决定？</text>
+    </g>
+    <g id="q2" data-pptx-bounds="70 304 720 50">
+      <rect x="70" y="304" width="34" height="34" rx="8" fill="#1B4593"/>
+      <text x="87" y="327" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">2</text>
+      <text x="116" y="329" font-size="20" font-weight="bold" fill="#0C2864">输入：哪些文件、哪些字段？</text>
+    </g>
+    <g id="q3" data-pptx-bounds="70 358 720 50">
+      <rect x="70" y="358" width="34" height="34" rx="8" fill="#1B4593"/>
+      <text x="87" y="381" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">3</text>
+      <text x="116" y="383" font-size="20" font-weight="bold" fill="#0C2864">输出：什么格式、能不能改？</text>
+    </g>
+    <g id="q4" data-pptx-bounds="70 412 720 50">
+      <rect x="70" y="412" width="34" height="34" rx="8" fill="#2064AE"/>
+      <text x="87" y="435" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">4</text>
+      <text x="116" y="437" font-size="20" font-weight="bold" fill="#0C2864">不确定性：哪一步看了才知道？</text>
+    </g>
+    <g id="q5" data-pptx-bounds="70 466 720 50">
+      <rect x="70" y="466" width="34" height="34" rx="8" fill="#DF203C"/>
+      <text x="87" y="489" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">5</text>
+      <text x="116" y="491" font-size="20" font-weight="bold" fill="#0C2864">不可执行：哪些动作绝对不能做？</text>
+    </g>
+    <g id="q6" data-pptx-bounds="70 520 720 50">
+      <rect x="70" y="520" width="34" height="34" rx="8" fill="#DF203C"/>
+      <text x="87" y="543" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">6</text>
+      <text x="116" y="545" font-size="20" font-weight="bold" fill="#0C2864">人工确认：哪一步必须人拍板？</text>
+    </g>
+    <g id="q7" data-pptx-bounds="70 574 720 56">
+      <rect x="70" y="574" width="34" height="34" rx="8" fill="#2064AE"/>
+      <text x="87" y="597" font-size="18" font-weight="bold" fill="#FFFFFF" text-anchor="middle">7</text>
+      <text x="116" y="599" font-size="20" font-weight="bold" fill="#0C2864">验收条件：怎么算成功、怎么算失败？</text>
+    </g>
+  </g>
+
+  <g id="exits" data-pptx-bounds="820 244 390 400">
+    <g id="gate" data-pptx-bounds="820 250 390 86">
+      <rect x="820" y="250" width="390" height="86" rx="10" fill="#0C2864"/>
+      <text x="844" y="286" font-size="20" font-weight="bold" fill="#FFFFFF">七问全部写完了吗？</text>
+      <text x="844" y="314" font-size="18" fill="#B9CCE4">没有就先回去问，别「先做起来看看」</text>
+    </g>
+    <g id="exit-a" data-pptx-bounds="820 348 390 88">
+      <rect x="820" y="348" width="390" height="88" rx="10" fill="#F5F8FC"/>
+      <path d="M828 348 a8 8 0 0 0 -8 8 v72 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+      <text x="846" y="382" font-size="20" font-weight="bold" fill="#1B4593">出口 A：脚本或固定工作流</text>
+      <text x="846" y="410" font-size="18" fill="#475569">先做这个，做不下去再换</text>
+    </g>
+    <g id="exit-b" data-pptx-bounds="820 448 390 88">
+      <rect x="820" y="448" width="390" height="88" rx="10" fill="#F5F8FC"/>
+      <path d="M828 448 a8 8 0 0 0 -8 8 v72 a8 8 0 0 0 8 8 z" fill="#2064AE"/>
+      <text x="846" y="482" font-size="20" font-weight="bold" fill="#2064AE">出口 B：检索应用</text>
+      <text x="846" y="510" font-size="18" fill="#475569">核心是照口径写，不是算准数</text>
+    </g>
+    <g id="exit-c" data-pptx-bounds="820 548 390 96">
+      <rect x="820" y="548" width="390" height="96" rx="10" fill="#F5F8FC"/>
+      <path d="M828 548 a8 8 0 0 0 -8 8 v80 a8 8 0 0 0 8 8 z" fill="#3D86D4"/>
+      <text x="846" y="582" font-size="20" font-weight="bold" fill="#3D86D4">出口 C：智能体</text>
+      <text x="846" y="610" font-size="18" fill="#475569">选了它，就必须同时给出权限与终止条件</text>
+    </g>
+  </g>
+</svg>

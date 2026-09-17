@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 7-1 MCP 三层角色与发现/授权分离（《智能体工程》第 7 章配图）
+       分层图：宿主 / 客户端 / 服务端，并用两个方框标出「发现的工具」与「绑定的工具」。 -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">一个宿主，多个连接，一个显式的绑定动作</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">协议标准化「怎么连」；「允许用哪个」是宿主自己的事，协议一点忙都帮不上。</text>
+  </g>
+
+  <g id="fig-layers" data-pptx-bounds="70 248 700 340">
+    <g id="layer-host" data-pptx-bounds="70 250 700 96">
+      <rect x="70" y="250" width="700" height="96" rx="10" fill="#0C2864"/>
+      <text x="94" y="288" font-size="22" font-weight="bold" fill="#FFFFFF">宿主 Host：你的应用程序</text>
+      <text x="94" y="322" font-size="18" fill="#B9CCE4">决定给模型看哪些工具、执行哪些调用、记录什么、拒绝什么</text>
+    </g>
+    <g id="layer-client" data-pptx-bounds="70 358 700 96">
+      <rect x="70" y="358" width="700" height="96" rx="10" fill="#1B4593"/>
+      <text x="94" y="396" font-size="22" font-weight="bold" fill="#FFFFFF">客户端 Client：与某一个服务端 1 对 1</text>
+      <text x="94" y="430" font-size="18" fill="#B9CCE4">命名冲突由宿主解决，所以工具名要带连接前缀</text>
+    </g>
+    <g id="layer-server" data-pptx-bounds="70 466 700 96">
+      <rect x="70" y="466" width="700" height="96" rx="10" fill="#2064AE"/>
+      <text x="94" y="504" font-size="22" font-weight="bold" fill="#FFFFFF">服务端 Server：外部能力提供方</text>
+      <text x="94" y="538" font-size="18" fill="#B9CCE4">声明自己有哪些工具与资源，接受调用并返回结果</text>
+    </g>
+  </g>
+
+  <g id="fig-gate" data-pptx-bounds="810 248 400 340">
+    <g id="gate-found" data-pptx-bounds="810 250 400 96">
+      <rect x="810" y="250" width="400" height="96" rx="10" fill="#F5F8FC"/>
+      <text x="834" y="292" font-size="22" font-weight="bold" fill="#64748B">已发现的工具</text>
+      <text x="834" y="322" font-size="18" fill="#64748B">服务端声明了多少，这里就有多少</text>
+    </g>
+    <g id="gate-line" data-pptx-bounds="810 358 400 96">
+      <rect x="810" y="358" width="400" height="96" rx="10" fill="#FDF3E3"/>
+      <path d="M818 358 a8 8 0 0 0 -8 8 v80 a8 8 0 0 0 8 8 z" fill="#DF203C"/>
+      <text x="842" y="396" font-size="22" font-weight="bold" fill="#DF203C">这条线由人画</text>
+      <text x="842" y="426" font-size="18" fill="#0C2864">发现不等于授权，全选等于放弃边界</text>
+    </g>
+    <g id="gate-bound" data-pptx-bounds="810 466 400 96">
+      <rect x="810" y="466" width="400" height="96" rx="10" fill="#F5F8FC"/>
+      <text x="834" y="508" font-size="22" font-weight="bold" fill="#1B4593">已绑定的工具</text>
+      <text x="834" y="538" font-size="18" fill="#64748B">只有这里面的，才变成可调用能力</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 608 1140 80">
+    <rect x="70" y="608" width="1140" height="80" rx="8" fill="#EEF4FB"/>
+    <path d="M78 608 a8 8 0 0 0 -8 8 v64 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="644" font-size="24" font-weight="bold" fill="#0C2864">MCP 是接线板，不是保险丝</text>
+    <text x="98" y="674" font-size="18" fill="#2064AE">它解决授权、数据可信、资源限制与审计吗？四条全部不解决，全部由宿主负责。</text>
+  </g>
+</svg>

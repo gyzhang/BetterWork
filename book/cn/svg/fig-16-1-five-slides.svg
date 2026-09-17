@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 16-1 五页演示的目的、内容与可追溯性（《智能体工程》第 16 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">每一页都要能写一个动词，每一句都要挂着一个东西</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">没有动词的那一页，先删掉或改写——不要先调字号。</text>
+  </g>
+
+  <g id="fig-table" data-pptx-bounds="70 240 1140 320">
+    <text x="94" y="264" font-size="18" fill="#64748B">页</text>
+    <text x="170" y="264" font-size="18" fill="#64748B">目的（动词）</text>
+    <text x="390" y="264" font-size="18" fill="#64748B">主要内容</text>
+    <text x="930" y="264" font-size="18" fill="#64748B">可追溯性</text>
+    <line x1="70" y1="278" x2="1210" y2="278" stroke="#D8E4F0" stroke-width="1.5"/>
+
+    <g id="slide-1" data-pptx-bounds="70 282 1140 54">
+      <rect x="70" y="282" width="1140" height="54" rx="6" fill="#F5F8FC"/>
+      <text x="94" y="316" font-size="20" font-weight="bold" fill="#1B4593">1</text>
+      <text x="170" y="316" font-size="20" font-weight="bold" fill="#0C2864">陈述决策</text>
+      <text x="390" y="316" font-size="20" fill="#0C2864">在批准下期工作前先复核异常</text>
+      <text x="930" y="316" font-size="20" fill="#64748B">复核者简报</text>
+    </g>
+    <g id="slide-2" data-pptx-bounds="70 336 1140 54">
+      <text x="94" y="370" font-size="20" font-weight="bold" fill="#1B4593">2</text>
+      <text x="170" y="370" font-size="20" font-weight="bold" fill="#0C2864">汇总支出</text>
+      <text x="390" y="370" font-size="20" fill="#0C2864">实际 250；预算 300；偏差 -50</text>
+      <text x="930" y="370" font-size="20" fill="#2064AE">整体指标 ID</text>
+    </g>
+    <g id="slide-3" data-pptx-bounds="70 390 1140 54">
+      <rect x="70" y="390" width="1140" height="54" rx="6" fill="#F5F8FC"/>
+      <text x="94" y="424" font-size="20" font-weight="bold" fill="#1B4593">3</text>
+      <text x="170" y="424" font-size="20" font-weight="bold" fill="#0C2864">说明分布</text>
+      <text x="390" y="424" font-size="20" fill="#0C2864">A：200 / 220；B：50 / 80</text>
+      <text x="930" y="424" font-size="20" fill="#2064AE">分项指标 ID</text>
+    </g>
+    <g id="slide-4" data-pptx-bounds="70 444 1140 54">
+      <text x="94" y="478" font-size="20" font-weight="bold" fill="#1B4593">4</text>
+      <text x="170" y="478" font-size="20" font-weight="bold" fill="#0C2864">暴露不确定性</text>
+      <text x="390" y="478" font-size="20" fill="#0C2864">工时整体吻合，分项偏差相反</text>
+      <text x="930" y="478" font-size="20" fill="#B9770E">工时指标 + 标注假设</text>
+    </g>
+    <g id="slide-5" data-pptx-bounds="70 498 1140 54">
+      <rect x="70" y="498" width="1140" height="54" rx="6" fill="#F5F8FC"/>
+      <text x="94" y="532" font-size="20" font-weight="bold" fill="#1B4593">5</text>
+      <text x="170" y="532" font-size="20" font-weight="bold" fill="#0C2864">要求行动</text>
+      <text x="390" y="532" font-size="20" fill="#0C2864">确认项目完成、调查异常</text>
+      <text x="930" y="532" font-size="20" fill="#B9770E">建议，不是已测定事实</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 596 1140 92">
+    <rect x="70" y="596" width="1140" height="92" rx="8" fill="#EEF4FB"/>
+    <path d="M78 596 a8 8 0 0 0 -8 8 v76 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="630" font-size="24" font-weight="bold" fill="#0C2864">第 4 页是整份演示里最重要的一页</text>
+    <text x="98" y="662" font-size="20" fill="#0C2864">工时整体吻合而分项偏差方向相反——只看合计会得出"完全按计划"的错误结论。</text>
+  </g>
+</svg>

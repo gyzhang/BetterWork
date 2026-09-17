@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 1-1 四种做法的确定性光谱（《智能体工程》第 1 章配图）
+       逐元素手写，无程序化绘图。本图不含值驱动标记，故无 chart-data 声明。
+       字号约定：正文字号 20px。1280 宽画布在阅读版正文栏（约 880px）内被缩到 0.64 倍，
+       故 20px 实际呈现约 13px 可读；本图不放小于 18px 的文字。 -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">同一件事的四种做法</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">决定用哪一种的，不是技术新不新，而是不确定性落在链条的哪一段。</text>
+  </g>
+
+  <g id="fig-spectrum" data-pptx-bounds="70 206 1140 34">
+    <text x="70" y="226" font-size="18" fill="#64748B">可穷举</text>
+    <line x1="150" y1="220" x2="1132" y2="220" stroke="#1B4593" stroke-width="2"/>
+    <path d="M150 220 l14 -7 v14 z" fill="#1B4593"/>
+    <path d="M1132 220 l-14 -7 v14 z" fill="#1B4593"/>
+    <text x="1210" y="226" font-size="18" fill="#64748B" text-anchor="end">不可穷举</text>
+  </g>
+
+  <g id="fig-table" data-pptx-bounds="70 248 1140 340">
+    <text x="82" y="272" font-size="18" fill="#64748B">做法</text>
+    <text x="286" y="272" font-size="18" fill="#64748B">谁决定下一步</text>
+    <text x="528" y="272" font-size="18" fill="#64748B">适合的输入</text>
+    <text x="790" y="272" font-size="18" fill="#64748B">典型失败方式</text>
+    <text x="1034" y="272" font-size="18" fill="#64748B">你要补的</text>
+    <line x1="70" y1="286" x2="1210" y2="286" stroke="#D8E4F0" stroke-width="1.5"/>
+
+    <g id="row-script" data-pptx-bounds="70 292 1140 74">
+      <rect x="70" y="292" width="1140" height="74" rx="8" fill="#F5F8FC"/>
+      <rect x="82" y="304" width="176" height="50" rx="8" fill="#0C2864"/>
+      <text x="170" y="338" font-size="22" font-weight="bold" fill="#FFFFFF" text-anchor="middle">脚本</text>
+      <text x="286" y="339" font-size="20" fill="#0C2864">写代码的人</text>
+      <text x="528" y="339" font-size="20" fill="#0C2864">字段稳定、结构固定</text>
+      <text x="790" y="339" font-size="20" fill="#0C2864">字段一变就崩</text>
+      <text x="1034" y="339" font-size="20" fill="#2064AE">类型校验与对账</text>
+    </g>
+    <g id="row-workflow" data-pptx-bounds="70 366 1140 74">
+      <rect x="82" y="378" width="176" height="50" rx="8" fill="#1B4593"/>
+      <text x="170" y="412" font-size="22" font-weight="bold" fill="#FFFFFF" text-anchor="middle">固定工作流</text>
+      <text x="286" y="413" font-size="20" fill="#0C2864">画流程图的人</text>
+      <text x="528" y="413" font-size="20" fill="#0C2864">步骤可穷举</text>
+      <text x="790" y="413" font-size="20" fill="#0C2864">新情况静默走错</text>
+      <text x="1034" y="413" font-size="20" fill="#2064AE">分支覆盖与兜底</text>
+    </g>
+    <g id="row-retrieval" data-pptx-bounds="70 440 1140 74">
+      <rect x="70" y="440" width="1140" height="74" rx="8" fill="#F5F8FC"/>
+      <rect x="82" y="452" width="176" height="50" rx="8" fill="#2064AE"/>
+      <text x="170" y="486" font-size="22" font-weight="bold" fill="#FFFFFF" text-anchor="middle">检索应用</text>
+      <text x="286" y="487" font-size="20" fill="#0C2864">检索逻辑</text>
+      <text x="528" y="487" font-size="20" fill="#0C2864">答案在语料库里</text>
+      <text x="790" y="487" font-size="20" fill="#0C2864">把无关内容当依据</text>
+      <text x="1034" y="487" font-size="20" fill="#2064AE">来源回链与评估</text>
+    </g>
+    <g id="row-agent" data-pptx-bounds="70 514 1140 74">
+      <rect x="82" y="526" width="176" height="50" rx="8" fill="#3D86D4"/>
+      <text x="170" y="560" font-size="22" font-weight="bold" fill="#FFFFFF" text-anchor="middle">智能体</text>
+      <text x="286" y="561" font-size="20" fill="#0C2864">模型，运行时</text>
+      <text x="528" y="561" font-size="20" fill="#0C2864">要看了才知道</text>
+      <text x="790" y="561" font-size="20" fill="#0C2864">越权、停不下来</text>
+      <text x="1034" y="561" font-size="20" fill="#2064AE">权限、追踪、终止</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 604 1140 84">
+    <rect x="70" y="604" width="1140" height="84" rx="8" fill="#EEF4FB"/>
+    <path d="M78 604 a8 8 0 0 0 -8 8 v68 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="640" font-size="24" font-weight="bold" fill="#0C2864">做法越往右，你要在模型之外补的东西越多</text>
+    <text x="98" y="668" font-size="18" fill="#2064AE">类型校验 · 分支覆盖 · 来源回链 · 权限与追踪</text>
+  </g>
+</svg>

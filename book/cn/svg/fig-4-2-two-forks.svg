@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 4-2 两处分岔：工具结果与三类终态（《智能体工程》第 4 章配图）
+       逐元素手写。字号：标题 32 / 正文 20 / 注 18。内容区 y126 起。 -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">两处分岔：一处继续跑，一处必须停</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">左边是工具这一层：我允许你做，但你做失败了。右边是运行这一层：它到底怎么结束的。</text>
+  </g>
+
+  <g id="fig-tools" data-pptx-bounds="70 248 590 272">
+    <text x="94" y="272" font-size="18" fill="#64748B">工具这一层发生了什么</text>
+    <text x="330" y="272" font-size="18" fill="#64748B">处理方式</text>
+    <line x1="70" y1="286" x2="660" y2="286" stroke="#D8E4F0" stroke-width="1.5"/>
+    <g id="tool-ok" data-pptx-bounds="70 292 590 76">
+      <rect x="70" y="292" width="590" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="338" font-size="20" font-weight="bold" fill="#0C2864">执行成功</text>
+      <text x="330" y="338" font-size="20" fill="#1B4593">转成观测，运行继续</text>
+    </g>
+    <g id="tool-fail" data-pptx-bounds="70 368 590 76">
+      <text x="94" y="414" font-size="20" font-weight="bold" fill="#0C2864">执行失败</text>
+      <text x="330" y="414" font-size="20" fill="#1B4593">转成错误观测，继续</text>
+    </g>
+    <g id="tool-unknown" data-pptx-bounds="70 444 590 76">
+      <rect x="70" y="444" width="590" height="76" rx="8" fill="#FDF3E3"/>
+      <text x="94" y="490" font-size="20" font-weight="bold" fill="#0C2864">未知工具名</text>
+      <text x="330" y="490" font-size="20" font-weight="bold" fill="#DF203C">整轮运行失败</text>
+    </g>
+  </g>
+
+  <g id="fig-terminals" data-pptx-bounds="690 248 520 272">
+    <text x="714" y="272" font-size="18" fill="#64748B">最终终态</text>
+    <text x="920" y="272" font-size="18" fill="#64748B">用户该看到什么</text>
+    <line x1="690" y1="286" x2="1210" y2="286" stroke="#D8E4F0" stroke-width="1.5"/>
+    <g id="term-done" data-pptx-bounds="690 292 520 76">
+      <rect x="690" y="292" width="520" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="714" y="338" font-size="20" font-weight="bold" fill="#1B4593">完成</text>
+      <text x="920" y="338" font-size="20" fill="#0C2864">结果本身</text>
+    </g>
+    <g id="term-cancel" data-pptx-bounds="690 368 520 76">
+      <text x="714" y="414" font-size="20" font-weight="bold" fill="#2064AE">取消</text>
+      <text x="920" y="414" font-size="20" fill="#0C2864">一个「已停止」提示</text>
+    </g>
+    <g id="term-failed" data-pptx-bounds="690 444 520 76">
+      <rect x="690" y="444" width="520" height="76" rx="8" fill="#FDF3E3"/>
+      <text x="714" y="490" font-size="20" font-weight="bold" fill="#DF203C">失败</text>
+      <text x="920" y="490" font-size="20" fill="#0C2864">错误信息与原因</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 548 1140 140">
+    <rect x="70" y="548" width="1140" height="140" rx="8" fill="#EEF4FB"/>
+    <path d="M78 548 a8 8 0 0 0 -8 8 v124 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="586" font-size="24" font-weight="bold" fill="#0C2864">把「取消」和「失败」合并，是最常见的产品缺陷之一</text>
+    <text x="98" y="618" font-size="20" fill="#0C2864">用户点了一次「停止」，界面上冒出一条红色错误提示——他会以为系统坏了。</text>
+    <text x="98" y="648" font-size="20" fill="#2064AE">判定顺序也是刻意的：先判取消，再判失败。反了，取消就会被归到失败里去。</text>
+    <text x="98" y="676" font-size="18" fill="#64748B">参考实现的做法：取消语义只有一处定义，任何地方都不许再手写 AbortError。</text>
+  </g>
+</svg>

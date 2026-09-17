@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 8-2 两类检索的强项、代价与选型判据（《智能体工程》第 8 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">两类检索没有高下，只有配不配</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">判断依据不是「哪种更先进」，是「你的查询里精确标识符和同义改写各占多少」。</text>
+  </g>
+
+  <g id="fig-table" data-pptx-bounds="70 248 1140 348">
+    <text x="94" y="272" font-size="18" fill="#64748B">维度</text>
+    <text x="340" y="272" font-size="18" fill="#64748B">词法检索</text>
+    <text x="640" y="272" font-size="18" fill="#64748B">向量检索</text>
+    <text x="920" y="272" font-size="18" fill="#64748B">选型判据</text>
+    <line x1="70" y1="286" x2="1210" y2="286" stroke="#D8E4F0" stroke-width="1.5"/>
+
+    <g id="row-id" data-pptx-bounds="70 292 1140 76">
+      <rect x="70" y="292" width="1140" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="338" font-size="20" font-weight="bold" fill="#0C2864">精确标识符</text>
+      <text x="340" y="338" font-size="20" fill="#1B4593">强</text>
+      <text x="640" y="338" font-size="20" fill="#DF203C">弱</text>
+      <text x="920" y="338" font-size="20" fill="#2064AE">编号、型号、人名便选词法</text>
+    </g>
+    <g id="row-paraphrase" data-pptx-bounds="70 368 1140 76">
+      <text x="94" y="414" font-size="20" font-weight="bold" fill="#0C2864">同义改写</text>
+      <text x="340" y="414" font-size="20" fill="#DF203C">弱</text>
+      <text x="640" y="414" font-size="20" fill="#1B4593">强</text>
+      <text x="920" y="414" font-size="20" fill="#2064AE">口语式提问便选向量</text>
+    </g>
+    <g id="row-explain" data-pptx-bounds="70 444 1140 76">
+      <rect x="70" y="444" width="1140" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="490" font-size="20" font-weight="bold" fill="#0C2864">可解释性</text>
+      <text x="340" y="490" font-size="20" fill="#1B4593">强，词对上了</text>
+      <text x="640" y="490" font-size="20" fill="#DF203C">弱，距离不是理由</text>
+      <text x="920" y="490" font-size="20" fill="#2064AE">要写进报告便选词法</text>
+    </g>
+    <g id="row-cost" data-pptx-bounds="70 520 1140 76">
+      <text x="94" y="566" font-size="20" font-weight="bold" fill="#0C2864">成本与复现</text>
+      <text x="340" y="566" font-size="20" fill="#1B4593">低、确定</text>
+      <text x="640" y="566" font-size="20" fill="#DF203C">需嵌入调用</text>
+      <text x="920" y="566" font-size="20" fill="#2064AE">向量必须固定模型版本</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 616 1140 72">
+    <rect x="70" y="616" width="1140" height="72" rx="8" fill="#EEF4FB"/>
+    <path d="M78 616 a8 8 0 0 0 -8 8 v56 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="650" font-size="24" font-weight="bold" fill="#0C2864">两者强项互补，所以默认应该都做，再对比</text>
+    <text x="98" y="678" font-size="18" fill="#2064AE">但混合检索不是免费的：它同时带来两种成本与两种失败模式。</text>
+  </g>
+</svg>

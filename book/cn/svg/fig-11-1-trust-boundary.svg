@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 11-1 信任边界与执行者（《智能体工程》第 11 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">除了你自己写的，几乎所有的文字都不可信</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">「工具返回的结果也不可信」这一条最容易被忽略：工具是你写的，它返回的内容不是。</text>
+  </g>
+
+  <g id="fig-table" data-pptx-bounds="70 248 1140 364">
+    <text x="94" y="272" font-size="18" fill="#64748B">来源</text>
+    <text x="500" y="272" font-size="18" fill="#64748B">可信吗</text>
+    <text x="720" y="272" font-size="18" fill="#64748B">为什么</text>
+    <line x1="70" y1="286" x2="1210" y2="286" stroke="#D8E4F0" stroke-width="1.5"/>
+
+    <g id="src-model" data-pptx-bounds="70 292 1140 64">
+      <rect x="70" y="292" width="1140" height="64" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="332" font-size="20" font-weight="bold" fill="#0C2864">模型生成的文本</text>
+      <text x="500" y="332" font-size="20" font-weight="bold" fill="#DF203C">不可信</text>
+      <text x="720" y="332" font-size="18" fill="#64748B">概率产物，而且会被上游内容影响</text>
+    </g>
+    <g id="src-tool" data-pptx-bounds="70 356 1140 64">
+      <text x="94" y="396" font-size="20" font-weight="bold" fill="#0C2864">工具返回的结果</text>
+      <text x="500" y="396" font-size="20" font-weight="bold" fill="#DF203C">不可信</text>
+      <text x="720" y="396" font-size="18" fill="#64748B">工具可信，它返回的内容可能来自外部</text>
+    </g>
+    <g id="src-doc" data-pptx-bounds="70 420 1140 64">
+      <rect x="70" y="420" width="1140" height="64" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="460" font-size="20" font-weight="bold" fill="#0C2864">检索到的文档与网页</text>
+      <text x="500" y="460" font-size="20" font-weight="bold" fill="#DF203C">不可信</text>
+      <text x="720" y="460" font-size="18" fill="#64748B">可能被篡改，也可能本来就含指令</text>
+    </g>
+    <g id="src-user" data-pptx-bounds="70 484 1140 64">
+      <text x="94" y="524" font-size="20" font-weight="bold" fill="#0C2864">用户本次的输入</text>
+      <text x="500" y="524" font-size="20" font-weight="bold" fill="#B9770E">半可信</text>
+      <text x="720" y="524" font-size="18" fill="#64748B">他是授权来源，但转发的材料仍不可信</text>
+    </g>
+    <g id="src-mine" data-pptx-bounds="70 548 1140 64">
+      <rect x="70" y="548" width="1140" height="64" rx="8" fill="#EEF4FB"/>
+      <text x="94" y="588" font-size="20" font-weight="bold" fill="#0C2864">你的系统提示与工具实现</text>
+      <text x="500" y="588" font-size="20" font-weight="bold" fill="#1B4593">可信</text>
+      <text x="720" y="588" font-size="18" fill="#64748B">你写的，可以成为信任根</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 632 1140 56">
+    <rect x="70" y="632" width="1140" height="56" rx="8" fill="#EEF4FB"/>
+    <path d="M78 632 a8 8 0 0 0 -8 8 v40 a8 8 0 0 0 8 8 z" fill="#DF203C"/>
+    <text x="98" y="666" font-size="18" fill="#0C2864">数据与指令共用同一个通道，是这个架构无法自我修复的缺陷：只能靠边界，不能靠教育。</text>
+  </g>
+</svg>

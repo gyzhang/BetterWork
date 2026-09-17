@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 6-2 三种不能算的情形与各自的处理（《智能体工程》第 6 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">三种不能算的情形，三种不同的处理</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">处理方式的差别不是风格，是由「下游拿到什么会更安全」决定的。</text>
+  </g>
+
+  <g id="fig-table" data-pptx-bounds="70 248 1140 272">
+    <text x="94" y="272" font-size="18" fill="#64748B">情形</text>
+    <text x="360" y="272" font-size="18" fill="#64748B">处理方式</text>
+    <text x="830" y="272" font-size="18" fill="#64748B">为什么这样处理</text>
+    <line x1="70" y1="286" x2="1210" y2="286" stroke="#D8E4F0" stroke-width="1.5"/>
+
+    <g id="row-zero" data-pptx-bounds="70 292 1140 76">
+      <rect x="70" y="292" width="1140" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="338" font-size="20" font-weight="bold" fill="#DF203C">分母为零</text>
+      <text x="360" y="338" font-size="20" fill="#0C2864">算绝对值，不产生比例字段</text>
+      <text x="830" y="338" font-size="20" fill="#2064AE">比例没有意义，绝对值有</text>
+    </g>
+    <g id="row-missing" data-pptx-bounds="70 368 1140 76">
+      <text x="94" y="414" font-size="20" font-weight="bold" fill="#DF203C">缺少本期值</text>
+      <text x="360" y="414" font-size="20" fill="#0C2864">抛错，并指明是哪个指标</text>
+      <text x="830" y="414" font-size="20" fill="#2064AE">跳过会让「数据不全」变成「少几行」</text>
+    </g>
+    <g id="row-outside" data-pptx-bounds="70 444 1140 76">
+      <rect x="70" y="444" width="1140" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="490" font-size="20" font-weight="bold" fill="#DF203C">路径越界</text>
+      <text x="360" y="490" font-size="20" fill="#0C2864">解析真实路径后判断，拒绝</text>
+      <text x="830" y="490" font-size="20" fill="#2064AE">字符串检查有洞：软链、大小写</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 548 1140 140">
+    <rect x="70" y="548" width="1140" height="140" rx="8" fill="#EEF4FB"/>
+    <path d="M78 548 a8 8 0 0 0 -8 8 v124 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="586" font-size="24" font-weight="bold" fill="#0C2864">缺失有四种伪装，每一种都要能被识别</text>
+    <text x="98" y="618" font-size="20" fill="#0C2864">① 填成零　　② 静默跳过　　③ 取默认值　　④ 用近似值代替</text>
+    <text x="98" y="648" font-size="20" fill="#DF203C">它们的共同效果是：报告看起来更完整，而错误已经完成。</text>
+    <text x="98" y="676" font-size="18" fill="#64748B">规则：宁可让报告里出现「无法计算」，也不要让它出现一个数字。</text>
+  </g>
+</svg>

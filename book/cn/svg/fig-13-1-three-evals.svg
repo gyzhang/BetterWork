@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 13-1 三类评估与各自的证据（《智能体工程》第 13 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">三类评估，各自的证据不能互相借</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">用第一类的证据去说第二类的话，是评估里最常见、也最贵的一种越界。</text>
+  </g>
+
+  <g id="fig-table" data-pptx-bounds="70 248 1140 308">
+    <text x="94" y="272" font-size="18" fill="#64748B">类型</text>
+    <text x="310" y="272" font-size="18" fill="#64748B">用什么跑</text>
+    <text x="600" y="272" font-size="18" fill="#64748B">能证明</text>
+    <text x="900" y="272" font-size="18" fill="#64748B">不能证明</text>
+    <line x1="70" y1="286" x2="1210" y2="286" stroke="#D8E4F0" stroke-width="1.5"/>
+
+    <g id="ev-1" data-pptx-bounds="70 292 1140 88">
+      <rect x="70" y="292" width="1140" height="88" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="344" font-size="20" font-weight="bold" fill="#1B4593">确定性检查</text>
+      <text x="310" y="344" font-size="20" fill="#0C2864">断言、单元测试、结构校验</text>
+      <text x="600" y="344" font-size="20" fill="#2064AE">代码逻辑对、格式合法</text>
+      <text x="900" y="344" font-size="20" fill="#64748B">输出内容是否有意义</text>
+    </g>
+    <g id="ev-2" data-pptx-bounds="70 380 1140 88">
+      <text x="94" y="432" font-size="20" font-weight="bold" fill="#1B4593">线上模型评估</text>
+      <text x="310" y="432" font-size="20" fill="#0C2864">真实模型加固定任务集</text>
+      <text x="600" y="432" font-size="20" fill="#2064AE">这批任务上的行为质量</text>
+      <text x="900" y="432" font-size="20" fill="#64748B">别的任务、生产稳定性</text>
+    </g>
+    <g id="ev-3" data-pptx-bounds="70 468 1140 88">
+      <rect x="70" y="468" width="1140" height="88" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="520" font-size="20" font-weight="bold" fill="#1B4593">人工文档审阅</text>
+      <text x="310" y="520" font-size="20" fill="#0C2864">人读产物</text>
+      <text x="600" y="520" font-size="20" fill="#2064AE">可读性与专业判断</text>
+      <text x="900" y="520" font-size="20" fill="#64748B">不能规模化，读不完</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 580 1140 108">
+    <rect x="70" y="580" width="1140" height="108" rx="8" fill="#EEF4FB"/>
+    <path d="M78 580 a8 8 0 0 0 -8 8 v92 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="616" font-size="24" font-weight="bold" fill="#0C2864">脚本化的假模型跑通了，不构成线上模型质量的证据</text>
+    <text x="98" y="648" font-size="20" fill="#0C2864">它证明的是第一类。要证明第二类，只能用真实模型、固定任务集、重复采样。</text>
+    <text x="98" y="676" font-size="18" fill="#DF203C">同一类错误换个说法就是：mock 通过、真实库失败。</text>
+  </g>
+</svg>

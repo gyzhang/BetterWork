@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 9-2 记忆的四个作用域与生命周期（《智能体工程》第 9 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">作用域防串味，生命周期防复活</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">一条记忆要同时回答两个问题：它属于谁，以及它什么时候必须消失。</text>
+  </g>
+
+  <g id="fig-scope" data-pptx-bounds="70 248 590 348">
+    <text x="94" y="272" font-size="18" fill="#64748B">作用域</text>
+    <text x="330" y="272" font-size="18" fill="#64748B">什么时候生效</text>
+    <line x1="70" y1="286" x2="660" y2="286" stroke="#D8E4F0" stroke-width="1.5"/>
+    <g id="scope-user" data-pptx-bounds="70 292 590 76">
+      <rect x="70" y="292" width="590" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="338" font-size="20" font-weight="bold" fill="#1B4593">用户</text>
+      <text x="330" y="338" font-size="20" fill="#0C2864">跨全部工作空间</text>
+    </g>
+    <g id="scope-workspace" data-pptx-bounds="70 368 590 76">
+      <text x="94" y="414" font-size="20" font-weight="bold" fill="#1B4593">工作空间</text>
+      <text x="330" y="414" font-size="20" fill="#0C2864">只在这个资料库里</text>
+    </g>
+    <g id="scope-expert" data-pptx-bounds="70 444 590 76">
+      <rect x="70" y="444" width="590" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="490" font-size="20" font-weight="bold" fill="#1B4593">专家</text>
+      <text x="330" y="490" font-size="20" fill="#0C2864">只在这个角色配置下</text>
+    </g>
+    <g id="scope-cross" data-pptx-bounds="70 520 590 76">
+      <text x="94" y="566" font-size="20" font-weight="bold" fill="#1B4593">专家 × 工作空间</text>
+      <text x="330" y="566" font-size="20" fill="#0C2864">两者同时满足才生效</text>
+    </g>
+  </g>
+
+  <g id="fig-state" data-pptx-bounds="690 248 520 348">
+    <text x="714" y="272" font-size="18" fill="#64748B">状态</text>
+    <text x="920" y="272" font-size="18" fill="#64748B">语义</text>
+    <line x1="690" y1="286" x2="1210" y2="286" stroke="#D8E4F0" stroke-width="1.5"/>
+    <g id="state-candidate" data-pptx-bounds="690 292 520 76">
+      <rect x="690" y="292" width="520" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="714" y="338" font-size="20" font-weight="bold" fill="#2064AE">候选</text>
+      <text x="920" y="338" font-size="20" fill="#0C2864">未确认，不生效</text>
+    </g>
+    <g id="state-active" data-pptx-bounds="690 368 520 76">
+      <text x="714" y="414" font-size="20" font-weight="bold" fill="#1B4593">生效</text>
+      <text x="920" y="414" font-size="20" fill="#0C2864">四个条件全部满足</text>
+    </g>
+    <g id="state-expired" data-pptx-bounds="690 444 520 76">
+      <rect x="690" y="444" width="520" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="714" y="490" font-size="20" font-weight="bold" fill="#B9770E">失效</text>
+      <text x="920" y="490" font-size="20" fill="#0C2864">超过有效期自动失效</text>
+    </g>
+    <g id="state-deleted" data-pptx-bounds="690 520 520 76">
+      <text x="714" y="566" font-size="20" font-weight="bold" fill="#DF203C">删除</text>
+      <text x="920" y="566" font-size="20" fill="#0C2864">必须同时删掉投影</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 616 1140 72">
+    <rect x="70" y="616" width="1140" height="72" rx="8" fill="#EEF4FB"/>
+    <path d="M78 616 a8 8 0 0 0 -8 8 v56 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="650" font-size="24" font-weight="bold" fill="#0C2864">四个生效条件：作用域匹配 · 时间有效 · 未被排除 · 状态可生效</text>
+    <text x="98" y="678" font-size="18" fill="#DF203C">真相源删了、派生视图还在——这是记忆类 bug 最典型的形态。</text>
+  </g>
+</svg>

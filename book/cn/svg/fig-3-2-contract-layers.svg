@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 3-2 工具契约的四层职责（《智能体工程》第 3 章配图）
+       逐元素手写。字号：标题 32 / 正文 20 / 注 18。内容区 y126 起。 -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">一个工具的四层，每一层各管一件事</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">同一个参数形状写两遍不是冗余：一份给模型看，一份给自己的代码执行。</text>
+  </g>
+
+  <g id="fig-table" data-pptx-bounds="70 248 1140 348">
+    <text x="94" y="272" font-size="18" fill="#64748B">层</text>
+    <text x="380" y="272" font-size="18" fill="#64748B">谁看得到</text>
+    <text x="640" y="272" font-size="18" fill="#64748B">它决定什么</text>
+    <text x="950" y="272" font-size="18" fill="#64748B">少了它会怎样</text>
+    <line x1="70" y1="286" x2="1210" y2="286" stroke="#D8E4F0" stroke-width="1.5"/>
+
+    <g id="row-declare" data-pptx-bounds="70 292 1140 76">
+      <rect x="70" y="292" width="1140" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="338" font-size="20" font-weight="bold" fill="#1B4593">① 声明</text>
+      <text x="380" y="338" font-size="20" fill="#0C2864">模型</text>
+      <text x="640" y="338" font-size="20" fill="#0C2864">要不要用这份工具</text>
+      <text x="950" y="338" font-size="20" fill="#2064AE">模型不知道参数形状</text>
+    </g>
+    <g id="row-validate" data-pptx-bounds="70 368 1140 76">
+      <text x="94" y="414" font-size="20" font-weight="bold" fill="#1B4593">② 校验</text>
+      <text x="380" y="414" font-size="20" fill="#0C2864">只有你的代码</text>
+      <text x="640" y="414" font-size="20" fill="#0C2864">能不能执行</text>
+      <text x="950" y="414" font-size="20" fill="#2064AE">畸形参数直接进执行器</text>
+    </g>
+    <g id="row-execute" data-pptx-bounds="70 444 1140 76">
+      <rect x="70" y="444" width="1140" height="76" rx="8" fill="#F5F8FC"/>
+      <text x="94" y="490" font-size="20" font-weight="bold" fill="#1B4593">③ 执行</text>
+      <text x="380" y="490" font-size="20" fill="#0C2864">只有你的代码</text>
+      <text x="640" y="490" font-size="20" fill="#0C2864">唯一的副作用来源</text>
+      <text x="950" y="490" font-size="20" fill="#2064AE">工具不会真的做事</text>
+    </g>
+    <g id="row-observe" data-pptx-bounds="70 520 1140 76">
+      <text x="94" y="566" font-size="20" font-weight="bold" fill="#1B4593">④ 回填</text>
+      <text x="380" y="566" font-size="20" fill="#0C2864">下一轮的模型</text>
+      <text x="640" y="566" font-size="20" fill="#0C2864">下一轮能看见什么</text>
+      <text x="950" y="566" font-size="20" fill="#2064AE">模型看不见刚发生了什么</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 616 1140 72">
+    <rect x="70" y="616" width="1140" height="72" rx="8" fill="#EEF4FB"/>
+    <path d="M78 616 a8 8 0 0 0 -8 8 v56 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="650" font-size="24" font-weight="bold" fill="#0C2864">声明是建议性的，校验是强制性的，两者不能互相替代</text>
+    <text x="98" y="678" font-size="18" fill="#2064AE">回填格式是工具契约的一部分，不是输出格式的附带产物。</text>
+  </g>
+</svg>

@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 图 17-2 主张—证据登记表：四类主张与各自的处理方式（《智能体工程》第 17 章配图） -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="fig-header" data-pptx-bounds="70 126 1140 70">
+    <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">主张必须先分类，才能决定它能不能进结论</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">四类的处理方式不同。把它们混成一句"据分析"，是提案里最常见的失真。</text>
+  </g>
+
+  <g id="fig-table" data-pptx-bounds="70 240 1140 336">
+    <text x="94" y="264" font-size="18" fill="#64748B">ID</text>
+    <text x="190" y="264" font-size="18" fill="#64748B">主张</text>
+    <text x="620" y="264" font-size="18" fill="#64748B">支撑</text>
+    <text x="930" y="264" font-size="18" fill="#64748B">处理方式</text>
+    <line x1="70" y1="278" x2="1210" y2="278" stroke="#D8E4F0" stroke-width="1.5"/>
+
+    <g id="claim-1" data-pptx-bounds="70 286 1140 70">
+      <rect x="70" y="286" width="1140" height="70" rx="6" fill="#F5F8FC"/>
+      <rect x="70" y="286" width="6" height="70" rx="3" fill="#1B4593"/>
+      <text x="94" y="328" font-size="20" font-weight="bold" fill="#1B4593">Q1</text>
+      <text x="190" y="328" font-size="20" fill="#0C2864">试点可使用已批准的云服务与合成数据</text>
+      <text x="620" y="328" font-size="20" fill="#475569">C1，政策 v2 §2</text>
+      <text x="930" y="328" font-size="20" fill="#2064AE">当前政策事实</text>
+    </g>
+    <g id="claim-2" data-pptx-bounds="70 356 1140 70">
+      <rect x="70" y="356" width="1140" height="70" rx="6" fill="#F5F8FC"/>
+      <rect x="70" y="356" width="6" height="70" rx="3" fill="#2064AE"/>
+      <text x="94" y="398" font-size="20" font-weight="bold" fill="#2064AE">Q2</text>
+      <text x="190" y="398" font-size="20" fill="#0C2864">提供的平台没有定时任务能力</text>
+      <text x="620" y="398" font-size="20" fill="#475569">C2，平台说明 v1 §4</text>
+      <text x="930" y="398" font-size="20" fill="#2064AE">能力限制</text>
+    </g>
+    <g id="claim-3" data-pptx-bounds="70 426 1140 70">
+      <rect x="70" y="426" width="1140" height="70" rx="6" fill="#F5F8FC"/>
+      <rect x="70" y="426" width="6" height="70" rx="3" fill="#3D86D4"/>
+      <text x="94" y="468" font-size="20" font-weight="bold" fill="#3D86D4">Q3</text>
+      <text x="190" y="468" font-size="20" fill="#0C2864">团队希望有隔夜报告</text>
+      <text x="620" y="468" font-size="20" fill="#475569">C3，访谈 v1 §1</text>
+      <text x="930" y="468" font-size="20" fill="#B9770E">用户需求</text>
+    </g>
+    <g id="claim-4" data-pptx-bounds="70 496 1140 70">
+      <rect x="70" y="496" width="1140" height="70" rx="6" fill="#FDF3E3"/>
+      <rect x="70" y="496" width="6" height="70" rx="3" fill="#DF203C"/>
+      <text x="94" y="538" font-size="20" font-weight="bold" fill="#DF203C">Q4</text>
+      <text x="190" y="538" font-size="20" fill="#0C2864">拟议系统能省下团队一半时间</text>
+      <text x="620" y="538" font-size="20" fill="#DF203C">没有任何测量证据</text>
+      <text x="930" y="538" font-size="20" fill="#DF203C">移除，改写为假设</text>
+    </g>
+  </g>
+
+  <g id="fig-conclusion" data-pptx-bounds="70 596 1140 92">
+    <rect x="70" y="596" width="1140" height="92" rx="8" fill="#EEF4FB"/>
+    <path d="M78 596 a8 8 0 0 0 -8 8 v76 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
+    <text x="98" y="630" font-size="24" font-weight="bold" fill="#0C2864">无支撑的收益只能待在两个位置：被删掉，或被降级成假设</text>
+    <text x="98" y="662" font-size="20" fill="#0C2864">它不能作为主张出现在结论里。而收益数字，恰好是被记住最久、被核得最少的那一个。</text>
+  </g>
+</svg>
