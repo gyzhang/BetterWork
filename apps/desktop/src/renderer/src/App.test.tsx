@@ -113,6 +113,7 @@ function installApi(options?: {
     chrome: { updateTheme: vi.fn(async () => undefined) },
     workspace: {
       getDefault: vi.fn(async () => ({ id: 'workspace-1', rootPath: '/workspace' })),
+      listAll: vi.fn(async () => []),
     },
     models: {
       list: vi.fn(async (): Promise<ModelProfileSummary[]> => options?.models ?? []),

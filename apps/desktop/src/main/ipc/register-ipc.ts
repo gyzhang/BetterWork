@@ -326,6 +326,13 @@ function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
     },
   );
 
+  handleNoInput(
+    IpcChannel.ListWorkspaces,
+    emptyRequestSchema,
+    z.array(workspaceSummarySchema),
+    () => store.workspaces.listAll(),
+  );
+
   handleInput(IpcChannel.CreateTask, createTaskRequestSchema, createdTaskSchema, (input) =>
     store.tasks.create(input.workspaceId, input.title, input.goal),
   );

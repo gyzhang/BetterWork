@@ -37,6 +37,7 @@ import { PageHeader } from './components/layout/PageHeader';
 import { ModelEditor } from './components/ModelEditorSheet';
 import { ToolActivity } from './components/ToolActivity';
 import { Welcome } from './components/Welcome';
+import { WorkspaceSelector } from './components/WorkspaceSelector';
 import { useAppearance } from './hooks/use-appearance';
 import { useExperts } from './hooks/use-experts';
 import { useKnowledgeLibrary } from './hooks/use-knowledge-library';
@@ -159,6 +160,7 @@ export function App(): React.JSX.Element {
   const startingRef = useRef(false);
   const [isStarting, setIsStarting] = useState(false);
   const [workspace, setWorkspace] = useState<WorkspaceSummary>();
+  const [allWorkspaces, setAllWorkspaces] = useState<WorkspaceSummary[]>([]);
   const workspaceIdRef = useRef<string | undefined>(undefined);
   const [activeTask, setActiveTask] = useState<{ id: string; sessionId: string; title: string }>();
   const activeTaskIdRef = useRef<string | undefined>(undefined);
@@ -324,6 +326,7 @@ export function App(): React.JSX.Element {
       }),
       '加载默认工作区',
     );
+    trackAction(window.betterwork.workspace.listAll().then(setAllWorkspaces), '加载工作区列表');
     return window.betterwork.runs.onEvent((event) => {
       setEvents((current) =>
         event.runId === activeRunIdRef.current ? [...current, event] : current,
@@ -1358,12 +1361,17 @@ export function App(): React.JSX.Element {
               )}
               <form className="composer" onSubmit={submit}>
                 <div className="workspace-row">
-                  <span>工作区</span>
-                  <input aria-label="工作区" value={workspace?.rootPath ?? ''} readOnly />
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() =>
+                  <WorkspaceSelector
+                    currentWorkspace={workspace}
+                    workspaces={allWorkspaces}
+                    onSelectWorkspace={(selected) => {
+                      startNewTask();
+                      setTaskBindings(taskBindings);
+                      workspaceIdRef.current = selected.id;
+                      setWorkspace(selected);
+                      refreshTasks(selected.id);
+                    }}
+                    onOpenLocalFolder={() =>
                       reportAction(
                         window.betterwork.workspace.selectDirectory().then((selected) => {
                           if (selected) {
@@ -1372,15 +1380,36 @@ export function App(): React.JSX.Element {
                             workspaceIdRef.current = selected.id;
                             setWorkspace(selected);
                             refreshTasks(selected.id);
+                            trackAction(
+                              window.betterwork.workspace.listAll().then(setAllWorkspaces),
+                              '刷新工作区列表',
+                            );
                           }
                         }),
                         setActionError,
                         '选择工作区失败，请重试。',
                       )
                     }
-                  >
-                    选择
-                  </button>
+                    onNewWorkspace={() =>
+                      reportAction(
+                        window.betterwork.workspace.selectDirectory().then((selected) => {
+                          if (selected) {
+                            startNewTask();
+                            setTaskBindings(taskBindings);
+                            workspaceIdRef.current = selected.id;
+                            setWorkspace(selected);
+                            refreshTasks(selected.id);
+                            trackAction(
+                              window.betterwork.workspace.listAll().then(setAllWorkspaces),
+                              '刷新工作区列表',
+                            );
+                          }
+                        }),
+                        setActionError,
+                        '新建工作区失败，请重试。',
+                      )
+                    }
+                  />
                 </div>
                 <div className="composer-capability-row">
                   {activeExpert && (

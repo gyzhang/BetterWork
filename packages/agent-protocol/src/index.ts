@@ -2134,6 +2134,7 @@ export const IpcChannel = {
   RunEvent: 'run:event',
   GetDefaultWorkspace: 'workspace:get-default',
   SelectWorkspace: 'workspace:select',
+  ListWorkspaces: 'workspace:list',
   CreateTask: 'task:create',
   ListTasks: 'task:list',
   ListEvidence: 'evidence:list',
@@ -2224,6 +2225,7 @@ export interface BetterWorkDesktopApi {
   workspace: {
     getDefault(): Promise<WorkspaceSummary>;
     selectDirectory(): Promise<WorkspaceSummary | null>;
+    listAll(): Promise<WorkspaceSummary[]>;
   };
   tasks: {
     create(input: CreateTaskRequest): Promise<CreatedTask>;

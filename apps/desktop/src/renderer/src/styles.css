@@ -887,6 +887,80 @@ p {
   border: 0;
   outline: 0;
 }
+
+/* === 工作区选择器 === */
+.workspace-selector-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 13px;
+  cursor: pointer;
+  min-height: 28px;
+}
+.workspace-selector-trigger:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+.workspace-selector-name {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-selector-chevron {
+  transition: transform var(--motion-instant) var(--motion-easing);
+}
+.workspace-selector-chevron.open {
+  transform: rotate(-90deg);
+}
+.workspace-selector-search {
+  padding: 6px 8px;
+}
+.workspace-selector-search-input {
+  width: 100%;
+  padding: 6px 8px;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+}
+.workspace-selector-search-input::placeholder {
+  color: var(--text-muted);
+}
+.workspace-selector-search-input:focus {
+  border-color: var(--focus-ring);
+}
+.workspace-selector-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 6px;
+}
+.workspace-selector-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  color: var(--text-primary);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+.workspace-selector-action:hover {
+  background: var(--selection);
+}
 .text-button {
   min-height: 25px;
   padding: 3px 7px;

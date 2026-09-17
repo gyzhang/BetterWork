@@ -56,4 +56,11 @@ export class WorkspaceRepository {
       WorkspaceRow | undefined;
     return row ? toSummary(row) : undefined;
   }
+
+  listAll(): WorkspaceSummary[] {
+    const rows = this.db
+      .prepare('SELECT * FROM workspaces ORDER BY updated_at DESC')
+      .all() as WorkspaceRow[];
+    return rows.map(toSummary);
+  }
 }
