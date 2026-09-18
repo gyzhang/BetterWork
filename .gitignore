@@ -22,3 +22,6 @@ coverage/
 # Runtime task working directories
 .betterwork/
 /temp-asserts/
+
+# Sensitive data
+book/cn/sensitive.txt
