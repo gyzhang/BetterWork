@@ -167,7 +167,7 @@ n_table = body.count('<table>')
 
 CSS = """
 *,*::before,*::after{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;--sw:312px}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;--sw:312px;--cw:880px}
 html[data-theme="paper"]{
   --bg:#F4F7FB; --paper:#FFFFFF; --panel:#F7FAFD; --side:#F7FAFD;
   --ink:#1F2937; --ink-soft:#475569; --head:#0C2864; --head2:#2064AE;
@@ -242,7 +242,7 @@ body{
 /* ---------- 正文 ---------- */
 #wrap{margin-left:var(--sw);padding:52px 0 0}
 main{
-  max-width:880px;margin:0 auto;background:var(--paper);
+  max-width:var(--cw);margin:0 auto;background:var(--paper);
   padding:44px 56px 120px;min-height:100vh;box-shadow:var(--shadow);
 }
 h1,h2,h3{line-height:1.4;letter-spacing:.01em}
@@ -429,12 +429,17 @@ JS = """
   var root=document.documentElement;
   var k='vibe-book';
   var pendingFold=null;
+  var pendingWide=false;
   try{
     var st=JSON.parse(localStorage.getItem(k)||'{}');
     if(st.fs) root.style.setProperty('--fs',st.fs+'px');
     if(st.theme) root.setAttribute('data-theme',st.theme);
     if(st.fold) pendingFold=st.fold;
     if(st.sw) root.style.setProperty('--sw',Math.round(st.sw)+'px');
+    if(st.cw){
+      root.style.setProperty('--cw',Math.round(st.cw)+'px');
+      pendingWide=Math.round(st.cw)>=1000;
+    }
   }catch(e){}
   function save(patch){
     var st={};
@@ -632,6 +637,13 @@ JS = """
       if(act==='font+'){var n=Math.min(22,curFs()+1);root.style.setProperty('--fs',n+'px');save({fs:n});}
       else if(act==='font-'){var n2=Math.max(14,curFs()-1);root.style.setProperty('--fs',n2+'px');save({fs:n2});}
       else if(act==='font0'){root.style.setProperty('--fs','17px');save({fs:17});}
+      else if(act==='wide'){
+        var cw=parseFloat(getComputedStyle(root).getPropertyValue('--cw'))||880;
+        var wide=cw<1000;
+        root.style.setProperty('--cw',(wide?1240:880)+'px');
+        save({cw:wide?1240:880});
+        b.textContent=wide?'标准':'加宽';
+      }
       else if(act==='theme'){
         var t=root.getAttribute('data-theme')==='night'?'paper':'night';
         root.setAttribute('data-theme',t);save({theme:t});
@@ -652,6 +664,10 @@ JS = """
       else if(act==='im'){root.classList.contains('immersive')?exitIm():enterIm();}
     };
   });
+  if(pendingWide){
+    var wb=document.querySelector('.tb-tools [data-act="wide"]');
+    if(wb)wb.textContent='标准';
+  }
 
   // 点击目录后关闭移动端侧栏
   navLinks.forEach(function(a){
@@ -720,6 +736,7 @@ SHELL = """<!DOCTYPE html>
     <button data-act="font-">A−</button>
     <button data-act="font0">A</button>
     <button data-act="font+">A＋</button>
+    <button data-act="wide" title="切换正文版心宽度（标准 880px / 加宽 1240px）">加宽</button>
     <button id="sideBtn" data-act="side">收目录</button>
     <button data-act="theme">夜读</button>
     <button data-act="im">沉浸</button>
