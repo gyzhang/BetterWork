@@ -4,7 +4,7 @@
 
   <g id="fig-header" data-pptx-bounds="70 126 1140 70">
     <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">动作、方法、角色约束</text>
-    <text x="70" y="192" font-size="20" fill="#64748B">三层的粒度是递进的。任何一层被放到错误的位置，后果都是结构性失效。</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">三层的颗粒度是递进的。任何一层被放到错误的位置，后果都是结构性失效。</text>
   </g>
 
   <g id="fig-table" data-pptx-bounds="70 248 1140 320">

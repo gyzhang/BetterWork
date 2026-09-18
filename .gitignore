@@ -23,5 +23,19 @@ coverage/
 .betterwork/
 /temp-asserts/
 
+# 书稿合稿产物：由脚本生成，永远不手改，也不入库
+#   .md  <- book/cn/build_book.py（合稿 parts/*.md）
+#   .html <- book/cn/build_html.py（内联 svg/）
+#   .pdf  <- make_print_pdf.py（Chrome 排版）+ add_pdf_bookmarks.py（书签注入）
+# 真相源是 book/cn/parts/ 与 book/cn/svg/；同目录其他 .md（架构说明 / overview / 审稿意见 /
+# 待决事项 / 分章源）是手写资产，必须保持跟踪，故此处只逐条点名，不用通配符。
+# 换书名或加语种时，同步改这三条与两个构建脚本里的文件名常量。
+book/cn/智能体工程：从一次工具调用到可交付的系统.md
+book/cn/智能体工程：从一次工具调用到可交付的系统.html
+book/cn/智能体工程：从一次工具调用到可交付的系统.pdf
+
+# External tool caches
+book/cn/.workbuddy/
+
 # Sensitive data
 book/cn/sensitive.txt

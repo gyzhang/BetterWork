@@ -8,33 +8,40 @@
   </g>
 
   <g id="fig-stages" data-pptx-bounds="70 248 1140 152">
-    <g id="stage-1" data-pptx-bounds="70 264 255 120">
-      <rect x="70" y="264" width="255" height="120" rx="10" fill="#1B4593"/>
-      <text x="90" y="300" font-size="20" font-weight="bold" fill="#FFFFFF">澄清决定 → 批准计划</text>
-      <text x="90" y="330" font-size="18" fill="#D8E4F0">边界由人预先固定</text>
-      <rect x="90" y="352" width="12" height="12" rx="3" fill="#FFFFFF"/>
-      <text x="110" y="363" font-size="18" fill="#FFFFFF">停车位</text>
+    <g id="stage-1" data-pptx-bounds="70 264 208 120">
+      <rect x="70" y="264" width="208" height="120" rx="10" fill="#1B4593"/>
+      <text x="86" y="300" font-size="20" font-weight="bold" fill="#FFFFFF">澄清决定</text>
+      <text x="86" y="330" font-size="18" fill="#D8E4F0">→ 批准计划</text>
+      <rect x="86" y="350" width="12" height="12" rx="3" fill="#FFFFFF"/>
+      <text x="106" y="361" font-size="18" fill="#FFFFFF">停车位</text>
     </g>
-    <g id="stage-2" data-pptx-bounds="365 264 255 120">
-      <rect x="365" y="264" width="255" height="120" rx="10" fill="#EEF4FB" stroke="#2064AE" stroke-width="1.5"/>
-      <text x="385" y="300" font-size="20" font-weight="bold" fill="#0C2864">检索、阅读、登记</text>
-      <text x="385" y="330" font-size="18" fill="#475569">只用已批准的来源</text>
-      <rect x="385" y="352" width="12" height="12" rx="3" fill="#2064AE"/>
-      <text x="405" y="363" font-size="18" fill="#2064AE">自适应</text>
+    <g id="stage-2" data-pptx-bounds="303 264 208 120">
+      <rect x="303" y="264" width="208" height="120" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="319" y="300" font-size="20" font-weight="bold" fill="#0C2864">检索与阅读</text>
+      <text x="319" y="330" font-size="18" fill="#475569">→ 登记冲突</text>
+      <rect x="319" y="350" width="12" height="12" rx="3" fill="#94A3B8"/>
+      <text x="339" y="361" font-size="18" fill="#64748B">自适应</text>
     </g>
-    <g id="stage-3" data-pptx-bounds="660 264 255 120">
-      <rect x="660" y="264" width="255" height="120" rx="10" fill="#2064AE"/>
-      <text x="680" y="300" font-size="20" font-weight="bold" fill="#FFFFFF">比较替代方案 → 大纲</text>
-      <text x="680" y="330" font-size="18" fill="#D8E4F0">有方向缺口就停</text>
-      <rect x="680" y="352" width="12" height="12" rx="3" fill="#FFFFFF"/>
-      <text x="700" y="363" font-size="18" fill="#FFFFFF">停车位</text>
+    <g id="stage-3" data-pptx-bounds="536 264 208 120">
+      <rect x="536" y="264" width="208" height="120" rx="10" fill="#2064AE"/>
+      <text x="552" y="300" font-size="20" font-weight="bold" fill="#FFFFFF">比较替代方案</text>
+      <text x="552" y="330" font-size="18" fill="#D8E4F0">→ 批准大纲</text>
+      <rect x="552" y="350" width="12" height="12" rx="3" fill="#FFFFFF"/>
+      <text x="572" y="361" font-size="18" fill="#FFFFFF">停车位</text>
     </g>
-    <g id="stage-4" data-pptx-bounds="955 264 255 120">
-      <rect x="955" y="264" width="255" height="120" rx="10" fill="#3D86D4"/>
-      <text x="975" y="300" font-size="20" font-weight="bold" fill="#FFFFFF">渲染三格式 → 校验</text>
-      <text x="975" y="330" font-size="18" fill="#FFFFFF">复核后作为新版本</text>
-      <rect x="975" y="352" width="12" height="12" rx="3" fill="#FFFFFF"/>
-      <text x="995" y="363" font-size="18" fill="#FFFFFF">停车位</text>
+    <g id="stage-4" data-pptx-bounds="769 264 208 120">
+      <rect x="769" y="264" width="208" height="120" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
+      <text x="785" y="300" font-size="20" font-weight="bold" fill="#0C2864">生成内容模型</text>
+      <text x="785" y="330" font-size="18" fill="#475569">→ 渲染三格式</text>
+      <rect x="785" y="350" width="12" height="12" rx="3" fill="#94A3B8"/>
+      <text x="805" y="361" font-size="18" fill="#64748B">自适应</text>
+    </g>
+    <g id="stage-5" data-pptx-bounds="1002 264 208 120">
+      <rect x="1002" y="264" width="208" height="120" rx="10" fill="#3D86D4"/>
+      <text x="1018" y="300" font-size="20" font-weight="bold" fill="#FFFFFF">校验与复核</text>
+      <text x="1018" y="330" font-size="18" fill="#FFFFFF">→ 作为新版本</text>
+      <rect x="1018" y="350" width="12" height="12" rx="3" fill="#FFFFFF"/>
+      <text x="1038" y="361" font-size="18" fill="#FFFFFF">停车位</text>
     </g>
   </g>
 

@@ -344,6 +344,32 @@ html[data-theme="night"] .draftbar{background:#2A2113;border-color:#5A451F;color
 #toTop.on{display:block}
 #mask{position:fixed;inset:0;background:rgba(6,14,26,.5);z-index:45;display:none}
 #mask.on{display:block}
+/* ---------- 侧栏收起 / 沉浸阅读 ---------- */
+#side{transition:transform .22s ease}
+#side.off{transform:translateX(-100%)}
+#wrap{transition:margin-left .22s ease,padding-top .22s ease}
+#wrap.full{margin-left:0}
+#topbar{transition:transform .25s ease}
+html.immersive #topbar{transform:translateY(-100%)}
+html.immersive #side{transform:translateX(-100%)}
+html.immersive #wrap{margin-left:0;padding-top:12px}
+html.immersive h1,html.immersive h2,html.immersive h3{scroll-margin-top:20px}
+#nav a.toc-l1{padding-right:26px}
+#nav .caret{
+  float:right;font-size:.75em;color:var(--muted);padding:2px 10px;margin-right:-8px;
+  cursor:pointer;user-select:none;transition:transform .18s;
+}
+#nav .caret:hover{color:var(--head2)}
+#nav .toc-group.folded .caret{transform:rotate(-90deg)}
+#nav .toc-group.folded .toc-subs{display:none}
+#imExit{
+  position:fixed;top:12px;right:16px;z-index:65;display:none;
+  font:inherit;font-size:.8em;padding:6px 12px;border-radius:999px;cursor:pointer;
+  border:1px solid var(--line);background:var(--paper);color:var(--ink-soft);
+  box-shadow:var(--shadow);opacity:.4;transition:.2s;
+}
+#imExit:hover{opacity:1;color:var(--head2);border-color:var(--head2)}
+html.immersive #imExit{display:block}
 /* ---------- 窄屏 ---------- */
 @media (max-width:1080px){
   #menuBtn{display:inline-block}
@@ -352,11 +378,13 @@ html[data-theme="night"] .draftbar{background:#2A2113;border-color:#5A451F;color
   #wrap{margin-left:0}
   main{padding:28px 20px 90px;box-shadow:none}
   .tb-title{font-size:.88em}
+  #sideBtn{display:none}
 }
 /* ---------- 打印 / PDF ---------- */
 @page{size:A4;margin:18mm 16mm}
 @media print{
-  #topbar,#side,#progress,#toTop,#lb,#mask,#q{display:none!important}
+  #topbar,#side,#progress,#toTop,#lb,#mask,#q,#imExit{display:none!important}
+  html.immersive #wrap{margin:0;padding-top:0}
   #wrap{margin:0;padding:0}
   main{max-width:none;padding:0;box-shadow:none;background:#fff}
   body{background:#fff;font-size:10.5pt;line-height:1.7;
@@ -375,10 +403,12 @@ JS = """
 (function(){
   var root=document.documentElement;
   var k='vibe-book';
+  var pendingFold=null;
   try{
     var st=JSON.parse(localStorage.getItem(k)||'{}');
     if(st.fs) root.style.setProperty('--fs',st.fs+'px');
     if(st.theme) root.setAttribute('data-theme',st.theme);
+    if(st.fold) pendingFold=st.fold;
   }catch(e){}
   function save(patch){
     var st={};
@@ -395,6 +425,47 @@ JS = """
   var navLinks=[].slice.call(document.querySelectorAll('#nav a'));
   var heads=[].slice.call(document.querySelectorAll('main h1[id],main h2[id],main h3[id]'));
 
+  // ---------- 目录按篇/章折叠 ----------
+  var groups=[];
+  (function(){
+    var g=null,subs=null;
+    navLinks.forEach(function(a){
+      if(a.classList.contains('toc-l1')){
+        g=document.createElement('div');g.className='toc-group';
+        subs=document.createElement('div');subs.className='toc-subs';
+        a.parentNode.insertBefore(g,a);
+        g.appendChild(a);g.appendChild(subs);
+        var c=document.createElement('span');c.className='caret';c.textContent='▾';
+        a.appendChild(c);
+        groups.push({el:g,l1:a,subs:subs});
+      }else if(subs){subs.appendChild(a);}
+    });
+  })();
+  function getFolds(){
+    try{return (JSON.parse(localStorage.getItem(k)||'{}').fold)||{};}catch(e){return{};}
+  }
+  function setFold(g,fold,keep){
+    var will=(fold===undefined)?!g.el.classList.contains('folded'):!!fold;
+    g.el.classList.toggle('folded',will);
+    if(!keep){
+      var f=getFolds();
+      f[g.l1.getAttribute('href')]=will;
+      save({fold:f});
+    }
+  }
+  // 事件委托：点击篇/章标题右侧的 ▾ 折叠/展开该组
+  document.getElementById('nav').addEventListener('click',function(e){
+    var t=e.target;
+    if(t&&t.classList&&t.classList.contains('caret')){
+      e.preventDefault();e.stopPropagation();
+      var grp=t.closest('.toc-group');
+      if(grp)setFold({el:grp,l1:grp.querySelector('.toc-l1')});
+    }
+  });
+  groups.forEach(function(g){
+    if(pendingFold&&pendingFold[g.l1.getAttribute('href')])g.el.classList.add('folded');
+  });
+
   function onScroll(){
     var st=window.scrollY||document.documentElement.scrollTop;
     var h=document.documentElement.scrollHeight-window.innerHeight;
@@ -410,6 +481,8 @@ JS = """
       if(a.getAttribute('href')==='#'+id){
         if(!a.classList.contains('active')){
           navLinks.forEach(function(b){b.classList.remove('active');});
+          var pg=a.closest('.toc-group');
+          if(pg&&pg.classList.contains('folded')&&!a.classList.contains('toc-l1'))setFold(pg,false,true);
           a.classList.add('active');
           var r=a.offsetTop-side.scrollTop;
           if(r<40||r>side.clientHeight-60) side.scrollTop=a.offsetTop-side.clientHeight*0.35;
@@ -426,7 +499,11 @@ JS = """
     if(e.target===this||e.target.className==='lb-x'){this.classList.remove('on');}
   };
   document.addEventListener('keydown',function(e){
-    if(e.key==='Escape'){document.getElementById('lb').classList.remove('on');side.classList.remove('on');mask.classList.remove('on');}
+    if(e.key==='Escape'){
+      document.getElementById('lb').classList.remove('on');
+      side.classList.remove('on');mask.classList.remove('on');
+      if(root.classList.contains('immersive'))exitIm();
+    }
   });
 
   // 配图放大
@@ -451,6 +528,10 @@ JS = """
       var hit=!v||(a.getAttribute('data-t')||'').indexOf(v)>=0;
       a.style.display=hit?'':'none';
     });
+    groups.forEach(function(g){
+      if(v){g.el.classList.remove('folded');}
+      else if(getFolds()[g.l1.getAttribute('href')]){g.el.classList.add('folded');}
+    });
   });
 
   // 工具按钮
@@ -466,6 +547,18 @@ JS = """
         b.textContent=t==='night'?'日间':'夜读';
       }
       else if(act==='menu'){side.classList.toggle('on');mask.classList.toggle('on');}
+      else if(act==='side'){
+        if(window.matchMedia&&window.matchMedia('(max-width:1080px)').matches){
+          side.classList.toggle('on');mask.classList.toggle('on');
+        }else{
+          var off=!side.classList.contains('off');
+          side.classList.toggle('off',off);
+          document.getElementById('wrap').classList.toggle('full',off);
+          b.textContent=off?'展目录':'收目录';
+          save({side:off?'off':'on'});
+        }
+      }
+      else if(act==='im'){root.classList.contains('immersive')?exitIm():enterIm();}
     };
   });
 
@@ -476,6 +569,24 @@ JS = """
     };
   });
   mask.onclick=function(){side.classList.remove('on');mask.classList.remove('on');};
+
+  // ---------- 沉浸阅读 ----------
+  function enterIm(keep){
+    root.classList.add('immersive');
+    if(!keep)save({im:1});
+  }
+  function exitIm(keep){
+    root.classList.remove('immersive');
+    if(!keep)save({im:0});
+  }
+  document.getElementById('imExit').onclick=function(){exitIm();};
+  if(st.im)enterIm(true);
+  if(st.side==='off'&&!(window.matchMedia&&window.matchMedia('(max-width:1080px)').matches)){
+    side.classList.add('off');
+    document.getElementById('wrap').classList.add('full');
+    var sb=document.getElementById('sideBtn');
+    if(sb)sb.textContent='展目录';
+  }
 
   // 打印时确保是日间主题
   window.addEventListener('beforeprint',function(){root.setAttribute('data-theme','paper');});
@@ -518,7 +629,9 @@ SHELL = """<!DOCTYPE html>
     <button data-act="font-">A−</button>
     <button data-act="font0">A</button>
     <button data-act="font+">A＋</button>
+    <button id="sideBtn" data-act="side">收目录</button>
     <button data-act="theme">夜读</button>
+    <button data-act="im">沉浸</button>
   </div>
 </header>
 <div id="mask"></div>
@@ -542,10 +655,11 @@ SHELL = """<!DOCTYPE html>
     </div>
   </div>
   <div class="draftbar"><strong>阅读提示</strong> —— 本书引用的协议版本、基准分数、漏洞统计与政策文件，<strong>快照时点均为 2026 年 9 月 18 日</strong>，半年后请复核；逐条口径、时点与局限见<strong>附录 C</strong>。案例数据全部为合成或已脱敏材料，机构类型不可混用（国有大行 ≠ 城商行 ≠ 农商行）。</div>
-  <p class="hint">阅读提示：点击任意配图可放大（Esc 关闭）；右上角可调字号与切换夜读模式；用 Ctrl/⌘ + P 可直接打印为 PDF（打印时自动隐藏侧栏、按章分页）。</p>
+  <p class="hint">阅读提示：点击任意配图可放大（Esc 关闭）；右上角可调字号、收起目录、切换夜读或进入<strong>沉浸阅读</strong>（再按一次按钮或 Esc 退出）；目录中篇/章标题右侧的 ▾ 可折叠小节；用 Ctrl/⌘ + P 可直接打印为 PDF（打印时自动隐藏侧栏、按章分页）。</p>
 __BODY__
 </main>
 </div>
+<button id="imExit" title="退出沉浸模式（Esc）">⤢ 退出沉浸</button>
 <button id="toTop" title="回到顶部">↑</button>
 <div id="lb"></div>
 <script>__JS__</script>

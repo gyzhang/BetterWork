@@ -83,6 +83,27 @@ def main() -> int:
 
     OUT_MD.write_text(merged, encoding="utf-8")
 
+    # 附录 B 一致性：正文引用的参考实现文件必须在附录 B 登记（反之不强制）
+    import re as _re
+    btxt = (PARTS / "90-appendix-b.md").read_text(encoding="utf-8")
+    listed = set(_re.findall(r"`((?:docs|packages|apps|resources|scripts)/[^`]+|package(?:-lock)?\.json|LICENSE)`", btxt))
+    pat = _re.compile(r"`((?:docs|packages|apps|resources|scripts)/[^`]+|package(?:-lock)?\.json|LICENSE)`")
+    missing = {}
+    for name, text in zip(ORDER, bodies):
+        if name == "90-appendix-b.md":
+            continue
+        for i, line in enumerate(text.splitlines(), 1):
+            for m in pat.finditer(line):
+                p_ = m.group(1)
+                if p_.endswith("/*") or p_ not in listed:
+                    if not p_.endswith("/*"):
+                        missing.setdefault(p_, []).append(f"{name}:{i}")
+    if missing:
+        print("ERROR 以下文件被正文引用，但未在附录 B 登记：")
+        for k, v in sorted(missing.items()):
+            print(f"   {k}  ← {', '.join(v[:3])}")
+        return 1
+
     chars = sum(len(t) for t in bodies)
     chapters = merged.count("\n# 第 ") + sum(
         1 for line in merged.splitlines() if line.startswith("# 第 ")

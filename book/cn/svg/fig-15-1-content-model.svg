@@ -33,14 +33,14 @@
       <text x="90" y="494" font-size="22" font-weight="bold" fill="#0C2864">结构</text>
       <text x="90" y="526" font-size="18" fill="#475569">标题层级、表格单元格</text>
       <text x="90" y="556" font-size="18" fill="#64748B">解析器可自动验</text>
-      <text x="90" y="584" font-size="18" fill="#DF203C">漏法：用字号造假标题</text>
+      <text x="90" y="584" font-size="18" fill="#DF203C">易漏：用字号造假标题</text>
     </g>
     <g id="check-2" data-pptx-bounds="360 460 270 140">
       <rect x="360" y="460" width="270" height="140" rx="10" fill="#F5F8FC" stroke="#D8E4F0" stroke-width="1.5"/>
       <text x="380" y="494" font-size="22" font-weight="bold" fill="#0C2864">事实</text>
       <text x="380" y="526" font-size="18" fill="#475569">抽取全部数字逐条比对</text>
       <text x="380" y="556" font-size="18" fill="#64748B">解析器可自动验</text>
-      <text x="380" y="584" font-size="18" fill="#DF203C">漏法：只比对第一页</text>
+      <text x="380" y="584" font-size="18" fill="#DF203C">易漏：只比对第一页</text>
     </g>
     <g id="check-3" data-pptx-bounds="650 460 270 140">
       <rect x="650" y="460" width="270" height="140" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
