@@ -167,7 +167,7 @@ n_table = body.count('<table>')
 
 CSS = """
 *,*::before,*::after{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;--sw:312px}
 html[data-theme="paper"]{
   --bg:#F4F7FB; --paper:#FFFFFF; --panel:#F7FAFD; --side:#F7FAFD;
   --ink:#1F2937; --ink-soft:#475569; --head:#0C2864; --head2:#2064AE;
@@ -212,7 +212,7 @@ body{
   background:linear-gradient(90deg,#2064AE,#08A6F6);transition:width .1s linear}
 /* ---------- 侧栏 ---------- */
 #side{
-  position:fixed;left:0;top:52px;bottom:0;width:312px;z-index:50;
+  position:fixed;left:0;top:52px;bottom:0;width:var(--sw);z-index:50;
   background:var(--side);border-right:1px solid var(--line);
   overflow-y:auto;overscroll-behavior:contain;padding:14px 10px 60px;
 }
@@ -225,9 +225,10 @@ body{
 #q:focus{outline:2px solid var(--accent);outline-offset:-1px}
 #nav{display:flex;flex-direction:column;gap:1px}
 #nav a{
-  display:block;text-decoration:none;color:var(--ink-soft);border-radius:7px;
+  display:flex;align-items:center;gap:2px;text-decoration:none;color:var(--ink-soft);border-radius:7px;
   padding:5px 9px;font-size:.83em;line-height:1.55;border-left:3px solid transparent;
 }
+#nav a .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #nav a:hover{background:var(--panel);color:var(--head2)}
 #nav a.h-part{font-weight:700;color:var(--head);margin-top:9px;letter-spacing:.04em}
 #nav a.h-chap{font-weight:700;color:var(--head);margin-top:9px}
@@ -239,7 +240,7 @@ body{
 #side .toc-fig{display:block;font-size:.77em;color:var(--muted);text-decoration:none;padding:3px 9px;border-radius:6px}
 #side .toc-fig:hover{background:var(--panel);color:var(--head2)}
 /* ---------- 正文 ---------- */
-#wrap{margin-left:312px;padding:52px 0 0}
+#wrap{margin-left:var(--sw);padding:52px 0 0}
 main{
   max-width:880px;margin:0 auto;background:var(--paper);
   padding:44px 56px 120px;min-height:100vh;box-shadow:var(--shadow);
@@ -354,14 +355,37 @@ html.immersive #topbar{transform:translateY(-100%)}
 html.immersive #side{transform:translateX(-100%)}
 html.immersive #wrap{margin-left:0;padding-top:12px}
 html.immersive h1,html.immersive h2,html.immersive h3{scroll-margin-top:20px}
-#nav a.toc-l1{padding-right:26px}
+#nav a.toc-l1{padding-right:8px}
 #nav .caret{
-  float:right;font-size:.75em;color:var(--muted);padding:2px 10px;margin-right:-8px;
-  cursor:pointer;user-select:none;transition:transform .18s;
+  flex:none;display:inline-flex;align-items:center;justify-content:center;
+  width:24px;height:24px;margin:0 -4px 0 2px;border-radius:7px;
+  color:var(--muted);cursor:pointer;user-select:none;
+  transition:transform .18s,background .15s,color .15s,box-shadow .15s;
 }
-#nav .caret:hover{color:var(--head2)}
-#nav .toc-group.folded .caret{transform:rotate(-90deg)}
+#nav .caret svg{display:block}
+#nav .caret:hover{background:color-mix(in srgb,var(--head2) 14%,transparent);color:var(--head2);box-shadow:0 0 0 1px color-mix(in srgb,var(--head2) 25%,transparent)}
+#nav .toc-group.folded .caret{transform:rotate(-90deg);color:var(--ink-soft)}
 #nav .toc-group.folded .toc-subs{display:none}
+#nav .toc-subs .toc-subs{margin-left:10px;border-left:1px solid var(--line);padding-left:4px}
+.nav-tools{display:flex;gap:6px;margin:0 0 10px}
+.nav-tools button{
+  flex:1;font:inherit;font-size:.76em;padding:5px 8px;border-radius:8px;cursor:pointer;
+  border:1px solid var(--line);background:var(--paper);color:var(--ink-soft);
+  display:inline-flex;align-items:center;justify-content:center;gap:5px;
+  transition:.15s;
+}
+.nav-tools button:hover{border-color:var(--head2);color:var(--head2)}
+.nav-tools button svg{flex:none}
+/* ---------- 侧栏宽度拖动 ---------- */
+#resize{
+  position:fixed;top:52px;bottom:0;left:var(--sw);width:8px;margin-left:-4px;z-index:52;
+  cursor:col-resize;touch-action:none;
+}
+#resize::after{
+  content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;
+  background:transparent;transition:background .15s;
+}
+#resize:hover::after,#resize.on::after{background:var(--accent)}
 #imExit{
   position:fixed;top:12px;right:16px;z-index:65;display:none;
   font:inherit;font-size:.8em;padding:6px 12px;border-radius:999px;cursor:pointer;
@@ -379,11 +403,12 @@ html.immersive #imExit{display:block}
   main{padding:28px 20px 90px;box-shadow:none}
   .tb-title{font-size:.88em}
   #sideBtn{display:none}
+  #resize{display:none}
 }
 /* ---------- 打印 / PDF ---------- */
 @page{size:A4;margin:18mm 16mm}
 @media print{
-  #topbar,#side,#progress,#toTop,#lb,#mask,#q,#imExit{display:none!important}
+  #topbar,#side,#progress,#toTop,#lb,#mask,#q,#imExit,#resize{display:none!important}
   html.immersive #wrap{margin:0;padding-top:0}
   #wrap{margin:0;padding:0}
   main{max-width:none;padding:0;box-shadow:none;background:#fff}
@@ -409,6 +434,7 @@ JS = """
     if(st.fs) root.style.setProperty('--fs',st.fs+'px');
     if(st.theme) root.setAttribute('data-theme',st.theme);
     if(st.fold) pendingFold=st.fold;
+    if(st.sw) root.style.setProperty('--sw',Math.round(st.sw)+'px');
   }catch(e){}
   function save(patch){
     var st={};
@@ -418,6 +444,31 @@ JS = """
   }
   function curFs(){return parseFloat(getComputedStyle(root).getPropertyValue('--fs'))||17;}
 
+  // ---------- 侧栏宽度拖动 ----------
+  (function(){
+    var rz=document.getElementById('resize');
+    if(!rz)return;
+    var drag=false;
+    function setW(px){
+      px=Math.min(560,Math.max(200,Math.round(px)));
+      root.style.setProperty('--sw',px+'px');
+      return px;
+    }
+    rz.addEventListener('pointerdown',function(e){
+      drag=true;rz.classList.add('on');
+      try{rz.setPointerCapture(e.pointerId);}catch(err){}
+      e.preventDefault();
+    });
+    rz.addEventListener('pointermove',function(e){if(drag)setW(e.clientX);});
+    rz.addEventListener('pointerup',function(e){
+      if(!drag)return;
+      drag=false;rz.classList.remove('on');
+      save({sw:parseFloat(getComputedStyle(root).getPropertyValue('--sw'))||312});
+    });
+    rz.addEventListener('pointercancel',function(){drag=false;rz.classList.remove('on');});
+    rz.addEventListener('dblclick',function(){setW(312);save({sw:312});});
+  })();
+
   var bar=document.getElementById('progress');
   var toTop=document.getElementById('toTop');
   var side=document.getElementById('side');
@@ -425,20 +476,46 @@ JS = """
   var navLinks=[].slice.call(document.querySelectorAll('#nav a'));
   var heads=[].slice.call(document.querySelectorAll('main h1[id],main h2[id],main h3[id]'));
 
-  // ---------- 目录按篇/章折叠 ----------
+  // ---------- 目录按篇/章/节多级折叠 ----------
+  // 用栈构建嵌套分组：凡是有下级条目的层级（篇/章/节）都有折叠箭头。
   var groups=[];
+  var CARET_SVG='<svg width="13" height="13" viewBox="0 0 14 14" aria-hidden="true">'+
+    '<path d="M3 5l4 4.2L11 5" fill="none" stroke="currentColor" stroke-width="2.2" '+
+    'stroke-linecap="round" stroke-linejoin="round"/></svg>';
   (function(){
-    var g=null,subs=null;
+    var stack=[]; // 保存当前各层级的打开分组
     navLinks.forEach(function(a){
-      if(a.classList.contains('toc-l1')){
-        g=document.createElement('div');g.className='toc-group';
-        subs=document.createElement('div');subs.className='toc-subs';
-        a.parentNode.insertBefore(g,a);
-        g.appendChild(a);g.appendChild(subs);
-        var c=document.createElement('span');c.className='caret';c.textContent='▾';
-        a.appendChild(c);
+      var lvl=a.classList.contains('toc-l1')?1:(a.classList.contains('toc-l2')?2:3);
+      while(stack.length&&stack[stack.length-1].lvl>=lvl)stack.pop();
+      var parentSubs=stack.length?stack[stack.length-1].subs:document.getElementById('nav');
+      var g=document.createElement('div');g.className='toc-group';
+      var subs=document.createElement('div');subs.className='toc-subs';
+      parentSubs.appendChild(g);
+      g.appendChild(a);g.appendChild(subs);
+      if(lvl<3){
+        stack.push({el:g,l1:a,subs:subs,lvl:lvl});
         groups.push({el:g,l1:a,subs:subs});
-      }else if(subs){subs.appendChild(a);}
+      }
+    });
+    // 只有真正拥有下级内容的组才配折叠箭头（如 2.2 无小节则不加）
+    groups=groups.filter(function(g){
+      if(!g.subs.firstChild)return false;
+      var c=document.createElement('span');c.className='caret';c.title='展开 / 收起本组';
+      c.innerHTML=CARET_SVG;
+      g.l1.appendChild(c);
+      return true;
+    });
+    // 单行省略号布局：把链接内文字包进 .t（flex:1 + ellipsis），箭头固定在右侧；
+    // 完整标题放入 title，悬停可看全文。
+    navLinks.forEach(function(a){
+      var t=document.createElement('span');t.className='t';
+      [].slice.call(a.childNodes).forEach(function(n){
+        if(n.nodeType===1&&n.classList.contains('caret'))return;
+        t.appendChild(n);
+      });
+      a.insertBefore(t,a.firstChild);
+      var full=(t.textContent||'').replace(/\\s+/g,' ').trim();
+      if(full)a.title=full;
     });
   })();
   function getFolds(){
@@ -453,17 +530,31 @@ JS = """
       save({fold:f});
     }
   }
-  // 事件委托：点击篇/章标题右侧的 ▾ 折叠/展开该组
+  // 事件委托：点击篇/章标题右侧的箭头折叠/展开该组。
+  // 箭头内部是 SVG（path/svg 元素），e.target 不会是 .caret 本身，必须用 closest 向上找。
   document.getElementById('nav').addEventListener('click',function(e){
     var t=e.target;
-    if(t&&t.classList&&t.classList.contains('caret')){
+    var c=t&&t.closest?t.closest('.caret'):null;
+    if(c){
       e.preventDefault();e.stopPropagation();
-      var grp=t.closest('.toc-group');
+      var grp=c.closest('.toc-group');
       if(grp)setFold({el:grp,l1:grp.querySelector('.toc-l1')});
     }
   });
   groups.forEach(function(g){
     if(pendingFold&&pendingFold[g.l1.getAttribute('href')])g.el.classList.add('folded');
+  });
+  // 全部展开 / 全部收起
+  [].slice.call(document.querySelectorAll('.nav-tools button')).forEach(function(b){
+    b.onclick=function(){
+      var fold=b.getAttribute('data-navact')==='foldAll';
+      var f=getFolds();
+      groups.forEach(function(g){
+        g.el.classList.toggle('folded',fold);
+        f[g.l1.getAttribute('href')]=fold;
+      });
+      save({fold:f});
+    };
   });
 
   function onScroll(){
@@ -637,12 +728,19 @@ SHELL = """<!DOCTYPE html>
 <div id="mask"></div>
 <aside id="side">
   <input id="q" type="search" placeholder="筛选章节…" autocomplete="off">
+  <div class="nav-tools">
+    <button type="button" data-navact="expandAll" title="展开所有篇/章的小节">
+      <svg width="11" height="11" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5.5L7 9.5l4-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>全部展开</button>
+    <button type="button" data-navact="foldAll" title="收起所有篇/章的小节">
+      <svg width="11" height="11" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 8.5L7 4.5l4 4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>全部收起</button>
+  </div>
   <nav id="nav">__TOC__</nav>
   <details>
     <summary>配图索引（__NFIG__）</summary>
     __FIGIDX__
   </details>
 </aside>
+<div id="resize" title="拖动调整目录宽度（双击恢复默认）"></div>
 <div id="wrap">
 <main>
   <div class="hero">
@@ -655,7 +753,7 @@ SHELL = """<!DOCTYPE html>
     </div>
   </div>
   <div class="draftbar"><strong>阅读提示</strong> —— 本书引用的协议版本、基准分数、漏洞统计与政策文件，<strong>快照时点均为 2026 年 9 月 18 日</strong>，半年后请复核；逐条口径、时点与局限见<strong>附录 C</strong>。案例数据全部为合成或已脱敏材料，机构类型不可混用（国有大行 ≠ 城商行 ≠ 农商行）。</div>
-  <p class="hint">阅读提示：点击任意配图可放大（Esc 关闭）；右上角可调字号、收起目录、切换夜读或进入<strong>沉浸阅读</strong>（再按一次按钮或 Esc 退出）；目录中篇/章标题右侧的 ▾ 可折叠小节；用 Ctrl/⌘ + P 可直接打印为 PDF（打印时自动隐藏侧栏、按章分页）。</p>
+  <p class="hint">阅读提示：点击任意配图可放大（Esc 关闭）；右上角可调字号、收起目录、切换夜读或进入<strong>沉浸阅读</strong>（再按一次按钮或 Esc 退出）；目录中篇/章/节标题右侧的 <strong>˅ 箭头</strong>可折叠下级内容（如 2.1 收起其下的 2.1.1），也可用搜索框下方的「<strong>全部展开 / 全部收起</strong>」一键操作；用 Ctrl/⌘ + P 可直接打印为 PDF（打印时自动隐藏侧栏、按章分页）。</p>
 __BODY__
 </main>
 </div>
