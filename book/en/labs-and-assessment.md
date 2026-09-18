@@ -1,6 +1,6 @@
 # Labs, Capstones, and Assessment
 
-Status: lab specifications only. Fixture names and example paths below describe assets to author later; those files and runnable exercises do not yet exist. Chapter IDs and prerequisites are maintained in the [curriculum](curriculum.md).
+Status: assessment specifications accompanied by drafted chapter practice, a [lab companion](lab-guides/README.md), and [instructor guidance](instructor/teaching-notes.md). The fixture packs and isolated runnable teaching application below remain to be prepared; existing BetterWork reference tests are documented separately. Chapter IDs and prerequisites are maintained in the [curriculum](curriculum.md). See [draft status](draft-status.md) for the exact evidence boundary.
 
 ## 1. Shared exercise model
 
@@ -238,7 +238,7 @@ Before live runs, freeze the case rubric, provider/model settings, corpus revisi
 | Usable deliverables | 15 | Both capstones, Markdown/DOCX/PPTX, visual/editability checks, version lineage |
 | Reproducibility and teach-back | 10 | Handoff replay, environment evidence, accurate concepts, independent debugging |
 
-Draft pass threshold: at least 80/100, completed G0–G4, and every critical gate below. G5 records the final result. Score each dimension using demonstrated evidence: absent/incorrect earns no credit, assisted-only or incomplete evidence earns partial credit, independent correct execution plus explanation earns full credit. Instructor calibration examples must define intermediate scores before teaching. Neither professional vocabulary nor campus-versus-industry choice changes the score. These are proposed course standards, not measured learner results or product acceptance criteria.
+Draft pass threshold: at least 80/100, completed G0–G4, and every critical gate below. G5 records the final result. Score each dimension using demonstrated evidence: absent/incorrect earns no credit, assisted-only or incomplete evidence earns partial credit, independent correct execution plus explanation earns full credit. The draft [instructor calibration examples](instructor/teaching-notes.md#6-draft-scoring-calibration) define intermediate score anchors; reviewers must trial and calibrate them before teaching. Neither professional vocabulary nor campus-versus-industry choice changes the score. These are proposed course standards, not measured learner results or product acceptance criteria.
 
 Critical gates cannot be compensated for by presentation quality:
 
@@ -253,10 +253,10 @@ Critical gates cannot be compensated for by presentation quality:
 
 ## 9. Course readiness gates
 
-1. **Plan ready:** both entry routes, O1–O8, chapter dependencies, fixtures, and assessment are specified. This revised planning draft is the current deliverable, pending user review.
+1. **Plan ready:** both entry routes, O1–O8, chapter dependencies, fixture contracts, and assessment are specified. The current deliverable also includes the first prose manuscript of Module 00 and Chapters 01–20; it does not claim executable or learner acceptance.
 2. **Lab ready:** starters/solutions, foundation bridges, fixtures, exact commands, and failure cases are tested at a pinned revision; required adapters do not depend on future product releases.
 3. **Pilot ready:** at least one programmer new to agents and one first-year-equivalent learner complete Module 00 as needed and Chapters 01–05, passing G1 with only documented support. Record assistance, misconceptions, time, and remediation; two participants are a usability check, not broad validation.
 4. **Capstone ready:** both complete journeys, all three document formats, actual integrations, and the application handoff pass offline and required live/human checks. Repeat the later-course pilot with both entry profiles to test total workload and G5 readiness.
 5. **Publication ready:** all chapters meet the authoring checklist, assets are redistributable, links resolve, and learner feedback has been incorporated. Publish measured pacing and any supported-environment limitations.
 
-None of gates 2–5 is satisfied merely by creating this planning directory. The [authoring plan](authoring-plan.md) defines how to reach them.
+None of gates 2–5 is satisfied merely by writing the manuscript or passing product reference tests. The [authoring plan](authoring-plan.md) defines how to reach them; the [draft evidence record](draft-status.md) separates authored material from verified teaching readiness.

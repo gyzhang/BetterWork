@@ -1,6 +1,6 @@
 # Curriculum: From Scenarios to Reliable Agents
 
-Status: proposed syllabus. All chapters and labs are planned, not written or validated. Audience and purpose are defined in the [course overview](README.md); executable acceptance is defined in [labs and assessment](labs-and-assessment.md).
+Status: syllabus with a complete first prose draft of Module 00 and Chapters 01–20, available through the [manuscript](manuscript.md). Draft lab guidance is written; executable course assets and learner validation are not complete. Audience and purpose are defined in the [course overview](README.md); executable acceptance is defined in [labs and assessment](labs-and-assessment.md). See [draft status](draft-status.md) for verification and remaining release work.
 
 ## Course sequence
 

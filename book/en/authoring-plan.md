@@ -1,6 +1,6 @@
 # Authoring and Maintenance Plan
 
-Status: proposed execution plan for writing the tutorial. This planning task does not begin chapter implementation, add dependencies, or modify product scope.
+Status: maintenance and release plan accompanying the first English manuscript draft. Module 00 and Chapters 01–20 now have prose, worked examples, practice, and references. Tested teaching implementations and pilots remain release work. This manuscript task adds no dependencies and does not modify product scope; see [draft status](draft-status.md).
 
 ## 1. Responsibilities of the documents
 
@@ -13,9 +13,9 @@ Course objectives are set by learner needs and O1–O8, independently of BetterW
 
 Use backward design: observable exit evidence → assessment → prerequisites → guided practice → explanation and references. Preparing a missing adapter, dataset, or setup guide is author work, not grounds for dropping an outcome or asking beginners to invent the infrastructure.
 
-## 2. Proposed content layout
+## 2. Content layout and remaining assets
 
-This task revises the four English planning documents in `book/en/`. The other paths below are proposed English-course assets, not existing deliverables. The separate `book/cn/` directory is outside this revision; no files are moved or synchronized automatically.
+The manuscript and supporting prose now exist alongside the four English course specifications. Paths explicitly marked future remain release work, not completed assets. The separate `book/cn/` directory is outside this revision; no files are moved or synchronized automatically.
 
 ```text
 book/en/
@@ -23,9 +23,12 @@ book/en/
   curriculum.md
   labs-and-assessment.md
   authoring-plan.md
-  foundations/                     # Future Module 00, F01–F04, diagnostic, glossary
-  chapters/                        # Future chapter prose, 01 through 20
-  lab-guides/                      # Future L01 through L20 instructions
+  manuscript.md                   # Preface, attribution, complete reading map
+  references.md                   # Pinned code sources, bibliography, MIT notice
+  draft-status.md                 # Verification and remaining release work
+  foundations/                    # Draft Module 00, F01–F04, diagnostic, glossary
+  chapters/                       # Draft chapter prose, 01 through 20
+  lab-guides/                     # Draft L01–L20 companion and reference commands
   examples/agent-lab/              # Future isolated, incremental teaching application
   fixtures/foundations/            # Future tiny hand-checked programming/table examples
   fixtures/retrieval/              # Future corpus, relevance labels, fixed embeddings
@@ -33,7 +36,7 @@ book/en/
   fixtures/operations/             # Future two-period workbooks and independent oracle
   fixtures/templates/             # Future redistributable DOCX and PPTX templates
   assets/                         # Future diagrams and approved screenshots
-  instructor/                     # Future solutions, rubrics, facilitation/pilot notes
+  instructor/                     # Draft answers, rubric anchors, facilitation/pilot notes
 ```
 
 Use chapter IDs from the curriculum and descriptive kebab-case filenames. Do not create empty chapter placeholders. Add each file when it contains an actual teaching deliverable.
@@ -44,27 +47,27 @@ The TypeScript/Node.js baseline supplies one consistent reference path. Module 0
 
 ## 3. Writing batches and exit conditions
 
-These are authoring batches, not product milestones or calendar commitments. B1–B7 proceed in teaching order. Preparation track P starts alongside B1 and resolves dependencies before their chapters are released. Only B0 has been drafted; all implementation, asset preparation, and pilots remain unstarted.
+These are authoring batches, not product milestones or calendar commitments. At the user's request, the full prose manuscript was drafted before executable preparation and learner pilots. B1–B7 retain their original release exit conditions: written prose alone does not pass a batch. Preparation track P resolves teaching dependencies before dependent labs are released; existing product reference tests are recorded separately.
 
 | Batch | Deliverables | Exit condition | Status |
 | --- | --- | --- | --- |
-| B0. Outcome-based planning | Two entry routes, O1–O8, revised curriculum, assessment, authoring plan | Links, chapter dependencies, required formats, and outcome/evidence map agree | Revised draft; user review pending |
-| P. Teaching infrastructure | Tested model/embedding access, local MCP fixture, workbook reader, DOCX/PPTX renderers/templates, thin API/UI adapter | Minimal feasibility checks, pinned dependencies, supported-environment matrix, and named role for each asset | Planned alongside B1; ready before dependent labs |
-| B1. Foundations and first agent | Module 00/F01–F04, Chapters/Labs 01–05, diagnostic, glossary, starter/solution milestones | Both entry profiles pass G0/G1 using documented support; early pilot corrections applied | Planned |
-| B2. Useful capabilities | Chapters/Labs 06–10, metrics, MCP, lexical/embedding retrieval, context/memory, Skill/Expert presets | O3–O4 evidence passes G2, including actual protocol use and measured retrieval | Planned |
-| B3. Harness engineering | Chapters/Labs 11–13, threat cases, lifecycle/SQLite primer, evaluation set and budgets | Boundary, recovery, redaction, regression, and bounded-stop evidence passes G3 | Planned |
-| B4. Data and document engineering | Chapters/Labs 14–16, workbook oracle, content model, Markdown/DOCX/PPTX renderers and QA | Reconciled data and all three formats pass G4, including editability and visual checks | Planned |
-| B5. Integrated cases | Chapters/Labs 17–18, campus/professional research packs, two-period reporting | Both journeys pass deterministic, live-model/source, and human review requirements | Planned |
-| B6. Delivery and final assessment | Chapters/Labs 19–20, runnable handoff, platform map, calibrated rubric and independent variants | Another learner runs the application; both entry profiles demonstrate G5 | Planned |
-| B7. Publication preparation | Pilot corrections, glossary, checked sources, redistribution review, release evidence | Publication gate in the assessment plan is satisfied | Planned |
+| B0. Outcome-based planning | Two entry routes, O1–O8, revised curriculum, assessment, authoring plan | Links, chapter dependencies, required formats, and outcome/evidence map agree | Specifications retained; manuscript navigation added |
+| P. Teaching infrastructure | Tested model/embedding access, local MCP fixture, workbook reader, DOCX/PPTX renderers/templates, thin API/UI adapter | Minimal feasibility checks, pinned dependencies, supported-environment matrix, and named role for each asset | Course packaging pending; reference code/tests available |
+| B1. Foundations and first agent | Module 00/F01–F04, Chapters/Labs 01–05, diagnostic, glossary, starter/solution milestones | Both entry profiles pass G0/G1 using documented support; early pilot corrections applied | Prose/guidance drafted; executable and pilot exit conditions pending |
+| B2. Useful capabilities | Chapters/Labs 06–10, metrics, MCP, lexical/embedding retrieval, context/memory, Skill/Expert presets | O3–O4 evidence passes G2, including actual protocol use and measured retrieval | Prose/guidance drafted; executable and pilot exit conditions pending |
+| B3. Harness engineering | Chapters/Labs 11–13, threat cases, lifecycle/SQLite primer, evaluation set and budgets | Boundary, recovery, redaction, regression, and bounded-stop evidence passes G3 | Prose/guidance drafted; executable and pilot exit conditions pending |
+| B4. Data and document engineering | Chapters/Labs 14–16, workbook oracle, content model, Markdown/DOCX/PPTX renderers and QA | Reconciled data and all three formats pass G4, including editability and visual checks | Prose/guidance drafted; executable and pilot exit conditions pending |
+| B5. Integrated cases | Chapters/Labs 17–18, campus/professional research packs, two-period reporting | Both journeys pass deterministic, live-model/source, and human review requirements | Prose/guidance drafted; executable and pilot exit conditions pending |
+| B6. Delivery and final assessment | Chapters/Labs 19–20, runnable handoff, platform map, calibrated rubric and independent variants | Another learner runs the application; both entry profiles demonstrate G5 | Prose/guidance drafted; executable and pilot exit conditions pending |
+| B7. Publication preparation | Pilot corrections, glossary, checked sources, redistribution review, release evidence | Publication gate in the assessment plan is satisfied | Prose/guidance drafted; executable and pilot exit conditions pending |
 
-Pilot B1 before writing the entire book, with at least one programmer new to agents and one first-year-equivalent learner. Record assistance, misconceptions, completion time, and retry results. Repeat later-course trials with both profiles before publication; passing the first loop does not validate the full workload. These small pilots identify usability issues, not population-level learning effectiveness.
+The manuscript-first request changes writing order, not pilot requirements. Pilot B1 before assessed teaching with at least one programmer new to agents and one first-year-equivalent learner; use the results to revise the already drafted later chapters. Record assistance, misconceptions, completion time, and retry results. Repeat later-course trials with both profiles before publication; passing the first loop does not validate the full workload. These small pilots identify usability issues, not population-level learning effectiveness.
 
 The initial pacing budgets are ten weeks/60 guided core hours plus about 40 independent hours for the accelerated route, or sixteen weeks/84 guided hours plus about 48 independent hours for the supported route. The latter includes 12 foundation and 12 supervised-practice hours. Use observed task times to revise pacing or add support; do not remove required outcomes to fit an optimistic timetable.
 
 ### Preparation ownership and release dependencies
 
-Assign people to these roles when authoring starts; one person may hold several roles, but an independent reviewer checks solutions and numeric oracles.
+Assign people to these roles before executable preparation and pilots; one person may hold several roles, but an independent reviewer checks solutions and numeric oracles.
 
 | Workstream | Accountable role | Required before |
 | --- | --- | --- |
@@ -148,7 +151,7 @@ Harness is used as an explicitly defined engineering term in this course. Do not
 
 ## 8. Chapter completion checklist
 
-A chapter is complete only when all applicable items hold:
+A chapter is complete for teaching release only when all applicable items hold. The current first-draft prose does not claim this checklist has passed:
 
 - [ ] The learner prerequisites, outcome IDs, exit evidence, and prerequisite check are explicit.
 - [ ] Both entry profiles can access the required background through a bridge, glossary, or worked example; domain expertise is not silently assumed.
@@ -170,15 +173,14 @@ A chapter is complete only when all applicable items hold:
 
 No chapter, fixture, or lab should be marked complete solely because text or source code was generated.
 
-## 9. Recommended next authoring task
+## 9. Recommended next release task
 
-Prepare the Module 00 diagnostic and F01–F04 guides together with Chapter 01 and its campus/professional scenario worksheet. Then author Chapter 02's model/prompt experiment, Chapter 03's tool exchange, and Chapters 04–05's bounded loop and workflow comparison as B1.
+Prepare the isolated B1 laboratory from the drafted Module 00 and Chapters 01–05: exact setup commands, foundation starters, scripted/live provider access, learner-owned loop exercises, milestone solutions, and controlled failure fixtures. Preserve the existing headless-first sequence and root engineering standards.
 
-- Use a tiny program and hand-checked table to distinguish basic programming from API/async/testing readiness.
-- Provide worked examples and staged hints while retaining independently assessed exit tasks.
-- Define both continuing cases without assuming accounting or enterprise-delivery experience.
-- Reach an observable, tested loop before exposing desktop internals.
-- In preparation track P, validate required model/embedding access and Excel/DOCX/PPTX teaching adapters early; resolve gaps as authoring work.
-- Pilot with both entry profiles before proceeding to the remaining batches.
+- Independently review the printed arithmetic and assessment anchors before encoding fixture oracles.
+- Test a clean installation and publish the supported OS/runtime matrix.
+- Validate required model/embedding access and Excel/DOCX/PPTX adapters in preparation track P, without waiting for a product release.
+- Pilot B1 with both entry profiles and use observed misconceptions, assistance, and timing to revise the manuscript.
+- Continue executable batches in dependency order; retain both capstones, all three formats, and all live/human gates.
 
-This is the next proposed task, not work performed by the current planning request.
+These are next release tasks, not implementations performed by the manuscript request. The [lab companion](lab-guides/README.md) identifies prerequisites per exercise; [instructor notes](instructor/teaching-notes.md) supply draft answers and pilot worksheets.

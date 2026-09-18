@@ -2,7 +2,7 @@
 
 > Learn to understand, design, build, evaluate, and deliver agents—from basic programming to complete applications.
 
-Status: tutorial planning draft. This directory contains the course plan, not completed chapters, runnable labs, or evidence that learners have passed them.
+Status: first English manuscript draft. [Start reading the book](manuscript.md): Module 00 and all twenty chapters are written, with worked examples, practice, references, a glossary, and instructor guidance. Executable teaching assets and learner validation remain separate release work; see [draft status](draft-status.md).
 
 ## 1. Who this course serves
 
@@ -31,13 +31,13 @@ The curriculum is designed backward from what a learner must independently demon
 
 For example, Word generation is a required learning outcome alongside Markdown and PowerPoint. If a suitable implementation is unavailable when a chapter is authored, preparing a tested teaching implementation is author work—not a reason to make the outcome optional.
 
-The product and course can inform each other without sharing a completion checklist. This plan changes course scope, not the product roadmap, and does not claim that planned teaching assets already run.
+The product and course can inform each other without sharing a completion checklist. The English course documents and manuscript do not change the product roadmap or claim that planned teaching assets already run.
 
 ## 3. The two continuing cases
 
 ### Case A: Deep research and proposals
 
-Question and selected materials → research plan → local and external evidence → comparison and synthesis → reviewed proposal → Markdown, DOCX, or PPTX → revision.
+Question and selected materials → research plan → local and external evidence → comparison and synthesis → reviewed proposal → Markdown, DOCX, and PPTX → revision.
 
 Emphasis: research scope, evidence quality, conflicting information, uncertainty, human checkpoints, and reusable deliverables.
 
@@ -99,9 +99,14 @@ The author must select and pin teaching-library versions when preparing each exe
 
 | Document | Purpose |
 | --- | --- |
+| [Manuscript](manuscript.md) | Preface and reading order for Module 00 and all twenty chapter drafts |
 | [Curriculum](curriculum.md) | Foundation module 00, twenty chapters, learning outcomes, exercises, and mastery checkpoints |
 | [Labs and assessment](labs-and-assessment.md) | Dataset contracts, two capstones, failure cases, scoring, and readiness gates |
 | [Authoring plan](authoring-plan.md) | Writing sequence, chapter template, source map, and evidence requirements |
+| [Lab companion](lab-guides/README.md) | L01–L20 guidance, evidence worksheet, reference-test commands, and asset prerequisites |
+| [Instructor notes](instructor/teaching-notes.md) | Expected reasoning, numeric derivations, staged hints, and draft scoring calibration |
+| [References and license](references.md) | BetterWork GitHub code attribution, pinned sources, independent references, and MIT notice |
+| [Draft status](draft-status.md) | What is written, what was verified, and what remains before a teaching release |
 
 ### Two entry routes, one exit standard
 
@@ -132,4 +137,4 @@ This overview and the linked curriculum define the course's target competence. T
 
 Learning objectives, available teaching assets, and verified lab results are three different facts. All required outcomes stay in scope while authors prepare the necessary material. An unavailable teaching implementation is an authoring blocker to resolve, not a learner exemption or a reason to relabel a required topic as optional.
 
-This directory contains the English planning documents. Chapters, examples, datasets, and evaluated teaching releases are still to be authored. Publication must cite tested revisions and distinguish course examples from product behavior. Changes here do not automatically revise the separate `book/cn` materials.
+This directory contains the English course specifications and the first manuscript draft. Code excerpts use Kevin Zhang's MIT-licensed [BetterWork GitHub repository](https://github.com/gyzhang/BetterWork), with revision-pinned attribution in the source register. The prose and worked examples are written; isolated executable labs, packaged datasets/renderers, and learner pilots remain author-owned work. Publication must meet the existing acceptance gates. Changes here do not automatically revise the separate `book/cn` materials.
