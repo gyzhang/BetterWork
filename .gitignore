@@ -34,6 +34,9 @@ book/cn/智能体工程：从一次工具调用到可交付的系统.md
 book/cn/智能体工程：从一次工具调用到可交付的系统.html
 book/cn/智能体工程：从一次工具调用到可交付的系统.pdf
 
+# Python cache
+__pycache__/
+
 # External tool caches
 book/cn/.workbuddy/
 
