@@ -48,7 +48,7 @@
     <path d="M78 560 a8 8 0 0 0 -8 8 v112 a8 8 0 0 0 8 8 z" fill="#DF203C"/>
     <text x="98" y="596" font-size="24" font-weight="bold" fill="#0C2864">引用任何一个分数，必须补齐三项</text>
     <text x="98" y="626" font-size="20" fill="#0C2864">发布日期　·　评测执行方　·　采样方式</text>
-    <text x="98" y="652" font-size="20" fill="#0C2864">采样方式要写清：是 pass@1 还是 pass@k，有没有预算限制</text>
+    <text x="98" y="652" font-size="20" fill="#0C2864">采样方式要写清：是 pass@1 还是 pass^k，有没有预算限制</text>
     <text x="98" y="676" font-size="18" fill="#DF203C">缺一项的分数，不要写进任何要给别人看的材料里。</text>
   </g>
 </svg>

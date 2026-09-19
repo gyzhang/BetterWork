@@ -64,7 +64,7 @@
     <path d="M78 566 a8 8 0 0 0 -8 8 v106 a8 8 0 0 0 8 8 z" fill="#1B4593"/>
     <text x="98" y="596" font-size="24" font-weight="bold" fill="#0C2864">阶段序列属于权限，不属于建议</text>
     <text x="98" y="626" font-size="20" fill="#0C2864">模型可以改变「怎么做」，不能改变「做哪几步」。</text>
-    <text x="98" y="652" font-size="20" fill="#2064AE">阶段边界同时是权限边界，也是唯一的停车位。</text>
+    <text x="98" y="652" font-size="20" fill="#2064AE">阶段边界同时是权限边界，也是唯一的检查点。</text>
     <text x="98" y="676" font-size="18" fill="#64748B">最实用的划阶段判据：这一步和下一步的动作集合不同吗？不同就分开。</text>
   </g>
 </svg>

@@ -4,7 +4,7 @@
 
   <g id="fig-header" data-pptx-bounds="70 126 1140 70">
     <text x="70" y="160" font-size="32" font-weight="bold" fill="#0C2864">阶段划分由人预先固定，阶段之内才允许自适应</text>
-    <text x="70" y="192" font-size="20" fill="#64748B">停车位只在"继续下去需要你做一个原计划里没有的决定"时出现。</text>
+    <text x="70" y="192" font-size="20" fill="#64748B">检查点只在"继续下去需要你做一个原计划里没有的决定"时出现。</text>
   </g>
 
   <g id="fig-stages" data-pptx-bounds="70 248 1140 152">
@@ -13,7 +13,7 @@
       <text x="86" y="300" font-size="20" font-weight="bold" fill="#FFFFFF">澄清决定</text>
       <text x="86" y="330" font-size="18" fill="#D8E4F0">→ 批准计划</text>
       <rect x="86" y="350" width="12" height="12" rx="3" fill="#FFFFFF"/>
-      <text x="106" y="361" font-size="18" fill="#FFFFFF">停车位</text>
+      <text x="106" y="361" font-size="18" fill="#FFFFFF">检查点</text>
     </g>
     <g id="stage-2" data-pptx-bounds="303 264 208 120">
       <rect x="303" y="264" width="208" height="120" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
@@ -27,7 +27,7 @@
       <text x="552" y="300" font-size="20" font-weight="bold" fill="#FFFFFF">比较替代方案</text>
       <text x="552" y="330" font-size="18" fill="#D8E4F0">→ 批准大纲</text>
       <rect x="552" y="350" width="12" height="12" rx="3" fill="#FFFFFF"/>
-      <text x="572" y="361" font-size="18" fill="#FFFFFF">停车位</text>
+      <text x="572" y="361" font-size="18" fill="#FFFFFF">检查点</text>
     </g>
     <g id="stage-4" data-pptx-bounds="769 264 208 120">
       <rect x="769" y="264" width="208" height="120" rx="10" fill="#EEF4FB" stroke="#D8E4F0" stroke-width="1.5"/>
@@ -41,7 +41,7 @@
       <text x="1018" y="300" font-size="20" font-weight="bold" fill="#FFFFFF">校验与复核</text>
       <text x="1018" y="330" font-size="18" fill="#FFFFFF">→ 作为新版本</text>
       <rect x="1018" y="350" width="12" height="12" rx="3" fill="#FFFFFF"/>
-      <text x="1038" y="361" font-size="18" fill="#FFFFFF">停车位</text>
+      <text x="1038" y="361" font-size="18" fill="#FFFFFF">检查点</text>
     </g>
   </g>
 
