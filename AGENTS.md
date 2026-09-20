@@ -35,6 +35,8 @@
 
 2026-09-14 用户已通过[专家与任务材料设计 v0.2](docs/designs/experts-and-task-materials.md)评审，[ADR-0014](docs/adr/0014-expert-context-and-material-binding.md)已接受；E11–E15 已落地专家持久化、执行注入、召唤对话、配置 UI 和首个内置分发样本，E20 已定案材料、快照和运行来源契约，E21 已落地知识内容修订与输入快照恢复基础，E22 已接入材料引用校验与草稿持久化。后续以[专家开发计划](docs/development/tasks-experts.md)为唯一新任务入口：E00 核对 A/macOS 与 B0 尾项，E2 材料与来源、E3 最小记忆、E4 MCP/网页正文、E5 Office 输入与连续两期交付。专家页“召唤”直接进入对话，不设启动前任务准备表单；材料按需选择并受运行范围约束。下文早期“记忆随 C、MCP 独立确认、建议待审阅”排期按此更新；已接受范围无需重复确认，具体技术决策在计划指定卡中落实。
 
+2026-09-20 用户接受 [API tools 与远程 MCP 设计](docs/designs/api-tools-and-remote-mcp.md)（[ADR-0024](docs/adr/0024-api-services-and-credentials.md) 与 [ADR-0025](docs/adr/0025-remote-mcp-and-capability-bindings.md) 仍 Proposed，[capability-contracts](docs/development/capability-contracts.md) 定义字段），并确认拆分为[能力基础开发计划](docs/development/tasks-capability-foundation.md)（CF00–CF51）。CF 与现有 A/B0/E 并行推进，不重复排期也不改写已有任务状态；里程碑入口不自动开工，需单独开发指令。
+
 Phase 0 与原 Phase 1 的知识库、搜索和 Markdown 成果部分能力已实现。2026-09-08 用户已确认后续顺序：
 
 1. Skill 管理与配置。

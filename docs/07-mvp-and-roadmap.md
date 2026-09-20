@@ -1,5 +1,13 @@
 # MVP 与路线图
 
+## Proposed API/MCP increment — 2026-09-20
+
+The [API tools and remote MCP design](designs/api-tools-and-remote-mcp.md) records the next capability configuration scope: curated API service profiles (Baidu first), Main-owned protected credentials, stdio plus Streamable HTTP with static authentication, and explicit Expert/Task/Run bindings. [ADR-0024](adr/0024-api-services-and-credentials.md), [ADR-0025](adr/0025-remote-mcp-and-capability-bindings.md), and [capability contracts](development/capability-contracts.md) define the proposed decisions and compatibility boundaries.
+
+This is documentation adoption only, not authorization to begin product development. Suggested later slices are credentials/contracts → API profile end-to-end integration → versioned stdio MCP → Streamable HTTP → cross-category acceptance. OAuth, legacy HTTP+SSE, arbitrary HTTP tools, business writes, and Windows completion remain outside this increment. Existing A/B0/E cards and acceptance statuses below are unchanged; this proposal neither closes them nor creates a competing implementation task board.
+
+2026-09-20 同一日用户接受设计后要求拆分为可推进的开发计划；[能力基础开发计划](development/tasks-capability-foundation.md) 以 CF00–CF51 17 张任务卡拆分为 M0–M5 六个里程碑，与现有 A/B0/E 并行推进；里程碑入口不自动开工，需单独开发指令。
+
 ## 0. 2026-09-08 生效的开发顺序
 
 **2026-09-14 当前有效计划**：用户已通过[专家与任务材料设计 v0.2](designs/experts-and-task-materials.md)整体评审，[ADR-0014](adr/0014-expert-context-and-material-binding.md)转为 Accepted。E1 专家召唤与执行（E11–E15）、E2 材料范围与来源（E20–E25）、E3 最小记忆（E30–E32）、E40 MCP stdio 协议探测、E41 MCP 运行适配、E42 MCP 设置/工具选择、E43 网页正文、E50/E51 Office 输入解析与读取、E52 讨论节点与返工恢复、E53 经营分析方法与确定性结果、E54 报告/PPT 交付与来源展示已按[专家计划](development/tasks-experts.md)完成；E55 已有合成两期自动化证据，真实桌面旅程仍待执行；E56 已完成打包资源预检和构建 App 召唤冒烟，签名安装及真实业务旅程仍待执行。旧 B01–B04、C01–C08 已映射归并，只有新计划维护 E 系列状态。下面的早期“待评审/尚未拆卡”记录为历史，不阻止执行已接受设计。阶段 A/macOS 和 B0 的真实验收尾项仍需按原卡核对，不能将设计接受当作验收通过。

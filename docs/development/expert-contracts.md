@@ -1,5 +1,7 @@
 # 专家与任务上下文契约（E10）
 
+> **Proposed capability extension — 2026-09-20:** [Capability contracts](capability-contracts.md) define API service-profile selections, versioned/reviewed MCP bindings, category replacement versus preset inheritance, explicit empty selections, and concrete Run metadata. The [product design](../designs/api-tools-and-remote-mcp.md) preserves direct summon-to-conversation and existing Skill execution. These proposed fields and compatibility projections are not implemented changes to the E10/E42 contracts below; historical Expert revisions and existing acceptance statuses remain unchanged.
+
 - 状态：E10 已定案并由 E11–E15 实现；E42 已为 ExpertRevision 与 TaskContext 接入 MCP 工具选择。材料增量由 E20 定案，E21–E25 已实现。
 - 日期：2026-09-14。
 - 依据：[专家与任务材料设计 v0.2](../designs/experts-and-task-materials.md)、[ADR-0014](../adr/0014-expert-context-and-material-binding.md)、[ADR-0012](../adr/0012-composer-capability-binding.md)。

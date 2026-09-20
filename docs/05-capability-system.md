@@ -1,5 +1,7 @@
 # Tool、Skill、专家与套件
 
+> **Proposed capability design — 2026-09-20:** [API tools and remote MCP](designs/api-tools-and-remote-mcp.md) defines three selectable categories: curated API tools with named service profiles, MCP connection/tool contracts, and existing Skills. Credential-free helpers such as `web_fetch` remain built-in tools. Expert presets, task overrides, readiness, and concrete Run bindings are specified in [capability contracts](development/capability-contracts.md), with [ADR-0024](adr/0024-api-services-and-credentials.md) and [ADR-0025](adr/0025-remote-mcp-and-capability-bindings.md) remaining Proposed. No new capability is implemented by this documentation.
+
 > 2026-09-14：[专家与任务材料设计 v0.2](designs/experts-and-task-materials.md)已通过用户评审，[ADR-0014](adr/0014-expert-context-and-material-binding.md)已接受。专家保存工作方式和能力预设，任务显式选择材料；Skill 仍使用既有 Run 绑定，工具/MCP 按有效范围裁决。E11–E54 已落地，E55/E56 保持真实业务与签名安装的部分验收状态；具体证据见[开发计划](development/tasks-experts.md)。
 
 > 配置与执行契约提案见 [Skill 执行器设计](designs/skill-executor-and-dependencies.md)：原包与宿主配置分层、受管 Python/工具链快照、脚本执行、产物校验；尚未落地。

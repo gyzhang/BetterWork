@@ -1,5 +1,7 @@
 # 系统架构
 
+> **Proposed architecture increment — 2026-09-20:** [ADR-0024](adr/0024-api-services-and-credentials.md) defines separate API/model/MCP configurations sharing Main-owned encrypted credentials; [ADR-0025](adr/0025-remote-mcp-and-capability-bindings.md) adds Streamable HTTP and Run-owned MCP clients. [Capability contracts](development/capability-contracts.md) retain the existing Agent Core boundary and specify preparation, revocation, provenance, and migration. Both ADRs are Proposed; current plaintext storage and stdio-only implementation are not changed by this documentation.
+
 > 2026-09-14 增量架构已接受：专家和任务上下文由 Application 解析，Run 固定能力与材料快照，宿主过滤检索/文件读取与历史上下文，成果关联输入版本。见 [ADR-0014](adr/0014-expert-context-and-material-binding.md)及[开发计划](development/tasks-experts.md)。保留现有依赖方向，不建立第二个 Agent 引擎；下文已有代码状态与新增目标分开阅读。
 
 > 对应运行设计现见 [Skill 执行器与依赖管理](designs/skill-executor-and-dependencies.md)（[ADR-0010](adr/0010-skill-executor-and-dependencies.md)，Proposed），明确进程生命周期、信任限制及文件成果接点；不改变本文记录的当前实现状态。

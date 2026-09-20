@@ -1,5 +1,7 @@
 # UI/UX 体系与落地计划
 
+> **Proposed interaction increment — 2026-09-20:** [API tools and remote MCP design §6](designs/api-tools-and-remote-mcp.md#6-expert-and-task-behavior) defines parallel API/MCP/Skill groups in Expert configuration and task capability selection. API services replace search-only settings; MCP settings add local/remote connections, credentials, and contract review. Models and native helpers remain distinct. Reuse this document's existing layout, semantic tokens, keyboard behavior, and feedback routing; add no top-level Tool page or task preparation wizard. This is a proposed design, not a shipped UI change.
+
 > 2026-09-14：[专家与任务材料设计 v0.2](designs/experts-and-task-materials.md)已通过整体评审，其交互规则正式作为后续实现规范，见本文 §6.1.2；不再视为待审草图。实现状态见[开发计划](development/tasks-experts.md)。B00-4 已落地 Composer 加号与 Skill chip，下文早期“能力选择未实现”描述不作为重复开发依据。
 
 ## 1. 文档目的

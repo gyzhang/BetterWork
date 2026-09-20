@@ -25,5 +25,9 @@
 | [0021](0021-mcp-evidence-provenance.md) | MCP 工具结果的来源证据 | Accepted（E42/E55） |
 | [0022](0022-expert-reference-materials.md) | 专家常用参考材料与召唤注入 | Accepted（E22/E25） |
 | [0023](0023-unspecified-material-purpose.md) | 材料“其他”用途与未指定来源关系 | Accepted |
+| [0024](0024-api-services-and-credentials.md) | API service profiles and protected credentials | Proposed; documentation only |
+| [0025](0025-remote-mcp-and-capability-bindings.md) | Remote MCP and versioned capability bindings | Proposed; documentation only |
 
 ADR 一经 Accepted 不直接重写历史；需要改变时新增 ADR 并标记替代关系。
+
+The [API/MCP design](../designs/api-tools-and-remote-mcp.md) and [capability contracts](../development/capability-contracts.md) describe the proposed increment. ADR-0024 proposes replacing ADR-0007's global provider selection/plaintext credential decisions; ADR-0025 proposes extending ADR-0016/0021. Existing accepted records and implementation/acceptance statuses are unchanged. Product development requires a separate instruction.

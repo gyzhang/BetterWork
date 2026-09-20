@@ -21,11 +21,14 @@
 
 ## 技术设计提案
 
+- [API tools and remote MCP](designs/api-tools-and-remote-mcp.md): documented next capability increment for named API service profiles, protected credentials, and remote MCP; [ADR-0024](adr/0024-api-services-and-credentials.md) and [ADR-0025](adr/0025-remote-mcp-and-capability-bindings.md) remain Proposed. Documentation only; product development requires a separate instruction.
 - [Skill 信任与本地分发](adr/0011-skill-trust-and-local-distribution.md)：已确认的产品规则，具体实现未落地。
 - [Skill 执行器与依赖管理](designs/skill-executor-and-dependencies.md)：首个 PPT Skill 的执行、环境、文件成果与阶段 A 验收，配套 ADR-0010 为 Proposed。
 
 ## 开发执行规划
 
+- [API/MCP capability contracts](development/capability-contracts.md): proposed fields, operations, readiness, Run resolution, migration, and acceptance requirements. Not a new implementation task board; existing A/B0/E statuses remain unchanged.
+- [能力基础开发计划 CF00–CF51](development/tasks-capability-foundation.md)：把 API tools 与远程 MCP 设计拆成 M0–M5 六个里程碑与 17 张任务卡，与现有 A/B0/E 并行。里程碑入口不自动开工，需单独开发指令。
 - [阶段 A 执行手册（供 5.6 Luna 使用）](development/README.md)：22 项顺序任务、共享实施契约、逐项验收与可复制派发提示词；仅规划，未开始实现。
 - [阶段 B/C 后续规划](development/phase-b-c-roadmap.md)：专家配置、研究到汇报与积累复用。
 

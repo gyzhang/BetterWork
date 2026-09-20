@@ -2,6 +2,8 @@
 
 > 2026-09-14：专家与任务材料设计 v0.2 已通过用户评审，后续开发统一进入[专家开发计划](tasks-experts.md)。该计划的 E00 核对本手册 A/macOS 与 B0 尾项，E10–E56 是新开发任务；不改写下方既有任务状态。旧 B01–B04/C01–C08 仅作历史映射，禁止双重排期。
 
+> 2026-09-20：能力基础开发计划[tasks-capability-foundation.md](tasks-capability-foundation.md)（CF00–CF51）覆盖 API service profile、受保护凭据、版本化/远程 MCP、跨类绑定与 A21/E55/E56 联合收尾；与 A/B0/E 并行推进，不重复排期也不改写本手册与专家计划已有任务状态。A12/A16/A17 的补验收与 B00-5 的真实 endpoint 走查仍属本手册原卡职责；CF00 只写“核对与补证据”，不新增同名卡。
+
 - 日期：2026-09-08
 - 状态：阶段 A 已有实现；2026-09-11 完成一轮代码补救，真实样本与安装验收仍未完成。本手册不自动把 Proposed ADR 改为 Accepted。
 - 适用：用户逐项交给 5.6 Luna 执行；任务卡给出明确输入/输出和验收，不依赖模型猜测历史对话，不对模型能力作额外假设。
@@ -38,6 +40,7 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | [A13–A17：样本接线](tasks-a3.md) | 模型指令、文件工具、Run 收口、PPT 样本适配、真实试运行 |
 | [A18–A21：成果分发](tasks-a4.md) | 文件成果、成果 UI、安装资源、跨平台验收 |
 | [B0：对话内能力绑定](tasks-b0.md) | 阶段 B 前置切片：Run↔Skill 1:N、指令按序注入、Composer `+` 菜单与 chip 条、撤销级联；依据 [ADR-0012](../adr/0012-composer-capability-binding.md) |
+| [能力基础开发计划 CF00–CF51](tasks-capability-foundation.md) | API service profile、受保护凭据、版本化/远程 MCP、跨类绑定与 A21/E55/E56 联合收尾；依据 [ADR-0024](../adr/0024-api-services-and-credentials.md)、[ADR-0025](../adr/0025-remote-mcp-and-capability-bindings.md) 与 [capability-contracts](capability-contracts.md)。与 A/B0/E 并行，不重复排期 |
 | [后续 B/C](phase-b-c-roadmap.md) | 专家配置与研究汇报路径，阶段 A 完成后按模板细化 |
 | [依赖验证记录](dependency-verification.md) | 基础 Python 候选、逐字抄录的上游校验值、本机探测结果与待验证清单 |
 
