@@ -1619,6 +1619,55 @@ export interface SearchEngineSummary {
   updatedAt: number;
 }
 
+// —— 凭据契约（CF10，ADR-0024 §3/§4）。`CredentialRecord` 只属于 Main/持久层，
+// 不进入任何 Renderer 读 DTO；下面只定义共享契约词汇，本卡不新增 IPC channel。
+
+/** 凭据归属：一个凭据只有一个 owner（API profile、MCP 连接槽位或模型 profile）。 */
+export const credentialOwnerKindSchema = z.enum([
+  'api-service-profile',
+  'mcp-connection',
+  'model-profile',
+]);
+export type CredentialOwnerKind = z.infer<typeof credentialOwnerKindSchema>;
+
+/** 单条凭据明文的长度上限；空值在上层归一为 keep，超长直接拒绝。 */
+export const MAX_CREDENTIAL_LENGTH = 8_192;
+
+/**
+ * 只写不读的凭据变更语义（§4）：编辑器空输入归一为 `keep`，
+ * `replace` 必须带非空值，`clear` 是显式动作。Renderer 持有的新值保存/取消即清空，不落 localStorage。
+ */
+export const credentialMutationSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('keep') }).strict(),
+  z
+    .object({ action: z.literal('replace'), value: z.string().min(1).max(MAX_CREDENTIAL_LENGTH) })
+    .strict(),
+  z.object({ action: z.literal('clear') }).strict(),
+]);
+export type CredentialMutation = z.infer<typeof credentialMutationSchema>;
+
+/**
+ * 公开的凭据状态：只有版本元数据与 configured/availability 信息，绝不包含明文或密文。
+ * `configured=false` 表示缺失（从未写入或已 clear）；`configured=true` 且 `available=false`
+ * 表示受保护存储不可用——§6 里两者语义可区分。`version` 是单调递增的非敏感版本号。
+ */
+export const credentialStatusSchema = z
+  .object({
+    configured: z.boolean(),
+    available: z.boolean(),
+    version: z.number().int().nonnegative(),
+  })
+  .strict();
+export type CredentialStatus = z.infer<typeof credentialStatusSchema>;
+
+/** 凭据错误码（§6）：三者都禁止明文回退，各自对应明确的修复动作。 */
+export const credentialErrorCodeSchema = z.enum([
+  'credential_missing',
+  'credential_unavailable',
+  'credential_migration_required',
+]);
+export type CredentialErrorCode = z.infer<typeof credentialErrorCodeSchema>;
+
 export interface RunSkillBindingSummary {
   skillId: string;
   skillName: string;

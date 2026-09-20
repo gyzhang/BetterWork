@@ -911,3 +911,50 @@ it('adds task context revisions with ordered snapshots and task ownership', () =
   expect(countRows(db, 'task_context_revisions')).toBe(0);
   db.close();
 });
+
+describe('credentials table (CF10)', () => {
+  const tableExists = (db: Database.Database, name: string): boolean =>
+    db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(name) !==
+    undefined;
+  const indexExists = (db: Database.Database, name: string): boolean =>
+    db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?").get(name) !==
+    undefined;
+
+  it('creates the credentials table with a unique owner/slot index on a fresh database', () => {
+    const db = new Database(':memory:');
+    migrate(db, { migrations: appMigrations });
+    expect(tableExists(db, 'credentials')).toBe(true);
+    expect(indexExists(db, 'idx_credentials_owner_slot')).toBe(true);
+    // 清空态：ciphertext 可为 NULL，但身份/版本元数据保留
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO credentials (id, owner_kind, owner_id, slot, ciphertext, version, created_at, updated_at)
+           VALUES (?, ?, ?, ?, NULL, ?, ?, ?)`,
+        )
+        .run('c-clear', 'mcp-connection', 'conn-1', 'env:TOKEN', 3, 1, 1),
+    ).not.toThrow();
+    db.close();
+  });
+
+  it('upgrades a v23 database with credentials and stays idempotent on re-run', () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    migrate(db, { migrations: appMigrations.slice(0, 23) });
+    expect(readSchemaVersion(db)).toBe(23);
+    expect(tableExists(db, 'credentials')).toBe(false);
+
+    migrate(db, { migrations: appMigrations });
+    expect(readSchemaVersion(db)).toBe(appMigrations.length);
+    expect(tableExists(db, 'credentials')).toBe(true);
+
+    // 再跑一次不得重复建表或重复打版本戳
+    migrate(db, { migrations: appMigrations });
+    expect(readSchemaVersion(db)).toBe(appMigrations.length);
+    const stamps = db
+      .prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 24')
+      .get() as { count: number };
+    expect(stamps.count).toBe(1);
+    db.close();
+  });
+});

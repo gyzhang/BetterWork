@@ -25,7 +25,7 @@
 
 | 范围 | 当前证据 | 处理 |
 | --- | --- | --- |
-| 协议/迁移/持久化 | v23 迁移；IPC channel 76 项；`packages/agent-protocol` 是唯一定义入口 | 沿用现有分层；CF 系列新增字段按 capability-contracts §10.1 逐步迁移 |
+| 协议/迁移/持久化 | v23 迁移；IPC channel 85 项；`packages/agent-protocol` 是唯一定义入口 | 沿用现有分层；CF 系列新增字段按 capability-contracts §10.1 逐步迁移 |
 | 内置工具与 allow-list | 12 个内置工具、`BUILTIN_TOOL_NAMES` 常量在 [expert-service](../../apps/desktop/src/main/services/expert-service.ts#L30)、编辑器 checkbox 在 [ExpertsView](../../apps/desktop/src/renderer/src/views/ExpertsView.tsx#L35) | CF22 把 `web_search` 从 allow-list 迁到 API profile 选择，其余 7 个 checkbox 保持不变 |
 | 搜索配置 | 单表 `search_engine_configs`；`enabled` 全局唯一；明文 Key | CF11 迁移到 API service profile；CF20–CF22 引入 profile/revision/默认 |
 | MCP stdio | `McpClientService` 应用级 cache；无托管凭据；无版本化连接 | CF30–CF32 拆身份/修订/审阅/per-Run 客户端 |
@@ -43,8 +43,8 @@ CF00 不重复此前已证实且未受变更影响的测试；以最新提交、
 
 | 编号 | 工作 | 前置 | 状态 | 证据 |
 | --- | --- | --- | --- | --- |
-| CF00 | 前置收口与基线核对 | 无 | todo | 待补 |
-| CF10 | 凭据服务与 safeStorage 契约 | CF00 | todo | 待补 |
+| CF00 | 前置收口与基线核对 | 无 | doing | 基线核对：HEAD `dee0bdb`，工作树仅含未跟踪 `.qoder/plans/`；`npm run verify` 退出 0（77 文件 / 582 测试 / Electron build，lint+format+typecheck 全绿）。§2 已校准：实测 IPC channel 85 项、schema v23、`mcp_connections` 空、`baidu_qianfan` enabled。桌面走查未完成，不伪造：模型端点 `10.62.64.38:30808` 探测 curl exit 52（空响应），A16/A17 真实样本与 B00-5 双 Skill 撤销受端点阻塞；A12 依赖代码（4e4a4e5 09-11）与 A16/A17 运行约定解耦（1a380ac 09-13）均晚于上次本机走查，桌面回归仍待人工窗口。Developer ID `security find-identity` 仍 0 身份（外部申请动作，不阻塞 CF10）|
+| CF10 | 凭据服务与 safeStorage 契约 | CF00 | done | credentials 表 v24 迁移（新库/旧库 v23→v24/幂等）；`infrastructure/credential-store.ts`（`SafeStorageAdapter` + `ElectronSafeStorageAdapter`，异步 safeStorage、可用性只查一次、`shouldReEncrypt` 有界再解）；`persistence/credential-repository.ts`（put/rotateAndCancel/clear/status/resolveForOwner + onSuperseded 订阅 + `CredentialError`，加密在事务外、失败不写半成品、解密失败不回落明文）；协议新增 `CredentialOwnerKind`/`CredentialMutation`/`CredentialStatus`/`CredentialErrorCode`/`MAX_CREDENTIAL_LENGTH`。单测 store 4 + repository 11 + migrate 2；`npm run verify` 退出 0（79 文件 / 599 测试 / Electron build）。真实 Keychain 桌面走查按里程碑留给 CF12，本卡不宣称密钥已迁移 |
 | CF11 | 版本化迁移与 legacy 密钥入库 | CF10 | todo | 待补 |
 | CF12 | M1 里程碑与凭据服务验收 | CF11 | todo | 待补 |
 | CF20 | API service profile 协议与仓储 | CF12 | todo | 待补 |

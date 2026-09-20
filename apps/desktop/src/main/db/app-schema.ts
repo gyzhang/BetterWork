@@ -911,6 +911,27 @@ export const appMigrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 24,
+    name: 'add credentials table',
+    up(db: Database.Database): void {
+      // CF10：Main 唯一的加密凭据存储。owner_id 不建外键——凭据是被 owner 引用的独立聚合，
+      // API/MCP/模型配置各自留在自己的聚合表里；(owner_kind, owner_id, slot) 唯一。
+      db.exec(`
+        CREATE TABLE credentials (
+          id TEXT PRIMARY KEY,
+          owner_kind TEXT NOT NULL CHECK (owner_kind IN ('api-service-profile', 'mcp-connection', 'model-profile')),
+          owner_id TEXT NOT NULL,
+          slot TEXT NOT NULL,
+          ciphertext BLOB,
+          version INTEGER NOT NULL DEFAULT 1,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE UNIQUE INDEX idx_credentials_owner_slot ON credentials(owner_kind, owner_id, slot);
+      `);
+    },
+  },
 ];
 
 /**
