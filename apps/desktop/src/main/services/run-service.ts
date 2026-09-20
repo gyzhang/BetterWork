@@ -61,7 +61,14 @@ import { z } from 'zod';
 
 import { managedPath, readManagedFile, writeManagedText } from '../infrastructure/managed-files';
 import type { OfficeFormat, OfficeParserService } from '../infrastructure/office-parser';
-import { type AppStore, type InputSnapshot, materialReferenceKey } from '../persistence';
+import {
+  type AppStore,
+  type CredentialOwnerRef,
+  type InputSnapshot,
+  materialReferenceKey,
+} from '../persistence';
+import { CredentialError } from '../persistence/credential-repository';
+import { API_KEY_SLOT, type CredentialResolver } from './credential-access';
 import type { FileArtifactService } from './file-artifact-service';
 import type { InputSnapshotService } from './input-snapshot-service';
 import type { KnowledgeVault } from './knowledge-vault';
@@ -385,6 +392,7 @@ export class RunService {
     private readonly mcpClientService?: McpClientService,
     private readonly webFetch?: WebFetch,
     private readonly officeParser?: OfficeParserService,
+    private readonly credentialAccess?: CredentialResolver,
   ) {}
 
   start(input: StartRunRequest): string {
@@ -551,8 +559,8 @@ export class RunService {
       if (executionContext.materialScope && this.taskMaterials) {
         await this.taskMaterials.validateSelections(input.taskId, executionContext.materials);
       }
-      const model = this.resolveModel(executionContext.modelReference);
-      const webSearch = this.resolveWebSearch();
+      const model = await this.resolveModel(executionContext.modelReference);
+      const webSearch = await this.resolveWebSearch();
       const allowedBuiltinToolNames = this.allowedBuiltinToolNames(
         executionContext.builtinToolPolicy,
       );
@@ -1379,18 +1387,48 @@ export class RunService {
     });
   }
 
-  /** 未配置语言模型时回落到教学 Provider，保证链路始终可复现。 */
-  private resolveModel(reference?: ExpertModelReference): ModelProvider {
+  /** 未配置语言模型时回落到教学 Provider，保证链路始终可复现。凭据迁移完成后走 credentials 解析。 */
+  private async resolveModel(reference?: ExpertModelReference): Promise<ModelProvider> {
     if (reference?.mode === 'profile') {
       const configured = this.store.models.getWithSecret(reference.modelProfileId);
       if (!configured) throw new Error(`指定的模型配置不存在：${reference.modelProfileId}`);
       if (!configured.enabled || configured.role !== 'language') {
         throw new Error(`指定的模型配置不可用于语言模型运行：${configured.name}`);
       }
-      return new OpenAICompatibleProvider(configured);
+      const apiKey = await this.credentialSecret(
+        { ownerKind: 'model-profile', ownerId: configured.id, slot: API_KEY_SLOT },
+        configured.apiKey,
+      );
+      return new OpenAICompatibleProvider({ ...configured, apiKey });
     }
     const configured = this.store.models.getForRun('language');
-    return configured ? new OpenAICompatibleProvider(configured) : this.fallbackModel;
+    if (!configured) return this.fallbackModel;
+    const apiKey = await this.credentialSecret(
+      { ownerKind: 'model-profile', ownerId: configured.id, slot: API_KEY_SLOT },
+      configured.apiKey,
+    );
+    return new OpenAICompatibleProvider({ ...configured, apiKey });
+  }
+
+  /**
+   * 新读优先：done→从 credentials 取明文；pending/failed→拒绝新 Run（不回落明文）；
+   * none→用旧列（回滚窗口/keyless）。未注入凭据访问点时保持原列行为，兼容旧测试。
+   */
+  private async credentialSecret(
+    ref: CredentialOwnerRef,
+    legacyPlaintext: string,
+  ): Promise<string> {
+    const access = this.credentialAccess;
+    if (!access) return legacyPlaintext;
+    const status = access.migrationStatus(ref);
+    if (status === 'pending' || status === 'failed') {
+      throw new CredentialError(
+        'credential_migration_required',
+        '相关凭据尚未完成加密迁移，请确认应用已成功启动并迁移后重试',
+      );
+    }
+    if (status === 'done') return access.resolveSecret(ref);
+    return legacyPlaintext;
   }
 
   private allowedBuiltinToolNames(policy?: BuiltinToolPolicy): ReadonlySet<string> | undefined {
@@ -1479,11 +1517,16 @@ export class RunService {
     return lines.join('\n');
   }
 
-  private resolveWebSearch(): WebSearch | undefined {
+  private async resolveWebSearch(): Promise<WebSearch | undefined> {
     const engine = this.store.searchEngines.getEnabled();
-    if (!engine || !engine.apiKey) return undefined;
+    if (!engine) return undefined;
+    const apiKey = await this.credentialSecret(
+      { ownerKind: 'api-service-profile', ownerId: engine.provider, slot: API_KEY_SLOT },
+      engine.apiKey,
+    );
+    if (!apiKey) return undefined;
     // 显式包一层：直接摘出 client.search 会脱离 this 绑定，类型系统无法证明它安全
-    const client = createQianfanSearchClient(engine);
+    const client = createQianfanSearchClient({ ...engine, apiKey });
     return (query, signal) => client.search(query, signal);
   }
 

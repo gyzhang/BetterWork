@@ -958,3 +958,60 @@ describe('credentials table (CF10)', () => {
     db.close();
   });
 });
+
+describe('credential migration journal (CF11)', () => {
+  const seedModel = (db: Database.Database, id: string, apiKey: string, now: number): void => {
+    db.prepare(
+      `INSERT INTO model_profiles (id, name, provider, base_url, model, role, api_key, created_at, updated_at)
+       VALUES (?, '模型', 'p', 'https://e.invalid/v1', 'm', 'language', ?, ?, ?)`,
+    ).run(id, apiKey, now, now);
+  };
+  const journalStatuses = (db: Database.Database): Array<{ owner_id: string; status: string }> =>
+    db
+      .prepare('SELECT owner_id, status FROM credential_migration_journal ORDER BY owner_id')
+      .all() as Array<{ owner_id: string; status: string }>;
+
+  it('creates the journal and seeds pending only for rows that hold a plaintext key', () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    migrate(db, { migrations: appMigrations.slice(0, 24) });
+    const now = 1_700_000_000_000;
+    seedModel(db, 'm-key', 'sk-live', now);
+    seedModel(db, 'm-empty', '', now);
+    db.prepare(
+      "INSERT INTO search_engine_configs (provider, api_key, updated_at) VALUES ('baidu_qianfan', 'sk-search', ?)",
+    ).run(now);
+
+    migrate(db, { migrations: appMigrations });
+
+    const modelEntries = db
+      .prepare(
+        "SELECT owner_id FROM credential_migration_journal WHERE owner_kind = 'model-profile'",
+      )
+      .all() as Array<{ owner_id: string }>;
+    expect(modelEntries.map((entry) => entry.owner_id)).toEqual(['m-key']);
+    const searchEntry = db
+      .prepare(
+        "SELECT status FROM credential_migration_journal WHERE owner_kind = 'api-service-profile'",
+      )
+      .get() as { status: string };
+    expect(searchEntry.status).toBe('pending');
+    db.close();
+  });
+
+  it('is idempotent: re-running v25 does not duplicate or resurrect migrated rows', () => {
+    const db = new Database(':memory:');
+    migrate(db, { migrations: appMigrations.slice(0, 24) });
+    seedModel(db, 'm-key', 'sk', 1);
+    migrate(db, { migrations: appMigrations });
+    // 模拟已迁移完成：手动标 done 后重建不应回到 pending
+    db.prepare(
+      "UPDATE credential_migration_journal SET status = 'done' WHERE owner_id = 'm-key'",
+    ).run();
+    expect(journalStatuses(db)).toEqual([{ owner_id: 'm-key', status: 'done' }]);
+    // 再跑一次全量迁移（幂等），journal 不重复、不新增
+    migrate(db, { migrations: appMigrations });
+    expect(journalStatuses(db)).toEqual([{ owner_id: 'm-key', status: 'done' }]);
+    db.close();
+  });
+});

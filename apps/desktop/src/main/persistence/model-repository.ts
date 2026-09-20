@@ -101,6 +101,18 @@ export class ModelRepository {
     };
   }
 
+  /** 供 legacy 凭据迁移读取本聚合的明文 Key（回滚窗口）；行不存在返回 undefined。 */
+  readPlaintextApiKey(id: string): string | undefined {
+    const row = this.db.prepare('SELECT api_key FROM model_profiles WHERE id = ?').get(id) as
+      { api_key: string } | undefined;
+    return row?.api_key;
+  }
+
+  /** 迁移完成后清空本聚合的明文 Key 列；列本身保留作回滚窗口，行消失后不再被读到。 */
+  clearPlaintextApiKey(id: string): void {
+    this.db.prepare("UPDATE model_profiles SET api_key = '' WHERE id = ?").run(id);
+  }
+
   save(input: ModelProfileInput & { id?: string | undefined }): string {
     const now = Date.now();
     const id = input.id ?? randomUUID();

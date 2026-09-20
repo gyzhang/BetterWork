@@ -82,6 +82,11 @@ export class CredentialRepository {
       .get(ref.ownerKind, ref.ownerId, ref.slot) as CredentialRow | undefined;
   }
 
+  /** 受保护存储当前是否可用；迁移与凭据解析前的整体门禁用它，不针对具体 owner。 */
+  isStorageAvailable(): Promise<boolean> {
+    return this.store.isAvailableAsync();
+  }
+
   /** 为尚不存在的 owner/slot 建立初始凭据，version 从 1 起。受保护存储不可用时抛错且不写入。 */
   async put(ref: CredentialOwnerRef, plaintext: string): Promise<{ id: string; version: number }> {
     assertPlaintext(plaintext);
@@ -144,6 +149,23 @@ export class CredentialRepository {
     write();
     this.notify(ref, existing.version);
     return { id: existing.id, version: nextVersion };
+  }
+
+  /**
+   * 幂等地让某 owner/slot 的凭据等于给定明文（迁移与双写共用）：
+   * 不存在→写入；已存在但不同→轮换；已相同→不动。返回当前版本。
+   */
+  async ensureSecret(ref: CredentialOwnerRef, plaintext: string): Promise<number> {
+    assertPlaintext(plaintext);
+    let existing: string | undefined;
+    try {
+      existing = (await this.resolveForOwner(ref)).plaintext;
+    } catch (error) {
+      if (!(error instanceof CredentialError) || error.code !== 'credential_missing') throw error;
+    }
+    if (existing === plaintext) return this.find(ref)?.version ?? 0;
+    if (existing === undefined) return (await this.put(ref, plaintext)).version;
+    return (await this.rotateAndCancel(ref, plaintext)).version;
   }
 
   /** 公开状态：只回版本与 configured/availability，不含明文或密文。 */

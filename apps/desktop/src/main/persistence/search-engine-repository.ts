@@ -84,6 +84,21 @@ export class SearchEngineRepository {
     return row ? toEnabled(row) : undefined;
   }
 
+  /** 供 legacy 凭据迁移读取本聚合的明文 Key（回滚窗口）；行不存在返回 undefined。 */
+  readPlaintextApiKey(provider: SearchProviderId): string | undefined {
+    const row = this.db
+      .prepare('SELECT api_key FROM search_engine_configs WHERE provider = ?')
+      .get(provider) as { api_key: string } | undefined;
+    return row?.api_key;
+  }
+
+  /** 迁移完成后清空本聚合的明文 Key 列；列本身保留作回滚窗口。 */
+  clearPlaintextApiKey(provider: SearchProviderId): void {
+    this.db
+      .prepare("UPDATE search_engine_configs SET api_key = '' WHERE provider = ?")
+      .run(provider);
+  }
+
   save(input: SearchEngineConfigInput): SearchProviderId {
     const now = Date.now();
     const existing = this.db

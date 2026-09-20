@@ -1,8 +1,11 @@
 import type Database from 'better-sqlite3';
 
 import { openAppDatabase } from '../db';
+import { CredentialMigrationJournalRepository } from '../db/credential-migration-journal';
+import type { SafeStorageAdapter } from '../infrastructure/credential-store';
 import { ArtifactInputRelationRepository } from './artifact-input-relation-repository';
 import { ArtifactRepository } from './artifact-repository';
+import { CredentialRepository } from './credential-repository';
 import { DependencyOperationRepository } from './dependency-operation-repository';
 import { DependencySnapshotRepository } from './dependency-snapshot-repository';
 import { DiscussionCheckpointRepository } from './discussion-checkpoint-repository';
@@ -56,8 +59,15 @@ export class AppStore {
   readonly dependencyOperations: DependencyOperationRepository;
   readonly snapshots: DependencySnapshotRepository;
   readonly discussionCheckpoints: DiscussionCheckpointRepository;
+  /** 迁移进度日志只依赖 db，始终可用。 */
+  readonly credentialJournal: CredentialMigrationJournalRepository;
+  /** 凭据仓储需要 Main 注入 safeStorage 适配器；未注入时为 undefined（不加密，保持旧行为）。 */
+  readonly credentials: CredentialRepository | undefined;
 
-  private constructor(private readonly db: Database.Database) {
+  private constructor(
+    private readonly db: Database.Database,
+    safeStorage?: SafeStorageAdapter,
+  ) {
     this.workspaces = new WorkspaceRepository(db);
     this.tasks = new TaskRepository(db);
     this.taskContexts = new TaskContextRepository(db);
@@ -80,10 +90,12 @@ export class AppStore {
     this.dependencyOperations = new DependencyOperationRepository(db);
     this.snapshots = new DependencySnapshotRepository(db);
     this.discussionCheckpoints = new DiscussionCheckpointRepository(db);
+    this.credentialJournal = new CredentialMigrationJournalRepository(db);
+    this.credentials = safeStorage ? new CredentialRepository(db, safeStorage) : undefined;
   }
 
-  static open(filePath: string): AppStore {
-    return new AppStore(openAppDatabase(filePath));
+  static open(filePath: string, safeStorage?: SafeStorageAdapter): AppStore {
+    return new AppStore(openAppDatabase(filePath), safeStorage);
   }
 
   /**
@@ -100,8 +112,18 @@ export class AppStore {
   }
 }
 
+export {
+  type CredentialJournalEntry,
+  CredentialMigrationJournalRepository,
+  type CredentialMigrationStatus,
+} from '../db/credential-migration-journal';
 export { ArtifactInputRelationRepository } from './artifact-input-relation-repository';
 export { ArtifactRepository } from './artifact-repository';
+export {
+  CredentialError,
+  type CredentialOwnerRef,
+  CredentialRepository,
+} from './credential-repository';
 export {
   type CreateOperationInput,
   DependencyOperationRepository,

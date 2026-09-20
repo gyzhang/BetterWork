@@ -932,6 +932,35 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 25,
+    name: 'add credential migration journal',
+    up(db: Database.Database): void {
+      // CF11：journaled、版本化的 legacy 密钥入库进度表，不存任何 secret 值。
+      db.exec(`
+        CREATE TABLE credential_migration_journal (
+          owner_kind TEXT NOT NULL CHECK (owner_kind IN ('api-service-profile', 'mcp-connection', 'model-profile')),
+          owner_id TEXT NOT NULL,
+          slot TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'done', 'failed')),
+          error_code TEXT,
+          updated_at INTEGER NOT NULL,
+          PRIMARY KEY (owner_kind, owner_id, slot)
+        );
+      `);
+      // 为现存明文 Key 播下 pending：模型按 id，搜索按 provider（CF20 之前搜索尚未 profile 化，
+      // 这里用 api-service-profile 作为其未来归属，owner_id=provider 作为可重放的迁移映射）。
+      const now = Date.now();
+      db.prepare(
+        `INSERT OR IGNORE INTO credential_migration_journal (owner_kind, owner_id, slot, status, updated_at)
+         SELECT 'model-profile', id, 'api-key', 'pending', ? FROM model_profiles WHERE api_key <> ''`,
+      ).run(now);
+      db.prepare(
+        `INSERT OR IGNORE INTO credential_migration_journal (owner_kind, owner_id, slot, status, updated_at)
+         SELECT 'api-service-profile', provider, 'api-key', 'pending', ? FROM search_engine_configs WHERE api_key <> ''`,
+      ).run(now);
+    },
+  },
 ];
 
 /**

@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { app, BrowserWindow } from 'electron';
 
+import { ElectronSafeStorageAdapter } from './infrastructure/credential-store';
 import {
   createFetchDownloader,
   createNodeFileSystem,
@@ -19,6 +20,8 @@ import { createPptxRenderer } from './infrastructure/pptx-renderer';
 import { registerIpc } from './ipc/register-ipc';
 import { AppStore } from './persistence';
 import { createQuitHandler } from './services/application-shutdown';
+import { CredentialAccess } from './services/credential-access';
+import { CredentialMigrationService } from './services/credential-migration-service';
 import { DiscussionCheckpointService } from './services/discussion-checkpoint-service';
 import { ExecutionOutputService } from './services/execution-output-service';
 import { type BuiltinExpertReleaseManifest, ExpertService } from './services/expert-service';
@@ -67,7 +70,28 @@ function getDefaultWorkspaceRoot(): string {
 
 function bootstrap(): ApplicationContext {
   const userData = app.getPath('userData');
-  const store = AppStore.open(path.join(userData, 'betterwork.db'));
+  const store = AppStore.open(
+    path.join(userData, 'betterwork.db'),
+    new ElectronSafeStorageAdapter(),
+  );
+  // CF11：legacy 明文密钥→credentials 的启动迁移；safeStorage 不可用时整体跳过、pending 原样保留。
+  const credentialAccess = store.credentials
+    ? new CredentialAccess(store.credentials, store.credentialJournal)
+    : undefined;
+  if (store.credentials) {
+    new CredentialMigrationService(store, store.credentials)
+      .runPending()
+      .then((result) => {
+        if (result.done > 0 || result.failed > 0 || result.skipped) {
+          console.warn(
+            `凭据迁移：done=${result.done} failed=${result.failed} remaining=${result.remaining} skipped=${String(result.skipped)}`,
+          );
+        }
+      })
+      .catch((error: unknown) => {
+        console.error('Credential migration failed', error);
+      });
+  }
   const knowledgeVault = new KnowledgeVault(
     path.join(userData, 'vaults', 'default', 'vault.sqlite'),
   );
@@ -260,6 +284,7 @@ function bootstrap(): ApplicationContext {
     mcpClientService,
     (url, signal) => webFetchService.fetch(url, signal),
     officeParser,
+    credentialAccess,
   );
   started.runs = runs;
 
@@ -280,6 +305,7 @@ function bootstrap(): ApplicationContext {
     dependencyLocksRoot,
     getWindow,
     getDefaultWorkspaceRoot,
+    ...(credentialAccess ? { credentialAccess } : {}),
   });
   return started;
 }

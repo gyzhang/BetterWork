@@ -147,6 +147,11 @@ import { z, type ZodTypeAny } from 'zod';
 import { createNodeFileSystem } from '../infrastructure/dependency-adapters';
 import { listDependencyLocks, loadDependencyLock } from '../infrastructure/dependency-lock-catalog';
 import type { AppStore } from '../persistence';
+import {
+  API_KEY_SLOT,
+  type CredentialProvisioner,
+  type CredentialResolver,
+} from '../services/credential-access';
 import type { DiscussionCheckpointService } from '../services/discussion-checkpoint-service';
 import type { ExpertService } from '../services/expert-service';
 import type { FileArtifactService } from '../services/file-artifact-service';
@@ -171,6 +176,8 @@ export interface IpcDependencies {
   readonly taskMaterials: TaskMaterialService;
   readonly notifications: NotificationService;
   readonly runs: RunService;
+  /** 凭据入口（Main 侧）：供保存双写与连接测试的新读优先；缺省时保持旧行为。 */
+  readonly credentialAccess?: CredentialResolver & CredentialProvisioner;
   readonly skillService: SkillService;
   readonly expertService: ExpertService;
   readonly discussionCheckpoints: DiscussionCheckpointService;
@@ -760,7 +767,7 @@ function mimeToExtension(mimeType: string): string {
   return MIME_EXTENSION_MAP[mimeType] ?? 'bin';
 }
 
-function registerModelChannels({ store }: IpcDependencies): void {
+function registerModelChannels({ store, credentialAccess }: IpcDependencies): void {
   handleNoInput(IpcChannel.ListModels, emptyRequestSchema, z.array(modelProfileSummarySchema), () =>
     store.models.list(),
   );
@@ -768,9 +775,16 @@ function registerModelChannels({ store }: IpcDependencies): void {
     IpcChannel.SaveModel,
     saveModelProfileRequestSchema,
     modelSaveResultSchema,
-    (input) => ({
-      id: store.models.save(input),
-    }),
+    async (input) => {
+      const id = store.models.save(input);
+      if (credentialAccess && input.apiKey) {
+        await credentialAccess.provision(
+          { ownerKind: 'model-profile', ownerId: id, slot: API_KEY_SLOT },
+          input.apiKey,
+        );
+      }
+      return { id };
+    },
   );
   handleInput(IpcChannel.DeleteModel, modelProfileIdSchema, deletedResultSchema, (input) => ({
     deleted: store.models.delete(input.id),
@@ -797,13 +811,20 @@ function registerModelChannels({ store }: IpcDependencies): void {
     testModelRequestSchema,
     connectionTestResultSchema,
     async (input) => {
-      // 编辑既有配置时允许留空 Key，表示沿用已保存的凭据
+      // 编辑既有配置时允许留空 Key，表示沿用已保存的凭据；已迁移的凭据从 credentials 新读优先。
       const stored = input.id ? store.models.getWithSecret(input.id) : undefined;
+      let storedKey = stored?.apiKey ?? '';
+      if (input.id && credentialAccess && !storedKey) {
+        const ref = { ownerKind: 'model-profile', ownerId: input.id, slot: API_KEY_SLOT } as const;
+        if (credentialAccess.migrationStatus(ref) === 'done') {
+          storedKey = await credentialAccess.resolveSecret(ref);
+        }
+      }
       const result = await probeModelConnection({
         baseUrl: input.baseUrl,
         model: input.model,
         role: input.role,
-        apiKey: input.apiKey || (stored?.apiKey ?? ''),
+        apiKey: input.apiKey || storedKey,
       });
       if (input.id) store.models.recordConnection(input.id, result.ok ? 'connected' : 'failed');
       return result;
@@ -889,7 +910,7 @@ function registerKnowledgeChannels(deps: IpcDependencies): void {
   );
 }
 
-function registerSearchEngineChannels({ store }: IpcDependencies): void {
+function registerSearchEngineChannels({ store, credentialAccess }: IpcDependencies): void {
   handleNoInput(
     IpcChannel.ListSearchEngines,
     emptyRequestSchema,
@@ -900,9 +921,16 @@ function registerSearchEngineChannels({ store }: IpcDependencies): void {
     IpcChannel.SaveSearchEngine,
     saveSearchEngineRequestSchema,
     searchEngineSaveResultSchema,
-    (input) => ({
-      provider: store.searchEngines.save(input),
-    }),
+    async (input) => {
+      const provider = store.searchEngines.save(input);
+      if (credentialAccess && input.apiKey) {
+        await credentialAccess.provision(
+          { ownerKind: 'api-service-profile', ownerId: provider, slot: API_KEY_SLOT },
+          input.apiKey,
+        );
+      }
+      return { provider };
+    },
   );
 
   handleInput(
@@ -911,7 +939,18 @@ function registerSearchEngineChannels({ store }: IpcDependencies): void {
     connectionTestResultSchema,
     async (input) => {
       const stored = store.searchEngines.get(input.provider);
-      const apiKey = input.apiKey || (stored?.apiKey ?? '');
+      let apiKey = input.apiKey || (stored?.apiKey ?? '');
+      // 已迁移的搜索凭据从 credentials 新读优先（明文列已清空）。
+      if (!apiKey && credentialAccess) {
+        const ref = {
+          ownerKind: 'api-service-profile',
+          ownerId: input.provider,
+          slot: API_KEY_SLOT,
+        } as const;
+        if (credentialAccess.migrationStatus(ref) === 'done') {
+          apiKey = await credentialAccess.resolveSecret(ref);
+        }
+      }
       if (!apiKey) return { ok: false, message: '请先填写 API Key。' };
       const result = await createQianfanSearchClient({ apiKey, webTopK: input.webTopK }).test();
       store.searchEngines.recordConnection(

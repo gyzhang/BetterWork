@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OfficeParserService } from '../infrastructure/office-parser';
 import type { ProcessSupervisor } from '../infrastructure/process-supervisor';
 import { AppStore } from '../persistence';
+import type { CredentialResolver } from './credential-access';
 import { InputSnapshotService } from './input-snapshot-service';
 import { KnowledgeVault } from './knowledge-vault';
 import { McpClientService } from './mcp-client-service';
@@ -29,9 +30,20 @@ const mcpFixturePath = path.resolve(
 );
 
 const sseResponse = (...payloads: string[]): Response =>
-  new Response(`${payloads.map((payload) => `data: ${payload}\n\n`).join('')}data: [DONE]\n\n`, {
-    headers: { 'content-type': 'text/event-stream' },
-  });
+  new Response(
+    `${payloads
+      .map(
+        (payload) => `data: ${payload}
+
+`,
+      )
+      .join('')}data: [DONE]
+
+`,
+    {
+      headers: { 'content-type': 'text/event-stream' },
+    },
+  );
 
 afterEach(async () => {
   vi.unstubAllGlobals();
@@ -126,6 +138,7 @@ const createService = (
   webFetch?: WebFetch,
   officeParser?: OfficeParserService,
   mcpClientService?: McpClientService,
+  credentialAccess?: CredentialResolver,
 ): RunService =>
   new RunService(
     fixture.store,
@@ -144,6 +157,7 @@ const createService = (
     mcpClientService,
     webFetch,
     officeParser,
+    credentialAccess,
   );
 
 const statusOf = (fixture: Fixture, runId: string): string | undefined =>
@@ -2472,5 +2486,90 @@ describe('RunService', () => {
     expect(await service.cancelRunsForSkill(skillId)).toBe(0);
     await waitForCompletion(fixture, unboundRunId);
     expect(statusOf(fixture, unboundRunId)).toBe('completed');
+  });
+});
+
+describe('CF11 credential dispatch gate', () => {
+  it('fails a new run whose model credential is still pending migration, without a model request or plaintext fallback', async () => {
+    const fixture = await createFixture();
+    fixture.store.models.save({
+      name: '待迁移模型',
+      provider: 'openai-compatible',
+      baseUrl: 'http://model.test/v1',
+      model: 'x',
+      role: 'language',
+      apiKey: 'sk-plain',
+      enabled: true,
+      maxContextTokens: 8_192,
+      maxOutputTokens: 1_024,
+      temperature: 0,
+    });
+    const resolveSecret = vi.fn(async () => 'SHOULD-NOT-USE');
+    const resolver: CredentialResolver = { migrationStatus: () => 'pending', resolveSecret };
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const service = createService(
+      fixture,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      resolver,
+    );
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '开始工作',
+    });
+    await waitForCompletion(fixture, runId);
+    expect(statusOf(fixture, runId)).toBe('failed');
+    expect(resolveSecret).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('resolves the model secret from credentials (new-read-first) and sends it as Bearer when migration is done', async () => {
+    const fixture = await createFixture();
+    // 迁移完成后明文列已清空，Key 只在 credentials；旧派发会因空 Key 缺 Authorization。
+    fixture.store.models.save({
+      name: '已迁移模型',
+      provider: 'openai-compatible',
+      baseUrl: 'http://model.test/v1',
+      model: 'x',
+      role: 'language',
+      apiKey: '',
+      enabled: true,
+      maxContextTokens: 8_192,
+      maxOutputTokens: 1_024,
+      temperature: 0,
+    });
+    const resolver: CredentialResolver = {
+      migrationStatus: (ref) => (ref.ownerKind === 'model-profile' ? 'done' : 'none'),
+      resolveSecret: async () => 'SK-FROM-CREDS',
+    };
+    const fetchMock = vi.fn(async () =>
+      sseResponse(JSON.stringify({ choices: [{ delta: { content: '完成。' } }] })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const service = createService(
+      fixture,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      resolver,
+    );
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '开始工作',
+    });
+    await waitForCompletion(fixture, runId);
+    expect(statusOf(fixture, runId)).toBe('completed');
+    const firstCall = fetchMock.mock.calls[0] as unknown[] | undefined;
+    const headers = (firstCall?.[1] as RequestInit | undefined)?.headers as
+      Record<string, string> | undefined;
+    expect(headers?.Authorization).toBe('Bearer SK-FROM-CREDS');
   });
 });
