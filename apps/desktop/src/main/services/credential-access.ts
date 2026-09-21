@@ -10,9 +10,6 @@ import type {
 /** 迁移状态；`none` 表示该 owner/slot 没有迁移记录（未加密的旧数据或无凭据）。 */
 export type CredentialGateStatus = CredentialMigrationStatus | 'none';
 
-/** API/模型类凭据的统一槽位名，与 v25 种子、迁移与双写保持一致。 */
-export const API_KEY_SLOT = 'api-key';
-
 /** 解析面：run-service 只需要迁移状态与明文解析。 */
 export interface CredentialResolver {
   migrationStatus(ref: CredentialOwnerRef): CredentialGateStatus;

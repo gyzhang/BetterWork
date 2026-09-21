@@ -6,6 +6,8 @@ import type {
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 
+import { API_KEY_SLOT, type CredentialAvailability } from './credential-repository';
+
 interface SearchEngineRow {
   provider: SearchProviderId;
   api_key: string;
@@ -39,9 +41,20 @@ const parseWebTopK = (raw: string): number => {
   }
 };
 
-const toSummary = (row: SearchEngineRow): SearchEngineSummary => ({
+const toSummary = (
+  row: SearchEngineRow,
+  hasCredential: CredentialAvailability | undefined,
+): SearchEngineSummary => ({
   provider: row.provider,
-  apiKeyConfigured: row.api_key !== '',
+  // 与模型侧同一口径：旧明文列为空但 credentials 已有密文时，仍算已配置。
+  apiKeyConfigured:
+    row.api_key !== '' ||
+    (hasCredential?.({
+      ownerKind: 'api-service-profile',
+      ownerId: row.provider,
+      slot: API_KEY_SLOT,
+    }) ??
+      false),
   enabled: row.enabled === 1,
   webTopK: parseWebTopK(row.options),
   connectionStatus: row.connection_status,
@@ -60,13 +73,16 @@ const toEnabled = (row: SearchEngineRow): EnabledSearchEngine => ({
  * 用户可以配置多家，但同一时刻只有一家对智能体生效。
  */
 export class SearchEngineRepository {
-  constructor(private readonly db: Database.Database) {}
+  constructor(
+    private readonly db: Database.Database,
+    private readonly hasCredential?: CredentialAvailability,
+  ) {}
 
   list(): SearchEngineSummary[] {
     const rows = this.db
       .prepare('SELECT * FROM search_engine_configs ORDER BY updated_at DESC')
       .all() as SearchEngineRow[];
-    return rows.map(toSummary);
+    return rows.map((row) => toSummary(row, this.hasCredential));
   }
 
   /** 含明文 Key，仅供主进程内部使用。 */

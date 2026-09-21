@@ -19,6 +19,18 @@ export interface CredentialOwnerRef {
 }
 
 /**
+ * API/模型类凭据的统一槽位名，与 v25 种子、迁移与双写保持一致。
+ * 定在持久层：凭据存储身份属于 `credentials` 表的契约，消费方（services / ipc）向下引用。
+ */
+export const API_KEY_SLOT = 'api-key';
+
+/**
+ * 凭据可用性判定：由 AppStore 在注入 safeStorage 适配器后提供给模型与搜索仓储。
+ * 未注入（无受保护存储）时为 undefined，摘要退回只看旧明文列。
+ */
+export type CredentialAvailability = (ref: CredentialOwnerRef) => boolean;
+
+/**
  * 凭据子系统错误：只携带 §6 定义的三个码之一，绝不回退明文。
  * 与 `ExpertServiceError` 同构——code 是共享协议枚举，消息面向修复动作。
  */
@@ -57,7 +69,7 @@ const assertPlaintext = (plaintext: string): void => {
 
 /**
  * Main 唯一的凭据存取与保护入口（CF10）。只提供 put / rotateAndCancel / clear / status /
- * resolveForOwner；永不返回明文给 IPC，也不接受 Renderer 直连。加密在事务外完成，
+ * resolveForOwner / hasSecret；永不返回明文给 IPC，也不接受 Renderer 直连。加密在事务外完成，
  * 失败即抛错且不写半成品；解密失败按 credential_unavailable 处理，绝不回退明文。
  */
 export class CredentialRepository {
@@ -85,6 +97,15 @@ export class CredentialRepository {
   /** 受保护存储当前是否可用；迁移与凭据解析前的整体门禁用它，不针对具体 owner。 */
   isStorageAvailable(): Promise<boolean> {
     return this.store.isAvailableAsync();
+  }
+
+  /**
+   * 同步判断某 owner/slot 是否已有密文：只查行存在性，不解密、不碰受保护存储。
+   * 供模型/搜索摘要推导「已配置凭据」，那里需要保持同步返回。
+   */
+  hasSecret(ref: CredentialOwnerRef): boolean {
+    const row = this.find(ref);
+    return row !== undefined && row.ciphertext !== null;
   }
 
   /** 为尚不存在的 owner/slot 建立初始凭据，version 从 1 起。受保护存储不可用时抛错且不写入。 */

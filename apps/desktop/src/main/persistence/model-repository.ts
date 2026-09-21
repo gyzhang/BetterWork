@@ -8,6 +8,8 @@ import type {
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 
+import { API_KEY_SLOT, type CredentialAvailability } from './credential-repository';
+
 interface ModelRow {
   id: string;
   name: string;
@@ -37,14 +39,20 @@ export interface RunnableModel {
   maxOutputTokens: number;
 }
 
-const toSummary = (row: ModelRow): ModelProfileSummary => ({
+const toSummary = (
+  row: ModelRow,
+  hasCredential: CredentialAvailability | undefined,
+): ModelProfileSummary => ({
   id: row.id,
   name: row.name,
   provider: row.provider,
   baseUrl: row.base_url,
   model: row.model,
   role: row.role,
-  apiKeyConfigured: row.api_key !== '',
+  // 迁移完成后明文列已清空，“已配置凭据”必须以 credentials 表为准；两边任一存在都算配置。
+  apiKeyConfigured:
+    row.api_key !== '' ||
+    (hasCredential?.({ ownerKind: 'model-profile', ownerId: row.id, slot: API_KEY_SLOT }) ?? false),
   enabled: row.enabled === 1,
   priority: row.priority,
   connectionStatus: row.connection_status,
@@ -58,24 +66,27 @@ const toSummary = (row: ModelRow): ModelProfileSummary => ({
 
 /**
  * 模型配置按能力角色（语言 / 视觉 / 嵌入）管理，priority 最小者为该角色默认。
- * API Key 明文存于本地 SQLite，对外只暴露 `apiKeyConfigured`；
- * 日志与错误信息绝不输出 Key。
+ * API Key 迁移后以 `credentials` 表的密文为准，旧明文列仅作回滚窗口；
+ * 对外只暴露 `apiKeyConfigured`，日志与错误信息绝不输出 Key。
  */
 export class ModelRepository {
-  constructor(private readonly db: Database.Database) {}
+  constructor(
+    private readonly db: Database.Database,
+    private readonly hasCredential?: CredentialAvailability,
+  ) {}
 
   list(): ModelProfileSummary[] {
     const rows = this.db
       .prepare('SELECT * FROM model_profiles ORDER BY priority ASC, created_at ASC')
       .all() as ModelRow[];
-    return rows.map(toSummary);
+    return rows.map((row) => toSummary(row, this.hasCredential));
   }
 
   /** 含明文 Key，仅供主进程内部使用，不得跨 IPC 返回。 */
   getWithSecret(id: string): (ModelProfileSummary & { apiKey: string }) | undefined {
     const row = this.db.prepare('SELECT * FROM model_profiles WHERE id = ?').get(id) as
       ModelRow | undefined;
-    return row ? { ...toSummary(row), apiKey: row.api_key } : undefined;
+    return row ? { ...toSummary(row, this.hasCredential), apiKey: row.api_key } : undefined;
   }
 
   getForRun(role: ModelRole): RunnableModel | undefined {

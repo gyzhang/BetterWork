@@ -5,7 +5,7 @@ import { CredentialMigrationJournalRepository } from '../db/credential-migration
 import type { SafeStorageAdapter } from '../infrastructure/credential-store';
 import { ArtifactInputRelationRepository } from './artifact-input-relation-repository';
 import { ArtifactRepository } from './artifact-repository';
-import { CredentialRepository } from './credential-repository';
+import { type CredentialOwnerRef, CredentialRepository } from './credential-repository';
 import { DependencyOperationRepository } from './dependency-operation-repository';
 import { DependencySnapshotRepository } from './dependency-snapshot-repository';
 import { DiscussionCheckpointRepository } from './discussion-checkpoint-repository';
@@ -68,6 +68,13 @@ export class AppStore {
     private readonly db: Database.Database,
     safeStorage?: SafeStorageAdapter,
   ) {
+    // 凭据仓储先建：模型与搜索摘要要靠它判断「已配置凭据」，不能等明文列。
+    const credentials = safeStorage ? new CredentialRepository(db, safeStorage) : undefined;
+    const hasCredential = credentials
+      ? (ref: CredentialOwnerRef): boolean => credentials.hasSecret(ref)
+      : undefined;
+    this.credentials = credentials;
+    this.credentialJournal = new CredentialMigrationJournalRepository(db);
     this.workspaces = new WorkspaceRepository(db);
     this.tasks = new TaskRepository(db);
     this.taskContexts = new TaskContextRepository(db);
@@ -79,10 +86,10 @@ export class AppStore {
     this.inputSnapshots = new InputSnapshotRepository(db);
     this.artifacts = new ArtifactRepository(db);
     this.artifactInputRelations = new ArtifactInputRelationRepository(db);
-    this.models = new ModelRepository(db);
+    this.models = new ModelRepository(db, hasCredential);
     this.memories = new MemoryRepository(db);
     this.mcpConnections = new McpConnectionRepository(db);
-    this.searchEngines = new SearchEngineRepository(db);
+    this.searchEngines = new SearchEngineRepository(db, hasCredential);
     this.notifications = new NotificationRepository(db);
     this.skills = new SkillRepository(db);
     this.executions = new SkillExecutionRepository(db);
@@ -90,8 +97,6 @@ export class AppStore {
     this.dependencyOperations = new DependencyOperationRepository(db);
     this.snapshots = new DependencySnapshotRepository(db);
     this.discussionCheckpoints = new DiscussionCheckpointRepository(db);
-    this.credentialJournal = new CredentialMigrationJournalRepository(db);
-    this.credentials = safeStorage ? new CredentialRepository(db, safeStorage) : undefined;
   }
 
   static open(filePath: string, safeStorage?: SafeStorageAdapter): AppStore {

@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import type { SafeStorageAdapter } from '../infrastructure/credential-store';
 import { AppStore } from '../persistence';
-import type { CredentialOwnerRef } from '../persistence/credential-repository';
-import { API_KEY_SLOT, CredentialAccess } from './credential-access';
+import { API_KEY_SLOT, type CredentialOwnerRef } from '../persistence/credential-repository';
+import { CredentialAccess } from './credential-access';
 
 class FakeStore implements SafeStorageAdapter {
   available = true;

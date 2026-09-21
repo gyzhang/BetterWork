@@ -67,8 +67,8 @@ import {
   type InputSnapshot,
   materialReferenceKey,
 } from '../persistence';
-import { CredentialError } from '../persistence/credential-repository';
-import { API_KEY_SLOT, type CredentialResolver } from './credential-access';
+import { API_KEY_SLOT, CredentialError } from '../persistence/credential-repository';
+import type { CredentialResolver } from './credential-access';
 import type { FileArtifactService } from './file-artifact-service';
 import type { InputSnapshotService } from './input-snapshot-service';
 import type { KnowledgeVault } from './knowledge-vault';

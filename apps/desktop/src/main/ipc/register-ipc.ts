@@ -147,11 +147,8 @@ import { z, type ZodTypeAny } from 'zod';
 import { createNodeFileSystem } from '../infrastructure/dependency-adapters';
 import { listDependencyLocks, loadDependencyLock } from '../infrastructure/dependency-lock-catalog';
 import type { AppStore } from '../persistence';
-import {
-  API_KEY_SLOT,
-  type CredentialProvisioner,
-  type CredentialResolver,
-} from '../services/credential-access';
+import { API_KEY_SLOT } from '../persistence/credential-repository';
+import { type CredentialProvisioner, type CredentialResolver } from '../services/credential-access';
 import type { DiscussionCheckpointService } from '../services/discussion-checkpoint-service';
 import type { ExpertService } from '../services/expert-service';
 import type { FileArtifactService } from '../services/file-artifact-service';

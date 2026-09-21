@@ -5,16 +5,31 @@ import path from 'node:path';
 import type { CreatedTask } from '@betterwork/agent-protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import type { SafeStorageAdapter } from '../infrastructure/credential-store';
+import { API_KEY_SLOT } from './credential-repository';
 import { AppStore } from './index';
 
 const openStores: AppStore[] = [];
 const temporaryDirectories: string[] = [];
 /** 每个用例自己开一个内存库并登记清理，用例内部因此不需要任何非空断言。 */
-const openStore = (): AppStore => {
-  const store = AppStore.open(':memory:');
+const openStore = (safeStorage?: SafeStorageAdapter): AppStore => {
+  const store = AppStore.open(':memory:', safeStorage);
   openStores.push(store);
   return store;
 };
+
+/** 受保护存储的测试替身：只验证存取链路，不接真实 Keychain。 */
+class FakeVault implements SafeStorageAdapter {
+  async isAvailableAsync(): Promise<boolean> {
+    return true;
+  }
+  async encryptAsync(plaintext: string): Promise<Buffer> {
+    return Buffer.from(`enc:${plaintext}`, 'utf8');
+  }
+  async decryptAsync(ciphertext: Buffer): Promise<string> {
+    return ciphertext.toString('utf8').replace(/^enc:/u, '');
+  }
+}
 
 /**
  * 外键约束开启后，Evidence 与 Run Event 必须挂在真实存在的 Task / Session / Run 上。
@@ -465,6 +480,65 @@ describe('AppStore', () => {
     expect(store.models.list()[0]).toMatchObject({ id, name: '测试模型', apiKeyConfigured: true });
     expect(store.models.list()[0]).not.toHaveProperty('apiKey');
     expect(store.models.getWithSecret(id)?.apiKey).toBe('secret-value');
+  });
+
+  it('still reports credentials as configured after the plaintext column is migrated away', async () => {
+    const store = openStore(new FakeVault());
+    const credentials = store.credentials;
+    if (!credentials) throw new Error('test setup: 受保护存储未注入');
+    const migratedId = store.models.save({
+      name: '已迁移模型',
+      provider: 'openai-compatible',
+      baseUrl: 'http://localhost:8000/v1',
+      model: 'demo',
+      role: 'language',
+      apiKey: 'vault-secret',
+      maxContextTokens: 8192,
+      maxOutputTokens: 1024,
+      temperature: 0.2,
+      enabled: true,
+    });
+    store.searchEngines.save({
+      provider: 'baidu_qianfan',
+      apiKey: 'search-secret',
+      webTopK: 10,
+      enabled: true,
+    });
+    // 复现 CF11 迁移后的落点：密文进 credentials，明文列被清空。
+    await credentials.ensureSecret(
+      { ownerKind: 'model-profile', ownerId: migratedId, slot: API_KEY_SLOT },
+      'vault-secret',
+    );
+    await credentials.ensureSecret(
+      { ownerKind: 'api-service-profile', ownerId: 'baidu_qianfan', slot: API_KEY_SLOT },
+      'search-secret',
+    );
+    store.models.clearPlaintextApiKey(migratedId);
+    store.searchEngines.clearPlaintextApiKey('baidu_qianfan');
+
+    expect(store.models.getWithSecret(migratedId)?.apiKey).toBe('');
+    expect(store.models.list().find((model) => model.id === migratedId)).toMatchObject({
+      apiKeyConfigured: true,
+    });
+    expect(store.searchEngines.list()[0]).toMatchObject({
+      provider: 'baidu_qianfan',
+      apiKeyConfigured: true,
+    });
+
+    // 从未配过凭据的配置仍报未配置：修复不得带进假阳性。
+    const bareId = store.models.save({
+      name: '无凭据模型',
+      provider: 'openai-compatible',
+      baseUrl: 'http://localhost:8000/v1',
+      model: 'demo',
+      role: 'vision',
+      apiKey: '',
+      maxContextTokens: 8192,
+      maxOutputTokens: 1024,
+      temperature: 0.2,
+      enabled: true,
+    });
+    expect(store.models.list().find((model) => model.id === bareId)?.apiKeyConfigured).toBe(false);
   });
 
   it('uses an explicitly selected enabled model as the default for its role', () => {
