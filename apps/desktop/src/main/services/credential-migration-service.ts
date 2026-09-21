@@ -102,6 +102,29 @@ export class CredentialMigrationService {
     return 'done';
   }
 
+  /**
+   * 启动不变量：迁移已 done 的 owner 不得再留明文副本。
+   * 任何把密钥当参数顺手落库的写入路径（如 CF11 发现一的连接检测回写）都会在下次启动被清掉。
+   * 只有受保护存储里确实有可用密文时才动明文，避免把用户唯一的凭据弄丢；
+   * 返回被清理的条数，不携带任何密钥内容。
+   */
+  async sweepResidualPlaintext(): Promise<number> {
+    if (!(await this.credentials.isStorageAvailable())) return 0;
+    let cleared = 0;
+    for (const entry of this.store.credentialJournal.listDone()) {
+      if (!this.readPlaintext(entry)) continue;
+      const ref: CredentialOwnerRef = {
+        ownerKind: entry.ownerKind,
+        ownerId: entry.ownerId,
+        slot: entry.slot,
+      };
+      if (!this.credentials.hasSecret(ref)) continue;
+      this.store.transaction(() => this.clearPlaintext(entry));
+      cleared += 1;
+    }
+    return cleared;
+  }
+
   private readPlaintext(entry: CredentialJournalEntry): string | null {
     if (entry.ownerKind === 'model-profile') {
       return this.store.models.readPlaintextApiKey(entry.ownerId) ?? null;

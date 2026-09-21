@@ -296,6 +296,30 @@ describe('架构边界', () => {
     });
     expect(offenders, '这些文件属于本机运行产物或凭据，不得进入仓库（AGENTS.md §7）').toEqual([]);
   });
+
+  it('明文凭据列只允许由所属仓储的 save 与迁移清空写入', () => {
+    const allowed = new Set([
+      'apps/desktop/src/main/persistence/model-repository.ts',
+      'apps/desktop/src/main/persistence/search-engine-repository.ts',
+    ]);
+    const offenders = productionPathsUnder(...SOURCE_ROOTS).filter(
+      (relative) => !allowed.has(relative) && /api_key *(?==)/.test(read(relative)),
+    );
+    expect(
+      offenders,
+      'api_key 只能由所属仓储的 save 写入或由迁移清空；多一个写入方就是多一个泄露口（CF11 发现一）',
+    ).toEqual([]);
+  });
+
+  it('任何 SQL 都不得用 excluded 覆写凭据列', () => {
+    const offenders = sourcePathsUnder(...SOURCE_ROOTS).filter((relative) =>
+      /excluded\.api_key/.test(read(relative)),
+    );
+    expect(
+      offenders,
+      'UPSERT 的 DO UPDATE 覆写 api_key，会把从 credentials 解出的密钥写回明文列，一律禁止',
+    ).toEqual([]);
+  });
 });
 
 describe('界面 Token 纪律', () => {

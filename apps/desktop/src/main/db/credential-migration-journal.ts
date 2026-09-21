@@ -69,6 +69,18 @@ export class CredentialMigrationJournalRepository {
     return rows.map(toEntry);
   }
 
+  /** 已完成迁移的 owner：启动扫描用它们确认明文列有没有被重新写回。 */
+  listDone(): CredentialJournalEntry[] {
+    const rows = this.db
+      .prepare(
+        `SELECT owner_kind, owner_id, slot, status, error_code
+           FROM credential_migration_journal WHERE status = 'done'
+          ORDER BY owner_kind, owner_id, slot`,
+      )
+      .all() as JournalRow[];
+    return rows.map(toEntry);
+  }
+
   markDone(ownerKind: CredentialOwnerKind, ownerId: string, slot: string): void {
     this.db
       .prepare(

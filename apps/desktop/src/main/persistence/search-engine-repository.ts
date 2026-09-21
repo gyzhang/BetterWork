@@ -169,8 +169,9 @@ export class SearchEngineRepository {
    * 记录一次连通性测试结果。用 upsert 而不是 update：
    * 「先测试、后保存」是常见顺序，此时配置行还不存在，
    * 纯 update 会影响 0 行并把测试结果丢掉。
-   * 被测的 Key 一并写入，否则状态会与实际凭据不一致。
-   * 刻意不碰 `enabled`——启用只由保存动作决定。
+   * 刻意不在冲突更新时写 `api_key`：已存在的配置只能由保存动作负责更新凭据，
+   * 否则从 credentials 解出的密钥会被回写成明文（CF11 发现一）。
+   * 也刻意不碰 `enabled`——启用只由保存动作决定。
    */
   recordConnection(
     provider: SearchProviderId,
@@ -184,7 +185,6 @@ export class SearchEngineRepository {
            (provider, api_key, options, enabled, connection_status, last_tested_at, updated_at)
          VALUES (?, ?, '{}', 0, ?, ?, ?)
          ON CONFLICT(provider) DO UPDATE SET
-           api_key = excluded.api_key,
            connection_status = excluded.connection_status,
            last_tested_at = excluded.last_tested_at,
            updated_at = excluded.updated_at`,

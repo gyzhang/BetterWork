@@ -19,6 +19,8 @@ export interface CredentialResolver {
 /** 双写面：保存新 Key 时写入 credentials 并登记 done。 */
 export interface CredentialProvisioner {
   provision(ref: CredentialOwnerRef, plaintext: string): Promise<void>;
+  /** 确认某 owner/slot 已有可用密文；保存路径据此决定能不能丢弃明文副本。 */
+  hasSecret(ref: CredentialOwnerRef): boolean;
 }
 
 /**
@@ -48,5 +50,10 @@ export class CredentialAccess implements CredentialResolver, CredentialProvision
     if (plaintext === '') return;
     await this.credentials.ensureSecret(ref, plaintext);
     this.journal.markDone(ref.ownerKind, ref.ownerId, ref.slot);
+  }
+
+  /** 同步确认受保护存储里已有该 owner 的密文；只有此时才允许丢弃明文副本。 */
+  hasSecret(ref: CredentialOwnerRef): boolean {
+    return this.credentials.hasSecret(ref);
   }
 }

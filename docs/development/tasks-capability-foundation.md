@@ -45,7 +45,7 @@ CF00 不重复此前已证实且未受变更影响的测试；以最新提交、
 | --- | --- | --- | --- | --- |
 | CF00 | 前置收口与基线核对 | 无 | doing | 基线核对：HEAD `dee0bdb`，工作树仅含未跟踪 `.qoder/plans/`；`npm run verify` 退出 0（77 文件 / 582 测试 / Electron build，lint+format+typecheck 全绿）。§2 已校准：实测 IPC channel 85 项、schema v23、`mcp_connections` 空、`baidu_qianfan` enabled。桌面走查未完成，不伪造：模型端点 `10.62.64.38:30808` 探测 curl exit 52（空响应），A16/A17 真实样本与 B00-5 双 Skill 撤销受端点阻塞；**【2026-09-21 已失效】同一地址 `GET /api/inference/v1/models` 实测返回 HTTP 401（可达、要求鉴权，不再是空响应），且本机真机三档模型「测试连接」均成功、任务可跑完——A16/A17/B00-5 的端点阻塞已解除，只余人工走查窗口**；A12 依赖代码（4e4a4e5 09-11）与 A16/A17 运行约定解耦（1a380ac 09-13）均晚于上次本机走查，桌面回归仍待人工窗口。Developer ID `security find-identity` 仍 0 身份（外部申请动作，不阻塞 CF10）|
 | CF10 | 凭据服务与 safeStorage 契约 | CF00 | done | credentials 表 v24 迁移（新库/旧库 v23→v24/幂等）；`infrastructure/credential-store.ts`（`SafeStorageAdapter` + `ElectronSafeStorageAdapter`，异步 safeStorage、可用性只查一次、`shouldReEncrypt` 有界再解）；`persistence/credential-repository.ts`（put/rotateAndCancel/clear/status/resolveForOwner + onSuperseded 订阅 + `CredentialError`，加密在事务外、失败不写半成品、解密失败不回落明文）；协议新增 `CredentialOwnerKind`/`CredentialMutation`/`CredentialStatus`/`CredentialErrorCode`/`MAX_CREDENTIAL_LENGTH`。单测 store 4 + repository 11 + migrate 2；`npm run verify` 退出 0（79 文件 / 599 测试 / Electron build）。真实 Keychain 桌面走查按里程碑留给 CF12，本卡不宣称密钥已迁移 |
-| CF11 | 版本化迁移与 legacy 密钥入库 | CF10 | doing | 代码完成并 `npm run verify` 退出 0（81 文件 / 611 测试）：v25 建 `credential_migration_journal` 并为现存明文 Key 播 pending；`credential-migration-journal.ts`、`credential-migration-service.ts`（§10.2：读明文→事务外加密→回环校验→单事务清空+标 done；失败 recoverable；存储不可用整体 skip；重放幂等）、`credential-access.ts`（migrationStatus/resolveSecret/provision）；AppStore 以注入 safeStorage 适配器暴露 credentials+credentialJournal（保持 Electron-free）；run-service resolveModel/resolveWebSearch “新读优先”+解析前迁移门禁（pending/failed → credential_migration_required 拒绝新 Run，未注入时保持旧行为）；register-ipc 保存双写 + 连接测试新读优先；bootstrap 启动时 runPending 一次。必测均绿：migrate(v25 新库/旧库/幂等)、migration-service(§10.2 全态)、run-service(阻断+新读优先)、credential-access。唯一剩余（需用户）：真机重启两次不重复加密 + 真实模型/搜索可用验收；search legacy key 暂归 `api-service-profile/owner_id=provider`，CF20 须沿用。2026-09-21 11:04 真机验收发现两处未收口的明文读取/回写（详 §CF11 验收发现）：发现二（「未配置凭据」误报）已修；发现一（连接检测回写明文）待修，本卡不得关单 |
+| CF11 | 版本化迁移与 legacy 密钥入库 | CF10 | doing | 代码完成并 `npm run verify` 退出 0（81 文件 / 611 测试）：v25 建 `credential_migration_journal` 并为现存明文 Key 播 pending；`credential-migration-journal.ts`、`credential-migration-service.ts`（§10.2：读明文→事务外加密→回环校验→单事务清空+标 done；失败 recoverable；存储不可用整体 skip；重放幂等）、`credential-access.ts`（migrationStatus/resolveSecret/provision）；AppStore 以注入 safeStorage 适配器暴露 credentials+credentialJournal（保持 Electron-free）；run-service resolveModel/resolveWebSearch “新读优先”+解析前迁移门禁（pending/failed → credential_migration_required 拒绝新 Run，未注入时保持旧行为）；register-ipc 保存双写 + 连接测试新读优先；bootstrap 启动时 runPending 一次。必测均绿：migrate(v25 新库/旧库/幂等)、migration-service(§10.2 全态)、run-service(阻断+新读优先)、credential-access。唯一剩余（需用户）：真机重启两次不重复加密 + 真实模型/搜索可用验收；search legacy key 暂归 `api-service-profile/owner_id=provider`，CF20 须沿用。2026-09-21 11:04 真机验收发现两处未收口的明文读取/回写（详 §CF11 验收发现）：发现一（连接检测回写明文）与发现二（「未配置凭据」误报）均已修，并新增启动不变量与两条结构护栏；本卡仍不得关单，剩真机两次重启验收 |
 | CF12 | M1 里程碑与凭据服务验收 | CF11 | todo | 待补 |
 | CF20 | API service profile 协议与仓储 | CF12 | todo | 待补 |
 | CF21 | API profile 管理 IPC/UI 与设置迁移 | CF20 | todo | 待补 |
@@ -124,13 +124,25 @@ CF00 不重复此前已证实且未受变更影响的测试；以最新提交、
 
 证据取自本机 SQLite（只读）与 `/tmp/betterwork-dev.log`：07:56:06 首启迁移日志 `凭据迁移：done=4 failed=0 remaining=0 skipped=false`；`credentials` 4 行均 `version=1`；三条 `model_profiles.api_key` 长度 0；journal 4 行均 `done`。
 
-**发现一：连接检测把已迁移的明文密钥回写数据库（安全回归）**
+**发现一：连接检测把已迁移的明文密钥回写数据库（安全回归，已修）**
 
 - 现象：`search_engine_configs` 中 `baidu_qianfan` 的 `api_key` 在 08:00:46 重新变为 75 字节明文，`connection_status=connected`，而 journal 仍为 `done`，不会再被任何机制清理。
 - 根因：`register-ipc.ts` 的 `TestSearchEngine` 处理器先从 credentials 新读优先解出密钥，再把它作为参数传给 `store.searchEngines.recordConnection(provider, status, apiKey)`；`search-engine-repository.ts` 的 UPSERT 含 `api_key = excluded.api_key`。于是「只记录连接状态」的动作在用户没有输入任何密钥的情况下重建了明文列。
 - 违反本卡第 3 条：双写仅限「迁移未完成时」的窗口；journal 已 `done` 的 owner 不得再写明文。
 - 对照组：模型侧 `recordConnection(input.id, status)` 不收密钥参数（`register-ipc.ts` 约 829 行），所以三条模型列仍为 0。修复按模型侧对齐。
 - 修复：`SearchEngineRepository.recordConnection` 删除 `apiKey` 形参与 UPSERT 中的 `api_key` 赋值（全仓仅一个调用点）；补回归测试「journal done 后执行连接检测，明文列仍为空」；现存这条泄漏在凭据回环校验可用的前提下直接清空该列即可，不重跑迁移。
+
+**发现一修复落点与新增不变量（2026-09-21）**
+
+同类问题按「三个屏障 + 一条不变量」收口，而不是只堵 08:00 那一个口子：
+
+1. **仓储屏障**：`recordConnection` 的 UPSERT 不再在 `ON CONFLICT DO UPDATE` 里写 `api_key`。保留 INSERT 分支的 `api_key`，因为「先测试、后保存」时行还不存在，需要用用户刚输入的 Key 建行；已存在的配置只能由保存动作更新凭据。
+2. **处理器屏障**：`TestSearchEngine` 只把 `input.apiKey`（用户本次输入）交给落库，从 credentials 解出的密钥不再参与任何写路径。
+3. **启动不变量**：`CredentialMigrationService.sweepResidualPlaintext()` 在 `runPending()` 之后执行，对所有 journal `done` 的 owner：明文列非空且 `hasSecret(ref)` 为真 → 清空明文列。只有密文确实可用时才动明文，避免销毁用户唯一凭据；受保护存储不可用时整体跳过。启动日志新增 `凭据明文残留清理：cleared=N`，不输出密钥。
+4. **停止无限双写**：`SaveModel` / `SaveSearchEngine` 在 `provision` 成功且 `hasSecret(ref)` 为真时立即清空明文列。这落实 [capability-contracts §10.2](capability-contracts.md) 第 7 条「Do not continue dual writes to legacy credential columns」与 [ADR-0024](../adr/0024-api-services-and-credentials.md)「not indefinite dual writes」；没有受保护存储时仍保留明文，作为唯一可用路径。
+5. **结构护栏**（`standards/coding-standard.test.ts` 架构边界）：`api_key` 的 SQL 赋值只允许出现在模型与搜索两个仓储；任何 SQL 不得出现 `excluded.api_key`。两条都已用临时探针文件验证会真的报错，不是空跑。
+
+不变量表述：**只要 `credentials` 里有该 owner 的可用密文，旧明文列就必须为空。** 违反它的写入方会被护栏拦住，已存在的残留会被启动扫描清掉。
 
 **发现二：`apiKeyConfigured` 仍读明文列，迁移后设置页恒显示「未配置凭据」（已修）**
 

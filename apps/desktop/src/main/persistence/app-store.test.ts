@@ -541,6 +541,36 @@ describe('AppStore', () => {
     expect(store.models.list().find((model) => model.id === bareId)?.apiKeyConfigured).toBe(false);
   });
 
+  it('keeps a connection test from rewriting the plaintext key of an existing search config', () => {
+    const store = openStore();
+    store.searchEngines.save({
+      provider: 'baidu_qianfan',
+      apiKey: 'typed-key',
+      webTopK: 10,
+      enabled: true,
+    });
+    // 模拟迁移完成后的落点：密文入 credentials，明文列已空。
+    store.searchEngines.clearPlaintextApiKey('baidu_qianfan');
+    // CF11 发现一：处理器万一再把解出的密钥递过来，也不能写回明文列。
+    store.searchEngines.recordConnection('baidu_qianfan', 'connected', 'resumed-from-vault');
+
+    expect(store.searchEngines.readPlaintextApiKey('baidu_qianfan')).toBe('');
+    expect(store.searchEngines.list()[0]).toMatchObject({ connectionStatus: 'connected' });
+  });
+
+  it('still creates a search config row when the first action is a connection test', () => {
+    const store = openStore();
+    store.searchEngines.recordConnection('baidu_qianfan', 'connected', 'first-typed-key');
+
+    expect(store.searchEngines.readPlaintextApiKey('baidu_qianfan')).toBe('first-typed-key');
+    expect(store.searchEngines.list()[0]).toMatchObject({
+      provider: 'baidu_qianfan',
+      apiKeyConfigured: true,
+      connectionStatus: 'connected',
+      enabled: false,
+    });
+  });
+
   it('uses an explicitly selected enabled model as the default for its role', () => {
     const store = openStore();
     const first = store.models.save({

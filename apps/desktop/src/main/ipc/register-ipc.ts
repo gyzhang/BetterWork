@@ -775,10 +775,10 @@ function registerModelChannels({ store, credentialAccess }: IpcDependencies): vo
     async (input) => {
       const id = store.models.save(input);
       if (credentialAccess && input.apiKey) {
-        await credentialAccess.provision(
-          { ownerKind: 'model-profile', ownerId: id, slot: API_KEY_SLOT },
-          input.apiKey,
-        );
+        const ref = { ownerKind: 'model-profile', ownerId: id, slot: API_KEY_SLOT } as const;
+        await credentialAccess.provision(ref, input.apiKey);
+        // 密文已落库就不再留明文副本；没有受保护存储时保留明文作为唯一可用路径。
+        if (credentialAccess.hasSecret(ref)) store.models.clearPlaintextApiKey(id);
       }
       return { id };
     },
@@ -921,10 +921,14 @@ function registerSearchEngineChannels({ store, credentialAccess }: IpcDependenci
     async (input) => {
       const provider = store.searchEngines.save(input);
       if (credentialAccess && input.apiKey) {
-        await credentialAccess.provision(
-          { ownerKind: 'api-service-profile', ownerId: provider, slot: API_KEY_SLOT },
-          input.apiKey,
-        );
+        const ref = {
+          ownerKind: 'api-service-profile',
+          ownerId: provider,
+          slot: API_KEY_SLOT,
+        } as const;
+        await credentialAccess.provision(ref, input.apiKey);
+        // 与模型侧同一规则：凭据已加密入库后，明文列不得继续留副本。
+        if (credentialAccess.hasSecret(ref)) store.searchEngines.clearPlaintextApiKey(provider);
       }
       return { provider };
     },
@@ -950,10 +954,12 @@ function registerSearchEngineChannels({ store, credentialAccess }: IpcDependenci
       }
       if (!apiKey) return { ok: false, message: '请先填写 API Key。' };
       const result = await createQianfanSearchClient({ apiKey, webTopK: input.webTopK }).test();
+      // 只把用户本次输入的 Key 交给落库（用于「先测试、后保存」时建行）；
+      // 从 credentials 解出的密钥绝不能回到明文列（CF11 发现一）。
       store.searchEngines.recordConnection(
         input.provider,
         result.ok ? 'connected' : 'failed',
-        apiKey,
+        input.apiKey,
       );
       return result;
     },

@@ -154,4 +154,64 @@ describe('CredentialMigrationService', () => {
       }),
     ).toEqual({ configured: false, available: false, version: 0 });
   });
+
+  it('sweeps plaintext that a later write put back for an already migrated owner', async () => {
+    const ctx = seeded();
+    await ctx.service.runPending();
+    expect(searchKey(ctx)).toBe('');
+
+    // 复现 CF11 发现一：某条写入路径把已迁移的密钥又抄回明文列。
+    ctx.store.searchEngines.save({
+      provider: 'baidu_qianfan',
+      apiKey: 'sk-search-456',
+      webTopK: 10,
+      enabled: true,
+    });
+    expect(searchKey(ctx)).toBe('sk-search-456');
+
+    expect(await ctx.service.sweepResidualPlaintext()).toBe(1);
+    expect(searchKey(ctx)).toBe('');
+    // 密文仍在，清理不影响搜索调用。
+    expect(
+      await ctx.credentials.resolveForOwner({
+        ownerKind: 'api-service-profile',
+        ownerId: 'baidu_qianfan',
+        slot: 'api-key',
+      }),
+    ).toMatchObject({ plaintext: 'sk-search-456' });
+  });
+
+  it('never destroys the only copy when the ciphertext is gone', async () => {
+    const ctx = seeded();
+    await ctx.service.runPending();
+    await ctx.credentials.clear({
+      ownerKind: 'api-service-profile',
+      ownerId: 'baidu_qianfan',
+      slot: 'api-key',
+    });
+    ctx.store.searchEngines.save({
+      provider: 'baidu_qianfan',
+      apiKey: 'sk-search-456',
+      webTopK: 10,
+      enabled: true,
+    });
+
+    expect(await ctx.service.sweepResidualPlaintext()).toBe(0);
+    expect(searchKey(ctx)).toBe('sk-search-456');
+  });
+
+  it('skips the sweep while protected storage is unavailable', async () => {
+    const ctx = seeded();
+    await ctx.service.runPending();
+    ctx.store.searchEngines.save({
+      provider: 'baidu_qianfan',
+      apiKey: 'sk-search-456',
+      webTopK: 10,
+      enabled: true,
+    });
+    ctx.store_.available = false;
+
+    expect(await ctx.service.sweepResidualPlaintext()).toBe(0);
+    expect(searchKey(ctx)).toBe('sk-search-456');
+  });
 });

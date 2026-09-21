@@ -79,13 +79,19 @@ function bootstrap(): ApplicationContext {
     ? new CredentialAccess(store.credentials, store.credentialJournal)
     : undefined;
   if (store.credentials) {
-    new CredentialMigrationService(store, store.credentials)
+    const migration = new CredentialMigrationService(store, store.credentials);
+    migration
       .runPending()
-      .then((result) => {
+      .then(async (result) => {
         if (result.done > 0 || result.failed > 0 || result.skipped) {
           console.warn(
             `凭据迁移：done=${result.done} failed=${result.failed} remaining=${result.remaining} skipped=${String(result.skipped)}`,
           );
+        }
+        // 迁移完成后还要守住不变量：已 done 的 owner 不得再留明文副本。
+        const residual = await migration.sweepResidualPlaintext();
+        if (residual > 0) {
+          console.warn(`凭据明文残留清理：cleared=${residual}`);
         }
       })
       .catch((error: unknown) => {
