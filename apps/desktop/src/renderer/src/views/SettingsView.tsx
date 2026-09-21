@@ -12,16 +12,16 @@ import type {
   ResolvedAppearance,
 } from '../appearance';
 import { colorSchemes } from '../appearance';
+import { TransientToast } from '../components/TransientToast';
 import type { McpConnectionsState } from '../hooks/use-mcp-connections';
 import type { MemoriesState } from '../hooks/use-memories';
 import { useSearchEngineSettings } from '../hooks/use-search-engine-settings';
-import type { SkillsState } from '../hooks/use-skills';
+import { useTransientToast } from '../hooks/use-transient-toast';
 import { CheckIcon, PlusIcon } from '../icons';
-import { trackAction } from '../lib/async-action';
+import { reportAction, trackAction } from '../lib/async-action';
 import { connectionStatusName, roleName } from '../lib/labels';
 import type { SettingsTab } from '../lib/view-types';
 import { type MemoryManagementTarget, MemoryPage } from './MemoryView';
-import { SkillsPage } from './SkillsView';
 
 export interface SettingsPageProps {
   tab: SettingsTab;
@@ -40,8 +40,6 @@ export interface SettingsPageProps {
   resolvedAppearance: ResolvedAppearance;
   onMode: (mode: AppearanceMode) => void;
   onScheme: (scheme: ColorScheme) => void;
-  modelMessage: string;
-  skills: SkillsState;
   memories: MemoriesState;
   memoryTarget?: MemoryManagementTarget;
   onClearMemoryTarget: () => void;
@@ -55,13 +53,16 @@ export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
         <p className="eyebrow">设置</p>
         <h1>偏好与能力</h1>
         <button className={tab === 'models' ? 'active' : ''} onClick={() => setTab('models')}>
-          模型与能力
-        </button>
-        <button className={tab === 'skills' ? 'active' : ''} onClick={() => setTab('skills')}>
-          能力 Skill
+          模型
         </button>
         <button className={tab === 'search' ? 'active' : ''} onClick={() => setTab('search')}>
           搜索
+        </button>
+        <button className={tab === 'mcp' ? 'active' : ''} onClick={() => setTab('mcp')}>
+          MCP
+        </button>
+        <button className={tab === 'memory' ? 'active' : ''} onClick={() => setTab('memory')}>
+          记忆
         </button>
         <button
           className={tab === 'appearance' ? 'active' : ''}
@@ -69,21 +70,14 @@ export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
         >
           外观
         </button>
-        <button className={tab === 'memory' ? 'active' : ''} onClick={() => setTab('memory')}>
-          记忆
-        </button>
-        <button className={tab === 'mcp' ? 'active' : ''} onClick={() => setTab('mcp')}>
-          MCP 工具
-        </button>
         <button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>
           通用
         </button>
       </aside>
       <section className="settings-content">
-        {tab === 'skills' && <SkillsPage state={props.skills} />}
         {tab === 'models' && <ModelSettings {...props} />}
         {tab === 'search' && <SearchSettings />}
-        {tab === 'appearance' && <AppearanceSettings {...props} />}
+        {tab === 'mcp' && <McpSettings state={props.mcp} />}
         {tab === 'memory' && (
           <MemoryPage
             state={props.memories}
@@ -91,7 +85,7 @@ export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
             onClearScope={props.onClearMemoryTarget}
           />
         )}
-        {tab === 'mcp' && <McpSettings state={props.mcp} />}
+        {tab === 'appearance' && <AppearanceSettings {...props} />}
         {tab === 'general' && (
           <section className="settings-section">
             <p className="eyebrow">通用</p>
@@ -116,13 +110,12 @@ export function ModelSettings({
   onToggle,
   onSetDefault,
   onDelete,
-  modelMessage,
 }: SettingsPageProps): React.JSX.Element {
   return (
     <section className="settings-section">
       <div className="settings-heading">
         <div>
-          <p className="eyebrow">模型与能力</p>
+          <p className="eyebrow">模型</p>
           <h2>让每一种工作使用合适的模型</h2>
           <p>
             API Key 仅保存于本机主进程。语言模型会用于当前任务，视觉与嵌入能力将在对应工作流启用。
@@ -132,7 +125,6 @@ export function ModelSettings({
           <PlusIcon size={13} /> 添加模型
         </button>
       </div>
-      {modelMessage && <p className="inline-message">{modelMessage}</p>}
       <div className="filter-bar">
         {(['all', 'language', 'vision', 'embedding'] as const).map((role) => (
           <button
@@ -272,8 +264,19 @@ export function AppearanceSettings({
   );
 }
 export function SearchSettings(): React.JSX.Element {
-  const { configured, apiKey, setApiKey, webTopK, setWebTopK, message, save, test } =
-    useSearchEngineSettings();
+  const {
+    configured,
+    apiKey,
+    setApiKey,
+    webTopK,
+    setWebTopK,
+    toast,
+    error,
+    busy,
+    dismissToast,
+    save,
+    test,
+  } = useSearchEngineSettings();
   return (
     <section className="settings-section search-settings">
       <div className="settings-heading">
@@ -286,7 +289,11 @@ export function SearchSettings(): React.JSX.Element {
           </p>
         </div>
       </div>
-      {message && <p className="inline-message">{message}</p>}
+      {error && (
+        <p className="inline-message error" role="alert">
+          {error}
+        </p>
+      )}
       <div className="search-form">
         <label>
           搜索引擎
@@ -323,9 +330,10 @@ export function SearchSettings(): React.JSX.Element {
           <button
             type="button"
             className="secondary-button"
+            disabled={busy}
             onClick={() => trackAction(test(), '测试搜索连接')}
           >
-            测试连接
+            {busy ? '连接中…' : '测试连接'}
           </button>
           <button
             type="button"
@@ -349,6 +357,7 @@ export function SearchSettings(): React.JSX.Element {
           '当前状态：未配置。保存并启用后，智能体即可联网搜索。'
         )}
       </p>
+      {toast && <TransientToast {...toast} onDismiss={dismissToast} />}
     </section>
   );
 }
@@ -374,9 +383,11 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
   const [form, setForm] = React.useState<McpFormState>(emptyMcpForm);
   const [editingId, setEditingId] = React.useState<string>();
   const [editorOpen, setEditorOpen] = React.useState(false);
-  const [message, setMessage] = React.useState('');
+  const [error, setError] = React.useState('');
+  const { toast, showToast, dismissToast } = useTransientToast();
   const [busyId, setBusyId] = React.useState<string>();
   const beginEdit = (connection?: McpConnectionSummary): void => {
+    setError('');
     if (!connection) {
       setEditingId(undefined);
       setForm(emptyMcpForm());
@@ -394,7 +405,7 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
   };
   const save = (): void => {
     if (!form.name.trim() || !form.command.trim()) {
-      setMessage('连接名称和启动命令不能为空。');
+      setError('连接名称和启动命令不能为空。');
       return;
     }
     const input: SaveMcpConnectionRequest = {
@@ -411,8 +422,8 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
       },
     };
     setBusyId(editingId ?? 'new');
-    setMessage('');
-    trackAction(
+    setError('');
+    reportAction(
       state
         .save(input)
         .then(() => {
@@ -420,29 +431,32 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
           setEditingId(undefined);
           setForm(emptyMcpForm());
           state.refresh();
-          setMessage('连接已保存。请检测后再授权具体工具。');
+          showToast('success', '连接已保存。请检测后再授权具体工具。');
         })
         .finally(() => setBusyId(undefined)),
-      '保存 MCP 连接',
+      (message) => showToast('error', message),
+      '保存 MCP 连接失败，请重试。',
     );
   };
   const test = (connection: McpConnectionSummary): void => {
     setBusyId(connection.id);
-    setMessage('');
-    trackAction(
+    setError('');
+    reportAction(
       state
         .test(connection.id)
         .then((result) => {
           state.refresh();
-          setMessage(`${result.connection.name} 已发现 ${result.tools.length} 个工具。`);
+          showToast('success', `${result.connection.name} 已发现 ${result.tools.length} 个工具。`);
         })
         .finally(() => setBusyId(undefined)),
-      '检测 MCP 连接',
+      (message) => showToast('error', message),
+      '检测 MCP 连接失败，请重试。',
     );
   };
   const remove = (connection: McpConnectionSummary): void => {
     setBusyId(connection.id);
-    trackAction(
+    setError('');
+    reportAction(
       state
         .remove(connection.id)
         .then(() => {
@@ -452,17 +466,18 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
             setForm(emptyMcpForm());
           }
           state.refresh();
-          setMessage('连接已删除，历史任务中的绑定仍会保留为失效记录。');
+          showToast('success', '连接已删除，历史任务中的绑定仍会保留为失效记录。');
         })
         .finally(() => setBusyId(undefined)),
-      '删除 MCP 连接',
+      (message) => showToast('error', message),
+      '删除 MCP 连接失败，请重试。',
     );
   };
   return (
     <section className="settings-section mcp-settings">
       <div className="settings-heading">
         <div>
-          <p className="eyebrow">MCP 工具</p>
+          <p className="eyebrow">MCP</p>
           <h2>连接外部工作能力</h2>
           <p>
             连接只保存本机启动命令和参数。检测后，专家和当前任务分别选择具体工具；新增工具不会自动进入既有选择。
@@ -472,7 +487,6 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
           新建连接
         </button>
       </div>
-      {message && <p className="inline-message">{message}</p>}
       {state.loading ? (
         <p className="muted-text">正在加载连接…</p>
       ) : state.connections.length === 0 ? (
@@ -560,6 +574,11 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
               onChange={(event) => setForm({ ...form, cwd: event.target.value })}
             />
           </label>
+          {error && (
+            <p className="inline-message error" role="alert">
+              {error}
+            </p>
+          )}
           <div className="mcp-editor-actions">
             <button
               className="primary-button"
@@ -583,6 +602,7 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
           </div>
         </div>
       )}
+      {toast && <TransientToast {...toast} onDismiss={dismissToast} />}
     </section>
   );
 }

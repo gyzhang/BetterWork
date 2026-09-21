@@ -3,6 +3,7 @@ import { type FormEvent, useCallback, useMemo, useState } from 'react';
 
 import { reportAction, trackAction } from '../lib/async-action';
 import { emptyModel, roleName } from '../lib/labels';
+import { type TransientToastMessage, useTransientToast } from './use-transient-toast';
 
 export type ModelFilter = ModelProfileSummary['role'] | 'all';
 
@@ -13,7 +14,9 @@ export interface ModelSettings {
   setFilter: (filter: ModelFilter) => void;
   defaultModelIds: Map<ModelProfileSummary['role'], string | undefined>;
   activeLanguageModel: ModelProfileSummary | undefined;
-  message: string;
+  toast: TransientToastMessage | undefined;
+  error: string;
+  dismissToast: () => void;
   /** 后台重新拉取模型清单；永不 reject。 */
   refresh: () => void;
   editorOpen: boolean;
@@ -41,7 +44,8 @@ const ROLES = ['language', 'vision', 'embedding'] as const;
 export function useModelSettings(): ModelSettings {
   const [models, setModels] = useState<ModelProfileSummary[]>([]);
   const [filter, setFilter] = useState<ModelFilter>('all');
-  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const { toast, showToast, dismissToast } = useTransientToast();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorForm, setEditorForm] = useState<ModelProfileInput>(emptyModel);
   const [editingModelId, setEditingModelId] = useState<string>();
@@ -64,7 +68,7 @@ export function useModelSettings(): ModelSettings {
   );
 
   const openEditor = (model?: ModelProfileSummary): void => {
-    setMessage('');
+    setError('');
     if (model) {
       setEditingModelId(model.id);
       setEditorForm({
@@ -96,23 +100,25 @@ export function useModelSettings(): ModelSettings {
 
   const onSave = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
+    setError('');
     try {
       await window.betterwork.models.save(editorPayload());
       refresh();
       setEditorOpen(false);
-      setMessage(editingModelId ? '模型配置已更新。' : '模型已添加，现在可以用于任务。');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '保存失败，请检查配置。');
+      showToast('success', editingModelId ? '模型配置已更新。' : '模型已添加，现在可以用于任务。');
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : '保存失败，请检查配置。');
     }
   };
 
   const onTest = async (): Promise<void> => {
+    setError('');
     try {
       const result = await window.betterwork.models.test(editorPayload());
-      setMessage(result.message);
+      showToast('success', result.message);
       refresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '连接测试失败。');
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : '连接测试失败。');
     }
   };
 
@@ -121,7 +127,7 @@ export function useModelSettings(): ModelSettings {
       window.betterwork.models
         .setEnabled({ id: model.id, enabled: !model.enabled })
         .then(() => refresh()),
-      setMessage,
+      (message) => showToast('error', message),
       '切换启用状态失败，请重试。',
     );
   };
@@ -129,14 +135,14 @@ export function useModelSettings(): ModelSettings {
   const onSetDefault = (model: ModelProfileSummary): void => {
     reportAction(
       window.betterwork.models.setDefault({ id: model.id }).then((result) => {
-        setMessage(
-          result.updated
-            ? `${model.name} 已设为${roleName[model.role]}默认模型。`
-            : '仅已启用模型可以设为默认。',
-        );
+        if (result.updated) {
+          showToast('success', `${model.name} 已设为${roleName[model.role]}默认模型。`);
+        } else {
+          showToast('error', '仅已启用模型可以设为默认。');
+        }
         refresh();
       }),
-      setMessage,
+      (message) => showToast('error', message),
       '设置默认模型失败，请重试。',
     );
   };
@@ -144,7 +150,7 @@ export function useModelSettings(): ModelSettings {
   const onDelete = (model: ModelProfileSummary): void => {
     reportAction(
       window.betterwork.models.delete({ id: model.id }).then(() => refresh()),
-      setMessage,
+      (message) => showToast('error', message),
       '删除模型失败，请重试。',
     );
   };
@@ -156,7 +162,9 @@ export function useModelSettings(): ModelSettings {
     setFilter,
     defaultModelIds,
     activeLanguageModel,
-    message,
+    toast,
+    error,
+    dismissToast,
     refresh,
     editorOpen,
     editorForm,

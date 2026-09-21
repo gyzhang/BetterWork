@@ -354,7 +354,7 @@ function ExpertEditor({
           <fieldset>
             <legend>MCP 工具预设</legend>
             {mcpConnections.length === 0 ? (
-              <span className="muted-text">请先在设置 → MCP 工具中配置并检测连接。</span>
+              <span className="muted-text">请先在设置 → MCP 中配置并检测连接。</span>
             ) : (
               <div className="selected-mcp-list">
                 {mcpConnections.map((connection) => (

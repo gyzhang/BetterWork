@@ -2,6 +2,7 @@ import type { SearchEngineSummary } from '@betterwork/agent-protocol';
 import { useCallback, useEffect, useState } from 'react';
 
 import { trackAction } from '../lib/async-action';
+import { type TransientToastMessage, useTransientToast } from './use-transient-toast';
 
 /**
  * 当前只接入百度千帆一家（ADR-0007）。新增服务商时这里改为可选项，
@@ -17,7 +18,10 @@ export interface SearchEngineSettings {
   setApiKey: (apiKey: string) => void;
   webTopK: number;
   setWebTopK: (webTopK: number) => void;
-  message: string;
+  toast: TransientToastMessage | undefined;
+  error: string;
+  busy: boolean;
+  dismissToast: () => void;
   save: () => Promise<void>;
   test: () => Promise<void>;
 }
@@ -32,7 +36,9 @@ export function useSearchEngineSettings(): SearchEngineSettings {
   const [engines, setEngines] = useState<SearchEngineSummary[]>([]);
   const [apiKey, setApiKey] = useState('');
   const [webTopK, setWebTopKValue] = useState(DEFAULT_WEB_TOP_K);
-  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const { toast, showToast, dismissToast } = useTransientToast();
 
   const refresh = useCallback((): void => {
     trackAction(window.betterwork.searchEngines.list().then(setEngines), '刷新搜索引擎配置');
@@ -48,6 +54,7 @@ export function useSearchEngineSettings(): SearchEngineSettings {
   };
 
   const save = async (): Promise<void> => {
+    setError('');
     try {
       await window.betterwork.searchEngines.save({
         provider: PROVIDER,
@@ -56,25 +63,28 @@ export function useSearchEngineSettings(): SearchEngineSettings {
         enabled: true,
       });
       setApiKey('');
-      setMessage('搜索配置已保存，智能体可以在任务中联网搜索并标注来源。');
+      showToast('success', '搜索配置已保存，智能体可以在任务中联网搜索并标注来源。');
       refresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '保存失败，请检查配置。');
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : '保存失败，请检查配置。');
     }
   };
 
   const test = async (): Promise<void> => {
-    setMessage('正在连接搜索服务…');
+    setError('');
+    setBusy(true);
     try {
       const result = await window.betterwork.searchEngines.test({
         provider: PROVIDER,
         apiKey,
         webTopK,
       });
-      setMessage(result.message);
+      showToast('success', result.message);
       refresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '连接测试失败。');
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : '连接测试失败。');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -84,7 +94,10 @@ export function useSearchEngineSettings(): SearchEngineSettings {
     setApiKey,
     webTopK,
     setWebTopK,
-    message,
+    toast,
+    error,
+    busy,
+    dismissToast,
     save,
     test,
   };

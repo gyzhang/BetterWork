@@ -8,7 +8,7 @@ export interface ModelEditorProps {
   form: ModelProfileInput;
   setForm: (input: ModelProfileInput) => void;
   editing: boolean;
-  message: string;
+  error: string;
   onClose: () => void;
   onSave: (event: FormEvent) => Promise<void>;
   onTest: () => void;
@@ -17,7 +17,7 @@ export function ModelEditor({
   form,
   setForm,
   editing,
-  message,
+  error,
   onClose,
   onSave,
   onTest,
@@ -129,7 +129,11 @@ export function ModelEditor({
               </label>
             </div>
           </details>
-          {message && <p className="inline-message">{message}</p>}
+          {error && (
+            <p className="inline-message error" role="alert">
+              {error}
+            </p>
+          )}
           <footer>
             <button type="button" className="secondary-button" onClick={onTest}>
               测试连接

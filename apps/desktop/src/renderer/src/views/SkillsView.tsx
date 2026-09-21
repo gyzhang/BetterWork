@@ -139,7 +139,7 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
   return (
     <section className="skills-page">
       <PageHeader
-        eyebrow="能力 · Skill"
+        eyebrow="技能"
         title="管理可复用的工作方法"
         leading={
           selected ? (
@@ -201,9 +201,9 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
             <LoadingPage label="正在加载 Skill…" />
           ) : state.skills.length === 0 ? (
             <EmptyPage
-              eyebrow="能力"
+              eyebrow="技能"
               title="还没有 Skill"
-              detail="导入一个目录型 Skill，或等待内置能力加入这里。"
+              detail="导入一个目录型 Skill，或等待内置技能加入这里。"
             />
           ) : viewMode === 'grid' ? (
             <ViewContainer mode="grid" className="skill-cards">

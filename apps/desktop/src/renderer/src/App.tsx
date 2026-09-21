@@ -36,6 +36,7 @@ import { DiscussionCheckpointPanel } from './components/DiscussionCheckpointPane
 import { PageHeader } from './components/layout/PageHeader';
 import { ModelEditor } from './components/ModelEditorSheet';
 import { ToolActivity } from './components/ToolActivity';
+import { TransientToast } from './components/TransientToast';
 import { Welcome } from './components/Welcome';
 import { WorkspaceSelector } from './components/WorkspaceSelector';
 import { useAppearance } from './hooks/use-appearance';
@@ -1042,7 +1043,7 @@ export function App(): React.JSX.Element {
             <span aria-hidden="true">
               <CapabilityIcon size={15} />
             </span>{' '}
-            能力
+            技能
           </button>
           <button
             className={view === 'experts' ? 'active' : ''}
@@ -1559,8 +1560,6 @@ export function App(): React.JSX.Element {
             resolvedAppearance={resolvedAppearance}
             onMode={(mode) => setAppearanceValue({ ...appearance, mode })}
             onScheme={(scheme) => setAppearanceValue({ ...appearance, scheme })}
-            modelMessage={modelSettings.message}
-            skills={skills}
             memories={memoriesState}
             {...(memoryManagementTarget ? { memoryTarget: memoryManagementTarget } : {})}
             onClearMemoryTarget={() => setMemoryManagementTarget(undefined)}
@@ -1613,11 +1612,14 @@ export function App(): React.JSX.Element {
           form={modelSettings.editorForm}
           setForm={modelSettings.setEditorForm}
           editing={modelSettings.editorIsEditing}
-          message={modelSettings.message}
+          error={modelSettings.error}
           onClose={modelSettings.closeEditor}
           onSave={modelSettings.onSave}
           onTest={() => trackAction(modelSettings.onTest(), '测试模型连接')}
         />
+      )}
+      {modelSettings.toast && (
+        <TransientToast {...modelSettings.toast} onDismiss={modelSettings.dismissToast} />
       )}
       <ToastHost
         toasts={toasts}

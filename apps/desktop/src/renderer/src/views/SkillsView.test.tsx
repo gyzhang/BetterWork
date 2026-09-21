@@ -35,7 +35,7 @@ function Harness(): React.JSX.Element {
   return <SkillsPage state={state} />;
 }
 
-/** A12 之后能力页会同时加载依赖面板：视图测试只需一个安静的替身，不触发任何真实准备。 */
+/** A12 之后技能页会同时加载依赖面板：视图测试只需一个安静的替身，不触发任何真实准备。 */
 function dependencyStub(): Record<string, unknown> {
   return {
     listOptions: vi.fn(async () => ({

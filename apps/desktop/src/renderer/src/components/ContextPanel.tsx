@@ -270,7 +270,7 @@ export function ContextPanel({
                   </div>
                 </div>
                 {mcpConnections.length === 0 ? (
-                  <p className="muted-text">请先在设置 → MCP 工具中配置连接。</p>
+                  <p className="muted-text">请先在设置 → MCP 中配置连接。</p>
                 ) : (
                   <div className="selected-mcp-list">
                     {mcpConnections.map((connection) => (

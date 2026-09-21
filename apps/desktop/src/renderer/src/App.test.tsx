@@ -226,7 +226,7 @@ function installApi(options?: {
 }
 
 async function openTestRun(): Promise<void> {
-  fireEvent.click(screen.getByRole('button', { name: '能力' }));
+  fireEvent.click(screen.getByRole('button', { name: '技能' }));
   fireEvent.click(await screen.findByRole('button', { name: /演示生成专家/ }));
   fireEvent.click(await screen.findByRole('button', { name: '试运行' }));
   // 现在以 chip 条形式显示已选技能，查找 aria-label 为“已选能力”的列表。
