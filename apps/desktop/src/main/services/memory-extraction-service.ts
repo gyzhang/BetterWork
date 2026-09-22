@@ -167,6 +167,29 @@ const notEnqueued = (reason?: MemoryErrorCode): MemoryExtractionRequestOutcome =
   ...(reason === undefined ? {} : { reason }),
 });
 
+/**
+ * §5.3：创建时展开来源依赖并拒绝循环。环只可能来自库里已有的相互引用
+ * （新候选是仓储生成的新身份，不会出现在自身依赖里），展开不成有限图就不建候选。
+ */
+const hasMemoryDependencyCycle = (
+  dependencies: readonly MemoryDependency[],
+  revisionDependencies: (revisionId: string) => readonly string[],
+): boolean => {
+  const settled = new Set<string>();
+  const onPath = new Set<string>();
+  const walk = (revisionId: string): boolean => {
+    if (onPath.has(revisionId)) return true;
+    if (settled.has(revisionId)) return false;
+    onPath.add(revisionId);
+    const cyclic = revisionDependencies(revisionId).some(walk);
+    onPath.delete(revisionId);
+    if (cyclic) return true;
+    settled.add(revisionId);
+    return false;
+  };
+  return dependencies.some((dependency) => walk(dependency.revisionId));
+};
+
 /** 仓储异常 → 契约 §9.3 错误码；仓储消息本就是可操作中文，不回显内容。 */
 const mapError = (error: unknown): MemoryError => {
   if (error instanceof MemoryConflictError) {
@@ -442,6 +465,12 @@ export class MemoryExtractionService {
   /** jobId → 执行中的中止句柄；取消必须先落库终态，再由本表中止请求。 */
   private readonly activeControllers = new Map<string, AbortController>();
   private draining: Promise<number> | undefined;
+  /** 来源依赖的下一跳：legacy 来源没有可展开的依赖。 */
+  private readonly revisionDependencies = (revisionId: string): readonly string[] => {
+    const provenance = this.memories.getRevision(revisionId)?.provenance;
+    if (provenance === undefined || provenance.verification !== 'verified') return [];
+    return provenance.memoryDependencies.map((dependency) => dependency.revisionId);
+  };
 
   constructor(options: MemoryExtractionServiceOptions) {
     this.jobs = options.jobs;
@@ -643,6 +672,10 @@ export class MemoryExtractionService {
         return notEnqueued('SOURCE_UNAVAILABLE');
       }
     }
+    // §5.3：候选整份继承来源依赖，展开不成有限图（库里已有相互引用）就不建候选。
+    if (hasMemoryDependencyCycle(record.memoryDependencies, this.revisionDependencies)) {
+      return notEnqueued('SOURCE_DEPENDENCY_CYCLE');
+    }
     const snapshot = buildModelInput(record);
     const fieldTexts = Object.values(snapshot.fields).filter(
       (value): value is string => typeof value === 'string' && value.length > 0,
@@ -758,8 +791,12 @@ export class MemoryExtractionService {
         return;
       }
     }
-    // 候选继承全新依赖（模型无权删减）；新候选身份是仓储生成的新 UUID，
-    // 不可能出现在自身依赖里，无需再做一次拒环展开。
+    // 入队后来源依赖仍要展开成有限图：期间被改出环同样不建候选。
+    // 作业阶段只用 memoryJobErrorCodes，依赖证不出来一律收口成 INPUT_LIMIT。
+    if (hasMemoryDependencyCycle(job.memoryDependencies, this.revisionDependencies)) {
+      this.finish(job, 'skipped', 'INPUT_LIMIT');
+      return;
+    }
 
     // 4. 模型：沿用来源 Run 的配置；不可用/指纹变化 skipped，不暗换另一服务。
     const reference: ExpertModelReference | undefined =

@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto';
 
 import type { ModelProvider, ModelRequest, ModelStreamChunk } from '@betterwork/agent-core';
 import { abortError } from '@betterwork/agent-core';
-import type { MaterialReference, MemoryRecord } from '@betterwork/agent-protocol';
+import type {
+  MaterialReference,
+  MemoryDependency,
+  MemoryProvenance,
+  MemoryRecord,
+} from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -258,6 +263,7 @@ const seedQueuedJob = (
   overrides: {
     runId?: string;
     sourceVersionHash?: string;
+    memoryDependencies?: readonly MemoryDependency[];
     consentRevision?: number;
     modelProfileId?: string;
     modelSnapshot?: Record<string, unknown>;
@@ -293,6 +299,9 @@ const seedQueuedJob = (
       : { consentRevision: overrides.consentRevision }),
     ...(overrides.modelProfileId === undefined ? {} : { modelProfileId: overrides.modelProfileId }),
     ...(overrides.modelSnapshot === undefined ? {} : { modelSnapshot: overrides.modelSnapshot }),
+    ...(overrides.memoryDependencies === undefined
+      ? {}
+      : { memoryDependencies: overrides.memoryDependencies }),
   });
   return outcome.job.id;
 };
@@ -335,6 +344,28 @@ const seedCandidate = (
     status: 'candidate',
     candidateDisposition: disposition,
   }).record;
+
+/**
+ * 生产写入路径产不出相互引用的环（新修订只能引用已存在的修订），
+ * 因此这里直接改写 memory_records.provenance_json 造出对抗状态，不在生产代码里开测试后门。
+ */
+const forgeDependencyCycle = (harness: Harness, left: MemoryRecord, right: MemoryRecord): void => {
+  const pointTo = (revisionId: string, target: MemoryRecord): void => {
+    const row = harness.db
+      .prepare('SELECT provenance_json FROM memory_records WHERE revision_id = ?')
+      .get(revisionId) as { provenance_json: string } | undefined;
+    if (!row) throw new Error(`缺少修订 ${revisionId}`);
+    const provenance = JSON.parse(row.provenance_json) as MemoryProvenance;
+    harness.db
+      .prepare('UPDATE memory_records SET provenance_json = ? WHERE revision_id = ?')
+      .run(
+        JSON.stringify({ ...provenance, memoryDependencies: [memoryDependencyOf(target)] }),
+        revisionId,
+      );
+  };
+  pointTo(left.revisionId, right);
+  pointTo(right.revisionId, left);
+};
 
 afterEach(() => {
   for (const db of openedDatabases.splice(0)) {
@@ -476,6 +507,46 @@ describe('MemoryExtractionService 入队与去重（WM09 §7.3）', () => {
       expect(requested.data.reason).toBe('SOURCE_UNAVAILABLE');
     }
     expect(harness.jobs.queuedCount()).toBe(0);
+  });
+
+  it('来源依赖成环时跳过自动建议并返回 SOURCE_DEPENDENCY_CYCLE', async () => {
+    const harness = makeFixture();
+    await enableAutoSuggest(harness);
+    const left = seedMemory(harness, '收入按回款金额统计。');
+    const right = seedMemory(harness, '毛利按收入减直接成本计算。');
+    forgeDependencyCycle(harness, left, right);
+    harness.putRunRecord({ memoryDependencies: [memoryDependencyOf(left)] });
+
+    const requested = await harness.service.requestExtractionForRun(RUN_ID);
+    expect(requested.ok).toBe(true);
+    if (!requested.ok) return;
+    expect(requested.data.status).toBe('not-enqueued');
+    expect(requested.data.reason).toBe('SOURCE_DEPENDENCY_CYCLE');
+    expect(harness.jobs.queuedCount()).toBe(0);
+    expect(harness.streamCalls.count).toBe(0);
+  });
+
+  it('入队之后才被改出环的作业跳过执行，不建候选也不调用模型', async () => {
+    const harness = makeFixture();
+    await enableAutoSuggest(harness);
+    const left = seedMemory(harness, '收入按回款金额统计。');
+    const right = seedMemory(harness, '毛利按收入减直接成本计算。');
+    harness.putRunRecord();
+    // 走仓储直连登记：入队路径自身的非阻塞排空会在同一次 claim 里跑完依赖复证。
+    const jobId = seedQueuedJob(harness, {
+      consentRevision: MEMORY_SUGGESTION_CONSENT_VERSION,
+      modelProfileId: 'mp-1',
+      sourceVersionHash: versionHashForPrompt(PROMPT),
+      memoryDependencies: [memoryDependencyOf(left)],
+    });
+    forgeDependencyCycle(harness, left, right);
+
+    await harness.service.runPendingJobs();
+    const job = harness.jobs.get(jobId);
+    expect(job?.status).toBe('skipped');
+    expect(job?.errorCode).toBe('INPUT_LIMIT');
+    expect(harness.streamCalls.count).toBe(0);
+    expect(job?.outcome?.candidateRevisionIds ?? []).toHaveLength(0);
   });
 
   it('材料依赖超额时返回 SOURCE_DEPENDENCY_LIMIT 结论', async () => {

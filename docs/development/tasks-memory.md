@@ -348,3 +348,11 @@ WM15 期间发现并修正的两处测试自身缺陷（不是产品缺陷）：
 - **§13.1「依赖递归/循环」**：新增 `memory-recall-service.test.ts`（此前 `memory-recall-service.ts` 没有任何测试文件）。两条用例都走 `MemoryService` 真实写入路径产出 verified＋来源可定位的已确认记忆，再用生产构建器 `buildDerivedProvenance` 把依赖挂到已有修订上：一条证明链路末端被删除后，中间与末端都落 `dependency-unavailable`——只看一层依赖会把已经站不住的末端口径放回来；一条把两条**当前**修订改成互相引用，证明递归在环处终止且环内记录都不注入。正常写入路径产不出环（新修订只能引用已存在的修订），所以环状态由测试自己打开同目录 SQLite 文件改写 `provenance_json` 得到，没有在生产代码里开测试后门。
 
 证据：`npm test -- apps/desktop/src/main/services/memory-retrieval.test.ts apps/desktop/src/main/services/memory-recall-service.test.ts` → 21 passed；`npx eslint` 对两份测试文件无告警；`npm run typecheck` 退出码 0。
+
+### 15.7 写时拒环补齐（2026-09-23 03:04）
+
+契约 §5.3 要求「在创建时展开来源依赖、拒绝循环」，错误码 `SOURCE_DEPENDENCY_CYCLE` 此前只存在于协议枚举、生产代码从不产出：`MemoryExtractionService` 只校验依赖修订存在且哈希一致，没有把来源依赖展开成图。补上两处展开——入队前 `enqueueAutomatic` 返回 `notEnqueued('SOURCE_DEPENDENCY_CYCLE')`，执行前依赖复证同样展开成环则 `finish(job, 'skipped', 'INPUT_LIMIT')`（作业阶段只允许 `memoryJobErrorCodes`，依赖证不出来一律收口成 `INPUT_LIMIT`，不为此扩协议枚举）。展开逻辑是模块内纯函数 `hasMemoryDependencyCycle`，下一跳由 `revisionDependencies` 读取已确认修订的 verified 来源，legacy 来源没有可展开的依赖。
+
+环状态同样不能用生产 API 造：新修订只能引用已存在的修订，所以测试改写 `memory_records.provenance_json` 造出两条互相引用的当前修订；作业阶段的用例必须走 `seedQueuedJob` 直连登记，因为入队路径自身的非阻塞排空会在同一次 claim 内跑完依赖复证，服务层入队来不及在中间改库。契约 §5.3 同步写明两处落点。
+
+证据：`memory-extraction-service.test.ts` 27 passed（新增 2 条，含「不调用模型」「不建候选」两条负断言）；`npm run verify` 退出码 0（110 个测试文件全绿）。
