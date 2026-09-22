@@ -81,11 +81,15 @@
 
 本期不声称自动识别新上传材料与记忆的全部语义冲突。当前指令/明确本期规则优先的上下文说明仍保留；自动化验收只证明上下文和冲突组处理，语义冲突处理用人工旅程验证。
 
+落点：§5.5 的判定规则只实现一次，在 `apps/desktop/src/main/services/memory-conflict-policy.ts`（`scopesIntersect`／`validityIntersects`／`listPotentialConflictPairs`／`unresolvedConflictPairs`）。此前召回内联一份（按 `topicKey` 分桶，等价于在共同适用集合内取作用域交集），简报又内联一份并把「作用域交集」写窄成「同一规范范围」；现在两处都只接线精确修订对的裁决记录，作用域口径归一。未裁决对以 `MemoryViewItem.conflicts`（`state: 'unresolved'`）摆进治理列表：一对两条口径各自都带同一条待澄清记录，替代与并存的裁决入口因此才可达；已裁决（`keep-both`/`replace`）按裁决结果原样展示，不重复提示。用例见 `memory-conflict-policy.test.ts` 与 `memory-service.test.ts`「把未裁决的同议题口径作为待澄清冲突摆进管理列表」。
+
 ### 5.6 幂等与投影
 
 所有用户写命令带 `operationId`；已有实体另带 `expectedRevision`。相同 `operationId`＋相同请求哈希返回原提交效果和当前最新展示状态；同 ID 不同请求返回 `IDEMPOTENCY_CONFLICT`。
 
 事务包含业务修订和回执；不跨网络持有事务。重复自动候选按 `scope`＋`normalizedHash` 抑制；与已拒绝候选相同也抑制；恢复候选后才重新进入待审列表。
+
+落点：写时抑制在 `memory-repository.ts` 的 `findCandidateByDedupeKey`（同 `scope`＋同 `normalizedHash` 返回 `deduplicated`／`suppressed`，不产生第二条待审记录）。已确认记忆与候选之间的重复不落库、按查询派生：`MemoryViewItem.duplicatesConfirmedMemoryId` 由 `memory-service.ts` 用 `scopesMatchExactly`＋同哈希判定，只指向那条已确认记录，界面据此在候选行内提示重复后果。
 
 投影在数据库提交后重建，使用单实例串行队列、唯一临时路径及原子 rename；合并重建请求但不得旧覆盖新。成功回执可带 `PROJECTION_PENDING`，不能把已提交误报成保存失败。来源待复核、`candidate`、`deleted`、`superseded`、`expired` 不进入有效投影。
 
@@ -237,7 +241,7 @@ WM02 先扩展仓储形状，公开旧调用方切换在 WM03 一起完成；来
 仅记忆/简报/参考新增家族使用 `Result<T>`：成功 `{ok:true,data:T,warnings:Warning[]}`；领域失败 `{ok:false,error:{code,message,retryable,currentRevision?}}`。不迁移全仓其他 IPC。
 
 - **WriteReceipt**：`operationId`、`commit:'committed'`、`effect`(created/updated/unchanged/deduplicated/suppressed)、`committedRevisionIds`、`currentMemory?`、`projectionState`(synced/pending/failed)。设置/参考写回执另包含相应 `currentSettings`/`currentReference`，不能返回不受约束任意 `data`。
-- **MemoryViewItem**：`MemoryRecord`＋`effectiveStatus`＋`sourceAvailability`(available/unavailable/review-required)＋`requiresMaterialSelection`＋`conflicts`（精确修订对与状态）。
+- **MemoryViewItem**：`MemoryRecord`＋`effectiveStatus`＋`sourceAvailability`(available/unavailable/review-required)＋`requiresMaterialSelection`＋`conflicts`（精确修订对与状态，含未裁决的 `unresolved`）＋`duplicatesConfirmedMemoryId?`（§5.6 的查询派生重复指针，不落库）。
 - **ListPage**：`items`、`nextCursor?`；cursor 为 `updatedAt`＋`id` 的版本化结构，`limit` 默认 50，上限 100；created/modified 排序定义在对应响应，非任意 SQL 游标。
 默认值与上限只认协议常量 `LIST_PAGE_DEFAULT_LIMIT`／`LIST_PAGE_MAX_LIMIT`：请求 Schema 卡上限，`MemoryRepository.listPage` 取默认值，存储层不再写死数字（回归用例见 `memory-repository.test.ts`「uses the protocol page-size constant as the default limit」）。
 - `Scope` 从现有判别联合复用；`Facet` 与 `kind` 由宿主映射，客户端不能提交矛盾组合。
@@ -295,5 +299,7 @@ WM02 先扩展仓储形状，公开旧调用方切换在 WM03 一起完成；来
 `openIssues` 取本空间 Task 的 open checkpoint 最近 10 项，保留 summary/feedback/nextAction 原有标识；开放不等于「已确认未解决所有问题」，不做 LLM 状态推断。参考区取最新 5 个 active 标记，`selectedAt DESC`/`id ASC`；可进入全部参考列表。
 
 源失效、过期和候选不进入确认区；重复/冲突待处理计数作为管理提示。空态不自动补内容，查询失败显示可重试错误，不显示伪造旧简报。
+
+落点：「重复/冲突待处理计数」落在记忆治理页（`MemoryView.tsx` 的 `.memory-pending-governance` 提示带，只报「几组口径待澄清 · 几条候选与已确认记忆重复」并指明去对应分组裁决），不新增 `WorkspaceBrief` 字段——本节的简报字段清单是封闭的，计数也不是「现有事实的只读投影」。简报侧继续只做「未裁决冲突组整组不进确认区」，不在此处替用户裁决。
 
 引用流程：选精确版本 → Main 验证归属及哈希 → 现有 `MaterialReference` → 加入 TaskContext，默认 purpose 为 `historical-comparison`，用户可改 `structure-reference` 等已有用途 → 后续 Run 按既有工具读取 → 实际读取后关联本期成果。WM00 已核对 `materialPurposeSchema` 的实际枚举字符串为 `rule`、`current-input`、`historical-comparison`、`structure-reference`、`template`、`background`、`other`（见 `packages/agent-protocol/src/index.ts`），本契约按该实名机械对齐，不新增同义枚举。标记参考或显示简报不算读取 Evidence。

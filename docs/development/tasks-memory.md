@@ -221,7 +221,7 @@ WM00 拆分为五份明确产物：
 - 用户分别确认：人工保存/修改/来源/排除；开关和候选质量；两期实际交付；简报和精确版本引用。真实模型调用只用用户授权的配置/合成材料。
 - 缺人工证据则保持 doing/blocked 及「人工待验」，不标总体 done。签名安装/真实 MCP 等未完成项仍回原任务板，不绑架本地记忆开发。
 - 最终定向回归、typecheck、verify；只交接，不自动提交、推送或发布。
-- 当前收口状态：Spec 侧自动化证据已闭环到 §15.6–§15.14（阈值收口与护栏见 §15.13，文档链接取证见 §15.14）。等待项只有 §15.5 的五项人工验收与真实模型授权下的语义确认，外加 §15.12 那一处口径偏离需要光哥拍板——「沿用来源 Run 快照的专家身份」当前按 Task 草稿取专家。本卡保持 doing，不得因测试全绿转 done。
+- 当前收口状态：Spec 侧自动化证据已闭环到 §15.6–§15.15（阈值收口与护栏见 §15.13，文档链接取证见 §15.14）。等待项只有 §15.5 的五项人工验收与真实模型授权下的语义确认，外加 §15.12 那一处口径偏离需要光哥拍板——「沿用来源 Run 快照的专家身份」当前按 Task 草稿取专家。本卡保持 doing，不得因测试全绿转 done。
 
 ## 13. 测试、里程碑与可观测性
 
@@ -431,3 +431,19 @@ Spec §9 与契约 §9 都写着 ListPage「`limit` 默认 50，上限 100」，
 §15「文档验证」要求内部链接与标题锚点逐一确认，此前只在 WM00 归档时人工看过。本轮用一次性脚本（不入库）扫描 WM 文档集与其 12 个接入入口，共 18 份文档、429 条内部链接：文件目标全部存在，锚点按 GitHub slug 规则（去句点与中文标点、空白转连字符、拉丁字母小写）逐个比对目标文件的实际标题，**0 条断链**。首轮报出的 4 条全是脚本自身的 slug 缺陷（没有剥掉「`## 12. 标题`」里的句点），修脚本后归零——不是文档有问题，也不许把脚本误报当成待修项写进文档。
 
 同节还要求「检查类型/key/枚举/预算在契约与任务提示词一致」：`memory-coding-prompts.md` 全文不出现任何预算数字或字段定义（grep `6,000`／`8,000`／`2,000`／`1,500`／`12,000`／`1,000`／`500`／`≤`／`最多` 均无命中），与 §15 表格里「提示词不重复定义字段」的职责划分一致，因此这一项是由「没有第二份定义」保证的，而不是两份定义被对上了。工作树此刻无未跟踪文件，`git diff --check` 退出码 0。
+
+### 15.15 冲突判定收口、待澄清可见性与界面样式（2026-09-23 04:44）
+
+15.11 那类「契约句子 ↔ 生产代码 ↔ 自动化用例」三方对齐再做一遍，报出四处缺口，本轮全部收口。写法仍是先补断言真实行为的用例，再把落点写进契约。
+
+1. **`unresolved` 冲突状态此前没有任何生产者**。协议 `memoryConflictStateSchema` 允许它，召回也按它整组排除并置 `conflictReviewRequired`，但没有任何代码把未裁决对放进 `memory:list` 的返回：治理列表两侧都不显示冲突，产品设计 §3.4 的裁决界面（并列呈现＋替代/并存/暂不处理）在真实数据下永不出现，`conflictReviewRequired` 成了没有出口的死提示。现在 `MemoryService` 按当前全部在效记录（`candidate`/`confirmed`/`expired`，不分页）派生未裁决对，一对两条口径各自都带同一条 `state: 'unresolved'`；裁决后原样变成 `keep-both`/`replaced`。
+2. **§5.5 判定规则有三份实现**：召回内联一份（按 `topicKey` 分桶）、简报内联一份（把「作用域交集」写窄成「同一规范范围」）、治理可见性需要第三份。抽出 `memory-conflict-policy.ts` 后三处共用同一份谓词，简报的作用域口径同时纠正。
+3. **候选与已确认记忆的重复没有可展示的指针**。§5.6 的写时抑制只覆盖自动候选之间，`MemorySuggestionList` 的冲突提示此前无源。新增查询派生字段 `MemoryViewItem.duplicatesConfirmedMemoryId`，候选行内提示「确认后会出现两条同口径记录，通常直接拒绝候选即可」。
+4. **记忆、简报、经验建议三块界面没有样式**。`styles.css` 里这三块用到的 108 个类有 66 个从未定义（`.memory-conflict*`、`.memory-group*`、`.memory-editor*`、`.brief-*`、`.suggestion-*`、`.context-row` 等）——WM07/WM11/WM14 交的是「结构正确但裸排版」的界面。本轮按语义 Token 补齐（提示带用 `--info`/`--warning`，冲突并列两条同宽，行内提示不再靠浏览器默认样式），零硬编码色值、未新增第三种 toast；顺带修掉 `suggestion-settings` 既当变体钩子又当面板类的同名冲突（面板改名 `suggestion-consent`）。
+
+需要光哥判定的两处（本轮按「已实现并记录」处理，不自称已批准）：
+
+- §10「重复/冲突待处理计数作为管理提示」的实现落点选了治理页而不是 `WorkspaceBrief`，理由是简报字段清单封闭且计数不是「现有事实的投影」。若判定计数必须进简报，要同时改契约 §10 的字段清单。
+- 因此 `MemoryViewItem` 多了一个契约 §9.1 原本没列的可选字段。已把 §9.1 该行改写为含 `duplicatesConfirmedMemoryId?`——这是契约的最小扩写，不是新增通道，也不落库。
+
+证据：`npm run verify` 退出码 0（lint＋format:check＋typecheck＋test＋build，Test Files 112 passed／Tests 1004 passed）。分项目标：`memory-conflict-policy.test.ts` 8 passed；`memory-service.test.ts` 16 passed；`memory-recall-service.test.ts` 4 passed；`workspace-brief-service.test.ts` 10 passed；`MemoryView.test.tsx` 11 passed；`MemorySuggestionList`／`ContextPanel`／`WorkspaceBrief`／`coding-standard` 四份 58 passed。`npm run typecheck` 曾捕获治理用例里 `conflicts` 可能为 `undefined` 的收窄缺陷——`vitest` 不做类型检查，测试全绿不代表类型正确，这条已经吃过一次亏。提交分三笔：`19ab026`（策略模块收口）、`fb12ab7`（待澄清与重复可见性）、`f738a08`（界面样式）。WM16 仍 doing：§15.5 五项人工验收与真实模型语义确认未变，界面样式的实际观感也要靠光哥在应用里确认（本轮只看类名与 Token 覆盖，没有跑真机视觉核对）。
