@@ -20,6 +20,7 @@ import {
   MEMORY_MATERIAL_DEPENDENCY_MAX,
   MEMORY_MEMORY_DEPENDENCY_MAX,
   MEMORY_SOURCE_EXCERPT_MAX_CODE_POINTS,
+  MEMORY_SUGGESTION_CONSENT_VERSION,
   type MemoryDependency,
   type MemoryError,
   type MemoryErrorCode,
@@ -88,9 +89,6 @@ import { ModelFactoryError, type ResolvedLanguageModel } from './model-provider-
  * 待协议补充来源类作业码后一并替换；未知存储异常归入唯一通用失败码
  * `MODEL_REQUEST_FAILED`，原始诊断只进本地日志、不落库。
  */
-
-/** 当前自动建议同意版本；设置或作业里的 consentVersion 不等于它就不允许自动提炼。 */
-export const MEMORY_SUGGESTION_CONSENT_VERSION = 1;
 
 /** 模型未给 confidence 时候选缺省置信度：待用户审阅，不冒充已核实。 */
 const DEFAULT_CANDIDATE_CONFIDENCE = 0.6;

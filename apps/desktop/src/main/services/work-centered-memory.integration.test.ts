@@ -4,8 +4,13 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { MemoryRecord, MemoryScope, TaskMaterialSelection } from '@betterwork/agent-protocol';
-import type { MemoryJobSummary } from '@betterwork/agent-protocol';
+import type {
+  MemoryJobSummary,
+  MemoryRecord,
+  MemoryScope,
+  TaskMaterialSelection,
+} from '@betterwork/agent-protocol';
+import { MEMORY_SUGGESTION_CONSENT_VERSION } from '@betterwork/agent-protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AppStore } from '../persistence';
@@ -13,10 +18,7 @@ import type { CredentialResolver } from './credential-access';
 import { createStoreExtractionSourceReader } from './extraction-source-reader';
 import { InputSnapshotService } from './input-snapshot-service';
 import { KnowledgeVault } from './knowledge-vault';
-import {
-  MEMORY_SUGGESTION_CONSENT_VERSION,
-  MemoryExtractionService,
-} from './memory-extraction-service';
+import { MemoryExtractionService } from './memory-extraction-service';
 import { MemoryRecallService } from './memory-recall-service';
 import { MemoryService } from './memory-service';
 import { ModelProviderFactory } from './model-provider-factory';

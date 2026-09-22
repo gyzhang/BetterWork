@@ -29,6 +29,7 @@ import type {
 import {
   countCodePoints,
   getRunMemoryContextRequestSchema,
+  MEMORY_DECISION_SUMMARY_IDENTITY_LIMIT,
   memoryErrorSchema,
   memoryPreviewDataSchema,
   memoryQueryContextSchema,
@@ -104,9 +105,6 @@ export const GENERAL_TASK_CONTEXT_REVISION_ID = 'general-empty-context';
 
 /** 没有 TaskContext 时的检索用标题占位；协议要求 taskTitle 非空。 */
 export const GENERAL_TASK_TITLE = '通用任务';
-
-/** §8.2：每个排除原因最多携带的身份数量。 */
-export const MEMORY_DECISION_IDENTITY_DISPLAY_LIMIT = 50;
 
 const EMPTY_QUERY_PLACEHOLDER = '空提问';
 
@@ -226,7 +224,7 @@ class ExclusionLedger {
       entries.push({
         reason,
         count: identities.length,
-        identities: identities.slice(0, MEMORY_DECISION_IDENTITY_DISPLAY_LIMIT),
+        identities: identities.slice(0, MEMORY_DECISION_SUMMARY_IDENTITY_LIMIT),
       });
     }
     return entries;

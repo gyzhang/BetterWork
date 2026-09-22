@@ -1768,6 +1768,9 @@ export const MEMORY_EXTRACTION_MIN_EVIDENCE = 1;
 export const MEMORY_EXTRACTION_MAX_EVIDENCE = 3;
 export const MEMORY_EXTRACTION_MAX_FRAGMENTS = 2;
 
+/** §7.3：当前自动建议同意版本；开启写命令的门槛、作业快照与界面文案共用同一个定义。 */
+export const MEMORY_SUGGESTION_CONSENT_VERSION = 1;
+
 export const memoryJobStatusSchema = z.enum([
   'queued',
   'running',

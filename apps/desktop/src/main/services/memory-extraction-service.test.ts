@@ -8,6 +8,7 @@ import type {
   MemoryProvenance,
   MemoryRecord,
 } from '@betterwork/agent-protocol';
+import { MEMORY_SUGGESTION_CONSENT_VERSION } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -24,7 +25,6 @@ import {
   type ExtractionModelResolver,
   type ExtractionRunSourceRecord,
   type ExtractionSourceRecord,
-  MEMORY_SUGGESTION_CONSENT_VERSION,
   MemoryExtractionService,
 } from './memory-extraction-service';
 import { buildUserInstructionProvenance, memoryDependencyOf } from './memory-provenance';

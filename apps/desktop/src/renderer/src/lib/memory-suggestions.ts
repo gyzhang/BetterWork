@@ -3,7 +3,10 @@ import type {
   MemoryViewItem,
   WorkspaceMemorySettings,
 } from '@betterwork/agent-protocol';
-import { MEMORY_EXTRACTION_MAX_CANDIDATES } from '@betterwork/agent-protocol';
+import {
+  MEMORY_EXTRACTION_MAX_CANDIDATES,
+  MEMORY_SUGGESTION_CONSENT_VERSION,
+} from '@betterwork/agent-protocol';
 
 import { memoryJobStatusLabel } from './memory-labels';
 
@@ -15,8 +18,8 @@ import { memoryJobStatusLabel } from './memory-labels';
  * 阶段词、状态词等共享词汇一律取自 `memory-labels.ts`，这里不另立一套。
  */
 
-/** §3.3：协议未导出「当前同意版本」常量，界面侧与文案同处定义，避免散落两处。 */
-export const MEMORY_CONSENT_VERSION = 1;
+/** §3.3：同意版本只有一个定义，门槛在主进程，文案在这里，都读协议常量。 */
+export const MEMORY_CONSENT_VERSION = MEMORY_SUGGESTION_CONSENT_VERSION;
 
 export const memoryConsentVersionLabel = `同意版本 v${MEMORY_CONSENT_VERSION}`;
 

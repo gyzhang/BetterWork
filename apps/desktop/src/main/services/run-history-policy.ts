@@ -1,4 +1,8 @@
 import type { MemoryScope } from '@betterwork/agent-protocol';
+import {
+  MEMORY_REPLAY_CODE_POINT_BUDGET,
+  MEMORY_REPLAY_PAIR_LIMIT,
+} from '@betterwork/agent-protocol';
 
 /**
  * 安全历史重放（总稿 §6.3）。
@@ -9,8 +13,8 @@ import type { MemoryScope } from '@betterwork/agent-protocol';
  */
 
 export const HISTORY_LIMITS = {
-  maxPairs: 8,
-  maxCodePoints: 12_000,
+  maxPairs: MEMORY_REPLAY_PAIR_LIMIT,
+  maxCodePoints: MEMORY_REPLAY_CODE_POINT_BUDGET,
 } as const;
 
 export type ReplayReasonCode =
