@@ -528,8 +528,8 @@ export class MemoryService {
   }
 
   /**
-   * 串行队列＋请求合并：所有重建共用一条 Promise 链，等待者拿到的都是自己那一次的执行结果，
-   * 因为数据始终取自最新提交；因此旧快照不可能覆盖新快照。
+   * 串行队列：所有重建共用一条 Promise 链，每个等待者排到自己那一次执行，期间不并发写同一份投影。
+   * 每次执行都在自己开始时同步读取最新提交，所以晚到的执行只会写出更新的状态，旧快照不可能覆盖新快照。
    */
   private requestProjectionRebuild(): Promise<'synced' | 'pending' | 'failed'> {
     this.projectionState = 'pending';

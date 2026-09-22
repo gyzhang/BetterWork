@@ -91,7 +91,7 @@
 
 落点：写时抑制在 `memory-repository.ts` 的 `findCandidateByDedupeKey`（同 `scope`＋同 `normalizedHash` 返回 `deduplicated`／`suppressed`，不产生第二条待审记录）。已确认记忆与候选之间的重复不落库、按查询派生：`MemoryViewItem.duplicatesConfirmedMemoryId` 由 `memory-service.ts` 用 `scopesMatchExactly`＋同哈希判定，只指向那条已确认记录，界面据此在候选行内提示重复后果。「所有用户写命令」也覆盖 `memory:set-settings`：`MemoryExtractionService.setSettings` 在同一事务里先 `claim`、再写设置、再 `append` 回执，因此「点了开关但响应超时」的第二次原样重发拿回的是原提交效果与当前设置行，`cancelledJobCount` 为 0（取消只发生在首次提交），换内容的同 ID 提交返回 `IDEMPOTENCY_CONFLICT`。
 
-投影在数据库提交后重建，使用单实例串行队列、唯一临时路径及原子 rename；合并重建请求但不得旧覆盖新。成功回执可带 `PROJECTION_PENDING`，不能把已提交误报成保存失败。来源待复核、`candidate`、`deleted`、`superseded`、`expired` 不进入有效投影。
+投影在数据库提交后重建，使用单实例串行队列、唯一临时路径及原子 rename。**不合并正在执行的重建**：每个写命令都排入属于自己的那次执行，因此它拿到 `synced` 时自己那次提交必定已落盘；每次执行在开始时同步读取最新提交，晚到的执行只会写出更新的状态，旧快照不可能覆盖新状态。（若改成「在飞时后来者共用同一个结果」，后来者会在自己的内容尚未落盘时拿到 `synced`。）该保证目前是构造性的：把链式串行改成并发执行后没有用例会变红，因为交叠窗口依赖文件系统 await 的调度时机，无法在不给服务加测试 seams 的前提下确定性地复现——取舍记录见[任务板 §15.26](tasks-memory.md)。成功回执可带 `PROJECTION_PENDING`，不能把已提交误报成保存失败。来源待复核、`candidate`、`deleted`、`superseded`、`expired` 不进入有效投影。
 
 维护只读 manifest 标识受管投影文件；仅清理 manifest 登记的旧受管文件，不遍历删除用户资料。落点：`memory-service.test.ts`「投影重建只清理 manifest 登记的受管文件，不遍历删除用户资料」在投影目录里预埋同空间的用户文件与子目录文件，删除记忆后断言受管文件消失而两者内容原样。DB 与跨文件投影不宣称原子，投影失败可见且可本地重建；模型永远不从投影读取。
 

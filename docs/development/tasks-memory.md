@@ -605,3 +605,25 @@ Spec §15 是 WM00 的验收面，此前只按「文档已归档」处理，本�
 **一处真缺陷，已改。** `app-schema.ts:1242` 的注释把阶段守卫写成「由写入方（run-memory-audit）把守」，而该模块从未建立——阶段单调推进实际在 `run-memory-context-repository.ts:184/220` 的 `markRequestPrepared`／`markDispatchAttempted` 里用 `WHERE phase = …` 与 `changes !== 1` 双重把守。已把指针改为真实文件。这与 §15.24 的 WM06 卡片同源的旧名，说明 §15.21 那次文件名真实性扫描的覆盖面有边界：它只扫了文档里的反引号文件名，**源码注释里的失效指针不在其内**。
 
 验证：本轮改一行注释并新增本节；`npx prettier --check` 与 `npx eslint apps/desktop/src/main/db/app-schema.ts` 均退出 0，改后该行 `sed -n '1242p'` 回读字面正确且 `grep -c run-memory-audit` 在该文件为 0。列级核对脚本只对源码文本求差，不写库、不跑迁移，故无测试变更，但改的是生产源码，仍跑定向 `migrate.test.ts` 兜底（41 passed，退出码 0）；表形状本身仍由 `db/migrate.test.ts` 与 WM15 集成测试的真实 SQLite 断言守着。
+
+### 15.26 Spec §2.2 九条静态风险逐条闭合与契约「合并重建」要求收口（2026-09-23 06:19）
+
+Spec §2.2 写着「必须验证的静态风险」九条，是本轮开发的立论起点；§15.3 只笼统提过 WM01 复现了第 1 条。本轮逐条把风险对到**当前生产代码里的强制点＋测试用例名**：
+
+| 风险 | 强制点 | 用例（标题原文） |
+| --- | --- | --- |
+| 1 写 IPC 返回未解析 Promise | `register-ipc.ts:1215-1240` 四个写通道加 `:1285` 重建通道全部 `async (input) => await …` | `register-ipc.test.ts:821`「commits memory writes to receipt envelopes and lists governance views」——经真实注册回调断言 `revision` 已推进到 1/2/3 |
+| 2 投影失败在提交之后 | `memory-service.ts:179-188` 警告语义、`:530-550` 串行链 | `memory-service.test.ts:242`「survives a failed projection as committed-plus-warning」、`work-centered-memory.integration.test.ts:801`「投影目录故障时仍按 SQLite 召回，重建请求可见地报失败」、`memory-result.test.ts:56`、`MemoryView.test.tsx:285` |
+| 3 先截 16 条再排除、排除后不补位 | `memory-retrieval.ts:289-336` 跳过超长继续试更短、`memory-recall-service.ts:764-782` 任务排除在候选集之前由仓储过滤 | `memory-retrieval.test.ts:173`「skips an oversized record and keeps trying shorter ones」、`:145`「returns nothing rather than backfilling with unrelated recent records」 |
+| 4 准备前记录被当成已发送 | 三阶段分别写于 `run-service.ts:516-527`、`memory-dispatch-gate.ts:77-82`、`run-memory-context-repository.ts:184/220`，DDL CHECK 在 `app-schema.ts:1247-1275` | `memory-dispatch-gate.test.ts:70`「writes request-prepared before dispatch-attempted, exactly once per run」、`:86`「never reaches the provider when the audit write fails」、`ContextPanel.test.tsx:425` |
+| 5 重放只处理子集缩小、首个 message.completed 当最终回答 | `run-history-policy.ts:88-131`（删除/过期/排除/材料替换/新修订各自理由）、`memory-recall-service.ts:931-937` 取 sequence 最后一条 | `run-history-policy.test.ts:51/105/111/160/174` 五条（含「takes the contiguous safe suffix and stops at the first unsafe turn」） |
+| 6 仅凭来源字符串认定归属 | `memory-provenance.ts:94-147` 由 Main 从已登记实体生成、`memory-recall-service.ts:282-306` 逐类型定位 | `memory-provenance.test.ts:76`「refuses to invent a source for a run that does not exist」、`:84`、`memory-service.test.ts:295`「rejects a fabricated source selector instead of trusting the client」 |
+| 7 `supersedesId` 被当成跨记忆替代 | `memory-repository.ts:921` 恒指向同身份上一修订，`:717-719` 跨身份替代写 `replacesRevisionId` | `memory-repository.test.ts:148`（`:171` 断言 `supersedesId === 上一修订`）、`:551`（`:601` 断言精确修订引用） |
+| 8 依赖 Renderer 临时消息 ID | 重放身份只由 `runId`＋`finalEventId`＋`promptHash` 构成（`memory-recall-service.ts:1002-1015/1090-1098`、`memory-provenance.ts:54`）；渲染层未检索到临时消息 ID 进入协议 | `run-history-policy.test.ts:211`「records the exact identity of every replayed turn」、`:136`「refuses to infer safety when legacy dependency facts are missing」 |
+| 9 保存/导出/Run 成功被当成业务批准 | `workspace-brief-service.ts:16-21/63-64/117-141` 只按来源可用性分区、未决节点保持未决；`ArtifactView.tsx:658` 注释钉住标记语义 | `workspace-brief-service.test.ts:145`「keeps open checkpoints marked unresolved and never confirmed」、`:105`、`WorkspaceBrief.test.tsx:132` |
+
+**一处契约与实现的真实冲突，已按实现收口。** 风险 2 的后半句「并发重建需保证旧投影不覆盖新状态」在契约 §5.6 里被写成「合并重建请求但不得旧覆盖新」，而 `memory-service.ts:534-549` 的实现从不合并——每个调用者排进链里跑自己那一次。**合并反而是缺陷**：在飞的那次执行读到的早于后来者刚提交修订，共用结果会让后来者在自己内容尚未落盘时拿到 `synced`。故按仓库纪律改文档而不是改代码：契约 §5.6 改成「不合并正在执行的重建」并写清为什么（每个写命令排入自己的执行＋每次执行开始时同步读最新提交），`memory-service.ts:531` 那句自相矛盾的注释同步改准。
+
+该保证目前是构造性的，**没有可判定的回归测试**：本轮试过补一条并发重建用例，但交叠窗口依赖文件系统 await 的调度时机：三次并发重建即便真的同时跑，也各自写同一组目标路径并以唯一临时文件名 `rename` 覆盖，最终磁盘内容不变，所以用例大概率不会红。本轮没有为此改生产代码加测试 seam，也没有落这条用例（未做变异验证的猜测不算证据），按 §15.23 的规矩「永远通过」的用例比没有用例更有害，故把它作为已知测试边界写进契约 §5.6，交由 WM16 人工验收时观察是否存在可见的投影不一致。
+
+验证：本轮改一行生产注释、契约 §5.6 一段、任务板新增本节；`npx prettier --check` 与 `npx eslint apps/desktop/src/main/services/memory-service.ts` 退出 0，`npx vitest run apps/desktop/src/main/services/memory-service.test.ts` 退出 0（16 passed，用它给投影路径兜底），`npm run typecheck` 退出 0；表内全部 `file:line` 与用例标题逐条 `sed -n`／`grep -n` 回读核实，其中 `memory-dispatch-gate.ts` 的两个阶段标记核到 `:77-82`、`memory-repository.ts` 的 `supersedesId` 核到 `:921`。
