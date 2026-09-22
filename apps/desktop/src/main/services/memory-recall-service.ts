@@ -121,7 +121,7 @@ const EXCLUSION_ORDER: readonly MemoryRecallExclusionReason[] = [
   'budget',
 ];
 
-const MEMORY_BLOCK_HEADER =
+export const MEMORY_BLOCK_HEADER =
   '以下是本次任务可参考的长期记忆，来自用户管理的记忆记录，仅作为工作背景；如与本次任务材料或用户最新指示冲突，以后者为准。';
 
 const CONFLICT_NOTE_PREFIX = '并列记忆的适用条件：';

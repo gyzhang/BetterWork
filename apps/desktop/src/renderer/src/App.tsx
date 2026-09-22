@@ -211,6 +211,8 @@ export function App(): React.JSX.Element {
   const [artifacts, setArtifacts] = useState<ArtifactSummary[]>([]);
   const [selectedArtifact, setSelectedArtifact] = useState<ArtifactDetail>();
   const [artifactNote, setArtifactNote] = useState<{ tone: 'ok' | 'error'; text: string }>();
+  /** §3.6：来源专家不可用时不猜专家，改用通用助手并把这件事当场说出来。 */
+  const [expertFallbackNotice, setExpertFallbackNotice] = useState<string>();
   // 跨视图的动作错误出口：开始任务、切换任务、停止执行、选择工作区等失败都在这里呈现，
   // 而不是像此前那样被 `void` 静默吞掉。
   const [actionError, setActionError] = useState('');
@@ -1023,6 +1025,7 @@ export function App(): React.JSX.Element {
     }
     const sourceContext = await window.betterwork.taskContexts.get({ taskId: artifact.taskId });
     let sourceExpert: { id: string; revisionId: string; name: string } | undefined;
+    let unavailableExpertName: string | undefined;
     if (sourceContext?.executor.kind === 'expert') {
       const expert = await window.betterwork.experts.get({ id: sourceContext.executor.expertId });
       if (expert?.lifecycle === 'active') {
@@ -1031,10 +1034,19 @@ export function App(): React.JSX.Element {
           revisionId: expert.revision.id,
           name: expert.name,
         };
+      } else {
+        unavailableExpertName = expert?.name;
       }
     }
     startNewTask();
     setSelectedArtifact(undefined);
+    setExpertFallbackNotice(
+      sourceExpert || sourceContext?.executor.kind !== 'expert'
+        ? undefined
+        : unavailableExpertName === undefined
+          ? '来源任务的专家已不可用，新任务先用通用助手。'
+          : `专家「${unavailableExpertName}」已不可用，新任务先用通用助手。`,
+    );
     if (sourceExpert) {
       setActiveExpert(sourceExpert);
       setTaskBindings(
@@ -1776,6 +1788,13 @@ export function App(): React.JSX.Element {
       )}
       {modelSettings.toast && (
         <TransientToast {...modelSettings.toast} onDismiss={modelSettings.dismissToast} />
+      )}
+      {expertFallbackNotice && (
+        <TransientToast
+          tone="success"
+          message={expertFallbackNotice}
+          onDismiss={() => setExpertFallbackNotice(undefined)}
+        />
       )}
       <ToastHost
         toasts={toasts}

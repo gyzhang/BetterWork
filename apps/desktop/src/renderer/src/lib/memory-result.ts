@@ -15,8 +15,8 @@ import type {
  *   绝不去解析 Electron 的异常字符串猜业务码。
  */
 
-export const TRANSPORT_FAILURE_CODE = 'TRANSPORT_FAILURE';
-export type MemoryFailureCode = MemoryErrorCode | typeof TRANSPORT_FAILURE_CODE;
+export const IPC_FAILURE_CODE = 'IPC_FAILURE';
+export type MemoryFailureCode = MemoryErrorCode | typeof IPC_FAILURE_CODE;
 
 export interface MemorySuccess<TData> {
   ok: true;
@@ -37,7 +37,7 @@ export type MemoryOutcome<TData> = MemorySuccess<TData> | MemoryFailure;
 
 const transportFailure = (error: unknown, fallback: string): MemoryFailure => ({
   ok: false,
-  code: TRANSPORT_FAILURE_CODE,
+  code: IPC_FAILURE_CODE,
   message: error instanceof Error && error.message ? error.message : fallback,
   retryable: true,
   currentRevision: undefined,

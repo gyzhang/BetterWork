@@ -206,6 +206,17 @@ export function useMemorySuggestions(query: MemorySuggestionQuery): MemorySugges
     };
   }, [activeJobKey, loadCandidates, loadJobs, visible]);
 
+  useEffect(() => {
+    // §7.3：轮询只在有活动作业时开启，而「窗口重获焦点」正是最需要新鲜状态的一刻——
+    // 别处（后台作业、另一个窗口）的变化要在这时读回来，所以焦点事件补发一次全量查询。
+    if (!visible || workspaceId === undefined) return;
+    const onFocus = (): void => {
+      refresh();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [refresh, visible, workspaceId]);
+
   /** 提交开关：`expectedRevision` 用设置行的修订，开启必须带当前同意版本。 */
   const setAutoSuggest = useCallback(
     async (enabled: boolean): Promise<void> => {

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -59,6 +59,44 @@ describe('MemoryService', () => {
     expect(projection).toContain('BetterWork 记忆');
     expect(projection).toContain('交付物优先使用中文。');
     expect(projection).toContain('请通过算台管理记忆');
+  });
+
+  it('投影重建只清理 manifest 登记的受管文件，不遍历删除用户资料', async () => {
+    const { service, store, directory } = await setup();
+    const created = await service.create(userInstruction('周报固定用五段式。'));
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const root = path.join(directory, 'memory');
+    const managed = path.join(root, 'user', 'index.md');
+    const manifest = path.join(root, '.managed-manifest.json');
+    expect(JSON.parse(await readFile(manifest, 'utf8'))).toEqual(['user/index.md']);
+
+    // 受管目录里混进用户自己的文件：重建既不许删它们，也不许把它们登记成受管路径。
+    const note = path.join(root, 'user', '我的笔记.md');
+    const stray = path.join(root, '草稿.txt');
+    writeFileSync(note, '我自己写的笔记，算台不要动。\n', 'utf8');
+    writeFileSync(stray, '放在投影根目录下的用户文件。\n', 'utf8');
+
+    const revisionId = created.data.committedRevisionIds[0] ?? '';
+    const record = store.memories.getRevision(revisionId);
+    if (!record) throw new Error('创建后必须能按修订读回记录');
+    const deleted = await service.setStatus({
+      operationId: randomUUID(),
+      id: record.id,
+      expectedRevision: record.revision,
+      action: 'delete',
+    });
+    expect(deleted.ok).toBe(true);
+    const rebuilt = await service.rebuildProjection({ operationId: randomUUID() });
+    expect(rebuilt.ok).toBe(true);
+    if (!rebuilt.ok) return;
+    expect(rebuilt.data.projectionState).toBe('synced');
+
+    // 旧受管文件按 manifest 清掉；未登记的用户文件与路径原样留下。
+    expect(existsSync(managed)).toBe(false);
+    expect(JSON.parse(await readFile(manifest, 'utf8'))).toEqual([]);
+    expect(readFileSync(note, 'utf8')).toContain('算台不要动');
+    expect(readFileSync(stray, 'utf8')).toContain('用户文件');
   });
 
   it('keeps a self-declared statement reusable across materials', async () => {

@@ -621,6 +621,8 @@ export class RunService {
           endpointDisplay: resolvedModel.endpointDisplay,
           ...(resolvedModel.profileId ? { modelProfileId: resolvedModel.profileId } : {}),
         },
+        // §6.4：装配消息与发包之间隔着工具循环，派发前按同一份快照核对记忆块。
+        memoryBlock: memory.memoryBlock,
       });
       const webSearch = await this.resolveWebSearch();
       const allowedBuiltinToolNames = this.allowedBuiltinToolNames(

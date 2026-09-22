@@ -941,8 +941,10 @@ describe('参考成果版本接入当前任务', () => {
     originWorkspaceId: 'workspace-1',
   };
 
-  const installReferenceApi = (): ReturnType<typeof installApi> => {
-    const api = installApi();
+  const installReferenceApi = (
+    options?: Parameters<typeof installApi>[0],
+  ): ReturnType<typeof installApi> => {
+    const api = installApi(options);
     api.artifacts.list.mockResolvedValue([reportSummary]);
     api.artifacts.get.mockResolvedValue(reportDetail);
     api.workspace.listReferenceVersions.mockResolvedValue(
@@ -1059,5 +1061,50 @@ describe('参考成果版本接入当前任务', () => {
     expect(api.artifacts.get).toHaveBeenCalledWith({ id: reportSummary.id });
     // 视图仍在工作页：失败不把用户扔到空白成果页
     expect(screen.getByRole('textbox', { name: /任务输入/ })).toBeTruthy();
+  });
+
+  /** 来源任务的专家绑定就记在它的 TaskContext 里，草稿衔接要按它继承。 */
+  const expertContext = (): TaskContextRevision => ({
+    id: 'context-previous',
+    taskId: 'previous-task',
+    revision: 2,
+    executor: {
+      kind: 'expert',
+      expertId: expertSummary.id,
+      expertRevisionId: expertDetail.revision.id,
+    },
+    skillBindings: [],
+    createdAt: 1,
+    updatedAt: 1,
+  });
+
+  const openVersionAction = async (): Promise<void> => {
+    fireEvent.click(await screen.findByRole('button', { name: '成果' }));
+    fireEvent.click(await screen.findByRole('button', { name: /季度复盘/ }));
+    fireEvent.click(await screen.findByRole('button', { name: '基于此版本开始新任务' }));
+  };
+
+  it('沿用来源专家：草稿交给该专家当前可用修订，不自动发送也不提示', async () => {
+    const api = installReferenceApi({ expert: true, context: expertContext() });
+    render(<App />);
+    await openVersionAction();
+
+    const expertChip = await screen.findByRole('list', { name: '当前专家' });
+    expect(expertChip.textContent).toContain('经营分析专家');
+    expect(screen.queryByText(/通用助手/)).toBeNull();
+    expect(api.runs.start).not.toHaveBeenCalled();
+  });
+
+  it('来源专家已不可用时改用通用助手并当场说明，不猜专家', async () => {
+    const api = installReferenceApi({ expert: true, context: expertContext() });
+    api.experts.get.mockResolvedValue({ ...expertDetail, lifecycle: 'archived' });
+    render(<App />);
+    await openVersionAction();
+
+    expect(
+      await screen.findByText('专家「经营分析专家」已不可用，新任务先用通用助手。'),
+    ).toBeTruthy();
+    expect(screen.queryByRole('list', { name: '当前专家' })).toBeNull();
+    expect(api.runs.start).not.toHaveBeenCalled();
   });
 });

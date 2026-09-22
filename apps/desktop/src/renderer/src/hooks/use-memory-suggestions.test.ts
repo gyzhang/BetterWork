@@ -11,7 +11,7 @@ import type {
   SetMemorySettingsRequest,
   WorkspaceMemorySettings,
 } from '@betterwork/agent-protocol';
-import { act, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import type { Mock } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -137,6 +137,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // 没有 RTL 自动清理（vitest 未开 globals），漏掉 unmount 会让上一例的监听器继续命中当前替身。
+  cleanup();
   vi.useRealTimers();
   Reflect.deleteProperty(window, 'betterwork');
 });
@@ -241,6 +243,40 @@ describe('useMemorySuggestions', () => {
       vi.advanceTimersByTime(5_000);
     });
     expect(api.listJobs.mock.calls.length).toBe(settled);
+  });
+
+  it('窗口重获焦点补查一次状态，卸载或不可见后不再监听', async () => {
+    const api = install();
+    const { unmount } = renderHook(() => useMemorySuggestions(query));
+    await settle();
+    expect(api.getSettings).toHaveBeenCalledTimes(1);
+    expect(api.listJobs).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      vi.advanceTimersByTime(1);
+    });
+    // 焦点这一次是「设置＋作业＋候选」全量重查，不是只把活动作业往前推一格。
+    expect(api.getSettings).toHaveBeenCalledTimes(2);
+    expect(api.listJobs).toHaveBeenCalledTimes(2);
+    expect(api.list).toHaveBeenCalledTimes(2);
+
+    unmount();
+    const afterUnmount = api.listJobs.mock.calls.length;
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      vi.advanceTimersByTime(1);
+    });
+    expect(api.listJobs.mock.calls.length).toBe(afterUnmount);
+
+    renderHook(() => useMemorySuggestions({ ...query, visible: false }));
+    await settle();
+    expect(api.listJobs.mock.calls.length).toBe(afterUnmount);
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      vi.advanceTimersByTime(1);
+    });
+    expect(api.listJobs.mock.calls.length).toBe(afterUnmount);
   });
 
   it('手动重试只授权这一次作业，不改动自动开关', async () => {
