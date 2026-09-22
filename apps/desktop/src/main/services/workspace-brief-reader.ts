@@ -1,7 +1,7 @@
 import type { DiscussionCheckpoint, MemoryRecord, MemoryScope } from '@betterwork/agent-protocol';
-import { stableStringifyJson } from '@betterwork/agent-protocol';
 
 import type { AppStore } from '../persistence';
+import { listPotentialConflictPairs } from './memory-conflict-policy';
 import type {
   BriefMemoryRow,
   BriefOpenCheckpoint,
@@ -35,15 +35,6 @@ const inWorkspaceScope = (
     case 'expert':
       return false;
   }
-};
-
-/** 两条记录的有效期是否真的重叠；不重叠的口径差异不构成冲突。 */
-const validityOverlap = (left: MemoryRecord, right: MemoryRecord): boolean => {
-  const leftStart = left.validFrom ?? 0;
-  const leftEnd = left.validUntil ?? Number.MAX_SAFE_INTEGER;
-  const rightStart = right.validFrom ?? 0;
-  const rightEnd = right.validUntil ?? Number.MAX_SAFE_INTEGER;
-  return leftStart < rightEnd && rightStart < leftEnd;
 };
 
 /** verified 来源的每条引用都必须仍能定位到已登记实体，定位不到即「源失效」。 */
@@ -106,36 +97,21 @@ const checkpointOf = (checkpoint: DiscussionCheckpoint): BriefOpenCheckpoint => 
 });
 
 /**
- * §5.5 召回口径同样约束简报：同一规范范围、同一非空 topicKey、正文规范化哈希不同、
- * 有效期重叠且两个精确修订之间没有裁决记录的，整组不进确认区；
+ * §5.5 召回口径同样约束简报：潜在冲突的判定规则只在 `memory-conflict-policy.ts` 定义一次，
+ * 这里接线精确修订对的裁决查询。未裁决的成对口径整组不进确认区；
  * 已裁决（keep-both / replace）不连坐。简报不能替用户裁决互斥口径。
  */
 const blockedByUnresolvedConflict = (
   store: AppStore,
   records: readonly MemoryRecord[],
 ): Set<string> => {
-  const groups = new Map<string, MemoryRecord[]>();
-  for (const record of records) {
-    if (!record.topicKey) continue;
-    const key = `${stableStringifyJson(record.scope)}#${record.topicKey}`;
-    const group = groups.get(key);
-    if (group) group.push(record);
-    else groups.set(key, [record]);
-  }
   const blocked = new Set<string>();
-  for (const group of groups.values()) {
-    for (const left of group) {
-      for (const right of group) {
-        if (left.id >= right.id) continue;
-        if (left.normalizedHash === right.normalizedHash) continue;
-        if (!validityOverlap(left, right)) continue;
-        if (store.memoryOperations.findDecisionForPair(left.revisionId, right.revisionId)) {
-          continue;
-        }
-        blocked.add(left.revisionId);
-        blocked.add(right.revisionId);
-      }
+  for (const { left, right } of listPotentialConflictPairs(records)) {
+    if (store.memoryOperations.findDecisionForPair(left.revisionId, right.revisionId)) {
+      continue;
     }
+    blocked.add(left.revisionId);
+    blocked.add(right.revisionId);
   }
   return blocked;
 };

@@ -49,6 +49,7 @@ import {
   MemoryTerminalError,
   MemoryValidationError,
 } from '../persistence';
+import { conflictPairKey, listPotentialConflictPairs } from './memory-conflict-policy';
 import { memoryContentHash } from './memory-content-policy';
 import { promptHashOf } from './memory-provenance';
 import {
@@ -278,17 +279,6 @@ type VerifiedProvenance = Extract<MemoryProvenance, { verification: 'verified' }
 
 const verifiedProvenanceOf = (record: MemoryRecord): VerifiedProvenance | undefined =>
   record.provenance.verification === 'verified' ? record.provenance : undefined;
-
-const overlapsValidity = (left: MemoryRecord, right: MemoryRecord): boolean => {
-  const leftStart = left.validFrom ?? 0;
-  const rightStart = right.validFrom ?? 0;
-  if (left.validUntil !== undefined && left.validUntil <= rightStart) return false;
-  if (right.validUntil !== undefined && right.validUntil <= leftStart) return false;
-  return true;
-};
-
-const pairKey = (left: string, right: string): string =>
-  left < right ? `${left}\u0000${right}` : `${right}\u0000${left}`;
 
 /** verified 来源是否仍能定位到已登记实体；定位不到即 source-unavailable（§6.1）。 */
 const sourceAvailable = (store: AppStore, record: MemoryRecord): boolean => {
@@ -534,78 +524,59 @@ interface ConflictPair {
 }
 
 /**
- * 潜在冲突判定（§5.5、§6.1）：同 topicKey、有效期重叠、normalizedHash 不同。
- * 未裁决的连通分量整组排除；全部 keep-both 的分量整组并列，适用条件写进包装文本。
+ * 潜在冲突判定（§5.5、§6.1）：规则本体只在 `memory-conflict-policy.ts` 定义一次，
+ * 这里接线裁决记录。未裁决的连通分量整组排除；全部 keep-both 的分量整组并列，
+ * 适用条件写进包装文本。
  */
 const buildConflictMap = (store: AppStore, records: readonly MemoryRecord[]): ConflictMap => {
   const blocked = new Set<string>();
   const groups = new Map<string, ConflictComponent>();
-  const byTopic = new Map<string, MemoryRecord[]>();
-  for (const record of records) {
-    const topic = record.topicKey;
-    if (topic === undefined) continue;
-    const bucket = byTopic.get(topic);
-    if (bucket) bucket.push(record);
-    else byTopic.set(topic, [record]);
-  }
   const decisionByPair = new Map<string, MemoryConflictDecisionRecord>();
   for (const decision of store.memoryOperations.listDecisionsForRevisionIds(
     records.map((record) => record.revisionId),
     { currentOnly: true },
   )) {
-    decisionByPair.set(pairKey(decision.leftRevisionId, decision.rightRevisionId), decision);
+    decisionByPair.set(
+      conflictPairKey(decision.leftRevisionId, decision.rightRevisionId),
+      decision,
+    );
   }
+  const pairs: ConflictPair[] = listPotentialConflictPairs(records).map(({ left, right }) => ({
+    left,
+    right,
+    decision: decisionByPair.get(conflictPairKey(left.revisionId, right.revisionId)),
+  }));
 
-  for (const topicRecords of byTopic.values()) {
-    if (topicRecords.length < 2) continue;
-    const pairs: ConflictPair[] = [];
-    for (let index = 0; index < topicRecords.length; index += 1) {
-      for (let next = index + 1; next < topicRecords.length; next += 1) {
-        const left = topicRecords[index];
-        const right = topicRecords[next];
-        if (left === undefined || right === undefined) continue;
-        if (left.normalizedHash === right.normalizedHash) continue;
-        if (!overlapsValidity(left, right)) continue;
-        pairs.push({
-          left,
-          right,
-          decision: decisionByPair.get(pairKey(left.revisionId, right.revisionId)),
-        });
+  const memberIds = new Set<string>(pairs.flatMap((pair) => [pair.left.id, pair.right.id]));
+  const blockedParent = new Map<string, string>([...memberIds].map((id) => [id, id]));
+  const keepParent = new Map<string, string>([...memberIds].map((id) => [id, id]));
+  const keepNotes = new Map<string, string>();
+  for (const pair of pairs) {
+    const keepBoth = pair.decision?.decision === 'keep-both' ? pair.decision : undefined;
+    if (keepBoth === undefined) {
+      unionPair(blockedParent, pair.left.id, pair.right.id);
+      continue;
+    }
+    unionPair(keepParent, pair.left.id, pair.right.id);
+    if (keepBoth.applicabilityNote !== undefined) {
+      keepNotes.set(conflictPairKey(pair.left.id, pair.right.id), keepBoth.applicabilityNote);
+    }
+  }
+  for (const ids of bucketize(blockedParent, new Set()).values()) {
+    if (ids.length < 2) continue;
+    for (const id of ids) blocked.add(id);
+  }
+  for (const ids of bucketize(keepParent, blocked).values()) {
+    if (ids.length < 2) continue;
+    let note: string | undefined;
+    for (let index = 0; index < ids.length; index += 1) {
+      for (let next = index + 1; next < ids.length; next += 1) {
+        const found = keepNotes.get(conflictPairKey(ids[index] ?? '', ids[next] ?? ''));
+        if (found !== undefined) note ??= found;
       }
     }
-    if (pairs.length === 0) continue;
-
-    const memberIds = new Set<string>(pairs.flatMap((pair) => [pair.left.id, pair.right.id]));
-    const blockedParent = new Map<string, string>([...memberIds].map((id) => [id, id]));
-    const keepParent = new Map<string, string>([...memberIds].map((id) => [id, id]));
-    const keepNotes = new Map<string, string>();
-    for (const pair of pairs) {
-      const keepBoth = pair.decision?.decision === 'keep-both' ? pair.decision : undefined;
-      if (keepBoth === undefined) {
-        unionPair(blockedParent, pair.left.id, pair.right.id);
-        continue;
-      }
-      unionPair(keepParent, pair.left.id, pair.right.id);
-      if (keepBoth.applicabilityNote !== undefined) {
-        keepNotes.set(pairKey(pair.left.id, pair.right.id), keepBoth.applicabilityNote);
-      }
-    }
-    for (const ids of bucketize(blockedParent, new Set()).values()) {
-      if (ids.length < 2) continue;
-      for (const id of ids) blocked.add(id);
-    }
-    for (const ids of bucketize(keepParent, blocked).values()) {
-      if (ids.length < 2) continue;
-      let note: string | undefined;
-      for (let index = 0; index < ids.length; index += 1) {
-        for (let next = index + 1; next < ids.length; next += 1) {
-          const found = keepNotes.get(pairKey(ids[index] ?? '', ids[next] ?? ''));
-          if (found !== undefined) note ??= found;
-        }
-      }
-      for (const id of ids) {
-        groups.set(id, { ids, ...(note === undefined ? {} : { note }) });
-      }
+    for (const id of ids) {
+      groups.set(id, { ids, ...(note === undefined ? {} : { note }) });
     }
   }
   return { blocked, groups };
