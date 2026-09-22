@@ -501,3 +501,15 @@ Spec §9 与契约 §9 都写着 ListPage「`limit` 默认 50，上限 100」，
 值得记下的对照：§15.9 修 `LIST_PAGE_DEFAULT_LIMIT` 时说的是「默认值没人读」，本轮三处是「两个值各读一份」——同一句「数字只有一个真相源」的两半，只有把它们都扫一遍才算收口。测试断言继续用字面量（如 `maxItems === 16`、5,000×2 撑破 12,000），这样契约数字变了会红在测试上而不是悄悄跟着常量走。
 
 验证：`npm run typecheck` 通过；`npm run verify` 退出码 0（lint + format:check + typecheck + test：Test Files 112 passed / Tests 1006 passed + build）。定向用例：`run-history-policy.test.ts` 17、`memory-recall-service.test.ts` 4、`memory-extraction-service.test.ts` 28、`work-centered-memory.integration.test.ts` 10、`use-memory-suggestions.test.ts` 9、`memory-suggestions.test.ts` 12。本轮无表结构变化，因此无迁移。
+
+### 15.20 IPC 双面一致性核对与 docs/04 过期能力描述修正（2026-09-23 05:25）
+
+枚举、错误码、数字三条轴收完后，剩下两条还没被逐条取证：接口面（契约 §9 的 18 个通道）与文档口径（其他文档对 WM 能力的描述）。
+
+**接口面。** 脚本对 18 个记忆通道逐条比对 `register-ipc.ts` 与 `preload/index.ts` 中该通道所用的请求 Schema 与 `resultSchema(...)` 内层标识符，18/18 两端完全一致（例如 `memory:set-status` 两端都是 `setMemoryStatusRequestSchema` ＋ `memoryWriteReceiptSchema`）；主进程注册表由 `register-ipc.test.ts` 的 `ipcMain.handle` 桩在运行时收集，已有断言覆盖「协议通道全部注册、无未知通道、无重复注册」。结构面另核两项：记忆区 60 个顶层对象 Schema 全部 `.strict()`（区内 90 处 `.object(` 对 93 处 `.strict()`，无遗漏），18 个通道里 17 个有界面消费者，只有 `memory:get` 没有——界面当前用 `memory:list` 返回的完整 `MemoryViewItem` 渲染详情，按精确修订读取的口子是契约 §9 定义的治理与调试入口，本轮不删也不为它造界面，留给光哥判定「保留为 API」还是「并进 list 的修订参数」。
+
+**文档口径。** `docs/04-knowledge-and-memory.md` §6 的「已知边界」段仍然描述 WM 之前的实现：「现有取候选顺序是范围/时间排序后先截 16 条再套预算，不含任务内容相关性匹配，也不在排除后补位；按任务相关性召回、结构化来源与依赖判定、请求阶段审计均为 WM 拟新增能力」——这三项能力 WM04/WM05/WM06 都已交付并有测试，文档却把它们写成待办、把旧行为写成现状。同节另两处时态同理（§6.1 派生索引、§7 提炼触发）。已按实现改写：过滤九类排除 → `memory-recall-v1` 相关性打分 → 16 条／6,000 码点总预算＋2 条／600 码点偏好小池，排除与不胜任记录不占预算，预算落选只作原因码计数；并补上两个自动触发点的代码落点——`run-service.ts:732` 在 `run.completed` 终态后调用 `requestRunExtraction`，`discussion-checkpoint-service.ts:51` 只在人工 `feedback` 非空时入队（`summary` 不能触发）。顺带确认这两个触发不是只在测试里存在：`main/index.ts` 分别把 `memoryExtractions` 传进 `new RunService(...)` 与 `new DiscussionCheckpointService(store, memoryExtractions)`。
+
+方法上的对照：接口面这一轴没查出缺陷，是因为它本来就是双端同写一份 Schema 标识符的机械结构，容易被复制粘贴保持同步；真正会烂掉的是**散文里的能力描述**——它不进任何门禁，只有人和代码对得上时才对。所以本轮之后，文档描述与实现的比对也要当成一条可重复的轴，而不是收尾时顺手读一遍。
+
+验证：本轮纯文档改动，无代码与测试变更；`npx prettier --check docs/04-knowledge-and-memory.md` 通过，`git diff --check` 退出码 0，改动段落整段 `sed -n` 回读校验中文字面。

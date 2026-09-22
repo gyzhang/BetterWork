@@ -111,7 +111,7 @@ E22 已能把具体 Knowledge revision 的身份、哈希和用途保存到 Task
 
 ## 6. 三层记忆体系
 
-> **现状：E31/E32 已完成最小记忆闭环。** 属 E3 范围（见 [开发计划](development/tasks-experts.md)），架构决策见 [ADR-0004](adr/0004-hybrid-memory.md) 与 [ADR-0015](adr/0015-memory-scope-and-governance.md)。SQLite 的 `MemoryRecord` 修订是唯一真相源；每次新 Run 只注入有效的 `confirmed` 记录，最多 16 条且总内容不超过 6,000 个 Unicode 字符，并记录实际读取的修订与哈希。设置页支持创建、查看、确认、编辑和删除；对话完成消息支持用户确认后形成记忆；任务资料面板的“本任务不用”只写入当前 TaskContextRevision。Markdown 只读投影按 User/Workspace/Expert/Expert×Workspace 作用域重建，不能回写数据库。自动反思、Embedding、向量索引和批量记忆维护仍未实现。**已知边界**：现有取候选顺序是范围/时间排序后先截 16 条再套预算，不含任务内容相关性匹配，也不在排除后补位；按任务相关性召回、结构化来源与依赖判定、请求阶段审计均为 WM 拟新增能力（[契约 §6](development/memory-contracts.md)），见 [WM 任务板](development/tasks-memory.md)。
+> **现状：E31/E32 完成最小记忆闭环，WM01–WM15 在其上落地工作型记忆的治理、确定性召回、运行审计与自动提炼（自动化证据见 [WM 任务板](development/tasks-memory.md) §15，界面与真实模型语义的人工验收未完成）。** 属 E3 与 WM 范围（见 [开发计划](development/tasks-experts.md)），架构决策见 [ADR-0004](adr/0004-hybrid-memory.md)、[ADR-0015](adr/0015-memory-scope-and-governance.md) 与 [ADR-0026](adr/0026-work-centered-memory.md)。SQLite 的 `MemoryRecord` 修订是唯一真相源；每次新 Run 只注入有效的 `confirmed` 记录，最多 16 条且总内容不超过 6,000 个 Unicode 字符，并记录实际读取的修订与哈希。设置页支持创建、查看、确认、编辑和删除；对话完成消息支持用户确认后形成记忆；任务资料面板的“本任务不用”只写入当前 TaskContextRevision。Markdown 只读投影按 User/Workspace/Expert/Expert×Workspace 作用域重建，不能回写数据库。自动反思、Embedding、向量索引和批量记忆维护仍未实现。**已实现（WM04/WM05）**：取候选顺序改为 [契约 §6](development/memory-contracts.md) 的确定性管线——先按最新修订、状态与生效期、范围、任务排除、来源可用与待复核、材料与记忆依赖、未裁决冲突逐层过滤（每层只登记身份与原因码，不落正文），再用固定版本 `memory-recall-v1` 按任务相关性打分排序，最后套 16 条／6,000 码点总预算与 2 条／600 码点的通用偏好小池；被排除或不胜任的记录不占预算，预算落选与「不相关」只作为原因码计数，不表示授权被撤销。每个 Run 的实际选择、重放轮次与排除账本按契约 §8 落库，可在运行详情回看。
 
 ### Core Memory Files（E31 已实现的受管投影）
 
@@ -161,7 +161,7 @@ interface MemoryRecord {
 
 Memory 文件和 MemoryRecord 共同生成全文与向量索引。索引不是长期真相源，可以随时重建。
 
-WM 拟新增的第一期**不建派生索引**：召回在 SQLite 范围过滤后使用固定版本 `memory-recall-v1` 的确定性内存文本匹配，不引入 FTS、Embedding 或向量依赖；未来的索引只是可重建优化（[契约 §6.1](development/memory-contracts.md)）。
+已实现（WM04）的召回第一期**不建派生索引**：召回在 SQLite 范围过滤后使用固定版本 `memory-recall-v1` 的确定性内存文本匹配，不引入 FTS、Embedding 或向量依赖；未来的索引只是可重建优化（[契约 §6.1](development/memory-contracts.md)）。
 
 ## 7. 记忆形成
 
@@ -177,7 +177,7 @@ Agent 发现可能长期有用的信息时，生成 candidate，由用户保存�
 
 任务结束后可整理成功方法、重复偏好、冲突和过期信息。后台反思只产生 candidate，不静默修改长期记忆。
 
-WM 拟新增的提炼**不是定时反思**：自动触发只有两处——Run 成功终态已提交、用户提交含非空 feedback 的讨论节点；每个工作空间独立开关且默认关闭，作业是 Main 层无工具单轮调用，结果一律停在 candidate，模型无权写 confirmed（[产品设计 §3.3](designs/work-centered-memory.md)、[契约 §7](development/memory-contracts.md)）。全量聊天扫描与定时反思明确不在范围内。
+已实现（WM08–WM11）的提炼**不是定时反思**：自动触发只有两处——`run-service.ts` 在 `run.completed` 终态提交后调用 `requestRunExtraction`，`discussion-checkpoint-service.ts` 只在人工 `feedback` 非空时按节点入队（`summary` 不能触发）；每个工作空间独立开关且默认关闭，作业是 Main 层无工具单轮调用，结果一律停在 candidate，模型无权写 confirmed（[产品设计 §3.3](designs/work-centered-memory.md)、[契约 §7](development/memory-contracts.md)）。全量聊天扫描与定时反思明确不在范围内。
 
 ## 8. 记忆治理
 
