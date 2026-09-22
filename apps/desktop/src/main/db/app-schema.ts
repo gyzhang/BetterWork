@@ -1239,7 +1239,7 @@ export const appMigrations: readonly Migration[] = [
       );
       // 一次运行一份记忆决策快照：Run 审计子表随 Run CASCADE（§8.3）。
       // 依赖并集与选中项保存精确修订引用（§8.2），跨表真实性由 Main 校验，
-      // 阶段只能前进、不得倒退由写入方（run-memory-audit）把守，DDL 只校验时间互证。
+      // 阶段只能前进、不得倒退由写入方（run-memory-context-repository.ts）把守，DDL 只校验时间互证。
       db.exec(`
         CREATE TABLE run_memory_contexts (
           run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,

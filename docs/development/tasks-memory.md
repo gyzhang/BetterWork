@@ -593,3 +593,15 @@ Spec §15 是 WM00 的验收面，此前只按「文档已归档」处理，本�
 其余逐条核过的卡片硬条件都有强制点＋用例：WM09 的 `MEMORY_EXTRACTION_CONCURRENCY = 1`、`MEMORY_EXTRACTION_QUEUE_LIMIT = 20` 落在 `memory-extraction-repository.ts:376/420` 并由其测试按队列满与并发满双向验证；WM12 的同空间 active ≤20 是 `WORKSPACE_REFERENCE_ACTIVE_LIMIT`，超限走 `REFERENCE_LIMIT` 领域失败；WM04 的非 BMP／码点计数由 `memory-retrieval.test.ts:210`「counts emoji and other non-BMP content in code points」与 `memory-content-policy.test.ts:27`「counts code points rather than UTF-16 units for non-BMP content」钉住，WM06 的 messages 断言落在 `memory-dispatch-gate.test.ts`（该文件捕获 `request.messages` 末条内容）；WM15 点名的集成文件与全部定向路径存在。
 
 验证：本轮只改任务板两行与新增本节，无代码与测试变更（改动的是文档指向，不需要重跑门禁）；`npx prettier --check` 与 `git diff --check` 通过，改后两行 `sed -n '150,153p'` 回读；所引 `memory-extraction-repository.ts:376/420`、`openai-compatible-provider.test.ts:390` 逐个 `grep -n` 核到行。
+
+### 15.25 持久化清单列级核对与一处源码注释失效指针（2026-09-23 06:04）
+
+§15.3 只核到「迁移 v26–v29 存在且被 `migrate.test.ts` 覆盖」这一层，表内列与约束没有逐条对过。本轮把契约／Spec §8.1–§8.3 声明的持久化形状逐项落到 `app-schema.ts` 上核对，共 **8 张表 82 个声明列**（`memory_records` 新增 6、`run_memory_reads` 新增 3、`memory_operations` 5、`memory_conflict_decisions` 8、`run_memory_contexts` 19、`workspace_memory_settings` 6、`memory_extraction_jobs` 26、`workspace_artifact_references` 9）：
+
+- **列缺失 0。** 脚本按 `CREATE TABLE` 体解析列名并与声明清单求差，8 张表全部命中；两处 `extra` 是解析器把 `REFERENCES` 折行当列，非真实多余列。§5.2 要求的 `facet` 与 `kind` 互斥、`candidate_disposition` 只出现在 candidate、`replaces_revision_id` 不得自我替代，都写成了表级 CHECK，注释还说明反向不成立的理由（§8.4 不得回填伪造处置）。
+- **约束与外键方向逐条对上 §8.1／§8.3。** `run_memory_reads` 保持 `UNIQUE(run_id, memory_revision_id)`，`memory_id` 只是数据列、精确引用与外键一律落在 `revision_id`；Run 审计子表 `ON DELETE CASCADE`，被历史引用的记忆修订、冲突裁决三列与 `workspace_artifact_references.artifact_version_id` 全部 `RESTRICT`。§8.2 索引清单四项齐备（`idx_memory_records_scope_hash`、`idx_memory_records_topic_key`、`idx_memory_extraction_jobs_status(status, created_at)`、`idx_workspace_artifact_references_active(workspace_id, status, selected_at DESC)`，另有三个裁决修订列的反查索引）。
+- **写进去有没有人读出来。** 九个新增字段逐个回查生产源码，均同时具备写入点与读出映射；`run_memory_contexts` 的 19 列由 `run-memory-context-repository.ts:77-109` 全量映射回领域对象（JSON 列在读出时即用 Zod 解析），界面侧 `ContextPanel.tsx:535/554/709/749/761` 消费 `selectedItems`、`decisionSummary`、`replay`，不存在「只落库不展示」的哑列。
+
+**一处真缺陷，已改。** `app-schema.ts:1242` 的注释把阶段守卫写成「由写入方（run-memory-audit）把守」，而该模块从未建立——阶段单调推进实际在 `run-memory-context-repository.ts:184/220` 的 `markRequestPrepared`／`markDispatchAttempted` 里用 `WHERE phase = …` 与 `changes !== 1` 双重把守。已把指针改为真实文件。这与 §15.24 的 WM06 卡片同源的旧名，说明 §15.21 那次文件名真实性扫描的覆盖面有边界：它只扫了文档里的反引号文件名，**源码注释里的失效指针不在其内**。
+
+验证：本轮改一行注释并新增本节；`npx prettier --check` 与 `npx eslint apps/desktop/src/main/db/app-schema.ts` 均退出 0，改后该行 `sed -n '1242p'` 回读字面正确且 `grep -c run-memory-audit` 在该文件为 0。列级核对脚本只对源码文本求差，不写库、不跑迁移，故无测试变更，但改的是生产源码，仍跑定向 `migrate.test.ts` 兜底（41 passed，退出码 0）；表形状本身仍由 `db/migrate.test.ts` 与 WM15 集成测试的真实 SQLite 断言守着。
