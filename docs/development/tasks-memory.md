@@ -513,3 +513,17 @@ Spec §9 与契约 §9 都写着 ListPage「`limit` 默认 50，上限 100」，
 方法上的对照：接口面这一轴没查出缺陷，是因为它本来就是双端同写一份 Schema 标识符的机械结构，容易被复制粘贴保持同步；真正会烂掉的是**散文里的能力描述**——它不进任何门禁，只有人和代码对得上时才对。所以本轮之后，文档描述与实现的比对也要当成一条可重复的轴，而不是收尾时顺手读一遍。
 
 验证：本轮纯文档改动，无代码与测试变更；`npx prettier --check docs/04-knowledge-and-memory.md` 通过，`git diff --check` 退出码 0，改动段落整段 `sed -n` 回读校验中文字面。
+
+### 15.21 规范归档与链接面核对（2026-09-23 05:30）
+
+Spec §15 是 WM00 的验收面，此前只按「文档已归档」处理，本轮把它的三条可执行要求逐条取证：五份产物＋入口接入、Markdown 链接与标题锚点、代码路径引用的真实性。
+
+**五份产物与入口。** `docs/designs/work-centered-memory.md`、`docs/adr/0026-work-centered-memory.md`、`docs/development/memory-contracts.md`、`docs/development/tasks-memory.md`、`docs/development/memory-coding-prompts.md` 齐备且互链。Spec 列出的 13 类入口逐个 `grep` 确认都含 WM 引用：AGENTS.md（任务路由＋当前阶段）、docs/README、docs/development/README、docs/adr/README、docs/07、docs/04、docs/02、docs/03、docs/10、expert/material/capability 三份契约、ADR-0015。其中两条最容易写歪的已按 Spec 原意核对：ADR-0015 第 76 行仍写「ADR-0026 记为 **Proposed**（接受状态待用户确认）」，没有提前写成生效替代；docs/02 第 252 行明确「Task 不是长期记忆作用域」。
+
+**链接与锚点。** 97 个 Markdown 文件全量扫描相对链接：WM 相关文档 **0 处断链、0 处失效锚点**。仓内另有两处与 WM 无关的历史问题，按「不改写历史记录/评审快照」原则记录不动：`docs/logs/2026-09-18.md` 指向仓库外的 `book/cn/…`（当时的外部书稿，现已不在库内），`docs/reviews/2026-09-07-code-quality.md` 用绝对路径写代码位置（评审快照的引用风格）。锚点只有 7 处（其中 5 处是文档间标题锚），另用近似 GitHub 的 slug 规则单独复核这 5 处，全部命中，包括 `memory-coding-prompts.md → tasks-memory.md#12-wm-唯一任务板与逐卡完成定义` 这种中英混排带空格的标题。
+
+**代码路径引用真实性。** WM 文档中被反引号引用的文件名共 91 个（含 19 个全路径），逐个回落到仓库实际文件：全部命中，唯一「不存在」的是 `run-memory-audit.ts`，而它在任务板 §「契约 §11 偏离」一行里明确写作**拟新增未建文件**并说明审计事实由 `run-memory-context-repository.ts`／`run-history-policy.ts`／`memory-recall-service.ts` 承担——正是 Spec §15 要求的「计划中的未来代码路径标『拟新增』而非已存在链接」。其余三处未命中项均为误报（投影目录树里的运行时 `index.md`、散文中的 `*.test.ts` 通配、以及 `memory-coding-prompts.md` 本身位于 docs 目录而扫描器只建了代码文件索引）。
+
+这条轴的结论与前几轮不同：**没有查出需要改的缺陷**，但它把 §15 的验收从「写过文档」变成了「链接、锚点、路径引用可机械复核」，也确认了上一轮修 `docs/04` 时担心的散文腐烂没有扩散到其他入口文档。
+
+验证：纯核对，无代码与文档内容变更；扫描脚本输出 97 文件／0 断链、91 引用文件名／0 失效（除已标拟新增者）；`git diff --check` 不适用（本轮此前仅 §15.20 与日志改动已提交）。
