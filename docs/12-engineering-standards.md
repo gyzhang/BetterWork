@@ -25,7 +25,7 @@
 | 层 | 载体 | 管住什么 |
 | --- | --- | --- |
 | 单文件写法 | `eslint.config.mjs`、`.prettierrc.json` | 一个文件内部的类型、异步、命名与排版 |
-| 跨文件结构 | `standards/coding-standard.test.ts` | 配置唯一性、零豁免、分层边界、Token 与动效纪律 |
+| 跨文件结构 | `standards/coding-standard.test.ts` | 配置唯一性、零豁免、分层边界、协议常量被消费、Token 与动效纪律 |
 | 门禁 | `npm run verify` | 上面两层，加类型检查、全部测试与构建 |
 
 结构护栏随 `npm test` 执行，因此也在 `verify` 里。它断言的都是 ESLint 表达不了的约定：ESLint / Prettier / tsconfig 各只有一份且严格开关全开、源码里没有任何豁免注释、`packages/*` 不依赖 `apps/*`、Agent Core 不依赖宿主运行时、Renderer 不导入 `node:*`、`views/` 与 `components/` 不直接调 IPC、`ipcMain.handle` 只在一处、取消词汇只在一处、硬编码色值与写死的动效时长只出现在白名单里、样式表引用的每个 Token 都有定义、首帧窗口主题与青玉浅色 Token 一致、`.qoder/rules/` 下每个规则文件都登记在索引里。
@@ -147,6 +147,7 @@ standards/
 - 需要用户文件访问的能力，白名单校验必须在主进程完成（例如「打开原文」先查知识库登记记录，再交给 `shell.openPath`）。
 - 会发起网络请求的用户输入必须收窄协议（`resolveEndpoint` 只接受 http/https），Zod 的 `url()` 会放过 `file://`。
 - 外部 HTTP 调用一律带超时（`AbortSignal.timeout`），并保证错误信息不含凭据。
+- 共享协议导出的阈值常量（分页大小、code point 上限、权重与停用词表等）是唯一真相源：消费方 `import` 常量，不在实现里另写字面量。协议内被 Schema 或别的常量引用、或被生产源码引用之外，任何 `export const UPPER_SNAKE` 都算孤儿，由 `coding-standard.test.ts`「协议导出的阈值常量都有真实消费者」拦下。半覆盖的形态（常量在协议内已被 Schema 消费、实现却仍写死一份）护栏读不出来，只能按契约逐处核对。
 
 ## 8. Renderer
 
@@ -191,3 +192,4 @@ standards/
 - 2026-09-05：建立本文。同时引入 Prettier + ESLint（含类型感知规则、导入排序）、把 `lint` 与 `format:check` 纳入 `verify` 门禁、按聚合拆分持久化层、引入版本化迁移与外键、统一异步收口与错误词汇、按 views / components / hooks / lib 拆分 Renderer。
 - 2026-09-06：新增 `standards/coding-standard.test.ts`，把 ESLint 表达不了的跨文件约定（配置唯一、源码零豁免、分层边界、Token 与动效纪律、规则索引完整、首帧主题一致）纳入 `npm test` 门禁。
 - 2026-09-07：修正 `foreign_key_check` 的事务语义：它可以读取同一事务的变更；迁移现在以迁移后、提交前的完整性检查为门槛。IPC 注册器同时校验共享协议定义的请求和响应。
+- 2026-09-23：`coding-standard.test.ts` 增加「协议导出的阈值常量都有真实消费者」，把 §7 新增的协议常量单一真相源条款纳入门禁；同轮把记忆召回与提炼里 9 个无人消费的协议常量接回实现侧。

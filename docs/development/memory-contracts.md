@@ -89,7 +89,7 @@
 
 投影在数据库提交后重建，使用单实例串行队列、唯一临时路径及原子 rename；合并重建请求但不得旧覆盖新。成功回执可带 `PROJECTION_PENDING`，不能把已提交误报成保存失败。来源待复核、`candidate`、`deleted`、`superseded`、`expired` 不进入有效投影。
 
-维护只读 manifest 标识受管投影文件；仅清理 manifest 登记的旧受管文件，不遍历删除用户资料。DB 与跨文件投影不宣称原子，投影失败可见且可本地重建；模型永远不从投影读取。
+维护只读 manifest 标识受管投影文件；仅清理 manifest 登记的旧受管文件，不遍历删除用户资料。落点：`memory-service.test.ts`「投影重建只清理 manifest 登记的受管文件，不遍历删除用户资料」在投影目录里预埋同空间的用户文件与子目录文件，删除记忆后断言受管文件消失而两者内容原样。DB 与跨文件投影不宣称原子，投影失败可见且可本地重建；模型永远不从投影读取。
 
 ## 6. 确定性召回与历史上下文
 
@@ -108,6 +108,8 @@ Main 构造 `MemoryQueryContext`：`workspaceId`、`expertId?`、`taskId`、精�
 5. 记录检索文本＝`topicKey`＋`content`。bigram/英文数字权重 3，单汉字权重 1；`score ＝ floor(1000 × 命中 token 权重和 / 查询与记录 token 并集权重和)`。至少 2 个命中 token；查询本身只有 1 个 token 时允许 1 个。
 6. 排序：`score DESC` → scope 特异性 `expert-workspace`/`workspace`/`expert`/`user` → `updatedAt DESC` → `id` 字节序 `ASC`。`confidence` 不参与排序。
 7. 无命中不拿最近记录填满；无相关记忆是正常结果。
+
+本节出现的每个数字与两份过滤词表只有一份定义：协议的 `MEMORY_RECALL_*` 常量。`memory-retrieval.ts` 的 `RECALL_BUDGET`、分词权重、命中阈值与打分基数一律取这些常量，不再写第二份字面量；`MEMORY_RECALL_VERSION` 也只由协议导出。护栏见 `standards/coding-standard.test.ts`「协议导出的阈值常量都有真实消费者」。
 
 ### 6.2 预算
 
@@ -137,7 +139,7 @@ Main 构造 `MemoryQueryContext`：`workspaceId`、`expertId?`、`taskId`、精�
 
 运行记录阶段：`selected` → `request-prepared` → `dispatch-attempted`，阶段时间单调；旧记录 `legacy_unknown`。
 
-Main 的 Provider 包装器在首个实际 `ModelRequest` 装配后计算规范化 `requestHash`，核对记忆块修订，持久化 `request-prepared`；开始消费委托 Provider 前持久化 `dispatch-attempted`。任何阶段持久化失败均不发起该次请求，主 Run 按现有失败机制收口。
+Main 的 Provider 包装器在首个实际 `ModelRequest` 装配后计算规范化 `requestHash`，核对记忆块修订，持久化 `request-prepared`；开始消费委托 Provider 前持久化 `dispatch-attempted`。任何阶段持久化失败均不发起该次请求，主 Run 按现有失败机制收口。落点：`services/memory-dispatch-gate.ts` 的 `withRunMemoryAudit` 先在首个 `ModelRequest` 上核对记忆块，再依次写两阶段；`assertMemoryBlockMatches` 要求请求中带 `MEMORY_BLOCK_HEADER` 的系统消息与已落库的同一份正文完全相同，`memoryBlock` 为空串表示本次不注入，此时出现任何记忆块也算不符并抛 `MemoryBlockMismatchError`。`modelRequestHash` 只指纹 `messages`、`tools`、`maxOutputTokens`，signal 与凭据不进指纹。用例见 `memory-dispatch-gate.test.ts`。
 
 不保存完整请求副本、不记录密钥、不把调用尝试当作网络已成功。后续工具回合继续使用固定记忆，无需新建逐回合记忆日志。普通记忆编辑/删除只影响新 Run；活跃 Run 如需刷新，由用户取消并重跑。现有材料/工具撤销机制不因本设计放松。
 
@@ -166,7 +168,7 @@ Main 的 Provider 包装器在首个实际 `ModelRequest` 装配后计算规范�
 
 自动 Run 输入：本次用户 prompt≤2,000；需要消歧时，取本次准备快照已允许的最近前一轮最终助手回答≤2,000；不使用当前助手新生成答案作为用户已认可的经验。讨论输入：人工 feedback≤2,000、summary≤1,000；summary 只是背景，不能证明确认。超长采用首尾等分片段并标注非全文，证据区间只允许落在实际片段中。
 
-不读完整材料、文件或其他历史来补上下文。固定指令≤1,500，最终装配仍验证 6,000 上限。依赖从来源及背景引用完整继承，不随送入模型的片段截断。
+不读完整材料、文件或其他历史来补上下文。固定指令≤1,500，最终装配仍验证 6,000 上限。落点：`memory-extraction-prompt.ts` 的 `EXTRACTION_LIMITS` 逐项取协议常量（`MEMORY_EXTRACTION_*`、`MEMORY_CANDIDATE_CONTENT_MAX_CODE_POINTS`），装配与严格解析读同一份数字，不再各写一份；片段类的三个上限就是协议里的单个片段上限。依赖从来源及背景引用完整继承，不随送入模型的片段截断。
 
 严格 JSON 输出：`{ candidates: [{ content, facet, topicKey?, confidence?, evidence: [{ fragmentId, start, end }] }] }`。最多 3 条；evidence 每条 1–3 段，至少一段来自本次用户 prompt 或人工 feedback，不能只引用助手内容。Main 验证片段身份、code point 范围及非空。`status`、`scope`、ID、来源哈希、材料权限均由宿主决定，模型输出这些额外字段即非法。0 条合法；围栏、额外解释、任意非法候选使整次结果失败；不进行额外模型修复重试。
 
@@ -182,7 +184,7 @@ Main 的 Provider 包装器在首个实际 `ModelRequest` 装配后计算规范�
 
 启动时将遗留 `queued`/`running` 收口 `interrupted`，不自动触网。关闭设置取消本空间自动作业；单次手动重试有独立同意，不暗开全局开关。取消后先落库终态再中止请求；成功落候选前检查 job revision/attempt/status、来源有效性、自动模式 `consentRevision`。迟到结果不能落库。
 
-候选写入、去重统计、作业成功终态在同事务提交。失败只保存安全错误码与摘要；主任务终态不受影响。UI 主动刷新和窗口重获焦点查询状态；仅面板可见且有活动作业时按 1 秒轮询，隐藏即停并清理，无自造成功提示计时器。
+候选写入、去重统计、作业成功终态在同事务提交。失败只保存安全错误码与摘要；主任务终态不受影响。UI 主动刷新和窗口重获焦点查询状态；仅面板可见且有活动作业时按 1 秒轮询，隐藏即停并清理，无自造成功提示计时器。落点：轮询与重获焦点的重查都在 `renderer/src/hooks/use-memory-suggestions.ts`——`window` 的 `focus` 监听补发一次全量查询（设置、作业、候选），面板不可见或已卸载即摘除监听；用例见 `use-memory-suggestions.test.ts`。
 
 ## 8. 持久化与迁移清单
 
@@ -282,7 +284,7 @@ WM02 先扩展仓储形状，公开旧调用方切换在 WM03 一起完成；来
 
 成功警告：`PROJECTION_PENDING`、`SOURCE_NEEDS_REVIEW`、`HISTORY_TRUNCATED`。错误 `message` 使用可操作中文，不带完整内容、URL 凭据或提供商原始响应。
 
-输入/输出 Zod 错误继续由已有注册 helper 拒绝；transport 拒绝由 Hook 统一映射 `IPC_FAILURE`，不解析 Electron 异常字符串来猜业务错误码。领域错误通过 `Result` 明确返回。投影失败是已提交成功＋警告，不是领域写失败。
+输入/输出 Zod 错误继续由已有注册 helper 拒绝；transport 拒绝由 Hook 统一映射 `IPC_FAILURE`，不解析 Electron 异常字符串来猜业务错误码。领域错误通过 `Result` 明确返回。投影失败是已提交成功＋警告，不是领域写失败。落点：`renderer/src/lib/memory-result.ts` 导出 `IPC_FAILURE_CODE` 作为该映射的唯一来源，`IPC_FAILURE` 不是领域错误码，`memoryErrorCodeSchema` 必须继续拒绝它（用例见 `packages/agent-protocol/src/index.test.ts`）；界面侧收口的三条路径——transport 拒绝、领域失败原样透出、成功保留 `warnings`——见 `memory-result.test.ts`。
 
 ## 10. 简报和成果引用精确规则
 

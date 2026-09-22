@@ -390,3 +390,37 @@ Spec §9 与契约 §9 都写着 ListPage「`limit` 默认 50，上限 100」，
 - WM16 收口的前置就是 §15.5 表格逐项拿到用户证据＋真实模型授权下的语义确认；拿到后 ADR-0026 转 Accepted、WM16 标 done、当日日志收口。
 - 本增量不依赖 CF 未完成的远程 MCP/API 能力，也不得改写 E/CF 任务状态；期间发现的缺陷按 GATE-0（先查 SQLite 现场 → `/tmp/betterwork-dev.log` → 代码）另立缺陷卡，不在 WM16 内顺手扩范围。
 - 若验收通过后再谈推送、打包与发布，那是单独一次授权。
+
+### 15.11 全量审计五处缺口逐条收口（2026-09-23 03:42）
+
+15.9／15.10 之后又做了一次「契约句子 ↔ 生产代码 ↔ 自动化用例」三方对齐审计，报出五处只有实现或只有文档、缺证据的缺口，本轮全部补齐。写法上统一：先补断言真实行为的用例，再把落点写进契约，不反过来为已通过的行为编用例。
+
+1. **派发闸门核对记忆块修订（契约 §6.4）**。原文要求「计算规范化 `requestHash`，核对记忆块修订」，此前只做了前半句：`withRunMemoryAudit` 落两阶段审计，但没有任何地方校验真正发出去的那份 `ModelRequest` 里带的记忆块，和装配阶段落进 `run_memory_contexts.selected_items_json` 的那份是同一个。中间隔着工具循环，记忆块一旦被替换或漏注入，审计里记下的选择就解释不了实际请求。补 `assertMemoryBlockMatches`：请求中所有带 `MEMORY_BLOCK_HEADER` 的系统消息必须与 `RunMemoryPreparation.memoryBlock` 逐字相同；`memoryBlock` 为空串表示本次不注入，此时出现任何记忆块也算不符。抛 `MemoryBlockMismatchError`，位置在两次审计写入**之前**，所以不符时既不发审计也不发包。`MEMORY_BLOCK_HEADER` 从模块私有常量改为导出，避免第二份表头字面量。
+2. **窗口重获焦点查询状态（契约 §7.3）**。原文两件事并列：「UI 主动刷新和窗口重获焦点查询状态」＋「仅面板可见且有活动作业时按 1 秒轮询」。此前只实现了轮询，而轮询恰恰只在有活动作业时才开——别处（后台作业或另一个窗口）改变候选状态后，回到窗口的用户读到的是过期快照。补 `focus` 监听补发一次全量查询（设置＋作业＋候选），面板不可见或卸载时摘除监听。
+3. **投影清理只碰 manifest（契约 §5.6）**。实现是对的（`rebuildProjection` 按 manifest 逐项删除），缺的是负向证据。补一条用例：预埋同空间子目录里的用户笔记与工作空间根目录的草稿，删除一条已投影记忆后重建，断言受管文件消失、manifest 清空、两个用户文件内容原样。这类「不遍历删除用户资料」的约束只有正断言等于没测。
+4. **`IPC_FAILURE` 命名与语义（契约 §9.3）**。渲染侧 transport 兜底码此前叫 `TRANSPORT_FAILURE`，与契约写明的 `IPC_FAILURE` 不一致；而 `memoryErrorCodeSchema` 明确不含该码，所以它只能是界面侧常量、不能塞进协议枚举。改为导出 `IPC_FAILURE_CODE` 并让 `MemoryFailureCode` 从它派生 union，新增 `memory-result.test.ts` 覆盖三条路径：拒绝映射成 `IPC_FAILURE` 且标可重试（含拒绝对象无消息时的回落文案）、领域失败原样透出错误码与 `currentRevision` 不降级、成功时保留 `warnings`。
+5. **来源专家不可用改用通用助手并提示（设计稿 §3.6）**。此前 `startFromArtifactVersion` 在专家已归档时静默回落到通用助手，等于「猜」了一次没有说出来的降级。现在把原因当场说出来（`TransientToast`，含来源专家名），并在 `App.test.tsx` 补两条：来源专家可用时草稿交给该专家当前修订且不自动发送、无提示；已归档时提示文案精确、不出现「当前专家」列表、不自动发送。
+
+本轮还纠正了一处测试基础设施缺陷：`use-memory-suggestions.test.ts` 的 `afterEach` 没有 `cleanup()`。`vitest.config.ts` 用 `environment: 'node'` 且未开 `globals`，RTL 的自动清理不会生效，前一例泄漏的挂载会继续监听 `window` 事件并命中当前例的共享替身，新加的 `focus` 监听把这种污染放大成了可见失败（期望 2 次调用实得 6 次）。补 `cleanup()` 是在修测试，不是绕开产品问题。
+
+证据：`memory-dispatch-gate.test.ts` 6 passed（含正例与两种不符）；`memory-result.test.ts` 4 passed；`use-memory-suggestions.test.ts` 9 passed；`memory-service.test.ts` 14 passed；`App.test.tsx` 21 passed；`work-centered-memory.integration.test.ts` ＋ `run-service.test.ts` 61 passed，说明真实请求路径满足新加的逐字核对；`npm run verify` 退出码 0（Test Files 111 passed）。
+
+### 15.12 一处未收口的口径偏离（2026-09-23 03:42）
+
+设计稿 §3.6 要求「新任务默认沿用**来源 Run 快照**中的专家身份」。当前实现读的是来源成果所属 Task 的 `TaskContext.executor`，不是那个版本实际所属 Run 的 `RunContextSnapshot`。两者在专家未换时等价，但语义不同：快照记的是「当时实际用了谁」，草稿记的是「现在打算用谁」。
+
+没有按原文改的原因：v21 确实在 `run_context_snapshots` 里持久化了 `expert_id`／`expert_revision_id`，但没有任何 preload／IPC 通道把运行快照的专家身份暴露给渲染进程；`成果版本 → 所属 Run → 快照专家`这条查询要新增通道、协议 Schema 和 `Result` 契约，而跨模块核心信息变化按 AGENTS.md §8 需要先补 ADR——那是 E 系列（专家上下文与材料绑定）的范围，不在 WM16 里顺手扩。
+
+因此本条按「已知偏离」记录，不标完成，也不改设计稿口径。要么由光哥判定当前「按 Task 草稿取专家」可接受（则改设计稿一句话即可），要么另立一卡走 IPC＋协议＋ADR。
+
+### 15.13 召回与提炼阈值收口到协议常量，并加护栏（2026-09-23 03:51）
+
+15.9 修的是 `LIST_PAGE_DEFAULT_LIMIT` 一处，本轮把同一类问题一次扫清：扫描协议里导出的 57 个 `UPPER_SNAKE` 常量，凡「在 `index.ts` 内只出现在自己的导出行、且 `apps/`＋`agent-core/` 生产源码里无人引用」都算孤儿。结果是 9 个：`MEMORY_RECALL_SINGLE_TOKEN_MIN_MATCHED`、`MEMORY_RECALL_STRONG_TOKEN_WEIGHT`、`MEMORY_RECALL_SINGLE_HAN_WEIGHT`、`MEMORY_RECALL_HAN_STOP_BIGRAMS`、`MEMORY_RECALL_LATIN_STOP_WORDS`，以及 `MEMORY_EXTRACTION_INPUT/TEXT/INSTRUCTION/SUMMARY_CODE_POINT_LIMIT`。它们的值在生产代码里各有一份字面量——`memory-retrieval.ts` 自己写了 `RECALL_BUDGET`、`PHRASE_WEIGHT = 3`、`SINGLE_HAN_WEIGHT = 1` 和两份停用词表，`memory-extraction-prompt.ts` 自己写了 `EXTRACTION_LIMITS` 的 1,500／6,000／2,000／1,000。逐值比对全部相等，所以这是一次纯接线，不改任何行为。
+
+- 召回侧：`RECALL_BUDGET` 的 12 个字段、两个权重、打分基数（`MEMORY_RECALL_SCORE_SCALE`）与「至少命中 2 个 token／单 token 查询允许命中 1 个」都改为取协议常量；`MEMORY_RECALL_VERSION` 和两份停用词表不再本地导出，测试改从协议引用，于是「算法版本」只有一处定义。
+- 提炼侧：`EXTRACTION_LIMITS` 逐项引用协议常量，并删掉两个无人消费且与协议重复的字段（`outputTokensMax`、`timeoutMs`——服务层本来就直接用 `MEMORY_EXTRACTION_MAX_OUTPUT_TOKENS`／`MEMORY_EXTRACTION_TIMEOUT_MS`）。三个片段类上限（用户 prompt／前一轮回答／人工 feedback）都归到协议的 `MEMORY_EXTRACTION_FRAGMENT_CODE_POINT_LIMIT`，与契约 §7.2「各自 ≤2,000」一致。
+- 命中阈值的写法顺带纠正了一处语义混用：原 `matchedTokens < 2 && query.length !== 1` 把「单 token 查询」和「放宽后的下限」挤在一个条件里，现在按常量分别表达，行为逐值等价。
+
+护栏进 `standards/coding-standard.test.ts`：新增「协议导出的阈值常量都有真实消费者」，规则是常量要么在协议内被 Schema 或别的常量引用，要么被 `apps/`／`packages/` 的生产源码引用，否则判为孤儿。这条护栏恰好是本轮缺陷的可执行形式——此前 9 个孤儿全都会让它失败。它不覆盖 15.9 那一类（常量在协议内已被 Schema 消费、存储层却又写死一份），那一类仍需按契约逐处核对，不夸大护栏能力。
+
+证据：`npm test -- standards/coding-standard.test.ts` → 22 passed；负向验证——临时在协议里加 `export const GUARD_PROBE_ORPHAN = 7;` 后该卡失败并报出该名字，随后撤销，`git diff` 对协议文件为空。`npm test -- memory-retrieval.test.ts memory-extraction-prompt.test.ts memory-recall-service.test.ts memory-extraction-service.test.ts` → 4 files／65 passed；`npx prettier --write`＋`npx eslint` 退出码 0；`npm run typecheck` 退出码 0；`npm run verify` 退出码 0（Test Files 111 passed）。
