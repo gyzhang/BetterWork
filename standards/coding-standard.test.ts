@@ -248,6 +248,29 @@ describe('架构边界', () => {
     expect(imgSrc ?? '', '幻灯片预览走 data URL，img-src 必须包含 data:').toContain('data:');
   });
 
+  it('协议导出的阈值常量都有真实消费者', () => {
+    const protocolPath = 'packages/agent-protocol/src/index.ts';
+    const protocol = read(protocolPath);
+    const declared = [...protocol.matchAll(/^export const ([A-Z][A-Z0-9_]*)\s*=/gm)].map(
+      (match) => match[1] ?? '',
+    );
+    expect(declared.length).toBeGreaterThan(0);
+    const consumerText = productionPathsUnder('apps/', 'packages/')
+      .filter((relative) => relative !== protocolPath)
+      .map((relative) => read(relative))
+      .join('\n');
+    const orphans = declared.filter((name) => {
+      const reference = new RegExp(`\\b${name}\\b`, 'gu');
+      // 同文件里被 Schema 或别的常量引用就算消费；只剩导出行是自己，等于常量与实现各说一套。
+      if ([...protocol.matchAll(reference)].length > 1) return false;
+      return [...consumerText.matchAll(reference)].length === 0;
+    });
+    expect(
+      orphans,
+      '无人消费的协议常量：改常量不会改行为，真相源变成了消费处那个字面量（docs/12 §4）',
+    ).toEqual([]);
+  });
+
   it('视图与组件不直接调用 IPC', () => {
     const offenders = pathsUnder(
       'apps/desktop/src/renderer/src/views/',

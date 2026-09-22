@@ -1,5 +1,25 @@
 import type { MemoryKind, MemoryScope } from '@betterwork/agent-protocol';
-import { countCodePoints } from '@betterwork/agent-protocol';
+import {
+  countCodePoints,
+  MEMORY_RECALL_BLOCK_CODE_POINT_BUDGET,
+  MEMORY_RECALL_CONTENT_CODE_POINT_BUDGET,
+  MEMORY_RECALL_HAN_STOP_BIGRAMS,
+  MEMORY_RECALL_LATIN_STOP_WORDS,
+  MEMORY_RECALL_MATERIAL_TITLE_CODE_POINT_LIMIT,
+  MEMORY_RECALL_MATERIAL_TITLE_ITEM_LIMIT,
+  MEMORY_RECALL_MIN_MATCHED_TOKENS,
+  MEMORY_RECALL_PREFERENCE_CODE_POINT_BUDGET,
+  MEMORY_RECALL_PREFERENCE_ITEM_LIMIT,
+  MEMORY_RECALL_QUERY_CODE_POINT_LIMIT,
+  MEMORY_RECALL_QUERY_EDGE_CODE_POINT_LIMIT,
+  MEMORY_RECALL_SCORE_SCALE,
+  MEMORY_RECALL_SINGLE_HAN_WEIGHT,
+  MEMORY_RECALL_SINGLE_TOKEN_MIN_MATCHED,
+  MEMORY_RECALL_STRONG_TOKEN_WEIGHT,
+  MEMORY_RECALL_TASK_TITLE_CODE_POINT_LIMIT,
+  MEMORY_RECALL_TOTAL_ITEM_LIMIT,
+  MEMORY_RECALL_WRAPPER_CODE_POINT_BUDGET,
+} from '@betterwork/agent-protocol';
 
 /**
  * memory-recall-v1：非向量的确定性任务相关召回。
@@ -8,61 +28,30 @@ import { countCodePoints } from '@betterwork/agent-protocol';
  * MEMORY_RECALL_VERSION 并更新 fixtures（总稿 §6.1 第 3 条）。
  */
 
-export const MEMORY_RECALL_VERSION = 'memory-recall-v1';
-
-/** §6.1 第 3 条的固定过滤词；改动即算法版本变更。 */
-export const CHINESE_STOP_BIGRAMS: readonly string[] = [
-  '请帮',
-  '帮我',
-  '一下',
-  '进行',
-  '根据',
-  '这个',
-  '这次',
-  '需要',
-  '我们',
-  '任务',
-];
-
-export const LATIN_STOP_TOKENS: readonly string[] = [
-  'a',
-  'an',
-  'the',
-  'and',
-  'or',
-  'to',
-  'of',
-  'for',
-  'in',
-  'on',
-  'is',
-  'are',
-  'please',
-];
-
+/**
+ * 阈值与两份停用词表都取自协议常量：`memory-recall-v1` 的算法版本、请求 Schema 的
+ * `recallAlgorithm` 回执和本文件的分词必须是同一份数字，否则审计里的算法解释不了实际排序。
+ */
 export const RECALL_BUDGET = {
-  maxItems: 16,
-  maxContentCodePoints: 6_000,
-  maxWrapperCodePoints: 2_000,
-  maxMemoryBlockCodePoints: 8_000,
-  preferencePoolMaxItems: 2,
-  preferencePoolMaxContentCodePoints: 600,
-  queryMaxCodePoints: 4_000,
-  queryHeadCodePoints: 2_000,
-  queryTailCodePoints: 2_000,
-  taskTitleMaxCodePoints: 200,
-  materialTitleMaxCodePoints: 120,
-  materialTitleCount: 10,
+  maxItems: MEMORY_RECALL_TOTAL_ITEM_LIMIT,
+  maxContentCodePoints: MEMORY_RECALL_CONTENT_CODE_POINT_BUDGET,
+  maxWrapperCodePoints: MEMORY_RECALL_WRAPPER_CODE_POINT_BUDGET,
+  maxMemoryBlockCodePoints: MEMORY_RECALL_BLOCK_CODE_POINT_BUDGET,
+  preferencePoolMaxItems: MEMORY_RECALL_PREFERENCE_ITEM_LIMIT,
+  preferencePoolMaxContentCodePoints: MEMORY_RECALL_PREFERENCE_CODE_POINT_BUDGET,
+  queryMaxCodePoints: MEMORY_RECALL_QUERY_CODE_POINT_LIMIT,
+  queryHeadCodePoints: MEMORY_RECALL_QUERY_EDGE_CODE_POINT_LIMIT,
+  queryTailCodePoints: MEMORY_RECALL_QUERY_EDGE_CODE_POINT_LIMIT,
+  taskTitleMaxCodePoints: MEMORY_RECALL_TASK_TITLE_CODE_POINT_LIMIT,
+  materialTitleMaxCodePoints: MEMORY_RECALL_MATERIAL_TITLE_CODE_POINT_LIMIT,
+  materialTitleCount: MEMORY_RECALL_MATERIAL_TITLE_ITEM_LIMIT,
 } as const;
-
-const PHRASE_WEIGHT = 3;
-const SINGLE_HAN_WEIGHT = 1;
 
 const HAN_RUN = /\p{Script=Han}+/gu;
 const LATIN_TOKEN = /[a-z0-9]+(?:[._-][a-z0-9]+)*/gu;
 
-const chineseStops = new Set(CHINESE_STOP_BIGRAMS);
-const latinStops = new Set(LATIN_STOP_TOKENS);
+const chineseStops = new Set<string>(MEMORY_RECALL_HAN_STOP_BIGRAMS);
+const latinStops = new Set<string>(MEMORY_RECALL_LATIN_STOP_WORDS);
 
 /** NFKC + 英文小写 + 空白归一；只影响检索文本，不改原始正文与哈希。 */
 export const normalizeRecallText = (value: string): string =>
@@ -100,7 +89,7 @@ export const tokenizeRecallText = (value: string): RecallToken[] => {
     const run = [...normalized.slice(start, end)];
     if (run.length === 1) {
       const single = run[0];
-      if (single !== undefined) push(single, SINGLE_HAN_WEIGHT);
+      if (single !== undefined) push(single, MEMORY_RECALL_SINGLE_HAN_WEIGHT);
       continue;
     }
     for (let index = 0; index + 1 < run.length; index += 1) {
@@ -109,7 +98,7 @@ export const tokenizeRecallText = (value: string): RecallToken[] => {
       if (left === undefined || right === undefined) continue;
       const bigram = `${left}${right}`;
       if (chineseStops.has(bigram)) continue;
-      push(bigram, PHRASE_WEIGHT);
+      push(bigram, MEMORY_RECALL_STRONG_TOKEN_WEIGHT);
     }
   }
 
@@ -119,7 +108,7 @@ export const tokenizeRecallText = (value: string): RecallToken[] => {
   for (const match of nonHan.matchAll(LATIN_TOKEN)) {
     const token = match[0] ?? '';
     if (latinStops.has(token)) continue;
-    push(token, PHRASE_WEIGHT);
+    push(token, MEMORY_RECALL_STRONG_TOKEN_WEIGHT);
   }
   return tokens;
 };
@@ -196,14 +185,15 @@ export const scoreRecallRecord = (
       continue;
     }
     // 单汉字查询退化为字符匹配，因为记录侧只产出 bigram。
-    if (weight === SINGLE_HAN_WEIGHT && normalizedRecord.includes(text)) {
+    if (weight === MEMORY_RECALL_SINGLE_HAN_WEIGHT && normalizedRecord.includes(text)) {
       matchedTokens += 1;
-      matchedWeight += SINGLE_HAN_WEIGHT;
-      recordWeights.set(text, SINGLE_HAN_WEIGHT);
+      matchedWeight += MEMORY_RECALL_SINGLE_HAN_WEIGHT;
+      recordWeights.set(text, MEMORY_RECALL_SINGLE_HAN_WEIGHT);
     }
   }
-  if (matchedTokens === 0) return undefined;
-  if (matchedTokens < 2 && query.length !== 1) return undefined;
+  const minMatchedTokens =
+    query.length === 1 ? MEMORY_RECALL_SINGLE_TOKEN_MIN_MATCHED : MEMORY_RECALL_MIN_MATCHED_TOKENS;
+  if (matchedTokens < minMatchedTokens) return undefined;
 
   let unionWeight = 0;
   const union = new Set([...queryWeights.keys(), ...recordWeights.keys()]);
@@ -211,7 +201,10 @@ export const scoreRecallRecord = (
     unionWeight += Math.max(queryWeights.get(text) ?? 0, recordWeights.get(text) ?? 0);
   }
   if (unionWeight === 0) return undefined;
-  return { score: Math.floor((1000 * matchedWeight) / unionWeight), matchedTokens };
+  return {
+    score: Math.floor((MEMORY_RECALL_SCORE_SCALE * matchedWeight) / unionWeight),
+    matchedTokens,
+  };
 };
 
 /** scope 特异性排序：expert-workspace > workspace > expert > user。 */

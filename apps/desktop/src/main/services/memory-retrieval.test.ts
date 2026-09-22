@@ -1,11 +1,13 @@
+import {
+  MEMORY_RECALL_HAN_STOP_BIGRAMS,
+  MEMORY_RECALL_LATIN_STOP_WORDS,
+  MEMORY_RECALL_VERSION,
+} from '@betterwork/agent-protocol';
 import { describe, expect, it } from 'vitest';
 
 import {
   applyRecallBudget,
   assembleRecallQuery,
-  CHINESE_STOP_BIGRAMS,
-  LATIN_STOP_TOKENS,
-  MEMORY_RECALL_VERSION,
   type PreferencePoolItem,
   rankRecallItems,
   RECALL_BUDGET,
@@ -42,7 +44,7 @@ describe('memory-recall-v1 tokenization', () => {
     expect(tokens).toContain('收入');
     expect(tokens).toContain('回款');
     expect(tokens).toContain('金额');
-    for (const stop of CHINESE_STOP_BIGRAMS) {
+    for (const stop of MEMORY_RECALL_HAN_STOP_BIGRAMS) {
       expect(tokenTexts(`请帮我根据这个任务`)).not.toContain(stop);
     }
   });
@@ -50,7 +52,7 @@ describe('memory-recall-v1 tokenization', () => {
   it('keeps letters, digits and internal separators as one latin token', () => {
     expect(tokenTexts('ARR不含一次性实施费，单位为万元')).toContain('arr');
     expect(tokenTexts('v1.2.3_build-x')).toContain('v1.2.3_build-x');
-    for (const stop of LATIN_STOP_TOKENS) {
+    for (const stop of MEMORY_RECALL_LATIN_STOP_WORDS) {
       expect(tokenTexts(`please ${stop} the report`)).not.toContain(stop);
     }
   });

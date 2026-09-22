@@ -1,4 +1,15 @@
 import { countCodePoints } from '@betterwork/agent-protocol';
+import {
+  MEMORY_CANDIDATE_CONTENT_MAX_CODE_POINTS,
+  MEMORY_EXTRACTION_FRAGMENT_CODE_POINT_LIMIT,
+  MEMORY_EXTRACTION_INPUT_CODE_POINT_LIMIT,
+  MEMORY_EXTRACTION_INSTRUCTION_CODE_POINT_LIMIT,
+  MEMORY_EXTRACTION_MAX_CANDIDATES,
+  MEMORY_EXTRACTION_MAX_EVIDENCE,
+  MEMORY_EXTRACTION_MIN_EVIDENCE,
+  MEMORY_EXTRACTION_SUMMARY_CODE_POINT_LIMIT,
+  MEMORY_EXTRACTION_TEXT_CODE_POINT_LIMIT,
+} from '@betterwork/agent-protocol';
 
 /**
  * 模型提炼作业的最小输入装配与严格输出解析（总稿 §7.2）。
@@ -7,21 +18,20 @@ import { countCodePoints } from '@betterwork/agent-protocol';
  * 模型只被允许产出候选正文，身份、范围、状态、来源与权限一律由宿主决定。
  */
 
+/** 阈值一律取协议常量（契约 §7.2）；候选正文下限 1 只在解析处校验，协议没有对应常量。 */
 export const EXTRACTION_LIMITS = {
-  instructionMaxCodePoints: 1_500,
-  requestMaxCodePoints: 6_000,
-  accumulatedTextMaxCodePoints: 6_000,
-  outputTokensMax: 2_048,
-  userPromptMaxCodePoints: 2_000,
-  backgroundAnswerMaxCodePoints: 2_000,
-  feedbackMaxCodePoints: 2_000,
-  summaryMaxCodePoints: 1_000,
-  candidateMax: 3,
+  instructionMaxCodePoints: MEMORY_EXTRACTION_INSTRUCTION_CODE_POINT_LIMIT,
+  requestMaxCodePoints: MEMORY_EXTRACTION_INPUT_CODE_POINT_LIMIT,
+  accumulatedTextMaxCodePoints: MEMORY_EXTRACTION_TEXT_CODE_POINT_LIMIT,
+  userPromptMaxCodePoints: MEMORY_EXTRACTION_FRAGMENT_CODE_POINT_LIMIT,
+  backgroundAnswerMaxCodePoints: MEMORY_EXTRACTION_FRAGMENT_CODE_POINT_LIMIT,
+  feedbackMaxCodePoints: MEMORY_EXTRACTION_FRAGMENT_CODE_POINT_LIMIT,
+  summaryMaxCodePoints: MEMORY_EXTRACTION_SUMMARY_CODE_POINT_LIMIT,
+  candidateMax: MEMORY_EXTRACTION_MAX_CANDIDATES,
   candidateContentMinCodePoints: 1,
-  candidateContentMaxCodePoints: 500,
-  evidenceMin: 1,
-  evidenceMax: 3,
-  timeoutMs: 30_000,
+  candidateContentMaxCodePoints: MEMORY_CANDIDATE_CONTENT_MAX_CODE_POINTS,
+  evidenceMin: MEMORY_EXTRACTION_MIN_EVIDENCE,
+  evidenceMax: MEMORY_EXTRACTION_MAX_EVIDENCE,
 } as const;
 
 /** 与协议 facet 判别联合保持一致的固定集合。 */
