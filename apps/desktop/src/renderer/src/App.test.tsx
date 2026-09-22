@@ -2,18 +2,25 @@
 
 import type {
   AgentRuntimeEvent,
+  ArtifactDetail,
+  ArtifactSummary,
   ExpertDetail,
   ExpertSummary,
   InputSnapshot,
   MaterialCandidate,
+  MaterialReference,
+  MemoryReferenceWriteReceipt,
   MemoryViewItem,
   MemoryWriteReceipt,
   ModelProfileSummary,
   RecentTaskSummary,
+  Result,
   RunSummary,
   SkillDetail,
   TaskContextRevision,
   WorkspaceBrief,
+  WorkspaceReferenceListData,
+  WorkspaceReferenceSetData,
 } from '@betterwork/agent-protocol';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -130,6 +137,28 @@ const writeReceipt: MemoryWriteReceipt = {
 
 const okResult = <TData,>(data: TData) => ({ ok: true as const, data, warnings: [] as never[] });
 
+const artifactVersionReference: MaterialReference = {
+  kind: 'artifact-version',
+  artifactId: 'artifact-1',
+  artifactVersionId: 'version-1',
+  contentHash: 'a'.repeat(64),
+  originWorkspaceId: 'workspace-1',
+};
+
+const referenceWriteReceipt: MemoryReferenceWriteReceipt = {
+  ...writeReceipt,
+  currentReference: {
+    id: 'ref-1',
+    workspaceId: 'workspace-1',
+    artifactVersionId: 'version-1',
+    contentHash: 'a'.repeat(64),
+    status: 'active',
+    revision: 1,
+    selectedAt: 1,
+    updatedAt: 1,
+  },
+};
+
 const memoryViewItem = (overrides?: Partial<MemoryViewItem>): MemoryViewItem => ({
   id: 'memory-1',
   revisionId: 'memory-1-r1',
@@ -164,16 +193,27 @@ function installApi(options?: {
     workspace: {
       getDefault: vi.fn(async () => ({ id: 'workspace-1', rootPath: '/workspace' })),
       listAll: vi.fn(async () => []),
-      memoryBrief: vi.fn(async () => okResult(briefFixture)),
-      listReferenceVersions: vi.fn(async () => okResult({ items: [] })),
-      setReferenceVersion: vi.fn(async () => okResult({ receipt: writeReceipt, material: {} })),
-      removeReferenceVersion: vi.fn(async () => okResult(writeReceipt)),
+      memoryBrief: vi.fn(async (): Promise<Result<WorkspaceBrief>> => okResult(briefFixture)),
+      listReferenceVersions: vi.fn(async (): Promise<Result<WorkspaceReferenceListData>> =>
+        okResult({ items: [] }),
+      ),
+      setReferenceVersion: vi.fn(async (): Promise<Result<WorkspaceReferenceSetData>> =>
+        okResult({ receipt: referenceWriteReceipt, material: artifactVersionReference }),
+      ),
+      removeReferenceVersion: vi.fn(async (): Promise<Result<MemoryReferenceWriteReceipt>> =>
+        okResult(referenceWriteReceipt),
+      ),
     },
     models: {
       list: vi.fn(async (): Promise<ModelProfileSummary[]> => options?.models ?? []),
     },
     knowledge: { list: vi.fn(async () => []) },
-    artifacts: { list: vi.fn(async () => []) },
+    artifacts: {
+      list: vi.fn(async (): Promise<ArtifactSummary[]> => []),
+      get: vi.fn(async (): Promise<ArtifactDetail | null> => null),
+      listVersions: vi.fn(async () => []),
+      getVersion: vi.fn(async () => null),
+    },
     evidence: { list: vi.fn(async () => []) },
     notifications: {
       list: vi.fn(async () => []),
@@ -863,5 +903,161 @@ describe('Expert configuration', () => {
         revision: expect.objectContaining({ identity: '负责经营分析并检查交付。' }),
       }),
     );
+  });
+});
+
+/**
+ * 参考成果版本的端到端纪律（WM14，产品设计 §3.6、实施契约 §10）。
+ *
+ * 界面把「标记」和「引用到当前任务」分成两件事：引用只把**那一版**（精确版本 id +
+ * 内容哈希）加进当前任务材料，既不自动发送也不换专家；来源消失时报错可见、视图不跳走。
+ */
+describe('参考成果版本接入当前任务', () => {
+  const pinnedHash = 'b'.repeat(64);
+  const reportSummary: ArtifactSummary = {
+    id: 'report-1',
+    workspaceId: 'workspace-1',
+    taskId: 'previous-task',
+    type: 'markdown',
+    title: '季度复盘',
+    currentVersionId: 'version-9',
+    versionNumber: 3,
+    origin: 'assistant-run',
+    sourceRunId: 'previous-run',
+    createdAt: 1,
+    updatedAt: 1,
+  };
+  const reportDetail: ArtifactDetail = {
+    ...reportSummary,
+    content: '# 季度复盘',
+    contentHash: pinnedHash,
+    evidence: [],
+  };
+  const pinnedReference = {
+    kind: 'artifact-version' as const,
+    artifactId: reportSummary.id,
+    artifactVersionId: 'version-9',
+    contentHash: pinnedHash,
+    originWorkspaceId: 'workspace-1',
+  };
+
+  const installReferenceApi = (): ReturnType<typeof installApi> => {
+    const api = installApi();
+    api.artifacts.list.mockResolvedValue([reportSummary]);
+    api.artifacts.get.mockResolvedValue(reportDetail);
+    api.workspace.listReferenceVersions.mockResolvedValue(
+      okResult({
+        items: [
+          {
+            reference: {
+              id: 'ref-1',
+              workspaceId: 'workspace-1',
+              artifactVersionId: 'version-9',
+              contentHash: pinnedHash,
+              label: '季度复盘 · v3',
+              status: 'active' as const,
+              revision: 1,
+              selectedAt: 1,
+              updatedAt: 1,
+            },
+            artifactId: reportSummary.id,
+            status: 'ready' as const,
+          },
+        ],
+      }),
+    );
+    api.materials.listCandidates.mockResolvedValue([
+      {
+        reference: pinnedReference,
+        title: '季度复盘 · v3',
+        sourceLabel: '成果 · 季度复盘',
+        status: 'ready',
+      },
+    ]);
+    return api;
+  };
+
+  it('引用只固定精确版本与哈希进材料，不自动启动运行', async () => {
+    const api = installReferenceApi();
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '成果' }));
+    fireEvent.click(await screen.findByRole('button', { name: /季度复盘/ }));
+    expect(await screen.findByText('本空间参考版本')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '引用到当前任务' }));
+
+    const chipBar = await screen.findByRole('list', { name: '本次材料' });
+    expect(chipBar.querySelectorAll('[role="listitem"]')).toHaveLength(1);
+    // 材料标题要等候选清单加载才有名字，这里断言的是引用本身：固定到结构参考用途、不自动发送
+    expect(chipBar.textContent).toContain('成果版本');
+    expect(screen.getByRole('combobox', { name: '成果版本用途' })).toHaveProperty(
+      'value',
+      'structure-reference',
+    );
+    expect(api.runs.start).not.toHaveBeenCalled();
+    expect(screen.queryByRole('list', { name: '当前专家' })).toBeNull();
+
+    fireEvent.change(screen.getByRole('textbox', { name: /任务输入/ }), {
+      target: { value: '按这一版的结构重写摘要' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '开始工作' }));
+
+    await waitFor(() => expect(api.taskContexts.save).toHaveBeenCalledTimes(1));
+    expect(api.taskContexts.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        materials: [
+          {
+            reference: pinnedReference,
+            purpose: 'structure-reference',
+            addedFrom: 'user-input',
+          },
+        ],
+      }),
+    );
+    // 复用已标记的引用：不再重复写标记，也不跟随成果的最新版本
+    expect(api.workspace.setReferenceVersion).not.toHaveBeenCalled();
+  });
+
+  it('简报里的参考版本对应成果已消失时，错误可见且不切换视图', async () => {
+    const api = installApi();
+    api.artifacts.get.mockResolvedValue(null);
+    api.workspace.memoryBrief.mockResolvedValue(
+      okResult({
+        ...briefFixture,
+        referenceVersions: {
+          items: [
+            {
+              reference: {
+                id: 'ref-1',
+                workspaceId: 'workspace-1',
+                artifactVersionId: 'version-9',
+                contentHash: pinnedHash,
+                label: '季度复盘 · v3',
+                status: 'active' as const,
+                revision: 1,
+                selectedAt: 1,
+                updatedAt: 1,
+              },
+              artifactId: reportSummary.id,
+              status: 'ready' as const,
+            },
+          ],
+          total: 1,
+          truncated: false,
+        },
+      }),
+    );
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '查看上下文' }));
+    fireEvent.click(screen.getByRole('tab', { name: '简报' }));
+    fireEvent.click(await screen.findByRole('button', { name: /季度复盘/ }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      '该参考版本对应的成果已不存在，请在成果列表中确认。',
+    );
+    expect(api.artifacts.get).toHaveBeenCalledWith({ id: reportSummary.id });
+    // 视图仍在工作页：失败不把用户扔到空白成果页
+    expect(screen.getByRole('textbox', { name: /任务输入/ })).toBeTruthy();
   });
 });
