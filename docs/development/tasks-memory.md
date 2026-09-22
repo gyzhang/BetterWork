@@ -424,3 +424,9 @@ Spec §9 与契约 §9 都写着 ListPage「`limit` 默认 50，上限 100」，
 护栏进 `standards/coding-standard.test.ts`：新增「协议导出的阈值常量都有真实消费者」，规则是常量要么在协议内被 Schema 或别的常量引用，要么被 `apps/`／`packages/` 的生产源码引用，否则判为孤儿。这条护栏恰好是本轮缺陷的可执行形式——此前 9 个孤儿全都会让它失败。它不覆盖 15.9 那一类（常量在协议内已被 Schema 消费、存储层却又写死一份），那一类仍需按契约逐处核对，不夸大护栏能力。
 
 证据：`npm test -- standards/coding-standard.test.ts` → 22 passed；负向验证——临时在协议里加 `export const GUARD_PROBE_ORPHAN = 7;` 后该卡失败并报出该名字，随后撤销，`git diff` 对协议文件为空。`npm test -- memory-retrieval.test.ts memory-extraction-prompt.test.ts memory-recall-service.test.ts memory-extraction-service.test.ts` → 4 files／65 passed；`npx prettier --write`＋`npx eslint` 退出码 0；`npm run typecheck` 退出码 0；`npm run verify` 退出码 0（Test Files 111 passed）。
+
+### 15.14 Spec §15 文档验证取证（2026-09-23 03:57）
+
+§15「文档验证」要求内部链接与标题锚点逐一确认，此前只在 WM00 归档时人工看过。本轮用一次性脚本（不入库）扫描 WM 文档集与其 12 个接入入口，共 18 份文档、429 条内部链接：文件目标全部存在，锚点按 GitHub slug 规则（去句点与中文标点、空白转连字符、拉丁字母小写）逐个比对目标文件的实际标题，**0 条断链**。首轮报出的 4 条全是脚本自身的 slug 缺陷（没有剥掉「`## 12. 标题`」里的句点），修脚本后归零——不是文档有问题，也不许把脚本误报当成待修项写进文档。
+
+同节还要求「检查类型/key/枚举/预算在契约与任务提示词一致」：`memory-coding-prompts.md` 全文不出现任何预算数字或字段定义（grep `6,000`／`8,000`／`2,000`／`1,500`／`12,000`／`1,000`／`500`／`≤`／`最多` 均无命中），与 §15 表格里「提示词不重复定义字段」的职责划分一致，因此这一项是由「没有第二份定义」保证的，而不是两份定义被对上了。工作树此刻无未跟踪文件，`git diff --check` 退出码 0。
