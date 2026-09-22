@@ -1,12 +1,21 @@
-import {
-  type CreateDiscussionCheckpointRequest,
-  type DiscussionCheckpoint,
-} from '@betterwork/agent-protocol';
+import { describeError } from '@betterwork/agent-core';
+import type { CreateDiscussionCheckpointRequest, DiscussionCheckpoint } from '@betterwork/agent-protocol';
 
 import type { AppStore } from '../persistence';
 
+/**
+ * 讨论节点只声明「有可提炼的人工反馈」，不拥有提炼逻辑：
+ * 入队失败或队列已满都不改节点写入结果（契约 §7.3）。
+ */
+export interface CheckpointExtractionRequester {
+  requestExtractionForCheckpoint(checkpointId: string): Promise<unknown>;
+}
+
 export class DiscussionCheckpointService {
-  constructor(private readonly store: AppStore) {}
+  constructor(
+    private readonly store: AppStore,
+    private readonly extractionRequester?: CheckpointExtractionRequester,
+  ) {}
 
   list(taskId: string): DiscussionCheckpoint[] {
     this.assertTask(taskId);
@@ -34,7 +43,17 @@ export class DiscussionCheckpointService {
         throw new Error('讨论节点引用的成果版本不属于当前 Task');
       }
     }
-    return this.store.discussionCheckpoints.create(taskId, input);
+    const checkpoint = this.store.discussionCheckpoints.create(taskId, input);
+    // summary 只是背景，不能证明确认；只有人工 feedback 才构成自动提炼的触发来源。
+    if (this.extractionRequester && (input.feedback?.trim() ?? '').length > 0) {
+      const requester = this.extractionRequester;
+      void requester
+        .requestExtractionForCheckpoint(checkpoint.id)
+        .catch((error: unknown) => {
+          console.error('[memory-extraction] 讨论节点入队失败：', describeError(error));
+        });
+    }
+    return checkpoint;
   }
 
   private assertTask(taskId: string): void {

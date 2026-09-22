@@ -129,7 +129,7 @@ function bootstrap(): ApplicationContext {
     console.error('Memory projection rebuild failed', error);
   });
   const taskMaterials = new TaskMaterialService({ store, knowledgeVault, inputSnapshots });
-  const discussionCheckpoints = new DiscussionCheckpointService(store);
+  const discussionCheckpoints = new DiscussionCheckpointService(store, memoryExtractions);
   inputSnapshots
     .recover()
     .then((recovered) => {
