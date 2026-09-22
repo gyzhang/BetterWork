@@ -467,3 +467,16 @@ Spec §9 与契约 §9 都写着 ListPage「`limit` 默认 50，上限 100」，
 「属性只含范围 ID、任务/运行 ID、状态/原因、数量/耗时/真实 usage，不含正文」也核过：审计行只存修订身份，仓储用例直接断言回执序列化后不含记忆正文。全仓没有任何第三方埋点或遥测依赖，UI 诊断计数一律从上述表读出。
 
 缺口一处，本轮已补：`governanceAction` 在服务层写入、仓储层解析，但**没有任何用例断言它能穿过 `result_json` 往返**——即 §13.3 里「候选确认」与「候选拒绝」两个事件的唯一区分点从未被验证，性质同 15.11 的「有枚举值、无生产者」。补了一条真实 SQLite 往返用例（该文件 9 passed），确认两条回执分别是 `confirm` 与 `reject`，且都不含正文。同一轮 `npm run verify` 退出码 0（Test Files 112 passed／Tests 1005 passed）。
+
+### 15.17 枚举值生产者全量扫描与两处收口（2026-09-23 05:03）
+
+15.11 与 15.15 各抓到一次「枚举值没有生产者」，本轮改成系统性扫描：把协议里所有 memory/brief/reference/job 相关的 `z.enum` 取出来，逐值在 `main`／`renderer`／`preload`／`agent-core` 的非测试源码里找字面量写入点。23 个枚举里只剩两处无生产者：
+
+- `memoryOperationKindSchema` 的 `set-settings` —— 真缺陷，见下。
+- `jobFailurePhaseSchema` 的 `publish` —— 属于 Skill 作业运行时（ADR-0009），不在 WM 范围，也不在本期改动，记录下来不顺手改。
+
+**`memory:set-settings` 漏掉了 §5.6 的幂等回执**。契约写的是「所有用户写命令带 `operationId`；相同 `operationId` ＋ 相同请求哈希返回原提交效果」，`MemoryExtractionRepository.applySettings` 的注释也明说「回执由调用方在同一事务内用 `MemoryOperationRepository.append` 补写」，但服务层只是把 `operationId` 回显出去，既没 `claim` 也没 `append`。后果有三层：用户「点了开关但响应超时」后原样重发，会撞自己刚推进的 `expectedRevision` 被读成 `REVISION_CONFLICT`；重发还会再跑一次关闭开关的取消逻辑；同意/撤销动作在 `memory_operations` 里没有任何审计行。现在服务在同一事务内 `claim`→写设置→`append`，重放返回原提交效果与当前设置行、`cancelledJobCount` 为 0（取消只发生在首次提交），同 ID 换内容返回 `IDEMPOTENCY_CONFLICT`。
+
+**本地日志是 §7.2 之外的第二条凭据路径**。契约只保证失败「不落库」，而提炼服务的文件注释把「原始诊断只进本地日志」当成安全前提；但厂商异常文本常见形态是把 `Authorization: Bearer ...` 或带密钥的端点原样回显，六条 `console.error(describeError(error))` 因此会把密钥写进 `dev.log`，违反 AGENTS.md「日志不得记录密钥」。现在统一走 `diagnosticOf`：写日志前用同一份 `findSensitiveMemoryContent`（含本次已知凭据）检查，命中只留原因码，未命中也截断到 300 码点，顺带满足「避免无必要记录完整文档内容」。用例改造为抛出带 Bearer 凭据的异常，断言数据库与日志两侧都不出现该凭据。
+
+证据：`npm run verify` 退出码 0（lint＋format:check＋typecheck＋test＋build，Test Files 112 passed／Tests 1006 passed）；`memory-extraction-service.test.ts` 28 passed、`memory-extraction-repository.test.ts` 9、`register-ipc.test.ts` 26、`work-centered-memory.integration.test.ts` 10 全绿。契约 §5.6 与 §7.2 各补落点。代码提交 `f3eb029`。`mapError` 仍把部分异常文本作为 `MemoryError.message` 返回给界面展示，这是全仓既有口径而不是 WM 新增，本轮不单独改动提炼服务一处来打破一致性——若要收口应连同其它服务一起处理，留作待判定项。
