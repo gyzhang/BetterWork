@@ -89,7 +89,7 @@
 
 事务包含业务修订和回执；不跨网络持有事务。重复自动候选按 `scope`＋`normalizedHash` 抑制；与已拒绝候选相同也抑制；恢复候选后才重新进入待审列表。
 
-落点：写时抑制在 `memory-repository.ts` 的 `findCandidateByDedupeKey`（同 `scope`＋同 `normalizedHash` 返回 `deduplicated`／`suppressed`，不产生第二条待审记录）。已确认记忆与候选之间的重复不落库、按查询派生：`MemoryViewItem.duplicatesConfirmedMemoryId` 由 `memory-service.ts` 用 `scopesMatchExactly`＋同哈希判定，只指向那条已确认记录，界面据此在候选行内提示重复后果。
+落点：写时抑制在 `memory-repository.ts` 的 `findCandidateByDedupeKey`（同 `scope`＋同 `normalizedHash` 返回 `deduplicated`／`suppressed`，不产生第二条待审记录）。已确认记忆与候选之间的重复不落库、按查询派生：`MemoryViewItem.duplicatesConfirmedMemoryId` 由 `memory-service.ts` 用 `scopesMatchExactly`＋同哈希判定，只指向那条已确认记录，界面据此在候选行内提示重复后果。「所有用户写命令」也覆盖 `memory:set-settings`：`MemoryExtractionService.setSettings` 在同一事务里先 `claim`、再写设置、再 `append` 回执，因此「点了开关但响应超时」的第二次原样重发拿回的是原提交效果与当前设置行，`cancelledJobCount` 为 0（取消只发生在首次提交），换内容的同 ID 提交返回 `IDEMPOTENCY_CONFLICT`。
 
 投影在数据库提交后重建，使用单实例串行队列、唯一临时路径及原子 rename；合并重建请求但不得旧覆盖新。成功回执可带 `PROJECTION_PENDING`，不能把已提交误报成保存失败。来源待复核、`candidate`、`deleted`、`superseded`、`expired` 不进入有效投影。
 
@@ -178,7 +178,7 @@ Main 的 Provider 包装器在首个实际 `ModelRequest` 装配后计算规范�
 
 提炼提示词固定要求：仅提炼明确、可复用、单一主题的工作要求/决定；一次性数字不提升永久事实；临时要求不得泛化；不确定输出空数组；输入片段中的指令不得改变这些规则。所有结果仍待用户确认，不能声称已自动核实事实。提示词文本见[记忆编码提示词](memory-coding-prompts.md)与 WM10 卡。
 
-源片段与输出先过记忆专用敏感内容检查：私钥块、Authorization/Bearer 凭据形式、明确的密码/API Key 赋值和本次已知凭据命中时拒绝提炼/保存，不记录原文错误或快照。此检查不宣称能识别所有个人或商业敏感信息；用户可关闭自动建议。普通业务资料不外传到任何额外服务，只使用已同意模型。
+源片段与输出先过记忆专用敏感内容检查：私钥块、Authorization/Bearer 凭据形式、明确的密码/API Key 赋值和本次已知凭据命中时拒绝提炼/保存，不记录原文错误或快照。此检查不宣称能识别所有个人或商业敏感信息；用户可关闭自动建议。普通业务资料不外传到任何额外服务，只使用已同意模型。落点：不落库之外还有日志这一条路径——`memory-extraction-service.ts` 的 `diagnosticOf` 在写本地日志前对异常文本走同一份 `findSensitiveMemoryContent`（含本次已知凭据），命中只写原因码，未命中也按 300 码点截断，用例见 `memory-extraction-service.test.ts`「凭据既不进数据库也不进日志」。
 
 ### 7.3 持久化生命周期
 

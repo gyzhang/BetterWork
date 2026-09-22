@@ -123,6 +123,7 @@ describe('registerIpc', () => {
     const memoryExtractions = new MemoryExtractionService({
       jobs: store.memoryExtractions,
       memories: store.memories,
+      operations: store.memoryOperations,
       transaction: <TBody>(body: () => TBody): TBody => store.transaction(body),
       sources: { readSource: () => undefined },
       modelFactory: {

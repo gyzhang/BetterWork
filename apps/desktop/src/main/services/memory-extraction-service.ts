@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type {
   ModelFinishReason,
   ModelProvider,
@@ -33,6 +35,7 @@ import {
   type Result,
   type RetryMemoryJobRequest,
   type SetMemorySettingsRequest,
+  stableStringifyJson,
   type WorkspaceMemorySettings,
 } from '@betterwork/agent-protocol';
 
@@ -43,6 +46,10 @@ import {
   MemoryJobStateConflictError,
   MemoryQueueFullError,
 } from '../persistence/memory-extraction-repository';
+import {
+  MemoryIdempotencyConflictError,
+  type MemoryOperationRepository,
+} from '../persistence/memory-operation-repository';
 import {
   MemoryConflictError,
   type MemoryRepository,
@@ -87,6 +94,9 @@ export const MEMORY_SUGGESTION_CONSENT_VERSION = 1;
 
 /** 模型未给 confidence 时候选缺省置信度：待用户审阅，不冒充已核实。 */
 const DEFAULT_CANDIDATE_CONFIDENCE = 0.6;
+
+/** 本地诊断的字数上界：日志不无必要复制完整响应体或文档。 */
+const DIAGNOSTIC_CODE_POINT_LIMIT = 300;
 
 /** 来源读取端口：Run 终态与讨论节点保存方在接线时实现（读已登记实体，不猜内容）。 */
 export interface ExtractionRunSourceRecord {
@@ -134,6 +144,8 @@ export interface ExtractionModelResolver {
 export interface MemoryExtractionServiceOptions {
   readonly jobs: MemoryExtractionRepository;
   readonly memories: MemoryRepository;
+  /** §5.6：设置写命令也要幂等，回执由本服务在同一事务里补写。 */
+  readonly operations: MemoryOperationRepository;
   /** 候选写入、去重统计与作业成功终态必须在同一事务里提交（§7.3）。 */
   readonly transaction: <TBody>(body: () => TBody) => TBody;
   readonly sources: ExtractionSourceReader;
@@ -151,6 +163,10 @@ export interface MemoryExtractionRequestOutcome {
   readonly reason?: MemoryErrorCode;
   readonly jobId?: string;
 }
+
+/** §5.1：全仓只有一种请求哈希口径——稳定序列化后取 SHA-256。 */
+const requestHashOf = (value: unknown): string =>
+  createHash('sha256').update(stableStringifyJson(value)).digest('hex');
 
 const okResult = <TData>(data: TData): Result<TData> => ({ ok: true, data, warnings: [] });
 
@@ -200,6 +216,13 @@ const mapError = (error: unknown): MemoryError => {
   }
   if (error instanceof MemoryQueueFullError) {
     return domainError('QUEUE_FULL', describeError(error), true);
+  }
+  if (error instanceof MemoryIdempotencyConflictError) {
+    return domainError(
+      'IDEMPOTENCY_CONFLICT',
+      '该操作已以不同内容提交过，请使用新的操作标识重试。',
+      true,
+    );
   }
   if (error instanceof MemoryValidationError) {
     return domainError('NOT_FOUND', describeError(error));
@@ -456,6 +479,7 @@ type StreamOutcome =
 export class MemoryExtractionService {
   private readonly jobs: MemoryExtractionRepository;
   private readonly memories: MemoryRepository;
+  private readonly operations: MemoryOperationRepository;
   private readonly transaction: <TBody>(body: () => TBody) => TBody;
   private readonly sources: ExtractionSourceReader;
   private readonly modelFactory: ExtractionModelResolver;
@@ -475,6 +499,7 @@ export class MemoryExtractionService {
   constructor(options: MemoryExtractionServiceOptions) {
     this.jobs = options.jobs;
     this.memories = options.memories;
+    this.operations = options.operations;
     this.transaction = options.transaction;
     this.sources = options.sources;
     this.modelFactory = options.modelFactory;
@@ -493,29 +518,63 @@ export class MemoryExtractionService {
     }
   }
 
-  /** 开启必须携带当前同意版本；关闭在同一事务里取消本空间自动作业。 */
+  /**
+   * 开启必须携带当前同意版本；关闭在同一事务里取消本空间自动作业。
+   *
+   * §5.6 把设置也当作一次用户写命令：同 `operationId` ＋ 同请求哈希重放原提交效果，
+   * 因此「点了开关但响应超时」的第二次提交不会再取消一轮自动作业，也不会报修订冲突。
+   * 重放本身不再产生写入，所以 `cancelledJobCount` 为 0——取消只发生在首次提交里。
+   */
   async setSettings(input: SetMemorySettingsRequest): Promise<Result<MemorySettingsData>> {
     if (input.autoSuggestEnabled && input.consentVersion !== MEMORY_SUGGESTION_CONSENT_VERSION) {
       return errorResult(domainError('CONSENT_REQUIRED', '开启自动建议必须先确认当前同意版本。'));
     }
     try {
-      const outcome = this.jobs.applySettings({
-        workspaceId: input.workspaceId,
-        expectedRevision: input.expectedRevision,
-        autoSuggestEnabled: input.autoSuggestEnabled,
-        ...(input.consentVersion === undefined ? {} : { consentVersion: input.consentVersion }),
+      const requestHash = requestHashOf({ kind: 'set-settings', request: input });
+      const committed = this.transaction(() => {
+        const claim = this.operations.claim({
+          operationId: input.operationId,
+          operationKind: 'set-settings',
+          requestHash,
+        });
+        if (claim.kind === 'replay') {
+          // 重放不产生写入：取消数归零，展示状态读回当前那一行。
+          return {
+            effect: claim.operation.effect,
+            settings: this.jobs.getSettings(input.workspaceId),
+            cancelledJobCount: 0,
+          };
+        }
+        const outcome = this.jobs.applySettings({
+          workspaceId: input.workspaceId,
+          expectedRevision: input.expectedRevision,
+          autoSuggestEnabled: input.autoSuggestEnabled,
+          ...(input.consentVersion === undefined ? {} : { consentVersion: input.consentVersion }),
+        });
+        this.operations.append({
+          operationId: input.operationId,
+          operationKind: 'set-settings',
+          requestHash,
+          effect: outcome.effect,
+          committedRevisionIds: [],
+        });
+        return {
+          effect: outcome.effect,
+          settings: outcome.settings,
+          cancelledJobCount: outcome.cancelledJobCount,
+        };
       });
       const receipt = memorySettingsWriteReceiptSchema.parse({
         operationId: input.operationId,
         commit: 'committed',
-        effect: outcome.effect,
+        effect: committed.effect,
         committedRevisionIds: [],
         projectionState: 'synced',
-        currentSettings: outcome.settings,
+        currentSettings: committed.settings,
       });
       return okResult<MemorySettingsData>({
         receipt,
-        cancelledJobCount: outcome.cancelledJobCount,
+        cancelledJobCount: committed.cancelledJobCount,
       });
     } catch (error) {
       return errorResult(mapError(error));
@@ -629,9 +688,26 @@ export class MemoryExtractionService {
     return this.jobs.interruptLeftoverJobs(this.now());
   }
 
+  /**
+   * 写本地日志前先过一遍凭据形态与本次已知凭据：命中就只留原因码。
+   * 契约 §7.2 已保证不落库，这里补的是「日志不得记录密钥」的另一半——异常文本
+   * 常见形态是把 `Authorization: Bearer ...` 或端点上的密钥原样回显。
+   */
+  private diagnosticOf(error: unknown): string {
+    const text = describeError(error);
+    const reasons = findSensitiveMemoryContent(text, this.knownSecrets());
+    if (reasons.length > 0) {
+      return `诊断已省略，命中敏感形态：${reasons.join('、')}`;
+    }
+    const codePoints = [...text];
+    return codePoints.length <= DIAGNOSTIC_CODE_POINT_LIMIT
+      ? text
+      : `${codePoints.slice(0, DIAGNOSTIC_CODE_POINT_LIMIT).join('')}…（已截断）`;
+  }
+
   private scheduleDrain(): void {
     void this.runPendingJobs().catch((error: unknown) => {
-      console.error('[memory-extraction] 队列排空失败：', describeError(error));
+      console.error('[memory-extraction] 队列排空失败：', this.diagnosticOf(error));
     });
   }
 
@@ -745,7 +821,7 @@ export class MemoryExtractionService {
       await this.runJob(job, controller);
     } catch (error) {
       // 执行器兜底：任何未收口异常都不能让作业停在 running 之外没有终态。
-      console.error('[memory-extraction] 作业执行异常：', describeError(error));
+      console.error('[memory-extraction] 作业执行异常：', this.diagnosticOf(error));
       this.finish(job, 'failed', 'MODEL_REQUEST_FAILED');
     } finally {
       this.activeControllers.delete(job.id);
@@ -815,7 +891,7 @@ export class MemoryExtractionService {
         this.finish(job, 'skipped', 'CREDENTIAL_UNAVAILABLE');
         return;
       }
-      console.error('[memory-extraction] 模型解析失败：', describeError(error));
+      console.error('[memory-extraction] 模型解析失败：', this.diagnosticOf(error));
       this.finish(job, 'failed', 'MODEL_REQUEST_FAILED');
       return;
     }
@@ -916,7 +992,7 @@ export class MemoryExtractionService {
         // 外部取消：终态应已先落库；再试一次并由 CAS 挡下迟到写。
         return { ok: false, kind: 'failed', code: 'CANCELLED' };
       }
-      console.error('[memory-extraction] 模型请求失败：', describeError(error));
+      console.error('[memory-extraction] 模型请求失败：', this.diagnosticOf(error));
       return { ok: false, kind: 'failed', code: 'MODEL_REQUEST_FAILED' };
     } finally {
       clearTimeout(timer);
@@ -1032,7 +1108,7 @@ export class MemoryExtractionService {
         // 迟到结果（已被取消或重试）：整笔事务回滚后静默收口，不覆盖新状态。
         return;
       }
-      console.error('[memory-extraction] 候选写入失败：', describeError(error));
+      console.error('[memory-extraction] 候选写入失败：', this.diagnosticOf(error));
       this.finish(job, 'failed', 'MODEL_REQUEST_FAILED');
     }
   }
@@ -1149,7 +1225,7 @@ export class MemoryExtractionService {
       else this.jobs.fail(patch);
     } catch (error) {
       if (error instanceof MemoryJobStateConflictError) return;
-      console.error('[memory-extraction] 终态写入失败：', describeError(error));
+      console.error('[memory-extraction] 终态写入失败：', this.diagnosticOf(error));
     }
   }
 }

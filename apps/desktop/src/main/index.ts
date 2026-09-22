@@ -116,6 +116,7 @@ function bootstrap(): ApplicationContext {
   const memoryExtractions = new MemoryExtractionService({
     jobs: store.memoryExtractions,
     memories: store.memories,
+    operations: store.memoryOperations,
     transaction: <TBody>(body: () => TBody): TBody => store.transaction(body),
     sources: createStoreExtractionSourceReader(store),
     modelFactory: modelProviderFactory,

@@ -9,11 +9,12 @@ import type {
   MemoryRecord,
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { openAppDatabase } from '../db';
 import { CredentialError } from '../persistence/credential-repository';
 import { MemoryExtractionRepository } from '../persistence/memory-extraction-repository';
+import { MemoryOperationRepository } from '../persistence/memory-operation-repository';
 import { MemoryRepository } from '../persistence/memory-repository';
 import { RunRepository } from '../persistence/run-repository';
 import { TaskRepository } from '../persistence/task-repository';
@@ -169,6 +170,7 @@ const makeFixture = (
   const service = new MemoryExtractionService({
     jobs,
     memories,
+    operations: new MemoryOperationRepository(db),
     transaction: <TBody>(body: () => TBody): TBody => db.transaction(body)(),
     sources: {
       readSource: (source) =>
@@ -415,6 +417,43 @@ describe('MemoryExtractionService 设置（WM09 §7.3）', () => {
     if (!off.ok) return;
     expect(off.data.cancelledJobCount).toBe(1);
     expect(harness.jobs.get(jobId)?.status).toBe('cancelled');
+  });
+
+  it('开关设置重复提交同一 operationId 时重放原回执，不再取消第二轮作业', async () => {
+    const harness = makeFixture();
+    await enableAutoSuggest(harness);
+    const jobId = seedQueuedJob(harness, { consentRevision: MEMORY_SUGGESTION_CONSENT_VERSION });
+    const request = {
+      operationId: randomUUID(),
+      workspaceId: harness.workspaceId,
+      expectedRevision: 1,
+      autoSuggestEnabled: false,
+    } as const;
+
+    const first = await harness.service.setSettings(request);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.data.cancelledJobCount).toBe(1);
+
+    // §5.6：响应超时后原样重发要拿回原提交效果，而不是把陈旧 expectedRevision 读成冲突。
+    const second = await harness.service.setSettings(request);
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.data.receipt.effect).toBe(first.data.receipt.effect);
+    expect(second.data.receipt.currentSettings.revision).toBe(2);
+    expect(second.data.cancelledJobCount).toBe(0);
+    expect(harness.jobs.get(jobId)?.status).toBe('cancelled');
+
+    // 同一个幂等身份换内容＝两次不同写入，必须拒掉而不是覆盖第一次的同意记录。
+    const reused = await harness.service.setSettings({
+      ...request,
+      autoSuggestEnabled: true,
+      consentVersion: MEMORY_SUGGESTION_CONSENT_VERSION,
+    });
+    expect(reused.ok).toBe(false);
+    if (reused.ok) return;
+    expect(reused.error.code).toBe('IDEMPOTENCY_CONFLICT');
+    expect(harness.jobs.getSettings(harness.workspaceId).revision).toBe(2);
   });
 });
 
@@ -744,23 +783,34 @@ describe('MemoryExtractionService 执行与候选闭环（WM10 §7.2）', () => 
     expect(job?.errorCode).toBe('OUTPUT_LIMIT');
   });
 
-  it('Provider 抛错只落 MODEL_REQUEST_FAILED，原始异常不进数据库', async () => {
+  it('Provider 抛错只落 MODEL_REQUEST_FAILED，凭据既不进数据库也不进日志', async () => {
+    const secret = 'sk-provider-live-key-1234567890';
     const harness = makeFixture({
       behaviour: {
         kind: 'throw',
-        error: new Error('fetch failed: token=abc123'),
+        // 厂商错误体常见形态：把请求头原样回显，日志因此会成为第二条泄漏路径。
+        error: new Error(`fetch failed: Authorization: Bearer ${secret}`),
         beforeChunks: [],
       },
+      knownSecrets: [secret],
     });
-    await enableAutoSuggest(harness);
-    harness.putRunRecord();
-    const requested = await harness.service.requestExtractionForRun(RUN_ID);
-    if (!requested.ok) throw new Error('入队应成功');
-    await harness.service.runPendingJobs();
-    const job = harness.jobs.get(requested.data.jobId ?? '');
-    expect(job?.status).toBe('failed');
-    expect(job?.errorCode).toBe('MODEL_REQUEST_FAILED');
-    expect(JSON.stringify(job)).not.toContain('abc123');
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      await enableAutoSuggest(harness);
+      harness.putRunRecord();
+      const requested = await harness.service.requestExtractionForRun(RUN_ID);
+      if (!requested.ok) throw new Error('入队应成功');
+      await harness.service.runPendingJobs();
+      const job = harness.jobs.get(requested.data.jobId ?? '');
+      expect(job?.status).toBe('failed');
+      expect(job?.errorCode).toBe('MODEL_REQUEST_FAILED');
+      expect(JSON.stringify(job)).not.toContain(secret);
+      const output = logged.mock.calls.map((call) => call.join(' ')).join('\n');
+      expect(output).toContain('诊断已省略');
+      expect(output).not.toContain(secret);
+    } finally {
+      logged.mockRestore();
+    }
   });
 });
 
