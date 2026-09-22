@@ -343,8 +343,10 @@ export const applyRecallBudget = (
 };
 
 /** 记录检索文本＝topicKey＋content（§6.1 第 5 条）。 */
-export const recallRecordText = (item: Pick<RecallItem, 'content' | 'topicKey'>): string =>
-  item.topicKey ? `${item.topicKey} ${item.content}` : item.content;
+export const recallRecordText = (item: {
+  readonly content: string;
+  readonly topicKey?: string | undefined;
+}): string => (item.topicKey ? `${item.topicKey} ${item.content}` : item.content);
 
 export const rankRecallItems = (
   query: readonly RecallToken[],

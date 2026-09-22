@@ -31,6 +31,7 @@ import { InputSnapshotService } from './services/input-snapshot-service';
 import { KnowledgeVault } from './services/knowledge-vault';
 import { McpClientService } from './services/mcp-client-service';
 import { MemoryExtractionService } from './services/memory-extraction-service';
+import { MemoryRecallService } from './services/memory-recall-service';
 import { MemoryService } from './services/memory-service';
 import { ModelProviderFactory } from './services/model-provider-factory';
 import { NotificationService } from './services/notification-service';
@@ -46,6 +47,8 @@ import { type BuiltinReleaseManifest, SkillService } from './services/skill-serv
 import { TaskMaterialService } from './services/task-material-service';
 import { ToolchainSnapshotService } from './services/toolchain-snapshot-service';
 import { WebFetchService } from './services/web-fetch-service';
+import { WorkspaceBriefService } from './services/workspace-memory-brief-service';
+import { WorkspaceReferenceService } from './services/workspace-reference-service';
 import { createMainWindow } from './window';
 
 /**
@@ -130,6 +133,9 @@ function bootstrap(): ApplicationContext {
   });
   const taskMaterials = new TaskMaterialService({ store, knowledgeVault, inputSnapshots });
   const discussionCheckpoints = new DiscussionCheckpointService(store, memoryExtractions);
+  const memoryRecall = new MemoryRecallService({ store });
+  const workspaceBrief = new WorkspaceBriefService({ store });
+  const workspaceReferences = new WorkspaceReferenceService({ store });
   inputSnapshots
     .recover()
     .then((recovered) => {
@@ -305,7 +311,7 @@ function bootstrap(): ApplicationContext {
     dependencies,
     inputSnapshots,
     taskMaterials,
-    memories,
+    memoryExtractions,
     mcpClientService,
     (url, signal) => webFetchService.fetch(url, signal),
     officeParser,
@@ -319,7 +325,10 @@ function bootstrap(): ApplicationContext {
     taskMaterials,
     discussionCheckpoints,
     memories,
+    memoryRecall,
     memoryExtractions,
+    workspaceBrief,
+    workspaceReferences,
     mcpClientService,
     notifications,
     runs,

@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import type { MemoryRecord, MemoryScope } from '@betterwork/agent-protocol';
 import { IpcChannel } from '@betterwork/agent-protocol';
 import type { WebFetch } from '@betterwork/tool-runtime';
 import type { BrowserWindow } from 'electron';
@@ -153,7 +155,7 @@ const createService = (
     undefined,
     fixture.inputSnapshots,
     fixture.taskMaterials,
-    fixture.memories,
+    undefined,
     mcpClientService,
     webFetch,
     officeParser,
@@ -206,18 +208,39 @@ const saveSingleMaterialContext = async (fixture: Fixture, content: string) => {
   });
 };
 
+/** 走 memory:create 的真实写入链路：confirmed 记忆必须连同 operation 回执一起落库，来源才可解析。 */
+const confirmedMemory = async (
+  fixture: Fixture,
+  scope: MemoryScope,
+  content: string,
+): Promise<MemoryRecord> => {
+  const receipt = await fixture.memories.create({
+    operationId: randomUUID(),
+    content,
+    facet: 'method',
+    scope,
+    asUserInstruction: true,
+    // §5.4：user / expert 作用域跨工作区生效，必须同时勾选通用声明。
+    ...(scope.kind === 'user' || scope.kind === 'expert' ? { genericDeclaration: true } : {}),
+  });
+  if (!receipt.ok) throw new Error(`记忆写入失败：${receipt.error.code}`);
+  const revisionId = receipt.data.committedRevisionIds[0];
+  const record =
+    revisionId === undefined ? undefined : fixture.store.memories.getRevision(revisionId);
+  if (!record) throw new Error('记忆修订未落库。');
+  return record;
+};
+
 describe('RunService', () => {
-  it('injects confirmed workspace memories and records their exact revisions', async () => {
+  it('records the recalled revisions and the three-phase request audit', async () => {
     const fixture = await createFixture();
     const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
     if (!workspaceId) throw new Error('workspace missing');
-    const memory = fixture.store.memories.create({
-      scope: { kind: 'workspace', workspaceId },
-      kind: 'procedural',
-      content: '经营月报必须先核对财务规则。',
-      sourceType: 'user-explicit',
-      status: 'confirmed',
-    });
+    const memory = await confirmedMemory(
+      fixture,
+      { kind: 'workspace', workspaceId },
+      '经营分析先核对回款金额口径。',
+    );
     const service = createService(fixture);
     const runId = service.start({
       taskId: fixture.taskId,
@@ -227,10 +250,17 @@ describe('RunService', () => {
     await waitForCompletion(fixture, runId);
 
     expect(statusOf(fixture, runId)).toBe('completed');
-    expect(fixture.store.memories.listReads(runId)).toEqual([memory]);
+    const context = fixture.store.runMemoryContexts.get(runId);
+    expect(context?.selectedItems.map((item) => item.revisionId)).toEqual([memory.revisionId]);
+    // selected→request-prepared→dispatch-attempted 只由真实发包推进（契约 §6.4）。
+    expect(context?.phase).toBe('dispatch-attempted');
+    expect((context?.requestHash ?? '').length).toBeGreaterThan(20);
+    expect(
+      fixture.store.memories.listMemoryReads(runId).map((read) => read.memoryRevisionId),
+    ).toEqual([memory.revisionId]);
   });
 
-  it('injects only memories applicable to the selected Expert and Workspace', async () => {
+  it('recalls only memories whose scope applies to the selected Expert and Workspace', async () => {
     const fixture = await createFixture();
     const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
     if (!workspaceId) throw new Error('workspace missing');
@@ -267,43 +297,33 @@ describe('RunService', () => {
       '其他工作区',
     );
     const applicable = [
-      fixture.store.memories.create({
-        scope: { kind: 'workspace', workspaceId },
-        kind: 'procedural',
-        content: '当前工作区规则。',
-        sourceType: 'user-explicit',
-        status: 'confirmed',
-      }),
-      fixture.store.memories.create({
-        scope: { kind: 'expert', expertId: expert.id },
-        kind: 'semantic',
-        content: '经营分析专家通用方法。',
-        sourceType: 'user-explicit',
-        status: 'confirmed',
-      }),
-      fixture.store.memories.create({
-        scope: { kind: 'expert-workspace', expertId: expert.id, workspaceId },
-        kind: 'procedural',
-        content: '本公司经营分析方法。',
-        sourceType: 'user-explicit',
-        status: 'confirmed',
-      }),
+      await confirmedMemory(
+        fixture,
+        { kind: 'workspace', workspaceId },
+        '当前工作区的经营分析口径。',
+      ),
+      await confirmedMemory(
+        fixture,
+        { kind: 'expert', expertId: expert.id },
+        '专家通用经营分析方法。',
+      ),
+      await confirmedMemory(
+        fixture,
+        { kind: 'expert-workspace', expertId: expert.id, workspaceId },
+        '本公司经营分析方法沉淀。',
+      ),
     ];
     const excluded = [
-      fixture.store.memories.create({
-        scope: { kind: 'expert', expertId: otherExpert.id },
-        kind: 'semantic',
-        content: '其他专家的记忆。',
-        sourceType: 'user-explicit',
-        status: 'confirmed',
-      }),
-      fixture.store.memories.create({
-        scope: { kind: 'expert-workspace', expertId: expert.id, workspaceId: otherWorkspace.id },
-        kind: 'procedural',
-        content: '其他工作区的记忆。',
-        sourceType: 'user-explicit',
-        status: 'confirmed',
-      }),
+      await confirmedMemory(
+        fixture,
+        { kind: 'expert', expertId: otherExpert.id },
+        '其他专家的经营分析方法。',
+      ),
+      await confirmedMemory(
+        fixture,
+        { kind: 'expert-workspace', expertId: expert.id, workspaceId: otherWorkspace.id },
+        '其他工作区的经营分析方法。',
+      ),
     ];
     const context = fixture.store.taskContexts.save(fixture.taskId, {
       executor: {
@@ -324,25 +344,24 @@ describe('RunService', () => {
     await waitForCompletion(fixture, runId);
 
     expect(statusOf(fixture, runId)).toBe('completed');
-    expect(fixture.store.memories.listReads(runId).map((memory) => memory.id)).toEqual(
-      expect.arrayContaining(applicable.map((memory) => memory.id)),
+    const selected = (fixture.store.runMemoryContexts.get(runId)?.selectedItems ?? []).map(
+      (item) => item.revisionId,
     );
-    expect(fixture.store.memories.listReads(runId).map((memory) => memory.id)).not.toEqual(
-      expect.arrayContaining(excluded.map((memory) => memory.id)),
-    );
+    expect(selected.sort()).toEqual(applicable.map((record) => record.revisionId).sort());
+    for (const record of excluded) {
+      expect(selected).not.toContain(record.revisionId);
+    }
   });
 
   it('honors a TaskContext memory exclusion for only the next run', async () => {
     const fixture = await createFixture();
     const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
     if (!workspaceId) throw new Error('workspace missing');
-    const memory = fixture.store.memories.create({
-      scope: { kind: 'workspace', workspaceId },
-      kind: 'semantic',
-      content: '本任务暂不参考。',
-      sourceType: 'user-explicit',
-      status: 'confirmed',
-    });
+    const memory = await confirmedMemory(
+      fixture,
+      { kind: 'workspace', workspaceId },
+      '本任务暂不参考的经营分析口径。',
+    );
     const context = fixture.store.taskContexts.save(fixture.taskId, {
       executor: { kind: 'general' },
       skillBindings: [],
@@ -352,13 +371,66 @@ describe('RunService', () => {
     const runId = service.start({
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
-      prompt: '不使用这条记忆。',
+      prompt: '不使用这条记忆的经营分析。',
       taskContextRevisionId: context.id,
       expectedTaskContextRevision: context.revision,
     });
     await waitForCompletion(fixture, runId);
 
-    expect(fixture.store.memories.listReads(runId)).toEqual([]);
+    const snapshot = fixture.store.runMemoryContexts.get(runId);
+    expect(snapshot?.selectedItems).toEqual([]);
+    expect((snapshot?.decisionSummary.exclusions ?? []).map((entry) => entry.reason)).toContain(
+      'task-excluded',
+    );
+    expect(fixture.store.memories.listMemoryReads(runId)).toEqual([]);
+  });
+
+  it('replays the previous run and stops when a recalled memory is revised', async () => {
+    const fixture = await createFixture();
+    const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+    if (!workspaceId) throw new Error('workspace missing');
+    const memory = await confirmedMemory(
+      fixture,
+      { kind: 'workspace', workspaceId },
+      '经营分析先核对回款金额口径。',
+    );
+    const service = createService(fixture);
+    const first = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '准备本月经营分析。',
+    });
+    await waitForCompletion(fixture, first);
+    expect(statusOf(fixture, first)).toBe('completed');
+
+    const second = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '把经营分析结论整理成段落。',
+    });
+    await waitForCompletion(fixture, second);
+    const replayed = fixture.store.runMemoryContexts.get(second)?.replay ?? [];
+    expect(replayed.map((entry) => (entry.replayed ? entry.runId : 'skipped'))).toEqual([first]);
+
+    // 记忆一换修订，依赖它的历史轮次就不再重放，也不能跨过它拼更早的对话（契约 §6.3）。
+    const revised = await fixture.memories.update({
+      operationId: randomUUID(),
+      id: memory.id,
+      expectedRevision: memory.revision,
+      patch: { content: '经营分析先核对签约金额口径。' },
+    });
+    if (!revised.ok) throw new Error(`记忆修订失败：${revised.error.code}`);
+    const third = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '再核对一次经营分析口径。',
+    });
+    await waitForCompletion(fixture, third);
+    const blocked = fixture.store.runMemoryContexts.get(third)?.replay ?? [];
+    expect(
+      blocked.every((entry) => !entry.replayed),
+      JSON.stringify(blocked),
+    ).toBe(true);
   });
 
   it('records local knowledge search results as task evidence', async () => {

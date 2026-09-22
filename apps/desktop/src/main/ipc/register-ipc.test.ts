@@ -96,6 +96,9 @@ describe('registerIpc', () => {
       await import('../services/discussion-checkpoint-service');
     const { MemoryService } = await import('../services/memory-service');
     const { MemoryExtractionService } = await import('../services/memory-extraction-service');
+    const { MemoryRecallService } = await import('../services/memory-recall-service');
+    const { WorkspaceBriefService } = await import('../services/workspace-memory-brief-service');
+    const { WorkspaceReferenceService } = await import('../services/workspace-reference-service');
     const { McpClientService } = await import('../services/mcp-client-service');
     const { fakePptxRenderer } = await import('../infrastructure/fixtures/fake-pptx-renderer');
     const { FakeDownloader, FakeFileSystem, FakePythonRunner, scenarioOf } =
@@ -129,6 +132,9 @@ describe('registerIpc', () => {
       },
     });
     const mcpClientService = new McpClientService(store);
+    const memoryRecall = new MemoryRecallService({ store });
+    const workspaceBrief = new WorkspaceBriefService({ store });
+    const workspaceReferences = new WorkspaceReferenceService({ store });
 
     // 依赖通道用离线替身根：不触网、不碰系统 Python，也不写受管目录之外的位置。
     const fakeFilesystem = new FakeFileSystem();
@@ -183,7 +189,10 @@ describe('registerIpc', () => {
       taskMaterials,
       discussionCheckpoints,
       memories,
+      memoryRecall,
       memoryExtractions,
+      workspaceBrief,
+      workspaceReferences,
       mcpClientService,
       notifications,
       runs,

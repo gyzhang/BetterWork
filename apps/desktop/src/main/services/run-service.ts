@@ -2,13 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 
-import type { AgentTool, ModelProvider, SkillInstruction } from '@betterwork/agent-core';
-import {
-  describeError,
-  FakeModelProvider,
-  OpenAICompatibleProvider,
-  ReActAgentEngine,
-} from '@betterwork/agent-core';
+import type { AgentTool, SkillInstruction } from '@betterwork/agent-core';
+import { describeError, FakeModelProvider, ReActAgentEngine } from '@betterwork/agent-core';
 import type {
   AgentMessage,
   AgentRuntimeEvent,
@@ -18,13 +13,16 @@ import type {
   ExpertModelReference,
   MaterialReference,
   McpToolBinding,
-  MemoryRecord,
   RuntimeProfileCommand,
   ScriptExecution,
   StartRunRequest,
   TaskMaterialSelection,
 } from '@betterwork/agent-protocol';
-import { IpcChannel, materialReferenceSchema } from '@betterwork/agent-protocol';
+import {
+  IpcChannel,
+  materialReferenceSchema,
+  memoryRecallPolicyV1,
+} from '@betterwork/agent-protocol';
 import {
   type ArtifactFileRegistrar,
   type ArtifactReader,
@@ -66,6 +64,7 @@ import {
   type CredentialOwnerRef,
   type InputSnapshot,
   materialReferenceKey,
+  type MemoryReadInput,
 } from '../persistence';
 import { API_KEY_SLOT, CredentialError } from '../persistence/credential-repository';
 import type { CredentialResolver } from './credential-access';
@@ -73,7 +72,15 @@ import type { FileArtifactService } from './file-artifact-service';
 import type { InputSnapshotService } from './input-snapshot-service';
 import type { KnowledgeVault } from './knowledge-vault';
 import type { McpClientService } from './mcp-client-service';
-import type { MemoryService } from './memory-service';
+import { withRunMemoryAudit } from './memory-dispatch-gate';
+import type { MemoryExtractionService } from './memory-extraction-service';
+import {
+  GENERAL_TASK_CONTEXT_REVISION_ID,
+  prepareRunMemoryDecision,
+  type RunMemoryPreparation,
+  taskTitleOf,
+} from './memory-recall-service';
+import { ModelProviderFactory, type ResolvedLanguageModel } from './model-provider-factory';
 import type { NotificationService } from './notification-service';
 import { preparePptAttempt } from './ppt-execution-attempt';
 import { adaptPptCommand } from './ppt-script-adaptation';
@@ -104,7 +111,6 @@ interface ResolvedRunContext {
   taskContextRevisionId?: string;
   expertId?: string;
   expertRevisionId?: string;
-  memoryRecords: MemoryRecord[];
   excludedMemoryIds: string[];
   mcpToolBindings: McpToolBinding[];
 }
@@ -362,6 +368,41 @@ const truncate = (value: string, max: number): string =>
   value.length <= max ? value : `${value.slice(0, max - 1)}…`;
 
 /**
+ * 直接注入与历史继承分别登记（契约 §8.1）：同一修订两者可同时成立，
+ * 但「本次读到」和「本次注入」必须是两个可区辨的事实。
+ */
+const memoryReadInputs = (
+  store: AppStore,
+  runId: string,
+  memory: RunMemoryPreparation,
+): MemoryReadInput[] => {
+  const capturedAt = Date.now();
+  const replayedViaRunIds = memory.replay
+    .filter((entry) => entry.replayed)
+    .map((entry) => entry.runId);
+  const reads: MemoryReadInput[] = memory.selectedRecords.map((record) => ({
+    runId,
+    memory: record,
+    capturedAt,
+    selectedForInjection: true,
+  }));
+  const direct = new Set(memory.selectedRecords.map((record) => record.revisionId));
+  for (const dependency of memory.memoryDependencyUnion) {
+    if (direct.has(dependency.revisionId)) continue;
+    const record = store.memories.getRevision(dependency.revisionId);
+    if (!record || replayedViaRunIds.length === 0) continue;
+    reads.push({
+      runId,
+      memory: record,
+      capturedAt,
+      selectedForInjection: false,
+      replayedViaRunIds,
+    });
+  }
+  return reads;
+};
+
+/**
  * 运行编排：选 Provider、选工具集、消费事件流。
  *
  * 两条不变量由本类负责：
@@ -388,7 +429,7 @@ export class RunService {
     private readonly dependencies?: SkillDependencyService,
     private readonly inputSnapshots?: InputSnapshotService,
     private readonly taskMaterials?: TaskMaterialService,
-    private readonly memories?: MemoryService,
+    private readonly memoryExtractions?: MemoryExtractionService,
     private readonly mcpClientService?: McpClientService,
     private readonly webFetch?: WebFetch,
     private readonly officeParser?: OfficeParserService,
@@ -400,17 +441,7 @@ export class RunService {
     if (!context) throw new Error('Session does not belong to task');
     const workspaceId = this.store.tasks.getWorkspaceId(input.taskId);
     if (!workspaceId) throw new Error('Task workspace does not exist');
-    const resolvedContext = this.resolveRunContext(input);
-    const executionContext: ResolvedRunContext = {
-      ...resolvedContext,
-      memoryRecords:
-        this.memories?.getApplicable(
-          workspaceId,
-          resolvedContext.expertId,
-          Date.now(),
-          resolvedContext.excludedMemoryIds,
-        ) ?? [],
-    };
+    const executionContext = this.resolveRunContext(input);
     const resolvedInput = {
       ...input,
       ...(executionContext.skillBindings ? { skillBindings: executionContext.skillBindings } : {}),
@@ -419,6 +450,20 @@ export class RunService {
     const runId = randomUUID();
     const controller = new AbortController();
     const contextSegmentId = this.resolveContextSegment(input.taskId, executionContext.materials);
+    // 召回、历史重放与审计指纹在同步事务里一次算清；抛错就没有这次 Run。
+    const memory = prepareRunMemoryDecision(this.store, {
+      workspaceId,
+      ...(executionContext.expertId ? { expertId: executionContext.expertId } : {}),
+      taskId: input.taskId,
+      runId,
+      taskContextRevisionId:
+        executionContext.taskContextRevisionId ?? GENERAL_TASK_CONTEXT_REVISION_ID,
+      evaluatedAt: Date.now(),
+      prompt: input.prompt,
+      materials: executionContext.materials,
+      excludedMemoryIds: executionContext.excludedMemoryIds,
+      taskTitle: taskTitleOf(this.store, input.taskId, workspaceId),
+    });
     this.activeRuns.set(runId, {
       taskId: input.taskId,
       prompt: input.prompt,
@@ -428,7 +473,7 @@ export class RunService {
       toolNames: new Map(),
       contextSegmentId,
       materialFacts: createMaterialFactLedger(
-        resolvedContext.materialScope && resolvedContext.materials.length > 0,
+        executionContext.materialScope && executionContext.materials.length > 0,
         input.prompt,
       ),
       markdownWrites: new Map(),
@@ -468,15 +513,20 @@ export class RunService {
           materials: executionContext.materials,
           createdAt: Date.now(),
         });
-        if (executionContext.memoryRecords.length > 0 && this.memories) {
-          this.memories.recordReads(
-            executionContext.memoryRecords.map((memory) => ({
-              runId,
-              memory,
-              capturedAt: Date.now(),
-            })),
-          );
-        }
+        this.store.runMemoryContexts.recordSelection({
+          runId,
+          evaluatedAt: memory.queryContext.evaluatedAt,
+          queryHash: memory.queryHash,
+          policySnapshot: memoryRecallPolicyV1,
+          selectedItems: memory.selectedItems,
+          replay: memory.replay,
+          materialDependencyUnion: memory.materialDependencyUnion,
+          memoryDependencyUnion: memory.memoryDependencyUnion,
+          decisionSummary: memory.decisionSummary,
+          authorizationHash: memory.authorizationHash,
+        });
+        const reads = memoryReadInputs(this.store, runId, memory);
+        if (reads.length > 0) this.store.memories.recordReads(reads);
         this.store.tasks.touch(input.taskId, Date.now());
       });
     } catch (error) {
@@ -491,6 +541,7 @@ export class RunService {
       context.workspacePath,
       controller,
       executionContext,
+      memory,
     )
       .catch((error: unknown) => {
         console.error(`Run ${runId} could not be finalized`, error);
@@ -553,13 +604,24 @@ export class RunService {
     workspacePath: string,
     controller: AbortController,
     executionContext: ResolvedRunContext,
+    memory: RunMemoryPreparation,
   ): Promise<void> {
     let terminalEvent: AgentRuntimeEvent | undefined;
     try {
       if (executionContext.materialScope && this.taskMaterials) {
         await this.taskMaterials.validateSelections(input.taskId, executionContext.materials);
       }
-      const model = await this.resolveModel(executionContext.modelReference);
+      const resolvedModel = await this.resolveLanguageModel(executionContext.modelReference);
+      const model = withRunMemoryAudit(resolvedModel.provider, {
+        runId,
+        sink: this.store.runMemoryContexts,
+        modelSnapshot: {
+          displayName: resolvedModel.displayName,
+          fingerprint: resolvedModel.fingerprint,
+          endpointDisplay: resolvedModel.endpointDisplay,
+          ...(resolvedModel.profileId ? { modelProfileId: resolvedModel.profileId } : {}),
+        },
+      });
       const webSearch = await this.resolveWebSearch();
       const allowedBuiltinToolNames = this.allowedBuiltinToolNames(
         executionContext.builtinToolPolicy,
@@ -578,13 +640,7 @@ export class RunService {
         sessionId: input.sessionId,
         prompt: input.prompt,
         workspacePath,
-        messages: this.buildPreviousMessages(
-          input.taskId,
-          runId,
-          executionContext.materialScope ? this.activeRuns.get(runId)?.contextSegmentId : undefined,
-          executionContext.memoryRecords,
-          executionContext.materials,
-        ),
+        messages: this.buildPreviousMessages(executionContext, memory),
         model,
         tools: createRunTools({
           knowledgeSearch: (query) => this.searchKnowledge(query, executionContext),
@@ -671,6 +727,7 @@ export class RunService {
         );
       }
       this.publish(terminalEvent);
+      if (terminalEvent.type === 'run.completed') this.requestRunExtraction(runId);
     } catch (error) {
       let message = describeError(error);
       try {
@@ -693,50 +750,43 @@ export class RunService {
   }
 
   /**
-   * 把同一 Task 下早于当前 Run 的已完成对话轮次重建为消息历史，
-   * 只取用户提问与助手最终回复，跳过工具调用细节以避免跨 Run 的工具 ID 配对问题。
+   * 契约 §7.3：排队失败绝不能把已成功的主 Run 改成失败，因此这里不 await，
+   * 只留下可解释的安全诊断；作业实际执行由提炼服务的排水循环负责。
+   */
+  private requestRunExtraction(runId: string): void {
+    const extractions = this.memoryExtractions;
+    if (!extractions) return;
+    void extractions
+      .requestExtractionForRun(runId)
+      .then((outcome) => {
+        if (!outcome.ok) {
+          console.warn(`[memory-extraction] Run ${runId} 提炼未入队：${outcome.error.code}`);
+        }
+      })
+      .catch((error: unknown) => {
+        console.error('[memory-extraction] Run 成功后入队失败：', describeError(error));
+      });
+  }
+
+  /**
+   * 组装模型可见的历史：记忆块＋**已判定可安全重放**的问答对＋本次材料清单。
+   *
+   * 历史不再由本类自行遍历 Run：哪些轮次可重放、在哪一轮截断、为什么，
+   * 全部来自 `prepareRunMemoryDecision` 与库里同一份快照（契约 §6.3）。
    */
   private buildPreviousMessages(
-    taskId: string,
-    currentRunId: string,
-    contextSegmentId?: string,
-    memoryRecords: readonly MemoryRecord[] = [],
-    materials: readonly TaskMaterialSelection[] = [],
+    executionContext: ResolvedRunContext,
+    memory: RunMemoryPreparation,
   ): AgentMessage[] {
-    const previousRuns = this.store.runs.listByTask(taskId).filter((run) => {
-      if (run.status !== 'completed' || run.id === currentRunId) return false;
-      if (!contextSegmentId) return true;
-      return this.store.runContextSnapshots.get(run.id)?.contextSegmentId === contextSegmentId;
-    });
-
     const messages: AgentMessage[] = [];
-    if (memoryRecords.length > 0) {
-      messages.push({
-        id: randomUUID(),
-        role: 'system',
-        content: [
-          '以下是本次任务可参考的长期记忆。它们来自用户管理的记忆记录，仅作为工作背景；如与本次任务材料或用户最新指示冲突，以后者为准。',
-          '',
-          ...memoryRecords.map(
-            (memory) => `- [${memory.kind}][${memory.scope.kind}] ${memory.content}`,
-          ),
-        ].join('\n'),
-      });
+    if (memory.memoryBlock) {
+      messages.push({ id: randomUUID(), role: 'system', content: memory.memoryBlock });
     }
-    for (const run of previousRuns) {
-      messages.push({ id: randomUUID(), role: 'user', content: run.prompt });
-
-      const events = this.store.runs.listEvents(run.id);
-      const completed = events.find(
-        (event): event is Extract<AgentRuntimeEvent, { type: 'message.completed' }> =>
-          event.type === 'message.completed',
-      );
-      if (completed?.content) {
-        messages.push({ id: randomUUID(), role: 'assistant', content: completed.content });
-      }
+    for (const turn of memory.historyMessages) {
+      messages.push({ id: randomUUID(), role: turn.role, content: turn.content });
     }
     // 放在旧对话之后、当前用户请求之前，避免旧助手回复遮蔽本次材料范围和事实边界。
-    const materialMessage = this.buildMaterialContextMessage(materials);
+    const materialMessage = this.buildMaterialContextMessage(executionContext.materials);
     if (materialMessage) messages.push(materialMessage);
     return messages;
   }
@@ -1387,27 +1437,15 @@ export class RunService {
     });
   }
 
-  /** 未配置语言模型时回落到教学 Provider，保证链路始终可复现。凭据迁移完成后走 credentials 解析。 */
-  private async resolveModel(reference?: ExpertModelReference): Promise<ModelProvider> {
-    if (reference?.mode === 'profile') {
-      const configured = this.store.models.getWithSecret(reference.modelProfileId);
-      if (!configured) throw new Error(`指定的模型配置不存在：${reference.modelProfileId}`);
-      if (!configured.enabled || configured.role !== 'language') {
-        throw new Error(`指定的模型配置不可用于语言模型运行：${configured.name}`);
-      }
-      const apiKey = await this.credentialSecret(
-        { ownerKind: 'model-profile', ownerId: configured.id, slot: API_KEY_SLOT },
-        configured.apiKey,
-      );
-      return new OpenAICompatibleProvider({ ...configured, apiKey });
-    }
-    const configured = this.store.models.getForRun('language');
-    if (!configured) return this.fallbackModel;
-    const apiKey = await this.credentialSecret(
-      { ownerKind: 'model-profile', ownerId: configured.id, slot: API_KEY_SLOT },
-      configured.apiKey,
-    );
-    return new OpenAICompatibleProvider({ ...configured, apiKey });
+  /** 语言模型解析统一走 Main 内共享工厂；未配置时保持既有的教学 Provider 回落（契约 §7.1）。 */
+  private async resolveLanguageModel(
+    reference?: ExpertModelReference,
+  ): Promise<ResolvedLanguageModel> {
+    return new ModelProviderFactory({
+      models: this.store.models,
+      ...(this.credentialAccess ? { credentialAccess: this.credentialAccess } : {}),
+      fallbackProvider: this.fallbackModel,
+    }).resolveForRun(reference);
   }
 
   /**
@@ -1442,7 +1480,6 @@ export class RunService {
         ...(input.skillBindings ? { skillBindings: input.skillBindings } : {}),
         materials: [],
         materialScope: false,
-        memoryRecords: [],
         excludedMemoryIds: [],
         mcpToolBindings: [],
       };
@@ -1465,7 +1502,6 @@ export class RunService {
         materials: context.materials ?? [],
         materialScope: true,
         taskContextRevisionId: context.id,
-        memoryRecords: [],
         excludedMemoryIds: context.excludedMemoryIds ?? [],
         mcpToolBindings: context.mcpToolBindings ?? [],
       };
@@ -1488,7 +1524,6 @@ export class RunService {
       taskContextRevisionId: context.id,
       expertId: context.executor.expertId,
       expertRevisionId: context.executor.expertRevisionId,
-      memoryRecords: [],
       excludedMemoryIds: context.excludedMemoryIds ?? [],
       mcpToolBindings: context.mcpToolBindings ?? [],
     };

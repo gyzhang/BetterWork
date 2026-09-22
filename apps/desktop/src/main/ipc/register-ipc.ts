@@ -53,6 +53,7 @@ import {
   getMcpConnectionRequestSchema,
   getMemoryRequestSchema,
   getMemorySettingsRequestSchema,
+  getRunMemoryContextRequestSchema,
   getSkillRequestSchema,
   getTaskContextRequestSchema,
   importSkillRequestSchema,
@@ -76,6 +77,7 @@ import {
   listSkillsRequestSchema,
   listTaskMaterialCandidatesRequestSchema,
   listTasksRequestSchema,
+  listWorkspaceReferenceVersionsRequestSchema,
   markAllNotificationsReadRequestSchema,
   markNotificationReadRequestSchema,
   materialCandidateSchema,
@@ -87,7 +89,10 @@ import {
   memoryJobListDataSchema,
   memoryJobSummarySchema,
   memoryListPageDataSchema,
+  memoryPreviewDataSchema,
   memoryProjectionStateDataSchema,
+  memoryReferenceWriteReceiptSchema,
+  memoryRunContextDataSchema,
   memorySettingsDataSchema,
   memoryViewItemSchema,
   memoryWriteReceiptSchema,
@@ -102,6 +107,7 @@ import {
   prepareDependencyRequestSchema,
   prepareDependencyResultSchema,
   prepareWorkspaceInputSnapshotRequestSchema,
+  previewMemoryRequestSchema,
   rebuildMemoryProjectionRequestSchema,
   recentTaskSummarySchema,
   refreshKnowledgeDocumentRequestSchema,
@@ -113,6 +119,7 @@ import {
   registerToolchainResultSchema,
   removedResultSchema,
   removeKnowledgeDocumentRequestSchema,
+  removeWorkspaceReferenceVersionRequestSchema,
   resolveMemoryConflictRequestSchema,
   resultSchema,
   retryMemoryJobRequestSchema,
@@ -135,6 +142,7 @@ import {
   setModelEnabledRequestSchema,
   setSkillEnabledRequestSchema,
   setSkillTrustRequestSchema,
+  setWorkspaceReferenceVersionRequestSchema,
   skillDetailSchema,
   skillExportResultSchema,
   skillImportResultSchema,
@@ -154,7 +162,11 @@ import {
   updateWindowThemeRequestSchema,
   voidResultSchema,
   windowToggleMaximizeRequestSchema,
+  workspaceBriefSchema,
+  workspaceMemoryBriefRequestSchema,
   workspaceMemorySettingsSchema,
+  workspaceReferenceListDataSchema,
+  workspaceReferenceSetDataSchema,
   workspaceSummarySchema,
 } from '@betterwork/agent-protocol';
 import { type BrowserWindow, dialog, ipcMain, shell, systemPreferences } from 'electron';
@@ -171,6 +183,7 @@ import type { FileArtifactService } from '../services/file-artifact-service';
 import type { KnowledgeVault } from '../services/knowledge-vault';
 import type { McpClientService } from '../services/mcp-client-service';
 import type { MemoryExtractionService } from '../services/memory-extraction-service';
+import type { MemoryRecallService } from '../services/memory-recall-service';
 import type { MemoryService } from '../services/memory-service';
 import { probeModelConnection } from '../services/model-connectivity';
 import type { NotificationService } from '../services/notification-service';
@@ -183,6 +196,8 @@ import {
 import type { SkillService } from '../services/skill-service';
 import type { TaskMaterialService } from '../services/task-material-service';
 import type { ToolchainSnapshotService } from '../services/toolchain-snapshot-service';
+import type { WorkspaceBriefService } from '../services/workspace-memory-brief-service';
+import type { WorkspaceReferenceService } from '../services/workspace-reference-service';
 
 export interface IpcDependencies {
   readonly store: AppStore;
@@ -196,8 +211,12 @@ export interface IpcDependencies {
   readonly expertService: ExpertService;
   readonly discussionCheckpoints: DiscussionCheckpointService;
   readonly memories: MemoryService;
+  /** 召回与运行上下文都是纯读：预览绝不写 run_memory_reads（契约 §9.2）。 */
+  readonly memoryRecall: MemoryRecallService;
   /** 提炼设置与作业只影响候选生成，不阻塞任何 Run 终态。 */
   readonly memoryExtractions: MemoryExtractionService;
+  readonly workspaceBrief: WorkspaceBriefService;
+  readonly workspaceReferences: WorkspaceReferenceService;
   readonly mcpClientService: McpClientService;
   readonly dependencies: SkillDependencyService;
   readonly snapshots: ToolchainSnapshotService;
@@ -294,6 +313,7 @@ export function registerIpc(deps: IpcDependencies): void {
   registerExpertChannels(deps);
   registerDiscussionCheckpointChannels(deps);
   registerMemoryChannels(deps);
+  registerWorkspaceMemoryChannels(deps);
   registerMcpChannels(deps);
   registerDependencyChannels(deps);
   registerNotificationChannels(deps);
@@ -1175,7 +1195,11 @@ function registerExpertChannels({ expertService }: IpcDependencies): void {
   );
 }
 
-function registerMemoryChannels({ memories, memoryExtractions }: IpcDependencies): void {
+function registerMemoryChannels({
+  memories,
+  memoryExtractions,
+  memoryRecall,
+}: IpcDependencies): void {
   handleOptionalInput(
     IpcChannel.ListMemories,
     listMemoriesRequestSchema,
@@ -1214,6 +1238,19 @@ function registerMemoryChannels({ memories, memoryExtractions }: IpcDependencies
     resultSchema(memoryConflictResolutionDataSchema),
     async (input) => await memories.resolveConflict(input),
   );
+  // 召回查询是纯读：preview 不写 run_memory_reads，也不留下任何运行痕迹（契约 §9.2）。
+  handleInput(
+    IpcChannel.PreviewMemory,
+    previewMemoryRequestSchema,
+    resultSchema(memoryPreviewDataSchema),
+    (input) => memoryRecall.preview(input),
+  );
+  handleInput(
+    IpcChannel.GetRunMemoryContext,
+    getRunMemoryContextRequestSchema,
+    resultSchema(memoryRunContextDataSchema),
+    (input) => memoryRecall.runContext(input),
+  );
   handleInput(
     IpcChannel.GetMemorySettings,
     getMemorySettingsRequestSchema,
@@ -1249,6 +1286,37 @@ function registerMemoryChannels({ memories, memoryExtractions }: IpcDependencies
     rebuildMemoryProjectionRequestSchema,
     resultSchema(memoryProjectionStateDataSchema),
     async (input) => await memories.rebuildProjection(input),
+  );
+}
+
+/** 工作空间级的记忆派生视图：简报是当场重算的只读投影，参考版本是治理动作。 */
+function registerWorkspaceMemoryChannels({
+  workspaceBrief,
+  workspaceReferences,
+}: IpcDependencies): void {
+  handleInput(
+    IpcChannel.GetWorkspaceMemoryBrief,
+    workspaceMemoryBriefRequestSchema,
+    resultSchema(workspaceBriefSchema),
+    async (input) => await workspaceBrief.get(input),
+  );
+  handleInput(
+    IpcChannel.ListWorkspaceReferenceVersions,
+    listWorkspaceReferenceVersionsRequestSchema,
+    resultSchema(workspaceReferenceListDataSchema),
+    (input) => workspaceReferences.listReferenceVersions(input),
+  );
+  handleInput(
+    IpcChannel.SetWorkspaceReferenceVersion,
+    setWorkspaceReferenceVersionRequestSchema,
+    resultSchema(workspaceReferenceSetDataSchema),
+    (input) => workspaceReferences.setReferenceVersion(input),
+  );
+  handleInput(
+    IpcChannel.RemoveWorkspaceReferenceVersion,
+    removeWorkspaceReferenceVersionRequestSchema,
+    resultSchema(memoryReferenceWriteReceiptSchema),
+    (input) => workspaceReferences.removeReferenceVersion(input),
   );
 }
 
