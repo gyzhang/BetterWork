@@ -30,7 +30,7 @@ export const memoryConsentOffNotice =
 /** 同意对话框正文：代价、隐私与同意版本一次说清（§3.3）。 */
 export const memoryConsentDialogNotice = (enabled: boolean): string =>
   enabled
-    ? `${memoryConsentNotice} 记录同意版本 ${memoryConsentVersionLabel}。`
+    ? `${memoryConsentNotice} 确认即记录为${memoryConsentVersionLabel}。`
     : memoryConsentOffNotice;
 
 /** 开关下方常驻的一行状态说明；长文案只在对话框里出现一次。 */

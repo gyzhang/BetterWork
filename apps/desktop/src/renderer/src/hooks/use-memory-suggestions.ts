@@ -72,22 +72,23 @@ export function useMemorySuggestions(query: MemorySuggestionQuery): MemorySugges
   const { toast, showToast, dismissToast } = useTransientToast();
   // 一次「代」＝ 一次可见的作用域装载。用户改开关或取消作业都会换代，
   // 于是上一代的迟到响应不可能把已经作废的「成功」写回界面。
-  const generation = useRef({ key: '', request: 0 });
+  // 同一代之内的并发读取（设置＋作业＋候选）都算当次装载，不能互相顶掉：
+  // 计数器一旦按「每次请求」递增，一次 refresh 里只有最后返回的那条被接受。
+  const generation = useRef({ key: '', token: 0 });
   const scopeKey = `${workspaceId ?? '-'}|${taskId ?? '-'}`;
 
   const beginRequest = useCallback(
-    (key: string): { requestId: number; requestKey: string } | undefined => {
+    (key: string): { token: number; requestKey: string } | undefined => {
       if (!visible || workspaceId === undefined) return undefined;
-      generation.current.request += 1;
       generation.current.key = key;
-      return { requestId: generation.current.request, requestKey: key };
+      return { token: generation.current.token, requestKey: key };
     },
     [visible, workspaceId],
   );
 
-  const isFresh = (guard: { requestId: number; requestKey: string } | undefined): boolean =>
+  const isFresh = (guard: { token: number; requestKey: string } | undefined): boolean =>
     guard !== undefined &&
-    generation.current.request === guard.requestId &&
+    generation.current.token === guard.token &&
     generation.current.key === guard.requestKey;
 
   const loadSettings = useCallback((): void => {
@@ -172,7 +173,7 @@ export function useMemorySuggestions(query: MemorySuggestionQuery): MemorySugges
 
   useEffect(() => {
     // 换空间或换可见性：先清空，避免上一处的候选与设置留在屏幕上。
-    generation.current = { key: '', request: generation.current.request + 1 };
+    generation.current = { key: '', token: generation.current.token + 1 };
     setSettings(undefined);
     setSettingsError('');
     setJobs([]);
@@ -223,7 +224,7 @@ export function useMemorySuggestions(query: MemorySuggestionQuery): MemorySugges
       );
       setSavingSettings(false);
       // 开关一变即作废上一代在途轮询：关闭后不得再把迟到的「成功」写回界面。
-      generation.current = { key: '', request: generation.current.request + 1 };
+      generation.current = { key: '', token: generation.current.token + 1 };
       if (!enabled) {
         // 关闭只停止此后的自动提炼并取消本空间未完成作业：作业行立刻收回，
         // 已确认记忆与历史候选都不动（`memoryConsentOffNotice` 的承诺）。
@@ -251,7 +252,7 @@ export function useMemorySuggestions(query: MemorySuggestionQuery): MemorySugges
       ) => Promise<Awaited<ReturnType<(typeof window.betterwork)['memories']['retryJob']>>>,
     ): Promise<void> => {
       const operationId = crypto.randomUUID();
-      generation.current = { key: '', request: generation.current.request + 1 };
+      generation.current = { key: '', token: generation.current.token + 1 };
       const outcome = await settleMemoryCall(call(operationId), `${label}失败，请重试。`);
       if (outcome.ok) showToast('success', `${label}已提交。`);
       else showToast('error', outcome.message);
