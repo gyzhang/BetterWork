@@ -147,10 +147,10 @@ WM00 拆分为五份明确产物：
 
 ### WM06：安全历史与请求接线
 
-- 文件：run-history-policy、run-memory-audit、RunService、TaskContext 最新版本校验、memory:run-context/preview 接线、必要 preload。
+- 文件：run-history-policy、RunService、TaskContext 最新版本校验、memory:run-context/preview 接线、必要 preload。契约 §11 拟新增的 `run-memory-audit.ts` **未单独建文件**，审计事实由 `run-memory-context-repository.ts`、`run-history-policy.ts`、`memory-dispatch-gate.ts`、`memory-recall-service.ts` 承载（见 §15.3 的「契约 §11 偏离」一条）。
 - 将新旧入口统一到明确材料范围；最后最终回答、时间边界、传递依赖、连续安全后缀；Provider 包装器记录真实 request-prepared/dispatch-attempted。
 - Given 旧记忆撤销或材料替换，Then 实际 Provider 输入无相关旧历史；Given 只是预算落选或材料增加，Then 保留仍安全历史；Given 并发未来轮次，Then 不纳入；Given 审计失败，Then 不调用 Provider。
-- 定向：run-history-policy.test.ts、run-memory-audit.test.ts、run-service.test.ts、register-ipc.test.ts；必须断言请求 messages，不只断言 segmentId。
+- 定向：run-history-policy.test.ts、run-memory-context-repository.test.ts、memory-dispatch-gate.test.ts、run-service.test.ts、register-ipc.test.ts；必须断言请求 messages，不只断言 segmentId。
 
 ### WM07：人工治理及透明展示
 
@@ -581,3 +581,15 @@ Spec §15 是 WM00 的验收面，此前只按「文档已归档」处理，本�
 方法上的收获：命中数低不等于缺覆盖（关键词假阴性），命中数高也不等于覆盖到位（简报层有用例不能替代召回层）。判定只看一件事——**契约里那条分支有没有用例走过**，这一轮就是靠这条标准抓出召回层两个零覆盖分支的。
 
 验证：`npx eslint` 与 `npx prettier --check` 通过；`npm run typecheck` 退出码 0；`npm run verify` 退出码 0（Test Files 112 passed／Tests 1008 passed，较上一轮 1006 净增 2）；无表结构与协议变化，故无迁移用例。
+
+### 15.24 逐卡完成定义与定向清单核对（2026-09-23 05:57）
+
+§12 的 16 张卡各自写着「文件／Given-Then／定向测试」三件套，但卡片标 done 之后没人回验过它点名的文件真的存在、定向命令真能跑。本轮把 WM01–WM15 卡片里点名的 32 个测试文件名与全部生产文件名逐个回落到仓库：
+
+**一处真缺陷，已改。** WM06 的「文件」行仍列 `run-memory-audit`、「定向」行仍写 `run-memory-audit.test.ts`，而这个文件从未建立——审计事实实际由 `run-memory-context-repository.ts`、`run-history-policy.ts`、`memory-dispatch-gate.ts`、`memory-recall-service.ts` 四个文件承载，且这个偏离只在 §15.3「契约 §11 偏离」一条里记着。结果是照卡办事的人跑 `npm test -- …run-memory-audit.test.ts` 会得到「没有匹配到测试文件」，而卡片本身是 done。已把 WM06 两行改为真实的文件与测试清单（`memory-dispatch-gate.test.ts` 确实按 `request.messages` 断言，满足本卡「必须断言请求 messages，不只断言 segmentId」），并在同一行指向 §15.3 的偏离记录。
+
+**一次假警报，已自我证伪。** 按关键词（`2048`／`上限`）扫 `openai-compatible-provider.test.ts` 只命中一条用例，据此会误判 WM08 的「Given profile 上限低于 2048，Then 使用较低值」没有边界用例。实际该用例存在，只是标题是英文且不含字面量：`sends the lower of the profile ceiling and the request ceiling` 断言了 profile 512 压住请求 2,048、请求 2,048 压住 profile 4,096、无 profile 时取 2,048 三种组合。教训：**扫标题找用例只能当索引，判定必须打开文件读断言**；本轮两次假阴性（上一节「成环／循环」、这一节的中英标题）都是同一个成因。
+
+其余逐条核过的卡片硬条件都有强制点＋用例：WM09 的 `MEMORY_EXTRACTION_CONCURRENCY = 1`、`MEMORY_EXTRACTION_QUEUE_LIMIT = 20` 落在 `memory-extraction-repository.ts:376/420` 并由其测试按队列满与并发满双向验证；WM12 的同空间 active ≤20 是 `WORKSPACE_REFERENCE_ACTIVE_LIMIT`，超限走 `REFERENCE_LIMIT` 领域失败；WM04 的非 BMP／码点计数由 `memory-retrieval.test.ts:210`「counts emoji and other non-BMP content in code points」与 `memory-content-policy.test.ts:27`「counts code points rather than UTF-16 units for non-BMP content」钉住，WM06 的 messages 断言落在 `memory-dispatch-gate.test.ts`（该文件捕获 `request.messages` 末条内容）；WM15 点名的集成文件与全部定向路径存在。
+
+验证：本轮只改任务板两行与新增本节，无代码与测试变更（改动的是文档指向，不需要重跑门禁）；`npx prettier --check` 与 `git diff --check` 通过，改后两行 `sed -n '150,153p'` 回读；所引 `memory-extraction-repository.ts:376/420`、`openai-compatible-provider.test.ts:390` 逐个 `grep -n` 核到行。
