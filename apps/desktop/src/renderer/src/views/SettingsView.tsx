@@ -15,6 +15,7 @@ import { colorSchemes } from '../appearance';
 import { TransientToast } from '../components/TransientToast';
 import type { McpConnectionsState } from '../hooks/use-mcp-connections';
 import type { MemoriesState } from '../hooks/use-memories';
+import type { MemorySuggestionsState } from '../hooks/use-memory-suggestions';
 import { useSearchEngineSettings } from '../hooks/use-search-engine-settings';
 import { useTransientToast } from '../hooks/use-transient-toast';
 import { CheckIcon, PlusIcon } from '../icons';
@@ -43,6 +44,14 @@ export interface SettingsPageProps {
   memories: MemoriesState;
   memoryTarget?: MemoryManagementTarget;
   onClearMemoryTarget: () => void;
+  /** 自动建议区（§3.3）：只在设置 → 记忆 期间取数与轮询。 */
+  memorySuggestions?: MemorySuggestionsState;
+  workspaceId?: string;
+  workspaceName?: string;
+  expertName?: string;
+  /** 从任务面板「编辑并确认」或简报跳转过来时预开的候选。 */
+  memoryFocusId?: string;
+  onClearMemoryFocus: () => void;
   mcp: McpConnectionsState;
 }
 export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
@@ -83,6 +92,12 @@ export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
             state={props.memories}
             {...(props.memoryTarget ? { scopeTarget: props.memoryTarget } : {})}
             onClearScope={props.onClearMemoryTarget}
+            {...(props.memorySuggestions ? { suggestions: props.memorySuggestions } : {})}
+            {...(props.workspaceId ? { workspaceId: props.workspaceId } : {})}
+            {...(props.workspaceName ? { workspaceName: props.workspaceName } : {})}
+            {...(props.expertName ? { expertName: props.expertName } : {})}
+            {...(props.memoryFocusId ? { focusMemoryId: props.memoryFocusId } : {})}
+            onFocusHandled={props.onClearMemoryFocus}
           />
         )}
         {tab === 'appearance' && <AppearanceSettings {...props} />}

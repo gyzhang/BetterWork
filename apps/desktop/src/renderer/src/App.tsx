@@ -13,15 +13,18 @@ import type {
   MaterialCandidate,
   MaterialReference,
   McpToolBinding,
-  MemoryRecord,
+  MemoryViewItem,
   NotificationSummary,
   NotificationTarget,
   RecentTaskSummary,
   RunSummary,
   TaskContextRevision,
   TaskMaterialSelection,
+  WorkspaceBriefOpenIssue,
+  WorkspaceReferenceListItem,
   WorkspaceSummary,
 } from '@betterwork/agent-protocol';
+import { MEMORY_CONTENT_MAX_CODE_POINTS } from '@betterwork/agent-protocol';
 import type { FormEvent, KeyboardEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -31,9 +34,11 @@ import {
   type CapabilityChip,
   ComposerCapabilityPicker,
 } from './components/ComposerCapabilityPicker';
+import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { ContextPanel } from './components/ContextPanel';
 import { DiscussionCheckpointPanel } from './components/DiscussionCheckpointPanel';
 import { PageHeader } from './components/layout/PageHeader';
+import { MemoryEditor, type MemoryEditorSubmission } from './components/MemoryEditor';
 import { ModelEditor } from './components/ModelEditorSheet';
 import { ToolActivity } from './components/ToolActivity';
 import { TransientToast } from './components/TransientToast';
@@ -43,10 +48,14 @@ import { useAppearance } from './hooks/use-appearance';
 import { useExperts } from './hooks/use-experts';
 import { useKnowledgeLibrary } from './hooks/use-knowledge-library';
 import { useMcpConnections } from './hooks/use-mcp-connections';
-import { useMemories } from './hooks/use-memories';
+import { newMemoryOperationId, useMemories } from './hooks/use-memories';
+import { useMemorySuggestions } from './hooks/use-memory-suggestions';
 import { useModelSettings } from './hooks/use-model-settings';
+import { useRunMemories, useTaskMemoryExclusion } from './hooks/use-run-memories';
 import { useSkills } from './hooks/use-skills';
 import { useTaskScroll } from './hooks/use-task-scroll';
+import { useWorkspaceBrief } from './hooks/use-workspace-brief';
+import { useWorkspaceReferences } from './hooks/use-workspace-references';
 import {
   AlertIcon,
   ArrowUpIcon,
@@ -64,6 +73,8 @@ import {
 import { describeActionError, reportAction, trackAction } from './lib/async-action';
 import { fileNameOf, formatTime } from './lib/format';
 import { runStatusName } from './lib/labels';
+import { settleMemoryCall } from './lib/memory-result';
+import { candidatesOfTask } from './lib/memory-suggestions';
 import { buildResearchPrompt } from './lib/research-prompt';
 import { extractAssistantText, finalRunContent, mergeRunEvents } from './lib/run-events';
 import { handleTitlebarDoubleClick } from './lib/titlebar';
@@ -73,7 +84,7 @@ import { NotificationCenter, ToastHost, useNotifications } from './notifications
 import { ArtifactPage } from './views/ArtifactView';
 import { ExpertsPage } from './views/ExpertsView';
 import { KnowledgePage } from './views/KnowledgeView';
-import type { MemoryManagementTarget } from './views/MemoryView';
+import { type MemoryManagementTarget, scopeOptionsFor } from './views/MemoryView';
 import { SettingsPage } from './views/SettingsView';
 import { SkillsPage } from './views/SkillsView';
 
@@ -83,6 +94,13 @@ const expertReferenceApplicableToWorkspace = (
 ): boolean => {
   if (reference.kind !== 'artifact-version') return true;
   return Boolean(workspaceId && reference.originWorkspaceId === workspaceId);
+};
+
+/** 材料引用的身份键：同一精确版本重复引用只留一条（§3.6）。 */
+const referenceKey = (reference: MaterialReference): string => {
+  if (reference.kind === 'knowledge-revision') return `knowledge:${reference.knowledgeRevisionId}`;
+  if (reference.kind === 'artifact-version') return `artifact:${reference.artifactVersionId}`;
+  return `snapshot:${reference.snapshotId}`;
 };
 
 const inputSnapshotCandidate = (snapshot: InputSnapshot): MaterialCandidate => ({
@@ -129,14 +147,20 @@ export function App(): React.JSX.Element {
   }>();
   const [taskContext, setTaskContext] = useState<TaskContextRevision>();
   const [taskMaterials, setTaskMaterials] = useState<TaskMaterialSelection[]>([]);
-  const [taskMemories, setTaskMemories] = useState<MemoryRecord[]>([]);
+  const [taskMemories, setTaskMemories] = useState<MemoryViewItem[]>([]);
+  const [taskMemoriesError, setTaskMemoriesError] = useState('');
+  const [taskMemoriesWarning, setTaskMemoriesWarning] = useState('');
+  const taskMemoriesRequestRef = useRef(0);
   const [excludedMemoryIds, setExcludedMemoryIds] = useState<string[]>([]);
   const [mcpToolBindings, setMcpToolBindings] = useState<McpToolBinding[]>([]);
   const [discussionCheckpoints, setDiscussionCheckpoints] = useState<DiscussionCheckpoint[]>([]);
-  const [memoryCapture, setMemoryCapture] = useState<{ content: string; runId: string }>();
-  const [memoryCaptureScope, setMemoryCaptureScope] = useState<
-    'user' | 'workspace' | 'expert' | 'expert-workspace'
-  >('user');
+  /** 人工保存表单（产品设计 §3.1）：只带用户当场选中的片段，不预填整段回答。 */
+  const [memoryCapture, setMemoryCapture] = useState<{
+    runId: string;
+    initialContent: string;
+  }>();
+  const [memoryCaptureError, setMemoryCaptureError] = useState('');
+  const [pendingCandidateDelete, setPendingCandidateDelete] = useState<MemoryViewItem>();
   const expertModelReference = activeExpert?.modelReference;
   const expertModel =
     expertModelReference?.mode === 'profile'
@@ -198,20 +222,182 @@ export function App(): React.JSX.Element {
   const [contextOpen, setContextOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('models');
   const [memoryManagementTarget, setMemoryManagementTarget] = useState<MemoryManagementTarget>();
+  const [memoryFocusId, setMemoryFocusId] = useState<string>();
   const [notificationCenterOpen, setNotificationCenterOpen] = useState(false);
 
-  useEffect(() => {
+  // 记忆域的三个读取口各自只在可见时取数：面板与设置页不会同时打开，
+  // 因此同一时刻最多一份建议轮询在跑（产品设计 §3.3）。
+  const suggestionsVisible = view === 'work' && contextOpen && contextTab === 'memory';
+  const suggestions = useMemorySuggestions({
+    workspaceId: workspace?.id,
+    visible: suggestionsVisible,
+    taskId: activeTask?.id,
+  });
+  const settingsSuggestions = useMemorySuggestions({
+    workspaceId: workspace?.id,
+    visible: view === 'settings' && settingsTab === 'memory',
+    taskId: undefined,
+  });
+  const runMemories = useRunMemories(
+    {
+      taskId: activeTask?.id,
+      taskContextRevisionId: taskContext?.id,
+      expectedTaskContextRevision: taskContext?.revision,
+      prompt,
+    },
+    activeRunId,
+  );
+  const brief = useWorkspaceBrief({
+    workspaceId: workspace?.id,
+    expertId: activeExpert?.id,
+  });
+  const references = useWorkspaceReferences(workspace?.id);
+  const memoryExclusion = useTaskMemoryExclusion();
+  const taskCandidates = activeTask
+    ? candidatesOfTask(suggestions.candidates, suggestions.jobs, activeTask.id)
+    : [];
+  // §3.1：有专家默认「专家与工作空间」，无专家默认「工作空间」；顺序即表单默认值。
+  const memoryCaptureScopes = useMemo(
+    () =>
+      scopeOptionsFor(
+        workspace?.id,
+        activeExpert
+          ? {
+              expertId: activeExpert.id,
+              expertName: activeExpert.name,
+              ...(workspace ? { workspaceId: workspace.id } : {}),
+            }
+          : undefined,
+      ),
+    [activeExpert, workspace],
+  );
+
+  /**
+   * 当前任务范围内的记忆清单（契约 §9.1 治理视图）。
+   * 读取走 `Result` 收口：失败写进面板内联提示，迟到响应按序列号丢弃。
+   */
+  const reloadTaskMemories = useCallback((): Promise<void> => {
+    const requestId = taskMemoriesRequestRef.current + 1;
+    taskMemoriesRequestRef.current = requestId;
     if (!workspace) {
       setTaskMemories([]);
+      setTaskMemoriesError('');
+      setTaskMemoriesWarning('');
+      return Promise.resolve();
+    }
+    return settleMemoryCall(
+      window.betterwork.memories.list({
+        workspaceId: workspace.id,
+        ...(activeExpert ? { expertId: activeExpert.id } : {}),
+      }),
+      '加载当前任务记忆失败，请重试。',
+    ).then((outcome) => {
+      if (taskMemoriesRequestRef.current !== requestId) return;
+      if (outcome.ok) {
+        setTaskMemories(outcome.data.items);
+        setTaskMemoriesError('');
+        setTaskMemoriesWarning(outcome.warnings.map((warning) => warning.message).join('；'));
+      } else {
+        setTaskMemories([]);
+        setTaskMemoriesWarning('');
+        setTaskMemoriesError(outcome.message);
+      }
+    });
+  }, [activeExpert, workspace]);
+
+  useEffect(() => {
+    trackAction(reloadTaskMemories(), '加载当前任务记忆');
+  }, [reloadTaskMemories]);
+
+  /** 人工保存：`create` 的失败已由 hook 收口，这里只把它呈现在表单旁边。 */
+  const submitMemoryCapture = async (submission: MemoryEditorSubmission): Promise<boolean> => {
+    if (submission.kind !== 'create') return false;
+    const outcome = await memoriesState.create(submission.request);
+    if (outcome.ok) {
+      setMemoryCapture(undefined);
+      setMemoryCaptureError('');
+      await reloadTaskMemories();
+      return true;
+    }
+    // 失败（含修订冲突）：表单不关闭、草稿与幂等键保留（契约 §5.6）。
+    setMemoryCaptureError(outcome.message);
+    return false;
+  };
+
+  const openMemoryPage = useCallback((): void => {
+    setContextOpen(false);
+    setView('settings');
+    setSettingsTab('memory');
+  }, []);
+
+  const openMemoryPageAt = useCallback((memoryId: string): void => {
+    setMemoryFocusId(memoryId);
+    setContextOpen(false);
+    setView('settings');
+    setSettingsTab('memory');
+  }, []);
+
+  const actOnTaskCandidate = (candidate: MemoryViewItem, action: 'reject' | 'delete'): void => {
+    trackAction(
+      memoriesState
+        .act({
+          operationId: newMemoryOperationId(),
+          id: candidate.id,
+          expectedRevision: candidate.revision,
+          action,
+        })
+        .then(() => reloadTaskMemories()),
+      action === 'reject' ? '暂不采用建议' : '删除建议',
+    );
+  };
+
+  const openBriefIssue = (issue: WorkspaceBriefOpenIssue): void => {
+    const task = recentTasks.find((item) => item.id === issue.taskId);
+    if (!task) {
+      setActionError('这条未决事项所属的任务不在当前空间的任务列表里，请从任务列表打开。');
       return;
     }
-    trackAction(
-      window.betterwork.memories
-        .list({ workspaceId: workspace.id, ...(activeExpert ? { expertId: activeExpert.id } : {}) })
-        .then(setTaskMemories),
-      '加载当前任务记忆',
+    reportAction(selectTask(task), setActionError, '无法打开这条未决事项对应的任务。');
+  };
+
+  const openBriefReference = (item: WorkspaceReferenceListItem): void => {
+    reportAction(
+      window.betterwork.artifacts.get({ id: item.artifactId }).then((artifact) => {
+        if (!artifact) {
+          setActionError('该参考版本对应的成果已不存在，请在成果列表中确认。');
+          return;
+        }
+        setSelectedArtifact(artifact);
+        setContextOpen(false);
+        setView('artifacts');
+      }),
+      setActionError,
+      '无法打开该参考版本的成果。',
     );
-  }, [workspace, activeExpert]);
+  };
+
+  /** §3.6「引用到当前任务」：固定精确版本，不改当前专家，不自动发送。 */
+  const referenceVersionToTask = (artifactVersionId: string): void => {
+    reportAction(
+      references.ensureReference(artifactVersionId).then((result) => {
+        if (!result.ok || result.material === undefined) {
+          setActionError(result.message || '无法把该版本设为参考，请重试。');
+          return;
+        }
+        const reference = result.material;
+        setTaskMaterials((current) =>
+          current.some((existing) => referenceKey(existing.reference) === referenceKey(reference))
+            ? current
+            : [...current, { reference, purpose: 'structure-reference', addedFrom: 'user-input' }],
+        );
+        if (activeTask?.id) refreshMaterialCandidates(activeTask.id);
+        setContextOpen(false);
+        setView('work');
+      }),
+      setActionError,
+      '引用该版本到当前任务失败。',
+    );
+  };
 
   useEffect(() => {
     const requestId = expertMaterialCandidatesRequestRef.current + 1;
@@ -431,6 +617,7 @@ export function App(): React.JSX.Element {
     setMcpToolBindings([]);
     setDiscussionCheckpoints([]);
     setMemoryCapture(undefined);
+    setMemoryCaptureError('');
     setMaterialCandidates([]);
     setMaterialPickerKind(undefined);
     setMaterialPickerError('');
@@ -1201,13 +1388,17 @@ export function App(): React.JSX.Element {
                                 <button
                                   className="message-action"
                                   onClick={() => {
+                                    // §3.1：只预填用户当场选中的片段，不把整段回答当作经验。
+                                    const selected = window
+                                      .getSelection()
+                                      ?.toString()
+                                      .trim()
+                                      .slice(0, MEMORY_CONTENT_MAX_CODE_POINTS);
                                     setMemoryCapture({
                                       runId: run.id,
-                                      content: runAssistantText.slice(0, 2_000),
+                                      initialContent: selected ?? '',
                                     });
-                                    setMemoryCaptureScope(
-                                      activeExpert ? 'expert-workspace' : 'user',
-                                    );
+                                    setMemoryCaptureError('');
                                   }}
                                 >
                                   记住这段经验
@@ -1241,102 +1432,25 @@ export function App(): React.JSX.Element {
                             )}
                             {memoryCapture?.runId === run.id && (
                               <div className="memory-capture">
-                                <label>
-                                  确认要长期复用的内容
-                                  <textarea
-                                    value={memoryCapture.content}
-                                    onChange={(event) =>
-                                      setMemoryCapture((current) =>
-                                        current
-                                          ? { ...current, content: event.target.value }
-                                          : current,
-                                      )
-                                    }
-                                    rows={4}
-                                    maxLength={2_000}
-                                  />
-                                </label>
-                                <div className="memory-capture-footer">
-                                  <select
-                                    aria-label="记忆适用范围"
-                                    value={memoryCaptureScope}
-                                    onChange={(event) =>
-                                      setMemoryCaptureScope(
-                                        event.target.value as typeof memoryCaptureScope,
-                                      )
-                                    }
-                                  >
-                                    <option value="user">所有工作</option>
-                                    {workspace && <option value="workspace">当前工作空间</option>}
-                                    {activeExpert && <option value="expert">当前专家</option>}
-                                    {workspace && activeExpert && (
-                                      <option value="expert-workspace">当前专家与工作空间</option>
-                                    )}
-                                  </select>
-                                  <button
-                                    type="button"
-                                    className="secondary-button"
-                                    onClick={() => setMemoryCapture(undefined)}
-                                  >
-                                    取消
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="primary-button"
-                                    disabled={!memoryCapture.content.trim()}
-                                    onClick={() => {
-                                      const content = memoryCapture.content.trim();
-                                      const scope =
-                                        memoryCaptureScope === 'workspace' && workspace
-                                          ? {
-                                              kind: 'workspace' as const,
-                                              workspaceId: workspace.id,
-                                            }
-                                          : memoryCaptureScope === 'expert' && activeExpert
-                                            ? {
-                                                kind: 'expert' as const,
-                                                expertId: activeExpert.id,
-                                              }
-                                            : memoryCaptureScope === 'expert-workspace' &&
-                                                workspace &&
-                                                activeExpert
-                                              ? {
-                                                  kind: 'expert-workspace' as const,
-                                                  expertId: activeExpert.id,
-                                                  workspaceId: workspace.id,
-                                                }
-                                              : { kind: 'user' as const };
-                                      trackAction(
-                                        memoriesState
-                                          .create({
-                                            scope,
-                                            kind: 'procedural',
-                                            content,
-                                            sourceType: 'user-explicit',
-                                            sourceId: run.id,
-                                            status: 'confirmed',
-                                          })
-                                          .then(() => {
-                                            setMemoryCapture(undefined);
-                                            if (workspace) {
-                                              return window.betterwork.memories
-                                                .list({
-                                                  workspaceId: workspace.id,
-                                                  ...(activeExpert
-                                                    ? { expertId: activeExpert.id }
-                                                    : {}),
-                                                })
-                                                .then(setTaskMemories);
-                                            }
-                                            return undefined;
-                                          }),
-                                        '保存长期记忆',
-                                      );
-                                    }}
-                                  >
-                                    确认并记住
-                                  </button>
-                                </div>
+                                <p className="memory-capture-hint">
+                                  先在上方回答中选中要沉淀的片段可自动带入；表单内容以你最终确认为准。
+                                </p>
+                                <MemoryEditor
+                                  scopes={memoryCaptureScopes}
+                                  initialContent={memoryCapture.initialContent}
+                                  sourceNote="由你在任务里手工确认，正文即来源，不调用模型"
+                                  submitLabel="确认并记住"
+                                  onSubmit={submitMemoryCapture}
+                                  onCancel={() => {
+                                    setMemoryCapture(undefined);
+                                    setMemoryCaptureError('');
+                                  }}
+                                />
+                                {memoryCaptureError && (
+                                  <p className="inline-message error" role="alert">
+                                    {memoryCaptureError}
+                                  </p>
+                                )}
                               </div>
                             )}
                             {isRunActive &&
@@ -1512,6 +1626,8 @@ export function App(): React.JSX.Element {
             onOpenFile={openFileArtifact}
             onOpenSource={knowledge.onOpenSource}
             onStartFromVersion={startFromArtifactVersion}
+            references={references}
+            onReferenceToTask={referenceVersionToTask}
             onBack={() => setSelectedArtifact(undefined)}
           />
         )}
@@ -1563,6 +1679,11 @@ export function App(): React.JSX.Element {
             memories={memoriesState}
             {...(memoryManagementTarget ? { memoryTarget: memoryManagementTarget } : {})}
             onClearMemoryTarget={() => setMemoryManagementTarget(undefined)}
+            memorySuggestions={settingsSuggestions}
+            {...(workspace ? { workspaceId: workspace.id, workspaceName: workspace.name } : {})}
+            {...(activeExpert ? { expertName: activeExpert.name } : {})}
+            {...(memoryFocusId ? { memoryFocusId } : {})}
+            onClearMemoryFocus={() => setMemoryFocusId(undefined)}
             mcp={mcpState}
           />
         )}
@@ -1582,18 +1703,41 @@ export function App(): React.JSX.Element {
           materials={taskMaterials}
           memories={taskMemories}
           excludedMemoryIds={excludedMemoryIds}
-          onToggleMemory={(memoryId) =>
-            setExcludedMemoryIds((current) =>
-              current.includes(memoryId)
-                ? current.filter((id) => id !== memoryId)
-                : [...current, memoryId],
-            )
-          }
+          onToggleMemory={(memoryId) => {
+            if (!taskContext) {
+              setActionError('任务上下文还没有建立，暂不能调整本任务的记忆范围。');
+              return;
+            }
+            trackAction(
+              memoryExclusion.toggle(taskContext, memoryId).then((saved) => {
+                if (!saved) return;
+                setTaskContext(saved);
+                setExcludedMemoryIds(saved.excludedMemoryIds ?? []);
+              }),
+              '调整本任务的记忆范围',
+            );
+          }}
+          exclusion={memoryExclusion}
           materialCandidates={materialCandidates}
           onRequestMaterials={requestMaterials}
           mcpConnections={mcpState.connections}
           mcpToolBindings={mcpToolBindings}
           onMcpToolBindingsChange={setMcpToolBindings}
+          runMemories={runMemories}
+          brief={brief}
+          workspaceName={workspace?.name}
+          expertName={activeExpert?.name}
+          onOpenBriefMemory={(item) => openMemoryPageAt(item.memoryId)}
+          onOpenBriefIssue={openBriefIssue}
+          onOpenBriefReference={openBriefReference}
+          suggestions={suggestions}
+          taskCandidates={taskCandidates}
+          onEditCandidate={(candidate) => openMemoryPageAt(candidate.id)}
+          onRejectCandidate={(candidate) => actOnTaskCandidate(candidate, 'reject')}
+          onDeleteCandidate={(candidate) => setPendingCandidateDelete(candidate)}
+          onOpenMemoryPage={openMemoryPage}
+          memoriesError={taskMemoriesError}
+          memoriesWarning={taskMemoriesWarning}
           onSelectRun={(run) =>
             reportAction(selectRun(run), setActionError, '无法打开这次执行记录。')
           }
@@ -1605,6 +1749,18 @@ export function App(): React.JSX.Element {
               '无法打开这项成果。',
             )
           }
+        />
+      )}
+      {pendingCandidateDelete && (
+        <ConfirmationDialog
+          title="不再使用这条建议？"
+          detail="这是「以后不用」：历史记录与来源仍保留、可随时回溯；正在运行的任务不会热更新，需要立刻生效请取消该次运行后重跑。"
+          confirmLabel="以后不用"
+          onConfirm={() => {
+            actOnTaskCandidate(pendingCandidateDelete, 'delete');
+            setPendingCandidateDelete(undefined);
+          }}
+          onCancel={() => setPendingCandidateDelete(undefined)}
         />
       )}
       {modelSettings.editorOpen && (

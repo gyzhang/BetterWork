@@ -17,6 +17,7 @@ import { ViewContainer } from '../components/layout/ViewContainer';
 import { type ToastTone, TransientToast } from '../components/TransientToast';
 import { useArtifactThumbnails } from '../hooks/use-artifact-thumbnails';
 import { useArtifactViewer } from '../hooks/use-artifact-viewer';
+import type { WorkspaceReferencesState } from '../hooks/use-workspace-references';
 import {
   ArtifactIcon,
   CapabilityIcon,
@@ -25,7 +26,7 @@ import {
   GlobeIcon,
   KnowledgeIcon,
 } from '../icons';
-import { reportAction } from '../lib/async-action';
+import { reportAction, trackAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
 import { MarkdownPreview } from '../markdown-preview';
 
@@ -77,6 +78,8 @@ export function ArtifactPage({
   onOpenFile,
   onOpenSource,
   onStartFromVersion,
+  references,
+  onReferenceToTask,
   onBack,
 }: {
   artifacts: ArtifactSummary[];
@@ -93,6 +96,9 @@ export function ArtifactPage({
   ) => Promise<{ opened: boolean; error?: string }>;
   onOpenSource: (sourcePath: string) => Promise<void>;
   onStartFromVersion: (artifact: ArtifactDetail, version: ArtifactVersionDetail) => Promise<void>;
+  /** §3.6 参考成果版本：未接线（如测试或无空间）时不显示该区。 */
+  references?: WorkspaceReferencesState | undefined;
+  onReferenceToTask?: ((artifactVersionId: string) => void) | undefined;
   onBack: () => void;
 }): React.JSX.Element {
   const {
@@ -204,6 +210,14 @@ export function ArtifactPage({
                     ? '这是人工修订版本；此前版本仍可回溯。'
                     : '来自一次任务运行，可在后续继续修订并形成新版本。'}
             </p>
+            {references && !editing && (
+              <ReferenceVersionSection
+                references={references}
+                artifactTitle={selected.title}
+                version={visibleVersion}
+                onReferenceToTask={onReferenceToTask}
+              />
+            )}
             {error && (
               <p className="artifact-action-error" role="alert">
                 {error}
@@ -633,5 +647,99 @@ function SlideViewer({
       </section>
     </div>,
     document.body,
+  );
+}
+
+/**
+ * 本空间的参考成果版本（产品设计 §3.6、实施契约 §10）。
+ *
+ * 三条约束：
+ * - 标记固定到 `artifactVersionId` + 内容哈希，**不跟随最新**；
+ * - 标记只表示参考选择，界面不得把它写成批准、正确或「本期已读取」；
+ * - 写入失败（含 CAS 冲突）走内联错误，成功才是局部短时确认。
+ */
+function ReferenceVersionSection({
+  references,
+  artifactTitle,
+  version,
+  onReferenceToTask,
+}: {
+  references: WorkspaceReferencesState;
+  artifactTitle: string;
+  version: ArtifactVersionDetail;
+  onReferenceToTask: ((artifactVersionId: string) => void) | undefined;
+}): React.JSX.Element {
+  const [note, setNote] = useState('');
+  const reference = references.referenceOf(version.id);
+  const busy = references.pendingVersionId === version.id;
+
+  const mark = (): void => {
+    trackAction(
+      references
+        .markReference(version.id, `v${version.versionNumber} · ${artifactTitle}`)
+        .then((result) => {
+          if (result.ok) {
+            setNote(
+              `已把 v${version.versionNumber} 指定为本空间参考版本：标记只表示参考选择，不表示内容正确或审批通过。`,
+            );
+          }
+        }),
+      '指定参考版本',
+    );
+  };
+
+  const remove = (): void => {
+    if (!reference) return;
+    trackAction(
+      references.removeReference(reference).then((result) => {
+        if (result.ok) setNote('已取消参考；成果与版本本身不受影响。');
+      }),
+      '取消参考版本',
+    );
+  };
+
+  return (
+    <section className="artifact-reference-section">
+      <div className="artifact-reference-heading">
+        <div>
+          <strong>本空间参考版本</strong>
+          <small>
+            {reference
+              ? `当前查看的 v${version.versionNumber} 已标记为参考`
+              : `当前查看的 v${version.versionNumber} 尚未标记`}
+          </small>
+        </div>
+        <div className="artifact-reference-actions">
+          {reference ? (
+            <button type="button" className="secondary-button" disabled={busy} onClick={remove}>
+              取消参考
+            </button>
+          ) : (
+            <button type="button" className="secondary-button" disabled={busy} onClick={mark}>
+              {busy ? '正在提交…' : '指定为本空间参考版本'}
+            </button>
+          )}
+          {onReferenceToTask && (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => onReferenceToTask(version.id)}
+            >
+              引用到当前任务
+            </button>
+          )}
+        </div>
+      </div>
+      <p className="artifact-reference-note">
+        标记与引用都固定到这一版的内容哈希，成果新增版本后参考仍指旧版本；引用只会把该版本加进当前任务材料，
+        不会自动发送，也不会改变当前专家。
+      </p>
+      {references.error && (
+        <p className="inline-message error" role="alert">
+          {references.error}
+        </p>
+      )}
+      {note && <TransientToast tone="success" message={note} onDismiss={() => setNote('')} />}
+    </section>
   );
 }

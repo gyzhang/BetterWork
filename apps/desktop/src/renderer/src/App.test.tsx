@@ -6,12 +6,14 @@ import type {
   ExpertSummary,
   InputSnapshot,
   MaterialCandidate,
-  MemoryRecord,
+  MemoryViewItem,
+  MemoryWriteReceipt,
   ModelProfileSummary,
   RecentTaskSummary,
   RunSummary,
   SkillDetail,
   TaskContextRevision,
+  WorkspaceBrief,
 } from '@betterwork/agent-protocol';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -103,10 +105,58 @@ const languageModel: ModelProfileSummary = {
   updatedAt: 1,
 };
 
+const emptySection = { items: [], total: 0, truncated: false };
+
+const briefFixture: WorkspaceBrief = {
+  workspaceId: 'workspace-1',
+  generatedAt: 1,
+  goals: emptySection,
+  constraints: emptySection,
+  decisions: emptySection,
+  methods: emptySection,
+  openIssues: emptySection,
+  referenceVersions: emptySection,
+};
+
+const memoryOperationUuid = '11111111-1111-4111-8111-111111111111';
+
+const writeReceipt: MemoryWriteReceipt = {
+  operationId: memoryOperationUuid,
+  commit: 'committed',
+  effect: 'unchanged',
+  committedRevisionIds: ['memory-1-r1'],
+  projectionState: 'synced',
+};
+
+const okResult = <TData,>(data: TData) => ({ ok: true as const, data, warnings: [] as never[] });
+
+const memoryViewItem = (overrides?: Partial<MemoryViewItem>): MemoryViewItem => ({
+  id: 'memory-1',
+  revisionId: 'memory-1-r1',
+  revision: 1,
+  scope: { kind: 'user' },
+  kind: 'procedural',
+  content: '先核对财务规则。',
+  sourceType: 'conversation',
+  confidence: 1,
+  status: 'confirmed',
+  contentHash: 'memory-hash',
+  createdAt: 1,
+  updatedAt: 1,
+  facet: 'method',
+  normalizedHash: 'normalized-hash',
+  provenance: { schemaVersion: 1, verification: 'legacy-unverified', sourceType: 'conversation' },
+  effectiveStatus: 'confirmed',
+  sourceAvailability: 'available',
+  requiresMaterialSelection: false,
+  conflicts: [],
+  ...overrides,
+});
+
 function installApi(options?: {
   expert?: boolean;
   context?: TaskContextRevision;
-  memories?: MemoryRecord[];
+  memories?: MemoryViewItem[];
   models?: ModelProfileSummary[];
 }) {
   const api = {
@@ -114,6 +164,10 @@ function installApi(options?: {
     workspace: {
       getDefault: vi.fn(async () => ({ id: 'workspace-1', rootPath: '/workspace' })),
       listAll: vi.fn(async () => []),
+      memoryBrief: vi.fn(async () => okResult(briefFixture)),
+      listReferenceVersions: vi.fn(async () => okResult({ items: [] })),
+      setReferenceVersion: vi.fn(async () => okResult({ receipt: writeReceipt, material: {} })),
+      removeReferenceVersion: vi.fn(async () => okResult(writeReceipt)),
     },
     models: {
       list: vi.fn(async (): Promise<ModelProfileSummary[]> => options?.models ?? []),
@@ -163,25 +217,63 @@ function installApi(options?: {
       prepareInputSnapshot: vi.fn(async (): Promise<InputSnapshot | null> => null),
     },
     memories: {
-      list: vi.fn(async (): Promise<MemoryRecord[]> => options?.memories ?? []),
-      create: vi.fn(async () => ({
-        memory: {
-          id: 'memory-1',
-          revisionId: 'memory-1-r1',
-          revision: 1,
-          scope: { kind: 'user' as const },
-          kind: 'semantic' as const,
-          content: 'test',
-          sourceType: 'user-explicit' as const,
-          confidence: 1,
-          status: 'confirmed' as const,
-          contentHash: 'hash',
-          createdAt: 1,
-          updatedAt: 1,
-        },
+      list: vi.fn(async () => okResult({ items: options?.memories ?? [] })),
+      get: vi.fn(async () => okResult(memoryViewItem())),
+      create: vi.fn(async () => okResult(writeReceipt)),
+      update: vi.fn(async () => okResult(writeReceipt)),
+      setStatus: vi.fn(async () => okResult(writeReceipt)),
+      resolveConflict: vi.fn(async () =>
+        okResult({
+          receipt: writeReceipt,
+          decision: {
+            id: 'conflict-decision-1',
+            operationId: memoryOperationUuid,
+            leftRevisionId: 'memory-1-r1',
+            rightRevisionId: 'memory-2-r1',
+            decision: 'keep-both',
+            applicabilityNote: '按适用范围分别保留。',
+            createdAt: 1,
+          },
+        }),
+      ),
+      preview: vi.fn(async () => ({
+        ok: false,
+        error: { code: 'NOT_FOUND', message: '测试未提供范围预览。', retryable: false },
       })),
-      update: vi.fn(async () => ({ memory: undefined })),
-      setStatus: vi.fn(async () => ({ memory: undefined })),
+      runContext: vi.fn(async (input: { runId: string }) =>
+        okResult({
+          runId: input?.runId ?? 'run-1',
+          phase: 'legacy_unknown',
+          memories: [],
+          reads: [],
+        }),
+      ),
+      getSettings: vi.fn(async () =>
+        okResult({
+          workspaceId: 'workspace-1',
+          revision: 0,
+          autoSuggestEnabled: false,
+          updatedAt: 1,
+        }),
+      ),
+      setSettings: vi.fn(async () =>
+        okResult({
+          receipt: {
+            ...writeReceipt,
+            currentSettings: {
+              workspaceId: 'workspace-1',
+              revision: 1,
+              autoSuggestEnabled: false,
+              updatedAt: 1,
+            },
+          },
+          cancelledJobCount: 0,
+        }),
+      ),
+      listJobs: vi.fn(async () => okResult({ items: [] })),
+      retryJob: vi.fn(async () => okResult({})),
+      cancelJob: vi.fn(async () => okResult({})),
+      rebuildProjection: vi.fn(async () => okResult({ projectionState: 'synced' })),
     },
     mcp: {
       listConnections: vi.fn(async () => []),
@@ -651,6 +743,9 @@ describe('Task context restoration', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
     fireEvent.click(await screen.findByRole('button', { name: '记住这段经验' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '记忆正文' }), {
+      target: { value: '先核对规则再出结论。' },
+    });
     fireEvent.change(screen.getByRole('combobox', { name: '记忆适用范围' }), {
       target: { value: 'expert' },
     });
@@ -658,13 +753,18 @@ describe('Task context restoration', () => {
       'value',
       'expert',
     );
+    // 全局/专家通用属于扩大适用范围，必须显式声明通用性后才能提交（契约 §3.1）。
+    fireEvent.click(screen.getByRole('checkbox', { name: '声明为通用要求' }));
     fireEvent.click(screen.getByRole('button', { name: '确认并记住' }));
 
     await waitFor(() => expect(api.memories.create).toHaveBeenCalledTimes(1));
     expect(api.memories.create).toHaveBeenCalledWith(
       expect.objectContaining({
+        content: '先核对规则再出结论。',
+        facet: 'method',
         scope: { kind: 'expert', expertId: expertSummary.id },
-        sourceId: previousRun.id,
+        asUserInstruction: true,
+        genericDeclaration: true,
       }),
     );
   });
@@ -672,35 +772,39 @@ describe('Task context restoration', () => {
 
 describe('Expert configuration', () => {
   it('shows the Expert memory summary and opens memory management', async () => {
-    const memory: MemoryRecord = {
+    const legacyProvenance = {
+      schemaVersion: 1,
+      verification: 'legacy-unverified',
+      sourceType: 'user-explicit',
+    } as const;
+    const memory = memoryViewItem({
       id: 'expert-memory-1',
       revisionId: 'expert-memory-1-r1',
-      revision: 1,
       scope: { kind: 'expert', expertId: expertSummary.id },
-      kind: 'procedural',
       content: '经营月报先核对财务规则。',
       sourceType: 'user-explicit',
-      confidence: 1,
-      status: 'confirmed',
       contentHash: 'expert-memory-hash',
-      createdAt: 1,
-      updatedAt: 1,
-    };
-    const workspaceMemory: MemoryRecord = {
-      ...memory,
+      provenance: legacyProvenance,
+    });
+    const workspaceMemory = memoryViewItem({
       id: 'expert-workspace-memory-1',
       revisionId: 'expert-workspace-memory-1-r1',
       scope: { kind: 'expert-workspace', expertId: expertSummary.id, workspaceId: 'workspace-1' },
       content: '当前工作空间的月报需要附上预算偏差。',
+      sourceType: 'user-explicit',
       status: 'candidate',
-    };
-    const otherWorkspaceMemory: MemoryRecord = {
-      ...memory,
+      candidateDisposition: 'pending',
+      effectiveStatus: 'candidate',
+      provenance: legacyProvenance,
+    });
+    const otherWorkspaceMemory = memoryViewItem({
       id: 'expert-workspace-memory-2',
       revisionId: 'expert-workspace-memory-2-r1',
       scope: { kind: 'expert-workspace', expertId: expertSummary.id, workspaceId: 'workspace-2' },
       content: '其他工作空间的内容不应出现在这里。',
-    };
+      sourceType: 'user-explicit',
+      provenance: legacyProvenance,
+    });
     installApi({ expert: true, memories: [memory, workspaceMemory, otherWorkspaceMemory] });
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: '专家' }));

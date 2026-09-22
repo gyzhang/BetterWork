@@ -3,6 +3,7 @@ import {
   agentRuntimeEventSchema,
   cancelDependencyRequestSchema,
   cancelDependencyResultSchema,
+  cancelMemoryJobRequestSchema,
   chooseInterpreterResultSchema,
   copyExpertRequestSchema,
   copySkillRequestSchema,
@@ -27,6 +28,9 @@ import {
   getDependencyOperationRequestSchema,
   getExpertRequestSchema,
   getMcpConnectionRequestSchema,
+  getMemoryRequestSchema,
+  getMemorySettingsRequestSchema,
+  getRunMemoryContextRequestSchema,
   getSkillRequestSchema,
   getTaskContextRequestSchema,
   importSkillRequestSchema,
@@ -36,31 +40,50 @@ import {
   listDiscussionCheckpointsRequestSchema,
   listExpertsRequestSchema,
   listMemoriesRequestSchema,
+  listMemoryJobsRequestSchema,
   listTaskMaterialCandidatesRequestSchema,
+  listWorkspaceReferenceVersionsRequestSchema,
   materialCandidateSchema,
   mcpConnectionSummarySchema,
   mcpMutationResultSchema,
   mcpTestResultSchema,
-  memoryMutationResultSchema,
-  memoryRecordSchema,
+  memoryConflictResolutionDataSchema,
+  memoryJobListDataSchema,
+  memoryJobSummarySchema,
+  memoryListPageDataSchema,
+  memoryPreviewDataSchema,
+  memoryProjectionStateDataSchema,
+  memoryReferenceWriteReceiptSchema,
+  memoryRunContextDataSchema,
+  memorySettingsDataSchema,
+  memoryViewItemSchema,
+  memoryWriteReceiptSchema,
   notificationActivatedSchema,
   notificationChangeEventSchema,
   prepareDependencyRequestSchema,
   prepareDependencyResultSchema,
   prepareWorkspaceInputSnapshotRequestSchema,
+  previewMemoryRequestSchema,
+  rebuildMemoryProjectionRequestSchema,
   refreshSkillDependencyGrantRequestSchema,
   refreshSkillDependencyGrantResultSchema,
   registerToolchainRequestSchema,
   registerToolchainResultSchema,
+  removeWorkspaceReferenceVersionRequestSchema,
+  resolveMemoryConflictRequestSchema,
+  resultSchema,
+  retryMemoryJobRequestSchema,
   revokeSkillTrustRequestSchema,
   saveExpertRevisionRequestSchema,
   saveMcpConnectionRequestSchema,
   saveSkillRuntimeProfileRequestSchema,
   saveTaskContextRequestSchema,
   setExpertLifecycleRequestSchema,
+  setMemorySettingsRequestSchema,
   setMemoryStatusRequestSchema,
   setSkillEnabledRequestSchema,
   setSkillTrustRequestSchema,
+  setWorkspaceReferenceVersionRequestSchema,
   skillDetailSchema,
   skillExportResultSchema,
   skillImportResultSchema,
@@ -71,6 +94,11 @@ import {
   testSkillRunRequestSchema,
   testSkillRunResultSchema,
   updateMemoryRequestSchema,
+  workspaceBriefSchema,
+  workspaceMemoryBriefRequestSchema,
+  workspaceMemorySettingsSchema,
+  workspaceReferenceListDataSchema,
+  workspaceReferenceSetDataSchema,
 } from '@betterwork/agent-protocol';
 import { contextBridge, ipcRenderer } from 'electron';
 import { z, type ZodTypeAny } from 'zod';
@@ -101,6 +129,30 @@ const api: BetterWorkDesktopApi = {
     getDefault: () => ipcRenderer.invoke(IpcChannel.GetDefaultWorkspace),
     selectDirectory: () => ipcRenderer.invoke(IpcChannel.SelectWorkspace),
     listAll: () => ipcRenderer.invoke(IpcChannel.ListWorkspaces),
+    memoryBrief: (input) =>
+      invokeValidated(
+        IpcChannel.GetWorkspaceMemoryBrief,
+        workspaceMemoryBriefRequestSchema.parse(input),
+        resultSchema(workspaceBriefSchema),
+      ),
+    listReferenceVersions: (input) =>
+      invokeValidated(
+        IpcChannel.ListWorkspaceReferenceVersions,
+        listWorkspaceReferenceVersionsRequestSchema.parse(input),
+        resultSchema(workspaceReferenceListDataSchema),
+      ),
+    setReferenceVersion: (input) =>
+      invokeValidated(
+        IpcChannel.SetWorkspaceReferenceVersion,
+        setWorkspaceReferenceVersionRequestSchema.parse(input),
+        resultSchema(workspaceReferenceSetDataSchema),
+      ),
+    removeReferenceVersion: (input) =>
+      invokeValidated(
+        IpcChannel.RemoveWorkspaceReferenceVersion,
+        removeWorkspaceReferenceVersionRequestSchema.parse(input),
+        resultSchema(memoryReferenceWriteReceiptSchema),
+      ),
   },
   tasks: {
     create: (input) => ipcRenderer.invoke(IpcChannel.CreateTask, input),
@@ -326,25 +378,85 @@ const api: BetterWorkDesktopApi = {
       invokeValidated(
         IpcChannel.ListMemories,
         listMemoriesRequestSchema.parse(input ?? {}),
-        memoryRecordSchema.array(),
+        resultSchema(memoryListPageDataSchema),
+      ),
+    get: (input) =>
+      invokeValidated(
+        IpcChannel.GetMemory,
+        getMemoryRequestSchema.parse(input),
+        resultSchema(memoryViewItemSchema),
       ),
     create: (input) =>
       invokeValidated(
         IpcChannel.CreateMemory,
         createMemoryRequestSchema.parse(input),
-        memoryMutationResultSchema,
+        resultSchema(memoryWriteReceiptSchema),
       ),
     update: (input) =>
       invokeValidated(
         IpcChannel.UpdateMemory,
         updateMemoryRequestSchema.parse(input),
-        memoryMutationResultSchema,
+        resultSchema(memoryWriteReceiptSchema),
       ),
     setStatus: (input) =>
       invokeValidated(
         IpcChannel.SetMemoryStatus,
         setMemoryStatusRequestSchema.parse(input),
-        memoryMutationResultSchema,
+        resultSchema(memoryWriteReceiptSchema),
+      ),
+    resolveConflict: (input) =>
+      invokeValidated(
+        IpcChannel.ResolveMemoryConflict,
+        resolveMemoryConflictRequestSchema.parse(input),
+        resultSchema(memoryConflictResolutionDataSchema),
+      ),
+    preview: (input) =>
+      invokeValidated(
+        IpcChannel.PreviewMemory,
+        previewMemoryRequestSchema.parse(input),
+        resultSchema(memoryPreviewDataSchema),
+      ),
+    runContext: (input) =>
+      invokeValidated(
+        IpcChannel.GetRunMemoryContext,
+        getRunMemoryContextRequestSchema.parse(input),
+        resultSchema(memoryRunContextDataSchema),
+      ),
+    getSettings: (input) =>
+      invokeValidated(
+        IpcChannel.GetMemorySettings,
+        getMemorySettingsRequestSchema.parse(input),
+        resultSchema(workspaceMemorySettingsSchema),
+      ),
+    setSettings: (input) =>
+      invokeValidated(
+        IpcChannel.SetMemorySettings,
+        setMemorySettingsRequestSchema.parse(input),
+        resultSchema(memorySettingsDataSchema),
+      ),
+    listJobs: (input) =>
+      invokeValidated(
+        IpcChannel.ListMemoryJobs,
+        listMemoryJobsRequestSchema.parse(input ?? {}),
+        resultSchema(memoryJobListDataSchema),
+      ),
+    retryJob: (input) =>
+      invokeValidated(
+        IpcChannel.RetryMemoryJob,
+        retryMemoryJobRequestSchema.parse(input),
+        resultSchema(memoryJobSummarySchema),
+      ),
+    cancelJob: (input) =>
+      invokeValidated(
+        IpcChannel.CancelMemoryJob,
+        cancelMemoryJobRequestSchema.parse(input),
+        resultSchema(memoryJobSummarySchema),
+      ),
+    rebuildProjection: (input) =>
+      invokeValidated(
+        IpcChannel.RebuildMemoryProjection,
+        rebuildMemoryProjectionRequestSchema.parse(input),
+        resultSchema(memoryProjectionStateDataSchema),
       ),
   },
   mcp: {
