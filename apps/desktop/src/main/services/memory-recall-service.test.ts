@@ -27,6 +27,9 @@ import { MemoryService } from './memory-service';
  *   正常写入路径产不出环（新修订只能引用已存在的修订），所以这里用同目录的 SQLite 文件
  *   改写 `provenance_json` 造出对抗状态，不为此在生产代码开后门。
  *
+ * - 来源证明消失：人工来源操作被移除后，修订虽然残留，也必须落 `source-unavailable`，
+ *   且账本只带身份不带正文（契约 §6.1、§8.2）。
+ *
  * 冲突组装配同样按 §6.1 的过滤顺序钉住：同议题、有效期重叠且没有裁决的两条口径都不注入并
  * 置 `conflictReviewRequired`；「两条都保留」之后两条必须作为一组回来，并带上适用条件说明。
  */
@@ -175,6 +178,16 @@ describe('召回期的依赖闭包与冲突组装配', () => {
       )?.identities ?? []
     ).map((identity) => identity.revisionId);
 
+  /** 抹掉一条已登记的人工来源操作：制造「来源消失、修订残留」的对抗状态。 */
+  const forgeDeleteOperation = (databasePath: string, operationId: string): void => {
+    const db = new Database(databasePath);
+    try {
+      db.prepare('DELETE FROM memory_operations WHERE operation_id = ?').run(operationId);
+    } finally {
+      db.close();
+    }
+  };
+
   it('末端依赖被删除时，整条链都不再注入', async () => {
     const { store, service, scope, workspaceId } = await setup();
 
@@ -289,5 +302,85 @@ describe('召回期的依赖闭包与冲突组装配', () => {
     expect(byRevision.get(contract.record.revisionId)).toBe('conflict-pair');
     expect(kept.memoryBlock).toContain('回款口径用于对外披露，签约口径用于内部销售复盘。');
     expect(kept.decisionSummary.conflictReviewRequired).toBe(false);
+  });
+
+  /** 造一对同议题口径并按「两条都保留」裁决，适用条件用满 300 码点上限。 */
+  const keepBothPair = async (
+    service: MemoryService,
+    store: AppStore,
+    scope: MemoryScope,
+    index: number,
+  ): Promise<void> => {
+    const left = await confirm(
+      service,
+      store,
+      scope,
+      `口径${index}按回款金额统计。`,
+      `收入口径${index}`,
+    );
+    const right = await confirm(
+      service,
+      store,
+      scope,
+      `口径${index}按签约金额统计。`,
+      `收入口径${index}`,
+    );
+    const resolved = await service.resolveConflict({
+      operationId: randomUUID(),
+      left: { id: left.record.id, expectedRevision: left.record.revision },
+      right: { id: right.record.id, expectedRevision: right.record.revision },
+      decision: 'keep-both',
+      applicabilityNote: `适用条件${index}`.padEnd(300, '说'),
+    });
+    expect(resolved.ok).toBe(true);
+  };
+
+  it('包装预算超限时整组让位，不留半条冲突口径', async () => {
+    const { store, service, scope, workspaceId } = await setup();
+    // 8 组 keep-both 正好占满 16 条上限；正文极短，撑破的只可能是条目级之外的块级预算。
+    for (const index of Array.from({ length: 8 }, (_, i) => i)) {
+      await keepBothPair(service, store, scope, index);
+    }
+
+    const outcome = outcomeOf(store, workspaceId);
+    const kept = outcome.selectedItems.map((item) => item.memoryId);
+    expect(kept.length).toBeLessThan(16);
+    expect(kept.length % 2).toBe(0);
+    expect([...outcome.memoryBlock].length).toBeLessThanOrEqual(8_000);
+
+    const dropped: number[] = [];
+    for (const index of Array.from({ length: 8 }, (_, i) => i)) {
+      const payment = outcome.memoryBlock.includes(`口径${index}按回款金额统计。`);
+      const contract = outcome.memoryBlock.includes(`口径${index}按签约金额统计。`);
+      // 组是原子单位：只带一条等于把「两条都保留」的裁决改成单方面采信。
+      expect(payment).toBe(contract);
+      if (!payment) dropped.push(index);
+    }
+    expect(dropped.length).toBeGreaterThan(0);
+  });
+
+  it('人工来源被移除后，残留修订不再注入且排除账本只记身份', async () => {
+    const { store, service, scope, workspaceId, databasePath } = await setup();
+
+    const memory = await confirm(service, store, scope, '收入按回款金额统计，不使用签约金额。');
+    expect(selectedRevisionIds(store, workspaceId)).toContain(memory.record.revisionId);
+
+    forgeDeleteOperation(databasePath, memory.operationId);
+
+    // 修订仍在库里：落选必须是因为来源证明站不住，而不是记录被连带删掉。
+    expect(store.memories.getRevision(memory.record.revisionId)).toBeDefined();
+
+    const outcome = outcomeOf(store, workspaceId);
+    expect(outcome.selectedItems.map((item) => item.revisionId)).not.toContain(
+      memory.record.revisionId,
+    );
+    const sourceFailures =
+      outcome.decisionSummary.exclusions
+        .find((entry) => entry.reason === 'source-unavailable')
+        ?.identities.map((identity) => identity.revisionId) ?? [];
+    expect(sourceFailures).toContain(memory.record.revisionId);
+    // 排除账本只带身份：正文既不进注入块，也不进账本。
+    expect(outcome.memoryBlock).not.toContain('不使用签约金额');
+    expect(JSON.stringify(outcome.decisionSummary)).not.toContain('不使用签约金额');
   });
 });

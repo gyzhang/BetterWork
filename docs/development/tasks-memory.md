@@ -549,3 +549,35 @@ Spec §15 是 WM00 的验收面，此前只按「文档已归档」处理，本�
 顺带核过「不把 code point 换算成实测 token」：`memory-extraction-service.ts:975` 的 `usage` 只在收到模型 chunk 时赋值，全仓无 code point→token 换算路径（`memory-retrieval.ts` 的 `tokenizeRecallText` 是相关性打分用词切分，与计量无关）。
 
 验证：本轮只改设计稿一段与任务板本节，无代码与测试变更；`npx prettier --check` 与 `git diff --check` 通过，新增中文段落整段 `sed -n` 回读，引用的 `MemoryView.tsx:96`、`memory-labels.ts:56-59`、`ContextPanel.test.tsx:285`、`memory-extraction-service.ts:526/975`、`App.tsx:214` 逐个 `grep -n` 核到行。
+
+### 15.23 §13.1 覆盖矩阵逐条映射与两条召回边界用例（2026-09-23 05:51）
+
+§13.1 列了 16 项「测试必须覆盖」的场景，此前各卡只写了「有用例」，没有逐条对到用例名。本轮把 24 个记忆相关测试文件加 `migrate.test.ts`／`register-ipc.test.ts`／渲染侧四个界面用例共 356 条 `it()` 标题按矩阵逐条正则映射（每项都补了同义词，如「成环／循环」「残留／来源消失」），命中分布：
+
+| 矩阵项 | 命中标题数 | 主要落点 |
+| --- | --- | --- |
+| 协议非法字段／ID 归属 | 6／1 | `memory-extraction-service.test.ts`、`workspace-memory-brief-service.test.ts`、协议侧 `index.test.ts` |
+| CAS 与幂等 | 9 | `memory-repository.test.ts`、`memory-extraction-service.test.ts` |
+| 状态终态 | 7 | `work-centered-memory.integration.test.ts` 等 |
+| 迁移回滚／外键 | 5 | `migrate.test.ts`、`memory-repository.test.ts` |
+| 有效期边界与清除 | 13 | `memory-conflict-policy.test.ts`、`memory-provenance.test.ts` |
+| 依赖递归／循环 | 7 | `memory-recall-service.test.ts`、`memory-extraction-service.test.ts` |
+| 中文与非 BMP 预算 | 2 | `memory-content-policy.test.ts`、`memory-retrieval.test.ts` |
+| 冲突组 | 13 | `memory-conflict-policy.test.ts`、`MemoryView.test.tsx` |
+| 取消／重启／迟到 | 13 | `memory-extraction-service.test.ts` 与四个 Hook |
+| 投影与 DB 一致 | 8 | `memory-service.test.ts`、`register-ipc.test.ts` |
+| 实际请求与重放 | 3 | `memory-dispatch-gate.test.ts`、`run-history-policy.test.ts` |
+| 精确版本／新任务不带旧授权 | 3 | `App.test.tsx`、`work-centered-memory.integration.test.ts` |
+| **来源移除但修订残留** | **1（且不在召回层）** | 只有 `workspace-memory-brief-service.test.ts` 的简报收缩用例 |
+| opt-in 0 调用、无模型／截断／EOF／工具、UI 过期响应 | 9／7／5 | `memory-extraction-service.test.ts`、四个 Hook |
+
+两条矩阵项在**召回层**没有对应边界用例，本轮补齐（`memory-recall-service.test.ts` 4 → 6 passed）：
+
+1. **「人工来源被移除后，残留修订不再注入且排除账本只记身份」**——`memory-recall-service.ts:809` 会因来源操作行读不到而落 `source-unavailable`，但这条分支此前从未被任何用例走过。用例先按真实写入路径产出 verified＋manual 来源的已确认记忆，再用同目录 SQLite 连接抹掉 `memory_operations` 那一行（与文件里既有的 `forgeDependencies` 同一手法：生产路径不存在「只删来源留修订」的命令，所以造对抗状态而不为它开后门），断言修订仍在库里、却没进注入块，排除账本按身份命中，且账本序列化后与注入块都不含正文。
+2. **「包装预算超限时整组让位，不留半条冲突口径」**——§6.2 的块级预算（整块 ≤8,000、包装 ≤2,000）只有常量断言，没有边界用例。用例造 8 组 keep-both 冲突（正好占满 16 条上限，正文极短），每组适用条件用满 §5.5 的 300 码点上限，使撑破的只可能是包装项；断言入选数小于 16、成对出现、块长不超 8,000，并逐组比对「两条要么都在块里、要么都不在」。
+
+两次都用**变异验证**确认用例真的咬得住：把 `sourceAvailable(...)` 判断短路后第 1 条红、把块级预算两个比较项短路后第 2 条红（`expected 16 to be less than 16`），其余四条不受影响；两次变异都已还原，工作树里只有测试文件变更。
+
+方法上的收获：命中数低不等于缺覆盖（关键词假阴性），命中数高也不等于覆盖到位（简报层有用例不能替代召回层）。判定只看一件事——**契约里那条分支有没有用例走过**，这一轮就是靠这条标准抓出召回层两个零覆盖分支的。
+
+验证：`npx eslint` 与 `npx prettier --check` 通过；`npm run typecheck` 退出码 0；`npm run verify` 退出码 0（Test Files 112 passed／Tests 1008 passed，较上一轮 1006 净增 2）；无表结构与协议变化，故无迁移用例。
