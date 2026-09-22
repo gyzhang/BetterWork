@@ -5,6 +5,8 @@
 - 依据：[专家与任务材料设计 v0.2](../designs/experts-and-task-materials.md)、[ADR-0014](../adr/0014-expert-context-and-material-binding.md)、[知识库与记忆](../04-knowledge-and-memory.md)、[成果版本与证据](../adr/0005-artifact-version-evidence.md)。
 - 范围：只定稿材料的身份、候选与授权边界、版本快照、恢复、读取足迹和成果输入关系。E20 不创建未来表，不宣称 E2 的读取隔离已经接入现有工具。
 
+> 2026-09-22 记忆增量衔接（Proposed，未实施）：[记忆实施契约](memory-contracts.md) 只**引用**本文件已定案的 `MaterialReference` 精确身份与内容哈希作为记忆的材料依赖，不新造材料类型或第二套来源系统。三条上下文兼容说明：① 历史上下文重放的安全性判定使用「历史已选 ∪ 实际读取」材料的保守并集，材料被移除/换版本/哈希不符会使依赖它的安全历史不可重放；② 参考成果标记固定 `artifactVersionId` + `contentHash` 且不跟随 latest，标记本身**不算读取足迹、不算 Evidence**；③ 引用到当前任务时复用本文件的用途枚举实际字符串（`rule`/`current-input`/`historical-comparison`/`structure-reference`/`template`/`background`/`other`），不新增同义值。本文件既有字段与验收状态不变。
+
 ## 1. 不变量
 
 材料有三个不同事实，必须分别保存：

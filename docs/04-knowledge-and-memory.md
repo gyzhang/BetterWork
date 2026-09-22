@@ -4,6 +4,8 @@
 
 > 2026-09-08：长期工作目录与已有知识共同支撑任务，不要求先建完整知识库；一个专家持续协作不等于无限累加聊天历史。当前已交付四种记忆作用域、确认/编辑/删除与运行注入；完整记忆系统和其他格式的旧 Phase 编号以 [新版顺序](07-mvp-and-roadmap.md#0-2026-09-08-生效的开发顺序) 为准。目录发现、自动反思与向量记忆仍以后续切片处理。
 
+> 2026-09-22 归档，2026-09-23 实施收口：**工作型记忆增量已归档为设计、ADR、契约、任务卡与提示词五份文档，WM01–WM15 的代码与自动化测试已落地（证据见任务板 §15），WM16 的人工验收尚未完成。** 产品行为见 [工作型记忆产品设计](designs/work-centered-memory.md)，决策见 [ADR-0026](adr/0026-work-centered-memory.md)（已按该方案实施），字段/算法/迁移/接口唯一真相源见 [记忆实施契约](development/memory-contracts.md)，实施状态只由 [WM 任务板](development/tasks-memory.md) 维护。下文标注「已实现（WM…）」的能力由 WM01–WM15 交付，自动化证据见任务板 §15；界面与真实模型语义的人工验收以任务板状态为准，未完成前不得写成用户已确认。本文不复制 WM 的字段清单。
+
 ## 1. 核心区分
 
 ```text
@@ -109,7 +111,7 @@ E22 已能把具体 Knowledge revision 的身份、哈希和用途保存到 Task
 
 ## 6. 三层记忆体系
 
-> **现状：E31/E32 已完成最小记忆闭环。** 属 E3 范围（见 [开发计划](development/tasks-experts.md)），架构决策见 [ADR-0004](adr/0004-hybrid-memory.md) 与 [ADR-0015](adr/0015-memory-scope-and-governance.md)。SQLite 的 `MemoryRecord` 修订是唯一真相源；每次新 Run 只注入有效的 `confirmed` 记录，最多 16 条且总内容不超过 6,000 个 Unicode 字符，并记录实际读取的修订与哈希。设置页支持创建、查看、确认、编辑和删除；对话完成消息支持用户确认后形成记忆；任务资料面板的“本任务不用”只写入当前 TaskContextRevision。Markdown 只读投影按 User/Workspace/Expert/Expert×Workspace 作用域重建，不能回写数据库。自动反思、Embedding、向量索引和批量记忆维护仍未实现。
+> **现状：E31/E32 已完成最小记忆闭环。** 属 E3 范围（见 [开发计划](development/tasks-experts.md)），架构决策见 [ADR-0004](adr/0004-hybrid-memory.md) 与 [ADR-0015](adr/0015-memory-scope-and-governance.md)。SQLite 的 `MemoryRecord` 修订是唯一真相源；每次新 Run 只注入有效的 `confirmed` 记录，最多 16 条且总内容不超过 6,000 个 Unicode 字符，并记录实际读取的修订与哈希。设置页支持创建、查看、确认、编辑和删除；对话完成消息支持用户确认后形成记忆；任务资料面板的“本任务不用”只写入当前 TaskContextRevision。Markdown 只读投影按 User/Workspace/Expert/Expert×Workspace 作用域重建，不能回写数据库。自动反思、Embedding、向量索引和批量记忆维护仍未实现。**已知边界**：现有取候选顺序是范围/时间排序后先截 16 条再套预算，不含任务内容相关性匹配，也不在排除后补位；按任务相关性召回、结构化来源与依赖判定、请求阶段审计均为 WM 拟新增能力（[契约 §6](development/memory-contracts.md)），见 [WM 任务板](development/tasks-memory.md)。
 
 ### Core Memory Files（E31 已实现的受管投影）
 
@@ -159,6 +161,8 @@ interface MemoryRecord {
 
 Memory 文件和 MemoryRecord 共同生成全文与向量索引。索引不是长期真相源，可以随时重建。
 
+WM 拟新增的第一期**不建派生索引**：召回在 SQLite 范围过滤后使用固定版本 `memory-recall-v1` 的确定性内存文本匹配，不引入 FTS、Embedding 或向量依赖；未来的索引只是可重建优化（[契约 §6.1](development/memory-contracts.md)）。
+
 ## 7. 记忆形成
 
 ### 用户明确记忆
@@ -173,6 +177,8 @@ Agent 发现可能长期有用的信息时，生成 candidate，由用户保存�
 
 任务结束后可整理成功方法、重复偏好、冲突和过期信息。后台反思只产生 candidate，不静默修改长期记忆。
 
+WM 拟新增的提炼**不是定时反思**：自动触发只有两处——Run 成功终态已提交、用户提交含非空 feedback 的讨论节点；每个工作空间独立开关且默认关闭，作业是 Main 层无工具单轮调用，结果一律停在 candidate，模型无权写 confirmed（[产品设计 §3.3](designs/work-centered-memory.md)、[契约 §7](development/memory-contracts.md)）。全量聊天扫描与定时反思明确不在范围内。
+
 ## 8. 记忆治理
 
 产品应提供“记忆中心”，支持：
@@ -183,6 +189,8 @@ Agent 发现可能长期有用的信息时，生成 candidate，由用户保存�
 - 确认、编辑、合并和删除
 - 标记过期
 - 禁止某类信息再次被建议
+
+已实现（E32）：设置页的创建、查看、确认、编辑、删除与「本任务不用」。**已实现（WM02/WM03）**：幂等操作回执与 `expectedRevision` 并发控制、以 action 表达的状态转移（confirm/reject/restore-candidate/expire/delete/reconfirm）、候选「暂不采用」可恢复、冲突裁决 `keep-both`/`replace` 绑定精确修订对、有效期的 set/clear 语义、legacy 来源复核入口，以及投影「数据库已提交成功＋可见警告」的一致性（[契约 §5.4–§5.6](development/memory-contracts.md)）。本期不做置信度自动覆盖，也不声称能自动识别新材料与记忆的全部语义冲突。
 
 ## 9. 知识加工闭环
 
@@ -199,6 +207,8 @@ Agent 发现可能长期有用的信息时，生成 candidate，由用户保存�
 ```
 
 生成的 Artifact 不自动进入知识库，必须由用户确认，避免知识库充满中间稿和低质量重复内容。
+
+**已实现（WM12–WM14）**补上闭环的「继承」一环：用户可把某个精确成果版本指定为本空间参考版本，并在下个任务显式引用（固定 `artifactVersionId` + `contentHash`，不跟随 latest，也**不表示内容正确或已获批准**）；工作空间简报是上述已确认目标/约束/决策/方法加未决讨论节点的可重建只读视图，不整体注入模型（[产品设计 §3.6](designs/work-centered-memory.md)、[契约 §10](development/memory-contracts.md)）。图中「可选择形成记忆」在 WM 下仍要求用户确认，模型只能产出候选；「可选择形成 Skill」不在本期范围。
 
 ## 10. 模型角色
 

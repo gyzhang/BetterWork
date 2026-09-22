@@ -249,6 +249,8 @@ Knowledge Vault 使用 `userData/vaults/<id>/vault.sqlite`，应用状态、Task
 - Expert：某个专家积累的方法和经验
 - Task：只对特定任务有效的上下文
 
+**Task 不是长期记忆作用域。** 上面第四项是早期目标描述：`Task` 在本模型里始终是**临时协作上下文**（TaskContextRevision 的目标、材料选择、能力与 `excludedMemoryIds`），随任务草稿演进、按期望修订号做并发控制，不进入 `MemoryRecord` 的 scope 判别联合。已实现的四种持久作用域是 `user`、`workspace`、`expert`、`expert-workspace`（[ADR-0015](adr/0015-memory-scope-and-governance.md)），[ADR-0026](adr/0026-work-centered-memory.md) 拟延续它们并只补治理字段，**不新增第五种 scope**。本期的目标、临时排除与材料选择留在 TaskContext 与 Run；只有用户明确确认、可跨任务复用的内容才成为 Memory。WorkspaceBrief 是这些事实的可重建视图，也不是新的事实库（[产品设计 §1.3](designs/work-centered-memory.md)、[契约 §5.2](development/memory-contracts.md)）。
+
 ## 10. Capability
 
 2026-09-14 已接受的增量关系：Expert 保存不可变修订；TaskContextRevision 保存下一次运行的可见草稿；RunContextSnapshot 固定实际专家、工具/Skill、资料引用与记忆适用范围。E10 已定案 Expert/Revision 与 E1 草稿字段，E11 已实现 Expert 身份、修订和管理 IPC，E12 已实现 TaskContextRevision 与运行时人格/能力裁决，E13–E15 已实现召唤、草稿保存、身份恢复、配置 UI 和内置分发。材料引用区分知识内容修订、成果版本和文件快照，按 [材料、快照与运行来源契约](development/material-contracts.md) 定案。任务缩小范围时按上下文段排除旧模型输入；新成果版本可关联输入材料。完整字段不是本节示例接口的已发布 Schema，实施必须遵循两份开发契约。

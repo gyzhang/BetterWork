@@ -6,6 +6,8 @@
 - Decisions: [ADR-0024](../adr/0024-api-services-and-credentials.md) and [ADR-0025](../adr/0025-remote-mcp-and-capability-bindings.md), both Proposed.
 - Existing contracts: [Expert/Task](expert-contracts.md), [materials](material-contracts.md), and [Skill execution](contracts.md).
 
+> 2026-09-22 memory increment note (proposed, not implemented): the [work-centered memory design](../designs/work-centered-memory.md), [ADR-0026](../adr/0026-work-centered-memory.md) and [memory contracts](memory-contracts.md) plan a Main-side shared model provider factory that reuses the existing model profiles and Main-only credential access. That increment deliberately depends on no unfinished CF remote MCP or API-service capability, and it implements none of the interfaces below. If a memory card later needs a CF-owned field, the CF card owns the change; missing model availability only blocks the corresponding real-extraction acceptance and never reopens the credential design. Existing A/B0/E/CF statuses remain unchanged.
+
 ## 1. Invariants and ownership
 
 1. API tools, MCP tools, and Skills are separate capability categories resolved into the existing Agent execution boundary.

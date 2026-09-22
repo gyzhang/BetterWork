@@ -139,6 +139,16 @@ Expert、ExpertRevision 和 TaskContextRevision 都由 Application 层解析。�
 
 脚本和 Python Worker 继续以本机用户权限执行。受管输入目录、工作路径和 Application 过滤是产品范围约束，不是 OS 进程沙箱，架构文档不宣称能阻止受信任脚本主动访问本机其他路径。
 
+### 4.3 记忆召回、提炼与派生简报边界（WM，已实现）
+
+[ADR-0026](adr/0026-work-centered-memory.md)与[记忆实施契约](development/memory-contracts.md)为记忆划定三条边界，2026-09-23 起已有自动化验收记录（[WM 任务板](development/tasks-memory.md) §15），人工界面验收仍待确认：
+
+- **Main 层无工具单轮提炼作业**：`services/memory-extraction-service.ts` 复用 `services/model-provider-factory.ts` 解析出的模型 profile 与凭据，只输出严格 JSON 候选；不新增模型设置分区、不新增 Agent 引擎、不给提炼作业任何工具，Agent Core 不导入数据库或 Electron。候选一律停在 `candidate`，确认仍由用户在 Main 边界提交。
+- **运行记忆请求审计**：Application 在准备阶段固化精确记忆修订与依赖并集，Provider 包装器分别持久化 `selected` / `request-prepared` / `dispatch-attempted`（旧记录 `legacy_unknown`），只保存规范化 `requestHash`，不保存第二份完整模型请求、不记录密钥。既有 `run_memory_reads` 在模型准备前写入，不能被解释为「外部模型已收到」。任何阶段持久化失败都不发起该次请求，主 Run 仍按现有唯一终态收口。
+- **只读派生简报与版本级参考标记**：工作空间简报与参考版本列表都是查询投影，不持久化正文副本、不用 LLM 二次总结、不整体注入模型，因此不构成第二真相源，符合「SQLite 是产品状态真相源；缓存、索引和预览必须可重建」。Markdown 只读投影同样只出不进，模型永不从中读取。
+
+依赖方向不变：Renderer 仍只经 Preload 的最小类型化 API 调用 Application，IPC 与 DTO 定义仍收敛在 `packages/agent-protocol`；记忆不授予工具或材料权限，跨库来源引用仍按 §8 的两库边界由 Main 校验。
+
 ## 5. 运行时事件
 
 第一版事件至少包括：

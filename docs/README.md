@@ -24,6 +24,7 @@
 - [API tools and remote MCP](designs/api-tools-and-remote-mcp.md): documented next capability increment for named API service profiles, protected credentials, and remote MCP; [ADR-0024](adr/0024-api-services-and-credentials.md) and [ADR-0025](adr/0025-remote-mcp-and-capability-bindings.md) remain Proposed. Documentation only; product development requires a separate instruction.
 - [Skill 信任与本地分发](adr/0011-skill-trust-and-local-distribution.md)：已确认的产品规则，具体实现未落地。
 - [Skill 执行器与依赖管理](designs/skill-executor-and-dependencies.md)：首个 PPT Skill 的执行、环境、文件成果与阶段 A 验收，配套 ADR-0010 为 Proposed。
+- [工作型记忆产品设计](designs/work-centered-memory.md)：2026-09-22 归档，同日开工、2026-09-23 收口。近期产品范围已获用户确认；[ADR-0026](adr/0026-work-centered-memory.md) 仍记为 Proposed 但已按其技术方案实施，WM01–WM15 有自动化验收记录，人工验收见任务板（实施状态以任务板为准）。字段/算法/迁移/接口唯一真相源是[记忆实施契约](development/memory-contracts.md)。
 
 ## 开发执行规划
 
@@ -31,6 +32,7 @@
 - [能力基础开发计划 CF00–CF51](development/tasks-capability-foundation.md)：把 API tools 与远程 MCP 设计拆成 M0–M5 六个里程碑与 17 张任务卡，与现有 A/B0/E 并行。里程碑入口不自动开工，需单独开发指令。
 - [阶段 A 执行手册（供 5.6 Luna 使用）](development/README.md)：22 项顺序任务、共享实施契约、逐项验收与可复制派发提示词；仅规划，未开始实现。
 - [阶段 B/C 后续规划](development/phase-b-c-roadmap.md)：专家配置、研究到汇报与积累复用。
+- [工作型记忆开发计划 WM00–WM16](development/tasks-memory.md)：2026-09-22 建立的唯一 WM 任务状态板；[记忆实施契约](development/memory-contracts.md) 定义字段与算法，[记忆编码提示词](development/memory-coding-prompts.md) 提供逐卡可复制指令。仅 WM00（文档归档）已执行；WM01 起需用户先批准 [ADR-0026](adr/0026-work-centered-memory.md) 的技术方案，且与 A/B0/E/CF 任务状态互不改写。
 
 ## 架构决策记录
 

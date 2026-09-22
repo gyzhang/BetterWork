@@ -27,7 +27,10 @@
 | [0023](0023-unspecified-material-purpose.md) | 材料“其他”用途与未指定来源关系 | Accepted |
 | [0024](0024-api-services-and-credentials.md) | API service profiles and protected credentials | Proposed; documentation only |
 | [0025](0025-remote-mcp-and-capability-bindings.md) | Remote MCP and versioned capability bindings | Proposed; documentation only |
+| [0026](0026-work-centered-memory.md) | 工作型记忆的召回、来源治理与提炼边界 | Proposed（已按用户开工指令实施，接受状态待用户确认；WM01–WM15 有自动化证据） |
 
 ADR 一经 Accepted 不直接重写历史；需要改变时新增 ADR 并标记替代关系。
+
+[ADR-0026](0026-work-centered-memory.md) 延续 [ADR-0004](0004-hybrid-memory.md) 的混合记忆边界，细化 [ADR-0015](0015-memory-scope-and-governance.md) 的来源与失败语义，并**拟替代**其固定范围优先的排序、Unicode 长度的含糊表述与「选中即实际注入」的解释，同时补足其范围缩小后的安全重放要求；它保留 [ADR-0014](0014-expert-context-and-material-binding.md) 的材料范围、[ADR-0005](0005-artifact-version-evidence.md) 的版本与来源、[ADR-0019](0019-discussion-checkpoints-and-rework.md) 的讨论节点事实边界。ADR-0026 获批准前 ADR-0015 全部条款仍然有效，两份记录的接受历史均不被改写。产品设计见 [work-centered-memory](../designs/work-centered-memory.md)，字段与接口见 [memory-contracts](../development/memory-contracts.md)，实施状态见 [tasks-memory](../development/tasks-memory.md)。
 
 The [API/MCP design](../designs/api-tools-and-remote-mcp.md) and [capability contracts](../development/capability-contracts.md) describe the proposed increment. ADR-0024 proposes replacing ADR-0007's global provider selection/plaintext credential decisions; ADR-0025 proposes extending ADR-0016/0021. Existing accepted records and implementation/acceptance statuses are unchanged. Product development requires a separate instruction.

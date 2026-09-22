@@ -13,6 +13,7 @@
 | 新增/修改 IPC、协议、Zod Schema | `packages/agent-protocol/src/index.ts`、[系统架构](docs/03-system-architecture.md)、[ADR-0003](docs/adr/0003-agent-core-boundary.md) |
 | 修改 Agent Core / Provider / Tool | [系统架构](docs/03-system-architecture.md)、[领域模型](docs/02-domain-model.md) |
 | Knowledge 导入/索引/检索/Evidence/打开源文件 | [知识库与记忆](docs/04-knowledge-and-memory.md) |
+| 记忆召回/来源治理/自动提炼建议/工作空间简报/参考成果版本 | [工作型记忆产品设计](docs/designs/work-centered-memory.md)、[记忆实施契约](docs/development/memory-contracts.md)、[WM 任务板](docs/development/tasks-memory.md)、[ADR-0026](docs/adr/0026-work-centered-memory.md)（Proposed，已按用户开工指令实施） |
 | Artifact / 版本 / 来源 / 导出 | [ADR-0005](docs/adr/0005-artifact-version-evidence.md)、[UI/UX 体系](docs/10-ui-ux-system.md) |
 | UI / 样式 / 主题 / 组件 | [UI/UX 体系](docs/10-ui-ux-system.md) |
 | 启动/停止/构建/验证/提交 | [交接说明](docs/11-qoder-handoff.md) 第 3 节 |
@@ -36,6 +37,8 @@
 2026-09-14 用户已通过[专家与任务材料设计 v0.2](docs/designs/experts-and-task-materials.md)评审，[ADR-0014](docs/adr/0014-expert-context-and-material-binding.md)已接受；E11–E15 已落地专家持久化、执行注入、召唤对话、配置 UI 和首个内置分发样本，E20 已定案材料、快照和运行来源契约，E21 已落地知识内容修订与输入快照恢复基础，E22 已接入材料引用校验与草稿持久化。后续以[专家开发计划](docs/development/tasks-experts.md)为唯一新任务入口：E00 核对 A/macOS 与 B0 尾项，E2 材料与来源、E3 最小记忆、E4 MCP/网页正文、E5 Office 输入与连续两期交付。专家页“召唤”直接进入对话，不设启动前任务准备表单；材料按需选择并受运行范围约束。下文早期“记忆随 C、MCP 独立确认、建议待审阅”排期按此更新；已接受范围无需重复确认，具体技术决策在计划指定卡中落实。
 
 2026-09-20 用户接受 [API tools 与远程 MCP 设计](docs/designs/api-tools-and-remote-mcp.md)（[ADR-0024](docs/adr/0024-api-services-and-credentials.md) 与 [ADR-0025](docs/adr/0025-remote-mcp-and-capability-bindings.md) 仍 Proposed，[capability-contracts](docs/development/capability-contracts.md) 定义字段），并确认拆分为[能力基础开发计划](docs/development/tasks-capability-foundation.md)（CF00–CF51）。CF 与现有 A/B0/E 并行推进，不重复排期也不改写已有任务状态；里程碑入口不自动开工，需单独开发指令。
+
+2026-09-22 [工作型记忆产品设计](docs/designs/work-centered-memory.md) 归档：近期产品范围已获用户确认，[ADR-0026](docs/adr/0026-work-centered-memory.md) 与[记忆实施契约](docs/development/memory-contracts.md) 的具体技术方案**记为 Proposed；2026-09-22 用户在目标模式下下达「完整实现该 Spec」的指令构成开工授权，WM01–WM15 的代码与自动化测试已于 2026-09-23 收口（证据见任务板 §15），ADR 接受状态与 WM16 人工验收仍待用户确认**。[WM00–WM16 任务板](docs/development/tasks-memory.md) 是 WM 系列唯一状态真相源，设计总稿快照不回写；逐卡提示词见[记忆编码提示词](docs/development/memory-coding-prompts.md)。WM 与 A/B0/E/CF 并行，不重复排期也不改写其任务状态。授权边界相互独立：设计批准、单卡开发授权、真实模型调用授权、提交发布授权各需单独指令；已下达的实现指令覆盖 WM 卡片范围，但不覆盖真实模型语义验收与发布。本轮记忆开发不依赖 CF 未完成的远程 MCP/API 能力，也不引入 Embedding、向量库、全量聊天扫描或定时反思。
 
 Phase 0 与原 Phase 1 的知识库、搜索和 Markdown 成果部分能力已实现。2026-09-08 用户已确认后续顺序：
 

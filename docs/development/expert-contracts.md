@@ -2,6 +2,8 @@
 
 > **Proposed capability extension — 2026-09-20:** [Capability contracts](capability-contracts.md) define API service-profile selections, versioned/reviewed MCP bindings, category replacement versus preset inheritance, explicit empty selections, and concrete Run metadata. The [product design](../designs/api-tools-and-remote-mcp.md) preserves direct summon-to-conversation and existing Skill execution. These proposed fields and compatibility projections are not implemented changes to the E10/E42 contracts below; historical Expert revisions and existing acceptance statuses remain unchanged.
 
+> **Proposed capability extension — 2026-09-22:** [工作型记忆产品设计](../designs/work-centered-memory.md)、[ADR-0026](../adr/0026-work-centered-memory.md)（Proposed）与[记忆实施契约](memory-contracts.md) 规划在 TaskContextRevision 上继续使用现有 `excludedMemoryIds`，并规定保存排除项时**必须完整保留** executor、skillBindings、materials、modelReference、builtinToolPolicy、mcpToolBindings 等其他字段（CAS 冲突保留草稿）。记忆的来源依赖只引用本契约已定案的精确材料引用，不改变 Expert/TaskContext/Run 的既有边界，也不新增第五种记忆 scope。该增量在 [WM 任务板](tasks-memory.md) 上无验收记录，不修改本文件的 E10/E42 字段定义。
+
 - 状态：E10 已定案并由 E11–E15 实现；E42 已为 ExpertRevision 与 TaskContext 接入 MCP 工具选择。材料增量由 E20 定案，E21–E25 已实现。
 - 日期：2026-09-14。
 - 依据：[专家与任务材料设计 v0.2](../designs/experts-and-task-materials.md)、[ADR-0014](../adr/0014-expert-context-and-material-binding.md)、[ADR-0012](../adr/0012-composer-capability-binding.md)。
