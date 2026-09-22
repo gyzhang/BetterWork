@@ -493,6 +493,135 @@ export const runMaterialReadSchema = z
   .strict();
 export type RunMaterialRead = z.infer<typeof runMaterialReadSchema>;
 
+/** §5.1：正文、摘录与预算都按 Unicode code point 计数；Zod 的 max() 数的是 UTF-16 单元。 */
+export function countCodePoints(value: string): number {
+  return Array.from(value).length;
+}
+
+export const MEMORY_CONTENT_MAX_CODE_POINTS = 2_000;
+export const MEMORY_CANDIDATE_CONTENT_MAX_CODE_POINTS = 500;
+export const MEMORY_SOURCE_EXCERPT_MAX_CODE_POINTS = 500;
+export const MEMORY_TOPIC_KEY_MAX_CODE_POINTS = 80;
+export const MEMORY_APPLICABILITY_NOTE_MIN_CODE_POINTS = 1;
+export const MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS = 300;
+export const MEMORY_REFERENCE_LABEL_MAX_CODE_POINTS = 120;
+export const MEMORY_SOURCE_MAX = 3;
+export const MEMORY_MATERIAL_DEPENDENCY_MAX = 200;
+export const MEMORY_MEMORY_DEPENDENCY_MAX = 100;
+export const MEMORY_COMMITTED_REVISION_MAX = 20;
+export const LIST_PAGE_DEFAULT_LIMIT = 50;
+export const LIST_PAGE_MAX_LIMIT = 100;
+
+/** contentHash、normalizedHash、excerptHash 等摘要字段的统一形状；散列由 Main 计算。 */
+export const sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/u);
+export const memoryOperationIdSchema = z
+  .string()
+  .regex(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u,
+    'operationId 必须是 UUID',
+  );
+
+function boundedTextSchema(label: string, min: number, max: number, trim: boolean) {
+  const base = trim ? z.string().trim() : z.string();
+  return base.superRefine((value, context) => {
+    const codePoints = countCodePoints(value);
+    if (codePoints >= min && codePoints <= max) return;
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `${label}长度必须为 ${min}–${max} 个字符，当前 ${codePoints} 个`,
+    });
+  });
+}
+
+function trimmedTextSchema(label: string, min: number, max: number) {
+  return boundedTextSchema(label, min, max, true);
+}
+
+/** 摘录与片段是原文的切片：不能修剪，否则切片与 start/end 区间不再对应。 */
+function exactTextSchema(label: string, min: number, max: number) {
+  return boundedTextSchema(label, min, max, false);
+}
+
+function compareStableKeys(left: string, right: string): number {
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
+}
+
+function stringifyStableValue(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) {
+    const items: readonly unknown[] = value;
+    return `[${items.map((item) => stringifyStableValue(item)).join(',')}]`;
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined && typeof item !== 'function')
+      .sort(([left], [right]) => compareStableKeys(left, right));
+    const body = entries
+      .map(([key, item]) => `${JSON.stringify(key)}:${stringifyStableValue(item)}`)
+      .join(',');
+    return `{${body}}`;
+  }
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return JSON.stringify(value);
+  }
+  return 'null';
+}
+
+/** §5.1：对象键排序、语义有序数组保留顺序；请求哈希与幂等判定只能用它。 */
+export function stableStringifyJson(value: unknown): string {
+  return stringifyStableValue(value);
+}
+
+/** §5.1：日期 patch 只有 set 与 clear 两种互斥动作，省略表示保留；不用 undefined 猜清空。 */
+export const datePatchSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('set'), value: z.number().int().nonnegative() }).strict(),
+  z.object({ action: z.literal('clear') }).strict(),
+]);
+export type DatePatch = z.infer<typeof datePatchSchema>;
+
+export const topicKeyPatchSchema = z.discriminatedUnion('action', [
+  z
+    .object({
+      action: z.literal('set'),
+      value: trimmedTextSchema('议题标识', 1, MEMORY_TOPIC_KEY_MAX_CODE_POINTS),
+    })
+    .strict(),
+  z.object({ action: z.literal('clear') }).strict(),
+]);
+export type TopicKeyPatch = z.infer<typeof topicKeyPatchSchema>;
+
+/** §9.1：游标是 updatedAt＋id 的版本化结构，不是任意 SQL 游标。 */
+export const listCursorSchema = z
+  .object({
+    version: z.literal(1),
+    updatedAt: z.number().int().nonnegative(),
+    id: z.string().min(1),
+  })
+  .strict();
+export type ListCursor = z.infer<typeof listCursorSchema>;
+
+export interface ListPage<TItem> {
+  items: TItem[];
+  nextCursor?: ListCursor | undefined;
+}
+
+function buildListPageSchema<TSchema extends z.ZodType>(itemSchema: TSchema) {
+  return z
+    .object({
+      items: z.array(itemSchema),
+      nextCursor: listCursorSchema.optional(),
+    })
+    .strict();
+}
+
+/** §9.1：ListPage 的 items 顺序由对应通道定义，游标只定位边界。 */
+export function listPageSchema<TSchema extends z.ZodType>(
+  itemSchema: TSchema,
+): ReturnType<typeof buildListPageSchema<TSchema>> {
+  return buildListPageSchema(itemSchema);
+}
+
 export const memoryScopeSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('user') }).strict(),
   z.object({ kind: z.literal('workspace'), workspaceId: z.string().min(1) }).strict(),
@@ -523,6 +652,153 @@ export const memoryStatusSchema = z.enum([
   'deleted',
 ]);
 export type MemoryStatus = z.infer<typeof memoryStatusSchema>;
+/** §5.2：candidateDisposition 只存在于 candidate 记录；rejected 可恢复为 pending 或删除。 */
+export const memoryCandidateDispositionSchema = z.enum(['pending', 'rejected']);
+export type MemoryCandidateDisposition = z.infer<typeof memoryCandidateDispositionSchema>;
+export const memoryProvenanceStateSchema = z.enum(['known', 'legacy_unknown']);
+export type MemoryProvenanceState = z.infer<typeof memoryProvenanceStateSchema>;
+/** §5.2：细分类由用户选择，kind 由宿主按本表推导，客户端不提交两者组合。 */
+export const memoryFacetSchema = z.enum([
+  'goal',
+  'constraint',
+  'decision',
+  'fact',
+  'method',
+  'preference',
+  'experience',
+]);
+export type MemoryFacet = z.infer<typeof memoryFacetSchema>;
+export const facetToKind = {
+  goal: 'semantic',
+  constraint: 'semantic',
+  decision: 'semantic',
+  fact: 'semantic',
+  method: 'procedural',
+  preference: 'preference',
+  experience: 'episodic',
+} as const satisfies Record<MemoryFacet, MemoryKind>;
+
+/** §5.3：讨论节点来源只锚定人工字段内容，节点被替代不伪造内容变化，不取 status/updatedAt。 */
+export const memoryCheckpointFieldSchema = z.enum(['feedback', 'summary']);
+export type MemoryCheckpointField = z.infer<typeof memoryCheckpointFieldSchema>;
+
+const memorySourceExcerptFields = {
+  start: z.number().int().nonnegative(),
+  end: z.number().int().nonnegative(),
+  excerpt: exactTextSchema('来源摘录', 1, MEMORY_SOURCE_EXCERPT_MAX_CODE_POINTS),
+  excerptHash: sha256HexSchema,
+  locator: z.string().min(1).max(2_000).optional(),
+};
+const manualMemorySourceSchema = z
+  .object({
+    kind: z.literal('manual'),
+    operationId: memoryOperationIdSchema,
+    contentHash: sha256HexSchema,
+    ...memorySourceExcerptFields,
+  })
+  .strict();
+const runUserMemorySourceSchema = z
+  .object({
+    kind: z.literal('run-user'),
+    runId: z.string().min(1),
+    promptHash: sha256HexSchema,
+    ...memorySourceExcerptFields,
+  })
+  .strict();
+const runAssistantMemorySourceSchema = z
+  .object({
+    kind: z.literal('run-assistant'),
+    runId: z.string().min(1),
+    eventId: z.string().min(1),
+    contentHash: sha256HexSchema,
+    ...memorySourceExcerptFields,
+  })
+  .strict();
+const checkpointMemorySourceSchema = z
+  .object({
+    kind: z.literal('checkpoint'),
+    checkpointId: z.string().min(1),
+    field: memoryCheckpointFieldSchema,
+    contentHash: sha256HexSchema,
+    ...memorySourceExcerptFields,
+  })
+  .strict();
+const artifactVersionMemorySourceSchema = z
+  .object({
+    kind: z.literal('artifact-version'),
+    artifactId: z.string().min(1),
+    artifactVersionId: z.string().min(1),
+    contentHash: sha256HexSchema,
+    ...memorySourceExcerptFields,
+  })
+  .strict();
+/** §5.3：SourceRef 只由 Main 读已登记实体后生成；Renderer 提交的是 memorySourceSelectorSchema。 */
+export const memorySourceRefSchema = z
+  .discriminatedUnion('kind', [
+    manualMemorySourceSchema,
+    runUserMemorySourceSchema,
+    runAssistantMemorySourceSchema,
+    checkpointMemorySourceSchema,
+    artifactVersionMemorySourceSchema,
+  ])
+  .superRefine((source, context) => {
+    if (source.end < source.start) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['end'],
+        message: '摘录区间为左闭右开，end 不得小于 start',
+      });
+      return;
+    }
+    if (countCodePoints(source.excerpt) !== source.end - source.start) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['excerpt'],
+        message: '摘录字符数必须与 start/end 区间一致',
+      });
+    }
+  });
+export type MemorySourceRef = z.infer<typeof memorySourceRefSchema>;
+
+/** §5.3：依赖记忆按精确修订与哈希检查，不按稳定 id。 */
+export const memoryDependencySchema = z
+  .object({
+    memoryId: z.string().min(1),
+    revisionId: z.string().min(1),
+    contentHash: sha256HexSchema,
+  })
+  .strict();
+export type MemoryDependency = z.infer<typeof memoryDependencySchema>;
+
+const legacyMemoryProvenanceSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    verification: z.literal('legacy-unverified'),
+    sourceType: memorySourceTypeSchema,
+    sourceId: z.string().min(1).optional(),
+    sourceLocator: z.string().min(1).optional(),
+  })
+  .strict();
+const verifiedMemoryProvenanceSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    verification: z.literal('verified'),
+    authority: z.enum(['user-instruction', 'derived']),
+    capturedAt: z.number().int().nonnegative(),
+    sources: z.array(memorySourceRefSchema).min(1).max(MEMORY_SOURCE_MAX),
+    materialDependencies: z.array(materialReferenceSchema).max(MEMORY_MATERIAL_DEPENDENCY_MAX),
+    memoryDependencies: z.array(memoryDependencySchema).max(MEMORY_MEMORY_DEPENDENCY_MAX),
+    originWorkspaceId: z.string().min(1).optional(),
+    genericDeclaration: z.boolean().optional(),
+  })
+  .strict();
+/** §5.3：scope 与 authority 的组合规则由 Main 判定并回领域错误，不在协议里猜测。 */
+export const memoryProvenanceSchema = z.discriminatedUnion('verification', [
+  legacyMemoryProvenanceSchema,
+  verifiedMemoryProvenanceSchema,
+]);
+export type MemoryProvenance = z.infer<typeof memoryProvenanceSchema>;
+
 export const memoryRecordSchema = z
   .object({
     id: z.string().min(1),
@@ -530,7 +806,7 @@ export const memoryRecordSchema = z
     revision: z.number().int().positive(),
     scope: memoryScopeSchema,
     kind: memoryKindSchema,
-    content: z.string().trim().min(1).max(2_000),
+    content: trimmedTextSchema('记忆正文', 1, MEMORY_CONTENT_MAX_CODE_POINTS),
     sourceType: memorySourceTypeSchema,
     sourceId: z.string().min(1).optional(),
     sourceLocator: z.string().min(1).optional(),
@@ -539,9 +815,255 @@ export const memoryRecordSchema = z
     validFrom: z.number().int().nonnegative().optional(),
     validUntil: z.number().int().nonnegative().optional(),
     supersedesId: z.string().min(1).optional(),
-    contentHash: z.string().min(1),
+    contentHash: sha256HexSchema,
     createdAt: z.number().int().nonnegative(),
     updatedAt: z.number().int().nonnegative(),
+    facet: memoryFacetSchema,
+    topicKey: trimmedTextSchema('议题标识', 1, MEMORY_TOPIC_KEY_MAX_CODE_POINTS).optional(),
+    normalizedHash: sha256HexSchema,
+    provenance: memoryProvenanceSchema,
+    candidateDisposition: memoryCandidateDispositionSchema.optional(),
+    replacesRevisionId: z.string().min(1).optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (
+      value.validUntil !== undefined &&
+      value.validFrom !== undefined &&
+      value.validUntil <= value.validFrom
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'validUntil 必须晚于 validFrom',
+        path: ['validUntil'],
+      });
+    }
+    if (value.kind !== facetToKind[value.facet]) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'kind 必须由 facet 推导，不接受矛盾组合',
+        path: ['kind'],
+      });
+    }
+    if (value.status !== 'candidate' && value.candidateDisposition !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'candidateDisposition 只存在于 candidate 记录',
+        path: ['candidateDisposition'],
+      });
+    }
+  });
+export type MemoryRecord = z.infer<typeof memoryRecordSchema>;
+
+/** §5.5：议题相同的潜在冲突只并列呈现，不认定真假。 */
+export const memoryConflictDecisionSchema = z.enum(['keep-both', 'replace']);
+export type MemoryConflictDecision = z.infer<typeof memoryConflictDecisionSchema>;
+export const memoryConflictStateSchema = z.enum(['unresolved', 'keep-both', 'replaced']);
+export type MemoryConflictState = z.infer<typeof memoryConflictStateSchema>;
+export const memoryConflictPairSchema = z
+  .object({
+    leftRevisionId: z.string().min(1),
+    rightRevisionId: z.string().min(1),
+    state: memoryConflictStateSchema,
+  })
+  .strict();
+export type MemoryConflictPair = z.infer<typeof memoryConflictPairSchema>;
+
+export const memoryConflictDecisionRecordSchema = z
+  .object({
+    id: z.string().min(1),
+    operationId: memoryOperationIdSchema,
+    leftRevisionId: z.string().min(1),
+    rightRevisionId: z.string().min(1),
+    decision: memoryConflictDecisionSchema,
+    winnerRevisionId: z.string().min(1).optional(),
+    applicabilityNote: trimmedTextSchema(
+      '适用条件说明',
+      MEMORY_APPLICABILITY_NOTE_MIN_CODE_POINTS,
+      MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS,
+    ).optional(),
+    createdAt: z.number().int().nonnegative(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.decision === 'replace' && value.winnerRevisionId === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['winnerRevisionId'],
+        message: 'replace 必须指明胜出的精确修订',
+      });
+    }
+    if (value.decision === 'keep-both' && value.applicabilityNote === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['applicabilityNote'],
+        message: 'keep-both 必须写明适用条件',
+      });
+    }
+  });
+export type MemoryConflictDecisionRecord = z.infer<typeof memoryConflictDecisionRecordSchema>;
+
+export const memoryGovernanceActionSchema = z.enum([
+  'confirm',
+  'reject',
+  'restore-candidate',
+  'expire',
+  'delete',
+  'reconfirm',
+]);
+export type MemoryGovernanceAction = z.infer<typeof memoryGovernanceActionSchema>;
+
+export interface MemoryGovernanceTransition {
+  readonly fromStatuses: readonly MemoryStatus[];
+  readonly toStatus: MemoryStatus;
+  readonly fromCandidateDispositions?: readonly MemoryCandidateDisposition[];
+  readonly toCandidateDisposition?: MemoryCandidateDisposition;
+  readonly requiresConfirmPatch?: boolean;
+}
+
+/** §5.4：转移表是唯一判据；deleted/superseded 是终态，不接受编辑、确认、续期或恢复。 */
+export const memoryGovernanceTransitions = {
+  confirm: {
+    fromStatuses: ['candidate'],
+    fromCandidateDispositions: ['pending'],
+    toStatus: 'confirmed',
+  },
+  reject: {
+    fromStatuses: ['candidate'],
+    fromCandidateDispositions: ['pending'],
+    toStatus: 'candidate',
+    toCandidateDisposition: 'rejected',
+  },
+  'restore-candidate': {
+    fromStatuses: ['candidate'],
+    fromCandidateDispositions: ['rejected'],
+    toStatus: 'candidate',
+    toCandidateDisposition: 'pending',
+  },
+  expire: { fromStatuses: ['confirmed'], toStatus: 'expired' },
+  reconfirm: {
+    fromStatuses: ['expired'],
+    toStatus: 'confirmed',
+    requiresConfirmPatch: true,
+  },
+  delete: { fromStatuses: ['candidate', 'confirmed', 'expired'], toStatus: 'deleted' },
+} as const satisfies Record<MemoryGovernanceAction, MemoryGovernanceTransition>;
+
+export const terminalMemoryStatuses: readonly MemoryStatus[] = ['deleted', 'superseded'];
+
+/** §9.1：编辑走 patch；来源不是可编辑 JSON，只能经 verified 选择器或人工重新表述构造。 */
+export const memoryEditPatchSchema = z
+  .object({
+    content: trimmedTextSchema('记忆正文', 1, MEMORY_CONTENT_MAX_CODE_POINTS).optional(),
+    facet: memoryFacetSchema.optional(),
+    topicKey: topicKeyPatchSchema.optional(),
+    scope: memoryScopeSchema.optional(),
+    validFrom: datePatchSchema.optional(),
+    validUntil: datePatchSchema.optional(),
+  })
+  .strict()
+  .superRefine((patch, context) => {
+    const touched = [
+      patch.content,
+      patch.facet,
+      patch.topicKey,
+      patch.scope,
+      patch.validFrom,
+      patch.validUntil,
+    ].filter((field) => field !== undefined);
+    if (touched.length === 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'patch 至少提交一个字段',
+      });
+    }
+    const from = patch.validFrom;
+    const until = patch.validUntil;
+    if (from?.action === 'set' && until?.action === 'set' && until.value <= from.value) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['validUntil'],
+        message: 'validUntil 必须晚于 validFrom',
+      });
+    }
+  });
+export type MemoryEditPatch = z.infer<typeof memoryEditPatchSchema>;
+
+/** §9.2：Renderer 只提交选择器，不自报来源真实性；缺省表示人工表单正文即来源。 */
+const memorySourceSelectorUnion = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('run-user'),
+      runId: z.string().min(1),
+      start: z.number().int().nonnegative(),
+      end: z.number().int().nonnegative(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('run-assistant'),
+      runId: z.string().min(1),
+      eventId: z.string().min(1),
+      start: z.number().int().nonnegative(),
+      end: z.number().int().nonnegative(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('checkpoint'),
+      checkpointId: z.string().min(1),
+      field: memoryCheckpointFieldSchema,
+      start: z.number().int().nonnegative(),
+      end: z.number().int().nonnegative(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('artifact-version'),
+      artifactVersionId: z.string().min(1),
+      locator: z.string().min(1).max(2_000),
+      selectedText: exactTextSchema('选中文本', 1, MEMORY_SOURCE_EXCERPT_MAX_CODE_POINTS),
+    })
+    .strict(),
+]);
+export const memorySourceSelectorSchema = memorySourceSelectorUnion.superRefine(
+  (selector, context) => {
+    if (selector.kind === 'artifact-version') return;
+    if (selector.end < selector.start) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['end'],
+        message: '选择区间为左闭右开，end 不得小于 start',
+      });
+    }
+  },
+);
+export type MemorySourceSelector = z.infer<typeof memorySourceSelectorSchema>;
+
+/** §9.2：legacy 复核要么补齐完整选择器，要么按人工声明重新表述。 */
+export const memoryLegacySourceReviewSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('selector'), selector: memorySourceSelectorSchema }).strict(),
+  z
+    .object({
+      mode: z.literal('user-instruction'),
+      genericDeclaration: z.boolean().optional(),
+    })
+    .strict(),
+]);
+export type MemoryLegacySourceReview = z.infer<typeof memoryLegacySourceReviewSchema>;
+
+export const createMemoryRequestSchema = z
+  .object({
+    operationId: memoryOperationIdSchema,
+    content: trimmedTextSchema('记忆正文', 1, MEMORY_CONTENT_MAX_CODE_POINTS),
+    facet: memoryFacetSchema,
+    scope: memoryScopeSchema,
+    topicKey: trimmedTextSchema('议题标识', 1, MEMORY_TOPIC_KEY_MAX_CODE_POINTS).optional(),
+    validFrom: z.number().int().nonnegative().optional(),
+    validUntil: z.number().int().nonnegative().optional(),
+    sourceSelector: memorySourceSelectorSchema.optional(),
+    asUserInstruction: z.boolean(),
+    genericDeclaration: z.boolean().optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -557,63 +1079,1053 @@ export const memoryRecordSchema = z
       });
     }
   });
-export type MemoryRecord = z.infer<typeof memoryRecordSchema>;
-export const createMemoryRequestSchema = z
-  .object({
-    scope: memoryScopeSchema,
-    kind: memoryKindSchema,
-    content: z.string().trim().min(1).max(2_000),
-    sourceType: memorySourceTypeSchema,
-    sourceId: z.string().min(1).optional(),
-    sourceLocator: z.string().min(1).optional(),
-    confidence: z.number().min(0).max(1).default(1),
-    status: memoryStatusSchema.default('candidate'),
-    validFrom: z.number().int().nonnegative().optional(),
-    validUntil: z.number().int().nonnegative().optional(),
-  })
-  .strict();
 export type CreateMemoryRequest = z.input<typeof createMemoryRequestSchema>;
+
 export const updateMemoryRequestSchema = z
   .object({
+    operationId: memoryOperationIdSchema,
     id: z.string().min(1),
     expectedRevision: z.number().int().positive(),
-    content: z.string().trim().min(1).max(2_000).optional(),
-    kind: memoryKindSchema.optional(),
-    confidence: z.number().min(0).max(1).optional(),
-    validFrom: z.number().int().nonnegative().optional(),
-    validUntil: z.number().int().nonnegative().optional(),
+    patch: memoryEditPatchSchema,
+    legacySourceReview: memoryLegacySourceReviewSchema.optional(),
   })
   .strict();
 export type UpdateMemoryRequest = z.infer<typeof updateMemoryRequestSchema>;
+
+/** §5.4：状态改由动作驱动，不接受任意 status。confirmPatch 只在 confirm/reconfirm 合法。 */
 export const setMemoryStatusRequestSchema = z
   .object({
+    operationId: memoryOperationIdSchema,
     id: z.string().min(1),
     expectedRevision: z.number().int().positive(),
-    status: memoryStatusSchema,
+    action: memoryGovernanceActionSchema,
+    confirmPatch: memoryEditPatchSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.confirmPatch === undefined) return;
+    if (value.action !== 'confirm' && value.action !== 'reconfirm') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['confirmPatch'],
+        message: 'confirmPatch 只随 confirm 或 reconfirm 提交',
+      });
+    }
+  });
 export type SetMemoryStatusRequest = z.infer<typeof setMemoryStatusRequestSchema>;
+
+export const resolveMemoryConflictRequestSchema = z
+  .object({
+    operationId: memoryOperationIdSchema,
+    left: z
+      .object({ id: z.string().min(1), expectedRevision: z.number().int().positive() })
+      .strict(),
+    right: z
+      .object({ id: z.string().min(1), expectedRevision: z.number().int().positive() })
+      .strict(),
+    decision: memoryConflictDecisionSchema,
+    winnerId: z.string().min(1).optional(),
+    applicabilityNote: trimmedTextSchema(
+      '适用条件说明',
+      MEMORY_APPLICABILITY_NOTE_MIN_CODE_POINTS,
+      MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS,
+    ).optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.left.id === value.right.id) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['right'],
+        message: '冲突裁决需要两条不同记录',
+      });
+    }
+    if (value.decision === 'replace') {
+      if (value.winnerId === undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['winnerId'],
+          message: 'replace 必须指明胜出的记忆身份',
+        });
+      } else if (value.winnerId !== value.left.id && value.winnerId !== value.right.id) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['winnerId'],
+          message: '胜出的记忆必须是本次提交的两条记录之一',
+        });
+      }
+    }
+    if (value.decision === 'keep-both' && value.applicabilityNote === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['applicabilityNote'],
+        message: 'keep-both 必须写明适用条件',
+      });
+    }
+  });
+export type ResolveMemoryConflictRequest = z.infer<typeof resolveMemoryConflictRequestSchema>;
+
 export const listMemoriesRequestSchema = z
   .object({
     workspaceId: z.string().min(1).optional(),
     expertId: z.string().min(1).optional(),
+    statuses: z.array(memoryStatusSchema).max(memoryStatusSchema.options.length).optional(),
     includeCandidates: z.boolean().default(true),
+    cursor: listCursorSchema.optional(),
+    limit: z.number().int().positive().max(LIST_PAGE_MAX_LIMIT).optional(),
   })
   .strict();
 export type ListMemoriesRequest = z.input<typeof listMemoriesRequestSchema>;
-export const memoryMutationResultSchema = z.object({ memory: memoryRecordSchema }).strict();
-export type MemoryMutationResult = z.infer<typeof memoryMutationResultSchema>;
+
+export const getMemoryRequestSchema = z
+  .object({ id: z.string().min(1), revisionId: z.string().min(1).optional() })
+  .strict();
+export type GetMemoryRequest = z.infer<typeof getMemoryRequestSchema>;
+
+const memoryIdentityErrorCodes = [
+  'NOT_FOUND',
+  'REVISION_CONFLICT',
+  'IDEMPOTENCY_CONFLICT',
+  'CONTEXT_REVISION_REQUIRED',
+] as const;
+const memoryGovernanceErrorCodes = [
+  'INVALID_TRANSITION',
+  'TERMINAL_MEMORY',
+  'INVALID_VALIDITY',
+  'CONFLICT_REVIEW_REQUIRED',
+] as const;
+const memorySourceErrorCodes = [
+  'SCOPE_MISMATCH',
+  'GLOBAL_SCOPE_REQUIRES_DECLARATION',
+  'WORKSPACE_FACT_CANNOT_BE_GLOBAL',
+  'SOURCE_UNAVAILABLE',
+  'SOURCE_MISMATCH',
+  'SOURCE_REVIEW_REQUIRED',
+  'SOURCE_DEPENDENCY_LIMIT',
+  'SOURCE_DEPENDENCY_CYCLE',
+  'MATERIAL_NOT_ALLOWED',
+  'MATERIAL_HASH_MISMATCH',
+  'SENSITIVE_CONTENT',
+] as const;
+const memoryJobErrorCodes = [
+  'MODEL_UNAVAILABLE',
+  'MODEL_PROFILE_CHANGED',
+  'CREDENTIAL_UNAVAILABLE',
+  'CONSENT_REQUIRED',
+  'QUEUE_FULL',
+  'JOB_STATE_CONFLICT',
+  'INPUT_LIMIT',
+  'OUTPUT_LIMIT',
+  'TIMEOUT',
+  'CANCELLED',
+  'INTERRUPTED',
+  'INVALID_MODEL_OUTPUT',
+  'MODEL_OUTPUT_TRUNCATED',
+  'MODEL_TOOL_CALL_REJECTED',
+  'MODEL_FINISH_UNKNOWN',
+  'MODEL_REQUEST_FAILED',
+  'SENSITIVE_CONTENT',
+] as const;
+const memoryReferenceErrorCodes = [
+  'REFERENCE_WORKSPACE_MISMATCH',
+  'REFERENCE_LIMIT',
+  'REFERENCE_UNAVAILABLE',
+  'HISTORY_REFERENCE_BLOCKS_DELETE',
+  'STORAGE_ERROR',
+  'INTERNAL_ERROR',
+] as const;
+
+/** §9.3：五组错误码的全集；message 用可操作中文，不带完整内容或凭据。 */
+export const memoryErrorCodeSchema = z.enum([
+  ...memoryIdentityErrorCodes,
+  ...memoryGovernanceErrorCodes,
+  ...memorySourceErrorCodes,
+  ...memoryJobErrorCodes,
+  ...memoryReferenceErrorCodes,
+]);
+export type MemoryErrorCode = z.infer<typeof memoryErrorCodeSchema>;
+/** §7.2/§7.3：作业失败只保存安全错误码与摘要。 */
+export const memoryJobErrorCodeSchema = z.enum(memoryJobErrorCodes);
+export type MemoryJobErrorCode = z.infer<typeof memoryJobErrorCodeSchema>;
+export const memoryWarningCodeSchema = z.enum([
+  'PROJECTION_PENDING',
+  'SOURCE_NEEDS_REVIEW',
+  'HISTORY_TRUNCATED',
+]);
+export type MemoryWarningCode = z.infer<typeof memoryWarningCodeSchema>;
+
+export const memoryWarningSchema = z
+  .object({
+    code: memoryWarningCodeSchema,
+    message: z.string().trim().min(1).max(1_000),
+  })
+  .strict();
+export type MemoryWarning = z.infer<typeof memoryWarningSchema>;
+
+export const memoryErrorSchema = z
+  .object({
+    code: memoryErrorCodeSchema,
+    message: z.string().trim().min(1).max(1_000),
+    retryable: z.boolean(),
+    currentRevision: z.number().int().positive().optional(),
+  })
+  .strict();
+export type MemoryError = z.infer<typeof memoryErrorSchema>;
+
+/** §9.1：只有记忆/简报/参考家族用 Result 收口领域失败；投影失败是已提交＋警告而非失败。 */
+export type Result<TData> =
+  { ok: true; data: TData; warnings: MemoryWarning[] } | { ok: false; error: MemoryError };
+
+function buildResultSchema<TSchema extends z.ZodType>(dataSchema: TSchema) {
+  return z.union([
+    z
+      .object({
+        ok: z.literal(true),
+        data: dataSchema,
+        warnings: z.array(memoryWarningSchema),
+      })
+      .strict(),
+    z.object({ ok: z.literal(false), error: memoryErrorSchema }).strict(),
+  ]);
+}
+
+export function resultSchema<TSchema extends z.ZodType>(
+  dataSchema: TSchema,
+): ReturnType<typeof buildResultSchema<TSchema>> {
+  return buildResultSchema(dataSchema);
+}
+
+export const memoryProjectionStateSchema = z.enum(['synced', 'pending', 'failed']);
+export type MemoryProjectionState = z.infer<typeof memoryProjectionStateSchema>;
+
+/** 有效期与候选处置由查询派生；「来源待复核」走 sourceAvailability，不另造状态。 */
+export const memoryEffectiveStatusSchema = z.enum([
+  'candidate',
+  'rejected',
+  'confirmed',
+  'superseded',
+  'expired',
+  'deleted',
+]);
+export type MemoryEffectiveStatus = z.infer<typeof memoryEffectiveStatusSchema>;
+export const memorySourceAvailabilitySchema = z.enum([
+  'available',
+  'unavailable',
+  'review-required',
+]);
+export type MemorySourceAvailability = z.infer<typeof memorySourceAvailabilitySchema>;
+
+export const memoryViewItemSchema = memoryRecordSchema
+  .extend({
+    effectiveStatus: memoryEffectiveStatusSchema,
+    sourceAvailability: memorySourceAvailabilitySchema,
+    requiresMaterialSelection: z.boolean(),
+    conflicts: z.array(memoryConflictPairSchema),
+  })
+  .strict();
+export type MemoryViewItem = z.infer<typeof memoryViewItemSchema>;
+
+export const memoryListPageDataSchema = listPageSchema(memoryViewItemSchema);
+export type MemoryListPageData = z.infer<typeof memoryListPageDataSchema>;
+
+export const memoryWriteEffectSchema = z.enum([
+  'created',
+  'updated',
+  'unchanged',
+  'deduplicated',
+  'suppressed',
+]);
+export type MemoryWriteEffect = z.infer<typeof memoryWriteEffectSchema>;
+
+/** §9.1：写命令回执；投影失败表现为 projectionState＋警告，不回滚已提交修订。 */
+export const memoryWriteReceiptSchema = z
+  .object({
+    operationId: memoryOperationIdSchema,
+    commit: z.literal('committed'),
+    effect: memoryWriteEffectSchema,
+    committedRevisionIds: z.array(z.string().min(1)).max(MEMORY_COMMITTED_REVISION_MAX),
+    projectionState: memoryProjectionStateSchema,
+    currentMemory: memoryViewItemSchema.optional(),
+    fromMemoryRevisionId: z.string().min(1).optional(),
+  })
+  .strict();
+export type MemoryWriteReceipt = z.infer<typeof memoryWriteReceiptSchema>;
+
+/** §8.2：memory_operations 只存提交实体与修订，不复制全文。 */
+export const memoryOperationKindSchema = z.enum([
+  'create',
+  'update',
+  'set-status',
+  'resolve-conflict',
+  'set-settings',
+  'set-reference',
+  'remove-reference',
+]);
+export type MemoryOperationKind = z.infer<typeof memoryOperationKindSchema>;
+export const memoryOperationRecordSchema = z
+  .object({
+    operationId: memoryOperationIdSchema,
+    operationKind: memoryOperationKindSchema,
+    requestHash: sha256HexSchema,
+    effect: memoryWriteEffectSchema,
+    governanceAction: memoryGovernanceActionSchema.optional(),
+    committedRevisionIds: z.array(z.string().min(1)).max(MEMORY_COMMITTED_REVISION_MAX),
+    committedAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type MemoryOperationRecord = z.infer<typeof memoryOperationRecordSchema>;
+
+export const memoryConflictResolutionDataSchema = z
+  .object({
+    receipt: memoryWriteReceiptSchema,
+    decision: memoryConflictDecisionRecordSchema,
+  })
+  .strict();
+export type MemoryConflictResolutionData = z.infer<typeof memoryConflictResolutionDataSchema>;
+
+export const workspaceMemorySettingsSchema = z
+  .object({
+    workspaceId: z.string().min(1),
+    revision: z.number().int().nonnegative(),
+    autoSuggestEnabled: z.boolean(),
+    consentVersion: z.number().int().positive().optional(),
+    consentedAt: z.number().int().nonnegative().optional(),
+    updatedAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type WorkspaceMemorySettings = z.infer<typeof workspaceMemorySettingsSchema>;
+
+export const memorySettingsWriteReceiptSchema = memoryWriteReceiptSchema.extend({
+  currentSettings: workspaceMemorySettingsSchema,
+});
+export type MemorySettingsWriteReceipt = z.infer<typeof memorySettingsWriteReceiptSchema>;
+
+/** §8.4/§10：参考标记只表示参考选择，不表示批准。 */
+export const workspaceArtifactReferenceSchema = z
+  .object({
+    id: z.string().min(1),
+    workspaceId: z.string().min(1),
+    artifactVersionId: z.string().min(1),
+    contentHash: sha256HexSchema,
+    label: trimmedTextSchema('参考成果标签', 1, MEMORY_REFERENCE_LABEL_MAX_CODE_POINTS).optional(),
+    status: z.enum(['active', 'removed']),
+    revision: z.number().int().positive(),
+    selectedAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type WorkspaceArtifactReference = z.infer<typeof workspaceArtifactReferenceSchema>;
+
+export const workspaceReferenceListItemSchema = z
+  .object({
+    reference: workspaceArtifactReferenceSchema,
+    artifactId: z.string().min(1),
+    status: z.enum(['ready', 'unavailable']),
+  })
+  .strict();
+export type WorkspaceReferenceListItem = z.infer<typeof workspaceReferenceListItemSchema>;
+
+export const memoryReferenceWriteReceiptSchema = memoryWriteReceiptSchema.extend({
+  currentReference: workspaceArtifactReferenceSchema,
+});
+export type MemoryReferenceWriteReceipt = z.infer<typeof memoryReferenceWriteReceiptSchema>;
+
+export const MEMORY_RECALL_VERSION = 'memory-recall-v1';
+export const MEMORY_RECALL_ALGORITHM_VERSION = 1;
+export const MEMORY_RECALL_PREFERENCE_ITEM_LIMIT = 2;
+export const MEMORY_RECALL_PREFERENCE_CODE_POINT_BUDGET = 600;
+export const MEMORY_RECALL_TOTAL_ITEM_LIMIT = 16;
+export const MEMORY_RECALL_CONTENT_CODE_POINT_BUDGET = 6_000;
+export const MEMORY_RECALL_WRAPPER_CODE_POINT_BUDGET = 2_000;
+export const MEMORY_RECALL_BLOCK_CODE_POINT_BUDGET = 8_000;
+export const MEMORY_RECALL_QUERY_CODE_POINT_LIMIT = 4_000;
+export const MEMORY_RECALL_QUERY_EDGE_CODE_POINT_LIMIT = 2_000;
+export const MEMORY_RECALL_TASK_TITLE_CODE_POINT_LIMIT = 200;
+export const MEMORY_RECALL_MATERIAL_TITLE_CODE_POINT_LIMIT = 120;
+export const MEMORY_RECALL_MATERIAL_TITLE_ITEM_LIMIT = 10;
+export const MEMORY_RECALL_MIN_MATCHED_TOKENS = 2;
+export const MEMORY_RECALL_SINGLE_TOKEN_MIN_MATCHED = 1;
+export const MEMORY_RECALL_STRONG_TOKEN_WEIGHT = 3;
+export const MEMORY_RECALL_SINGLE_HAN_WEIGHT = 1;
+export const MEMORY_RECALL_SCORE_SCALE = 1_000;
+export const MEMORY_REPLAY_PAIR_LIMIT = 8;
+export const MEMORY_REPLAY_CODE_POINT_BUDGET = 12_000;
+export const MEMORY_DECISION_SUMMARY_IDENTITY_LIMIT = 50;
+
+/** §6.1 第 3 条：两份停用词表是算法版本的一部分，改动必须升版本并同步 fixtures。 */
+export const MEMORY_RECALL_HAN_STOP_BIGRAMS = [
+  '请帮',
+  '帮我',
+  '一下',
+  '进行',
+  '根据',
+  '这个',
+  '这次',
+  '需要',
+  '我们',
+  '任务',
+] as const;
+export const MEMORY_RECALL_LATIN_STOP_WORDS = [
+  'a',
+  'an',
+  'the',
+  'and',
+  'or',
+  'to',
+  'of',
+  'for',
+  'in',
+  'on',
+  'is',
+  'are',
+  'please',
+] as const;
+
+export const memorySelectionReasonSchema = z.enum([
+  'task-relevant',
+  'general-preference',
+  'conflict-pair',
+  'replay-inherited',
+]);
+export type MemorySelectionReason = z.infer<typeof memorySelectionReasonSchema>;
+
+/** §6.2/§8.1：只记录精确引用与顺序，不复制正文。 */
+export const memorySelectedMemorySchema = z
+  .object({
+    memoryId: z.string().min(1),
+    revisionId: z.string().min(1),
+    contentHash: sha256HexSchema,
+    order: z.number().int().positive(),
+    score: z.number().int().min(0).max(MEMORY_RECALL_SCORE_SCALE),
+    reason: memorySelectionReasonSchema,
+  })
+  .strict();
+export type MemorySelectedMemory = z.infer<typeof memorySelectedMemorySchema>;
+
+/** §6.3：历史轮次不可重放的边界理由。 */
+export const memoryReplayBoundaryReasonSchema = z.enum([
+  'memory-revised',
+  'memory-excluded',
+  'memory-inactive',
+  'source-unavailable',
+  'material-removed-or-replaced',
+  'legacy-provenance-unknown',
+  'history-budget',
+]);
+export type MemoryReplayBoundaryReason = z.infer<typeof memoryReplayBoundaryReasonSchema>;
+
+const replayedRunSchema = z
+  .object({
+    replayed: z.literal(true),
+    runId: z.string().min(1),
+    finalEventId: z.string().min(1),
+    promptHash: sha256HexSchema,
+    contentCodePoints: z.number().int().nonnegative(),
+  })
+  .strict();
+const skippedRunSchema = z
+  .object({
+    replayed: z.literal(false),
+    runId: z.string().min(1),
+    reason: memoryReplayBoundaryReasonSchema,
+  })
+  .strict();
+export const memoryReplayEntrySchema = z.discriminatedUnion('replayed', [
+  replayedRunSchema,
+  skippedRunSchema,
+]);
+export type MemoryReplayEntry = z.infer<typeof memoryReplayEntrySchema>;
+
+/** §6.1/§6.2 的过滤顺序逐一对应一个排除理由；预算落选不等于授权撤销。 */
+export const memoryRecallExclusionReasonSchema = z.enum([
+  'inactive',
+  'scope',
+  'task-excluded',
+  'source-unavailable',
+  'source-review-required',
+  'dependency-unavailable',
+  'conflict-unresolved',
+  'not-relevant',
+  'budget',
+]);
+export type MemoryRecallExclusionReason = z.infer<typeof memoryRecallExclusionReasonSchema>;
+
+export const memoryRecallBudgetUsageSchema = z
+  .object({
+    totalItems: z.number().int().nonnegative(),
+    preferenceItems: z.number().int().nonnegative(),
+    contentCodePoints: z.number().int().nonnegative(),
+    wrapperCodePoints: z.number().int().nonnegative(),
+    blockCodePoints: z.number().int().nonnegative(),
+  })
+  .strict();
+export type MemoryRecallBudgetUsage = z.infer<typeof memoryRecallBudgetUsageSchema>;
+
+export const memoryRecallExclusionSchema = z
+  .object({
+    reason: memoryRecallExclusionReasonSchema,
+    count: z.number().int().nonnegative(),
+    identities: z
+      .array(
+        z
+          .object({
+            memoryId: z.string().min(1),
+            revisionId: z.string().min(1),
+          })
+          .strict(),
+      )
+      .max(MEMORY_DECISION_SUMMARY_IDENTITY_LIMIT),
+  })
+  .strict();
+export type MemoryRecallExclusion = z.infer<typeof memoryRecallExclusionSchema>;
+
+export const memoryDecisionSummarySchema = z
+  .object({
+    budget: memoryRecallBudgetUsageSchema,
+    exclusions: z
+      .array(memoryRecallExclusionSchema)
+      .max(memoryRecallExclusionReasonSchema.options.length),
+    queryTruncated: z.boolean(),
+    conflictReviewRequired: z.boolean(),
+  })
+  .strict();
+export type MemoryDecisionSummary = z.infer<typeof memoryDecisionSummarySchema>;
+
+export const memoryPolicySnapshotSchema = z
+  .object({
+    recallVersion: z.literal(MEMORY_RECALL_VERSION),
+    algorithmVersion: z.literal(MEMORY_RECALL_ALGORITHM_VERSION),
+    preferenceItemLimit: z.literal(MEMORY_RECALL_PREFERENCE_ITEM_LIMIT),
+    preferenceCodePointBudget: z.literal(MEMORY_RECALL_PREFERENCE_CODE_POINT_BUDGET),
+    totalItemLimit: z.literal(MEMORY_RECALL_TOTAL_ITEM_LIMIT),
+    contentCodePointBudget: z.literal(MEMORY_RECALL_CONTENT_CODE_POINT_BUDGET),
+    wrapperCodePointBudget: z.literal(MEMORY_RECALL_WRAPPER_CODE_POINT_BUDGET),
+    blockCodePointBudget: z.literal(MEMORY_RECALL_BLOCK_CODE_POINT_BUDGET),
+    queryCodePointLimit: z.literal(MEMORY_RECALL_QUERY_CODE_POINT_LIMIT),
+    queryEdgeCodePointLimit: z.literal(MEMORY_RECALL_QUERY_EDGE_CODE_POINT_LIMIT),
+    taskTitleCodePointLimit: z.literal(MEMORY_RECALL_TASK_TITLE_CODE_POINT_LIMIT),
+    materialTitleCodePointLimit: z.literal(MEMORY_RECALL_MATERIAL_TITLE_CODE_POINT_LIMIT),
+    materialTitleItemLimit: z.literal(MEMORY_RECALL_MATERIAL_TITLE_ITEM_LIMIT),
+    minMatchedTokens: z.literal(MEMORY_RECALL_MIN_MATCHED_TOKENS),
+    replayPairLimit: z.literal(MEMORY_REPLAY_PAIR_LIMIT),
+    replayCodePointBudget: z.literal(MEMORY_REPLAY_CODE_POINT_BUDGET),
+  })
+  .strict();
+export type MemoryPolicySnapshot = z.infer<typeof memoryPolicySnapshotSchema>;
+
+export const memoryRecallPolicyV1 = {
+  recallVersion: MEMORY_RECALL_VERSION,
+  algorithmVersion: MEMORY_RECALL_ALGORITHM_VERSION,
+  preferenceItemLimit: MEMORY_RECALL_PREFERENCE_ITEM_LIMIT,
+  preferenceCodePointBudget: MEMORY_RECALL_PREFERENCE_CODE_POINT_BUDGET,
+  totalItemLimit: MEMORY_RECALL_TOTAL_ITEM_LIMIT,
+  contentCodePointBudget: MEMORY_RECALL_CONTENT_CODE_POINT_BUDGET,
+  wrapperCodePointBudget: MEMORY_RECALL_WRAPPER_CODE_POINT_BUDGET,
+  blockCodePointBudget: MEMORY_RECALL_BLOCK_CODE_POINT_BUDGET,
+  queryCodePointLimit: MEMORY_RECALL_QUERY_CODE_POINT_LIMIT,
+  queryEdgeCodePointLimit: MEMORY_RECALL_QUERY_EDGE_CODE_POINT_LIMIT,
+  taskTitleCodePointLimit: MEMORY_RECALL_TASK_TITLE_CODE_POINT_LIMIT,
+  materialTitleCodePointLimit: MEMORY_RECALL_MATERIAL_TITLE_CODE_POINT_LIMIT,
+  materialTitleItemLimit: MEMORY_RECALL_MATERIAL_TITLE_ITEM_LIMIT,
+  minMatchedTokens: MEMORY_RECALL_MIN_MATCHED_TOKENS,
+  replayPairLimit: MEMORY_REPLAY_PAIR_LIMIT,
+  replayCodePointBudget: MEMORY_REPLAY_CODE_POINT_BUDGET,
+} as const satisfies MemoryPolicySnapshot;
+
+/** §6.1：由 Main 构造；preview 允许草稿 prompt，但不写读取足迹。 */
+export const memoryQueryContextSchema = z
+  .object({
+    workspaceId: z.string().min(1),
+    expertId: z.string().min(1).optional(),
+    taskId: z.string().min(1),
+    taskContextRevisionId: z.string().min(1),
+    evaluatedAt: z.number().int().nonnegative(),
+    prompt: z.string().trim().min(1),
+    taskTitle: z.string().trim().min(1),
+    materialTitles: z
+      .array(
+        z
+          .object({
+            reference: materialReferenceSchema,
+            title: trimmedTextSchema('材料标题', 1, MEMORY_RECALL_MATERIAL_TITLE_CODE_POINT_LIMIT),
+          })
+          .strict(),
+      )
+      .max(50),
+    excludedMemoryIds: z.array(z.string().min(1)).max(100),
+  })
+  .strict();
+export type MemoryQueryContext = z.infer<typeof memoryQueryContextSchema>;
+
+/** §6.4：阶段单调；legacy_unknown 只用于改造前的旧记录，不回填发送时间与请求哈希。 */
+export const memoryRunPhaseSchema = z.enum([
+  'selected',
+  'request-prepared',
+  'dispatch-attempted',
+  'legacy_unknown',
+]);
+export type MemoryRunPhase = z.infer<typeof memoryRunPhaseSchema>;
+
 export const memoryReadSchema = z
   .object({
     id: z.string().min(1),
     runId: z.string().min(1),
     memoryId: z.string().min(1),
     memoryRevisionId: z.string().min(1),
-    contentHash: z.string().min(1),
+    contentHash: sha256HexSchema,
     capturedAt: z.number().int().nonnegative(),
+    selectedForInjection: z.boolean(),
+    replayedViaRunIds: z.array(z.string().min(1)).max(MEMORY_REPLAY_PAIR_LIMIT),
+    provenanceState: memoryProvenanceStateSchema,
   })
   .strict();
 export type MemoryRead = z.infer<typeof memoryReadSchema>;
+
+/** §8.2：run_memory_contexts 一行；依赖 union 保存精确引用，不得只存摘要文本。 */
+export const runMemoryContextSchema = z
+  .object({
+    runId: z.string().min(1),
+    schemaVersion: z.literal(1),
+    phase: memoryRunPhaseSchema,
+    recallVersion: z.literal(MEMORY_RECALL_VERSION),
+    evaluatedAt: z.number().int().nonnegative(),
+    queryHash: sha256HexSchema,
+    policySnapshot: memoryPolicySnapshotSchema,
+    selectedItems: z.array(memorySelectedMemorySchema).max(MEMORY_RECALL_TOTAL_ITEM_LIMIT),
+    replay: z.array(memoryReplayEntrySchema).max(MEMORY_REPLAY_PAIR_LIMIT * 2),
+    materialDependencyUnion: z.array(materialReferenceSchema).max(MEMORY_MATERIAL_DEPENDENCY_MAX),
+    memoryDependencyUnion: z.array(memoryDependencySchema).max(MEMORY_MEMORY_DEPENDENCY_MAX),
+    decisionSummary: memoryDecisionSummarySchema,
+    authorizationHash: sha256HexSchema,
+    modelSnapshot: z.record(z.string(), z.unknown()).optional(),
+    requestHash: sha256HexSchema.optional(),
+    selectedAt: z.number().int().nonnegative(),
+    requestPreparedAt: z.number().int().nonnegative().optional(),
+    dispatchAttemptedAt: z.number().int().nonnegative().optional(),
+    updatedAt: z.number().int().nonnegative(),
+  })
+  .strict()
+  .superRefine((context, ctx) => {
+    const orders = context.selectedItems.map((item) => item.order);
+    const expected = orders.map((_, index) => index + 1);
+    const contiguous = [...orders]
+      .sort((a, b) => a - b)
+      .every((value, index) => value === expected[index]);
+    if (!contiguous) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['selectedItems'],
+        message: 'selectedItems 的 order 必须是从 1 开始的连续序列',
+      });
+    }
+    const phases: MemoryRunPhase[] = ['selected', 'request-prepared', 'dispatch-attempted'];
+    const reached = phases.indexOf(context.phase);
+    if (context.requestPreparedAt !== undefined && reached < 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['requestPreparedAt'],
+        message: '未到 request-prepared 阶段不得写入该时间',
+      });
+    }
+    if (context.dispatchAttemptedAt !== undefined && reached < 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dispatchAttemptedAt'],
+        message: '未到 dispatch-attempted 阶段不得写入该时间',
+      });
+    }
+  });
+export type RunMemoryContext = z.infer<typeof runMemoryContextSchema>;
+
+export const previewMemoryRequestSchema = z
+  .object({
+    taskId: z.string().min(1),
+    taskContextRevisionId: z.string().min(1),
+    expectedTaskContextRevision: z.number().int().positive(),
+    prompt: z.string().trim().min(1),
+  })
+  .strict();
+export type PreviewMemoryRequest = z.infer<typeof previewMemoryRequestSchema>;
+
+export const memoryPreviewDataSchema = z
+  .object({
+    evaluatedAt: z.number().int().nonnegative(),
+    policySnapshot: memoryPolicySnapshotSchema,
+    selectedItems: z.array(memorySelectedMemorySchema).max(MEMORY_RECALL_TOTAL_ITEM_LIMIT),
+    decisionSummary: memoryDecisionSummarySchema,
+  })
+  .strict();
+export type MemoryPreviewData = z.infer<typeof memoryPreviewDataSchema>;
+
+export const getRunMemoryContextRequestSchema = z.object({ runId: z.string().min(1) }).strict();
+export type GetRunMemoryContextRequest = z.infer<typeof getRunMemoryContextRequestSchema>;
+
+/** §9.2：旧运行没有审计行时 phase 为 legacy_unknown，context 省略，不伪造请求哈希。 */
+export const memoryRunContextDataSchema = z
+  .object({
+    runId: z.string().min(1),
+    phase: memoryRunPhaseSchema,
+    context: runMemoryContextSchema.optional(),
+    memories: z.array(memoryViewItemSchema).max(LIST_PAGE_MAX_LIMIT),
+    reads: z.array(memoryReadSchema).max(LIST_PAGE_MAX_LIMIT),
+  })
+  .strict();
+export type MemoryRunContextData = z.infer<typeof memoryRunContextDataSchema>;
+
+export const MEMORY_JOB_LIST_DEFAULT_LIMIT = 20;
+export const MEMORY_JOB_LIST_MAX_LIMIT = 50;
+export const MEMORY_EXTRACTION_CONCURRENCY = 1;
+export const MEMORY_EXTRACTION_QUEUE_LIMIT = 20;
+export const MEMORY_EXTRACTION_TIMEOUT_MS = 30_000;
+export const MEMORY_EXTRACTION_MAX_OUTPUT_TOKENS = 2_048;
+export const MEMORY_EXTRACTION_INPUT_CODE_POINT_LIMIT = 6_000;
+export const MEMORY_EXTRACTION_TEXT_CODE_POINT_LIMIT = 6_000;
+export const MEMORY_EXTRACTION_INSTRUCTION_CODE_POINT_LIMIT = 1_500;
+export const MEMORY_EXTRACTION_FRAGMENT_CODE_POINT_LIMIT = 2_000;
+export const MEMORY_EXTRACTION_SUMMARY_CODE_POINT_LIMIT = 1_000;
+export const MEMORY_EXTRACTION_MAX_CANDIDATES = 3;
+export const MEMORY_EXTRACTION_MIN_EVIDENCE = 1;
+export const MEMORY_EXTRACTION_MAX_EVIDENCE = 3;
+export const MEMORY_EXTRACTION_MAX_FRAGMENTS = 2;
+
+export const memoryJobStatusSchema = z.enum([
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+  'cancelled',
+  'interrupted',
+  'skipped',
+]);
+export type MemoryJobStatus = z.infer<typeof memoryJobStatusSchema>;
+export const memoryJobTriggerSchema = z.enum(['automatic', 'manual-retry']);
+export type MemoryJobTrigger = z.infer<typeof memoryJobTriggerSchema>;
+export const modelFinishReasonSchema = z.enum([
+  'stop',
+  'length',
+  'tool-calls',
+  'content-filter',
+  'unknown',
+]);
+export type ModelFinishReason = z.infer<typeof modelFinishReasonSchema>;
+
+/** §7.2：超长输入取首尾等分片段并标注非全文；证据区间只能落在实际片段内。 */
+export const memoryExtractionFragmentSchema = z
+  .object({
+    fragmentId: z.string().min(1),
+    role: z.enum(['run-prompt', 'run-assistant', 'checkpoint-feedback', 'checkpoint-summary']),
+    text: exactTextSchema('提炼输入片段', 1, MEMORY_EXTRACTION_FRAGMENT_CODE_POINT_LIMIT),
+    partial: z.boolean(),
+  })
+  .strict();
+export type MemoryExtractionFragment = z.infer<typeof memoryExtractionFragmentSchema>;
+
+const modelEvidenceSchema = z
+  .object({
+    fragmentId: z.string().min(1),
+    start: z.number().int().nonnegative(),
+    end: z.number().int().nonnegative(),
+  })
+  .strict()
+  .superRefine((evidence, context) => {
+    if (evidence.end <= evidence.start) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['end'],
+        message: '证据区间为左闭右开且不得为空',
+      });
+    }
+  });
+
+/** §7.2：status、scope、ID、来源哈希与材料权限由宿主决定，模型输出这些字段即非法。 */
+export const memoryExtractionCandidateSchema = z
+  .object({
+    content: exactTextSchema('候选正文', 1, MEMORY_CANDIDATE_CONTENT_MAX_CODE_POINTS),
+    facet: memoryFacetSchema,
+    topicKey: trimmedTextSchema('议题标识', 1, MEMORY_TOPIC_KEY_MAX_CODE_POINTS).optional(),
+    confidence: z.number().min(0).max(1).optional(),
+    evidence: z
+      .array(modelEvidenceSchema)
+      .min(MEMORY_EXTRACTION_MIN_EVIDENCE)
+      .max(MEMORY_EXTRACTION_MAX_EVIDENCE),
+  })
+  .strict();
+export type MemoryExtractionCandidate = z.infer<typeof memoryExtractionCandidateSchema>;
+
+export const memoryExtractionModelOutputSchema = z
+  .object({
+    candidates: z.array(memoryExtractionCandidateSchema).max(MEMORY_EXTRACTION_MAX_CANDIDATES),
+  })
+  .strict();
+export type MemoryExtractionModelOutput = z.infer<typeof memoryExtractionModelOutputSchema>;
+
+export const memoryExtractionUsageSchema = z
+  .object({
+    promptTokens: z.number().int().nonnegative().optional(),
+    completionTokens: z.number().int().nonnegative().optional(),
+    totalTokens: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+export type MemoryExtractionUsage = z.infer<typeof memoryExtractionUsageSchema>;
+
+/** §7.3：候选写入、去重统计与作业成功终态在同事务提交。 */
+export const memoryExtractionOutcomeSchema = z
+  .object({
+    candidateRevisionIds: z.array(z.string().min(1)).max(MEMORY_EXTRACTION_MAX_CANDIDATES),
+    deduplicatedCount: z.number().int().nonnegative(),
+    suppressedCount: z.number().int().nonnegative(),
+  })
+  .strict();
+export type MemoryExtractionOutcome = z.infer<typeof memoryExtractionOutcomeSchema>;
+
+export const memoryExtractionSourceSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('run'), runId: z.string().min(1) }).strict(),
+  z.object({ kind: z.literal('checkpoint'), checkpointId: z.string().min(1) }).strict(),
+]);
+export type MemoryExtractionSource = z.infer<typeof memoryExtractionSourceSchema>;
+
+export const memoryExtractionJobSchema = z
+  .object({
+    id: z.string().min(1),
+    /** §7.3：触发类型＋真实 source ID＋内容快照哈希，不含模型版本。 */
+    sourceKey: z.string().min(1),
+    workspaceId: z.string().min(1),
+    taskId: z.string().min(1),
+    source: memoryExtractionSourceSchema,
+    fragments: z.array(memoryExtractionFragmentSchema).max(MEMORY_EXTRACTION_MAX_FRAGMENTS),
+    sourceVersionHash: sha256HexSchema,
+    materialDependencies: z.array(materialReferenceSchema).max(MEMORY_MATERIAL_DEPENDENCY_MAX),
+    memoryDependencies: z.array(memoryDependencySchema).max(MEMORY_MEMORY_DEPENDENCY_MAX),
+    modelProfileId: z.string().min(1).optional(),
+    modelSnapshot: z.record(z.string(), z.unknown()).optional(),
+    trigger: memoryJobTriggerSchema,
+    consentRevision: z.number().int().nonnegative().optional(),
+    status: memoryJobStatusSchema,
+    revision: z.number().int().positive(),
+    attempt: z.number().int().positive(),
+    inputCodePoints: z.number().int().nonnegative(),
+    outputCodePoints: z.number().int().nonnegative(),
+    usage: memoryExtractionUsageSchema.optional(),
+    outcome: memoryExtractionOutcomeSchema.optional(),
+    errorCode: memoryJobErrorCodeSchema.optional(),
+    createdAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+    startedAt: z.number().int().nonnegative().optional(),
+    finishedAt: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+export type MemoryExtractionJob = z.infer<typeof memoryExtractionJobSchema>;
+
+/** §9.2：JobSummary 是脱敏视图，不含密钥、模型原文输入或错误正文。 */
+export const memoryJobSummarySchema = z
+  .object({
+    id: z.string().min(1),
+    workspaceId: z.string().min(1),
+    taskId: z.string().min(1),
+    source: memoryExtractionSourceSchema,
+    status: memoryJobStatusSchema,
+    revision: z.number().int().positive(),
+    attempt: z.number().int().positive(),
+    trigger: memoryJobTriggerSchema,
+    modelLabel: z.string().min(1).max(160).optional(),
+    candidateCount: z.number().int().nonnegative(),
+    errorCode: memoryJobErrorCodeSchema.optional(),
+    diagnostic: z.string().trim().min(1).max(500).optional(),
+    createdAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type MemoryJobSummary = z.infer<typeof memoryJobSummarySchema>;
+
+export const getMemorySettingsRequestSchema = z.object({ workspaceId: z.string().min(1) }).strict();
+export type GetMemorySettingsRequest = z.infer<typeof getMemorySettingsRequestSchema>;
+
+export const setMemorySettingsRequestSchema = z
+  .object({
+    operationId: memoryOperationIdSchema,
+    workspaceId: z.string().min(1),
+    expectedRevision: z.number().int().nonnegative(),
+    autoSuggestEnabled: z.boolean(),
+    consentVersion: z.number().int().positive().optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.autoSuggestEnabled && value.consentVersion === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['consentVersion'],
+        message: '开启自动建议必须提交当前同意版本',
+      });
+    }
+  });
+export type SetMemorySettingsRequest = z.infer<typeof setMemorySettingsRequestSchema>;
+
+export const memorySettingsDataSchema = z
+  .object({
+    receipt: memorySettingsWriteReceiptSchema,
+    cancelledJobCount: z.number().int().nonnegative(),
+  })
+  .strict();
+export type MemorySettingsData = z.infer<typeof memorySettingsDataSchema>;
+
+export const listMemoryJobsRequestSchema = z
+  .object({
+    workspaceId: z.string().min(1),
+    taskId: z.string().min(1).optional(),
+    cursor: listCursorSchema.optional(),
+    limit: z.number().int().positive().max(MEMORY_JOB_LIST_MAX_LIMIT).optional(),
+  })
+  .strict();
+export type ListMemoryJobsRequest = z.infer<typeof listMemoryJobsRequestSchema>;
+
+export const memoryJobListDataSchema = listPageSchema(memoryJobSummarySchema);
+export type MemoryJobListData = z.infer<typeof memoryJobListDataSchema>;
+
+export const retryMemoryJobRequestSchema = z
+  .object({
+    operationId: memoryOperationIdSchema,
+    jobId: z.string().min(1),
+    expectedRevision: z.number().int().positive(),
+    consentVersion: z.number().int().positive(),
+  })
+  .strict();
+export type RetryMemoryJobRequest = z.infer<typeof retryMemoryJobRequestSchema>;
+
+export const cancelMemoryJobRequestSchema = z
+  .object({
+    operationId: memoryOperationIdSchema,
+    jobId: z.string().min(1),
+    expectedRevision: z.number().int().positive(),
+  })
+  .strict();
+export type CancelMemoryJobRequest = z.infer<typeof cancelMemoryJobRequestSchema>;
+
+export const rebuildMemoryProjectionRequestSchema = z
+  .object({ operationId: memoryOperationIdSchema })
+  .strict();
+export type RebuildMemoryProjectionRequest = z.infer<typeof rebuildMemoryProjectionRequestSchema>;
+
+export const memoryProjectionStateDataSchema = z
+  .object({ projectionState: memoryProjectionStateSchema })
+  .strict();
+export type MemoryProjectionStateData = z.infer<typeof memoryProjectionStateDataSchema>;
+
+export const WORKSPACE_BRIEF_SECTION_ITEM_LIMIT = 10;
+export const WORKSPACE_BRIEF_REFERENCE_ITEM_LIMIT = 5;
+export const WORKSPACE_REFERENCE_ACTIVE_LIMIT = 20;
+
+export const workspaceBriefMemoryItemSchema = z
+  .object({
+    memoryId: z.string().min(1),
+    revisionId: z.string().min(1),
+    contentHash: sha256HexSchema,
+    content: trimmedTextSchema('记忆正文', 1, MEMORY_CONTENT_MAX_CODE_POINTS),
+    scope: memoryScopeSchema,
+    sourceAvailability: memorySourceAvailabilitySchema,
+    requiresMaterialSelection: z.boolean(),
+  })
+  .strict();
+export type WorkspaceBriefMemoryItem = z.infer<typeof workspaceBriefMemoryItemSchema>;
+
+const workspaceBriefMemorySectionSchema = z
+  .object({
+    items: z.array(workspaceBriefMemoryItemSchema).max(WORKSPACE_BRIEF_SECTION_ITEM_LIMIT),
+    total: z.number().int().nonnegative(),
+    truncated: z.boolean(),
+  })
+  .strict();
+
+/** §10：开放节点保留 summary/feedback/nextAction 原有标识，不推断成已确认结论。 */
+export const workspaceBriefOpenIssueSchema = z
+  .object({
+    checkpointId: z.string().min(1),
+    taskId: z.string().min(1),
+    summary: z.string().trim().max(20_000),
+    feedback: z.string().trim().max(10_000).optional(),
+    nextAction: z.string().trim().max(10_000).optional(),
+    createdAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type WorkspaceBriefOpenIssue = z.infer<typeof workspaceBriefOpenIssueSchema>;
+
+export const workspaceBriefSchema = z
+  .object({
+    workspaceId: z.string().min(1),
+    expertId: z.string().min(1).optional(),
+    generatedAt: z.number().int().nonnegative(),
+    goals: workspaceBriefMemorySectionSchema,
+    constraints: workspaceBriefMemorySectionSchema,
+    decisions: workspaceBriefMemorySectionSchema,
+    methods: workspaceBriefMemorySectionSchema,
+    openIssues: z
+      .object({
+        items: z.array(workspaceBriefOpenIssueSchema).max(WORKSPACE_BRIEF_SECTION_ITEM_LIMIT),
+        total: z.number().int().nonnegative(),
+        truncated: z.boolean(),
+      })
+      .strict(),
+    referenceVersions: z
+      .object({
+        items: z.array(workspaceReferenceListItemSchema).max(WORKSPACE_BRIEF_REFERENCE_ITEM_LIMIT),
+        total: z.number().int().nonnegative(),
+        truncated: z.boolean(),
+      })
+      .strict(),
+  })
+  .strict();
+export type WorkspaceBrief = z.infer<typeof workspaceBriefSchema>;
+
+export const workspaceMemoryBriefRequestSchema = z
+  .object({ workspaceId: z.string().min(1), expertId: z.string().min(1).optional() })
+  .strict();
+export type WorkspaceMemoryBriefRequest = z.infer<typeof workspaceMemoryBriefRequestSchema>;
+
+export const listWorkspaceReferenceVersionsRequestSchema = z
+  .object({ workspaceId: z.string().min(1) })
+  .strict();
+export type ListWorkspaceReferenceVersionsRequest = z.infer<
+  typeof listWorkspaceReferenceVersionsRequestSchema
+>;
+
+export const workspaceReferenceListDataSchema = z
+  .object({
+    items: z.array(workspaceReferenceListItemSchema).max(WORKSPACE_REFERENCE_ACTIVE_LIMIT),
+  })
+  .strict();
+export type WorkspaceReferenceListData = z.infer<typeof workspaceReferenceListDataSchema>;
+
+/** §10：expectedRevision 新建为 0；引用固定 versionId＋contentHash，不跟随 latest。 */
+export const setWorkspaceReferenceVersionRequestSchema = z
+  .object({
+    operationId: memoryOperationIdSchema,
+    workspaceId: z.string().min(1),
+    artifactVersionId: z.string().min(1),
+    expectedRevision: z.number().int().nonnegative(),
+    label: trimmedTextSchema('参考成果标签', 1, MEMORY_REFERENCE_LABEL_MAX_CODE_POINTS).optional(),
+  })
+  .strict();
+export type SetWorkspaceReferenceVersionRequest = z.infer<
+  typeof setWorkspaceReferenceVersionRequestSchema
+>;
+
+export const workspaceReferenceSetDataSchema = z
+  .object({
+    receipt: memoryReferenceWriteReceiptSchema,
+    material: materialReferenceSchema,
+  })
+  .strict();
+export type WorkspaceReferenceSetData = z.infer<typeof workspaceReferenceSetDataSchema>;
+
+export const removeWorkspaceReferenceVersionRequestSchema = z
+  .object({
+    operationId: memoryOperationIdSchema,
+    id: z.string().min(1),
+    expectedRevision: z.number().int().positive(),
+  })
+  .strict();
+export type RemoveWorkspaceReferenceVersionRequest = z.infer<
+  typeof removeWorkspaceReferenceVersionRequestSchema
+>;
 
 export const mcpConnectionStatusSchema = z.enum([
   'unconfigured',
@@ -2241,6 +3753,20 @@ export const IpcChannel = {
   CreateMemory: 'memory:create',
   UpdateMemory: 'memory:update',
   SetMemoryStatus: 'memory:set-status',
+  GetMemory: 'memory:get',
+  ResolveMemoryConflict: 'memory:resolve-conflict',
+  PreviewMemory: 'memory:preview',
+  GetRunMemoryContext: 'memory:run-context',
+  GetMemorySettings: 'memory:get-settings',
+  SetMemorySettings: 'memory:set-settings',
+  ListMemoryJobs: 'memory:list-jobs',
+  RetryMemoryJob: 'memory:retry-job',
+  CancelMemoryJob: 'memory:cancel-job',
+  RebuildMemoryProjection: 'memory:rebuild-projection',
+  GetWorkspaceMemoryBrief: 'workspace:memory-brief',
+  ListWorkspaceReferenceVersions: 'workspace:list-reference-versions',
+  SetWorkspaceReferenceVersion: 'workspace:set-reference-version',
+  RemoveWorkspaceReferenceVersion: 'workspace:remove-reference-version',
   ListMcpConnections: 'mcp:list-connections',
   GetMcpConnection: 'mcp:get-connection',
   SaveMcpConnection: 'mcp:save-connection',
@@ -2275,6 +3801,16 @@ export interface BetterWorkDesktopApi {
     getDefault(): Promise<WorkspaceSummary>;
     selectDirectory(): Promise<WorkspaceSummary | null>;
     listAll(): Promise<WorkspaceSummary[]>;
+    memoryBrief(input: WorkspaceMemoryBriefRequest): Promise<Result<WorkspaceBrief>>;
+    listReferenceVersions(
+      input: ListWorkspaceReferenceVersionsRequest,
+    ): Promise<Result<WorkspaceReferenceListData>>;
+    setReferenceVersion(
+      input: SetWorkspaceReferenceVersionRequest,
+    ): Promise<Result<WorkspaceReferenceSetData>>;
+    removeReferenceVersion(
+      input: RemoveWorkspaceReferenceVersionRequest,
+    ): Promise<Result<MemoryReferenceWriteReceipt>>;
   };
   tasks: {
     create(input: CreateTaskRequest): Promise<CreatedTask>;
@@ -2370,10 +3906,24 @@ export interface BetterWorkDesktopApi {
     ): Promise<InputSnapshot | null>;
   };
   memories: {
-    list(input: ListMemoriesRequest): Promise<MemoryRecord[]>;
-    create(input: CreateMemoryRequest): Promise<MemoryMutationResult>;
-    update(input: UpdateMemoryRequest): Promise<MemoryMutationResult>;
-    setStatus(input: SetMemoryStatusRequest): Promise<MemoryMutationResult>;
+    list(input: ListMemoriesRequest): Promise<Result<ListPage<MemoryViewItem>>>;
+    get(input: GetMemoryRequest): Promise<Result<MemoryViewItem>>;
+    create(input: CreateMemoryRequest): Promise<Result<MemoryWriteReceipt>>;
+    update(input: UpdateMemoryRequest): Promise<Result<MemoryWriteReceipt>>;
+    setStatus(input: SetMemoryStatusRequest): Promise<Result<MemoryWriteReceipt>>;
+    resolveConflict(
+      input: ResolveMemoryConflictRequest,
+    ): Promise<Result<MemoryConflictResolutionData>>;
+    preview(input: PreviewMemoryRequest): Promise<Result<MemoryPreviewData>>;
+    runContext(input: GetRunMemoryContextRequest): Promise<Result<MemoryRunContextData>>;
+    getSettings(input: GetMemorySettingsRequest): Promise<Result<WorkspaceMemorySettings>>;
+    setSettings(input: SetMemorySettingsRequest): Promise<Result<MemorySettingsData>>;
+    listJobs(input: ListMemoryJobsRequest): Promise<Result<ListPage<MemoryJobSummary>>>;
+    retryJob(input: RetryMemoryJobRequest): Promise<Result<MemoryJobSummary>>;
+    cancelJob(input: CancelMemoryJobRequest): Promise<Result<MemoryJobSummary>>;
+    rebuildProjection(
+      input: RebuildMemoryProjectionRequest,
+    ): Promise<Result<MemoryProjectionStateData>>;
   };
   mcp: {
     listConnections(): Promise<McpConnectionSummary[]>;

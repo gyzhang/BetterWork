@@ -2,19 +2,32 @@ import { describe, expect, it } from 'vitest';
 
 import {
   artifactInputRelationSchema,
+  countCodePoints,
   createMemoryRequestSchema,
   deleteSkillRequestSchema,
   dependencyLockSchema,
   dependencyOperationSchema,
   expertReferenceMaterialSchema,
   exportMarkdownArtifactRequestSchema,
+  facetToKind,
   importSkillRequestSchema,
   jobResultSchema,
   jobSpecSchema,
+  listPageSchema,
   MAX_RUN_SKILL_BINDINGS,
   mcpToolBindingSchema,
   mcpToolSummarySchema,
+  MEMORY_RECALL_TOTAL_ITEM_LIMIT,
+  MEMORY_RECALL_VERSION,
+  memoryEditPatchSchema,
+  memoryErrorCodeSchema,
+  memoryGovernanceActionSchema,
+  memoryProvenanceSchema,
   memoryRecordSchema,
+  memorySourceRefSchema,
+  memorySourceSelectorSchema,
+  memoryWriteReceiptSchema,
+  resultSchema,
   runMaterialReadSchema,
   runtimeEnvironmentSchema,
   runtimeProfileDraftSchema,
@@ -26,40 +39,58 @@ import {
   startRunRequestSchema,
   taskContextRevisionSchema,
   updateWindowThemeRequestSchema,
+  workspaceBriefSchema,
 } from './index';
 
 describe('run protocol', () => {
   it('models scoped memory records and rejects invalid validity windows', () => {
+    const hash = 'a'.repeat(64);
     const record = memoryRecordSchema.parse({
       id: 'memory-1',
       revisionId: 'memory-1-r1',
       revision: 1,
       scope: { kind: 'expert-workspace', expertId: 'expert-1', workspaceId: 'workspace-1' },
       kind: 'procedural',
+      facet: 'method',
       content: '月报先核对财务规则。',
       sourceType: 'user-explicit',
       confidence: 1,
       status: 'confirmed',
       validFrom: 10,
       validUntil: 20,
-      contentHash: 'hash-1',
+      contentHash: hash,
+      normalizedHash: hash,
+      provenance: {
+        schemaVersion: 1,
+        verification: 'legacy-unverified',
+        sourceType: 'user-explicit',
+      },
       createdAt: 10,
       updatedAt: 10,
     });
     expect(record.scope.kind).toBe('expert-workspace');
-    expect(
-      createMemoryRequestSchema.parse({
-        scope: { kind: 'user' },
-        kind: 'semantic',
-        content: '用户偏好',
-        sourceType: 'conversation',
-      }),
-    ).toMatchObject({ confidence: 1, status: 'candidate' });
+    expect(() => memoryRecordSchema.parse({ ...record, validFrom: 20, validUntil: 20 })).toThrow();
+    // 客户端不能提交与 facet 矛盾的 kind，映射由宿主决定。
+    expect(() => memoryRecordSchema.parse({ ...record, kind: 'semantic' })).toThrow();
+  });
+
+  it('accepts the new user-instruction create shape', () => {
+    const created = createMemoryRequestSchema.parse({
+      operationId: '11111111-1111-4111-8111-111111111111',
+      content: '收入按回款金额统计，不使用签约金额。',
+      facet: 'constraint',
+      scope: { kind: 'workspace', workspaceId: 'ws-1' },
+      asUserInstruction: true,
+    });
+    expect(created.facet).toBe('constraint');
+    expect(created.topicKey).toBeUndefined();
     expect(() =>
-      memoryRecordSchema.parse({
-        ...record,
-        validFrom: 20,
-        validUntil: 20,
+      createMemoryRequestSchema.parse({
+        operationId: 'not-a-uuid',
+        content: 'x',
+        facet: 'constraint',
+        scope: { kind: 'user' },
+        asUserInstruction: true,
       }),
     ).toThrow();
   });
@@ -630,5 +661,139 @@ describe('dependency and environment protocol', () => {
     expect(dependencyOperationSchema.parse(operation)).toEqual(operation);
     expect(() => dependencyOperationSchema.parse({ ...operation, status: 'done' })).toThrow();
     expect(() => dependencyOperationSchema.parse({ ...operation, step: 'pip-install' })).toThrow();
+  });
+});
+
+describe('工作型记忆契约不变量', () => {
+  const hash64 = 'a'.repeat(64);
+  const baseRecord = {
+    id: 'memory-1',
+    revisionId: 'memory-1-r1',
+    revision: 1,
+    scope: { kind: 'workspace', workspaceId: 'workspace-1' },
+    kind: 'procedural',
+    facet: 'method',
+    content: '月报先核对财务规则。',
+    sourceType: 'user-explicit',
+    confidence: 1,
+    status: 'confirmed',
+    contentHash: hash64,
+    normalizedHash: hash64,
+    provenance: {
+      schemaVersion: 1,
+      verification: 'legacy-unverified',
+      sourceType: 'user-explicit',
+    },
+    createdAt: 10,
+    updatedAt: 10,
+  };
+
+  it('按 Unicode 码点而不是 UTF-16 长度计量', () => {
+    expect(countCodePoints('记忆abc')).toBe(5);
+    expect(countCodePoints('\u4e2d\u6587')).toBe(2);
+    expect(MEMORY_RECALL_VERSION).toBe('memory-recall-v1');
+    expect(MEMORY_RECALL_TOTAL_ITEM_LIMIT).toBe(16);
+  });
+
+  it('facet 与 kind 由宿主映射，客户端不能提交矛盾组合', () => {
+    expect(facetToKind.method).toBe('procedural');
+    expect(facetToKind.preference).toBe('preference');
+    expect(facetToKind.experience).toBe('episodic');
+    expect(
+      memoryRecordSchema.safeParse({ ...baseRecord, facet: 'method', kind: 'preference' }).success,
+    ).toBe(false);
+    expect(memoryRecordSchema.safeParse(baseRecord).success).toBe(true);
+  });
+
+  it('来源摘录必须与 start/end 区间按码点一致', () => {
+    expect(
+      memorySourceRefSchema.safeParse({
+        kind: 'run-user',
+        runId: 'r-1',
+        promptHash: hash64,
+        excerpt: '收入',
+        excerptHash: hash64,
+        start: 0,
+        end: 3,
+      }).success,
+    ).toBe(false);
+    expect(
+      memorySourceRefSchema.safeParse({
+        kind: 'run-user',
+        runId: 'r-1',
+        promptHash: hash64,
+        excerpt: '收入',
+        excerptHash: hash64,
+        start: 0,
+        end: 2,
+      }).success,
+    ).toBe(true);
+    expect(
+      memorySourceSelectorSchema.safeParse({ kind: 'run-user', runId: 'r-1', start: 4, end: 2 })
+        .success,
+    ).toBe(false);
+  });
+
+  it('来源必须是 verified 或 legacy 两种形状之一', () => {
+    expect(
+      memoryProvenanceSchema.safeParse({ schemaVersion: 1, verification: 'verified' }).success,
+    ).toBe(false);
+    expect(
+      memoryProvenanceSchema.safeParse({
+        schemaVersion: 1,
+        verification: 'legacy-unverified',
+        sourceType: 'conversation',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('EditPatch 至少一个字段，日期支持显式 clear', () => {
+    expect(memoryEditPatchSchema.safeParse({}).success).toBe(false);
+    expect(memoryEditPatchSchema.safeParse({ validUntil: { action: 'clear' } }).success).toBe(true);
+    expect(
+      memoryEditPatchSchema.safeParse({
+        validFrom: { action: 'set', value: 200 },
+        validUntil: { action: 'set', value: 100 },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('治理动作与错误码是封闭枚举', () => {
+    expect(memoryGovernanceActionSchema.safeParse('confirm').success).toBe(true);
+    expect(memoryGovernanceActionSchema.safeParse('model-confirm').success).toBe(false);
+    expect(memoryErrorCodeSchema.safeParse('IDEMPOTENCY_CONFLICT').success).toBe(true);
+    expect(memoryErrorCodeSchema.safeParse('IPC_FAILURE').success).toBe(false);
+  });
+
+  it('写回执只能表达已提交，Result 只表达成功或领域失败', () => {
+    const receipt = {
+      operationId: '6f1a2b3c-4d5e-4f60-8a7b-9c0d1e2f3a4b',
+      commit: 'committed',
+      effect: 'created',
+      committedRevisionIds: [hash64],
+      projectionState: 'synced',
+    };
+    expect(memoryWriteReceiptSchema.safeParse(receipt).success).toBe(true);
+    expect(memoryWriteReceiptSchema.safeParse({ ...receipt, commit: 'pending' }).success).toBe(
+      false,
+    );
+    const schema = resultSchema(memoryWriteReceiptSchema);
+    expect(schema.safeParse({ ok: true, data: receipt, warnings: [] }).success).toBe(true);
+    expect(
+      schema.safeParse({
+        ok: false,
+        error: { code: 'NOT_FOUND', message: '记忆不存在。', retryable: false },
+      }).success,
+    ).toBe(true);
+    expect(schema.safeParse({ ok: true, data: receipt }).success).toBe(false);
+  });
+
+  it('分页只带版本化游标，简报拒绝缺字段的对象', () => {
+    expect(listPageSchema(memoryRecordSchema).safeParse({ items: [] }).success).toBe(true);
+    expect(
+      listPageSchema(memoryRecordSchema).safeParse({ items: [], nextCursor: { updatedAt: 1 } })
+        .success,
+    ).toBe(false);
+    expect(workspaceBriefSchema.safeParse({}).success).toBe(false);
   });
 });
