@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { appMigrations, openAppDatabase, openKnowledgeDatabase } from './index';
 import { knowledgeMigrations } from './knowledge-schema';
-import { migrate, type Migration, readSchemaVersion } from './migrate';
+import { hasColumn, hasTable, migrate, type Migration, readSchemaVersion } from './migrate';
 
 const temporaryDirectories: string[] = [];
 const temporaryDirectory = (): string => {
@@ -1012,6 +1013,1111 @@ describe('credential migration journal (CF11)', () => {
     // 再跑一次全量迁移（幂等），journal 不重复、不新增
     migrate(db, { migrations: appMigrations });
     expect(journalStatuses(db)).toEqual([{ owner_id: 'm-key', status: 'done' }]);
+    db.close();
+  });
+});
+
+/** WM02/WM05/WM09/WM12 之前的应用库最新形状（v25 = 凭据迁移日志）。 */
+const WM_BASELINE = 25;
+
+/** 契约 §5.1 的归一化：NFC → 换行统一 → 去首尾空白，然后取 UTF-8 的 SHA-256。 */
+const normalizeMemory = (content: string): string =>
+  content.normalize('NFC').replace(/\r\n?/gu, '\n').trim();
+const sha256Hex = (value: string): string =>
+  createHash('sha256').update(value, 'utf8').digest('hex');
+const normalizedHashOf = (content: string): string => sha256Hex(normalizeMemory(content));
+
+/** 契约 §8.4：facet 只能按 kind 机械映射到其中唯一无歧义的那一个。 */
+const EXPECTED_LEGACY_FACET: Record<string, string> = {
+  semantic: 'fact',
+  episodic: 'experience',
+  procedural: 'method',
+  preference: 'preference',
+};
+
+interface LegacyMemoryFixture {
+  readonly revisionId: string;
+  readonly id: string;
+  readonly revision: number;
+  readonly kind: 'semantic' | 'episodic' | 'procedural' | 'preference';
+  readonly content: string;
+  readonly sourceType: 'user-explicit' | 'conversation' | 'artifact' | 'reflection';
+  readonly sourceId: string | null;
+  readonly sourceLocator: string | null;
+  readonly status: 'candidate' | 'confirmed' | 'superseded';
+  readonly supersedesId: string | null;
+}
+
+/**
+ * 迁移前就存在的记忆行。内容刻意包含契约 §13.1 的去重对照：
+ * 「不得合并 / 可以合并」「10万元 / 100万元」必须算出不同哈希，
+ * 只差换行与首尾空白的两条必须算出同一个哈希。
+ */
+const LEGACY_MEMORIES: readonly LegacyMemoryFixture[] = [
+  {
+    revisionId: 'mrev-a1',
+    id: 'mem-a',
+    revision: 1,
+    kind: 'semantic',
+    content: '本期续约率为82%。',
+    sourceType: 'conversation',
+    sourceId: 'src-a1',
+    sourceLocator: '第 1 段',
+    status: 'superseded',
+    supersedesId: null,
+  },
+  {
+    revisionId: 'mrev-a2',
+    id: 'mem-a',
+    revision: 2,
+    kind: 'semantic',
+    content: '收入按回款金额统计，不使用签约金额。',
+    sourceType: 'user-explicit',
+    sourceId: 'src-a2',
+    sourceLocator: '第 3 段',
+    status: 'confirmed',
+    supersedesId: 'mrev-a1',
+  },
+  {
+    revisionId: 'mrev-b1',
+    id: 'mem-b',
+    revision: 1,
+    kind: 'episodic',
+    content: '不得合并',
+    sourceType: 'conversation',
+    sourceId: null,
+    sourceLocator: null,
+    status: 'candidate',
+    supersedesId: null,
+  },
+  {
+    revisionId: 'mrev-c1',
+    id: 'mem-c',
+    revision: 1,
+    kind: 'episodic',
+    content: '可以合并',
+    sourceType: 'reflection',
+    sourceId: null,
+    sourceLocator: null,
+    status: 'candidate',
+    supersedesId: null,
+  },
+  {
+    revisionId: 'mrev-d1',
+    id: 'mem-d',
+    revision: 1,
+    kind: 'procedural',
+    content: '先给结论，再给依据。  \r\n',
+    sourceType: 'user-explicit',
+    sourceId: 'src-d1',
+    sourceLocator: null,
+    status: 'superseded',
+    supersedesId: null,
+  },
+  {
+    revisionId: 'mrev-d2',
+    id: 'mem-d',
+    revision: 2,
+    kind: 'procedural',
+    content: '先给结论，再给依据。',
+    sourceType: 'user-explicit',
+    sourceId: 'src-d1',
+    sourceLocator: null,
+    status: 'confirmed',
+    supersedesId: 'mrev-d1',
+  },
+  {
+    revisionId: 'mrev-e1',
+    id: 'mem-e',
+    revision: 1,
+    kind: 'preference',
+    content: '预算上限 10万元',
+    sourceType: 'artifact',
+    sourceId: 'src-e1',
+    sourceLocator: 'v1',
+    status: 'confirmed',
+    supersedesId: null,
+  },
+  {
+    revisionId: 'mrev-f1',
+    id: 'mem-f',
+    revision: 1,
+    kind: 'preference',
+    content: '预算上限 100万元',
+    sourceType: 'artifact',
+    sourceId: null,
+    sourceLocator: null,
+    status: 'confirmed',
+    supersedesId: null,
+  },
+];
+
+const LEGACY_MEMORY_COLUMNS = `
+  revision_id, id, revision, scope_kind, scope_id, expert_id, workspace_id,
+  kind, content, source_type, source_id, source_locator, confidence, status,
+  valid_from, valid_until, supersedes_id, content_hash, created_at, updated_at
+`;
+
+/** 造出 v25 形状的世界：一条被运行引用过的记忆链，加上没有来源可证的旧记忆。 */
+const seedLegacyMemoryWorld = (db: Database.Database): void => {
+  seedLegacyWork(db);
+  const insert = db.prepare(
+    `INSERT INTO memory_records (${LEGACY_MEMORY_COLUMNS})
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  for (const memory of LEGACY_MEMORIES) {
+    insert.run(
+      memory.revisionId,
+      memory.id,
+      memory.revision,
+      'workspace',
+      'ws-1',
+      null,
+      'ws-1',
+      memory.kind,
+      memory.content,
+      memory.sourceType,
+      memory.sourceId,
+      memory.sourceLocator,
+      0.8,
+      memory.status,
+      null,
+      null,
+      memory.supersedesId,
+      `legacy-hash-${memory.revisionId}`,
+      1_700_000_000_000,
+      1_700_000_000_000,
+    );
+  }
+  // 旧写入路径只登记实际注入的记忆，且不记录任何请求阶段（§2.2 风险 4）。
+  db.prepare(
+    `INSERT INTO run_memory_reads (id, run_id, memory_id, memory_revision_id, content_hash, captured_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run('rmr-1', 'run-1', 'mem-a', 'mrev-a2', 'legacy-hash-mrev-a2', 1_700_000_000_500);
+};
+
+/** 升级前后都必须逐字保留的历史事实。 */
+const legacyFacts = (db: Database.Database): unknown[] =>
+  db.prepare(`SELECT ${LEGACY_MEMORY_COLUMNS} FROM memory_records ORDER BY revision_id`).all();
+
+const readFacts = (db: Database.Database): unknown[] =>
+  db
+    .prepare(
+      `SELECT id, run_id, memory_id, memory_revision_id, content_hash, captured_at
+         FROM run_memory_reads ORDER BY id`,
+    )
+    .all();
+
+const indexNames = (db: Database.Database): string[] =>
+  (
+    db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' ORDER BY name").all() as Array<{
+      name: string;
+    }>
+  ).map((row) => row.name);
+
+/** 迁移后的记忆写入必须自带治理列：没有可伪造的默认值。 */
+const insertGovernedMemory = (
+  db: Database.Database,
+  memory: {
+    revisionId: string;
+    id: string;
+    revision?: number;
+    kind?: string;
+    facet?: string;
+    content?: string;
+    status?: string;
+    topicKey?: string | null;
+    normalizedHash?: string;
+    provenanceJson?: string;
+    candidateDisposition?: string | null;
+    replacesRevisionId?: string | null;
+  },
+): void => {
+  const content = memory.content ?? '收入按回款金额统计，不使用签约金额。';
+  db.prepare(
+    `INSERT INTO memory_records (
+       revision_id, id, revision, scope_kind, scope_id, kind, facet, topic_key,
+       normalized_hash, provenance_json, candidate_disposition, replaces_revision_id,
+       content, source_type, confidence, status, content_hash, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    memory.revisionId,
+    memory.id,
+    memory.revision ?? 1,
+    'workspace',
+    'ws-1',
+    memory.kind ?? 'semantic',
+    memory.facet ?? 'fact',
+    memory.topicKey ?? null,
+    memory.normalizedHash ?? normalizedHashOf(content),
+    memory.provenanceJson ??
+      JSON.stringify({
+        schemaVersion: 1,
+        verification: 'legacy-unverified',
+        sourceType: 'user-explicit',
+      }),
+    memory.candidateDisposition ?? null,
+    memory.replacesRevisionId ?? null,
+    content,
+    'user-explicit',
+    0.9,
+    memory.status ?? 'confirmed',
+    sha256Hex(content),
+    1,
+    1,
+  );
+};
+
+const insertRead = (
+  db: Database.Database,
+  read: {
+    id: string;
+    runId: string;
+    memoryId: string;
+    memoryRevisionId: string;
+    selectedForInjection: number;
+    provenanceState: string;
+  },
+): void => {
+  db.prepare(
+    `INSERT INTO run_memory_reads (
+       id, run_id, memory_id, memory_revision_id, content_hash, captured_at,
+       selected_for_injection, replayed_via_run_ids_json, provenance_state
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?)`,
+  ).run(
+    read.id,
+    read.runId,
+    read.memoryId,
+    read.memoryRevisionId,
+    'hash-1',
+    2,
+    read.selectedForInjection,
+    read.provenanceState,
+  );
+};
+
+const RUN_MEMORY_CONTEXT_INSERT = `INSERT INTO run_memory_contexts (
+  run_id, schema_version, phase, recall_version, evaluated_at, query_hash,
+  policy_snapshot_json, selected_items_json, replay_json,
+  material_dependency_union_json, memory_dependency_union_json, decision_summary_json,
+  authorization_hash, model_snapshot_json, request_hash,
+  selected_at, request_prepared_at, dispatch_attempted_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+/**
+ * 契约 §8.4 要求「每批真实 SQLite 验证」：WM02/WM05/WM09/WM12 四个批次各自都要
+ * 单独走一遍「从上一版本升级」与「失败回滚」，不能只让 WM02 一批代表全部。
+ * 每批点名的表与收紧列就是该批落库的全部结构变更，回滚后必须一样都不留下。
+ */
+interface WmSchemaBatch {
+  readonly version: number;
+  readonly tables: readonly string[];
+  readonly columns: readonly { readonly table: string; readonly column: string }[];
+}
+
+const WM_BATCHES: readonly WmSchemaBatch[] = [
+  {
+    version: 26,
+    tables: ['memory_operations', 'memory_conflict_decisions'],
+    columns: [
+      { table: 'memory_records', column: 'facet' },
+      { table: 'memory_records', column: 'normalized_hash' },
+      { table: 'memory_records', column: 'provenance_json' },
+      { table: 'memory_records', column: 'replaces_revision_id' },
+    ],
+  },
+  {
+    version: 27,
+    tables: ['run_memory_contexts'],
+    columns: [
+      { table: 'run_memory_reads', column: 'selected_for_injection' },
+      { table: 'run_memory_reads', column: 'replayed_via_run_ids_json' },
+      { table: 'run_memory_reads', column: 'provenance_state' },
+    ],
+  },
+  { version: 28, tables: ['workspace_memory_settings', 'memory_extraction_jobs'], columns: [] },
+  { version: 29, tables: ['workspace_artifact_references'], columns: [] },
+];
+
+describe('work-centered memory schema (WM02/WM05/WM09/WM12)', () => {
+  it('builds governance tables, columns and indexes on a fresh database', () => {
+    const db = new Database(':memory:');
+    migrate(db, { migrations: appMigrations });
+    expect(readSchemaVersion(db)).toBe(appMigrations.length);
+    for (const table of [
+      'memory_operations',
+      'memory_conflict_decisions',
+      'run_memory_contexts',
+      'workspace_memory_settings',
+      'memory_extraction_jobs',
+      'workspace_artifact_references',
+    ]) {
+      expect(hasTable(db, table), table).toBe(true);
+    }
+    for (const column of [
+      'facet',
+      'topic_key',
+      'normalized_hash',
+      'provenance_json',
+      'candidate_disposition',
+      'replaces_revision_id',
+    ]) {
+      expect(hasColumn(db, 'memory_records', column), column).toBe(true);
+    }
+    for (const column of [
+      'selected_for_injection',
+      'replayed_via_run_ids_json',
+      'provenance_state',
+    ]) {
+      expect(hasColumn(db, 'run_memory_reads', column), column).toBe(true);
+    }
+    expect(indexNames(db)).toEqual(
+      expect.arrayContaining([
+        'idx_memory_records_latest',
+        'idx_memory_records_scope',
+        'idx_memory_records_scope_hash',
+        'idx_memory_records_topic_key',
+        'idx_run_memory_reads_run',
+        'idx_memory_conflict_decisions_left',
+        'idx_memory_conflict_decisions_right',
+        'idx_memory_conflict_decisions_winner',
+        'idx_memory_extraction_jobs_status',
+        'idx_workspace_artifact_references_active',
+      ]),
+    );
+    expect(db.pragma('foreign_key_check')).toEqual([]);
+    db.close();
+  });
+
+  it('refuses to invent governance facts for rows written after the migration', () => {
+    const db = new Database(':memory:');
+    migrate(db, { migrations: appMigrations });
+    seedLegacyWork(db);
+    // 缺 normalized_hash / provenance_json / facet 的记忆写入不再有可能。
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO memory_records (
+             revision_id, id, revision, scope_kind, scope_id, kind, content,
+             source_type, confidence, status, content_hash, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          'mrev-x',
+          'mem-x',
+          1,
+          'workspace',
+          'ws-1',
+          'semantic',
+          '内容',
+          'user-explicit',
+          1,
+          'confirmed',
+          'h',
+          1,
+          1,
+        ),
+    ).toThrow(/NOT NULL/iu);
+    // 运行读取必须自己声明请求阶段；历史重放来源是显式数组而不是猜测。
+    insertGovernedMemory(db, { revisionId: 'mrev-x', id: 'mem-x' });
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO run_memory_reads (
+             id, run_id, memory_id, memory_revision_id, content_hash, captured_at
+           ) VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .run('rmr-x', 'run-1', 'mem-x', 'mrev-x', 'h', 1),
+    ).toThrow(/NOT NULL/iu);
+    db.close();
+  });
+
+  it('keeps every legacy memory fact and backfills only what is mechanically derivable', () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    migrate(db, { migrations: appMigrations.slice(0, WM_BASELINE) });
+    seedLegacyMemoryWorld(db);
+    const memoriesBefore = legacyFacts(db);
+
+    migrate(db, { migrations: appMigrations });
+
+    expect(readSchemaVersion(db)).toBe(appMigrations.length);
+    // id、revision、status、content、来源三字段与两个时间戳逐字保留。
+    expect(legacyFacts(db)).toEqual(memoriesBefore);
+    const rows = db
+      .prepare(
+        `SELECT revision_id, kind, content, facet, topic_key, normalized_hash, provenance_json,
+                candidate_disposition, replaces_revision_id, source_type, source_id, source_locator
+           FROM memory_records ORDER BY revision_id`,
+      )
+      .all() as Array<{
+      revision_id: string;
+      kind: string;
+      content: string;
+      facet: string;
+      topic_key: string | null;
+      normalized_hash: string;
+      provenance_json: string;
+      candidate_disposition: string | null;
+      replaces_revision_id: string | null;
+      source_type: string;
+      source_id: string | null;
+      source_locator: string | null;
+    }>;
+    expect(rows).toHaveLength(LEGACY_MEMORIES.length);
+    for (const row of rows) {
+      expect(row.facet).toBe(EXPECTED_LEGACY_FACET[row.kind]);
+      expect(row.topic_key).toBeNull();
+      expect(row.candidate_disposition).toBeNull();
+      expect(row.replaces_revision_id).toBeNull();
+      expect(row.normalized_hash).toBe(normalizedHashOf(row.content));
+      expect(row.normalized_hash).toHaveLength(64);
+      const provenance = JSON.parse(row.provenance_json) as Record<string, unknown>;
+      expect(provenance).toEqual({
+        schemaVersion: 1,
+        verification: 'legacy-unverified',
+        sourceType: row.source_type,
+        ...(row.source_id === null ? {} : { sourceId: row.source_id }),
+        ...(row.source_locator === null ? {} : { sourceLocator: row.source_locator }),
+      });
+    }
+    // 不补造捕获时间、来源清单与确认人（§8.4）。
+    for (const row of rows) {
+      const provenance = JSON.parse(row.provenance_json) as Record<string, unknown>;
+      expect(Object.keys(provenance)).not.toContain('capturedAt');
+      expect(Object.keys(provenance)).not.toContain('sources');
+      expect(Object.keys(provenance)).not.toContain('authority');
+    }
+    // 去重控制：数字/否定词差异必须分得开，换行与首尾空白差异必须合得上。
+    const hashOf = (revisionId: string): string =>
+      rows.find((row) => row.revision_id === revisionId)?.normalized_hash ?? '';
+    expect(hashOf('mrev-b1')).not.toBe(hashOf('mrev-c1'));
+    expect(hashOf('mrev-e1')).not.toBe(hashOf('mrev-f1'));
+    expect(hashOf('mrev-d1')).toBe(hashOf('mrev-d2'));
+    db.close();
+  });
+
+  it('marks legacy run memory reads as unknown provenance without inventing send facts', () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    migrate(db, { migrations: appMigrations.slice(0, WM_BASELINE) });
+    seedLegacyMemoryWorld(db);
+    const readsBefore = readFacts(db);
+
+    migrate(db, { migrations: appMigrations });
+
+    expect(readFacts(db)).toEqual(readsBefore);
+    const read = db
+      .prepare(
+        `SELECT provenance_state, selected_for_injection, replayed_via_run_ids_json, captured_at
+           FROM run_memory_reads WHERE id = 'rmr-1'`,
+      )
+      .get() as {
+      provenance_state: string;
+      selected_for_injection: number;
+      replayed_via_run_ids_json: string;
+      captured_at: number;
+    };
+    expect(read.provenance_state).toBe('legacy_unknown');
+    expect(read.selected_for_injection).toBe(1);
+    expect(read.replayed_via_run_ids_json).toBe('[]');
+    expect(read.captured_at).toBe(1_700_000_000_500);
+    // 请求哈希不属于旧读取记录：这一列在 run_memory_reads 上根本不存在。
+    expect(hasColumn(db, 'run_memory_reads', 'request_hash')).toBe(false);
+    // 重建后外键依然有效：被引用的记忆修订不能静默删除。
+    expect(() =>
+      db.prepare('DELETE FROM memory_records WHERE revision_id = ?').run('mrev-a2'),
+    ).toThrow(/FOREIGN KEY/iu);
+    expect(db.pragma('foreign_key_check')).toEqual([]);
+    db.close();
+  });
+
+  it('is idempotent: reopening an upgraded database changes nothing', () => {
+    const file = path.join(temporaryDirectory(), 'work-centered-memory.sqlite');
+    const first = new Database(file);
+    first.pragma('journal_mode = WAL');
+    first.pragma('foreign_keys = ON');
+    migrate(first, { migrations: appMigrations.slice(0, WM_BASELINE) });
+    seedLegacyMemoryWorld(first);
+    first.close();
+
+    const db = openAppDatabase(file);
+    const snapshot = (): unknown => ({
+      version: readSchemaVersion(db),
+      schema: db
+        .prepare(
+          'SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY type, name',
+        )
+        .all(),
+      memories: countRows(db, 'memory_records'),
+      operations: countRows(db, 'memory_operations'),
+      stamps: countRows(db, 'schema_migrations'),
+    });
+    const before = snapshot();
+    migrate(db, { migrations: appMigrations });
+    expect(snapshot()).toEqual(before);
+    db.close();
+
+    const reopened = openAppDatabase(file);
+    expect(readSchemaVersion(reopened)).toBe(appMigrations.length);
+    expect(countRows(reopened, 'memory_records')).toBe(LEGACY_MEMORIES.length);
+    expect(countRows(reopened, 'run_memory_reads')).toBe(1);
+    reopened.close();
+  });
+
+  it('rolls back a failing WM02 batch without leaving a partial schema', () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    migrate(db, { migrations: appMigrations.slice(0, WM_BASELINE) });
+    seedLegacyMemoryWorld(db);
+    const memoriesBefore = legacyFacts(db);
+    const governance = migrationOf(appMigrations, WM_BASELINE + 1);
+    const failing: Migration[] = [
+      ...appMigrations.slice(0, WM_BASELINE),
+      {
+        version: WM_BASELINE + 1,
+        name: 'wm02 that fails after the DDL',
+        up(database): void {
+          governance.up(database);
+          throw new Error('forced WM02 failure');
+        },
+      },
+    ];
+
+    expect(() => migrate(db, { migrations: failing })).toThrow(/forced WM02 failure/u);
+
+    expect(readSchemaVersion(db)).toBe(WM_BASELINE);
+    expect(hasTable(db, 'memory_operations')).toBe(false);
+    expect(hasTable(db, 'memory_conflict_decisions')).toBe(false);
+    expect(hasColumn(db, 'memory_records', 'facet')).toBe(false);
+    expect(hasColumn(db, 'memory_records', 'normalized_hash')).toBe(false);
+    expect(legacyFacts(db)).toEqual(memoriesBefore);
+    expect(indexNames(db)).not.toContain('idx_memory_records_scope_hash');
+    db.close();
+  });
+
+  for (const batch of WM_BATCHES) {
+    it(`upgrades v${batch.version - 1} to v${batch.version} in one step without touching legacy facts`, () => {
+      const db = new Database(':memory:');
+      db.pragma('foreign_keys = ON');
+      // 历史数据只在 v25 形状下种下：那才是「迁移之前就已存在」的库。
+      migrate(db, { migrations: appMigrations.slice(0, WM_BASELINE) });
+      seedLegacyMemoryWorld(db);
+      migrate(db, { migrations: appMigrations.slice(0, batch.version - 1) });
+      // 起点必须是紧邻的上一版本：跳迁移在这一步就会露馅。
+      expect(readSchemaVersion(db)).toBe(batch.version - 1);
+      const factsBefore = legacyFacts(db);
+
+      migrate(db, { migrations: appMigrations.slice(0, batch.version) });
+
+      expect(readSchemaVersion(db)).toBe(batch.version);
+      expect(legacyFacts(db)).toEqual(factsBefore);
+      expect(countRows(db, 'memory_records')).toBe(LEGACY_MEMORIES.length);
+      for (const table of batch.tables) {
+        expect(hasTable(db, table), table).toBe(true);
+      }
+      for (const column of batch.columns) {
+        expect(hasColumn(db, column.table, column.column), `${column.table}.${column.column}`).toBe(
+          true,
+        );
+      }
+      // 迁移不写业务事实：治理表建出来时必须是空的，历史也没有被回填成回执。
+      if (hasTable(db, 'memory_operations')) expect(countRows(db, 'memory_operations')).toBe(0);
+      expect(db.pragma('foreign_key_check')).toEqual([]);
+      db.close();
+    });
+
+    it(`rolls back a failing v${batch.version} batch without leaving its tables or columns`, () => {
+      const db = new Database(':memory:');
+      db.pragma('foreign_keys = ON');
+      // 同上：数据落在 v25 形状上，被测批次是唯一没走通的那一步。
+      migrate(db, { migrations: appMigrations.slice(0, WM_BASELINE) });
+      seedLegacyMemoryWorld(db);
+      migrate(db, { migrations: appMigrations.slice(0, batch.version - 1) });
+      const factsBefore = legacyFacts(db);
+      const step = migrationOf(appMigrations, batch.version);
+      const failing: Migration[] = [
+        ...appMigrations.slice(0, batch.version - 1),
+        {
+          version: batch.version,
+          name: `v${batch.version} that fails after the DDL`,
+          up(database): void {
+            step.up(database);
+            throw new Error(`forced v${batch.version} failure`);
+          },
+        },
+      ];
+
+      expect(() => migrate(db, { migrations: failing })).toThrow(
+        `forced v${batch.version} failure`,
+      );
+
+      expect(readSchemaVersion(db)).toBe(batch.version - 1);
+      for (const table of batch.tables) {
+        expect(hasTable(db, table), table).toBe(false);
+      }
+      for (const column of batch.columns) {
+        expect(hasColumn(db, column.table, column.column), `${column.table}.${column.column}`).toBe(
+          false,
+        );
+      }
+      expect(legacyFacts(db)).toEqual(factsBefore);
+      db.close();
+    });
+  }
+
+  it('binds conflict decisions to exact revisions and receipts', () => {
+    const db = new Database(':memory:');
+    migrate(db, { migrations: appMigrations });
+    seedLegacyWork(db);
+    insertGovernedMemory(db, { revisionId: 'mrev-left', id: 'mem-left', topicKey: '收入口径' });
+    insertGovernedMemory(db, { revisionId: 'mrev-right', id: 'mem-right', topicKey: '收入口径' });
+    insertGovernedMemory(db, { revisionId: 'mrev-third', id: 'mem-third', topicKey: '收入口径' });
+    const insertOperation = db.prepare(
+      `INSERT INTO memory_operations (operation_id, operation_kind, request_hash, result_json, committed_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    );
+    insertOperation.run('op-1', 'resolve-conflict', 'req-1', '{"effect":"updated"}', 1);
+    insertOperation.run('op-2', 'resolve-conflict', 'req-2', '{"effect":"updated"}', 2);
+    const insertDecision = db.prepare(
+      `INSERT INTO memory_conflict_decisions (
+         id, operation_id, left_revision_id, right_revision_id, decision,
+         winner_revision_id, applicability_note, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    const keepBoth = (id: string, operationId: string, left: string, right: string): void => {
+      insertDecision.run(
+        id,
+        operationId,
+        left,
+        right,
+        'keep-both',
+        null,
+        '含税口径只用于季度对外报告',
+        1,
+      );
+    };
+    keepBoth('cd-1', 'op-1', 'mrev-left', 'mrev-right');
+    // 左右必须按修订身份规范排序：反序落库被 CHECK 拒绝，同一对只有一种形状。
+    expect(() => keepBoth('cd-2', 'op-1', 'mrev-right', 'mrev-left')).toThrow(/CHECK constraint/iu);
+    // 一个操作回执只能挂一条裁决。
+    expect(() => keepBoth('cd-3', 'op-1', 'mrev-left', 'mrev-right')).toThrow(/UNIQUE/iu);
+    // 裁决必须挂在真实回执与真实修订上：回执外键与两个修订列的外键都要各自成立。
+    // 幽灵修订必须落在规范顺序的位置上，否则先被「左右必须规范排序」的 CHECK 挡下，
+    // 断言读到的就是另一个约束（§8.2 两个约束都要求，各自单独验才不互相掩盖）。
+    expect(() => keepBoth('cd-4', 'op-ghost', 'mrev-left', 'mrev-right')).toThrow(/FOREIGN KEY/iu);
+    expect(() => keepBoth('cd-ghost-left', 'op-2', 'mrev-aaa-ghost', 'mrev-left')).toThrow(
+      /FOREIGN KEY/iu,
+    );
+    expect(() => keepBoth('cd-ghost-right', 'op-2', 'mrev-right', 'mrev-zzz-ghost')).toThrow(
+      /FOREIGN KEY/iu,
+    );
+    // keep-both 必须给出适用条件；replace 必须给出属于这一对的胜出修订。
+    expect(() =>
+      insertDecision.run('cd-6', 'op-2', 'mrev-left', 'mrev-right', 'keep-both', null, null, 1),
+    ).toThrow(/CHECK constraint/iu);
+    expect(() =>
+      insertDecision.run('cd-7', 'op-2', 'mrev-left', 'mrev-right', 'replace', null, null, 1),
+    ).toThrow(/CHECK constraint/iu);
+    expect(() =>
+      insertDecision.run(
+        'cd-8',
+        'op-2',
+        'mrev-left',
+        'mrev-right',
+        'replace',
+        'mrev-third',
+        null,
+        1,
+      ),
+    ).toThrow(/CHECK constraint/iu);
+    expect(() =>
+      insertDecision.run(
+        'cd-9',
+        'op-2',
+        'mrev-left',
+        'mrev-right',
+        'replace',
+        'mrev-right',
+        null,
+        1,
+      ),
+    ).not.toThrow();
+    // 改判必须同时改掉配套字段，不允许只翻 decision 留下悬空的条件。
+    expect(() =>
+      db
+        .prepare("UPDATE memory_conflict_decisions SET decision = 'replace' WHERE id = 'cd-1'")
+        .run(),
+    ).toThrow(/CHECK constraint/iu);
+    expect(() =>
+      db
+        .prepare('UPDATE memory_conflict_decisions SET applicability_note = NULL WHERE id = ?')
+        .run('cd-1'),
+    ).toThrow(/CHECK constraint/iu);
+    // 被裁决引用的修订与回执都删不掉（§8.3 RESTRICT）。
+    expect(() =>
+      db.prepare('DELETE FROM memory_records WHERE revision_id = ?').run('mrev-left'),
+    ).toThrow(/FOREIGN KEY/iu);
+    expect(() =>
+      db.prepare('DELETE FROM memory_operations WHERE operation_id = ?').run('op-1'),
+    ).toThrow(/FOREIGN KEY/iu);
+    db.prepare('DELETE FROM memory_conflict_decisions WHERE id = ?').run('cd-1');
+    expect(() =>
+      db.prepare('DELETE FROM memory_records WHERE revision_id = ?').run('mrev-left'),
+    ).toThrow(/FOREIGN KEY/iu);
+    db.prepare('DELETE FROM memory_conflict_decisions').run();
+    expect(() =>
+      db.prepare('DELETE FROM memory_records WHERE revision_id = ?').run('mrev-left'),
+    ).not.toThrow();
+    expect(() =>
+      db.prepare('DELETE FROM memory_operations WHERE operation_id = ?').run('op-1'),
+    ).not.toThrow();
+    db.close();
+  });
+
+  it('rejects contradictory governance fields on new memory revisions', () => {
+    const db = new Database(':memory:');
+    migrate(db, { migrations: appMigrations });
+    seedLegacyWork(db);
+    insertGovernedMemory(db, { revisionId: 'mrev-ok', id: 'mem-ok' });
+    // 修订表按身份追加：同一 id 的两行必须并存（精确引用落在 revision_id 上，§8.1），
+    // 但同一 (id, revision) 落不进第二行——追加式的修订链全靠这条唯一约束把守。
+    insertGovernedMemory(db, { revisionId: 'mrev-ok-2', id: 'mem-ok', revision: 2 });
+    expect(() =>
+      insertGovernedMemory(db, { revisionId: 'mrev-ok-dup', id: 'mem-ok', revision: 2 }),
+    ).toThrow(/UNIQUE/iu);
+    // facet 必须由 kind 推出：semantic 不能写 method。
+    expect(() =>
+      insertGovernedMemory(db, {
+        revisionId: 'mrev-bad-facet',
+        id: 'mem-bad-facet',
+        facet: 'method',
+      }),
+    ).toThrow(/CHECK constraint/iu);
+    // 「暂不采用」只属于 candidate。
+    expect(() =>
+      insertGovernedMemory(db, {
+        revisionId: 'mrev-bad-disposition',
+        id: 'mem-bad-disposition',
+        status: 'confirmed',
+        candidateDisposition: 'rejected',
+      }),
+    ).toThrow(/CHECK constraint/iu);
+    insertGovernedMemory(db, {
+      revisionId: 'mrev-candidate',
+      id: 'mem-candidate',
+      status: 'candidate',
+      candidateDisposition: 'rejected',
+    });
+    // 去重键必须是真摘要，来源必须是 JSON，议题键不得超长。
+    expect(() =>
+      insertGovernedMemory(db, {
+        revisionId: 'mrev-bad-hash',
+        id: 'mem-bad-hash',
+        normalizedHash: 'not-a-digest',
+      }),
+    ).toThrow(/CHECK constraint/iu);
+    expect(() =>
+      insertGovernedMemory(db, {
+        revisionId: 'mrev-bad-json',
+        id: 'mem-bad-json',
+        provenanceJson: '{',
+      }),
+    ).toThrow(/CHECK constraint/iu);
+    expect(() =>
+      insertGovernedMemory(db, {
+        revisionId: 'mrev-bad-topic',
+        id: 'mem-bad-topic',
+        topicKey: '议'.repeat(81),
+      }),
+    ).toThrow(/CHECK constraint/iu);
+    // 跨记录替代指向精确修订，且不能指向自己。
+    expect(() =>
+      insertGovernedMemory(db, {
+        revisionId: 'mrev-replaces',
+        id: 'mem-replaces',
+        replacesRevisionId: 'mrev-ghost',
+      }),
+    ).toThrow(/FOREIGN KEY/iu);
+    expect(() =>
+      db
+        .prepare('UPDATE memory_records SET replaces_revision_id = revision_id WHERE id = ?')
+        .run('mem-ok'),
+    ).toThrow(/CHECK constraint/iu);
+    expect(() =>
+      insertGovernedMemory(db, {
+        revisionId: 'mrev-replaces',
+        id: 'mem-replaces',
+        replacesRevisionId: 'mrev-ok',
+      }),
+    ).not.toThrow();
+    expect(() =>
+      db.prepare('DELETE FROM memory_records WHERE revision_id = ?').run('mrev-ok'),
+    ).toThrow(/FOREIGN KEY/iu);
+    db.close();
+  });
+
+  it('records one run memory context per run and keeps phases honest', () => {
+    const db = new Database(':memory:');
+    migrate(db, { migrations: appMigrations });
+    seedLegacyWork(db);
+    insertGovernedMemory(db, { revisionId: 'mrev-run', id: 'mem-run' });
+    const insertContext = db.prepare(RUN_MEMORY_CONTEXT_INSERT);
+    const insertSelectedContext = (): void => {
+      insertContext.run(
+        'run-1',
+        1,
+        'selected',
+        'memory-recall-v1',
+        1,
+        'query-1',
+        '{"recallVersion":"memory-recall-v1","budget":6000}',
+        '[{"memoryId":"mem-run","revisionId":"mrev-run","hash":"h","order":1,"score":500,"reason":"match"}]',
+        '[]',
+        '[]',
+        '[{"memoryId":"mem-run","revisionId":"mrev-run","hash":"h"}]',
+        '{"excluded":{}}',
+        'auth-1',
+        null,
+        null,
+        1,
+        null,
+        null,
+        1,
+      );
+    };
+    insertSelectedContext();
+    // 一次运行只有一份记忆决策快照：run_id 是主键。
+    expect(insertSelectedContext).toThrow(/UNIQUE|PRIMARY KEY/iu);
+    // 阶段没推进就不许留下请求哈希或阶段时间。
+    expect(() =>
+      db
+        .prepare('UPDATE run_memory_contexts SET request_hash = ? WHERE run_id = ?')
+        .run('r-1', 'run-1'),
+    ).toThrow(/CHECK constraint/iu);
+    expect(() =>
+      db
+        .prepare('UPDATE run_memory_contexts SET dispatch_attempted_at = ? WHERE run_id = ?')
+        .run(5, 'run-1'),
+    ).toThrow(/CHECK constraint/iu);
+    expect(() =>
+      db
+        .prepare('UPDATE run_memory_contexts SET phase = ? WHERE run_id = ?')
+        .run('queued', 'run-1'),
+    ).toThrow(/CHECK constraint/iu);
+    expect(() =>
+      db
+        .prepare('UPDATE run_memory_contexts SET request_prepared_at = ? WHERE run_id = ?')
+        .run(0, 'run-1'),
+    ).toThrow(/CHECK constraint/iu);
+    insertRead(db, {
+      id: 'rmr-new',
+      runId: 'run-1',
+      memoryId: 'mem-run',
+      memoryRevisionId: 'mrev-run',
+      selectedForInjection: 1,
+      provenanceState: 'known',
+    });
+    expect(() =>
+      insertRead(db, {
+        id: 'rmr-new-2',
+        runId: 'run-1',
+        memoryId: 'mem-run',
+        memoryRevisionId: 'mrev-run',
+        selectedForInjection: 1,
+        provenanceState: 'known',
+      }),
+    ).toThrow(/UNIQUE/iu);
+    db.prepare('DELETE FROM runs WHERE id = ?').run('run-1');
+    expect(countRows(db, 'run_memory_contexts')).toBe(0);
+    expect(countRows(db, 'run_memory_reads')).toBe(0);
+    // 审计删完后，被引用的修订才可以被清理。
+    expect(() =>
+      db.prepare('DELETE FROM memory_records WHERE revision_id = ?').run('mrev-run'),
+    ).not.toThrow();
+    db.close();
+  });
+
+  it('keeps auto-suggest off by default and validates extraction jobs', () => {
+    const db = new Database(':memory:');
+    migrate(db, { migrations: appMigrations });
+    seedLegacyWork(db);
+    db.prepare(
+      `INSERT INTO workspace_memory_settings (workspace_id, revision, updated_at) VALUES (?, ?, ?)`,
+    ).run('ws-1', 1, 1);
+    expect(
+      db
+        .prepare(
+          'SELECT auto_suggest_enabled FROM workspace_memory_settings WHERE workspace_id = ?',
+        )
+        .get('ws-1'),
+    ).toEqual({ auto_suggest_enabled: 0 });
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO workspace_memory_settings (
+             workspace_id, revision, auto_suggest_enabled, updated_at
+           ) VALUES (?, ?, 1, ?)`,
+        )
+        .run('ws-2', 1, 1),
+    ).toThrow(/CHECK constraint/iu);
+    expect(() =>
+      db
+        .prepare(
+          `UPDATE workspace_memory_settings
+              SET auto_suggest_enabled = 1, consent_version = '3', consented_at = 2 WHERE workspace_id = ?`,
+        )
+        .run('ws-1'),
+    ).not.toThrow();
+
+    const insertJob = db.prepare(
+      `INSERT INTO memory_extraction_jobs (
+         id, source_key, workspace_id, task_id, run_id, source_snapshot_json, source_version_hash,
+         trigger, status, revision, attempt, input_code_points, output_code_points,
+         created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    insertJob.run(
+      'job-1',
+      'run:run-1:hash-1',
+      'ws-1',
+      'task-1',
+      'run-1',
+      '{"fragments":[]}',
+      'hash-1',
+      'automatic',
+      'queued',
+      1,
+      1,
+      0,
+      0,
+      1,
+      1,
+    );
+    expect(() =>
+      insertJob.run(
+        'job-2',
+        'run:run-1:hash-1',
+        'ws-1',
+        'task-1',
+        'run-1',
+        '{}',
+        'hash-1',
+        'automatic',
+        'queued',
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+      ),
+    ).toThrow(/UNIQUE/iu);
+    const jobStatus = db.prepare('UPDATE memory_extraction_jobs SET status = ? WHERE id = ?');
+    expect(() => jobStatus.run('done', 'job-1')).toThrow(/CHECK constraint/iu);
+    expect(() =>
+      db.prepare('UPDATE memory_extraction_jobs SET trigger = ? WHERE id = ?').run('auto', 'job-1'),
+    ).toThrow(/CHECK constraint/iu);
+    // 成功的作业不得带错误码，也没人能给「已提交」的幂等回执改名。
+    expect(() =>
+      db
+        .prepare(
+          `UPDATE memory_extraction_jobs
+              SET status = 'succeeded', finished_at = 3, started_at = 2, error_code = 'TIMEOUT'
+            WHERE id = ?`,
+        )
+        .run('job-1'),
+    ).toThrow(/CHECK constraint/iu);
+    expect(() =>
+      db
+        .prepare(
+          `UPDATE memory_extraction_jobs
+              SET status = 'failed', finished_at = 3, started_at = 2, error_code = 'MODEL_UNAVAILABLE'
+            WHERE id = ?`,
+        )
+        .run('job-1'),
+    ).not.toThrow();
+    // 运行审计子表随 Run CASCADE；没有引用的工作区照旧可删。
+    db.prepare('DELETE FROM runs WHERE id = ?').run('run-1');
+    expect(countRows(db, 'memory_extraction_jobs')).toBe(0);
+    db.prepare('DELETE FROM workspace_memory_settings WHERE workspace_id = ?').run('ws-1');
+    db.prepare('DELETE FROM memory_extraction_jobs WHERE id = ?').run('job-1');
+    db.prepare('DELETE FROM workspaces WHERE id = ?').run('ws-1');
+    expect(countRows(db, 'workspace_memory_settings')).toBe(0);
+    db.close();
+  });
+
+  it('pins workspace references to exact versions and blocks silent loss', () => {
+    const db = new Database(':memory:');
+    migrate(db, { migrations: appMigrations });
+    seedLegacyWork(db);
+    const now = 1_700_000_000_000;
+    db.prepare(
+      'INSERT INTO workspaces (id, name, root_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+    ).run('ws-2', '市场研究', '/tmp/ws-2', now, now);
+    const insertReference = db.prepare(
+      `INSERT INTO workspace_artifact_references (
+         id, workspace_id, artifact_version_id, content_hash, label, status, revision, selected_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
+    );
+    // 参考标记只表达「用户指定这一版」，跨空间由服务层用 REFERENCE_WORKSPACE_MISMATCH 把关。
+    insertReference.run('ref-1', 'ws-2', 'ver-1', 'h2', null, 1, now, now);
+    expect(() => insertReference.run('ref-2', 'ws-2', 'ver-1', 'h2', null, 1, now, now)).toThrow(
+      /UNIQUE/iu,
+    );
+    expect(() =>
+      insertReference.run('ref-3', 'ws-2', 'ver-ghost', 'h3', null, 1, now, now),
+    ).toThrow(/FOREIGN KEY/iu);
+    expect(() =>
+      insertReference.run('ref-4', 'ws-ghost', 'ver-1', 'h4', null, 1, now, now),
+    ).toThrow(/FOREIGN KEY/iu);
+    expect(() =>
+      insertReference.run('ref-5', 'ws-2', 'ver-1', 'h5', '标'.repeat(121), 1, now, now),
+    ).toThrow(/CHECK constraint/iu);
+    expect(() =>
+      db
+        .prepare('UPDATE workspace_artifact_references SET status = ? WHERE id = ?')
+        .run('archived', 'ref-1'),
+    ).toThrow(/CHECK constraint/iu);
+    // active≤20 无法用 CHECK 表达（SQLite 不允许子查询，本仓库也不用 trigger）：
+    // 建 21 个版本一次插满，DDL 放行，上限由 workspace-reference-repository 在同一事务里统计。
+    for (let version = 2; version <= 21; version += 1) {
+      db.prepare(
+        `INSERT INTO artifact_versions (id, artifact_id, version_number, content, content_hash, source_run_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).run(`ver-${version}`, 'art-1', version, `# 第 ${version} 版`, `h${version}`, 'run-1', now);
+      insertReference.run(
+        `ref-a${version}`,
+        'ws-1',
+        `ver-${version}`,
+        `h${version}`,
+        null,
+        1,
+        now,
+        now,
+      );
+    }
+    expect(countRows(db, 'workspace_artifact_references')).toBe(21);
+    // 被另一空间参考标记绑定的版本，其 owner 工作区删不掉（§8.3 不得静默级联清除历史）。
+    expect(() => db.prepare('DELETE FROM workspaces WHERE id = ?').run('ws-1')).toThrow(
+      /FOREIGN KEY/iu,
+    );
+    expect(() => db.prepare('DELETE FROM artifacts WHERE id = ?').run('art-1')).toThrow(
+      /FOREIGN KEY/iu,
+    );
+    // 标记随自己的空间消失；失去引用后父对象删除行为回到原样。
+    db.prepare('DELETE FROM workspaces WHERE id = ?').run('ws-2');
+    expect(
+      db
+        .prepare(
+          'SELECT COUNT(*) AS count FROM workspace_artifact_references WHERE workspace_id = ?',
+        )
+        .get('ws-2'),
+    ).toEqual({ count: 0 });
+    db.prepare('DELETE FROM workspace_artifact_references WHERE workspace_id = ?').run('ws-1');
+    db.prepare('DELETE FROM workspaces WHERE id = ?').run('ws-1');
+    expect(countRows(db, 'artifact_versions')).toBe(0);
+    expect(db.pragma('foreign_key_check')).toEqual([]);
     db.close();
   });
 });

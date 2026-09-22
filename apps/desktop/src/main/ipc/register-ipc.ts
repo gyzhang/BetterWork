@@ -10,6 +10,7 @@ import {
   cancelDependencyRequestSchema,
   cancelDependencyResultSchema,
   cancelledResultSchema,
+  cancelMemoryJobRequestSchema,
   cancelRunRequestSchema,
   chooseInterpreterResultSchema,
   clearedResultSchema,
@@ -51,6 +52,7 @@ import {
   getFileArtifactRequestSchema,
   getMcpConnectionRequestSchema,
   getMemoryRequestSchema,
+  getMemorySettingsRequestSchema,
   getSkillRequestSchema,
   getTaskContextRequestSchema,
   importSkillRequestSchema,
@@ -68,6 +70,7 @@ import {
   listEvidenceRequestSchema,
   listExpertsRequestSchema,
   listMemoriesRequestSchema,
+  listMemoryJobsRequestSchema,
   listRunEventsRequestSchema,
   listRunsRequestSchema,
   listSkillsRequestSchema,
@@ -81,8 +84,11 @@ import {
   mcpMutationResultSchema,
   mcpTestResultSchema,
   memoryConflictResolutionDataSchema,
+  memoryJobListDataSchema,
+  memoryJobSummarySchema,
   memoryListPageDataSchema,
   memoryProjectionStateDataSchema,
+  memorySettingsDataSchema,
   memoryViewItemSchema,
   memoryWriteReceiptSchema,
   modelProfileIdSchema,
@@ -109,6 +115,7 @@ import {
   removeKnowledgeDocumentRequestSchema,
   resolveMemoryConflictRequestSchema,
   resultSchema,
+  retryMemoryJobRequestSchema,
   revokeSkillTrustRequestSchema,
   runSummarySchema,
   saveExpertRevisionRequestSchema,
@@ -123,6 +130,7 @@ import {
   searchKnowledgeRequestSchema,
   setDefaultModelRequestSchema,
   setExpertLifecycleRequestSchema,
+  setMemorySettingsRequestSchema,
   setMemoryStatusRequestSchema,
   setModelEnabledRequestSchema,
   setSkillEnabledRequestSchema,
@@ -146,6 +154,7 @@ import {
   updateWindowThemeRequestSchema,
   voidResultSchema,
   windowToggleMaximizeRequestSchema,
+  workspaceMemorySettingsSchema,
   workspaceSummarySchema,
 } from '@betterwork/agent-protocol';
 import { type BrowserWindow, dialog, ipcMain, shell, systemPreferences } from 'electron';
@@ -161,6 +170,7 @@ import type { ExpertService } from '../services/expert-service';
 import type { FileArtifactService } from '../services/file-artifact-service';
 import type { KnowledgeVault } from '../services/knowledge-vault';
 import type { McpClientService } from '../services/mcp-client-service';
+import type { MemoryExtractionService } from '../services/memory-extraction-service';
 import type { MemoryService } from '../services/memory-service';
 import { probeModelConnection } from '../services/model-connectivity';
 import type { NotificationService } from '../services/notification-service';
@@ -186,6 +196,8 @@ export interface IpcDependencies {
   readonly expertService: ExpertService;
   readonly discussionCheckpoints: DiscussionCheckpointService;
   readonly memories: MemoryService;
+  /** 提炼设置与作业只影响候选生成，不阻塞任何 Run 终态。 */
+  readonly memoryExtractions: MemoryExtractionService;
   readonly mcpClientService: McpClientService;
   readonly dependencies: SkillDependencyService;
   readonly snapshots: ToolchainSnapshotService;
@@ -1163,7 +1175,7 @@ function registerExpertChannels({ expertService }: IpcDependencies): void {
   );
 }
 
-function registerMemoryChannels({ memories }: IpcDependencies): void {
+function registerMemoryChannels({ memories, memoryExtractions }: IpcDependencies): void {
   handleOptionalInput(
     IpcChannel.ListMemories,
     listMemoriesRequestSchema,
@@ -1201,6 +1213,36 @@ function registerMemoryChannels({ memories }: IpcDependencies): void {
     resolveMemoryConflictRequestSchema,
     resultSchema(memoryConflictResolutionDataSchema),
     async (input) => await memories.resolveConflict(input),
+  );
+  handleInput(
+    IpcChannel.GetMemorySettings,
+    getMemorySettingsRequestSchema,
+    resultSchema(workspaceMemorySettingsSchema),
+    async (input) => await memoryExtractions.getSettings(input),
+  );
+  handleInput(
+    IpcChannel.SetMemorySettings,
+    setMemorySettingsRequestSchema,
+    resultSchema(memorySettingsDataSchema),
+    async (input) => await memoryExtractions.setSettings(input),
+  );
+  handleInput(
+    IpcChannel.ListMemoryJobs,
+    listMemoryJobsRequestSchema,
+    resultSchema(memoryJobListDataSchema),
+    (input) => memoryExtractions.listJobs(input),
+  );
+  handleInput(
+    IpcChannel.RetryMemoryJob,
+    retryMemoryJobRequestSchema,
+    resultSchema(memoryJobSummarySchema),
+    async (input) => await memoryExtractions.retryJob(input),
+  );
+  handleInput(
+    IpcChannel.CancelMemoryJob,
+    cancelMemoryJobRequestSchema,
+    resultSchema(memoryJobSummarySchema),
+    async (input) => await memoryExtractions.cancelJob(input),
   );
   handleInput(
     IpcChannel.RebuildMemoryProjection,

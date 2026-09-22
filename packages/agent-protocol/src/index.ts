@@ -1921,16 +1921,11 @@ export const setMemorySettingsRequestSchema = z
     autoSuggestEnabled: z.boolean(),
     consentVersion: z.number().int().positive().optional(),
   })
-  .strict()
-  .superRefine((value, context) => {
-    if (value.autoSuggestEnabled && value.consentVersion === undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['consentVersion'],
-        message: '开启自动建议必须提交当前同意版本',
-      });
-    }
-  });
+  .strict();
+/**
+ * 「开启必须带当前同意版本」是治理裁决，由 MemoryExtractionService 用 CONSENT_REQUIRED 回答；
+ * 写在 Schema 里只会在 IPC 边界抛出渲染层无法呈现的 ZodError。
+ */
 export type SetMemorySettingsRequest = z.infer<typeof setMemorySettingsRequestSchema>;
 
 export const memorySettingsDataSchema = z

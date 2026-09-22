@@ -25,11 +25,14 @@ import { CredentialMigrationService } from './services/credential-migration-serv
 import { DiscussionCheckpointService } from './services/discussion-checkpoint-service';
 import { ExecutionOutputService } from './services/execution-output-service';
 import { type BuiltinExpertReleaseManifest, ExpertService } from './services/expert-service';
+import { createStoreExtractionSourceReader } from './services/extraction-source-reader';
 import { FileArtifactService } from './services/file-artifact-service';
 import { InputSnapshotService } from './services/input-snapshot-service';
 import { KnowledgeVault } from './services/knowledge-vault';
 import { McpClientService } from './services/mcp-client-service';
+import { MemoryExtractionService } from './services/memory-extraction-service';
 import { MemoryService } from './services/memory-service';
+import { ModelProviderFactory } from './services/model-provider-factory';
 import { NotificationService } from './services/notification-service';
 import {
   pptGenerationAdapterFactory,
@@ -103,6 +106,22 @@ function bootstrap(): ApplicationContext {
   );
   const inputSnapshots = new InputSnapshotService(store, userData);
   const memories = new MemoryService(store, userData);
+  const modelProviderFactory = new ModelProviderFactory({
+    models: store.models,
+    ...(credentialAccess ? { credentialAccess } : {}),
+  });
+  const memoryExtractions = new MemoryExtractionService({
+    jobs: store.memoryExtractions,
+    memories: store.memories,
+    transaction: <TBody>(body: () => TBody): TBody => store.transaction(body),
+    sources: createStoreExtractionSourceReader(store),
+    modelFactory: modelProviderFactory,
+  });
+  // 启动只做收口：遗留 queued/running 一律转 interrupted，不在启动瞬间触网（契约 §7.3）。
+  const interruptedJobs = memoryExtractions.recoverInterruptedJobs();
+  if (interruptedJobs > 0) {
+    console.warn(`记忆提炼作业启动收口：interrupted=${String(interruptedJobs)}`);
+  }
   const mcpClientService = new McpClientService(store);
   const webFetchService = new WebFetchService();
   const officeParser = new OfficeParserService();
@@ -300,6 +319,7 @@ function bootstrap(): ApplicationContext {
     taskMaterials,
     discussionCheckpoints,
     memories,
+    memoryExtractions,
     mcpClientService,
     notifications,
     runs,

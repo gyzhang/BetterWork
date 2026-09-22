@@ -8,11 +8,15 @@ import {
   type AgentRuntimeEvent,
   IpcChannel,
   type MemoryConflictResolutionData,
+  type MemoryJobListData,
+  type MemoryJobSummary,
   type MemoryListPageData,
   type MemoryProjectionStateData,
+  type MemorySettingsData,
   type MemoryViewItem,
   type MemoryWriteReceipt,
   type Result,
+  type WorkspaceMemorySettings,
 } from '@betterwork/agent-protocol';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -91,6 +95,7 @@ describe('registerIpc', () => {
     const { DiscussionCheckpointService } =
       await import('../services/discussion-checkpoint-service');
     const { MemoryService } = await import('../services/memory-service');
+    const { MemoryExtractionService } = await import('../services/memory-extraction-service');
     const { McpClientService } = await import('../services/mcp-client-service');
     const { fakePptxRenderer } = await import('../infrastructure/fixtures/fake-pptx-renderer');
     const { FakeDownloader, FakeFileSystem, FakePythonRunner, scenarioOf } =
@@ -111,6 +116,18 @@ describe('registerIpc', () => {
     const taskMaterials = new TaskMaterialService({ store, knowledgeVault, inputSnapshots });
     const discussionCheckpoints = new DiscussionCheckpointService(store);
     const memories = new MemoryService(store, temporaryDirectory);
+    // 通道测试只验证接线与校验，绝不执行提炼：模型解析器一旦被调用就是测试失败。
+    const memoryExtractions = new MemoryExtractionService({
+      jobs: store.memoryExtractions,
+      memories: store.memories,
+      transaction: <TBody>(body: () => TBody): TBody => store.transaction(body),
+      sources: { readSource: () => undefined },
+      modelFactory: {
+        requireConfiguredLanguageModel: async () => {
+          throw new Error('IPC 通道测试不应解析语言模型');
+        },
+      },
+    });
     const mcpClientService = new McpClientService(store);
 
     // 依赖通道用离线替身根：不触网、不碰系统 Python，也不写受管目录之外的位置。
@@ -166,6 +183,7 @@ describe('registerIpc', () => {
       taskMaterials,
       discussionCheckpoints,
       memories,
+      memoryExtractions,
       mcpClientService,
       notifications,
       runs,
@@ -909,5 +927,70 @@ describe('registerIpc', () => {
     expect(rebuilt.ok).toBe(true);
     if (!rebuilt.ok) return;
     expect(rebuilt.data.projectionState).toBe('synced');
+  });
+
+  it('keeps automatic extraction closed by default and opens it only with the current consent', async () => {
+    const workspace = (await invoke(IpcChannel.GetDefaultWorkspace, {})) as { id: string };
+
+    const initial = (await invoke(IpcChannel.GetMemorySettings, {
+      workspaceId: workspace.id,
+    })) as Result<WorkspaceMemorySettings>;
+    expect(initial.ok).toBe(true);
+    if (!initial.ok) return;
+    expect(initial.data.autoSuggestEnabled).toBe(false);
+    expect(initial.data.revision).toBe(0);
+
+    const withoutConsent = (await invoke(IpcChannel.SetMemorySettings, {
+      operationId: randomUUID(),
+      workspaceId: workspace.id,
+      expectedRevision: 0,
+      autoSuggestEnabled: true,
+    })) as Result<MemorySettingsData>;
+    expect(withoutConsent.ok).toBe(false);
+    if (withoutConsent.ok) return;
+    expect(withoutConsent.error.code).toBe('CONSENT_REQUIRED');
+
+    const enabled = (await invoke(IpcChannel.SetMemorySettings, {
+      operationId: randomUUID(),
+      workspaceId: workspace.id,
+      expectedRevision: 0,
+      autoSuggestEnabled: true,
+      consentVersion: 1,
+    })) as Result<MemorySettingsData>;
+    expect(enabled.ok).toBe(true);
+    if (!enabled.ok) return;
+    expect(enabled.data.receipt.commit).toBe('committed');
+    expect(enabled.data.receipt.currentSettings.autoSuggestEnabled).toBe(true);
+    expect(enabled.data.cancelledJobCount).toBe(0);
+  });
+
+  it('lists an empty extraction queue and reports unknown jobs as domain failures', async () => {
+    const workspace = (await invoke(IpcChannel.GetDefaultWorkspace, {})) as { id: string };
+
+    const jobs = (await invoke(IpcChannel.ListMemoryJobs, {
+      workspaceId: workspace.id,
+    })) as Result<MemoryJobListData>;
+    expect(jobs.ok).toBe(true);
+    if (!jobs.ok) return;
+    expect(jobs.data.items).toHaveLength(0);
+
+    const retried = (await invoke(IpcChannel.RetryMemoryJob, {
+      operationId: randomUUID(),
+      jobId: 'missing-job',
+      expectedRevision: 1,
+      consentVersion: 1,
+    })) as Result<MemoryJobSummary>;
+    expect(retried.ok).toBe(false);
+    if (retried.ok) return;
+    expect(retried.error.code).toBe('NOT_FOUND');
+
+    const cancelled = (await invoke(IpcChannel.CancelMemoryJob, {
+      operationId: randomUUID(),
+      jobId: 'missing-job',
+      expectedRevision: 1,
+    })) as Result<MemoryJobSummary>;
+    expect(cancelled.ok).toBe(false);
+    if (cancelled.ok) return;
+    expect(cancelled.error.code).toBe('NOT_FOUND');
   });
 });

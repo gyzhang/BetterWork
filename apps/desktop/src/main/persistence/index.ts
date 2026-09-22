@@ -13,11 +13,14 @@ import { EvidenceRepository } from './evidence-repository';
 import { ExpertRepository } from './expert-repository';
 import { InputSnapshotRepository } from './input-snapshot-repository';
 import { McpConnectionRepository } from './mcp-connection-repository';
+import { MemoryExtractionRepository } from './memory-extraction-repository';
+import { MemoryOperationRepository } from './memory-operation-repository';
 import { MemoryRepository } from './memory-repository';
 import { ModelRepository } from './model-repository';
 import { NotificationRepository } from './notification-repository';
 import { RunContextSnapshotRepository } from './run-context-snapshot-repository';
 import { RunMaterialReadRepository } from './run-material-read-repository';
+import { RunMemoryContextRepository } from './run-memory-context-repository';
 import { RunRepository } from './run-repository';
 import { RuntimeEnvironmentRepository } from './runtime-environment-repository';
 import { SearchEngineRepository } from './search-engine-repository';
@@ -25,6 +28,7 @@ import { SkillExecutionRepository } from './skill-execution-repository';
 import { SkillRepository } from './skill-repository';
 import { TaskContextRepository } from './task-context-repository';
 import { TaskRepository } from './task-repository';
+import { WorkspaceReferenceRepository } from './workspace-reference-repository';
 import { WorkspaceRepository } from './workspace-repository';
 
 /**
@@ -59,6 +63,10 @@ export class AppStore {
   readonly dependencyOperations: DependencyOperationRepository;
   readonly snapshots: DependencySnapshotRepository;
   readonly discussionCheckpoints: DiscussionCheckpointRepository;
+  readonly memoryOperations: MemoryOperationRepository;
+  readonly runMemoryContexts: RunMemoryContextRepository;
+  readonly memoryExtractions: MemoryExtractionRepository;
+  readonly workspaceReferences: WorkspaceReferenceRepository;
   /** 迁移进度日志只依赖 db，始终可用。 */
   readonly credentialJournal: CredentialMigrationJournalRepository;
   /** 凭据仓储需要 Main 注入 safeStorage 适配器；未注入时为 undefined（不加密，保持旧行为）。 */
@@ -97,6 +105,10 @@ export class AppStore {
     this.dependencyOperations = new DependencyOperationRepository(db);
     this.snapshots = new DependencySnapshotRepository(db);
     this.discussionCheckpoints = new DiscussionCheckpointRepository(db);
+    this.memoryOperations = new MemoryOperationRepository(db);
+    this.runMemoryContexts = new RunMemoryContextRepository(db);
+    this.memoryExtractions = new MemoryExtractionRepository(db);
+    this.workspaceReferences = new WorkspaceReferenceRepository(db);
   }
 
   static open(filePath: string, safeStorage?: SafeStorageAdapter): AppStore {
@@ -151,10 +163,41 @@ export {
 } from './input-snapshot-repository';
 export { McpConnectionRepository, type McpDiscoveryPatch } from './mcp-connection-repository';
 export {
+  type EnqueueExtractionJobInput,
+  extractionSourceKey,
+  type JobEnqueueOutcome,
+  MemoryExtractionRepository,
+  type MemoryJobListPage,
+  type MemoryJobListQuery,
+  MemoryJobStateConflictError,
+  MemoryQueueFullError,
+  type MemorySettingsWriteOutcome,
+} from './memory-extraction-repository';
+export {
+  type ConflictDecisionInput,
+  MemoryIdempotencyConflictError,
+  type MemoryOperationClaim,
+  type MemoryOperationInput,
+  MemoryOperationRepository,
+  MemoryOperationValidationError,
+} from './memory-operation-repository';
+export {
+  deriveEffectiveStatus,
+  isMemoryEffectiveAt,
   MemoryConflictError,
+  type MemoryCreateInput,
+  type MemoryDeletionImpact,
+  type MemoryEditCommand,
+  type MemoryGovernanceCommand,
+  type MemoryListPage,
+  type MemoryListPageQuery,
   type MemoryReadInput,
   MemoryRepository,
+  MemoryScopeMismatchError,
+  MemoryTerminalError,
   MemoryValidationError,
+  type MemoryWriteOutcome,
+  type RecallCandidateQuery,
 } from './memory-repository';
 export { ModelRepository, type RunnableModel } from './model-repository';
 export { NotificationRepository } from './notification-repository';
@@ -164,6 +207,11 @@ export {
   RunContextSnapshotRepository,
 } from './run-context-snapshot-repository';
 export { RunMaterialReadRepository } from './run-material-read-repository';
+export {
+  RunMemoryContextRepository,
+  RunMemoryPhaseError,
+  type RunMemorySelectionInput,
+} from './run-memory-context-repository';
 export { RunRepository } from './run-repository';
 export {
   type CreateEnvironmentInput,
@@ -189,4 +237,13 @@ export {
 } from './skill-repository';
 export { type SaveTaskContextInput, TaskContextRepository } from './task-context-repository';
 export { TaskRepository } from './task-repository';
+export {
+  type ReferenceWriteOutcome,
+  type SetReferenceInput,
+  type WorkspaceReferenceDeletionImpact,
+  WorkspaceReferenceLimitError,
+  WorkspaceReferenceMismatchError,
+  WorkspaceReferenceRepository,
+  WorkspaceReferenceUnavailableError,
+} from './workspace-reference-repository';
 export { WorkspaceRepository } from './workspace-repository';

@@ -99,7 +99,7 @@ describe('resolveMemorySourceSelector', () => {
     expect(resolved.ok).toBe(true);
     if (!resolved.ok) return;
     expect(resolved.value.authority).toBe('derived');
-    if (resolved.value.source.kind !== 'artifact-version') throw new Error('来源类型不符。');
+    if (resolved.value.source.kind !== 'run-assistant') throw new Error('来源类型不符。');
     expect(resolved.value.source.contentHash).toBe(sha(content));
     expect(resolved.value.materialDependencies).toHaveLength(1);
   });
