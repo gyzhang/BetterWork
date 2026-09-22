@@ -527,3 +527,25 @@ Spec §15 是 WM00 的验收面，此前只按「文档已归档」处理，本�
 这条轴的结论与前几轮不同：**没有查出需要改的缺陷**，但它把 §15 的验收从「写过文档」变成了「链接、锚点、路径引用可机械复核」，也确认了上一轮修 `docs/04` 时担心的散文腐烂没有扩散到其他入口文档。
 
 验证：本轮只新增本节与日志 05:31 一节，无代码、契约正文与测试变更；扫描脚本输出 97 文件／0 断链、7 处锚点全命中、91 引用文件名／0 失效（除已标拟新增者）；`npx prettier --check` 与 `git diff --check` 均通过。
+
+### 15.22 Spec §3 产品行为逐条取证与 §1.4 指标数据源核对（2026-09-23 05:43）
+
+前面几轮扫的都是协议面（枚举值、错误码、数字、接口、链接），本轮换正向轴：把 Spec §3 的每条产品行为对到界面组件与测试，再核 §1.4 四个产品指标有没有数据源。
+
+**行为面逐条有证据，无缺陷：**
+
+- §3.1 默认适用范围：`MemoryView.tsx:96` 的 `scopeOptionsFor` 在有专家且有工作空间时把 `expert-workspace` 排首位、无专家时首位是 `workspace`，`MemoryEditor.tsx:196` 取 `scopes[0]` 作默认，函数注释直接引用 §3.1。正文 2,000／来源摘录 500 都读协议常量并用 `countCodePoints` 计数，不是 UTF-16 长度。
+- §3.1＋§3.2 提升与重述门槛：编辑器要求勾选「这是我的通用工作要求，与具体工作空间或资料无关」才能存全局；工作空间事实直接改全局被拒并指向「作为我的工作口径重新保存」；重述还要求正文确实改过——原样复制报「需要重新表述，不能原样复制资料结论」。
+- §3.3 每次最多 3 条：`MEMORY_EXTRACTION_MAX_CANDIDATES = 3` 同时用于作业输出 Schema 与 `candidateRevisionIds` 上限。四个阶段文案在 `memory-labels.ts:56-59` 与 Spec 字面一致，`ContextPanel.test.tsx:285` 直接断言界面不含「模型已收到」。
+- §3.3 关闭开关：`memory-extraction-service.ts:526` 的 `setSettings` 在同一事务内由 `jobs.applySettings` 返回 `cancelledJobCount`，只碰作业不碰记忆；幂等重放路径显式把取消数归零，避免「点了开关但响应超时」的第二次提交再取消一轮。
+- §3.4 状态机：协议转换表只允许从 `candidate` 出发的候选动作，`deleted`／`superseded` 无回边，恢复待确认走 `restore-candidate` 复用同一 `governanceAction` 字段（§15.16 已补往返用例）。
+- §3.5 排除只写 `excludedMemoryIds`：该字段在 17 个文件出现，完整保存 TaskContext 时其余字段保留；界面三段（下次运行可用／本次运行记忆／历史上下文调整）在 `ContextPanel.tsx` 与 `use-run-memories.ts`。
+- §3.6 不猜专家：`App.tsx:214` 的注释与两条文案（有名字报名字、无名字报通用助手）；「引用到当前任务」在 `App.tsx:381` 注明固定精确版本、不改当前专家、不自动发送，`App.test.tsx` 三条用例分别覆盖不自动发送、不换专家与沿用来源专家。
+- §3.7 收口：五个记忆相关 Hook 全部经 `reportAction`／`trackAction`，`views/`、`components/` 内不出现 `window.betterwork`。
+- §13.1「依赖递归／循环」两个阶段都有真实用例：入队阶段返回 `SOURCE_DEPENDENCY_CYCLE`，入队之后才被改出环的作业收口为 `skipped`＋`INPUT_LIMIT`，两者都不调模型、不建候选。
+
+**查到一处真缺口，本轮落进文档：** §1.4 把四件事并列写成「只定义采集口径」，读起来像都已就绪；实际「已展示候选数」这个分母没有任何生产者——§15.20 核过的 18 个通道里没有展示上报口，§13.3 又排除新增埋点，所以候选采纳率与建议负担当前**不可计算**，重复纠正次数与复用满意度同样只有口径、没有采集入口。已修订 `docs/designs/work-centered-memory.md` §1.4：逐项点名今天能取的是分子（`memory_operations` 的 `set-status`＋`governanceAction='confirm'` 回执）与真实耗时／usage（`memory_extraction_jobs` 的 `started_at`／`finished_at`／`usage_json`），并写死「不为凑分母补遥测，要采集必须先另立设计并单独授权」。这条与 ADR-0026「不承诺采纳率」一致，属于把既有边界说清，不改范围。
+
+顺带核过「不把 code point 换算成实测 token」：`memory-extraction-service.ts:975` 的 `usage` 只在收到模型 chunk 时赋值，全仓无 code point→token 换算路径（`memory-retrieval.ts` 的 `tokenizeRecallText` 是相关性打分用词切分，与计量无关）。
+
+验证：本轮只改设计稿一段与任务板本节，无代码与测试变更；`npx prettier --check` 与 `git diff --check` 通过，新增中文段落整段 `sed -n` 回读，引用的 `MemoryView.tsx:96`、`memory-labels.ts:56-59`、`ContextPanel.test.tsx:285`、`memory-extraction-service.ts:526/975`、`App.tsx:214` 逐个 `grep -n` 核到行。
