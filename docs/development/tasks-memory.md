@@ -252,7 +252,7 @@ WM00 拆分为五份明确产物：
 
 ### 13.3 本地观察数据
 
-复用 operations/jobs/run contexts 记录，不新增第三方埋点服务。事件语义：`candidate_created`、`candidate_confirmed`、`candidate_rejected`、`memory_replaced`、`memory_selected`、`memory_dispatch_attempted`、`memory_excluded`、`extraction_finished`、`reference_selected`。属性只含范围 ID、任务/运行 ID、状态/原因、数量/耗时/真实 usage，不含正文/secret。UI 可以从这些记录生成诊断计数，不宣称「被选中＝改善成果」。
+复用 operations/jobs/run contexts 记录，不新增第三方埋点服务。事件语义：`candidate_created`、`candidate_confirmed`、`candidate_rejected`、`memory_replaced`、`memory_selected`、`memory_dispatch_attempted`、`memory_excluded`、`extraction_finished`、`reference_selected`。属性只含范围 ID、任务/运行 ID、状态/原因、数量/耗时/真实 usage，不含正文/secret。UI 可以从这些记录生成诊断计数，不宣称「被选中＝改善成果」。九个事件语义的逐条生产者与属性落点见 §15.16。
 
 ### 13.4 验证命令
 
@@ -447,3 +447,23 @@ Spec §9 与契约 §9 都写着 ListPage「`limit` 默认 50，上限 100」，
 - 因此 `MemoryViewItem` 多了一个契约 §9.1 原本没列的可选字段。已把 §9.1 该行改写为含 `duplicatesConfirmedMemoryId?`——这是契约的最小扩写，不是新增通道，也不落库。
 
 证据：`npm run verify` 退出码 0（lint＋format:check＋typecheck＋test＋build，Test Files 112 passed／Tests 1004 passed）。分项目标：`memory-conflict-policy.test.ts` 8 passed；`memory-service.test.ts` 16 passed；`memory-recall-service.test.ts` 4 passed；`workspace-brief-service.test.ts` 10 passed；`MemoryView.test.tsx` 11 passed；`MemorySuggestionList`／`ContextPanel`／`WorkspaceBrief`／`coding-standard` 四份 58 passed。`npm run typecheck` 曾捕获治理用例里 `conflicts` 可能为 `undefined` 的收窄缺陷——`vitest` 不做类型检查，测试全绿不代表类型正确，这条已经吃过一次亏。提交分三笔：`19ab026`（策略模块收口）、`fb12ab7`（待澄清与重复可见性）、`f738a08`（界面样式）。WM16 仍 doing：§15.5 五项人工验收与真实模型语义确认未变，界面样式的实际观感也要靠光哥在应用里确认（本轮只看类名与 Token 覆盖，没有跑真机视觉核对）。
+
+### 15.16 §13.3 九类观察事件逐条取证（2026-09-23 04:50）
+
+§13.3 要求「复用 operations/jobs/run contexts 记录，不新增第三方埋点服务」，但任务板此前只照抄了九个事件名，没有逐条指明谁生产、属性落在哪个字段。本轮按当前代码逐个核对：
+
+| 事件语义 | 生产记录与字段（实测） | 定向测试 |
+| --- | --- | --- |
+| `candidate_created` | `memory_extraction_jobs.result_json` 的 `candidateRevisionIds` 与 `deduplicatedCount`；候选本体是 `memory_records` 里 `status='candidate'` 的修订 | `memory-extraction-service.test.ts`、`memory-extraction-repository.test.ts` |
+| `candidate_confirmed` | `memory_operations` 的 `operation_kind='set-status'` ＋ `result_json.governanceAction='confirm'` | 本轮新增用例 |
+| `candidate_rejected` | 同上，`governanceAction='reject'`；`restore-candidate` 复用同一字段 | 本轮新增用例 |
+| `memory_replaced` | `memory_conflict_decisions.decision='replace'` ＋ `winner_revision_id`，配合被替代修订的 `replaces_revision_id` | `memory-operation-repository.test.ts`、`memory-repository.test.ts`、`migrate.test.ts` |
+| `memory_selected` | `run_memory_contexts.selected_items_json`（身份/顺序/分数/理由）＋ `run_memory_reads.selected_for_injection` | `run-memory-context-repository.test.ts`、`memory-repository.test.ts` |
+| `memory_dispatch_attempted` | `run_memory_contexts.phase='dispatch-attempted'` ＋ `dispatch_attempted_at`，表级 CHECK 保证阶段与时间戳一致 | `run-memory-context-repository.test.ts`、`migrate.test.ts` |
+| `memory_excluded` | `task_context_revisions.excluded_memory_ids_json` ＋ 召回快照 `decision_summary_json.exclusions` 的原因枚举（含 `memory-excluded`） | `run-history-policy.test.ts`、`memory-recall-service.test.ts`、`register-ipc.test.ts` |
+| `extraction_finished` | `memory_extraction_jobs.status`、`started_at/finished_at`、`input_code_points/output_code_points`、`usage_json`（真实 token 数）、`error_code` | `memory-extraction-service.test.ts` |
+| `reference_selected` | `workspace_artifact_references.selected_at` ＋ `memory_operations` 的 `set-reference`/`remove-reference` 回执 | `workspace-reference-repository.test.ts`、`workspace-reference-service.test.ts` |
+
+「属性只含范围 ID、任务/运行 ID、状态/原因、数量/耗时/真实 usage，不含正文」也核过：审计行只存修订身份，仓储用例直接断言回执序列化后不含记忆正文。全仓没有任何第三方埋点或遥测依赖，UI 诊断计数一律从上述表读出。
+
+缺口一处，本轮已补：`governanceAction` 在服务层写入、仓储层解析，但**没有任何用例断言它能穿过 `result_json` 往返**——即 §13.3 里「候选确认」与「候选拒绝」两个事件的唯一区分点从未被验证，性质同 15.11 的「有枚举值、无生产者」。补了一条真实 SQLite 往返用例（该文件 9 passed），确认两条回执分别是 `confirm` 与 `reject`，且都不含正文。同一轮 `npm run verify` 退出码 0（Test Files 112 passed／Tests 1005 passed）。

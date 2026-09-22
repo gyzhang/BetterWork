@@ -118,6 +118,33 @@ describe('MemoryOperationRepository', () => {
     expect(JSON.stringify(receipt)).not.toContain(content);
   });
 
+  /** §13.3：审计里区分「候选确认」与「候选拒绝」的唯一字段是 governanceAction。 */
+  it('round-trips the governance action that separates confirm from reject', () => {
+    const store = openStore();
+    const memory = seedMemory(store.memories, '周报先写风险，再写进展。');
+    const confirmId = randomUUID();
+    const rejectId = randomUUID();
+
+    for (const [operationId, action] of [
+      [confirmId, 'confirm'],
+      [rejectId, 'reject'],
+    ] as const) {
+      store.memoryOperations.append({
+        operationId,
+        operationKind: 'set-status',
+        requestHash: requestHashOf({ id: memory.id, action }),
+        effect: 'updated',
+        committedRevisionIds: [memory.revisionId],
+        governanceAction: action,
+      });
+    }
+
+    expect(store.memoryOperations.get(confirmId)?.governanceAction).toBe('confirm');
+    expect(store.memoryOperations.get(rejectId)?.governanceAction).toBe('reject');
+    // 两条回执都是同一修订上的不同决定，正文不进审计行。
+    expect(JSON.stringify(store.memoryOperations.get(confirmId))).not.toContain(memory.content);
+  });
+
   it('refuses a reused operationId that carries different content or a different kind', () => {
     const store = openStore();
     const memory = seedMemory(store.memories, '周会纪要默认只发到项目群。');
