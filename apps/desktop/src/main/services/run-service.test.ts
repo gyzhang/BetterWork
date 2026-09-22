@@ -231,6 +231,23 @@ const confirmedMemory = async (
   return record;
 };
 
+/** 真实 HTTP Provider 的发包体：只看 role/content，别的字段与本卡断言无关。 */
+const wireMessages = (init: RequestInit | undefined): { role: string; content: string }[] => {
+  const parsed: unknown = JSON.parse(String(init?.body ?? '{}'));
+  const messages =
+    typeof parsed === 'object' && parsed !== null
+      ? (parsed as { messages?: unknown }).messages
+      : undefined;
+  if (!Array.isArray(messages)) return [];
+  return messages.flatMap((message) => {
+    if (typeof message !== 'object' || message === null) return [];
+    const entry = message as { role?: unknown; content?: unknown };
+    return typeof entry.role === 'string' && typeof entry.content === 'string'
+      ? [{ role: entry.role, content: entry.content }]
+      : [];
+  });
+};
+
 describe('RunService', () => {
   it('records the recalled revisions and the three-phase request audit', async () => {
     const fixture = await createFixture();
@@ -430,6 +447,99 @@ describe('RunService', () => {
     expect(
       blocked.every((entry) => !entry.replayed),
       JSON.stringify(blocked),
+    ).toBe(true);
+  });
+
+  it('把召回记忆与安全历史后缀真正发进模型请求，记忆换修订后旧历史不再出现', async () => {
+    const fixture = await createFixture();
+    const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+    if (!workspaceId) throw new Error('workspace missing');
+    // 走真实 HTTP Provider：只有捕获发包体才能断言模型看见了什么（契约 §6.3、§6.4）。
+    fixture.store.models.save({
+      name: '请求替身模型',
+      provider: 'openai-compatible',
+      baseUrl: 'http://model.test/v1',
+      model: 'x',
+      role: 'language',
+      apiKey: '',
+      enabled: true,
+      maxContextTokens: 8_192,
+      maxOutputTokens: 1_024,
+      temperature: 0,
+    });
+    const resolver: CredentialResolver = {
+      migrationStatus: (ref) => (ref.ownerKind === 'model-profile' ? 'done' : 'none'),
+      resolveSecret: async () => 'SK-FROM-CREDS',
+    };
+    const requests: { role: string; content: string }[][] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        requests.push(wireMessages(init));
+        return sseResponse(JSON.stringify({ choices: [{ delta: { content: '已按口径完成。' } }] }));
+      }),
+    );
+    const memory = await confirmedMemory(
+      fixture,
+      { kind: 'workspace', workspaceId },
+      '经营分析先核对回款金额口径。',
+    );
+    const service = createService(
+      fixture,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      resolver,
+    );
+    const startRun = (prompt: string): string => {
+      const runId = service.start({ taskId: fixture.taskId, sessionId: fixture.sessionId, prompt });
+      return runId;
+    };
+
+    const first = startRun('准备本月经营分析。');
+    await waitForCompletion(fixture, first);
+    const firstRequest = requests.at(-1) ?? [];
+    expect(statusOf(fixture, first)).toBe('completed');
+    expect(
+      firstRequest.some(
+        (message) =>
+          message.role === 'system' && message.content.includes('经营分析先核对回款金额口径。'),
+      ),
+      JSON.stringify(firstRequest),
+    ).toBe(true);
+    expect(
+      firstRequest.some(
+        (message) => message.role === 'user' && message.content.includes('准备本月经营分析。'),
+      ),
+    ).toBe(true);
+
+    const second = startRun('把经营分析结论整理成段落。');
+    await waitForCompletion(fixture, second);
+    const secondRequest = requests.at(-1) ?? [];
+    // 上一轮问答以真实历史消息进入请求，而不是靠 segmentId 推断。
+    expect(secondRequest).toContainEqual({ role: 'user', content: '准备本月经营分析。' });
+    expect(secondRequest).toContainEqual({ role: 'assistant', content: '已按口径完成。' });
+
+    // 记忆一换修订，依赖它的历史轮次必须从请求里消失（契约 §6.3）。
+    const revised = await fixture.memories.update({
+      operationId: randomUUID(),
+      id: memory.id,
+      expectedRevision: memory.revision,
+      patch: { content: '经营分析先核对签约金额口径。' },
+    });
+    if (!revised.ok) throw new Error(`记忆修订失败：${revised.error.code}`);
+    const third = startRun('再核对一次经营分析口径。');
+    await waitForCompletion(fixture, third);
+    const thirdRequest = requests.at(-1) ?? [];
+    expect(thirdRequest).not.toContainEqual({ role: 'assistant', content: '已按口径完成。' });
+    expect(thirdRequest).not.toContainEqual({ role: 'user', content: '准备本月经营分析。' });
+    expect(
+      thirdRequest.some(
+        (message) =>
+          message.role === 'system' && message.content.includes('经营分析先核对签约金额口径。'),
+      ),
     ).toBe(true);
   });
 
