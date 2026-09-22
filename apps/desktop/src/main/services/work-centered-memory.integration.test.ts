@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -10,7 +10,10 @@ import type {
   MemoryScope,
   TaskMaterialSelection,
 } from '@betterwork/agent-protocol';
-import { MEMORY_SUGGESTION_CONSENT_VERSION } from '@betterwork/agent-protocol';
+import {
+  MEMORY_EXTRACTION_QUEUE_LIMIT,
+  MEMORY_SUGGESTION_CONSENT_VERSION,
+} from '@betterwork/agent-protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AppStore } from '../persistence';
@@ -31,6 +34,9 @@ import { TaskMaterialService } from './task-material-service';
 // 空间与文案全部合成，不使用任何公司真实文件；这里只证明机制与范围隔离，不证明真实模型语义质量。
 
 const EXTRACTION_MARKER = '只输出严格 JSON';
+
+const sha256Hex = (value: string): string =>
+  createHash('sha256').update(value, 'utf8').digest('hex');
 
 const temporaryDirectories: string[] = [];
 const openStores: AppStore[] = [];
@@ -795,6 +801,67 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
     expect(job?.errorCode).toBe('INVALID_MODEL_OUTPUT');
     const extractions = world.requests.filter((request) => request.extraction);
     expect(extractions).toHaveLength(1);
+    expect(memoriesOf(world, workspaceA)).toEqual([]);
+  });
+
+  it('排队失败（全局队列已满）不改主 Run 终态，也不留下自动补单', async () => {
+    const world = await createWorld();
+    const workspaceA = world.layout.workspaceA;
+    await enableAutoSuggest(world, workspaceA);
+
+    // 全局队列只有 20 条：先用另一条真实任务链占满，让本次 Run 的提炼必然排队失败。
+    // 一次事务写完占位作业，避免逐条提交把用例拖到默认超时边界。
+    const seedRunId = randomUUID();
+    world.services.store.transaction(() => {
+      world.services.store.runs.create({
+        id: seedRunId,
+        taskId: world.layout.a2.taskId,
+        sessionId: world.layout.a2.sessionId,
+        prompt: '排队用例的来源运行',
+        status: 'completed',
+        createdAt: Date.now(),
+      });
+      for (let index = 0; index < MEMORY_EXTRACTION_QUEUE_LIMIT; index += 1) {
+        const text = `排队占位片段 ${index}`;
+        world.services.store.memoryExtractions.enqueue({
+          source: { kind: 'run', runId: seedRunId },
+          workspaceId: workspaceA,
+          taskId: world.layout.a2.taskId,
+          fragments: [
+            { fragmentId: `queue-${index}`, role: 'run-assistant', text, partial: false },
+          ],
+          sourceVersionHash: sha256Hex(text),
+          trigger: 'automatic',
+          inputCodePoints: [...text].length,
+        });
+      }
+    });
+    expect(world.services.store.memoryExtractions.queuedCount()).toBe(
+      MEMORY_EXTRACTION_QUEUE_LIMIT,
+    );
+
+    const diagnostics: string[] = [];
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+      diagnostics.push(String(args[0] ?? ''));
+    });
+    const runId = startRun(world, world.layout.a1, '按回款金额口径核对本月收入并给出结论。');
+    await waitForCompletion(world, runId);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    warnSpy.mockRestore();
+    // 排队失败只留一条安全诊断：主 Run 的终态、作业行与候选都必须不受影响。
+    expect(statusOf(world, runId)).toBe('completed');
+    expect(
+      diagnostics.some((line) => line.includes('提炼未入队') && line.includes('QUEUE_FULL')),
+    ).toBe(true);
+    expect(
+      world.services.store.memoryExtractions.listPage({
+        workspaceId: workspaceA,
+        taskId: world.layout.a1.taskId,
+      }).items,
+    ).toEqual([]);
+    expect(world.services.store.memoryExtractions.queuedCount()).toBe(
+      MEMORY_EXTRACTION_QUEUE_LIMIT,
+    );
     expect(memoriesOf(world, workspaceA)).toEqual([]);
   });
 

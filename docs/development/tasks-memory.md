@@ -627,3 +627,54 @@ Spec §2.2 写着「必须验证的静态风险」九条，是本轮开发的立
 该保证目前是构造性的，**没有可判定的回归测试**：本轮试过补一条并发重建用例，但交叠窗口依赖文件系统 await 的调度时机：三次并发重建即便真的同时跑，也各自写同一组目标路径并以唯一临时文件名 `rename` 覆盖，最终磁盘内容不变，所以用例大概率不会红。本轮没有为此改生产代码加测试 seam，也没有落这条用例（未做变异验证的猜测不算证据），按 §15.23 的规矩「永远通过」的用例比没有用例更有害，故把它作为已知测试边界写进契约 §5.6，交由 WM16 人工验收时观察是否存在可见的投影不一致。
 
 验证：本轮改一行生产注释、契约 §5.6 一段、任务板新增本节；`npx prettier --check` 与 `npx eslint apps/desktop/src/main/services/memory-service.ts` 退出 0，`npx vitest run apps/desktop/src/main/services/memory-service.test.ts` 退出 0（16 passed，用它给投影路径兜底），`npm run typecheck` 退出 0；表内全部 `file:line` 与用例标题逐条 `sed -n`／`grep -n` 回读核实，其中 `memory-dispatch-gate.ts` 的两个阶段标记核到 `:77-82`、`memory-repository.ts` 的 `supersedesId` 核到 `:921`。
+
+
+### 15.27 Spec §10 与 §7.3 逐条闭合、排队失败安全诊断补线（2026-09-23 06:54）
+
+**A 组｜Spec §10「简报和成果引用精确规则」10 条逐条取证。** 每条都指到实现行号与非测试用例标题原文。
+
+| # | 契约条款 | 强制点 | 用例（标题原文） |
+| --- | --- | --- | --- |
+| A1 | 简报字段与各区 `total`／`truncated` | 常量 `packages/agent-protocol/src/index.ts:1991-1993`（10／5／20）；`workspace-memory-brief-service.ts:59-149` 组装 | `workspace-memory-brief-service.test.ts:417`「各区按上限截断并如实报告 total，不假装完整」 |
+| A2 | 确认区排序 `updatedAt DESC`／`id ASC` | `memory-repository.ts:602` | `:202`「确认区只收本空间当前有效、verified 且来源仍可用的 confirmed 记录」 |
+| A3 | 只纳入当前有效＋verified＋来源可用 | 同上，配合 `workspace-memory-brief-service.ts` 的来源可用性分区 | `:243`「把待复核与源失效分别判定成各自身份，不折叠成可用」、`:530`「已确认记录的来源消失后简报当场收缩，不留残余条目」 |
+| A4 | 空间视角不混 user 偏好，选专家才叠加 expert-workspace | `workspace-memory-brief-service.ts:59-149` 的 scope 过滤 | `:287`「只有为该专家装配简报时才叠加 expert-workspace 记录」 |
+| A5 | 条目返回 `memoryId`／`revisionId`／`hash`／`content`／`scope`／`sourceAvailability`／`requiresMaterialSelection` | `workspace-brief-reader.ts:22-157` DTO 组装 | `:260`「资料派生条目仍进入简报，但标明使用时仍需材料且不因此获得授权」 |
+| A6 | openIssues 取本空间未决节点最近 10 项、保留原标识、不做 LLM 推断 | `workspace-memory-brief-service.ts:59-149` openIssues 段 | `:322`「开放节点只取本空间未决项，被替代与外来空间的节点都不出现」、`:366`「未决节点保留 feedback 与 nextAction 原标识，不推断成已确认结论」 |
+| A7 | 参考区取最新 5 个 active 标记，`selectedAt DESC`／`id ASC` | `workspace-reference-repository.ts:219`（排序）＋`:226`（截断） | `:392`「参考区按 selectedAt 倒序取用 active 标记，取消后的标记不再出现」 |
+| A8 | 查询失败显示可重试错误，不伪造旧简报 | `workspace-brief-service.ts` 错误映射＋`use-workspace-brief.ts:42-84` | `:479`「底层读取失败返回可重试的 STORAGE_ERROR，不伪造旧简报」、`use-workspace-brief.test.ts:135`「读取失败时清空简报并给出重试入口，重试会重新现取一次」 |
+| A9 | 空态不自动补内容；未知空间与非法入参不得降级成空简报 | 同上 | `:471`「未知工作空间回答 NOT_FOUND，而不是给出一份空简报」、`:525`「入参不合协议时由协议错误拒绝，不降级成空简报」、`:498` |
+| A10 | 标记参考或显示简报不算读取 Evidence；引用后由既有工具读取 | 写点只出现在 `run-service.ts:1245/1260/1274/1290/1430`（真实读取之后） | `workspace-memory-brief-service.test.ts:447`「是可重建视图：新事实当场生效，读取本身不落任何库」 |
+
+**§10 与实现的唯一字面差异已被 WM00 的机械对齐吸收，判定为无缺陷。** 设计稿写「默认 purpose 为 `comparison`」，而 `materialPurposeSchema`（`packages/agent-protocol/src/index.ts:251-260`）里根本没有该值——`comparison` 只存在于 `artifactInputRelationKindSchema:2174-2183`。契约 §10 第 309 行记录对齐后的 `historical-comparison`，`App.tsx:582-602/1058-1070` 完成映射。**不新增同义枚举**，正是 §10 自己要求的做法。
+
+**B 组｜Spec §7.3「持久化生命周期」12 条逐条取证。**
+
+| # | 契约条款 | 强制点 | 用例（标题原文） |
+| --- | --- | --- | --- |
+| B1 | 状态机 queued→running→终态；执行前条件不满足直接 skipped | `memory-extraction-repository.ts:419 claimNext`／`:441 markSkipped`／`:445 cancel`／`:449 fail`／`:454 succeed`；跳过判定 `memory-extraction-service.ts:727/731/734/741` | `memory-extraction-service.test.ts:534`「依赖记忆修订无法证明时跳过自动建议（不截断）」、`:568`「入队之后才被改出环的作业跳过执行，不建候选也不调用模型」 |
+| B2 | 手动 retry 只从非成功终态转 queued，`attempt` 递增 | `memory-extraction-repository.ts:487-519`（`SET status='queued', trigger='manual-retry', attempt = attempt + 1`） | `memory-extraction-repository.test.ts:411`「retries only from a non-success terminal state and bumps the attempt」、`memory-extraction-service.test.ts:961`、`use-memory-suggestions.test.ts:282`「手动重试只授权这一次作业，不改动自动开关」 |
+| B3 | succeeded 即使 0 条也不再提炼同来源版本 | `memory-extraction-repository.ts:367-374`（`findBySource` 命中即 `existing`） | `memory-extraction-service.test.ts:640`「模型返回 0 条也算成功，并且不再提炼同一来源版本」、`:486` |
+| B4 | 来源键＝触发类型＋真实来源 id＋内容快照 hash，不含模型版本 | `memory-extraction-repository.ts:153-163 extractionSourceKey` | `memory-extraction-repository.test.ts:253`「keeps one logical job per source version no matter which model is chosen」 |
+| B5 | 候选写入、去重统计、作业成功终态同事务 | `memory-extraction-service.ts:1072-1100`（一个 `this.transaction` 内 `create` ×N ＋ `succeed`） | `memory-extraction-service.test.ts:606`「合法用户纠正 → 候选以待审状态落库并整份继承依赖」、`:657`「与既有 pending 候选重复计 deduplicated，与已拒绝候选计 suppressed」 |
+| B6 | 排队失败不能把已成功主 Run 改失败 | `run-service.ts:731-732`（终态 `publish` 之后才请求提炼）＋`:758-777`（不 await） | 新增 `work-centered-memory.integration.test.ts:807`「排队失败（全局队列已满）不改主 Run 终态，也不留下自动补单」、既有 `:782`「提炼失败不改变主 Run 终态，也不写入候选」 |
+| B7 | 启动把遗留 queued／running 收口 interrupted，零网络 | `main/index.ts:124-127`、`memory-extraction-repository.ts:568-580` | `memory-extraction-repository.test.ts:457`、`memory-extraction-service.test.ts:943`「重启收口：遗留 queued/running 全部 interrupted 且零网络调用」、`work-centered-memory.integration.test.ts:717` |
+| B8 | 关闭设置只取消本空间自动作业 | `memory-extraction-repository.ts:582-594`（`trigger='automatic' AND workspace_id=?`） | `memory-extraction-repository.test.ts:213`「cancels the automatic jobs of this workspace when the switch goes off」、`memory-extraction-service.test.ts:395` |
+| B9 | 取消后先落库终态再中止请求 | `memory-extraction-service.ts:621-645`（`cancel` 成功后才 `controller.abort()`） | `memory-extraction-service.test.ts:914`「取消执行中的作业：先落终态再中止请求，迟到结果不落库」 |
+| B10 | 落候选前校验 revision／attempt／status、来源有效性、自动模式 consentRevision；迟到结果不落库 | `memory-extraction-repository.ts:596-619`（`WHERE ... AND revision = ? AND attempt = ?`，`changes !== 1` 抛冲突）；同意新鲜度 `memory-extraction-service.ts:732-733/832` | `memory-extraction-repository.test.ts:355`「rejects a late result that does not match revision, attempt and status」、`memory-extraction-service.test.ts:818`「同意缺失、模型不可用、指纹变化、来源变化都在调用模型前收口」 |
+| B11 | 失败只保存安全错误码；列表只回脱敏摘要 | `memory-extraction-repository.ts:596-619`（只写 `error_code` 列，库里无错误正文列）、`:540-566 listPage` | `memory-extraction-repository.test.ts:485`「pages desensitized job summaries for one workspace」、`memory-extraction-service.test.ts:1000`、`:684`、`:786`「Provider 抛错只落 MODEL_REQUEST_FAILED，凭据既不进数据库也不进日志」 |
+| B12 | UI 主动刷新＋焦点查询；只在面板可见且有活动作业时 1 秒轮询，隐藏即停 | `use-memory-suggestions.ts:193-218`（`activeJobKey` 依赖＋`1_000` 毫秒＋`focus` 补查）、`:175-185`（换空间或换可见性先清空） | `use-memory-suggestions.test.ts:224`「有活动作业时按秒轮询，作业结束后停止轮询」、`:248`、`:147`「面板不可见时既不发请求也不启动轮询」、`:322` |
+
+**「摘要」这个词在实现里没有生产者。** §7.3 还写「失败只保存安全错误码与摘要」，而协议与库里都只有 `errorCode`（`memoryJobErrorCodeSchema`，`packages/agent-protocol/src/index.ts:1893/1915`），不存在错误摘要列。本轮按「只保存这些、绝不保存原文」的**上限**读法判定实现合规（只存码即满足），并把这条读法写进契约 §7.3 的落点；若按「必须另存一段安全摘要」理解则缺一个字段与一次迁移，属新增口径，归光哥拍板，本轮不自行补列也不改契约原句。
+
+**查到一处真实缺陷并已补线：排队失败从来没留过安全诊断。** §7.3 要求「排队失败不能把已成功主 Run 改失败；记录安全诊断」，而 `requestExtractionForRun` 对队列满、模型不可用、依赖超限等原因返回的是 **`ok: true` ＋ `status: 'not-enqueued'` ＋ `reason`**（`memory-extraction-service.ts:727-741/777-778/808`），`run-service.ts` 的旧代码只在 `!outcome.ok` 分支里 `console.warn`，于是这条正常返回的路径把原因码整个咽掉——§2.2 那类「声明了却没接线」在诊断面上再现一次。已在 `run-service.ts:767-771` 补：带 `reason` 的 not-enqueued 也写一条只含原因码的 warn（不落原文，守「日志不得记录密钥」）。`notEnqueued()` 无原因码的唯一路径是「自动建议本就关闭」（`:731`），保持静默，避免每次 Run 都刷屏。
+
+**新增用例的写法与代价。** `work-centered-memory.integration.test.ts:807` 用另一条真实任务链（`a2`）把全局队列占满 20 条，再跑 `a1` 的 Run，断言主 Run 仍 `completed`、`a1` 名下没有任何作业行、候选为空、且那条安全诊断确实写出。占位作业必须挂在真实存在的 Run 上（`assertSourceOwnership` 会拒编造的来源），并且**一条事务写完**——逐条提交时本用例实测 4.7 秒，贴着默认 5 秒超时线；改成单事务后同一用例实测 912 毫秒（全文件 11 条全绿，`tests 17.65s`）。
+
+**变异验证两次，一红一不红，都记录。** ① 把新加的 `console.warn` 短路成 `void 0`：本用例红（`AssertionError: expected false to be true`），其余 10 条不受影响；还原后 `grep` 确认生产源码只留这一处新增。② 反过来把诊断分支改成 `this.finalizeFailure(runId, ...)`（模拟「排队失败去改主 Run」）：用例**仍然绿**——因为 `requestRunExtraction` 在 `publish(terminalEvent)` 之后才调用，Run 早已终态，`finalizeFailure` 只收口仍处 `running` 的 Run。所以 B6 这半句在当前代码里还有**结构免疫**，新用例判定的是「诊断确实记录＋不补单＋不建候选」，判定不了「有人把入队挪到终态之前并 await」。不为此改生产代码加测试 seam，按 §15.23 的规矩把边界写在这里，交 WM16 人工验收时一并说明。
+
+**「不自动扫描补单」是结构事实，不是用例。** `memory-extraction-service.ts` 内检索 `scan`／`backfill`／`sweep`／`requeue` 均无命中（假阴性已按同义词补查），作业只由 `requestExtraction*` 显式登记、由 `runPendingJobs` 排空已入队的行；本轮不为「不存在的路径」造用例。
+
+**一处需光哥确认的口径（不改契约条目，只标注落点）。** 契约 §7.3 沿用 Spec 原句「Run 成功提交和作业登记、人工 feedback 提交和作业登记**尽量**在同应用库事务完成」。实现里这两处都**不共用**事务：登记前必须先 `await` 解析模型快照与凭据（`memory-extraction-service.ts:773-780`），而来源提交早已在 `publish` 时落定，把异步解析塞进 Run 事务会违反「事务内不得有网络／不得悬挂」。取舍兜底就是 B6 那条硬约束，任务板 WM09 卡片第 179 行也按「候选和作业成功同事务，主 Run 失败隔离」记录。**已在契约 §7.3 原句后补一段实测落点说明并指向本节**，是否算偏离原设计需光哥拍板；本轮没有删改「尽量」那句本身。
+
+验证：`npx prettier --check` 与 `npx eslint` 对本轮两个源码文件退出 0；`npx vitest run apps/desktop/src/main/services/work-centered-memory.integration.test.ts` 11 条全绿（`tests 17.65s`）；`npm run verify` 退出码 0（112 文件／1009 用例，新增即本节这一条）；表内全部 `file:line` 与用例标题本轮逐条 `grep -n`／`sed -n` 回读核实，其中 `memory-extraction-repository.ts` 的五个终态方法核到 `:419/441/445/449/454`、`memory-extraction-service.ts` 的候选事务核到 `:1072-1100`、简报排序核到 `memory-repository.ts:602` 与 `workspace-reference-repository.ts:219/226`。

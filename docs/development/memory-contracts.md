@@ -188,9 +188,11 @@ Main 的 Provider 包装器在首个实际 `ModelRequest` 装配后计算规范�
 
 来源键＝触发类型＋真实 source ID＋内容快照 hash，不含模型版本，防止改模型绕过去重。Run 成功提交和作业登记、人工 feedback 提交和作业登记尽量在同应用库事务完成；无网络在事务内。排队失败不能把已成功主 Run 改失败；记录安全诊断，下次不自动扫描补单。
 
+落点（见[任务板 §15.27](tasks-memory.md)）：安全诊断只由 `run-service.ts` 的 `requestRunExtraction` 写一条含原因码的本地日志——`!ok` 与 `ok ＋ status:'not-enqueued' ＋ reason` **两条路都要写**，因为队列满、模型不可用、依赖超限这些原因返回的是正常结论而非错误，只盯 `!ok` 会让这条契约静默失效（本轮实测到的缺陷）；「自动建议本就关闭」不带原因码，保持静默以免每次 Run 刷屏。「不自动扫描补单」是结构事实：服务里没有 `scan`／`backfill`／`requeue` 一类路径，作业只能由 `requestExtraction*` 显式登记。同事务那半句的实测落点是**不共用事务**：登记前必须先 `await` 解析模型快照与凭据，而来源提交在终态发布时已落定，把异步解析塞进 Run 事务会违反「事务内不得有网络／不得悬挂」，两步之间由「排队失败不影响主 Run」兜底；这是否算偏离原设计由光哥拍板，本节只记录落点、不改「尽量」那句本身。
+
 启动时将遗留 `queued`/`running` 收口 `interrupted`，不自动触网。关闭设置取消本空间自动作业；单次手动重试有独立同意，不暗开全局开关。取消后先落库终态再中止请求；成功落候选前检查 job revision/attempt/status、来源有效性、自动模式 `consentRevision`。迟到结果不能落库。同意版本也只有一个定义：协议 `MEMORY_SUGGESTION_CONSENT_VERSION`，主进程门槛（`memory-extraction-service.ts`）与界面文案（`renderer/src/lib/memory-suggestions.ts`）都导入它；此前两处各自写死 `1`，改版本会静默分裂成「界面说 v1、门槛拒 v2」。
 
-候选写入、去重统计、作业成功终态在同事务提交。失败只保存安全错误码与摘要；主任务终态不受影响。UI 主动刷新和窗口重获焦点查询状态；仅面板可见且有活动作业时按 1 秒轮询，隐藏即停并清理，无自造成功提示计时器。落点：轮询与重获焦点的重查都在 `renderer/src/hooks/use-memory-suggestions.ts`——`window` 的 `focus` 监听补发一次全量查询（设置、作业、候选），面板不可见或已卸载即摘除监听；用例见 `use-memory-suggestions.test.ts`。
+候选写入、去重统计、作业成功终态在同事务提交。失败只保存安全错误码与摘要；主任务终态不受影响。落点：库里与协议里都**只有 `errorCode`**（`memoryJobErrorCodeSchema`），没有错误摘要列——这条按「只保存这些、绝不保存原文」的上限理解，因此只存码即满足；若按「必须另存一段安全摘要」理解则缺一个字段，取舍归光哥（任务板 §15.27）。UI 主动刷新和窗口重获焦点查询状态；仅面板可见且有活动作业时按 1 秒轮询，隐藏即停并清理，无自造成功提示计时器。落点：轮询与重获焦点的重查都在 `renderer/src/hooks/use-memory-suggestions.ts`——`window` 的 `focus` 监听补发一次全量查询（设置、作业、候选），面板不可见或已卸载即摘除监听；用例见 `use-memory-suggestions.test.ts`。
 
 ## 8. 持久化与迁移清单
 

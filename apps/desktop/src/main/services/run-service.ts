@@ -763,6 +763,11 @@ export class RunService {
       .then((outcome) => {
         if (!outcome.ok) {
           console.warn(`[memory-extraction] Run ${runId} 提炼未入队：${outcome.error.code}`);
+          return;
+        }
+        // 队列满、模型不可用等原因只回结论不报错，界面看不到它们；§7.3 要求留下安全诊断。
+        if (outcome.data.reason !== undefined) {
+          console.warn(`[memory-extraction] Run ${runId} 提炼未入队：${outcome.data.reason}`);
         }
       })
       .catch((error: unknown) => {
