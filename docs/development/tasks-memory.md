@@ -480,3 +480,7 @@ Spec §9 与契约 §9 都写着 ListPage「`limit` 默认 50，上限 100」，
 **本地日志是 §7.2 之外的第二条凭据路径**。契约只保证失败「不落库」，而提炼服务的文件注释把「原始诊断只进本地日志」当成安全前提；但厂商异常文本常见形态是把 `Authorization: Bearer ...` 或带密钥的端点原样回显，六条 `console.error(describeError(error))` 因此会把密钥写进 `dev.log`，违反 AGENTS.md「日志不得记录密钥」。现在统一走 `diagnosticOf`：写日志前用同一份 `findSensitiveMemoryContent`（含本次已知凭据）检查，命中只留原因码，未命中也截断到 300 码点，顺带满足「避免无必要记录完整文档内容」。用例改造为抛出带 Bearer 凭据的异常，断言数据库与日志两侧都不出现该凭据。
 
 证据：`npm run verify` 退出码 0（lint＋format:check＋typecheck＋test＋build，Test Files 112 passed／Tests 1006 passed）；`memory-extraction-service.test.ts` 28 passed、`memory-extraction-repository.test.ts` 9、`register-ipc.test.ts` 26、`work-centered-memory.integration.test.ts` 10 全绿。契约 §5.6 与 §7.2 各补落点。代码提交 `f3eb029`。`mapError` 仍把部分异常文本作为 `MemoryError.message` 返回给界面展示，这是全仓既有口径而不是 WM 新增，本轮不单独改动提炼服务一处来打破一致性——若要收口应连同其它服务一起处理，留作待判定项。
+
+### 15.18 错误码清单与真实生产者对齐（2026-09-23 05:07）
+
+把 §15.17 的扫描从状态枚举扩到错误码：协议里 41 个记忆错误码逐值找非测试源码里的写入点，39 个有生产者，两个没有——`MATERIAL_NOT_ALLOWED` 与 `MATERIAL_HASH_MISMATCH`。它们的语义其实已经实现，只是用了别的词汇：召回阶段的材料依赖不满足是排除原因 `dependency-unavailable`，写入阶段的摘录与来源正文不一致是 `SOURCE_MISMATCH`。因此这不是缺功能，而是设计词汇比实现多出一档。本轮只在契约 §错误码清单下记录落点，不为了凑码新增失败路径，也不删清单条目，留给光哥判定「拆码」还是「收敛词汇」。

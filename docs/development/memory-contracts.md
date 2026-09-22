@@ -286,6 +286,8 @@ WM02 先扩展仓储形状，公开旧调用方切换在 WM03 一起完成；来
 - **模型/作业**：`MODEL_UNAVAILABLE`、`MODEL_PROFILE_CHANGED`、`CREDENTIAL_UNAVAILABLE`、`CONSENT_REQUIRED`、`QUEUE_FULL`、`JOB_STATE_CONFLICT`、`INPUT_LIMIT`、`OUTPUT_LIMIT`、`TIMEOUT`、`CANCELLED`、`INTERRUPTED`、`INVALID_MODEL_OUTPUT`、`MODEL_OUTPUT_TRUNCATED`、`MODEL_TOOL_CALL_REJECTED`、`MODEL_FINISH_UNKNOWN`、`MODEL_REQUEST_FAILED`。
 - **参考/存储**：`REFERENCE_WORKSPACE_MISMATCH`、`REFERENCE_LIMIT`、`REFERENCE_UNAVAILABLE`、`HISTORY_REFERENCE_BLOCKS_DELETE`、`STORAGE_ERROR`、`INTERNAL_ERROR`。
 
+落点：`MATERIAL_NOT_ALLOWED` 与 `MATERIAL_HASH_MISMATCH` 目前没有任何生产者，两条语义由别的词汇承担——召回阶段「材料未在本任务允许集合内或实体已不可读」记为排除原因 `dependency-unavailable`（`memory-recall-service.ts` 的 `dependencyAvailable`），写入阶段「登记摘录与来源正文不一致」返回 `SOURCE_MISMATCH`（`memory-provenance.ts`）。本期不新增失败路径去凑这两个码，也不从清单里删，等光哥判定是拆成独立错误码还是把清单收敛到实际词汇。
+
 成功警告：`PROJECTION_PENDING`、`SOURCE_NEEDS_REVIEW`、`HISTORY_TRUNCATED`。错误 `message` 使用可操作中文，不带完整内容、URL 凭据或提供商原始响应。
 
 输入/输出 Zod 错误继续由已有注册 helper 拒绝；transport 拒绝由 Hook 统一映射 `IPC_FAILURE`，不解析 Electron 异常字符串来猜业务错误码。领域错误通过 `Result` 明确返回。投影失败是已提交成功＋警告，不是领域写失败。落点：`renderer/src/lib/memory-result.ts` 导出 `IPC_FAILURE_CODE` 作为该映射的唯一来源，`IPC_FAILURE` 不是领域错误码，`memoryErrorCodeSchema` 必须继续拒绝它（用例见 `packages/agent-protocol/src/index.test.ts`）；界面侧收口的三条路径——transport 拒绝、领域失败原样透出、成功保留 `warnings`——见 `memory-result.test.ts`。
