@@ -1131,38 +1131,11 @@ export const resolveMemoryConflictRequestSchema = z
       MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS,
     ).optional(),
   })
-  .strict()
-  .superRefine((value, context) => {
-    if (value.left.id === value.right.id) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['right'],
-        message: '冲突裁决需要两条不同记录',
-      });
-    }
-    if (value.decision === 'replace') {
-      if (value.winnerId === undefined) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['winnerId'],
-          message: 'replace 必须指明胜出的记忆身份',
-        });
-      } else if (value.winnerId !== value.left.id && value.winnerId !== value.right.id) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['winnerId'],
-          message: '胜出的记忆必须是本次提交的两条记录之一',
-        });
-      }
-    }
-    if (value.decision === 'keep-both' && value.applicabilityNote === undefined) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['applicabilityNote'],
-        message: 'keep-both 必须写明适用条件',
-      });
-    }
-  });
+  .strict();
+/**
+ * 条件必填（replace 要有胜出方、keep-both 要有适用条件、两条必须是不同记录）属于治理裁决，
+ * 由 MemoryService 用错误码回答；写在这里只会让 IPC 边界抛出渲染层无法呈现的 ZodError。
+ */
 export type ResolveMemoryConflictRequest = z.infer<typeof resolveMemoryConflictRequestSchema>;
 
 export const listMemoriesRequestSchema = z

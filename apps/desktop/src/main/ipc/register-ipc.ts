@@ -50,6 +50,7 @@ import {
   getExpertRequestSchema,
   getFileArtifactRequestSchema,
   getMcpConnectionRequestSchema,
+  getMemoryRequestSchema,
   getSkillRequestSchema,
   getTaskContextRequestSchema,
   importSkillRequestSchema,
@@ -79,8 +80,11 @@ import {
   mcpConnectionSummarySchema,
   mcpMutationResultSchema,
   mcpTestResultSchema,
-  memoryMutationResultSchema,
-  memoryRecordSchema,
+  memoryConflictResolutionDataSchema,
+  memoryListPageDataSchema,
+  memoryProjectionStateDataSchema,
+  memoryViewItemSchema,
+  memoryWriteReceiptSchema,
   modelProfileIdSchema,
   modelProfileSummarySchema,
   modelSaveResultSchema,
@@ -92,6 +96,7 @@ import {
   prepareDependencyRequestSchema,
   prepareDependencyResultSchema,
   prepareWorkspaceInputSnapshotRequestSchema,
+  rebuildMemoryProjectionRequestSchema,
   recentTaskSummarySchema,
   refreshKnowledgeDocumentRequestSchema,
   refreshSkillDependencyGrantRequestSchema,
@@ -102,6 +107,8 @@ import {
   registerToolchainResultSchema,
   removedResultSchema,
   removeKnowledgeDocumentRequestSchema,
+  resolveMemoryConflictRequestSchema,
+  resultSchema,
   revokeSkillTrustRequestSchema,
   runSummarySchema,
   saveExpertRevisionRequestSchema,
@@ -1160,26 +1167,46 @@ function registerMemoryChannels({ memories }: IpcDependencies): void {
   handleOptionalInput(
     IpcChannel.ListMemories,
     listMemoriesRequestSchema,
-    z.array(memoryRecordSchema),
+    resultSchema(memoryListPageDataSchema),
     (input) => memories.list(input),
   );
   handleInput(
+    IpcChannel.GetMemory,
+    getMemoryRequestSchema,
+    resultSchema(memoryViewItemSchema),
+    (input) => memories.get(input),
+  );
+  // 记忆写在提交数据库之后还要重建投影：必须 await 内层结果，
+  // 只 await 外层对象会让未解析的 Promise 进入响应校验。
+  handleInput(
     IpcChannel.CreateMemory,
     createMemoryRequestSchema,
-    memoryMutationResultSchema,
-    (input) => ({ memory: memories.create(input) }),
+    resultSchema(memoryWriteReceiptSchema),
+    async (input) => await memories.create(input),
   );
   handleInput(
     IpcChannel.UpdateMemory,
     updateMemoryRequestSchema,
-    memoryMutationResultSchema,
-    (input) => ({ memory: memories.update(input) }),
+    resultSchema(memoryWriteReceiptSchema),
+    async (input) => await memories.update(input),
   );
   handleInput(
     IpcChannel.SetMemoryStatus,
     setMemoryStatusRequestSchema,
-    memoryMutationResultSchema,
-    (input) => ({ memory: memories.setStatus(input) }),
+    resultSchema(memoryWriteReceiptSchema),
+    async (input) => await memories.setStatus(input),
+  );
+  handleInput(
+    IpcChannel.ResolveMemoryConflict,
+    resolveMemoryConflictRequestSchema,
+    resultSchema(memoryConflictResolutionDataSchema),
+    async (input) => await memories.resolveConflict(input),
+  );
+  handleInput(
+    IpcChannel.RebuildMemoryProjection,
+    rebuildMemoryProjectionRequestSchema,
+    resultSchema(memoryProjectionStateDataSchema),
+    async (input) => await memories.rebuildProjection(input),
   );
 }
 

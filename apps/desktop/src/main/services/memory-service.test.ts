@@ -1,15 +1,47 @@
+import { randomUUID } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import type { CreateMemoryRequest } from '@betterwork/agent-protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { AppStore } from '../persistence';
+import { normalizedMemoryHash } from './memory-content-policy';
+import { buildLegacyProvenance } from './memory-provenance';
 import { MemoryService } from './memory-service';
+
+const userScope = { kind: 'user' } as const;
+
+const userInstruction = (
+  content: string,
+  overrides: Partial<CreateMemoryRequest> = {},
+): CreateMemoryRequest => ({
+  operationId: randomUUID(),
+  content,
+  facet: 'preference',
+  scope: userScope,
+  asUserInstruction: true,
+  genericDeclaration: true,
+  ...overrides,
+});
 
 describe('MemoryService', () => {
   const stores: AppStore[] = [];
   const directories: string[] = [];
+
+  const setup = async (): Promise<{
+    store: AppStore;
+    directory: string;
+    service: MemoryService;
+  }> => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'betterwork-memory-'));
+    directories.push(directory);
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    return { store, directory, service: new MemoryService(store, directory) };
+  };
 
   afterEach(async () => {
     for (const store of stores.splice(0)) store.close();
@@ -19,22 +51,226 @@ describe('MemoryService', () => {
   });
 
   it('rebuilds a managed Markdown projection from SQLite records', async () => {
-    const directory = await mkdtemp(path.join(os.tmpdir(), 'betterwork-memory-'));
-    directories.push(directory);
-    const store = AppStore.open(':memory:');
-    stores.push(store);
-    const service = new MemoryService(store, directory);
-    await service.create({
-      scope: { kind: 'user' },
-      kind: 'preference',
-      content: '交付物优先使用中文。',
-      sourceType: 'user-explicit',
-      status: 'confirmed',
-    });
+    const { service, directory } = await setup();
+    const result = await service.create(userInstruction('交付物优先使用中文。'));
 
+    expect(result.ok).toBe(true);
     const projection = await readFile(path.join(directory, 'memory', 'user', 'index.md'), 'utf8');
     expect(projection).toContain('BetterWork 记忆');
     expect(projection).toContain('交付物优先使用中文。');
     expect(projection).toContain('请通过算台管理记忆');
+  });
+
+  it('keeps a self-declared statement reusable across materials', async () => {
+    const { service } = await setup();
+    const result = await service.create(
+      userInstruction('月报先核对收入确认口径。', { facet: 'decision', topicKey: 'revenue' }),
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const memory = result.data.currentMemory;
+    expect(memory?.sourceAvailability).toBe('available');
+    expect(memory?.requiresMaterialSelection).toBe(false);
+    expect(memory?.provenance).toMatchObject({
+      verification: 'verified',
+      authority: 'user-instruction',
+      materialDependencies: [],
+      memoryDependencies: [],
+    });
+  });
+
+  it('refuses credential-looking content without persisting it', async () => {
+    const { service, store } = await setup();
+    const secret = 'API_KEY=sk-abcdefghijklmnopqrstuvwxyz012345';
+    const result = await service.create(userInstruction(secret));
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('SENSITIVE_CONTENT');
+    // 失败摘要不得回显命中片段。
+    expect(result.error.message).not.toContain('sk-abcdefghijklmnopqrstuvwxyz012345');
+    expect(store.memories.list({ includeCandidates: true })).toHaveLength(0);
+  });
+
+  it('requires an explicit generic declaration before writing global memory', async () => {
+    const { service } = await setup();
+    const result = await service.create(
+      userInstruction('所有交付物都用中文。', { genericDeclaration: false }),
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('GLOBAL_SCOPE_REQUIRES_DECLARATION');
+  });
+
+  it('replays one effect per operationId and rejects a reused id with a different request', async () => {
+    const { service, store } = await setup();
+    const operationId = randomUUID();
+    const first = await service.create(userInstruction('汇报要先说风险。', { operationId }));
+    const replay = await service.create(userInstruction('汇报要先说风险。', { operationId }));
+    const conflict = await service.create(userInstruction('汇报要先说结论。', { operationId }));
+
+    expect(first.ok && replay.ok).toBe(true);
+    if (!first.ok || !replay.ok) return;
+    expect(replay.data.committedRevisionIds).toEqual(first.data.committedRevisionIds);
+    expect(replay.data.currentMemory?.revision).toBe(1);
+    expect(store.memories.getRevision(first.data.committedRevisionIds[0] ?? '')?.revision).toBe(1);
+    expect(conflict.ok).toBe(false);
+    if (conflict.ok) return;
+    expect(conflict.error.code).toBe('IDEMPOTENCY_CONFLICT');
+  });
+
+  it('reports the live revision on a stale write without appending one', async () => {
+    const { service, store } = await setup();
+    const created = await service.create(userInstruction('预算按季度复核。'));
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const id = created.data.currentMemory?.id ?? '';
+
+    const stale = await service.update({
+      operationId: randomUUID(),
+      id,
+      expectedRevision: 99,
+      patch: { content: '预算按月复核。' },
+    });
+
+    expect(stale.ok).toBe(false);
+    if (stale.ok) return;
+    expect(stale.error.code).toBe('REVISION_CONFLICT');
+    expect(stale.error.currentRevision).toBe(1);
+    expect(store.memories.get(id)?.revision).toBe(1);
+    expect(store.memories.get(id)?.content).toBe('预算按季度复核。');
+  });
+
+  it('survives a failed projection as committed-plus-warning', async () => {
+    const { service, store, directory } = await setup();
+    // 受管投影根被普通文件占用：mkdir 必然失败，用来固定「已提交 + 投影失败」这一顺序。
+    writeFileSync(path.join(directory, 'memory'), 'not-a-directory', 'utf8');
+
+    const result = await service.create(userInstruction('结论放第一段。'));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.commit).toBe('committed');
+    expect(result.data.projectionState).toBe('failed');
+    expect(result.warnings.map((warning) => warning.code)).toContain('PROJECTION_PENDING');
+    // 投影失败不得重复写业务修订。
+    expect(store.memories.get(result.data.currentMemory?.id ?? '')?.revision).toBe(1);
+  });
+
+  it('gates unreviewed legacy records and clears the gate through the review entry', async () => {
+    const { service, store } = await setup();
+    const content = '历史口径：合同额即收入。';
+    const legacy = store.memories.create({
+      facet: 'fact',
+      scope: userScope,
+      content,
+      normalizedHash: normalizedMemoryHash(content),
+      provenance: buildLegacyProvenance({ sourceType: 'conversation' }),
+      confidence: 1,
+      status: 'confirmed',
+    });
+    const id = legacy.record.id;
+
+    const blocked = await service.setStatus({
+      operationId: randomUUID(),
+      id,
+      expectedRevision: 1,
+      action: 'reconfirm',
+    });
+    expect(blocked.ok).toBe(false);
+    if (blocked.ok) return;
+    expect(blocked.error.code).toBe('SOURCE_REVIEW_REQUIRED');
+
+    const reviewed = await service.update({
+      operationId: randomUUID(),
+      id,
+      expectedRevision: 1,
+      patch: { content },
+      legacySourceReview: { mode: 'user-instruction', genericDeclaration: true },
+    });
+    expect(reviewed.ok).toBe(true);
+    if (!reviewed.ok) return;
+    expect(reviewed.data.currentMemory?.sourceAvailability).toBe('available');
+    expect(store.memories.get(id)?.provenance.verification).toBe('verified');
+  });
+
+  it('rejects a fabricated source selector instead of trusting the client', async () => {
+    const { service } = await setup();
+    const result = await service.create(
+      userInstruction('收入按回款金额统计。', {
+        scope: { kind: 'workspace', workspaceId: 'ws-fabricated' },
+        asUserInstruction: false,
+        genericDeclaration: undefined,
+        sourceSelector: { kind: 'run-user', runId: 'no-such-run', start: 0, end: 2 },
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('SOURCE_UNAVAILABLE');
+  });
+
+  it('resolves conflicts atomically and demands an applicability note for keep-both', async () => {
+    const { service, store } = await setup();
+    const left = await service.create(
+      userInstruction('收入按回款金额统计。', { facet: 'fact', topicKey: 'revenue' }),
+    );
+    const right = await service.create(
+      userInstruction('收入按签约金额统计。', { facet: 'fact', topicKey: 'revenue' }),
+    );
+    expect(left.ok && right.ok).toBe(true);
+    if (!left.ok || !right.ok) return;
+    const leftId = left.data.currentMemory?.id ?? '';
+    const rightId = right.data.currentMemory?.id ?? '';
+
+    const withoutNote = await service.resolveConflict({
+      operationId: randomUUID(),
+      left: { id: leftId, expectedRevision: 1 },
+      right: { id: rightId, expectedRevision: 1 },
+      decision: 'keep-both',
+    });
+    expect(withoutNote.ok).toBe(false);
+    if (withoutNote.ok) return;
+    expect(withoutNote.error.code).toBe('CONFLICT_REVIEW_REQUIRED');
+
+    const staleLoser = await service.resolveConflict({
+      operationId: randomUUID(),
+      left: { id: leftId, expectedRevision: 1 },
+      right: { id: rightId, expectedRevision: 7 },
+      decision: 'replace',
+      winnerId: leftId,
+    });
+    expect(staleLoser.ok).toBe(false);
+    if (staleLoser.ok) return;
+    expect(store.memories.get(rightId)?.status).toBe('confirmed');
+    expect(store.memories.get(leftId)?.revision).toBe(1);
+
+    const replaced = await service.resolveConflict({
+      operationId: randomUUID(),
+      left: { id: leftId, expectedRevision: 1 },
+      right: { id: rightId, expectedRevision: 1 },
+      decision: 'replace',
+      winnerId: leftId,
+    });
+    expect(replaced.ok).toBe(true);
+    if (!replaced.ok) return;
+    expect(store.memories.get(leftId)?.status).toBe('confirmed');
+    expect(store.memories.get(rightId)?.status).toBe('superseded');
+    expect(replaced.data.decision).toMatchObject({ decision: 'replace' });
+  });
+
+  it('lists governance views with derived effective status', async () => {
+    const { service } = await setup();
+    const created = await service.create(
+      userInstruction('已失效的旧口径。', { facet: 'fact', validUntil: 1_000 }),
+    );
+    expect(created.ok).toBe(true);
+
+    const page = service.list({ includeCandidates: false });
+    expect(page.ok).toBe(true);
+    if (!page.ok) return;
+    expect(page.data.items.map((item) => item.effectiveStatus)).toContain('expired');
   });
 });

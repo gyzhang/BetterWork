@@ -5,11 +5,33 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { AppStore } from '../persistence';
 import { DiscussionCheckpointService } from './discussion-checkpoint-service';
+import { normalizedMemoryHash } from './memory-content-policy';
+import { buildUserInstructionProvenance } from './memory-provenance';
 
 const stores: AppStore[] = [];
 
 afterEach(() => {
   for (const store of stores.splice(0)) store.close();
+});
+
+/** 专家 × 空间的过程性记忆：用户当场给出的口径，来源为 manual。 */
+const expertMemory = (
+  expertId: string,
+  workspaceId: string,
+  content: string,
+): Parameters<AppStore['memories']['create']>[0] => ({
+  facet: 'method',
+  scope: { kind: 'expert-workspace', expertId, workspaceId },
+  content,
+  normalizedHash: normalizedMemoryHash(content),
+  provenance: buildUserInstructionProvenance({
+    capturedAt: 3,
+    operationId: randomUUID(),
+    content,
+    originWorkspaceId: workspaceId,
+  }),
+  confidence: 1,
+  status: 'confirmed',
 });
 
 describe('Expert two-period acceptance path', () => {
@@ -78,25 +100,18 @@ describe('Expert two-period acceptance path', () => {
         ],
       },
     });
-    const confirmedMethod = store.memories.create({
-      scope: { kind: 'expert-workspace', expertId: expert.id, workspaceId: workspace.id },
-      kind: 'procedural',
-      content: '先核对财务规则，再比较期间变化。',
-      sourceType: 'user-explicit',
-      status: 'confirmed',
-    });
+    const confirmedMethod = store.memories.create(
+      expertMemory(expert.id, workspace.id, '先核对财务规则，再比较期间变化。'),
+    ).record;
     const otherWorkspace = store.workspaces.getOrCreate('/tmp/two-periods-other', '其他公司');
-    const otherCompanyMethod = store.memories.create({
-      scope: { kind: 'expert-workspace', expertId: expert.id, workspaceId: otherWorkspace.id },
-      kind: 'procedural',
-      content: '其他公司的经营分析方法。',
-      sourceType: 'user-explicit',
-      status: 'confirmed',
-    });
-    expect(store.memories.listApplicable(workspace.id, expert.id)).toContainEqual(confirmedMethod);
-    expect(store.memories.listApplicable(workspace.id, expert.id)).not.toContainEqual(
-      otherCompanyMethod,
-    );
+    const otherCompanyMethod = store.memories.create(
+      expertMemory(expert.id, otherWorkspace.id, '其他公司的经营分析方法。'),
+    ).record;
+    const applicableIds = store.memories
+      .list({ workspaceId: workspace.id, expertId: expert.id })
+      .map((record) => record.id);
+    expect(applicableIds).toContain(confirmedMethod.id);
+    expect(applicableIds).not.toContain(otherCompanyMethod.id);
     const secondContext = store.taskContexts.save(secondTask.task.id, {
       executor: {
         kind: 'expert',
@@ -146,7 +161,9 @@ describe('Expert two-period acceptance path', () => {
       taskContextRevisionId: secondContext.id,
     });
     store.memories.recordReads([{ runId: secondRunId, memory: confirmedMethod, capturedAt: 3 }]);
-    expect(store.memories.listReads(secondRunId)).toEqual([confirmedMethod]);
+    expect(store.memories.listReads(secondRunId).map((record) => record.id)).toEqual([
+      confirmedMethod.id,
+    ]);
     const secondArtifact = store.artifacts.saveMarkdown({
       taskId: secondTask.task.id,
       runId: secondRunId,

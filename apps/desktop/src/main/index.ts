@@ -106,7 +106,7 @@ function bootstrap(): ApplicationContext {
   const mcpClientService = new McpClientService(store);
   const webFetchService = new WebFetchService();
   const officeParser = new OfficeParserService();
-  memories.rebuildProjection().catch((error: unknown) => {
+  memories.rebuildManagedProjection().catch((error: unknown) => {
     console.error('Memory projection rebuild failed', error);
   });
   const taskMaterials = new TaskMaterialService({ store, knowledgeVault, inputSnapshots });

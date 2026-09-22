@@ -1,10 +1,19 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { type AgentRuntimeEvent, IpcChannel } from '@betterwork/agent-protocol';
+import {
+  type AgentRuntimeEvent,
+  IpcChannel,
+  type MemoryConflictResolutionData,
+  type MemoryListPageData,
+  type MemoryProjectionStateData,
+  type MemoryViewItem,
+  type MemoryWriteReceipt,
+  type Result,
+} from '@betterwork/agent-protocol';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { AppStore } from '../persistence';
@@ -765,5 +774,140 @@ describe('registerIpc', () => {
     expect(wrongType.opened).toBe(false);
     expect(wrongType.error).toContain('不是文件类型');
     expect(mocks.openPath).not.toHaveBeenCalled();
+  });
+
+  const createMemory = async (
+    content: string,
+    overrides: Record<string, unknown> = {},
+  ): Promise<Result<MemoryWriteReceipt>> =>
+    (await invoke(IpcChannel.CreateMemory, {
+      operationId: randomUUID(),
+      facet: 'preference',
+      scope: { kind: 'user' },
+      content,
+      asUserInstruction: true,
+      genericDeclaration: true,
+      ...overrides,
+    })) as Result<MemoryWriteReceipt>;
+
+  it('commits memory writes to receipt envelopes and lists governance views', async () => {
+    const created = await createMemory('报告先给结论，再给证据。');
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    expect(created.data.commit).toBe('committed');
+    expect(created.data.effect).toBe('created');
+    expect(created.data.currentMemory?.revision).toBe(1);
+    expect((created.data.currentMemory?.revisionId ?? '').length).toBeGreaterThan(20);
+    const id = created.data.currentMemory?.id ?? '';
+
+    const updated = (await invoke(IpcChannel.UpdateMemory, {
+      operationId: randomUUID(),
+      id,
+      expectedRevision: 1,
+      patch: { content: '报告先给结论与待决策事项，再给支撑证据。' },
+    })) as Result<MemoryWriteReceipt>;
+    expect(updated.ok).toBe(true);
+    if (!updated.ok) return;
+    expect(updated.data.currentMemory?.revision).toBe(2);
+
+    const retired = (await invoke(IpcChannel.SetMemoryStatus, {
+      operationId: randomUUID(),
+      id,
+      expectedRevision: 2,
+      action: 'expire',
+    })) as Result<MemoryWriteReceipt>;
+    expect(retired.ok).toBe(true);
+    if (!retired.ok) return;
+    expect(retired.data.currentMemory?.revision).toBe(3);
+
+    const listed = (await invoke(IpcChannel.ListMemories, {})) as Result<MemoryListPageData>;
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    const persisted = listed.data.items.find((item) => item.id === id);
+    expect(persisted?.revision).toBe(3);
+    expect(persisted?.content).toBe('报告先给结论与待决策事项，再给支撑证据。');
+
+    const single = (await invoke(IpcChannel.GetMemory, { id })) as Result<MemoryViewItem>;
+    expect(single.ok).toBe(true);
+    if (!single.ok) return;
+    expect(single.data.revision).toBe(3);
+  });
+
+  it('reports a stale memory write as a retryable domain failure, not an IPC rejection', async () => {
+    const created = await createMemory('口径以回款金额为准。');
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const id = created.data.currentMemory?.id ?? '';
+
+    const stale = (await invoke(IpcChannel.UpdateMemory, {
+      operationId: randomUUID(),
+      id,
+      expectedRevision: 99,
+      patch: { content: '不应写入的内容。' },
+    })) as Result<MemoryWriteReceipt>;
+
+    expect(stale.ok).toBe(false);
+    if (stale.ok) return;
+    expect(stale.error.code).toBe('REVISION_CONFLICT');
+    expect(stale.error.retryable).toBe(true);
+    expect(stale.error.currentRevision).toBe(1);
+
+    const listed = (await invoke(IpcChannel.ListMemories, {})) as Result<MemoryListPageData>;
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    const persisted = listed.data.items.find((item) => item.id === id);
+    expect(persisted?.revision).toBe(1);
+    expect(persisted?.content).toBe('口径以回款金额为准。');
+  });
+
+  it('keeps a governance refusal about a missing record inside the envelope', async () => {
+    const missing = (await invoke(IpcChannel.UpdateMemory, {
+      operationId: randomUUID(),
+      id: 'memory-that-does-not-exist',
+      expectedRevision: 1,
+      patch: { content: '不应写入的内容。' },
+    })) as Result<MemoryWriteReceipt>;
+
+    expect(missing.ok).toBe(false);
+    if (missing.ok) return;
+    expect(missing.error.code).toBe('NOT_FOUND');
+
+    const listed = (await invoke(IpcChannel.ListMemories, {})) as Result<MemoryListPageData>;
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    expect(listed.data.items.some((item) => item.content === '不应写入的内容。')).toBe(false);
+  });
+
+  it('refuses an incomplete conflict decision as a domain failure instead of a schema throw', async () => {
+    const left = await createMemory('收入按回款金额统计。', { facet: 'fact', topicKey: 'revenue' });
+    const right = await createMemory('收入按签约金额统计。', {
+      facet: 'fact',
+      topicKey: 'revenue',
+    });
+    expect(left.ok && right.ok).toBe(true);
+    if (!left.ok || !right.ok) return;
+
+    const withoutNote = (await invoke(IpcChannel.ResolveMemoryConflict, {
+      operationId: randomUUID(),
+      left: { id: left.data.currentMemory?.id ?? '', expectedRevision: 1 },
+      right: { id: right.data.currentMemory?.id ?? '', expectedRevision: 1 },
+      decision: 'keep-both',
+    })) as Result<MemoryConflictResolutionData>;
+
+    expect(withoutNote.ok).toBe(false);
+    if (withoutNote.ok) return;
+    expect(withoutNote.error.code).toBe('CONFLICT_REVIEW_REQUIRED');
+  });
+
+  it('rebuilds the managed projection on request and reports its state', async () => {
+    const created = await createMemory('交付物一律使用中文。');
+    expect(created.ok).toBe(true);
+
+    const rebuilt = (await invoke(IpcChannel.RebuildMemoryProjection, {
+      operationId: randomUUID(),
+    })) as Result<MemoryProjectionStateData>;
+    expect(rebuilt.ok).toBe(true);
+    if (!rebuilt.ok) return;
+    expect(rebuilt.data.projectionState).toBe('synced');
   });
 });
