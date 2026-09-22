@@ -192,7 +192,7 @@ Main 的 Provider 包装器在首个实际 `ModelRequest` 装配后计算规范�
 
 启动时将遗留 `queued`/`running` 收口 `interrupted`，不自动触网。关闭设置取消本空间自动作业；单次手动重试有独立同意，不暗开全局开关。取消后先落库终态再中止请求；成功落候选前检查 job revision/attempt/status、来源有效性、自动模式 `consentRevision`。迟到结果不能落库。同意版本也只有一个定义：协议 `MEMORY_SUGGESTION_CONSENT_VERSION`，主进程门槛（`memory-extraction-service.ts`）与界面文案（`renderer/src/lib/memory-suggestions.ts`）都导入它；此前两处各自写死 `1`，改版本会静默分裂成「界面说 v1、门槛拒 v2」。
 
-候选写入、去重统计、作业成功终态在同事务提交。失败只保存安全错误码与摘要；主任务终态不受影响。落点：库里与协议里都**只有 `errorCode`**（`memoryJobErrorCodeSchema`），没有错误摘要列——这条按「只保存这些、绝不保存原文」的上限理解，因此只存码即满足；若按「必须另存一段安全摘要」理解则缺一个字段，取舍归光哥（任务板 §15.27）。UI 主动刷新和窗口重获焦点查询状态；仅面板可见且有活动作业时按 1 秒轮询，隐藏即停并清理，无自造成功提示计时器。落点：轮询与重获焦点的重查都在 `renderer/src/hooks/use-memory-suggestions.ts`——`window` 的 `focus` 监听补发一次全量查询（设置、作业、候选），面板不可见或已卸载即摘除监听；用例见 `use-memory-suggestions.test.ts`。
+候选写入、去重统计、作业成功终态在同事务提交。失败只保存安全错误码与摘要；主任务终态不受影响。落点（更正任务板 §15.27 里的初判，完整判定见 §15.28）：摘要这一半是**有声明、有消费者、零生产者**——协议 `memoryJobSummarySchema` 声明了 `diagnostic?`（`packages/agent-protocol/src/index.ts:1916`），界面失败文案确实优先读它再退回错误码（`renderer/src/lib/memory-suggestions.ts:60`，用例见 `memory-suggestions.test.ts:92/96`），但库里没有任何对应列，仓储终态写入只落 `error_code`（`memory-extraction-repository.ts:596-619`），`toSummary` 也从不填 `diagnostic`（`:210-226`）。因此界面上「一段安全的失败摘要」永远不会出现，用户只看到错误码。出路有两条且互斥：补列＋迁移＋脱敏写入，或收窄契约与协议、删掉界面的这条分支；取舍归光哥，本轮不自行加列也不删契约条目。UI 主动刷新和窗口重获焦点查询状态；仅面板可见且有活动作业时按 1 秒轮询，隐藏即停并清理，无自造成功提示计时器。落点：轮询与重获焦点的重查都在 `renderer/src/hooks/use-memory-suggestions.ts`——`window` 的 `focus` 监听补发一次全量查询（设置、作业、候选），面板不可见或已卸载即摘除监听；用例见 `use-memory-suggestions.test.ts`。
 
 ## 8. 持久化与迁移清单
 

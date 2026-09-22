@@ -665,7 +665,7 @@ Spec §2.2 写着「必须验证的静态风险」九条，是本轮开发的立
 | B11 | 失败只保存安全错误码；列表只回脱敏摘要 | `memory-extraction-repository.ts:596-619`（只写 `error_code` 列，库里无错误正文列）、`:540-566 listPage` | `memory-extraction-repository.test.ts:485`「pages desensitized job summaries for one workspace」、`memory-extraction-service.test.ts:1000`、`:684`、`:786`「Provider 抛错只落 MODEL_REQUEST_FAILED，凭据既不进数据库也不进日志」 |
 | B12 | UI 主动刷新＋焦点查询；只在面板可见且有活动作业时 1 秒轮询，隐藏即停 | `use-memory-suggestions.ts:193-218`（`activeJobKey` 依赖＋`1_000` 毫秒＋`focus` 补查）、`:175-185`（换空间或换可见性先清空） | `use-memory-suggestions.test.ts:224`「有活动作业时按秒轮询，作业结束后停止轮询」、`:248`、`:147`「面板不可见时既不发请求也不启动轮询」、`:322` |
 
-**「摘要」这个词在实现里没有生产者。** §7.3 还写「失败只保存安全错误码与摘要」，而协议与库里都只有 `errorCode`（`memoryJobErrorCodeSchema`，`packages/agent-protocol/src/index.ts:1893/1915`），不存在错误摘要列。本轮按「只保存这些、绝不保存原文」的**上限**读法判定实现合规（只存码即满足），并把这条读法写进契约 §7.3 的落点；若按「必须另存一段安全摘要」理解则缺一个字段与一次迁移，属新增口径，归光哥拍板，本轮不自行补列也不改契约原句。
+**（本节的这一条判定被 §15.28 更正）「摘要」到底有没有生产者？** §7.3 还写「失败只保存安全错误码与摘要」。本节初稿写成「协议与库里都只有 `errorCode`」——**这句是错的**：协议 `memoryJobSummarySchema` 里确实声明了 `diagnostic`（`packages/agent-protocol/src/index.ts:1916`，`max(500)` 的安全说明），界面还优先读它（`renderer/src/lib/memory-suggestions.ts:60`，用例 `memory-suggestions.test.ts:91`「失败优先展示摘要，缺摘要才退回错误码」）。真实状态是**有消费者、零生产者**：库里没有对应列，仓储 `finish()` 只写 `error_code`（`memory-extraction-repository.ts:596-619`），`toSummary` 从不填 `diagnostic`（`:210-226`）。完整判定与两条出路见 §15.28，取舍归光哥；本轮不自行补列，也不删契约条目。
 
 **查到一处真实缺陷并已补线：排队失败从来没留过安全诊断。** §7.3 要求「排队失败不能把已成功主 Run 改失败；记录安全诊断」，而 `requestExtractionForRun` 对队列满、模型不可用、依赖超限等原因返回的是 **`ok: true` ＋ `status: 'not-enqueued'` ＋ `reason`**（`memory-extraction-service.ts:727-741/777-778/808`），`run-service.ts` 的旧代码只在 `!outcome.ok` 分支里 `console.warn`，于是这条正常返回的路径把原因码整个咽掉——§2.2 那类「声明了却没接线」在诊断面上再现一次。已在 `run-service.ts:767-771` 补：带 `reason` 的 not-enqueued 也写一条只含原因码的 warn（不落原文，守「日志不得记录密钥」）。`notEnqueued()` 无原因码的唯一路径是「自动建议本就关闭」（`:731`），保持静默，避免每次 Run 都刷屏。
 
@@ -678,3 +678,31 @@ Spec §2.2 写着「必须验证的静态风险」九条，是本轮开发的立
 **一处需光哥确认的口径（不改契约条目，只标注落点）。** 契约 §7.3 沿用 Spec 原句「Run 成功提交和作业登记、人工 feedback 提交和作业登记**尽量**在同应用库事务完成」。实现里这两处都**不共用**事务：登记前必须先 `await` 解析模型快照与凭据（`memory-extraction-service.ts:773-780`），而来源提交早已在 `publish` 时落定，把异步解析塞进 Run 事务会违反「事务内不得有网络／不得悬挂」。取舍兜底就是 B6 那条硬约束，任务板 WM09 卡片第 179 行也按「候选和作业成功同事务，主 Run 失败隔离」记录。**已在契约 §7.3 原句后补一段实测落点说明并指向本节**，是否算偏离原设计需光哥拍板；本轮没有删改「尽量」那句本身。
 
 验证：`npx prettier --check` 与 `npx eslint` 对本轮两个源码文件退出 0；`npx vitest run apps/desktop/src/main/services/work-centered-memory.integration.test.ts` 11 条全绿（`tests 17.65s`）；`npm run verify` 退出码 0（112 文件／1009 用例，新增即本节这一条）；表内全部 `file:line` 与用例标题本轮逐条 `grep -n`／`sed -n` 回读核实，其中 `memory-extraction-repository.ts` 的五个终态方法核到 `:419/441/445/449/454`、`memory-extraction-service.ts` 的候选事务核到 `:1072-1100`、简报排序核到 `memory-repository.ts:602` 与 `workspace-reference-repository.ts:219/226`。
+
+
+### 15.28 Spec §9.1／§9.3 与 §11 文件责任逐条闭合，抓出一个只有消费者没有生产者的字段（2026-09-23 07:10）
+
+**A 组｜§9.1「统一结果与最小公共对象」6 条。**
+
+| # | 契约条款 | 强制点 | 证据（用例标题原文／实测） |
+| --- | --- | --- | --- |
+| A1 | 仅记忆／简报／参考家族使用协议 `Result<T>`，不迁移全仓其他 IPC | `packages/agent-protocol/src/index.ts:1251` 定义 | `grep -rl "Result<" apps/desktop/src/main/services` 恰好命中 5 个记忆家族服务（`memory-service`／`memory-recall-service`／`memory-extraction-service`／`workspace-memory-brief-service`／`workspace-reference-service`）；`search-engine-service.ts`、`model-connectivity.ts` 各自保留自有形状，未被顺手改造 |
+| A2 | WriteReceipt 字段（`operationId`／`commit`／`effect`／`committedRevisionIds`／`currentMemory?`／`projectionState`），设置与参考回执带各自 current 对象、不返回不受约束 data | `index.ts:1319-1330`、`:1379`（`currentSettings`）、`:1409`（`currentReference`） | `register-ipc.test.ts:973`（`receipt.currentSettings.autoSuggestEnabled`）、`workspace-reference-service.test.ts:111/136/142/152`（新建／改名／unchanged／removed 四态都带回 `currentReference`） |
+| A3 | ListPage 的 `cursor` 是 `updatedAt＋id` 的版本化结构，limit 默认 50／上限 100；作业列表 20／50 | `index.ts:512-513`、`:1755-1756`；游标构造 `memory-extraction-repository.ts:560-565`（`{version:1, updatedAt, id}`）、`memory-repository.ts:554` | `memory-extraction-repository.test.ts:485`「pages desensitized job summaries for one workspace」（含翻页游标续取） |
+| A4 | `MemoryViewItem` ＝ MemoryRecord＋`effectiveStatus`＋`sourceAvailability`＋`requiresMaterialSelection`＋`conflicts` | `index.ts:1293` | `memory-service.test.ts` 治理族；简报侧同源断言见 §15.27 A5 |
+| A5 | EditPatch 只允许 content／facet／topicKey／scope／日期，日期与 topicKey 用显式 `clear`；来源不是任意可编辑 JSON | `index.ts:576-590`（set／clear 互斥）、`:955` `memoryEditPatchSchema`；来源只能经 verified 选择器（`memory-provenance.ts:94-147`） | `memory-service.test.ts` patch 族；来源伪造拒绝见 §15.26 风险 6 行 |
+| A6 | 三条成功警告都要有生产者：`PROJECTION_PENDING`／`SOURCE_NEEDS_REVIEW`／`HISTORY_TRUNCATED` | `memory-service.ts`（投影失败＝已提交＋警告）、`memory-recall-service.ts:1278/1369/1428`、`:1284/1419` | `memory-service.test.ts:295`、`work-centered-memory.integration.test.ts:801`「投影目录故障时仍按 SQLite 召回，重建请求可见地报失败」（断言 `warnings` 含 `PROJECTION_PENDING` 且 `commit==='committed'`） |
+
+§9.3 的错误码分组与警告分组已在 §15.18（错误码逐值找写入点）与 §15.21（文档散文）里扫过，本节不重复；§9.2 的 IPC 双面在 §15.20。本轮新增的是**「谁在读这个字段」这一面**：§15.18 只问「声明的码有没有人写」，没问「写出去的 DTO 字段有没有人填」。
+
+**B 组｜§11「文件责任和阶段划分」拟新增模块逐个查存在性（19 项）。** 18 项都已按卡建立并可 `test -f`：`memory-operation-repository.ts`、`memory-provenance.ts`、`memory-content-policy.ts`、`memory-retrieval.ts`、`run-memory-context-repository.ts`、`run-history-policy.ts`、`model-provider-factory.ts`、`memory-extraction-repository.ts`、`memory-extraction-service.ts`、`memory-extraction-prompt.ts`、`workspace-reference-repository.ts`、`workspace-brief-service.ts`、`use-memory-suggestions.ts`、`use-run-memories.ts`、`use-workspace-brief.ts`、`MemorySuggestionList.tsx`、`WorkspaceBrief.tsx`、`MemoryEditor.tsx`。
+
+唯一没落地的是 `persistence/run-memory-audit.ts`——**它正是这一系列幽灵名字的源头**：§15.24 抓到 WM06 卡片点名 `run-memory-audit.test.ts`（从未建立），§15.25 抓到 `app-schema.ts:1242` 注释把守卫写成 `run-memory-audit`。运行审计的真实承担者是 `run-memory-context-repository.ts`＋`run_memory_reads` 表，本轮不新建空壳模块凑名，只把落点记在这里（Spec §11 表格是交接快照，不回写）。
+
+**C 组｜本轮的真实发现：`JobSummary.diagnostic` 有消费者、零生产者。** §9.2 把「安全说明?」写进 JobSummary 字段清单，协议据此声明了 `diagnostic`（`index.ts:1916`，`max(500)`），界面 `memory-suggestions.ts:60` 的读法是 `job.diagnostic ?? job.errorCode ?? 状态标签`——**摘要优先**；用例 `memory-suggestions.test.ts:91`「失败优先展示摘要，缺摘要才退回错误码」用**手喂的 DTO** 证明这条分支按设计工作。但生产侧没有任何一处填它：库里无对应列（`app-schema.ts` 作业表只有 `error_code`），`finish()` 只写码（`memory-extraction-repository.ts:596-619`），`toSummary` 也不带这个键（`:210-226`）。结果是**这条界面分支永远走后备路径**，而 §7.3「失败只保存安全错误码与摘要」里的「摘要」从来没有落地。
+
+两条出路都不在本轮授权范围内，归光哥拍板：① **补生产者**＝新增列＋版本化迁移＋写前过 `diagnosticOf` 那份脱敏与 500 码点截断（同时把「敏感文本不进库」这条边界重新核对一遍）；② **收窄契约**＝删掉 `diagnostic` 字段与界面分支，只保留错误码。本轮既不自行加列，也不擅自删契约条目，只把 §15.27 里那句写错的判定就地更正。
+
+**教训（写进核对方法）**：查「声明 vs 生产」时必须**双向**问——除了「声明的值有没有人写」，还要问「DTO 里每个字段有没有人填、有没有人读」。只查一侧会漏掉这种「界面优先读、生产端从不写」的字段；它比孤儿常量更隐蔽，因为界面单测手喂 DTO 会让它看起来完全被覆盖过。
+
+验证：本节为纯文档改动（更正 §15.27 一处判定＋新增本节），生产源码与测试未再改动；`npx prettier --check docs/development/tasks-memory.md` 退出 0；表内 `file:line` 全部当场 `grep -n`／`sed -n` 回读核实（协议侧核到 `:512-513/1251/1293/1319-1330/1379/1409/1755-1756/1916`，主进程核到 `memory-recall-service.ts:1278/1284/1369/1419/1428`、`memory-extraction-repository.ts:210-226/560-565/596-619`），19 项模块存在性用 `test -f` 逐项打印。上一节（§15.27）的全量门禁仍然有效：`npm run verify` 退出码 0，112 文件／1009 用例。
