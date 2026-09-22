@@ -1,5 +1,8 @@
 import { describeError } from '@betterwork/agent-core';
-import type { CreateDiscussionCheckpointRequest, DiscussionCheckpoint } from '@betterwork/agent-protocol';
+import type {
+  CreateDiscussionCheckpointRequest,
+  DiscussionCheckpoint,
+} from '@betterwork/agent-protocol';
 
 import type { AppStore } from '../persistence';
 
@@ -47,11 +50,9 @@ export class DiscussionCheckpointService {
     // summary 只是背景，不能证明确认；只有人工 feedback 才构成自动提炼的触发来源。
     if (this.extractionRequester && (input.feedback?.trim() ?? '').length > 0) {
       const requester = this.extractionRequester;
-      void requester
-        .requestExtractionForCheckpoint(checkpoint.id)
-        .catch((error: unknown) => {
-          console.error('[memory-extraction] 讨论节点入队失败：', describeError(error));
-        });
+      void requester.requestExtractionForCheckpoint(checkpoint.id).catch((error: unknown) => {
+        console.error('[memory-extraction] 讨论节点入队失败：', describeError(error));
+      });
     }
     return checkpoint;
   }

@@ -286,11 +286,7 @@ const clampField = (value: string, role: FragmentRole): ClampedField => {
   };
 };
 
-const assignAssemblerField = (
-  target: AssemblerFields,
-  role: FragmentRole,
-  text: string,
-): void => {
+const assignAssemblerField = (target: AssemblerFields, role: FragmentRole, text: string): void => {
   switch (role) {
     case 'user-prompt':
       target.userPrompt = text;

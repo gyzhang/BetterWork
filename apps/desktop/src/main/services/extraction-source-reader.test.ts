@@ -74,7 +74,12 @@ describe('createStoreExtractionSourceReader', () => {
     const store = await setup();
     const workspace = store.workspaces.getOrCreate('/tmp/extraction-source', '来源空间');
     const task = store.tasks.create(workspace.id, '提炼来源', '验证来源真实性');
-    const runId = addRun(store, task, '请把这份长材料按业务线拆开，并给出下一季度的收入确认口径与风险清单，谢谢。', T0);
+    const runId = addRun(
+      store,
+      task,
+      '请把这份长材料按业务线拆开，并给出下一季度的收入确认口径与风险清单，谢谢。',
+      T0,
+    );
     snapshot(store, runId, task.task.id, workspace.id);
 
     const record = createStoreExtractionSourceReader(store).readSource({ kind: 'run', runId });

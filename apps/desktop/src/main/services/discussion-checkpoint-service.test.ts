@@ -21,7 +21,9 @@ describe('DiscussionCheckpointService 的提炼触发', () => {
 
   const setup = async (): Promise<{
     store: AppStore;
-    service: (requester?: { requestExtractionForCheckpoint(id: string): Promise<unknown> }) => DiscussionCheckpointService;
+    service: (requester?: {
+      requestExtractionForCheckpoint(id: string): Promise<unknown>;
+    }) => DiscussionCheckpointService;
     taskId: string;
   }> => {
     const directory = await mkdtemp(path.join(os.tmpdir(), 'betterwork-checkpoint-'));
