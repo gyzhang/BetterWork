@@ -6,16 +6,33 @@ export interface ModelToolDefinition {
   inputSchema: Record<string, unknown>;
 }
 
+export const MODEL_FINISH_REASONS = [
+  'stop',
+  'length',
+  'tool-calls',
+  'content-filter',
+  'unknown',
+] as const;
+
+export type ModelFinishReason = (typeof MODEL_FINISH_REASONS)[number];
+
+export interface ModelUsage {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+}
+
 export type ModelStreamChunk =
   | { type: 'reasoning-delta'; delta: string }
   | { type: 'text-delta'; delta: string }
   | { type: 'tool-call'; toolCall: ToolCall }
-  | { type: 'done' };
+  | { type: 'done'; finishReason?: ModelFinishReason; usage?: ModelUsage };
 
 export interface ModelRequest {
   messages: AgentMessage[];
   tools: ModelToolDefinition[];
   signal: AbortSignal;
+  maxOutputTokens?: number;
 }
 
 export interface ModelProvider {

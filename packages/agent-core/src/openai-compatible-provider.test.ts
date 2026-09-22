@@ -2,7 +2,7 @@ import type { AgentMessage } from '@betterwork/agent-protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { OpenAICompatibleProvider } from './openai-compatible-provider';
-import type { ModelRequest, ModelStreamChunk } from './types';
+import type { ModelFinishReason, ModelRequest, ModelStreamChunk } from './types';
 
 /**
  * OpenAICompatibleProvider 是真实模型链路里最容易出错的一段：手工解析 SSE、
@@ -29,6 +29,22 @@ const sse = (...payloads: string[]): Response => {
 
 const delta = (fields: Record<string, unknown>): string =>
   JSON.stringify({ choices: [{ delta: fields }] });
+
+const wireFinish = (finishReason: unknown, usage?: unknown): string =>
+  JSON.stringify({
+    choices: [{ finish_reason: finishReason }],
+    ...(usage === undefined ? {} : { usage }),
+  });
+
+const wireUsageOnly = (usage: unknown): string => JSON.stringify({ choices: [], usage });
+
+type DoneChunk = Extract<ModelStreamChunk, { type: 'done' }>;
+
+const doneOf = (chunks: ModelStreamChunk[]): DoneChunk => {
+  const done = chunks.at(-1);
+  if (!done || done.type !== 'done') throw new Error('流没有以 done 结束');
+  return done;
+};
 
 /** 按给定的字节边界分段下发，用于验证跨包缓冲。 */
 const streamOf = (chunks: string[], init?: ResponseInit): Response => {
@@ -61,6 +77,14 @@ const request = (overrides?: Partial<ModelRequest>): ModelRequest => ({
   tools: [],
   signal: new AbortController().signal,
   ...overrides,
+});
+
+/** 单独构造带输出上限的请求，避免用 `...overrides` 展开时把 undefined 写成显式属性。 */
+const requestWithCeiling = (maxOutputTokens: number | undefined): ModelRequest => ({
+  messages: [{ id: 'm-1', role: 'user', content: '你好' } satisfies AgentMessage],
+  tools: [],
+  signal: new AbortController().signal,
+  ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
 });
 
 const collect = async (chunks: AsyncIterable<ModelStreamChunk>): Promise<ModelStreamChunk[]> => {
@@ -196,6 +220,103 @@ describe('OpenAICompatibleProvider streaming', () => {
   });
 });
 
+describe('OpenAICompatibleProvider completion signals', () => {
+  const cases: Array<[unknown, ModelFinishReason | undefined]> = [
+    ['stop', 'stop'],
+    ['length', 'length'],
+    ['tool_calls', 'tool-calls'],
+    ['tool-calls', 'tool-calls'],
+    ['content_filter', 'content-filter'],
+    ['content-filter', 'content-filter'],
+    ['eos_token', 'unknown'],
+    [null, undefined],
+  ];
+
+  it.each(cases)('maps the upstream finish_reason %s into %s', async (wire, expected) => {
+    stubFetch(() => sse(delta({ content: '好' }), wireFinish(wire)));
+    const done = doneOf(await collect(provider().stream(request())));
+
+    expect(done.finishReason).toBe(expected);
+    expect('finishReason' in done).toBe(expected !== undefined);
+  });
+
+  it('leaves finishReason absent when the stream only sends [DONE]', async () => {
+    stubFetch(() => sse(delta({ content: '好' })));
+    const done = doneOf(await collect(provider().stream(request())));
+
+    expect(Object.keys(done)).toEqual(['type']);
+  });
+
+  it('keeps a length truncation distinguishable from an early end of stream', async () => {
+    stubFetch(() => sse(delta({ content: '截断的内容' }), wireFinish('length')));
+    await expect(collect(provider().stream(request()))).resolves.toEqual([
+      { type: 'text-delta', delta: '截断的内容' },
+      { type: 'done', finishReason: 'length' },
+    ]);
+
+    stubFetch(() => streamOf([`data: ${delta({ content: '断流' })}\n\n`]));
+    await expect(collect(provider().stream(request()))).rejects.toThrow(
+      '模型流在收到完成信号前结束',
+    );
+  });
+
+  it('passes usage numbers through exactly as the upstream returned them', async () => {
+    stubFetch(() =>
+      sse(
+        delta({ content: '好' }),
+        wireFinish('stop', { prompt_tokens: 12, completion_tokens: 7, total_tokens: 19 }),
+      ),
+    );
+    const done = doneOf(await collect(provider().stream(request())));
+
+    expect(done.usage).toEqual({ promptTokens: 12, completionTokens: 7, totalTokens: 19 });
+  });
+
+  it('reads usage from the trailing usage-only chunk some services send', async () => {
+    stubFetch(() =>
+      sse(
+        delta({ content: '好' }),
+        wireFinish('stop'),
+        wireUsageOnly({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }),
+      ),
+    );
+    const done = doneOf(await collect(provider().stream(request())));
+
+    expect(done).toEqual({
+      type: 'done',
+      finishReason: 'stop',
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    });
+  });
+
+  it('omits usage when the response carries none', async () => {
+    stubFetch(() => sse(delta({ content: '好' }), wireFinish('stop')));
+    const done = doneOf(await collect(provider().stream(request())));
+
+    expect('usage' in done).toBe(false);
+  });
+
+  it('drops usage fields that are not real returned numbers', async () => {
+    stubFetch(() =>
+      sse(
+        delta({ content: '好' }),
+        wireFinish('stop', {
+          prompt_tokens: 12,
+          completion_tokens: 'estimated',
+          total_tokens: null,
+        }),
+      ),
+    );
+    const done = doneOf(await collect(provider().stream(request())));
+
+    expect(done.usage).toEqual({ promptTokens: 12 });
+
+    stubFetch(() => sse(delta({ content: '好' }), wireFinish('stop', { completion_tokens: '9' })));
+    const withoutNumbers = doneOf(await collect(provider().stream(request())));
+    expect('usage' in withoutNumbers).toBe(false);
+  });
+});
+
 describe('OpenAICompatibleProvider request shape', () => {
   it('sends the bearer header only when a key is configured', async () => {
     const withKey = stubFetch(() => sse(delta({ content: '好' })));
@@ -264,6 +385,42 @@ describe('OpenAICompatibleProvider request shape', () => {
     const fetchMock = stubFetch(() => sse(delta({ content: '好' })));
     await collect(provider().stream(request()));
     expect('tools' in bodyOf(fetchMock)).toBe(false);
+  });
+
+  it('sends the lower of the profile ceiling and the request ceiling', async () => {
+    const profileWins = stubFetch(() => sse(delta({ content: '好' })));
+    await collect(provider({ maxOutputTokens: 512 }).stream(requestWithCeiling(2_048)));
+    expect(bodyOf(profileWins).max_tokens).toBe(512);
+
+    const requestWins = stubFetch(() => sse(delta({ content: '好' })));
+    await collect(provider({ maxOutputTokens: 4_096 }).stream(requestWithCeiling(2_048)));
+    expect(bodyOf(requestWins).max_tokens).toBe(2_048);
+
+    const defaultProfile = stubFetch(() => sse(delta({ content: '好' })));
+    await collect(provider().stream(requestWithCeiling(2_048)));
+    expect(bodyOf(defaultProfile).max_tokens).toBe(2_048);
+  });
+
+  it('keeps the existing max_tokens when the request sets no ceiling', async () => {
+    const withoutProfileCeiling = stubFetch(() => sse(delta({ content: '好' })));
+    await collect(provider().stream(request()));
+    expect(bodyOf(withoutProfileCeiling).max_tokens).toBe(8_192);
+
+    const withProfileCeiling = stubFetch(() => sse(delta({ content: '好' })));
+    await collect(provider({ maxOutputTokens: 1_024 }).stream(request()));
+    expect(bodyOf(withProfileCeiling).max_tokens).toBe(1_024);
+
+    const withUndefinedRequestCeiling = stubFetch(() => sse(delta({ content: '好' })));
+    await collect(provider({ maxOutputTokens: 1_024 }).stream(requestWithCeiling(undefined)));
+    expect(bodyOf(withUndefinedRequestCeiling).max_tokens).toBe(1_024);
+  });
+
+  it('never sends a non-positive or non-finite request ceiling', async () => {
+    for (const ceiling of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const fetchMock = stubFetch(() => sse(delta({ content: '好' })));
+      await collect(provider({ maxOutputTokens: 4_096 }).stream(requestWithCeiling(ceiling)));
+      expect(bodyOf(fetchMock).max_tokens).toBe(4_096);
+    }
   });
 
   it('combines the caller cancellation signal with the stream timeout', async () => {
@@ -348,7 +505,7 @@ describe('OpenAICompatibleProvider failures', () => {
     );
     await expect(collect(provider().stream(request()))).resolves.toEqual([
       { type: 'text-delta', delta: '完整内容' },
-      { type: 'done' },
+      { type: 'done', finishReason: 'stop' },
     ]);
   });
 

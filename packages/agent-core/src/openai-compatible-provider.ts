@@ -1,5 +1,11 @@
 import { abortError } from './errors';
-import type { ModelProvider, ModelRequest, ModelStreamChunk } from './types';
+import type {
+  ModelFinishReason,
+  ModelProvider,
+  ModelRequest,
+  ModelStreamChunk,
+  ModelUsage,
+} from './types';
 
 export interface OpenAICompatibleProviderConfig {
   id: string;
@@ -16,6 +22,72 @@ export interface OpenAICompatibleProviderOptions {
 }
 
 const DEFAULT_STREAM_TIMEOUT_MS = 300_000;
+const DEFAULT_MAX_OUTPUT_TOKENS = 8_192;
+
+/** 只有真实正数才是一次可用的 token 上限；缺失或非法值退回既有的 profile 缺省。 */
+const tokenCeiling = (value: number | undefined): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+
+const maxOutputTokensFor = (
+  profileCeiling: number | undefined,
+  requestCeiling: number | undefined,
+): number => {
+  const profile = tokenCeiling(profileCeiling) ?? DEFAULT_MAX_OUTPUT_TOKENS;
+  return Math.min(tokenCeiling(requestCeiling) ?? profile, profile);
+};
+
+const FINISH_REASON_BY_WIRE_VALUE: ReadonlyMap<string, ModelFinishReason> = new Map([
+  ['stop', 'stop'],
+  ['length', 'length'],
+  ['tool-calls', 'tool-calls'],
+  ['tool_calls', 'tool-calls'],
+  ['content-filter', 'content-filter'],
+  ['content_filter', 'content-filter'],
+]);
+
+const finishReasonOf = (wireValue: string): ModelFinishReason =>
+  FINISH_REASON_BY_WIRE_VALUE.get(wireValue) ?? 'unknown';
+
+const tokenCount = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+
+/** usage 只搬运上游真实返回的数字，绝不把 code points 之类推算值冒充成 token。 */
+const usageOf = (usage: StreamUsage | null | undefined): ModelUsage | undefined => {
+  if (!usage) return undefined;
+  const promptTokens = tokenCount(usage.prompt_tokens);
+  const completionTokens = tokenCount(usage.completion_tokens);
+  const totalTokens = tokenCount(usage.total_tokens);
+  if (promptTokens === undefined && completionTokens === undefined && totalTokens === undefined) {
+    return undefined;
+  }
+  return {
+    ...(promptTokens === undefined ? {} : { promptTokens }),
+    ...(completionTokens === undefined ? {} : { completionTokens }),
+    ...(totalTokens === undefined ? {} : { totalTokens }),
+  };
+};
+
+interface StreamUsage {
+  prompt_tokens?: unknown;
+  completion_tokens?: unknown;
+  total_tokens?: unknown;
+}
+
+interface StreamPayload {
+  choices?: Array<{
+    finish_reason?: unknown;
+    delta?: {
+      content?: string;
+      reasoning_content?: string;
+      tool_calls?: Array<{
+        index?: number;
+        id?: string;
+        function?: { name?: string; arguments?: string };
+      }>;
+    };
+  }>;
+  usage?: StreamUsage | null;
+}
 
 /**
  * 归一化用户填写的 base URL。
@@ -100,7 +172,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
                 }))
               : undefined,
           temperature: this.config.temperature ?? 0.7,
-          max_tokens: this.config.maxOutputTokens ?? 8192,
+          max_tokens: maxOutputTokensFor(this.config.maxOutputTokens, request.maxOutputTokens),
           stream: true,
         }),
         signal,
@@ -115,6 +187,8 @@ export class OpenAICompatibleProvider implements ModelProvider {
     const decoder = new TextDecoder();
     let buffer = '';
     let completed = false;
+    let wireFinishReason: string | undefined;
+    let usage: ModelUsage | undefined;
     const toolCalls = new Map<number, { id: string; name: string; arguments: string }>();
     const emitLine = (line: string): ModelStreamChunk[] => {
       if (!line.startsWith('data:')) return [];
@@ -124,23 +198,17 @@ export class OpenAICompatibleProvider implements ModelProvider {
         completed = true;
         return [];
       }
-      const chunk = JSON.parse(data) as {
-        choices?: Array<{
-          finish_reason?: string | null;
-          delta?: {
-            content?: string;
-            reasoning_content?: string;
-            tool_calls?: Array<{
-              index?: number;
-              id?: string;
-              function?: { name?: string; arguments?: string };
-            }>;
-          };
-        }>;
-      };
+      const chunk = JSON.parse(data) as StreamPayload;
       const choice = chunk.choices?.[0];
       const delta = choice?.delta;
-      if (choice?.finish_reason) completed = true;
+      const parsedUsage = usageOf(chunk.usage);
+      if (parsedUsage) usage = parsedUsage;
+      if (choice?.finish_reason) {
+        completed = true;
+        if (wireFinishReason === undefined && typeof choice.finish_reason === 'string') {
+          wireFinishReason = choice.finish_reason;
+        }
+      }
       const output: ModelStreamChunk[] = [];
       if (delta?.reasoning_content)
         output.push({ type: 'reasoning-delta', delta: delta.reasoning_content });
@@ -180,7 +248,11 @@ export class OpenAICompatibleProvider implements ModelProvider {
       const input = JSON.parse(call.arguments || '{}') as Record<string, unknown>;
       yield { type: 'tool-call', toolCall: { id: call.id, name: call.name, input } };
     }
-    yield { type: 'done' };
+    yield {
+      type: 'done',
+      ...(wireFinishReason === undefined ? {} : { finishReason: finishReasonOf(wireFinishReason) }),
+      ...(usage === undefined ? {} : { usage }),
+    };
   }
 
   private streamError(error: unknown, requestSignal: AbortSignal, timeout: AbortSignal): Error {
