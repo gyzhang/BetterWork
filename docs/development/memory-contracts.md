@@ -237,6 +237,7 @@ WM02 先扩展仓储形状，公开旧调用方切换在 WM03 一起完成；来
 - **WriteReceipt**：`operationId`、`commit:'committed'`、`effect`(created/updated/unchanged/deduplicated/suppressed)、`committedRevisionIds`、`currentMemory?`、`projectionState`(synced/pending/failed)。设置/参考写回执另包含相应 `currentSettings`/`currentReference`，不能返回不受约束任意 `data`。
 - **MemoryViewItem**：`MemoryRecord`＋`effectiveStatus`＋`sourceAvailability`(available/unavailable/review-required)＋`requiresMaterialSelection`＋`conflicts`（精确修订对与状态）。
 - **ListPage**：`items`、`nextCursor?`；cursor 为 `updatedAt`＋`id` 的版本化结构，`limit` 默认 50，上限 100；created/modified 排序定义在对应响应，非任意 SQL 游标。
+默认值与上限只认协议常量 `LIST_PAGE_DEFAULT_LIMIT`／`LIST_PAGE_MAX_LIMIT`：请求 Schema 卡上限，`MemoryRepository.listPage` 取默认值，存储层不再写死数字（回归用例见 `memory-repository.test.ts`「uses the protocol page-size constant as the default limit」）。
 - `Scope` 从现有判别联合复用；`Facet` 与 `kind` 由宿主映射，客户端不能提交矛盾组合。
 - **EditPatch** 允许 `content`/`facet`/`topicKey`/`scope`/日期 patch；`topicKey` 清空同样用 `clear`。来源不作为任意可编辑 JSON，单独经 verified 选择器或人工重新表述构造。
 

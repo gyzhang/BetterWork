@@ -364,3 +364,29 @@ WM15 期间发现并修正的两处测试自身缺陷（不是产品缺陷）：
 唯一缺口是第 9 项「conflict 组」：治理侧（裁决行、回执、精确修订绑定、keep-both 必须写适用条件、界面表单、预算组原子性）都有测试，但**召回期的冲突装配**没有——`buildConflictMap` → `conflict-unresolved` 账本与 keep-both 同组注入这条路径此前只在 `memory-retrieval.test.ts` 里以手工构造的分组喂给预算层。补齐 `memory-recall-service.test.ts` 两条：同议题、有效期重叠、无裁决的两条口径都不注入且 `conflictReviewRequired` 为真；经 `resolveConflict('keep-both')` 后两条以 `conflict-pair` 一起回来、记忆块带适用条件说明、`conflictReviewRequired` 归零。该测试文件同时承载 15.6 的依赖闭包两条，共 4 条用例。
 
 矩阵 16 项至此全部有自动化证据；仍缺的只有 §15.5 的人工验收与真实模型语义确认。
+
+### 15.9 分页默认值收口到协议常量（2026-09-23 03:18）
+
+Spec §9 与契约 §9 都写着 ListPage「`limit` 默认 50，上限 100」，协议也导出了 `LIST_PAGE_DEFAULT_LIMIT = 50`，但这个常量在生产代码里没有任何消费者：请求 Schema 只用 `LIST_PAGE_MAX_LIMIT` 卡上限，真正的默认值是 `MemoryRepository.listPage` 里写死的 `?? 50`。行为当时是对的，问题在于常量与实现各说一套——改常量不会改行为，看代码的人也读不出谁是真相源。同一文件族的作业列表（`memory-extraction-repository.ts:542`）本来就是从 `MEMORY_JOB_LIST_DEFAULT_LIMIT` 取的，说明约定如此，只有这一处漏了。
+
+修法是一行替换加一条回归用例：`parsed.limit ?? LIST_PAGE_DEFAULT_LIMIT`，用例种 `LIST_PAGE_DEFAULT_LIMIT + 1` 条记忆，断言第一页正好返回常量条数、给出游标、第二页返回剩下的 1 条且不再给游标，并断言两页并集不重不漏。此后常量与存储层只能一起动。契约 §9 补了一句写明「默认值与上限只认协议常量」。
+
+证据：`npm test -- apps/desktop/src/main/persistence/memory-repository.test.ts` → 16 passed；`npx eslint`（含 `--fix` 后的 import 排序）退出码 0；`npm run typecheck` 退出码 0。
+
+### 15.10 风险与下一卡前置（2026-09-23 03:18）
+
+补齐 §14 交接模板里此前没有独立条目的两项（其余七项散落在 15.1–15.9）。
+
+**风险**
+
+1. **人工验收缺口＝收口缺口**：§15.5 五项（治理界面、自动建议质量、简报与精确版本引用、真实模型端到端、提交发布授权）一条都没有用户证据。按 Spec §14.4 的口径，不得把「测试通过」写成「业务质量通过」，也不得把「记忆已选中」写成「已影响成果」。
+2. **ADR-0026 仍是 Proposed**：本增量业务代码已落地，但技术方案批准权在光哥手上；任务板与文档不得自行改为 Accepted。
+3. **召回在 Main 进程同步执行**：1,000 条实测约 10ms，`memory-retrieval.test.ts` 里 200ms 是防回归上界而不是容量承诺。规模到万级或上界被踩到时，按 Spec §16 回设计评审，不得就地加缓存或悄悄引入向量库绕过。
+4. **真实模型语义未验证**：替身测试只覆盖请求结构、上限、`finishReason`、用量与取消；候选质量、费用与实际失败模式要在 §15.5 第 2、4 项里由光哥用真实模型配置确认。
+5. **只本地提交、未推送**：本工作树与其他 Qoder 会话共享，后续每次提交前必须重跑 `git status` 并逐份核对 diff，追加共享日志前先重读文件末尾。
+
+**下一卡前置**
+
+- WM16 收口的前置就是 §15.5 表格逐项拿到用户证据＋真实模型授权下的语义确认；拿到后 ADR-0026 转 Accepted、WM16 标 done、当日日志收口。
+- 本增量不依赖 CF 未完成的远程 MCP/API 能力，也不得改写 E/CF 任务状态；期间发现的缺陷按 GATE-0（先查 SQLite 现场 → `/tmp/betterwork-dev.log` → 代码）另立缺陷卡，不在 WM16 内顺手扩范围。
+- 若验收通过后再谈推送、打包与发布，那是单独一次授权。

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import {
   type DatePatch,
+  LIST_PAGE_DEFAULT_LIMIT,
   type ListCursor,
   type ListMemoriesRequest,
   listMemoriesRequestSchema,
@@ -536,7 +537,7 @@ export class MemoryRepository {
       ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
       ...(input.limit === undefined ? {} : { limit: input.limit }),
     });
-    const limit = parsed.limit ?? 50;
+    const limit = parsed.limit ?? LIST_PAGE_DEFAULT_LIMIT;
     const { clause, values } = this.scopeAndStatusFilter(parsed);
     const conditions = [clause];
     const parameters = [...values];

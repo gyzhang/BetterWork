@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import {
+  LIST_PAGE_DEFAULT_LIMIT,
   type MemoryFacet,
   type MemoryProvenance,
   type MemoryScope,
@@ -251,6 +252,31 @@ describe('MemoryRepository', () => {
     expect(afterWindow.items.map((record) => record.id)).not.toContain(expiring.id);
     expect(afterWindow.items).toHaveLength(2);
     expect(repository.get(expiring.id)?.status).toBe('confirmed');
+  });
+
+  it('uses the protocol page-size constant as the default limit', () => {
+    const store = openStore();
+    const repository = store.memories;
+    const scope: MemoryScope = {
+      kind: 'workspace',
+      workspaceId: seedWorkspace(store, '默认页大小空间'),
+    };
+    for (let index = 0; index <= LIST_PAGE_DEFAULT_LIMIT; index += 1) {
+      seedMemory(repository, scope, `第 ${index + 1} 条口径`, {
+        createdAt: 1_700_000_000_000 + index * 1_000,
+      });
+    }
+
+    // 默认页大小只认协议常量：常量改动时这里必须跟着动，存储层不允许再写死一个数字。
+    const first = repository.listPage({});
+    expect(first.items).toHaveLength(LIST_PAGE_DEFAULT_LIMIT);
+    const cursor = first.nextCursor;
+    if (!cursor) throw new Error('超出默认页大小时必须给出游标');
+    const second = repository.listPage({ cursor });
+    expect(second.items).toHaveLength(1);
+    expect(second.nextCursor).toBeUndefined();
+    const ids = new Set([...first.items, ...second.items].map((record) => record.id));
+    expect(ids.size).toBe(LIST_PAGE_DEFAULT_LIMIT + 1);
   });
 
   it('keeps a cleared validity date distinct from one that was never set', () => {
