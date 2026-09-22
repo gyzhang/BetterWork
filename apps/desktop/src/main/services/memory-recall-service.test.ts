@@ -18,7 +18,7 @@ import { recallMemoriesForQuery } from './memory-recall-service';
 import { MemoryService } from './memory-service';
 
 /**
- * 召回期的记忆依赖闭包（契约 §5.3、§6.1 过滤顺序，WM04）。
+ * 召回期的记忆依赖闭包与冲突组装配（契约 §5.3、§6.1 过滤顺序，WM04）。
  *
  * 记忆依赖按**精确修订＋哈希**检查并沿链递归展开，因此两处容易走样的地方必须钉住：
  * - 传递失效：链路末端被删除后，直接依赖它的记录和更上游的记录都要落 `dependency-unavailable`，
@@ -26,6 +26,9 @@ import { MemoryService } from './memory-service';
  * - 环必须终止：库里出现相互依赖时按不可用处理，而不是无限递归。
  *   正常写入路径产不出环（新修订只能引用已存在的修订），所以这里用同目录的 SQLite 文件
  *   改写 `provenance_json` 造出对抗状态，不为此在生产代码开后门。
+ *
+ * 冲突组装配同样按 §6.1 的过滤顺序钉住：同议题、有效期重叠且没有裁决的两条口径都不注入并
+ * 置 `conflictReviewRequired`；「两条都保留」之后两条必须作为一组回来，并带上适用条件说明。
  */
 
 const CAPTURED_AT = 1_700_000_000_000;
@@ -75,7 +78,7 @@ const forgeDependencies = (
   }
 };
 
-describe('召回期的记忆依赖闭包', () => {
+describe('召回期的依赖闭包与冲突组装配', () => {
   const stores: AppStore[] = [];
   const directories: string[] = [];
 
@@ -114,6 +117,7 @@ describe('召回期的记忆依赖闭包', () => {
     store: AppStore,
     scope: MemoryScope,
     content: string,
+    topicKey?: string,
   ): Promise<Seeded> => {
     const operationId = randomUUID();
     const result = await service.create({
@@ -122,6 +126,7 @@ describe('召回期的记忆依赖闭包', () => {
       facet: 'fact',
       scope,
       asUserInstruction: true,
+      ...(topicKey === undefined ? {} : { topicKey }),
     });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error.code);
@@ -227,5 +232,62 @@ describe('召回期的记忆依赖闭包', () => {
     expect(dependencyFailures(store, workspaceId)).toEqual(
       expect.arrayContaining([leftRevised.record.revisionId, right.record.revisionId]),
     );
+  });
+
+  it('同议题两条未裁决的口径互相顶住，谁都不注入', async () => {
+    const { store, service, scope, workspaceId } = await setup();
+
+    const payment = await confirm(
+      service,
+      store,
+      scope,
+      '收入按回款金额统计，不含签约金额。',
+      '收入口径',
+    );
+    const contract = await confirm(service, store, scope, '收入按签约金额统计。', '收入口径');
+
+    const blocked = outcomeOf(store, workspaceId);
+    const selected = blocked.selectedItems.map((item) => item.revisionId);
+    expect(selected).not.toContain(payment.record.revisionId);
+    expect(selected).not.toContain(contract.record.revisionId);
+    expect(
+      blocked.decisionSummary.exclusions
+        .find((entry) => entry.reason === 'conflict-unresolved')
+        ?.identities.map((identity) => identity.revisionId),
+    ).toEqual(expect.arrayContaining([payment.record.revisionId, contract.record.revisionId]));
+    expect(blocked.decisionSummary.conflictReviewRequired).toBe(true);
+  });
+
+  it('两条都保留后按一个冲突组注入，并带上适用条件', async () => {
+    const { store, service, scope, workspaceId } = await setup();
+
+    const payment = await confirm(
+      service,
+      store,
+      scope,
+      '收入按回款金额统计，不含签约金额。',
+      '收入口径',
+    );
+    const contract = await confirm(service, store, scope, '收入按签约金额统计。', '收入口径');
+    const resolved = await service.resolveConflict({
+      operationId: randomUUID(),
+      left: { id: payment.record.id, expectedRevision: payment.record.revision },
+      right: { id: contract.record.id, expectedRevision: contract.record.revision },
+      decision: 'keep-both',
+      applicabilityNote: '回款口径用于对外披露，签约口径用于内部销售复盘。',
+    });
+    expect(resolved.ok).toBe(true);
+
+    const kept = outcomeOf(store, workspaceId);
+    const byRevision = new Map(
+      kept.selectedItems.map((item) => [item.revisionId, item.reason] as const),
+    );
+    expect([...byRevision.keys()]).toEqual(
+      expect.arrayContaining([payment.record.revisionId, contract.record.revisionId]),
+    );
+    expect(byRevision.get(payment.record.revisionId)).toBe('conflict-pair');
+    expect(byRevision.get(contract.record.revisionId)).toBe('conflict-pair');
+    expect(kept.memoryBlock).toContain('回款口径用于对外披露，签约口径用于内部销售复盘。');
+    expect(kept.decisionSummary.conflictReviewRequired).toBe(false);
   });
 });

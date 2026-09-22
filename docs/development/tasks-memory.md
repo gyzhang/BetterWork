@@ -356,3 +356,11 @@ WM15 期间发现并修正的两处测试自身缺陷（不是产品缺陷）：
 环状态同样不能用生产 API 造：新修订只能引用已存在的修订，所以测试改写 `memory_records.provenance_json` 造出两条互相引用的当前修订；作业阶段的用例必须走 `seedQueuedJob` 直连登记，因为入队路径自身的非阻塞排空会在同一次 claim 内跑完依赖复证，服务层入队来不及在中间改库。契约 §5.3 同步写明两处落点。
 
 证据：`memory-extraction-service.test.ts` 27 passed（新增 2 条，含「不调用模型」「不建候选」两条负断言）；`npm run verify` 退出码 0（110 个测试文件全绿）。
+
+### 15.8 §13.1 测试矩阵逐条复核（2026-09-23 03:08）
+
+16 项按当前工作树逐条取证（每项至少回读到具体 `it(...)` 与断言，不看用例名推断）：协议非法字段/ID 归属、CAS 与幂等、状态终态、migration 回滚/外键、有效期边界/clear、来源移除但修订残留、依赖递归/循环、中文与非 BMP 预算、实际请求与重放、opt-in 0 调用、无模型/截断/EOF/工具调用、取消/重启/迟到、投影 DB 成功、UI 过期响应、参考精确版本/新任务不带旧授权——共 15 项此前已有自动化证据。
+
+唯一缺口是第 9 项「conflict 组」：治理侧（裁决行、回执、精确修订绑定、keep-both 必须写适用条件、界面表单、预算组原子性）都有测试，但**召回期的冲突装配**没有——`buildConflictMap` → `conflict-unresolved` 账本与 keep-both 同组注入这条路径此前只在 `memory-retrieval.test.ts` 里以手工构造的分组喂给预算层。补齐 `memory-recall-service.test.ts` 两条：同议题、有效期重叠、无裁决的两条口径都不注入且 `conflictReviewRequired` 为真；经 `resolveConflict('keep-both')` 后两条以 `conflict-pair` 一起回来、记忆块带适用条件说明、`conflictReviewRequired` 归零。该测试文件同时承载 15.6 的依赖闭包两条，共 4 条用例。
+
+矩阵 16 项至此全部有自动化证据；仍缺的只有 §15.5 的人工验收与真实模型语义确认。
