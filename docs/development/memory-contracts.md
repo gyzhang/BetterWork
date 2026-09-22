@@ -133,7 +133,7 @@ Main 构造 `MemoryQueryContext`：`workspaceId`、`expertId?`、`taskId`、精�
 
 以下情况使依赖历史不可重放：记忆被删除/排除/替代/过期/改修订/缩 scope、来源不可用、依赖材料移除/换版本/哈希不符；相关记忆本次无命中或预算落选不使历史失效。纯增加材料也不应无故截断。
 
-从最近历史向前选连续安全后缀，遇首个不安全轮次停止，不跨过它拼接更早对话。上限 8 个完整问答对、12,000 code points；容不下完整一对就停止。记录实际重放 `runId`/`finalEventId`/`promptHash` 及依赖；不让更近回答隐藏它继承的已撤销信息。
+从最近历史向前选连续安全后缀，遇首个不安全轮次停止，不跨过它拼接更早对话。上限 8 个完整问答对、12,000 code points；容不下完整一对就停止。记录实际重放 `runId`/`finalEventId`/`promptHash` 及依赖；不让更近回答隐藏它继承的已撤销信息。落点：`run-history-policy.ts` 的 `HISTORY_LIMITS` 逐项取协议常量 `MEMORY_REPLAY_PAIR_LIMIT`／`MEMORY_REPLAY_CODE_POINT_BUDGET`，服务层不再自写 8 与 12,000；边界用例见 `run-history-policy.test.ts`「caps at eight complete pairs」与「stops instead of truncating a pair to fit the code point budget」。
 
 `contextSegmentId` 保留为展示分段，不作为唯一授权闸门。历史 UI 保留，模型请求不带不安全历史；没有模型二次摘要绕回被删除内容。理由码：`memory-revised`、`memory-excluded`、`memory-inactive`、`source-unavailable`、`material-removed-or-replaced`、`legacy-provenance-unknown`、`history-budget`。
 
@@ -186,7 +186,7 @@ Main 的 Provider 包装器在首个实际 `ModelRequest` 装配后计算规范�
 
 来源键＝触发类型＋真实 source ID＋内容快照 hash，不含模型版本，防止改模型绕过去重。Run 成功提交和作业登记、人工 feedback 提交和作业登记尽量在同应用库事务完成；无网络在事务内。排队失败不能把已成功主 Run 改失败；记录安全诊断，下次不自动扫描补单。
 
-启动时将遗留 `queued`/`running` 收口 `interrupted`，不自动触网。关闭设置取消本空间自动作业；单次手动重试有独立同意，不暗开全局开关。取消后先落库终态再中止请求；成功落候选前检查 job revision/attempt/status、来源有效性、自动模式 `consentRevision`。迟到结果不能落库。
+启动时将遗留 `queued`/`running` 收口 `interrupted`，不自动触网。关闭设置取消本空间自动作业；单次手动重试有独立同意，不暗开全局开关。取消后先落库终态再中止请求；成功落候选前检查 job revision/attempt/status、来源有效性、自动模式 `consentRevision`。迟到结果不能落库。同意版本也只有一个定义：协议 `MEMORY_SUGGESTION_CONSENT_VERSION`，主进程门槛（`memory-extraction-service.ts`）与界面文案（`renderer/src/lib/memory-suggestions.ts`）都导入它；此前两处各自写死 `1`，改版本会静默分裂成「界面说 v1、门槛拒 v2」。
 
 候选写入、去重统计、作业成功终态在同事务提交。失败只保存安全错误码与摘要；主任务终态不受影响。UI 主动刷新和窗口重获焦点查询状态；仅面板可见且有活动作业时按 1 秒轮询，隐藏即停并清理，无自造成功提示计时器。落点：轮询与重获焦点的重查都在 `renderer/src/hooks/use-memory-suggestions.ts`——`window` 的 `focus` 监听补发一次全量查询（设置、作业、候选），面板不可见或已卸载即摘除监听；用例见 `use-memory-suggestions.test.ts`。
 
@@ -214,7 +214,7 @@ Main 的 Provider 包装器在首个实际 `ModelRequest` 装配后计算规范�
 | memory_extraction_jobs | id PK、source_key UNIQUE、workspace_id、task_id、run_id?、checkpoint_id?、source_snapshot_json、source_version_hash、material_dependencies_json、memory_dependencies_json、model_profile_id?、model_snapshot_json?、trigger（automatic/manual-retry）、consent_revision?、status、revision、attempt、input_code_points、output_code_points、usage_json?、result_json?、error_code?、created_at、updated_at、started_at?、finished_at?。 |
 | workspace_artifact_references | id PK、workspace_id、artifact_version_id、content_hash、label?、status（active/removed）、revision、selected_at、updated_at；workspace_id＋artifact_version_id UNIQUE，同空间 active≤20。 |
 
-`run_memory_contexts` 中：`selectedItems`＝memoryId/revisionId/hash/order/score/reason；`replay`＝runId/finalEventId/promptHash 和边界理由；`decisionSummary`＝各原因计数和合法范围内最多 50 个身份/原因，不复制被排除正文；`policySnapshot` 保存算法版本及全部预算；依赖 union 保存精确引用，不得只存摘要文本。
+`run_memory_contexts` 中：`selectedItems`＝memoryId/revisionId/hash/order/score/reason；`replay`＝runId/finalEventId/promptHash 和边界理由；`decisionSummary`＝各原因计数和合法范围内最多 50 个身份/原因，不复制被排除正文；`policySnapshot` 保存算法版本及全部预算；依赖 union 保存精确引用，不得只存摘要文本。「最多 50 个身份」只有一个数字：`memory-recall-service.ts` 直接 `slice(0, MEMORY_DECISION_SUMMARY_IDENTITY_LIMIT)`，与协议里 `memoryDecisionSummary` 的 `.max(...)` 读同一常量。
 
 索引：memory 最新修订及 scope 保留，补 scope＋normalized_hash、topic_key；job(status,created_at)；reference(workspace_id,status,selected_at)；精确修订/Run 外键查询索引。
 

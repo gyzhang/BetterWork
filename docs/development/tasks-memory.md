@@ -484,3 +484,20 @@ Spec §9 与契约 §9 都写着 ListPage「`limit` 默认 50，上限 100」，
 ### 15.18 错误码清单与真实生产者对齐（2026-09-23 05:07）
 
 把 §15.17 的扫描从状态枚举扩到错误码：协议里 41 个记忆错误码逐值找非测试源码里的写入点，39 个有生产者，两个没有——`MATERIAL_NOT_ALLOWED` 与 `MATERIAL_HASH_MISMATCH`。它们的语义其实已经实现，只是用了别的词汇：召回阶段的材料依赖不满足是排除原因 `dependency-unavailable`，写入阶段的摘录与来源正文不一致是 `SOURCE_MISMATCH`。因此这不是缺功能，而是设计词汇比实现多出一档。本轮只在契约 §错误码清单下记录落点，不为了凑码新增失败路径，也不删清单条目，留给光哥判定「拆码」还是「收敛词汇」。
+
+### 15.19 数字口径全量扫描与三处双源收口（2026-09-23 05:14）
+
+§15.17 扫的是枚举值，§15.18 扫的是错误码，本轮把同一套动作换成契约里的数字：协议导出的 51 个数值型记忆／简报／分页常量逐个统计「非测试生产源码引用数」，再反向检查契约正文书写的每个上限（问答对 8、12,000 码点、16 条／6,000 码点、偏好池 2 条／600 码点、每区 10 条、参考区 5 个、排除身份 50、queued 20、并发 1、30 秒、输出 2,048 token、候选 3、证据 1–3、片段 2、同意版本）。结论分三层：
+
+1. **契约数字全部有强制点**，没有一个只活在文档里。简报的两个上限直接 `slice(0, WORKSPACE_BRIEF_*_ITEM_LIMIT)`，召回预算整体收在 `RECALL_BUDGET`，提炼装配与严格解析共用 `EXTRACTION_LIMITS`，`memory:run-context` 的落库校验用 `MEMORY_RECALL_TOTAL_ITEM_LIMIT`／`MEMORY_REPLAY_PAIR_LIMIT` 组数组 Schema。
+2. **§15.10 之后不再有孤儿常量**：那 9 个当时的孤儿已接进 `memory-retrieval.ts`／`memory-extraction-prompt.ts`；本轮剩下的都是「协议里被 Schema 用掉、服务层再抄一份字面量」的双源，而不是无人引用。
+3. **真正的缺陷是三处双份数字**，值当前相等，所以行为不变，但改一处不会改另一处：
+   - `run-history-policy.ts` 的 `HISTORY_LIMITS` 自写 `maxPairs: 8`／`maxCodePoints: 12_000`，而协议早已导出 `MEMORY_REPLAY_PAIR_LIMIT`／`MEMORY_REPLAY_CODE_POINT_BUDGET`。
+   - `memory-recall-service.ts` 另立 `export const MEMORY_DECISION_IDENTITY_DISPLAY_LIMIT = 50`，与协议 `MEMORY_DECISION_SUMMARY_IDENTITY_LIMIT = 50` 各说一套；契约 §8.2 的「最多 50 个身份」因此有两个真相源。
+   - 同意版本跨进程写了两遍：主进程 `MEMORY_SUGGESTION_CONSENT_VERSION = 1`（门槛）与界面 `MEMORY_CONSENT_VERSION = 1`（文案与请求）。界面侧注释甚至写明「协议未导出该常量」。**这是三处里唯一会真正咬人的**：门槛只接受等于自身常量的版本，一旦升到 v2 而界面副本没动，开关会永久返回 `CONSENT_REQUIRED`，且用户看到的仍是「同意版本 v1」——静默不可用，无报错可循。
+
+修法统一为「把真相源搬进协议，两侧导入」：协议新增 `MEMORY_SUGGESTION_CONSENT_VERSION = 1`；`memory-extraction-service.ts` 删除本地定义改为导入（两个测试的导入也跟着改到协议）；`renderer/src/lib/memory-suggestions.ts` 保留 `MEMORY_CONSENT_VERSION` 这个名字但让它等于协议常量（与同文件里 `MEMORY_CANDIDATE_PER_JOB_LIMIT = MEMORY_EXTRACTION_MAX_CANDIDATES` 是同一个写法）；`HISTORY_LIMITS` 与排除身份切片直接引用协议常量。契约 §6.3、§7.3、§8.2 各补一句落点。
+
+值得记下的对照：§15.9 修 `LIST_PAGE_DEFAULT_LIMIT` 时说的是「默认值没人读」，本轮三处是「两个值各读一份」——同一句「数字只有一个真相源」的两半，只有把它们都扫一遍才算收口。测试断言继续用字面量（如 `maxItems === 16`、5,000×2 撑破 12,000），这样契约数字变了会红在测试上而不是悄悄跟着常量走。
+
+验证：`npm run typecheck` 通过；`npm run verify` 退出码 0（lint + format:check + typecheck + test：Test Files 112 passed / Tests 1006 passed + build）。定向用例：`run-history-policy.test.ts` 17、`memory-recall-service.test.ts` 4、`memory-extraction-service.test.ts` 28、`work-centered-memory.integration.test.ts` 10、`use-memory-suggestions.test.ts` 9、`memory-suggestions.test.ts` 12。本轮无表结构变化，因此无迁移。
