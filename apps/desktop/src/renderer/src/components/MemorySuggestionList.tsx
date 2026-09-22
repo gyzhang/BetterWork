@@ -141,7 +141,7 @@ function SuggestionSettings({
       : `同意版本 v${suggestions.settings.consentVersion}`;
 
   return (
-    <div className="suggestion-settings">
+    <div className="suggestion-consent">
       <div className="suggestion-setting-row">
         <div>
           <strong>任务完成后自动提炼建议</strong>

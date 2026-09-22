@@ -1158,6 +1158,355 @@ p {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 上下文面板里的记忆、简报与建议（docs/10 §8.3、§11.5.1）：
+   小节靠分隔线分级，条目卡用 --surface，不叠第二层背景。 */
+.context-section {
+  display: grid;
+  gap: 8px;
+  padding: 13px 14px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.context-section .selected-materials-heading > button {
+  min-height: 26px;
+  padding: 3px 8px;
+  color: var(--brand);
+  background: var(--brand-soft);
+  border: 0;
+  border-radius: 5px;
+  font-size: 12px;
+}
+.context-section .selected-materials-heading > button:hover {
+  background: var(--selection);
+}
+.context-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.context-note {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.context-phase {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.context-list {
+  display: grid;
+  gap: 6px;
+}
+.context-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 9px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.context-row > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.context-row strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.context-row small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.context-row button {
+  flex: none;
+  min-height: 26px;
+  padding: 3px 8px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.context-row button:hover {
+  color: var(--text-primary);
+  background: var(--surface-raised);
+}
+/* 本任务已排除＝范围预览里降级显示，但不隐藏：用户要能把它恢复回来。 */
+.context-row.excluded {
+  background: var(--surface-raised);
+  border-color: var(--border-subtle);
+  opacity: 0.66;
+}
+.context-details {
+  display: grid;
+  gap: 6px;
+}
+.context-details summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+.context-details > small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.context-exclusion-list {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  list-style: none;
+}
+.context-exclusion-list small {
+  display: block;
+  color: var(--text-muted);
+}
+.context-replay-list {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  list-style: none;
+}
+.context-placeholder {
+  display: grid;
+  gap: 6px;
+  padding: 26px 18px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.7;
+  text-align: center;
+}
+.context-placeholder strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+/* 工作空间简报：只读投影，每条都要看得出可跳转。 */
+.brief-panel {
+  display: grid;
+  gap: 14px;
+  padding: 13px 14px 16px;
+}
+.brief-note {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.brief-section {
+  display: grid;
+  gap: 7px;
+}
+.brief-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.brief-section-head strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.brief-section-head small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.brief-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.brief-list button {
+  display: grid;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 8px;
+  padding: 8px 10px;
+  color: var(--text-primary);
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.brief-list button:hover {
+  background: var(--surface-raised);
+  border-color: var(--brand);
+}
+.brief-item-title {
+  grid-column: 1;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.brief-list button small {
+  grid-column: 1;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.brief-list button svg {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: var(--text-muted);
+}
+.brief-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.brief-truncated {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* 经验建议：开关与作业行只在记忆页出现，候选卡片两处共用。 */
+.suggestion-consent {
+  display: grid;
+  gap: 8px;
+  padding: 11px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+}
+.suggestion-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.suggestion-setting-row > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.suggestion-setting-row strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.suggestion-setting-row small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.suggestion-polling {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--info);
+  font-size: 12px;
+}
+.suggestion-job-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.suggestion-job-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  background: var(--surface-raised);
+  border-radius: 7px;
+}
+.suggestion-job-row > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.suggestion-job-row strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.suggestion-job-row small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.suggestion-job-row button {
+  flex: none;
+  min-height: 26px;
+  padding: 3px 8px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.suggestion-job-row button:hover {
+  color: var(--text-primary);
+  background: var(--surface);
+}
+.suggestion-list {
+  display: grid;
+  gap: 9px;
+}
+.suggestion-card {
+  display: grid;
+  gap: 8px;
+  padding: 11px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+.suggestion-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.suggestion-body {
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.suggestion-facts {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  list-style: none;
+}
+.suggestion-facts .warn {
+  color: var(--warning);
+}
+.suggestion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.memory-kind,
+.memory-state {
+  padding: 2px 6px;
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+  border-radius: 5px;
+  font-size: 12px;
+}
 .empty-context {
   display: flex;
   min-height: 220px;
@@ -2229,6 +2578,8 @@ p {
   background: var(--surface-raised);
 }
 .memory-capture {
+  display: grid;
+  gap: 8px;
   margin: 10px 0 16px 32px;
   padding: 12px;
   background: var(--surface-raised);
@@ -2266,6 +2617,344 @@ p {
   border: 1px solid var(--border);
   border-radius: 5px;
   font-size: 12px;
+}
+/* 记忆治理页（产品设计 §3.1–§3.4、契约 §9/§10）：
+   提示带只报事实不裁决，冲突并列呈现必须两条同宽。 */
+.memory-settings {
+  display: grid;
+  gap: 12px;
+}
+.memory-projection {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.memory-projection span {
+  flex: 1;
+}
+.memory-warnings {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  list-style: none;
+}
+.memory-pending-governance {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  color: var(--info);
+  background: var(--info-soft);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.memory-group {
+  margin-top: 2px;
+}
+.memory-group-heading {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 9px;
+}
+.memory-group-heading strong {
+  font-size: 14px;
+}
+.memory-group-heading small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.memory-group-hint {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.memory-status-badge {
+  padding: 2px 6px;
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+  border-radius: 5px;
+  font-size: 12px;
+}
+/* 状态只在行首做轻度区分：待确认保留强调，派生终态降饱和。 */
+.memory-row.memory-candidate {
+  box-shadow: inset 2px 0 0 var(--brand);
+}
+.memory-row.memory-expired,
+.memory-row.memory-rejected {
+  opacity: 0.78;
+}
+.memory-row.memory-superseded,
+.memory-row.memory-deleted {
+  opacity: 0.6;
+}
+.memory-source-available {
+  color: var(--success);
+}
+.memory-source-unavailable {
+  color: var(--danger);
+}
+.memory-source-review-required {
+  color: var(--warning);
+}
+.memory-dependencies {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.memory-duplicate-hint {
+  display: block;
+  margin-top: 5px;
+  color: var(--warning);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.memory-terminal-note {
+  display: grid;
+  align-content: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.memory-conflict {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 11px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+.memory-conflict > strong {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.memory-conflict.conflict-unresolved {
+  background: var(--warning-soft);
+  border-color: var(--warning);
+}
+.memory-conflict.conflict-unresolved > strong {
+  color: var(--warning);
+}
+.memory-conflict.conflict-keep-both {
+  border-color: var(--info);
+}
+.memory-conflict-bodies {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px;
+}
+.memory-conflict-bodies > div {
+  display: grid;
+  gap: 4px;
+  padding: 8px 9px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+}
+.memory-conflict-bodies > div > span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.memory-conflict-bodies p {
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.memory-conflict-bodies small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.memory-conflict-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 7px;
+}
+.memory-conflict-actions label {
+  display: grid;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.memory-conflict-actions select,
+.memory-conflict-actions input {
+  min-height: 30px;
+  padding: 5px 7px;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.memory-conflict-actions input {
+  flex: 1;
+  min-width: 200px;
+}
+.memory-conflict-actions button {
+  min-height: 30px;
+  padding: 5px 9px;
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.memory-conflict-actions button:hover {
+  color: var(--text-primary);
+  background: var(--surface-raised);
+}
+.memory-conflict-hint {
+  width: 100%;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.memory-history-group {
+  margin-top: 2px;
+}
+.memory-history-group summary {
+  padding: 10px 4px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+.memory-history-group[open] summary {
+  color: var(--text-primary);
+}
+.memory-editor-host {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.memory-editor-host h3 {
+  font-size: 14px;
+}
+.memory-editor {
+  display: grid;
+  gap: 12px;
+}
+.memory-editor-field {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.memory-editor textarea,
+.memory-editor input,
+.memory-editor select {
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 9px;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.memory-editor textarea {
+  resize: vertical;
+}
+.memory-editor input[type='checkbox'] {
+  width: auto;
+  min-height: 0;
+  padding: 0;
+}
+.memory-editor small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.memory-editor small.over {
+  color: var(--danger);
+}
+.memory-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+.memory-editor-grid label {
+  display: grid;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.memory-editor-diff {
+  display: grid;
+  gap: 7px;
+  padding: 11px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+}
+.memory-editor-diff > strong {
+  font-size: 12px;
+}
+.memory-editor-diff-row {
+  display: grid;
+  gap: 3px;
+}
+.memory-editor-diff-row > span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.memory-editor-diff-row p {
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.memory-editor-diff > small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.memory-editor-note {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.memory-editor-declaration {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.memory-editor-problems {
+  display: grid;
+  gap: 4px;
+  padding-left: 11px;
+  list-style: none;
+}
+.memory-editor-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.memory-capture-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
 }
 .appearance-settings h3 {
   margin: 28px 0 11px;
