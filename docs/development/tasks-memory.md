@@ -339,3 +339,12 @@ WM15 期间发现并修正的两处测试自身缺陷（不是产品缺陷）：
 | WM-M3 简报与引用 | 连续两期实际工作：引用参考版本、查看空间简报 | 待光哥验收 |
 | WM-M4 端到端 | 用真实模型配置（用户授权）与合成材料跑通两期交付 | 待光哥验收 |
 | 提交与发布 | 本轮只做本地提交，未推送、未打包、未发布 | 需单独授权 |
+
+### 15.6 收口复核补齐（2026-09-23 02:53）
+
+15.4 之后又按 Spec 原文逐条复核，另有两项只有实现、没有自动化证据，本轮补齐：
+
+- **Spec §16 规模压测**：`memory-retrieval.test.ts` 新增 `memory-recall-v1 scale` 用例，用 1,000 条有效记忆（工作空间与专家工作空间两种范围、40 个议题、中英混合文案）跑确定性排序，断言条数、最高分范围、两次排序结果完全一致，并设 200ms 主线程上界防回归。本机（darwin/arm64，Node 24）实测约 10ms，未超出可接受的主线程开销，因此按 Spec 要求不返回设计评审，也不引入向量库或长期后台扫描。
+- **§13.1「依赖递归/循环」**：新增 `memory-recall-service.test.ts`（此前 `memory-recall-service.ts` 没有任何测试文件）。两条用例都走 `MemoryService` 真实写入路径产出 verified＋来源可定位的已确认记忆，再用生产构建器 `buildDerivedProvenance` 把依赖挂到已有修订上：一条证明链路末端被删除后，中间与末端都落 `dependency-unavailable`——只看一层依赖会把已经站不住的末端口径放回来；一条把两条**当前**修订改成互相引用，证明递归在环处终止且环内记录都不注入。正常写入路径产不出环（新修订只能引用已存在的修订），所以环状态由测试自己打开同目录 SQLite 文件改写 `provenance_json` 得到，没有在生产代码里开测试后门。
+
+证据：`npm test -- apps/desktop/src/main/services/memory-retrieval.test.ts apps/desktop/src/main/services/memory-recall-service.test.ts` → 21 passed；`npx eslint` 对两份测试文件无告警；`npm run typecheck` 退出码 0。
