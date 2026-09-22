@@ -22,6 +22,7 @@ import {
   memoryEditPatchSchema,
   memoryErrorCodeSchema,
   memoryGovernanceActionSchema,
+  memoryOperationRecordSchema,
   memoryProvenanceSchema,
   memoryRecordSchema,
   memorySourceRefSchema,
@@ -84,6 +85,25 @@ describe('run protocol', () => {
     });
     expect(created.facet).toBe('constraint');
     expect(created.topicKey).toBeUndefined();
+    // §5.3：重新表述只多带一条审计线索，不接受凭空字符串。
+    expect(
+      createMemoryRequestSchema.parse({ ...created, fromMemoryRevisionId: 'rev-1' })
+        .fromMemoryRevisionId,
+    ).toBe('rev-1');
+    expect(
+      createMemoryRequestSchema.safeParse({ ...created, fromMemoryRevisionId: '' }).success,
+    ).toBe(false);
+    expect(
+      memoryOperationRecordSchema.safeParse({
+        operationId: '11111111-1111-4111-8111-111111111111',
+        operationKind: 'create',
+        requestHash: 'a'.repeat(64),
+        effect: 'created',
+        committedRevisionIds: ['rev-2'],
+        fromMemoryRevisionId: 'rev-1',
+        committedAt: 1,
+      }).success,
+    ).toBe(true);
     expect(() =>
       createMemoryRequestSchema.parse({
         operationId: 'not-a-uuid',

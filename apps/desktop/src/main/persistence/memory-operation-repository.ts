@@ -45,6 +45,8 @@ export interface MemoryOperationInput {
   effect: MemoryWriteEffect;
   committedRevisionIds: readonly string[];
   governanceAction?: MemoryGovernanceAction;
+  /** §5.3：自主口径重新保存的审计来源修订。 */
+  fromMemoryRevisionId?: string;
   committedAt?: number;
 }
 
@@ -82,6 +84,7 @@ interface OperationResult {
   effect: MemoryWriteEffect;
   committedRevisionIds: string[];
   governanceAction?: MemoryGovernanceAction;
+  fromMemoryRevisionId?: string;
 }
 
 /** §8.2：左右按修订身份规范排序，同一对冲突只有一种落库形状。 */
@@ -165,6 +168,9 @@ export class MemoryOperationRepository {
       effect: input.effect,
       committedRevisionIds: [...input.committedRevisionIds],
       ...(input.governanceAction === undefined ? {} : { governanceAction: input.governanceAction }),
+      ...(input.fromMemoryRevisionId === undefined
+        ? {}
+        : { fromMemoryRevisionId: input.fromMemoryRevisionId }),
       committedAt: input.committedAt ?? this.clock(),
     });
     const result: OperationResult = {
@@ -173,6 +179,9 @@ export class MemoryOperationRepository {
       ...(record.governanceAction === undefined
         ? {}
         : { governanceAction: record.governanceAction }),
+      ...(record.fromMemoryRevisionId === undefined
+        ? {}
+        : { fromMemoryRevisionId: record.fromMemoryRevisionId }),
     };
     this.db
       .prepare(

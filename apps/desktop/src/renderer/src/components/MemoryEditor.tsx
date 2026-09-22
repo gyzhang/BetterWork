@@ -36,8 +36,7 @@ import {
  * 提交走哪条命令由治理动作表决定（契约 §5.4）：候选确认走 `set-status`＋`confirmPatch`，
  * 已确认记录的编辑走 `update`，过期记录必须 `reconfirm` 并同时改有效期。
  *
- * 契约缺口：§5.3 要求自主口径重新保存在回执里保留 `fromMemoryRevisionId` 供审计，
- * 但 `memory:create` 的输入没有承载它的字段，Renderer 无法提交；已在交接里上报。
+ * §5.3 的审计线索已打通：重新表述提交 `fromMemoryRevisionId`，Main 校验后原样写进回执。
  */
 
 export const memoryFacetOrder: readonly MemoryFacet[] = [
@@ -255,6 +254,8 @@ export function MemoryEditor({
       ...(restating || sourceSelector === undefined ? {} : { sourceSelector }),
       asUserInstruction: globalTarget || restating,
       ...(globalTarget && genericDeclaration ? { genericDeclaration: true } : {}),
+      // §5.3：重新表述留下的审计线索只指回被重述的那条修订，不声明任何资料依赖已核实。
+      ...(restateFrom === undefined ? {} : { fromMemoryRevisionId: restateFrom.revisionId }),
     };
     let submission: MemoryEditorSubmission;
     if (memory && target === 'update') {

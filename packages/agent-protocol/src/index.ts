@@ -1064,6 +1064,8 @@ export const createMemoryRequestSchema = z
     sourceSelector: memorySourceSelectorSchema.optional(),
     asUserInstruction: z.boolean(),
     genericDeclaration: z.boolean().optional(),
+    /** §5.3：「作为我的工作口径重新保存」指向被重新表述的精确修订，只用于审计，不解除资料依赖。 */
+    fromMemoryRevisionId: z.string().min(1).optional(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -1343,6 +1345,8 @@ export const memoryOperationRecordSchema = z
     effect: memoryWriteEffectSchema,
     governanceAction: memoryGovernanceActionSchema.optional(),
     committedRevisionIds: z.array(z.string().min(1)).max(MEMORY_COMMITTED_REVISION_MAX),
+    /** §5.3：自主口径重新保存留下被重新表述的修订，供审计回溯；除此之外不出现在回执里。 */
+    fromMemoryRevisionId: z.string().min(1).optional(),
     committedAt: z.number().int().nonnegative(),
   })
   .strict();

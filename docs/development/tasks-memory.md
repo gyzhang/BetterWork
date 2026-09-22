@@ -322,9 +322,13 @@ WM15 期间发现并修正的两处测试自身缺陷（不是产品缺陷）：
 - 契约 §11 拟新增的 `run-memory-audit.ts` **未单独建文件**：审计事实由 `persistence/run-memory-context-repository.ts`、`services/run-history-policy.ts`、`services/memory-dispatch-gate.ts` 与 `services/memory-recall-service.ts` 承载。命名偏离在此记录，不新增空模块凑结构。
 - §8.3 `HISTORY_REFERENCE_BLOCKS_DELETE` 已实现于 `services/workspace-reference-service.ts` 并有测试；不存在「无删除入口」的缺口。
 
-### 15.4 上报的契约缺口（不在 WM16 扩范围解决）
+### 15.4 曾上报的契约缺口（2026-09-23 02:24 已补齐）
 
-`memory:create` 输入没有承载 §5.3 要求的 `fromMemoryRevisionId`，而回执 `MemoryWriteReceipt` 有该可选字段：「作为我的工作口径重新保存」提交时无法带上审计链，Renderer 只能走 `sourceSelector`。已在 `components/MemoryEditor.tsx` 头部注释记录，需在协议卡单独补齐（新增字段 → 走 ADR/契约变更，不由验收卡顺手实现）。
+原缺口：`memory:create` 输入没有承载 §5.3 要求的 `fromMemoryRevisionId`，而回执 `MemoryWriteReceipt` 有该可选字段，「作为我的工作口径重新保存」提交时带不上审计链。
+
+补齐方式（不新增迁移、不新增错误码）：`createMemoryRequestSchema` 与 `memoryOperationRecordSchema` 各加一个可选字段；`MemoryService.create` 先用 `checkRestatementLink` 校验「只有人工口径可以声明来源修订」与「该修订必须真实存在」，再经 `commitReceipt` 写进 `memory_operations.result_json`，由 `buildReceipt` 回显，因此幂等重放返回同一条线索。`MemoryEditor` 的重新表述路径提交 `restateFrom.revisionId`，仍不携带 `sourceSelector`。契约 §5.3 与 §9.2 同步改口径。
+
+证据：`packages/agent-protocol/src/index.test.ts`（字段可用且拒绝空串、操作记录可携带）、`memory-service.test.ts` 两条新用例（回执与重放都带线索、失败路径返回 `NOT_FOUND`/`SOURCE_MISMATCH`）、新增 `components/MemoryEditor.test.tsx` 两条（重新表述提交精确修订、原样复制时不提交）。
 
 ### 15.5 人工待验（缺证据即为待验，不得代填）
 

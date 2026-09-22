@@ -249,6 +249,9 @@ export class MemoryService {
           );
         }
       }
+      const originRevision = this.checkRestatementLink(request);
+      if (!originRevision.ok) return originRevision;
+
       const capturedAt = Date.now();
       const originWorkspaceId = originWorkspaceOf(request.scope);
       const provenance = this.buildCreateProvenance(request, capturedAt, originWorkspaceId);
@@ -261,6 +264,9 @@ export class MemoryService {
         requestHash,
         effect: outcome.effect,
         committedRevisionIds: [outcome.record.revisionId],
+        ...(request.fromMemoryRevisionId === undefined
+          ? {}
+          : { fromMemoryRevisionId: request.fromMemoryRevisionId }),
       });
     } catch (error) {
       return mapDomainError(error);
@@ -541,6 +547,7 @@ export class MemoryService {
     effect: MemoryWriteEffect;
     committedRevisionIds: readonly string[];
     governanceAction?: MemoryGovernanceAction;
+    fromMemoryRevisionId?: string;
   }): Promise<Result<MemoryWriteReceipt>> {
     this.store.memoryOperations.append({
       operationId: input.operationId,
@@ -549,6 +556,9 @@ export class MemoryService {
       effect: input.effect,
       committedRevisionIds: input.committedRevisionIds,
       ...(input.governanceAction === undefined ? {} : { governanceAction: input.governanceAction }),
+      ...(input.fromMemoryRevisionId === undefined
+        ? {}
+        : { fromMemoryRevisionId: input.fromMemoryRevisionId }),
     });
     const projectionState = await this.requestProjectionRebuild();
     return this.receipt(
@@ -562,6 +572,9 @@ export class MemoryService {
         ...(input.governanceAction === undefined
           ? {}
           : { governanceAction: input.governanceAction }),
+        ...(input.fromMemoryRevisionId === undefined
+          ? {}
+          : { fromMemoryRevisionId: input.fromMemoryRevisionId }),
       },
       projectionState,
     );
@@ -588,6 +601,9 @@ export class MemoryService {
       effect: operation.effect,
       committedRevisionIds: [...operation.committedRevisionIds],
       projectionState,
+      ...(operation.fromMemoryRevisionId === undefined
+        ? {}
+        : { fromMemoryRevisionId: operation.fromMemoryRevisionId }),
       ...current,
     });
   }
@@ -611,6 +627,25 @@ export class MemoryService {
   private checkRevision(record: MemoryRecord, expectedRevision: number): DomainFailure | undefined {
     if (record.revision === expectedRevision) return undefined;
     return failResult('REVISION_CONFLICT', '记忆已被其他操作更新，请重新加载。', record.revision);
+  }
+
+  /**
+   * §5.3：自主口径重新保存只留一条审计线索——新记忆仍是人工来源、空模型依赖，
+   * 但回执要能指回被重新表述的那条修订，所以这里只校验请求形状与修订确实存在。
+   */
+  private checkRestatementLink(request: CreateMemoryRequest): { ok: true } | DomainFailure {
+    const revisionId = request.fromMemoryRevisionId;
+    if (revisionId === undefined) return { ok: true };
+    if (!request.asUserInstruction) {
+      return failResult(
+        'SOURCE_MISMATCH',
+        '只有「作为我的工作口径重新保存」可以声明来源记忆，请补齐来源选择器或改用人工口径。',
+      );
+    }
+    if (!this.store.memories.getRevision(revisionId)) {
+      return failResult('NOT_FOUND', '来源记忆修订不存在，无法作为重新表述的审计线索。');
+    }
+    return { ok: true };
   }
 
   private buildCreateProvenance(

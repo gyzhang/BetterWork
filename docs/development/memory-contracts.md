@@ -59,7 +59,7 @@
 
 来源有效性分三层：历史可审计、用户可查看、当前可带入模型。Knowledge 历史修订还在不等于当前登记有效；材料派生内容进入模型仍要求精确依赖在本 Run 允许材料集合。记忆派生内容依赖旧记忆时，后者删除/修改/排除/失效应使前者待复核，不能重新包装后绕过遗忘。
 
-自主口径重新保存是新 `manual` 来源、空模型依赖；在操作回执保留 `fromMemoryRevisionId` 供审计，但不假装原资料事实已核实。
+自主口径重新保存是新 `manual` 来源、空模型依赖；由 `memory:create` 的 `fromMemoryRevisionId` 承载被重述的精确修订，`memory_operations.result_json` 原样保存并在回执里回显，但不假装原资料事实已核实。
 
 ### 5.4 确认、拒绝、替代
 
@@ -246,7 +246,7 @@ WM02 先扩展仓储形状，公开旧调用方切换在 WM03 一起完成；来
 | --- | --- | --- |
 | memory:list | workspaceId?/expertId?、statuses?、includeCandidates 默认 true、cursor?、limit? | ListPage\<MemoryViewItem\>；全局管理可无过滤，Run 召回不复用此权限宽查询 |
 | memory:get | id、revisionId? | MemoryViewItem，精确旧修订标历史不可直接编辑 |
-| memory:create | operationId、content、facet、scope、topicKey?、validFrom?/validUntil?、sourceSelector?、asUserInstruction:boolean、genericDeclaration? | WriteReceipt |
+| memory:create | operationId、content、facet、scope、topicKey?、validFrom?/validUntil?、sourceSelector?、asUserInstruction:boolean、genericDeclaration?、fromMemoryRevisionId? | WriteReceipt；`fromMemoryRevisionId` 只在「作为我的工作口径重新保存」出现，必须指向真实修订 |
 | memory:update | operationId、id、expectedRevision、patch、legacySourceReview? | WriteReceipt；legacy 复核须完整选择器/人工声明 |
 | memory:set-status | operationId、id、expectedRevision、action、confirmPatch? | WriteReceipt；confirmPatch 只在 confirm/reconfirm 合法 |
 | memory:resolve-conflict | operationId、left:{id,expectedRevision}、right:{id,expectedRevision}、decision、winnerId?、applicabilityNote? | WriteReceipt＋ConflictDecision；replace 必填 winner，keep-both 必填说明 |

@@ -104,6 +104,64 @@ describe('MemoryService', () => {
     expect(result.error.code).toBe('GLOBAL_SCOPE_REQUIRES_DECLARATION');
   });
 
+  it('keeps the restated revision as an audit link, even on replay', async () => {
+    const { service } = await setup();
+    const original = await service.create(userInstruction('资料里说收入按回款确认。'));
+    expect(original.ok).toBe(true);
+    if (!original.ok) return;
+    const fromRevisionId = original.data.committedRevisionIds[0] ?? '';
+
+    const operationId = randomUUID();
+    const restated = await service.create(
+      userInstruction('收入以回款到账为准，这是我自己的口径。', {
+        operationId,
+        fromMemoryRevisionId: fromRevisionId,
+      }),
+    );
+    expect(restated.ok).toBe(true);
+    if (!restated.ok) return;
+    expect(restated.data.fromMemoryRevisionId).toBe(fromRevisionId);
+    expect(restated.data.currentMemory?.provenance).toMatchObject({
+      authority: 'user-instruction',
+      materialDependencies: [],
+      memoryDependencies: [],
+    });
+
+    const replay = await service.create(
+      userInstruction('收入以回款到账为准，这是我自己的口径。', {
+        operationId,
+        fromMemoryRevisionId: fromRevisionId,
+      }),
+    );
+    expect(replay.ok).toBe(true);
+    if (!replay.ok) return;
+    expect(replay.data.fromMemoryRevisionId).toBe(fromRevisionId);
+    expect(replay.data.committedRevisionIds).toEqual(restated.data.committedRevisionIds);
+  });
+
+  it('refuses an audit link that is fabricated or not a restatement', async () => {
+    const { service } = await setup();
+    const missing = await service.create(
+      userInstruction('凭空的审计线索。', { fromMemoryRevisionId: 'rev-missing' }),
+    );
+    expect(missing.ok).toBe(false);
+    if (missing.ok) return;
+    expect(missing.error.code).toBe('NOT_FOUND');
+
+    const notRestatement = await service.create(
+      userInstruction('资料结论。', {
+        scope: { kind: 'workspace', workspaceId: 'ws-a' },
+        asUserInstruction: false,
+        genericDeclaration: undefined,
+        sourceSelector: { kind: 'run-user', runId: 'run-1', start: 0, end: 5 },
+        fromMemoryRevisionId: 'rev-any',
+      }),
+    );
+    expect(notRestatement.ok).toBe(false);
+    if (notRestatement.ok) return;
+    expect(notRestatement.error.code).toBe('SOURCE_MISMATCH');
+  });
+
   it('replays one effect per operationId and rejects a reused id with a different request', async () => {
     const { service, store } = await setup();
     const operationId = randomUUID();
