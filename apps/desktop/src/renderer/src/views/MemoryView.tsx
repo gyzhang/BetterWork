@@ -143,6 +143,17 @@ export function MemoryPage({
     confirmed: visible.filter((memory) => groupOf(memory) === 'confirmed'),
     expired: visible.filter((memory) => groupOf(memory) === 'expired'),
   };
+  // 契约 §10：待澄清与重复只报计数，不替用户裁决，也不新增跳转目的地。
+  const pendingConflictPairs = new Set<string>(
+    visible.flatMap((memory) =>
+      memory.conflicts
+        .filter((pair) => pair.state === 'unresolved')
+        .map((pair) => `${pair.leftRevisionId}|${pair.rightRevisionId}`),
+    ),
+  ).size;
+  const pendingDuplicateCandidates = visible.filter(
+    (memory) => memory.duplicatesConfirmedMemoryId !== undefined,
+  ).length;
 
   const closeSession = (): void => setSession(undefined);
   // 只有新建会话带重新表述来源；其余模式不读该字段，避免在联合类型上取属性。
@@ -323,6 +334,23 @@ export function MemoryPage({
             <li key={`${warning.code}:${warning.message}`}>{warning.message}</li>
           ))}
         </ul>
+      )}
+
+      {(pendingConflictPairs > 0 || pendingDuplicateCandidates > 0) && (
+        <div className="memory-pending-governance" role="note">
+          <AlertIcon size={13} />
+          <span>
+            {[
+              pendingConflictPairs > 0 ? `${pendingConflictPairs} 组口径待澄清` : '',
+              pendingDuplicateCandidates > 0
+                ? `${pendingDuplicateCandidates} 条候选与已确认记忆重复`
+                : '',
+            ]
+              .filter((part) => part !== '')
+              .join(' · ')}
+            ：计数只是管理提示，请在下方对应分组里裁决或拒绝。
+          </span>
+        </div>
       )}
 
       {suggestions && (
@@ -584,6 +612,11 @@ function MemoryRow({
           )}
         {memory.requiresMaterialSelection && dependencies === undefined && (
           <small className="memory-dependencies">使用时仍需在本任务选入对应资料。</small>
+        )}
+        {memory.duplicatesConfirmedMemoryId !== undefined && (
+          <small className="memory-duplicate-hint">
+            与已确认记忆重复：确认后会出现两条同口径记录，通常直接拒绝候选即可。
+          </small>
         )}
         {memory.conflicts.map((pair) => (
           <ConflictPair

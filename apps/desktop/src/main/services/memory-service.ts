@@ -12,6 +12,7 @@ import {
   type ListMemoriesRequest,
   listMemoriesRequestSchema,
   type ListPage,
+  type MemoryConflictPair,
   type MemoryConflictResolutionData,
   memoryConflictResolutionDataSchema,
   type MemoryEffectiveStatus,
@@ -51,6 +52,7 @@ import {
   MemoryTerminalError,
   MemoryValidationError,
 } from '../persistence/memory-repository';
+import { duplicateConfirmedMemoryId, unresolvedConflictPairs } from './memory-conflict-policy';
 import { isSensitiveMemoryContent, normalizedMemoryHash } from './memory-content-policy';
 import {
   buildUserInstructionProvenance,
@@ -120,6 +122,12 @@ const mapDomainError = (error: unknown): DomainFailure => {
 
 const isGlobalScope = (scope: MemoryScope): boolean =>
   scope.kind === 'user' || scope.kind === 'expert';
+
+/** 判定待澄清与重复用的当前记录集合与未裁决冲突对（契约 §5.5、§10 管理提示口径）。 */
+interface PendingGovernance {
+  readonly current: readonly MemoryRecord[];
+  readonly unresolved: MemoryConflictPair[];
+}
 
 const needsSourceReview = (record: MemoryRecord): boolean =>
   record.provenance.verification === 'legacy-unverified';
@@ -206,8 +214,9 @@ export class MemoryService {
       ...(parsed.cursor === undefined ? {} : { cursor: parsed.cursor }),
       ...(parsed.limit === undefined ? {} : { limit: parsed.limit }),
     });
+    const governance = this.pendingGovernance();
     return okResult({
-      items: page.items.map((record) => this.toViewItem(record)),
+      items: page.items.map((record) => this.toViewItem(record, governance)),
       ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
     });
   }
@@ -719,15 +728,43 @@ export class MemoryService {
     return this.resolveSelector(review.selector, Date.now(), originWorkspaceId);
   }
 
-  private toViewItem(record: MemoryRecord): MemoryViewItem {
+  /**
+   * 待澄清口径与重复候选都按「当前全部生效记录」判定，与分页和筛选无关：
+   * 一条记录是否撞口径，不取决于这一次查到了哪些记录（契约 §5.5、§5.6）。
+   */
+  private pendingGovernance(): PendingGovernance {
+    const current = this.store.memories.list({
+      includeCandidates: true,
+      statuses: ['candidate', 'confirmed', 'expired'],
+    });
+    return {
+      current,
+      unresolved: unresolvedConflictPairs(
+        current,
+        (left, right) => this.store.memoryOperations.findDecisionForPair(left, right) !== undefined,
+      ),
+    };
+  }
+
+  private toViewItem(record: MemoryRecord, governance?: PendingGovernance): MemoryViewItem {
+    const context = governance ?? this.pendingGovernance();
     const requiresMaterialSelection = materialDependencyCount(record) > 0;
     const effectiveStatus: MemoryEffectiveStatus = deriveEffectiveStatus(record, Date.now());
+    const pending = context.unresolved.filter(
+      (pair) =>
+        pair.leftRevisionId === record.revisionId || pair.rightRevisionId === record.revisionId,
+    );
+    const decided = this.store.memoryOperations.listConflictPairsForRevisionIds([
+      record.revisionId,
+    ]);
+    const duplicatesConfirmedMemoryId = duplicateConfirmedMemoryId(record, context.current);
     return memoryViewItemSchema.parse({
       ...record,
       effectiveStatus,
       sourceAvailability: needsSourceReview(record) ? 'review-required' : 'available',
       requiresMaterialSelection,
-      conflicts: this.store.memoryOperations.listConflictPairsForRevisionIds([record.revisionId]),
+      conflicts: [...pending, ...decided],
+      ...(duplicatesConfirmedMemoryId === undefined ? {} : { duplicatesConfirmedMemoryId }),
     });
   }
 

@@ -376,4 +376,46 @@ describe('MemoryPage', () => {
     });
     expect(input.operationId).toMatch(UUID_PATTERN);
   });
+
+  it('把待澄清与重复的计数作为管理提示，并给重复候选行内标记', () => {
+    const unresolved = {
+      leftRevisionId: 'memory-left-r1',
+      rightRevisionId: 'memory-right-r1',
+      state: 'unresolved' as const,
+    };
+    const left = memoryViewItem({
+      id: 'memory-left',
+      revisionId: 'memory-left-r1',
+      status: 'confirmed',
+      effectiveStatus: 'confirmed',
+      candidateDisposition: undefined,
+      content: '收入按回款金额统计。',
+      conflicts: [unresolved],
+    });
+    const right = memoryViewItem({
+      id: 'memory-right',
+      revisionId: 'memory-right-r1',
+      status: 'confirmed',
+      effectiveStatus: 'confirmed',
+      candidateDisposition: undefined,
+      content: '收入按签约金额统计。',
+      conflicts: [unresolved],
+    });
+    const duplicate = memoryViewItem({
+      id: 'memory-duplicate',
+      revisionId: 'memory-duplicate-r1',
+      content: '交付物优先使用中文。',
+      duplicatesConfirmedMemoryId: 'memory-left',
+    });
+    render(<MemoryPage state={state({ memories: [left, right, duplicate] })} />);
+
+    // 同一对两侧都带这条冲突，计数只算一组（契约 §10）。
+    expect(screen.getByText(/1 组口径待澄清 · 1 条候选与已确认记忆重复/)).toBeTruthy();
+    expect(screen.getByText(/与已确认记忆重复：确认后会出现两条同口径记录/)).toBeTruthy();
+  });
+
+  it('没有待澄清与重复时不显示管理提示', () => {
+    render(<MemoryPage state={state()} />);
+    expect(screen.queryByText(/组口径待澄清/)).toBeNull();
+  });
 });

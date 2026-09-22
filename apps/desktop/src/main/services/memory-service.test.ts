@@ -357,6 +357,79 @@ describe('MemoryService', () => {
     expect(replaced.data.decision).toMatchObject({ decision: 'replace' });
   });
 
+  it('把未裁决的同议题口径作为待澄清冲突摆进管理列表', async () => {
+    const { service } = await setup();
+    const left = await service.create(
+      userInstruction('收入按回款金额统计。', { facet: 'fact', topicKey: '收入口径' }),
+    );
+    const right = await service.create(
+      userInstruction('收入按签约金额统计。', { facet: 'fact', topicKey: '收入口径' }),
+    );
+    expect(left.ok && right.ok).toBe(true);
+    if (!left.ok || !right.ok) return;
+    const leftRevisionId = left.data.currentMemory?.revisionId ?? '';
+    const rightRevisionId = right.data.currentMemory?.revisionId ?? '';
+
+    const pending = service.list({ includeCandidates: false });
+    expect(pending.ok).toBe(true);
+    if (!pending.ok) return;
+    // 两侧都要看到这一对，否则用户在列表里无从裁决（契约 §5.5）。
+    for (const revisionId of [leftRevisionId, rightRevisionId]) {
+      const item = pending.data.items.find((entry) => entry.revisionId === revisionId);
+      expect(item?.conflicts).toHaveLength(1);
+      const pair = item?.conflicts[0];
+      expect(pair?.state).toBe('unresolved');
+      expect([pair?.leftRevisionId, pair?.rightRevisionId].sort()).toEqual(
+        [leftRevisionId, rightRevisionId].sort(),
+      );
+    }
+
+    const resolved = await service.resolveConflict({
+      operationId: randomUUID(),
+      left: { id: left.data.currentMemory?.id ?? '', expectedRevision: 1 },
+      right: { id: right.data.currentMemory?.id ?? '', expectedRevision: 1 },
+      decision: 'keep-both',
+      applicabilityNote: '回款口径用于现金流，签约口径用于销售业绩。',
+    });
+    expect(resolved.ok).toBe(true);
+
+    const after = service.list({ includeCandidates: false });
+    expect(after.ok).toBe(true);
+    if (!after.ok) return;
+    expect(after.data.items.flatMap((item) => item.conflicts.map((pair) => pair.state))).toEqual([
+      'keep-both',
+      'keep-both',
+    ]);
+  });
+
+  it('把与已确认记忆重复的候选标成待处理重复', async () => {
+    const { service, store } = await setup();
+    const confirmed = await service.create(userInstruction('交付物优先使用中文。'));
+    expect(confirmed.ok).toBe(true);
+    if (!confirmed.ok) return;
+    const confirmedId = confirmed.data.currentMemory?.id ?? '';
+    const candidate = store.memories.create({
+      facet: 'preference',
+      scope: userScope,
+      content: '交付物优先使用中文。',
+      normalizedHash: normalizedMemoryHash('交付物优先使用中文。'),
+      provenance: buildLegacyProvenance({ sourceType: 'reflection' }),
+      confidence: 0.7,
+      status: 'candidate',
+    });
+
+    const page = service.list({ includeCandidates: true });
+    expect(page.ok).toBe(true);
+    if (!page.ok) return;
+    const items = page.data.items;
+    expect(items.find((item) => item.id === candidate.record.id)?.duplicatesConfirmedMemoryId).toBe(
+      confirmedId,
+    );
+    expect(
+      items.find((item) => item.id === confirmedId)?.duplicatesConfirmedMemoryId,
+    ).toBeUndefined();
+  });
+
   it('lists governance views with derived effective status', async () => {
     const { service } = await setup();
     const created = await service.create(

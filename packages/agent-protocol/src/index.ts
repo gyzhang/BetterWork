@@ -1295,7 +1295,10 @@ export const memoryViewItemSchema = memoryRecordSchema
     effectiveStatus: memoryEffectiveStatusSchema,
     sourceAvailability: memorySourceAvailabilitySchema,
     requiresMaterialSelection: z.boolean(),
+    /** §5.5 的潜在冲突对：未裁决的一方也算待澄清，界面据此给出可裁决的并列视图。 */
     conflicts: z.array(memoryConflictPairSchema),
+    /** §5.6：候选与已确认记忆同规范范围同规范化哈希时指向那条已确认记录。 */
+    duplicatesConfirmedMemoryId: z.string().min(1).optional(),
   })
   .strict();
 export type MemoryViewItem = z.infer<typeof memoryViewItemSchema>;
