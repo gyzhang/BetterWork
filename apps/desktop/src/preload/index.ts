@@ -36,9 +36,12 @@ import {
   importSkillRequestSchema,
   inputSnapshotSchema,
   IpcChannel,
+  knowledgeRevisionSummarySchema,
+  knowledgeTextPageSchema,
   listDependencyOptionsRequestSchema,
   listDiscussionCheckpointsRequestSchema,
   listExpertsRequestSchema,
+  listKnowledgeRevisionsRequestSchema,
   listMemoriesRequestSchema,
   listMemoryJobsRequestSchema,
   listTaskMaterialCandidatesRequestSchema,
@@ -63,6 +66,7 @@ import {
   prepareDependencyRequestSchema,
   prepareDependencyResultSchema,
   prepareWorkspaceInputSnapshotRequestSchema,
+  previewKnowledgeRequestSchema,
   previewMemoryRequestSchema,
   rebuildMemoryProjectionRequestSchema,
   refreshSkillDependencyGrantRequestSchema,
@@ -223,6 +227,18 @@ const api: BetterWorkDesktopApi = {
     openSource: (input) => ipcRenderer.invoke(IpcChannel.OpenKnowledgeSource, input),
     remove: (input) => ipcRenderer.invoke(IpcChannel.RemoveKnowledgeDocument, input),
     refresh: (input) => ipcRenderer.invoke(IpcChannel.RefreshKnowledgeDocument, input),
+    listRevisions: (input) =>
+      invokeValidated(
+        IpcChannel.ListKnowledgeRevisions,
+        listKnowledgeRevisionsRequestSchema.parse(input),
+        z.array(knowledgeRevisionSummarySchema),
+      ),
+    preview: (input) =>
+      invokeValidated(
+        IpcChannel.PreviewKnowledge,
+        previewKnowledgeRequestSchema.parse(input),
+        knowledgeTextPageSchema,
+      ),
   },
   skills: {
     list: () => invokeValidated(IpcChannel.ListSkills, {}, z.array(skillSummarySchema)),

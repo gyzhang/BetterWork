@@ -23,8 +23,8 @@ Points 是 Fibonacci 相对复杂度建议，不是已承诺工时；由未来�
 
 | 卡号 | 用户可感知交付 | 前置 | 优先级 | Points | 状态 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- |
-| KM00 | 固定可实施范围、技术与交互评审门 | 无 | P0 | 2 | todo | — |
-| KM01 | 可稳定回看的知识修订与文本分页基础 | KM00 | P0 | 5 | todo | — |
+| KM00 | 固定可实施范围、技术与交互评审门 | 无 | P0 | 2 | done | 2026-09-24 核对：HEAD `767130e`，`git diff f59c71a..HEAD` 仅 docs（KM 文档归档）无知识代码漂移；Vault 最新迁移 v3、应用库 v29；`npx vitest run knowledge-vault/migrate/knowledge-search` 退出 0（51 tests）。批准依据：光哥 2026-09-24 目标指令明确批准 ADR-0027 与产品规范 §5 文档线框，授权 KM00 后连续实施 KM01–KM14（替代逐卡停止流程）；不覆盖真实模型与发布授权。 |
+| KM01 | 可稳定回看的知识修订与文本分页基础 | KM00 | P0 | 5 | done | 2026-09-25 实施于 HEAD 767130e 之上：Vault v4 迁移（修订唯一键含 parser/chunking、text_hash/section_count/warnings_json 回填）、`knowledge-text.ts` 码点分页纯函数、协议 `knowledgeRevisionSummarySchema/knowledgeSpanSchema/knowledgeCursorSchema/knowledgeTextPageSchema` 与预算常量、list 接通 currentRevisionId、管理 search 命中同快照完整 reference、`knowledge:list-revisions`/`knowledge:preview` IPC/Preload/API 链路。测试：`npx vitest run knowledge-text/knowledge-vault/migrate` 退出 0（61 tests，含幂等重导入、解析升级追加修订、PARSER_NONDETERMINISTIC 事务回滚、历史修订仍读、增补字符分页、跨修订游标拒绝、v4 回填与部分唯一键）；lint/format/typecheck/build 退出 0。全量 `npm test` 1027/1028，唯一失败 `App.test.tsx > offers Expert-scoped memory capture` 在干净 HEAD worktree 复现同样失败——为记忆 UI 系列（9b93312 FieldSelect）既有回归，非 KM 改动，待记忆会话修复。UI 入口人工待 KM15。 |
 | KM02 | 助手读取选定知识正文并留下精确证据 | KM01 | P0 | 8 | todo | — |
 | KM03 | 用勾选资料创建可恢复的研究草稿 | KM01 | P0 | 5 | todo | — |
 | KM04 | 看清当前运行搜索/读取了哪个版本哪一段 | KM02 | P0 | 3 | todo | — |

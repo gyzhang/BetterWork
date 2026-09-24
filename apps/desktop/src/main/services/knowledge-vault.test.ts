@@ -2,9 +2,11 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import Database from 'better-sqlite3';
 import JSZip from 'jszip';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { KnowledgeServiceError } from './knowledge-errors';
 import { KnowledgeVault } from './knowledge-vault';
 
 const temporaryDirectories: string[] = [];
@@ -229,5 +231,96 @@ describe('KnowledgeVault', () => {
     expect(vault.listDocuments()).toHaveLength(1);
     expect(vault.search('待刷新的原始内容')[0]?.document.id).toBe(original.id);
     vault.close();
+  });
+
+  it('KM01 exposes fixed revision identity on list and search from one snapshot', async () => {
+    const directory = temporaryDirectory();
+    const text = path.join(directory, '版本资料.txt');
+    writeFileSync(text, '第一版：渠道转化。');
+    const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
+    const first = (await vault.importPaths([text])).imported[0]!;
+    const firstRevision = vault.listDocuments().find((item) => item.id === first.id);
+    expect(firstRevision?.currentRevisionId).toBeDefined();
+    expect(vault.search('渠道转化')[0]).toMatchObject({
+      document: { currentRevisionId: firstRevision?.currentRevisionId },
+      reference: {
+        kind: 'knowledge-revision',
+        knowledgeDocumentId: first.id,
+        knowledgeRevisionId: firstRevision?.currentRevisionId,
+        contentHash: firstRevision?.contentHash,
+        sourcePath: text,
+      },
+      textHash: expect.stringMatching(/^[0-9a-f]{64}$/u),
+    });
+
+    // 刷新产生新修订后，列表与搜索身份一起前进，不留下 latest 补出来的旧引用
+    writeFileSync(text, '第二版：渠道转化与续约风险。');
+    await vault.importPaths([text]);
+    const revisions = vault.listRevisions(first.id);
+    expect(revisions.map((revision) => revision.revision)).toEqual([2, 1]);
+    const current = vault.listDocuments().find((item) => item.id === first.id);
+    expect(current?.currentRevisionId).toBe(revisions[0]?.id);
+    expect(current?.contentHash).toBe(revisions[0]?.contentHash);
+    const hits = vault.search('续约风险');
+    expect(hits[0]?.reference.knowledgeRevisionId).toBe(revisions[0]?.id);
+    expect(hits[0]?.textHash).toBe(revisions[0]?.textHash);
+    vault.close();
+  });
+
+  it('KM01 re-import is idempotent while history stays readable after removal', async () => {
+    const directory = temporaryDirectory();
+    const text = path.join(directory, '历史资料.txt');
+    writeFileSync(text, '旧版本的市场信号。');
+    const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
+    const document = (await vault.importPaths([text])).imported[0]!;
+    await vault.importPaths([text]);
+    expect(vault.listRevisions(document.id)).toHaveLength(1);
+
+    writeFileSync(text, '新版本的市场信号与续约风险。');
+    await vault.importPaths([text]);
+    const revisions = vault.listRevisions(document.id);
+    expect(revisions).toHaveLength(2);
+    const oldRevisionId = revisions[1]?.id;
+    expect(oldRevisionId).toBeDefined();
+    // 历史修订仍可读，正文不漂移
+    expect(vault.getRevision(oldRevisionId!)?.content).toContain('旧版本的市场信号');
+    const page = vault.previewRevision(document.id, oldRevisionId!);
+    expect(page.parts.map((part) => part.text).join('')).toBe('旧版本的市场信号。');
+    expect(page.complete).toBe(true);
+
+    // 移除当前登记不删除留存修订；重新导入是新登记，不改写历史
+    vault.removeDocument(document.id);
+    expect(vault.getRevision(oldRevisionId!)?.title).toBeDefined();
+    writeFileSync(text, '第三次导入的内容。');
+    const reimported = (await vault.importPaths([text])).imported[0]!;
+    expect(reimported.id).not.toBe(document.id);
+    expect(vault.listRevisions(reimported.id)).toHaveLength(1);
+    expect(vault.getRevision(oldRevisionId!)?.content).toContain('旧版本的市场信号');
+    vault.close();
+  });
+
+  it('KM01 refuses nondeterministic re-parse and mismatched preview identity', async () => {
+    const directory = temporaryDirectory();
+    const vaultFile = path.join(directory, 'vault.sqlite');
+    const text = path.join(directory, '解析稳定性.txt');
+    writeFileSync(text, '稳定的提取文本。');
+    const vault = new KnowledgeVault(vaultFile);
+    const document = (await vault.importPaths([text])).imported[0]!;
+    vault.close();
+
+    // 模拟解析器回归：同解析身份的已存修订带着不同的提取文本哈希
+    const raw = new Database(vaultFile);
+    raw.prepare('UPDATE knowledge_revisions SET text_hash = ?').run('deadbeef');
+    raw.close();
+    const reopened = new KnowledgeVault(vaultFile);
+    const outcome = await reopened.importPaths([text]);
+    expect(outcome.imported).toHaveLength(0);
+    expect(outcome.skipped[0]?.reason).toMatch(/解析/u);
+    // 失败回滚后旧修订与哈希未被覆盖
+    expect(reopened.listRevisions(document.id)[0]?.textHash).toBe('deadbeef');
+    expect(() => reopened.previewRevision('other-document', document.id)).toThrowError(
+      KnowledgeServiceError,
+    );
+    reopened.close();
   });
 });

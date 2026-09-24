@@ -63,13 +63,16 @@ import {
   type KnowledgeImportResult,
   knowledgeImportResultSchema,
   knowledgeRefreshResultSchema,
+  knowledgeRevisionSummarySchema,
   knowledgeSearchResultSchema,
+  knowledgeTextPageSchema,
   listArtifactsRequestSchema,
   listArtifactVersionsRequestSchema,
   listDependencyOptionsRequestSchema,
   listDiscussionCheckpointsRequestSchema,
   listEvidenceRequestSchema,
   listExpertsRequestSchema,
+  listKnowledgeRevisionsRequestSchema,
   listMemoriesRequestSchema,
   listMemoryJobsRequestSchema,
   listRunEventsRequestSchema,
@@ -107,6 +110,7 @@ import {
   prepareDependencyRequestSchema,
   prepareDependencyResultSchema,
   prepareWorkspaceInputSnapshotRequestSchema,
+  previewKnowledgeRequestSchema,
   previewMemoryRequestSchema,
   rebuildMemoryProjectionRequestSchema,
   recentTaskSummarySchema,
@@ -943,6 +947,24 @@ function registerKnowledgeChannels(deps: IpcDependencies): void {
     refreshKnowledgeDocumentRequestSchema,
     knowledgeRefreshResultSchema,
     (input) => knowledgeVault.refreshDocument(input.id),
+  );
+  handleInput(
+    IpcChannel.ListKnowledgeRevisions,
+    listKnowledgeRevisionsRequestSchema,
+    z.array(knowledgeRevisionSummarySchema),
+    (input) => knowledgeVault.listRevisions(input.documentId),
+  );
+  handleInput(
+    IpcChannel.PreviewKnowledge,
+    previewKnowledgeRequestSchema,
+    knowledgeTextPageSchema,
+    (input) =>
+      knowledgeVault.previewRevision(
+        input.documentId,
+        input.revisionId,
+        input.cursor,
+        input.maxCodePoints,
+      ),
   );
 }
 

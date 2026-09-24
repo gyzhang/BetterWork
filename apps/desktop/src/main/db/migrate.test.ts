@@ -6,6 +6,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { revisionTextHash } from '../services/knowledge-text';
 import { appMigrations, openAppDatabase, openKnowledgeDatabase } from './index';
 import { knowledgeMigrations } from './knowledge-schema';
 import { hasColumn, hasTable, migrate, type Migration, readSchemaVersion } from './migrate';
@@ -732,6 +733,77 @@ describe('knowledge database migrations', () => {
     // 修订没有随当前索引记录删除，历史材料仍可解释；未来引用关系负责阻止物理回收。
     expect(countRows(db, 'knowledge_revisions')).toBe(1);
     db.close();
+  });
+
+  it('KM01 v4 upgrades revision uniqueness and backfills text hashes from stored sections', () => {
+    const file = path.join(temporaryDirectory(), 'vault-v3.sqlite');
+    const db = new Database(file);
+    migrate(db, { migrations: knowledgeMigrations.slice(0, 3) });
+    db.prepare(
+      `INSERT INTO knowledge_revisions
+        (id, document_id, revision, title, source_path, format, byte_size, content_hash,
+         content, page_count, parser_version, chunking_version, imported_at, created_at)
+       VALUES ('rev-1', 'doc-1', 1, '旧修订', '/tmp/a.md', 'pdf', 3, 'hash-1',
+         '甲\n\n乙方', 2, 'text-extract-v1', 'format-locator-v1', 1, 1)`,
+    ).run();
+    const insertChunk = db.prepare(
+      'INSERT INTO knowledge_revision_chunks (id, revision_id, locator, ordinal, content) VALUES (?, ?, ?, ?, ?)',
+    );
+    insertChunk.run('c-0', 'rev-1', '第 1 页', 0, '甲');
+    insertChunk.run('c-1', 'rev-1', '第 2 页', 1, '乙方');
+    db.close();
+
+    const upgraded = openKnowledgeDatabase(file);
+    expect(readSchemaVersion(upgraded)).toBe(knowledgeMigrations.length);
+    const backfilled = upgraded
+      .prepare('SELECT text_hash, section_count FROM knowledge_revisions WHERE id = ?')
+      .get('rev-1') as { text_hash: string; section_count: number };
+    expect(backfilled.section_count).toBe(2);
+    expect(backfilled.text_hash).toBe(
+      revisionTextHash([
+        { ordinal: 0, locator: '第 1 页', content: '甲' },
+        { ordinal: 1, locator: '第 2 页', content: '乙方' },
+      ]),
+    );
+
+    // 新唯一键：同文档同原始哈希、不同解析版本可以作为追加修订共存
+    expect(() =>
+      upgraded
+        .prepare(
+          `INSERT INTO knowledge_revisions
+            (id, document_id, revision, title, source_path, format, byte_size, content_hash,
+             content, page_count, parser_version, chunking_version, text_hash, section_count,
+             warnings_json, imported_at, created_at)
+           VALUES ('rev-2', 'doc-1', 2, '新解析', '/tmp/a.md', 'pdf', 3, 'hash-1',
+             '甲\n\n乙方', 2, 'text-extract-v2', 'format-locator-v1', 'x', 2, '[]', 2, 2)`,
+        )
+        .run(),
+    ).not.toThrow();
+    // 同解析身份仍然唯一，重复登记必须被拒绝
+    expect(() =>
+      upgraded
+        .prepare(
+          `INSERT INTO knowledge_revisions
+            (id, document_id, revision, title, source_path, format, byte_size, content_hash,
+             content, page_count, parser_version, chunking_version, text_hash, section_count,
+             warnings_json, imported_at, created_at)
+           VALUES ('rev-dup', 'doc-1', 3, '重复', '/tmp/a.md', 'pdf', 3, 'hash-1',
+             '甲', 1, 'text-extract-v1', 'format-locator-v1', 'y', 1, '[]', 3, 3)`,
+        )
+        .run(),
+    ).toThrow(/UNIQUE/iu);
+    upgraded.close();
+
+    // 重启幂等：不再重复回填或破坏已存哈希
+    const again = openKnowledgeDatabase(file);
+    expect(
+      (
+        again.prepare('SELECT text_hash FROM knowledge_revisions WHERE id = ?').get('rev-1') as {
+          text_hash: string;
+        }
+      ).text_hash,
+    ).toBe(backfilled.text_hash);
+    again.close();
   });
 });
 

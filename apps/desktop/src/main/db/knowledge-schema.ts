@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type Database from 'better-sqlite3';
 
+import { revisionTextHash } from '../services/knowledge-text';
 import { hasColumn, hasTable, type Migration, rebuildTable } from './migrate';
 
 /**
@@ -211,6 +212,75 @@ export const knowledgeMigrations: readonly Migration[] = [
         for (const chunk of chunks) {
           insertChunk.run(randomUUID(), revisionId, chunk.locator, chunk.ordinal, chunk.content);
         }
+      }
+    },
+  },
+  {
+    version: 4,
+    name: 'parser-aware revision uniqueness with text hash and section counts',
+    up(db: Database.Database): void {
+      // 唯一键从 (document, contentHash) 扩为含解析与分段版本：同字节不同解析版本可追加修订。
+      // 已存 section 回填提取文本哈希与段数；不重解析原件、不改 ID/hash/版本文本。
+      rebuildTable(
+        db,
+        'knowledge_revisions',
+        `CREATE TABLE knowledge_revisions (
+          id TEXT PRIMARY KEY,
+          document_id TEXT NOT NULL,
+          revision INTEGER NOT NULL CHECK (revision > 0),
+          title TEXT NOT NULL,
+          source_path TEXT NOT NULL,
+          format TEXT NOT NULL,
+          byte_size INTEGER NOT NULL,
+          content_hash TEXT NOT NULL,
+          content TEXT NOT NULL,
+          page_count INTEGER,
+          parser_version TEXT NOT NULL,
+          chunking_version TEXT NOT NULL,
+          text_hash TEXT NOT NULL DEFAULT '',
+          section_count INTEGER NOT NULL DEFAULT 0,
+          warnings_json TEXT NOT NULL DEFAULT '[]',
+          imported_at INTEGER NOT NULL,
+          created_at INTEGER NOT NULL,
+          UNIQUE(document_id, revision),
+          UNIQUE(document_id, content_hash, parser_version, chunking_version)
+        )`,
+        [
+          'id',
+          'document_id',
+          'revision',
+          'title',
+          'source_path',
+          'format',
+          'byte_size',
+          'content_hash',
+          'content',
+          'page_count',
+          'parser_version',
+          'chunking_version',
+          'imported_at',
+          'created_at',
+        ],
+        [
+          'CREATE INDEX idx_knowledge_revisions_document ON knowledge_revisions(document_id, revision DESC)',
+        ],
+      );
+      const revisions = db
+        .prepare("SELECT id FROM knowledge_revisions WHERE text_hash = ''")
+        .all() as Array<{ id: string }>;
+      const selectSections = db.prepare(
+        'SELECT ordinal, locator, content FROM knowledge_revision_chunks WHERE revision_id = ? ORDER BY ordinal',
+      );
+      const updateHash = db.prepare(
+        'UPDATE knowledge_revisions SET text_hash = ?, section_count = ? WHERE id = ?',
+      );
+      for (const revision of revisions) {
+        const sections = selectSections.all(revision.id) as Array<{
+          ordinal: number;
+          locator: string;
+          content: string;
+        }>;
+        updateHash.run(revisionTextHash(sections), sections.length, revision.id);
       }
     },
   },

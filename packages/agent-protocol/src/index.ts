@@ -259,7 +259,7 @@ export const materialPurposeSchema = z.enum([
 ]);
 export type MaterialPurpose = z.infer<typeof materialPurposeSchema>;
 
-const knowledgeMaterialReferenceSchema = z
+export const knowledgeMaterialReferenceSchema = z
   .object({
     kind: z.literal('knowledge-revision'),
     knowledgeDocumentId: z.string().min(1),
@@ -269,6 +269,7 @@ const knowledgeMaterialReferenceSchema = z
     originWorkspaceId: z.string().min(1).optional(),
   })
   .strict();
+export type KnowledgeMaterialReference = z.infer<typeof knowledgeMaterialReferenceSchema>;
 const artifactMaterialReferenceSchema = z
   .object({
     kind: z.literal('artifact-version'),
@@ -2788,6 +2789,8 @@ export interface KnowledgeDocumentSummary {
   format: KnowledgeFormat;
   byteSize: number;
   contentHash: string;
+  /** 选材入口的修订身份（KM01 §2.4）：当前登记文档的最新修订 ID。 */
+  currentRevisionId?: string;
   pageCount?: number;
   importedAt: number;
   updatedAt: number;
@@ -2821,6 +2824,10 @@ export interface KnowledgeSearchResult {
   document: KnowledgeDocumentSummary;
   locator: string;
   excerpt: string;
+  /** 与命中正文同一读快照的完整修订引用；命中内容变化后引用必须一起更换。 */
+  reference: KnowledgeMaterialReference;
+  /** 命中所在修订的提取文本哈希。 */
+  textHash: string;
 }
 
 export interface EvidenceSummary {
@@ -3391,6 +3398,7 @@ export const knowledgeDocumentSummarySchema = z.object({
   format: z.enum(['markdown', 'text', 'pdf', 'docx']),
   byteSize: z.number().int().nonnegative(),
   contentHash: z.string().min(1),
+  currentRevisionId: z.string().min(1).optional(),
   pageCount: z.number().int().positive().optional(),
   importedAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
@@ -3403,11 +3411,115 @@ export const knowledgeSearchResultSchema = z.object({
   document: knowledgeDocumentSummarySchema,
   locator: z.string(),
   excerpt: z.string(),
+  reference: knowledgeMaterialReferenceSchema,
+  textHash: z.string().min(1),
 });
 export const knowledgeRefreshResultSchema = z.object({
   refreshed: knowledgeDocumentSummarySchema.optional(),
   error: z.string().optional(),
 });
+
+/** 知识正文分页与修订身份（契约 §2.2/§2.3/§3.1）的唯一数值真相源。 */
+export const KNOWLEDGE_REVISION_MAX_TEXT_CODE_POINTS = 2_000_000;
+export const KNOWLEDGE_PAGE_DEFAULT_CODE_POINTS = 4_000;
+export const KNOWLEDGE_PAGE_MAX_CODE_POINTS = 8_000;
+export const KNOWLEDGE_PAGE_MAX_PARTS = 20;
+
+export const knowledgeWarningCodeSchema = z.enum([
+  'formula-without-cached-result',
+  'truncated',
+  'unsupported-feature',
+]);
+export type KnowledgeWarningCode = z.infer<typeof knowledgeWarningCodeSchema>;
+
+/** section 内容上的码点半开区间 [start, end)，见契约 §2.3。 */
+export const knowledgeSpanSchema = z
+  .object({
+    sectionOrdinal: z.number().int().nonnegative(),
+    start: z.number().int().nonnegative(),
+    end: z.number().int().positive(),
+  })
+  .strict();
+export type KnowledgeSpan = z.infer<typeof knowledgeSpanSchema>;
+
+/** 仅定位已保存文本，不是授权 token；服务必须独立验证修订与调用域。 */
+export const knowledgeCursorSchema = z
+  .object({
+    revisionId: z.string().min(1),
+    textHash: z.string().min(1),
+    sectionOrdinal: z.number().int().nonnegative(),
+    offset: z.number().int().nonnegative(),
+  })
+  .strict();
+export type KnowledgeCursor = z.infer<typeof knowledgeCursorSchema>;
+
+export const knowledgeRevisionSummarySchema = z.object({
+  id: z.string().min(1),
+  documentId: z.string().min(1),
+  revision: z.number().int().positive(),
+  title: z.string(),
+  sourcePath: z.string().min(1),
+  format: z.enum(['markdown', 'text', 'pdf', 'docx']),
+  byteSize: z.number().int().nonnegative(),
+  contentHash: z.string().min(1),
+  pageCount: z.number().int().positive().optional(),
+  parserVersion: z.string().min(1),
+  chunkingVersion: z.string().min(1),
+  textHash: z.string().min(1),
+  sectionCount: z.number().int().nonnegative(),
+  warnings: z.array(knowledgeWarningCodeSchema),
+  importedAt: z.number().int().nonnegative(),
+  createdAt: z.number().int().nonnegative(),
+});
+export type KnowledgeRevisionSummary = z.infer<typeof knowledgeRevisionSummarySchema>;
+
+export const knowledgeTextPagePartSchema = z
+  .object({
+    span: knowledgeSpanSchema,
+    locator: z.string(),
+    text: z.string(),
+    excerptHash: z.string().min(1),
+  })
+  .strict();
+export type KnowledgeTextPagePart = z.infer<typeof knowledgeTextPagePartSchema>;
+
+export const knowledgeTextPageSchema = z
+  .object({
+    reference: knowledgeMaterialReferenceSchema,
+    textHash: z.string().min(1),
+    title: z.string(),
+    parserVersion: z.string().min(1),
+    chunkingVersion: z.string().min(1),
+    warnings: z.array(knowledgeWarningCodeSchema),
+    parts: z.array(knowledgeTextPagePartSchema),
+    returnedCodePoints: z.number().int().nonnegative(),
+    complete: z.boolean(),
+    nextCursor: knowledgeCursorSchema.optional(),
+  })
+  .strict()
+  .superRefine((page, context) => {
+    if (page.complete && page.nextCursor) {
+      context.addIssue({
+        code: 'custom',
+        message: 'complete page must not carry nextCursor',
+        path: ['nextCursor'],
+      });
+    }
+  });
+export type KnowledgeTextPage = z.infer<typeof knowledgeTextPageSchema>;
+
+export const listKnowledgeRevisionsRequestSchema = z.object({ documentId: z.string().min(1) });
+export type ListKnowledgeRevisionsRequest = z.infer<typeof listKnowledgeRevisionsRequestSchema>;
+
+export const previewKnowledgeRequestSchema = z
+  .object({
+    documentId: z.string().min(1),
+    revisionId: z.string().min(1),
+    cursor: knowledgeCursorSchema.optional(),
+    maxCodePoints: z.number().int().min(1).max(KNOWLEDGE_PAGE_MAX_CODE_POINTS).optional(),
+  })
+  .strict();
+export type PreviewKnowledgeRequest = z.infer<typeof previewKnowledgeRequestSchema>;
 export const openKnowledgeSourceResultSchema = z.object({
   opened: z.boolean(),
   error: z.string().optional(),
@@ -3699,6 +3811,8 @@ export const IpcChannel = {
   OpenKnowledgeSource: 'knowledge:open-source',
   RemoveKnowledgeDocument: 'knowledge:remove',
   RefreshKnowledgeDocument: 'knowledge:refresh',
+  ListKnowledgeRevisions: 'knowledge:list-revisions',
+  PreviewKnowledge: 'knowledge:preview',
   ListSearchEngines: 'search:list',
   SaveSearchEngine: 'search:save',
   TestSearchEngine: 'search:test',
@@ -3844,6 +3958,8 @@ export interface BetterWorkDesktopApi {
     openSource(input: OpenKnowledgeSourceRequest): Promise<OpenKnowledgeSourceResult>;
     remove(input: RemoveKnowledgeDocumentRequest): Promise<{ removed: boolean }>;
     refresh(input: RefreshKnowledgeDocumentRequest): Promise<KnowledgeRefreshResult>;
+    listRevisions(input: ListKnowledgeRevisionsRequest): Promise<KnowledgeRevisionSummary[]>;
+    preview(input: PreviewKnowledgeRequest): Promise<KnowledgeTextPage>;
   };
   skills: {
     list(): Promise<SkillSummary[]>;

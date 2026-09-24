@@ -2,16 +2,34 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-import type {
-  KnowledgeDocumentSummary,
-  KnowledgeFormat,
-  KnowledgeImportResult,
-  KnowledgeRefreshResult,
-  KnowledgeSearchResult,
+import {
+  countCodePoints,
+  KNOWLEDGE_REVISION_MAX_TEXT_CODE_POINTS,
+  type KnowledgeCursor,
+  type KnowledgeDocumentSummary,
+  type KnowledgeFormat,
+  type KnowledgeImportResult,
+  type KnowledgeMaterialReference,
+  type KnowledgeRefreshResult,
+  type KnowledgeRevisionSummary,
+  type KnowledgeSearchResult,
+  type KnowledgeTextPage,
+  type KnowledgeWarningCode,
+  knowledgeWarningCodeSchema,
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
+import { z } from 'zod';
 
 import { openKnowledgeDatabase } from '../db';
+import { KnowledgeServiceError } from './knowledge-errors';
+import { readKnowledgeTextPage, revisionTextHash } from './knowledge-text';
+
+const parserVersion = 'text-extract-v1';
+const chunkingVersion = 'format-locator-v1';
+
+const revisionColumns = `id, document_id, revision, title, source_path, format, byte_size, content_hash,
+                content, page_count, parser_version, chunking_version, text_hash, section_count,
+                warnings_json, imported_at, created_at`;
 
 interface KnowledgeRow {
   id: string;
@@ -23,27 +41,6 @@ interface KnowledgeRow {
   page_count: number | null;
   imported_at: number;
   updated_at: number;
-}
-
-export interface KnowledgeRevisionSummary {
-  id: string;
-  documentId: string;
-  revision: number;
-  title: string;
-  sourcePath: string;
-  format: KnowledgeFormat;
-  byteSize: number;
-  contentHash: string;
-  pageCount?: number;
-  parserVersion: string;
-  chunkingVersion: string;
-  importedAt: number;
-  createdAt: number;
-}
-
-export interface KnowledgeRevisionDetail extends KnowledgeRevisionSummary {
-  content: string;
-  chunks: Array<{ locator: string; ordinal: number; content: string }>;
 }
 
 interface KnowledgeRevisionRow {
@@ -59,9 +56,13 @@ interface KnowledgeRevisionRow {
   page_count: number | null;
   parser_version: string;
   chunking_version: string;
+  text_hash: string;
+  section_count: number;
+  warnings_json: string;
   imported_at: number;
   created_at: number;
 }
+
 interface KnowledgeChunk {
   id: string;
   locator: string;
@@ -72,7 +73,15 @@ interface ExtractedDocument {
   format: KnowledgeFormat;
   content: string;
   pageCount?: number;
+  warnings?: KnowledgeWarningCode[];
   chunks: Array<Omit<KnowledgeChunk, 'id'>>;
+}
+
+export type { KnowledgeRevisionSummary } from '@betterwork/agent-protocol';
+
+export interface KnowledgeRevisionDetail extends KnowledgeRevisionSummary {
+  content: string;
+  chunks: Array<{ locator: string; ordinal: number; content: string }>;
 }
 
 const supportedFormats: Record<string, KnowledgeFormat> = {
@@ -96,10 +105,17 @@ export class KnowledgeVault {
   listDocuments(): KnowledgeDocumentSummary[] {
     const rows = this.db
       .prepare(
-        'SELECT id, title, source_path, format, byte_size, content_hash, page_count, imported_at, updated_at FROM knowledge_documents ORDER BY updated_at DESC, rowid DESC',
+        `SELECT id, title, source_path, format, byte_size, content_hash, page_count, imported_at, updated_at,
+                (SELECT r.id FROM knowledge_revisions r
+                  WHERE r.document_id = knowledge_documents.id
+                  ORDER BY r.revision DESC LIMIT 1) AS current_revision_id
+           FROM knowledge_documents ORDER BY updated_at DESC, rowid DESC`,
       )
-      .all() as KnowledgeRow[];
-    return rows.map((row) => this.toSummary(row));
+      .all() as Array<KnowledgeRow & { current_revision_id: string | null }>;
+    return rows.map((row) => ({
+      ...this.toSummary(row),
+      ...(row.current_revision_id ? { currentRevisionId: row.current_revision_id } : {}),
+    }));
   }
 
   async importPaths(sourcePaths: string[]): Promise<KnowledgeImportResult> {
@@ -135,18 +151,27 @@ export class KnowledgeVault {
     return { imported, skipped };
   }
 
+  /** 搜索命中与修订引用必须来自同一读快照（契约 §2.4），不能先取摘要再按 latest 补引用。 */
   search(query: string, options?: { revisionIds?: readonly string[] }): KnowledgeSearchResult[] {
-    if (options?.revisionIds) return this.searchRevisions(query, options.revisionIds);
+    return this.db.transaction(() => {
+      if (options?.revisionIds) return this.searchRevisions(query, options.revisionIds);
+      return this.searchLibrary(query);
+    })();
+  }
+
+  private searchLibrary(query: string): KnowledgeSearchResult[] {
     const terms = query
       .trim()
       .split(/[\s\p{P}]+/u)
       .filter(Boolean)
       .map((term) => `"${term.replaceAll('"', '""')}"`);
+    const hitColumns =
+      'd.id, d.title, d.source_path, d.format, d.byte_size, d.content_hash, d.page_count, d.imported_at, d.updated_at, c.locator, c.content';
     const rows =
       terms.length > 0
         ? (this.db
             .prepare(
-              `SELECT d.id, d.title, d.source_path, d.format, d.byte_size, d.content_hash, d.page_count, d.imported_at, d.updated_at, c.locator, c.content FROM knowledge_fts f JOIN knowledge_chunks c ON c.id = f.chunk_id JOIN knowledge_documents d ON d.id = f.document_id WHERE knowledge_fts MATCH ? ORDER BY rank LIMIT 50`,
+              `SELECT ${hitColumns} FROM knowledge_fts f JOIN knowledge_chunks c ON c.id = f.chunk_id JOIN knowledge_documents d ON d.id = f.document_id WHERE knowledge_fts MATCH ? ORDER BY rank LIMIT 50`,
             )
             .all(terms.join(' AND ')) as Array<KnowledgeRow & { locator: string; content: string }>)
         : [];
@@ -155,16 +180,45 @@ export class KnowledgeVault {
         ? rows
         : (this.db
             .prepare(
-              `SELECT d.id, d.title, d.source_path, d.format, d.byte_size, d.content_hash, d.page_count, d.imported_at, d.updated_at, c.locator, c.content FROM knowledge_chunks c JOIN knowledge_documents d ON d.id = c.document_id WHERE d.title LIKE ? OR c.content LIKE ? ORDER BY d.updated_at DESC, c.ordinal ASC LIMIT 50`,
+              `SELECT ${hitColumns} FROM knowledge_chunks c JOIN knowledge_documents d ON d.id = c.document_id WHERE d.title LIKE ? OR c.content LIKE ? ORDER BY d.updated_at DESC, c.ordinal ASC LIMIT 50`,
             )
             .all(`%${query}%`, `%${query}%`) as Array<
             KnowledgeRow & { locator: string; content: string }
           >);
-    return fallback.map((row) => ({
-      document: this.toSummary(row),
+    const results: KnowledgeSearchResult[] = [];
+    for (const row of fallback) {
+      const hit = this.toLibraryHit(row, query);
+      if (hit) results.push(hit);
+    }
+    return results;
+  }
+
+  /** 当前投影命中映射到该文档的当前修订；没有修订行（异常数据）时宁可丢弃命中也不伪造身份。 */
+  private toLibraryHit(
+    row: KnowledgeRow & { locator: string; content: string },
+    query: string,
+  ): KnowledgeSearchResult | undefined {
+    const revision = this.db
+      .prepare(
+        `SELECT id, document_id, revision, title, source_path, format, byte_size, content_hash,
+                content, page_count, parser_version, chunking_version, text_hash, section_count,
+                warnings_json, imported_at, created_at
+           FROM knowledge_revisions
+          WHERE document_id = ?
+          ORDER BY revision DESC LIMIT 1`,
+      )
+      .get(row.id) as KnowledgeRevisionRow | undefined;
+    if (!revision) return undefined;
+    return {
+      document: {
+        ...this.toSummary(row),
+        currentRevisionId: revision.id,
+      },
       locator: row.locator,
       excerpt: makeExcerpt(row.content, query),
-    }));
+      reference: this.toReference(revision),
+      textHash: revision.text_hash,
+    };
   }
 
   /**
@@ -203,6 +257,14 @@ export class KnowledgeVault {
           },
           locator: chunk.locator,
           excerpt: makeExcerpt(chunk.content, query),
+          reference: {
+            kind: 'knowledge-revision',
+            knowledgeDocumentId: revision.documentId,
+            knowledgeRevisionId: revision.id,
+            contentHash: revision.contentHash,
+            sourcePath: revision.sourcePath,
+          },
+          textHash: revision.textHash,
         });
         if (results.length >= 50) return results;
       }
@@ -213,8 +275,7 @@ export class KnowledgeVault {
   listRevisions(documentId: string): KnowledgeRevisionSummary[] {
     const rows = this.db
       .prepare(
-        `SELECT id, document_id, revision, title, source_path, format, byte_size, content_hash,
-                content, page_count, parser_version, chunking_version, imported_at, created_at
+        `SELECT ${revisionColumns}
            FROM knowledge_revisions
           WHERE document_id = ?
           ORDER BY revision DESC`,
@@ -225,12 +286,7 @@ export class KnowledgeVault {
 
   getRevision(revisionId: string): KnowledgeRevisionDetail | undefined {
     const row = this.db
-      .prepare(
-        `SELECT id, document_id, revision, title, source_path, format, byte_size, content_hash,
-                content, page_count, parser_version, chunking_version, imported_at, created_at
-           FROM knowledge_revisions
-          WHERE id = ?`,
-      )
+      .prepare(`SELECT ${revisionColumns} FROM knowledge_revisions WHERE id = ?`)
       .get(revisionId) as KnowledgeRevisionRow | undefined;
     if (!row) return undefined;
     const chunks = this.db
@@ -250,14 +306,61 @@ export class KnowledgeVault {
   ): KnowledgeRevisionSummary | undefined {
     const row = this.db
       .prepare(
-        `SELECT id, document_id, revision, title, source_path, format, byte_size, content_hash,
-                content, page_count, parser_version, chunking_version, imported_at, created_at
+        `SELECT ${revisionColumns}
            FROM knowledge_revisions
           WHERE source_path = ? AND content_hash = ?
           ORDER BY revision DESC LIMIT 1`,
       )
       .get(sourcePath, contentHash) as KnowledgeRevisionRow | undefined;
     return row ? this.toRevisionSummary(row) : undefined;
+  }
+
+  /**
+   * 管理预览（契约 §3.1）：复用同一分页纯逻辑，但不占 Run 预算、
+   * 不生成 RunMaterialRead/Evidence、不调用模型。documentId 与 revisionId 必须关联。
+   */
+  previewRevision(
+    documentId: string,
+    revisionId: string,
+    cursor?: KnowledgeCursor,
+    maxCodePoints?: number,
+  ): KnowledgeTextPage {
+    const revision = this.requireRevisionForDocument(documentId, revisionId);
+    return readKnowledgeTextPage({
+      reference: {
+        kind: 'knowledge-revision',
+        knowledgeDocumentId: revision.documentId,
+        knowledgeRevisionId: revision.id,
+        contentHash: revision.contentHash,
+        sourcePath: revision.sourcePath,
+      },
+      textHash: revision.textHash,
+      title: revision.title,
+      parserVersion: revision.parserVersion,
+      chunkingVersion: revision.chunkingVersion,
+      warnings: revision.warnings,
+      sections: revision.chunks,
+      ...(cursor ? { cursor } : {}),
+      ...(maxCodePoints === undefined ? {} : { maxCodePoints }),
+    });
+  }
+
+  requireRevisionForDocument(documentId: string, revisionId: string): KnowledgeRevisionDetail {
+    const revision = this.getRevision(revisionId);
+    if (!revision || revision.documentId !== documentId) {
+      throw new KnowledgeServiceError('KNOWLEDGE_REVISION_MISMATCH', '修订不存在或不属于该资料。');
+    }
+    return revision;
+  }
+
+  private toReference(revision: KnowledgeRevisionRow): KnowledgeMaterialReference {
+    return {
+      kind: 'knowledge-revision',
+      knowledgeDocumentId: revision.document_id,
+      knowledgeRevisionId: revision.id,
+      contentHash: revision.content_hash,
+      sourcePath: revision.source_path,
+    };
   }
 
   getRegisteredSourcePath(sourcePath: string): string | undefined {
@@ -304,6 +407,13 @@ export class KnowledgeVault {
     bytes: Buffer,
     extracted: ExtractedDocument,
   ): KnowledgeDocumentSummary {
+    // 超限整文件失败，不暗截断为完整导入（契约 §2.2）。
+    if (countCodePoints(extracted.content) > KNOWLEDGE_REVISION_MAX_TEXT_CODE_POINTS) {
+      throw new KnowledgeServiceError(
+        'EXTRACTION_LIMIT_EXCEEDED',
+        '提取正文超过单修订 2,000,000 码点上限，文件未导入。',
+      );
+    }
     const now = Date.now();
     const hash = createHash('sha256').update(bytes).digest('hex');
     const existing = this.db
@@ -358,10 +468,24 @@ export class KnowledgeVault {
         insertChunk.run(chunkId, id, chunk.locator, chunk.ordinal, chunk.content);
         insertFts.run(id, chunkId, title, chunk.content);
       }
-      const revisionExists = this.db
-        .prepare('SELECT id FROM knowledge_revisions WHERE document_id = ? AND content_hash = ?')
-        .get(id, hash) as { id: string } | undefined;
-      if (!revisionExists) {
+      const warningsJson = JSON.stringify(extracted.warnings ?? []);
+      const existingRevision = this.db
+        .prepare(
+          `SELECT id, text_hash FROM knowledge_revisions
+            WHERE document_id = ? AND content_hash = ? AND parser_version = ? AND chunking_version = ?`,
+        )
+        .get(id, hash, parserVersion, chunkingVersion) as
+        { id: string; text_hash: string } | undefined;
+      const revisionTextHashValue = revisionTextHash(extracted.chunks);
+      if (existingRevision) {
+        // 同解析身份必须得到同一提取文本；不一致说明解析被改坏，绝不覆盖旧修订。
+        if (existingRevision.text_hash !== revisionTextHashValue) {
+          throw new KnowledgeServiceError(
+            'PARSER_NONDETERMINISTIC',
+            '相同解析身份得到不同提取文本，已保留旧修订。',
+          );
+        }
+      } else {
         const nextRevision = this.db
           .prepare(
             'SELECT COALESCE(MAX(revision), 0) + 1 AS next FROM knowledge_revisions WHERE document_id = ?',
@@ -372,8 +496,9 @@ export class KnowledgeVault {
           .prepare(
             `INSERT INTO knowledge_revisions
               (id, document_id, revision, title, source_path, format, byte_size, content_hash,
-               content, page_count, parser_version, chunking_version, imported_at, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+               content, page_count, parser_version, chunking_version, text_hash, section_count,
+               warnings_json, imported_at, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .run(
             revisionId,
@@ -386,8 +511,11 @@ export class KnowledgeVault {
             hash,
             extracted.content,
             extracted.pageCount ?? null,
-            'text-extract-v1',
-            'format-locator-v1',
+            parserVersion,
+            chunkingVersion,
+            revisionTextHashValue,
+            extracted.chunks.length,
+            warningsJson,
             existing?.imported_at ?? now,
             now,
           );
@@ -442,9 +570,21 @@ export class KnowledgeVault {
       ...(row.page_count === null ? {} : { pageCount: row.page_count }),
       parserVersion: row.parser_version,
       chunkingVersion: row.chunking_version,
+      textHash: row.text_hash,
+      sectionCount: row.section_count,
+      warnings: parseWarningCodes(row.warnings_json),
       importedAt: row.imported_at,
       createdAt: row.created_at,
     };
+  }
+}
+
+function parseWarningCodes(raw: string): KnowledgeWarningCode[] {
+  try {
+    const parsed = z.array(knowledgeWarningCodeSchema).safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : [];
+  } catch {
+    return [];
   }
 }
 
