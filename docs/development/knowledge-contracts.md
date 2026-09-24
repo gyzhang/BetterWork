@@ -380,6 +380,9 @@ KnowledgeFormat 扩充 `xlsx | csv | pptx`；穷尽更新扩展名、文件选�
 | SOURCE_DECLARATION_INVALID | 采用声明越界、未读整份材料或重复冲突 |
 | OPERATION_CONFLICT | 幂等 ID 输入不同 |
 | REVISION_CONFLICT | 设置/集合 CAS 失败 |
+| WORKER_TIMEOUT | 提取 Worker 在预算内未完成，条目失败且不自动重试 |
+| WORKER_UNAVAILABLE | Worker 启动失败、异常退出、响应超限或应用退出收口 |
+| WORKER_EXTRACT_FAILED | Worker 返回提取错误（解析失败），逐条目可见原因 |
 | COLLECTION_NAME_CONFLICT | 规范化名称重复 |
 
 普通文件不存在/权限、格式不支持、无文本与解析失败保留具体 job item reason，不混同模型故障。未知异常使用 describeError 后脱敏，不在 UI 显示 stack。

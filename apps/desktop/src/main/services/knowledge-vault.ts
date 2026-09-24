@@ -18,6 +18,7 @@ import {
   type KnowledgeTextPage,
   type KnowledgeWarningCode,
   knowledgeWarningCodeSchema,
+  type KnowledgeWorkerJobContext,
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
@@ -25,6 +26,11 @@ import { z } from 'zod';
 import { openKnowledgeDatabase } from '../db';
 import { buildRetrievalChunks } from './knowledge-chunks';
 import { KnowledgeServiceError } from './knowledge-errors';
+import {
+  type DocumentExtractor,
+  extractDocument,
+  type ExtractedDocument,
+} from './knowledge-extract';
 import { KnowledgeIndexStore } from './knowledge-index-store';
 import { KnowledgeJobStore } from './knowledge-job-store';
 import { makeSpanExcerpt, readKnowledgeTextPage, revisionTextHash } from './knowledge-text';
@@ -68,20 +74,6 @@ interface KnowledgeRevisionRow {
   created_at: number;
 }
 
-interface KnowledgeChunk {
-  id: string;
-  locator: string;
-  content: string;
-  ordinal: number;
-}
-interface ExtractedDocument {
-  format: KnowledgeFormat;
-  content: string;
-  pageCount?: number;
-  warnings?: KnowledgeWarningCode[];
-  chunks: Array<Omit<KnowledgeChunk, 'id'>>;
-}
-
 export type { KnowledgeRevisionSummary } from '@betterwork/agent-protocol';
 
 export interface KnowledgeRevisionDetail extends KnowledgeRevisionSummary {
@@ -105,11 +97,14 @@ export class KnowledgeVault {
   readonly index: KnowledgeIndexStore;
   readonly jobs: KnowledgeJobStore;
 
+  private readonly extractor: DocumentExtractor;
+
   /** schema 与历史库对账由 db/knowledge-schema.ts 的版本化迁移负责，服务层不碰 DDL。 */
-  constructor(filePath: string) {
+  constructor(filePath: string, deps?: { readonly extractor?: DocumentExtractor }) {
     this.db = openKnowledgeDatabase(filePath);
     this.index = new KnowledgeIndexStore(this.db);
     this.jobs = new KnowledgeJobStore(this.db);
+    this.extractor = deps?.extractor ?? extractDocument;
   }
 
   listDocuments(): KnowledgeDocumentSummary[] {
@@ -155,6 +150,7 @@ export class KnowledgeVault {
    */
   async importSource(
     sourcePath: string,
+    context?: KnowledgeWorkerJobContext,
   ): Promise<{ document: KnowledgeDocumentSummary; revisionId: string; textHash: string }> {
     const extension = path.extname(sourcePath).toLowerCase();
     const format = supportedFormats[extension];
@@ -169,7 +165,7 @@ export class KnowledgeVault {
       throw new KnowledgeServiceError('EXTRACTION_LIMIT_EXCEEDED', '文件超过 20 MB，暂不导入。');
     }
     const bytes = await readFile(sourcePath);
-    const extracted = await extractDocument(format, bytes);
+    const extracted = await this.extractor(format, bytes, context);
     if (!extracted.content.trim()) {
       throw new KnowledgeServiceError('EXTRACTION_LIMIT_EXCEEDED', '未能从文件中提取可检索文本。');
     }
@@ -560,7 +556,7 @@ export class KnowledgeVault {
       const insertFts = this.db.prepare(
         'INSERT INTO knowledge_fts (document_id, chunk_id, title, content) VALUES (?, ?, ?, ?)',
       );
-      for (const chunk of extracted.chunks) {
+      for (const chunk of extracted.sections) {
         const chunkId = randomUUID();
         insertChunk.run(chunkId, id, chunk.locator, chunk.ordinal, chunk.content);
         insertFts.run(id, chunkId, title, chunk.content);
@@ -573,7 +569,7 @@ export class KnowledgeVault {
         )
         .get(id, hash, parserVersion, chunkingVersion) as
         { id: string; text_hash: string } | undefined;
-      const revisionTextHashValue = revisionTextHash(extracted.chunks);
+      const revisionTextHashValue = revisionTextHash(extracted.sections);
       let publishedRevisionId = existingRevision?.id ?? '';
       if (existingRevision) {
         // 同解析身份必须得到同一提取文本；不一致说明解析被改坏，绝不覆盖旧修订。
@@ -613,7 +609,7 @@ export class KnowledgeVault {
             parserVersion,
             chunkingVersion,
             revisionTextHashValue,
-            extracted.chunks.length,
+            extracted.sections.length,
             warningsJson,
             existing?.imported_at ?? now,
             now,
@@ -622,7 +618,7 @@ export class KnowledgeVault {
           `INSERT INTO knowledge_revision_chunks
             (id, revision_id, locator, ordinal, content) VALUES (?, ?, ?, ?, ?)`,
         );
-        for (const chunk of extracted.chunks) {
+        for (const chunk of extracted.sections) {
           insertRevisionChunk.run(
             randomUUID(),
             revisionId,
@@ -640,7 +636,7 @@ export class KnowledgeVault {
         buildRetrievalChunks({
           revisionId: publishedRevisionId,
           textHash: revisionTextHashValue,
-          sections: extracted.chunks.map((chunk) => ({
+          sections: extracted.sections.map((chunk) => ({
             ordinal: chunk.ordinal,
             locator: chunk.locator,
             content: chunk.content,
@@ -700,47 +696,6 @@ function parseWarningCodes(raw: string): KnowledgeWarningCode[] {
     return parsed.success ? parsed.data : [];
   } catch {
     return [];
-  }
-}
-
-async function extractDocument(format: KnowledgeFormat, bytes: Buffer): Promise<ExtractedDocument> {
-  if (format === 'markdown' || format === 'text') {
-    const content = bytes.toString('utf8').replace(/^\uFEFF/, '');
-    return { format, content, chunks: [{ locator: '全文', ordinal: 0, content }] };
-  }
-  if (format === 'docx') {
-    const mammoth = await import('mammoth');
-    const result = await mammoth.extractRawText({ buffer: bytes });
-    const paragraphs = result.value
-      .split(/\n{2,}/u)
-      .map((paragraph) => paragraph.trim())
-      .filter(Boolean);
-    const chunks = paragraphs.map((content, index) => ({
-      locator: `段落 ${index + 1}`,
-      ordinal: index,
-      content,
-    }));
-    return { format, content: chunks.map((chunk) => chunk.content).join('\n\n'), chunks };
-  }
-  const { PDFParse } = await import('pdf-parse');
-  const parser = new PDFParse({ data: bytes });
-  try {
-    const text = await parser.getText({ pageJoiner: '' });
-    const chunks = text.pages
-      .map((page) => ({
-        locator: `第 ${page.num} 页`,
-        ordinal: page.num - 1,
-        content: page.text.trim(),
-      }))
-      .filter((page) => Boolean(page.content));
-    return {
-      format,
-      content: chunks.map((page) => page.content).join('\n\n'),
-      pageCount: text.total,
-      chunks,
-    };
-  } finally {
-    await parser.destroy();
   }
 }
 

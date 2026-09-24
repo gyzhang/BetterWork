@@ -15,7 +15,10 @@ export type KnowledgeErrorCode =
   | 'INDEX_CONFIGURATION_CHANGED'
   | 'INDEX_ITEM_NOT_RETRYABLE'
   | 'OPERATION_CONFLICT'
-  | 'REVISION_CONFLICT';
+  | 'REVISION_CONFLICT'
+  | 'WORKER_TIMEOUT'
+  | 'WORKER_UNAVAILABLE'
+  | 'WORKER_EXTRACT_FAILED';
 
 export class KnowledgeServiceError extends Error {
   constructor(

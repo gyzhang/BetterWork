@@ -91,6 +91,36 @@ describe('KnowledgeVault', () => {
     // mammoth 首次动态导入需要现场转换，冷缓存下会超过默认的 5 秒
   }, 30_000);
 
+  it('注入的提取器接管解析并收到条目级作业上下文（KM07b）', async () => {
+    const directory = temporaryDirectory();
+    const document = path.join(directory, '注入提取.md');
+    const content = '# 原件\n\n原件文本。';
+    writeFileSync(document, content);
+    const calls: Array<{ format: string; bytes: number; jobId: string | undefined }> = [];
+    const vault = new KnowledgeVault(path.join(directory, 'vault-worker.sqlite'), {
+      async extractor(format, bytes, context) {
+        calls.push({ format, bytes: bytes.length, jobId: context?.jobId });
+        return {
+          format,
+          content: '由 Worker 返回的提取文本。',
+          sections: [{ locator: '全文', ordinal: 0, content: '由 Worker 返回的提取文本。' }],
+        };
+      },
+    });
+    const published = await vault.importSource(document, { jobId: 'job-77', attempt: 3 });
+    expect(calls).toEqual([
+      { format: 'markdown', bytes: Buffer.byteLength(content), jobId: 'job-77' },
+    ]);
+    expect(vault.search('Worker')[0]).toMatchObject({
+      document: { title: '注入提取' },
+    });
+    expect(published.textHash).toBeTruthy();
+    // 不传上下文（如旧调用路径）时照常工作，Worker 端落到独立作业。
+    await vault.importSource(document);
+    expect(calls[1]?.jobId).toBeUndefined();
+    vault.close();
+  });
+
   it('imports PDF pages as independently locatable search results', async () => {
     const directory = temporaryDirectory();
     const pdf = path.join(directory, '市场报告.pdf');

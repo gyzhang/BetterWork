@@ -3776,6 +3776,89 @@ export const knowledgeWarningCodeSchema = z.enum([
 ]);
 export type KnowledgeWarningCode = z.infer<typeof knowledgeWarningCodeSchema>;
 
+/**
+ * KM07b 提取 Worker 线协议（契约 §8.2）：Main 给字节，Worker 还提取结果。
+ * Worker 不读文件路径、不访问网络、不写数据库；请求与响应都逐行 JSON、有大小上限。
+ */
+export const KNOWLEDGE_WORKER_REQUEST_MAX_BASE64_BYTES = 32 * 1024 * 1024;
+export const KNOWLEDGE_WORKER_RESPONSE_MAX_BYTES = 64 * 1024 * 1024;
+export const KNOWLEDGE_WORKER_SHUTDOWN_GRACE_MS = 1_000;
+export const KNOWLEDGE_WORKER_EXTRACT_TIMEOUT_MS = 30_000;
+
+const knowledgeWorkerEnvelope = {
+  id: z.string().min(1).max(64),
+  nonce: z.string().min(1).max(64),
+};
+
+export const knowledgeExtractedSectionSchema = z
+  .object({
+    locator: z.string().min(1),
+    ordinal: z.number().int().nonnegative(),
+    content: z.string(),
+  })
+  .strict();
+export type KnowledgeExtractedSection = z.infer<typeof knowledgeExtractedSectionSchema>;
+
+export const knowledgeExtractedDocumentSchema = z
+  .object({
+    format: z.enum(['markdown', 'text', 'pdf', 'docx']),
+    content: z.string(),
+    pageCount: z.number().int().positive().optional(),
+    warnings: z.array(knowledgeWarningCodeSchema).optional(),
+    sections: z.array(knowledgeExtractedSectionSchema),
+  })
+  .strict();
+export type KnowledgeExtractedDocument = z.infer<typeof knowledgeExtractedDocumentSchema>;
+
+export const knowledgeWorkerJobContextSchema = z
+  .object({
+    jobId: z.string().min(1),
+    attempt: z.number().int().positive(),
+  })
+  .strict();
+export type KnowledgeWorkerJobContext = z.infer<typeof knowledgeWorkerJobContextSchema>;
+
+export const knowledgeWorkerExtractRequestSchema = z
+  .object({
+    ...knowledgeWorkerEnvelope,
+    op: z.literal('extract'),
+    job: knowledgeWorkerJobContextSchema,
+    format: knowledgeExtractedDocumentSchema.shape.format,
+    dataBase64: z.string().max(KNOWLEDGE_WORKER_REQUEST_MAX_BASE64_BYTES),
+  })
+  .strict();
+export type KnowledgeWorkerExtractRequest = z.infer<typeof knowledgeWorkerExtractRequestSchema>;
+
+export const knowledgeWorkerShutdownRequestSchema = z
+  .object({ ...knowledgeWorkerEnvelope, op: z.literal('shutdown') })
+  .strict();
+
+export const knowledgeWorkerRequestSchema = z.discriminatedUnion('op', [
+  knowledgeWorkerExtractRequestSchema,
+  knowledgeWorkerShutdownRequestSchema,
+]);
+export type KnowledgeWorkerRequest = z.infer<typeof knowledgeWorkerRequestSchema>;
+
+export const knowledgeWorkerResponseSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      ...knowledgeWorkerEnvelope,
+      kind: z.literal('result'),
+      document: knowledgeExtractedDocumentSchema,
+    })
+    .strict(),
+  z
+    .object({
+      ...knowledgeWorkerEnvelope,
+      kind: z.literal('error'),
+      code: z.string().min(1).max(64),
+      message: z.string().min(1).max(500),
+    })
+    .strict(),
+  z.object({ ...knowledgeWorkerEnvelope, kind: z.literal('shutdown') }).strict(),
+]);
+export type KnowledgeWorkerResponse = z.infer<typeof knowledgeWorkerResponseSchema>;
+
 export const knowledgeRevisionSummarySchema = z.object({
   id: z.string().min(1),
   documentId: z.string().min(1),

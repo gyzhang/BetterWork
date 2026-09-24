@@ -32,6 +32,10 @@ import { FileArtifactService } from './services/file-artifact-service';
 import { InputSnapshotService } from './services/input-snapshot-service';
 import { KnowledgeIndexService } from './services/knowledge-index-service';
 import { KnowledgeVault } from './services/knowledge-vault';
+import {
+  KnowledgeWorkerRunner,
+  resolveKnowledgeWorkerRuntime,
+} from './services/knowledge-worker-runner';
 import { McpClientService } from './services/mcp-client-service';
 import { MemoryExtractionService } from './services/memory-extraction-service';
 import { MemoryRecallService } from './services/memory-recall-service';
@@ -64,6 +68,7 @@ import { createMainWindow } from './window';
 interface ApplicationContext {
   store: AppStore;
   knowledgeVault: KnowledgeVault;
+  knowledgeWorker: KnowledgeWorkerRunner;
   inputSnapshots: InputSnapshotService;
   mcpClientService: McpClientService;
   runs?: RunService;
@@ -107,8 +112,13 @@ function bootstrap(): ApplicationContext {
         console.error('Credential migration failed', error);
       });
   }
+  // 提取在受管 Worker 子进程执行（契约 §8.2）：Main 只给字节、收结果，不占解析 CPU。
+  const knowledgeWorker = new KnowledgeWorkerRunner({
+    runtime: resolveKnowledgeWorkerRuntime(__dirname),
+  });
   const knowledgeVault = new KnowledgeVault(
     path.join(userData, 'vaults', 'default', 'vault.sqlite'),
+    { extractor: knowledgeWorker.extractor },
   );
   const inputSnapshots = new InputSnapshotService(store, userData);
   const memories = new MemoryService(store, userData);
@@ -240,6 +250,7 @@ function bootstrap(): ApplicationContext {
   const started: ApplicationContext = {
     store,
     knowledgeVault,
+    knowledgeWorker,
     inputSnapshots,
     mcpClientService,
     window: null,
@@ -253,6 +264,7 @@ function bootstrap(): ApplicationContext {
   const notifications = new NotificationService(store.notifications, getWindow);
   const knowledgeIndex = new KnowledgeIndexService({
     vault: knowledgeVault,
+    onJobCancel: (jobId) => knowledgeWorker.cancelJob(jobId),
     embedding: new EmbeddingClient({
       models: store.models,
       ...(credentialAccess ? { credentialAccess } : {}),
@@ -391,6 +403,7 @@ app.on(
     async () => {
       await context?.runs?.shutdown();
       await context?.mcpClientService.shutdown();
+      await context?.knowledgeWorker.shutdown();
     },
     () => {
       context?.knowledgeVault.close();

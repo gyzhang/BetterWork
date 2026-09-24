@@ -89,6 +89,8 @@ interface Harness {
   directory: string;
 }
 
+const cancelCalls: string[] = [];
+
 const createHarness = (options: EmbeddingStubOptions = {}): Harness => {
   const directory = temporaryDirectory();
   const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
@@ -99,6 +101,9 @@ const createHarness = (options: EmbeddingStubOptions = {}): Harness => {
     embedding,
     onEvent: (job) => {
       events.push(job);
+    },
+    onJobCancel: (jobId) => {
+      cancelCalls.push(jobId);
     },
   });
   return { vault, service, events, embedding, directory };
@@ -531,6 +536,17 @@ describe('KnowledgeIndexService 设置与来源检查', () => {
     harness.vault.close();
   });
 
+  it('取消作业同步通知提取 Worker 收口登记进程（KM07b）', async () => {
+    const harness = createHarness();
+    const file = writeSource(harness.directory, '取消通知.md', '取消也要能解释。');
+    const ack = harness.service.startImport([file]);
+    const callsBefore = cancelCalls.length;
+    harness.service.cancelJob(ack.jobId);
+    expect(cancelCalls.slice(callsBefore)).toEqual([ack.jobId]);
+    await harness.service.settled();
+    expect(harness.service.getJob(ack.jobId)?.status).toBe('cancelled');
+    harness.vault.close();
+  });
   it('空目标的普通重建被拒绝，不产生看似成功的作业', () => {
     const harness = createHarness();
     expect(() => harness.service.startRebuildKeyword({ kind: 'keyword' })).toThrow(

@@ -91,6 +91,7 @@ standards/
 - `useUnknownInCatchVariables`：`catch (error)` 里 `error` 是 `unknown`。统一用 `describeError(error)` 转文本，不要 `String(error)` 散落各处。
 - 禁止 `any`（生产代码）与 `!` 非空断言。数据库行一律先声明 `interface XxxRow` 再 `as` 到该类型，不要 `Record<string, unknown>` 加 `String()` 逐字段转换——那会让 `no-base-to-string` 报警，也容易把 `[object Object]` 写进用户数据。
 - 可选属性优先于 `null`；数据库列的 `NULL` 在映射层转成「省略该属性」。
+- `allowImportingTsExtensions` 仅为独立 Worker 入口开启：`knowledge-worker.ts` 需要被 Node 原生类型剥离直接执行（同 skill-guardian 的「测试跑 TS 源、打包跑构建 JS」双入口），原生 ESM 解析要求相对导入带 `.ts` 后缀；除该入口链外不要新增 `.ts` 后缀导入。
 
 ## 5. 异步与错误处理
 

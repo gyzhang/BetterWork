@@ -49,6 +49,8 @@ export interface KnowledgeIndexServiceDeps {
   readonly onEvent?: ((job: KnowledgeJobSummary) => void) | undefined;
   /** 两个索引批次之间让查询优先；测试与生产都注入同一实现，不额外放宽预算。 */
   readonly yieldBetweenBatches?: (() => Promise<void> | void) | undefined;
+  /** 取消作业时通知提取 Worker（KM07b）：由 Worker 运行器收口本作业登记的子进程。 */
+  readonly onJobCancel?: ((jobId: string) => void) | undefined;
 }
 
 export interface ImportJobRequest {
@@ -118,6 +120,7 @@ export class KnowledgeIndexService {
   private readonly index: KnowledgeIndexStore;
   private readonly onEvent: ((job: KnowledgeJobSummary) => void) | undefined;
   private readonly yieldBetweenBatches: (() => Promise<void> | void) | undefined;
+  private readonly onJobCancel: ((jobId: string) => void) | undefined;
   private readonly controllers = new Map<string, AbortController>();
   private draining: Promise<void> = Promise.resolve();
 
@@ -128,6 +131,7 @@ export class KnowledgeIndexService {
     this.index = deps.vault.index;
     this.onEvent = deps.onEvent;
     this.yieldBetweenBatches = deps.yieldBetweenBatches;
+    this.onJobCancel = deps.onJobCancel;
   }
 
   getSettings(): KnowledgeSearchSettings {
@@ -291,6 +295,7 @@ export class KnowledgeIndexService {
     if (!job || isTerminalJob(job.status)) return undefined;
     this.controllers.get(jobId)?.abort();
     this.controllers.delete(jobId);
+    this.onJobCancel?.(jobId);
     this.jobs.cancelUnfinishedItems(jobId);
     const cancelled = this.jobs.finish(jobId, { status: 'cancelled' });
     this.emit(cancelled);
@@ -443,7 +448,10 @@ export class KnowledgeIndexService {
           throw jobError('INDEX_CONFIGURATION_CHANGED', '导入作业条目类型不符。');
         }
         this.jobs.updateItem(item.id, { phase: 'extract' });
-        const published = await this.vault.importSource(target.sourcePath);
+        const published = await this.vault.importSource(target.sourcePath, {
+          jobId: job.id,
+          attempt: item.attempt,
+        });
         this.jobs.updateItem(item.id, {
           phase: 'publish',
           resultRevisionId: published.revisionId,
@@ -460,7 +468,10 @@ export class KnowledgeIndexService {
         if (!document) {
           throw jobError('KNOWLEDGE_DOCUMENT_REMOVED', '资料已不在当前资料库中。');
         }
-        const published = await this.vault.importSource(document.sourcePath);
+        const published = await this.vault.importSource(document.sourcePath, {
+          jobId: job.id,
+          attempt: item.attempt,
+        });
         this.jobs.updateItem(item.id, {
           phase: 'publish',
           resultRevisionId: published.revisionId,
