@@ -795,3 +795,79 @@ Spec §2.2 写着「必须验证的静态风险」九条，是本轮开发的立
 | 升级禁令 `authority === 'derived'`→永不匹配 | 集成 12 条中**只有新用例红**，11 条仍绿 |
 
 验证：`npx eslint`（本轮 5 份改动文件）退出 0；`npx vitest run memory-provenance.test.ts` 删除后 14 条全绿；`npm run verify` 退出码 **0**，**112 文件／1011 用例全绿**。用例数与上一节对得上：1009 ＋ 本轮新增 3 条 − 删除的假守卫 1 条 ＝ 1011（`memory-provenance.test.ts` 少一条，其余三条分别落在协议、服务与集成文件）。契约 §5.1／§5.5 两处落点为纯文档改动，含在全量门禁的 `format:check` 里。**口径要说满**：本节这段验证文字写在那次门禁之后，它（以及日志同日新增段落）只由随后的 `npx prettier --check docs/development/tasks-memory.md docs/development/memory-contracts.md docs/logs/2026-09-24.md` 退出 0 覆盖，未重跑全量门禁——纯文档改动不触碰代码，这一点是判定而非实测。
+
+### 15.30 Spec §7.1／§7.2 逐条款闭合：补上「无 Run 的讨论反馈用当前 TaskContext 的模型」这条从未实现的口径（2026-09-24 21:01）
+
+本轮轴＝模型与提炼正文（§7.1 九条、§7.2 八条）＋ §13.2 里程碑三栏记录 ＋ §16 假设与边界。并行取证回料后按行号复核 31 处强制点。
+
+**A 组｜§7.1 模型与 Provider（9 条）**
+
+| # | 条款 | 强制点 | 用例（`it()` 原文） |
+| --- | --- | --- | --- |
+| A1 | Main 内共享 `model-provider-factory.ts`，复用 profile／默认解析／credential-access；Agent Core 不导入数据库 | 工厂存在且被两侧共用 `services/model-provider-factory.ts:113/143`；`packages/agent-core/package.json` 依赖面 | `model-provider-factory.test.ts:187`「reads the secret from the credential store once migration is done」＋护栏 `standards/coding-standard.test.ts:205`「packages 不依赖 apps，Agent Core 不依赖宿主运行时」 |
+| A2 | 普通 Run 兼容行为保持 | `run-service.ts:1455` 仍走同一工厂的 `resolveForRun` | `model-provider-factory.test.ts:78`「keeps the teaching fallback for ordinary runs when nothing is configured」 |
+| A3 | 提炼用 `requireConfiguredLanguageModel`，生产禁止 Fake 回落 | `model-provider-factory.ts:117-121`（非 profile/default 直接 `MODEL_UNAVAILABLE`）；主进程装配不传 `fallbackProvider`（`main/index.ts:112`），Fake 只作为普通 Run 的回落注入（`run-service.ts:417`→`:1454`） | `model-provider-factory.test.ts:113`「refuses to run extraction on the teaching model even when a fallback exists」 |
+| A4 | 新 Run 审计存实际解析的 `modelProfileId` 与非敏感指纹 | `run-service.ts:620-622` | `run-memory-context-repository.test.ts:167`「walks selected to request-prepared to dispatch-attempted with the real request hash」 |
+| A5 | **无 Run 的讨论反馈使用当前 TaskContext 的模型** | 本轮新实现：`extraction-source-reader.ts` 的 `taskContextModelProfileId`（`getLatest(taskId).modelReference` → 执行专家修订 `modelReference`，与 `run-service.ts:1527` 同口径），`readCheckpointSource` 在 `!runId` 时取它 | 本轮新增 `work-centered-memory.integration.test.ts`「没有来源 Run 的讨论反馈用当前 TaskContext 钉住的模型，不暗换应用级默认」（两侧：钉住 profile 时作业带该 profile；停用它后拒绝且零作业登记，而应用级默认可用） |
+| A6 | 配置不可用／指纹变化 ⇒ `skipped`，不暗换另一服务 | `memory-extraction-service.ts:885/898`；工厂侧不另找替代 `model-provider-factory.ts:129` | `memory-extraction-service.test.ts:818`「同意缺失、模型不可用、指纹变化、来源变化都在调用模型前收口」 |
+| A7 | 手动重试需展示当前模型并重新同意 | 独立同意 `memory-extraction-service.ts:600`；展示名从当前 profile 联表取 `memory-extraction-repository.ts:650`，界面 `MemorySuggestionList.tsx:220` | `memory-extraction-service.test.ts:961`「手动重试带独立同意：attempt 递增、trigger 变 manual-retry、不改自动开关」（「展示当前模型」这一半 无测试，见缺口 3） |
+| A8 | 指纹不含凭据；端点只存去 query／userinfo 的展示值 | `model-provider-factory.ts:157`（指纹入参无 `apiKey`）、`:64`（`protocol//host+pathname`） | `model-provider-factory.test.ts:128`「never carries the credential, so two keys on the same config match」、`:66`「strips query, userinfo and any url-borne token」、`memory-extraction-service.test.ts:461` |
+| A9 | `maxOutputTokens` 可选，实际发包 `min(请求上限, profile上限)`；done chunk 带可选 `finishReason`／`usage`，普通消费者兼容；提炼只接受 `stop`；缺结束原因＝`MODEL_FINISH_UNKNOWN`；`length` 不当完整 JSON | `agent-core/src/types.ts:29/35`；`openai-compatible-provider.ts:36`（`Math.min`）；编排器只读 tool-call 分支 `agent-engine.ts:139`；`memory-extraction-prompt.ts:231-232` | `openai-compatible-provider.test.ts:390`「sends the lower of the profile ceiling and the request ceiling」、`:404`、`:235`「maps the upstream finish_reason %s into %s」、`agent-engine.test.ts:38`、`memory-extraction-prompt.test.ts`「distinguishes truncation, tool calls and an unknown finish reason」 |
+
+超时／取消／早 EOF／可注入 fetch 的复用已在 §15.9–§15.11 与 §15.19 逐条取证（`memory-extraction-service.ts:960/965` 无自有 `fetch`、`openai-compatible-provider.ts:131/246`），本节不重复。
+
+**B 组｜§7.2 作业输入、输出及保密（8 条行为面）**
+
+| # | 条款 | 强制点 | 用例（`it()` 原文） |
+| --- | --- | --- | --- |
+| B1 | 只用本次 prompt；需要消歧时才取「上一轮最终回答」，绝不把本轮新生成的答案当已被认可的经验 | `extraction-source-reader.ts:83`（`needsDisambiguation` 才取）＋`:48`（`run.id !== currentRunId` 过滤）＋`:32`（只取 `message.completed`） | `extraction-source-reader.test.ts:98`「attaches the previous final answer only when the prompt needs disambiguation」 |
+| B2 | 讨论输入：人工 feedback 为主证据，summary 只是背景、不能证明确认 | `memory-extraction-prompt.ts:60`（`HUMAN_EVIDENCE_ROLES` 只有 `user-prompt`／`checkpoint-feedback`）→ `:311/314` 拒绝无人工证据的候选 | 「keeps human feedback as the primary fragment for checkpoint jobs」＋本轮新增「节点摘要单独撑不住一条候选：摘要只是背景，不证明确认」 |
+| B3 | summary 送入上限 1,000 码点 | `memory-extraction-prompt.ts:29`（取协议常量）＋应用处 `:142`（`clampHeadTail`） | `memory-extraction-prompt.test.ts`「respects the fixed instruction and whole-request code point ceilings」 |
+| B4 | 超长采用首尾等分并标注非全文；证据区间只能落在真实片段内 | `memory-extraction-service.ts:325/329`（等分＋`partial: true`）＋`:396`（`mapStoredRange` 把片段坐标映回全文，跨标记即放弃）；`memory-extraction-prompt.ts:306/308` | 「marks truncation instead of silently dropping the middle」＋`memory-extraction-service.test.ts:1068`「超长来源：截断片段仍按全文坐标证明头段证据；命中截断标记的证据被放弃而非伪造」 |
+| B5 | 不读完整材料、文件或其它历史来补上下文 | `memory-extraction-prompt.ts:103`（装配器只收四个文本字段）；`extraction-source-reader.ts:70`（材料只取引用，不取正文）；提炼服务全文件无 `readFile`／`knowledgeVault` | 「sends only the minimal evidence plus disambiguating background」、`extraction-source-reader.test.ts:62`「refuses a run without a preparation snapshot」 |
+| B6 | 依赖随来源与背景引用整份继承，不随送入片段截断 | `memory-extraction-service.ts:791`（入队整份）→`:1059`（候选整份）；超额即拒 `:737` | 「合法用户纠正 → 候选以待审状态落库并整份继承依赖」「材料依赖超额时返回 SOURCE_DEPENDENCY_LIMIT 结论」 |
+| B7 | 严格 JSON 的每条子断言（≤3 条；每条 1–3 段证据；至少一段人工证据；Main 验片段身份／码点区间／非空；宿主字段出现即整次非法；0 条合法；围栏或解释或任一非法即整体失败；不做修复重试） | `memory-extraction-prompt.ts:243/244/250/258/259/267/284/287/303/306/308/311/314`；单次解析 `memory-extraction-service.ts:1000` | 「accepts zero candidates as a successful result」「rejects code fences, trailing prose and any extra top-level key」「rejects a candidate supported only by assistant text」「rejects evidence pointing at a fragment that was never sent」「rejects evidence ranges outside the fragment that was actually sent」「rejects host-owned fields smuggled into a candidate」「rejects more than three candidates and an over-long body」＋`work-centered-memory.integration.test.ts:788`「提炼失败不改变主 Run 终态，也不写入候选」（其中断言提炼请求恰好 1 次＝无修复重试）；**候选正文下限 1 码点由本轮新增「空正文候选让整次结果失败（正文下限 1 码点）」补上** |
+| B8 | 提示词六条固定规则随请求送出；敏感内容三处拒绝且日志不落原文；用户可关自动建议；不外传到其它服务 | `memory-extraction-prompt.ts:66-70`（六条原文）；`memory-extraction-service.ts:760/905/1027`（入队前／执行前／保存前）＋`:696`（日志同源脱敏）；`memory-content-policy.ts:44`（含本次已知凭据）；`memory-service.ts:244`（写入口同源）；开关 `memory-extraction-service.ts:526`；唯一出口 `:965` | 「来源片段命中敏感内容时拒绝提炼：零入队零模型调用」「输出命中凭据模式时整批拒绝保存且不落原文」「Provider 抛错只落 MODEL_REQUEST_FAILED，凭据既不进数据库也不进日志」＋本轮新增「契约写死的六条提炼规则随每次请求一起送出」（六句原文逐条 `toContain`） |
+
+**C 组｜§13.2 里程碑三栏记录（此前只有两栏，缺第三栏即记为缺，不伪造）**
+
+| 里程碑 | 自动证据 | 用户界面证据（人工） | 模型语义证据（真实模型） |
+| --- | --- | --- | --- |
+| WM-M0 | 文档完整性／链接：§15.13（429 条内部链接逐条）＋§15.21 文档散文轴 | 待光哥（设计批准已给，界面未逐项签收） | 不适用 |
+| WM-M1 | §15.2 自动证据清单＋§15.23 §13.1 矩阵逐条映射＋§15.29 §5.1–§5.5 全 41 条 | 待光哥：§15.5 第 1 项治理界面（保存／复核／排除／冲突／本次记忆） | 不适用（本里程碑不涉模型） |
+| WM-M2 | §15.9–§15.11 提炼族＋§15.19 数字面＋§15.30 §7.1／§7.2 逐条款（含假 Provider 拒绝、无修复重试、凭据三处出口） | 待光哥：§15.5 第 2 项自动建议候选质量 | **未验证**：真实模型语义质量需光哥单独授权后跑，本轮全部用可捕获请求的替身 |
+| WM-M3 | §15.12–§15.16 简报与参考链＋§15.27 §10 十条 | 待光哥：§15.5 第 3 项简报与精确版本引用（Markdown／PPTX） | 不适用 |
+| WM-M4 | `npm run verify` 退出码 0（见本节末）＋§15.1 WM15 端到端 13 条 | 待光哥：§15.5 第 4／5 项（连续两次实际工作、提交发布授权） | **未验证**，同上 |
+
+**D 组｜§16 已确定假设与边界逐条核对**
+
+| 假设／边界 | 现状证据 |
+| --- | --- |
+| 自动建议默认关闭、按空间同意；人工保存不调模型 | 设置默认值 `memory-extraction-repository.ts:273`（`autoSuggestEnabled: false`）与同意门槛 `memory-extraction-service.ts:600`、`memory-extraction-service.ts:600`；人工保存路径无任何模型调用（`memory-service.ts:236-280` 只写库） |
+| 不依赖 CF 未完成的远程 MCP／API；缺可用模型只阻塞相应真实提炼验收 | 提炼只经 `ModelProviderFactory`＋credential-access，无 MCP／API 服务依赖；缺模型时 `MODEL_UNAVAILABLE` 收口（`:885`） |
+| 旧来源无法证明时保留历史但需复核，且必须让用户看见 | `memory-recall-service.ts:804-807`＋`memory-service.ts:764`（`review-required` 仍可见）＋`SOURCE_NEEDS_REVIEW` 警告；§15.26 风险 1 行 |
+| 本机可存来源与记忆内容；远程遵循已显示同意，不承诺永不离开设备 | 契约 §7.2 已按此措辞；同意版本单一来源 `MEMORY_SUGGESTION_CONSENT_VERSION`（§15.19） |
+| 跨空间只由既有显式材料选择授权；本期参考标记只同空间 | `workspace-reference-repository.ts` 归属校验与 `REFERENCE_WORKSPACE_MISMATCH`；§15.14／§15.16 |
+| 规模压测用 1,000 条有效记忆记录排序耗时，超可接受开销即返回设计评审、不擅自上向量库 | `memory-retrieval.test.ts:229`「ranks 1,000 active memories within the main-thread budget」：构造 1,000 条、两次排序结果一致、上界断言 200 ms，本机约 10 ms（`:227` 注释与 §15.17）；未超 ⇒ 按 Spec 不返回设计评审。记忆侧确无 Embedding／向量检索接线（`memory-retrieval.ts:24-28` 写明「非向量的确定性任务相关召回」）；全仓 `embedding` 字样只出现在既有的模型连通性检查里（`model-connectivity.ts:34-43` 按角色拼 endpoint），与记忆召回无关 |
+
+**本轮缺口与处置**
+
+| # | 缺口 | 处置 |
+| --- | --- | --- |
+| 1 | §7.1「无 Run 的讨论反馈使用当前 TaskContext 的模型」**整条未实现**：检查点无 `runId` 时 `modelProfileId` 恒为 `undefined`，提炼悄悄用应用级默认模型 | 已在 `extraction-source-reader.ts` 实现（TaskContext 自己的 `modelReference` 优先，退到执行专家修订），并落契约 §7.1 落点＋集成用例；这条是本轮唯一的「契约有、实现无」，与 §15.18／§15.28 那两类（有声明无生产）同源 |
+| 2 | `summary` 单独作证据、候选正文空串两处契约分支无用例 | 补 `memory-extraction-prompt.test.ts` 两条（含 `INVALID_MODEL_OUTPUT` 判定） |
+| 3 | §7.1 手动重试「展示当前模型」这一半无测试（`model_label` 联表已有生产者，界面也有读点） | 只记为边界，不为凑测试改生产代码；人工验收时在重试弹窗里核对模型名即是这一栏的证据 |
+| 4 | 提示词六条规则此前只被长度断言覆盖 | 补「契约写死的六条提炼规则随每次请求一起送出」，逐句 `toContain` 原文；改词即红 |
+
+**变异验证**
+
+| 变异 | 结果 |
+| --- | --- |
+| 把 `readCheckpointSource` 的 profileId 取法还原成 `snapshot ? … : undefined` | 新集成用例红（`expected undefined to be '<pinned id>'`），其余 12 条不受影响；已还原，`git diff --numstat` 该文件只剩本轮新增 |
+| `HUMAN_EVIDENCE_ROLES` 加上 `checkpoint-summary` | 「节点摘要单独撑不住一条候选」红，其余绿；已还原 |
+| `candidateContentMinCodePoints: 1`→`0` | 「空正文候选让整次结果失败」红；已还原 |
+| 改掉 `INSTRUCTION` 第 1 条规则措辞 | 「契约写死的六条提炼规则随每次请求一起送出」红；已还原 |
+
+验证：`npx eslint`（三份改动文件）退出 0；`npm run typecheck` 通过；`npx vitest run memory-extraction-prompt.test.ts` 18 条全绿；`npx vitest run work-centered-memory.integration.test.ts` 13 条全绿；`npm run verify` 退出码 **0**，**112 文件／1015 用例全绿**（上一节 1011 ＋ 本轮新增 4 条）。本节这段验证文字写在那次门禁之后，只由随后的 `npx prettier --check`（三份文档退出 0）覆盖，未重跑全量门禁——纯文档改动不触碰代码，这一点是判定而非实测。
+
+**待光哥拍板新增**：本轮把「无 Run 的讨论反馈用当前 TaskContext 的模型」按契约原文实现成「TaskContext 钉住的 profile 优先，退到执行专家修订的 `modelReference`」——若产品上更希望这类反馈固定走应用级默认（现状＝改动前行为），请明确，我按结论回退或改文档；另外「重试弹窗展示当前模型」要不要补界面自动化测试也归光哥。

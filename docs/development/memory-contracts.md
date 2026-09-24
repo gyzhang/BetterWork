@@ -160,6 +160,7 @@ Main 的 Provider 包装器在首个实际 `ModelRequest` 装配后计算规范�
 从 `RunService` 提取 Main 内共享 `model-provider-factory.ts`，复用 model profiles、默认模型解析和 credential-access；Agent Core 不导入数据库。普通 Run 兼容行为保持，提炼使用 `requireConfiguredLanguageModel` 模式，禁止生产 FakeProvider 回退。
 
 在新 Run 审计中保存实际解析的 `modelProfileId` 和非敏感配置指纹；提炼沿用来源 Run 的模型。无 Run 的讨论反馈使用当前 TaskContext 的模型。配置不可用/指纹变化则 `skipped`，不暗换另一服务；手动重试需展示当前模型并重新同意。配置指纹不含凭据；历史摘要只存清除 query、userinfo 的 endpoint 展示值，不存 URL token。
+落点（任务板 §15.30）：「无 Run 的讨论反馈使用当前 TaskContext 的模型」此前**没有实现**——`extraction-source-reader.ts` 对没有 `runId` 的检查点只回 `modelProfileId: undefined`，于是提炼走 `model-provider-factory.ts:143` 的应用级默认模型。本轮补上取法：`taskContexts.getLatest(taskId).modelReference` 优先，缺省再退到该上下文执行专家修订的 `modelReference`（与 RunService 解析运行模型的同一口径，`run-service.ts:1527`），两处都不是 `profile` 模式才交给应用级默认；只回传 profile id 而不另存引用，是因为「专家说用应用级默认」与「没有专家」在解析结果上是同一个模型，多存一份反而造出第二套口径。用例见 `work-centered-memory.integration.test.ts`「没有来源 Run 的讨论反馈用当前 TaskContext 钉住的模型，不暗换应用级默认」：把该 profile 停用后同一来源必须可见地拒绝（`MODEL_UNAVAILABLE`、零作业登记），而应用级默认模型此刻仍然可用——回落就等于把同一段反馈送给另一个服务。
 
 `ModelRequest` 增加可选 `maxOutputTokens`；实际发包为 `min(请求上限, profile上限)`，未设置请求上限时维持现状。done chunk 增加可选 `finishReason`（`stop`/`length`/`tool-calls`/`content-filter`/`unknown`）及可选 `usage`；普通消费者兼容，提炼仅接受 `stop`。只有 DONE 而缺正常结束原因，提炼失败为 `MODEL_FINISH_UNKNOWN`；`length` 不接受为完整 JSON。继续复用超时、取消、提前 EOF 检验及可注入 fetch。
 

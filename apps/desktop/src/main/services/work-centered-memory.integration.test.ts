@@ -960,4 +960,65 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
     expect(escalated.error.code).toBe('WORKSPACE_FACT_CANNOT_BE_GLOBAL');
     expect(world.services.store.memories.get(memory.id)?.scope.kind).toBe('workspace');
   });
+
+  it('没有来源 Run 的讨论反馈用当前 TaskContext 钉住的模型，不暗换应用级默认', async () => {
+    const world = await createWorld();
+    const store = world.services.store;
+    const pinnedId = store.models.save({
+      name: '讨论反馈专用模型',
+      provider: 'openai-compatible',
+      baseUrl: 'http://model.test/v1',
+      model: 'pinned-for-checkpoint',
+      role: 'language',
+      apiKey: '',
+      enabled: true,
+      maxContextTokens: 8_192,
+      maxOutputTokens: 1_024,
+      temperature: 0,
+    });
+    store.taskContexts.save(world.layout.a1.taskId, {
+      executor: {
+        kind: 'expert',
+        expertId: world.layout.expertId,
+        expertRevisionId: world.layout.expertRevisionId,
+      },
+      skillBindings: [],
+      modelReference: { mode: 'profile', modelProfileId: pinnedId },
+    });
+    const addCheckpoint = (id: string, feedback: string): void => {
+      store.discussionCheckpoints.create(world.layout.a1.taskId, {
+        id,
+        taskId: world.layout.a1.taskId,
+        stage: 'understanding',
+        title: '大纲口径',
+        summary: '大纲先给结论再展开。',
+        artifactVersionIds: [],
+        feedback,
+      });
+    };
+    addCheckpoint('cp-pinned', '以后大纲都按结论先开来写。');
+    await enableAutoSuggest(world, world.layout.workspaceA);
+
+    const queued = await world.services.extractions.requestExtractionForCheckpoint('cp-pinned');
+    expect(queued.ok).toBe(true);
+    if (!queued.ok) return;
+    expect(queued.data.reason).toBeUndefined();
+    expect(store.memoryExtractions.get(queued.data.jobId ?? '')?.modelProfileId).toBe(pinnedId);
+
+    // 应用级默认模型此刻仍然可用：只把钉住的那条停掉，就必须可见地拒绝，
+    // 而不是回落到默认模型——回落等于把同一段反馈送给另一个服务。
+    store.models.setEnabled(pinnedId, false);
+    addCheckpoint('cp-refused', '汇报里不要出现未核实的预测数字。');
+    const refused = await world.services.extractions.requestExtractionForCheckpoint('cp-refused');
+    expect(refused.ok).toBe(true);
+    if (!refused.ok) return;
+    expect(refused.data.status).toBe('not-enqueued');
+    expect(refused.data.reason).toBe('MODEL_UNAVAILABLE');
+    // 被拒的那一次连作业都不该登记：这个任务名下只有第一条钉住模型的作业。
+    const jobs = store.memoryExtractions.listPage({
+      workspaceId: world.layout.workspaceA,
+      taskId: world.layout.a1.taskId,
+    });
+    expect(jobs.items.map((job) => job.id)).toEqual([queued.data.jobId]);
+  });
 });

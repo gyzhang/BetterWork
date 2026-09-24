@@ -98,6 +98,22 @@ const readRunSource = (store: AppStore, runId: string): ExtractionRunSourceRecor
   };
 };
 
+/**
+ * §7.1：没有来源 Run 的讨论反馈用「当前 TaskContext 的模型」——先取该上下文自己钉住的
+ * profile，再退到上下文执行专家修订的默认值；两处都缺省才交给应用级默认语言模型。
+ * 这里只回传 profile id：应用级默认与「专家说用应用级默认」在解析结果上是同一个模型。
+ */
+const taskContextModelProfileId = (store: AppStore, taskId: string): string | undefined => {
+  const context = store.taskContexts.getLatest(taskId);
+  if (!context) return undefined;
+  const revision =
+    context.executor.kind === 'expert'
+      ? store.experts.getRevision(context.executor.expertId, context.executor.expertRevisionId)
+      : undefined;
+  const reference = context.modelReference ?? revision?.modelReference;
+  return reference?.mode === 'profile' ? reference.modelProfileId : undefined;
+};
+
 const readCheckpointSource = (
   store: AppStore,
   checkpointId: string,
@@ -111,7 +127,11 @@ const readCheckpointSource = (
   const dependencies = runId
     ? dependenciesOf(store, runId, snapshot)
     : { materialDependencies: [] as readonly MaterialReference[], memoryDependencies: [] };
-  const profileId = snapshot ? modelProfileIdOf(snapshot) : undefined;
+  const profileId = runId
+    ? snapshot
+      ? modelProfileIdOf(snapshot)
+      : undefined
+    : taskContextModelProfileId(store, checkpoint.taskId);
   return {
     kind: 'checkpoint',
     checkpointId,
