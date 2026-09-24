@@ -112,6 +112,20 @@ export class ModelRepository {
     };
   }
 
+  /**
+   * 某能力角色当前的默认配置 id（priority 最小者）。
+   * 语义索引需要先把「具体 profileId」固定进设置里，不能只拿运行时解析结果。
+   */
+  getDefaultProfileId(role: ModelRole): string | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT id FROM model_profiles
+          WHERE role = ? AND enabled = 1 ORDER BY priority ASC, created_at ASC LIMIT 1`,
+      )
+      .get(role) as { id: string } | undefined;
+    return row?.id;
+  }
+
   /** 供 legacy 凭据迁移读取本聚合的明文 Key（回滚窗口）；行不存在返回 undefined。 */
   readPlaintextApiKey(id: string): string | undefined {
     const row = this.db.prepare('SELECT api_key FROM model_profiles WHERE id = ?').get(id) as

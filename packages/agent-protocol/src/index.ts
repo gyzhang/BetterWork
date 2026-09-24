@@ -3537,6 +3537,49 @@ export const KNOWLEDGE_SEARCH_TOOL_MAX_RESULTS = 8;
 export const KNOWLEDGE_SEARCH_SUMMARY_MAX_CODE_POINTS = 400;
 export const KNOWLEDGE_SEARCH_CANDIDATE_LIMIT = 50;
 
+/** Embedding 请求与响应预算（契约 §2.2/§7.2）：生产者与消费者都引用这里，不在实现里另写数字。 */
+export const KNOWLEDGE_EMBEDDING_BATCH_INPUT_MAX = 16;
+export const KNOWLEDGE_EMBEDDING_BATCH_CODE_POINT_BUDGET = 16_000;
+export const KNOWLEDGE_EMBEDDING_QUERY_INPUT_MAX = 1;
+export const KNOWLEDGE_EMBEDDING_RESPONSE_MAX_BYTES = 4 * 1024 * 1024;
+export const KNOWLEDGE_EMBEDDING_DIMENSION_MIN = 1;
+export const KNOWLEDGE_EMBEDDING_DIMENSION_MAX = 4_096;
+export const KNOWLEDGE_EMBEDDING_BATCH_TIMEOUT_MS = 30_000;
+export const KNOWLEDGE_EMBEDDING_QUERY_TIMEOUT_MS = 10_000;
+/** 向量空间指纹的算法版本与固定请求格式；任一变化都使旧空间不兼容。 */
+export const KNOWLEDGE_EMBEDDING_FINGERPRINT_VERSION = 'knowledge-embedding-v1';
+export const KNOWLEDGE_EMBEDDING_RESPONSE_FORMAT = 'float';
+
+/**
+ * 无密钥的嵌入模型身份（契约 §7.1）。完整 endpoint 只存在于 Main 的请求配置里，
+ * 对外只有它的指纹；dimension 省略表示共享空间还没被首个合法批次锁定。
+ */
+export const embeddingModelSnapshotSchema = z
+  .object({
+    profileId: z.string().min(1),
+    provider: z.string().min(1),
+    endpointFingerprint: z.string().min(1),
+    model: z.string().min(1),
+    modelFingerprint: z.string().min(1),
+    dimension: z
+      .number()
+      .int()
+      .min(KNOWLEDGE_EMBEDDING_DIMENSION_MIN)
+      .max(KNOWLEDGE_EMBEDDING_DIMENSION_MAX)
+      .optional(),
+  })
+  .strict();
+export type EmbeddingModelSnapshot = z.infer<typeof embeddingModelSnapshotSchema>;
+
+/** usage 只接受服务返回的非负整数；缺失就省略，不用字符数伪造。 */
+export const embeddingUsageSchema = z
+  .object({
+    promptTokens: z.number().int().nonnegative(),
+    totalTokens: z.number().int().nonnegative(),
+  })
+  .strict();
+export type EmbeddingUsage = z.infer<typeof embeddingUsageSchema>;
+
 export const knowledgeWarningCodeSchema = z.enum([
   'formula-without-cached-result',
   'truncated',
