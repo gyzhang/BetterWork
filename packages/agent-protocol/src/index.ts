@@ -3537,6 +3537,9 @@ export const KNOWLEDGE_SEARCH_TOOL_MAX_RESULTS = 8;
 export const KNOWLEDGE_SEARCH_SUMMARY_MAX_CODE_POINTS = 400;
 export const KNOWLEDGE_SEARCH_CANDIDATE_LIMIT = 50;
 
+/** 当前可发布向量总数上限（契约 §2.2）：超出保持关键词可用并报告容量不足。 */
+export const KNOWLEDGE_VECTOR_MAX_PUBLISHED = 20_000;
+
 /** Embedding 请求与响应预算（契约 §2.2/§7.2）：生产者与消费者都引用这里，不在实现里另写数字。 */
 export const KNOWLEDGE_EMBEDDING_BATCH_INPUT_MAX = 16;
 export const KNOWLEDGE_EMBEDDING_BATCH_CODE_POINT_BUDGET = 16_000;
@@ -3579,6 +3582,192 @@ export const embeddingUsageSchema = z
   })
   .strict();
 export type EmbeddingUsage = z.infer<typeof embeddingUsageSchema>;
+
+/** 索引作业词汇（知识契约 §8.1）：kind、状态与阶段各只有一份定义。 */
+export const knowledgeJobKindSchema = z.enum([
+  'import',
+  'refresh',
+  'rebuild-keyword',
+  'rebuild-semantic',
+  'check-source',
+]);
+export type KnowledgeJobKind = z.infer<typeof knowledgeJobKindSchema>;
+
+export const knowledgeJobStatusSchema = z.enum([
+  'queued',
+  'running',
+  'succeeded',
+  'partial',
+  'failed',
+  'cancelled',
+  'interrupted',
+]);
+export type KnowledgeJobStatus = z.infer<typeof knowledgeJobStatusSchema>;
+
+export const knowledgeJobItemStatusSchema = z.enum([
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+  'cancelled',
+  'interrupted',
+]);
+export type KnowledgeJobItemStatus = z.infer<typeof knowledgeJobItemStatusSchema>;
+
+export const knowledgeJobPhaseSchema = z.enum([
+  'read',
+  'extract',
+  'chunk',
+  'embed',
+  'publish',
+  'check',
+]);
+export type KnowledgeJobPhase = z.infer<typeof knowledgeJobPhaseSchema>;
+
+/** 手动重试只接受这三种未完成原因，且作业必须已终态。 */
+export const knowledgeRetryableItemStatusSchema = z.enum(['failed', 'interrupted', 'cancelled']);
+export type KnowledgeRetryableItemStatus = z.infer<typeof knowledgeRetryableItemStatusSchema>;
+
+/** 安全失败说明：稳定错误码 + 最多 500 码点的去敏文本（契约 §2.2）。 */
+export const knowledgeJobFailureSchema = z
+  .object({
+    code: z.string().min(1).max(64),
+    message: z.string().min(1).max(500),
+  })
+  .strict();
+export type KnowledgeJobFailure = z.infer<typeof knowledgeJobFailureSchema>;
+
+export const knowledgeJobSummarySchema = z
+  .object({
+    id: z.string().min(1),
+    kind: knowledgeJobKindSchema,
+    status: knowledgeJobStatusSchema,
+    attempt: z.number().int().positive(),
+    /** 按 job 持久化的单调事件序号，只用于展示顺序，不替代 attempt。 */
+    sequence: z.number().int().positive(),
+    retryOfJobId: z.string().min(1).optional(),
+    spaceId: z.string().min(1).optional(),
+    totalCount: z.number().int().nonnegative(),
+    completedCount: z.number().int().nonnegative(),
+    failedCount: z.number().int().nonnegative(),
+    createdAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+    failure: knowledgeJobFailureSchema.optional(),
+  })
+  .strict();
+export type KnowledgeJobSummary = z.infer<typeof knowledgeJobSummarySchema>;
+
+/** 条目摘要只回已登记 documentId 或文件名，不回原始 target/request JSON。 */
+export const knowledgeJobItemSummarySchema = z
+  .object({
+    id: z.string().min(1),
+    jobId: z.string().min(1),
+    documentId: z.string().min(1).optional(),
+    fileName: z.string().min(1).optional(),
+    status: knowledgeJobItemStatusSchema,
+    phase: knowledgeJobPhaseSchema,
+    attempt: z.number().int().positive(),
+    completedUnits: z.number().int().nonnegative(),
+    totalUnits: z.number().int().nonnegative().optional(),
+    resultRevisionId: z.string().min(1).optional(),
+    failure: knowledgeJobFailureSchema.optional(),
+  })
+  .strict();
+export type KnowledgeJobItemSummary = z.infer<typeof knowledgeJobItemSummarySchema>;
+
+export const knowledgeJobDetailSchema = z
+  .object({ job: knowledgeJobSummarySchema, items: z.array(knowledgeJobItemSummarySchema) })
+  .strict();
+export type KnowledgeJobDetail = z.infer<typeof knowledgeJobDetailSchema>;
+
+/** 作业启动回执：耗时动作立即返回可取消、可回看的 jobId。 */
+export const knowledgeJobAckSchema = z.object({ jobId: z.string().min(1) }).strict();
+export type KnowledgeJobAck = z.infer<typeof knowledgeJobAckSchema>;
+
+/** 文件对话框取消沿用既有语义：不创建作业，也不返回空 jobId。 */
+export const knowledgeImportAckSchema = z
+  .object({ cancelled: z.boolean(), jobId: z.string().min(1).optional() })
+  .strict();
+export type KnowledgeImportAck = z.infer<typeof knowledgeImportAckSchema>;
+
+export const knowledgeJobCursorSchema = z
+  .object({ createdAt: z.number().int().nonnegative(), id: z.string().min(1) })
+  .strict();
+export type KnowledgeJobCursor = z.infer<typeof knowledgeJobCursorSchema>;
+
+export const listKnowledgeJobsRequestSchema = z
+  .object({
+    limit: z.number().int().min(1).max(100).default(50),
+    cursor: knowledgeJobCursorSchema.optional(),
+  })
+  .strict();
+export type ListKnowledgeJobsRequest = z.infer<typeof listKnowledgeJobsRequestSchema>;
+
+export const knowledgeJobPageSchema = z
+  .object({
+    jobs: z.array(knowledgeJobSummarySchema),
+    nextCursor: knowledgeJobCursorSchema.optional(),
+  })
+  .strict();
+export type KnowledgeJobPage = z.infer<typeof knowledgeJobPageSchema>;
+
+export const knowledgeJobIdRequestSchema = z.object({ jobId: z.string().min(1) }).strict();
+
+/** 取消结果只回答「有没有这个作业可取消」；取消本身不发失败通知。 */
+export const knowledgeJobCancelResultSchema = z.object({ cancelled: z.boolean() }).strict();
+export type KnowledgeJobCancelResult = z.infer<typeof knowledgeJobCancelResultSchema>;
+
+export const retryKnowledgeJobRequestSchema = z
+  .object({
+    jobId: z.string().min(1),
+    itemIds: z.array(z.string().min(1)).min(1).max(200),
+  })
+  .strict();
+export type RetryKnowledgeJobRequest = z.infer<typeof retryKnowledgeJobRequestSchema>;
+
+/** 语义设置（契约 §7.1）：启用时固定具体 profileId，切换必须显式。 */
+export const knowledgeSearchSettingsSchema = z
+  .object({
+    semanticEnabled: z.boolean(),
+    embeddingProfileId: z.string().min(1).optional(),
+    revision: z.number().int().positive(),
+    embeddingAvailable: z.boolean(),
+    unavailableReason: z.string().max(500).optional(),
+  })
+  .strict();
+export type KnowledgeSearchSettings = z.infer<typeof knowledgeSearchSettingsSchema>;
+
+export const saveKnowledgeSettingsRequestSchema = z
+  .object({
+    expectedRevision: z.number().int().positive(),
+    semanticEnabled: z.boolean(),
+    embeddingProfileId: z.string().min(1).optional(),
+  })
+  .strict();
+export type SaveKnowledgeSettingsRequest = z.infer<typeof saveKnowledgeSettingsRequestSchema>;
+
+/** 重建：关键词按目标文档或精确历史修订；语义整体重建不接受局部目标。 */
+export const rebuildKnowledgeIndexRequestSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('keyword'),
+      documentIds: z.array(z.string().min(1)).max(200).optional(),
+      revisions: z.array(knowledgeMaterialReferenceSchema).max(200).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('semantic'),
+      resetSemanticSpace: z.boolean().optional(),
+    })
+    .strict(),
+]);
+export type RebuildKnowledgeIndexRequest = z.infer<typeof rebuildKnowledgeIndexRequestSchema>;
+
+export const checkKnowledgeSourcesRequestSchema = z
+  .object({ documentIds: z.array(z.string().min(1)).min(1).max(200) })
+  .strict();
+export type CheckKnowledgeSourcesRequest = z.infer<typeof checkKnowledgeSourcesRequestSchema>;
 
 export const knowledgeWarningCodeSchema = z.enum([
   'formula-without-cached-result',
@@ -4021,6 +4210,15 @@ export const IpcChannel = {
   PreviewKnowledge: 'knowledge:preview',
   CreateResearchDraft: 'knowledge:create-research-draft',
   PreviewRunSource: 'knowledge:preview-run-source',
+  ListKnowledgeJobs: 'knowledge:list-jobs',
+  GetKnowledgeJob: 'knowledge:get-job',
+  CancelKnowledgeJob: 'knowledge:cancel-job',
+  RetryKnowledgeJob: 'knowledge:retry-job',
+  KnowledgeJobEvent: 'knowledge:job-event',
+  GetKnowledgeSettings: 'knowledge:get-settings',
+  SaveKnowledgeSettings: 'knowledge:save-settings',
+  RebuildKnowledgeIndex: 'knowledge:rebuild-index',
+  CheckKnowledgeSources: 'knowledge:check-sources',
   DeclareArtifactSources: 'artifact:declare-sources',
   GetRunArtifactDeclarations: 'artifact:get-run-declarations',
   ListSearchEngines: 'search:list',
@@ -4163,11 +4361,20 @@ export interface BetterWorkDesktopApi {
   };
   knowledge: {
     list(): Promise<KnowledgeDocumentSummary[]>;
-    importFromDialog(): Promise<KnowledgeImportResult>;
+    importFromDialog(): Promise<KnowledgeImportAck>;
+    jobs(input?: ListKnowledgeJobsRequest): Promise<KnowledgeJobPage>;
+    job(input: { jobId: string }): Promise<KnowledgeJobDetail | null>;
+    cancelJob(input: { jobId: string }): Promise<{ cancelled: boolean }>;
+    retryJob(input: RetryKnowledgeJobRequest): Promise<KnowledgeJobAck>;
+    onJobEvent(listener: (event: KnowledgeJobSummary) => void): () => void;
+    settings(): Promise<KnowledgeSearchSettings>;
+    saveSettings(input: SaveKnowledgeSettingsRequest): Promise<KnowledgeSearchSettings>;
+    rebuildIndex(input: RebuildKnowledgeIndexRequest): Promise<KnowledgeJobAck>;
+    checkSources(input: CheckKnowledgeSourcesRequest): Promise<KnowledgeJobAck>;
     search(input: SearchKnowledgeRequest): Promise<KnowledgeSearchResult[]>;
     openSource(input: OpenKnowledgeSourceRequest): Promise<OpenKnowledgeSourceResult>;
     remove(input: RemoveKnowledgeDocumentRequest): Promise<{ removed: boolean }>;
-    refresh(input: RefreshKnowledgeDocumentRequest): Promise<KnowledgeRefreshResult>;
+    refresh(input: RefreshKnowledgeDocumentRequest): Promise<KnowledgeJobAck>;
     listRevisions(input: ListKnowledgeRevisionsRequest): Promise<KnowledgeRevisionSummary[]>;
     preview(input: PreviewKnowledgeRequest): Promise<KnowledgeTextPage>;
     createResearchDraft(

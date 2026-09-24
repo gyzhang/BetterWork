@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { IpcChannel, type KnowledgeJobSummary } from '@betterwork/agent-protocol';
 import { app, BrowserWindow } from 'electron';
 
 import { ElectronSafeStorageAdapter } from './infrastructure/credential-store';
@@ -23,11 +24,13 @@ import { createQuitHandler } from './services/application-shutdown';
 import { CredentialAccess } from './services/credential-access';
 import { CredentialMigrationService } from './services/credential-migration-service';
 import { DiscussionCheckpointService } from './services/discussion-checkpoint-service';
+import { EmbeddingClient } from './services/embedding-client';
 import { ExecutionOutputService } from './services/execution-output-service';
 import { type BuiltinExpertReleaseManifest, ExpertService } from './services/expert-service';
 import { createStoreExtractionSourceReader } from './services/extraction-source-reader';
 import { FileArtifactService } from './services/file-artifact-service';
 import { InputSnapshotService } from './services/input-snapshot-service';
+import { KnowledgeIndexService } from './services/knowledge-index-service';
 import { KnowledgeVault } from './services/knowledge-vault';
 import { McpClientService } from './services/mcp-client-service';
 import { MemoryExtractionService } from './services/memory-extraction-service';
@@ -248,6 +251,22 @@ function bootstrap(): ApplicationContext {
 
   started.window = createMainWindow();
   const notifications = new NotificationService(store.notifications, getWindow);
+  const knowledgeIndex = new KnowledgeIndexService({
+    vault: knowledgeVault,
+    embedding: new EmbeddingClient({
+      models: store.models,
+      ...(credentialAccess ? { credentialAccess } : {}),
+    }),
+    onEvent: (job) => {
+      getWindow()?.webContents.send(IpcChannel.KnowledgeJobEvent, job);
+      notifyKnowledgeJob(notifications, job);
+    },
+  });
+  // 索引作业同样只在启动时收口为 interrupted，绝不自动重跑付费向量。
+  const interruptedIndexJobs = knowledgeIndex.recoverInterrupted().length;
+  if (interruptedIndexJobs > 0) {
+    console.warn(`知识索引作业启动收口：interrupted=${String(interruptedIndexJobs)}`);
+  }
   const supervisor = createMacProcessSupervisor({
     guardian: resolveGuardianRuntime(__dirname),
     createLogSink: (executionId) =>
@@ -323,6 +342,7 @@ function bootstrap(): ApplicationContext {
   registerIpc({
     store,
     knowledgeVault,
+    knowledgeIndex,
     taskMaterials,
     discussionCheckpoints,
     memories,
@@ -381,3 +401,30 @@ app.on(
     (error) => console.error('RunService shutdown failed:', error),
   ),
 );
+
+/**
+ * 索引作业终态进消息中心（契约 §12）：取消不发失败通知，部分成功按 warning 呈现，
+ * 目标固定为知识页，通知本身不导航、不清空当前任务。
+ */
+function notifyKnowledgeJob(notifications: NotificationService, job: KnowledgeJobSummary): void {
+  if (job.status === 'queued' || job.status === 'running' || job.status === 'cancelled') return;
+  const titles: Record<KnowledgeJobSummary['kind'], string> = {
+    import: '资料导入',
+    refresh: '资料刷新',
+    'rebuild-keyword': '关键词索引重建',
+    'rebuild-semantic': '向量索引重建',
+    'check-source': '来源检查',
+  };
+  const level =
+    job.status === 'succeeded' ? 'success' : job.status === 'partial' ? 'warning' : 'error';
+  notifications.create(
+    {
+      level,
+      kind: job.kind === 'import' || job.kind === 'refresh' ? 'knowledge-import' : 'system',
+      title: `${titles[job.kind]}${job.status === 'succeeded' ? '完成' : '结束'}（${String(job.completedCount)}/${String(job.totalCount)}）`,
+      detail: job.failure?.message ?? `状态：${job.status}`,
+      target: { kind: 'knowledge' },
+    },
+    { systemNotify: level === 'error' },
+  );
+}

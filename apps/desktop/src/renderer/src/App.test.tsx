@@ -207,7 +207,11 @@ function installApi(options?: {
     models: {
       list: vi.fn(async (): Promise<ModelProfileSummary[]> => options?.models ?? []),
     },
-    knowledge: { list: vi.fn(async () => []) },
+    knowledge: {
+      list: vi.fn(async () => []),
+      job: vi.fn(async () => null),
+      onJobEvent: vi.fn(() => () => undefined),
+    },
     artifacts: {
       list: vi.fn(async (): Promise<ArtifactSummary[]> => []),
       get: vi.fn(async (): Promise<ArtifactDetail | null> => null),

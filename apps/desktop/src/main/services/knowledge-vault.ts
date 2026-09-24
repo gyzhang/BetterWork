@@ -23,7 +23,10 @@ import type Database from 'better-sqlite3';
 import { z } from 'zod';
 
 import { openKnowledgeDatabase } from '../db';
+import { buildRetrievalChunks } from './knowledge-chunks';
 import { KnowledgeServiceError } from './knowledge-errors';
+import { KnowledgeIndexStore } from './knowledge-index-store';
+import { KnowledgeJobStore } from './knowledge-job-store';
 import { makeSpanExcerpt, readKnowledgeTextPage, revisionTextHash } from './knowledge-text';
 
 const parserVersion = 'text-extract-v1';
@@ -98,10 +101,15 @@ const maxBytes = 20 * 1024 * 1024;
 
 export class KnowledgeVault {
   private readonly db: Database.Database;
+  /** 派生块、向量空间与作业都由同一连接读写，避免两个连接在同一库上互相看不见。 */
+  readonly index: KnowledgeIndexStore;
+  readonly jobs: KnowledgeJobStore;
 
   /** schema 与历史库对账由 db/knowledge-schema.ts 的版本化迁移负责，服务层不碰 DDL。 */
   constructor(filePath: string) {
     this.db = openKnowledgeDatabase(filePath);
+    this.index = new KnowledgeIndexStore(this.db);
+    this.jobs = new KnowledgeJobStore(this.db);
   }
 
   listDocuments(): KnowledgeDocumentSummary[] {
@@ -124,33 +132,110 @@ export class KnowledgeVault {
     const imported: KnowledgeDocumentSummary[] = [];
     const skipped: KnowledgeImportResult['skipped'] = [];
     for (const sourcePath of sourcePaths) {
-      const extension = path.extname(sourcePath).toLowerCase();
-      const format = supportedFormats[extension];
-      if (!format) {
-        skipped.push({ sourcePath, reason: '暂仅支持 Markdown、文本、PDF 和 Word 文件。' });
-        continue;
-      }
       try {
-        const file = await stat(sourcePath);
-        if (file.size > maxBytes) {
-          skipped.push({ sourcePath, reason: '文件超过 20 MB，暂不导入。' });
-          continue;
-        }
-        const bytes = await readFile(sourcePath);
-        const extracted = await extractDocument(format, bytes);
-        if (!extracted.content.trim()) {
-          skipped.push({ sourcePath, reason: '未能从文件中提取可检索文本。' });
-          continue;
-        }
-        imported.push(this.storeDocument(sourcePath, file.size, bytes, extracted));
+        imported.push((await this.importSource(sourcePath)).document);
       } catch (error) {
         skipped.push({
           sourcePath,
-          reason: error instanceof Error ? `导入失败：${error.message}` : '无法读取此文件。',
+          reason:
+            error instanceof KnowledgeServiceError
+              ? error.message
+              : error instanceof Error
+                ? `导入失败：${error.message}`
+                : '无法读取此文件。',
         });
       }
     }
     return { imported, skipped };
+  }
+
+  /**
+   * 单个来源的读→提取→发布。作业服务按条目逐个调用它，
+   * 因此每个文件都能有自己的状态、阶段与可解释失败原因。
+   */
+  async importSource(
+    sourcePath: string,
+  ): Promise<{ document: KnowledgeDocumentSummary; revisionId: string; textHash: string }> {
+    const extension = path.extname(sourcePath).toLowerCase();
+    const format = supportedFormats[extension];
+    if (!format) {
+      throw new KnowledgeServiceError(
+        'EXTRACTION_LIMIT_EXCEEDED',
+        '暂仅支持 Markdown、文本、PDF 和 Word 文件。',
+      );
+    }
+    const file = await stat(sourcePath);
+    if (file.size > maxBytes) {
+      throw new KnowledgeServiceError('EXTRACTION_LIMIT_EXCEEDED', '文件超过 20 MB，暂不导入。');
+    }
+    const bytes = await readFile(sourcePath);
+    const extracted = await extractDocument(format, bytes);
+    if (!extracted.content.trim()) {
+      throw new KnowledgeServiceError('EXTRACTION_LIMIT_EXCEEDED', '未能从文件中提取可检索文本。');
+    }
+    return this.storeDocument(sourcePath, file.size, bytes, extracted);
+  }
+
+  /** 关键词重建：从已保存的修订文本重建派生块，不重解析原件。 */
+  reindexKeywordRevision(revisionId: string): number {
+    const revision = this.getRevision(revisionId);
+    if (!revision) {
+      throw new KnowledgeServiceError('KNOWLEDGE_REVISION_MISMATCH', '该修订已不在资料库中。');
+    }
+    const write = this.db.transaction((): number => {
+      const chunks = buildRetrievalChunks({
+        revisionId: revision.id,
+        textHash: revision.textHash,
+        sections: revision.chunks.map((chunk) => ({
+          ordinal: chunk.ordinal,
+          locator: chunk.locator,
+          content: chunk.content,
+        })),
+      });
+      this.index.replaceRetrievalChunks(revision.id, revision.textHash, revision.title, chunks);
+      return chunks.length;
+    });
+    return write();
+  }
+
+  /** 当前登记修订 id；用于发布前复核旧 attempt 是否已经过期。 */
+  registeredRevisionId(documentId: string): string | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT id FROM knowledge_revisions WHERE document_id = ?
+          ORDER BY revision DESC LIMIT 1`,
+      )
+      .get(documentId) as { id: string } | undefined;
+    return row?.id;
+  }
+
+  revisionReference(revisionId: string): KnowledgeMaterialReference | undefined {
+    const row = this.db
+      .prepare(`SELECT ${revisionColumns} FROM knowledge_revisions WHERE id = ?`)
+      .get(revisionId) as KnowledgeRevisionRow | undefined;
+    return row ? this.toReference(row) : undefined;
+  }
+
+  currentRevisionOf(documentId: string): KnowledgeRevisionDetail | undefined {
+    const revisionId = this.registeredRevisionId(documentId);
+    return revisionId ? this.getRevision(revisionId) : undefined;
+  }
+
+  /** 原件是否仍与登记内容一致（check-source 条目使用）；只读，不刷新索引。 */
+  async sourceMatchesRegistration(documentId: string): Promise<{ ok: boolean; reason: string }> {
+    const row = this.db
+      .prepare('SELECT source_path, content_hash FROM knowledge_documents WHERE id = ?')
+      .get(documentId) as { source_path: string; content_hash: string } | undefined;
+    if (!row) return { ok: false, reason: '资料已不在当前资料库中。' };
+    try {
+      const bytes = await readFile(row.source_path);
+      const hash = createHash('sha256').update(bytes).digest('hex');
+      return hash === row.content_hash
+        ? { ok: true, reason: '' }
+        : { ok: false, reason: '原始文件内容已变化，本地索引仍是历史版本。' };
+    } catch {
+      return { ok: false, reason: '原始文件无法访问（可能已被移动或删除）。' };
+    }
   }
 
   /** 搜索命中与修订引用必须来自同一读快照（契约 §2.4），不能先取摘要再按 latest 补引用。 */
@@ -418,7 +503,7 @@ export class KnowledgeVault {
     byteSize: number,
     bytes: Buffer,
     extracted: ExtractedDocument,
-  ): KnowledgeDocumentSummary {
+  ): { document: KnowledgeDocumentSummary; revisionId: string; textHash: string } {
     // 超限整文件失败，不暗截断为完整导入（契约 §2.2）。
     if (countCodePoints(extracted.content) > KNOWLEDGE_REVISION_MAX_TEXT_CODE_POINTS) {
       throw new KnowledgeServiceError(
@@ -433,7 +518,7 @@ export class KnowledgeVault {
       .get(sourcePath) as { id: string; imported_at: number } | undefined;
     const id = existing?.id ?? `knowledge-${randomUUID()}`;
     const title = path.basename(sourcePath, path.extname(sourcePath));
-    const write = this.db.transaction(() => {
+    const write = this.db.transaction((): { revisionId: string; textHash: string } => {
       if (existing) {
         this.db
           .prepare(
@@ -489,6 +574,7 @@ export class KnowledgeVault {
         .get(id, hash, parserVersion, chunkingVersion) as
         { id: string; text_hash: string } | undefined;
       const revisionTextHashValue = revisionTextHash(extracted.chunks);
+      let publishedRevisionId = existingRevision?.id ?? '';
       if (existingRevision) {
         // 同解析身份必须得到同一提取文本；不一致说明解析被改坏，绝不覆盖旧修订。
         if (existingRevision.text_hash !== revisionTextHashValue) {
@@ -504,6 +590,7 @@ export class KnowledgeVault {
           )
           .get(id) as { next: number };
         const revisionId = randomUUID();
+        publishedRevisionId = revisionId;
         this.db
           .prepare(
             `INSERT INTO knowledge_revisions
@@ -545,14 +632,30 @@ export class KnowledgeVault {
           );
         }
       }
+      // 派生检索块与当前投影在同一次事务里发布：语义失败不会让关键词查找缺块（契约 §8.2）。
+      this.index.replaceRetrievalChunks(
+        publishedRevisionId,
+        revisionTextHashValue,
+        title,
+        buildRetrievalChunks({
+          revisionId: publishedRevisionId,
+          textHash: revisionTextHashValue,
+          sections: extracted.chunks.map((chunk) => ({
+            ordinal: chunk.ordinal,
+            locator: chunk.locator,
+            content: chunk.content,
+          })),
+        }),
+      );
+      return { revisionId: publishedRevisionId, textHash: revisionTextHashValue };
     });
-    write();
+    const published = write();
     const row = this.db
       .prepare(
         'SELECT id, title, source_path, format, byte_size, content_hash, page_count, imported_at, updated_at FROM knowledge_documents WHERE id = ?',
       )
       .get(id) as KnowledgeRow;
-    return this.toSummary(row);
+    return { document: this.toSummary(row), ...published };
   }
 
   private toSummary(row: KnowledgeRow): KnowledgeDocumentSummary {

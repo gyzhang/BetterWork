@@ -376,6 +376,7 @@ KnowledgeFormat 扩充 `xlsx | csv | pptx`；穷尽更新扩展名、文件选�
 | EMBEDDING_TIMEOUT | 有限时间内未完成；作业失败/查询可解释降级 |
 | INDEX_CAPACITY_EXCEEDED | 向量超本期规模上限；关键词保持 |
 | INDEX_CONFIGURATION_CHANGED | 发布前发现空间/配置变化，旧 attempt 不可发布 |
+| INDEX_ITEM_NOT_RETRYABLE | 重试目标不属于原作业、未终态或条目状态不在 failed/interrupted/cancelled 内 |
 | SOURCE_DECLARATION_INVALID | 采用声明越界、未读整份材料或重复冲突 |
 | OPERATION_CONFLICT | 幂等 ID 输入不同 |
 | REVISION_CONFLICT | 设置/集合 CAS 失败 |

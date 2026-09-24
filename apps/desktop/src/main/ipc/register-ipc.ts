@@ -12,6 +12,7 @@ import {
   cancelledResultSchema,
   cancelMemoryJobRequestSchema,
   cancelRunRequestSchema,
+  checkKnowledgeSourcesRequestSchema,
   chooseInterpreterResultSchema,
   clearedResultSchema,
   clearNotificationsRequestSchema,
@@ -63,12 +64,16 @@ import {
   IpcChannel,
   knowledgeCreateResearchDraftRequestSchema,
   knowledgeDocumentSummarySchema,
-  type KnowledgeImportResult,
-  knowledgeImportResultSchema,
-  knowledgeRefreshResultSchema,
+  knowledgeImportAckSchema,
+  knowledgeJobAckSchema,
+  knowledgeJobCancelResultSchema,
+  knowledgeJobDetailSchema,
+  knowledgeJobIdRequestSchema,
+  knowledgeJobPageSchema,
   knowledgeResearchDraftResultSchema,
   knowledgeRevisionSummarySchema,
   knowledgeSearchResultSchema,
+  knowledgeSearchSettingsSchema,
   knowledgeTextPageSchema,
   listArtifactsRequestSchema,
   listArtifactVersionsRequestSchema,
@@ -76,6 +81,7 @@ import {
   listDiscussionCheckpointsRequestSchema,
   listEvidenceRequestSchema,
   listExpertsRequestSchema,
+  listKnowledgeJobsRequestSchema,
   listKnowledgeRevisionsRequestSchema,
   listMemoriesRequestSchema,
   listMemoryJobsRequestSchema,
@@ -117,6 +123,7 @@ import {
   previewKnowledgeRequestSchema,
   previewMemoryRequestSchema,
   previewRunSourceRequestSchema,
+  rebuildKnowledgeIndexRequestSchema,
   rebuildMemoryProjectionRequestSchema,
   recentTaskSummarySchema,
   refreshKnowledgeDocumentRequestSchema,
@@ -131,12 +138,14 @@ import {
   removeWorkspaceReferenceVersionRequestSchema,
   resolveMemoryConflictRequestSchema,
   resultSchema,
+  retryKnowledgeJobRequestSchema,
   retryMemoryJobRequestSchema,
   revokeSkillTrustRequestSchema,
   runArtifactSourceDeclarationSchema,
   runSourcePreviewSchema,
   runSummarySchema,
   saveExpertRevisionRequestSchema,
+  saveKnowledgeSettingsRequestSchema,
   saveMarkdownArtifactRequestSchema,
   saveMcpConnectionRequestSchema,
   saveModelProfileRequestSchema,
@@ -193,6 +202,7 @@ import type { DiscussionCheckpointService } from '../services/discussion-checkpo
 import type { ExpertService } from '../services/expert-service';
 import type { FileArtifactService } from '../services/file-artifact-service';
 import { KnowledgeAudit } from '../services/knowledge-audit';
+import type { KnowledgeIndexService } from '../services/knowledge-index-service';
 import type { KnowledgeVault } from '../services/knowledge-vault';
 import type { McpClientService } from '../services/mcp-client-service';
 import type { MemoryExtractionService } from '../services/memory-extraction-service';
@@ -216,6 +226,7 @@ import type { WorkspaceReferenceService } from '../services/workspace-reference-
 export interface IpcDependencies {
   readonly store: AppStore;
   readonly knowledgeVault: KnowledgeVault;
+  readonly knowledgeIndex: KnowledgeIndexService;
   readonly taskMaterials: TaskMaterialService;
   readonly notifications: NotificationService;
   readonly runs: RunService;
@@ -860,7 +871,7 @@ function registerModelChannels({ store, credentialAccess }: IpcDependencies): vo
 }
 
 function registerKnowledgeChannels(deps: IpcDependencies): void {
-  const { knowledgeVault, notifications, store } = deps;
+  const { knowledgeIndex, knowledgeVault, store } = deps;
 
   handleNoInput(
     IpcChannel.ListKnowledge,
@@ -872,7 +883,7 @@ function registerKnowledgeChannels(deps: IpcDependencies): void {
   handleNoInput(
     IpcChannel.ImportKnowledge,
     emptyRequestSchema,
-    knowledgeImportResultSchema,
+    knowledgeImportAckSchema,
     async () => {
       const result = await showOpenDialog(deps, {
         title: '导入本地资料',
@@ -882,22 +893,9 @@ function registerKnowledgeChannels(deps: IpcDependencies): void {
           { name: '所有文件', extensions: ['*'] },
         ],
       });
-      if (result.canceled) return { imported: [], skipped: [] };
-
-      try {
-        const outcome = await knowledgeVault.importPaths(result.filePaths);
-        notifyImportOutcome(notifications, outcome);
-        return outcome;
-      } catch (error) {
-        notifications.create({
-          level: 'error',
-          kind: 'knowledge-import',
-          title: '导入资料失败',
-          detail: describeError(error),
-          target: { kind: 'knowledge' },
-        });
-        throw error;
-      }
+      // 取消文件对话框不创建作业，也不留下任何半成品索引。
+      if (result.canceled) return { cancelled: true };
+      return { cancelled: false, jobId: knowledgeIndex.startImport(result.filePaths).jobId };
     },
   );
 
@@ -932,8 +930,59 @@ function registerKnowledgeChannels(deps: IpcDependencies): void {
   handleInput(
     IpcChannel.RefreshKnowledgeDocument,
     refreshKnowledgeDocumentRequestSchema,
-    knowledgeRefreshResultSchema,
-    (input) => knowledgeVault.refreshDocument(input.id),
+    knowledgeJobAckSchema,
+    (input) => knowledgeIndex.startRefresh(input.id),
+  );
+  handleOptionalInput(
+    IpcChannel.ListKnowledgeJobs,
+    listKnowledgeJobsRequestSchema,
+    knowledgeJobPageSchema,
+    (input) => knowledgeIndex.listJobs(input),
+  );
+  handleInput(
+    IpcChannel.GetKnowledgeJob,
+    knowledgeJobIdRequestSchema,
+    knowledgeJobDetailSchema.nullable(),
+    (input) => knowledgeIndex.jobDetail(input.jobId) ?? null,
+  );
+  handleInput(
+    IpcChannel.CancelKnowledgeJob,
+    knowledgeJobIdRequestSchema,
+    knowledgeJobCancelResultSchema,
+    (input) => ({ cancelled: knowledgeIndex.cancelJob(input.jobId) !== undefined }),
+  );
+  handleInput(
+    IpcChannel.RetryKnowledgeJob,
+    retryKnowledgeJobRequestSchema,
+    knowledgeJobAckSchema,
+    (input) => knowledgeIndex.retryJob(input.jobId, input.itemIds),
+  );
+  handleNoInput(
+    IpcChannel.GetKnowledgeSettings,
+    emptyRequestSchema,
+    knowledgeSearchSettingsSchema,
+    () => knowledgeIndex.getSettings(),
+  );
+  handleInput(
+    IpcChannel.SaveKnowledgeSettings,
+    saveKnowledgeSettingsRequestSchema,
+    knowledgeSearchSettingsSchema,
+    (input) => knowledgeIndex.saveSettings(input),
+  );
+  handleInput(
+    IpcChannel.RebuildKnowledgeIndex,
+    rebuildKnowledgeIndexRequestSchema,
+    knowledgeJobAckSchema,
+    (input) =>
+      input.kind === 'keyword'
+        ? knowledgeIndex.startRebuildKeyword(input)
+        : knowledgeIndex.startRebuildSemantic(input),
+  );
+  handleInput(
+    IpcChannel.CheckKnowledgeSources,
+    checkKnowledgeSourcesRequestSchema,
+    knowledgeJobAckSchema,
+    (input) => knowledgeIndex.startCheckSources(input),
   );
   handleInput(
     IpcChannel.ListKnowledgeRevisions,
@@ -1593,32 +1642,3 @@ function registerWindowChannels({ getWindow }: IpcDependencies): void {
 }
 
 /** 导入结果按「全部成功 / 部分跳过 / 全部失败」给出不同级别的通知。 */
-function notifyImportOutcome(
-  notifications: NotificationService,
-  outcome: KnowledgeImportResult,
-): void {
-  const { imported, skipped } = outcome;
-  if (imported.length > 0) {
-    notifications.create({
-      level: skipped.length > 0 ? 'warning' : 'success',
-      kind: 'knowledge-import',
-      title:
-        skipped.length > 0
-          ? `已整理 ${imported.length} 份资料，${skipped.length} 份未导入`
-          : `已整理 ${imported.length} 份资料`,
-      target: { kind: 'knowledge' },
-    });
-    return;
-  }
-  if (skipped.length === 0) return;
-  notifications.create({
-    level: 'warning',
-    kind: 'knowledge-import',
-    title: `资料未导入（${skipped.length} 份）`,
-    detail: skipped
-      .slice(0, 5)
-      .map((item) => `${path.basename(item.sourcePath)}：${item.reason}`)
-      .join('；'),
-    target: { kind: 'knowledge' },
-  });
-}

@@ -11,7 +11,11 @@ export type KnowledgeErrorCode =
   | 'EMBEDDING_MODEL_UNAVAILABLE'
   | 'EMBEDDING_RESPONSE_INVALID'
   | 'EMBEDDING_TIMEOUT'
-  | 'OPERATION_CONFLICT';
+  | 'INDEX_CAPACITY_EXCEEDED'
+  | 'INDEX_CONFIGURATION_CHANGED'
+  | 'INDEX_ITEM_NOT_RETRYABLE'
+  | 'OPERATION_CONFLICT'
+  | 'REVISION_CONFLICT';
 
 export class KnowledgeServiceError extends Error {
   constructor(

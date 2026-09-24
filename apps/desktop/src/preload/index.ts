@@ -4,6 +4,7 @@ import {
   cancelDependencyRequestSchema,
   cancelDependencyResultSchema,
   cancelMemoryJobRequestSchema,
+  checkKnowledgeSourcesRequestSchema,
   chooseInterpreterResultSchema,
   copyExpertRequestSchema,
   copySkillRequestSchema,
@@ -39,12 +40,21 @@ import {
   inputSnapshotSchema,
   IpcChannel,
   knowledgeCreateResearchDraftRequestSchema,
+  knowledgeImportAckSchema,
+  knowledgeJobAckSchema,
+  knowledgeJobCancelResultSchema,
+  knowledgeJobDetailSchema,
+  knowledgeJobIdRequestSchema,
+  knowledgeJobPageSchema,
+  knowledgeJobSummarySchema,
   knowledgeResearchDraftResultSchema,
   knowledgeRevisionSummarySchema,
+  knowledgeSearchSettingsSchema,
   knowledgeTextPageSchema,
   listDependencyOptionsRequestSchema,
   listDiscussionCheckpointsRequestSchema,
   listExpertsRequestSchema,
+  listKnowledgeJobsRequestSchema,
   listKnowledgeRevisionsRequestSchema,
   listMemoriesRequestSchema,
   listMemoryJobsRequestSchema,
@@ -73,7 +83,9 @@ import {
   previewKnowledgeRequestSchema,
   previewMemoryRequestSchema,
   previewRunSourceRequestSchema,
+  rebuildKnowledgeIndexRequestSchema,
   rebuildMemoryProjectionRequestSchema,
+  refreshKnowledgeDocumentRequestSchema,
   refreshSkillDependencyGrantRequestSchema,
   refreshSkillDependencyGrantResultSchema,
   registerToolchainRequestSchema,
@@ -81,11 +93,13 @@ import {
   removeWorkspaceReferenceVersionRequestSchema,
   resolveMemoryConflictRequestSchema,
   resultSchema,
+  retryKnowledgeJobRequestSchema,
   retryMemoryJobRequestSchema,
   revokeSkillTrustRequestSchema,
   runArtifactSourceDeclarationSchema,
   runSourcePreviewSchema,
   saveExpertRevisionRequestSchema,
+  saveKnowledgeSettingsRequestSchema,
   saveMcpConnectionRequestSchema,
   saveSkillRuntimeProfileRequestSchema,
   saveTaskContextRequestSchema,
@@ -229,11 +243,68 @@ const api: BetterWorkDesktopApi = {
   },
   knowledge: {
     list: () => ipcRenderer.invoke(IpcChannel.ListKnowledge),
-    importFromDialog: () => ipcRenderer.invoke(IpcChannel.ImportKnowledge),
+    importFromDialog: () =>
+      invokeValidated(IpcChannel.ImportKnowledge, {}, knowledgeImportAckSchema),
+    jobs: (input) =>
+      invokeValidated(
+        IpcChannel.ListKnowledgeJobs,
+        listKnowledgeJobsRequestSchema.parse(input ?? {}),
+        knowledgeJobPageSchema,
+      ),
+    job: (input) =>
+      invokeValidated(
+        IpcChannel.GetKnowledgeJob,
+        knowledgeJobIdRequestSchema.parse(input),
+        knowledgeJobDetailSchema.nullable(),
+      ),
+    cancelJob: (input) =>
+      invokeValidated(
+        IpcChannel.CancelKnowledgeJob,
+        knowledgeJobIdRequestSchema.parse(input),
+        knowledgeJobCancelResultSchema,
+      ),
+    retryJob: (input) =>
+      invokeValidated(
+        IpcChannel.RetryKnowledgeJob,
+        retryKnowledgeJobRequestSchema.parse(input),
+        knowledgeJobAckSchema,
+      ),
+    onJobEvent(listener) {
+      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
+        listener(knowledgeJobSummarySchema.parse(raw));
+      };
+      ipcRenderer.on(IpcChannel.KnowledgeJobEvent, handler);
+      return () => ipcRenderer.off(IpcChannel.KnowledgeJobEvent, handler);
+    },
+    settings: () =>
+      invokeValidated(IpcChannel.GetKnowledgeSettings, {}, knowledgeSearchSettingsSchema),
+    saveSettings: (input) =>
+      invokeValidated(
+        IpcChannel.SaveKnowledgeSettings,
+        saveKnowledgeSettingsRequestSchema.parse(input),
+        knowledgeSearchSettingsSchema,
+      ),
+    rebuildIndex: (input) =>
+      invokeValidated(
+        IpcChannel.RebuildKnowledgeIndex,
+        rebuildKnowledgeIndexRequestSchema.parse(input),
+        knowledgeJobAckSchema,
+      ),
+    checkSources: (input) =>
+      invokeValidated(
+        IpcChannel.CheckKnowledgeSources,
+        checkKnowledgeSourcesRequestSchema.parse(input),
+        knowledgeJobAckSchema,
+      ),
     search: (input) => ipcRenderer.invoke(IpcChannel.SearchKnowledge, input),
     openSource: (input) => ipcRenderer.invoke(IpcChannel.OpenKnowledgeSource, input),
     remove: (input) => ipcRenderer.invoke(IpcChannel.RemoveKnowledgeDocument, input),
-    refresh: (input) => ipcRenderer.invoke(IpcChannel.RefreshKnowledgeDocument, input),
+    refresh: (input) =>
+      invokeValidated(
+        IpcChannel.RefreshKnowledgeDocument,
+        refreshKnowledgeDocumentRequestSchema.parse(input),
+        knowledgeJobAckSchema,
+      ),
     listRevisions: (input) =>
       invokeValidated(
         IpcChannel.ListKnowledgeRevisions,

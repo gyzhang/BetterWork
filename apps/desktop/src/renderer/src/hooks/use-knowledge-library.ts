@@ -1,13 +1,13 @@
 import type {
   KnowledgeDocumentSummary,
+  KnowledgeJobSummary,
   KnowledgeResearchDraftMaterial,
   KnowledgeResearchDraftResult,
   KnowledgeSearchResult,
 } from '@betterwork/agent-protocol';
-import { type FormEvent, useCallback, useRef, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 
 import { describeActionError, trackAction } from '../lib/async-action';
-import { fileNameOf } from '../lib/format';
 
 export interface KnowledgeLibrary {
   documents: KnowledgeDocumentSummary[];
@@ -64,6 +64,7 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   );
   const [researchBusy, setResearchBusy] = useState(false);
   const researchSeq = useRef(0);
+  const pendingJobs = useRef(new Set<string>());
   const operationByInput = useRef<Map<string, string>>(new Map());
 
   const refresh = useCallback((): void => {
@@ -86,14 +87,12 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     setMessage('');
     setIssues([]);
     try {
-      const result = await window.betterwork.knowledge.importFromDialog();
-      if (result.imported.length || result.skipped.length) {
-        setMessage(
-          `已整理 ${result.imported.length} 份资料${result.skipped.length ? `；${result.skipped.length} 份未导入` : ''}。`,
-        );
-        setIssues(result.skipped.map((item) => `${fileNameOf(item.sourcePath)}：${item.reason}`));
-      } else {
+      const ack = await window.betterwork.knowledge.importFromDialog();
+      if (ack.cancelled || !ack.jobId) {
         setMessage('已取消导入，未选择文件。');
+      } else {
+        setMessage('已提交导入作业，索引正在后台建立。');
+        trackJob(ack.jobId);
       }
       refresh();
     } catch (error) {
@@ -128,14 +127,10 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     setImporting(true);
     setMessage('');
     try {
-      const result = await window.betterwork.knowledge.refresh({ id: document.id });
-      if (!result.refreshed) {
-        const errorMessage = result.error ?? '刷新索引失败。';
-        setMessage(errorMessage);
-        throw new Error(errorMessage);
-      }
-      setMessage('');
+      const ack = await window.betterwork.knowledge.refresh({ id: document.id });
+      setMessage(`已提交「${document.title}」的刷新作业，索引正在后台重建。`);
       setQuery('');
+      trackJob(ack.jobId);
       refresh();
     } catch (error) {
       const message = describeActionError(error, '刷新索引失败，请重试。');
@@ -145,6 +140,50 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
       setImporting(false);
     }
   };
+
+  /** 作业终态后把结果与逐条目失败原因回填到界面；取消不报失败。 */
+  const reportJob = useCallback((jobId: string): void => {
+    trackAction(
+      window.betterwork.knowledge.job({ jobId }).then((detail) => {
+        if (!detail) return;
+        const failed = detail.items.filter((item) => item.status === 'failed');
+        setIssues(
+          failed.map(
+            (item) =>
+              `${item.fileName ?? item.documentId ?? '资料'}：${item.failure?.message ?? '处理失败'}`,
+          ),
+        );
+        if (detail.job.status === 'succeeded') {
+          setMessage(
+            `${titleOfJob(detail.job)}完成（${detail.job.completedCount}/${detail.job.totalCount}）。`,
+          );
+        } else if (detail.job.status === 'partial') {
+          setMessage(
+            `${titleOfJob(detail.job)}部分完成（${detail.job.completedCount}/${detail.job.totalCount}）。`,
+          );
+        } else if (detail.job.status !== 'cancelled') {
+          setMessage(
+            `${titleOfJob(detail.job)}未完成：${detail.job.failure?.message ?? detail.job.status}`,
+          );
+        }
+      }),
+      '回读索引作业结果',
+    );
+  }, []);
+
+  const trackJob = useCallback((jobId: string): void => {
+    pendingJobs.current.add(jobId);
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = window.betterwork.knowledge.onJobEvent((job: KnowledgeJobSummary) => {
+      if (!pendingJobs.current.has(job.id)) return;
+      if (job.status === 'queued' || job.status === 'running') return;
+      pendingJobs.current.delete(job.id);
+      reportJob(job.id);
+    });
+    return unsubscribe;
+  }, [reportJob]);
 
   const materialKey = (result: KnowledgeSearchResult): string =>
     `${result.reference.knowledgeDocumentId}:${result.reference.knowledgeRevisionId}`;
@@ -250,3 +289,13 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     research,
   };
 }
+
+const JOB_TITLES: Record<KnowledgeJobSummary['kind'], string> = {
+  import: '资料导入',
+  refresh: '资料刷新',
+  'rebuild-keyword': '关键词索引重建',
+  'rebuild-semantic': '向量索引重建',
+  'check-source': '来源检查',
+};
+
+const titleOfJob = (job: KnowledgeJobSummary): string => JOB_TITLES[job.kind];

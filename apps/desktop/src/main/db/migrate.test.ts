@@ -805,6 +805,73 @@ describe('knowledge database migrations', () => {
     ).toBe(backfilled.text_hash);
     again.close();
   });
+
+  it('KM07a v5 升级作业/空间/代次/向量/派生块与设置单例并保住唯一约束', () => {
+    const file = path.join(temporaryDirectory(), 'vault-v4.sqlite');
+    const before = new Database(file);
+    migrate(before, { migrations: knowledgeMigrations.slice(0, 4) });
+    expect(
+      (
+        before
+          .prepare(
+            "SELECT COUNT(*) AS c FROM sqlite_master WHERE type = 'table' AND name = 'knowledge_jobs'",
+          )
+          .get() as { c: number }
+      ).c,
+    ).toBe(0);
+    before.close();
+
+    const db = openKnowledgeDatabase(file);
+    expect(readSchemaVersion(db)).toBe(knowledgeMigrations.length);
+    for (const table of [
+      'knowledge_jobs',
+      'knowledge_job_items',
+      'knowledge_embedding_spaces',
+      'knowledge_index_generations',
+      'knowledge_chunk_vectors',
+      'knowledge_retrieval_chunks',
+      'knowledge_retrieval_fts',
+    ]) {
+      expect(
+        (
+          db.prepare('SELECT COUNT(*) AS c FROM sqlite_master WHERE name = ?').get(table) as {
+            c: number;
+          }
+        ).c,
+      ).toBe(1);
+    }
+    // 设置单例随迁移落库：语义默认关闭、revision 从 1 起。
+    expect(
+      db.prepare('SELECT id, semantic_enabled, revision FROM knowledge_search_settings').get(),
+    ).toEqual({ id: 'singleton', semantic_enabled: 0, revision: 1 });
+
+    // 每个模型指纹只允许一个 current 空间；维度锁定与 epoch 由服务层 CAS 负责。
+    const insertSpace = `INSERT INTO knowledge_embedding_spaces
+      (id, model_fingerprint, epoch, dimension, status, created_at)
+      VALUES (?, 'fp-a', ?, NULL, 'current', 1)`;
+    db.prepare(insertSpace).run('space-1', 1);
+    expect(() => db.prepare(insertSpace).run('space-2', 2)).toThrow(/UNIQUE/iu);
+
+    // 同一作业的同一目标只能有一个条目。
+    db.prepare(
+      `INSERT INTO knowledge_jobs
+        (id, kind, status, attempt, request_json, created_at, updated_at)
+       VALUES ('job-1', 'import', 'queued', 1, '{}', 1, 1)`,
+    ).run();
+    const insertItem = `INSERT INTO knowledge_job_items
+      (id, job_id, target_json, status, phase, attempt)
+      VALUES (?, 'job-1', '{"sourcePath":"/tmp/a.md"}', 'queued', 'read', 1)`;
+    db.prepare(insertItem).run('item-1');
+    expect(() => db.prepare(insertItem).run('item-2')).toThrow(/UNIQUE/iu);
+    db.close();
+
+    // 重启不再触碰已升级的库：单例与既有行原样保留。
+    const again = openKnowledgeDatabase(file);
+    expect(countRows(again, 'knowledge_search_settings')).toBe(1);
+    expect(countRows(again, 'knowledge_embedding_spaces')).toBe(1);
+    expect(countRows(again, 'knowledge_job_items')).toBe(1);
+    again.close();
+  });
 });
 
 it('creates managed input snapshot state with workspace ownership', () => {

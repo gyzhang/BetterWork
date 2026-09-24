@@ -76,6 +76,113 @@ const REVISION_SCHEMA = `
 const parserVersion = 'text-extract-v1';
 const chunkingVersion = 'format-locator-v1';
 
+/**
+ * KM07（知识契约 §8.1）：派生检索块、共享向量空间、代次与持久作业。
+ * 全部是可由已保存修订离线重建的派生数据；`knowledge_revisions` 与 `knowledge_sections`
+ * 不在这里改动，所以迁移失败最坏是重新建索引，不动用户文本。
+ */
+const INDEX_JOB_SCHEMA = `
+  CREATE TABLE knowledge_search_settings (
+    id TEXT PRIMARY KEY CHECK (id = 'singleton'),
+    semantic_enabled INTEGER NOT NULL DEFAULT 0 CHECK (semantic_enabled IN (0, 1)),
+    embedding_profile_id TEXT,
+    revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+    updated_at INTEGER NOT NULL
+  );
+  CREATE TABLE knowledge_retrieval_chunks (
+    id TEXT PRIMARY KEY,
+    revision_id TEXT NOT NULL REFERENCES knowledge_revisions(id) ON DELETE CASCADE,
+    text_hash TEXT NOT NULL,
+    chunking_version TEXT NOT NULL,
+    section_ordinal INTEGER NOT NULL CHECK (section_ordinal >= 0),
+    start INTEGER NOT NULL CHECK (start >= 0),
+    end INTEGER NOT NULL CHECK (end > 0),
+    locator TEXT NOT NULL,
+    content TEXT NOT NULL,
+    chunk_hash TEXT NOT NULL,
+    UNIQUE(revision_id, chunking_version, section_ordinal, start, end)
+  );
+  CREATE INDEX idx_knowledge_retrieval_chunks_revision
+    ON knowledge_retrieval_chunks(revision_id, section_ordinal, start);
+  CREATE TABLE knowledge_embedding_spaces (
+    id TEXT PRIMARY KEY,
+    model_fingerprint TEXT NOT NULL,
+    epoch INTEGER NOT NULL CHECK (epoch > 0),
+    dimension INTEGER CHECK (dimension IS NULL OR (dimension >= 1 AND dimension <= 4096)),
+    status TEXT NOT NULL CHECK (status IN ('current', 'retired')),
+    created_at INTEGER NOT NULL,
+    UNIQUE(model_fingerprint, epoch)
+  );
+  CREATE UNIQUE INDEX idx_knowledge_embedding_spaces_current
+    ON knowledge_embedding_spaces(model_fingerprint) WHERE status = 'current';
+  CREATE TABLE knowledge_index_generations (
+    id TEXT PRIMARY KEY,
+    revision_id TEXT NOT NULL REFERENCES knowledge_revisions(id) ON DELETE CASCADE,
+    text_hash TEXT NOT NULL,
+    space_id TEXT NOT NULL REFERENCES knowledge_embedding_spaces(id) ON DELETE CASCADE,
+    model_snapshot_json TEXT NOT NULL,
+    chunking_version TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('staging', 'active', 'superseded')),
+    chunk_count INTEGER NOT NULL DEFAULT 0 CHECK (chunk_count >= 0),
+    created_at INTEGER NOT NULL,
+    published_at INTEGER
+  );
+  CREATE UNIQUE INDEX idx_knowledge_index_generations_active
+    ON knowledge_index_generations(revision_id, space_id, chunking_version) WHERE status = 'active';
+  CREATE TABLE knowledge_chunk_vectors (
+    generation_id TEXT NOT NULL REFERENCES knowledge_index_generations(id) ON DELETE CASCADE,
+    chunk_id TEXT NOT NULL REFERENCES knowledge_retrieval_chunks(id) ON DELETE CASCADE,
+    vector BLOB NOT NULL,
+    chunk_hash TEXT NOT NULL,
+    PRIMARY KEY (generation_id, chunk_id)
+  );
+  CREATE TABLE knowledge_job_items (
+    id TEXT PRIMARY KEY,
+    job_id TEXT NOT NULL REFERENCES knowledge_jobs(id) ON DELETE CASCADE,
+    target_json TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled', 'interrupted')),
+    phase TEXT NOT NULL CHECK (phase IN ('read', 'extract', 'chunk', 'embed', 'publish', 'check')),
+    attempt INTEGER NOT NULL CHECK (attempt > 0),
+    completed_units INTEGER NOT NULL DEFAULT 0 CHECK (completed_units >= 0),
+    total_units INTEGER CHECK (total_units IS NULL OR total_units >= 0),
+    result_revision_id TEXT REFERENCES knowledge_revisions(id) ON DELETE SET NULL,
+    failure_code TEXT,
+    failure_message TEXT,
+    UNIQUE(job_id, target_json)
+  );
+  CREATE INDEX idx_knowledge_job_items_job ON knowledge_job_items(job_id, status);
+`;
+
+/** FTS5 虚表不能放进普通事务字符串拼接的建表之后，需要单独执行。 */
+const RETRIEVAL_FTS_SCHEMA = `
+  CREATE VIRTUAL TABLE knowledge_retrieval_fts USING fts5(
+    chunk_id UNINDEXED,
+    title,
+    content
+  );
+`;
+
+const JOB_TABLE_SCHEMA = `
+  CREATE TABLE knowledge_jobs (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK (kind IN ('import', 'refresh', 'rebuild-keyword', 'rebuild-semantic', 'check-source')),
+    status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'succeeded', 'partial', 'failed', 'cancelled', 'interrupted')),
+    attempt INTEGER NOT NULL CHECK (attempt > 0),
+    sequence INTEGER NOT NULL DEFAULT 1 CHECK (sequence > 0),
+    retry_of_job_id TEXT REFERENCES knowledge_jobs(id) ON DELETE SET NULL,
+    request_json TEXT NOT NULL,
+    space_id TEXT REFERENCES knowledge_embedding_spaces(id) ON DELETE SET NULL,
+    total_count INTEGER NOT NULL DEFAULT 0 CHECK (total_count >= 0),
+    completed_count INTEGER NOT NULL DEFAULT 0 CHECK (completed_count >= 0),
+    failed_count INTEGER NOT NULL DEFAULT 0 CHECK (failed_count >= 0),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    failure_code TEXT,
+    failure_message TEXT
+  );
+  CREATE INDEX idx_knowledge_jobs_list ON knowledge_jobs(created_at DESC, id DESC);
+`;
+
 interface LegacyDocumentRow {
   id: string;
   content: string;
@@ -282,6 +389,20 @@ export const knowledgeMigrations: readonly Migration[] = [
         }>;
         updateHash.run(revisionTextHash(sections), sections.length, revision.id);
       }
+    },
+  },
+  {
+    version: 5,
+    name: 'durable index jobs, shared embedding spaces and derived retrieval chunks',
+    up(db: Database.Database): void {
+      // knowledge_job_items 外键指向 knowledge_jobs，作业表必须先建。
+      db.exec(JOB_TABLE_SCHEMA);
+      db.exec(INDEX_JOB_SCHEMA);
+      db.exec(RETRIEVAL_FTS_SCHEMA);
+      db.prepare(
+        `INSERT INTO knowledge_search_settings (id, semantic_enabled, revision, updated_at)
+         VALUES ('singleton', 0, 1, ?)`,
+      ).run(Date.now());
     },
   },
 ];

@@ -7,6 +7,9 @@ import path from 'node:path';
 import {
   type AgentRuntimeEvent,
   IpcChannel,
+  type KnowledgeJobDetail,
+  type KnowledgeJobPage,
+  type KnowledgeSearchSettings,
   type MemoryConflictResolutionData,
   type MemoryJobListData,
   type MemoryJobSummary,
@@ -66,6 +69,7 @@ const PUSH_ONLY_CHANNELS = new Set<string>([
   IpcChannel.RunEvent,
   IpcChannel.NotificationChangeEvent,
   IpcChannel.NotificationActivated,
+  IpcChannel.KnowledgeJobEvent,
 ]);
 
 describe('registerIpc', () => {
@@ -100,6 +104,7 @@ describe('registerIpc', () => {
     const { WorkspaceBriefService } = await import('../services/workspace-memory-brief-service');
     const { WorkspaceReferenceService } = await import('../services/workspace-reference-service');
     const { McpClientService } = await import('../services/mcp-client-service');
+    const { KnowledgeIndexService } = await import('../services/knowledge-index-service');
     const { fakePptxRenderer } = await import('../infrastructure/fixtures/fake-pptx-renderer');
     const { FakeDownloader, FakeFileSystem, FakePythonRunner, scenarioOf } =
       await import('../services/fixtures/fake-python-runtime');
@@ -133,6 +138,18 @@ describe('registerIpc', () => {
       },
     });
     const mcpClientService = new McpClientService(store);
+    // 通道测试只验证接线与校验：嵌入替身一旦被调用就抛错，绝不触网。
+    const embeddingUnavailable = (): never => {
+      throw new Error('IPC 通道测试不应调用嵌入模型');
+    };
+    const knowledgeIndex = new KnowledgeIndexService({
+      vault: knowledgeVault,
+      embedding: {
+        defaultSnapshot: embeddingUnavailable,
+        snapshotOf: embeddingUnavailable,
+        embed: async () => embeddingUnavailable(),
+      },
+    });
     const memoryRecall = new MemoryRecallService({ store });
     const workspaceBrief = new WorkspaceBriefService({ store });
     const workspaceReferences = new WorkspaceReferenceService({ store });
@@ -187,6 +204,7 @@ describe('registerIpc', () => {
     registerIpc({
       store,
       knowledgeVault,
+      knowledgeIndex,
       taskMaterials,
       discussionCheckpoints,
       memories,
@@ -1108,5 +1126,154 @@ describe('registerIpc', () => {
     expect(cancelled.ok).toBe(false);
     if (cancelled.ok) return;
     expect(cancelled.error.code).toBe('NOT_FOUND');
+  });
+
+  describe('知识作业通道（KM07a）', () => {
+    const terminalStatuses = new Set<string>([
+      'succeeded',
+      'partial',
+      'failed',
+      'cancelled',
+      'interrupted',
+    ]);
+    let importJobId = '';
+    let succeededItemId = '';
+    let importedDocumentId = '';
+
+    const waitTerminalJob = async (jobId: string): Promise<KnowledgeJobDetail> => {
+      for (let attempt = 0; attempt < 400; attempt += 1) {
+        const detail = (await invoke(IpcChannel.GetKnowledgeJob, {
+          jobId,
+        })) as KnowledgeJobDetail | null;
+        if (detail && terminalStatuses.has(detail.job.status)) return detail;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      throw new Error(`作业 ${jobId} 未在预期时间内进入终态`);
+    };
+
+    it('取消导入对话框不建作业；选定文件后作业到终态且资料可列出', async () => {
+      mocks.showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] });
+      await expect(invoke(IpcChannel.ImportKnowledge, {})).resolves.toEqual({ cancelled: true });
+      const emptyPage = (await invoke(IpcChannel.ListKnowledgeJobs, {
+        limit: 10,
+      })) as KnowledgeJobPage;
+      expect(emptyPage.jobs).toHaveLength(0);
+
+      const source = path.join(temporaryDirectory, 'knowledge-job-channel.md');
+      writeFileSync(source, '# 续约条款\n\n违约金上限为合同金额的百分之二十。\n');
+      mocks.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [source] });
+      const ack = (await invoke(IpcChannel.ImportKnowledge, {})) as {
+        cancelled: boolean;
+        jobId?: string;
+      };
+      expect(ack).toMatchObject({ cancelled: false });
+      expect(ack.jobId).toBeTruthy();
+      importJobId = ack.jobId ?? '';
+      const detail = await waitTerminalJob(importJobId);
+      expect(detail.job).toMatchObject({ kind: 'import', status: 'succeeded', totalCount: 1 });
+      expect(detail.items[0]?.status).toBe('succeeded');
+      succeededItemId = detail.items[0]?.id ?? '';
+      const documents = (await invoke(IpcChannel.ListKnowledge, {})) as Array<{
+        id: string;
+        title: string;
+      }>;
+      importedDocumentId =
+        documents.find((document) => document.title === 'knowledge-job-channel')?.id ?? '';
+      expect(importedDocumentId).toBeTruthy();
+      await expect(
+        invoke(IpcChannel.GetKnowledgeJob, { jobId: 'missing-job' }),
+      ).resolves.toBeNull();
+    });
+
+    it('取消与重试只接受合法目标：未知或终态作业不可取消，成功条目不可重试', async () => {
+      await expect(
+        invoke(IpcChannel.CancelKnowledgeJob, { jobId: 'missing-job' }),
+      ).resolves.toEqual({ cancelled: false });
+      await expect(invoke(IpcChannel.CancelKnowledgeJob, { jobId: importJobId })).resolves.toEqual({
+        cancelled: false,
+      });
+      await expect(
+        invoke(IpcChannel.RetryKnowledgeJob, { jobId: importJobId, itemIds: [succeededItemId] }),
+      ).rejects.toThrow('只有失败、中断或已取消的条目可以重试');
+      await expect(
+        invoke(IpcChannel.RetryKnowledgeJob, { jobId: importJobId, itemIds: ['not-an-item'] }),
+      ).rejects.toThrow('所选条目不属于该作业');
+      await expect(
+        invoke(IpcChannel.RetryKnowledgeJob, { jobId: importJobId, itemIds: [] }),
+      ).rejects.toThrow();
+    });
+
+    it('刷新、关键词重建与来源核对都以作业回执推进并到终态', async () => {
+      const refresh = (await invoke(IpcChannel.RefreshKnowledgeDocument, {
+        id: importedDocumentId,
+      })) as { jobId: string };
+      expect((await waitTerminalJob(refresh.jobId)).job).toMatchObject({
+        kind: 'refresh',
+        status: 'succeeded',
+      });
+
+      await expect(invoke(IpcChannel.RebuildKnowledgeIndex, { kind: 'keyword' })).rejects.toThrow(
+        '普通重建需要至少一个目标资料或精确修订',
+      );
+      const rebuild = (await invoke(IpcChannel.RebuildKnowledgeIndex, {
+        kind: 'keyword',
+        documentIds: [importedDocumentId],
+      })) as { jobId: string };
+      expect((await waitTerminalJob(rebuild.jobId)).job).toMatchObject({
+        kind: 'rebuild-keyword',
+        status: 'succeeded',
+      });
+
+      const check = (await invoke(IpcChannel.CheckKnowledgeSources, {
+        documentIds: [importedDocumentId],
+      })) as { jobId: string };
+      const checkDetail = await waitTerminalJob(check.jobId);
+      expect(checkDetail.job).toMatchObject({ kind: 'check-source', status: 'succeeded' });
+      expect(checkDetail.items[0]?.status).toBe('succeeded');
+    });
+
+    it('作业列表按倒序分页返回已收口作业，游标越界被拒绝', async () => {
+      const page = (await invoke(IpcChannel.ListKnowledgeJobs, { limit: 2 })) as KnowledgeJobPage;
+      expect(page.jobs).toHaveLength(2);
+      expect(page.nextCursor).toBeDefined();
+      expect(page.jobs[0]?.createdAt).toBeGreaterThanOrEqual(page.jobs[1]?.createdAt ?? 0);
+      await expect(
+        invoke(IpcChannel.ListKnowledgeJobs, { limit: 2, cursor: { createdAt: -1, id: 'x' } }),
+      ).rejects.toThrow();
+    });
+
+    it('索引设置以 CAS 演进，模型不可用时拒绝启用语义检索', async () => {
+      const initial = (await invoke(
+        IpcChannel.GetKnowledgeSettings,
+        {},
+      )) as KnowledgeSearchSettings;
+      expect(initial).toMatchObject({
+        semanticEnabled: false,
+        embeddingAvailable: false,
+        revision: 1,
+      });
+
+      const saved = (await invoke(IpcChannel.SaveKnowledgeSettings, {
+        expectedRevision: 1,
+        semanticEnabled: false,
+      })) as KnowledgeSearchSettings;
+      expect(saved.revision).toBe(2);
+
+      await expect(
+        invoke(IpcChannel.SaveKnowledgeSettings, { expectedRevision: 1, semanticEnabled: false }),
+      ).rejects.toThrow();
+      await expect(
+        invoke(IpcChannel.SaveKnowledgeSettings, { expectedRevision: 2, semanticEnabled: true }),
+      ).rejects.toThrow('没有合格的嵌入模型');
+      await expect(invoke(IpcChannel.RebuildKnowledgeIndex, { kind: 'semantic' })).rejects.toThrow(
+        '语义检索未启用',
+      );
+
+      const afterRejections = (await invoke(
+        IpcChannel.GetKnowledgeSettings,
+        {},
+      )) as KnowledgeSearchSettings;
+      expect(afterRejections).toMatchObject({ revision: 2, semanticEnabled: false });
+    });
   });
 });
