@@ -9,6 +9,7 @@ import {
   copySkillRequestSchema,
   createDiscussionCheckpointRequestSchema,
   createMemoryRequestSchema,
+  declareArtifactSourcesRequestSchema,
   deletedResultSchema,
   deleteMcpConnectionRequestSchema,
   deleteSkillRequestSchema,
@@ -30,6 +31,7 @@ import {
   getMcpConnectionRequestSchema,
   getMemoryRequestSchema,
   getMemorySettingsRequestSchema,
+  getRunArtifactDeclarationsRequestSchema,
   getRunMemoryContextRequestSchema,
   getSkillRequestSchema,
   getTaskContextRequestSchema,
@@ -81,6 +83,7 @@ import {
   resultSchema,
   retryMemoryJobRequestSchema,
   revokeSkillTrustRequestSchema,
+  runArtifactSourceDeclarationSchema,
   runSourcePreviewSchema,
   saveExpertRevisionRequestSchema,
   saveMcpConnectionRequestSchema,
@@ -254,6 +257,18 @@ const api: BetterWorkDesktopApi = {
         IpcChannel.PreviewRunSource,
         previewRunSourceRequestSchema.parse(input),
         runSourcePreviewSchema,
+      ),
+    declareArtifactSources: (input) =>
+      invokeValidated(
+        IpcChannel.DeclareArtifactSources,
+        declareArtifactSourcesRequestSchema.parse(input),
+        runArtifactSourceDeclarationSchema,
+      ),
+    getRunArtifactDeclarations: (input) =>
+      invokeValidated(
+        IpcChannel.GetRunArtifactDeclarations,
+        getRunArtifactDeclarationsRequestSchema.parse(input),
+        runArtifactSourceDeclarationSchema.nullable(),
       ),
   },
   skills: {

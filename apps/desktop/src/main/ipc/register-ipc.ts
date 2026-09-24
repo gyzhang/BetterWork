@@ -22,6 +22,7 @@ import {
   createdTaskSchema,
   createMemoryRequestSchema,
   createTaskRequestSchema,
+  declareArtifactSourcesRequestSchema,
   deletedResultSchema,
   deleteMcpConnectionRequestSchema,
   deleteSkillRequestSchema,
@@ -53,6 +54,7 @@ import {
   getMcpConnectionRequestSchema,
   getMemoryRequestSchema,
   getMemorySettingsRequestSchema,
+  getRunArtifactDeclarationsRequestSchema,
   getRunMemoryContextRequestSchema,
   getSkillRequestSchema,
   getTaskContextRequestSchema,
@@ -131,6 +133,7 @@ import {
   resultSchema,
   retryMemoryJobRequestSchema,
   revokeSkillTrustRequestSchema,
+  runArtifactSourceDeclarationSchema,
   runSourcePreviewSchema,
   runSummarySchema,
   saveExpertRevisionRequestSchema,
@@ -184,6 +187,7 @@ import { createNodeFileSystem } from '../infrastructure/dependency-adapters';
 import { listDependencyLocks, loadDependencyLock } from '../infrastructure/dependency-lock-catalog';
 import type { AppStore } from '../persistence';
 import { API_KEY_SLOT } from '../persistence/credential-repository';
+import { ArtifactDeclarationService } from '../services/artifact-declaration-service';
 import { type CredentialProvisioner, type CredentialResolver } from '../services/credential-access';
 import type { DiscussionCheckpointService } from '../services/discussion-checkpoint-service';
 import type { ExpertService } from '../services/expert-service';
@@ -515,36 +519,39 @@ function registerArtifactChannels(deps: IpcDependencies): void {
       return inputRelations.length > 0 ? { ...detail, inputRelations } : detail;
     },
   );
+  const declarations = new ArtifactDeclarationService(store);
   handleInput(
     IpcChannel.SaveMarkdownArtifact,
     saveMarkdownArtifactRequestSchema,
     artifactSummarySchema,
     (input) => {
+      // 声明种类由宿主判定；校验先于事务，失败时不留半版本（知识契约 §6.1）。
+      const previousVersionId = input.artifactId
+        ? store.artifacts.getDetail(input.artifactId)?.currentVersionId
+        : undefined;
+      const plan = declarations.planForWrite(
+        input.origin,
+        input.runId,
+        previousVersionId,
+        input.inputRelations ?? null,
+      );
       return store.transaction(() => {
-        const saved = store.artifacts.saveMarkdown(input);
-        if (!input.inputRelations || input.inputRelations.length === 0) return saved;
-        const runId = input.runId;
-        if (input.origin !== 'assistant-run' || !runId) {
-          throw new Error('只有 Assistant Run 产生的成果才能声明本次输入来源');
+        const saved = store.artifacts.saveMarkdown(input, plan.kind);
+        if (plan.copyRelationsFromVersionId) {
+          store.artifactInputRelations.inheritFromVersion(
+            saved.currentVersionId,
+            plan.copyRelationsFromVersionId,
+            plan.kind,
+          );
+          return saved;
         }
-        const version = store.artifacts.getVersionDetail(saved.currentVersionId);
-        if (!version || version.sourceRunId !== runId) {
-          throw new Error('成果版本不属于声明来源的 Run');
-        }
+        if (!plan.inputs || plan.inputs.length === 0) return saved;
         store.artifactInputRelations.saveForRun(
           saved.currentVersionId,
-          runId,
-          input.inputRelations,
-          (relationInput) => {
-            if (relationInput.kind === 'evidence') {
-              return store.evidence.get(relationInput.evidenceId)?.runId === runId;
-            }
-            return store.materialReads.hasMaterialRead(
-              runId,
-              JSON.stringify(relationInput),
-              relationInput.contentHash,
-            );
-          },
+          plan.runId,
+          plan.inputs,
+          declarations.wasReadDuring,
+          plan.kind === 'user' ? 'user' : 'model',
         );
         return saved;
       });
@@ -584,22 +591,10 @@ function registerArtifactChannels(deps: IpcDependencies): void {
     registerFileArtifactRequestSchema,
     registerFileArtifactResultSchema,
     async (input) => {
-      const { fileArtifactService, store } = deps;
+      const { fileArtifactService } = deps;
       if (!fileArtifactService) throw new Error('File artifact service is not available');
       const relations = input.inputRelations ?? [];
-      if (
-        relations.some((relation) =>
-          relation.input.kind === 'evidence'
-            ? store.evidence.get(relation.input.evidenceId)?.runId !== input.runId
-            : !store.materialReads.hasMaterialRead(
-                input.runId,
-                JSON.stringify(relation.input),
-                relation.input.contentHash,
-              ),
-        )
-      ) {
-        throw new Error('文件成果输入必须先由同一 Run 实际读取');
-      }
+      if (relations.length > 0) declarations.validate(relations, input.runId);
       const result = await fileArtifactService.register({
         runId: input.runId,
         executionId: input.executionId,
@@ -609,22 +604,8 @@ function registerArtifactChannels(deps: IpcDependencies): void {
         ...(input.mimeType ? { mimeType: input.mimeType } : {}),
         ...(input.description ? { description: input.description } : {}),
         ...(input.validation ? { validation: input.validation } : {}),
+        inputRelations: relations,
       });
-      if (relations.length > 0) {
-        store.artifactInputRelations.saveForRun(
-          result.versionId,
-          input.runId,
-          relations,
-          (relationInput) =>
-            relationInput.kind === 'evidence'
-              ? store.evidence.get(relationInput.evidenceId)?.runId === input.runId
-              : store.materialReads.hasMaterialRead(
-                  input.runId,
-                  JSON.stringify(relationInput),
-                  relationInput.contentHash,
-                ),
-        );
-      }
       return result;
     },
   );
@@ -984,6 +965,18 @@ function registerKnowledgeChannels(deps: IpcDependencies): void {
     knowledgeCreateResearchDraftRequestSchema,
     knowledgeResearchDraftResultSchema,
     (input) => new ResearchDraftService(store, knowledgeVault).create(input),
+  );
+  handleInput(
+    IpcChannel.DeclareArtifactSources,
+    declareArtifactSourcesRequestSchema,
+    runArtifactSourceDeclarationSchema,
+    (input) => new ArtifactDeclarationService(store).declare(input.runId, input.inputRelations),
+  );
+  handleInput(
+    IpcChannel.GetRunArtifactDeclarations,
+    getRunArtifactDeclarationsRequestSchema,
+    runArtifactSourceDeclarationSchema.nullable(),
+    (input) => store.runArtifactDeclarations.get(input.runId) ?? null,
   );
 }
 

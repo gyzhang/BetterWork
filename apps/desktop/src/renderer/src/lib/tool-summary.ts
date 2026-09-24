@@ -59,6 +59,18 @@ export function summarizeToolOutput(
         isRecord(output) && Array.isArray(output.parts) ? output.parts.length : undefined;
       return parts === undefined ? '已读取资料正文' : `已读取 ${parts} 段资料正文`;
     }
+    case 'artifact_declare_sources': {
+      if (message) return message;
+      const declared =
+        isRecord(output) && typeof output.declaredCount === 'number'
+          ? output.declaredCount
+          : undefined;
+      return declared === undefined
+        ? '已更新采用来源声明'
+        : declared === 0
+          ? '已清除采用来源声明'
+          : `已声明 ${declared} 项采用来源`;
+    }
     case 'web_search': {
       if (message) return message;
       const found = countResults(output);

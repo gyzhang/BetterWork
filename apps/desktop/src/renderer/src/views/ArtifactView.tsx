@@ -1,6 +1,10 @@
 import type {
   ArtifactDetail,
   ArtifactInput,
+  ArtifactInputRelation,
+  ArtifactInputRelationInput,
+  ArtifactInputRelationKind,
+  ArtifactSourceDeclarationKind,
   ArtifactSummary,
   ArtifactThumbnail,
   ArtifactVersionDetail,
@@ -11,10 +15,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { EmptyPage } from '../components/EmptyState';
+import { FieldSelect } from '../components/FieldSelect';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
 import { ViewContainer } from '../components/layout/ViewContainer';
 import { type ToastTone, TransientToast } from '../components/TransientToast';
+import { useArtifactSourceSelection } from '../hooks/use-artifact-source-selection';
 import { useArtifactThumbnails } from '../hooks/use-artifact-thumbnails';
 import { useArtifactViewer } from '../hooks/use-artifact-viewer';
 import type { WorkspaceReferencesState } from '../hooks/use-workspace-references';
@@ -49,9 +55,40 @@ const inputLabel = (input: ArtifactInput): string => {
   return input.snapshotId;
 };
 
+/** 声明种类与输入关系都用中文呈现：审阅者要能区分「声明采用」与「只是访问过」。 */
+const DECLARATION_KIND_LABEL: Record<ArtifactSourceDeclarationKind, string> = {
+  model: '模型声明采用',
+  user: '用户选择采用',
+  inherited: '继承前版声明',
+  legacy: '历史关联，未核实采用',
+  none: '未声明采用依据',
+};
+
+const RELATION_ORDER: readonly ArtifactInputRelationKind[] = [
+  'data',
+  'rule',
+  'comparison',
+  'structure',
+  'template',
+  'background',
+  'other',
+];
+
+const RELATION_LABEL: Record<ArtifactInputRelation['relation'], string> = {
+  data: '数据依据',
+  rule: '规则口径',
+  comparison: '历史对比',
+  structure: '结构参考',
+  template: '模板',
+  background: '背景参考',
+  other: '其他',
+};
+
+const RELATION_OPTIONS = RELATION_ORDER.map((kind) => ({ id: kind, label: RELATION_LABEL[kind] }));
+
 const inputSourceLabel = (input: ArtifactInput): string => {
   if (input.kind === 'evidence') return '证据';
-  if (input.kind === 'knowledge-revision') return '知识修订';
+  if (input.kind === 'knowledge-revision') return '文档级依据，非全文已读';
   if (input.kind === 'artifact-version') return '成果版本';
   return '工作区输入';
 };
@@ -85,7 +122,13 @@ export function ArtifactPage({
   artifacts: ArtifactSummary[];
   selected: ArtifactDetail | undefined;
   onSelect: (artifact: ArtifactSummary) => void;
-  onSave: (artifact: ArtifactDetail, title: string, content: string) => Promise<void>;
+  /** `inputRelations` 省略表示沿用前版声明，空数组表示用户主动清除采用声明。 */
+  onSave: (
+    artifact: ArtifactDetail,
+    title: string,
+    content: string,
+    inputRelations?: ArtifactInputRelationInput[],
+  ) => Promise<void>;
   onExport: (
     artifact: ArtifactDetail,
     versionId?: string,
@@ -122,6 +165,7 @@ export function ArtifactPage({
     artifactId: selected?.type === 'presentation' ? selected.id : undefined,
     versionId: selected?.type === 'presentation' ? visibleVersion?.id : undefined,
   });
+  const sourceSelection = useArtifactSourceSelection(visibleVersion);
   if (selected && visibleVersion)
     return (
       <>
@@ -223,11 +267,22 @@ export function ArtifactPage({
                 {error}
               </p>
             )}
-            {visibleVersion.inputRelations && visibleVersion.inputRelations.length > 0 && (
+            {(visibleVersion.inputRelations?.length ?? 0) > 0 ||
+            visibleVersion.sourceDeclarationKind !== undefined ? (
               <section className="artifact-input-grid">
-                <h4>本版输入</h4>
+                <h4>
+                  声明采用依据 ·{' '}
+                  {DECLARATION_KIND_LABEL[visibleVersion.sourceDeclarationKind ?? 'none']}
+                </h4>
+                {(visibleVersion.inputRelations ?? []).length === 0 && (
+                  <p className="muted-text">
+                    {visibleVersion.sourceDeclarationKind === 'legacy'
+                      ? '这些输入关系来自旧版本，未经过采用核实。'
+                      : '本版本没有声明采用依据；下方访问记录只表示运行读到过。'}
+                  </p>
+                )}
                 <div className="artifact-input-cards">
-                  {visibleVersion.inputRelations.map((relation) => {
+                  {(visibleVersion.inputRelations ?? []).map((relation) => {
                     const fileName = inputLabel(relation.input);
                     const sourceLabel = inputSourceLabel(relation.input);
                     const isSnapshot = relation.input.kind === 'workspace-input-snapshot';
@@ -244,7 +299,7 @@ export function ArtifactPage({
                         <div className="artifact-input-card-body">
                           <span className="artifact-input-card-name">{fileName}</span>
                           <span className="artifact-input-card-meta">
-                            {relation.relation} · {sourceLabel}
+                            {RELATION_LABEL[relation.relation]} · {sourceLabel}
                           </span>
                         </div>
                       </div>
@@ -252,7 +307,7 @@ export function ArtifactPage({
                   })}
                 </div>
               </section>
-            )}
+            ) : null}
             <div className="artifact-detail-layout">
               <aside className="artifact-version-list">
                 <div>
@@ -276,7 +331,7 @@ export function ArtifactPage({
                 ))}
                 {visibleVersion.evidence.length > 0 && (
                   <div className="artifact-evidence-list">
-                    <strong>本版来源</strong>
+                    <strong>运行访问记录</strong>
                     {visibleVersion.evidence.map((item) => {
                       const isWeb = item.sourceType === 'web-page';
                       const isMcp = item.sourceType === 'mcp-tool';
@@ -329,7 +384,7 @@ export function ArtifactPage({
                     onSubmit={(event) => {
                       event.preventDefault();
                       setError('');
-                      onSave(selected, title, content)
+                      onSave(selected, title, content, sourceSelection.buildInputRelations())
                         .then(finishEditing)
                         .catch((reason: unknown) =>
                           setError(reason instanceof Error ? reason.message : '保存修订失败。'),
@@ -353,6 +408,53 @@ export function ArtifactPage({
                         required
                       />
                     </label>
+                    {sourceSelection.hasCandidates && (
+                      <fieldset className="artifact-source-select">
+                        <legend>采用来源</legend>
+                        <p className="muted-text">
+                          {sourceSelection.touched
+                            ? '已重新选择：保存后新版按这些精确来源记为用户选择采用。'
+                            : '不勾选则沿用上一版声明；这里只列出运行真正返回过定位的来源。'}
+                        </p>
+                        {sourceSelection.candidates.map((candidate) => (
+                          <div className="artifact-source-row" key={candidate.evidenceId}>
+                            <input
+                              type="checkbox"
+                              id={`artifact-source-${candidate.evidenceId}`}
+                              checked={sourceSelection.isSelected(candidate.evidenceId)}
+                              onChange={() => sourceSelection.toggle(candidate.evidenceId)}
+                            />
+                            <label
+                              htmlFor={`artifact-source-${candidate.evidenceId}`}
+                              className="artifact-source-name"
+                            >
+                              {candidate.title}
+                              <small>{candidate.operationLabel}</small>
+                            </label>
+                            {sourceSelection.isSelected(candidate.evidenceId) && (
+                              <FieldSelect
+                                options={RELATION_OPTIONS}
+                                value={sourceSelection.relationFor(candidate.evidenceId)}
+                                onChange={(id) => {
+                                  const kind = RELATION_ORDER.find((key) => key === id);
+                                  if (kind) sourceSelection.setRelation(candidate.evidenceId, kind);
+                                }}
+                                ariaLabel={`${candidate.title} 的依据类型`}
+                              />
+                            )}
+                          </div>
+                        ))}
+                        {sourceSelection.touched && (
+                          <button
+                            className="text-button"
+                            type="button"
+                            onClick={sourceSelection.inheritPrevious}
+                          >
+                            改为沿用上一版声明
+                          </button>
+                        )}
+                      </fieldset>
+                    )}
                     <footer>
                       <span>保存后会创建 v{selected.versionNumber + 1} 人工修订版本。</span>
                       <div>

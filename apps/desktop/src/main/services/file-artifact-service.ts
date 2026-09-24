@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import path from 'node:path';
 
 import type {
+  ArtifactInputRelationInput,
   ArtifactThumbnail,
   RegisterFileArtifactResult,
   ValidationState,
@@ -32,6 +33,8 @@ export interface RegisterFileServiceInput {
   mimeType?: string;
   description?: string;
   validation?: ValidationState;
+  /** 显式声明即 model；省略即 none（知识契约 §6.1）。 */
+  inputRelations?: ArtifactInputRelationInput[];
 }
 
 /**
@@ -91,6 +94,8 @@ export class FileArtifactService {
     if (hashBytes(report) !== output.reportHash) throw new Error('Validation report hash mismatch');
     const fileSize = fileBuffer.length;
     const fileKey = `${input.executionId}/${input.outputId}`;
+    const inputRelations = input.inputRelations ?? [];
+    const declarationKind = inputRelations.length > 0 ? ('model' as const) : ('none' as const);
     const versionId = randomUUID();
     const destDir = path.join(this.artifactFilesRoot, versionId);
     const destPath = path.join(destDir, 'output');
@@ -110,7 +115,7 @@ export class FileArtifactService {
         }
         mkdirSync(destDir, { recursive: true });
         writeFileSync(destPath, fileBuffer, { flag: 'wx', mode: 0o400 });
-        return this.store.artifacts.registerFile({
+        const registered = this.store.artifacts.registerFile({
           taskId,
           ...(input.artifactId ? { artifactId: input.artifactId } : {}),
           versionId,
@@ -123,7 +128,19 @@ export class FileArtifactService {
           executionId: input.executionId,
           ...(input.description ? { description: input.description } : {}),
           validation: output.validation,
+          sourceDeclarationKind: declarationKind,
         });
+        if (inputRelations.length > 0) {
+          this.store.artifactInputRelations.saveForRun(
+            registered.versionId,
+            input.runId,
+            inputRelations,
+            // 登记前已由宿主校验归属；同事务内文件与关系一起成败。
+            () => true,
+            'model',
+          );
+        }
+        return registered;
       });
     } catch (error) {
       rmSync(destDir, { recursive: true, force: true });

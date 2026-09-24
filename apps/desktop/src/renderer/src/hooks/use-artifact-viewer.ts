@@ -33,6 +33,9 @@ const toVersionDetail = (artifact: ArtifactDetail): ArtifactVersionDetail | unde
       origin: artifact.origin,
       ...(artifact.sourceRunId ? { sourceRunId: artifact.sourceRunId } : {}),
       createdAt: artifact.updatedAt,
+      ...(artifact.sourceDeclarationKind
+        ? { sourceDeclarationKind: artifact.sourceDeclarationKind }
+        : {}),
       type: 'markdown',
       content: artifact.content,
       contentHash: artifact.contentHash,
@@ -47,6 +50,9 @@ const toVersionDetail = (artifact: ArtifactDetail): ArtifactVersionDetail | unde
     origin: artifact.origin,
     ...(artifact.sourceRunId ? { sourceRunId: artifact.sourceRunId } : {}),
     createdAt: artifact.updatedAt,
+    ...(artifact.sourceDeclarationKind
+      ? { sourceDeclarationKind: artifact.sourceDeclarationKind }
+      : {}),
     type: 'presentation',
     mimeType: artifact.mimeType,
     fileSize: artifact.fileSize,

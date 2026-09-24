@@ -1,3 +1,4 @@
+export * from './artifact-declare-sources';
 export * from './artifact-register-file';
 export * from './business-metrics';
 export * from './calculator';

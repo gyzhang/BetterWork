@@ -579,27 +579,6 @@ export function App(): React.JSX.Element {
       ));
   const activityGroups = useMemo(() => deriveActivityGroups(events), [events]);
   const currentTaskArtifacts = artifacts.filter((artifact) => artifact.taskId === activeTask?.id);
-  const artifactInputRelations = useMemo<ArtifactInputRelationInput[]>(
-    () =>
-      taskMaterials.map((selection) => ({
-        input: selection.reference,
-        relation:
-          selection.purpose === 'rule'
-            ? 'rule'
-            : selection.purpose === 'current-input'
-              ? 'data'
-              : selection.purpose === 'historical-comparison'
-                ? 'comparison'
-                : selection.purpose === 'structure-reference'
-                  ? 'structure'
-                  : selection.purpose === 'template'
-                    ? 'template'
-                    : selection.purpose === 'background'
-                      ? 'background'
-                      : 'other',
-      })),
-    [taskMaterials],
-  );
 
   const startNewTask = (): void => {
     runSelectionRequestRef.current += 1;
@@ -995,7 +974,6 @@ export function App(): React.JSX.Element {
         runId: latestCompletedRun.id,
         title: activeTask.title,
         content: latestCompletedRun.content,
-        ...(artifactInputRelations.length > 0 ? { inputRelations: artifactInputRelations } : {}),
       });
       setArtifactNote({
         tone: 'ok',
@@ -1090,6 +1068,7 @@ export function App(): React.JSX.Element {
     artifact: ArtifactDetail,
     title: string,
     content: string,
+    inputRelations?: ArtifactInputRelationInput[],
   ): Promise<void> => {
     const saved = await window.betterwork.artifacts.saveMarkdown({
       artifactId: artifact.id,
@@ -1097,6 +1076,7 @@ export function App(): React.JSX.Element {
       origin: 'user-edit',
       title,
       content,
+      ...(inputRelations ? { inputRelations } : {}),
     });
     refreshArtifacts();
     const detail = await window.betterwork.artifacts.get({ id: saved.id });

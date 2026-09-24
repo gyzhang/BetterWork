@@ -11,6 +11,7 @@ import {
   type KnowledgeSearchResult,
   type KnowledgeTextPage,
   type RunSourcePreview,
+  sameKnowledgeReference,
 } from '@betterwork/agent-protocol';
 
 import type { AppStore } from '../persistence';
@@ -55,14 +56,7 @@ export interface KnowledgeRunAuditContext {
   materials: readonly KnowledgeMaterialReference[];
 }
 
-const sameReference = (
-  left: KnowledgeMaterialReference,
-  right: KnowledgeMaterialReference,
-): boolean =>
-  left.knowledgeDocumentId === right.knowledgeDocumentId &&
-  left.knowledgeRevisionId === right.knowledgeRevisionId &&
-  left.contentHash === right.contentHash &&
-  left.sourcePath === right.sourcePath;
+const sameReference = sameKnowledgeReference;
 
 /**
  * 知识搜索/读取的审计服务（契约 §5）：先在同一应用库事务内落 Evidence 与整组

@@ -1484,6 +1484,56 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 32,
+    name: 'KM05 artifact source declaration ledger',
+    up(db: Database.Database): void {
+      // 契约 §6：版本声明种类由宿主判定；迁移前已有输入关系的版本只标 legacy（历史关联，不等于采用）。
+      const relationVersions = db
+        .prepare('SELECT DISTINCT output_version_id FROM artifact_input_relations')
+        .all() as Array<{ output_version_id: string }>;
+      rebuildTable(
+        db,
+        'artifact_versions',
+        `CREATE TABLE artifact_versions (
+          id TEXT PRIMARY KEY,
+          artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
+          version_number INTEGER NOT NULL,
+          content TEXT,
+          content_hash TEXT NOT NULL,
+          source_run_id TEXT NOT NULL,
+          origin TEXT NOT NULL DEFAULT 'assistant-run',
+          created_at INTEGER NOT NULL,
+          source_declaration TEXT NOT NULL DEFAULT 'none'
+            CHECK (source_declaration IN ('model', 'user', 'inherited', 'legacy', 'none')),
+          UNIQUE(artifact_id, version_number)
+        )`,
+        [
+          'id',
+          'artifact_id',
+          'version_number',
+          'content',
+          'content_hash',
+          'source_run_id',
+          'origin',
+          'created_at',
+        ],
+      );
+      for (const { output_version_id } of relationVersions) {
+        db.prepare("UPDATE artifact_versions SET source_declaration = 'legacy' WHERE id = ?").run(
+          output_version_id,
+        );
+      }
+      db.exec(`
+        CREATE TABLE run_artifact_source_declarations (
+          run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+          inputs_json TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+      `);
+    },
+  },
 ];
 
 /**

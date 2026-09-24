@@ -270,6 +270,19 @@ export const knowledgeMaterialReferenceSchema = z
   })
   .strict();
 export type KnowledgeMaterialReference = z.infer<typeof knowledgeMaterialReferenceSchema>;
+
+/** 修订完整身份（不含 originWorkspaceId）：材料、足迹与声明共用同一比较口径。 */
+export function sameKnowledgeReference(
+  left: KnowledgeMaterialReference,
+  right: KnowledgeMaterialReference,
+): boolean {
+  return (
+    left.knowledgeDocumentId === right.knowledgeDocumentId &&
+    left.knowledgeRevisionId === right.knowledgeRevisionId &&
+    left.contentHash === right.contentHash &&
+    left.sourcePath === right.sourcePath
+  );
+}
 const artifactMaterialReferenceSchema = z
   .object({
     kind: z.literal('artifact-version'),
@@ -2262,6 +2275,16 @@ export const artifactInputRelationInputSchema = z
   .strict();
 export type ArtifactInputRelationInput = z.infer<typeof artifactInputRelationInputSchema>;
 
+/** 版本声明种类由宿主判定：model/user 为显式声明，inherited 必有已声明祖先，legacy 只作历史关联。 */
+export const artifactSourceDeclarationKindSchema = z.enum([
+  'model',
+  'user',
+  'inherited',
+  'legacy',
+  'none',
+]);
+export type ArtifactSourceDeclarationKind = z.infer<typeof artifactSourceDeclarationKindSchema>;
+
 export const inputSnapshotStatusSchema = z.enum(['preparing', 'ready', 'failed', 'cancelled']);
 export type InputSnapshotStatus = z.infer<typeof inputSnapshotStatusSchema>;
 export const inputSnapshotSchema = z
@@ -2931,6 +2954,8 @@ export interface MarkdownArtifactSummary {
   workspaceId: string;
   taskId: string;
   type: 'markdown';
+  /** 当前版本的采用声明种类。 */
+  sourceDeclarationKind?: ArtifactSourceDeclarationKind;
   title: string;
   currentVersionId: string;
   versionNumber: number;
@@ -2945,6 +2970,7 @@ export interface FileArtifactSummary {
   workspaceId: string;
   taskId: string;
   type: 'presentation';
+  sourceDeclarationKind?: ArtifactSourceDeclarationKind;
   title: string;
   currentVersionId: string;
   versionNumber: number;
@@ -2984,6 +3010,7 @@ export interface MarkdownArtifactVersionSummary {
   origin: ArtifactVersionOrigin;
   sourceRunId?: string;
   createdAt: number;
+  sourceDeclarationKind?: ArtifactSourceDeclarationKind;
 }
 
 export interface FileArtifactVersionSummary {
@@ -2994,6 +3021,7 @@ export interface FileArtifactVersionSummary {
   origin: ArtifactVersionOrigin;
   sourceRunId?: string;
   createdAt: number;
+  sourceDeclarationKind?: ArtifactSourceDeclarationKind;
   mimeType: string;
   fileSize: number;
   validation: ValidationState;
@@ -3041,6 +3069,13 @@ export const saveMarkdownArtifactRequestSchema = z
         code: z.ZodIssueCode.custom,
         message: '人工修订不能伪装为 AI 运行产物',
         path: ['runId'],
+      });
+    }
+    if (input.origin === 'user-edit' && input.inputRelations && !input.artifactId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: '新建成果没有可核验的来源运行，无法声明采用依据',
+        path: ['inputRelations'],
       });
     }
   });
@@ -3358,6 +3393,7 @@ export const markdownArtifactSummarySchema = z.object({
   workspaceId: z.string().min(1),
   taskId: z.string().min(1),
   type: z.literal('markdown'),
+  sourceDeclarationKind: artifactSourceDeclarationKindSchema.optional(),
   title: z.string(),
   currentVersionId: z.string().min(1),
   versionNumber: z.number().int().positive(),
@@ -3371,6 +3407,7 @@ export const fileArtifactSummarySchema = z.object({
   workspaceId: z.string().min(1),
   taskId: z.string().min(1),
   type: z.literal('presentation'),
+  sourceDeclarationKind: artifactSourceDeclarationKindSchema.optional(),
   title: z.string(),
   currentVersionId: z.string().min(1),
   versionNumber: z.number().int().positive(),
@@ -3410,6 +3447,8 @@ export const markdownArtifactVersionSummarySchema = z.object({
   origin: z.enum(['assistant-run', 'user-edit']),
   sourceRunId: z.string().min(1).optional(),
   createdAt: z.number().int().nonnegative(),
+  /** 省略只出现在迁移前的历史数据；新写入一律显式携带。 */
+  sourceDeclarationKind: artifactSourceDeclarationKindSchema.optional(),
 });
 export const fileArtifactVersionSummarySchema = markdownArtifactVersionSummarySchema.extend({
   mimeType: z.string().min(1),
@@ -3610,6 +3649,30 @@ export const runSourcePreviewSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('legacy'), evidence: evidenceSummarySchema }).strict(),
 ]);
 export type RunSourcePreview = z.infer<typeof runSourcePreviewSchema>;
+
+/** 一次 Run 的成果采用声明：最后一次成功声明生效，空数组表示主动清除。 */
+export const declareArtifactSourcesRequestSchema = z
+  .object({
+    runId: z.string().min(1),
+    inputRelations: z.array(artifactInputRelationInputSchema).max(50),
+  })
+  .strict();
+export type DeclareArtifactSourcesRequest = z.infer<typeof declareArtifactSourcesRequestSchema>;
+
+export const runArtifactSourceDeclarationSchema = z
+  .object({
+    runId: z.string().min(1),
+    inputs: z.array(artifactInputRelationInputSchema),
+    createdAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type RunArtifactSourceDeclaration = z.infer<typeof runArtifactSourceDeclarationSchema>;
+
+export const getRunArtifactDeclarationsRequestSchema = z.object({ runId: z.string().min(1) });
+export type GetRunArtifactDeclarationsRequest = z.infer<
+  typeof getRunArtifactDeclarationsRequestSchema
+>;
 
 export const previewKnowledgeRequestSchema = z
   .object({
@@ -3915,6 +3978,8 @@ export const IpcChannel = {
   PreviewKnowledge: 'knowledge:preview',
   CreateResearchDraft: 'knowledge:create-research-draft',
   PreviewRunSource: 'knowledge:preview-run-source',
+  DeclareArtifactSources: 'artifact:declare-sources',
+  GetRunArtifactDeclarations: 'artifact:get-run-declarations',
   ListSearchEngines: 'search:list',
   SaveSearchEngine: 'search:save',
   TestSearchEngine: 'search:test',
@@ -4066,6 +4131,12 @@ export interface BetterWorkDesktopApi {
       input: KnowledgeCreateResearchDraftRequest,
     ): Promise<KnowledgeResearchDraftResult>;
     previewRunSource(input: PreviewRunSourceRequest): Promise<RunSourcePreview>;
+    declareArtifactSources(
+      input: DeclareArtifactSourcesRequest,
+    ): Promise<RunArtifactSourceDeclaration>;
+    getRunArtifactDeclarations(
+      input: GetRunArtifactDeclarationsRequest,
+    ): Promise<RunArtifactSourceDeclaration | null>;
   };
   skills: {
     list(): Promise<SkillSummary[]>;

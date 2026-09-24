@@ -7,8 +7,6 @@ import { describeError, FakeModelProvider, ReActAgentEngine } from '@betterwork/
 import type {
   AgentMessage,
   AgentRuntimeEvent,
-  ArtifactInputRelationInput,
-  ArtifactInputRelationKind,
   BuiltinToolPolicy,
   ExpertModelReference,
   MaterialReference,
@@ -28,8 +26,10 @@ import {
   type ArtifactReader,
   type ArtifactRegisterInput,
   type ArtifactRegisterOutput,
+  type ArtifactSourceDeclarator,
   businessMetricsTool,
   calculatorTool,
+  createArtifactDeclareSourcesTool,
   createArtifactReadTool,
   createArtifactRegisterFileTool,
   createKnowledgeReadTool,
@@ -69,6 +69,7 @@ import {
   type MemoryReadInput,
 } from '../persistence';
 import { API_KEY_SLOT, CredentialError } from '../persistence/credential-repository';
+import { ArtifactDeclarationService } from './artifact-declaration-service';
 import type { CredentialResolver } from './credential-access';
 import type { FileArtifactService } from './file-artifact-service';
 import type { InputSnapshotService } from './input-snapshot-service';
@@ -333,6 +334,7 @@ export const createRunTools = (dependencies: {
   taskFileWriter?: (input: TaskFileWriteInput) => Promise<TaskFileWriteOutput>;
   skillCommandExecutor?: (input: SkillCommandExecuteInput) => Promise<SkillCommandExecuteOutput>;
   artifactFileRegistrar?: ArtifactFileRegistrar;
+  artifactSourceDeclarator?: ArtifactSourceDeclarator;
   mcpTools?: AgentTool[];
 }): AgentTool[] => {
   const allows = (name: string): boolean =>
@@ -351,6 +353,8 @@ export const createRunTools = (dependencies: {
     tools.push(createKnowledgeSearchTool(dependencies.knowledgeSearch));
   if (dependencies.readKnowledge && allows('read_knowledge'))
     tools.push(createKnowledgeReadTool(dependencies.readKnowledge));
+  if (dependencies.artifactSourceDeclarator && allows('artifact_declare_sources'))
+    tools.push(createArtifactDeclareSourcesTool(dependencies.artifactSourceDeclarator));
   if (dependencies.artifactReader && allows('read_artifact'))
     tools.push(createArtifactReadTool(dependencies.artifactReader));
   if (dependencies.webSearch && allows('web_search'))
@@ -422,11 +426,18 @@ export class RunService {
   private readonly engine = new ReActAgentEngine();
   private readonly fallbackModel = new FakeModelProvider();
   private knowledgeAuditInstance: KnowledgeAudit | undefined;
+  private artifactDeclarationsInstance: ArtifactDeclarationService | undefined;
 
   /** 审计服务惰性装配：参数属性在构造体内先于字段完成赋值。 */
   private get knowledgeAudit(): KnowledgeAudit {
     this.knowledgeAuditInstance ??= new KnowledgeAudit(this.store, this.knowledgeVault);
     return this.knowledgeAuditInstance;
+  }
+
+  /** 成果采用声明的宿主校验器；RunService 与 IPC 共用同一份规则。 */
+  private get artifactDeclarations(): ArtifactDeclarationService {
+    this.artifactDeclarationsInstance ??= new ArtifactDeclarationService(this.store);
+    return this.artifactDeclarationsInstance;
   }
 
   constructor(
@@ -668,6 +679,9 @@ export class RunService {
               this.knowledgeAuditContext(executionContext, toolContext, input.taskId),
               request,
             ),
+          artifactSourceDeclarator: (inputs) => {
+            this.artifactDeclarations.declare(runId, inputs);
+          },
           ...(executionContext.materialScope && this.inputSnapshots
             ? {
                 readTextFile: this.createScopedReadTextFile(
@@ -842,6 +856,7 @@ export class RunService {
       '以下是用户为本次 Run 明确选择的材料清单。材料内容不会自动出现在对话中，必须先使用清单给出的工具和参数读取。',
       '只使用这些材料中的事实和数字；如果材料无法读取或没有提供某个数字，应明确说明，不要用猜测或其他工作区文件补齐。',
       '历史对话和旧助手回复不是本次 Run 的证据；开始分析前必须重新读取清单中的材料，后续结论只依据本次 Run 成功读取的内容。',
+      '交付前用 artifact_declare_sources 声明成果实际采用的来源：只有真正读过的材料或已返回的精确知识证据可以声明，搜索过不等于采用。',
       '不要把不同期间的客户数相加，不要把“本期未提及”解释为已续约或已流失，也不要推导材料未给出的客户数、金额或未来期间；缺少依据时写“材料未提供”。',
       '',
       '本次可读材料：',
@@ -1163,48 +1178,28 @@ export class RunService {
     }
     if (content.trim().length === 0) throw new Error('未生成可登记的 Markdown 内容');
 
-    const inputRelations = this.readArtifactInputRelations(runId, executionContext.materials);
+    // 运行访问记录不再自动映射为采用声明；只有 artifact_declare_sources 的显式声明才建立关系（§6.1）。
+    const declaredInputs = this.store.runArtifactDeclarations.get(runId)?.inputs ?? [];
     this.store.transaction(() => {
-      const saved = this.store.artifacts.saveMarkdown({
-        taskId: input.taskId,
-        origin: 'assistant-run',
-        runId,
-        title,
-        content,
-      });
-      if (inputRelations.length === 0) return;
+      const saved = this.store.artifacts.saveMarkdown(
+        {
+          taskId: input.taskId,
+          origin: 'assistant-run',
+          runId,
+          title,
+          content,
+        },
+        declaredInputs.length > 0 ? 'model' : 'none',
+      );
+      if (declaredInputs.length === 0) return;
       this.store.artifactInputRelations.saveForRun(
         saved.currentVersionId,
         runId,
-        inputRelations,
-        (relationInput) =>
-          relationInput.kind === 'evidence'
-            ? this.store.evidence.get(relationInput.evidenceId)?.runId === runId
-            : this.store.materialReads.hasMaterialRead(
-                runId,
-                JSON.stringify(relationInput),
-                relationInput.contentHash,
-              ),
+        declaredInputs,
+        this.artifactDeclarations.wasReadDuring,
+        'model',
       );
     });
-  }
-
-  private readArtifactInputRelations(
-    runId: string,
-    materials: readonly TaskMaterialSelection[],
-  ): ArtifactInputRelationInput[] {
-    return materials
-      .filter((selection) =>
-        this.store.materialReads.hasMaterialRead(
-          runId,
-          JSON.stringify(selection.reference),
-          selection.reference.contentHash,
-        ),
-      )
-      .map((selection) => ({
-        input: selection.reference,
-        relation: artifactRelationForPurpose(selection.purpose),
-      }));
   }
 
   private auditMaterialFacts(runId: string, content: string): string | undefined {
@@ -1696,6 +1691,8 @@ export class RunService {
     if (!this.fileArtifactService) {
       throw new Error('File artifact service is not available');
     }
+    const inputs = input.inputRelations ?? [];
+    if (inputs.length > 0) this.artifactDeclarations.validate(inputs, runId);
     const result = await this.fileArtifactService.register({
       runId,
       executionId: input.executionId,
@@ -1705,6 +1702,7 @@ export class RunService {
       ...(input.mimeType ? { mimeType: input.mimeType } : {}),
       ...(input.description ? { description: input.description } : {}),
       ...(input.validation ? { validation: input.validation } : {}),
+      inputRelations: inputs,
     });
     return {
       artifactId: result.artifactId,
@@ -2055,27 +2053,6 @@ const officeFactValues = (value: unknown): unknown => {
       .filter(([key]) => key !== 'address' && key !== 'locator')
       .map(([key, child]) => [key, officeFactValues(child)]),
   );
-};
-
-const artifactRelationForPurpose = (
-  purpose: TaskMaterialSelection['purpose'],
-): ArtifactInputRelationKind => {
-  switch (purpose) {
-    case 'rule':
-      return 'rule';
-    case 'current-input':
-      return 'data';
-    case 'historical-comparison':
-      return 'comparison';
-    case 'structure-reference':
-      return 'structure';
-    case 'template':
-      return 'template';
-    case 'background':
-      return 'background';
-    case 'other':
-      return 'other';
-  }
 };
 
 const isTaskFileWriteOutput = (value: unknown): value is { path: string; contentHash: string } =>

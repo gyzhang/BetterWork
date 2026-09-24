@@ -45,6 +45,7 @@ const TOOL_LABELS: Readonly<Record<string, string>> = {
   read_text_file: '阅读资料',
   knowledge_search: '查阅个人资料',
   read_knowledge: '查阅资料正文',
+  artifact_declare_sources: '声明采用来源',
   web_search: '搜索网络资料',
   web_fetch: '阅读网页正文',
   read_office_material: '读取 Office 材料',

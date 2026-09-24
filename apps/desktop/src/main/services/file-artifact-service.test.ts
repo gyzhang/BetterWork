@@ -191,6 +191,30 @@ describe('FileArtifactService', () => {
     );
     f.store.close();
   });
+  it('only the relations the registration carried become a model declaration', async () => {
+    const declared = fixture();
+    const withRelations = await declared.service.register({
+      ...declared.input,
+      inputRelations: [{ input: { kind: 'evidence', evidenceId: 'evidence-1' }, relation: 'data' }],
+    });
+    expect(declared.store.artifacts.getVersionDeclarationKind(withRelations.versionId)).toBe(
+      'model',
+    );
+    expect(
+      declared.store.artifactInputRelations.listByVersion(withRelations.versionId),
+    ).toHaveLength(1);
+    declared.store.close();
+
+    const silent = fixture();
+    const withoutRelations = await silent.service.register(silent.input);
+    expect(silent.store.artifacts.getVersionDeclarationKind(withoutRelations.versionId)).toBe(
+      'none',
+    );
+    expect(
+      silent.store.artifactInputRelations.listByVersion(withoutRelations.versionId),
+    ).toHaveLength(0);
+    silent.store.close();
+  });
   it('deduplicates concurrent registrations for the same execution and output', async () => {
     const f = fixture();
     const [first, second] = await Promise.all([

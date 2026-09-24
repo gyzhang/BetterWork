@@ -2,6 +2,7 @@ import {
   type ArtifactInputRelation,
   type ArtifactInputRelationInput,
   artifactInputRelationSchema,
+  type ArtifactSourceDeclarationKind,
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 
@@ -12,6 +13,7 @@ interface RelationRow {
   input_key: string;
   relation: ArtifactInputRelation['relation'];
   created_at: number;
+  run_id: string;
   /** LEFT JOIN input_snapshots 带来的原始文件路径；非快照类输入为 null。 */
   source_path: string | null;
 }
@@ -40,20 +42,30 @@ export class ArtifactInputRelationRepository {
     outputVersionId: string,
     runId: string,
     inputs: readonly ArtifactInputRelationInput[],
-    hasRead: (input: ArtifactInputRelationInput['input']) => boolean,
+    hasRead: (input: ArtifactInputRelationInput['input'], runId: string) => boolean,
+    declarationKind: 'model' | 'user' = 'model',
   ): ArtifactInputRelation[] {
+    // 用户编辑版本的来源运行是祖先 Assistant Run，因此这里只校验同任务归属；
+    // 「谁读过什么」由宿主声明服务在同一事务里判定。
     const version = this.db
-      .prepare('SELECT source_run_id FROM artifact_versions WHERE id = ?')
-      .get(outputVersionId) as { source_run_id: string } | undefined;
+      .prepare(
+        `SELECT t.id AS task_id FROM artifact_versions v
+           JOIN artifacts a ON a.id = v.artifact_id
+           JOIN tasks t ON t.id = a.task_id
+          WHERE v.id = ?`,
+      )
+      .get(outputVersionId) as { task_id: string } | undefined;
     if (!version) throw new Error('Artifact version does not exist');
-    if (version.source_run_id !== runId) {
+    const run = this.db.prepare('SELECT task_id FROM runs WHERE id = ?').get(runId) as
+      { task_id: string } | undefined;
+    if (!run || run.task_id !== version.task_id) {
       throw new Error('Artifact version does not belong to source Run');
     }
     const saved: ArtifactInputRelation[] = [];
     const write = this.db.transaction(() => {
       const now = Date.now();
       for (const input of inputs) {
-        if (!hasRead(input.input)) {
+        if (!hasRead(input.input, runId)) {
           throw new Error('Artifact input must be read by the same Run before it is related');
         }
         const relation = artifactInputRelationSchema.parse({
@@ -86,9 +98,52 @@ export class ArtifactInputRelationRepository {
           RelationRow | undefined;
         if (row) saved.push(toRelation(row));
       }
+      this.db
+        .prepare('UPDATE artifact_versions SET source_declaration = ? WHERE id = ?')
+        .run(declarationKind, outputVersionId);
     });
     write();
     return saved;
+  }
+
+  /**
+   * 合法继承：把前版声明关系原样复制给新版本（§6.1「沿用前版」），不改写旧版。
+   * run_id 保留建立该关系的那次运行，继承不伪造新的访问事实。
+   */
+  inheritFromVersion(
+    outputVersionId: string,
+    previousVersionId: string,
+    declarationKind: ArtifactSourceDeclarationKind,
+  ): ArtifactInputRelation[] {
+    const copy = this.db.transaction(() => {
+      const rows = this.db
+        .prepare('SELECT * FROM artifact_input_relations WHERE output_version_id = ?')
+        .all(previousVersionId) as RelationRow[];
+      const now = Date.now();
+      for (const row of rows) {
+        this.db
+          .prepare(
+            `INSERT OR IGNORE INTO artifact_input_relations
+               (id, output_version_id, run_id, input_json, input_key, relation, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            `${outputVersionId}:${row.input_key}:${row.relation}`,
+            outputVersionId,
+            row.run_id,
+            row.input_json,
+            row.input_key,
+            row.relation,
+            now,
+          );
+      }
+      this.db
+        .prepare('UPDATE artifact_versions SET source_declaration = ? WHERE id = ?')
+        .run(declarationKind, outputVersionId);
+      return rows.length;
+    });
+    copy();
+    return this.listByVersion(outputVersionId);
   }
 
   listByVersion(outputVersionId: string): ArtifactInputRelation[] {

@@ -1,16 +1,18 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import type {
-  ArtifactDetail,
-  ArtifactSummary,
-  ArtifactType,
-  ArtifactVersionDetail,
-  ArtifactVersionSummary,
-  EvidenceSummary,
-  FileArtifactMeta,
-  RegisterFileArtifactResult,
-  SaveMarkdownArtifactRequest,
-  ValidationState,
+import {
+  type ArtifactDetail,
+  type ArtifactSourceDeclarationKind,
+  type ArtifactSummary,
+  type ArtifactType,
+  type ArtifactVersionDetail,
+  type ArtifactVersionSummary,
+  type EvidenceSummary,
+  type FileArtifactMeta,
+  knowledgeEvidenceSourceSchema,
+  type RegisterFileArtifactResult,
+  type SaveMarkdownArtifactRequest,
+  type ValidationState,
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 
@@ -27,6 +29,7 @@ interface ArtifactRow {
   origin: ArtifactSummary['origin'];
   created_at: number;
   updated_at: number;
+  source_declaration?: string;
   mime_type?: string;
   file_size?: number;
 }
@@ -38,6 +41,7 @@ interface ArtifactVersionRow {
   source_run_id: string;
   origin: ArtifactSummary['origin'];
   created_at: number;
+  source_declaration?: string;
   content?: string;
   content_hash?: string;
   mime_type?: string;
@@ -73,10 +77,11 @@ interface EvidenceRow {
   excerpt: string;
   content_hash: string;
   captured_at: number;
+  knowledge_source_json?: string | null;
 }
 
 const SUMMARY_COLUMNS = `a.id, a.workspace_id, a.task_id, a.type, a.title, a.current_version_id,
-       v.version_number, v.source_run_id, v.origin, a.created_at, a.updated_at,
+       v.version_number, v.source_run_id, v.origin, v.source_declaration, a.created_at, a.updated_at,
        af.mime_type, af.file_size`;
 
 const SUMMARY_JOIN = `artifacts a
@@ -95,6 +100,7 @@ const toSummary = (row: ArtifactRow): ArtifactSummary => {
     ...(row.source_run_id ? { sourceRunId: row.source_run_id } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    sourceDeclarationKind: parseDeclarationKind(row.source_declaration),
   };
   if (row.type === 'presentation' && row.mime_type && row.file_size !== undefined) {
     return { ...common, type: 'presentation', mimeType: row.mime_type, fileSize: row.file_size };
@@ -110,6 +116,7 @@ const toVersionSummary = (row: ArtifactVersionRow): ArtifactVersionSummary => {
     origin: row.origin,
     ...(row.source_run_id ? { sourceRunId: row.source_run_id } : {}),
     createdAt: row.created_at,
+    sourceDeclarationKind: parseDeclarationKind(row.source_declaration),
   };
   if (
     row.mime_type &&
@@ -144,7 +151,28 @@ const toEvidence = (row: EvidenceRow): EvidenceSummary => ({
   excerpt: row.excerpt,
   contentHash: row.content_hash,
   capturedAt: row.captured_at,
+  ...(row.knowledge_source_json
+    ? {
+        knowledgeSource: knowledgeEvidenceSourceSchema.parse(JSON.parse(row.knowledge_source_json)),
+      }
+    : {}),
 });
+
+/** 声明种类的可写字集合；legacy 只由迁移产生，运行期不写。 */
+export type WritableDeclarationKind = 'model' | 'user' | 'inherited' | 'legacy' | 'none';
+
+const parseDeclarationKind = (value: string | undefined | null): ArtifactSourceDeclarationKind => {
+  switch (value) {
+    case 'model':
+    case 'user':
+    case 'inherited':
+    case 'legacy':
+    case 'none':
+      return value;
+    default:
+      return 'none';
+  }
+};
 
 export interface RegisterFileInput {
   taskId: string;
@@ -159,6 +187,7 @@ export interface RegisterFileInput {
   executionId: string;
   description?: string;
   validation: ValidationState;
+  sourceDeclarationKind?: WritableDeclarationKind;
 }
 
 /**
@@ -172,7 +201,10 @@ export interface RegisterFileInput {
 export class ArtifactRepository {
   constructor(private readonly db: Database.Database) {}
 
-  saveMarkdown(input: SaveMarkdownArtifactRequest): ArtifactSummary {
+  saveMarkdown(
+    input: SaveMarkdownArtifactRequest,
+    declarationKind: WritableDeclarationKind = 'none',
+  ): ArtifactSummary {
     const workspaceId = this.readTaskWorkspaceId(input.taskId);
     if (input.origin === 'assistant-run') this.assertRunBelongsToTask(input.runId, input.taskId);
 
@@ -210,8 +242,9 @@ export class ArtifactRepository {
       this.db
         .prepare(
           `INSERT INTO artifact_versions
-             (id, artifact_id, version_number, content, content_hash, source_run_id, origin, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+             (id, artifact_id, version_number, content, content_hash, source_run_id, origin,
+              created_at, source_declaration)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           versionId,
@@ -222,6 +255,7 @@ export class ArtifactRepository {
           input.runId ?? '',
           input.origin,
           now,
+          declarationKind,
         );
 
       if (input.origin === 'assistant-run') {
@@ -319,10 +353,19 @@ export class ArtifactRepository {
       this.db
         .prepare(
           `INSERT INTO artifact_versions
-             (id, artifact_id, version_number, content, content_hash, source_run_id, origin, created_at)
-           VALUES (?, ?, ?, NULL, ?, ?, 'assistant-run', ?)`,
+             (id, artifact_id, version_number, content, content_hash, source_run_id, origin,
+              created_at, source_declaration)
+           VALUES (?, ?, ?, NULL, ?, ?, 'assistant-run', ?, ?)`,
         )
-        .run(versionId, artifactId, versionNumber, input.fileHash, input.runId, now);
+        .run(
+          versionId,
+          artifactId,
+          versionNumber,
+          input.fileHash,
+          input.runId,
+          now,
+          input.sourceDeclarationKind ?? 'none',
+        );
 
       this.db
         .prepare(
@@ -454,7 +497,8 @@ export class ArtifactRepository {
   listVersions(artifactId: string): ArtifactVersionSummary[] {
     const rows = this.db
       .prepare(
-        `SELECT v.id, v.artifact_id, v.version_number, v.source_run_id, v.origin, v.created_at,
+        `SELECT v.id, v.artifact_id, v.version_number, v.source_run_id, v.origin,
+                v.source_declaration, v.created_at,
                 af.mime_type, af.file_size,
                 af.validation_structure, af.validation_visual, af.validation_manual_edit
            FROM artifact_versions v
@@ -469,7 +513,7 @@ export class ArtifactRepository {
     const row = this.db
       .prepare(
         `SELECT v.id, v.artifact_id, v.version_number, v.source_run_id, v.origin,
-                v.content, v.content_hash, v.created_at,
+                v.source_declaration, v.content, v.content_hash, v.created_at,
                 af.mime_type, af.file_size,
                 af.validation_structure, af.validation_visual, af.validation_manual_edit
            FROM artifact_versions v
@@ -511,6 +555,35 @@ export class ArtifactRepository {
       ...(file.description ? { description: file.description } : {}),
       evidence: this.listVersionEvidence(row.id),
     };
+  }
+
+  getVersionDeclarationKind(versionId: string): ArtifactSourceDeclarationKind {
+    const row = this.db
+      .prepare('SELECT source_declaration FROM artifact_versions WHERE id = ?')
+      .get(versionId) as { source_declaration: string } | undefined;
+    if (!row) throw new Error('Artifact version does not exist');
+    return parseDeclarationKind(row.source_declaration);
+  }
+
+  /** 同一成果的上一个版本；用户编辑链要靠它回溯到最近的来源运行。 */
+  getPreviousVersionId(versionId: string): string | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT v2.id FROM artifact_versions v1
+           JOIN artifact_versions v2
+             ON v2.artifact_id = v1.artifact_id AND v2.version_number = v1.version_number - 1
+          WHERE v1.id = ?`,
+      )
+      .get(versionId) as { id: string } | undefined;
+    return row?.id;
+  }
+
+  getVersionSourceRunId(versionId: string): string | undefined {
+    const row = this.db
+      .prepare('SELECT source_run_id FROM artifact_versions WHERE id = ?')
+      .get(versionId) as { source_run_id: string } | undefined;
+    if (!row) throw new Error('Artifact version does not exist');
+    return row.source_run_id || undefined;
   }
 
   /** 版本是否属于该成果，导出历史版本前必须校验，避免跨成果取内容。 */

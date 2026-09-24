@@ -309,6 +309,80 @@ describe('registerIpc', () => {
     expect(mocks.openPath).not.toHaveBeenCalled();
   });
 
+  it('declares adopted sources for a run through validated IPC', async () => {
+    const workspace = store.workspaces.getOrCreate(temporaryDirectory, '采用声明');
+    const created = store.tasks.create(workspace.id, '声明通道', 'KM05 通道校验');
+    const runId = randomUUID();
+    store.runs.create({
+      id: runId,
+      taskId: created.task.id,
+      sessionId: created.sessionId,
+      prompt: '测试',
+      status: 'completed',
+      createdAt: Date.now(),
+    });
+    const reference = {
+      kind: 'knowledge-revision' as const,
+      knowledgeDocumentId: 'doc-1',
+      knowledgeRevisionId: 'revision-1',
+      contentHash: 'a'.repeat(64),
+      sourcePath: '/vault/合同模板.md',
+    };
+    store.runContextSnapshots.create({
+      runId,
+      taskId: created.task.id,
+      workspaceId: workspace.id,
+      contextSegmentId: randomUUID(),
+      materials: [],
+      createdAt: Date.now(),
+    });
+    const evidence = store.evidence.saveKnowledge({
+      taskId: created.task.id,
+      runId,
+      sourceUri: reference.sourcePath,
+      title: '合同模板',
+      locator: '第 1 段',
+      excerpt: '违约金上限为合同金额的百分之二十。',
+      contentHash: reference.contentHash,
+      knowledgeSource: {
+        reference,
+        textHash: 'b'.repeat(64),
+        span: { sectionOrdinal: 0, start: 0, end: 17 },
+        operation: 'search',
+      },
+    });
+    await expect(
+      invoke(IpcChannel.DeclareArtifactSources, {
+        runId,
+        inputRelations: [
+          { input: { kind: 'evidence', evidenceId: evidence.id }, relation: 'data' },
+        ],
+      }),
+    ).resolves.toMatchObject({ runId, inputs: [{ relation: 'data' }] });
+    await expect(invoke(IpcChannel.GetRunArtifactDeclarations, { runId })).resolves.toMatchObject({
+      runId,
+    });
+    // 越界声明：证据不属于本 Run（同任务另一 Run）时拒绝，不落账本
+    const otherRunId = randomUUID();
+    store.runs.create({
+      id: otherRunId,
+      taskId: created.task.id,
+      sessionId: created.sessionId,
+      prompt: '另一个运行',
+      status: 'completed',
+      createdAt: Date.now(),
+    });
+    await expect(
+      invoke(IpcChannel.DeclareArtifactSources, {
+        runId: otherRunId,
+        inputRelations: [
+          { input: { kind: 'evidence', evidenceId: evidence.id }, relation: 'data' },
+        ],
+      }),
+    ).rejects.toThrow();
+    await expect(invoke(IpcChannel.DeclareArtifactSources, { runId })).rejects.toThrow();
+  });
+
   it('previews a legacy run source through validated IPC and rejects malformed requests', async () => {
     await expect(invoke(IpcChannel.PreviewRunSource, { runId: 'only-run' })).rejects.toThrow();
     const workspace = store.workspaces.getOrCreate(temporaryDirectory, '回看来源');

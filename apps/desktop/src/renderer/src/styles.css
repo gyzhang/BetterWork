@@ -4308,6 +4308,50 @@ p {
   padding: 8px 11px;
   border-radius: 7px;
 }
+.artifact-source-select {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+}
+.artifact-source-select legend {
+  padding: 0 4px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+.artifact-source-select p {
+  margin: 0;
+  font-size: 12px;
+}
+.artifact-source-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.artifact-source-row input[type='checkbox'] {
+  flex: none;
+  width: auto;
+  padding: 0;
+  margin: 0;
+  border: none;
+}
+.artifact-source-name {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+  flex-direction: row;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.artifact-source-name small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
 .artifact-action-error {
   margin-bottom: 12px;
   padding: 9px 11px;

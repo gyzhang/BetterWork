@@ -240,4 +240,34 @@ export class RunMaterialReadRepository {
       .get(runId, materialKey, contentHash) as { found?: number } | undefined;
     return row?.found === 1;
   }
+
+  /** 正文级足迹：`search` 摘要不算实际读取（契约 §6.2）。 */
+  hasBodyRead(runId: string, materialJson: string, contentHash: string): boolean {
+    const row = this.db
+      .prepare(
+        `SELECT 1 AS found FROM run_material_reads
+          WHERE run_id = ? AND material_json = ? AND content_hash = ?
+            AND operation <> 'search'
+          LIMIT 1`,
+      )
+      .get(runId, materialJson, contentHash) as { found?: number } | undefined;
+    return row?.found === 1;
+  }
+
+  /** 知识正文足迹按完整修订身份匹配；搜索足迹 operation='search' 被排除。 */
+  hasKnowledgeBodyRead(runId: string, reference: MaterialReference): boolean {
+    const rows = this.db
+      .prepare(
+        `SELECT material_json FROM run_material_reads
+          WHERE run_id = ? AND operation <> 'search' AND knowledge_span_json IS NOT NULL`,
+      )
+      .all(runId) as Array<{ material_json: string }>;
+    return rows.some((row) => {
+      try {
+        return sameMaterialReference(JSON.parse(row.material_json) as MaterialReference, reference);
+      } catch {
+        return false;
+      }
+    });
+  }
 }

@@ -566,6 +566,11 @@ describe('RunService', () => {
       }),
     });
     expect(tools.map((tool) => tool.name)).toContain('read_knowledge');
+    const withDeclarator = createRunTools({
+      knowledgeSearch: () => ({ results: [] }),
+      artifactSourceDeclarator: async () => undefined,
+    });
+    expect(withDeclarator.map((tool) => tool.name)).toContain('artifact_declare_sources');
     const restricted = createRunTools({
       knowledgeSearch: () => ({ results: [] }),
       readKnowledge: () => ({
@@ -2562,6 +2567,11 @@ describe('RunService', () => {
       type: 'markdown',
       content: '# 经营分析报告\n\n收入：120 万元。',
     });
+    // 运行访问记录不再自动变成采用声明：模型没调用 artifact_declare_sources 时版本是 none。
+    expect(artifact.sourceDeclarationKind).toBe('none');
+    expect(fixture.store.artifactInputRelations.listByVersion(artifact.currentVersionId)).toEqual(
+      [],
+    );
   });
 
   /** 记录 createBinding 的调用顺序，用于断言绑定建立即注入顺序。 */

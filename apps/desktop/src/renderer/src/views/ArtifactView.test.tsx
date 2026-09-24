@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 
-import type { ArtifactDetail, WorkspaceArtifactReference } from '@betterwork/agent-protocol';
+import type {
+  ArtifactDetail,
+  ArtifactInputRelationInput,
+  WorkspaceArtifactReference,
+} from '@betterwork/agent-protocol';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { Mock } from 'vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type {
@@ -278,5 +283,131 @@ describe('ArtifactPage 本空间参考版本', () => {
       />,
     );
     expect(container.querySelector('.artifact-reference-section')).toBeNull();
+  });
+});
+
+/** KM05（知识契约 §6.1/§6.2）：人工修订时由用户重新选择采用来源，未改动则沿用前版声明。 */
+describe('ArtifactPage 采用来源选择', () => {
+  type SaveHandler = (
+    artifact: ArtifactDetail,
+    title: string,
+    content: string,
+    inputRelations?: ArtifactInputRelationInput[],
+  ) => Promise<void>;
+
+  const createSaver = (): Mock<SaveHandler> => vi.fn<SaveHandler>(async () => undefined);
+
+  const preciseEvidence = {
+    id: 'evidence-precise',
+    taskId: 'task-1',
+    runId: 'run-1',
+    sourceType: 'local-file' as const,
+    sourceUri: '/notes/经营口径.md',
+    title: '经营口径',
+    locator: '修订 rev-1',
+    excerpt: '收入按回款口径统计。',
+    contentHash: 'hash-precise',
+    capturedAt: 1,
+    knowledgeSource: {
+      reference: {
+        kind: 'knowledge-revision' as const,
+        knowledgeDocumentId: 'doc-1',
+        knowledgeRevisionId: 'rev-1',
+        contentHash: 'content-1',
+        sourcePath: '/notes/经营口径.md',
+      },
+      textHash: 'text-precise',
+      span: { sectionOrdinal: 1, start: 0, end: 120 },
+      operation: 'read' as const,
+    },
+  };
+  const legacyEvidence = {
+    id: 'evidence-legacy',
+    taskId: 'task-1',
+    runId: 'run-1',
+    sourceType: 'local-file' as const,
+    sourceUri: '/notes/历史资料.md',
+    title: '历史资料',
+    locator: '本地资料 · 历史范围未记录',
+    excerpt: '旧数据没有区间定位。',
+    contentHash: 'hash-legacy',
+    capturedAt: 1,
+  };
+  const artifactWithSources = (
+    inputRelations?: ArtifactDetail['inputRelations'],
+  ): ArtifactDetail => ({
+    ...selectedArtifact,
+    evidence: [preciseEvidence, legacyEvidence],
+    ...(inputRelations ? { inputRelations } : {}),
+  });
+
+  const renderEditable = (artifact: ArtifactDetail, onSave: Mock<SaveHandler>) => {
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        artifacts: { listVersions: vi.fn(async () => []), getVersion: vi.fn(async () => null) },
+      },
+    });
+    render(
+      <ArtifactPage
+        artifacts={[artifact]}
+        selected={artifact}
+        onSelect={vi.fn()}
+        onSave={onSave}
+        onExport={vi.fn(async () => ({ cancelled: true }))}
+        onOpenSource={vi.fn(async () => undefined)}
+        onOpenFile={vi.fn(async () => ({ opened: true }))}
+        onStartFromVersion={vi.fn(async () => undefined)}
+        onBack={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '编辑此版本' }));
+  };
+
+  it('只列出带精确定位的来源作为可采用候选', () => {
+    renderEditable(artifactWithSources(), createSaver());
+
+    expect(screen.getByRole('checkbox', { name: /经营口径/ })).toBeTruthy();
+    expect(screen.queryByRole('checkbox', { name: /历史资料/ })).toBeNull();
+  });
+
+  it('勾选来源后保存，把用户级声明交给宿主判定', async () => {
+    const onSave = createSaver();
+    renderEditable(artifactWithSources(), onSave);
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /经营口径/ }));
+    fireEvent.click(screen.getByRole('button', { name: '保存新版本' }));
+
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'artifact-1' }),
+        '季度复盘',
+        '# 当前版本',
+        [{ input: { kind: 'evidence', evidenceId: 'evidence-precise' }, relation: 'data' }],
+      ),
+    );
+  });
+
+  it('未改动选择时保存不提交该字段，沿用前版声明', async () => {
+    const onSave = createSaver();
+    renderEditable(
+      artifactWithSources([
+        {
+          outputVersionId: 'version-1',
+          input: { kind: 'evidence', evidenceId: 'evidence-precise' },
+          relation: 'data',
+          createdAt: 1,
+        },
+      ]),
+      onSave,
+    );
+
+    // 前版已声明的证据默认勾选，表示这次不改选。
+    expect(screen.getByRole<HTMLInputElement>('checkbox', { name: /经营口径/ }).checked).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: '保存新版本' }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0]?.[3]).toBeUndefined();
   });
 });
