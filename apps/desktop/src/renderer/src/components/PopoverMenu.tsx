@@ -152,8 +152,15 @@ export function PopoverMenu({
   }, [open, computePosition]);
 
   // 受控开关下的焦点管理：打开时聚焦首个可用项，关闭时归还焦点。
+  // 只依赖 open：items 引用变化（如搜索过滤）不应打断鼠标 hover 的选中态。
+  const wasOpenRef = useRef(false);
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      wasOpenRef.current = false;
+      return;
+    }
+    if (wasOpenRef.current) return;
+    wasOpenRef.current = true;
     const firstEnabled = items.findIndex((item) => !item.disabled);
     const target = firstEnabled >= 0 ? firstEnabled : 0;
     setActiveIndex(target);

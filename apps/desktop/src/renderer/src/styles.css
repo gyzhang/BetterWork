@@ -2973,6 +2973,43 @@ p {
   font-size: 12px;
   line-height: 1.6;
 }
+
+/* === FieldSelect：基于 PopoverMenu 的下拉选择器 === */
+.field-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 9px;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+  text-align: left;
+}
+.field-select-trigger:hover {
+  border-color: var(--focus-ring);
+}
+.field-select-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.field-select-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transform: rotate(-90deg);
+  transition: transform var(--motion-instant) var(--motion-easing);
+}
+.field-select-chevron.open {
+  transform: rotate(90deg);
+}
 .appearance-settings h3 {
   margin: 28px 0 11px;
   font-size: 14px;

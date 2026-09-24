@@ -22,6 +22,7 @@ import {
   memoryScopeLabel,
   toDateInputValue,
 } from '../lib/memory-labels';
+import { FieldSelect } from './FieldSelect';
 
 /**
  * 人工保存与编辑并确认的可编辑表单（产品设计 §3.1、§3.2、§3.4）。
@@ -331,34 +332,27 @@ export function MemoryEditor({
       <div className="memory-editor-grid">
         <label>
           <span>分类</span>
-          <select
-            aria-label="记忆分类"
+          <FieldSelect
+            ariaLabel="记忆分类"
             value={facet}
-            onChange={(event) => setFacet(event.target.value as MemoryFacet)}
-          >
-            {memoryFacetOrder.map((option) => (
-              <option key={option} value={option}>
-                {facetLabel[option]}
-              </option>
-            ))}
-          </select>
+            options={memoryFacetOrder.map((f) => ({ id: f, label: facetLabel[f] }))}
+            onChange={(id) => setFacet(id as MemoryFacet)}
+          />
         </label>
         <label>
           <span>适用范围</span>
-          <select
-            aria-label="记忆适用范围"
+          <FieldSelect
+            ariaLabel="记忆适用范围"
             value={scope.kind}
-            onChange={(event) => {
-              const next = scopes.find((option) => option.kind === event.target.value);
+            options={scopes.map((option) => ({
+              id: option.kind,
+              label: memoryScopeLabel(option, workspaceName, expertName),
+            }))}
+            onChange={(kind) => {
+              const next = scopes.find((option) => option.kind === kind);
               if (next) setScope(next);
             }}
-          >
-            {scopes.map((option) => (
-              <option key={option.kind} value={option.kind}>
-                {memoryScopeLabel(option, workspaceName, expertName)}
-              </option>
-            ))}
-          </select>
+          />
         </label>
         <label>
           <span>议题（可选）</span>
