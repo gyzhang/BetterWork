@@ -105,6 +105,9 @@ export interface MemoryEditorProps {
    * 界面无法为历史记录造精确选择器，因此复核入口只有「按我的工作口径保留」一条路。
    */
   legacySourceReview?: MemoryLegacySourceReview;
+  /** 适用范围下拉框里工作空间/专家的名称回显；省略时回退到 ID。 */
+  workspaceName?: string;
+  expertName?: string;
   /** 返回 `true` 表示 Main 已接受，表单随即关闭；`false` 时草稿原样保留。 */
   onSubmit: (submission: MemoryEditorSubmission) => Promise<boolean>;
   onCancel: () => void;
@@ -185,6 +188,8 @@ export function MemoryEditor({
   submitLabel,
   confirmAction = 'confirm',
   legacySourceReview,
+  workspaceName,
+  expertName,
   onSubmit,
   onCancel,
 }: MemoryEditorProps): React.JSX.Element {
@@ -350,7 +355,7 @@ export function MemoryEditor({
           >
             {scopes.map((option) => (
               <option key={option.kind} value={option.kind}>
-                {memoryScopeLabel(option)}
+                {memoryScopeLabel(option, workspaceName, expertName)}
               </option>
             ))}
           </select>

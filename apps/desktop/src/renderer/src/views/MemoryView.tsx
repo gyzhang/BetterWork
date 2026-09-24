@@ -381,6 +381,8 @@ export function MemoryPage({
               : {})}
             {...(restateFrom ? { restateFrom } : {})}
             submitLabel={editorSubmitLabel}
+            {...(workspaceName ? { workspaceName } : {})}
+            {...(expertName ? { expertName } : {})}
             onSubmit={submitEditor}
             onCancel={closeSession}
           />
@@ -411,6 +413,8 @@ export function MemoryPage({
             onDelete={setPendingDelete}
             onReviewSource={reviewLegacySource}
             onResolve={resolveConflict}
+            {...(workspaceName ? { workspaceName } : {})}
+            {...(expertName ? { expertName } : {})}
           />
           <MemoryGroup
             title="已确认"
@@ -425,6 +429,8 @@ export function MemoryPage({
             onDelete={setPendingDelete}
             onReviewSource={reviewLegacySource}
             onResolve={resolveConflict}
+            {...(workspaceName ? { workspaceName } : {})}
+            {...(expertName ? { expertName } : {})}
           />
           <MemoryGroup
             title="已过期"
@@ -442,6 +448,8 @@ export function MemoryPage({
             onReviewSource={reviewLegacySource}
             onResolve={resolveConflict}
             editLabel="修改有效期并重新确认"
+            {...(workspaceName ? { workspaceName } : {})}
+            {...(expertName ? { expertName } : {})}
           />
           {history.length > 0 && (
             <details className="memory-history-group">
@@ -458,6 +466,8 @@ export function MemoryPage({
                 onReviewSource={() => undefined}
                 onResolve={() => undefined}
                 readOnly
+                {...(workspaceName ? { workspaceName } : {})}
+                {...(expertName ? { expertName } : {})}
               />
             </details>
           )}
@@ -505,6 +515,8 @@ interface MemoryGroupProps {
   onDelete: (memory: MemoryViewItem) => void;
   onReviewSource: (memory: MemoryViewItem) => void;
   onResolve: ConflictResolver;
+  workspaceName?: string;
+  expertName?: string;
 }
 
 function MemoryGroup({
@@ -520,6 +532,8 @@ function MemoryGroup({
   onDelete,
   onReviewSource,
   onResolve,
+  workspaceName,
+  expertName,
 }: MemoryGroupProps): React.JSX.Element | null {
   if (memories.length === 0) return null;
   return (
@@ -545,6 +559,8 @@ function MemoryGroup({
             onDelete={onDelete}
             onReviewSource={onReviewSource}
             onResolve={onResolve}
+            {...(workspaceName ? { workspaceName } : {})}
+            {...(expertName ? { expertName } : {})}
           />
         ))}
       </div>
@@ -563,6 +579,8 @@ interface MemoryRowProps {
   onDelete: (memory: MemoryViewItem) => void;
   onReviewSource: (memory: MemoryViewItem) => void;
   onResolve: ConflictResolver;
+  workspaceName?: string;
+  expertName?: string;
 }
 
 function MemoryRow({
@@ -576,6 +594,8 @@ function MemoryRow({
   onDelete,
   onReviewSource,
   onResolve,
+  workspaceName,
+  expertName,
 }: MemoryRowProps): React.JSX.Element {
   const dependencies =
     memory.provenance.verification === 'verified'
@@ -592,7 +612,7 @@ function MemoryRow({
             {effectiveStatusLabel[memory.effectiveStatus]}
           </span>
           <span>{facetLabel[memory.facet]}</span>
-          <span>{memoryScopeLabel(memory.scope)}</span>
+          <span>{memoryScopeLabel(memory.scope, workspaceName, expertName)}</span>
           <span>{formatValidityRange(memory.validFrom, memory.validUntil)}</span>
           <span className={`memory-source-${memory.sourceAvailability.replace(' ', '-')}`}>
             {sourceAvailabilityLabel[memory.sourceAvailability]}
@@ -625,6 +645,8 @@ function MemoryRow({
             memory={memory}
             allMemories={allMemories}
             onResolve={onResolve}
+            {...(workspaceName ? { workspaceName } : {})}
+            {...(expertName ? { expertName } : {})}
           />
         ))}
       </div>
@@ -690,6 +712,8 @@ interface ConflictPairProps {
   memory: MemoryViewItem;
   allMemories: MemoryViewItem[];
   onResolve: ConflictResolver;
+  workspaceName?: string;
+  expertName?: string;
 }
 
 /**
@@ -703,6 +727,8 @@ function ConflictPair({
   memory,
   allMemories,
   onResolve,
+  workspaceName,
+  expertName,
 }: ConflictPairProps): React.JSX.Element {
   const [note, setNote] = useState('');
   const [winner, setWinner] = useState(memory.id);
@@ -727,14 +753,14 @@ function ConflictPair({
         <div>
           <span>本条</span>
           <p>{memory.content}</p>
-          <small>{memoryScopeLabel(memory.scope)}</small>
+          <small>{memoryScopeLabel(memory.scope, workspaceName, expertName)}</small>
         </div>
         <div>
           <span>另一条</span>
           {other ? (
             <>
               <p>{other.content}</p>
-              <small>{memoryScopeLabel(other.scope)}</small>
+              <small>{memoryScopeLabel(other.scope, workspaceName, expertName)}</small>
             </>
           ) : (
             <p className="muted-text">另一条记录不在当前列表，可能已被替代或超出筛选范围。</p>
