@@ -1,5 +1,7 @@
 # 知识库与记忆
 
+> 2026-09-24：知识基础闭环的补齐方向已获光哥接受，本轮仅归档[产品规范](designs/knowledge-foundation.md)、[ADR-0027](adr/0027-knowledge-foundation.md)（Proposed）、[实施契约](development/knowledge-contracts.md)、[KM 任务板](development/tasks-knowledge.md)和[编码交接](development/knowledge-coding-prompts.md)。正文读取、真实研究选材、混合检索、索引作业、轻量集合和 Office 知识导入均为待实现增量，不能从本入口推断已可用；成果回收知识与 OCR 后置，WM 记忆召回不改为向量。下文知识现状与增量设计分开阅读。
+
 > 2026-09-14：用户已接受[专家与任务材料设计](designs/experts-and-task-materials.md)。知识按文档选取并固定内容修订、Expert/Workspace 适用记忆和范围缩小后的上下文处理按 [ADR-0014](adr/0014-expert-context-and-material-binding.md) 和 [材料、快照与运行来源契约](development/material-contracts.md) 落实；E2/E3 的唯一执行入口为[开发计划](development/tasks-experts.md)。E31/E32 已实现最小长期记忆闭环；自动反思、Embedding 和向量检索仍未实现。现有 RunService 已重建本 Task 历史回复，下文“不读取历史”属于旧实现说明。
 
 > 2026-09-08：长期工作目录与已有知识共同支撑任务，不要求先建完整知识库；一个专家持续协作不等于无限累加聊天历史。当前已交付四种记忆作用域、确认/编辑/删除与运行注入；完整记忆系统和其他格式的旧 Phase 编号以 [新版顺序](07-mvp-and-roadmap.md#0-2026-09-08-生效的开发顺序) 为准。目录发现、自动反思与向量记忆仍以后续切片处理。
@@ -60,7 +62,7 @@ Knowledge Vault 与应用状态库是两个独立的 SQLite 文件：Vault 保�
 
 当前实现状态：已支持 **Markdown、Text、PDF、DOCX** 四种格式，导入对话框也只提供这四类扩展名过滤。单文件上限 20 MB；格式不支持、超限、读取失败或提取不到可检索文本时，该文件被跳过并回报具体原因，不中断整批导入。
 
-定位信息的保留程度低于上表目标：PDF 只到页码（未保留页内区块），DOCX 只到按空行切分的段落序号（未保留标题层级与表格结构）。XLSX/CSV 属 Phase 2，PPTX 属 Phase 3，HTML 与图片 OCR 未排入 MVP。
+定位信息的保留程度低于上表目标：PDF 只到页码（未保留页内区块），DOCX 只到按空行切分的段落序号（未保留标题层级与表格结构）。XLSX/CSV/PPTX 已有任务输入解析，但尚未接入知识导入；旧 Phase 2/3 格式排期不再作为本轮入口，补齐按 [KM12/KM13](development/tasks-knowledge.md)独立推进。HTML 与图片 OCR 不进入本轮。
 
 ## 4. 索引流程
 
@@ -81,10 +83,11 @@ Knowledge Vault 与应用状态库是两个独立的 SQLite 文件：Vault 保�
 
 当前实现状态：已落地的步骤是「发现文件（用户在系统对话框中选择）→ 内容 Hash（对原始字节做 SHA-256）→ 格式解析 → 提取 → 分块 → 元数据保存 → FTS5 → 可检索」；Embedding、摘要和关键词三步未做。
 
-分块策略按格式固定：Markdown/Text 整篇作为单块（Locator「全文」），PDF 按页，DOCX 按空行切分的段落。与本节要求相比有两处差距：
+分块策略按格式固定：Markdown/Text 整篇作为单块（Locator「全文」），PDF 按页，DOCX 按空行切分的段落。当前去重与版本事实如下：
 
-- **去重口径**：唯一约束建在 `source_path` 上，因此实际语义是「同一路径重复导入即更新既有记录」，不是按内容 Hash 去重——同一份内容放在两个不同路径会被当作两份资料分别入库。Hash 已保存但当前只用于展示与刷新比对，未参与去重判定。
-- **可重建性元数据**：分块策略与 Parser 版本都没有记录在库中。索引确实可以重建（FTS5 虚表在探测到结构变化时会丢弃并从 `knowledge_documents.content` 重灌），但重建时无法判断历史数据是用哪一版解析器产生的。引入 Embedding 时必须一并补上这两项，否则更换模型后无法定向重建。
+- **去重口径**：当前文档按 `source_path` 更新，不同路径的相同内容仍是两份资料；修订表以 `(document_id, content_hash)` 去重，因此原始字节哈希已参与同文档修订去重，不只是展示字段。
+- **版本元数据**：Vault v3 的 `knowledge_revisions` 已保存 `parser_version` 和 `chunking_version`，既有写入值为 `text-extract-v1` 和 `format-locator-v1`。尚缺的是同原始哈希下解析升级的修订身份、独立提取文本哈希及派生检索小块版本，按 [知识契约 §2](development/knowledge-contracts.md)补齐。
+- **重建边界**：当前投影、FTS 和未来向量可重建；已保存修订、文本及其 Task/Run 历史关系必须保留。不得把整个 Vault 当可随意删除的缓存。
 
 ## 5. 检索
 
@@ -105,7 +108,7 @@ VectorIndex 必须可替换。第一版优先考虑 SQLite + sqlite-vec；规模
 
 结果上限 50 条；`knowledge_search` Tool 侧再截到 8 条，避免把长清单塞进模型上下文。向量检索、元数据过滤、融合与 Rerank 均未落地，Embedding 按 AGENTS.md 的范围约束留待后续切片。
 
-材料契约要求运行中的检索接收允许的 Knowledge revision 集合，只返回选定修订的 Locator、摘要和内容哈希；未选文档不能因为同一 Vault 的全局搜索命中而进入 Run。E23 已增加范围参数并由 RunContextSnapshot 提供固定 revision 集合；运行读取足迹留 E24，不能把“已选择”本身当作读取证据。
+运行中的检索接收允许的 Knowledge revision 集合，当前对保存修订逐块做全部查询词的大小写不敏感 substring 匹配，并非上述 current 文档的 FTS5 管线。正常 UI 通过 TaskContext/RunContextSnapshot 固定选材，空知识集合返回空结果；旧无 TaskContext 兼容分支仍可全库查询，这是 [ADR-0027](adr/0027-knowledge-foundation.md)拟收窄的范围。E24 已保存搜索摘要足迹，但摘要不等于正文读取，已选择也不等于已访问。
 
 E22 已能把具体 Knowledge revision 的身份、哈希和用途保存到 TaskContextRevision；E23 已把该选择绑定到 Run 并限制 `knowledge_search`，E24 已把返回的修订、Locator 和摘要哈希保存为读取足迹，未选资料不能通过运行时搜索进入模型。E25 已将选择、用途和实际来源呈现在 Composer 与资料面板。
 

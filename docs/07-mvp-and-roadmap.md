@@ -1,5 +1,13 @@
 # MVP 与路线图
 
+## 知识基础闭环增量 — 2026-09-24（文档归档）
+
+光哥已接受知识管理与知识使用补齐方向；[产品规范](designs/knowledge-foundation.md)明确研究草稿真实选材、固定修订正文读取与来源、成果声明采用、嵌入模型消费/混合检索与索引生命周期，并将轻量集合、来源检查和 XLSX/CSV/PPTX 知识导入列为独立后续卡。成果一键回收、OCR、知识图谱和企业权限不进入本轮。
+
+[ADR-0027](adr/0027-knowledge-foundation.md)和[实施契约](development/knowledge-contracts.md)仍为 Proposed；[KM00–KM15 任务板](development/tasks-knowledge.md)是唯一 KM 状态入口，[编码交接](development/knowledge-coding-prompts.md)供新会话使用 Qwen3.8-Flash 逐卡执行。本轮不编码，全部新卡未开工；“两天”是建议推进窗口而非整批工期承诺。
+
+此增量将 Knowledge 语义检索从旧路线图的后置设想单独提出，不改变 WM 记忆的非向量算法，不重排或关闭 A/B0/E/CF/WM 原卡。技术批准、单卡开工、真实模型、提交发布分别授权。
+
 ## Proposed API/MCP increment — 2026-09-20
 
 The [API tools and remote MCP design](designs/api-tools-and-remote-mcp.md) records the next capability configuration scope: curated API service profiles (Baidu first), Main-owned protected credentials, stdio plus Streamable HTTP with static authentication, and explicit Expert/Task/Run bindings. [ADR-0024](adr/0024-api-services-and-credentials.md), [ADR-0025](adr/0025-remote-mcp-and-capability-bindings.md), and [capability contracts](development/capability-contracts.md) define the proposed decisions and compatibility boundaries.

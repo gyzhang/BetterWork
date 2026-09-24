@@ -21,6 +21,7 @@
 
 ## 技术设计提案
 
+- [知识管理与使用基础闭环](designs/knowledge-foundation.md)：2026-09-24 归档的知识补齐产品规范；[ADR-0027](adr/0027-knowledge-foundation.md) 为 Proposed，[知识实施契约](development/knowledge-contracts.md) 定义固定修订读取、精确来源、嵌入/混合检索、索引生命周期与 Office 导入。只写文档，尚未编码，不改变 WM 的非向量召回。
 - [API tools and remote MCP](designs/api-tools-and-remote-mcp.md): documented next capability increment for named API service profiles, protected credentials, and remote MCP; [ADR-0024](adr/0024-api-services-and-credentials.md) and [ADR-0025](adr/0025-remote-mcp-and-capability-bindings.md) remain Proposed. Documentation only; product development requires a separate instruction.
 - [Skill 信任与本地分发](adr/0011-skill-trust-and-local-distribution.md)：已确认的产品规则，具体实现未落地。
 - [Skill 执行器与依赖管理](designs/skill-executor-and-dependencies.md)：首个 PPT Skill 的执行、环境、文件成果与阶段 A 验收，配套 ADR-0010 为 Proposed。
@@ -28,6 +29,7 @@
 
 ## 开发执行规划
 
+- [知识基础闭环 KM00–KM15](development/tasks-knowledge.md)：知识补齐的唯一任务板，全部新卡未开工；[Qwen3.8-Flash 编码交接](development/knowledge-coding-prompts.md)提供基线核对、单卡、恢复和里程碑指令。先评审 ADR 与文档线框，再在新会话逐卡编码；不改写 E/CF/WM 状态。
 - [API/MCP capability contracts](development/capability-contracts.md): proposed fields, operations, readiness, Run resolution, migration, and acceptance requirements. Not a new implementation task board; existing A/B0/E statuses remain unchanged.
 - [能力基础开发计划 CF00–CF51](development/tasks-capability-foundation.md)：把 API tools 与远程 MCP 设计拆成 M0–M5 六个里程碑与 17 张任务卡，与现有 A/B0/E 并行。里程碑入口不自动开工，需单独开发指令。
 - [阶段 A 执行手册（供 5.6 Luna 使用）](development/README.md)：22 项顺序任务、共享实施契约、逐项验收与可复制派发提示词；仅规划，未开始实现。

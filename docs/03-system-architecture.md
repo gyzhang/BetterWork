@@ -1,5 +1,7 @@
 # 系统架构
 
+> 2026-09-24 知识增量提案：[ADR-0027](adr/0027-knowledge-foundation.md)与[知识契约](development/knowledge-contracts.md)提出固定修订正文读取、Main 所有的嵌入适配、可重建混合索引和受管工作进程；延续现有依赖方向与两库边界，不新建 Agent 引擎或 package。知识修订/历史证据不能当派生缓存删除。方案 Proposed，本轮只写文档；状态只看 [KM 任务板](development/tasks-knowledge.md)。
+
 > **Proposed architecture increment — 2026-09-20:** [ADR-0024](adr/0024-api-services-and-credentials.md) defines separate API/model/MCP configurations sharing Main-owned encrypted credentials; [ADR-0025](adr/0025-remote-mcp-and-capability-bindings.md) adds Streamable HTTP and Run-owned MCP clients. [Capability contracts](development/capability-contracts.md) retain the existing Agent Core boundary and specify preparation, revocation, provenance, and migration. Both ADRs are Proposed; current plaintext storage and stdio-only implementation are not changed by this documentation.
 
 > 2026-09-14 增量架构已接受：专家和任务上下文由 Application 解析，Run 固定能力与材料快照，宿主过滤检索/文件读取与历史上下文，成果关联输入版本。见 [ADR-0014](adr/0014-expert-context-and-material-binding.md)及[开发计划](development/tasks-experts.md)。保留现有依赖方向，不建立第二个 Agent 引擎；下文已有代码状态与新增目标分开阅读。
