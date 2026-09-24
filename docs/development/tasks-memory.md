@@ -706,3 +706,92 @@ Spec §2.2 写着「必须验证的静态风险」九条，是本轮开发的立
 **教训（写进核对方法）**：查「声明 vs 生产」时必须**双向**问——除了「声明的值有没有人写」，还要问「DTO 里每个字段有没有人填、有没有人读」。只查一侧会漏掉这种「界面优先读、生产端从不写」的字段；它比孤儿常量更隐蔽，因为界面单测手喂 DTO 会让它看起来完全被覆盖过。
 
 验证：本节为纯文档改动（更正 §15.27 一处判定＋新增本节），生产源码与测试未再改动；`npx prettier --check docs/development/tasks-memory.md` 退出 0；表内 `file:line` 全部当场 `grep -n`／`sed -n` 回读核实（协议侧核到 `:512-513/1251/1293/1319-1330/1379/1409/1755-1756/1916`，主进程核到 `memory-recall-service.ts:1278/1284/1369/1419/1428`、`memory-extraction-repository.ts:210-226/560-565/596-619`），19 项模块存在性用 `test -f` 逐项打印。上一节（§15.27）的全量门禁仍然有效：`npm run verify` 退出码 0，112 文件／1009 用例。
+
+### 15.29 Spec §5.1–§5.5 逐条款闭合，补齐四处「有强制点、无边界用例」并删掉一条假守卫（2026-09-24 20:31）
+
+本轮轴＝通用实施契约 §5.1–§5.5 全 41 条逐条款。三条并行取证回料后，本人按行号抽查 45 处强制点（`sed -n "Np"` 逐行打印比对），下表只保留抽查命中的行；用例标题一律是 `it()` 原文。
+
+**A 组｜§5.1 基础类型、长度与时间（7 条）**
+
+| # | 条款 | 强制点 | 用例 |
+| --- | --- | --- | --- |
+| A1 | `operationId` 为 UUID，跨进程只在协议定义 | `agent-protocol/src/index.ts:519`；入库再校验＋同 ID 不同哈希判据 `memory-operation-repository.ts:145-149` | `memory-operation-repository.test.ts`「rejects receipt shapes that the contract does not allow」 |
+| A2 | 一律按 Unicode 码点计量 | `index.ts:497` `countCodePoints`，生产侧 28 个调用点（`memory-retrieval.ts:83/129/142`、`memory-extraction-service.ts:309/766/1038`、`workspace-brief-service.ts:177` 等） | `index.test.ts:712`「按 Unicode 码点而不是 UTF-16 长度计量」、`memory-retrieval.test.ts:210`「counts emoji and other non-BMP content in code points」、`memory-provenance.test.ts:166` |
+| A3 | 人工 1–2,000／候选 1–500／摘录 ≤500／`topicKey` ≤80／参考 `label` ≤120 | 常量 `index.ts:501-507`；强制点 `:809`（记录）、`:957`（patch）、`:1058`（create）、`:1826`（候选）、`:688`（摘录）、`:822`、`:2082`；DDL CHECK `db/app-schema.ts:1076/1368` | `memory-extraction-prompt.test.ts:139`、`memory-provenance.test.ts:57`、`migrate.test.ts:1778`、`migrate.test.ts:2050`；**人工正文 2,000 与适用条件 300 由本轮新增 `index.test.ts:719`「契约写死的正文与适用条件上限都要真的卡住」补齐** |
+| A4 | 非负 epoch ms；`validFrom ≤ now < validUntil`；缺端无界 | `index.ts:815-819`；`memory-repository.ts:438-439` 与 SQL 同口径 `:461` | `memory-repository.test.ts:337`「derives validity and expiry at read time instead of storing a second status」、`index.test.ts:48` |
+| A5 | `contentHash`＝UTF-8 SHA-256；`normalizedHash` 仅 NFC＋换行统一＋trim | `memory-content-policy.ts:12/15/18` | `memory-content-policy.test.ts:13`「normalizes only formatting and keeps meaning-bearing characters」、`:19`「keeps negation, digits and units out of the dedup collision」 |
+| A6 | 稳定序列化：键排序、有序数组保序、集合按精确引用键排序，不含 secret／AbortSignal／临时消息 ID | `index.ts:572`（键排序 `:556-559`、数组保序 `:551-554`）；集合排序 `memory-recall-service.ts:154`、`memory-operation-repository.ts:91`；三处幂等指纹 `memory-service.ts:68`、`memory-extraction-service.ts:166`、`workspace-reference-service.ts:54` 只哈希已校验请求体 | `memory-operation-repository.test.ts:226`「stores one canonical shape per revision pair and reads it back either way round」、`memory-dispatch-gate.test.ts:59`；**唯一偏离：`memory-dispatch-gate.ts:24-33` 把整份 `messages` 喂进序列化器，而 `run-service.ts:790/793` 现场 `randomUUID()` 生成消息 id ⇒ 该指纹含临时消息 ID。它只在同调用内写库后回读比对（`run-memory-context-repository.ts:198-215`），从不跨请求复算，故无判定被削弱；落点已写进契约 §5.1，剥不剥归光哥** |
+| A7 | 日期 patch 为 set／clear 判别联合，省略即保留，二者不可并存 | `index.ts:577`（两分支均 `.strict()`）；`memory-repository.ts:412` 未提交即保留 | `index.test.ts:798`「EditPatch 至少一个字段，日期支持显式 clear」、`memory-repository.test.ts:282`「keeps a cleared validity date distinct from one that was never set」 |
+
+**B 组｜§5.2 MemoryRecord 增量（6 条）**
+
+| # | 条款 | 强制点 | 用例 |
+| --- | --- | --- | --- |
+| B1 | 保留既有 16 字段，新增恰为 6 项 | `index.ts:802-828`（`.strict()` 挡第七项），新字段 `:821-826`；DDL `app-schema.ts:1053-1059` | `index.test.ts:48` |
+| B2 | facet→kind 由宿主映射 | `index.ts:671` 与一致性校验 `:841`；SQL 侧第二处映射 `memory-repository.ts:245`；DDL CHECK `app-schema.ts:1098-1103` | `index.test.ts:746`「facet 与 kind 由宿主映射，客户端不能提交矛盾组合」 |
+| B3 | `candidateDisposition` 仅 pending/rejected，非候选省略 | 枚举 `index.ts:656`、禁止 `:848`；构造 `memory-repository.ts:667-672`；DDL `app-schema.ts:1106` | `migrate.test.ts:1778`、`memory-repository.test.ts:470` |
+| B4 | `replacesRevisionId` 指向另一身份精确旧修订，`supersedesId` 仍指本身份上一修订 | `memory-repository.ts:718`（前置 `:690` 判 `winner.id !== loser.id`）与 `:921`；FK／自替代 CHECK `app-schema.ts:1086/1109` | `memory-repository.test.ts:551`（断言 `loser.replacesRevisionId === winnerRevisionId`） |
+| B5 | 每次编辑或状态变化追加修订；无变化返回 unchanged 不堆空修订 | `memory-repository.ts:619`（同状态短路）→`:623`＋`:920` | `memory-repository.test.ts:148`「appends a revision per change and refuses to pile up empty ones」 |
+| B6 | 终态 deleted/superseded 禁编辑／确认／续期／恢复 | `index.ts:952`＋`memory-repository.ts:434/612/1095-1112`；服务映射 `memory-service.ts:110` | `memory-repository.test.ts:404`（对 edit 与六个治理动作逐个断言异常类）；**错误码字符串此前零断言 → 本轮补 `memory-service.test.ts`「终态记忆后续写走 TERMINAL_MEMORY 领域失败，不把异常文案丢给界面」** |
+
+**C 组｜§5.3 来源和依赖（11 条）**
+
+| # | 条款 | 强制点 | 用例 |
+| --- | --- | --- | --- |
+| C1 | `schemaVersion=1` 判别联合；legacy 不补造来源与时间；verified 带 authority／capturedAt／sources 1..3／依赖 0..200／0..100 | `index.ts:773-799`（`:788` `sources.min(1).max(3)`），常量 `:508-510`；构造期二次拦截 `memory-provenance.ts:250-255`；legacy 构造只展开原字段 `:274-280` | `memory-provenance.test.ts:200`「marks legacy rows unverified without fabricating a source or capture time」、`index.test.ts:785` |
+| C2 | 自主全局可无 `originWorkspaceId`，空间来源必须真实 | 取值 `memory-service.ts:146-147`；条件展开 `memory-provenance.ts:237/264`；真身校验 `memory-repository.ts:983-989`（create 路径 `:473` 调用） | `memory-extraction-service.test.ts:606`（断言候选带 `originWorkspaceId`）、`memory-repository.test.ts:1002` |
+| C3 | user/expert 全局只允许 user-instruction、依赖为空且 `genericDeclaration=true` | `memory-service.ts:247-259` 两道门；空依赖 `memory-provenance.ts:235-236`；升级禁令 `memory-service.ts:312-321` | `memory-service.test.ts:134`；**升级禁令此前有生产者零用例 → 本轮补集成用例「助手回复派生的空间记录不能直接改成全局口径」** |
+| C4 | 五种 SourceRef 各带必需身份与版本 | `index.ts:695/703/711/720/729`；checkpoint 字段白名单 `:682`＋读取器只返回 feedback/summary（`memory-provenance-reader.ts:33-37`）；助手 `message.completed` 真实性 `memory-provenance-reader.ts:13-17` | `memory-provenance.test.ts:40/82/91/105/117/186` 逐分支 |
+| C5 | Main 读已登记实体算哈希，Renderer 只提交选择器 | 选择器联合不含真实性字段 `index.ts:993-1028`；请求 `.strict()` `:1070`（夹带 `verification`/`authority` 直接拒）；重建 `memory-service.ts:684-695`→`:150-164` | `memory-service.test.ts:295`「rejects a fabricated source selector instead of trusting the client」、`memory-provenance.test.ts:40` |
+| C6 | 摘录按码点 start/end 左闭右开，Main 验区间与文本一致 | `memory-provenance.ts:57-58` 区间、`:84` `SOURCE_MISMATCH`、`:181-183` 选中文本必须落在受管版本正文；协议二次校验 `index.ts:744-759` | `memory-provenance.test.ts:57`、`:65`「rejects a reversed or empty range」、`:132`；`index.test.ts:756` |
+| C7 | 候选继承来源 Run 直连＋重放的材料与记忆依赖，模型无权删 | `extraction-source-reader.ts:56-73`（`listDependencyUnion`＝直连∪重放，`run-memory-context-repository.ts:266`）；登记 `memory-extraction-service.ts:791-792`；整份写到候选 `:1055-1062`；模型可名字段白名单 `memory-extraction-prompt.ts:219`、多余键拒 `:259-261` | `extraction-source-reader.test.ts:73`、`memory-extraction-service.test.ts:606` |
+| C8 | 依赖超额或无法证明时可见跳过，绝不静默截断 | 入队 `memory-extraction-service.ts:737-748`；执行期复证 `:854-866`→`skipped`/`INPUT_LIMIT`；构造期 RangeError 按候选跳过 `:1064-1067`；跳过计数落作业结果 `:1094-1102` | `memory-extraction-service.test.ts:591/534/568` |
+| C9 | 记忆依赖存 `memoryId＋revisionId＋contentHash`，按版本核、创建时展开、拒绝循环 | 形状 `index.ts:764-770`；按版本核 `memory-recall-service.ts:341-342`、`memory-extraction-service.ts:744-745`；DFS 展开 `memory-extraction-service.ts:188-205`，两处调用 `:750`、`:870` | `memory-extraction-service.test.ts:551`、`memory-recall-service.test.ts:230` |
+| C10 | 三层有效性分开：历史可审计／用户可查看／当前可注入；材料派生仍需本 Run 允许集；记忆派生记忆失效要复核 | 三道闸在同一循环 `memory-recall-service.ts:803-818`（`source-review-required`／`source-unavailable`／`dependency-unavailable`），材料实体可用性 `:308-317`、精确键匹配 `:368-387`＋允许集 `:791-793`；视图仍可见但不可注入 `memory-service.ts:764`；历史仍可审计 `memory-repository.ts:512-518/788`；父删除预检不静默级联 `:1045-1084` | `memory-recall-service.test.ts:362/191`、`work-centered-memory.integration.test.ts:516/656` |
+| C11 | 自主口径重新保存＝新 manual 来源＋空依赖，回执留 `fromMemoryRevisionId` 但不假装原资料已核实 | `memory-provenance.ts:221-241`（manual 源用最终提交正文哈希 `:213`）；只作审计的门 `memory-service.ts:645-658`；回执 `:276-278`；原样落库 `memory-operation-repository.ts:171-173` | `memory-service.test.ts:145`「keeps the restated revision as an audit link, even on replay」、`:180`「refuses an audit link that is fabricated or not a restatement」 |
+
+**D 组｜§5.4 确认、拒绝、替代（7 条）**
+
+| # | 条款 | 强制点 | 用例 |
+| --- | --- | --- | --- |
+| D1 | create 只接受最终表单，`confirmed` 由 Main 决定 | `memory-service.ts:486` 写死；请求体无 `status` 且 `.strict()` `index.ts:1055-1070` | `MemoryView.test.tsx:146` 以 `toEqual` 钉住整份请求字段集 |
+| D2 | 模型候选只由内部服务写 candidate/pending，无公开「确认模型建议」API | `memory-extraction-service.ts:1085-1086`；通道闭集 `index.ts:3886-3905`＋`register-ipc.ts:1203-1289` | `register-ipc.test.ts:224`「registers no channel outside the protocol」 |
+| D3 | `set-status` 六动作由状态转移表验证 | 枚举 `index.ts:906-913`；表 `:925-950` 是唯一判据，仓储直接复用（`memory-repository.ts:631`→`:1095-1112`） | `index.test.ts:809`「治理动作与错误码是封闭枚举」 |
+| D4 | confirm/reconfirm 可带 patch，只核一个 `expectedRevision`，编辑与确认同事务 | `index.ts:1102-1116`；`memory-service.ts:359`→`:378-386` 单事务；`memory-repository.ts:629-681`（patch 投影 `:647-652`，一次追加修订 `:674-680`） | `memory-repository.test.ts:470`「walks candidates through reject and restore exactly as the transition table allows」 |
+| D5 | candidate/rejected 只能回 pending 或删除；expired 可改有效期再确认；deleted/superseded 终态 | `index.ts:937-952`；`memory-repository.ts:611-613/1099-1105` | `memory-repository.test.ts:404`＋本轮新增服务层用例 |
+| D6 | 替代要求新旧处于同一规范 scope，不允许局部例外作废全局规则 | `memory-repository.ts:699-701`（`sameCanonicalScope :406`）→`SCOPE_MISMATCH`（`memory-service.ts:112-114`）；无任何豁免分支 | `memory-repository.test.ts:635`「refuses a replace across scopes, against itself and over unconfirmed records」 |
+| D7 | replace 事务核两条 `expectedRevision`、确认新、旧追加 superseded、写 `replacesRevisionId` 与裁决回执，任一步失败全回滚 | `memory-service.ts:506-521` 包事务；`memory-repository.ts:687-721` 双 CAS；裁决＋回执同内层事务 `memory-operation-repository.ts:215-263` | `memory-repository.test.ts:551`（回执写入抛错→两条记录都回到原位）、`memory-operation-repository.test.ts:191` |
+
+**E 组｜§5.5 冲突策略（7 条）**
+
+| # | 条款 | 强制点 | 用例 |
+| --- | --- | --- | --- |
+| E1 | 同非空 `topicKey`＋作用域交集＋有效期交集＋`normalizedHash` 不同 ⇒ 潜在冲突，不判真假 | `memory-conflict-policy.ts:85-90`（交集实现 `:14-34`、`:55-61`），非空下限由 `index.ts:822/1061` 保证 | `memory-conflict-policy.test.ts:81`「requires a shared non-empty topicKey, differing content and overlapping validity」 |
+| E2 | 无 `topicKey` 不做语义矛盾识别；本期不调额外 LLM、不用不可解释启发式 | `memory-conflict-policy.ts:86` 直接短路；召回是纯函数 `memory-retrieval.ts:24-28`，`memory-recall-service.ts:100` 不触网；记忆族唯一模型路径 `memory-extraction-service.ts:965` 只写候选、不比较两条记忆 | `work-centered-memory.integration.test.ts`「重启后记忆、审计与召回保持一致，启动阶段零网络」 |
+| E3 | candidate 与 confirmed 的冲突提示不阻塞既有 confirmed | 标记只落在候选 `memory-conflict-policy.ts:127`；列表侧 `memory-service.ts:735-766`；召回只装 confirmed `memory-repository.ts:593`，故 blocked 集按构造拿不到候选 | `memory-service.test.ts:405`「把与已确认记忆重复的候选标成待处理重复」（另一半见「本轮缺口」第 5 行） |
+| E4 | 两条已确认未裁决 ⇒ 整组不注入＋可见「待澄清口径」摘要，不自动挑一条，也不展示越权正文 | 排除 `memory-recall-service.ts:823-826`；并查集成组、不选赢家 `:549-566`；摘要生产者 `:879`（协议字段 `index.ts:1569`）；只带身份 `:197-200/219-231`；文案 `memory-labels.ts:76`＋界面 `ContextPanel.tsx:613-616` | `memory-recall-service.test.ts:250`「同议题两条未裁决的口径互相顶住，谁都不注入」、`ContextPanel.test.tsx:394`「待澄清口径与待复核来源只报身份，不展示正文」 |
+| E5 | keep-both 需用户填写 1–300 适用条件并绑定精确修订对；共同召回整组同进同退；任一修订变化即失效 | 边界 `index.ts:505-506`，请求 `:1130-1134`、存储 `:880-884`；成对绑定 `memory-operation-repository.ts:210-214/273-284`；失效判定 `:301-312`；成组 `memory-recall-service.ts:674-697`＋超预算整组让位 `:703-723` | `memory-operation-repository.test.ts:265/346`、`memory-recall-service.test.ts:338`「包装预算超限时整组让位，不留半条冲突口径」 |
+| E6 | replace 必填 `winnerId`，keep-both 必填说明 | `memory-service.ts:497`（`INVALID_TRANSITION`）、`:437-447`（`CONFLICT_REVIEW_REQUIRED`）；刻意不进 IPC schema 的理由见 `index.ts:1137-1141` | `register-ipc.test.ts:909`「refuses an incomplete conflict decision as a domain failure instead of a schema throw」、`memory-service.test.ts:311` |
+| E7 | 本期不声称自动识别新上传材料与记忆的全部语义冲突 | 负向条款：冲突判定只有三个调用点（`memory-recall-service.ts:542`、`memory-service.ts:742`、`workspace-brief-reader.ts:109`），资料导入与 `task-material` 管线都不引 `memory-conflict-policy` | 无测试（不声称的事情不需要用例；文档侧已按 §15.21 收口） |
+
+**本轮缺口与处置**
+
+| # | 缺口 | 处置 |
+| --- | --- | --- |
+| 1 | 人工正文 2,000、适用条件 300 两个契约数字**只有强制点、没有任何边界用例**（全仓无 2001／301 码点用例） | 新增 `index.test.ts:719`，双向断言 2,000 通过／2,001 拒、300 通过／301 拒，数字写死字面量 |
+| 2 | `TERMINAL_MEMORY` 错误码字符串在测试里从未被断言（仓储层只断异常类，界面上到底出现哪个码无人证明） | 新增 `memory-service.test.ts` 服务层用例：删除后再编辑／再恢复都收口成 `TERMINAL_MEMORY`，且不追加修订 |
+| 3 | `WORKSPACE_FACT_CANNOT_BE_GLOBAL` 有生产者（`memory-service.ts:318`）但零用例，是 §15.18「无生产者码」的反面同一种缺陷 | 新增集成用例：真实 Run 的 `message.completed` 派生 verified/derived 空间记录，改 `scope:'user'` 被拒且库里 scope 未变 |
+| 4 | `memory-provenance.ts:293` 的 `assertNoDependencyCycle` **导出但生产零调用**，其唯一用例标题写着「derived provenance refuses …」而 `buildDerivedProvenance` 根本不调它 —— 一条会让后来人以为写时已挡自引用的假守卫 | 删除死导出与那条用例。真实环检测在 `memory-extraction-service.ts:188-205`（入队 `:750`、执行 `:870` 两处都有生产者与用例），读侧另有 `memory-recall-service.ts:331` 递归护栏；新建记录的身份先于任何依赖存在，自引用在写时结构上不可能，故不为此造失败路径 |
+| 5 | §5.5「candidate 与 confirmed 的冲突提示」这半条在**召回链路**上无驱动用例 | 不补假用例：召回装载集合按 `memory-repository.ts:593` 只含 confirmed，候选按构造进不了 `blocked`，因此该分支无法被真实驱动；已在契约 §5.5 与本节记录为边界，人工验收时留意候选列表的冲突标记即可 |
+| 6 | `modelRequestHash` 的输入含临时消息 ID，与 §5.1 那句字面不符 | 不改代码也不改判定：写进契约 §5.1 落点，若要审计指纹变成可跨次复算的规范指纹需在装配阶段剥 `message.id`，属协议与审计语义变化，归光哥 |
+
+**变异验证**（每次还原后再跑下一处；全部完成后 `git status` 只剩本轮文件）
+
+| 变异 | 结果 |
+| --- | --- |
+| `MEMORY_CONTENT_MAX_CODE_POINTS` 2,000→2,001 | 新用例红（其余 30 条不受影响） |
+| `MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS` 300→301 | 新用例红 |
+| `mapDomainError` 的 `failResult('TERMINAL_MEMORY', …)`→`INVALID_TRANSITION` | `memory-service.test.ts` 17 条中**只有新用例红**，16 条仍绿 |
+| 升级禁令 `authority === 'derived'`→永不匹配 | 集成 12 条中**只有新用例红**，11 条仍绿 |
+
+验证：`npx eslint`（本轮 5 份改动文件）退出 0；`npx vitest run memory-provenance.test.ts` 删除后 14 条全绿；`npm run verify` 退出码 **0**，**112 文件／1011 用例全绿**。用例数与上一节对得上：1009 ＋ 本轮新增 3 条 − 删除的假守卫 1 条 ＝ 1011（`memory-provenance.test.ts` 少一条，其余三条分别落在协议、服务与集成文件）。契约 §5.1／§5.5 两处落点为纯文档改动，含在全量门禁的 `format:check` 里。**口径要说满**：本节这段验证文字写在那次门禁之后，它（以及日志同日新增段落）只由随后的 `npx prettier --check docs/development/tasks-memory.md docs/development/memory-contracts.md docs/logs/2026-09-24.md` 退出 0 覆盖，未重跑全量门禁——纯文档改动不触碰代码，这一点是判定而非实测。

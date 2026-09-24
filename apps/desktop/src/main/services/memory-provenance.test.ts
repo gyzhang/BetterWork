@@ -4,12 +4,10 @@ import type { MaterialReference } from '@betterwork/agent-protocol';
 import { describe, expect, it } from 'vitest';
 
 import {
-  assertNoDependencyCycle,
   buildDerivedProvenance,
   buildLegacyProvenance,
   buildUserInstructionProvenance,
   manualMemorySource,
-  memoryDependencyOf,
   promptHashOf,
   type ProvenanceReader,
   resolveMemorySourceSelector,
@@ -206,16 +204,6 @@ describe('provenance builders', () => {
     expect(provenance.sourceId).toBe('r-old');
     expect('capturedAt' in provenance).toBe(false);
     expect('sources' in provenance).toBe(false);
-  });
-
-  it('refuses a derived provenance whose memory dependency points at itself', () => {
-    const dependency = memoryDependencyOf({
-      id: 'm-1',
-      revisionId: 'rev-1',
-      contentHash: sha('x'),
-    });
-    expect(() => assertNoDependencyCycle([dependency], 'm-1')).toThrow(RangeError);
-    expect(() => assertNoDependencyCycle([dependency], 'm-2')).not.toThrow();
   });
 
   it('keeps a derived provenance schema-valid', () => {

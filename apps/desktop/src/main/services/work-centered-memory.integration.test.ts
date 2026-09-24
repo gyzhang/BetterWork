@@ -916,4 +916,48 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
     expect(result.data.reads).toEqual([]);
     expect(result.warnings.map((warning) => warning.code)).toContain('SOURCE_NEEDS_REVIEW');
   });
+
+  it('助手回复派生的空间记录不能直接改成全局口径', async () => {
+    const world = await createWorld();
+    const runId = startRun(world, world.layout.a1, '按回款金额口径核对本月收入并给出结论。');
+    await waitForCompletion(world, runId);
+    const assistant = world.services.store.runs
+      .listEvents(runId)
+      .find((event) => event.type === 'message.completed');
+    if (assistant?.type !== 'message.completed') throw new Error('替身模型必须产出一条助手消息。');
+
+    const created = await world.services.memories.create({
+      operationId: randomUUID(),
+      content: '本月收入按回款金额口径统计。',
+      facet: 'fact',
+      scope: { kind: 'workspace', workspaceId: world.layout.workspaceA },
+      asUserInstruction: false,
+      sourceSelector: {
+        kind: 'run-assistant',
+        runId,
+        eventId: assistant.id,
+        start: 0,
+        end: [...assistant.content].length,
+      },
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const memory = created.data.currentMemory;
+    if (!memory) throw new Error('回执必须带回当前记忆。');
+    expect(memory.provenance).toMatchObject({
+      verification: 'verified',
+      authority: 'derived',
+    });
+
+    const escalated = await world.services.memories.update({
+      operationId: randomUUID(),
+      id: memory.id,
+      expectedRevision: memory.revision,
+      patch: { scope: { kind: 'user' } },
+    });
+    expect(escalated.ok).toBe(false);
+    if (escalated.ok) return;
+    expect(escalated.error.code).toBe('WORKSPACE_FACT_CANNOT_BE_GLOBAL');
+    expect(world.services.store.memories.get(memory.id)?.scope.kind).toBe('workspace');
+  });
 });

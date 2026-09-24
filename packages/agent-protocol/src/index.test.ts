@@ -28,6 +28,7 @@ import {
   memorySourceRefSchema,
   memorySourceSelectorSchema,
   memoryWriteReceiptSchema,
+  resolveMemoryConflictRequestSchema,
   resultSchema,
   runMaterialReadSchema,
   runtimeEnvironmentSchema,
@@ -713,6 +714,33 @@ describe('工作型记忆契约不变量', () => {
     expect(countCodePoints('\u4e2d\u6587')).toBe(2);
     expect(MEMORY_RECALL_VERSION).toBe('memory-recall-v1');
     expect(MEMORY_RECALL_TOTAL_ITEM_LIMIT).toBe(16);
+  });
+
+  it('契约写死的正文与适用条件上限都要真的卡住', () => {
+    expect(
+      memoryRecordSchema.safeParse({ ...baseRecord, content: '记'.repeat(2_000) }).success,
+    ).toBe(true);
+    expect(
+      memoryRecordSchema.safeParse({ ...baseRecord, content: '记'.repeat(2_001) }).success,
+    ).toBe(false);
+    const keepBoth = {
+      operationId: '6f1a2b3c-4d5e-4f60-8a7b-9c0d1e2f3a4b',
+      left: { id: 'memory-1', expectedRevision: 1 },
+      right: { id: 'memory-2', expectedRevision: 3 },
+      decision: 'keep-both',
+    };
+    expect(
+      resolveMemoryConflictRequestSchema.safeParse({
+        ...keepBoth,
+        applicabilityNote: '条'.repeat(300),
+      }).success,
+    ).toBe(true);
+    expect(
+      resolveMemoryConflictRequestSchema.safeParse({
+        ...keepBoth,
+        applicabilityNote: '条'.repeat(301),
+      }).success,
+    ).toBe(false);
   });
 
   it('facet 与 kind 由宿主映射，客户端不能提交矛盾组合', () => {

@@ -289,12 +289,3 @@ export const memoryDependencyOf = (record: {
   revisionId: record.revisionId,
   contentHash: record.contentHash,
 });
-
-export const assertNoDependencyCycle = (
-  dependencies: readonly MemoryDependency[],
-  selfMemoryId: string,
-): void => {
-  if (dependencies.some((dependency) => dependency.memoryId === selfMemoryId)) {
-    throw new RangeError('记忆依赖不能指向自身身份。');
-  }
-};

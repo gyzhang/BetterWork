@@ -200,6 +200,46 @@ describe('MemoryService', () => {
     expect(notRestatement.error.code).toBe('SOURCE_MISMATCH');
   });
 
+  it('终态记忆后续写走 TERMINAL_MEMORY 领域失败，不把异常文案丢给界面', async () => {
+    const { service, store } = await setup();
+    const created = await service.create(userInstruction('复盘先看现金流。'));
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const record = created.data.currentMemory;
+    if (!record) throw new Error('创建回执必须带回当前记忆。');
+
+    const deleted = await service.setStatus({
+      operationId: randomUUID(),
+      id: record.id,
+      expectedRevision: record.revision,
+      action: 'delete',
+    });
+    expect(deleted.ok).toBe(true);
+    const terminalRevision = record.revision + 1;
+
+    const edited = await service.update({
+      operationId: randomUUID(),
+      id: record.id,
+      expectedRevision: terminalRevision,
+      patch: { content: '改一个字。' },
+    });
+    expect(edited.ok).toBe(false);
+    if (edited.ok) return;
+    expect(edited.error.code).toBe('TERMINAL_MEMORY');
+
+    const revived = await service.setStatus({
+      operationId: randomUUID(),
+      id: record.id,
+      expectedRevision: terminalRevision,
+      action: 'restore-candidate',
+    });
+    expect(revived.ok).toBe(false);
+    if (revived.ok) return;
+    expect(revived.error.code).toBe('TERMINAL_MEMORY');
+    // 两次拒绝都不能留下新修订。
+    expect(store.memories.get(record.id)?.revision).toBe(terminalRevision);
+  });
+
   it('replays one effect per operationId and rejects a reused id with a different request', async () => {
     const { service, store } = await setup();
     const operationId = randomUUID();

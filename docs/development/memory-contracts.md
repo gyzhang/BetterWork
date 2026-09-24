@@ -20,6 +20,8 @@
 - 稳定序列化 JSON：对象键排序，语义有序数组保留顺序，集合先按精确引用键排序；不包含 secret、AbortSignal 和临时消息 ID。
 - 日期 patch 为 `{ action: 'set', value }` 或 `{ action: 'clear' }`；省略表示保留。`set` 与 `clear` 不可同时出现，不使用 `undefined` 猜清空。
 
+落点（任务板 §15.29）：「不包含 secret、AbortSignal 和临时消息 ID」由**调用方喂什么**保证，`stableStringifyJson` 本身只做键排序与数组保序。幂等指纹三处（`memory-service.ts:68`、`memory-extraction-service.ts:166`、`workspace-reference-service.ts:54` 的 `requestHashOf`）都只哈希已校验的 IPC 请求体，里面既没有凭据也没有 signal，因此重放判定与 `IDEMPOTENCY_CONFLICT` 不受影响。唯一把消息对象喂进序列化器的是 `modelRequestHash`（`services/memory-dispatch-gate.ts:24-33`）：它按 §6.4 要钉住「实际发出去的那份字节」，而每次装配的 `AgentMessage.id` 由 `run-service.ts:790/793` 现场生成，所以这个指纹里**确实含临时消息 ID**。该值只在同一次调用内写库后回读比对（`persistence/run-memory-context-repository.ts:198-215`），从不跨请求复算，因此没有判定被削弱；若要它变成可复算的规范指纹，需要装配阶段剥离 `message.id`，属审计语义变化，交光哥拍板，本轮不改。
+
 ### 5.2 MemoryRecord 增量
 
 保留既有 `id`/`revisionId`/`revision`/`scope`/`kind`/`content`/`sourceType`/`sourceId`/`sourceLocator`/`confidence`/`status`/`validFrom`/`validUntil`/`supersedesId`/`contentHash`/`createdAt`/`updatedAt`。
@@ -82,6 +84,8 @@
 本期不声称自动识别新上传材料与记忆的全部语义冲突。当前指令/明确本期规则优先的上下文说明仍保留；自动化验收只证明上下文和冲突组处理，语义冲突处理用人工旅程验证。
 
 落点：§5.5 的判定规则只实现一次，在 `apps/desktop/src/main/services/memory-conflict-policy.ts`（`scopesIntersect`／`validityIntersects`／`listPotentialConflictPairs`／`unresolvedConflictPairs`）。此前召回内联一份（按 `topicKey` 分桶，等价于在共同适用集合内取作用域交集），简报又内联一份并把「作用域交集」写窄成「同一规范范围」；现在两处都只接线精确修订对的裁决记录，作用域口径归一。未裁决对以 `MemoryViewItem.conflicts`（`state: 'unresolved'`）摆进治理列表：一对两条口径各自都带同一条待澄清记录，替代与并存的裁决入口因此才可达；已裁决（`keep-both`/`replace`）按裁决结果原样展示，不重复提示。用例见 `memory-conflict-policy.test.ts` 与 `memory-service.test.ts`「把未裁决的同议题口径作为待澄清冲突摆进管理列表」。
+
+落点（任务板 §15.29 E3 与缺口 5）：「候选与已确认的冲突提示不阻塞既有 confirmed」是**结构事实**——标记只落在候选（`memory-conflict-policy.ts:127`），而召回装载集合按 `memory-repository.ts:593` 只取 `status = 'confirmed'`，候选按构造进不了 `blocked` 组，因此没有任何一条召回用例能真实驱动这半条。本轮不为它补会永远通过的假用例，人工验收时在候选行上看重复标记即可。`keep-both` 说明的 300 码点上界此前只有「正好 300 通过」的用例，越界拒绝由 §15.29 新增的协议用例（`packages/agent-protocol/src/index.test.ts:719`）补上。
 
 ### 5.6 幂等与投影
 
