@@ -108,6 +108,16 @@ export class TaskRepository {
     return { task: toSummary(task), sessionId };
   }
 
+  /** KM03：按 id 重建任务摘要，供幂等重试返回原草稿。 */
+  getSummary(taskId: string): TaskSummary | undefined {
+    const row = this.db
+      .prepare(
+        'SELECT id, workspace_id, title, goal, created_at, updated_at FROM tasks WHERE id = ?',
+      )
+      .get(taskId) as TaskRow | undefined;
+    return row ? toSummary(row) : undefined;
+  }
+
   listRecent(workspaceId?: string): RecentTaskSummary[] {
     const query = `
       SELECT t.id, t.workspace_id, t.title, t.goal, t.created_at, t.updated_at,

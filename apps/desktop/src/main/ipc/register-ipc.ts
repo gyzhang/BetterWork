@@ -59,10 +59,12 @@ import {
   importSkillRequestSchema,
   inputSnapshotSchema,
   IpcChannel,
+  knowledgeCreateResearchDraftRequestSchema,
   knowledgeDocumentSummarySchema,
   type KnowledgeImportResult,
   knowledgeImportResultSchema,
   knowledgeRefreshResultSchema,
+  knowledgeResearchDraftResultSchema,
   knowledgeRevisionSummarySchema,
   knowledgeSearchResultSchema,
   knowledgeTextPageSchema,
@@ -191,6 +193,7 @@ import type { MemoryRecallService } from '../services/memory-recall-service';
 import type { MemoryService } from '../services/memory-service';
 import { probeModelConnection } from '../services/model-connectivity';
 import type { NotificationService } from '../services/notification-service';
+import { ResearchDraftService } from '../services/research-draft-service';
 import type { RunService } from '../services/run-service';
 import { createQianfanSearchClient } from '../services/search-engine-service';
 import {
@@ -873,7 +876,7 @@ function registerModelChannels({ store, credentialAccess }: IpcDependencies): vo
 }
 
 function registerKnowledgeChannels(deps: IpcDependencies): void {
-  const { knowledgeVault, notifications } = deps;
+  const { knowledgeVault, notifications, store } = deps;
 
   handleNoInput(
     IpcChannel.ListKnowledge,
@@ -965,6 +968,12 @@ function registerKnowledgeChannels(deps: IpcDependencies): void {
         input.cursor,
         input.maxCodePoints,
       ),
+  );
+  handleInput(
+    IpcChannel.CreateResearchDraft,
+    knowledgeCreateResearchDraftRequestSchema,
+    knowledgeResearchDraftResultSchema,
+    (input) => new ResearchDraftService(store, knowledgeVault).create(input),
   );
 }
 

@@ -36,6 +36,8 @@ import {
   importSkillRequestSchema,
   inputSnapshotSchema,
   IpcChannel,
+  knowledgeCreateResearchDraftRequestSchema,
+  knowledgeResearchDraftResultSchema,
   knowledgeRevisionSummarySchema,
   knowledgeTextPageSchema,
   listDependencyOptionsRequestSchema,
@@ -238,6 +240,12 @@ const api: BetterWorkDesktopApi = {
         IpcChannel.PreviewKnowledge,
         previewKnowledgeRequestSchema.parse(input),
         knowledgeTextPageSchema,
+      ),
+    createResearchDraft: (input) =>
+      invokeValidated(
+        IpcChannel.CreateResearchDraft,
+        knowledgeCreateResearchDraftRequestSchema.parse(input),
+        knowledgeResearchDraftResultSchema,
       ),
   },
   skills: {

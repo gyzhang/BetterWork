@@ -1129,13 +1129,40 @@ export function App(): React.JSX.Element {
     setView('knowledge');
     refreshKnowledge();
   };
-  const startResearchFromKnowledge = (query: string, sourceCount: number): void => {
+  const startResearchFromKnowledge = (): void => {
     if (isRunning) {
       setActionError('当前任务仍在执行，请等待完成后再开始新的研究。');
       return;
     }
-    startNewTask();
-    setPrompt(buildResearchPrompt(query, sourceCount));
+    if (!workspace) {
+      setActionError('请先选择或创建工作空间，再开始研究。');
+      return;
+    }
+    const prompt = buildResearchPrompt(knowledge.query.trim(), knowledge.selectedMaterials.length);
+    // KM03：失败绝不清空当前任务或选择；成功且请求仍是最新意图时才导航。
+    reportAction(
+      (async (): Promise<void> => {
+        const outcome = await knowledge.research(prompt, workspace.id);
+        if (!outcome) {
+          setActionError('没有可用的勾选资料，请先勾选要用于研究的资料。');
+          return;
+        }
+        if (outcome.stale) {
+          knowledge.setMessage('研究草稿已创建；可从最近任务打开。');
+          refreshTasks();
+          return;
+        }
+        const tasks = await window.betterwork.tasks.list({ workspaceId: workspace.id });
+        const created = tasks.find((task) => task.id === outcome.result.task.id);
+        if (created) {
+          await selectTask(created);
+          setPrompt(outcome.result.prompt);
+        }
+        knowledge.clearSelection();
+      })(),
+      setActionError,
+      '创建研究草稿失败；当前任务与已勾选资料保持不变。',
+    );
   };
   const navigateToTarget = (target: NotificationTarget): void => {
     if (target.kind === 'task') {
@@ -1644,7 +1671,7 @@ export function App(): React.JSX.Element {
           />
         )}
         {view === 'knowledge' && (
-          <KnowledgePage library={knowledge} onStartResearch={startResearchFromKnowledge} />
+          <KnowledgePage library={knowledge} onResearch={startResearchFromKnowledge} />
         )}
         {view === 'skills' && <SkillsPage state={skills} />}
         {view === 'experts' && (

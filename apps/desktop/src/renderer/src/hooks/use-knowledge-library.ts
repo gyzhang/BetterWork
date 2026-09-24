@@ -1,5 +1,10 @@
-import type { KnowledgeDocumentSummary, KnowledgeSearchResult } from '@betterwork/agent-protocol';
-import { type FormEvent, useCallback, useState } from 'react';
+import type {
+  KnowledgeDocumentSummary,
+  KnowledgeResearchDraftMaterial,
+  KnowledgeResearchDraftResult,
+  KnowledgeSearchResult,
+} from '@betterwork/agent-protocol';
+import { type FormEvent, useCallback, useRef, useState } from 'react';
 
 import { describeActionError, trackAction } from '../lib/async-action';
 import { fileNameOf } from '../lib/format';
@@ -10,6 +15,8 @@ export interface KnowledgeLibrary {
   query: string;
   setQuery: (query: string) => void;
   message: string;
+  /** 局部信息写入（如 KM03 迟到成功的可找回提示）。 */
+  setMessage: (message: string) => void;
   issues: string[];
   importing: boolean;
   loading: boolean;
@@ -21,6 +28,18 @@ export interface KnowledgeLibrary {
   onOpenSource: (sourcePath: string) => Promise<void>;
   onRefresh: (document: KnowledgeDocumentSummary) => Promise<void>;
   onRemove: (document: KnowledgeDocumentSummary) => Promise<void>;
+  /** KM03：当前搜索结果中被勾选的固定修订材料（默认用途 background）。 */
+  selectedMaterials: KnowledgeResearchDraftMaterial[];
+  isSelected: (result: KnowledgeSearchResult) => boolean;
+  toggleSelect: (result: KnowledgeSearchResult, checked: boolean) => void;
+  selectAllResults: () => void;
+  clearSelection: () => void;
+  researchBusy: boolean;
+  /** 返回结果与 stale 标记：迟到的成功不再导航，只提示可从最近任务找回。 */
+  research: (
+    prompt: string,
+    workspaceId: string,
+  ) => Promise<{ result: KnowledgeResearchDraftResult; stale: boolean } | undefined>;
 }
 
 /**
@@ -40,6 +59,12 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   const [importing, setImporting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [selected, setSelected] = useState<Map<string, KnowledgeResearchDraftMaterial>>(
+    () => new Map(),
+  );
+  const [researchBusy, setResearchBusy] = useState(false);
+  const researchSeq = useRef(0);
+  const operationByInput = useRef<Map<string, string>>(new Map());
 
   const refresh = useCallback((): void => {
     setLoading(true);
@@ -121,6 +146,39 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     }
   };
 
+  const materialKey = (result: KnowledgeSearchResult): string =>
+    `${result.reference.knowledgeDocumentId}:${result.reference.knowledgeRevisionId}`;
+
+  const isSelected = useCallback(
+    (result: KnowledgeSearchResult): boolean => selected.has(materialKey(result)),
+    [selected],
+  );
+  const toggleSelect = useCallback((result: KnowledgeSearchResult, checked: boolean): void => {
+    setSelected((current) => {
+      const next = new Map(current);
+      const key = materialKey(result);
+      if (checked) {
+        next.set(key, { reference: result.reference, purpose: 'background' });
+      } else {
+        next.delete(key);
+      }
+      return next;
+    });
+  }, []);
+  const clearSelection = useCallback((): void => setSelected(new Map()), []);
+  const selectAllResults = useCallback((): void => {
+    setSelected(
+      new Map(
+        results
+          .filter((result) => result.reference)
+          .map((result) => [
+            materialKey(result),
+            { reference: result.reference, purpose: 'background' },
+          ]),
+      ),
+    );
+  }, [results]);
+
   const onSearch = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
     const term = query.trim();
@@ -130,8 +188,39 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     }
     try {
       setResults(await window.betterwork.knowledge.search({ query: term }));
+      // 切换搜索后清空结果勾选，避免隐形的跨查询选择。
+      setSelected((current) => {
+        if (current.size > 0) setMessage('搜索结果已更新，此前的勾选已清空。');
+        return new Map();
+      });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '检索资料失败。');
+    }
+  };
+
+  const research = async (
+    prompt: string,
+    workspaceId: string,
+  ): Promise<{ result: KnowledgeResearchDraftResult; stale: boolean } | undefined> => {
+    const materials = [...selected.values()];
+    if (materials.length === 0 || researchBusy) return undefined;
+    const inputKey = JSON.stringify([prompt, workspaceId, materials]);
+    const existing = operationByInput.current.get(inputKey);
+    const operationId = existing ?? crypto.randomUUID();
+    operationByInput.current.set(inputKey, operationId);
+    const seq = researchSeq.current + 1;
+    researchSeq.current = seq;
+    setResearchBusy(true);
+    try {
+      const result = await window.betterwork.knowledge.createResearchDraft({
+        operationId,
+        workspaceId,
+        prompt,
+        materials,
+      });
+      return { result, stale: researchSeq.current !== seq };
+    } finally {
+      setResearchBusy(false);
     }
   };
 
@@ -141,6 +230,7 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     query,
     setQuery,
     message,
+    setMessage,
     issues,
     importing,
     loading,
@@ -151,5 +241,12 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     onOpenSource,
     onRefresh,
     onRemove,
+    selectedMaterials: [...selected.values()],
+    isSelected,
+    toggleSelect,
+    selectAllResults,
+    clearSelection,
+    researchBusy,
+    research,
   };
 }

@@ -3569,6 +3569,33 @@ export const knowledgeReadRequestSchema = z
   .strict();
 export type KnowledgeReadRequest = z.infer<typeof knowledgeReadRequestSchema>;
 
+export const knowledgeResearchDraftMaterialSchema = z
+  .object({
+    reference: knowledgeMaterialReferenceSchema,
+    purpose: materialPurposeSchema.default('background'),
+  })
+  .strict();
+export type KnowledgeResearchDraftMaterial = z.infer<typeof knowledgeResearchDraftMaterialSchema>;
+
+export const knowledgeCreateResearchDraftRequestSchema = z.object({
+  operationId: z.string().uuid(),
+  workspaceId: z.string().min(1),
+  prompt: z.string().trim().min(1).max(8_000),
+  materials: z.array(knowledgeResearchDraftMaterialSchema).min(1),
+});
+export type KnowledgeCreateResearchDraftRequest = z.infer<
+  typeof knowledgeCreateResearchDraftRequestSchema
+>;
+
+export const knowledgeResearchDraftResultSchema = z
+  .object({
+    task: taskSummarySchema,
+    context: taskContextRevisionSchema,
+    prompt: z.string(),
+  })
+  .strict();
+export type KnowledgeResearchDraftResult = z.infer<typeof knowledgeResearchDraftResultSchema>;
+
 export const listKnowledgeRevisionsRequestSchema = z.object({ documentId: z.string().min(1) });
 export type ListKnowledgeRevisionsRequest = z.infer<typeof listKnowledgeRevisionsRequestSchema>;
 
@@ -3874,6 +3901,7 @@ export const IpcChannel = {
   RefreshKnowledgeDocument: 'knowledge:refresh',
   ListKnowledgeRevisions: 'knowledge:list-revisions',
   PreviewKnowledge: 'knowledge:preview',
+  CreateResearchDraft: 'knowledge:create-research-draft',
   ListSearchEngines: 'search:list',
   SaveSearchEngine: 'search:save',
   TestSearchEngine: 'search:test',
@@ -4021,6 +4049,9 @@ export interface BetterWorkDesktopApi {
     refresh(input: RefreshKnowledgeDocumentRequest): Promise<KnowledgeRefreshResult>;
     listRevisions(input: ListKnowledgeRevisionsRequest): Promise<KnowledgeRevisionSummary[]>;
     preview(input: PreviewKnowledgeRequest): Promise<KnowledgeTextPage>;
+    createResearchDraft(
+      input: KnowledgeCreateResearchDraftRequest,
+    ): Promise<KnowledgeResearchDraftResult>;
   };
   skills: {
     list(): Promise<SkillSummary[]>;

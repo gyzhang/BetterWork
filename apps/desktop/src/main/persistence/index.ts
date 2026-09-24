@@ -18,6 +18,7 @@ import { MemoryOperationRepository } from './memory-operation-repository';
 import { MemoryRepository } from './memory-repository';
 import { ModelRepository } from './model-repository';
 import { NotificationRepository } from './notification-repository';
+import { ResearchDraftOperationRepository } from './research-draft-operation-repository';
 import { RunContextSnapshotRepository } from './run-context-snapshot-repository';
 import { RunMaterialReadRepository } from './run-material-read-repository';
 import { RunMemoryContextRepository } from './run-memory-context-repository';
@@ -67,6 +68,7 @@ export class AppStore {
   readonly runMemoryContexts: RunMemoryContextRepository;
   readonly memoryExtractions: MemoryExtractionRepository;
   readonly workspaceReferences: WorkspaceReferenceRepository;
+  readonly researchDraftOperations: ResearchDraftOperationRepository;
   /** 迁移进度日志只依赖 db，始终可用。 */
   readonly credentialJournal: CredentialMigrationJournalRepository;
   /** 凭据仓储需要 Main 注入 safeStorage 适配器；未注入时为 undefined（不加密，保持旧行为）。 */
@@ -109,6 +111,7 @@ export class AppStore {
     this.runMemoryContexts = new RunMemoryContextRepository(db);
     this.memoryExtractions = new MemoryExtractionRepository(db);
     this.workspaceReferences = new WorkspaceReferenceRepository(db);
+    this.researchDraftOperations = new ResearchDraftOperationRepository(db);
   }
 
   static open(filePath: string, safeStorage?: SafeStorageAdapter): AppStore {

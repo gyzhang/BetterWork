@@ -3710,6 +3710,19 @@ p {
 .knowledge-research-button:hover {
   border-color: var(--brand);
 }
+/* KM03：搜索结果勾选与选择操作条 */
+.knowledge-card-select {
+  display: flex;
+  align-items: center;
+  padding-right: 4px;
+}
+.knowledge-card-select input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand);
+  cursor: pointer;
+}
+
 .knowledge-card {
   display: flex;
   align-items: flex-start;

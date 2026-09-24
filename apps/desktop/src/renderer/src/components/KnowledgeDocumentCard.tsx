@@ -8,6 +8,8 @@ export interface KnowledgeDocumentCardProps {
   excerpt?: string;
   locator?: string;
   busy?: boolean;
+  /** KM03：搜索结果选择模式；列表模式不显示勾选。 */
+  select?: { checked: boolean; onToggle: (checked: boolean) => void; label: string };
   onOpen: () => void;
   onRefresh: () => void;
   onRemove: () => void;
@@ -26,12 +28,23 @@ export function KnowledgeDocumentCard({
   excerpt,
   locator,
   busy = false,
+  select,
   onOpen,
   onRefresh,
   onRemove,
 }: KnowledgeDocumentCardProps): React.JSX.Element {
   return (
     <article className="knowledge-card">
+      {select && (
+        <label className="knowledge-card-select" title={select.label}>
+          <input
+            type="checkbox"
+            checked={select.checked}
+            aria-label={select.label}
+            onChange={(event) => select.onToggle(event.target.checked)}
+          />
+        </label>
+      )}
       <span className={`knowledge-format ${document.format}`}>{formatLabel(document.format)}</span>
       <div className="knowledge-card-main">
         <strong>{document.title}</strong>

@@ -1,4 +1,4 @@
-import type { KnowledgeDocumentSummary } from '@betterwork/agent-protocol';
+import type { KnowledgeDocumentSummary, KnowledgeSearchResult } from '@betterwork/agent-protocol';
 import { useCallback, useState } from 'react';
 
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
@@ -24,16 +24,22 @@ interface KnowledgeToast {
  */
 export function KnowledgePage({
   library,
-  onStartResearch,
+  onResearch,
 }: {
   library: KnowledgeLibrary;
-  onStartResearch: (query: string, sourceCount: number) => void;
+  onResearch: () => void;
 }): React.JSX.Element {
   const {
     documents,
     results,
     query,
     setQuery,
+    selectedMaterials,
+    isSelected,
+    toggleSelect,
+    selectAllResults,
+    clearSelection,
+    researchBusy,
     message,
     issues,
     importing,
@@ -47,15 +53,19 @@ export function KnowledgePage({
     onRemove,
   } = library;
   const showingResults = Boolean(query.trim());
-  const items: Array<{ document: KnowledgeDocumentSummary; excerpt?: string; locator?: string }> =
-    showingResults
-      ? results.map((result) => ({
-          document: result.document,
-          locator: result.locator,
-          excerpt: result.excerpt,
-        }))
-      : documents.map((document) => ({ document }));
-  const researchSourceCount = new Set(items.map(({ document }) => document.id)).size;
+  const items: Array<{
+    document: KnowledgeDocumentSummary;
+    excerpt?: string;
+    locator?: string;
+    hit?: KnowledgeSearchResult;
+  }> = showingResults
+    ? results.map((result) => ({
+        document: result.document,
+        locator: result.locator,
+        excerpt: result.excerpt,
+        hit: result,
+      }))
+    : documents.map((document) => ({ document }));
   const [toast, setToast] = useState<KnowledgeToast>();
   const [removalTarget, setRemovalTarget] = useState<KnowledgeDocumentSummary>();
   const dismissToast = useCallback(() => setToast(undefined), []);
@@ -128,12 +138,25 @@ export function KnowledgePage({
                 {showingResults ? '检索仅在本地资料库中进行' : '下一步将支持表格与语义检索'}
               </small>
               {showingResults && items.length > 0 && (
+                <button type="button" onClick={selectAllResults}>
+                  全选结果
+                </button>
+              )}
+              {showingResults && selectedMaterials.length > 0 && (
+                <button type="button" onClick={clearSelection}>
+                  清除选择
+                </button>
+              )}
+              {showingResults && (
                 <button
                   className="knowledge-research-button"
                   type="button"
-                  onClick={() => onStartResearch(query.trim(), researchSourceCount)}
+                  disabled={selectedMaterials.length === 0 || researchBusy}
+                  onClick={onResearch}
                 >
-                  用这 {researchSourceCount} 份资料开始研究
+                  {researchBusy
+                    ? '正在创建草稿…'
+                    : `用已选资料研究${selectedMaterials.length > 0 ? `（${selectedMaterials.length}）` : ''}`}
                 </button>
               )}
             </div>
@@ -155,12 +178,21 @@ export function KnowledgePage({
               />
             ) : (
               <ViewContainer mode="list">
-                {items.map(({ document, excerpt, locator }) => (
+                {items.map(({ document, excerpt, locator, hit }) => (
                   <KnowledgeDocumentCard
                     key={`${document.id}-${locator ?? 'document'}`}
                     document={document}
                     {...(excerpt ? { excerpt } : {})}
                     {...(locator ? { locator } : {})}
+                    {...(hit
+                      ? {
+                          select: {
+                            checked: isSelected(hit),
+                            onToggle: (checked: boolean) => toggleSelect(hit, checked),
+                            label: `选择「${document.title}」用于研究`,
+                          },
+                        }
+                      : {})}
                     busy={importing}
                     onOpen={() =>
                       reportAction(

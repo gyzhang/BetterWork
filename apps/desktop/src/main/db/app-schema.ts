@@ -1467,6 +1467,23 @@ export const appMigrations: readonly Migration[] = [
       );
     },
   },
+  {
+    version: 31,
+    name: 'KM03 research draft operation receipts',
+    up(db: Database.Database): void {
+      // 知识契约 §4：研究草稿幂等回执；prompt 保存在回执里，不发明第二个 TaskContext。
+      db.exec(`
+        CREATE TABLE research_draft_operations (
+          operation_id TEXT PRIMARY KEY,
+          input_hash TEXT NOT NULL,
+          task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          context_id TEXT NOT NULL REFERENCES task_context_revisions(id) ON DELETE CASCADE,
+          prompt TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+      `);
+    },
+  },
 ];
 
 /**

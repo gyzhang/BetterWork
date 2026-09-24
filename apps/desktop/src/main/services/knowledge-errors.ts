@@ -7,7 +7,8 @@ export type KnowledgeErrorCode =
   | 'KNOWLEDGE_AUDIT_FAILED'
   | 'KNOWLEDGE_DOCUMENT_REMOVED'
   | 'PARSER_NONDETERMINISTIC'
-  | 'EXTRACTION_LIMIT_EXCEEDED';
+  | 'EXTRACTION_LIMIT_EXCEEDED'
+  | 'OPERATION_CONFLICT';
 
 export class KnowledgeServiceError extends Error {
   constructor(
