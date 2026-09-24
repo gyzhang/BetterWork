@@ -252,7 +252,9 @@ export function MemoryEditor({
       ...(until === undefined ? {} : { validUntil: until }),
       // 重新表述路径的来源就是用户此刻提交的人工表单，不沿用资料选择器（§3.2）。
       ...(restating || sourceSelector === undefined ? {} : { sourceSelector }),
-      asUserInstruction: globalTarget || restating,
+      // §5.3：人工表单没有选择片段时，正文自身就是来源——必须声明为用户口径，
+      // 否则工作空间范围的保存会被服务判成「缺来源」。只有带选择器时才走资料派生。
+      asUserInstruction: sourceSelector === undefined || restating,
       ...(globalTarget && genericDeclaration ? { genericDeclaration: true } : {}),
       // §5.3：重新表述留下的审计线索只指回被重述的那条修订，不声明任何资料依赖已核实。
       ...(restateFrom === undefined ? {} : { fromMemoryRevisionId: restateFrom.revisionId }),

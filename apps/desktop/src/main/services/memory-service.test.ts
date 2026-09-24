@@ -118,6 +118,29 @@ describe('MemoryService', () => {
     });
   });
 
+  it('工作空间范围的手工表单保存：正文即来源，不再被要求补来源选择器', async () => {
+    const { service, store } = await setup();
+    const root = await mkdtemp(path.join(os.tmpdir(), 'betterwork-memory-ws-'));
+    const workspaceId = store.workspaces.getOrCreate(root, '经营分析').id;
+
+    const created = await service.create({
+      operationId: randomUUID(),
+      content: '收入按回款到账金额统计，不使用签约金额。',
+      facet: 'constraint',
+      scope: { kind: 'workspace', workspaceId },
+      asUserInstruction: true,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const memory = created.data.currentMemory;
+    if (memory?.provenance.verification !== 'verified')
+      throw new Error('手工表单来源必须 verified');
+    expect(memory.provenance.authority).toBe('user-instruction');
+    expect(memory.provenance.originWorkspaceId).toBe(workspaceId);
+    expect(memory.provenance.sources[0]?.kind).toBe('manual');
+    expect(memory.provenance.materialDependencies).toEqual([]);
+  });
+
   it('refuses credential-looking content without persisting it', async () => {
     const { service, store } = await setup();
     const secret = 'API_KEY=sk-abcdefghijklmnopqrstuvwxyz012345';

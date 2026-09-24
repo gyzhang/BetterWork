@@ -160,7 +160,8 @@ describe('MemoryPage', () => {
       content: '交付前检查引用。',
       facet: 'method',
       scope: { kind: 'workspace', workspaceId: 'workspace-1' },
-      asUserInstruction: false,
+      // 手工表单＝正文即来源（契约 §5.3）：不带选择器却声明 false 会被服务判 SOURCE_REVIEW_REQUIRED。
+      asUserInstruction: true,
     });
   });
 
