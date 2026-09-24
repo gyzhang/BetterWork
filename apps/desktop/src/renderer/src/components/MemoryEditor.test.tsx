@@ -91,6 +91,16 @@ describe('MemoryEditor 重新表述路径', () => {
     expect(submission.request.sourceSelector).toBeUndefined();
   });
 
+  // 契约 §5.1 的议题上限要在界面上看得见，但计数一旦排在输入框下面就会把整列撑高，
+  // 同一行的分类／适用范围／日期就不再对齐——所以计数必须待在场内。
+  it('议题计数待在场内而不是把整行顶歪', () => {
+    const onSubmit = vi.fn().mockResolvedValue(true);
+    renderEditor(onSubmit);
+    const wrapper = screen.getByLabelText('议题标识').parentElement;
+    expect(wrapper?.className).toBe('memory-editor-counted');
+    expect(wrapper?.querySelector('small')?.textContent).toBe('0 / 80');
+  });
+
   it('原样复制资料结论时不提交', () => {
     const onSubmit = vi.fn().mockResolvedValue(true);
     renderEditor(onSubmit);

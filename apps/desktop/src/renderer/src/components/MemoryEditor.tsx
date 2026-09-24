@@ -357,15 +357,17 @@ export function MemoryEditor({
         </label>
         <label>
           <span>议题（可选）</span>
-          <input
-            aria-label="议题标识"
-            value={topicKey}
-            placeholder="例如：收入口径"
-            onChange={(event) => setTopicKey(event.target.value)}
-          />
-          <small className={topicPoints > MEMORY_TOPIC_KEY_MAX_CODE_POINTS ? 'over' : ''}>
-            {topicPoints} / {MEMORY_TOPIC_KEY_MAX_CODE_POINTS}
-          </small>
+          <span className="memory-editor-counted">
+            <input
+              aria-label="议题标识"
+              value={topicKey}
+              placeholder="例如：收入口径"
+              onChange={(event) => setTopicKey(event.target.value)}
+            />
+            <small className={topicPoints > MEMORY_TOPIC_KEY_MAX_CODE_POINTS ? 'over' : ''}>
+              {topicPoints} / {MEMORY_TOPIC_KEY_MAX_CODE_POINTS}
+            </small>
+          </span>
         </label>
         <label>
           <span>生效日期（可选）</span>

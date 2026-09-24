@@ -2887,6 +2887,23 @@ p {
 .memory-editor small.over {
   color: var(--danger);
 }
+
+/* 单行输入的计数放进场内右端：放在下方会把这一列撑高，同一行的控件就不再对齐。 */
+.memory-editor-counted {
+  position: relative;
+  display: block;
+}
+.memory-editor-counted > input {
+  padding-right: 62px;
+}
+.memory-editor-counted > small {
+  position: absolute;
+  top: 50%;
+  right: 9px;
+  line-height: 1;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
 .memory-editor-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
