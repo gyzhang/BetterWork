@@ -114,6 +114,7 @@ import {
   prepareWorkspaceInputSnapshotRequestSchema,
   previewKnowledgeRequestSchema,
   previewMemoryRequestSchema,
+  previewRunSourceRequestSchema,
   rebuildMemoryProjectionRequestSchema,
   recentTaskSummarySchema,
   refreshKnowledgeDocumentRequestSchema,
@@ -130,6 +131,7 @@ import {
   resultSchema,
   retryMemoryJobRequestSchema,
   revokeSkillTrustRequestSchema,
+  runSourcePreviewSchema,
   runSummarySchema,
   saveExpertRevisionRequestSchema,
   saveMarkdownArtifactRequestSchema,
@@ -186,6 +188,7 @@ import { type CredentialProvisioner, type CredentialResolver } from '../services
 import type { DiscussionCheckpointService } from '../services/discussion-checkpoint-service';
 import type { ExpertService } from '../services/expert-service';
 import type { FileArtifactService } from '../services/file-artifact-service';
+import { KnowledgeAudit } from '../services/knowledge-audit';
 import type { KnowledgeVault } from '../services/knowledge-vault';
 import type { McpClientService } from '../services/mcp-client-service';
 import type { MemoryExtractionService } from '../services/memory-extraction-service';
@@ -968,6 +971,13 @@ function registerKnowledgeChannels(deps: IpcDependencies): void {
         input.cursor,
         input.maxCodePoints,
       ),
+  );
+  handleInput(
+    IpcChannel.PreviewRunSource,
+    previewRunSourceRequestSchema,
+    runSourcePreviewSchema,
+    (input) =>
+      new KnowledgeAudit(store, knowledgeVault).previewRunSource(input.runId, input.evidenceId),
   );
   handleInput(
     IpcChannel.CreateResearchDraft,

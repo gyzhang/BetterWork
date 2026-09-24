@@ -1,16 +1,20 @@
 // @vitest-environment jsdom
 
 import type {
+  EvidenceSummary,
+  KnowledgeEvidenceSource,
   MemoryJobSummary,
   MemoryPreviewData,
   MemoryRunContextData,
   MemoryViewItem,
   RunMemoryContext,
+  RunSourcePreview,
+  RunSummary,
   WorkspaceBrief,
 } from '@betterwork/agent-protocol';
 import { memoryRecallPolicyV1 } from '@betterwork/agent-protocol';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { MemorySuggestionsState } from '../hooks/use-memory-suggestions';
 import type { RunMemoriesState, TaskMemoryExclusionState } from '../hooks/use-run-memories';
@@ -451,5 +455,160 @@ describe('ContextPanel 记忆可见性', () => {
     expect(container.textContent).toContain(
       '记忆被修订、排除、失效或材料换版本时，相关旧回答不会继续当作事实使用',
     );
+  });
+});
+
+const knowledgeSource = (
+  overrides?: Partial<KnowledgeEvidenceSource>,
+): KnowledgeEvidenceSource => ({
+  reference: {
+    kind: 'knowledge-revision',
+    knowledgeDocumentId: 'doc-1',
+    knowledgeRevisionId: 'revision-1',
+    contentHash: HASH,
+    sourcePath: '/vault/合同模板.md',
+  },
+  textHash: HASH,
+  span: { sectionOrdinal: 0, start: 10, end: 18 },
+  operation: 'search',
+  ...overrides,
+});
+
+const evidenceOf = (overrides: Partial<EvidenceSummary>): EvidenceSummary => ({
+  id: 'evidence-1',
+  taskId: 'task-1',
+  runId: 'run-1',
+  sourceType: 'local-file',
+  sourceUri: '/vault/合同模板.md',
+  title: '合同模板',
+  locator: '第 1 段',
+  excerpt: '违约金上限为合同金额的百分之二十。',
+  contentHash: HASH,
+  capturedAt: 1,
+  ...overrides,
+});
+
+const runOf = (id: string): RunSummary => ({
+  id,
+  taskId: 'task-1',
+  sessionId: 'session-1',
+  prompt: '审阅合同',
+  status: 'completed',
+  createdAt: 1,
+});
+
+const exactPreview: RunSourcePreview = {
+  kind: 'exact',
+  page: {
+    reference: knowledgeSource().reference,
+    textHash: HASH,
+    title: '合同模板',
+    parserVersion: 'text-extract-v1',
+    chunkingVersion: 'format-locator-v1',
+    warnings: [],
+    parts: [
+      {
+        span: { sectionOrdinal: 0, start: 10, end: 18 },
+        locator: '第 1 段',
+        text: '违约金上限为合同金额的百分之二十。',
+        excerptHash: HASH,
+      },
+    ],
+    returnedCodePoints: 17,
+    complete: true,
+  },
+};
+
+const previewRunSource = vi.fn(async (): Promise<RunSourcePreview> => exactPreview);
+
+beforeAll(() => {
+  Object.defineProperty(window, 'betterwork', {
+    configurable: true,
+    value: { knowledge: { previewRunSource } },
+  });
+});
+
+afterAll(() => {
+  delete (window as { betterwork?: unknown }).betterwork;
+});
+
+describe('ContextPanel 按运行回看来源', () => {
+  const current = evidenceOf({
+    knowledgeSource: knowledgeSource({ operation: 'search' }),
+  });
+  const historical = evidenceOf({
+    id: 'evidence-0',
+    runId: 'run-0',
+    knowledgeSource: knowledgeSource({ operation: 'read' }),
+  });
+  const legacy = evidenceOf({ id: 'evidence-legacy', runId: 'run-0', title: '旧访问记录' });
+
+  it('默认只呈现当前运行，摘要来源与正文来源分开标注，历史折叠需显式展开', () => {
+    const container = renderPanel({
+      tab: 'sources',
+      activeRun: runOf('run-1'),
+      evidence: [current, historical, legacy],
+    });
+    const groups = container.querySelectorAll('.evidence-run-group');
+    expect(groups[0]?.textContent).toContain('本次运行');
+    expect(groups[0]?.textContent).toContain('摘要来源');
+    expect(groups[0]?.textContent).not.toContain('正文来源');
+    expect(groups[0]?.textContent).toContain('修订 revision');
+    const history = groups[1];
+    expect(history?.tagName).toBe('DETAILS');
+    expect(history?.textContent).toContain('历史运行来源 · 2 条');
+    expect(history?.textContent).toContain('旧访问记录');
+    expect(container.querySelector('[role="note"]')).toBeNull();
+  });
+
+  it('查看区间只回看当时返回的正文，止于该区间且不提供续读', async () => {
+    previewRunSource.mockClear();
+    renderPanel({
+      tab: 'sources',
+      activeRun: runOf('run-1'),
+      evidence: [current],
+    });
+    fireEvent.click(screen.getByRole('button', { name: '查看区间' }));
+    await waitFor(() =>
+      expect(previewRunSource).toHaveBeenCalledWith({
+        runId: 'run-1',
+        evidenceId: 'evidence-1',
+      }),
+    );
+    const note = await screen.findByRole('note');
+    expect(note.textContent).toContain('违约金上限为合同金额的百分之二十。');
+    expect(note.textContent).toContain('止于该区间；不提供续读');
+    expect(note.textContent).not.toContain('下一页');
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+    expect(screen.queryByRole('note')).toBeNull();
+  });
+
+  it('旧数据没有精确区间时只标历史范围未记录，不给区间回看入口', () => {
+    renderPanel({
+      tab: 'sources',
+      activeRun: runOf('run-1'),
+      evidence: [legacy],
+    });
+    expect(screen.getByText('旧访问记录')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '查看区间' })).toBeNull();
+    const row = screen.getByText('旧访问记录').closest('.evidence-row');
+    expect(row?.textContent).toContain('历史范围未记录');
+    expect(screen.getByRole('button', { name: '原文' })).toBeTruthy();
+  });
+
+  it('回看失败在内联呈现并允许关闭，不当作成功结果', async () => {
+    previewRunSource.mockRejectedValueOnce(new Error('证据的修订身份与保存文本不一致。'));
+    renderPanel({
+      tab: 'sources',
+      activeRun: runOf('run-1'),
+      evidence: [current],
+    });
+    fireEvent.click(screen.getByRole('button', { name: '查看区间' }));
+    const note = await screen.findByRole('note');
+    expect(note.querySelector('.inline-message.error')?.textContent).toContain(
+      '证据的修订身份与保存文本不一致',
+    );
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+    expect(screen.queryByRole('note')).toBeNull();
   });
 });

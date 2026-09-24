@@ -37,7 +37,7 @@ export function revisionTextHash(sections: readonly KnowledgeSection[]): string 
   return sha256Hex(JSON.stringify(ordered));
 }
 
-function sliceCodePoints(text: string, start: number, end: number): string {
+export function sliceCodePoints(text: string, start: number, end: number): string {
   return Array.from(text).slice(start, end).join('');
 }
 

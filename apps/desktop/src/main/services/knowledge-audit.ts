@@ -10,10 +10,12 @@ import {
   type KnowledgeReadRequest,
   type KnowledgeSearchResult,
   type KnowledgeTextPage,
+  type RunSourcePreview,
 } from '@betterwork/agent-protocol';
 
 import type { AppStore } from '../persistence';
 import { KnowledgeServiceError } from './knowledge-errors';
+import { sha256Hex, sliceCodePoints } from './knowledge-text';
 import type { KnowledgeVault } from './knowledge-vault';
 
 /** Run 工具层可见的搜索条目：正文之外的身份与审计引用。 */
@@ -261,5 +263,78 @@ export class KnowledgeAudit {
         { cause: error },
       );
     }
+  }
+
+  /**
+   * KM04 按运行回看单条证据实际返回过的区间（契约 §3.1）：
+   * 只复用保存文本，不接收游标与额度，不能续读未返回正文；旧来源返回 legacy。
+   */
+  previewRunSource(runId: string, evidenceId: string): RunSourcePreview {
+    const evidence = this.store.evidence.get(evidenceId);
+    if (!evidence || evidence.runId !== runId) {
+      throw new KnowledgeServiceError(
+        'KNOWLEDGE_REVISION_MISMATCH',
+        '来源证据不存在或不属于本次运行。',
+      );
+    }
+    const source = evidence.knowledgeSource;
+    if (!source) return { kind: 'legacy', evidence };
+    const snapshot = this.store.runContextSnapshots.get(runId);
+    const inScope =
+      snapshot?.materials.some(
+        (selection) =>
+          selection.reference.kind === 'knowledge-revision' &&
+          sameReference(selection.reference, source.reference),
+      ) ?? false;
+    if (!inScope) {
+      throw new KnowledgeServiceError(
+        'KNOWLEDGE_REVISION_MISMATCH',
+        '证据引用的修订不在该运行的材料快照内。',
+      );
+    }
+    const revision = this.vault.getRevision(source.reference.knowledgeRevisionId);
+    if (
+      !revision ||
+      revision.documentId !== source.reference.knowledgeDocumentId ||
+      revision.contentHash !== source.reference.contentHash ||
+      revision.sourcePath !== source.reference.sourcePath ||
+      revision.textHash !== source.textHash
+    ) {
+      throw new KnowledgeServiceError(
+        'KNOWLEDGE_REVISION_MISMATCH',
+        '证据的修订身份与保存文本不一致。',
+      );
+    }
+    const section = revision.chunks.find((chunk) => chunk.ordinal === source.span.sectionOrdinal);
+    const text = section
+      ? sliceCodePoints(section.content, source.span.start, source.span.end)
+      : '';
+    if (!section || text !== evidence.excerpt) {
+      throw new KnowledgeServiceError(
+        'KNOWLEDGE_REVISION_MISMATCH',
+        '保存文本与证据区间不一致，拒绝伪造精确预览。',
+      );
+    }
+    return {
+      kind: 'exact',
+      page: {
+        reference: source.reference,
+        textHash: source.textHash,
+        title: revision.title,
+        parserVersion: revision.parserVersion,
+        chunkingVersion: revision.chunkingVersion,
+        warnings: revision.warnings,
+        parts: [
+          {
+            span: source.span,
+            locator: section.locator,
+            text,
+            excerptHash: sha256Hex(text),
+          },
+        ],
+        returnedCodePoints: countCodePoints(text),
+        complete: true,
+      },
+    };
   }
 }

@@ -3,8 +3,9 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import type { KnowledgeMaterialReference } from '@betterwork/agent-protocol';
+import type { KnowledgeMaterialReference, TaskMaterialSelection } from '@betterwork/agent-protocol';
 import { KNOWLEDGE_RUN_READ_BUDGET_CODE_POINTS } from '@betterwork/agent-protocol';
+import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { AppStore } from '../persistence';
@@ -20,7 +21,8 @@ afterEach(async () => {
 const setup = async (fileContent: string) => {
   const directory = await mkdtemp(path.join(tmpdir(), 'betterwork-audit-'));
   const store = AppStore.open(':memory:');
-  const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
+  const vaultPath = path.join(directory, 'vault.sqlite');
+  const vault = new KnowledgeVault(vaultPath);
   const notePath = path.join(directory, '资料.md');
   await writeFile(notePath, fileContent);
   await vault.importPaths([notePath]);
@@ -60,7 +62,19 @@ const setup = async (fileContent: string) => {
     materials: [reference],
     ...overrides,
   });
-  return { store, vault, audit, reference, revision, runId, taskId: created.task.id, context };
+  return {
+    store,
+    vault,
+    vaultPath,
+    audit,
+    reference,
+    revision,
+    runId,
+    sessionId: created.sessionId,
+    taskId: created.task.id,
+    workspaceId: workspace.id,
+    context,
+  };
 };
 
 const longContent = '续'.repeat(300);
@@ -245,5 +259,129 @@ describe('KnowledgeAudit.readForRun', () => {
     expect(fixture.store.materialReads.readCodePointsUsed(fixture.runId)).toBe(
       KNOWLEDGE_RUN_READ_BUDGET_CODE_POINTS,
     );
+  });
+});
+
+describe('KnowledgeAudit.previewRunSource', () => {
+  const material = (reference: KnowledgeMaterialReference): TaskMaterialSelection => ({
+    reference,
+    purpose: 'background',
+    addedFrom: 'user-input',
+  });
+
+  const addSnapshot = (
+    fixture: Awaited<ReturnType<typeof setup>>,
+    materials: TaskMaterialSelection[],
+    runId = fixture.runId,
+  ): void => {
+    fixture.store.runContextSnapshots.create({
+      runId,
+      taskId: fixture.taskId,
+      workspaceId: fixture.workspaceId,
+      contextSegmentId: randomUUID(),
+      materials,
+      createdAt: Date.now(),
+    });
+  };
+
+  it('shows the exact searched span again, ending at the span with no continuation', async () => {
+    const fixture = await setup(`${longContent}甲。${longContent}乙。`);
+    addSnapshot(fixture, [material(fixture.reference)]);
+    const outcome = fixture.audit.searchForRun(fixture.context(), '乙');
+    const evidenceId = outcome.results[0]?.evidenceId;
+    if (!evidenceId) throw new Error('expected audited search evidence');
+    const preview = fixture.audit.previewRunSource(fixture.runId, evidenceId);
+    expect(preview.kind).toBe('exact');
+    if (preview.kind !== 'exact') return;
+    expect(preview.page.complete).toBe(true);
+    expect(preview.page.nextCursor).toBeUndefined();
+    expect(preview.page.parts).toHaveLength(1);
+    const part = preview.page.parts[0];
+    expect(part?.text).toBe(outcome.results[0]?.excerpt);
+    expect(part?.span).toEqual(outcome.results[0]?.span);
+    expect(preview.page.returnedCodePoints).toBe(Array.from(part?.text ?? '').length);
+    // 回看只读：不留下新的证据或足迹
+    expect(fixture.store.materialReads.listByRun(fixture.runId)).toHaveLength(1);
+    expect(fixture.store.evidence.listByTask(fixture.taskId)).toHaveLength(1);
+  });
+
+  it('returns legacy evidence unchanged instead of fabricating a span', async () => {
+    const fixture = await setup('续约风险跟进。');
+    fixture.store.evidence.saveLocal({
+      runId: fixture.runId,
+      taskId: fixture.taskId,
+      sourceUri: '/tmp/旧资料.md',
+      title: '旧资料',
+      locator: '全文',
+      excerpt: '没有精确区间的旧记录',
+      contentHash: 'legacy-hash',
+    });
+    const legacy = fixture.store.evidence.listByTask(fixture.taskId)[0];
+    if (!legacy) throw new Error('legacy evidence missing');
+    const preview = fixture.audit.previewRunSource(fixture.runId, legacy.id);
+    expect(preview.kind).toBe('legacy');
+    if (preview.kind !== 'legacy') return;
+    expect(preview.evidence.id).toBe(legacy.id);
+    expect(preview.evidence.knowledgeSource).toBeUndefined();
+  });
+
+  it('rejects evidence from another run and a revision outside the snapshot', async () => {
+    const fixture = await setup('续约风险跟进。');
+    addSnapshot(fixture, [material(fixture.reference)]);
+    const outcome = fixture.audit.searchForRun(fixture.context(), '续约');
+    const evidenceId = outcome.results[0]?.evidenceId;
+    if (!evidenceId) throw new Error('expected audited search evidence');
+    const otherRunId = randomUUID();
+    fixture.store.runs.create({
+      id: otherRunId,
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '另一个运行',
+      status: 'completed',
+      createdAt: Date.now(),
+    });
+    try {
+      fixture.audit.previewRunSource(otherRunId, evidenceId);
+      expect.unreachable();
+    } catch (error) {
+      expect((error as KnowledgeServiceError).code).toBe('KNOWLEDGE_REVISION_MISMATCH');
+    }
+    // 同 Run 但材料快照被换掉：精确来源仍要拒绝，回看不扩大范围
+    const emptyScopeRunId = randomUUID();
+    fixture.store.runs.create({
+      id: emptyScopeRunId,
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '无材料运行',
+      status: 'completed',
+      createdAt: Date.now(),
+    });
+    addSnapshot(fixture, [], emptyScopeRunId);
+    try {
+      fixture.audit.previewRunSource(emptyScopeRunId, evidenceId);
+      expect.unreachable();
+    } catch (error) {
+      expect((error as KnowledgeServiceError).code).toBe('KNOWLEDGE_REVISION_MISMATCH');
+    }
+  });
+
+  it('refuses to fake an exact preview when saved text no longer matches the evidence', async () => {
+    const fixture = await setup('续约风险跟进。');
+    addSnapshot(fixture, [material(fixture.reference)]);
+    const outcome = fixture.audit.searchForRun(fixture.context(), '续约');
+    const evidenceId = outcome.results[0]?.evidenceId;
+    if (!evidenceId) throw new Error('expected audited search evidence');
+    // 模拟保存文本与证据区间脱节（例如索引库被外部破坏）：只能拒绝，不能拼一个假区间
+    const external = new Database(fixture.vaultPath);
+    external
+      .prepare('UPDATE knowledge_revision_chunks SET content = ? WHERE revision_id = ?')
+      .run('这段正文与证据摘录不一致', fixture.revision.id);
+    external.close();
+    try {
+      fixture.audit.previewRunSource(fixture.runId, evidenceId);
+      expect.unreachable();
+    } catch (error) {
+      expect((error as KnowledgeServiceError).code).toBe('KNOWLEDGE_REVISION_MISMATCH');
+    }
   });
 });

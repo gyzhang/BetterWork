@@ -3908,6 +3908,43 @@ p {
   color: var(--brand);
   border-color: var(--brand);
 }
+.evidence-run-group {
+  margin-top: 10px;
+}
+.evidence-run-group > strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.evidence-run-group > summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.evidence-preview {
+  margin: 6px 0 10px;
+  padding: 9px 10px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+.evidence-preview ul {
+  margin: 6px 0;
+  padding-left: 16px;
+}
+.evidence-preview li small {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.evidence-preview li p {
+  margin: 2px 0 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
 .artifact-row-clickable {
   width: 100%;
   cursor: pointer;

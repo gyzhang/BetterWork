@@ -309,6 +309,38 @@ describe('registerIpc', () => {
     expect(mocks.openPath).not.toHaveBeenCalled();
   });
 
+  it('previews a legacy run source through validated IPC and rejects malformed requests', async () => {
+    await expect(invoke(IpcChannel.PreviewRunSource, { runId: 'only-run' })).rejects.toThrow();
+    const workspace = store.workspaces.getOrCreate(temporaryDirectory, '回看来源');
+    const created = store.tasks.create(workspace.id, '来源回看', 'KM04 通道校验');
+    const runId = randomUUID();
+    store.runs.create({
+      id: runId,
+      taskId: created.task.id,
+      sessionId: created.sessionId,
+      prompt: '测试',
+      status: 'completed',
+      createdAt: Date.now(),
+    });
+    store.evidence.saveLocal({
+      runId,
+      taskId: created.task.id,
+      sourceUri: path.join(temporaryDirectory, 'legacy.md'),
+      title: '旧来源',
+      locator: '全文',
+      excerpt: '改造前的访问记录',
+      contentHash: 'legacy-hash',
+    });
+    const evidence = store.evidence.listByTask(created.task.id)[0];
+    if (!evidence) throw new Error('legacy evidence missing');
+    await expect(
+      invoke(IpcChannel.PreviewRunSource, { runId, evidenceId: evidence.id }),
+    ).resolves.toMatchObject({ kind: 'legacy', evidence: { id: evidence.id } });
+    await expect(
+      invoke(IpcChannel.PreviewRunSource, { runId: randomUUID(), evidenceId: evidence.id }),
+    ).rejects.toThrow();
+  });
+
   it('rejects a malformed handler result before it can cross the IPC boundary', async () => {
     const original = store.models.list.bind(store.models);
     Object.defineProperty(store.models, 'list', {

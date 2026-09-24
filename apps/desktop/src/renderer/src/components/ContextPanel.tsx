@@ -2,6 +2,7 @@ import type {
   AgentRuntimeEvent,
   ArtifactSummary,
   EvidenceSummary,
+  KnowledgeEvidenceSource,
   MaterialCandidate,
   McpConnectionSummary,
   McpToolBinding,
@@ -16,11 +17,12 @@ import type {
   WorkspaceBriefOpenIssue,
   WorkspaceReferenceListItem,
 } from '@betterwork/agent-protocol';
-import { useCallback, useState } from 'react';
+import { Fragment, useCallback, useState } from 'react';
 
 import type { ActivityGroup } from '../activity';
 import type { MemorySuggestionsState } from '../hooks/use-memory-suggestions';
 import type { RunMemoriesState, TaskMemoryExclusionState } from '../hooks/use-run-memories';
+import { useRunSourcePreview } from '../hooks/use-run-source-preview';
 import type { WorkspaceBriefState } from '../hooks/use-workspace-brief';
 import {
   ArtifactIcon,
@@ -394,57 +396,12 @@ export function ContextPanel({
                   </div>
                 )}
               </section>
-              {evidence.length === 0 ? (
-                <EmptyContext
-                  title="尚无已查阅来源"
-                  detail="本次运行实际读取的本地资料、网页与 MCP 来源会显示在这里。"
-                />
-              ) : (
-                <div className="evidence-list">
-                  {evidence.map((item) => {
-                    const isWeb = item.sourceType === 'web-page';
-                    const isMcp = item.sourceType === 'mcp-tool';
-                    const Icon = isWeb ? GlobeIcon : isMcp ? CapabilityIcon : KnowledgeIcon;
-                    const sourceLabel = isWeb ? '网页来源' : isMcp ? 'MCP 工具' : '本地资料';
-                    return (
-                      <article className="evidence-row" key={item.id}>
-                        <span aria-hidden="true">
-                          <Icon size={12} />
-                        </span>
-                        <div>
-                          <strong>{item.title}</strong>
-                          <small>
-                            {item.locator} · {sourceLabel}
-                          </small>
-                          <p>{item.excerpt}</p>
-                        </div>
-                        {!isWeb && !isMcp && (
-                          <button
-                            className="evidence-open-button"
-                            onClick={() =>
-                              reportAction(
-                                onOpenSource(item.sourceUri).then(() =>
-                                  setSourceToast({
-                                    tone: 'success',
-                                    message: `已打开「${item.title}」的原始资料。`,
-                                  }),
-                                ),
-                                (errorMessage) =>
-                                  setSourceToast({
-                                    tone: 'error',
-                                    message: errorMessage || '无法打开原始资料。',
-                                  }),
-                              )
-                            }
-                          >
-                            原文
-                          </button>
-                        )}
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
+              <EvidenceSection
+                key={activeRun?.id ?? 'task'}
+                evidence={evidence}
+                activeRunId={activeRun?.id}
+                onOpenSource={onOpenSource}
+              />
             </>
           )}
           {tab === 'artifacts' &&
@@ -481,6 +438,177 @@ export function ContextPanel({
       </aside>
       {sourceToast && <TransientToast {...sourceToast} onDismiss={dismissSourceToast} />}
     </>
+  );
+}
+
+/** 知识 Evidence 的访问类型标签：搜索摘要与正文读取分开呈现（契约 §5.1）。 */
+const knowledgeOperationLabel: Record<KnowledgeEvidenceSource['operation'], string> = {
+  search: '摘要来源',
+  read: '正文来源',
+};
+
+/**
+ * 已查阅来源（KM04）：默认只呈现当前 Run，历史运行折叠显式展开；
+ * 精确知识来源可回看当时实际返回的区间，legacy 与旧数据只标注范围未记录，
+ * 不伪造 span、不提供续读入口。「原文」走主进程白名单，与区间回看是两件事。
+ */
+function EvidenceSection({
+  evidence,
+  activeRunId,
+  onOpenSource,
+}: {
+  evidence: EvidenceSummary[];
+  activeRunId: string | undefined;
+  onOpenSource: (sourcePath: string) => Promise<void>;
+}): React.JSX.Element {
+  const [sourceToast, setSourceToast] = useState<{ tone: ToastTone; message: string }>();
+  const dismissSourceToast = useCallback(() => setSourceToast(undefined), []);
+  const runSource = useRunSourcePreview();
+  const current = activeRunId ? evidence.filter((item) => item.runId === activeRunId) : [];
+  const historical = activeRunId
+    ? evidence.filter((item) => item.runId !== activeRunId)
+    : [...evidence];
+
+  const openSourceWithToast = (item: EvidenceSummary): void => {
+    reportAction(
+      onOpenSource(item.sourceUri).then(() =>
+        setSourceToast({ tone: 'success', message: `已打开「${item.title}」的原始资料。` }),
+      ),
+      (errorMessage) =>
+        setSourceToast({ tone: 'error', message: errorMessage || '无法打开原始资料。' }),
+    );
+  };
+
+  const renderRow = (item: EvidenceSummary): React.JSX.Element => {
+    const isWeb = item.sourceType === 'web-page';
+    const isMcp = item.sourceType === 'mcp-tool';
+    const Icon = isWeb ? GlobeIcon : isMcp ? CapabilityIcon : KnowledgeIcon;
+    const knowledge = item.knowledgeSource;
+    const sourceLabel = isWeb
+      ? '网页来源'
+      : isMcp
+        ? 'MCP 工具'
+        : knowledge
+          ? knowledgeOperationLabel[knowledge.operation]
+          : '本地资料 · 历史范围未记录';
+    const isPreviewing = runSource.selectedEvidenceId === item.id;
+    return (
+      <Fragment key={item.id}>
+        <article className="evidence-row">
+          <span aria-hidden="true">
+            <Icon size={12} />
+          </span>
+          <div>
+            <strong>{item.title}</strong>
+            <small>
+              {item.locator} · {sourceLabel}
+              {knowledge
+                ? ` · 修订 ${knowledge.reference.knowledgeRevisionId.slice(0, 8)} · 第 ${knowledge.span.sectionOrdinal + 1} 段 ${knowledge.span.start}–${knowledge.span.end} 字`
+                : ''}
+            </small>
+            <p>{item.excerpt}</p>
+          </div>
+          {knowledge && (
+            <button
+              className="evidence-open-button"
+              onClick={() => runSource.previewRunSource(item.runId, item.id)}
+            >
+              {isPreviewing && runSource.loading ? '正在回看…' : '查看区间'}
+            </button>
+          )}
+          {!isWeb && !isMcp && (
+            <button className="evidence-open-button" onClick={() => openSourceWithToast(item)}>
+              原文
+            </button>
+          )}
+        </article>
+        {isPreviewing && <EvidencePreview state={runSource} onClose={runSource.close} />}
+      </Fragment>
+    );
+  };
+
+  return (
+    <>
+      {evidence.length === 0 ? (
+        <EmptyContext
+          title="尚无已查阅来源"
+          detail="本次运行实际读取的本地资料、网页与 MCP 来源会显示在这里。"
+        />
+      ) : (
+        <>
+          <div className="evidence-run-group">
+            <strong>{activeRunId ? '本次运行' : '任务来源'}</strong>
+            {current.length === 0 ? (
+              <p className="context-hint">
+                {activeRunId ? '本次运行还没有登记已查阅来源。' : '尚未开始运行。'}
+              </p>
+            ) : (
+              <div className="evidence-list">{current.map((item) => renderRow(item))}</div>
+            )}
+          </div>
+          {historical.length > 0 && (
+            <details className="evidence-run-group">
+              <summary>历史运行来源 · {historical.length} 条</summary>
+              <div className="evidence-list">{historical.map((item) => renderRow(item))}</div>
+            </details>
+          )}
+        </>
+      )}
+      {sourceToast && <TransientToast {...sourceToast} onDismiss={dismissSourceToast} />}
+    </>
+  );
+}
+
+function EvidencePreview({
+  state,
+  onClose,
+}: {
+  state: ReturnType<typeof useRunSourcePreview>;
+  onClose: () => void;
+}): React.JSX.Element {
+  const { loading, error, preview } = state;
+  return (
+    <div className="evidence-preview" role="note">
+      {loading ? (
+        <p className="context-hint">正在回看当时返回的区间…</p>
+      ) : error ? (
+        <>
+          <p className="inline-message error">{error}</p>
+          <button type="button" onClick={onClose}>
+            关闭
+          </button>
+        </>
+      ) : preview === undefined ? null : preview.kind === 'exact' ? (
+        <>
+          <p className="context-note">
+            「{preview.page.title}」固定修订{' '}
+            {preview.page.reference.knowledgeRevisionId.slice(0, 8)} · 共返回{' '}
+            {preview.page.returnedCodePoints} 字，止于该区间；不提供续读。
+          </p>
+          {preview.page.warnings.length > 0 && (
+            <p className="context-note">解析提示：{preview.page.warnings.join('、')}</p>
+          )}
+          <ul>
+            {preview.page.parts.map((part) => (
+              <li key={`${part.span.sectionOrdinal}-${part.span.start}-${part.span.end}`}>
+                <small>
+                  {part.locator} · 第 {part.span.sectionOrdinal + 1} 段 {part.span.start}–
+                  {part.span.end} 字
+                </small>
+                <p>{part.text}</p>
+              </li>
+            ))}
+          </ul>
+          <button type="button" onClick={onClose}>
+            关闭
+          </button>
+        </>
+      ) : (
+        <p className="context-note">
+          这条来源没有记录精确区间（历史数据），只能查看摘录与本机原文。
+        </p>
+      )}
+    </div>
   );
 }
 

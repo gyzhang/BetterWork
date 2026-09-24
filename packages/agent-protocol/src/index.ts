@@ -3599,6 +3599,18 @@ export type KnowledgeResearchDraftResult = z.infer<typeof knowledgeResearchDraft
 export const listKnowledgeRevisionsRequestSchema = z.object({ documentId: z.string().min(1) });
 export type ListKnowledgeRevisionsRequest = z.infer<typeof listKnowledgeRevisionsRequestSchema>;
 
+export const previewRunSourceRequestSchema = z
+  .object({ runId: z.string().min(1), evidenceId: z.string().min(1) })
+  .strict();
+export type PreviewRunSourceRequest = z.infer<typeof previewRunSourceRequestSchema>;
+
+/** 回看单条证据实际返回过的区间：精确来源止于 span、无续页；旧来源不推测位置（契约 §3.1）。 */
+export const runSourcePreviewSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('exact'), page: knowledgeTextPageSchema }).strict(),
+  z.object({ kind: z.literal('legacy'), evidence: evidenceSummarySchema }).strict(),
+]);
+export type RunSourcePreview = z.infer<typeof runSourcePreviewSchema>;
+
 export const previewKnowledgeRequestSchema = z
   .object({
     documentId: z.string().min(1),
@@ -3902,6 +3914,7 @@ export const IpcChannel = {
   ListKnowledgeRevisions: 'knowledge:list-revisions',
   PreviewKnowledge: 'knowledge:preview',
   CreateResearchDraft: 'knowledge:create-research-draft',
+  PreviewRunSource: 'knowledge:preview-run-source',
   ListSearchEngines: 'search:list',
   SaveSearchEngine: 'search:save',
   TestSearchEngine: 'search:test',
@@ -4052,6 +4065,7 @@ export interface BetterWorkDesktopApi {
     createResearchDraft(
       input: KnowledgeCreateResearchDraftRequest,
     ): Promise<KnowledgeResearchDraftResult>;
+    previewRunSource(input: PreviewRunSourceRequest): Promise<RunSourcePreview>;
   };
   skills: {
     list(): Promise<SkillSummary[]>;

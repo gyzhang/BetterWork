@@ -70,6 +70,7 @@ import {
   prepareWorkspaceInputSnapshotRequestSchema,
   previewKnowledgeRequestSchema,
   previewMemoryRequestSchema,
+  previewRunSourceRequestSchema,
   rebuildMemoryProjectionRequestSchema,
   refreshSkillDependencyGrantRequestSchema,
   refreshSkillDependencyGrantResultSchema,
@@ -80,6 +81,7 @@ import {
   resultSchema,
   retryMemoryJobRequestSchema,
   revokeSkillTrustRequestSchema,
+  runSourcePreviewSchema,
   saveExpertRevisionRequestSchema,
   saveMcpConnectionRequestSchema,
   saveSkillRuntimeProfileRequestSchema,
@@ -246,6 +248,12 @@ const api: BetterWorkDesktopApi = {
         IpcChannel.CreateResearchDraft,
         knowledgeCreateResearchDraftRequestSchema.parse(input),
         knowledgeResearchDraftResultSchema,
+      ),
+    previewRunSource: (input) =>
+      invokeValidated(
+        IpcChannel.PreviewRunSource,
+        previewRunSourceRequestSchema.parse(input),
+        runSourcePreviewSchema,
       ),
   },
   skills: {
