@@ -7,6 +7,7 @@ import {
   KNOWLEDGE_PAGE_MAX_PARTS,
   type KnowledgeCursor,
   type KnowledgeMaterialReference,
+  type KnowledgeSpan,
   type KnowledgeTextPage,
   type KnowledgeTextPagePart,
   type KnowledgeWarningCode,
@@ -38,6 +39,36 @@ export function revisionTextHash(sections: readonly KnowledgeSection[]): string 
 
 function sliceCodePoints(text: string, start: number, end: number): string {
   return Array.from(text).slice(start, end).join('');
+}
+
+/**
+ * 精确可回算的搜索摘要（知识契约 §5.1/§9.2）：text 必为 section 原文子串，
+ * span 与 excerptHash 与之严格对应，供 Evidence 与 previewRunSource 回放。
+ */
+export function makeSpanExcerpt(
+  content: string,
+  query: string,
+  sectionOrdinal: number,
+  maxCodePoints = 400,
+): { text: string; span: KnowledgeSpan; excerptHash: string } {
+  const chars = Array.from(content);
+  const lower = chars.map((char) => char.toLocaleLowerCase()).join('');
+  const terms = query
+    .trim()
+    .toLocaleLowerCase()
+    .split(/[\s\p{P}]+/u)
+    .filter(Boolean);
+  let anchor = -1;
+  for (const term of terms.length > 0 ? terms : [query.trim().toLocaleLowerCase()]) {
+    if (!term) continue;
+    const index = lower.indexOf(term);
+    if (index >= 0 && (anchor < 0 || index < anchor)) anchor = index;
+  }
+  const anchorCp = anchor < 0 ? 0 : Math.min(anchor, chars.length - 1);
+  const start = Math.max(0, anchorCp - 80);
+  const end = Math.min(chars.length, Math.max(start + 1, start + maxCodePoints, anchorCp + 1));
+  const text = chars.slice(start, end).join('');
+  return { text, span: { sectionOrdinal, start, end }, excerptHash: sha256Hex(text) };
 }
 
 export interface KnowledgeTextPageInput {

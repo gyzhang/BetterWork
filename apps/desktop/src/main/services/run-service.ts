@@ -32,6 +32,7 @@ import {
   calculatorTool,
   createArtifactReadTool,
   createArtifactRegisterFileTool,
+  createKnowledgeReadTool,
   createKnowledgeSearchTool,
   createReadOfficeMaterialTool,
   createReadTextFileTool,
@@ -40,7 +41,8 @@ import {
   createTaskWriteFileTool,
   createWebFetchTool,
   createWebSearchTool,
-  type KnowledgeSearchItem,
+  type KnowledgeRunRead,
+  type KnowledgeSearch,
   type OfficeMaterialReader,
   type ReadOfficeMaterialInput,
   type ReadTextFile,
@@ -70,6 +72,7 @@ import { API_KEY_SLOT, CredentialError } from '../persistence/credential-reposit
 import type { CredentialResolver } from './credential-access';
 import type { FileArtifactService } from './file-artifact-service';
 import type { InputSnapshotService } from './input-snapshot-service';
+import { KnowledgeAudit, type KnowledgeRunAuditContext } from './knowledge-audit';
 import type { KnowledgeVault } from './knowledge-vault';
 import type { McpClientService } from './mcp-client-service';
 import { withRunMemoryAudit } from './memory-dispatch-gate';
@@ -318,7 +321,8 @@ const officeFormatFromMimeType = (mimeType: string): OfficeFormat => {
  * Skill 工具只在提供对应依赖时注册：无绑定的 Run 不需要它们。
  */
 export const createRunTools = (dependencies: {
-  knowledgeSearch: (query: string) => KnowledgeSearchItem[];
+  knowledgeSearch: KnowledgeSearch;
+  readKnowledge?: KnowledgeRunRead;
   readTextFile?: ReadTextFile;
   artifactReader?: ArtifactReader;
   webSearch?: WebSearch;
@@ -345,6 +349,8 @@ export const createRunTools = (dependencies: {
   }
   if (allows('knowledge_search'))
     tools.push(createKnowledgeSearchTool(dependencies.knowledgeSearch));
+  if (dependencies.readKnowledge && allows('read_knowledge'))
+    tools.push(createKnowledgeReadTool(dependencies.readKnowledge));
   if (dependencies.artifactReader && allows('read_artifact'))
     tools.push(createArtifactReadTool(dependencies.artifactReader));
   if (dependencies.webSearch && allows('web_search'))
@@ -415,6 +421,13 @@ export class RunService {
   private readonly consumePromises = new Map<string, Promise<void>>();
   private readonly engine = new ReActAgentEngine();
   private readonly fallbackModel = new FakeModelProvider();
+  private knowledgeAuditInstance: KnowledgeAudit | undefined;
+
+  /** 审计服务惰性装配：参数属性在构造体内先于字段完成赋值。 */
+  private get knowledgeAudit(): KnowledgeAudit {
+    this.knowledgeAuditInstance ??= new KnowledgeAudit(this.store, this.knowledgeVault);
+    return this.knowledgeAuditInstance;
+  }
 
   constructor(
     private readonly store: AppStore,
@@ -645,7 +658,16 @@ export class RunService {
         messages: this.buildPreviousMessages(executionContext, memory),
         model,
         tools: createRunTools({
-          knowledgeSearch: (query) => this.searchKnowledge(query, executionContext),
+          knowledgeSearch: (query, toolContext) =>
+            this.knowledgeAudit.searchForRun(
+              this.knowledgeAuditContext(executionContext, toolContext, input.taskId),
+              query,
+            ),
+          readKnowledge: (request, toolContext) =>
+            this.knowledgeAudit.readForRun(
+              this.knowledgeAuditContext(executionContext, toolContext, input.taskId),
+              request,
+            ),
           ...(executionContext.materialScope && this.inputSnapshots
             ? {
                 readTextFile: this.createScopedReadTextFile(
@@ -842,6 +864,7 @@ export class RunService {
         lines.push(
           `${index + 1}. 知识修订「${reference.sourcePath}」【${purpose}】`,
           `   - 使用 knowledge_search；检索范围已限制为 knowledgeRevisionId="${reference.knowledgeRevisionId}"。`,
+          `   - 需要正文时使用 read_knowledge，reference 必须逐字复制上面这条知识修订的材料引用（knowledgeDocumentId="${reference.knowledgeDocumentId}"，knowledgeRevisionId="${reference.knowledgeRevisionId}"，contentHash="${reference.contentHash}"，sourcePath="${reference.sourcePath}"），用 nextCursor 继续分页。`,
         );
         continue;
       }
@@ -855,18 +878,21 @@ export class RunService {
     return { id: randomUUID(), role: 'system', content: lines.join('\n') };
   }
 
-  private searchKnowledge(query: string, context: ResolvedRunContext): KnowledgeSearchItem[] {
-    const revisionIds = context.materials
-      .filter((selection) => selection.reference.kind === 'knowledge-revision')
-      .map((selection) =>
-        selection.reference.kind === 'knowledge-revision'
-          ? selection.reference.knowledgeRevisionId
-          : '',
-      )
-      .filter(Boolean);
-    return this.knowledgeVault
-      .search(query, context.materialScope ? { revisionIds } : undefined)
-      .map(({ document, locator, excerpt }) => ({ ...document, locator, excerpt }));
+  private knowledgeAuditContext(
+    context: ResolvedRunContext,
+    toolContext: { runId: string; toolCallId: string; signal: AbortSignal },
+    taskId: string,
+  ): KnowledgeRunAuditContext {
+    return {
+      runId: toolContext.runId,
+      taskId,
+      toolCallId: toolContext.toolCallId,
+      signal: toolContext.signal,
+      materialScope: context.materialScope,
+      materials: context.materials.flatMap((selection) =>
+        selection.reference.kind === 'knowledge-revision' ? [selection.reference] : [],
+      ),
+    };
   }
 
   private resolveContextSegment(
@@ -1074,6 +1100,15 @@ export class RunService {
       );
       return;
     }
+    if (toolName === 'read_knowledge' && isKnowledgeReadOutput(event.output)) {
+      active.materialFacts.materialReadCount += 1;
+      // 事实池只用工具实际返回的正文片段（契约 §5.2）。
+      recordMaterialFacts(
+        active.materialFacts,
+        event.output.parts.map((part) => part.text).join('\n'),
+      );
+      return;
+    }
     if (toolName === 'analyze_business_metrics') {
       recordMaterialFacts(active.materialFacts, serializeToolOutput(event.output));
     }
@@ -1238,6 +1273,15 @@ export class RunService {
     );
   }
 
+  private assertAuditedKnowledgeEvidence(runId: string, evidenceIds: (string | undefined)[]): void {
+    for (const evidenceId of evidenceIds) {
+      if (!evidenceId) continue;
+      if (this.store.evidence.get(evidenceId)?.runId !== runId) {
+        throw new Error('Knowledge evidence does not belong to this run');
+      }
+    }
+  }
+
   private persistEvidence(
     taskId: string,
     event: Extract<AgentRuntimeEvent, { type: 'tool.completed' }>,
@@ -1245,18 +1289,18 @@ export class RunService {
   ): void {
     const toolName = toolNames.get(event.toolCallId);
     if (toolName === 'knowledge_search' && isKnowledgeSearchOutput(event.output)) {
-      const output = event.output;
-      for (const result of output.results) {
-        this.store.evidence.saveLocal({
-          taskId,
-          runId: event.runId,
-          sourceUri: result.sourcePath,
-          title: result.title,
-          locator: result.locator,
-          excerpt: result.excerpt,
-          contentHash: result.contentHash,
-        });
-      }
+      // 搜索回调已在同事务内落审计；通用消费者只核验归属，不再第二次插入。
+      this.assertAuditedKnowledgeEvidence(
+        event.runId,
+        event.output.results.map((result) => result.evidenceId),
+      );
+      return;
+    }
+    if (toolName === 'read_knowledge' && isKnowledgeReadOutput(event.output)) {
+      this.assertAuditedKnowledgeEvidence(
+        event.runId,
+        event.output.parts.map((part) => part.evidenceId),
+      );
       return;
     }
     if (toolName === 'web_search' && isWebSearchOutput(event.output)) {
@@ -1311,39 +1355,8 @@ export class RunService {
     const snapshot = this.store.runContextSnapshots.get(event.runId);
     if (!snapshot) return;
     const toolName = toolNames.get(event.toolCallId);
-    if (toolName === 'knowledge_search' && isKnowledgeSearchOutput(event.output)) {
-      for (const result of event.output.results) {
-        const selectedMaterial = snapshot.materials.find(
-          (selection) =>
-            selection.reference.kind === 'knowledge-revision' &&
-            selection.reference.sourcePath === result.sourcePath &&
-            selection.reference.contentHash === result.contentHash,
-        )?.reference;
-        const revision =
-          selectedMaterial?.kind === 'knowledge-revision'
-            ? undefined
-            : this.knowledgeVault.findRevisionBySource(result.sourcePath, result.contentHash);
-        const material: MaterialReference | undefined =
-          selectedMaterial ??
-          (snapshot.taskContextRevisionId || !revision
-            ? undefined
-            : {
-                kind: 'knowledge-revision',
-                knowledgeDocumentId: revision.documentId,
-                knowledgeRevisionId: revision.id,
-                contentHash: revision.contentHash,
-                sourcePath: revision.sourcePath,
-              });
-        if (!material) continue;
-        this.saveMaterialRead(
-          event.runId,
-          material,
-          'search',
-          result.locator,
-          result.contentHash,
-          result.excerpt,
-        );
-      }
+    if (toolName === 'knowledge_search' || toolName === 'read_knowledge') {
+      // 精确足迹由 KnowledgeAudit 在工具执行事务内写入，这里不再重复记录。
       return;
     }
     if (toolName === 'read_text_file' && isReadTextFileOutput(event.output)) {
@@ -1945,7 +1958,18 @@ interface KnowledgeSearchOutputItem {
   locator: string;
   excerpt: string;
   contentHash: string;
+  evidenceId?: string;
 }
+
+interface KnowledgeReadOutputPart {
+  evidenceId: string;
+  text: string;
+}
+
+const isKnowledgeReadOutput = (value: unknown): value is { parts: KnowledgeReadOutputPart[] } =>
+  isRecord(value) &&
+  Array.isArray(value.parts) &&
+  value.parts.every((part) => isRecord(part) && isString(part.evidenceId) && isString(part.text));
 
 const isKnowledgeSearchOutput = (
   value: unknown,

@@ -53,6 +53,12 @@ export function summarizeToolOutput(
       const found = countResults(output);
       return found === undefined ? '已检索个人资料库' : `找到 ${found} 份相关资料`;
     }
+    case 'read_knowledge': {
+      if (message) return message;
+      const parts =
+        isRecord(output) && Array.isArray(output.parts) ? output.parts.length : undefined;
+      return parts === undefined ? '已读取资料正文' : `已读取 ${parts} 段资料正文`;
+    }
     case 'web_search': {
       if (message) return message;
       const found = countResults(output);

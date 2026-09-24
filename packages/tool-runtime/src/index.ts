@@ -3,6 +3,7 @@ export * from './business-metrics';
 export * from './calculator';
 export * from './knowledge-search';
 export * from './read-artifact';
+export * from './read-knowledge';
 export * from './read-office-material';
 export * from './read-text-file';
 export * from './skill-execute';

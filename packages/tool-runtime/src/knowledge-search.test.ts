@@ -17,6 +17,7 @@ describe('createKnowledgeSearchTool', () => {
         id: String(index),
         title: `资料 ${index}`,
         sourcePath: `/notes/${index}.md`,
+        contentHash: `hash-${index}`,
         format: 'markdown' as const,
         locator: '全文',
         excerpt: '相关片段',
@@ -27,7 +28,7 @@ describe('createKnowledgeSearchTool', () => {
       message: string;
       results: Array<{ title: string; sourcePath: string }>;
     };
-    expect(output).toMatchObject({ query: '市场', message: '找到 8 份相关资料。' });
+    expect(output).toMatchObject({ query: '市场', message: '找到 8 条相关资料摘要。' });
     expect(output.results).toHaveLength(8);
     expect(output.results[0]).toMatchObject({ title: '资料 0', sourcePath: '/notes/0.md' });
   });

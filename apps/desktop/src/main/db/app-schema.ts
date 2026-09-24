@@ -1380,6 +1380,93 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 30,
+    name: 'KM02 exact knowledge evidence and footprints',
+    up(db: Database.Database): void {
+      // 知识契约 §5.1/§13.2：Evidence 增加精确来源与去重键，旧 unique 拆成两组部分唯一索引；
+      // run_material_reads 重建以移除表级 UNIQUE(run_id,material_key,operation,locator)，
+      // 允许同段后续页；旧行不回填虚构 toolCall/span。
+      rebuildTable(
+        db,
+        'evidence',
+        `CREATE TABLE evidence (
+          id TEXT PRIMARY KEY,
+          task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+          source_type TEXT NOT NULL,
+          source_uri TEXT NOT NULL,
+          title TEXT NOT NULL,
+          locator TEXT NOT NULL,
+          excerpt TEXT NOT NULL,
+          content_hash TEXT NOT NULL,
+          captured_at INTEGER NOT NULL,
+          knowledge_source_json TEXT,
+          dedupe_key TEXT
+        )`,
+        [
+          'id',
+          'task_id',
+          'run_id',
+          'source_type',
+          'source_uri',
+          'title',
+          'locator',
+          'excerpt',
+          'content_hash',
+          'captured_at',
+        ],
+        [
+          'CREATE UNIQUE INDEX evidence_run_uri_locator ON evidence(run_id, source_uri, locator) WHERE knowledge_source_json IS NULL',
+          'CREATE UNIQUE INDEX evidence_knowledge_dedupe ON evidence(run_id, dedupe_key) WHERE knowledge_source_json IS NOT NULL',
+        ],
+      );
+      rebuildTable(
+        db,
+        'run_material_reads',
+        `CREATE TABLE run_material_reads (
+          id TEXT PRIMARY KEY,
+          run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+          material_json TEXT NOT NULL,
+          material_key TEXT NOT NULL,
+          operation TEXT NOT NULL CHECK (operation IN ('preview', 'search', 'read', 'parse')),
+          locator TEXT,
+          content_hash TEXT NOT NULL,
+          excerpt_hash TEXT,
+          captured_at INTEGER NOT NULL,
+          tool_call_id TEXT,
+          knowledge_part_index INTEGER CHECK (knowledge_part_index IS NULL OR knowledge_part_index >= 0),
+          knowledge_span_json TEXT,
+          text_hash TEXT,
+          evidence_id TEXT REFERENCES evidence(id) ON DELETE CASCADE,
+          CHECK (
+            (evidence_id IS NULL AND tool_call_id IS NULL AND knowledge_part_index IS NULL
+              AND knowledge_span_json IS NULL AND text_hash IS NULL)
+              OR
+            (evidence_id IS NOT NULL AND tool_call_id IS NOT NULL AND knowledge_part_index IS NOT NULL
+              AND knowledge_span_json IS NOT NULL AND text_hash IS NOT NULL
+              AND operation IN ('search', 'read'))
+          )
+        )`,
+        [
+          'id',
+          'run_id',
+          'material_json',
+          'material_key',
+          'operation',
+          'locator',
+          'content_hash',
+          'excerpt_hash',
+          'captured_at',
+        ],
+        [
+          'CREATE INDEX idx_run_material_reads_run ON run_material_reads(run_id, captured_at ASC)',
+          'CREATE UNIQUE INDEX run_material_reads_knowledge_part ON run_material_reads(run_id, tool_call_id, knowledge_part_index) WHERE evidence_id IS NOT NULL',
+          'CREATE UNIQUE INDEX run_material_reads_legacy_key ON run_material_reads(run_id, material_key, operation, locator) WHERE evidence_id IS NULL',
+        ],
+      );
+    },
+  },
 ];
 
 /**

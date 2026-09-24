@@ -298,6 +298,38 @@ export const materialReferenceSchema = z.discriminatedUnion('kind', [
 ]);
 export type MaterialReference = z.infer<typeof materialReferenceSchema>;
 
+/** section 内容上的码点半开区间 [start, end)，见知识契约 §2.3。 */
+export const knowledgeSpanSchema = z
+  .object({
+    sectionOrdinal: z.number().int().nonnegative(),
+    start: z.number().int().nonnegative(),
+    end: z.number().int().positive(),
+  })
+  .strict();
+export type KnowledgeSpan = z.infer<typeof knowledgeSpanSchema>;
+
+/** 仅定位已保存文本，不是授权 token；服务必须独立验证修订与调用域（契约 §3.1）。 */
+export const knowledgeCursorSchema = z
+  .object({
+    revisionId: z.string().min(1),
+    textHash: z.string().min(1),
+    sectionOrdinal: z.number().int().nonnegative(),
+    offset: z.number().int().nonnegative(),
+  })
+  .strict();
+export type KnowledgeCursor = z.infer<typeof knowledgeCursorSchema>;
+
+/** 知识 Evidence 的精确来源（契约 §5.1）：固定修订 + 实际返回范围 + 访问类型。 */
+export const knowledgeEvidenceSourceSchema = z
+  .object({
+    reference: knowledgeMaterialReferenceSchema,
+    textHash: z.string().min(1),
+    span: knowledgeSpanSchema,
+    operation: z.enum(['search', 'read']),
+  })
+  .strict();
+export type KnowledgeEvidenceSource = z.infer<typeof knowledgeEvidenceSourceSchema>;
+
 export const expertReferenceMaterialSchema = z
   .object({
     reference: materialReferenceSchema,
@@ -490,8 +522,36 @@ export const runMaterialReadSchema = z
     contentHash: z.string().min(1),
     excerptHash: z.string().min(1).optional(),
     capturedAt: z.number().int().nonnegative(),
+    // 知识契约 §5.1：新知识足迹要求这组字段全部存在；旧行保留原形状。
+    toolCallId: z.string().min(1).optional(),
+    knowledgePartIndex: z.number().int().nonnegative().optional(),
+    knowledgeSpan: knowledgeSpanSchema.optional(),
+    textHash: z.string().min(1).optional(),
+    evidenceId: z.string().min(1).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((read, context) => {
+    const group = [
+      read.toolCallId,
+      read.knowledgePartIndex,
+      read.knowledgeSpan,
+      read.textHash,
+      read.evidenceId,
+    ];
+    const present = group.filter((value) => value !== undefined).length;
+    if (present > 0 && present < group.length) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Knowledge footprint fields must all be present together',
+      });
+    }
+    if (present === group.length && read.operation !== 'search' && read.operation !== 'read') {
+      context.addIssue({
+        code: 'custom',
+        message: 'Knowledge footprints only record search or read operations',
+      });
+    }
+  });
 export type RunMaterialRead = z.infer<typeof runMaterialReadSchema>;
 
 /** §5.1：正文、摘录与预算都按 Unicode code point 计数；Zod 的 max() 数的是 UTF-16 单元。 */
@@ -2828,6 +2888,8 @@ export interface KnowledgeSearchResult {
   reference: KnowledgeMaterialReference;
   /** 命中所在修订的提取文本哈希。 */
   textHash: string;
+  span?: KnowledgeSpan;
+  excerptHash?: string;
 }
 
 export interface EvidenceSummary {
@@ -2841,6 +2903,7 @@ export interface EvidenceSummary {
   excerpt: string;
   contentHash: string;
   capturedAt: number;
+  knowledgeSource?: KnowledgeEvidenceSource;
 }
 
 export type ArtifactVersionOrigin = 'assistant-run' | 'user-edit';
@@ -3288,6 +3351,7 @@ export const evidenceSummarySchema = z.object({
   excerpt: z.string(),
   contentHash: z.string().min(1),
   capturedAt: z.number().int().nonnegative(),
+  knowledgeSource: knowledgeEvidenceSourceSchema.optional(),
 });
 export const markdownArtifactSummarySchema = z.object({
   id: z.string().min(1),
@@ -3413,6 +3477,9 @@ export const knowledgeSearchResultSchema = z.object({
   excerpt: z.string(),
   reference: knowledgeMaterialReferenceSchema,
   textHash: z.string().min(1),
+  // 摘要必须能回算到 section 的精确码点范围（KM02 Run 审计使用；KM08 两入口统一）。
+  span: knowledgeSpanSchema.optional(),
+  excerptHash: z.string().min(1).optional(),
 });
 export const knowledgeRefreshResultSchema = z.object({
   refreshed: knowledgeDocumentSummarySchema.optional(),
@@ -3425,33 +3492,18 @@ export const KNOWLEDGE_PAGE_DEFAULT_CODE_POINTS = 4_000;
 export const KNOWLEDGE_PAGE_MAX_CODE_POINTS = 8_000;
 export const KNOWLEDGE_PAGE_MAX_PARTS = 20;
 
+/** Run 正文累计读取预算（知识契约 §2.2）：按每次实际返回码点计。 */
+export const KNOWLEDGE_RUN_READ_BUDGET_CODE_POINTS = 60_000;
+export const KNOWLEDGE_SEARCH_TOOL_MAX_RESULTS = 8;
+export const KNOWLEDGE_SEARCH_SUMMARY_MAX_CODE_POINTS = 400;
+export const KNOWLEDGE_SEARCH_CANDIDATE_LIMIT = 50;
+
 export const knowledgeWarningCodeSchema = z.enum([
   'formula-without-cached-result',
   'truncated',
   'unsupported-feature',
 ]);
 export type KnowledgeWarningCode = z.infer<typeof knowledgeWarningCodeSchema>;
-
-/** section 内容上的码点半开区间 [start, end)，见契约 §2.3。 */
-export const knowledgeSpanSchema = z
-  .object({
-    sectionOrdinal: z.number().int().nonnegative(),
-    start: z.number().int().nonnegative(),
-    end: z.number().int().positive(),
-  })
-  .strict();
-export type KnowledgeSpan = z.infer<typeof knowledgeSpanSchema>;
-
-/** 仅定位已保存文本，不是授权 token；服务必须独立验证修订与调用域。 */
-export const knowledgeCursorSchema = z
-  .object({
-    revisionId: z.string().min(1),
-    textHash: z.string().min(1),
-    sectionOrdinal: z.number().int().nonnegative(),
-    offset: z.number().int().nonnegative(),
-  })
-  .strict();
-export type KnowledgeCursor = z.infer<typeof knowledgeCursorSchema>;
 
 export const knowledgeRevisionSummarySchema = z.object({
   id: z.string().min(1),
@@ -3507,6 +3559,15 @@ export const knowledgeTextPageSchema = z
     }
   });
 export type KnowledgeTextPage = z.infer<typeof knowledgeTextPageSchema>;
+
+export const knowledgeReadRequestSchema = z
+  .object({
+    reference: knowledgeMaterialReferenceSchema,
+    cursor: knowledgeCursorSchema.optional(),
+    maxCodePoints: z.number().int().min(1).max(KNOWLEDGE_PAGE_MAX_CODE_POINTS).optional(),
+  })
+  .strict();
+export type KnowledgeReadRequest = z.infer<typeof knowledgeReadRequestSchema>;
 
 export const listKnowledgeRevisionsRequestSchema = z.object({ documentId: z.string().min(1) });
 export type ListKnowledgeRevisionsRequest = z.infer<typeof listKnowledgeRevisionsRequestSchema>;

@@ -1,4 +1,5 @@
 import {
+  knowledgeSpanSchema,
   type MaterialReference,
   materialReferenceSchema,
   type RunMaterialRead,
@@ -16,6 +17,11 @@ interface RunMaterialReadRow {
   content_hash: string;
   excerpt_hash: string | null;
   captured_at: number;
+  tool_call_id: string | null;
+  knowledge_part_index: number | null;
+  knowledge_span_json: string | null;
+  text_hash: string | null;
+  evidence_id: string | null;
 }
 
 interface RunContextMaterialRow {
@@ -81,6 +87,13 @@ const toRead = (row: RunMaterialReadRow): RunMaterialRead =>
     contentHash: row.content_hash,
     ...(row.excerpt_hash ? { excerptHash: row.excerpt_hash } : {}),
     capturedAt: row.captured_at,
+    ...(row.tool_call_id ? { toolCallId: row.tool_call_id } : {}),
+    ...(row.knowledge_part_index === null ? {} : { knowledgePartIndex: row.knowledge_part_index }),
+    ...(row.knowledge_span_json
+      ? { knowledgeSpan: JSON.parse(row.knowledge_span_json) as unknown }
+      : {}),
+    ...(row.text_hash ? { textHash: row.text_hash } : {}),
+    ...(row.evidence_id ? { evidenceId: row.evidence_id } : {}),
   });
 
 export class RunMaterialReadRepository {
@@ -111,6 +124,67 @@ export class RunMaterialReadRepository {
       }
     }
     const materialJsonKey = JSON.stringify(parsed.material);
+    if (parsed.evidenceId) {
+      // 新知识足迹：同 toolCall 同序号重复消费时整组核验一致才复用；内容不同必须失败，
+      // 不用 INSERT OR IGNORE 掩盖不同内容（契约 §5.2）。
+      const existing = this.db
+        .prepare(
+          `SELECT id, content_hash, excerpt_hash, text_hash, knowledge_span_json, operation, material_json
+             FROM run_material_reads
+            WHERE run_id = ? AND tool_call_id = ? AND knowledge_part_index = ?`,
+        )
+        .get(parsed.runId, parsed.toolCallId, parsed.knowledgePartIndex) as
+        | {
+            id: string;
+            content_hash: string;
+            excerpt_hash: string | null;
+            text_hash: string | null;
+            knowledge_span_json: string | null;
+            operation: string;
+            material_json: string;
+          }
+        | undefined;
+      if (existing) {
+        const sameGroup =
+          existing.content_hash === parsed.contentHash &&
+          (existing.excerpt_hash ?? '') === (parsed.excerptHash ?? '') &&
+          (existing.text_hash ?? '') === (parsed.textHash ?? '') &&
+          existing.knowledge_span_json === JSON.stringify(parsed.knowledgeSpan) &&
+          existing.operation === parsed.operation &&
+          existing.material_json === materialJsonKey;
+        if (!sameGroup) {
+          throw new Error(
+            'Knowledge footprint conflict: same tool call slot holds different content',
+          );
+        }
+        return;
+      }
+      this.db
+        .prepare(
+          `INSERT INTO run_material_reads (
+             id, run_id, material_json, material_key, operation, locator,
+             content_hash, excerpt_hash, captured_at,
+             tool_call_id, knowledge_part_index, knowledge_span_json, text_hash, evidence_id
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          parsed.id,
+          parsed.runId,
+          materialJsonKey,
+          materialKey(parsed.material),
+          parsed.operation,
+          parsed.locator ?? null,
+          parsed.contentHash,
+          parsed.excerptHash ?? null,
+          parsed.capturedAt,
+          parsed.toolCallId ?? null,
+          parsed.knowledgePartIndex ?? null,
+          parsed.knowledgeSpan ? JSON.stringify(parsed.knowledgeSpan) : null,
+          parsed.textHash ?? null,
+          parsed.evidenceId,
+        );
+      return;
+    }
     this.db
       .prepare(
         `INSERT OR IGNORE INTO run_material_reads (
@@ -129,6 +203,23 @@ export class RunMaterialReadRepository {
         parsed.excerptHash ?? null,
         parsed.capturedAt,
       );
+  }
+
+  /** Run 累计正文用量：新精确足迹中 operation=read 的 span 长度之和（契约 §5.2）。 */
+  readCodePointsUsed(runId: string): number {
+    const rows = this.db
+      .prepare(
+        `SELECT knowledge_span_json FROM run_material_reads
+          WHERE run_id = ? AND operation = 'read' AND evidence_id IS NOT NULL`,
+      )
+      .all(runId) as Array<{ knowledge_span_json: string | null }>;
+    let total = 0;
+    for (const row of rows) {
+      if (!row.knowledge_span_json) continue;
+      const span = knowledgeSpanSchema.parse(JSON.parse(row.knowledge_span_json));
+      total += span.end - span.start;
+    }
+    return total;
   }
 
   listByRun(runId: string): RunMaterialRead[] {

@@ -543,7 +543,58 @@ describe('RunService', () => {
     ).toBe(true);
   });
 
-  it('records local knowledge search results as task evidence', async () => {
+  it('registers read_knowledge by default and respects the Expert allow-list', () => {
+    const tools = createRunTools({
+      knowledgeSearch: () => ({ results: [] }),
+      readKnowledge: () => ({
+        reference: {
+          kind: 'knowledge-revision',
+          knowledgeDocumentId: 'd',
+          knowledgeRevisionId: 'r',
+          contentHash: 'h',
+          sourcePath: '/a.md',
+        },
+        textHash: 't',
+        title: 'A',
+        parserVersion: 'p',
+        chunkingVersion: 'c',
+        warnings: [],
+        parts: [],
+        returnedCodePoints: 0,
+        complete: true,
+        remainingRunCodePoints: 0,
+      }),
+    });
+    expect(tools.map((tool) => tool.name)).toContain('read_knowledge');
+    const restricted = createRunTools({
+      knowledgeSearch: () => ({ results: [] }),
+      readKnowledge: () => ({
+        reference: {
+          kind: 'knowledge-revision',
+          knowledgeDocumentId: 'd',
+          knowledgeRevisionId: 'r',
+          contentHash: 'h',
+          sourcePath: '/a.md',
+        },
+        textHash: 't',
+        title: 'A',
+        parserVersion: 'p',
+        chunkingVersion: 'c',
+        warnings: [],
+        parts: [],
+        returnedCodePoints: 0,
+        complete: true,
+        remainingRunCodePoints: 0,
+      }),
+      allowedBuiltinToolNames: new Set(['knowledge_search']),
+    });
+    expect(restricted.map((tool) => tool.name)).not.toContain('read_knowledge');
+    expect(
+      createRunTools({ knowledgeSearch: () => ({ results: [] }) }).map((tool) => tool.name),
+    ).not.toContain('read_knowledge');
+  });
+
+  it('KM02 gives legacy runs without a material scope explained empty search, not full-vault access', async () => {
     const fixture = await createFixture();
     const note = path.join(fixture.directory, '客户资料.md');
     await writeFile(note, '客户续约风险需要在季度复盘中重点跟进。');
@@ -557,13 +608,14 @@ describe('RunService', () => {
     });
     await waitForCompletion(fixture, runId);
 
-    expect(fixture.store.evidence.listByTask(fixture.taskId)).toEqual([
-      expect.objectContaining({ runId, title: '客户资料', locator: '全文', sourceUri: note }),
-    ]);
-    expect(fixture.store.materialReads.listByRun(runId)).toEqual([
-      expect.objectContaining({ runId, operation: 'search', locator: '全文' }),
-    ]);
+    // 无 TaskContext 的旧兼容 Run 不再隐式全库搜索，也不留下任何证据或足迹。
+    expect(fixture.store.evidence.listByTask(fixture.taskId)).toEqual([]);
+    expect(fixture.store.materialReads.listByRun(runId)).toEqual([]);
     expect(statusOf(fixture, runId)).toBe('completed');
+    const toolEvent = fixture.store.runs
+      .listEvents(runId)
+      .find((event) => event.type === 'tool.completed');
+    expect(JSON.stringify(toolEvent?.output ?? '')).toContain('没有固定材料范围');
   });
 
   it('limits knowledge search to the exact revisions selected in the TaskContext', async () => {
@@ -609,9 +661,42 @@ describe('RunService', () => {
     await waitForCompletion(fixture, runId);
 
     expect(statusOf(fixture, runId)).toBe('completed');
-    expect(fixture.store.evidence.listByTask(fixture.taskId)).toEqual([
-      expect.objectContaining({ runId, sourceUri: selectedPath }),
+    const evidence = fixture.store.evidence.listByTask(fixture.taskId);
+    expect(evidence).toEqual([
+      expect.objectContaining({
+        runId,
+        sourceUri: selectedPath,
+        knowledgeSource: expect.objectContaining({
+          operation: 'search',
+          reference: expect.objectContaining({ knowledgeRevisionId: selectedRevision.id }),
+          textHash: selectedRevision.textHash,
+          span: expect.objectContaining({ start: expect.any(Number), end: expect.any(Number) }),
+        }),
+      }),
     ]);
+    const footprint = fixture.store.materialReads.listByRun(runId);
+    expect(footprint).toEqual([
+      expect.objectContaining({
+        runId,
+        operation: 'search',
+        toolCallId: expect.any(String),
+        knowledgePartIndex: 0,
+        textHash: selectedRevision.textHash,
+        evidenceId: evidence[0]?.id,
+      }),
+    ]);
+    // 摘要与 span 严格对应同一修订文本
+    if (evidence[0]?.knowledgeSource) {
+      const { span } = evidence[0].knowledgeSource;
+      const section = selectedRevision
+        ? fixture.vault.getRevision(selectedRevision.id)?.chunks[0]
+        : undefined;
+      expect(evidence[0].excerpt).toBe(
+        Array.from(section?.content ?? '')
+          .slice(span.start, span.end)
+          .join(''),
+      );
+    }
   });
 
   it('rejects a direct workspace file read when the file was not selected', async () => {

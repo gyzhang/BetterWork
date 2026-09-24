@@ -5,6 +5,8 @@ import path from 'node:path';
 import {
   countCodePoints,
   KNOWLEDGE_REVISION_MAX_TEXT_CODE_POINTS,
+  KNOWLEDGE_SEARCH_CANDIDATE_LIMIT,
+  KNOWLEDGE_SEARCH_SUMMARY_MAX_CODE_POINTS,
   type KnowledgeCursor,
   type KnowledgeDocumentSummary,
   type KnowledgeFormat,
@@ -22,7 +24,7 @@ import { z } from 'zod';
 
 import { openKnowledgeDatabase } from '../db';
 import { KnowledgeServiceError } from './knowledge-errors';
-import { readKnowledgeTextPage, revisionTextHash } from './knowledge-text';
+import { makeSpanExcerpt, readKnowledgeTextPage, revisionTextHash } from './knowledge-text';
 
 const parserVersion = 'text-extract-v1';
 const chunkingVersion = 'format-locator-v1';
@@ -171,18 +173,20 @@ export class KnowledgeVault {
       terms.length > 0
         ? (this.db
             .prepare(
-              `SELECT ${hitColumns} FROM knowledge_fts f JOIN knowledge_chunks c ON c.id = f.chunk_id JOIN knowledge_documents d ON d.id = f.document_id WHERE knowledge_fts MATCH ? ORDER BY rank LIMIT 50`,
+              `SELECT ${hitColumns} FROM knowledge_fts f JOIN knowledge_chunks c ON c.id = f.chunk_id JOIN knowledge_documents d ON d.id = f.document_id WHERE knowledge_fts MATCH ? ORDER BY rank LIMIT ?`,
             )
-            .all(terms.join(' AND ')) as Array<KnowledgeRow & { locator: string; content: string }>)
+            .all(terms.join(' AND '), KNOWLEDGE_SEARCH_CANDIDATE_LIMIT) as Array<
+            KnowledgeRow & { locator: string; content: string }
+          >)
         : [];
     const fallback =
       rows.length > 0
         ? rows
         : (this.db
             .prepare(
-              `SELECT ${hitColumns} FROM knowledge_chunks c JOIN knowledge_documents d ON d.id = c.document_id WHERE d.title LIKE ? OR c.content LIKE ? ORDER BY d.updated_at DESC, c.ordinal ASC LIMIT 50`,
+              `SELECT ${hitColumns} FROM knowledge_chunks c JOIN knowledge_documents d ON d.id = c.document_id WHERE d.title LIKE ? OR c.content LIKE ? ORDER BY d.updated_at DESC, c.ordinal ASC LIMIT ?`,
             )
-            .all(`%${query}%`, `%${query}%`) as Array<
+            .all(`%${query}%`, `%${query}%`, KNOWLEDGE_SEARCH_CANDIDATE_LIMIT) as Array<
             KnowledgeRow & { locator: string; content: string }
           >);
     const results: KnowledgeSearchResult[] = [];
@@ -243,6 +247,12 @@ export class KnowledgeVault {
       for (const chunk of revision.chunks) {
         const haystack = `${revision.title}\n${chunk.content}`.toLocaleLowerCase();
         if (!terms.every((term) => haystack.includes(term))) continue;
+        const excerpt = makeSpanExcerpt(
+          chunk.content,
+          query,
+          chunk.ordinal,
+          KNOWLEDGE_SEARCH_SUMMARY_MAX_CODE_POINTS,
+        );
         results.push({
           document: {
             id: revision.documentId,
@@ -256,7 +266,7 @@ export class KnowledgeVault {
             updatedAt: revision.createdAt,
           },
           locator: chunk.locator,
-          excerpt: makeExcerpt(chunk.content, query),
+          excerpt: excerpt.text,
           reference: {
             kind: 'knowledge-revision',
             knowledgeDocumentId: revision.documentId,
@@ -265,8 +275,10 @@ export class KnowledgeVault {
             sourcePath: revision.sourcePath,
           },
           textHash: revision.textHash,
+          span: excerpt.span,
+          excerptHash: excerpt.excerptHash,
         });
-        if (results.length >= 50) return results;
+        if (results.length >= KNOWLEDGE_SEARCH_CANDIDATE_LIMIT) return results;
       }
     }
     return results;

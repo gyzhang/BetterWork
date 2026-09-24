@@ -33,6 +33,7 @@ const BUILTIN_TOOL_NAMES = new Set([
   'read_text_file',
   'read_artifact',
   'knowledge_search',
+  'read_knowledge',
   'web_search',
   'web_fetch',
   'read_office_material',

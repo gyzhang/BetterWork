@@ -101,6 +101,7 @@ describe('ReActAgentEngine', () => {
             id: 'doc-1',
             title: '客户访谈',
             sourcePath: '/notes/customer.md',
+            contentHash: 'hash-1',
             format: 'markdown',
             locator: '全文',
             excerpt: '续约风险需要季度复盘。',
