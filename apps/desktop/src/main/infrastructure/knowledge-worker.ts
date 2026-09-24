@@ -26,6 +26,33 @@ const failure = (id: string, requestNonce: string, code: string, message: string
   writeLine({ id, nonce: requestNonce, kind: 'error', code, message: message.slice(0, 500) });
 };
 
+const float32From = (encoded: string): Float32Array => {
+  const bytes = Buffer.from(encoded, 'base64');
+  return new Float32Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 4));
+};
+
+/** 归一化向量的点积即 cosine；只回本批 top 50，全局 top 50 必在其并集内。 */
+function scanBatch(
+  query: Float32Array,
+  dimension: number,
+  entries: ReadonlyArray<{ chunkId: string; vectorBase64: string }>,
+): Array<{ chunkId: string; score: number }> {
+  const scores = entries.map((entry) => {
+    const vector = float32From(entry.vectorBase64);
+    if (vector.length !== dimension) {
+      throw new Error(`向量维度与空间不符：${entry.chunkId}`);
+    }
+    let dot = 0;
+    for (let index = 0; index < dimension; index += 1) {
+      dot += (query[index] ?? 0) * (vector[index] ?? 0);
+    }
+    return { chunkId: entry.chunkId, score: dot };
+  });
+  return scores
+    .sort((left, right) => right.score - left.score || left.chunkId.localeCompare(right.chunkId))
+    .slice(0, 50);
+}
+
 async function handleLine(line: string): Promise<void> {
   if (!line.trim()) return;
   let raw: unknown;
@@ -58,6 +85,28 @@ async function handleLine(line: string): Promise<void> {
   if (request.data.op === 'shutdown') {
     writeLine({ id: request.data.id, nonce, kind: 'shutdown' });
     process.exit(0);
+  }
+  if (request.data.op === 'scan') {
+    try {
+      const query = float32From(request.data.queryBase64);
+      if (query.length !== request.data.dimension) {
+        throw new Error('查询向量维度与空间不符。');
+      }
+      writeLine({
+        id: request.data.id,
+        nonce,
+        kind: 'scores',
+        scores: scanBatch(query, request.data.dimension, request.data.entries),
+      });
+    } catch (error) {
+      failure(
+        request.data.id,
+        nonce,
+        'WORKER_SCAN_FAILED',
+        error instanceof Error ? error.message : '向量扫描失败。',
+      );
+    }
+    return;
   }
   try {
     const document = await extractDocument(

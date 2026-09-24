@@ -3,7 +3,7 @@ import type {
   KnowledgeJobSummary,
   KnowledgeResearchDraftMaterial,
   KnowledgeResearchDraftResult,
-  KnowledgeSearchResult,
+  KnowledgeSearchHit,
 } from '@betterwork/agent-protocol';
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 
@@ -11,7 +11,7 @@ import { describeActionError, trackAction } from '../lib/async-action';
 
 export interface KnowledgeLibrary {
   documents: KnowledgeDocumentSummary[];
-  results: KnowledgeSearchResult[];
+  results: KnowledgeSearchHit[];
   query: string;
   setQuery: (query: string) => void;
   message: string;
@@ -30,8 +30,8 @@ export interface KnowledgeLibrary {
   onRemove: (document: KnowledgeDocumentSummary) => Promise<void>;
   /** KM03：当前搜索结果中被勾选的固定修订材料（默认用途 background）。 */
   selectedMaterials: KnowledgeResearchDraftMaterial[];
-  isSelected: (result: KnowledgeSearchResult) => boolean;
-  toggleSelect: (result: KnowledgeSearchResult, checked: boolean) => void;
+  isSelected: (result: KnowledgeSearchHit) => boolean;
+  toggleSelect: (result: KnowledgeSearchHit, checked: boolean) => void;
   selectAllResults: () => void;
   clearSelection: () => void;
   researchBusy: boolean;
@@ -52,7 +52,7 @@ export interface KnowledgeLibrary {
  */
 export function useKnowledgeLibrary(): KnowledgeLibrary {
   const [documents, setDocuments] = useState<KnowledgeDocumentSummary[]>([]);
-  const [results, setResults] = useState<KnowledgeSearchResult[]>([]);
+  const [results, setResults] = useState<KnowledgeSearchHit[]>([]);
   const [query, setQuery] = useState('');
   const [message, setMessage] = useState('');
   const [issues, setIssues] = useState<string[]>([]);
@@ -185,14 +185,14 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     return unsubscribe;
   }, [reportJob]);
 
-  const materialKey = (result: KnowledgeSearchResult): string =>
+  const materialKey = (result: KnowledgeSearchHit): string =>
     `${result.reference.knowledgeDocumentId}:${result.reference.knowledgeRevisionId}`;
 
   const isSelected = useCallback(
-    (result: KnowledgeSearchResult): boolean => selected.has(materialKey(result)),
+    (result: KnowledgeSearchHit): boolean => selected.has(materialKey(result)),
     [selected],
   );
-  const toggleSelect = useCallback((result: KnowledgeSearchResult, checked: boolean): void => {
+  const toggleSelect = useCallback((result: KnowledgeSearchHit, checked: boolean): void => {
     setSelected((current) => {
       const next = new Map(current);
       const key = materialKey(result);
@@ -209,7 +209,6 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     setSelected(
       new Map(
         results
-          .filter((result) => result.reference)
           .map((result) => [
             materialKey(result),
             { reference: result.reference, purpose: 'background' },
@@ -226,7 +225,11 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
       return;
     }
     try {
-      setResults(await window.betterwork.knowledge.search({ query: term }));
+      const response = await window.betterwork.knowledge.search({ query: term });
+      setResults(response.results);
+      if (response.degradedReason) {
+        setMessage(`语义检索已降级（${response.degradedReason}），当前展示关键词与已兼容向量的结果。`);
+      }
       // 切换搜索后清空结果勾选，避免隐形的跨查询选择。
       setSelected((current) => {
         if (current.size > 0) setMessage('搜索结果已更新，此前的勾选已清空。');

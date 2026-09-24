@@ -14,6 +14,7 @@ import type { ProcessSupervisor } from '../infrastructure/process-supervisor';
 import { AppStore } from '../persistence';
 import type { CredentialResolver } from './credential-access';
 import { InputSnapshotService } from './input-snapshot-service';
+import { KnowledgeSearchService } from './knowledge-search';
 import { KnowledgeVault } from './knowledge-vault';
 import { McpClientService } from './mcp-client-service';
 import { MemoryService } from './memory-service';
@@ -160,6 +161,26 @@ const createService = (
     webFetch,
     officeParser,
     credentialAccess,
+    new KnowledgeSearchService({
+      vault: fixture.vault,
+      index: fixture.vault.index,
+      // Run 材料只信宿主快照，与 main/index 生产接线一致。
+      runMaterials: (runId) =>
+        (fixture.store.runContextSnapshots.get(runId)?.materials ?? []).flatMap((material) =>
+          material.reference.kind === 'knowledge-revision' ? [material.reference] : [],
+        ),
+      embedding: {
+        defaultSnapshot: () => {
+          throw new Error('Run 编排测试不应调用嵌入模型');
+        },
+        snapshotOf: () => {
+          throw new Error('Run 编排测试不应调用嵌入模型');
+        },
+        embed: async () => {
+          throw new Error('Run 编排测试不应调用嵌入模型');
+        },
+      },
+    }),
   );
 
 const statusOf = (fixture: Fixture, runId: string): string | undefined =>
@@ -545,7 +566,7 @@ describe('RunService', () => {
 
   it('registers read_knowledge by default and respects the Expert allow-list', () => {
     const tools = createRunTools({
-      knowledgeSearch: () => ({ results: [] }),
+      knowledgeSearch: async () => ({ results: [] }),
       readKnowledge: () => ({
         reference: {
           kind: 'knowledge-revision',
@@ -567,12 +588,12 @@ describe('RunService', () => {
     });
     expect(tools.map((tool) => tool.name)).toContain('read_knowledge');
     const withDeclarator = createRunTools({
-      knowledgeSearch: () => ({ results: [] }),
+      knowledgeSearch: async () => ({ results: [] }),
       artifactSourceDeclarator: async () => undefined,
     });
     expect(withDeclarator.map((tool) => tool.name)).toContain('artifact_declare_sources');
     const restricted = createRunTools({
-      knowledgeSearch: () => ({ results: [] }),
+      knowledgeSearch: async () => ({ results: [] }),
       readKnowledge: () => ({
         reference: {
           kind: 'knowledge-revision',
@@ -595,7 +616,7 @@ describe('RunService', () => {
     });
     expect(restricted.map((tool) => tool.name)).not.toContain('read_knowledge');
     expect(
-      createRunTools({ knowledgeSearch: () => ({ results: [] }) }).map((tool) => tool.name),
+      createRunTools({ knowledgeSearch: async () => ({ results: [] }) }).map((tool) => tool.name),
     ).not.toContain('read_knowledge');
   });
 
@@ -1692,7 +1713,7 @@ describe('RunService', () => {
   });
 
   it('registers the web search tool only when a search engine is configured', () => {
-    const knowledgeSearch = (): [] => [];
+    const knowledgeSearch = async () => [];
     expect(createRunTools({ knowledgeSearch }).map((tool) => tool.name)).toEqual([
       'calculator',
       'analyze_business_metrics',
@@ -1995,7 +2016,7 @@ describe('RunService', () => {
   });
 
   it('applies an Expert built-in tool allow-list without exposing omitted tools', () => {
-    const knowledgeSearch = (): [] => [];
+    const knowledgeSearch = async () => [];
     expect(
       createRunTools({
         knowledgeSearch,

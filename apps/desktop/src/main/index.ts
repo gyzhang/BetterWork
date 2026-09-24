@@ -31,6 +31,7 @@ import { createStoreExtractionSourceReader } from './services/extraction-source-
 import { FileArtifactService } from './services/file-artifact-service';
 import { InputSnapshotService } from './services/input-snapshot-service';
 import { KnowledgeIndexService } from './services/knowledge-index-service';
+import { KnowledgeSearchService } from './services/knowledge-search';
 import { KnowledgeVault } from './services/knowledge-vault';
 import {
   KnowledgeWorkerRunner,
@@ -262,13 +263,14 @@ function bootstrap(): ApplicationContext {
 
   started.window = createMainWindow();
   const notifications = new NotificationService(store.notifications, getWindow);
+  const embeddingClient = new EmbeddingClient({
+    models: store.models,
+    ...(credentialAccess ? { credentialAccess } : {}),
+  });
   const knowledgeIndex = new KnowledgeIndexService({
     vault: knowledgeVault,
     onJobCancel: (jobId) => knowledgeWorker.cancelJob(jobId),
-    embedding: new EmbeddingClient({
-      models: store.models,
-      ...(credentialAccess ? { credentialAccess } : {}),
-    }),
+    embedding: embeddingClient,
     onEvent: (job) => {
       getWindow()?.webContents.send(IpcChannel.KnowledgeJobEvent, job);
       notifyKnowledgeJob(notifications, job);
@@ -330,6 +332,18 @@ function bootstrap(): ApplicationContext {
     (runId) => started.runs?.acceptsOutput(runId) ?? false,
     pptxRenderer,
   );
+  // 统一混合检索（契约 §9）：管理页与 knowledge_search 工具共用一条管线。
+  const knowledgeSearch = new KnowledgeSearchService({
+    vault: knowledgeVault,
+    index: knowledgeVault.index,
+    runMaterials: (runId) =>
+      (store.runContextSnapshots.get(runId)?.materials ?? []).flatMap((material) =>
+        material.reference.kind === 'knowledge-revision' ? [material.reference] : [],
+      ),
+    embedding: embeddingClient,
+    scan: (request) => knowledgeWorker.scan(request),
+  });
+
   const runs = new RunService(
     store,
     knowledgeVault,
@@ -348,6 +362,7 @@ function bootstrap(): ApplicationContext {
     (url, signal) => webFetchService.fetch(url, signal),
     officeParser,
     credentialAccess,
+    knowledgeSearch,
   );
   started.runs = runs;
 
@@ -355,6 +370,7 @@ function bootstrap(): ApplicationContext {
     store,
     knowledgeVault,
     knowledgeIndex,
+    knowledgeSearch,
     taskMaterials,
     discussionCheckpoints,
     memories,

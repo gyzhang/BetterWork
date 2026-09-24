@@ -14,6 +14,8 @@ export interface KnowledgeSearchItem {
   sourcePath: string;
   format: 'markdown' | 'text' | 'pdf' | 'docx';
   locator: string;
+  /** 命中来自哪一路（KM08）：keyword/vector/both。 */
+  matchedBy?: 'keyword' | 'vector' | 'both';
   excerpt: string;
   contentHash: string;
   /** Run 审计后的精确身份（KM02）；管理路径缺省。 */
@@ -32,7 +34,7 @@ export interface KnowledgeSearchOutcome {
 export type KnowledgeSearch = (
   query: string,
   context: ToolExecutionContext,
-) => KnowledgeSearchOutcome | KnowledgeSearchItem[];
+) => Promise<KnowledgeSearchOutcome | KnowledgeSearchItem[]>;
 
 /** Creates a read-only tool around the application-owned Knowledge Vault. */
 export const createKnowledgeSearchTool = (search: KnowledgeSearch): AgentTool => ({
@@ -51,7 +53,7 @@ export const createKnowledgeSearchTool = (search: KnowledgeSearch): AgentTool =>
     const { query } = inputSchema.parse(rawInput);
     if (context.signal.aborted) throw abortError();
     context.reportProgress(`正在检索个人资料库：${query}`);
-    const outcome = search(query, context);
+    const outcome = await search(query, context);
     const resolved = Array.isArray(outcome) ? { results: outcome } : outcome;
     const results = resolved.results.slice(0, KNOWLEDGE_SEARCH_TOOL_MAX_RESULTS);
     return {

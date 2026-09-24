@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { AppStore } from '../persistence';
 import { KnowledgeAudit, type KnowledgeRunAuditContext } from './knowledge-audit';
 import { KnowledgeServiceError } from './knowledge-errors';
+import { KnowledgeSearchService } from './knowledge-search';
 import { KnowledgeVault } from './knowledge-vault';
 
 const cleanup: Array<() => Promise<void>> = [];
@@ -52,7 +53,25 @@ const setup = async (fileContent: string) => {
     contentHash: revision.contentHash,
     sourcePath: revision.sourcePath,
   };
-  const audit = new KnowledgeAudit(store, vault);
+  const audit = new KnowledgeAudit(store, vault, (input) =>
+    new KnowledgeSearchService({
+      vault,
+      index: vault.index,
+      // Run 通道测试注入固定材料；语义检索未开启时只会走关键词路径。
+      runMaterials: () => [reference],
+      embedding: {
+        defaultSnapshot: () => {
+          throw new Error('审计测试不应调用嵌入模型');
+        },
+        snapshotOf: () => {
+          throw new Error('审计测试不应调用嵌入模型');
+        },
+        embed: async () => {
+          throw new Error('审计测试不应调用嵌入模型');
+        },
+      },
+    }).search(input),
+  );
   const context = (overrides?: Partial<KnowledgeRunAuditContext>): KnowledgeRunAuditContext => ({
     runId,
     taskId: created.task.id,
@@ -82,13 +101,16 @@ const longContent = '续'.repeat(300);
 describe('KnowledgeAudit.searchForRun', () => {
   it('returns an explained empty result instead of full-vault access', async () => {
     const fixture = await setup('客户续约风险需要跟进。');
-    const legacy = fixture.audit.searchForRun(
+    const legacy = await fixture.audit.searchForRun(
       fixture.context({ materialScope: false, materials: [] }),
       '续约',
     );
     expect(legacy.results).toEqual([]);
     expect(legacy.notice).toContain('没有固定材料范围');
-    const noneSelected = fixture.audit.searchForRun(fixture.context({ materials: [] }), '续约');
+    const noneSelected = await fixture.audit.searchForRun(
+      fixture.context({ materials: [] }),
+      '续约',
+    );
     expect(noneSelected.results).toEqual([]);
     expect(noneSelected.notice).toContain('未选择知识资料');
     expect(fixture.store.evidence.listByTask(fixture.taskId)).toEqual([]);
@@ -97,7 +119,7 @@ describe('KnowledgeAudit.searchForRun', () => {
   it('audits each returned excerpt with exact span and full footprint group', async () => {
     const fixture = await setup(`${longContent}甲。${longContent}乙。`);
     const ctx = fixture.context({ toolCallId: 'call-search-1' });
-    const outcome = fixture.audit.searchForRun(ctx, '乙');
+    const outcome = await fixture.audit.searchForRun(ctx, '乙');
     expect(outcome.results).toHaveLength(1);
     const hit = outcome.results[0];
     if (!hit?.span) throw new Error('audited hit must carry span');
@@ -127,8 +149,8 @@ describe('KnowledgeAudit.searchForRun', () => {
 
   it('reuses one evidence id across tool calls while keeping footprints separate', async () => {
     const fixture = await setup('续约风险跟进。');
-    const first = fixture.audit.searchForRun(fixture.context(), '续约');
-    const second = fixture.audit.searchForRun(fixture.context(), '续约');
+    const first = await fixture.audit.searchForRun(fixture.context(), '续约');
+    const second = await fixture.audit.searchForRun(fixture.context(), '续约');
     expect(second.results[0]?.evidenceId).toBe(first.results[0]?.evidenceId);
     expect(fixture.store.materialReads.listByRun(fixture.runId)).toHaveLength(2);
     expect(fixture.store.evidence.listByTask(fixture.taskId)).toHaveLength(1);
@@ -136,9 +158,9 @@ describe('KnowledgeAudit.searchForRun', () => {
 
   it('fails closed with KNOWLEDGE_AUDIT_FAILED and returns nothing on write error', async () => {
     const fixture = await setup('续约风险跟进。');
-    expect(() =>
+    await expect(
       fixture.audit.searchForRun(fixture.context({ taskId: 'not-the-task' }), '续约'),
-    ).toThrowError(KnowledgeServiceError);
+    ).rejects.toThrowError(KnowledgeServiceError);
     expect(fixture.store.materialReads.listByRun(fixture.runId)).toEqual([]);
     expect(fixture.store.evidence.listByTask(fixture.taskId)).toEqual([]);
   });
@@ -287,7 +309,7 @@ describe('KnowledgeAudit.previewRunSource', () => {
   it('shows the exact searched span again, ending at the span with no continuation', async () => {
     const fixture = await setup(`${longContent}甲。${longContent}乙。`);
     addSnapshot(fixture, [material(fixture.reference)]);
-    const outcome = fixture.audit.searchForRun(fixture.context(), '乙');
+    const outcome = await fixture.audit.searchForRun(fixture.context(), '乙');
     const evidenceId = outcome.results[0]?.evidenceId;
     if (!evidenceId) throw new Error('expected audited search evidence');
     const preview = fixture.audit.previewRunSource(fixture.runId, evidenceId);
@@ -328,7 +350,7 @@ describe('KnowledgeAudit.previewRunSource', () => {
   it('rejects evidence from another run and a revision outside the snapshot', async () => {
     const fixture = await setup('续约风险跟进。');
     addSnapshot(fixture, [material(fixture.reference)]);
-    const outcome = fixture.audit.searchForRun(fixture.context(), '续约');
+    const outcome = await fixture.audit.searchForRun(fixture.context(), '续约');
     const evidenceId = outcome.results[0]?.evidenceId;
     if (!evidenceId) throw new Error('expected audited search evidence');
     const otherRunId = randomUUID();
@@ -368,7 +390,7 @@ describe('KnowledgeAudit.previewRunSource', () => {
   it('refuses to fake an exact preview when saved text no longer matches the evidence', async () => {
     const fixture = await setup('续约风险跟进。');
     addSnapshot(fixture, [material(fixture.reference)]);
-    const outcome = fixture.audit.searchForRun(fixture.context(), '续约');
+    const outcome = await fixture.audit.searchForRun(fixture.context(), '续约');
     const evidenceId = outcome.results[0]?.evidenceId;
     if (!evidenceId) throw new Error('expected audited search evidence');
     // 模拟保存文本与证据区间脱节（例如索引库被外部破坏）：只能拒绝，不能拼一个假区间

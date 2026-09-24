@@ -1,4 +1,4 @@
-import type { KnowledgeDocumentSummary, KnowledgeSearchResult } from '@betterwork/agent-protocol';
+import type { KnowledgeDocumentSummary, KnowledgeSearchHit } from '@betterwork/agent-protocol';
 import { useCallback, useState } from 'react';
 
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
@@ -57,14 +57,17 @@ export function KnowledgePage({
     document: KnowledgeDocumentSummary;
     excerpt?: string;
     locator?: string;
-    hit?: KnowledgeSearchResult;
+    hit?: KnowledgeSearchHit;
   }> = showingResults
-    ? results.map((result) => ({
-        document: result.document,
-        locator: result.locator,
-        excerpt: result.excerpt,
-        hit: result,
-      }))
+    ? results.flatMap((hit) => {
+        // 命中身份必须落回登记的资料卡片；库范围检索不到登记文档的命中直接不显示，不伪造卡片。
+        const document = documents.find(
+          (entry) => entry.id === hit.reference.knowledgeDocumentId,
+        );
+        return document
+          ? [{ document, locator: hit.locator, excerpt: hit.excerpt, hit }]
+          : [];
+      })
     : documents.map((document) => ({ document }));
   const [toast, setToast] = useState<KnowledgeToast>();
   const [removalTarget, setRemovalTarget] = useState<KnowledgeDocumentSummary>();

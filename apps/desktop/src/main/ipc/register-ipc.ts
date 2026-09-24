@@ -72,7 +72,7 @@ import {
   knowledgeJobPageSchema,
   knowledgeResearchDraftResultSchema,
   knowledgeRevisionSummarySchema,
-  knowledgeSearchResultSchema,
+  knowledgeSearchResponseSchema,
   knowledgeSearchSettingsSchema,
   knowledgeTextPageSchema,
   listArtifactsRequestSchema,
@@ -203,6 +203,7 @@ import type { ExpertService } from '../services/expert-service';
 import type { FileArtifactService } from '../services/file-artifact-service';
 import { KnowledgeAudit } from '../services/knowledge-audit';
 import type { KnowledgeIndexService } from '../services/knowledge-index-service';
+import type { KnowledgeSearchService } from '../services/knowledge-search';
 import type { KnowledgeVault } from '../services/knowledge-vault';
 import type { McpClientService } from '../services/mcp-client-service';
 import type { MemoryExtractionService } from '../services/memory-extraction-service';
@@ -227,6 +228,7 @@ export interface IpcDependencies {
   readonly store: AppStore;
   readonly knowledgeVault: KnowledgeVault;
   readonly knowledgeIndex: KnowledgeIndexService;
+  readonly knowledgeSearch: KnowledgeSearchService;
   readonly taskMaterials: TaskMaterialService;
   readonly notifications: NotificationService;
   readonly runs: RunService;
@@ -871,7 +873,7 @@ function registerModelChannels({ store, credentialAccess }: IpcDependencies): vo
 }
 
 function registerKnowledgeChannels(deps: IpcDependencies): void {
-  const { knowledgeIndex, knowledgeVault, store } = deps;
+  const { knowledgeIndex, knowledgeSearch, knowledgeVault, store } = deps;
 
   handleNoInput(
     IpcChannel.ListKnowledge,
@@ -902,8 +904,13 @@ function registerKnowledgeChannels(deps: IpcDependencies): void {
   handleInput(
     IpcChannel.SearchKnowledge,
     searchKnowledgeRequestSchema,
-    z.array(knowledgeSearchResultSchema),
-    (input) => knowledgeVault.search(input.query),
+    knowledgeSearchResponseSchema,
+    (input) =>
+      knowledgeSearch.search({
+        scope: { kind: 'library' },
+        query: input.query,
+        ...(input.mode ? { mode: input.mode } : {}),
+      }),
   );
 
   handleInput(
@@ -1007,7 +1014,9 @@ function registerKnowledgeChannels(deps: IpcDependencies): void {
     previewRunSourceRequestSchema,
     runSourcePreviewSchema,
     (input) =>
-      new KnowledgeAudit(store, knowledgeVault).previewRunSource(input.runId, input.evidenceId),
+      new KnowledgeAudit(store, knowledgeVault, (searchInput) =>
+        knowledgeSearch.search(searchInput),
+      ).previewRunSource(input.runId, input.evidenceId),
   );
   handleInput(
     IpcChannel.CreateResearchDraft,

@@ -96,7 +96,7 @@ describe('ReActAgentEngine', () => {
       workspacePath: '.',
       model: new FakeModelProvider(0),
       tools: [
-        createKnowledgeSearchTool(() => [
+        createKnowledgeSearchTool(async () => [
           {
             id: 'doc-1',
             title: '客户访谈',

@@ -4,9 +4,12 @@ import type {
   KnowledgeJobDetail,
   KnowledgeJobPage,
   KnowledgeJobSummary,
+  KnowledgeSearchHit,
+  KnowledgeSearchResponse,
   KnowledgeSearchSettings,
 } from '@betterwork/agent-protocol';
 import { act, renderHook } from '@testing-library/react';
+import type { FormEvent } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useKnowledgeLibrary } from './use-knowledge-library';
@@ -78,6 +81,37 @@ const failedItemDetail = (): KnowledgeJobDetail => ({
   ],
 });
 
+const searchHit = (overrides: Partial<KnowledgeSearchHit> = {}): KnowledgeSearchHit => ({
+  chunkId: 'chunk-1',
+  reference: {
+    kind: 'knowledge-revision',
+    knowledgeDocumentId: 'doc-1',
+    knowledgeRevisionId: 'rev-1',
+    contentHash: 'b'.repeat(64),
+    sourcePath: '/tmp/合同条款.md',
+  },
+  textHash: 'c'.repeat(64),
+  title: '合同条款',
+  format: 'markdown',
+  locator: '全文',
+  span: { sectionOrdinal: 0, start: 0, end: 12 },
+  excerpt: '违约金上限为合同金额的',
+  excerptHash: 'd'.repeat(64),
+  matchedBy: 'keyword',
+  ...overrides,
+});
+
+const searchResponse = (
+  overrides: Partial<KnowledgeSearchResponse> = {},
+): KnowledgeSearchResponse => ({
+  results: [searchHit()],
+  requestedMode: 'hybrid',
+  effectiveMode: 'keyword',
+  coverage: { eligibleChunks: 1, indexedChunks: 0 },
+  durationMs: 3,
+  ...overrides,
+});
+
 interface Harness {
   events: ((job: KnowledgeJobSummary) => void)[];
   unsubscribe: ReturnType<typeof vi.fn>;
@@ -94,6 +128,7 @@ interface Harness {
     checkSources: ReturnType<typeof vi.fn>;
     retryJob: ReturnType<typeof vi.fn>;
     cancelJob: ReturnType<typeof vi.fn>;
+    search: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -126,6 +161,7 @@ const install = (): Harness => {
     checkSources: vi.fn(async () => ({ jobId: 'job-3' })),
     retryJob: vi.fn(async () => ({ jobId: 'job-4' })),
     cancelJob: vi.fn(async () => ({ cancelled: true })),
+    search: vi.fn(async () => searchResponse()),
   };
   Object.defineProperty(window, 'betterwork', {
     configurable: true,
@@ -233,5 +269,59 @@ describe('useKnowledgeLibrary 作业接线', () => {
     expect(harness.knowledge.job).not.toHaveBeenCalled();
     unmount();
     expect(harness.unsubscribe).toHaveBeenCalled();
+  });
+});
+
+describe('useKnowledgeLibrary 统一检索（KM08）', () => {
+  const submit = { preventDefault: (): void => undefined } as unknown as FormEvent<HTMLFormElement>;
+
+  it('检索响应按命中条目落地，携带精确修订身份', async () => {
+    const harness = install();
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    await act(async () => {
+      result.current.setQuery('违约金');
+    });
+    await act(async () => {
+      await result.current.onSearch(submit);
+    });
+    expect(harness.knowledge.search).toHaveBeenCalledWith({ query: '违约金' });
+    expect(result.current.results).toHaveLength(1);
+    expect(result.current.results[0]).toMatchObject({
+      chunkId: 'chunk-1',
+      matchedBy: 'keyword',
+      reference: { knowledgeRevisionId: 'rev-1' },
+    });
+  });
+
+  it('语义降级时给出内联解释而不是静默返回', async () => {
+    const harness = install();
+    harness.knowledge.search.mockResolvedValueOnce(
+      searchResponse({ degradedReason: 'index-partial' }),
+    );
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    await act(async () => {
+      result.current.setQuery('违约金');
+    });
+    await act(async () => {
+      await result.current.onSearch(submit);
+    });
+    expect(result.current.message).toContain('语义检索已降级（index-partial）');
+    expect(result.current.results).toHaveLength(1);
+  });
+
+  it('检索失败把主进程错误落到内联消息', async () => {
+    const harness = install();
+    harness.knowledge.search.mockRejectedValueOnce(new Error('检索服务暂不可用。'));
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    await act(async () => {
+      result.current.setQuery('违约金');
+    });
+    await act(async () => {
+      await result.current.onSearch(submit);
+    });
+    expect(result.current.message).toBe('检索服务暂不可用。');
   });
 });

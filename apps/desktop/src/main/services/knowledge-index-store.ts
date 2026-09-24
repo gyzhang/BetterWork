@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
-import { KNOWLEDGE_VECTOR_MAX_PUBLISHED } from '@betterwork/agent-protocol';
+import {
+  KNOWLEDGE_SEARCH_CANDIDATE_LIMIT,
+  KNOWLEDGE_VECTOR_MAX_PUBLISHED,
+} from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 
 import { KnowledgeServiceError } from './knowledge-errors';
@@ -39,6 +42,16 @@ export interface GenerationRecord {
   createdAt: number;
   publishedAt?: number | undefined;
 }
+
+export interface ScopedRetrievalChunk extends RetrievalChunkRow {
+  documentId: string;
+  title: string;
+  sourcePath: string;
+  format: ScopedChunkFormat;
+  revisionContentHash: string;
+}
+
+export type ScopedChunkFormat = 'markdown' | 'text' | 'pdf' | 'docx';
 
 export interface RetrievalChunkRow {
   id: string;
@@ -151,6 +164,23 @@ const vectorBlob = (vector: Float32Array): Buffer => {
   }
   return buffer;
 };
+
+interface ScopedChunkDbRow extends RetrievalChunkDbRow {
+  document_id: string;
+  title: string;
+  source_path: string;
+  format: string;
+  revision_content_hash: string;
+}
+
+const toScopedChunk = (row: ScopedChunkDbRow): ScopedRetrievalChunk => ({
+  ...toChunk(row),
+  documentId: row.document_id,
+  title: row.title,
+  sourcePath: row.source_path,
+  format: row.format as ScopedChunkFormat,
+  revisionContentHash: row.revision_content_hash,
+});
 
 export class KnowledgeIndexStore {
   private readonly db: Database.Database;
@@ -520,6 +550,117 @@ export class KnowledgeIndexStore {
         .run(generationId);
     });
     remove();
+  }
+
+  /**
+   * KM08 关键词路（契约 §9.1）：bm25 升序、在允许修订集合内过滤后取前 N，
+   * 不是全库 top N 再剔除；MATCH 串由服务层转义好并作为绑定参数传入。
+   */
+  searchChunks(revisionIds: readonly string[], match: string): ScopedRetrievalChunk[] {
+    if (revisionIds.length === 0 || match === '') return [];
+    const placeholders = revisionIds.map(() => '?').join(', ');
+    const rows = this.db
+      .prepare(
+        `SELECT c.id, c.revision_id, c.text_hash, c.chunking_version, c.section_ordinal,
+                c.start, c.end, c.locator, c.content, c.chunk_hash,
+                r.document_id, r.title, r.source_path, r.format, r.content_hash AS revision_content_hash
+           FROM knowledge_retrieval_fts(?) f
+           JOIN knowledge_retrieval_chunks c ON c.id = f.chunk_id
+           JOIN knowledge_revisions r ON r.id = c.revision_id
+          WHERE c.revision_id IN (${placeholders})
+          ORDER BY f.rank
+          LIMIT ?`,
+      )
+      .all(match, ...revisionIds, KNOWLEDGE_SEARCH_CANDIDATE_LIMIT) as ScopedChunkDbRow[];
+    return rows.map(toScopedChunk);
+  }
+
+  /** 允许集合内的全部派生块：给 substring 回退与 eligible 覆盖计数用（契约 §9.1/§9.3）。 */
+  chunksInScope(revisionIds: readonly string[]): ScopedRetrievalChunk[] {
+    if (revisionIds.length === 0) return [];
+    const placeholders = revisionIds.map(() => '?').join(', ');
+    const rows = this.db
+      .prepare(
+        `SELECT c.id, c.revision_id, c.text_hash, c.chunking_version, c.section_ordinal,
+                c.start, c.end, c.locator, c.content, c.chunk_hash,
+                r.document_id, r.title, r.source_path, r.format, r.content_hash AS revision_content_hash
+           FROM knowledge_retrieval_chunks c
+           JOIN knowledge_revisions r ON r.id = c.revision_id
+          WHERE c.revision_id IN (${placeholders})
+          ORDER BY c.revision_id, c.section_ordinal, c.start`,
+      )
+      .all(...revisionIds) as ScopedChunkDbRow[];
+    return rows.map(toScopedChunk);
+  }
+
+  /** 覆盖计数（契约 §9.3）：eligible 来自派生块，indexed 来自租约代次的向量行。 */
+  scopeCoverage(
+    revisionIds: readonly string[],
+    generationIds: readonly string[],
+  ): {
+    eligibleChunks: number;
+    indexedChunks: number;
+  } {
+    if (revisionIds.length === 0) return { eligibleChunks: 0, indexedChunks: 0 };
+    const revisionPlaceholders = revisionIds.map(() => '?').join(', ');
+    const eligible = this.db
+      .prepare(
+        `SELECT COUNT(*) AS c FROM knowledge_retrieval_chunks WHERE revision_id IN (${revisionPlaceholders})`,
+      )
+      .get(...revisionIds) as { c: number };
+    if (generationIds.length === 0) return { eligibleChunks: eligible.c, indexedChunks: 0 };
+    const generationPlaceholders = generationIds.map(() => '?').join(', ');
+    const indexed = this.db
+      .prepare(
+        `SELECT COUNT(*) AS c FROM knowledge_chunk_vectors WHERE generation_id IN (${generationPlaceholders})`,
+      )
+      .get(...generationIds) as { c: number };
+    return { eligibleChunks: eligible.c, indexedChunks: indexed.c };
+  }
+
+  /**
+   * 代次租约内的向量（契约 §8.3）：只读查询开始时刻已固定的 active 代次；
+   * superseded 行不删除，因此租约期内可安全扫描，新发布不会混入本批。
+   */
+  vectorsInGenerations(generationIds: readonly string[]): Array<{
+    chunkId: string;
+    generationId: string;
+    revisionId: string;
+    sectionOrdinal: number;
+    start: number;
+    vector: Float32Array;
+  }> {
+    if (generationIds.length === 0) return [];
+    const placeholders = generationIds.map(() => '?').join(', ');
+    const rows = this.db
+      .prepare(
+        `SELECT v.chunk_id, v.generation_id, c.revision_id, c.section_ordinal, c.start, v.vector
+           FROM knowledge_chunk_vectors v
+           JOIN knowledge_retrieval_chunks c ON c.id = v.chunk_id
+          WHERE v.generation_id IN (${placeholders})
+          ORDER BY v.generation_id, v.chunk_id`,
+      )
+      .all(...generationIds) as Array<{
+      chunk_id: string;
+      generation_id: string;
+      revision_id: string;
+      section_ordinal: number;
+      start: number;
+      vector: Uint8Array;
+    }>;
+    return rows.map((row) => ({
+      chunkId: row.chunk_id,
+      generationId: row.generation_id,
+      revisionId: row.revision_id,
+      sectionOrdinal: row.section_ordinal,
+      start: row.start,
+      vector: new Float32Array(
+        row.vector.buffer.slice(
+          row.vector.byteOffset,
+          row.vector.byteOffset + row.vector.byteLength,
+        ),
+      ),
+    }));
   }
 
   coverage(spaceId: string): { revisions: number; vectors: number } {

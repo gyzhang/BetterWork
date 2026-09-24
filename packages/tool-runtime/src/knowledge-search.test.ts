@@ -12,7 +12,7 @@ const context = {
 
 describe('createKnowledgeSearchTool', () => {
   it('returns bounded, source-addressable search results', async () => {
-    const tool = createKnowledgeSearchTool(() =>
+    const tool = createKnowledgeSearchTool(async () =>
       Array.from({ length: 12 }, (_, index) => ({
         id: String(index),
         title: `资料 ${index}`,

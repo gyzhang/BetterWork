@@ -9,6 +9,7 @@ import {
   IpcChannel,
   type KnowledgeJobDetail,
   type KnowledgeJobPage,
+  type KnowledgeSearchResponse,
   type KnowledgeSearchSettings,
   type MemoryConflictResolutionData,
   type MemoryJobListData,
@@ -105,6 +106,7 @@ describe('registerIpc', () => {
     const { WorkspaceReferenceService } = await import('../services/workspace-reference-service');
     const { McpClientService } = await import('../services/mcp-client-service');
     const { KnowledgeIndexService } = await import('../services/knowledge-index-service');
+    const { KnowledgeSearchService } = await import('../services/knowledge-search');
     const { fakePptxRenderer } = await import('../infrastructure/fixtures/fake-pptx-renderer');
     const { FakeDownloader, FakeFileSystem, FakePythonRunner, scenarioOf } =
       await import('../services/fixtures/fake-python-runtime');
@@ -144,6 +146,16 @@ describe('registerIpc', () => {
     };
     const knowledgeIndex = new KnowledgeIndexService({
       vault: knowledgeVault,
+      embedding: {
+        defaultSnapshot: embeddingUnavailable,
+        snapshotOf: embeddingUnavailable,
+        embed: async () => embeddingUnavailable(),
+      },
+    });
+    const knowledgeSearch = new KnowledgeSearchService({
+      vault: knowledgeVault,
+      index: knowledgeVault.index,
+      runMaterials: () => undefined,
       embedding: {
         defaultSnapshot: embeddingUnavailable,
         snapshotOf: embeddingUnavailable,
@@ -205,6 +217,7 @@ describe('registerIpc', () => {
       store,
       knowledgeVault,
       knowledgeIndex,
+      knowledgeSearch,
       taskMaterials,
       discussionCheckpoints,
       memories,
@@ -1274,6 +1287,34 @@ describe('registerIpc', () => {
         {},
       )) as KnowledgeSearchSettings;
       expect(afterRejections).toMatchObject({ revision: 2, semanticEnabled: false });
+    });
+  });
+
+  describe('统一检索通道（KM08）', () => {
+    it('SearchKnowledge 返回统一响应：关键词命中、语义关闭降级与精确 span', async () => {
+      const response = (await invoke(IpcChannel.SearchKnowledge, {
+        query: '违约金',
+      })) as KnowledgeSearchResponse;
+      expect(response).toMatchObject({
+        requestedMode: 'hybrid',
+        effectiveMode: 'keyword',
+        degradedReason: 'semantic-disabled',
+      });
+      expect(response.coverage.indexedChunks).toBe(0);
+      expect(response.coverage.eligibleChunks).toBeGreaterThanOrEqual(1);
+      const hit = response.results[0];
+      expect(hit).toMatchObject({ matchedBy: 'keyword' });
+      expect(hit?.reference.kind).toBe('knowledge-revision');
+      expect(hit?.excerpt).toContain('违约金');
+      expect(hit?.span.end).toBeGreaterThan(hit?.span.start ?? -1);
+      expect(response.durationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('管理端只接受 keyword/hybrid 模式，空查询在协议层被拒绝', async () => {
+      await expect(
+        invoke(IpcChannel.SearchKnowledge, { query: '违约金', mode: 'vector' }),
+      ).rejects.toThrow();
+      await expect(invoke(IpcChannel.SearchKnowledge, { query: '   ' })).rejects.toThrow();
     });
   });
 });

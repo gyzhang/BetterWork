@@ -2884,7 +2884,12 @@ export interface KnowledgeImportResult {
   skipped: Array<{ sourcePath: string; reason: string }>;
 }
 
-export const searchKnowledgeRequestSchema = z.object({ query: z.string().trim().min(1).max(500) });
+export const searchKnowledgeRequestSchema = z
+  .object({
+    query: z.string().trim().min(1).max(500),
+    mode: z.enum(['keyword', 'hybrid']).optional(),
+  })
+  .strict();
 export type SearchKnowledgeRequest = z.infer<typeof searchKnowledgeRequestSchema>;
 export const openKnowledgeSourceRequestSchema = z.object({
   sourcePath: z.string().trim().min(1).max(4_000),
@@ -3833,8 +3838,46 @@ export const knowledgeWorkerShutdownRequestSchema = z
   .object({ ...knowledgeWorkerEnvelope, op: z.literal('shutdown') })
   .strict();
 
+export const knowledgeWorkerScanEntrySchema = z
+  .object({
+    chunkId: z.string().min(1),
+    vectorBase64: z.string().min(8),
+  })
+  .strict();
+export type KnowledgeWorkerScanEntry = z.infer<typeof knowledgeWorkerScanEntrySchema>;
+
+/**
+ * 向量扫描（契约 §8.2/§9.2）：Main 读向量并按每批 ≤1 MiB 载荷切分，
+ * Worker 只做点积并回本批 top 50；全局 top 50 必在各批 top 50 的并集内。
+ */
+export const KNOWLEDGE_VECTOR_SCAN_BATCH_MAX_BYTES = 1024 * 1024;
+
+export const knowledgeWorkerScanRequestSchema = z
+  .object({
+    ...knowledgeWorkerEnvelope,
+    op: z.literal('scan'),
+    spaceId: z.string().min(1),
+    dimension: z
+      .number()
+      .int()
+      .min(KNOWLEDGE_EMBEDDING_DIMENSION_MIN)
+      .max(KNOWLEDGE_EMBEDDING_DIMENSION_MAX),
+    queryBase64: z.string().min(8),
+    entries: z
+      .array(knowledgeWorkerScanEntrySchema)
+      .max(
+        Math.floor(
+          KNOWLEDGE_VECTOR_SCAN_BATCH_MAX_BYTES /
+            (KNOWLEDGE_EMBEDDING_DIMENSION_MIN * Float32Array.BYTES_PER_ELEMENT),
+        ),
+      ),
+  })
+  .strict();
+export type KnowledgeWorkerScanRequest = z.infer<typeof knowledgeWorkerScanRequestSchema>;
+
 export const knowledgeWorkerRequestSchema = z.discriminatedUnion('op', [
   knowledgeWorkerExtractRequestSchema,
+  knowledgeWorkerScanRequestSchema,
   knowledgeWorkerShutdownRequestSchema,
 ]);
 export type KnowledgeWorkerRequest = z.infer<typeof knowledgeWorkerRequestSchema>;
@@ -3850,6 +3893,20 @@ export const knowledgeWorkerResponseSchema = z.discriminatedUnion('kind', [
   z
     .object({
       ...knowledgeWorkerEnvelope,
+      kind: z.literal('scores'),
+      scores: z.array(
+        z
+          .object({
+            chunkId: z.string().min(1),
+            score: z.number().finite(),
+          })
+          .strict(),
+      ),
+    })
+    .strict(),
+  z
+    .object({
+      ...knowledgeWorkerEnvelope,
       kind: z.literal('error'),
       code: z.string().min(1).max(64),
       message: z.string().min(1).max(500),
@@ -3858,6 +3915,82 @@ export const knowledgeWorkerResponseSchema = z.discriminatedUnion('kind', [
   z.object({ ...knowledgeWorkerEnvelope, kind: z.literal('shutdown') }).strict(),
 ]);
 export type KnowledgeWorkerResponse = z.infer<typeof knowledgeWorkerResponseSchema>;
+
+/**
+ * KM08 统一检索管线（契约 §9）：scope 由宿主注入，runId 不是模型输入；
+ * RRF 常数与候选上限只在契约 §2.2 定义，这里引用，不允许实现另写数字。
+ */
+export const knowledgeSearchScopeSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('library'),
+      collectionId: z.string().min(1).optional(),
+    })
+    .strict(),
+  z.object({ kind: z.literal('run'), runId: z.string().min(1) }).strict(),
+]);
+export type KnowledgeSearchScope = z.infer<typeof knowledgeSearchScopeSchema>;
+
+export const knowledgeSearchModeSchema = z.enum(['keyword', 'hybrid']);
+export type KnowledgeSearchMode = z.infer<typeof knowledgeSearchModeSchema>;
+
+/** effectiveMode 多出的 vector 表示本次只有向量路有结果（契约 §9.3）。 */
+export const knowledgeSearchEffectiveModeSchema = z.enum(['keyword', 'hybrid', 'vector']);
+export type KnowledgeSearchEffectiveMode = z.infer<typeof knowledgeSearchEffectiveModeSchema>;
+
+export const knowledgeSearchDegradedReasonSchema = z.enum([
+  'semantic-disabled',
+  'model-unavailable',
+  'index-missing',
+  'index-partial',
+  'index-stale',
+  'embedding-failed',
+  'capacity-exceeded',
+]);
+export type KnowledgeSearchDegradedReason = z.infer<typeof knowledgeSearchDegradedReasonSchema>;
+
+export const knowledgeSearchMatchedBySchema = z.enum(['keyword', 'vector', 'both']);
+export type KnowledgeSearchMatchedBy = z.infer<typeof knowledgeSearchMatchedBySchema>;
+
+/** RRF 融合常数（契约 §9.2）：两路同权，rank 从 1 起。 */
+export const KNOWLEDGE_SEARCH_RRF_K = 60;
+
+export const knowledgeSearchHitSchema = z
+  .object({
+    chunkId: z.string().min(1),
+    reference: knowledgeMaterialReferenceSchema,
+    textHash: z.string().min(1),
+    title: z.string(),
+    format: z.enum(['markdown', 'text', 'pdf', 'docx']),
+    locator: z.string(),
+    span: knowledgeSpanSchema,
+    excerpt: z.string(),
+    excerptHash: z.string().min(1),
+    matchedBy: knowledgeSearchMatchedBySchema,
+    evidenceId: z.string().min(1).optional(),
+  })
+  .strict();
+export type KnowledgeSearchHit = z.infer<typeof knowledgeSearchHitSchema>;
+
+export const knowledgeSearchCoverageSchema = z
+  .object({
+    eligibleChunks: z.number().int().nonnegative(),
+    indexedChunks: z.number().int().nonnegative(),
+  })
+  .strict();
+export type KnowledgeSearchCoverage = z.infer<typeof knowledgeSearchCoverageSchema>;
+
+export const knowledgeSearchResponseSchema = z
+  .object({
+    results: z.array(knowledgeSearchHitSchema),
+    requestedMode: knowledgeSearchModeSchema,
+    effectiveMode: knowledgeSearchEffectiveModeSchema,
+    degradedReason: knowledgeSearchDegradedReasonSchema.optional(),
+    coverage: knowledgeSearchCoverageSchema,
+    durationMs: z.number().int().nonnegative(),
+  })
+  .strict();
+export type KnowledgeSearchResponse = z.infer<typeof knowledgeSearchResponseSchema>;
 
 export const knowledgeRevisionSummarySchema = z.object({
   id: z.string().min(1),
@@ -4454,7 +4587,7 @@ export interface BetterWorkDesktopApi {
     saveSettings(input: SaveKnowledgeSettingsRequest): Promise<KnowledgeSearchSettings>;
     rebuildIndex(input: RebuildKnowledgeIndexRequest): Promise<KnowledgeJobAck>;
     checkSources(input: CheckKnowledgeSourcesRequest): Promise<KnowledgeJobAck>;
-    search(input: SearchKnowledgeRequest): Promise<KnowledgeSearchResult[]>;
+    search(input: SearchKnowledgeRequest): Promise<KnowledgeSearchResponse>;
     openSource(input: OpenKnowledgeSourceRequest): Promise<OpenKnowledgeSourceResult>;
     remove(input: RemoveKnowledgeDocumentRequest): Promise<{ removed: boolean }>;
     refresh(input: RefreshKnowledgeDocumentRequest): Promise<KnowledgeJobAck>;

@@ -33,9 +33,9 @@ const overflowRuntime = {
 
 const runners: KnowledgeWorkerRunner[] = [];
 
-const waitForPid = async (runner: KnowledgeWorkerRunner): Promise<number> => {
+const waitForPid = async (runner: KnowledgeWorkerRunner, jobKey: string): Promise<number> => {
   for (let attempt = 0; attempt < 500; attempt += 1) {
-    const pid = runner.activePid;
+    const pid = runner.activePid(jobKey);
     if (pid !== undefined) return pid;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
@@ -69,13 +69,13 @@ describe('KnowledgeWorkerRunner', () => {
     );
     expect(markdown.content).toContain('正文内容。');
     expect(markdown.sections[0]?.locator).toBe('全文');
-    const pid = runner.activePid;
+    const pid = runner.activePid('extract:job-a');
     expect(pid).toBeTypeOf('number');
 
     const text = await runner.extract('text', Buffer.from('plain\r\nbody', 'utf8'), job);
     expect(text.content).toBe('plain\r\nbody');
     // 同一作业复用进程，不是每条请求起一个。
-    expect(runner.activePid).toBe(pid);
+    expect(runner.activePid('extract:job-a')).toBe(pid);
   }, 30_000);
 
   it('坏 docx 以 WORKER_EXTRACT_FAILED 收口为条目错误，进程存活可继续下一条目', async () => {
@@ -84,7 +84,7 @@ describe('KnowledgeWorkerRunner', () => {
     await expect(runner.extract('docx', Buffer.from('not-a-docx', 'utf8'), job)).rejects.toThrow(
       KnowledgeServiceError,
     );
-    expect(runner.activePid).toBeTypeOf('number');
+    expect(runner.activePid('extract:job-bad')).toBeTypeOf('number');
     const next = await runner.extract('text', Buffer.from('后续条目', 'utf8'), job);
     expect(next.content).toBe('后续条目');
   }, 30_000);
@@ -95,7 +95,7 @@ describe('KnowledgeWorkerRunner', () => {
     await expect(
       runner.extract('text', huge, { jobId: 'job-oversize', attempt: 1 }),
     ).rejects.toThrow('文件超过提取上限');
-    expect(runner.activePid).toBeUndefined();
+    expect(runner.activePid('extract:job-oversize')).toBeUndefined();
   }, 30_000);
 
   it('取消在途提取以取消收口而非失败，宽限后只终止已登记的 pid', async () => {
@@ -104,16 +104,16 @@ describe('KnowledgeWorkerRunner', () => {
       jobId: 'job-cancel',
       attempt: 1,
     });
-    const pid = await waitForPid(runner);
+    const pid = await waitForPid(runner, 'extract:job-cancel');
     // 等请求登记完成再取消：spawn 与 pending 写入之间只差一个微任务。
     await new Promise((resolve) => setTimeout(resolve, 25));
     runner.cancelJob('job-cancel');
     await expect(pending).rejects.toSatisfy(isAbortError);
     const deadline = Date.now() + 5_000;
-    while (runner.activePid !== undefined && Date.now() < deadline) {
+    while (runner.activePid('extract:job-cancel') !== undefined && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
-    expect(runner.activePid).toBeUndefined();
+    expect(runner.activePid('extract:job-cancel')).toBeUndefined();
     expect(pid).toBeTypeOf('number');
   }, 30_000);
 
@@ -123,10 +123,10 @@ describe('KnowledgeWorkerRunner', () => {
       jobId: 'job-keep',
       attempt: 1,
     });
-    const pid = await waitForPid(runner);
+    const pid = await waitForPid(runner, 'extract:job-keep');
     await new Promise((resolve) => setTimeout(resolve, 25));
     runner.cancelJob('another-job');
-    expect(runner.activePid).toBe(pid);
+    expect(runner.activePid('extract:job-keep')).toBe(pid);
     // 收口由 afterEach 的 shutdown 完成；这里先让在途请求落到终态避免未处理拒绝。
     runner.cancelJob('job-keep');
     await expect(pending).rejects.toSatisfy(isAbortError);
@@ -141,7 +141,7 @@ describe('KnowledgeWorkerRunner', () => {
       }),
     ).rejects.toThrow('提取响应超过大小上限');
     // 超限响应来自不可信进程：登记句柄被清掉，只终止了这个 pid。
-    expect(runner.activePid).toBeUndefined();
+    expect(runner.activePid('extract:job-overflow')).toBeUndefined();
   }, 60_000);
 
   it('Worker 线协议拒绝伪造身份与非法请求：nonce 不符与坏 JSON 都是错误响应', async () => {
@@ -185,4 +185,52 @@ describe('KnowledgeWorkerRunner', () => {
     });
     expect(exitCode).toBe(0);
   }, 30_000);
+
+  describe('向量扫描批（KM08）', () => {
+    it('真实 Worker 逐批点积并按分数降序返回', async () => {
+      const runner = createRunner();
+      const scores = await runner.scan({
+        spaceId: 'space-1',
+        dimension: 3,
+        query: Float32Array.from([0, 1, 0]),
+        entries: [
+          { chunkId: 'c-low', vector: Float32Array.from([1, 0, 0]) },
+          { chunkId: 'c-high', vector: Float32Array.from([0, 1, 0]) },
+          { chunkId: 'c-mid', vector: Float32Array.from([0, 0.5, 0]) },
+        ],
+      });
+      expect(scores.map((entry) => entry.chunkId)).toEqual(['c-high', 'c-mid', 'c-low']);
+      expect(scores[0]?.score).toBeCloseTo(1);
+      expect(scores[2]?.score).toBeCloseTo(0);
+    }, 30_000);
+
+    it('批内向量维度与声明不符按扫描失败收口，不返回部分分数', async () => {
+      const runner = createRunner();
+      await expect(
+        runner.scan({
+          spaceId: 'space-1',
+          dimension: 3,
+          query: Float32Array.from([0, 1, 0]),
+          entries: [{ chunkId: 'c-bad', vector: Float32Array.from([0, 1]) }],
+        }),
+      ).rejects.toThrow('WORKER_SCAN_FAILED');
+    }, 30_000);
+
+    it('载荷批超上限直接拒绝，不向进程发送', async () => {
+      const runner = createRunner();
+      const entries = Array.from({ length: 65_537 }, (_, index) => ({
+        chunkId: `c-${index}`,
+        vector: Float32Array.from([1, 0, 0, 0]),
+      }));
+      await expect(
+        runner.scan({
+          spaceId: 'space-1',
+          dimension: 4,
+          query: Float32Array.from([1, 0, 0, 0]),
+          entries,
+        }),
+      ).rejects.toThrow('向量批超过单批载荷上限');
+      expect(runner.activePid('scan')).toBeUndefined();
+    }, 30_000);
+  });
 });

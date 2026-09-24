@@ -8,6 +8,7 @@ import {
   KNOWLEDGE_SEARCH_TOOL_MAX_RESULTS,
   type KnowledgeMaterialReference,
   type KnowledgeReadRequest,
+  type KnowledgeSearchHit,
   type KnowledgeSearchResult,
   type KnowledgeTextPage,
   type RunSourcePreview,
@@ -16,12 +17,14 @@ import {
 
 import type { AppStore } from '../persistence';
 import { KnowledgeServiceError } from './knowledge-errors';
+import type { KnowledgeSearchService } from './knowledge-search';
 import { sha256Hex, sliceCodePoints } from './knowledge-text';
 import type { KnowledgeVault } from './knowledge-vault';
 
 /** Run 工具层可见的搜索条目：正文之外的身份与审计引用。 */
 export interface KnowledgeAuditedSearchItem {
   id: string;
+  chunkId: string;
   title: string;
   sourcePath: string;
   format: KnowledgeSearchResult['document']['format'];
@@ -32,6 +35,7 @@ export interface KnowledgeAuditedSearchItem {
   textHash: string;
   span: NonNullable<KnowledgeSearchResult['span']>;
   excerptHash: string;
+  matchedBy: KnowledgeSearchHit['matchedBy'];
   evidenceId: string;
 }
 
@@ -66,9 +70,13 @@ export class KnowledgeAudit {
   constructor(
     private readonly store: AppStore,
     private readonly vault: KnowledgeVault,
+    private readonly search: KnowledgeSearchService['search'],
   ) {}
 
-  searchForRun(context: KnowledgeRunAuditContext, query: string): KnowledgeSearchOutcome {
+  async searchForRun(
+    context: KnowledgeRunAuditContext,
+    query: string,
+  ): Promise<KnowledgeSearchOutcome> {
     if (context.signal.aborted) throw abortError();
     if (!context.materialScope) {
       return {
@@ -82,34 +90,36 @@ export class KnowledgeAudit {
         notice: '本次运行未选择知识资料，不检索全库。',
       };
     }
-    const hits = this.vault
-      .search(query, { revisionIds: context.materials.map((ref) => ref.knowledgeRevisionId) })
-      .filter((hit) => hit.span && hit.excerptHash)
-      .slice(0, KNOWLEDGE_SEARCH_TOOL_MAX_RESULTS);
-    if (hits.length === 0) return { results: [] };
+    const response = await this.search({
+      scope: { kind: 'run', runId: context.runId },
+      query,
+      signal: context.signal,
+      limit: KNOWLEDGE_SEARCH_TOOL_MAX_RESULTS,
+    });
+    if (response.results.length === 0) {
+      return {
+        results: [],
+        ...(response.degradedReason
+          ? { notice: `语义检索未完成（${response.degradedReason}），关键词没有命中。` }
+          : {}),
+      };
+    }
+    const hits = response.results;
     try {
       const results = this.store.transaction((): KnowledgeAuditedSearchItem[] =>
         hits.map((hit, index) => {
-          const span = hit.span;
-          const excerptHash = hit.excerptHash;
-          if (!span || !excerptHash) {
-            throw new KnowledgeServiceError(
-              'KNOWLEDGE_AUDIT_FAILED',
-              '搜索命中缺少精确范围，拒绝未审计返回。',
-            );
-          }
           const evidence = this.store.evidence.saveKnowledge({
             taskId: context.taskId,
             runId: context.runId,
             sourceUri: hit.reference.sourcePath,
-            title: hit.document.title,
+            title: hit.title,
             locator: hit.locator,
             excerpt: hit.excerpt,
             contentHash: hit.reference.contentHash,
             knowledgeSource: {
               reference: hit.reference,
               textHash: hit.textHash,
-              span,
+              span: hit.span,
               operation: 'search',
             },
           });
@@ -120,26 +130,28 @@ export class KnowledgeAudit {
             operation: 'search',
             locator: hit.locator,
             contentHash: hit.reference.contentHash,
-            excerptHash,
+            excerptHash: hit.excerptHash,
             capturedAt: Date.now(),
             toolCallId: context.toolCallId,
             knowledgePartIndex: index,
-            knowledgeSpan: span,
+            knowledgeSpan: hit.span,
             textHash: hit.textHash,
             evidenceId: evidence.id,
           });
           return {
-            id: hit.document.id,
-            title: hit.document.title,
-            sourcePath: hit.document.sourcePath,
-            format: hit.document.format,
+            id: hit.reference.knowledgeDocumentId,
+            chunkId: hit.chunkId,
+            title: hit.title,
+            sourcePath: hit.reference.sourcePath,
+            format: hit.format,
             locator: hit.locator,
             excerpt: hit.excerpt,
             contentHash: hit.reference.contentHash,
             reference: hit.reference,
             textHash: hit.textHash,
-            span,
-            excerptHash,
+            span: hit.span,
+            excerptHash: hit.excerptHash,
+            matchedBy: hit.matchedBy,
             evidenceId: evidence.id,
           };
         }),

@@ -74,6 +74,8 @@ import type { CredentialResolver } from './credential-access';
 import type { FileArtifactService } from './file-artifact-service';
 import type { InputSnapshotService } from './input-snapshot-service';
 import { KnowledgeAudit, type KnowledgeRunAuditContext } from './knowledge-audit';
+import { KnowledgeServiceError } from './knowledge-errors';
+import type { KnowledgeSearchService } from './knowledge-search';
 import type { KnowledgeVault } from './knowledge-vault';
 import type { McpClientService } from './mcp-client-service';
 import { withRunMemoryAudit } from './memory-dispatch-gate';
@@ -430,7 +432,16 @@ export class RunService {
 
   /** 审计服务惰性装配：参数属性在构造体内先于字段完成赋值。 */
   private get knowledgeAudit(): KnowledgeAudit {
-    this.knowledgeAuditInstance ??= new KnowledgeAudit(this.store, this.knowledgeVault);
+    this.knowledgeAuditInstance ??= new KnowledgeAudit(
+      this.store,
+      this.knowledgeVault,
+      (input) =>
+        this.knowledgeSearchService
+          ? this.knowledgeSearchService.search(input)
+          : Promise.reject(
+              new KnowledgeServiceError('KNOWLEDGE_AUDIT_FAILED', '统一检索服务未接线。'),
+            ),
+    );
     return this.knowledgeAuditInstance;
   }
 
@@ -458,6 +469,7 @@ export class RunService {
     private readonly webFetch?: WebFetch,
     private readonly officeParser?: OfficeParserService,
     private readonly credentialAccess?: CredentialResolver,
+    private readonly knowledgeSearchService?: KnowledgeSearchService,
   ) {}
 
   start(input: StartRunRequest): string {
