@@ -1207,6 +1207,9 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
         facet: 'constraint',
       },
     );
+    // §5.0 的前提是「材料标题不补查询关键词」，不是「没有材料」：挂一份标题与目标规则
+    // 零 bigram 重叠的真实材料，让前提在非零查询宽度上成立。
+    const material = await addMaterial(world, '季度经营数据.md', '本期收入合计 128。');
 
     for (const [index, prompt] of PINNED_PROMPTS.entries()) {
       const task = world.services.store.tasks.create(
@@ -1218,7 +1221,7 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
         world,
         { taskId: task.task.id, sessionId: task.sessionId },
         {
-          materials: [],
+          materials: [material],
           excludedMemoryIds: [],
         },
       );
@@ -1854,6 +1857,25 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
     expect(new Set(selected.map((item) => item.memoryId))).toEqual(
       new Set([expertRule.id, workspaceRule.id]),
     );
+    // R2 单独占一行，矩阵给它的是另一个问法：逐行分母要求这条 When 也真走过一次。
+    const r2Task = world.services.store.tasks.create(
+      world.layout.workspaceA,
+      'R2 管理层沟通稿',
+      '请整理下一场管理层沟通稿',
+    );
+    const r2Ref = { taskId: r2Task.task.id, sessionId: r2Task.sessionId };
+    const r2Context = saveContext(world, r2Ref, { materials: [], excludedMemoryIds: [] });
+    const r2Run = startRun(world, r2Ref, '请整理下一场管理层沟通稿', r2Context);
+    await waitForCompletion(world, r2Run);
+    const r2Injected = (lastRunRequest(world)?.messages ?? [])
+      .filter((message) => message.role !== 'user')
+      .map((message) => message.content)
+      .join('\n');
+    expect(r2Injected).toContain('结论、证据、建议依次输出。');
+    expect(r2Injected).not.toContain('另一个空间的内部口径不得跨范围带入。');
+    expect(
+      world.services.store.runMemoryContexts.get(r2Run)?.selectedItems.map((item) => item.memoryId),
+    ).toContain(workspaceRule.id);
     // N4 另一半：他空间规则只能以排除 ID 的占位分支出现，不回正文与来源。
     const excluding = world.services.store.taskContexts.save(taskRef.taskId, {
       executor: {

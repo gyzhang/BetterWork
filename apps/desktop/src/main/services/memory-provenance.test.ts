@@ -215,6 +215,11 @@ describe('resolveMemorySourceSelector', () => {
     // 同文不同位：两处保存靠区间区分，正文相同也不能合并成同一条来源。
     expect(first.source.excerpt).toBe(second.source.excerpt);
     expect(first.source.start).not.toBe(second.source.start);
+    // R5 的「依赖一致」：换区间不改变继承的依赖闭包，也不许其中一侧被写成空依赖。
+    expect(second.materialDependencies).toEqual([material('kr-1')]);
+    expect(second.memoryDependencies).toEqual([]);
+    expect(first.materialDependencies).toEqual(second.materialDependencies);
+    expect(first.memoryDependencies).toEqual(second.memoryDependencies);
   });
 
   it('rejects anything that is not the final tool-free answer of a completed run', () => {
