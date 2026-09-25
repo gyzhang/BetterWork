@@ -669,3 +669,31 @@ describe('ContextPanel 本任务已排除（MI03）', () => {
     expect(onToggleMemory).toHaveBeenCalledWith('memory-1');
   });
 });
+
+describe('ContextPanel 换期恢复引导（MI08）', () => {
+  afterEach(cleanup);
+
+  it('解释历史截断后给出可返回的恢复入口，不提供一键恢复全部历史', () => {
+    const setTab = vi.fn();
+    const onRequestMaterials = vi.fn();
+    const onOpenMemoryPage = vi.fn();
+    const container = renderPanel({
+      setTab,
+      onRequestMaterials,
+      onOpenMemoryPage,
+    });
+
+    expect(container.textContent).toContain('未带入');
+    expect(container.textContent).toContain('旧轮次只是这次不发送，对话没有被删除');
+    const labels = [...container.querySelectorAll('button')].map((button) => button.textContent);
+    expect(labels).toContain('选择本期材料');
+    expect(labels).toContain('查看上期成果版本');
+    expect(labels).toContain('到记忆详情保留方法');
+    expect(container.textContent).toContain('标记参考不等于已读取');
+    expect(labels.some((label) => label === '恢复全部历史')).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: '选择本期材料' }));
+    expect(setTab).toHaveBeenCalledWith('sources');
+    expect(onRequestMaterials).toHaveBeenCalledWith('file');
+  });
+});

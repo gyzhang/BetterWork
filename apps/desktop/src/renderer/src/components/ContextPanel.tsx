@@ -294,7 +294,18 @@ export function ContextPanel({
                 expertName={expertName}
               />
               <ThisRunMemorySection runMemories={runMemories} memories={memories} />
-              <HistoryAdjustmentSection runMemories={runMemories} />
+              <HistoryAdjustmentSection
+                runMemories={runMemories}
+                onSelectMaterials={() => {
+                  setTab('sources');
+                  onRequestMaterials('file');
+                }}
+                onOpenArtifacts={() => {
+                  setTab('sources');
+                  onRequestMaterials('artifact');
+                }}
+                onOpenMemoryPage={onOpenMemoryPage}
+              />
             </>
           )}
           {tab === 'brief' && (
@@ -977,8 +988,15 @@ function RunContextBody({
 /** 「历史上下文调整」：被截断的轮次与可解释原因（产品设计 §3.5、契约 §6.3）。 */
 function HistoryAdjustmentSection({
   runMemories,
+  onSelectMaterials,
+  onOpenArtifacts,
+  onOpenMemoryPage,
 }: {
   runMemories: RunMemoriesState;
+  /** MI08：历史截断后给可返回的恢复入口，而不是只解释为什么没带。 */
+  onSelectMaterials: () => void;
+  onOpenArtifacts: () => void;
+  onOpenMemoryPage: () => void;
 }): React.JSX.Element {
   const replay = runMemories.runContext?.context?.replay ?? [];
   const known = runMemories.runContext?.phase !== 'legacy_unknown';
@@ -1012,7 +1030,21 @@ function HistoryAdjustmentSection({
         </ul>
       )}
       <p className="context-note">
-        记忆被修订、排除、失效或材料换版本时，相关旧回答不会继续当作事实使用。
+        旧轮次只是这次不发送，对话没有被删除；记忆被修订、排除、失效或材料换版本时，相关旧回答不会继续当作事实使用。
+      </p>
+      <div className="context-continuity-actions">
+        <button type="button" onClick={onSelectMaterials}>
+          选择本期材料
+        </button>
+        <button type="button" onClick={onOpenArtifacts}>
+          查看上期成果版本
+        </button>
+        <button type="button" onClick={onOpenMemoryPage}>
+          到记忆详情保留方法
+        </button>
+      </div>
+      <p className="context-hint">
+        引用旧成果只固定你选定的那一版，标记参考不等于已读取；要把上期方法长期留下，请在记忆详情以你的口径重新表述，系统不会自动摘要旧回答。
       </p>
     </section>
   );

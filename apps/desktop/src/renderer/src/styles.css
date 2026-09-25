@@ -2737,6 +2737,14 @@ p {
   font-size: 12px;
   line-height: 1.55;
 }
+/* 换期恢复入口：解释之后立刻给出可返回的下一步，不提供「一键恢复全部历史」。 */
+.context-continuity-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 8px;
+}
+
 /* 冲突两侧来源只按需展开，展开后也仅显示登记摘要，不显示原始事件载荷。 */
 .memory-conflict-sources {
   display: grid;
