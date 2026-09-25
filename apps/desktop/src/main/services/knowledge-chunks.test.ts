@@ -71,4 +71,21 @@ describe('buildRetrievalChunks', () => {
     expect(other[0]?.id).not.toBe(first[0]?.id);
     expect(first[0]?.contentHash).toHaveLength(64);
   });
+
+  it('含代理对的正文按码点而非 UTF-16 单元截取窗口', () => {
+    const size = KNOWLEDGE_CHUNK_WINDOW_CODE_POINTS + 250;
+    const content = '😀甲'.repeat(Math.floor(size / 2));
+    const chunks = buildRetrievalChunks({
+      revisionId: 'rev-1',
+      textHash: 'text-1',
+      sections: [{ ordinal: 0, locator: '第 1 段', content }],
+    });
+    const codePoints = Array.from(content);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(Array.from(chunk.content).join('')).toBe(
+        codePoints.slice(chunk.span.start, chunk.span.end).join(''),
+      );
+    }
+  });
 });
