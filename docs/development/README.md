@@ -1,6 +1,6 @@
 # 阶段 A 开发执行手册（供 5.6 Luna 使用）
 
-> 2026-09-25：记忆可靠性增量见[改进 Spec](../designs/memory-improvements.md)、[契约 §11](memory-contracts.md#11-mi-改进契约proposed)、[MI00–MI10 计划](tasks-memory-improvements.md)与 [Qwen3.8-Flash 提示词](memory-improvement-coding-prompts.md)。光哥已查看[低保真原型](../prototype/memory-improvements/index.html)并批准 D1–D5 推荐方案；下一步按提示词单独下达 MI00 核对指令，再逐卡授权开发。全部 MI 卡仍未开工，不改 WM16 或其他系列状态。
+> 2026-09-25：记忆可靠性增量见[改进 Spec](../designs/memory-improvements.md)、[契约 §11](memory-contracts.md#11-mi-改进契约proposed)、[MI00–MI10 计划](tasks-memory-improvements.md)与 [Qwen3.8-Flash 提示词](memory-improvement-coding-prompts.md)。光哥已查看[低保真原型](../prototype/memory-improvements/index.html)并批准 D1–D5 推荐方案，随后下达持续落地指令：MI00–MI05、MI09 的代码与自动化测试已按阶段提交，状态与证据只写任务板；MI02/MI03/MI06/MI07/MI08 的界面部分待光哥按 [MI 人工验收清单](memory-mi10-checklist.md)在真实窗口逐格走查，MI10 的真实模型语义验收仍待配置显示名与调用预算的单独授权。推送与发布未授权，不改 WM16/KM/E 系列状态。
 
 > 2026-09-24：知识补齐统一进入 [KM00–KM15 任务板](tasks-knowledge.md)，产品行为见[知识基础闭环](../designs/knowledge-foundation.md)，技术见 [ADR-0027](../adr/0027-knowledge-foundation.md)与[知识契约](knowledge-contracts.md)，新会话使用 [Qwen3.8-Flash 编码交接](knowledge-coding-prompts.md)。本轮只归档文档，方案 Proposed，全部新卡未开工；不在本手册维护 KM 状态，不重排 A/B0/E/CF/WM。
 
