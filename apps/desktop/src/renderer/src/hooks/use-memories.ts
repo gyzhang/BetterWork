@@ -1,5 +1,6 @@
 import type {
   CreateMemoryRequest,
+  GetMemoryRequest,
   ListMemoriesRequest,
   MemoryConflictResolutionData,
   MemoryProjectionStateData,
@@ -69,6 +70,11 @@ export interface MemoriesState {
   act: (input: SetMemoryStatusRequest) => Promise<MemoryMutationOutcome>;
   resolveConflict: (input: ResolveMemoryConflictRequest) => Promise<MemoryConflictOutcome>;
   rebuildProjection: (operationId: string) => Promise<MemoryProjectionOutcome>;
+  /**
+   * MI07：按需读取某个精确修订的来源摘要（契约 §11.5）。
+   * 只读、不写足迹；越范围的记录由 Main 的读取边界处理，界面不自行补正文。
+   */
+  loadRevision: (input: GetMemoryRequest) => Promise<MemoryOutcome<MemoryViewItem>>;
 }
 
 /** 幂等键（契约 §5.6）：一次提交意图一个 UUID，重试沿用；换草稿才重新生成。 */
@@ -194,6 +200,12 @@ export function useMemories(): MemoriesState {
     [submitWrite],
   );
 
+  const loadRevision = useCallback(
+    async (input: GetMemoryRequest): Promise<MemoryOutcome<MemoryViewItem>> =>
+      settleMemoryCall(window.betterwork.memories.get(input), '读取记忆来源失败，请重试。'),
+    [],
+  );
+
   const update = useCallback(
     async (input: UpdateMemoryRequest): Promise<MemoryMutationOutcome> =>
       submitWrite(
@@ -282,6 +294,7 @@ export function useMemories(): MemoriesState {
     update,
     act,
     resolveConflict,
+    loadRevision,
     rebuildProjection,
   };
 }

@@ -266,6 +266,15 @@ export function MemoryPage({
     );
   };
 
+  /** MI07：冲突两侧按需读取精确修订；失败或越范围返回 undefined，由界面显示占位。 */
+  const loadRevisionById = async (
+    memoryId: string,
+    revisionId: string,
+  ): Promise<MemoryViewItem | undefined> => {
+    const outcome = await state.loadRevision({ id: memoryId, revisionId });
+    return outcome.ok ? outcome.data : undefined;
+  };
+
   const resolveConflict: ConflictResolver = (left, right, decision, options) => {
     trackAction(
       state.resolveConflict({
@@ -428,6 +437,7 @@ export function MemoryPage({
             onReviewSource={reviewLegacySource}
             onPolicy={setPolicy}
             onResolve={resolveConflict}
+            onLoadRevision={loadRevisionById}
             {...(workspaceName ? { workspaceName } : {})}
             {...(expertName ? { expertName } : {})}
           />
@@ -445,6 +455,7 @@ export function MemoryPage({
             onReviewSource={reviewLegacySource}
             onPolicy={setPolicy}
             onResolve={resolveConflict}
+            onLoadRevision={loadRevisionById}
             {...(workspaceName ? { workspaceName } : {})}
             {...(expertName ? { expertName } : {})}
           />
@@ -464,6 +475,7 @@ export function MemoryPage({
             onReviewSource={reviewLegacySource}
             onPolicy={setPolicy}
             onResolve={resolveConflict}
+            onLoadRevision={loadRevisionById}
             editLabel="修改有效期并重新确认"
             {...(workspaceName ? { workspaceName } : {})}
             {...(expertName ? { expertName } : {})}
@@ -483,6 +495,7 @@ export function MemoryPage({
                 onReviewSource={() => undefined}
                 onPolicy={() => undefined}
                 onResolve={() => undefined}
+                onLoadRevision={loadRevisionById}
                 readOnly
                 {...(workspaceName ? { workspaceName } : {})}
                 {...(expertName ? { expertName } : {})}
@@ -535,6 +548,7 @@ interface MemoryGroupProps {
   /** MI06：显式调整召回策略；资格不合格由 Main 拒绝并回原因。 */
   onPolicy: (memory: MemoryViewItem, policy: MemoryRecallPolicy) => void;
   onResolve: ConflictResolver;
+  onLoadRevision: (memoryId: string, revisionId: string) => Promise<MemoryViewItem | undefined>;
   workspaceName?: string;
   expertName?: string;
 }
@@ -553,6 +567,7 @@ function MemoryGroup({
   onReviewSource,
   onPolicy,
   onResolve,
+  onLoadRevision,
   workspaceName,
   expertName,
 }: MemoryGroupProps): React.JSX.Element | null {
@@ -581,6 +596,7 @@ function MemoryGroup({
             onReviewSource={onReviewSource}
             onPolicy={onPolicy}
             onResolve={onResolve}
+            onLoadRevision={onLoadRevision}
             {...(workspaceName ? { workspaceName } : {})}
             {...(expertName ? { expertName } : {})}
           />
@@ -602,6 +618,7 @@ interface MemoryRowProps {
   onReviewSource: (memory: MemoryViewItem) => void;
   onPolicy: (memory: MemoryViewItem, policy: MemoryRecallPolicy) => void;
   onResolve: ConflictResolver;
+  onLoadRevision: (memoryId: string, revisionId: string) => Promise<MemoryViewItem | undefined>;
   workspaceName?: string;
   expertName?: string;
 }
@@ -618,6 +635,7 @@ function MemoryRow({
   onReviewSource,
   onPolicy,
   onResolve,
+  onLoadRevision,
   workspaceName,
   expertName,
 }: MemoryRowProps): React.JSX.Element {
@@ -672,6 +690,7 @@ function MemoryRow({
             memory={memory}
             allMemories={allMemories}
             onResolve={onResolve}
+            onLoadRevision={onLoadRevision}
             {...(workspaceName ? { workspaceName } : {})}
             {...(expertName ? { expertName } : {})}
           />
@@ -750,11 +769,27 @@ const isGlobalScopeOf = (memory: MemoryViewItem): boolean =>
 const isDerived = (memory: MemoryViewItem): boolean =>
   memory.provenance.verification === 'verified' && memory.provenance.authority === 'derived';
 
+/** 来源摘要只回显已登记的实体信息，不展示原始事件载荷或模型内部过程。 */
+const conflictSourceSummary = (item: MemoryViewItem): string => {
+  const provenance = item.provenance;
+  const excerpt =
+    provenance.verification === 'verified' ? provenance.sources[0]?.excerpt : undefined;
+  const dependencies =
+    provenance.verification === 'verified'
+      ? `资料 ${provenance.materialDependencies.length} 项 · 既有记忆 ${provenance.memoryDependencies.length} 条`
+      : '来源待复核';
+  return `${memoryProvenanceLabel(item)} · 修订 v${item.revision} · ${dependencies}${
+    excerpt === undefined ? '' : ` · 摘录「${excerpt.slice(0, 60)}」`
+  }`;
+};
+
 interface ConflictPairProps {
   pair: MemoryConflictPair;
   memory: MemoryViewItem;
   allMemories: MemoryViewItem[];
   onResolve: ConflictResolver;
+  /** MI07：按精确修订读取两侧来源；越范围或不存在时返回 undefined，界面只给占位。 */
+  onLoadRevision: (memoryId: string, revisionId: string) => Promise<MemoryViewItem | undefined>;
   workspaceName?: string;
   expertName?: string;
 }
@@ -770,11 +805,17 @@ function ConflictPair({
   memory,
   allMemories,
   onResolve,
+  onLoadRevision,
   workspaceName,
   expertName,
 }: ConflictPairProps): React.JSX.Element {
   const [note, setNote] = useState('');
   const [winner, setWinner] = useState(memory.id);
+  const [sources, setSources] = useState<{
+    readonly lines: readonly string[];
+    readonly missing: boolean;
+  }>({ lines: [], missing: false });
+  const [sourcesOpen, setSourcesOpen] = useState(false);
   const other = allMemories.find(
     (item) =>
       item.revisionId ===
@@ -815,6 +856,57 @@ function ConflictPair({
             <p className="muted-text">另一条记录不在当前列表，可能已被替代或超出筛选范围。</p>
           )}
         </div>
+      </div>
+      <div className="memory-conflict-sources">
+        <button
+          type="button"
+          aria-expanded={sourcesOpen}
+          onClick={() => {
+            if (sourcesOpen) {
+              setSourcesOpen(false);
+              return;
+            }
+            const revisionIds = [pair.leftRevisionId, pair.rightRevisionId];
+            const loadSides = async (): Promise<void> => {
+              const items = await Promise.all(
+                revisionIds.map(async (revisionId) => {
+                  const owner =
+                    revisionId === memory.revisionId
+                      ? memory
+                      : allMemories.find((item) => item.revisionId === revisionId);
+                  // 只读取当前列表里已可管理的记录，不借来源探测其他空间的内容。
+                  if (!owner) return undefined;
+                  return onLoadRevision(owner.id, revisionId);
+                }),
+              );
+              const readable = items.filter((item): item is MemoryViewItem => item !== undefined);
+              setSources({
+                lines: readable.map((item) => `${item.content}｜${conflictSourceSummary(item)}`),
+                missing: readable.length < revisionIds.length,
+              });
+              setSourcesOpen(true);
+            };
+            trackAction(loadSides(), '读取冲突两侧来源');
+          }}
+        >
+          {sourcesOpen ? '收起两侧来源' : '查看两侧来源'}
+        </button>
+        {sourcesOpen && (
+          <>
+            {sources.lines.length > 0 && (
+              <ul className="memory-conflict-source-list">
+                {sources.lines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            )}
+            {sources.missing && (
+              <p className="muted-text">
+                另一条不在当前管理范围或已不可读取：这里不显示其正文与来源，请在其合法管理范围内处理。
+              </p>
+            )}
+          </>
+        )}
       </div>
       {state === 'keep-both' && 'applicabilityNote' in pair && (
         <p className="memory-conflict-note">

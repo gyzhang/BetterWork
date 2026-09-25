@@ -2737,6 +2737,21 @@ p {
   font-size: 12px;
   line-height: 1.55;
 }
+/* 冲突两侧来源只按需展开，展开后也仅显示登记摘要，不显示原始事件载荷。 */
+.memory-conflict-sources {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+.memory-conflict-source-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  list-style: disc;
+}
+
 .memory-duplicate-hint {
   display: block;
   margin-top: 5px;

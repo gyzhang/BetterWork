@@ -2,6 +2,8 @@
 
 import type {
   CreateMemoryRequest,
+  GetMemoryRequest,
+  MemoryConflictPair,
   MemoryConflictResolutionData,
   MemoryViewItem,
   MemoryWriteReceipt,
@@ -29,6 +31,8 @@ import { type MemoryManagementTarget, MemoryPage } from './MemoryView';
 
 const HASH_A = 'a'.repeat(64);
 const HASH_B = 'b'.repeat(64);
+
+import type { MemoryOutcome } from '../lib/memory-result';
 
 const receipt: MemoryWriteReceipt = {
   operationId: 'c'.repeat(36),
@@ -97,6 +101,11 @@ const state = (overrides?: Partial<MemoriesState>): MemoriesState => ({
   refresh: vi.fn(),
   create: vi.fn(async (): Promise<MemoryMutationOutcome> => success),
   update: vi.fn(async (): Promise<MemoryMutationOutcome> => success),
+  loadRevision: vi.fn(async (): Promise<MemoryOutcome<MemoryViewItem>> => ({
+    ok: true,
+    data: memoryViewItem(),
+    warnings: [],
+  })),
   act: vi.fn(async (): Promise<MemoryMutationOutcome> => success),
   resolveConflict: vi.fn(async (): Promise<MemoryConflictOutcome> => ({
     ok: true,
@@ -483,5 +492,90 @@ describe('MemoryPage 召回策略（MI06）', () => {
     });
     render(<MemoryPage state={current} />);
     expect(screen.queryByRole('button', { name: '设为优先带入' })).toBeNull();
+  });
+});
+
+describe('MemoryPage 冲突来源回看（MI07）', () => {
+  afterEach(cleanup);
+
+  const pairOf = (state: MemoryConflictPair['state'], note?: string): MemoryConflictPair =>
+    state === 'keep-both'
+      ? {
+          leftRevisionId: 'memory-1-r1',
+          rightRevisionId: 'memory-2-r1',
+          state,
+          applicabilityNote: note ?? '签约口径用于合同，回款口径用于月报。',
+        }
+      : { leftRevisionId: 'memory-1-r1', rightRevisionId: 'memory-2-r1', state };
+
+  const sides = (): MemoryViewItem[] => [
+    memoryViewItem({
+      conflicts: [pairOf('keep-both')],
+      status: 'confirmed',
+      effectiveStatus: 'confirmed',
+      candidateDisposition: undefined,
+    }),
+    memoryViewItem({
+      id: 'memory-2',
+      revisionId: 'memory-2-r1',
+      content: '收入按回款金额统计。',
+      status: 'confirmed',
+      effectiveStatus: 'confirmed',
+      candidateDisposition: undefined,
+    }),
+  ];
+
+  it('默认只说「可能冲突」，展开后按精确修订显示两侧来源摘要', async () => {
+    const loadRevision = vi.fn(
+      async (input: GetMemoryRequest): Promise<MemoryOutcome<MemoryViewItem>> => ({
+        ok: true,
+        data: memoryViewItem({
+          content: '收入按回款金额统计。',
+          ...(input.revisionId === undefined ? {} : { revisionId: input.revisionId }),
+        }),
+        warnings: [],
+      }),
+    );
+    const current = state({ memories: sides(), loadRevision });
+    render(<MemoryPage state={current} />);
+
+    expect(screen.getByText('签约口径用于合同，回款口径用于月报。')).toBeDefined();
+    expect(screen.queryByText(/摘录「/)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '查看两侧来源' }));
+    await waitFor(() => expect(loadRevision).toHaveBeenCalledTimes(2));
+    expect(
+      await screen.findAllByText(/摘录「先核对财务规则|摘录「收入按回款金额统计/),
+    ).toHaveLength(2);
+    // 读取按精确修订发起，不拿当前草稿冒充历史裁决对象。
+    expect(loadRevision.mock.calls.map((call) => call[0]?.revisionId)).toEqual([
+      'memory-1-r1',
+      'memory-2-r1',
+    ]);
+  });
+
+  it('另一条越出可管理范围时不请求也不显示其正文', async () => {
+    const loadRevision = vi.fn(
+      async (input: GetMemoryRequest): Promise<MemoryOutcome<MemoryViewItem>> => ({
+        ok: true,
+        data: memoryViewItem({
+          ...(input.revisionId === undefined ? {} : { revisionId: input.revisionId }),
+        }),
+        warnings: [],
+      }),
+    );
+    const orphan = memoryViewItem({
+      conflicts: [pairOf('unresolved')],
+      status: 'confirmed',
+      effectiveStatus: 'confirmed',
+      candidateDisposition: undefined,
+    });
+    const current = state({ memories: [orphan], loadRevision });
+    render(<MemoryPage state={current} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '查看两侧来源' }));
+    await waitFor(() => expect(loadRevision).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/另一条不在当前管理范围或已不可读取/)).toBeDefined();
+    expect(screen.queryByText('收入按回款金额统计。')).toBeNull();
   });
 });
