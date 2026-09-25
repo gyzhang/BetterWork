@@ -153,6 +153,9 @@ describe('MemoryEditor 回答捕获（MI02）', () => {
     await Promise.resolve();
     expect(onSubmit).not.toHaveBeenCalled();
     expect(screen.getByText('请先在回答原文里确认要保留的来源片段。')).toBeDefined();
+    // 反馈路由护栏（docs/10 §11.5.1）：错误必须落在内联错误槽里，且不存在非错误态的 `.inline-message`。
+    expect(document.querySelector('.inline-message.error.memory-editor-problems')).not.toBeNull();
+    expect(document.querySelector('.inline-message:not(.error)')).toBeNull();
   });
 
   it('带来源选择器提交时保留 selector 且 asUserInstruction 为 false', async () => {

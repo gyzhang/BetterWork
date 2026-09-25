@@ -655,6 +655,26 @@ describe('ContextPanel 本任务已排除（MI03）', () => {
     expect(labels).toContain('移除此排除');
   });
 
+  /** 读取失败也要留在原位并可重试：内联错误槽（docs/10 §11.5.1），不弹全局横幅也不清空清单。 */
+  it('排除清单读取失败时给内联错误与重试，不影响已读到的条目', () => {
+    const reload = vi.fn();
+    const container = renderPanel({
+      excludedMemoryIds: ['memory-1'],
+      exclusions: exclusions({ items, error: '读取本任务已排除记忆失败，请重试。', reload }),
+    });
+    const section = container.querySelector('.memory-excluded-section');
+    expect(section?.querySelector('.inline-message.error')?.textContent).toContain(
+      '读取本任务已排除记忆失败',
+    );
+    expect(section?.querySelector('.inline-message:not(.error)')).toBeNull();
+    const retry = [...(section?.querySelectorAll('button') ?? [])].find(
+      (button) => button.textContent === '重试',
+    );
+    retry?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(section?.textContent).toContain('金额按万元保留两位。');
+  });
+
   it('恢复动作只针对该条排除，越范围项也能移除', () => {
     const onToggleMemory = vi.fn();
     const container = renderPanel({
