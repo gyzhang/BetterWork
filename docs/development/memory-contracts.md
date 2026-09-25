@@ -366,6 +366,8 @@ Renderer 选择：仅接受当前回答容器内单段选区；原始正文唯�
 
 Hook 按 taskId＋contextRevision＋请求序号防过期响应。切任务/卸载丢弃 UI 结果但不撤销已提交保存；同任务串行写入。REVISION_CONFLICT 不自动覆盖或静默合并其他编辑。预览与排除查询独立错误状态；恢复后重算只更新「下次运行」，不修改当前 Run。
 
+排除额度 `MEMORY_TASK_EXCLUSION_MAX` 由写回 Schema 与界面 Hook 共用同一份协议常量：额度用满时 Hook 在本地就地给出「先恢复一条再排除」的可操作原因，不发一条注定被 Schema 拒绝的请求——否则界面只会把它显示成一句疑似上下文冲突的失败；恢复操作不受额度影响。
+
 ### 11.3 显式策略与持久化（MI04/MI05/MI06）
 
 `MemoryRecord.recallPolicy: 'relevant'|'pinned'`；应用表 `memory_records.recall_policy TEXT NOT NULL DEFAULT 'relevant'`，CHECK 枚举。这是修订字段，不是新 scope/status/authority；不参与正文 contentHash/normalizedHash，但包含在操作请求哈希与变更检测中。写新修订、状态变化时明确继承，不由默认值悄悄清掉。
