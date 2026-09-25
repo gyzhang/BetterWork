@@ -11,6 +11,7 @@ import type {
   SetMemoryStatusRequest,
   UpdateMemoryRequest,
 } from '@betterwork/agent-protocol';
+import { MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS } from '@betterwork/agent-protocol';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -238,6 +239,40 @@ describe('MemoryPage', () => {
       applicabilityNote: '签约口径用于合同，回款口径用于经营月报。',
     });
     expect(request.winnerId).toBeUndefined();
+  });
+
+  /** MI07 AC2：超上限要在当场给出原因和计数，不能只把按钮静默禁掉。 */
+  it('适用条件超过上限时给出码点计数与原因，修正后可提交', async () => {
+    const conflictPair = {
+      leftRevisionId: 'memory-1-r1',
+      rightRevisionId: 'memory-2-r1',
+      state: 'unresolved' as const,
+    };
+    const withConflict = memoryViewItem({ conflicts: [conflictPair] });
+    const right = memoryViewItem({
+      id: 'memory-2',
+      revisionId: 'memory-2-r1',
+      content: '收入按回款金额统计。',
+      topicKey: '收入口径',
+    });
+    const current = state({ memories: [withConflict, right] });
+    render(<MemoryPage state={current} />);
+
+    const note = screen.getByRole('textbox', { name: '适用条件说明' });
+    fireEvent.change(note, {
+      target: { value: '口'.repeat(MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS + 1) },
+    });
+    expect(screen.getByRole('button', { name: '确认两条并存' })).toHaveProperty('disabled', true);
+    expect(screen.getByText(/最多 300 个码点，当前 301 个/)).toBeTruthy();
+    expect(screen.getByText(/已写 301 \/ 300 码点/)).toBeTruthy();
+    expect(document.querySelector('.inline-message:not(.error)')).toBeNull();
+    expect(current.resolveConflict).not.toHaveBeenCalled();
+
+    fireEvent.change(note, { target: { value: '签约口径用于合同。' } });
+    const keepBoth = screen.getByRole('button', { name: '确认两条并存' });
+    expect(keepBoth).toHaveProperty('disabled', false);
+    fireEvent.click(keepBoth);
+    await waitFor(() => expect(current.resolveConflict).toHaveBeenCalledTimes(1));
   });
 
   it('replaces a conflicting rule only with an explicit winner', async () => {

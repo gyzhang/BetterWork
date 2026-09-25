@@ -824,6 +824,7 @@ function ConflictPair({
   const state = pair.state;
   const notePoints = countCodePoints(note.trim());
   const canKeepBoth = notePoints >= 1 && notePoints <= MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS;
+  const noteOverLimit = notePoints > MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS;
   return (
     <div className={`memory-conflict conflict-${state}`} role="note">
       <strong>
@@ -944,6 +945,15 @@ function ConflictPair({
             placeholder="并存：写出两条各自的适用条件"
             onChange={(event) => setNote(event.target.value)}
           />
+          <p className="memory-conflict-hint">
+            已写 {notePoints} / {MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS} 码点
+          </p>
+          {noteOverLimit && (
+            <p className="inline-message error" role="alert">
+              适用条件最多 {MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS} 个码点，当前 {notePoints}{' '}
+              个，请先精简后再确认并存。
+            </p>
+          )}
           <button
             type="button"
             disabled={!canKeepBoth}
