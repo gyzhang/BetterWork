@@ -9,7 +9,7 @@
 **建议优先完成 MI-M0，不承诺当天下午做完全部改进。** 以下是顺序与停止点，不是工时估算或隐含开工授权。
 
 1. D1–D5 推荐方案已获光哥批准，无需重复评审未变化的方案；仍可只安排 MI-M0，后续阶段另行派卡。
-2. 取得 MI00 指令后，让 Qwen3.8-Flash 执行只读基线核对，再分别授权 MI01 → MI02 → MI03。
+2. MI00 已核对，MI01–MI03 的代码与自动化已落地（见状态表）；MI-M0 仍需光哥在真实应用完成两条人工路径后才算通过。
 3. MI-M0 的门槛：来源链与排除恢复自动化通过、应用中完成两条人工路径；未通过就停在此里程碑，不带病叠加新策略。
 4. MI-M0 通过且取得对应卡授权后，再执行 MI04 → MI05 → MI06。MI04 是迁移基础，不单独宣布优先策略可用。
 5. MI07 → MI08 完成治理与换期；MI09 做离线联合回归；MI10 单独安排真实 UI 与已授权的真实模型效果评审。
@@ -31,9 +31,9 @@
 | 卡片 | 交付 | 前置 | 状态 | 证据 |
 | --- | --- | --- | --- | --- |
 | MI00 | 基线、原型决策与授权核对 | 无 | done | 2026-09-25 14:43 核对：HEAD `7ba8761`；`apps/desktop/src/main/db/app-schema.ts` 实际最新迁移 **32**（MI04 只能用 33 起）；工作树只有本增量文档与原型（docs/ 6 改 5 新），无并行会话未提交代码；静态问题仍存在——`memory-provenance-reader.ts:11–18` 只匹配 message.completed 不验最终无工具、`:29–32` 只读快照材料，`memory-service.ts:150–164` 手工解析固定 `memoryDependencies: []`，`ContextPanel.tsx` 排除行仍随 selectedItems 重算。审批：D1–D5 方案已批；MI01+ 逐卡开发、真实模型、真实 UI 与提交推送各自仍需指令。 |
-| MI01 | Main 手工来源依赖闭环 | MI00；D1 | todo | — |
-| MI02 | 回答原文选择与保留来源保存 | MI01；D1 | todo | — |
-| MI03 | 持久化排除列表与恢复 | MI00；D2；建议在 MI02 后 | todo | — |
+| MI01 | Main 手工来源依赖闭环 | MI00；D1 | done | 提交 `cd36d2a`。`memory-provenance.ts` 新增最终无工具回答＋真实空间归属＋依赖闭包校验，`ResolvedMemorySource.memoryDependencies` 由解析结果传入（原 `memory-service.ts:162` 硬编空数组已消除）；缺快照/审计→`SOURCE_REVIEW_REQUIRED`，缺修订/哈希不符/失效同码，循环→`SOURCE_DEPENDENCY_CYCLE`，超限→`SOURCE_DEPENDENCY_LIMIT`，501 码点摘录→`SOURCE_MISMATCH`；checkpoint 与 artifact-version 分支不再允许空依赖降级。协议层拒绝 `sourceSelector` ＋ `asUserInstruction=true`。证据：`memory-provenance.test.ts` 19 例、`work-centered-memory.integration.test.ts` 真实 SQLite 两例（继承等式/幂等重放/非最终事件/缺审计/零写入），全仓 `npm run verify` 通过 131 文件 1225 测试。 |
+| MI02 | 回答原文选择与保留来源保存 | MI01；D1 | doing | 自动化通过，UI 待验。提交 `c3a5348`：`lib/memory-capture.ts`（最终回答判定、UTF-16→码点换算、半代理对拒绝、唯一命中定位）、`components/MemoryCaptureSource.tsx` 只读原文重选、`MemoryEditor` 新增 `requireSource`，未确认选区不能提交且不再静默转 manual；捕获范围过滤掉 user/expert 全局。`App.test.tsx` 新增选区保留来源与不提供全局两例，`memory-capture.test.ts` 8 例含非 BMP 与重复片段。 |
+| MI03 | 持久化排除列表与恢复 | MI00；D2；建议在 MI02 后 | doing | 自动化通过，UI 待验。提交 `f914bcc`：新只读通道 `memory:task-exclusions`（不要求 prompt）＋ `TaskMemoryExclusionItem` strict 联合，越范围/不存在统一 `unavailable` 占位；`MemoryRecallService.taskExclusions` 直接投影 TaskContext 顺序、去重、上限 100（`MEMORY_TASK_EXCLUSION_MAX` 与 TaskContext/保存 Schema 共用），写入仍走 `SaveTaskContextRequest`＋CAS，未新建排除表。证据：`task-memory-exclusions.test.ts` 真实 SQLite 4 例（含不泄露他空间正文、修订冲突回 `REVISION_CONFLICT`＋当前修订号）、`ContextPanel.test.tsx` 独立清单在预览失败时仍可恢复。 |
 | MI04 | recallPolicy 字段与真实迁移 | MI-M0；D3 | todo | — |
 | MI05 | 优先策略写入与 v2 召回/历史兼容 | MI04 | todo | — |
 | MI06 | 优先规则管理与原因展示 | MI05；D3 | todo | — |
