@@ -6,6 +6,7 @@ import type {
   SaveTaskContextRequest,
   TaskContextRevision,
 } from '@betterwork/agent-protocol';
+import { MEMORY_TASK_EXCLUSION_MAX } from '@betterwork/agent-protocol';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { describeActionError, trackAction } from '../lib/async-action';
@@ -203,13 +204,21 @@ export function useTaskMemoryExclusion(): TaskMemoryExclusionState {
       context: TaskContextRevision,
       memoryId: string,
     ): Promise<TaskContextRevision | undefined> => {
+      const excluded = context.excludedMemoryIds ?? [];
+      if (!excluded.includes(memoryId) && excluded.length >= MEMORY_TASK_EXCLUSION_MAX) {
+        // 上限由协议 Schema 兜底，但直接发请求会把它变成「上下文已更新」的误导性失败：
+        // 这里当场说明是额度用满，并保留恢复入口。放在置态之前，避免留下「正在调整…」。
+        setError(
+          `本任务最多记录 ${MEMORY_TASK_EXCLUSION_MAX} 条排除，已用满。请先恢复一条不再排除的记忆，再调整这条。`,
+        );
+        return undefined;
+      }
       guard.current.request += 1;
       const requestId = guard.current.request;
       const token = `${context.taskId}|${context.revision}|${memoryId}`;
       guard.current.token = token;
       setSavingMemoryId(memoryId);
       setError('');
-      const excluded = context.excludedMemoryIds ?? [];
       const next = excluded.includes(memoryId)
         ? excluded.filter((id) => id !== memoryId)
         : [...excluded, memoryId];

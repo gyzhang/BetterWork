@@ -8,7 +8,7 @@ import type {
   SaveTaskContextRequest,
   TaskContextRevision,
 } from '@betterwork/agent-protocol';
-import { memoryRecallPolicyV1 } from '@betterwork/agent-protocol';
+import { MEMORY_TASK_EXCLUSION_MAX, memoryRecallPolicyV1 } from '@betterwork/agent-protocol';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -293,6 +293,38 @@ describe('useTaskMemoryExclusion', () => {
     expect(returned?.revision).toBe(4);
     expect(result.current.error).toBe('');
     expect(result.current.savingMemoryId).toBeUndefined();
+  });
+
+  /** 上限要能解释：第 101 条不发给 Main，否则界面只会收到一句误导性的「上下文已更新」。 */
+  it('排除额度用满时就地说明原因，不发请求也不留在进行中状态', async () => {
+    const save = vi.fn(async (input: SaveTaskContextRequest) => ({
+      context: contextRevision(input.excludedMemoryIds ?? []),
+    }));
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: { taskContexts: { save } },
+    });
+
+    const full = Array.from({ length: MEMORY_TASK_EXCLUSION_MAX }, (_unused, index) =>
+      String(index),
+    );
+    const { result } = renderHook(() => useTaskMemoryExclusion());
+    let returned: TaskContextRevision | undefined;
+    await act(async () => {
+      returned = await result.current.toggle(contextRevision(full), 'memory-new');
+    });
+
+    expect(save).not.toHaveBeenCalled();
+    expect(returned).toBeUndefined();
+    expect(result.current.error).toContain('本任务最多记录 100 条排除');
+    expect(result.current.savingMemoryId).toBeUndefined();
+
+    // 用满额度不影响恢复：去掉一条排除仍然照原样提交完整上下文。
+    await act(async () => {
+      returned = await result.current.toggle(contextRevision([...full, 'memory-new']), '0');
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save.mock.calls[0]?.[0]?.excludedMemoryIds).not.toContain('0');
   });
 
   it('已排除的记忆再次点击是从列表里移除，而不是重复追加', async () => {

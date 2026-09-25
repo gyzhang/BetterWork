@@ -47,6 +47,7 @@ import {
   runMemoryContextSchema,
   runtimeEnvironmentSchema,
   runtimeProfileDraftSchema,
+  saveTaskContextRequestSchema,
   scriptExecutionSchema,
   setSkillTrustRequestSchema,
   skillBindingSchema,
@@ -1176,5 +1177,14 @@ describe('MI 运行快照 v1/v2 兼容与优先预算字面量', () => {
     expect(MEMORY_TASK_EXCLUSION_MAX).toBe(100);
     expect(memoryQueryContextSchema.safeParse(queryOf(100)).success).toBe(true);
     expect(memoryQueryContextSchema.safeParse(queryOf(101)).success).toBe(false);
+    // 写回口用同一上限：界面拦在前面，Schema 是兜底，两处不能各有自己的数字。
+    const saveOf = (count: number) => ({
+      taskId: 'task-1',
+      executor: { kind: 'general' },
+      skillBindings: [],
+      excludedMemoryIds: Array.from({ length: count }, (_unused, index) => `memory-${index}`),
+    });
+    expect(saveTaskContextRequestSchema.safeParse(saveOf(100)).success).toBe(true);
+    expect(saveTaskContextRequestSchema.safeParse(saveOf(101)).success).toBe(false);
   });
 });
