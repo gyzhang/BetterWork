@@ -1197,6 +1197,16 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
   it('Q1–Q8 八种无词面问法都经生产发送链路带入优先规则，且词面分数如实为 0', async () => {
     const world = await createWorld();
     const rule = await pinRule(world);
+    // 对照前提：同样合法但没有设优先的规则，零词面命中时必须不入选——
+    // 否则「免词面」就成了对所有记忆的放行，矩阵 §5.0 的断言也就没有意义。
+    const control = await confirmMemory(
+      world,
+      { kind: 'workspace', workspaceId: world.layout.workspaceA },
+      {
+        content: '对照口径：按千元列示。',
+        facet: 'constraint',
+      },
+    );
 
     for (const [index, prompt] of PINNED_PROMPTS.entries()) {
       const task = world.services.store.tasks.create(
@@ -1227,6 +1237,34 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
       expect(selected?.reason, prompt).toBe('pinned-rule');
       expect(selected?.score, prompt).toBe(0);
       expect(audit?.recallVersion, prompt).toBe('memory-recall-v2');
+      // 同一次运行里，未设优先且零词面命中的合法规则不得混进来，且要有可解释原因。
+      expect(
+        (audit?.selectedItems ?? []).some((item) => item.memoryId === control.id),
+        prompt,
+      ).toBe(false);
+      expect(mentions(lastRunRequest(world), '对照口径：按千元列示。'), prompt).toBe(false);
+      expect(
+        audit?.decisionSummary.exclusions
+          .find((entry) => entry.reason === 'not-relevant')
+          ?.identities.map((entry) => entry.memoryId),
+        prompt,
+      ).toContain(control.id);
+
+      // 矩阵 §5.0 要的是「preview 与实际请求都带」：只断言请求侧会漏掉预览那条同口径承诺。
+      const preview = world.services.recall.preview({
+        taskId: task.task.id,
+        taskContextRevisionId: context.id,
+        expectedTaskContextRevision: context.revision,
+        prompt,
+      });
+      expect(preview.ok, prompt).toBe(true);
+      if (!preview.ok) continue;
+      const previewSelected = preview.data.selectedItems.find(
+        (entry) => entry.memoryId === rule.id,
+      );
+      expect(previewSelected?.reason, prompt).toBe('pinned-rule');
+      expect(previewSelected?.score, prompt).toBe(0);
+      expect(preview.data.policySnapshot.recallVersion, prompt).toBe('memory-recall-v2');
     }
   });
 
