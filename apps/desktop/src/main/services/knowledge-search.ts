@@ -7,6 +7,7 @@ import {
   KNOWLEDGE_SEARCH_SUMMARY_MAX_CODE_POINTS,
   KNOWLEDGE_VECTOR_MAX_PUBLISHED,
   KNOWLEDGE_VECTOR_SCAN_BATCH_MAX_BYTES,
+  type KnowledgeLibraryFilter,
   type KnowledgeMaterialReference,
   type KnowledgeSearchDegradedReason,
   type KnowledgeSearchEffectiveMode,
@@ -221,8 +222,15 @@ export class KnowledgeSearchService {
       }
       return ids;
     }
+    const filter: KnowledgeLibraryFilter =
+      scope.collectionId !== undefined
+        ? { kind: 'collection', collectionId: scope.collectionId }
+        : scope.uncategorized === true
+          ? { kind: 'uncategorized' }
+          : { kind: 'all' };
     const ids: string[] = [];
-    for (const document of this.vault.listDocuments()) {
+    // 集合过滤发生在候选收集之前：未选集合的资料不占 top 名额（契约 §10.1）。
+    for (const document of this.vault.listDocuments(filter)) {
       const revisionId = this.vault.registeredRevisionId(document.id);
       if (revisionId) ids.push(revisionId);
     }

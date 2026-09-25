@@ -1,4 +1,9 @@
-import type { KnowledgeDocumentSummary, KnowledgeSearchHit } from '@betterwork/agent-protocol';
+import type {
+  KnowledgeCollection,
+  KnowledgeDocumentSummary,
+  KnowledgeLibraryFilter,
+  KnowledgeSearchHit,
+} from '@betterwork/agent-protocol';
 import { useCallback, useState } from 'react';
 
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
@@ -58,6 +63,12 @@ const sourceStateLine = (
     `关键词索引${document.lexicalState === 'ready' ? '就绪' : '失败'}`,
     `向量索引${SEMANTIC_STATE_LABELS[document.semanticState]}`,
   ].join(' · ');
+
+/** FieldSelect 用扁平 id 表达筛选；集合项加前缀避免与派生视图撞名。 */
+const COLLECTION_OPTION_PREFIX = 'collection:';
+
+const filterOptionId = (value: KnowledgeLibraryFilter): string =>
+  value.kind === 'collection' ? `${COLLECTION_OPTION_PREFIX}${value.collectionId}` : value.kind;
 
 const DEGRADED_LABELS: Record<string, string> = {
   'semantic-disabled': '未启用语义检索',
@@ -124,6 +135,13 @@ export function KnowledgePage({
     loadNextDetailPage,
     loadPreviousDetailPage,
     checkDocumentSource,
+    collections,
+    filter,
+    setFilter,
+    createCollection,
+    renameCollection,
+    deleteCollection,
+    saveDocumentCollections,
   } = library;
   const detailRevision = detailRevisions.find((revision) => revision.id === detailRevisionId);
   const showingResults = Boolean(query.trim());
@@ -144,7 +162,20 @@ export function KnowledgePage({
   const [adminOpen, setAdminOpen] = useState(false);
   const [pendingEnable, setPendingEnable] = useState<{ profileId: string }>();
   const [pendingRebuild, setPendingRebuild] = useState<'normal' | 'forced'>();
+  const [pendingCollectionDelete, setPendingCollectionDelete] = useState<KnowledgeCollection>();
+  const [newCollectionName, setNewCollectionName] = useState('');
+  const [renameDrafts, setRenameDrafts] = useState<Record<string, string>>({});
+  const [memberDraft, setMemberDraft] = useState<{ documentId: string; ids: string[] }>();
   const dismissToast = useCallback(() => setToast(undefined), []);
+
+  const filterOptions = [
+    { id: 'all', label: '全部资料' },
+    { id: 'uncategorized', label: '未分类' },
+    ...collections.map((collection) => ({
+      id: `${COLLECTION_OPTION_PREFIX}${collection.id}`,
+      label: collection.name,
+    })),
+  ];
 
   const semanticOn = settings?.semanticEnabled ?? false;
   const enableAllowed = semanticOn || (settings?.embeddingAvailable ?? false);
@@ -153,6 +184,10 @@ export function KnowledgePage({
     label: `${model.name} · ${model.model}`,
   }));
   const selectedProfileId = settings?.embeddingProfileId ?? embeddingModels[0]?.id ?? '';
+  const detailMemberIds =
+    detailDocument && memberDraft?.documentId === detailDocument.id
+      ? memberDraft.ids
+      : (detailDocument?.collectionIds ?? []);
 
   return (
     <>
@@ -182,6 +217,21 @@ export function KnowledgePage({
             Word。
           </p>
           <PageToolbar ariaLabel="资料库操作">
+            <FieldSelect
+              options={filterOptions}
+              value={filterOptionId(filter)}
+              ariaLabel="按集合筛选资料"
+              onChange={(id) =>
+                setFilter(
+                  id.startsWith(COLLECTION_OPTION_PREFIX)
+                    ? {
+                        kind: 'collection',
+                        collectionId: id.slice(COLLECTION_OPTION_PREFIX.length),
+                      }
+                    : { kind: id === 'uncategorized' ? 'uncategorized' : 'all' },
+                )
+              }
+            />
             <form
               className="knowledge-search"
               onSubmit={(event) => trackAction(onSearch(event), '检索资料')}
@@ -274,6 +324,75 @@ export function KnowledgePage({
                 <small>
                   普通重建只更新当前资料的兼容索引；强制重建会立即停用全部旧语义索引。关键词检索始终可用。
                 </small>
+              </div>
+              <div className="knowledge-admin-row knowledge-collections">
+                <strong>集合管理</strong>
+                <form
+                  className="knowledge-collection-create"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const name = newCollectionName.trim();
+                    if (!name) return;
+                    setNewCollectionName('');
+                    trackAction(createCollection(name), '新建集合');
+                  }}
+                >
+                  <input
+                    value={newCollectionName}
+                    onChange={(event) => setNewCollectionName(event.target.value)}
+                    placeholder="新集合名称…"
+                    aria-label="新集合名称"
+                    maxLength={60}
+                  />
+                  <button type="submit" disabled={!newCollectionName.trim()}>
+                    新建
+                  </button>
+                </form>
+                {collections.length === 0 && <small>还没有集合；资料可先留在全部资料中。</small>}
+                {collections.map((collection) => {
+                  const draftName = renameDrafts[collection.id] ?? collection.name;
+                  return (
+                    <div className="knowledge-collection-row" key={collection.id}>
+                      <input
+                        value={draftName}
+                        onChange={(event) =>
+                          setRenameDrafts((drafts) => ({
+                            ...drafts,
+                            [collection.id]: event.target.value,
+                          }))
+                        }
+                        aria-label={`集合「${collection.name}」的新名称`}
+                        maxLength={60}
+                      />
+                      <button
+                        type="button"
+                        disabled={!draftName.trim() || draftName.trim() === collection.name}
+                        onClick={() => {
+                          const name = draftName.trim();
+                          setRenameDrafts((drafts) => {
+                            const next = { ...drafts };
+                            delete next[collection.id];
+                            return next;
+                          });
+                          trackAction(
+                            renameCollection(collection.id, name, collection.revision),
+                            '改名集合',
+                          );
+                        }}
+                      >
+                        改名
+                      </button>
+                      <button
+                        type="button"
+                        className="knowledge-admin-danger"
+                        onClick={() => setPendingCollectionDelete(collection)}
+                      >
+                        删除
+                      </button>
+                    </div>
+                  );
+                })}
+                <small>集合只是本地分类：不移动本机文件，也不改变任务已固定的材料。</small>
               </div>
             </section>
           )}
@@ -447,6 +566,50 @@ export function KnowledgePage({
                     </div>
                   ))}
                 </section>
+                <section className="knowledge-detail-members" aria-label="所属集合">
+                  <strong>集合</strong>
+                  {collections.length === 0 && (
+                    <small>还没有集合，可在「索引与模型」面板新建。</small>
+                  )}
+                  {collections.map((collection) => (
+                    <label className="knowledge-collection-check" key={collection.id}>
+                      <input
+                        type="checkbox"
+                        checked={detailMemberIds.includes(collection.id)}
+                        onChange={(event) =>
+                          setMemberDraft({
+                            documentId: detailDocument.id,
+                            ids: event.target.checked
+                              ? [...detailMemberIds, collection.id]
+                              : detailMemberIds.filter((id) => id !== collection.id),
+                          })
+                        }
+                      />
+                      {collection.name}
+                    </label>
+                  ))}
+                  <div>
+                    <button
+                      type="button"
+                      disabled={memberDraft?.documentId !== detailDocument.id}
+                      onClick={() => {
+                        const ids = memberDraft?.ids ?? [];
+                        setMemberDraft(undefined);
+                        trackAction(
+                          saveDocumentCollections(
+                            detailDocument.id,
+                            detailDocument.membershipRevision,
+                            ids,
+                          ),
+                          '保存集合分类',
+                        );
+                      }}
+                    >
+                      保存分类
+                    </button>
+                    <small>勾选即加入、取消即移出；分类不改变内容版本，也不动任务材料。</small>
+                  </div>
+                </section>
                 <section className="knowledge-detail-text" aria-label="保存文本预览">
                   {detailLoading && <small>正在读取保存文本…</small>}
                   {detailPage?.parts.map((part) => (
@@ -568,6 +731,19 @@ export function KnowledgePage({
             const target = removalTarget;
             setRemovalTarget(undefined);
             trackAction(onRemove(target), '移出资料库');
+          }}
+        />
+      )}
+      {pendingCollectionDelete && (
+        <ConfirmationDialog
+          title={`删除集合「${pendingCollectionDelete.name}」？`}
+          detail="只解除这层分类，不会删除资料或本机原件；其他集合与任务材料不受影响。"
+          confirmLabel="删除集合"
+          onCancel={() => setPendingCollectionDelete(undefined)}
+          onConfirm={() => {
+            const target = pendingCollectionDelete;
+            setPendingCollectionDelete(undefined);
+            trackAction(deleteCollection(target.id, target.revision), '删除集合');
           }}
         />
       )}

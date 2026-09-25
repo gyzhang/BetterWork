@@ -217,6 +217,10 @@ function installApi(options?: {
         embeddingAvailable: false,
       })),
       onJobEvent: vi.fn(() => () => undefined),
+      listCollections: vi.fn(async () => []),
+      saveCollection: vi.fn(async () => []),
+      deleteCollection: vi.fn(async () => []),
+      setCollectionMembers: vi.fn(async () => ({ membershipRevision: 2, collectionIds: [] })),
     },
     artifacts: {
       list: vi.fn(async (): Promise<ArtifactSummary[]> => []),
@@ -796,13 +800,10 @@ describe('Task context restoration', () => {
     fireEvent.change(screen.getByRole('textbox', { name: '记忆正文' }), {
       target: { value: '先核对规则再出结论。' },
     });
-    fireEvent.change(screen.getByRole('combobox', { name: '记忆适用范围' }), {
-      target: { value: 'expert' },
-    });
-    expect(screen.getByRole('combobox', { name: '记忆适用范围' })).toHaveProperty(
-      'value',
-      'expert',
-    );
+    // FieldSelect 改造（9b93312）后适用范围是按钮＋弹层菜单，不再是原生 select。
+    fireEvent.click(screen.getByRole('button', { name: '记忆适用范围' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /专家通用/ }));
+    expect(screen.getByRole('button', { name: '记忆适用范围' }).textContent).toContain('专家通用');
     // 全局/专家通用属于扩大适用范围，必须显式声明通用性后才能提交（契约 §3.1）。
     fireEvent.click(screen.getByRole('checkbox', { name: '声明为通用要求' }));
     fireEvent.click(screen.getByRole('button', { name: '确认并记住' }));

@@ -829,6 +829,66 @@ describe('knowledge database migrations', () => {
     db.close();
   });
 
+  it('KM11 v7 升级建集合与成员表：历史行成员版本为 1，name_key 唯一且双向级联', () => {
+    const file = path.join(temporaryDirectory(), 'vault-v6-collections.sqlite');
+    const before = new Database(file);
+    migrate(before, { migrations: knowledgeMigrations.slice(0, 6) });
+    before.exec(
+      `INSERT INTO knowledge_documents
+        (id, title, source_path, format, byte_size, content_hash, content, imported_at, updated_at)
+        VALUES ('doc-1', '旧资料', '/tmp/旧资料.md', 'markdown', 1, 'hash', '文本', 1, 1)`,
+    );
+    before.close();
+
+    const db = openKnowledgeDatabase(file);
+    expect(readSchemaVersion(db)).toBe(knowledgeMigrations.length);
+    expect(
+      (
+        db
+          .prepare('SELECT membership_revision FROM knowledge_documents WHERE id = ?')
+          .get('doc-1') as {
+          membership_revision: number;
+        }
+      ).membership_revision,
+    ).toBe(1);
+    db.pragma('foreign_keys = ON');
+    db.exec(
+      `INSERT INTO knowledge_collections (id, name, name_key, revision, created_at, updated_at)
+       VALUES ('col-1', '季度报告', '季度报告', 1, 1, 1),
+              ('col-2', '其他', '其他', 1, 1, 1)`,
+    );
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO knowledge_collections (id, name, name_key, revision, created_at, updated_at)
+           VALUES ('col-x', '重复', '季度报告', 1, 1, 1)`,
+        )
+        .run(),
+    ).toThrow(/UNIQUE/iu);
+    db.prepare(
+      'INSERT INTO knowledge_collection_members (collection_id, document_id) VALUES (?, ?)',
+    ).run('col-1', 'doc-1');
+    // 删除集合只级联成员，不动文档（K-16）
+    db.prepare("DELETE FROM knowledge_collections WHERE id = 'col-1'").run();
+    expect(db.prepare('SELECT 1 AS p FROM knowledge_collection_members').get()).toBeUndefined();
+    expect(db.prepare('SELECT id FROM knowledge_documents WHERE id = ?').get('doc-1')).toBeTruthy();
+    // 移出资料库级联成员；成员不能引用未登记文档
+    expect(() =>
+      db
+        .prepare(
+          'INSERT INTO knowledge_collection_members (collection_id, document_id) VALUES (?, ?)',
+        )
+        .run('col-2', 'doc-ghost'),
+    ).toThrow(/FOREIGN KEY/iu);
+    db.prepare("DELETE FROM knowledge_documents WHERE id = 'doc-1'").run();
+    expect(
+      db
+        .prepare('SELECT 1 AS p FROM knowledge_collection_members WHERE document_id = ?')
+        .get('doc-1'),
+    ).toBeUndefined();
+    db.close();
+  });
+
   it('KM07a v5 升级作业/空间/代次/向量/派生块与设置单例并保住唯一约束', () => {
     const file = path.join(temporaryDirectory(), 'vault-v4.sqlite');
     const before = new Database(file);

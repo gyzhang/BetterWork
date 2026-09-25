@@ -432,15 +432,12 @@ export class RunService {
 
   /** 审计服务惰性装配：参数属性在构造体内先于字段完成赋值。 */
   private get knowledgeAudit(): KnowledgeAudit {
-    this.knowledgeAuditInstance ??= new KnowledgeAudit(
-      this.store,
-      this.knowledgeVault,
-      (input) =>
-        this.knowledgeSearchService
-          ? this.knowledgeSearchService.search(input)
-          : Promise.reject(
-              new KnowledgeServiceError('KNOWLEDGE_AUDIT_FAILED', '统一检索服务未接线。'),
-            ),
+    this.knowledgeAuditInstance ??= new KnowledgeAudit(this.store, this.knowledgeVault, (input) =>
+      this.knowledgeSearchService
+        ? this.knowledgeSearchService.search(input)
+        : Promise.reject(
+            new KnowledgeServiceError('KNOWLEDGE_AUDIT_FAILED', '统一检索服务未接线。'),
+          ),
     );
     return this.knowledgeAuditInstance;
   }

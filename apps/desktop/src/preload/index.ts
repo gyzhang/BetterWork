@@ -12,6 +12,7 @@ import {
   createMemoryRequestSchema,
   declareArtifactSourcesRequestSchema,
   deletedResultSchema,
+  deleteKnowledgeCollectionRequestSchema,
   deleteMcpConnectionRequestSchema,
   deleteSkillRequestSchema,
   dependencyOperationSchema,
@@ -39,7 +40,10 @@ import {
   importSkillRequestSchema,
   inputSnapshotSchema,
   IpcChannel,
+  knowledgeCollectionMembersResultSchema,
+  knowledgeCollectionSchema,
   knowledgeCreateResearchDraftRequestSchema,
+  knowledgeDocumentSummarySchema,
   knowledgeImportAckSchema,
   knowledgeJobAckSchema,
   knowledgeJobCancelResultSchema,
@@ -55,6 +59,7 @@ import {
   listDiscussionCheckpointsRequestSchema,
   listExpertsRequestSchema,
   listKnowledgeJobsRequestSchema,
+  listKnowledgeRequestSchema,
   listKnowledgeRevisionsRequestSchema,
   listMemoriesRequestSchema,
   listMemoryJobsRequestSchema,
@@ -99,11 +104,13 @@ import {
   runArtifactSourceDeclarationSchema,
   runSourcePreviewSchema,
   saveExpertRevisionRequestSchema,
+  saveKnowledgeCollectionRequestSchema,
   saveKnowledgeSettingsRequestSchema,
   saveMcpConnectionRequestSchema,
   saveSkillRuntimeProfileRequestSchema,
   saveTaskContextRequestSchema,
   setExpertLifecycleRequestSchema,
+  setKnowledgeCollectionMembersRequestSchema,
   setMemorySettingsRequestSchema,
   setMemoryStatusRequestSchema,
   setSkillEnabledRequestSchema,
@@ -242,7 +249,32 @@ const api: BetterWorkDesktopApi = {
     toggleMaximize: () => ipcRenderer.invoke(IpcChannel.WindowToggleMaximize, {}),
   },
   knowledge: {
-    list: () => ipcRenderer.invoke(IpcChannel.ListKnowledge),
+    list: (input) =>
+      invokeValidated(
+        IpcChannel.ListKnowledge,
+        listKnowledgeRequestSchema.parse(input ?? {}),
+        z.array(knowledgeDocumentSummarySchema),
+      ),
+    listCollections: () =>
+      invokeValidated(IpcChannel.ListKnowledgeCollections, {}, z.array(knowledgeCollectionSchema)),
+    saveCollection: (input) =>
+      invokeValidated(
+        IpcChannel.SaveKnowledgeCollection,
+        saveKnowledgeCollectionRequestSchema.parse(input),
+        z.array(knowledgeCollectionSchema),
+      ),
+    deleteCollection: (input) =>
+      invokeValidated(
+        IpcChannel.DeleteKnowledgeCollection,
+        deleteKnowledgeCollectionRequestSchema.parse(input),
+        z.array(knowledgeCollectionSchema),
+      ),
+    setCollectionMembers: (input) =>
+      invokeValidated(
+        IpcChannel.SetKnowledgeCollectionMembers,
+        setKnowledgeCollectionMembersRequestSchema.parse(input),
+        knowledgeCollectionMembersResultSchema,
+      ),
     importFromDialog: () =>
       invokeValidated(IpcChannel.ImportKnowledge, {}, knowledgeImportAckSchema),
     jobs: (input) =>

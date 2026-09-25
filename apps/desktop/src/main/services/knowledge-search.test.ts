@@ -440,3 +440,51 @@ describe('KnowledgeSearchService 租约与取消（契约 §8.3/§9.2）', () =>
     expect(response.results).toHaveLength(2);
   });
 });
+
+describe('集合筛选先于检索截取（KM11，契约 §10.1）', () => {
+  it('集合与未分类筛选在候选收集阶段生效：范围外资料不占名额', async () => {
+    const harness = await makeHarness({
+      甲: 'revenue alpha report',
+      乙: 'revenue beta memo',
+      丙: 'revenue gamma note',
+    });
+    const collection = harness.vault.saveCollection({ mode: 'create', name: '研究' })[0];
+    const docA = harness.references.get('甲');
+    if (!collection || !docA) throw new Error('fixture collection/reference missing');
+    harness.vault.setCollectionMembers({
+      documentId: docA.knowledgeDocumentId,
+      expectedMembershipRevision: 1,
+      collectionIds: [collection.id],
+    });
+    const inCollection = await harness.service.search({
+      scope: { kind: 'library', collectionId: collection.id },
+      query: 'revenue',
+      mode: 'keyword',
+      limit: 1,
+    });
+    // 未选集合的乙丙即使在排序上更靠前也不得占掉这个名额
+    expect(inCollection.results.map((hit) => hit.title)).toEqual(['甲']);
+    expect(inCollection.coverage).toEqual({ eligibleChunks: 1, indexedChunks: 0 });
+
+    const uncategorized = await harness.service.search({
+      scope: { kind: 'library', uncategorized: true },
+      query: 'revenue',
+      mode: 'keyword',
+    });
+    expect(uncategorized.results.map((hit) => hit.title).sort()).toEqual(['丙', '乙'].sort());
+  });
+
+  it('集合已删除后按空范围收口：不回退全库也不报错', async () => {
+    const harness = await makeHarness({ 甲: 'revenue alpha report' });
+    const collection = harness.vault.saveCollection({ mode: 'create', name: '研究' })[0];
+    if (!collection) throw new Error('fixture collection missing');
+    harness.vault.deleteCollection({ id: collection.id, expectedRevision: 1 });
+    const response = await harness.service.search({
+      scope: { kind: 'library', collectionId: collection.id },
+      query: 'revenue',
+      mode: 'keyword',
+    });
+    expect(response.results).toEqual([]);
+    expect(response.coverage).toEqual({ eligibleChunks: 0, indexedChunks: 0 });
+  });
+});

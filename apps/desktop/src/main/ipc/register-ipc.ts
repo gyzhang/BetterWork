@@ -25,6 +25,7 @@ import {
   createTaskRequestSchema,
   declareArtifactSourcesRequestSchema,
   deletedResultSchema,
+  deleteKnowledgeCollectionRequestSchema,
   deleteMcpConnectionRequestSchema,
   deleteSkillRequestSchema,
   dependencyOperationSchema,
@@ -62,6 +63,8 @@ import {
   importSkillRequestSchema,
   inputSnapshotSchema,
   IpcChannel,
+  knowledgeCollectionMembersResultSchema,
+  knowledgeCollectionSchema,
   knowledgeCreateResearchDraftRequestSchema,
   knowledgeDocumentSummarySchema,
   knowledgeImportAckSchema,
@@ -82,6 +85,7 @@ import {
   listEvidenceRequestSchema,
   listExpertsRequestSchema,
   listKnowledgeJobsRequestSchema,
+  listKnowledgeRequestSchema,
   listKnowledgeRevisionsRequestSchema,
   listMemoriesRequestSchema,
   listMemoryJobsRequestSchema,
@@ -145,6 +149,7 @@ import {
   runSourcePreviewSchema,
   runSummarySchema,
   saveExpertRevisionRequestSchema,
+  saveKnowledgeCollectionRequestSchema,
   saveKnowledgeSettingsRequestSchema,
   saveMarkdownArtifactRequestSchema,
   saveMcpConnectionRequestSchema,
@@ -157,6 +162,7 @@ import {
   searchKnowledgeRequestSchema,
   setDefaultModelRequestSchema,
   setExpertLifecycleRequestSchema,
+  setKnowledgeCollectionMembersRequestSchema,
   setMemorySettingsRequestSchema,
   setMemoryStatusRequestSchema,
   setModelEnabledRequestSchema,
@@ -875,11 +881,39 @@ function registerModelChannels({ store, credentialAccess }: IpcDependencies): vo
 function registerKnowledgeChannels(deps: IpcDependencies): void {
   const { knowledgeIndex, knowledgeSearch, knowledgeVault, store } = deps;
 
-  handleNoInput(
+  handleInput(
     IpcChannel.ListKnowledge,
-    emptyRequestSchema,
+    listKnowledgeRequestSchema,
     z.array(knowledgeDocumentSummarySchema),
-    () => knowledgeVault.listDocuments(),
+    (input) => knowledgeVault.listDocuments(input.filter),
+  );
+
+  handleNoInput(
+    IpcChannel.ListKnowledgeCollections,
+    emptyRequestSchema,
+    z.array(knowledgeCollectionSchema),
+    () => knowledgeVault.listCollections(),
+  );
+
+  handleInput(
+    IpcChannel.SaveKnowledgeCollection,
+    saveKnowledgeCollectionRequestSchema,
+    z.array(knowledgeCollectionSchema),
+    (input) => knowledgeVault.saveCollection(input),
+  );
+
+  handleInput(
+    IpcChannel.DeleteKnowledgeCollection,
+    deleteKnowledgeCollectionRequestSchema,
+    z.array(knowledgeCollectionSchema),
+    (input) => knowledgeVault.deleteCollection(input),
+  );
+
+  handleInput(
+    IpcChannel.SetKnowledgeCollectionMembers,
+    setKnowledgeCollectionMembersRequestSchema,
+    knowledgeCollectionMembersResultSchema,
+    (input) => knowledgeVault.setCollectionMembers(input),
   );
 
   handleNoInput(
@@ -907,7 +941,14 @@ function registerKnowledgeChannels(deps: IpcDependencies): void {
     knowledgeSearchResponseSchema,
     (input) =>
       knowledgeSearch.search({
-        scope: { kind: 'library' },
+        scope: {
+          kind: 'library',
+          ...(input.filter?.kind === 'collection'
+            ? { collectionId: input.filter.collectionId }
+            : input.filter?.kind === 'uncategorized'
+              ? { uncategorized: true }
+              : {}),
+        },
         query: input.query,
         ...(input.mode ? { mode: input.mode } : {}),
       }),

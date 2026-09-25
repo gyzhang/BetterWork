@@ -162,6 +162,27 @@ const RETRIEVAL_FTS_SCHEMA = `
   );
 `;
 
+/**
+ * KM11（契约 §10.1）：单层集合。名称按 NFKC＋trim＋小写唯一；
+ * 成员关系挂在当前登记文档上，文档删除级联成员，不触碰原件与修订历史。
+ */
+const COLLECTION_SCHEMA = `
+  CREATE TABLE knowledge_collections (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    name_key TEXT NOT NULL UNIQUE,
+    revision INTEGER NOT NULL CHECK (revision > 0),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE TABLE knowledge_collection_members (
+    collection_id TEXT NOT NULL REFERENCES knowledge_collections(id) ON DELETE CASCADE,
+    document_id TEXT NOT NULL REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+    PRIMARY KEY (collection_id, document_id)
+  );
+  ALTER TABLE knowledge_documents ADD COLUMN membership_revision INTEGER NOT NULL DEFAULT 1;
+`;
+
 const JOB_TABLE_SCHEMA = `
   CREATE TABLE knowledge_jobs (
     id TEXT PRIMARY KEY,
@@ -417,6 +438,13 @@ export const knowledgeMigrations: readonly Migration[] = [
             CHECK (source_status IN ('unchecked', 'unchanged', 'changed', 'missing', 'unreadable'));
         ALTER TABLE knowledge_documents ADD COLUMN source_checked_at INTEGER;
       `);
+    },
+  },
+  {
+    version: 7,
+    name: 'single-layer collections and document membership revisions',
+    up(db: Database.Database): void {
+      db.exec(COLLECTION_SCHEMA);
     },
   },
 ];

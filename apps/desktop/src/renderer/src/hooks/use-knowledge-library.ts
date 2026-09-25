@@ -1,7 +1,9 @@
 import type {
+  KnowledgeCollection,
   KnowledgeCursor,
   KnowledgeDocumentSummary,
   KnowledgeJobSummary,
+  KnowledgeLibraryFilter,
   KnowledgeResearchDraftMaterial,
   KnowledgeResearchDraftResult,
   KnowledgeRevisionSummary,
@@ -36,6 +38,18 @@ export interface KnowledgeLibrary {
   importing: boolean;
   loading: boolean;
   loadError: string;
+  /** KM11：集合筛选与单层分类；筛选只影响知识页视图，不改 Task 材料。 */
+  collections: KnowledgeCollection[];
+  filter: KnowledgeLibraryFilter;
+  setFilter: (filter: KnowledgeLibraryFilter) => void;
+  createCollection: (name: string) => Promise<void>;
+  renameCollection: (id: string, name: string, expectedRevision: number) => Promise<void>;
+  deleteCollection: (id: string, expectedRevision: number) => Promise<void>;
+  saveDocumentCollections: (
+    documentId: string,
+    expectedMembershipRevision: number,
+    collectionIds: string[],
+  ) => Promise<void>;
   /** KM09：语义设置、合格嵌入模型、进行中的作业与最近检索状态。 */
   settings: KnowledgeSearchSettings | undefined;
   embeddingModels: ModelProfileSummary[];
@@ -122,6 +136,9 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   );
   const [researchBusy, setResearchBusy] = useState(false);
   const [settings, setSettings] = useState<KnowledgeSearchSettings | undefined>(undefined);
+  const [collections, setCollections] = useState<KnowledgeCollection[]>([]);
+  const [filter, setFilterState] = useState<KnowledgeLibraryFilter>({ kind: 'all' });
+  const filterRef = useRef<KnowledgeLibraryFilter>(filter);
   const [embeddingModels, setEmbeddingModels] = useState<ModelProfileSummary[]>([]);
   const [activeJobs, setActiveJobs] = useState<Map<string, KnowledgeJobSummary>>(() => new Map());
   const [searchStatus, setSearchStatus] = useState<KnowledgeSearchStatus | undefined>(undefined);
@@ -147,7 +164,7 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     setLoadError('');
     trackAction(
       window.betterwork.knowledge
-        .list()
+        .list({ filter: filterRef.current })
         .then(setDocuments)
         .catch((error: unknown) => {
           setLoadError(describeActionError(error, '资料库加载失败，请重试。'));
@@ -334,7 +351,85 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
 
   useEffect(() => {
     loadSettings();
+    trackAction(
+      window.betterwork.knowledge
+        .listCollections()
+        .then(setCollections)
+        .catch(() => {
+          // 集合列表失败只让筛选少选项，不阻塞资料页。
+        }),
+      '读取集合列表',
+    );
   }, [loadSettings]);
+
+  const setFilter = (next: KnowledgeLibraryFilter): void => {
+    filterRef.current = next;
+    setFilterState(next);
+    setQuery('');
+    setResults([]);
+    setSearchStatus(undefined);
+    refresh();
+  };
+
+  const createCollection = async (name: string): Promise<void> => {
+    try {
+      setCollections(await window.betterwork.knowledge.saveCollection({ mode: 'create', name }));
+      setMessage(`已创建集合「${name.trim()}」。`);
+    } catch (error) {
+      setMessage(describeActionError(error, '创建集合失败。'));
+    }
+  };
+
+  const renameCollection = async (
+    id: string,
+    name: string,
+    expectedRevision: number,
+  ): Promise<void> => {
+    try {
+      setCollections(
+        await window.betterwork.knowledge.saveCollection({
+          mode: 'rename',
+          id,
+          name,
+          expectedRevision,
+        }),
+      );
+      setMessage(`集合已改名为「${name.trim()}」。`);
+    } catch (error) {
+      setMessage(describeActionError(error, '改名集合失败。'));
+    }
+  };
+
+  const deleteCollection = async (id: string, expectedRevision: number): Promise<void> => {
+    try {
+      setCollections(await window.betterwork.knowledge.deleteCollection({ id, expectedRevision }));
+      const current = filterRef.current;
+      if (current.kind === 'collection' && current.collectionId === id) {
+        setFilter({ kind: 'all' });
+      }
+      setMessage('已删除集合；资料本身与原件不受影响。');
+    } catch (error) {
+      setMessage(describeActionError(error, '删除集合失败。'));
+    }
+  };
+
+  const saveDocumentCollections = async (
+    documentId: string,
+    expectedMembershipRevision: number,
+    collectionIds: string[],
+  ): Promise<void> => {
+    try {
+      await window.betterwork.knowledge.setCollectionMembers({
+        documentId,
+        expectedMembershipRevision,
+        collectionIds,
+      });
+      setMessage('分类已保存；不会改变内容版本与已选任务材料。');
+      refresh();
+    } catch (error) {
+      setMessage(describeActionError(error, '保存分类失败，可能已被其他窗口更新。'));
+    }
+  };
 
   const materialKey = (result: KnowledgeSearchHit): string =>
     `${result.reference.knowledgeDocumentId}:${result.reference.knowledgeRevisionId}`;
@@ -378,7 +473,10 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
       return;
     }
     try {
-      const response = await window.betterwork.knowledge.search({ query: term });
+      const response = await window.betterwork.knowledge.search({
+        query: term,
+        filter,
+      });
       // 迟到的检索响应不覆盖当前查询的结果与状态。
       if (searchSeq.current !== seq) return;
       setResults(response.results);
@@ -607,6 +705,13 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     loadError,
     settings,
     embeddingModels,
+    collections,
+    filter,
+    setFilter,
+    createCollection,
+    renameCollection,
+    deleteCollection,
+    saveDocumentCollections,
     activeJobs: [...activeJobs.values()],
     searchStatus,
     retryTarget,

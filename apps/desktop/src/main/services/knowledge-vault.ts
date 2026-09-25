@@ -4,13 +4,17 @@ import path from 'node:path';
 
 import {
   countCodePoints,
+  type DeleteKnowledgeCollectionRequest,
   KNOWLEDGE_REVISION_MAX_TEXT_CODE_POINTS,
   KNOWLEDGE_SEARCH_CANDIDATE_LIMIT,
   KNOWLEDGE_SEARCH_SUMMARY_MAX_CODE_POINTS,
+  type KnowledgeCollection,
+  type KnowledgeCollectionMembersResult,
   type KnowledgeCursor,
   type KnowledgeDocumentSummary,
   type KnowledgeFormat,
   type KnowledgeImportResult,
+  type KnowledgeLibraryFilter,
   type KnowledgeMaterialReference,
   type KnowledgeRefreshResult,
   type KnowledgeRevisionSummary,
@@ -21,6 +25,8 @@ import {
   type KnowledgeWarningCode,
   knowledgeWarningCodeSchema,
   type KnowledgeWorkerJobContext,
+  type SaveKnowledgeCollectionRequest,
+  type SetKnowledgeCollectionMembersRequest,
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
@@ -56,6 +62,15 @@ interface KnowledgeRow {
   updated_at: number;
   source_status: KnowledgeSourceStatus;
   source_checked_at: number | null;
+  membership_revision: number;
+}
+
+interface CollectionRow {
+  id: string;
+  name: string;
+  revision: number;
+  created_at: number;
+  updated_at: number;
 }
 
 interface KnowledgeRevisionRow {
@@ -111,21 +126,170 @@ export class KnowledgeVault {
     this.extractor = deps?.extractor ?? extractDocument;
   }
 
-  listDocuments(): KnowledgeDocumentSummary[] {
+  listDocuments(filter?: KnowledgeLibraryFilter): KnowledgeDocumentSummary[] {
+    let membership = '';
+    const filterParams: string[] = [];
+    if (filter && filter.kind === 'uncategorized') {
+      membership = `WHERE NOT EXISTS (
+        SELECT 1 FROM knowledge_collection_members m
+         WHERE m.document_id = knowledge_documents.id
+      )`;
+    } else if (filter && filter.kind === 'collection') {
+      membership = `WHERE EXISTS (
+        SELECT 1 FROM knowledge_collection_members m
+         WHERE m.document_id = knowledge_documents.id AND m.collection_id = ?
+      )`;
+      filterParams.push(filter.collectionId);
+    }
     const rows = this.db
       .prepare(
         `SELECT id, title, source_path, format, byte_size, content_hash, page_count, imported_at, updated_at,
-                source_status, source_checked_at,
+                source_status, source_checked_at, membership_revision,
                 (SELECT r.id FROM knowledge_revisions r
                   WHERE r.document_id = knowledge_documents.id
                   ORDER BY r.revision DESC LIMIT 1) AS current_revision_id
-           FROM knowledge_documents ORDER BY updated_at DESC, rowid DESC`,
+           FROM knowledge_documents ${membership}
+          ORDER BY updated_at DESC, rowid DESC`,
       )
-      .all() as Array<KnowledgeRow & { current_revision_id: string | null }>;
+      .all(...filterParams) as Array<KnowledgeRow & { current_revision_id: string | null }>;
     return rows.map((row) => ({
       ...this.toSummary(row, row.current_revision_id ?? undefined),
       ...(row.current_revision_id ? { currentRevisionId: row.current_revision_id } : {}),
     }));
+  }
+
+  /** 单层集合管理（契约 §10.1）：名称规范化唯一，成员/改名/删除都不触碰原件与修订。 */
+  listCollections(): KnowledgeCollection[] {
+    const rows = this.db
+      .prepare(
+        'SELECT id, name, revision, created_at, updated_at FROM knowledge_collections ORDER BY created_at, id',
+      )
+      .all() as CollectionRow[];
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      revision: row.revision,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+
+  saveCollection(input: SaveKnowledgeCollectionRequest): KnowledgeCollection[] {
+    const nameKey = input.name.normalize('NFKC').trim().toLocaleLowerCase();
+    const write = this.db.transaction((): void => {
+      const clash = this.db
+        .prepare('SELECT id FROM knowledge_collections WHERE name_key = ?')
+        .get(nameKey) as { id: string } | undefined;
+      if (input.mode === 'create') {
+        if (clash) {
+          throw new KnowledgeServiceError(
+            'COLLECTION_NAME_TAKEN',
+            '已有同名集合（忽略大小写与全角差异），请换个名字。',
+          );
+        }
+        const now = Date.now();
+        this.db
+          .prepare(
+            `INSERT INTO knowledge_collections (id, name, name_key, revision, created_at, updated_at)
+             VALUES (?, ?, ?, 1, ?, ?)`,
+          )
+          .run(randomUUID(), input.name.trim(), nameKey, now, now);
+        return;
+      }
+      if (clash && clash.id !== input.id) {
+        throw new KnowledgeServiceError(
+          'COLLECTION_NAME_TAKEN',
+          '已有同名集合（忽略大小写与全角差异），请换个名字。',
+        );
+      }
+      const updated = this.db
+        .prepare(
+          `UPDATE knowledge_collections
+              SET name = ?, name_key = ?, revision = revision + 1, updated_at = ?
+            WHERE id = ? AND revision = ?`,
+        )
+        .run(input.name.trim(), nameKey, Date.now(), input.id, input.expectedRevision);
+      if (updated.changes === 0) {
+        throw new KnowledgeServiceError(
+          'COLLECTION_NOT_FOUND',
+          '集合不存在或已被其他操作更新，请刷新后重试。',
+        );
+      }
+    });
+    write();
+    return this.listCollections();
+  }
+
+  deleteCollection(input: DeleteKnowledgeCollectionRequest): KnowledgeCollection[] {
+    const removed = this.db
+      .prepare('DELETE FROM knowledge_collections WHERE id = ? AND revision = ?')
+      .run(input.id, input.expectedRevision);
+    if (removed.changes === 0) {
+      throw new KnowledgeServiceError(
+        'COLLECTION_NOT_FOUND',
+        '集合不存在或已被其他操作更新，请刷新后重试。',
+      );
+    }
+    return this.listCollections();
+  }
+
+  /** replace-set ＋成员 CAS：两个窗口互相覆盖不可能静默发生。 */
+  setCollectionMembers(
+    input: SetKnowledgeCollectionMembersRequest,
+  ): KnowledgeCollectionMembersResult {
+    const write = this.db.transaction((): KnowledgeCollectionMembersResult => {
+      const document = this.db
+        .prepare('SELECT membership_revision FROM knowledge_documents WHERE id = ?')
+        .get(input.documentId) as { membership_revision: number } | undefined;
+      if (!document) {
+        throw new KnowledgeServiceError('KNOWLEDGE_DOCUMENT_REMOVED', '资料已不在当前资料库中。');
+      }
+      if (document.membership_revision !== input.expectedMembershipRevision) {
+        throw new KnowledgeServiceError(
+          'OPERATION_CONFLICT',
+          '分类刚被其他操作更新，请刷新后重新保存。',
+        );
+      }
+      for (const collectionId of input.collectionIds) {
+        const known = this.db
+          .prepare('SELECT 1 AS present FROM knowledge_collections WHERE id = ?')
+          .get(collectionId) as { present: number } | undefined;
+        if (!known) {
+          throw new KnowledgeServiceError('COLLECTION_NOT_FOUND', '引用了不存在或已删除的集合。');
+        }
+      }
+      this.db
+        .prepare('DELETE FROM knowledge_collection_members WHERE document_id = ?')
+        .run(input.documentId);
+      const insert = this.db.prepare(
+        'INSERT INTO knowledge_collection_members (collection_id, document_id) VALUES (?, ?)',
+      );
+      for (const collectionId of input.collectionIds) {
+        insert.run(collectionId, input.documentId);
+      }
+      this.db
+        .prepare(
+          'UPDATE knowledge_documents SET membership_revision = membership_revision + 1 WHERE id = ?',
+        )
+        .run(input.documentId);
+      const next = this.db
+        .prepare('SELECT membership_revision FROM knowledge_documents WHERE id = ?')
+        .get(input.documentId) as { membership_revision: number };
+      return {
+        membershipRevision: next.membership_revision,
+        collectionIds: [...input.collectionIds].sort(),
+      };
+    });
+    return write();
+  }
+
+  private collectionIdsOf(documentId: string): string[] {
+    const rows = this.db
+      .prepare(
+        'SELECT collection_id FROM knowledge_collection_members WHERE document_id = ? ORDER BY collection_id',
+      )
+      .all(documentId) as Array<{ collection_id: string }>;
+    return rows.map((row) => row.collection_id);
   }
 
   async importPaths(sourcePaths: string[]): Promise<KnowledgeImportResult> {
@@ -226,7 +390,7 @@ export class KnowledgeVault {
     return this.db
       .prepare(
         `SELECT id, title, source_path, format, byte_size, content_hash, page_count,
-                imported_at, updated_at, source_status, source_checked_at
+                imported_at, updated_at, source_status, source_checked_at, membership_revision
            FROM knowledge_documents WHERE id = ?`,
       )
       .get(documentId) as KnowledgeRow | undefined;
@@ -731,7 +895,7 @@ export class KnowledgeVault {
     const published = write();
     const row = this.db
       .prepare(
-        'SELECT id, title, source_path, format, byte_size, content_hash, page_count, imported_at, updated_at, source_status, source_checked_at FROM knowledge_documents WHERE id = ?',
+        'SELECT id, title, source_path, format, byte_size, content_hash, page_count, imported_at, updated_at, source_status, source_checked_at, membership_revision FROM knowledge_documents WHERE id = ?',
       )
       .get(id) as KnowledgeRow;
     return { document: this.toSummary(row, published.revisionId), ...published };
@@ -749,6 +913,8 @@ export class KnowledgeVault {
       ...(row.source_checked_at === null ? {} : { sourceCheckedAt: row.source_checked_at }),
       lexicalState: 'ready',
       semanticState: this.semanticStateOf(revisionId),
+      collectionIds: this.collectionIdsOf(row.id),
+      membershipRevision: row.membership_revision,
       ...(row.page_count === null ? {} : { pageCount: row.page_count }),
       importedAt: row.imported_at,
       updatedAt: row.updated_at,

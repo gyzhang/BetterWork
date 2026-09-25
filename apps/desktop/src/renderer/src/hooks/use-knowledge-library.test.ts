@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import type {
+  KnowledgeCollection,
   KnowledgeCursor,
   KnowledgeDocumentSummary,
   KnowledgeJobDetail,
@@ -130,6 +131,8 @@ const documentOf = (
   sourceCheckedAt: 5,
   lexicalState: 'ready',
   semanticState: 'disabled',
+  collectionIds: [],
+  membershipRevision: 1,
   importedAt: 1,
   updatedAt: 2,
   ...overrides,
@@ -208,6 +211,10 @@ interface Harness {
     search: ReturnType<typeof vi.fn>;
     listRevisions: ReturnType<typeof vi.fn>;
     preview: ReturnType<typeof vi.fn>;
+    listCollections: ReturnType<typeof vi.fn>;
+    saveCollection: ReturnType<typeof vi.fn>;
+    deleteCollection: ReturnType<typeof vi.fn>;
+    setCollectionMembers: ReturnType<typeof vi.fn>;
   };
   models: { list: ReturnType<typeof vi.fn> };
 }
@@ -244,6 +251,10 @@ const install = (): Harness => {
     search: vi.fn(async () => searchResponse()),
     listRevisions: vi.fn(async () => [revisionOf()]),
     preview: vi.fn(async () => textPage()),
+    listCollections: vi.fn(async () => []),
+    saveCollection: vi.fn(async () => []),
+    deleteCollection: vi.fn(async () => []),
+    setCollectionMembers: vi.fn(async () => ({ membershipRevision: 2, collectionIds: [] })),
   };
   const models = { list: vi.fn(async () => []) };
   Object.defineProperty(window, 'betterwork', {
@@ -321,6 +332,8 @@ describe('useKnowledgeLibrary 作业接线', () => {
         sourceStatus: 'unchanged',
         lexicalState: 'ready',
         semanticState: 'disabled',
+        collectionIds: [],
+        membershipRevision: 1,
         sourcePath: '/tmp/合同条款.md',
         importedAt: 1,
         updatedAt: 2,
@@ -371,7 +384,10 @@ describe('useKnowledgeLibrary 统一检索（KM08）', () => {
     await act(async () => {
       await result.current.onSearch(submit);
     });
-    expect(harness.knowledge.search).toHaveBeenCalledWith({ query: '违约金' });
+    expect(harness.knowledge.search).toHaveBeenCalledWith({
+      query: '违约金',
+      filter: { kind: 'all' },
+    });
     expect(result.current.results).toHaveLength(1);
     expect(result.current.results[0]).toMatchObject({
       chunkId: 'chunk-1',
@@ -769,5 +785,125 @@ describe('useKnowledgeLibrary 资料详情接线（KM10）', () => {
     expect(harness.knowledge.job).toHaveBeenCalledWith({ jobId: 'job-check-1' });
     await flush();
     expect(harness.knowledge.list.mock.calls.length).toBeGreaterThan(listCallsBefore);
+  });
+});
+
+describe('useKnowledgeLibrary 集合接线（KM11）', () => {
+  const submit = {
+    preventDefault: (): void => undefined,
+  } as unknown as FormEvent<HTMLFormElement>;
+
+  const collectionFixture: KnowledgeCollection = {
+    id: 'col-1',
+    name: '研究',
+    revision: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+
+  it('切换筛选清空搜索状态，列表与检索都带当前筛选', async () => {
+    const harness = install();
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    await act(async () => {
+      result.current.setQuery('续约');
+    });
+    await act(async () => {
+      await result.current.onSearch(submit);
+    });
+    expect(harness.knowledge.search).toHaveBeenLastCalledWith({
+      query: '续约',
+      filter: { kind: 'all' },
+    });
+    await act(async () => {
+      result.current.setFilter({ kind: 'collection', collectionId: 'col-1' });
+    });
+    expect(result.current.query).toBe('');
+    expect(result.current.results).toEqual([]);
+    expect(harness.knowledge.list).toHaveBeenLastCalledWith({
+      filter: { kind: 'collection', collectionId: 'col-1' },
+    });
+    await act(async () => {
+      result.current.setQuery('续约');
+    });
+    await act(async () => {
+      await result.current.onSearch(submit);
+    });
+    expect(harness.knowledge.search).toHaveBeenLastCalledWith({
+      query: '续约',
+      filter: { kind: 'collection', collectionId: 'col-1' },
+    });
+  });
+
+  it('新建集合成功回填列表与局部反馈；规范化重名错误落回 message 不静默', async () => {
+    const harness = install();
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    expect(harness.knowledge.listCollections).toHaveBeenCalled();
+    harness.knowledge.saveCollection.mockResolvedValueOnce([collectionFixture]);
+    await act(async () => {
+      await result.current.createCollection(' 研究 ');
+    });
+    expect(harness.knowledge.saveCollection).toHaveBeenCalledWith({
+      mode: 'create',
+      name: ' 研究 ',
+    });
+    expect(result.current.collections).toEqual([collectionFixture]);
+    expect(result.current.message).toBe('已创建集合「研究」。');
+
+    harness.knowledge.saveCollection.mockRejectedValueOnce(new Error('已有同名集合，请换个名字。'));
+    await act(async () => {
+      await result.current.createCollection('研究');
+    });
+    expect(result.current.message).toContain('已有同名集合');
+    expect(result.current.collections).toEqual([collectionFixture]);
+  });
+
+  it('删除当前正在筛选的集合后回落到全部资料并重新拉取', async () => {
+    const harness = install();
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    await act(async () => {
+      result.current.setFilter({ kind: 'collection', collectionId: 'col-1' });
+    });
+    harness.knowledge.deleteCollection.mockResolvedValueOnce([]);
+    await act(async () => {
+      await result.current.deleteCollection('col-1', 1);
+    });
+    expect(harness.knowledge.deleteCollection).toHaveBeenCalledWith({
+      id: 'col-1',
+      expectedRevision: 1,
+    });
+    expect(result.current.collections).toEqual([]);
+    expect(result.current.filter).toEqual({ kind: 'all' });
+    expect(harness.knowledge.list).toHaveBeenLastCalledWith({ filter: { kind: 'all' } });
+    expect(result.current.message).toContain('已删除集合');
+  });
+
+  it('保存资料分类走成员 CAS 并回填局部反馈，失败不伪装成功', async () => {
+    const harness = install();
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    harness.knowledge.setCollectionMembers.mockResolvedValueOnce({
+      membershipRevision: 2,
+      collectionIds: ['col-1'],
+    });
+    await act(async () => {
+      await result.current.saveDocumentCollections('doc-1', 1, ['col-1']);
+    });
+    expect(harness.knowledge.setCollectionMembers).toHaveBeenCalledWith({
+      documentId: 'doc-1',
+      expectedMembershipRevision: 1,
+      collectionIds: ['col-1'],
+    });
+    expect(result.current.message).toBe('分类已保存；不会改变内容版本与已选任务材料。');
+
+    harness.knowledge.setCollectionMembers.mockRejectedValueOnce(
+      new Error('分类刚被其他操作更新，请刷新后重新保存。'),
+    );
+    await act(async () => {
+      await result.current.saveDocumentCollections('doc-1', 1, []);
+    });
+    expect(result.current.message).toContain('分类刚被其他操作更新');
   });
 });

@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import type {
+  KnowledgeCollection,
+  KnowledgeDocumentSummary,
   KnowledgeJobSummary,
   KnowledgeRevisionSummary,
   KnowledgeTextPage,
@@ -87,6 +89,13 @@ const library = (overrides: Partial<KnowledgeLibrary> = {}): KnowledgeLibrary =>
   loadError: '',
   settings: { semanticEnabled: false, revision: 1, embeddingAvailable: false },
   embeddingModels: [],
+  collections: [],
+  filter: { kind: 'all' },
+  setFilter: () => undefined,
+  createCollection: async () => undefined,
+  renameCollection: async () => undefined,
+  deleteCollection: async () => undefined,
+  saveDocumentCollections: async () => undefined,
   activeJobs: [],
   searchStatus: undefined,
   retryTarget: undefined,
@@ -213,6 +222,8 @@ describe('KnowledgePage 索引管理护栏（KM09）', () => {
               sourceCheckedAt: 1_700_000_000_000,
               lexicalState: 'ready',
               semanticState: 'stale',
+              collectionIds: [],
+              membershipRevision: 1,
               importedAt: 1,
               updatedAt: 2,
             },
@@ -228,6 +239,8 @@ describe('KnowledgePage 索引管理护栏（KM09）', () => {
             sourceCheckedAt: 1_700_000_000_000,
             lexicalState: 'ready',
             semanticState: 'stale',
+            collectionIds: [],
+            membershipRevision: 1,
             importedAt: 1,
             updatedAt: 2,
           },
@@ -245,5 +258,73 @@ describe('KnowledgePage 索引管理护栏（KM09）', () => {
     expect(screen.getByText(/已读到结尾/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '返回列表' }));
     expect(closeDocument).toHaveBeenCalled();
+  });
+});
+
+describe('KnowledgePage 集合护栏（KM11）', () => {
+  const collection: KnowledgeCollection = {
+    id: 'col-1',
+    name: '研究',
+    revision: 3,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+  const documentSummary: KnowledgeDocumentSummary = {
+    id: 'doc-1',
+    title: '合同条款',
+    sourcePath: '/tmp/合同条款.md',
+    format: 'markdown',
+    byteSize: 24,
+    contentHash: 'a'.repeat(64),
+    sourceStatus: 'unchanged',
+    lexicalState: 'ready',
+    semanticState: 'disabled',
+    collectionIds: [],
+    membershipRevision: 1,
+    importedAt: 1,
+    updatedAt: 2,
+  };
+
+  it('集合筛选常驻工具栏；删除集合必须经过「只解除分类」确认', () => {
+    const deleteCollection = vi.fn(async () => undefined);
+    render(
+      <KnowledgePage
+        library={library({ collections: [collection], deleteCollection })}
+        onResearch={() => undefined}
+      />,
+    );
+    expect(screen.getByRole('button', { name: '按集合筛选资料' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '索引与模型' }));
+    expect(screen.getByText('集合管理')).toBeTruthy();
+    expect(screen.getByDisplayValue('研究')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '删除' }));
+    expect(deleteCollection).not.toHaveBeenCalled();
+    expect(screen.getByText('删除集合「研究」？')).toBeTruthy();
+    expect(screen.getByText(/只解除这层分类，不会删除资料或本机原件/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '删除集合' }));
+    expect(deleteCollection).toHaveBeenCalledWith('col-1', 3);
+  });
+
+  it('详情勾选集合必须显式保存，并按成员修订 CAS 提交', () => {
+    const saveDocumentCollections = vi.fn(async () => undefined);
+    render(
+      <KnowledgePage
+        library={library({
+          collections: [collection],
+          detailDocument: documentSummary,
+          detailRevisions: [revision],
+          detailRevisionId: revision.id,
+          detailPage: page,
+          saveDocumentCollections,
+        })}
+        onResearch={() => undefined}
+      />,
+    );
+    const save = screen.getByRole('button', { name: '保存分类' });
+    expect(save.hasAttribute('disabled')).toBe(true);
+    fireEvent.click(screen.getByRole('checkbox', { name: '研究' }));
+    expect(save.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(save);
+    expect(saveDocumentCollections).toHaveBeenCalledWith('doc-1', 1, ['col-1']);
   });
 });

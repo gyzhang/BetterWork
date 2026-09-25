@@ -439,3 +439,115 @@ describe('来源检查与摘要投影（KM10，契约 §10.1/§10.2）', () => {
     vault.close();
   });
 });
+
+describe('单层集合与成员（KM11，契约 §10.1）', () => {
+  const importDoc = async (vault: KnowledgeVault, directory: string, name: string) => {
+    const file = path.join(directory, name);
+    writeFileSync(file, `${name} 的内容。`);
+    return vault.importSource(file);
+  };
+
+  it('集合名规范化唯一：全角/大小写/首尾空格都算重名，改名 CAS 拒绝并发改动', async () => {
+    const directory = temporaryDirectory();
+    const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
+    const created = vault.saveCollection({ mode: 'create', name: '  季度报告Ａ  ' });
+    expect(created).toHaveLength(1);
+    expect(created[0]?.name).toBe('季度报告Ａ');
+    expect(created[0]?.revision).toBe(1);
+
+    expect(() => vault.saveCollection({ mode: 'create', name: '季度报告a' })).toThrowError(
+      KnowledgeServiceError,
+    );
+    expect(() => vault.saveCollection({ mode: 'create', name: '季度报告a' })).toThrowError(
+      /已有同名集合/,
+    );
+
+    const collectionId = created[0]?.id ?? '';
+    expect(() =>
+      vault.saveCollection({
+        mode: 'rename',
+        id: collectionId,
+        name: '新名字',
+        expectedRevision: 99,
+      }),
+    ).toThrowError(/集合不存在或已被其他操作更新/);
+    const renamed = vault.saveCollection({
+      mode: 'rename',
+      id: collectionId,
+      name: ' 新名字 ',
+      expectedRevision: 1,
+    });
+    expect(renamed[0]).toMatchObject({ name: '新名字', revision: 2 });
+    vault.close();
+  });
+
+  it('成员 replace-set＋CAS：筛选视图各归其位，删集合保另一集合成员，移除再导入不复活成员', async () => {
+    const directory = temporaryDirectory();
+    const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
+    const docA = await importDoc(vault, directory, '甲.md');
+    const docB = await importDoc(vault, directory, '乙.md');
+    const collections = vault.saveCollection({ mode: 'create', name: '研究' });
+    const colStudy = collections.find((collection) => collection.name === '研究')?.id ?? '';
+    const colOther =
+      vault
+        .saveCollection({ mode: 'create', name: '归档' })
+        .find((collection) => collection.name === '归档')?.id ?? '';
+
+    const first = vault.setCollectionMembers({
+      documentId: docA.document.id,
+      expectedMembershipRevision: docA.document.membershipRevision,
+      collectionIds: [colOther, colStudy],
+    });
+    expect(first).toEqual({
+      membershipRevision: docA.document.membershipRevision + 1,
+      collectionIds: [colStudy, colOther].sort(),
+    });
+    expect(() =>
+      vault.setCollectionMembers({
+        documentId: docA.document.id,
+        expectedMembershipRevision: docA.document.membershipRevision,
+        collectionIds: [],
+      }),
+    ).toThrowError(/分类刚被其他操作更新/);
+    expect(() =>
+      vault.setCollectionMembers({
+        documentId: docA.document.id,
+        expectedMembershipRevision: first.membershipRevision,
+        collectionIds: ['不存在的集合'],
+      }),
+    ).toThrowError(/引用了不存在或已删除的集合/);
+    expect(() =>
+      vault.setCollectionMembers({
+        documentId: 'ghost-doc',
+        expectedMembershipRevision: 1,
+        collectionIds: [],
+      }),
+    ).toThrowError(/资料已不在当前资料库中/);
+
+    expect(
+      vault
+        .listDocuments({ kind: 'collection', collectionId: colStudy })
+        .map((document) => document.id),
+    ).toEqual([docA.document.id]);
+    expect(vault.listDocuments({ kind: 'uncategorized' }).map((document) => document.id)).toEqual([
+      docB.document.id,
+    ]);
+    expect(vault.listDocuments({ kind: 'all' })).toHaveLength(2);
+
+    // K-16：删除一个集合，资料与另一集合成员仍在
+    const afterDelete = vault.deleteCollection({ id: colStudy, expectedRevision: 1 });
+    expect(afterDelete.map((collection) => collection.id)).toEqual([colOther]);
+    const listedA = vault.listDocuments().find((document) => document.id === docA.document.id);
+    expect(listedA?.collectionIds).toEqual([colOther]);
+    // 内容版本不因分类改动：登记修订保持不变
+    expect(listedA?.currentRevisionId).toBe(docA.revisionId);
+
+    // 移出资料库后重新导入是新登记：不恢复旧成员
+    expect(vault.removeDocument(docA.document.id)).toBe(true);
+    const reimported = await importDoc(vault, directory, '甲.md');
+    expect(reimported.document.id).not.toBe(docA.document.id);
+    expect(reimported.document.collectionIds).toEqual([]);
+    expect(reimported.document.membershipRevision).toBe(1);
+    vault.close();
+  });
+});

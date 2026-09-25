@@ -2873,16 +2873,90 @@ export interface KnowledgeDocumentSummary {
   byteSize: number;
   contentHash: string;
   /** 选材入口的修订身份（KM01 §2.4）：当前登记文档的最新修订 ID。 */
-  currentRevisionId?: string;
+  currentRevisionId?: string | undefined;
   /** 来源检查结论（KM10，契约 §10.2）：截至某时点，不是实时保证。 */
   sourceStatus: 'unchecked' | 'unchanged' | 'changed' | 'missing' | 'unreadable';
-  sourceCheckedAt?: number;
+  sourceCheckedAt?: number | undefined;
   lexicalState: 'ready' | 'failed';
   semanticState: 'disabled' | 'pending' | 'ready' | 'partial' | 'stale' | 'failed';
-  pageCount?: number;
+  /** KM11：所属集合与成员 CAS 版本；分类修改不改内容版本，也不改 Task 材料。 */
+  collectionIds: string[];
+  membershipRevision: number;
+  pageCount?: number | undefined;
   importedAt: number;
   updatedAt: number;
 }
+
+/** 个人知识页的单层筛选视图（契约 §10.1）：全部/未分类是派生查询模式，不插入集合行。 */
+export const knowledgeLibraryFilterSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('all') }).strict(),
+  z.object({ kind: z.literal('uncategorized') }).strict(),
+  z.object({ kind: z.literal('collection'), collectionId: z.string().min(1) }).strict(),
+]);
+export type KnowledgeLibraryFilter = z.infer<typeof knowledgeLibraryFilterSchema>;
+
+export const listKnowledgeRequestSchema = z
+  .object({ filter: knowledgeLibraryFilterSchema.optional() })
+  .strict();
+export type ListKnowledgeRequest = z.infer<typeof listKnowledgeRequestSchema>;
+
+/** 集合：仅个人分类，不代表工作空间授权；名称按 NFKC＋trim＋小写唯一。 */
+export const knowledgeCollectionSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    revision: z.number().int().positive(),
+    createdAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type KnowledgeCollection = z.infer<typeof knowledgeCollectionSchema>;
+
+export const saveKnowledgeCollectionRequestSchema = z.discriminatedUnion('mode', [
+  z
+    .object({
+      mode: z.literal('create'),
+      name: z.string().trim().min(1).max(60),
+    })
+    .strict(),
+  z
+    .object({
+      mode: z.literal('rename'),
+      id: z.string().min(1),
+      name: z.string().trim().min(1).max(60),
+      expectedRevision: z.number().int().positive(),
+    })
+    .strict(),
+]);
+export type SaveKnowledgeCollectionRequest = z.infer<typeof saveKnowledgeCollectionRequestSchema>;
+
+export const deleteKnowledgeCollectionRequestSchema = z
+  .object({ id: z.string().min(1), expectedRevision: z.number().int().positive() })
+  .strict();
+export type DeleteKnowledgeCollectionRequest = z.infer<
+  typeof deleteKnowledgeCollectionRequestSchema
+>;
+
+export const setKnowledgeCollectionMembersRequestSchema = z
+  .object({
+    documentId: z.string().min(1),
+    expectedMembershipRevision: z.number().int().positive(),
+    collectionIds: z.array(z.string().min(1)).max(200),
+  })
+  .strict();
+export type SetKnowledgeCollectionMembersRequest = z.infer<
+  typeof setKnowledgeCollectionMembersRequestSchema
+>;
+
+export const knowledgeCollectionMembersResultSchema = z
+  .object({
+    membershipRevision: z.number().int().positive(),
+    collectionIds: z.array(z.string().min(1)),
+  })
+  .strict();
+export type KnowledgeCollectionMembersResult = z.infer<
+  typeof knowledgeCollectionMembersResultSchema
+>;
 
 export interface KnowledgeImportResult {
   imported: KnowledgeDocumentSummary[];
@@ -2893,6 +2967,7 @@ export const searchKnowledgeRequestSchema = z
   .object({
     query: z.string().trim().min(1).max(500),
     mode: z.enum(['keyword', 'hybrid']).optional(),
+    filter: knowledgeLibraryFilterSchema.optional(),
   })
   .strict();
 export type SearchKnowledgeRequest = z.infer<typeof searchKnowledgeRequestSchema>;
@@ -3541,6 +3616,8 @@ export const knowledgeDocumentSummarySchema = z.object({
   sourceCheckedAt: z.number().int().nonnegative().optional(),
   lexicalState: knowledgeLexicalStateSchema,
   semanticState: knowledgeSemanticStateSchema,
+  collectionIds: z.array(z.string().min(1)),
+  membershipRevision: z.number().int().positive(),
   pageCount: z.number().int().positive().optional(),
   importedAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
@@ -3959,6 +4036,7 @@ export const knowledgeSearchScopeSchema = z.discriminatedUnion('kind', [
     .object({
       kind: z.literal('library'),
       collectionId: z.string().min(1).optional(),
+      uncategorized: z.boolean().optional(),
     })
     .strict(),
   z.object({ kind: z.literal('run'), runId: z.string().min(1) }).strict(),
@@ -4451,6 +4529,10 @@ export const IpcChannel = {
   SetDefaultModel: 'model:set-default',
   SetModelEnabled: 'model:set-enabled',
   ListKnowledge: 'knowledge:list',
+  ListKnowledgeCollections: 'knowledge:list-collections',
+  SaveKnowledgeCollection: 'knowledge:save-collection',
+  DeleteKnowledgeCollection: 'knowledge:delete-collection',
+  SetKnowledgeCollectionMembers: 'knowledge:set-collection-members',
   ImportKnowledge: 'knowledge:import',
   SearchKnowledge: 'knowledge:search',
   OpenKnowledgeSource: 'knowledge:open-source',
@@ -4610,7 +4692,13 @@ export interface BetterWorkDesktopApi {
     toggleMaximize(): Promise<{ maximized: boolean }>;
   };
   knowledge: {
-    list(): Promise<KnowledgeDocumentSummary[]>;
+    list(input?: ListKnowledgeRequest): Promise<KnowledgeDocumentSummary[]>;
+    listCollections(): Promise<KnowledgeCollection[]>;
+    saveCollection(input: SaveKnowledgeCollectionRequest): Promise<KnowledgeCollection[]>;
+    deleteCollection(input: DeleteKnowledgeCollectionRequest): Promise<KnowledgeCollection[]>;
+    setCollectionMembers(
+      input: SetKnowledgeCollectionMembersRequest,
+    ): Promise<KnowledgeCollectionMembersResult>;
     importFromDialog(): Promise<KnowledgeImportAck>;
     jobs(input?: ListKnowledgeJobsRequest): Promise<KnowledgeJobPage>;
     job(input: { jobId: string }): Promise<KnowledgeJobDetail | null>;

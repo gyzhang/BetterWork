@@ -4492,6 +4492,73 @@ p {
   border-radius: 6px;
   font-size: 12px;
 }
+/* KM11：集合筛选、集合管理与详情勾选 */
+.knowledge-collections {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 8px;
+}
+.knowledge-collection-create,
+.knowledge-collection-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.knowledge-collection-create input,
+.knowledge-collection-row input {
+  flex: 1;
+  min-width: 0;
+  min-height: 30px;
+  padding: 6px 9px;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.knowledge-collection-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+.knowledge-collection-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand);
+}
+.knowledge-detail-members {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.knowledge-detail-members > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.knowledge-detail-members small {
+  color: var(--text-muted);
+}
+.knowledge-detail-members button {
+  min-height: 30px;
+  padding: 6px 10px;
+  color: var(--brand);
+  background: transparent;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.knowledge-detail-members button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 /* KM10：资料详情子视图 */
 .knowledge-detail {
   display: flex;

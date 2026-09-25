@@ -1317,4 +1317,120 @@ describe('registerIpc', () => {
       await expect(invoke(IpcChannel.SearchKnowledge, { query: '   ' })).rejects.toThrow();
     });
   });
+
+  describe('集合通道（KM11）', () => {
+    interface CollectionRow {
+      id: string;
+      name: string;
+      revision: number;
+    }
+
+    it('集合增删改走 CAS 与规范化唯一名，筛选贯通列表与检索', async () => {
+      const existing = (await invoke(IpcChannel.ListKnowledge, {})) as Array<{
+        id: string;
+        title: string;
+      }>;
+      const importedDocumentId =
+        existing.find((document) => document.title === 'knowledge-job-channel')?.id ?? '';
+      expect(importedDocumentId).toBeTruthy();
+      await expect(invoke(IpcChannel.ListKnowledgeCollections, {})).resolves.toEqual([]);
+      const created = (await invoke(IpcChannel.SaveKnowledgeCollection, {
+        mode: 'create',
+        name: '  研究  ',
+      })) as CollectionRow[];
+      expect(created).toHaveLength(1);
+      expect(created[0]).toMatchObject({ name: '研究', revision: 1 });
+      const collectionId = created[0]?.id ?? '';
+
+      // 规范化重名（大小写/全角差异）在协议层收口为可解释错误
+      await expect(
+        invoke(IpcChannel.SaveKnowledgeCollection, { mode: 'create', name: '研究' }),
+      ).rejects.toThrow('已有同名集合');
+      await expect(
+        invoke(IpcChannel.SaveKnowledgeCollection, {
+          mode: 'rename',
+          id: collectionId,
+          name: '研究资料',
+          expectedRevision: 99,
+        }),
+      ).rejects.toThrow('集合不存在或已被其他操作更新');
+      const renamed = (await invoke(IpcChannel.SaveKnowledgeCollection, {
+        mode: 'rename',
+        id: collectionId,
+        name: '研究资料',
+        expectedRevision: 1,
+      })) as CollectionRow[];
+      expect(renamed[0]).toMatchObject({ id: collectionId, name: '研究资料', revision: 2 });
+
+      const uncategorized = (await invoke(IpcChannel.ListKnowledge, {
+        filter: { kind: 'uncategorized' },
+      })) as Array<{ id: string }>;
+      expect(uncategorized.map((document) => document.id)).toContain(importedDocumentId);
+      await expect(
+        invoke(IpcChannel.ListKnowledge, { filter: { kind: 'collection', collectionId } }),
+      ).resolves.toEqual([]);
+
+      const members = (await invoke(IpcChannel.SetKnowledgeCollectionMembers, {
+        documentId: importedDocumentId,
+        expectedMembershipRevision: 1,
+        collectionIds: [collectionId],
+      })) as { membershipRevision: number; collectionIds: string[] };
+      expect(members).toEqual({ membershipRevision: 2, collectionIds: [collectionId] });
+      await expect(
+        invoke(IpcChannel.SetKnowledgeCollectionMembers, {
+          documentId: importedDocumentId,
+          expectedMembershipRevision: 1,
+          collectionIds: [],
+        }),
+      ).rejects.toThrow('分类刚被其他操作更新');
+      await expect(
+        invoke(IpcChannel.SetKnowledgeCollectionMembers, {
+          documentId: importedDocumentId,
+          expectedMembershipRevision: 2,
+          collectionIds: ['不存在的集合'],
+        }),
+      ).rejects.toThrow('引用了不存在或已删除的集合');
+
+      const filteredList = (await invoke(IpcChannel.ListKnowledge, {
+        filter: { kind: 'collection', collectionId },
+      })) as Array<{ id: string; collectionIds: string[]; membershipRevision: number }>;
+      expect(filteredList).toHaveLength(1);
+      expect(filteredList[0]).toMatchObject({
+        id: importedDocumentId,
+        collectionIds: [collectionId],
+        membershipRevision: 2,
+      });
+      const searchScoped = (await invoke(IpcChannel.SearchKnowledge, {
+        query: '违约金',
+        filter: { kind: 'collection', collectionId },
+      })) as KnowledgeSearchResponse;
+      expect(searchScoped.results.map((hit) => hit.reference.knowledgeDocumentId)).toEqual([
+        importedDocumentId,
+      ]);
+      const searchOutside = (await invoke(IpcChannel.SearchKnowledge, {
+        query: '违约金',
+        filter: { kind: 'uncategorized' },
+      })) as KnowledgeSearchResponse;
+      expect(searchOutside.results).toEqual([]);
+
+      await expect(
+        invoke(IpcChannel.DeleteKnowledgeCollection, { id: collectionId, expectedRevision: 1 }),
+      ).rejects.toThrow('集合不存在或已被其他操作更新');
+      await expect(
+        invoke(IpcChannel.DeleteKnowledgeCollection, { id: collectionId, expectedRevision: 2 }),
+      ).resolves.toEqual([]);
+      const afterDelete = (await invoke(IpcChannel.ListKnowledge, {})) as Array<{
+        id: string;
+        collectionIds: string[];
+      }>;
+      const survivor = afterDelete.find((document) => document.id === importedDocumentId);
+      expect(survivor?.collectionIds).toEqual([]);
+      await expect(
+        invoke(IpcChannel.SearchKnowledge, {
+          query: '违约金',
+          filter: { kind: 'collection', collectionId },
+        }),
+      ).resolves.toMatchObject({ results: [] });
+    });
+  });
 });
