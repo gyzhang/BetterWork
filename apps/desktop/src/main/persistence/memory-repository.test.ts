@@ -7,6 +7,7 @@ import {
   LIST_PAGE_DEFAULT_LIMIT,
   type MemoryFacet,
   type MemoryProvenance,
+  type MemoryRecord,
   type MemoryScope,
   type MemorySourceType,
   stableStringifyJson,
@@ -784,6 +785,47 @@ describe('MemoryRepository', () => {
       action: 'expire',
     }).record;
     expect(expired.recallPolicy).toBe('pinned');
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  /** 契约 §11.3：替代只给败者打终态，胜者不会继承另一条记忆的优先标记。 */
+  it('替代不继承被替代记忆的 pinned 标记', () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), 'betterwork-replace-policy-'));
+    const databasePath = path.join(directory, 'app.db');
+    const store = AppStore.open(databasePath);
+    stores.push(store);
+    const scope: MemoryScope = {
+      kind: 'workspace',
+      workspaceId: seedWorkspace(store, '替代策略'),
+    };
+    const seed = (content: string): MemoryRecord =>
+      store.memories.create({
+        scope,
+        content,
+        facet: 'constraint',
+        normalizedHash: digestOf(content),
+        provenance: legacyProvenance(),
+        confidence: 0.9,
+        status: 'confirmed',
+      }).record;
+    const oldRule = seed('旧口径：同比为准。');
+    const newRule = seed('新口径：环比为准。');
+    const forge = new Database(databasePath);
+    forge
+      .prepare('UPDATE memory_records SET recall_policy = ? WHERE revision_id = ?')
+      .run('pinned', oldRule.revisionId);
+    forge.close();
+
+    const replacement = store.memories.replace({
+      winnerId: newRule.id,
+      winnerExpectedRevision: newRule.revision,
+      loserId: oldRule.id,
+      loserExpectedRevision: oldRule.revision,
+    });
+    expect(replacement.winner.recallPolicy).toBe('relevant');
+    expect(store.memories.get(newRule.id)?.recallPolicy).toBe('relevant');
+    expect(replacement.loser.status).toBe('superseded');
+    expect(replacement.loser.recallPolicy).toBe('pinned');
     rmSync(directory, { recursive: true, force: true });
   });
 

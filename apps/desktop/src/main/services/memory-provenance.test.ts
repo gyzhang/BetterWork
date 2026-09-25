@@ -366,6 +366,32 @@ describe('resolveMemorySourceSelector', () => {
     ).toBe('SOURCE_DEPENDENCY_LIMIT');
   });
 
+  /** 契约 §11.1：空区间在 Schema 里是合法形状（只判顺序），下限 1 码点由 Main 把关。 */
+  it('rejects an empty excerpt interval', () => {
+    expect(
+      code(
+        resolveMemorySourceSelector(
+          { kind: 'run-user', runId: 'r-1', start: 3, end: 3 },
+          reader(),
+          workspace,
+        ),
+      ),
+    ).toBe('SOURCE_MISMATCH');
+  });
+
+  it('rejects exceeding the material dependency limit rather than truncating', () => {
+    const materials = Array.from({ length: 201 }, (_unused, index) => material(`kr-${index}`));
+    expect(
+      code(
+        resolveMemorySourceSelector(
+          { kind: 'run-assistant', runId: 'r-1', eventId: 'e-7', start: 0, end: 3 },
+          reader({ runDependencies: () => dependencies({ materials }) }),
+          workspace,
+        ),
+      ),
+    ).toBe('SOURCE_DEPENDENCY_LIMIT');
+  });
+
   it('inherits checkpoint dependencies only when the node can prove them', () => {
     const base = {
       kind: 'checkpoint',

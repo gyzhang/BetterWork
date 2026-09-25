@@ -189,6 +189,34 @@ describe('resolveArtifactVersionExecutor', () => {
     ).toEqual({ kind: 'unavailable', reason: 'source-unavailable' });
   });
 
+  /** MI08 AC5：真实通用运行与「无法证明来源身份」是两件事，混为一谈会让界面说不出原因。 */
+  it('通用助手跑出的版本返回 general，而不是 unavailable', async () => {
+    const { store, taskId, sessionId, workspaceId } = await openWorld();
+    const generalRunId = randomUUID();
+    store.runs.create({
+      id: generalRunId,
+      taskId,
+      sessionId,
+      prompt: '产出本期结论',
+      status: 'completed',
+      createdAt: 1,
+    });
+    store.runContextSnapshots.create({
+      runId: generalRunId,
+      taskId,
+      workspaceId,
+      contextSegmentId: 'segment-general',
+      materials: [],
+      createdAt: 2,
+    });
+    const versionId = saveVersion(store, { taskId, runId: generalRunId, content: '# 通用结论' });
+    const artifactId = store.artifacts.list(taskId)[0]?.id;
+    if (artifactId === undefined) throw new Error('缺少成果。');
+    expect(
+      resolveArtifactVersionExecutor(store, { artifactId, artifactVersionId: versionId }),
+    ).toEqual({ kind: 'general', sourceRunId: generalRunId });
+  });
+
   it('来源专家被停用或版本不属于该成果时分别拒绝', async () => {
     const { store, taskId, sessionId, workspaceId, expertId, expertRevisionId } = await openWorld();
     const runId = randomUUID();

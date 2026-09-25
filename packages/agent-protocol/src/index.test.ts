@@ -17,14 +17,26 @@ import {
   MAX_RUN_SKILL_BINDINGS,
   mcpToolBindingSchema,
   mcpToolSummarySchema,
+  MEMORY_RECALL_BLOCK_CODE_POINT_BUDGET,
+  MEMORY_RECALL_CONTENT_CODE_POINT_BUDGET,
+  MEMORY_RECALL_PINNED_CODE_POINT_BUDGET,
+  MEMORY_RECALL_PINNED_ITEM_LIMIT,
+  MEMORY_RECALL_PREFERENCE_CODE_POINT_BUDGET,
+  MEMORY_RECALL_PREFERENCE_ITEM_LIMIT,
   MEMORY_RECALL_TOTAL_ITEM_LIMIT,
   MEMORY_RECALL_VERSION,
+  MEMORY_RECALL_VERSION_V2,
+  MEMORY_RECALL_WRAPPER_CODE_POINT_BUDGET,
+  MEMORY_TASK_EXCLUSION_MAX,
   memoryConflictPairSchema,
   memoryEditPatchSchema,
   memoryErrorCodeSchema,
   memoryGovernanceActionSchema,
   memoryOperationRecordSchema,
   memoryProvenanceSchema,
+  memoryQueryContextSchema,
+  memoryRecallPolicyV1,
+  memoryRecallPolicyV2,
   memoryRecordSchema,
   memorySourceRefSchema,
   memorySourceSelectorSchema,
@@ -32,6 +44,7 @@ import {
   resolveMemoryConflictRequestSchema,
   resultSchema,
   runMaterialReadSchema,
+  runMemoryContextSchema,
   runtimeEnvironmentSchema,
   runtimeProfileDraftSchema,
   scriptExecutionSchema,
@@ -901,6 +914,18 @@ describe('工作型记忆契约不变量', () => {
       memorySourceSelectorSchema.safeParse({ kind: 'run-user', runId: 'r-1', start: 4, end: 2 })
         .success,
     ).toBe(false);
+    // 契约 §11.1：摘录下限 1 码点，空区间不能当作「已保留来源」。
+    expect(
+      memorySourceRefSchema.safeParse({
+        kind: 'run-user',
+        runId: 'r-1',
+        promptHash: hash64,
+        excerpt: '',
+        excerptHash: hash64,
+        start: 0,
+        end: 0,
+      }).success,
+    ).toBe(false);
   });
 
   it('来源必须是 verified 或 legacy 两种形状之一', () => {
@@ -964,5 +989,165 @@ describe('工作型记忆契约不变量', () => {
         .success,
     ).toBe(false);
     expect(workspaceBriefSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+/**
+ * MI05/契约 §11.4：历史 v1 快照与新 v2 快照混存时，判别必须靠 recallVersion＋快照分支。
+ * 这三条拒绝路径是防伪造的最后一道，缺任何一条都会让「旧数据兼容读取」变成「任意改写都能读」。
+ */
+describe('MI 运行快照 v1/v2 兼容与优先预算字面量', () => {
+  const hash = 'b'.repeat(64);
+  type Snapshot = Record<string, unknown>;
+  interface Item {
+    memoryId: string;
+    revisionId: string;
+    contentHash: string;
+    order: number;
+    score: number;
+    reason: string;
+  }
+
+  const itemOf = (order: number, reason: string): Item => ({
+    memoryId: `memory-${order}`,
+    revisionId: `revision-${order}`,
+    contentHash: hash,
+    order,
+    score: reason === 'pinned-rule' ? 0 : 640,
+    reason,
+  });
+
+  const contextOf = (recallVersion: string, policySnapshot: Snapshot, items: Item[]) => ({
+    runId: 'run-1',
+    schemaVersion: 1,
+    phase: 'request-prepared',
+    recallVersion,
+    evaluatedAt: 1_700_000_001_000,
+    queryHash: hash,
+    policySnapshot,
+    selectedItems: items,
+    replay: [],
+    materialDependencyUnion: [],
+    memoryDependencyUnion: [],
+    decisionSummary: {
+      budget: {
+        totalItems: items.length,
+        preferenceItems: 0,
+        contentCodePoints: 120,
+        wrapperCodePoints: 40,
+        blockCodePoints: 160,
+      },
+      exclusions: [],
+      queryTruncated: false,
+      conflictReviewRequired: false,
+    },
+    authorizationHash: hash,
+    requestHash: hash,
+    selectedAt: 1_700_000_001_000,
+    requestPreparedAt: 1_700_000_002_000,
+    updatedAt: 1_700_000_002_000,
+  });
+
+  const without = (snapshot: Snapshot, key: string): Snapshot => {
+    const copy: Snapshot = { ...snapshot };
+    delete copy[key];
+    return copy;
+  };
+
+  it('v1 与 v2 的合法快照都原样可读，v2 允许 pinned-rule', () => {
+    expect(
+      runMemoryContextSchema.safeParse(
+        contextOf(MEMORY_RECALL_VERSION, memoryRecallPolicyV1, [itemOf(1, 'task-relevant')]),
+      ).success,
+    ).toBe(true);
+    expect(
+      runMemoryContextSchema.safeParse(
+        contextOf(MEMORY_RECALL_VERSION_V2, memoryRecallPolicyV2, [
+          itemOf(1, 'pinned-rule'),
+          itemOf(2, 'task-relevant'),
+        ]),
+      ).success,
+    ).toBe(true);
+  });
+
+  it('recallVersion 与快照分支不同侧即拒绝', () => {
+    expect(
+      runMemoryContextSchema.safeParse(
+        contextOf(MEMORY_RECALL_VERSION, memoryRecallPolicyV2, [itemOf(1, 'task-relevant')]),
+      ).success,
+    ).toBe(false);
+    expect(
+      runMemoryContextSchema.safeParse(
+        contextOf(MEMORY_RECALL_VERSION_V2, memoryRecallPolicyV1, [itemOf(1, 'task-relevant')]),
+      ).success,
+    ).toBe(false);
+  });
+
+  it('v2 缺任一优先预算字段不合法，v1 携带这两个字段也不合法', () => {
+    const items = [itemOf(1, 'task-relevant')];
+    expect(
+      runMemoryContextSchema.safeParse(
+        contextOf(
+          MEMORY_RECALL_VERSION_V2,
+          without(memoryRecallPolicyV2, 'pinnedItemLimit'),
+          items,
+        ),
+      ).success,
+    ).toBe(false);
+    expect(
+      runMemoryContextSchema.safeParse(
+        contextOf(
+          MEMORY_RECALL_VERSION_V2,
+          without(memoryRecallPolicyV2, 'pinnedCodePointBudget'),
+          items,
+        ),
+      ).success,
+    ).toBe(false);
+    expect(
+      runMemoryContextSchema.safeParse(
+        contextOf(
+          MEMORY_RECALL_VERSION,
+          { ...memoryRecallPolicyV1, pinnedItemLimit: MEMORY_RECALL_PINNED_ITEM_LIMIT },
+          items,
+        ),
+      ).success,
+    ).toBe(false);
+  });
+
+  it('pinned-rule 塞进 v1 历史快照必须拒绝，而不是被兼容读取', () => {
+    const parsed = runMemoryContextSchema.safeParse(
+      contextOf(MEMORY_RECALL_VERSION, memoryRecallPolicyV1, [itemOf(1, 'pinned-rule')]),
+    );
+    expect(parsed.success).toBe(false);
+  });
+
+  it('优先/偏好/总额预算的字面量写死，改动必须同时升算法版本', () => {
+    expect(MEMORY_RECALL_PINNED_ITEM_LIMIT).toBe(6);
+    expect(MEMORY_RECALL_PINNED_CODE_POINT_BUDGET).toBe(2_000);
+    expect(MEMORY_RECALL_PREFERENCE_ITEM_LIMIT).toBe(2);
+    expect(MEMORY_RECALL_PREFERENCE_CODE_POINT_BUDGET).toBe(600);
+    expect(MEMORY_RECALL_TOTAL_ITEM_LIMIT).toBe(16);
+    expect(MEMORY_RECALL_CONTENT_CODE_POINT_BUDGET).toBe(6_000);
+    expect(MEMORY_RECALL_WRAPPER_CODE_POINT_BUDGET).toBe(2_000);
+    expect(MEMORY_RECALL_BLOCK_CODE_POINT_BUDGET).toBe(8_000);
+    expect(memoryRecallPolicyV2.pinnedItemLimit).toBe(6);
+    expect(memoryRecallPolicyV2.pinnedCodePointBudget).toBe(2_000);
+    expect(Object.hasOwn(memoryRecallPolicyV1, 'pinnedItemLimit')).toBe(false);
+  });
+
+  it('任务排除上限 100：第 101 个被拒绝而不是静默截断', () => {
+    const queryOf = (count: number) => ({
+      workspaceId: 'workspace-1',
+      taskId: 'task-1',
+      taskContextRevisionId: 'revision-1',
+      evaluatedAt: 1_700_000_001_000,
+      prompt: '做份经营回顾',
+      taskTitle: '经营回顾',
+      materialTitles: [],
+      excludedMemoryIds: Array.from({ length: count }, (_unused, index) => `memory-${index}`),
+    });
+    expect(MEMORY_TASK_EXCLUSION_MAX).toBe(100);
+    expect(memoryQueryContextSchema.safeParse(queryOf(100)).success).toBe(true);
+    expect(memoryQueryContextSchema.safeParse(queryOf(101)).success).toBe(false);
   });
 });

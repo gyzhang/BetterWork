@@ -1779,6 +1779,29 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
     }
     expect(derivedRecord.provenance.materialDependencies.length).toBeGreaterThan(0);
 
+    // 契约 §11.1：改写正文只是换口径重述，不得顺带解除已登记的资料依赖。
+    const dependencyHashes = derivedRecord.provenance.materialDependencies.map(
+      (entry) => entry.contentHash,
+    );
+    const restated = await world.services.memories.update({
+      operationId: randomUUID(),
+      id: derivedRecord.id,
+      expectedRevision: derivedRecord.revision,
+      patch: { content: '复盘收入时先统一统计口径再比较增减。' },
+    });
+    expect(restated.ok).toBe(true);
+    const restatedRevisionId = restated.ok ? restated.data.committedRevisionIds[0] : undefined;
+    const restatedRecord =
+      restatedRevisionId === undefined
+        ? undefined
+        : world.services.store.memories.getRevision(restatedRevisionId);
+    expect(restatedRecord?.provenance.verification).toBe('verified');
+    expect(
+      restatedRecord?.provenance.verification === 'verified'
+        ? restatedRecord.provenance.materialDependencies.map((entry) => entry.contentHash)
+        : undefined,
+    ).toEqual(dependencyHashes);
+
     // 本期换成新材料：旧快照派生的经验不得再进入请求。
     const second = await addMaterial(world, '收入口径.md', '收入按签约金额统计。');
     const secondContext = saveContext(world, world.layout.a2, {
