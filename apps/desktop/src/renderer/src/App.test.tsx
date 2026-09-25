@@ -5,6 +5,7 @@ import type {
   ArtifactDetail,
   ArtifactSummary,
   ArtifactVersionExecutorSummary,
+  CreateMemoryRequest,
   ExpertDetail,
   ExpertSummary,
   InputSnapshot,
@@ -276,7 +277,9 @@ function installApi(options?: {
     memories: {
       list: vi.fn(async () => okResult({ items: options?.memories ?? [] })),
       get: vi.fn(async () => okResult(memoryViewItem())),
-      create: vi.fn(async () => okResult(writeReceipt)),
+      create: vi.fn(async (input: CreateMemoryRequest): Promise<Result<MemoryWriteReceipt>> =>
+        okResult({ ...writeReceipt, operationId: input.operationId }),
+      ),
       update: vi.fn(async () => okResult(writeReceipt)),
       setStatus: vi.fn(async () => okResult(writeReceipt)),
       resolveConflict: vi.fn(async () =>
@@ -890,6 +893,87 @@ describe('Task context restoration', () => {
         },
       }),
     );
+  });
+  /** MI02 AC3：保存失败要留下草稿与原因，未提交的取消不得写库。 */
+  it('回答捕获保存失败时保留草稿与幂等键，取消不写库', async () => {
+    const api = installApi({
+      expert: true,
+      context: {
+        id: 'context-previous',
+        taskId: previousTask.id,
+        revision: 1,
+        executor: {
+          kind: 'expert',
+          expertId: expertSummary.id,
+          expertRevisionId: expertDetail.revision.id,
+        },
+        skillBindings: [],
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    });
+    api.runs.listEvents.mockResolvedValue([
+      {
+        id: 'message-event',
+        runId: previousRun.id,
+        sequence: 1,
+        createdAt: 2,
+        type: 'message.completed',
+        messageId: 'message-1',
+        content: '经营分析应先核对规则。',
+      },
+      {
+        id: 'completed-event',
+        runId: previousRun.id,
+        sequence: 2,
+        createdAt: 3,
+        type: 'run.completed',
+        finalContent: '经营分析应先核对规则。',
+      },
+    ]);
+    api.memories.create.mockImplementation(async () => ({
+      ok: false,
+      error: {
+        code: 'SOURCE_REVIEW_REQUIRED',
+        message: '来源回答缺少可证明的审计记录，请重新确认选区。',
+        retryable: false,
+      },
+    }));
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
+    fireEvent.click(await screen.findByRole('button', { name: '记住这段经验' }));
+    const original = screen.getByRole<HTMLTextAreaElement>('textbox', { name: '回答原文' });
+    original.setSelectionRange(0, 9);
+    fireEvent.select(original);
+    fireEvent.click(screen.getByRole('button', { name: '确认选区' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '记忆正文' }), {
+      target: { value: '先核对规则再出结论。' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '保留来源并记住' }));
+
+    await waitFor(() => expect(api.memories.create).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('来源回答缺少可证明的审计记录，请重新确认选区。')).toBeTruthy();
+    // 失败不关表单、不吞草稿：正文与来源区间都还在，可以原地重试。
+    expect(screen.getByRole('textbox', { name: '记忆正文' })).toHaveProperty(
+      'value',
+      '先核对规则再出结论。',
+    );
+    expect(screen.getByRole('button', { name: '保留来源并记住' })).toBeTruthy();
+
+    // 失败重试复用同一个幂等键：一次打开表单一个键（契约 §5.6）。
+    fireEvent.click(screen.getByRole('button', { name: '保留来源并记住' }));
+    await waitFor(() => expect(api.memories.create).toHaveBeenCalledTimes(2));
+    const calls = vi.mocked(api.memories.create).mock.calls;
+    const firstKey = calls[0]?.[0]?.operationId;
+    expect(firstKey).toBeTruthy();
+    expect(calls[1]?.[0]?.operationId).toBe(firstKey);
+
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: '保留来源并记住' })).toBeNull(),
+    );
+    expect(api.memories.create).toHaveBeenCalledTimes(2);
   });
 });
 
