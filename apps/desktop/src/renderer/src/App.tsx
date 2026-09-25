@@ -53,6 +53,7 @@ import { useMemorySuggestions } from './hooks/use-memory-suggestions';
 import { useModelSettings } from './hooks/use-model-settings';
 import { useRunMemories, useTaskMemoryExclusion } from './hooks/use-run-memories';
 import { useSkills } from './hooks/use-skills';
+import { useTaskMemoryExclusions } from './hooks/use-task-memory-exclusions';
 import { useTaskScroll } from './hooks/use-task-scroll';
 import { useWorkspaceBrief } from './hooks/use-workspace-brief';
 import { useWorkspaceReferences } from './hooks/use-workspace-references';
@@ -264,6 +265,12 @@ export function App(): React.JSX.Element {
   });
   const references = useWorkspaceReferences(workspace?.id);
   const memoryExclusion = useTaskMemoryExclusion();
+  // 契约 §11.2：排除清单独立读取，与预览互不阻塞；调整成功后立即刷新。
+  const taskExclusions = useTaskMemoryExclusions({
+    taskId: activeTask?.id,
+    taskContextRevisionId: taskContext?.id,
+    expectedTaskContextRevision: taskContext?.revision,
+  });
   const taskCandidates = activeTask
     ? candidatesOfTask(suggestions.candidates, suggestions.jobs, activeTask.id)
     : [];
@@ -1774,11 +1781,13 @@ export function App(): React.JSX.Element {
                 if (!saved) return;
                 setTaskContext(saved);
                 setExcludedMemoryIds(saved.excludedMemoryIds ?? []);
+                taskExclusions.reload();
               }),
               '调整本任务的记忆范围',
             );
           }}
           exclusion={memoryExclusion}
+          exclusions={taskExclusions}
           materialCandidates={materialCandidates}
           onRequestMaterials={requestMaterials}
           mcpConnections={mcpState.connections}

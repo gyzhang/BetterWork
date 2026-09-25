@@ -582,6 +582,8 @@ export const MEMORY_REFERENCE_LABEL_MAX_CODE_POINTS = 120;
 export const MEMORY_SOURCE_MAX = 3;
 export const MEMORY_MATERIAL_DEPENDENCY_MAX = 200;
 export const MEMORY_MEMORY_DEPENDENCY_MAX = 100;
+/** 契约 §11.2：任务排除数量上限＝TaskContext 允许写入的排除数，两侧共用同一把尺。 */
+export const MEMORY_TASK_EXCLUSION_MAX = 100;
 export const MEMORY_COMMITTED_REVISION_MAX = 20;
 export const LIST_PAGE_DEFAULT_LIMIT = 50;
 export const LIST_PAGE_MAX_LIMIT = 100;
@@ -1714,7 +1716,7 @@ export const memoryQueryContextSchema = z
           .strict(),
       )
       .max(50),
-    excludedMemoryIds: z.array(z.string().min(1)).max(100),
+    excludedMemoryIds: z.array(z.string().min(1)).max(MEMORY_TASK_EXCLUSION_MAX),
   })
   .strict();
 export type MemoryQueryContext = z.infer<typeof memoryQueryContextSchema>;
@@ -1818,6 +1820,48 @@ export const memoryPreviewDataSchema = z
   })
   .strict();
 export type MemoryPreviewData = z.infer<typeof memoryPreviewDataSchema>;
+
+/**
+ * 契约 §11.2：本任务已排除列表是 TaskContext 的只读投影，不要求 prompt，
+ * 因此换问法、预览失败或重启后都能回到同一份排除清单。
+ */
+export const taskMemoryExclusionsRequestSchema = z
+  .object({
+    taskId: z.string().min(1),
+    taskContextRevisionId: z.string().min(1),
+    expectedTaskContextRevision: z.number().int().positive(),
+  })
+  .strict();
+export type TaskMemoryExclusionsRequest = z.infer<typeof taskMemoryExclusionsRequestSchema>;
+
+/**
+ * 可见分支只带当前管理范围内已可管理的内容；不可见分支不返回正文、标题、来源，
+ * 也不区分「不存在」与「越范围」，避免泄露其他空间的记录存在性。
+ */
+export const taskMemoryExclusionItemSchema = z.discriminatedUnion('visibility', [
+  z
+    .object({
+      visibility: z.literal('visible'),
+      memoryId: z.string().min(1),
+      revisionId: z.string().min(1),
+      content: memoryRecordSchema.shape.content,
+      scope: memoryScopeSchema,
+      effectiveStatus: memoryEffectiveStatusSchema,
+    })
+    .strict(),
+  z.object({ visibility: z.literal('unavailable'), memoryId: z.string().min(1) }).strict(),
+]);
+export type TaskMemoryExclusionItem = z.infer<typeof taskMemoryExclusionItemSchema>;
+
+export const taskMemoryExclusionsDataSchema = z
+  .object({
+    taskId: z.string().min(1),
+    taskContextRevisionId: z.string().min(1),
+    taskContextRevision: z.number().int().positive(),
+    items: z.array(taskMemoryExclusionItemSchema).max(MEMORY_TASK_EXCLUSION_MAX),
+  })
+  .strict();
+export type TaskMemoryExclusionsData = z.infer<typeof taskMemoryExclusionsDataSchema>;
 
 export const getRunMemoryContextRequestSchema = z.object({ runId: z.string().min(1) }).strict();
 export type GetRunMemoryContextRequest = z.infer<typeof getRunMemoryContextRequestSchema>;
@@ -2327,7 +2371,7 @@ export const taskContextRevisionSchema = z
         { message: 'skillBindings 中存在重复的 skillId' },
       ),
     materials: taskMaterialSelectionSchema.array().max(50).optional(),
-    excludedMemoryIds: z.array(z.string().min(1)).max(100).optional(),
+    excludedMemoryIds: z.array(z.string().min(1)).max(MEMORY_TASK_EXCLUSION_MAX).optional(),
     mcpToolBindings: z.array(mcpToolBindingSchema).max(50).optional(),
     modelReference: expertModelReferenceSchema.optional(),
     builtinToolPolicy: builtinToolPolicySchema.optional(),
@@ -4607,6 +4651,7 @@ export const IpcChannel = {
   GetMemory: 'memory:get',
   ResolveMemoryConflict: 'memory:resolve-conflict',
   PreviewMemory: 'memory:preview',
+  TaskMemoryExclusions: 'memory:task-exclusions',
   GetRunMemoryContext: 'memory:run-context',
   GetMemorySettings: 'memory:get-settings',
   SetMemorySettings: 'memory:set-settings',
@@ -4793,6 +4838,7 @@ export interface BetterWorkDesktopApi {
       input: ResolveMemoryConflictRequest,
     ): Promise<Result<MemoryConflictResolutionData>>;
     preview(input: PreviewMemoryRequest): Promise<Result<MemoryPreviewData>>;
+    taskExclusions(input: TaskMemoryExclusionsRequest): Promise<Result<TaskMemoryExclusionsData>>;
     runContext(input: GetRunMemoryContextRequest): Promise<Result<MemoryRunContextData>>;
     getSettings(input: GetMemorySettingsRequest): Promise<Result<WorkspaceMemorySettings>>;
     setSettings(input: SetMemorySettingsRequest): Promise<Result<MemorySettingsData>>;

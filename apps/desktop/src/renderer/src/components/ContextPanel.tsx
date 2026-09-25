@@ -23,6 +23,7 @@ import type { ActivityGroup } from '../activity';
 import type { MemorySuggestionsState } from '../hooks/use-memory-suggestions';
 import type { RunMemoriesState, TaskMemoryExclusionState } from '../hooks/use-run-memories';
 import { useRunSourcePreview } from '../hooks/use-run-source-preview';
+import type { TaskMemoryExclusionsState } from '../hooks/use-task-memory-exclusions';
 import type { WorkspaceBriefState } from '../hooks/use-workspace-brief';
 import {
   ArtifactIcon,
@@ -37,6 +38,7 @@ import { formatTime } from '../lib/format';
 import { runStatusName } from '../lib/labels';
 import { canToggleMcpTool, hasMcpToolBinding, setMcpToolBinding } from '../lib/mcp-selection';
 import {
+  effectiveStatusLabel,
   memoryRunPhaseLabel,
   memoryScopeLabel,
   recallExclusionLabel,
@@ -115,6 +117,8 @@ export interface ContextPanelProps {
   onToggleMemory: (memoryId: string) => void;
   /** 排除的保存状态：逐行「正在调整」与内联失败原因（§11.5.1）。 */
   exclusion: TaskMemoryExclusionState;
+  /** 「本任务已排除」独立清单：不依赖词面命中或预览成功（契约 §11.2）。 */
+  exclusions: TaskMemoryExclusionsState;
   materialCandidates: MaterialCandidate[];
   onRequestMaterials: (kind: 'file' | 'knowledge' | 'artifact') => void;
   mcpConnections: McpConnectionSummary[];
@@ -160,6 +164,7 @@ export function ContextPanel({
   excludedMemoryIds,
   onToggleMemory,
   exclusion,
+  exclusions,
   materialCandidates,
   onRequestMaterials,
   mcpConnections,
@@ -274,6 +279,14 @@ export function ContextPanel({
               <NextRunScopeSection
                 runMemories={runMemories}
                 memories={memories}
+                excludedMemoryIds={excludedMemoryIds}
+                onToggleMemory={onToggleMemory}
+                exclusion={exclusion}
+                workspaceName={workspaceName}
+                expertName={expertName}
+              />
+              <ExcludedTaskMemoriesSection
+                exclusions={exclusions}
                 excludedMemoryIds={excludedMemoryIds}
                 onToggleMemory={onToggleMemory}
                 exclusion={exclusion}
@@ -720,6 +733,87 @@ function MemoryScopeRow({
         {saving ? '正在调整…' : excluded ? '恢复使用' : '本任务不用'}
       </button>
     </div>
+  );
+}
+
+/**
+ * 「本任务已排除」独立清单（改进 Spec §5）：条目来自持久化 TaskContext，
+ * 换问法、预览失败、重启后都还在；恢复的只是参与选择的资格，不保证重新入选。
+ * 越范围或已不存在的 ID 只显示占位，不泄露正文、标题或来源。
+ */
+function ExcludedTaskMemoriesSection({
+  exclusions,
+  excludedMemoryIds,
+  onToggleMemory,
+  exclusion,
+  workspaceName,
+  expertName,
+}: {
+  exclusions: TaskMemoryExclusionsState;
+  excludedMemoryIds: string[];
+  onToggleMemory: (memoryId: string) => void;
+  exclusion: TaskMemoryExclusionState;
+  workspaceName: string | undefined;
+  expertName: string | undefined;
+}): React.JSX.Element {
+  return (
+    <section className="context-section memory-excluded-section">
+      <div className="selected-materials-heading">
+        <div>
+          <strong>本任务已排除</strong>
+          <small>来自本任务的持久化设置：换问法、重启或预览失败都保留在这里</small>
+        </div>
+        <button type="button" onClick={exclusions.reload} disabled={exclusions.loading}>
+          {exclusions.loading ? '正在读取…' : '刷新'}
+        </button>
+      </div>
+      {exclusions.error !== '' && (
+        <p className="inline-message error">
+          {exclusions.error}
+          <button type="button" onClick={exclusions.reload}>
+            重试
+          </button>
+        </p>
+      )}
+      {exclusions.error === '' && exclusions.items.length === 0 ? (
+        <p className="context-hint">这个任务目前没有排除任何记忆。</p>
+      ) : (
+        <div className="context-list">
+          {exclusions.items.map((item) => (
+            <div className="context-row" key={item.memoryId}>
+              {item.visibility === 'visible' ? (
+                <div>
+                  <strong>{item.content}</strong>
+                  <small>
+                    {effectiveStatusLabel[item.effectiveStatus]} ·{' '}
+                    {memoryScopeLabel(item.scope, workspaceName, expertName)}
+                  </small>
+                </div>
+              ) : (
+                <div>
+                  <strong>此项当前不可查看</strong>
+                  <small>不在本任务可管理范围内，或记录已被删除</small>
+                </div>
+              )}
+              <button
+                type="button"
+                disabled={exclusion.savingMemoryId === item.memoryId}
+                onClick={() => onToggleMemory(item.memoryId)}
+              >
+                {exclusion.savingMemoryId === item.memoryId
+                  ? '正在调整…'
+                  : item.visibility === 'visible'
+                    ? '恢复参与选择'
+                    : '移除此排除'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {excludedMemoryIds.length > 0 && exclusions.items.length === 0 && exclusions.error === '' ? (
+        <p className="context-note">任务上下文记录了排除项，但清单尚未读取，请点击刷新。</p>
+      ) : null}
+    </section>
   );
 }
 

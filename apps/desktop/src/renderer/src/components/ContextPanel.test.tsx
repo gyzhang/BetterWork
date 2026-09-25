@@ -18,6 +18,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 
 import type { MemorySuggestionsState } from '../hooks/use-memory-suggestions';
 import type { RunMemoriesState, TaskMemoryExclusionState } from '../hooks/use-run-memories';
+import type { TaskMemoryExclusionsState } from '../hooks/use-task-memory-exclusions';
 import type { WorkspaceBriefState } from '../hooks/use-workspace-brief';
 import { ContextPanel } from './ContextPanel';
 
@@ -174,6 +175,14 @@ const exclusion = (overrides?: Partial<TaskMemoryExclusionState>): TaskMemoryExc
   ...overrides,
 });
 
+const exclusions = (overrides?: Partial<TaskMemoryExclusionsState>): TaskMemoryExclusionsState => ({
+  items: [],
+  loading: false,
+  error: '',
+  reload: vi.fn(),
+  ...overrides,
+});
+
 const briefState = (overrides?: Partial<WorkspaceBriefState>): WorkspaceBriefState => {
   const brief: WorkspaceBrief = {
     workspaceId: 'workspace-1',
@@ -250,6 +259,7 @@ const renderPanel = (overrides: Record<string, unknown> = {}): HTMLElement => {
       excludedMemoryIds={[]}
       onToggleMemory={vi.fn()}
       exclusion={exclusion()}
+      exclusions={exclusions()}
       materialCandidates={[]}
       onRequestMaterials={vi.fn()}
       mcpConnections={[]}
@@ -610,5 +620,51 @@ describe('ContextPanel 按运行回看来源', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: '关闭' }));
     expect(screen.queryByRole('note')).toBeNull();
+  });
+});
+
+describe('ContextPanel 本任务已排除（MI03）', () => {
+  const items = [
+    {
+      visibility: 'visible' as const,
+      memoryId: 'memory-1',
+      revisionId: 'memory-1-r1',
+      content: '金额按万元保留两位。',
+      scope: { kind: 'workspace' as const, workspaceId: 'workspace-1' },
+      effectiveStatus: 'confirmed' as const,
+    },
+    { visibility: 'unavailable' as const, memoryId: 'memory-9' },
+  ];
+
+  it('预览失败或没有输入时，排除清单仍然可读并可恢复', () => {
+    const container = renderPanel({
+      runMemories: runMemories({
+        preview: undefined,
+        previewAvailable: false,
+        previewError: '范围预览暂时失败。',
+      }),
+      excludedMemoryIds: ['memory-1', 'memory-9'],
+      exclusions: exclusions({ items }),
+    });
+    expect(container.textContent).toContain('本任务已排除');
+    expect(container.textContent).toContain('金额按万元保留两位。');
+    expect(container.textContent).toContain('此项当前不可查看');
+    const labels = [...container.querySelectorAll('button')].map((button) => button.textContent);
+    expect(labels).toContain('恢复参与选择');
+    expect(labels).toContain('移除此排除');
+  });
+
+  it('恢复动作只针对该条排除，越范围项也能移除', () => {
+    const onToggleMemory = vi.fn();
+    const container = renderPanel({
+      excludedMemoryIds: ['memory-1', 'memory-9'],
+      exclusions: exclusions({ items }),
+      onToggleMemory,
+    });
+    const restore = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent === '恢复参与选择',
+    );
+    restore?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(onToggleMemory).toHaveBeenCalledWith('memory-1');
   });
 });

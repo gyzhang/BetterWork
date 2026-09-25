@@ -40,6 +40,9 @@ import {
   skillSummarySchema,
   startRunRequestSchema,
   taskContextRevisionSchema,
+  taskMemoryExclusionItemSchema,
+  taskMemoryExclusionsDataSchema,
+  taskMemoryExclusionsRequestSchema,
   updateWindowThemeRequestSchema,
   workspaceBriefSchema,
 } from './index';
@@ -114,6 +117,50 @@ describe('run protocol', () => {
         asUserInstruction: true,
       }),
     ).toThrow();
+  });
+
+  it('projects task exclusions without a prompt and hides out-of-scope detail', () => {
+    // 请求不要求 prompt：换问法或清空草稿后仍能读到排除清单（契约 §11.2）。
+    expect(
+      taskMemoryExclusionsRequestSchema.safeParse({
+        taskId: 't-1',
+        taskContextRevisionId: 'ctx-1',
+        expectedTaskContextRevision: 3,
+      }).success,
+    ).toBe(true);
+    expect(
+      taskMemoryExclusionsRequestSchema.safeParse({
+        taskId: 't-1',
+        taskContextRevisionId: 'ctx-1',
+        expectedTaskContextRevision: 0,
+        prompt: '多余字段',
+      }).success,
+    ).toBe(false);
+    const data = taskMemoryExclusionsDataSchema.parse({
+      taskId: 't-1',
+      taskContextRevisionId: 'ctx-1',
+      taskContextRevision: 3,
+      items: [
+        {
+          visibility: 'visible',
+          memoryId: 'm-1',
+          revisionId: 'm-1-r1',
+          content: '金额按万元保留两位。',
+          scope: { kind: 'workspace', workspaceId: 'ws-1' },
+          effectiveStatus: 'confirmed',
+        },
+        { visibility: 'unavailable', memoryId: 'm-2' },
+      ],
+    });
+    expect(data.items).toHaveLength(2);
+    // 不可见分支不接受正文：越范围记录不能借投影泄露。
+    expect(
+      taskMemoryExclusionItemSchema.safeParse({
+        visibility: 'unavailable',
+        memoryId: 'm-2',
+        content: '别的空间的口径。',
+      }).success,
+    ).toBe(false);
   });
 
   it('keeps a provenance selector and a user instruction mutually exclusive', () => {

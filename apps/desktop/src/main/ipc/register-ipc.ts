@@ -178,6 +178,8 @@ import {
   startRunResultSchema,
   taskContextMutationResultSchema,
   taskContextRevisionSchema,
+  taskMemoryExclusionsDataSchema,
+  taskMemoryExclusionsRequestSchema,
   testModelRequestSchema,
   testSearchEngineRequestSchema,
   testSkillRunRequestSchema,
@@ -1380,6 +1382,13 @@ function registerMemoryChannels({
     previewMemoryRequestSchema,
     resultSchema(memoryPreviewDataSchema),
     (input) => memoryRecall.preview(input),
+  );
+  // 契约 §11.2：排除列表是 TaskContext 的只读投影，与预览互不阻塞。
+  handleInput(
+    IpcChannel.TaskMemoryExclusions,
+    taskMemoryExclusionsRequestSchema,
+    resultSchema(taskMemoryExclusionsDataSchema),
+    (input) => memoryRecall.taskExclusions(input),
   );
   handleInput(
     IpcChannel.GetRunMemoryContext,

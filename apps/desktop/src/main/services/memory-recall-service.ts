@@ -25,6 +25,9 @@ import type {
   PreviewMemoryRequest,
   Result,
   TaskMaterialSelection,
+  TaskMemoryExclusionItem,
+  TaskMemoryExclusionsData,
+  TaskMemoryExclusionsRequest,
 } from '@betterwork/agent-protocol';
 import {
   countCodePoints,
@@ -39,6 +42,8 @@ import {
   memoryViewItemSchema,
   previewMemoryRequestSchema,
   stableStringifyJson,
+  taskMemoryExclusionsDataSchema,
+  taskMemoryExclusionsRequestSchema,
 } from '@betterwork/agent-protocol';
 
 import type { AppStore } from '../persistence';
@@ -1308,6 +1313,24 @@ export const prepareRunMemoryDecision = (
   };
 };
 
+/** 排除项是否落在当前任务可管理范围内：越范围的记录只回 unavailable 占位。 */
+const exclusionVisibleInScope = (
+  scope: MemoryScope,
+  workspaceId: string,
+  expertId: string | undefined,
+): boolean => {
+  switch (scope.kind) {
+    case 'user':
+      return true;
+    case 'expert':
+      return expertId !== undefined && scope.expertId === expertId;
+    case 'workspace':
+      return scope.workspaceId === workspaceId;
+    case 'expert-workspace':
+      return scope.workspaceId === workspaceId && scope.expertId === expertId;
+  }
+};
+
 const resolveExpertIdOfContext = (
   executor: { kind: 'general' } | { kind: 'expert'; expertId: string; expertRevisionId: string },
 ): string | undefined => (executor.kind === 'expert' ? executor.expertId : undefined);
@@ -1372,6 +1395,64 @@ export class MemoryRecallService {
         });
       }
       return okResult(data, warnings);
+    } catch (error) {
+      return toFailure(error);
+    }
+  }
+
+  /**
+   * 契约 §11.2：本任务已排除列表是 TaskContext 的只读投影。
+   * 不要求 prompt、不依赖词面命中、不写读取足迹；越范围或已不存在的 ID 只回占位分支。
+   */
+  taskExclusions(input: TaskMemoryExclusionsRequest): Result<TaskMemoryExclusionsData> {
+    try {
+      const request = taskMemoryExclusionsRequestSchema.parse(input);
+      const workspaceId = this.store.tasks.getWorkspaceId(request.taskId);
+      if (workspaceId === undefined) {
+        return failResult('NOT_FOUND', `任务不存在：${request.taskId}`);
+      }
+      const context = this.store.taskContexts.get(request.taskContextRevisionId, request.taskId);
+      if (context === undefined) {
+        return failResult(
+          'CONTEXT_REVISION_REQUIRED',
+          '任务上下文不存在或不属于当前 Task，请先保存任务上下文。',
+        );
+      }
+      if (context.revision !== request.expectedTaskContextRevision) {
+        return failResult(
+          'REVISION_CONFLICT',
+          `任务上下文已更新：期望 ${request.expectedTaskContextRevision}，当前为 ${context.revision}，请重新加载。`,
+          context.revision,
+        );
+      }
+      const expertId = resolveExpertIdOfContext(context.executor);
+      const items: TaskMemoryExclusionItem[] = [];
+      const seen = new Set<string>();
+      for (const memoryId of context.excludedMemoryIds ?? []) {
+        if (seen.has(memoryId)) continue;
+        seen.add(memoryId);
+        const record = this.store.memories.get(memoryId);
+        if (!record || !exclusionVisibleInScope(record.scope, workspaceId, expertId)) {
+          // 不泄露正文、标题、来源，也不说明它到底存不存在。
+          items.push({ visibility: 'unavailable', memoryId });
+          continue;
+        }
+        items.push({
+          visibility: 'visible',
+          memoryId: record.id,
+          revisionId: record.revisionId,
+          content: record.content,
+          scope: record.scope,
+          effectiveStatus: deriveEffectiveStatus(record, Date.now()),
+        });
+      }
+      const data = taskMemoryExclusionsDataSchema.parse({
+        taskId: request.taskId,
+        taskContextRevisionId: context.id,
+        taskContextRevision: context.revision,
+        items,
+      });
+      return okResult(data);
     } catch (error) {
       return toFailure(error);
     }

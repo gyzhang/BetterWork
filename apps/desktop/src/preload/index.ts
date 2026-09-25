@@ -123,6 +123,8 @@ import {
   skillSummarySchema,
   taskContextMutationResultSchema,
   taskContextRevisionSchema,
+  taskMemoryExclusionsDataSchema,
+  taskMemoryExclusionsRequestSchema,
   testSkillRunRequestSchema,
   testSkillRunResultSchema,
   updateMemoryRequestSchema,
@@ -565,6 +567,12 @@ const api: BetterWorkDesktopApi = {
         IpcChannel.PreviewMemory,
         previewMemoryRequestSchema.parse(input),
         resultSchema(memoryPreviewDataSchema),
+      ),
+    taskExclusions: (input) =>
+      invokeValidated(
+        IpcChannel.TaskMemoryExclusions,
+        taskMemoryExclusionsRequestSchema.parse(input),
+        resultSchema(taskMemoryExclusionsDataSchema),
       ),
     runContext: (input) =>
       invokeValidated(

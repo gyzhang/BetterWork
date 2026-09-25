@@ -294,6 +294,15 @@ function installApi(options?: {
         ok: false,
         error: { code: 'NOT_FOUND', message: '测试未提供范围预览。', retryable: false },
       })),
+      // 排除清单是独立只读投影：默认空表，个别用例再覆写。
+      taskExclusions: vi.fn(async (input: { taskId: string; taskContextRevisionId: string }) =>
+        okResult({
+          taskId: input?.taskId ?? 'task-1',
+          taskContextRevisionId: input?.taskContextRevisionId ?? 'context-1',
+          taskContextRevision: 1,
+          items: [],
+        }),
+      ),
       runContext: vi.fn(async (input: { runId: string }) =>
         okResult({
           runId: input?.runId ?? 'run-1',
