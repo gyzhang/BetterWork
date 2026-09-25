@@ -3,7 +3,12 @@ import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { AgentTool, SkillInstruction } from '@betterwork/agent-core';
-import { describeError, FakeModelProvider, ReActAgentEngine } from '@betterwork/agent-core';
+import {
+  abortError,
+  describeError,
+  FakeModelProvider,
+  ReActAgentEngine,
+} from '@betterwork/agent-core';
 import type {
   AgentMessage,
   AgentRuntimeEvent,
@@ -1012,7 +1017,7 @@ export class RunService {
     context: Parameters<OfficeMaterialReader>[1],
   ): Promise<unknown> {
     if (!this.officeParser) throw new Error('Office 材料解析器不可用。');
-    if (context.signal.aborted) throw new Error('Office 材料读取已取消。');
+    if (context.signal.aborted) throw abortError();
     const selected = materials.find((selection) => {
       const reference = selection.reference;
       if (input.sourceKind === 'workspace-input-snapshot') {
