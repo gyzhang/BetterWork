@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { MaterialReference, MemoryDependency } from '@betterwork/agent-protocol';
 import { describe, expect, it } from 'vitest';
 
+import { memoryContentHash } from './memory-content-policy';
 import {
   buildDerivedProvenance,
   buildLegacyProvenance,
@@ -171,6 +172,49 @@ describe('resolveMemorySourceSelector', () => {
       ),
     );
     expect(exact.source.excerpt).toBe('𠮷祥');
+  });
+
+  /**
+   * 矩阵 R5：回答里同一句出现两次时，第二处区间必须按码点精确落位，
+   * 正文哈希取自事件原文而不是调用方给的值——否则「重复片段选第二处」会静默存成第一处。
+   */
+  it('binds a repeated sentence to the exact second occurrence and the event body', () => {
+    const answer = '口径已统一。𠮷附注。口径已统一。';
+    const characters = [...answer];
+    const sentence = '口径已统一。';
+    const secondStart = characters.length - [...sentence].length;
+    // 同一句话在 UTF-16 下标上会因为非 BMP 字符右移一位：码点口径取到的才是第二处。
+    expect(answer.indexOf(sentence, 1)).toBe(secondStart + 1);
+
+    const second = valueOf(
+      resolveMemorySourceSelector(
+        {
+          kind: 'run-assistant',
+          runId: 'r-1',
+          eventId: 'e-7',
+          start: secondStart,
+          end: secondStart + [...sentence].length,
+        },
+        reader({ runAssistantAnswer: () => answer }),
+        workspace,
+      ),
+    );
+    expect(second.source.excerpt).toBe(sentence);
+    expect(second.source.start).toBe(secondStart);
+    expect(second.source.excerptHash).toBe(sha(sentence));
+    if (second.source.kind !== 'run-assistant') throw new Error('来源类型不符。');
+    expect(second.source.contentHash).toBe(memoryContentHash(answer));
+
+    const first = valueOf(
+      resolveMemorySourceSelector(
+        { kind: 'run-assistant', runId: 'r-1', eventId: 'e-7', start: 0, end: 6 },
+        reader({ runAssistantAnswer: () => answer }),
+        workspace,
+      ),
+    );
+    // 同文不同位：两处保存靠区间区分，正文相同也不能合并成同一条来源。
+    expect(first.source.excerpt).toBe(second.source.excerpt);
+    expect(first.source.start).not.toBe(second.source.start);
   });
 
   it('rejects anything that is not the final tool-free answer of a completed run', () => {

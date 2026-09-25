@@ -397,7 +397,11 @@ const addMaterial = async (
 const confirmMemory = async (
   world: World,
   scope: MemoryScope,
-  input: { content: string; facet: 'decision' | 'fact' | 'preference'; topicKey?: string },
+  input: {
+    content: string;
+    facet: 'goal' | 'constraint' | 'decision' | 'fact' | 'method' | 'preference';
+    topicKey?: string;
+  },
 ): Promise<MemoryRecord> => {
   const result = await world.services.memories.create({
     operationId: randomUUID(),
@@ -1426,6 +1430,103 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
       .map((message) => message.content)
       .join('\n');
     expect(injectedBlock).toContain('内部简报只要结论，对外汇报要结论加证据。');
+  });
+
+  /**
+   * 矩阵 N8（请求级）：并存分量只要含一条优先就整体属于优先池，装不下就整组落选；
+   * 关键反证是「词面本来就命中的那条成员」不得改走相关池绕开优先池上限。
+   */
+  it('N8 超预算的优先并存组整组不入选，词面命中也不绕过上限', async () => {
+    const world = await createWorld();
+    const scope: MemoryScope = { kind: 'workspace', workspaceId: world.layout.workspaceA };
+    const pad = (head: string, total: number): string =>
+      head + '径'.repeat(total - [...head].length);
+    const companionText = pad('经营回顾时统一收入口径：', 1_100);
+
+    // 对照组：这条记忆词面确实可被召回，否则后面的断言只是空跑。
+    const companion = await confirmMemory(world, scope, {
+      content: companionText,
+      facet: 'method',
+      topicKey: 'income-unit',
+    });
+    const controlTask = world.services.store.tasks.create(
+      world.layout.workspaceA,
+      'N8 对照',
+      '做份经营回顾',
+    );
+    const controlRef = {
+      taskId: controlTask.task.id,
+      sessionId: controlTask.sessionId,
+    };
+    const controlContext = saveContext(world, controlRef, {
+      materials: [],
+      excludedMemoryIds: [],
+    });
+    const controlRun = startRun(world, controlRef, '做份经营回顾', controlContext);
+    await waitForCompletion(world, controlRun);
+    expect(mentions(lastRunRequest(world), '经营回顾时统一收入口径：')).toBe(true);
+    expect(
+      world.services.store.runMemoryContexts
+        .get(controlRun)
+        ?.selectedItems.map((item) => item.memoryId),
+    ).toContain(companion.id);
+
+    // 加入一条同议题的优先规则并判定并存：整组进入优先池，两条正文合计超过 2,000 码点。
+    const pinned = await confirmMemory(world, scope, {
+      content: pad('经营回顾金额按万元保留两位：', 1_100),
+      facet: 'decision',
+      topicKey: 'income-unit',
+    });
+    const pinnedCurrent = world.services.store.memories.get(pinned.id);
+    if (!pinnedCurrent) throw new Error('优先规则未落库。');
+    const setPinned = await world.services.memories.update({
+      operationId: randomUUID(),
+      id: pinnedCurrent.id,
+      expectedRevision: pinnedCurrent.revision,
+      patch: { recallPolicy: 'pinned' },
+    });
+    if (!setPinned.ok) throw new Error(`设优先失败：${setPinned.error.code}`);
+    const afterPin = world.services.store.memories.get(pinnedCurrent.id);
+    if (!afterPin) throw new Error('优先修订缺失。');
+    const decided = await world.services.memories.resolveConflict({
+      operationId: randomUUID(),
+      left: { id: pinned.id, expectedRevision: afterPin.revision },
+      right: { id: companion.id, expectedRevision: companion.revision },
+      decision: 'keep-both',
+      applicabilityNote: '内部回顾只看金额口径。',
+    });
+    expect(decided.ok).toBe(true);
+
+    const task = world.services.store.tasks.create(
+      world.layout.workspaceA,
+      'N8 整组落选',
+      '做份经营回顾',
+    );
+    const taskRef = { taskId: task.task.id, sessionId: task.sessionId };
+    const context = saveContext(world, taskRef, { materials: [], excludedMemoryIds: [] });
+    const runId = startRun(world, taskRef, '做份经营回顾', context);
+    await waitForCompletion(world, runId);
+
+    const audit = world.services.store.runMemoryContexts.get(runId);
+    const selectedIds = new Set((audit?.selectedItems ?? []).map((item) => item.memoryId));
+    expect(selectedIds.has(pinned.id)).toBe(false);
+    expect(selectedIds.has(companion.id)).toBe(false);
+    const injected = (lastRunRequest(world)?.messages ?? [])
+      .filter((message) => message.role !== 'user')
+      .map((message) => message.content)
+      .join('\n');
+    expect(injected).not.toContain('经营回顾时统一收入口径：');
+    expect(injected).not.toContain('经营回顾金额按万元保留两位：');
+    // 落选原因必须是预算，且两条都在同一批里；不能把词面命中那条改记成「不相关」。
+    const budget = audit?.decisionSummary.exclusions.find((entry) => entry.reason === 'budget');
+    expect(new Set((budget?.identities ?? []).map((entry) => entry.memoryId))).toEqual(
+      new Set([pinned.id, companion.id]),
+    );
+    expect(
+      audit?.decisionSummary.exclusions
+        .find((entry) => entry.reason === 'not-relevant')
+        ?.identities.map((entry) => entry.memoryId) ?? [],
+    ).not.toContain(companion.id);
   });
 
   it('R3/R7 无需历史即可带入最新优先修订，旧运行回看不变', async () => {
