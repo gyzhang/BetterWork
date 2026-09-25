@@ -76,6 +76,12 @@ describe('KnowledgeWorkerRunner', () => {
     expect(text.content).toBe('plain\r\nbody');
     // 同一作业复用进程，不是每条请求起一个。
     expect(runner.activePid('extract:job-a')).toBe(pid);
+
+    // KM13：Office 字节核心进 Worker 图后，真实子进程与 Main 共用同一份解析器。
+    const csv = await runner.extract('csv', Buffer.from('月份,收入\n2026-08,120\n', 'utf8'), job);
+    expect(csv.sections[0]).toMatchObject({ locator: 'rows:1-1' });
+    expect(csv.sections[1]?.locator).toBe('rows:2-2');
+    expect(runner.activePid('extract:job-a')).toBe(pid);
   }, 30_000);
 
   it('坏 docx 以 WORKER_EXTRACT_FAILED 收口为条目错误，进程存活可继续下一条目', async () => {

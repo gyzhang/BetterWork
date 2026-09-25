@@ -1,6 +1,7 @@
 import { abortError, type AgentTool, type ToolExecutionContext } from '@betterwork/agent-core';
 import {
   KNOWLEDGE_SEARCH_TOOL_MAX_RESULTS,
+  type KnowledgeFormat,
   type KnowledgeMaterialReference,
   type KnowledgeSpan,
 } from '@betterwork/agent-protocol';
@@ -12,7 +13,7 @@ export interface KnowledgeSearchItem {
   id: string;
   title: string;
   sourcePath: string;
-  format: 'markdown' | 'text' | 'pdf' | 'docx';
+  format: KnowledgeFormat;
   locator: string;
   /** 命中来自哪一路（KM08）：keyword/vector/both。 */
   matchedBy?: 'keyword' | 'vector' | 'both';

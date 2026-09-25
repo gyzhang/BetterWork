@@ -23,12 +23,12 @@ export type KnowledgeErrorCode =
   | 'WORKER_EXTRACT_FAILED';
 
 export class KnowledgeServiceError extends Error {
-  constructor(
-    readonly code: KnowledgeErrorCode,
-    message: string,
-    options?: { cause?: unknown },
-  ) {
+  readonly code: KnowledgeErrorCode;
+
+  // Worker 入口用 Node 原生 type-stripping 执行：构造参数属性不被支持，只能在体内赋值。
+  constructor(code: KnowledgeErrorCode, message: string, options?: { cause?: unknown }) {
     super(message, options);
+    this.code = code;
     this.name = 'KnowledgeServiceError';
   }
 }

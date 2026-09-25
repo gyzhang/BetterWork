@@ -1198,6 +1198,21 @@ describe('registerIpc', () => {
       ).resolves.toBeNull();
     });
 
+    it('导入对话框过滤扩展名包含 Office 三格式（KM13）', async () => {
+      mocks.showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] });
+      await expect(invoke(IpcChannel.ImportKnowledge, {})).resolves.toEqual({ cancelled: true });
+      const call = mocks.showOpenDialog.mock.calls.at(-1) as unknown[] | undefined;
+      const options = call?.find(
+        (argument): argument is { filters?: Array<{ extensions: string[] }> } =>
+          typeof argument === 'object' &&
+          argument !== null &&
+          'filters' in (argument as Record<string, unknown>),
+      );
+      expect(options?.filters?.[0]?.extensions).toEqual(
+        expect.arrayContaining(['xlsx', 'csv', 'pptx']),
+      );
+    });
+
     it('取消与重试只接受合法目标：未知或终态作业不可取消，成功条目不可重试', async () => {
       await expect(
         invoke(IpcChannel.CancelKnowledgeJob, { jobId: 'missing-job' }),

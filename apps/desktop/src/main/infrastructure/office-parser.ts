@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { abortError } from '@betterwork/agent-core';
+import { abortError } from '@betterwork/agent-core/errors';
 import ExcelJS from 'exceljs';
 import { XMLParser } from 'fast-xml-parser';
 import JSZip from 'jszip';

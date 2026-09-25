@@ -25,12 +25,17 @@ const SOURCE_STATE_LABELS: Record<KnowledgeDocumentSummary['sourceStatus'], stri
   unreadable: '原件不可读',
 };
 
-const formatLabel = (format: KnowledgeDocumentSummary['format']): string => {
-  if (format === 'markdown') return 'MD';
-  if (format === 'pdf') return 'PDF';
-  if (format === 'docx') return 'DOC';
-  return 'TXT';
+const FORMAT_LABELS: Record<KnowledgeDocumentSummary['format'], string> = {
+  markdown: 'MD',
+  text: 'TXT',
+  pdf: 'PDF',
+  docx: 'DOC',
+  xlsx: 'XLS',
+  csv: 'CSV',
+  pptx: 'PPT',
 };
+
+const formatLabel = (format: KnowledgeDocumentSummary['format']): string => FORMAT_LABELS[format];
 
 /** 知识资料的领域卡片：展示来源状态，动作由页面注入。 */
 export function KnowledgeDocumentCard({

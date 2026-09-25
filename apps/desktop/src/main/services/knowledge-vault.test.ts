@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import Database from 'better-sqlite3';
+import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -548,6 +549,59 @@ describe('单层集合与成员（KM11，契约 §10.1）', () => {
     expect(reimported.document.id).not.toBe(docA.document.id);
     expect(reimported.document.collectionIds).toEqual([]);
     expect(reimported.document.membershipRevision).toBe(1);
+    vault.close();
+  });
+});
+
+describe('Office 格式进入资料库（KM13，契约 §11）', () => {
+  it('xlsx/csv/pptx 可导入可检索；旧格式与无文本文件逐条给原因，不建伪知识', async () => {
+    const directory = temporaryDirectory();
+    const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
+    const csv = path.join(directory, '月度表.csv');
+    writeFileSync(csv, '月份,收入\n2026-08,120\n', 'utf8');
+    const xlsx = path.join(directory, '回款.xlsx');
+    const workbook = new ExcelJS.Workbook();
+    workbook.addWorksheet('回款').getCell('A1').value = '三季度回款 120 万元';
+    writeFileSync(xlsx, Buffer.from(await workbook.xlsx.writeBuffer()));
+    const pptx = path.join(directory, '经营分析.pptx');
+    const zip = new JSZip();
+    zip.file(
+      'ppt/presentation.xml',
+      '<p:presentation xmlns:p="urn:p"><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>',
+    );
+    zip.file(
+      'ppt/_rels/presentation.xml.rels',
+      '<Relationships xmlns="urn:rels"><Relationship Id="rId1" Type="urn:slide" Target="slides/slide1.xml"/></Relationships>',
+    );
+    zip.file(
+      'ppt/slides/slide1.xml',
+      '<p:sld xmlns:p="urn:p" xmlns:a="urn:a"><p:cSld><a:t>下季度聚焦续约风险</a:t></p:cSld></p:sld>',
+    );
+    writeFileSync(pptx, await zip.generateAsync({ type: 'nodebuffer' }));
+    const legacy = path.join(directory, '旧格式.ppt');
+    writeFileSync(legacy, 'legacy binary');
+    const emptyCsv = path.join(directory, '空表.csv');
+    writeFileSync(emptyCsv, '\n');
+
+    const result = await vault.importPaths([csv, xlsx, pptx, legacy, emptyCsv]);
+    expect(result.imported.map((document) => document.format)).toEqual(['csv', 'xlsx', 'pptx']);
+    expect(result.skipped.map((entry) => entry.sourcePath)).toEqual([legacy, emptyCsv]);
+    expect(result.skipped[0]?.reason).toContain('暂仅支持');
+    expect(result.skipped[1]?.reason).toContain('no-extractable-text');
+
+    expect(vault.search('续约风险')[0]).toMatchObject({
+      document: { title: '经营分析', format: 'pptx' },
+    });
+    expect(vault.search('三季度回款')[0]).toMatchObject({
+      document: { title: '回款', format: 'xlsx' },
+    });
+    // 预览按 §11 分节：XLSX 每逻辑行一节，locator 展示表名与范围
+    const doc = vault.listDocuments().find((document) => document.title === '回款');
+    const revisionId = doc?.currentRevisionId;
+    if (!doc || !revisionId) throw new Error('fixture document missing');
+    const page = vault.previewRevision(doc.id, revisionId);
+    expect(page.parts[0]?.locator).toBe('sheet:回款!A1:A1');
+    expect(page.parts[0]?.text).toContain('三季度回款 120 万元');
     vault.close();
   });
 });

@@ -107,6 +107,9 @@ const supportedFormats: Record<string, KnowledgeFormat> = {
   '.text': 'text',
   '.pdf': 'pdf',
   '.docx': 'docx',
+  '.xlsx': 'xlsx',
+  '.csv': 'csv',
+  '.pptx': 'pptx',
 };
 const maxBytes = 20 * 1024 * 1024;
 
@@ -326,7 +329,7 @@ export class KnowledgeVault {
     if (!format) {
       throw new KnowledgeServiceError(
         'EXTRACTION_LIMIT_EXCEEDED',
-        '暂仅支持 Markdown、文本、PDF 和 Word 文件。',
+        '暂仅支持 Markdown、文本、PDF 和 Word，以及工作簿（XLSX）、CSV、演示文稿（PPTX）文件。',
       );
     }
     const file = await stat(sourcePath);

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import type { KnowledgeFormat } from '@betterwork/agent-protocol';
 import {
   KNOWLEDGE_SEARCH_CANDIDATE_LIMIT,
   KNOWLEDGE_VECTOR_MAX_PUBLISHED,
@@ -51,7 +52,7 @@ export interface ScopedRetrievalChunk extends RetrievalChunkRow {
   revisionContentHash: string;
 }
 
-export type ScopedChunkFormat = 'markdown' | 'text' | 'pdf' | 'docx';
+export type ScopedChunkFormat = KnowledgeFormat;
 
 export interface RetrievalChunkRow {
   id: string;

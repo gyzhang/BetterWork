@@ -2863,7 +2863,17 @@ export interface ModelProfileSummary {
   updatedAt: number;
 }
 
-export type KnowledgeFormat = 'markdown' | 'text' | 'pdf' | 'docx';
+/** KM13（契约 §11）：工作簿/CSV/演示文稿进入知识；单一来源 Schema，消费分支必须穷尽。 */
+export const knowledgeFormatSchema = z.enum([
+  'markdown',
+  'text',
+  'pdf',
+  'docx',
+  'xlsx',
+  'csv',
+  'pptx',
+]);
+export type KnowledgeFormat = z.infer<typeof knowledgeFormatSchema>;
 
 export interface KnowledgeDocumentSummary {
   id: string;
@@ -3608,7 +3618,7 @@ export const knowledgeDocumentSummarySchema = z.object({
   id: z.string().min(1),
   title: z.string(),
   sourcePath: z.string().min(1),
-  format: z.enum(['markdown', 'text', 'pdf', 'docx']),
+  format: knowledgeFormatSchema,
   byteSize: z.number().int().nonnegative(),
   contentHash: z.string().min(1),
   currentRevisionId: z.string().min(1).optional(),
@@ -3889,6 +3899,7 @@ export const knowledgeWarningCodeSchema = z.enum([
   'formula-without-cached-result',
   'truncated',
   'unsupported-feature',
+  'no-extractable-text',
 ]);
 export type KnowledgeWarningCode = z.infer<typeof knowledgeWarningCodeSchema>;
 
@@ -3917,7 +3928,7 @@ export type KnowledgeExtractedSection = z.infer<typeof knowledgeExtractedSection
 
 export const knowledgeExtractedDocumentSchema = z
   .object({
-    format: z.enum(['markdown', 'text', 'pdf', 'docx']),
+    format: knowledgeFormatSchema,
     content: z.string(),
     pageCount: z.number().int().positive().optional(),
     warnings: z.array(knowledgeWarningCodeSchema).optional(),
@@ -4073,7 +4084,7 @@ export const knowledgeSearchHitSchema = z
     reference: knowledgeMaterialReferenceSchema,
     textHash: z.string().min(1),
     title: z.string(),
-    format: z.enum(['markdown', 'text', 'pdf', 'docx']),
+    format: knowledgeFormatSchema,
     locator: z.string(),
     span: knowledgeSpanSchema,
     excerpt: z.string(),
@@ -4110,7 +4121,7 @@ export const knowledgeRevisionSummarySchema = z.object({
   revision: z.number().int().positive(),
   title: z.string(),
   sourcePath: z.string().min(1),
-  format: z.enum(['markdown', 'text', 'pdf', 'docx']),
+  format: knowledgeFormatSchema,
   byteSize: z.number().int().nonnegative(),
   contentHash: z.string().min(1),
   pageCount: z.number().int().positive().optional(),

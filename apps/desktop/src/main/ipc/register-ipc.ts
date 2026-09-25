@@ -925,7 +925,10 @@ function registerKnowledgeChannels(deps: IpcDependencies): void {
         title: '导入本地资料',
         properties: ['openFile', 'multiSelections'],
         filters: [
-          { name: '资料文件', extensions: ['md', 'markdown', 'txt', 'text', 'pdf', 'docx'] },
+          {
+            name: '资料文件',
+            extensions: ['md', 'markdown', 'txt', 'text', 'pdf', 'docx', 'xlsx', 'csv', 'pptx'],
+          },
           { name: '所有文件', extensions: ['*'] },
         ],
       });

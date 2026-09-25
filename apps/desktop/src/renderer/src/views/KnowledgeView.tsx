@@ -213,8 +213,8 @@ export function KnowledgePage({
       <div className="page-scroll knowledge-scroll">
         <section className="page-body knowledge-page">
           <p className="page-intro">
-            资料保留在你的本机路径；算台只建立可重建的本地文本索引。当前支持 Markdown、文本、PDF 与
-            Word。
+            资料保留在你的本机路径；算台只建立可重建的本地文本索引。当前支持 Markdown、文本、PDF、
+            Word、工作簿、CSV 与演示文稿。
           </p>
           <PageToolbar ariaLabel="资料库操作">
             <FieldSelect
@@ -662,7 +662,7 @@ export function KnowledgePage({
                   detail={
                     showingResults
                       ? '当前先按文本内容进行本地检索。'
-                      : '导入 Markdown、文本、PDF 或 Word 后，它们会在后续研究和写作中成为可引用的个人资料。'
+                      : '导入 Markdown、文本、PDF、Word、工作簿、CSV 或演示文稿后，它们会在后续研究和写作中成为可引用的个人资料。'
                   }
                 />
               ) : (
