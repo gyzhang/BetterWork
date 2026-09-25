@@ -753,20 +753,32 @@ function ConflictPair({
         <div>
           <span>本条</span>
           <p>{memory.content}</p>
-          <small>{memoryScopeLabel(memory.scope, workspaceName, expertName)}</small>
+          <small>
+            {memoryScopeLabel(memory.scope, workspaceName, expertName)} ·{' '}
+            {formatValidityRange(memory.validFrom, memory.validUntil)}
+          </small>
         </div>
         <div>
           <span>另一条</span>
           {other ? (
             <>
               <p>{other.content}</p>
-              <small>{memoryScopeLabel(other.scope, workspaceName, expertName)}</small>
+              <small>
+                {memoryScopeLabel(other.scope, workspaceName, expertName)} ·{' '}
+                {formatValidityRange(other.validFrom, other.validUntil)}
+              </small>
             </>
           ) : (
             <p className="muted-text">另一条记录不在当前列表，可能已被替代或超出筛选范围。</p>
           )}
         </div>
       </div>
+      {state === 'keep-both' && 'applicabilityNote' in pair && (
+        <p className="memory-conflict-note">
+          <strong>并存适用条件</strong>
+          {pair.applicabilityNote}
+        </p>
+      )}
       {state === 'unresolved' && other && !isTerminalMemory(other) && !isTerminalMemory(memory) && (
         <div className="memory-conflict-actions">
           <label>

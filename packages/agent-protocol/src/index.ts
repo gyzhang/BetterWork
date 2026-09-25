@@ -943,13 +943,39 @@ export const memoryConflictDecisionSchema = z.enum(['keep-both', 'replace']);
 export type MemoryConflictDecision = z.infer<typeof memoryConflictDecisionSchema>;
 export const memoryConflictStateSchema = z.enum(['unresolved', 'keep-both', 'replaced']);
 export type MemoryConflictState = z.infer<typeof memoryConflictStateSchema>;
-export const memoryConflictPairSchema = z
-  .object({
-    leftRevisionId: z.string().min(1),
-    rightRevisionId: z.string().min(1),
-    state: memoryConflictStateSchema,
-  })
-  .strict();
+/**
+ * 契约 §11.5：冲突视图按裁决状态分支。
+ * keep-both 必须带当时的适用条件说明，未裁决与已替代不带该字段——
+ * 「没有条件的忽略冲突」不是合法状态，缺条件就不能显示成已裁决。
+ */
+export const memoryConflictPairSchema = z.discriminatedUnion('state', [
+  z
+    .object({
+      leftRevisionId: z.string().min(1),
+      rightRevisionId: z.string().min(1),
+      state: z.literal('unresolved'),
+    })
+    .strict(),
+  z
+    .object({
+      leftRevisionId: z.string().min(1),
+      rightRevisionId: z.string().min(1),
+      state: z.literal('replaced'),
+    })
+    .strict(),
+  z
+    .object({
+      leftRevisionId: z.string().min(1),
+      rightRevisionId: z.string().min(1),
+      state: z.literal('keep-both'),
+      applicabilityNote: trimmedTextSchema(
+        '适用条件说明',
+        MEMORY_APPLICABILITY_NOTE_MIN_CODE_POINTS,
+        MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS,
+      ),
+    })
+    .strict(),
+]);
 export type MemoryConflictPair = z.infer<typeof memoryConflictPairSchema>;
 
 export const memoryConflictDecisionRecordSchema = z

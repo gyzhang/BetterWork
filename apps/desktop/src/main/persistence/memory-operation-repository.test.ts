@@ -297,6 +297,8 @@ describe('MemoryOperationRepository', () => {
         leftRevisionId: decision.leftRevisionId,
         rightRevisionId: decision.rightRevisionId,
         state: 'keep-both',
+        // MI07：并存对在视图里必须带回用户当时写的适用条件。
+        applicabilityNote: '项目内按周五，跨项目汇报按月末。',
       },
     ]);
   });

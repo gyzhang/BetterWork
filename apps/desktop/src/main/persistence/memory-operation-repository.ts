@@ -329,7 +329,16 @@ export class MemoryOperationRepository {
     return this.listDecisionsForRevisionIds(revisionIds, { currentOnly: true }).map((decision) => ({
       leftRevisionId: decision.leftRevisionId,
       rightRevisionId: decision.rightRevisionId,
-      state: decision.decision === 'replace' ? 'replaced' : 'keep-both',
+      ...(decision.decision === 'replace'
+        ? { state: 'replaced' as const }
+        : decision.applicabilityNote === undefined
+          ? // 缺适用条件的并存裁决不能伪装成已裁决：按未裁决回看，迫使用户补齐。
+            { state: 'unresolved' as const }
+          : {
+              // 并存裁决离开适用条件就没有意义：条件随裁决行一起回传，供重开后继续回看。
+              state: 'keep-both' as const,
+              applicabilityNote: decision.applicabilityNote,
+            }),
     }));
   }
 

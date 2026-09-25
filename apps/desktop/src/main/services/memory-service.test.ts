@@ -28,6 +28,50 @@ const userInstruction = (
 });
 
 describe('MemoryService', () => {
+  it('并存裁决把适用条件回传到冲突视图', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'betterwork-mi07-'));
+    directories.push(directory);
+    const databasePath = path.join(directory, 'app.db');
+    const store = AppStore.open(databasePath);
+    stores.push(store);
+    const service = new MemoryService(store, directory);
+    const workspaceId = store.workspaces.getOrCreate('/tmp/svc/mi07', 'MI07 空间').id;
+    const scope = { kind: 'workspace', workspaceId } as const;
+    const tenThousand = await service.create(
+      userInstruction('对外报表统一用万元。', {
+        scope,
+        facet: 'constraint',
+        topicKey: 'unit-口径',
+      }),
+    );
+    const yuan = await service.create(
+      userInstruction('对外报表统一用元。', { scope, facet: 'constraint', topicKey: 'unit-口径' }),
+    );
+    if (!tenThousand.ok || !yuan.ok) throw new Error('前置记录未写入。');
+    const leftId = tenThousand.data.committedRevisionIds[0];
+    const rightId = yuan.data.committedRevisionIds[0];
+    if (leftId === undefined || rightId === undefined) throw new Error('缺少修订。');
+    const leftRecord = store.memories.getRevision(leftId);
+    const rightRecord = store.memories.getRevision(rightId);
+    if (!leftRecord || !rightRecord) throw new Error('修订未落库。');
+
+    const resolved = await service.resolveConflict({
+      operationId: randomUUID(),
+      left: { id: leftRecord.id, expectedRevision: leftRecord.revision },
+      right: { id: rightRecord.id, expectedRevision: rightRecord.revision },
+      decision: 'keep-both',
+      applicabilityNote: '集团口径用万元，合同明细用元。',
+    });
+    expect(resolved.ok).toBe(true);
+
+    const view = service.get({ id: leftRecord.id });
+    expect(view.ok).toBe(true);
+    if (!view.ok) return;
+    expect(
+      view.data.conflicts.find((entry) => entry.state === 'keep-both')?.applicabilityNote,
+    ).toBe('集团口径用万元，合同明细用元。');
+  });
+
   const stores: AppStore[] = [];
   const directories: string[] = [];
 

@@ -19,6 +19,7 @@ import {
   mcpToolSummarySchema,
   MEMORY_RECALL_TOTAL_ITEM_LIMIT,
   MEMORY_RECALL_VERSION,
+  memoryConflictPairSchema,
   memoryEditPatchSchema,
   memoryErrorCodeSchema,
   memoryGovernanceActionSchema,
@@ -160,6 +161,28 @@ describe('run protocol', () => {
         visibility: 'unavailable',
         memoryId: 'm-2',
         content: '别的空间的口径。',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('splits conflict view states so only coexistence carries a condition', () => {
+    const pair = { leftRevisionId: 'r-1', rightRevisionId: 'r-2' };
+    // 并存裁决离开适用条件就不成立：缺字段必须拒绝，不能显示成已裁决。
+    expect(memoryConflictPairSchema.safeParse({ ...pair, state: 'keep-both' }).success).toBe(false);
+    expect(
+      memoryConflictPairSchema.safeParse({
+        ...pair,
+        state: 'keep-both',
+        applicabilityNote: '集团口径用万元，合同明细用元。',
+      }).success,
+    ).toBe(true);
+    expect(memoryConflictPairSchema.safeParse({ ...pair, state: 'unresolved' }).success).toBe(true);
+    // 未裁决与替代不携带说明：strict 分支拒绝多余字段，避免把空串当说明。
+    expect(
+      memoryConflictPairSchema.safeParse({
+        ...pair,
+        state: 'replaced',
+        applicabilityNote: '',
       }).success,
     ).toBe(false);
   });

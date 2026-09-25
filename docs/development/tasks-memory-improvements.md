@@ -37,7 +37,7 @@
 | MI04 | recallPolicy 字段与真实迁移 | MI-M0；D3 | done | 提交 `dd7bb58`。迁移 **v33** 给 `memory_records` 补 `recall_policy TEXT NOT NULL DEFAULT 'relevant' CHECK IN ('relevant','pinned')`；仓储读写映射、追加修订与治理动作均原样携带策略（不被默认值清掉），新建与自动候选固定 relevant。证据：`migrate.test.ts` v33 用例（旧库两次迁移幂等、身份/正文哈希/状态/来源逐行不变、非法枚举被 CHECK 拒、`foreign_key_check` 为空）、`memory-repository.test.ts` 用真实文件库把历史行 forge 成 pinned 后编辑与 expire 仍保留策略、协议枚举用例。全仓 verify 通过。 |
 | MI05 | 优先策略写入与 v2 召回/历史兼容 | MI04 | doing | 自动化通过，真实 ModelRequest 断言待补（MI09）。协议新增 `memory-recall-v2`/algorithmVersion=2、`MEMORY_RECALL_PINNED_ITEM_LIMIT=6`、`MEMORY_RECALL_PINNED_CODE_POINT_BUDGET=2000`、冻结 v1 快照 Schema＋严格 v2 Schema、`pinned-rule` 选择理由，并在 `runMemoryContextSchema` 拒绝「版本与快照不一致」和「v1 快照里出现 pinned-rule」。`MemoryService.update` 落资格门禁：仅已确认、当前生效、用户口径、零材料/零记忆依赖且非事实/经验可 pinned，否则 `INVALID_TRANSITION`；已 pinned 记录被编辑成不合格形状时要求先取消优先。`applyRecallBudgetV2` 按优先池→偏好池→相关池分配，keep-both 分量整体进出、优先组排序不用 updatedAt 偏袒，新 Run 写 v2。证据：`memory-recall-v2.test.ts` 9 例（零词面命中仍入选且 score 如实为 0、6/7 条与 2,000/2,001 码点边界、三分量整组进整组出、排除项不能穿透、真实 SQLite preview 快照为 v2）。 |
 | MI06 | 优先规则管理与原因展示 | MI05；D3 | todo | — |
-| MI07 | 冲突来源与并存条件可回看 | MI-M0；D4 | todo | — |
+| MI07 | 冲突来源与并存条件可回看 | MI-M0；D4 | doing | 自动化通过，UI 待验且来源展开未完成。冲突 DTO 改为按 state 判别：`keep-both` 必带 `applicabilityNote`（1–300），`unresolved`/`replaced` 严格不带该字段，缺条件的旧并存裁决降级显示为未裁决而不是补空串（仓储映射见 `memory-operation-repository.ts:328`）。记忆视图并列两侧正文、适用范围与有效期，并在同一位置回显并存适用条件。证据：`packages/agent-protocol/src/index.test.ts` DTO 分支用例、`memory-operation-repository.test.ts` 裁决回传、`memory-service.test.ts` 真实 SQLite 回看。**未做**：契约 §11.5「按需展开精确来源摘要」仍需接 `memory:get` 的来源详情展开；UI 人工走查未做。 |
 | MI08 | 换期恢复引导与来源专家修正 | MI-M0；D5 | todo | — |
 | MI09 | 离线联合回归与效果验收数据集 | MI01–MI08 | todo | — |
 | MI10 | 人工 UI 与真实模型语义验收 | MI09；独立真实模型授权 | todo | — |
