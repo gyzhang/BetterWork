@@ -48,6 +48,7 @@ import { MemoryIdempotencyConflictError } from '../persistence/memory-operation-
 import type { MemoryWriteOutcome } from '../persistence/memory-repository';
 import {
   deriveEffectiveStatus,
+  isMemoryEffectiveAt,
   MemoryConflictError,
   MemoryScopeMismatchError,
   MemoryTerminalError,
@@ -180,7 +181,8 @@ const pinnedEligibilityProblem = (record: MemoryRecord, at: number): string | un
   if (provenance.materialDependencies.length > 0 || provenance.memoryDependencies.length > 0) {
     return '仍依赖材料或其他记忆的记录不能设为优先带入，请先解除依赖。';
   }
-  if (deriveEffectiveStatus(record, at) !== 'confirmed') {
+  // 「当前生效」按召回用的同一口径判定：未到 validFrom 的规则此刻也不会入选，不能先设为优先。
+  if (deriveEffectiveStatus(record, at) !== 'confirmed' || !isMemoryEffectiveAt(record, at)) {
     return '只有已确认且当前生效的记忆才能设为优先带入。';
   }
   return undefined;

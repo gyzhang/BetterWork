@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -18,6 +18,11 @@ import {
 import { MemoryService } from './memory-service';
 
 /** MI05：memory-recall-v2 的优先池、预算边界与历史 v1 兼容（契约 §11.3–§11.4）。 */
+
+const sha256Hex = (value: string): string =>
+  createHash('sha256').update(value, 'utf8').digest('hex');
+const digestOf = (content: string): string =>
+  sha256Hex(content.normalize('NFC').replace(/\r\n?/gu, '\n').trim());
 
 const item = (
   id: string,
@@ -208,6 +213,132 @@ describe('优先策略写入资格（真实 SQLite）', () => {
     });
     expect(same.ok).toBe(true);
     if (same.ok) expect(same.data.effect).toBe('unchanged');
+  });
+
+  /**
+   * 契约 §11.3 的五条资格各给一条原因，界面才可能把「为什么不能优先」说清楚。
+   * legacy 与「用户口径＋带依赖」两种形状只能按仓储直写建立：前者是迁移前的历史记录，
+   * 后者当前生产路径写不出来（create 里 sourceSelector 与 asUserInstruction 互斥），
+   * 但门禁必须在形状出现时照样拦住，所以留作对抗性 fixture。
+   */
+  it('剩余三条资格拒绝各有原因，已优先记录改形状要先取消优先', async () => {
+    const { store, memories, scope } = await openWorld();
+
+    const legacy = store.memories.create({
+      scope,
+      content: '旧口径：报表按千元出。',
+      facet: 'constraint',
+      normalizedHash: digestOf('旧口径：报表按千元出。'),
+      provenance: {
+        schemaVersion: 1,
+        verification: 'legacy-unverified',
+        sourceType: 'user-explicit',
+      },
+      confidence: 1,
+      status: 'confirmed',
+    }).record;
+    const legacyReject = await memories.update({
+      operationId: randomUUID(),
+      id: legacy.id,
+      expectedRevision: legacy.revision,
+      patch: { recallPolicy: 'pinned' },
+    });
+    expect(legacyReject.ok).toBe(false);
+    if (legacyReject.ok) return;
+    expect(legacyReject.error.message).toContain('来源尚未复核');
+
+    const scheduled = await memories.create({
+      operationId: randomUUID(),
+      content: '下季度才启用的口径。',
+      facet: 'constraint',
+      scope,
+      asUserInstruction: true,
+      validFrom: Date.now() + 86_400_000,
+    });
+    expect(scheduled.ok).toBe(true);
+    if (!scheduled.ok) return;
+    const scheduledRevisionId = scheduled.data.committedRevisionIds[0];
+    const scheduledRecord =
+      scheduledRevisionId === undefined
+        ? undefined
+        : store.memories.getRevision(scheduledRevisionId);
+    if (!scheduledRecord) throw new Error('未到生效期的记录未落库。');
+    const scheduledReject = await memories.update({
+      operationId: randomUUID(),
+      id: scheduledRecord.id,
+      expectedRevision: scheduledRecord.revision,
+      patch: { recallPolicy: 'pinned' },
+    });
+    expect(scheduledReject.ok).toBe(false);
+    if (scheduledReject.ok) return;
+    expect(scheduledReject.error.message).toContain('当前生效');
+
+    const excerpt = '依赖材料';
+    const withDependency = store.memories.create({
+      scope,
+      content: '引用了资料原文的口径。',
+      facet: 'constraint',
+      normalizedHash: digestOf('引用了资料原文的口径。'),
+      provenance: {
+        schemaVersion: 1,
+        verification: 'verified',
+        authority: 'user-instruction',
+        capturedAt: 1_700_000_000_000,
+        sources: [
+          {
+            kind: 'manual',
+            operationId: randomUUID(),
+            contentHash: sha256Hex(excerpt),
+            start: 0,
+            end: [...excerpt].length,
+            excerpt,
+            excerptHash: sha256Hex(excerpt),
+          },
+        ],
+        materialDependencies: [
+          {
+            kind: 'knowledge-revision',
+            knowledgeDocumentId: 'doc-1',
+            knowledgeRevisionId: 'rev-1',
+            contentHash: sha256Hex('rev-1'),
+            sourcePath: 'docs/income-policy.md',
+          },
+        ],
+        memoryDependencies: [],
+      },
+      confidence: 1,
+      status: 'confirmed',
+    }).record;
+    const dependencyReject = await memories.update({
+      operationId: randomUUID(),
+      id: withDependency.id,
+      expectedRevision: withDependency.revision,
+      patch: { recallPolicy: 'pinned' },
+    });
+    expect(dependencyReject.ok).toBe(false);
+    if (dependencyReject.ok) return;
+    expect(dependencyReject.error.message).toContain('仍依赖材料');
+
+    // 已优先的记录不许被悄悄改形成违规形状，必须先显式取消优先。
+    const rule = await createConfirmed(memories, scope, '金额按万元保留两位。');
+    const pinned = await memories.update({
+      operationId: randomUUID(),
+      id: rule.id,
+      expectedRevision: rule.revision,
+      patch: { recallPolicy: 'pinned' },
+    });
+    expect(pinned.ok).toBe(true);
+    const current = store.memories.get(rule.id);
+    const demoteAttempt = await memories.update({
+      operationId: randomUUID(),
+      id: rule.id,
+      expectedRevision: current?.revision ?? 2,
+      patch: { facet: 'fact' },
+    });
+    expect(demoteAttempt.ok).toBe(false);
+    if (demoteAttempt.ok) return;
+    expect(demoteAttempt.error.message).toContain('先取消优先');
+    expect(store.memories.get(rule.id)?.facet).toBe('constraint');
   });
 
   it('preview 与真实选择都用 v2 快照，零词面命中的优先规则仍入选', async () => {
