@@ -1322,6 +1322,50 @@ describe('参考成果版本接入当前任务', () => {
     expect(api.runs.start).not.toHaveBeenCalled();
   });
 
+  /**
+   * MI08 AC3：来源专家配置已更新时要说明「按当前配置使用」，并且不继承来源任务的技能选择；
+   * 来源身份只用于决定默认专家，旧授权不自动跟随。
+   */
+  it('来源专家修订已更新时说明按当前配置使用，且不复制技能绑定', async () => {
+    const api = installReferenceApi({
+      expert: true,
+      context: {
+        ...expertContext(),
+        // 来源任务带着技能选择；新草稿只继承默认专家，不复制这些授权。
+        skillBindings: [{ skillId: 'skill-old', revisionId: 'rev-old', source: 'task-selection' }],
+      },
+    });
+    api.artifacts.getVersionExecutor.mockResolvedValue({
+      kind: 'expert',
+      sourceRunId: 'previous-run',
+      expertId: expertSummary.id,
+      sourceExpertRevisionId: 'expert-revision-old',
+      currentExpertRevisionId: expertDetail.revision.id,
+      name: expertDetail.name,
+    });
+    render(<App />);
+    await openVersionAction();
+
+    expect(await screen.findByText(/旧版本配置；新任务使用其当前版本/)).toBeTruthy();
+    expect(api.runs.start).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByRole('textbox', { name: /任务输入/ }), {
+      target: { value: '按这一版的结构重写摘要' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '开始工作' }));
+    await waitFor(() => expect(api.taskContexts.save).toHaveBeenCalledTimes(1));
+    expect(api.taskContexts.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        executor: {
+          kind: 'expert',
+          expertId: expertSummary.id,
+          expertRevisionId: expertDetail.revision.id,
+        },
+        skillBindings: [],
+      }),
+    );
+  });
+
   it('来源专家已不可用时改用通用助手并当场说明，不猜专家', async () => {
     const api = installReferenceApi({ expert: true, context: expertContext() });
     api.artifacts.getVersionExecutor.mockResolvedValue({
