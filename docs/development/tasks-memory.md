@@ -1,5 +1,7 @@
 # 工作型记忆开发计划（WM00–WM16）
 
+> 2026-09-25 记忆增量：[记忆改进 Spec](../designs/memory-improvements.md)、[MI00–MI10 独立任务板](tasks-memory-improvements.md)与[编码提示词](memory-improvement-coding-prompts.md)。D1–D5 推荐方案已获光哥批准，MI 全部仍未开工；不改下方 WM 状态或自动关闭 WM16，复用验收证据时须逐项注明。
+
 - 生效：2026-09-22。本文件是 WM 系列**唯一任务状态板**：状态列是活动真相源，[设计总稿快照](../../.qoder/specs/工作型记忆设计与开发交接_task-17a.md)（`.qoder/specs/工作型记忆设计与开发交接_task-17a.md`）永不回写，避免两套活动任务板。
 - 设计：[工作型记忆产品设计](../designs/work-centered-memory.md)（产品行为真相源）。决策：[ADR-0026](../adr/0026-work-centered-memory.md)（**Proposed**）。字段/算法/迁移/接口：[记忆实施契约](memory-contracts.md)（唯一真相源）。提示词：[记忆编码提示词](memory-coding-prompts.md)。
 - 授权边界：**设计批准、单卡开发授权、真实模型调用授权、提交发布授权相互独立**。WM00 只归档文档；WM01 开工前需用户明确批准具体技术方案，不得自动连续开工、提交或推送。

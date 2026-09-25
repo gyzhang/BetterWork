@@ -144,6 +144,12 @@ Skill 列表分别展示来源（内置/用户）、启用状态、信任状态�
 
 反馈继续按 §11.5.1 决策表归类：局部短时成功用 `TransientToast`，表单可处理错误用内联 `.inline-message.error`，只有确需跨页回看的长操作结果进消息中心 + 全局 `ToastHost`；候选结果本身可见时不重复通知，禁止逐条全局 Toast 或自造成功提示计时器。IPC 调用收在 hooks/ 并经 `reportAction`/`trackAction` 收口，视图不出现 `window.betterwork`。字段与通道见[记忆实施契约](development/memory-contracts.md)，界面落地卡片为 WM07/WM11/WM14，见 [WM 任务板](development/tasks-memory.md)。
 
+### 6.1.4 记忆可靠性改进（MI，D1–D5 已批准）
+
+2026-09-25 的[改进 Spec](designs/memory-improvements.md)与[低保真原型](prototype/memory-improvements/index.html)提出五项局部交互：回答保存先绑定原文来源、独立「本任务已排除」与恢复参与选择、记忆详情显式「优先带入」、冲突双方来源与并存条件、历史截断后的选材/精确成果/记忆详情入口。均复用既有设置与可关闭上下文面板，不增一级导航，不强制发送前预览，不自动发起 Run。
+
+光哥已查看原型并批准 D1–D5 推荐方案，作为后续交互实现依据；目前未开工、未实现，取得单卡授权后按 [MI 计划](development/tasks-memory-improvements.md)逐卡落地。沿用 §8.3 页面骨架、§11.5.1 反馈路由和 §12 可用性底线；不得用「模型已阅读」「恢复后必定使用」替代真实状态。具体规则只见 Spec 与[契约 §11](development/memory-contracts.md#11-mi-改进契约proposed)，不在本节重复技术字段。
+
 ### 6.2 任务工作区
 
 采用可折叠三层结构：

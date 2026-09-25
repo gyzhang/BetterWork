@@ -1,5 +1,11 @@
 # MVP 与路线图
 
+## 记忆可靠性改进 — 2026-09-25（D1–D5 已批准，未开工）
+
+[改进 Spec](designs/memory-improvements.md)与[原型](prototype/memory-improvements/index.html)提出：先修回答来源继承和任务排除恢复，再补显式优先规则、冲突来源/条件展示与换期恢复旅程；不引入记忆向量检索、自动确认或不安全历史恢复。[ADR-0028](adr/0028-memory-reliability-improvements.md)记录提案及 D1–D5 批准事实，正式状态仍为 Proposed；[记忆契约 §11](development/memory-contracts.md#11-mi-改进契约proposed)集中维护增量字段与预算。
+
+[MI00–MI10](development/tasks-memory-improvements.md)是新增量唯一状态板，[编码交接](development/memory-improvement-coding-prompts.md)供 Qwen3.8-Flash 串行逐卡使用；建议下午先过来源与恢复的 MI-M0，不作整批工期承诺。光哥已查看原型并批准 D1–D5 推荐方案，全部 MI 卡仍未开工；MI00 核对、单卡开发、真实模型调用及提交发布仍须取得各自指令，不关闭 WM16，也不重排 A/B0/E/CF/KM。
+
 ## 知识基础闭环增量 — 2026-09-24（文档归档）
 
 光哥已接受知识管理与知识使用补齐方向；[产品规范](designs/knowledge-foundation.md)明确研究草稿真实选材、固定修订正文读取与来源、成果声明采用、嵌入模型消费/混合检索与索引生命周期，并将轻量集合、来源检查和 XLSX/CSV/PPTX 知识导入列为独立后续卡。成果一键回收、OCR、知识图谱和企业权限不进入本轮。

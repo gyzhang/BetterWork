@@ -1,5 +1,7 @@
 # 记忆实施契约（WM 系列）
 
+> 2026-09-25：[MI 改进 Spec](../designs/memory-improvements.md)的 D1–D5 推荐方案已获光哥批准；新增字段、迁移、IPC 和 v2 召回集中在[§11](#11-mi-改进契约proposed)。技术契约与 ADR 正式状态仍为 Proposed，尚未获单卡实施授权，不改变下方 §5–§10 的现行状态。
+
 - 状态：**已实施的契约（ADR-0026 仍为 Proposed，接受状态待用户确认）**。本文所述字段、表、通道与算法由 WM01–WM15 落地并有自动化验收记录，收口证据见 [WM 任务板](tasks-memory.md) §15；实施与人工验收状态只以该任务板为准，本文不复述状态。
 - 日期：2026-09-22（取自本轮 `date`）。
 - 唯一职责：本文是工作型记忆**字段名、类型、状态转移、`memory-recall-v1` 算法、预算、code point 计数、表结构、迁移批次、IPC 通道、DTO 与错误码**的单一真相源。其他文档只链接、不复述整套字段。
@@ -314,3 +316,112 @@ WM02 先扩展仓储形状，公开旧调用方切换在 WM03 一起完成；来
 落点：「重复/冲突待处理计数」落在记忆治理页（`MemoryView.tsx` 的 `.memory-pending-governance` 提示带，只报「几组口径待澄清 · 几条候选与已确认记忆重复」并指明去对应分组裁决），不新增 `WorkspaceBrief` 字段——本节的简报字段清单是封闭的，计数也不是「现有事实的只读投影」。简报侧继续只做「未裁决冲突组整组不进确认区」，不在此处替用户裁决。
 
 引用流程：选精确版本 → Main 验证归属及哈希 → 现有 `MaterialReference` → 加入 TaskContext，默认 purpose 为 `historical-comparison`，用户可改 `structure-reference` 等已有用途 → 后续 Run 按既有工具读取 → 实际读取后关联本期成果。WM00 已核对 `materialPurposeSchema` 的实际枚举字符串为 `rule`、`current-input`、`historical-comparison`、`structure-reference`、`template`、`background`、`other`（见 `packages/agent-protocol/src/index.ts`），本契约按该实名机械对齐，不新增同义枚举。标记参考或显示简报不算读取 Evidence。
+
+## 11. MI 改进契约（Proposed）
+
+日期：2026-09-25。对应[改进 Spec](../designs/memory-improvements.md)、[ADR-0028](../adr/0028-memory-reliability-improvements.md)与 [MI00–MI10](tasks-memory-improvements.md)。**D1–D5 推荐方案已批准，本节尚未实施**；技术契约及 ADR 正式状态保持 Proposed。§5–§10 保留现行基线，只有获得对应卡实施授权后才按下列增量修改，不把设计批准回写成已实现事实。字段与数字以本节为唯一新定义，其他文档只链接。
+
+### 11.1 来源闭环（MI01/MI02）
+
+不新增 sourceSelector 种类。`run-assistant` 继续提交 `runId/eventId/start/end`，且 `asUserInstruction=false`。新增拒绝组合校验：任何 `sourceSelector` 与 `asUserInstruction=true` 同时出现均非法；显式自主重述仍只携带 `fromMemoryRevisionId`，不携带 selector。
+
+Main 必须依次验证：
+
+1. 来源实体真实存在；来源 Run 为 completed；eventId 属于该 Run 按 sequence 最后的、非工具调用的最终 message.completed。不能拿 run.completed 的事件 ID 代替。核对该消息对应的工具调用事实，不能仅按事件类型猜最终回答。
+2. 来源真实 workspaceId 与提交的 workspace/expert-workspace 一致；derived 不允许 user/expert 全局。originWorkspaceId 从登记关系生成，不信任客户端范围暗示。
+3. `[start,end)` 是**原始事件正文**的 code point 区间，摘录为 1–500，不能为空、越界或拆 UTF-16 代理对；超过上限返回 `SOURCE_MISMATCH`，不等到构造输出 Zod 时抛内部错误。最终记忆正文沿用人工 1–2,000 上限，可与摘录不同，依赖不随编辑缩减。
+4. 来源运行的准备快照与记忆审计记录齐全；以记录是否存在和完整性判断，不以数组为空判断缺记录。合法空依赖允许；缺记录返回 `SOURCE_REVIEW_REQUIRED`，不 `?? []`。
+5. 依赖取来源 Run 已选材料、实际读取材料、重放继承材料的保守并集，以及直接/继承记忆的精确修订并集；按精确引用键去重，递归展开记忆来源，拒绝循环、缺修订/哈希不符和超限。继续使用 §5.3 的材料 200、记忆 100 上限，不能静默截断。当前不再有效的依赖返回 `SOURCE_REVIEW_REQUIRED`；超限/循环使用已有专用错误码。
+6. 检查与写入在现有应用事务边界内重验相关修订；异步读取不跨 await 持有事务。外部可用性在使用时仍重验，不宣称跨库或文件系统事务原子。
+
+`ResolvedMemorySource` 增加内部 `memoryDependencies`，`provenanceFromResolved` 使用解析结果而不是字面空数组；既有 provenance schemaVersion=1 已支持该字段，不升级来源版本。优先复用 `runMemoryContexts.get/listDependencyUnion`、RunContextSnapshot、现有材料读取与记忆依赖展开；不能直接复用 extraction-source-reader 的空数组回退作为安全证明。
+
+同一手工解析器各来源的依赖规则：
+
+| 来源 | 规则 |
+| --- | --- |
+| manual / run-user | 保持既有自主口径规则；run-user 必须可追到真实空间，不借来源选择器绕过全局通用声明 |
+| run-assistant | 按上方完整检查；已有但失效的依赖不自动擦除 |
+| checkpoint | 有来源 Run 时继承其完整依赖，并联合节点明确引用的材料；无 Run 时只能在节点来源事实足以证明完整依赖时保存，否则 `SOURCE_REVIEW_REQUIRED`，不推断 summary 是自主要求 |
+| artifact-version | 纳入该精确 ArtifactVersion 本身的材料引用，并继承该版本已登记的输入/来源关系；AI 版本核验所属 Run，user-edit 沿前版登记关系继承，检测版本链循环。无法证明完整性或不可精确读取时拒绝，不把人工编辑版本当空依赖 |
+
+本期只新增回答捕获 UI，其他来源只补共用服务安全门禁；依赖实体字段以现有 material-contracts 和 ArtifactVersion 登记关系为准。不能证明时采用上表的明确拒绝，不发明外部证据实体或新的成果写入系统。
+
+Renderer 选择：仅接受当前回答容器内单段选区；原始正文唯一精确命中时按前缀 code points 计算索引。否则显示只读原文 textarea 供选择，使用 selectionStart/selectionEnd 对应前缀转换 code point 索引，并拒绝半代理对边界。重复文本用原文区间定位，不使用第一次 indexOf 猜测；trim 后必须同步重算区间，不 `.slice()` 静默截长。表单分别持有 selector 与可编辑正文；选区未确认则提交禁用。没有 selector 不得从捕获入口调用 create。
+
+不迁移旧 manual 为 derived，不扫描相似文本追源。历史纠错由用户逐条保留正确新来源、删除错误旧条，再验证下次请求。
+
+### 11.2 独立任务排除投影（MI03）
+
+新增通道 `memory:task-exclusions`（IpcChannel 新成员），请求为 `{taskId,taskContextRevisionId,expectedTaskContextRevision}`；复用 preview 的上下文身份校验但**不要求 prompt**。响应 `Result<{taskId,taskContextRevisionId,taskContextRevision,items:TaskMemoryExclusionItem[]}>`。
+
+`TaskMemoryExclusionItem` 为 strict 判别联合：
+
+- `{visibility:'visible',memoryId,revisionId,content,scope,effectiveStatus}`：仅当前 workspace/expert 可管理范围内的记录，字段复用既有类型；记录过期/删除仍可解释，恢复只解除排除。
+- `{visibility:'unavailable',memoryId}`：不在当前范围、不存在或不可查看统一返回此分支，不返回 revision/title/content/source，不区分是否存在。
+
+列表从最新 TaskContext 的 excludedMemoryIds 读取，保留其顺序、按 ID 去重；最多 100 项，抽出/复用同一共享阈值供 TaskContext、查询与保存 Schema 使用。不从 decisionSummary 的 50 项账本截取，不扫描并返回其他空间身份。响应仅包含该任务已登记 ID。列表查询不写读取足迹或 Run 快照。
+
+写入仍用现有 `SaveTaskContextRequest`，保留 executor、skills、materials、MCP、modelReference、builtinToolPolicy 等全部上下文；只改变目标 excludedMemoryIds，带最新 expectedRevision。该 API 现有 CAS 机制保持，**本卡不套用 memory operationId，也不新建第二套任务写协议**。响应不明先重查当前上下文，确认目标是否已达成，再由用户重试；不盲重发反向 toggle。
+
+Hook 按 taskId＋contextRevision＋请求序号防过期响应。切任务/卸载丢弃 UI 结果但不撤销已提交保存；同任务串行写入。REVISION_CONFLICT 不自动覆盖或静默合并其他编辑。预览与排除查询独立错误状态；恢复后重算只更新「下次运行」，不修改当前 Run。
+
+### 11.3 显式策略与持久化（MI04/MI05/MI06）
+
+`MemoryRecord.recallPolicy: 'relevant'|'pinned'`；应用表 `memory_records.recall_policy TEXT NOT NULL DEFAULT 'relevant'`，CHECK 枚举。这是修订字段，不是新 scope/status/authority；不参与正文 contentHash/normalizedHash，但包含在操作请求哈希与变更检测中。写新修订、状态变化时明确继承，不由默认值悄悄清掉。
+
+- 既有全部修订机械填 relevant，不改变 revisionId、revision、正文/hash、来源、状态或操作回执；自动候选及所有 create 初始 relevant，模型输出不允许此字段。
+- MI04 只完成字段映射、默认持久化和迁移；MI05 同时开放 update.patch.recallPolicy 与实际召回。不要先发布可设置 pinned 却不生效的公共接口。
+- 设置 pinned 仅允许 confirmed＋当前有效＋verified/user-instruction＋来源可用＋空材料/记忆依赖，facet 限 goal/constraint/decision/method/preference。派生事实、经验、candidate、legacy 不允许；复用 `INVALID_TRANSITION` 并给中文原因，不新增重复错误码。
+- 已 pinned 记录被编辑成不符合这些条件的记录时拒绝，要求先显式取消优先；expire/delete/supersede 允许并保留策略值作历史事实，但不再入选。恢复确认仍重验资格。
+- 调整使用 `memory:update` 的 operationId/expectedRevision；追加修订；同值返回 unchanged。确认、替代不继承另一 memoryId 的 pinned 标记；新替代记忆按自己的显式策略，不能自动置优先。
+- 不设新硬性「每空间多少条」上限；受运行预算约束，避免多窗口配额事务。UI 可显示本次实际可用和落选，不承诺全部必带。
+- 迁移使用开工时下一连续版本，绝不修改历史迁移或预占 v33。真实 SQLite 覆盖空库、旧数据、重启幂等、CHECK 非法值、故障回滚及 foreign_key_check。
+- 旧 memory_operations.result_json 可能内嵌旧 MemoryRecord：只在读取旧持久化 DTO 的版本适配点补 relevant，严格公网/IPC写入不加兼容后门；旧请求 requestHash 不重算，同 operationId 原样重放仍命中原回执。Markdown 投影只是可重建展示，可显示策略但不能变成模型读取入口。
+
+### 11.4 memory-recall-v2（MI05）
+
+新版 `recallVersion='memory-recall-v2'`、`algorithmVersion=2`，**仅选择策略升级，词法分词/打分仍按 §6.1**。每个新阈值只在共享协议定义，并有生产消费者；本卡与使用侧同交付，不堆孤儿常量。
+
+新增协议常量 `MEMORY_RECALL_PINNED_ITEM_LIMIT=6`、`MEMORY_RECALL_PINNED_CODE_POINT_BUDGET=2000`；加入 v2 的 policySnapshot：`pinnedItemLimit`、`pinnedCodePointBudget`。沿用总 16 条/正文 6,000/包装 2,000/整块 8,000、偏好 2 条/600 与历史预算，不复制另一套值。
+
+选择顺序与边界：
+
+1. 原有范围、有效期、任务排除、来源、依赖及冲突门禁**先于所有池**；优先不能穿透任何一层。
+2. keep-both 的已裁决关系按连通分量形成不可拆组，并携带分量全部适用说明，避免 A–B、B–C 只注入半组。未裁决冲突仍挡住对应规则。组内至少一条 pinned 则整个组属于优先池，所有成员与正文计入该池；含 relevant 成员不是暗改其策略。分量不能容纳则整组落选。
+3. 优先池不要求文本命中；按组内最具体 scope 排序，再按组内规范最小 memoryId 字节序升序，组内按同样规则；不按 updatedAt 给修改者隐性业务优先权。
+4. 逐组校验该池条数/正文预算与全局正文、条数、包装、整块预算。容不下整组就记 budget，继续尝试后面较小组。未入选 pinned 组本次不再进入其他池绕过上限。
+5. 其余 eligible relevant 记录进入既有偏好池与词面相关池，同一 revision 去重。优先成员不二次占偏好池；偏好池只处理未分配组。所有 keep-both 分量无论进入哪个池都不可拆；偏好分量所有成员计入偏好限额，容不下可在普通相关池以整组按既有相关性规则竞争，但不能拆成单条。
+6. 新 selection reason `pinned-rule`，优先组所有成员用此 reason，score 为实际词面分数或 0（不能伪造高分）；非优先选择保留原理由。落选仍使用已有 budget 等原因；不新增「预算失败就阻止发送」或强制预览。
+7. 预算在**加入组之前**核对最终格式化字节对应的 code point 计数，不能先选完再从高优先组倒删；包装含每条标签、分隔和共存说明。空块不发送；不截断规则或说明凑预算。
+8. preview 与真实 Run 共用相同选择器/格式化器；Run 独立重算并在写快照时重验上下文与记忆修订。运行记录依旧 selected→request-prepared→dispatch-attempted，不表示模型已读。
+
+兼容要求：当前 Schema 对版本使用 literal，直接改全局常量会使旧库解析失败。保留冻结的 v1 policy Schema 和快照解析，新 v2 分支严格要求两个新预算字段；RunMemoryContext.recallVersion 必须与 policySnapshot 分支一致。旧 selected reason 与旧 usage/decisionSummary 原样可读，新 pinned-rule 只允许在 v2 运行上下文中出现；不批量把旧行改为 v2、不补历史 pinned 或调用时间。schemaVersion 可继续为 1，算法版本由 recallVersion 判别，不设永久双算法运行开关：新运行只写 v2，旧运行只读 v1。
+
+### 11.5 冲突视图与连续性（MI07/MI08）
+
+`MemoryViewItem.conflicts` 中 keep-both 分支增加必需 `applicabilityNote`（沿用 1–300）；unresolved/replace 不带该字段。返回精确左右 revisionId，读取已存在裁决表；无新表和迁移。旧持久化回执含旧展示 DTO 时，返回当前状态必须通过实时视图投影补齐，不能给空字符串假说明。
+
+冲突来源详情优先复用已有 `memory:get(id,revisionId)` 与 provenance；同一合法管理范围内才显示。页面/hook 对比精确修订，不把旧 decision 应用于新修订；禁止根据同 topicKey 自动重新关联 note。查询失败不影响已有裁决记录。
+
+换期动作只复用本期材料面板、记忆详情和精确 ArtifactVersion 详情；不新增「恢复历史」IPC、checkpoint 自动摘要或资料权限。source Run 专家快照是「从成果开始新任务」默认专家的来源；旧 Task 的最新 executor 不是来源证据。
+
+MI08 同卡新增只读 `artifact:get-version-executor`，Preload 为 `artifacts.getVersionExecutor`；严格请求 `{artifactId,artifactVersionId}`，响应为 `ArtifactVersionExecutorSummary|null`。不扩充每次成果详情的载荷，不向 Renderer 开放完整 RunContextSnapshot。只有 Markdown 的既有「从此版本开始」入口消费，不扩大可创建任务的成果类型。
+
+`ArtifactVersionExecutorSummary` 为 strict 判别联合：
+
+- `{kind:'general',sourceRunId}`：存在完整来源快照，且快照确为通用执行器。
+- `{kind:'expert',sourceRunId,expertId,sourceExpertRevisionId,currentExpertRevisionId,name}`：快照专家身份和来源修订已核验，专家当前 active；当前修订单独标明，不能把当前配置冒称历史配置。
+- `{kind:'unavailable',reason:'source-unavailable'|'expert-unavailable'}`：来源链/快照无法证明，或来源专家不可用；不返回猜测的专家或其他任务草稿。
+
+Main 先沿用成果管理读取边界校验版本属于所给 artifactId；对象不存在或不匹配均返回 null。沿该精确版本 `getVersionSourceRunId` 查询；user-edit 无来源 Run 时用 `getPreviousVersionId` 沿同成果前版回溯，遇 assistant-run 却缺来源、链断裂或循环即 unavailable，绝不改取 latest。重验 Run 所属 Task/Workspace 与成果登记一致、快照专家修订属于该专家；数据库读取失败按既有 Artifact IPC 的异常/Hook 错误出口处理，不伪装 unavailable。
+
+新任务默认沿用的是来源专家**身份**，不是恢复旧权限：当前修订不同于来源修订时先显示差异并由用户确认使用当前版；新绑定复用现有专家选择流程的当前预设，不复制来源 Task 的最新 skills/model/MCP，也不复活快照中的旧授权。选择完成前不清空原草稿；general 才可直接默认通用，unavailable 必须显式选择通用或可用专家。取消/失败/迟到响应均保留原任务；创建时重验专家当前状态及修订，变化则提示重选，不自动发起 Run。
+
+### 11.6 共同错误与取消语义
+
+- 来源/策略/裁决用户写命令沿用 §9.3 领域错误和 §5.6 幂等；Zod 拒绝与 transport 失败仍由 Hook 映射 IPC_FAILURE，不抓字符串猜业务码。
+- 短时本地写无新增作业和取消 API；未提交关闭不写库，已提交结果可查询。双击同请求复用 operationId，编辑请求后生成新 ID；数据库成功但投影失败按 PROJECTION_PENDING 报成功警告。
+- preview、来源详情、排除查询的迟到响应不得污染另一任务或关闭的表单。用户正在编辑的正文不能被后台刷新覆盖。
+- 运行快照不因策略/排除/来源治理中途变化而改写；要求本次改变则复用取消 Run 后重跑。下次必须重验，历史中的旧依赖不得回流。
+- 不新增网络作业，不自动调用模型验收，不改自动提炼开关/同意版本/模型配置或凭据保存方式。

@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>记忆增量 · 评审原型</title>
+    <style>
+      :root {
+        --surface-page: #f5f4ef;
+        --surface-panel: #ffffff;
+        --surface-subtle: #eeeee8;
+        --text-primary: #293b37;
+        --text-secondary: #596761;
+        --border-default: #c7cfca;
+        --action-primary: #315f51;
+        --text-error: #923a32;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--surface-page);
+        color: var(--text-primary);
+        font:
+          15px/1.65 'PingFang SC',
+          sans-serif;
+      }
+      .review-bar {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        padding: 12px 24px;
+        background: var(--surface-subtle);
+      }
+      .page-header,
+      .page-body {
+        width: min(860px, calc(100% - 48px));
+        margin: auto;
+      }
+      .page-header {
+        padding: 20px 0;
+      }
+      h2 {
+        font-size: 21px;
+      }
+      h3 {
+        font-size: 16px;
+      }
+      a {
+        color: var(--action-primary);
+      }
+      nav,
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 14px 0;
+      }
+      section,
+      .box,
+      details {
+        margin-bottom: 18px;
+        padding: 16px;
+        border: 1px solid var(--border-default);
+        background: var(--surface-panel);
+        scroll-margin-top: 76px;
+      }
+      .decision,
+      .muted,
+      footer {
+        color: var(--text-secondary);
+        font-size: 13px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 14px;
+      }
+      label {
+        display: block;
+        margin: 12px 0 6px;
+      }
+      textarea,
+      select,
+      button {
+        font: inherit;
+        color: inherit;
+        padding: 8px;
+        border: 1px solid var(--border-default);
+        background: var(--surface-panel);
+      }
+      textarea,
+      select {
+        width: 100%;
+      }
+      textarea {
+        resize: vertical;
+        min-height: 96px;
+      }
+      textarea[readonly] {
+        background: var(--surface-subtle);
+      }
+      button,
+      summary {
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      :focus-visible {
+        outline: 2px solid var(--action-primary);
+        outline-offset: 3px;
+      }
+      .error {
+        color: var(--text-error);
+      }
+      .preserve {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="review-bar">评审原型 / D1–D5 已批准 / 模拟数据</div>
+    <header class="page-header">
+      <p class="muted">算台 BetterWork · 记忆增量</p>
+      <h1>记得有依据，用得可撤回</h1>
+      <p>五段独立交互，用于讨论行为，不代表功能已实现。刷新页面会清空所有模拟操作。</p>
+      <nav aria-label="评审路径">
+        <a href="#f1">F1 保存来源</a><a href="#f2">F2 恢复排除</a> <a href="#f3">F3 优先策略</a
+        ><a href="#f4">F4 冲突裁决</a><a href="#f5">F5 换期继续</a>
+      </nav>
+    </header>
+    <main class="page-body">
+      <section id="f1">
+        <h2>F1 · 从回答记住一段经验</h2>
+        <p class="decision">
+          D1 已批准：普通保存保留来源；定位不确定时重选原文，不降级为自主口径。
+        </p>
+        <button id="capture-open">记住这段经验</button>
+        <div id="capture-form" hidden>
+          <p>模拟来源：经营复盘任务 / Run R1 / 最终回答 E7；工作空间：经营研究。</p>
+          <label for="source-text">只读原文：请在此拖选或用键盘选择（含非 BMP 汉字「𠮷」）</label>
+          <textarea id="source-text" readonly rows="4">
+分析𠮷祥项目时，先核对口径，再计算同比。
+若材料缺少统计范围，应先要求补充，不沿用上期数字。
+先核对口径，再计算同比。
+汇报准备阶段，应将当前任务需要回答的问题写清楚，并把已有材料与尚未取得的材料分开登记。材料标题只是识别入口，不能代替正文证据，也不能因为曾在其他任务中使用过某份资料，就假定当前任务已经获得读取权限。使用范围必须以本次明确选择的材料为准。
+开始分析前，先确认统计对象、统计区间、计量单位和数据版本。遇到同名但版本不同的材料，保留精确引用，不使用最新版本替换旧引用。若本期材料尚未补齐，可以列出缺项和下一步动作，但不能把上期数据重新包装成本期结论，也不能用历史回答填补事实空缺。
+数值比较需要有一致的分母和统计范围。口径发生变化时，应先解释变化，再决定是否能够比较。不能比较的部分应明确标记为待核实，而不是为了完成报告而给出看似完整的数字。确定性计算应依据已核实的数据，结果同时保留必要的单位、来源与计算说明。
+成果复用主要沿用结构和方法。引用上期报告的精确版本，只代表选择了一个参考对象，不表示其内容已经读取，也不表示其中的事实适用于本期。摘要、差异分析和待办事项可以作为结构示例，但本期业务结论仍须由当前材料支持；缺少证据时应保持问题开放。
+工作经验保存后仍应能够解释来源。用户可以改写记忆正文，使表达更加简洁，但普通编辑不应删掉材料和记忆依赖。以后使用这条经验时，还需要核对适用范围和来源有效性；确认一段文字可复用，不等于把它升级为没有来源约束的自主工作要求。</textarea>
+          <div class="actions">
+            <button id="confirm-selection">确认选区</button>
+            <button id="split-selection">模拟半代理对选区</button>
+          </div>
+          <p id="selection-status" role="status">尚未确认来源摘录；仅接受原文连续 1–500 码点。</p>
+          <div class="box">
+            <strong>已确认来源摘录（只读）</strong>
+            <p id="excerpt" class="preserve">尚未选择</p>
+          </div>
+          <label for="memory-content">记忆正文（独立编辑，1–2000 码点；修改不解除来源）</label>
+          <textarea id="memory-content" rows="3"></textarea>
+          <p id="content-count" class="muted">0 / 2000 码点</p>
+          <label for="source-state">模拟保存前来源检查</label>
+          <select id="source-state">
+            <option value="valid">来源与依赖可核验</option>
+            <option value="missing">来源记录缺失</option>
+          </select>
+          <p>
+            固定范围：当前工作空间。继承材料 2 项、记忆 1 项的精确依赖，后续使用仍需满足材料范围。
+          </p>
+          <p class="muted">
+            此入口不提供解除来源。自主重述须先保留来源保存，再从记忆详情另走显式路径。
+          </p>
+          <p id="capture-error" class="error" role="alert"></p>
+          <div class="actions">
+            <button id="save-memory" class="primary" disabled>保留来源并记住</button
+            ><button id="cancel-memory">取消，不保存</button>
+          </div>
+        </div>
+        <p id="capture-result" role="status">尚无页内模拟保存。</p>
+        <details id="saved-memory" hidden>
+          <summary>展开模拟记录及来源</summary>
+          <p id="saved-content" class="preserve"></p>
+          <p id="saved-source" class="preserve"></p>
+        </details>
+      </section>
+      <section id="f2">
+        <h2>F2 · 本任务排除，始终能找到</h2>
+        <p class="decision">D2 已批准：独立排除列表；恢复的是参与选择资格，不是强制带入。</p>
+        <label for="preview-scenario">模拟下次运行预览</label>
+        <select id="preview-scenario">
+          <option value="relevant">任务与记忆相关</option>
+          <option value="unrelated">换了问法，无词面命中</option>
+          <option value="failed">预览失败</option>
+        </select>
+        <div class="actions"><button id="recompute">重算预览</button></div>
+        <div class="box">
+          <h3>下次运行可用</h3>
+          <p id="next-memory" role="status"></p>
+          <button id="exclude-memory">本任务排除</button>
+        </div>
+        <div class="box">
+          <h3>本任务已排除（独立列表）</h3>
+          <div id="excluded-visible" hidden>
+            <p>记忆 M1：图表须标明统计口径。已确认 / 当前工作空间</p>
+            <button id="restore-memory">恢复参与选择</button>
+          </div>
+          <div id="excluded-unavailable">
+            <p>此项当前不可查看</p>
+            <button id="remove-exclusion">移除此排除</button>
+          </div>
+          <p id="empty-exclusions" hidden>本任务暂无排除项。</p>
+        </div>
+        <p id="exclusion-result" role="status">列表不依赖预览是否成功，也不依赖词面命中。</p>
+        <details>
+          <summary>查看本次运行记录（模拟只读快照）</summary>
+          <p>过去的 Run R0 使用了 M1/r1；当前排除或恢复只影响下次运行，不改写此记录。</p>
+        </details>
+      </section>
+      <section id="f3">
+        <h2>F3 · 优先带入，不越过安全门禁</h2>
+        <p class="decision">D3 已批准：显式优先与有限预算；也可仅先交付 F1、F2。</p>
+        <div class="box">
+          <strong>工作要求：对外数据附上口径说明。</strong>
+          <p class="muted">已确认 / 自主约束 / 当前工作空间 / 生效中 / 无材料与记忆依赖</p>
+        </div>
+        <label for="recall-policy">模拟记忆详情中的选择策略</label>
+        <select id="recall-policy">
+          <option value="relevant">按相关性选择（默认）</option>
+          <option value="pinned">优先带入</option>
+        </select>
+        <label><input id="no-match" type="checkbox" checked /> 模拟无词面命中</label>
+        <label><input id="no-budget" type="checkbox" /> 模拟剩余预算不足</label>
+        <label><input id="invalid-source" type="checkbox" /> 模拟来源失效</label>
+        <p id="policy-result" class="box" role="status"></p>
+        <p class="muted">
+          范围、有效期、排除、来源与依赖、冲突门禁先于所有选择池；优先只免词面门槛。事实、派生经验、候选不可设置优先。
+        </p>
+        <p class="muted">
+          实际产品调整策略将追加修订，旧修订依赖可能导致历史不再发送。本页仅模拟预览，不表示模型已读或遵从。
+        </p>
+      </section>
+      <section id="f4">
+        <h2>F4 · 看清双方来源，再决定共存</h2>
+        <p class="decision">D4 已批准：维持潜在冲突算法；共存须有适用条件，不自动判断业务真假。</p>
+        <button id="conflict-open">打开 / 重开裁决</button>
+        <div id="conflict-panel" hidden>
+          <p>同议题、范围与有效期重叠；尚未判定业务矛盾。当前精确修订对：A/r1 与 B/r2。</p>
+          <div class="grid">
+            <article class="box">
+              <h3>A/r1 · 正式汇报</h3>
+              <p>金额按万元展示。</p>
+              <p class="muted">经营研究空间 / 持续有效</p>
+              <details>
+                <summary>展开 A 的精确来源</summary>
+                <p>人工工作要求 / 操作 manual-A；原文：正式汇报金额按万元展示。无模型来源依赖。</p>
+              </details>
+            </article>
+            <article class="box">
+              <h3>B/r2 · 明细核对</h3>
+              <p>金额按元展示。</p>
+              <p class="muted">经营研究空间 / 持续有效</p>
+              <details>
+                <summary>展开 B 的精确来源</summary>
+                <p>人工工作要求 / 操作 manual-B；原文：核对明细时金额按元展示。无模型来源依赖。</p>
+              </details>
+            </article>
+          </div>
+          <label for="applicability">两条分别在什么情况下适用？（1–300 码点，必填）</label>
+          <textarea
+            id="applicability"
+            placeholder="例如：汇报摘要用万元，核对明细用元。"
+          ></textarea>
+          <p id="note-count" class="muted">0 / 300 码点</p>
+          <div class="actions">
+            <button id="keep-both" class="primary" disabled>模拟保留两条</button
+            ><button id="conflict-close">关闭裁决</button>
+          </div>
+          <p id="conflict-result" role="status">尚未裁决；不会自动选一条。</p>
+          <p id="saved-note" class="preserve"></p>
+        </div>
+        <p class="muted">
+          已保存说明仅在本页重开时保留，刷新即清空；实际裁决绑定精确修订，任一修订变化后失效。
+        </p>
+      </section>
+      <section id="f5">
+        <h2>F5 · 换期继续，不偷偷恢复旧历史</h2>
+        <p class="decision">
+          D5 已批准：解释不发送原因，查看本期材料并复用精确成果；返回保留原任务草稿。
+        </p>
+        <div id="task-panel">
+          <h3>当前任务 · 本期经营复盘（模拟草稿）</h3>
+          <label for="draft-prompt">工作要求</label
+          ><textarea id="draft-prompt">
+请沿用上期结构，分析本期变化；缺少材料时先列出待补项。</textarea>
+          <label for="draft-expert">当前草稿专家</label
+          ><select id="draft-expert">
+            <option>经营分析专家</option>
+            <option>通用助手</option>
+          </select>
+          <p id="material-summary"></p>
+          <div class="box">
+            <strong>历史上下文调整</strong>
+            <p>
+              旧记录仍可回看，但此次不发送：上期数据 r1
+              已不在本次材料范围；依赖记忆也已变更修订。不是删除对话。
+            </p>
+          </div>
+          <div class="actions">
+            <button data-view="history-panel">回看旧记录</button
+            ><button data-view="materials-panel">查看本次材料</button
+            ><button data-view="artifact-panel">查看精确成果 v1</button>
+          </div>
+          <p class="muted">
+            仅保留合法上下文，不复制旧聊天、不自动总结旧事实、不自动选择
+            latest。本原型没有发送入口。
+          </p>
+        </div>
+        <div id="history-panel" hidden>
+          <h3>旧记录 · 仅供回看</h3>
+          <p>用户：请根据上期数据完成复盘。</p>
+          <p>助手：已形成上期报告，结构为摘要、差异分析、待办事项。</p>
+          <p>本段是模拟历史，本次不会发送；回看不等于恢复模型上下文。</p>
+          <button data-view="task-panel">返回原任务</button>
+        </div>
+        <div id="materials-panel" hidden>
+          <h3>本次材料 · 由用户明确选择</h3>
+          <label><input id="method-material" type="checkbox" checked /> 方法手册 r1（背景）</label>
+          <label><input id="period-material" type="checkbox" /> 本期经营数据 r2（本期输入）</label>
+          <p>不会自动带回上期数据 r1，也不会以 latest 替换当前引用。</p>
+          <button data-view="task-panel">返回原任务，保留选材</button>
+        </div>
+        <div id="artifact-panel" hidden>
+          <h3>周期报告 · 精确成果 v1</h3>
+          <p>模拟版本身份：artifact-report-v1。另有 v2，但本入口固定 v1。</p>
+          <div class="box">v1 结构预览：摘要 / 差异分析 / 待办事项。此处不是本期事实依据。</div>
+          <p class="muted">
+            来源 Run R1 的执行快照：经营分析专家。不能用旧 Task 当前草稿推断来源专家。
+          </p>
+          <label for="reference-purpose">引用用途</label
+          ><select id="reference-purpose">
+            <option value="historical-comparison">历史对比</option>
+            <option value="structure-reference">结构参考</option>
+          </select>
+          <div class="actions">
+            <button id="reference-artifact">模拟引用 v1 到当前任务</button
+            ><button data-view="task-panel">返回原任务</button>
+          </div>
+          <p id="reference-result" role="status">尚未引用；引用只表示选择，不表示已读取。</p>
+        </div>
+        <p class="muted">页内状态保留，不是持久化；所有查看与返回都不会创建 Run 或调用模型。</p>
+      </section>
+      <footer>
+        仅为交互评审，不算产品验收。<a href="../../designs/memory-improvements.md">改进 Spec</a> /
+        <a href="../../development/memory-contracts.md#11-mi-改进契约proposed">契约 §11</a> /
+        <a href="README.md">五步评审说明</a>
+      </footer>
+    </main>
+    <script>
+      const byId = (id) => document.getElementById(id);
+      const text = (id, value) => {
+        byId(id).textContent = value;
+      };
+      const count = (value) => Array.from(value).length;
+      const validText = (value, limit) =>
+        value.trim().length > 0 && count(value) <= limit && !/[\uD800-\uDFFF]/u.test(value);
+      const source = byId('source-text');
+      let selection = null;
+      let savedCount = 0;
+      function splitsPair(value, index) {
+        const before = value.charCodeAt(index - 1);
+        const after = value.charCodeAt(index);
+        return before >= 0xd800 && before <= 0xdbff && after >= 0xdc00 && after <= 0xdfff;
+      }
+      function updateCapture() {
+        if (
+          selection &&
+          (source.selectionStart !== selection.startUtf16 ||
+            source.selectionEnd !== selection.endUtf16)
+        ) {
+          selection = null;
+          text('excerpt', '选区已改变，请重新确认。');
+          text('selection-status', '来源选区未确认；已编辑正文保留。');
+        }
+        const content = byId('memory-content').value;
+        const sourceValid = byId('source-state').value === 'valid';
+        text('content-count', `${count(content)} / 2000 码点`);
+        text(
+          'capture-error',
+          !sourceValid
+            ? '来源记录缺失：拒绝保存，请核对来源；不会改为自主口径。'
+            : content && !validText(content, 2000)
+              ? '正文须为非空的 1–2000 码点，且不得含孤立代理项。'
+              : '',
+        );
+        byId('save-memory').disabled = !selection || !validText(content, 2000) || !sourceValid;
+      }
+      source.onselect = updateCapture;
+      byId('confirm-selection').onclick = () => {
+        const start = source.selectionStart;
+        const end = source.selectionEnd;
+        const excerpt = source.value.slice(start, end);
+        selection = null;
+        if (
+          splitsPair(source.value, start) ||
+          splitsPair(source.value, end) ||
+          !validText(excerpt, 500)
+        ) {
+          text('selection-status', '拒绝选区：请完整选择 1–500 码点，不能拆开代理对。');
+          text('excerpt', '尚未确认有效选区');
+        } else {
+          selection = {
+            startUtf16: start,
+            endUtf16: end,
+            start: count(source.value.slice(0, start)),
+            end: count(source.value.slice(0, end)),
+            excerpt,
+          };
+          text(
+            'selection-status',
+            `已确认原文区间 [${selection.start}, ${selection.end})，${count(excerpt)} 码点。`,
+          );
+          text('excerpt', excerpt);
+          if (!byId('memory-content').value) byId('memory-content').value = excerpt;
+        }
+        updateCapture();
+      };
+      byId('split-selection').onclick = () => {
+        const offset = source.value.indexOf('𠮷');
+        source.focus();
+        source.setSelectionRange(offset, offset + 1);
+        byId('confirm-selection').click();
+      };
+      byId('capture-open').onclick = () => {
+        byId('capture-form').hidden = false;
+        source.focus();
+      };
+      function closeCapture() {
+        byId('capture-form').hidden = true;
+        selection = null;
+        source.setSelectionRange(0, 0);
+        byId('memory-content').value = '';
+        text('excerpt', '尚未选择');
+        text('selection-status', '尚未确认来源摘录；仅接受原文连续 1–500 码点。');
+        updateCapture();
+        byId('capture-open').focus();
+      }
+      byId('cancel-memory').onclick = () => {
+        closeCapture();
+        text('capture-result', `已取消，本次未保存。页内已有 ${savedCount} 次模拟保存。`);
+      };
+      byId('memory-content').oninput = updateCapture;
+      byId('source-state').onchange = updateCapture;
+      byId('save-memory').onclick = () => {
+        updateCapture();
+        if (!selection || byId('save-memory').disabled) return;
+        savedCount += 1;
+        text('saved-content', byId('memory-content').value);
+        text(
+          'saved-source',
+          `来源：经营复盘 / R1 / E7 / [${selection.start}, ${selection.end})\n原始摘录：${selection.excerpt}\n材料：本期数据 r2、方法手册 r1；记忆：核对规则 M0/r3。来源性质：派生；范围：经营研究空间。`,
+        );
+        byId('saved-memory').hidden = false;
+        text(
+          'capture-result',
+          `已保留来源，仅页内模拟保存 ${savedCount} 次；下方展示最近一条，未写入数据库。`,
+        );
+        closeCapture();
+      };
+      let excluded = false;
+      let unavailableExcluded = true;
+      function renderExclusions() {
+        const scenario = byId('preview-scenario').value;
+        text(
+          'next-memory',
+          scenario === 'failed'
+            ? '预览失败；排除列表仍可管理。'
+            : excluded
+              ? '没有入选记忆：M1 已被本任务排除。'
+              : scenario === 'unrelated'
+                ? 'M1 仍未入选：无关（无词面命中）。'
+                : 'M1：图表须标明统计口径。模拟入选。',
+        );
+        byId('exclude-memory').disabled = excluded || scenario !== 'relevant';
+        byId('excluded-visible').hidden = !excluded;
+        byId('excluded-unavailable').hidden = !unavailableExcluded;
+        byId('empty-exclusions').hidden = excluded || unavailableExcluded;
+      }
+      byId('exclude-memory').onclick = () => {
+        excluded = true;
+        renderExclusions();
+        text('exclusion-result', '已模拟排除 M1；重算不会移除独立列表中的恢复入口。');
+      };
+      byId('restore-memory').onclick = () => {
+        excluded = false;
+        renderExclusions();
+        text('exclusion-result', '已恢复参与选择；是否入选请看预览，不强制带入。');
+      };
+      byId('remove-exclusion').onclick = () => {
+        unavailableExcluded = false;
+        renderExclusions();
+        text('exclusion-result', '仅移除此排除，未查看或恢复该项内容。');
+      };
+      byId('recompute').onclick = renderExclusions;
+      byId('preview-scenario').onchange = renderExclusions;
+      function renderPolicy() {
+        const pinned = byId('recall-policy').value === 'pinned';
+        const result = byId('invalid-source').checked
+          ? '未入选：来源失效。优先也不能穿过安全门禁。'
+          : !pinned && byId('no-match').checked
+            ? '未入选：无词面命中；默认按相关性选择。'
+            : byId('no-budget').checked
+              ? '未入选：预算不足。优先不表示无条件必带。'
+              : pinned
+                ? '模拟入选：优先带入（pinned-rule）；免词面门槛，但已通过安全和预算检查。'
+                : '模拟入选：按相关性选择，且通过安全与预算检查。';
+        text('policy-result', result);
+      }
+      ['recall-policy', 'no-match', 'no-budget', 'invalid-source'].forEach((id) => {
+        byId(id).onchange = renderPolicy;
+      });
+      let savedNote = '';
+      function updateNote() {
+        const value = byId('applicability').value;
+        text('note-count', `${count(value)} / 300 码点；须填写非空适用条件。`);
+        byId('keep-both').disabled = !validText(value, 300);
+      }
+      byId('conflict-open').onclick = () => {
+        byId('conflict-panel').hidden = false;
+        byId('applicability').value = savedNote;
+        updateNote();
+      };
+      byId('conflict-close').onclick = () => {
+        byId('conflict-panel').hidden = true;
+        byId('conflict-open').focus();
+      };
+      byId('applicability').oninput = updateNote;
+      byId('keep-both').onclick = () => {
+        const note = byId('applicability').value;
+        if (!validText(note, 300)) return;
+        savedNote = note;
+        text('saved-note', `已保存适用条件（仅页内）：${savedNote}`);
+        text(
+          'conflict-result',
+          'A/r1 与 B/r2 已模拟共存；共同带入时附上条件，预算不足则整组落选。',
+        );
+      };
+      let referencePurpose = '';
+      function renderMaterials() {
+        const items = [];
+        if (byId('method-material').checked) items.push('方法手册 r1');
+        if (byId('period-material').checked) items.push('本期经营数据 r2');
+        if (referencePurpose) items.push(`周期报告 v1（${referencePurpose}，未读取）`);
+        text('material-summary', `本次材料：${items.join('；') || '尚未选择'}。`);
+      }
+      document.querySelectorAll('[data-view]').forEach((button) => {
+        button.onclick = () => {
+          const target = button.dataset.view;
+          ['task-panel', 'history-panel', 'materials-panel', 'artifact-panel'].forEach((id) => {
+            byId(id).hidden = id !== target;
+          });
+          renderMaterials();
+          const panel = byId(target);
+          panel.setAttribute('tabindex', '-1');
+          panel.focus();
+        };
+      });
+      byId('reference-artifact').onclick = () => {
+        referencePurpose =
+          byId('reference-purpose').value === 'structure-reference' ? '结构参考' : '历史对比';
+        text(
+          'reference-result',
+          `已页内引用 artifact-report-v1，用途：${referencePurpose}。未读取、未发送，未替换为 v2。`,
+        );
+        renderMaterials();
+      };
+      byId('method-material').onchange = renderMaterials;
+      byId('period-material').onchange = renderMaterials;
+      renderExclusions();
+      renderPolicy();
+      renderMaterials();
+    </script>
+  </body>
+</html>
