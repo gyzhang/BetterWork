@@ -185,6 +185,36 @@ describe('MemoryService', () => {
     expect(memory.provenance.materialDependencies).toEqual([]);
   });
 
+  /**
+   * 回归：自主口径的 manual 来源「摘录」就是正文本身，早期实现按选择器摘录的 500 码点
+   * 上限校验，导致 501–2,000 码点的长记忆直接抛 ZodError（既不是成功也不是领域失败）。
+   */
+  it('手工保存允许 500 码点以上的长正文', async () => {
+    const { service, store } = await setup();
+    const root = await mkdtemp(path.join(os.tmpdir(), 'betterwork-memory-long-'));
+    const workspaceId = store.workspaces.getOrCreate(root, '长口径').id;
+    const content = '口径说明：' + '金额按万元保留两位；'.repeat(100);
+    expect([...content].length).toBeGreaterThan(500);
+
+    const created = await service.create({
+      operationId: randomUUID(),
+      content,
+      facet: 'constraint',
+      scope: { kind: 'workspace', workspaceId },
+      asUserInstruction: true,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const revisionId = created.data.committedRevisionIds[0];
+    const record = revisionId === undefined ? undefined : store.memories.getRevision(revisionId);
+    expect(record?.content).toBe(content);
+    if (record?.provenance.verification !== 'verified') throw new Error('来源未 verified。');
+    const source = record.provenance.sources[0];
+    expect(source?.kind).toBe('manual');
+    expect(source?.excerpt).toBe(content);
+    expect(source?.end).toBe([...content].length);
+  });
+
   it('refuses credential-looking content without persisting it', async () => {
     const { service, store } = await setup();
     const secret = 'API_KEY=sk-abcdefghijklmnopqrstuvwxyz012345';

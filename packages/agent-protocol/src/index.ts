@@ -774,7 +774,12 @@ const manualMemorySourceSchema = z
     kind: z.literal('manual'),
     operationId: memoryOperationIdSchema,
     contentHash: sha256HexSchema,
-    ...memorySourceExcerptFields,
+    start: z.number().int().nonnegative(),
+    end: z.number().int().nonnegative(),
+    // 自主口径没有外部正文可摘：摘录就是正文本身，上限跟随人工正文而不是选择器摘录。
+    excerpt: exactTextSchema('来源摘录', 1, MEMORY_CONTENT_MAX_CODE_POINTS),
+    excerptHash: sha256HexSchema,
+    locator: z.string().min(1).max(2_000).optional(),
   })
   .strict();
 const runUserMemorySourceSchema = z

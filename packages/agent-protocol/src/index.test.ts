@@ -952,6 +952,33 @@ describe('工作型记忆契约不变量', () => {
     ).toBe(false);
   });
 
+  it('来源摘录的两个上限各管各的：manual 跟正文，选择器来源跟摘录', () => {
+    const manualOf = (length: number) => ({
+      kind: 'manual',
+      operationId: '6f1a2b3c-4d5e-4f60-8a7b-9c0d1e2f3a4b',
+      contentHash: hash64,
+      start: 0,
+      end: length,
+      excerpt: '记'.repeat(length),
+      excerptHash: hash64,
+    });
+    // 自主口径的摘录就是正文，允许到 2,000 码点；超过仍拒绝。
+    expect(memorySourceRefSchema.safeParse(manualOf(2_000)).success).toBe(true);
+    expect(memorySourceRefSchema.safeParse(manualOf(2_001)).success).toBe(false);
+    expect(
+      memorySourceRefSchema.safeParse({
+        kind: 'run-assistant',
+        runId: 'r-1',
+        eventId: 'e-1',
+        contentHash: hash64,
+        start: 0,
+        end: 501,
+        excerpt: '记'.repeat(501),
+        excerptHash: hash64,
+      }).success,
+    ).toBe(false);
+  });
+
   it('治理动作与错误码是封闭枚举', () => {
     expect(memoryGovernanceActionSchema.safeParse('confirm').success).toBe(true);
     expect(memoryGovernanceActionSchema.safeParse('model-confirm').success).toBe(false);
