@@ -1020,38 +1020,36 @@ export function App(): React.JSX.Element {
     if (artifact.type !== 'markdown' || version.type !== 'markdown') {
       throw new Error('当前仅支持以 Markdown 成果版本开始新任务。');
     }
-    const sourceContext = await window.betterwork.taskContexts.get({ taskId: artifact.taskId });
+    // MI08：默认身份取自这个精确版本的来源 Run 快照，不读旧 Task 的当前草稿，
+    // 也不复制来源任务的技能/模型/MCP 绑定；配置已更新时先按当前版本使用并说明。
+    const executor = await window.betterwork.artifacts.getVersionExecutor({
+      artifactId: artifact.id,
+      artifactVersionId: version.id,
+    });
     let sourceExpert: { id: string; revisionId: string; name: string } | undefined;
-    let unavailableExpertName: string | undefined;
-    if (sourceContext?.executor.kind === 'expert') {
-      const expert = await window.betterwork.experts.get({ id: sourceContext.executor.expertId });
-      if (expert?.lifecycle === 'active') {
-        sourceExpert = {
-          id: expert.id,
-          revisionId: expert.revision.id,
-          name: expert.name,
-        };
-      } else {
-        unavailableExpertName = expert?.name;
-      }
+    let notice: string | undefined;
+    if (executor === null) {
+      notice = '无法确认这个版本当时的执行身份，新任务先用通用助手，可自行选择专家。';
+    } else if (executor.kind === 'expert') {
+      sourceExpert = {
+        id: executor.expertId,
+        revisionId: executor.currentExpertRevisionId,
+        name: executor.name,
+      };
+      notice =
+        executor.currentExpertRevisionId === executor.sourceExpertRevisionId
+          ? undefined
+          : `来源使用的是「${executor.name}」的旧版本配置；新任务使用其当前版本，权限与预设以当前配置为准。`;
+    } else if (executor.kind === 'unavailable') {
+      notice =
+        executor.reason === 'expert-unavailable'
+          ? '来源任务的专家已不可用，新任务先用通用助手，可自行选择其他专家。'
+          : '来源运行的执行记录不完整，无法确认当时的专家，新任务先用通用助手。';
     }
     startNewTask();
     setSelectedArtifact(undefined);
-    setExpertFallbackNotice(
-      sourceExpert || sourceContext?.executor.kind !== 'expert'
-        ? undefined
-        : unavailableExpertName === undefined
-          ? '来源任务的专家已不可用，新任务先用通用助手。'
-          : `专家「${unavailableExpertName}」已不可用，新任务先用通用助手。`,
-    );
-    if (sourceExpert) {
-      setActiveExpert(sourceExpert);
-      setTaskBindings(
-        sourceContext?.skillBindings.map((binding) =>
-          skillChipForBinding({ ...binding, source: 'expert-preset' }),
-        ) ?? [],
-      );
-    }
+    setExpertFallbackNotice(notice);
+    if (sourceExpert) setActiveExpert(sourceExpert);
     setTaskMaterials([
       {
         reference: {

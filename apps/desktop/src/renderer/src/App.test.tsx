@@ -4,6 +4,7 @@ import type {
   AgentRuntimeEvent,
   ArtifactDetail,
   ArtifactSummary,
+  ArtifactVersionExecutorSummary,
   ExpertDetail,
   ExpertSummary,
   InputSnapshot,
@@ -228,6 +229,7 @@ function installApi(options?: {
       get: vi.fn(async (): Promise<ArtifactDetail | null> => null),
       listVersions: vi.fn(async () => []),
       getVersion: vi.fn(async () => null),
+      getVersionExecutor: vi.fn(async (): Promise<ArtifactVersionExecutorSummary | null> => null),
     },
     evidence: { list: vi.fn(async () => []) },
     notifications: {
@@ -1028,6 +1030,15 @@ describe('参考成果版本接入当前任务', () => {
     const api = installApi(options);
     api.artifacts.list.mockResolvedValue([reportSummary]);
     api.artifacts.get.mockResolvedValue(reportDetail);
+    // MI08：默认身份来自来源 Run 快照，而不是旧 Task 的当前草稿。
+    api.artifacts.getVersionExecutor.mockResolvedValue({
+      kind: 'expert',
+      sourceRunId: 'previous-run',
+      expertId: expertSummary.id,
+      sourceExpertRevisionId: expertDetail.revision.id,
+      currentExpertRevisionId: expertDetail.revision.id,
+      name: expertDetail.name,
+    });
     api.workspace.listReferenceVersions.mockResolvedValue(
       okResult({
         items: [
@@ -1178,12 +1189,15 @@ describe('参考成果版本接入当前任务', () => {
 
   it('来源专家已不可用时改用通用助手并当场说明，不猜专家', async () => {
     const api = installReferenceApi({ expert: true, context: expertContext() });
-    api.experts.get.mockResolvedValue({ ...expertDetail, lifecycle: 'archived' });
+    api.artifacts.getVersionExecutor.mockResolvedValue({
+      kind: 'unavailable',
+      reason: 'expert-unavailable',
+    });
     render(<App />);
     await openVersionAction();
 
     expect(
-      await screen.findByText('专家「经营分析专家」已不可用，新任务先用通用助手。'),
+      await screen.findByText('来源任务的专家已不可用，新任务先用通用助手，可自行选择其他专家。'),
     ).toBeTruthy();
     expect(screen.queryByRole('list', { name: '当前专家' })).toBeNull();
     expect(api.runs.start).not.toHaveBeenCalled();

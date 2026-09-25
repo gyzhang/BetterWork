@@ -1,6 +1,7 @@
 import type { BetterWorkDesktopApi } from '@betterwork/agent-protocol';
 import {
   agentRuntimeEventSchema,
+  artifactVersionExecutorSummarySchema,
   cancelDependencyRequestSchema,
   cancelDependencyResultSchema,
   cancelMemoryJobRequestSchema,
@@ -28,6 +29,7 @@ import {
   exportSkillRequestSchema,
   getArtifactThumbnailsRequestSchema,
   getArtifactThumbnailsResultSchema,
+  getArtifactVersionExecutorRequestSchema,
   getDependencyOperationRequestSchema,
   getExpertRequestSchema,
   getMcpConnectionRequestSchema,
@@ -199,6 +201,12 @@ const api: BetterWorkDesktopApi = {
     list: (input) => ipcRenderer.invoke(IpcChannel.ListArtifacts, input),
     get: (input) => ipcRenderer.invoke(IpcChannel.GetArtifact, input),
     listVersions: (input) => ipcRenderer.invoke(IpcChannel.ListArtifactVersions, input),
+    getVersionExecutor: (input) =>
+      invokeValidated(
+        IpcChannel.GetArtifactVersionExecutor,
+        getArtifactVersionExecutorRequestSchema.parse(input),
+        artifactVersionExecutorSummarySchema.nullable(),
+      ),
     getVersion: (input) => ipcRenderer.invoke(IpcChannel.GetArtifactVersion, input),
     saveMarkdown: (input) => ipcRenderer.invoke(IpcChannel.SaveMarkdownArtifact, input),
     exportMarkdown: (input) => ipcRenderer.invoke(IpcChannel.ExportMarkdownArtifact, input),

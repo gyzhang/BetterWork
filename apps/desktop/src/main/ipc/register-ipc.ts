@@ -6,6 +6,7 @@ import {
   artifactDetailSchema,
   artifactSummarySchema,
   artifactVersionDetailSchema,
+  artifactVersionExecutorSummarySchema,
   artifactVersionSummarySchema,
   cancelDependencyRequestSchema,
   cancelDependencyResultSchema,
@@ -49,6 +50,7 @@ import {
   getArtifactRequestSchema,
   getArtifactThumbnailsRequestSchema,
   getArtifactThumbnailsResultSchema,
+  getArtifactVersionExecutorRequestSchema,
   getArtifactVersionRequestSchema,
   getDependencyOperationRequestSchema,
   getExpertRequestSchema,
@@ -205,6 +207,7 @@ import { listDependencyLocks, loadDependencyLock } from '../infrastructure/depen
 import type { AppStore } from '../persistence';
 import { API_KEY_SLOT } from '../persistence/credential-repository';
 import { ArtifactDeclarationService } from '../services/artifact-declaration-service';
+import { resolveArtifactVersionExecutor } from '../services/artifact-version-executor';
 import { type CredentialProvisioner, type CredentialResolver } from '../services/credential-access';
 import type { DiscussionCheckpointService } from '../services/discussion-checkpoint-service';
 import type { ExpertService } from '../services/expert-service';
@@ -528,6 +531,13 @@ function registerArtifactChannels(deps: IpcDependencies): void {
     listArtifactVersionsRequestSchema,
     z.array(artifactVersionSummarySchema),
     (input) => store.artifacts.listVersions(input.artifactId),
+  );
+  // MI08：只回答「这个精确版本当时用的是谁」，不开放完整运行快照。
+  handleInput(
+    IpcChannel.GetArtifactVersionExecutor,
+    getArtifactVersionExecutorRequestSchema,
+    artifactVersionExecutorSummarySchema.nullable(),
+    (input) => resolveArtifactVersionExecutor(store, input),
   );
   handleInput(
     IpcChannel.GetArtifactVersion,

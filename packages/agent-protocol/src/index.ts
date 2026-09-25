@@ -3336,6 +3336,38 @@ export const listArtifactsRequestSchema = z.object({ taskId: z.string().min(1).o
 export type ListArtifactsRequest = z.infer<typeof listArtifactsRequestSchema>;
 export const getArtifactRequestSchema = z.object({ id: z.string().min(1) });
 export const listArtifactVersionsRequestSchema = z.object({ artifactId: z.string().min(1) });
+/**
+ * 契约 §11.5：「从此版本开始新任务」的默认专家身份来自来源 Run 的执行快照，
+ * 不是旧 Task 的当前草稿。三种分支互斥，且绝不返回猜测出来的专家。
+ */
+export const artifactVersionExecutorSummarySchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('general'), sourceRunId: z.string().min(1) }).strict(),
+  z
+    .object({
+      kind: z.literal('expert'),
+      sourceRunId: z.string().min(1),
+      expertId: z.string().min(1),
+      sourceExpertRevisionId: z.string().min(1),
+      currentExpertRevisionId: z.string().min(1),
+      name: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('unavailable'),
+      reason: z.enum(['source-unavailable', 'expert-unavailable']),
+    })
+    .strict(),
+]);
+export type ArtifactVersionExecutorSummary = z.infer<typeof artifactVersionExecutorSummarySchema>;
+
+export const getArtifactVersionExecutorRequestSchema = z
+  .object({ artifactId: z.string().min(1), artifactVersionId: z.string().min(1) })
+  .strict();
+export type GetArtifactVersionExecutorRequest = z.infer<
+  typeof getArtifactVersionExecutorRequestSchema
+>;
+
 export const getArtifactVersionRequestSchema = z.object({ id: z.string().min(1) });
 export const exportMarkdownArtifactRequestSchema = z.object({
   artifactId: z.string().min(1),
@@ -4684,6 +4716,7 @@ export const IpcChannel = {
   GetArtifact: 'artifact:get',
   ListArtifactVersions: 'artifact:list-versions',
   GetArtifactVersion: 'artifact:get-version',
+  GetArtifactVersionExecutor: 'artifact:get-version-executor',
   SaveMarkdownArtifact: 'artifact:save-markdown',
   ExportMarkdownArtifact: 'artifact:export-markdown',
   RegisterFileArtifact: 'artifact:register-file',
@@ -4825,6 +4858,9 @@ export interface BetterWorkDesktopApi {
     get(input: { id: string }): Promise<ArtifactDetail | null>;
     listVersions(input: { artifactId: string }): Promise<ArtifactVersionSummary[]>;
     getVersion(input: { id: string }): Promise<ArtifactVersionDetail | null>;
+    getVersionExecutor(
+      input: GetArtifactVersionExecutorRequest,
+    ): Promise<ArtifactVersionExecutorSummary | null>;
     saveMarkdown(input: SaveMarkdownArtifactRequest): Promise<ArtifactSummary>;
     exportMarkdown(input: ExportMarkdownArtifactRequest): Promise<ExportMarkdownArtifactResult>;
     registerFile(input: RegisterFileArtifactRequest): Promise<RegisterFileArtifactResult>;
