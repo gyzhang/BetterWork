@@ -421,3 +421,67 @@ describe('MemoryPage', () => {
     expect(screen.queryByText(/组口径待澄清/)).toBeNull();
   });
 });
+
+describe('MemoryPage 召回策略（MI06）', () => {
+  afterEach(cleanup);
+
+  const confirmed = (overrides?: Partial<MemoryViewItem>): MemoryViewItem =>
+    memoryViewItem({
+      status: 'confirmed',
+      effectiveStatus: 'confirmed',
+      candidateDisposition: undefined,
+      facet: 'constraint',
+      ...overrides,
+    });
+
+  it('默认按相关性选择，可显式设为优先带入并追加修订提交', async () => {
+    const current = state({ memories: [confirmed()] });
+    render(<MemoryPage state={current} />);
+
+    expect(screen.getByText('按相关性选择')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: '设为优先带入' }));
+    await waitFor(() => expect(current.update).toHaveBeenCalledTimes(1));
+    const input = vi.mocked(current.update).mock.calls[0]?.[0];
+    expect(input).toMatchObject({
+      id: 'memory-1',
+      expectedRevision: 1,
+      patch: { recallPolicy: 'pinned' },
+    });
+    expect(String(vi.mocked(current.update).mock.calls[0]?.[0]?.operationId ?? '')).toMatch(
+      UUID_PATTERN,
+    );
+  });
+
+  it('已优先的记录可取消，且措辞不承诺模型一定采用', async () => {
+    const current = state({ memories: [confirmed({ recallPolicy: 'pinned' })] });
+    render(<MemoryPage state={current} />);
+
+    expect(screen.getByText('优先带入')).toBeDefined();
+    const hint = screen.getByText(/优先带入只免/);
+    expect(hint.textContent).toContain('不表示模型一定采用');
+    expect(hint.textContent).not.toContain('模型已阅读');
+
+    fireEvent.click(screen.getByRole('button', { name: '取消优先带入' }));
+    await waitFor(() => expect(current.update).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(current.update).mock.calls[0]?.[0]).toMatchObject({
+      patch: { recallPolicy: 'relevant' },
+    });
+  });
+
+  it('Main 拒绝不合格策略时把原因显示在列表内，不改口径为已保存', async () => {
+    const current = state({
+      memories: [confirmed({ facet: 'fact' })],
+      error: '优先带入只用于工作要求，事实与经验仍按相关性选择。',
+    });
+    render(<MemoryPage state={current} />);
+    expect(screen.getByText('优先带入只用于工作要求，事实与经验仍按相关性选择。')).toBeDefined();
+  });
+
+  it('终态记录不提供策略开关', () => {
+    const current = state({
+      memories: [confirmed({ status: 'deleted', effectiveStatus: 'rejected' })],
+    });
+    render(<MemoryPage state={current} />);
+    expect(screen.queryByRole('button', { name: '设为优先带入' })).toBeNull();
+  });
+});

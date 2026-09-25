@@ -2744,6 +2744,21 @@ p {
   font-size: 12px;
   line-height: 1.55;
 }
+/* 优先带入是用户显式选择的策略：徽标只强调「策略」，不冒充状态结论。 */
+.memory-policy-pinned {
+  padding: 2px 6px;
+  color: var(--warning);
+  background: var(--surface);
+  border-radius: 5px;
+  font-size: 12px;
+}
+.memory-policy-hint {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
 .memory-terminal-note {
   display: grid;
   align-content: center;

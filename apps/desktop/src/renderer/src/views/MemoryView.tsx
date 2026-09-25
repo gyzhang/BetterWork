@@ -2,6 +2,7 @@ import type {
   MemoryConflictDecision,
   MemoryConflictPair,
   MemoryGovernanceAction,
+  MemoryRecallPolicy,
   MemoryViewItem,
 } from '@betterwork/agent-protocol';
 import {
@@ -252,6 +253,19 @@ export function MemoryPage({
     );
   };
 
+  /** 契约 §11.3：策略调整追加修订，只影响新 Run；不合格时 Main 给中文原因。 */
+  const setPolicy = (memory: MemoryViewItem, policy: MemoryRecallPolicy): void => {
+    trackAction(
+      state.update({
+        operationId: newMemoryOperationId(),
+        id: memory.id,
+        expectedRevision: memory.revision,
+        patch: { recallPolicy: policy },
+      }),
+      '调整记忆召回策略',
+    );
+  };
+
   const resolveConflict: ConflictResolver = (left, right, decision, options) => {
     trackAction(
       state.resolveConflict({
@@ -412,6 +426,7 @@ export function MemoryPage({
             }
             onDelete={setPendingDelete}
             onReviewSource={reviewLegacySource}
+            onPolicy={setPolicy}
             onResolve={resolveConflict}
             {...(workspaceName ? { workspaceName } : {})}
             {...(expertName ? { expertName } : {})}
@@ -428,6 +443,7 @@ export function MemoryPage({
             }
             onDelete={setPendingDelete}
             onReviewSource={reviewLegacySource}
+            onPolicy={setPolicy}
             onResolve={resolveConflict}
             {...(workspaceName ? { workspaceName } : {})}
             {...(expertName ? { expertName } : {})}
@@ -446,6 +462,7 @@ export function MemoryPage({
             }
             onDelete={setPendingDelete}
             onReviewSource={reviewLegacySource}
+            onPolicy={setPolicy}
             onResolve={resolveConflict}
             editLabel="修改有效期并重新确认"
             {...(workspaceName ? { workspaceName } : {})}
@@ -464,6 +481,7 @@ export function MemoryPage({
                 onRestate={() => undefined}
                 onDelete={() => undefined}
                 onReviewSource={() => undefined}
+                onPolicy={() => undefined}
                 onResolve={() => undefined}
                 readOnly
                 {...(workspaceName ? { workspaceName } : {})}
@@ -514,6 +532,8 @@ interface MemoryGroupProps {
   onRestate: (memory: MemoryViewItem) => void;
   onDelete: (memory: MemoryViewItem) => void;
   onReviewSource: (memory: MemoryViewItem) => void;
+  /** MI06：显式调整召回策略；资格不合格由 Main 拒绝并回原因。 */
+  onPolicy: (memory: MemoryViewItem, policy: MemoryRecallPolicy) => void;
   onResolve: ConflictResolver;
   workspaceName?: string;
   expertName?: string;
@@ -531,6 +551,7 @@ function MemoryGroup({
   onRestate,
   onDelete,
   onReviewSource,
+  onPolicy,
   onResolve,
   workspaceName,
   expertName,
@@ -558,6 +579,7 @@ function MemoryGroup({
             onRestate={onRestate}
             onDelete={onDelete}
             onReviewSource={onReviewSource}
+            onPolicy={onPolicy}
             onResolve={onResolve}
             {...(workspaceName ? { workspaceName } : {})}
             {...(expertName ? { expertName } : {})}
@@ -578,6 +600,7 @@ interface MemoryRowProps {
   onRestate: (memory: MemoryViewItem) => void;
   onDelete: (memory: MemoryViewItem) => void;
   onReviewSource: (memory: MemoryViewItem) => void;
+  onPolicy: (memory: MemoryViewItem, policy: MemoryRecallPolicy) => void;
   onResolve: ConflictResolver;
   workspaceName?: string;
   expertName?: string;
@@ -593,6 +616,7 @@ function MemoryRow({
   onRestate,
   onDelete,
   onReviewSource,
+  onPolicy,
   onResolve,
   workspaceName,
   expertName,
@@ -614,6 +638,9 @@ function MemoryRow({
           <span>{facetLabel[memory.facet]}</span>
           <span>{memoryScopeLabel(memory.scope, workspaceName, expertName)}</span>
           <span>{formatValidityRange(memory.validFrom, memory.validUntil)}</span>
+          <span className={memory.recallPolicy === 'pinned' ? 'memory-policy-pinned' : ''}>
+            {memory.recallPolicy === 'pinned' ? '优先带入' : '按相关性选择'}
+          </span>
           <span className={`memory-source-${memory.sourceAvailability.replace(' ', '-')}`}>
             {sourceAvailabilityLabel[memory.sourceAvailability]}
           </span>
@@ -684,6 +711,22 @@ function MemoryRow({
           <button type="button" onClick={() => onAction(memory, 'expire')}>
             设为过期
           </button>
+        )}
+        {!readOnly && !isTerminalMemory(memory) && memory.status === 'confirmed' && (
+          <button
+            type="button"
+            onClick={() =>
+              onPolicy(memory, memory.recallPolicy === 'pinned' ? 'relevant' : 'pinned')
+            }
+          >
+            {memory.recallPolicy === 'pinned' ? '取消优先带入' : '设为优先带入'}
+          </button>
+        )}
+        {!readOnly && memory.status === 'confirmed' && (
+          <small className="memory-policy-hint">
+            优先带入只免「词面命中」这一道门槛，不免范围、有效期、本任务排除、来源与冲突门禁；
+            调整会追加修订并只影响下次运行，也不表示模型一定采用。
+          </small>
         )}
         {!readOnly && !isGlobalScopeOf(memory) && isDerived(memory) && (
           <button type="button" onClick={() => onRestate(memory)}>
