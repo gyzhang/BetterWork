@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -1636,6 +1636,164 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
     expect(read.ok).toBe(true);
     if (!read.ok) return;
     expect(read.data.context?.recallVersion).toBe('memory-recall-v1');
+  });
+
+  const pinInScope = async (
+    world: World,
+    scope: MemoryScope,
+    content: string,
+    facet: 'constraint' | 'method' | 'preference' | 'decision',
+  ): Promise<{ id: string; revision: number }> => {
+    const created = await world.services.memories.create({
+      operationId: randomUUID(),
+      content,
+      facet,
+      scope,
+      asUserInstruction: true,
+      ...(scope.kind === 'user' || scope.kind === 'expert' ? { genericDeclaration: true } : {}),
+    });
+    if (!created.ok) throw new Error(`规则写入失败：${created.error.code}`);
+    const revisionId = created.data.committedRevisionIds[0];
+    const record =
+      revisionId === undefined ? undefined : world.services.store.memories.getRevision(revisionId);
+    if (!record) throw new Error('规则未落库。');
+    const pinned = await world.services.memories.update({
+      operationId: randomUUID(),
+      id: record.id,
+      expectedRevision: record.revision,
+      patch: { recallPolicy: 'pinned' },
+    });
+    if (!pinned.ok) throw new Error(`设优先失败：${pinned.error.code}`);
+    return { id: record.id, revision: record.revision + 1 };
+  };
+
+  it('R2/R4 专家与专家工作空间的优先规则按范围带入，另一侧不泄露（N4）', async () => {
+    const world = await createWorld();
+    const expertScope: MemoryScope = { kind: 'expert', expertId: world.layout.expertId };
+    const expertWorkspaceScope: MemoryScope = {
+      kind: 'expert-workspace',
+      expertId: world.layout.expertId,
+      workspaceId: world.layout.workspaceA,
+    };
+    const otherWorkspaceScope: MemoryScope = {
+      kind: 'expert-workspace',
+      expertId: world.layout.expertId,
+      workspaceId: world.layout.workspaceB,
+    };
+    const expertRule = await pinInScope(
+      world,
+      expertScope,
+      '写给管理层的段落先给一句判断。',
+      'method',
+    );
+    const workspaceRule = await pinInScope(
+      world,
+      expertWorkspaceScope,
+      '结论、证据、建议依次输出。',
+      'method',
+    );
+    const foreignRule = await pinInScope(
+      world,
+      otherWorkspaceScope,
+      '另一个空间的内部口径不得跨范围带入。',
+      'method',
+    );
+
+    const taskRef = { taskId: world.layout.a2.taskId, sessionId: world.layout.a2.sessionId };
+    const context = saveContext(world, taskRef, { materials: [], excludedMemoryIds: [] });
+    const runId = startRun(world, taskRef, '继续处理这件事', context);
+    await waitForCompletion(world, runId);
+    const injected = (lastRunRequest(world)?.messages ?? [])
+      .filter((message) => message.role !== 'user')
+      .map((message) => message.content)
+      .join('\n');
+    expect(injected).toContain('写给管理层的段落先给一句判断。');
+    expect(injected).toContain('结论、证据、建议依次输出。');
+    // N4：同专家但另一工作空间的优先规则既不注入，也不在请求里暴露正文。
+    expect(injected).not.toContain('另一个空间的内部口径不得跨范围带入。');
+    const selected = world.services.store.runMemoryContexts.get(runId)?.selectedItems ?? [];
+    expect(new Set(selected.map((item) => item.memoryId))).toEqual(
+      new Set([expertRule.id, workspaceRule.id]),
+    );
+    // N4 另一半：他空间规则只能以排除 ID 的占位分支出现，不回正文与来源。
+    const excluding = world.services.store.taskContexts.save(taskRef.taskId, {
+      executor: {
+        kind: 'expert',
+        expertId: world.layout.expertId,
+        expertRevisionId: world.layout.expertRevisionId,
+      },
+      skillBindings: [],
+      materials: [],
+      excludedMemoryIds: [foreignRule.id],
+    });
+    const exclusions = world.services.recall.taskExclusions({
+      taskId: taskRef.taskId,
+      taskContextRevisionId: excluding.id,
+      expectedTaskContextRevision: excluding.revision,
+    });
+    expect(exclusions.ok).toBe(true);
+    if (!exclusions.ok) return;
+    expect(exclusions.data.items).toEqual([
+      { visibility: 'unavailable', memoryId: foreignRule.id },
+    ]);
+  });
+
+  it('N5 派生记忆依赖的材料换版本后不再进入请求，源文件保持只读', async () => {
+    const world = await createWorld();
+    const first = await addMaterial(world, '收入口径.md', '收入按回款金额统计，不含签约金额。');
+    const taskRef = world.layout.a1;
+    const firstContext = saveContext(world, taskRef, {
+      materials: [first],
+      excludedMemoryIds: [],
+    });
+    world.script.readsMaterials = true;
+    const firstRun = startRun(world, taskRef, '请按收入口径说明本月收入', firstContext);
+    await waitForCompletion(world, firstRun);
+    const answer = world.services.store.runs
+      .listEvents(firstRun)
+      .filter((event) => event.type === 'message.completed')
+      .at(-1);
+    if (!answer || answer.type !== 'message.completed') throw new Error('缺少最终回答。');
+    const derived = await world.services.memories.create({
+      operationId: randomUUID(),
+      content: '复盘收入时先核对统计口径。',
+      facet: 'method',
+      scope: { kind: 'workspace', workspaceId: world.layout.workspaceA },
+      asUserInstruction: false,
+      sourceSelector: {
+        kind: 'run-assistant',
+        runId: firstRun,
+        eventId: answer.id,
+        start: 0,
+        end: 4,
+      },
+    });
+    expect(derived.ok).toBe(true);
+    const derivedRevisionId = derived.ok ? derived.data.committedRevisionIds[0] : undefined;
+    const derivedRecord =
+      derivedRevisionId === undefined
+        ? undefined
+        : world.services.store.memories.getRevision(derivedRevisionId);
+    if (!derivedRecord || derivedRecord.provenance.verification !== 'verified') {
+      throw new Error('派生记忆未按预期登记依赖。');
+    }
+    expect(derivedRecord.provenance.materialDependencies.length).toBeGreaterThan(0);
+
+    // 本期换成新材料：旧快照派生的经验不得再进入请求。
+    const second = await addMaterial(world, '收入口径.md', '收入按签约金额统计。');
+    const secondContext = saveContext(world, world.layout.a2, {
+      materials: [second],
+      excludedMemoryIds: [],
+    });
+    const secondRun = startRun(world, world.layout.a2, '请复盘收入并核对统计口径。', secondContext);
+    await waitForCompletion(world, secondRun);
+    const audit = world.services.store.runMemoryContexts.get(secondRun);
+    expect(audit?.selectedItems.map((item) => item.memoryId)).not.toContain(derivedRecord.id);
+    const excludedReasons = audit?.decisionSummary.exclusions.map((entry) => entry.reason) ?? [];
+    expect(excludedReasons).toContain('dependency-unavailable');
+    // 源文件只读：本卡只写过一次，验证内容仍是当前版本而不是被改坏。
+    const onDisk = readFileSync(path.join(world.layout.rootA, '收入口径.md'), 'utf8');
+    expect(onDisk).toBe('收入按签约金额统计。');
   });
 
   it('没有来源 Run 的讨论反馈用当前 TaskContext 钉住的模型，不暗换应用级默认', async () => {
