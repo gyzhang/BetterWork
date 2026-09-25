@@ -37,6 +37,7 @@ const memory = (overrides?: Partial<MemoryViewItem>): MemoryViewItem => ({
   id: 'memory-1',
   revisionId: 'memory-1-r1',
   revision: 3,
+  recallPolicy: overrides?.recallPolicy ?? 'relevant',
   scope: { kind: 'workspace', workspaceId: 'workspace-1' },
   kind: 'procedural',
   content: '季度分析先对齐签约金额口径。',

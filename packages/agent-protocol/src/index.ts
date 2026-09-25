@@ -729,6 +729,10 @@ export const memoryStatusSchema = z.enum([
 ]);
 export type MemoryStatus = z.infer<typeof memoryStatusSchema>;
 /** §5.2：candidateDisposition 只存在于 candidate 记录；rejected 可恢复为 pending 或删除。 */
+/** 契约 §11.3：修订级召回策略；`pinned` 只能由用户在合格记录上显式设置（MI05 开放写入）。 */
+export const memoryRecallPolicySchema = z.enum(['relevant', 'pinned']);
+export type MemoryRecallPolicy = z.infer<typeof memoryRecallPolicySchema>;
+
 export const memoryCandidateDispositionSchema = z.enum(['pending', 'rejected']);
 export type MemoryCandidateDisposition = z.infer<typeof memoryCandidateDispositionSchema>;
 export const memoryProvenanceStateSchema = z.enum(['known', 'legacy_unknown']);
@@ -897,6 +901,9 @@ export const memoryRecordSchema = z
     facet: memoryFacetSchema,
     topicKey: trimmedTextSchema('议题标识', 1, MEMORY_TOPIC_KEY_MAX_CODE_POINTS).optional(),
     normalizedHash: sha256HexSchema,
+    // 不参与正文 contentHash/normalizedHash，但属于记录本身；公网/IPC 写入必须显式提交，
+    // 只有读取旧持久化 DTO 的适配点才补 relevant（契约 §11.3）。
+    recallPolicy: memoryRecallPolicySchema,
     provenance: memoryProvenanceSchema,
     candidateDisposition: memoryCandidateDispositionSchema.optional(),
     replacesRevisionId: z.string().min(1).optional(),

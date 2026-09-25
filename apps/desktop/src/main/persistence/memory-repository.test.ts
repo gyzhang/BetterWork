@@ -1,4 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import {
   LIST_PAGE_DEFAULT_LIMIT,
@@ -8,6 +11,7 @@ import {
   type MemorySourceType,
   stableStringifyJson,
 } from '@betterwork/agent-protocol';
+import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -738,6 +742,49 @@ describe('MemoryRepository', () => {
     expect(store.memoryOperations.get(operationId)?.committedRevisionIds).toEqual([
       claimed.revisionId,
     ]);
+  });
+
+  it('追加修订与状态动作都保留既有召回策略，不被默认值悄悄清掉', () => {
+    // 用真实文件库：MI05 才开放 pinned 写入，这里先按同一列形状造历史状态。
+    const directory = mkdtempSync(path.join(os.tmpdir(), 'betterwork-recall-policy-'));
+    const databasePath = path.join(directory, 'app.db');
+    const store = AppStore.open(databasePath);
+    stores.push(store);
+    const workspaceId = seedWorkspace(store, '策略继承');
+    const scope: MemoryScope = { kind: 'workspace', workspaceId };
+    const first = store.memories.create({
+      scope,
+      content: '对外数据附口径说明。',
+      facet: 'constraint',
+      normalizedHash: digestOf('对外数据附口径说明。'),
+      provenance: legacyProvenance(),
+      confidence: 0.9,
+      status: 'confirmed',
+    }).record;
+    expect(first.recallPolicy).toBe('relevant');
+    const forge = new Database(databasePath);
+    forge
+      .prepare('UPDATE memory_records SET recall_policy = ? WHERE revision_id = ?')
+      .run('pinned', first.revisionId);
+    forge.close();
+
+    const edited = store.memories.update({
+      id: first.id,
+      expectedRevision: first.revision,
+      patch: { content: '对外数据必须附口径与单位说明。' },
+      normalizedHash: digestOf('对外数据必须附口径与单位说明。'),
+    }).record;
+    expect(edited.revision).toBe(first.revision + 1);
+    expect(edited.recallPolicy).toBe('pinned');
+    expect(store.memories.get(first.id)?.recallPolicy).toBe('pinned');
+
+    const expired = store.memories.applyGovernance({
+      id: first.id,
+      expectedRevision: edited.revision,
+      action: 'expire',
+    }).record;
+    expect(expired.recallPolicy).toBe('pinned');
+    rmSync(directory, { recursive: true, force: true });
   });
 
   it('suppresses duplicate candidates by scope and normalized hash', () => {

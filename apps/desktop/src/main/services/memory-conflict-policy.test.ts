@@ -28,6 +28,7 @@ const otherExpertScope: MemoryScope = { kind: 'expert', expertId: 'ex-2' };
 const record = (over: Partial<MemoryRecord> & { id: string; content: string }): MemoryRecord => ({
   revisionId: `rev-${over.id}`,
   revision: 1,
+  recallPolicy: over.recallPolicy ?? 'relevant',
   scope: workspaceScope,
   kind: 'semantic',
   sourceType: 'user-explicit',

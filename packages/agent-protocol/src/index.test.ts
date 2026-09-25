@@ -54,6 +54,7 @@ describe('run protocol', () => {
       id: 'memory-1',
       revisionId: 'memory-1-r1',
       revision: 1,
+      recallPolicy: 'relevant',
       scope: { kind: 'expert-workspace', expertId: 'expert-1', workspaceId: 'workspace-1' },
       kind: 'procedural',
       facet: 'method',
@@ -783,6 +784,7 @@ describe('工作型记忆契约不变量', () => {
     status: 'confirmed',
     contentHash: hash64,
     normalizedHash: hash64,
+    recallPolicy: 'relevant',
     provenance: {
       schemaVersion: 1,
       verification: 'legacy-unverified',
@@ -824,6 +826,19 @@ describe('工作型记忆契约不变量', () => {
         applicabilityNote: '条'.repeat(301),
       }).success,
     ).toBe(false);
+  });
+
+  it('召回策略只认 relevant / pinned 两个值', () => {
+    // 契约 §11.3：新列用 CHECK 约束枚举，协议层同样不接受第三种值或缺字段。
+    expect(memoryRecordSchema.safeParse({ ...baseRecord, recallPolicy: 'pinned' }).success).toBe(
+      true,
+    );
+    expect(memoryRecordSchema.safeParse({ ...baseRecord, recallPolicy: 'always' }).success).toBe(
+      false,
+    );
+    const withoutPolicy: Record<string, unknown> = { ...baseRecord };
+    delete withoutPolicy.recallPolicy;
+    expect(memoryRecordSchema.safeParse(withoutPolicy).success).toBe(false);
   });
 
   it('facet 与 kind 由宿主映射，客户端不能提交矛盾组合', () => {

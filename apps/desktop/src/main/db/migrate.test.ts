@@ -670,6 +670,95 @@ describe('application database migrations', () => {
     ).toBeUndefined();
     db.close();
   });
+  it('MI04 v33 给记忆修订补 recall_policy：历史行全为 relevant 且身份不变', () => {
+    const db = new Database(':memory:');
+    migrate(db, { migrations: appMigrations.slice(0, 32) });
+    const insertLegacy = db.prepare(`
+      INSERT INTO memory_records (
+        revision_id, id, revision, scope_kind, scope_id, kind, facet, content,
+        source_type, confidence, status, content_hash, normalized_hash,
+        provenance_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const provenance = JSON.stringify({
+      schemaVersion: 1,
+      verification: 'legacy-unverified',
+      sourceType: 'user-explicit',
+    });
+    insertLegacy.run(
+      'rev-1',
+      'mem-1',
+      1,
+      'workspace',
+      'ws-1',
+      'semantic',
+      'fact',
+      '收入按回款金额统计。',
+      'user-explicit',
+      0.9,
+      'confirmed',
+      'a'.repeat(64),
+      'b'.repeat(64),
+      provenance,
+      1,
+      1,
+    );
+    insertLegacy.run(
+      'rev-2',
+      'mem-1',
+      2,
+      'workspace',
+      'ws-1',
+      'semantic',
+      'fact',
+      '收入按回款金额统计（改写）。',
+      'user-explicit',
+      0.9,
+      'superseded',
+      'c'.repeat(64),
+      'd'.repeat(64),
+      provenance,
+      2,
+      2,
+    );
+    const before = db
+      .prepare(
+        `SELECT revision_id, id, revision, content_hash, status, source_type
+           FROM memory_records ORDER BY revision_id`,
+      )
+      .all() as Array<Record<string, unknown>>;
+
+    migrate(db, { migrations: appMigrations });
+    expect(readSchemaVersion(db)).toBe(33);
+    expect(hasColumn(db, 'memory_records', 'recall_policy')).toBe(true);
+    const after = db
+      .prepare(
+        `SELECT revision_id, id, revision, content_hash, status, source_type
+           FROM memory_records ORDER BY revision_id`,
+      )
+      .all() as Array<Record<string, unknown>>;
+    expect(after).toEqual(before);
+    const policies = db
+      .prepare('SELECT recall_policy AS policy FROM memory_records')
+      .all() as Array<{ policy: string }>;
+    expect(policies.map((row) => row.policy)).toEqual(['relevant', 'relevant']);
+
+    // 枚举受约束：非法值必须被 CHECK 拒绝，而不是静默写进去。
+    expect(() =>
+      db
+        .prepare("UPDATE memory_records SET recall_policy = 'always' WHERE revision_id = 'rev-1'")
+        .run(),
+    ).toThrow(/CHECK constraint/iu);
+    expect(
+      db.prepare("SELECT COUNT(*) AS n FROM memory_records WHERE recall_policy = 'always'").get(),
+    ).toEqual({ n: 0 });
+
+    // 再次打开并迁移必须幂等，且不引入外键问题。
+    migrate(db, { migrations: appMigrations });
+    expect(readSchemaVersion(db)).toBe(33);
+    expect(db.pragma('foreign_key_check', { simple: false })).toEqual([]);
+    db.close();
+  });
 });
 
 describe('knowledge database migrations', () => {

@@ -1534,6 +1534,18 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 33,
+    name: 'MI04 memory recall policy column',
+    up(db: Database.Database): void {
+      // 契约 §11.3：既有全部修订机械填 relevant，不改 revisionId/revision/正文/hash/来源/状态。
+      db.exec(`
+        ALTER TABLE memory_records
+          ADD COLUMN recall_policy TEXT NOT NULL DEFAULT 'relevant'
+            CHECK (recall_policy IN ('relevant', 'pinned'));
+      `);
+    },
+  },
 ];
 
 /**

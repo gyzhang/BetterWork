@@ -197,6 +197,7 @@ interface MemoryRow {
   facet: MemoryFacet;
   topic_key: string | null;
   normalized_hash: string;
+  recall_policy: 'relevant' | 'pinned';
   provenance_json: string;
   candidate_disposition: MemoryCandidateDisposition | null;
   replaces_revision_id: string | null;
@@ -360,6 +361,7 @@ const toRecord = (row: MemoryRow): MemoryRecord =>
     ...(row.supersedes_id === null ? {} : { supersedesId: row.supersedes_id }),
     ...(row.topic_key === null ? {} : { topicKey: row.topic_key }),
     normalizedHash: row.normalized_hash,
+    recallPolicy: row.recall_policy,
     provenance: parseProvenance(row.provenance_json),
     ...(row.candidate_disposition === null
       ? {}
@@ -896,6 +898,8 @@ export class MemoryRepository {
       ...state,
       // 顶层 source_* 是 provenance 的派生投影，写列时同样取自 sourceColumnsOf（§8.1）。
       ...sourceColumnsOf(state.provenance),
+      // 契约 §11.3：新建记录（含自动候选）一律 relevant，模型不能自报优先。
+      recallPolicy: 'relevant',
       id: randomUUID(),
       revisionId: randomUUID(),
       revision: 1,
@@ -915,6 +919,8 @@ export class MemoryRepository {
     const record = memoryRecordSchema.parse({
       ...state,
       ...sourceColumnsOf(state.provenance),
+      // 追加修订必须显式带上原策略，不能让默认值悄悄清掉用户的优先设置。
+      recallPolicy: current.recallPolicy,
       id: current.id,
       revisionId: randomUUID(),
       revision: current.revision + 1,
@@ -936,10 +942,11 @@ export class MemoryRepository {
       .prepare(
         `INSERT INTO memory_records (
           revision_id, id, revision, scope_kind, scope_id, expert_id, workspace_id,
-          kind, facet, topic_key, normalized_hash, provenance_json, candidate_disposition,
-          replaces_revision_id, content, source_type, source_id, source_locator, confidence,
-          status, valid_from, valid_until, supersedes_id, content_hash, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          kind, facet, topic_key, normalized_hash, recall_policy, provenance_json,
+          candidate_disposition, replaces_revision_id, content, source_type, source_id,
+          source_locator, confidence, status, valid_from, valid_until, supersedes_id,
+          content_hash, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         record.revisionId,
@@ -953,6 +960,7 @@ export class MemoryRepository {
         record.facet,
         record.topicKey ?? null,
         record.normalizedHash,
+        record.recallPolicy,
         JSON.stringify(record.provenance),
         record.candidateDisposition ?? null,
         record.replacesRevisionId ?? null,
