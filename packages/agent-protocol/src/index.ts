@@ -1154,6 +1154,14 @@ export const createMemoryRequestSchema = z
         path: ['validUntil'],
       });
     }
+    // 契约 §11.1：来源选择器与自主口径互斥，普通保存不可能被降级成空依赖的人工声明。
+    if (value.sourceSelector !== undefined && value.asUserInstruction) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'sourceSelector 与 asUserInstruction 互斥：保留来源的保存不得同时声明自主口径',
+        path: ['asUserInstruction'],
+      });
+    }
   });
 export type CreateMemoryRequest = z.input<typeof createMemoryRequestSchema>;
 

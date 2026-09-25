@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type {
+  CreateMemoryRequest,
   MemoryJobSummary,
   MemoryRecord,
   MemoryScope,
@@ -959,6 +960,189 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
     if (escalated.ok) return;
     expect(escalated.error.code).toBe('WORKSPACE_FACT_CANNOT_BE_GLOBAL');
     expect(world.services.store.memories.get(memory.id)?.scope.kind).toBe('workspace');
+  });
+
+  it('保留来源的保存继承运行的材料与记忆依赖，缺审计记录与非最终事件被拒绝', async () => {
+    const world = await createWorld();
+    // 选了材料就必须真读：让替身模型走一次 read_text_file，Run 才能进到 completed 终态。
+    world.script.readsMaterials = true;
+    const scope: MemoryScope = { kind: 'workspace', workspaceId: world.layout.workspaceA };
+    await confirmMemory(world, scope, {
+      content: '金额按万元保留两位。',
+      facet: 'preference',
+    });
+    const material = await addMaterial(
+      world,
+      '收入口径说明.md',
+      '收入按回款金额统计，不使用签约金额。',
+    );
+    const context = saveContext(world, world.layout.a1, {
+      materials: [material],
+      excludedMemoryIds: [],
+    });
+    const runId = startRun(world, world.layout.a1, '请汇总本月收入并给出万元口径结论。', context);
+    await waitForCompletion(world, runId);
+    const events = world.services.store.runs.listEvents(runId);
+    const finalEvent = [...events].reverse().find((event) => event.type === 'message.completed');
+    if (!finalEvent || finalEvent.type !== 'message.completed') {
+      throw new Error('运行缺少最终回答事件。');
+    }
+    const answerLength = [...finalEvent.content].length;
+    const operationId = randomUUID();
+    const request: CreateMemoryRequest = {
+      operationId,
+      content: '汇总收入前先核对回款口径与单位。',
+      facet: 'method',
+      scope,
+      asUserInstruction: false,
+      sourceSelector: {
+        kind: 'run-assistant',
+        runId,
+        eventId: finalEvent.id,
+        start: 0,
+        end: Math.min(8, answerLength),
+      },
+    };
+    const result = await world.services.memories.create(request);
+    if (!result.ok) throw new Error(`来源保存失败：${result.error.code} ${result.error.message}`);
+    const revisionId = result.data.committedRevisionIds[0];
+    if (revisionId === undefined) throw new Error('修订未落库。');
+    const record = world.services.store.memories.getRevision(revisionId);
+    if (!record) throw new Error('记忆修订不存在。');
+    const provenance = record.provenance;
+    if (provenance.verification !== 'verified') throw new Error('来源应为已核验派生。');
+    expect(provenance.authority).toBe('derived');
+    // 依赖等式：新记忆继承该运行「直接＋传递」并集，不裁剪也不新增。
+    const union = world.services.store.runMemoryContexts.listDependencyUnion(runId);
+    expect(new Set(provenance.memoryDependencies.map((item) => item.revisionId))).toEqual(
+      new Set(union.memories.map((item) => item.revisionId)),
+    );
+    const savedKeys = new Set(provenance.materialDependencies.map((item) => item.contentHash));
+    for (const reference of union.materials) {
+      expect(savedKeys.has(reference.contentHash)).toBe(true);
+    }
+    for (const selected of world.services.store.runContextSnapshots.get(runId)?.materials ?? []) {
+      expect(savedKeys.has(selected.reference.contentHash)).toBe(true);
+    }
+    // 同 operationId 原样重试只落一次；换正文必须失败。
+    const replayed = await world.services.memories.create(request);
+    expect(replayed.ok).toBe(true);
+    if (!replayed.ok) return;
+    // 同 operationId 原样重放只回同一份回执，不追加修订。
+    expect(replayed.data.committedRevisionIds).toEqual(result.data.committedRevisionIds);
+    const mutated = await world.services.memories.create({ ...request, content: '换一个正文。' });
+    expect(mutated.ok).toBe(false);
+    if (mutated.ok) return;
+    expect(mutated.error.code).toBe('IDEMPOTENCY_CONFLICT');
+
+    const started = events.find((event) => event.type === 'run.started');
+    if (!started) throw new Error('缺少非最终事件。');
+    const wrongEvent = await world.services.memories.create({
+      ...request,
+      operationId: randomUUID(),
+      sourceSelector: {
+        kind: 'run-assistant',
+        runId,
+        eventId: started.id,
+        start: 0,
+        end: 4,
+      },
+    });
+    expect(wrongEvent.ok).toBe(false);
+    if (wrongEvent.ok) return;
+    expect(wrongEvent.error.code).toBe('SOURCE_UNAVAILABLE');
+
+    // 有终态但没有准备快照/记忆审计的旧运行：不能当成「零依赖」保存。
+    const orphanRunId = randomUUID();
+    world.services.store.runs.create({
+      id: orphanRunId,
+      taskId: world.layout.a1.taskId,
+      sessionId: world.layout.a1.sessionId,
+      prompt: '没有准备快照的完成运行',
+      status: 'completed',
+      createdAt: Date.now(),
+    });
+    world.services.store.runs.appendEvent({
+      id: 'orphan-answer-event',
+      runId: orphanRunId,
+      sequence: 1,
+      createdAt: Date.now(),
+      type: 'message.completed',
+      messageId: 'orphan-message',
+      content: '孤立运行的回答正文。',
+    });
+    const orphanEvents = world.services.store.runs.listEvents(orphanRunId);
+    const orphanAnswer = orphanEvents.find((event) => event.type === 'message.completed');
+    if (!orphanAnswer || orphanAnswer.type !== 'message.completed') {
+      throw new Error('孤立事件未落库。');
+    }
+    const orphan = await world.services.memories.create({
+      ...request,
+      operationId: randomUUID(),
+      sourceSelector: {
+        kind: 'run-assistant',
+        runId: orphanRunId,
+        eventId: orphanAnswer.id,
+        start: 0,
+        end: 4,
+      },
+    });
+    expect(orphan.ok).toBe(false);
+    if (orphan.ok) return;
+    expect(orphan.error.code).toBe('SOURCE_REVIEW_REQUIRED');
+    // 拒绝路径零写入：该正文没有产生新修订。
+    expect(
+      world.services.store.memories
+        .list({ workspaceId: world.layout.workspaceA })
+        .filter((item) => item.content === '汇总收入前先核对回款口径与单位。'),
+    ).toHaveLength(1);
+    world.services.store.close();
+    world.services.vault.close();
+  });
+
+  it('派生来源不能落到全局范围，摘录超限在 Main 侧先拒绝', async () => {
+    const world = await createWorld();
+    const runId = startRun(world, world.layout.a1, '按回款金额口径核对本月收入并给出结论。');
+    await waitForCompletion(world, runId);
+    const events = world.services.store.runs.listEvents(runId);
+    const finalEvent = [...events].reverse().find((event) => event.type === 'message.completed');
+    if (!finalEvent || finalEvent.type !== 'message.completed') {
+      throw new Error('运行缺少最终回答事件。');
+    }
+    const selector = {
+      kind: 'run-assistant',
+      runId,
+      eventId: finalEvent.id,
+      start: 0,
+      end: Math.min(4, [...finalEvent.content].length),
+    } as const;
+    const global = await world.services.memories.create({
+      operationId: randomUUID(),
+      content: '派生内容不能声明为全局口径。',
+      facet: 'method',
+      scope: { kind: 'user' },
+      asUserInstruction: false,
+      genericDeclaration: true,
+      sourceSelector: selector,
+    });
+    expect(global.ok).toBe(false);
+    if (global.ok) return;
+    expect(global.error.code).toBe('GLOBAL_SCOPE_REQUIRES_DECLARATION');
+
+    const long = await world.services.memories.create({
+      operationId: randomUUID(),
+      content: '超出摘录上限的保存必须被拒绝。',
+      facet: 'method',
+      scope: { kind: 'workspace', workspaceId: world.layout.workspaceA },
+      asUserInstruction: false,
+      sourceSelector: { ...selector, start: 0, end: 501 },
+    });
+    expect(long.ok).toBe(false);
+    if (long.ok) return;
+    expect(long.error.code).toBe('SOURCE_MISMATCH');
+
+    world.services.store.close();
+    world.services.vault.close();
   });
 
   it('没有来源 Run 的讨论反馈用当前 TaskContext 钉住的模型，不暗换应用级默认', async () => {

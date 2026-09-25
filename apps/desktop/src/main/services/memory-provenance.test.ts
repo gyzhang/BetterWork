@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import type { MaterialReference } from '@betterwork/agent-protocol';
+import type { MaterialReference, MemoryDependency } from '@betterwork/agent-protocol';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -8,9 +8,12 @@ import {
   buildLegacyProvenance,
   buildUserInstructionProvenance,
   manualMemorySource,
+  type MemoryRevisionFacts,
   promptHashOf,
   type ProvenanceReader,
+  type ResolvedMemorySource,
   resolveMemorySourceSelector,
+  type SourceDependencies,
 } from './memory-provenance';
 
 const sha = (value: string): string => createHash('sha256').update(value).digest('hex');
@@ -23,201 +26,458 @@ const material = (revisionId: string): MaterialReference => ({
   sourcePath: `/tmp/${revisionId}.md`,
 });
 
+const memoryDependency = (memoryId: string, revisionId: string): MemoryDependency => ({
+  memoryId,
+  revisionId,
+  contentHash: sha(revisionId),
+});
+
+const revisionFacts = (
+  memoryId: string,
+  revisionId: string,
+  over: Partial<MemoryRevisionFacts> = {},
+): MemoryRevisionFacts => ({
+  memoryId,
+  revisionId,
+  contentHash: sha(revisionId),
+  usable: true,
+  materialDependencies: [],
+  memoryDependencies: [],
+  ...over,
+});
+
+const ANSWER = '已按签约金额完成本期统计。';
+
+const dependencies = (over: Partial<SourceDependencies> = {}): SourceDependencies => ({
+  workspaceId: 'ws-1',
+  materials: [material('kr-1')],
+  memories: [],
+  ...over,
+});
+
+/** 只登记测试显式声明的修订：未列出的修订一律「读不到」，用于验证缺链拒绝。 */
+const revisions = (
+  entries: Record<string, string>,
+  extra: Record<string, Partial<MemoryRevisionFacts>> = {},
+): ((revisionId: string) => MemoryRevisionFacts | undefined) => {
+  return (revisionId) => {
+    const memoryId = entries[revisionId];
+    if (!memoryId) return undefined;
+    return revisionFacts(memoryId, revisionId, extra[revisionId] ?? {});
+  };
+};
+
 const reader = (over: Partial<ProvenanceReader> = {}): ProvenanceReader => ({
   runPrompt: () => '收入按回款金额统计，不使用签约金额。',
-  runAssistantEventContent: () => '已按签约金额完成本期统计。',
-  runMaterialReferences: () => [material('kr-1')],
+  runWorkspace: () => 'ws-1',
+  runAssistantAnswer: () => ANSWER,
+  runDependencies: () => dependencies(),
   checkpointField: (_id, field) => (field === 'feedback' ? '这里应改为不含税口径。' : '续约讨论'),
+  checkpointDependencies: () => dependencies(),
   artifactVersion: () => ({
     artifactId: 'a-1',
     contentHash: sha('version'),
     readableText: '结论：收入按回款金额统计。',
   }),
+  artifactVersionDependencies: () => dependencies(),
+  memoryRevision: revisions({}),
   ...over,
 });
 
+const workspace = { workspaceId: 'ws-1' } as const;
+
+const valueOf = (
+  resolved: ReturnType<typeof resolveMemorySourceSelector>,
+): ResolvedMemorySource => {
+  if (!resolved.ok) throw new Error(`解析失败：${resolved.code} ${resolved.message}`);
+  return resolved.value;
+};
+
+const code = (resolved: ReturnType<typeof resolveMemorySourceSelector>): string => {
+  if (resolved.ok) throw new Error('本应拒绝，却解析成功。');
+  return resolved.code;
+};
+
 describe('resolveMemorySourceSelector', () => {
   it('derives a run-user source from the stored prompt, not from the caller', () => {
-    const resolved = resolveMemorySourceSelector(
-      { kind: 'run-user', runId: 'r-1', start: 0, end: 2 },
-      reader(),
+    const resolved = valueOf(
+      resolveMemorySourceSelector(
+        { kind: 'run-user', runId: 'r-1', start: 0, end: 2 },
+        reader(),
+        workspace,
+      ),
     );
-    expect(resolved.ok).toBe(true);
-    if (!resolved.ok) return;
-    expect(resolved.value.source).toMatchObject({ kind: 'run-user', excerpt: '收入' });
-    expect(resolved.value.authority).toBe('user-instruction');
+    expect(resolved.source).toMatchObject({ kind: 'run-user', excerpt: '收入' });
+    expect(resolved.authority).toBe('user-instruction');
     // 用户本人的发言不继承材料依赖。
-    expect(resolved.value.materialDependencies).toEqual([]);
-    if (resolved.value.source.kind !== 'run-user') throw new Error('来源类型不符。');
-    expect(resolved.value.source.promptHash).toBe(
-      promptHashOf('收入按回款金额统计，不使用签约金额。'),
-    );
+    expect(resolved.materialDependencies).toEqual([]);
+    expect(resolved.memoryDependencies).toEqual([]);
+    if (resolved.source.kind !== 'run-user') throw new Error('来源类型不符。');
+    expect(resolved.source.promptHash).toBe(promptHashOf('收入按回款金额统计，不使用签约金额。'));
+  });
+
+  it('rejects a run-user source whose workspace cannot be traced', () => {
+    expect(
+      code(
+        resolveMemorySourceSelector(
+          { kind: 'run-user', runId: 'r-1', start: 0, end: 2 },
+          reader({ runWorkspace: () => undefined }),
+          workspace,
+        ),
+      ),
+    ).toBe('SOURCE_UNAVAILABLE');
   });
 
   it('rejects an excerpt range that runs past the real source text', () => {
-    const resolved = resolveMemorySourceSelector(
-      { kind: 'run-user', runId: 'r-1', start: 0, end: 9_999 },
-      reader(),
-    );
-    expect(resolved).toMatchObject({ ok: false, code: 'SOURCE_MISMATCH' });
-  });
-
-  it('rejects a reversed or empty range', () => {
     expect(
-      resolveMemorySourceSelector({ kind: 'run-user', runId: 'r-1', start: 5, end: 3 }, reader()),
-    ).toMatchObject({ ok: false });
-    expect(
-      resolveMemorySourceSelector({ kind: 'run-user', runId: 'r-1', start: 2, end: 2 }, reader()),
-    ).toMatchObject({ ok: false });
-  });
-
-  it('refuses to invent a source for a run that does not exist', () => {
-    const resolved = resolveMemorySourceSelector(
-      { kind: 'run-user', runId: 'missing', start: 0, end: 2 },
-      reader({ runPrompt: () => undefined }),
-    );
-    expect(resolved).toMatchObject({ ok: false, code: 'SOURCE_UNAVAILABLE' });
-  });
-
-  it('requires the assistant event id to be one actually recorded for that run', () => {
-    expect(
-      resolveMemorySourceSelector(
-        { kind: 'run-assistant', runId: 'r-1', eventId: 'forged', start: 0, end: 3 },
-        reader({ runAssistantEventContent: () => undefined }),
+      code(
+        resolveMemorySourceSelector(
+          { kind: 'run-user', runId: 'r-1', start: 0, end: 9_999 },
+          reader(),
+          workspace,
+        ),
       ),
-    ).toMatchObject({ ok: false, code: 'SOURCE_UNAVAILABLE' });
+    ).toBe('SOURCE_MISMATCH');
   });
 
-  it('hashes the whole assistant body and inherits that run material dependencies', () => {
-    const content = '已按签约金额完成本期统计。';
-    const resolved = resolveMemorySourceSelector(
-      { kind: 'run-assistant', runId: 'r-1', eventId: 'e-1', start: 0, end: 3 },
-      reader(),
-    );
-    expect(resolved.ok).toBe(true);
-    if (!resolved.ok) return;
-    expect(resolved.value.authority).toBe('derived');
-    if (resolved.value.source.kind !== 'run-assistant') throw new Error('来源类型不符。');
-    expect(resolved.value.source.contentHash).toBe(sha(content));
-    expect(resolved.value.materialDependencies).toHaveLength(1);
-  });
-
-  it('ignores checkpoint status and updated time when hashing the field body', () => {
-    const resolved = resolveMemorySourceSelector(
-      { kind: 'checkpoint', checkpointId: 'c-1', field: 'feedback', start: 0, end: 4 },
-      reader(),
-    );
-    expect(resolved.ok).toBe(true);
-    if (!resolved.ok) return;
-    if (resolved.value.source.kind !== 'checkpoint') throw new Error('来源类型不符。');
-    expect(resolved.value.source.contentHash).toBe(sha('这里应改为不含税口径。'));
-    expect(resolved.value.source.excerpt).toBe('这里应改');
-  });
-
-  it('verifies artifact excerpts against the readable managed version', () => {
-    const selector = {
-      kind: 'artifact-version' as const,
-      artifactVersionId: 'v-1',
-      locator: '第 1 段',
-      selectedText: '收入按回款金额统计',
-    };
-    const resolved = resolveMemorySourceSelector(selector, reader());
-    expect(resolved.ok).toBe(true);
-    if (!resolved.ok) return;
-    expect(resolved.value.source.start).toBe(3);
-    expect(resolved.value.source.end).toBe(3 + '收入按回款金额统计'.length);
-    expect(resolved.value.source.excerptHash).toBe(sha(selector.selectedText));
-  });
-
-  it('rejects text that is not in that version', () => {
+  it('rejects an excerpt longer than the shared limit before building output', () => {
+    const long = '口'.repeat(501);
     expect(
-      resolveMemorySourceSelector(
-        {
-          kind: 'artifact-version',
-          artifactVersionId: 'v-1',
-          locator: '第 1 段',
-          selectedText: '签约金额口径',
-        },
-        reader(),
+      code(
+        resolveMemorySourceSelector(
+          { kind: 'run-user', runId: 'r-1', start: 0, end: 501 },
+          reader({ runPrompt: () => long }),
+          workspace,
+        ),
       ),
-    ).toMatchObject({ ok: false, code: 'SOURCE_MISMATCH' });
+    ).toBe('SOURCE_MISMATCH');
+    const exact = valueOf(
+      resolveMemorySourceSelector(
+        { kind: 'run-user', runId: 'r-1', start: 0, end: 500 },
+        reader({ runPrompt: () => long }),
+        workspace,
+      ),
+    );
+    expect([...exact.source.excerpt]).toHaveLength(500);
   });
 
-  it('falls back to manual sourcing for formats it cannot locate precisely', () => {
-    expect(
+  it('indexes non-BMP excerpts by code points, not UTF-16 units', () => {
+    const text = '分析𠮷祥项目';
+    const exact = valueOf(
       resolveMemorySourceSelector(
-        {
-          kind: 'artifact-version',
-          artifactVersionId: 'v-1',
-          locator: '第 3 页',
-          selectedText: '任意文本',
-        },
+        { kind: 'run-user', runId: 'r-1', start: 2, end: 4 },
+        reader({ runPrompt: () => text }),
+        workspace,
+      ),
+    );
+    expect(exact.source.excerpt).toBe('𠮷祥');
+  });
+
+  it('rejects anything that is not the final tool-free answer of a completed run', () => {
+    expect(
+      code(
+        resolveMemorySourceSelector(
+          { kind: 'run-assistant', runId: 'r-1', eventId: 'e-9', start: 0, end: 3 },
+          reader({ runAssistantAnswer: () => undefined }),
+          workspace,
+        ),
+      ),
+    ).toBe('SOURCE_UNAVAILABLE');
+  });
+
+  it('inherits the run materials and memory dependencies with exact references', () => {
+    const exact = valueOf(
+      resolveMemorySourceSelector(
+        { kind: 'run-assistant', runId: 'r-1', eventId: 'e-7', start: 0, end: 3 },
         reader({
-          artifactVersion: () => ({
-            artifactId: 'a-1',
-            contentHash: 'h',
-            readableText: undefined,
-          }),
+          runDependencies: () =>
+            dependencies({
+              materials: [material('kr-1'), material('kr-2'), material('kr-1')],
+              memories: [memoryDependency('m-9', 'rev-9')],
+            }),
+          memoryRevision: revisions({ 'rev-9': 'm-9' }),
         }),
+        workspace,
       ),
-    ).toMatchObject({ ok: false, code: 'SOURCE_UNAVAILABLE' });
+    );
+    expect(exact.authority).toBe('derived');
+    expect(exact.materialDependencies).toHaveLength(2);
+    expect(exact.memoryDependencies).toEqual([memoryDependency('m-9', 'rev-9')]);
+    if (exact.source.kind !== 'run-assistant') throw new Error('来源类型不符。');
+    expect(exact.source.eventId).toBe('e-7');
+    expect(exact.source.contentHash).toBe(sha(ANSWER));
   });
 
-  it('counts the artifact offset in code points, not UTF-16 units', () => {
-    const resolved = resolveMemorySourceSelector(
-      {
-        kind: 'artifact-version',
-        artifactVersionId: 'v-1',
-        locator: '第 1 段',
-        selectedText: '🎯目标',
-      },
-      reader({
-        artifactVersion: () => ({ artifactId: 'a', contentHash: 'h', readableText: '📊🎯目标' }),
-      }),
+  it('expands transitive memory dependencies and dedupes repeated revisions', () => {
+    const exact = valueOf(
+      resolveMemorySourceSelector(
+        { kind: 'run-assistant', runId: 'r-1', eventId: 'e-7', start: 0, end: 3 },
+        reader({
+          runDependencies: () =>
+            dependencies({
+              materials: [],
+              memories: [memoryDependency('m-a', 'rev-a'), memoryDependency('m-b', 'rev-b')],
+            }),
+          memoryRevision: revisions(
+            { 'rev-a': 'm-a', 'rev-b': 'm-b' },
+            {
+              'rev-a': {
+                materialDependencies: [material('kr-inherited')],
+                memoryDependencies: [memoryDependency('m-b', 'rev-b')],
+              },
+              'rev-b': { materialDependencies: [material('kr-inherited')] },
+            },
+          ),
+        }),
+        workspace,
+      ),
     );
-    expect(resolved.ok).toBe(true);
-    if (!resolved.ok) return;
-    expect(resolved.value.source.start).toBe(1);
-    expect(resolved.value.source.end).toBe(4);
+    expect(exact.memoryDependencies.map((item) => item.revisionId).sort()).toEqual([
+      'rev-a',
+      'rev-b',
+    ]);
+    // 两条依赖指向同一材料：并集去重，不重复计费。
+    expect(exact.materialDependencies).toHaveLength(1);
+  });
+
+  it('refuses to treat a missing audit record as zero dependencies', () => {
+    expect(
+      code(
+        resolveMemorySourceSelector(
+          { kind: 'run-assistant', runId: 'r-1', eventId: 'e-7', start: 0, end: 3 },
+          reader({ runDependencies: () => undefined }),
+          workspace,
+        ),
+      ),
+    ).toBe('SOURCE_REVIEW_REQUIRED');
+  });
+
+  it('accepts a genuinely empty dependency set from a complete snapshot', () => {
+    const exact = valueOf(
+      resolveMemorySourceSelector(
+        { kind: 'run-assistant', runId: 'r-1', eventId: 'e-7', start: 0, end: 3 },
+        reader({ runDependencies: () => dependencies({ materials: [], memories: [] }) }),
+        workspace,
+      ),
+    );
+    expect(exact.materialDependencies).toEqual([]);
+    expect(exact.memoryDependencies).toEqual([]);
+  });
+
+  it('rejects a source whose run belongs to another workspace or a global scope', () => {
+    expect(
+      code(
+        resolveMemorySourceSelector(
+          { kind: 'run-assistant', runId: 'r-1', eventId: 'e-7', start: 0, end: 3 },
+          reader(),
+          { workspaceId: 'ws-2' },
+        ),
+      ),
+    ).toBe('SCOPE_MISMATCH');
+    expect(
+      code(
+        resolveMemorySourceSelector(
+          { kind: 'run-assistant', runId: 'r-1', eventId: 'e-7', start: 0, end: 3 },
+          reader(),
+          { workspaceId: undefined },
+        ),
+      ),
+    ).toBe('SCOPE_MISMATCH');
+  });
+
+  it('refuses missing, hash-mismatched or no-longer-usable dependencies', () => {
+    const base = { kind: 'run-assistant', runId: 'r-1', eventId: 'e-7', start: 0, end: 3 } as const;
+    expect(
+      code(
+        resolveMemorySourceSelector(
+          base,
+          reader({
+            runDependencies: () => dependencies({ memories: [memoryDependency('m-x', 'rev-x')] }),
+            memoryRevision: () => undefined,
+          }),
+          workspace,
+        ),
+      ),
+    ).toBe('SOURCE_REVIEW_REQUIRED');
+    expect(
+      code(
+        resolveMemorySourceSelector(
+          base,
+          reader({
+            runDependencies: () => dependencies({ memories: [memoryDependency('m-x', 'rev-x')] }),
+            memoryRevision: () => revisionFacts('m-x', 'rev-x', { contentHash: sha('other') }),
+          }),
+          workspace,
+        ),
+      ),
+    ).toBe('SOURCE_REVIEW_REQUIRED');
+    expect(
+      code(
+        resolveMemorySourceSelector(
+          base,
+          reader({
+            runDependencies: () => dependencies({ memories: [memoryDependency('m-x', 'rev-x')] }),
+            memoryRevision: () => revisionFacts('m-x', 'rev-x', { usable: false }),
+          }),
+          workspace,
+        ),
+      ),
+    ).toBe('SOURCE_REVIEW_REQUIRED');
+  });
+
+  it('rejects a dependency cycle instead of looping forever', () => {
+    expect(
+      code(
+        resolveMemorySourceSelector(
+          { kind: 'run-assistant', runId: 'r-1', eventId: 'e-7', start: 0, end: 3 },
+          reader({
+            runDependencies: () => dependencies({ memories: [memoryDependency('m-a', 'rev-a')] }),
+            memoryRevision: (revisionId) =>
+              revisionId === 'rev-a'
+                ? revisionFacts('m-a', 'rev-a', {
+                    memoryDependencies: [memoryDependency('m-b', 'rev-b')],
+                  })
+                : revisionFacts('m-b', 'rev-b', {
+                    memoryDependencies: [memoryDependency('m-a', 'rev-a')],
+                  }),
+          }),
+          workspace,
+        ),
+      ),
+    ).toBe('SOURCE_DEPENDENCY_CYCLE');
+  });
+
+  it('rejects exceeding the memory dependency limit rather than truncating', () => {
+    const memories = Array.from({ length: 101 }, (_unused, index) =>
+      memoryDependency(`m-${index}`, `rev-${index}`),
+    );
+    expect(
+      code(
+        resolveMemorySourceSelector(
+          { kind: 'run-assistant', runId: 'r-1', eventId: 'e-7', start: 0, end: 3 },
+          reader({
+            runDependencies: () => dependencies({ memories }),
+            memoryRevision: (revisionId) =>
+              revisionFacts(revisionId.replace('rev-', 'm-'), revisionId),
+          }),
+          workspace,
+        ),
+      ),
+    ).toBe('SOURCE_DEPENDENCY_LIMIT');
+  });
+
+  it('inherits checkpoint dependencies only when the node can prove them', () => {
+    const base = {
+      kind: 'checkpoint',
+      checkpointId: 'c-1',
+      field: 'feedback',
+      start: 0,
+      end: 4,
+    } as const;
+    const exact = valueOf(
+      resolveMemorySourceSelector(
+        base,
+        reader({
+          checkpointDependencies: () =>
+            dependencies({
+              materials: [material('kr-node')],
+              memories: [memoryDependency('m-c', 'rev-c')],
+            }),
+          memoryRevision: revisions({ 'rev-c': 'm-c' }),
+        }),
+        workspace,
+      ),
+    );
+    expect(exact.materialDependencies).toEqual([material('kr-node')]);
+    expect(exact.memoryDependencies).toEqual([memoryDependency('m-c', 'rev-c')]);
+    expect(
+      code(
+        resolveMemorySourceSelector(
+          base,
+          reader({ checkpointDependencies: () => undefined }),
+          workspace,
+        ),
+      ),
+    ).toBe('SOURCE_REVIEW_REQUIRED');
+  });
+
+  it('inherits artifact version dependencies and refuses a broken chain', () => {
+    const base = {
+      kind: 'artifact-version',
+      artifactVersionId: 'av-2',
+      locator: 'v-2#1',
+      selectedText: '结论：收入按回款金额统计。',
+    } as const;
+    const exact = valueOf(
+      resolveMemorySourceSelector(
+        base,
+        reader({
+          artifactVersionDependencies: () =>
+            dependencies({
+              materials: [material('kr-artifact')],
+              memories: [memoryDependency('m-a', 'rev-a')],
+            }),
+          memoryRevision: revisions({ 'rev-a': 'm-a' }),
+        }),
+        workspace,
+      ),
+    );
+    expect(exact.materialDependencies).toEqual([material('kr-artifact')]);
+    expect(exact.memoryDependencies).toEqual([memoryDependency('m-a', 'rev-a')]);
+    expect(
+      code(
+        resolveMemorySourceSelector(
+          base,
+          reader({ artifactVersionDependencies: () => undefined }),
+          workspace,
+        ),
+      ),
+    ).toBe('SOURCE_REVIEW_REQUIRED');
   });
 });
 
 describe('provenance builders', () => {
-  it('builds a self-contained user instruction with empty dependencies', () => {
+  it('keeps a manual user instruction as the only empty-dependency shape', () => {
+    const operationId = '11111111-1111-4111-8111-111111111111';
     const provenance = buildUserInstructionProvenance({
-      capturedAt: 100,
-      operationId: '11111111-1111-4111-8111-111111111111',
-      content: '先列异常和待决策事项。',
+      capturedAt: 1,
+      operationId,
+      content: '金额按万元保留两位。',
+      genericDeclaration: false,
     });
-    expect(provenance.verification).toBe('verified');
-    if (provenance.verification !== 'verified') return;
+    if (provenance.verification !== 'verified') throw new Error('人工口径应当已核验。');
     expect(provenance.authority).toBe('user-instruction');
     expect(provenance.materialDependencies).toEqual([]);
     expect(provenance.memoryDependencies).toEqual([]);
-    expect(provenance.sources[0]?.kind).toBe('manual');
+    expect(manualMemorySource(operationId, '金额按万元保留两位。').start).toBe(0);
   });
 
-  it('marks legacy rows unverified without fabricating a source or capture time', () => {
-    const provenance = buildLegacyProvenance({ sourceType: 'conversation', sourceId: 'r-old' });
-    expect(provenance.verification).toBe('legacy-unverified');
-    if (provenance.verification !== 'legacy-unverified') return;
-    expect(provenance.sourceId).toBe('r-old');
-    expect('capturedAt' in provenance).toBe(false);
-    expect('sources' in provenance).toBe(false);
-  });
-
-  it('keeps a derived provenance schema-valid', () => {
-    const source = manualMemorySource('11111111-1111-4111-8111-111111111111', '不含税口径');
+  it('carries resolved dependencies into derived provenance', () => {
     const provenance = buildDerivedProvenance({
-      capturedAt: 200,
-      sources: [source],
+      capturedAt: 1,
+      sources: [
+        {
+          kind: 'run-assistant',
+          runId: 'r-1',
+          eventId: 'e-7',
+          contentHash: sha(ANSWER),
+          excerpt: '已按签约',
+          excerptHash: sha('已按签约'),
+          start: 0,
+          end: 4,
+        },
+      ],
       materialDependencies: [material('kr-1')],
-      memoryDependencies: [],
+      memoryDependencies: [memoryDependency('m-9', 'rev-9')],
       originWorkspaceId: 'ws-1',
     });
-    expect(provenance.verification).toBe('verified');
-    if (provenance.verification !== 'verified') return;
-    expect(provenance.authority).toBe('derived');
+    if (provenance.verification !== 'verified') throw new Error('派生来源应当已核验。');
+    expect(provenance.memoryDependencies).toEqual([memoryDependency('m-9', 'rev-9')]);
     expect(provenance.originWorkspaceId).toBe('ws-1');
+  });
+
+  it('keeps legacy rows unverified without inventing dependencies', () => {
+    const provenance = buildLegacyProvenance({ sourceType: 'conversation', sourceId: 'm-legacy' });
+    expect(provenance.verification).toBe('legacy-unverified');
   });
 });

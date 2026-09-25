@@ -116,6 +116,42 @@ describe('run protocol', () => {
     ).toThrow();
   });
 
+  it('keeps a provenance selector and a user instruction mutually exclusive', () => {
+    const selector = { kind: 'run-assistant', runId: 'r-1', eventId: 'e-7', start: 0, end: 4 };
+    const base = {
+      operationId: '22222222-2222-4222-8222-222222222222',
+      content: '汇总收入前先核对回款口径与单位。',
+      facet: 'method',
+      scope: { kind: 'workspace', workspaceId: 'ws-1' },
+    } as const;
+    // 保留来源的普通保存：asUserInstruction=false ＋ selector。
+    expect(
+      createMemoryRequestSchema.safeParse({
+        ...base,
+        asUserInstruction: false,
+        sourceSelector: selector,
+      }).success,
+    ).toBe(true);
+    // 自主口径不得同时携带来源选择器，防止普通保存被降级成空依赖。
+    expect(
+      createMemoryRequestSchema.safeParse({
+        ...base,
+        asUserInstruction: true,
+        genericDeclaration: true,
+        sourceSelector: selector,
+      }).success,
+    ).toBe(false);
+    // 显式自主重述只带审计线索，不带 selector。
+    expect(
+      createMemoryRequestSchema.safeParse({
+        ...base,
+        asUserInstruction: true,
+        genericDeclaration: true,
+        fromMemoryRevisionId: 'rev-1',
+      }).success,
+    ).toBe(true);
+  });
+
   it('keeps material reads and artifact inputs tied to exact revisions', () => {
     const material = {
       kind: 'knowledge-revision' as const,

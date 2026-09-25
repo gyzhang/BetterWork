@@ -146,7 +146,7 @@ const scopeOf = (record: MemoryRecord): MemoryScope => record.scope;
 const originWorkspaceOf = (scope: MemoryScope): string | undefined =>
   scope.kind === 'workspace' || scope.kind === 'expert-workspace' ? scope.workspaceId : undefined;
 
-/** 来源权威由 Main 依据选择器指向的实体判定；Renderer 与模型都不能改写。 */
+/** 来源权威与依赖都由 Main 依据选择器指向的实体判定；Renderer 与模型都不能改写（§11.1）。 */
 const provenanceFromResolved = (
   resolved: ResolvedMemorySource,
   capturedAt: number,
@@ -159,7 +159,7 @@ const provenanceFromResolved = (
     capturedAt,
     sources: [resolved.source],
     materialDependencies: resolved.materialDependencies,
-    memoryDependencies: [],
+    memoryDependencies: resolved.memoryDependencies,
     ...(originWorkspaceId ? { originWorkspaceId } : {}),
   });
 
@@ -663,6 +663,12 @@ export class MemoryService {
     originWorkspaceId: string | undefined,
   ): ProvenanceResolution {
     if (request.asUserInstruction) {
+      if (request.sourceSelector) {
+        return failResult(
+          'SOURCE_MISMATCH',
+          '自主口径与来源选择器互斥：勾选「以我的口径记录」时不要同时提交来源选择器。',
+        );
+      }
       return {
         ok: true,
         value: buildUserInstructionProvenance({
@@ -686,7 +692,9 @@ export class MemoryService {
     capturedAt: number,
     originWorkspaceId: string | undefined,
   ): ProvenanceResolution {
-    const resolved = resolveMemorySourceSelector(selector, this.reader);
+    const resolved = resolveMemorySourceSelector(selector, this.reader, {
+      workspaceId: originWorkspaceId,
+    });
     if (!resolved.ok) return failResult(resolved.code, resolved.message);
     return {
       ok: true,

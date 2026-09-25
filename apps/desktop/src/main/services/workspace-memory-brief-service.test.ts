@@ -47,7 +47,13 @@ const verifiedProvenance = (
 });
 
 const selectorSource = (store: AppStore, selector: MemorySourceSelector): MemorySourceRef => {
-  const resolved = resolveMemorySourceSelector(selector, createStoreProvenanceReader(store));
+  const reader = createStoreProvenanceReader(store);
+  // 夹具与被测记录同属一个真实工作空间：范围核对用来源实体自己所属的空间。
+  const workspaceId =
+    selector.kind === 'run-user' || selector.kind === 'run-assistant'
+      ? reader.runWorkspace(selector.runId)
+      : undefined;
+  const resolved = resolveMemorySourceSelector(selector, reader, { workspaceId });
   if (!resolved.ok) throw new Error(`夹具来源解析失败：${resolved.message}`);
   return resolved.value.source;
 };
