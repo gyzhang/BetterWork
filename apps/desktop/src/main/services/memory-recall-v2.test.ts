@@ -113,6 +113,37 @@ describe('applyRecallBudgetV2 分配顺序', () => {
     expect(rejected.skippedForBudget).toBe(2);
   });
 
+  it('优先池只剩一条名额时也不得把分量拆开塞入', () => {
+    const singles = Array.from({ length: 5 }, (_unused, index) =>
+      group('pinned-rule', item(`m-solo-${index}`, `独条规则 ${index}。`)),
+    );
+    const component = group(
+      'pinned-rule',
+      item('m-x', '甲。'),
+      item('m-y', '乙。'),
+      item('m-z', '丙。'),
+    );
+    const selection = applyRecallBudgetV2([...singles, component], [], []);
+    expect(selection.items.map((entry) => entry.id)).toEqual(
+      singles.map((_unused, index) => `m-solo-${index}`),
+    );
+    expect(selection.items).toHaveLength(5);
+    expect(selection.skippedForBudget).toBe(3);
+  });
+
+  it('并存分量合计超过优先池正文预算时整组落选，不留下一条', () => {
+    const component = group(
+      'pinned-rule',
+      item('m-p1', '甲'.repeat(600)),
+      item('m-p2', '乙'.repeat(600)),
+      item('m-p3', '丙'.repeat(600)),
+      item('m-p4', '丁'.repeat(600)),
+    );
+    const selection = applyRecallBudgetV2([component], [], []);
+    expect(selection.items).toEqual([]);
+    expect(selection.skippedForBudget).toBe(4);
+  });
+
   it('组序按最具体范围与最小 id 决定，不按更新时间偏袒', () => {
     const groups = [
       group('pinned-rule', item('m-late', '晚更新的用户级规则。')),
