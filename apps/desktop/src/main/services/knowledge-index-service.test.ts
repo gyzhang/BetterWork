@@ -468,10 +468,11 @@ describe('KnowledgeIndexService 设置与来源检查', () => {
     harness.vault.close();
   });
 
-  it('来源检查区分未变化与已改动的原件', async () => {
+  it('来源检查把结论持久到文档摘要：改动与缺失都是完成而不是作业失败', async () => {
     const harness = createHarness();
     const file = writeSource(harness.directory, '原件.md', '原件内容。');
     const imported = await harness.vault.importSource(file);
+    expect(imported.document.sourceStatus).toBe('unchanged');
     const ack = harness.service.startCheckSources({
       documentIds: [imported.document.id, 'missing-document'],
     });
@@ -483,10 +484,21 @@ describe('KnowledgeIndexService 设置与来源检查', () => {
     writeFileSync(file, '原件已被改写。', 'utf8');
     const changed = harness.service.startCheckSources({ documentIds: [imported.document.id] });
     await harness.service.settled();
-    expect(harness.service.jobDetail(changed.jobId)?.items.at(0)?.status).toBe('failed');
-    expect(harness.service.jobDetail(changed.jobId)?.items.at(0)?.failure?.code).toBe(
-      'KNOWLEDGE_DOCUMENT_REMOVED',
-    );
+    expect(harness.service.jobDetail(changed.jobId)?.items.at(0)?.status).toBe('succeeded');
+    const listed = harness.vault
+      .listDocuments()
+      .find((document) => document.id === imported.document.id);
+    expect(listed?.sourceStatus).toBe('changed');
+    expect(listed?.sourceCheckedAt).toBeTypeOf('number');
+
+    rmSync(file);
+    const gone = harness.service.startCheckSources({ documentIds: [imported.document.id] });
+    await harness.service.settled();
+    expect(harness.service.jobDetail(gone.jobId)?.items.at(0)?.status).toBe('succeeded');
+    expect(
+      harness.vault.listDocuments().find((document) => document.id === imported.document.id)
+        ?.sourceStatus,
+    ).toBe('missing');
     harness.vault.close();
   });
 

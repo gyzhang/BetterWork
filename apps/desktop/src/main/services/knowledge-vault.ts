@@ -15,6 +15,8 @@ import {
   type KnowledgeRefreshResult,
   type KnowledgeRevisionSummary,
   type KnowledgeSearchResult,
+  type KnowledgeSemanticState,
+  type KnowledgeSourceStatus,
   type KnowledgeTextPage,
   type KnowledgeWarningCode,
   knowledgeWarningCodeSchema,
@@ -52,6 +54,8 @@ interface KnowledgeRow {
   page_count: number | null;
   imported_at: number;
   updated_at: number;
+  source_status: KnowledgeSourceStatus;
+  source_checked_at: number | null;
 }
 
 interface KnowledgeRevisionRow {
@@ -111,6 +115,7 @@ export class KnowledgeVault {
     const rows = this.db
       .prepare(
         `SELECT id, title, source_path, format, byte_size, content_hash, page_count, imported_at, updated_at,
+                source_status, source_checked_at,
                 (SELECT r.id FROM knowledge_revisions r
                   WHERE r.document_id = knowledge_documents.id
                   ORDER BY r.revision DESC LIMIT 1) AS current_revision_id
@@ -118,7 +123,7 @@ export class KnowledgeVault {
       )
       .all() as Array<KnowledgeRow & { current_revision_id: string | null }>;
     return rows.map((row) => ({
-      ...this.toSummary(row),
+      ...this.toSummary(row, row.current_revision_id ?? undefined),
       ...(row.current_revision_id ? { currentRevisionId: row.current_revision_id } : {}),
     }));
   }
@@ -217,21 +222,97 @@ export class KnowledgeVault {
     return revisionId ? this.getRevision(revisionId) : undefined;
   }
 
-  /** 原件是否仍与登记内容一致（check-source 条目使用）；只读，不刷新索引。 */
-  async sourceMatchesRegistration(documentId: string): Promise<{ ok: boolean; reason: string }> {
+  private documentRowOf(documentId: string): KnowledgeRow | undefined {
+    return this.db
+      .prepare(
+        `SELECT id, title, source_path, format, byte_size, content_hash, page_count,
+                imported_at, updated_at, source_status, source_checked_at
+           FROM knowledge_documents WHERE id = ?`,
+      )
+      .get(documentId) as KnowledgeRow | undefined;
+  }
+
+  documentExists(documentId: string): boolean {
+    const row = this.db
+      .prepare('SELECT 1 AS present FROM knowledge_documents WHERE id = ?')
+      .get(documentId) as { present: number } | undefined;
+    return row !== undefined;
+  }
+
+  /**
+   * 来源检查（契约 §10.2）：比较当前原件字节与登记内容哈希，并把结论持久到文档。
+   * changed/missing/unreadable 都是确定结论而非作业失败；只读原件，不刷新索引。
+   */
+  async checkSource(
+    documentId: string,
+  ): Promise<{ status: KnowledgeSourceStatus; checkedAt: number; reason: string }> {
     const row = this.db
       .prepare('SELECT source_path, content_hash FROM knowledge_documents WHERE id = ?')
       .get(documentId) as { source_path: string; content_hash: string } | undefined;
-    if (!row) return { ok: false, reason: '资料已不在当前资料库中。' };
-    try {
-      const bytes = await readFile(row.source_path);
-      const hash = createHash('sha256').update(bytes).digest('hex');
-      return hash === row.content_hash
-        ? { ok: true, reason: '' }
-        : { ok: false, reason: '原始文件内容已变化，本地索引仍是历史版本。' };
-    } catch {
-      return { ok: false, reason: '原始文件无法访问（可能已被移动或删除）。' };
+    if (!row) {
+      return { status: 'missing', checkedAt: Date.now(), reason: '资料已不在当前资料库中。' };
     }
+    const checkedAt = Date.now();
+    let status: KnowledgeSourceStatus;
+    let reason: string;
+    try {
+      const info = await stat(row.source_path);
+      if (info.size > maxBytes) {
+        status = 'changed';
+        reason = '原始文件超过导入大小上限，无法按登记内容视为一致。';
+      } else {
+        const hash = createHash('sha256')
+          .update(await readFile(row.source_path))
+          .digest('hex');
+        status = hash === row.content_hash ? 'unchanged' : 'changed';
+        reason =
+          hash === row.content_hash
+            ? '原始文件与登记内容一致。'
+            : '原始文件内容已变化，本地索引仍是历史版本。';
+      }
+    } catch (error) {
+      const code =
+        typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : '';
+      if (code === 'ENOENT') {
+        status = 'missing';
+        reason = '原始文件已不存在于登记路径。';
+      } else if (code === 'EACCES' || code === 'EPERM') {
+        status = 'unreadable';
+        reason = '没有权限读取原始文件。';
+      } else {
+        status = 'unreadable';
+        reason = '原始文件暂时无法访问。';
+      }
+    }
+    this.db
+      .prepare(
+        'UPDATE knowledge_documents SET source_status = ?, source_checked_at = ? WHERE id = ?',
+      )
+      .run(status, checkedAt, documentId);
+    return { status, checkedAt, reason };
+  }
+
+  /** 语义索引状态派生（契约 §10.1）：只读设置与代次，不复制作业状态。 */
+  private semanticStateOf(revisionId: string | undefined): KnowledgeSemanticState {
+    if (!this.index.settings().semanticEnabled) return 'disabled';
+    if (!revisionId) return 'pending';
+    const row = this.db
+      .prepare(
+        `SELECT g.text_hash AS generation_text_hash,
+                r.text_hash AS current_text_hash,
+                s.status AS space_status
+           FROM knowledge_revisions r
+           JOIN knowledge_index_generations g ON g.revision_id = r.id AND g.status = 'active'
+           JOIN knowledge_embedding_spaces s ON s.id = g.space_id
+          WHERE r.id = ?
+          ORDER BY s.status = 'current' DESC, g.published_at DESC
+          LIMIT 1`,
+      )
+      .get(revisionId) as
+      { generation_text_hash: string; current_text_hash: string; space_status: string } | undefined;
+    if (!row) return 'pending';
+    if (row.space_status !== 'current') return 'stale';
+    return row.generation_text_hash === row.current_text_hash ? 'ready' : 'stale';
   }
 
   /** 搜索命中与修订引用必须来自同一读快照（契约 §2.4），不能先取摘要再按 latest 补引用。 */
@@ -249,7 +330,7 @@ export class KnowledgeVault {
       .filter(Boolean)
       .map((term) => `"${term.replaceAll('"', '""')}"`);
     const hitColumns =
-      'd.id, d.title, d.source_path, d.format, d.byte_size, d.content_hash, d.page_count, d.imported_at, d.updated_at, c.locator, c.content';
+      'd.id, d.title, d.source_path, d.format, d.byte_size, d.content_hash, d.page_count, d.imported_at, d.updated_at, d.source_status, d.source_checked_at, c.locator, c.content';
     const rows =
       terms.length > 0
         ? (this.db
@@ -296,7 +377,7 @@ export class KnowledgeVault {
     if (!revision) return undefined;
     return {
       document: {
-        ...this.toSummary(row),
+        ...this.toSummary(row, revision.id),
         currentRevisionId: revision.id,
       },
       locator: row.locator,
@@ -320,11 +401,19 @@ export class KnowledgeVault {
 
     const results: KnowledgeSearchResult[] = [];
     const seen = new Set<string>();
+    const summaryCache = new Map<string, KnowledgeDocumentSummary>();
     for (const revisionId of revisionIds) {
       if (seen.has(revisionId)) continue;
       seen.add(revisionId);
       const revision = this.getRevision(revisionId);
       if (!revision) continue;
+      let document = summaryCache.get(revision.documentId);
+      if (!document) {
+        const documentRow = this.documentRowOf(revision.documentId);
+        if (!documentRow) continue;
+        document = this.toSummary(documentRow, revision.id);
+        summaryCache.set(revision.documentId, document);
+      }
       for (const chunk of revision.chunks) {
         const haystack = `${revision.title}\n${chunk.content}`.toLocaleLowerCase();
         if (!terms.every((term) => haystack.includes(term))) continue;
@@ -335,17 +424,7 @@ export class KnowledgeVault {
           KNOWLEDGE_SEARCH_SUMMARY_MAX_CODE_POINTS,
         );
         results.push({
-          document: {
-            id: revision.documentId,
-            title: revision.title,
-            sourcePath: revision.sourcePath,
-            format: revision.format,
-            byteSize: revision.byteSize,
-            contentHash: revision.contentHash,
-            ...(revision.pageCount === undefined ? {} : { pageCount: revision.pageCount }),
-            importedAt: revision.importedAt,
-            updatedAt: revision.createdAt,
-          },
+          document,
           locator: chunk.locator,
           excerpt: excerpt.text,
           reference: {
@@ -518,7 +597,7 @@ export class KnowledgeVault {
       if (existing) {
         this.db
           .prepare(
-            'UPDATE knowledge_documents SET title=?, format=?, byte_size=?, content_hash=?, content=?, page_count=?, updated_at=? WHERE id=?',
+            'UPDATE knowledge_documents SET title=?, format=?, byte_size=?, content_hash=?, content=?, page_count=?, updated_at=?, source_status=?, source_checked_at=? WHERE id=?',
           )
           .run(
             title,
@@ -528,12 +607,14 @@ export class KnowledgeVault {
             extracted.content,
             extracted.pageCount ?? null,
             now,
+            'unchanged',
+            now,
             id,
           );
       } else {
         this.db
           .prepare(
-            'INSERT INTO knowledge_documents (id, title, source_path, format, byte_size, content_hash, content, page_count, imported_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO knowledge_documents (id, title, source_path, format, byte_size, content_hash, content, page_count, imported_at, updated_at, source_status, source_checked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           )
           .run(
             id,
@@ -545,6 +626,8 @@ export class KnowledgeVault {
             extracted.content,
             extracted.pageCount ?? null,
             now,
+            now,
+            'unchanged',
             now,
           );
       }
@@ -648,13 +731,13 @@ export class KnowledgeVault {
     const published = write();
     const row = this.db
       .prepare(
-        'SELECT id, title, source_path, format, byte_size, content_hash, page_count, imported_at, updated_at FROM knowledge_documents WHERE id = ?',
+        'SELECT id, title, source_path, format, byte_size, content_hash, page_count, imported_at, updated_at, source_status, source_checked_at FROM knowledge_documents WHERE id = ?',
       )
       .get(id) as KnowledgeRow;
-    return { document: this.toSummary(row), ...published };
+    return { document: this.toSummary(row, published.revisionId), ...published };
   }
 
-  private toSummary(row: KnowledgeRow): KnowledgeDocumentSummary {
+  private toSummary(row: KnowledgeRow, revisionId?: string): KnowledgeDocumentSummary {
     return {
       id: row.id,
       title: row.title,
@@ -662,6 +745,10 @@ export class KnowledgeVault {
       format: row.format,
       byteSize: row.byte_size,
       contentHash: row.content_hash,
+      sourceStatus: row.source_status,
+      ...(row.source_checked_at === null ? {} : { sourceCheckedAt: row.source_checked_at }),
+      lexicalState: 'ready',
+      semanticState: this.semanticStateOf(revisionId),
       ...(row.page_count === null ? {} : { pageCount: row.page_count }),
       importedAt: row.imported_at,
       updatedAt: row.updated_at,

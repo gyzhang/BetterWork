@@ -354,3 +354,88 @@ describe('KnowledgeVault', () => {
     reopened.close();
   });
 });
+
+describe('来源检查与摘要投影（KM10，契约 §10.1/§10.2）', () => {
+  it('导入即得出「一致」结论；原件变化与缺失按结论持久而不是作业失败', async () => {
+    const directory = temporaryDirectory();
+    const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
+    const file = path.join(directory, '原件.md');
+    writeFileSync(file, '原件内容。');
+    const imported = await vault.importSource(file);
+    expect(imported.document.sourceStatus).toBe('unchanged');
+    expect(imported.document.sourceCheckedAt).toBeTypeOf('number');
+    expect(imported.document.lexicalState).toBe('ready');
+    expect(imported.document.semanticState).toBe('disabled');
+
+    expect(await vault.checkSource(imported.document.id)).toMatchObject({ status: 'unchanged' });
+    writeFileSync(file, '改写后的原件。');
+    expect((await vault.checkSource(imported.document.id)).status).toBe('changed');
+    expect(
+      vault.listDocuments().find((document) => document.id === imported.document.id)?.sourceStatus,
+    ).toBe('changed');
+
+    rmSync(file);
+    expect((await vault.checkSource(imported.document.id)).status).toBe('missing');
+    const listed = vault.listDocuments().find((document) => document.id === imported.document.id);
+    expect(listed?.sourceStatus).toBe('missing');
+    // 原件缺失后保存文本仍可读：详情预览不依赖原件存在
+    const page = vault.previewRevision(imported.document.id, imported.revisionId);
+    expect(page.parts.length).toBeGreaterThan(0);
+    vault.close();
+  });
+
+  it('语义状态由设置与代次派生：启用无代次为待建，发布后就绪，退役旧空间即过期', async () => {
+    const directory = temporaryDirectory();
+    const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
+    const file = path.join(directory, '语义.md');
+    writeFileSync(file, '语义状态内容。');
+    const imported = await vault.importSource(file);
+    const fingerprint = 'a'.repeat(64);
+    vault.index.saveSettings({
+      expectedRevision: vault.index.settings().revision,
+      semanticEnabled: true,
+    });
+    const stateOf = (): string =>
+      vault.listDocuments().find((document) => document.id === imported.document.id)
+        ?.semanticState ?? 'missing';
+    expect(stateOf()).toBe('pending');
+
+    const index = vault.index;
+    const chunks = index.retrievalChunks(imported.revisionId);
+    const space = index.ensureCurrentSpace(fingerprint);
+    index.lockDimension(space.id, 3);
+    const generation = index.createStagingGeneration({
+      revisionId: imported.revisionId,
+      textHash: chunks[0]?.textHash ?? '',
+      spaceId: space.id,
+      modelSnapshot: { modelFingerprint: fingerprint },
+      chunkingVersion: chunks[0]?.chunkingVersion ?? '',
+      chunkCount: chunks.length,
+    });
+    index.addStagingVectors(
+      generation.id,
+      chunks.map((chunk) => ({
+        chunkId: chunk.id,
+        chunkHash: chunk.contentHash,
+        vector: Float32Array.from([1, 0, 0]),
+      })),
+    );
+    index.publishGeneration({
+      generationId: generation.id,
+      expect: {
+        revisionId: imported.revisionId,
+        textHash: chunks[0]?.textHash ?? '',
+        spaceId: space.id,
+        modelFingerprint: fingerprint,
+        dimension: 3,
+        chunkingVersion: chunks[0]?.chunkingVersion ?? '',
+        registeredRevisionId: vault.registeredRevisionId(imported.document.id) ?? '',
+      },
+    });
+    expect(stateOf()).toBe('ready');
+
+    index.resetCurrentSpace(fingerprint);
+    expect(stateOf()).toBe('stale');
+    vault.close();
+  });
+});

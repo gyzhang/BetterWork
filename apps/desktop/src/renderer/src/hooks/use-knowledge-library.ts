@@ -1,13 +1,16 @@
 import type {
+  KnowledgeCursor,
   KnowledgeDocumentSummary,
   KnowledgeJobSummary,
   KnowledgeResearchDraftMaterial,
   KnowledgeResearchDraftResult,
+  KnowledgeRevisionSummary,
   KnowledgeSearchCoverage,
   KnowledgeSearchDegradedReason,
   KnowledgeSearchEffectiveMode,
   KnowledgeSearchHit,
   KnowledgeSearchSettings,
+  KnowledgeTextPage,
   ModelProfileSummary,
 } from '@betterwork/agent-protocol';
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
@@ -65,6 +68,20 @@ export interface KnowledgeLibrary {
   rebuildSemantic: (forced: boolean) => Promise<void>;
   cancelJob: (jobId: string) => Promise<void>;
   retryFailedItems: () => Promise<void>;
+  /** KM10：主区详情子视图；列表状态（query/results/勾选）在打开期间保持不变。 */
+  detailDocument: KnowledgeDocumentSummary | undefined;
+  detailRevisions: KnowledgeRevisionSummary[];
+  detailRevisionId: string | undefined;
+  detailPage: KnowledgeTextPage | undefined;
+  detailLoading: boolean;
+  detailError: string;
+  detailCanGoBack: boolean;
+  openDocument: (document: KnowledgeDocumentSummary) => Promise<void>;
+  closeDocument: () => void;
+  selectDetailRevision: (revisionId: string) => Promise<void>;
+  loadNextDetailPage: () => Promise<void>;
+  loadPreviousDetailPage: () => Promise<void>;
+  checkDocumentSource: (documentId: string) => Promise<void>;
 }
 
 const TERMINAL_STATUSES = new Set<KnowledgeJobSummary['status']>([
@@ -111,6 +128,15 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   const [retryTarget, setRetryTarget] = useState<
     { jobId: string; itemIds: string[]; kind: KnowledgeJobSummary['kind'] } | undefined
   >(undefined);
+  const [detailId, setDetailId] = useState<string | undefined>(undefined);
+  const [detailRevisions, setDetailRevisions] = useState<KnowledgeRevisionSummary[]>([]);
+  const [detailRevisionId, setDetailRevisionId] = useState<string | undefined>(undefined);
+  const [detailPage, setDetailPage] = useState<KnowledgeTextPage | undefined>(undefined);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
+  const [cursorStack, setCursorStack] = useState<Array<KnowledgeCursor | undefined>>([]);
+  const currentCursor = useRef<KnowledgeCursor | undefined>(undefined);
+  const detailSeq = useRef(0);
   const researchSeq = useRef(0);
   const searchSeq = useRef(0);
   const pendingJobs = useRef(new Set<string>());
@@ -235,44 +261,49 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   };
 
   /** 作业终态后把结果与逐条目失败原因回填到界面；取消不报失败。 */
-  const reportJob = useCallback((jobId: string): void => {
-    trackAction(
-      window.betterwork.knowledge.job({ jobId }).then((detail) => {
-        if (!detail) return;
-        const failed = detail.items.filter((item) => item.status === 'failed');
-        setIssues(
-          failed.map(
-            (item) =>
-              `${item.fileName ?? item.documentId ?? '资料'}：${item.failure?.message ?? '处理失败'}`,
-          ),
-        );
-        const retryable = detail.items.filter((item) => RETRYABLE_ITEM_STATUSES.has(item.status));
-        setRetryTarget(
-          detail.job.status === 'succeeded' || retryable.length === 0
-            ? undefined
-            : {
-                jobId: detail.job.id,
-                itemIds: retryable.map((item) => item.id),
-                kind: detail.job.kind,
-              },
-        );
-        if (detail.job.status === 'succeeded') {
-          setMessage(
-            `${titleOfJob(detail.job)}完成（${detail.job.completedCount}/${detail.job.totalCount}）。`,
+  const reportJob = useCallback(
+    (jobId: string): void => {
+      trackAction(
+        window.betterwork.knowledge.job({ jobId }).then((detail) => {
+          if (!detail) return;
+          // 作业终态可能改变登记与来源状态，列表和详情摘要都要拉回最新投影。
+          refresh();
+          const failed = detail.items.filter((item) => item.status === 'failed');
+          setIssues(
+            failed.map(
+              (item) =>
+                `${item.fileName ?? item.documentId ?? '资料'}：${item.failure?.message ?? '处理失败'}`,
+            ),
           );
-        } else if (detail.job.status === 'partial') {
-          setMessage(
-            `${titleOfJob(detail.job)}部分完成（${detail.job.completedCount}/${detail.job.totalCount}）。`,
+          const retryable = detail.items.filter((item) => RETRYABLE_ITEM_STATUSES.has(item.status));
+          setRetryTarget(
+            detail.job.status === 'succeeded' || retryable.length === 0
+              ? undefined
+              : {
+                  jobId: detail.job.id,
+                  itemIds: retryable.map((item) => item.id),
+                  kind: detail.job.kind,
+                },
           );
-        } else if (detail.job.status !== 'cancelled') {
-          setMessage(
-            `${titleOfJob(detail.job)}未完成：${detail.job.failure?.message ?? detail.job.status}`,
-          );
-        }
-      }),
-      '回读索引作业结果',
-    );
-  }, []);
+          if (detail.job.status === 'succeeded') {
+            setMessage(
+              `${titleOfJob(detail.job)}完成（${detail.job.completedCount}/${detail.job.totalCount}）。`,
+            );
+          } else if (detail.job.status === 'partial') {
+            setMessage(
+              `${titleOfJob(detail.job)}部分完成（${detail.job.completedCount}/${detail.job.totalCount}）。`,
+            );
+          } else if (detail.job.status !== 'cancelled') {
+            setMessage(
+              `${titleOfJob(detail.job)}未完成：${detail.job.failure?.message ?? detail.job.status}`,
+            );
+          }
+        }),
+        '回读索引作业结果',
+      );
+    },
+    [refresh],
+  );
 
   const trackJob = useCallback((jobId: string): void => {
     pendingJobs.current.add(jobId);
@@ -435,6 +466,108 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     }
   };
 
+  const loadDetailPage = async (
+    documentId: string,
+    revisionId: string,
+    cursor: KnowledgeCursor | undefined,
+  ): Promise<void> => {
+    const seq = detailSeq.current + 1;
+    detailSeq.current = seq;
+    setDetailLoading(true);
+    setDetailError('');
+    try {
+      const page = await window.betterwork.knowledge.preview({
+        documentId,
+        revisionId,
+        ...(cursor ? { cursor } : {}),
+      });
+      if (detailSeq.current !== seq) return;
+      setDetailRevisionId(revisionId);
+      setDetailPage(page);
+      currentCursor.current = cursor;
+    } catch (error) {
+      if (detailSeq.current === seq) {
+        setDetailError(describeActionError(error, '读取保存文本失败。'));
+      }
+    } finally {
+      if (detailSeq.current === seq) setDetailLoading(false);
+    }
+  };
+
+  const openDocument = async (document: KnowledgeDocumentSummary): Promise<void> => {
+    const seq = detailSeq.current + 1;
+    detailSeq.current = seq;
+    setDetailId(document.id);
+    setDetailRevisions([]);
+    setDetailPage(undefined);
+    setDetailRevisionId(undefined);
+    setDetailError('');
+    setCursorStack([]);
+    currentCursor.current = undefined;
+    setDetailLoading(true);
+    try {
+      const revisions = await window.betterwork.knowledge.listRevisions({
+        documentId: document.id,
+      });
+      if (detailSeq.current !== seq) return;
+      setDetailRevisions(revisions);
+      const first = revisions[0];
+      if (!first) {
+        setDetailError('该资料没有可预览的保存修订。');
+        return;
+      }
+      await loadDetailPage(document.id, first.id, undefined);
+    } catch (error) {
+      if (detailSeq.current === seq) {
+        setDetailError(describeActionError(error, '读取版本列表失败。'));
+      }
+    } finally {
+      if (detailSeq.current === seq) setDetailLoading(false);
+    }
+  };
+
+  const closeDocument = (): void => {
+    detailSeq.current += 1;
+    setDetailId(undefined);
+    setDetailPage(undefined);
+    setDetailRevisionId(undefined);
+    setDetailRevisions([]);
+    setCursorStack([]);
+    setDetailError('');
+    setDetailLoading(false);
+  };
+
+  const selectDetailRevision = async (revisionId: string): Promise<void> => {
+    if (!detailId) return;
+    setCursorStack([]);
+    currentCursor.current = undefined;
+    await loadDetailPage(detailId, revisionId, undefined);
+  };
+
+  const loadNextDetailPage = async (): Promise<void> => {
+    if (!detailId || !detailRevisionId || !detailPage?.nextCursor) return;
+    const previous = currentCursor.current;
+    setCursorStack((stack) => [...stack, previous]);
+    await loadDetailPage(detailId, detailRevisionId, detailPage.nextCursor);
+  };
+
+  const loadPreviousDetailPage = async (): Promise<void> => {
+    if (!detailId || !detailRevisionId || cursorStack.length === 0) return;
+    const target = cursorStack[cursorStack.length - 1];
+    setCursorStack((stack) => stack.slice(0, -1));
+    await loadDetailPage(detailId, detailRevisionId, target);
+  };
+
+  const checkDocumentSource = async (documentId: string): Promise<void> => {
+    try {
+      const ack = await window.betterwork.knowledge.checkSources({ documentIds: [documentId] });
+      trackJob(ack.jobId);
+      setMessage('已提交来源检查，原件与登记内容的比对在后台进行。');
+    } catch (error) {
+      setMessage(describeActionError(error, '提交来源检查失败。'));
+    }
+  };
+
   const research = async (
     prompt: string,
     workspaceId: string,
@@ -494,6 +627,19 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     rebuildSemantic,
     cancelJob,
     retryFailedItems,
+    detailDocument: documents.find((document) => document.id === detailId),
+    detailRevisions,
+    detailRevisionId,
+    detailPage,
+    detailLoading,
+    detailError,
+    detailCanGoBack: cursorStack.length > 0,
+    openDocument,
+    closeDocument,
+    selectDetailRevision,
+    loadNextDetailPage,
+    loadPreviousDetailPage,
+    checkDocumentSource,
   };
 }
 

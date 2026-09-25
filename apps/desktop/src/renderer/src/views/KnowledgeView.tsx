@@ -14,6 +14,7 @@ import type { KnowledgeLibrary } from '../hooks/use-knowledge-library';
 import { knowledgeJobTitle } from '../hooks/use-knowledge-library';
 import { PlusIcon } from '../icons';
 import { reportAction, trackAction } from '../lib/async-action';
+import { formatTime } from '../lib/format';
 
 interface KnowledgeToast {
   tone: 'success' | 'error';
@@ -25,6 +26,38 @@ const MODE_LABELS: Record<string, string> = {
   hybrid: '关键词＋语义',
   vector: '语义（向量）',
 };
+
+const SOURCE_STATE_LABELS: Record<KnowledgeDocumentSummary['sourceStatus'], string> = {
+  unchecked: '来源未检查',
+  unchanged: '来源一致',
+  changed: '原件已变化',
+  missing: '原件缺失',
+  unreadable: '原件不可读',
+};
+
+const SEMANTIC_STATE_LABELS: Record<KnowledgeDocumentSummary['semanticState'], string> = {
+  disabled: '未启用',
+  pending: '待建索引',
+  ready: '就绪',
+  partial: '部分就绪',
+  stale: '需重建',
+  failed: '建索引失败',
+};
+
+const sourceStateLine = (
+  document: KnowledgeDocumentSummary,
+  revision: { revision: number } | undefined,
+): string =>
+  [
+    revision ? `第 ${revision.revision} 版` : '尚未建立保存版本',
+    `${SOURCE_STATE_LABELS[document.sourceStatus]}${
+      document.sourceCheckedAt
+        ? `（检查于 ${formatTime(document.sourceCheckedAt)}）`
+        : '（尚未检查）'
+    }`,
+    `关键词索引${document.lexicalState === 'ready' ? '就绪' : '失败'}`,
+    `向量索引${SEMANTIC_STATE_LABELS[document.semanticState]}`,
+  ].join(' · ');
 
 const DEGRADED_LABELS: Record<string, string> = {
   'semantic-disabled': '未启用语义检索',
@@ -78,7 +111,21 @@ export function KnowledgePage({
     rebuildSemantic,
     cancelJob,
     retryFailedItems,
+    detailDocument,
+    detailRevisions,
+    detailRevisionId,
+    detailPage,
+    detailLoading,
+    detailError,
+    detailCanGoBack,
+    openDocument,
+    closeDocument,
+    selectDetailRevision,
+    loadNextDetailPage,
+    loadPreviousDetailPage,
+    checkDocumentSource,
   } = library;
+  const detailRevision = detailRevisions.find((revision) => revision.id === detailRevisionId);
   const showingResults = Boolean(query.trim());
   const items: Array<{
     document: KnowledgeDocumentSummary;
@@ -310,72 +357,204 @@ export function KnowledgePage({
               )}
             </div>
           </div>
-          <ScrollRegion ariaLabel="知识资料列表" busy={importing} className="knowledge-list-scroll">
-            {loading ? (
-              <LoadingPage />
-            ) : loadError ? (
-              <ErrorPage detail={loadError} onRetry={refresh} />
-            ) : items.length === 0 ? (
-              <EmptyPage
-                eyebrow={showingResults ? '没有匹配结果' : '从一份资料开始'}
-                title={showingResults ? '换个关键词试试' : '把常用资料放进你的资料库'}
-                detail={
-                  showingResults
-                    ? '当前先按文本内容进行本地检索。'
-                    : '导入 Markdown、文本、PDF 或 Word 后，它们会在后续研究和写作中成为可引用的个人资料。'
-                }
-              />
-            ) : (
-              <ViewContainer mode="list">
-                {items.map(({ document, excerpt, locator, hit }) => (
-                  <KnowledgeDocumentCard
-                    key={`${document.id}-${locator ?? 'document'}`}
-                    document={document}
-                    {...(excerpt ? { excerpt } : {})}
-                    {...(locator ? { locator } : {})}
-                    {...(hit
-                      ? {
-                          select: {
-                            checked: isSelected(hit),
-                            onToggle: (checked: boolean) => toggleSelect(hit, checked),
-                            label: `选择「${document.title}」用于研究`,
-                          },
-                        }
-                      : {})}
-                    busy={importing}
-                    onOpen={() =>
+          {detailDocument && (
+            <ScrollRegion ariaLabel="资料详情" className="knowledge-list-scroll">
+              <section className="knowledge-detail">
+                <header className="knowledge-detail-header">
+                  <button type="button" onClick={closeDocument}>
+                    返回列表
+                  </button>
+                  <div>
+                    <strong>{detailDocument.title}</strong>
+                    <small>{sourceStateLine(detailDocument, detailRevision)}</small>
+                  </div>
+                </header>
+                <div className="knowledge-detail-actions">
+                  <button
+                    type="button"
+                    onClick={() =>
                       reportAction(
-                        onOpenSource(document.sourcePath).then(() =>
+                        onOpenSource(detailDocument.sourcePath).then(() =>
                           setToast({
                             tone: 'success',
-                            message: `已打开「${document.title}」的原始资料。`,
+                            message: `已打开「${detailDocument.title}」的原始资料。`,
                           }),
                         ),
                         (error) =>
                           setToast({ tone: 'error', message: error || '无法打开原始资料。' }),
                       )
                     }
-                    onRefresh={() =>
+                  >
+                    打开本机原件
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => trackAction(checkDocumentSource(detailDocument.id), '检查来源')}
+                  >
+                    检查来源
+                  </button>
+                  <button
+                    type="button"
+                    disabled={importing}
+                    onClick={() =>
                       reportAction(
-                        onRefresh(document).then(() =>
+                        onRefresh(detailDocument).then(() =>
                           setToast({
                             tone: 'success',
-                            message: `已刷新「${document.title}」的本地索引。`,
+                            message: `已刷新「${detailDocument.title}」的本地索引。`,
                           }),
                         ),
                         (error) =>
-                          setToast({
-                            tone: 'error',
-                            message: error || '刷新索引失败，请重试。',
-                          }),
+                          setToast({ tone: 'error', message: error || '刷新索引失败，请重试。' }),
                       )
                     }
-                    onRemove={() => setRemovalTarget(document)}
-                  />
-                ))}
-              </ViewContainer>
-            )}
-          </ScrollRegion>
+                  >
+                    刷新内容
+                  </button>
+                  <button
+                    type="button"
+                    className="knowledge-admin-danger"
+                    onClick={() => setRemovalTarget(detailDocument)}
+                  >
+                    移出资料库
+                  </button>
+                </div>
+                <p className="knowledge-detail-hint">
+                  预览读取的是已保存文本：不产生任务访问记录，也不调用模型；原件变化不会自动刷新索引。
+                </p>
+                {detailError && <p className="inline-message">{detailError}</p>}
+                <section className="knowledge-detail-revisions" aria-label="保存版本列表">
+                  <strong>保存版本</strong>
+                  {detailRevisions.length === 0 && !detailLoading && <small>暂无历史版本。</small>}
+                  {detailRevisions.map((revision) => (
+                    <div className="knowledge-revision-row" key={revision.id}>
+                      <button
+                        type="button"
+                        disabled={revision.id === detailRevisionId}
+                        onClick={() =>
+                          trackAction(selectDetailRevision(revision.id), '切换保存版本')
+                        }
+                      >
+                        第 {revision.revision} 版
+                      </button>
+                      <small>
+                        {`哈希 ${revision.contentHash.slice(0, 8)} · ${formatTime(revision.createdAt)}${
+                          revision.warnings.length > 0
+                            ? ` · 提取警告 ${revision.warnings.join('、')}`
+                            : ''
+                        }`}
+                      </small>
+                    </div>
+                  ))}
+                </section>
+                <section className="knowledge-detail-text" aria-label="保存文本预览">
+                  {detailLoading && <small>正在读取保存文本…</small>}
+                  {detailPage?.parts.map((part) => (
+                    <article key={`${part.locator}-${part.span.start}`}>
+                      <small>{part.locator}</small>
+                      <p>{part.text}</p>
+                    </article>
+                  ))}
+                  {detailPage && (
+                    <footer className="knowledge-detail-pager">
+                      <button
+                        type="button"
+                        disabled={!detailCanGoBack || detailLoading}
+                        onClick={() => trackAction(loadPreviousDetailPage(), '上一页')}
+                      >
+                        上一页
+                      </button>
+                      <small>
+                        {detailPage.complete
+                          ? `已读到结尾（本页 ${detailPage.returnedCodePoints} 字）`
+                          : `本页 ${detailPage.returnedCodePoints} 字，仍有后续内容`}
+                      </small>
+                      <button
+                        type="button"
+                        disabled={!detailPage.nextCursor || detailLoading}
+                        onClick={() => trackAction(loadNextDetailPage(), '下一页')}
+                      >
+                        下一页
+                      </button>
+                    </footer>
+                  )}
+                </section>
+              </section>
+            </ScrollRegion>
+          )}
+          {!detailDocument && (
+            <ScrollRegion
+              ariaLabel="知识资料列表"
+              busy={importing}
+              className="knowledge-list-scroll"
+            >
+              {loading ? (
+                <LoadingPage />
+              ) : loadError ? (
+                <ErrorPage detail={loadError} onRetry={refresh} />
+              ) : items.length === 0 ? (
+                <EmptyPage
+                  eyebrow={showingResults ? '没有匹配结果' : '从一份资料开始'}
+                  title={showingResults ? '换个关键词试试' : '把常用资料放进你的资料库'}
+                  detail={
+                    showingResults
+                      ? '当前先按文本内容进行本地检索。'
+                      : '导入 Markdown、文本、PDF 或 Word 后，它们会在后续研究和写作中成为可引用的个人资料。'
+                  }
+                />
+              ) : (
+                <ViewContainer mode="list">
+                  {items.map(({ document, excerpt, locator, hit }) => (
+                    <KnowledgeDocumentCard
+                      key={`${document.id}-${locator ?? 'document'}`}
+                      document={document}
+                      {...(excerpt ? { excerpt } : {})}
+                      {...(locator ? { locator } : {})}
+                      {...(hit
+                        ? {
+                            select: {
+                              checked: isSelected(hit),
+                              onToggle: (checked: boolean) => toggleSelect(hit, checked),
+                              label: `选择「${document.title}」用于研究`,
+                            },
+                          }
+                        : {})}
+                      busy={importing}
+                      onOpen={() =>
+                        reportAction(
+                          onOpenSource(document.sourcePath).then(() =>
+                            setToast({
+                              tone: 'success',
+                              message: `已打开「${document.title}」的原始资料。`,
+                            }),
+                          ),
+                          (error) =>
+                            setToast({ tone: 'error', message: error || '无法打开原始资料。' }),
+                        )
+                      }
+                      onRefresh={() =>
+                        reportAction(
+                          onRefresh(document).then(() =>
+                            setToast({
+                              tone: 'success',
+                              message: `已刷新「${document.title}」的本地索引。`,
+                            }),
+                          ),
+                          (error) =>
+                            setToast({
+                              tone: 'error',
+                              message: error || '刷新索引失败，请重试。',
+                            }),
+                        )
+                      }
+                      onRemove={() => setRemovalTarget(document)}
+                      onOpenDetail={() => trackAction(openDocument(document), '打开资料详情')}
+                    />
+                  ))}
+                </ViewContainer>
+              )}
+            </ScrollRegion>
+          )}
         </section>
       </div>
       {toast && <TransientToast {...toast} onDismiss={dismissToast} />}

@@ -526,10 +526,12 @@ export class KnowledgeIndexService {
           throw jobError('INDEX_CONFIGURATION_CHANGED', '来源检查条目类型不符。');
         }
         this.jobs.updateItem(item.id, { phase: 'check' });
-        const result = await this.vault.sourceMatchesRegistration(target.documentId);
-        if (!result.ok) {
-          throw jobError('KNOWLEDGE_DOCUMENT_REMOVED', result.reason);
+        if (!this.vault.documentExists(target.documentId)) {
+          throw jobError('KNOWLEDGE_DOCUMENT_REMOVED', '资料已不在当前资料库中。');
         }
+        // changed/missing/unreadable 都是确定结论，持久到文档摘要后条目按完成收口；
+        // 检查作业失败只保留给真正的执行异常（契约 §10.2）。
+        await this.vault.checkSource(target.documentId);
       }
     }
   }

@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 
-import type { KnowledgeJobSummary } from '@betterwork/agent-protocol';
+import type {
+  KnowledgeJobSummary,
+  KnowledgeRevisionSummary,
+  KnowledgeTextPage,
+} from '@betterwork/agent-protocol';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,6 +30,49 @@ const job = (overrides: Partial<KnowledgeJobSummary> = {}): KnowledgeJobSummary 
   updatedAt: 2,
   ...overrides,
 });
+
+const revision: KnowledgeRevisionSummary = {
+  id: 'rev-2',
+  documentId: 'doc-1',
+  revision: 2,
+  title: '合同条款',
+  sourcePath: '/tmp/合同条款.md',
+  format: 'markdown',
+  byteSize: 24,
+  contentHash: 'b'.repeat(64),
+  parserVersion: 'text-extract-v1',
+  chunkingVersion: 'format-locator-v1',
+  textHash: 'c'.repeat(64),
+  sectionCount: 1,
+  warnings: [],
+  importedAt: 1,
+  createdAt: 2,
+};
+
+const page: KnowledgeTextPage = {
+  reference: {
+    kind: 'knowledge-revision',
+    knowledgeDocumentId: 'doc-1',
+    knowledgeRevisionId: 'rev-2',
+    contentHash: 'b'.repeat(64),
+    sourcePath: '/tmp/合同条款.md',
+  },
+  textHash: 'c'.repeat(64),
+  title: '合同条款',
+  parserVersion: 'text-extract-v1',
+  chunkingVersion: 'format-locator-v1',
+  warnings: [],
+  parts: [
+    {
+      span: { sectionOrdinal: 0, start: 0, end: 7 },
+      locator: '全文',
+      text: '第二段保存文本',
+      excerptHash: 'd'.repeat(64),
+    },
+  ],
+  returnedCodePoints: 7,
+  complete: true,
+};
 
 const library = (overrides: Partial<KnowledgeLibrary> = {}): KnowledgeLibrary => ({
   documents: [],
@@ -60,6 +107,19 @@ const library = (overrides: Partial<KnowledgeLibrary> = {}): KnowledgeLibrary =>
   rebuildSemantic: async () => undefined,
   cancelJob: async () => undefined,
   retryFailedItems: async () => undefined,
+  detailDocument: undefined,
+  detailRevisions: [],
+  detailRevisionId: undefined,
+  detailPage: undefined,
+  detailLoading: false,
+  detailError: '',
+  detailCanGoBack: false,
+  openDocument: async () => undefined,
+  closeDocument: () => undefined,
+  selectDetailRevision: async () => undefined,
+  loadNextDetailPage: async () => undefined,
+  loadPreviousDetailPage: async () => undefined,
+  checkDocumentSource: async () => undefined,
   ...overrides,
 });
 
@@ -134,5 +194,56 @@ describe('KnowledgePage 索引管理护栏（KM09）', () => {
     expect(saveSettings).not.toHaveBeenCalled();
     expect(screen.getByText('启用语义检索？')).toBeTruthy();
     expect(screen.getByText(/可能产生调用费用/)).toBeTruthy();
+  });
+
+  it('详情子视图分开保存文本与原件状态，返回入口常驻', () => {
+    const closeDocument = vi.fn();
+    render(
+      <KnowledgePage
+        library={library({
+          documents: [
+            {
+              id: 'doc-1',
+              title: '合同条款',
+              sourcePath: '/tmp/合同条款.md',
+              format: 'markdown',
+              byteSize: 24,
+              contentHash: 'a'.repeat(64),
+              sourceStatus: 'changed',
+              sourceCheckedAt: 1_700_000_000_000,
+              lexicalState: 'ready',
+              semanticState: 'stale',
+              importedAt: 1,
+              updatedAt: 2,
+            },
+          ],
+          detailDocument: {
+            id: 'doc-1',
+            title: '合同条款',
+            sourcePath: '/tmp/合同条款.md',
+            format: 'markdown',
+            byteSize: 24,
+            contentHash: 'a'.repeat(64),
+            sourceStatus: 'changed',
+            sourceCheckedAt: 1_700_000_000_000,
+            lexicalState: 'ready',
+            semanticState: 'stale',
+            importedAt: 1,
+            updatedAt: 2,
+          },
+          detailRevisions: [revision],
+          detailRevisionId: revision.id,
+          detailPage: page,
+          closeDocument,
+        })}
+        onResearch={() => undefined}
+      />,
+    );
+    expect(screen.getByText(/原件已变化/)).toBeTruthy();
+    expect(screen.getByText(/向量索引需重建/)).toBeTruthy();
+    expect(screen.getByText('第二段保存文本')).toBeTruthy();
+    expect(screen.getByText(/已读到结尾/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '返回列表' }));
+    expect(closeDocument).toHaveBeenCalled();
   });
 });

@@ -2874,6 +2874,11 @@ export interface KnowledgeDocumentSummary {
   contentHash: string;
   /** 选材入口的修订身份（KM01 §2.4）：当前登记文档的最新修订 ID。 */
   currentRevisionId?: string;
+  /** 来源检查结论（KM10，契约 §10.2）：截至某时点，不是实时保证。 */
+  sourceStatus: 'unchecked' | 'unchanged' | 'changed' | 'missing' | 'unreadable';
+  sourceCheckedAt?: number;
+  lexicalState: 'ready' | 'failed';
+  semanticState: 'disabled' | 'pending' | 'ready' | 'partial' | 'stale' | 'failed';
   pageCount?: number;
   importedAt: number;
   updatedAt: number;
@@ -3499,6 +3504,31 @@ export const modelProfileSummarySchema = z.object({
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
 });
+/** 来源检查结论（知识契约 §10.2）：截至某时点，不是实时保证。 */
+export const knowledgeSourceStatusSchema = z.enum([
+  'unchecked',
+  'unchanged',
+  'changed',
+  'missing',
+  'unreadable',
+]);
+export type KnowledgeSourceStatus = z.infer<typeof knowledgeSourceStatusSchema>;
+
+/** 关键词索引状态；未成功导入的文件不会建立伪 ready 文档（契约 §10.1）。 */
+export const knowledgeLexicalStateSchema = z.enum(['ready', 'failed']);
+export type KnowledgeLexicalState = z.infer<typeof knowledgeLexicalStateSchema>;
+
+/** 语义索引状态由设置与代次派生，不复制作业状态为第二套可写事实。 */
+export const knowledgeSemanticStateSchema = z.enum([
+  'disabled',
+  'pending',
+  'ready',
+  'partial',
+  'stale',
+  'failed',
+]);
+export type KnowledgeSemanticState = z.infer<typeof knowledgeSemanticStateSchema>;
+
 export const knowledgeDocumentSummarySchema = z.object({
   id: z.string().min(1),
   title: z.string(),
@@ -3507,6 +3537,10 @@ export const knowledgeDocumentSummarySchema = z.object({
   byteSize: z.number().int().nonnegative(),
   contentHash: z.string().min(1),
   currentRevisionId: z.string().min(1).optional(),
+  sourceStatus: knowledgeSourceStatusSchema,
+  sourceCheckedAt: z.number().int().nonnegative().optional(),
+  lexicalState: knowledgeLexicalStateSchema,
+  semanticState: knowledgeSemanticStateSchema,
   pageCount: z.number().int().positive().optional(),
   importedAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),

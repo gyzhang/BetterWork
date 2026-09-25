@@ -806,6 +806,29 @@ describe('knowledge database migrations', () => {
     again.close();
   });
 
+  it('KM10 v6 升级给文档补来源检查结论列：历史行未检查且枚举受约束', () => {
+    const file = path.join(temporaryDirectory(), 'vault-v5-source.sqlite');
+    const before = new Database(file);
+    migrate(before, { migrations: knowledgeMigrations.slice(0, 5) });
+    before.exec(
+      `INSERT INTO knowledge_documents
+        (id, title, source_path, format, byte_size, content_hash, content, imported_at, updated_at)
+        VALUES ('doc-1', '旧资料', '/tmp/旧资料.md', 'markdown', 1, 'hash', '文本', 1, 1)`,
+    );
+    before.close();
+
+    const db = openKnowledgeDatabase(file);
+    expect(
+      db
+        .prepare('SELECT source_status, source_checked_at FROM knowledge_documents WHERE id = ?')
+        .get('doc-1') as { source_status: string; source_checked_at: number | null },
+    ).toEqual({ source_status: 'unchecked', source_checked_at: null });
+    expect(() =>
+      db.prepare(`UPDATE knowledge_documents SET source_status = '猜测' WHERE id = 'doc-1'`).run(),
+    ).toThrow(/CHECK/);
+    db.close();
+  });
+
   it('KM07a v5 升级作业/空间/代次/向量/派生块与设置单例并保住唯一约束', () => {
     const file = path.join(temporaryDirectory(), 'vault-v4.sqlite');
     const before = new Database(file);

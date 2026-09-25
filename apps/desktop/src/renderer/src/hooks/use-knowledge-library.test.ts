@@ -1,12 +1,16 @@
 // @vitest-environment jsdom
 
 import type {
+  KnowledgeCursor,
+  KnowledgeDocumentSummary,
   KnowledgeJobDetail,
   KnowledgeJobPage,
   KnowledgeJobSummary,
+  KnowledgeRevisionSummary,
   KnowledgeSearchHit,
   KnowledgeSearchResponse,
   KnowledgeSearchSettings,
+  KnowledgeTextPage,
   ModelProfileSummary,
 } from '@betterwork/agent-protocol';
 import { act, renderHook } from '@testing-library/react';
@@ -113,6 +117,78 @@ const searchResponse = (
   ...overrides,
 });
 
+const documentOf = (
+  overrides: Partial<KnowledgeDocumentSummary> = {},
+): KnowledgeDocumentSummary => ({
+  id: 'doc-1',
+  title: '合同条款',
+  sourcePath: '/tmp/合同条款.md',
+  format: 'markdown',
+  byteSize: 24,
+  contentHash: 'a'.repeat(64),
+  sourceStatus: 'unchanged',
+  sourceCheckedAt: 5,
+  lexicalState: 'ready',
+  semanticState: 'disabled',
+  importedAt: 1,
+  updatedAt: 2,
+  ...overrides,
+});
+
+const revisionOf = (
+  overrides: Partial<KnowledgeRevisionSummary> = {},
+): KnowledgeRevisionSummary => ({
+  id: 'rev-2',
+  documentId: 'doc-1',
+  revision: 2,
+  title: '合同条款',
+  sourcePath: '/tmp/合同条款.md',
+  format: 'markdown',
+  byteSize: 24,
+  contentHash: 'b'.repeat(64),
+  parserVersion: 'text-extract-v1',
+  chunkingVersion: 'format-locator-v1',
+  textHash: 'c'.repeat(64),
+  sectionCount: 1,
+  warnings: [],
+  importedAt: 1,
+  createdAt: 2,
+  ...overrides,
+});
+
+const nextPageCursor: KnowledgeCursor = {
+  revisionId: 'rev-2',
+  textHash: 'c'.repeat(64),
+  sectionOrdinal: 0,
+  offset: 5,
+};
+
+const textPage = (overrides: Partial<KnowledgeTextPage> = {}): KnowledgeTextPage => ({
+  reference: {
+    kind: 'knowledge-revision',
+    knowledgeDocumentId: 'doc-1',
+    knowledgeRevisionId: 'rev-2',
+    contentHash: 'b'.repeat(64),
+    sourcePath: '/tmp/合同条款.md',
+  },
+  textHash: 'c'.repeat(64),
+  title: '合同条款',
+  parserVersion: 'text-extract-v1',
+  chunkingVersion: 'format-locator-v1',
+  warnings: [],
+  parts: [
+    {
+      span: { sectionOrdinal: 0, start: 0, end: 5 },
+      locator: '全文',
+      text: '第一段保存文本',
+      excerptHash: 'd'.repeat(64),
+    },
+  ],
+  returnedCodePoints: 7,
+  complete: true,
+  ...overrides,
+});
+
 interface Harness {
   events: ((job: KnowledgeJobSummary) => void)[];
   unsubscribe: ReturnType<typeof vi.fn>;
@@ -130,6 +206,8 @@ interface Harness {
     retryJob: ReturnType<typeof vi.fn>;
     cancelJob: ReturnType<typeof vi.fn>;
     search: ReturnType<typeof vi.fn>;
+    listRevisions: ReturnType<typeof vi.fn>;
+    preview: ReturnType<typeof vi.fn>;
   };
   models: { list: ReturnType<typeof vi.fn> };
 }
@@ -164,6 +242,8 @@ const install = (): Harness => {
     retryJob: vi.fn(async () => ({ jobId: 'job-4' })),
     cancelJob: vi.fn(async () => ({ cancelled: true })),
     search: vi.fn(async () => searchResponse()),
+    listRevisions: vi.fn(async () => [revisionOf()]),
+    preview: vi.fn(async () => textPage()),
   };
   const models = { list: vi.fn(async () => []) };
   Object.defineProperty(window, 'betterwork', {
@@ -238,6 +318,9 @@ describe('useKnowledgeLibrary 作业接线', () => {
         format: 'markdown',
         byteSize: 10,
         contentHash: 'a'.repeat(64),
+        sourceStatus: 'unchanged',
+        lexicalState: 'ready',
+        semanticState: 'disabled',
         sourcePath: '/tmp/合同条款.md',
         importedAt: 1,
         updatedAt: 2,
@@ -554,5 +637,137 @@ describe('useKnowledgeLibrary 索引管理界面接线（KM09）', () => {
     });
     expect(harness.knowledge.cancelJob).toHaveBeenCalledWith({ jobId: 'job-done' });
     expect(result.current.message).toBe('该作业已结束，无法取消。');
+  });
+});
+
+describe('useKnowledgeLibrary 资料详情接线（KM10）', () => {
+  const submit = {
+    preventDefault: (): void => undefined,
+  } as unknown as FormEvent<HTMLFormElement>;
+
+  it('详情加载版本列表与保存文本；返回列表保留搜索条件', async () => {
+    const harness = install();
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    await act(async () => {
+      result.current.setQuery('续约');
+    });
+    await act(async () => {
+      await result.current.onSearch(submit);
+    });
+    await act(async () => {
+      await result.current.openDocument(documentOf());
+    });
+    expect(harness.knowledge.listRevisions).toHaveBeenCalledWith({ documentId: 'doc-1' });
+    expect(harness.knowledge.preview).toHaveBeenCalledWith({
+      documentId: 'doc-1',
+      revisionId: 'rev-2',
+    });
+    expect(result.current.detailPage?.parts[0]?.text).toBe('第一段保存文本');
+    await act(async () => {
+      result.current.closeDocument();
+    });
+    expect(result.current.detailDocument).toBeUndefined();
+    expect(result.current.query).toBe('续约');
+    // 详情预览是纯读取通道：不回读作业，也不触发任何模型调用。
+    expect(harness.knowledge.job).not.toHaveBeenCalled();
+  });
+
+  it('版本切换后旧页响应迟到不污染选中版本', async () => {
+    const harness = install();
+    harness.knowledge.listRevisions.mockResolvedValueOnce([
+      revisionOf(),
+      revisionOf({ id: 'rev-1', revision: 1 }),
+    ]);
+    let resolveStale: ((value: KnowledgeTextPage) => void) | undefined;
+    const staleGate = new Promise<KnowledgeTextPage>((resolve) => {
+      resolveStale = resolve;
+    });
+    harness.knowledge.preview.mockReturnValueOnce(staleGate).mockResolvedValueOnce(
+      textPage({
+        parts: [
+          {
+            span: { sectionOrdinal: 0, start: 0, end: 3 },
+            locator: '全文',
+            text: '旧版文本',
+            excerptHash: 'e'.repeat(64),
+          },
+        ],
+      }),
+    );
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    let opening: Promise<void> | undefined;
+    await act(async () => {
+      opening = result.current.openDocument(documentOf());
+    });
+    await act(async () => {
+      await result.current.selectDetailRevision('rev-1');
+    });
+    expect(result.current.detailRevisionId).toBe('rev-1');
+    await act(async () => {
+      resolveStale?.(textPage());
+      await opening;
+    });
+    expect(result.current.detailRevisionId).toBe('rev-1');
+    expect(result.current.detailPage?.parts[0]?.text).toBe('旧版文本');
+  });
+
+  it('下一页积累返回栈，上一页恢复游标', async () => {
+    const harness = install();
+    harness.knowledge.preview
+      .mockResolvedValueOnce(textPage({ complete: false, nextCursor: nextPageCursor }))
+      .mockResolvedValueOnce(
+        textPage({
+          parts: [
+            {
+              span: { sectionOrdinal: 0, start: 5, end: 8 },
+              locator: '全文',
+              text: '第二段保存文本',
+              excerptHash: 'f'.repeat(64),
+            },
+          ],
+        }),
+      );
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    await act(async () => {
+      await result.current.openDocument(documentOf());
+    });
+    expect(result.current.detailCanGoBack).toBe(false);
+    await act(async () => {
+      await result.current.loadNextDetailPage();
+    });
+    expect(result.current.detailPage?.parts[0]?.text).toBe('第二段保存文本');
+    expect(result.current.detailCanGoBack).toBe(true);
+    await act(async () => {
+      await result.current.loadPreviousDetailPage();
+    });
+    expect(harness.knowledge.preview).toHaveBeenLastCalledWith({
+      documentId: 'doc-1',
+      revisionId: 'rev-2',
+    });
+  });
+
+  it('来源检查提交为作业并跟踪，终态后列表与详情摘要拉回新状态', async () => {
+    const harness = install();
+    harness.knowledge.checkSources.mockResolvedValueOnce({ jobId: 'job-check-1' });
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    await act(async () => {
+      await result.current.checkDocumentSource('doc-1');
+    });
+    expect(harness.knowledge.checkSources).toHaveBeenCalledWith({ documentIds: ['doc-1'] });
+    expect(result.current.message).toContain('已提交来源检查');
+    const listCallsBefore = harness.knowledge.list.mock.calls.length;
+    await act(async () => {
+      harness.events[0]?.(
+        jobOf({ id: 'job-check-1', kind: 'check-source', status: 'succeeded', completedCount: 1 }),
+      );
+      await Promise.resolve();
+    });
+    expect(harness.knowledge.job).toHaveBeenCalledWith({ jobId: 'job-check-1' });
+    await flush();
+    expect(harness.knowledge.list.mock.calls.length).toBeGreaterThan(listCallsBefore);
   });
 });

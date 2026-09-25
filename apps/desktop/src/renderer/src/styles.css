@@ -4492,6 +4492,83 @@ p {
   border-radius: 6px;
   font-size: 12px;
 }
+/* KM10：资料详情子视图 */
+.knowledge-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 2px 28px;
+}
+.knowledge-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.knowledge-detail-header strong {
+  display: block;
+  font-size: 15px;
+}
+.knowledge-detail-header small,
+.knowledge-detail-hint,
+.knowledge-revision-row small,
+.knowledge-detail-text small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.knowledge-detail-header button,
+.knowledge-detail-actions button,
+.knowledge-revision-row button,
+.knowledge-detail-pager button {
+  min-height: 28px;
+  padding: 5px 10px;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.knowledge-detail-header button:hover:not(:disabled),
+.knowledge-detail-actions button:hover:not(:disabled),
+.knowledge-revision-row button:hover:not(:disabled),
+.knowledge-detail-pager button:hover:not(:disabled) {
+  border-color: var(--brand);
+}
+.knowledge-detail-header button:disabled,
+.knowledge-detail-actions button:disabled,
+.knowledge-revision-row button:disabled,
+.knowledge-detail-pager button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.knowledge-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.knowledge-revision-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+.knowledge-detail-text article {
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.knowledge-detail-text article p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+.knowledge-detail-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 10px;
+}
 .page-toast-host {
   position: fixed;
   right: 20px;

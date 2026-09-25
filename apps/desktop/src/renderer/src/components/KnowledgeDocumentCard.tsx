@@ -13,7 +13,17 @@ export interface KnowledgeDocumentCardProps {
   onOpen: () => void;
   onRefresh: () => void;
   onRemove: () => void;
+  /** KM10：打开主区详情（保存文本、版本列表与来源状态）。 */
+  onOpenDetail: () => void;
 }
+
+const SOURCE_STATE_LABELS: Record<KnowledgeDocumentSummary['sourceStatus'], string> = {
+  unchecked: '来源未检查',
+  unchanged: '来源一致',
+  changed: '原件已变化',
+  missing: '原件缺失',
+  unreadable: '原件不可读',
+};
 
 const formatLabel = (format: KnowledgeDocumentSummary['format']): string => {
   if (format === 'markdown') return 'MD';
@@ -32,6 +42,7 @@ export function KnowledgeDocumentCard({
   onOpen,
   onRefresh,
   onRemove,
+  onOpenDetail,
 }: KnowledgeDocumentCardProps): React.JSX.Element {
   return (
     <article className="knowledge-card">
@@ -51,7 +62,8 @@ export function KnowledgeDocumentCard({
         {excerpt && <p>{excerpt}</p>}
         <small>
           {document.sourcePath}
-          {locator ? ` · ${locator}` : ''} · 更新于 {formatTime(document.updatedAt)}
+          {locator ? ` · ${locator}` : ''} · 更新于 {formatTime(document.updatedAt)} ·{' '}
+          {SOURCE_STATE_LABELS[document.sourceStatus]}
         </small>
       </div>
       <div className="knowledge-card-actions">
@@ -64,6 +76,9 @@ export function KnowledgeDocumentCard({
             <span>更多</span>
           </summary>
           <div className="knowledge-actions-menu-panel">
+            <button type="button" onClick={onOpenDetail}>
+              查看详情
+            </button>
             <button type="button" disabled={busy} onClick={onRefresh}>
               刷新索引
             </button>

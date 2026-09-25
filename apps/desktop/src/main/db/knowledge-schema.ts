@@ -405,6 +405,20 @@ export const knowledgeMigrations: readonly Migration[] = [
       ).run(Date.now());
     },
   },
+  {
+    version: 6,
+    name: 'persist per-document source check conclusions',
+    up(db: Database.Database): void {
+      // 来源状态是检查得到的持久结论（契约 §10.2）；历史行未检查过，一律 unchecked，
+      // 不伪造「一致」。source_checked_at 只在得到确定结论时记录。
+      db.exec(`
+        ALTER TABLE knowledge_documents
+          ADD COLUMN source_status TEXT NOT NULL DEFAULT 'unchecked'
+            CHECK (source_status IN ('unchecked', 'unchanged', 'changed', 'missing', 'unreadable'));
+        ALTER TABLE knowledge_documents ADD COLUMN source_checked_at INTEGER;
+      `);
+    },
+  },
 ];
 
 /**
