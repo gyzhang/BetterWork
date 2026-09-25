@@ -1271,6 +1271,38 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
     }
   });
 
+  /**
+   * MI05 AC6（生产链路）：审计写入失败时一个 Provider 请求都不许发出。
+   * 此前这条只在 gate 的单元层用假 sink 证过，没有走真实 RunService＋真实仓储。
+   */
+  it('审计写入失败时真实运行不发包，审计停在待准备阶段并留下失败终态', async () => {
+    const world = await createWorld();
+    await pinRule(world);
+    const sink = world.services.store.runMemoryContexts;
+    const original = sink.markRequestPrepared.bind(sink);
+    sink.markRequestPrepared = (): never => {
+      throw new Error('注入：审计写入失败。');
+    };
+
+    const task = world.services.store.tasks.create(
+      world.layout.workspaceA,
+      '审计失败',
+      '请汇总近期业务表现',
+    );
+    const taskRef = { taskId: task.task.id, sessionId: task.sessionId };
+    const context = saveContext(world, taskRef, { materials: [], excludedMemoryIds: [] });
+    try {
+      const runId = startRun(world, taskRef, '请汇总近期业务表现', context);
+      await waitForCompletion(world, runId);
+
+      expect(world.requests.filter((request) => !request.extraction)).toHaveLength(0);
+      expect(world.services.store.runMemoryContexts.get(runId)?.phase).toBe('selected');
+      expect(statusOf(world, runId)).toBe('failed');
+    } finally {
+      sink.markRequestPrepared = original;
+    }
+  });
+
   it('N1 排除优先父规则后，派生记忆与继承历史都不回流', async () => {
     const world = await createWorld();
     const rule = await pinRule(world);
