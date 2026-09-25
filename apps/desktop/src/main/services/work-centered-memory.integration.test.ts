@@ -1796,6 +1796,99 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
     expect(onDisk).toBe('收入按签约金额统计。');
   });
 
+  it('R8 换期：新材料＋精确成果结构参考＋自主方法同时成立，旧期数字不当默认事实', async () => {
+    const world = await createWorld();
+    const scope: MemoryScope = { kind: 'workspace', workspaceId: world.layout.workspaceA };
+    // 上一期的成果版本：只固定它自己的精确引用与哈希，不跟随后续版本。
+    const previousRun = randomUUID();
+    world.services.store.runs.create({
+      id: previousRun,
+      taskId: world.layout.a1.taskId,
+      sessionId: world.layout.a1.sessionId,
+      prompt: '上期经营复盘',
+      status: 'completed',
+      createdAt: 1,
+      completedAt: 2,
+    });
+    const legacy = world.services.store.artifacts.saveMarkdown(
+      {
+        taskId: world.layout.a1.taskId,
+        title: '上期经营复盘',
+        content: '# 上期结论\n\n上期收入 1.23 亿元。',
+        origin: 'assistant-run',
+        runId: previousRun,
+      },
+      'model',
+    );
+    const legacyDetail = world.services.store.artifacts.getDetail(legacy.id);
+    if (!legacyDetail) throw new Error('上期成果未落库。');
+    const legacyVersionId = legacyDetail.currentVersionId;
+    const legacyVersion = world.services.store.artifacts.getVersionDetail(legacyVersionId);
+    if (!legacyVersion || legacyVersion.type !== 'markdown') {
+      throw new Error('上期成果版本不可精确读取。');
+    }
+    const legacyHash = legacyVersion.contentHash;
+
+    const method = await pinInScope(world, scope, '分析先给一句结论，再列证据与建议。', 'method');
+    const currentMaterial = await addMaterial(
+      world,
+      '本期数据.md',
+      '本期收入 1.42 亿元，回款口径。',
+    );
+    const taskRef = world.layout.a2;
+    const context = world.services.store.taskContexts.save(taskRef.taskId, {
+      executor: {
+        kind: 'expert',
+        expertId: world.layout.expertId,
+        expertRevisionId: world.layout.expertRevisionId,
+      },
+      skillBindings: [],
+      materials: [
+        currentMaterial,
+        {
+          reference: {
+            kind: 'artifact-version',
+            artifactId: legacy.id,
+            artifactVersionId: legacyVersionId,
+            contentHash: legacyHash,
+            originWorkspaceId: world.layout.workspaceA,
+          },
+          purpose: 'structure-reference',
+          addedFrom: 'expert-reference',
+        },
+      ],
+      excludedMemoryIds: [],
+    });
+    const runId = startRun(world, taskRef, '请沿用上期结构输出本期经营复盘要点', {
+      id: context.id,
+      revision: context.revision,
+    });
+    await waitForCompletion(world, runId);
+
+    // 自主方法经优先池带入；旧期数字不作为事实注入记忆块。
+    const selected = world.services.store.runMemoryContexts.get(runId)?.selectedItems ?? [];
+    expect(selected.map((item) => item.memoryId)).toContain(method.id);
+    const memoryBlock = (lastRunRequest(world)?.messages ?? [])
+      .map((message) => message.content)
+      .find((content) => content.includes('长期记忆'));
+    expect(memoryBlock ?? '').toContain('分析先给一句结论，再列证据与建议。');
+    expect(memoryBlock ?? '').not.toContain('1.23 亿元');
+
+    // 精确引用合法性：运行快照钉住的是那一版成果，不是 latest。
+    const snapshot = world.services.store.runContextSnapshots.get(runId);
+    const pinned = snapshot?.materials.find(
+      (material) => material.reference.kind === 'artifact-version',
+    );
+    if (!pinned || pinned.reference.kind !== 'artifact-version') {
+      throw new Error('本期任务没有钉住参考成果版本。');
+    }
+    expect(pinned.reference.artifactVersionId).toBe(legacyVersionId);
+    expect(pinned.reference.contentHash).toBe(legacyHash);
+    // 参考不等于已读取：本次没有真实读取该成果，因此不产生它的证据。
+    const reads = world.services.store.materialReads.listByRun(runId);
+    expect(reads.some((read) => read.material.kind === 'artifact-version')).toBe(false);
+  });
+
   it('没有来源 Run 的讨论反馈用当前 TaskContext 钉住的模型，不暗换应用级默认', async () => {
     const world = await createWorld();
     const store = world.services.store;
