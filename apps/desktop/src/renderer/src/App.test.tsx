@@ -210,6 +210,12 @@ function installApi(options?: {
     knowledge: {
       list: vi.fn(async () => []),
       job: vi.fn(async () => null),
+      jobs: vi.fn(async () => ({ jobs: [] })),
+      settings: vi.fn(async () => ({
+        semanticEnabled: false,
+        revision: 1,
+        embeddingAvailable: false,
+      })),
       onJobEvent: vi.fn(() => () => undefined),
     },
     artifacts: {

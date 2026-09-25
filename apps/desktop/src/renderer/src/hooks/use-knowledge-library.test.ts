@@ -7,6 +7,7 @@ import type {
   KnowledgeSearchHit,
   KnowledgeSearchResponse,
   KnowledgeSearchSettings,
+  ModelProfileSummary,
 } from '@betterwork/agent-protocol';
 import { act, renderHook } from '@testing-library/react';
 import type { FormEvent } from 'react';
@@ -130,6 +131,7 @@ interface Harness {
     cancelJob: ReturnType<typeof vi.fn>;
     search: ReturnType<typeof vi.fn>;
   };
+  models: { list: ReturnType<typeof vi.fn> };
 }
 
 const install = (): Harness => {
@@ -163,11 +165,12 @@ const install = (): Harness => {
     cancelJob: vi.fn(async () => ({ cancelled: true })),
     search: vi.fn(async () => searchResponse()),
   };
+  const models = { list: vi.fn(async () => []) };
   Object.defineProperty(window, 'betterwork', {
     configurable: true,
-    value: { knowledge },
+    value: { knowledge, models },
   });
-  return { events, unsubscribe, knowledge };
+  return { events, unsubscribe, knowledge, models };
 };
 
 afterEach(() => {
@@ -307,7 +310,7 @@ describe('useKnowledgeLibrary 统一检索（KM08）', () => {
     await act(async () => {
       await result.current.onSearch(submit);
     });
-    expect(result.current.message).toContain('语义检索已降级（index-partial）');
+    expect(result.current.message).toContain('本次检索以关键词为主（index-partial）');
     expect(result.current.results).toHaveLength(1);
   });
 
@@ -323,5 +326,233 @@ describe('useKnowledgeLibrary 统一检索（KM08）', () => {
       await result.current.onSearch(submit);
     });
     expect(result.current.message).toBe('检索服务暂不可用。');
+  });
+});
+
+const embeddingModel = (): ModelProfileSummary => ({
+  id: 'm-embed',
+  name: '向量服务',
+  provider: 'openai-compatible',
+  baseUrl: 'https://embed.test/v1',
+  model: 'embed-v1',
+  role: 'embedding',
+  apiKeyConfigured: true,
+  enabled: true,
+  priority: 0,
+  connectionStatus: 'connected',
+  maxContextTokens: 8192,
+  maxOutputTokens: 8192,
+  temperature: 0,
+  createdAt: 1,
+  updatedAt: 1,
+});
+
+const availableSettings = (): KnowledgeSearchSettings => ({
+  semanticEnabled: false,
+  revision: 1,
+  embeddingAvailable: true,
+});
+
+describe('useKnowledgeLibrary 索引管理界面接线（KM09）', () => {
+  it('作业事件按 sequence 单调合并，终态后从进行中面板移除', async () => {
+    const harness = install();
+    harness.knowledge.jobs.mockResolvedValueOnce({
+      jobs: [jobOf({ id: 'job-run', status: 'running', sequence: 3, completedCount: 1 })],
+    });
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    expect(result.current.activeJobs.map((job) => job.sequence)).toEqual([3]);
+    // 乱序迟到（sequence 更小）不回退面板。
+    await act(async () => {
+      harness.events[0]?.(jobOf({ id: 'job-run', status: 'running', sequence: 2 }));
+      await Promise.resolve();
+    });
+    expect(result.current.activeJobs.map((job) => job.sequence)).toEqual([3]);
+    await act(async () => {
+      harness.events[0]?.(jobOf({ id: 'job-run', status: 'running', sequence: 4 }));
+      await Promise.resolve();
+    });
+    expect(result.current.activeJobs.map((job) => job.sequence)).toEqual([4]);
+    await act(async () => {
+      harness.events[0]?.(
+        jobOf({ id: 'job-run', status: 'succeeded', sequence: 5, completedCount: 1 }),
+      );
+      await Promise.resolve();
+    });
+    expect(result.current.activeJobs).toEqual([]);
+    // 面板挂载的作业同样在终态后回读结果。
+    expect(harness.knowledge.job).toHaveBeenCalledWith({ jobId: 'job-run' });
+  });
+
+  it('迟到的检索响应不覆盖当前查询的结果与覆盖状态', async () => {
+    const harness = install();
+    let resolveLate: ((value: KnowledgeSearchResponse) => void) | undefined;
+    const lateGate = new Promise<KnowledgeSearchResponse>((resolve) => {
+      resolveLate = resolve;
+    });
+    harness.knowledge.search.mockReturnValueOnce(lateGate).mockResolvedValueOnce(
+      searchResponse({
+        results: [searchHit({ chunkId: 'chunk-now' })],
+        effectiveMode: 'hybrid',
+        coverage: { eligibleChunks: 9, indexedChunks: 4 },
+      }),
+    );
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    const submit = {
+      preventDefault: (): void => undefined,
+    } as unknown as FormEvent<HTMLFormElement>;
+    let first: Promise<void> | undefined;
+    await act(async () => {
+      result.current.setQuery('旧查询');
+    });
+    await act(async () => {
+      first = result.current.onSearch(submit);
+    });
+    await act(async () => {
+      result.current.setQuery('新查询');
+    });
+    await act(async () => {
+      await result.current.onSearch(submit);
+    });
+    expect(result.current.results.map((hit) => hit.chunkId)).toEqual(['chunk-now']);
+    expect(result.current.searchStatus?.coverage).toEqual({ eligibleChunks: 9, indexedChunks: 4 });
+    await act(async () => {
+      resolveLate?.(searchResponse({ results: [searchHit({ chunkId: 'chunk-late' })] }));
+      await first;
+    });
+    expect(result.current.results.map((hit) => hit.chunkId)).toEqual(['chunk-now']);
+    expect(result.current.searchStatus?.coverage).toEqual({ eligibleChunks: 9, indexedChunks: 4 });
+  });
+
+  it('启用语义检索显式携带 profile 与 CAS 版本，且不自动补建历史索引', async () => {
+    const harness = install();
+    harness.knowledge.settings.mockResolvedValueOnce(availableSettings());
+    harness.models.list.mockResolvedValueOnce([embeddingModel()]);
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    expect(result.current.embeddingModels.map((model) => model.id)).toEqual(['m-embed']);
+    await act(async () => {
+      await result.current.saveSettings({ semanticEnabled: true, embeddingProfileId: 'm-embed' });
+    });
+    expect(harness.knowledge.saveSettings).toHaveBeenCalledWith({
+      expectedRevision: 1,
+      semanticEnabled: true,
+      embeddingProfileId: 'm-embed',
+    });
+    expect(result.current.message).toContain('历史资料需手动重建向量索引');
+    expect(harness.knowledge.rebuildIndex).not.toHaveBeenCalled();
+  });
+
+  it('普通与强制重建走同一通道但载荷不同，并跟踪新作业', async () => {
+    const harness = install();
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    await act(async () => {
+      await result.current.rebuildSemantic(false);
+    });
+    expect(harness.knowledge.rebuildIndex).toHaveBeenCalledWith({ kind: 'semantic' });
+    await act(async () => {
+      await result.current.rebuildSemantic(true);
+    });
+    expect(harness.knowledge.rebuildIndex).toHaveBeenLastCalledWith({
+      kind: 'semantic',
+      resetSemanticSpace: true,
+    });
+    expect(result.current.message).toContain('旧语义索引立即停用');
+    await act(async () => {
+      harness.events[0]?.(jobOf({ id: 'job-2', status: 'succeeded', completedCount: 1 }));
+      await Promise.resolve();
+    });
+    expect(harness.knowledge.job).toHaveBeenCalledWith({ jobId: 'job-2' });
+  });
+
+  it('终态作业只把失败、中断或取消的条目列为可重试', async () => {
+    const harness = install();
+    const detail: KnowledgeJobDetail = {
+      job: jobOf({
+        id: 'job-2',
+        kind: 'rebuild-semantic',
+        status: 'partial',
+        sequence: 9,
+        completedCount: 1,
+        failedCount: 1,
+        totalCount: 4,
+      }),
+      items: [
+        {
+          id: 'item-ok',
+          jobId: 'job-2',
+          fileName: '甲.md',
+          status: 'succeeded',
+          phase: 'publish',
+          attempt: 1,
+          completedUnits: 1,
+        },
+        {
+          id: 'item-failed',
+          jobId: 'job-2',
+          fileName: '乙.md',
+          status: 'failed',
+          phase: 'embed',
+          attempt: 1,
+          completedUnits: 0,
+          failure: { code: 'EMBEDDING_FAILED', message: '服务超时' },
+        },
+        {
+          id: 'item-cancelled',
+          jobId: 'job-2',
+          fileName: '丙.md',
+          status: 'cancelled',
+          phase: 'embed',
+          attempt: 1,
+          completedUnits: 0,
+        },
+        {
+          id: 'item-interrupted',
+          jobId: 'job-2',
+          fileName: '丁.md',
+          status: 'interrupted',
+          phase: 'embed',
+          attempt: 1,
+          completedUnits: 0,
+        },
+      ],
+    };
+    harness.knowledge.job.mockResolvedValueOnce(detail);
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    await act(async () => {
+      await result.current.rebuildSemantic(false);
+    });
+    await act(async () => {
+      harness.events[0]?.(detail.job);
+      await Promise.resolve();
+    });
+    expect(result.current.retryTarget?.itemIds).toEqual([
+      'item-failed',
+      'item-cancelled',
+      'item-interrupted',
+    ]);
+    await act(async () => {
+      await result.current.retryFailedItems();
+    });
+    expect(harness.knowledge.retryJob).toHaveBeenCalledWith({
+      jobId: 'job-2',
+      itemIds: ['item-failed', 'item-cancelled', 'item-interrupted'],
+    });
+    expect(result.current.retryTarget).toBeUndefined();
+  });
+
+  it('取消已结束的作业时如实反馈而不是假装成功', async () => {
+    const harness = install();
+    harness.knowledge.cancelJob.mockResolvedValueOnce({ cancelled: false });
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    await act(async () => {
+      await result.current.cancelJob('job-done');
+    });
+    expect(harness.knowledge.cancelJob).toHaveBeenCalledWith({ jobId: 'job-done' });
+    expect(result.current.message).toBe('该作业已结束，无法取消。');
   });
 });

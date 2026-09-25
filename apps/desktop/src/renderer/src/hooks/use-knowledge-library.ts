@@ -3,11 +3,23 @@ import type {
   KnowledgeJobSummary,
   KnowledgeResearchDraftMaterial,
   KnowledgeResearchDraftResult,
+  KnowledgeSearchCoverage,
+  KnowledgeSearchDegradedReason,
+  KnowledgeSearchEffectiveMode,
   KnowledgeSearchHit,
+  KnowledgeSearchSettings,
+  ModelProfileSummary,
 } from '@betterwork/agent-protocol';
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 
 import { describeActionError, trackAction } from '../lib/async-action';
+
+/** 最近一次检索的真实生效方式与覆盖度（契约 §9 response 的界面投影）。 */
+export interface KnowledgeSearchStatus {
+  effectiveMode: KnowledgeSearchEffectiveMode;
+  coverage: KnowledgeSearchCoverage;
+  degradedReason?: KnowledgeSearchDegradedReason;
+}
 
 export interface KnowledgeLibrary {
   documents: KnowledgeDocumentSummary[];
@@ -21,6 +33,13 @@ export interface KnowledgeLibrary {
   importing: boolean;
   loading: boolean;
   loadError: string;
+  /** KM09：语义设置、合格嵌入模型、进行中的作业与最近检索状态。 */
+  settings: KnowledgeSearchSettings | undefined;
+  embeddingModels: ModelProfileSummary[];
+  activeJobs: KnowledgeJobSummary[];
+  searchStatus: KnowledgeSearchStatus | undefined;
+  /** 最近一个已收口作业里可重试（失败/中断/取消）的条目；成功后清空。 */
+  retryTarget: { jobId: string; itemIds: string[]; kind: KnowledgeJobSummary['kind'] } | undefined;
   /** 后台重新拉取资料清单；永不 reject。 */
   refresh: () => void;
   onImport: () => Promise<void>;
@@ -40,15 +59,37 @@ export interface KnowledgeLibrary {
     prompt: string,
     workspaceId: string,
   ) => Promise<{ result: KnowledgeResearchDraftResult; stale: boolean } | undefined>;
+  /** KM09：启用/停用/显式切换嵌入模型都走 CAS；启用不会自动补建历史索引。 */
+  saveSettings: (input: { semanticEnabled: boolean; embeddingProfileId?: string }) => Promise<void>;
+  /** 普通语义重建（兼容现有空间）与强制重建（退役旧空间）走同一入口、必须区分确认。 */
+  rebuildSemantic: (forced: boolean) => Promise<void>;
+  cancelJob: (jobId: string) => Promise<void>;
+  retryFailedItems: () => Promise<void>;
 }
+
+const TERMINAL_STATUSES = new Set<KnowledgeJobSummary['status']>([
+  'succeeded',
+  'partial',
+  'failed',
+  'cancelled',
+  'interrupted',
+]);
+
+const RETRYABLE_ITEM_STATUSES = new Set<KnowledgeJobSummary['status']>([
+  'failed',
+  'interrupted',
+  'cancelled',
+]);
 
 /**
  * 本地资料库的界面状态与动作。
  *
- * 两个不变量：
+ * 三个不变量：
  * - 所有失败都写进 `message` / `issues` 呈现给用户，不静默；
  * - 任何动作都不得修改或删除用户源文件，移除与刷新只作用于本地索引，
- *   文案必须把这一点说清楚。
+ *   文案必须把这一点说清楚；
+ * - 作业事件与检索响应都必须按新旧程度合并（sequence / 序号守卫），
+ *   迟到结果永不覆盖当前状态。
  */
 export function useKnowledgeLibrary(): KnowledgeLibrary {
   const [documents, setDocuments] = useState<KnowledgeDocumentSummary[]>([]);
@@ -63,7 +104,15 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     () => new Map(),
   );
   const [researchBusy, setResearchBusy] = useState(false);
+  const [settings, setSettings] = useState<KnowledgeSearchSettings | undefined>(undefined);
+  const [embeddingModels, setEmbeddingModels] = useState<ModelProfileSummary[]>([]);
+  const [activeJobs, setActiveJobs] = useState<Map<string, KnowledgeJobSummary>>(() => new Map());
+  const [searchStatus, setSearchStatus] = useState<KnowledgeSearchStatus | undefined>(undefined);
+  const [retryTarget, setRetryTarget] = useState<
+    { jobId: string; itemIds: string[]; kind: KnowledgeJobSummary['kind'] } | undefined
+  >(undefined);
   const researchSeq = useRef(0);
+  const searchSeq = useRef(0);
   const pendingJobs = useRef(new Set<string>());
   const operationByInput = useRef<Map<string, string>>(new Map());
 
@@ -79,6 +128,50 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
         })
         .finally(() => setLoading(false)),
       '刷新资料库',
+    );
+  }, []);
+
+  const loadSettings = useCallback((): void => {
+    trackAction(
+      window.betterwork.knowledge
+        .settings()
+        .then(setSettings)
+        .catch(() => {
+          // 设置读取失败保持旧值；下一次动作仍会在错误里可解释。
+        }),
+      '读取索引设置',
+    );
+  }, []);
+
+  useEffect(() => {
+    trackAction(
+      window.betterwork.knowledge
+        .jobs({ limit: 10 })
+        .then((page) => {
+          const running = page.jobs.filter((job) => !TERMINAL_STATUSES.has(job.status));
+          if (running.length === 0) return;
+          setActiveJobs(new Map(running.map((job) => [job.id, job] as const)));
+          for (const job of running) pendingJobs.current.add(job.id);
+        })
+        .catch(() => {
+          // 作业面板是可重建的投影；拉不到首页不影响资料与检索。
+        }),
+      '读取进行中作业',
+    );
+    trackAction(
+      window.betterwork.models
+        .list()
+        .then((models) =>
+          setEmbeddingModels(
+            models.filter(
+              (model) => model.role === 'embedding' && model.enabled && model.apiKeyConfigured,
+            ),
+          ),
+        )
+        .catch(() => {
+          // 模型清单失败只让管理面板少选项，错误由模型设置页负责呈现。
+        }),
+      '读取嵌入模型清单',
     );
   }, []);
 
@@ -153,6 +246,16 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
               `${item.fileName ?? item.documentId ?? '资料'}：${item.failure?.message ?? '处理失败'}`,
           ),
         );
+        const retryable = detail.items.filter((item) => RETRYABLE_ITEM_STATUSES.has(item.status));
+        setRetryTarget(
+          detail.job.status === 'succeeded' || retryable.length === 0
+            ? undefined
+            : {
+                jobId: detail.job.id,
+                itemIds: retryable.map((item) => item.id),
+                kind: detail.job.kind,
+              },
+        );
         if (detail.job.status === 'succeeded') {
           setMessage(
             `${titleOfJob(detail.job)}完成（${detail.job.completedCount}/${detail.job.totalCount}）。`,
@@ -177,13 +280,30 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
 
   useEffect(() => {
     const unsubscribe = window.betterwork.knowledge.onJobEvent((job: KnowledgeJobSummary) => {
-      if (!pendingJobs.current.has(job.id)) return;
+      const tracked = pendingJobs.current.has(job.id);
+      setActiveJobs((current) => {
+        const known = current.get(job.id);
+        // 未跟踪的作业事件不得污染面板；已跟踪的按 sequence 单调合并。
+        if (!tracked && !known) return current;
+        const next = new Map(current);
+        if (TERMINAL_STATUSES.has(job.status)) {
+          next.delete(job.id);
+        } else if (!known || job.sequence > known.sequence) {
+          next.set(job.id, job);
+        }
+        return next;
+      });
+      if (!tracked) return;
       if (job.status === 'queued' || job.status === 'running') return;
       pendingJobs.current.delete(job.id);
       reportJob(job.id);
     });
     return unsubscribe;
   }, [reportJob]);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
 
   const materialKey = (result: KnowledgeSearchHit): string =>
     `${result.reference.knowledgeDocumentId}:${result.reference.knowledgeRevisionId}`;
@@ -208,11 +328,10 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   const selectAllResults = useCallback((): void => {
     setSelected(
       new Map(
-        results
-          .map((result) => [
-            materialKey(result),
-            { reference: result.reference, purpose: 'background' },
-          ]),
+        results.map((result) => [
+          materialKey(result),
+          { reference: result.reference, purpose: 'background' },
+        ]),
       ),
     );
   }, [results]);
@@ -220,15 +339,25 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   const onSearch = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
     const term = query.trim();
+    const seq = searchSeq.current + 1;
+    searchSeq.current = seq;
     if (!term) {
       setResults([]);
+      setSearchStatus(undefined);
       return;
     }
     try {
       const response = await window.betterwork.knowledge.search({ query: term });
+      // 迟到的检索响应不覆盖当前查询的结果与状态。
+      if (searchSeq.current !== seq) return;
       setResults(response.results);
+      setSearchStatus({
+        effectiveMode: response.effectiveMode,
+        coverage: response.coverage,
+        ...(response.degradedReason ? { degradedReason: response.degradedReason } : {}),
+      });
       if (response.degradedReason) {
-        setMessage(`语义检索已降级（${response.degradedReason}），当前展示关键词与已兼容向量的结果。`);
+        setMessage(`本次检索以关键词为主（${response.degradedReason}），兼容向量结果照常返回。`);
       }
       // 切换搜索后清空结果勾选，避免隐形的跨查询选择。
       setSelected((current) => {
@@ -236,7 +365,73 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
         return new Map();
       });
     } catch (error) {
+      if (searchSeq.current !== seq) return;
       setMessage(error instanceof Error ? error.message : '检索资料失败。');
+    }
+  };
+
+  const saveSettings = async (input: {
+    semanticEnabled: boolean;
+    embeddingProfileId?: string;
+  }): Promise<void> => {
+    try {
+      const next = await window.betterwork.knowledge.saveSettings({
+        expectedRevision: settings?.revision ?? 1,
+        semanticEnabled: input.semanticEnabled,
+        ...(input.embeddingProfileId ? { embeddingProfileId: input.embeddingProfileId } : {}),
+      });
+      setSettings(next);
+      setMessage(
+        input.semanticEnabled
+          ? '已启用语义检索。历史资料需手动重建向量索引；新导入资料会自动纳入。'
+          : '已停用语义检索；关键词搜索不受影响。',
+      );
+    } catch (error) {
+      setMessage(describeActionError(error, '保存索引设置失败，请重试。'));
+    }
+  };
+
+  const rebuildSemantic = async (forced: boolean): Promise<void> => {
+    try {
+      const ack = await window.betterwork.knowledge.rebuildIndex({
+        kind: 'semantic',
+        ...(forced ? { resetSemanticSpace: true } : {}),
+      });
+      trackJob(ack.jobId);
+      setMessage(
+        forced
+          ? '已提交强制重建：旧语义索引立即停用，关键词检索保持可用。'
+          : '已提交语义索引重建作业。',
+      );
+    } catch (error) {
+      setMessage(describeActionError(error, '提交重建作业失败，请重试。'));
+    }
+  };
+
+  const cancelJob = async (jobId: string): Promise<void> => {
+    try {
+      const ack = await window.betterwork.knowledge.cancelJob({ jobId });
+      setMessage(
+        ack.cancelled ? '已请求取消，作业将停在当前条目边界。' : '该作业已结束，无法取消。',
+      );
+    } catch (error) {
+      setMessage(describeActionError(error, '取消作业失败。'));
+    }
+  };
+
+  const retryFailedItems = async (): Promise<void> => {
+    if (!retryTarget) return;
+    const target = retryTarget;
+    try {
+      const ack = await window.betterwork.knowledge.retryJob({
+        jobId: target.jobId,
+        itemIds: target.itemIds,
+      });
+      setRetryTarget(undefined);
+      trackJob(ack.jobId);
+      setMessage(`已提交重试作业（${target.itemIds.length} 个条目）。`);
+    } catch (error) {
+      setMessage(describeActionError(error, '重试失败条目未提交，请重试。'));
     }
   };
 
@@ -277,6 +472,11 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     importing,
     loading,
     loadError,
+    settings,
+    embeddingModels,
+    activeJobs: [...activeJobs.values()],
+    searchStatus,
+    retryTarget,
     refresh,
     onImport,
     onSearch,
@@ -290,6 +490,10 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     clearSelection,
     researchBusy,
     research,
+    saveSettings,
+    rebuildSemantic,
+    cancelJob,
+    retryFailedItems,
   };
 }
 
@@ -302,3 +506,6 @@ const JOB_TITLES: Record<KnowledgeJobSummary['kind'], string> = {
 };
 
 const titleOfJob = (job: KnowledgeJobSummary): string => JOB_TITLES[job.kind];
+
+/** 供作业面板按 kind 显示中文名。 */
+export const knowledgeJobTitle = (kind: KnowledgeJobSummary['kind']): string => JOB_TITLES[kind];

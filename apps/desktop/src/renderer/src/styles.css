@@ -4393,6 +4393,105 @@ p {
   line-height: 1.55;
   word-break: break-all;
 }
+/* KM09：索引与模型管理、作业区域 */
+.knowledge-admin-toggle {
+  min-height: 30px;
+  padding: 6px 10px;
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.knowledge-admin-toggle:hover {
+  border-color: var(--brand);
+}
+.knowledge-admin {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 10px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.knowledge-admin-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.knowledge-admin-row small {
+  color: var(--text-muted);
+}
+.knowledge-admin-row button {
+  min-height: 30px;
+  padding: 6px 10px;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.knowledge-admin-row button:hover:not(:disabled) {
+  border-color: var(--brand);
+}
+.knowledge-admin-row button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.knowledge-admin-switch {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 600;
+}
+.knowledge-admin-switch input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand);
+}
+.knowledge-admin-profile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.knowledge-issues button {
+  margin-top: 8px;
+  padding: 5px 10px;
+  color: var(--danger);
+  background: var(--surface);
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.knowledge-jobs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+  padding: 10px 12px;
+  color: var(--text-secondary);
+  background: var(--brand-soft);
+  border-radius: 7px;
+  font-size: 12px;
+}
+.knowledge-job-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.knowledge-job-row button {
+  min-height: 26px;
+  padding: 4px 10px;
+  color: var(--brand);
+  background: transparent;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  font-size: 12px;
+}
 .page-toast-host {
   position: fixed;
   right: 20px;
