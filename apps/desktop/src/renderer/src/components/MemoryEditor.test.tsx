@@ -109,3 +109,60 @@ describe('MemoryEditor 重新表述路径', () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 });
+
+describe('MemoryEditor 回答捕获（MI02）', () => {
+  afterEach(cleanup);
+
+  const captureSelector = {
+    kind: 'run-assistant',
+    runId: 'run-1',
+    eventId: 'event-1',
+    start: 2,
+    end: 8,
+  } as const;
+
+  const renderCapture = (
+    onSubmit: (submission: MemoryEditorSubmission) => Promise<boolean>,
+    withSelector: boolean,
+  ): void => {
+    render(
+      <MemoryEditor
+        scopes={[{ kind: 'workspace', workspaceId: 'workspace-1' }]}
+        initialContent="汇总收入前先核对回款口径。"
+        requireSource
+        submitLabel="保留来源并记住"
+        {...(withSelector ? { sourceSelector: captureSelector } : {})}
+        onSubmit={onSubmit}
+        onCancel={() => undefined}
+      />,
+    );
+  };
+
+  const fill = (): void => {
+    fireEvent.change(screen.getByLabelText('记忆正文'), {
+      target: { value: '汇总收入前先核对回款口径。' },
+    });
+  };
+
+  it('未确认原文选区时不得提交，也不能被当成自主口径', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(true);
+    renderCapture(onSubmit, false);
+    fill();
+    fireEvent.click(screen.getByRole('button', { name: '保留来源并记住' }));
+    await Promise.resolve();
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText('请先在回答原文里确认要保留的来源片段。')).toBeDefined();
+  });
+
+  it('带来源选择器提交时保留 selector 且 asUserInstruction 为 false', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(true);
+    renderCapture(onSubmit, true);
+    fill();
+    fireEvent.click(screen.getByRole('button', { name: '保留来源并记住' }));
+    const submission = onSubmit.mock.calls[0]?.[0];
+    expect(submission?.kind).toBe('create');
+    if (submission?.kind !== 'create') return;
+    expect(submission.request.asUserInstruction).toBe(false);
+    expect(submission.request.sourceSelector).toEqual(captureSelector);
+  });
+});

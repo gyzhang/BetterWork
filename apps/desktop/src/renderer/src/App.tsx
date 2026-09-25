@@ -24,7 +24,6 @@ import type {
   WorkspaceReferenceListItem,
   WorkspaceSummary,
 } from '@betterwork/agent-protocol';
-import { MEMORY_CONTENT_MAX_CODE_POINTS } from '@betterwork/agent-protocol';
 import type { FormEvent, KeyboardEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -38,6 +37,7 @@ import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { ContextPanel } from './components/ContextPanel';
 import { DiscussionCheckpointPanel } from './components/DiscussionCheckpointPanel';
 import { PageHeader } from './components/layout/PageHeader';
+import { MemoryCaptureSource } from './components/MemoryCaptureSource';
 import { MemoryEditor, type MemoryEditorSubmission } from './components/MemoryEditor';
 import { ModelEditor } from './components/ModelEditorSheet';
 import { ToolActivity } from './components/ToolActivity';
@@ -73,6 +73,12 @@ import {
 import { describeActionError, reportAction, trackAction } from './lib/async-action';
 import { fileNameOf, formatTime } from './lib/format';
 import { runStatusName } from './lib/labels';
+import {
+  excerptOf,
+  type ExcerptRange,
+  finalAssistantAnswer,
+  planCaptureFromSelection,
+} from './lib/memory-capture';
 import { settleMemoryCall } from './lib/memory-result';
 import { candidatesOfTask } from './lib/memory-suggestions';
 import { buildResearchPrompt } from './lib/research-prompt';
@@ -157,7 +163,10 @@ export function App(): React.JSX.Element {
   /** 人工保存表单（产品设计 §3.1）：只带用户当场选中的片段，不预填整段回答。 */
   const [memoryCapture, setMemoryCapture] = useState<{
     runId: string;
+    eventId: string;
+    raw: string;
     initialContent: string;
+    range: ExcerptRange | undefined;
   }>();
   const [memoryCaptureError, setMemoryCaptureError] = useState('');
   const [pendingCandidateDelete, setPendingCandidateDelete] = useState<MemoryViewItem>();
@@ -259,6 +268,9 @@ export function App(): React.JSX.Element {
     ? candidatesOfTask(suggestions.candidates, suggestions.jobs, activeTask.id)
     : [];
   // §3.1：有专家默认「专家与工作空间」，无专家默认「工作空间」；顺序即表单默认值。
+  // 契约 §11.1：回答捕获保留的是资料派生来源，因此不提供用户/专家全局范围。
+  // §3.1：有专家默认「专家与工作空间」，无专家默认「工作空间」；顺序即表单默认值。
+  // 契约 §11.1：回答捕获保留的是资料派生来源，因此不提供用户/专家全局范围。
   const memoryCaptureScopes = useMemo(
     () =>
       scopeOptionsFor(
@@ -270,7 +282,7 @@ export function App(): React.JSX.Element {
               ...(workspace ? { workspaceId: workspace.id } : {}),
             }
           : undefined,
-      ),
+      ).filter((scope) => scope.kind !== 'user' && scope.kind !== 'expert'),
     [activeExpert, workspace],
   );
 
@@ -1407,17 +1419,27 @@ export function App(): React.JSX.Element {
                                 <button
                                   className="message-action"
                                   onClick={() => {
-                                    // §3.1：只预填用户当场选中的片段，不把整段回答当作经验。
-                                    const selected = window
-                                      .getSelection()
-                                      ?.toString()
-                                      .trim()
-                                      .slice(0, MEMORY_CONTENT_MAX_CODE_POINTS);
+                                    const answer = finalAssistantAnswer(runEvents);
+                                    if (!answer) {
+                                      setMemoryCaptureError(
+                                        '这条回答还没有可定位的最终事件，请等运行完成后再记住经验。',
+                                      );
+                                      return;
+                                    }
+                                    // §3.1 与契约 §11.1：只有页面选区在原文里唯一命中才预填，
+                                    // 否则正文留空，让用户在下方只读原文重选，不猜渲染坐标。
+                                    const selected = window.getSelection()?.toString().trim() ?? '';
+                                    const plan = planCaptureFromSelection(answer.content, selected);
                                     setMemoryCapture({
                                       runId: run.id,
-                                      initialContent: selected ?? '',
+                                      eventId: answer.eventId,
+                                      raw: answer.content,
+                                      initialContent: plan.range
+                                        ? excerptOf(answer.content, plan.range)
+                                        : '',
+                                      range: plan.range,
                                     });
-                                    setMemoryCaptureError('');
+                                    setMemoryCaptureError(plan.error);
                                   }}
                                 >
                                   记住这段经验
@@ -1452,13 +1474,33 @@ export function App(): React.JSX.Element {
                             {memoryCapture?.runId === run.id && (
                               <div className="memory-capture">
                                 <p className="memory-capture-hint">
-                                  先在上方回答中选中要沉淀的片段可自动带入；表单内容以你最终确认为准。
+                                  来源摘录取自这条回答的原文；正文可以另行改写，改写不会解除来源与依赖。
                                 </p>
+                                <MemoryCaptureSource
+                                  raw={memoryCapture.raw}
+                                  range={memoryCapture.range}
+                                  onRangeChange={(range) => {
+                                    setMemoryCapture({ ...memoryCapture, range });
+                                    setMemoryCaptureError('');
+                                  }}
+                                />
                                 <MemoryEditor
                                   scopes={memoryCaptureScopes}
                                   initialContent={memoryCapture.initialContent}
-                                  sourceNote="由你在任务里手工确认，正文即来源，不调用模型"
-                                  submitLabel="确认并记住"
+                                  requireSource
+                                  sourceNote="保留来源：Main 会重查这条回答与它依赖的材料、记忆"
+                                  submitLabel="保留来源并记住"
+                                  {...(memoryCapture.range
+                                    ? {
+                                        sourceSelector: {
+                                          kind: 'run-assistant',
+                                          runId: memoryCapture.runId,
+                                          eventId: memoryCapture.eventId,
+                                          start: memoryCapture.range.start,
+                                          end: memoryCapture.range.end,
+                                        },
+                                      }
+                                    : {})}
                                   onSubmit={submitMemoryCapture}
                                   onCancel={() => {
                                     setMemoryCapture(undefined);

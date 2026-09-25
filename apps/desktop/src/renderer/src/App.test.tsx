@@ -797,25 +797,85 @@ describe('Task context restoration', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
     fireEvent.click(await screen.findByRole('button', { name: '记住这段经验' }));
+    // 专家任务的捕获表单默认落在「专家 + 工作空间」范围，并给出只读原文选择区（§3.1、MI02）。
+    const scopeButton = await screen.findByRole('button', { name: '记忆适用范围' });
+    expect(scopeButton.textContent ?? '').toContain('专家与工作空间');
+    expect(screen.getByRole('textbox', { name: '回答原文' })).toBeDefined();
+  });
+
+  it('回答捕获保留原文选区来源，并且不提供全局范围', async () => {
+    const api = installApi({
+      expert: true,
+      context: {
+        id: 'context-previous',
+        taskId: previousTask.id,
+        revision: 1,
+        executor: {
+          kind: 'expert',
+          expertId: expertSummary.id,
+          expertRevisionId: expertDetail.revision.id,
+        },
+        skillBindings: [],
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    });
+    api.runs.listEvents.mockResolvedValue([
+      {
+        id: 'message-event',
+        runId: previousRun.id,
+        sequence: 1,
+        createdAt: 2,
+        type: 'message.completed',
+        messageId: 'message-1',
+        content: '经营分析应先核对规则。',
+      },
+      {
+        id: 'completed-event',
+        runId: previousRun.id,
+        sequence: 2,
+        createdAt: 3,
+        type: 'run.completed',
+        finalContent: '经营分析应先核对规则。',
+      },
+    ]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
+    fireEvent.click(await screen.findByRole('button', { name: '记住这段经验' }));
+    // 未确认选区前不得提交（契约 §11.1）。
     fireEvent.change(screen.getByRole('textbox', { name: '记忆正文' }), {
       target: { value: '先核对规则再出结论。' },
     });
-    // FieldSelect 改造（9b93312）后适用范围是按钮＋弹层菜单，不再是原生 select。
+    fireEvent.click(screen.getByRole('button', { name: '保留来源并记住' }));
+    await Promise.resolve();
+    expect(api.memories.create).not.toHaveBeenCalled();
+
+    const original = screen.getByRole<HTMLTextAreaElement>('textbox', { name: '回答原文' });
+    original.setSelectionRange(0, 9);
+    fireEvent.select(original);
+    fireEvent.click(screen.getByRole('button', { name: '确认选区' }));
+    // 派生来源不进入全局范围：菜单里不再出现「专家通用」「用户全局」。
     fireEvent.click(screen.getByRole('button', { name: '记忆适用范围' }));
-    fireEvent.click(await screen.findByRole('menuitem', { name: /专家通用/ }));
-    expect(screen.getByRole('button', { name: '记忆适用范围' }).textContent).toContain('专家通用');
-    // 全局/专家通用属于扩大适用范围，必须显式声明通用性后才能提交（契约 §3.1）。
-    fireEvent.click(screen.getByRole('checkbox', { name: '声明为通用要求' }));
-    fireEvent.click(screen.getByRole('button', { name: '确认并记住' }));
+    const labels = screen.getAllByRole('menuitem').map((item) => item.textContent ?? '');
+    expect(labels.some((label) => label.includes('专家通用') || label.includes('全局'))).toBe(
+      false,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '记忆适用范围' }));
+    fireEvent.click(screen.getByRole('button', { name: '保留来源并记住' }));
 
     await waitFor(() => expect(api.memories.create).toHaveBeenCalledTimes(1));
     expect(api.memories.create).toHaveBeenCalledWith(
       expect.objectContaining({
         content: '先核对规则再出结论。',
         facet: 'method',
-        scope: { kind: 'expert', expertId: expertSummary.id },
-        asUserInstruction: true,
-        genericDeclaration: true,
+        asUserInstruction: false,
+        sourceSelector: {
+          kind: 'run-assistant',
+          runId: previousRun.id,
+          eventId: 'message-event',
+          start: 0,
+          end: 9,
+        },
       }),
     );
   });

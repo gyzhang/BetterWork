@@ -92,6 +92,11 @@ export interface MemoryEditorProps {
   initialContent?: string;
   /** 选中片段对应的来源选择器；人工表单没有它时正文自身即来源。 */
   sourceSelector?: MemorySourceSelector;
+  /**
+   * 回答捕获入口专用：未确认来源片段前禁止提交，也不得把「没有选择器」当成自主口径。
+   * 见改进 Spec §4.1 与契约 §11.1。
+   */
+  requireSource?: boolean;
   /** 来源说明文案，例如「来自本次你的发言」。 */
   sourceNote?: string;
   /** 提交按钮文案。 */
@@ -185,6 +190,7 @@ export function MemoryEditor({
   restateFrom,
   initialContent,
   sourceSelector,
+  requireSource,
   sourceNote,
   submitLabel,
   confirmAction = 'confirm',
@@ -234,6 +240,9 @@ export function MemoryEditor({
     problems.push('失效日期必须晚于生效日期。');
   if (restating && restateFrom !== undefined && content.trim() === restateFrom.content)
     problems.push('作为工作口径重新保存需要重新表述，不能原样复制资料结论。');
+  // 捕获入口不允许「没选来源就保存」：那等于把资料结论洗成自主口径。
+  if (requireSource === true && !restating && sourceSelector === undefined)
+    problems.push('请先在回答原文里确认要保留的来源片段。');
   if (globalTarget && !genericDeclaration)
     problems.push('保存为全局记忆前，请确认这是一条通用要求并勾选声明。');
   if (memory !== undefined && !isGlobalScope(memory.scope) && globalTarget && !restating)

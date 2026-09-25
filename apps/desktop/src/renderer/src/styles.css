@@ -2603,6 +2603,25 @@ p {
   line-height: 1.5;
   resize: vertical;
 }
+.memory-capture-source {
+  display: grid;
+  gap: 7px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.memory-capture-source textarea[readonly] {
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+}
+.memory-capture-source-actions {
+  display: flex;
+  gap: 7px;
+}
+.memory-capture-source-state {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
 .memory-capture-footer {
   display: flex;
   justify-content: flex-end;
