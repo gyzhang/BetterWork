@@ -617,7 +617,8 @@ const renderMemoryBlock = (
     const scopeKind = record?.scope.kind ?? 'user';
     contentCodePoints += countCodePoints(item.content);
     lines.push(`${index + 1}. [${facet}/${scopeKind}] ${item.content}`);
-    if (item.reason !== 'conflict-group') continue;
+    // 并存说明必须跟着整组进请求：优先池里的并存分量同样不能只带正文丢条件。
+    if (item.reason !== 'conflict-group' && item.reason !== 'pinned-rule') continue;
     const component = components.get(item.id);
     const note = component?.note;
     const marker = component?.ids.join(',') ?? item.id;

@@ -14,6 +14,7 @@ import type {
 import {
   MEMORY_EXTRACTION_QUEUE_LIMIT,
   MEMORY_SUGGESTION_CONSENT_VERSION,
+  memoryRecallPolicyV1,
 } from '@betterwork/agent-protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -1143,6 +1144,498 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
 
     world.services.store.close();
     world.services.vault.close();
+  });
+
+  // ===== MI09 离线联合回归：Q1–Q8 问法矩阵与关键正负例（契约 §11.3–§11.4） =====
+  const RULE = '金额按万元保留两位。';
+  const PINNED_PROMPTS = [
+    '做份经营回顾',
+    '请整理本季简报',
+    '准备董事会汇报提纲',
+    '输出经营分析',
+    '撰写本期摘要',
+    '做一版管理层汇报',
+    '整理财务概览',
+    '请汇总近期业务表现',
+  ] as const;
+
+  const pinRule = async (
+    world: World,
+    content = RULE,
+    overrides: { facet?: 'constraint' | 'method' | 'preference'; validUntil?: number } = {},
+  ): Promise<{ id: string; revision: number; revisionId: string }> => {
+    const scope: MemoryScope = { kind: 'workspace', workspaceId: world.layout.workspaceA };
+    const created = await world.services.memories.create({
+      operationId: randomUUID(),
+      content,
+      facet: overrides.facet ?? 'constraint',
+      scope,
+      asUserInstruction: true,
+      ...(overrides.validUntil === undefined ? {} : { validUntil: overrides.validUntil }),
+    });
+    if (!created.ok) throw new Error(`规则写入失败：${created.error.code}`);
+    const revisionId = created.data.committedRevisionIds[0];
+    if (revisionId === undefined) throw new Error('缺少修订。');
+    const record = world.services.store.memories.getRevision(revisionId);
+    if (!record) throw new Error('修订未落库。');
+    const pinned = await world.services.memories.update({
+      operationId: randomUUID(),
+      id: record.id,
+      expectedRevision: record.revision,
+      patch: { recallPolicy: 'pinned' },
+    });
+    if (!pinned.ok) throw new Error(`设优先失败：${pinned.error.code}`);
+    const latest = world.services.store.memories.get(record.id);
+    if (!latest) throw new Error('优先修订未落库。');
+    return { id: latest.id, revision: latest.revision, revisionId: latest.revisionId };
+  };
+
+  it('Q1–Q8 八种无词面问法都经生产发送链路带入优先规则，且词面分数如实为 0', async () => {
+    const world = await createWorld();
+    const rule = await pinRule(world);
+
+    for (const [index, prompt] of PINNED_PROMPTS.entries()) {
+      const task = world.services.store.tasks.create(
+        world.layout.workspaceA,
+        `Q${index + 1} 经营交付`,
+        prompt,
+      );
+      const context = saveContext(
+        world,
+        { taskId: task.task.id, sessionId: task.sessionId },
+        {
+          materials: [],
+          excludedMemoryIds: [],
+        },
+      );
+      const runId = startRun(
+        world,
+        { taskId: task.task.id, sessionId: task.sessionId },
+        prompt,
+        context,
+      );
+      await waitForCompletion(world, runId);
+
+      // 断言落到实际 ModelRequest，而不是只看选择结果。
+      expect(mentions(lastRunRequest(world), RULE), prompt).toBe(true);
+      const audit = world.services.store.runMemoryContexts.get(runId);
+      const selected = audit?.selectedItems.find((item) => item.memoryId === rule.id);
+      expect(selected?.reason, prompt).toBe('pinned-rule');
+      expect(selected?.score, prompt).toBe(0);
+      expect(audit?.recallVersion, prompt).toBe('memory-recall-v2');
+    }
+  });
+
+  it('N1 排除优先父规则后，派生记忆与继承历史都不回流', async () => {
+    const world = await createWorld();
+    const rule = await pinRule(world);
+    const first = world.layout.a1;
+    const firstContext = saveContext(world, first, { materials: [], excludedMemoryIds: [] });
+    const firstRun = startRun(world, first, '请按金额按万元保留两位汇总本月收入', firstContext);
+    await waitForCompletion(world, firstRun);
+    expect(mentions(lastRunRequest(world), RULE)).toBe(true);
+
+    // 派生记忆经正常回答捕获建立，不伪造事件 ID 或外键。
+    const answer = world.services.store.runs
+      .listEvents(firstRun)
+      .filter((event) => event.type === 'message.completed')
+      .at(-1);
+    if (!answer || answer.type !== 'message.completed') throw new Error('缺少最终回答事件。');
+    const derived = await world.services.memories.create({
+      operationId: randomUUID(),
+      content: '复盘时先统一金额单位再比较。',
+      facet: 'method',
+      scope: { kind: 'workspace', workspaceId: world.layout.workspaceA },
+      asUserInstruction: false,
+      sourceSelector: {
+        kind: 'run-assistant',
+        runId: firstRun,
+        eventId: answer.id,
+        start: 0,
+        end: 4,
+      },
+    });
+    expect(derived.ok).toBe(true);
+
+    const excluded = world.services.store.taskContexts.save(first.taskId, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+      materials: [],
+      excludedMemoryIds: [rule.id],
+    });
+    const secondRun = startRun(world, first, '请出本期结论并给出下一期动作', excluded);
+    await waitForCompletion(world, secondRun);
+    // 只看宿主注入给模型的历史与记忆段：本轮 prompt 本身允许出现同一句话。
+    const injected = (lastRunRequest(world)?.messages ?? [])
+      .filter((message) => message.role !== 'user')
+      .map((message) => message.content)
+      .join('\n');
+    expect(injected).not.toContain(RULE);
+    expect(injected).not.toContain('复盘时先统一金额单位再比较。');
+    const audit = world.services.store.runMemoryContexts.get(secondRun);
+    expect(audit?.selectedItems.map((item) => item.memoryId)).not.toContain(rule.id);
+  });
+
+  it('N3 过期的优先规则不注入，N7 未裁决冲突也不按时间挑胜者', async () => {
+    const world = await createWorld();
+    const expired = await pinRule(world, '过期规则不再带入。');
+    const expiredResult = await world.services.memories.setStatus({
+      operationId: randomUUID(),
+      id: expired.id,
+      expectedRevision: expired.revision,
+      action: 'expire',
+    });
+    expect(expiredResult.ok).toBe(true);
+    const task = world.services.store.tasks.create(
+      world.layout.workspaceA,
+      '过期与冲突',
+      '请汇总近期业务表现',
+    );
+    const context = saveContext(
+      world,
+      { taskId: task.task.id, sessionId: task.sessionId },
+      {
+        materials: [],
+        excludedMemoryIds: [],
+      },
+    );
+    const runId = startRun(
+      world,
+      { taskId: task.task.id, sessionId: task.sessionId },
+      '请汇总近期业务表现',
+      context,
+    );
+    await waitForCompletion(world, runId);
+    expect(mentions(lastRunRequest(world), '过期规则不再带入。')).toBe(false);
+    const audit = world.services.store.runMemoryContexts.get(runId);
+    expect(audit?.selectedItems.map((item) => item.memoryId)).not.toContain(expired.id);
+    expect(mentions(lastRunRequest(world), '过期规则不再带入。')).toBe(false);
+
+    const left = await confirmMemory(
+      world,
+      { kind: 'workspace', workspaceId: world.layout.workspaceA },
+      {
+        content: '经营月报统一用万元。',
+        facet: 'decision',
+        topicKey: 'monthly-unit',
+      },
+    );
+    const right = await confirmMemory(
+      world,
+      { kind: 'workspace', workspaceId: world.layout.workspaceA },
+      {
+        content: '经营月报统一用元。',
+        facet: 'decision',
+        topicKey: 'monthly-unit',
+      },
+    );
+    const conflicted = await world.services.memories.update({
+      operationId: randomUUID(),
+      id: left.id,
+      expectedRevision: left.revision,
+      patch: { recallPolicy: 'pinned' },
+    });
+    expect(conflicted.ok).toBe(true);
+    const pinnedRun = startRun(
+      world,
+      { taskId: task.task.id, sessionId: task.sessionId },
+      '请出经营月报统一用万元的口径结论',
+      world.services.store.taskContexts.save(task.task.id, {
+        executor: { kind: 'general' },
+        skillBindings: [],
+        materials: [],
+        excludedMemoryIds: [],
+      }),
+    );
+    await waitForCompletion(world, pinnedRun);
+    const after = world.services.store.runMemoryContexts.get(pinnedRun);
+    // 未裁决冲突挡住相关规则：不注入任何一侧，也不按更新时间或置信度挑胜者。
+    expect(after?.selectedItems.map((item) => item.memoryId)).not.toContain(left.id);
+    expect(after?.selectedItems.map((item) => item.memoryId)).not.toContain(right.id);
+  });
+
+  it('R6 一个优先与两条相关并存时整组带入且条件齐全', async () => {
+    const world = await createWorld();
+    const scope: MemoryScope = { kind: 'workspace', workspaceId: world.layout.workspaceA };
+    const mainCreated = await world.services.memories.create({
+      operationId: randomUUID(),
+      content: '经营月报先给结论。',
+      facet: 'constraint',
+      scope,
+      topicKey: 'report-opening',
+      asUserInstruction: true,
+    });
+    if (!mainCreated.ok) throw new Error(`主规则写入失败：${mainCreated.error.code}`);
+    const mainRevisionId = mainCreated.data.committedRevisionIds[0];
+    const mainCreatedRecord =
+      mainRevisionId === undefined
+        ? undefined
+        : world.services.store.memories.getRevision(mainRevisionId);
+    if (!mainCreatedRecord) throw new Error('主规则未落库。');
+    const mainPinned = await world.services.memories.update({
+      operationId: randomUUID(),
+      id: mainCreatedRecord.id,
+      expectedRevision: mainCreatedRecord.revision,
+      patch: { recallPolicy: 'pinned' },
+    });
+    if (!mainPinned.ok) throw new Error(`主规则设优先失败：${mainPinned.error.code}`);
+    const mainRecord = world.services.store.memories.get(mainCreatedRecord.id);
+    if (!mainRecord) throw new Error('主规则修订缺失。');
+    const main = { id: mainRecord.id, revision: mainRecord.revision };
+    const companion = await confirmMemory(world, scope, {
+      content: '经营月报先给结论再列证据。',
+      facet: 'decision',
+      topicKey: 'report-opening',
+    });
+    const resolved = await world.services.memories.resolveConflict({
+      operationId: randomUUID(),
+      left: { id: main.id, expectedRevision: main.revision },
+      right: { id: companion.id, expectedRevision: companion.revision },
+      decision: 'keep-both',
+      applicabilityNote: '内部简报只要结论，对外汇报要结论加证据。',
+    });
+    expect(resolved.ok).toBe(true);
+
+    const task = world.services.store.tasks.create(
+      world.layout.workspaceA,
+      '并存组',
+      '请整理本季简报',
+    );
+    const context = saveContext(
+      world,
+      { taskId: task.task.id, sessionId: task.sessionId },
+      {
+        materials: [],
+        excludedMemoryIds: [],
+      },
+    );
+    const runId = startRun(
+      world,
+      { taskId: task.task.id, sessionId: task.sessionId },
+      '请整理本季简报',
+      context,
+    );
+    await waitForCompletion(world, runId);
+    const selected = world.services.store.runMemoryContexts.get(runId)?.selectedItems ?? [];
+    expect(new Set(selected.map((item) => item.memoryId))).toEqual(
+      new Set([main.id, companion.id]),
+    );
+    expect(selected.every((item) => item.reason === 'pinned-rule')).toBe(true);
+    // 并存说明随整组一起注入，缺一侧就不算整组带入。
+    const injectedBlock = (lastRunRequest(world)?.messages ?? [])
+      .map((message) => message.content)
+      .join('\n');
+    expect(injectedBlock).toContain('内部简报只要结论，对外汇报要结论加证据。');
+  });
+
+  it('R3/R7 无需历史即可带入最新优先修订，旧运行回看不变', async () => {
+    const world = await createWorld();
+    const scope: MemoryScope = { kind: 'user' };
+    const created = await world.services.memories.create({
+      operationId: randomUUID(),
+      content: '给出表格后附限制说明。',
+      facet: 'preference',
+      scope,
+      asUserInstruction: true,
+      genericDeclaration: true,
+    });
+    if (!created.ok) throw new Error(`偏好写入失败：${created.error.code}`);
+    const firstRevisionId = created.data.committedRevisionIds[0];
+    const firstRecord =
+      firstRevisionId === undefined
+        ? undefined
+        : world.services.store.memories.getRevision(firstRevisionId);
+    if (!firstRecord) throw new Error('偏好未落库。');
+    const pinned = await world.services.memories.update({
+      operationId: randomUUID(),
+      id: firstRecord.id,
+      expectedRevision: firstRecord.revision,
+      patch: { recallPolicy: 'pinned' },
+    });
+    if (!pinned.ok) throw new Error(`设优先失败：${pinned.error.code}`);
+
+    // R3：新 Task、无历史，仅凭优先池入选。
+    const task = world.services.store.tasks.create(
+      world.layout.workspaceA,
+      'R3 表格偏好',
+      '请整理财务概览',
+    );
+    const taskRef = { taskId: task.task.id, sessionId: task.sessionId };
+    const firstRun = startRun(
+      world,
+      taskRef,
+      '请整理财务概览',
+      saveContext(world, taskRef, { materials: [], excludedMemoryIds: [] }),
+    );
+    await waitForCompletion(world, firstRun);
+    expect(mentions(lastRunRequest(world), '给出表格后附限制说明。')).toBe(true);
+    const beforeRevision = world.services.store.runMemoryContexts
+      .get(firstRun)
+      ?.selectedItems.find((item) => item.memoryId === firstRecord.id)?.revisionId;
+
+    // R7：改为新修订并重新设优先，新任务只注入最新修订，旧运行审计不变。
+    const current = world.services.store.memories.get(firstRecord.id);
+    if (!current) throw new Error('记录缺失。');
+    const reworded = await world.services.memories.update({
+      operationId: randomUUID(),
+      id: firstRecord.id,
+      expectedRevision: current.revision,
+      patch: { content: '给出表格后附限制说明与数据截止日期。', recallPolicy: 'pinned' },
+    });
+    expect(reworded.ok).toBe(true);
+    const secondRun = startRun(world, taskRef, '请整理财务概览', {
+      id: saveContext(world, taskRef, { materials: [], excludedMemoryIds: [] }).id,
+      revision: (world.services.store.taskContexts.getLatest(task.task.id) ?? { revision: 0 })
+        .revision,
+    });
+    await waitForCompletion(world, secondRun);
+    const injected = (lastRunRequest(world)?.messages ?? [])
+      .filter((message) => message.role !== 'user')
+      .map((message) => message.content)
+      .join('\n');
+    expect(injected).toContain('给出表格后附限制说明与数据截止日期。');
+    expect(injected).not.toContain('给出表格后附限制说明。\n');
+    expect(
+      world.services.store.runMemoryContexts
+        .get(firstRun)
+        ?.selectedItems.find((item) => item.memoryId === firstRecord.id)?.revisionId,
+    ).toBe(beforeRevision);
+  });
+
+  it('N2 父规则被删除后，派生记忆不再带入也不擦除依赖', async () => {
+    const world = await createWorld();
+    const scope: MemoryScope = { kind: 'workspace', workspaceId: world.layout.workspaceA };
+    const parent = await confirmMemory(world, scope, {
+      content: '金额按万元保留两位。',
+      facet: 'preference',
+    });
+    const runId = startRun(
+      world,
+      world.layout.a1,
+      '请按金额按万元保留两位汇总本月收入',
+      saveContext(world, world.layout.a1, { materials: [], excludedMemoryIds: [] }),
+    );
+    await waitForCompletion(world, runId);
+    const answer = world.services.store.runs
+      .listEvents(runId)
+      .filter((event) => event.type === 'message.completed')
+      .at(-1);
+    if (!answer || answer.type !== 'message.completed') throw new Error('缺少最终回答。');
+    const derived = await world.services.memories.create({
+      operationId: randomUUID(),
+      content: '复盘时先统一金额单位。',
+      facet: 'method',
+      scope,
+      asUserInstruction: false,
+      sourceSelector: {
+        kind: 'run-assistant',
+        runId,
+        eventId: answer.id,
+        start: 0,
+        end: 4,
+      },
+    });
+    expect(derived.ok).toBe(true);
+    const derivedRevisionId = derived.ok ? derived.data.committedRevisionIds[0] : undefined;
+    const derivedRecord =
+      derivedRevisionId === undefined
+        ? undefined
+        : world.services.store.memories.getRevision(derivedRevisionId);
+    if (!derivedRecord) throw new Error('派生记忆未落库。');
+    const dependenciesBefore =
+      derivedRecord.provenance.verification === 'verified'
+        ? derivedRecord.provenance.memoryDependencies.length
+        : 0;
+    expect(dependenciesBefore).toBeGreaterThan(0);
+
+    const deleted = await world.services.memories.setStatus({
+      operationId: randomUUID(),
+      id: parent.id,
+      expectedRevision: parent.revision,
+      action: 'delete',
+    });
+    expect(deleted.ok).toBe(true);
+
+    const secondRun = startRun(world, world.layout.a2, '请出本期经营分析', {
+      id: saveContext(world, world.layout.a2, { materials: [], excludedMemoryIds: [] }).id,
+      revision: (
+        world.services.store.taskContexts.getLatest(world.layout.a2.taskId) ?? {
+          revision: 0,
+        }
+      ).revision,
+    });
+    await waitForCompletion(world, secondRun);
+    const injected = (lastRunRequest(world)?.messages ?? [])
+      .filter((message) => message.role !== 'user')
+      .map((message) => message.content)
+      .join('\n');
+    expect(injected).not.toContain('复盘时先统一金额单位。');
+    // 依赖不擦除：仍登记原父修订引用，由门禁拒绝带入而不是抹掉证据链。
+    const after = world.services.store.memories.getRevision(derivedRecord.revisionId);
+    expect(
+      after?.provenance.verification === 'verified'
+        ? after.provenance.memoryDependencies.length
+        : 0,
+    ).toBe(dependenciesBefore);
+  });
+
+  it('AC3 崩溃重启后旧 v1 审计原样可读，新策略字段不强塞历史', async () => {
+    const world = await createWorld();
+    const legacyRunId = 'mi09-legacy-v1-run';
+    world.services.store.runs.create({
+      id: legacyRunId,
+      taskId: world.layout.a1.taskId,
+      sessionId: world.layout.a1.sessionId,
+      prompt: '改造前的旧运行',
+      status: 'completed',
+      createdAt: 1,
+      completedAt: 2,
+    });
+    world.services.store.runMemoryContexts.recordSelection({
+      runId: legacyRunId,
+      evaluatedAt: 3,
+      queryHash: 'e'.repeat(64),
+      policySnapshot: memoryRecallPolicyV1,
+      selectedItems: [
+        {
+          memoryId: 'legacy-memory',
+          revisionId: 'legacy-revision',
+          contentHash: 'f'.repeat(64),
+          order: 1,
+          score: 500,
+          reason: 'task-relevant',
+        },
+      ],
+      decisionSummary: {
+        budget: {
+          totalItems: 1,
+          preferenceItems: 0,
+          contentCodePoints: 9,
+          wrapperCodePoints: 20,
+          blockCodePoints: 29,
+        },
+        exclusions: [],
+        queryTruncated: false,
+        conflictReviewRequired: false,
+      },
+      authorizationHash: 'a'.repeat(64),
+      selectedAt: 3,
+    });
+
+    const reopened = restartWorld(world);
+    expect(reopened).toBeGreaterThanOrEqual(0);
+    const context = world.services.store.runMemoryContexts.get(legacyRunId);
+    expect(context?.recallVersion).toBe('memory-recall-v1');
+    expect(context?.policySnapshot.algorithmVersion).toBe(1);
+    expect(context?.selectedItems[0]?.reason).toBe('task-relevant');
+    // 旧行不被回填新字段：读取仍按冻结的 v1 形状解析。
+    expect(context !== undefined && Object.hasOwn(context.policySnapshot, 'pinnedItemLimit')).toBe(
+      false,
+    );
+    const read = world.services.recall.runContext({ runId: legacyRunId });
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect(read.data.context?.recallVersion).toBe('memory-recall-v1');
   });
 
   it('没有来源 Run 的讨论反馈用当前 TaskContext 钉住的模型，不暗换应用级默认', async () => {
