@@ -158,6 +158,7 @@ export function App(): React.JSX.Element {
   const [taskMemoriesError, setTaskMemoriesError] = useState('');
   const [taskMemoriesWarning, setTaskMemoriesWarning] = useState('');
   const taskMemoriesRequestRef = useRef(0);
+  const startFromVersionRequest = useRef(0);
   const [excludedMemoryIds, setExcludedMemoryIds] = useState<string[]>([]);
   const [mcpToolBindings, setMcpToolBindings] = useState<McpToolBinding[]>([]);
   const [discussionCheckpoints, setDiscussionCheckpoints] = useState<DiscussionCheckpoint[]>([]);
@@ -1020,12 +1021,24 @@ export function App(): React.JSX.Element {
     if (artifact.type !== 'markdown' || version.type !== 'markdown') {
       throw new Error('当前仅支持以 Markdown 成果版本开始新任务。');
     }
+    // MI08 AC4：读取期间用户可能已切走或正在写别的草稿——迟到响应不得改动当前任务，
+    // 读取失败也要保留原任务与草稿而不是先清空再报错。
+    const requestId = (startFromVersionRequest.current += 1);
+    const taskAtRequest = activeTask?.id;
+    let executor: Awaited<ReturnType<typeof window.betterwork.artifacts.getVersionExecutor>>;
+    try {
+      executor = await window.betterwork.artifacts.getVersionExecutor({
+        artifactId: artifact.id,
+        artifactVersionId: version.id,
+      });
+    } catch (error: unknown) {
+      // 读取失败：原任务与草稿保持不动，失败由调用方的 reportAction 呈现。
+      if (requestId !== startFromVersionRequest.current) return;
+      throw new Error('无法确认该版本的来源执行身份，原任务保持不变。', { cause: error });
+    }
+    if (requestId !== startFromVersionRequest.current || activeTask?.id !== taskAtRequest) return;
     // MI08：默认身份取自这个精确版本的来源 Run 快照，不读旧 Task 的当前草稿，
     // 也不复制来源任务的技能/模型/MCP 绑定；配置已更新时先按当前版本使用并说明。
-    const executor = await window.betterwork.artifacts.getVersionExecutor({
-      artifactId: artifact.id,
-      artifactVersionId: version.id,
-    });
     let sourceExpert: { id: string; revisionId: string; name: string } | undefined;
     let notice: string | undefined;
     if (executor === null) {

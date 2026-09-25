@@ -1187,6 +1187,57 @@ describe('参考成果版本接入当前任务', () => {
     expect(api.runs.start).not.toHaveBeenCalled();
   });
 
+  it('来源执行身份读取失败时保留原任务与草稿，只报一次可重试错误', async () => {
+    const api = installReferenceApi({ expert: true, context: expertContext() });
+    api.artifacts.getVersionExecutor.mockRejectedValueOnce(new Error('数据库暂时不可用'));
+    render(<App />);
+    await openVersionAction();
+
+    expect(await screen.findByText(/无法确认该版本的来源执行身份，原任务保持不变/)).toBeTruthy();
+    // 失败不新建任务、不切走成果视图，也不留下半途的专家切换。
+    expect(screen.queryByRole('list', { name: '当前专家' })).toBeNull();
+    expect(api.runs.start).not.toHaveBeenCalled();
+  });
+
+  it('重复点击时迟到响应不覆盖后一次结果', async () => {
+    const api = installReferenceApi({ expert: true, context: expertContext() });
+    let resolveFirst: ((value: ArtifactVersionExecutorSummary | null) => void) | undefined;
+    api.artifacts.getVersionExecutor
+      .mockImplementationOnce(
+        () =>
+          new Promise<ArtifactVersionExecutorSummary | null>((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        kind: 'unavailable',
+        reason: 'expert-unavailable',
+      });
+    render(<App />);
+    await openVersionAction();
+    // 再点一次：第一次的响应此刻仍未回来，只有后一次的结果可以落到界面上。
+    const again = screen.getAllByRole('button', { name: '基于此版本开始新任务' }).at(-1);
+    if (again) fireEvent.click(again);
+
+    resolveFirst?.({
+      kind: 'expert',
+      sourceRunId: 'previous-run',
+      expertId: expertSummary.id,
+      sourceExpertRevisionId: expertDetail.revision.id,
+      currentExpertRevisionId: expertDetail.revision.id,
+      name: expertDetail.name,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // 只有后一次（专家不可用）的结果生效：不出现幽灵专家，也不重复提示。
+    expect(screen.queryByRole('list', { name: '当前专家' })).toBeNull();
+    expect(
+      await screen.findByText('来源任务的专家已不可用，新任务先用通用助手，可自行选择其他专家。'),
+    ).toBeTruthy();
+    expect(api.runs.start).not.toHaveBeenCalled();
+  });
+
   it('来源专家已不可用时改用通用助手并当场说明，不猜专家', async () => {
     const api = installReferenceApi({ expert: true, context: expertContext() });
     api.artifacts.getVersionExecutor.mockResolvedValue({
