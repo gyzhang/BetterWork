@@ -695,6 +695,12 @@ function MemoryRow({
             {...(expertName ? { expertName } : {})}
           />
         ))}
+        {!readOnly && memory.status === 'confirmed' && (
+          <small className="memory-policy-hint">
+            优先带入只免「词面命中」这一道门槛，不免范围、有效期、本任务排除、来源与冲突门禁；
+            调整会追加修订并只影响下次运行，也不表示模型一定采用。
+          </small>
+        )}
       </div>
       <div className="memory-actions">
         {!readOnly && (
@@ -740,12 +746,6 @@ function MemoryRow({
           >
             {memory.recallPolicy === 'pinned' ? '取消优先带入' : '设为优先带入'}
           </button>
-        )}
-        {!readOnly && memory.status === 'confirmed' && (
-          <small className="memory-policy-hint">
-            优先带入只免「词面命中」这一道门槛，不免范围、有效期、本任务排除、来源与冲突门禁；
-            调整会追加修订并只影响下次运行，也不表示模型一定采用。
-          </small>
         )}
         {!readOnly && !isGlobalScopeOf(memory) && isDerived(memory) && (
           <button type="button" onClick={() => onRestate(memory)}>

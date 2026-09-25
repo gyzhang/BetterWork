@@ -585,6 +585,9 @@ export const MEMORY_MEMORY_DEPENDENCY_MAX = 100;
 /** 契约 §11.2：任务排除数量上限＝TaskContext 允许写入的排除数，两侧共用同一把尺。 */
 export const MEMORY_TASK_EXCLUSION_MAX = 100;
 export const MEMORY_COMMITTED_REVISION_MAX = 20;
+/** 检索词整句按 code point 计长；空白切词后最多取前 MEMORY_QUERY_TERM_MAX 个词做子串匹配。 */
+export const MEMORY_QUERY_MAX_CODE_POINTS = 500;
+export const MEMORY_QUERY_TERM_MAX = 10;
 export const LIST_PAGE_DEFAULT_LIMIT = 50;
 export const LIST_PAGE_MAX_LIMIT = 100;
 
@@ -1271,6 +1274,8 @@ export const listMemoriesRequestSchema = z
     expertId: z.string().min(1).optional(),
     statuses: z.array(memoryStatusSchema).max(memoryStatusSchema.options.length).optional(),
     includeCandidates: z.boolean().default(true),
+    // 全库检索：治理页只渲染一页，检索必须在 SQL 层命中未加载的记录，不能在界面二次过滤。
+    query: trimmedTextSchema('记忆检索词', 1, MEMORY_QUERY_MAX_CODE_POINTS).optional(),
     cursor: listCursorSchema.optional(),
     limit: z.number().int().positive().max(LIST_PAGE_MAX_LIMIT).optional(),
   })

@@ -2562,8 +2562,10 @@ p {
 }
 .memory-actions {
   display: flex;
-  flex: none;
-  gap: 4px;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 6px;
 }
 .memory-actions button {
   padding: 5px 7px;
