@@ -1,7 +1,7 @@
 # ADR-0028：记忆来源可靠性与显式优先召回
 
 - 日期：2026-09-25
-- 状态：Proposed（ADR 正式接受状态未变）；光哥已批准 Spec 的 D1–D5 推荐方案，不改变 ADR-0026 的状态，不构成开工、真实模型调用或提交发布授权。
+- 状态：Proposed（ADR 正式接受状态未变）；光哥已批准 Spec 的 D1–D5 推荐方案，不改变 ADR-0026 的状态，不构成开工、真实模型调用或提交发布授权。同日光哥另行下达持续落地指令，MI00–MI09 的代码与自动化测试已按阶段提交，界面人工走查与真实模型语义验收未完成；推送与发布仍未授权，本 ADR 的 Proposed 状态不因代码落地自动改变。
 - 产品：[记忆改进 Spec](../designs/memory-improvements.md)
 - 实施真相源：[记忆契约 §11](../development/memory-contracts.md#11-mi-改进契约proposed)
 - 推进：[MI00–MI10](../development/tasks-memory-improvements.md)

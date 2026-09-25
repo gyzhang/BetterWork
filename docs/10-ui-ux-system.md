@@ -148,7 +148,7 @@ Skill 列表分别展示来源（内置/用户）、启用状态、信任状态�
 
 2026-09-25 的[改进 Spec](designs/memory-improvements.md)与[低保真原型](prototype/memory-improvements/index.html)提出五项局部交互：回答保存先绑定原文来源、独立「本任务已排除」与恢复参与选择、记忆详情显式「优先带入」、冲突双方来源与并存条件、历史截断后的选材/精确成果/记忆详情入口。均复用既有设置与可关闭上下文面板，不增一级导航，不强制发送前预览，不自动发起 Run。
 
-光哥已查看原型并批准 D1–D5 推荐方案，作为后续交互实现依据；目前未开工、未实现，取得单卡授权后按 [MI 计划](development/tasks-memory-improvements.md)逐卡落地。沿用 §8.3 页面骨架、§11.5.1 反馈路由和 §12 可用性底线；不得用「模型已阅读」「恢复后必定使用」替代真实状态。具体规则只见 Spec 与[契约 §11](development/memory-contracts.md#11-mi-改进契约proposed)，不在本节重复技术字段。
+光哥已查看原型并批准 D1–D5 推荐方案，作为后续交互实现依据；同日下达持续落地指令后，五项交互的界面与主进程链路均已实现并分阶段提交（MI00–MI09 的代码与自动化证据见 [MI 计划](development/tasks-memory-improvements.md)），逐格人工走查记录在 [MI 人工验收清单](development/memory-mi10-checklist.md)，走查与真实模型语义未完成前不得写成已通过。沿用 §8.3 页面骨架、§11.5.1 反馈路由和 §12 可用性底线；不得用「模型已阅读」「恢复后必定使用」替代真实状态。具体规则只见 Spec 与[契约 §11](development/memory-contracts.md#11-mi-改进契约proposed)，不在本节重复技术字段。
 
 ### 6.2 任务工作区
 

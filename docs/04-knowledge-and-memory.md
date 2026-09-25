@@ -166,6 +166,8 @@ Memory 文件和 MemoryRecord 共同生成全文与向量索引。索引不是�
 
 已实现（WM04）的召回第一期**不建派生索引**：召回在 SQLite 范围过滤后使用固定版本 `memory-recall-v1` 的确定性内存文本匹配，不引入 FTS、Embedding 或向量依赖；未来的索引只是可重建优化（[契约 §6.1](development/memory-contracts.md)）。
 
+MI05 起，新运行改用同族版本 `memory-recall-v2`：在同一套分词与打分之上先排「优先带入」池（用户显式设定、免「词面命中」这一道门槛，但不免范围、有效期、本任务排除、来源与冲突门禁），再排通用偏好池与相关池，新增 `pinned-rule` 选择理由并把优先池预算固定为 6 条 / 2,000 码点。历史 v1 运行快照按原样只读，不回填、不改写算法版本；`RunMemoryContext.recallVersion` 必须与其 `policySnapshot` 分支一致，v1 上下文里出现 `pinned-rule` 视为伪造数据直接拒绝（[契约 §11.3–§11.4](development/memory-contracts.md#11-mi-改进契约proposed)、[ADR-0028](adr/0028-memory-reliability-improvements.md)）。设置优先只影响下一次运行，不表示模型一定采用。
+
 ## 7. 记忆形成
 
 ### 用户明确记忆
@@ -194,6 +196,8 @@ Agent 发现可能长期有用的信息时，生成 candidate，由用户保存�
 - 禁止某类信息再次被建议
 
 已实现（E32）：设置页的创建、查看、确认、编辑、删除与「本任务不用」。**已实现（WM02/WM03）**：幂等操作回执与 `expectedRevision` 并发控制、以 action 表达的状态转移（confirm/reject/restore-candidate/expire/delete/reconfirm）、候选「暂不采用」可恢复、冲突裁决 `keep-both`/`replace` 绑定精确修订对、有效期的 set/clear 语义、legacy 来源复核入口，以及投影「数据库已提交成功＋可见警告」的一致性（[契约 §5.4–§5.6](development/memory-contracts.md)）。本期不做置信度自动覆盖，也不声称能自动识别新材料与记忆的全部语义冲突。
+
+**已实现（MI01–MI08）**：来源完整性由 Main 判定——保存回答摘录时重查该 Run 的最后一条无工具完成消息、Run 审计里的实际读取足迹，以及材料与既有记忆的**完整依赖闭包**（重放闭包、环与超额一律拒绝，缺审计记为来源待复核），界面不能把有来源的保存伪装成自主口径；本任务排除改为独立投影 `memory:task-exclusions`，换问法、预览失败或重启后仍能在面板里逐条恢复，越范围或已删除的条目只给占位不给正文；`recallPolicy` 作为修订字段持久化（迁移 v33），只有已确认、当前生效、用户口径、来源可用且不带任何材料/记忆依赖的工作要求可设优先，其余形状在写入时即给出中文原因；并存裁决的适用条件随冲突视图回传并可重开。人工界面走查与真实模型语义验收尚未完成，本段只描述代码与自动化证据（[MI 任务板](development/tasks-memory-improvements.md)）。
 
 ## 9. 知识加工闭环
 
