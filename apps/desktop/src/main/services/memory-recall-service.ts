@@ -36,7 +36,7 @@ import {
   memoryErrorSchema,
   memoryPreviewDataSchema,
   memoryQueryContextSchema,
-  memoryRecallPolicyV1,
+  memoryRecallPolicyV2,
   memoryRunContextDataSchema,
   memorySelectedMemorySchema,
   memoryViewItemSchema,
@@ -59,9 +59,10 @@ import { conflictPairKey, listPotentialConflictPairs } from './memory-conflict-p
 import { memoryContentHash } from './memory-content-policy';
 import { promptHashOf } from './memory-provenance';
 import {
-  applyRecallBudget,
+  applyRecallBudgetV2,
   assembleRecallQuery,
   type BudgetSelection,
+  pinnedGroupOrder,
   type PreferencePoolItem,
   type RankedRecall,
   rankRecallItems,
@@ -261,6 +262,7 @@ const recallItemOf = (record: MemoryRecord): RecallItem => ({
   kind: record.kind,
   scope: record.scope,
   updatedAt: record.updatedAt,
+  recallPolicy: record.recallPolicy,
   ...(record.topicKey === undefined ? {} : { topicKey: record.topicKey }),
 });
 
@@ -641,6 +643,8 @@ const selectionReasonOf = (reason: RecallReason): MemorySelectionReason => {
       return 'conflict-pair';
     case 'relevance':
       return 'task-relevant';
+    case 'pinned-rule':
+      return 'pinned-rule';
   }
 };
 
@@ -677,21 +681,24 @@ const rankedGroups = (
 
 /** 组原子的单元划分：连续 conflict-group 条目是一个整体，其余每条各自成单元。 */
 const unitsOf = (items: readonly SelectedMemory[]): SelectedMemory[][] => {
+  const groupReasons: readonly RecallReason[] = ['conflict-group', 'pinned-rule'];
   const units: SelectedMemory[][] = [];
   let index = 0;
   while (index < items.length) {
     const first = items[index];
     if (first === undefined) break;
-    if (first.reason !== 'conflict-group') {
+    // 优先组与并存组都是整体：裁剪预算时只能整组进出，不能拆成单条。
+    if (!groupReasons.includes(first.reason)) {
       units.push([first]);
       index += 1;
       continue;
     }
+    const reason = first.reason;
     const unit: SelectedMemory[] = [];
     let next = index;
     for (;;) {
       const candidate = items[next];
-      if (candidate === undefined || candidate.reason !== 'conflict-group') break;
+      if (candidate === undefined || candidate.reason !== reason) break;
       unit.push(candidate);
       next += 1;
     }
@@ -832,15 +839,39 @@ export const recallMemoriesForQuery = (
     survivors.push(record);
   }
 
+  // 契约 §11.4：优先池先按「已裁决并存分量」整体判定——分量里只要有一条 pinned，
+  // 整组都属于优先池（其余成员的策略不被暗改），且必须与其余成员一起进出。
+  const componentKeyOf = (record: MemoryRecord): string => {
+    const component = conflicts.groups.get(record.id);
+    return component === undefined ? `single:${record.id}` : component.ids.join('|');
+  };
+  const pinnedComponentKeys = new Set<string>();
+  for (const record of survivors) {
+    if (record.recallPolicy === 'pinned') pinnedComponentKeys.add(componentKeyOf(record));
+  }
+  const inPinnedPool = (record: MemoryRecord): boolean =>
+    record.recallPolicy === 'pinned' || pinnedComponentKeys.has(componentKeyOf(record));
+
+  const pinnedByKey = new Map<string, MemoryRecord[]>();
   const pool: PreferencePoolItem[] = [];
   const relevanceRecords: MemoryRecord[] = [];
   for (const record of survivors) {
+    if (inPinnedPool(record)) {
+      const key = componentKeyOf(record);
+      const bucket = pinnedByKey.get(key);
+      if (bucket === undefined) pinnedByKey.set(key, [record]);
+      else bucket.push(record);
+      continue;
+    }
     if (isPreferencePoolCandidate(record)) {
       pool.push(poolItemOf(record));
       continue;
     }
     relevanceRecords.push(record);
   }
+  const pinnedGroups: RecallGroup[] = [...pinnedByKey.values()]
+    .map((items) => ({ items: items.map(recallItemOf), reason: 'pinned-rule' as const }))
+    .sort((left, right) => pinnedGroupOrder(left.items, right.items));
 
   const ranked = rankRecallItems(queryParts.tokens, relevanceRecords.map(recallItemOf));
   const scoreById = new Map(ranked.map((item) => [item.id, item.score]));
@@ -850,11 +881,14 @@ export const recallMemoriesForQuery = (
   }
 
   const groups = rankedGroups(ranked, conflicts.groups);
-  const selection = applyRecallBudget(groups, pool);
+  const selection = applyRecallBudgetV2(pinnedGroups, groups, pool);
   const recordById = new Map(survivors.map((record) => [record.id, record]));
   const trimmed = trimToBlockBudget(selection, recordById, conflicts.groups);
   const finalIds = new Set(trimmed.map((item) => item.id));
   for (const candidate of [
+    ...pinnedGroups.flatMap((group) =>
+      group.items.map((item) => ({ id: item.id, revisionId: item.revisionId })),
+    ),
     ...pool.map((item) => ({ id: item.id, revisionId: item.revisionId })),
     ...groups.flatMap((group) =>
       group.items.map((item) => ({ id: item.id, revisionId: item.revisionId })),
@@ -1382,7 +1416,7 @@ export class MemoryRecallService {
       const outcome = recallMemoriesForQuery(this.store, query);
       const data = memoryPreviewDataSchema.parse({
         evaluatedAt: query.evaluatedAt,
-        policySnapshot: memoryRecallPolicyV1,
+        policySnapshot: memoryRecallPolicyV2,
         selectedItems: outcome.selectedItems,
         decisionSummary: outcome.decisionSummary,
       });

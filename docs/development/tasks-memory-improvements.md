@@ -10,7 +10,7 @@
 
 1. D1–D5 推荐方案已获光哥批准，无需重复评审未变化的方案；仍可只安排 MI-M0，后续阶段另行派卡。
 2. MI00 已核对，MI01–MI03 的代码与自动化已落地（见状态表）；MI-M0 仍需光哥在真实应用完成两条人工路径后才算通过。
-3. MI-M0 的门槛：来源链与排除恢复自动化通过、应用中完成两条人工路径；未通过就停在此里程碑，不带病叠加新策略。
+3. MI-M0 的门槛：来源链与排除恢复自动化通过、应用中完成两条人工路径；未通过就停在此里程碑，不带病叠加新策略。**当前状态**：自动化与提交已完成（MI01 done、MI02/MI03 doing＝UI 待光哥走查）；MI04/MI05 在同日持续指令下已推进，若 MI-M0 人工走查发现问题，回对应卡补回归后再继续 MI06+。
 4. MI-M0 通过且取得对应卡授权后，再执行 MI04 → MI05 → MI06。MI04 是迁移基础，不单独宣布优先策略可用。
 5. MI07 → MI08 完成治理与换期；MI09 做离线联合回归；MI10 单独安排真实 UI 与已授权的真实模型效果评审。
 6. 每卡串行。协议、迁移、App.tsx、RunService 是共享高冲突文件，不并发派给多个编码会话。与 KM/CF 的并行会话保持文件边界，不抢改其测试。
@@ -34,8 +34,8 @@
 | MI01 | Main 手工来源依赖闭环 | MI00；D1 | done | 提交 `cd36d2a`。`memory-provenance.ts` 新增最终无工具回答＋真实空间归属＋依赖闭包校验，`ResolvedMemorySource.memoryDependencies` 由解析结果传入（原 `memory-service.ts:162` 硬编空数组已消除）；缺快照/审计→`SOURCE_REVIEW_REQUIRED`，缺修订/哈希不符/失效同码，循环→`SOURCE_DEPENDENCY_CYCLE`，超限→`SOURCE_DEPENDENCY_LIMIT`，501 码点摘录→`SOURCE_MISMATCH`；checkpoint 与 artifact-version 分支不再允许空依赖降级。协议层拒绝 `sourceSelector` ＋ `asUserInstruction=true`。证据：`memory-provenance.test.ts` 19 例、`work-centered-memory.integration.test.ts` 真实 SQLite 两例（继承等式/幂等重放/非最终事件/缺审计/零写入），全仓 `npm run verify` 通过 131 文件 1225 测试。 |
 | MI02 | 回答原文选择与保留来源保存 | MI01；D1 | doing | 自动化通过，UI 待验。提交 `c3a5348`：`lib/memory-capture.ts`（最终回答判定、UTF-16→码点换算、半代理对拒绝、唯一命中定位）、`components/MemoryCaptureSource.tsx` 只读原文重选、`MemoryEditor` 新增 `requireSource`，未确认选区不能提交且不再静默转 manual；捕获范围过滤掉 user/expert 全局。`App.test.tsx` 新增选区保留来源与不提供全局两例，`memory-capture.test.ts` 8 例含非 BMP 与重复片段。 |
 | MI03 | 持久化排除列表与恢复 | MI00；D2；建议在 MI02 后 | doing | 自动化通过，UI 待验。提交 `f914bcc`：新只读通道 `memory:task-exclusions`（不要求 prompt）＋ `TaskMemoryExclusionItem` strict 联合，越范围/不存在统一 `unavailable` 占位；`MemoryRecallService.taskExclusions` 直接投影 TaskContext 顺序、去重、上限 100（`MEMORY_TASK_EXCLUSION_MAX` 与 TaskContext/保存 Schema 共用），写入仍走 `SaveTaskContextRequest`＋CAS，未新建排除表。证据：`task-memory-exclusions.test.ts` 真实 SQLite 4 例（含不泄露他空间正文、修订冲突回 `REVISION_CONFLICT`＋当前修订号）、`ContextPanel.test.tsx` 独立清单在预览失败时仍可恢复。 |
-| MI04 | recallPolicy 字段与真实迁移 | MI-M0；D3 | todo | — |
-| MI05 | 优先策略写入与 v2 召回/历史兼容 | MI04 | todo | — |
+| MI04 | recallPolicy 字段与真实迁移 | MI-M0；D3 | done | 提交 `dd7bb58`。迁移 **v33** 给 `memory_records` 补 `recall_policy TEXT NOT NULL DEFAULT 'relevant' CHECK IN ('relevant','pinned')`；仓储读写映射、追加修订与治理动作均原样携带策略（不被默认值清掉），新建与自动候选固定 relevant。证据：`migrate.test.ts` v33 用例（旧库两次迁移幂等、身份/正文哈希/状态/来源逐行不变、非法枚举被 CHECK 拒、`foreign_key_check` 为空）、`memory-repository.test.ts` 用真实文件库把历史行 forge 成 pinned 后编辑与 expire 仍保留策略、协议枚举用例。全仓 verify 通过。 |
+| MI05 | 优先策略写入与 v2 召回/历史兼容 | MI04 | doing | 自动化通过，真实 ModelRequest 断言待补（MI09）。协议新增 `memory-recall-v2`/algorithmVersion=2、`MEMORY_RECALL_PINNED_ITEM_LIMIT=6`、`MEMORY_RECALL_PINNED_CODE_POINT_BUDGET=2000`、冻结 v1 快照 Schema＋严格 v2 Schema、`pinned-rule` 选择理由，并在 `runMemoryContextSchema` 拒绝「版本与快照不一致」和「v1 快照里出现 pinned-rule」。`MemoryService.update` 落资格门禁：仅已确认、当前生效、用户口径、零材料/零记忆依赖且非事实/经验可 pinned，否则 `INVALID_TRANSITION`；已 pinned 记录被编辑成不合格形状时要求先取消优先。`applyRecallBudgetV2` 按优先池→偏好池→相关池分配，keep-both 分量整体进出、优先组排序不用 updatedAt 偏袒，新 Run 写 v2。证据：`memory-recall-v2.test.ts` 9 例（零词面命中仍入选且 score 如实为 0、6/7 条与 2,000/2,001 码点边界、三分量整组进整组出、排除项不能穿透、真实 SQLite preview 快照为 v2）。 |
 | MI06 | 优先规则管理与原因展示 | MI05；D3 | todo | — |
 | MI07 | 冲突来源与并存条件可回看 | MI-M0；D4 | todo | — |
 | MI08 | 换期恢复引导与来源专家修正 | MI-M0；D5 | todo | — |

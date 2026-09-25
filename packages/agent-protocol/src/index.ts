@@ -1043,6 +1043,8 @@ export const memoryEditPatchSchema = z
     scope: memoryScopeSchema.optional(),
     validFrom: datePatchSchema.optional(),
     validUntil: datePatchSchema.optional(),
+    /** 契约 §11.3：策略调整走同一份 patch；资格校验在 MemoryService 判定。 */
+    recallPolicy: memoryRecallPolicySchema.optional(),
   })
   .strict()
   .superRefine((patch, context) => {
@@ -1053,6 +1055,7 @@ export const memoryEditPatchSchema = z
       patch.scope,
       patch.validFrom,
       patch.validUntil,
+      patch.recallPolicy,
     ].filter((field) => field !== undefined);
     if (touched.length === 0) {
       context.addIssue({
@@ -1503,6 +1506,11 @@ export type MemoryReferenceWriteReceipt = z.infer<typeof memoryReferenceWriteRec
 
 export const MEMORY_RECALL_VERSION = 'memory-recall-v1';
 export const MEMORY_RECALL_ALGORITHM_VERSION = 1;
+/** 契约 §11.4：v2 只升级选择策略（新增优先池），分词、打分与其余预算沿用 v1。 */
+export const MEMORY_RECALL_VERSION_V2 = 'memory-recall-v2';
+export const MEMORY_RECALL_ALGORITHM_VERSION_V2 = 2;
+export const MEMORY_RECALL_PINNED_ITEM_LIMIT = 6;
+export const MEMORY_RECALL_PINNED_CODE_POINT_BUDGET = 2_000;
 export const MEMORY_RECALL_PREFERENCE_ITEM_LIMIT = 2;
 export const MEMORY_RECALL_PREFERENCE_CODE_POINT_BUDGET = 600;
 export const MEMORY_RECALL_TOTAL_ITEM_LIMIT = 16;
@@ -1557,6 +1565,8 @@ export const memorySelectionReasonSchema = z.enum([
   'general-preference',
   'conflict-pair',
   'replay-inherited',
+  // 契约 §11.4：优先池成员的理由，只允许出现在 v2 运行上下文里。
+  'pinned-rule',
 ]);
 export type MemorySelectionReason = z.infer<typeof memorySelectionReasonSchema>;
 
@@ -1662,31 +1672,74 @@ export const memoryDecisionSummarySchema = z
   .strict();
 export type MemoryDecisionSummary = z.infer<typeof memoryDecisionSummarySchema>;
 
-export const memoryPolicySnapshotSchema = z
+/** 除版本字段外的阈值在两个版本之间共享，避免同一数字写两遍后各自漂移。 */
+const memoryPolicySnapshotSharedFields = {
+  preferenceItemLimit: z.literal(MEMORY_RECALL_PREFERENCE_ITEM_LIMIT),
+  preferenceCodePointBudget: z.literal(MEMORY_RECALL_PREFERENCE_CODE_POINT_BUDGET),
+  totalItemLimit: z.literal(MEMORY_RECALL_TOTAL_ITEM_LIMIT),
+  contentCodePointBudget: z.literal(MEMORY_RECALL_CONTENT_CODE_POINT_BUDGET),
+  wrapperCodePointBudget: z.literal(MEMORY_RECALL_WRAPPER_CODE_POINT_BUDGET),
+  blockCodePointBudget: z.literal(MEMORY_RECALL_BLOCK_CODE_POINT_BUDGET),
+  queryCodePointLimit: z.literal(MEMORY_RECALL_QUERY_CODE_POINT_LIMIT),
+  queryEdgeCodePointLimit: z.literal(MEMORY_RECALL_QUERY_EDGE_CODE_POINT_LIMIT),
+  taskTitleCodePointLimit: z.literal(MEMORY_RECALL_TASK_TITLE_CODE_POINT_LIMIT),
+  materialTitleCodePointLimit: z.literal(MEMORY_RECALL_MATERIAL_TITLE_CODE_POINT_LIMIT),
+  materialTitleItemLimit: z.literal(MEMORY_RECALL_MATERIAL_TITLE_ITEM_LIMIT),
+  minMatchedTokens: z.literal(MEMORY_RECALL_MIN_MATCHED_TOKENS),
+  replayPairLimit: z.literal(MEMORY_REPLAY_PAIR_LIMIT),
+  replayCodePointBudget: z.literal(MEMORY_REPLAY_CODE_POINT_BUDGET),
+} as const;
+
+/** 冻结的 v1 形状：历史库里的旧运行必须按原样解析，不回填新字段。 */
+export const memoryPolicySnapshotV1Schema = z
   .object({
     recallVersion: z.literal(MEMORY_RECALL_VERSION),
     algorithmVersion: z.literal(MEMORY_RECALL_ALGORITHM_VERSION),
-    preferenceItemLimit: z.literal(MEMORY_RECALL_PREFERENCE_ITEM_LIMIT),
-    preferenceCodePointBudget: z.literal(MEMORY_RECALL_PREFERENCE_CODE_POINT_BUDGET),
-    totalItemLimit: z.literal(MEMORY_RECALL_TOTAL_ITEM_LIMIT),
-    contentCodePointBudget: z.literal(MEMORY_RECALL_CONTENT_CODE_POINT_BUDGET),
-    wrapperCodePointBudget: z.literal(MEMORY_RECALL_WRAPPER_CODE_POINT_BUDGET),
-    blockCodePointBudget: z.literal(MEMORY_RECALL_BLOCK_CODE_POINT_BUDGET),
-    queryCodePointLimit: z.literal(MEMORY_RECALL_QUERY_CODE_POINT_LIMIT),
-    queryEdgeCodePointLimit: z.literal(MEMORY_RECALL_QUERY_EDGE_CODE_POINT_LIMIT),
-    taskTitleCodePointLimit: z.literal(MEMORY_RECALL_TASK_TITLE_CODE_POINT_LIMIT),
-    materialTitleCodePointLimit: z.literal(MEMORY_RECALL_MATERIAL_TITLE_CODE_POINT_LIMIT),
-    materialTitleItemLimit: z.literal(MEMORY_RECALL_MATERIAL_TITLE_ITEM_LIMIT),
-    minMatchedTokens: z.literal(MEMORY_RECALL_MIN_MATCHED_TOKENS),
-    replayPairLimit: z.literal(MEMORY_REPLAY_PAIR_LIMIT),
-    replayCodePointBudget: z.literal(MEMORY_REPLAY_CODE_POINT_BUDGET),
+    ...memoryPolicySnapshotSharedFields,
   })
   .strict();
+
+/** v2 严格要求两个优先预算字段，缺任何一个都不是合法的 v2 快照。 */
+export const memoryPolicySnapshotV2Schema = z
+  .object({
+    recallVersion: z.literal(MEMORY_RECALL_VERSION_V2),
+    algorithmVersion: z.literal(MEMORY_RECALL_ALGORITHM_VERSION_V2),
+    pinnedItemLimit: z.literal(MEMORY_RECALL_PINNED_ITEM_LIMIT),
+    pinnedCodePointBudget: z.literal(MEMORY_RECALL_PINNED_CODE_POINT_BUDGET),
+    ...memoryPolicySnapshotSharedFields,
+  })
+  .strict();
+
+export const memoryPolicySnapshotSchema = z.union([
+  memoryPolicySnapshotV1Schema,
+  memoryPolicySnapshotV2Schema,
+]);
 export type MemoryPolicySnapshot = z.infer<typeof memoryPolicySnapshotSchema>;
 
 export const memoryRecallPolicyV1 = {
   recallVersion: MEMORY_RECALL_VERSION,
   algorithmVersion: MEMORY_RECALL_ALGORITHM_VERSION,
+  preferenceItemLimit: MEMORY_RECALL_PREFERENCE_ITEM_LIMIT,
+  preferenceCodePointBudget: MEMORY_RECALL_PREFERENCE_CODE_POINT_BUDGET,
+  totalItemLimit: MEMORY_RECALL_TOTAL_ITEM_LIMIT,
+  contentCodePointBudget: MEMORY_RECALL_CONTENT_CODE_POINT_BUDGET,
+  wrapperCodePointBudget: MEMORY_RECALL_WRAPPER_CODE_POINT_BUDGET,
+  blockCodePointBudget: MEMORY_RECALL_BLOCK_CODE_POINT_BUDGET,
+  queryCodePointLimit: MEMORY_RECALL_QUERY_CODE_POINT_LIMIT,
+  queryEdgeCodePointLimit: MEMORY_RECALL_QUERY_EDGE_CODE_POINT_LIMIT,
+  taskTitleCodePointLimit: MEMORY_RECALL_TASK_TITLE_CODE_POINT_LIMIT,
+  materialTitleCodePointLimit: MEMORY_RECALL_MATERIAL_TITLE_CODE_POINT_LIMIT,
+  materialTitleItemLimit: MEMORY_RECALL_MATERIAL_TITLE_ITEM_LIMIT,
+  minMatchedTokens: MEMORY_RECALL_MIN_MATCHED_TOKENS,
+  replayPairLimit: MEMORY_REPLAY_PAIR_LIMIT,
+  replayCodePointBudget: MEMORY_REPLAY_CODE_POINT_BUDGET,
+} as const satisfies MemoryPolicySnapshot;
+
+export const memoryRecallPolicyV2 = {
+  recallVersion: MEMORY_RECALL_VERSION_V2,
+  algorithmVersion: MEMORY_RECALL_ALGORITHM_VERSION_V2,
+  pinnedItemLimit: MEMORY_RECALL_PINNED_ITEM_LIMIT,
+  pinnedCodePointBudget: MEMORY_RECALL_PINNED_CODE_POINT_BUDGET,
   preferenceItemLimit: MEMORY_RECALL_PREFERENCE_ITEM_LIMIT,
   preferenceCodePointBudget: MEMORY_RECALL_PREFERENCE_CODE_POINT_BUDGET,
   totalItemLimit: MEMORY_RECALL_TOTAL_ITEM_LIMIT,
@@ -1758,7 +1811,7 @@ export const runMemoryContextSchema = z
     runId: z.string().min(1),
     schemaVersion: z.literal(1),
     phase: memoryRunPhaseSchema,
-    recallVersion: z.literal(MEMORY_RECALL_VERSION),
+    recallVersion: z.union([z.literal(MEMORY_RECALL_VERSION), z.literal(MEMORY_RECALL_VERSION_V2)]),
     evaluatedAt: z.number().int().nonnegative(),
     queryHash: sha256HexSchema,
     policySnapshot: memoryPolicySnapshotSchema,
@@ -1777,6 +1830,25 @@ export const runMemoryContextSchema = z
   })
   .strict()
   .superRefine((context, ctx) => {
+    // 契约 §11.4：算法版本由 recallVersion 判别，快照必须与它同分支。
+    if (context.policySnapshot.recallVersion !== context.recallVersion) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['policySnapshot'],
+        message: 'policySnapshot 的 recallVersion 与运行上下文不一致',
+      });
+    }
+    // v1 历史快照里出现 pinned-rule 属于伪造数据，必须拒绝而不是兼容读取。
+    if (
+      context.recallVersion === MEMORY_RECALL_VERSION &&
+      context.selectedItems.some((item) => item.reason === 'pinned-rule')
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['selectedItems'],
+        message: 'pinned-rule 只允许出现在 memory-recall-v2 运行上下文中',
+      });
+    }
     const orders = context.selectedItems.map((item) => item.order);
     const expected = orders.map((_, index) => index + 1);
     const contiguous = [...orders]

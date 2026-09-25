@@ -24,7 +24,7 @@ import type {
 import {
   IpcChannel,
   materialReferenceSchema,
-  memoryRecallPolicyV1,
+  memoryRecallPolicyV2,
 } from '@betterwork/agent-protocol';
 import {
   type ArtifactFileRegistrar,
@@ -555,7 +555,7 @@ export class RunService {
           runId,
           evaluatedAt: memory.queryContext.evaluatedAt,
           queryHash: memory.queryHash,
-          policySnapshot: memoryRecallPolicyV1,
+          policySnapshot: memoryRecallPolicyV2,
           selectedItems: memory.selectedItems,
           replay: memory.replay,
           materialDependencyUnion: memory.materialDependencyUnion,

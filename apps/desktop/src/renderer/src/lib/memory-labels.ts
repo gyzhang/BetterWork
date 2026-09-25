@@ -63,6 +63,7 @@ export const selectionReasonLabel: Record<MemorySelectionReason, string> = {
   'task-relevant': '与本任务内容相关',
   'general-preference': '通用表达偏好',
   'conflict-pair': '共存裁决成对带入',
+  'pinned-rule': '优先带入',
   'replay-inherited': '由历史轮次继承',
 };
 

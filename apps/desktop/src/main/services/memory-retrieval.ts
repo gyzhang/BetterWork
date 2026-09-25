@@ -1,4 +1,4 @@
-import type { MemoryKind, MemoryScope } from '@betterwork/agent-protocol';
+import type { MemoryKind, MemoryRecallPolicy, MemoryScope } from '@betterwork/agent-protocol';
 import {
   countCodePoints,
   MEMORY_RECALL_BLOCK_CODE_POINT_BUDGET,
@@ -8,6 +8,8 @@ import {
   MEMORY_RECALL_MATERIAL_TITLE_CODE_POINT_LIMIT,
   MEMORY_RECALL_MATERIAL_TITLE_ITEM_LIMIT,
   MEMORY_RECALL_MIN_MATCHED_TOKENS,
+  MEMORY_RECALL_PINNED_CODE_POINT_BUDGET,
+  MEMORY_RECALL_PINNED_ITEM_LIMIT,
   MEMORY_RECALL_PREFERENCE_CODE_POINT_BUDGET,
   MEMORY_RECALL_PREFERENCE_ITEM_LIMIT,
   MEMORY_RECALL_QUERY_CODE_POINT_LIMIT,
@@ -39,6 +41,9 @@ export const RECALL_BUDGET = {
   maxMemoryBlockCodePoints: MEMORY_RECALL_BLOCK_CODE_POINT_BUDGET,
   preferencePoolMaxItems: MEMORY_RECALL_PREFERENCE_ITEM_LIMIT,
   preferencePoolMaxContentCodePoints: MEMORY_RECALL_PREFERENCE_CODE_POINT_BUDGET,
+  // 契约 §11.4：优先池只免「词面命中」这道门槛，不免任何安全门禁，也不保证必带。
+  pinnedPoolMaxItems: MEMORY_RECALL_PINNED_ITEM_LIMIT,
+  pinnedPoolMaxContentCodePoints: MEMORY_RECALL_PINNED_CODE_POINT_BUDGET,
   queryMaxCodePoints: MEMORY_RECALL_QUERY_CODE_POINT_LIMIT,
   queryHeadCodePoints: MEMORY_RECALL_QUERY_EDGE_CODE_POINT_LIMIT,
   queryTailCodePoints: MEMORY_RECALL_QUERY_EDGE_CODE_POINT_LIMIT,
@@ -234,13 +239,15 @@ export interface RecallItem {
   readonly scope: MemoryScope;
   readonly updatedAt: number;
   readonly topicKey?: string;
+  /** v2 优先池判定用；v1 调用方忽略该字段，行为保持不变。 */
+  readonly recallPolicy?: MemoryRecallPolicy;
 }
 
 export interface RankedRecall extends RecallItem {
   readonly score: number;
 }
 
-export type RecallReason = 'relevance' | 'preference-pool' | 'conflict-group';
+export type RecallReason = 'relevance' | 'preference-pool' | 'conflict-group' | 'pinned-rule';
 
 export interface SelectedMemory {
   readonly id: string;
@@ -333,6 +340,107 @@ export const applyRecallBudget = (
   }
 
   return { items, contentCodePoints, skippedForBudget };
+};
+
+/**
+ * memory-recall-v2 的分配顺序（契约 §11.4）：
+ * 先装优先池（免词面门槛，仍受本池与全局预算约束，组原子），
+ * 再装通用偏好小池，最后按相关性装剩余组。
+ * 装不下的整组记为落选并继续尝试后面较小组，不从高优先组倒删。
+ */
+export const applyRecallBudgetV2 = (
+  pinnedGroups: readonly RecallGroup[],
+  groups: readonly RecallGroup[],
+  preferencePool: readonly PreferencePoolItem[] = [],
+): BudgetSelection => {
+  const items: SelectedMemory[] = [];
+  let contentCodePoints = 0;
+  let skippedForBudget = 0;
+
+  let pinnedCount = 0;
+  let pinnedCodePoints = 0;
+  for (const group of pinnedGroups) {
+    const groupCodePoints = group.items.reduce(
+      (total, item) => total + countCodePoints(item.content),
+      0,
+    );
+    const overPooled =
+      pinnedCount + group.items.length > RECALL_BUDGET.pinnedPoolMaxItems ||
+      pinnedCodePoints + groupCodePoints > RECALL_BUDGET.pinnedPoolMaxContentCodePoints;
+    const overGlobal =
+      items.length + group.items.length > RECALL_BUDGET.maxItems ||
+      !fits(
+        contentCodePoints,
+        group.items.map((item) => item.content).join(''),
+        RECALL_BUDGET.maxContentCodePoints,
+      );
+    if (overPooled || overGlobal) {
+      skippedForBudget += group.items.length;
+      continue;
+    }
+    pinnedCount += group.items.length;
+    pinnedCodePoints += groupCodePoints;
+    contentCodePoints += groupCodePoints;
+    for (const item of group.items) items.push(selected(item, items.length, 'pinned-rule'));
+  }
+
+  let poolCount = 0;
+  let poolCodePoints = 0;
+  for (const candidate of preferencePool) {
+    if (poolCount >= RECALL_BUDGET.preferencePoolMaxItems) break;
+    if (items.length >= RECALL_BUDGET.maxItems) break;
+    const length = countCodePoints(candidate.content);
+    if (poolCodePoints + length > RECALL_BUDGET.preferencePoolMaxContentCodePoints) continue;
+    if (!fits(contentCodePoints, candidate.content, RECALL_BUDGET.maxContentCodePoints)) continue;
+    poolCount += 1;
+    poolCodePoints += length;
+    contentCodePoints += length;
+    items.push(selected(candidate, items.length, 'preference-pool'));
+  }
+
+  for (const group of groups) {
+    if (items.length + group.items.length > RECALL_BUDGET.maxItems) {
+      skippedForBudget += group.items.length;
+      continue;
+    }
+    const groupCodePoints = group.items.reduce(
+      (total, item) => total + countCodePoints(item.content),
+      0,
+    );
+    if (contentCodePoints + groupCodePoints > RECALL_BUDGET.maxContentCodePoints) {
+      skippedForBudget += group.items.length;
+      continue;
+    }
+    contentCodePoints += groupCodePoints;
+    for (const item of group.items) items.push(selected(item, items.length, group.reason));
+  }
+
+  return { items, contentCodePoints, skippedForBudget };
+};
+
+/** v2 优先池排序：组内最具体 scope 优先，再按组内规范最小 memoryId 字节序；不按 updatedAt 偏袒。 */
+export const pinnedGroupOrder = (
+  left: readonly RecallItem[],
+  right: readonly RecallItem[],
+): number => {
+  const specificity = (items: readonly RecallItem[]): number =>
+    Math.max(...items.map((item) => scopeSpecificity(item.scope)));
+  const smallestId = (items: readonly RecallItem[]): string =>
+    [...items].map((item) => item.id).sort(compareIdsByteOrder)[0] ?? '';
+  return (
+    specificity(right) - specificity(left) ||
+    compareIdsByteOrder(smallestId(left), smallestId(right)) ||
+    compareIdsByteOrder(
+      [...left]
+        .map((item) => item.id)
+        .sort(compareIdsByteOrder)
+        .join('|'),
+      [...right]
+        .map((item) => item.id)
+        .sort(compareIdsByteOrder)
+        .join('|'),
+    )
+  );
 };
 
 /** 记录检索文本＝topicKey＋content（§6.1 第 5 条）。 */

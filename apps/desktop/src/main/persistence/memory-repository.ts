@@ -19,6 +19,7 @@ import {
   memoryProvenanceSchema,
   type MemoryRead,
   memoryReadSchema,
+  type MemoryRecallPolicy,
   type MemoryRecord,
   memoryRecordSchema,
   type MemoryScope,
@@ -183,6 +184,7 @@ interface MemoryState {
   validFrom?: number;
   validUntil?: number;
   candidateDisposition?: MemoryCandidateDisposition;
+  recallPolicy: MemoryRecallPolicy;
 }
 
 interface MemoryRow {
@@ -388,6 +390,7 @@ const stateOf = (record: MemoryRecord): MemoryState => ({
   ...(record.candidateDisposition === undefined
     ? {}
     : { candidateDisposition: record.candidateDisposition }),
+  recallPolicy: record.recallPolicy,
 });
 
 /** 稳定序列化后比较：来源声明换期、换事件都不许被当成「无变化」。 */
@@ -496,6 +499,8 @@ export class MemoryRepository {
       provenance,
       status: input.status,
       confidence: input.confidence,
+      // 契约 §11.3：新建（含自动候选）一律 relevant，模型不能自报优先。
+      recallPolicy: 'relevant' as const,
       ...(input.topicKey === undefined ? {} : { topicKey: input.topicKey }),
       ...(input.validFrom === undefined ? {} : { validFrom: input.validFrom }),
       ...(input.validUntil === undefined ? {} : { validUntil: input.validUntil }),
@@ -662,6 +667,7 @@ export class MemoryRepository {
       contentHash: projected.contentHash,
       provenance: projected.provenance,
       confidence: projected.confidence,
+      recallPolicy: projected.recallPolicy,
       status: transition.toStatus,
       ...(projected.topicKey === undefined ? {} : { topicKey: projected.topicKey }),
       ...(projected.validFrom === undefined ? {} : { validFrom: projected.validFrom }),
@@ -706,6 +712,8 @@ export class MemoryRepository {
       scope: loser.scope,
       kind: loser.kind,
       facet: loser.facet,
+      // 被替代只是终态标记，历史策略值仍作为事实留在行里。
+      recallPolicy: loser.recallPolicy,
       content: loser.content,
       normalizedHash: loser.normalizedHash,
       contentHash: loser.contentHash,
@@ -877,6 +885,8 @@ export class MemoryRepository {
       provenance,
       status: base.status,
       confidence: options.confidence ?? current.confidence,
+      // 策略只在 patch 显式提交时变化；其余写入必须原样带上，不能被默认值清掉。
+      recallPolicy: patch.recallPolicy ?? current.recallPolicy,
       ...(topicKey === undefined ? {} : { topicKey }),
       ...(validFrom === undefined ? {} : { validFrom }),
       ...(validUntil === undefined ? {} : { validUntil }),
@@ -898,8 +908,6 @@ export class MemoryRepository {
       ...state,
       // 顶层 source_* 是 provenance 的派生投影，写列时同样取自 sourceColumnsOf（§8.1）。
       ...sourceColumnsOf(state.provenance),
-      // 契约 §11.3：新建记录（含自动候选）一律 relevant，模型不能自报优先。
-      recallPolicy: 'relevant',
       id: randomUUID(),
       revisionId: randomUUID(),
       revision: 1,
@@ -919,8 +927,6 @@ export class MemoryRepository {
     const record = memoryRecordSchema.parse({
       ...state,
       ...sourceColumnsOf(state.provenance),
-      // 追加修订必须显式带上原策略，不能让默认值悄悄清掉用户的优先设置。
-      recallPolicy: current.recallPolicy,
       id: current.id,
       revisionId: randomUUID(),
       revision: current.revision + 1,

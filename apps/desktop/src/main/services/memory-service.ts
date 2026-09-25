@@ -7,6 +7,7 @@ import {
   countCodePoints,
   type CreateMemoryRequest,
   createMemoryRequestSchema,
+  facetToKind,
   type GetMemoryRequest,
   getMemoryRequestSchema,
   type ListMemoriesRequest,
@@ -163,6 +164,55 @@ const provenanceFromResolved = (
     ...(originWorkspaceId ? { originWorkspaceId } : {}),
   });
 
+/**
+ * 契约 §11.3：只有「已确认、当前生效、用户口径、来源可用且不带任何材料/记忆依赖」
+ * 的工作要求才能设为优先带入；事实与经验一律拒绝。
+ */
+const pinnedEligibilityProblem = (record: MemoryRecord, at: number): string | undefined => {
+  if (record.facet === 'fact' || record.facet === 'experience') {
+    return '优先带入只用于工作要求，事实与经验仍按相关性选择。';
+  }
+  const provenance = verifiedProvenance(record.provenance);
+  if (!provenance) return '来源尚未复核的记忆不能设为优先带入。';
+  if (provenance.authority !== 'user-instruction') {
+    return '派生自资料或回答的记忆不能直接设为优先带入，请先作为我的工作口径重新保存。';
+  }
+  if (provenance.materialDependencies.length > 0 || provenance.memoryDependencies.length > 0) {
+    return '仍依赖材料或其他记忆的记录不能设为优先带入，请先解除依赖。';
+  }
+  if (deriveEffectiveStatus(record, at) !== 'confirmed') {
+    return '只有已确认且当前生效的记忆才能设为优先带入。';
+  }
+  return undefined;
+};
+
+/** 只用于资格判定：把 patch 的日期与分类落到当前记录上，得到将要写入的形状。 */
+const projectedForPolicyCheck = (
+  current: MemoryRecord,
+  patch: UpdateMemoryRequest['patch'],
+  provenance: MemoryProvenance,
+): MemoryRecord => {
+  const dateOf = (
+    action: { action: 'set'; value: number } | { action: 'clear' } | undefined,
+    fallback: number | undefined,
+  ): number | undefined =>
+    action === undefined ? fallback : action.action === 'set' ? action.value : undefined;
+  const validFrom = dateOf(patch.validFrom, current.validFrom);
+  const validUntil = dateOf(patch.validUntil, current.validUntil);
+  const facet = patch.facet ?? current.facet;
+  return {
+    ...current,
+    facet,
+    kind: facetToKind[facet],
+    provenance,
+    recallPolicy: patch.recallPolicy ?? current.recallPolicy,
+    ...(patch.scope === undefined ? {} : { scope: patch.scope }),
+    ...(patch.content === undefined ? {} : { content: patch.content }),
+    ...(validFrom === undefined ? {} : { validFrom }),
+    ...(validUntil === undefined ? {} : { validUntil }),
+  };
+};
+
 const scopeLabel = (record: MemoryRecord): string => {
   switch (record.scope.kind) {
     case 'user':
@@ -317,6 +367,33 @@ export class MemoryService {
         return failResult(
           'WORKSPACE_FACT_CANNOT_BE_GLOBAL',
           '来源属于具体空间的记录不能直接改为全局生效，请先以用户口径重新表述。',
+        );
+      }
+
+      // 策略改动与编辑在同一条 update 命令里，因此先按将要写入的形状判定资格。
+      const policyCheckTarget = projectedForPolicyCheck(
+        current.record,
+        request.patch,
+        provenance.value,
+      );
+      if (
+        request.patch.recallPolicy === 'pinned' ||
+        (current.record.recallPolicy === 'pinned' &&
+          request.patch.recallPolicy !== 'relevant' &&
+          request.patch.recallPolicy !== undefined)
+      ) {
+        const problem = pinnedEligibilityProblem(policyCheckTarget, Date.now());
+        if (problem !== undefined) return failResult('INVALID_TRANSITION', problem);
+      }
+      if (
+        current.record.recallPolicy === 'pinned' &&
+        request.patch.recallPolicy === undefined &&
+        pinnedEligibilityProblem(policyCheckTarget, Date.now()) !== undefined
+      ) {
+        // 已优先的记录被编辑成不合格的形状时，要求先显式取消优先，而不是悄悄降级。
+        return failResult(
+          'INVALID_TRANSITION',
+          '这条记忆当前是优先带入：请先取消优先，再修改会使其不再符合资格的内容、分类或范围。',
         );
       }
 
