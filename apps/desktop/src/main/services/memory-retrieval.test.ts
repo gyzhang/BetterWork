@@ -6,6 +6,13 @@ import {
 import { describe, expect, it } from 'vitest';
 
 import {
+  expertScope,
+  expertWorkspaceScope,
+  item,
+  userScope,
+  workspaceScope,
+} from './fixtures/memory-recall-fixtures';
+import {
   applyRecallBudget,
   assembleRecallQuery,
   type PreferencePoolItem,
@@ -16,24 +23,6 @@ import {
   scoreRecallRecord,
   tokenizeRecallText,
 } from './memory-retrieval';
-
-const userScope = { kind: 'user' } as const;
-const workspaceScope = { kind: 'workspace', workspaceId: 'ws-1' } as const;
-const expertScope = { kind: 'expert', expertId: 'ex-1' } as const;
-const expertWorkspaceScope = {
-  kind: 'expert-workspace',
-  expertId: 'ex-1',
-  workspaceId: 'ws-1',
-} as const;
-
-const item = (over: Partial<RecallItem> & { id: string; content: string }): RecallItem => ({
-  revisionId: `rev-${over.id}`,
-  contentHash: `hash-${over.id}`,
-  kind: 'semantic',
-  scope: workspaceScope,
-  updatedAt: 1_000,
-  ...over,
-});
 
 const tokenTexts = (value: string): string[] =>
   tokenizeRecallText(value).map((token) => token.text);
@@ -220,38 +209,5 @@ describe('memory-recall-v1 budget', () => {
     expect(RECALL_BUDGET.maxContentCodePoints).toBe(6_000);
     expect(RECALL_BUDGET.maxWrapperCodePoints).toBe(2_000);
     expect(RECALL_BUDGET.maxMemoryBlockCodePoints).toBe(8_000);
-  });
-});
-
-// 设计 §16：规模压测只记录排序耗时，不引入向量库或后台扫描。
-// 本机（darwin/arm64，Node 24）实测 1,000 条约 10 ms，这里守住一个宽松上界防回归。
-describe('memory-recall-v1 scale', () => {
-  it('ranks 1,000 active memories within the main-thread budget', () => {
-    const items: RecallItem[] = Array.from({ length: 1_000 }, (_unused, index) =>
-      item({
-        id: `memory-${index}`,
-        content: `第 ${index} 条口径：收入按回款金额统计，ARR 不含一次性实施费，单位为万元。`,
-        topicKey: `收入口径-${index % 40}`,
-        scope: index % 3 === 0 ? expertWorkspaceScope : workspaceScope,
-        updatedAt: 1_000 + index,
-      }),
-    );
-    const query = assembleRecallQuery({
-      prompt: '请帮我把本期续约率和收入金额整理成月报，先列异常事项。',
-      taskTitle: '经营分析月报',
-      materialTitles: ['财务规则.md', '回款明细.csv'],
-    }).tokens;
-
-    rankRecallItems(query, items);
-    const startedAt = performance.now();
-    const ranked = rankRecallItems(query, items);
-    const elapsedMs = performance.now() - startedAt;
-
-    expect(ranked).toHaveLength(1_000);
-    expect(ranked[0]?.scope.kind).toBe('expert-workspace');
-    expect(rankRecallItems(query, items).map((entry) => entry.id)).toEqual(
-      ranked.map((entry) => entry.id),
-    );
-    expect(elapsedMs).toBeLessThan(200);
   });
 });

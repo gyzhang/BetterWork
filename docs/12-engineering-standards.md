@@ -15,8 +15,9 @@
 | `npm run format` | Prettier 写入 |
 | `npm run format:check` | Prettier 校验 |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest 单次运行 |
-| `npm run verify` | 上述五项按序全跑，任一失败即中止 |
+| `npm test` | Vitest **功能档**单次运行（`--project functional`），断言行为是否正确 |
+| `npm run bench` | Vitest **计时基准档**（`--project bench`）：串行跑 `*.bench.test.ts`，断言墙钟与内存预算 |
+| `npm run verify` | lint + format:check + typecheck + `npm test` + build，任一失败即中止 |
 
 提交前必须跑 `npm run verify`。**不要**把它的输出接管道后只看末尾——`cmd | tail` 的退出码是 `tail` 的，会把失败读成成功。需要截取输出时用 `npm run verify > log 2>&1; echo $?`。
 
@@ -28,7 +29,7 @@
 | 跨文件结构 | `standards/coding-standard.test.ts` | 配置唯一性、零豁免、分层边界、协议常量被消费、Token 与动效纪律 |
 | 门禁 | `npm run verify` | 上面两层，加类型检查、全部测试与构建 |
 
-结构护栏随 `npm test` 执行，因此也在 `verify` 里。它断言的都是 ESLint 表达不了的约定：ESLint / Prettier / tsconfig 各只有一份且严格开关全开、源码里没有任何豁免注释、`packages/*` 不依赖 `apps/*`、Agent Core 不依赖宿主运行时、Renderer 不导入 `node:*`、`views/` 与 `components/` 不直接调 IPC、`ipcMain.handle` 只在一处、取消词汇只在一处、硬编码色值与写死的动效时长只出现在白名单里、样式表引用的每个 Token 都有定义、首帧窗口主题与青玉浅色 Token 一致、`.qoder/rules/` 下每个规则文件都登记在索引里。
+结构护栏随 `npm test` 执行，因此也在 `verify` 里。它断言的都是 ESLint 表达不了的约定：ESLint / Prettier / tsconfig 各只有一份且严格开关全开、源码里没有任何豁免注释、`packages/*` 不依赖 `apps/*`、Agent Core 不依赖宿主运行时、Renderer 不导入 `node:*`、`views/` 与 `components/` 不直接调 IPC、`ipcMain.handle` 只在一处、取消词汇只在一处、硬编码色值与写死的动效时长只出现在白名单里、样式表引用的每个 Token 都有定义、首帧窗口主题与青玉浅色 Token 一致、`.qoder/rules/` 下每个规则文件都登记在索引里、界面间距与控件几何取档位、计时断言不出现在功能档里。
 
 格式化范围：所有 `.ts` / `.tsx` / `.css` / `.html` / `.json`。Markdown 与 `docs/assets/` 下的品牌 SVG **不格式化**——中文长行经重排后无法逐字回读校验，标志文件是人工定稿资产。
 
@@ -176,6 +177,8 @@ standards/
 - 涉及外部 HTTP 的代码必须注入 `fetch`（或用 `vi.stubGlobal`），测试绝不触网。
 - 断言窗口广播时必须区分 channel：同一个 `webContents.send` 同时承载 Run 事件与通知事件，只按 `type` 断言会把两者混在一起。
 - 依赖重型动态导入的用例（PDF / DOCX 解析）要显式提高超时，冷缓存下的首次转换会超过默认 5 秒。
+- **墙钟与内存预算断言只允许住在 `*.bench.test.ts`，由 `npm run bench` 串行跑，不进 `npm run verify`**。原因不是性能不好，而是门禁不可信：137 个测试文件并发抢核时，同一份代码的 p95 会漂到 1.5–5 倍（2026-09-26 实测连跑四轮，红项组合每次都变；串行档里 p95 303ms，预算 1s）。随机红的门禁下一个被牺牲的永远是门禁本身。挪进串行档的同时保留三件事：样本值每次照旧打印、阈值一格没放宽、护栏锁「功能档里不得出现 `performance.now()`」，防止新的计时断言悄悄混回提交门禁。
+- **慢夹具 ≠ 计时基准**：只为构造非法输入而昂贵的用例（例如压缩炸弹夹具要真 DEFLATE 210 MiB）留在功能档，放宽**该用例的超时**并在注释里写明放宽的是夹具时间、断言的是什么边界。放宽超时的注释必须能被反驳：安静机上先量一次实测值（该例约 4 秒），别一上来就写「可能超时」。
 
 ## 10. 例外机制
 

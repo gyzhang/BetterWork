@@ -168,6 +168,8 @@ describe('OfficeParserService', () => {
     for (let index = 1; index <= 21; index += 1) {
       zip.file(`ppt/media/big${index}.bin`, huge);
     }
+    // 必须 DEFLATE：STORE 会让归档本身涨到 210 MiB，先撞上 50 MiB 归档上限，
+    // 就走不到「按中央目录声明的解压总量拒绝」这条分支了。
     const bytes = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
     await expect(parseOfficeBytes('pptx', bytes)).rejects.toThrow('解压内容超过 200 MiB 上限');
 
@@ -190,7 +192,10 @@ describe('OfficeParserService', () => {
       compression: 'DEFLATE',
     });
     await expect(parseOfficeBytes('pptx', singleBytes)).rejects.toThrow('单个文本条目超过 20 MiB');
-  }, 30_000);
+    // 180 秒是**夹具预算**不是计时断言：夹具必须真 DEFLATE 出 210 MiB 声明量，
+    // 安静机上约 4 秒，137 文件并发抢核时曾顶穿默认的 30 秒。
+    // 本用例守的是压缩炸弹边界（安全行为），因此留在功能档 `npm test`，不进 bench 车道。
+  }, 180_000);
 
   it('reads UTF-8 BOM CSV，引号内换行不增加逻辑行号；取消统一 abortError', async () => {
     const filePath = await writeTemp(

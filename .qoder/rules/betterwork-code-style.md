@@ -15,6 +15,7 @@ trigger: glob: **/*.ts,tsx,css,mjs,json
 - **不新建第二套标准**：不加第二份 ESLint / Prettier / tsconfig 配置，不在任何 `package.json` 里内嵌 `eslintConfig` 或 `prettier` 键，不新建会各自放宽严格度的子 tsconfig。
 - **源码里零豁免**：禁止 `eslint-disable`、`@ts-ignore`、`@ts-expect-error`、`prettier-ignore`。例外只能写进配置（按文件角色）或护栏测试的白名单，并注明理由。
 - **提交前跑 `npm run verify`**（lint + format:check + typecheck + test + build）。**不要把输出接管道后只看末尾**——管道退出码取最后一个命令，会把失败读成成功。需要截取时用 `npm run verify > log 2>&1; echo $?`。
+- **墙钟与内存预算断言只写在 `*.bench.test.ts` 里**，由 `npm run bench` 串行跑，不属于 `verify`；功能档里出现 `performance.now()` 会被护栏拦下。为昂贵夹具放宽**超时**是另一回事，注释里写清放宽的是什么。见 docs/12 §9。
 
 ## 最常踩的硬约束
 

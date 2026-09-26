@@ -24,6 +24,7 @@ description: 启动应用、停止应用、调试、运行开发环境、构建�
     npm run format:check  # 或 npm run format 写入
     npm run typecheck
     npm test
+    npm run bench       # 计时基准档（*.bench.test.ts，串行），不属于 verify
     npm run build
     git diff --check
 

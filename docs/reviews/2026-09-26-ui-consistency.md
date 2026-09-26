@@ -131,7 +131,7 @@
 
 **P3（持续）**
 
-- 附带发现（不属于 UI，但阻塞"提交前必绿"）：`npm test` 里三个**墙钟预算门**——KM14 向量扫描 p95、`memory-retrieval` 1,000 条排序、office-parser 解压预算——在 137 个测试文件并发跑时随机红（同一份代码四轮分别红过不同组合），机器负载 ≥15 时连单跑都超线。方向不是放宽阈值，而是把计时基准挪进独立串行档（`npm run bench`），`verify` 只跑功能测试。本轮未改动门禁构成。
+- ✅ 附带发现已修（2026-09-26 21:15，光哥拍板）：`npm test` 里三个**墙钟预算门**（KM14 向量扫描 p95、`memory-retrieval` 1,000 条排序、office-parser 解压预算）在 137 个文件并发跑时随机红。现在计时断言只住在 `*.bench.test.ts`，由 `npm run bench` 串行跑（`fileParallelism: false`），`verify` 只跑功能档；阈值一格没放宽，样本值每次照旧打印，护栏锁「功能档里不得出现 `performance.now()`」。office-parser 那项测的是压缩炸弹边界、不是耗时，因此留在功能档、只把**夹具超时**放宽到 180 秒（安静机实测约 4 秒）。串行档实测 KM14 p95 303ms／基准总耗时 9.3 秒，功能档 12.9 秒全绿。口径见 docs/12 §1、§9。
 
 - `views/` 里重复的领域卡片下沉到 `components/`；`SettingsView`/`SkillsView`/`ExpertsView` 补齐 `components/layout/` 骨架。
 - 每个新基座必须带一个交互语义测试（Esc 能关、焦点能归还、方向键能走），照 Cloud 的 `agent-picker.test.tsx` 那条断言写。

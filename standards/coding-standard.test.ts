@@ -737,6 +737,46 @@ describe('界面观感基线', () => {
   });
 });
 
+describe('计时基准车道纪律', () => {
+  const timingTests = pathsUnder(...SOURCE_ROOTS).filter(
+    (relative) => /\.test\.tsx?$/.test(relative) && !relative.endsWith('.bench.test.ts'),
+  );
+
+  it('墙钟计时断言只允许住在 *.bench.test.ts', () => {
+    // 并发跑 137 个文件时，p95 会漂到 1.5–5 倍：这类断言留在 `npm test` 里
+    // 等于给每次提交加随机红，而红了的门禁很快就会被绕过。
+    // 判据取 `performance.now()`——本仓只有「测耗时」用它，`Date.now()` 大量用于
+    // 数据夹具（updatedAt/revision 时间戳），拿它当信号会淹成假阳性。
+    const offenders = timingTests.filter((relative) => read(relative).includes('performance.now'));
+    expect(offenders, '计时基准要挪进 `npm run bench` 的串行车道（docs/12 §9）').toEqual([]);
+  });
+
+  it('两条车道的配置与脚本各就各位，且 verify 不含基准', () => {
+    const config = read('vitest.config.ts');
+    expect(config).toContain("name: 'functional'");
+    expect(config).toContain("name: 'bench'");
+    expect(config).toContain("'**/*.bench.test.ts'");
+    expect(config).toContain('fileParallelism: false');
+
+    const scripts = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
+    expect(scripts.scripts['test']).toContain('--project functional');
+    expect(scripts.scripts.bench).toContain('--project bench');
+    expect(scripts.scripts.verify ?? '').not.toContain('bench');
+  });
+
+  it('基准车道里确实有用例，不给自己留空挡', () => {
+    const benchFiles = pathsUnder(...SOURCE_ROOTS).filter((relative) =>
+      relative.endsWith('.bench.test.ts'),
+    );
+    expect(benchFiles.length, '至少要有一条串行车道基准').toBeGreaterThan(0);
+    for (const benchFile of benchFiles) {
+      expect(read(benchFile), '基准用例必须打印样本值，否则红了无法判断是回归还是抢核').toContain(
+        'console.warn',
+      );
+    }
+  });
+});
+
 describe('规则与文档索引', () => {
   it('.qoder/rules 下的每个规则文件都登记在场景索引里', () => {
     const index = read('.qoder/rules/betterwork.md');

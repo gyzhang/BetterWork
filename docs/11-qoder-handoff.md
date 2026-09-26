@@ -69,10 +69,13 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 提交前唯一门禁：
 
     npm run verify     # lint + format:check + typecheck + test + build
+    npm run bench      # 计时基准档（串行）：跑完规模/性能卡或专门核查时执行，不在提交门禁里
+
+门禁分两条车道：`npm test` 跑**功能档**（断言行为），`npm run bench` 串行跑**计时基准档** `*.bench.test.ts`（断言墙钟与内存预算）。`verify` 只含前者——并发跑时计时值会漂 1.5–5 倍，随机红的门禁守不住任何东西；阈值没有放宽，样本值每次照旧打印。理由与口径见 [工程规范](12-engineering-standards.md) §1 与 §9。
 
 **不要把 verify 的输出接管道后只看末尾**（`npm run verify | tail` 的退出码是 `tail` 的，永远为 0，会把失败读成成功）。需要截取输出时用 `npm run verify > /tmp/verify.log 2>&1; echo $?`。
 
-当前门禁覆盖 **77 个测试文件、564 项测试**（含 `standards/coding-standard.test.ts` 的规范护栏），ESLint、格式检查、类型检查与 Electron 构建均通过。生产构建存在两条来自 Zod 的 Rollup `@PURE` 注释警告；在不影响构建成功的前提下，它们是已知警告，不应因此作无关依赖升级。
+当前门禁覆盖 **功能档 137 个测试文件、1,342 项测试**（含 `standards/coding-standard.test.ts` 的 36 条规范护栏），**计时基准档 2 个文件、2 项基准**；ESLint、格式检查、类型检查与 Electron 构建均通过。生产构建存在两条来自 Zod 的 Rollup `@PURE` 注释警告；在不影响构建成功的前提下，它们是已知警告，不应因此作无关依赖升级。
 
 `knowledge-vault.test.ts` 的 PDF 与 DOCX 两个用例已显式提高超时——它们首次运行需要现场转换 `pdf-parse` 与 `mammoth`，冷 Vite 缓存下会超过默认的 5 秒。
 
