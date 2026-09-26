@@ -1,6 +1,7 @@
 import type { SkillDetail } from '@betterwork/agent-protocol';
 
 import type { SkillDependenciesState } from '../../hooks/use-skill-dependencies';
+import { Badge } from '../Badge';
 import { Field } from '../Field';
 import { FieldSelect } from '../FieldSelect';
 
@@ -57,9 +58,9 @@ export function DependencyPanel({
           <p className="eyebrow">运行环境</p>
           <h3>依赖与解释器</h3>
         </div>
-        <span className="dependency-status-chip">
+        <Badge tone="outline">
           {environment ? environmentStatusName[environment.status] : '未准备'}
-        </span>
+        </Badge>
       </div>
 
       <Field

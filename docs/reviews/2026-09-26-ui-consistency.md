@@ -75,7 +75,7 @@
 
 这些差异没有一条来自业务需求，全部是逐页现写的结果。`styles.css` 里把多个选择器并列以复用同一条声明的写法（如 `.knowledge-search, .memory-search`）就是“各写一遍”的自证。
 
-→ 归属：`ListRow`（左槽/主区/右槽 + 分隔线模式）与 `Badge`。
+→ 归属：`ListRow`（左槽/主区/右槽 + 分隔线模式）与 `Badge`。（**2026-09-26 深夜 `Badge` 半边已收口**：`components/Badge.tsx` 落地 `tone` × `shape`，技能卡状态片、依赖面板环境片、记忆状态片、MCP 工具名片合并；`.skill-chip`／`.dependency-status-chip`／`.memory-status-badge` 三条类样式删除并由护栏锁死不得复活。`ListRow` 的 9 套行几何仍在。）
 
 ### 3.5 视觉刻度没有 Token —— 中
 
@@ -128,7 +128,8 @@
 
 **P2（3–5 天，收重复结构）**
 
-- ⬜ `ListRow` 与 `Badge` 基座，按 §3.4 的表逐类迁移；`min-height` 与 `border-radius` 建档位表并加棘轮。
+- ⬜ `ListRow` 基座：§3.4 的 9 套行几何逐类迁移（`Badge` 半边已完成，见 §3.4）。
+- ✅ 档位与棘轮：`--radius-tag`／`--radius-pill` 立档，样式表内字面 `999px` 清零（护栏锁）；与三档同值的密集高度裸值 12 处换成 `--control-height*`，余下 16 处不同档（23／26／30／34／40）登记进 `DENSE_HEIGHT_BASELINE` 待收敛清单，只降不升。是否把 26 并入 28、30 并入 32 需要产品定档，未擅自改。
 - ⬜ 空/加载态全部走 `EmptyState`（6 处内联占位待收）。
 - ✅ `Tabs` / `SegmentedControl` 分两个基座落地（同在 `components/Tabs.tsx`），`Tabs` 自带左右方向键与 roving tabindex，一次性收掉 `MemoryView` 与 `ContextPanel` 两处页签；`SkillsView` 的视图模式切换也显式收进 `SegmentedControl`。密集高度顺带收了两条：页签与切换组的 29／30px 裸值改取 `--control-height-sm`，圆角改取 `--control-radius`。
 

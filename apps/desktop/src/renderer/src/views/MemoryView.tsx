@@ -12,6 +12,7 @@ import {
 } from '@betterwork/agent-protocol';
 import { useEffect, useState } from 'react';
 
+import { Badge } from '../components/Badge';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
@@ -698,9 +699,7 @@ function MemoryRow({
     <article className={`memory-row memory-${memory.effectiveStatus}`} key={memory.id}>
       <div className="memory-main">
         <div className="memory-meta">
-          <span className="memory-status-badge">
-            {effectiveStatusLabel[memory.effectiveStatus]}
-          </span>
+          <Badge shape="tag">{effectiveStatusLabel[memory.effectiveStatus]}</Badge>
           <span>{facetLabel[memory.facet]}</span>
           <span>{memoryScopeLabel(memory.scope, workspaceName, expertName)}</span>
           <span>{formatValidityRange(memory.validFrom, memory.validUntil)}</span>

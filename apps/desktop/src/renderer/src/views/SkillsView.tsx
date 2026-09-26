@@ -1,6 +1,7 @@
 import type { RuntimeProfileDraft, SkillSummary } from '@betterwork/agent-protocol';
 import { useCallback, useEffect, useState } from 'react';
 
+import { Badge, type BadgeTone } from '../components/Badge';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -35,12 +36,12 @@ const environmentName = {
 
 type ChipKind = 'source' | 'trust' | 'enabled' | 'environment';
 
-function chipModifier(label: string, kind: ChipKind): string {
-  if (kind === 'trust' && label === '已信任') return ' skill-chip-active';
-  if (kind === 'trust' && label === '需复核') return ' skill-chip-warn';
-  if (kind === 'enabled' && label === '已启用') return ' skill-chip-active';
-  if (kind === 'environment' && label === '已就绪') return ' skill-chip-active';
-  return '';
+function chipTone(label: string, kind: ChipKind): BadgeTone {
+  if (kind === 'trust' && label === '需复核') return 'warning';
+  if (kind === 'trust' && label === '已信任') return 'brand';
+  if (kind === 'enabled' && label === '已启用') return 'brand';
+  if (kind === 'environment' && label === '已就绪') return 'brand';
+  return 'neutral';
 }
 
 function SkillChips({ skill }: { skill: SkillSummary }): React.JSX.Element {
@@ -50,10 +51,10 @@ function SkillChips({ skill }: { skill: SkillSummary }): React.JSX.Element {
   const environment = environmentName[skill.environmentStatus];
   return (
     <div className="skill-chips">
-      <span className="skill-chip">{source}</span>
-      <span className={`skill-chip${chipModifier(trust, 'trust')}`}>{trust}</span>
-      <span className={`skill-chip${chipModifier(enabled, 'enabled')}`}>{enabled}</span>
-      <span className={`skill-chip${chipModifier(environment, 'environment')}`}>{environment}</span>
+      <Badge>{source}</Badge>
+      <Badge tone={chipTone(trust, 'trust')}>{trust}</Badge>
+      <Badge tone={chipTone(enabled, 'enabled')}>{enabled}</Badge>
+      <Badge tone={chipTone(environment, 'environment')}>{environment}</Badge>
     </div>
   );
 }

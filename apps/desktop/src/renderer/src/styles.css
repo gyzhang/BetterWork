@@ -17,6 +17,9 @@
   --control-height-sm: 28px;
   --control-height: 32px;
   --control-height-lg: 36px;
+  /* 圆角档位：控件 6px、方角徽标 5px、胶囊 999px。卡片与面板档随 ListRow 基座一起补。 */
+  --radius-tag: 5px;
+  --radius-pill: 999px;
   --control-radius: 6px;
   --control-border: 1px solid var(--input-border);
 
@@ -782,7 +785,7 @@ small {
 }
 
 .discussion-checkpoint-history span {
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   padding: 3px 7px;
   background: var(--surface-raised);
   color: var(--text-muted);
@@ -922,7 +925,7 @@ small {
   border-radius: 7px;
   font-size: 13px;
   cursor: pointer;
-  min-height: 28px;
+  min-height: var(--control-height-sm);
 }
 .workspace-selector-trigger:hover {
   color: var(--text-primary);
@@ -970,7 +973,7 @@ small {
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 32px;
+  min-height: var(--control-height);
   padding: 6px 10px;
   color: var(--text-primary);
   background: transparent;
@@ -1040,7 +1043,7 @@ small {
     monospace;
 }
 .composer-footer button {
-  min-height: 32px;
+  min-height: var(--control-height);
   padding: 7px 11px;
   color: var(--on-brand);
   background: var(--brand);
@@ -1069,7 +1072,7 @@ small {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 36px;
+  min-height: var(--control-height-lg);
   padding: 0 14px;
   color: var(--text-muted);
   font-size: 12px;
@@ -2070,21 +2073,36 @@ small {
   flex-wrap: wrap;
   gap: 8px;
 }
-.skill-chip {
+/* === Badge：状态徽标的唯一外观（docs/10 §10.1） === */
+.badge {
+  display: inline-flex;
+  align-items: center;
   padding: 2px 8px;
   color: var(--text-secondary);
   background: var(--surface-raised);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 12px;
+  line-height: 1.5;
   white-space: nowrap;
 }
-.skill-chip-active {
+.badge[data-shape='tag'] {
+  border-radius: var(--radius-tag);
+}
+.badge[data-tone='brand'] {
   color: var(--brand);
   background: var(--brand-soft);
 }
-.skill-chip-warn {
+.badge[data-tone='warning'] {
   color: var(--warning);
   background: var(--warning-soft);
+}
+.badge[data-tone='danger'] {
+  color: var(--on-danger);
+  background: var(--danger);
+}
+.badge[data-tone='outline'] {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
 }
 .skill-rows {
   display: flex;
@@ -2153,7 +2171,7 @@ small {
 }
 .skill-detail-section :where(button) {
   /* :where 把这条页面级按钮样式的权重降到 0-1-0，FieldSelect 的基座几何才不会被它改写。 */
-  min-height: 32px;
+  min-height: var(--control-height);
   padding: 6px 11px;
   color: var(--text-primary);
   background: var(--surface-raised);
@@ -2216,14 +2234,6 @@ small {
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: 10px;
-}
-.dependency-status-chip {
-  padding: 3px 9px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  background: var(--surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
 }
 .dependency-inline {
   display: flex;
@@ -2724,13 +2734,6 @@ small {
   color: var(--brand);
   background: var(--selection);
   font-weight: 600;
-}
-.memory-status-badge {
-  padding: 2px 6px;
-  color: var(--text-secondary);
-  background: var(--surface-raised);
-  border-radius: 5px;
-  font-size: 12px;
 }
 /* 状态只在行首做轻度区分：待确认保留强调，派生终态降饱和。 */
 .memory-row.memory-candidate {
@@ -3313,7 +3316,7 @@ small {
   margin-top: 16px;
 }
 .danger-confirm-button {
-  min-height: 32px;
+  min-height: var(--control-height);
   padding: 7px 11px;
   color: var(--on-danger);
   background: var(--danger);
@@ -3354,7 +3357,7 @@ small {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 32px;
+  min-height: var(--control-height);
   padding: 6px 10px;
   border-radius: 5px;
   cursor: pointer;
@@ -3568,7 +3571,7 @@ small {
   padding: 5px 8px;
   color: var(--brand);
   background: var(--brand-soft);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   font-size: 12px;
   font-weight: 600;
 }
@@ -3716,7 +3719,7 @@ small {
   .skill-cards {
     grid-template-columns: minmax(0, 1fr);
   }
-  .skill-list-item .skill-chips .skill-chip:nth-child(n + 3) {
+  .skill-list-item .skill-chips .badge:nth-child(n + 3) {
     display: none;
   }
   .skill-state-grid {
@@ -4283,7 +4286,7 @@ small {
   background: var(--surface-raised);
 }
 .page-header-actions button {
-  min-height: 32px;
+  min-height: var(--control-height);
   padding: 6px 11px;
   border-radius: 7px;
   font-size: 12px;
@@ -4664,7 +4667,7 @@ small {
 .knowledge-detail-actions button,
 .knowledge-revision-row button,
 .knowledge-detail-pager button {
-  min-height: 28px;
+  min-height: var(--control-height-sm);
   padding: 5px 10px;
   color: var(--text-primary);
   background: var(--surface);
@@ -5612,7 +5615,7 @@ select,
 .tool-activity-toggle {
   display: flex;
   max-width: 100%;
-  min-height: 36px;
+  min-height: var(--control-height-lg);
   align-items: center;
   gap: 8px;
   padding: 4px 8px;
@@ -5665,12 +5668,12 @@ select,
   display: inline-flex;
   max-width: 100%;
   min-width: 0;
-  min-height: 32px;
+  min-height: var(--control-height);
   align-items: center;
   gap: 8px;
   padding: 4px 10px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text-secondary);
   font-size: 12px;
@@ -5739,7 +5742,7 @@ select,
   font-size: 12px;
 }
 .tool-field summary {
-  min-height: 32px;
+  min-height: var(--control-height);
   padding: 8px;
   cursor: pointer;
   overflow-wrap: anywhere;
@@ -5771,7 +5774,7 @@ select,
 .latest-message-control button {
   position: absolute;
   bottom: 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   box-shadow: 0 4px 12px var(--shadow-color-soft);
 }
 

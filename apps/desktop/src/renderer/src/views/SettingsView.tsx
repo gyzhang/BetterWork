@@ -12,6 +12,7 @@ import type {
   ResolvedAppearance,
 } from '../appearance';
 import { colorSchemes } from '../appearance';
+import { Badge } from '../components/Badge';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
 import { TransientToast } from '../components/TransientToast';
@@ -555,9 +556,7 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
               {connection.tools.length > 0 && (
                 <div className="mcp-tool-summary">
                   {connection.tools.map((tool) => (
-                    <span className="skill-chip" key={tool.id}>
-                      {tool.name}
-                    </span>
+                    <Badge key={tool.id}>{tool.name}</Badge>
                   ))}
                 </div>
               )}

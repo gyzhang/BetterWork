@@ -469,9 +469,13 @@ UI Foundation 首批提供四套成对色系：
 | `--control-height` | 32px | **常规档**：输入框、下拉、日期/选择器、标准按钮 |
 | `--control-height-lg` | 36px | 主行动按钮（`.primary-button`）与大型输入 |
 | `--control-radius` | 6px | 所有表单控件与浮层内按钮 |
+| `--radius-tag` | 5px | 方角徽标（`Badge shape="tag"`） |
+| `--radius-pill` | 999px | 胶囊：徽标、筛选片、工具状态片。样式表里不得再出现字面 `999px` |
 | `--control-border` | `1px solid var(--input-border)` | 表单控件与按钮边框；不得再混用 `--border` / `--border-subtle`。填充式主行动按钮可取 `1px solid transparent`，只为与带边框控件保持同一盒几何 |
 
 - 多行 `textarea` 的 `min-height` 表达「编辑区至少多高」，不属于控件档位，不受此表约束。
+- **24–40px 的密集高度带**：与三档同值的裸值（28／32／36）已在 2026-09-26 深夜全部换成 Token，样式表里剩 16 处不同档（23／26／30／34／40）——它们是行内小按钮、导航条与文本钳制高度，是否并档需要产品判断，因此由护栏按**待收敛清单**（`DENSE_HEIGHT_BASELINE`）登记：清单只降不升，新增这个带宽的裸高度即失败。
+- 圆角档位同理起步：本轮先立 `--radius-tag`／`--radius-pill` 两档并把 999px 收干净；卡片与面板圆角（现存 8／9／10／12px 混用）随 `ListRow` 基座一起建档位表。
 - **浮层字号跟随触发控件**：`PopoverMenu` 打开时读取触发元素的计算字号并内联到浮层根，菜单项不自带 `font-size`。浮层是触发器的延伸，两处字号不一致会让菜单看起来属于另一个控件（知识卡片「更多」曾继承正文 14px 而比自己的 12px 触发按钮大）。
 - 落地现状：2026-09-26 已把 50 处控件边框/圆角/高度声明换成 `--control-*` 取值，表单控件里裸值残留 0（由护栏强制，`textarea` 的编辑区高度除外）；三档高度都有真实消费者，护栏的选择器口径除 `input/select/textarea/.field-select-trigger` 外还覆盖 `.primary-button`、`.secondary-button`、`.text-button` 三个按钮类。
 
@@ -521,6 +525,7 @@ UI Foundation 首批提供四套成对色系：
 | 模态基座 Modal（dialog／sheet／viewer 三变体）＋ `useOverlaySemantics` | `components/Modal.tsx` | 已落地：inert 应用主体、Esc、背板点击、初始焦点、Tab 循环、焦点归还、`role=dialog`/`alertdialog`。确认框、模型抽屉、幻灯片放映层、消息中心四处已收编 |
 | 表单字段 Field（标签 + 控件 + 说明） | `components/Field.tsx` | 已落地：标签与控件的缝只有一份；37 处字段改用它，12 条页面级 `label { gap / font-size }` 规则随之删除 |
 | 模态确认 ConfirmationDialog | `components/ConfirmationDialog.tsx` | 已落地，走 Modal 的 `alertdialog` 变体；初始焦点落在「取消」 |
+| 状态徽标 Badge（tone × shape） | `components/Badge.tsx` | 已落地：技能卡状态片、依赖面板环境片、记忆状态片、MCP 工具名片四套自造 chip 合并；图形化标识（格式徽标、未读角标）不在此基座内，按字号护栏登记 |
 | 短时反馈 TransientToast / 全局 ToastHost | `components/` | 已落地；两套不可混用（§11.5.1） |
 | 空状态 EmptyState | `components/EmptyState.tsx` | 已落地，但有 6 处内联占位绕开它 |
 | 页签 Tabs（tablist + roving tabindex + 方向键） | `components/Tabs.tsx` | 已落地：左右方向键与 Home／End 切换并把焦点带过去，只有选中页签进 Tab 顺序。记忆页分组与任务上下文两处已收编 |
@@ -533,6 +538,8 @@ UI Foundation 首批提供四套成对色系：
 **浮层一律复用 `PopoverMenu` 基座**：下拉、菜单、选择器等脱离文档流的浮层必须走 `components/PopoverMenu.tsx`——背板收起、Esc、焦点归还、方向键导航与视口碰撞处理都在基座里。不得用 `<details>` 或 `position:absolute` 面板自造：2026-09-26 知识卡片的「更多」正是这样写的，三个症状同源——点外面不收起（`<details>` 没有这个语义）、能同时打开两张卡片的菜单、菜单项继承正文 14px 而比自己的 12px 触发按钮还大。基座会把菜单字号镜像成触发控件的计算值，让浮层与触发器看起来属于同一个控件；破坏性菜单项用 `tone: 'danger'` 表达，颜色仍由 Token 决定。护栏锁两条：`.popover-menu-item` 不得自带字号；overlay 阴影只允许出现在登记过的浮层表面（`standards/coding-standard.test.ts`）。
 
 **模态与覆盖层一律复用 `Modal` 基座**：会夺走整页焦点的表面（确认框、抽屉、放映层）走 `components/Modal.tsx` 的 `dialog`／`sheet`／`viewer` 三个变体；锚定在触发器局部、不居中的覆盖层（消息中心）用同文件导出的 `useOverlaySemantics`，只借语义不借定位；但借用者必须把覆盖层 portal 到 `document.body`——被 `inert` 的是整个 `<main>`，2026-09-26 消息中心留在壳内时面板与背板一起被 pointer-events 锁死，滚动、点按钮、点外面全部失效，只剩挂在 window 上的 Esc 还能用。inert 应用主体、Esc、背板点击关闭、初始焦点、Tab 循环、焦点归还、`role=dialog`/`alertdialog` 与 `aria-modal` 全部只有一处实现——此前这里是四套并存：确认框什么都有、模型抽屉只有 `aria-modal` 外壳、放映层自己写键盘、消息中心连 `aria-expanded` 都没有。触发元素必须带 `aria-haspopup="dialog"` 与 `aria-expanded`（消息中心的铃铛已按此补齐）。护栏锁两条：`.modal-panel` 之外的表面不得自带浮层阴影（存量按棘轮只降不升）；渲染层里出现 `role="dialog"`／`aria-modal`／`key === 'Escape'`／旧背板类而没接 `Modal` 或 `useOverlaySemantics` 即失败。
+
+**状态徽标一律用 `Badge`**：一小段只读状态文字（已信任／已就绪／已过期）走 `components/Badge.tsx` 的 `tone`（neutral／brand／warning／danger／outline）× `shape`（pill／tag），颜色与圆角仍只取语义 Token。此前 6 套 chip 各写 padding、圆角与配色组合，同一个「已启用」在技能卡与依赖面板里长得不同（§3.4）。靠字形与小于 12px 字号成立的图形化标识（MD/PDF 徽标、未读数角标）不算状态徽标，留在原类名并按字号护栏登记。护栏锁三条：`.skill-chip`／`.dependency-status-chip`／`.memory-status-badge` 的样式不得复活；胶囊圆角一律 `var(--radius-pill)`；24–40px 高度裸值只降不升。
 
 **页签一律用 `Tabs`、切换按钮组一律用 `SegmentedControl`**（同在 `components/Tabs.tsx`）：`Tabs` 输出 `role=tablist`／`role=tab`／`aria-selected`，并实现 roving tabindex——只有选中页签 `tabIndex=0`，组内切换交给左右方向键与 Home／End；焦点跟随选中项，切换从**当前焦点**出发而不是从 `value` 出发，所以受控父组件重渲染之前连按也能连续走格。此前两处页签各写一遍，结果是两处都没有键盘导航。`SegmentedControl` 是另一个模式（切换同一片内容的呈现方式，每个按钮都参与 Tab 顺序），别再让页面手拼一组带 `aria-pressed` 的按钮。护栏锁两处：出现页签／`aria-pressed` 语义却没接基座即失败；`button[aria-selected|aria-pressed]` 的选中态样式只能住在 `.tabs` 与 `.segmented-control` 上。
 

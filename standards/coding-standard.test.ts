@@ -859,6 +859,87 @@ describe('界面观感基线', () => {
   });
 });
 
+/**
+ * 密集高度裸值的存量清单（docs/10 §9.10）：**只许降不许升**。
+ * 24–40px 是控件与行的档位带；落在 28／32／36 的已经收进 `--control-height*`，
+ * 剩下这些是还没定档的（23 侧栏工作空间行、26 行内小按钮、30 筛选与次级按钮、
+ * 34 导航、36／40 卡片摘要与顶栏），等 `ListRow` 基座一次性收档。
+ */
+const DENSE_HEIGHT_BASELINE = [
+  '.new-task',
+  '.primary-nav button, .settings-nav',
+  '.settings-nav-list button',
+  '.selected-materials-actions button',
+  '.context-section .selected-materials-heading > button',
+  '.context-row button',
+  '.suggestion-job-row button',
+  '.knowledge-job-row button',
+  '.knowledge-research-button',
+  '.knowledge-admin-toggle',
+  '.knowledge-admin-row button',
+  '.knowledge-detail-members button',
+  '.filter-bar button',
+  '.memory-conflict-actions button',
+  '.material-chip',
+  '.expert-card-desc',
+];
+
+describe('徽标与档位纪律', () => {
+  const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
+  expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
+  const declarations = declarationsOf(styles ?? '');
+
+  it('状态徽标不得再回到各页自造的 chip 类', () => {
+    // §3.4 记着 6 套 chip 各写一遍的下场；Badge 基座落地后这三个类的样式不得复活。
+    const retired = [
+      { pattern: /\.skill-chip\b/, name: '.skill-chip' },
+      { pattern: /\.dependency-status-chip\b/, name: '.dependency-status-chip' },
+      { pattern: /\.memory-status-badge\b/, name: '.memory-status-badge' },
+    ];
+    const offenders: string[] = [];
+    for (const relative of cssPaths()) {
+      for (const declaration of declarationsOf(relative)) {
+        const hit = retired.find((entry) => entry.pattern.test(declaration.selector));
+        if (hit) offenders.push(`${relative} → ${hit.name}`);
+      }
+    }
+    expect(offenders, '状态徽标请复用 Badge（docs/10 §10.1）').toEqual([]);
+  });
+
+  it('密集高度档位的裸值只降不升', () => {
+    let current = 0;
+    const offenders: string[] = [];
+    for (const declaration of declarations) {
+      if (declaration.property !== 'min-height') continue;
+      const pixels = parsePixels(declaration.value);
+      if (pixels === undefined || pixels < 24 || pixels > 40) continue;
+      current += 1;
+      const selector = declaration.selector.replace(/\/\*[\s\S]*?\*\//g, '').trim();
+      if (!DENSE_HEIGHT_BASELINE.some((entry) => selector.includes(entry))) {
+        offenders.push(locate(declaration, styles ?? ''));
+      }
+    }
+    expect(
+      offenders,
+      '24–40px 的高度档要么取 --control-height*，要么登记进待收敛清单（docs/10 §9.10）',
+    ).toEqual([]);
+    expect(
+      current,
+      `密集高度裸值 ${current} 处，比基线 ${DENSE_HEIGHT_BASELINE.length} 多——清单不是豁免清单`,
+    ).toBeLessThanOrEqual(DENSE_HEIGHT_BASELINE.length);
+  });
+
+  it('胶囊圆角只允许取档位', () => {
+    const offenders = declarations
+      .filter((declaration) => declaration.property === 'border-radius')
+      .filter((declaration) => /(^|\D)999px/.test(declaration.value));
+    expect(
+      offenders.map((declaration) => locate(declaration, styles ?? '')),
+      '胶囊一律 var(--radius-pill)；再写一遍 999px 就是第二个档位源（docs/10 §9.10）',
+    ).toEqual([]);
+  });
+});
+
 describe('计时基准车道纪律', () => {
   const timingTests = pathsUnder(...SOURCE_ROOTS).filter(
     (relative) => /\.test\.tsx?$/.test(relative) && !relative.endsWith('.bench.test.ts'),
