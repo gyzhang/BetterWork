@@ -23,6 +23,7 @@ import {
   memoryConsentDialogNotice,
 } from '../lib/memory-suggestions';
 import { ConfirmationDialog } from './ConfirmationDialog';
+import { ListRow } from './ListRow';
 import { TransientToast } from './TransientToast';
 
 /**
@@ -212,26 +213,33 @@ function SuggestionJobRow({
   onRetry: (job: MemoryJobSummary) => void;
 }): React.JSX.Element {
   return (
-    <li className="suggestion-job-row">
-      <div>
-        <strong>{memoryJobStatusLabel[job.status]}</strong>
-        <small>
+    <ListRow
+      as="li"
+      variant="plain"
+      className="suggestion-job-row"
+      title={memoryJobStatusLabel[job.status]}
+      meta={
+        <>
           {jobOutcomeLabel(job)} · {formatTime(job.updatedAt)}
           {job.modelLabel ? ` · ${job.modelLabel}` : ''}
           {job.attempt > 1 ? ` · 第 ${job.attempt} 次尝试` : ''}
-        </small>
-      </div>
-      {isActiveMemoryJob(job.status) && (
-        <button type="button" disabled={busy} onClick={() => onCancel(job)}>
-          取消
-        </button>
-      )}
-      {canRetryJob(job) && (
-        <button type="button" disabled={busy} onClick={() => onRetry(job)}>
-          重新提炼
-        </button>
-      )}
-    </li>
+        </>
+      }
+      actions={
+        <>
+          {isActiveMemoryJob(job.status) && (
+            <button type="button" disabled={busy} onClick={() => onCancel(job)}>
+              取消
+            </button>
+          )}
+          {canRetryJob(job) && (
+            <button type="button" disabled={busy} onClick={() => onRetry(job)}>
+              重新提炼
+            </button>
+          )}
+        </>
+      }
+    />
   );
 }
 

@@ -19,6 +19,7 @@ import { FieldSelect } from '../components/FieldSelect';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
 import { ViewContainer } from '../components/layout/ViewContainer';
+import { ListRow } from '../components/ListRow';
 import { Modal } from '../components/Modal';
 import { type ToastTone, TransientToast } from '../components/TransientToast';
 import { useArtifactSourceSelection } from '../hooks/use-artifact-source-selection';
@@ -504,30 +505,32 @@ export function ArtifactPage({
           ) : (
             <ViewContainer mode="list" className="completed-work-list">
               {artifacts.map((artifact) => (
-                <button
-                  className="completed-work-card"
+                <ListRow
                   key={artifact.id}
                   onClick={() => onSelect(artifact)}
-                >
-                  <span
-                    className={`completed-work-icon ${artifact.type === 'markdown' ? 'markdown' : 'file'}`}
-                    aria-hidden="true"
-                  >
-                    {artifact.type === 'markdown' ? 'MD' : 'PPT'}
-                  </span>
-                  <div>
-                    <strong>{artifact.title}</strong>
-                    <p>
+                  leading={
+                    <span
+                      className={`completed-work-icon ${artifact.type === 'markdown' ? 'markdown' : 'file'}`}
+                      aria-hidden="true"
+                    >
+                      {artifact.type === 'markdown' ? 'MD' : 'PPT'}
+                    </span>
+                  }
+                  title={artifact.title}
+                  detail={
+                    <>
                       {artifact.type === 'markdown' ? 'Markdown' : '文件成果'} · v
                       {artifact.versionNumber}
                       {artifact.origin === 'user-edit' ? ' · 人工修订' : ''} · 更新于{' '}
                       {formatTime(artifact.updatedAt)}
-                    </p>
-                  </div>
-                  <span aria-hidden="true">
-                    <ChevronRightIcon size={16} />
-                  </span>
-                </button>
+                    </>
+                  }
+                  trailing={
+                    <span aria-hidden="true">
+                      <ChevronRightIcon size={16} />
+                    </span>
+                  }
+                />
               ))}
             </ViewContainer>
           )}

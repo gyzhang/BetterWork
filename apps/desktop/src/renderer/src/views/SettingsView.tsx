@@ -16,6 +16,7 @@ import { Badge } from '../components/Badge';
 import { EmptyNotice } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
+import { ListRow } from '../components/ListRow';
 import { TransientToast } from '../components/TransientToast';
 import type { McpConnectionsState } from '../hooks/use-mcp-connections';
 import type { MemoriesState } from '../hooks/use-memories';
@@ -165,46 +166,54 @@ export function ModelSettings({
           models.map((model) => {
             const isDefault = defaultModelIds.get(model.role) === model.id;
             return (
-              <article
-                className={model.enabled ? 'model-row' : 'model-row disabled'}
+              <ListRow
                 key={model.id}
-              >
-                <div className="model-role-icon" aria-hidden="true">
-                  {model.role === 'language' ? '文' : model.role === 'vision' ? '图' : '嵌'}
-                </div>
-                <div className="model-main">
-                  <div>
-                    <strong>{model.name}</strong>
+                as="article"
+                tone={model.enabled ? 'default' : 'muted'}
+                leading={
+                  <span className="model-role-icon" aria-hidden="true">
+                    {model.role === 'language' ? '文' : model.role === 'vision' ? '图' : '嵌'}
+                  </span>
+                }
+                title={
+                  <>
+                    {model.name}
                     {isDefault && (
-                      <span className="current-badge">
+                      <Badge tone="brand" shape="tag">
                         {model.role === 'language' ? '当前工作模型' : '默认模型'}
-                      </span>
+                      </Badge>
                     )}
-                  </div>
-                  <p>
-                    {roleName[model.role]} · {model.provider} · {model.model}
-                  </p>
-                  <small>
+                  </>
+                }
+                detail={`${roleName[model.role]} · ${model.provider} · ${model.model}`}
+                meta={
+                  <>
                     {model.apiKeyConfigured ? '已配置凭据' : '未配置凭据'} ·{' '}
                     <span className={`connection-status ${model.connectionStatus}`}>
                       {connectionStatusName[model.connectionStatus]}
                     </span>{' '}
                     · {model.enabled ? '已启用' : '已停用'}
-                  </small>
-                </div>
-                <div className="model-actions">
-                  <button onClick={() => onEdit(model)}>编辑</button>
-                  {!isDefault && (
-                    <button disabled={!model.enabled} onClick={() => onSetDefault(model)}>
-                      设为默认
+                  </>
+                }
+                actions={
+                  <>
+                    <button type="button" onClick={() => onEdit(model)}>
+                      编辑
                     </button>
-                  )}
-                  <button onClick={() => onToggle(model)}>{model.enabled ? '停用' : '启用'}</button>
-                  <button className="danger-text" onClick={() => onDelete(model)}>
-                    删除
-                  </button>
-                </div>
-              </article>
+                    {!isDefault && (
+                      <button disabled={!model.enabled} onClick={() => onSetDefault(model)}>
+                        设为默认
+                      </button>
+                    )}
+                    <button type="button" onClick={() => onToggle(model)}>
+                      {model.enabled ? '停用' : '启用'}
+                    </button>
+                    <button type="button" className="danger-text" onClick={() => onDelete(model)}>
+                      删除
+                    </button>
+                  </>
+                }
+              />
             );
           })
         )}
@@ -523,37 +532,40 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
       ) : (
         <div className="mcp-connection-list">
           {state.connections.map((connection) => (
-            <article className="mcp-connection-row" key={connection.id}>
-              <div className="mcp-connection-main">
-                <strong>{connection.name}</strong>
-                <p>
-                  {connection.transport.command} · {connection.tools.length} 个已发现工具
-                </p>
-                <small className={`connection-status ${connection.status}`}>
+            <ListRow
+              key={connection.id}
+              as="article"
+              title={connection.name}
+              detail={`${connection.transport.command} · ${connection.tools.length} 个已发现工具`}
+              meta={
+                <span className={`connection-status ${connection.status}`}>
                   {mcpStatusName[connection.status]}
                   {connection.failureMessage ? ` · ${connection.failureMessage}` : ''}
-                </small>
-              </div>
-              <div className="model-actions">
-                <button
-                  type="button"
-                  disabled={busyId === connection.id}
-                  onClick={() => test(connection)}
-                >
-                  检测
-                </button>
-                <button type="button" onClick={() => beginEdit(connection)}>
-                  编辑
-                </button>
-                <button
-                  type="button"
-                  className="danger-text"
-                  disabled={busyId === connection.id}
-                  onClick={() => remove(connection)}
-                >
-                  删除
-                </button>
-              </div>
+                </span>
+              }
+              actions={
+                <>
+                  <button
+                    type="button"
+                    disabled={busyId === connection.id}
+                    onClick={() => test(connection)}
+                  >
+                    检测
+                  </button>
+                  <button type="button" onClick={() => beginEdit(connection)}>
+                    编辑
+                  </button>
+                  <button
+                    type="button"
+                    className="danger-text"
+                    disabled={busyId === connection.id}
+                    onClick={() => remove(connection)}
+                  >
+                    删除
+                  </button>
+                </>
+              }
+            >
               {connection.tools.length > 0 && (
                 <div className="mcp-tool-summary">
                   {connection.tools.map((tool) => (
@@ -561,7 +573,7 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
                   ))}
                 </div>
               )}
-            </article>
+            </ListRow>
           ))}
         </div>
       )}

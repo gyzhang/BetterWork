@@ -19,6 +19,7 @@ import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
 import { PageToolbar } from '../components/layout/PageToolbar';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
+import { ListRow } from '../components/ListRow';
 import type { MemoryEditorSubmission } from '../components/MemoryEditor';
 import { MemoryEditor } from '../components/MemoryEditor';
 import { MemorySuggestionList } from '../components/MemorySuggestionList';
@@ -697,117 +698,120 @@ function MemoryRow({
         }
       : undefined;
   return (
-    <article className={`memory-row memory-${memory.effectiveStatus}`} key={memory.id}>
-      <div className="memory-main">
-        <div className="memory-meta">
-          <Badge shape="tag">{effectiveStatusLabel[memory.effectiveStatus]}</Badge>
-          <span>{facetLabel[memory.facet]}</span>
-          <span>{memoryScopeLabel(memory.scope, workspaceName, expertName)}</span>
-          <span>{formatValidityRange(memory.validFrom, memory.validUntil)}</span>
-          <span className={memory.recallPolicy === 'pinned' ? 'memory-policy-pinned' : ''}>
-            {memory.recallPolicy === 'pinned' ? '优先带入' : '按相关性选择'}
-          </span>
-          <span className={`memory-source-${memory.sourceAvailability.replace(' ', '-')}`}>
-            {sourceAvailabilityLabel[memory.sourceAvailability]}
-          </span>
-          <span>
-            修订 v{memory.revision} · {memoryProvenanceLabel(memory)}
-          </span>
-        </div>
-        <p>{memory.content}</p>
-        {memory.topicKey && <small>议题：{memory.topicKey}</small>}
-        {dependencies !== undefined &&
-          (dependencies.materials > 0 || dependencies.memories > 0) && (
-            <small className="memory-dependencies">
-              依赖：资料 {dependencies.materials} 项 · 既有记忆 {dependencies.memories} 条
-              {memory.requiresMaterialSelection ? '；使用时仍需在本任务选入对应资料' : ''}
-            </small>
-          )}
-        {memory.requiresMaterialSelection && dependencies === undefined && (
-          <small className="memory-dependencies">使用时仍需在本任务选入对应资料。</small>
-        )}
-        {memory.duplicatesConfirmedMemoryId !== undefined && (
-          <small className="memory-duplicate-hint">
-            与已确认记忆重复：确认后会出现两条同口径记录，通常直接拒绝候选即可。
-          </small>
-        )}
-        {memory.conflicts.map((pair) => (
-          <ConflictPair
-            key={`${pair.leftRevisionId}:${pair.rightRevisionId}`}
-            pair={pair}
-            memory={memory}
-            allMemories={allMemories}
-            onResolve={onResolve}
-            onLoadRevision={onLoadRevision}
-            {...(workspaceName ? { workspaceName } : {})}
-            {...(expertName ? { expertName } : {})}
-          />
-        ))}
-        {!readOnly && memory.status === 'confirmed' && (
-          <small className="memory-policy-hint">
-            优先带入只免「词面命中」这一道门槛，不免范围、有效期、本任务排除、来源与冲突门禁；
-            调整会追加修订并只影响下次运行，也不表示模型一定采用。
-          </small>
-        )}
-      </div>
-      <div className="memory-actions">
-        {!readOnly && (
-          <button type="button" onClick={() => onEdit(memory)}>
-            {editLabel}
-          </button>
-        )}
-        {!readOnly &&
-          memory.status === 'candidate' &&
-          memory.candidateDisposition === 'pending' && (
-            <>
-              <button type="button" onClick={() => onAction(memory, 'confirm')}>
-                确认
-              </button>
-              <button type="button" onClick={() => onAction(memory, 'reject')}>
-                暂不采用
-              </button>
-            </>
-          )}
-        {!readOnly &&
-          memory.status === 'candidate' &&
-          memory.candidateDisposition === 'rejected' && (
-            <button type="button" onClick={() => onAction(memory, 'restore-candidate')}>
-              恢复待确认
+    <ListRow
+      key={memory.id}
+      as="article"
+      className={`memory-row memory-${memory.effectiveStatus}`}
+      actions={
+        <>
+          {!readOnly && (
+            <button type="button" onClick={() => onEdit(memory)}>
+              {editLabel}
             </button>
           )}
-        {!readOnly && memory.sourceAvailability === 'review-required' && (
-          <button type="button" onClick={() => onReviewSource(memory)}>
-            复核来源
-          </button>
-        )}
-        {!readOnly && memory.effectiveStatus !== 'expired' && memory.status === 'confirmed' && (
-          <button type="button" onClick={() => onAction(memory, 'expire')}>
-            设为过期
-          </button>
-        )}
-        {!readOnly && !isTerminalMemory(memory) && memory.status === 'confirmed' && (
-          <button
-            type="button"
-            onClick={() =>
-              onPolicy(memory, memory.recallPolicy === 'pinned' ? 'relevant' : 'pinned')
-            }
-          >
-            {memory.recallPolicy === 'pinned' ? '取消优先带入' : '设为优先带入'}
-          </button>
-        )}
-        {!readOnly && !isGlobalScopeOf(memory) && isDerived(memory) && (
-          <button type="button" onClick={() => onRestate(memory)}>
-            作为我的工作口径重新保存
-          </button>
-        )}
-        {!readOnly && !isTerminalMemory(memory) && (
-          <button className="danger-text" type="button" onClick={() => onDelete(memory)}>
-            以后不用
-          </button>
-        )}
-        {readOnly && <span className="memory-terminal-note">终态记录，不可恢复</span>}
+          {!readOnly &&
+            memory.status === 'candidate' &&
+            memory.candidateDisposition === 'pending' && (
+              <>
+                <button type="button" onClick={() => onAction(memory, 'confirm')}>
+                  确认
+                </button>
+                <button type="button" onClick={() => onAction(memory, 'reject')}>
+                  暂不采用
+                </button>
+              </>
+            )}
+          {!readOnly &&
+            memory.status === 'candidate' &&
+            memory.candidateDisposition === 'rejected' && (
+              <button type="button" onClick={() => onAction(memory, 'restore-candidate')}>
+                恢复待确认
+              </button>
+            )}
+          {!readOnly && memory.sourceAvailability === 'review-required' && (
+            <button type="button" onClick={() => onReviewSource(memory)}>
+              复核来源
+            </button>
+          )}
+          {!readOnly && memory.effectiveStatus !== 'expired' && memory.status === 'confirmed' && (
+            <button type="button" onClick={() => onAction(memory, 'expire')}>
+              设为过期
+            </button>
+          )}
+          {!readOnly && !isTerminalMemory(memory) && memory.status === 'confirmed' && (
+            <button
+              type="button"
+              onClick={() =>
+                onPolicy(memory, memory.recallPolicy === 'pinned' ? 'relevant' : 'pinned')
+              }
+            >
+              {memory.recallPolicy === 'pinned' ? '取消优先带入' : '设为优先带入'}
+            </button>
+          )}
+          {!readOnly && !isGlobalScopeOf(memory) && isDerived(memory) && (
+            <button type="button" onClick={() => onRestate(memory)}>
+              作为我的工作口径重新保存
+            </button>
+          )}
+          {!readOnly && !isTerminalMemory(memory) && (
+            <button className="danger-text" type="button" onClick={() => onDelete(memory)}>
+              以后不用
+            </button>
+          )}
+          {readOnly && <span className="memory-terminal-note">终态记录，不可恢复</span>}
+        </>
+      }
+    >
+      <div className="memory-meta">
+        <Badge shape="tag">{effectiveStatusLabel[memory.effectiveStatus]}</Badge>
+        <span>{facetLabel[memory.facet]}</span>
+        <span>{memoryScopeLabel(memory.scope, workspaceName, expertName)}</span>
+        <span>{formatValidityRange(memory.validFrom, memory.validUntil)}</span>
+        <span className={memory.recallPolicy === 'pinned' ? 'memory-policy-pinned' : ''}>
+          {memory.recallPolicy === 'pinned' ? '优先带入' : '按相关性选择'}
+        </span>
+        <span className={`memory-source-${memory.sourceAvailability.replace(' ', '-')}`}>
+          {sourceAvailabilityLabel[memory.sourceAvailability]}
+        </span>
+        <span>
+          修订 v{memory.revision} · {memoryProvenanceLabel(memory)}
+        </span>
       </div>
-    </article>
+      <p>{memory.content}</p>
+      {memory.topicKey && <small>议题：{memory.topicKey}</small>}
+      {dependencies !== undefined && (dependencies.materials > 0 || dependencies.memories > 0) && (
+        <small className="memory-dependencies">
+          依赖：资料 {dependencies.materials} 项 · 既有记忆 {dependencies.memories} 条
+          {memory.requiresMaterialSelection ? '；使用时仍需在本任务选入对应资料' : ''}
+        </small>
+      )}
+      {memory.requiresMaterialSelection && dependencies === undefined && (
+        <small className="memory-dependencies">使用时仍需在本任务选入对应资料。</small>
+      )}
+      {memory.duplicatesConfirmedMemoryId !== undefined && (
+        <small className="memory-duplicate-hint">
+          与已确认记忆重复：确认后会出现两条同口径记录，通常直接拒绝候选即可。
+        </small>
+      )}
+      {memory.conflicts.map((pair) => (
+        <ConflictPair
+          key={`${pair.leftRevisionId}:${pair.rightRevisionId}`}
+          pair={pair}
+          memory={memory}
+          allMemories={allMemories}
+          onResolve={onResolve}
+          onLoadRevision={onLoadRevision}
+          {...(workspaceName ? { workspaceName } : {})}
+          {...(expertName ? { expertName } : {})}
+        />
+      ))}
+      {!readOnly && memory.status === 'confirmed' && (
+        <small className="memory-policy-hint">
+          优先带入只免「词面命中」这一道门槛，不免范围、有效期、本任务排除、来源与冲突门禁；
+          调整会追加修订并只影响下次运行，也不表示模型一定采用。
+        </small>
+      )}
+    </ListRow>
   );
 }
 

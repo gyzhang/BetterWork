@@ -268,7 +268,7 @@ describe('SkillsPage', () => {
     expect(listButton.getAttribute('aria-pressed')).toBe('false');
 
     expect(document.querySelector('.skill-card')).toBeTruthy();
-    expect(document.querySelector('.skill-list-item')).toBeNull();
+    expect(document.querySelector('.list-row[data-variant=card]')).toBeNull();
 
     listButton.click();
     await waitFor(() => {
@@ -280,7 +280,7 @@ describe('SkillsPage', () => {
         within(updatedGroup).getByRole('button', { name: '卡片' }).getAttribute('aria-pressed'),
       ).toBe('false');
     });
-    expect(document.querySelector('.skill-list-item')).toBeTruthy();
+    expect(document.querySelector('.list-row[data-variant=card]')).toBeTruthy();
     expect(document.querySelector('.skill-card')).toBeNull();
   });
 

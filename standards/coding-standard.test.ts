@@ -710,22 +710,70 @@ const CHECKBOX_ROW_LABEL_SELECTORS: { readonly match: string; readonly reason: s
   { match: '.skill-trust-box label', reason: 'Skill 信任确认行：框在左、说明在右' },
 ];
 
-/** 已被基座收编的自造类：样式不得复活（Badge 收 chip、EmptyState 收占位）。 */
-const RETIRED_UTILITY_CLASSES: { readonly pattern: RegExp; readonly name: string }[] = [
-  { pattern: /\.skill-chip\b/, name: '.skill-chip' },
-  { pattern: /\.dependency-status-chip\b/, name: '.dependency-status-chip' },
-  { pattern: /\.memory-status-badge\b/, name: '.memory-status-badge' },
-  { pattern: /\.empty-runs\b/, name: '.empty-runs' },
-  { pattern: /\.empty-models\b/, name: '.empty-models' },
-  { pattern: /\.setting-placeholder\b/, name: '.setting-placeholder' },
-  { pattern: /\.notification-empty\b/, name: '.notification-empty' },
+/**
+ * 已被基座收编的自造类：样式不得复活（Badge 收 chip、EmptyState 收占位、ListRow 收行几何）。
+ * 行类一律用 `(?![-\w])` 收尾——`\b` 在连字符处也算词边界，会把仍在用的
+ * `.knowledge-card-select` 当成复活的 `.knowledge-card`。
+ */
+const RETIRED_UTILITY_CLASSES: {
+  readonly pattern: RegExp;
+  readonly name: string;
+  readonly family: 'badge' | 'empty' | 'row';
+}[] = [
+  { pattern: /\.skill-chip(?![-\w])/, name: '.skill-chip', family: 'badge' },
+  {
+    pattern: /\.dependency-status-chip(?![-\w])/,
+    name: '.dependency-status-chip',
+    family: 'badge',
+  },
+  { pattern: /\.memory-status-badge(?![-\w])/, name: '.memory-status-badge', family: 'badge' },
+  { pattern: /\.empty-runs(?![-\w])/, name: '.empty-runs', family: 'empty' },
+  { pattern: /\.empty-models(?![-\w])/, name: '.empty-models', family: 'empty' },
+  { pattern: /\.setting-placeholder(?![-\w])/, name: '.setting-placeholder', family: 'empty' },
+  { pattern: /\.notification-empty(?![-\w])/, name: '.notification-empty', family: 'empty' },
+  { pattern: /\.run-item(?![-\w])/, name: '.run-item', family: 'row' },
+  { pattern: /\.notification-item(?![-\w])/, name: '.notification-item', family: 'row' },
+  {
+    pattern: /\.completed-work-card(?![-\w])/,
+    name: '.completed-work-card',
+    family: 'row',
+  },
+  { pattern: /\.skill-list-item(?![-\w])/, name: '.skill-list-item', family: 'row' },
+  { pattern: /\.context-row(?![-\w])/, name: '.context-row', family: 'row' },
+  {
+    pattern: /\.model-(?:row|main|actions)(?![-\w])/,
+    name: '.model-row／.model-main／.model-actions',
+    family: 'row',
+  },
+  {
+    pattern: /\.mcp-connection-(?:row|main)(?![-\w])/,
+    name: '.mcp-connection-row／-main',
+    family: 'row',
+  },
+  { pattern: /\.evidence-row(?![-\w])/, name: '.evidence-row', family: 'row' },
+  {
+    pattern: /\.knowledge-job-(?:row|actions)(?![-\w])/,
+    name: '.knowledge-job-row／-actions',
+    family: 'row',
+  },
+  {
+    pattern: /\.knowledge-card(?:-(?:main|actions))?(?![-\w])/,
+    name: '.knowledge-card／-main／-actions',
+    family: 'row',
+  },
+  {
+    pattern: /\.memory-(?:main|actions)(?![-\w])/,
+    name: '.memory-main／.memory-actions',
+    family: 'row',
+  },
 ];
 
 /** 把 retired 清单变成一条断言：任一 CSS 文件里都不得再出现这些选择器。 */
-function assertRetiredClassesAbsent(offenders: string[]): void {
+function assertRetiredClassesAbsent(offenders: string[], family: 'badge' | 'empty' | 'row'): void {
+  const retired = RETIRED_UTILITY_CLASSES.filter((entry) => entry.family === family);
   for (const relative of cssPaths()) {
     for (const declaration of declarationsOf(relative)) {
-      const hit = RETIRED_UTILITY_CLASSES.find((entry) => entry.pattern.test(declaration.selector));
+      const hit = retired.find((entry) => entry.pattern.test(declaration.selector));
       if (hit) offenders.push(`${relative} → ${hit.name}`);
     }
   }
@@ -920,11 +968,8 @@ describe('徽标与档位纪律', () => {
   it('状态徽标不得再回到各页自造的 chip 类', () => {
     // §3.4 记着 6 套 chip 各写一遍的下场；Badge 基座落地后这些类的样式不得复活。
     const offenders: string[] = [];
-    assertRetiredClassesAbsent(offenders);
-    expect(
-      offenders.filter((entry) => /chip|badge/.test(entry)),
-      '状态徽标请复用 Badge（docs/10 §10.1）',
-    ).toEqual([]);
+    assertRetiredClassesAbsent(offenders, 'badge');
+    expect(offenders, '状态徽标请复用 Badge（docs/10 §10.1）').toEqual([]);
   });
 
   it('密集高度与圆角只允许取档位', () => {
@@ -975,11 +1020,8 @@ describe('徽标与档位纪律', () => {
   it('空态占位不得再回到各页自造的类', () => {
     // §2 记着 6 处内联占位绕开 EmptyState：同一个「这里还没有东西」有四种尺寸与配色。
     const offenders: string[] = [];
-    assertRetiredClassesAbsent(offenders);
-    expect(
-      offenders.filter((entry) => /empty|placeholder/.test(entry)),
-      '空态请复用 EmptyContext／EmptyNotice（docs/10 §10.1）',
-    ).toEqual([]);
+    assertRetiredClassesAbsent(offenders, 'empty');
+    expect(offenders, '空态请复用 EmptyContext／EmptyNotice（docs/10 §10.1）').toEqual([]);
   });
 
   it('胶囊圆角只允许取档位', () => {
@@ -989,6 +1031,79 @@ describe('徽标与档位纪律', () => {
     expect(
       offenders.map((declaration) => locate(declaration, styles ?? '')),
       '胶囊一律 var(--radius-pill)；再写一遍 999px 就是第二个档位源（docs/10 §9.10）',
+    ).toEqual([]);
+  });
+});
+
+describe('列表行基座纪律', () => {
+  const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
+  expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
+  const declarations = declarationsOf(styles ?? '');
+
+  it('行几何不得再回到各页自造的类', () => {
+    // §3.4 记着同一结构有 9 套 flex／gap／padding／圆角，差异全部来自各写一遍。
+    const offenders: string[] = [];
+    assertRetiredClassesAbsent(offenders, 'row');
+    expect(offenders, '列表行请复用 ListRow 的槽位（docs/10 §10.1）').toEqual([]);
+  });
+
+  it('行的间距与内边距只由基座的选择器拥有', () => {
+    // 基座收编后，页面最常见的回归是「这条行在我这里想紧一点」：用后代选择器替骨架
+    // 补一遍 gap／padding，等于把第 10 套行几何写回来。
+    const offenders = declarations
+      .map((declaration) => ({
+        declaration,
+        selector: declaration.selector.replace(/\/\*[\s\S]*?\*\//g, '').trim(),
+      }))
+      .filter(({ selector }) => {
+        if (!selector.includes('.list-row')) return false;
+        // 基座自己的选择器：`.list-row` 本体、三个变体档与六个槽位类。
+        return !/^\.list-row(?:-[a-z]+)?(?![-\w])/.test(selector);
+      })
+      .filter(
+        ({ declaration }) =>
+          declaration.property === 'gap' ||
+          declaration.property === 'row-gap' ||
+          declaration.property === 'column-gap' ||
+          declaration.property === 'padding',
+      )
+      .map(({ declaration }) => locate(declaration, styles ?? ''));
+    expect(
+      offenders,
+      '行的 gap／padding 归 ListRow；要更紧或更松先改档位或加变体，别在页面里补一遍（docs/10 §9.8）',
+    ).toEqual([]);
+  });
+
+  it('留在行上的领域钩子不再自带几何', () => {
+    // 迁进 ListRow 后，`.memory-row` 这样的名字还要承担状态外观（左侧状态条、降饱和）。
+    // 允许它活着的前提是行骨架不从它身上长回来——否则第 13 套行几何只是换了个入口。
+    const ROW_HOOK_CLASSES = ['memory-row'];
+    const offenders = declarations
+      .map((declaration) => ({
+        declaration,
+        selector: declaration.selector.replace(/\/\*[\s\S]*?\*\//g, '').trim(),
+      }))
+      .filter(
+        ({ selector }) =>
+          !selector.includes('.list-row') &&
+          ROW_HOOK_CLASSES.some((hook) => new RegExp(`^\\.${hook}(?![-\\w])`).test(selector)),
+      )
+      .filter(({ declaration }) =>
+        [
+          'display',
+          'gap',
+          'row-gap',
+          'column-gap',
+          'padding',
+          'align-items',
+          'flex-direction',
+          'border-bottom',
+        ].includes(declaration.property),
+      )
+      .map(({ declaration }) => locate(declaration, styles ?? ''));
+    expect(
+      offenders,
+      '行的 flex／gap／padding 归 ListRow；领域钩子类只保留状态表达（docs/10 §10.1）',
     ).toEqual([]);
   });
 });

@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom';
 
 import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { EmptyContext } from './components/EmptyState';
+import { ListRow } from './components/ListRow';
 import { useOverlaySemantics } from './components/Modal';
 import { AlertIcon, BellIcon, CheckIcon, CloseIcon, InfoIcon, WarningIcon } from './icons';
 import { trackAction } from './lib/async-action';
@@ -268,21 +269,22 @@ const NotificationPanel = ({
             />
           ) : (
             notifications.map((item) => (
-              <button
+              <ListRow
                 key={item.id}
-                className={item.read ? 'notification-item' : 'notification-item unread'}
+                className={item.read ? undefined : 'unread'}
                 onClick={() => onActivate(item)}
-              >
-                <span className={`level-${item.level}`} aria-hidden="true">
-                  <LevelIcon level={item.level} />
-                </span>
-                <div>
-                  <strong>{item.title}</strong>
-                  {item.detail && <p>{item.detail}</p>}
-                  <small>{relativeTime(item.createdAt)}</small>
-                </div>
-                {!item.read && <span className="notification-dot" aria-hidden="true" />}
-              </button>
+                leading={
+                  <span className={`level-${item.level}`} aria-hidden="true">
+                    <LevelIcon level={item.level} />
+                  </span>
+                }
+                title={item.title}
+                detail={item.detail}
+                meta={relativeTime(item.createdAt)}
+                trailing={
+                  item.read ? undefined : <span className="notification-dot" aria-hidden="true" />
+                }
+              />
             ))
           )}
         </div>

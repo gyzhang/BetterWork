@@ -48,6 +48,7 @@ import {
 import { handleTitlebarDoubleClick } from '../lib/titlebar';
 import type { ContextTab } from '../lib/view-types';
 import { EmptyContext } from './EmptyState';
+import { ListRow } from './ListRow';
 import { MemorySuggestionList } from './MemorySuggestionList';
 import { Tabs } from './Tabs';
 import { ToolActivity } from './ToolActivity';
@@ -432,24 +433,23 @@ export function ContextPanel({
             ) : (
               <div className="evidence-list">
                 {artifacts.map((artifact) => (
-                  <button
+                  <ListRow
                     key={artifact.id}
-                    type="button"
-                    className="evidence-row artifact-row-clickable"
                     onClick={() => onSelectArtifact?.(artifact)}
-                    aria-label={`查看成果「${artifact.title}」`}
-                  >
-                    <span aria-hidden="true">
-                      <ArtifactIcon size={12} />
-                    </span>
-                    <div>
-                      <strong>{artifact.title}</strong>
-                      <small>
+                    label={`查看成果「${artifact.title}」`}
+                    leading={
+                      <span aria-hidden="true">
+                        <ArtifactIcon size={12} />
+                      </span>
+                    }
+                    title={artifact.title}
+                    meta={
+                      <>
                         {artifactTypeLabel(artifact)} · v{artifact.versionNumber}
-                      </small>
-                    </div>
-                    <ChevronRightIcon size={12} className="artifact-row-chevron" />
-                  </button>
+                      </>
+                    }
+                    trailing={<ChevronRightIcon size={12} />}
+                  />
                 ))}
               </div>
             ))}
@@ -513,34 +513,42 @@ function EvidenceSection({
     const isPreviewing = runSource.selectedEvidenceId === item.id;
     return (
       <Fragment key={item.id}>
-        <article className="evidence-row">
-          <span aria-hidden="true">
-            <Icon size={12} />
-          </span>
-          <div>
-            <strong>{item.title}</strong>
-            <small>
+        <ListRow
+          as="article"
+          leading={
+            <span aria-hidden="true">
+              <Icon size={12} />
+            </span>
+          }
+          title={item.title}
+          meta={
+            <>
               {item.locator} · {sourceLabel}
               {knowledge
                 ? ` · 修订 ${knowledge.reference.knowledgeRevisionId.slice(0, 8)} · 第 ${knowledge.span.sectionOrdinal + 1} 段 ${knowledge.span.start}–${knowledge.span.end} 字`
                 : ''}
-            </small>
-            <p>{item.excerpt}</p>
-          </div>
-          {knowledge && (
-            <button
-              className="evidence-open-button"
-              onClick={() => runSource.previewRunSource(item.runId, item.id)}
-            >
-              {isPreviewing && runSource.loading ? '正在回看…' : '查看区间'}
-            </button>
-          )}
-          {!isWeb && !isMcp && (
-            <button className="evidence-open-button" onClick={() => openSourceWithToast(item)}>
-              原文
-            </button>
-          )}
-        </article>
+            </>
+          }
+          actions={
+            <>
+              {knowledge && (
+                <button
+                  type="button"
+                  onClick={() => runSource.previewRunSource(item.runId, item.id)}
+                >
+                  {isPreviewing && runSource.loading ? '正在回看…' : '查看区间'}
+                </button>
+              )}
+              {!isWeb && !isMcp && (
+                <button type="button" onClick={() => openSourceWithToast(item)}>
+                  原文
+                </button>
+              )}
+            </>
+          }
+        >
+          <p className="list-row-detail">{item.excerpt}</p>
+        </ListRow>
         {isPreviewing && <EvidencePreview state={runSource} onClose={runSource.close} />}
       </Fragment>
     );
@@ -726,19 +734,23 @@ function MemoryScopeRow({
   expertName: string | undefined;
 }): React.JSX.Element {
   return (
-    <div className={`context-row${excluded ? ' excluded' : ''}`}>
-      <div>
-        <strong>{memory?.content ?? '该记忆的正文不在当前清单内'}</strong>
-        <small>
+    <ListRow
+      variant="card"
+      className={excluded ? 'excluded' : undefined}
+      title={memory?.content ?? '该记忆的正文不在当前清单内'}
+      meta={
+        <>
           第 {item.order} 位 · {selectionReasonLabel[item.reason]} ·{' '}
           {memory ? memoryScopeLabel(memory.scope, workspaceName, expertName) : item.memoryId} ·{' '}
           {memory ? `v${memory.revision}` : ''}
-        </small>
-      </div>
-      <button type="button" disabled={saving} onClick={() => onToggleMemory(item.memoryId)}>
-        {saving ? '正在调整…' : excluded ? '恢复使用' : '本任务不用'}
-      </button>
-    </div>
+        </>
+      }
+      actions={
+        <button type="button" disabled={saving} onClick={() => onToggleMemory(item.memoryId)}>
+          {saving ? '正在调整…' : excluded ? '恢复使用' : '本任务不用'}
+        </button>
+      }
+    />
   );
 }
 
@@ -786,33 +798,34 @@ function ExcludedTaskMemoriesSection({
       ) : (
         <div className="context-list">
           {exclusions.items.map((item) => (
-            <div className="context-row" key={item.memoryId}>
-              {item.visibility === 'visible' ? (
-                <div>
-                  <strong>{item.content}</strong>
-                  <small>
+            <ListRow
+              key={item.memoryId}
+              variant="card"
+              title={item.visibility === 'visible' ? item.content : '此项当前不可查看'}
+              meta={
+                item.visibility === 'visible' ? (
+                  <>
                     {effectiveStatusLabel[item.effectiveStatus]} ·{' '}
                     {memoryScopeLabel(item.scope, workspaceName, expertName)}
-                  </small>
-                </div>
-              ) : (
-                <div>
-                  <strong>此项当前不可查看</strong>
-                  <small>不在本任务可管理范围内，或记录已被删除</small>
-                </div>
-              )}
-              <button
-                type="button"
-                disabled={exclusion.savingMemoryId === item.memoryId}
-                onClick={() => onToggleMemory(item.memoryId)}
-              >
-                {exclusion.savingMemoryId === item.memoryId
-                  ? '正在调整…'
-                  : item.visibility === 'visible'
-                    ? '恢复参与选择'
-                    : '移除此排除'}
-              </button>
-            </div>
+                  </>
+                ) : (
+                  '不在本任务可管理范围内，或记录已被删除'
+                )
+              }
+              actions={
+                <button
+                  type="button"
+                  disabled={exclusion.savingMemoryId === item.memoryId}
+                  onClick={() => onToggleMemory(item.memoryId)}
+                >
+                  {exclusion.savingMemoryId === item.memoryId
+                    ? '正在调整…'
+                    : item.visibility === 'visible'
+                      ? '恢复参与选择'
+                      : '移除此排除'}
+                </button>
+              }
+            />
           ))}
         </div>
       )}

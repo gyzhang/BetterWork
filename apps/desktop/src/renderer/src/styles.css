@@ -516,33 +516,7 @@ small {
   min-height: 0;
   overflow: auto;
 }
-.run-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px 9px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-row);
-  text-align: left;
-}
-.run-item:hover,
-.run-item.active {
-  color: var(--text-primary);
-  background: var(--selection);
-}
-.run-item span {
-  overflow: hidden;
-  font-size: 12px;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.run-item small {
-  color: var(--text-muted);
-  font-size: 12px;
-}
+
 .settings-nav {
   margin-top: 12px;
 }
@@ -1217,47 +1191,9 @@ small {
   display: grid;
   gap: 8px;
 }
-.context-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 9px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-row);
-}
-.context-row > div {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-.context-row strong {
-  color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.5;
-}
-.context-row small {
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-.context-row button {
-  flex: none;
-  min-height: var(--control-height-sm);
-  padding: 3px 8px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--control-radius);
-  font-size: 12px;
-}
-.context-row button:hover {
-  color: var(--text-primary);
-  background: var(--surface-raised);
-}
+
 /* 本任务已排除＝范围预览里降级显示，但不隐藏：用户要能把它恢复回来。 */
-.context-row.excluded {
+.list-row.excluded {
   background: var(--surface-raised);
   border-color: var(--border-subtle);
   opacity: 0.66;
@@ -1439,43 +1375,7 @@ small {
   padding: 0;
   list-style: none;
 }
-.suggestion-job-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 7px 9px;
-  background: var(--surface-raised);
-  border-radius: var(--radius-row);
-}
-.suggestion-job-row > div {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-.suggestion-job-row strong {
-  color: var(--text-primary);
-  font-size: 12px;
-}
-.suggestion-job-row small {
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-.suggestion-job-row button {
-  flex: none;
-  min-height: var(--control-height-sm);
-  padding: 3px 8px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--control-radius);
-  font-size: 12px;
-}
-.suggestion-job-row button:hover {
-  color: var(--text-primary);
-  background: var(--surface);
-}
+
 .suggestion-list {
   display: grid;
   gap: 8px;
@@ -1701,21 +1601,7 @@ small {
   flex-direction: column;
   padding: 10px 0;
 }
-.completed-work-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 13px 5px;
-  color: var(--text-primary);
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  text-align: left;
-}
-.completed-work-card:hover {
-  background: var(--surface-raised);
-}
+
 .completed-work-icon {
   display: grid;
   width: 30px;
@@ -1728,26 +1614,7 @@ small {
   font-size: 12px;
   font-weight: 700;
 }
-.completed-work-card div {
-  min-width: 0;
-  flex: 1;
-}
-.completed-work-card strong {
-  display: block;
-  overflow: hidden;
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.completed-work-card p {
-  margin-top: 4px;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-.completed-work-card > span:last-child {
-  color: var(--text-muted);
-  font-size: 22px;
-}
+
 .completed-work-page .empty-page {
   min-height: 360px;
   padding: 0;
@@ -2076,6 +1943,115 @@ small {
   flex-wrap: wrap;
   gap: 8px;
 }
+/* 提炼作业行用抬升底色区分状态，几何仍归 ListRow 的 plain 变体。 */
+.suggestion-job-row {
+  background: var(--surface-raised);
+}
+/* === ListRow：左槽 + 主区 + 右槽的唯一行骨架（docs/10 §10.1） ===
+   三种呈现共用几何：分隔线行（列表）、卡片行（技能与上下文）、裸行（侧栏）。
+   行内的三行文字尺寸也收在这里，页面只放内容与前缀类。 */
+.list-row {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  padding: 12px 4px;
+  color: var(--text-primary);
+  background: transparent;
+  border: 0;
+  text-align: left;
+}
+.list-row[data-variant='divider'] {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--border);
+}
+.list-row[data-variant='card'] {
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+.list-row[data-variant='plain'] {
+  padding: 8px 9px;
+  border-radius: var(--radius-row);
+}
+button.list-row:where(:not(:disabled)):hover {
+  background: var(--surface-hover);
+}
+.list-row[data-variant='card']:where(button):hover {
+  border-color: var(--brand);
+}
+.list-row[data-selected='true'] {
+  background: var(--selection);
+}
+.list-row[data-tone='muted'],
+.list-row[data-disabled='true'] {
+  opacity: 0.62;
+}
+.list-row-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+.list-row-title {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.list-row-detail {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.list-row-meta {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.list-row-leading {
+  display: grid;
+  flex: none;
+  place-items: center;
+}
+.list-row-actions {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+/* :where 让页面自己的动作按钮类（打开原文、更多）保持权重，基座只兜底。
+   兜底取「行内文字按钮」：行内动作是一排次级操作，描边框会把一行变成一堵按钮墙。 */
+.list-row-actions :where(button) {
+  min-height: var(--control-height-sm);
+  padding: 3px 8px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-tag);
+  font-size: 12px;
+}
+.list-row-actions :where(button):hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--surface-raised);
+}
+.list-row-trailing {
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: var(--text-muted);
+}
+
 /* === Badge：状态徽标的唯一外观（docs/10 §10.1） === */
 .badge {
   display: inline-flex;
@@ -2112,43 +2088,7 @@ small {
   flex-direction: column;
   gap: 12px;
 }
-.skill-list-item {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  text-align: left;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  cursor: pointer;
-}
-.skill-list-item:hover {
-  border-color: var(--brand);
-}
-.skill-list-item:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -2px;
-}
-.skill-list-item-main {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 4px;
-}
-.skill-list-item-main strong {
-  color: var(--text-primary);
-  font-size: 13px;
-}
-.skill-list-item-main small {
-  color: var(--text-muted);
-  font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+
 .skill-detail-heading,
 .skill-section-heading {
   display: flex;
@@ -2392,16 +2332,7 @@ small {
 .model-list {
   border-top: 1px solid var(--border);
 }
-.model-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 4px;
-  border-bottom: 1px solid var(--border);
-}
-.model-row.disabled {
-  opacity: 0.58;
-}
+/* 模型行的骨架与动作都由 ListRow 提供，这里只剩领域标记：角色徽标与连接状态。 */
 .model-role-icon {
   display: grid;
   width: 32px;
@@ -2414,63 +2345,10 @@ small {
   font-size: 12px;
   font-weight: 600;
 }
-.model-main {
-  min-width: 0;
-  flex: 1;
-}
-.model-main > div {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.model-main strong {
-  font-size: 14px;
-}
-.model-main p,
-.model-main small {
-  display: block;
-  overflow: hidden;
-  margin-top: 4px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.model-main small {
-  color: var(--text-muted);
-  font-size: 12px;
-}
 .connection-status.connected {
   color: var(--success);
 }
 .connection-status.failed {
-  color: var(--danger);
-}
-.current-badge {
-  padding: 2px 5px;
-  color: var(--brand);
-  background: var(--brand-soft);
-  border-radius: 4px;
-  font-size: 10px;
-}
-.model-actions {
-  display: flex;
-  gap: 4px;
-}
-.model-actions button {
-  padding: 5px 7px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-tag);
-  font-size: 12px;
-}
-.model-actions button:hover {
-  background: var(--surface-raised);
-  color: var(--text-primary);
-}
-.model-actions .danger-text {
   color: var(--danger);
 }
 /* === EmptyNotice：列表与小节级占位（docs/10 §10.1） ===
@@ -2506,8 +2384,7 @@ small {
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
 }
-.memory-create-form textarea,
-.memory-main textarea {
+.memory-create-form textarea {
   width: 100%;
   padding: 8px 9px;
   color: var(--text-primary);
@@ -2521,17 +2398,7 @@ small {
 .memory-list {
   border-top: 1px solid var(--border);
 }
-.memory-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  padding: 16px 4px;
-  border-bottom: 1px solid var(--border);
-}
-.memory-main {
-  min-width: 0;
-  flex: 1;
-}
+/* 行的骨架与右槽动作都由 ListRow 提供（docs/10 §10.1）；这里只留记忆正文的排版。 */
 .memory-meta {
   display: flex;
   flex-wrap: wrap;
@@ -2540,35 +2407,15 @@ small {
   color: var(--text-muted);
   font-size: 12px;
 }
-.memory-main p {
-  margin: 9px 0 6px;
+.memory-row p {
   color: var(--text-primary);
   font-size: 13px;
   line-height: 1.6;
   white-space: pre-wrap;
 }
-.memory-main small {
+.memory-row small {
   color: var(--text-muted);
   font-size: 12px;
-}
-.memory-actions {
-  display: flex;
-  flex: 0 1 auto;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 4px 8px;
-}
-.memory-actions button {
-  padding: 5px 7px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-tag);
-  font-size: 12px;
-}
-.memory-actions button:hover {
-  color: var(--text-primary);
-  background: var(--surface-raised);
 }
 .memory-capture {
   display: grid;
@@ -3729,9 +3576,10 @@ small {
   .skill-cards {
     grid-template-columns: minmax(0, 1fr);
   }
-  .skill-list-item .skill-chips .badge:nth-child(n + 3) {
+  .list-row .skill-chips .badge:nth-child(n + 3) {
     display: none;
   }
+
   .skill-state-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3818,13 +3666,6 @@ small {
   cursor: pointer;
 }
 
-.knowledge-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 15px 3px;
-  border-bottom: 1px solid var(--border);
-}
 .knowledge-format {
   display: grid;
   width: 34px;
@@ -3840,33 +3681,6 @@ small {
 .knowledge-format.text {
   color: var(--text-secondary);
   background: var(--surface-raised);
-}
-.knowledge-card-main {
-  min-width: 0;
-  flex: 1;
-}
-.knowledge-card strong {
-  font-size: 14px;
-}
-.knowledge-card p {
-  margin: 6px 0;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.6;
-}
-.knowledge-card small {
-  display: block;
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.knowledge-card-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: none;
 }
 .open-source-button,
 .knowledge-more-button {
@@ -3913,13 +3727,7 @@ small {
   flex-direction: column;
   gap: 4px;
 }
-.evidence-row {
-  display: flex;
-  gap: 8px;
-  padding: 10px 2px;
-  border-bottom: 1px solid var(--border);
-}
-.evidence-row > span {
+.evidence-list .list-row-leading > span {
   display: grid;
   width: 22px;
   height: 22px;
@@ -3929,28 +3737,10 @@ small {
   background: var(--brand-soft);
   border-radius: var(--radius-tag);
 }
-.evidence-row > div {
-  min-width: 0;
-  flex: 1;
-}
-.evidence-row strong {
-  display: block;
-  font-size: 12px;
-  line-height: 1.35;
-}
-.evidence-row small {
-  display: block;
-  margin-top: 3px;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-.evidence-row p {
+/* 摘录只作识别用，超过三行折起来；要看全文走「原文」。 */
+.evidence-list .list-row-detail {
   display: -webkit-box;
   overflow: hidden;
-  margin-top: 5px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.55;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
 }
@@ -4527,21 +4317,6 @@ small {
   border-radius: var(--radius-row);
   font-size: 12px;
 }
-.knowledge-job-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.knowledge-job-row button {
-  min-height: var(--control-height-sm);
-  padding: 4px 10px;
-  color: var(--brand);
-  background: transparent;
-  border: 1px solid var(--brand);
-  border-radius: var(--control-radius);
-  font-size: 12px;
-}
 /* 终态作业默认收起，进行中的作业仍留在面板上（docs/10 §11.5）。 */
 .knowledge-recent-jobs {
   display: flex;
@@ -4554,12 +4329,6 @@ small {
 }
 .knowledge-recent-jobs[open] summary {
   color: var(--text-primary);
-}
-.knowledge-job-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: none;
 }
 .knowledge-job-items {
   margin: 2px 0 0;
@@ -4575,7 +4344,7 @@ small {
 @media (max-width: 960px) {
   .knowledge-summary,
   .knowledge-summary-actions,
-  .knowledge-job-row,
+  .knowledge-jobs .list-row,
   .knowledge-detail-header,
   .knowledge-detail-actions {
     flex-direction: column;
@@ -5154,10 +4923,20 @@ small {
 .notification-dot {
   width: 7px;
   height: 7px;
-  margin-top: 6px;
   flex: none;
   background: var(--brand);
   border-radius: var(--radius-circle);
+}
+/* 通知行的级别图标：尺寸与圆角属于这一种标记，不写进行骨架。 */
+.notification-list .list-row-leading > span {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: var(--control-radius);
+}
+.list-row.unread .list-row-title {
+  font-weight: 700;
 }
 .toast-body {
   min-width: 0;
@@ -5207,58 +4986,7 @@ small {
   flex: 1;
   overflow: auto;
 }
-.notification-item {
-  display: flex;
-  width: 100%;
-  gap: 12px;
-  padding: 11px 14px;
-  color: var(--text-primary);
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  text-align: left;
-}
-.notification-item:hover {
-  background: var(--surface-raised);
-}
-.notification-item > span:not(.notification-dot) {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  flex: none;
-  place-items: center;
-  border-radius: var(--control-radius);
-}
-.notification-item > div {
-  min-width: 0;
-  flex: 1;
-}
-.notification-item strong {
-  display: block;
-  overflow: hidden;
-  font-size: 12px;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.notification-item.unread strong {
-  font-weight: 700;
-}
-.notification-item p {
-  overflow: hidden;
-  margin-top: 3px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.notification-item small {
-  display: block;
-  margin-top: 4px;
-  color: var(--text-muted);
-  font-size: 12px;
-}
+
 .level-success {
   color: var(--success);
   background: var(--success-soft);
@@ -5454,12 +5182,7 @@ button,
 input,
 textarea,
 select,
-.run-item,
-.completed-work-card,
-.knowledge-card,
-.model-row,
-.evidence-row,
-.notification-item,
+.list-row,
 .artifact-version-list button,
 .task-run-history button {
   transition:
@@ -5764,36 +5487,8 @@ select,
   margin-top: 24px;
   border-top: 1px solid var(--border);
 }
-.mcp-connection-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px 16px;
-  padding: 16px 4px;
-  border-bottom: 1px solid var(--border);
-}
-.mcp-connection-main {
-  min-width: 0;
-}
-.mcp-connection-main strong,
-.mcp-connection-main p,
-.mcp-connection-main small {
-  display: block;
-}
-.mcp-connection-main p {
-  margin-top: 4px;
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mcp-connection-main small {
-  margin-top: 5px;
-  font-size: 12px;
-}
 .mcp-tool-summary {
   display: flex;
-  grid-column: 1 / -1;
   flex-wrap: wrap;
   gap: 8px;
 }

@@ -14,6 +14,7 @@ import { PageHeader } from '../components/layout/PageHeader';
 import { PageToolbar } from '../components/layout/PageToolbar';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
 import { ViewContainer } from '../components/layout/ViewContainer';
+import { ListRow } from '../components/ListRow';
 import { TransientToast } from '../components/TransientToast';
 import type { KnowledgeLibrary } from '../hooks/use-knowledge-library';
 import {
@@ -437,47 +438,49 @@ export function KnowledgePage({
           {(activeJobs.length > 0 || recentJobs.length > 0) && (
             <section className="knowledge-jobs" aria-label="索引作业">
               {activeJobs.map((job) => (
-                <div className="knowledge-job-row" key={job.id}>
-                  <span>
-                    {`${knowledgeJobTitle(job.kind)}：${knowledgeJobStatusLabel(job.status)}`}
-                    {job.status === 'running' ? ` ${job.completedCount}/${job.totalCount}` : ''}
-                    {job.failedCount > 0 ? ` · 失败 ${job.failedCount}` : ''}
-                  </span>
-                  <div className="knowledge-job-actions">
-                    <button
-                      type="button"
-                      onClick={() => trackAction(openJobDetail(job.id), '查看作业条目')}
-                    >
-                      {jobDetail?.jobId === job.id ? '收起条目' : '查看条目'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => trackAction(cancelJob(job.id), '取消作业')}
-                    >
-                      取消
-                    </button>
-                  </div>
-                </div>
+                <ListRow
+                  key={job.id}
+                  variant="plain"
+                  detail={`${knowledgeJobTitle(job.kind)}：${knowledgeJobStatusLabel(job.status)}${
+                    job.status === 'running' ? ` ${job.completedCount}/${job.totalCount}` : ''
+                  }${job.failedCount > 0 ? ` · 失败 ${job.failedCount}` : ''}`}
+                  actions={
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => trackAction(openJobDetail(job.id), '查看作业条目')}
+                      >
+                        {jobDetail?.jobId === job.id ? '收起条目' : '查看条目'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => trackAction(cancelJob(job.id), '取消作业')}
+                      >
+                        取消
+                      </button>
+                    </>
+                  }
+                />
               ))}
               {recentJobs.length > 0 && (
                 <details className="knowledge-recent-jobs">
                   <summary>{`最近作业（含已取消）· ${recentJobs.length} 条`}</summary>
                   {recentJobs.map((job) => (
-                    <div className="knowledge-job-row" key={job.id}>
-                      <span>
-                        {`${knowledgeJobTitle(job.kind)}：${knowledgeJobStatusLabel(job.status)} ${job.completedCount}/${job.totalCount}`}
-                        {job.failedCount > 0 ? ` · 失败 ${job.failedCount}` : ''}
-                        {job.failure ? ` · ${job.failure.message}` : ''}
-                      </span>
-                      <div className="knowledge-job-actions">
+                    <ListRow
+                      key={job.id}
+                      variant="plain"
+                      detail={`${knowledgeJobTitle(job.kind)}：${knowledgeJobStatusLabel(job.status)} ${job.completedCount}/${job.totalCount}${
+                        job.failedCount > 0 ? ` · 失败 ${job.failedCount}` : ''
+                      }${job.failure ? ` · ${job.failure.message}` : ''}`}
+                      actions={
                         <button
                           type="button"
                           onClick={() => trackAction(openJobDetail(job.id), '查看作业条目')}
                         >
                           {jobDetail?.jobId === job.id ? '收起条目' : '查看条目'}
                         </button>
-                      </div>
-                    </div>
+                      }
+                    />
                   ))}
                 </details>
               )}

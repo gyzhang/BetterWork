@@ -530,6 +530,7 @@ UI Foundation 首批提供四套成对色系：
 | 下拉选择 FieldSelect | `components/FieldSelect.tsx` | 已落地，走 PopoverMenu；2026-09-26 深夜 9 处原生 `<select>` 全部迁入，全仓已无原生下拉（护栏拦截新增） |
 | 模态基座 Modal（dialog／sheet／viewer 三变体）＋ `useOverlaySemantics` | `components/Modal.tsx` | 已落地：inert 应用主体、Esc、背板点击、初始焦点、Tab 循环、焦点归还、`role=dialog`/`alertdialog`。确认框、模型抽屉、幻灯片放映层、消息中心四处已收编 |
 | 表单字段 Field（标签 + 控件 + 说明） | `components/Field.tsx` | 已落地：标签与控件的缝只有一份；37 处字段改用它，12 条页面级 `label { gap / font-size }` 规则随之删除 |
+| 列表行 ListRow（左槽／主区／右槽，divider／card／plain 三档） | `components/ListRow.tsx` | 已落地：§3.4 的 9 套行几何（`.run-item`／`.notification-item`／`.skill-list-item`／`.model-row`／`.memory-row`／`.evidence-row`／`.knowledge-job-row`／`.mcp-connection-row`／`.knowledge-card`）加上 `.completed-work-card`／`.context-row`／`.suggestion-job-row` 共 12 类并入一处，行内动作按钮的几何同时收进 `.list-row-actions` |
 | 模态确认 ConfirmationDialog | `components/ConfirmationDialog.tsx` | 已落地，走 Modal 的 `alertdialog` 变体；初始焦点落在「取消」 |
 | 状态徽标 Badge（tone × shape） | `components/Badge.tsx` | 已落地：技能卡状态片、依赖面板环境片、记忆状态片、MCP 工具名片四套自造 chip 合并；图形化标识（格式徽标、未读角标）不在此基座内，按字号护栏登记 |
 | 短时反馈 TransientToast / 全局 ToastHost | `components/` | 已落地；两套不可混用（§11.5.1） |
@@ -553,7 +554,9 @@ UI Foundation 首批提供四套成对色系：
 
 **表单字段一律用 `Field`**：`<Field label="模型角色">…</Field>` 负责标签、控件与说明三件事的纵向结构，标签与控件之间的缝由 `Field` 自己的 `gap` 拥有（§9.8）。此前每个视图各写一份 `label { display: flex; gap: …; font-size: … }`，同一屏里因此并存 12px 与 13px 两种标签、4px 与 8px 两种缝（§3.2 的成因）。给出 `controlId` 时 `Field` 用 `<label htmlFor>` 精确关联，此时才能放说明文字；不给 `controlId` 时整个 `Field` 就是 `<label>`，点标签文字即可聚焦或展开控件，这种模式下不要再传 `hint`（包裹式标签会把说明读进控件名称）。勾选行（复选框与文字同排）不属于这个结构，仍在页面里自持排版。护栏两条：渲染层出现 `<select>`／`<option>` 即失败；除登记过的勾选行外，任何 `label` 选择器写 `gap` 或上下 `margin` 即失败。
 
-落地现状：按钮、输入、页签、Sheet、Toast、内联提示、空状态都有对应样式；页面骨架已由 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 负责结构，`KnowledgeDocumentCard` 负责知识条目的领域呈现，聚焦环用 `:focus-visible` 统一实现。破坏性确认统一使用 `ConfirmationDialog`，它以 `Modal` 的 `alertdialog` 变体实现：Portal 挂到应用外、背景 inert、初始焦点落在取消、Esc 与 Tab 焦点循环、关闭后恢复触发控件焦点。Popover 已落地为 `PopoverMenu` 基座（[ADR-0012](adr/0012-composer-capability-binding.md)）。尚未落地的有 Tooltip、Progress、Skeleton、Switch。
+**列表行一律用 `ListRow`**：「图标／徽标 + 标题 + 说明 + 次要信息 + 右侧动作」这一种结构走 `components/ListRow.tsx`，三个变体只决定外壳——`divider` 是列表里的分隔线行（默认），`card` 是带边框圆角的可点卡片，`plain` 是侧栏那种悬停才出底的裸行。内容一律填槽位：`leading`／`title`／`detail`／`meta`／`actions`／`trailing`，结构特殊的行（记忆行、MCP 工具片）把额外内容作为 `children` 交进主区，而不是另起一套行几何。给 `onClick` 时整行渲染成**一个** `<button>` 并必须给 `label` 作可及名称，此时 `actions` 里不能再放按钮（按钮套按钮是无效 DOM）；选中态走 `selected` → `aria-current`，降饱和走 `tone="muted"` 或 `disabled`，页面只保留自己的领域钩子类。行内文字的尺寸也收在基座：标题 13px、说明 12px 次要、meta 12px 弱化，页面不再各写一遍 `strong`／`small`。此前这种结构有 9 份独立几何（gap 从 4 到 16、padding 从 `10px 2px` 到 `16px 16px`、圆角 7／8／10 各写一遍），没有一条差异来自业务需求（§3.4）。护栏锁三条：`.run-item`／`.model-row`／`.evidence-row`／`.knowledge-card` 等 12 个已收编类的样式不得复活；行的 `gap`／`padding` 只能由 `.list-row*` 自己的选择器声明，页面用后代选择器替骨架补一遍即失败；迁完后仍留在行上承担状态外观的领域钩子（现登记 `.memory-row` 一个）不得再写 `display`／`gap`／`padding`／`align-items`／`flex-direction`／`border-bottom`。
+
+落地现状：按钮、输入、页签、Sheet、Toast、内联提示、空状态与列表行都有对应样式；页面骨架已由 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 负责结构，`KnowledgeDocumentCard` 负责知识条目的领域呈现，聚焦环用 `:focus-visible` 统一实现。破坏性确认统一使用 `ConfirmationDialog`，它以 `Modal` 的 `alertdialog` 变体实现：Portal 挂到应用外、背景 inert、初始焦点落在取消、Esc 与 Tab 焦点循环、关闭后恢复触发控件焦点。Popover 已落地为 `PopoverMenu` 基座（[ADR-0012](adr/0012-composer-capability-binding.md)）。尚未落地的有 Tooltip、Progress、Skeleton、Switch。
 
 2026-09-26 的[UI 一致性评估](reviews/2026-09-26-ui-consistency.md)给出本节台账的完整核对结果（哪些模式各写了几遍、缺哪个基座、分期收口计划）；新增基座或迁移自造控件前先查该报告。
 

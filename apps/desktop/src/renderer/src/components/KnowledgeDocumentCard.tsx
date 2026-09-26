@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 
 import { MoreHorizontalIcon } from '../icons';
 import { formatTime } from '../lib/format';
+import { ListRow } from './ListRow';
 import type { PopoverMenuItem } from './PopoverMenu';
 import { PopoverMenu } from './PopoverMenu';
 
@@ -62,59 +63,68 @@ export function KnowledgeDocumentCard({
   ];
 
   return (
-    <article className="knowledge-card">
-      {select && (
-        <label className="knowledge-card-select" title={select.label}>
-          <input
-            type="checkbox"
-            checked={select.checked}
-            aria-label={select.label}
-            onChange={(event) => select.onToggle(event.target.checked)}
-          />
-        </label>
-      )}
-      <span className={`knowledge-format ${document.format}`}>{formatLabel(document.format)}</span>
-      <div className="knowledge-card-main">
-        <strong>{document.title}</strong>
-        {excerpt && <p>{excerpt}</p>}
-        <small>
+    <ListRow
+      as="article"
+      leading={
+        <>
+          {select && (
+            <label className="knowledge-card-select" title={select.label}>
+              <input
+                type="checkbox"
+                checked={select.checked}
+                aria-label={select.label}
+                onChange={(event) => select.onToggle(event.target.checked)}
+              />
+            </label>
+          )}
+          <span className={`knowledge-format ${document.format}`}>
+            {formatLabel(document.format)}
+          </span>
+        </>
+      }
+      title={document.title}
+      detail={excerpt}
+      meta={
+        <>
           {document.sourcePath}
           {locator ? ` · ${locator}` : ''} · 更新于 {formatTime(document.updatedAt)} ·{' '}
           {SOURCE_STATE_LABELS[document.sourceStatus]}
-        </small>
-      </div>
-      <div className="knowledge-card-actions">
-        <button className="open-source-button" type="button" onClick={onOpen}>
-          打开原文
-        </button>
-        <button
-          ref={menuTriggerRef}
-          className="knowledge-more-button"
-          type="button"
-          aria-label={menuLabel}
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          <MoreHorizontalIcon size={16} />
-          <span>更多</span>
-        </button>
-        <PopoverMenu
-          open={menuOpen}
-          anchorRef={menuTriggerRef}
-          items={menuItems}
-          label={menuLabel}
-          align="end"
-          placement="bottom"
-          onDismiss={() => setMenuOpen(false)}
-          onSelect={(id) => {
-            setMenuOpen(false);
-            if (id === 'detail') onOpenDetail();
-            if (id === 'refresh') onRefresh();
-            if (id === 'remove') onRemove();
-          }}
-        />
-      </div>
-    </article>
+        </>
+      }
+      actions={
+        <>
+          <button className="open-source-button" type="button" onClick={onOpen}>
+            打开原文
+          </button>
+          <button
+            ref={menuTriggerRef}
+            className="knowledge-more-button"
+            type="button"
+            aria-label={menuLabel}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <MoreHorizontalIcon size={16} />
+            <span>更多</span>
+          </button>
+          <PopoverMenu
+            open={menuOpen}
+            anchorRef={menuTriggerRef}
+            items={menuItems}
+            label={menuLabel}
+            align="end"
+            placement="bottom"
+            onDismiss={() => setMenuOpen(false)}
+            onSelect={(id) => {
+              setMenuOpen(false);
+              if (id === 'detail') onOpenDetail();
+              if (id === 'refresh') onRefresh();
+              if (id === 'remove') onRemove();
+            }}
+          />
+        </>
+      }
+    />
   );
 }

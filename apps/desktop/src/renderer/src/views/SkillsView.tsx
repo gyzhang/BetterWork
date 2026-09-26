@@ -7,6 +7,7 @@ import { EmptyPage, LoadingPage } from '../components/EmptyState';
 import { PageHeader } from '../components/layout/PageHeader';
 import type { ViewMode } from '../components/layout/ViewContainer';
 import { ViewContainer } from '../components/layout/ViewContainer';
+import { ListRow } from '../components/ListRow';
 import { DependencyPanel } from '../components/skills/DependencyPanel';
 import { SegmentedControl } from '../components/Tabs';
 import { TransientToast } from '../components/TransientToast';
@@ -91,16 +92,18 @@ function SkillListItem({
   onClick: () => void;
 }): React.JSX.Element {
   return (
-    <button className="skill-list-item" type="button" onClick={onClick}>
-      <span className="skill-card-mark" aria-hidden="true">
-        {skill.name.slice(0, 1).toUpperCase()}
-      </span>
-      <span className="skill-list-item-main">
-        <strong>{skill.name}</strong>
-        <small>{skill.description || '暂无描述'}</small>
-      </span>
-      <SkillChips skill={skill} />
-    </button>
+    <ListRow
+      variant="card"
+      onClick={onClick}
+      leading={
+        <span className="skill-card-mark" aria-hidden="true">
+          {skill.name.slice(0, 1).toUpperCase()}
+        </span>
+      }
+      title={skill.name}
+      meta={skill.description || '暂无描述'}
+      actions={<SkillChips skill={skill} />}
+    />
   );
 }
 

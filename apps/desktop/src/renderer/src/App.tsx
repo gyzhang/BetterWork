@@ -38,6 +38,7 @@ import { ContextPanel } from './components/ContextPanel';
 import { DiscussionCheckpointPanel } from './components/DiscussionCheckpointPanel';
 import { EmptyNotice } from './components/EmptyState';
 import { PageHeader } from './components/layout/PageHeader';
+import { ListRow } from './components/ListRow';
 import { MemoryCaptureSource } from './components/MemoryCaptureSource';
 import { MemoryEditor, type MemoryEditorSubmission } from './components/MemoryEditor';
 import { ModelEditor } from './components/ModelEditorSheet';
@@ -1300,18 +1301,18 @@ export function App(): React.JSX.Element {
         <div className="run-list">
           {recentTasks.length === 0 && <EmptyNotice title="你的任务会保存在这里。" />}
           {recentTasks.map((task) => (
-            <button
+            <ListRow
               key={task.id}
-              className={task.id === activeTask?.id ? 'run-item active' : 'run-item'}
+              variant="plain"
+              selected={task.id === activeTask?.id}
               onClick={() => reportAction(selectTask(task), setActionError, '无法打开这项任务。')}
-            >
-              <span>{task.title}</span>
-              <small>
-                {task.latestRun
+              title={task.title}
+              meta={
+                task.latestRun
                   ? `${runStatusName[task.latestRun.status]} · ${formatTime(task.latestRun.createdAt)}`
-                  : '等待开始'}
-              </small>
-            </button>
+                  : '等待开始'
+              }
+            />
           ))}
         </div>
         <div className="sidebar-bottom">

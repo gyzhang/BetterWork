@@ -305,7 +305,7 @@ describe('ContextPanel 记忆可见性', () => {
     const container = renderPanel({ onToggleMemory });
 
     // 同一条正文同时出现在「范围预览」与「本次运行记忆」两段，查询必须落在预览段内。
-    const row = container.querySelector('.memory-scope-section .context-row');
+    const row = container.querySelector('.memory-scope-section .list-row');
     expect(row?.textContent).toContain('第 1 位');
     expect(row?.textContent).toContain('与本任务内容相关');
     expect(row?.textContent).toContain('工作空间 · 我的空间');
@@ -321,7 +321,7 @@ describe('ContextPanel 记忆可见性', () => {
       excludedMemoryIds: ['memory-1'],
       onToggleMemory,
     });
-    const row = container.querySelector('.memory-scope-section .context-row');
+    const row = container.querySelector('.memory-scope-section .list-row');
     expect(row?.className).toContain('excluded');
     expect(row?.textContent).toContain('恢复使用');
     fireEvent.click(screen.getByRole('button', { name: '恢复使用' }));
@@ -333,7 +333,7 @@ describe('ContextPanel 记忆可见性', () => {
       excludedMemoryIds: ['memory-1'],
       exclusion: exclusion({ savingMemoryId: 'memory-1' }),
     });
-    const row = container.querySelector('.memory-scope-section .context-row');
+    const row = container.querySelector('.memory-scope-section .list-row');
     expect(row?.textContent).toContain('正在调整…');
     const button = screen.getByRole('button', { name: '正在调整…' });
     expect(button.hasAttribute('disabled')).toBe(true);
@@ -602,7 +602,7 @@ describe('ContextPanel 按运行回看来源', () => {
     });
     expect(screen.getByText('旧访问记录')).toBeTruthy();
     expect(screen.queryByRole('button', { name: '查看区间' })).toBeNull();
-    const row = screen.getByText('旧访问记录').closest('.evidence-row');
+    const row = screen.getByText('旧访问记录').closest('.list-row');
     expect(row?.textContent).toContain('历史范围未记录');
     expect(screen.getByRole('button', { name: '原文' })).toBeTruthy();
   });
