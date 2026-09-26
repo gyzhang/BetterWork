@@ -24,6 +24,7 @@
     "setup:runtime": "node node_modules/electron/install.js && electron-rebuild -f -w better-sqlite3",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
     "office:probe": "node scripts/office-input-probe.mjs",
+    "km15:semantics": "npm run build && npx esbuild scripts/km15-semantic-probe.ts --bundle --platform=node --format=cjs --tsconfig=tsconfig.json --outfile=node_modules/.cache/km15-semantic-probe.cjs --external:electron --external:better-sqlite3 && node node_modules/.cache/km15-semantic-probe.cjs",
     "expert:preflight": "node scripts/expert-release-preflight.mjs",
     "expert:acceptance-preflight": "node scripts/expert-acceptance-preflight.mjs"
   },

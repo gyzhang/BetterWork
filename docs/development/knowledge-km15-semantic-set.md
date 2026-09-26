@@ -87,8 +87,23 @@
 | Q19 | K08 | | | | | | | |
 | Q20 | K10 | | | | | | | |
 
-## 5. 执行载体（两条路，需要你选一条）
+## 5. 执行载体（已选定 B：一次性探针脚本）
 
-- **A 界面手跑**：你在开发实例的知识页搜索框逐题输入，两列共 40 次，我在旁边按你口述回填 §4。最贴近真实使用，代价是你的操作量。
-- **B 一次性探针脚本**：我在 `scripts/` 下加一个探针（仓库已有 `mcp-probe.mjs`／`office-input-probe.mjs` 先例），直连你这台机器的 Vault 与已配置的向量模型跑完 40 次并出表。省你的操作量，但它有两点代价：① 脚本需要读取模型凭据才能真实调用 `/embeddings`，属于敏感操作，要你单独授权；② 它验的是检索服务这一层，不经过界面，因此**不能替代**清单 §8 的人工 UI 栏。
-- 我的建议：§1–§11 与 §13 的人工栏你先按清单走；题集这一栏如果你不想手动打 40 次，就走 B，但需要你明确一次「允许探针读取本机模型凭据发起真实向量调用」，并把 §8.7／§8.8 的界面降级显示留在人工栏里单独确认。
+选定 B 之后遇到一个必须写清的实现边界：本仓的模型 Key 存在 Electron `safeStorage`（macOS 钥匙串）里，由 `credential-repository` 在 Main 进程解密，**非 Electron 进程取不出明文**。我没有去绕这条通道（既不读钥匙串，也不把库里的密文抄出来自己解），改成：模型 endpoint、模型标识与 Key 由启动者用环境变量给同一个真实模型；Key 只进 `Authorization` 头，脚本不打印、不落盘、不写日志。
+
+已落地的探针：`scripts/km15-semantic-probe.ts` ＋ `package.json` 的 `km15:semantics`。它起的是生产侧同一条管线——受管提取 Worker（`apps/desktop/out/main/knowledge-worker.js`，与打包进 .app 的同一入口）、FTS5 关键词路、真实 `/embeddings` 调用、RRF 融合、向量扫描 Worker——并把两列一起跑完。默认在 `/tmp/km15-semantics-vault.sqlite` 新建一次性 Vault 导入这 10 份合成资料，**不碰你的正式资料库**；结果表写 `/tmp/km15-semantic-results.md`。
+
+你只需要在自己终端里跑一次（Key 不经过我）：
+
+```bash
+cd /Users/kevin/Dev4AI/BetterWork
+KM15_EMBED_BASE_URL='设置→模型里那个向量模型的 baseUrl' \
+KM15_EMBED_MODEL='模型标识' \
+KM15_EMBED_API_KEY='密钥' \
+npm run km15:semantics
+```
+
+`npm run km15:semantics` 会先 `npm run build`（产出 Worker 入口），再用 esbuild 把探针打成 CJS（exceljs 一类依赖里有动态 require，ESM 输出跑不动），最后执行。缺这三个环境变量时它只跑关键词基线列并明确说明——2026-09-26 08:5x 我就是这样预跑过一次：**基线列命中 5/20**（Q15/Q16/Q17/Q19/Q20 命中；Q18「双录 质检 抽样 比例」未命中，原因是文档里写的是"百分之五随机抽取"，没有"比例"这个字面词，而关键词路要求所有分词都命中）。这条预跑**不算** §12 的正式结果，正式结论必须是你那条命令跑出的两列并列数据。
+
+仍要提醒的代价：探针验的是检索服务这一层，不经过界面，所以清单 §8.7／§8.8（降级原因的中文展示、覆盖计数与作业留档）仍必须在人工 UI 栏里单独确认。
+
