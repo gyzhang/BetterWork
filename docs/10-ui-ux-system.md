@@ -482,6 +482,8 @@ UI Foundation 首批提供四套成对色系：
 
 落地现状：按钮、输入、页签、Sheet、Toast、内联提示、空状态都有对应样式；页面骨架已由 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 负责结构，`KnowledgeDocumentCard` 负责知识条目的领域呈现，聚焦环用 `:focus-visible` 统一实现。破坏性确认统一使用 `ConfirmationDialog`：以 Portal 挂到应用外、背景设为 inert、初始焦点落在取消、支持 Escape 与 Tab 焦点循环、关闭后恢复触发控件焦点。Popover 已落地为 `PopoverMenu` 基座（[ADR-0012](adr/0012-composer-capability-binding.md)）。尚未落地的有 Tooltip、Progress、Skeleton、Switch。
 
+2026-09-26 的[UI 一致性评估](reviews/2026-09-26-ui-consistency.md)给出本节台账的完整核对结果（哪些模式各写了几遍、缺哪个基座、分期收口计划）；新增基座或迁移自造控件前先查该报告。
+
 业务组件的落地边界：`views/` 承载工作、成果、知识、设置四个页面级视图，`components/` 承载跨视图复用的上下文面板、欢迎视图、空状态与模型编辑 Sheet，`hooks/` 承载外观、资料库、模型设置三个内聚状态簇，`lib/` 承载纯函数与常量。AppShell 与 Sidebar 仍在 `App.tsx` 内；`ConfirmationBlock`、`PlanStep`、`EvidenceChip`、`RunSummary` 未落地。
 
 聚焦与状态覆盖已达标。曾经的死代码（从未被引用的 `CompletedWorkPage`、未使用的 `PanelLeftIcon` 与 `ChevronDownIcon`）已清理；`App.tsx` 从 2098 行降到约 720 行，只保留跨簇编排与布局组装。目录约定见 [工程规范](12-engineering-standards.md) §2。
