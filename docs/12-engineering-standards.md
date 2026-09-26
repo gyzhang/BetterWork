@@ -160,7 +160,9 @@ standards/
 
 - 只用语义化 Token，禁止硬编码色值与局部 `.dark` 补丁。新增颜色先进 §9.3 的契约并**当场补齐 8 个 Variant**，不留半套。
 - 动效时长只用 Token（`--motion-instant` / `--motion-expand` / `--motion-overlay`），禁止在组件里写死毫秒数；`prefers-reduced-motion` 的降级已全局处理，新增动效自动生效。
-- 正文与承载产品信息的次要文本不得小于 12px。豁免仅限图形化标识：格式徽标（MD / PDF / DOC / TXT）、品牌字标、未读数徽标、当前模型徽标。
+- 正文与承载产品信息的次要文本不得小于 12px。豁免仅限图形化标识：格式徽标（MD / PDF / DOC / TXT）、品牌字标、未读数徽标、当前模型徽标。`<small>` 已在 `styles.css` 给出 12px 全局基线（UA 默认 `0.83em` 会掉到下限之下，且「没写声明」扫不出来），组件只在此之上放大，不得再靠逐处补 `font-size` 兜底。
+- 间距标尺是 4 / 8 / 12 / 16 / 24 / 32px：`gap` / `row-gap` / `column-gap` 的像素取值必须是这六档之一，由 `standards/coding-standard.test.ts` 强制；要加新档位先改 [UI/UX 体系 §9.8](10-ui-ux-system.md)。`margin` 与 `padding` 暂未纳入，仍待逐页收口。
+- 纵向堆叠的块之间必须有垂直间距：堆叠容器用 `gap` / `row-gap` 拥有节奏，`components/layout/` 的骨架容器必须自带 `display` + `gap`，页面不得用后代选择器覆写骨架的 `display` / `flex-direction` / `gap` / `align-items` / `justify-content`；表单控件不写 `width:100%`（在弹性行里会挤到同排标签逐字断行）。护栏见 `standards/coding-standard.test.ts`，理由见 [UI/UX 体系 §9.8](10-ui-ux-system.md)。
 - 界面功能图标一律用 `icons.tsx` 里的内联 SVG（`currentColor`、24 网格、统一笔画）。新增图标先进图标集再使用。禁止 Unicode 字符或 emoji 充当界面图标。
 - 原始 Run 事件不得出现在主界面。工具卡片显示阶段名与一句摘要（`lib/tool-summary.ts`），原始载荷只在过程面板的折叠区里。
 - 工具名到阶段名的映射在 `lib/labels.ts` 的 `TOOL_LABELS`，**新增工具必须同步**，否则界面会退化成通用文案。

@@ -322,6 +322,11 @@ h3,
 p {
   margin: 0;
 }
+/* 次要文本字号基线：`<small>` 的 UA 默认是 0.83em，嵌在 12–13px 容器里会掉到 12px 下限之下
+   且不被只扫显式声明的护栏抓到；这里一次性收口，各组件只在此之上放大。 */
+small {
+  font-size: 12px;
+}
 .app-shell {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) auto;
@@ -344,7 +349,7 @@ p {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 24px 8px 18px;
 }
 .brand-mark {
@@ -390,7 +395,7 @@ p {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 8px;
   min-height: 36px;
   padding: 8px 12px;
   color: var(--on-brand);
@@ -406,7 +411,7 @@ p {
 .new-task {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
   min-height: 34px;
   padding: 7px 9px;
@@ -431,7 +436,7 @@ p {
 .settings-nav {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-height: 34px;
   padding: 7px 9px;
   color: var(--text-secondary);
@@ -608,7 +613,12 @@ p {
   outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
+/* 骨架级纵向堆叠容器：工具栏内各控件的垂直间距只由这里的 gap 负责，
+   子元素不得再自带上下外边距，否则同一道缝由两个机制各占一半（docs/10 §9.8）。 */
 .page-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   flex: none;
   margin-bottom: 12px;
 }
@@ -682,7 +692,7 @@ p {
 
 .discussion-checkpoints-header > div {
   display: grid;
-  gap: 2px;
+  gap: 4px;
 }
 
 .discussion-checkpoint-summary {
@@ -728,7 +738,7 @@ p {
 
 .discussion-checkpoint-artifacts {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   padding: 8px;
@@ -744,7 +754,7 @@ p {
   display: flex;
   grid-template-columns: auto 1fr;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
 }
 
 .discussion-checkpoint-footer {
@@ -755,7 +765,7 @@ p {
 .discussion-checkpoint-history {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   margin-top: 8px;
 }
 
@@ -789,7 +799,7 @@ p {
 .abacus {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
   padding: 0 0 19px;
 }
 .abacus::before,
@@ -892,7 +902,7 @@ p {
 .workspace-selector-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 4px 8px;
   color: var(--text-secondary);
   background: var(--surface-raised);
@@ -940,7 +950,7 @@ p {
 .workspace-selector-actions {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   padding: 4px 6px;
 }
 .workspace-selector-action {
@@ -1112,13 +1122,13 @@ p {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
 }
 .selected-materials-heading > div:first-child {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 .selected-materials-heading small,
 .selected-material-row small {
@@ -1150,7 +1160,7 @@ p {
 .selected-material-row {
   display: grid;
   min-width: 0;
-  gap: 2px;
+  gap: 4px;
 }
 .selected-material-row strong,
 .selected-material-row small {
@@ -1194,7 +1204,7 @@ p {
 }
 .context-list {
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 .context-row {
   display: flex;
@@ -1209,7 +1219,7 @@ p {
 .context-row > div {
   display: grid;
   min-width: 0;
-  gap: 3px;
+  gap: 4px;
 }
 .context-row strong {
   color: var(--text-primary);
@@ -1243,12 +1253,12 @@ p {
 }
 .context-details {
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 .context-details summary {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
@@ -1260,7 +1270,7 @@ p {
 }
 .context-exclusion-list {
   display: grid;
-  gap: 5px;
+  gap: 8px;
   margin: 0;
   padding-left: 18px;
   color: var(--text-secondary);
@@ -1274,7 +1284,7 @@ p {
 }
 .context-replay-list {
   display: grid;
-  gap: 5px;
+  gap: 8px;
   margin: 0;
   padding-left: 18px;
   color: var(--text-secondary);
@@ -1284,7 +1294,7 @@ p {
 }
 .context-placeholder {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   padding: 26px 18px;
   color: var(--text-secondary);
   font-size: 12px;
@@ -1299,7 +1309,7 @@ p {
 /* 工作空间简报：只读投影，每条都要看得出可跳转。 */
 .brief-panel {
   display: grid;
-  gap: 14px;
+  gap: 16px;
   padding: 13px 14px 16px;
 }
 .brief-note {
@@ -1309,12 +1319,12 @@ p {
 }
 .brief-section {
   display: grid;
-  gap: 7px;
+  gap: 8px;
 }
 .brief-section-head {
   display: flex;
   align-items: baseline;
-  gap: 7px;
+  gap: 8px;
 }
 .brief-section-head strong {
   color: var(--text-primary);
@@ -1327,7 +1337,7 @@ p {
 }
 .brief-list {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1336,7 +1346,7 @@ p {
   display: grid;
   align-items: center;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 3px 8px;
+  gap: 4px 8px;
   padding: 8px 10px;
   color: var(--text-primary);
   text-align: left;
@@ -1388,12 +1398,12 @@ p {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
 }
 .suggestion-setting-row > div {
   display: grid;
   min-width: 0;
-  gap: 3px;
+  gap: 4px;
 }
 .suggestion-setting-row strong {
   color: var(--text-primary);
@@ -1407,13 +1417,13 @@ p {
 .suggestion-polling {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   color: var(--info);
   font-size: 12px;
 }
 .suggestion-job-list {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1430,7 +1440,7 @@ p {
 .suggestion-job-row > div {
   display: grid;
   min-width: 0;
-  gap: 2px;
+  gap: 4px;
 }
 .suggestion-job-row strong {
   color: var(--text-primary);
@@ -1457,7 +1467,7 @@ p {
 }
 .suggestion-list {
   display: grid;
-  gap: 9px;
+  gap: 8px;
 }
 .suggestion-card {
   display: grid;
@@ -1471,7 +1481,7 @@ p {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   color: var(--text-muted);
   font-size: 12px;
 }
@@ -1497,7 +1507,7 @@ p {
 .suggestion-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 .memory-kind,
 .memory-state {
@@ -1542,7 +1552,7 @@ p {
 }
 .activity-summary {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   padding: 12px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1574,7 +1584,7 @@ p {
 .activity-row {
   display: grid;
   grid-template-columns: 12px minmax(0, 1fr);
-  gap: 9px;
+  gap: 8px;
   min-height: 58px;
   padding-top: 14px;
 }
@@ -1629,7 +1639,7 @@ p {
   min-height: 260px;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 12px;
   padding: 32px;
   color: var(--text-secondary);
   text-align: center;
@@ -1821,7 +1831,7 @@ p {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   padding: 16px;
   text-align: left;
   background: var(--surface);
@@ -1839,7 +1849,7 @@ p {
 .skill-card-head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 .skill-card-mark {
   display: grid;
@@ -1892,7 +1902,7 @@ p {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   padding: 16px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1902,7 +1912,7 @@ p {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   padding: 0;
   color: inherit;
   text-align: left;
@@ -1916,7 +1926,7 @@ p {
 .expert-card-head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 .expert-card-mark {
   display: grid;
@@ -1961,7 +1971,7 @@ p {
 .expert-editor-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 .expert-editor,
 .expert-detail-page {
@@ -1982,12 +1992,12 @@ p {
 .expert-editor-body {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 .expert-editor-body > label {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 600;
@@ -2024,13 +2034,13 @@ p {
 .expert-option-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 14px;
+  gap: 8px 16px;
   margin-top: 8px;
 }
 .expert-option {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 400;
@@ -2079,7 +2089,7 @@ p {
 .skill-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 .skill-chip {
   padding: 2px 8px;
@@ -2126,7 +2136,7 @@ p {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 .skill-list-item-main strong {
   color: var(--text-primary);
@@ -2158,7 +2168,7 @@ p {
 }
 .skill-detail-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
   align-self: flex-start;
 }
@@ -2204,13 +2214,13 @@ p {
 .skill-trust-box label {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   font-size: 13px;
 }
 .skill-trust-box p {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
   margin: 9px 0 0 22px;
   color: var(--text-secondary);
   font-size: 12px;
@@ -2364,7 +2374,7 @@ p {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 20px;
+  gap: 24px;
 }
 .settings-heading h2 {
   margin: 7px 0 8px;
@@ -2392,7 +2402,7 @@ p {
 }
 .filter-bar {
   display: flex;
-  gap: 5px;
+  gap: 8px;
   margin: 25px 0 9px;
 }
 .filter-bar button {
@@ -2441,7 +2451,7 @@ p {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 8px;
 }
 .model-main strong {
   font-size: 14px;
@@ -2511,7 +2521,7 @@ p {
 .memory-create-form {
   display: flex;
   align-items: flex-end;
-  gap: 10px;
+  gap: 12px;
   margin: 24px 0;
   padding: 14px;
   background: var(--surface-raised);
@@ -2521,7 +2531,7 @@ p {
 .memory-create-form label {
   display: grid;
   flex: 1;
-  gap: 7px;
+  gap: 8px;
   color: var(--text-secondary);
   font-size: 12px;
 }
@@ -2555,7 +2565,7 @@ p {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   color: var(--text-muted);
   font-size: 12px;
 }
@@ -2575,7 +2585,7 @@ p {
   flex: 0 1 auto;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 4px 6px;
+  gap: 4px 8px;
 }
 .memory-actions button {
   padding: 5px 7px;
@@ -2600,7 +2610,7 @@ p {
 }
 .memory-capture label {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   color: var(--text-secondary);
   font-size: 12px;
 }
@@ -2617,7 +2627,7 @@ p {
 }
 .memory-capture-source {
   display: grid;
-  gap: 7px;
+  gap: 8px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
 }
@@ -2627,7 +2637,7 @@ p {
 }
 .memory-capture-source-actions {
   display: flex;
-  gap: 7px;
+  gap: 8px;
 }
 .memory-capture-source-state {
   color: var(--text-secondary);
@@ -2637,7 +2647,7 @@ p {
 .memory-capture-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 7px;
+  gap: 8px;
   margin-top: 9px;
 }
 .memory-capture-footer select {
@@ -2659,16 +2669,14 @@ p {
   gap: 12px;
   overflow-y: auto;
 }
+/* 本页纵向节奏由 .memory-settings 的 gap 统一负责，工具栏不再另加下边距。 */
 .memory-settings .page-toolbar {
-  display: grid;
-  flex: none;
-  gap: 10px;
   margin-bottom: 0;
 }
 .memory-projection {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   padding: 10px 12px;
   color: var(--warning);
   background: var(--warning-soft);
@@ -2681,7 +2689,7 @@ p {
 }
 .memory-warnings {
   display: grid;
-  gap: 5px;
+  gap: 8px;
   margin: 0;
   padding: 10px 12px;
   color: var(--warning);
@@ -2707,12 +2715,12 @@ p {
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .memory-group-heading {
   display: grid;
   flex: none;
-  gap: 3px;
+  gap: 4px;
 }
 .memory-group-heading strong {
   font-size: 14px;
@@ -2796,14 +2804,14 @@ p {
 .context-continuity-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 8px;
   margin-top: 8px;
 }
 
 /* 冲突两侧来源只按需展开，展开后也仅显示登记摘要，不显示原始事件载荷。 */
 .memory-conflict-sources {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   margin-top: 8px;
 }
 .memory-conflict-source-list {
@@ -2896,7 +2904,7 @@ p {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 7px;
+  gap: 8px;
 }
 .memory-conflict-actions label {
   display: grid;
@@ -2954,7 +2962,7 @@ p {
 }
 .memory-editor-field {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   color: var(--text-secondary);
   font-size: 12px;
 }
@@ -3007,17 +3015,17 @@ p {
 .memory-editor-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 .memory-editor-grid label {
   display: grid;
-  gap: 5px;
+  gap: 8px;
   color: var(--text-secondary);
   font-size: 12px;
 }
 .memory-editor-diff {
   display: grid;
-  gap: 7px;
+  gap: 8px;
   padding: 11px 12px;
   background: var(--surface);
   border: 1px solid var(--border-subtle);
@@ -3028,7 +3036,7 @@ p {
 }
 .memory-editor-diff-row {
   display: grid;
-  gap: 3px;
+  gap: 4px;
 }
 .memory-editor-diff-row > span {
   color: var(--text-muted);
@@ -3052,7 +3060,7 @@ p {
 .memory-editor-declaration {
   display: flex;
   align-items: flex-start;
-  gap: 7px;
+  gap: 8px;
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.5;
@@ -3075,12 +3083,13 @@ p {
 }
 
 /* === FieldSelect：基于 PopoverMenu 的下拉选择器 === */
+/* 不写 width:100%：放进纵向容器时由 stretch 撑满，放进横向行时按内容取宽。
+   写成 100% 会让它在弹性行里以父容器宽度为基准，把同排的标签与提示挤到逐字断行。 */
 .field-select-trigger {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
-  width: 100%;
+  gap: 8px;
   min-height: 32px;
   padding: 6px 9px;
   color: var(--text-primary);
@@ -3117,7 +3126,7 @@ p {
 .appearance-modes {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 .appearance-modes button,
 .scheme-grid button {
@@ -3201,7 +3210,7 @@ p {
 .scheme-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 .scheme-preview {
   display: flex;
@@ -3267,7 +3276,7 @@ p {
 }
 .appearance-note {
   display: flex;
-  gap: 9px;
+  gap: 8px;
   margin-top: 26px;
   padding: 12px;
   color: var(--text-secondary);
@@ -3398,7 +3407,7 @@ p {
 .capability-chip-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   padding: 4px 0;
 }
 .capability-chip {
@@ -3500,7 +3509,7 @@ p {
 .material-chip-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
   padding: 2px 0;
 }
@@ -3508,7 +3517,7 @@ p {
   display: inline-flex;
   max-width: min(360px, 100%);
   align-items: center;
-  gap: 5px;
+  gap: 8px;
   min-height: 26px;
   padding: 2px 5px 2px 8px;
   color: var(--text-primary);
@@ -3566,12 +3575,12 @@ p {
 .expert-chip-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 .expert-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 5px 8px;
   color: var(--brand);
   background: var(--brand-soft);
@@ -3616,13 +3625,13 @@ p {
 }
 .model-sheet form {
   display: flex;
-  gap: 15px;
+  gap: 16px;
   flex-direction: column;
   overflow: auto;
 }
 .model-sheet label {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-direction: column;
   color: var(--text-secondary);
   font-size: 12px;
@@ -3750,9 +3759,6 @@ p {
   display: flex;
   gap: 8px;
 }
-.knowledge-search {
-  margin: 0 0 12px;
-}
 .knowledge-search input,
 .memory-search input {
   min-width: 0;
@@ -3802,7 +3808,7 @@ p {
 .knowledge-summary-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 .knowledge-research-button {
   min-height: 30px;
@@ -3877,14 +3883,14 @@ p {
 .knowledge-card-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex: none;
 }
 .open-source-button,
 .knowledge-more-button {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
   padding: 6px 8px;
   color: var(--text-secondary);
   background: transparent;
@@ -3920,7 +3926,7 @@ p {
   width: 132px;
   padding: 4px;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -3963,7 +3969,7 @@ p {
 }
 .evidence-row {
   display: flex;
-  gap: 9px;
+  gap: 8px;
   padding: 10px 2px;
   border-bottom: 1px solid var(--border);
 }
@@ -4064,7 +4070,7 @@ p {
   color: inherit;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
 }
 .artifact-row-clickable:hover {
   background: var(--surface-hover);
@@ -4078,7 +4084,7 @@ p {
   display: flex;
   margin: -10px 0 18px;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 .run-group {
   margin-bottom: 8px;
@@ -4105,7 +4111,7 @@ p {
 .run-running-indicator {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 8px 0;
   color: var(--text-secondary);
   font-size: 13px;
@@ -4127,7 +4133,7 @@ p {
 .message-action {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 6px 10px;
   color: var(--text-secondary);
   background: var(--surface);
@@ -4163,7 +4169,7 @@ p {
 .artifact-file-info {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -4372,7 +4378,7 @@ p {
 }
 .artifact-editor label {
   display: flex;
-  gap: 7px;
+  gap: 8px;
   flex-direction: column;
   color: var(--text-secondary);
   font-size: 13px;
@@ -4437,7 +4443,7 @@ p {
 .artifact-source-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 .artifact-source-row input[type='checkbox'] {
   flex: none;
@@ -4502,6 +4508,7 @@ p {
 }
 /* KM09：索引与模型管理、作业区域 */
 .knowledge-admin-toggle {
+  align-self: flex-start;
   min-height: 30px;
   padding: 6px 10px;
   color: var(--text-primary);
@@ -4551,7 +4558,7 @@ p {
 .knowledge-admin-switch {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   font-weight: 600;
 }
 .knowledge-admin-switch input {
@@ -4563,6 +4570,15 @@ p {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+/* 与标签、提示同排：给一个字段级的稳定宽度，切换模型时不抖动，超长模型名在按钮内省略。 */
+.knowledge-admin-profile .field-select-trigger {
+  min-width: 200px;
+  max-width: 280px;
+}
+.knowledge-admin-profile > span,
+.knowledge-admin-profile small {
+  flex: none;
 }
 .knowledge-issues button {
   margin-top: 8px;
@@ -4576,7 +4592,7 @@ p {
 .knowledge-jobs {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   margin: 10px 0;
   padding: 10px 12px;
   color: var(--text-secondary);
@@ -4658,7 +4674,7 @@ p {
 .knowledge-collection-check {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   font-size: 12px;
 }
 .knowledge-collection-check input {
@@ -4701,14 +4717,14 @@ p {
 .knowledge-detail {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   padding: 14px 2px 28px;
 }
 .knowledge-detail-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 14px;
+  gap: 16px;
 }
 .knowledge-detail-header strong {
   display: block;
@@ -4749,12 +4765,12 @@ p {
 .knowledge-detail-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
 }
 .knowledge-revision-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 6px 0;
 }
 .knowledge-detail-text article {
@@ -4806,7 +4822,7 @@ p {
   display: grid;
   width: 100%;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 7px;
+  gap: 8px;
   padding: 8px 5px;
   color: var(--text-secondary);
   background: transparent;
@@ -4846,7 +4862,7 @@ p {
 }
 .artifact-evidence-list article {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   padding: 6px 5px;
 }
 .artifact-evidence-list b {
@@ -4892,7 +4908,7 @@ p {
 .artifact-input-card {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 10px 12px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
@@ -4913,7 +4929,7 @@ p {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 .artifact-input-card-name {
   overflow: hidden;
@@ -4947,7 +4963,7 @@ p {
 .artifact-detail-layout {
   display: grid;
   grid-template-columns: 176px minmax(0, 1fr);
-  gap: 20px;
+  gap: 24px;
   margin-top: 24px;
   flex: 1;
   min-height: 0;
@@ -5082,7 +5098,7 @@ p {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
 }
 .back-button {
   display: inline-flex;
@@ -5097,13 +5113,13 @@ p {
 .search-settings .search-form {
   display: flex;
   margin-top: 22px;
-  gap: 15px;
+  gap: 16px;
   flex-direction: column;
   max-width: 480px;
 }
 .search-settings label {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-direction: column;
   color: var(--text-secondary);
   font-size: 12px;
@@ -5143,7 +5159,7 @@ p {
 .sidebar-bottom {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin-top: 12px;
 }
 .sidebar-bottom .settings-nav {
@@ -5271,7 +5287,7 @@ p {
 .notification-item {
   display: flex;
   width: 100%;
-  gap: 10px;
+  gap: 12px;
   padding: 11px 14px;
   color: var(--text-primary);
   background: transparent;
@@ -5376,7 +5392,7 @@ p {
 }
 .toast {
   display: flex;
-  gap: 9px;
+  gap: 8px;
   padding: 11px 12px;
   color: var(--text-primary);
   background: var(--surface);
@@ -5454,7 +5470,7 @@ p {
   z-index: 30;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   max-width: min(560px, calc(100% - 48px));
   padding: 10px 12px;
   color: var(--text-primary);
@@ -5887,7 +5903,7 @@ select,
   display: flex;
   grid-column: 1 / -1;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 .mcp-editor {
   display: flex;
@@ -5907,7 +5923,7 @@ select,
 .mcp-editor label {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   color: var(--text-secondary);
   font-size: 12px;
 }

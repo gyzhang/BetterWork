@@ -488,6 +488,105 @@ function parsePixels(value: string): number | undefined {
   return undefined;
 }
 
+/** docs/10 §8.3 点名的页面骨架类。`ViewContainer` 用 `view-container-${mode}` 拼出变体，
+ *  静态扫描取不到，因此显式登记。 */
+const SKELETON_CLASSES = [
+  'page-body',
+  'page-header',
+  'page-header-actions',
+  'page-header-leading',
+  'page-intro',
+  'page-toolbar',
+  'scroll-region',
+  'view-container',
+  'view-container-grid',
+  'view-container-list',
+];
+
+/**
+ * 纵向堆叠**控件**的骨架容器（docs/10 §9.8）。只列真正装控件的容器：
+ * 滚动区与列表行的垂直节奏分别来自版心区块的内距和行自身的 padding + 分隔线，
+ * 一律要求 gap 反而会让分隔线脱离下一行，因此不进这份清单。
+ */
+const CONTROL_STACK_SELECTORS = ['.page-toolbar'];
+
+describe('界面间距与骨架纪律', () => {
+  const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
+  expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
+  const declarations = declarationsOf(styles ?? '');
+  const grouped = new Map<string, Map<string, string>>();
+  for (const declaration of declarations) {
+    const properties = grouped.get(declaration.selector) ?? new Map<string, string>();
+    properties.set(declaration.property, declaration.value);
+    grouped.set(declaration.selector, properties);
+  }
+
+  it('装控件的骨架容器自带纵向间距机制', () => {
+    const offenders: string[] = [];
+    for (const selector of CONTROL_STACK_SELECTORS) {
+      const properties = grouped.get(selector);
+      if (!properties) {
+        offenders.push(`${selector}（styles.css 里没有这条基类规则）`);
+        continue;
+      }
+      const direction = properties.get('flex-direction') ?? '';
+      const display = properties.get('display') ?? '';
+      const stacks = direction.includes('column') || display === 'grid' || display === 'flex';
+      if (!stacks || !(properties.has('gap') || properties.has('row-gap'))) {
+        offenders.push(`${selector} { display: ${display}; flex-direction: ${direction} }`);
+      }
+    }
+    expect(
+      offenders,
+      '骨架容器没有纵向堆叠机制，同排的控件会 0 间距贴死；间距归容器的 gap 管（docs/10 §9.8）',
+    ).toEqual([]);
+  });
+
+  it('间距只用标尺上的档位', () => {
+    const SCALE = new Set([4, 8, 12, 16, 24, 32]);
+    const offenders: string[] = [];
+    for (const declaration of declarations) {
+      if (!['gap', 'row-gap', 'column-gap'].includes(declaration.property)) continue;
+      for (const match of declaration.value.matchAll(/(\d+(?:\.\d+)?)px/g)) {
+        const pixels = Number(match[1]);
+        if (pixels !== 0 && !SCALE.has(pixels)) offenders.push(locate(declaration, styles ?? ''));
+      }
+    }
+    expect(offenders, '间距只允许 4 / 8 / 12 / 16 / 24 / 32px 档位（docs/10 §9.8）').toEqual([]);
+  });
+
+  it('次要文本 small 有 12px 字号基线', () => {
+    // `<small>` 的 UA 默认是 0.83em，父级 12–13px 时会掉到下限之下，
+    // 而只扫显式声明的字号护栏抓不到「没写」这种情况，所以钉住基线本身。
+    const baseline = declarations.find(
+      (declaration) => declaration.selector === 'small' && declaration.property === 'font-size',
+    );
+    expect(baseline, '<small> 缺少全局字号基线（docs/10 §9.8）').toBeDefined();
+    const pixels = parsePixels(baseline?.value ?? '');
+    expect(pixels, 'small 基线必须用 px 或 rem 才能判定').toBeDefined();
+    expect(pixels ?? 0, 'small 基线不得小于 12px').toBeGreaterThanOrEqual(12);
+  });
+
+  it('页面选择器不得替骨架容器补 gap', () => {
+    // 类名要整段匹配：`.page-header-leading` 不是 `.page-header` 的覆写。
+    const skeletonOf = (selector: string): string | undefined =>
+      SKELETON_CLASSES.find((name) =>
+        new RegExp(`\\.${name.replace(/-/gu, '\\-')}(?![\\w-])`).test(selector),
+      );
+    const offenders: string[] = [];
+    for (const declaration of declarations) {
+      if (!['gap', 'row-gap', 'column-gap'].includes(declaration.property)) continue;
+      const skeleton = skeletonOf(declaration.selector);
+      if (!skeleton || declaration.selector === `.${skeleton}`) continue;
+      offenders.push(locate(declaration, styles ?? ''));
+    }
+    expect(
+      offenders,
+      '逐页给骨架补间距会留下「覆写一次才正常」的坑，机制要收回基类（docs/10 §9.8）',
+    ).toEqual([]);
+  });
+});
+
 describe('规则与文档索引', () => {
   it('.qoder/rules 下的每个规则文件都登记在场景索引里', () => {
     const index = read('.qoder/rules/betterwork.md');
