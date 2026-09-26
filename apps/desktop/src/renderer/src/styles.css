@@ -3362,6 +3362,8 @@ small {
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 12px 28px var(--shadow-color-overlay);
+  /* 兜底字号；打开时基座会按触发控件的计算值内联覆写（docs/10 §9.10）。 */
+  font-size: 13px;
 }
 .popover-menu-item {
   display: flex;
@@ -3371,7 +3373,6 @@ small {
   padding: 6px 10px;
   border-radius: 5px;
   cursor: pointer;
-  font-size: 13px;
   color: var(--text-primary);
 }
 .popover-menu-item.active:not([aria-disabled]) {
@@ -3380,6 +3381,9 @@ small {
 .popover-menu-item[aria-disabled] {
   opacity: 0.5;
   cursor: default;
+}
+.popover-menu-item.danger {
+  color: var(--danger);
 }
 .popover-menu-label {
   flex: 1;
@@ -3902,49 +3906,13 @@ small {
   color: var(--brand);
   border-color: var(--brand);
 }
-.knowledge-actions-menu {
-  position: relative;
-}
 .knowledge-more-button {
   cursor: pointer;
-  list-style: none;
-}
-.knowledge-more-button::-webkit-details-marker {
-  display: none;
 }
 .knowledge-more-button:hover,
-.knowledge-actions-menu[open] .knowledge-more-button {
+.knowledge-more-button[aria-expanded='true'] {
   color: var(--brand-hover);
   border-color: var(--brand);
-}
-.knowledge-actions-menu-panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 2;
-  display: flex;
-  width: 132px;
-  padding: 4px;
-  flex-direction: column;
-  gap: 4px;
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 12px 28px var(--shadow-color-overlay);
-}
-.knowledge-actions-menu-panel button {
-  padding: 7px 8px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 0;
-  border-radius: 5px;
-  text-align: left;
-}
-.knowledge-actions-menu-panel button:hover {
-  background: var(--surface-hover);
-}
-.knowledge-actions-menu-panel button.danger:hover {
-  color: var(--danger);
 }
 .knowledge-page .empty-page {
   min-height: 300px;
@@ -4615,8 +4583,17 @@ small {
   border-radius: 6px;
   font-size: 12px;
 }
-.knowledge-jobs-heading {
-  margin-top: 4px;
+/* 终态作业默认收起，进行中的作业仍留在面板上（docs/10 §11.5）。 */
+.knowledge-recent-jobs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.knowledge-recent-jobs summary {
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.knowledge-recent-jobs[open] summary {
   color: var(--text-primary);
 }
 .knowledge-job-actions {

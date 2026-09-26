@@ -460,25 +460,27 @@ export function KnowledgePage({
                 </div>
               ))}
               {recentJobs.length > 0 && (
-                <strong className="knowledge-jobs-heading">最近作业（含已取消）</strong>
+                <details className="knowledge-recent-jobs">
+                  <summary>{`最近作业（含已取消）· ${recentJobs.length} 条`}</summary>
+                  {recentJobs.map((job) => (
+                    <div className="knowledge-job-row" key={job.id}>
+                      <span>
+                        {`${knowledgeJobTitle(job.kind)}：${knowledgeJobStatusLabel(job.status)} ${job.completedCount}/${job.totalCount}`}
+                        {job.failedCount > 0 ? ` · 失败 ${job.failedCount}` : ''}
+                        {job.failure ? ` · ${job.failure.message}` : ''}
+                      </span>
+                      <div className="knowledge-job-actions">
+                        <button
+                          type="button"
+                          onClick={() => trackAction(openJobDetail(job.id), '查看作业条目')}
+                        >
+                          {jobDetail?.jobId === job.id ? '收起条目' : '查看条目'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </details>
               )}
-              {recentJobs.map((job) => (
-                <div className="knowledge-job-row" key={job.id}>
-                  <span>
-                    {`${knowledgeJobTitle(job.kind)}：${knowledgeJobStatusLabel(job.status)} ${job.completedCount}/${job.totalCount}`}
-                    {job.failedCount > 0 ? ` · 失败 ${job.failedCount}` : ''}
-                    {job.failure ? ` · ${job.failure.message}` : ''}
-                  </span>
-                  <div className="knowledge-job-actions">
-                    <button
-                      type="button"
-                      onClick={() => trackAction(openJobDetail(job.id), '查看作业条目')}
-                    >
-                      {jobDetail?.jobId === job.id ? '收起条目' : '查看条目'}
-                    </button>
-                  </div>
-                </div>
-              ))}
               {jobDetailLoading && <small>正在读取条目…</small>}
               {jobDetailError && <p className="inline-message error">{jobDetailError}</p>}
               {jobDetail && (

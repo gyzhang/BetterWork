@@ -1,7 +1,10 @@
 import type { KnowledgeDocumentSummary } from '@betterwork/agent-protocol';
+import { useRef, useState } from 'react';
 
 import { MoreHorizontalIcon } from '../icons';
 import { formatTime } from '../lib/format';
+import type { PopoverMenuItem } from './PopoverMenu';
+import { PopoverMenu } from './PopoverMenu';
 
 export interface KnowledgeDocumentCardProps {
   document: KnowledgeDocumentSummary;
@@ -49,6 +52,15 @@ export function KnowledgeDocumentCard({
   onRemove,
   onOpenDetail,
 }: KnowledgeDocumentCardProps): React.JSX.Element {
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuLabel = `更多操作：${document.title}`;
+  const menuItems: PopoverMenuItem[] = [
+    { id: 'detail', label: '查看详情' },
+    { id: 'refresh', label: '刷新索引', disabled: busy },
+    { id: 'remove', label: '移出资料库', disabled: busy, tone: 'danger' },
+  ];
+
   return (
     <article className="knowledge-card">
       {select && (
@@ -75,23 +87,33 @@ export function KnowledgeDocumentCard({
         <button className="open-source-button" type="button" onClick={onOpen}>
           打开原文
         </button>
-        <details className="knowledge-actions-menu">
-          <summary className="knowledge-more-button" aria-label={`更多操作：${document.title}`}>
-            <MoreHorizontalIcon size={16} />
-            <span>更多</span>
-          </summary>
-          <div className="knowledge-actions-menu-panel">
-            <button type="button" onClick={onOpenDetail}>
-              查看详情
-            </button>
-            <button type="button" disabled={busy} onClick={onRefresh}>
-              刷新索引
-            </button>
-            <button className="danger" type="button" disabled={busy} onClick={onRemove}>
-              移出资料库
-            </button>
-          </div>
-        </details>
+        <button
+          ref={menuTriggerRef}
+          className="knowledge-more-button"
+          type="button"
+          aria-label={menuLabel}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          <MoreHorizontalIcon size={16} />
+          <span>更多</span>
+        </button>
+        <PopoverMenu
+          open={menuOpen}
+          anchorRef={menuTriggerRef}
+          items={menuItems}
+          label={menuLabel}
+          align="end"
+          placement="bottom"
+          onDismiss={() => setMenuOpen(false)}
+          onSelect={(id) => {
+            setMenuOpen(false);
+            if (id === 'detail') onOpenDetail();
+            if (id === 'refresh') onRefresh();
+            if (id === 'remove') onRemove();
+          }}
+        />
       </div>
     </article>
   );

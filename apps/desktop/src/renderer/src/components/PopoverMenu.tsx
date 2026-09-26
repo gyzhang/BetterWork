@@ -16,6 +16,8 @@ export interface PopoverMenuItem {
   disabled?: boolean;
   /** 可选说明行（如 blockedReasons）。 */
   hint?: string;
+  /** 破坏性动作：红色文字，与「移出资料库」这类不可逆操作对应。 */
+  tone?: 'danger';
 }
 
 export interface PopoverMenuProps {
@@ -151,6 +153,15 @@ export function PopoverMenu({
     };
   }, [open, computePosition]);
 
+  // 浮层是触发元素的延伸：字号必须跟随触发控件，否则菜单看起来像另一个层级。
+  const [anchorFontSize, setAnchorFontSize] = useState<string>();
+  useEffect(() => {
+    if (!open) return;
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    setAnchorFontSize(window.getComputedStyle(anchor).fontSize);
+  }, [open, anchorRef]);
+
   // 受控开关下的焦点管理：打开时聚焦首个可用项，关闭时归还焦点。
   // 只依赖 open：items 引用变化（如搜索过滤）不应打断鼠标 hover 的选中态。
   const wasOpenRef = useRef(false);
@@ -222,7 +233,11 @@ export function PopoverMenu({
         className="popover-menu"
         role="menu"
         aria-label={label}
-        style={position}
+        style={
+          position
+            ? { ...position, ...(anchorFontSize ? { fontSize: anchorFontSize } : {}) }
+            : undefined
+        }
         onKeyDown={handleKeyDown}
       >
         {header ? <div className="popover-menu-header">{header}</div> : undefined}
@@ -235,7 +250,9 @@ export function PopoverMenu({
             role="menuitem"
             tabIndex={-1}
             aria-disabled={item.disabled ? true : undefined}
-            className={`popover-menu-item${index === activeIndex ? ' active' : ''}`}
+            className={`popover-menu-item${index === activeIndex ? ' active' : ''}${
+              item.tone === 'danger' ? ' danger' : ''
+            }`}
             onClick={() => {
               if (!item.disabled) onSelect(item.id);
             }}

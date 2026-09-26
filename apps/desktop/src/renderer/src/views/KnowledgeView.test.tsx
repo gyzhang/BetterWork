@@ -390,7 +390,7 @@ describe('本机索引动作、作业回看与键盘可达（KM15 走查补齐�
     expect(check.hasAttribute('disabled')).toBe(true);
   });
 
-  it('已取消的作业留在最近作业里，并可展开逐条目阶段与原因', () => {
+  it('已取消的作业留在最近作业里，默认折叠并可展开逐条目阶段与原因', () => {
     const openJobDetail = vi.fn(async () => undefined);
     render(
       <KnowledgePage
@@ -403,7 +403,12 @@ describe('本机索引动作、作业回看与键盘可达（KM15 走查补齐�
         onResearch={() => undefined}
       />,
     );
-    expect(screen.getByText('最近作业（含已取消）')).toBeTruthy();
+    const heading = screen.getByText('最近作业（含已取消）· 1 条');
+    const group = heading.closest('details');
+    expect(group, '终态作业要收进折叠组，不占满面板').toBeTruthy();
+    expect(group?.hasAttribute('open')).toBe(false);
+    fireEvent.click(heading);
+    expect(group?.hasAttribute('open')).toBe(true);
     expect(screen.getByText(/资料导入：已取消 1\/3/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '查看条目' }));
     expect(openJobDetail).toHaveBeenCalledWith('job-1');

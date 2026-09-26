@@ -478,7 +478,9 @@ UI Foundation 首批提供四套成对色系：
 
 所有交互组件都必须定义：默认、悬停、聚焦、按下、禁用、加载、成功和错误状态。键盘焦点必须可见，不能只依赖颜色变化。
 
-落地现状：按钮、输入、页签、Sheet、Toast、内联提示、空状态都有对应样式；页面骨架已由 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 负责结构，`KnowledgeDocumentCard` 负责知识条目的领域呈现，聚焦环用 `:focus-visible` 统一实现。破坏性确认统一使用 `ConfirmationDialog`：以 Portal 挂到应用外、背景设为 inert、初始焦点落在取消、支持 Escape 与 Tab 焦点循环、关闭后恢复触发控件焦点。尚未落地的有 Tooltip、Popover、Progress、Skeleton、Switch。
+**浮层一律复用 `PopoverMenu` 基座**：下拉、菜单、选择器等脱离文档流的浮层必须走 `components/PopoverMenu.tsx`——背板收起、Esc、焦点归还、方向键导航与视口碰撞处理都在基座里。不得用 `<details>` 或 `position:absolute` 面板自造：2026-09-26 知识卡片的「更多」正是这样写的，三个症状同源——点外面不收起（`<details>` 没有这个语义）、能同时打开两张卡片的菜单、菜单项继承正文 14px 而比自己的 12px 触发按钮还大。基座会把菜单字号镜像成触发控件的计算值，让浮层与触发器看起来属于同一个控件；破坏性菜单项用 `tone: 'danger'` 表达，颜色仍由 Token 决定。护栏锁两条：`.popover-menu-item` 不得自带字号；overlay 阴影只允许出现在登记过的浮层表面（`standards/coding-standard.test.ts`）。
+
+落地现状：按钮、输入、页签、Sheet、Toast、内联提示、空状态都有对应样式；页面骨架已由 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 负责结构，`KnowledgeDocumentCard` 负责知识条目的领域呈现，聚焦环用 `:focus-visible` 统一实现。破坏性确认统一使用 `ConfirmationDialog`：以 Portal 挂到应用外、背景设为 inert、初始焦点落在取消、支持 Escape 与 Tab 焦点循环、关闭后恢复触发控件焦点。Popover 已落地为 `PopoverMenu` 基座（[ADR-0012](adr/0012-composer-capability-binding.md)）。尚未落地的有 Tooltip、Progress、Skeleton、Switch。
 
 业务组件的落地边界：`views/` 承载工作、成果、知识、设置四个页面级视图，`components/` 承载跨视图复用的上下文面板、欢迎视图、空状态与模型编辑 Sheet，`hooks/` 承载外观、资料库、模型设置三个内聚状态簇，`lib/` 承载纯函数与常量。AppShell 与 Sidebar 仍在 `App.tsx` 内；`ConfirmationBlock`、`PlanStep`、`EvidenceChip`、`RunSummary` 未落地。
 

@@ -587,6 +587,54 @@ describe('界面间距与骨架纪律', () => {
   });
 });
 
+/**
+ * 允许自带 overlay 阴影的浮层表面（docs/10 §10.1）。需要新浮层时先复用 `PopoverMenu`
+ * 基座，而不是在这里加一行——自造浮层会各自漏掉背板收起、Esc 与焦点归还。
+ */
+const OVERLAY_SURFACES: { readonly match: string; readonly reason: string }[] = [
+  { match: '.popover-menu', reason: '浮层基座（ADR-0012）' },
+  { match: '.confirmation-dialog', reason: '模态确认框' },
+  { match: '.notification-panel', reason: '消息中心浮层' },
+  { match: '.toast', reason: '全局结果提示' },
+  { match: '.action-error-banner', reason: '全局错误横幅' },
+  { match: '.slide-viewer', reason: '演示放映画布' },
+];
+
+describe('浮层基座纪律', () => {
+  const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
+  expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
+  const declarations = declarationsOf(styles ?? '');
+
+  it('overlay 阴影只允许出现在登记过的浮层表面', () => {
+    const offenders: string[] = [];
+    for (const declaration of declarations) {
+      if (declaration.property !== 'box-shadow') continue;
+      if (!declaration.value.includes('shadow-color-overlay')) continue;
+      if (OVERLAY_SURFACES.some((surface) => declaration.selector.includes(surface.match))) {
+        continue;
+      }
+      offenders.push(locate(declaration, styles ?? ''));
+    }
+    expect(
+      offenders,
+      '要浮层就复用 PopoverMenu，别自造带阴影的 absolute 面板（docs/10 §10.1）',
+    ).toEqual([]);
+  });
+
+  it('菜单项不自带字号，由基座镜像触发控件', () => {
+    const offenders: string[] = [];
+    for (const declaration of declarations) {
+      if (declaration.property !== 'font-size') continue;
+      if (!declaration.selector.includes('.popover-menu-item')) continue;
+      offenders.push(locate(declaration, styles ?? ''));
+    }
+    expect(
+      offenders,
+      '浮层字号跟随触发控件；写死会让菜单比自己的触发按钮还大（docs/10 §10.1）',
+    ).toEqual([]);
+  });
+});
+
 describe('规则与文档索引', () => {
   it('.qoder/rules 下的每个规则文件都登记在场景索引里', () => {
     const index = read('.qoder/rules/betterwork.md');

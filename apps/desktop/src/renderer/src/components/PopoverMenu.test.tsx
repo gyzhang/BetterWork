@@ -21,21 +21,29 @@ function Wrapper({
   open,
   onDismiss,
   onSelect,
+  items = ITEMS,
+  anchorFontSize,
 }: {
   open: boolean;
   onDismiss: () => void;
   onSelect: (id: string) => void;
+  items?: PopoverMenuItem[];
+  anchorFontSize?: string;
 }) {
   const anchorRef = useRef<HTMLButtonElement>(null);
   return (
     <main>
-      <button ref={anchorRef} type="button">
+      <button
+        ref={anchorRef}
+        type="button"
+        {...(anchorFontSize ? { style: { fontSize: anchorFontSize } } : {})}
+      >
         打开菜单
       </button>
       <PopoverMenu
         open={open}
         anchorRef={anchorRef}
-        items={ITEMS}
+        items={items}
         label="能力选择"
         onDismiss={onDismiss}
         onSelect={onSelect}
@@ -198,5 +206,26 @@ describe('PopoverMenu', () => {
     const menu = screen.getByRole('menu');
     const emojiPattern = /\p{Emoji_Presentation}/u;
     expect(emojiPattern.test(menu.textContent ?? '')).toBe(false);
+  });
+
+  it('mirrors the anchor font size so the menu belongs to its trigger', () => {
+    render(<Wrapper open={true} onDismiss={vi.fn()} onSelect={vi.fn()} anchorFontSize="12px" />);
+    expect(screen.getByRole('menu').style.fontSize).toBe('12px');
+  });
+
+  it('marks destructive items with the danger class', () => {
+    render(
+      <Wrapper
+        open={true}
+        onDismiss={vi.fn()}
+        onSelect={vi.fn()}
+        items={[
+          { id: 'keep', label: '查看详情' },
+          { id: 'drop', label: '移出资料库', tone: 'danger' },
+        ]}
+      />,
+    );
+    expect(screen.getByRole('menuitem', { name: '移出资料库' }).className).toContain('danger');
+    expect(screen.getByRole('menuitem', { name: '查看详情' }).className).not.toContain('danger');
   });
 });
