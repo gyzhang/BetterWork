@@ -17,7 +17,8 @@ import { createPortal } from 'react-dom';
  *
  * 菜单类浮层（下拉、「更多」）仍归 `PopoverMenu`——那是另一套语义（不夺走整页焦点）。
  * 已经自带锚定排版的覆盖层（消息中心）复用 `useOverlaySemantics`：它缺的从来不是
- * 又一层壳，而是 Esc 能关、焦点能回来。
+ * 又一层壳，而是 Esc 能关、焦点能回来。注意被 `inert` 的是整个 `<main>`，
+ * 借用者必须把覆盖层 portal 到 body——留在壳内等于把自己的面板也锁死。
  */
 
 export type ModalVariant = 'dialog' | 'sheet' | 'viewer';

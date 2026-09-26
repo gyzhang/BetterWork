@@ -5220,14 +5220,12 @@ small {
   line-height: 1;
 }
 .notification-panel {
-  /* 锚定覆盖层：外壳（背景、边框、圆角、浮层阴影、纵向节奏）与 .modal-panel 同一份，
-     这里只留它自己的锚定位置与尺寸（消息中心不居中，贴在铃铛右侧）。 */
-  position: absolute;
-  left: calc(100% + 10px);
-  bottom: 0;
+  /* 锚定覆盖层：外壳（背景、边框、圆角、浮层阴影、纵向节奏）与 .modal-panel 同一份。
+     面板与背板 portal 到 body（否则被 <main> 的 inert 锁死，见 notifications.tsx），
+     left/top/maxHeight 由铃铛 rect 算出（高度上限见 notifications.tsx），这里只留宽度与层级。 */
+  position: fixed;
   z-index: var(--z-notification);
   width: 360px;
-  max-height: 480px;
   gap: 0;
   padding: 0;
 }

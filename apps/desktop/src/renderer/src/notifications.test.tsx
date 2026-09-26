@@ -78,6 +78,21 @@ describe('消息中心（Modal 基座的锚定覆盖层）', () => {
     expect(bell.onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  it('面板与背板 portal 到 body，不留在被 inert 的 <main> 里', () => {
+    // 2026-09-26 线上事故：面板挂在 <main> 内，useOverlaySemantics inert 整个
+    // <main> 时把面板自己也锁死了——滚动无效、点哪都无响应，
+    // 只剩 window 上的 Esc 活着。jsdom 不模拟指针命中，只能锁 DOM 归属。
+    const bell = Bell();
+    bell.open(true);
+    const main = document.querySelector('main');
+    const panel = screen.getByRole('dialog', { name: '消息中心' });
+    expect(main?.contains(panel)).toBe(false);
+    expect(panel.parentElement).toBe(document.body);
+    const overlay = document.querySelector('.notification-overlay');
+    expect(overlay).not.toBeNull();
+    expect(main?.contains(overlay ?? null)).toBe(false);
+  });
+
   it('Tab 在面板内循环，不会走到已经 inert 的页面里', () => {
     const bell = Bell();
     bell.open(true);

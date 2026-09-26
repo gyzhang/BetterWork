@@ -3,7 +3,8 @@ import type {
   NotificationSummary,
   NotificationTarget,
 } from '@betterwork/agent-protocol';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { useOverlaySemantics } from './components/Modal';
@@ -201,6 +202,8 @@ interface NotificationCenterProps {
 interface NotificationPanelProps {
   notifications: NotificationSummary[];
   unreadCount: number;
+  /** 由铃铛 rect 算出的视口坐标；面板 portal 到 body 后 CSS 已无锚点可依。 */
+  position: { left: number; top: number; maxHeight: number };
   onClose: () => void;
   onActivate: (notification: NotificationSummary) => void;
   onMarkAllRead: () => void;
@@ -208,13 +211,16 @@ interface NotificationPanelProps {
 }
 
 /**
- * 消息中心面板：锚定在铃铛右侧，所以不套 `Modal` 的背板与居中几何，
+ * 消息中心面板：贴在铃铛右侧，所以不套 `Modal` 的背板与居中几何，
  * 但键盘与焦点语义必须同一份——Esc 能关、进入时 inert 掉应用主体、
  * Tab 在面板内循环、关闭后焦点回到铃铛（`useOverlaySemantics`）。
+ * 面板与背板必须 portal 到 body：`useOverlaySemantics` inert 的是整个 `<main>`，
+ * 留在壳内的话面板自己也被 pointer-events 锁死（2026-09-26 线上事故）。
  */
 const NotificationPanel = ({
   notifications,
   unreadCount,
+  position,
   onClose,
   onActivate,
   onMarkAllRead,
@@ -232,6 +238,11 @@ const NotificationPanel = ({
         role="dialog"
         aria-modal="true"
         aria-label="消息中心"
+        style={{
+          left: position.left,
+          top: position.top,
+          maxHeight: position.maxHeight,
+        }}
       >
         <div className="notification-panel-header">
           <div>
@@ -293,6 +304,11 @@ const NotificationPanel = ({
   );
 };
 
+const PANEL_WIDTH = 360;
+const PANEL_MAX_HEIGHT = 480;
+const PANEL_GAP = 10;
+const PANEL_VIEWPORT_MARGIN = 12;
+
 export const NotificationCenter = ({
   notifications,
   unreadCount,
@@ -301,34 +317,80 @@ export const NotificationCenter = ({
   onActivate,
   onMarkAllRead,
   onClear,
-}: NotificationCenterProps): React.JSX.Element => (
-  <div className="notification-anchor">
-    <button
-      className={open ? 'notification-bell active' : 'notification-bell'}
-      title="通知"
-      aria-label={unreadCount > 0 ? `通知，${unreadCount} 条未读` : '通知'}
-      aria-haspopup="dialog"
-      aria-expanded={open}
-      onClick={() => onOpenChange(!open)}
-    >
-      <BellIcon size={16} />
-      {unreadCount > 0 && (
-        <span className="notification-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
-      )}
-    </button>
-    {open && <div className="notification-overlay" onMouseDown={() => onOpenChange(false)} />}
-    {open && (
-      <NotificationPanel
-        notifications={notifications}
-        unreadCount={unreadCount}
-        onClose={() => onOpenChange(false)}
-        onActivate={onActivate}
-        onMarkAllRead={onMarkAllRead}
-        onClear={onClear}
-      />
-    )}
-  </div>
-);
+}: NotificationCenterProps): React.JSX.Element => {
+  const bellRef = useRef<HTMLButtonElement>(null);
+  const [position, setPosition] = useState<{ left: number; top: number; maxHeight: number } | null>(
+    null,
+  );
+
+  // 覆盖层已 portal 到 body，锚点只剩铃铛的视口坐标；窗口变化时重测。
+  useLayoutEffect(() => {
+    if (!open) {
+      setPosition(null);
+      return;
+    }
+    const measure = (): void => {
+      const bell = bellRef.current;
+      if (!bell) return;
+      const rect = bell.getBoundingClientRect();
+      const fitsRight = rect.right + PANEL_GAP + PANEL_WIDTH <= innerWidth - PANEL_VIEWPORT_MARGIN;
+      // 面板底边贴铃铛底，向上生长；480px 是旧版锚定面板的高度上限，
+      // 通高面板会把整窗吞掉（2026-09-26 光哥验收打回）。
+      const maxHeight = Math.min(PANEL_MAX_HEIGHT, innerHeight - 2 * PANEL_VIEWPORT_MARGIN);
+      const bottom = Math.max(PANEL_VIEWPORT_MARGIN, rect.bottom);
+      setPosition({
+        left: fitsRight
+          ? rect.right + PANEL_GAP
+          : Math.max(PANEL_VIEWPORT_MARGIN, rect.left - PANEL_GAP - PANEL_WIDTH),
+        top: Math.max(PANEL_VIEWPORT_MARGIN, bottom - maxHeight),
+        maxHeight,
+      });
+    };
+    measure();
+    addEventListener('resize', measure);
+    return () => removeEventListener('resize', measure);
+  }, [open]);
+
+  return (
+    <div className="notification-anchor">
+      <button
+        ref={bellRef}
+        className={open ? 'notification-bell active' : 'notification-bell'}
+        title="通知"
+        aria-label={unreadCount > 0 ? `通知，${unreadCount} 条未读` : '通知'}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => onOpenChange(!open)}
+      >
+        <BellIcon size={16} />
+        {unreadCount > 0 && (
+          <span className="notification-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
+        )}
+      </button>
+      {open &&
+        position &&
+        createPortal(
+          <>
+            <div
+              className="notification-overlay"
+              onMouseDown={() => onOpenChange(false)}
+              role="presentation"
+            />
+            <NotificationPanel
+              notifications={notifications}
+              unreadCount={unreadCount}
+              position={position}
+              onClose={() => onOpenChange(false)}
+              onActivate={onActivate}
+              onMarkAllRead={onMarkAllRead}
+              onClear={onClear}
+            />
+          </>,
+          document.body,
+        )}
+    </div>
+  );
+};
 
 interface ToastHostProps {
   toasts: ToastItem[];
