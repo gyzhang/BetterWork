@@ -4599,6 +4599,37 @@ p {
   border-radius: 6px;
   font-size: 12px;
 }
+.knowledge-jobs-heading {
+  margin-top: 4px;
+  color: var(--text-primary);
+}
+.knowledge-job-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.knowledge-job-items {
+  margin: 2px 0 0;
+  padding-left: 17px;
+  color: var(--text-muted);
+}
+.knowledge-job-items li {
+  margin-top: 3px;
+  line-height: 1.55;
+  word-break: break-all;
+}
+/* 窄窗：知识页的摘要行、作业行与详情头改为纵向堆叠，用换行换空间，不压字号。 */
+@media (max-width: 960px) {
+  .knowledge-summary,
+  .knowledge-summary-actions,
+  .knowledge-job-row,
+  .knowledge-detail-header,
+  .knowledge-detail-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
 /* KM11：集合筛选、集合管理与详情勾选 */
 .knowledge-collections {
   align-items: flex-start;

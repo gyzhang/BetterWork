@@ -3,6 +3,7 @@
 import type {
   KnowledgeCollection,
   KnowledgeDocumentSummary,
+  KnowledgeJobItemSummary,
   KnowledgeJobSummary,
   KnowledgeRevisionSummary,
   KnowledgeTextPage,
@@ -97,6 +98,11 @@ const library = (overrides: Partial<KnowledgeLibrary> = {}): KnowledgeLibrary =>
   deleteCollection: async () => undefined,
   saveDocumentCollections: async () => undefined,
   activeJobs: [],
+  recentJobs: [],
+  jobDetail: undefined,
+  jobDetailLoading: false,
+  jobDetailError: '',
+  openJobDetail: async () => undefined,
   searchStatus: undefined,
   retryTarget: undefined,
   refresh: () => undefined,
@@ -114,6 +120,8 @@ const library = (overrides: Partial<KnowledgeLibrary> = {}): KnowledgeLibrary =>
   research: async () => undefined,
   saveSettings: async () => undefined,
   rebuildSemantic: async () => undefined,
+  rebuildKeyword: async () => undefined,
+  checkAllSources: async () => undefined,
   cancelJob: async () => undefined,
   retryFailedItems: async () => undefined,
   detailDocument: undefined,
@@ -326,5 +334,129 @@ describe('KnowledgePage 集合护栏（KM11）', () => {
     expect(save.hasAttribute('disabled')).toBe(false);
     fireEvent.click(save);
     expect(saveDocumentCollections).toHaveBeenCalledWith('doc-1', 1, ['col-1']);
+  });
+});
+
+describe('本机索引动作、作业回看与键盘可达（KM15 走查补齐）', () => {
+  const summary: KnowledgeDocumentSummary = {
+    id: 'doc-1',
+    title: '合同条款',
+    sourcePath: '/tmp/合同条款.md',
+    format: 'markdown',
+    byteSize: 24,
+    contentHash: 'a'.repeat(64),
+    sourceStatus: 'unchanged',
+    lexicalState: 'ready',
+    semanticState: 'disabled',
+    collectionIds: [],
+    membershipRevision: 1,
+    importedAt: 1,
+    updatedAt: 2,
+  };
+
+  const item = (overrides: Partial<KnowledgeJobItemSummary> = {}): KnowledgeJobItemSummary => ({
+    id: 'item-2',
+    jobId: 'job-1',
+    fileName: '损坏材料.docx',
+    status: 'failed',
+    phase: 'extract',
+    attempt: 1,
+    completedUnits: 0,
+    failure: { code: 'INDEX_ITEM_FAILED', message: '解析失败' },
+    ...overrides,
+  });
+
+  it('索引与模型面板提供关键词重建与当前列表来源检查，两者都不出本机', () => {
+    const rebuildKeyword = vi.fn(async () => undefined);
+    const checkAllSources = vi.fn(async () => undefined);
+    render(
+      <KnowledgePage
+        library={library({ documents: [summary], rebuildKeyword, checkAllSources })}
+        onResearch={() => undefined}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '索引与模型' }));
+    fireEvent.click(screen.getByRole('button', { name: '重建关键词索引' }));
+    expect(rebuildKeyword).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '检查当前列表来源（1）' }));
+    expect(checkAllSources).toHaveBeenCalled();
+    expect(screen.getByText(/不调用模型/)).toBeTruthy();
+  });
+
+  it('没有资料时不给可点的「检查全部来源」空转按钮', () => {
+    render(<KnowledgePage library={library({ documents: [] })} onResearch={() => undefined} />);
+    fireEvent.click(screen.getByRole('button', { name: '索引与模型' }));
+    const check = screen.getByRole('button', { name: '检查当前列表来源（0）' });
+    expect(check.hasAttribute('disabled')).toBe(true);
+  });
+
+  it('已取消的作业留在最近作业里，并可展开逐条目阶段与原因', () => {
+    const openJobDetail = vi.fn(async () => undefined);
+    render(
+      <KnowledgePage
+        library={library({
+          recentJobs: [
+            job({ kind: 'import', status: 'cancelled', completedCount: 1, totalCount: 3 }),
+          ],
+          openJobDetail,
+        })}
+        onResearch={() => undefined}
+      />,
+    );
+    expect(screen.getByText('最近作业（含已取消）')).toBeTruthy();
+    expect(screen.getByText(/资料导入：已取消 1\/3/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '查看条目' }));
+    expect(openJobDetail).toHaveBeenCalledWith('job-1');
+  });
+
+  it('条目行把状态、阶段与失败原因都翻成中文', () => {
+    render(
+      <KnowledgePage
+        library={library({
+          recentJobs: [job({ kind: 'import', status: 'partial' })],
+          jobDetail: { jobId: 'job-1', items: [item()] },
+        })}
+        onResearch={() => undefined}
+      />,
+    );
+    expect(screen.getByText(/损坏材料\.docx · 失败 · 解析提取 · 解析失败/)).toBeTruthy();
+  });
+
+  it('刷新只在提交作业时给「已提交」，不在后台完成前报刷新成功', async () => {
+    render(
+      <KnowledgePage
+        library={library({
+          documents: [summary],
+          detailDocument: summary,
+          detailRevisions: [revision],
+          detailRevisionId: revision.id,
+          detailPage: page,
+          message: '已提交「合同条款」的刷新作业，索引正在后台重建。',
+        })}
+        onResearch={() => undefined}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '刷新内容' }));
+    expect(screen.queryByText(/已刷新/)).toBeNull();
+    expect(screen.getByText('已提交「合同条款」的刷新作业，索引正在后台重建。')).toBeTruthy();
+  });
+
+  it('Esc 退出详情子视图；确认框打开时不越级改界面', () => {
+    const closeDocument = vi.fn();
+    render(
+      <KnowledgePage
+        library={library({
+          documents: [summary],
+          detailDocument: summary,
+          detailRevisions: [revision],
+          detailRevisionId: revision.id,
+          detailPage: page,
+          closeDocument,
+        })}
+        onResearch={() => undefined}
+      />,
+    );
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(closeDocument).toHaveBeenCalled();
   });
 });

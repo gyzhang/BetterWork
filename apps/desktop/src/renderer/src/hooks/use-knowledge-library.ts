@@ -2,6 +2,10 @@ import type {
   KnowledgeCollection,
   KnowledgeCursor,
   KnowledgeDocumentSummary,
+  KnowledgeJobItemStatus,
+  KnowledgeJobItemSummary,
+  KnowledgeJobPhase,
+  KnowledgeJobStatus,
   KnowledgeJobSummary,
   KnowledgeLibraryFilter,
   KnowledgeResearchDraftMaterial,
@@ -54,6 +58,12 @@ export interface KnowledgeLibrary {
   settings: KnowledgeSearchSettings | undefined;
   embeddingModels: ModelProfileSummary[];
   activeJobs: KnowledgeJobSummary[];
+  /** 已收口的作业（含取消/失败）留在面板上供回看，新作业按提交倒序排在前面。 */
+  recentJobs: KnowledgeJobSummary[];
+  /** 展开查看逐条目阶段与原因的作业；同时只展开一个。 */
+  jobDetail: { jobId: string; items: KnowledgeJobItemSummary[] } | undefined;
+  jobDetailLoading: boolean;
+  jobDetailError: string;
   searchStatus: KnowledgeSearchStatus | undefined;
   /** 最近一个已收口作业里可重试（失败/中断/取消）的条目；成功后清空。 */
   retryTarget: { jobId: string; itemIds: string[]; kind: KnowledgeJobSummary['kind'] } | undefined;
@@ -80,6 +90,10 @@ export interface KnowledgeLibrary {
   saveSettings: (input: { semanticEnabled: boolean; embeddingProfileId?: string }) => Promise<void>;
   /** 普通语义重建（兼容现有空间）与强制重建（退役旧空间）走同一入口、必须区分确认。 */
   rebuildSemantic: (forced: boolean) => Promise<void>;
+  /** 关键词重建只重建本地派生索引、不调用模型；覆盖资料库当前全部登记资料。 */
+  rebuildKeyword: () => Promise<void>;
+  /** 展开/收回某个作业的逐条目结果。 */
+  openJobDetail: (jobId: string) => Promise<void>;
   cancelJob: (jobId: string) => Promise<void>;
   retryFailedItems: () => Promise<void>;
   /** KM10：主区详情子视图；列表状态（query/results/勾选）在打开期间保持不变。 */
@@ -96,6 +110,8 @@ export interface KnowledgeLibrary {
   loadNextDetailPage: () => Promise<void>;
   loadPreviousDetailPage: () => Promise<void>;
   checkDocumentSource: (documentId: string) => Promise<void>;
+  /** 一次作业检查当前列表内的全部原件（随集合筛选变化）；超过单次上限时分批提交并如实报数。 */
+  checkAllSources: () => Promise<void>;
 }
 
 const TERMINAL_STATUSES = new Set<KnowledgeJobSummary['status']>([
@@ -105,6 +121,12 @@ const TERMINAL_STATUSES = new Set<KnowledgeJobSummary['status']>([
   'cancelled',
   'interrupted',
 ]);
+
+/** 已收口作业在界面上保留的条数；历史真相在数据库里，界面只做最近回看。 */
+const RECENT_JOBS_LIMIT = 10;
+
+/** 来源检查单次可提交的资料数上限，与契约 §12 的协议校验一致。 */
+const CHECK_SOURCES_BATCH_MAX = 200;
 
 const RETRYABLE_ITEM_STATUSES = new Set<KnowledgeJobSummary['status']>([
   'failed',
@@ -141,6 +163,12 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   const filterRef = useRef<KnowledgeLibraryFilter>(filter);
   const [embeddingModels, setEmbeddingModels] = useState<ModelProfileSummary[]>([]);
   const [activeJobs, setActiveJobs] = useState<Map<string, KnowledgeJobSummary>>(() => new Map());
+  const [recentJobs, setRecentJobs] = useState<Map<string, KnowledgeJobSummary>>(() => new Map());
+  const [jobDetail, setJobDetail] = useState<
+    { jobId: string; items: KnowledgeJobItemSummary[] } | undefined
+  >(undefined);
+  const [jobDetailLoading, setJobDetailLoading] = useState(false);
+  const [jobDetailError, setJobDetailError] = useState('');
   const [searchStatus, setSearchStatus] = useState<KnowledgeSearchStatus | undefined>(undefined);
   const [retryTarget, setRetryTarget] = useState<
     { jobId: string; itemIds: string[]; kind: KnowledgeJobSummary['kind'] } | undefined
@@ -157,6 +185,9 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   const researchSeq = useRef(0);
   const searchSeq = useRef(0);
   const pendingJobs = useRef(new Set<string>());
+  const openDetailIdRef = useRef<string | undefined>(undefined);
+  /** 作业终态后重新读取打开中的详情；每次渲染刷新到最新闭包，避免让 effect 重新订阅。 */
+  const reloadDetailRef = useRef<() => void>(() => {});
   const operationByInput = useRef<Map<string, string>>(new Map());
 
   const refresh = useCallback((): void => {
@@ -172,6 +203,8 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
         .finally(() => setLoading(false)),
       '刷新资料库',
     );
+    // 详情打开时同步重读版本与正文，避免「刷新内容已完成但界面还是旧版」。
+    reloadDetailRef.current();
   }, []);
 
   const loadSettings = useCallback((): void => {
@@ -192,9 +225,17 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
         .jobs({ limit: 10 })
         .then((page) => {
           const running = page.jobs.filter((job) => !TERMINAL_STATUSES.has(job.status));
-          if (running.length === 0) return;
-          setActiveJobs(new Map(running.map((job) => [job.id, job] as const)));
           for (const job of running) pendingJobs.current.add(job.id);
+          if (running.length > 0) {
+            setActiveJobs(new Map(running.map((job) => [job.id, job] as const)));
+          }
+          // 首页里的终态作业留在「最近作业」里，取消/失败后界面不再是空白。
+          const finished = page.jobs.filter((job) => TERMINAL_STATUSES.has(job.status));
+          if (finished.length > 0) {
+            setRecentJobs(
+              new Map(finished.slice(0, RECENT_JOBS_LIMIT).map((job) => [job.id, job] as const)),
+            );
+          }
         })
         .catch(() => {
           // 作业面板是可重建的投影；拉不到首页不影响资料与检索。
@@ -247,6 +288,16 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   const onRemove = async (document: KnowledgeDocumentSummary): Promise<void> => {
     try {
       const result = await window.betterwork.knowledge.remove({ id: document.id });
+      // 被移除的资料若正开着详情，先收掉详情，避免后续刷新重读一个已不存在的登记。
+      if (openDetailIdRef.current === document.id) {
+        openDetailIdRef.current = undefined;
+        setDetailId(undefined);
+        setDetailPage(undefined);
+        setDetailRevisionId(undefined);
+        setDetailRevisions([]);
+        setCursorStack([]);
+        setDetailError('');
+      }
       setMessage(
         result.removed
           ? `已从资料库移除「${document.title}」，原始文件未受影响。`
@@ -344,6 +395,12 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
       if (!tracked) return;
       if (job.status === 'queued' || job.status === 'running') return;
       pendingJobs.current.delete(job.id);
+      // 收口后的作业不进消失通道：作为最近作业第一条留下，供回看条目与原因。
+      setRecentJobs((current) => {
+        const merged: Array<[string, KnowledgeJobSummary]> = [[job.id, job], ...current.entries()];
+        return new Map(merged.slice(0, RECENT_JOBS_LIMIT));
+      });
+      setJobDetail((detail) => (detail?.jobId === job.id ? undefined : detail));
       reportJob(job.id);
     });
     return unsubscribe;
@@ -485,14 +542,19 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
         coverage: response.coverage,
         ...(response.degradedReason ? { degradedReason: response.degradedReason } : {}),
       });
+      // 降级解释与勾选清空各写一句，但合成一条内联消息，后写的不能把降级原因盖掉。
+      const notes: string[] = [];
       if (response.degradedReason) {
-        setMessage(`本次检索以关键词为主（${response.degradedReason}），兼容向量结果照常返回。`);
+        notes.push(
+          `本次检索以关键词为主（${knowledgeDegradedLabel(response.degradedReason)}），兼容向量结果照常返回`,
+        );
       }
       // 切换搜索后清空结果勾选，避免隐形的跨查询选择。
-      setSelected((current) => {
-        if (current.size > 0) setMessage('搜索结果已更新，此前的勾选已清空。');
-        return new Map();
-      });
+      if (selected.size > 0) {
+        notes.push('此前的结果勾选已清空');
+        setSelected(new Map());
+      }
+      if (notes.length > 0) setMessage(`${notes.join('；')}。`);
     } catch (error) {
       if (searchSeq.current !== seq) return;
       setMessage(error instanceof Error ? error.message : '检索资料失败。');
@@ -534,6 +596,40 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
       );
     } catch (error) {
       setMessage(describeActionError(error, '提交重建作业失败，请重试。'));
+    }
+  };
+
+  /** 关键词重建只重建本地派生索引，不调用模型；覆盖资料库当前全部登记资料。 */
+  const rebuildKeyword = async (): Promise<void> => {
+    try {
+      const ack = await window.betterwork.knowledge.rebuildIndex({ kind: 'keyword' });
+      trackJob(ack.jobId);
+      setMessage('已提交关键词索引重建；不调用模型，向量索引与覆盖状态不受影响。');
+    } catch (error) {
+      setMessage(describeActionError(error, '提交关键词重建失败，请重试。'));
+    }
+  };
+
+  /** 展开某个作业的逐条目阶段与原因；再次点击同一作业即收回。 */
+  const openJobDetail = async (jobId: string): Promise<void> => {
+    if (jobDetail?.jobId === jobId) {
+      setJobDetail(undefined);
+      return;
+    }
+    setJobDetail(undefined);
+    setJobDetailError('');
+    setJobDetailLoading(true);
+    try {
+      const detail = await window.betterwork.knowledge.job({ jobId });
+      if (!detail) {
+        setJobDetailError('这条作业的结果已不可回看。');
+        return;
+      }
+      setJobDetail({ jobId, items: detail.items });
+    } catch (error) {
+      setJobDetailError(describeActionError(error, '读取作业条目失败。'));
+    } finally {
+      setJobDetailLoading(false);
     }
   };
 
@@ -592,20 +688,17 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     }
   };
 
-  const openDocument = async (document: KnowledgeDocumentSummary): Promise<void> => {
+  /** 重读版本列表与最新修订正文；详情打开期间的列表刷新与作业终态都走这里。 */
+  const loadDetail = async (documentId: string): Promise<void> => {
     const seq = detailSeq.current + 1;
     detailSeq.current = seq;
-    setDetailId(document.id);
-    setDetailRevisions([]);
-    setDetailPage(undefined);
-    setDetailRevisionId(undefined);
+    setDetailLoading(true);
     setDetailError('');
     setCursorStack([]);
     currentCursor.current = undefined;
-    setDetailLoading(true);
     try {
       const revisions = await window.betterwork.knowledge.listRevisions({
-        documentId: document.id,
+        documentId,
       });
       if (detailSeq.current !== seq) return;
       setDetailRevisions(revisions);
@@ -614,7 +707,7 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
         setDetailError('该资料没有可预览的保存修订。');
         return;
       }
-      await loadDetailPage(document.id, first.id, undefined);
+      await loadDetailPage(documentId, first.id, undefined);
     } catch (error) {
       if (detailSeq.current === seq) {
         setDetailError(describeActionError(error, '读取版本列表失败。'));
@@ -624,7 +717,25 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     }
   };
 
+  useEffect((): void => {
+    reloadDetailRef.current = (): void => {
+      const documentId = openDetailIdRef.current;
+      if (documentId) trackAction(loadDetail(documentId), '重读资料详情');
+    };
+  });
+
+  const openDocument = async (document: KnowledgeDocumentSummary): Promise<void> => {
+    openDetailIdRef.current = document.id;
+    setDetailId(document.id);
+    setDetailRevisions([]);
+    setDetailPage(undefined);
+    setDetailRevisionId(undefined);
+    setDetailError('');
+    await loadDetail(document.id);
+  };
+
   const closeDocument = (): void => {
+    openDetailIdRef.current = undefined;
     detailSeq.current += 1;
     setDetailId(undefined);
     setDetailPage(undefined);
@@ -661,6 +772,32 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
       const ack = await window.betterwork.knowledge.checkSources({ documentIds: [documentId] });
       trackJob(ack.jobId);
       setMessage('已提交来源检查，原件与登记内容的比对在后台进行。');
+    } catch (error) {
+      setMessage(describeActionError(error, '提交来源检查失败。'));
+    }
+  };
+
+  /** 契约 §12 单次最多 200 份：超出时分批提交，每批各有作业与终态。 */
+  const checkAllSources = async (): Promise<void> => {
+    const ids = documents.map((document) => document.id);
+    if (ids.length === 0) {
+      setMessage('资料库里现在没有可检查的资料。');
+      return;
+    }
+    const batches: string[][] = [];
+    for (let index = 0; index < ids.length; index += CHECK_SOURCES_BATCH_MAX) {
+      batches.push(ids.slice(index, index + CHECK_SOURCES_BATCH_MAX));
+    }
+    try {
+      for (const batch of batches) {
+        const ack = await window.betterwork.knowledge.checkSources({ documentIds: batch });
+        trackJob(ack.jobId);
+      }
+      setMessage(
+        `已提交 ${ids.length} 份资料的原件检查${
+          batches.length > 1 ? `（分 ${batches.length} 批）` : ''
+        }，比对在后台进行，未检查项不会显示为正常。`,
+      );
     } catch (error) {
       setMessage(describeActionError(error, '提交来源检查失败。'));
     }
@@ -713,6 +850,13 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     deleteCollection,
     saveDocumentCollections,
     activeJobs: [...activeJobs.values()],
+    recentJobs: [...recentJobs.values()].sort(
+      (left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id),
+    ),
+    jobDetail,
+    jobDetailLoading,
+    jobDetailError,
+    openJobDetail,
     searchStatus,
     retryTarget,
     refresh,
@@ -730,6 +874,7 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     research,
     saveSettings,
     rebuildSemantic,
+    rebuildKeyword,
     cancelJob,
     retryFailedItems,
     detailDocument: documents.find((document) => document.id === detailId),
@@ -745,6 +890,7 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     loadNextDetailPage,
     loadPreviousDetailPage,
     checkDocumentSource,
+    checkAllSources,
   };
 }
 
@@ -760,3 +906,61 @@ const titleOfJob = (job: KnowledgeJobSummary): string => JOB_TITLES[job.kind];
 
 /** 供作业面板按 kind 显示中文名。 */
 export const knowledgeJobTitle = (kind: KnowledgeJobSummary['kind']): string => JOB_TITLES[kind];
+
+const JOB_STATUS_LABELS: Record<KnowledgeJobStatus, string> = {
+  queued: '排队中',
+  running: '进行中',
+  succeeded: '已完成',
+  partial: '部分完成',
+  failed: '失败',
+  cancelled: '已取消',
+  interrupted: '已中断',
+};
+
+const JOB_ITEM_STATUS_LABELS: Record<KnowledgeJobItemStatus, string> = {
+  queued: '排队中',
+  running: '处理中',
+  succeeded: '成功',
+  failed: '失败',
+  cancelled: '已取消',
+  interrupted: '已中断',
+};
+
+const JOB_PHASE_LABELS: Record<KnowledgeJobPhase, string> = {
+  read: '读取原件',
+  extract: '解析提取',
+  chunk: '切分索引块',
+  embed: '生成向量',
+  publish: '发布索引',
+  check: '比对原件',
+};
+
+/** 检索实际生效的方式，与契约 §9 的 effectiveMode 一一对应。 */
+export const knowledgeModeLabel = (mode: KnowledgeSearchEffectiveMode): string => MODE_LABELS[mode];
+
+/** 降级原因的唯一中文口径：内联消息与检索状态条共用，不再漏英文枚举。 */
+export const knowledgeDegradedLabel = (reason: KnowledgeSearchDegradedReason): string =>
+  DEGRADED_LABELS[reason];
+
+/** 作业、条目与阶段的中文名。 */
+export const knowledgeJobStatusLabel = (status: KnowledgeJobStatus): string =>
+  JOB_STATUS_LABELS[status];
+export const knowledgeJobItemStatusLabel = (status: KnowledgeJobItemStatus): string =>
+  JOB_ITEM_STATUS_LABELS[status];
+export const knowledgeJobPhaseLabel = (phase: KnowledgeJobPhase): string => JOB_PHASE_LABELS[phase];
+
+const MODE_LABELS: Record<KnowledgeSearchEffectiveMode, string> = {
+  keyword: '关键词',
+  hybrid: '关键词＋语义',
+  vector: '语义（向量）',
+};
+
+const DEGRADED_LABELS: Record<KnowledgeSearchDegradedReason, string> = {
+  'semantic-disabled': '未启用语义检索',
+  'model-unavailable': '嵌入模型不可用',
+  'index-missing': '尚未建立语义索引',
+  'index-partial': '部分资料未完成向量索引',
+  'index-stale': '索引代次已过期，需要重建',
+  'embedding-failed': '嵌入服务调用失败',
+  'capacity-exceeded': '索引规模已达上限',
+};

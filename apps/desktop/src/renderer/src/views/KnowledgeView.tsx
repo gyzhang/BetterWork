@@ -4,7 +4,7 @@ import type {
   KnowledgeLibraryFilter,
   KnowledgeSearchHit,
 } from '@betterwork/agent-protocol';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, ErrorPage, LoadingPage } from '../components/EmptyState';
@@ -16,7 +16,14 @@ import { ScrollRegion } from '../components/layout/ScrollRegion';
 import { ViewContainer } from '../components/layout/ViewContainer';
 import { TransientToast } from '../components/TransientToast';
 import type { KnowledgeLibrary } from '../hooks/use-knowledge-library';
-import { knowledgeJobTitle } from '../hooks/use-knowledge-library';
+import {
+  knowledgeDegradedLabel,
+  knowledgeJobItemStatusLabel,
+  knowledgeJobPhaseLabel,
+  knowledgeJobStatusLabel,
+  knowledgeJobTitle,
+  knowledgeModeLabel,
+} from '../hooks/use-knowledge-library';
 import { PlusIcon } from '../icons';
 import { reportAction, trackAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
@@ -25,12 +32,6 @@ interface KnowledgeToast {
   tone: 'success' | 'error';
   message: string;
 }
-
-const MODE_LABELS: Record<string, string> = {
-  keyword: '关键词',
-  hybrid: '关键词＋语义',
-  vector: '语义（向量）',
-};
 
 const SOURCE_STATE_LABELS: Record<KnowledgeDocumentSummary['sourceStatus'], string> = {
   unchecked: '来源未检查',
@@ -70,16 +71,6 @@ const COLLECTION_OPTION_PREFIX = 'collection:';
 const filterOptionId = (value: KnowledgeLibraryFilter): string =>
   value.kind === 'collection' ? `${COLLECTION_OPTION_PREFIX}${value.collectionId}` : value.kind;
 
-const DEGRADED_LABELS: Record<string, string> = {
-  'semantic-disabled': '未启用语义检索',
-  'model-unavailable': '嵌入模型不可用',
-  'index-missing': '尚未建立语义索引',
-  'index-partial': '部分资料未完成向量索引',
-  'index-stale': '索引代次已过期，需要重建',
-  'embedding-failed': '嵌入服务调用失败',
-  'capacity-exceeded': '索引规模已达上限',
-};
-
 /**
  * 资料库视图。状态与动作全部来自 useKnowledgeLibrary，
  * 视图只负责呈现，因此这里没有任何 IPC 调用。
@@ -110,6 +101,11 @@ export function KnowledgePage({
     settings,
     embeddingModels,
     activeJobs,
+    recentJobs,
+    jobDetail,
+    jobDetailLoading,
+    jobDetailError,
+    openJobDetail,
     searchStatus,
     retryTarget,
     refresh,
@@ -120,6 +116,7 @@ export function KnowledgePage({
     onRemove,
     saveSettings,
     rebuildSemantic,
+    rebuildKeyword,
     cancelJob,
     retryFailedItems,
     detailDocument,
@@ -135,6 +132,7 @@ export function KnowledgePage({
     loadNextDetailPage,
     loadPreviousDetailPage,
     checkDocumentSource,
+    checkAllSources,
     collections,
     filter,
     setFilter,
@@ -167,6 +165,28 @@ export function KnowledgePage({
   const [renameDrafts, setRenameDrafts] = useState<Record<string, string>>({});
   const [memberDraft, setMemberDraft] = useState<{ documentId: string; ids: string[] }>();
   const dismissToast = useCallback(() => setToast(undefined), []);
+  const dialogOpen =
+    removalTarget !== undefined ||
+    pendingEnable !== undefined ||
+    pendingRebuild !== undefined ||
+    pendingCollectionDelete !== undefined;
+
+  // 键盘可达：Esc 先收起局部提示，再退出详情子视图，最后收起「索引与模型」面板；
+  // 确认框打开时交给确认框自己处理，不越级改界面状态。
+  useEffect((): (() => void) => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape' || dialogOpen) return;
+      if (toast) {
+        setToast(undefined);
+      } else if (detailDocument) {
+        closeDocument();
+      } else if (adminOpen) {
+        setAdminOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [dialogOpen, toast, detailDocument, adminOpen, closeDocument]);
 
   const filterOptions = [
     { id: 'all', label: '全部资料' },
@@ -325,6 +345,24 @@ export function KnowledgePage({
                   普通重建只更新当前资料的兼容索引；强制重建会立即停用全部旧语义索引。关键词检索始终可用。
                 </small>
               </div>
+              <div className="knowledge-admin-row">
+                <button
+                  type="button"
+                  onClick={() => trackAction(rebuildKeyword(), '重建关键词索引')}
+                >
+                  重建关键词索引
+                </button>
+                <button
+                  type="button"
+                  disabled={documents.length === 0}
+                  onClick={() => trackAction(checkAllSources(), '检查当前列表来源')}
+                >
+                  检查当前列表来源（{documents.length}）
+                </button>
+                <small>
+                  这两项只在本机进行、不调用模型：关键词重建重写全部登记资料的派生索引，来源检查只比对当前列表里的原件与登记内容是否一致。
+                </small>
+              </div>
               <div className="knowledge-admin-row knowledge-collections">
                 <strong>集合管理</strong>
                 <form
@@ -396,21 +434,69 @@ export function KnowledgePage({
               </div>
             </section>
           )}
-          {activeJobs.length > 0 && (
-            <section className="knowledge-jobs" aria-label="进行中的索引作业">
+          {(activeJobs.length > 0 || recentJobs.length > 0) && (
+            <section className="knowledge-jobs" aria-label="索引作业">
               {activeJobs.map((job) => (
                 <div className="knowledge-job-row" key={job.id}>
                   <span>
-                    {knowledgeJobTitle(job.kind)}：
-                    {job.status === 'queued'
-                      ? '排队中'
-                      : `进行中 ${job.completedCount}/${job.totalCount}`}
+                    {`${knowledgeJobTitle(job.kind)}：${knowledgeJobStatusLabel(job.status)}`}
+                    {job.status === 'running' ? ` ${job.completedCount}/${job.totalCount}` : ''}
+                    {job.failedCount > 0 ? ` · 失败 ${job.failedCount}` : ''}
                   </span>
-                  <button type="button" onClick={() => trackAction(cancelJob(job.id), '取消作业')}>
-                    取消
-                  </button>
+                  <div className="knowledge-job-actions">
+                    <button
+                      type="button"
+                      onClick={() => trackAction(openJobDetail(job.id), '查看作业条目')}
+                    >
+                      {jobDetail?.jobId === job.id ? '收起条目' : '查看条目'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => trackAction(cancelJob(job.id), '取消作业')}
+                    >
+                      取消
+                    </button>
+                  </div>
                 </div>
               ))}
+              {recentJobs.length > 0 && (
+                <strong className="knowledge-jobs-heading">最近作业（含已取消）</strong>
+              )}
+              {recentJobs.map((job) => (
+                <div className="knowledge-job-row" key={job.id}>
+                  <span>
+                    {`${knowledgeJobTitle(job.kind)}：${knowledgeJobStatusLabel(job.status)} ${job.completedCount}/${job.totalCount}`}
+                    {job.failedCount > 0 ? ` · 失败 ${job.failedCount}` : ''}
+                    {job.failure ? ` · ${job.failure.message}` : ''}
+                  </span>
+                  <div className="knowledge-job-actions">
+                    <button
+                      type="button"
+                      onClick={() => trackAction(openJobDetail(job.id), '查看作业条目')}
+                    >
+                      {jobDetail?.jobId === job.id ? '收起条目' : '查看条目'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {jobDetailLoading && <small>正在读取条目…</small>}
+              {jobDetailError && <p className="inline-message error">{jobDetailError}</p>}
+              {jobDetail && (
+                <ul className="knowledge-job-items">
+                  {jobDetail.items.map((item) => (
+                    <li key={item.id}>
+                      {`${item.fileName ?? item.documentId ?? '条目'} · ${knowledgeJobItemStatusLabel(
+                        item.status,
+                      )} · ${knowledgeJobPhaseLabel(item.phase)}`}
+                      {item.status === 'running' && (item.totalUnits ?? 0) > 0
+                        ? ` ${item.completedUnits}/${item.totalUnits ?? 0}`
+                        : ''}
+                      {item.failure ? ` · ${item.failure.message}` : ''}
+                    </li>
+                  ))}
+                  {jobDetail.items.length === 0 && <li>这条作业没有留下可回看的条目。</li>}
+                </ul>
+              )}
             </section>
           )}
           {message && <p className="inline-message">{message}</p>}
@@ -441,9 +527,9 @@ export function KnowledgePage({
             <div className="knowledge-summary-actions">
               {showingResults && searchStatus ? (
                 <small>
-                  {`本次检索方式：${MODE_LABELS[searchStatus.effectiveMode] ?? searchStatus.effectiveMode}`}
+                  {`本次检索方式：${knowledgeModeLabel(searchStatus.effectiveMode)}`}
                   {searchStatus.degradedReason
-                    ? ` · ${DEGRADED_LABELS[searchStatus.degradedReason] ?? searchStatus.degradedReason}`
+                    ? ` · ${knowledgeDegradedLabel(searchStatus.degradedReason)}`
                     : ''}
                   {` · 向量覆盖 ${searchStatus.coverage.indexedChunks}/${searchStatus.coverage.eligibleChunks}`}
                 </small>
@@ -516,15 +602,8 @@ export function KnowledgePage({
                     type="button"
                     disabled={importing}
                     onClick={() =>
-                      reportAction(
-                        onRefresh(detailDocument).then(() =>
-                          setToast({
-                            tone: 'success',
-                            message: `已刷新「${detailDocument.title}」的本地索引。`,
-                          }),
-                        ),
-                        (error) =>
-                          setToast({ tone: 'error', message: error || '刷新索引失败，请重试。' }),
+                      reportAction(onRefresh(detailDocument), (error) =>
+                        setToast({ tone: 'error', message: error || '刷新索引失败，请重试。' }),
                       )
                     }
                   >
@@ -696,18 +775,11 @@ export function KnowledgePage({
                         )
                       }
                       onRefresh={() =>
-                        reportAction(
-                          onRefresh(document).then(() =>
-                            setToast({
-                              tone: 'success',
-                              message: `已刷新「${document.title}」的本地索引。`,
-                            }),
-                          ),
-                          (error) =>
-                            setToast({
-                              tone: 'error',
-                              message: error || '刷新索引失败，请重试。',
-                            }),
+                        reportAction(onRefresh(document), (error) =>
+                          setToast({
+                            tone: 'error',
+                            message: error || '刷新索引失败，请重试。',
+                          }),
                         )
                       }
                       onRemove={() => setRemovalTarget(document)}

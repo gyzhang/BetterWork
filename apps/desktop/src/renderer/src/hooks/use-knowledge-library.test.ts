@@ -409,7 +409,8 @@ describe('useKnowledgeLibrary 统一检索（KM08）', () => {
     await act(async () => {
       await result.current.onSearch(submit);
     });
-    expect(result.current.message).toContain('本次检索以关键词为主（index-partial）');
+    expect(result.current.message).toContain('本次检索以关键词为主（部分资料未完成向量索引）');
+    expect(result.current.message).not.toContain('index-partial');
     expect(result.current.results).toHaveLength(1);
   });
 
@@ -905,5 +906,132 @@ describe('useKnowledgeLibrary 集合接线（KM11）', () => {
       await result.current.saveDocumentCollections('doc-1', 1, []);
     });
     expect(result.current.message).toContain('分类刚被其他操作更新');
+  });
+});
+
+describe('本机索引动作、作业回看与详情重读（KM15 走查补齐）', () => {
+  it('关键词重建提交 keyword 作业、跟踪并说明不调用模型', async () => {
+    const harness = install();
+    harness.knowledge.job.mockResolvedValueOnce(
+      detailOf(
+        jobOf({ id: 'job-2', kind: 'rebuild-keyword', status: 'succeeded', completedCount: 1 }),
+      ),
+    );
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    await act(async () => {
+      await result.current.rebuildKeyword();
+    });
+    expect(harness.knowledge.rebuildIndex).toHaveBeenCalledWith({ kind: 'keyword' });
+    expect(result.current.message).toBe(
+      '已提交关键词索引重建；不调用模型，向量索引与覆盖状态不受影响。',
+    );
+    await act(async () => {
+      harness.events[0]?.(
+        jobOf({
+          id: 'job-2',
+          kind: 'rebuild-keyword',
+          status: 'succeeded',
+          completedCount: 1,
+        }),
+      );
+      await Promise.resolve();
+    });
+    await flush();
+    expect(result.current.message).toBe('关键词索引重建完成（1/1）。');
+  });
+
+  it('来源检查按单次 200 份上限分批提交，并把批数说清楚', async () => {
+    const harness = install();
+    const ids = Array.from({ length: 201 }, (_unused, index) => `doc-${index}`);
+    harness.knowledge.list.mockResolvedValue(ids.map((id) => documentOf({ id })));
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await act(async () => {
+      result.current.refresh();
+      for (let attempt = 0; attempt < 10 && result.current.documents.length === 0; attempt += 1) {
+        await Promise.resolve();
+      }
+    });
+    expect(result.current.documents).toHaveLength(201);
+    await act(async () => {
+      await result.current.checkAllSources();
+    });
+    expect(harness.knowledge.checkSources).toHaveBeenNthCalledWith(1, {
+      documentIds: ids.slice(0, 200),
+    });
+    expect(harness.knowledge.checkSources).toHaveBeenNthCalledWith(2, {
+      documentIds: ids.slice(200),
+    });
+    expect(result.current.message).toContain('已提交 201 份资料的原件检查（分 2 批）');
+  });
+
+  it('空库时检查全部来源如实说明，不提交空作业', async () => {
+    const harness = install();
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    await act(async () => {
+      await result.current.checkAllSources();
+    });
+    expect(result.current.message).toBe('资料库里现在没有可检查的资料。');
+    expect(harness.knowledge.checkSources).not.toHaveBeenCalled();
+  });
+
+  it('取消的作业留在最近作业里，进行中面板不再挂它', async () => {
+    const harness = install();
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    await act(async () => {
+      await result.current.onImport();
+    });
+    await act(async () => {
+      harness.events[0]?.(jobOf({ status: 'cancelled' }));
+      await Promise.resolve();
+    });
+    expect(result.current.activeJobs).toEqual([]);
+    expect(result.current.recentJobs.map((job) => job.status)).toEqual(['cancelled']);
+  });
+
+  it('展开作业条目回读逐条目阶段与原因，再点收回', async () => {
+    const harness = install();
+    harness.knowledge.job.mockResolvedValueOnce(failedItemDetail());
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    await act(async () => {
+      await result.current.openJobDetail('job-1');
+    });
+    expect(harness.knowledge.job).toHaveBeenCalledWith({ jobId: 'job-1' });
+    expect(result.current.jobDetail?.items.map((item) => item.status)).toEqual([
+      'succeeded',
+      'failed',
+    ]);
+    await act(async () => {
+      await result.current.openJobDetail('job-1');
+    });
+    expect(result.current.jobDetail).toBeUndefined();
+  });
+
+  it('详情打开时作业终态会重读版本与正文，不需要关掉再打开', async () => {
+    const harness = install();
+    harness.knowledge.list.mockResolvedValue([documentOf()]);
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    await act(async () => {
+      await result.current.openDocument(documentOf());
+    });
+    expect(harness.knowledge.listRevisions).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await result.current.onImport();
+    });
+    const revisionsBeforeFinish = harness.knowledge.listRevisions.mock.calls.length;
+    await act(async () => {
+      harness.events[0]?.(jobOf({ status: 'succeeded', completedCount: 1 }));
+      await Promise.resolve();
+    });
+    await flush();
+    // 终态回读必须把详情一起拉回来，而不是只刷新列表。
+    expect(harness.knowledge.listRevisions.mock.calls.length).toBeGreaterThan(
+      revisionsBeforeFinish,
+    );
+    expect(harness.knowledge.preview.mock.calls.length).toBeGreaterThan(1);
   });
 });
