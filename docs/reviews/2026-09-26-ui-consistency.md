@@ -43,6 +43,8 @@
 
 → 归属：新建 `Modal`（含 `Sheet` 变体）基座，收编 `ConfirmationDialog`、`ModelEditorSheet`、放映层、消息中心四处；`PopoverMenu` 继续拥有菜单类浮层。
 
+**2026-09-26 深夜已收口**：`components/Modal.tsx` 落地 `dialog`／`sheet`／`viewer` 三变体，锚定不居中的消息中心复用同文件导出的 `useOverlaySemantics`（只借语义、不借定位）。四处现在共享同一份 inert／Esc／背板关闭／初始焦点／Tab 循环／焦点归还实现；铃铛补上 `aria-haspopup="dialog"` 与 `aria-expanded`，`.sheet-backdrop` 与 `.dialog-backdrop` 两套旧背板类删除，浮层阴影存量棘轮从 6 降到 4（`.modal-panel`、`.popover-menu`、`.toast`、`.action-error-banner`）。新增护栏：渲染层出现 `role="dialog"`／`aria-modal`／`key === 'Escape'`／旧背板类而没接基座即失败（已用探针文件变异验证会红）。
+
 ### 3.2 表单控件没有几何 Token —— 中高
 
 9 处原生 `<select>` 与 `FieldSelect` 并存；输入类控件的 padding / 边框 Token / 圆角在 6 个视图里各写一遍。后果是同一屏里出现两种高度和两种边框色（知识页搜索框 `10px 12px` + `--border` + 圆角 8，模型抽屉 `8px 9px` + `--input-border` + 圆角 7）。
@@ -119,10 +121,10 @@
 - ✅ 组件台账表已落进 docs/10 §10.1（组件名 → 路径 → 用途 → 状态：已落地/缺位/待迁入），「写 UI 交互前先查台账」已写进 `.qoder/rules/betterwork-ui.md` 第一条。
 - ✅ 快改：`MemoryView` 页签补 `role="tablist"/"tab"` 与 `aria-selected`，回归断言见 `MemoryView.test.tsx`。方向键与 roving tabindex 未做——`ContextPanel` 的任务上下文页签同样缺这两项，两者一起等 P2 的 `Tabs` 基座收口，避免在两个页面各写一遍键盘逻辑。
 
-**P1（2–3 天，补最缺的两个基座）**
+**P1（2–3 天，补最缺的两个基座）——Modal 半边已于 2026-09-26 深夜完成**
 
-- `Modal`（含 `Sheet` 变体）基座：inert + 焦点陷阱 + 归还 + Esc + `aria-modal`，从 `ConfirmationDialog` 抽出；迁移 `ModelEditorSheet`、放映层、消息中心四处。**消息中心顺带补齐 `aria-haspopup`/`aria-expanded`**。
-- `Field` + 控件几何 Token（`--control-height` / `--control-padding` / `--control-radius` / `--control-border`），9 处原生 `<select>` 迁到 `FieldSelect`，并加护栏禁止裸 `<select>`。
+- ✅ `Modal`（含 `sheet` 变体）基座：inert + 焦点陷阱 + 归还 + Esc + `aria-modal`，从 `ConfirmationDialog` 抽出；已迁移 `ConfirmationDialog`、`ModelEditorSheet`、放映层、消息中心四处，**消息中心的 `aria-haspopup`/`aria-expanded` 一并补齐**（锚定面板走 `useOverlaySemantics`，不套居中外壳）。
+- ⬜ `Field` + 9 处原生 `<select>` 迁 `FieldSelect`，并加护栏禁止裸 `<select>`。（控件几何档位已在 P0 落地，见 §3.5。）
 
 **P2（3–5 天，收重复结构）**
 

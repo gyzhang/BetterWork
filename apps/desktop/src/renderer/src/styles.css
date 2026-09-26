@@ -27,10 +27,10 @@
   --z-drag-strip: 6;
   --z-notification-overlay: 7;
   --z-notification: 8;
-  --z-sheet: 10;
   --z-popover-backdrop: 11;
   --z-popover: 12;
-  --z-dialog-backdrop: 19;
+  /* 抽屉与对话框自 Modal 基座起同档（docs/10 §9.11）。 */
+  --z-modal-backdrop: 19;
   --z-toast: 30;
   --z-banner: 40;
 }
@@ -3318,31 +3318,56 @@ small {
   color: var(--success);
   font-weight: 700;
 }
-.sheet-backdrop {
+/* 模态与覆盖层基座（docs/10 §10.1）：背板、层级、面板外壳与浮层阴影只在这里定义一次。
+   变体决定几何，各表面类（`.confirmation-dialog`／`.model-sheet`／`.slide-viewer`）
+   只保留自己的排版，不再各自抄一遍 background + border + shadow + 动画。 */
+.modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: var(--z-sheet);
-  background: var(--scrim);
-}
-.dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-dialog-backdrop);
+  z-index: var(--z-modal-backdrop);
   display: grid;
   padding: 24px;
   place-items: center;
   background: var(--scrim);
 }
-.confirmation-dialog {
-  width: min(420px, 100%);
+/* 抽屉贴右边缘；锚定覆盖层（消息中心）不套这层壳，只复用基座的键盘与焦点语义。 */
+.modal-backdrop[data-variant='sheet'] {
+  place-items: stretch end;
+  padding: 0;
+}
+.modal-panel,
+.notification-panel {
+  display: flex;
+  max-height: 100%;
+  flex-direction: column;
+  gap: 12px;
   padding: 24px;
+  overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 16px 40px var(--shadow-color-overlay);
 }
+.modal-panel[data-variant='dialog'] {
+  gap: 8px;
+  width: min(420px, 100%);
+}
+.modal-panel[data-variant='viewer'] {
+  width: min(1080px, 100%);
+  padding: 16px;
+}
+.modal-panel[data-variant='sheet'] {
+  gap: 0;
+  width: min(480px, 100%);
+  height: 100%;
+  padding: 25px;
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: -16px 0 42px var(--shadow-color-strong);
+}
 .confirmation-dialog h2 {
-  margin: 8px 0 10px;
+  /* 纵向节奏归基座的 gap：这里不再自带上下外边距（docs/10 §9.8）。 */
   font-size: 20px;
 }
 .confirmation-dialog-detail {
@@ -3354,7 +3379,7 @@ small {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 24px;
+  margin-top: 16px;
 }
 .danger-confirm-button {
   min-height: 32px;
@@ -3622,17 +3647,10 @@ small {
   font-weight: 600;
 }
 .model-sheet {
-  position: absolute;
-  top: 0;
-  right: 0;
+  /* 外壳（宽度、内边距、左分隔线、抽屉阴影、层级）由 .modal-panel[data-variant=sheet] 负责，
+     这里只剩抽屉自己的排版。 */
   display: flex;
-  width: min(480px, 100%);
-  height: 100%;
-  padding: 25px;
   flex-direction: column;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
-  box-shadow: -16px 0 42px var(--shadow-color-strong);
 }
 .model-sheet header {
   display: flex;
@@ -4215,19 +4233,6 @@ small {
   cursor: zoom-in;
   background: transparent;
   border: 0;
-}
-.slide-viewer {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: min(1080px, 100%);
-  max-height: 100%;
-  padding: 16px;
-  overflow: hidden;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 16px 40px var(--shadow-color-overlay);
 }
 .slide-viewer-bar {
   display: flex;
@@ -5215,19 +5220,16 @@ small {
   line-height: 1;
 }
 .notification-panel {
+  /* 锚定覆盖层：外壳（背景、边框、圆角、浮层阴影、纵向节奏）与 .modal-panel 同一份，
+     这里只留它自己的锚定位置与尺寸（消息中心不居中，贴在铃铛右侧）。 */
   position: absolute;
   left: calc(100% + 10px);
   bottom: 0;
   z-index: var(--z-notification);
-  display: flex;
   width: 360px;
   max-height: 480px;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 16px 40px var(--shadow-color-overlay);
+  gap: 0;
+  padding: 0;
 }
 .notification-overlay {
   position: fixed;
@@ -5594,16 +5596,13 @@ select,
 .context-panel {
   animation: betterwork-slide-in-right var(--motion-overlay) var(--motion-easing);
 }
-.sheet-backdrop {
+.modal-backdrop {
   animation: betterwork-fade-in var(--motion-overlay) var(--motion-easing);
 }
-.dialog-backdrop {
-  animation: betterwork-fade-in var(--motion-overlay) var(--motion-easing);
-}
-.confirmation-dialog {
+.modal-panel {
   animation: betterwork-rise-in var(--motion-expand) var(--motion-easing);
 }
-.model-sheet {
+.modal-panel[data-variant='sheet'] {
   animation: betterwork-slide-in-right var(--motion-overlay) var(--motion-easing);
 }
 .notification-panel {

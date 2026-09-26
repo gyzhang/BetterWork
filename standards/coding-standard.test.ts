@@ -592,14 +592,15 @@ describe('界面间距与骨架纪律', () => {
  * 它记录的是「还没迁进基座的存量」，不是「允许继续这样写」。需要新浮层时先复用
  * `PopoverMenu`，或把待迁入的基座标注在 reason 里，而不是在这里加一行豁免。
  */
-const OVERLAY_SHADOW_BASELINE = 6;
+const OVERLAY_SHADOW_BASELINE = 4;
 const OVERLAY_SURFACES: { readonly match: string; readonly reason: string }[] = [
-  { match: '.popover-menu', reason: '浮层基座（ADR-0012）' },
-  { match: '.confirmation-dialog', reason: '模态确认框' },
-  { match: '.notification-panel', reason: '待迁入 Modal 基座（缺 aria-expanded/Esc/焦点）' },
+  { match: '.popover-menu', reason: '菜单类浮层基座（ADR-0012）' },
+  {
+    match: '.modal-panel',
+    reason: '模态与覆盖层基座（docs/10 §10.1）：确认框、模型抽屉、放映层、消息中心共用这一层外壳',
+  },
   { match: '.toast', reason: '全局结果提示' },
   { match: '.action-error-banner', reason: '全局错误横幅' },
-  { match: '.slide-viewer', reason: '待迁入 Modal 基座（自写键盘与焦点）' },
 ];
 
 describe('浮层基座纪律', () => {
@@ -644,6 +645,40 @@ describe('浮层基座纪律', () => {
       offenders,
       '浮层字号跟随触发控件；写死会让菜单比自己的触发按钮还大（docs/10 §10.1）',
     ).toEqual([]);
+  });
+
+  it('模态语义只有一处实现，页面不得再自写背板与 Esc', () => {
+    // 四套并存的后果已经付过学费：`ModelEditorSheet` 只有 aria-modal 外壳、
+    // 放映层自己写键盘、消息中心连 aria-expanded 都没有（docs/reviews/2026-09-26-ui-consistency.md §3.1）。
+    // 判据是「写了一遍 dialog 语义，却没接基座」：接了 `Modal` 或 `useOverlaySemantics`
+    // 的锚定覆盖层（消息中心留在触发器局部定位）不算自造。
+    const owners = [
+      'apps/desktop/src/renderer/src/components/Modal.tsx',
+      'apps/desktop/src/renderer/src/components/PopoverMenu.tsx',
+    ];
+    const rendererFiles = pathsUnder('apps/desktop/src/renderer/').filter(
+      (relative) =>
+        /\.(tsx|ts)$/.test(relative) &&
+        !relative.endsWith('.test.tsx') &&
+        !relative.endsWith('.test.ts'),
+    );
+    const offenders: string[] = [];
+    for (const relative of rendererFiles) {
+      if (owners.includes(relative)) continue;
+      const body = read(relative);
+      const usesBase =
+        body.includes('useOverlaySemantics') ||
+        /from '.*\/Modal'/.test(body) ||
+        /from '.*\/PopoverMenu'/.test(body);
+      const bespoke: string[] = [];
+      if (!usesBase && /role="dialog"|role="alertdialog"/.test(body))
+        bespoke.push('自写 role=dialog');
+      if (!usesBase && /aria-modal/.test(body)) bespoke.push('自写 aria-modal');
+      if (!usesBase && /key === 'Escape'/.test(body)) bespoke.push('自写 Esc 处理');
+      if (/sheet-backdrop|dialog-backdrop/.test(body)) bespoke.push('引用已收编的旧背板类');
+      if (bespoke.length > 0) offenders.push(`${relative}：${bespoke.join('、')}`);
+    }
+    expect(offenders, '模态与覆盖层请复用 Modal／useOverlaySemantics（docs/10 §10.1）').toEqual([]);
   });
 });
 

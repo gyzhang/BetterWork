@@ -485,13 +485,12 @@ UI Foundation 首批提供四套成对色系：
 | `--z-context-panel` | 4 | 上下文面板 |
 | `--z-drag-strip` | 6 | 标题拖拽带 |
 | `--z-notification-overlay` / `--z-notification` | 7 / 8 | 消息中心背板与面板 |
-| `--z-sheet` | 10 | 抽屉背板 |
 | `--z-popover-backdrop` / `--z-popover` | 11 / 12 | 浮层基座背板与菜单 |
-| `--z-dialog-backdrop` | 19 | 模态背板 |
+| `--z-modal-backdrop` | 19 | 模态基座背板（对话框、抽屉、放映层同一档） |
 | `--z-toast` | 30 | 全局结果提示 |
 | `--z-banner` | 40 | 全局错误横幅 |
 
-相对顺序沿用改造前的实际叠放结果，唯一有意改变的是**模态一档高于浮层**（此前模态背板与菜单同为 12，靠 DOM 顺序决胜）。待 `Modal` 基座落地后，`--z-sheet` 与 `--z-dialog-backdrop` 应合并为同一档。
+相对顺序沿用改造前的实际叠放结果，两处有意改变：**模态一档高于浮层**（此前模态背板与菜单同为 12，靠 DOM 顺序决胜）；`Modal` 基座落地后**抽屉与对话框背板合并为 `--z-modal-backdrop` 一档**（原 `--z-sheet` 10 与 `--z-dialog-backdrop` 19 并存没有语义依据）。面板本身不设 `z-index`，由背板这一层决定高低。
 
 ## 10. 组件体系
 
@@ -519,10 +518,10 @@ UI Foundation 首批提供四套成对色系：
 | 页面骨架 PageHeader / PageToolbar / ScrollRegion / ViewContainer | `components/layout/` | 已落地；骨架容器自带纵向间距机制（§9.8），页面不得覆写 |
 | 浮层基座 PopoverMenu（含 Menu/Popover/Dropdown） | `components/PopoverMenu.tsx` | 已落地：背板收起、Esc、焦点归还、方向键、视口碰撞、字号镜像触发控件 |
 | 下拉选择 FieldSelect | `components/FieldSelect.tsx` | 已落地，走 PopoverMenu；**仍有 9 处原生 `<select>` 待迁** |
-| 模态确认 ConfirmationDialog | `components/ConfirmationDialog.tsx` | 已落地：inert + 焦点陷阱 + 归还 + Esc |
+| 模态基座 Modal（dialog／sheet／viewer 三变体）＋ `useOverlaySemantics` | `components/Modal.tsx` | 已落地：inert 应用主体、Esc、背板点击、初始焦点、Tab 循环、焦点归还、`role=dialog`/`alertdialog`。确认框、模型抽屉、幻灯片放映层、消息中心四处已收编 |
+| 模态确认 ConfirmationDialog | `components/ConfirmationDialog.tsx` | 已落地，走 Modal 的 `alertdialog` 变体；初始焦点落在「取消」 |
 | 短时反馈 TransientToast / 全局 ToastHost | `components/` | 已落地；两套不可混用（§11.5.1） |
 | 空状态 EmptyState | `components/EmptyState.tsx` | 已落地，但有 6 处内联占位绕开它 |
-| Modal / Sheet | — | **缺位**：现存 3 套自造模态（抽屉、放映层、消息中心），P1 建基座后收编 |
 | Tabs / SegmentedControl | — | **缺位**：现有两处只有 `role` 与 `aria-selected`，无 roving tabindex 与方向键 |
 | Button / Input / Textarea | 只有样式类，无组件 | 几何已统一取 `--control-*` 档位（§9.10），是否组件化随 P1 的 Field 一起定 |
 | Switch / Tooltip / Progress / Skeleton | — | 未落地 |
@@ -531,7 +530,9 @@ UI Foundation 首批提供四套成对色系：
 
 **浮层一律复用 `PopoverMenu` 基座**：下拉、菜单、选择器等脱离文档流的浮层必须走 `components/PopoverMenu.tsx`——背板收起、Esc、焦点归还、方向键导航与视口碰撞处理都在基座里。不得用 `<details>` 或 `position:absolute` 面板自造：2026-09-26 知识卡片的「更多」正是这样写的，三个症状同源——点外面不收起（`<details>` 没有这个语义）、能同时打开两张卡片的菜单、菜单项继承正文 14px 而比自己的 12px 触发按钮还大。基座会把菜单字号镜像成触发控件的计算值，让浮层与触发器看起来属于同一个控件；破坏性菜单项用 `tone: 'danger'` 表达，颜色仍由 Token 决定。护栏锁两条：`.popover-menu-item` 不得自带字号；overlay 阴影只允许出现在登记过的浮层表面（`standards/coding-standard.test.ts`）。
 
-落地现状：按钮、输入、页签、Sheet、Toast、内联提示、空状态都有对应样式；页面骨架已由 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 负责结构，`KnowledgeDocumentCard` 负责知识条目的领域呈现，聚焦环用 `:focus-visible` 统一实现。破坏性确认统一使用 `ConfirmationDialog`：以 Portal 挂到应用外、背景设为 inert、初始焦点落在取消、支持 Escape 与 Tab 焦点循环、关闭后恢复触发控件焦点。Popover 已落地为 `PopoverMenu` 基座（[ADR-0012](adr/0012-composer-capability-binding.md)）。尚未落地的有 Tooltip、Progress、Skeleton、Switch。
+**模态与覆盖层一律复用 `Modal` 基座**：会夺走整页焦点的表面（确认框、抽屉、放映层）走 `components/Modal.tsx` 的 `dialog`／`sheet`／`viewer` 三个变体；锚定在触发器局部、不居中的覆盖层（消息中心）用同文件导出的 `useOverlaySemantics`，只借语义不借定位。inert 应用主体、Esc、背板点击关闭、初始焦点、Tab 循环、焦点归还、`role=dialog`/`alertdialog` 与 `aria-modal` 全部只有一处实现——此前这里是四套并存：确认框什么都有、模型抽屉只有 `aria-modal` 外壳、放映层自己写键盘、消息中心连 `aria-expanded` 都没有。触发元素必须带 `aria-haspopup="dialog"` 与 `aria-expanded`（消息中心的铃铛已按此补齐）。护栏锁两条：`.modal-panel` 之外的表面不得自带浮层阴影（存量按棘轮只降不升）；渲染层里出现 `role="dialog"`／`aria-modal`／`key === 'Escape'`／旧背板类而没接 `Modal` 或 `useOverlaySemantics` 即失败。
+
+落地现状：按钮、输入、页签、Sheet、Toast、内联提示、空状态都有对应样式；页面骨架已由 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 负责结构，`KnowledgeDocumentCard` 负责知识条目的领域呈现，聚焦环用 `:focus-visible` 统一实现。破坏性确认统一使用 `ConfirmationDialog`，它以 `Modal` 的 `alertdialog` 变体实现：Portal 挂到应用外、背景 inert、初始焦点落在取消、Esc 与 Tab 焦点循环、关闭后恢复触发控件焦点。Popover 已落地为 `PopoverMenu` 基座（[ADR-0012](adr/0012-composer-capability-binding.md)）。尚未落地的有 Tooltip、Progress、Skeleton、Switch。
 
 2026-09-26 的[UI 一致性评估](reviews/2026-09-26-ui-consistency.md)给出本节台账的完整核对结果（哪些模式各写了几遍、缺哪个基座、分期收口计划）；新增基座或迁移自造控件前先查该报告。
 
