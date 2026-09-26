@@ -697,6 +697,27 @@ const CHECKBOX_ROW_LABEL_SELECTORS: { readonly match: string; readonly reason: s
   { match: '.skill-trust-box label', reason: 'Skill 信任确认行：框在左、说明在右' },
 ];
 
+/** 已被基座收编的自造类：样式不得复活（Badge 收 chip、EmptyState 收占位）。 */
+const RETIRED_UTILITY_CLASSES: { readonly pattern: RegExp; readonly name: string }[] = [
+  { pattern: /\.skill-chip\b/, name: '.skill-chip' },
+  { pattern: /\.dependency-status-chip\b/, name: '.dependency-status-chip' },
+  { pattern: /\.memory-status-badge\b/, name: '.memory-status-badge' },
+  { pattern: /\.empty-runs\b/, name: '.empty-runs' },
+  { pattern: /\.empty-models\b/, name: '.empty-models' },
+  { pattern: /\.setting-placeholder\b/, name: '.setting-placeholder' },
+  { pattern: /\.notification-empty\b/, name: '.notification-empty' },
+];
+
+/** 把 retired 清单变成一条断言：任一 CSS 文件里都不得再出现这些选择器。 */
+function assertRetiredClassesAbsent(offenders: string[]): void {
+  for (const relative of cssPaths()) {
+    for (const declaration of declarationsOf(relative)) {
+      const hit = RETIRED_UTILITY_CLASSES.find((entry) => entry.pattern.test(declaration.selector));
+      if (hit) offenders.push(`${relative} → ${hit.name}`);
+    }
+  }
+}
+
 describe('表单字段基座纪律', () => {
   const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
   expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
@@ -890,20 +911,13 @@ describe('徽标与档位纪律', () => {
   const declarations = declarationsOf(styles ?? '');
 
   it('状态徽标不得再回到各页自造的 chip 类', () => {
-    // §3.4 记着 6 套 chip 各写一遍的下场；Badge 基座落地后这三个类的样式不得复活。
-    const retired = [
-      { pattern: /\.skill-chip\b/, name: '.skill-chip' },
-      { pattern: /\.dependency-status-chip\b/, name: '.dependency-status-chip' },
-      { pattern: /\.memory-status-badge\b/, name: '.memory-status-badge' },
-    ];
+    // §3.4 记着 6 套 chip 各写一遍的下场；Badge 基座落地后这些类的样式不得复活。
     const offenders: string[] = [];
-    for (const relative of cssPaths()) {
-      for (const declaration of declarationsOf(relative)) {
-        const hit = retired.find((entry) => entry.pattern.test(declaration.selector));
-        if (hit) offenders.push(`${relative} → ${hit.name}`);
-      }
-    }
-    expect(offenders, '状态徽标请复用 Badge（docs/10 §10.1）').toEqual([]);
+    assertRetiredClassesAbsent(offenders);
+    expect(
+      offenders.filter((entry) => /chip|badge/.test(entry)),
+      '状态徽标请复用 Badge（docs/10 §10.1）',
+    ).toEqual([]);
   });
 
   it('密集高度档位的裸值只降不升', () => {
@@ -927,6 +941,16 @@ describe('徽标与档位纪律', () => {
       current,
       `密集高度裸值 ${current} 处，比基线 ${DENSE_HEIGHT_BASELINE.length} 多——清单不是豁免清单`,
     ).toBeLessThanOrEqual(DENSE_HEIGHT_BASELINE.length);
+  });
+
+  it('空态占位不得再回到各页自造的类', () => {
+    // §2 记着 6 处内联占位绕开 EmptyState：同一个「这里还没有东西」有四种尺寸与配色。
+    const offenders: string[] = [];
+    assertRetiredClassesAbsent(offenders);
+    expect(
+      offenders.filter((entry) => /empty|placeholder/.test(entry)),
+      '空态请复用 EmptyContext／EmptyNotice（docs/10 §10.1）',
+    ).toEqual([]);
   });
 
   it('胶囊圆角只允许取档位', () => {

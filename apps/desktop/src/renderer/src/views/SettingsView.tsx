@@ -13,6 +13,7 @@ import type {
 } from '../appearance';
 import { colorSchemes } from '../appearance';
 import { Badge } from '../components/Badge';
+import { EmptyNotice } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
 import { TransientToast } from '../components/TransientToast';
@@ -108,10 +109,10 @@ export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
           <section className="settings-section">
             <p className="eyebrow">通用</p>
             <h2>工作偏好</h2>
-            <div className="setting-placeholder">
-              <strong>通用设置将在后续阶段开放</strong>
-              <p>工作目录、语言、数据与更新设置会在这里统一管理。</p>
-            </div>
+            <EmptyNotice
+              title="通用设置将在后续阶段开放"
+              detail="工作目录、语言、数据与更新设置会在这里统一管理。"
+            />
           </section>
         )}
       </section>
@@ -156,10 +157,10 @@ export function ModelSettings({
       </div>
       <div className="model-list">
         {models.length === 0 ? (
-          <div className="empty-models">
-            <strong>尚未配置模型</strong>
-            <p>添加一个 OpenAI-compatible 服务后，即可从教学链路切换到真实模型。</p>
-          </div>
+          <EmptyNotice
+            title="尚未配置模型"
+            detail="添加一个 OpenAI-compatible 服务后，即可从教学链路切换到真实模型。"
+          />
         ) : (
           models.map((model) => {
             const isDefault = defaultModelIds.get(model.role) === model.id;
@@ -515,10 +516,10 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
       {state.loading ? (
         <p className="muted-text">正在加载连接…</p>
       ) : state.connections.length === 0 ? (
-        <div className="setting-placeholder">
-          <strong>还没有 MCP 连接</strong>
-          <p>添加一个 stdio 服务后，在专家配置或任务资料面板选择工具。</p>
-        </div>
+        <EmptyNotice
+          title="还没有 MCP 连接"
+          detail="添加一个 stdio 服务后，在专家配置或任务资料面板选择工具。"
+        />
       ) : (
         <div className="mcp-connection-list">
           {state.connections.map((connection) => (

@@ -16,6 +16,7 @@ trigger: glob: apps/desktop/src/renderer/**/*.tsx,ts,css
 - `gap` / `row-gap` / `column-gap` 的像素取值只能是 4 / 8 / 12 / 16 / 24 / 32 六档，由护栏强制；要加档位先改 docs/10 §9.8。
 - **界面功能图标一律使用内联 SVG 描边图标**（图标集在 `apps/desktop/src/renderer/src/icons.tsx`，`currentColor`、统一 24 网格与笔画粗细）：禁止用 Unicode 字符或 emoji 充当系统操作、导航、按钮等界面图标；新增图标先进图标集再使用，品牌字标与格式徽标（MD/PDF）除外。
 - **浮层一律复用 `PopoverMenu` 基座**（docs/10 §10.1）：下拉、菜单、选择器不得用 `<details>` 或 `position:absolute` 面板自造；菜单字号由基座镜像触发控件，破坏性菜单项用 `tone: 'danger'`。护栏锁「`.popover-menu-item` 不自带字号」与「overlay 阴影只允许登记过的浮层表面」。
+- **空态一律用 `EmptyContext`（区域级，可换图标）或 `EmptyNotice`（行内与小节级）**（`components/EmptyState.tsx`，docs/10 §10.1）：不得再写 `.empty-*`／`.setting-placeholder` 之类的自造占位类。
 - **状态徽标一律用 `Badge`**（`components/Badge.tsx`，docs/10 §10.1）：只读状态文字用 `tone` × `shape` 表达，不得再写 `*-chip`／`*-badge` 自造一套外观；胶囊圆角一律 `var(--radius-pill)`，24–40px 密集高度不得新增裸值（护栏按待收敛清单只降不升）。
 - **页签一律用 `Tabs`、切换按钮组一律用 `SegmentedControl`**（`components/Tabs.tsx`，docs/10 §10.1）：`tablist`／`tab`／`aria-selected`、roving tabindex 与左右方向键只有一份实现，页面不得再手拼；选中态样式只住在 `.tabs` 与 `.segmented-control` 上。
 - **表单字段一律用 `Field` 基座、下拉一律用 `FieldSelect`**（docs/10 §10.1）：标签 + 控件 + 说明的纵向结构只有一份，页面不得再写 `label { gap / font-size }` 各调一遍；需要说明文字时给 `controlId` 走 `htmlFor` 关联。原生 `<select>` 已全仓清零，不得回归——它的弹层由系统绘制，字号与暗色都脱离 Token。护栏锁「渲染层出现 `<select>`／`<option>`」与「`label` 选择器自带 gap／margin」。

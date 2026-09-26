@@ -7,6 +7,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom';
 
 import { ConfirmationDialog } from './components/ConfirmationDialog';
+import { EmptyContext } from './components/EmptyState';
 import { useOverlaySemantics } from './components/Modal';
 import { AlertIcon, BellIcon, CheckIcon, CloseIcon, InfoIcon, WarningIcon } from './icons';
 import { trackAction } from './lib/async-action';
@@ -260,13 +261,11 @@ const NotificationPanel = ({
         </div>
         <div className="notification-list">
           {notifications.length === 0 ? (
-            <div className="notification-empty">
-              <span aria-hidden="true">
-                <BellIcon size={16} />
-              </span>
-              <strong>暂无通知</strong>
-              <p>任务与导入的结果会保存在这里。</p>
-            </div>
+            <EmptyContext
+              title="暂无通知"
+              detail="任务与导入的结果会保存在这里。"
+              icon={<BellIcon size={16} />}
+            />
           ) : (
             notifications.map((item) => (
               <button

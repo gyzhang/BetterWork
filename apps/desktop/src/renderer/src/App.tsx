@@ -36,6 +36,7 @@ import {
 import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { ContextPanel } from './components/ContextPanel';
 import { DiscussionCheckpointPanel } from './components/DiscussionCheckpointPanel';
+import { EmptyNotice } from './components/EmptyState';
 import { PageHeader } from './components/layout/PageHeader';
 import { MemoryCaptureSource } from './components/MemoryCaptureSource';
 import { MemoryEditor, type MemoryEditorSubmission } from './components/MemoryEditor';
@@ -1297,7 +1298,7 @@ export function App(): React.JSX.Element {
         <div className="sidebar-divider" />
         <p className="section-label">最近任务</p>
         <div className="run-list">
-          {recentTasks.length === 0 && <p className="empty-runs">你的任务会保存在这里。</p>}
+          {recentTasks.length === 0 && <EmptyNotice title="你的任务会保存在这里。" />}
           {recentTasks.map((task) => (
             <button
               key={task.id}

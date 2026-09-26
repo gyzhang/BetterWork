@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 
 import { Badge } from '../components/Badge';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
+import { EmptyNotice } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
 import { PageToolbar } from '../components/layout/PageToolbar';
@@ -464,12 +465,12 @@ export function MemoryPage({
       )}
 
       {state.loading && state.memories.length === 0 ? (
-        <div className="setting-placeholder">正在加载记忆…</div>
+        <EmptyNotice title="正在加载记忆…" />
       ) : state.memories.length === 0 && appliedQuery === '' ? (
-        <div className="setting-placeholder">
-          <strong>还没有长期记忆</strong>
-          <p>在这里记录稳定的偏好和工作方法，下一次任务会按适用范围与来源状态决定是否带入。</p>
-        </div>
+        <EmptyNotice
+          title="还没有长期记忆"
+          detail="在这里记录稳定的偏好和工作方法，下一次任务会按适用范围与来源状态决定是否带入。"
+        />
       ) : (
         <>
           <PageToolbar ariaLabel="记忆检索与分组">

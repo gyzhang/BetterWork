@@ -28,7 +28,7 @@
 | 消息中心浮层 | **自造，且缺语义** | `notifications.tsx:225-227`：`.notification-overlay` + `.notification-panel role="dialog"`，触发器**无 `aria-haspopup`/`aria-expanded`**，全文件无 Escape 分支、无焦点管理 |
 | Tabs | 三套语义（见 §3.3） | `ContextPanel.tsx:203,215` 正确 `role=tablist/tab`；`MemoryView.tsx:496` 只有 `aria-selected` 无 role |
 | Toast | ✅ 两套且职责已分（`TransientToast` / `ToastHost`），有护栏 | docs/10 §11.5.1、`SkillsView.test.tsx` |
-| EmptyState | 基座已有，**6 处绕开** | `SettingsView.tsx:156`(`.empty-models`)、`SettingsView.tsx:508` 与 `MemoryView.tsx:463`(`.setting-placeholder`)、`App.tsx:1300`(`.empty-runs`)、`notifications.tsx:244`、`WorkspaceBrief.test`/`DependencyPanel.tsx:162` |
+| EmptyState | **2026-09-26 深夜已收口**（6 处内联占位全部迁入 `EmptyContext`／新增 `EmptyNotice`） | `SettingsView.tsx:156`(`.empty-models`)、`SettingsView.tsx:508` 与 `MemoryView.tsx:463`(`.setting-placeholder`)、`App.tsx:1300`(`.empty-runs`)、`notifications.tsx:244`、`WorkspaceBrief.test`/`DependencyPanel.tsx:162` |
 | Switch / Tooltip / Progress / Skeleton | ❌ 未落地 | docs/10 §10.1 落地现状已如实登记 |
 
 ---
@@ -130,7 +130,7 @@
 
 - ⬜ `ListRow` 基座：§3.4 的 9 套行几何逐类迁移（`Badge` 半边已完成，见 §3.4）。
 - ✅ 档位与棘轮：`--radius-tag`／`--radius-pill` 立档，样式表内字面 `999px` 清零（护栏锁）；与三档同值的密集高度裸值 12 处换成 `--control-height*`，余下 16 处不同档（23／26／30／34／40）登记进 `DENSE_HEIGHT_BASELINE` 待收敛清单，只降不升。是否把 26 并入 28、30 并入 32 需要产品定档，未擅自改。
-- ⬜ 空/加载态全部走 `EmptyState`（6 处内联占位待收）。
+- ✅ 空态全部走 `EmptyState`：6 处内联占位收编（区域级 `EmptyContext` 加 `icon` 参，行内与小节级新增 `EmptyNotice` 的 line／block 两变体），四个自造占位类的样式删除并由护栏锁死不得复活。行内加载提示（如「正在计算依赖计划…」）留在 `muted-text` 状态行，不塞进空态块——它表达的是「正在忙」而不是「这里没有东西」。
 - ✅ `Tabs` / `SegmentedControl` 分两个基座落地（同在 `components/Tabs.tsx`），`Tabs` 自带左右方向键与 roving tabindex，一次性收掉 `MemoryView` 与 `ContextPanel` 两处页签；`SkillsView` 的视图模式切换也显式收进 `SegmentedControl`。密集高度顺带收了两条：页签与切换组的 29／30px 裸值改取 `--control-height-sm`，圆角改取 `--control-radius`。
 
 **P3（持续）**

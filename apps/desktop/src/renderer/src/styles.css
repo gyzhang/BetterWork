@@ -507,12 +507,6 @@ small {
   min-height: 0;
   overflow: auto;
 }
-.empty-runs {
-  padding: 8px 9px;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
 .run-item {
   display: flex;
   flex-direction: column;
@@ -2470,18 +2464,25 @@ small {
 .model-actions .danger-text {
   color: var(--danger);
 }
-.empty-models,
-.setting-placeholder {
-  padding: 24px 4px;
+/* === EmptyNotice：列表与小节级占位（docs/10 §10.1） ===
+   区域级居中带图标的空态是 `.empty-context`，这里管放不下的两种小尺寸。 */
+.empty-notice {
   color: var(--text-secondary);
 }
-.empty-models strong,
-.setting-placeholder strong {
+.empty-notice[data-variant='line'] {
+  padding: 8px 9px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.empty-notice[data-variant='block'] {
+  padding: 24px 4px;
+}
+.empty-notice strong {
   color: var(--text-primary);
   font-size: 13px;
 }
-.empty-models p,
-.setting-placeholder p {
+.empty-notice[data-variant='block'] p {
   margin-top: 6px;
   font-size: 12px;
   line-height: 1.6;
@@ -5246,34 +5247,6 @@ small {
 .notification-item small {
   display: block;
   margin-top: 4px;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-.notification-empty {
-  display: flex;
-  min-height: 180px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary);
-  text-align: center;
-}
-.notification-empty > span {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  margin-bottom: 10px;
-  place-items: center;
-  color: var(--text-muted);
-  background: var(--surface-raised);
-  border-radius: 10px;
-}
-.notification-empty strong {
-  color: var(--text-primary);
-  font-size: 12px;
-}
-.notification-empty p {
-  margin-top: 5px;
   color: var(--text-muted);
   font-size: 12px;
 }

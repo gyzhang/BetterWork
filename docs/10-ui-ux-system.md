@@ -527,7 +527,7 @@ UI Foundation 首批提供四套成对色系：
 | 模态确认 ConfirmationDialog | `components/ConfirmationDialog.tsx` | 已落地，走 Modal 的 `alertdialog` 变体；初始焦点落在「取消」 |
 | 状态徽标 Badge（tone × shape） | `components/Badge.tsx` | 已落地：技能卡状态片、依赖面板环境片、记忆状态片、MCP 工具名片四套自造 chip 合并；图形化标识（格式徽标、未读角标）不在此基座内，按字号护栏登记 |
 | 短时反馈 TransientToast / 全局 ToastHost | `components/` | 已落地；两套不可混用（§11.5.1） |
-| 空状态 EmptyState | `components/EmptyState.tsx` | 已落地，但有 6 处内联占位绕开它 |
+| 空状态 EmptyContext／EmptyNotice／EmptyPage／LoadingPage／ErrorPage | `components/EmptyState.tsx` | 已落地：6 处内联占位（侧栏最近任务、模型清单、通用设置、MCP 连接、记忆清单与加载行、消息中心）2026-09-26 深夜全部收编；`EmptyContext` 管区域级、`EmptyNotice` 管行内与小节级 |
 | 页签 Tabs（tablist + roving tabindex + 方向键） | `components/Tabs.tsx` | 已落地：左右方向键与 Home／End 切换并把焦点带过去，只有选中页签进 Tab 顺序。记忆页分组与任务上下文两处已收编 |
 | 切换按钮组 SegmentedControl（group + aria-pressed） | `components/Tabs.tsx` | 已落地：技能页卡片／列表模式已收编；与页签的分工是「切换同一片内容的呈现方式」 |
 | Button / Input / Textarea | 只有样式类，无组件 | 几何取 `--control-*` 档位（§9.10），结构由 `Field` 负责；不再单独组件化，避免只为包一层壳而增加第二处真相 |
@@ -538,6 +538,8 @@ UI Foundation 首批提供四套成对色系：
 **浮层一律复用 `PopoverMenu` 基座**：下拉、菜单、选择器等脱离文档流的浮层必须走 `components/PopoverMenu.tsx`——背板收起、Esc、焦点归还、方向键导航与视口碰撞处理都在基座里。不得用 `<details>` 或 `position:absolute` 面板自造：2026-09-26 知识卡片的「更多」正是这样写的，三个症状同源——点外面不收起（`<details>` 没有这个语义）、能同时打开两张卡片的菜单、菜单项继承正文 14px 而比自己的 12px 触发按钮还大。基座会把菜单字号镜像成触发控件的计算值，让浮层与触发器看起来属于同一个控件；破坏性菜单项用 `tone: 'danger'` 表达，颜色仍由 Token 决定。护栏锁两条：`.popover-menu-item` 不得自带字号；overlay 阴影只允许出现在登记过的浮层表面（`standards/coding-standard.test.ts`）。
 
 **模态与覆盖层一律复用 `Modal` 基座**：会夺走整页焦点的表面（确认框、抽屉、放映层）走 `components/Modal.tsx` 的 `dialog`／`sheet`／`viewer` 三个变体；锚定在触发器局部、不居中的覆盖层（消息中心）用同文件导出的 `useOverlaySemantics`，只借语义不借定位；但借用者必须把覆盖层 portal 到 `document.body`——被 `inert` 的是整个 `<main>`，2026-09-26 消息中心留在壳内时面板与背板一起被 pointer-events 锁死，滚动、点按钮、点外面全部失效，只剩挂在 window 上的 Esc 还能用。inert 应用主体、Esc、背板点击关闭、初始焦点、Tab 循环、焦点归还、`role=dialog`/`alertdialog` 与 `aria-modal` 全部只有一处实现——此前这里是四套并存：确认框什么都有、模型抽屉只有 `aria-modal` 外壳、放映层自己写键盘、消息中心连 `aria-expanded` 都没有。触发元素必须带 `aria-haspopup="dialog"` 与 `aria-expanded`（消息中心的铃铛已按此补齐）。护栏锁两条：`.modal-panel` 之外的表面不得自带浮层阴影（存量按棘轮只降不升）；渲染层里出现 `role="dialog"`／`aria-modal`／`key === 'Escape'`／旧背板类而没接 `Modal` 或 `useOverlaySemantics` 即失败。
+
+**空态一律用 `EmptyContext`／`EmptyNotice`**：区域级（整块内容区）用 `EmptyContext`——居中、带图标、吃掉整块高度，图标可按语义替换；放不下那种尺寸的列表行与小节用 `EmptyNotice`——只给一行说明，或标题加一句解释。此前侧栏、模型清单、通用设置、MCP 连接、记忆清单、消息中心六处各写各的占位类（`.empty-runs`／`.empty-models`／`.setting-placeholder`／`.notification-empty`），同一个「这里还没有东西」有四种尺寸与配色。护栏锁这些类不得复活。
 
 **状态徽标一律用 `Badge`**：一小段只读状态文字（已信任／已就绪／已过期）走 `components/Badge.tsx` 的 `tone`（neutral／brand／warning／danger／outline）× `shape`（pill／tag），颜色与圆角仍只取语义 Token。此前 6 套 chip 各写 padding、圆角与配色组合，同一个「已启用」在技能卡与依赖面板里长得不同（§3.4）。靠字形与小于 12px 字号成立的图形化标识（MD/PDF 徽标、未读数角标）不算状态徽标，留在原类名并按字号护栏登记。护栏锁三条：`.skill-chip`／`.dependency-status-chip`／`.memory-status-badge` 的样式不得复活；胶囊圆角一律 `var(--radius-pill)`；24–40px 高度裸值只降不升。
 
