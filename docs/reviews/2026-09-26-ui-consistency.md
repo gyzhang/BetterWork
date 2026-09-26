@@ -51,7 +51,7 @@
 
 ### 3.3 Tabs 语义三套 —— 中
 
-`ContextPanel` 是正确实现；`MemoryView.tsx:491-497` 在普通 `<button>` 上写 `aria-selected` 而无 `role="tab"`，这个属性对该角色无效，读屏软件不会播报选中态，也没有左右键切换。`SkillsView.tsx:154` 的 `role="group"` + `aria-pressed` 是视图模式切换，语义上属于另一类（切换按钮组），**不算错**，但应当显式命名这个模式而不是每次重新发明。
+`ContextPanel.tsx:203,215` 有 `role="tablist"/"tab"` + `aria-selected`，语义角色正确，但**同样缺 roving tabindex 与左右方向键**（WAI-ARIA 页签模式要求方向键切换、Tab 只进出页签列表）；`MemoryView.tsx:491-497` 此前更严重——在普通 `<button>` 上写 `aria-selected` 而无 `role="tab"`，该属性对这个角色无效，读屏不会播报选中态（2026-09-26 晚已补 `role="tablist"/"tab"`）。`SkillsView.tsx:154` 的 `role="group"` + `aria-pressed` 是视图模式切换，语义上属于另一类（切换按钮组），**不算错**，但应当显式命名这个模式而不是每次重新发明。
 
 → 归属：`Tabs` 基座（tablist + roving tabindex + 方向键）；`SegmentedControl` 基座（group + aria-pressed）。
 
@@ -77,7 +77,11 @@
 
 ### 3.5 视觉刻度没有 Token —— 中
 
-`styles.css` 实测：`min-height` **21 种**取值（控件档混用 23/25/26/28/29/30/32/34/36/40）、`border-radius` **12 种**（5/6/7/8/9/10/12/999/4/3/50%/0）、`z-index` **10 种且无层级表**、焦点环 **3 种写法**（`outline: 2px solid var(--focus-ring)` ×6、`outline: 1px` ×1、`box-shadow: 0 0 0 4px var(--brand-soft)` ×3）。另有 `.text-button` 在 654 与 974 **重复定义两次**。
+`styles.css` 实测（本轮改造前）：`min-height` 21 种取值（控件档混用 23/25/26/28/29/30/32/34/36/40）、`border-radius` 12 种（5/6/7/8/9/10/12/999/4/3/50%/0）、`z-index` 10 种且无层级表、焦点环**两种**写法（`outline: 2px solid var(--focus-ring)` ×8、`outline: 1px solid var(--focus-ring)` ×1）。另有 `.text-button` 在 654 与 974 **重复定义两次**：后者覆盖高度与背景、前者留下边框，实际渲染成"带边框的 25px 小胶囊"，既不是文字按钮也不是次级按钮，且没有任何报错。
+
+> 核实修正：初稿把 `box-shadow: 0 0 0 4px var(--brand-soft)` 的 3 处也算作焦点环，**不成立**——它们位于 `.abacus i`、`.status-dot.running`、`.activity-row.running .activity-marker`，是状态点的脉冲光晕，不是聚焦指示。
+
+**2026-09-26 晚已收口的部分**：控件几何 50 处声明改取 `--control-*` 档位（表单控件裸值残留 0，`.primary-button` 补上 36px 一档的消费者）、焦点环统一为一种写法、`z-index` 13 处全部改取 `--z-*` 档位、`.text-button` 合并为单一定义；四项均加护栏并做变异验证。仍待收口的是密集控件与行高的 23–40px 档位（裸值残留 30 处）与卡片/徽标圆角（见 §5 P2）。
 
 ### 3.6 页面骨架未全覆盖 —— 中
 
@@ -107,12 +111,13 @@
 
 ## 5. 改进建议（分四期，每期都要带门禁）
 
-**P0（1 天，先止血并建立台账）**
+**P0（先止血并建立台账）——2026-09-26 晚已完成 5/5（页签方向键并入 P2 的 `Tabs` 基座）**
 
-- 把 `OVERLAY_SURFACES` 从“允许清单”改成**棘轮基线**：记录当前数量，只许降；同时把 `.notification-panel`、`.slide-viewer` 标注为「待迁入 Modal 基座」而不是「合法浮层」。
-- 新增护栏：`z-index` 取值必须来自层级表；焦点环只允许一种写法；`.text-button` 去重。
-- 在 docs/10 §10.1 建**组件台账表**（组件名 → 文件路径 → 用途 → 状态：已落地/缺位/待迁入），并把「动手写 UI 交互前先查台账」写进 `.qoder/rules/betterwork-ui.md` 第一条。
-- 快改：`MemoryView` 页签补 `role="tablist"/"tab"` 与方向键，或改用新 `Tabs`。
+- ✅ `OVERLAY_SURFACES` 改为**棘轮基线** `OVERLAY_SHADOW_BASELINE = 6`：只许降不许升，降了必须同步改小基线；`.notification-panel` 与 `.slide-viewer` 的 reason 改成「待迁入 Modal 基座」，不再是"合法浮层"。
+- ✅ 护栏四条：`z-index` 必须取 `--z-*` 档位；焦点环只允许一种写法；表单控件的边框/圆角/高度必须取 `--control-*`；独立类选择器不得被拆成两处并写出冲突值。每条都做过变异验证。
+- ✅ 控件几何落地：新增 `--control-*` 与 `--z-*` 档位表，50 处迁移（含 `.primary-button` 补上 36px 档的消费者），`.text-button` 合并为单一定义；docs/10 新增 §9.10 控件几何与浮层字号、§9.11 叠放层级。
+- ✅ 组件台账表已落进 docs/10 §10.1（组件名 → 路径 → 用途 → 状态：已落地/缺位/待迁入），「写 UI 交互前先查台账」已写进 `.qoder/rules/betterwork-ui.md` 第一条。
+- ✅ 快改：`MemoryView` 页签补 `role="tablist"/"tab"` 与 `aria-selected`，回归断言见 `MemoryView.test.tsx`。方向键与 roving tabindex 未做——`ContextPanel` 的任务上下文页签同样缺这两项，两者一起等 P2 的 `Tabs` 基座收口，避免在两个页面各写一遍键盘逻辑。
 
 **P1（2–3 天，补最缺的两个基座）**
 
@@ -122,9 +127,11 @@
 **P2（3–5 天，收重复结构）**
 
 - `ListRow` 与 `Badge` 基座，按 §3.4 的表逐类迁移；`min-height` 与 `border-radius` 建档位表并加棘轮。
-- 空/加载态全部走 `EmptyState`；`Tabs` / `SegmentedControl` 分两个基座落地。
+- 空/加载态全部走 `EmptyState`；`Tabs` / `SegmentedControl` 分两个基座落地，`Tabs` 基座自带左右方向键与 roving tabindex，一次性收掉 `MemoryView` 与 `ContextPanel` 两处页签。
 
 **P3（持续）**
+
+- 附带发现（不属于 UI，但阻塞"提交前必绿"）：`npm test` 里三个**墙钟预算门**——KM14 向量扫描 p95、`memory-retrieval` 1,000 条排序、office-parser 解压预算——在 137 个测试文件并发跑时随机红（同一份代码四轮分别红过不同组合），机器负载 ≥15 时连单跑都超线。方向不是放宽阈值，而是把计时基准挪进独立串行档（`npm run bench`），`verify` 只跑功能测试。本轮未改动门禁构成。
 
 - `views/` 里重复的领域卡片下沉到 `components/`；`SettingsView`/`SkillsView`/`ExpertsView` 补齐 `components/layout/` 骨架。
 - 每个新基座必须带一个交互语义测试（Esc 能关、焦点能归还、方向键能走），照 Cloud 的 `agent-picker.test.tsx` 那条断言写。

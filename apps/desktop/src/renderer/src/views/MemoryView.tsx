@@ -488,11 +488,12 @@ export function MemoryPage({
                 </button>
               )}
             </form>
-            <div className="memory-tabs">
+            <div className="memory-tabs" role="tablist" aria-label="记忆分组">
               {memoryTabOrder.map((key) => (
                 <button
                   key={key}
                   type="button"
+                  role="tab"
                   aria-selected={key === activeKey}
                   onClick={() => setTabKey(key)}
                 >

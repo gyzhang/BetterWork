@@ -6,6 +6,7 @@ trigger: glob: apps/desktop/src/renderer/**/*.tsx,ts,css
 
 设计真相源是 [docs/10-ui-ux-system.md](../../docs/10-ui-ux-system.md)；变更核心信息架构或视觉语言前先更新该文档。
 
+- **写 UI 交互前先查组件台账**（docs/10 §10.1）：已有基座必须复用；缺基座时先补基座再接页面，不得就地自造同类控件。绕过台账的代价已经发生过一次——用 `<details>` 手搓「更多」菜单，结果点外面不收起、能同开两个、菜单字号比自己的触发按钮还大。
 - **纵向堆叠不得贴死**：同一容器里上下相邻的控件/表单/提示/卡片之间必须有可见垂直间距；间距由容器的 `gap` 拥有，子元素不自带上下 `margin` 凑同一道缝。`components/layout/` 骨架容器必须自带 `display` + `gap`，页面不得用后代选择器替骨架补 `gap`；表单控件不写 `width:100%`（在弹性行里会挤到同排标签逐字断行）。护栏见 `standards/coding-standard.test.ts`，理由见 docs/10 §9.8。
 - **新增/修改页面必须复用统一页面骨架**（docs/10 §8.3：`.page-header` 页头带 + `.page-body` 860px 版心）：禁止页面自定版心宽度、页头结构或标题坐标；工作视图的对话列与输入框必须同宽。
 - **只用语义化主题 Token**（定义于 `apps/desktop/src/renderer/src/appearance.ts` 与 `styles.css`）：禁止新增硬编码色值，禁止用局部 `.dark` 补丁绕过 Token 契约。建立新 Token 时必须当场迁移所有相关硬编码值，不留半套。

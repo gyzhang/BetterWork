@@ -588,16 +588,18 @@ describe('界面间距与骨架纪律', () => {
 });
 
 /**
- * 允许自带 overlay 阴影的浮层表面（docs/10 §10.1）。需要新浮层时先复用 `PopoverMenu`
- * 基座，而不是在这里加一行——自造浮层会各自漏掉背板收起、Esc 与焦点归还。
+ * 允许自带 overlay 阴影的浮层表面（docs/10 §10.1）。这份基线**只许降不许升**：
+ * 它记录的是「还没迁进基座的存量」，不是「允许继续这样写」。需要新浮层时先复用
+ * `PopoverMenu`，或把待迁入的基座标注在 reason 里，而不是在这里加一行豁免。
  */
+const OVERLAY_SHADOW_BASELINE = 6;
 const OVERLAY_SURFACES: { readonly match: string; readonly reason: string }[] = [
   { match: '.popover-menu', reason: '浮层基座（ADR-0012）' },
   { match: '.confirmation-dialog', reason: '模态确认框' },
-  { match: '.notification-panel', reason: '消息中心浮层' },
+  { match: '.notification-panel', reason: '待迁入 Modal 基座（缺 aria-expanded/Esc/焦点）' },
   { match: '.toast', reason: '全局结果提示' },
   { match: '.action-error-banner', reason: '全局错误横幅' },
-  { match: '.slide-viewer', reason: '演示放映画布' },
+  { match: '.slide-viewer', reason: '待迁入 Modal 基座（自写键盘与焦点）' },
 ];
 
 describe('浮层基座纪律', () => {
@@ -605,11 +607,13 @@ describe('浮层基座纪律', () => {
   expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
   const declarations = declarationsOf(styles ?? '');
 
-  it('overlay 阴影只允许出现在登记过的浮层表面', () => {
+  it('overlay 阴影只允许出现在登记过的浮层表面，且存量只降不升', () => {
     const offenders: string[] = [];
+    let current = 0;
     for (const declaration of declarations) {
       if (declaration.property !== 'box-shadow') continue;
       if (!declaration.value.includes('shadow-color-overlay')) continue;
+      current += 1;
       if (OVERLAY_SURFACES.some((surface) => declaration.selector.includes(surface.match))) {
         continue;
       }
@@ -619,6 +623,14 @@ describe('浮层基座纪律', () => {
       offenders,
       '要浮层就复用 PopoverMenu，别自造带阴影的 absolute 面板（docs/10 §10.1）',
     ).toEqual([]);
+    expect(
+      current,
+      `overlay 阴影存量比基线 ${OVERLAY_SHADOW_BASELINE} 多了——白名单不是豁免清单`,
+    ).toBeLessThanOrEqual(OVERLAY_SHADOW_BASELINE);
+    expect(
+      current,
+      `存量已降到 ${current}，请把 OVERLAY_SHADOW_BASELINE 一并改小，别把已收口的缺陷留在基线里`,
+    ).toBeGreaterThanOrEqual(OVERLAY_SHADOW_BASELINE);
   });
 
   it('菜单项不自带字号，由基座镜像触发控件', () => {
@@ -631,6 +643,96 @@ describe('浮层基座纪律', () => {
     expect(
       offenders,
       '浮层字号跟随触发控件；写死会让菜单比自己的触发按钮还大（docs/10 §10.1）',
+    ).toEqual([]);
+  });
+});
+
+/** 表单控件与三档按钮的几何必须来自 Token；这些正则与迁移脚本保持同一套口径。 */
+const CONTROL_SELECTOR =
+  /(^|[,>\s])input\b|(^|[,>\s])select\b|(^|[,>\s])textarea\b|\.field-select-trigger|\.primary-button|\.secondary-button|\.text-button/;
+const CONTROL_EXEMPTIONS =
+  /checkbox|::placeholder|:focus|:hover|\.workspace-row input|\.composer textarea|textarea\[readonly\]|counted/;
+
+describe('界面观感基线', () => {
+  const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
+  expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
+  const declarations = declarationsOf(styles ?? '');
+
+  it('z-index 只允许取层级 Token', () => {
+    const offenders = declarations
+      .filter((declaration) => declaration.property === 'z-index')
+      .filter((declaration) => !declaration.value.startsWith('var(--z-'));
+    expect(
+      offenders.map((declaration) => locate(declaration, styles ?? '')),
+      '叠放层级要先进 :root 的 --z-* 档位表（docs/10 §9.11）',
+    ).toEqual([]);
+  });
+
+  it('焦点环只有一种写法', () => {
+    const offenders = declarations
+      .filter((declaration) => declaration.property === 'outline')
+      .filter((declaration) => declaration.value.includes('--focus-ring'))
+      .filter((declaration) => declaration.value !== '2px solid var(--focus-ring)');
+    expect(
+      offenders.map((declaration) => locate(declaration, styles ?? '')),
+      '聚焦指示必须同宽同色，1px 的环在深色底上几乎看不见（docs/10 §9.11）',
+    ).toEqual([]);
+  });
+
+  it('表单控件的边框、圆角与高度来自控件 Token', () => {
+    const raw = new RegExp(`^(border|border-radius|min-height)$`);
+    const offenders: string[] = [];
+    for (const declaration of declarations) {
+      if (!raw.test(declaration.property)) continue;
+      if (!CONTROL_SELECTOR.test(declaration.selector)) continue;
+      if (CONTROL_EXEMPTIONS.test(declaration.selector)) continue;
+      if (declaration.value.startsWith('var(--control-')) continue;
+      if (
+        declaration.value === '0' ||
+        declaration.value === 'none' ||
+        declaration.value === 'auto'
+      ) {
+        continue;
+      }
+      if (declaration.property === 'border' && !declaration.value.startsWith('1px solid')) continue;
+      // 填充式主行动按钮用透明边框保持盒几何与带边框控件一致，颜色由填充色负责。
+      if (declaration.property === 'border' && declaration.value === '1px solid transparent') {
+        continue;
+      }
+      if (declaration.property === 'min-height' && !/^\d+px$/.test(declaration.value)) continue;
+      // 多行文本框的 min-height 是「编辑区至少多高」，与单行控件档位不是一回事。
+      if (declaration.property === 'min-height' && /textarea/.test(declaration.selector)) continue;
+      offenders.push(locate(declaration, styles ?? ''));
+    }
+    expect(
+      offenders,
+      '控件几何要取 --control-* 档位；各视图各写一遍正是「界面看着不统一」的来源（docs/10 §9.8）',
+    ).toEqual([]);
+  });
+
+  it('独立类选择器不得被拆成两处并写出冲突值', () => {
+    // `.text-button` 曾被前后两条规则各写一半：后者覆盖高度与背景、前者留下边框，
+    // 结果渲染成"带边框的 25px 小胶囊"，与类名表达的不是一回事，且没人报错。
+    const seen = new Map<string, Map<string, Set<string>>>();
+    for (const declaration of declarations) {
+      if (!/^\.[a-z][\w-]*$/.test(declaration.selector)) continue;
+      const properties = seen.get(declaration.selector) ?? new Map<string, Set<string>>();
+      const values = properties.get(declaration.property) ?? new Set<string>();
+      values.add(declaration.value);
+      properties.set(declaration.property, values);
+      seen.set(declaration.selector, properties);
+    }
+    const offenders: string[] = [];
+    for (const [selector, properties] of seen) {
+      for (const [property, values] of properties) {
+        if (values.size > 1) {
+          offenders.push(`${selector} { ${property}: ${[...values].join(' | ')} }`);
+        }
+      }
+    }
+    expect(
+      offenders,
+      '同一个类的一处定义要能读出它的全部外观；分散叠加会让最终值不属于任何一条规则（docs/10 §9.8）',
     ).toEqual([]);
   });
 });

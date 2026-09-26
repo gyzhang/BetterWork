@@ -459,6 +459,40 @@ UI Foundation 首批提供四套成对色系：
 
 交互控件的状态变化走 120ms transition；挂载即出现的浮层（Sheet、通知面板、Toast、上下文面板、动作错误条）走 keyframes，按浮层或展开档取时长；`prefers-reduced-motion: reduce` 下动效与过渡一律压到 0.01ms。「不使用循环发光和无意义等待动画」这一条天然满足。
 
+### 9.10 控件几何与浮层字号
+
+控件的边框、圆角与高度必须来自 `:root` 的 `--control-*` 档位，禁止各视图各写一遍——同一类控件在不同页面上长得不一样，就是「界面看着不统一」最直接的来源。
+
+| Token | 值 | 用在哪 |
+| --- | --- | --- |
+| `--control-height-sm` | 28px | 密集行内的小控件（文字按钮、页签内动作） |
+| `--control-height` | 32px | **常规档**：输入框、下拉、日期/选择器、标准按钮 |
+| `--control-height-lg` | 36px | 主行动按钮（`.primary-button`）与大型输入 |
+| `--control-radius` | 6px | 所有表单控件与浮层内按钮 |
+| `--control-border` | `1px solid var(--input-border)` | 表单控件与按钮边框；不得再混用 `--border` / `--border-subtle`。填充式主行动按钮可取 `1px solid transparent`，只为与带边框控件保持同一盒几何 |
+
+- 多行 `textarea` 的 `min-height` 表达「编辑区至少多高」，不属于控件档位，不受此表约束。
+- **浮层字号跟随触发控件**：`PopoverMenu` 打开时读取触发元素的计算字号并内联到浮层根，菜单项不自带 `font-size`。浮层是触发器的延伸，两处字号不一致会让菜单看起来属于另一个控件（知识卡片「更多」曾继承正文 14px 而比自己的 12px 触发按钮大）。
+- 落地现状：2026-09-26 已把 50 处控件边框/圆角/高度声明换成 `--control-*` 取值，表单控件里裸值残留 0（由护栏强制，`textarea` 的编辑区高度除外）；三档高度都有真实消费者，护栏的选择器口径除 `input/select/textarea/.field-select-trigger` 外还覆盖 `.primary-button`、`.secondary-button`、`.text-button` 三个按钮类。
+
+### 9.11 叠放层级
+
+`z-index` 只允许取 `:root` 的 `--z-*` 档位，新增浮层必须先选档，不得随手写数字——数字各写各的，叠放关系就退化成「谁后渲染谁在上面」。
+
+| Token | 值 | 层 |
+| --- | --- | --- |
+| `--z-inline` | 1 | 文档流内的抬升元素 |
+| `--z-context-panel` | 4 | 上下文面板 |
+| `--z-drag-strip` | 6 | 标题拖拽带 |
+| `--z-notification-overlay` / `--z-notification` | 7 / 8 | 消息中心背板与面板 |
+| `--z-sheet` | 10 | 抽屉背板 |
+| `--z-popover-backdrop` / `--z-popover` | 11 / 12 | 浮层基座背板与菜单 |
+| `--z-dialog-backdrop` | 19 | 模态背板 |
+| `--z-toast` | 30 | 全局结果提示 |
+| `--z-banner` | 40 | 全局错误横幅 |
+
+相对顺序沿用改造前的实际叠放结果，唯一有意改变的是**模态一档高于浮层**（此前模态背板与菜单同为 12，靠 DOM 顺序决胜）。待 `Modal` 基座落地后，`--z-sheet` 与 `--z-dialog-backdrop` 应合并为同一档。
+
 ## 10. 组件体系
 
 ### 10.1 基础组件
@@ -477,6 +511,23 @@ UI Foundation 首批提供四套成对色系：
 - SettingsLayout、SettingsNav、ModelProfileRow、ConnectionStatus
 
 所有交互组件都必须定义：默认、悬停、聚焦、按下、禁用、加载、成功和错误状态。键盘焦点必须可见，不能只依赖颜色变化。
+
+**铁律：写任何 UI 交互前，先查下面这份台账与 `components/` 是否已有实现。缺基座时先补基座再接页面，不得就地自造同类控件**——「更多」菜单用 `<details>` 手搓导致点外面不关、能同开两个、字号比触发按钮大，就是绕过台账的代价（2026-09-26 修复）。
+
+| 组件 | 位置 | 状态 |
+| --- | --- | --- |
+| 页面骨架 PageHeader / PageToolbar / ScrollRegion / ViewContainer | `components/layout/` | 已落地；骨架容器自带纵向间距机制（§9.8），页面不得覆写 |
+| 浮层基座 PopoverMenu（含 Menu/Popover/Dropdown） | `components/PopoverMenu.tsx` | 已落地：背板收起、Esc、焦点归还、方向键、视口碰撞、字号镜像触发控件 |
+| 下拉选择 FieldSelect | `components/FieldSelect.tsx` | 已落地，走 PopoverMenu；**仍有 9 处原生 `<select>` 待迁** |
+| 模态确认 ConfirmationDialog | `components/ConfirmationDialog.tsx` | 已落地：inert + 焦点陷阱 + 归还 + Esc |
+| 短时反馈 TransientToast / 全局 ToastHost | `components/` | 已落地；两套不可混用（§11.5.1） |
+| 空状态 EmptyState | `components/EmptyState.tsx` | 已落地，但有 6 处内联占位绕开它 |
+| Modal / Sheet | — | **缺位**：现存 3 套自造模态（抽屉、放映层、消息中心），P1 建基座后收编 |
+| Tabs / SegmentedControl | — | **缺位**：现有两处只有 `role` 与 `aria-selected`，无 roving tabindex 与方向键 |
+| Button / Input / Textarea | 只有样式类，无组件 | 几何已统一取 `--control-*` 档位（§9.10），是否组件化随 P1 的 Field 一起定 |
+| Switch / Tooltip / Progress / Skeleton | — | 未落地 |
+
+本表是组件层的唯一台账：新增基座必须登记在此，`.qoder/rules/betterwork-ui.md` 与[UI 一致性评估](reviews/2026-09-26-ui-consistency.md)都指向本表。
 
 **浮层一律复用 `PopoverMenu` 基座**：下拉、菜单、选择器等脱离文档流的浮层必须走 `components/PopoverMenu.tsx`——背板收起、Esc、焦点归还、方向键导航与视口碰撞处理都在基座里。不得用 `<details>` 或 `position:absolute` 面板自造：2026-09-26 知识卡片的「更多」正是这样写的，三个症状同源——点外面不收起（`<details>` 没有这个语义）、能同时打开两张卡片的菜单、菜单项继承正文 14px 而比自己的 12px 触发按钮还大。基座会把菜单字号镜像成触发控件的计算值，让浮层与触发器看起来属于同一个控件；破坏性菜单项用 `tone: 'danger'` 表达，颜色仍由 Token 决定。护栏锁两条：`.popover-menu-item` 不得自带字号；overlay 阴影只允许出现在登记过的浮层表面（`standards/coding-standard.test.ts`）。
 

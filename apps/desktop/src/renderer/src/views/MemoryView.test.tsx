@@ -314,7 +314,7 @@ describe('MemoryPage', () => {
 
     // 默认落在第一组有记录的页签：待确认里那条仍可「以后不用」。
     expect(screen.getAllByRole('button', { name: '以后不用' })).toHaveLength(1);
-    fireEvent.click(screen.getByRole('button', { name: '历史与已停用 · 1' }));
+    fireEvent.click(screen.getByRole('tab', { name: '历史与已停用 · 1' }));
     expect(screen.getByText('终态记录，不可恢复')).toBeTruthy();
     // 终态分组里不得再出现任何动作按钮。
     expect(screen.queryByRole('button', { name: '以后不用' })).toBeNull();
@@ -650,12 +650,27 @@ describe('记忆页检索与分组（滚动区改造）', () => {
     const current = state({ memories: [candidate, confirmed] });
     render(<MemoryPage state={current} />);
 
+    // 页签必须有页签语义，不能读成一排普通按钮（docs/10 §10.1 组件台账）
+    expect(screen.getByRole('tablist', { name: '记忆分组' })).toBeTruthy();
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      '待确认 · 1',
+      '已确认 · 1',
+      '已过期 · 0',
+      '历史与已停用 · 0',
+    ]);
+    expect(screen.getByRole('tab', { name: '待确认 · 1' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+
     expect(screen.getByText('待确认的口径。')).toBeDefined();
     expect(screen.queryByText('已确认的口径。')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: '已确认 · 1' }));
+    fireEvent.click(screen.getByRole('tab', { name: '已确认 · 1' }));
     expect(screen.getByText('已确认的口径。')).toBeDefined();
     expect(screen.queryByText('待确认的口径。')).toBeNull();
+    expect(screen.getByRole('tab', { name: '已确认 · 1' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
   });
 
   it('命中一页上限时说明只显示最近一页并引导检索', () => {
