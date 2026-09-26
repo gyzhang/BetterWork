@@ -738,6 +738,43 @@ describe('表单字段基座纪律', () => {
   });
 });
 
+describe('页签与切换组纪律', () => {
+  it('页签与切换按钮组的语义只住在 Tabs 基座', () => {
+    // 两处页签各写一遍的后果是都没有 roving tabindex：键盘用户要按 Tab 一格一格穿过去。
+    // 判据同模态护栏——写了这组属性却没接基座才算自造。
+    const owner = 'apps/desktop/src/renderer/src/components/Tabs.tsx';
+    const rendererFiles = pathsUnder('apps/desktop/src/renderer/').filter(
+      (relative) =>
+        /\.(tsx|ts)$/.test(relative) &&
+        !relative.endsWith('.test.tsx') &&
+        !relative.endsWith('.test.ts'),
+    );
+    const offenders: string[] = [];
+    for (const relative of rendererFiles) {
+      if (relative === owner) continue;
+      const body = read(relative);
+      if (!/role="tablist"|role="tab"|aria-selected|aria-pressed/.test(body)) continue;
+      if (/from '.*\/Tabs'/.test(body)) continue;
+      offenders.push(relative);
+    }
+    expect(offenders, '页签与切换按钮组请复用 Tabs／SegmentedControl（docs/10 §10.1）').toEqual([]);
+
+    const styles = cssPaths().find((relative) => relative.endsWith('styles.css')) ?? '';
+    const offendersCss = declarationsOf(styles)
+      .filter((declaration) => /button\[aria-(selected|pressed)/.test(declaration.selector))
+      .filter(
+        (declaration) =>
+          !declaration.selector.includes('.tabs') &&
+          !declaration.selector.includes('.segmented-control'),
+      )
+      .map((declaration) => locate(declaration, styles));
+    expect(
+      offendersCss,
+      '选中态样式归基座；页面再补一条 button[aria-selected] 就是第二套页签外观',
+    ).toEqual([]);
+  });
+});
+
 describe('界面观感基线', () => {
   const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
   expect(styles, '找不到 renderer 的 styles.css').toBeDefined();

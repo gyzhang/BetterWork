@@ -523,7 +523,8 @@ UI Foundation 首批提供四套成对色系：
 | 模态确认 ConfirmationDialog | `components/ConfirmationDialog.tsx` | 已落地，走 Modal 的 `alertdialog` 变体；初始焦点落在「取消」 |
 | 短时反馈 TransientToast / 全局 ToastHost | `components/` | 已落地；两套不可混用（§11.5.1） |
 | 空状态 EmptyState | `components/EmptyState.tsx` | 已落地，但有 6 处内联占位绕开它 |
-| Tabs / SegmentedControl | — | **缺位**：现有两处只有 `role` 与 `aria-selected`，无 roving tabindex 与方向键 |
+| 页签 Tabs（tablist + roving tabindex + 方向键） | `components/Tabs.tsx` | 已落地：左右方向键与 Home／End 切换并把焦点带过去，只有选中页签进 Tab 顺序。记忆页分组与任务上下文两处已收编 |
+| 切换按钮组 SegmentedControl（group + aria-pressed） | `components/Tabs.tsx` | 已落地：技能页卡片／列表模式已收编；与页签的分工是「切换同一片内容的呈现方式」 |
 | Button / Input / Textarea | 只有样式类，无组件 | 几何取 `--control-*` 档位（§9.10），结构由 `Field` 负责；不再单独组件化，避免只为包一层壳而增加第二处真相 |
 | Switch / Tooltip / Progress / Skeleton | — | 未落地 |
 
@@ -532,6 +533,8 @@ UI Foundation 首批提供四套成对色系：
 **浮层一律复用 `PopoverMenu` 基座**：下拉、菜单、选择器等脱离文档流的浮层必须走 `components/PopoverMenu.tsx`——背板收起、Esc、焦点归还、方向键导航与视口碰撞处理都在基座里。不得用 `<details>` 或 `position:absolute` 面板自造：2026-09-26 知识卡片的「更多」正是这样写的，三个症状同源——点外面不收起（`<details>` 没有这个语义）、能同时打开两张卡片的菜单、菜单项继承正文 14px 而比自己的 12px 触发按钮还大。基座会把菜单字号镜像成触发控件的计算值，让浮层与触发器看起来属于同一个控件；破坏性菜单项用 `tone: 'danger'` 表达，颜色仍由 Token 决定。护栏锁两条：`.popover-menu-item` 不得自带字号；overlay 阴影只允许出现在登记过的浮层表面（`standards/coding-standard.test.ts`）。
 
 **模态与覆盖层一律复用 `Modal` 基座**：会夺走整页焦点的表面（确认框、抽屉、放映层）走 `components/Modal.tsx` 的 `dialog`／`sheet`／`viewer` 三个变体；锚定在触发器局部、不居中的覆盖层（消息中心）用同文件导出的 `useOverlaySemantics`，只借语义不借定位；但借用者必须把覆盖层 portal 到 `document.body`——被 `inert` 的是整个 `<main>`，2026-09-26 消息中心留在壳内时面板与背板一起被 pointer-events 锁死，滚动、点按钮、点外面全部失效，只剩挂在 window 上的 Esc 还能用。inert 应用主体、Esc、背板点击关闭、初始焦点、Tab 循环、焦点归还、`role=dialog`/`alertdialog` 与 `aria-modal` 全部只有一处实现——此前这里是四套并存：确认框什么都有、模型抽屉只有 `aria-modal` 外壳、放映层自己写键盘、消息中心连 `aria-expanded` 都没有。触发元素必须带 `aria-haspopup="dialog"` 与 `aria-expanded`（消息中心的铃铛已按此补齐）。护栏锁两条：`.modal-panel` 之外的表面不得自带浮层阴影（存量按棘轮只降不升）；渲染层里出现 `role="dialog"`／`aria-modal`／`key === 'Escape'`／旧背板类而没接 `Modal` 或 `useOverlaySemantics` 即失败。
+
+**页签一律用 `Tabs`、切换按钮组一律用 `SegmentedControl`**（同在 `components/Tabs.tsx`）：`Tabs` 输出 `role=tablist`／`role=tab`／`aria-selected`，并实现 roving tabindex——只有选中页签 `tabIndex=0`，组内切换交给左右方向键与 Home／End；焦点跟随选中项，切换从**当前焦点**出发而不是从 `value` 出发，所以受控父组件重渲染之前连按也能连续走格。此前两处页签各写一遍，结果是两处都没有键盘导航。`SegmentedControl` 是另一个模式（切换同一片内容的呈现方式，每个按钮都参与 Tab 顺序），别再让页面手拼一组带 `aria-pressed` 的按钮。护栏锁两处：出现页签／`aria-pressed` 语义却没接基座即失败；`button[aria-selected|aria-pressed]` 的选中态样式只能住在 `.tabs` 与 `.segmented-control` 上。
 
 **表单字段一律用 `Field`**：`<Field label="模型角色">…</Field>` 负责标签、控件与说明三件事的纵向结构，标签与控件之间的缝由 `Field` 自己的 `gap` 拥有（§9.8）。此前每个视图各写一份 `label { display: flex; gap: …; font-size: … }`，同一屏里因此并存 12px 与 13px 两种标签、4px 与 8px 两种缝（§3.2 的成因）。给出 `controlId` 时 `Field` 用 `<label htmlFor>` 精确关联，此时才能放说明文字；不给 `controlId` 时整个 `Field` 就是 `<label>`，点标签文字即可聚焦或展开控件，这种模式下不要再传 `hint`（包裹式标签会把说明读进控件名称）。勾选行（复选框与文字同排）不属于这个结构，仍在页面里自持排版。护栏两条：渲染层出现 `<select>`／`<option>` 即失败；除登记过的勾选行外，任何 `label` 选择器写 `gap` 或上下 `margin` 即失败。
 

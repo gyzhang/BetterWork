@@ -1088,25 +1088,9 @@ small {
   color: var(--text-primary);
   background: var(--surface);
 }
-.context-tabs {
-  display: flex;
-  gap: 4px;
+.context-panel .tabs {
+  /* 面板给的是左右内缩，几何仍归 Tabs 基座。 */
   padding: 0 12px 4px;
-  border-bottom: 1px solid var(--border);
-}
-.context-tabs button {
-  flex: 1;
-  min-height: 29px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 0;
-  border-radius: 6px;
-  font-size: 12px;
-}
-.context-tabs button[aria-selected='true'] {
-  color: var(--text-primary);
-  background: var(--surface);
-  box-shadow: 0 1px 2px var(--shadow-color-raised);
 }
 .context-content {
   min-height: 0;
@@ -1825,25 +1809,7 @@ small {
 .skills-body {
   padding-top: 20px;
 }
-.skill-segmented {
-  display: flex;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  overflow: hidden;
-}
-.skill-segmented button {
-  padding: 5px 12px;
-  color: var(--text-secondary);
-  background: var(--surface);
-  border: 0;
-  font-size: 12px;
-  cursor: pointer;
-}
-.skill-segmented button[aria-pressed='true'] {
-  color: var(--brand);
-  background: var(--selection);
-  font-weight: 600;
-}
+
 .skill-cards {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
@@ -2716,24 +2682,48 @@ small {
   font-size: 12px;
   line-height: 1.6;
 }
-.memory-tabs {
+/* === Tabs 与 SegmentedControl：页签带与切换按钮组的唯一几何（docs/10 §10.1） === */
+.tabs {
   display: flex;
   gap: 4px;
   border-bottom: 1px solid var(--border);
 }
-.memory-tabs button {
-  min-height: 30px;
+.tabs button {
+  min-height: var(--control-height-sm);
   padding: 5px 11px;
   color: var(--text-secondary);
   background: transparent;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   font-size: 13px;
 }
-.memory-tabs button[aria-selected='true'] {
+.tabs button[aria-selected='true'] {
   color: var(--text-primary);
   background: var(--surface);
   box-shadow: 0 1px 2px var(--shadow-color-raised);
+}
+.tabs[data-fill='true'] button {
+  flex: 1;
+}
+.segmented-control {
+  display: flex;
+  overflow: hidden;
+  border: var(--control-border);
+  border-radius: var(--control-radius);
+}
+.segmented-control button {
+  min-height: var(--control-height-sm);
+  padding: 5px 12px;
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 0;
+  font-size: 12px;
+  cursor: pointer;
+}
+.segmented-control button[aria-pressed='true'] {
+  color: var(--brand);
+  background: var(--selection);
+  font-weight: 600;
 }
 .memory-status-badge {
   padding: 2px 6px;

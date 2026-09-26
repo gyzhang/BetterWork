@@ -53,7 +53,7 @@
 
 ### 3.3 Tabs 语义三套 —— 中
 
-`ContextPanel.tsx:203,215` 有 `role="tablist"/"tab"` + `aria-selected`，语义角色正确，但**同样缺 roving tabindex 与左右方向键**（WAI-ARIA 页签模式要求方向键切换、Tab 只进出页签列表）；`MemoryView.tsx:491-497` 此前更严重——在普通 `<button>` 上写 `aria-selected` 而无 `role="tab"`，该属性对这个角色无效，读屏不会播报选中态（2026-09-26 晚已补 `role="tablist"/"tab"`）。`SkillsView.tsx:154` 的 `role="group"` + `aria-pressed` 是视图模式切换，语义上属于另一类（切换按钮组），**不算错**，但应当显式命名这个模式而不是每次重新发明。
+`ContextPanel.tsx:203,215` 有 `role="tablist"/"tab"` + `aria-selected`，语义角色正确，但**同样缺 roving tabindex 与左右方向键**（WAI-ARIA 页签模式要求方向键切换、Tab 只进出页签列表）；`MemoryView.tsx:491-497` 此前更严重——在普通 `<button>` 上写 `aria-selected` 而无 `role="tab"`，该属性对这个角色无效，读屏不会播报选中态（2026-09-26 晚已补 `role="tablist"/"tab"`）。`SkillsView.tsx:154` 的 `role="group"` + `aria-pressed` 是视图模式切换，语义上属于另一类（切换按钮组），**不算错**，但应当显式命名这个模式而不是每次重新发明。（**2026-09-26 深夜已收口**：`components/Tabs.tsx` 落地 `Tabs`（roving tabindex + 方向键 + Home／End）与 `SegmentedControl` 两个基座，记忆页、任务上下文、技能页三处已收编；护栏锁「写了页签语义却没接基座」与「选中态样式长在页面选择器上」。）
 
 → 归属：`Tabs` 基座（tablist + roving tabindex + 方向键）；`SegmentedControl` 基座（group + aria-pressed）。
 
@@ -128,8 +128,9 @@
 
 **P2（3–5 天，收重复结构）**
 
-- `ListRow` 与 `Badge` 基座，按 §3.4 的表逐类迁移；`min-height` 与 `border-radius` 建档位表并加棘轮。
-- 空/加载态全部走 `EmptyState`；`Tabs` / `SegmentedControl` 分两个基座落地，`Tabs` 基座自带左右方向键与 roving tabindex，一次性收掉 `MemoryView` 与 `ContextPanel` 两处页签。
+- ⬜ `ListRow` 与 `Badge` 基座，按 §3.4 的表逐类迁移；`min-height` 与 `border-radius` 建档位表并加棘轮。
+- ⬜ 空/加载态全部走 `EmptyState`（6 处内联占位待收）。
+- ✅ `Tabs` / `SegmentedControl` 分两个基座落地（同在 `components/Tabs.tsx`），`Tabs` 自带左右方向键与 roving tabindex，一次性收掉 `MemoryView` 与 `ContextPanel` 两处页签；`SkillsView` 的视图模式切换也显式收进 `SegmentedControl`。密集高度顺带收了两条：页签与切换组的 29／30px 裸值改取 `--control-height-sm`，圆角改取 `--control-radius`。
 
 **P3（持续）**
 

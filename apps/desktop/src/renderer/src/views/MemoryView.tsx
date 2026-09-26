@@ -20,6 +20,7 @@ import { ScrollRegion } from '../components/layout/ScrollRegion';
 import type { MemoryEditorSubmission } from '../components/MemoryEditor';
 import { MemoryEditor } from '../components/MemoryEditor';
 import { MemorySuggestionList } from '../components/MemorySuggestionList';
+import { Tabs } from '../components/Tabs';
 import type { MemoriesState } from '../hooks/use-memories';
 import { newMemoryOperationId } from '../hooks/use-memories';
 import type { MemorySuggestionsState } from '../hooks/use-memory-suggestions';
@@ -490,19 +491,15 @@ export function MemoryPage({
                 </button>
               )}
             </form>
-            <div className="memory-tabs" role="tablist" aria-label="记忆分组">
-              {memoryTabOrder.map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  role="tab"
-                  aria-selected={key === activeKey}
-                  onClick={() => setTabKey(key)}
-                >
-                  {memoryTabLabels[key]} · {grouped[key].length}
-                </button>
-              ))}
-            </div>
+            <Tabs
+              label="记忆分组"
+              items={memoryTabOrder.map((key) => ({
+                id: key,
+                label: `${memoryTabLabels[key]} · ${grouped[key].length}`,
+              }))}
+              value={activeKey}
+              onChange={setTabKey}
+            />
           </PageToolbar>
           <MemoryGroup
             title={memoryTabLabels[activeKey]}

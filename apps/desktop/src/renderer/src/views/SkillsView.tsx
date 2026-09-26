@@ -7,6 +7,7 @@ import { PageHeader } from '../components/layout/PageHeader';
 import type { ViewMode } from '../components/layout/ViewContainer';
 import { ViewContainer } from '../components/layout/ViewContainer';
 import { DependencyPanel } from '../components/skills/DependencyPanel';
+import { SegmentedControl } from '../components/Tabs';
 import { TransientToast } from '../components/TransientToast';
 import type { SkillDependenciesState } from '../hooks/use-skill-dependencies';
 import { useSkillDependencies } from '../hooks/use-skill-dependencies';
@@ -151,22 +152,15 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
         actions={
           selected ? undefined : (
             <>
-              <div className="skill-segmented" role="group" aria-label="视图模式">
-                <button
-                  type="button"
-                  aria-pressed={viewMode === 'grid'}
-                  onClick={() => changeViewMode('grid')}
-                >
-                  卡片
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={viewMode === 'list'}
-                  onClick={() => changeViewMode('list')}
-                >
-                  列表
-                </button>
-              </div>
+              <SegmentedControl
+                label="视图模式"
+                value={viewMode}
+                onChange={changeViewMode}
+                items={[
+                  { id: 'grid', label: '卡片' },
+                  { id: 'list', label: '列表' },
+                ]}
+              />
               <button
                 className="primary-button"
                 type="button"

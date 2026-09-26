@@ -49,9 +49,18 @@ import { handleTitlebarDoubleClick } from '../lib/titlebar';
 import type { ContextTab } from '../lib/view-types';
 import { EmptyContext } from './EmptyState';
 import { MemorySuggestionList } from './MemorySuggestionList';
+import { Tabs } from './Tabs';
 import { ToolActivity } from './ToolActivity';
 import { type ToastTone, TransientToast } from './TransientToast';
 import { WorkspaceBrief } from './WorkspaceBrief';
+
+const CONTEXT_TABS: ReadonlyArray<readonly [ContextTab, string]> = [
+  ['process', '过程'],
+  ['sources', '资料'],
+  ['memory', '记忆'],
+  ['brief', '简报'],
+  ['artifacts', '成果'],
+];
 
 const MIME_LABEL_MAP: Record<string, string> = {
   'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
@@ -200,27 +209,13 @@ export function ContextPanel({
             <ChevronRightIcon size={14} />
           </button>
         </div>
-        <div className="context-tabs" role="tablist" aria-label="任务上下文">
-          {(
-            [
-              ['process', '过程'],
-              ['sources', '资料'],
-              ['memory', '记忆'],
-              ['brief', '简报'],
-              ['artifacts', '成果'],
-            ] as const
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              role="tab"
-              aria-selected={tab === key}
-              className={tab === key ? 'active' : ''}
-              onClick={() => setTab(key)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <Tabs
+          fill
+          label="任务上下文"
+          items={CONTEXT_TABS.map(([id, label]) => ({ id, label }))}
+          value={tab}
+          onChange={setTab}
+        />
         <div className="context-content">
           {tab === 'process' &&
             (events.length === 0 ? (

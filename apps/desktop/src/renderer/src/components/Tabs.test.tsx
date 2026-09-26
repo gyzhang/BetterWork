@@ -1,0 +1,92 @@
+// @vitest-environment jsdom
+
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { SegmentedControl, Tabs } from './Tabs';
+
+afterEach(() => {
+  cleanup();
+});
+
+const ITEMS = [
+  { id: 'a', label: '甲' },
+  { id: 'b', label: '乙' },
+  { id: 'c', label: '丙' },
+] as const;
+
+describe('Tabs 基座', () => {
+  const renderTabs = (onChange = vi.fn()): void => {
+    render(
+      <div>
+        <button type="button">页签带之外的控件</button>
+        <Tabs items={ITEMS} value="b" onChange={onChange} label="示例分组" />
+      </div>,
+    );
+  };
+
+  it('只有选中页签进入 Tab 顺序，其余靠方向键', () => {
+    renderTabs();
+    const tabs = screen.getAllByRole('tab');
+
+    expect(tabs.map((tab) => tab.tabIndex)).toEqual([-1, 0, -1]);
+    expect(tabs[1]?.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('方向键切换选中项并把焦点带过去，越界回绕', () => {
+    const onChange = vi.fn();
+    renderTabs(onChange);
+    const [first, second, third] = screen.getAllByRole('tab');
+    second?.focus();
+
+    fireEvent.keyDown(second as HTMLElement, { key: 'ArrowRight' });
+    expect(onChange).toHaveBeenLastCalledWith('c');
+    expect(document.activeElement).toBe(third);
+
+    fireEvent.keyDown(third as HTMLElement, { key: 'ArrowRight' });
+    expect(onChange).toHaveBeenLastCalledWith('a');
+    expect(document.activeElement).toBe(first);
+
+    fireEvent.keyDown(first as HTMLElement, { key: 'ArrowLeft' });
+    expect(onChange).toHaveBeenLastCalledWith('c');
+    expect(document.activeElement).toBe(third);
+  });
+
+  it('Home 与 End 直达首尾', () => {
+    const onChange = vi.fn();
+    renderTabs(onChange);
+    const [first, , third] = screen.getAllByRole('tab');
+
+    fireEvent.keyDown(screen.getByRole('tablist'), { key: 'Home' });
+    expect(onChange).toHaveBeenLastCalledWith('a');
+    expect(document.activeElement).toBe(first);
+
+    fireEvent.keyDown(screen.getByRole('tablist'), { key: 'End' });
+    expect(onChange).toHaveBeenLastCalledWith('c');
+    expect(document.activeElement).toBe(third);
+  });
+
+  it('选中值不在清单里时，首项仍可被 Tab 命中', () => {
+    render(<Tabs items={ITEMS} value="zzz" onChange={() => undefined} label="示例分组" />);
+
+    expect(screen.getAllByRole('tab').map((tab) => tab.tabIndex)).toEqual([0, -1, -1]);
+  });
+});
+
+describe('SegmentedControl 基座', () => {
+  it('用 aria-pressed 表达当前模式，每个按钮都参与 Tab 顺序', () => {
+    const onChange = vi.fn();
+    render(<SegmentedControl items={ITEMS} value="b" onChange={onChange} label="示例模式" />);
+
+    const buttons = screen.getAllByRole('button');
+    expect(buttons.map((button) => button.getAttribute('aria-pressed'))).toEqual([
+      'false',
+      'true',
+      'false',
+    ]);
+    expect(buttons.every((button) => button.tabIndex === 0)).toBe(true);
+
+    fireEvent.click(buttons[2] as HTMLElement);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('c');
+  });
+});
