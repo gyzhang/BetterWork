@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { FieldSelect } from './FieldSelect';
 import { Modal, type ModalVariant } from './Modal';
 
 afterEach(() => cleanup());
@@ -148,5 +149,58 @@ describe('Modal 基座', () => {
     middle.focus();
     rerender(<Harness onClose={vi.fn()} />);
     expect(document.activeElement).toBe(middle);
+  });
+});
+
+describe('模态内的菜单类浮层', () => {
+  const ROLE_OPTIONS = [
+    { id: 'language', label: '语言模型' },
+    { id: 'vision', label: '视觉模型' },
+  ];
+
+  const openSheet = (onClose = vi.fn()): void => {
+    render(
+      <main>
+        <Modal variant="sheet" label="编辑模型" onClose={onClose}>
+          <FieldSelect
+            ariaLabel="模型角色"
+            value="language"
+            onChange={() => undefined}
+            options={ROLE_OPTIONS}
+          />
+          <button type="button">保存</button>
+        </Modal>
+      </main>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '模型角色' }));
+  };
+
+  it('抽屉里点下拉能展开菜单：菜单 portal 在 body 上，不在被 inert 的壳里', () => {
+    openSheet();
+
+    const menu = screen.getByRole('menu');
+    expect(menu.parentElement).toBe(document.body);
+    expect(menu.getAttribute('data-overlay-layer')).toBe('popover');
+    expect(screen.getByRole('menuitem', { name: '视觉模型' })).toBeTruthy();
+  });
+
+  it('焦点在菜单里时，面板的 Tab 循环不抢焦点', () => {
+    openSheet();
+    const item = screen.getByRole('menuitem', { name: '视觉模型' });
+    item.focus();
+
+    fireEvent.keyDown(window, { key: 'Tab' });
+
+    expect(document.activeElement).toBe(item);
+  });
+
+  it('菜单吃掉 Esc 时只关那一层，抽屉不关', () => {
+    const onClose = vi.fn();
+    openSheet(onClose);
+
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 });

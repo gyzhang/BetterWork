@@ -23,17 +23,18 @@
   --control-radius: 6px;
   --control-border: 1px solid var(--input-border);
 
-  /* 叠放层级（docs/10 §9.11）：数值沿用今天的相对顺序，只把随手写的数字换成
-     有名字的档；新增浮层必须先选档。dialog 一档高于 popover，模态盖住浮层。 */
+  /* 叠放层级（docs/10 §10.1、§9.11）：新增浮层必须先选档。
+     菜单类浮层一档高于模态——模态里也有下拉（模型抽屉的「模型角色」），
+     反过来会让菜单被自己的面板盖住，看起来像点了没反应。 */
   --z-inline: 1;
   --z-context-panel: 4;
   --z-drag-strip: 6;
   --z-notification-overlay: 7;
   --z-notification: 8;
-  --z-popover-backdrop: 11;
-  --z-popover: 12;
   /* 抽屉与对话框自 Modal 基座起同档（docs/10 §9.11）。 */
   --z-modal-backdrop: 19;
+  --z-popover-backdrop: 20;
+  --z-popover: 21;
   --z-toast: 30;
   --z-banner: 40;
 }

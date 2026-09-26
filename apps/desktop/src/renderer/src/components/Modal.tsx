@@ -99,16 +99,21 @@ export function useOverlaySemantics(
     const panel = panelRef.current;
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
+        // 面板内的浮层已经吃掉这次 Esc（它 preventDefault 过）时只关那一层。
+        if (event.defaultPrevented) return;
         event.preventDefault();
         onClose();
         return;
       }
       if (!trapTab || event.key !== 'Tab' || !panel) return;
+      // 模态里打开的下拉菜单 portal 在 body 上，焦点落在面板之外是正常状态。
+      const active = document.activeElement;
+      if (active instanceof Element && active.closest('[data-overlay-layer]')) return;
+
       const focusable = focusableWithin(panel);
       if (focusable.length === 0) return;
       const first = focusable[0] as HTMLElement;
       const last = focusable[focusable.length - 1] as HTMLElement;
-      const active = document.activeElement;
       if (event.shiftKey && (active === first || !panel.contains(active))) {
         event.preventDefault();
         last.focus();

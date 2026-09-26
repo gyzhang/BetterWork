@@ -647,6 +647,19 @@ describe('浮层基座纪律', () => {
     ).toEqual([]);
   });
 
+  it('菜单类浮层的层级必须高于模态', () => {
+    // 模态里也有下拉（模型抽屉的「模型角色」）。层级倒挂时菜单被自己的面板盖住，
+    // 看起来就是「点了没反应」——jsdom 算不出层叠，只能在档位表上锁死。
+    const level = (token: string): number => {
+      const found = declarations.find((declaration) => declaration.property === token);
+      const value = Number(found?.value ?? Number.NaN);
+      expect(Number.isFinite(value), `${token} 必须是数值档位`).toBe(true);
+      return value;
+    };
+    expect(level('--z-popover')).toBeGreaterThan(level('--z-modal-backdrop'));
+    expect(level('--z-popover-backdrop')).toBeGreaterThan(level('--z-modal-backdrop'));
+  });
+
   it('模态语义只有一处实现，页面不得再自写背板与 Esc', () => {
     // 四套并存的后果已经付过学费：`ModelEditorSheet` 只有 aria-modal 外壳、
     // 放映层自己写键盘、消息中心连 aria-expanded 都没有（docs/reviews/2026-09-26-ui-consistency.md §3.1）。

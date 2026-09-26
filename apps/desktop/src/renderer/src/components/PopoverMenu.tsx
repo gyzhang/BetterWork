@@ -232,6 +232,8 @@ export function PopoverMenu({
         ref={menuRef}
         className="popover-menu"
         role="menu"
+        // 模态基座靠这个属性认出「焦点在自己的浮层里」，不抢 Tab、也不被 Esc 双关。
+        data-overlay-layer="popover"
         aria-label={label}
         style={
           position
