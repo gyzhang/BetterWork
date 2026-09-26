@@ -893,29 +893,23 @@ describe('界面观感基线', () => {
   });
 });
 
+/** 24–40px 带内的唯一例外：两行文本的钳制高度，既不是控件也不是行（docs/10 §9.10）。 */
+const TEXT_MIN_HEIGHT_EXEMPTION = ['.expert-card-desc'];
+
 /**
- * 密集高度裸值的存量清单（docs/10 §9.10）：**只许降不许升**。
- * 24–40px 是控件与行的档位带；落在 28／32／36 的已经收进 `--control-height*`，
- * 剩下这些是还没定档的（23 侧栏工作空间行、26 行内小按钮、30 筛选与次级按钮、
- * 34 导航、36／40 卡片摘要与顶栏），等 `ListRow` 基座一次性收档。
+ * 微标圆角例外：3–4px 的图形化小件不进档位表。**只许降不许升**，
+ * 新增一条要写清为什么它不是 `--radius-*` 里的某一档。
  */
-const DENSE_HEIGHT_BASELINE = [
-  '.new-task',
-  '.primary-nav button, .settings-nav',
-  '.settings-nav-list button',
-  '.selected-materials-actions button',
-  '.context-section .selected-materials-heading > button',
-  '.context-row button',
-  '.suggestion-job-row button',
-  '.knowledge-job-row button',
-  '.knowledge-research-button',
-  '.knowledge-admin-toggle',
-  '.knowledge-admin-row button',
-  '.knowledge-detail-members button',
-  '.filter-bar button',
-  '.memory-conflict-actions button',
-  '.material-chip',
-  '.expert-card-desc',
+const MICRO_MARK_RADII: {
+  readonly match: string;
+  readonly value: string;
+  readonly reason: string;
+}[] = [
+  { match: '.composer-footer kbd', value: '4px', reason: '键帽' },
+  { match: '.current-badge', value: '4px', reason: '当前模型徽标' },
+  { match: '.mode-preview b', value: '4px', reason: '外观模式预览色板' },
+  { match: '.scheme-preview i', value: '3px', reason: '色系预览色块' },
+  { match: '.artifact-evidence-list b', value: '4px', reason: '来源格式微标' },
 ];
 
 describe('徽标与档位纪律', () => {
@@ -933,29 +927,51 @@ describe('徽标与档位纪律', () => {
     ).toEqual([]);
   });
 
-  it('密集高度档位的裸值只降不升', () => {
-    let current = 0;
-    const offenders: string[] = [];
+  it('密集高度与圆角只允许取档位', () => {
+    // 24–40px 的裸高度与 3–12px 的裸圆角各写一遍，正是「看着不统一」的最后一层。
+    const heightOffenders: string[] = [];
+    const radiusOffenders: string[] = [];
+    let microMarks = 0;
     for (const declaration of declarations) {
-      if (declaration.property !== 'min-height') continue;
-      const pixels = parsePixels(declaration.value);
-      if (pixels === undefined || pixels < 24 || pixels > 40) continue;
-      current += 1;
       const selector = declaration.selector.replace(/\/\*[\s\S]*?\*\//g, '').trim();
-      if (!DENSE_HEIGHT_BASELINE.some((entry) => selector.includes(entry))) {
-        offenders.push(locate(declaration, styles ?? ''));
+      if (declaration.property === 'min-height') {
+        const pixels = parsePixels(declaration.value);
+        if (pixels === undefined || pixels < 24 || pixels > 40) continue;
+        if (TEXT_MIN_HEIGHT_EXEMPTION.some((entry) => selector.includes(entry))) continue;
+        if (
+          !declaration.value.startsWith('var(--control-height') &&
+          !declaration.value.startsWith('var(--row-height')
+        ) {
+          heightOffenders.push(locate(declaration, styles ?? ''));
+        }
+        continue;
       }
+      if (declaration.property !== 'border-radius') continue;
+      const value = declaration.value;
+      if (
+        value.startsWith('var(--radius-') ||
+        value.startsWith('var(--control-radius') ||
+        value === '0'
+      )
+        continue;
+      if (
+        MICRO_MARK_RADII.some((entry) => selector.includes(entry.match) && entry.value === value)
+      ) {
+        microMarks += 1;
+        continue;
+      }
+      radiusOffenders.push(locate(declaration, styles ?? ''));
     }
     expect(
-      offenders,
-      '24–40px 的高度档要么取 --control-height*，要么登记进待收敛清单（docs/10 §9.10）',
+      heightOffenders,
+      '24–40px 的高度必须取 --control-height*／--row-height* 档位（docs/10 §9.10）',
     ).toEqual([]);
+    expect(radiusOffenders, '圆角必须取 --radius-* 档位；微标例外要登记理由').toEqual([]);
     expect(
-      current,
-      `密集高度裸值 ${current} 处，比基线 ${DENSE_HEIGHT_BASELINE.length} 多——清单不是豁免清单`,
-    ).toBeLessThanOrEqual(DENSE_HEIGHT_BASELINE.length);
+      microMarks,
+      `微标圆角存量 ${microMarks} 处，比清单 ${MICRO_MARK_RADII.length} 多——例外不是新增口`,
+    ).toBeLessThanOrEqual(MICRO_MARK_RADII.length);
   });
-
   it('空态占位不得再回到各页自造的类', () => {
     // §2 记着 6 处内联占位绕开 EmptyState：同一个「这里还没有东西」有四种尺寸与配色。
     const offenders: string[] = [];

@@ -17,10 +17,18 @@
   --control-height-sm: 28px;
   --control-height: 32px;
   --control-height-lg: 36px;
-  /* 圆角档位：控件 6px、方角徽标 5px、胶囊 999px。卡片与面板档随 ListRow 基座一起补。 */
-  --radius-tag: 5px;
-  --radius-pill: 999px;
   --control-radius: 6px;
+  /* 圆角档位（docs/10 §9.10）：一档一个用途，样式表里不得再出现字面 px。
+     微标（kbd、色板、格式徽标）取 3–4px，属图形化例外，由护栏按清单登记。 */
+  --radius-tag: 5px;
+  --radius-row: 8px;
+  --radius-card: 10px;
+  --radius-surface: 12px;
+  --radius-pill: 999px;
+  --radius-circle: 50%;
+  /* 行高档位：侧栏的行不是控件，套不进 28/32/36 三档。 */
+  --row-height-sm: 23px;
+  --row-height: 34px;
   --control-border: 1px solid var(--input-border);
 
   /* 叠放层级（docs/10 §10.1、§9.11）：新增浮层必须先选档。
@@ -409,7 +417,7 @@ small {
   color: var(--text-muted);
   background: transparent;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   font-size: 19px;
   line-height: 1;
 }
@@ -439,12 +447,12 @@ small {
   align-items: center;
   gap: 12px;
   width: 100%;
-  min-height: 34px;
+  min-height: var(--row-height);
   padding: 7px 9px;
   color: var(--text-secondary);
   background: transparent;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-row);
   font-size: 13px;
   text-align: left;
 }
@@ -463,12 +471,12 @@ small {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 34px;
+  min-height: var(--row-height);
   padding: 7px 9px;
   color: var(--text-secondary);
   background: transparent;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-row);
   font-size: 13px;
   text-align: left;
 }
@@ -516,7 +524,7 @@ small {
   color: var(--text-secondary);
   background: transparent;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-row);
   text-align: left;
 }
 .run-item:hover,
@@ -695,7 +703,7 @@ small {
   margin: 0 auto 12px;
   width: min(760px, calc(100% - 32px));
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-surface);
   padding: 10px 12px;
   background: var(--surface-raised);
 }
@@ -749,7 +757,7 @@ small {
   display: grid;
   gap: 8px;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   padding: 8px;
 }
 
@@ -824,7 +832,7 @@ small {
   width: 11px;
   height: 11px;
   background: var(--brand);
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   box-shadow: 0 0 0 4px var(--brand-soft);
 }
 .welcome h2 {
@@ -855,7 +863,7 @@ small {
   color: var(--text-secondary);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-row);
   font-size: 12px;
 }
 .examples button:hover {
@@ -874,7 +882,7 @@ small {
 }
 .message p {
   padding: 13px 15px;
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   font-size: 15px;
   line-height: 1.7;
   white-space: pre-wrap;
@@ -888,14 +896,14 @@ small {
   padding: 11px 13px 10px;
   background: var(--composer);
   border: 1px solid var(--input-border);
-  border-radius: 12px;
+  border-radius: var(--radius-surface);
   box-shadow: 0 10px 26px var(--shadow-color-raised);
 }
 .workspace-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 23px;
+  min-height: var(--row-height-sm);
   color: var(--text-muted);
   font-size: 12px;
 }
@@ -917,7 +925,7 @@ small {
   color: var(--text-secondary);
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-row);
   font-size: 13px;
   cursor: pointer;
   min-height: var(--control-height-sm);
@@ -973,7 +981,7 @@ small {
   color: var(--text-primary);
   background: transparent;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-tag);
   cursor: pointer;
   font-size: 13px;
   text-align: left;
@@ -1043,7 +1051,7 @@ small {
   color: var(--on-brand);
   background: var(--brand);
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-row);
   font-size: 12px;
   font-weight: 600;
 }
@@ -1078,7 +1086,7 @@ small {
   color: var(--text-muted);
   background: transparent;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   font-size: 22px;
   line-height: 1;
 }
@@ -1118,7 +1126,7 @@ small {
   color: var(--text-secondary);
   background: transparent;
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: var(--radius-tag);
   font-size: 12px;
 }
 .selected-materials-heading {
@@ -1143,12 +1151,12 @@ small {
   gap: 4px;
 }
 .selected-materials-actions button {
-  min-height: 26px;
+  min-height: var(--control-height-sm);
   padding: 3px 6px;
   color: var(--brand);
   background: var(--brand-soft);
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-tag);
   font-size: 12px;
   cursor: pointer;
 }
@@ -1180,12 +1188,12 @@ small {
   border-bottom: 1px solid var(--border-subtle);
 }
 .context-section .selected-materials-heading > button {
-  min-height: 26px;
+  min-height: var(--control-height-sm);
   padding: 3px 8px;
   color: var(--brand);
   background: var(--brand-soft);
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-tag);
   font-size: 12px;
 }
 .context-section .selected-materials-heading > button:hover {
@@ -1217,7 +1225,7 @@ small {
   padding: 8px 9px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
 }
 .context-row > div {
   display: grid;
@@ -1236,12 +1244,12 @@ small {
 }
 .context-row button {
   flex: none;
-  min-height: 26px;
+  min-height: var(--control-height-sm);
   padding: 3px 8px;
   color: var(--text-secondary);
   background: transparent;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   font-size: 12px;
 }
 .context-row button:hover {
@@ -1355,7 +1363,7 @@ small {
   text-align: left;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
 }
 .brief-list button:hover {
   background: var(--surface-raised);
@@ -1395,7 +1403,7 @@ small {
   padding: 11px 12px;
   background: var(--surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 9px;
+  border-radius: var(--radius-card);
 }
 .suggestion-setting-row {
   display: flex;
@@ -1438,7 +1446,7 @@ small {
   gap: 8px;
   padding: 7px 9px;
   background: var(--surface-raised);
-  border-radius: 7px;
+  border-radius: var(--radius-row);
 }
 .suggestion-job-row > div {
   display: grid;
@@ -1456,12 +1464,12 @@ small {
 }
 .suggestion-job-row button {
   flex: none;
-  min-height: 26px;
+  min-height: var(--control-height-sm);
   padding: 3px 8px;
   color: var(--text-secondary);
   background: transparent;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   font-size: 12px;
 }
 .suggestion-job-row button:hover {
@@ -1478,7 +1486,7 @@ small {
   padding: 11px 12px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-card);
 }
 .suggestion-head {
   display: flex;
@@ -1517,7 +1525,7 @@ small {
   padding: 2px 6px;
   color: var(--text-secondary);
   background: var(--surface-raised);
-  border-radius: 5px;
+  border-radius: var(--radius-tag);
   font-size: 12px;
 }
 .empty-context {
@@ -1538,7 +1546,7 @@ small {
   place-items: center;
   color: var(--brand);
   background: var(--brand-soft);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
 }
 .empty-context strong {
   color: var(--text-primary);
@@ -1559,7 +1567,7 @@ small {
   padding: 12px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-card);
 }
 .status-dot {
   width: 8px;
@@ -1567,7 +1575,7 @@ small {
   margin-top: 4px;
   flex: none;
   background: var(--success);
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
 }
 .status-dot.running {
   background: var(--brand);
@@ -1596,7 +1604,7 @@ small {
   height: 7px;
   margin: 4px 0 0 2px;
   background: var(--brand);
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
 }
 .activity-row.running .activity-marker {
   box-shadow: 0 0 0 4px var(--brand-soft);
@@ -1652,7 +1660,7 @@ small {
   height: 16px;
   border: 2px solid var(--border);
   border-top-color: var(--brand);
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   animation: page-spinner var(--motion-overlay) linear infinite;
 }
 .error-page {
@@ -1666,7 +1674,7 @@ small {
   place-items: center;
   color: var(--danger);
   background: var(--danger-soft);
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
 }
 .error-page p {
   max-width: 420px;
@@ -1684,7 +1692,7 @@ small {
   padding: 5px 8px;
   color: var(--brand);
   background: var(--brand-soft);
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   font-size: 12px;
   font-weight: 600;
 }
@@ -1716,7 +1724,7 @@ small {
   place-items: center;
   color: var(--on-brand);
   background: var(--success);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   font-size: 12px;
   font-weight: 700;
 }
@@ -1773,12 +1781,12 @@ small {
 .settings-nav-list button {
   display: block;
   width: 100%;
-  min-height: 34px;
+  min-height: var(--row-height);
   padding: 7px 9px;
   color: var(--text-secondary);
   background: transparent;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-row);
   font-size: 13px;
   text-align: left;
 }
@@ -1821,7 +1829,7 @@ small {
   text-align: left;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   cursor: pointer;
 }
 .skill-card:hover {
@@ -1844,7 +1852,7 @@ small {
   place-items: center;
   color: var(--brand);
   background: var(--brand-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   font-size: 14px;
   font-weight: 700;
 }
@@ -1891,7 +1899,7 @@ small {
   padding: 16px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
 }
 .expert-card-main {
   display: flex;
@@ -1921,7 +1929,7 @@ small {
   place-items: center;
   color: var(--brand);
   background: var(--brand-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
 }
 .expert-card-head strong,
 .expert-card-head small {
@@ -2000,7 +2008,7 @@ small {
 .expert-editor-body fieldset {
   padding: 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
 }
 .expert-editor-body legend {
   padding: 0 5px;
@@ -2113,7 +2121,7 @@ small {
   text-align: left;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   cursor: pointer;
 }
 .skill-list-item:hover {
@@ -2171,7 +2179,7 @@ small {
   color: var(--text-primary);
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-row);
   font-size: 13px;
 }
 .skill-detail-section button:hover {
@@ -2187,7 +2195,7 @@ small {
 .skill-trust-box {
   padding: 11px;
   background: var(--surface-raised);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
 }
 .skill-state-grid span,
 .skill-state-grid strong {
@@ -2228,7 +2236,7 @@ small {
   padding: 13px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
 }
 .dependency-inline {
   display: flex;
@@ -2256,7 +2264,7 @@ small {
   padding: 10px;
   background: var(--surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
 }
 .dependency-operation strong {
   font-size: 13px;
@@ -2360,7 +2368,7 @@ small {
   padding: 9px 11px;
   color: var(--success);
   background: var(--success-soft);
-  border-radius: 7px;
+  border-radius: var(--radius-row);
   font-size: 12px;
 }
 .filter-bar {
@@ -2369,12 +2377,12 @@ small {
   margin: 25px 0 9px;
 }
 .filter-bar button {
-  min-height: 30px;
+  min-height: var(--control-height);
   padding: 5px 10px;
   color: var(--text-secondary);
   background: transparent;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   font-size: 12px;
 }
 .filter-bar button.active {
@@ -2402,7 +2410,7 @@ small {
   place-items: center;
   color: var(--brand);
   background: var(--brand-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   font-size: 12px;
   font-weight: 600;
 }
@@ -2455,7 +2463,7 @@ small {
   color: var(--text-secondary);
   background: transparent;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-tag);
   font-size: 12px;
 }
 .model-actions button:hover {
@@ -2496,7 +2504,7 @@ small {
   padding: 14px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-card);
 }
 .memory-create-form textarea,
 .memory-main textarea {
@@ -2555,7 +2563,7 @@ small {
   color: var(--text-secondary);
   background: transparent;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-tag);
   font-size: 12px;
 }
 .memory-actions button:hover {
@@ -2569,7 +2577,7 @@ small {
   padding: 12px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
 }
 .memory-capture textarea {
   width: 100%;
@@ -2628,7 +2636,7 @@ small {
   padding: 10px 12px;
   color: var(--warning);
   background: var(--warning-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -2642,7 +2650,7 @@ small {
   padding: 10px 12px;
   color: var(--warning);
   background: var(--warning-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   font-size: 12px;
   line-height: 1.6;
   list-style: none;
@@ -2654,7 +2662,7 @@ small {
   padding: 10px 12px;
   color: var(--info);
   background: var(--info-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -2800,7 +2808,7 @@ small {
   padding: 2px 6px;
   color: var(--warning);
   background: var(--surface);
-  border-radius: 5px;
+  border-radius: var(--radius-tag);
   font-size: 12px;
 }
 .memory-policy-hint {
@@ -2823,7 +2831,7 @@ small {
   padding: 10px 11px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-card);
 }
 .memory-conflict > strong {
   font-size: 12px;
@@ -2850,7 +2858,7 @@ small {
   padding: 8px 9px;
   background: var(--surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 7px;
+  border-radius: var(--radius-row);
 }
 .memory-conflict-bodies > div > span {
   color: var(--text-muted);
@@ -2885,12 +2893,12 @@ small {
   min-width: 200px;
 }
 .memory-conflict-actions button {
-  min-height: 30px;
+  min-height: var(--control-height);
   padding: 5px 9px;
   color: var(--text-secondary);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   font-size: 12px;
 }
 .memory-conflict-actions button:hover {
@@ -2909,7 +2917,7 @@ small {
   padding: 14px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
 }
 .memory-editor-host h3 {
   font-size: 14px;
@@ -2974,7 +2982,7 @@ small {
   padding: 11px 12px;
   background: var(--surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 9px;
+  border-radius: var(--radius-card);
 }
 .memory-editor-diff > strong {
   font-size: 12px;
@@ -3103,7 +3111,7 @@ small {
   color: var(--text-primary);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-card);
   text-align: left;
 }
 .appearance-modes button:hover,
@@ -3132,7 +3140,7 @@ small {
   width: 100%;
   height: 54px;
   overflow: hidden;
-  border-radius: 5px;
+  border-radius: var(--radius-tag);
 }
 .mode-preview.light {
   background: #f4f5f2;
@@ -3184,7 +3192,7 @@ small {
   overflow: hidden;
   gap: 4px;
   padding: 5px;
-  border-radius: 5px;
+  border-radius: var(--radius-tag);
 }
 .scheme-preview i {
   display: block;
@@ -3246,7 +3254,7 @@ small {
   padding: 12px;
   color: var(--text-secondary);
   background: var(--surface-raised);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -3281,7 +3289,7 @@ small {
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-surface);
   box-shadow: 0 16px 40px var(--shadow-color-overlay);
 }
 .modal-panel[data-variant='dialog'] {
@@ -3323,7 +3331,7 @@ small {
   color: var(--on-danger);
   background: var(--danger);
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-row);
   font-size: 12px;
   font-weight: 600;
 }
@@ -3350,7 +3358,7 @@ small {
   overflow-y: auto;
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   box-shadow: 0 12px 28px var(--shadow-color-overlay);
   /* 兜底字号；打开时基座会按触发控件的计算值内联覆写（docs/10 §9.10）。 */
   font-size: 13px;
@@ -3361,7 +3369,7 @@ small {
   gap: 8px;
   min-height: var(--control-height);
   padding: 6px 10px;
-  border-radius: 5px;
+  border-radius: var(--radius-tag);
   cursor: pointer;
   color: var(--text-primary);
 }
@@ -3410,7 +3418,7 @@ small {
   gap: 4px;
   height: 24px;
   padding: 0 6px 0 4px;
-  border-radius: 12px;
+  border-radius: var(--radius-surface);
   background: var(--selection);
   color: var(--text-primary);
   font-size: 12px;
@@ -3430,7 +3438,7 @@ small {
   height: 16px;
   padding: 0;
   border: none;
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -3447,7 +3455,7 @@ small {
   height: 28px;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   background: var(--surface-raised);
   color: var(--text-secondary);
   cursor: pointer;
@@ -3512,12 +3520,12 @@ small {
   max-width: min(360px, 100%);
   align-items: center;
   gap: 8px;
-  min-height: 26px;
+  min-height: var(--control-height-sm);
   padding: 2px 5px 2px 8px;
   color: var(--text-primary);
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-row);
   font-size: 12px;
 }
 .material-chip.unavailable {
@@ -3599,7 +3607,7 @@ small {
   color: var(--text-secondary);
   background: transparent;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   font-size: 22px;
 }
 .model-sheet header button:hover {
@@ -3656,7 +3664,7 @@ small {
 ::-webkit-scrollbar-thumb {
   background: var(--scrollbar);
   border: 2px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   background-clip: padding-box;
 }
 @media (max-width: 1279px) {
@@ -3756,7 +3764,7 @@ small {
   color: var(--on-brand);
   background: var(--brand);
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-row);
   font-size: 12px;
   font-weight: 600;
 }
@@ -3785,12 +3793,12 @@ small {
   gap: 12px;
 }
 .knowledge-research-button {
-  min-height: 30px;
+  min-height: var(--control-height);
   padding: 6px 9px;
   color: var(--brand);
   background: var(--brand-soft);
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   font-size: 12px;
   font-weight: 600;
 }
@@ -3825,7 +3833,7 @@ small {
   place-items: center;
   color: var(--brand);
   background: var(--brand-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   font-size: 10px;
   font-weight: 700;
 }
@@ -3869,7 +3877,7 @@ small {
   color: var(--text-secondary);
   background: transparent;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   font-size: 12px;
 }
 .open-source-button:hover {
@@ -3919,7 +3927,7 @@ small {
   place-items: center;
   color: var(--brand);
   background: var(--brand-soft);
-  border-radius: 5px;
+  border-radius: var(--radius-tag);
 }
 .evidence-row > div {
   min-width: 0;
@@ -3952,7 +3960,7 @@ small {
   color: var(--text-secondary);
   background: transparent;
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: var(--radius-tag);
   font-size: 12px;
 }
 .evidence-open-button:hover {
@@ -3978,7 +3986,7 @@ small {
   padding: 9px 10px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-row);
 }
 .evidence-preview ul {
   margin: 6px 0;
@@ -4060,7 +4068,7 @@ small {
   height: 12px;
   border: 2px solid var(--border);
   border-top-color: var(--brand);
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   animation: spin var(--motion-overlay) linear infinite;
 }
 @keyframes spin {
@@ -4076,7 +4084,7 @@ small {
   color: var(--text-secondary);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-row);
   font-size: 12px;
 }
 .message-action:hover {
@@ -4110,7 +4118,7 @@ small {
   gap: 8px;
   padding: 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   background: var(--surface-raised);
 }
 .artifact-file-info-row {
@@ -4138,7 +4146,7 @@ small {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   overflow: hidden;
   background: var(--surface-raised);
 }
@@ -4178,7 +4186,7 @@ small {
   object-fit: contain;
   background: var(--artifact-canvas);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
 }
 .artifact-thumbnail-index {
   padding: 6px 10px;
@@ -4201,7 +4209,7 @@ small {
   padding: 32px clamp(24px, 5vw, 52px);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   box-shadow: 0 12px 28px var(--shadow-color-soft);
   font-size: 15px;
   line-height: 1.8;
@@ -4264,7 +4272,7 @@ small {
   padding: 13px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius-row);
 }
 .markdown-preview pre code {
   padding: 0;
@@ -4290,7 +4298,7 @@ small {
 .page-header-actions button {
   min-height: var(--control-height);
   padding: 6px 11px;
-  border-radius: 7px;
+  border-radius: var(--radius-row);
   font-size: 12px;
 }
 .artifact-editor {
@@ -4338,7 +4346,7 @@ small {
 }
 .artifact-editor footer button {
   padding: 8px 11px;
-  border-radius: 7px;
+  border-radius: var(--radius-row);
 }
 .artifact-source-select {
   display: flex;
@@ -4347,7 +4355,7 @@ small {
   margin: 0;
   padding: 12px;
   border: 1px solid var(--border-subtle);
-  border-radius: 9px;
+  border-radius: var(--radius-card);
 }
 .artifact-source-select legend {
   padding: 0 4px;
@@ -4389,7 +4397,7 @@ small {
   padding: 9px 11px;
   color: var(--danger);
   background: var(--danger-soft);
-  border-radius: 7px;
+  border-radius: var(--radius-row);
   font-size: 12px;
 }
 .refresh-knowledge-button {
@@ -4397,7 +4405,7 @@ small {
   color: var(--text-secondary);
   background: transparent;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   font-size: 12px;
 }
 .refresh-knowledge-button:hover {
@@ -4409,7 +4417,7 @@ small {
   padding: 10px 12px;
   color: var(--danger);
   background: var(--danger-soft);
-  border-radius: 7px;
+  border-radius: var(--radius-row);
   font-size: 12px;
 }
 .knowledge-issues strong {
@@ -4428,12 +4436,12 @@ small {
 /* KM09：索引与模型管理、作业区域 */
 .knowledge-admin-toggle {
   align-self: flex-start;
-  min-height: 30px;
+  min-height: var(--control-height);
   padding: 6px 10px;
   color: var(--text-primary);
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   font-size: 12px;
 }
 .knowledge-admin-toggle:hover {
@@ -4446,7 +4454,7 @@ small {
   margin: 10px 0;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
 }
 .knowledge-admin-row {
   display: flex;
@@ -4459,12 +4467,12 @@ small {
   color: var(--text-muted);
 }
 .knowledge-admin-row button {
-  min-height: 30px;
+  min-height: var(--control-height);
   padding: 6px 10px;
   color: var(--text-primary);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   font-size: 12px;
 }
 .knowledge-admin-row button:hover:not(:disabled) {
@@ -4505,7 +4513,7 @@ small {
   color: var(--danger);
   background: var(--surface);
   border: 1px solid var(--danger);
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   font-size: 12px;
 }
 .knowledge-jobs {
@@ -4516,7 +4524,7 @@ small {
   padding: 10px 12px;
   color: var(--text-secondary);
   background: var(--brand-soft);
-  border-radius: 7px;
+  border-radius: var(--radius-row);
   font-size: 12px;
 }
 .knowledge-job-row {
@@ -4526,12 +4534,12 @@ small {
   gap: 12px;
 }
 .knowledge-job-row button {
-  min-height: 26px;
+  min-height: var(--control-height-sm);
   padding: 4px 10px;
   color: var(--brand);
   background: transparent;
   border: 1px solid var(--brand);
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   font-size: 12px;
 }
 /* 终态作业默认收起，进行中的作业仍留在面板上（docs/10 §11.5）。 */
@@ -4616,7 +4624,7 @@ small {
   gap: 8px;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   font-size: 12px;
 }
 .knowledge-detail-members > div {
@@ -4629,12 +4637,12 @@ small {
   color: var(--text-muted);
 }
 .knowledge-detail-members button {
-  min-height: 30px;
+  min-height: var(--control-height);
   padding: 6px 10px;
   color: var(--brand);
   background: transparent;
   border: 1px solid var(--brand);
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   font-size: 12px;
 }
 .knowledge-detail-members button:disabled {
@@ -4674,7 +4682,7 @@ small {
   color: var(--text-primary);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   font-size: 12px;
 }
 .knowledge-detail-header button:hover:not(:disabled),
@@ -4755,7 +4763,7 @@ small {
   color: var(--text-secondary);
   background: transparent;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   text-align: left;
 }
 .task-run-history button:hover,
@@ -4840,7 +4848,7 @@ small {
   padding: 10px 12px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
 }
 .artifact-input-card-icon {
   display: grid;
@@ -4850,7 +4858,7 @@ small {
   place-items: center;
   color: var(--brand);
   background: var(--brand-soft);
-  border-radius: 6px;
+  border-radius: var(--control-radius);
 }
 .artifact-input-card-body {
   min-width: 0;
@@ -4906,7 +4914,7 @@ small {
   padding: 10px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
 }
 .artifact-version-list > div {
   display: flex;
@@ -4930,7 +4938,7 @@ small {
   color: var(--text-secondary);
   background: transparent;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--control-radius);
   text-align: left;
 }
 .artifact-version-list button:hover,
@@ -5105,7 +5113,7 @@ small {
   color: var(--text-muted);
   background: transparent;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-row);
 }
 .notification-bell:hover,
 .notification-bell.active {
@@ -5123,7 +5131,7 @@ small {
   padding: 0 4px;
   color: var(--on-danger);
   background: var(--danger);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
@@ -5149,7 +5157,7 @@ small {
   margin-top: 6px;
   flex: none;
   background: var(--brand);
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
 }
 .toast-body {
   min-width: 0;
@@ -5185,7 +5193,7 @@ small {
   color: var(--text-secondary);
   background: transparent;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-tag);
   font-size: 12px;
 }
 .notification-panel-actions button:hover {
@@ -5219,7 +5227,7 @@ small {
   height: 24px;
   flex: none;
   place-items: center;
-  border-radius: 6px;
+  border-radius: var(--control-radius);
 }
 .notification-item > div {
   min-width: 0;
@@ -5284,7 +5292,7 @@ small {
   color: var(--text-primary);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   box-shadow: 0 14px 34px var(--shadow-color-overlay);
   text-align: left;
 }
@@ -5294,7 +5302,7 @@ small {
   height: 24px;
   flex: none;
   place-items: center;
-  border-radius: 6px;
+  border-radius: var(--control-radius);
 }
 .toast > div {
   min-width: 0;
@@ -5322,7 +5330,7 @@ small {
   color: var(--text-muted);
   background: transparent;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-tag);
   font-size: 16px;
   line-height: 1;
 }
@@ -5363,7 +5371,7 @@ small {
   color: var(--text-primary);
   background: var(--surface);
   border: 1px solid var(--danger);
-  border-radius: 10px;
+  border-radius: var(--radius-card);
   box-shadow: 0 14px 34px var(--shadow-color-overlay);
   transform: translateX(-50%);
 }
@@ -5375,7 +5383,7 @@ small {
   place-items: center;
   color: var(--danger);
   background: var(--danger-soft);
-  border-radius: 6px;
+  border-radius: var(--control-radius);
 }
 .action-error-banner p {
   min-width: 0;
@@ -5393,7 +5401,7 @@ small {
   color: var(--text-muted);
   background: transparent;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-tag);
 }
 .action-error-banner button:hover {
   color: var(--text-primary);
@@ -5596,7 +5604,7 @@ select,
   color: var(--text-secondary);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   text-align: left;
   font-size: 13px;
 }
@@ -5627,7 +5635,7 @@ select,
   margin-top: 8px;
   padding: 12px;
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-surface);
   background: var(--surface);
   max-height: 440px;
   overflow: auto;
@@ -5731,7 +5739,7 @@ select,
   overflow-wrap: anywhere;
   background: var(--surface-raised);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   font:
     12px/1.7 ui-monospace,
     SFMono-Regular,
@@ -5798,7 +5806,7 @@ select,
   gap: 12px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius-card);
 }
 .mcp-editor h3 {
   margin: 0;
@@ -5824,7 +5832,7 @@ select,
   padding: 12px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
 }
 .selected-mcp-list,
 .selected-mcp-connection {

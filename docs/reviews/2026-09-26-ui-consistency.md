@@ -129,7 +129,7 @@
 **P2（3–5 天，收重复结构）**
 
 - ⬜ `ListRow` 基座：§3.4 的 9 套行几何逐类迁移（`Badge` 半边已完成，见 §3.4）。
-- ✅ 档位与棘轮：`--radius-tag`／`--radius-pill` 立档，样式表内字面 `999px` 清零（护栏锁）；与三档同值的密集高度裸值 12 处换成 `--control-height*`，余下 16 处不同档（23／26／30／34／40）登记进 `DENSE_HEIGHT_BASELINE` 待收敛清单，只降不升。是否把 26 并入 28、30 并入 32 需要产品定档，未擅自改。
+- ✅ 档位与棘轮（2026-09-27 收口，产品已拍板并档）：圆角立成 `--radius-tag 5 / --control-radius 6 / --radius-row 8 / --radius-card 10 / --radius-surface 12 / --radius-pill 999 / --radius-circle 50%` 七档，样式表 150 处裸圆角换成档位（7→8、9→10 是有意并档），3–4px 的 5 处微标按 `MICRO_MARK_RADII` 只降不升；密集高度 26→28、30→32、34→`--row-height`、23→`--row-height-sm`，24–40px 带内裸值清零，唯一例外是 `.expert-card-desc` 的两行文本钳制。护栏由「清单」升级为「零容忍」。
 - ✅ 空态全部走 `EmptyState`：6 处内联占位收编（区域级 `EmptyContext` 加 `icon` 参，行内与小节级新增 `EmptyNotice` 的 line／block 两变体），四个自造占位类的样式删除并由护栏锁死不得复活。行内加载提示（如「正在计算依赖计划…」）留在 `muted-text` 状态行，不塞进空态块——它表达的是「正在忙」而不是「这里没有东西」。
 - ✅ `Tabs` / `SegmentedControl` 分两个基座落地（同在 `components/Tabs.tsx`），`Tabs` 自带左右方向键与 roving tabindex，一次性收掉 `MemoryView` 与 `ContextPanel` 两处页签；`SkillsView` 的视图模式切换也显式收进 `SegmentedControl`。密集高度顺带收了两条：页签与切换组的 29／30px 裸值改取 `--control-height-sm`，圆角改取 `--control-radius`。
 

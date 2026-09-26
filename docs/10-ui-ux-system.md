@@ -469,13 +469,19 @@ UI Foundation 首批提供四套成对色系：
 | `--control-height` | 32px | **常规档**：输入框、下拉、日期/选择器、标准按钮 |
 | `--control-height-lg` | 36px | 主行动按钮（`.primary-button`）与大型输入 |
 | `--control-radius` | 6px | 所有表单控件与浮层内按钮 |
+| `--row-height-sm` | 23px | 侧栏工作空间行（不是控件，套不进三档控件高度） |
+| `--row-height` | 34px | 侧栏导航与「新建任务」行 |
 | `--radius-tag` | 5px | 方角徽标（`Badge shape="tag"`） |
-| `--radius-pill` | 999px | 胶囊：徽标、筛选片、工具状态片。样式表里不得再出现字面 `999px` |
+| `--radius-row` | 8px | 行与内嵌小块：侧栏项、上下文行、建议行 |
+| `--radius-card` | 10px | 卡片与小面板：技能卡、专家卡、依赖面板 |
+| `--radius-surface` | 12px | 大表面：模态面板、Composer、通知面板 |
+| `--radius-pill` | 999px | 胶囊：徽标、筛选片、工具状态片 |
+| `--radius-circle` | 50% | 圆点与头像 |
 | `--control-border` | `1px solid var(--input-border)` | 表单控件与按钮边框；不得再混用 `--border` / `--border-subtle`。填充式主行动按钮可取 `1px solid transparent`，只为与带边框控件保持同一盒几何 |
 
 - 多行 `textarea` 的 `min-height` 表达「编辑区至少多高」，不属于控件档位，不受此表约束。
-- **24–40px 的密集高度带**：与三档同值的裸值（28／32／36）已在 2026-09-26 深夜全部换成 Token，样式表里剩 16 处不同档（23／26／30／34／40）——它们是行内小按钮、导航条与文本钳制高度，是否并档需要产品判断，因此由护栏按**待收敛清单**（`DENSE_HEIGHT_BASELINE`）登记：清单只降不升，新增这个带宽的裸高度即失败。
-- 圆角档位同理起步：本轮先立 `--radius-tag`／`--radius-pill` 两档并把 999px 收干净；卡片与面板圆角（现存 8／9／10／12px 混用）随 `ListRow` 基座一起建档位表。
+- **24–40px 的密集高度带已并档**（2026-09-27，产品拍板）：行内小按钮 26 → 28、筛选与次级按钮 30 → 32、侧栏行 34 → `--row-height`、工作空间行 23 → `--row-height-sm`。带内裸值现为 0，护栏改为零容忍——唯一的例外是 `.expert-card-desc` 的两行文本钳制高度，它既不是控件也不是行。
+- **圆角同样收进档位表**：样式表里 150 处裸圆角换成 `var(--radius-*)`，其中 7 → 8（`--radius-row`）、9 → 10（`--radius-card`）是两处有意的并档。剩下的 3–4px 只有 5 处，全是键帽、色板与格式微标这类图形化小件，由 `MICRO_MARK_RADII` 按「只降不升」登记；新增一处必须写清它为什么不算某一档。
 - **浮层字号跟随触发控件**：`PopoverMenu` 打开时读取触发元素的计算字号并内联到浮层根，菜单项不自带 `font-size`。浮层是触发器的延伸，两处字号不一致会让菜单看起来属于另一个控件（知识卡片「更多」曾继承正文 14px 而比自己的 12px 触发按钮大）。
 - 落地现状：2026-09-26 已把 50 处控件边框/圆角/高度声明换成 `--control-*` 取值，表单控件里裸值残留 0（由护栏强制，`textarea` 的编辑区高度除外）；三档高度都有真实消费者，护栏的选择器口径除 `input/select/textarea/.field-select-trigger` 外还覆盖 `.primary-button`、`.secondary-button`、`.text-button` 三个按钮类。
 
