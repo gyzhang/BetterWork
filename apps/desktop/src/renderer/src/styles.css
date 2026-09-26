@@ -1738,6 +1738,16 @@ p {
   grid-template-columns: 220px minmax(0, 1fr);
   overflow: auto;
 }
+/* 记忆页自带滚动区：外层不再整页滚，滚动条才落在版心右缘而不是窗口右缘（docs/10 §8.3）。 */
+.settings-layout-fixed {
+  overflow: hidden;
+}
+.settings-layout-fixed .settings-content {
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+  flex-direction: column;
+}
 .settings-nav-list {
   padding: 36px 20px;
   border-right: 1px solid var(--border);
@@ -2642,8 +2652,18 @@ p {
 /* 记忆治理页（产品设计 §3.1–§3.4、契约 §9/§10）：
    提示带只报事实不裁决，冲突并列呈现必须两条同宽。 */
 .memory-settings {
-  display: grid;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
   gap: 12px;
+  overflow-y: auto;
+}
+.memory-settings .page-toolbar {
+  display: grid;
+  flex: none;
+  gap: 10px;
+  margin-bottom: 0;
 }
 .memory-projection {
   display: flex;
@@ -2683,12 +2703,16 @@ p {
   line-height: 1.6;
 }
 .memory-group {
-  margin-top: 2px;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
 }
 .memory-group-heading {
   display: grid;
+  flex: none;
   gap: 3px;
-  margin-bottom: 9px;
 }
 .memory-group-heading strong {
   font-size: 14px;
@@ -2698,11 +2722,40 @@ p {
   font-size: 12px;
   line-height: 1.6;
 }
-.memory-group-hint {
-  margin: 0 0 8px;
+/* 列表是本页唯一滚动区；窗口过矮时先保住可读高度，再让整页兜底滚动。 */
+.memory-list-scroll {
+  min-height: 200px;
+}
+.memory-list-empty {
+  margin: 18px 2px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.memory-group-footer {
+  padding: 12px 2px 2px;
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.6;
+}
+.memory-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.memory-tabs button {
+  min-height: 30px;
+  padding: 5px 11px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.memory-tabs button[aria-selected='true'] {
+  color: var(--text-primary);
+  background: var(--surface);
+  box-shadow: 0 1px 2px var(--shadow-color-raised);
 }
 .memory-status-badge {
   padding: 2px 6px;
@@ -2883,18 +2936,6 @@ p {
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.6;
-}
-.memory-history-group {
-  margin-top: 2px;
-}
-.memory-history-group summary {
-  padding: 10px 4px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  cursor: pointer;
-}
-.memory-history-group[open] summary {
-  color: var(--text-primary);
 }
 .memory-editor-host {
   display: grid;
@@ -3704,12 +3745,16 @@ p {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-.knowledge-search {
+.knowledge-search,
+.memory-search {
   display: flex;
   gap: 8px;
+}
+.knowledge-search {
   margin: 0 0 12px;
 }
-.knowledge-search input {
+.knowledge-search input,
+.memory-search input {
   min-width: 0;
   flex: 1;
   padding: 10px 12px;
@@ -3720,11 +3765,13 @@ p {
   font: inherit;
   font-size: 13px;
 }
-.knowledge-search input:focus {
+.knowledge-search input:focus,
+.memory-search input:focus {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
-.knowledge-search button {
+.knowledge-search button,
+.memory-search .clear-search {
   padding: 8px 12px;
   color: var(--on-brand);
   background: var(--brand);
@@ -3733,7 +3780,8 @@ p {
   font-size: 12px;
   font-weight: 600;
 }
-.knowledge-search .clear-search {
+.knowledge-search .clear-search,
+.memory-search .clear-search {
   color: var(--text-secondary);
   background: transparent;
   border: 1px solid var(--border);

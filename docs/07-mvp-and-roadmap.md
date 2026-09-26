@@ -1,5 +1,9 @@
 # MVP 与路线图
 
+## 记忆治理页检索与滚动区 — 2026-09-25（代码与自动化已落地，光哥真实窗口走查已通过）
+
+光哥把已确认记忆压到 61 条后判定原页面不可维护：整页滚动、且只看得见最近 50 条。两项拍板并已落地——分组收成页签（待确认/已确认/已过期/历史），页面唯一滚动区落在该组列表上，滚动条贴版心右缘；`memory:list` 增加 `query` 做后端全库检索（正文＋议题，NFC 归一＋小写折叠，空白切词取 AND，用 `instr` 所以 `%`/`_` 是字面量）。本页仍不翻页，命中超出一页时在列表尾部说明并引导检索。规范见 [UI 体系 §6.1.6](10-ui-ux-system.md) 与[记忆实施契约 §9.1](development/memory-contracts.md)；回归用例在 `memory-repository.test.ts`、`memory-service.test.ts`、`MemoryView.test.tsx`。人工走查已于 2026-09-26 通过、压测数据已按 id 清单清理；提交与推送仍需单独指令，也不改写 WM/MI 任务板状态。
+
 ## 记忆可靠性改进 — 2026-09-25（D1–D5 已批准，MI00–MI09 代码与自动化已落地）
 
 [改进 Spec](designs/memory-improvements.md)与[原型](prototype/memory-improvements/index.html)提出：先修回答来源继承和任务排除恢复，再补显式优先规则、冲突来源/条件展示与换期恢复旅程；不引入记忆向量检索、自动确认或不安全历史恢复。[ADR-0028](adr/0028-memory-reliability-improvements.md)记录提案及 D1–D5 批准事实，正式状态仍为 Proposed；[记忆契约 §11](development/memory-contracts.md#11-mi-改进契约proposed)集中维护增量字段与预算。

@@ -263,6 +263,7 @@ export class MemoryService {
       ...(parsed.expertId === undefined ? {} : { expertId: parsed.expertId }),
       ...(parsed.statuses === undefined ? {} : { statuses: parsed.statuses }),
       includeCandidates: parsed.includeCandidates,
+      ...(parsed.query === undefined ? {} : { query: parsed.query }),
       ...(parsed.cursor === undefined ? {} : { cursor: parsed.cursor }),
       ...(parsed.limit === undefined ? {} : { limit: parsed.limit }),
     });

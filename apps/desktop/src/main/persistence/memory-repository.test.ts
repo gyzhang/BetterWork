@@ -259,6 +259,67 @@ describe('MemoryRepository', () => {
     expect(repository.get(expiring.id)?.status).toBe('confirmed');
   });
 
+  it('检索命中整个库，而不是只过滤已加载的那一页', () => {
+    const store = openStore();
+    const repository = store.memories;
+    const scope: MemoryScope = { kind: 'workspace', workspaceId: seedWorkspace(store, '检索空间') };
+
+    const revenue = seedMemory(repository, scope, '收入按回款到账金额统计，不使用签约金额', {
+      topicKey: '收入口径',
+      createdAt: 1_700_000_000_000,
+    });
+    const report = seedMemory(repository, scope, '汇报材料先给结论再给依据', {
+      topicKey: '汇报格式',
+      createdAt: 1_700_000_000_100,
+    });
+    const discount = seedMemory(repository, scope, '折扣金额按 15% 以内审批', {
+      topicKey: '审批线',
+      createdAt: 1_700_000_000_200,
+    });
+    const timeout = seedMemory(repository, scope, 'API 超时统一按 30s 处理', {
+      topicKey: '接口约定',
+      createdAt: 1_700_000_000_300,
+    });
+
+    // 中文不需要分词也能命中正文子串。
+    expect(repository.listPage({ query: '回款' }).items.map((record) => record.id)).toEqual([
+      revenue.id,
+    ]);
+    // 议题同样是检索面：命中词可以完全不出现在正文里。
+    expect(repository.listPage({ query: '汇报格式' }).items.map((record) => record.id)).toEqual([
+      report.id,
+    ]);
+    // 空白切词取 AND：两个词各自都有更多命中，合起来只剩一条。
+    expect(repository.listPage({ query: '金额' }).items.map((record) => record.id)).toEqual([
+      discount.id,
+      revenue.id,
+    ]);
+    expect(repository.listPage({ query: '金额 签约' }).items.map((record) => record.id)).toEqual([
+      revenue.id,
+    ]);
+    // 拉丁字母折叠大小写，中文不受 lower() 影响。
+    expect(repository.listPage({ query: 'api' }).items.map((record) => record.id)).toEqual([
+      timeout.id,
+    ]);
+    expect(repository.listPage({ query: 'API' }).items.map((record) => record.id)).toEqual([
+      timeout.id,
+    ]);
+    // 用 instr 而不是 LIKE，所以 % 与 _ 只表示字面量：命中正文里真带 % 的那条，而不是全部。
+    expect(repository.listPage({ query: '15%' }).items.map((record) => record.id)).toEqual([
+      discount.id,
+    ]);
+    expect(repository.listPage({ query: '%' }).items.map((record) => record.id)).toEqual([
+      discount.id,
+    ]);
+    expect(repository.listPage({ query: '不存在的口径' }).items).toEqual([]);
+    // list 与 listPage 共用同一条件构造，治理页与投影重建看到的过滤口径一致。
+    expect(repository.list({ query: '回款' }).map((record) => record.id)).toEqual([revenue.id]);
+    // 检索与分页共存：命中超过一页时仍给游标，说明截断可解释而不是静默丢记录。
+    const paged = repository.listPage({ query: '金额', limit: 1 });
+    expect(paged.items.map((record) => record.id)).toEqual([discount.id]);
+    expect(paged.nextCursor).toBeDefined();
+  });
+
   it('uses the protocol page-size constant as the default limit', () => {
     const store = openStore();
     const repository = store.memories;

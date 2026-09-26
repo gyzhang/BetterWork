@@ -6,6 +6,7 @@ import {
   type ListCursor,
   type ListMemoriesRequest,
   listMemoriesRequestSchema,
+  MEMORY_QUERY_TERM_MAX,
   type MemoryCandidateDisposition,
   type MemoryDependency,
   type MemoryEditPatch,
@@ -466,6 +467,19 @@ const EFFECTIVE_PREDICATE = `
   (r.valid_from IS NULL OR r.valid_from <= ?) AND (r.valid_until IS NULL OR r.valid_until > ?)
 `;
 
+/**
+ * 检索词切分：与正文同一套 NFC 归一（memory-content-policy），再小写折叠按空白切词。
+ * 逐词做子串匹配并取 AND，所以「回款 口径」命中同时含两词的记录；不用 LIKE 是为了
+ * 让用户输入的 % 与 _ 只表示字面量，不改变匹配语义。
+ */
+const queryTerms = (query: string): string[] =>
+  query
+    .normalize('NFC')
+    .toLowerCase()
+    .split(/\s+/u)
+    .filter((term) => term !== '')
+    .slice(0, MEMORY_QUERY_TERM_MAX);
+
 export class MemoryRepository {
   constructor(
     private readonly db: Database.Database,
@@ -541,6 +555,7 @@ export class MemoryRepository {
       ...(input.includeCandidates === undefined
         ? {}
         : { includeCandidates: input.includeCandidates }),
+      ...(input.query === undefined ? {} : { query: input.query }),
       ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
       ...(input.limit === undefined ? {} : { limit: input.limit }),
     });
@@ -1053,6 +1068,12 @@ export class MemoryRepository {
       values.push(...input.statuses);
     }
     if (input.includeCandidates === false) conditions.push("AND r.status != 'candidate'");
+    for (const term of input.query === undefined ? [] : queryTerms(input.query)) {
+      conditions.push(
+        "AND (instr(lower(r.content), ?) > 0 OR instr(lower(COALESCE(r.topic_key, '')), ?) > 0)",
+      );
+      values.push(term, term);
+    }
     return { clause: conditions.join(' '), values };
   }
 

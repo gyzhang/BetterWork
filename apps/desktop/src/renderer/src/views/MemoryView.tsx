@@ -7,11 +7,14 @@ import type {
 } from '@betterwork/agent-protocol';
 import {
   countCodePoints,
+  LIST_PAGE_DEFAULT_LIMIT,
   MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS,
 } from '@betterwork/agent-protocol';
 import { useEffect, useState } from 'react';
 
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
+import { PageToolbar } from '../components/layout/PageToolbar';
+import { ScrollRegion } from '../components/layout/ScrollRegion';
 import type { MemoryEditorSubmission } from '../components/MemoryEditor';
 import { MemoryEditor } from '../components/MemoryEditor';
 import { MemorySuggestionList } from '../components/MemorySuggestionList';
@@ -112,7 +115,26 @@ export const scopeOptionsFor = (
   { kind: 'user' as const },
 ];
 
-const groupOf = (memory: MemoryViewItem): 'candidate' | 'confirmed' | 'expired' | 'history' => {
+/** 分组即页签：一次只看一组，页面唯一的滚动区落在该组的列表上。 */
+type MemoryTabKey = 'candidate' | 'confirmed' | 'expired' | 'history';
+
+const memoryTabOrder: MemoryTabKey[] = ['candidate', 'confirmed', 'expired', 'history'];
+
+const memoryTabLabels: Record<MemoryTabKey, string> = {
+  candidate: '待确认',
+  confirmed: '已确认',
+  expired: '已过期',
+  history: '历史与已停用',
+};
+
+const memoryTabHints: Record<MemoryTabKey, string> = {
+  candidate: '候选不会自动进入模型上下文；确认前请先核对适用范围与有效期。',
+  confirmed: '已确认的经验按范围召回；来源不可用或待复核的不会带入。',
+  expired: '到期只由查询派生；要恢复使用必须明确修改有效期并重新确认。',
+  history: '已被替代与「以后不用」的记录是终态：不能编辑、确认、续期或恢复，只能显式新建一条。',
+};
+
+const groupOf = (memory: MemoryViewItem): MemoryTabKey => {
   if (memory.status === 'candidate') return 'candidate';
   if (memory.effectiveStatus === 'expired') return 'expired';
   if (memory.status === 'confirmed') return 'confirmed';
@@ -132,6 +154,8 @@ export function MemoryPage({
 }: MemoryPageProps): React.JSX.Element {
   const [session, setSession] = useState<EditorSession>();
   const [pendingDelete, setPendingDelete] = useState<MemoryViewItem>();
+  const [tabKey, setTabKey] = useState<MemoryTabKey>();
+  const [draftQuery, setDraftQuery] = useState('');
   const scopes = scopeOptionsFor(workspaceId, scopeTarget);
   const visible = state.memories.filter(
     (memory) => !isTerminalMemory(memory) && memoryMatchesTarget(memory, scopeTarget),
@@ -139,11 +163,24 @@ export function MemoryPage({
   const history = state.memories.filter(
     (memory) => isTerminalMemory(memory) && memoryMatchesTarget(memory, scopeTarget),
   );
-  const groups = {
+  const grouped: Record<MemoryTabKey, MemoryViewItem[]> = {
     candidate: visible.filter((memory) => groupOf(memory) === 'candidate'),
     confirmed: visible.filter((memory) => groupOf(memory) === 'confirmed'),
     expired: visible.filter((memory) => groupOf(memory) === 'expired'),
+    history,
   };
+  // 未点页签时落在第一组有记录的页签上，避免打开页面先看见一片空。
+  const activeKey: MemoryTabKey =
+    tabKey ?? memoryTabOrder.find((key) => grouped[key].length > 0) ?? 'confirmed';
+
+  // 输入即搜：停顿 250ms 才发请求；检索词与已生效值相同时不重复请求。
+  const setQuery = state.setQuery;
+  const appliedQuery = state.query;
+  useEffect(() => {
+    if (draftQuery === appliedQuery) return;
+    const timer = setTimeout(() => setQuery(draftQuery), 250);
+    return () => clearTimeout(timer);
+  }, [draftQuery, setQuery, appliedQuery]);
   // 契约 §10：待澄清与重复只报计数，不替用户裁决，也不新增跳转目的地。
   const pendingConflictPairs = new Set<string>(
     visible.flatMap((memory) =>
@@ -157,6 +194,16 @@ export function MemoryPage({
   ).length;
 
   const closeSession = (): void => setSession(undefined);
+  /** 页签决定编辑器语义：候选是「编辑并确认」，过期是「改期并重新确认」，终态只读。 */
+  const openEditor = (memory: MemoryViewItem): void => {
+    if (activeKey === 'history') return;
+    setSession({
+      key: `${activeKey}-${memory.id}`,
+      mode:
+        activeKey === 'candidate' ? 'confirm' : activeKey === 'confirmed' ? 'edit' : 'reconfirm',
+      memory,
+    });
+  };
   // 只有新建会话带重新表述来源；其余模式不读该字段，避免在联合类型上取属性。
   const restateFrom =
     session !== undefined && session.mode === 'create' ? session.restateFrom : undefined;
@@ -371,7 +418,7 @@ export function MemoryPage({
             ]
               .filter((part) => part !== '')
               .join(' · ')}
-            ：计数只是管理提示，请在下方对应分组里裁决或拒绝。
+            ：计数只是管理提示，请在「待确认」页签里裁决或拒绝。
           </span>
         </div>
       )}
@@ -379,7 +426,7 @@ export function MemoryPage({
       {suggestions && (
         <MemorySuggestionList
           suggestions={suggestions}
-          candidates={groups.candidate}
+          candidates={grouped.candidate}
           variant="settings"
           workspaceName={workspaceName}
           expertName={expertName}
@@ -412,96 +459,71 @@ export function MemoryPage({
         </div>
       )}
 
-      {state.loading ? (
+      {state.loading && state.memories.length === 0 ? (
         <div className="setting-placeholder">正在加载记忆…</div>
-      ) : visible.length === 0 && history.length === 0 ? (
+      ) : state.memories.length === 0 && appliedQuery === '' ? (
         <div className="setting-placeholder">
           <strong>还没有长期记忆</strong>
           <p>在这里记录稳定的偏好和工作方法，下一次任务会按适用范围与来源状态决定是否带入。</p>
         </div>
       ) : (
         <>
-          <MemoryGroup
-            title="待确认"
-            hint="候选不会自动进入模型上下文；确认前请先核对适用范围与有效期。"
-            memories={groups.candidate}
-            state={state}
-            onEdit={(memory) =>
-              setSession({ key: `confirm-${memory.id}`, mode: 'confirm', memory })
-            }
-            onAction={actOn}
-            onRestate={(memory) =>
-              setSession({ key: `restate-${memory.id}`, mode: 'create', restateFrom: memory })
-            }
-            onDelete={setPendingDelete}
-            onReviewSource={reviewLegacySource}
-            onPolicy={setPolicy}
-            onResolve={resolveConflict}
-            onLoadRevision={loadRevisionById}
-            {...(workspaceName ? { workspaceName } : {})}
-            {...(expertName ? { expertName } : {})}
-          />
-          <MemoryGroup
-            title="已确认"
-            hint="已确认的经验按范围召回；来源不可用或待复核的不会带入。"
-            memories={groups.confirmed}
-            state={state}
-            onEdit={(memory) => setSession({ key: `edit-${memory.id}`, mode: 'edit', memory })}
-            onAction={actOn}
-            onRestate={(memory) =>
-              setSession({ key: `restate-${memory.id}`, mode: 'create', restateFrom: memory })
-            }
-            onDelete={setPendingDelete}
-            onReviewSource={reviewLegacySource}
-            onPolicy={setPolicy}
-            onResolve={resolveConflict}
-            onLoadRevision={loadRevisionById}
-            {...(workspaceName ? { workspaceName } : {})}
-            {...(expertName ? { expertName } : {})}
-          />
-          <MemoryGroup
-            title="已过期"
-            hint="到期只由查询派生；要恢复使用必须明确修改有效期并重新确认。"
-            memories={groups.expired}
-            state={state}
-            onEdit={(memory) =>
-              setSession({ key: `reconfirm-${memory.id}`, mode: 'reconfirm', memory })
-            }
-            onAction={actOn}
-            onRestate={(memory) =>
-              setSession({ key: `restate-${memory.id}`, mode: 'create', restateFrom: memory })
-            }
-            onDelete={setPendingDelete}
-            onReviewSource={reviewLegacySource}
-            onPolicy={setPolicy}
-            onResolve={resolveConflict}
-            onLoadRevision={loadRevisionById}
-            editLabel="修改有效期并重新确认"
-            {...(workspaceName ? { workspaceName } : {})}
-            {...(expertName ? { expertName } : {})}
-          />
-          {history.length > 0 && (
-            <details className="memory-history-group">
-              <summary>历史与已停用 · {history.length} 条</summary>
-              <MemoryGroup
-                title=""
-                hint="已被替代与「以后不用」的记录是终态：不能编辑、确认、续期或恢复，只能显式新建一条。"
-                memories={history}
-                state={state}
-                onEdit={() => undefined}
-                onAction={() => undefined}
-                onRestate={() => undefined}
-                onDelete={() => undefined}
-                onReviewSource={() => undefined}
-                onPolicy={() => undefined}
-                onResolve={() => undefined}
-                onLoadRevision={loadRevisionById}
-                readOnly
-                {...(workspaceName ? { workspaceName } : {})}
-                {...(expertName ? { expertName } : {})}
+          <PageToolbar ariaLabel="记忆检索与分组">
+            <form
+              className="memory-search"
+              onSubmit={(event) => {
+                event.preventDefault();
+              }}
+            >
+              <input
+                type="search"
+                value={draftQuery}
+                placeholder="搜索记忆正文或议题…"
+                aria-label="搜索记忆"
+                onChange={(event) => setDraftQuery(event.target.value)}
               />
-            </details>
-          )}
+              {draftQuery !== '' && (
+                <button className="clear-search" type="button" onClick={() => setDraftQuery('')}>
+                  清除
+                </button>
+              )}
+            </form>
+            <div className="memory-tabs">
+              {memoryTabOrder.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  aria-selected={key === activeKey}
+                  onClick={() => setTabKey(key)}
+                >
+                  {memoryTabLabels[key]} · {grouped[key].length}
+                </button>
+              ))}
+            </div>
+          </PageToolbar>
+          <MemoryGroup
+            title={memoryTabLabels[activeKey]}
+            hint={memoryTabHints[activeKey]}
+            ariaLabel={`${memoryTabLabels[activeKey]}记忆列表`}
+            memories={grouped[activeKey]}
+            query={appliedQuery}
+            truncated={state.truncated}
+            state={state}
+            readOnly={activeKey === 'history'}
+            {...(activeKey === 'expired' ? { editLabel: '修改有效期并重新确认' } : {})}
+            onEdit={openEditor}
+            onAction={actOn}
+            onRestate={(memory) =>
+              setSession({ key: `restate-${memory.id}`, mode: 'create', restateFrom: memory })
+            }
+            onDelete={setPendingDelete}
+            onReviewSource={reviewLegacySource}
+            onPolicy={setPolicy}
+            onResolve={resolveConflict}
+            onLoadRevision={loadRevisionById}
+            {...(workspaceName ? { workspaceName } : {})}
+            {...(expertName ? { expertName } : {})}
+          />
         </>
       )}
 
@@ -536,7 +558,13 @@ const uniqueScopes = (scopes: MemoryViewItem['scope'][]): MemoryViewItem['scope'
 interface MemoryGroupProps {
   title: string;
   hint: string;
+  /** 滚动区的辅助技术名称：读屏要能说出「正在浏览哪一组」。 */
+  ariaLabel: string;
   memories: MemoryViewItem[];
+  /** 已生效的检索词，用于区分「这一组本来为空」与「搜索没命中」。 */
+  query: string;
+  /** 后端还有未返回的记录（契约 §9.1 nextCursor）；本页不翻页，只能说明并引导检索。 */
+  truncated: boolean;
   state: MemoriesState;
   readOnly?: boolean;
   editLabel?: string;
@@ -553,10 +581,17 @@ interface MemoryGroupProps {
   expertName?: string;
 }
 
+/**
+ * 一个分组页签：标题与说明固定不滚动，页面唯一的滚动区是下面的列表（docs/10 §8.3
+ * 的 ScrollRegion），滚动条因此贴住版心右缘而不是整页滚。
+ */
 function MemoryGroup({
   title,
   hint,
+  ariaLabel,
   memories,
+  query,
+  truncated,
   state,
   readOnly = false,
   editLabel = '编辑',
@@ -570,38 +605,51 @@ function MemoryGroup({
   onLoadRevision,
   workspaceName,
   expertName,
-}: MemoryGroupProps): React.JSX.Element | null {
-  if (memories.length === 0) return null;
+}: MemoryGroupProps): React.JSX.Element {
   return (
     <div className="memory-group">
-      {title && (
-        <div className="memory-group-heading">
-          <strong>{title}</strong>
-          <small>{hint}</small>
-        </div>
-      )}
-      {!title && <p className="memory-group-hint">{hint}</p>}
-      <div className="memory-list">
-        {memories.map((memory) => (
-          <MemoryRow
-            key={memory.id}
-            memory={memory}
-            allMemories={state.memories}
-            readOnly={readOnly}
-            editLabel={editLabel}
-            onEdit={onEdit}
-            onAction={onAction}
-            onRestate={onRestate}
-            onDelete={onDelete}
-            onReviewSource={onReviewSource}
-            onPolicy={onPolicy}
-            onResolve={onResolve}
-            onLoadRevision={onLoadRevision}
-            {...(workspaceName ? { workspaceName } : {})}
-            {...(expertName ? { expertName } : {})}
-          />
-        ))}
+      <div className="memory-group-heading">
+        <strong>{title}</strong>
+        <small>{hint}</small>
       </div>
+      <ScrollRegion ariaLabel={ariaLabel} busy={state.loading} className="memory-list-scroll">
+        {memories.length === 0 ? (
+          <p className="memory-list-empty">
+            {query === ''
+              ? '这一组还没有记录。'
+              : `没有匹配「${query}」的记录，换个关键词或清除搜索。`}
+          </p>
+        ) : (
+          <>
+            <div className="memory-list">
+              {memories.map((memory) => (
+                <MemoryRow
+                  key={memory.id}
+                  memory={memory}
+                  allMemories={state.memories}
+                  readOnly={readOnly}
+                  editLabel={editLabel}
+                  onEdit={onEdit}
+                  onAction={onAction}
+                  onRestate={onRestate}
+                  onDelete={onDelete}
+                  onReviewSource={onReviewSource}
+                  onPolicy={onPolicy}
+                  onResolve={onResolve}
+                  onLoadRevision={onLoadRevision}
+                  {...(workspaceName ? { workspaceName } : {})}
+                  {...(expertName ? { expertName } : {})}
+                />
+              ))}
+            </div>
+            {truncated && (
+              <p className="memory-group-footer">
+                本页只显示最近 {LIST_PAGE_DEFAULT_LIMIT} 条，其余记录请用上方搜索定位。
+              </p>
+            )}
+          </>
+        )}
+      </ScrollRegion>
     </div>
   );
 }

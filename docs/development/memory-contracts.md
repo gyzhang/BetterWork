@@ -255,6 +255,7 @@ WM02 先扩展仓储形状，公开旧调用方切换在 WM03 一起完成；来
 - **MemoryViewItem**：`MemoryRecord`＋`effectiveStatus`＋`sourceAvailability`(available/unavailable/review-required)＋`requiresMaterialSelection`＋`conflicts`（精确修订对与状态，含未裁决的 `unresolved`）＋`duplicatesConfirmedMemoryId?`（§5.6 的查询派生重复指针，不落库）。
 - **ListPage**：`items`、`nextCursor?`；cursor 为 `updatedAt`＋`id` 的版本化结构，`limit` 默认 50，上限 100；created/modified 排序定义在对应响应，非任意 SQL 游标。
 默认值与上限只认协议常量 `LIST_PAGE_DEFAULT_LIMIT`／`LIST_PAGE_MAX_LIMIT`：请求 Schema 卡上限，`MemoryRepository.listPage` 取默认值，存储层不再写死数字（回归用例见 `memory-repository.test.ts`「uses the protocol page-size constant as the default limit」）。
+- **检索**：`memory:list` 的 `query`（可选，整句 ≤ `MEMORY_QUERY_MAX_CODE_POINTS`）在 SQL 层过滤整个库，不是界面二次过滤——治理页一次只渲染一页，未加载的记录必须能被搜到。口径：NFC 归一＋小写折叠后按空白切词，最多取前 `MEMORY_QUERY_TERM_MAX` 个词，逐词对 `content` 与 `topic_key` 做 `instr` 子串匹配并取 AND；因此 `%` 与 `_` 只表示字面量（不用 LIKE）。本页不做翻页：命中超过一页时 `nextCursor` 必须原样透出，界面据此说明「只显示最近一页」并引导用检索缩小范围，不得静默丢记录（回归用例见 `memory-repository.test.ts`「检索命中整个库」与 `memory-service.test.ts`「检索词透传到查询层」）。
 - `Scope` 从现有判别联合复用；`Facet` 与 `kind` 由宿主映射，客户端不能提交矛盾组合。
 - **EditPatch** 允许 `content`/`facet`/`topicKey`/`scope`/日期 patch；`topicKey` 清空同样用 `clear`。来源不作为任意可编辑 JSON，单独经 verified 选择器或人工重新表述构造。
 
@@ -262,7 +263,7 @@ WM02 先扩展仓储形状，公开旧调用方切换在 WM03 一起完成；来
 
 | 通道 | 输入 | 成功 data |
 | --- | --- | --- |
-| memory:list | workspaceId?/expertId?、statuses?、includeCandidates 默认 true、cursor?、limit? | ListPage\<MemoryViewItem\>；全局管理可无过滤，Run 召回不复用此权限宽查询 |
+| memory:list | workspaceId?/expertId?、statuses?、includeCandidates 默认 true、query?（§9.1 检索）、cursor?、limit? | ListPage\<MemoryViewItem\>；全局管理可无过滤，Run 召回不复用此权限宽查询 |
 | memory:get | id、revisionId? | MemoryViewItem，精确旧修订标历史不可直接编辑 |
 | memory:create | operationId、content、facet、scope、topicKey?、validFrom?/validUntil?、sourceSelector?、asUserInstruction:boolean、genericDeclaration?、fromMemoryRevisionId? | WriteReceipt；`fromMemoryRevisionId` 只在「作为我的工作口径重新保存」出现，必须指向真实修订 |
 | memory:update | operationId、id、expectedRevision、patch、legacySourceReview? | WriteReceipt；legacy 复核须完整选择器/人工声明 |

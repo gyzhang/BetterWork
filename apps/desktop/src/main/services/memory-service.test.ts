@@ -579,4 +579,30 @@ describe('MemoryService', () => {
     if (!page.ok) return;
     expect(page.data.items.map((item) => item.effectiveStatus)).toContain('expired');
   });
+
+  it('检索词透传到查询层，命中超出一页时带回游标', async () => {
+    const { service } = await setup();
+    expect(
+      (await service.create(userInstruction('收入按回款到账金额统计。', { facet: 'fact' }))).ok,
+    ).toBe(true);
+    expect(
+      (await service.create(userInstruction('汇报材料先给结论再给依据。', { facet: 'fact' }))).ok,
+    ).toBe(true);
+
+    const found = service.list({ includeCandidates: false, query: '回款' });
+    expect(found.ok).toBe(true);
+    if (!found.ok) return;
+    expect(found.data.items).toHaveLength(1);
+
+    const missed = service.list({ includeCandidates: false, query: '不存在的口径' });
+    expect(missed.ok).toBe(true);
+    if (!missed.ok) return;
+    expect(missed.data.items).toHaveLength(0);
+
+    // 游标必须原样透出：界面据此说明「只看到最近一页」，不静默丢记录。
+    const paged = service.list({ includeCandidates: false, limit: 1 });
+    expect(paged.ok).toBe(true);
+    if (!paged.ok) return;
+    expect(paged.data.nextCursor).toBeDefined();
+  });
 });

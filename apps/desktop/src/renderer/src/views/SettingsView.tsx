@@ -57,7 +57,7 @@ export interface SettingsPageProps {
 export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
   const { tab, setTab } = props;
   return (
-    <div className="settings-layout">
+    <div className={tab === 'memory' ? 'settings-layout settings-layout-fixed' : 'settings-layout'}>
       <aside className="settings-nav-list">
         <p className="eyebrow">设置</p>
         <h1>偏好与能力</h1>

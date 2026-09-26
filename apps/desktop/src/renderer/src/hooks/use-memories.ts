@@ -41,6 +41,8 @@ export type MemoryProjectionOutcome = MemoryOutcome<MemoryProjectionStateData>;
 export interface MemoryFilters {
   workspaceId: string | undefined;
   expertId: string | undefined;
+  /** 全库检索词；空串表示不检索。检索在 Main 的 SQL 层完成，界面不二次过滤。 */
+  query: string;
 }
 
 export interface RevisionConflict {
@@ -54,6 +56,13 @@ export interface MemoriesState {
   memories: MemoryViewItem[];
   loading: boolean;
   error: string;
+  /** 当前生效的检索词（已去除首尾空白）。 */
+  query: string;
+  /**
+   * 后端还有未返回的记录（契约 §9.1 的 nextCursor）。治理页不做翻页，
+   * 所以界面必须据此说明「只看到最近一页」，并引导用检索缩小范围。
+   */
+  truncated: boolean;
   revisionConflict: RevisionConflict | undefined;
   /**
    * 投影状态来自最近一次写回执：「已提交但投影待重建」是成功＋警告，
@@ -62,6 +71,7 @@ export interface MemoriesState {
   projectionState: MemoryWriteReceipt['projectionState'] | undefined;
   warnings: MemoryWarning[];
   setFilters: (filters: MemoryFilters) => void;
+  setQuery: (query: string) => void;
   setError: (message: string) => void;
   clearRevisionConflict: () => void;
   refresh: () => void;
@@ -83,19 +93,23 @@ export const newMemoryOperationId = (): string => crypto.randomUUID();
 const toListRequest = (filters: MemoryFilters): ListMemoriesRequest => ({
   ...(filters.workspaceId ? { workspaceId: filters.workspaceId } : {}),
   ...(filters.expertId ? { expertId: filters.expertId } : {}),
+  ...(filters.query.trim() === '' ? {} : { query: filters.query.trim() }),
 });
 
 const filtersKey = (filters: MemoryFilters): string =>
-  `${filters.workspaceId ?? '-'}|${filters.expertId ?? '-'}`;
+  `${filters.workspaceId ?? '-'}|${filters.expertId ?? '-'}|${filters.query.trim()}`;
 
 export function useMemories(): MemoriesState {
   const [filters, setFiltersState] = useState<MemoryFilters>({
     workspaceId: undefined,
     expertId: undefined,
+    query: '',
   });
   const [memories, setMemories] = useState<MemoryViewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [query, setQueryState] = useState('');
+  const [truncated, setTruncated] = useState(false);
   const [revisionConflict, setRevisionConflict] = useState<RevisionConflict>();
   const [projectionState, setProjectionState] = useState<MemoryWriteReceipt['projectionState']>();
   const [warnings, setWarnings] = useState<MemoryWarning[]>([]);
@@ -120,6 +134,9 @@ export function useMemories(): MemoriesState {
         if (outcome.ok) {
           setMemories(outcome.data.items);
           setWarnings(outcome.warnings);
+          // 检索词与列表一起落地：界面回显的条件必须对应这批行，不能超前一步。
+          setQueryState(snapshot.query.trim());
+          setTruncated(outcome.data.nextCursor !== undefined);
           setError('');
         } else {
           // 读取失败不清列表：留着上一次可见内容并说明原因，比刷成空白更可解释。
@@ -147,6 +164,14 @@ export function useMemories(): MemoriesState {
       load(true);
     },
     [load],
+  );
+
+  /** 只改检索词，保留当前范围筛选；筛选键未变时由 setFilters 拦住重复请求。 */
+  const setQuery = useCallback(
+    (next: string): void => {
+      setFilters({ ...filtersRef.current, query: next });
+    },
+    [setFilters],
   );
 
   const afterWrite = useCallback(
@@ -283,10 +308,13 @@ export function useMemories(): MemoriesState {
     memories,
     loading,
     error,
+    query,
+    truncated,
     revisionConflict,
     projectionState,
     warnings,
     setFilters,
+    setQuery,
     setError,
     clearRevisionConflict,
     refresh,

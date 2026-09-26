@@ -93,10 +93,13 @@ const state = (overrides?: Partial<MemoriesState>): MemoriesState => ({
   memories: [memoryViewItem()],
   loading: false,
   error: '',
+  query: '',
+  truncated: false,
   revisionConflict: undefined,
   projectionState: undefined,
   warnings: [],
   setFilters: vi.fn(),
+  setQuery: vi.fn(),
   setError: vi.fn(),
   clearRevisionConflict: vi.fn(),
   refresh: vi.fn(),
@@ -309,10 +312,12 @@ describe('MemoryPage', () => {
     const current = state({ memories: [memoryViewItem(), deleted] });
     render(<MemoryPage state={current} />);
 
-    fireEvent.click(screen.getByText('历史与已停用 · 1 条'));
-    expect(screen.getByText('终态记录，不可恢复')).toBeTruthy();
-    // 待确认分组里那条仍可「以后不用」；终态记录不得再出现任何动作按钮。
+    // 默认落在第一组有记录的页签：待确认里那条仍可「以后不用」。
     expect(screen.getAllByRole('button', { name: '以后不用' })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: '历史与已停用 · 1' }));
+    expect(screen.getByText('终态记录，不可恢复')).toBeTruthy();
+    // 终态分组里不得再出现任何动作按钮。
+    expect(screen.queryByRole('button', { name: '以后不用' })).toBeNull();
     expect(screen.getByText('终态记录，不可恢复').closest('article')?.textContent).toContain(
       deleted.content,
     );
@@ -614,5 +619,60 @@ describe('MemoryPage 冲突来源回看（MI07）', () => {
     await waitFor(() => expect(loadRevision).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(/另一条不在当前管理范围或已不可读取/)).toBeDefined();
     expect(screen.queryByText('收入按回款金额统计。')).toBeNull();
+  });
+});
+
+describe('记忆页检索与分组（滚动区改造）', () => {
+  afterEach(cleanup);
+
+  it('搜索框停顿后才发一次检索请求', async () => {
+    const setQuery = vi.fn();
+    const current = state({ memories: [memoryViewItem()], setQuery });
+    render(<MemoryPage state={current} />);
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索记忆' }), {
+      target: { value: '回款' },
+    });
+    expect(setQuery).not.toHaveBeenCalled();
+    await waitFor(() => expect(setQuery).toHaveBeenCalledWith('回款'));
+    expect(setQuery).toHaveBeenCalledTimes(1);
+  });
+
+  it('页签一次只渲染一组，默认落在第一组有记录的页签', () => {
+    const confirmed = memoryViewItem({
+      id: 'memory-confirmed',
+      status: 'confirmed',
+      effectiveStatus: 'confirmed',
+      candidateDisposition: undefined,
+      content: '已确认的口径。',
+    });
+    const candidate = memoryViewItem({ id: 'memory-candidate', content: '待确认的口径。' });
+    const current = state({ memories: [candidate, confirmed] });
+    render(<MemoryPage state={current} />);
+
+    expect(screen.getByText('待确认的口径。')).toBeDefined();
+    expect(screen.queryByText('已确认的口径。')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '已确认 · 1' }));
+    expect(screen.getByText('已确认的口径。')).toBeDefined();
+    expect(screen.queryByText('待确认的口径。')).toBeNull();
+  });
+
+  it('命中一页上限时说明只显示最近一页并引导检索', () => {
+    const confirmed = memoryViewItem({
+      status: 'confirmed',
+      effectiveStatus: 'confirmed',
+      candidateDisposition: undefined,
+    });
+    const current = state({ memories: [confirmed], truncated: true });
+    render(<MemoryPage state={current} />);
+    expect(screen.getByText(/本页只显示最近 50 条/)).toBeDefined();
+  });
+
+  it('检索无命中时说「没有匹配」，不谎报成还没有记忆', () => {
+    const current = state({ memories: [], query: '回款' });
+    render(<MemoryPage state={current} />);
+    expect(screen.getByText(/没有匹配「回款」的记录/)).toBeDefined();
+    expect(screen.queryByText('还没有长期记忆')).toBeNull();
   });
 });
