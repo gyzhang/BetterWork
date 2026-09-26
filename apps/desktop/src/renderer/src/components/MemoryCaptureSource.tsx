@@ -7,6 +7,7 @@ import {
   type ExcerptRange,
   excerptRangeFromTextarea,
 } from '../lib/memory-capture';
+import { Field } from './Field';
 
 /**
  * 回答捕获的原文选择区（改进 Spec §4.1）：来源摘录只能来自这条回答的原始正文，
@@ -45,8 +46,7 @@ export function MemoryCaptureSource({
 
   return (
     <div className="memory-capture-source">
-      <label className="memory-capture-source-field">
-        <span>回答原文（只读，可拖选或用键盘选择）</span>
+      <Field label="回答原文（只读，可拖选或用键盘选择）">
         <textarea
           ref={fieldRef}
           rows={5}
@@ -55,7 +55,7 @@ export function MemoryCaptureSource({
           aria-label="回答原文"
           onFocus={() => setError('')}
         />
-      </label>
+      </Field>
       <div className="memory-capture-source-actions">
         <button className="message-action" type="button" onClick={confirm}>
           确认选区

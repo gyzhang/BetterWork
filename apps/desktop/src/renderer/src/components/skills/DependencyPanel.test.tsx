@@ -7,7 +7,7 @@ import type {
   RefreshSkillDependencyGrantResult,
   SkillDetail,
 } from '@betterwork/agent-protocol';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { useSkillDependencies } from '../../hooks/use-skill-dependencies';
@@ -353,9 +353,10 @@ describe('DependencyPanel', () => {
     installApi();
     render(<Harness skill={skillOf('skill-1')} />);
 
+    fireEvent.click(await screen.findByRole('button', { name: '外部工具链快照' }));
     const named = (fragment: string): boolean =>
       screen
-        .queryAllByRole('option')
+        .queryAllByRole('menuitem')
         .some((element) => (element.textContent ?? '').includes(fragment));
     await waitFor(() => expect(named('12981 文件')).toBe(true));
     expect(named('含本地修改')).toBe(true);

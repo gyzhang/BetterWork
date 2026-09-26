@@ -22,6 +22,7 @@ import {
   memoryScopeLabel,
   toDateInputValue,
 } from '../lib/memory-labels';
+import { Field } from './Field';
 import { FieldSelect } from './FieldSelect';
 
 /**
@@ -309,8 +310,7 @@ export function MemoryEditor({
 
   return (
     <div className="memory-editor">
-      <label className="memory-editor-field">
-        <span>要长期复用的内容</span>
+      <Field label="要长期复用的内容">
         <textarea
           value={content}
           rows={4}
@@ -321,7 +321,7 @@ export function MemoryEditor({
         <small className={contentPoints > MEMORY_CONTENT_MAX_CODE_POINTS ? 'over' : ''}>
           {contentPoints} / {MEMORY_CONTENT_MAX_CODE_POINTS}
         </small>
-      </label>
+      </Field>
       {restating && restateFrom && (
         <div className="memory-editor-diff">
           <strong>与原记忆的差别</strong>
@@ -339,17 +339,15 @@ export function MemoryEditor({
         </div>
       )}
       <div className="memory-editor-grid">
-        <label>
-          <span>分类</span>
+        <Field label="分类">
           <FieldSelect
             ariaLabel="记忆分类"
             value={facet}
             options={memoryFacetOrder.map((f) => ({ id: f, label: facetLabel[f] }))}
             onChange={(id) => setFacet(id as MemoryFacet)}
           />
-        </label>
-        <label>
-          <span>适用范围</span>
+        </Field>
+        <Field label="适用范围">
           <FieldSelect
             ariaLabel="记忆适用范围"
             value={scope.kind}
@@ -362,9 +360,8 @@ export function MemoryEditor({
               if (next) setScope(next);
             }}
           />
-        </label>
-        <label>
-          <span>议题（可选）</span>
+        </Field>
+        <Field label="议题（可选）">
           <span className="memory-editor-counted">
             <input
               aria-label="议题标识"
@@ -376,25 +373,23 @@ export function MemoryEditor({
               {topicPoints} / {MEMORY_TOPIC_KEY_MAX_CODE_POINTS}
             </small>
           </span>
-        </label>
-        <label>
-          <span>生效日期（可选）</span>
+        </Field>
+        <Field label="生效日期（可选）">
           <input
             aria-label="生效日期"
             type="date"
             value={validFrom}
             onChange={(event) => setValidFrom(event.target.value)}
           />
-        </label>
-        <label>
-          <span>失效日期（可选）</span>
+        </Field>
+        <Field label="失效日期（可选）">
           <input
             aria-label="失效日期"
             type="date"
             value={validUntil}
             onChange={(event) => setValidUntil(event.target.value)}
           />
-        </label>
+        </Field>
       </div>
       <p className="memory-editor-note">
         有效期缺省即长期有效；到期只派生「已过期」，不会自动删除记录。

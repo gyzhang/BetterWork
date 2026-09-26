@@ -1038,9 +1038,10 @@ describe('Expert configuration', () => {
     fireEvent.click(await screen.findByRole('button', { name: '查看配置' }));
     fireEvent.click(await screen.findByRole('button', { name: '编辑配置' }));
 
-    const modelSelect = await screen.findByRole('combobox', { name: '专家模型偏好' });
-    expect(modelSelect).toHaveProperty('value', 'application-default');
-    fireEvent.change(modelSelect, { target: { value: 'model-language-1' } });
+    const modelSelect = await screen.findByRole('button', { name: '专家模型偏好' });
+    expect(modelSelect.textContent).toContain('应用默认模型');
+    fireEvent.click(modelSelect);
+    fireEvent.click(await screen.findByRole('menuitem', { name: '本地语言模型 · local-model' }));
     fireEvent.click(screen.getByRole('button', { name: '保存修订' }));
 
     await waitFor(() => expect(api.experts.saveRevision).toHaveBeenCalledTimes(1));
@@ -1168,10 +1169,7 @@ describe('参考成果版本接入当前任务', () => {
     expect(chipBar.querySelectorAll('[role="listitem"]')).toHaveLength(1);
     // 材料标题要等候选清单加载才有名字，这里断言的是引用本身：固定到结构参考用途、不自动发送
     expect(chipBar.textContent).toContain('成果版本');
-    expect(screen.getByRole('combobox', { name: '成果版本用途' })).toHaveProperty(
-      'value',
-      'structure-reference',
-    );
+    expect(screen.getByRole('button', { name: '成果版本用途' }).textContent).toContain('结构参考');
     expect(api.runs.start).not.toHaveBeenCalled();
     expect(screen.queryByRole('list', { name: '当前专家' })).toBeNull();
 

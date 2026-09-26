@@ -13,6 +13,8 @@ import {
 import { useEffect, useState } from 'react';
 
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
+import { Field } from '../components/Field';
+import { FieldSelect } from '../components/FieldSelect';
 import { PageToolbar } from '../components/layout/PageToolbar';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
 import type { MemoryEditorSubmission } from '../components/MemoryEditor';
@@ -966,17 +968,17 @@ function ConflictPair({
       )}
       {state === 'unresolved' && other && !isTerminalMemory(other) && !isTerminalMemory(memory) && (
         <div className="memory-conflict-actions">
-          <label>
-            <span>替代：保留哪一条</span>
-            <select
-              aria-label="替代后保留的记忆"
+          <Field label="替代：保留哪一条">
+            <FieldSelect
+              ariaLabel="替代后保留的记忆"
               value={winner}
-              onChange={(event) => setWinner(event.target.value)}
-            >
-              <option value={memory.id}>本条</option>
-              <option value={other.id}>另一条</option>
-            </select>
-          </label>
+              onChange={setWinner}
+              options={[
+                { id: memory.id, label: '本条' },
+                { id: other.id, label: '另一条' },
+              ]}
+            />
+          </Field>
           <button
             type="button"
             onClick={() =>

@@ -6,6 +6,9 @@ import type {
 } from '@betterwork/agent-protocol';
 import { useMemo, useState } from 'react';
 
+import { Field } from './Field';
+import { FieldSelect } from './FieldSelect';
+
 const STAGES: Array<{ value: DiscussionCheckpointStage; label: string }> = [
   { value: 'understanding', label: '理解与目标' },
   { value: 'research-complete', label: '研究完成' },
@@ -103,47 +106,37 @@ export function DiscussionCheckpointPanel({
       {expanded && (
         <div className="discussion-checkpoint-form">
           <div className="discussion-checkpoint-fields">
-            <label>
-              阶段
-              <select
+            <Field label="阶段">
+              <FieldSelect
                 value={stage}
-                onChange={(event) => setStage(event.target.value as DiscussionCheckpointStage)}
-              >
-                {STAGES.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              标题
+                onChange={(next) => setStage(next as DiscussionCheckpointStage)}
+                options={STAGES.map((item) => ({ id: item.value, label: item.label }))}
+              />
+            </Field>
+            <Field label="标题">
               <input
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 maxLength={200}
               />
-            </label>
-            <label>
-              当前结论
+            </Field>
+            <Field label="当前结论">
               <textarea
                 value={summary}
                 onChange={(event) => setSummary(event.target.value)}
                 rows={3}
               />
-            </label>
-            <label>
-              审阅反馈（可选）
+            </Field>
+            <Field label="审阅反馈（可选）">
               <textarea
                 value={feedback}
                 onChange={(event) => setFeedback(event.target.value)}
                 rows={2}
               />
-            </label>
-            <label>
-              下一步（可选）
+            </Field>
+            <Field label="下一步（可选）">
               <input value={nextAction} onChange={(event) => setNextAction(event.target.value)} />
-            </label>
+            </Field>
           </div>
           {artifacts.length > 0 && (
             <fieldset className="discussion-checkpoint-artifacts">

@@ -7,6 +7,7 @@ import type {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { CapabilityIcon, CloseIcon, PlusIcon } from '../icons';
+import { FieldSelect } from './FieldSelect';
 import { PopoverMenu } from './PopoverMenu';
 
 /**
@@ -55,6 +56,8 @@ const PURPOSE_LABELS: Record<MaterialPurpose, string> = {
   background: '背景参考',
   other: '其他',
 };
+
+const PURPOSE_OPTIONS = Object.entries(PURPOSE_LABELS).map(([id, label]) => ({ id, label }));
 
 const materialKey = (selection: TaskMaterialSelection): string => {
   const reference = selection.reference;
@@ -277,25 +280,21 @@ export function ComposerCapabilityPicker({
                 <span className="material-chip-title" title={title}>
                   {title}
                 </span>
-                <select
-                  aria-label={`${title}用途`}
+                <FieldSelect
+                  ariaLabel={`${title}用途`}
                   value={selection.purpose}
                   disabled={disabled}
-                  onChange={(event) => {
-                    const purpose = event.target.value as MaterialPurpose;
+                  onChange={(purpose) => {
                     onCommitMaterials(
                       materials.map((item) =>
-                        materialKey(item) === materialKey(selection) ? { ...item, purpose } : item,
+                        materialKey(item) === materialKey(selection)
+                          ? { ...item, purpose: purpose as MaterialPurpose }
+                          : item,
                       ),
                     );
                   }}
-                >
-                  {Object.entries(PURPOSE_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                  options={PURPOSE_OPTIONS}
+                />
                 <button
                   type="button"
                   className="capability-chip-remove"

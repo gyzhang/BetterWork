@@ -12,6 +12,8 @@ import type {
   ResolvedAppearance,
 } from '../appearance';
 import { colorSchemes } from '../appearance';
+import { Field } from '../components/Field';
+import { FieldSelect } from '../components/FieldSelect';
 import { TransientToast } from '../components/TransientToast';
 import type { McpConnectionsState } from '../hooks/use-mcp-connections';
 import type { MemoriesState } from '../hooks/use-memories';
@@ -278,7 +280,15 @@ export function AppearanceSettings({
     </section>
   );
 }
+
+/** 目前只有千帆接通了协议字段，其余引擎先作为不可选项占位。 */
+const SEARCH_ENGINE_OPTIONS = [
+  { id: 'baidu_qianfan', label: '百度千帆 AI 搜索' },
+  { id: 'more', label: '更多搜索引擎即将支持', disabled: true },
+];
+
 export function SearchSettings(): React.JSX.Element {
+  const [engine, setEngine] = React.useState('baidu_qianfan');
   const {
     configured,
     apiKey,
@@ -310,15 +320,15 @@ export function SearchSettings(): React.JSX.Element {
         </p>
       )}
       <div className="search-form">
-        <label>
-          搜索引擎
-          <select defaultValue="baidu_qianfan">
-            <option value="baidu_qianfan">百度千帆 AI 搜索</option>
-            <option disabled>更多搜索引擎即将支持</option>
-          </select>
-        </label>
-        <label>
-          API Key
+        <Field label="搜索引擎">
+          <FieldSelect
+            value={engine}
+            onChange={setEngine}
+            options={SEARCH_ENGINE_OPTIONS}
+            ariaLabel="搜索引擎"
+          />
+        </Field>
+        <Field label="API Key">
           <input
             type="password"
             value={apiKey}
@@ -327,11 +337,10 @@ export function SearchSettings(): React.JSX.Element {
               configured?.apiKeyConfigured ? '留空则保持原有凭据' : '粘贴服务商控制台生成的 API Key'
             }
           />
-        </label>
+        </Field>
         <details>
           <summary>高级参数</summary>
-          <label>
-            网页结果数量 top_k
+          <Field label="网页结果数量 top_k">
             <input
               type="number"
               min={1}
@@ -339,7 +348,7 @@ export function SearchSettings(): React.JSX.Element {
               value={webTopK}
               onChange={(event) => setWebTopK(Number(event.target.value))}
             />
-          </label>
+          </Field>
         </details>
         <div className="search-actions">
           <button
@@ -559,36 +568,32 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
       {editorOpen && (
         <div className="mcp-editor">
           <h3>{editingId ? '编辑连接' : '新建连接'}</h3>
-          <label>
-            名称
+          <Field label="名称">
             <input
               value={form.name}
               onChange={(event) => setForm({ ...form, name: event.target.value })}
             />
-          </label>
-          <label>
-            启动命令
+          </Field>
+          <Field label="启动命令">
             <input
               value={form.command}
               onChange={(event) => setForm({ ...form, command: event.target.value })}
               placeholder="node"
             />
-          </label>
-          <label>
-            参数（每行一个）
+          </Field>
+          <Field label="参数（每行一个）">
             <textarea
               rows={3}
               value={form.args}
               onChange={(event) => setForm({ ...form, args: event.target.value })}
             />
-          </label>
-          <label>
-            工作目录（可选）
+          </Field>
+          <Field label="工作目录（可选）">
             <input
               value={form.cwd}
               onChange={(event) => setForm({ ...form, cwd: event.target.value })}
             />
-          </label>
+          </Field>
           {error && (
             <p className="inline-message error" role="alert">
               {error}

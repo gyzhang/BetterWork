@@ -1,6 +1,8 @@
 import type { SkillDetail } from '@betterwork/agent-protocol';
 
 import type { SkillDependenciesState } from '../../hooks/use-skill-dependencies';
+import { Field } from '../Field';
+import { FieldSelect } from '../FieldSelect';
 
 /**
  * Skill 依赖与运行环境面板（A12）。
@@ -60,87 +62,83 @@ export function DependencyPanel({
         </span>
       </div>
 
-      <div className="dependency-field">
-        <label htmlFor="dependency-base">基础 Python</label>
-        <select
+      <Field
+        controlId="dependency-base"
+        label="基础 Python"
+        hint="受管制品按固定版本与校验值使用；本机解释器只作为 venv 基础，不会修改它的全局 site-packages。"
+      >
+        <FieldSelect
           id="dependency-base"
           value={state.base?.kind === 'managed' ? state.base.distributionId : '__local__'}
-          onChange={(event) => {
-            const value = event.target.value;
+          onChange={(value) => {
             if (value === '__local__') {
               state.chooseLocalInterpreter();
               return;
             }
             state.selectManagedDistribution(value);
           }}
-        >
-          {(options?.distributions ?? []).map((distribution) => (
-            <option key={distribution.id} value={distribution.id}>
-              算台受管 Python {distribution.version}（{distribution.platform.os}/
-              {distribution.platform.arch}）{distribution.installed ? '· 已下载' : '· 需下载'}
-            </option>
-          ))}
-          <option value="__local__">
-            {state.base?.kind === 'local' ? `本机解释器 ${state.base.path}` : '选择本机 Python…'}
-          </option>
-        </select>
-        <p>
-          受管制品按固定版本与校验值使用；本机解释器只作为 venv 基础，不会修改它的全局
-          site-packages。
-        </p>
-      </div>
+          options={[
+            ...(options?.distributions ?? []).map((distribution) => ({
+              id: distribution.id,
+              label: `算台受管 Python ${distribution.version}（${distribution.platform.os}/${distribution.platform.arch}）${distribution.installed ? '· 已下载' : '· 需下载'}`,
+            })),
+            {
+              id: '__local__',
+              label:
+                state.base?.kind === 'local' ? `本机解释器 ${state.base.path}` : '选择本机 Python…',
+            },
+          ]}
+        />
+      </Field>
 
-      <div className="dependency-field">
-        <label htmlFor="dependency-lock">依赖锁</label>
-        <select
+      <Field
+        controlId="dependency-lock"
+        label="依赖锁"
+        hint={
+          plan ? (
+            <>
+              {plan.lock.packages.length} 个精确版本包 · {plan.platform.os}/{plan.platform.arch}/
+              {plan.platform.abi} · 必需模块 {plan.lock.importProbes.join('、') || '无'}
+              {plan.missingWheels.length > 0 && (
+                <span className="dependency-warning">
+                  随包资源缺少 {plan.missingWheels.join('、')}；准备时需要显式联网下载并逐个校验。
+                </span>
+              )}
+            </>
+          ) : undefined
+        }
+      >
+        <FieldSelect
           id="dependency-lock"
           value={state.lockId}
-          onChange={(event) => state.selectLock(event.target.value)}
-        >
-          {(options?.lockIds ?? []).map((lockId) => (
-            <option key={lockId} value={lockId}>
-              {lockId}
-            </option>
-          ))}
-        </select>
-        {plan && (
-          <p>
-            {plan.lock.packages.length} 个精确版本包 · {plan.platform.os}/{plan.platform.arch}/
-            {plan.platform.abi} · 必需模块 {plan.lock.importProbes.join('、') || '无'}
-          </p>
-        )}
-        {plan && plan.missingWheels.length > 0 && (
-          <p className="dependency-warning">
-            随包资源缺少 {plan.missingWheels.join('、')}；准备时需要显式联网下载并逐个校验。
-          </p>
-        )}
-      </div>
+          onChange={(lockId) => state.selectLock(lockId)}
+          options={(options?.lockIds ?? []).map((lockId) => ({ id: lockId, label: lockId }))}
+        />
+      </Field>
 
-      <div className="dependency-field">
-        <label htmlFor="dependency-snapshot">外部工具链快照</label>
+      <Field
+        controlId="dependency-snapshot"
+        label="外部工具链快照"
+        hint="快照是外部目录的受管不可变副本，运行时 PPTM_HOME 指向它；源目录之后再改动也不影响已登记的快照。"
+      >
         <div className="dependency-inline">
-          <select
+          <FieldSelect
             id="dependency-snapshot"
             value={state.snapshotId}
-            onChange={(event) => state.selectSnapshot(event.target.value)}
-          >
-            <option value="">不使用外部工具链</option>
-            {(options?.snapshots ?? []).map((snapshot) => (
-              <option key={snapshot.id} value={snapshot.id}>
-                {snapshot.manifestHash.slice(0, 12)} · {snapshot.fileCount} 文件 ·{' '}
-                {snapshot.originState === 'dirty' ? '含本地修改' : snapshot.originState}
-              </option>
-            ))}
-          </select>
+            onChange={(snapshotId) => state.selectSnapshot(snapshotId)}
+            options={[
+              { id: '', label: '不使用外部工具链' },
+              ...(options?.snapshots ?? []).map((snapshot) => ({
+                id: snapshot.id,
+                label: `${snapshot.manifestHash.slice(0, 12)} · ${snapshot.fileCount} 文件 · ${snapshot.originState === 'dirty' ? '含本地修改' : snapshot.originState}`,
+              })),
+            ]}
+          />
           <button type="button" className="secondary-button" onClick={state.registerToolchain}>
             登记目录…
           </button>
         </div>
-        <p>
-          快照是外部目录的受管不可变副本，运行时 PPTM_HOME 指向它；源目录之后再改动也不影响
-          已登记的快照。
-        </p>
-      </div>
+      </Field>
 
       <div className="dependency-actions">
         <button

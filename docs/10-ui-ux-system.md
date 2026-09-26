@@ -517,13 +517,14 @@ UI Foundation 首批提供四套成对色系：
 | --- | --- | --- |
 | 页面骨架 PageHeader / PageToolbar / ScrollRegion / ViewContainer | `components/layout/` | 已落地；骨架容器自带纵向间距机制（§9.8），页面不得覆写 |
 | 浮层基座 PopoverMenu（含 Menu/Popover/Dropdown） | `components/PopoverMenu.tsx` | 已落地：背板收起、Esc、焦点归还、方向键、视口碰撞、字号镜像触发控件 |
-| 下拉选择 FieldSelect | `components/FieldSelect.tsx` | 已落地，走 PopoverMenu；**仍有 9 处原生 `<select>` 待迁** |
+| 下拉选择 FieldSelect | `components/FieldSelect.tsx` | 已落地，走 PopoverMenu；2026-09-26 深夜 9 处原生 `<select>` 全部迁入，全仓已无原生下拉（护栏拦截新增） |
 | 模态基座 Modal（dialog／sheet／viewer 三变体）＋ `useOverlaySemantics` | `components/Modal.tsx` | 已落地：inert 应用主体、Esc、背板点击、初始焦点、Tab 循环、焦点归还、`role=dialog`/`alertdialog`。确认框、模型抽屉、幻灯片放映层、消息中心四处已收编 |
+| 表单字段 Field（标签 + 控件 + 说明） | `components/Field.tsx` | 已落地：标签与控件的缝只有一份；37 处字段改用它，12 条页面级 `label { gap / font-size }` 规则随之删除 |
 | 模态确认 ConfirmationDialog | `components/ConfirmationDialog.tsx` | 已落地，走 Modal 的 `alertdialog` 变体；初始焦点落在「取消」 |
 | 短时反馈 TransientToast / 全局 ToastHost | `components/` | 已落地；两套不可混用（§11.5.1） |
 | 空状态 EmptyState | `components/EmptyState.tsx` | 已落地，但有 6 处内联占位绕开它 |
 | Tabs / SegmentedControl | — | **缺位**：现有两处只有 `role` 与 `aria-selected`，无 roving tabindex 与方向键 |
-| Button / Input / Textarea | 只有样式类，无组件 | 几何已统一取 `--control-*` 档位（§9.10），是否组件化随 P1 的 Field 一起定 |
+| Button / Input / Textarea | 只有样式类，无组件 | 几何取 `--control-*` 档位（§9.10），结构由 `Field` 负责；不再单独组件化，避免只为包一层壳而增加第二处真相 |
 | Switch / Tooltip / Progress / Skeleton | — | 未落地 |
 
 本表是组件层的唯一台账：新增基座必须登记在此，`.qoder/rules/betterwork-ui.md` 与[UI 一致性评估](reviews/2026-09-26-ui-consistency.md)都指向本表。
@@ -531,6 +532,8 @@ UI Foundation 首批提供四套成对色系：
 **浮层一律复用 `PopoverMenu` 基座**：下拉、菜单、选择器等脱离文档流的浮层必须走 `components/PopoverMenu.tsx`——背板收起、Esc、焦点归还、方向键导航与视口碰撞处理都在基座里。不得用 `<details>` 或 `position:absolute` 面板自造：2026-09-26 知识卡片的「更多」正是这样写的，三个症状同源——点外面不收起（`<details>` 没有这个语义）、能同时打开两张卡片的菜单、菜单项继承正文 14px 而比自己的 12px 触发按钮还大。基座会把菜单字号镜像成触发控件的计算值，让浮层与触发器看起来属于同一个控件；破坏性菜单项用 `tone: 'danger'` 表达，颜色仍由 Token 决定。护栏锁两条：`.popover-menu-item` 不得自带字号；overlay 阴影只允许出现在登记过的浮层表面（`standards/coding-standard.test.ts`）。
 
 **模态与覆盖层一律复用 `Modal` 基座**：会夺走整页焦点的表面（确认框、抽屉、放映层）走 `components/Modal.tsx` 的 `dialog`／`sheet`／`viewer` 三个变体；锚定在触发器局部、不居中的覆盖层（消息中心）用同文件导出的 `useOverlaySemantics`，只借语义不借定位；但借用者必须把覆盖层 portal 到 `document.body`——被 `inert` 的是整个 `<main>`，2026-09-26 消息中心留在壳内时面板与背板一起被 pointer-events 锁死，滚动、点按钮、点外面全部失效，只剩挂在 window 上的 Esc 还能用。inert 应用主体、Esc、背板点击关闭、初始焦点、Tab 循环、焦点归还、`role=dialog`/`alertdialog` 与 `aria-modal` 全部只有一处实现——此前这里是四套并存：确认框什么都有、模型抽屉只有 `aria-modal` 外壳、放映层自己写键盘、消息中心连 `aria-expanded` 都没有。触发元素必须带 `aria-haspopup="dialog"` 与 `aria-expanded`（消息中心的铃铛已按此补齐）。护栏锁两条：`.modal-panel` 之外的表面不得自带浮层阴影（存量按棘轮只降不升）；渲染层里出现 `role="dialog"`／`aria-modal`／`key === 'Escape'`／旧背板类而没接 `Modal` 或 `useOverlaySemantics` 即失败。
+
+**表单字段一律用 `Field`**：`<Field label="模型角色">…</Field>` 负责标签、控件与说明三件事的纵向结构，标签与控件之间的缝由 `Field` 自己的 `gap` 拥有（§9.8）。此前每个视图各写一份 `label { display: flex; gap: …; font-size: … }`，同一屏里因此并存 12px 与 13px 两种标签、4px 与 8px 两种缝（§3.2 的成因）。给出 `controlId` 时 `Field` 用 `<label htmlFor>` 精确关联，此时才能放说明文字；不给 `controlId` 时整个 `Field` 就是 `<label>`，点标签文字即可聚焦或展开控件，这种模式下不要再传 `hint`（包裹式标签会把说明读进控件名称）。勾选行（复选框与文字同排）不属于这个结构，仍在页面里自持排版。护栏两条：渲染层出现 `<select>`／`<option>` 即失败；除登记过的勾选行外，任何 `label` 选择器写 `gap` 或上下 `margin` 即失败。
 
 落地现状：按钮、输入、页签、Sheet、Toast、内联提示、空状态都有对应样式；页面骨架已由 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 负责结构，`KnowledgeDocumentCard` 负责知识条目的领域呈现，聚焦环用 `:focus-visible` 统一实现。破坏性确认统一使用 `ConfirmationDialog`，它以 `Modal` 的 `alertdialog` 变体实现：Portal 挂到应用外、背景 inert、初始焦点落在取消、Esc 与 Tab 焦点循环、关闭后恢复触发控件焦点。Popover 已落地为 `PopoverMenu` 基座（[ADR-0012](adr/0012-composer-capability-binding.md)）。尚未落地的有 Tooltip、Progress、Skeleton、Switch。
 

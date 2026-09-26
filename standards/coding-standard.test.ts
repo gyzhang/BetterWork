@@ -688,6 +688,56 @@ const CONTROL_SELECTOR =
 const CONTROL_EXEMPTIONS =
   /checkbox|::placeholder|:focus|:hover|\.workspace-row input|\.composer textarea|textarea\[readonly\]|counted/;
 
+/**
+ * 勾选行（复选框与文字同排）不是「标签 + 控件」结构，保留自己的排版；
+ * 新增条目要说明为什么它不算表单字段，否则应改用 Field。
+ */
+const CHECKBOX_ROW_LABEL_SELECTORS: { readonly match: string; readonly reason: string }[] = [
+  { match: '.discussion-checkpoint-artifacts label', reason: '成果版本勾选行：框在左、标题在右' },
+  { match: '.skill-trust-box label', reason: 'Skill 信任确认行：框在左、说明在右' },
+];
+
+describe('表单字段基座纪律', () => {
+  const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
+  expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
+  const declarations = declarationsOf(styles ?? '');
+
+  it('下拉选择只有 FieldSelect 一处实现', () => {
+    // 原生 <select> 的弹层由操作系统画，字号、圆角、暗色全部脱离主题 Token；
+    // 它与基座并存过的结果是同一屏出现两种下拉外观（docs/reviews/2026-09-26-ui-consistency.md §3.2）。
+    const rendererFiles = pathsUnder('apps/desktop/src/renderer/').filter((relative) =>
+      /\.(tsx|ts)$/.test(relative),
+    );
+    const offenders = rendererFiles.filter((relative) =>
+      /<select\b|<option\b/.test(read(relative)),
+    );
+    expect(
+      offenders,
+      '下拉请选择 FieldSelect；它走 PopoverMenu 基座，主题与键盘语义只有一份',
+    ).toEqual([]);
+  });
+
+  it('表单字段的标签几何只住在 Field', () => {
+    // 每个视图各写一份 `label { gap / margin / font-size }`，才有同一屏两种标签字号与两种缝。
+    // 选择器文本里带着 CSS 注释，先剥掉再判，否则注释里提到 label 就会被误伤。
+    const offenders: string[] = [];
+    for (const declaration of declarations) {
+      const selector = declaration.selector.replace(/\/\*[\s\S]*?\*\//g, '').trim();
+      if (!/(^|[,>\s])label\b/.test(selector)) continue;
+      if (
+        !['gap', 'row-gap', 'margin', 'margin-top', 'margin-bottom'].includes(declaration.property)
+      )
+        continue;
+      if (CHECKBOX_ROW_LABEL_SELECTORS.some((row) => selector.includes(row.match))) continue;
+      offenders.push(locate(declaration, styles ?? ''));
+    }
+    expect(
+      offenders,
+      '标签与控件之间的缝归 Field；页面请改用 <Field>，别再加一条 label 规则（docs/10 §10.1）',
+    ).toEqual([]);
+  });
+});
+
 describe('界面观感基线', () => {
   const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
   expect(styles, '找不到 renderer 的 styles.css').toBeDefined();

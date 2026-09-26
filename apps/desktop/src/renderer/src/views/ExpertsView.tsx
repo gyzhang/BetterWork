@@ -12,6 +12,8 @@ import type {
 import { useState } from 'react';
 
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
+import { Field } from '../components/Field';
+import { FieldSelect } from '../components/FieldSelect';
 import { PageHeader } from '../components/layout/PageHeader';
 import type { ExpertsState } from '../hooks/use-experts';
 import { ExpertIcon, PlusIcon } from '../icons';
@@ -192,53 +194,47 @@ function ExpertEditor({
       />
       <div className="page-scroll skills-scroll">
         <div className="page-body expert-editor-body">
-          <label>
-            名称
+          <Field label="名称">
             <input
               value={draft.name}
               onChange={(event) => onChange({ ...draft, name: event.target.value })}
             />
-          </label>
-          <label>
-            简介
+          </Field>
+          <Field label="简介">
             <textarea
               value={draft.summary}
               onChange={(event) => onChange({ ...draft, summary: event.target.value })}
               rows={2}
             />
-          </label>
-          <label>
-            人格与职责
+          </Field>
+          <Field label="人格与职责">
             <textarea
               value={draft.identity}
               onChange={(event) => onChange({ ...draft, identity: event.target.value })}
               rows={4}
             />
-          </label>
-          <label>
-            工作原则（每行一条）
+          </Field>
+          <Field label="工作原则（每行一条）">
             <textarea
               value={draft.principles.join('\n')}
               onChange={(event) => updateLines('principles', event.target.value)}
               rows={3}
             />
-          </label>
-          <label>
-            输入要求（每行一条）
+          </Field>
+          <Field label="输入要求（每行一条）">
             <textarea
               value={draft.inputRequirements.join('\n')}
               onChange={(event) => updateLines('inputRequirements', event.target.value)}
               rows={3}
             />
-          </label>
-          <label>
-            交付要求（每行一条）
+          </Field>
+          <Field label="交付要求（每行一条）">
             <textarea
               value={draft.deliveryRequirements.join('\n')}
               onChange={(event) => updateLines('deliveryRequirements', event.target.value)}
               rows={3}
             />
-          </label>
+          </Field>
           <fieldset>
             <legend>Skill 预设</legend>
             <div className="expert-option-list">
@@ -315,38 +311,37 @@ function ExpertEditor({
           </fieldset>
           <fieldset>
             <legend>模型偏好</legend>
-            <label>
-              <span className="muted-text">新任务默认使用的语言模型</span>
-              <select
-                aria-label="专家模型偏好"
+            <Field label="新任务默认使用的语言模型">
+              <FieldSelect
+                ariaLabel="专家模型偏好"
                 value={
                   draft.modelReference.mode === 'profile'
                     ? draft.modelReference.modelProfileId
                     : 'application-default'
                 }
-                onChange={(event) =>
+                onChange={(modelId) =>
                   onChange({
                     ...draft,
                     modelReference:
-                      event.target.value === 'application-default'
+                      modelId === 'application-default'
                         ? { mode: 'application-default' }
-                        : { mode: 'profile', modelProfileId: event.target.value },
+                        : { mode: 'profile', modelProfileId: modelId },
                   })
                 }
-              >
-                <option value="application-default">应用默认模型</option>
-                {selectedModelProfileId &&
-                  !languageModels.some((model) => model.id === selectedModelProfileId) && (
-                    <option value={selectedModelProfileId}>当前配置的模型不可用</option>
-                  )}
-                {languageModels.map((model) => (
-                  <option key={model.id} value={model.id} disabled={!model.enabled}>
-                    {model.name} · {model.model}
-                    {!model.enabled ? '（已停用）' : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
+                options={[
+                  { id: 'application-default', label: '应用默认模型' },
+                  ...(selectedModelProfileId &&
+                  !languageModels.some((model) => model.id === selectedModelProfileId)
+                    ? [{ id: selectedModelProfileId, label: '当前配置的模型不可用' }]
+                    : []),
+                  ...languageModels.map((model) => ({
+                    id: model.id,
+                    label: `${model.name} · ${model.model}${model.enabled ? '' : '（已停用）'}`,
+                    ...(model.enabled ? {} : { disabled: true }),
+                  })),
+                ]}
+              />
+            </Field>
             {languageModels.length === 0 && (
               <small className="muted-text">还没有配置语言模型，当前任务会使用应用默认模型。</small>
             )}

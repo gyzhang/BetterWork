@@ -3,7 +3,15 @@ import type { FormEvent } from 'react';
 
 import { CloseIcon } from '../icons';
 import { trackAction } from '../lib/async-action';
+import { Field } from './Field';
+import { FieldSelect } from './FieldSelect';
 import { Modal } from './Modal';
+
+const ROLE_OPTIONS = [
+  { id: 'language', label: '语言模型' },
+  { id: 'vision', label: '视觉模型' },
+  { id: 'embedding', label: '嵌入模型' },
+] as const;
 
 export interface ModelEditorProps {
   form: ModelProfileInput;
@@ -40,50 +48,40 @@ export function ModelEditor({
         </button>
       </header>
       <form onSubmit={(event) => trackAction(onSave(event), '保存模型配置')}>
-        <label>
-          显示名称
+        <Field label="显示名称">
           <input
             required
             value={form.name}
             onChange={(event) => setForm({ ...form, name: event.target.value })}
             placeholder="例如：公司主力模型"
           />
-        </label>
+        </Field>
         <div className="form-grid">
-          <label>
-            模型角色
-            <select
+          <Field label="模型角色">
+            <FieldSelect
               value={form.role}
-              onChange={(event) =>
-                setForm({ ...form, role: event.target.value as ModelProfileInput['role'] })
-              }
-            >
-              <option value="language">语言模型</option>
-              <option value="vision">视觉模型</option>
-              <option value="embedding">嵌入模型</option>
-            </select>
-          </label>
-          <label>
-            Provider
+              onChange={(role) => setForm({ ...form, role: role as ModelProfileInput['role'] })}
+              options={ROLE_OPTIONS}
+            />
+          </Field>
+          <Field label="Provider">
             <input
               required
               value={form.provider}
               onChange={(event) => setForm({ ...form, provider: event.target.value })}
               placeholder="openai-compatible"
             />
-          </label>
+          </Field>
         </div>
-        <label>
-          模型名称
+        <Field label="模型名称">
           <input
             required
             value={form.model}
             onChange={(event) => setForm({ ...form, model: event.target.value })}
             placeholder="模型服务中的 model id"
           />
-        </label>
-        <label>
-          API 地址
+        </Field>
+        <Field label="API 地址">
           <input
             required
             type="url"
@@ -91,21 +89,19 @@ export function ModelEditor({
             onChange={(event) => setForm({ ...form, baseUrl: event.target.value })}
             placeholder="https://example.com/v1"
           />
-        </label>
-        <label>
-          API Key
+        </Field>
+        <Field label="API Key">
           <input
             type="password"
             value={form.apiKey}
             onChange={(event) => setForm({ ...form, apiKey: event.target.value })}
             placeholder={editing ? '留空则保持原有凭据' : '可留空'}
           />
-        </label>
+        </Field>
         <details>
           <summary>高级参数</summary>
           <div className="form-grid">
-            <label>
-              上下文 Token
+            <Field label="上下文 Token">
               <input
                 type="number"
                 min="1"
@@ -114,9 +110,8 @@ export function ModelEditor({
                   setForm({ ...form, maxContextTokens: Number(event.target.value) })
                 }
               />
-            </label>
-            <label>
-              最大输出 Token
+            </Field>
+            <Field label="最大输出 Token">
               <input
                 type="number"
                 min="1"
@@ -125,7 +120,7 @@ export function ModelEditor({
                   setForm({ ...form, maxOutputTokens: Number(event.target.value) })
                 }
               />
-            </label>
+            </Field>
           </div>
         </details>
         {error && (

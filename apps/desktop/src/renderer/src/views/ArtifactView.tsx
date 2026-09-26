@@ -14,6 +14,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useCallback, useRef, useState } from 'react';
 
 import { EmptyPage } from '../components/EmptyState';
+import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
@@ -391,23 +392,21 @@ export function ArtifactPage({
                         );
                     }}
                   >
-                    <label>
-                      标题
+                    <Field label="标题">
                       <input
                         value={title}
                         onChange={(event) => setTitle(event.target.value)}
                         maxLength={160}
                         required
                       />
-                    </label>
-                    <label>
-                      Markdown 内容
+                    </Field>
+                    <Field label="Markdown 内容">
                       <textarea
                         value={content}
                         onChange={(event) => setContent(event.target.value)}
                         required
                       />
-                    </label>
+                    </Field>
                     {sourceSelection.hasCandidates && (
                       <fieldset className="artifact-source-select">
                         <legend>采用来源</legend>

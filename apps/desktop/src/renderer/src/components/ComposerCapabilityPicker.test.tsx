@@ -85,9 +85,8 @@ describe('ComposerCapabilityPicker materials', () => {
       <ComposerCapabilityPicker {...pickerProps({ onCommitMaterials, materials: [selected] })} />,
     );
 
-    fireEvent.change(screen.getByRole('combobox', { name: '财务规则用途' }), {
-      target: { value: 'other' },
-    });
+    fireEvent.click(screen.getByRole('button', { name: '财务规则用途' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '其他' }));
 
     expect(onCommitMaterials).toHaveBeenCalledExactlyOnceWith([
       expect.objectContaining({ purpose: 'other' }),
