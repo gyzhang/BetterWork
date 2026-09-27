@@ -637,7 +637,7 @@ UI Foundation 首批提供四套成对色系：
 两条最易踩的边界：
 
 - **代码里有两个「toast」，写文档或提 PR 必须指明是哪一个**：`TransientToast` 是局部、自消、**不落库**的短时确认；`ToastHost` 是全局右下角浮层，本质是**一条已持久化通知的投影**（必然伴随写入消息中心，并受「同页抑制」控制）。短时确认**不得**走 `NotificationService`，否则会把瞬时提醒沉淀进消息中心、污染可回溯列表。
-- **`.inline-message` 只保留错误态**：成功 / 信息一律用 `TransientToast`，禁止用常驻 `.inline-message` 充当「顶部成功横幅」。列表页顶部的持久结果横幅、Hook 内自造的自动消失计时器都在禁止之列；回归护栏见 `SkillsView.test.tsx` 对 `.inline-message:not(.error)` 必须为空的断言。
+- **`.inline-message` 只保留错误态**：成功 / 信息一律用 `TransientToast`，禁止用常驻 `.inline-message` 充当「顶部成功横幅」。列表页顶部的持久结果横幅、Hook 内自造的自动消失计时器都在禁止之列。落地现状：知识页曾把作业终态写成常驻 `.inline-message`（「来源检查完成（9/9）」与消息中心重复且不会消失），2026-09-27 已收口——钩子的反馈通道拆成 `error`（内联、可行动）与 `toast`（`TransientToast`、自消、不落库），作业**成功**不再在页面重复播报，只有部分完成与失败留内联并带「查看条目／重试」入口。护栏两条：渲染层出现不带 `.error` 的 `className="inline-message"` 即失败；`.inline-message` 不得长出 `.error` 以外的配色变体（`SkillsView.test.tsx` 对 `.inline-message:not(.error)` 的断言继续保留）。
 
 ## 12. 无障碍与可用性底线
 

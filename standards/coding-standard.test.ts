@@ -1108,6 +1108,36 @@ describe('列表行基座纪律', () => {
   });
 });
 
+describe('反馈通道纪律', () => {
+  it('内联提示只承载可行动的失败原因', () => {
+    // docs/10 §11.5.1 只有三个落点，`.inline-message` 是其中的错误态。
+    // 知识页曾把「来源检查完成（9/9）」写成常驻 `.inline-message`：与消息中心重复，
+    // 而且没有任何清除路径——只有下一次动作会覆盖它。
+    const offenders = pathsUnder('apps/desktop/src/renderer/')
+      .filter((relative) => /\.tsx$/.test(relative) && !/\.test\.tsx$/.test(relative))
+      .filter((relative) => /className="inline-message(?! error)"/.test(read(relative)));
+    expect(
+      offenders,
+      '成功与信息走 TransientToast（自消、不落库）；内联只留 .inline-message.error（docs/10 §11.5.1）',
+    ).toEqual([]);
+  });
+
+  it('.inline-message 不得长出错误以外的配色变体', () => {
+    const styles = cssPaths().find((relative) => relative.endsWith('styles.css')) ?? '';
+    const offenders = declarationsOf(styles)
+      .map((declaration) => ({
+        declaration,
+        selector: declaration.selector.replace(/\/\*[\s\S]*?\*\//g, '').trim(),
+      }))
+      .filter(({ selector }) => /\.inline-message\.(?!error\b)[a-z]/.test(selector))
+      .map(({ declaration }) => locate(declaration, styles));
+    expect(
+      offenders,
+      '内联提示只有错误态；再补一个 .inline-message.success 就是第二个成功通道',
+    ).toEqual([]);
+  });
+});
+
 describe('计时基准车道纪律', () => {
   const timingTests = pathsUnder(...SOURCE_ROOTS).filter(
     (relative) => /\.test\.tsx?$/.test(relative) && !relative.endsWith('.bench.test.ts'),

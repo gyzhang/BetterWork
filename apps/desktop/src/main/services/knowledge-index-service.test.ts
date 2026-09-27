@@ -431,6 +431,37 @@ describe('KnowledgeIndexService 空间、代次与重试', () => {
   });
 });
 
+describe('KnowledgeIndexService 清空最近作业', () => {
+  it('只删已收口的作业与它的条目，进行中作业与已索引资料都不受影响', async () => {
+    const harness = createHarness();
+    const first = writeSource(harness.directory, '收入.md', '三季度收入 120 万元。');
+    const second = writeSource(harness.directory, '回款.md', '回款按季度确认。');
+
+    const finished = harness.service.startImport([first]);
+    await harness.service.settled();
+    const running = harness.service.startImport([second]);
+
+    expect(harness.service.clearJobs()).toBe(1);
+    // 清空不碰排队与运行中的作业——它仍是界面上的「进行中」与取消入口。
+    expect(harness.service.getJob(running.jobId)).toBeDefined();
+    await harness.service.settled();
+
+    const page = harness.service.listJobs({ limit: 10 });
+    expect(page.jobs.map((job) => job.id)).toEqual([running.jobId]);
+    // 被清掉的作业连条目一起消失（外键级联），但资料与检索索引原样保留。
+    expect(harness.service.jobDetail(finished.jobId)).toBeUndefined();
+    expect(
+      harness.vault
+        .listDocuments()
+        .map((document) => document.title)
+        .sort(),
+    ).toEqual(['回款', '收入']);
+    expect(harness.service.clearJobs()).toBe(1);
+    expect(harness.service.listJobs({ limit: 10 }).jobs).toEqual([]);
+    harness.vault.close();
+  });
+});
+
 describe('KnowledgeIndexService 设置与来源检查', () => {
   it('没有合格嵌入模型时拒绝启用语义，且不改写已存设置', () => {
     const harness = createHarness();

@@ -21,7 +21,10 @@ import type {
 } from '@betterwork/agent-protocol';
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 
+import type { ToastTone } from '../components/TransientToast';
 import { describeActionError, trackAction } from '../lib/async-action';
+import type { TransientToastMessage } from './use-transient-toast';
+import { useTransientToast } from './use-transient-toast';
 
 /** 最近一次检索的真实生效方式与覆盖度（契约 §9 response 的界面投影）。 */
 export interface KnowledgeSearchStatus {
@@ -35,9 +38,12 @@ export interface KnowledgeLibrary {
   results: KnowledgeSearchHit[];
   query: string;
   setQuery: (query: string) => void;
-  message: string;
-  /** 局部信息写入（如 KM03 迟到成功的可找回提示）。 */
-  setMessage: (message: string) => void;
+  /** 可行动的失败原因：内联在页面上，随下一次动作或修正消失（docs/10 §11.5.1）。 */
+  error: string;
+  /** 当场发起的短时确认：由 `TransientToast` 在 4s／6s 后自消，不落库。 */
+  toast: TransientToastMessage | undefined;
+  showToast: (tone: ToastTone, message: string) => void;
+  dismissToast: () => void;
   issues: string[];
   importing: boolean;
   loading: boolean;
@@ -60,6 +66,8 @@ export interface KnowledgeLibrary {
   activeJobs: KnowledgeJobSummary[];
   /** 已收口的作业（含取消/失败）留在面板上供回看，新作业按提交倒序排在前面。 */
   recentJobs: KnowledgeJobSummary[];
+  /** 清空已收口的作业记录（与消息中心的「清空」同语义）；进行中的作业不受影响。 */
+  clearRecentJobs: () => Promise<void>;
   /** 展开查看逐条目阶段与原因的作业；同时只展开一个。 */
   jobDetail: { jobId: string; items: KnowledgeJobItemSummary[] } | undefined;
   jobDetailLoading: boolean;
@@ -148,7 +156,8 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   const [documents, setDocuments] = useState<KnowledgeDocumentSummary[]>([]);
   const [results, setResults] = useState<KnowledgeSearchHit[]>([]);
   const [query, setQuery] = useState('');
-  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const { toast, showToast, dismissToast } = useTransientToast();
   const [issues, setIssues] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -261,26 +270,26 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
 
   const onImport = async (): Promise<void> => {
     setImporting(true);
-    setMessage('');
+    setError('');
     setIssues([]);
     try {
       const ack = await window.betterwork.knowledge.importFromDialog();
       if (ack.cancelled || !ack.jobId) {
-        setMessage('已取消导入，未选择文件。');
+        showToast('success', '已取消导入，未选择文件。');
       } else {
-        setMessage('已提交导入作业，索引正在后台建立。');
+        showToast('success', '已提交导入作业，索引正在后台建立。');
         trackJob(ack.jobId);
       }
       refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '导入资料失败。');
+      setError(error instanceof Error ? error.message : '导入资料失败。');
     } finally {
       setImporting(false);
     }
   };
 
   const onOpenSource = async (sourcePath: string): Promise<void> => {
-    setMessage('');
+    setError('');
     const result = await window.betterwork.knowledge.openSource({ sourcePath });
     if (!result.opened) throw new Error(result.error ?? '无法打开原始资料。');
   };
@@ -298,7 +307,8 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
         setCursorStack([]);
         setDetailError('');
       }
-      setMessage(
+      showToast(
+        'success',
         result.removed
           ? `已从资料库移除「${document.title}」，原始文件未受影响。`
           : '资料已不在当前资料库中。',
@@ -306,22 +316,22 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
       setQuery('');
       refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '移出资料库失败，请重试。');
+      setError(error instanceof Error ? error.message : '移出资料库失败，请重试。');
     }
   };
 
   const onRefresh = async (document: KnowledgeDocumentSummary): Promise<void> => {
     setImporting(true);
-    setMessage('');
+    setError('');
     try {
       const ack = await window.betterwork.knowledge.refresh({ id: document.id });
-      setMessage(`已提交「${document.title}」的刷新作业，索引正在后台重建。`);
+      showToast('success', `已提交「${document.title}」的刷新作业，索引正在后台重建。`);
       setQuery('');
       trackJob(ack.jobId);
       refresh();
     } catch (error) {
       const message = describeActionError(error, '刷新索引失败，请重试。');
-      setMessage(`刷新索引失败：${message}`);
+      setError(`刷新索引失败：${message}`);
       throw error instanceof Error ? error : new Error(message);
     } finally {
       setImporting(false);
@@ -353,16 +363,13 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
                   kind: detail.job.kind,
                 },
           );
-          if (detail.job.status === 'succeeded') {
-            setMessage(
-              `${titleOfJob(detail.job)}完成（${detail.job.completedCount}/${detail.job.totalCount}）。`,
+          // 成功结果不在此处重复提示：作业行就是它的界面投影，消息中心另有一条落库通知。
+          if (detail.job.status === 'partial') {
+            setError(
+              `${titleOfJob(detail.job)}部分完成（${detail.job.completedCount}/${detail.job.totalCount}）。可展开「查看条目」定位失败项。`,
             );
-          } else if (detail.job.status === 'partial') {
-            setMessage(
-              `${titleOfJob(detail.job)}部分完成（${detail.job.completedCount}/${detail.job.totalCount}）。`,
-            );
-          } else if (detail.job.status !== 'cancelled') {
-            setMessage(
+          } else if (detail.job.status === 'failed' || detail.job.status === 'interrupted') {
+            setError(
               `${titleOfJob(detail.job)}未完成：${detail.job.failure?.message ?? detail.job.status}`,
             );
           }
@@ -372,6 +379,17 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     },
     [refresh],
   );
+
+  const clearRecentJobs = useCallback(async (): Promise<void> => {
+    try {
+      await window.betterwork.knowledge.clearJobs();
+      setRecentJobs(new Map());
+      setJobDetail(undefined);
+      showToast('success', '已清空最近作业；资料、索引与原件都没有被改动。');
+    } catch (clearError) {
+      setError(describeActionError(clearError, '清空最近作业失败。'));
+    }
+  }, [showToast]);
 
   const trackJob = useCallback((jobId: string): void => {
     pendingJobs.current.add(jobId);
@@ -431,9 +449,9 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   const createCollection = async (name: string): Promise<void> => {
     try {
       setCollections(await window.betterwork.knowledge.saveCollection({ mode: 'create', name }));
-      setMessage(`已创建集合「${name.trim()}」。`);
+      showToast('success', `已创建集合「${name.trim()}」。`);
     } catch (error) {
-      setMessage(describeActionError(error, '创建集合失败。'));
+      setError(describeActionError(error, '创建集合失败。'));
     }
   };
 
@@ -451,9 +469,9 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
           expectedRevision,
         }),
       );
-      setMessage(`集合已改名为「${name.trim()}」。`);
+      showToast('success', `集合已改名为「${name.trim()}」。`);
     } catch (error) {
-      setMessage(describeActionError(error, '改名集合失败。'));
+      setError(describeActionError(error, '改名集合失败。'));
     }
   };
 
@@ -464,9 +482,9 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
       if (current.kind === 'collection' && current.collectionId === id) {
         setFilter({ kind: 'all' });
       }
-      setMessage('已删除集合；资料本身与原件不受影响。');
+      showToast('success', '已删除集合；资料本身与原件不受影响。');
     } catch (error) {
-      setMessage(describeActionError(error, '删除集合失败。'));
+      setError(describeActionError(error, '删除集合失败。'));
     }
   };
 
@@ -481,10 +499,10 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
         expectedMembershipRevision,
         collectionIds,
       });
-      setMessage('分类已保存；不会改变内容版本与已选任务材料。');
+      showToast('success', '分类已保存；不会改变内容版本与已选任务材料。');
       refresh();
     } catch (error) {
-      setMessage(describeActionError(error, '保存分类失败，可能已被其他窗口更新。'));
+      setError(describeActionError(error, '保存分类失败，可能已被其他窗口更新。'));
     }
   };
 
@@ -554,10 +572,10 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
         notes.push('此前的结果勾选已清空');
         setSelected(new Map());
       }
-      if (notes.length > 0) setMessage(`${notes.join('；')}。`);
+      if (notes.length > 0) showToast('error', `${notes.join('；')}。`);
     } catch (error) {
       if (searchSeq.current !== seq) return;
-      setMessage(error instanceof Error ? error.message : '检索资料失败。');
+      setError(error instanceof Error ? error.message : '检索资料失败。');
     }
   };
 
@@ -572,13 +590,14 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
         ...(input.embeddingProfileId ? { embeddingProfileId: input.embeddingProfileId } : {}),
       });
       setSettings(next);
-      setMessage(
+      showToast(
+        'success',
         input.semanticEnabled
           ? '已启用语义检索。历史资料需手动重建向量索引；新导入资料会自动纳入。'
           : '已停用语义检索；关键词搜索不受影响。',
       );
     } catch (error) {
-      setMessage(describeActionError(error, '保存索引设置失败，请重试。'));
+      setError(describeActionError(error, '保存索引设置失败，请重试。'));
     }
   };
 
@@ -589,13 +608,14 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
         ...(forced ? { resetSemanticSpace: true } : {}),
       });
       trackJob(ack.jobId);
-      setMessage(
+      showToast(
+        'success',
         forced
           ? '已提交强制重建：旧语义索引立即停用，关键词检索保持可用。'
           : '已提交语义索引重建作业。',
       );
     } catch (error) {
-      setMessage(describeActionError(error, '提交重建作业失败，请重试。'));
+      setError(describeActionError(error, '提交重建作业失败，请重试。'));
     }
   };
 
@@ -604,9 +624,9 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     try {
       const ack = await window.betterwork.knowledge.rebuildIndex({ kind: 'keyword' });
       trackJob(ack.jobId);
-      setMessage('已提交关键词索引重建；不调用模型，向量索引与覆盖状态不受影响。');
+      showToast('success', '已提交关键词索引重建；不调用模型，向量索引与覆盖状态不受影响。');
     } catch (error) {
-      setMessage(describeActionError(error, '提交关键词重建失败，请重试。'));
+      setError(describeActionError(error, '提交关键词重建失败，请重试。'));
     }
   };
 
@@ -636,11 +656,10 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   const cancelJob = async (jobId: string): Promise<void> => {
     try {
       const ack = await window.betterwork.knowledge.cancelJob({ jobId });
-      setMessage(
-        ack.cancelled ? '已请求取消，作业将停在当前条目边界。' : '该作业已结束，无法取消。',
-      );
+      if (ack.cancelled) showToast('success', '已请求取消，作业将停在当前条目边界。');
+      else showToast('error', '该作业已结束，无法取消。');
     } catch (error) {
-      setMessage(describeActionError(error, '取消作业失败。'));
+      setError(describeActionError(error, '取消作业失败。'));
     }
   };
 
@@ -654,9 +673,9 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
       });
       setRetryTarget(undefined);
       trackJob(ack.jobId);
-      setMessage(`已提交重试作业（${target.itemIds.length} 个条目）。`);
+      showToast('success', `已提交重试作业（${target.itemIds.length} 个条目）。`);
     } catch (error) {
-      setMessage(describeActionError(error, '重试失败条目未提交，请重试。'));
+      setError(describeActionError(error, '重试失败条目未提交，请重试。'));
     }
   };
 
@@ -771,9 +790,9 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     try {
       const ack = await window.betterwork.knowledge.checkSources({ documentIds: [documentId] });
       trackJob(ack.jobId);
-      setMessage('已提交来源检查，原件与登记内容的比对在后台进行。');
+      showToast('success', '已提交来源检查，原件与登记内容的比对在后台进行。');
     } catch (error) {
-      setMessage(describeActionError(error, '提交来源检查失败。'));
+      setError(describeActionError(error, '提交来源检查失败。'));
     }
   };
 
@@ -781,7 +800,7 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   const checkAllSources = async (): Promise<void> => {
     const ids = documents.map((document) => document.id);
     if (ids.length === 0) {
-      setMessage('资料库里现在没有可检查的资料。');
+      showToast('success', '资料库里现在没有可检查的资料。');
       return;
     }
     const batches: string[][] = [];
@@ -793,13 +812,14 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
         const ack = await window.betterwork.knowledge.checkSources({ documentIds: batch });
         trackJob(ack.jobId);
       }
-      setMessage(
+      showToast(
+        'success',
         `已提交 ${ids.length} 份资料的原件检查${
           batches.length > 1 ? `（分 ${batches.length} 批）` : ''
         }，比对在后台进行，未检查项不会显示为正常。`,
       );
     } catch (error) {
-      setMessage(describeActionError(error, '提交来源检查失败。'));
+      setError(describeActionError(error, '提交来源检查失败。'));
     }
   };
 
@@ -834,8 +854,10 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     results,
     query,
     setQuery,
-    message,
-    setMessage,
+    error,
+    toast,
+    showToast,
+    dismissToast,
     issues,
     importing,
     loading,
@@ -850,6 +872,7 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     deleteCollection,
     saveDocumentCollections,
     activeJobs: [...activeJobs.values()],
+    clearRecentJobs,
     recentJobs: [...recentJobs.values()].sort(
       (left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id),
     ),

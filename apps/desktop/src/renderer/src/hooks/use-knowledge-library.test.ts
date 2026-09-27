@@ -208,6 +208,7 @@ interface Harness {
     checkSources: ReturnType<typeof vi.fn>;
     retryJob: ReturnType<typeof vi.fn>;
     cancelJob: ReturnType<typeof vi.fn>;
+    clearJobs: ReturnType<typeof vi.fn>;
     search: ReturnType<typeof vi.fn>;
     listRevisions: ReturnType<typeof vi.fn>;
     preview: ReturnType<typeof vi.fn>;
@@ -248,6 +249,7 @@ const install = (): Harness => {
     checkSources: vi.fn(async () => ({ jobId: 'job-3' })),
     retryJob: vi.fn(async () => ({ jobId: 'job-4' })),
     cancelJob: vi.fn(async () => ({ cancelled: true })),
+    clearJobs: vi.fn(async () => ({ cleared: true as const })),
     search: vi.fn(async () => searchResponse()),
     listRevisions: vi.fn(async () => [revisionOf()]),
     preview: vi.fn(async () => textPage()),
@@ -283,7 +285,7 @@ describe('useKnowledgeLibrary 作业接线', () => {
     await act(async () => {
       await result.current.onImport();
     });
-    expect(result.current.message).toBe('已取消导入，未选择文件。');
+    expect(result.current.toast?.message).toBe('已取消导入，未选择文件。');
     expect(result.current.issues).toEqual([]);
     // 后续任何终态事件都不应触发回读。
     await act(async () => {
@@ -293,14 +295,14 @@ describe('useKnowledgeLibrary 作业接线', () => {
     expect(harness.knowledge.job).not.toHaveBeenCalled();
   });
 
-  it('导入回执先报已提交，终态事件后回填完成文案', async () => {
+  it('导入回执先报已提交，终态成功后不在页面重复提示', async () => {
     const harness = install();
     const { result } = renderHook(() => useKnowledgeLibrary());
     await flush();
     await act(async () => {
       await result.current.onImport();
     });
-    expect(result.current.message).toBe('已提交导入作业，索引正在后台建立。');
+    expect(result.current.toast?.message).toBe('已提交导入作业，索引正在后台建立。');
     // 排队/运行中的事件不回填结果。
     await act(async () => {
       harness.events[0]?.(jobOf({ status: 'queued' }));
@@ -314,7 +316,9 @@ describe('useKnowledgeLibrary 作业接线', () => {
     });
     expect(harness.knowledge.job).toHaveBeenCalledWith({ jobId: 'job-1' });
     await flush();
-    expect(result.current.message).toBe('资料导入完成（1/1）。');
+    // 成功结果的界面投影是作业行与消息中心那一条落库通知，页面不再补一份文案。
+    expect(result.current.toast?.message).toBe('已提交导入作业，索引正在后台建立。');
+    expect(result.current.error).toBe('');
   });
 
   it('刷新作业部分完成时把逐条目失败回填到 issues', async () => {
@@ -339,7 +343,7 @@ describe('useKnowledgeLibrary 作业接线', () => {
         updatedAt: 2,
       });
     });
-    expect(result.current.message).toContain('刷新作业');
+    expect(result.current.toast?.message).toContain('刷新作业');
     await act(async () => {
       harness.events[0]?.(
         jobOf({
@@ -353,7 +357,7 @@ describe('useKnowledgeLibrary 作业接线', () => {
       await Promise.resolve();
     });
     await flush();
-    expect(result.current.message).toBe('资料刷新部分完成（1/2）。');
+    expect(result.current.error).toBe('资料刷新部分完成（1/2）。可展开「查看条目」定位失败项。');
     expect(result.current.issues).toEqual(['损坏材料.docx：解析失败']);
   });
 
@@ -409,8 +413,10 @@ describe('useKnowledgeLibrary 统一检索（KM08）', () => {
     await act(async () => {
       await result.current.onSearch(submit);
     });
-    expect(result.current.message).toContain('本次检索以关键词为主（部分资料未完成向量索引）');
-    expect(result.current.message).not.toContain('index-partial');
+    expect(result.current.toast?.message).toContain(
+      '本次检索以关键词为主（部分资料未完成向量索引）',
+    );
+    expect(result.current.toast?.message).not.toContain('index-partial');
     expect(result.current.results).toHaveLength(1);
   });
 
@@ -425,7 +431,7 @@ describe('useKnowledgeLibrary 统一检索（KM08）', () => {
     await act(async () => {
       await result.current.onSearch(submit);
     });
-    expect(result.current.message).toBe('检索服务暂不可用。');
+    expect(result.current.error).toBe('检索服务暂不可用。');
   });
 });
 
@@ -540,7 +546,7 @@ describe('useKnowledgeLibrary 索引管理界面接线（KM09）', () => {
       semanticEnabled: true,
       embeddingProfileId: 'm-embed',
     });
-    expect(result.current.message).toContain('历史资料需手动重建向量索引');
+    expect(result.current.toast?.message).toContain('历史资料需手动重建向量索引');
     expect(harness.knowledge.rebuildIndex).not.toHaveBeenCalled();
   });
 
@@ -559,7 +565,7 @@ describe('useKnowledgeLibrary 索引管理界面接线（KM09）', () => {
       kind: 'semantic',
       resetSemanticSpace: true,
     });
-    expect(result.current.message).toContain('旧语义索引立即停用');
+    expect(result.current.toast?.message).toContain('旧语义索引立即停用');
     await act(async () => {
       harness.events[0]?.(jobOf({ id: 'job-2', status: 'succeeded', completedCount: 1 }));
       await Promise.resolve();
@@ -653,7 +659,7 @@ describe('useKnowledgeLibrary 索引管理界面接线（KM09）', () => {
       await result.current.cancelJob('job-done');
     });
     expect(harness.knowledge.cancelJob).toHaveBeenCalledWith({ jobId: 'job-done' });
-    expect(result.current.message).toBe('该作业已结束，无法取消。');
+    expect(result.current.toast?.message).toBe('该作业已结束，无法取消。');
   });
 });
 
@@ -775,7 +781,7 @@ describe('useKnowledgeLibrary 资料详情接线（KM10）', () => {
       await result.current.checkDocumentSource('doc-1');
     });
     expect(harness.knowledge.checkSources).toHaveBeenCalledWith({ documentIds: ['doc-1'] });
-    expect(result.current.message).toContain('已提交来源检查');
+    expect(result.current.toast?.message).toContain('已提交来源检查');
     const listCallsBefore = harness.knowledge.list.mock.calls.length;
     await act(async () => {
       harness.events[0]?.(
@@ -850,13 +856,13 @@ describe('useKnowledgeLibrary 集合接线（KM11）', () => {
       name: ' 研究 ',
     });
     expect(result.current.collections).toEqual([collectionFixture]);
-    expect(result.current.message).toBe('已创建集合「研究」。');
+    expect(result.current.toast?.message).toBe('已创建集合「研究」。');
 
     harness.knowledge.saveCollection.mockRejectedValueOnce(new Error('已有同名集合，请换个名字。'));
     await act(async () => {
       await result.current.createCollection('研究');
     });
-    expect(result.current.message).toContain('已有同名集合');
+    expect(result.current.error).toContain('已有同名集合');
     expect(result.current.collections).toEqual([collectionFixture]);
   });
 
@@ -878,7 +884,7 @@ describe('useKnowledgeLibrary 集合接线（KM11）', () => {
     expect(result.current.collections).toEqual([]);
     expect(result.current.filter).toEqual({ kind: 'all' });
     expect(harness.knowledge.list).toHaveBeenLastCalledWith({ filter: { kind: 'all' } });
-    expect(result.current.message).toContain('已删除集合');
+    expect(result.current.toast?.message).toContain('已删除集合');
   });
 
   it('保存资料分类走成员 CAS 并回填局部反馈，失败不伪装成功', async () => {
@@ -897,7 +903,7 @@ describe('useKnowledgeLibrary 集合接线（KM11）', () => {
       expectedMembershipRevision: 1,
       collectionIds: ['col-1'],
     });
-    expect(result.current.message).toBe('分类已保存；不会改变内容版本与已选任务材料。');
+    expect(result.current.toast?.message).toBe('分类已保存；不会改变内容版本与已选任务材料。');
 
     harness.knowledge.setCollectionMembers.mockRejectedValueOnce(
       new Error('分类刚被其他操作更新，请刷新后重新保存。'),
@@ -905,7 +911,7 @@ describe('useKnowledgeLibrary 集合接线（KM11）', () => {
     await act(async () => {
       await result.current.saveDocumentCollections('doc-1', 1, []);
     });
-    expect(result.current.message).toContain('分类刚被其他操作更新');
+    expect(result.current.error).toContain('分类刚被其他操作更新');
   });
 });
 
@@ -923,7 +929,7 @@ describe('本机索引动作、作业回看与详情重读（KM15 走查补齐�
       await result.current.rebuildKeyword();
     });
     expect(harness.knowledge.rebuildIndex).toHaveBeenCalledWith({ kind: 'keyword' });
-    expect(result.current.message).toBe(
+    expect(result.current.toast?.message).toBe(
       '已提交关键词索引重建；不调用模型，向量索引与覆盖状态不受影响。',
     );
     await act(async () => {
@@ -938,7 +944,10 @@ describe('本机索引动作、作业回看与详情重读（KM15 走查补齐�
       await Promise.resolve();
     });
     await flush();
-    expect(result.current.message).toBe('关键词索引重建完成（1/1）。');
+    expect(result.current.toast?.message).toBe(
+      '已提交关键词索引重建；不调用模型，向量索引与覆盖状态不受影响。',
+    );
+    expect(result.current.error).toBe('');
   });
 
   it('来源检查按单次 200 份上限分批提交，并把批数说清楚', async () => {
@@ -962,7 +971,7 @@ describe('本机索引动作、作业回看与详情重读（KM15 走查补齐�
     expect(harness.knowledge.checkSources).toHaveBeenNthCalledWith(2, {
       documentIds: ids.slice(200),
     });
-    expect(result.current.message).toContain('已提交 201 份资料的原件检查（分 2 批）');
+    expect(result.current.toast?.message).toContain('已提交 201 份资料的原件检查（分 2 批）');
   });
 
   it('空库时检查全部来源如实说明，不提交空作业', async () => {
@@ -972,7 +981,7 @@ describe('本机索引动作、作业回看与详情重读（KM15 走查补齐�
     await act(async () => {
       await result.current.checkAllSources();
     });
-    expect(result.current.message).toBe('资料库里现在没有可检查的资料。');
+    expect(result.current.toast?.message).toBe('资料库里现在没有可检查的资料。');
     expect(harness.knowledge.checkSources).not.toHaveBeenCalled();
   });
 
@@ -989,6 +998,42 @@ describe('本机索引动作、作业回看与详情重读（KM15 走查补齐�
     });
     expect(result.current.activeJobs).toEqual([]);
     expect(result.current.recentJobs.map((job) => job.status)).toEqual(['cancelled']);
+  });
+
+  it('清空最近作业只清记录列表并给自消确认，不留下常驻文案', async () => {
+    const harness = install();
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    await act(async () => {
+      await result.current.onImport();
+    });
+    await act(async () => {
+      harness.events[0]?.(jobOf({ status: 'succeeded', completedCount: 1 }));
+      await Promise.resolve();
+    });
+    expect(result.current.recentJobs).toHaveLength(1);
+
+    await act(async () => {
+      await result.current.clearRecentJobs();
+    });
+    expect(harness.knowledge.clearJobs).toHaveBeenCalledTimes(1);
+    expect(result.current.recentJobs).toEqual([]);
+    expect(result.current.toast?.message).toBe('已清空最近作业；资料、索引与原件都没有被改动。');
+    expect(result.current.error).toBe('');
+  });
+
+  it('清空最近作业失败时把原因留在内联而不是静默', async () => {
+    const harness = install();
+    harness.knowledge.clearJobs.mockRejectedValueOnce(new Error('数据库被占用'));
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    await act(async () => {
+      await result.current.clearRecentJobs();
+    });
+    expect(result.current.error).toContain('数据库被占用');
+    // 失败不能假装清掉了：列表按库里的样子留着。
+    expect(harness.knowledge.clearJobs).toHaveBeenCalledTimes(1);
+    expect(result.current.toast).toBeUndefined();
   });
 
   it('展开作业条目回读逐条目阶段与原因，再点收回', async () => {

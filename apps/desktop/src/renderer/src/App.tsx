@@ -1160,7 +1160,7 @@ export function App(): React.JSX.Element {
           return;
         }
         if (outcome.stale) {
-          knowledge.setMessage('研究草稿已创建；可从最近任务打开。');
+          knowledge.showToast('success', '研究草稿已创建；可从最近任务打开。');
           refreshTasks();
           return;
         }

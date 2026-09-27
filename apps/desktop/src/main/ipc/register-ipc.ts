@@ -16,6 +16,7 @@ import {
   checkKnowledgeSourcesRequestSchema,
   chooseInterpreterResultSchema,
   clearedResultSchema,
+  clearKnowledgeJobsRequestSchema,
   clearNotificationsRequestSchema,
   connectionTestResultSchema,
   copyExpertRequestSchema,
@@ -1019,6 +1020,15 @@ function registerKnowledgeChannels(deps: IpcDependencies): void {
     retryKnowledgeJobRequestSchema,
     knowledgeJobAckSchema,
     (input) => knowledgeIndex.retryJob(input.jobId, input.itemIds),
+  );
+  handleNoInput(
+    IpcChannel.ClearKnowledgeJobs,
+    clearKnowledgeJobsRequestSchema,
+    clearedResultSchema,
+    () => {
+      knowledgeIndex.clearJobs();
+      return { cleared: true };
+    },
   );
   handleNoInput(
     IpcChannel.GetKnowledgeSettings,

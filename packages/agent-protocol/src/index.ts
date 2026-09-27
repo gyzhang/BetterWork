@@ -4036,6 +4036,12 @@ export const knowledgeJobPageSchema = z
   .strict();
 export type KnowledgeJobPage = z.infer<typeof knowledgeJobPageSchema>;
 
+/**
+ * 清空最近作业：与消息中心的「清空」同一语义——清的是已结束的作业记录，
+ * 排队中与运行中的作业不在范围内，资料、修订与索引本身一律不受影响。
+ */
+export const clearKnowledgeJobsRequestSchema = z.object({}).strict();
+
 export const knowledgeJobIdRequestSchema = z.object({ jobId: z.string().min(1) }).strict();
 
 /** 取消结果只回答「有没有这个作业可取消」；取消本身不发失败通知。 */
@@ -4757,6 +4763,7 @@ export const IpcChannel = {
   GetKnowledgeJob: 'knowledge:get-job',
   CancelKnowledgeJob: 'knowledge:cancel-job',
   RetryKnowledgeJob: 'knowledge:retry-job',
+  ClearKnowledgeJobs: 'knowledge:clear-jobs',
   KnowledgeJobEvent: 'knowledge:job-event',
   GetKnowledgeSettings: 'knowledge:get-settings',
   SaveKnowledgeSettings: 'knowledge:save-settings',
@@ -4918,6 +4925,7 @@ export interface BetterWorkDesktopApi {
     jobs(input?: ListKnowledgeJobsRequest): Promise<KnowledgeJobPage>;
     job(input: { jobId: string }): Promise<KnowledgeJobDetail | null>;
     cancelJob(input: { jobId: string }): Promise<{ cancelled: boolean }>;
+    clearJobs(): Promise<{ cleared: true }>;
     retryJob(input: RetryKnowledgeJobRequest): Promise<KnowledgeJobAck>;
     onJobEvent(listener: (event: KnowledgeJobSummary) => void): () => void;
     settings(): Promise<KnowledgeSearchSettings>;

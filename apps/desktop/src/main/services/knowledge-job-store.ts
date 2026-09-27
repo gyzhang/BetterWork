@@ -380,6 +380,19 @@ export class KnowledgeJobStore {
     };
   }
 
+  /**
+   * 清空已收口的作业：条目随外键级联删除，`retry_of_job_id` 置空。
+   * 排队与运行中的作业不在范围内——它们仍然是界面上的「进行中」与取消入口。
+   */
+  clearTerminal(): number {
+    return this.db
+      .prepare(
+        `DELETE FROM knowledge_jobs
+          WHERE status IN ('succeeded', 'partial', 'failed', 'cancelled', 'interrupted')`,
+      )
+      .run().changes;
+  }
+
   /** 启动收口：queued/running 一律 interrupted，终态不改。 */
   recoverInterrupted(): KnowledgeJobSummary[] {
     const write = this.db.transaction((): KnowledgeJobSummary[] => {

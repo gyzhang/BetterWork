@@ -7,6 +7,7 @@ import {
   cancelMemoryJobRequestSchema,
   checkKnowledgeSourcesRequestSchema,
   chooseInterpreterResultSchema,
+  clearedResultSchema,
   copyExpertRequestSchema,
   copySkillRequestSchema,
   createDiscussionCheckpointRequestSchema,
@@ -305,6 +306,7 @@ const api: BetterWorkDesktopApi = {
         knowledgeJobIdRequestSchema.parse(input),
         knowledgeJobCancelResultSchema,
       ),
+    clearJobs: () => invokeValidated(IpcChannel.ClearKnowledgeJobs, {}, clearedResultSchema),
     retryJob: (input) =>
       invokeValidated(
         IpcChannel.RetryKnowledgeJob,

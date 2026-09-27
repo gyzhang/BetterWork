@@ -4,7 +4,7 @@ import type {
   KnowledgeLibraryFilter,
   KnowledgeSearchHit,
 } from '@betterwork/agent-protocol';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, ErrorPage, LoadingPage } from '../components/EmptyState';
@@ -28,11 +28,6 @@ import {
 import { PlusIcon } from '../icons';
 import { reportAction, trackAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
-
-interface KnowledgeToast {
-  tone: 'success' | 'error';
-  message: string;
-}
 
 const SOURCE_STATE_LABELS: Record<KnowledgeDocumentSummary['sourceStatus'], string> = {
   unchecked: '来源未检查',
@@ -94,7 +89,10 @@ export function KnowledgePage({
     selectAllResults,
     clearSelection,
     researchBusy,
-    message,
+    error,
+    toast,
+    showToast,
+    dismissToast,
     issues,
     importing,
     loading,
@@ -103,6 +101,7 @@ export function KnowledgePage({
     embeddingModels,
     activeJobs,
     recentJobs,
+    clearRecentJobs,
     jobDetail,
     jobDetailLoading,
     jobDetailError,
@@ -156,21 +155,21 @@ export function KnowledgePage({
         return document ? [{ document, locator: hit.locator, excerpt: hit.excerpt, hit }] : [];
       })
     : documents.map((document) => ({ document }));
-  const [toast, setToast] = useState<KnowledgeToast>();
   const [removalTarget, setRemovalTarget] = useState<KnowledgeDocumentSummary>();
   const [adminOpen, setAdminOpen] = useState(false);
   const [pendingEnable, setPendingEnable] = useState<{ profileId: string }>();
   const [pendingRebuild, setPendingRebuild] = useState<'normal' | 'forced'>();
   const [pendingCollectionDelete, setPendingCollectionDelete] = useState<KnowledgeCollection>();
+  const [pendingJobClear, setPendingJobClear] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState('');
   const [renameDrafts, setRenameDrafts] = useState<Record<string, string>>({});
   const [memberDraft, setMemberDraft] = useState<{ documentId: string; ids: string[] }>();
-  const dismissToast = useCallback(() => setToast(undefined), []);
   const dialogOpen =
     removalTarget !== undefined ||
     pendingEnable !== undefined ||
     pendingRebuild !== undefined ||
-    pendingCollectionDelete !== undefined;
+    pendingCollectionDelete !== undefined ||
+    pendingJobClear;
 
   // 键盘可达：Esc 先收起局部提示，再退出详情子视图，最后收起「索引与模型」面板；
   // 确认框打开时交给确认框自己处理，不越级改界面状态。
@@ -178,7 +177,7 @@ export function KnowledgePage({
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape' || dialogOpen) return;
       if (toast) {
-        setToast(undefined);
+        dismissToast();
       } else if (detailDocument) {
         closeDocument();
       } else if (adminOpen) {
@@ -187,7 +186,7 @@ export function KnowledgePage({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [dialogOpen, toast, detailDocument, adminOpen, closeDocument]);
+  }, [dialogOpen, dismissToast, toast, detailDocument, adminOpen, closeDocument]);
 
   const filterOptions = [
     { id: 'all', label: '全部资料' },
@@ -464,7 +463,20 @@ export function KnowledgePage({
               ))}
               {recentJobs.length > 0 && (
                 <details className="knowledge-recent-jobs">
-                  <summary>{`最近作业（含已取消）· ${recentJobs.length} 条`}</summary>
+                  <summary>
+                    <span>{`最近作业（含已取消）· ${recentJobs.length} 条`}</span>
+                    <button
+                      className="danger-text"
+                      type="button"
+                      onClick={(event) => {
+                        // 折叠标题里的按钮不该顺手切换展开状态：只打开确认框。
+                        event.preventDefault();
+                        setPendingJobClear(true);
+                      }}
+                    >
+                      清空
+                    </button>
+                  </summary>
                   {recentJobs.map((job) => (
                     <ListRow
                       key={job.id}
@@ -504,7 +516,7 @@ export function KnowledgePage({
               )}
             </section>
           )}
-          {message && <p className="inline-message">{message}</p>}
+          {error && <p className="inline-message error">{error}</p>}
           {issues.length > 0 && (
             <div className="knowledge-issues">
               <strong>以下条目未完成</strong>
@@ -585,13 +597,9 @@ export function KnowledgePage({
                     onClick={() =>
                       reportAction(
                         onOpenSource(detailDocument.sourcePath).then(() =>
-                          setToast({
-                            tone: 'success',
-                            message: `已打开「${detailDocument.title}」的原始资料。`,
-                          }),
+                          showToast('success', `已打开「${detailDocument.title}」的原始资料。`),
                         ),
-                        (error) =>
-                          setToast({ tone: 'error', message: error || '无法打开原始资料。' }),
+                        (failure) => showToast('error', failure || '无法打开原始资料。'),
                       )
                     }
                   >
@@ -607,8 +615,8 @@ export function KnowledgePage({
                     type="button"
                     disabled={importing}
                     onClick={() =>
-                      reportAction(onRefresh(detailDocument), (error) =>
-                        setToast({ tone: 'error', message: error || '刷新索引失败，请重试。' }),
+                      reportAction(onRefresh(detailDocument), (failure) =>
+                        showToast('error', failure || '刷新索引失败，请重试。'),
                       )
                     }
                   >
@@ -625,7 +633,7 @@ export function KnowledgePage({
                 <p className="knowledge-detail-hint">
                   预览读取的是已保存文本：不产生任务访问记录，也不调用模型；原件变化不会自动刷新索引。
                 </p>
-                {detailError && <p className="inline-message">{detailError}</p>}
+                {detailError && <p className="inline-message error">{detailError}</p>}
                 <section className="knowledge-detail-revisions" aria-label="保存版本列表">
                   <strong>保存版本</strong>
                   {detailRevisions.length === 0 && !detailLoading && <small>暂无历史版本。</small>}
@@ -770,21 +778,14 @@ export function KnowledgePage({
                       onOpen={() =>
                         reportAction(
                           onOpenSource(document.sourcePath).then(() =>
-                            setToast({
-                              tone: 'success',
-                              message: `已打开「${document.title}」的原始资料。`,
-                            }),
+                            showToast('success', `已打开「${document.title}」的原始资料。`),
                           ),
-                          (error) =>
-                            setToast({ tone: 'error', message: error || '无法打开原始资料。' }),
+                          (failure) => showToast('error', failure || '无法打开原始资料。'),
                         )
                       }
                       onRefresh={() =>
-                        reportAction(onRefresh(document), (error) =>
-                          setToast({
-                            tone: 'error',
-                            message: error || '刷新索引失败，请重试。',
-                          }),
+                        reportAction(onRefresh(document), (failure) =>
+                          showToast('error', failure || '刷新索引失败，请重试。'),
                         )
                       }
                       onRemove={() => setRemovalTarget(document)}
@@ -808,6 +809,18 @@ export function KnowledgePage({
             const target = removalTarget;
             setRemovalTarget(undefined);
             trackAction(onRemove(target), '移出资料库');
+          }}
+        />
+      )}
+      {pendingJobClear && (
+        <ConfirmationDialog
+          title="清空最近作业？"
+          detail="只清掉已结束的作业记录；资料、索引与本机原件都不受影响，进行中的作业不会被删除。"
+          confirmLabel="清空记录"
+          onCancel={() => setPendingJobClear(false)}
+          onConfirm={() => {
+            setPendingJobClear(false);
+            trackAction(clearRecentJobs(), '清空最近作业');
           }}
         />
       )}

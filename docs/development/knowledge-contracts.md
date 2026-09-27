@@ -343,7 +343,7 @@ KnowledgeFormat 扩充 `xlsx | csv | pptx`；穷尽更新扩展名、文件选�
 | knowledge.refresh | documentId | `{ jobId }` |
 | knowledge.rebuildIndex | kind=keyword/semantic；普通重建为非空 documentIds 或精确历史 references（二选一）；semantic 可选 resetSemanticSpace=true，此时不传目标，按 §8 全库当前修订快照 | `{ jobId }`；semantic 必须已启用；keyword 不接受 resetSemanticSpace |
 | knowledge.checkSources | 非空 documentIds，最多 200 | `{ jobId }` |
-| knowledge.jobs.list/get/cancel/retry | jobId、retry 的 itemIds；list 为游标分页默认 50/最多 100 | §8 job+item summaries；结果事件仅 ID/状态/计数 |
+| knowledge.jobs.list/get/cancel/retry/clear | jobId、retry 的 itemIds；list 为游标分页默认 50/最多 100；clear 无输入 | §8 job+item summaries；结果事件仅 ID/状态/计数；clear 只删已收口作业（条目级联、`retry_of_job_id` 置空），排队与运行中的作业不在范围内 |
 | knowledge.settings.get/save | save 带 expectedRevision、semanticEnabled、embeddingProfileId? | §7 设置与可用性；Vault CAS |
 | knowledge.collections.list/save/delete | save/delete 带 expectedRevision；create 无 id/revision | §10 collection；Vault |
 | knowledge.collections.setMembers | documentId、expectedMembershipRevision、collectionIds | 新 membershipRevision、collectionIds |
@@ -351,7 +351,7 @@ KnowledgeFormat 扩充 `xlsx | csv | pptx`；穷尽更新扩展名、文件选�
 
 `knowledge.jobs.changed` 事件携带完整 job summary 和单调递增的 `sequence`（按 job 持久化），Preload Zod 校验。Renderer 先加载快照再合并 sequence 更大的事件，卸载取消订阅；页面切换靠请求代号防迟到覆盖。sequence 不替代 attempt，前者为展示顺序，后者为发布资格。
 
-长作业通知复用 NotificationService，目标为知识页对应 jobId，通知不能导航时清空当前 Task。取消不发失败 toast；对象可行动错误留内联，集合短成功使用 TransientToast。知识页不自建计时器/全局成功横幅。
+长作业通知复用 NotificationService，目标为知识页对应 jobId，通知不能导航时清空当前 Task。取消不发失败 toast；对象可行动错误留内联，集合短成功使用 TransientToast。知识页不自建计时器/全局成功横幅——**作业的终态不在页面重复播报**：成功结果的界面投影是「最近作业」那一行与消息中心的落库通知，页面再挂一条常驻文案就成了第三个表面（2026-09-27 修掉的正是这条：`来源检查完成（9/9）` 曾以 `.inline-message` 常驻，直到下一次动作才被覆盖）。部分完成与失败例外，它们带可行动入口（查看条目、重试），留在内联错误态。
 
 应用库新增/扩充只涉及：研究草稿操作回执（operation_id/input_hash/task_id/context_id/prompt）、Evidence 精确来源列与索引、RunMaterialRead 精确字段及 §5 唯一约束重建、run_artifact_source_declarations（run_id PK、input_relations_json、tool_call_id、updated_at）、artifact_versions.source_declaration_kind。JSON 引用均由服务完整校验。与 Vault settings 的 profileId 不做跨库 FK。
 

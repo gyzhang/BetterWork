@@ -282,6 +282,11 @@ export class KnowledgeIndexService {
     });
   }
 
+  /** 清空最近作业记录，返回被清掉的条数；进行中作业不受影响。 */
+  clearJobs(): number {
+    return this.jobs.clearTerminal();
+  }
+
   getJob(jobId: string): KnowledgeJobSummary | undefined {
     return this.jobs.job(jobId);
   }

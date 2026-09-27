@@ -82,8 +82,10 @@ const library = (overrides: Partial<KnowledgeLibrary> = {}): KnowledgeLibrary =>
   results: [],
   query: '',
   setQuery: () => undefined,
-  message: '',
-  setMessage: () => undefined,
+  error: '',
+  toast: undefined,
+  showToast: () => undefined,
+  dismissToast: () => undefined,
   issues: [],
   importing: false,
   loading: false,
@@ -99,6 +101,7 @@ const library = (overrides: Partial<KnowledgeLibrary> = {}): KnowledgeLibrary =>
   saveDocumentCollections: async () => undefined,
   activeJobs: [],
   recentJobs: [],
+  clearRecentJobs: async () => undefined,
   jobDetail: undefined,
   jobDetailLoading: false,
   jobDetailError: '',
@@ -193,6 +196,27 @@ describe('KnowledgePage 索引管理护栏（KM09）', () => {
     expect(screen.getByText(/向量索引重建：进行中 1\/2/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '取消' }));
     expect(cancelJob).toHaveBeenCalledWith('job-1');
+  });
+
+  it('清空最近作业先确认再走链路，折叠标题上的按钮不切换展开状态', () => {
+    const clearRecentJobs = vi.fn(async () => undefined);
+    render(
+      <KnowledgePage
+        library={library({
+          recentJobs: [job({ status: 'succeeded', completedCount: 2 })],
+          clearRecentJobs,
+        })}
+        onResearch={() => undefined}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '清空' }));
+    expect(clearRecentJobs).not.toHaveBeenCalled();
+    expect(screen.getByText('清空最近作业？')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '清空记录' }));
+    expect(clearRecentJobs).toHaveBeenCalledTimes(1);
+    // 「最近作业 · 1 条」这一行还在原处：清空走的是确认框，不是折叠开关。
+    expect(screen.getByText(/最近作业（含已取消）· 1 条/)).toBeTruthy();
   });
 
   it('启用语义检索前必须经过费用与范围确认，不静默启用', () => {
@@ -436,7 +460,7 @@ describe('本机索引动作、作业回看与键盘可达（KM15 走查补齐�
           detailRevisions: [revision],
           detailRevisionId: revision.id,
           detailPage: page,
-          message: '已提交「合同条款」的刷新作业，索引正在后台重建。',
+          toast: { tone: 'success', message: '已提交「合同条款」的刷新作业，索引正在后台重建。' },
         })}
         onResearch={() => undefined}
       />,
