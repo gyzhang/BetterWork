@@ -542,6 +542,7 @@ UI Foundation 首批提供四套成对色系：
 | 空状态 EmptyContext／EmptyNotice／EmptyPage／LoadingPage／ErrorPage | `components/EmptyState.tsx` | 已落地：6 处内联占位（侧栏最近任务、模型清单、通用设置、MCP 连接、记忆清单与加载行、消息中心）2026-09-26 深夜全部收编；`EmptyContext` 管区域级、`EmptyNotice` 管行内与小节级 |
 | 页签 Tabs（tablist + roving tabindex + 方向键） | `components/Tabs.tsx` | 已落地：左右方向键与 Home／End 切换并把焦点带过去，只有选中页签进 Tab 顺序。记忆页分组与任务上下文两处已收编 |
 | 切换按钮组 SegmentedControl（group + aria-pressed） | `components/Tabs.tsx` | 已落地：技能页卡片／列表模式已收编；与页签的分工是「切换同一片内容的呈现方式」 |
+| 导航列表 NavList／NavItem（`aria-current` ＋ 两档变体 ＋ 窄栏折叠） | `components/NavList.tsx` | 已落地：侧栏一级导航（5 项）与设置左侧分区（6 项）；`NavItem` 同时承接侧栏「新建任务」与底部「设置」两颗单行导航。折叠成窄栏换的是自定义属性（`--nav-item-*`），几何仍只有一处；文字用 `clip-path` 收掉而不是 `font-size: 0`，以免只剩图标的按钮失去可及名称 |
 | Button / Input / Textarea | 只有样式类，无组件 | 几何取 `--control-*` 档位（§9.10），结构由 `Field` 负责；不再单独组件化，避免只为包一层壳而增加第二处真相 |
 | Switch / Tooltip / Skeleton | — | 未落地。Progress 只有一枚不确定态 spinner（`.spinner`，由 `InlineLoading` 与页面加载态共用），没有百分比进度条。
 | 芯片里的微移除按钮 `.capability-chip-remove` | 随 `CapabilityChip` 一起收 | 刻意不进 IconButton：10px 命中区属于整枚芯片（图标＋名称＋×），塞进 24／28px 方块会把芯片撑破；登记在护栏的 `ICON_BUTTON_EXEMPT_CLASSES` 里（§3.1 P7） |
@@ -565,6 +566,22 @@ UI Foundation 首批提供四套成对色系：
 **列表行一律用 `ListRow`**：「图标／徽标 + 标题 + 说明 + 次要信息 + 右侧动作」这一种结构走 `components/ListRow.tsx`，三个变体只决定外壳——`divider` 是列表里的分隔线行（默认），`card` 是带边框圆角的可点卡片，`plain` 是侧栏那种悬停才出底的裸行。内容一律填槽位：`leading`／`title`／`detail`／`meta`／`actions`／`trailing`，结构特殊的行（记忆行、MCP 工具片）把额外内容作为 `children` 交进主区，而不是另起一套行几何。给 `onClick` 时整行渲染成**一个** `<button>` 并必须给 `label` 作可及名称，此时 `actions` 里不能再放按钮（按钮套按钮是无效 DOM）；选中态走 `selected` → `aria-current`，降饱和走 `tone="muted"` 或 `disabled`，页面只保留自己的领域钩子类。行内文字的尺寸也收在基座：标题 13px、说明 12px 次要、meta 12px 弱化，页面不再各写一遍 `strong`／`small`。此前这种结构有 9 份独立几何（gap 从 4 到 16、padding 从 `10px 2px` 到 `16px 16px`、圆角 7／8／10 各写一遍），没有一条差异来自业务需求（§3.4）。护栏锁三条：`.run-item`／`.model-row`／`.evidence-row`／`.knowledge-card` 等 12 个已收编类的样式不得复活；行的 `gap`／`padding` 只能由 `.list-row*` 自己的选择器声明，页面用后代选择器替骨架补一遍即失败；迁完后仍留在行上承担状态外观的领域钩子（现登记 `.memory-row` 一个）不得再写 `display`／`gap`／`padding`／`align-items`／`flex-direction`／`border-bottom`。
 
 **区块头一律用 `SectionHeader`**：「小标题（可带 eyebrow）＋ 一句说明 ＋ 右槽动作」这一种结构走 `components/SectionHeader.tsx`，两个变体只决定层级与密度——`block` 是页面区块头（h2、13／21px 标题、说明 13px 走 630px 版心），`panel` 是面板与卡片里的小节头（h3、13px 标题、说明 12px 弱化）。内容填 `title`／`hint`／`eyebrow`／`actions` 四个槽，空槽不渲染节点（否则基座的 `gap` 会撑出一道看不见的缝）。此前这种结构有 13 个类名、26 处写法，`gap` 取遍 4／8／12／16／24 五档，`display` 有 flex-row／column／grid 三种，16 处用 `<strong>` 冒充标题而不进文档大纲（§3.1 P1）。**面板自己那一道内缩与分隔线仍归面板**：把领域钩子类传进 `className`（如消息中心的 `.notification-panel-heading`），不要写 `.某面板 .section-header { padding }`。右槽按钮的外观由按钮自己带类：三档主皮（`.primary-button`／`.secondary-button`／`.text-button`）之外，密集面板里的两档小动作分别叫 `.chip-button`（品牌底小胶囊）与 `.quiet-button`（无底、悬停才出底）——这两档原先靠 `.selected-materials-actions button`、`.context-section .selected-materials-heading > button`、`.notification-panel-actions button` 这类容器后代选择器发力，槽位结构一换就整片掉回浏览器默认外观，2026-09-27 把它们上收成具名类。护栏锁三条：13 个已收编类的样式不得复活；含 `.section-header` 的选择器里只有基座自己的（`.section-header` 本体、两档变体、四个槽位类）能写 `gap`／`padding`／`margin`／`align-items`／`justify-content`；除基座文件外任何 `.tsx` 出现 `section-header*` 类名即失败（手写槽位等于又造一份结构）。
+
+**纵向导航一律用 `NavList`／`NavItem`，切换同一块内容的视图一律用 `SegmentedControl`**
+（`components/NavList.tsx`、`components/Tabs.tsx`）：「当前在哪一项」是 ARIA 事实，不是一个 CSS 类。
+此前侧栏一级导航、设置导航、模型筛选、执行记录与版本历史这 5 族按钮全部只靠
+`className={当前 ? 'active' : ''}` 表达选中，而全站生产代码里 `aria-current` 只有 `ListRow` 一处——
+读屏用户听到的是一串没有状态的按钮。现在收口成三条正路：导航列表与可点行给 `aria-current`
+（`NavList`、`ListRow selected`），筛选与视图切换给 `role="group"` ＋ `aria-pressed`
+（`SegmentedControl`），浮层展开态直接复用按钮自己已经发布的 `aria-expanded`（消息中心铃铛原本
+另写了一个 `.active` 类，现在删掉了）。`NavList` 的 `label` 必填：一串按钮没有区域名称，
+读屏听不出这是导航。窄栏折叠与窄屏媒体查询只换 `--nav-item-width`／`--nav-item-padding`／
+`--nav-item-gap`／`--nav-item-label-clip` 四个自定义属性，**不重述**宽度与内边距；标签用
+`clip-path` 收掉而不是 `font-size: 0`——后者连同「展开态」一起会把只剩图标的按钮变成没有名字。
+护栏锁三条：`.filter-bar`／`.primary-nav button`／`.settings-nav-list button`／
+`.{task-run-history,artifact-version-list} button` 等已收编类不得复活；含 `.nav-item`／`.nav-list`
+的选择器里只有基座自己能写几何与配色；生产代码的 `className` 值里再出现 `active` 一词即失败
+（`NavList` 与 `PopoverMenu` 两个基座文件除外——后者的 `active` 是键盘高亮而不是选中态）。
 
 落地现状：按钮、输入、页签、Sheet、Toast、内联提示、空状态、列表行与区块头都有对应样式；页面骨架已由 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 负责结构，`KnowledgeDocumentCard` 负责知识条目的领域呈现，聚焦环用 `:focus-visible` 统一实现。破坏性确认统一使用 `ConfirmationDialog`，它以 `Modal` 的 `alertdialog` 变体实现：Portal 挂到应用外、背景 inert、初始焦点落在取消、Esc 与 Tab 焦点循环、关闭后恢复触发控件焦点。Popover 已落地为 `PopoverMenu` 基座（[ADR-0012](adr/0012-composer-capability-binding.md)）。尚未落地的有 Tooltip、Skeleton、Switch；区块头、图标按钮与底部动作条已于 2026-09-27 落地为 `SectionHeader`、`IconButton`、`ActionBar`。
 

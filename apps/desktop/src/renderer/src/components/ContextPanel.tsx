@@ -211,15 +211,16 @@ export function ContextPanel({
                   <details className="task-run-history">
                     <summary>执行记录 · {taskRuns.length} 次</summary>
                     {taskRuns.map((run) => (
-                      <button
+                      <ListRow
                         key={run.id}
-                        className={run.id === activeRun?.id ? 'active' : ''}
+                        variant="plain"
+                        selected={run.id === activeRun?.id}
+                        label={`查看执行记录「${run.prompt}」`}
                         onClick={() => onSelectRun(run)}
-                      >
-                        <span>{runStatusName[run.status]}</span>
-                        <strong>{run.prompt}</strong>
-                        <small>{formatTime(run.createdAt)}</small>
-                      </button>
+                        title={run.prompt}
+                        detail={runStatusName[run.status]}
+                        meta={formatTime(run.createdAt)}
+                      />
                     ))}
                   </details>
                 )}

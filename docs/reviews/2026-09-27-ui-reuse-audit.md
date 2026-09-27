@@ -281,6 +281,33 @@
 
 ---
 
+## 12. R2-D 落地状态（2026-09-27 17:40）
+
+`npm run verify` 退出码 0（功能档 151 文件／1,450 用例，护栏 57 → 60 条）。
+
+**P10 的账收完了，但不是靠一个新基座。** 那 5 族 17 个「只有一个 `.active` 类」的按钮，其实是三种不同的事实，各自都有正路：
+
+| 这族按钮在说 | 收口到 | 属性 |
+| --- | --- | --- |
+| 「现在在哪一页」（侧栏一级导航 5 项、设置左侧分区 6 项、侧栏「新建任务」与底部「设置」两颗单行） | **新增 `NavList`／`NavItem`** | `aria-current` ＋ `data-selected`，`<nav aria-label>` 区域名 |
+| 「同一块内容换一种显示」（模型角色筛选 4 项） | **已存在的 `SegmentedControl`** | `role="group"` ＋ `aria-pressed` |
+| 「这一行是当前查看的对象」（上下文面板执行记录、成果版本历史） | **已存在的 `ListRow`**（`variant="plain"`） | `selected` → `aria-current` |
+| 「面板正开着」（消息中心铃铛） | 不需要选中态 | 复用它已经发布的 `aria-expanded`，删掉另写的 `.active` |
+
+**新基座只有一个**：`components/NavList.tsx`。它的 `label` 是必填项——一串按钮没有区域名称，读屏听不出这是导航；折叠成窄栏时不换一套几何，只换 `--nav-item-width`／`--nav-item-padding`／`--nav-item-gap`／`--nav-item-label-clip` 四个自定义属性，窄屏媒体查询用的也是这同一组属性。**标签用 `clip-path` 收掉而不是 `font-size: 0`**：原先 `.sidebar-collapsed` 与 ≤720px 媒体查询各写了一份 `font-size: 0` ＋ `span { font-size: 15px }` 的把戏，而零号字号的文字在可及名称计算里是不可靠的——只剩图标的那一行可能整个没有名字。
+
+删掉的自造定义：`.new-task` 全套行几何、`.primary-nav button`／`.settings-nav` 那一族（含 hover 与 `.active`）、`.primary-nav span` 图标列宽、`.settings-nav-list button`（含 `button + button { margin-top: 4px }`）、`.filter-bar` 三档、`.task-run-history button` 五段、`.artifact-version-list button` 四段，以及折叠态那两组重复规则。`.primary-nav` 作为钩子只留它自己的上下内缩，`.model-filter` 只留在清单上方的留白（`25px 0 9px` 并档为 `24px 0 12px`）。
+
+**护栏 57 → 60 条**：① `RETIRED_UTILITY_CLASSES` 新增 `nav` 一档，上面那些类不得复活；② 含 `.nav-item`／`.nav-list` 的选择器里只有基座自己能写几何与配色（媒体查询换自定义属性因此合法）；③ **生产代码的 `className` 值里再出现 `active` 一词即失败**——这条是 P10 的真正收口，它不问你用哪个类名，只问「选中」这件事是否还由 CSS 类表达。三条各做过变异验证：把铃铛改回 `open ? 'notification-bell active' : …` → ③ 转红；写回 `.filter-bar { display: flex }` → ① 转红；写一条 `.sidebar .nav-item { padding: 4px 2px }` → ② 转红。三次验证后都整文件回滚并复绿。
+
+第③条一开始误伤了 `ExpertsView.tsx:586`：那一行的 `onClick={() => onLifecycle('active')}` 里 `'active'` 是**专家生命周期**的领域值，不是类名。判据因此收到「只看 `className=` 之后、遇到下一个属性就停」的范围内——**护栏误伤要改判据，不是把误伤项塞进白名单**。
+
+**需要光哥窗口回看的四个视觉点**：① 侧栏「设置」行在设置页时现在**常驻高亮**（原先只有悬停才有底，`.settings-nav.active { background: transparent }` 是特意压掉的）；② 侧栏折叠与窄屏折叠的图标行现在是 36px 方块＋裁切文字，视觉与原先的 `font-size: 0` 一致但命中区更规矩；③ 模型筛选四片从「无边框透明底＋品牌色选中」变成 `SegmentedControl` 的一体外框；④ 上下文面板的执行记录行与成果版本行改用 `ListRow`，选中底色从 `--surface` 变成 `--selection`，字号取基座的 13／12 两档。
+
+**P10 记账归零**：全站生产代码里 `aria-current` 现在由 `NavList` 与 `ListRow` 两处产出，`.active` 作为**选中态**在渲染层已无实例（`PopoverMenu` 里剩下的那个 `active` 是键盘高亮，不是选中态，已在护栏里按文件排除）。
+
+---
+
 ## 附：本轮核查方式
 
 静态统计（Python／grep 脚本，产物在 `/tmp`）＋ 大文件逐一目视阅读＋ 关键结论二次复核（`.inline-message` 配色、`.page-scroll` 双实现、720px 版心、两套 keyframes、8 个死类、13 处 checkbox、`aria-current` 全站唯一、词表分叉）。**未做**：启动应用做视觉判断（按既有分工，界面验收归光哥）、真实模型下的长链路状态观察、`.app` 冷启动。上述"未做"意味着本文所有观感结论都是结构层面的，不能替代一次人工走查。

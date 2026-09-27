@@ -310,19 +310,17 @@ export function ArtifactPage({
                   <span>{versions.length} 个版本</span>
                 </div>
                 {versions.map((version) => (
-                  <button
+                  <ListRow
                     key={version.id}
-                    className={version.id === visibleVersion.id ? 'active' : ''}
+                    variant="plain"
+                    selected={version.id === visibleVersion.id}
+                    label={`打开版本 v${version.versionNumber}`}
                     onClick={() =>
                       reportAction(selectVersion(version), setError, '打开该版本失败，请重试。')
                     }
-                  >
-                    <span>v{version.versionNumber}</span>
-                    <small>
-                      {version.origin === 'user-edit' ? '人工修订' : 'AI 生成'} ·{' '}
-                      {formatTime(version.createdAt)}
-                    </small>
-                  </button>
+                    title={`v${version.versionNumber}`}
+                    detail={`${version.origin === 'user-edit' ? '人工修订' : 'AI 生成'} · ${formatTime(version.createdAt)}`}
+                  />
                 ))}
                 {visibleVersion.evidence.length > 0 && (
                   <div className="artifact-evidence-list">

@@ -43,6 +43,7 @@ import { ListRow } from './components/ListRow';
 import { MemoryCaptureSource } from './components/MemoryCaptureSource';
 import { MemoryEditor, type MemoryEditorSubmission } from './components/MemoryEditor';
 import { ModelEditor } from './components/ModelEditorSheet';
+import { type NavEntry, NavItem, NavList } from './components/NavList';
 import { ToolActivity } from './components/ToolActivity';
 import { TransientToast } from './components/TransientToast';
 import { Welcome } from './components/Welcome';
@@ -98,6 +99,18 @@ import { KnowledgePage } from './views/KnowledgeView';
 import { type MemoryManagementTarget, scopeOptionsFor } from './views/MemoryView';
 import { SettingsPage } from './views/SettingsView';
 import { SkillsPage } from './views/SkillsView';
+
+/**
+ * 侧栏一级导航。选中态由 `NavList` 同时给 `aria-current` 与底色，
+ * 页面这里只声明「有哪些项、各自的图标」。
+ */
+const PRIMARY_NAV_ITEMS: readonly NavEntry<AppView>[] = [
+  { id: 'work', label: '工作', icon: WorkIcon },
+  { id: 'artifacts', label: '成果', icon: ArtifactIcon },
+  { id: 'knowledge', label: '知识', icon: KnowledgeIcon },
+  { id: 'skills', label: '技能', icon: CapabilityIcon },
+  { id: 'experts', label: '专家', icon: ExpertIcon },
+];
 
 const inputSnapshotCandidate = (snapshot: InputSnapshot): MaterialCandidate => ({
   reference: {
@@ -1232,60 +1245,24 @@ export function App(): React.JSX.Element {
             onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
           />
         </div>
-        <button className="new-task" onClick={startNewTask}>
-          <PlusIcon size={15} /> 新建任务
-        </button>
-        <nav className="primary-nav" aria-label="主要导航">
-          <button className={view === 'work' ? 'active' : ''} onClick={() => setView('work')}>
-            <span aria-hidden="true">
-              <WorkIcon size={15} />
-            </span>{' '}
-            工作
-          </button>
-          <button
-            className={view === 'artifacts' ? 'active' : ''}
-            onClick={() => {
-              setView('artifacts');
+        <NavItem label="新建任务" icon={PlusIcon} rail={sidebarCollapsed} onClick={startNewTask} />
+        <NavList
+          className="primary-nav"
+          label="主要导航"
+          rail={sidebarCollapsed}
+          value={view}
+          onSelect={(next) => {
+            setView(next);
+            if (next === 'artifacts') {
               setSelectedArtifact(undefined);
               refreshArtifacts();
-            }}
-          >
-            <span aria-hidden="true">
-              <ArtifactIcon size={15} />
-            </span>{' '}
-            成果
-          </button>
-          <button className={view === 'knowledge' ? 'active' : ''} onClick={openKnowledge}>
-            <span aria-hidden="true">
-              <KnowledgeIcon size={15} />
-            </span>{' '}
-            知识
-          </button>
-          <button
-            className={view === 'skills' ? 'active' : ''}
-            onClick={() => {
-              setView('skills');
-              skills.refresh();
-            }}
-          >
-            <span aria-hidden="true">
-              <CapabilityIcon size={15} />
-            </span>{' '}
-            技能
-          </button>
-          <button
-            className={view === 'experts' ? 'active' : ''}
-            onClick={() => {
-              setView('experts');
-              experts.refresh();
-            }}
-          >
-            <span aria-hidden="true">
-              <ExpertIcon size={15} />
-            </span>{' '}
-            专家
-          </button>
-        </nav>
+            }
+            if (next === 'knowledge') refreshKnowledge();
+            if (next === 'skills') skills.refresh();
+            if (next === 'experts') experts.refresh();
+          }}
+          items={PRIMARY_NAV_ITEMS}
+        />
         <div className="sidebar-divider" />
         <p className="section-label">最近任务</p>
         <div className="run-list">
@@ -1306,20 +1283,18 @@ export function App(): React.JSX.Element {
           ))}
         </div>
         <div className="sidebar-bottom">
-          <button
-            className={view === 'settings' ? 'settings-nav active' : 'settings-nav'}
+          <NavItem
+            label="设置"
+            icon={SettingsIcon}
+            rail={sidebarCollapsed}
+            selected={view === 'settings'}
             onClick={() => {
               setView('settings');
               setSettingsTab('models');
               setMemoryManagementTarget(undefined);
               refreshModels();
             }}
-          >
-            <span aria-hidden="true">
-              <SettingsIcon size={15} />
-            </span>{' '}
-            设置
-          </button>
+          />
           <NotificationCenter
             notifications={notifications}
             unreadCount={unreadCount}

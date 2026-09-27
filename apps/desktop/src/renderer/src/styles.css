@@ -429,56 +429,9 @@ small {
 .primary-button:hover {
   background: var(--brand-hover);
 }
-.new-task {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: var(--row-height);
-  padding: 7px 9px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-row);
-  font-size: 13px;
-  text-align: left;
-}
-.new-task:hover {
-  color: var(--text-primary);
-  background: var(--selection);
-}
+/* 侧栏导航行的几何归 NavItem；这里只留这一段自己的上下留白。 */
 .primary-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
   padding: 17px 0 10px;
-}
-.primary-nav button,
-.settings-nav {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: var(--row-height);
-  padding: 7px 9px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-row);
-  font-size: 13px;
-  text-align: left;
-}
-.primary-nav button:hover,
-.settings-nav:hover,
-.primary-nav button.active,
-.settings-nav.active {
-  color: var(--text-primary);
-  background: var(--selection);
-}
-.primary-nav span,
-.settings-nav span {
-  width: 16px;
-  color: var(--text-muted);
-  text-align: center;
 }
 .sidebar-divider {
   height: 1px;
@@ -503,10 +456,6 @@ small {
   min-height: 0;
   overflow: auto;
 }
-
-.settings-nav {
-  margin-top: 12px;
-}
 .sidebar-collapsed {
   grid-template-columns: 88px minmax(0, 1fr) auto;
 }
@@ -527,21 +476,6 @@ small {
 }
 .sidebar-collapsed .sidebar-collapse-button {
   margin: 0;
-}
-.sidebar-collapsed .new-task,
-.sidebar-collapsed .primary-nav button,
-.sidebar-collapsed .settings-nav {
-  width: 36px;
-  justify-content: center;
-  padding: 7px;
-  font-size: 0;
-  gap: 0;
-}
-.sidebar-collapsed .new-task span,
-.sidebar-collapsed .primary-nav span,
-.sidebar-collapsed .settings-nav span {
-  width: auto;
-  font-size: 15px;
 }
 .main-stage {
   display: flex;
@@ -1611,26 +1545,6 @@ small {
   margin: 7px 0 22px;
   font-size: 18px;
 }
-.settings-nav-list button {
-  display: block;
-  width: 100%;
-  min-height: var(--row-height);
-  padding: 7px 9px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-row);
-  font-size: 13px;
-  text-align: left;
-}
-.settings-nav-list button + button {
-  margin-top: 4px;
-}
-.settings-nav-list button:hover,
-.settings-nav-list button.active {
-  color: var(--text-primary);
-  background: var(--selection);
-}
 .skills-page {
   display: flex;
   min-height: 0;
@@ -1947,6 +1861,61 @@ small {
   align-items: center;
   flex: none;
   gap: 8px;
+}
+/* === NavList：纵向导航列表（docs/10 §10.1） ===
+   选中必须同时是底色与 `aria-current`；此前五族按钮只有一个 `.active` 类，
+   读屏听得出点了什么、听不出现在在哪一项。 */
+.nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.nav-item {
+  display: flex;
+  width: var(--nav-item-width, 100%);
+  min-height: var(--row-height);
+  align-items: center;
+  gap: var(--nav-item-gap, 12px);
+  padding: var(--nav-item-padding, 7px 9px);
+  overflow: hidden;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-row);
+  font-size: 13px;
+  text-align: left;
+}
+.nav-item:hover,
+.nav-item[data-selected='true'] {
+  color: var(--text-primary);
+  background: var(--selection);
+}
+.nav-item-icon {
+  display: grid;
+  width: 16px;
+  flex: none;
+  place-items: center;
+  color: var(--text-muted);
+}
+.nav-item-label {
+  min-width: 0;
+  overflow: hidden;
+  clip-path: var(--nav-item-label-clip, none);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 折叠成窄栏：文字用 clip-path 收掉而不是 `font-size: 0` 或 `display: none`——
+   后两种会让只剩图标的按钮失去可及名称。窄屏媒体查询换同一组自定义属性，
+   几何仍然只有上面这一处定义。 */
+.nav-list[data-rail] {
+  align-items: center;
+}
+.nav-item[data-rail],
+.nav-list[data-rail] .nav-item {
+  --nav-item-width: 36px;
+  --nav-item-padding: 7px;
+  --nav-item-gap: 0;
+  --nav-item-label-clip: inset(50%);
 }
 .list-row {
   display: flex;
@@ -2274,23 +2243,9 @@ button.list-row:where(:not(:disabled)):hover {
   border-radius: var(--radius-row);
   font-size: 12px;
 }
-.filter-bar {
-  display: flex;
-  gap: 8px;
-  margin: 25px 0 9px;
-}
-.filter-bar button {
-  min-height: var(--control-height);
-  padding: 5px 10px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 0;
-  border-radius: var(--control-radius);
-  font-size: 12px;
-}
-.filter-bar button.active {
-  color: var(--brand);
-  background: var(--brand-soft);
+/* 筛选组的外观归 SegmentedControl；这里只给它在清单上方留一口气。 */
+.model-filter {
+  margin: 24px 0 12px;
 }
 .model-list {
   border-top: 1px solid var(--border);
@@ -3436,19 +3391,15 @@ button.list-row:where(:not(:disabled)):hover {
   .sidebar-divider {
     display: none;
   }
-  .new-task,
-  .primary-nav button,
-  .settings-nav {
-    width: 36px;
-    justify-content: center;
-    padding: 7px;
-    font-size: 0;
+  .sidebar .nav-item,
+  .sidebar .nav-list {
+    /* 与手动折叠同一套几何：只换自定义属性，不重进行何。 */
+    --nav-item-width: 36px;
+    --nav-item-padding: 7px;
+    --nav-item-gap: 0;
   }
-  .new-task span,
-  .primary-nav span,
-  .settings-nav span {
-    width: auto;
-    font-size: 15px;
+  .sidebar .nav-item-label {
+    --nav-item-label-clip: inset(50%);
   }
   .settings-layout {
     grid-template-columns: 168px minmax(0, 1fr);
@@ -4350,39 +4301,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .task-run-history[open] summary {
   color: var(--text-primary);
-}
-.task-run-history button {
-  display: grid;
-  width: 100%;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 8px;
-  padding: 8px 5px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 0;
-  border-radius: var(--control-radius);
-  text-align: left;
-}
-.task-run-history button:hover,
-.task-run-history button.active {
-  background: var(--surface);
-}
-.task-run-history button > span {
-  color: var(--brand);
-  font-size: 12px;
-}
-.task-run-history button > strong {
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.task-run-history button > small {
-  color: var(--text-muted);
-  font-size: 12px;
-}
-/* 「本空间参考版本」小节此前完全没有样式：标题、说明与内联提示三块贴在一起，
+} /* 「本空间参考版本」小节此前完全没有样式：标题、说明与内联提示三块贴在一起，
    唯一的分隔来自 `.inline-message` 自带的上下 margin。现在由小节自己拥有纵向缝（docs/10 §9.8）。 */
 .artifact-reference-section {
   display: grid;
@@ -4537,31 +4456,6 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--text-secondary);
   font-size: 12px;
 }
-.artifact-version-list button {
-  display: flex;
-  width: 100%;
-  gap: 4px;
-  padding: 8px 7px;
-  flex-direction: column;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 0;
-  border-radius: var(--control-radius);
-  text-align: left;
-}
-.artifact-version-list button:hover,
-.artifact-version-list button.active {
-  color: var(--text-primary);
-  background: var(--surface);
-}
-.artifact-version-list button > span {
-  font-size: 13px;
-  font-weight: 600;
-}
-.artifact-version-list small {
-  color: var(--text-muted);
-  font-size: 12px;
-}
 @media (max-width: 720px) {
   .artifact-detail-layout {
     grid-template-columns: 1fr;
@@ -4576,7 +4470,7 @@ button.list-row:where(:not(:disabled)):hover {
     flex-direction: column;
     align-items: flex-start;
   }
-  .artifact-version-list button {
+  .artifact-version-list .list-row {
     min-width: 110px;
   }
 }
@@ -4641,9 +4535,7 @@ button.list-row:where(:not(:disabled)):hover {
   align-items: center;
   gap: 4px;
 }
-.brand svg,
-.primary-nav span svg,
-.settings-nav span svg {
+.brand svg {
   flex: none;
 }
 .search-settings .search-form {
@@ -4690,15 +4582,6 @@ button.list-row:where(:not(:disabled)):hover {
   gap: 8px;
   margin-top: 12px;
 }
-.sidebar-bottom .settings-nav {
-  margin-top: 0;
-}
-.settings-nav.active {
-  background: transparent;
-}
-.settings-nav.active:hover {
-  background: var(--selection);
-}
 .notification-anchor {
   position: relative;
   flex: none;
@@ -4715,8 +4598,9 @@ button.list-row:where(:not(:disabled)):hover {
   border: 0;
   border-radius: var(--radius-row);
 }
+/* 展开态直接用按钮自己发布的 `aria-expanded`，不再复制一份 `.active` 类。 */
 .notification-bell:hover,
-.notification-bell.active {
+.notification-bell[aria-expanded='true'] {
   color: var(--text-primary);
   background: var(--surface);
 }
@@ -4955,9 +4839,7 @@ button,
 input,
 textarea,
 select,
-.list-row,
-.artifact-version-list button,
-.task-run-history button {
+.list-row {
   transition:
     color var(--motion-instant) var(--motion-easing),
     background-color var(--motion-instant) var(--motion-easing),

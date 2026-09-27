@@ -19,7 +19,9 @@ import { EmptyNotice } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
 import { ListRow } from '../components/ListRow';
+import { type NavEntry, NavList } from '../components/NavList';
 import { SectionHeader } from '../components/SectionHeader';
+import { SegmentedControl } from '../components/Tabs';
 import { TransientToast } from '../components/TransientToast';
 import type { McpConnectionsState } from '../hooks/use-mcp-connections';
 import type { MemoriesState } from '../hooks/use-memories';
@@ -62,6 +64,25 @@ export interface SettingsPageProps {
   onClearMemoryFocus: () => void;
   mcp: McpConnectionsState;
 }
+/**
+ * 设置左侧分区。选中态由 `NavList` 给 `aria-current` 与底色，
+ * 这里只声明顺序与名称——顺序即信息架构，改动前先对 docs/10 §6.4。
+ */
+/** 模型清单的角色筛选：切换的是同一份清单的显示范围，所以是切换组而不是页签。 */
+const MODEL_FILTER_ITEMS = (['all', 'language', 'vision', 'embedding'] as const).map((role) => ({
+  id: role,
+  label: role === 'all' ? '全部' : roleName[role],
+}));
+
+const SETTINGS_NAV_ITEMS: readonly NavEntry<SettingsTab>[] = [
+  { id: 'models', label: '模型' },
+  { id: 'search', label: '搜索' },
+  { id: 'mcp', label: 'MCP' },
+  { id: 'memory', label: '记忆' },
+  { id: 'appearance', label: '外观' },
+  { id: 'general', label: '通用' },
+];
+
 export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
   const { tab, setTab } = props;
   return (
@@ -69,27 +90,13 @@ export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
       <aside className="settings-nav-list">
         <p className="eyebrow">设置</p>
         <h1>偏好与能力</h1>
-        <button className={tab === 'models' ? 'active' : ''} onClick={() => setTab('models')}>
-          模型
-        </button>
-        <button className={tab === 'search' ? 'active' : ''} onClick={() => setTab('search')}>
-          搜索
-        </button>
-        <button className={tab === 'mcp' ? 'active' : ''} onClick={() => setTab('mcp')}>
-          MCP
-        </button>
-        <button className={tab === 'memory' ? 'active' : ''} onClick={() => setTab('memory')}>
-          记忆
-        </button>
-        <button
-          className={tab === 'appearance' ? 'active' : ''}
-          onClick={() => setTab('appearance')}
-        >
-          外观
-        </button>
-        <button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>
-          通用
-        </button>
+        <NavList
+          variant="panel"
+          label="设置分区"
+          value={tab}
+          onSelect={setTab}
+          items={SETTINGS_NAV_ITEMS}
+        />
       </aside>
       <section className="settings-content">
         {tab === 'models' && <ModelSettings {...props} />}
@@ -147,17 +154,13 @@ export function ModelSettings({
           </button>
         }
       />
-      <div className="filter-bar">
-        {(['all', 'language', 'vision', 'embedding'] as const).map((role) => (
-          <button
-            className={modelFilter === role ? 'active' : ''}
-            key={role}
-            onClick={() => setModelFilter(role)}
-          >
-            {role === 'all' ? '全部' : roleName[role]}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        className="model-filter"
+        label="按角色筛选模型"
+        value={modelFilter}
+        onChange={setModelFilter}
+        items={MODEL_FILTER_ITEMS}
+      />
       <div className="model-list">
         {models.length === 0 ? (
           <EmptyNotice

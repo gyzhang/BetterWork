@@ -719,7 +719,7 @@ const CHECKBOX_ROW_LABEL_SELECTORS: { readonly match: string; readonly reason: s
 const RETIRED_UTILITY_CLASSES: {
   readonly pattern: RegExp;
   readonly name: string;
-  readonly family: 'action-bar' | 'badge' | 'empty' | 'heading' | 'row';
+  readonly family: 'action-bar' | 'badge' | 'empty' | 'heading' | 'nav' | 'row';
 }[] = [
   { pattern: /\.skill-chip(?![-\w])/, name: '.skill-chip', family: 'badge' },
   {
@@ -843,12 +843,30 @@ const RETIRED_UTILITY_CLASSES: {
     name: '.artifact-editor footer（含其 div 与 button 后代）',
     family: 'action-bar',
   },
+  { pattern: /\.filter-bar(?![-\w])/, name: '.filter-bar', family: 'nav' },
+  {
+    pattern: /\.new-task(?![-\w])/,
+    name: '.new-task（行几何已归 NavItem）',
+    family: 'nav',
+  },
+  { pattern: /\.primary-nav button/, name: '.primary-nav button', family: 'nav' },
+  { pattern: /\.settings-nav button/, name: '.settings-nav button', family: 'nav' },
+  {
+    pattern: /\.settings-nav-list button/,
+    name: '.settings-nav-list button',
+    family: 'nav',
+  },
+  {
+    pattern: /\.(?:task-run-history|artifact-version-list) button/,
+    name: '.task-run-history button／.artifact-version-list button',
+    family: 'nav',
+  },
 ];
 
 /** 把 retired 清单变成一条断言：任一 CSS 文件里都不得再出现这些选择器。 */
 function assertRetiredClassesAbsent(
   offenders: string[],
-  family: 'action-bar' | 'badge' | 'empty' | 'heading' | 'row',
+  family: 'action-bar' | 'badge' | 'empty' | 'heading' | 'nav' | 'row',
 ): void {
   const retired = RETIRED_UTILITY_CLASSES.filter((entry) => entry.family === family);
   for (const relative of cssPaths()) {
@@ -1379,6 +1397,93 @@ describe('图标按钮与动作条纪律', () => {
     expect(
       offenders,
       '图标按钮的方块归 IconButton；钩子只带位置与自己那份皮（docs/10 §10.1）',
+    ).toEqual([]);
+  });
+});
+
+describe('导航列表纪律', () => {
+  const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
+  expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
+  const declarations = declarationsOf(styles ?? '');
+
+  /** 基座自己渲染 `' active'` 高亮（键盘项），它们的类名与状态词不算自造选中态。 */
+  const NAV_BASE_FILES = [
+    'apps/desktop/src/renderer/src/components/NavList.tsx',
+    'apps/desktop/src/renderer/src/components/PopoverMenu.tsx',
+  ];
+
+  it('选中态不得再用一个 `.active` 类表达', () => {
+    // §3.1 P10：CSS 类不是 ARIA。用 `className={当前 ? 'active' : ''}` 表达「这是当前项」，
+    // 读屏听到的就是一串没有状态的按钮；键盘 Tab 序里也看不出自己在哪。
+    // 现在这一族有 `NavList`（`aria-current`）与 `ListRow selected` 两条正路。
+    const offenders: string[] = [];
+    for (const relative of productionPathsUnder('apps/desktop/src/renderer/')) {
+      if (!relative.endsWith('.tsx') || NAV_BASE_FILES.includes(relative)) continue;
+      const text = read(relative);
+      for (const match of text.matchAll(/className=/g)) {
+        const start = match.index ?? 0;
+        const lineEnd = text.indexOf('\n', start);
+        // 只看 className 的值本身：同一行后面常有领域值恰好也叫 'active'（专家生命周期），
+        // 那不是选中态类，把它算进来就是误伤。
+        const after = text
+          .slice(start, lineEnd < 0 ? undefined : lineEnd)
+          .split(/\son[A-Z]\w*=|\stype=|\saria-\w+=|>/u)[0];
+        if (!/\bactive\b/.test(after ?? '')) continue;
+        const line = text.slice(0, start).split('\n').length;
+        offenders.push(
+          `${relative}:${line} ${(text.slice(start, lineEnd).match(/.{0,60}/u)?.[0] ?? '').trim()}`,
+        );
+      }
+    }
+    expect(
+      offenders,
+      '选中请用 NavList／ListRow 的 `selected`（`aria-current`）；展开态直接用已经发布的 `aria-expanded`（docs/10 §10.1）',
+    ).toEqual([]);
+  });
+
+  it('被导航基座收编的类不得复活', () => {
+    const offenders: string[] = [];
+    assertRetiredClassesAbsent(offenders, 'nav');
+    expect(
+      offenders,
+      '导航行与筛选组请复用 NavList／SegmentedControl／ListRow（docs/10 §10.1）',
+    ).toEqual([]);
+  });
+
+  it('导航行的几何只由基座的选择器拥有', () => {
+    // 窄屏那一档只换 `--nav-item-*` 自定义属性，不重述宽度与内边距——
+    // 折叠态此前在 `.sidebar-collapsed` 与媒体查询里各写一遍，才有 `font-size: 0` 这种删名字的做法。
+    const offenders = declarations
+      .map((declaration) => ({
+        declaration,
+        selector: declaration.selector.replace(/\/\*[\s\S]*?\*\//g, '').trim(),
+      }))
+      .filter(({ selector }) => /\.nav-(?:item|list)(?![-\w])/.test(selector))
+      .filter(
+        ({ selector }) => !/^\.nav-(?:item|list|item-icon|item-label)(?![-\w])/.test(selector),
+      )
+      .filter(({ declaration }) =>
+        [
+          'display',
+          'width',
+          'min-height',
+          'height',
+          'gap',
+          'row-gap',
+          'column-gap',
+          'padding',
+          'align-items',
+          'justify-content',
+          'border-radius',
+          'color',
+          'background',
+          'font-size',
+        ].includes(declaration.property),
+      )
+      .map(({ declaration }) => locate(declaration, styles ?? ''));
+    expect(
+      offenders,
+      '导航行的几何与配色归 NavItem／NavList；位置与折叠态请换自定义属性（docs/10 §9.8）',
     ).toEqual([]);
   });
 });

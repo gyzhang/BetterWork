@@ -359,7 +359,7 @@ export const NotificationCenter = ({
     <div className="notification-anchor">
       <button
         ref={bellRef}
-        className={open ? 'notification-bell active' : 'notification-bell'}
+        className="notification-bell"
         title="通知"
         aria-label={unreadCount > 0 ? `通知，${unreadCount} 条未读` : '通知'}
         aria-haspopup="dialog"
