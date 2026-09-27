@@ -21,11 +21,12 @@ import {
   latestJobLabel,
   memoryConsentDialogNotice,
 } from '../lib/memory-suggestions';
-import { AsyncButton, InlineLoading } from './AsyncButton';
+import { InlineLoading } from './AsyncButton';
 import { Badge, type BadgeTone } from './Badge';
 import { ConfirmationDialog } from './ConfirmationDialog';
 import { ListRow } from './ListRow';
 import { SectionHeader } from './SectionHeader';
+import { Switch } from './Switch';
 import { TransientToast } from './TransientToast';
 
 /**
@@ -151,16 +152,16 @@ function SuggestionSettings({
         meta={
           suggestions.settingsLoading
             ? '正在读取本空间设置…'
-            : `${enabled ? '已开启' : '已关闭'} · ${consentLabel}`
+            : suggestions.savingSettings
+              ? '正在提交…'
+              : `${enabled ? '已开启' : '已关闭'} · ${consentLabel}`
         }
         actions={
-          <AsyncButton
-            variant="secondary"
-            busy={suggestions.savingSettings}
-            disabled={suggestions.settingsLoading}
-            label={enabled ? '关闭自动建议' : '开启自动建议'}
-            busyLabel="正在提交…"
-            onClick={() => setPendingToggle(!enabled)}
+          <Switch
+            label="自动提炼建议"
+            checked={enabled}
+            disabled={suggestions.settingsLoading || suggestions.savingSettings}
+            onChange={() => setPendingToggle(!enabled)}
           />
         }
       />

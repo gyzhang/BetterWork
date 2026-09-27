@@ -180,7 +180,7 @@ describe('KnowledgePage 索引管理护栏（KM09）', () => {
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: '索引与作业' }));
-    const toggle = screen.getByRole('checkbox', { name: '语义检索' });
+    const toggle = screen.getByRole('switch', { name: '语义检索' });
     expect(toggle.hasAttribute('disabled')).toBe(true);
     expect(screen.getByText('还没有配置可用的嵌入模型。')).toBeTruthy();
   });
@@ -238,7 +238,7 @@ describe('KnowledgePage 索引管理护栏（KM09）', () => {
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: '索引与作业' }));
-    fireEvent.click(screen.getByRole('checkbox', { name: '语义检索' }));
+    fireEvent.click(screen.getByRole('switch', { name: '语义检索' }));
     expect(saveSettings).not.toHaveBeenCalled();
     expect(screen.getByText('启用语义检索？')).toBeTruthy();
     expect(screen.getByText(/可能产生调用费用/)).toBeTruthy();

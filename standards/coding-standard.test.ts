@@ -738,6 +738,16 @@ const RETIRED_UTILITY_CLASSES: {
     name: '.connection-status（按状态改字色的领域规则，已改 Badge 的 tone 档位）',
     family: 'badge',
   },
+  {
+    pattern: /\.knowledge-admin-switch(?![-\w])/,
+    name: '.knowledge-admin-switch（原生 checkbox 冒充开关，已改 Switch）',
+    family: 'badge',
+  },
+  {
+    pattern: /\.knowledge-admin-switch(?![-\w])/,
+    name: '.knowledge-admin-switch（名为 switch 实为 checkbox，已改 Switch 基座）',
+    family: 'badge',
+  },
   { pattern: /\.empty-runs(?![-\w])/, name: '.empty-runs', family: 'empty' },
   { pattern: /\.empty-models(?![-\w])/, name: '.empty-models', family: 'empty' },
   { pattern: /\.setting-placeholder(?![-\w])/, name: '.setting-placeholder', family: 'empty' },

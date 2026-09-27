@@ -141,7 +141,7 @@ describe('MemorySuggestionList', () => {
     const suggestions = state({ setAutoSuggest });
     renderList(suggestions, []);
 
-    fireEvent.click(screen.getByRole('button', { name: '开启自动建议' }));
+    fireEvent.click(screen.getByRole('switch', { name: '自动提炼建议' }));
     expect(setAutoSuggest).not.toHaveBeenCalled();
     const dialog = screen.getByRole('alertdialog').textContent ?? '';
     expect(dialog).toContain('可能产生费用');
@@ -161,7 +161,7 @@ describe('MemorySuggestionList', () => {
     });
     renderList(suggestions, []);
 
-    fireEvent.click(screen.getByRole('button', { name: '关闭自动建议' }));
+    fireEvent.click(screen.getByRole('switch', { name: '自动提炼建议' }));
     expect(screen.getByRole('alertdialog').textContent).toContain(
       '已确认的记忆与历史候选都不受影响',
     );

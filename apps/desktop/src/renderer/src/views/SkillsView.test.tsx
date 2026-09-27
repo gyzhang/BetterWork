@@ -180,7 +180,11 @@ describe('SkillsPage', () => {
     render(<Harness />);
     await waitFor(() => expect(screen.getByText('研究方法')).toBeTruthy());
     screen.getByRole('button', { name: /研究方法/ }).click();
-    await waitFor(() => expect(screen.getByRole('checkbox')).toHaveProperty('checked', true));
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: /^受信任/ }).getAttribute('aria-checked')).toBe(
+        'true',
+      ),
+    );
   });
 
   it('routes short-lived success feedback through the shared toast', async () => {

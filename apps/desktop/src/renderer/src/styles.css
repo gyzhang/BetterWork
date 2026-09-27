@@ -1955,6 +1955,59 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--text-muted);
 }
 
+/* === Switch：布尔设置的唯一开关（docs/10 §10.1） ===
+   整行是一个 `role="switch"` 按钮：名称不随状态变（此前两处用「开启 X／关闭 X」
+   的文案翻转充当开关，读屏听到的名称跟着状态改），轨道与滑块是纯装饰。 */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--control-height-sm);
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.switch-track {
+  display: block;
+  position: relative;
+  flex: none;
+  width: 32px;
+  height: 18px;
+  background: var(--surface-hover);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-pill);
+}
+.switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  background: var(--text-muted);
+  border-radius: var(--radius-circle);
+  transition: transform var(--motion-instant) var(--motion-easing);
+}
+.switch[aria-checked='true'] .switch-track {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+.switch[aria-checked='true'] .switch-thumb {
+  background: var(--on-brand);
+  transform: translateX(16px);
+}
+.switch:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 /* === Badge：状态徽标的唯一外观（docs/10 §10.1） === */
 .badge {
   display: inline-flex;
@@ -3951,7 +4004,8 @@ button.list-row:where(:not(:disabled)):hover {
 .knowledge-admin-row small {
   color: var(--text-muted);
 }
-.knowledge-admin-row button {
+/* `.switch` 自己带轨道与滑块，不吃这一档按钮皮（docs/10 §10.1）。 */
+.knowledge-admin-row button:not(.switch) {
   min-height: var(--control-height);
   padding: 6px 10px;
   color: var(--text-primary);
@@ -3960,23 +4014,12 @@ button.list-row:where(:not(:disabled)):hover {
   border-radius: var(--control-radius);
   font-size: 12px;
 }
-.knowledge-admin-row button:hover:not(:disabled) {
+.knowledge-admin-row button:not(.switch):hover:not(:disabled) {
   border-color: var(--brand);
 }
-.knowledge-admin-row button:disabled {
+.knowledge-admin-row button:not(.switch):disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-.knowledge-admin-switch {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-}
-.knowledge-admin-switch input {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--brand);
 }
 .knowledge-admin-profile {
   display: flex;

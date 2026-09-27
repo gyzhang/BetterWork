@@ -17,6 +17,7 @@ import { ScrollRegion } from '../components/layout/ScrollRegion';
 import { ViewContainer } from '../components/layout/ViewContainer';
 import { ListRow } from '../components/ListRow';
 import { Modal } from '../components/Modal';
+import { Switch } from '../components/Switch';
 import { TransientToast } from '../components/TransientToast';
 import type { KnowledgeLibrary } from '../hooks/use-knowledge-library';
 import {
@@ -319,22 +320,18 @@ export function KnowledgePage({
                 )}
                 <section className="knowledge-admin" aria-label="索引与模型管理">
                   <div className="knowledge-admin-row">
-                    <label className="knowledge-admin-switch">
-                      <input
-                        type="checkbox"
-                        checked={semanticOn}
-                        disabled={!enableAllowed}
-                        onChange={(event) => {
-                          const next = event.target.checked;
-                          if (next) {
-                            setPendingEnable({ profileId: selectedProfileId });
-                          } else {
-                            trackAction(saveSettings({ semanticEnabled: false }), '停用语义检索');
-                          }
-                        }}
-                      />
-                      语义检索
-                    </label>
+                    <Switch
+                      label="语义检索"
+                      checked={semanticOn}
+                      disabled={!enableAllowed}
+                      onChange={(next) => {
+                        if (next) {
+                          setPendingEnable({ profileId: selectedProfileId });
+                        } else {
+                          trackAction(saveSettings({ semanticEnabled: false }), '停用语义检索');
+                        }
+                      }}
+                    />
                     {!enableAllowed && (
                       <small>
                         {settings?.unavailableReason ??

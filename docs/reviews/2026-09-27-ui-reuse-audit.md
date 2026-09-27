@@ -406,6 +406,30 @@ MCP 那一节不再是灰底圆角卡，而是与相邻小节一样的分隔线�
 `ModelProfileRow`（`SettingsView.tsx:173-205` 已是 ListRow 填槽，下沉成本接近零）、`Switch`（仅 4 处布尔值，
 多选与全选保留原生 checkbox 是正确语义，不为统一而塞）。
 
+## 16. R3-C 第二段落地：Switch（2026-09-27 20:51）
+
+§6 对 Switch 的结论是「小范围做，P2：13 处 `type="checkbox"` 里只有 4 处是布尔设置」。
+盘点以后**这 4 处的病灶比预想的重**：真正该是开关的地方，有两处根本不在 checkbox 里，
+而是用「开启 X／关闭 X」的**按钮文案翻转**充当开关——可及名称随状态改变，
+用户没法用同一个名字找回同一个开关；知识页那处倒是原生勾选框，可类名已经叫
+`.knowledge-admin-switch` 了。所以这一段的判据不是「有几处 checkbox」，而是「哪几处说的开是『这一项开不开』」。
+
+`components/Switch.tsx` 把「轨道＋滑块＋文字」收成**一个** `role="switch"` 按钮：
+`label` 恒定、状态走 `aria-checked`、键盘行为由按钮自带（不需要另写 keydown），
+禁用与说明走 `disabled`／`aria-describedby`。四处迁移：知识页语义检索、记忆页自动建议、
+设置页模型启用、技能页受信任标记。**需要确认才能改的状态仍然照旧弹确认框**——
+开关只负责表达与触发，未确认前保持原状态，这是三处测试改动的全部内容
+（`开启自动建议`→`switch 自动提炼建议`、`checkbox 语义检索`→`switch 语义检索`，另有一处
+`toHaveProperty('aria-checked')` 改成 `getAttribute`：aria-* 是属性，不是 DOM 元素属性）。
+
+其余 9 处 `type="checkbox"` 是集合多选、材料全选、节点选择这类**多对多**语义，
+按 §6 的判断保留原生勾选框，不为观感统一塞进开关。`.knowledge-admin-switch` 登记退役；
+知识页那行原本靠 `.knowledge-admin-row button` 发按钮皮，加 `:not(.switch)` 排掉基座自己的控件
+（R2-B 的教训在这里第二次出现：**皮住在容器里，槽位一换就整片掉回默认外观**）。
+
+**R3-C 剩余**：`SettingsLayout`／`SettingsNav`（设置页左右壳现在由 `.settings-content` 与页面自己的 padding 承担）、
+`ModelProfileRow`（`SettingsView.tsx` 里那段已是 ListRow 填槽，下沉成本接近零）。
+
 ---
 
 ## 附：本轮核查方式

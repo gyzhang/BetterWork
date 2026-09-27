@@ -22,6 +22,7 @@ import { FieldSelect } from '../components/FieldSelect';
 import { ListRow } from '../components/ListRow';
 import { type NavEntry, NavList } from '../components/NavList';
 import { SectionHeader } from '../components/SectionHeader';
+import { Switch } from '../components/Switch';
 import { SegmentedControl } from '../components/Tabs';
 import { TransientToast } from '../components/TransientToast';
 import type { McpConnectionsState } from '../hooks/use-mcp-connections';
@@ -212,9 +213,7 @@ export function ModelSettings({
                         设为默认
                       </button>
                     )}
-                    <button type="button" onClick={() => onToggle(model)}>
-                      {model.enabled ? '停用' : '启用'}
-                    </button>
+                    <Switch label="启用" checked={model.enabled} onChange={() => onToggle(model)} />
                     <button type="button" className="danger-text" onClick={() => onDelete(model)}>
                       删除
                     </button>

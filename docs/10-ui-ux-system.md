@@ -544,7 +544,8 @@ UI Foundation 首批提供四套成对色系：
 | 切换按钮组 SegmentedControl（group + aria-pressed） | `components/Tabs.tsx` | 已落地：技能页卡片／列表模式已收编；与页签的分工是「切换同一片内容的呈现方式」 |
 | 导航列表 NavList／NavItem（`aria-current` ＋ 两档变体 ＋ 窄栏折叠） | `components/NavList.tsx` | 已落地：侧栏一级导航（5 项）与设置左侧分区（6 项）；`NavItem` 同时承接侧栏「新建任务」与底部「设置」两颗单行导航。折叠成窄栏换的是自定义属性（`--nav-item-*`），几何仍只有一处；文字用 `clip-path` 收掉而不是 `font-size: 0`，以免只剩图标的按钮失去可及名称 |
 | Button / Input / Textarea | 只有样式类，无组件 | 几何取 `--control-*` 档位（§9.10），结构由 `Field` 负责；不再单独组件化，避免只为包一层壳而增加第二处真相 |
-| Switch / Tooltip / Skeleton | — | 未落地。Progress 只有一枚不确定态 spinner（`.spinner`，由 `InlineLoading` 与页面加载态共用），没有百分比进度条。
+| Switch（`role="switch"` ＋ 恒定名称 ＋ 轨道滑块） | `components/Switch.tsx` | 已落地：全站 13 处 `type="checkbox"` 里只有 4 处真是「开／关」，全部收进这里——知识页语义检索（类名本来就叫 `.knowledge-admin-switch`，实为原生勾选框）、记忆页自动建议与设置页模型启用（两处原来用「开启 X／关闭 X」的按钮文案翻转充当开关，读屏听到的名称随状态改变）、技能页受信任标记。**多选与全选保留原生 checkbox 是正确语义**，不为观感统一塞进开关 |
+| Tooltip / Skeleton | — | 未落地。Progress 只有一枚不确定态 spinner（`.spinner`，由 `InlineLoading` 与页面加载态共用），没有百分比进度条。
 | 片里的微移除按钮 `.binding-chip-remove` | 随 `BindingChip` 一起收 | 刻意不进 IconButton：10px 命中区属于整枚片（图标＋名称＋×），塞进 24／28px 方块会把片撑破；登记在护栏的 `ICON_BUTTON_EXEMPT_CLASSES` 里（§3.1 P7） |
 | 图标按钮 IconButton（sm／md 两档方块） | `components/IconButton.tsx` | 已落地：面板头与条带里「只装一个图标的按钮」收成一处——6 个渲染点（侧栏折叠、错误横幅关闭、上下文面板折叠、模型抽屉关闭、结果提示关闭、能力选择器触发），此前它们是 24／26／28／30px 四种边长、两种圆角、字形 10／12／14／15px，还有两处留着 `font-size: 19px／22px` 配 `×` 字符的旧时代残留；`aria-label` 是必填项，`aria-expanded`／`aria-haspopup`／`ref`（浮层锚点）由基座转发 |
 | 底部动作条 ActionBar（说明在左、主行动恒在最右） | `components/ActionBar.tsx` | 已落地：7 处「主按钮＋取消」收成一处（记忆编辑、材料选择、MCP 编辑、讨论节点、模型抽屉、成果修订、专家修订），`gap` 8／12 与 `justify-content` flex-end／space-between 的分叉并掉，全仓第一次有了 `role="group"` 与动作条名称；两处「取消在最前」的调用点已按约定翻到主行动左侧 |
@@ -565,6 +566,18 @@ UI Foundation 首批提供四套成对色系：
 **状态徽标一律用 `Badge`**：一小段只读状态文字（已信任／已就绪／已过期）走 `components/Badge.tsx` 的 `tone`（neutral／brand／warning／danger／outline／success）× `shape`（pill／tag），颜色与圆角仍只取语义 Token。此前 6 套 chip 各写 padding、圆角与配色组合，同一个「已启用」在技能卡与依赖面板里长得不同（§3.4）。靠字形与小于 12px 字号成立的图形化标识（MD/PDF 徽标、未读数角标）不算状态徽标，留在原类名并按字号护栏登记。护栏锁四条：`.skill-chip`／`.dependency-status-chip`／`.memory-status-badge`／`.memory-kind`／`.memory-state`／`.connection-status` 的样式不得复活；胶囊圆角一律 `var(--radius-pill)`；24–40px 高度裸值只降不升；**任何类名以 chip／badge／status／state／kind／pill 结尾、又同时写了 `padding`＋`background`＋`border-radius` 这件「片状三件套」的，必须走 Badge**——确实不是徽标的（可移除的绑定片、整片是按钮的活动条、未读数角标）按理由登记进护栏的 `NON_BADGE_CHIP_CLASSES`。判据看外观而不是类名，所以 `.tool-pill-status` 那种只改字色的不会被误伤。
 
 **连接状态一律用 `ConnectionStatus`**（`components/ConnectionStatus.tsx`）：模型档位的 `untested／connected／failed` 与 MCP 连接的 `unconfigured／connecting／ready／failed／disconnected` 共用一张 tone 表（成好＝success、进行中＝brand、失败＝danger、未验证＝outline、已断开＝neutral），文案仍由领域自己给——模型那一行说「连接成功」，MCP 那一行说「可用」，这是措辞差异不是口径分叉。`Badge` 管外观、这张表管语义色、页面管措辞，三层各只在一处，才有设置页三行里「失败」写三种字色的旧账一次关掉（§4.3 P6）。
+
+**布尔设置一律用 `Switch`，多选与全选一律留原生 `checkbox`**（`components/Switch.tsx`）：
+开关与勾选框表达的是两种事实——「这一项是开还是关」与「这些项里勾了哪几个」。
+2026-09-27 盘点 13 处 `type="checkbox"` 后只有 4 处属于前者，就只做这 4 处：
+知识页语义检索（原生勾选框却顶着 `.knowledge-admin-switch` 的类名）、记忆页自动建议与
+设置页模型启用（两处都用「开启 X／关闭 X」的**按钮文案翻转**充当开关，
+后果是可及名称随状态改变，用户无法用同一个名字找回同一个开关）、技能页受信任标记。
+`Switch` 把「轨道＋滑块＋文字」收成一个 `role="switch"` 按钮：`label` 是恒定名称，
+状态由 `aria-checked` 表达，键盘行为是按钮自带的，不需要另写 keydown。
+需要确认才能改的状态（自动建议、信任、语义检索）仍然照旧弹确认框——
+**开关只负责表达与触发，不接管确认流程**，未确认前它保持原状态。
+
 
 **页签一律用 `Tabs`、切换按钮组一律用 `SegmentedControl`**（同在 `components/Tabs.tsx`）：`Tabs` 输出 `role=tablist`／`role=tab`／`aria-selected`，并实现 roving tabindex——只有选中页签 `tabIndex=0`，组内切换交给左右方向键与 Home／End；焦点跟随选中项，切换从**当前焦点**出发而不是从 `value` 出发，所以受控父组件重渲染之前连按也能连续走格。此前两处页签各写一遍，结果是两处都没有键盘导航。`SegmentedControl` 是另一个模式（切换同一片内容的呈现方式，每个按钮都参与 Tab 顺序），别再让页面手拼一组带 `aria-pressed` 的按钮。护栏锁两处：出现页签／`aria-pressed` 语义却没接基座即失败；`button[aria-selected|aria-pressed]` 的选中态样式只能住在 `.tabs` 与 `.segmented-control` 上。
 
@@ -629,7 +642,7 @@ UI Foundation 首批提供四套成对色系：
 `--page-body-width` 必须在 `:root` 定义恰好一次并被 `.page-body` 消费。骨架的另一半由
 「页面不得替骨架补几何」守着：给 `.page-body`／`.page-header` 等六个骨架类补 `display`／`gap`／
 `padding`／`width` 的后代选择器一律失败，要一列可增长的内容就把钩子类给元素自己。
-落地现状：按钮、输入、页签、Sheet、Toast、内联提示、空状态、列表行与区块头都有对应样式；页面骨架已由 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 负责结构，`KnowledgeDocumentCard` 负责知识条目的领域呈现，聚焦环用 `:focus-visible` 统一实现。破坏性确认统一使用 `ConfirmationDialog`，它以 `Modal` 的 `alertdialog` 变体实现：Portal 挂到应用外、背景 inert、初始焦点落在取消、Esc 与 Tab 焦点循环、关闭后恢复触发控件焦点。Popover 已落地为 `PopoverMenu` 基座（[ADR-0012](adr/0012-composer-capability-binding.md)）。尚未落地的有 Tooltip、Skeleton、Switch；区块头、图标按钮与底部动作条已于 2026-09-27 落地为 `SectionHeader`、`IconButton`、`ActionBar`。
+落地现状：按钮、输入、页签、Sheet、Toast、内联提示、空状态、列表行、区块头、图标按钮、底部动作条、导航列表、复选组、绑定片、来源行、连接状态片与布尔开关都有对应基座；页面骨架已由 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 负责结构，`KnowledgeDocumentCard` 负责知识条目的领域呈现，聚焦环用 `:focus-visible` 统一实现。破坏性确认统一使用 `ConfirmationDialog`，它以 `Modal` 的 `alertdialog` 变体实现：Portal 挂到应用外、背景 inert、初始焦点落在取消、Esc 与 Tab 焦点循环、关闭后恢复触发控件焦点。Popover 已落地为 `PopoverMenu` 基座（[ADR-0012](adr/0012-composer-capability-binding.md)）。尚未落地的有 Tooltip、Skeleton、Switch；区块头、图标按钮与底部动作条已于 2026-09-27 落地为 `SectionHeader`、`IconButton`、`ActionBar`。
 
 2026-09-26 的[UI 一致性评估](reviews/2026-09-26-ui-consistency.md)给出本节台账的完整核对结果（哪些模式各写了几遍、缺哪个基座、分期收口计划）；新增基座或迁移自造控件前先查该报告。
 

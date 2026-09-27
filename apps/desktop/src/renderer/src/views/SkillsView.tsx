@@ -12,6 +12,7 @@ import { ViewContainer } from '../components/layout/ViewContainer';
 import { ListRow } from '../components/ListRow';
 import { SectionHeader } from '../components/SectionHeader';
 import { DependencyPanel } from '../components/skills/DependencyPanel';
+import { Switch } from '../components/Switch';
 import { SegmentedControl } from '../components/Tabs';
 import { TransientToast } from '../components/TransientToast';
 import type { SkillDependenciesState } from '../hooks/use-skill-dependencies';
@@ -304,14 +305,11 @@ function SkillDetail({
         </div>
       </div>
       <div className="skill-trust-box">
-        <label>
-          <input
-            type="checkbox"
-            checked={trustRequested}
-            onChange={(event) => state.setTrust(skill, event.target.checked)}
-          />{' '}
-          受信任：允许在已授权范围内执行脚本
-        </label>
+        <Switch
+          label="受信任：允许在已授权范围内执行脚本"
+          checked={trustRequested}
+          onChange={(next) => state.setTrust(skill, next)}
+        />
         <p>
           <InfoIcon size={14} /> 脚本以本机用户权限运行，信任不提供沙箱隔离。
         </p>
