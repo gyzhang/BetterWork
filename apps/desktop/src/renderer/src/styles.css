@@ -1549,13 +1549,16 @@ small {
   color: var(--text-muted);
   font-size: 12px;
 }
+/* 描述一律三行定高：一行也占三行的位置，卡片高度因此恒定；
+   超出三行截断，悬停由 Tooltip 基座补全（docs/10 §10.1）。 */
 .skill-card-desc {
   display: -webkit-box;
+  min-height: 61px;
   margin: 0;
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.55;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -1570,6 +1573,11 @@ small {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
+.expert-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 .expert-card {
   display: flex;
   min-width: 0;
@@ -1580,9 +1588,17 @@ small {
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
 }
+/* 卡片顶部一行：整卡点击区在左，主行动「召唤」贴在右上角。
+   两枚按钮是兄弟而不是嵌套，点召唤不会同时进详情。 */
+.expert-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
 .expert-card-main {
   display: flex;
   min-width: 0;
+  flex: 1;
   flex-direction: column;
   gap: 12px;
   padding: 0;
@@ -1623,20 +1639,35 @@ small {
   color: var(--text-muted);
   font-size: 12px;
 }
+/* 描述一律三行定高，与技能卡同一口径：一行也占三行的位置，卡片高度因此恒定；
+   超出三行截断，悬停由 Tooltip 基座补全（docs/10 §10.1）。 */
 .expert-card-desc {
-  min-height: 40px;
+  display: -webkit-box;
+  min-height: 61px;
   margin: 0;
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.55;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .expert-card-status {
   margin: 0;
   color: var(--warning);
   font-size: 12px;
 }
+/* 卡片与详情里的动作列：上下相邻的按钮之间必须有可见缝（§9.8），
+   间距由容器 gap 拥有。这条规则此前与下面两个页面外壳共用一份，
+   外壳不能带 gap（页头与滚动区各自定位），于是动作列也没拿到缝。 */
 .expert-card-actions,
-.expert-detail-actions,
+.expert-detail-actions {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+}
 .expert-editor,
 .expert-detail-page {
   display: flex;

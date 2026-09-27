@@ -1,0 +1,689 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>算台 · 专家页改版低保真原型（待拍板）</title>
+    <style>
+      :root {
+        --canvas: #f6f7f5;
+        --surface: #ffffff;
+        --surface-raised: #f0f2ef;
+        --text-primary: #1d2420;
+        --text-secondary: #68736c;
+        --text-muted: #8a948e;
+        --border: #dbe2dc;
+        --brand: #2f6b5d;
+        --brand-soft: #e1eee9;
+        --selection: #d8ebe3;
+        --warning: #a86e1b;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--canvas);
+        color: var(--text-primary);
+        font:
+          14px/1.6 -apple-system,
+          BlinkMacSystemFont,
+          'PingFang SC',
+          'Microsoft YaHei',
+          sans-serif;
+      }
+      .proto-note {
+        margin: 0;
+        padding: 12px 24px;
+        background: var(--brand-soft);
+        border-bottom: 1px solid var(--border);
+        color: var(--text-secondary);
+        font-size: 12px;
+      }
+      .proto-note strong {
+        color: var(--brand);
+      }
+      main {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      h1 {
+        margin: 8px 0 4px;
+        font-size: 20px;
+      }
+      h2 {
+        margin: 32px 0 8px;
+        padding-left: 8px;
+        border-left: 3px solid var(--brand);
+        font-size: 16px;
+      }
+      p,
+      li {
+        color: var(--text-secondary);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      th,
+      td {
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        text-align: left;
+        vertical-align: top;
+        color: var(--text-secondary);
+      }
+      th {
+        background: var(--surface-raised);
+        color: var(--text-primary);
+      }
+      code {
+        padding: 1px 4px;
+        background: var(--surface-raised);
+        border-radius: 4px;
+        font-size: 12px;
+      }
+      .rec {
+        color: var(--brand);
+        font-weight: 600;
+      }
+      .decision {
+        margin: 12px 0;
+        padding: 12px 14px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+      }
+      .decision h4 {
+        margin: 0 0 6px;
+        font-size: 14px;
+      }
+      .decision p {
+        margin: 0;
+      }
+
+      /* ---- 以下为模拟界面 ---- */
+      .app {
+        margin-top: 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      .bar h3 {
+        margin: 0;
+        font-size: 15px;
+      }
+      .bar .spacer {
+        margin-left: auto;
+      }
+      .segmented {
+        display: inline-flex;
+        gap: 4px;
+        padding: 3px;
+        background: var(--surface-raised);
+        border-radius: 8px;
+      }
+      .segmented button {
+        padding: 4px 10px;
+        color: var(--text-secondary);
+        background: transparent;
+        border: 0;
+        border-radius: 6px;
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .segmented button[aria-pressed='true'] {
+        color: var(--text-primary);
+        background: var(--surface);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+      }
+      .btn {
+        padding: 5px 10px;
+        color: var(--text-secondary);
+        background: var(--surface-raised);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .btn.brand {
+        color: #ffffff;
+        background: var(--brand);
+        border-color: var(--brand);
+        font-weight: 600;
+      }
+      .body {
+        padding: 16px;
+      }
+
+      /* 卡片：主行动移到右上角，描述固定三行 */
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .app[data-mode='list'] .cards {
+        display: none;
+      }
+      .app[data-mode='grid'] .rows {
+        display: none;
+      }
+      .ecard {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 16px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+      }
+      .ecard-main {
+        display: block;
+        width: 100%;
+        padding: 0;
+        color: inherit;
+        text-align: left;
+        background: transparent;
+        border: 0;
+        font: inherit;
+        cursor: pointer;
+      }
+      .ecard-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .mark {
+        display: grid;
+        width: 36px;
+        height: 36px;
+        flex: none;
+        place-items: center;
+        color: var(--brand);
+        background: var(--brand-soft);
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .ecard-head strong {
+        display: block;
+        color: var(--text-primary);
+        font-size: 13px;
+      }
+      .ecard-head small {
+        display: block;
+        margin-top: 2px;
+        color: var(--text-muted);
+        font-size: 12px;
+      }
+      .desc {
+        display: -webkit-box;
+        min-height: 61px;
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: 13px;
+        line-height: 1.55;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .desc.overflow {
+        text-overflow: ellipsis;
+      }
+      .status {
+        margin: 0;
+        color: var(--warning);
+        font-size: 12px;
+      }
+      .ecard-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: auto;
+      }
+      /* 主行动钉在卡片右上角，层级压在整卡按钮之上，点击不外泄 */
+      .summon {
+        position: absolute;
+        top: 14px;
+        right: 14px;
+        z-index: 2;
+      }
+      .badge {
+        padding: 1px 6px;
+        color: var(--text-secondary);
+        background: var(--surface-raised);
+        border-radius: 999px;
+        font-size: 11px;
+      }
+      .badge.brand {
+        color: var(--brand);
+        background: var(--brand-soft);
+      }
+
+      /* 列表模式 */
+      .rows {
+        display: grid;
+        gap: 8px;
+      }
+      .erow {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+      }
+      .erow-main {
+        min-width: 0;
+        flex: 1;
+      }
+      .erow-main strong {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text-primary);
+        font-size: 13px;
+      }
+      .erow-main small {
+        display: block;
+        margin-top: 2px;
+        color: var(--text-muted);
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .erow-meta {
+        flex: none;
+        color: var(--text-secondary);
+        font-size: 12px;
+      }
+      .erow-actions {
+        display: flex;
+        flex: none;
+        align-items: center;
+        gap: 8px;
+      }
+
+      /* 原型里的 tooltip 用 CSS 演示；真实实现必须走 Tooltip 基座 */
+      [data-tip] {
+        position: relative;
+      }
+      [data-tip]:hover::after,
+      [data-tip]:focus-visible::after {
+        content: attr(data-tip);
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        z-index: 9;
+        width: max-content;
+        max-width: 300px;
+        padding: 6px 9px;
+        color: #ffffff;
+        background: #1d2420;
+        border-radius: 6px;
+        font-size: 12px;
+        line-height: 1.5;
+        white-space: normal;
+      }
+    </style>
+  </head>
+  <body>
+    <p class="proto-note">
+      <strong>低保真原型 · 待拍板</strong>
+      结构可点：卡片／列表真实切换，点卡片或行进入详情态。本轮只定结构，配色与字号沿用 docs/10
+      现有档位。专家「编辑配置」入口确实存在（详情页页头右侧），本页原型顺带处理内置专家的只读表达。
+    </p>
+    <main>
+      <h1>专家页：主行动位置、描述定高与视图切换</h1>
+      <p>
+        2026-09-27 提出。四项变更（D1–D4）＋一处已直接修复的缺陷（按钮贴死，违反
+        §9.8，不需要拍板）。
+      </p>
+
+      <h2>一、现状问题</h2>
+      <table>
+        <tr>
+          <th>#</th>
+          <th>问题</th>
+          <th>证据</th>
+          <th>影响</th>
+        </tr>
+        <tr>
+          <td>1</td>
+          <td>卡片底部「召唤／查看配置」上下贴死</td>
+          <td>
+            <code>styles.css:1630</code> 一条规则同时服务「动作列」与「页面外壳」，外壳不能带
+            <code>gap</code>，动作列就没拿到缝
+          </td>
+          <td>违反 §9.8；详情页「生命周期」那一列按钮同样贴死 —— <strong>本轮已修</strong></td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>「召唤」是通栏主按钮压在卡片底部</td>
+          <td><code>ExpertsView.tsx:122</code></td>
+          <td>主行动的位置与权重不匹配，且与「整卡可点进详情」在竖向上抢位</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>描述高度不稳</td>
+          <td>
+            <code>styles.css:1618</code> 只有 <code>min-height: 40px</code>，没有行数钳制；技能卡是
+            2 行钳制但 1 行会塌（<code>styles.css:1544</code>）
+          </td>
+          <td>长描述把卡片撑高，同一屏卡片不等高；短描述留白</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>专家页只有卡片视图</td>
+          <td>
+            技能页已落地 <code>SegmentedControl</code> + <code>ViewContainer</code> + 模式持久化
+            （<code>SkillsView.tsx:131-164</code>），专家页未接
+          </td>
+          <td>专家变多后无法用列表快速扫；两页同类操作不一致</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td>内置专家的「编辑配置」无条件可点</td>
+          <td>
+            <code>ExpertsView.tsx:471</code> 未看 <code>sourceKind</code>，后端
+            <code>expert-service.ts:202</code> 抛 <code>expert_builtin_readonly</code>
+          </td>
+          <td>
+            点了才知道不能改；技能页已用
+            <code>disabled</code> +「复制并编辑」表达同一约束（ADR-0011）
+          </td>
+        </tr>
+      </table>
+
+      <h2>二、可交互原型</h2>
+      <div class="app" data-mode="grid" id="app">
+        <div class="bar">
+          <h3>召唤固定的工作方式</h3>
+          <div class="spacer"></div>
+          <div class="segmented" id="segmented" role="group" aria-label="视图模式">
+            <button type="button" data-mode="grid" aria-pressed="true">卡片</button>
+            <button type="button" data-mode="list" aria-pressed="false">列表</button>
+          </div>
+          <button type="button" class="btn brand">＋ 新建专家</button>
+        </div>
+        <div class="body">
+          <div id="browse">
+            <div class="cards">
+              <article class="ecard">
+                <button class="summon btn brand" type="button">召唤</button>
+                <button class="ecard-main" type="button" data-open>
+                  <span class="ecard-head">
+                    <span class="mark">研</span>
+                    <span>
+                      <strong>研究分析专家</strong>
+                      <small>可召唤 · 用户</small>
+                    </span>
+                  </span>
+                  <span class="desc">先厘清问题和证据，再形成可复用的分析结论。</span>
+                </button>
+                <div class="ecard-actions">
+                  <button class="btn" type="button" data-open>配置详情</button>
+                </div>
+              </article>
+
+              <article class="ecard">
+                <button class="summon btn brand" type="button">召唤</button>
+                <button class="ecard-main" type="button" data-open>
+                  <span class="ecard-head">
+                    <span class="mark">经</span>
+                    <span>
+                      <strong>经营分析专家</strong>
+                      <small>可召唤 · 用户</small>
+                    </span>
+                  </span>
+                  <span
+                    class="desc"
+                    data-tip="按当期口径核对收入、成本与毛利，指出与上期的差异并给出可执行的下一步；所有结论必须能追溯到材料中的具体数字。"
+                    >按当期口径核对收入、成本与毛利，指出与上期的差异并给出可执行的下一步；所有结论必须能追溯到材料中的具体数字，不得用估算代替材料。</span
+                  >
+                </button>
+                <p class="status">配置待补全：尚未绑定任何 Skill</p>
+                <div class="ecard-actions">
+                  <button class="btn" type="button" data-open>配置详情</button>
+                </div>
+              </article>
+
+              <article class="ecard">
+                <button class="summon btn brand" type="button">召唤</button>
+                <button class="ecard-main" type="button" data-open>
+                  <span class="ecard-head">
+                    <span class="mark">复</span>
+                    <span>
+                      <strong>月度复盘专家</strong>
+                      <small>可召唤 · 内置</small>
+                    </span>
+                  </span>
+                  <span
+                    class="desc"
+                    data-tip="把散落在周报、会议纪要与成果里的事实汇成一份月度复盘：先对齐目标与实际，再分层次写清进展、风险与下月计划，并为每一条结论标注来源。"
+                    >把散落在周报、会议纪要与成果里的事实汇成一份月度复盘：先对齐目标与实际，再分层次写清进展、风险与下月计划，并为每一条结论标注来源与出处，避免只写感受不写依据。<span
+                      class="badge brand"
+                      >内置只读</span
+                    ></span
+                  >
+                </button>
+                <div class="ecard-actions">
+                  <button class="btn" type="button" data-open>配置详情</button>
+                </div>
+              </article>
+            </div>
+
+            <div class="rows">
+              <div class="erow">
+                <span class="mark">研</span>
+                <div class="erow-main">
+                  <strong>研究分析专家 <span class="badge">可召唤</span></strong>
+                  <small>先厘清问题和证据，再形成可复用的分析结论。</small>
+                </div>
+                <div class="erow-meta">2 个 Skill · 3 条已确认记忆</div>
+                <div class="erow-actions">
+                  <button class="btn brand" type="button">召唤</button>
+                  <button class="btn" type="button" data-open>配置详情</button>
+                </div>
+              </div>
+              <div class="erow">
+                <span class="mark">经</span>
+                <div class="erow-main">
+                  <strong>经营分析专家 <span class="badge">可召唤</span></strong>
+                  <small
+                    >按当期口径核对收入、成本与毛利，指出与上期的差异并给出可执行的下一步……</small
+                  >
+                </div>
+                <div class="erow-meta">1 个 Skill · 配置待补全</div>
+                <div class="erow-actions">
+                  <button class="btn brand" type="button">召唤</button>
+                  <button class="btn" type="button" data-open>配置详情</button>
+                </div>
+              </div>
+              <div class="erow">
+                <span class="mark">复</span>
+                <div class="erow-main">
+                  <strong
+                    >月度复盘专家 <span class="badge">可召唤</span>
+                    <span class="badge brand">内置只读</span></strong
+                  >
+                  <small
+                    >把散落在周报、会议纪要与成果里的事实汇成一份月度复盘：先对齐目标与实际……</small
+                  >
+                </div>
+                <div class="erow-meta">内置 · 不可直接编辑</div>
+                <div class="erow-actions">
+                  <button class="btn brand" type="button">召唤</button>
+                  <button class="btn" type="button" data-open>配置详情</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="detail" class="hidden" style="display: none">
+            <p>
+              <button id="back" class="btn" type="button">← 返回列表</button>
+            </p>
+            <h3 style="margin: 12px 0 4px">研究分析专家</h3>
+            <p style="margin: 0 0 12px">
+              详情态页头右侧两枚按钮：用户专家显示「召唤 ＋ 编辑配置」；内置专家显示「召唤 ＋
+              复制为用户专家」，编辑入口按 D5
+              处理。以下小节（人格与职责／能力／记忆／生命周期）沿用现状。
+            </p>
+          </div>
+        </div>
+      </div>
+      <p>
+        说明：①「召唤」绝对定位在卡片右上角，层级压在整卡按钮之上，点击不会同时触发进详情；整卡（名称＋描述）仍是进入配置的点击区。②描述固定三行高（13px
+        × 1.55 × 3 ≈ 61px），一行也占满三行，超出三行截断并在悬停时出提示 —— 原型用 CSS
+        演示，真实实现必须走 <strong>Tooltip 基座</strong>（§10.1 台账里 Tooltip
+        尚未落地，本轮先补基座再接页面，不得用 <code>::after</code> 自造浮层）。③只有真溢出时才挂
+        tooltip，短描述悬停无反应不算坏掉，见 D2。④列表模式复用
+        <code>ListRow</code> 现成槽位，不新造行几何。
+      </p>
+
+      <h2>三、与 docs/10 的映射</h2>
+      <table>
+        <tr>
+          <th>条款</th>
+          <th>现状</th>
+          <th>改版后</th>
+        </tr>
+        <tr>
+          <td>§9.8 纵向堆叠不得贴死</td>
+          <td>动作列与页面外壳共用一条规则，动作列没有 <code>gap</code></td>
+          <td>拆开：动作列 <code>gap: 8px</code>，外壳不带缝。已落地</td>
+        </tr>
+        <tr>
+          <td>§10.1 浮层台账</td>
+          <td>Tooltip 未落地，页面里没有「悬停看全文」的正规手段</td>
+          <td>
+            补 <code>components/Tooltip.tsx</code> 基座：悬停延时出现、焦点立即出现、Esc
+            与移出即收、<code>aria-describedby</code> 关联、层级走 <code>--z-*</code> 档位
+          </td>
+        </tr>
+        <tr>
+          <td>§10.1 卡片／列表切换</td>
+          <td>技能页有，专家页没有</td>
+          <td>
+            专家页接 <code>SegmentedControl</code> + <code>ViewContainer</code>；把技能页那段
+            <code>readStoredViewMode</code>／持久化逻辑提成
+            <code>hooks/use-view-mode.ts</code>，两页共用一份
+          </td>
+        </tr>
+        <tr>
+          <td>§8.3 统一页面骨架</td>
+          <td>已合规（页头带 + 860px 版心）</td>
+          <td>不变，切换视图时页头坐标与左上锚点不跳动</td>
+        </tr>
+        <tr>
+          <td>§9.4 字号档位</td>
+          <td>卡片描述 13px</td>
+          <td>不变；tooltip 走 12px 基线，不新增档位</td>
+        </tr>
+        <tr>
+          <td>ADR-0011 内置只读</td>
+          <td>后端拒绝，前端不表达</td>
+          <td>按 <code>sourceKind</code> 分档按钮，与技能页同口径</td>
+        </tr>
+      </table>
+
+      <h2>四、拍板点（均附推荐）</h2>
+      <div class="decision">
+        <h4>D1 「召唤」的位置与形态</h4>
+        <p>
+          <span class="rec"
+            >推荐：卡片右上角绝对定位的小主按钮（28px 高、13px 字），整卡仍可点进配置</span
+          >。主行动待在最容易被看到的位置，同时不与整卡点击抢位。备选：右上角只放图标按钮（更安静，但「召唤」是这页唯一的主行动，图标不表意）；保持底部通栏（现状，卡片下半部被两枚按钮占满）。
+        </p>
+      </div>
+      <div class="decision">
+        <h4>D2 描述定高与提示的触发条件</h4>
+        <p>
+          <span class="rec">推荐：固定三行高 ＋ 三行截断 ＋ 仅真溢出时挂 Tooltip</span>（悬停 300ms
+          出现、键盘聚焦立即出现）。一行描述也占满三行，卡片高度因此恒定。备选：任何描述都可悬停（实现更简单，但短描述悬停出全文＝和没截断一样，读起来像坏掉）；点击卡片展开全文（多一次点击，且卡片高度会跳）。
+        </p>
+      </div>
+      <div class="decision">
+        <h4>D3 两页描述口径是否同轮统一</h4>
+        <p>
+          <span class="rec">推荐：同轮把技能卡描述也改成三行定高 ＋ 同一套溢出提示</span
+          >。技能卡现在是两行钳制且一行会塌，与专家卡并排看就是一处不一致（§3.4
+          同一件事两种长相）。备选：本轮只改专家页，技能页留到下一轮（改动面小，但两页并排的不一致继续留在产品里）。
+        </p>
+      </div>
+      <div class="decision">
+        <h4>D4 列表模式的行内容</h4>
+        <p>
+          <span class="rec"
+            >推荐：图标 ＋ 名称 ＋ 生命周期徽标 ＋ 描述单行省略 ＋ 能力与记忆计数
+            ＋「召唤／配置详情」</span
+          >，全部走 <code>ListRow</code>
+          现成槽位。选专家主要靠描述，所以描述留在行里。备选：不带描述（行更密，但两行才能看清一个专家，列表就失去意义）。
+        </p>
+      </div>
+      <div class="decision">
+        <h4>D5 内置专家的编辑入口</h4>
+        <p>
+          <span class="rec"
+            >推荐：详情页主按钮按来源分档 —— 用户专家「编辑配置」，内置专家「复制为用户专家」</span
+          >，复制后直接进入编辑，与技能页
+          <code>复制并编辑</code>
+          同口径（ADR-0011：内置只读、用户副本可改）。备选：保持「编辑配置」可点，点击后内联提示「内置专家需先复制」（多一次失败往返，但按钮文案统一）。
+        </p>
+      </div>
+      <div class="decision">
+        <h4>D6 卡片底部按钮的措辞</h4>
+        <p>
+          <span class="rec">推荐：改成「配置详情」</span
+          >。这枚按钮进的是详情页，详情页里才有编辑；「查看配置」听起来像只读，光哥本轮的疑问正来自这里。备选：保持「查看配置」；或改成「配置」并在内置专家卡片上显示「内置只读」徽标（徽标已按
+          D5 出现在详情页，卡片上再加是重复信息）。
+        </p>
+      </div>
+    </main>
+    <script>
+      const app = document.getElementById('app');
+      const browse = document.getElementById('browse');
+      const detail = document.getElementById('detail');
+      const back = document.getElementById('back');
+      const segmented = document.getElementById('segmented');
+      segmented.addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-mode]');
+        if (!button) return;
+        app.dataset.mode = button.dataset.mode;
+        for (const item of segmented.querySelectorAll('button')) {
+          item.setAttribute('aria-pressed', String(item === button));
+        }
+      });
+      const showDetail = () => {
+        browse.style.display = 'none';
+        detail.style.display = 'block';
+        segmented.style.display = 'none';
+      };
+      const showBrowse = () => {
+        detail.style.display = 'none';
+        browse.style.display = 'block';
+        segmented.style.display = 'inline-flex';
+      };
+      for (const item of document.querySelectorAll('[data-open]')) {
+        item.addEventListener('click', showDetail);
+      }
+      back.addEventListener('click', showBrowse);
+    </script>
+  </body>
+</html>

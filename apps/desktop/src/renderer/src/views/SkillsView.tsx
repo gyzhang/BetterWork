@@ -7,17 +7,18 @@ import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
-import type { ViewMode } from '../components/layout/ViewContainer';
 import { ViewContainer } from '../components/layout/ViewContainer';
 import { ListRow } from '../components/ListRow';
 import { SectionHeader } from '../components/SectionHeader';
 import { DependencyPanel } from '../components/skills/DependencyPanel';
 import { Switch } from '../components/Switch';
 import { SegmentedControl } from '../components/Tabs';
+import { Tooltip } from '../components/Tooltip';
 import { TransientToast } from '../components/TransientToast';
 import type { SkillDependenciesState } from '../hooks/use-skill-dependencies';
 import { useSkillDependencies } from '../hooks/use-skill-dependencies';
 import type { SkillsState } from '../hooks/use-skills';
+import { useViewMode } from '../hooks/use-view-mode';
 import { ChevronLeftIcon, InfoIcon, PlusIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
 import { skillEnvironmentName } from '../lib/labels';
@@ -75,7 +76,7 @@ function SkillCard({
           <small>{sourceName[skill.sourceKind]} Skill</small>
         </div>
       </div>
-      <p className="skill-card-desc">{skill.description || '暂无描述'}</p>
+      <Tooltip className="skill-card-desc">{skill.description || '暂无描述'}</Tooltip>
       <SkillChips skill={skill} />
     </button>
   );
@@ -104,14 +105,6 @@ function SkillListItem({
   );
 }
 
-function readStoredViewMode(): ViewMode {
-  try {
-    return localStorage.getItem(VIEW_MODE_STORAGE_KEY) === 'list' ? 'list' : 'grid';
-  } catch {
-    return 'grid';
-  }
-}
-
 export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element {
   const { selected, dismissToast: dismissStateToast } = state;
   const refreshSkillDetail = useCallback(
@@ -128,15 +121,7 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
     dismissStateToast();
     dismissDepsToast();
   }, [dismissStateToast, dismissDepsToast]);
-  const [viewMode, setViewMode] = useState<ViewMode>(readStoredViewMode);
-  const changeViewMode = (mode: ViewMode): void => {
-    setViewMode(mode);
-    try {
-      localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
-    } catch {
-      // storage unavailable — mode still applies for this session
-    }
-  };
+  const { viewMode, changeViewMode } = useViewMode(VIEW_MODE_STORAGE_KEY);
 
   return (
     <section className="skills-page">

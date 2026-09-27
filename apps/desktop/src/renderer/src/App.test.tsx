@@ -1015,7 +1015,7 @@ describe('Expert configuration', () => {
     installApi({ expert: true, memories: [memory, workspaceMemory, otherWorkspaceMemory] });
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: '专家' }));
-    fireEvent.click(await screen.findByRole('button', { name: '查看配置' }));
+    fireEvent.click(await screen.findByRole('button', { name: '配置详情' }));
 
     expect(await screen.findByText('1 条已确认 · 1 条待确认')).toBeTruthy();
     expect(screen.getByText(memory.content)).toBeTruthy();
@@ -1035,7 +1035,7 @@ describe('Expert configuration', () => {
     });
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: '专家' }));
-    fireEvent.click(await screen.findByRole('button', { name: '查看配置' }));
+    fireEvent.click(await screen.findByRole('button', { name: '配置详情' }));
     fireEvent.click(await screen.findByRole('button', { name: '编辑配置' }));
 
     const modelSelect = await screen.findByRole('button', { name: '专家模型偏好' });
@@ -1058,7 +1058,7 @@ describe('Expert configuration', () => {
     const api = installApi({ expert: true });
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: '专家' }));
-    fireEvent.click(await screen.findByRole('button', { name: '查看配置' }));
+    fireEvent.click(await screen.findByRole('button', { name: '配置详情' }));
     fireEvent.click(await screen.findByRole('button', { name: '编辑配置' }));
     const identity = await screen.findByRole('textbox', { name: '人格与职责' });
     fireEvent.change(identity, { target: { value: '负责经营分析并检查交付。' } });
@@ -1071,6 +1071,31 @@ describe('Expert configuration', () => {
         revision: expect.objectContaining({ identity: '负责经营分析并检查交付。' }),
       }),
     );
+  });
+
+  it('内置专家的配置页给的是「复制为用户专家」，不是点了才被后端拒绝的编辑入口', async () => {
+    const api = installApi({ expert: true });
+    api.experts.get.mockResolvedValue({ ...expertDetail, sourceKind: 'builtin' });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
+    fireEvent.click(await screen.findByRole('button', { name: '配置详情' }));
+
+    expect(await screen.findByRole('button', { name: '复制为用户专家' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '编辑配置' })).toBeNull();
+  });
+
+  it('专家页在卡片与列表之间切换，列表行仍是「召唤＋配置详情」', async () => {
+    installApi({ expert: true });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
+    expect(await screen.findByRole('button', { name: '配置详情' })).toBeTruthy();
+    expect(document.querySelector('.expert-card')).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '列表' }));
+    const row = document.querySelector('.expert-rows .list-row');
+    expect(row).not.toBeNull();
+    expect(row?.textContent).toContain('经营分析专家');
+    expect(row?.textContent).toContain('可召唤');
   });
 });
 

@@ -18,11 +18,18 @@ import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
+import { ViewContainer } from '../components/layout/ViewContainer';
+import { ListRow } from '../components/ListRow';
 import { McpToolBindingsPicker } from '../components/McpToolBindingsPicker';
+import { SegmentedControl } from '../components/Tabs';
+import { Tooltip } from '../components/Tooltip';
 import type { ExpertsState } from '../hooks/use-experts';
+import { useViewMode } from '../hooks/use-view-mode';
 import { ExpertIcon, PlusIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
 import { materialCandidateAppliesToWorkspace, materialReferenceKey } from '../lib/materials';
+
+const VIEW_MODE_STORAGE_KEY = 'experts-view-mode';
 
 const lifecycleName = {
   active: '可召唤',
@@ -86,6 +93,31 @@ const draftOf = (detail: ExpertDetail): ExpertRevisionDraft => ({
 const referencePurpose = (candidate: MaterialCandidate): 'rule' | 'historical-comparison' =>
   candidate.reference.kind === 'knowledge-revision' ? 'rule' : 'historical-comparison';
 
+const blockedHint = (expert: ExpertSummary): string =>
+  `配置待补全：${expert.blockedReasons.map((reason) => blockedReasonName[reason] ?? reason).join('、')}`;
+
+/** 卡片与列表行共用同一枚召唤按钮：禁用条件与失败措辞只有一份。 */
+function ExpertSummon({
+  expert,
+  onSummon,
+  onError,
+}: {
+  expert: ExpertSummary;
+  onSummon: (expert: ExpertSummary) => Promise<void>;
+  onError: (message: string) => void;
+}): React.JSX.Element {
+  return (
+    <button
+      className="primary-button"
+      type="button"
+      disabled={expert.lifecycle !== 'active'}
+      onClick={() => reportAction(onSummon(expert), onError, '无法召唤该专家。')}
+    >
+      召唤
+    </button>
+  );
+}
+
 function ExpertCard({
   expert,
   onOpen,
@@ -97,42 +129,72 @@ function ExpertCard({
   onSummon: (expert: ExpertSummary) => Promise<void>;
   onError: (message: string) => void;
 }): React.JSX.Element {
-  const blocked = expert.blockedReasons.length > 0;
-  const unavailable = expert.lifecycle !== 'active';
   return (
     <article className="expert-card">
-      <button className="expert-card-main" type="button" onClick={() => onOpen(expert)}>
-        <div className="expert-card-head">
-          <span className="expert-card-mark" aria-hidden="true">
-            <ExpertIcon size={18} />
+      <div className="expert-card-top">
+        <button className="expert-card-main" type="button" onClick={() => onOpen(expert)}>
+          <span className="expert-card-head">
+            <span className="expert-card-mark" aria-hidden="true">
+              <ExpertIcon size={18} />
+            </span>
+            <span className="expert-card-title">
+              <strong>{expert.name}</strong>
+              <small>{lifecycleName[expert.lifecycle]}</small>
+            </span>
           </span>
-          <div>
-            <strong>{expert.name}</strong>
-            <small>{lifecycleName[expert.lifecycle]}</small>
-          </div>
-        </div>
-        <p className="expert-card-desc">{expert.summary || '暂无说明'}</p>
-      </button>
-      {blocked && (
-        <p className="expert-card-status">
-          配置待补全：
-          {expert.blockedReasons.map((reason) => blockedReasonName[reason] ?? reason).join('、')}
-        </p>
+          <Tooltip className="expert-card-desc">{expert.summary || '暂无说明'}</Tooltip>
+        </button>
+        <ExpertSummon expert={expert} onSummon={onSummon} onError={onError} />
+      </div>
+      {expert.blockedReasons.length > 0 && (
+        <p className="expert-card-status">{blockedHint(expert)}</p>
       )}
       <div className="expert-card-actions">
-        <button
-          className="primary-button"
-          type="button"
-          disabled={unavailable}
-          onClick={() => reportAction(onSummon(expert), onError, '无法召唤该专家。')}
-        >
-          召唤
-        </button>
         <button className="text-button" type="button" onClick={() => onOpen(expert)}>
-          查看配置
+          配置详情
         </button>
       </div>
     </article>
+  );
+}
+
+/** 列表模式：右槽已有按钮，所以整行不再是点击区；描述交给行的单行省略。 */
+function ExpertRow({
+  expert,
+  onOpen,
+  onSummon,
+  onError,
+}: {
+  expert: ExpertSummary;
+  onOpen: (expert: ExpertSummary) => void;
+  onSummon: (expert: ExpertSummary) => Promise<void>;
+  onError: (message: string) => void;
+}): React.JSX.Element {
+  return (
+    <ListRow
+      as="article"
+      variant="card"
+      leading={
+        <span className="expert-card-mark" aria-hidden="true">
+          <ExpertIcon size={18} />
+        </span>
+      }
+      title={expert.name}
+      detail={expert.summary || '暂无说明'}
+      meta={
+        expert.blockedReasons.length > 0
+          ? `${lifecycleName[expert.lifecycle]} · ${blockedHint(expert)}`
+          : lifecycleName[expert.lifecycle]
+      }
+      actions={
+        <>
+          <ExpertSummon expert={expert} onSummon={onSummon} onError={onError} />
+          <button className="text-button" type="button" onClick={() => onOpen(expert)}>
+            配置详情
+          </button>
+        </>
+      }
+    />
   );
 }
 
@@ -468,9 +530,17 @@ function ExpertDetailPanel({
             >
               召唤
             </button>
-            <button className="secondary-button" type="button" onClick={onEdit}>
-              编辑配置
-            </button>
+            {/* 内置专家后端拒绝直接改（expert_builtin_readonly）：入口按来源分档，
+                不再让人点一次才知道不能改（ADR-0011，与技能页同口径）。 */}
+            {detail.sourceKind === 'builtin' ? (
+              <button className="secondary-button" type="button" onClick={onCopy}>
+                复制为用户专家
+              </button>
+            ) : (
+              <button className="secondary-button" type="button" onClick={onEdit}>
+                编辑配置
+              </button>
+            )}
           </>
         }
       />
@@ -548,11 +618,6 @@ function ExpertDetailPanel({
                   归档
                 </button>
               )}
-              {detail.sourceKind === 'builtin' && (
-                <button className="text-button" type="button" onClick={onCopy}>
-                  复制为用户专家
-                </button>
-              )}
             </div>
           </section>
         </div>
@@ -591,6 +656,7 @@ export function ExpertsPage({
   const [detailLoading, setDetailLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  const { viewMode, changeViewMode } = useViewMode(VIEW_MODE_STORAGE_KEY);
 
   const openDetail = (summary: ExpertSummary): void => {
     setDetailLoading(true);
@@ -707,9 +773,20 @@ export function ExpertsPage({
         eyebrow="专家"
         title="召唤固定的工作方式"
         actions={
-          <button className="primary-button" type="button" onClick={openCreate}>
-            <PlusIcon size={13} /> 新建专家
-          </button>
+          <>
+            <SegmentedControl
+              label="视图模式"
+              value={viewMode}
+              onChange={changeViewMode}
+              items={[
+                { id: 'grid', label: '卡片' },
+                { id: 'list', label: '列表' },
+              ]}
+            />
+            <button className="primary-button" type="button" onClick={openCreate}>
+              <PlusIcon size={13} /> 新建专家
+            </button>
+          </>
         }
       />
       {state.error && (
@@ -727,8 +804,8 @@ export function ExpertsPage({
               title="还没有可召唤的专家"
               detail="创建一个固定的工作方式，之后可以直接召唤开始工作。"
             />
-          ) : (
-            <div className="expert-cards">
+          ) : viewMode === 'grid' ? (
+            <ViewContainer mode="grid" className="expert-cards">
               {state.experts.map((expert) => (
                 <ExpertCard
                   key={expert.id}
@@ -738,7 +815,19 @@ export function ExpertsPage({
                   onError={onError}
                 />
               ))}
-            </div>
+            </ViewContainer>
+          ) : (
+            <ViewContainer mode="list" className="expert-rows">
+              {state.experts.map((expert) => (
+                <ExpertRow
+                  key={expert.id}
+                  expert={expert}
+                  onOpen={openDetail}
+                  onSummon={onSummon}
+                  onError={onError}
+                />
+              ))}
+            </ViewContainer>
           )}
         </section>
       </ScrollRegion>
