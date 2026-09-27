@@ -15,6 +15,7 @@ import { colorSchemes } from '../appearance';
 import { ActionBar } from '../components/ActionBar';
 import { AsyncButton, InlineLoading } from '../components/AsyncButton';
 import { Badge } from '../components/Badge';
+import { ConnectionStatus } from '../components/ConnectionStatus';
 import { EmptyNotice } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
@@ -194,9 +195,10 @@ export function ModelSettings({
                 meta={
                   <>
                     {model.apiKeyConfigured ? '已配置凭据' : '未配置凭据'} ·{' '}
-                    <span className={`connection-status ${model.connectionStatus}`}>
-                      {connectionStatusName[model.connectionStatus]}
-                    </span>{' '}
+                    <ConnectionStatus
+                      status={model.connectionStatus}
+                      label={connectionStatusName[model.connectionStatus]}
+                    />{' '}
                     · {model.enabled ? '已启用' : '已停用'}
                   </>
                 }
@@ -383,9 +385,10 @@ export function SearchSettings(): React.JSX.Element {
           <>
             当前状态：{configured.enabled ? '已启用' : '已停用'} ·{' '}
             {configured.apiKeyConfigured ? '已配置凭据' : '未配置凭据'} ·{' '}
-            <span className={`connection-status ${configured.connectionStatus}`}>
-              {connectionStatusName[configured.connectionStatus]}
-            </span>
+            <ConnectionStatus
+              status={configured.connectionStatus}
+              label={connectionStatusName[configured.connectionStatus]}
+            />
           </>
         ) : (
           '当前状态：未配置。保存并启用后，智能体即可联网搜索。'
@@ -536,10 +539,13 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
               title={connection.name}
               detail={`${connection.transport.command} · ${connection.tools.length} 个已发现工具`}
               meta={
-                <span className={`connection-status ${connection.status}`}>
-                  {mcpStatusName[connection.status]}
+                <>
+                  <ConnectionStatus
+                    status={connection.status}
+                    label={mcpStatusName[connection.status]}
+                  />
                   {connection.failureMessage ? ` · ${connection.failureMessage}` : ''}
-                </span>
+                </>
               }
               actions={
                 <>

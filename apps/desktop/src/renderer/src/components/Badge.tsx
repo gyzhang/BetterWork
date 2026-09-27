@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
 
-export type BadgeTone = 'neutral' | 'brand' | 'warning' | 'danger' | 'outline';
+export type BadgeTone = 'neutral' | 'brand' | 'warning' | 'danger' | 'outline' | 'success';
 export type BadgeShape = 'pill' | 'tag';
 
 export interface BadgeProps {
-  /** 语义着色：默认中性，强调态用 brand，需要注意用 warning／danger。 */
+  /** 语义着色：默认中性，强调态用 brand，需要注意用 warning／danger，成好用 success。 */
   tone?: BadgeTone;
   /** 胶囊（默认）或方角标签。 */
   shape?: BadgeShape;

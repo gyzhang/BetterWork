@@ -388,6 +388,24 @@ MCP 那一节不再是灰底圆角卡，而是与相邻小节一样的分隔线�
 与 R3-B 的 `MessageBlock`＋`Composer` 外提是同一片代码，先外提再抽摘要行才不会改两遍。
 本档只做 `SourceRow`，任务 #11 的范围据此收窄，RunSummary 并入 #12。
 
+## 15. R3-C 第一段落地：ConnectionStatus（2026-09-27 20:21）
+
+§4.3 P6 点名的 5 套「绕过 Badge 的状态片」在 R2-E 里已经分类收口：一处（`.memory-kind`／`.memory-state`）
+是真徽标、直接迁移，四处判读为不是徽标、按理由登记例外。本段做掉的是当时留在 R3-C 名单里的
+`.connection-status`——它连"片"都算不上，只是**一行灰字里按状态改字色的三个 `<span>`**，
+但正是这种"就一个字色，何必用徽标"的地方，让同一个「失败」在模型行、Web 搜索小节与 MCP 列表里
+长出三种观感。
+
+`components/ConnectionStatus.tsx` 把两张状态枚举（模型档位 3 值、MCP 连接 5 值）并成一张语义色表，
+`Badge` 同时补出 `success` 一档（`--success`／`--success-soft` 在 8 个 Variant 里早已存在，
+**是基座缺档，不是页面偷懒**——这条判断顺序写进了当日日志）。删掉 `.connection-status` 的两条领域规则
+并登记退役；`ConnectionStatus` 不新增护栏，因为它落在既有的两条锁之内：外观归 `Badge`，
+退役类不得复活。
+
+**R3-C 剩余**：`SettingsLayout`／`SettingsNav`（设置页左右壳现在靠 `.settings-content` 与页面自己的 padding）、
+`ModelProfileRow`（`SettingsView.tsx:173-205` 已是 ListRow 填槽，下沉成本接近零）、`Switch`（仅 4 处布尔值，
+多选与全选保留原生 checkbox 是正确语义，不为统一而塞）。
+
 ---
 
 ## 附：本轮核查方式

@@ -733,6 +733,11 @@ const RETIRED_UTILITY_CLASSES: {
     name: '.memory-kind／.memory-state（建议卡的状态片，已改 Badge）',
     family: 'badge',
   },
+  {
+    pattern: /\.connection-status(?![-\w])/,
+    name: '.connection-status（按状态改字色的领域规则，已改 Badge 的 tone 档位）',
+    family: 'badge',
+  },
   { pattern: /\.empty-runs(?![-\w])/, name: '.empty-runs', family: 'empty' },
   { pattern: /\.empty-models(?![-\w])/, name: '.empty-models', family: 'empty' },
   { pattern: /\.setting-placeholder(?![-\w])/, name: '.setting-placeholder', family: 'empty' },

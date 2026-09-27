@@ -1986,6 +1986,10 @@ button.list-row:where(:not(:disabled)):hover {
   background: var(--surface);
   border: 1px solid var(--border-subtle);
 }
+.badge[data-tone='success'] {
+  color: var(--success);
+  background: var(--success-soft);
+}
 .skill-rows {
   display: flex;
   flex-direction: column;
@@ -2199,12 +2203,8 @@ button.list-row:where(:not(:disabled)):hover {
   font-size: 12px;
   font-weight: 600;
 }
-.connection-status.connected {
-  color: var(--success);
-}
-.connection-status.failed {
-  color: var(--danger);
-}
+/* 连接状态是只读状态文字，走 Badge 的 tone 档位（docs/10 §10.1）；
+   这里不再留一条「按状态改字色」的领域规则。 */
 /* === EmptyNotice：列表与小节级占位（docs/10 §10.1） ===
    区域级居中带图标的空态是 `.empty-context`，这里管放不下的两种小尺寸。 */
 .empty-notice {
