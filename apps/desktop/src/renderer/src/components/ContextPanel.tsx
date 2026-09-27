@@ -507,7 +507,7 @@ function EvidencePreview({
       ) : error ? (
         <>
           <p className="inline-message error">{error}</p>
-          <button type="button" onClick={onClose}>
+          <button type="button" className="text-button" onClick={onClose}>
             关闭
           </button>
         </>
@@ -532,7 +532,7 @@ function EvidencePreview({
               </li>
             ))}
           </ul>
-          <button type="button" onClick={onClose}>
+          <button type="button" className="text-button" onClick={onClose}>
             关闭
           </button>
         </>
@@ -952,13 +952,13 @@ function HistoryAdjustmentSection({
         旧轮次只是这次不发送，对话没有被删除；记忆被修订、排除、失效或材料换版本时，相关旧回答不会继续当作事实使用。
       </p>
       <div className="context-continuity-actions">
-        <button type="button" onClick={onSelectMaterials}>
+        <button type="button" className="chip-button" onClick={onSelectMaterials}>
           选择本期材料
         </button>
-        <button type="button" onClick={onOpenArtifacts}>
+        <button type="button" className="chip-button" onClick={onOpenArtifacts}>
           查看上期成果版本
         </button>
-        <button type="button" onClick={onOpenMemoryPage}>
+        <button type="button" className="chip-button" onClick={onOpenMemoryPage}>
           到记忆详情保留方法
         </button>
       </div>

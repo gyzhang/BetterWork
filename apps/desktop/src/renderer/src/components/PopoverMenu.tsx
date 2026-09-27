@@ -154,12 +154,14 @@ export function PopoverMenu({
   }, [open, computePosition]);
 
   // 浮层是触发元素的延伸：字号必须跟随触发控件，否则菜单看起来像另一个层级。
+  // 只镜像控件**自己的文字**：纯图标按钮没有文字，计算字号是它从容器继承来的值
+  // （composer 的 `+` 一路继承到 UA 默认 16px），镜像过来会让菜单比正文还大。
   const [anchorFontSize, setAnchorFontSize] = useState<string>();
   useEffect(() => {
     if (!open) return;
     const anchor = anchorRef.current;
-    if (!anchor) return;
-    setAnchorFontSize(window.getComputedStyle(anchor).fontSize);
+    const hasOwnText = anchor !== null && (anchor.textContent?.trim() ?? '') !== '';
+    setAnchorFontSize(anchor && hasOwnText ? window.getComputedStyle(anchor).fontSize : undefined);
   }, [open, anchorRef]);
 
   // 受控开关下的焦点管理：打开时聚焦首个可用项，关闭时归还焦点。

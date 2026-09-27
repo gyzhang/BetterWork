@@ -23,12 +23,14 @@ function Wrapper({
   onSelect,
   items = ITEMS,
   anchorFontSize,
+  iconOnlyAnchor = false,
 }: {
   open: boolean;
   onDismiss: () => void;
   onSelect: (id: string) => void;
   items?: PopoverMenuItem[];
   anchorFontSize?: string;
+  iconOnlyAnchor?: boolean;
 }) {
   const anchorRef = useRef<HTMLButtonElement>(null);
   return (
@@ -36,9 +38,10 @@ function Wrapper({
       <button
         ref={anchorRef}
         type="button"
+        aria-label="打开菜单"
         {...(anchorFontSize ? { style: { fontSize: anchorFontSize } } : {})}
       >
-        打开菜单
+        {iconOnlyAnchor ? <svg aria-hidden="true" /> : '打开菜单'}
       </button>
       <PopoverMenu
         open={open}
@@ -211,6 +214,19 @@ describe('PopoverMenu', () => {
   it('mirrors the anchor font size so the menu belongs to its trigger', () => {
     render(<Wrapper open={true} onDismiss={vi.fn()} onSelect={vi.fn()} anchorFontSize="12px" />);
     expect(screen.getByRole('menu').style.fontSize).toBe('12px');
+  });
+
+  it('keeps the fallback size for an icon-only trigger that has no text of its own', () => {
+    render(
+      <Wrapper
+        open={true}
+        onDismiss={vi.fn()}
+        onSelect={vi.fn()}
+        anchorFontSize="16px"
+        iconOnlyAnchor
+      />,
+    );
+    expect(screen.getByRole('menu').style.fontSize).toBe('');
   });
 
   it('marks destructive items with the danger class', () => {

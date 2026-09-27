@@ -1972,7 +1972,11 @@ button.list-row:where(:not(:disabled)):hover {
   color: inherit;
   background: transparent;
   border: 0;
-  font: inherit;
+  /* 标签字号写在基座：这里原先是 `font: inherit`，简写会把 font-size 一起重置，
+     同特异度下排在后面就顶掉 `.list-row-actions :where(button)` 的 12px 兜底，
+     于是「启用」比同一排「编辑／删除」大一号。字体族与行高交给全局
+     `button { font: inherit }`（元素选择器，权重低于任何类），这里只钉字号。 */
+  font-size: 12px;
   text-align: left;
   cursor: pointer;
 }
@@ -2213,11 +2217,14 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--danger);
   background: var(--danger-soft);
 }
+/* 错误条里的「重试」是这条消息自带的行内动作：只借文字色与浮动位置，
+   字号必须跟正文同档，否则它从 body 继承到 16px，比消息本身还大。 */
 .inline-message.error button {
   float: right;
   color: inherit;
   background: transparent;
   border: 0;
+  font-size: 12px;
 }
 .danger-text {
   color: var(--danger) !important;
