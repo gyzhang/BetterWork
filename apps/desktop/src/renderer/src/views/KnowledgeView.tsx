@@ -15,6 +15,7 @@ import { PageToolbar } from '../components/layout/PageToolbar';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
 import { ViewContainer } from '../components/layout/ViewContainer';
 import { ListRow } from '../components/ListRow';
+import { Modal } from '../components/Modal';
 import { TransientToast } from '../components/TransientToast';
 import type { KnowledgeLibrary } from '../hooks/use-knowledge-library';
 import {
@@ -156,7 +157,7 @@ export function KnowledgePage({
       })
     : documents.map((document) => ({ document }));
   const [removalTarget, setRemovalTarget] = useState<KnowledgeDocumentSummary>();
-  const [adminOpen, setAdminOpen] = useState(false);
+  const [indexDrawerOpen, setIndexDrawerOpen] = useState(false);
   const [pendingEnable, setPendingEnable] = useState<{ profileId: string }>();
   const [pendingRebuild, setPendingRebuild] = useState<'normal' | 'forced'>();
   const [pendingCollectionDelete, setPendingCollectionDelete] = useState<KnowledgeCollection>();
@@ -171,22 +172,29 @@ export function KnowledgePage({
     pendingCollectionDelete !== undefined ||
     pendingJobClear;
 
-  // 键盘可达：Esc 先收起局部提示，再退出详情子视图，最后收起「索引与模型」面板；
-  // 确认框打开时交给确认框自己处理，不越级改界面状态。
+  // 键盘可达：Esc 先收起局部提示，再退出详情子视图。「索引与作业」抽屉与确认框都是
+  // Modal 基座的表面，它们自己处理 Esc，页面不越级替它们关。
   useEffect((): (() => void) => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape' || dialogOpen) return;
+      if (event.key !== 'Escape' || dialogOpen || indexDrawerOpen) return;
       if (toast) {
         dismissToast();
       } else if (detailDocument) {
         closeDocument();
-      } else if (adminOpen) {
-        setAdminOpen(false);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [dialogOpen, dismissToast, toast, detailDocument, adminOpen, closeDocument]);
+  }, [dialogOpen, indexDrawerOpen, dismissToast, toast, detailDocument, closeDocument]);
+
+  // 抽屉是模态：关着的时候也要知道有没有作业在跑，进度因此挂在入口按钮上。
+  const runningJob = activeJobs.find((job) => job.status === 'running') ?? activeJobs[0];
+  const indexEntryLabel = runningJob
+    ? `索引与作业 · 进行中 ${runningJob.completedCount}/${runningJob.totalCount}`
+    : '索引与作业';
+
+  // 条目回看区跟着「展开了哪条作业」走，不区分它来自进行中还是最近作业。
+  const jobDetailVisible = jobDetail !== undefined || jobDetailLoading || jobDetailError !== '';
 
   const filterOptions = [
     { id: 'all', label: '全部资料' },
@@ -272,251 +280,266 @@ export function KnowledgePage({
             <button
               type="button"
               className="knowledge-admin-toggle"
-              aria-expanded={adminOpen}
-              onClick={() => setAdminOpen((open) => !open)}
+              aria-haspopup="dialog"
+              aria-expanded={indexDrawerOpen}
+              onClick={() => setIndexDrawerOpen(true)}
             >
-              索引与模型
+              {indexEntryLabel}
             </button>
           </PageToolbar>
-          {adminOpen && (
-            <section className="knowledge-admin" aria-label="索引与模型管理">
-              <div className="knowledge-admin-row">
-                <label className="knowledge-admin-switch">
-                  <input
-                    type="checkbox"
-                    checked={semanticOn}
-                    disabled={!enableAllowed}
-                    onChange={(event) => {
-                      const next = event.target.checked;
-                      if (next) {
-                        setPendingEnable({ profileId: selectedProfileId });
-                      } else {
-                        trackAction(saveSettings({ semanticEnabled: false }), '停用语义检索');
-                      }
-                    }}
-                  />
-                  语义检索
-                </label>
-                {!enableAllowed && (
-                  <small>
-                    {settings?.unavailableReason ??
-                      '还没有可用的嵌入模型，请先到模型设置配置；关键词检索不受影响。'}
-                  </small>
-                )}
-                {enableAllowed && profileOptions.length > 0 && (
-                  <div className="knowledge-admin-profile">
-                    <span>嵌入模型</span>
-                    <FieldSelect
-                      options={profileOptions}
-                      value={selectedProfileId}
-                      ariaLabel="选择嵌入模型"
-                      onChange={(id) => {
-                        if (!semanticOn) {
-                          setPendingEnable({ profileId: id });
-                          return;
+          {indexDrawerOpen && (
+            <Modal variant="sheet" label="索引与作业" onClose={() => setIndexDrawerOpen(false)}>
+              <header className="knowledge-drawer-head">
+                <h2>索引与作业</h2>
+                <button type="button" onClick={() => setIndexDrawerOpen(false)}>
+                  关闭
+                </button>
+              </header>
+              <div className="knowledge-drawer-body">
+                {activeJobs.length > 0 && (
+                  <section className="knowledge-jobs" aria-label="进行中的作业">
+                    {activeJobs.map((job) => (
+                      <ListRow
+                        key={job.id}
+                        variant="plain"
+                        detail={`${knowledgeJobTitle(job.kind)}：${knowledgeJobStatusLabel(job.status)}${
+                          job.status === 'running' ? ` ${job.completedCount}/${job.totalCount}` : ''
+                        }${job.failedCount > 0 ? ` · 失败 ${job.failedCount}` : ''}`}
+                        actions={
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => trackAction(openJobDetail(job.id), '查看作业条目')}
+                            >
+                              {jobDetail?.jobId === job.id ? '收起条目' : '查看条目'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => trackAction(cancelJob(job.id), '取消作业')}
+                            >
+                              取消
+                            </button>
+                          </>
                         }
-                        trackAction(
-                          saveSettings({ semanticEnabled: true, embeddingProfileId: id }),
-                          '切换嵌入模型',
-                        );
-                      }}
-                    />
-                    <small>切换模型后需手动重建，旧向量不会混入新查询。</small>
-                  </div>
-                )}
-              </div>
-              <div className="knowledge-admin-row">
-                <button
-                  type="button"
-                  disabled={!semanticOn}
-                  onClick={() => setPendingRebuild('normal')}
-                >
-                  重建语义索引
-                </button>
-                <button
-                  type="button"
-                  className="knowledge-admin-danger"
-                  disabled={!semanticOn}
-                  onClick={() => setPendingRebuild('forced')}
-                >
-                  强制重建语义索引
-                </button>
-                <small>
-                  普通重建只更新当前资料的兼容索引；强制重建会立即停用全部旧语义索引。关键词检索始终可用。
-                </small>
-              </div>
-              <div className="knowledge-admin-row">
-                <button
-                  type="button"
-                  onClick={() => trackAction(rebuildKeyword(), '重建关键词索引')}
-                >
-                  重建关键词索引
-                </button>
-                <button
-                  type="button"
-                  disabled={documents.length === 0}
-                  onClick={() => trackAction(checkAllSources(), '检查当前列表来源')}
-                >
-                  检查当前列表来源（{documents.length}）
-                </button>
-                <small>
-                  这两项只在本机进行、不调用模型：关键词重建重写全部登记资料的派生索引，来源检查只比对当前列表里的原件与登记内容是否一致。
-                </small>
-              </div>
-              <div className="knowledge-admin-row knowledge-collections">
-                <strong>集合管理</strong>
-                <form
-                  className="knowledge-collection-create"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    const name = newCollectionName.trim();
-                    if (!name) return;
-                    setNewCollectionName('');
-                    trackAction(createCollection(name), '新建集合');
-                  }}
-                >
-                  <input
-                    value={newCollectionName}
-                    onChange={(event) => setNewCollectionName(event.target.value)}
-                    placeholder="新集合名称…"
-                    aria-label="新集合名称"
-                    maxLength={60}
-                  />
-                  <button type="submit" disabled={!newCollectionName.trim()}>
-                    新建
-                  </button>
-                </form>
-                {collections.length === 0 && <small>还没有集合；资料可先留在全部资料中。</small>}
-                {collections.map((collection) => {
-                  const draftName = renameDrafts[collection.id] ?? collection.name;
-                  return (
-                    <div className="knowledge-collection-row" key={collection.id}>
-                      <input
-                        value={draftName}
-                        onChange={(event) =>
-                          setRenameDrafts((drafts) => ({
-                            ...drafts,
-                            [collection.id]: event.target.value,
-                          }))
-                        }
-                        aria-label={`集合「${collection.name}」的新名称`}
-                        maxLength={60}
                       />
-                      <button
-                        type="button"
-                        disabled={!draftName.trim() || draftName.trim() === collection.name}
-                        onClick={() => {
-                          const name = draftName.trim();
-                          setRenameDrafts((drafts) => {
-                            const next = { ...drafts };
-                            delete next[collection.id];
-                            return next;
-                          });
-                          trackAction(
-                            renameCollection(collection.id, name, collection.revision),
-                            '改名集合',
-                          );
+                    ))}
+                  </section>
+                )}
+                <section className="knowledge-admin" aria-label="索引与模型管理">
+                  <div className="knowledge-admin-row">
+                    <label className="knowledge-admin-switch">
+                      <input
+                        type="checkbox"
+                        checked={semanticOn}
+                        disabled={!enableAllowed}
+                        onChange={(event) => {
+                          const next = event.target.checked;
+                          if (next) {
+                            setPendingEnable({ profileId: selectedProfileId });
+                          } else {
+                            trackAction(saveSettings({ semanticEnabled: false }), '停用语义检索');
+                          }
                         }}
-                      >
-                        改名
-                      </button>
-                      <button
-                        type="button"
-                        className="knowledge-admin-danger"
-                        onClick={() => setPendingCollectionDelete(collection)}
-                      >
-                        删除
-                      </button>
-                    </div>
-                  );
-                })}
-                <small>集合只是本地分类：不移动本机文件，也不改变任务已固定的材料。</small>
-              </div>
-            </section>
-          )}
-          {(activeJobs.length > 0 || recentJobs.length > 0) && (
-            <section className="knowledge-jobs" aria-label="索引作业">
-              {activeJobs.map((job) => (
-                <ListRow
-                  key={job.id}
-                  variant="plain"
-                  detail={`${knowledgeJobTitle(job.kind)}：${knowledgeJobStatusLabel(job.status)}${
-                    job.status === 'running' ? ` ${job.completedCount}/${job.totalCount}` : ''
-                  }${job.failedCount > 0 ? ` · 失败 ${job.failedCount}` : ''}`}
-                  actions={
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => trackAction(openJobDetail(job.id), '查看作业条目')}
-                      >
-                        {jobDetail?.jobId === job.id ? '收起条目' : '查看条目'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => trackAction(cancelJob(job.id), '取消作业')}
-                      >
-                        取消
-                      </button>
-                    </>
-                  }
-                />
-              ))}
-              {recentJobs.length > 0 && (
-                <details className="knowledge-recent-jobs">
-                  <summary>
-                    <span>{`最近作业（含已取消）· ${recentJobs.length} 条`}</span>
+                      />
+                      语义检索
+                    </label>
+                    {!enableAllowed && (
+                      <small>
+                        {settings?.unavailableReason ??
+                          '还没有可用的嵌入模型，请先到模型设置配置；关键词检索不受影响。'}
+                      </small>
+                    )}
+                    {enableAllowed && profileOptions.length > 0 && (
+                      <div className="knowledge-admin-profile">
+                        <span>嵌入模型</span>
+                        <FieldSelect
+                          options={profileOptions}
+                          value={selectedProfileId}
+                          ariaLabel="选择嵌入模型"
+                          onChange={(id) => {
+                            if (!semanticOn) {
+                              setPendingEnable({ profileId: id });
+                              return;
+                            }
+                            trackAction(
+                              saveSettings({ semanticEnabled: true, embeddingProfileId: id }),
+                              '切换嵌入模型',
+                            );
+                          }}
+                        />
+                        <small>切换模型后需手动重建，旧向量不会混入新查询。</small>
+                      </div>
+                    )}
+                  </div>
+                  <div className="knowledge-admin-row">
                     <button
-                      className="danger-text"
                       type="button"
-                      onClick={(event) => {
-                        // 折叠标题里的按钮不该顺手切换展开状态：只打开确认框。
+                      disabled={!semanticOn}
+                      onClick={() => setPendingRebuild('normal')}
+                    >
+                      重建语义索引
+                    </button>
+                    <button
+                      type="button"
+                      className="knowledge-admin-danger"
+                      disabled={!semanticOn}
+                      onClick={() => setPendingRebuild('forced')}
+                    >
+                      强制重建语义索引
+                    </button>
+                    <small>
+                      普通重建只更新当前资料的兼容索引；强制重建会立即停用全部旧语义索引。关键词检索始终可用。
+                    </small>
+                  </div>
+                  <div className="knowledge-admin-row">
+                    <button
+                      type="button"
+                      onClick={() => trackAction(rebuildKeyword(), '重建关键词索引')}
+                    >
+                      重建关键词索引
+                    </button>
+                    <button
+                      type="button"
+                      disabled={documents.length === 0}
+                      onClick={() => trackAction(checkAllSources(), '检查当前列表来源')}
+                    >
+                      检查当前列表来源（{documents.length}）
+                    </button>
+                    <small>
+                      这两项只在本机进行、不调用模型：关键词重建重写全部登记资料的派生索引，来源检查只比对当前列表里的原件与登记内容是否一致。
+                    </small>
+                  </div>
+                  <div className="knowledge-admin-row knowledge-collections">
+                    <strong>集合管理</strong>
+                    <form
+                      className="knowledge-collection-create"
+                      onSubmit={(event) => {
                         event.preventDefault();
-                        setPendingJobClear(true);
+                        const name = newCollectionName.trim();
+                        if (!name) return;
+                        setNewCollectionName('');
+                        trackAction(createCollection(name), '新建集合');
                       }}
                     >
-                      清空
-                    </button>
-                  </summary>
-                  {recentJobs.map((job) => (
-                    <ListRow
-                      key={job.id}
-                      variant="plain"
-                      detail={`${knowledgeJobTitle(job.kind)}：${knowledgeJobStatusLabel(job.status)} ${job.completedCount}/${job.totalCount}${
-                        job.failedCount > 0 ? ` · 失败 ${job.failedCount}` : ''
-                      }${job.failure ? ` · ${job.failure.message}` : ''}`}
-                      actions={
-                        <button
-                          type="button"
-                          onClick={() => trackAction(openJobDetail(job.id), '查看作业条目')}
-                        >
-                          {jobDetail?.jobId === job.id ? '收起条目' : '查看条目'}
-                        </button>
-                      }
-                    />
-                  ))}
-                </details>
-              )}
-              {jobDetailLoading && <small>正在读取条目…</small>}
-              {jobDetailError && <p className="inline-message error">{jobDetailError}</p>}
-              {jobDetail && (
-                <ul className="knowledge-job-items">
-                  {jobDetail.items.map((item) => (
-                    <li key={item.id}>
-                      {`${item.fileName ?? item.documentId ?? '条目'} · ${knowledgeJobItemStatusLabel(
-                        item.status,
-                      )} · ${knowledgeJobPhaseLabel(item.phase)}`}
-                      {item.status === 'running' && (item.totalUnits ?? 0) > 0
-                        ? ` ${item.completedUnits}/${item.totalUnits ?? 0}`
-                        : ''}
-                      {item.failure ? ` · ${item.failure.message}` : ''}
-                    </li>
-                  ))}
-                  {jobDetail.items.length === 0 && <li>这条作业没有留下可回看的条目。</li>}
-                </ul>
-              )}
-            </section>
+                      <input
+                        value={newCollectionName}
+                        onChange={(event) => setNewCollectionName(event.target.value)}
+                        placeholder="新集合名称…"
+                        aria-label="新集合名称"
+                        maxLength={60}
+                      />
+                      <button type="submit" disabled={!newCollectionName.trim()}>
+                        新建
+                      </button>
+                    </form>
+                    {collections.length === 0 && (
+                      <small>还没有集合；资料可先留在全部资料中。</small>
+                    )}
+                    {collections.map((collection) => {
+                      const draftName = renameDrafts[collection.id] ?? collection.name;
+                      return (
+                        <div className="knowledge-collection-row" key={collection.id}>
+                          <input
+                            value={draftName}
+                            onChange={(event) =>
+                              setRenameDrafts((drafts) => ({
+                                ...drafts,
+                                [collection.id]: event.target.value,
+                              }))
+                            }
+                            aria-label={`集合「${collection.name}」的新名称`}
+                            maxLength={60}
+                          />
+                          <button
+                            type="button"
+                            disabled={!draftName.trim() || draftName.trim() === collection.name}
+                            onClick={() => {
+                              const name = draftName.trim();
+                              setRenameDrafts((drafts) => {
+                                const next = { ...drafts };
+                                delete next[collection.id];
+                                return next;
+                              });
+                              trackAction(
+                                renameCollection(collection.id, name, collection.revision),
+                                '改名集合',
+                              );
+                            }}
+                          >
+                            改名
+                          </button>
+                          <button
+                            type="button"
+                            className="knowledge-admin-danger"
+                            onClick={() => setPendingCollectionDelete(collection)}
+                          >
+                            删除
+                          </button>
+                        </div>
+                      );
+                    })}
+                    <small>集合只是本地分类：不移动本机文件，也不改变任务已固定的材料。</small>
+                  </div>
+                </section>
+                {recentJobs.length > 0 && (
+                  <section className="knowledge-jobs" aria-label="最近作业">
+                    <div className="knowledge-jobs-head">
+                      <strong>{`最近作业（含已取消）· ${recentJobs.length} 条`}</strong>
+                      <button
+                        className="danger-text"
+                        type="button"
+                        onClick={() => setPendingJobClear(true)}
+                      >
+                        清空
+                      </button>
+                    </div>
+                    {recentJobs.map((job) => (
+                      <ListRow
+                        key={job.id}
+                        variant="plain"
+                        detail={`${knowledgeJobTitle(job.kind)}：${knowledgeJobStatusLabel(job.status)} ${job.completedCount}/${job.totalCount}${
+                          job.failedCount > 0 ? ` · 失败 ${job.failedCount}` : ''
+                        }${job.failure ? ` · ${job.failure.message}` : ''}`}
+                        actions={
+                          <button
+                            type="button"
+                            onClick={() => trackAction(openJobDetail(job.id), '查看作业条目')}
+                          >
+                            {jobDetail?.jobId === job.id ? '收起条目' : '查看条目'}
+                          </button>
+                        }
+                      />
+                    ))}
+                  </section>
+                )}
+                {jobDetailVisible && (
+                  <section className="knowledge-jobs" aria-label="作业条目">
+                    {jobDetailLoading && <small>正在读取条目…</small>}
+                    {jobDetailError && <p className="inline-message error">{jobDetailError}</p>}
+                    {jobDetail && (
+                      <ul className="knowledge-job-items">
+                        {jobDetail.items.map((item) => (
+                          <li key={item.id}>
+                            {`${item.fileName ?? item.documentId ?? '条目'} · ${knowledgeJobItemStatusLabel(
+                              item.status,
+                            )} · ${knowledgeJobPhaseLabel(item.phase)}`}
+                            {item.status === 'running' && (item.totalUnits ?? 0) > 0
+                              ? ` ${item.completedUnits}/${item.totalUnits ?? 0}`
+                              : ''}
+                            {item.failure ? ` · ${item.failure.message}` : ''}
+                          </li>
+                        ))}
+                        {jobDetail.items.length === 0 && <li>这条作业没有留下可回看的条目。</li>}
+                      </ul>
+                    )}
+                  </section>
+                )}
+                {error && <p className="inline-message error">{error}</p>}
+              </div>
+            </Modal>
           )}
-          {error && <p className="inline-message error">{error}</p>}
+          {/* 抽屉开着时失败原因显示在抽屉里——页面在它背后，把错误放那儿等于看不见。 */}
+          {!indexDrawerOpen && error && <p className="inline-message error">{error}</p>}
           {issues.length > 0 && (
             <div className="knowledge-issues">
               <strong>以下条目未完成</strong>

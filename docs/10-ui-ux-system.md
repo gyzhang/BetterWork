@@ -236,6 +236,8 @@ Skill 列表分别展示来源（内置/用户）、启用状态、信任状态�
 - 资料详情显示来源、摘要、更新时间和可检索状态
 - 不把向量、Chunk 等实现术语作为默认用户语言
 
+**2026-09-27 界面收口**：知识页不再有内联展开的管理面。工具栏「索引与作业」开一个右侧抽屉（`Modal` 的 `sheet` 变体，480px），自上而下五节——进行中的作业（钉顶端，没有就不出现）、语义检索、本机索引维护、最近作业（含已取消）＋清空、集合管理；关着抽屉时进度写在入口按钮上（`索引与作业 · 进行中 5/9`），Esc 归抽屉自己，页面不越级。原型与拍板记录见[知识页抽屉评审](prototype/knowledge-index-drawer/README.md)。
+
 2026-09-24 补齐设计见[知识基础闭环 §5](designs/knowledge-foundation.md#5-文档线框与交互评审)：勾选资料创建研究草稿、固定修订文本详情、当前 Run 访问来源、索引作业与集合管理。该文档线框待 KM00 评审，本轮未实现 UI；沿用本规范 §8.3 的页面骨架与 §11.5.1 的反馈通道，知识页不新增常驻任务右栏或一级导航。
 
 ### 7.5 模型设置
@@ -544,7 +546,7 @@ UI Foundation 首批提供四套成对色系：
 
 **浮层一律复用 `PopoverMenu` 基座**：下拉、菜单、选择器等脱离文档流的浮层必须走 `components/PopoverMenu.tsx`——背板收起、Esc、焦点归还、方向键导航与视口碰撞处理都在基座里。不得用 `<details>` 或 `position:absolute` 面板自造：2026-09-26 知识卡片的「更多」正是这样写的，三个症状同源——点外面不收起（`<details>` 没有这个语义）、能同时打开两张卡片的菜单、菜单项继承正文 14px 而比自己的 12px 触发按钮还大。基座会把菜单字号镜像成触发控件的计算值，让浮层与触发器看起来属于同一个控件；破坏性菜单项用 `tone: 'danger'` 表达，颜色仍由 Token 决定。护栏锁两条：`.popover-menu-item` 不得自带字号；overlay 阴影只允许出现在登记过的浮层表面（`standards/coding-standard.test.ts`）。
 
-**模态与覆盖层一律复用 `Modal` 基座**：会夺走整页焦点的表面（确认框、抽屉、放映层）走 `components/Modal.tsx` 的 `dialog`／`sheet`／`viewer` 三个变体；锚定在触发器局部、不居中的覆盖层（消息中心）用同文件导出的 `useOverlaySemantics`，只借语义不借定位；但借用者必须把覆盖层 portal 到 `document.body`——被 `inert` 的是整个 `<main>`，2026-09-26 消息中心留在壳内时面板与背板一起被 pointer-events 锁死，滚动、点按钮、点外面全部失效，只剩挂在 window 上的 Esc 还能用。inert 应用主体、Esc、背板点击关闭、初始焦点、Tab 循环、焦点归还、`role=dialog`/`alertdialog` 与 `aria-modal` 全部只有一处实现——此前这里是四套并存：确认框什么都有、模型抽屉只有 `aria-modal` 外壳、放映层自己写键盘、消息中心连 `aria-expanded` 都没有。触发元素必须带 `aria-haspopup="dialog"` 与 `aria-expanded`（消息中心的铃铛已按此补齐）。**模态里可以再开菜单类浮层**，两处交接写在基座里：下拉菜单 portal 在 `document.body` 上、层级高于模态，所以看得见也点得到；Esc 被浮层吃掉时（浮层 `preventDefault` 过）模态不跟着一起关；焦点落在浮层里时面板的 Tab 循环不抢焦点（靠浮层根上的 `data-overlay-layer` 识别，两个基座之间不互相 import 类名）。回归见 `Modal.test.tsx`「模态内的菜单类浮层」三条。护栏锁两条：`.modal-panel` 之外的表面不得自带浮层阴影（存量按棘轮只降不升）；渲染层里出现 `role="dialog"`／`aria-modal`／`key === 'Escape'`／旧背板类而没接 `Modal` 或 `useOverlaySemantics` 即失败。
+**模态与覆盖层一律复用 `Modal` 基座**：会夺走整页焦点的表面（确认框、抽屉、放映层）走 `components/Modal.tsx` 的 `dialog`／`sheet`／`viewer` 三个变体；锚定在触发器局部、不居中的覆盖层（消息中心）用同文件导出的 `useOverlaySemantics`，只借语义不借定位；但借用者必须把覆盖层 portal 到 `document.body`——被 `inert` 的是整个 `<main>`，2026-09-26 消息中心留在壳内时面板与背板一起被 pointer-events 锁死，滚动、点按钮、点外面全部失效，只剩挂在 window 上的 Esc 还能用。inert 应用主体、Esc、背板点击关闭、初始焦点、Tab 循环、焦点归还、`role=dialog`/`alertdialog` 与 `aria-modal` 全部只有一处实现——此前这里是四套并存：确认框什么都有、模型抽屉只有 `aria-modal` 外壳、放映层自己写键盘、消息中心连 `aria-expanded` 都没有。触发元素必须带 `aria-haspopup="dialog"` 与 `aria-expanded`（消息中心的铃铛已按此补齐）。**模态可以叠模态与浮层**，交接写在基座里：`useOverlaySemantics` 维护一份打开中的面板栈，Esc 与 Tab 只属于最上面那一层——抽屉里再开确认框时，一次 Esc 只关确认框，下层抽屉留着；确认框关掉后抽屉重新成为最上面一层。同理，下拉菜单 portal 在 `document.body` 上、层级高于模态，所以看得见也点得到；Esc 被浮层吃掉时（浮层 `preventDefault` 过）模态不跟着一起关；焦点落在浮层里时面板的 Tab 循环不抢焦点（靠浮层根上的 `data-overlay-layer` 识别，两个基座之间不互相 import 类名）。回归见 `Modal.test.tsx`「模态内的菜单类浮层」与「模态叠模态」各三条。护栏锁两条：`.modal-panel` 之外的表面不得自带浮层阴影（存量按棘轮只降不升）；渲染层里出现 `role="dialog"`／`aria-modal`／`key === 'Escape'`／旧背板类而没接 `Modal` 或 `useOverlaySemantics` 即失败。
 
 **空态一律用 `EmptyContext`／`EmptyNotice`**：区域级（整块内容区）用 `EmptyContext`——居中、带图标、吃掉整块高度，图标可按语义替换；放不下那种尺寸的列表行与小节用 `EmptyNotice`——只给一行说明，或标题加一句解释。此前侧栏、模型清单、通用设置、MCP 连接、记忆清单、消息中心六处各写各的占位类（`.empty-runs`／`.empty-models`／`.setting-placeholder`／`.notification-empty`），同一个「这里还没有东西」有四种尺寸与配色。护栏锁这些类不得复活。
 

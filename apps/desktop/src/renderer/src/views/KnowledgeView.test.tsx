@@ -179,13 +179,13 @@ describe('KnowledgePage 索引管理护栏（KM09）', () => {
         onResearch={() => undefined}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: '索引与模型' }));
+    fireEvent.click(screen.getByRole('button', { name: '索引与作业' }));
     const toggle = screen.getByRole('checkbox', { name: '语义检索' });
     expect(toggle.hasAttribute('disabled')).toBe(true);
     expect(screen.getByText('还没有配置可用的嵌入模型。')).toBeTruthy();
   });
 
-  it('进行中的作业必须有可见状态与取消入口', () => {
+  it('进行中的作业在抽屉里可见可取消，进度同时挂在入口按钮上', () => {
     const cancelJob = vi.fn(async () => undefined);
     render(
       <KnowledgePage
@@ -193,12 +193,18 @@ describe('KnowledgePage 索引管理护栏（KM09）', () => {
         onResearch={() => undefined}
       />,
     );
+    // 抽屉是模态，关着的时候看不到进度——入口按钮自己带出「进行中 x/y」。
+    const entry = screen.getByRole('button', { name: '索引与作业 · 进行中 1/2' });
+    expect(entry.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(entry.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(entry);
+    expect(entry.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText(/向量索引重建：进行中 1\/2/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '取消' }));
     expect(cancelJob).toHaveBeenCalledWith('job-1');
   });
 
-  it('清空最近作业先确认再走链路，折叠标题上的按钮不切换展开状态', () => {
+  it('清空最近作业先确认再走链路，且只作用于这一节', () => {
     const clearRecentJobs = vi.fn(async () => undefined);
     render(
       <KnowledgePage
@@ -209,13 +215,14 @@ describe('KnowledgePage 索引管理护栏（KM09）', () => {
         onResearch={() => undefined}
       />,
     );
+    fireEvent.click(screen.getByRole('button', { name: '索引与作业' }));
     fireEvent.click(screen.getByRole('button', { name: '清空' }));
     expect(clearRecentJobs).not.toHaveBeenCalled();
     expect(screen.getByText('清空最近作业？')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '清空记录' }));
     expect(clearRecentJobs).toHaveBeenCalledTimes(1);
-    // 「最近作业 · 1 条」这一行还在原处：清空走的是确认框，不是折叠开关。
+    // 确认框不牵连外层：抽屉仍开着，小节标题还在。
     expect(screen.getByText(/最近作业（含已取消）· 1 条/)).toBeTruthy();
   });
 
@@ -230,7 +237,7 @@ describe('KnowledgePage 索引管理护栏（KM09）', () => {
         onResearch={() => undefined}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: '索引与模型' }));
+    fireEvent.click(screen.getByRole('button', { name: '索引与作业' }));
     fireEvent.click(screen.getByRole('checkbox', { name: '语义检索' }));
     expect(saveSettings).not.toHaveBeenCalled();
     expect(screen.getByText('启用语义检索？')).toBeTruthy();
@@ -326,7 +333,7 @@ describe('KnowledgePage 集合护栏（KM11）', () => {
       />,
     );
     expect(screen.getByRole('button', { name: '按集合筛选资料' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '索引与模型' }));
+    fireEvent.click(screen.getByRole('button', { name: '索引与作业' }));
     expect(screen.getByText('集合管理')).toBeTruthy();
     expect(screen.getByDisplayValue('研究')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '删除' }));
@@ -390,7 +397,7 @@ describe('本机索引动作、作业回看与键盘可达（KM15 走查补齐�
     ...overrides,
   });
 
-  it('索引与模型面板提供关键词重建与当前列表来源检查，两者都不出本机', () => {
+  it('「索引与作业」抽屉提供关键词重建与当前列表来源检查，两者都不出本机', () => {
     const rebuildKeyword = vi.fn(async () => undefined);
     const checkAllSources = vi.fn(async () => undefined);
     render(
@@ -399,7 +406,7 @@ describe('本机索引动作、作业回看与键盘可达（KM15 走查补齐�
         onResearch={() => undefined}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: '索引与模型' }));
+    fireEvent.click(screen.getByRole('button', { name: '索引与作业' }));
     fireEvent.click(screen.getByRole('button', { name: '重建关键词索引' }));
     expect(rebuildKeyword).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '检查当前列表来源（1）' }));
@@ -409,12 +416,12 @@ describe('本机索引动作、作业回看与键盘可达（KM15 走查补齐�
 
   it('没有资料时不给可点的「检查全部来源」空转按钮', () => {
     render(<KnowledgePage library={library({ documents: [] })} onResearch={() => undefined} />);
-    fireEvent.click(screen.getByRole('button', { name: '索引与模型' }));
+    fireEvent.click(screen.getByRole('button', { name: '索引与作业' }));
     const check = screen.getByRole('button', { name: '检查当前列表来源（0）' });
     expect(check.hasAttribute('disabled')).toBe(true);
   });
 
-  it('已取消的作业留在最近作业里，默认折叠并可展开逐条目阶段与原因', () => {
+  it('已取消的作业留在抽屉的最近作业一节里，可直接展开逐条目阶段与原因', () => {
     const openJobDetail = vi.fn(async () => undefined);
     render(
       <KnowledgePage
@@ -427,12 +434,8 @@ describe('本机索引动作、作业回看与键盘可达（KM15 走查补齐�
         onResearch={() => undefined}
       />,
     );
-    const heading = screen.getByText('最近作业（含已取消）· 1 条');
-    const group = heading.closest('details');
-    expect(group, '终态作业要收进折叠组，不占满面板').toBeTruthy();
-    expect(group?.hasAttribute('open')).toBe(false);
-    fireEvent.click(heading);
-    expect(group?.hasAttribute('open')).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '索引与作业' }));
+    expect(screen.getByText('最近作业（含已取消）· 1 条')).toBeTruthy();
     expect(screen.getByText(/资料导入：已取消 1\/3/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '查看条目' }));
     expect(openJobDetail).toHaveBeenCalledWith('job-1');
@@ -448,6 +451,7 @@ describe('本机索引动作、作业回看与键盘可达（KM15 走查补齐�
         onResearch={() => undefined}
       />,
     );
+    fireEvent.click(screen.getByRole('button', { name: '索引与作业' }));
     expect(screen.getByText(/损坏材料\.docx · 失败 · 解析提取 · 解析失败/)).toBeTruthy();
   });
 
@@ -487,5 +491,42 @@ describe('本机索引动作、作业回看与键盘可达（KM15 走查补齐�
     );
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(closeDocument).toHaveBeenCalled();
+  });
+
+  it('抽屉里的动作失败，原因显示在抽屉里而不是背后的页面', () => {
+    render(
+      <KnowledgePage
+        library={library({ documents: [summary], error: '创建集合失败：已有同名集合。' })}
+        onResearch={() => undefined}
+      />,
+    );
+    expect(document.querySelectorAll('.inline-message.error')).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole('button', { name: '索引与作业' }));
+    const shown = document.querySelectorAll('.inline-message.error');
+    expect(shown).toHaveLength(1);
+    expect(shown[0]?.closest('.modal-panel')).toBeTruthy();
+  });
+
+  it('抽屉打开时 Esc 只关抽屉，不越级退出详情子视图', () => {
+    const closeDocument = vi.fn();
+    render(
+      <KnowledgePage
+        library={library({
+          documents: [summary],
+          detailDocument: summary,
+          detailRevisions: [revision],
+          detailRevisionId: revision.id,
+          detailPage: page,
+          closeDocument,
+        })}
+        onResearch={() => undefined}
+      />,
+    );
+    const entry = screen.getByRole('button', { name: '索引与作业' });
+    fireEvent.click(entry);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(closeDocument).not.toHaveBeenCalled();
+    expect(entry.getAttribute('aria-expanded')).toBe('false');
   });
 });

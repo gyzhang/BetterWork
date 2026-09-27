@@ -1,6 +1,6 @@
 # 知识页「索引与作业」抽屉低保真评审原型
 
-**评审原型 / 待光哥拍板 / 模拟数据。** 方案 B：把工具栏的「索引与模型」与页面里的「最近作业（含已取消）」合成一个右侧抽屉。打开同目录 [index.html](index.html) 即可回看，无需启动应用或服务。所有数据为合成示例，按钮只改变当前页面内存；刷新或关闭页面即清空，不使用数据库、localStorage、IPC、网络或模型。
+**评审原型 / D1–D6 已批准 / 模拟数据。** 光哥 2026-09-27 查看原型后按推荐方案拍板（B：合成一个抽屉），并指示推进编码与测试；批准不等于人工验收通过。 方案 B：把工具栏的「索引与模型」与页面里的「最近作业（含已取消）」合成一个右侧抽屉。打开同目录 [index.html](index.html) 即可回看，无需启动应用或服务。所有数据为合成示例，按钮只改变当前页面内存；刷新或关闭页面即清空，不使用数据库、localStorage、IPC、网络或模型。
 
 依据：[UI/UX 体系 §7.4 知识页、§10.1 组件台账、§11.5.1 反馈通道决策表](../../10-ui-ux-system.md)、[知识实施契约 §12](../../development/knowledge-contracts.md)、[KM15 人工验收清单](../../development/knowledge-km15-checklist.md)。本文不另立产品或技术契约；拍板前不改生产代码。
 
@@ -29,7 +29,7 @@
 
 ## 拍板后的落地范围
 
-- 新组件 `components/KnowledgeIndexDrawer.tsx`（走 `Modal variant="sheet"`），把 `KnowledgeView` 的 `.knowledge-admin` 面板与「最近作业」折叠组迁入。
+- `KnowledgeView` 内联的 `.knowledge-admin` 面板与「最近作业」折叠组迁入 `Modal variant="sheet"` 抽屉。**实现落点与原型文字有一处出入并已按实际改动修正**：没有另建 `KnowledgeIndexDrawer.tsx`——抽屉内容要用的状态与回调全部在页面里，单独建组件只会得到一份二十多个字段的 props 转接，行为不变而文件更多。抽屉头与唯一滚动区由 `.knowledge-drawer-head` / `.knowledge-drawer-body` 承担，面板几何仍归 Modal。
 - 工具栏入口改名并显示进行中状态；`adminOpen` 页面状态换成抽屉开合，Esc 层级顺序（局部提示 → 详情子视图 → 抽屉）随之调整。
 - 作业进度在抽屉内继续按 `sequence` 合并；抽屉关闭时入口按钮仍显示「进行中 x/y」，不落库、不自建计时器。
 - KM15 清单 §1.1／1.5／2.4／2.7／8.x／9.x 涉及「索引与模型」面板与「最近作业」的操作路径按新界面重写。

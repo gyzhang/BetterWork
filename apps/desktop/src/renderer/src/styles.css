@@ -4224,6 +4224,36 @@ button.list-row:where(:not(:disabled)):hover {
   word-break: break-all;
 }
 /* KM09：索引与模型管理、作业区域 */
+/* 「索引与作业」抽屉：面板几何归 Modal 的 sheet 变体，这里只有头与唯一滚动区。 */
+.knowledge-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.knowledge-drawer-head h2 {
+  margin: 0;
+  /* 与「编辑模型」抽屉同一个标题档（docs/10 §9.7：20px 页面级标题）。 */
+  font-size: 20px;
+}
+.knowledge-drawer-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+  padding-top: 16px;
+}
+.knowledge-jobs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
 .knowledge-admin-toggle {
   align-self: flex-start;
   min-height: var(--control-height);
@@ -4241,7 +4271,6 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin: 10px 0;
   padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-row);
@@ -4310,29 +4339,11 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin: 10px 0;
   padding: 10px 12px;
   color: var(--text-secondary);
   background: var(--brand-soft);
   border-radius: var(--radius-row);
   font-size: 12px;
-}
-/* 终态作业默认收起，进行中的作业仍留在面板上（docs/10 §11.5）。 */
-.knowledge-recent-jobs {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.knowledge-recent-jobs summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-.knowledge-recent-jobs[open] summary {
-  color: var(--text-primary);
 }
 .knowledge-job-items {
   margin: 2px 0 0;

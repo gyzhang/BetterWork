@@ -56,6 +56,12 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
+/**
+ * 打开中的覆盖层面板，按挂载顺序排列。Esc 与 Tab 只属于最上面那一层：
+ * 抽屉里再开确认框时，两层 window 订阅会同时收到同一次 Esc，一次按键关掉两个表面。
+ */
+const openPanels: HTMLElement[] = [];
+
 const focusableWithin = (container: HTMLElement): HTMLElement[] =>
   Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
     (element) => !element.hasAttribute('inert'),
@@ -84,10 +90,15 @@ export function useOverlaySemantics(
     // 模态可以叠在别的覆盖层之上：只有本层是第一个 inert 者时才负责解除。
     const wasInert = application?.hasAttribute('inert') ?? false;
     application?.setAttribute('inert', '');
+    if (panel) openPanels.push(panel);
     const target = initialFocusRef?.current ?? (panel ? focusableWithin(panel)[0] : undefined);
     target?.focus();
 
     return () => {
+      if (panel) {
+        const index = openPanels.indexOf(panel);
+        if (index >= 0) openPanels.splice(index, 1);
+      }
       if (application && !wasInert) application.removeAttribute('inert');
       if (opener instanceof HTMLElement && document.contains(opener)) opener.focus();
     };
@@ -98,6 +109,8 @@ export function useOverlaySemantics(
   useEffect(() => {
     const panel = panelRef.current;
     const onKeyDown = (event: KeyboardEvent): void => {
+      // 不是最上面一层就交给上面那层处理，别替它关闭。
+      if (panel && openPanels.at(-1) !== panel) return;
       if (event.key === 'Escape') {
         // 面板内的浮层已经吃掉这次 Esc（它 preventDefault 过）时只关那一层。
         if (event.defaultPrevented) return;

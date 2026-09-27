@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FieldSelect } from './FieldSelect';
@@ -202,5 +202,61 @@ describe('模态内的菜单类浮层', () => {
 
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.queryByRole('menu')).toBeNull();
+  });
+});
+
+describe('模态叠模态', () => {
+  /** 抽屉里再开确认框：两层都订阅 window 的 Esc，一次按键只能关最上面那层。 */
+  function Stack({ onSheetClose }: { onSheetClose: () => void }): React.JSX.Element {
+    const [confirming, setConfirming] = useState(false);
+    return (
+      <main>
+        <Modal variant="sheet" label="索引与作业" onClose={onSheetClose}>
+          <button type="button" onClick={() => setConfirming(true)}>
+            清空
+          </button>
+        </Modal>
+        {confirming && (
+          <Modal variant="dialog" label="清空最近作业？" alert onClose={() => setConfirming(false)}>
+            <button type="button">清空记录</button>
+          </Modal>
+        )}
+      </main>
+    );
+  }
+
+  it('Esc 只关最上面那层，下层抽屉留着', () => {
+    const onSheetClose = vi.fn();
+    render(<Stack onSheetClose={onSheetClose} />);
+    fireEvent.click(screen.getByRole('button', { name: '清空' }));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(onSheetClose).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.getByRole('dialog', { name: '索引与作业' })).toBeTruthy();
+  });
+
+  it('焦点在确认框里时，下层抽屉的 Tab 循环不抢焦点', () => {
+    render(<Stack onSheetClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '清空' }));
+    const confirm = screen.getByRole('button', { name: '清空记录' });
+    confirm.focus();
+
+    fireEvent.keyDown(window, { key: 'Tab' });
+
+    expect(document.activeElement).toBe(confirm);
+  });
+
+  it('确认框关掉后抽屉重新成为最上面一层，Esc 归它', () => {
+    const onSheetClose = vi.fn();
+    render(<Stack onSheetClose={onSheetClose} />);
+    fireEvent.click(screen.getByRole('button', { name: '清空' }));
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(onSheetClose).toHaveBeenCalledTimes(1);
   });
 });
