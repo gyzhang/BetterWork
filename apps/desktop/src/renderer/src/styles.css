@@ -759,12 +759,17 @@ small {
   color: var(--brand);
   border-color: var(--brand);
 }
+/* 一条发言：标签、正文、就地动作三行，缝由消息块自己的 gap 拥有（§9.8）。
+   动作收进气泡同一个块之前，`.message-actions` 靠 -10px 追回气泡下缘——那条负
+   margin 记的就是「这两块本来属于同一件事」。 */
 .message {
+  display: grid;
   margin: 0 0 18px;
+  gap: 8px;
 }
 .message > span {
   display: block;
-  margin: 0 0 7px 2px;
+  margin-left: 2px;
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 600;
@@ -3602,7 +3607,6 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .message-actions {
   display: flex;
-  margin: -10px 0 18px;
   align-items: center;
   gap: 12px;
 }
@@ -4813,7 +4817,6 @@ select,
   overflow-wrap: anywhere;
 }
 .message.assistant .markdown-preview {
-  margin-top: 12px;
   padding: 0;
   background: transparent;
   border: 0;

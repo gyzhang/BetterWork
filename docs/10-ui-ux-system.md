@@ -529,8 +529,13 @@ UI Foundation 首批提供四套成对色系：
 **明确不做并说明为什么**：`SettingsLayout`／`SettingsNav` 与 `ModelProfileRow` 都只有**一个消费者**
 （分别是 `SettingsPage` 与它内部的模型清单），外壳就是三行 JSX、行本身就是 `ListRow` 填槽——
 包一层只为壳的组件与 §10.1 对 Button／Input 的既有口径同源：**不新增第二处真相**。
-仍待落地：`MessageBlock`、`Composer`（都内联在 `App.tsx`，R3-B）、`PlanStep`、`ArtifactVersionMenu`、
-`ArtifactCard` 两份合并（R3-D）。
+R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBlock.tsx`、
+`Composer`＝`components/Composer.tsx`、`RunSummary`＝`components/RunSummaryRow.tsx`（§10.2 里
+`RunSummary` 与它指的是同一件事），侧栏「最近任务」与上下文面板「执行记录」两处一起改用它；
+`.memory-capture` 那一整块也随消息流外提成 `components/MemoryCapturePanel.tsx`。
+仍待落地：`PlanStep`、`ArtifactVersionMenu`、`Sidebar`／`TaskListItem`、`ArtifactCard` 两份合并（R3-D
+与后续）。`AppShell`／`TitleBar`／`TaskHeader` 按 §10.1 对 Button／Input 的同一口径不做：
+它们的外壳就是窗口装饰与页头，另抽一层只会多出第二处真相。
 
 所有交互组件都必须定义：默认、悬停、聚焦、按下、禁用、加载、成功和错误状态。键盘焦点必须可见，不能只依赖颜色变化。
 
@@ -567,9 +572,19 @@ UI Foundation 首批提供四套成对色系：
 | 来源行 SourceRow（`ListRow` 的具名用法：来源图标＋标题＋定位符·类型＋原文） | `components/SourceRow.tsx` | 已落地：上下文面板「已查阅来源」与成果详情「运行访问记录」两处逐字重复的三元式合成一处，此前两边连图标尺寸（12／10px）与类型详细度都不同——同一条 Evidence 在两处报出不同身份。来源类型→图标／标签的映射是一张表，不是渲染期三元式（`react-hooks/static-components` 会拦在渲染里造组件） |
 
 | 连接状态片 ConnectionStatus（模型档位与 MCP 连接共用的 Badge 映射） | `components/ConnectionStatus.tsx` | 已落地：设置页三处写着 `connection-status` ＋状态后缀的 `<span>` 改成它——此前只有 `.connected`／`.failed` 两条字色规则，同一个「失败」在模型行、Web 搜索小节与 MCP 列表里各自裸着写字色。两种状态枚举共用一张 tone 表，**文案仍各领域自给**（模型说「连接成功」，MCP 说「可用」），Badge 因此补出 `success` 一档 |
+| 消息块 MessageBlock（发言者标签＋正文＋就地动作） | `components/MessageBlock.tsx` | 已落地：§10.2 点名却内联在 `App.tsx` 的气泡外提。「你／算台」两个标签在此定稿；正文排版由 `author` 决定（用户原文预格式、算台走 Markdown）；**就地动作是这条消息的一个槽位**——此前 `.message-actions` 住在气泡外面，靠 `margin: -10px 0 18px` 追回下缘，那条负 margin 记的就是「两块本属一件事」，收进槽位后缝由 `.message` 自己的 grid gap 拥有（§9.8） |
+| 任务输入区 Composer（工作区＋绑定区＋正文＋提交） | `components/Composer.tsx` | 已落地：内联在 `App.tsx` 的 140 行 `<form>` 外提。工作区两颗按钮（打开本地文件夹／新建工作区）原来是**逐字相同**的两段 `reportAction(selectDirectory()…)`，只差一句失败文案，现由页面出一个 `applyWorkspaceDirectory(failureMessage)`；提交与 ⌘／Ctrl＋↵ 合成一个 `onStartRun`，输入法组合中的 Enter 不提交。`submit` 是三档可辨识联合（idle／starting／running＋onStop），与 `locked`（运行中锁绑定区）分列——停止按钮要求确实有一次可停的运行 |
+| 运行摘要行 RunSummaryRow（§10.2 `RunSummary`） | `components/RunSummaryRow.tsx` | 已落地：`ListRow` 的又一种具名填法（与 `SourceRow` 同源）。「状态 · 时间」这句措辞此前四份，侧栏把状态与时间并成一行、上下文面板拆成说明＋meta 两行，同一个运行在两个列表里报出的层次不同；现在行几何归 `ListRow`、**措辞与「没跑过时说什么」归这里**，整行的 `aria-label` 拼「动词＋标题＋状态·时间」，读屏不再只听到标题 |
+| 回答捕获面板 MemoryCapturePanel | `components/MemoryCapturePanel.tsx` | 已落地：消息流里的 `.memory-capture` 整块（只读原文＋选区＋记忆正文）外提，「区间 → 来源选择器」这段推导跟着搬走；契约 §11.1 的口径不变，正文只能来自用户当场选中的片段 |
 **浮层一律复用 `PopoverMenu` 基座**：下拉、菜单、选择器等脱离文档流的浮层必须走 `components/PopoverMenu.tsx`——背板收起、Esc、焦点归还、方向键导航与视口碰撞处理都在基座里。不得用 `<details>` 或 `position:absolute` 面板自造：2026-09-26 知识卡片的「更多」正是这样写的，三个症状同源——点外面不收起（`<details>` 没有这个语义）、能同时打开两张卡片的菜单、菜单项继承正文 14px 而比自己的 12px 触发按钮还大。基座会把菜单字号镜像成触发控件的计算值，让浮层与触发器看起来属于同一个控件；破坏性菜单项用 `tone: 'danger'` 表达，颜色仍由 Token 决定。护栏锁两条：`.popover-menu-item` 不得自带字号；overlay 阴影只允许出现在登记过的浮层表面（`standards/coding-standard.test.ts`）。
 
 **模态与覆盖层一律复用 `Modal` 基座**：会夺走整页焦点的表面（确认框、抽屉、放映层）走 `components/Modal.tsx` 的 `dialog`／`sheet`／`viewer` 三个变体；锚定在触发器局部、不居中的覆盖层（消息中心）用同文件导出的 `useOverlaySemantics`，只借语义不借定位；但借用者必须把覆盖层 portal 到 `document.body`——被 `inert` 的是整个 `<main>`，2026-09-26 消息中心留在壳内时面板与背板一起被 pointer-events 锁死，滚动、点按钮、点外面全部失效，只剩挂在 window 上的 Esc 还能用。inert 应用主体、Esc、背板点击关闭、初始焦点、Tab 循环、焦点归还、`role=dialog`/`alertdialog` 与 `aria-modal` 全部只有一处实现——此前这里是四套并存：确认框什么都有、模型抽屉只有 `aria-modal` 外壳、放映层自己写键盘、消息中心连 `aria-expanded` 都没有。触发元素必须带 `aria-haspopup="dialog"` 与 `aria-expanded`（消息中心的铃铛已按此补齐）。**模态可以叠模态与浮层**，交接写在基座里：`useOverlaySemantics` 维护一份打开中的面板栈，Esc 与 Tab 只属于最上面那一层——抽屉里再开确认框时，一次 Esc 只关确认框，下层抽屉留着；确认框关掉后抽屉重新成为最上面一层。同理，下拉菜单 portal 在 `document.body` 上、层级高于模态，所以看得见也点得到；Esc 被浮层吃掉时（浮层 `preventDefault` 过）模态不跟着一起关；焦点落在浮层里时面板的 Tab 循环不抢焦点（靠浮层根上的 `data-overlay-layer` 识别，两个基座之间不互相 import 类名）。回归见 `Modal.test.tsx`「模态内的菜单类浮层」与「模态叠模态」各三条。护栏锁两条：`.modal-panel` 之外的表面不得自带浮层阴影（存量按棘轮只降不升）；渲染层里出现 `role="dialog"`／`aria-modal`／`key === 'Escape'`／旧背板类而没接 `Modal` 或 `useOverlaySemantics` 即失败。
+
+**消息流与输入区一律走 `MessageBlock`／`Composer`**：一条发言的标签、正文与就地动作是一个块，
+页面不再手写 `<div className="message user">`，也不再在气泡旁边补一条负 margin 把动作追回来；
+任务输入区的工作区行、绑定区、正文与提交住在 `Composer`，页面只给状态与回调。护栏锁两条：
+基座之外出现消息气泡或 `<form className="composer">` 结构即失败；「状态 · 时间」这句运行摘要
+只许在 `RunSummaryRow` 拼一次（`standards/coding-standard.test.ts`）。
 
 **空态一律用 `EmptyContext`／`EmptyNotice`**：区域级（整块内容区）用 `EmptyContext`——居中、带图标、吃掉整块高度，图标可按语义替换；放不下那种尺寸的列表行与小节用 `EmptyNotice`——只给一行说明，或标题加一句解释。此前侧栏、模型清单、通用设置、MCP 连接、记忆清单、消息中心六处各写各的占位类（`.empty-runs`／`.empty-models`／`.setting-placeholder`／`.notification-empty`），同一个「这里还没有东西」有四种尺寸与配色。护栏锁这些类不得复活。
 

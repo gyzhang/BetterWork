@@ -23,32 +23,28 @@ import type {
   WorkspaceReferenceListItem,
   WorkspaceSummary,
 } from '@betterwork/agent-protocol';
-import type { FormEvent, KeyboardEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { deriveActivityGroups } from './activity';
 import { BrandLogo } from './brand-logo';
-import { AsyncButton, InlineLoading } from './components/AsyncButton';
-import { BindingChip, BindingChipBar } from './components/BindingChip';
-import {
-  type CapabilityChip,
-  ComposerCapabilityPicker,
-} from './components/ComposerCapabilityPicker';
+import { InlineLoading } from './components/AsyncButton';
+import { Composer } from './components/Composer';
+import type { CapabilityChip } from './components/ComposerCapabilityPicker';
 import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { ContextPanel } from './components/ContextPanel';
 import { DiscussionCheckpointPanel } from './components/DiscussionCheckpointPanel';
 import { EmptyNotice } from './components/EmptyState';
 import { IconButton } from './components/IconButton';
 import { PageHeader } from './components/layout/PageHeader';
-import { ListRow } from './components/ListRow';
-import { MemoryCaptureSource } from './components/MemoryCaptureSource';
-import { MemoryEditor, type MemoryEditorSubmission } from './components/MemoryEditor';
+import { type MemoryCaptureDraft, MemoryCapturePanel } from './components/MemoryCapturePanel';
+import type { MemoryEditorSubmission } from './components/MemoryEditor';
+import { MessageBlock } from './components/MessageBlock';
 import { ModelEditor } from './components/ModelEditorSheet';
 import { type NavEntry, NavItem, NavList } from './components/NavList';
+import { RunSummaryRow } from './components/RunSummaryRow';
 import { ToolActivity } from './components/ToolActivity';
 import { TransientToast } from './components/TransientToast';
 import { Welcome } from './components/Welcome';
-import { WorkspaceSelector } from './components/WorkspaceSelector';
 import { useAppearance } from './hooks/use-appearance';
 import { useExperts } from './hooks/use-experts';
 import { useKnowledgeLibrary } from './hooks/use-knowledge-library';
@@ -64,7 +60,6 @@ import { useWorkspaceBrief } from './hooks/use-workspace-brief';
 import { useWorkspaceReferences } from './hooks/use-workspace-references';
 import {
   AlertIcon,
-  ArrowUpIcon,
   ArtifactIcon,
   CapabilityIcon,
   ChevronLeftIcon,
@@ -78,21 +73,14 @@ import {
 } from './icons';
 import { describeActionError, reportAction, trackAction } from './lib/async-action';
 import { fileNameOf, formatTime } from './lib/format';
-import { runStatusName } from './lib/labels';
 import { materialReferenceAppliesToWorkspace, materialReferenceKey } from './lib/materials';
-import {
-  excerptOf,
-  type ExcerptRange,
-  finalAssistantAnswer,
-  planCaptureFromSelection,
-} from './lib/memory-capture';
+import { excerptOf, finalAssistantAnswer, planCaptureFromSelection } from './lib/memory-capture';
 import { settleMemoryCall } from './lib/memory-result';
 import { candidatesOfTask } from './lib/memory-suggestions';
 import { buildResearchPrompt } from './lib/research-prompt';
 import { extractAssistantText, finalRunContent, mergeRunEvents } from './lib/run-events';
 import { handleTitlebarDoubleClick } from './lib/titlebar';
 import type { AppView, ContextTab, SettingsTab } from './lib/view-types';
-import { MarkdownPreview } from './markdown-preview';
 import { NotificationCenter, ToastHost, useNotifications } from './notifications';
 import { ArtifactPage } from './views/ArtifactView';
 import { ExpertsPage } from './views/ExpertsView';
@@ -166,13 +154,7 @@ export function App(): React.JSX.Element {
   const [mcpToolBindings, setMcpToolBindings] = useState<McpToolBinding[]>([]);
   const [discussionCheckpoints, setDiscussionCheckpoints] = useState<DiscussionCheckpoint[]>([]);
   /** 人工保存表单（产品设计 §3.1）：只带用户当场选中的片段，不预填整段回答。 */
-  const [memoryCapture, setMemoryCapture] = useState<{
-    runId: string;
-    eventId: string;
-    raw: string;
-    initialContent: string;
-    range: ExcerptRange | undefined;
-  }>();
+  const [memoryCapture, setMemoryCapture] = useState<MemoryCaptureDraft>();
   const [memoryCaptureError, setMemoryCaptureError] = useState('');
   const [pendingCandidateDelete, setPendingCandidateDelete] = useState<MemoryViewItem>();
   const expertModelReference = activeExpert?.modelReference;
@@ -635,6 +617,23 @@ export function App(): React.JSX.Element {
     setArtifactNote(undefined);
     setView('work');
   };
+  /** 打开本地文件夹与新建工作区走的是同一件事：选一个目录并切过去。 */
+  const applyWorkspaceDirectory = (failureMessage: string): void => {
+    reportAction(
+      window.betterwork.workspace.selectDirectory().then((selected) => {
+        if (!selected) return;
+        startNewTask();
+        // 换目录开的是新任务，但保留当场已选的技能片：切目录不等于清草稿。
+        setTaskBindings(taskBindings);
+        workspaceIdRef.current = selected.id;
+        setWorkspace(selected);
+        refreshTasks(selected.id);
+        trackAction(window.betterwork.workspace.listAll().then(setAllWorkspaces), '刷新工作区列表');
+      }),
+      setActionError,
+      failureMessage,
+    );
+  };
   const skills = useSkills({
     onTestRunRequested: (skill) => {
       startNewTask();
@@ -896,10 +895,6 @@ export function App(): React.JSX.Element {
       setIsStarting(false);
     }
   };
-  const submit = (event: FormEvent): void => {
-    event.preventDefault();
-    reportAction(startRun(), setActionError, '无法开始这项工作，请重试。');
-  };
   const createDiscussionCheckpoint = async (
     input: CreateDiscussionCheckpointRequest,
   ): Promise<void> => {
@@ -910,16 +905,6 @@ export function App(): React.JSX.Element {
       setActionError(describeActionError(error, '无法保存讨论节点，请重试。'));
       throw error;
     }
-  };
-  const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (
-      event.key !== 'Enter' ||
-      (!event.metaKey && !event.ctrlKey) ||
-      event.nativeEvent.isComposing
-    )
-      return;
-    event.preventDefault();
-    reportAction(startRun(), setActionError, '无法开始这项工作，请重试。');
   };
   const selectRun = async (run: RunSummary): Promise<void> => {
     setTaskBindings([]);
@@ -1269,17 +1254,13 @@ export function App(): React.JSX.Element {
         <div className="run-list">
           {recentTasks.length === 0 && <EmptyNotice title="你的任务会保存在这里。" />}
           {recentTasks.map((task) => (
-            <ListRow
+            <RunSummaryRow
               key={task.id}
-              variant="plain"
-              selected={task.id === activeTask?.id}
-              onClick={() => reportAction(selectTask(task), setActionError, '无法打开这项任务。')}
+              run={task.latestRun}
               title={task.title}
-              meta={
-                task.latestRun
-                  ? `${runStatusName[task.latestRun.status]} · ${formatTime(task.latestRun.createdAt)}`
-                  : '等待开始'
-              }
+              action="打开任务"
+              selected={task.id === activeTask?.id}
+              onSelect={() => reportAction(selectTask(task), setActionError, '无法打开这项任务。')}
             />
           ))}
         </div>
@@ -1384,124 +1365,102 @@ export function App(): React.JSX.Element {
                                 <span>{formatTime(run.createdAt)}</span>
                               </div>
                             )}
-                            <div className="message user">
-                              <span>你</span>
-                              <p>{run.prompt}</p>
-                            </div>
+                            <MessageBlock author="user" content={run.prompt} />
                             <ToolActivity key={run.id} events={runEvents} />
                             {runAssistantText && (
-                              <div
-                                className="message assistant"
-                                ref={idx === taskAllRuns.length - 1 ? latestReplyRef : undefined}
-                              >
-                                <span>算台</span>
-                                <MarkdownPreview content={runAssistantText} variant="message" />
-                              </div>
+                              <MessageBlock
+                                author="assistant"
+                                content={runAssistantText}
+                                anchorRef={
+                                  idx === taskAllRuns.length - 1 ? latestReplyRef : undefined
+                                }
+                                actions={
+                                  isLatestCompleted ? (
+                                    <>
+                                      <button
+                                        className="text-button"
+                                        onClick={() => {
+                                          const answer = finalAssistantAnswer(runEvents);
+                                          if (!answer) {
+                                            setMemoryCaptureError(
+                                              '这条回答还没有可定位的最终事件，请等运行完成后再记住经验。',
+                                            );
+                                            return;
+                                          }
+                                          // §3.1 与契约 §11.1：只有页面选区在原文里唯一命中才预填，
+                                          // 否则正文留空，让用户在下方只读原文重选，不猜渲染坐标。
+                                          const selected =
+                                            window.getSelection()?.toString().trim() ?? '';
+                                          const plan = planCaptureFromSelection(
+                                            answer.content,
+                                            selected,
+                                          );
+                                          setMemoryCapture({
+                                            runId: run.id,
+                                            eventId: answer.eventId,
+                                            raw: answer.content,
+                                            initialContent: plan.range
+                                              ? excerptOf(answer.content, plan.range)
+                                              : '',
+                                            range: plan.range,
+                                          });
+                                          setMemoryCaptureError(plan.error);
+                                        }}
+                                      >
+                                        记住这段经验
+                                      </button>
+                                      <button
+                                        className="text-button"
+                                        onClick={() =>
+                                          trackAction(saveCurrentArtifact(), '保存成果')
+                                        }
+                                        disabled={currentTaskArtifacts.some(
+                                          (artifact) => artifact.sourceRunId === run.id,
+                                        )}
+                                      >
+                                        <ArtifactIcon size={13} />
+                                        {currentTaskArtifacts.some(
+                                          (artifact) => artifact.sourceRunId === run.id,
+                                        )
+                                          ? '已保存为成果'
+                                          : '保存为成果'}
+                                      </button>
+                                      {artifactNote && (
+                                        <span
+                                          className={
+                                            artifactNote.tone === 'ok'
+                                              ? 'action-note ok'
+                                              : 'action-note error'
+                                          }
+                                        >
+                                          {artifactNote.text}
+                                        </span>
+                                      )}
+                                    </>
+                                  ) : undefined
+                                }
+                              />
                             )}
                             {runFailure?.type === 'run.failed' && (
                               <p className="action-note error run-failure-note" role="alert">
                                 本次运行未完成，回复内容未登记为正式成果。{runFailure.error}
                               </p>
                             )}
-                            {isLatestCompleted && runAssistantText && (
-                              <div className="message-actions">
-                                <button
-                                  className="text-button"
-                                  onClick={() => {
-                                    const answer = finalAssistantAnswer(runEvents);
-                                    if (!answer) {
-                                      setMemoryCaptureError(
-                                        '这条回答还没有可定位的最终事件，请等运行完成后再记住经验。',
-                                      );
-                                      return;
-                                    }
-                                    // §3.1 与契约 §11.1：只有页面选区在原文里唯一命中才预填，
-                                    // 否则正文留空，让用户在下方只读原文重选，不猜渲染坐标。
-                                    const selected = window.getSelection()?.toString().trim() ?? '';
-                                    const plan = planCaptureFromSelection(answer.content, selected);
-                                    setMemoryCapture({
-                                      runId: run.id,
-                                      eventId: answer.eventId,
-                                      raw: answer.content,
-                                      initialContent: plan.range
-                                        ? excerptOf(answer.content, plan.range)
-                                        : '',
-                                      range: plan.range,
-                                    });
-                                    setMemoryCaptureError(plan.error);
-                                  }}
-                                >
-                                  记住这段经验
-                                </button>
-                                <button
-                                  className="text-button"
-                                  onClick={() => trackAction(saveCurrentArtifact(), '保存成果')}
-                                  disabled={currentTaskArtifacts.some(
-                                    (artifact) => artifact.sourceRunId === run.id,
-                                  )}
-                                >
-                                  <ArtifactIcon size={13} />
-                                  {currentTaskArtifacts.some(
-                                    (artifact) => artifact.sourceRunId === run.id,
-                                  )
-                                    ? '已保存为成果'
-                                    : '保存为成果'}
-                                </button>
-                                {artifactNote && (
-                                  <span
-                                    className={
-                                      artifactNote.tone === 'ok'
-                                        ? 'action-note ok'
-                                        : 'action-note error'
-                                    }
-                                  >
-                                    {artifactNote.text}
-                                  </span>
-                                )}
-                              </div>
-                            )}
                             {memoryCapture?.runId === run.id && (
-                              <div className="memory-capture">
-                                <p className="memory-capture-hint">
-                                  来源摘录取自这条回答的原文；正文可以另行改写，改写不会解除来源与依赖。
-                                </p>
-                                <MemoryCaptureSource
-                                  raw={memoryCapture.raw}
-                                  range={memoryCapture.range}
-                                  onRangeChange={(range) => {
-                                    setMemoryCapture({ ...memoryCapture, range });
-                                    setMemoryCaptureError('');
-                                  }}
-                                />
-                                <MemoryEditor
-                                  scopes={memoryCaptureScopes}
-                                  initialContent={memoryCapture.initialContent}
-                                  requireSource
-                                  sourceNote="保留来源：Main 会重查这条回答与它依赖的材料、记忆"
-                                  submitLabel="保留来源并记住"
-                                  {...(memoryCapture.range
-                                    ? {
-                                        sourceSelector: {
-                                          kind: 'run-assistant',
-                                          runId: memoryCapture.runId,
-                                          eventId: memoryCapture.eventId,
-                                          start: memoryCapture.range.start,
-                                          end: memoryCapture.range.end,
-                                        },
-                                      }
-                                    : {})}
-                                  onSubmit={submitMemoryCapture}
-                                  onCancel={() => {
-                                    setMemoryCapture(undefined);
-                                    setMemoryCaptureError('');
-                                  }}
-                                />
-                                {memoryCaptureError && (
-                                  <p className="inline-message error" role="alert">
-                                    {memoryCaptureError}
-                                  </p>
-                                )}
-                              </div>
+                              <MemoryCapturePanel
+                                capture={memoryCapture}
+                                scopes={memoryCaptureScopes}
+                                error={memoryCaptureError}
+                                onRangeChange={(range) => {
+                                  setMemoryCapture({ ...memoryCapture, range });
+                                  setMemoryCaptureError('');
+                                }}
+                                onSubmit={submitMemoryCapture}
+                                onClose={() => {
+                                  setMemoryCapture(undefined);
+                                  setMemoryCaptureError('');
+                                }}
+                              />
                             )}
                             {isRunActive &&
                               runEvents.length > 0 &&
@@ -1524,146 +1483,72 @@ export function App(): React.JSX.Element {
                   </button>
                 </div>
               )}
-              <form className="composer" onSubmit={submit}>
-                <div className="workspace-row">
-                  <WorkspaceSelector
-                    currentWorkspace={workspace}
-                    workspaces={allWorkspaces}
-                    onSelectWorkspace={(selected) => {
-                      startNewTask();
-                      setTaskBindings(taskBindings);
-                      workspaceIdRef.current = selected.id;
-                      setWorkspace(selected);
-                      refreshTasks(selected.id);
-                    }}
-                    onOpenLocalFolder={() =>
-                      reportAction(
-                        window.betterwork.workspace.selectDirectory().then((selected) => {
-                          if (selected) {
-                            startNewTask();
-                            setTaskBindings(taskBindings);
-                            workspaceIdRef.current = selected.id;
-                            setWorkspace(selected);
-                            refreshTasks(selected.id);
-                            trackAction(
-                              window.betterwork.workspace.listAll().then(setAllWorkspaces),
-                              '刷新工作区列表',
-                            );
-                          }
-                        }),
-                        setActionError,
-                        '选择工作区失败，请重试。',
-                      )
-                    }
-                    onNewWorkspace={() =>
-                      reportAction(
-                        window.betterwork.workspace.selectDirectory().then((selected) => {
-                          if (selected) {
-                            startNewTask();
-                            setTaskBindings(taskBindings);
-                            workspaceIdRef.current = selected.id;
-                            setWorkspace(selected);
-                            refreshTasks(selected.id);
-                            trackAction(
-                              window.betterwork.workspace.listAll().then(setAllWorkspaces),
-                              '刷新工作区列表',
-                            );
-                          }
-                        }),
-                        setActionError,
-                        '新建工作区失败，请重试。',
-                      )
-                    }
-                  />
-                </div>
-                <div className="composer-capability-row">
-                  {activeExpert && (
-                    <BindingChipBar label="当前专家">
-                      <BindingChip
-                        name={activeExpert.name}
-                        removeLabel={`移除专家 ${activeExpert.name}`}
-                        leading={<ExpertIcon size={12} />}
-                        tone="brand"
-                        disabled={isRunning}
-                        onRemove={() => {
-                          setActiveExpert(undefined);
-                          setTaskContext(undefined);
-                          setTaskBindings((current) =>
-                            current.filter((chip) => chip.source !== 'expert-preset'),
-                          );
-                        }}
-                      />
-                    </BindingChipBar>
-                  )}
-                  <ComposerCapabilityPicker
-                    skills={skills.skills}
-                    selected={taskBindings}
-                    materials={taskMaterials}
-                    materialCandidates={materialCandidates}
-                    {...(workspace ? { workspaceId: workspace.id } : {})}
-                    {...(materialPickerKind ? { materialPickerKind } : {})}
-                    materialsLoading={materialsLoading}
-                    {...(materialPickerError ? { materialPickerError } : {})}
-                    disabled={isRunning}
-                    {...(isRunning ? { disabledReason: '运行中不可修改' } : {})}
-                    onAdd={(chip) => setTaskBindings((prev) => [...prev, chip])}
-                    onRemove={(id) =>
-                      setTaskBindings((prev) => prev.filter((chip) => chip.id !== id))
-                    }
-                    onRequestSkillDetail={() => {
-                      setView('skills');
-                    }}
-                    onRequestExpert={() => {
-                      setView('experts');
-                      experts.refresh();
-                    }}
-                    onRequestMaterials={requestMaterials}
-                    onDismissMaterialPicker={() => setMaterialPickerKind(undefined)}
-                    onCommitMaterials={commitTaskMaterials}
-                  />
-                </div>
-                <textarea
-                  ref={composerRef}
-                  aria-label="任务输入，按 Command 或 Control 加 Enter 开始工作"
-                  value={prompt}
-                  onChange={(event) => setPrompt(event.target.value)}
-                  onKeyDown={handleComposerKeyDown}
-                  rows={3}
-                  placeholder="告诉算台你想完成什么工作…"
-                />
-                <div className="composer-footer">
-                  <span>
-                    {composerModelLabel} <kbd>⌘/Ctrl ↵</kbd>
-                  </span>
-                  {isRunning && activeRunId ? (
-                    <button
-                      type="button"
-                      className="stop"
-                      onClick={() =>
-                        reportAction(
-                          window.betterwork.runs.cancel({ runId: activeRunId }),
-                          setActionError,
-                          '无法停止这次执行，请重试。',
-                        )
+              <Composer
+                prompt={prompt}
+                onPromptChange={setPrompt}
+                onStartRun={() =>
+                  reportAction(startRun(), setActionError, '无法开始这项工作，请重试。')
+                }
+                submit={
+                  isRunning && activeRunId
+                    ? {
+                        state: 'running',
+                        onStop: () =>
+                          reportAction(
+                            window.betterwork.runs.cancel({ runId: activeRunId }),
+                            setActionError,
+                            '无法停止这次执行，请重试。',
+                          ),
                       }
-                    >
-                      停止
-                    </button>
-                  ) : (
-                    <AsyncButton
-                      type="submit"
-                      busy={isStarting}
-                      disabled={!prompt.trim() || !workspace}
-                      label={
-                        <>
-                          开始工作 <ArrowUpIcon size={13} />
-                        </>
-                      }
-                      busyLabel="正在启动…"
-                    />
-                  )}
-                </div>
-              </form>
+                    : isStarting
+                      ? { state: 'starting' }
+                      : { state: 'idle' }
+                }
+                locked={isRunning}
+                modelLabel={composerModelLabel}
+                textareaRef={composerRef}
+                workspacePicker={{
+                  currentWorkspace: workspace,
+                  workspaces: allWorkspaces,
+                  onSelectWorkspace: (selected) => {
+                    startNewTask();
+                    // 换工作区开的是新任务，但保留当场已选的技能片：切目录不等于清草稿。
+                    setTaskBindings(taskBindings);
+                    workspaceIdRef.current = selected.id;
+                    setWorkspace(selected);
+                    refreshTasks(selected.id);
+                  },
+                  onOpenLocalFolder: () => applyWorkspaceDirectory('选择工作区失败，请重试。'),
+                  onNewWorkspace: () => applyWorkspaceDirectory('新建工作区失败，请重试。'),
+                }}
+                expert={activeExpert}
+                onRemoveExpert={() => {
+                  setActiveExpert(undefined);
+                  setTaskContext(undefined);
+                  setTaskBindings((current) =>
+                    current.filter((chip) => chip.source !== 'expert-preset'),
+                  );
+                }}
+                skills={skills.skills}
+                bindings={taskBindings}
+                onAddBinding={(chip) => setTaskBindings((prev) => [...prev, chip])}
+                onRemoveBinding={(id) =>
+                  setTaskBindings((prev) => prev.filter((chip) => chip.id !== id))
+                }
+                materials={taskMaterials}
+                materialCandidates={materialCandidates}
+                materialsLoading={materialsLoading}
+                {...(materialPickerKind ? { materialPickerKind } : {})}
+                {...(materialPickerError ? { materialPickerError } : {})}
+                onRequestMaterials={requestMaterials}
+                onDismissMaterialPicker={() => setMaterialPickerKind(undefined)}
+                onCommitMaterials={commitTaskMaterials}
+                onRequestSkillDetail={() => setView('skills')}
+                onRequestExpert={() => {
+                  setView('experts');
+                  experts.refresh();
+                }}
+              />
             </div>
           </>
         )}

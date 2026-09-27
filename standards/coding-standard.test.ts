@@ -1612,6 +1612,36 @@ describe('来源行纪律', () => {
   });
 });
 
+describe('消息流与输入区纪律', () => {
+  it('一条发言与任务输入区的结构只有一处实现', () => {
+    // §10.2 把 MessageBlock／Composer 列为业务组件，它们却长期内联在 App.tsx：
+    // 气泡与它下面那排动作之间靠 `.message-actions` 的 -10px margin 相接，
+    // 「这两块属于同一件事」只写在 CSS 的负数里。外提之后结构归基座。
+    const owners = [/components\/MessageBlock\.tsx$/, /components\/Composer\.tsx$/];
+    const offenders = productionPathsUnder('apps/desktop/src/renderer/')
+      .filter((relative) => !owners.some((owner) => owner.test(relative)))
+      .filter((relative) =>
+        /className="message (?:user|assistant)"|className="message-actions"|<form className="composer"/.test(
+          read(relative),
+        ),
+      );
+    expect(offenders, '消息气泡与任务输入区请复用 MessageBlock／Composer（docs/10 §10.1）').toEqual(
+      [],
+    );
+  });
+
+  it('「状态 · 时间」这句运行摘要只许拼一次', () => {
+    // 侧栏「最近任务」把状态与时间并成一行、上下文面板「执行记录」拆成两行，
+    // 同一个运行在两个列表里报出的层次不同（docs/reviews/2026-09-27-ui-reuse-audit.md §3.2）。
+    const offenders = productionPathsUnder('apps/desktop/src/renderer/')
+      .filter((relative) => !relative.endsWith('components/RunSummaryRow.tsx'))
+      .filter((relative) => /runStatusName\[[^\]]*\]\}\s·\s\$\{formatTime/.test(read(relative)));
+    expect(offenders, '运行摘要行的措辞归 RunSummaryRow，页面不再自己拼（docs/10 §10.1）').toEqual(
+      [],
+    );
+  });
+});
+
 describe('页面骨架契约纪律', () => {
   const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
   expect(styles, '找不到 renderer 的 styles.css').toBeDefined();

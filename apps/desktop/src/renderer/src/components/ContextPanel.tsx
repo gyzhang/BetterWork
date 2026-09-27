@@ -45,6 +45,7 @@ import { IconButton } from './IconButton';
 import { ListRow } from './ListRow';
 import { McpToolBindingsPicker } from './McpToolBindingsPicker';
 import { MemorySuggestionList } from './MemorySuggestionList';
+import { RunSummaryRow } from './RunSummaryRow';
 import { SectionHeader } from './SectionHeader';
 import { SourceRow } from './SourceRow';
 import { Tabs } from './Tabs';
@@ -204,15 +205,13 @@ export function ContextPanel({
                   <details className="task-run-history">
                     <summary>执行记录 · {taskRuns.length} 次</summary>
                     {taskRuns.map((run) => (
-                      <ListRow
+                      <RunSummaryRow
                         key={run.id}
-                        variant="plain"
-                        selected={run.id === activeRun?.id}
-                        label={`查看执行记录「${run.prompt}」`}
-                        onClick={() => onSelectRun(run)}
+                        run={run}
                         title={run.prompt}
-                        detail={runStatusName[run.status]}
-                        meta={formatTime(run.createdAt)}
+                        action="查看执行记录"
+                        selected={run.id === activeRun?.id}
+                        onSelect={() => onSelectRun(run)}
                       />
                     ))}
                   </details>

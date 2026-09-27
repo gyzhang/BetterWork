@@ -456,6 +456,37 @@ R3-C 名单里剩下的三项按 §6 的「避免为抽而抽」口径逐条判�
 run-group 那段约 180 行、带约 15 个闭包依赖，需要一次成块的外提）；#14 局部组件下沉 25 个、
 `ArtifactCard` 两份合并、`ListRow` 的「整行可点＋卡片底部动作区」能力缺口。
 
+## 18. R3-B 落地：MessageBlock／Composer／RunSummaryRow，`App.tsx` 降到 1,736 行（2026-09-27 22:40）
+
+§10.2 那份业务组件清单里，`MessageBlock` 与 `Composer` 是最后两个「文档说要有、代码里只有内联 JSX」
+的欠账，`RunSummary` 是第四项「四份拷贝」——本档把它们一并收掉，并把消息流里最重的一块
+`.memory-capture` 一起外提。
+
+| 抽取 | 之前 | 之后 |
+| --- | --- | --- |
+| `components/MessageBlock.tsx` | `<div className="message user">` 与 `assistant` 两处内联，动作排 `.message-actions` 住在气泡**外面**，靠 `margin: -10px 0 18px` 追回下缘 | 发言者标签（你／算台）、正文排版（用户预格式／算台 Markdown）与 `actions` 槽位一处定义；`.message` 改 grid＋`gap: 8px`，负 margin 与 `.markdown-preview` 的 `margin-top: 12px`、标签的 `margin-bottom: 7px` 一并删除（§9.8：缝由容器 gap 拥有） |
+| `components/Composer.tsx` | 140 行 `<form className="composer">` 内联在 `App.tsx`；工作区两颗按钮是**逐字相同**的两段 `reportAction(selectDirectory()…)`，只差一句失败文案；提交与 ⌘＋↵ 各复制一次 `reportAction(startRun()…)` | 页面出一个 `applyWorkspaceDirectory(failureMessage)`、一个 `onStartRun`；`submit` 是 idle／starting／running 三档可辨识联合，`locked` 单独表达「运行中锁绑定区」——停止按钮要求确实有一次可停的运行 |
+| `components/RunSummaryRow.tsx` | 「状态 · 时间」四份：侧栏并成一行、上下文面板拆成说明＋meta 两行，同一个运行在两处报出不同层次；侧栏整行按钮**没有** `aria-label` | 一处措辞＋一个 `action` 动词，`aria-label` 拼「动词「标题」，状态 · 时间」；行几何仍归 `ListRow` |
+| `components/MemoryCapturePanel.tsx` | `.memory-capture` 43 行内联在消息流里，含「区间 → 来源选择器」推导 | 面板自带这段推导，页面只给草稿／错误／回调（`MemoryCaptureDraft` 也随面板走） |
+
+**行数**：`App.tsx` 1,851 → 1,736（−115）。这是 §10 完成判据里「`App.tsx` 真正降下来」的第一步：
+余下的 1,736 行里渲染层只剩导航、消息流编排与各页面分支，控件结构全部外移。
+**护栏** 67 → 69 条：新增「消息气泡与任务输入区的结构只有一处实现」「『状态 · 时间』这句运行摘要
+只许拼一次」，两条同做一次变异验证（在 `EmptyState.tsx` 末尾同时植入气泡类名与摘要拼接，两条一起转红）。
+**测试** 新增 16 项（`MessageBlock` 3／`Composer` 5／`RunSummaryRow` 3／`MemoryCapturePanel` 5），
+其中「输入法组合中的 Enter 不提交」验证过变异：去掉 `isComposing` 判断即转红。
+
+两处判读记录，避免下轮误当成漏抽：
+`runStatusName` 在上下文面板的**活动运行头**（状态点＋状态名＋阶段数）仍留一处用法，那不是列表里的
+运行摘要行，不并入 `RunSummaryRow`；`.message-actions` 也**没有**换成 `ActionBar`——消息底下的两个
+文字按钮紧贴正文左缘才是对的，右侧对齐到 860px 版心边缘会把动作从内容上撕开。
+
+**待光哥在真实界面里回看的视觉后果**（自动测试看不见）：
+① 消息气泡内三条缝（标签→正文 7→8px、正文→动作约 8px、算台 Markdown 少掉的 12px 上缘）；
+② 上下文面板「执行记录」由两行变一行；③ 侧栏「最近任务」观感不变但读屏名称变长；
+④ Composer 外提后的四态：可提交／正在启动／运行中「停止」／没有工作区时禁用；
+⑤ 「记住这段经验」打开的捕获面板与「保留来源并记住」提交流程。
+
 ---
 
 ## 附：本轮核查方式
