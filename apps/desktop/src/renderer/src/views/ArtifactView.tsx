@@ -24,19 +24,13 @@ import { ViewContainer } from '../components/layout/ViewContainer';
 import { ListRow } from '../components/ListRow';
 import { Modal } from '../components/Modal';
 import { SectionHeader } from '../components/SectionHeader';
+import { SourceRow } from '../components/SourceRow';
 import { type ToastTone, TransientToast } from '../components/TransientToast';
 import { useArtifactSourceSelection } from '../hooks/use-artifact-source-selection';
 import { useArtifactThumbnails } from '../hooks/use-artifact-thumbnails';
 import { useArtifactViewer } from '../hooks/use-artifact-viewer';
 import type { WorkspaceReferencesState } from '../hooks/use-workspace-references';
-import {
-  ArtifactIcon,
-  CapabilityIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  GlobeIcon,
-  KnowledgeIcon,
-} from '../icons';
+import { ArtifactIcon, ChevronLeftIcon, ChevronRightIcon, KnowledgeIcon } from '../icons';
 import { reportAction, trackAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
 import { fileTypeLabel } from '../lib/labels';
@@ -305,10 +299,11 @@ export function ArtifactPage({
             ) : null}
             <div className="artifact-detail-layout">
               <aside className="artifact-version-list">
-                <div>
-                  <strong>版本历史</strong>
-                  <span>{versions.length} 个版本</span>
-                </div>
+                <SectionHeader
+                  variant="panel"
+                  title="版本历史"
+                  hint={`${versions.length} 个版本`}
+                />
                 {versions.map((version) => (
                   <ListRow
                     key={version.id}
@@ -324,49 +319,29 @@ export function ArtifactPage({
                 ))}
                 {visibleVersion.evidence.length > 0 && (
                   <div className="artifact-evidence-list">
-                    <strong>运行访问记录</strong>
-                    {visibleVersion.evidence.map((item) => {
-                      const isWeb = item.sourceType === 'web-page';
-                      const isMcp = item.sourceType === 'mcp-tool';
-                      const Icon = isWeb ? GlobeIcon : isMcp ? CapabilityIcon : KnowledgeIcon;
-                      return (
-                        <article key={item.id}>
-                          <b>
-                            <Icon size={10} />
-                          </b>
-                          <div className="artifact-evidence-main">
-                            <span>{item.title}</span>
-                            <small>
-                              {item.locator} ·{' '}
-                              {isMcp ? 'MCP 工具' : isWeb ? '网页来源' : '本地资料'}
-                            </small>
-                          </div>
-                          {!isWeb && !isMcp && (
-                            <button
-                              className="evidence-open-button"
-                              type="button"
-                              onClick={() =>
-                                reportAction(
-                                  onOpenSource(item.sourceUri).then(() =>
-                                    setToast({
-                                      tone: 'success',
-                                      message: `已打开「${item.title}」的原始资料。`,
-                                    }),
-                                  ),
-                                  (errorMessage) =>
-                                    setToast({
-                                      tone: 'error',
-                                      message: errorMessage || '无法打开原始资料。',
-                                    }),
-                                )
-                              }
-                            >
-                              原文
-                            </button>
-                          )}
-                        </article>
-                      );
-                    })}
+                    <SectionHeader variant="panel" title="运行访问记录" />
+                    {visibleVersion.evidence.map((item) => (
+                      <SourceRow
+                        key={item.id}
+                        item={item}
+                        variant="plain"
+                        onOpenSource={() =>
+                          reportAction(
+                            onOpenSource(item.sourceUri).then(() =>
+                              setToast({
+                                tone: 'success',
+                                message: `已打开「${item.title}」的原始资料。`,
+                              }),
+                            ),
+                            (errorMessage) =>
+                              setToast({
+                                tone: 'error',
+                                message: errorMessage || '无法打开原始资料。',
+                              }),
+                          )
+                        }
+                      />
+                    ))}
                   </div>
                 )}
               </aside>

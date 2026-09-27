@@ -767,6 +767,16 @@ const RETIRED_UTILITY_CLASSES: {
     family: 'row',
   },
   {
+    pattern: /\.artifact-evidence-main(?![-\w])/,
+    name: '.artifact-evidence-main（引用行已改 SourceRow／ListRow）',
+    family: 'row',
+  },
+  {
+    pattern: /\.artifact-evidence-list (?:article|b|div|span|small)(?![-\w])/,
+    name: '.artifact-evidence-list 的 article／b／div／span／small 后代行几何',
+    family: 'row',
+  },
+  {
     pattern: /\.model-(?:row|main|actions)(?![-\w])/,
     name: '.model-row／.model-main／.model-actions',
     family: 'row',
@@ -1568,6 +1578,21 @@ describe('导航列表纪律', () => {
     expect(
       offenders,
       '导航行的几何与配色归 NavItem／NavList；位置与折叠态请换自定义属性（docs/10 §9.8）',
+    ).toEqual([]);
+  });
+});
+
+describe('来源行纪律', () => {
+  it('来源类型的图标与标签三元式只允许有一处', () => {
+    // §3.1 P12：`isWeb ? GlobeIcon : isMcp ? CapabilityIcon : KnowledgeIcon` 与
+    // 「MCP 工具／网页来源／本地资料」这组标签此前在上下文面板与成果详情各写一遍，
+    // 而且两边详细度不同——同一条 Evidence 在两处报出不同的身份。
+    const offenders = productionPathsUnder('apps/desktop/src/renderer/')
+      .filter((relative) => /sourceType === '(?:web-page|mcp-tool)'/.test(read(relative)))
+      .filter((relative) => !relative.endsWith('components/SourceRow.tsx'));
+    expect(
+      offenders,
+      '一条来源是哪一类、配哪个图标，只有 SourceRow 一处说了算（docs/10 §10.1）',
     ).toEqual([]);
   });
 });

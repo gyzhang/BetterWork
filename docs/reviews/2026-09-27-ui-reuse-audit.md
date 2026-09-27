@@ -354,6 +354,40 @@ R2-E 是 R2 的收口档：把护栏补齐、把 §4.4 的行漏网与 §4.5 的
 ④ 上下文面板的"本次材料／本次 MCP 工具"两节改用与记忆小节同一个 `.context-section` 壳，
 MCP 那一节不再是灰底圆角卡，而是与相邻小节一样的分隔线小节。
 
+## 14. R3-A 落地状态：SourceRow（2026-09-27 19:50）
+
+§3.1 P12 记的是**同一条三元式写了两遍**：`isWeb ? GlobeIcon : isMcp ? CapabilityIcon : KnowledgeIcon`
+与「MCP 工具／网页来源／本地资料」这组标签，在上下文面板的「已查阅来源」与成果详情的「运行访问记录」
+各有一份。合并时暴露出的不只是重复——**两份拷贝的细节并不一样**：面板会区分「摘要来源／正文来源」
+并注明「历史范围未记录」，成果页只会说「本地资料」；图标一个 12px 一个 10px；右槽按钮一个用行内动作皮、
+一个自造 `.evidence-open-button`。也就是说同一条 Evidence 在两处报出**不同的身份**，
+这比"重复"更糟：用户无法从界面上确认自己看的是不是同一件事。
+
+`components/SourceRow.tsx` 是 `ListRow` 的一个**具名用法**，不是第二套行几何：
+来源类型→图标与类型标签的映射收成一张表（三元式在渲染里造组件会被 `react-hooks/static-components` 拦下），
+`showExcerpt`／`metaExtra`／`actions`／`onOpenSource` 四个入口把差异留在页面上——
+「要不要显示摘要」是版面事实，「查看区间」带着页面的 hook 状态，「打开原文」才是来源行共有的动作，
+并且**只有本地资料会渲染它**（网页与 MCP 的来源就是那次调用本身）。
+成果详情顺手把「版本历史／运行访问记录」两个 `<strong>` 小节头换成 `SectionHeader`，
+`.artifact-evidence-list` 的五条后代行几何删除并登记退役。
+
+**护栏 65 → 66 条**：① 渲染层生产代码里再出现 `sourceType === 'web-page'|'mcp-tool'` 判据即失败
+（只有 `SourceRow.tsx` 允许）；② `.artifact-evidence-list` 的 `article|b|div|span|small` 后代几何入退役清单。
+两条都做过变异验证：在 `Welcome.tsx` 里写一条同样的三元式判据 → ① 转红；写回
+`.artifact-evidence-list span { color }` → ② 与行几何档一起转红。每次验证后整文件回滚并复绿。
+
+**一次真实事故记录（写在这里，因为它正是"回读校验"这条纪律的适用面）**：变异验证时用了
+`cp 原文件 /tmp/s3.bak && … && cp /tmp/s3.bak 原文件` 的备份套路，但 `/tmp/s3.bak` 是**上一轮会话留下的同名文件**，
+`cp` 因链式命令前一步失败而没有覆盖它，还原时把 `styles.css` 退回了 R2 之前的状态——
+23 条护栏同时转红才暴露。处置：`git checkout HEAD -- styles.css` 回到 R2-E 提交态，
+再逐条重放本轮 CSS 编辑（脚本里每条 `assert count==1`），并用 `git diff --stat` 确认
+最终只剩 8 增 63 删。**教训**：临时备份必须用本轮新建的唯一文件名（带时间戳），
+且**还原动作之后必须看一次 `git status`／`git diff --stat`**——工具报成功不代表文件是想要的那份。
+
+**RunSummary 不在本档做**：它的四处拷贝有三处住在 `App.tsx` 的消息流与侧栏里（§3.2 已定位），
+与 R3-B 的 `MessageBlock`＋`Composer` 外提是同一片代码，先外提再抽摘要行才不会改两遍。
+本档只做 `SourceRow`，任务 #11 的范围据此收窄，RunSummary 并入 #12。
+
 ---
 
 ## 附：本轮核查方式

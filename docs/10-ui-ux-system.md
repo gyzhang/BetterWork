@@ -553,6 +553,7 @@ UI Foundation 首批提供四套成对色系：
 | 绑定片 BindingChip／BindingChipBar（名称＋内联控件＋移除 ×） | `components/BindingChip.tsx` | 已落地：Composer 上三套几何各写一遍的片（`.capability-chip` 24px 高／`--selection` 底、`.material-chip` 28px 高／描边、`.expert-chip` 胶囊／品牌色粗体）合成一处，身份差异降成 `tone`（default／brand／danger）一个维度；三套片此前还共用同一个 `.capability-chip-remove` 类，专家片在 `App.tsx` 里直接借能力片的皮（§4.5） |
 | MCP 工具勾选组 McpToolBindingsPicker（按连接分组的 CheckList） | `components/McpToolBindingsPicker.tsx` | 已落地：上下文面板「本次 MCP 工具」与专家编辑「MCP 工具预设」两处逐字相同的 JSX（同一组 `hasMcpToolBinding`／`canToggleMcpTool`／`setMcpToolBinding` 调用＋同一句「尚未检测到工具」）合成一处；它不是新基座，是 `CheckList` 之上的领域组件，页面只保留自己的小节壳 |
 本表是组件层的唯一台账：新增基座必须登记在此，`.qoder/rules/betterwork-ui.md` 与[UI 一致性评估](reviews/2026-09-26-ui-consistency.md)都指向本表。
+| 来源行 SourceRow（`ListRow` 的具名用法：来源图标＋标题＋定位符·类型＋原文） | `components/SourceRow.tsx` | 已落地：上下文面板「已查阅来源」与成果详情「运行访问记录」两处逐字重复的三元式合成一处，此前两边连图标尺寸（12／10px）与类型详细度都不同——同一条 Evidence 在两处报出不同身份。来源类型→图标／标签的映射是一张表，不是渲染期三元式（`react-hooks/static-components` 会拦在渲染里造组件） |
 
 **浮层一律复用 `PopoverMenu` 基座**：下拉、菜单、选择器等脱离文档流的浮层必须走 `components/PopoverMenu.tsx`——背板收起、Esc、焦点归还、方向键导航与视口碰撞处理都在基座里。不得用 `<details>` 或 `position:absolute` 面板自造：2026-09-26 知识卡片的「更多」正是这样写的，三个症状同源——点外面不收起（`<details>` 没有这个语义）、能同时打开两张卡片的菜单、菜单项继承正文 14px 而比自己的 12px 触发按钮还大。基座会把菜单字号镜像成触发控件的计算值，让浮层与触发器看起来属于同一个控件；破坏性菜单项用 `tone: 'danger'` 表达，颜色仍由 Token 决定。护栏锁两条：`.popover-menu-item` 不得自带字号；overlay 阴影只允许出现在登记过的浮层表面（`standards/coding-standard.test.ts`）。
 

@@ -2,7 +2,6 @@ import type {
   AgentRuntimeEvent,
   ArtifactSummary,
   EvidenceSummary,
-  KnowledgeEvidenceSource,
   MaterialCandidate,
   McpConnectionSummary,
   McpToolBinding,
@@ -25,14 +24,7 @@ import type { RunMemoriesState, TaskMemoryExclusionState } from '../hooks/use-ru
 import { useRunSourcePreview } from '../hooks/use-run-source-preview';
 import type { TaskMemoryExclusionsState } from '../hooks/use-task-memory-exclusions';
 import type { WorkspaceBriefState } from '../hooks/use-workspace-brief';
-import {
-  ArtifactIcon,
-  CapabilityIcon,
-  ChevronRightIcon,
-  GlobeIcon,
-  KnowledgeIcon,
-  WarningIcon,
-} from '../icons';
+import { ArtifactIcon, ChevronRightIcon, WarningIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
 import { fileTypeLabel, materialPurposeName, runStatusName } from '../lib/labels';
@@ -54,6 +46,7 @@ import { ListRow } from './ListRow';
 import { McpToolBindingsPicker } from './McpToolBindingsPicker';
 import { MemorySuggestionList } from './MemorySuggestionList';
 import { SectionHeader } from './SectionHeader';
+import { SourceRow } from './SourceRow';
 import { Tabs } from './Tabs';
 import { ToolActivity } from './ToolActivity';
 import { type ToastTone, TransientToast } from './TransientToast';
@@ -402,12 +395,6 @@ export function ContextPanel({
   );
 }
 
-/** 知识 Evidence 的访问类型标签：搜索摘要与正文读取分开呈现（契约 §5.1）。 */
-const knowledgeOperationLabel: Record<KnowledgeEvidenceSource['operation'], string> = {
-  search: '摘要来源',
-  read: '正文来源',
-};
-
 /**
  * 已查阅来源（KM04）：默认只呈现当前 Run，历史运行折叠显式展开；
  * 精确知识来源可回看当时实际返回的区间，legacy 与旧数据只标注范围未记录，
@@ -441,56 +428,34 @@ function EvidenceSection({
   };
 
   const renderRow = (item: EvidenceSummary): React.JSX.Element => {
-    const isWeb = item.sourceType === 'web-page';
-    const isMcp = item.sourceType === 'mcp-tool';
-    const Icon = isWeb ? GlobeIcon : isMcp ? CapabilityIcon : KnowledgeIcon;
     const knowledge = item.knowledgeSource;
-    const sourceLabel = isWeb
-      ? '网页来源'
-      : isMcp
-        ? 'MCP 工具'
-        : knowledge
-          ? knowledgeOperationLabel[knowledge.operation]
-          : '本地资料 · 历史范围未记录';
     const isPreviewing = runSource.selectedEvidenceId === item.id;
     return (
       <Fragment key={item.id}>
-        <ListRow
-          as="article"
-          leading={
-            <span aria-hidden="true">
-              <Icon size={12} />
-            </span>
-          }
-          title={item.title}
-          meta={
-            <>
-              {item.locator} · {sourceLabel}
-              {knowledge
-                ? ` · 修订 ${knowledge.reference.knowledgeRevisionId.slice(0, 8)} · 第 ${knowledge.span.sectionOrdinal + 1} 段 ${knowledge.span.start}–${knowledge.span.end} 字`
-                : ''}
-            </>
-          }
-          actions={
-            <>
-              {knowledge && (
-                <AsyncButton
-                  busy={isPreviewing && runSource.loading}
-                  label="查看区间"
-                  busyLabel="正在回看…"
-                  onClick={() => runSource.previewRunSource(item.runId, item.id)}
-                />
-              )}
-              {!isWeb && !isMcp && (
-                <button type="button" onClick={() => openSourceWithToast(item)}>
-                  原文
-                </button>
-              )}
-            </>
-          }
-        >
-          <p className="list-row-detail">{item.excerpt}</p>
-        </ListRow>
+        <SourceRow
+          item={item}
+          showExcerpt
+          {...(knowledge
+            ? {
+                metaExtra: ` · 修订 ${knowledge.reference.knowledgeRevisionId.slice(0, 8)} · 第 ${
+                  knowledge.span.sectionOrdinal + 1
+                } 段 ${knowledge.span.start}–${knowledge.span.end} 字`,
+              }
+            : {})}
+          {...(knowledge
+            ? {
+                actions: (
+                  <AsyncButton
+                    busy={isPreviewing && runSource.loading}
+                    label="查看区间"
+                    busyLabel="正在回看…"
+                    onClick={() => runSource.previewRunSource(item.runId, item.id)}
+                  />
+                ),
+              }
+            : {})}
+          onOpenSource={() => openSourceWithToast(item)}
+        />
         {isPreviewing && <EvidencePreview state={runSource} onClose={runSource.close} />}
       </Fragment>
     );
