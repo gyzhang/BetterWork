@@ -719,7 +719,7 @@ const CHECKBOX_ROW_LABEL_SELECTORS: { readonly match: string; readonly reason: s
 const RETIRED_UTILITY_CLASSES: {
   readonly pattern: RegExp;
   readonly name: string;
-  readonly family: 'badge' | 'empty' | 'heading' | 'row';
+  readonly family: 'action-bar' | 'badge' | 'empty' | 'heading' | 'row';
 }[] = [
   { pattern: /\.skill-chip(?![-\w])/, name: '.skill-chip', family: 'badge' },
   {
@@ -813,12 +813,42 @@ const RETIRED_UTILITY_CLASSES: {
     name: '.discussion-checkpoints-header',
     family: 'heading',
   },
+  {
+    pattern: /\.memory-editor-footer(?![-\w])/,
+    name: '.memory-editor-footer',
+    family: 'action-bar',
+  },
+  {
+    pattern: /\.material-picker-actions(?![-\w])/,
+    name: '.material-picker-actions',
+    family: 'action-bar',
+  },
+  {
+    pattern: /\.mcp-editor-actions(?![-\w])/,
+    name: '.mcp-editor-actions',
+    family: 'action-bar',
+  },
+  {
+    pattern: /\.discussion-checkpoint-footer(?![-\w])/,
+    name: '.discussion-checkpoint-footer',
+    family: 'action-bar',
+  },
+  {
+    pattern: /\.expert-editor-actions(?![-\w])/,
+    name: '.expert-editor-actions',
+    family: 'action-bar',
+  },
+  {
+    pattern: /\.artifact-editor footer/,
+    name: '.artifact-editor footer（含其 div 与 button 后代）',
+    family: 'action-bar',
+  },
 ];
 
 /** 把 retired 清单变成一条断言：任一 CSS 文件里都不得再出现这些选择器。 */
 function assertRetiredClassesAbsent(
   offenders: string[],
-  family: 'badge' | 'empty' | 'heading' | 'row',
+  family: 'action-bar' | 'badge' | 'empty' | 'heading' | 'row',
 ): void {
   const retired = RETIRED_UTILITY_CLASSES.filter((entry) => entry.family === family);
   for (const relative of cssPaths()) {
@@ -1220,6 +1250,135 @@ describe('区块头基座纪律', () => {
     expect(
       offenders,
       '区块头请传 title／hint／eyebrow／actions，不要手排基座的槽位类（docs/10 §10.1）',
+    ).toEqual([]);
+  });
+});
+
+/**
+ * 芯片里的微移除按钮不是面板头那颗方块按钮：它的 10px 命中区属于整枚芯片
+ * （图标＋名称＋×），塞进 IconButton 的 24／28px 方块会把芯片撑破。
+ * R3-A 落 `CapabilityChip` 时随芯片一起收口（docs/reviews/2026-09-27-ui-reuse-audit.md §3.1 P7）。
+ */
+const ICON_BUTTON_EXEMPT_CLASSES = ['capability-chip-remove'];
+
+describe('图标按钮与动作条纪律', () => {
+  const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
+  expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
+  const declarations = declarationsOf(styles ?? '');
+
+  /** `<button` 的开始标签到哪里结束：引号与 `{}` 里的 `>` 都不算（`onClick={() => x()}` 常有）。 */
+  const endOfOpeningTag = (text: string, start: number): number => {
+    let quote = '';
+    let depth = 0;
+    for (let index = start + 1; index < text.length; index += 1) {
+      const char = text[index] ?? '';
+      if (quote) {
+        if (char === quote) quote = '';
+        continue;
+      }
+      if (char === '"' || char === "'") quote = char;
+      else if (char === '{') depth += 1;
+      else if (char === '}') depth -= 1;
+      else if (char === '>' && depth === 0) return index;
+    }
+    return -1;
+  };
+
+  /** 按钮体里只剩下图标（或三元式里两个图标分支）时，它就是一个图标按钮。 */
+  const iconOnlyBody = (body: string): boolean => {
+    if (!/<[A-Z][A-Za-z0-9]*Icon\b/.test(body)) return false;
+    const stripped = body
+      .replace(/<span[^>]*aria-hidden[^>]*>[\s\S]*?<\/span>/g, '')
+      .replace(/<\/?[A-Z][A-Za-z0-9]*Icon\b[^>]*>/g, '')
+      .trim();
+    if (stripped === '') return true;
+    return /^\{[^'"]*\}$/.test(stripped) && !/[\u4e00-\u9fff]/.test(stripped);
+  };
+
+  it('图标即按钮的唯一实现是 IconButton', () => {
+    // 只装一个图标的 `<button>`：可及名称、方块几何与命中区都得由基座负责。
+    // 5 处各写一遍的结果是同一颗关闭按钮有 24／26／30px 三种边长与两种圆角（§3.1 P3）。
+    const offenders: string[] = [];
+    for (const relative of productionPathsUnder('apps/desktop/src/renderer/')) {
+      if (!relative.endsWith('.tsx')) continue;
+      const text = read(relative);
+      for (const match of text.matchAll(/<button\b/g)) {
+        const start = match.index ?? 0;
+        const tagEnd = endOfOpeningTag(text, start);
+        const bodyEnd = text.indexOf('</button>', tagEnd + 1);
+        if (tagEnd < 0 || bodyEnd < 0) continue;
+        const opening = text.slice(start, tagEnd + 1);
+        if (ICON_BUTTON_EXEMPT_CLASSES.some((hook) => opening.includes(hook))) continue;
+        if (!iconOnlyBody(text.slice(tagEnd + 1, bodyEnd))) continue;
+        offenders.push(`${relative}:${text.slice(0, start).split('\n').length} 手搓图标按钮`);
+      }
+    }
+    expect(
+      offenders,
+      '只放图标的按钮请用 IconButton：`aria-label` 与方块几何只有一份（docs/10 §10.1）',
+    ).toEqual([]);
+  });
+
+  it('被动作条基座收编的类不得复活', () => {
+    const offenders: string[] = [];
+    assertRetiredClassesAbsent(offenders, 'action-bar');
+    expect(offenders, '底部动作条请复用 ActionBar（docs/10 §10.1）').toEqual([]);
+  });
+
+  it('图标按钮与动作条的外观只由基座的选择器拥有', () => {
+    // 页面想给某颗关闭按钮挪位置，请把钩子类传进 `className`（如 `.sidebar-collapse-button`
+    // 只留 `margin-left: auto`），不要借 `.icon-button`／`.action-bar` 的名字改它的排布。
+    const offenders = declarations
+      .map((declaration) => ({
+        declaration,
+        selector: declaration.selector.replace(/\/\*[\s\S]*?\*\//g, '').trim(),
+      }))
+      .filter(({ selector }) => /\.(?:icon-button|action-bar)(?![-\w])/.test(selector))
+      .filter(
+        ({ selector }) =>
+          !/^\.(?:icon-button|action-bar|action-bar-hint)(?![-\w])/.test(selector) &&
+          !/^\.icon-button\[data-size/.test(selector) &&
+          !/^\.action-bar-hint(?![-\w])/.test(selector),
+      )
+      .map(({ declaration }) => locate(declaration, styles ?? ''));
+    expect(
+      offenders,
+      '`.icon-button`／`.action-bar` 的外观与排布只住在基座里（docs/10 §9.8）',
+    ).toEqual([]);
+  });
+
+  it('留在图标按钮上的领域钩子不再自带方块', () => {
+    // 这两个钩子允许带着自己那份皮（侧栏那颗要顶到行尾、能力选择器要带边框），
+    // 但方块尺寸、居中与内边距必须回到基座——否则 24／26／28／30px 四种边长又长回来。
+    const ICON_BUTTON_HOOKS: { readonly match: string; readonly reason: string }[] = [
+      { match: 'sidebar-collapse-button', reason: '只留 `margin-left: auto` 这一条定位' },
+      { match: 'capability-picker-trigger', reason: '只留带边框的皮：border／background／color' },
+    ];
+    const offenders = declarations
+      .map((declaration) => ({
+        declaration,
+        selector: declaration.selector.replace(/\/\*[\s\S]*?\*\//g, '').trim(),
+      }))
+      .filter(({ selector }) =>
+        ICON_BUTTON_HOOKS.some((hook) => new RegExp(`\\.${hook.match}(?![-\\w])`).test(selector)),
+      )
+      .filter(({ declaration }) =>
+        [
+          'display',
+          'width',
+          'height',
+          'place-items',
+          'align-items',
+          'justify-content',
+          'padding',
+          'border-radius',
+          'cursor',
+        ].includes(declaration.property),
+      )
+      .map(({ declaration }) => locate(declaration, styles ?? ''));
+    expect(
+      offenders,
+      '图标按钮的方块归 IconButton；钩子只带位置与自己那份皮（docs/10 §10.1）',
     ).toEqual([]);
   });
 });

@@ -12,6 +12,7 @@ import type {
   ResolvedAppearance,
 } from '../appearance';
 import { colorSchemes } from '../appearance';
+import { ActionBar } from '../components/ActionBar';
 import { AsyncButton, InlineLoading } from '../components/AsyncButton';
 import { Badge } from '../components/Badge';
 import { EmptyNotice } from '../components/EmptyState';
@@ -605,15 +606,7 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
               {error}
             </p>
           )}
-          <div className="mcp-editor-actions">
-            <button
-              className="primary-button"
-              type="button"
-              disabled={busyId !== undefined}
-              onClick={save}
-            >
-              保存
-            </button>
+          <ActionBar as="div" label="保存 MCP 连接">
             <button
               className="text-button"
               type="button"
@@ -625,7 +618,15 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
             >
               取消
             </button>
-          </div>
+            <button
+              className="primary-button"
+              type="button"
+              disabled={busyId !== undefined}
+              onClick={save}
+            >
+              保存
+            </button>
+          </ActionBar>
         </div>
       )}
       {toast && <TransientToast {...toast} onDismiss={dismissToast} />}

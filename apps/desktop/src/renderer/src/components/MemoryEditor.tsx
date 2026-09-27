@@ -23,6 +23,7 @@ import {
   memoryScopeLabel,
   toDateInputValue,
 } from '../lib/memory-labels';
+import { ActionBar } from './ActionBar';
 import { AsyncButton } from './AsyncButton';
 import { Field } from './Field';
 import { FieldSelect } from './FieldSelect';
@@ -412,7 +413,7 @@ export function MemoryEditor({
           ))}
         </ul>
       )}
-      <div className="memory-editor-footer">
+      <ActionBar as="div" label="保存经验">
         <button type="button" className="secondary-button" onClick={onCancel} disabled={submitting}>
           取消
         </button>
@@ -424,7 +425,7 @@ export function MemoryEditor({
           busyLabel="正在提交…"
           onClick={submit}
         />
-      </div>
+      </ActionBar>
     </div>
   );
 }

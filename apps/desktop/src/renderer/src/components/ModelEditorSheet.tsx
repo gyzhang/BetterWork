@@ -3,8 +3,10 @@ import type { FormEvent } from 'react';
 
 import { CloseIcon } from '../icons';
 import { trackAction } from '../lib/async-action';
+import { ActionBar } from './ActionBar';
 import { Field } from './Field';
 import { FieldSelect } from './FieldSelect';
+import { IconButton } from './IconButton';
 import { Modal } from './Modal';
 
 const ROLE_OPTIONS = [
@@ -43,9 +45,7 @@ export function ModelEditor({
           <p className="eyebrow">模型配置</p>
           <h2>{editing ? '编辑模型' : '添加模型'}</h2>
         </div>
-        <button aria-label="关闭" onClick={onClose}>
-          <CloseIcon size={14} />
-        </button>
+        <IconButton label="关闭" icon={CloseIcon} onClick={onClose} />
       </header>
       <form onSubmit={(event) => trackAction(onSave(event), '保存模型配置')}>
         <Field label="显示名称">
@@ -128,14 +128,14 @@ export function ModelEditor({
             {error}
           </p>
         )}
-        <footer>
+        <ActionBar label="保存模型配置">
           <button type="button" className="secondary-button" onClick={onTest}>
             测试连接
           </button>
           <button type="submit" className="primary-button">
             {editing ? '保存修改' : '添加模型'}
           </button>
-        </footer>
+        </ActionBar>
       </form>
     </Modal>
   );

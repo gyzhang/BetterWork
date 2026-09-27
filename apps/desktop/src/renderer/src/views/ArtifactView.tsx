@@ -13,6 +13,7 @@ import type {
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useCallback, useRef, useState } from 'react';
 
+import { ActionBar } from '../components/ActionBar';
 import { AsyncButton, InlineLoading } from '../components/AsyncButton';
 import { EmptyPage } from '../components/EmptyState';
 import { Field } from '../components/Field';
@@ -447,17 +448,17 @@ export function ArtifactPage({
                         )}
                       </fieldset>
                     )}
-                    <footer>
-                      <span>保存后会创建 v{selected.versionNumber + 1} 人工修订版本。</span>
-                      <div>
-                        <button type="button" className="secondary-button" onClick={cancelEditing}>
-                          取消
-                        </button>
-                        <button type="submit" className="primary-button">
-                          保存新版本
-                        </button>
-                      </div>
-                    </footer>
+                    <ActionBar
+                      hint={`保存后会创建 v${selected.versionNumber + 1} 人工修订版本。`}
+                      label="保存成果修订"
+                    >
+                      <button type="button" className="secondary-button" onClick={cancelEditing}>
+                        取消
+                      </button>
+                      <button type="submit" className="primary-button">
+                        保存新版本
+                      </button>
+                    </ActionBar>
                   </form>
                 ) : (
                   <MarkdownPreview content={(visibleVersion as { content: string }).content} />

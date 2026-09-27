@@ -50,6 +50,7 @@ import { handleTitlebarDoubleClick } from '../lib/titlebar';
 import type { ContextTab } from '../lib/view-types';
 import { AsyncButton, InlineLoading } from './AsyncButton';
 import { EmptyContext } from './EmptyState';
+import { IconButton } from './IconButton';
 import { ListRow } from './ListRow';
 import { MemorySuggestionList } from './MemorySuggestionList';
 import { SectionHeader } from './SectionHeader';
@@ -171,9 +172,11 @@ export function ContextPanel({
       <aside className="context-panel">
         <div className="context-topline" onDoubleClick={handleTitlebarDoubleClick}>
           <span>当前任务</span>
-          <button aria-label="收起上下文面板" onClick={() => setOpen(false)}>
-            <ChevronRightIcon size={14} />
-          </button>
+          <IconButton
+            label="收起上下文面板"
+            icon={ChevronRightIcon}
+            onClick={() => setOpen(false)}
+          />
         </div>
         <Tabs
           fill

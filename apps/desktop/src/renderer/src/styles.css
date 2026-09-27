@@ -409,21 +409,8 @@ small {
   text-transform: uppercase;
 }
 .sidebar-collapse-button {
-  display: grid;
-  width: 24px;
-  height: 24px;
+  /* 方块、配色与悬停归 IconButton；这里只管它在品牌行里的位置。 */
   margin-left: auto;
-  place-items: center;
-  color: var(--text-muted);
-  background: transparent;
-  border: 0;
-  border-radius: var(--control-radius);
-  font-size: 19px;
-  line-height: 1;
-}
-.sidebar-collapse-button:hover {
-  color: var(--text-primary);
-  background: var(--surface);
 }
 .primary-button {
   display: inline-flex;
@@ -539,7 +526,6 @@ small {
   display: none;
 }
 .sidebar-collapsed .sidebar-collapse-button {
-  position: static;
   margin: 0;
 }
 .sidebar-collapsed .new-task,
@@ -685,13 +671,6 @@ small {
   background: var(--surface-raised);
 }
 
-.discussion-checkpoint-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
 .discussion-checkpoint-summary {
   margin: 8px 0 0;
   color: var(--text-secondary);
@@ -743,11 +722,6 @@ small {
   align-items: center;
   gap: 8px;
   color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.discussion-checkpoint-footer {
-  color: var(--text-muted);
   font-size: 12px;
 }
 
@@ -1003,6 +977,47 @@ small {
   color: var(--text-primary);
   background: var(--surface-raised);
 }
+/* 图标按钮：面板头与条带里的关闭／折叠只有这一档方块（docs/10 §10.1）。
+   此前同样的"一个小图标、悬停才出底"有 5 份写法——24／26／30px 三种边长、
+   `--control-radius` 与 `--radius-tag` 两种圆角、字形 12／14／15px，
+   还有两处留着 `font-size: 19px／22px`：那是用 `×` 字符充当图标的残留，
+   图标改成 SVG 之后它只是把盒子撑高。 */
+.icon-button {
+  display: grid;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  flex: none;
+  place-items: center;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--control-radius);
+}
+.icon-button[data-size='sm'] {
+  width: var(--row-height-sm);
+  height: var(--row-height-sm);
+}
+.icon-button:hover {
+  color: var(--text-primary);
+  background: var(--surface-raised);
+}
+/* 底部动作条：说明在左、按钮在右，主行动永远在最右（docs/10 §10.1）。
+   此前 8 处各写一遍，`gap` 有 8／12 两档、对齐有 flex-end／space-between 两种，
+   取消键一处在最前一处在最后。 */
+.action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.action-bar-hint {
+  /* 左推不是凑缝：它把说明钉在行首，按钮组仍按 gap 排布。 */
+  margin-right: auto;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
 .composer textarea {
   width: 100%;
   padding: 11px 0;
@@ -1078,20 +1093,6 @@ small {
   padding: 0 14px;
   color: var(--text-muted);
   font-size: 12px;
-}
-.context-topline button {
-  width: 26px;
-  height: 26px;
-  color: var(--text-muted);
-  background: transparent;
-  border: 0;
-  border-radius: var(--control-radius);
-  font-size: 22px;
-  line-height: 1;
-}
-.context-topline button:hover {
-  color: var(--text-primary);
-  background: var(--surface);
 }
 .context-panel .tabs {
   /* 面板给的是左右内缩，几何仍归 Tabs 基座。 */
@@ -1785,11 +1786,6 @@ small {
 }
 .expert-card-actions,
 .expert-detail-actions,
-.expert-editor-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
 .expert-editor,
 .expert-detail-page {
   display: flex;
@@ -2798,11 +2794,6 @@ button.list-row:where(:not(:disabled)):hover {
   padding-left: 11px;
   list-style: none;
 }
-.memory-editor-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
 .memory-capture-hint {
   color: var(--text-muted);
   font-size: 12px;
@@ -3221,26 +3212,19 @@ button.list-row:where(:not(:disabled)):hover {
   background: var(--border-subtle);
   color: var(--text-primary);
 }
+/* 能力选择器的触发器：方块、尺寸与光标归 IconButton，这里只留它的带边框皮。 */
 .capability-picker-trigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
   border: 1px solid var(--border);
-  border-radius: var(--control-radius);
   background: var(--surface-raised);
   color: var(--text-secondary);
-  cursor: pointer;
 }
 .capability-picker-trigger:hover:not(:disabled) {
   background: var(--selection);
   color: var(--text-primary);
 }
 .capability-picker-trigger:disabled {
+  /* 光标交给全局 `button:disabled { cursor: not-allowed }`，这里只降透明度。 */
   opacity: 0.5;
-  cursor: default;
 }
 .capability-picker-reason {
   font-size: 12px;
@@ -3337,12 +3321,6 @@ button.list-row:where(:not(:disabled)):hover {
 .material-global-toggle:hover {
   text-decoration: underline;
 }
-.material-picker-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
 .expert-chip-bar {
   display: flex;
   flex-wrap: wrap;
@@ -3375,18 +3353,6 @@ button.list-row:where(:not(:disabled)):hover {
   margin-top: 5px;
   font-size: 20px;
 }
-.model-sheet header button {
-  width: 30px;
-  height: 30px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 0;
-  border-radius: var(--control-radius);
-  font-size: 22px;
-}
-.model-sheet header button:hover {
-  background: var(--surface-raised);
-}
 .model-sheet form {
   display: flex;
   gap: 16px;
@@ -3417,12 +3383,6 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .model-sheet summary {
   cursor: pointer;
-}
-.model-sheet footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding-top: 4px;
 }
 .secondary-button {
   color: var(--text-secondary);
@@ -4002,22 +3962,6 @@ button.list-row:where(:not(:disabled)):hover {
   min-height: 0;
   resize: vertical;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-.artifact-editor footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-.artifact-editor footer > div {
-  display: flex;
-  gap: 8px;
-}
-.artifact-editor footer button {
-  padding: 8px 11px;
-  border-radius: var(--radius-row);
 }
 .artifact-source-select {
   display: flex;
@@ -4686,14 +4630,6 @@ button.list-row:where(:not(:disabled)):hover {
   -webkit-app-region: drag;
   app-region: drag;
 }
-.context-topline button {
-  display: grid;
-  place-items: center;
-}
-.model-sheet header button {
-  display: grid;
-  place-items: center;
-}
 .composer-footer button {
   display: inline-flex;
   align-items: center;
@@ -4918,21 +4854,6 @@ button.list-row:where(:not(:disabled)):hover {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
-.toast button {
-  width: 24px;
-  height: 24px;
-  flex: none;
-  color: var(--text-muted);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-tag);
-  font-size: 16px;
-  line-height: 1;
-}
-.toast button:hover {
-  color: var(--text-primary);
-  background: var(--surface-raised);
-}
 .sidebar-collapsed .sidebar-bottom {
   flex-direction: column;
   gap: 12px;
@@ -4986,21 +4907,6 @@ button.list-row:where(:not(:disabled)):hover {
   margin: 0;
   font-size: 13px;
   line-height: 1.5;
-}
-.action-error-banner button {
-  width: 24px;
-  height: 24px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  color: var(--text-muted);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-tag);
-}
-.action-error-banner button:hover {
-  color: var(--text-primary);
-  background: var(--surface-raised);
 }
 
 /* ---- 动效（docs/10 §9.9）---------------------------------------------
@@ -5377,11 +5283,6 @@ select,
   border-radius: var(--control-radius);
   font: inherit;
   font-size: 13px;
-}
-.mcp-editor-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
 }
 .selected-mcp-panel {
   margin-top: 14px;

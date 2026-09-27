@@ -263,6 +263,24 @@
 
 ---
 
+## 11. R2-C 落地状态（2026-09-27 16:30）
+
+`npm run verify` 退出码 0（功能档 150 文件／1,442 用例，护栏 53 → 57 条）。
+
+**`IconButton`（§3.1 P3）。** 新增 `components/IconButton.tsx`：`label` 必填（图标按钮没有文字，名称只能由属性给），方块两档——`sm` 23px／字形 12 给密集条带，`md` 28px／字形 14 给面板头；`aria-expanded`、`aria-haspopup`、`ref`（浮层锚点）与 `trailing`（徽标）由基座转发。**迁移 6 个渲染点**：侧栏折叠、错误横幅关闭、上下文面板折叠、模型抽屉关闭、结果提示关闭、能力选择器触发器。删掉的四套专属几何原本是 24／26／28／30px 四种边长、`--control-radius` 与 `--radius-tag` 两种圆角、字形 10／12／14／15px，另有两处 `font-size: 19px／22px`——那是 Unicode `×` 字符时代的残留，图标换成 SVG 之后它只负责把盒子撑高。 `.capability-picker-trigger` 与 `.sidebar-collapse-button` 作为领域钩子保留：前者只留带边框的皮（border／background／color），后者只留 `margin-left: auto`。
+
+三处**刻意不迁**：① 消息中心的铃铛（34px 方块 ＋ 未读角标 ＋ 锚点 ref，它是侧栏导航件而不是面板头控件）；② 芯片里的 `.capability-chip-remove`（10px 命中区属于整枚芯片，塞进 24／28px 方块会把芯片撑破，随 R3-A 的 `CapabilityChip` 一起收，登记在护栏的 `ICON_BUTTON_EXEMPT_CLASSES`）；③ 知识详情的分页 `footer`（「上一页／读到哪了／下一页」不是「主行动＋取消」）。
+
+**`ActionBar`（§3.1 P2）。** 新增 `components/ActionBar.tsx`：说明钉在左（`.action-bar-hint`，`margin-right: auto`），按钮按视觉顺序排、主行动恒在最右，容器 `as='footer' | 'div'`，并带 `role="group"` 与动作条名称——**这是全仓第一次给一排按钮一个语义容器**，此前 8 处一个 `role` 都没有。**迁移 7 个渲染点**：记忆编辑、材料选择、MCP 编辑、讨论节点、模型抽屉、成果修订、专家修订。删掉 `.memory-editor-footer`、`.material-picker-actions`、`.mcp-editor-actions`、`.discussion-checkpoint-footer`、`.expert-editor-actions`、`.model-sheet footer` 与 `.artifact-editor footer`（含它的 `> div` 与 `> button` 后代）七套自造排布，`gap` 8／12 与 `justify-content` flex-end／space-between 的分叉并掉。
+
+**一处按约定改掉了现状**：MCP 编辑与专家修订这两排的「取消」原本在主行动**左侧**，另有五排在右侧——同一产品给出相反的按钮顺序。迁移时统一翻成「取消在左、保存在右」。这是本轮唯一一处会改变肌肉记忆顺序的改动，回看时请重点看这两处。
+
+**护栏 53 → 57 条**：① 只装图标的裸 `<button>` 即失败（开始标签按引号与花括号配对解析，`onClick={() => x()}` 里的 `>` 不再骗过扫描）；② `.memory-editor-footer` 等 6 个动作条类不得复活（`RETIRED_UTILITY_CLASSES` 新增 `action-bar` 一档）；③ `.icon-button`／`.action-bar` 的外观与排布只由基座自己的选择器声明；④ 留在图标按钮上的领域钩子不得再写 `display`／`width`／`height`／`place-items`／`padding`／`border-radius`／`cursor`。四条各自做过变异验证：手写一个 `<button aria-label="关闭"><CloseIcon size={12} /></button>`、写回 `.memory-editor-footer { display: flex }`、写回 `.context-panel .icon-button { padding: 4px }`、写回 `.sidebar-collapse-button { width: 30px }`，以及把基座里的 `aria-label={label}` 删掉——五种变异都会被抓到并已在验证后原样回滚。新增 `IconButton.test.tsx` 5 例、`ActionBar.test.tsx` 4 例。
+
+**需要光哥窗口回看的五个视觉点**：① 侧栏折叠按钮 24px → 28px 方块、字形 15px → 14px；② 模型抽屉关闭 30px → 28px，上下文面板折叠 26px → 28px，错误横幅与结果提示关闭 24px → 23px；③ 能力选择器触发器的悬停底色由 `--selection` 保持，但禁用时光标从 `default` 改为全局的 `not-allowed`；④ MCP 编辑与专家修订两排按钮**左右顺序互换**；⑤ 成果编辑器底部那两颗按钮回到标准档内边距（原本是页面自己覆写的 `8px 11px` ＋ `--radius-row`），讨论节点动作条的缝 12px → 8px。
+
+---
+
 ## 附：本轮核查方式
 
 静态统计（Python／grep 脚本，产物在 `/tmp`）＋ 大文件逐一目视阅读＋ 关键结论二次复核（`.inline-message` 配色、`.page-scroll` 双实现、720px 版心、两套 keyframes、8 个死类、13 处 checkbox、`aria-current` 全站唯一、词表分叉）。**未做**：启动应用做视觉判断（按既有分工，界面验收归光哥）、真实模型下的长链路状态观察、`.app` 冷启动。上述"未做"意味着本文所有观感结论都是结构层面的，不能替代一次人工走查。

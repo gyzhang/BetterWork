@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom';
 
 import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { EmptyContext } from './components/EmptyState';
+import { IconButton } from './components/IconButton';
 import { ListRow } from './components/ListRow';
 import { useOverlaySemantics } from './components/Modal';
 import { SectionHeader } from './components/SectionHeader';
@@ -428,9 +429,12 @@ export const ToastHost = ({
             <strong>{toast.notification.title}</strong>
             {toast.notification.detail && <p>{toast.notification.detail}</p>}
           </button>
-          <button aria-label="关闭提醒" onClick={() => onDismiss(toast.id)}>
-            <CloseIcon size={12} />
-          </button>
+          <IconButton
+            label="关闭提醒"
+            icon={CloseIcon}
+            size="sm"
+            onClick={() => onDismiss(toast.id)}
+          />
         </div>
       ))}
     </div>

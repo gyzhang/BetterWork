@@ -37,6 +37,7 @@ import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { ContextPanel } from './components/ContextPanel';
 import { DiscussionCheckpointPanel } from './components/DiscussionCheckpointPanel';
 import { EmptyNotice } from './components/EmptyState';
+import { IconButton } from './components/IconButton';
 import { PageHeader } from './components/layout/PageHeader';
 import { ListRow } from './components/ListRow';
 import { MemoryCaptureSource } from './components/MemoryCaptureSource';
@@ -1223,13 +1224,13 @@ export function App(): React.JSX.Element {
             <strong>算台</strong>
             <small>BetterWork</small>
           </div>
-          <button
+          <IconButton
             className="sidebar-collapse-button"
-            aria-label={sidebarCollapsed ? '展开导航' : '收起导航'}
+            label={sidebarCollapsed ? '展开导航' : '收起导航'}
+            icon={sidebarCollapsed ? ChevronRightIcon : ChevronLeftIcon}
+            expanded={!sidebarCollapsed}
             onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-          >
-            {sidebarCollapsed ? <ChevronRightIcon size={15} /> : <ChevronLeftIcon size={15} />}
-          </button>
+          />
         </div>
         <button className="new-task" onClick={startNewTask}>
           <PlusIcon size={15} /> 新建任务
@@ -1337,9 +1338,12 @@ export function App(): React.JSX.Element {
               <AlertIcon size={13} />
             </span>
             <p>{actionError}</p>
-            <button type="button" aria-label="关闭提示" onClick={() => setActionError('')}>
-              <CloseIcon size={12} />
-            </button>
+            <IconButton
+              label="关闭提示"
+              icon={CloseIcon}
+              size="sm"
+              onClick={() => setActionError('')}
+            />
           </div>
         )}
         {view === 'settings' && (

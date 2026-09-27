@@ -9,8 +9,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CapabilityIcon, CloseIcon, PlusIcon } from '../icons';
 import { materialPurposeName } from '../lib/labels';
 import { materialCandidateKey, taskMaterialKey } from '../lib/materials';
+import { ActionBar } from './ActionBar';
 import { InlineLoading } from './AsyncButton';
 import { FieldSelect } from './FieldSelect';
+import { IconButton } from './IconButton';
 import { PopoverMenu } from './PopoverMenu';
 
 /**
@@ -299,18 +301,16 @@ export function ComposerCapabilityPicker({
           })}
         </div>
       )}
-      <button
-        ref={buttonRef}
-        type="button"
+      <IconButton
+        buttonRef={buttonRef}
         className="capability-picker-trigger"
-        aria-label="添加能力"
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
+        label="添加能力"
+        icon={PlusIcon}
+        hasPopup="menu"
+        expanded={menuOpen}
         onClick={() => setMenuOpen((prev) => !prev)}
         disabled={disabled}
-      >
-        <PlusIcon size={14} />
-      </button>
+      />
       <PopoverMenu
         open={menuOpen}
         anchorRef={buttonRef}
@@ -406,7 +406,7 @@ export function ComposerCapabilityPicker({
           ) : undefined
         }
         footer={
-          <div className="material-picker-actions">
+          <ActionBar as="div" label="添加材料">
             <button type="button" className="text-button" onClick={onDismissMaterialPicker}>
               取消
             </button>
@@ -420,7 +420,7 @@ export function ComposerCapabilityPicker({
             >
               添加已选材料
             </button>
-          </div>
+          </ActionBar>
         }
       />
       {disabled && disabledReason ? (

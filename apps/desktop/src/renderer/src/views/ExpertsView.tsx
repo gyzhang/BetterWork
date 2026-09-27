@@ -10,6 +10,7 @@ import type {
 } from '@betterwork/agent-protocol';
 import { useState } from 'react';
 
+import { ActionBar } from '../components/ActionBar';
 import { AsyncButton } from '../components/AsyncButton';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
 import { Field } from '../components/Field';
@@ -432,7 +433,10 @@ function ExpertEditor({
               )}
             </div>
           </fieldset>
-          <div className="expert-editor-actions">
+          <ActionBar as="div" label="保存专家修订">
+            <button className="text-button" type="button" onClick={onCancel}>
+              取消
+            </button>
             <AsyncButton
               variant="primary"
               busy={saving}
@@ -440,10 +444,7 @@ function ExpertEditor({
               busyLabel="正在保存…"
               onClick={onSave}
             />
-            <button className="text-button" type="button" onClick={onCancel}>
-              取消
-            </button>
-          </div>
+          </ActionBar>
         </div>
       </ScrollRegion>
     </section>
