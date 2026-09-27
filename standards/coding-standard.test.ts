@@ -1765,6 +1765,40 @@ describe('页面骨架契约纪律', () => {
   });
 });
 
+describe('导出面纪律', () => {
+  it('导出的组件必须有跨文件消费者', () => {
+    // §3.4 末与 §3.2「伪导出」：`SettingsView.tsx` 曾把四个只被同文件消费的分区导出成公共 API，
+    // `ContextPanel.tsx` 的 `ActivityGroupRow` 同罪。导出面就是契约面——
+    // 多一个导出，等于全仓多一个可以被绕过的入口，也让「这块到底归谁渲染」从代码里消失。
+    const rendererFiles = pathsUnder('apps/desktop/src/renderer/').filter(
+      (relative) => /\.(tsx|ts)$/.test(relative) && !/\.test\.tsx?$/.test(relative),
+    );
+    const sources = rendererFiles.filter(
+      (relative) =>
+        relative.includes('/views/') ||
+        relative.includes('/components/') ||
+        relative.endsWith('notifications.tsx'),
+    );
+    const offenders: string[] = [];
+    for (const relative of sources) {
+      for (const match of read(relative).matchAll(/^export function ([A-Z]\w*)/gmu)) {
+        const name = match[1];
+        if (name === undefined) continue;
+        const referenced = new RegExp(`\\b${name}\\b`, 'u');
+        const consumed = rendererFiles
+          .concat(pathsUnder('apps/desktop/src/renderer/').filter((r) => /\.test\.tsx?$/.test(r)))
+          .filter((other) => other !== relative)
+          .some((other) => referenced.test(read(other)));
+        if (!consumed) offenders.push(`${relative} → ${name}`);
+      }
+    }
+    expect(
+      offenders,
+      '只被同文件消费的分区不要导出；确实要给别人用的，先有消费者再开出口（docs/12 §3）',
+    ).toEqual([]);
+  });
+});
+
 describe('反馈通道纪律', () => {
   it('内联提示只承载可行动的失败原因', () => {
     // docs/10 §11.5.1 只有三个落点，`.inline-message` 是其中的错误态。

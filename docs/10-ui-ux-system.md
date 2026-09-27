@@ -522,6 +522,16 @@ UI Foundation 首批提供四套成对色系：
 - ContextPanel、SourceList、RunSummary
 - SettingsLayout、SettingsNav、ModelProfileRow、ConnectionStatus
 
+**逐项落地状态（2026-09-27 复核，避免下轮再猜）**：`ToolCallRow`＝`components/ToolActivity.tsx`、
+`SourceList`＋`EvidenceChip`＝`components/SourceRow.tsx`（同一件事的两种叫法，只留一处实现）、
+`ConnectionStatus`＝`components/ConnectionStatus.tsx`、`ConfirmationBlock`＝`components/ConfirmationDialog.tsx`、
+`ActivityGroup`＝`components/ContextPanel.tsx` 导出的 `ActivityGroupRow`。
+**明确不做并说明为什么**：`SettingsLayout`／`SettingsNav` 与 `ModelProfileRow` 都只有**一个消费者**
+（分别是 `SettingsPage` 与它内部的模型清单），外壳就是三行 JSX、行本身就是 `ListRow` 填槽——
+包一层只为壳的组件与 §10.1 对 Button／Input 的既有口径同源：**不新增第二处真相**。
+仍待落地：`MessageBlock`、`Composer`（都内联在 `App.tsx`，R3-B）、`PlanStep`、`ArtifactVersionMenu`、
+`ArtifactCard` 两份合并（R3-D）。
+
 所有交互组件都必须定义：默认、悬停、聚焦、按下、禁用、加载、成功和错误状态。键盘焦点必须可见，不能只依赖颜色变化。
 
 **铁律：写任何 UI 交互前，先查下面这份台账与 `components/` 是否已有实现。缺基座时先补基座再接页面，不得就地自造同类控件**——「更多」菜单用 `<details>` 手搓导致点外面不关、能同开两个、字号比触发按钮大，就是绕过台账的代价（2026-09-26 修复）。

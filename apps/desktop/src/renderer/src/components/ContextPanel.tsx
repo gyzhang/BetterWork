@@ -970,7 +970,7 @@ function HistoryAdjustmentSection({
   );
 }
 
-export function ActivityGroupRow({ group }: { group: ActivityGroup }): React.JSX.Element {
+function ActivityGroupRow({ group }: { group: ActivityGroup }): React.JSX.Element {
   return (
     <div className={`activity-row ${group.status}`}>
       <span className="activity-marker" />

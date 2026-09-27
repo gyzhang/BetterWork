@@ -132,7 +132,7 @@ export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
     </div>
   );
 }
-export function ModelSettings({
+function ModelSettings({
   models,
   modelFilter,
   setModelFilter,
@@ -227,7 +227,7 @@ export function ModelSettings({
     </section>
   );
 }
-export function AppearanceSettings({
+function AppearanceSettings({
   appearance,
   resolvedAppearance,
   onMode,
@@ -415,7 +415,7 @@ interface McpFormState {
 
 const emptyMcpForm = (): McpFormState => ({ name: '', command: '', args: '', cwd: '' });
 
-export function McpSettings({ state }: { state: McpConnectionsState }): React.JSX.Element {
+function McpSettings({ state }: { state: McpConnectionsState }): React.JSX.Element {
   const [form, setForm] = React.useState<McpFormState>(emptyMcpForm);
   const [editingId, setEditingId] = React.useState<string>();
   const [editorOpen, setEditorOpen] = React.useState(false);

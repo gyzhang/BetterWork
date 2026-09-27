@@ -430,6 +430,32 @@ MCP 那一节不再是灰底圆角卡，而是与相邻小节一样的分隔线�
 **R3-C 剩余**：`SettingsLayout`／`SettingsNav`（设置页左右壳现在由 `.settings-content` 与页面自己的 padding 承担）、
 `ModelProfileRow`（`SettingsView.tsx` 里那段已是 ListRow 填槽，下沉成本接近零）。
 
+## 17. R3-C 收尾：三项「不抽」的判定与导出面收敛（2026-09-27 21:09）
+
+R3-C 名单里剩下的三项按 §6 的「避免为抽而抽」口径逐条判定，结论写进 `docs/10` §10.2 的落地状态段，
+不再让下一轮重新猜：
+
+| 项 | 判定 | 依据 |
+| --- | --- | --- |
+| `SettingsLayout`／`SettingsNav` | **不做** | 只有 `SettingsPage` 一个消费者，外壳就是「左导航＋右内容」三行 JSX；包一层只为壳的组件与 §10.1 对 Button／Input 的既有口径同源 |
+| `ModelProfileRow` | **不做** | 同上——`models.map` 里的一个 `ListRow` 填槽，第二处消费者不存在 |
+| `ConnectionStatus` | **已做** | 见 §15 |
+
+**顺带收掉 §3.4 末与 §3.2 的「伪导出」**：`SettingsView.tsx` 的 `ModelSettings`／`AppearanceSettings`／
+`McpSettings` 与 `ContextPanel.tsx` 的 `ActivityGroupRow` 导出后都只被同文件消费，去掉 `export`。
+`SearchSettings` 保留导出，因为 `SettingsView.test.tsx` 直接渲染它——**测试也是消费者**，
+这条边界写进了新护栏的判据里。
+
+**护栏 66 → 67 条**：「导出的组件必须有跨文件消费者」扫 `views/`＋`components/`＋`notifications.tsx`，
+导出名在其它生产文件或任一测试文件里找不到引用即失败。变异验证：在 `Welcome.tsx` 追加一个
+`export function OrphanProbeSection()` → 转红并点名到文件与符号；回滚复绿。
+（第一次探针写成 `export export function …`，双 `export` 让行首正则不匹配，护栏于是"没抓到"——
+**变异验证本身也要验**：先看红的那条消息里有没有预期的符号名，没有就是探针没生效，不是规则失效。）
+
+**R3 剩余**：#12 `MessageBlock`＋`Composer`＋`RunSummary`（`App.tsx` 1,851 行的内联区，
+run-group 那段约 180 行、带约 15 个闭包依赖，需要一次成块的外提）；#14 局部组件下沉 25 个、
+`ArtifactCard` 两份合并、`ListRow` 的「整行可点＋卡片底部动作区」能力缺口。
+
 ---
 
 ## 附：本轮核查方式
