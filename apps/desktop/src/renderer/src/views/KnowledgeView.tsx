@@ -10,6 +10,7 @@ import { AsyncButton, InlineLoading } from '../components/AsyncButton';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, ErrorPage, LoadingPage } from '../components/EmptyState';
 import { FieldSelect } from '../components/FieldSelect';
+import { IconButton } from '../components/IconButton';
 import { KnowledgeDocumentCard } from '../components/KnowledgeDocumentCard';
 import { PageHeader } from '../components/layout/PageHeader';
 import { PageToolbar } from '../components/layout/PageToolbar';
@@ -28,7 +29,7 @@ import {
   knowledgeJobTitle,
   knowledgeModeLabel,
 } from '../hooks/use-knowledge-library';
-import { PlusIcon } from '../icons';
+import { CloseIcon, PlusIcon } from '../icons';
 import { reportAction, trackAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
 import { knowledgeSourceStateName } from '../lib/labels';
@@ -284,9 +285,11 @@ export function KnowledgePage({
             <Modal variant="sheet" label="索引与作业" onClose={() => setIndexDrawerOpen(false)}>
               <header className="knowledge-drawer-head">
                 <h2>索引与作业</h2>
-                <button type="button" onClick={() => setIndexDrawerOpen(false)}>
-                  关闭
-                </button>
+                <IconButton
+                  label="关闭"
+                  icon={CloseIcon}
+                  onClick={() => setIndexDrawerOpen(false)}
+                />
               </header>
               <div className="knowledge-drawer-body">
                 {activeJobs.length > 0 && (

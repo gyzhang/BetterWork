@@ -562,7 +562,7 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 | Switch（`role="switch"` ＋ 恒定名称 ＋ 轨道滑块） | `components/Switch.tsx` | 已落地：全站 13 处 `type="checkbox"` 里只有 4 处真是「开／关」，全部收进这里——知识页语义检索（类名本来就叫 `.knowledge-admin-switch`，实为原生勾选框）、记忆页自动建议与设置页模型启用（两处原来用「开启 X／关闭 X」的按钮文案翻转充当开关，读屏听到的名称随状态改变）、技能页受信任标记。**多选与全选保留原生 checkbox 是正确语义**，不为观感统一塞进开关 |
 | Tooltip / Skeleton | — | 未落地。Progress 只有一枚不确定态 spinner（`.spinner`，由 `InlineLoading` 与页面加载态共用），没有百分比进度条。
 | 片里的微移除按钮 `.binding-chip-remove` | 随 `BindingChip` 一起收 | 刻意不进 IconButton：10px 命中区属于整枚片（图标＋名称＋×），塞进 24／28px 方块会把片撑破；登记在护栏的 `ICON_BUTTON_EXEMPT_CLASSES` 里（§3.1 P7） |
-| 图标按钮 IconButton（sm／md 两档方块） | `components/IconButton.tsx` | 已落地：面板头与条带里「只装一个图标的按钮」收成一处——6 个渲染点（侧栏折叠、错误横幅关闭、上下文面板折叠、模型抽屉关闭、结果提示关闭、能力选择器触发），此前它们是 24／26／28／30px 四种边长、两种圆角、字形 10／12／14／15px，还有两处留着 `font-size: 19px／22px` 配 `×` 字符的旧时代残留；`aria-label` 是必填项，`aria-expanded`／`aria-haspopup`／`ref`（浮层锚点）由基座转发 |
+| 图标按钮 IconButton（sm／md 两档方块） | `components/IconButton.tsx` | 已落地：面板头与条带里「只装一个图标的按钮」收成一处——7 个渲染点（侧栏折叠、错误横幅关闭、上下文面板折叠、模型抽屉关闭、知识抽屉关闭、结果提示关闭、能力选择器触发），此前它们是 24／26／28／30px 四种边长、两种圆角、字形 10／12／14／15px，还有两处留着 `font-size: 19px／22px` 配 `×` 字符的旧时代残留；`aria-label` 是必填项，`aria-expanded`／`aria-haspopup`／`ref`（浮层锚点）由基座转发 |
 | 底部动作条 ActionBar（说明在左、主行动恒在最右） | `components/ActionBar.tsx` | 已落地：7 处「主按钮＋取消」收成一处（记忆编辑、材料选择、MCP 编辑、讨论节点、模型抽屉、成果修订、专家修订），`gap` 8／12 与 `justify-content` flex-end／space-between 的分叉并掉，全仓第一次有了 `role="group"` 与动作条名称；两处「取消在最前」的调用点已按约定翻到主行动左侧 |
 
 | 复选框选项组 CheckList（一行一项，`label` 包住原生 checkbox） | `components/CheckList.tsx` | 已落地：专家编辑四处勾选（Skill 预设／内置工具白名单／MCP 工具／常用参考）与上下文面板的 MCP 工具勾选收成一处，此前它们在两个页面之间**互借带领域名的类**（上下文面板借 `.expert-option-list`，专家页借 `.selected-mcp-list`）；组名给了才写 `role="group"`，已经在 `<fieldset>` 里就不另包一层语义（§4.5） |
