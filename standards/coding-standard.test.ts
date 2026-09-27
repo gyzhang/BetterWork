@@ -660,6 +660,17 @@ describe('浮层基座纪律', () => {
     expect(level('--z-popover-backdrop')).toBeGreaterThan(level('--z-modal-backdrop'));
   });
 
+  it('文本提示的层级必须高于菜单类浮层', () => {
+    // 提示可能从菜单项或模态里长出来；被自己的弹出处盖住就等于白弹。
+    const level = (token: string): number => {
+      const found = declarations.find((declaration) => declaration.property === token);
+      const value = Number(found?.value ?? Number.NaN);
+      expect(Number.isFinite(value), `${token} 必须是数值档位`).toBe(true);
+      return value;
+    };
+    expect(level('--z-tooltip')).toBeGreaterThan(level('--z-popover'));
+  });
+
   it('模态语义只有一处实现，页面不得再自写背板与 Esc', () => {
     // 四套并存的后果已经付过学费：`ModelEditorSheet` 只有 aria-modal 外壳、
     // 放映层自己写键盘、消息中心连 aria-expanded 都没有（docs/reviews/2026-09-26-ui-consistency.md §3.1）。
@@ -1104,9 +1115,6 @@ describe('界面观感基线', () => {
   });
 });
 
-/** 24–40px 带内的唯一例外：两行文本的钳制高度，既不是控件也不是行（docs/10 §9.10）。 */
-const TEXT_MIN_HEIGHT_EXEMPTION = ['.expert-card-desc'];
-
 /**
  * 微标圆角例外：3–4px 的图形化小件不进档位表。**只许降不许升**，
  * 新增一条要写清为什么它不是 `--radius-*` 里的某一档。
@@ -1189,7 +1197,6 @@ describe('徽标与档位纪律', () => {
       if (declaration.property === 'min-height') {
         const pixels = parsePixels(declaration.value);
         if (pixels === undefined || pixels < 24 || pixels > 40) continue;
-        if (TEXT_MIN_HEIGHT_EXEMPTION.some((entry) => selector.includes(entry))) continue;
         if (
           !declaration.value.startsWith('var(--control-height') &&
           !declaration.value.startsWith('var(--row-height')

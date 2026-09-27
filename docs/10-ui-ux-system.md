@@ -500,6 +500,7 @@ UI Foundation 首批提供四套成对色系：
 | `--z-notification-overlay` / `--z-notification` | 7 / 8 | 消息中心背板与面板 |
 | `--z-modal-backdrop` | 19 | 模态基座背板（对话框、抽屉、放映层同一档） |
 | `--z-popover-backdrop` / `--z-popover` | 20 / 21 | 浮层基座背板与菜单：**高于模态**，因为模态内也有下拉 |
+| `--z-tooltip` | 22 | 文本提示：一档高于菜单，它可能从菜单项或模态里长出来 |
 | `--z-toast` | 30 | 全局结果提示 |
 | `--z-banner` | 40 | 全局错误横幅 |
 
@@ -560,7 +561,8 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 | 导航列表 NavList／NavItem（`aria-current` ＋ 两档变体 ＋ 窄栏折叠） | `components/NavList.tsx` | 已落地：侧栏一级导航（5 项）与设置左侧分区（6 项）；`NavItem` 同时承接侧栏「新建任务」与底部「设置」两颗单行导航。折叠成窄栏换的是自定义属性（`--nav-item-*`），几何仍只有一处；文字用 `clip-path` 收掉而不是 `font-size: 0`，以免只剩图标的按钮失去可及名称 |
 | Button / Input / Textarea | 只有样式类，无组件 | 几何取 `--control-*` 档位（§9.10），结构由 `Field` 负责；不再单独组件化，避免只为包一层壳而增加第二处真相 |
 | Switch（`role="switch"` ＋ 恒定名称 ＋ 轨道滑块） | `components/Switch.tsx` | 已落地：全站 13 处 `type="checkbox"` 里只有 4 处真是「开／关」，全部收进这里——知识页语义检索（类名本来就叫 `.knowledge-admin-switch`，实为原生勾选框）、记忆页自动建议与设置页模型启用（两处原来用「开启 X／关闭 X」的按钮文案翻转充当开关，读屏听到的名称随状态改变）、技能页受信任标记。**多选与全选保留原生 checkbox 是正确语义**，不为观感统一塞进开关 |
-| Tooltip / Skeleton | — | 未落地。Progress 只有一枚不确定态 spinner（`.spinner`，由 `InlineLoading` 与页面加载态共用），没有百分比进度条。
+| Tooltip（被裁切文本的悬停提示） | `components/Tooltip.tsx` | 已落地（2026-09-27）：只在锚点**真的被裁切**时出现——悬停 300ms、聚焦立即、移出与滚动即收；Portal 挂到应用外走 `--z-tooltip`，刻意不带 overlay 阴影（靠描边与升起面区分层级，不进 §10.1 的阴影存量）。完整文本本来就在锚点自己的文本里（行数钳制只裁视觉不裁可及名称），浮层对读屏是重复信息，所以显式 `aria-hidden`，不另挂 `aria-describedby` |
+| Skeleton / Progress | — | 未落地。Progress 只有一枚不确定态 spinner（`.spinner`，由 `InlineLoading` 与页面加载态共用），没有百分比进度条。 |
 | 片里的微移除按钮 `.binding-chip-remove` | 随 `BindingChip` 一起收 | 刻意不进 IconButton：10px 命中区属于整枚片（图标＋名称＋×），塞进 24／28px 方块会把片撑破；登记在护栏的 `ICON_BUTTON_EXEMPT_CLASSES` 里（§3.1 P7） |
 | 图标按钮 IconButton（sm／md 两档方块） | `components/IconButton.tsx` | 已落地：面板头与条带里「只装一个图标的按钮」收成一处——7 个渲染点（侧栏折叠、错误横幅关闭、上下文面板折叠、模型抽屉关闭、知识抽屉关闭、结果提示关闭、能力选择器触发），此前它们是 24／26／28／30px 四种边长、两种圆角、字形 10／12／14／15px，还有两处留着 `font-size: 19px／22px` 配 `×` 字符的旧时代残留；`aria-label` 是必填项，`aria-expanded`／`aria-haspopup`／`ref`（浮层锚点）由基座转发 |
 | 底部动作条 ActionBar（说明在左、主行动恒在最右） | `components/ActionBar.tsx` | 已落地：7 处「主按钮＋取消」收成一处（记忆编辑、材料选择、MCP 编辑、讨论节点、模型抽屉、成果修订、专家修订），`gap` 8／12 与 `justify-content` flex-end／space-between 的分叉并掉，全仓第一次有了 `role="group"` 与动作条名称；两处「取消在最前」的调用点已按约定翻到主行动左侧 |
@@ -667,7 +669,11 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 `--page-body-width` 必须在 `:root` 定义恰好一次并被 `.page-body` 消费。骨架的另一半由
 「页面不得替骨架补几何」守着：给 `.page-body`／`.page-header` 等六个骨架类补 `display`／`gap`／
 `padding`／`width` 的后代选择器一律失败，要一列可增长的内容就把钩子类给元素自己。
-落地现状：按钮、输入、页签、Sheet、Toast、内联提示、空状态、列表行、区块头、图标按钮、底部动作条、导航列表、复选组、绑定片、来源行、连接状态片与布尔开关都有对应基座；页面骨架已由 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 负责结构，`KnowledgeDocumentCard` 负责知识条目的领域呈现，聚焦环用 `:focus-visible` 统一实现。破坏性确认统一使用 `ConfirmationDialog`，它以 `Modal` 的 `alertdialog` 变体实现：Portal 挂到应用外、背景 inert、初始焦点落在取消、Esc 与 Tab 焦点循环、关闭后恢复触发控件焦点。Popover 已落地为 `PopoverMenu` 基座（[ADR-0012](adr/0012-composer-capability-binding.md)）。尚未落地的有 Tooltip 与 Skeleton；Switch 已于 2026-09-27 落地（见 §10.1 台账）；区块头、图标按钮与底部动作条已于 2026-09-27 落地为 `SectionHeader`、`IconButton`、`ActionBar`。
+**卡片描述一律三行定高，截断处交给 Tooltip 补全**（`components/Tooltip.tsx`）：技能卡与专家卡的描述固定占三行（13px × 1.55 × 3 ≈ 61px），一行也占满三行的位置，超出三行截断，悬停**只在真的被裁切时**弹出全文。此前专家卡只写 `min-height: 40px` 而不钳制，长描述把卡片撑高、短描述留白，同一屏卡片不等高；技能卡钳两行且一行会塌，两页并排看就是一处不一致。整卡仍是进入配置的点击区，而卡片的主行动（专家的「召唤」）贴在右上角，不与次级动作在同一排抢位。
+
+**同一块内容的两种视图（卡片／列表）一律用 `ViewContainer` ＋ `SegmentedControl`，模式偏好走 `hooks/use-view-mode.ts`**：读写与 storage 不可用时的兜底只有一份，每页用自己的 storage key，互不覆盖；页面不再各自 `localStorage.getItem`。技能页与专家页共用这一个切换。
+
+落地现状：按钮、输入、页签、Sheet、Toast、内联提示、空状态、列表行、区块头、图标按钮、底部动作条、导航列表、复选组、绑定片、来源行、连接状态片、布尔开关与文本提示都有对应基座；页面骨架已由 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 负责结构，`KnowledgeDocumentCard` 负责知识条目的领域呈现，聚焦环用 `:focus-visible` 统一实现。破坏性确认统一使用 `ConfirmationDialog`，它以 `Modal` 的 `alertdialog` 变体实现：Portal 挂到应用外、背景 inert、初始焦点落在取消、Esc 与 Tab 焦点循环、关闭后恢复触发控件焦点。Popover 已落地为 `PopoverMenu` 基座（[ADR-0012](adr/0012-composer-capability-binding.md)）。尚未落地的只剩 Skeleton；Switch 与 Tooltip 已于 2026-09-27 落地（见 §10.1 台账）；区块头、图标按钮与底部动作条已于 2026-09-27 落地为 `SectionHeader`、`IconButton`、`ActionBar`。
 
 2026-09-26 的[UI 一致性评估](reviews/2026-09-26-ui-consistency.md)给出本节台账的完整核对结果（哪些模式各写了几遍、缺哪个基座、分期收口计划）；新增基座或迁移自造控件前先查该报告。
 
@@ -773,7 +779,7 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 | UI-1 视觉基础与应用外壳 | 已完成 | 组件边界已拆出：视图、组件、hooks 与纯函数各自成目录（见 [工程规范](12-engineering-standards.md) §2）；AppShell 与 Sidebar 仍留在 `App.tsx` 内 |
 | UI-2 任务工作区 | 已完成 | 确认点（ConfirmationBlock）依赖尚未定义的审批事件，属 Phase 1 研究工作流范围 |
 | UI-3 模型设置 | 已完成 | 超出原计划新增了「搜索」分区（[ADR-0007](adr/0007-search-engine-config-and-web-search-tool.md)） |
-| UI-4 成果与细节打磨 | 部分完成 | 成果卡片、预览、版本与通知已落地；Tooltip 未落地，除 `⌘/Ctrl ↵` 外无其他快捷键，多色系下的边界状态未做系统抽样 |
+| UI-4 成果与细节打磨 | 部分完成 | 成果卡片、预览、版本与通知已落地；Tooltip 已于 2026-09-27 落地为 `components/Tooltip.tsx`（被裁切文本的悬停提示），除 `⌘/Ctrl ↵` 外无其他快捷键，多色系下的边界状态未做系统抽样 |
 | UI-5 视觉 QA 与回归 | 部分完成 | 每轮改动均做真实桌面人工验收并写入 `docs/logs/`；但没有自动化回归，也没有 1280×800 / 1440×900 / 1728×1117 三尺寸与 3 模式 × 4 色系的验收矩阵记录，打包验证未做 |
 
 以下为各阶段的原始范围定义，保留作为后续增补工作的清单。

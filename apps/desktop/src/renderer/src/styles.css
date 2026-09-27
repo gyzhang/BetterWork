@@ -46,6 +46,9 @@
   --z-modal-backdrop: 19;
   --z-popover-backdrop: 20;
   --z-popover: 21;
+  /* 提示浮层一档高于菜单：它可能从菜单项或模态里长出来，被自己弹出处盖住就白弹了。
+     它不带 overlay 阴影，靠描边与升起面区分层级，因此不进 §10.1 的阴影存量。 */
+  --z-tooltip: 22;
   --z-toast: 30;
   --z-banner: 40;
 }
@@ -3124,6 +3127,23 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .popover-menu-footer {
   border-top: 1px solid var(--border-subtle);
+}
+
+/* === Tooltip 基座（docs/10 §10.1） ===
+   锚点由调用方带领域类（钳制与字号在那一类上），基座只负责浮层这一面。 */
+.tooltip {
+  position: fixed;
+  z-index: var(--z-tooltip);
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 6px 8px;
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-tag);
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+  animation: betterwork-fade-in var(--motion-instant) var(--motion-easing);
 }
 
 /* === Composer 能力选择器（ADR-0012 §UI / B00-4） === */
