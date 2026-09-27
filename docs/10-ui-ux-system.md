@@ -652,7 +652,7 @@ UI Foundation 首批提供四套成对色系：
 `--page-body-width` 必须在 `:root` 定义恰好一次并被 `.page-body` 消费。骨架的另一半由
 「页面不得替骨架补几何」守着：给 `.page-body`／`.page-header` 等六个骨架类补 `display`／`gap`／
 `padding`／`width` 的后代选择器一律失败，要一列可增长的内容就把钩子类给元素自己。
-落地现状：按钮、输入、页签、Sheet、Toast、内联提示、空状态、列表行、区块头、图标按钮、底部动作条、导航列表、复选组、绑定片、来源行、连接状态片与布尔开关都有对应基座；页面骨架已由 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 负责结构，`KnowledgeDocumentCard` 负责知识条目的领域呈现，聚焦环用 `:focus-visible` 统一实现。破坏性确认统一使用 `ConfirmationDialog`，它以 `Modal` 的 `alertdialog` 变体实现：Portal 挂到应用外、背景 inert、初始焦点落在取消、Esc 与 Tab 焦点循环、关闭后恢复触发控件焦点。Popover 已落地为 `PopoverMenu` 基座（[ADR-0012](adr/0012-composer-capability-binding.md)）。尚未落地的有 Tooltip、Skeleton、Switch；区块头、图标按钮与底部动作条已于 2026-09-27 落地为 `SectionHeader`、`IconButton`、`ActionBar`。
+落地现状：按钮、输入、页签、Sheet、Toast、内联提示、空状态、列表行、区块头、图标按钮、底部动作条、导航列表、复选组、绑定片、来源行、连接状态片与布尔开关都有对应基座；页面骨架已由 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 负责结构，`KnowledgeDocumentCard` 负责知识条目的领域呈现，聚焦环用 `:focus-visible` 统一实现。破坏性确认统一使用 `ConfirmationDialog`，它以 `Modal` 的 `alertdialog` 变体实现：Portal 挂到应用外、背景 inert、初始焦点落在取消、Esc 与 Tab 焦点循环、关闭后恢复触发控件焦点。Popover 已落地为 `PopoverMenu` 基座（[ADR-0012](adr/0012-composer-capability-binding.md)）。尚未落地的有 Tooltip 与 Skeleton；Switch 已于 2026-09-27 落地（见 §10.1 台账）；区块头、图标按钮与底部动作条已于 2026-09-27 落地为 `SectionHeader`、`IconButton`、`ActionBar`。
 
 2026-09-26 的[UI 一致性评估](reviews/2026-09-26-ui-consistency.md)给出本节台账的完整核对结果（哪些模式各写了几遍、缺哪个基座、分期收口计划）；新增基座或迁移自造控件前先查该报告。
 
