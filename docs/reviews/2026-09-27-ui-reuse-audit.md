@@ -239,11 +239,27 @@
 
 **R1-3 纯逻辑上收 `lib/`。** 新增 `lib/materials.ts`：材料身份投影（六份副本）合 1，工作空间适用性谓词（两份）合 1；`lib/labels.ts` 增 `materialPurposeName`（两份合 1）、`knowledgeSourceStateName`（两份合 1）、`skillEnvironmentName`（两份**已分叉**的词表合 1）、`fileTypeLabel`（两份 MIME 表合 1）；`lib/format.ts` 增 `relativeTime`（此前只有消息中心一份，而列表行 meta 天然要同一口径）；`lib/memory-labels.ts` 增 `isGlobalMemoryScope`（两份合 1）。用户可见的分叉已收：`ready` 统一「已就绪」（依赖面板原写「就绪」，其测试断言同步改）、`failed` 统一「准备失败」、`invalid` 统一「已失效」。补 `lib/materials.test.ts` 与 `lib/format.test.ts` 共 11 例。
 
-**R1-4 死样式与文档。** 8 个死类共 16 处规则清除（13 处整块删除，`.sidebar-collapsed` 与窄屏媒体查询里两处混排分组只摘掉死选择器，活选择器保留），`styles.css` 5,564 → 5,512 行。docs/10 §9.8 补两条契约（配色只能由错误态提供、内联提示不自带上下缝），§10.1 台账登记 `IconButton` 未落地并把 §10.2 那批内联欠账写明（`MessageBlock`／`Composer`／`ArtifactCard`／`SettingsNav`／`ModelProfileRow`／`ConnectionStatus` 等），三处「`App.tsx` 约 720 行」与「护栏 37 条」按实测改为 1,867 行与 50 条；docs/11 的视图与组件清单补齐到当前文件。
+**R1-4 死样式与文档。** 8 个死类共 16 处规则清除（13 处整块删除，`.sidebar-collapsed` 与窄屏媒体查询里两处混排分组只摘掉死选择器，活选择器保留），`styles.css` 5,564 → 5,507 行。docs/10 §9.8 补两条契约（配色只能由错误态提供、内联提示不自带上下缝），§10.1 台账登记 `IconButton` 未落地并把 §10.2 那批内联欠账写明（`MessageBlock`／`Composer`／`ArtifactCard`／`SettingsNav`／`ModelProfileRow`／`ConnectionStatus` 等），三处「`App.tsx` 约 720 行」与「护栏 37 条」按实测改为 1,876 行与 50 条；docs/11 的视图与组件清单补齐到当前文件。
 
 **需要光哥窗口回看的四个视觉点**（结构改动无法由 tsc／vitest 判定）：① 内联提示在 gap 容器里的上下缝从原来的 15px 收成容器自己的 8／12／16 档，视觉上会变紧；② 技能页与专家页页头下的错误横带由通栏贴边改为左右内缩 28px；③ 专家编辑与详情从 720px 版心回到 860px；④ 证据回看块与「本空间参考版本」小节新增的纵向缝（后者此前完全无样式）。
 
 **R1 未包含、仍在 R2 的**：Tabs 护栏仍以 ARIA 为触发条件（不写 `role="tablist"` 就绕过，P10 那 5 族 17 个按钮仍在）；`margin`／`padding` 标尺与 `height` 档位护栏（存量 157／73／28 条）；以及 §3.1 全部结构基座。
+
+---
+
+## 10. R2 前两档落地状态（2026-09-27 15:40）
+
+`npm run verify` 退出码 0（功能档 148 文件／1,429 用例，护栏 50 → 53 条）。
+
+**R2-A `AsyncButton` ＋ `InlineLoading`（§3.1 P4／P5）。** 新增 `components/AsyncButton.tsx`：`busy` 同时负责 `disabled`、`aria-busy` 与文案切换，四档主皮靠 `variant` 映射到既有的 `.primary-button`／`.secondary-button`／`.text-button`，不给变体就只留行为不带外观。`InlineLoading` 收 11 处裸 `<p>正在…`。spinner 归一：`page-spinner` 与 `spin` 两套 keyframes 画的是同一个圈，合并成 `.spinner` ＋ `spinner-rotate`，尺寸走 `--spinner-size`（默认 12px，整页加载态覆写 16px）。**一处设计回退值得记**：初版为了不让按钮在 busy 时抖动，把两份标签叠在一起用 `visibility: hidden` 占位，结果 `textContent` 里同时留着两个文案，两条 ContextPanel 断言立刻红了——可及名称把「正在保存」和「保存」读成一句。现在只渲染当前那一行，宽度抖动交给 `min-width` 也不值得，理由写在组件注释里。补 `AsyncButton.test.tsx` 5 例。
+
+**R2-B `SectionHeader`（§3.1 P1）。** 新增 `components/SectionHeader.tsx`，两档变体：`block`（页面区块头，h2 ＋ eyebrow ＋ 13px／630px 说明）与 `panel`（面板与卡片小节头，h3 ＋ 12px 弱化说明）。**迁移 23 个渲染点**：ContextPanel 6、SettingsView 4、WorkspaceBrief 3、SkillsView 2、MemoryView 2，ArtifactView／MemorySuggestionList／ToolActivity／DiscussionCheckpointPanel／DependencyPanel／消息中心各 1。13 个类名与 36 条选择器一并删除（`.settings-heading`、`.selected-materials-heading`／`-actions`、`.skill-detail-heading`／`.skill-section-heading`／`.skill-detail-actions`、`.memory-group-heading`、`.memory-heading-actions`、`.artifact-reference-heading`／`-actions`、`.notification-panel-header`／`-actions`、`.tool-detail-heading`、`.brief-section-head`、`.discussion-checkpoints-header`），`styles.css` 5,507 → 5,410 行。原来用 `<strong>` 冒充标题的 16 处升级为真 `h2`／`h3`，读屏与文档大纲从此能跳。
+
+三处**刻意没有迁**，登记在此以免被当成漏网：`Modal` 的 sheet 表头（`ModelEditorSheet.tsx` 与知识页抽屉的 `.knowledge-drawer-head`）——那里的标题与关闭按钮是模态外壳的一部分，几何归 `Modal`，拆给区块头会把壳与内容混起来；`.knowledge-detail-header`——「返回列表 ＋ 标题 ＋ 分页」的导航式页头，不是「标题＋说明＋动作」；`.context-topline`——拖拽带上的面板标题，双击行为与 `PageHeader` 同源。`.knowledge-jobs-head`（昨天方案 B 抽屉里新写的作业头）也留在原位，等光哥回看抽屉那轮一起定：它只有「标题＋一个清空按钮」，迁过去会把单行变两行。
+
+**顺带修掉的一个真实外观风险。** 区块头右槽里原本有 7 个按钮（材料面板的「文件／知识／成果」、范围预览的「重新试算」、两处「刷新」、经验建议的「集中管理」）与消息中心的两个动作，**都没有自己的外观类**，全靠 `.selected-materials-actions button`、`.context-section .selected-materials-heading > button`、`.notification-panel-actions button` 这类容器后代选择器发力。槽位结构一换，它们会整片掉回浏览器默认外观——这正是 §5 说的「皮住在容器里」的账，本轮把三档皮上收成两枚具名类：`.chip-button`（品牌底小胶囊，原 3px 6px 与 3px 8px 两档并成 3px 8px）与 `.quiet-button`（无底、悬停才出底）。`standards/coding-standard.test.ts` 新增「区块头基座纪律」三条护栏（已收编类不得复活／含 `.section-header` 的选择器里只有基座自己能写几何／基座外任何 `.tsx` 不得出现 `section-header*` 类名），三条都做过变异验证：分别把 `.settings-heading { display: flex }`、`.context-section .section-header { gap: 4px }` 与页面里手写一个 `section-header-text` 写回去，都能抓到。补 `SectionHeader.test.tsx` 5 例，含「空槽不渲染节点」这条——否则 `gap` 会在没有动作时撑出一道看不见的缝。
+
+**字号收敛（需要光哥窗口回看）**：区块头标题统一到 13px（panel）／21px（block）。因此记忆页分组标题 14px → 13px、工具详情标题旁的状态由继承主文本改为 12px 弱化、工作空间简报的「标题＋说明」从同行 baseline 改为上下两行、消息中心头部动作按钮之间的缝 4px → 8px。都是同一族内的并档，但没有一条是 tsc／vitest 能判定的。
 
 ---
 

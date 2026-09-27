@@ -24,6 +24,7 @@ import {
 import { AsyncButton, InlineLoading } from './AsyncButton';
 import { ConfirmationDialog } from './ConfirmationDialog';
 import { ListRow } from './ListRow';
+import { SectionHeader } from './SectionHeader';
 import { TransientToast } from './TransientToast';
 
 /**
@@ -69,20 +70,19 @@ export function MemorySuggestionList({
   const jobLabel = latestJobLabel(suggestions.jobs);
   return (
     <section className={`context-section suggestion-section suggestion-${variant}`}>
-      <div className="selected-materials-heading">
-        <div>
-          <strong>经验建议</strong>
-          <small>
-            {suggestions.loadingCandidates ? '正在读取建议批次…' : jobLabel} ·
-            候选不会自动生效，也不会自动进入模型
-          </small>
-        </div>
-        {variant === 'context' && onOpenMemoryPage && (
-          <button type="button" onClick={onOpenMemoryPage}>
-            集中管理
-          </button>
-        )}
-      </div>
+      <SectionHeader
+        title="经验建议"
+        hint={`${
+          suggestions.loadingCandidates ? '正在读取建议批次…' : jobLabel
+        } · 候选不会自动生效，也不会自动进入模型`}
+        actions={
+          variant === 'context' && onOpenMemoryPage ? (
+            <button className="chip-button" type="button" onClick={onOpenMemoryPage}>
+              集中管理
+            </button>
+          ) : undefined
+        }
+      />
       {variant === 'settings' && <SuggestionSettings suggestions={suggestions} />}
       {suggestions.candidatesError && (
         <p className="inline-message error">{suggestions.candidatesError}</p>

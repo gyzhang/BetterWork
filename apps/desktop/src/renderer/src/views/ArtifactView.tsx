@@ -22,6 +22,7 @@ import { ScrollRegion } from '../components/layout/ScrollRegion';
 import { ViewContainer } from '../components/layout/ViewContainer';
 import { ListRow } from '../components/ListRow';
 import { Modal } from '../components/Modal';
+import { SectionHeader } from '../components/SectionHeader';
 import { type ToastTone, TransientToast } from '../components/TransientToast';
 import { useArtifactSourceSelection } from '../hooks/use-artifact-source-selection';
 import { useArtifactThumbnails } from '../hooks/use-artifact-thumbnails';
@@ -780,40 +781,40 @@ function ReferenceVersionSection({
 
   return (
     <section className="artifact-reference-section">
-      <div className="artifact-reference-heading">
-        <div>
-          <strong>本空间参考版本</strong>
-          <small>
-            {reference
-              ? `当前查看的 v${version.versionNumber} 已标记为参考`
-              : `当前查看的 v${version.versionNumber} 尚未标记`}
-          </small>
-        </div>
-        <div className="artifact-reference-actions">
-          {reference ? (
-            <button type="button" className="secondary-button" disabled={busy} onClick={remove}>
-              取消参考
-            </button>
-          ) : (
-            <AsyncButton
-              variant="secondary"
-              busy={busy}
-              label="指定为本空间参考版本"
-              busyLabel="正在提交…"
-              onClick={mark}
-            />
-          )}
-          {onReferenceToTask && (
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => onReferenceToTask(version.id)}
-            >
-              引用到当前任务
-            </button>
-          )}
-        </div>
-      </div>
+      <SectionHeader
+        title="本空间参考版本"
+        hint={
+          reference
+            ? `当前查看的 v${version.versionNumber} 已标记为参考`
+            : `当前查看的 v${version.versionNumber} 尚未标记`
+        }
+        actions={
+          <>
+            {reference ? (
+              <button type="button" className="secondary-button" disabled={busy} onClick={remove}>
+                取消参考
+              </button>
+            ) : (
+              <AsyncButton
+                variant="secondary"
+                busy={busy}
+                label="指定为本空间参考版本"
+                busyLabel="正在提交…"
+                onClick={mark}
+              />
+            )}
+            {onReferenceToTask && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => onReferenceToTask(version.id)}
+              >
+                引用到当前任务
+              </button>
+            )}
+          </>
+        }
+      />
       <p className="artifact-reference-note">
         标记与引用都固定到这一版的内容哈希，成果新增版本后参考仍指旧版本；引用只会把该版本加进当前任务材料，
         不会自动发送，也不会改变当前专家。

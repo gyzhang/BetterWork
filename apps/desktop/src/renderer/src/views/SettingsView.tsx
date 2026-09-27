@@ -18,6 +18,7 @@ import { EmptyNotice } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
 import { ListRow } from '../components/ListRow';
+import { SectionHeader } from '../components/SectionHeader';
 import { TransientToast } from '../components/TransientToast';
 import type { McpConnectionsState } from '../hooks/use-mcp-connections';
 import type { MemoriesState } from '../hooks/use-memories';
@@ -134,18 +135,17 @@ export function ModelSettings({
 }: SettingsPageProps): React.JSX.Element {
   return (
     <section className="settings-section">
-      <div className="settings-heading">
-        <div>
-          <p className="eyebrow">模型</p>
-          <h2>让每一种工作使用合适的模型</h2>
-          <p>
-            API Key 仅保存于本机主进程。语言模型会用于当前任务，视觉与嵌入能力将在对应工作流启用。
-          </p>
-        </div>
-        <button className="primary-button" onClick={onAdd}>
-          <PlusIcon size={13} /> 添加模型
-        </button>
-      </div>
+      <SectionHeader
+        variant="block"
+        eyebrow="模型"
+        title="让每一种工作使用合适的模型"
+        hint="API Key 仅保存于本机主进程。语言模型会用于当前任务，视觉与嵌入能力将在对应工作流启用。"
+        actions={
+          <button className="primary-button" type="button" onClick={onAdd}>
+            <PlusIcon size={13} /> 添加模型
+          </button>
+        }
+      />
       <div className="filter-bar">
         {(['all', 'language', 'vision', 'embedding'] as const).map((role) => (
           <button
@@ -230,13 +230,12 @@ export function AppearanceSettings({
 }: SettingsPageProps): React.JSX.Element {
   return (
     <section className="settings-section appearance-settings">
-      <div className="settings-heading">
-        <div>
-          <p className="eyebrow">外观</p>
-          <h2>选择适合长期工作的界面</h2>
-          <p>外观模式与色系独立保存；跟随系统时仍会保留你选择的色系。</p>
-        </div>
-      </div>
+      <SectionHeader
+        variant="block"
+        eyebrow="外观"
+        title="选择适合长期工作的界面"
+        hint="外观模式与色系独立保存；跟随系统时仍会保留你选择的色系。"
+      />
       <h3>外观模式</h3>
       <div className="appearance-modes">
         {(
@@ -316,16 +315,12 @@ export function SearchSettings(): React.JSX.Element {
   } = useSearchEngineSettings();
   return (
     <section className="settings-section search-settings">
-      <div className="settings-heading">
-        <div>
-          <p className="eyebrow">搜索</p>
-          <h2>为智能体接入联网搜索</h2>
-          <p>
-            API Key
-            仅保存于本机主进程。启用后，智能体在任务需要时会搜索互联网，并给过程与成果标注网页来源。
-          </p>
-        </div>
-      </div>
+      <SectionHeader
+        variant="block"
+        eyebrow="搜索"
+        title="为智能体接入联网搜索"
+        hint="API Key 仅保存于本机主进程。启用后，智能体在任务需要时会搜索互联网，并给过程与成果标注网页来源。"
+      />
       {error && (
         <p className="inline-message error" role="alert">
           {error}
@@ -510,18 +505,17 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
   };
   return (
     <section className="settings-section mcp-settings">
-      <div className="settings-heading">
-        <div>
-          <p className="eyebrow">MCP</p>
-          <h2>连接外部工作能力</h2>
-          <p>
-            连接只保存本机启动命令和参数。检测后，专家和当前任务分别选择具体工具；新增工具不会自动进入既有选择。
-          </p>
-        </div>
-        <button className="primary-button" type="button" onClick={() => beginEdit()}>
-          新建连接
-        </button>
-      </div>
+      <SectionHeader
+        variant="block"
+        eyebrow="MCP"
+        title="连接外部工作能力"
+        hint="连接只保存本机启动命令和参数。检测后，专家和当前任务分别选择具体工具；新增工具不会自动进入既有选择。"
+        actions={
+          <button className="primary-button" type="button" onClick={() => beginEdit()}>
+            新建连接
+          </button>
+        }
+      />
       {state.loading ? (
         <InlineLoading label="正在加载连接…" />
       ) : state.connections.length === 0 ? (

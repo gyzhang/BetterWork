@@ -10,6 +10,7 @@ import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { EmptyContext } from './components/EmptyState';
 import { ListRow } from './components/ListRow';
 import { useOverlaySemantics } from './components/Modal';
+import { SectionHeader } from './components/SectionHeader';
 import { AlertIcon, BellIcon, CheckIcon, CloseIcon, InfoIcon, WarningIcon } from './icons';
 import { trackAction } from './lib/async-action';
 import { relativeTime } from './lib/format';
@@ -238,20 +239,29 @@ const NotificationPanel = ({
           maxHeight: position.maxHeight,
         }}
       >
-        <div className="notification-panel-header">
-          <div>
-            <strong>消息中心</strong>
-            <small>{unreadCount > 0 ? `未读 ${unreadCount} 条` : '已全部阅读'}</small>
-          </div>
-          <div className="notification-panel-actions">
-            {unreadCount > 0 && <button onClick={onMarkAllRead}>全部已读</button>}
-            {notifications.length > 0 && (
-              <button className="danger-text" onClick={() => setClearRequested(true)}>
-                清空
-              </button>
-            )}
-          </div>
-        </div>
+        <SectionHeader
+          className="notification-panel-heading"
+          title="消息中心"
+          hint={unreadCount > 0 ? `未读 ${unreadCount} 条` : '已全部阅读'}
+          actions={
+            <>
+              {unreadCount > 0 && (
+                <button className="quiet-button" type="button" onClick={onMarkAllRead}>
+                  全部已读
+                </button>
+              )}
+              {notifications.length > 0 && (
+                <button
+                  className="quiet-button danger-text"
+                  type="button"
+                  onClick={() => setClearRequested(true)}
+                >
+                  清空
+                </button>
+              )}
+            </>
+          }
+        />
         <div className="notification-list">
           {notifications.length === 0 ? (
             <EmptyContext

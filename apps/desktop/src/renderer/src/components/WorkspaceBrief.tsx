@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { ChevronRightIcon } from '../icons';
 import { memoryScopeLabel } from '../lib/memory-labels';
 import { InlineLoading } from './AsyncButton';
+import { SectionHeader } from './SectionHeader';
 import { TransientToast } from './TransientToast';
 
 /**
@@ -110,10 +111,7 @@ export function WorkspaceBrief({
         />
       ))}
       <section className="brief-section">
-        <div className="brief-section-head">
-          <strong>未决事项</strong>
-          <small>讨论节点原样保留，未确认的结论不会被写成已确认</small>
-        </div>
+        <SectionHeader title="未决事项" hint="讨论节点原样保留，未确认的结论不会被写成已确认" />
         {brief.openIssues.items.length === 0 ? (
           <p className="brief-empty">当前没有开放的讨论节点。</p>
         ) : (
@@ -140,10 +138,10 @@ export function WorkspaceBrief({
         )}
       </section>
       <section className="brief-section">
-        <div className="brief-section-head">
-          <strong>参考成果版本</strong>
-          <small>标记只表示「选它作参考」，不表示内容正确、审批通过或本期已读取</small>
-        </div>
+        <SectionHeader
+          title="参考成果版本"
+          hint="标记只表示「选它作参考」，不表示内容正确、审批通过或本期已读取"
+        />
         {brief.referenceVersions.items.length === 0 ? (
           <p className="brief-empty">
             还没有指定参考版本。在成果版本详情里可「指定为本空间参考版本」。
@@ -199,10 +197,7 @@ function BriefSection({
   if (section.items.length === 0) return <></>;
   return (
     <section className="brief-section">
-      <div className="brief-section-head">
-        <strong>{title}</strong>
-        <small>{hint}</small>
-      </div>
+      <SectionHeader title={title} hint={hint} />
       <ul className="brief-list">
         {section.items.map((item) => (
           <li key={`${item.memoryId}:${item.revisionId}`}>

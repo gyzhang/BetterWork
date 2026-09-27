@@ -23,6 +23,7 @@ import { ListRow } from '../components/ListRow';
 import type { MemoryEditorSubmission } from '../components/MemoryEditor';
 import { MemoryEditor } from '../components/MemoryEditor';
 import { MemorySuggestionList } from '../components/MemorySuggestionList';
+import { SectionHeader } from '../components/SectionHeader';
 import { Tabs } from '../components/Tabs';
 import type { MemoriesState } from '../hooks/use-memories';
 import { newMemoryOperationId } from '../hooks/use-memories';
@@ -349,34 +350,35 @@ export function MemoryPage({
 
   return (
     <section className="settings-section memory-settings">
-      <div className="settings-heading">
-        <div>
-          <p className="eyebrow">记忆</p>
-          <h2>让长期经验可查看、可确认、可撤回</h2>
-          <p>
-            {scopeTarget
-              ? `当前范围：${scopeTarget.expertName}${scopeTarget.workspaceId ? ' · 当前工作空间' : ''}`
-              : '只有已确认、来源可用且适用范围命中的经验才会随新任务带入；候选与来源待复核的记录不会自动进入模型。'}
-          </p>
-        </div>
-        <div className="memory-heading-actions">
-          {scopeTarget && onClearScope && (
-            <button className="text-button" type="button" onClick={onClearScope}>
-              查看全部记忆
+      <SectionHeader
+        variant="block"
+        eyebrow="记忆"
+        title="让长期经验可查看、可确认、可撤回"
+        hint={
+          scopeTarget
+            ? `当前范围：${scopeTarget.expertName}${scopeTarget.workspaceId ? ' · 当前工作空间' : ''}`
+            : '只有已确认、来源可用且适用范围命中的经验才会随新任务带入；候选与来源待复核的记录不会自动进入模型。'
+        }
+        actions={
+          <>
+            {scopeTarget && onClearScope ? (
+              <button className="text-button" type="button" onClick={onClearScope}>
+                查看全部记忆
+              </button>
+            ) : null}
+            <button className="secondary-button" type="button" onClick={state.refresh}>
+              刷新
             </button>
-          )}
-          <button className="secondary-button" type="button" onClick={state.refresh}>
-            刷新
-          </button>
-          <button
-            className="primary-button"
-            type="button"
-            onClick={() => setSession({ key: 'create', mode: 'create', restateFrom: undefined })}
-          >
-            <PlusIcon size={13} /> 新增经验
-          </button>
-        </div>
-      </div>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => setSession({ key: 'create', mode: 'create', restateFrom: undefined })}
+            >
+              <PlusIcon size={13} /> 新增经验
+            </button>
+          </>
+        }
+      />
 
       {state.error && <p className="inline-message error">{state.error}</p>}
       {state.revisionConflict && (
@@ -612,10 +614,7 @@ function MemoryGroup({
 }: MemoryGroupProps): React.JSX.Element {
   return (
     <div className="memory-group">
-      <div className="memory-group-heading">
-        <strong>{title}</strong>
-        <small>{hint}</small>
-      </div>
+      <SectionHeader title={title} hint={hint} />
       <ScrollRegion ariaLabel={ariaLabel} busy={state.loading} className="memory-list-scroll">
         {memories.length === 0 ? (
           <p className="memory-list-empty">

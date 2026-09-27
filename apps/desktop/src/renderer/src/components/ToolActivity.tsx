@@ -4,6 +4,7 @@ import { useId, useState } from 'react';
 import { AlertIcon, CheckIcon, ChevronRightIcon } from '../icons';
 import { toolStageLabel } from '../lib/labels';
 import { deriveToolActivity, formatToolValue, toolTarget } from '../lib/tool-activity';
+import { SectionHeader } from './SectionHeader';
 
 const statusLabel = {
   pending: '等待中',
@@ -98,10 +99,10 @@ export function ToolActivity({
           </div>
           {selected && (
             <section id={`${panelId}-detail`} className="tool-call-detail" aria-label="调用详情">
-              <div className="tool-detail-heading">
-                <strong>{toolStageLabel(selected.name)}</strong>
-                <span>{statusLabel[selected.status]}</span>
-              </div>
+              <SectionHeader
+                title={toolStageLabel(selected.name)}
+                hint={statusLabel[selected.status]}
+              />
               <p className="tool-detail-name">{selected.name}</p>
               {selected.progress && selected.status === 'running' && <p>{selected.progress}</p>}
               {selected.error && (

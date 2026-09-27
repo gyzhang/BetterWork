@@ -6,6 +6,7 @@ import { InlineLoading } from '../AsyncButton';
 import { Badge } from '../Badge';
 import { Field } from '../Field';
 import { FieldSelect } from '../FieldSelect';
+import { SectionHeader } from '../SectionHeader';
 
 /**
  * Skill 依赖与运行环境面板（A12）。
@@ -46,15 +47,15 @@ export function DependencyPanel({
 
   return (
     <div className="skill-detail-section dependency-panel">
-      <div className="skill-section-heading">
-        <div>
-          <p className="eyebrow">运行环境</p>
-          <h3>依赖与解释器</h3>
-        </div>
-        <Badge tone="outline">
-          {environment ? skillEnvironmentName[environment.status] : '未准备'}
-        </Badge>
-      </div>
+      <SectionHeader
+        eyebrow="运行环境"
+        title="依赖与解释器"
+        actions={
+          <Badge tone="outline">
+            {environment ? skillEnvironmentName[environment.status] : '未准备'}
+          </Badge>
+        }
+      />
 
       <Field
         controlId="dependency-base"

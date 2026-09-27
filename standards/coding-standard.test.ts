@@ -711,14 +711,15 @@ const CHECKBOX_ROW_LABEL_SELECTORS: { readonly match: string; readonly reason: s
 ];
 
 /**
- * 已被基座收编的自造类：样式不得复活（Badge 收 chip、EmptyState 收占位、ListRow 收行几何）。
+ * 已被基座收编的自造类：样式不得复活（Badge 收 chip、EmptyState 收占位、ListRow 收行几何、
+ * SectionHeader 收区块头）。
  * 行类一律用 `(?![-\w])` 收尾——`\b` 在连字符处也算词边界，会把仍在用的
  * `.knowledge-card-select` 当成复活的 `.knowledge-card`。
  */
 const RETIRED_UTILITY_CLASSES: {
   readonly pattern: RegExp;
   readonly name: string;
-  readonly family: 'badge' | 'empty' | 'row';
+  readonly family: 'badge' | 'empty' | 'heading' | 'row';
 }[] = [
   { pattern: /\.skill-chip(?![-\w])/, name: '.skill-chip', family: 'badge' },
   {
@@ -766,10 +767,59 @@ const RETIRED_UTILITY_CLASSES: {
     name: '.memory-main／.memory-actions',
     family: 'row',
   },
+  { pattern: /\.settings-heading(?![-\w])/, name: '.settings-heading', family: 'heading' },
+  {
+    pattern: /\.memory-heading-actions(?![-\w])/,
+    name: '.memory-heading-actions',
+    family: 'heading',
+  },
+  {
+    pattern: /\.selected-materials-(?:heading|actions)(?![-\w])/,
+    name: '.selected-materials-heading／-actions',
+    family: 'heading',
+  },
+  {
+    pattern: /\.skill-(?:detail|section)-(?:heading|actions)(?![-\w])/,
+    name: '.skill-detail-heading／-actions、.skill-section-heading',
+    family: 'heading',
+  },
+  {
+    pattern: /\.memory-group-heading(?![-\w])/,
+    name: '.memory-group-heading',
+    family: 'heading',
+  },
+  {
+    pattern: /\.artifact-reference-(?:heading|actions)(?![-\w])/,
+    name: '.artifact-reference-heading／-actions',
+    family: 'heading',
+  },
+  {
+    pattern: /\.notification-panel-(?:header|actions)(?![-\w])/,
+    name: '.notification-panel-header／-actions',
+    family: 'heading',
+  },
+  {
+    pattern: /\.tool-detail-heading(?![-\w])/,
+    name: '.tool-detail-heading',
+    family: 'heading',
+  },
+  {
+    pattern: /\.brief-section-head(?![-\w])/,
+    name: '.brief-section-head',
+    family: 'heading',
+  },
+  {
+    pattern: /\.discussion-checkpoints-header(?![-\w])/,
+    name: '.discussion-checkpoints-header',
+    family: 'heading',
+  },
 ];
 
 /** 把 retired 清单变成一条断言：任一 CSS 文件里都不得再出现这些选择器。 */
-function assertRetiredClassesAbsent(offenders: string[], family: 'badge' | 'empty' | 'row'): void {
+function assertRetiredClassesAbsent(
+  offenders: string[],
+  family: 'badge' | 'empty' | 'heading' | 'row',
+): void {
   const retired = RETIRED_UTILITY_CLASSES.filter((entry) => entry.family === family);
   for (const relative of cssPaths()) {
     for (const declaration of declarationsOf(relative)) {
@@ -1104,6 +1154,72 @@ describe('列表行基座纪律', () => {
     expect(
       offenders,
       '行的 flex／gap／padding 归 ListRow；领域钩子类只保留状态表达（docs/10 §10.1）',
+    ).toEqual([]);
+  });
+});
+
+describe('区块头基座纪律', () => {
+  const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
+  expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
+  const declarations = declarationsOf(styles ?? '');
+
+  it('被 SectionHeader 收编的区块头类不得复活', () => {
+    // §3.1 P1：同一句「标题＋说明＋右槽动作」有 13 个类名、26 处写法，`gap` 取遍 4／8／12／16／24
+    // 五档，`display` 有 flex-row／column／grid 三种。差异没有一条来自业务。
+    const offenders: string[] = [];
+    assertRetiredClassesAbsent(offenders, 'heading');
+    expect(offenders, '区块头请复用 SectionHeader 的槽位（docs/10 §10.1）').toEqual([]);
+  });
+
+  it('区块头的几何只由基座的选择器拥有', () => {
+    // 收编后最常见的回归是替骨架再补一遍缝：`某面板 .section-header { gap }`。
+    // 面板自己的内缩与分隔线写在传给基座的领域钩子类上（如 `.notification-panel-heading`），
+    // 那条类名里没有 `.section-header`，因此不受本条约束（docs/10 §9.8）。
+    const offenders = declarations
+      .map((declaration) => ({
+        declaration,
+        selector: declaration.selector.replace(/\/\*[\s\S]*?\*\//g, '').trim(),
+      }))
+      .filter(({ selector }) => {
+        if (!selector.includes('.section-header')) return false;
+        // 基座自己的选择器：`.section-header` 本体、两个变体档与四个槽位类。
+        return !/^\.section-header(?:-[a-z]+)?(?![-\w])/.test(selector);
+      })
+      .filter(({ declaration }) =>
+        [
+          'gap',
+          'row-gap',
+          'column-gap',
+          'padding',
+          'padding-top',
+          'padding-bottom',
+          'margin',
+          'margin-top',
+          'margin-bottom',
+          'align-items',
+          'justify-content',
+        ].includes(declaration.property),
+      )
+      .map(({ declaration }) => locate(declaration, styles ?? ''));
+    expect(
+      offenders,
+      '区块头的缝与内缩归 SectionHeader；要更紧或更松先加变体档，别在页面里补一遍（docs/10 §9.8）',
+    ).toEqual([]);
+  });
+
+  it('区块头的结构只住在基座里', () => {
+    // 页面手写 `section-header-text` 就是把第 14 份结构写回来：它拿不到 `data-variant`
+    // 上的字号与 gap，只会得到一个名字对不上的空壳。
+    const owner = 'apps/desktop/src/renderer/src/components/SectionHeader.tsx';
+    const offenders = pathsUnder('apps/desktop/src/renderer/')
+      .filter(
+        (relative) =>
+          /\.tsx$/.test(relative) && !/\.test\.tsx$/.test(relative) && relative !== owner,
+      )
+      .filter((relative) => /section-header(-\w+)?\b/.test(read(relative)));
+    expect(
+      offenders,
+      '区块头请传 title／hint／eyebrow／actions，不要手排基座的槽位类（docs/10 §10.1）',
     ).toEqual([]);
   });
 });

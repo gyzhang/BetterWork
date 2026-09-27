@@ -685,17 +685,11 @@ small {
   background: var(--surface-raised);
 }
 
-.discussion-checkpoints-header,
 .discussion-checkpoint-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-}
-
-.discussion-checkpoints-header > div {
-  display: grid;
-  gap: 4px;
 }
 
 .discussion-checkpoint-summary {
@@ -981,6 +975,34 @@ small {
   color: var(--text-primary);
   border-color: var(--brand);
 }
+/* 区块头右槽的两档小按钮。它们原来是靠容器后代选择器发力的
+   （`.selected-materials-actions button`、`.context-section .selected-materials-heading > button`、
+   `.notification-panel-actions button`）：槽位结构一换就整片掉回浏览器默认外观，
+   所以把皮收到具名类上，由按钮自己带着（docs/10 §9.7、docs/reviews/2026-09-27-ui-reuse-audit.md §5）。 */
+.chip-button {
+  min-height: var(--control-height-sm);
+  padding: 3px 8px;
+  color: var(--brand);
+  background: var(--brand-soft);
+  border: 0;
+  border-radius: var(--radius-tag);
+  font-size: 12px;
+}
+.chip-button:hover {
+  background: var(--selection);
+}
+.quiet-button {
+  padding: 5px 8px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-tag);
+  font-size: 12px;
+}
+.quiet-button:hover {
+  color: var(--text-primary);
+  background: var(--surface-raised);
+}
 .composer textarea {
   width: 100%;
   padding: 11px 0;
@@ -1089,39 +1111,9 @@ small {
   padding: 13px 14px 10px;
   border-bottom: 1px solid var(--border-subtle);
 }
-.selected-materials-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-.selected-materials-heading > div:first-child {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 4px;
-}
-.selected-materials-heading small,
 .selected-material-row small {
   color: var(--text-muted);
   font-size: 12px;
-}
-.selected-materials-actions {
-  display: flex;
-  gap: 4px;
-}
-.selected-materials-actions button {
-  min-height: var(--control-height-sm);
-  padding: 3px 6px;
-  color: var(--brand);
-  background: var(--brand-soft);
-  border: 0;
-  border-radius: var(--radius-tag);
-  font-size: 12px;
-  cursor: pointer;
-}
-.selected-materials-actions button:hover {
-  background: var(--selection);
 }
 .selected-materials-list {
   display: grid;
@@ -1146,18 +1138,6 @@ small {
   gap: 8px;
   padding: 13px 14px 12px;
   border-bottom: 1px solid var(--border-subtle);
-}
-.context-section .selected-materials-heading > button {
-  min-height: var(--control-height-sm);
-  padding: 3px 8px;
-  color: var(--brand);
-  background: var(--brand-soft);
-  border: 0;
-  border-radius: var(--radius-tag);
-  font-size: 12px;
-}
-.context-section .selected-materials-heading > button:hover {
-  background: var(--selection);
 }
 .context-hint {
   color: var(--text-muted);
@@ -1253,20 +1233,6 @@ small {
 .brief-section {
   display: grid;
   gap: 8px;
-}
-.brief-section-head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.brief-section-head strong {
-  color: var(--text-primary);
-  font-size: 13px;
-}
-.brief-section-head small {
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.5;
 }
 .brief-list {
   display: grid;
@@ -1942,6 +1908,50 @@ small {
 /* === ListRow：左槽 + 主区 + 右槽的唯一行骨架（docs/10 §10.1） ===
    三种呈现共用几何：分隔线行（列表）、卡片行（技能与上下文）、裸行（侧栏）。
    行内的三行文字尺寸也收在这里，页面只放内容与前缀类。 */
+/* 区块头：小标题（＋ eyebrow）＋ 说明 ＋ 右槽动作。13 个类名并成这一处（docs/10 §10.1）。
+   纵向缝由 `.section-header-text` 的 gap 拥有，标题不再自带上下 margin。 */
+.section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.section-header[data-variant='block'] {
+  gap: 24px;
+}
+.section-header-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+.section-header[data-variant='block'] .section-header-text {
+  gap: 8px;
+}
+.section-header-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 650;
+}
+.section-header[data-variant='block'] .section-header-title {
+  font-size: 21px;
+}
+.section-header-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.section-header[data-variant='block'] .section-header-hint {
+  max-width: 630px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.65;
+}
+.section-header-actions {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 8px;
+}
 .list-row {
   display: flex;
   gap: 12px;
@@ -2081,28 +2091,11 @@ button.list-row:where(:not(:disabled)):hover {
   gap: 12px;
 }
 
-.skill-detail-heading,
-.skill-section-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-.skill-detail-heading h2 {
-  margin: 6px 0;
-  font-size: 21px;
-}
 .skill-detail-description,
 .skill-detail-section > p {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.6;
-}
-.skill-detail-actions {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-  align-self: flex-start;
 }
 .skill-detail-section :where(button) {
   /* :where 把这条页面级按钮样式的权重降到 0-1-0，FieldSelect 的基座几何才不会被它改写。 */
@@ -2276,28 +2269,6 @@ button.list-row:where(:not(:disabled)):hover {
 /* 设置页各段是块级流，段内没有纵向 gap 可用，因此由这一段自己给内联提示上下缝。 */
 .settings-section > .inline-message {
   margin: 12px 0;
-}
-.settings-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-}
-.settings-heading h2 {
-  margin: 7px 0 8px;
-  font-size: 21px;
-}
-.settings-heading p:last-child {
-  max-width: 630px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.65;
-}
-.memory-heading-actions {
-  display: flex;
-  align-items: center;
-  flex: none;
-  gap: 8px;
 }
 /* 内联提示只有错误态一种配色：基础类只留排版，色与底一律由 `.error` 提供。
    成功与信息走 TransientToast（docs/10 §11.5.1），这里长出绿色就等于开了第二个成功通道。
@@ -2488,19 +2459,6 @@ button.list-row:where(:not(:disabled)):hover {
   flex: 1;
   flex-direction: column;
   gap: 12px;
-}
-.memory-group-heading {
-  display: grid;
-  flex: none;
-  gap: 4px;
-}
-.memory-group-heading strong {
-  font-size: 14px;
-}
-.memory-group-heading small {
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.6;
 }
 /* 列表是本页唯一滚动区；窗口过矮时先保住可读高度，再让整页兜底滚动。 */
 .memory-list-scroll {
@@ -4486,27 +4444,6 @@ button.list-row:where(:not(:disabled)):hover {
   display: grid;
   gap: 12px;
 }
-.artifact-reference-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-.artifact-reference-heading > div:first-child {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 4px;
-}
-.artifact-reference-heading small {
-  color: var(--text-muted);
-  font-size: 12px;
-}
-.artifact-reference-actions {
-  display: flex;
-  flex: none;
-  gap: 8px;
-}
 .artifact-reference-note {
   color: var(--text-secondary);
   font-size: 12px;
@@ -4906,39 +4843,11 @@ button.list-row:where(:not(:disabled)):hover {
   text-align: left;
   cursor: pointer;
 }
-.notification-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+.notification-panel-heading {
+  /* 结构（标题＋说明＋右槽）归 SectionHeader；这里只给消息中心这一块面板补它自己的
+     内缩与分隔线，面板 `gap: 0`，缝由头部自己拥有。 */
   padding: 12px 14px;
   border-bottom: 1px solid var(--border);
-}
-.notification-panel-header strong {
-  font-size: 13px;
-}
-.notification-panel-header small {
-  color: var(--text-muted);
-  font-size: 12px;
-}
-.notification-panel-actions {
-  display: flex;
-  gap: 4px;
-}
-.notification-panel-actions button {
-  padding: 5px 8px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-tag);
-  font-size: 12px;
-}
-.notification-panel-actions button:hover {
-  background: var(--surface-raised);
-  color: var(--text-primary);
-}
-.notification-panel-actions .danger-text {
-  color: var(--danger);
 }
 .notification-list {
   flex: 1;
@@ -5373,12 +5282,6 @@ select,
   padding-top: 12px;
   border-top: 1px solid var(--border-subtle);
   overflow-wrap: anywhere;
-}
-.tool-detail-heading {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 13px;
 }
 .tool-detail-name {
   margin: 4px 0 12px;

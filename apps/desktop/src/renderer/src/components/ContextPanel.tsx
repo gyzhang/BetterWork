@@ -52,6 +52,7 @@ import { AsyncButton, InlineLoading } from './AsyncButton';
 import { EmptyContext } from './EmptyState';
 import { ListRow } from './ListRow';
 import { MemorySuggestionList } from './MemorySuggestionList';
+import { SectionHeader } from './SectionHeader';
 import { Tabs } from './Tabs';
 import { ToolActivity } from './ToolActivity';
 import { type ToastTone, TransientToast } from './TransientToast';
@@ -284,25 +285,35 @@ export function ContextPanel({
           {tab === 'sources' && (
             <>
               <section className="selected-materials-panel">
-                <div className="selected-materials-heading">
-                  <div>
-                    <strong>本次材料</strong>
-                    <small>
-                      {materials.length > 0 ? `${materials.length} 项已选择` : '尚未选择'}
-                    </small>
-                  </div>
-                  <div className="selected-materials-actions">
-                    <button type="button" onClick={() => onRequestMaterials('file')}>
-                      文件
-                    </button>
-                    <button type="button" onClick={() => onRequestMaterials('knowledge')}>
-                      知识
-                    </button>
-                    <button type="button" onClick={() => onRequestMaterials('artifact')}>
-                      成果
-                    </button>
-                  </div>
-                </div>
+                <SectionHeader
+                  title="本次材料"
+                  hint={materials.length > 0 ? `${materials.length} 项已选择` : '尚未选择'}
+                  actions={
+                    <>
+                      <button
+                        className="chip-button"
+                        type="button"
+                        onClick={() => onRequestMaterials('file')}
+                      >
+                        文件
+                      </button>
+                      <button
+                        className="chip-button"
+                        type="button"
+                        onClick={() => onRequestMaterials('knowledge')}
+                      >
+                        知识
+                      </button>
+                      <button
+                        className="chip-button"
+                        type="button"
+                        onClick={() => onRequestMaterials('artifact')}
+                      >
+                        成果
+                      </button>
+                    </>
+                  }
+                />
                 {materials.length > 0 && (
                   <div className="selected-materials-list">
                     {materials.map((selection) => {
@@ -324,16 +335,14 @@ export function ContextPanel({
                 )}
               </section>
               <section className="selected-mcp-panel">
-                <div className="selected-materials-heading">
-                  <div>
-                    <strong>本次 MCP 工具</strong>
-                    <small>
-                      {mcpToolBindings.length > 0
-                        ? `${mcpToolBindings.length} 项已选择`
-                        : '未选择，专家预设也不会自动加入'}
-                    </small>
-                  </div>
-                </div>
+                <SectionHeader
+                  title="本次 MCP 工具"
+                  hint={
+                    mcpToolBindings.length > 0
+                      ? `${mcpToolBindings.length} 项已选择`
+                      : '未选择，专家预设也不会自动加入'
+                  }
+                />
                 {mcpConnections.length === 0 ? (
                   <p className="muted-text">请先在设置 → MCP 中配置连接。</p>
                 ) : (
@@ -625,15 +634,20 @@ function NextRunScopeSection({
   const byId = new Map(memories.map((memory) => [memory.id, memory]));
   return (
     <section className="context-section memory-scope-section">
-      <div className="selected-materials-heading">
-        <div>
-          <strong>下次运行可用</strong>
-          <small>范围预览：按当前任务输入试算，不是本次实际使用记录</small>
-        </div>
-        <button type="button" onClick={requestPreview} disabled={!previewAvailable}>
-          重新试算
-        </button>
-      </div>
+      <SectionHeader
+        title="下次运行可用"
+        hint="范围预览：按当前任务输入试算，不是本次实际使用记录"
+        actions={
+          <button
+            className="chip-button"
+            type="button"
+            onClick={requestPreview}
+            disabled={!previewAvailable}
+          >
+            重新试算
+          </button>
+        }
+      />
       {!previewAvailable ? (
         <p className="context-hint">
           还没有可试算的输入：任务上下文或输入变化后，这里才会给出候选范围。
@@ -743,18 +757,19 @@ function ExcludedTaskMemoriesSection({
 }): React.JSX.Element {
   return (
     <section className="context-section memory-excluded-section">
-      <div className="selected-materials-heading">
-        <div>
-          <strong>本任务已排除</strong>
-          <small>来自本任务的持久化设置：换问法、重启或预览失败都保留在这里</small>
-        </div>
-        <AsyncButton
-          busy={exclusions.loading}
-          label="刷新"
-          busyLabel="正在读取…"
-          onClick={exclusions.reload}
-        />
-      </div>
+      <SectionHeader
+        title="本任务已排除"
+        hint="来自本任务的持久化设置：换问法、重启或预览失败都保留在这里"
+        actions={
+          <AsyncButton
+            className="chip-button"
+            busy={exclusions.loading}
+            label="刷新"
+            busyLabel="正在读取…"
+            onClick={exclusions.reload}
+          />
+        }
+      />
       {exclusions.error !== '' && (
         <p className="inline-message error">
           {exclusions.error}
@@ -877,15 +892,15 @@ function ThisRunMemorySection({
   const { runContext, contextLoading, contextError, refreshRunContext } = runMemories;
   return (
     <section className="context-section memory-run-section">
-      <div className="selected-materials-heading">
-        <div>
-          <strong>本次运行记忆</strong>
-          <small>登记的是宿主的准备阶段，不表示模型已读到</small>
-        </div>
-        <button type="button" onClick={refreshRunContext}>
-          刷新
-        </button>
-      </div>
+      <SectionHeader
+        title="本次运行记忆"
+        hint="登记的是宿主的准备阶段，不表示模型已读到"
+        actions={
+          <button className="chip-button" type="button" onClick={refreshRunContext}>
+            刷新
+          </button>
+        }
+      />
       {contextError ? (
         <p className="inline-message error">
           {contextError}
@@ -975,12 +990,7 @@ function HistoryAdjustmentSection({
   const known = runMemories.runContext?.phase !== 'legacy_unknown';
   return (
     <section className="context-section memory-history-section">
-      <div className="selected-materials-heading">
-        <div>
-          <strong>历史上下文调整</strong>
-          <small>哪些旧轮次没带、为什么没带</small>
-        </div>
-      </div>
+      <SectionHeader title="历史上下文调整" hint="哪些旧轮次没带、为什么没带" />
       {!known ? (
         <p className="context-hint">旧版运行没有历史重放审计，无法确认当时的轮次取舍。</p>
       ) : replay.length === 0 ? (

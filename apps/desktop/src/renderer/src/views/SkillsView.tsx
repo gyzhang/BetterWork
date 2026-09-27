@@ -10,6 +10,7 @@ import { ScrollRegion } from '../components/layout/ScrollRegion';
 import type { ViewMode } from '../components/layout/ViewContainer';
 import { ViewContainer } from '../components/layout/ViewContainer';
 import { ListRow } from '../components/ListRow';
+import { SectionHeader } from '../components/SectionHeader';
 import { DependencyPanel } from '../components/skills/DependencyPanel';
 import { SegmentedControl } from '../components/Tabs';
 import { TransientToast } from '../components/TransientToast';
@@ -259,29 +260,30 @@ function SkillDetail({
   const trustRequested = skill.trustStatus === 'trusted' || skill.trustStatus === 'needs-review';
   return (
     <>
-      <div className="skill-detail-heading">
-        <div>
-          <p className="eyebrow">{sourceName[skill.sourceKind]} Skill</p>
-          <h2>{skill.name}</h2>
-        </div>
-        <div className="skill-detail-actions">
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => state.copy(skill)}
-            disabled={skill.sourceKind === 'user'}
-          >
-            {skill.sourceKind === 'builtin' ? '复制并编辑' : '用户副本'}
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => state.exportSkill(skill)}
-          >
-            导出
-          </button>
-        </div>
-      </div>
+      <SectionHeader
+        variant="block"
+        eyebrow={`${sourceName[skill.sourceKind]} Skill`}
+        title={skill.name}
+        actions={
+          <>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => state.copy(skill)}
+              disabled={skill.sourceKind === 'user'}
+            >
+              {skill.sourceKind === 'builtin' ? '复制并编辑' : '用户副本'}
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => state.exportSkill(skill)}
+            >
+              导出
+            </button>
+          </>
+        }
+      />
       <p className="skill-detail-description">{skill.description || '暂无描述'}</p>
       <div className="skill-state-grid">
         <div>
@@ -320,15 +322,15 @@ function SkillDetail({
         )}
       </div>
       <div className="skill-detail-section">
-        <div className="skill-section-heading">
-          <div>
-            <p className="eyebrow">运行配置</p>
-            <h3>保存配置草稿</h3>
-          </div>
-          <button type="button" className="secondary-button" onClick={save}>
-            保存草稿
-          </button>
-        </div>
+        <SectionHeader
+          eyebrow="运行配置"
+          title="保存配置草稿"
+          actions={
+            <button type="button" className="secondary-button" onClick={save}>
+              保存草稿
+            </button>
+          }
+        />
         <p>当前仅保存配置，不会伪造环境已就绪，也不会启动脚本。</p>
         <textarea
           aria-label="运行配置 JSON"

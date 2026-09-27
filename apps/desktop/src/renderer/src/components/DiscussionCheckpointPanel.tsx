@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react';
 import { AsyncButton } from './AsyncButton';
 import { Field } from './Field';
 import { FieldSelect } from './FieldSelect';
+import { SectionHeader } from './SectionHeader';
 
 const STAGES: Array<{ value: DiscussionCheckpointStage; label: string }> = [
   { value: 'understanding', label: '理解与目标' },
@@ -85,19 +86,19 @@ export function DiscussionCheckpointPanel({
 
   return (
     <section className="discussion-checkpoints" aria-label="讨论节点">
-      <div className="discussion-checkpoints-header">
-        <div>
-          <span className="eyebrow">讨论节点</span>
-          <strong>{latestOpen ? stageLabel(latestOpen.stage) : '尚未记录阶段'}</strong>
-        </div>
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={() => setExpanded((current) => !current)}
-        >
-          {expanded ? '收起' : '记录节点'}
-        </button>
-      </div>
+      <SectionHeader
+        eyebrow="讨论节点"
+        title={latestOpen ? stageLabel(latestOpen.stage) : '尚未记录阶段'}
+        actions={
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setExpanded((current) => !current)}
+          >
+            {expanded ? '收起' : '记录节点'}
+          </button>
+        }
+      />
       {latestOpen && (
         <p className="discussion-checkpoint-summary">
           {latestOpen.title} · {latestOpen.summary}
