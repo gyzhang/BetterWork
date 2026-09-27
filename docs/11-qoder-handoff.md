@@ -75,7 +75,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 
 **不要把 verify 的输出接管道后只看末尾**（`npm run verify | tail` 的退出码是 `tail` 的，永远为 0，会把失败读成成功）。需要截取输出时用 `npm run verify > /tmp/verify.log 2>&1; echo $?`。
 
-当前门禁覆盖 **功能档 139 个测试文件、1,359 项测试**（含 `standards/coding-standard.test.ts` 的 37 条规范护栏），**计时基准档 2 个文件、2 项基准**；ESLint、格式检查、类型检查与 Electron 构建均通过。生产构建存在两条来自 Zod 的 Rollup `@PURE` 注释警告；在不影响构建成功的前提下，它们是已知警告，不应因此作无关依赖升级。
+当前门禁覆盖 **功能档 146 个测试文件、1,416 项测试**（含 `standards/coding-standard.test.ts` 的 50 条规范护栏），**计时基准档 2 个文件、2 项基准**；ESLint、格式检查、类型检查与 Electron 构建均通过。生产构建存在两条来自 Zod 的 Rollup `@PURE` 注释警告；在不影响构建成功的前提下，它们是已知警告，不应因此作无关依赖升级。
 
 `knowledge-vault.test.ts` 的 PDF 与 DOCX 两个用例已显式提高超时——它们首次运行需要现场转换 `pdf-parse` 与 `mammoth`，冷 Vite 缓存下会超过默认的 5 秒。
 
@@ -102,9 +102,9 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 | `apps/desktop/src/main/services/model-connectivity.ts` | 模型连通性探测的纯函数实现（可注入 fetch），含超时与 http/https 协议校验收窄。 |
 | `apps/desktop/src/main/ipc/register-ipc.ts` | 全部 channel 注册。三个 helper（`handleInput` / `handleOptionalInput` / `handleNoInput`）是入参校验的唯一通道，handler 不得自行解析 `raw`。 |
 | `apps/desktop/src/preload/index.ts` | 最小化、类型化的 Renderer API；所有推送事件过 Zod 后再交给 Renderer。必须维持 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。 |
-| `apps/desktop/src/renderer/src/App.tsx` | 跨簇编排与布局组装（约 720 行）：工作会话状态、视图切换、通知接线、Sidebar 与错误条。 |
-| `apps/desktop/src/renderer/src/views/` | 工作以外的页面级视图：`ArtifactView`、`KnowledgeView`、`SettingsView`。视图内不出现 IPC 调用。 |
-| `apps/desktop/src/renderer/src/components/` | 跨视图复用组件：`ContextPanel`、`Welcome`、`EmptyState`、`ModelEditorSheet`。 |
+| `apps/desktop/src/renderer/src/App.tsx` | 跨簇编排与布局组装（1,867 行）：工作会话状态、视图切换、通知接线、Sidebar 与错误条。侧栏、消息流与 Composer 三段仍是内联 JSX，外提属 UI 复用评估的 R3。 |
+| `apps/desktop/src/renderer/src/views/` | 工作以外的页面级视图：`ArtifactView`、`KnowledgeView`、`MemoryView`、`SkillsView`、`ExpertsView`、`SettingsView`。视图内不出现 IPC 调用。 |
+| `apps/desktop/src/renderer/src/components/` | 跨视图复用组件与基座：`ContextPanel`、`Welcome`、`EmptyState`、`ModelEditorSheet`，以及 `Modal`、`PopoverMenu`、`ListRow`、`Badge`、`Tabs`、`Field`／`FieldSelect`、`layout/` 四件（台账见 docs/10 §10.1）。 |
 | `apps/desktop/src/renderer/src/hooks/` | 五个内聚状态簇：`useAppearance`、`useKnowledgeLibrary`、`useModelSettings`、`useArtifactViewer`、`useSearchEngineSettings`。IPC 调用只出现在这一层与 `App.tsx`；刷新类回调用 `useCallback` 保持引用稳定，挂载 effect 才能如实声明依赖。 |
 | `apps/desktop/src/renderer/src/lib/` | 无状态纯函数与常量：`async-action`（异步收口的唯一入口）、`tool-summary`、`labels`（含 `TOOL_LABELS`，新增工具必须同步）、`format`、`titlebar`、`view-types`。 |
 | `apps/desktop/src/renderer/src/notifications.tsx` | `useNotifications`（初始加载、增量广播、同页抑制、Toast 生命周期）、消息中心面板与 Toast 宿主。 |
@@ -140,7 +140,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 
 **界面**
 
-4. `App.tsx` 仍有约 720 行，AppShell 与 Sidebar 未拆出。工作会话状态刻意留在 App（它同时牵动任务列表、上下文面板、成果列表与通知跳转），但 Sidebar 是纯 JSX，可以继续外提。
+4. `App.tsx` 仍有 1,867 行，AppShell 与 Sidebar 未拆出（此前写的「约 720 行」是 2026-09-26 之前的状态，功能三轮之后已不成立）。工作会话状态刻意留在 App（它同时牵动任务列表、上下文面板、成果列表与通知跳转），但 Sidebar、消息流与 Composer 三段是纯 JSX，可以继续外提。
 5. Confirmation Dialog 已落地，但尚未覆盖所有未来的破坏性操作；新增此类操作必须复用组件并补键盘行为测试。
 6. 部分低频次级按钮的点击区域小于 32px（Composer 工作区行的文字按钮、上下文页签、模型行内动作、通知面板动作、证据「原文」按钮）。达标方式是扩大命中区，不是放大视觉尺寸。
 7. Tooltip、Popover、Progress、Skeleton、Switch 未落地；除 `⌘/Ctrl ↵` 外没有其他快捷键。

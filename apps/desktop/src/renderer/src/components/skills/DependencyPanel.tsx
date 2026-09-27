@@ -1,6 +1,8 @@
 import type { SkillDetail } from '@betterwork/agent-protocol';
 
 import type { SkillDependenciesState } from '../../hooks/use-skill-dependencies';
+import { skillEnvironmentName } from '../../lib/labels';
+import { InlineLoading } from '../AsyncButton';
 import { Badge } from '../Badge';
 import { Field } from '../Field';
 import { FieldSelect } from '../FieldSelect';
@@ -30,15 +32,6 @@ const operationStatusName: Record<string, string> = {
   interrupted: '已中断',
 };
 
-const environmentStatusName: Record<string, string> = {
-  unprepared: '未准备',
-  preparing: '准备中',
-  ready: '就绪',
-  failed: '失败',
-  cancelled: '已取消',
-  invalid: '已失效',
-};
-
 export function DependencyPanel({
   skill,
   state,
@@ -59,7 +52,7 @@ export function DependencyPanel({
           <h3>依赖与解释器</h3>
         </div>
         <Badge tone="outline">
-          {environment ? environmentStatusName[environment.status] : '未准备'}
+          {environment ? skillEnvironmentName[environment.status] : '未准备'}
         </Badge>
       </div>
 
@@ -158,7 +151,9 @@ export function DependencyPanel({
         >
           取消准备
         </button>
-        {state.loading && <span className="dependency-progress">正在计算依赖计划…</span>}
+        {state.loading && (
+          <InlineLoading className="dependency-progress" label="正在计算依赖计划…" />
+        )}
       </div>
 
       {operation && (
@@ -177,7 +172,7 @@ export function DependencyPanel({
 
       {environment?.failureSummary && !pending && (
         <p className="field-error" role="alert">
-          环境{environmentStatusName[environment.status]}：{environment.failureSummary}
+          环境{skillEnvironmentName[environment.status]}：{environment.failureSummary}
         </p>
       )}
 

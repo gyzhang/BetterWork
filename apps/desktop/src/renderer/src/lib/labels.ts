@@ -1,7 +1,10 @@
 import type {
+  KnowledgeDocumentSummary,
+  MaterialPurpose,
   ModelProfileInput,
   ModelProfileSummary,
   RunSummary,
+  SkillEnvironmentStatus,
 } from '@betterwork/agent-protocol';
 
 export const emptyModel: ModelProfileInput = {
@@ -58,3 +61,52 @@ export const FALLBACK_TOOL_LABEL = '处理工作材料';
 
 export const toolStageLabel = (name: string | undefined): string =>
   (name ? TOOL_LABELS[name] : undefined) ?? FALLBACK_TOOL_LABEL;
+
+/**
+ * 材料用途的中文口径。输入框的材料选择器与任务上下文面板此前各写一份（七项全同），
+ * 改一处就会让同一个用途在两个界面里叫不同名字。
+ */
+export const materialPurposeName: Record<MaterialPurpose, string> = {
+  rule: '规则口径',
+  'current-input': '本期输入',
+  'historical-comparison': '历史对比',
+  'structure-reference': '结构参考',
+  template: '模板',
+  background: '背景参考',
+  other: '其他',
+};
+
+/** 资料来源检查结果（docs/04 只读索引治理）；知识卡片与知识页详情此前各写一份。 */
+export const knowledgeSourceStateName: Record<KnowledgeDocumentSummary['sourceStatus'], string> = {
+  unchecked: '来源未检查',
+  unchanged: '来源一致',
+  changed: '原件已变化',
+  missing: '原件缺失',
+  unreadable: '原件不可读',
+};
+
+/**
+ * 技能依赖环境状态。技能卡与依赖面板曾分别写「已就绪／就绪」「无效／已失效」
+ * 「准备失败／失败」——同一种状态在两个界面里字面不同，是用户能直接看见的不一致。
+ * 统一取本仓既有的「已＋动词」口径（已信任／已撤销／已完成）。
+ */
+export const skillEnvironmentName: Record<SkillEnvironmentStatus, string> = {
+  unprepared: '未准备',
+  preparing: '准备中',
+  ready: '已就绪',
+  failed: '准备失败',
+  cancelled: '已取消',
+  invalid: '已失效',
+};
+
+const MIME_TYPE_LABELS: Readonly<Record<string, string>> = {
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
+  'application/pdf': 'PDF',
+  'text/plain': 'TXT',
+};
+
+/** 格式徽标文字：未登记的 MIME 退化成子类型大写，再退化成 FILE。 */
+export const fileTypeLabel = (mimeType: string): string =>
+  MIME_TYPE_LABELS[mimeType] ?? mimeType.split('/').pop()?.toUpperCase() ?? 'FILE';

@@ -1,10 +1,12 @@
 import type { RuntimeProfileDraft, SkillSummary } from '@betterwork/agent-protocol';
 import { useCallback, useEffect, useState } from 'react';
 
+import { AsyncButton } from '../components/AsyncButton';
 import { Badge, type BadgeTone } from '../components/Badge';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
 import { PageHeader } from '../components/layout/PageHeader';
+import { ScrollRegion } from '../components/layout/ScrollRegion';
 import type { ViewMode } from '../components/layout/ViewContainer';
 import { ViewContainer } from '../components/layout/ViewContainer';
 import { ListRow } from '../components/ListRow';
@@ -16,6 +18,7 @@ import { useSkillDependencies } from '../hooks/use-skill-dependencies';
 import type { SkillsState } from '../hooks/use-skills';
 import { ChevronLeftIcon, InfoIcon, PlusIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
+import { skillEnvironmentName } from '../lib/labels';
 
 const VIEW_MODE_STORAGE_KEY = 'skills-view-mode';
 
@@ -25,14 +28,6 @@ const trustName = {
   trusted: '已信任',
   'needs-review': '需复核',
   revoked: '已撤销',
-} as const;
-const environmentName = {
-  unprepared: '未准备',
-  preparing: '准备中',
-  ready: '已就绪',
-  failed: '准备失败',
-  cancelled: '已取消',
-  invalid: '无效',
 } as const;
 
 type ChipKind = 'source' | 'trust' | 'enabled' | 'environment';
@@ -49,7 +44,7 @@ function SkillChips({ skill }: { skill: SkillSummary }): React.JSX.Element {
   const source = sourceName[skill.sourceKind];
   const trust = trustName[skill.trustStatus];
   const enabled = skill.enabled ? '已启用' : '已停用';
-  const environment = environmentName[skill.environmentStatus];
+  const environment = skillEnvironmentName[skill.environmentStatus];
   return (
     <div className="skill-chips">
       <Badge>{source}</Badge>
@@ -165,16 +160,19 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
                   { id: 'list', label: '列表' },
                 ]}
               />
-              <button
-                className="primary-button"
-                type="button"
-                disabled={state.importing}
+              <AsyncButton
+                variant="primary"
+                busy={state.importing}
+                label={
+                  <>
+                    <PlusIcon size={13} /> 导入 Skill
+                  </>
+                }
+                busyLabel="正在导入…"
                 onClick={() =>
                   reportAction(state.importSkill(), state.clearError, '导入 Skill 失败。')
                 }
-              >
-                <PlusIcon size={13} /> {state.importing ? '正在导入…' : '导入 Skill'}
-              </button>
+              />
             </>
           )
         }
@@ -187,7 +185,7 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
           </button>
         </p>
       )}
-      <div className="page-scroll skills-scroll">
+      <ScrollRegion ariaLabel="技能列表与详情" busy={state.loading || state.detailLoading}>
         <section className="page-body skills-body">
           {selected ? (
             state.detailLoading ? (
@@ -217,7 +215,7 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
             </ViewContainer>
           )}
         </section>
-      </div>
+      </ScrollRegion>
       {toast && <TransientToast tone="success" message={toast} onDismiss={dismissToast} />}
     </section>
   );
@@ -300,7 +298,7 @@ function SkillDetail({
         </div>
         <div>
           <span>环境</span>
-          <strong>{environmentName[skill.environmentStatus]}</strong>
+          <strong>{skillEnvironmentName[skill.environmentStatus]}</strong>
         </div>
       </div>
       <div className="skill-trust-box">

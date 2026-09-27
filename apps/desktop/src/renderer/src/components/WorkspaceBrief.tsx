@@ -8,6 +8,7 @@ import { useState } from 'react';
 
 import { ChevronRightIcon } from '../icons';
 import { memoryScopeLabel } from '../lib/memory-labels';
+import { InlineLoading } from './AsyncButton';
 import { TransientToast } from './TransientToast';
 
 /**
@@ -67,7 +68,7 @@ export function WorkspaceBrief({
     );
   }
   if (loading && brief === undefined) {
-    return <div className="context-placeholder">正在读取工作空间简报…</div>;
+    return <InlineLoading className="brief-loading" label="正在读取工作空间简报…" />;
   }
   if (!brief) {
     return (

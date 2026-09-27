@@ -12,6 +12,7 @@ import type {
   ResolvedAppearance,
 } from '../appearance';
 import { colorSchemes } from '../appearance';
+import { AsyncButton, InlineLoading } from '../components/AsyncButton';
 import { Badge } from '../components/Badge';
 import { EmptyNotice } from '../components/EmptyState';
 import { Field } from '../components/Field';
@@ -362,14 +363,13 @@ export function SearchSettings(): React.JSX.Element {
           </Field>
         </details>
         <div className="search-actions">
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={busy}
+          <AsyncButton
+            variant="secondary"
+            busy={busy}
+            label="测试连接"
+            busyLabel="连接中…"
             onClick={() => trackAction(test(), '测试搜索连接')}
-          >
-            {busy ? '连接中…' : '测试连接'}
-          </button>
+          />
           <button
             type="button"
             className="primary-button"
@@ -523,7 +523,7 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
         </button>
       </div>
       {state.loading ? (
-        <p className="muted-text">正在加载连接…</p>
+        <InlineLoading label="正在加载连接…" />
       ) : state.connections.length === 0 ? (
         <EmptyNotice
           title="还没有 MCP 连接"

@@ -6,6 +6,7 @@ import type {
 } from '@betterwork/agent-protocol';
 import { useEffect, useState } from 'react';
 
+import { AsyncButton, InlineLoading } from '../components/AsyncButton';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, ErrorPage, LoadingPage } from '../components/EmptyState';
 import { FieldSelect } from '../components/FieldSelect';
@@ -29,14 +30,7 @@ import {
 import { PlusIcon } from '../icons';
 import { reportAction, trackAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
-
-const SOURCE_STATE_LABELS: Record<KnowledgeDocumentSummary['sourceStatus'], string> = {
-  unchecked: '来源未检查',
-  unchanged: '来源一致',
-  changed: '原件已变化',
-  missing: '原件缺失',
-  unreadable: '原件不可读',
-};
+import { knowledgeSourceStateName } from '../lib/labels';
 
 const SEMANTIC_STATE_LABELS: Record<KnowledgeDocumentSummary['semanticState'], string> = {
   disabled: '未启用',
@@ -53,7 +47,7 @@ const sourceStateLine = (
 ): string =>
   [
     revision ? `第 ${revision.revision} 版` : '尚未建立保存版本',
-    `${SOURCE_STATE_LABELS[document.sourceStatus]}${
+    `${knowledgeSourceStateName[document.sourceStatus]}${
       document.sourceCheckedAt
         ? `（检查于 ${formatTime(document.sourceCheckedAt)}）`
         : '（尚未检查）'
@@ -223,22 +217,20 @@ export function KnowledgePage({
         eyebrow="知识 · 个人资料库"
         title="让资料成为下一次工作的起点"
         actions={
-          <button
-            className="primary-button"
-            disabled={importing}
-            onClick={() => trackAction(onImport(), '导入资料')}
-          >
-            {importing ? (
-              '正在处理…'
-            ) : (
+          <AsyncButton
+            variant="primary"
+            busy={importing}
+            label={
               <>
                 <PlusIcon size={13} /> 导入资料
               </>
-            )}
-          </button>
+            }
+            busyLabel="正在处理…"
+            onClick={() => trackAction(onImport(), '导入资料')}
+          />
         }
       />
-      <div className="page-scroll knowledge-scroll">
+      <div className="knowledge-stage">
         <section className="page-body knowledge-page">
           <p className="page-intro">
             资料保留在你的本机路径；算台只建立可重建的本地文本索引。当前支持 Markdown、文本、PDF、
@@ -514,7 +506,7 @@ export function KnowledgePage({
                 )}
                 {jobDetailVisible && (
                   <section className="knowledge-jobs" aria-label="作业条目">
-                    {jobDetailLoading && <small>正在读取条目…</small>}
+                    {jobDetailLoading && <InlineLoading label="正在读取条目…" />}
                     {jobDetailError && <p className="inline-message error">{jobDetailError}</p>}
                     {jobDetail && (
                       <ul className="knowledge-job-items">
@@ -589,16 +581,14 @@ export function KnowledgePage({
                 </button>
               )}
               {showingResults && (
-                <button
+                <AsyncButton
                   className="knowledge-research-button"
-                  type="button"
-                  disabled={selectedMaterials.length === 0 || researchBusy}
+                  busy={researchBusy}
+                  disabled={selectedMaterials.length === 0}
+                  label={`用已选资料研究${selectedMaterials.length > 0 ? `（${selectedMaterials.length}）` : ''}`}
+                  busyLabel="正在创建草稿…"
                   onClick={onResearch}
-                >
-                  {researchBusy
-                    ? '正在创建草稿…'
-                    : `用已选资料研究${selectedMaterials.length > 0 ? `（${selectedMaterials.length}）` : ''}`}
-                </button>
+                />
               )}
             </div>
           </div>
@@ -726,7 +716,7 @@ export function KnowledgePage({
                   </div>
                 </section>
                 <section className="knowledge-detail-text" aria-label="保存文本预览">
-                  {detailLoading && <small>正在读取保存文本…</small>}
+                  {detailLoading && <InlineLoading label="正在读取保存文本…" />}
                   {detailPage?.parts.map((part) => (
                     <article key={`${part.locator}-${part.span.start}`}>
                       <small>{part.locator}</small>

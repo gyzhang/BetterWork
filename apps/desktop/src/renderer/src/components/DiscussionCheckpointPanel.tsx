@@ -6,6 +6,7 @@ import type {
 } from '@betterwork/agent-protocol';
 import { useMemo, useState } from 'react';
 
+import { AsyncButton } from './AsyncButton';
 import { Field } from './Field';
 import { FieldSelect } from './FieldSelect';
 
@@ -161,14 +162,14 @@ export function DiscussionCheckpointPanel({
           )}
           <div className="discussion-checkpoint-footer">
             {latestOpen && <span>保存后会把上一节点标记为已替代</span>}
-            <button
-              type="button"
-              className="primary-button"
-              disabled={saving || !title.trim() || !summary.trim()}
+            <AsyncButton
+              variant="primary"
+              busy={saving}
+              disabled={!title.trim() || !summary.trim()}
+              label="保存节点"
+              busyLabel="正在保存…"
               onClick={handleSubmit}
-            >
-              {saving ? '正在保存…' : '保存节点'}
-            </button>
+            />
           </div>
         </div>
       )}

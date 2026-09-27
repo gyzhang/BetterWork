@@ -7,6 +7,9 @@ import type {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { CapabilityIcon, CloseIcon, PlusIcon } from '../icons';
+import { materialPurposeName } from '../lib/labels';
+import { materialCandidateKey, taskMaterialKey } from '../lib/materials';
+import { InlineLoading } from './AsyncButton';
 import { FieldSelect } from './FieldSelect';
 import { PopoverMenu } from './PopoverMenu';
 
@@ -47,31 +50,10 @@ export interface ComposerCapabilityPickerProps {
   onCommitMaterials: (materials: TaskMaterialSelection[]) => void;
 }
 
-const PURPOSE_LABELS: Record<MaterialPurpose, string> = {
-  rule: '规则口径',
-  'current-input': '本期输入',
-  'historical-comparison': '历史对比',
-  'structure-reference': '结构参考',
-  template: '模板',
-  background: '背景参考',
-  other: '其他',
-};
-
-const PURPOSE_OPTIONS = Object.entries(PURPOSE_LABELS).map(([id, label]) => ({ id, label }));
-
-const materialKey = (selection: TaskMaterialSelection): string => {
-  const reference = selection.reference;
-  if (reference.kind === 'knowledge-revision') return `knowledge:${reference.knowledgeRevisionId}`;
-  if (reference.kind === 'artifact-version') return `artifact:${reference.artifactVersionId}`;
-  return `snapshot:${reference.snapshotId}`;
-};
-
-const candidateKey = (candidate: MaterialCandidate): string => {
-  const reference = candidate.reference;
-  if (reference.kind === 'knowledge-revision') return `knowledge:${reference.knowledgeRevisionId}`;
-  if (reference.kind === 'artifact-version') return `artifact:${reference.artifactVersionId}`;
-  return `snapshot:${reference.snapshotId}`;
-};
+const PURPOSE_OPTIONS = Object.entries(materialPurposeName).map(([id, label]) => ({
+  id,
+  label,
+}));
 
 const defaultPurpose = (candidate: MaterialCandidate): MaterialPurpose => {
   if (candidate.reference.kind === 'knowledge-revision') return 'rule';
@@ -83,7 +65,9 @@ const materialTitle = (
   selection: TaskMaterialSelection,
   candidates: MaterialCandidate[],
 ): string => {
-  const candidate = candidates.find((item) => candidateKey(item) === materialKey(selection));
+  const candidate = candidates.find(
+    (item) => materialCandidateKey(item) === taskMaterialKey(selection),
+  );
   if (candidate) return candidate.title;
   if (selection.reference.kind === 'knowledge-revision') return '知识修订';
   if (selection.reference.kind === 'artifact-version') return '成果版本';
@@ -228,8 +212,8 @@ export function ComposerCapabilityPicker({
   const materialItems = useMemo(
     () =>
       visibleMaterialCandidates.map((candidate) => {
-        const key = candidateKey(candidate);
-        const isSelected = materialDraft.some((selection) => materialKey(selection) === key);
+        const key = materialCandidateKey(candidate);
+        const isSelected = materialDraft.some((selection) => taskMaterialKey(selection) === key);
         const hint = [candidate.sourceLabel, candidate.detail, isSelected ? '已选择' : '']
           .filter(Boolean)
           .join(' · ');
@@ -269,11 +253,11 @@ export function ComposerCapabilityPicker({
           {materials.map((selection) => {
             const title = materialTitle(selection, materialCandidates);
             const candidate = materialCandidates.find(
-              (item) => candidateKey(item) === materialKey(selection),
+              (item) => materialCandidateKey(item) === taskMaterialKey(selection),
             );
             return (
               <div
-                key={materialKey(selection)}
+                key={taskMaterialKey(selection)}
                 className={`material-chip${candidate?.status === 'unavailable' ? ' unavailable' : ''}`}
                 role="listitem"
               >
@@ -287,7 +271,7 @@ export function ComposerCapabilityPicker({
                   onChange={(purpose) => {
                     onCommitMaterials(
                       materials.map((item) =>
-                        materialKey(item) === materialKey(selection)
+                        taskMaterialKey(item) === taskMaterialKey(selection)
                           ? { ...item, purpose: purpose as MaterialPurpose }
                           : item,
                       ),
@@ -301,7 +285,9 @@ export function ComposerCapabilityPicker({
                   aria-label={`移除材料 ${title}`}
                   onClick={() =>
                     onCommitMaterials(
-                      materials.filter((item) => materialKey(item) !== materialKey(selection)),
+                      materials.filter(
+                        (item) => taskMaterialKey(item) !== taskMaterialKey(selection),
+                      ),
                     )
                   }
                   disabled={disabled}
@@ -383,10 +369,12 @@ export function ComposerCapabilityPicker({
         label={materialPickerKind === 'knowledge' ? '引用知识' : '引用成果'}
         onDismiss={onDismissMaterialPicker}
         onSelect={(id) => {
-          const candidate = visibleMaterialCandidates.find((item) => candidateKey(item) === id);
+          const candidate = visibleMaterialCandidates.find(
+            (item) => materialCandidateKey(item) === id,
+          );
           if (!candidate || candidate.status !== 'ready') return;
           setMaterialDraft((current) => {
-            const existing = current.findIndex((selection) => materialKey(selection) === id);
+            const existing = current.findIndex((selection) => taskMaterialKey(selection) === id);
             if (existing >= 0) return current.filter((_, index) => index !== existing);
             const addedFrom =
               candidate.reference.kind === 'artifact-version' &&
@@ -404,7 +392,7 @@ export function ComposerCapabilityPicker({
           materialPickerError ||
           (materialPickerKind === 'artifact' && hasGlobalArtifacts) ? (
             <div className="material-picker-status">
-              {materialsLoading ? '正在加载候选材料…' : materialPickerError}
+              {materialsLoading ? <InlineLoading label="正在加载候选材料…" /> : materialPickerError}
               {materialPickerKind === 'artifact' && hasGlobalArtifacts && !materialsLoading && (
                 <button
                   type="button"

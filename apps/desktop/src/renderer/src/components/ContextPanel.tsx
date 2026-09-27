@@ -35,7 +35,8 @@ import {
 } from '../icons';
 import { reportAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
-import { runStatusName } from '../lib/labels';
+import { fileTypeLabel, materialPurposeName, runStatusName } from '../lib/labels';
+import { materialCandidateKey, taskMaterialKey } from '../lib/materials';
 import { canToggleMcpTool, hasMcpToolBinding, setMcpToolBinding } from '../lib/mcp-selection';
 import {
   effectiveStatusLabel,
@@ -47,6 +48,7 @@ import {
 } from '../lib/memory-labels';
 import { handleTitlebarDoubleClick } from '../lib/titlebar';
 import type { ContextTab } from '../lib/view-types';
+import { AsyncButton, InlineLoading } from './AsyncButton';
 import { EmptyContext } from './EmptyState';
 import { ListRow } from './ListRow';
 import { MemorySuggestionList } from './MemorySuggestionList';
@@ -63,48 +65,10 @@ const CONTEXT_TABS: ReadonlyArray<readonly [ContextTab, string]> = [
   ['artifacts', '成果'],
 ];
 
-const MIME_LABEL_MAP: Record<string, string> = {
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
-  'application/pdf': 'PDF',
-  'text/plain': 'TXT',
-};
-
-const artifactTypeLabel = (artifact: ArtifactSummary): string => {
-  if (artifact.type === 'presentation' && artifact.mimeType) {
-    return (
-      MIME_LABEL_MAP[artifact.mimeType] ??
-      artifact.mimeType.split('/').pop()?.toUpperCase() ??
-      'FILE'
-    );
-  }
-  return 'Markdown';
-};
-
-const materialKey = (selection: TaskMaterialSelection): string => {
-  const reference = selection.reference;
-  if (reference.kind === 'knowledge-revision') return `knowledge:${reference.knowledgeRevisionId}`;
-  if (reference.kind === 'artifact-version') return `artifact:${reference.artifactVersionId}`;
-  return `snapshot:${reference.snapshotId}`;
-};
-
-const candidateKey = (candidate: MaterialCandidate): string => {
-  const reference = candidate.reference;
-  if (reference.kind === 'knowledge-revision') return `knowledge:${reference.knowledgeRevisionId}`;
-  if (reference.kind === 'artifact-version') return `artifact:${reference.artifactVersionId}`;
-  return `snapshot:${reference.snapshotId}`;
-};
-
-const purposeLabel: Record<TaskMaterialSelection['purpose'], string> = {
-  rule: '规则口径',
-  'current-input': '本期输入',
-  'historical-comparison': '历史对比',
-  'structure-reference': '结构参考',
-  template: '模板',
-  background: '背景参考',
-  other: '其他',
-};
+const artifactTypeLabel = (artifact: ArtifactSummary): string =>
+  artifact.type === 'presentation' && artifact.mimeType
+    ? fileTypeLabel(artifact.mimeType)
+    : 'Markdown';
 
 export interface ContextPanelProps {
   open: boolean;
@@ -343,14 +307,14 @@ export function ContextPanel({
                   <div className="selected-materials-list">
                     {materials.map((selection) => {
                       const candidate = materialCandidates.find(
-                        (item) => candidateKey(item) === materialKey(selection),
+                        (item) => materialCandidateKey(item) === taskMaterialKey(selection),
                       );
                       return (
-                        <div className="selected-material-row" key={materialKey(selection)}>
+                        <div className="selected-material-row" key={taskMaterialKey(selection)}>
                           <strong>{candidate?.title ?? '已选材料'}</strong>
                           <small>
                             {candidate?.sourceLabel ?? selection.reference.kind} ·{' '}
-                            {purposeLabel[selection.purpose]}
+                            {materialPurposeName[selection.purpose]}
                             {candidate?.status === 'unavailable' ? ' · 不可读取' : ''}
                           </small>
                         </div>
@@ -532,12 +496,12 @@ function EvidenceSection({
           actions={
             <>
               {knowledge && (
-                <button
-                  type="button"
+                <AsyncButton
+                  busy={isPreviewing && runSource.loading}
+                  label="查看区间"
+                  busyLabel="正在回看…"
                   onClick={() => runSource.previewRunSource(item.runId, item.id)}
-                >
-                  {isPreviewing && runSource.loading ? '正在回看…' : '查看区间'}
-                </button>
+                />
               )}
               {!isWeb && !isMcp && (
                 <button type="button" onClick={() => openSourceWithToast(item)}>
@@ -597,7 +561,7 @@ function EvidencePreview({
   return (
     <div className="evidence-preview" role="note">
       {loading ? (
-        <p className="context-hint">正在回看当时返回的区间…</p>
+        <InlineLoading label="正在回看当时返回的区间…" />
       ) : error ? (
         <>
           <p className="inline-message error">{error}</p>
@@ -675,7 +639,7 @@ function NextRunScopeSection({
           还没有可试算的输入：任务上下文或输入变化后，这里才会给出候选范围。
         </p>
       ) : previewLoading ? (
-        <p className="context-hint">正在按当前输入试算可用范围…</p>
+        <InlineLoading label="正在按当前输入试算可用范围…" />
       ) : previewError ? (
         <p className="inline-message error">
           {previewError}
@@ -746,9 +710,12 @@ function MemoryScopeRow({
         </>
       }
       actions={
-        <button type="button" disabled={saving} onClick={() => onToggleMemory(item.memoryId)}>
-          {saving ? '正在调整…' : excluded ? '恢复使用' : '本任务不用'}
-        </button>
+        <AsyncButton
+          busy={saving}
+          label={excluded ? '恢复使用' : '本任务不用'}
+          busyLabel="正在调整…"
+          onClick={() => onToggleMemory(item.memoryId)}
+        />
       }
     />
   );
@@ -781,9 +748,12 @@ function ExcludedTaskMemoriesSection({
           <strong>本任务已排除</strong>
           <small>来自本任务的持久化设置：换问法、重启或预览失败都保留在这里</small>
         </div>
-        <button type="button" onClick={exclusions.reload} disabled={exclusions.loading}>
-          {exclusions.loading ? '正在读取…' : '刷新'}
-        </button>
+        <AsyncButton
+          busy={exclusions.loading}
+          label="刷新"
+          busyLabel="正在读取…"
+          onClick={exclusions.reload}
+        />
       </div>
       {exclusions.error !== '' && (
         <p className="inline-message error">
@@ -813,17 +783,12 @@ function ExcludedTaskMemoriesSection({
                 )
               }
               actions={
-                <button
-                  type="button"
-                  disabled={exclusion.savingMemoryId === item.memoryId}
+                <AsyncButton
+                  busy={exclusion.savingMemoryId === item.memoryId}
+                  label={item.visibility === 'visible' ? '恢复参与选择' : '移除此排除'}
+                  busyLabel="正在调整…"
                   onClick={() => onToggleMemory(item.memoryId)}
-                >
-                  {exclusion.savingMemoryId === item.memoryId
-                    ? '正在调整…'
-                    : item.visibility === 'visible'
-                      ? '恢复参与选择'
-                      : '移除此排除'}
-                </button>
+                />
               }
             />
           ))}
@@ -929,7 +894,7 @@ function ThisRunMemorySection({
           </button>
         </p>
       ) : contextLoading && runContext === undefined ? (
-        <p className="context-hint">正在读取本次运行的记忆登记…</p>
+        <InlineLoading label="正在读取本次运行的记忆登记…" />
       ) : runContext === undefined ? (
         <p className="context-hint">还没有运行记录：任务开始后才能看到本次登记的精确修订。</p>
       ) : (

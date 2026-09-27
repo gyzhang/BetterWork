@@ -11,7 +11,6 @@ import type {
   ExpertSummary,
   InputSnapshot,
   MaterialCandidate,
-  MaterialReference,
   McpToolBinding,
   MemoryViewItem,
   NotificationSummary,
@@ -29,6 +28,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { deriveActivityGroups } from './activity';
 import { BrandLogo } from './brand-logo';
+import { AsyncButton, InlineLoading } from './components/AsyncButton';
 import {
   type CapabilityChip,
   ComposerCapabilityPicker,
@@ -76,6 +76,7 @@ import {
 import { describeActionError, reportAction, trackAction } from './lib/async-action';
 import { fileNameOf, formatTime } from './lib/format';
 import { runStatusName } from './lib/labels';
+import { materialReferenceAppliesToWorkspace, materialReferenceKey } from './lib/materials';
 import {
   excerptOf,
   type ExcerptRange,
@@ -96,21 +97,6 @@ import { KnowledgePage } from './views/KnowledgeView';
 import { type MemoryManagementTarget, scopeOptionsFor } from './views/MemoryView';
 import { SettingsPage } from './views/SettingsView';
 import { SkillsPage } from './views/SkillsView';
-
-const expertReferenceApplicableToWorkspace = (
-  reference: MaterialReference,
-  workspaceId?: string,
-): boolean => {
-  if (reference.kind !== 'artifact-version') return true;
-  return Boolean(workspaceId && reference.originWorkspaceId === workspaceId);
-};
-
-/** 材料引用的身份键：同一精确版本重复引用只留一条（§3.6）。 */
-const referenceKey = (reference: MaterialReference): string => {
-  if (reference.kind === 'knowledge-revision') return `knowledge:${reference.knowledgeRevisionId}`;
-  if (reference.kind === 'artifact-version') return `artifact:${reference.artifactVersionId}`;
-  return `snapshot:${reference.snapshotId}`;
-};
 
 const inputSnapshotCandidate = (snapshot: InputSnapshot): MaterialCandidate => ({
   reference: {
@@ -410,7 +396,10 @@ export function App(): React.JSX.Element {
         }
         const reference = result.material;
         setTaskMaterials((current) =>
-          current.some((existing) => referenceKey(existing.reference) === referenceKey(reference))
+          current.some(
+            (existing) =>
+              materialReferenceKey(existing.reference) === materialReferenceKey(reference),
+          )
             ? current
             : [...current, { reference, purpose: 'structure-reference', addedFrom: 'user-input' }],
         );
@@ -725,7 +714,7 @@ export function App(): React.JSX.Element {
       setTaskMaterials(
         (detail.revision.referenceMaterials ?? [])
           .filter((material) =>
-            expertReferenceApplicableToWorkspace(material.reference, workspace?.id),
+            materialReferenceAppliesToWorkspace(material.reference, workspace?.id),
           )
           .map((material) => ({ ...material, addedFrom: 'expert-reference' as const })),
       );
@@ -1540,7 +1529,7 @@ export function App(): React.JSX.Element {
                                 ['run.completed', 'run.failed', 'run.cancelled'].includes(
                                   event.type,
                                 ),
-                              ) && <div className="run-running-indicator">正在执行…</div>}
+                              ) && <InlineLoading label="正在执行…" />}
                           </div>
                         );
                       })}
@@ -1686,9 +1675,17 @@ export function App(): React.JSX.Element {
                       停止
                     </button>
                   ) : (
-                    <button type="submit" disabled={isStarting || !prompt.trim() || !workspace}>
-                      {isStarting ? '正在启动…' : '开始工作'} <ArrowUpIcon size={13} />
-                    </button>
+                    <AsyncButton
+                      type="submit"
+                      busy={isStarting}
+                      disabled={!prompt.trim() || !workspace}
+                      label={
+                        <>
+                          开始工作 <ArrowUpIcon size={13} />
+                        </>
+                      }
+                      busyLabel="正在启动…"
+                    />
                   )}
                 </div>
               </form>

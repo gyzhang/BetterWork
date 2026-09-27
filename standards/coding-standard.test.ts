@@ -1136,6 +1136,42 @@ describe('反馈通道纪律', () => {
       '内联提示只有错误态；再补一个 .inline-message.success 就是第二个成功通道',
     ).toEqual([]);
   });
+
+  it('内联提示的基础类不得自带配色，也不得自带上下缝', () => {
+    // 上面两条只看「渲染层有没有裸用法」和「有没有别的变体类」，所以基础规则里的
+    // `color: var(--success)` 与 `margin: 15px 0` 一直活着：谁写一句 `<p className="inline-message">`
+    // 就得到一条绿色成功横幅（第二个成功通道），而 22 处已由容器 gap 提供缝的位置被它再叠一道。
+    // 配色归 `.inline-message.error`，上下缝归承载它的那个容器（docs/10 §9.8、§11.5.1）。
+    const styles = cssPaths().find((relative) => relative.endsWith('styles.css')) ?? '';
+    // 选择器组按逗号拆开逐个判，否则 `.field-error, .inline-message { … }` 整组漏网。
+    const partsOf = (selector: string): string[] =>
+      selector
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0);
+    const colorOffenders = declarationsOf(styles)
+      .filter(({ selector }) =>
+        partsOf(selector).some(
+          (part) => /\.inline-message(?![\w-])/.test(part) && !/\.error\b/.test(part),
+        ),
+      )
+      .filter(({ property }) => property === 'color' || property.startsWith('background'))
+      .map((declaration) => locate(declaration, styles));
+    expect(colorOffenders, '内联提示的配色只能由错误态提供').toEqual([]);
+
+    // 只审裸选择器（`.inline-message` 单独成条）。容器侧写成 `.某页面 > .inline-message`
+    // 正是「缝由承载它的位置拥有」的写法，不在本条范围内。
+    const marginOffenders = declarationsOf(styles)
+      .filter(({ selector }) =>
+        partsOf(selector).some((part) => /^\.inline-message(?![\w-])$/.test(part)),
+      )
+      .filter(({ property }) => property.startsWith('margin'))
+      .map((declaration) => locate(declaration, styles));
+    expect(
+      marginOffenders,
+      '上下缝由容器拥有：`.inline-message` 自带 margin 会在已有 gap 的容器里叠成双缝（docs/10 §9.8）',
+    ).toEqual([]);
+  });
 });
 
 describe('计时基准车道纪律', () => {

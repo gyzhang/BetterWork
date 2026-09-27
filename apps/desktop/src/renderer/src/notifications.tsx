@@ -12,6 +12,7 @@ import { ListRow } from './components/ListRow';
 import { useOverlaySemantics } from './components/Modal';
 import { AlertIcon, BellIcon, CheckIcon, CloseIcon, InfoIcon, WarningIcon } from './icons';
 import { trackAction } from './lib/async-action';
+import { relativeTime } from './lib/format';
 
 const TOAST_MAX = 4;
 const TOAST_DURATION = 4_000;
@@ -180,15 +181,6 @@ const LevelIcon = ({ level }: { level: NotificationLevel }): React.JSX.Element =
   if (level === 'error') return <AlertIcon size={12} />;
   if (level === 'warning') return <WarningIcon size={12} />;
   return <InfoIcon size={12} />;
-};
-
-const relativeTime = (timestamp: number): string => {
-  const elapsed = Date.now() - timestamp;
-  if (elapsed < 60_000) return '刚刚';
-  if (elapsed < 3_600_000) return `${Math.floor(elapsed / 60_000)} 分钟前`;
-  if (elapsed < 86_400_000) return `${Math.floor(elapsed / 3_600_000)} 小时前`;
-  const date = new Date(timestamp);
-  return `${date.getMonth() + 1} 月 ${date.getDate()} 日`;
 };
 
 interface NotificationCenterProps {

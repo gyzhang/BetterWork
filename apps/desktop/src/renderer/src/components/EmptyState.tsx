@@ -70,7 +70,7 @@ export function EmptyPage({
 export function LoadingPage({ label = '正在加载资料…' }: { label?: string }): React.JSX.Element {
   return (
     <section className="loading-page" aria-live="polite" aria-busy="true">
-      <span className="loading-page-spinner" aria-hidden="true" />
+      <span className="spinner" aria-hidden="true" />
       <strong>{label}</strong>
     </section>
   );

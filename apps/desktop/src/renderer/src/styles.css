@@ -520,12 +520,6 @@ small {
 .settings-nav {
   margin-top: 12px;
 }
-.sidebar-footer {
-  padding: 11px 7px 0;
-  color: var(--text-muted);
-  font-size: 12px;
-  text-align: center;
-}
 .sidebar-collapsed {
   grid-template-columns: 88px minmax(0, 1fr) auto;
 }
@@ -541,7 +535,6 @@ small {
 .sidebar-collapsed .brand > div,
 .sidebar-collapsed .section-label,
 .sidebar-collapsed .run-list,
-.sidebar-collapsed .sidebar-footer,
 .sidebar-collapsed .sidebar-divider {
   display: none;
 }
@@ -598,10 +591,16 @@ small {
   gap: 8px;
   flex: none;
 }
-.page-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
+/* 页面级内联提示：技能页与专家页的提示挂在页头带下方，是一条横贯内容区的带子，
+   左右与页头的 28px 内缩对齐；知识页那条落在版心里，跟着版心齐边。
+   两种都由承载它的位置决定缝，不让 `.inline-message` 组件自带上下 margin，
+   否则 22 处已有 gap 的容器会被再叠一道（docs/10 §9.8、§11.5.1）。 */
+.skills-page > .inline-message,
+.experts-page > .inline-message {
+  margin: 12px 28px;
+}
+.knowledge-page > .inline-message {
+  margin: 12px 0;
 }
 .scroll-region {
   display: flex;
@@ -636,7 +635,11 @@ small {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
-.knowledge-scroll {
+/* 知识页的两栏舞台本身不滚动（滚动交给里面的两个 ScrollRegion），
+   所以它是「裁剪容器」而不是滚动区，不再借用滚动区类名。 */
+.knowledge-stage {
+  min-height: 0;
+  flex: 1;
   overflow: hidden;
 }
 .page-body {
@@ -1077,31 +1080,14 @@ small {
   flex: 1;
   overflow: auto;
 }
+/* 上下文面板的分段之间靠各自的 padding 与分隔线相接，不能整列补 gap；
+   夹在段与段之间的内联提示因此由这里给它自己的缝，左右与 `.context-section` 的 padding 对齐。 */
+.context-content > .inline-message {
+  margin: 12px 14px;
+}
 .selected-materials-panel {
   padding: 13px 14px 10px;
   border-bottom: 1px solid var(--border-subtle);
-}
-.selected-memories-panel {
-  padding: 13px 14px 10px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.selected-memories-panel .selected-material-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-}
-.selected-memories-panel .selected-material-row > div {
-  min-width: 0;
-}
-.selected-memories-panel button {
-  flex: none;
-  padding: 4px 7px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-tag);
-  font-size: 12px;
 }
 .selected-materials-heading {
   display: flex;
@@ -1555,13 +1541,31 @@ small {
   color: var(--text-secondary);
   text-align: center;
 }
-.loading-page-spinner {
-  width: 16px;
-  height: 16px;
+/* 全站唯一的「进行中」旋转指示器：LoadingPage、InlineLoading 与消息流共用一份。
+   此前 `page-spinner` 与 `spin` 两套 keyframes 画的是同一个圈，尺寸与描边各写一遍。 */
+.spinner {
+  width: var(--spinner-size, 12px);
+  height: var(--spinner-size, 12px);
+  flex: none;
   border: 2px solid var(--border);
   border-top-color: var(--brand);
   border-radius: var(--radius-circle);
-  animation: page-spinner var(--motion-overlay) linear infinite;
+  animation: spinner-rotate var(--motion-overlay) linear infinite;
+}
+@keyframes spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.loading-page .spinner {
+  --spinner-size: 16px;
+}
+.inline-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 .error-page {
   min-height: 300px;
@@ -1582,11 +1586,6 @@ small {
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.6;
-}
-@keyframes page-spinner {
-  to {
-    transform: rotate(360deg);
-  }
 }
 .work-count {
   padding: 5px 8px;
@@ -1673,11 +1672,6 @@ small {
 }
 .skills-page > .page-header {
   flex: none;
-}
-.skills-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
 }
 .skills-body {
   padding-top: 20px;
@@ -1823,9 +1817,6 @@ small {
   color: var(--warning);
   font-size: 12px;
 }
-.expert-summon-button {
-  align-self: flex-start;
-}
 .expert-card-actions,
 .expert-detail-actions,
 .expert-editor-actions {
@@ -1844,9 +1835,10 @@ small {
 .expert-detail-page > .page-header {
   flex: none;
 }
+/* 专家编辑与详情的正文一律用 `.page-body` 的 860px 版心（docs/10 §8.3），
+   页面不再自定宽度；这里只留顶部留白的微调。 */
 .expert-editor-body,
 .expert-detail-body {
-  width: min(720px, 100%);
   padding-top: 20px;
 }
 .expert-editor-body {
@@ -2281,6 +2273,10 @@ button.list-row:where(:not(:disabled)):hover {
 .settings-section {
   width: min(850px, 100%);
 }
+/* 设置页各段是块级流，段内没有纵向 gap 可用，因此由这一段自己给内联提示上下缝。 */
+.settings-section > .inline-message {
+  margin: 12px 0;
+}
 .settings-heading {
   display: flex;
   align-items: flex-start;
@@ -2303,11 +2299,11 @@ button.list-row:where(:not(:disabled)):hover {
   flex: none;
   gap: 8px;
 }
+/* 内联提示只有错误态一种配色：基础类只留排版，色与底一律由 `.error` 提供。
+   成功与信息走 TransientToast（docs/10 §11.5.1），这里长出绿色就等于开了第二个成功通道。
+   上下缝同样不在这里：缝由承载它的容器拥有，见下面的容器侧规则（docs/10 §9.8）。 */
 .inline-message {
-  margin: 15px 0;
   padding: 9px 11px;
-  color: var(--success);
-  background: var(--success-soft);
   border-radius: var(--radius-row);
   font-size: 12px;
 }
@@ -2374,27 +2370,6 @@ button.list-row:where(:not(:disabled)):hover {
   font-size: 12px;
   line-height: 1.6;
 }
-.memory-create-form {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  margin: 24px 0;
-  padding: 14px;
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-}
-.memory-create-form textarea {
-  width: 100%;
-  padding: 8px 9px;
-  color: var(--text-primary);
-  background: var(--surface);
-  border: var(--control-border);
-  border-radius: var(--control-radius);
-  font: inherit;
-  line-height: 1.5;
-  resize: vertical;
-}
 .memory-list {
   border-top: 1px solid var(--border);
 }
@@ -2455,12 +2430,6 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.6;
-}
-.memory-capture-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 9px;
 }
 /* 记忆治理页（产品设计 §3.1–§3.4、契约 §9/§10）：
    提示带只报事实不裁决，冲突并列呈现必须两条同宽。 */
@@ -3501,9 +3470,6 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--text-secondary);
   background: var(--surface-raised);
 }
-.model-sheet .inline-message {
-  margin: 0;
-}
 ::-webkit-scrollbar {
   width: 7px;
   height: 7px;
@@ -3549,7 +3515,6 @@ button.list-row:where(:not(:disabled)):hover {
   .brand > div,
   .section-label,
   .run-list,
-  .sidebar-footer,
   .sidebar-divider {
     display: none;
   }
@@ -3771,15 +3736,17 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--text-secondary);
   font-size: 12px;
 }
+/* 证据回看块自己就是缝的拥有者：里面的提示、列表与按钮纵向排开，间距只由这里的 gap 负责。
+   它自己挂在 `.evidence-list`（flex column gap 4px）里，所以不再自带上下 margin。 */
 .evidence-preview {
-  margin: 6px 0 10px;
+  display: grid;
+  gap: 8px;
   padding: 9px 10px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-row);
 }
 .evidence-preview ul {
-  margin: 6px 0;
   padding-left: 16px;
 }
 .evidence-preview li small {
@@ -3793,28 +3760,6 @@ button.list-row:where(:not(:disabled)):hover {
   font-size: 12px;
   line-height: 1.55;
   white-space: pre-wrap;
-}
-.artifact-row-clickable {
-  width: 100%;
-  cursor: pointer;
-  text-align: left;
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  padding: 10px 2px;
-  font: inherit;
-  color: inherit;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.artifact-row-clickable:hover {
-  background: var(--surface-hover);
-}
-.artifact-row-chevron {
-  margin-left: auto;
-  color: var(--text-muted);
-  flex: none;
 }
 .message-actions {
   display: flex;
@@ -3843,28 +3788,6 @@ button.list-row:where(:not(:disabled)):hover {
 .run-divider span {
   padding: 0 12px;
   white-space: nowrap;
-}
-.run-running-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-.run-running-indicator::before {
-  content: '';
-  width: 12px;
-  height: 12px;
-  border: 2px solid var(--border);
-  border-top-color: var(--brand);
-  border-radius: var(--radius-circle);
-  animation: spin var(--motion-overlay) linear infinite;
-}
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 .message-action {
   display: inline-flex;
@@ -4189,18 +4112,6 @@ button.list-row:where(:not(:disabled)):hover {
   background: var(--danger-soft);
   border-radius: var(--radius-row);
   font-size: 12px;
-}
-.refresh-knowledge-button {
-  padding: 6px 8px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--control-radius);
-  font-size: 12px;
-}
-.refresh-knowledge-button:hover {
-  color: var(--brand);
-  border-color: var(--brand);
 }
 .knowledge-issues {
   margin: 12px 0;
@@ -4568,6 +4479,38 @@ button.list-row:where(:not(:disabled)):hover {
 .task-run-history button > small {
   color: var(--text-muted);
   font-size: 12px;
+}
+/* 「本空间参考版本」小节此前完全没有样式：标题、说明与内联提示三块贴在一起，
+   唯一的分隔来自 `.inline-message` 自带的上下 margin。现在由小节自己拥有纵向缝（docs/10 §9.8）。 */
+.artifact-reference-section {
+  display: grid;
+  gap: 12px;
+}
+.artifact-reference-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.artifact-reference-heading > div:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+.artifact-reference-heading small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.artifact-reference-actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+.artifact-reference-note {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
 }
 .artifact-evidence-list {
   margin-top: 14px;

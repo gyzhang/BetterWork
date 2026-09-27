@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 
 import { MoreHorizontalIcon } from '../icons';
 import { formatTime } from '../lib/format';
+import { knowledgeSourceStateName } from '../lib/labels';
 import { ListRow } from './ListRow';
 import type { PopoverMenuItem } from './PopoverMenu';
 import { PopoverMenu } from './PopoverMenu';
@@ -20,14 +21,6 @@ export interface KnowledgeDocumentCardProps {
   /** KM10：打开主区详情（保存文本、版本列表与来源状态）。 */
   onOpenDetail: () => void;
 }
-
-const SOURCE_STATE_LABELS: Record<KnowledgeDocumentSummary['sourceStatus'], string> = {
-  unchecked: '来源未检查',
-  unchanged: '来源一致',
-  changed: '原件已变化',
-  missing: '原件缺失',
-  unreadable: '原件不可读',
-};
 
 const FORMAT_LABELS: Record<KnowledgeDocumentSummary['format'], string> = {
   markdown: 'MD',
@@ -88,7 +81,7 @@ export function KnowledgeDocumentCard({
         <>
           {document.sourcePath}
           {locator ? ` · ${locator}` : ''} · 更新于 {formatTime(document.updatedAt)} ·{' '}
-          {SOURCE_STATE_LABELS[document.sourceStatus]}
+          {knowledgeSourceStateName[document.sourceStatus]}
         </>
       }
       actions={

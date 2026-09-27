@@ -3,7 +3,6 @@ import type {
   ExpertRevisionDraft,
   ExpertSummary,
   MaterialCandidate,
-  MaterialReference,
   McpConnectionSummary,
   MemoryRecord,
   ModelProfileSummary,
@@ -11,13 +10,16 @@ import type {
 } from '@betterwork/agent-protocol';
 import { useState } from 'react';
 
+import { AsyncButton } from '../components/AsyncButton';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
 import { PageHeader } from '../components/layout/PageHeader';
+import { ScrollRegion } from '../components/layout/ScrollRegion';
 import type { ExpertsState } from '../hooks/use-experts';
 import { ExpertIcon, PlusIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
+import { materialCandidateAppliesToWorkspace, materialReferenceKey } from '../lib/materials';
 import { canToggleMcpTool, hasMcpToolBinding, setMcpToolBinding } from '../lib/mcp-selection';
 
 const lifecycleName = {
@@ -79,22 +81,8 @@ const draftOf = (detail: ExpertDetail): ExpertRevisionDraft => ({
   referenceMaterials: detail.revision.referenceMaterials ?? [],
 });
 
-const referenceKey = (reference: MaterialReference): string => {
-  if (reference.kind === 'knowledge-revision') return `knowledge:${reference.knowledgeRevisionId}`;
-  if (reference.kind === 'artifact-version') return `artifact:${reference.artifactVersionId}`;
-  return `snapshot:${reference.snapshotId}`;
-};
-
 const referencePurpose = (candidate: MaterialCandidate): 'rule' | 'historical-comparison' =>
   candidate.reference.kind === 'knowledge-revision' ? 'rule' : 'historical-comparison';
-
-const referenceApplicableToWorkspace = (
-  candidate: MaterialCandidate,
-  workspaceId?: string,
-): boolean => {
-  if (candidate.reference.kind !== 'artifact-version') return true;
-  return Boolean(workspaceId && candidate.reference.originWorkspaceId === workspaceId);
-};
 
 function ExpertCard({
   expert,
@@ -192,7 +180,7 @@ function ExpertEditor({
           </button>
         }
       />
-      <div className="page-scroll skills-scroll">
+      <ScrollRegion ariaLabel="专家编辑表单">
         <div className="page-body expert-editor-body">
           <Field label="名称">
             <input
@@ -405,11 +393,11 @@ function ExpertEditor({
                 materialCandidates
                   .filter((candidate) => candidate.reference.kind !== 'workspace-input-snapshot')
                   .map((candidate) => {
-                    const key = referenceKey(candidate.reference);
+                    const key = materialReferenceKey(candidate.reference);
                     const checked = referenceMaterials.some(
-                      (item) => referenceKey(item.reference) === key,
+                      (item) => materialReferenceKey(item.reference) === key,
                     );
-                    const applicable = referenceApplicableToWorkspace(candidate, workspaceId);
+                    const applicable = materialCandidateAppliesToWorkspace(candidate, workspaceId);
                     return (
                       <label className="expert-option" key={key}>
                         <input
@@ -428,7 +416,7 @@ function ExpertEditor({
                                     },
                                   ]
                                 : referenceMaterials.filter(
-                                    (item) => referenceKey(item.reference) !== key,
+                                    (item) => materialReferenceKey(item.reference) !== key,
                                   ),
                             })
                           }
@@ -445,15 +433,19 @@ function ExpertEditor({
             </div>
           </fieldset>
           <div className="expert-editor-actions">
-            <button className="primary-button" type="button" disabled={saving} onClick={onSave}>
-              {saving ? '正在保存…' : '保存修订'}
-            </button>
+            <AsyncButton
+              variant="primary"
+              busy={saving}
+              label="保存修订"
+              busyLabel="正在保存…"
+              onClick={onSave}
+            />
             <button className="text-button" type="button" onClick={onCancel}>
               取消
             </button>
           </div>
         </div>
-      </div>
+      </ScrollRegion>
     </section>
   );
 }
@@ -529,7 +521,7 @@ function ExpertDetailPanel({
           </>
         }
       />
-      <div className="page-scroll skills-scroll">
+      <ScrollRegion ariaLabel="专家详情">
         <div className="page-body expert-detail-body">
           <p className="expert-detail-summary">{detail.summary || '暂无说明'}</p>
           <section className="expert-detail-section">
@@ -611,7 +603,7 @@ function ExpertDetailPanel({
             </div>
           </section>
         </div>
-      </div>
+      </ScrollRegion>
     </section>
   );
 }
@@ -772,7 +764,7 @@ export function ExpertsPage({
           {state.error}
         </p>
       )}
-      <div className="page-scroll skills-scroll">
+      <ScrollRegion ariaLabel="专家列表" busy={state.loading || detailLoading}>
         <section className="page-body skills-body">
           {state.loading || detailLoading ? (
             <LoadingPage label="正在加载专家…" />
@@ -796,7 +788,7 @@ export function ExpertsPage({
             </div>
           )}
         </section>
-      </div>
+      </ScrollRegion>
     </section>
   );
 }

@@ -19,9 +19,11 @@ import { trackAction } from '../lib/async-action';
 import {
   facetLabel,
   fromDateInputValue,
+  isGlobalMemoryScope,
   memoryScopeLabel,
   toDateInputValue,
 } from '../lib/memory-labels';
+import { AsyncButton } from './AsyncButton';
 import { Field } from './Field';
 import { FieldSelect } from './FieldSelect';
 
@@ -119,9 +121,6 @@ export interface MemoryEditorProps {
   onSubmit: (submission: MemoryEditorSubmission) => Promise<boolean>;
   onCancel: () => void;
 }
-
-const isGlobalScope = (scope: MemoryScope): boolean =>
-  scope.kind === 'user' || scope.kind === 'expert';
 
 /**
  * 把表单字段翻成契约 §9.1 的 patch：日期与议题只用 `set`/`clear`，
@@ -226,7 +225,7 @@ export function MemoryEditor({
     scope,
   };
   const restating = restateFrom !== undefined;
-  const globalTarget = isGlobalScope(scope);
+  const globalTarget = isGlobalMemoryScope(scope);
   const target = memoryEditorSubmitTarget(memory, confirmAction);
   const patch = memory === undefined ? undefined : buildMemoryEditPatch(fields, memory);
   const unchanged = patch !== undefined && isMemoryEditPatchEmpty(patch);
@@ -246,7 +245,7 @@ export function MemoryEditor({
     problems.push('请先在回答原文里确认要保留的来源片段。');
   if (globalTarget && !genericDeclaration)
     problems.push('保存为全局记忆前，请确认这是一条通用要求并勾选声明。');
-  if (memory !== undefined && !isGlobalScope(memory.scope) && globalTarget && !restating)
+  if (memory !== undefined && !isGlobalMemoryScope(memory.scope) && globalTarget && !restating)
     problems.push('工作空间事实不能直接改成全局记忆，请改用「作为我的工作口径重新保存」。');
   if (target === 'confirm' && confirmAction === 'reconfirm') {
     problems.push(...reconfirmProblems(fields, memory));
@@ -417,14 +416,14 @@ export function MemoryEditor({
         <button type="button" className="secondary-button" onClick={onCancel} disabled={submitting}>
           取消
         </button>
-        <button
-          type="button"
-          className="primary-button"
+        <AsyncButton
+          variant="primary"
+          busy={submitting}
+          disabled={problems.length > 0}
+          label={submitLabel ?? '保存'}
+          busyLabel="正在提交…"
           onClick={submit}
-          disabled={problems.length > 0 || submitting}
-        >
-          {submitting ? '正在提交…' : (submitLabel ?? '保存')}
-        </button>
+        />
       </div>
     </div>
   );

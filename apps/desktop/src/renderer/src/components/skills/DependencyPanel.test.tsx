@@ -227,7 +227,7 @@ describe('DependencyPanel', () => {
     });
     render(<Harness skill={skillOf('skill-1', { trustStatus: 'needs-review' })} />);
 
-    await waitFor(() => expect(screen.getByText('就绪')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('已就绪')).toBeTruthy());
     expect(screen.getByText(/需要用户确认后建立/)).toBeTruthy();
     expect(screen.queryByText(/环境就绪且授权有效，可以执行脚本。/)).toBeNull();
     expect(screen.getByRole('button', { name: '确认依赖授权' })).toHaveProperty('disabled', false);

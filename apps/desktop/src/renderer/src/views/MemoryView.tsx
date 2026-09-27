@@ -33,6 +33,7 @@ import {
   effectiveStatusLabel,
   facetLabel,
   formatValidityRange,
+  isGlobalMemoryScope,
   isTerminalMemory,
   memoryProvenanceLabel,
   memoryScopeLabel,
@@ -748,7 +749,7 @@ function MemoryRow({
               {memory.recallPolicy === 'pinned' ? '取消优先带入' : '设为优先带入'}
             </button>
           )}
-          {!readOnly && !isGlobalScopeOf(memory) && isDerived(memory) && (
+          {!readOnly && !isGlobalMemoryScope(memory.scope) && isDerived(memory) && (
             <button type="button" onClick={() => onRestate(memory)}>
               作为我的工作口径重新保存
             </button>
@@ -814,9 +815,6 @@ function MemoryRow({
     </ListRow>
   );
 }
-
-const isGlobalScopeOf = (memory: MemoryViewItem): boolean =>
-  memory.scope.kind === 'user' || memory.scope.kind === 'expert';
 
 const isDerived = (memory: MemoryViewItem): boolean =>
   memory.provenance.verification === 'verified' && memory.provenance.authority === 'derived';

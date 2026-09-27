@@ -183,3 +183,11 @@ export const fromDateInputValue = (value: string): number | undefined => {
   const timestamp = new Date(`${value}T00:00:00`).getTime();
   return Number.isNaN(timestamp) ? undefined : timestamp;
 };
+
+/**
+ * 全局作用域的记忆：用户级与专家级两处不属于任何单一工作空间，
+ * 因此可跨空间召回，界面也据此决定「适用于哪些工作空间」那一行的说法。
+ * 记忆页与记忆编辑器此前各写一份同样的判断。
+ */
+export const isGlobalMemoryScope = (scope: MemoryScope): boolean =>
+  scope.kind === 'user' || scope.kind === 'expert';

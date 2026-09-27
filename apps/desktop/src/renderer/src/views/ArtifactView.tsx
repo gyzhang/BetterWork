@@ -13,6 +13,7 @@ import type {
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useCallback, useRef, useState } from 'react';
 
+import { AsyncButton, InlineLoading } from '../components/AsyncButton';
 import { EmptyPage } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
@@ -36,18 +37,8 @@ import {
 } from '../icons';
 import { reportAction, trackAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
+import { fileTypeLabel } from '../lib/labels';
 import { MarkdownPreview } from '../markdown-preview';
-
-const MIME_LABEL_MAP: Record<string, string> = {
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
-  'application/pdf': 'PDF',
-  'text/plain': 'TXT',
-};
-
-const fileTypeLabel = (mimeType: string): string =>
-  MIME_LABEL_MAP[mimeType] ?? mimeType.split('/').pop()?.toUpperCase() ?? 'FILE';
 
 const inputLabel = (input: ArtifactInput): string => {
   if (input.kind === 'evidence') return `证据 · ${input.evidenceId}`;
@@ -560,7 +551,7 @@ function PresentationPreview({
     return (
       <div className="artifact-file-info">
         <div className="artifact-file-info-row">
-          <span>正在生成幻灯片预览…</span>
+          <InlineLoading label="正在生成幻灯片预览…" />
         </div>
       </div>
     );
@@ -804,9 +795,13 @@ function ReferenceVersionSection({
               取消参考
             </button>
           ) : (
-            <button type="button" className="secondary-button" disabled={busy} onClick={mark}>
-              {busy ? '正在提交…' : '指定为本空间参考版本'}
-            </button>
+            <AsyncButton
+              variant="secondary"
+              busy={busy}
+              label="指定为本空间参考版本"
+              busyLabel="正在提交…"
+              onClick={mark}
+            />
           )}
           {onReferenceToTask && (
             <button

@@ -3,7 +3,6 @@ import { MEMORY_CANDIDATE_CONTENT_MAX_CODE_POINTS } from '@betterwork/agent-prot
 import { useState } from 'react';
 
 import type { MemorySuggestionsState } from '../hooks/use-memory-suggestions';
-import { AlertIcon } from '../icons';
 import { trackAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
 import {
@@ -22,6 +21,7 @@ import {
   latestJobLabel,
   memoryConsentDialogNotice,
 } from '../lib/memory-suggestions';
+import { AsyncButton, InlineLoading } from './AsyncButton';
 import { ConfirmationDialog } from './ConfirmationDialog';
 import { ListRow } from './ListRow';
 import { TransientToast } from './TransientToast';
@@ -88,9 +88,10 @@ export function MemorySuggestionList({
         <p className="inline-message error">{suggestions.candidatesError}</p>
       )}
       {suggestions.polling && (
-        <p className="suggestion-polling">
-          <AlertIcon size={12} /> 正在提炼，本面板可见期间才会查询进度。
-        </p>
+        <InlineLoading
+          className="suggestion-polling"
+          label="正在提炼，本面板可见期间才会查询进度。"
+        />
       )}
       {variant === 'settings' ? (
         <p className="context-hint">
@@ -152,14 +153,14 @@ function SuggestionSettings({
               : `${enabled ? '已开启' : '已关闭'} · ${consentLabel}`}
           </small>
         </div>
-        <button
-          type="button"
-          className="secondary-button"
-          disabled={suggestions.savingSettings || suggestions.settingsLoading}
+        <AsyncButton
+          variant="secondary"
+          busy={suggestions.savingSettings}
+          disabled={suggestions.settingsLoading}
+          label={enabled ? '关闭自动建议' : '开启自动建议'}
+          busyLabel="正在提交…"
           onClick={() => setPendingToggle(!enabled)}
-        >
-          {suggestions.savingSettings ? '正在提交…' : enabled ? '关闭自动建议' : '开启自动建议'}
-        </button>
+        />
       </div>
       <p className="context-hint">{consentStateNotice(suggestions.settings)}</p>
       {suggestions.settingsError && (
