@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>知识页 · 索引与作业抽屉 · 评审原型（方案 B）</title>
+    <style>
+      :root {
+        --surface-page: #f5f4ef;
+        --surface-panel: #ffffff;
+        --surface-subtle: #eeeee8;
+        --text-primary: #293b37;
+        --text-secondary: #596761;
+        --border-default: #c7cfca;
+        --action-primary: #315f51;
+        --text-error: #923a32;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--surface-page);
+        color: var(--text-primary);
+        font:
+          15px/1.65 'PingFang SC',
+          sans-serif;
+      }
+      .review-bar {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        padding: 12px 24px;
+        background: var(--surface-subtle);
+        border-bottom: 1px solid var(--border-default);
+      }
+      .review-bar p,
+      .decision,
+      .muted,
+      footer {
+        color: var(--text-secondary);
+        font-size: 13px;
+      }
+      nav,
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 14px 0;
+      }
+      main {
+        width: min(980px, calc(100% - 48px));
+        margin: auto;
+        padding-bottom: 40px;
+      }
+      section {
+        margin: 26px 0;
+        padding: 16px;
+        background: var(--surface-panel);
+        border: 1px solid var(--border-default);
+        scroll-margin-top: 96px;
+      }
+      h2 {
+        margin: 0 0 6px;
+        font-size: 21px;
+      }
+      h3 {
+        margin: 18px 0 6px;
+        font-size: 16px;
+      }
+      button {
+        padding: 6px 12px;
+        color: var(--text-primary);
+        background: var(--surface-panel);
+        border: 1px solid var(--border-default);
+        border-radius: 6px;
+        font: inherit;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      button.primary {
+        color: #ffffff;
+        background: var(--action-primary);
+        border-color: var(--action-primary);
+      }
+      button.ghost {
+        color: var(--text-secondary);
+        border-style: dashed;
+      }
+      ul {
+        margin: 8px 0;
+        padding-left: 20px;
+      }
+      li {
+        margin: 3px 0;
+      }
+      code {
+        padding: 1px 4px;
+        background: var(--surface-subtle);
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+      }
+
+      /* === 线框：应用外壳 === */
+      .frame {
+        position: relative;
+        overflow: hidden;
+        height: 560px;
+        background: var(--surface-page);
+        border: 1px solid var(--border-default);
+      }
+      .shell {
+        display: grid;
+        grid-template-columns: 200px 1fr;
+        height: 100%;
+        transition: filter 0.2s;
+      }
+      .shell.inert {
+        filter: grayscale(0.7) brightness(0.97);
+        pointer-events: none;
+      }
+      .side {
+        padding: 12px;
+        background: var(--surface-panel);
+        border-right: 1px solid var(--border-default);
+        font-size: 13px;
+      }
+      .side b {
+        display: block;
+        padding: 6px 8px;
+        color: #ffffff;
+        background: var(--action-primary);
+        border-radius: 6px;
+      }
+      .side span {
+        display: block;
+        padding: 6px 8px;
+        color: var(--text-secondary);
+      }
+      .page {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 16px 20px;
+        overflow: auto;
+      }
+      .page-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .page-head h3 {
+        margin: 0;
+        font-size: 18px;
+      }
+      .toolbar {
+        display: flex;
+        gap: 8px;
+      }
+      .card {
+        padding: 10px 12px;
+        background: var(--surface-panel);
+        border: 1px solid var(--border-default);
+        border-radius: 8px;
+        font-size: 13px;
+      }
+      .card i {
+        display: block;
+        height: 8px;
+        margin-top: 6px;
+        background: var(--surface-subtle);
+      }
+      .summary {
+        display: flex;
+        justify-content: space-between;
+        color: var(--text-secondary);
+        font-size: 12px;
+      }
+
+      /* === 线框：右侧抽屉 === */
+      .backdrop {
+        position: absolute;
+        inset: 0;
+        display: none;
+        background: rgba(41, 59, 55, 0.28);
+      }
+      .frame.open .backdrop {
+        display: block;
+      }
+      .drawer {
+        position: absolute;
+        top: 0;
+        right: 0;
+        display: none;
+        width: min(480px, 92%);
+        height: 100%;
+        flex-direction: column;
+        background: var(--surface-panel);
+        border-left: 1px solid var(--border-default);
+        box-shadow: -16px 0 42px rgba(41, 59, 55, 0.24);
+      }
+      .frame.open .drawer {
+        display: flex;
+      }
+      .drawer-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 18px;
+        border-bottom: 1px solid var(--border-default);
+      }
+      .drawer-head h4 {
+        margin: 0;
+        font-size: 16px;
+      }
+      .drawer-body {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 14px 18px 20px;
+        overflow: auto;
+      }
+      .group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px;
+        background: var(--surface-page);
+        border: 1px solid var(--border-default);
+        border-radius: 8px;
+      }
+      .group > header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .group p {
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: 12px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 8px 10px;
+        background: var(--surface-panel);
+        border: 1px solid var(--border-default);
+        border-radius: 6px;
+        font-size: 12px;
+      }
+      .row .badge {
+        padding: 1px 6px;
+        color: var(--action-primary);
+        background: #dfeae4;
+        border-radius: 5px;
+        font-size: 11px;
+      }
+      .danger {
+        color: var(--text-error);
+      }
+      .pin {
+        border-style: dashed;
+        border-color: var(--action-primary);
+      }
+      .note {
+        margin: 0;
+        padding: 10px 12px;
+        color: var(--text-secondary);
+        background: #fff8e6;
+        border: 1px dashed #d8c48a;
+        font-size: 13px;
+      }
+      .options {
+        display: grid;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .options div {
+        padding: 10px 12px;
+        background: var(--surface-page);
+        border: 1px solid var(--border-default);
+      }
+      .options b {
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="review-bar">
+      <strong>方案 B：把「索引与模型」与「最近作业」合成一个右侧抽屉</strong>
+      <p>
+        低保真交互原型，不是视觉稿。下面第一块可以点：按
+        <code>索引与作业</code> 开抽屉，按 <code>Esc</code> 或点左侧背板关抽屉；抽屉打开时主页面被
+        inert（灰化、不可点）。
+      </p>
+      <nav>
+        <a href="#d1">D1 入口与命名</a>
+        <a href="#d2">D2 抽屉分区</a>
+        <a href="#d3">D3 进行中作业的位置</a>
+        <a href="#d4">D4 主页面留什么</a>
+        <a href="#d5">D5 清空与确认</a>
+        <a href="#d6">D6 与既有约定的一致性</a>
+      </nav>
+    </div>
+
+    <main>
+      <section id="wireframe">
+        <h2>线框（可点）</h2>
+        <div class="frame" id="frame">
+          <div class="shell" id="shell">
+            <div class="side">
+              <b>知识</b>
+              <span>工作 / 成果 / 技能 / 专家</span>
+              <span>最近任务…</span>
+            </div>
+            <div class="page">
+              <div class="page-head">
+                <h3>让资料成为下一次工作的起点</h3>
+                <button class="primary">导入资料</button>
+              </div>
+              <div class="toolbar">
+                <button class="ghost">全部资料 ▾</button>
+                <button class="ghost">搜索资料库中的内容…</button>
+                <button id="openDrawer">索引与作业</button>
+              </div>
+              <div class="card">合同条款整理.md<i></i><i style="width: 70%"></i></div>
+              <div class="card">三季度经营分析.md<i></i><i style="width: 55%"></i></div>
+              <div class="card">回款口径备忘.md<i></i><i style="width: 62%"></i></div>
+              <p class="summary">
+                <span>已整理 9 份资料</span><span>提交搜索后可见检索方式与覆盖状态</span>
+              </p>
+            </div>
+          </div>
+
+          <div class="backdrop" id="backdrop"></div>
+
+          <div class="drawer" role="dialog" aria-modal="true" aria-label="索引与作业" tabindex="-1">
+            <div class="drawer-head">
+              <h4>索引与作业</h4>
+              <button id="closeDrawer">关闭</button>
+            </div>
+            <div class="drawer-body">
+              <div class="group pin">
+                <header><span>进行中的作业</span><span class="badge">钉在顶端</span></header>
+                <div class="row">
+                  <span>向量索引重建：进行中 5/9</span>
+                  <button>取消</button>
+                </div>
+                <p>没有进行中作业时整节不出现，不留空壳。</p>
+              </div>
+
+              <div class="group">
+                <header><span>语义检索</span></header>
+                <div class="row">
+                  <span>☑ 语义检索 · 嵌入模型 bge-m3 · default ▾</span>
+                </div>
+                <div class="row"><span>重建语义索引</span><span>强制重建</span></div>
+                <p>切换模型后需手动重建，旧向量不会混入新查询。</p>
+              </div>
+
+              <div class="group">
+                <header><span>本机索引维护</span></header>
+                <div class="row"><span>重建关键词索引</span><span>检查当前列表来源（9）</span></div>
+                <p>两项只在本机进行、不调用模型。</p>
+              </div>
+
+              <div class="group">
+                <header>
+                  <span>最近作业（含已取消）· 3 条</span><button class="danger">清空</button>
+                </header>
+                <div class="row"><span>来源检查：已完成 9/9</span><span>查看条目</span></div>
+                <div class="row"><span>来源检查：已完成 9/9</span><span>查看条目</span></div>
+                <div class="row"><span>向量索引重建：已取消 4/9</span><span>查看条目</span></div>
+              </div>
+
+              <div class="group">
+                <header><span>集合管理</span></header>
+                <div class="row"><span>新集合名称…</span><span>新建</span></div>
+                <p>集合只是本地分类：不移动本机文件，也不改变任务已固定的材料。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="note">
+          抽屉宽 480px、右侧全高，与「编辑模型」抽屉同一个基座（inert、Esc、背板点击、焦点归还）。
+          抽屉内部只有一个滚动区；主页面在抽屉打开期间不可操作，这是与现在内联面板最大的差别。
+        </p>
+      </section>
+
+      <section id="d1">
+        <h2>D1 入口与命名</h2>
+        <p>
+          现在工具栏上是「索引与模型」，展开后里面其实还藏着集合管理与最近作业——名字比内容窄。合成一个抽屉后建议改名。
+        </p>
+        <div class="options">
+          <div>
+            <b>建议：索引与作业</b>
+            <p>
+              覆盖语义检索、本机重建、作业记录、集合管理四件事；有作业在跑时按钮上带「进行中 1」。
+            </p>
+          </div>
+          <div>
+            <b>备选：索引与模型（不改名）</b>
+            <p>改动最小，但按钮名字继续少说一件事。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="d2">
+        <h2>D2 抽屉分区顺序</h2>
+        <p>自上而下五节，顺序按「先看到正在发生什么，再看到能做什么」排：</p>
+        <ul>
+          <li>进行中的作业（钉在顶端，带取消；没有就不出现）</li>
+          <li>语义检索（开关、嵌入模型、普通／强制重建）</li>
+          <li>本机索引维护（重建关键词索引、检查当前列表来源（N））</li>
+          <li>最近作业（含已取消）· N 条 ＋ 清空 ＋ 查看条目</li>
+          <li>集合管理（新建／改名／删除）</li>
+        </ul>
+        <p class="muted">
+          为什么把「进行中」放最上面：跑作业时你唯一想知道的是它到哪了；放最下面会被五屏内容推走。
+        </p>
+      </section>
+
+      <section id="d3">
+        <h2>D3 进行中作业的位置（这个方案唯一的代价）</h2>
+        <p>
+          抽屉是模态：打开时主页面
+          inert，你看不到资料列表；关掉抽屉回到列表时，又看不到作业进度。内联面板没有这个问题，但它把管理面板永久挂在页面上。
+        </p>
+        <div class="options">
+          <div>
+            <b>建议：接受这个取舍，用两处补偿</b>
+            <p>
+              ① 入口按钮上带状态（<code>索引与作业 · 进行中 5/9</code>），关着抽屉也知道在跑；②
+              作业终态照旧落库进消息中心，切走页面也不丢结果。
+            </p>
+          </div>
+          <div>
+            <b>备选：只把「索引与模型」搬进抽屉，最近作业留在页面</b>
+            <p>进度可以同屏看，但页面仍留一处折叠，两个表面的不一致只解决一半。</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="d4">
+        <h2>D4 主页面留什么</h2>
+        <ul>
+          <li>
+            页头、工具栏（集合筛选、搜索、索引与作业、导入资料）、资料卡片列表、底部摘要行——都不变。
+          </li>
+          <li>
+            删除：页面内联的 <code>.knowledge-admin</code> 面板与「最近作业」折叠组（全部进抽屉）。
+          </li>
+          <li>
+            不变：文档详情仍是页面内子视图（返回列表保留搜索条件），它不是配置面，不该进抽屉。
+          </li>
+          <li>不变：反馈落点——当场确认 4 秒自消，可行动失败留内联，作业结果进消息中心。</li>
+        </ul>
+      </section>
+
+      <section id="d5">
+        <h2>D5 清空与确认</h2>
+        <p>
+          「清空」放在<em>最近作业小节的标题右侧</em>，不放在抽屉底部——抽屉底部是全局动作的位置，而清空只作用于这一节。确认框沿用已实现的那一条：
+        </p>
+        <ul>
+          <li>标题：清空最近作业？</li>
+          <li>
+            说明：只清掉已结束的作业记录；资料、索引与本机原件都不受影响，进行中的作业不会被删除。
+          </li>
+          <li>按钮：清空记录（破坏性用 danger 文字）</li>
+        </ul>
+      </section>
+
+      <section id="d6">
+        <h2>D6 与既有约定的一致性</h2>
+        <ul>
+          <li>
+            复用 <code>Modal</code> 的 <code>sheet</code>
+            变体：inert、Esc、背板关闭、初始焦点、Tab 循环、焦点归还全在基座里，页面不重写。
+          </li>
+          <li>抽屉内允许开下拉与确认框（层级、Esc 交接、Tab 不抢焦点已由基座处理）。</li>
+          <li>
+            docs/10
+            §7.4「知识页不新增常驻任务右栏或一级导航」不被违反：抽屉是模态覆盖层，用完即走，不常驻。
+          </li>
+          <li>列表行、徽标、空态继续走 ListRow／Badge／EmptyNotice 基座，不新造外观。</li>
+        </ul>
+      </section>
+
+      <footer>
+        拍板后落代码的范围：KnowledgeView 的 admin 面板与最近作业折叠组迁入
+        <code>KnowledgeIndexDrawer</code>（新组件，走 Modal
+        sheet）；入口按钮改名并带进行中状态；KM15 清单相应行按新界面重写。
+      </footer>
+    </main>
+
+    <script>
+      const frame = document.getElementById('frame');
+      const shell = document.getElementById('shell');
+      const drawer = frame.querySelector('.drawer');
+      const open = () => {
+        frame.classList.add('open');
+        shell.classList.add('inert');
+        drawer.focus();
+      };
+      const close = () => {
+        frame.classList.remove('open');
+        shell.classList.remove('inert');
+        document.getElementById('openDrawer').focus();
+      };
+      document.getElementById('openDrawer').addEventListener('click', open);
+      document.getElementById('closeDrawer').addEventListener('click', close);
+      document.getElementById('backdrop').addEventListener('click', close);
+      window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && frame.classList.contains('open')) close();
+      });
+    </script>
+  </body>
+</html>
