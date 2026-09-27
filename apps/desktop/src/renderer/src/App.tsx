@@ -29,6 +29,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { deriveActivityGroups } from './activity';
 import { BrandLogo } from './brand-logo';
 import { AsyncButton, InlineLoading } from './components/AsyncButton';
+import { BindingChip, BindingChipBar } from './components/BindingChip';
 import {
   type CapabilityChip,
   ComposerCapabilityPicker,
@@ -1346,7 +1347,7 @@ export function App(): React.JSX.Element {
                 />
               )}
               <div className="messages" ref={containerRef} onScroll={onScroll}>
-                <div className="page-body">
+                <div className="page-body message-flow">
                   {taskAllRuns.length === 0 && !activeRunId ? (
                     taskBindings.length > 0 ? (
                       <div className="welcome">
@@ -1405,7 +1406,7 @@ export function App(): React.JSX.Element {
                             {isLatestCompleted && runAssistantText && (
                               <div className="message-actions">
                                 <button
-                                  className="message-action"
+                                  className="text-button"
                                   onClick={() => {
                                     const answer = finalAssistantAnswer(runEvents);
                                     if (!answer) {
@@ -1433,7 +1434,7 @@ export function App(): React.JSX.Element {
                                   记住这段经验
                                 </button>
                                 <button
-                                  className="message-action"
+                                  className="text-button"
                                   onClick={() => trackAction(saveCurrentArtifact(), '保存成果')}
                                   disabled={currentTaskArtifacts.some(
                                     (artifact) => artifact.sourceRunId === run.id,
@@ -1577,27 +1578,22 @@ export function App(): React.JSX.Element {
                 </div>
                 <div className="composer-capability-row">
                   {activeExpert && (
-                    <div className="expert-chip-bar" role="list" aria-label="当前专家">
-                      <div className="expert-chip" role="listitem">
-                        <ExpertIcon size={12} />
-                        <span>{activeExpert.name}</span>
-                        <button
-                          type="button"
-                          className="capability-chip-remove"
-                          aria-label={`移除专家 ${activeExpert.name}`}
-                          onClick={() => {
-                            setActiveExpert(undefined);
-                            setTaskContext(undefined);
-                            setTaskBindings((current) =>
-                              current.filter((chip) => chip.source !== 'expert-preset'),
-                            );
-                          }}
-                          disabled={isRunning}
-                        >
-                          <CloseIcon size={10} />
-                        </button>
-                      </div>
-                    </div>
+                    <BindingChipBar label="当前专家">
+                      <BindingChip
+                        name={activeExpert.name}
+                        removeLabel={`移除专家 ${activeExpert.name}`}
+                        leading={<ExpertIcon size={12} />}
+                        tone="brand"
+                        disabled={isRunning}
+                        onRemove={() => {
+                          setActiveExpert(undefined);
+                          setTaskContext(undefined);
+                          setTaskBindings((current) =>
+                            current.filter((chip) => chip.source !== 'expert-preset'),
+                          );
+                        }}
+                      />
+                    </BindingChipBar>
                   )}
                   <ComposerCapabilityPicker
                     skills={skills.skills}

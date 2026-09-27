@@ -6,11 +6,12 @@ import type {
 } from '@betterwork/agent-protocol';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { CapabilityIcon, CloseIcon, PlusIcon } from '../icons';
+import { CapabilityIcon, PlusIcon } from '../icons';
 import { materialPurposeName } from '../lib/labels';
 import { materialCandidateKey, taskMaterialKey } from '../lib/materials';
 import { ActionBar } from './ActionBar';
 import { InlineLoading } from './AsyncButton';
+import { BindingChip, BindingChipBar } from './BindingChip';
 import { FieldSelect } from './FieldSelect';
 import { IconButton } from './IconButton';
 import { PopoverMenu } from './PopoverMenu';
@@ -232,40 +233,40 @@ export function ComposerCapabilityPicker({
   return (
     <>
       {selected.length > 0 && (
-        <div className="capability-chip-bar" role="list" aria-label="已选能力">
+        <BindingChipBar label="已选能力">
           {selected.map((chip) => (
-            <div key={chip.id} className="capability-chip" role="listitem">
-              <CapabilityIcon size={12} />
-              <span className="capability-chip-label">{chip.name}</span>
-              <button
-                type="button"
-                className="capability-chip-remove"
-                aria-label={`移除 ${chip.name}`}
-                onClick={() => onRemove(chip.id)}
-                disabled={disabled}
-              >
-                <CloseIcon size={10} />
-              </button>
-            </div>
+            <BindingChip
+              key={chip.id}
+              name={chip.name}
+              leading={<CapabilityIcon size={12} />}
+              disabled={disabled}
+              onRemove={() => onRemove(chip.id)}
+            />
           ))}
-        </div>
+        </BindingChipBar>
       )}
       {materials.length > 0 && (
-        <div className="material-chip-bar" role="list" aria-label="本次材料">
+        <BindingChipBar className="binding-chip-block" label="本次材料">
           {materials.map((selection) => {
             const title = materialTitle(selection, materialCandidates);
             const candidate = materialCandidates.find(
               (item) => materialCandidateKey(item) === taskMaterialKey(selection),
             );
             return (
-              <div
+              <BindingChip
                 key={taskMaterialKey(selection)}
-                className={`material-chip${candidate?.status === 'unavailable' ? ' unavailable' : ''}`}
-                role="listitem"
+                name={title}
+                removeLabel={`移除材料 ${title}`}
+                disabled={disabled}
+                onRemove={() =>
+                  onCommitMaterials(
+                    materials.filter(
+                      (item) => taskMaterialKey(item) !== taskMaterialKey(selection),
+                    ),
+                  )
+                }
+                {...(candidate?.status === 'unavailable' ? { tone: 'danger' as const } : {})}
               >
-                <span className="material-chip-title" title={title}>
-                  {title}
-                </span>
                 <FieldSelect
                   ariaLabel={`${title}用途`}
                   value={selection.purpose}
@@ -281,25 +282,10 @@ export function ComposerCapabilityPicker({
                   }}
                   options={PURPOSE_OPTIONS}
                 />
-                <button
-                  type="button"
-                  className="capability-chip-remove"
-                  aria-label={`移除材料 ${title}`}
-                  onClick={() =>
-                    onCommitMaterials(
-                      materials.filter(
-                        (item) => taskMaterialKey(item) !== taskMaterialKey(selection),
-                      ),
-                    )
-                  }
-                  disabled={disabled}
-                >
-                  <CloseIcon size={10} />
-                </button>
-              </div>
+              </BindingChip>
             );
           })}
-        </div>
+        </BindingChipBar>
       )}
       <IconButton
         buttonRef={buttonRef}

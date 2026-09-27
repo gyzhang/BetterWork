@@ -306,6 +306,54 @@
 
 **P10 记账归零**：全站生产代码里 `aria-current` 现在由 `NavList` 与 `ListRow` 两处产出，`.active` 作为**选中态**在渲染层已无实例（`PopoverMenu` 里剩下的那个 `active` 是键盘高亮，不是选中态，已在护栏里按文件排除）。
 
+## 13. R2-E 落地状态（2026-09-27 18:20）
+
+R2-E 是 R2 的收口档：把护栏补齐、把 §4.4 的行漏网与 §4.5 的借类清干净。它新增的基座仍然只有一个
+（`CheckList` 在 R2-E 开工时就已落地，`BindingChip` 是本档新增），其余工作都是**把已经存在的能力认出来**：
+
+| 本档动到的结构 | 处理 |
+| --- | --- |
+| 简报三条列表（`.brief-list button`，3 个渲染点） | 改 `ListRow variant="plain"`＋`multiline`，行几何与行内字号交回基座 |
+| 本次材料行（`.selected-material-row`）、本运行记忆行（`.context-row`） | 改 `ListRow`（只读行，`title`＋`meta`） |
+| 自动建议开关行（`.suggestion-setting-row`） | 改 `ListRow`，右侧 `AsyncButton` 进 `actions` 槽 |
+| 上下文面板与专家页**逐字相同**的 MCP 工具勾选分组 | 合成 `components/McpToolBindingsPicker.tsx`，`.selected-mcp-list`／`.selected-mcp-connection` 两个借类退役 |
+| Composer 三片（`.capability-chip`／`.material-chip`／`.expert-chip`）共用 `.capability-chip-remove`，且 `App.tsx` 直接借能力片的皮 | 合成 `components/BindingChip.tsx`（`BindingChip`＋`BindingChipBar`），三套几何并成一份，身份差异降成 `tone` 一档 |
+| 建议卡的两个状态片（`.memory-kind`／`.memory-state`） | 改 `Badge shape="tag"`，`tone` 按生效状态映射 |
+| `.tool-pill-status`／`.expert-card-status`／`.artifact-input-card-meta`／`.model-role-icon` | **判读为不是徽标**：分别是胶囊按钮内的状态词、卡片内的一句警示文案、卡片的次要信息文本、以字形成立的图形化角色标识。四者按理由登记进护栏的例外表，避免下一轮被误并 |
+
+**基座能力补了一档**：`ListRow` 的 `multiline`（`.list-row[data-overflow='wrap']`）。三处漏网此前留着自造行几何，
+真实原因不是懒——基座的标题与 meta 是单行省略号，而简报条目与被选记忆**整句就是内容**，
+套默认档会把用户要看的那句话切掉。**基座表达不了就说基座表达不了**，把能力补进基座，而不是让页面留在外面。
+
+**版心收成一个 Token**（§4.1 的后半段）：新增 `--page-body-width: 860px`，由 `.page-body` 消费。
+讨论节点卡原先 760px、设置页正文原先 850px，与对话列（860px）在同一屏里三种行长；
+现在 `.discussion-checkpoints`、`.settings-section`、`.composer` 与 `.page-body` 读同一个值，
+「对话列与输入框同宽」这条规则第一次由 Token 而不是由两处相同的字面量保证。
+
+**护栏 60 → 65 条**，五条都做过变异验证（每次验证后整文件回滚并复绿）：
+
+| 新护栏 | 变异注入 | 结果 |
+| --- | --- | --- |
+| 被基座收编的借类不得复活（`borrow` 档，含 `.expert-option*`、`.message-action`、`.selected-mcp-*`） | 写回 `.selected-mcp-list { gap: 8px }` | 转红 |
+| 页面不得替骨架补几何 | 写 `.workspace > .page-body { gap: 8px }` | 转红 |
+| 版心宽度全仓只有一处 | 写 `.fake { width: min(700px, 100%) }` | 转红 |
+| 版心 Token 只有一个定义点并被骨架消费 | 在第二个 `:root` 再定义一次；把 `.page-body` 改成 `width: 860px` | 两次都转红 |
+| 只读状态片必须由 Badge 画 | 写 `.fake-status-chip { padding＋background＋border-radius }` | 转红 |
+
+第③④条是**先被自己的判据咬了一口**再定型的：判据最初把 `Modal` 三档表面宽度（420／1080／480px）
+也算成"第二套版心"，但浮层面板的宽度不是版心，是基座自己的表面几何——按理由登记例外而不是放宽判据；
+同时把「例外」写成必须带理由字段的表，新增一行就得写为什么。
+
+**门禁**：功能档 154 个文件／1,471 项测试（本档新增 `BindingChip` 6 项、`McpToolBindingsPicker` 6 项），
+`CheckList` 4 项在开工段已落；护栏 65 条全绿；ESLint 与类型检查干净。
+
+**需要光哥窗口回看的四个视觉点**（都属于"并档"必然带来的观感变化）：
+① Composer 三片现在等高（28px）、同圆角，专家片仍是品牌色但不再是胶囊，材料片仍是描边；
+② 简报条目、本次材料、本运行记忆三类行从"描边小卡"变成裸行（悬停才出底），密度由 `ul` 的 8px 缝控制；
+③ 讨论节点卡从 760px 放大到 860px，与对话列、输入框同宽；设置页正文 850 → 860px；
+④ 上下文面板的"本次材料／本次 MCP 工具"两节改用与记忆小节同一个 `.context-section` 壳，
+MCP 那一节不再是灰底圆角卡，而是与相邻小节一样的分隔线小节。
+
 ---
 
 ## 附：本轮核查方式

@@ -30,6 +30,9 @@
   --row-height-sm: 23px;
   --row-height: 34px;
   --control-border: 1px solid var(--input-border);
+  /* 版心宽度（docs/10 §8.3）：全仓只有这一个正文行长，对话列与输入框同宽。
+     要更窄的排版请写成 max-width 或内缩一档，不要再另起一个 `width: min(Npx, …)`。 */
+  --page-body-width: 860px;
 
   /* 叠放层级（docs/10 §10.1、§9.11）：新增浮层必须先选档。
      菜单类浮层一档高于模态——模态里也有下拉（模型抽屉的「模型角色」），
@@ -490,6 +493,8 @@ small {
   justify-content: space-between;
   gap: 16px;
   height: 70px;
+  flex: none;
+  /* 页头从不生长：`flex: none` 归基座，页面不再各自替它补一条。 */
   padding: 12px 28px;
   border-bottom: 1px solid var(--border);
   background: var(--overlay);
@@ -541,6 +546,8 @@ small {
   flex-direction: column;
   gap: 12px;
   flex: none;
+  /* 与下一段之间的缝默认由这段自己给；容器的 gap 已经负责节奏的页面，
+     把工具栏包在一层 `.toolbar-slot` 里由那一层决定留白（见 docs/10 §9.8）。 */
   margin-bottom: 12px;
 }
 .view-container {
@@ -563,7 +570,7 @@ small {
   overflow: hidden;
 }
 .page-body {
-  width: min(860px, calc(100% - 48px));
+  width: min(var(--page-body-width), calc(100% - 48px));
   margin: 0 auto;
   padding: 28px 0 48px;
 }
@@ -598,7 +605,7 @@ small {
 
 .discussion-checkpoints {
   margin: 0 auto 12px;
-  width: min(760px, calc(100% - 32px));
+  width: min(var(--page-body-width), calc(100% - 48px));
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-surface);
   padding: 10px 12px;
@@ -678,7 +685,10 @@ small {
   min-height: 0;
   overflow: auto;
 }
-.messages > .page-body {
+/* 消息列是「骨架里的一列可增长内容」：`.page-body` 给版心与左右留白，
+   这条钩子只给自己这一段加纵向弹性与更小的下缘（Composer 就在下面）。
+   用元素自己的类，而不是 `.messages > .page-body` 那种替骨架补设定的后代选择器。 */
+.message-flow {
   display: flex;
   min-height: 100%;
   flex-direction: column;
@@ -770,7 +780,7 @@ small {
   background: var(--selection);
 }
 .composer {
-  width: min(860px, calc(100% - 48px));
+  width: min(var(--page-body-width), calc(100% - 48px));
   margin: 0 auto 20px;
   padding: 11px 13px 10px;
   background: var(--composer);
@@ -1042,29 +1052,11 @@ small {
 .context-content > .inline-message {
   margin: 12px 14px;
 }
-.selected-materials-panel {
-  padding: 13px 14px 10px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.selected-material-row small {
-  color: var(--text-muted);
-  font-size: 12px;
-}
+/* 「本次材料」的小节壳与记忆、简报用同一个 `.context-section`；
+   列表只负责 8px 的缝，行的几何归 ListRow（docs/10 §10.1、§9.8）。 */
 .selected-materials-list {
   display: grid;
   gap: 8px;
-  margin-top: 11px;
-}
-.selected-material-row {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-.selected-material-row strong,
-.selected-material-row small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 /* 上下文面板里的记忆、简报与建议（docs/10 §8.3、§11.5.1）：
    小节靠分隔线分级，条目卡用 --surface，不叠第二层背景。 */
@@ -1176,39 +1168,8 @@ small {
   padding: 0;
   list-style: none;
 }
-.brief-list button {
-  display: grid;
-  align-items: center;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px 8px;
-  padding: 8px 10px;
-  color: var(--text-primary);
-  text-align: left;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-row);
-}
-.brief-list button:hover {
-  background: var(--surface-raised);
-  border-color: var(--brand);
-}
-.brief-item-title {
-  grid-column: 1;
-  font-size: 13px;
-  line-height: 1.5;
-}
-.brief-list button small {
-  grid-column: 1;
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-.brief-list button svg {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  align-self: center;
-  color: var(--text-muted);
-}
+/* 简报的三条列表都换成 ListRow（docs/10 §10.1）：行的几何归基座，
+   `.brief-list` 只留「这是一个 8px 缝的 ul」这一件事。 */
 .brief-empty {
   color: var(--text-muted);
   font-size: 12px;
@@ -1227,26 +1188,6 @@ small {
   background: var(--surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-card);
-}
-.suggestion-setting-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.suggestion-setting-row > div {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-.suggestion-setting-row strong {
-  color: var(--text-primary);
-  font-size: 13px;
-}
-.suggestion-setting-row small {
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.5;
 }
 .suggestion-polling {
   display: flex;
@@ -1307,14 +1248,8 @@ small {
   flex-wrap: wrap;
   gap: 8px;
 }
-.memory-kind,
-.memory-state {
-  padding: 2px 6px;
-  color: var(--text-secondary);
-  background: var(--surface-raised);
-  border-radius: var(--radius-tag);
-  font-size: 12px;
-}
+/* 建议卡上的facet与生效状态是只读状态文字，一律由 Badge 画（docs/10 §10.1）；
+   这里只留「它们排成一行」这件事，不再各写一套片状外观。 */
 .empty-context {
   display: flex;
   min-height: 220px;
@@ -1551,9 +1486,6 @@ small {
   flex: 1;
   flex-direction: column;
 }
-.skills-page > .page-header {
-  flex: none;
-}
 .skills-body {
   padding-top: 20px;
 }
@@ -1624,9 +1556,6 @@ small {
   min-height: 0;
   flex: 1;
   flex-direction: column;
-}
-.experts-page > .page-header {
-  flex: none;
 }
 .expert-cards {
   display: grid;
@@ -1707,10 +1636,6 @@ small {
   flex: 1;
   flex-direction: column;
 }
-.expert-editor > .page-header,
-.expert-detail-page > .page-header {
-  flex: none;
-}
 /* 专家编辑与详情的正文一律用 `.page-body` 的 860px 版心（docs/10 §8.3），
    页面不再自定宽度；这里只留顶部留白的微调。 */
 .expert-editor-body,
@@ -1741,6 +1666,9 @@ small {
   outline-offset: 1px;
 }
 .expert-editor-body fieldset {
+  display: grid;
+  gap: 8px;
+  align-content: start;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-row);
@@ -1751,13 +1679,14 @@ small {
   font-size: 12px;
   font-weight: 600;
 }
-.expert-option-list {
+/* 复选框选项组：结构与外观只有一处（docs/10 §10.1）。
+   领域侧的上下缝由页面自己给（`.expert-options`），基座不管承载位置。 */
+.check-list {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 16px;
-  margin-top: 8px;
 }
-.expert-option {
+.check-list-item {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -1765,7 +1694,7 @@ small {
   font-size: 12px;
   font-weight: 400;
 }
-.expert-option input {
+.check-list-item input {
   width: 14px;
   height: 14px;
 }
@@ -1983,6 +1912,13 @@ button.list-row:where(:not(:disabled)):hover {
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* multiline＝整句就是内容的行（简报条目、本运行的记忆）：标题与次要信息折行，
+   不吃默认的单行省略号，否则用户要看的那句话正好被切掉（docs/10 §10.1）。 */
+.list-row[data-overflow='wrap'] .list-row-title,
+.list-row[data-overflow='wrap'] .list-row-meta {
+  overflow: visible;
+  white-space: normal;
 }
 .list-row-leading {
   display: grid;
@@ -2229,7 +2165,7 @@ button.list-row:where(:not(:disabled)):hover {
   padding: 36px clamp(28px, 6vw, 80px);
 }
 .settings-section {
-  width: min(850px, 100%);
+  width: min(var(--page-body-width), 100%);
 }
 /* 设置页各段是块级流，段内没有纵向 gap 可用，因此由这一段自己给内联提示上下缝。 */
 .settings-section > .inline-message {
@@ -3126,46 +3062,76 @@ button.list-row:where(:not(:disabled)):hover {
 }
 
 /* === Composer 能力选择器（ADR-0012 §UI / B00-4） === */
-.capability-chip-bar {
+/* === BindingChip：组合框上「已绑定的一项」（docs/10 §10.1） ===
+   三套片（能力／材料／专家）此前各写一遍高度、圆角与底色，还共用同一个移除按钮类；
+   外壳与移除按钮收在这里，身份差异只留 `data-tone` 一个维度。 */
+.binding-chip-bar {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
-  padding: 4px 0;
 }
-.capability-chip {
+.binding-chip {
   display: inline-flex;
+  max-width: min(360px, 100%);
+  min-width: 0;
   align-items: center;
   gap: 4px;
-  height: 24px;
-  padding: 0 6px 0 4px;
-  border-radius: var(--radius-surface);
-  background: var(--selection);
+  min-height: var(--control-height-sm);
+  padding: 2px 5px 2px 8px;
   color: var(--text-primary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-row);
   font-size: 12px;
-  line-height: 1;
+  line-height: 1.4;
 }
-.capability-chip-label {
-  white-space: nowrap;
+.binding-chip[data-tone='brand'] {
+  color: var(--brand);
+  background: var(--brand-soft);
+  border-color: color-mix(in srgb, var(--brand) 32%, var(--border));
+  font-weight: 600;
+}
+.binding-chip[data-tone='danger'] {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
+.binding-chip-leading {
+  display: grid;
+  flex: none;
+  place-items: center;
+}
+.binding-chip-label {
   overflow: hidden;
+  max-width: 150px;
   text-overflow: ellipsis;
-  max-width: 120px;
+  white-space: nowrap;
 }
-.capability-chip-remove {
+/* 片内的下拉是材料片的「用途」：它必须缩到片的高度里，不另占一行。 */
+.binding-chip .field-select-trigger {
+  max-width: 104px;
+  min-height: var(--control-height-sm);
+  padding: 2px 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.binding-chip-remove {
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
   width: 16px;
   height: 16px;
   padding: 0;
-  border: none;
-  border-radius: var(--radius-circle);
-  background: transparent;
   color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-circle);
   cursor: pointer;
 }
-.capability-chip-remove:hover {
-  background: var(--border-subtle);
+.binding-chip-remove:hover:where(:not(:disabled)) {
   color: var(--text-primary);
+  background: var(--border-subtle);
 }
 /* 能力选择器的触发器：方块、尺寸与光标归 IconButton，这里只留它的带边框皮。 */
 .capability-picker-trigger {
@@ -3221,42 +3187,9 @@ button.list-row:where(:not(:disabled)):hover {
   gap: 8px;
   padding: 4px 0;
 }
-.material-chip-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+/* 材料片那一组放不下就整行占位，不与能力片挤在同一行里（位置钩子，不带几何）。 */
+.binding-chip-block {
   width: 100%;
-  padding: 2px 0;
-}
-.material-chip {
-  display: inline-flex;
-  max-width: min(360px, 100%);
-  align-items: center;
-  gap: 8px;
-  min-height: var(--control-height-sm);
-  padding: 2px 5px 2px 8px;
-  color: var(--text-primary);
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-row);
-  font-size: 12px;
-}
-.material-chip.unavailable {
-  color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
-}
-.material-chip-title {
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.material-chip .field-select-trigger {
-  max-width: 104px;
-  min-height: var(--control-height-sm);
-  padding: 2px 5px;
-  color: var(--text-secondary);
-  font-size: 12px;
 }
 .material-picker-status {
   padding: 6px 4px;
@@ -3275,22 +3208,6 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .material-global-toggle:hover {
   text-decoration: underline;
-}
-.expert-chip-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.expert-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
-  color: var(--brand);
-  background: var(--brand-soft);
-  border-radius: var(--radius-pill);
-  font-size: 12px;
-  font-weight: 600;
 }
 .model-sheet {
   /* 外壳（宽度、内边距、左分隔线、抽屉阴影、层级）由 .modal-panel[data-variant=sheet] 负责，
@@ -3657,21 +3574,6 @@ button.list-row:where(:not(:disabled)):hover {
 .run-divider span {
   padding: 0 12px;
   white-space: nowrap;
-}
-.message-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  color: var(--text-secondary);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-row);
-  font-size: 12px;
-}
-.message-action:hover {
-  color: var(--brand);
-  border-color: var(--brand);
 }
 .action-note {
   color: var(--text-secondary);
@@ -5166,28 +5068,16 @@ select,
   font: inherit;
   font-size: 13px;
 }
-.selected-mcp-panel {
-  margin-top: 14px;
-  padding: 12px;
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-row);
-}
-.selected-mcp-list,
-.selected-mcp-connection {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.selected-mcp-list {
-  margin-top: 10px;
+.mcp-binding-picker {
+  display: grid;
   gap: 12px;
 }
-.selected-mcp-connection + .selected-mcp-connection {
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
+.mcp-binding-group {
+  display: grid;
+  gap: 8px;
+  align-content: start;
 }
-.selected-mcp-connection > strong {
+.mcp-binding-group > strong {
   color: var(--text-secondary);
   font-size: 12px;
 }

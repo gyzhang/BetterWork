@@ -719,7 +719,7 @@ const CHECKBOX_ROW_LABEL_SELECTORS: { readonly match: string; readonly reason: s
 const RETIRED_UTILITY_CLASSES: {
   readonly pattern: RegExp;
   readonly name: string;
-  readonly family: 'action-bar' | 'badge' | 'empty' | 'heading' | 'nav' | 'row';
+  readonly family: 'action-bar' | 'badge' | 'borrow' | 'empty' | 'heading' | 'nav' | 'row';
 }[] = [
   { pattern: /\.skill-chip(?![-\w])/, name: '.skill-chip', family: 'badge' },
   {
@@ -728,6 +728,11 @@ const RETIRED_UTILITY_CLASSES: {
     family: 'badge',
   },
   { pattern: /\.memory-status-badge(?![-\w])/, name: '.memory-status-badge', family: 'badge' },
+  {
+    pattern: /\.memory-(?:kind|state)(?![-\w])/,
+    name: '.memory-kind／.memory-state（建议卡的状态片，已改 Badge）',
+    family: 'badge',
+  },
   { pattern: /\.empty-runs(?![-\w])/, name: '.empty-runs', family: 'empty' },
   { pattern: /\.empty-models(?![-\w])/, name: '.empty-models', family: 'empty' },
   { pattern: /\.setting-placeholder(?![-\w])/, name: '.setting-placeholder', family: 'empty' },
@@ -741,6 +746,26 @@ const RETIRED_UTILITY_CLASSES: {
   },
   { pattern: /\.skill-list-item(?![-\w])/, name: '.skill-list-item', family: 'row' },
   { pattern: /\.context-row(?![-\w])/, name: '.context-row', family: 'row' },
+  {
+    pattern: /\.brief-item-title(?![-\w])/,
+    name: '.brief-item-title（简报行已改 ListRow）',
+    family: 'row',
+  },
+  {
+    pattern: /\.selected-material-row(?![-\w])/,
+    name: '.selected-material-row（本次材料行已改 ListRow）',
+    family: 'row',
+  },
+  {
+    pattern: /\.suggestion-setting-row(?![-\w])/,
+    name: '.suggestion-setting-row（自动建议开关行已改 ListRow）',
+    family: 'row',
+  },
+  {
+    pattern: /\.(?:capability|material|expert)-chip(?![-\w])/,
+    name: '.capability-chip／.material-chip／.expert-chip（三套绑定片已合成 BindingChip）',
+    family: 'row',
+  },
   {
     pattern: /\.model-(?:row|main|actions)(?![-\w])/,
     name: '.model-row／.model-main／.model-actions',
@@ -861,12 +886,27 @@ const RETIRED_UTILITY_CLASSES: {
     name: '.task-run-history button／.artifact-version-list button',
     family: 'nav',
   },
+  {
+    pattern: /\.message-action(?![-\w])/,
+    name: '.message-action（借用消息流的皮，实为 .text-button）',
+    family: 'borrow',
+  },
+  {
+    pattern: /\.expert-option(?:-list)?(?![-\w])/,
+    name: '.expert-option／.expert-option-list（借用专家页的复选组，已收进 CheckList）',
+    family: 'borrow',
+  },
+  {
+    pattern: /\.selected-mcp-(?:list|connection)(?![-\w])/,
+    name: '.selected-mcp-list／-connection（跨页借类，已收进 McpToolBindingsPicker）',
+    family: 'borrow',
+  },
 ];
 
 /** 把 retired 清单变成一条断言：任一 CSS 文件里都不得再出现这些选择器。 */
 function assertRetiredClassesAbsent(
   offenders: string[],
-  family: 'action-bar' | 'badge' | 'empty' | 'heading' | 'nav' | 'row',
+  family: 'action-bar' | 'badge' | 'borrow' | 'empty' | 'heading' | 'nav' | 'row',
 ): void {
   const retired = RETIRED_UTILITY_CLASSES.filter((entry) => entry.family === family);
   for (const relative of cssPaths()) {
@@ -1062,6 +1102,50 @@ describe('徽标与档位纪律', () => {
   const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
   expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
   const declarations = declarationsOf(styles ?? '');
+
+  /**
+   * 登记在案的「名字像徽标但不是徽标」：这几片是**可交互的绑定片**（内含移除按钮或用途下拉）、
+   * 整片就是按钮的活动条、未读数角标，或基座自己的皮类，都套不进 `Badge` 的只读状态语义。
+   * 新增这一档必须写清为什么不能复用 Badge；R3-D 计划把三套「名称＋移除 ×」绑定片
+   * 收成一个基座（审计 §13 新发现），届时它们从这张表里消失。
+   */
+  const NON_BADGE_CHIP_CLASSES: { readonly match: string; readonly reason: string }[] = [
+    { match: '.badge', reason: 'Badge 基座自己' },
+    { match: '.chip-button', reason: '具名按钮皮类（docs/10 §10.1），不是状态片' },
+    { match: '.binding-chip', reason: 'BindingChip 基座自己：可移除的绑定片，不是只读状态' },
+    { match: '.tool-pill', reason: '工具调用活动条：整片是按钮，选中态走 aria-expanded' },
+    { match: '.notification-badge', reason: '未读数角标：图形化标识，Badge 文档明确排除' },
+  ];
+
+  it('只读状态片必须由 Badge 画', () => {
+    // §4.3 P6：Badge 基座落地后，页面又长出 `.memory-kind`／`.tool-pill-status` 这类
+    // 「自己的 padding＋圆角＋底色」的片。字色与文案随领域变是合理的，
+    // 但**片的形状**再各写一遍就等于没有基座。
+    // 判据是「片状外观三件套」，不是类名——所以只有名字像、外观不像的不会误伤。
+    const propsByClass = new Map<string, Set<string>>();
+    for (const declaration of declarations) {
+      const selector = declaration.selector.replace(/\/\*[\s\S]*?\*\//g, '').trim();
+      for (const className of selector.match(/\.[\w-]+/gu) ?? []) {
+        const seen = propsByClass.get(className) ?? new Set<string>();
+        seen.add(declaration.property);
+        propsByClass.set(className, seen);
+      }
+    }
+    const offenders = [...propsByClass]
+      .filter(
+        ([className, props]) =>
+          props.has('background') &&
+          props.has('border-radius') &&
+          props.has('padding') &&
+          /(?:chip|badge|status|state|kind|pill)$/u.test(className) &&
+          !NON_BADGE_CHIP_CLASSES.some((entry) => className === entry.match),
+      )
+      .map(([className]) => className);
+    expect(
+      offenders,
+      '只读状态文字请用 Badge（tone × shape）；确实不是徽标的，按理由登记进 NON_BADGE_CHIP_CLASSES（docs/10 §10.1）',
+    ).toEqual([]);
+  });
 
   it('状态徽标不得再回到各页自造的 chip 类', () => {
     // §3.4 记着 6 套 chip 各写一遍的下场；Badge 基座落地后这些类的样式不得复活。
@@ -1277,7 +1361,7 @@ describe('区块头基座纪律', () => {
  * （图标＋名称＋×），塞进 IconButton 的 24／28px 方块会把芯片撑破。
  * R3-A 落 `CapabilityChip` 时随芯片一起收口（docs/reviews/2026-09-27-ui-reuse-audit.md §3.1 P7）。
  */
-const ICON_BUTTON_EXEMPT_CLASSES = ['capability-chip-remove'];
+const ICON_BUTTON_EXEMPT_CLASSES = ['binding-chip-remove'];
 
 describe('图标按钮与动作条纪律', () => {
   const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
@@ -1485,6 +1569,159 @@ describe('导航列表纪律', () => {
       offenders,
       '导航行的几何与配色归 NavItem／NavList；位置与折叠态请换自定义属性（docs/10 §9.8）',
     ).toEqual([]);
+  });
+});
+
+describe('页面骨架契约纪律', () => {
+  const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
+  expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
+  const declarations = declarationsOf(styles ?? '');
+
+  /** 骨架的六个类：结构由 `components/layout/` 负责，页面只能往里面放内容。 */
+  const SKELETON_CLASSES = [
+    'page-header',
+    'page-toolbar',
+    'page-body',
+    'page-intro',
+    'scroll-region',
+    'view-container',
+  ];
+
+  /**
+   * 登记在案的例外：容器已有 `gap` 时，工具栏那道 `margin-bottom` 是重复的缝，
+   * 由承载页抵消。基座不能改成无 margin——知识页那个容器没有 gap，靠这条边距分开。
+   * 新增例外要写清为什么不能改成「缝归容器」，否则就是又一处替骨架补设定。
+   */
+  const SKELETON_EXCEPTIONS: {
+    readonly match: string;
+    readonly property: string;
+    readonly reason: string;
+  }[] = [
+    {
+      match: '.memory-settings .page-toolbar',
+      property: 'margin-bottom',
+      reason: '本页容器 .memory-settings 已有 gap: 12px，抵消工具栏自带的下边距',
+    },
+  ];
+
+  it('被基座收编的借类不得复活', () => {
+    // §4.5：跨文件借他人 CSS 类是「复用了皮、没复用结构」。修它的正确方式是给结构建基座
+    // （CheckList）或改用主皮类名（.text-button），而不是把别人的类抄进自己文件。
+    const offenders: string[] = [];
+    assertRetiredClassesAbsent(offenders, 'borrow');
+    expect(offenders, '跨页面借类请改接基座或具名主皮（docs/10 §10.1）').toEqual([]);
+  });
+
+  it('页面不得替骨架补几何', () => {
+    const offenders = declarations
+      .map((declaration) => ({
+        declaration,
+        selector: declaration.selector.replace(/\/\*[\s\S]*?\*\//g, '').trim(),
+      }))
+      .filter(({ selector }) =>
+        SKELETON_CLASSES.some((cls) => new RegExp(`\\.${cls}(?![-\\w])`).test(selector)),
+      )
+      .filter(({ selector }) => {
+        const head = selector.trim().split(/[,\s>]/)[0] ?? '';
+        return !SKELETON_CLASSES.some((cls) => head === `.${cls}`);
+      })
+      .filter(({ declaration }) =>
+        [
+          'display',
+          'flex',
+          'flex-direction',
+          'gap',
+          'row-gap',
+          'column-gap',
+          'padding',
+          'margin',
+          'margin-bottom',
+          'margin-top',
+          'width',
+          'max-width',
+          'min-height',
+          'height',
+        ].includes(declaration.property),
+      )
+      .filter(
+        ({ selector, declaration }) =>
+          !SKELETON_EXCEPTIONS.some(
+            (item) => selector.includes(item.match) && declaration.property === item.property,
+          ),
+      )
+      .map(({ declaration, selector }) =>
+        selector.includes('@media')
+          ? locate(declaration, styles ?? '')
+          : `${locate(declaration, styles ?? '')}`.replace(/\s+\{.*/u, ''),
+      );
+    expect(
+      offenders,
+      '骨架的几何只住在 components/layout/ 与它自己的类上；要一列可增长的内容，请把钩子类给元素自己（如 `.message-flow`），别写 `.某容器 > .page-body`（docs/10 §8.3、§9.8）',
+    ).toEqual([]);
+  });
+
+  /**
+   * 登记在案的例外：这三档宽度属于 Modal 基座自己的表面几何（对话框／抽屉／查看器），
+   * 不是页面版心。基座内部要各自宽窄是设计的一部分；页面不得援引此例另起版心。
+   */
+  const PAGE_WIDTH_EXCEPTIONS: { readonly match: string; readonly reason: string }[] = [
+    {
+      match: ".modal-panel[data-variant='dialog']",
+      reason: 'Modal 基座的对话框表面宽度，属浮层几何不属版心（docs/10 §8.3、§10.1）',
+    },
+    {
+      match: ".modal-panel[data-variant='viewer']",
+      reason: 'Modal 基座的查看器表面宽度：要容得下整页文档与演示',
+    },
+    {
+      match: ".modal-panel[data-variant='sheet']",
+      reason: 'Modal 基座的抽屉表面宽度：贴边滑出，与正文列无关',
+    },
+  ];
+
+  it('版心宽度全仓只有一处', () => {
+    // §4.1：专家页曾给正文写 `width: min(720px, 100%)`，同一站点的正文因此有两种行长。
+    // 收口方式是把 860px 定成 `--page-body-width`，对话列、输入框、讨论节点卡都读它。
+    const offenders = declarations
+      .map((declaration) => ({
+        declaration,
+        selector: declaration.selector.replace(/\/\*[\s\S]*?\*\//g, '').trim(),
+      }))
+      .filter(({ declaration }) => declaration.property === 'width')
+      .filter(({ declaration }) => /min\(\s*\d+px/u.test(declaration.value))
+      .filter(({ selector }) => {
+        const head = selector.trim().split(/[\s>]/)[0] ?? '';
+        return !/^\.page-body(?![-\w])/.test(head);
+      })
+      .filter(
+        ({ selector }) => !PAGE_WIDTH_EXCEPTIONS.some((item) => selector.includes(item.match)),
+      )
+      .map(
+        ({ declaration, selector }) => `${selector} { ${declaration.value} } (${declaration.line})`,
+      );
+    expect(
+      offenders,
+      '版心只有一个值：`--page-body-width`，由 `.page-body` 消费；要更窄请写成 max-width，要另一档请先改 docs/10 §8.3（浮层表面宽度按清单登记）',
+    ).toEqual([]);
+  });
+
+  it('版心 Token 有且只有一个定义点并被骨架消费', () => {
+    const defined = declarations.filter(
+      (declaration) =>
+        declaration.property === '--page-body-width' &&
+        /^:(?:root|html)$/.test(declaration.selector.trim().split(/[\s>]/)[0] ?? ''),
+    );
+    expect(defined, '`--page-body-width` 只能定义一次（docs/10 §8.3）').toHaveLength(1);
+    expect(defined[0]?.value, '版心值改了要同步 docs/10 §8.3 与本条断言').toBe('860px');
+    const consumed = declarations.filter(
+      (declaration) =>
+        declaration.value.includes('var(--page-body-width)') &&
+        (declaration.selector.trim().split(/[\s>]/)[0] ?? '') === '.page-body',
+    );
+    expect(
+      consumed,
+      '`--page-body-width` 必须被 `.page-body` 消费，否则它只是个死变量',
+    ).toHaveLength(1);
   });
 });
 

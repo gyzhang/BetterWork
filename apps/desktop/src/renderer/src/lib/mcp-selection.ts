@@ -5,20 +5,20 @@ export const canToggleMcpTool = (status: McpConnectionStatus, checked: boolean):
   status === 'ready' || checked;
 
 export const hasMcpToolBinding = (
-  bindings: McpToolBinding[],
+  bindings: readonly McpToolBinding[],
   connectionId: string,
   toolId: string,
 ): boolean =>
   bindings.some((binding) => binding.connectionId === connectionId && binding.toolId === toolId);
 
 export const setMcpToolBinding = (
-  bindings: McpToolBinding[],
+  bindings: readonly McpToolBinding[],
   connectionId: string,
   toolId: string,
   checked: boolean,
 ): McpToolBinding[] => {
   if (checked) {
-    if (hasMcpToolBinding(bindings, connectionId, toolId)) return bindings;
+    if (hasMcpToolBinding(bindings, connectionId, toolId)) return [...bindings];
     return [...bindings, { connectionId, toolId }];
   }
   return bindings.filter(

@@ -533,7 +533,7 @@ UI Foundation 首批提供四套成对色系：
 | 下拉选择 FieldSelect | `components/FieldSelect.tsx` | 已落地，走 PopoverMenu；2026-09-26 深夜 9 处原生 `<select>` 全部迁入，全仓已无原生下拉（护栏拦截新增） |
 | 模态基座 Modal（dialog／sheet／viewer 三变体）＋ `useOverlaySemantics` | `components/Modal.tsx` | 已落地：inert 应用主体、Esc、背板点击、初始焦点、Tab 循环、焦点归还、`role=dialog`/`alertdialog`。确认框、模型抽屉、幻灯片放映层、消息中心四处已收编 |
 | 表单字段 Field（标签 + 控件 + 说明） | `components/Field.tsx` | 已落地：标签与控件的缝只有一份；37 处字段改用它，12 条页面级 `label { gap / font-size }` 规则随之删除 |
-| 列表行 ListRow（左槽／主区／右槽，divider／card／plain 三档） | `components/ListRow.tsx` | 已落地：§3.4 的 9 套行几何（`.run-item`／`.notification-item`／`.skill-list-item`／`.model-row`／`.memory-row`／`.evidence-row`／`.knowledge-job-row`／`.mcp-connection-row`／`.knowledge-card`）加上 `.completed-work-card`／`.context-row`／`.suggestion-job-row` 共 12 类并入一处，行内动作按钮的几何同时收进 `.list-row-actions` |
+| 列表行 ListRow（左槽／主区／右槽，divider／card／plain 三档，`multiline` 折行档） | `components/ListRow.tsx` | 已落地：§3.4 的 9 套行几何（`.run-item`／`.notification-item`／`.skill-list-item`／`.model-row`／`.memory-row`／`.evidence-row`／`.knowledge-job-row`／`.mcp-connection-row`／`.knowledge-card`）加上 `.completed-work-card`／`.context-row`／`.suggestion-job-row` 共 12 类并入一处，行内动作按钮的几何同时收进 `.list-row-actions`；2026-09-27 R2-E 再收三处漏网：简报条目（`.brief-list button`）、本次材料行（`.selected-material-row`）、自动建议开关行（`.suggestion-setting-row`） |
 | 模态确认 ConfirmationDialog | `components/ConfirmationDialog.tsx` | 已落地，走 Modal 的 `alertdialog` 变体；初始焦点落在「取消」 |
 | 区块头 SectionHeader（eyebrow／title／hint／actions，block／panel 两档） | `components/SectionHeader.tsx` | 已落地：§3.1 P1 的 26 处／13 个类名并成一处（`.settings-heading`／`.selected-materials-heading`／`.skill-detail-heading`／`.skill-section-heading`／`.memory-group-heading`／`.memory-heading-actions`／`.notification-panel-header`／`.artifact-reference-heading`／`.brief-section-head`／`.tool-detail-heading`／`.discussion-checkpoints-header`），16 处冒充标题的 `<strong>` 升级为真 h2／h3；面板自己的内缩与分隔线写在传给基座的领域钩子类上（现登记 `.notification-panel-heading`） |
 | 异步按钮 AsyncButton／行内加载 InlineLoading | `components/AsyncButton.tsx` | 已落地：§3.1 P4 的「disabled＋文案翻转＋aria-busy」三件事一次收口，busy 时只渲染当前那一行文字（曾为防抖宽叠两份标签，结果把 busy 文案读进了可及名称）；`InlineLoading` 统一 spinner，`page-spinner` 与 `spin` 两套 keyframes 合并为一套 |
@@ -545,10 +545,13 @@ UI Foundation 首批提供四套成对色系：
 | 导航列表 NavList／NavItem（`aria-current` ＋ 两档变体 ＋ 窄栏折叠） | `components/NavList.tsx` | 已落地：侧栏一级导航（5 项）与设置左侧分区（6 项）；`NavItem` 同时承接侧栏「新建任务」与底部「设置」两颗单行导航。折叠成窄栏换的是自定义属性（`--nav-item-*`），几何仍只有一处；文字用 `clip-path` 收掉而不是 `font-size: 0`，以免只剩图标的按钮失去可及名称 |
 | Button / Input / Textarea | 只有样式类，无组件 | 几何取 `--control-*` 档位（§9.10），结构由 `Field` 负责；不再单独组件化，避免只为包一层壳而增加第二处真相 |
 | Switch / Tooltip / Skeleton | — | 未落地。Progress 只有一枚不确定态 spinner（`.spinner`，由 `InlineLoading` 与页面加载态共用），没有百分比进度条。
-| 芯片里的微移除按钮 `.capability-chip-remove` | 随 `CapabilityChip` 一起收 | 刻意不进 IconButton：10px 命中区属于整枚芯片（图标＋名称＋×），塞进 24／28px 方块会把芯片撑破；登记在护栏的 `ICON_BUTTON_EXEMPT_CLASSES` 里（§3.1 P7） |
+| 片里的微移除按钮 `.binding-chip-remove` | 随 `BindingChip` 一起收 | 刻意不进 IconButton：10px 命中区属于整枚片（图标＋名称＋×），塞进 24／28px 方块会把片撑破；登记在护栏的 `ICON_BUTTON_EXEMPT_CLASSES` 里（§3.1 P7） |
 | 图标按钮 IconButton（sm／md 两档方块） | `components/IconButton.tsx` | 已落地：面板头与条带里「只装一个图标的按钮」收成一处——6 个渲染点（侧栏折叠、错误横幅关闭、上下文面板折叠、模型抽屉关闭、结果提示关闭、能力选择器触发），此前它们是 24／26／28／30px 四种边长、两种圆角、字形 10／12／14／15px，还有两处留着 `font-size: 19px／22px` 配 `×` 字符的旧时代残留；`aria-label` 是必填项，`aria-expanded`／`aria-haspopup`／`ref`（浮层锚点）由基座转发 |
 | 底部动作条 ActionBar（说明在左、主行动恒在最右） | `components/ActionBar.tsx` | 已落地：7 处「主按钮＋取消」收成一处（记忆编辑、材料选择、MCP 编辑、讨论节点、模型抽屉、成果修订、专家修订），`gap` 8／12 与 `justify-content` flex-end／space-between 的分叉并掉，全仓第一次有了 `role="group"` 与动作条名称；两处「取消在最前」的调用点已按约定翻到主行动左侧 |
 
+| 复选框选项组 CheckList（一行一项，`label` 包住原生 checkbox） | `components/CheckList.tsx` | 已落地：专家编辑四处勾选（Skill 预设／内置工具白名单／MCP 工具／常用参考）与上下文面板的 MCP 工具勾选收成一处，此前它们在两个页面之间**互借带领域名的类**（上下文面板借 `.expert-option-list`，专家页借 `.selected-mcp-list`）；组名给了才写 `role="group"`，已经在 `<fieldset>` 里就不另包一层语义（§4.5） |
+| 绑定片 BindingChip／BindingChipBar（名称＋内联控件＋移除 ×） | `components/BindingChip.tsx` | 已落地：Composer 上三套几何各写一遍的片（`.capability-chip` 24px 高／`--selection` 底、`.material-chip` 28px 高／描边、`.expert-chip` 胶囊／品牌色粗体）合成一处，身份差异降成 `tone`（default／brand／danger）一个维度；三套片此前还共用同一个 `.capability-chip-remove` 类，专家片在 `App.tsx` 里直接借能力片的皮（§4.5） |
+| MCP 工具勾选组 McpToolBindingsPicker（按连接分组的 CheckList） | `components/McpToolBindingsPicker.tsx` | 已落地：上下文面板「本次 MCP 工具」与专家编辑「MCP 工具预设」两处逐字相同的 JSX（同一组 `hasMcpToolBinding`／`canToggleMcpTool`／`setMcpToolBinding` 调用＋同一句「尚未检测到工具」）合成一处；它不是新基座，是 `CheckList` 之上的领域组件，页面只保留自己的小节壳 |
 本表是组件层的唯一台账：新增基座必须登记在此，`.qoder/rules/betterwork-ui.md` 与[UI 一致性评估](reviews/2026-09-26-ui-consistency.md)都指向本表。
 
 **浮层一律复用 `PopoverMenu` 基座**：下拉、菜单、选择器等脱离文档流的浮层必须走 `components/PopoverMenu.tsx`——背板收起、Esc、焦点归还、方向键导航与视口碰撞处理都在基座里。不得用 `<details>` 或 `position:absolute` 面板自造：2026-09-26 知识卡片的「更多」正是这样写的，三个症状同源——点外面不收起（`<details>` 没有这个语义）、能同时打开两张卡片的菜单、菜单项继承正文 14px 而比自己的 12px 触发按钮还大。基座会把菜单字号镜像成触发控件的计算值，让浮层与触发器看起来属于同一个控件；破坏性菜单项用 `tone: 'danger'` 表达，颜色仍由 Token 决定。护栏锁两条：`.popover-menu-item` 不得自带字号；overlay 阴影只允许出现在登记过的浮层表面（`standards/coding-standard.test.ts`）。
@@ -583,6 +586,45 @@ UI Foundation 首批提供四套成对色系：
 的选择器里只有基座自己能写几何与配色；生产代码的 `className` 值里再出现 `active` 一词即失败
 （`NavList` 与 `PopoverMenu` 两个基座文件除外——后者的 `active` 是键盘高亮而不是选中态）。
 
+**复选框选项组一律用 `CheckList`，按连接分组的 MCP 工具勾选一律用 `McpToolBindingsPicker`**
+（`components/CheckList.tsx`、`components/McpToolBindingsPicker.tsx`）：「一行一个 `label` ＋
+原生 checkbox ＋ 名称」此前在专家编辑与上下文面板各写一遍，而真正的病灶是它们**互相借用了
+带领域名的类**——上下文面板借专家页的 `.expert-option-list`，专家页借上下文面板的
+`.selected-mcp-list`（§4.5）。借类的后果是「复用了皮、没复用结构」：改一处外观炸到另一个页面，
+而两个页面各自的结构漂移又没人负责。现在勾选行的结构与外观只住在 `CheckList`，
+`label` 给了才写 `role="group"`＋`aria-label`（已经在 `<fieldset><legend>` 里就不要再包一层语义），
+组名与说明走 `hint` → 原生 `title` 兜底。「按连接分组」那一层两处**逐字相同**
+（同一组 `hasMcpToolBinding`／`canToggleMcpTool`／`setMcpToolBinding` 调用、同一句「尚未检测到工具」、
+只差两个字的空态提示），合成 `McpToolBindingsPicker` 一个领域组件：它是 `CheckList` 之上的分组，
+不是第五十个基座，页面只留自己的小节壳。护栏锁「`.expert-option*`／`.selected-mcp-list`／
+`.selected-mcp-connection` 的样式不得复活」（`borrow` 档）。
+
+
+**Composer 上「已经绑定的一样东西」一律用 `BindingChip`／`BindingChipBar`**
+（`components/BindingChip.tsx`）：能力片、材料片、专家片在同一行里排着，却各自一套几何——
+24px 高／`--selection` 底／`--radius-surface`、28px 高／描边／`--radius-row`、胶囊／品牌底／粗体，
+而三片的 × 按钮**共用同一个 `.capability-chip-remove` 类**，专家片还在 `App.tsx` 里直接借走了
+能力选择器组件的皮（§4.5）。现在外壳、字号与移除按钮只有一份，身份差异降成 `tone`
+（`default`／`brand`／`danger`）一个维度，材料片的「用途」下拉作为 `children` 插进名称与 × 之间，
+`BindingChipBar` 负责 `role="list"` 与区域名称。它**不是** `Badge`：`Badge` 是只读状态文字，
+这枚片必定可移除、还可以带内联控件；也不是 `ListRow`：它排在一行里而不是占满一行。
+片里的 16px × 刻意不进 `IconButton`（24／28px 方块会把片撑破），按 `binding-chip-remove`
+登记在护栏的 `ICON_BUTTON_EXEMPT_CLASSES` 里。
+
+
+**行与片的文字截断是基座的一档，不是页面的补丁**：`ListRow` 默认把标题与次要信息收成
+单行省略号——那适合「任务名」「成果标题」这类标签；但简报条目与被选记忆**整句就是内容**，
+省略号正好切掉用户要看的那句话（§4.4 的三处漏网就是这个原因先前留着自造行几何）。
+需要折行的行传 `multiline`，样式只有 `.list-row[data-overflow='wrap']` 一条。
+
+**版心宽度只有一个 Token**：`--page-body-width: 860px`（§8.3）由 `.page-body` 消费，
+对话列（`.message-flow` 就是 `.page-body` 的钩子）、输入框 `.composer`、讨论节点卡
+`.discussion-checkpoints` 与设置页正文 `.settings-section` 全部读它——此前讨论节点卡是 760px、
+设置页是 850px，同一屏里对话列、输入框与它们三种行长。护栏锁两条：渲染层里除 `.page-body`
+与登记过的浮层表面（`Modal` 三档宽度）外，任何 `width: min(Npx, …)` 即失败；
+`--page-body-width` 必须在 `:root` 定义恰好一次并被 `.page-body` 消费。骨架的另一半由
+「页面不得替骨架补几何」守着：给 `.page-body`／`.page-header` 等六个骨架类补 `display`／`gap`／
+`padding`／`width` 的后代选择器一律失败，要一列可增长的内容就把钩子类给元素自己。
 落地现状：按钮、输入、页签、Sheet、Toast、内联提示、空状态、列表行与区块头都有对应样式；页面骨架已由 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 负责结构，`KnowledgeDocumentCard` 负责知识条目的领域呈现，聚焦环用 `:focus-visible` 统一实现。破坏性确认统一使用 `ConfirmationDialog`，它以 `Modal` 的 `alertdialog` 变体实现：Portal 挂到应用外、背景 inert、初始焦点落在取消、Esc 与 Tab 焦点循环、关闭后恢复触发控件焦点。Popover 已落地为 `PopoverMenu` 基座（[ADR-0012](adr/0012-composer-capability-binding.md)）。尚未落地的有 Tooltip、Skeleton、Switch；区块头、图标按钮与底部动作条已于 2026-09-27 落地为 `SectionHeader`、`IconButton`、`ActionBar`。
 
 2026-09-26 的[UI 一致性评估](reviews/2026-09-26-ui-consistency.md)给出本节台账的完整核对结果（哪些模式各写了几遍、缺哪个基座、分期收口计划）；新增基座或迁移自造控件前先查该报告。

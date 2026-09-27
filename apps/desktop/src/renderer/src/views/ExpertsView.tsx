@@ -12,16 +12,17 @@ import { useState } from 'react';
 
 import { ActionBar } from '../components/ActionBar';
 import { AsyncButton } from '../components/AsyncButton';
+import { CheckList } from '../components/CheckList';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
+import { McpToolBindingsPicker } from '../components/McpToolBindingsPicker';
 import type { ExpertsState } from '../hooks/use-experts';
 import { ExpertIcon, PlusIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
 import { materialCandidateAppliesToWorkspace, materialReferenceKey } from '../lib/materials';
-import { canToggleMcpTool, hasMcpToolBinding, setMcpToolBinding } from '../lib/mcp-selection';
 
 const lifecycleName = {
   active: '可召唤',
@@ -226,39 +227,33 @@ function ExpertEditor({
           </Field>
           <fieldset>
             <legend>Skill 预设</legend>
-            <div className="expert-option-list">
-              {skills.length === 0 ? (
-                <span className="muted-text">当前还没有可配置的 Skill。</span>
-              ) : (
-                skills.map((skill) => {
-                  const checked = draft.skillPreset.some((binding) => binding.skillId === skill.id);
-                  return (
-                    <label key={skill.id} className="expert-option">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(event) =>
-                          onChange({
-                            ...draft,
-                            skillPreset: event.target.checked
-                              ? [
-                                  ...draft.skillPreset,
-                                  { skillId: skill.id, revisionId: skill.currentRevisionId },
-                                ]
-                              : draft.skillPreset.filter((binding) => binding.skillId !== skill.id),
-                          })
-                        }
-                      />
-                      <span>{skill.name}</span>
-                    </label>
-                  );
+            <CheckList
+              empty={<span className="muted-text">当前还没有可配置的 Skill。</span>}
+              options={skills.map((skill) => ({
+                id: skill.id,
+                label: skill.name,
+                checked: draft.skillPreset.some((binding) => binding.skillId === skill.id),
+              }))}
+              onToggle={(id, checked) =>
+                onChange({
+                  ...draft,
+                  skillPreset: checked
+                    ? [
+                        ...draft.skillPreset,
+                        {
+                          skillId: id,
+                          revisionId:
+                            skills.find((skill) => skill.id === id)?.currentRevisionId ?? '',
+                        },
+                      ]
+                    : draft.skillPreset.filter((binding) => binding.skillId !== id),
                 })
-              )}
-            </div>
+              }
+            />
           </fieldset>
           <fieldset>
             <legend>内置工具</legend>
-            <label className="expert-option">
+            <label className="check-list-item">
               <input
                 type="checkbox"
                 checked={draft.builtinToolPolicy.mode === 'application-defaults'}
@@ -271,31 +266,28 @@ function ExpertEditor({
                   })
                 }
               />
-              使用算台默认工具
+              <span>使用算台默认工具</span>
             </label>
             {draft.builtinToolPolicy.mode === 'allow-list' && (
-              <div className="expert-option-list">
-                {builtinToolNames.map((toolName) => (
-                  <label key={toolName} className="expert-option">
-                    <input
-                      type="checkbox"
-                      checked={toolNames.includes(toolName)}
-                      onChange={(event) =>
-                        onChange({
-                          ...draft,
-                          builtinToolPolicy: {
-                            mode: 'allow-list',
-                            toolNames: event.target.checked
-                              ? [...toolNames, toolName]
-                              : toolNames.filter((name) => name !== toolName),
-                          },
-                        })
-                      }
-                    />
-                    {toolName}
-                  </label>
-                ))}
-              </div>
+              <CheckList
+                label="内置工具白名单"
+                options={builtinToolNames.map((toolName) => ({
+                  id: toolName,
+                  label: toolName,
+                  checked: toolNames.includes(toolName),
+                }))}
+                onToggle={(id, checked) =>
+                  onChange({
+                    ...draft,
+                    builtinToolPolicy: {
+                      mode: 'allow-list',
+                      toolNames: checked
+                        ? [...toolNames, id]
+                        : toolNames.filter((name) => name !== id),
+                    },
+                  })
+                }
+              />
             )}
           </fieldset>
           <fieldset>
@@ -337,101 +329,61 @@ function ExpertEditor({
           </fieldset>
           <fieldset>
             <legend>MCP 工具预设</legend>
-            {mcpConnections.length === 0 ? (
-              <span className="muted-text">请先在设置 → MCP 中配置并检测连接。</span>
-            ) : (
-              <div className="selected-mcp-list">
-                {mcpConnections.map((connection) => (
-                  <div className="selected-mcp-connection" key={connection.id}>
-                    <strong>{connection.name}</strong>
-                    {connection.tools.length === 0 ? (
-                      <small className="muted-text">尚未检测到工具</small>
-                    ) : (
-                      <div className="expert-option-list">
-                        {connection.tools.map((tool) => {
-                          const bindings = draft.mcpToolBindings ?? [];
-                          const checked = hasMcpToolBinding(bindings, connection.id, tool.id);
-                          return (
-                            <label className="expert-option" key={tool.id}>
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                disabled={!canToggleMcpTool(connection.status, checked)}
-                                onChange={(event) =>
-                                  onChange({
-                                    ...draft,
-                                    mcpToolBindings: setMcpToolBinding(
-                                      bindings,
-                                      connection.id,
-                                      tool.id,
-                                      event.target.checked,
-                                    ),
-                                  })
-                                }
-                              />
-                              <span title={tool.description}>{tool.name}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+            <McpToolBindingsPicker
+              connections={mcpConnections}
+              bindings={draft.mcpToolBindings ?? []}
+              onChange={(bindings) => onChange({ ...draft, mcpToolBindings: bindings })}
+            />
           </fieldset>
           <fieldset>
             <legend>常用参考</legend>
             <small className="muted-text">
               召唤专家时带入选定的知识修订或历史成果；本期任务仍可移除或补充。
             </small>
-            <div className="expert-option-list">
-              {materialCandidates.filter(
-                (candidate) => candidate.reference.kind !== 'workspace-input-snapshot',
-              ).length === 0 ? (
-                <span className="muted-text">当前工作空间还没有可引用的知识或成果。</span>
-              ) : (
-                materialCandidates
-                  .filter((candidate) => candidate.reference.kind !== 'workspace-input-snapshot')
-                  .map((candidate) => {
-                    const key = materialReferenceKey(candidate.reference);
-                    const checked = referenceMaterials.some(
-                      (item) => materialReferenceKey(item.reference) === key,
-                    );
-                    const applicable = materialCandidateAppliesToWorkspace(candidate, workspaceId);
-                    return (
-                      <label className="expert-option" key={key}>
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={(!applicable || candidate.status === 'unavailable') && !checked}
-                          onChange={(event) =>
-                            onChange({
-                              ...draft,
-                              referenceMaterials: event.target.checked
-                                ? [
-                                    ...referenceMaterials,
-                                    {
-                                      reference: candidate.reference,
-                                      purpose: referencePurpose(candidate),
-                                    },
-                                  ]
-                                : referenceMaterials.filter(
-                                    (item) => materialReferenceKey(item.reference) !== key,
-                                  ),
-                            })
-                          }
-                        />
-                        <span>
-                          {candidate.title} · {candidate.sourceLabel}
-                          {candidate.detail ? ` · ${candidate.detail}` : ''}
-                          {!applicable ? ' · 不适用于当前工作空间' : ''}
-                        </span>
-                      </label>
-                    );
-                  })
-              )}
-            </div>
+            <CheckList
+              empty={<span className="muted-text">当前工作空间还没有可引用的知识或成果。</span>}
+              options={materialCandidates
+                .filter((candidate) => candidate.reference.kind !== 'workspace-input-snapshot')
+                .map((candidate) => {
+                  const key = materialReferenceKey(candidate.reference);
+                  const checked = referenceMaterials.some(
+                    (item) => materialReferenceKey(item.reference) === key,
+                  );
+                  const applicable = materialCandidateAppliesToWorkspace(candidate, workspaceId);
+                  return {
+                    id: key,
+                    label: (
+                      <>
+                        {candidate.title} · {candidate.sourceLabel}
+                        {candidate.detail ? ` · ${candidate.detail}` : ''}
+                        {!applicable ? ' · 不适用于当前工作空间' : ''}
+                      </>
+                    ),
+                    checked,
+                    disabled: (!applicable || candidate.status === 'unavailable') && !checked,
+                  };
+                })}
+              onToggle={(id, checked) => {
+                const candidate = materialCandidates.find(
+                  (item) => materialReferenceKey(item.reference) === id,
+                );
+                if (!candidate) return;
+                onChange({
+                  ...draft,
+                  referenceMaterials: checked
+                    ? [
+                        ...referenceMaterials,
+                        {
+                          reference: candidate.reference,
+                          purpose: referencePurpose(candidate),
+                        },
+                      ]
+                    : referenceMaterials.filter(
+                        (item) => materialReferenceKey(item.reference) !== id,
+                      ),
+                });
+              }}
+            />
           </fieldset>
           <ActionBar as="div" label="保存专家修订">
             <button className="text-button" type="button" onClick={onCancel}>

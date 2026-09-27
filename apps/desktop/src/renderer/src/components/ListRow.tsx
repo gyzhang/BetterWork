@@ -30,6 +30,12 @@ export interface ListRowProps {
   label?: string | undefined;
   /** 非交互行的语义容器：列表项用 li，文章卡片用 article。 */
   as?: 'div' | 'li' | 'article' | undefined;
+  /**
+   * 标题与次要信息按句子折行，不截断。默认档是单行省略号，适合「任务名」「成果标题」
+   * 这类标签；但简报条目与被选记忆**整句就是内容**
+   * （docs/reviews/2026-09-27-ui-reuse-audit.md §4.4），省略号会把用户要看的那句话切掉。
+   */
+  multiline?: boolean | undefined;
   className?: string | undefined;
 }
 
@@ -57,6 +63,7 @@ export function ListRow({
   as = 'div',
   className,
   label,
+  multiline = false,
 }: ListRowProps): React.JSX.Element {
   const classes = `list-row${className ? ` ${className}` : ''}`;
   const attributes = {
@@ -64,6 +71,7 @@ export function ListRow({
     'data-variant': variant,
     'data-tone': tone,
     ...(selected ? { 'data-selected': 'true' } : {}),
+    ...(multiline ? { 'data-overflow': 'wrap' } : {}),
   };
   const main = (
     <div className="list-row-main">

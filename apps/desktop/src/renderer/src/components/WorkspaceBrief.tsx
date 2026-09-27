@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { ChevronRightIcon } from '../icons';
 import { memoryScopeLabel } from '../lib/memory-labels';
 import { InlineLoading } from './AsyncButton';
+import { ListRow } from './ListRow';
 import { SectionHeader } from './SectionHeader';
 import { TransientToast } from './TransientToast';
 
@@ -118,15 +119,21 @@ export function WorkspaceBrief({
           <ul className="brief-list">
             {brief.openIssues.items.map((issue) => (
               <li key={issue.checkpointId}>
-                <button type="button" onClick={() => onOpenIssue(issue)}>
-                  <span className="brief-item-title">{issue.summary || '（无小结）'}</span>
-                  <small>
-                    未决事项
-                    {issue.nextAction ? ` · 下一步：${issue.nextAction}` : ''}
-                    {issue.feedback ? ' · 已有反馈' : ''}
-                  </small>
-                  <ChevronRightIcon size={12} />
-                </button>
+                <ListRow
+                  multiline
+                  variant="plain"
+                  onClick={() => onOpenIssue(issue)}
+                  label={`查看未决事项「${issue.summary || '（无小结）'}」`}
+                  title={issue.summary || '（无小结）'}
+                  meta={
+                    <>
+                      未决事项
+                      {issue.nextAction ? ` · 下一步：${issue.nextAction}` : ''}
+                      {issue.feedback ? ' · 已有反馈' : ''}
+                    </>
+                  }
+                  trailing={<ChevronRightIcon size={12} />}
+                />
               </li>
             ))}
           </ul>
@@ -150,16 +157,15 @@ export function WorkspaceBrief({
           <ul className="brief-list">
             {brief.referenceVersions.items.map((item) => (
               <li key={item.reference.id}>
-                <button type="button" onClick={() => onOpenReference(item)}>
-                  <span className="brief-item-title">
-                    {item.reference.label ?? '未命名参考版本'}
-                  </span>
-                  <small>
-                    {item.status === 'ready' ? '版本可用' : '版本已不可用'} ·
-                    固定精确版本，不跟随最新
-                  </small>
-                  <ChevronRightIcon size={12} />
-                </button>
+                <ListRow
+                  multiline
+                  variant="plain"
+                  onClick={() => onOpenReference(item)}
+                  label={`查看参考版本「${item.reference.label ?? '未命名参考版本'}」`}
+                  title={item.reference.label ?? '未命名参考版本'}
+                  meta={`${item.status === 'ready' ? '版本可用' : '版本已不可用'} · 固定精确版本，不跟随最新`}
+                  trailing={<ChevronRightIcon size={12} />}
+                />
               </li>
             ))}
           </ul>
@@ -201,18 +207,24 @@ function BriefSection({
       <ul className="brief-list">
         {section.items.map((item) => (
           <li key={`${item.memoryId}:${item.revisionId}`}>
-            <button type="button" onClick={() => onOpenMemory(item)}>
-              <span className="brief-item-title">{item.content}</span>
-              <small>
-                {memoryScopeLabel(item.scope, workspaceName, expertName)} ·{' '}
-                {item.requiresMaterialSelection
-                  ? '使用时仍需本期选入资料'
-                  : '自包含口径，可直接复用'}
-                {item.sourceAvailability === 'unavailable' ? ' · 来源已不可用' : ''}
-                {item.sourceAvailability === 'review-required' ? ' · 来源待复核' : ''}
-              </small>
-              <ChevronRightIcon size={12} />
-            </button>
+            <ListRow
+              multiline
+              variant="plain"
+              onClick={() => onOpenMemory(item)}
+              label={`查看记忆「${item.content}」`}
+              title={item.content}
+              meta={
+                <>
+                  {memoryScopeLabel(item.scope, workspaceName, expertName)} ·{' '}
+                  {item.requiresMaterialSelection
+                    ? '使用时仍需本期选入资料'
+                    : '自包含口径，可直接复用'}
+                  {item.sourceAvailability === 'unavailable' ? ' · 来源已不可用' : ''}
+                  {item.sourceAvailability === 'review-required' ? ' · 来源待复核' : ''}
+                </>
+              }
+              trailing={<ChevronRightIcon size={12} />}
+            />
           </li>
         ))}
       </ul>

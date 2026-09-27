@@ -22,6 +22,7 @@ import {
   memoryConsentDialogNotice,
 } from '../lib/memory-suggestions';
 import { AsyncButton, InlineLoading } from './AsyncButton';
+import { Badge, type BadgeTone } from './Badge';
 import { ConfirmationDialog } from './ConfirmationDialog';
 import { ListRow } from './ListRow';
 import { SectionHeader } from './SectionHeader';
@@ -144,24 +145,25 @@ function SuggestionSettings({
 
   return (
     <div className="suggestion-consent">
-      <div className="suggestion-setting-row">
-        <div>
-          <strong>任务完成后自动提炼建议</strong>
-          <small>
-            {suggestions.settingsLoading
-              ? '正在读取本空间设置…'
-              : `${enabled ? '已开启' : '已关闭'} · ${consentLabel}`}
-          </small>
-        </div>
-        <AsyncButton
-          variant="secondary"
-          busy={suggestions.savingSettings}
-          disabled={suggestions.settingsLoading}
-          label={enabled ? '关闭自动建议' : '开启自动建议'}
-          busyLabel="正在提交…"
-          onClick={() => setPendingToggle(!enabled)}
-        />
-      </div>
+      <ListRow
+        variant="plain"
+        title="任务完成后自动提炼建议"
+        meta={
+          suggestions.settingsLoading
+            ? '正在读取本空间设置…'
+            : `${enabled ? '已开启' : '已关闭'} · ${consentLabel}`
+        }
+        actions={
+          <AsyncButton
+            variant="secondary"
+            busy={suggestions.savingSettings}
+            disabled={suggestions.settingsLoading}
+            label={enabled ? '关闭自动建议' : '开启自动建议'}
+            busyLabel="正在提交…"
+            onClick={() => setPendingToggle(!enabled)}
+          />
+        }
+      />
       <p className="context-hint">{consentStateNotice(suggestions.settings)}</p>
       {suggestions.settingsError && (
         <p className="inline-message error">{suggestions.settingsError}</p>
@@ -265,12 +267,28 @@ function SuggestionCard({
       ? candidate.provenance.materialDependencies.length +
         candidate.provenance.memoryDependencies.length
       : 0;
+  /**
+   * 生效状态 → 徽标档位（docs/10 §10.1）：状态文字一律由 `Badge` 画，
+   * 页面只决定用语义色。待确认＝需要用户处理，已确认＝品牌色，
+   * 已被替代／过期／以后不用＝历史状态，降到低对比档。
+   */
+  const effectiveStatusTone: Record<MemoryViewItem['effectiveStatus'], BadgeTone> = {
+    candidate: 'warning',
+    rejected: 'outline',
+    confirmed: 'brand',
+    superseded: 'outline',
+    expired: 'outline',
+    deleted: 'outline',
+  };
+
   const bodyLimit = Math.min(MEMORY_CANDIDATE_CONTENT_MAX_CODE_POINTS, 500);
   return (
     <article className="suggestion-card">
       <div className="suggestion-head">
-        <span className="memory-kind">{facetLabel[candidate.facet]}</span>
-        <span className="memory-state">{effectiveStatusLabel[candidate.effectiveStatus]}</span>
+        <Badge shape="tag">{facetLabel[candidate.facet]}</Badge>
+        <Badge shape="tag" tone={effectiveStatusTone[candidate.effectiveStatus]}>
+          {effectiveStatusLabel[candidate.effectiveStatus]}
+        </Badge>
         <small>{memoryScopeLabel(candidate.scope, workspaceName, expertName)}</small>
       </div>
       <p className="suggestion-body">{candidate.content.slice(0, bodyLimit)}</p>

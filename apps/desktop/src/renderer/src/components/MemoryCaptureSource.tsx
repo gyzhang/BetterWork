@@ -57,12 +57,12 @@ export function MemoryCaptureSource({
         />
       </Field>
       <div className="memory-capture-source-actions">
-        <button className="message-action" type="button" onClick={confirm}>
+        <button className="text-button" type="button" onClick={confirm}>
           确认选区
         </button>
         {excerpt !== undefined && (
           <button
-            className="message-action"
+            className="text-button"
             type="button"
             onClick={() => {
               onRangeChange(undefined);

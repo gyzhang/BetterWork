@@ -37,7 +37,6 @@ import { reportAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
 import { fileTypeLabel, materialPurposeName, runStatusName } from '../lib/labels';
 import { materialCandidateKey, taskMaterialKey } from '../lib/materials';
-import { canToggleMcpTool, hasMcpToolBinding, setMcpToolBinding } from '../lib/mcp-selection';
 import {
   effectiveStatusLabel,
   memoryRunPhaseLabel,
@@ -52,6 +51,7 @@ import { AsyncButton, InlineLoading } from './AsyncButton';
 import { EmptyContext } from './EmptyState';
 import { IconButton } from './IconButton';
 import { ListRow } from './ListRow';
+import { McpToolBindingsPicker } from './McpToolBindingsPicker';
 import { MemorySuggestionList } from './MemorySuggestionList';
 import { SectionHeader } from './SectionHeader';
 import { Tabs } from './Tabs';
@@ -288,7 +288,7 @@ export function ContextPanel({
           )}
           {tab === 'sources' && (
             <>
-              <section className="selected-materials-panel">
+              <section className="context-section">
                 <SectionHeader
                   title="本次材料"
                   hint={materials.length > 0 ? `${materials.length} 项已选择` : '尚未选择'}
@@ -325,20 +325,25 @@ export function ContextPanel({
                         (item) => materialCandidateKey(item) === taskMaterialKey(selection),
                       );
                       return (
-                        <div className="selected-material-row" key={taskMaterialKey(selection)}>
-                          <strong>{candidate?.title ?? '已选材料'}</strong>
-                          <small>
-                            {candidate?.sourceLabel ?? selection.reference.kind} ·{' '}
-                            {materialPurposeName[selection.purpose]}
-                            {candidate?.status === 'unavailable' ? ' · 不可读取' : ''}
-                          </small>
-                        </div>
+                        <ListRow
+                          key={taskMaterialKey(selection)}
+                          multiline
+                          variant="plain"
+                          title={candidate?.title ?? '已选材料'}
+                          meta={
+                            <>
+                              {candidate?.sourceLabel ?? selection.reference.kind} ·{' '}
+                              {materialPurposeName[selection.purpose]}
+                              {candidate?.status === 'unavailable' ? ' · 不可读取' : ''}
+                            </>
+                          }
+                        />
                       );
                     })}
                   </div>
                 )}
               </section>
-              <section className="selected-mcp-panel">
+              <section className="context-section">
                 <SectionHeader
                   title="本次 MCP 工具"
                   hint={
@@ -347,51 +352,11 @@ export function ContextPanel({
                       : '未选择，专家预设也不会自动加入'
                   }
                 />
-                {mcpConnections.length === 0 ? (
-                  <p className="muted-text">请先在设置 → MCP 中配置连接。</p>
-                ) : (
-                  <div className="selected-mcp-list">
-                    {mcpConnections.map((connection) => (
-                      <div className="selected-mcp-connection" key={connection.id}>
-                        <strong>{connection.name}</strong>
-                        {connection.tools.length === 0 ? (
-                          <small className="muted-text">尚未检测到工具</small>
-                        ) : (
-                          <div className="expert-option-list">
-                            {connection.tools.map((tool) => {
-                              const checked = hasMcpToolBinding(
-                                mcpToolBindings,
-                                connection.id,
-                                tool.id,
-                              );
-                              const enabled = canToggleMcpTool(connection.status, checked);
-                              return (
-                                <label className="expert-option" key={tool.id}>
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    disabled={!enabled}
-                                    onChange={(event) =>
-                                      onMcpToolBindingsChange(
-                                        setMcpToolBinding(
-                                          mcpToolBindings,
-                                          connection.id,
-                                          tool.id,
-                                          event.target.checked,
-                                        ),
-                                      )
-                                    }
-                                  />
-                                  <span title={tool.description}>{tool.name}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <McpToolBindingsPicker
+                  connections={mcpConnections}
+                  bindings={mcpToolBindings}
+                  onChange={onMcpToolBindingsChange}
+                />
               </section>
               <EvidenceSection
                 key={activeRun?.id ?? 'task'}
@@ -954,19 +919,22 @@ function RunContextBody({
           const memory = byId.get(item.memoryId);
           const read = context.reads.find((entry) => entry.memoryRevisionId === item.revisionId);
           return (
-            <div className="context-row" key={item.revisionId}>
-              <div>
-                <strong>{memory?.content ?? `记忆 ${item.memoryId}`}</strong>
-                <small>
+            <ListRow
+              key={item.revisionId}
+              multiline
+              variant="plain"
+              title={memory?.content ?? `记忆 ${item.memoryId}`}
+              meta={
+                <>
                   第 {item.order} 位 · {selectionReasonLabel[item.reason]} · 修订{' '}
                   {item.revisionId.slice(0, 8)} · 哈希 {item.contentHash.slice(0, 8)}
                   {read?.provenanceState === 'legacy_unknown' ? ' · 旧版来源' : ''}
                   {read && read.replayedViaRunIds.length > 0
                     ? ` · 经 ${read.replayedViaRunIds.length} 次历史轮次带入`
                     : ''}
-                </small>
-              </div>
-            </div>
+                </>
+              }
+            />
           );
         })}
       </div>
