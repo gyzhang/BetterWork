@@ -28,7 +28,7 @@ import { SegmentedControl } from '../components/Tabs';
 import { Tooltip } from '../components/Tooltip';
 import type { ExpertsState } from '../hooks/use-experts';
 import { useViewMode } from '../hooks/use-view-mode';
-import { ExpertIcon, PlusIcon, SummonIcon } from '../icons';
+import { ChevronLeftIcon, ExpertIcon, PlusIcon, SummonIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
 import { materialCandidateAppliesToWorkspace, materialReferenceKey } from '../lib/materials';
 
@@ -340,8 +340,8 @@ function ExpertEditor({
         eyebrow="专家配置"
         title={editing ? '编辑专家修订' : '新建专家'}
         leading={
-          <Button variant="text" size="sm" type="button" onClick={onCancel}>
-            {backLabel}
+          <Button variant="link" size="sm" type="button" onClick={onCancel}>
+            <ChevronLeftIcon size={13} /> {backLabel}
           </Button>
         }
       />
@@ -643,8 +643,8 @@ function ExpertDetailPanel({
         eyebrow="专家"
         title={detail.name}
         leading={
-          <Button variant="text" size="sm" type="button" onClick={onBack}>
-            返回列表
+          <Button variant="link" size="sm" type="button" onClick={onBack}>
+            <ChevronLeftIcon size={13} /> 返回列表
           </Button>
         }
         actions={
