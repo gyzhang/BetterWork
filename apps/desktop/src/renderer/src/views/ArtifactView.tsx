@@ -281,21 +281,17 @@ export function ArtifactPage({
                     const isSnapshot = relation.input.kind === 'workspace-input-snapshot';
                     const Icon = isSnapshot ? KnowledgeIcon : ArtifactIcon;
                     return (
-                      <div
+                      <ListRow
                         key={`${relation.outputVersionId}:${JSON.stringify(relation.input)}`}
-                        className="artifact-input-card"
-                        title={`${fileName} · ${relation.relation} · ${sourceLabel}`}
-                      >
-                        <span className="artifact-input-card-icon">
-                          <Icon size={16} />
-                        </span>
-                        <div className="artifact-input-card-body">
-                          <span className="artifact-input-card-name">{fileName}</span>
-                          <span className="artifact-input-card-meta">
-                            {RELATION_LABEL[relation.relation]} · {sourceLabel}
+                        variant="card"
+                        leading={
+                          <span className="artifact-input-card-icon">
+                            <Icon size={16} />
                           </span>
-                        </div>
-                      </div>
+                        }
+                        title={fileName}
+                        detail={`${RELATION_LABEL[relation.relation]} · ${sourceLabel}`}
+                      />
                     );
                   })}
                 </div>

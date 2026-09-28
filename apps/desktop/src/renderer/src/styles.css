@@ -24,6 +24,9 @@
   --control-padding-lg: 8px 12px;
   /* 原生勾选框的方框边长：14×14 与 16×16 两套并成一套。 */
   --control-check-size: 16px;
+  /* 卡片外壳档位：卡片与 ListRow 的 card 档共用，网格里的卡片不再各写一套。 */
+  --card-padding: 12px 16px;
+  --card-gap: 12px;
   --control-radius: 6px;
   /* 圆角档位（docs/10 §9.10）：一档一个用途，样式表里不得再出现字面 px。
      微标（kbd、色板、格式徽标）取 3–4px，属图形化例外，由护栏按清单登记。 */
@@ -1343,12 +1346,7 @@ small {
   gap: 8px;
 }
 .suggestion-card {
-  display: grid;
   gap: 8px;
-  padding: 11px 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
 }
 .suggestion-head {
   display: flex;
@@ -1376,11 +1374,6 @@ small {
 }
 .suggestion-facts .warn {
   color: var(--warning);
-}
-.suggestion-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 /* 建议卡上的facet与生效状态是只读状态文字，一律由 Badge 画（docs/10 §10.1）；
    这里只留「它们排成一行」这件事，不再各写一套片状外观。 */
@@ -1628,65 +1621,9 @@ small {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
-.skill-card {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  text-align: left;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  cursor: pointer;
-}
+
 .skill-card:hover {
   border-color: var(--brand);
-}
-.skill-card:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -2px;
-}
-.skill-card-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.skill-card-mark {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  flex: none;
-  place-items: center;
-  color: var(--brand);
-  background: var(--brand-soft);
-  border-radius: var(--radius-row);
-  font-size: 14px;
-  font-weight: 700;
-}
-.skill-card-head strong {
-  display: block;
-  color: var(--text-primary);
-  font-size: 13px;
-}
-.skill-card-head small {
-  display: block;
-  margin-top: 4px;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-/* 描述一律三行定高：一行也占三行的位置，卡片高度因此恒定；
-   超出三行截断，悬停由 Tooltip 基座补全（docs/10 §10.1）。 */
-.skill-card-desc {
-  display: -webkit-box;
-  min-height: 61px;
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.55;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 .experts-page {
   display: flex;
@@ -1703,80 +1640,6 @@ small {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-.expert-card {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-}
-/* 卡片顶部一行：整卡点击区在左，主行动「召唤」贴在右上角。
-   两枚按钮是兄弟而不是嵌套，点召唤不会同时进详情。 */
-.expert-card-top {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-.expert-card-main {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 12px;
-  padding: 0;
-  color: inherit;
-  text-align: left;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-}
-.expert-card-main:hover .expert-card-head strong {
-  color: var(--brand);
-}
-.expert-card-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.expert-card-mark {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  flex: none;
-  place-items: center;
-  color: var(--brand);
-  background: var(--brand-soft);
-  border-radius: var(--radius-row);
-}
-.expert-card-head strong,
-.expert-card-head small {
-  display: block;
-}
-.expert-card-head strong {
-  color: var(--text-primary);
-  font-size: 13px;
-}
-.expert-card-head small {
-  margin-top: 4px;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-/* 描述一律三行定高，与技能卡同一口径：一行也占三行的位置，卡片高度因此恒定；
-   超出三行截断，悬停由 Tooltip 基座补全（docs/10 §10.1）。 */
-.expert-card-desc {
-  display: -webkit-box;
-  min-height: 61px;
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.55;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 .expert-card-status {
   margin: 0;
@@ -2060,11 +1923,98 @@ small {
   align-items: flex-start;
   border-bottom: 1px solid var(--border);
 }
+/* 卡片外壳只有这一处：网格里的 Card、列表里的 ListRow card 档，以及外观页那颗
+   选择卡（它是 button，进不了 Card 的 article 根，但外壳没有理由再抄一遍）
+   共用同一份底、边框、圆角与内距（docs/10 §10.1、ADR-0031）。 */
+.card,
+.option-card,
 .list-row[data-variant='card'] {
-  padding: 12px 16px;
+  padding: var(--card-padding);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
+}
+.card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--card-gap);
+  color: var(--text-primary);
+  text-align: left;
+}
+.card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--card-gap);
+}
+.card-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--card-gap);
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.card-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--card-gap);
+}
+.card-mark {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  place-items: center;
+  color: var(--brand);
+  background: var(--brand-soft);
+  border-radius: var(--radius-row);
+  font-size: 14px;
+  font-weight: 700;
+}
+.card-names {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+.card-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.card-byline {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+/* 卡片说明一律三行定高：一行也占满三行，卡片才真正等高；截断处交给 Tooltip 补全。 */
+.card-description {
+  display: -webkit-box;
+  min-height: 61px;
+  width: 100%;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+.card-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+/* 可点卡片的名称在悬停时点亮——此前只有专家卡有这条反馈，技能卡整片是按钮却没有。 */
+.card-main:hover .card-title {
+  color: var(--brand);
 }
 .list-row[data-variant='plain'] {
   padding: 8px 9px;
@@ -3068,13 +3018,9 @@ button.list-row:where(:not(:disabled)):hover {
 .option-card {
   display: flex;
   min-width: 0;
-  padding: 10px;
   flex-direction: column;
-  align-items: flex-start;
-  color: var(--text-primary);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
+  gap: 8px;
+  cursor: pointer;
   text-align: left;
 }
 .option-card:hover {
@@ -4383,15 +4329,7 @@ button.list-row:where(:not(:disabled)):hover {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 8px;
 }
-.artifact-input-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-row);
-}
+
 .artifact-input-card-icon {
   display: grid;
   width: 28px;
@@ -4401,28 +4339,6 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--brand);
   background: var(--brand-soft);
   border-radius: var(--control-radius);
-}
-.artifact-input-card-body {
-  min-width: 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.artifact-input-card-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.3;
-}
-.artifact-input-card-meta {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-muted);
-  font-size: 12px;
 }
 
 .artifact-detail-page {

@@ -24,6 +24,7 @@ import {
 import { InlineLoading } from './AsyncButton';
 import { Badge, type BadgeTone } from './Badge';
 import { Button } from './Button';
+import { Card } from './Card';
 import { ConfirmationDialog } from './ConfirmationDialog';
 import { ListRow } from './ListRow';
 import { SectionHeader } from './SectionHeader';
@@ -297,7 +298,28 @@ function SuggestionCard({
 
   const bodyLimit = Math.min(MEMORY_CANDIDATE_CONTENT_MAX_CODE_POINTS, 500);
   return (
-    <article className="suggestion-card">
+    <Card
+      className="suggestion-card"
+      footer={
+        <>
+          <Button variant="primary" size="lg" type="button" onClick={() => onEdit(candidate)}>
+            编辑并确认
+          </Button>
+          <Button variant="secondary" size="md" type="button" onClick={() => onReject(candidate)}>
+            暂不采用
+          </Button>
+          <Button
+            variant="quiet"
+            size="sm"
+            tone="danger"
+            type="button"
+            onClick={() => onDelete(candidate)}
+          >
+            删除
+          </Button>
+        </>
+      }
+    >
       <div className="suggestion-head">
         <Badge shape="tag">{facetLabel[candidate.facet]}</Badge>
         <Badge shape="tag" tone={effectiveStatusTone[candidate.effectiveStatus]}>
@@ -326,23 +348,6 @@ function SuggestionCard({
           <li className="warn">可能冲突：同一议题下另有待澄清的口径，确认前请先看两边。</li>
         )}
       </ul>
-      <div className="suggestion-actions">
-        <Button variant="primary" size="lg" type="button" onClick={() => onEdit(candidate)}>
-          编辑并确认
-        </Button>
-        <Button variant="secondary" size="md" type="button" onClick={() => onReject(candidate)}>
-          暂不采用
-        </Button>
-        <Button
-          variant="quiet"
-          size="sm"
-          tone="danger"
-          type="button"
-          onClick={() => onDelete(candidate)}
-        >
-          删除
-        </Button>
-      </div>
-    </article>
+    </Card>
   );
 }

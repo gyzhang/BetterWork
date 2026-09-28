@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AsyncButton } from '../components/AsyncButton';
 import { Badge, type BadgeTone } from '../components/Badge';
 import { Button } from '../components/Button';
+import { Card, CardMark } from '../components/Card';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -14,7 +15,6 @@ import { SectionHeader } from '../components/SectionHeader';
 import { DependencyPanel } from '../components/skills/DependencyPanel';
 import { Switch } from '../components/Switch';
 import { SegmentedControl } from '../components/Tabs';
-import { Tooltip } from '../components/Tooltip';
 import { TransientToast } from '../components/TransientToast';
 import type { SkillDependenciesState } from '../hooks/use-skill-dependencies';
 import { useSkillDependencies } from '../hooks/use-skill-dependencies';
@@ -67,19 +67,16 @@ function SkillCard({
   onClick: () => void;
 }): React.JSX.Element {
   return (
-    <button className="skill-card" type="button" onClick={onClick}>
-      <div className="skill-card-head">
-        <span className="skill-card-mark" aria-hidden="true">
-          {skill.name.slice(0, 1).toUpperCase()}
-        </span>
-        <div>
-          <strong>{skill.name}</strong>
-          <small>{sourceName[skill.sourceKind]} Skill</small>
-        </div>
-      </div>
-      <Tooltip className="skill-card-desc">{skill.description || '暂无描述'}</Tooltip>
+    <Card
+      className="skill-card"
+      leading={skill.name.slice(0, 1).toUpperCase()}
+      title={skill.name}
+      byline={`${sourceName[skill.sourceKind]} Skill`}
+      description={skill.description || '暂无描述'}
+      onOpen={onClick}
+    >
       <SkillChips skill={skill} />
-    </button>
+    </Card>
   );
 }
 
@@ -94,11 +91,7 @@ function SkillListItem({
     <ListRow
       variant="card"
       onClick={onClick}
-      leading={
-        <span className="skill-card-mark" aria-hidden="true">
-          {skill.name.slice(0, 1).toUpperCase()}
-        </span>
-      }
+      leading={<CardMark>{skill.name.slice(0, 1).toUpperCase()}</CardMark>}
       title={skill.name}
       meta={skill.description || '暂无描述'}
       actions={<SkillChips skill={skill} />}

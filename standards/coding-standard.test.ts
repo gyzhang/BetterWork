@@ -1122,6 +1122,75 @@ function assertRetiredClassesAbsent(
   }
 }
 
+/**
+ * 卡片外壳的唯一出口（docs/10 §10.1）。
+ *
+ * 五套自造外壳并轨之后，这两条锁的是「别再长回五套」：领域钩子类可以继续存在
+ * （悬停显形、网格定位、色条），但不许再声明底、边框、圆角与内距；基座的槽位类
+ * 也不许由页面手写——那等于绕过 `Card` 自己拼一份卡片骨架。
+ */
+describe('卡片外壳基座纪律', () => {
+  const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
+  expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
+  const declarations = declarationsOf(styles ?? '');
+
+  /** 那条共用规则本身：`padding`／`background`／`border`／`border-radius` 只有这一处。 */
+  const SHARED_CARD_SHELL = /^\.card,\s*\.option-card,\s*\.list-row\[data-variant='card'\]$/;
+  const CARD_HOOKS = /\.(?:skill|expert|suggestion|artifact-input|option)-card(?![-\w])/;
+  const SHELL_PROPERTIES = ['padding', 'background', 'border', 'border-radius'];
+
+  it('卡片外壳的四件套不得被领域钩子重新声明', () => {
+    const offenders = declarations
+      .filter((declaration) => SHELL_PROPERTIES.includes(declaration.property))
+      .filter((declaration) => {
+        const selector = declaration.selector.replace(/\/\*[\s\S]*?\*\//g, '').trim();
+        if (SHARED_CARD_SHELL.test(selector)) return false;
+        // 逗号分列的每一个选择器都命中卡片钩子，才算「又给卡片写了一遍外壳」。
+        return selector.split(',').every((part) => CARD_HOOKS.test(part.trim()));
+      })
+      .map((declaration) => locate(declaration, styles ?? ''));
+    expect(
+      offenders,
+      '卡片底、边框、圆角与内距归 .card 那条共用规则；要更紧或更松先改 --card-padding 或加变体（docs/10 §10.1）',
+    ).toEqual([]);
+  });
+
+  it('基座的槽位类不得由页面手写', () => {
+    const owners = [
+      'apps/desktop/src/renderer/src/components/Card.tsx',
+      'apps/desktop/src/renderer/src/components/ListRow.tsx',
+    ];
+    // 整词比对：`artifact-input-card-icon` 是成果输入卡留在行槽里的身份块钩子，
+    // 不是基座的 `.card`，也不该被误判成「手写外壳」。
+    const baseClasses = new Set([
+      'card',
+      'card-top',
+      'card-main',
+      'card-head',
+      'card-mark',
+      'card-names',
+      'card-title',
+      'card-byline',
+      'card-description',
+      'card-footer',
+    ]);
+    const offenders: string[] = [];
+    for (const relative of pathsUnder('apps/desktop/src/renderer/')) {
+      if (!/\.tsx$/.test(relative) || /\.test\.tsx$/.test(relative)) continue;
+      if (owners.includes(relative)) continue;
+      const source = read(relative);
+      for (const match of source.matchAll(/className(?:=\{?)["'`]+([^"'`]*)["'`]/g)) {
+        const hit = (match[1] ?? '').split(/[\s]+/).find((token) => baseClasses.has(token));
+        if (hit) offenders.push(`${relative} → className="${match[1] ?? ''}"（命中基座类 ${hit}）`);
+      }
+    }
+    expect(
+      offenders,
+      '请用 Card 的 leading／title／byline／description／footer 槽位，不要手排基座的骨架类（docs/10 §10.1）',
+    ).toEqual([]);
+  });
+});
+
 describe('表单字段基座纪律', () => {
   const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
   expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
@@ -1468,6 +1537,9 @@ describe('列表行基座纪律', () => {
   it('行的间距与内边距只由基座的选择器拥有', () => {
     // 基座收编后，页面最常见的回归是「这条行在我这里想紧一点」：用后代选择器替骨架
     // 补一遍 gap／padding，等于把第 10 套行几何写回来。
+    // 例外是卡片外壳那一条：`.list-row[data-variant='card']` 与 `.card`／`.option-card`
+    // 共用同一份内距，正是「一份几何两种视图」，不是页面替骨架补缝（docs/10 §10.1）。
+    const SHARED_CARD_SHELL = /^\.card,\s*\.option-card,\s*\.list-row\[data-variant='card'\]$/;
     const offenders = declarations
       .map((declaration) => ({
         declaration,
@@ -1475,6 +1547,7 @@ describe('列表行基座纪律', () => {
       }))
       .filter(({ selector }) => {
         if (!selector.includes('.list-row')) return false;
+        if (SHARED_CARD_SHELL.test(selector)) return false;
         // 基座自己的选择器：`.list-row` 本体、三个变体档与六个槽位类。
         return !/^\.list-row(?:-[a-z]+)?(?![-\w])/.test(selector);
       })
@@ -1808,6 +1881,7 @@ describe('图标按钮与动作条纪律', () => {
  */
 const BUTTON_BASE_FILES = [
   'apps/desktop/src/renderer/src/components/Button.tsx',
+  'apps/desktop/src/renderer/src/components/Card.tsx',
   'apps/desktop/src/renderer/src/components/IconButton.tsx',
   'apps/desktop/src/renderer/src/components/ListRow.tsx',
   'apps/desktop/src/renderer/src/components/NavList.tsx',
@@ -1827,8 +1901,6 @@ const NON_ACTION_BUTTON_SHAPES: { readonly match: string; readonly reason: strin
     match: 'option-card',
     reason: '外观预览的选择卡：取 --radius-card 与卡片底，不吃三档控件高度',
   },
-  { match: 'expert-card-main', reason: '整张专家卡的主区可点：它是卡片，不是一排动作' },
-  { match: 'skill-card', reason: '整张技能卡可点：同上' },
   { match: 'toast-body', reason: '整条通知可点：它是消息行的活动区' },
   { match: 'tool-activity-toggle', reason: '工具活动条：整片是状态条，展开态走 aria-expanded' },
   { match: 'tool-pill', reason: '工具状态片：选中态由 aria-expanded 表达，不是按钮档' },

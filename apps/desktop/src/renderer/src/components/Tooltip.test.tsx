@@ -75,7 +75,7 @@ describe('Tooltip', () => {
 
   it('shows the full text only after the hover delay', () => {
     vi.useFakeTimers();
-    const { container } = render(<Tooltip className="expert-card-desc">{LONG}</Tooltip>);
+    const { container } = render(<Tooltip className="card-description">{LONG}</Tooltip>);
     const anchor = container.querySelector('.tooltip-anchor') as HTMLElement;
     makeClipped(anchor, true);
 
@@ -90,7 +90,7 @@ describe('Tooltip', () => {
 
   it('never opens for a short description that is not clipped', () => {
     vi.useFakeTimers();
-    const { container } = render(<Tooltip className="expert-card-desc">一行就放得下</Tooltip>);
+    const { container } = render(<Tooltip className="card-description">一行就放得下</Tooltip>);
     const anchor = container.querySelector('.tooltip-anchor') as HTMLElement;
     makeClipped(anchor, false);
 
@@ -103,7 +103,7 @@ describe('Tooltip', () => {
 
   it('closes when the pointer leaves the anchor', () => {
     vi.useFakeTimers();
-    const { container } = render(<Tooltip className="expert-card-desc">{LONG}</Tooltip>);
+    const { container } = render(<Tooltip className="card-description">{LONG}</Tooltip>);
     const anchor = hoverClipped(container);
     expect(tipOf()).not.toBeNull();
 
@@ -113,7 +113,7 @@ describe('Tooltip', () => {
 
   it('keeps the full text in the anchor and hides the tip from assistive technology', () => {
     vi.useFakeTimers();
-    const { container } = render(<Tooltip className="expert-card-desc">{LONG}</Tooltip>);
+    const { container } = render(<Tooltip className="card-description">{LONG}</Tooltip>);
     const anchor = hoverClipped(container);
 
     expect(anchor.textContent).toBe(LONG);

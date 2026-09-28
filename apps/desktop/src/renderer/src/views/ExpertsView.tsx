@@ -14,6 +14,7 @@ import { ActionBar } from '../components/ActionBar';
 import { AsyncButton } from '../components/AsyncButton';
 import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
+import { Card, CardMark } from '../components/Card';
 import { CheckList } from '../components/CheckList';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
@@ -26,7 +27,6 @@ import { ListRow } from '../components/ListRow';
 import { McpToolBindingsPicker } from '../components/McpToolBindingsPicker';
 import { SectionHeader } from '../components/SectionHeader';
 import { SegmentedControl } from '../components/Tabs';
-import { Tooltip } from '../components/Tooltip';
 import type { ExpertsState } from '../hooks/use-experts';
 import { useViewMode } from '../hooks/use-view-mode';
 import { ChevronLeftIcon, ExpertIcon, PlusIcon, SummonIcon } from '../icons';
@@ -233,35 +233,28 @@ function ExpertActionButtons({
  */
 function ExpertCard({ expert, onSummon, onError, actions }: ExpertCardProps): React.JSX.Element {
   return (
-    <article className="expert-card">
-      <div className="expert-card-top">
-        <button className="expert-card-main" type="button" onClick={() => actions.onOpen(expert)}>
-          <span className="expert-card-head">
-            <span className="expert-card-mark" aria-hidden="true">
-              <ExpertIcon size={18} />
-            </span>
-            <span className="expert-card-title">
-              <strong>{expert.name}</strong>
-              <small>{expertByline(expert)}</small>
-            </span>
-          </span>
-          <Tooltip className="expert-card-desc">{expert.summary || '暂无说明'}</Tooltip>
-        </button>
+    <Card
+      className="expert-card"
+      leading={<ExpertIcon size={18} />}
+      title={expert.name}
+      byline={expertByline(expert)}
+      description={expert.summary || '暂无说明'}
+      onOpen={() => actions.onOpen(expert)}
+      topTrailing={
         <ExpertSummon
           className="expert-card-summon"
           expert={expert}
           onSummon={onSummon}
           onError={onError}
         />
-      </div>
+      }
+      footer={<ExpertActionButtons {...actions} expert={expert} />}
+    >
       <ExpertTags expert={expert} />
       {expert.blockedReasons.length > 0 && (
         <p className="expert-card-status">{blockedHint(expert)}</p>
       )}
-      <div className="expert-card-actions">
-        <ExpertActionButtons {...actions} expert={expert} />
-      </div>
-    </article>
+    </Card>
   );
 }
 
@@ -272,9 +265,9 @@ function ExpertRow({ expert, onSummon, onError, actions }: ExpertCardProps): Rea
       as="article"
       variant="card"
       leading={
-        <span className="expert-card-mark" aria-hidden="true">
+        <CardMark>
           <ExpertIcon size={18} />
-        </span>
+        </CardMark>
       }
       title={expert.name}
       detail={expert.summary || '暂无说明'}

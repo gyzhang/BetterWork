@@ -1131,7 +1131,7 @@ describe('Expert configuration', () => {
     fireEvent.click(await screen.findByRole('button', { name: '专家' }));
     expect(await screen.findByRole('button', { name: '详情' })).toBeTruthy();
     const card = document.querySelector('.expert-card');
-    expect(card?.querySelector('.expert-card-mark svg')).not.toBeNull();
+    expect(card?.querySelector('.card-mark svg')).not.toBeNull();
     expect(card?.textContent).toContain('财务组 · v1');
     expect(card?.querySelectorAll('.expert-card-tags .badge[data-shape="tag"]')).toHaveLength(2);
     expect(screen.getByRole('button', { name: '召唤' })).toBeTruthy();
