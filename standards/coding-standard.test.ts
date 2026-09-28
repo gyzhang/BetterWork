@@ -14,6 +14,11 @@ import { describe, expect, it } from 'vitest';
  * `docs/12-engineering-standards.md` 里，本文件是它们的可执行形式。
  *
  * 例外一律写成下面的显式白名单并注明理由（docs/12 §10），不允许在源码里就地豁免。
+ *
+ * 注释里裸写的 `§3.x`／`§4.x` 与 `P` 编号指 `docs/reviews/2026-09-26-ui-consistency.md`
+ * （§3.1–3.6 缺陷清单，`P` 只到 P3）与 `docs/reviews/2026-09-27-ui-reuse-audit.md`
+ * （§3.1–3.4 重复账、§4.1–4.6 基座逃逸，`P` 到 P12）；两份都有 §3.x，P4 及以上一定在
+ * 后者。新增引用请点名文件，别再留裸编号。
  */
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
