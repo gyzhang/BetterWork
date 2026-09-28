@@ -236,7 +236,11 @@ export function ContextPanel({
                 onOpenMemoryPage={onOpenMemoryPage}
               />
               {memoriesError && <p className="inline-message error">{memoriesError}</p>}
-              {memoriesWarning && <p className="context-note">{memoriesWarning}</p>}
+              {memoriesWarning && (
+                <section className="context-section">
+                  <p className="context-note">{memoriesWarning}</p>
+                </section>
+              )}
               <NextRunScopeSection
                 runMemories={runMemories}
                 memories={memories}
@@ -372,27 +376,29 @@ export function ContextPanel({
                 detail="将完成的回复保存为 Markdown 后，它会出现在这里。"
               />
             ) : (
-              <div className="evidence-list">
-                {artifacts.map((artifact) => (
-                  <ListRow
-                    key={artifact.id}
-                    onClick={() => onSelectArtifact?.(artifact)}
-                    label={`查看成果「${artifact.title}」`}
-                    leading={
-                      <span aria-hidden="true">
-                        <ArtifactIcon size={12} />
-                      </span>
-                    }
-                    title={artifact.title}
-                    meta={
-                      <>
-                        {artifactTypeLabel(artifact)} · v{artifact.versionNumber}
-                      </>
-                    }
-                    trailing={<ChevronRightIcon size={12} />}
-                  />
-                ))}
-              </div>
+              <section className="context-section">
+                <div className="evidence-list">
+                  {artifacts.map((artifact) => (
+                    <ListRow
+                      key={artifact.id}
+                      onClick={() => onSelectArtifact?.(artifact)}
+                      label={`查看成果「${artifact.title}」`}
+                      leading={
+                        <span aria-hidden="true">
+                          <ArtifactIcon size={12} />
+                        </span>
+                      }
+                      title={artifact.title}
+                      meta={
+                        <>
+                          {artifactTypeLabel(artifact)} · v{artifact.versionNumber}
+                        </>
+                      }
+                      trailing={<ChevronRightIcon size={12} />}
+                    />
+                  ))}
+                </div>
+              </section>
             ))}
         </div>
       </aside>
@@ -476,8 +482,8 @@ function EvidenceSection({
         />
       ) : (
         <>
-          <div className="evidence-run-group">
-            <strong>{activeRunId ? '本次运行' : '任务来源'}</strong>
+          <section className="context-section">
+            <SectionHeader title={activeRunId ? '本次运行' : '任务来源'} />
             {current.length === 0 ? (
               <p className="context-hint">
                 {activeRunId ? '本次运行还没有登记已查阅来源。' : '尚未开始运行。'}
@@ -485,14 +491,13 @@ function EvidenceSection({
             ) : (
               <div className="evidence-list">{current.map((item) => renderRow(item))}</div>
             )}
-          </div>
+          </section>
           {historical.length > 0 && (
-            <Disclosure
-              className="evidence-run-group"
-              label={`历史运行来源 · ${historical.length} 条`}
-            >
-              <div className="evidence-list">{historical.map((item) => renderRow(item))}</div>
-            </Disclosure>
+            <section className="context-section">
+              <Disclosure label={`历史运行来源 · ${historical.length} 条`}>
+                <div className="evidence-list">{historical.map((item) => renderRow(item))}</div>
+              </Disclosure>
+            </section>
           )}
         </>
       )}

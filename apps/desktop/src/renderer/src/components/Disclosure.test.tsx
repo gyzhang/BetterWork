@@ -22,9 +22,17 @@ describe('Disclosure', () => {
   });
 
   it('默认收起，单字段载荷这类场景用 defaultOpen 摊开', () => {
-    const closed = render(<Disclosure label="高级参数" />);
+    const closed = render(
+      <Disclosure label="高级参数">
+        <p>上下文 Token</p>
+      </Disclosure>,
+    );
     expect(closed.container.querySelector('details')?.hasAttribute('open')).toBe(false);
-    const opened = render(<Disclosure label="输入参数" defaultOpen={true} />);
+    const opened = render(
+      <Disclosure label="输入参数" defaultOpen={true}>
+        <p>模型名称</p>
+      </Disclosure>,
+    );
     expect(opened.container.querySelector('details')?.hasAttribute('open')).toBe(true);
   });
 

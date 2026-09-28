@@ -20,6 +20,7 @@ import type { MemorySuggestionsState } from '../hooks/use-memory-suggestions';
 import type { RunMemoriesState, TaskMemoryExclusionState } from '../hooks/use-run-memories';
 import type { TaskMemoryExclusionsState } from '../hooks/use-task-memory-exclusions';
 import type { WorkspaceBriefState } from '../hooks/use-workspace-brief';
+import type { ContextTab } from '../lib/view-types';
 import { ContextPanel } from './ContextPanel';
 
 /**
@@ -560,13 +561,16 @@ describe('ContextPanel 按运行回看来源', () => {
       activeRun: runOf('run-1'),
       evidence: [current, historical, legacy],
     });
-    const groups = container.querySelectorAll('.evidence-run-group');
-    expect(groups[0]?.textContent).toContain('本次运行');
-    expect(groups[0]?.textContent).toContain('摘要来源');
-    expect(groups[0]?.textContent).not.toContain('正文来源');
-    expect(groups[0]?.textContent).toContain('修订 revision');
-    const history = groups[1];
-    expect(history?.tagName).toBe('DETAILS');
+    const currentGroup = screen
+      .getByRole('heading', { name: '本次运行' })
+      .closest('.context-section');
+    expect(currentGroup?.textContent).toContain('摘要来源');
+    expect(currentGroup?.textContent).not.toContain('正文来源');
+    expect(currentGroup?.textContent).toContain('修订 revision');
+    const history = container.querySelector('details.disclosure');
+    expect(history?.parentElement?.className, '历史来源段要套上下文面板的小节壳').toBe(
+      'context-section',
+    );
     expect(history?.textContent).toContain('历史运行来源 · 2 条');
     expect(history?.textContent).toContain('旧访问记录');
     expect(container.querySelector('[role="note"]')).toBeNull();
@@ -715,5 +719,59 @@ describe('ContextPanel 换期恢复引导（MI08）', () => {
     fireEvent.click(screen.getByRole('button', { name: '选择本期材料' }));
     expect(setTab).toHaveBeenCalledWith('sources');
     expect(onRequestMaterials).toHaveBeenCalledWith('file');
+  });
+});
+
+/**
+ * 上下文面板是 380px 定宽列，每一段的左内缩只由它自己的外壳给（docs/10 §9.8）。
+ *
+ * 2026-09-28「本次运行」与「历史运行来源」两段漏了 `.context-section`，直接贴到列的
+ * 左边缘，而同列其余段落都有 14px；成果列表与记忆提示行是同一件事的另外两处。
+ * 分段外壳因此要有台账：新增一段必须先选一个自带水平内缩的壳，
+ * 或者把新壳登记到这里并写明它凭什么自己定内缩。
+ */
+describe('上下文面板的分段内缩', () => {
+  const INSET_OWNERS: ReadonlyArray<readonly [string, string]> = [
+    ['context-section', '小节壳：13px 14px 12px ＋ 分隔线，面板里绝大多数段落'],
+    ['activity-list', '过程页的列表壳：17px 15px'],
+    ['brief-panel', '简报壳：13px 14px 16px'],
+    ['context-placeholder', '简报空态：26px 18px 的居中文案'],
+    ['empty-context', '区域级空态基座：自带 28px 内距并居中'],
+    [
+      'inline-message',
+      '带边框与底色的内联错误，它是表面不是文本，缝由 `.context-content > .inline-message` 给',
+    ],
+    ['inline-loading', '读取状态行，随上面的壳一起出现'],
+  ];
+
+  const cases: ReadonlyArray<readonly [ContextTab, string, Record<string, unknown>]> = [
+    ['process', '空过程页', {}],
+    ['sources', '只有本次运行', { activeRun: runOf('run-1'), evidence: [evidenceOf({})] }],
+    [
+      'sources',
+      '本次运行与历史来源并存',
+      {
+        activeRun: runOf('run-1'),
+        evidence: [evidenceOf({}), evidenceOf({ id: 'evidence-0', runId: 'run-0' })],
+      },
+    ],
+    [
+      'memory',
+      '带错误与警告行',
+      { memoriesError: '读取记忆失败。', memoriesWarning: '有一条记忆待复核。' },
+    ],
+    ['brief', '简报页', {}],
+    ['artifacts', '成果页', {}],
+  ];
+
+  it.each(cases)('%s：%s 的每一段都自带列内缩', (tab, _label, overrides) => {
+    const container = renderPanel({ tab, ...overrides });
+    const segments = [...container.querySelectorAll('.context-content > *')];
+    // 空容器会把「没有违规」读成「全部合规」：先证这一段真的渲染出了东西。
+    expect(segments.length, `${tab} 页没渲染出任何分段，用例夹具失效`).toBeGreaterThan(0);
+    const offenders = segments
+      .filter((node) => !INSET_OWNERS.some(([owner]) => node.classList.contains(owner)))
+      .map((node) => `${node.tagName.toLowerCase()}.${node.className || '(无类名)'}`);
+    expect(offenders.length, `${tab} 页有分段没登记内缩外壳：${offenders.join('、')}`).toBe(0);
   });
 });
