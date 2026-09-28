@@ -108,7 +108,7 @@ Renderer -> Preload API -> Application -> Agent Core / Infrastructure
 ## 6. UI 原则
 
 - UI 实现以 `docs/10-ui-ux-system.md` 为设计真相源；变更核心信息架构或视觉语言时先更新文档。
-- UI 反馈必须先按 `docs/10-ui-ux-system.md` §11.5.1 决策表归类：用户当场发起的短时确认复用局部 `TransientToast`（自消、不落库），当前对象/表单可处理的错误用内联 `.inline-message.error`（`.inline-message` 只保留错误态），跨页面可回看的长操作结果才进入消息中心 + 全局 `ToastHost`；两个 toast 不可混用，短时确认禁止走 `NotificationService`，也禁止页面或 Hook 自造 Toast、顶部成功横幅或自动消失计时器。具体工程约束见 `docs/12-engineering-standards.md` §8。
+- UI 反馈必须先按 `docs/10-ui-ux-system.md` §11.5.1 决策表归类，只有三个落点、每个落点只有一个出口组件：用户当场发起的短时确认复用局部 `TransientToast`（自消、不落库），需要停留且当前表单/对象可据以行动的错误或警告用 `InlineError` 基座（danger／warning 两档），跨页面可回看的长操作结果才进入消息中心 + 全局 `ToastHost`；两个 toast 不可混用，短时确认禁止走 `NotificationService`，也禁止页面或 Hook 自造 Toast、顶部成功横幅或自动消失计时器。具体工程约束见 `docs/12-engineering-standards.md` §8。
 - 借鉴 LobsterAI 的信息架构和产品完成度，不复制其 OpenClaw 结构。
 - 界面服务于任务、过程与成果，不堆叠 AI 装饰。
 - 展示计划、状态、工具、来源和产物，不展示模型私有思维链。
@@ -128,7 +128,7 @@ Renderer -> Preload API -> Application -> Agent Core / Infrastructure
 - 不新建第二份 ESLint / Prettier / tsconfig，不在任何 `package.json` 内嵌 `eslintConfig` 或 `prettier` 键；源码里禁止 `eslint-disable`、`@ts-ignore`、`@ts-expect-error`、`prettier-ignore`。
 - TypeScript 开启 strict，并额外开启 `noUncheckedIndexedAccess`、`exactOptionalPropertyTypes`、`useUnknownInCatchVariables`。
 - 生产代码禁止 `any` 与 `!` 非空断言；下标访问后判空，可选属性用条件展开构造。
-- Renderer 到主进程的每一次调用都必须收口：`reportAction`（失败要让用户看见）或 `trackAction`（后台同步，失败记录到控制台）。禁止 `void someIpcCall()`。
+- Renderer 到主进程的每一次调用都必须收口：`reportAction`（失败要让用户看见）或 `trackAction`（后台同步，失败记录到控制台）。二选一的判据是「这句话是否已有内联或浮层承载」——已有承载的用 `trackAction`，只去全局短时提醒的才用 `reportAction`；同一次结果不得两个通道各播一遍（见 `docs/12-engineering-standards.md` §8）。禁止 `void someIpcCall()`。
 - 每个 Run 必须有明确终态；编排层的 `catch` 兜底与启动时的中断收口不可省略。
 - Schema 变更走版本化迁移并补迁移测试，不得在启动代码里探测后 `ALTER`。
 - 新增领域行为必须有单元测试；Agent 事件顺序、取消和工具失败必须有测试；涉及外部 HTTP 的代码必须可注入 `fetch`，测试不得触网。

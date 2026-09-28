@@ -431,7 +431,7 @@ UI Foundation 首批提供四套成对色系：
 
 小字号一档已于 2026-09-05 专项收敛：41 处承载产品信息的 10px / 11px 声明统一提升到 12px 下限；另有 3 处「元素早已改为内联 SVG、字号声明实际失效」的死声明被删除。
 
-保留小字号的 5 处是图形化标识而非正文，属本节豁免范围：品牌字标（侧栏 `BETTERWORK` 副标）、格式徽标（成果列表的 `MD`、资料卡的 `MD/PDF/DOC/TXT`）、当前模型徽标、通知未读数徽标。
+保留小字号的 5 处是图形化标识而非正文，属本节豁免范围：品牌字标 1 处（侧栏 `BETTERWORK` 副标）、格式徽标 3 处（资料卡的 `MD/PDF/DOC/TXT`，成果列表的 `markdown`／`file` 两枚）、通知未读数徽标 1 处。「当前模型徽标」曾是第 6 处，2026-09-27 已改走 `Badge tone="brand" shape="tag"`，护栏里那两条豁免登记随之删除。
 
 新增界面时不得再用 9–11px 承载产品信息；空间不够时用折叠、覆盖或响应式重排换，不要压字号。
 
@@ -512,7 +512,7 @@ UI Foundation 首批提供四套成对色系：
 - 多行 `textarea` 的 `min-height` 表达「编辑区至少多高」，不属于控件档位，不受此表约束；它的**内距**属于，一律取 `--control-padding-lg`。
 - **高度档与内距档必须成对**：只统一高度而不统一内距，同排的按钮与输入框仍会一个显得饱满一个显得瘦。护栏因此把 `padding` 与 `height`／`width` 一起纳进「控件几何」口径，裸 px 即红（`.composer textarea` 的 `11px 0` 是登记在案的例外——它的左右内距归 `.composer`）。
 - **24–40px 的密集高度带已并档**（2026-09-27，产品拍板）：行内小按钮 26 → 28、筛选与次级按钮 30 → 32、侧栏行 34 → `--row-height`、工作空间行 23 → `--row-height-sm`。带内裸值现为 0，护栏改为零容忍；原先登记为唯一例外的 `.expert-card-desc` 两行钳制高度，已随「卡片描述一律三行定高」移出这一带（§10.1），例外清单因此清空并被删除。
-- **圆角同样收进档位表**：样式表里 150 处裸圆角换成 `var(--radius-*)`，其中 7 → 8（`--radius-row`）、9 → 10（`--radius-card`）是两处有意的并档。剩下的 3–4px 只有 5 处，全是键帽、色板与格式微标这类图形化小件，由 `MICRO_MARK_RADII` 按「只降不升」登记；新增一处必须写清它为什么不算某一档。
+- **圆角同样收进档位表**：样式表里 150 处裸圆角换成 `var(--radius-*)`，其中 7 → 8（`--radius-row`）、9 → 10（`--radius-card`）是两处有意的并档。剩下的 3–4px 只有 3 处（键帽 `kbd`、外观模式预览、色系预览各一），全是图形化小件，由 `MICRO_MARK_RADII` 按「只降不升」登记；新增一处必须写清它为什么不算某一档。清单里原有的 `.current-badge` 与 `.artifact-evidence-list b` 两条已随实现消失而删除。
 - **浮层字号跟随触发控件**：`PopoverMenu` 打开时读取触发元素的计算字号并内联到浮层根，菜单项不自带 `font-size`。浮层是触发器的延伸，两处字号不一致会让菜单看起来属于另一个控件（知识卡片「更多」曾继承正文 14px 而比自己的 12px 触发按钮大）。**只镜像有文字的触发器**：纯图标按钮（`IconButton`）不渲染文字，它的计算字号是从容器继承来的值（composer 的 `+` 一路继承到 UA 默认 16px），镜像过来等于把「浏览器没被设置过」当成控件的字号，菜单会比正文还大——这类触发器走基座兜底的 13px。
 - 落地现状：2026-09-26 已把 50 处控件边框/圆角/高度声明换成 `--control-*` 取值，表单控件里裸值残留 0（由护栏强制，`textarea` 的编辑区高度除外）；三档高度都有真实消费者。**2026-09-28 起按钮几何不再靠「记得选对档」维持**：`Button` 基座把 `size` 与 `--control-height-*` 一对一绑死，护栏的 `CONTROL_SELECTOR` 口径同步换成 `.btn` 与 `.icon-button`，原先散在 11 套具名皮与 12 处页面级后代规则里的 16 种 `padding` 组合一并收进三档（[ADR-0031](adr/0031-button-base-and-skin-closure.md)）。
 
@@ -552,12 +552,7 @@ UI Foundation 首批提供四套成对色系：
 
 ## 10. 组件体系
 
-### 10.1 基础组件
-- Button、IconButton、Input、Textarea、Select、Switch
-- Tabs、Tooltip、Popover、Menu、Dialog、Sheet
-- Toast、InlineError、Progress、Skeleton、EmptyState
-
-### 10.2 业务组件
+### 10.1 组件台账与基座纪律
 
 - AppShell、TitleBar、Sidebar、SidebarItem、TaskListItem
 - TaskHeader、Composer、MessageBlock、ConfirmationBlock
@@ -569,19 +564,20 @@ UI Foundation 首批提供四套成对色系：
 **逐项落地状态（2026-09-27 复核，避免下轮再猜）**：`ToolCallRow`＝`components/ToolActivity.tsx`、
 `SourceList`＋`EvidenceChip`＝`components/SourceRow.tsx`（同一件事的两种叫法，只留一处实现）、
 `ConnectionStatus`＝`components/ConnectionStatus.tsx`、`ConfirmationBlock`＝`components/ConfirmationDialog.tsx`、
-`ActivityGroup`＝`components/ContextPanel.tsx` 导出的 `ActivityGroupRow`。
+`ActivityGroup`＝`components/ContextPanel.tsx` 内的 `ActivityGroupRow`（模块私有，未导出）。
 **明确不做并说明为什么**：`SettingsLayout`／`SettingsNav` 与 `ModelProfileRow` 都只有**一个消费者**
 （分别是 `SettingsPage` 与它内部的模型清单），外壳就是三行 JSX、行本身就是 `ListRow` 填槽——
-包一层只为壳的组件与 §10.1 对 Input／Textarea 的既有口径同源：**不新增第二处真相**。
+包一层只为壳的组件与 Input／Textarea 的既有口径同源（那两个只有样式类、没有组件层）：**不新增第二处真相**。
 （Button 曾与它们同批判为「不组件化」，2026-09-28 由 [ADR-0031](adr/0031-button-base-and-skin-closure.md)
 反转：皮类方案缺一个封闭清单的执行者，11 套具名皮、12 处页面级后代规则与 16 种 padding 组合说明
 第二处真相已经长出来了，不是一层壳造出来的。）
 R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBlock.tsx`、
-`Composer`＝`components/Composer.tsx`、`RunSummary`＝`components/RunSummaryRow.tsx`（§10.2 里
+`Composer`＝`components/Composer.tsx`、`RunSummary`＝`components/RunSummaryRow.tsx`（上面那份清单里的
 `RunSummary` 与它指的是同一件事），侧栏「最近任务」与上下文面板「执行记录」两处一起改用它；
 `.memory-capture` 那一整块也随消息流外提成 `components/MemoryCapturePanel.tsx`。
-仍待落地：`PlanStep`、`ArtifactVersionMenu`、`Sidebar`／`TaskListItem`、`ArtifactCard` 两份合并（R3-D
-与后续）。`AppShell`／`TitleBar`／`TaskHeader` 按 §10.1 对 Input／Textarea 的同一口径不做：
+仍待落地：`PlanStep`、`ArtifactVersionMenu`、`Sidebar`／`TaskListItem`（R3-D 与后续）。`ArtifactCard`
+这个名字全仓已无实现（`ArtifactCard` 与 `.artifact-card` 均 0 命中），不要再当成「两份待合并」。
+`AppShell`／`TitleBar`／`TaskHeader` 按 Input／Textarea 的同一口径不做：
 它们的外壳就是窗口装饰与页头，另抽一层只会多出第二处真相。
 
 所有交互组件都必须定义：默认、悬停、聚焦、按下、禁用、加载、成功和错误状态。键盘焦点必须可见，不能只依赖颜色变化。
@@ -596,19 +592,19 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 | 模态基座 Modal（dialog／sheet／viewer 三变体）＋ `useOverlaySemantics` | `components/Modal.tsx` | 已落地：inert 应用主体、Esc、背板点击、初始焦点、Tab 循环、焦点归还、`role=dialog`/`alertdialog`。确认框、模型抽屉、幻灯片放映层、消息中心四处已收编 |
 | 表单字段 Field（标签 + 控件 + 说明） | `components/Field.tsx` | 已落地：标签与控件的缝只有一份；37 处字段改用它，12 条页面级 `label { gap / font-size }` 规则随之删除 |
 | 列表行 ListRow（左槽／主区／右槽，divider／card／plain 三档，`multiline` 折行档） | `components/ListRow.tsx` | 已落地：§3.4 的 9 套行几何（`.run-item`／`.notification-item`／`.skill-list-item`／`.model-row`／`.memory-row`／`.evidence-row`／`.knowledge-job-row`／`.mcp-connection-row`／`.knowledge-card`）加上 `.completed-work-card`／`.context-row`／`.suggestion-job-row` 共 12 类并入一处，行内动作按钮的几何同时收进 `.list-row-actions`；2026-09-27 R2-E 再收三处漏网：简报条目（`.brief-list button`）、本次材料行（`.selected-material-row`）、自动建议开关行（`.suggestion-setting-row`）。2026-09-28 起它的 `card` 档与 `Card` 共用同一条外壳规则（见下一行） |
-| 模态确认 ConfirmationDialog | `components/ConfirmationDialog.tsx` | 已落地，走 Modal 的 `alertdialog` 变体；初始焦点落在「取消」 |
+| 模态确认 ConfirmationDialog | `components/ConfirmationDialog.tsx` | 已落地，走 Modal 的 `dialog` 变体＋`alert` 属性（`role=alertdialog` 由该属性推出，`ModalVariant` 没有第四档）；初始焦点落在「取消」 |
 | 卡片 Card（身份块／名称／署名／三行说明／展开／页脚） | `components/Card.tsx` | 已落地：2026-09-28 把五套自造外壳（`.skill-card`／`.expert-card`／`.suggestion-card`／`.option-card`／`.artifact-input-card`）并成一处——内距原本有 `16px`／`11px 12px`／`10px`／`10px 12px` 四种，圆角有一处跳到 `--radius-row`，而 `.skill-card-head` 与 `.expert-card-head`、`.skill-card-desc` 与 `.expert-card-desc` 是逐字相同的两份规则。外壳四件套现在住在 `.card, .option-card, .list-row[data-variant='card']` 这一条共用规则里，档位是 `--card-padding`／`--card-gap`；成果输入卡本来就是「图标＋名称＋说明」，直接改走 `ListRow variant="card"` |
 | 折叠披露 Disclosure（label／defaultOpen／className，会转的 chevron 标记） | `components/Disclosure.tsx` | 已落地（2026-09-28）：六处 `<details>` 并成一处——`.model-sheet details` 与 `.search-settings details` 的三条声明**逐字相同**（同一个「高级参数」抄了两遍），命中区却有 `8px`、`12px 2px 8px` 与无内距三种，展开态的强调色只有一处有；`.context-details` 因为那一行带了图标，一 flex 就把原生三角弄丢了，六处里只剩它没有展开指示。行几何是一条 `.disclosure-label`：`min-height: var(--control-height)` 把 12px 那一行居中成 32px 命中带，不给内距；展开内容与那一行之间的缝归 `.disclosure` 自己的 `gap` |
 | 区块头 SectionHeader（eyebrow／title／hint／actions，block／panel 两档） | `components/SectionHeader.tsx` | 已落地：§3.1 P1 的 26 处／13 个类名并成一处（`.settings-heading`／`.selected-materials-heading`／`.skill-detail-heading`／`.skill-section-heading`／`.memory-group-heading`／`.memory-heading-actions`／`.notification-panel-header`／`.artifact-reference-heading`／`.brief-section-head`／`.tool-detail-heading`／`.discussion-checkpoints-header`），16 处冒充标题的 `<strong>` 升级为真 h2／h3；面板自己的内缩与分隔线写在传给基座的领域钩子类上（现登记 `.notification-panel-heading` 与 `.knowledge-drawer-head`）。2026-09-28 再收 16 处裸标题标签与 10 条容器后代规则，浮层标题也走 `block` 档；护栏五条 |
 | 异步按钮 AsyncButton／行内加载 InlineLoading | `components/AsyncButton.tsx` | 已落地：§3.1 P4 的「disabled＋文案翻转＋aria-busy」三件事一次收口，busy 时只渲染当前那一行文字（曾为防抖宽叠两份标签，结果把 busy 文案读进了可及名称）；`InlineLoading` 统一 spinner，`page-spinner` 与 `spin` 两套 keyframes 合并为一套。**外观自 2026-09-28 委托给 `Button`（ADR-0031）**：它自己那张 `variant → 皮类名` 映射表随 11 套皮一起删除，`.async-button` 这个从未被 CSS 用过的类同时消失 |
 | 状态徽标 Badge（tone × shape，tone 六档：neutral／brand／warning／danger／outline／success） | `components/Badge.tsx` | 已落地：技能卡状态片、依赖面板环境片、记忆状态片、MCP 工具名片四套自造 chip 合并；图形化标识（格式徽标、未读角标）不在此基座内，按字号护栏登记 |
-| 短时反馈 TransientToast ／ 全局 ToastHost ／ 反馈堆叠 `#toast-stack` | `components/TransientToast.tsx`、`notifications.tsx` | 已落地；两套不可混用（§11.5.1）。**2026-09-28 起两者共用同一枚固定堆叠容器 `#toast-stack`**（右下角、`gap: 8px` 纵向堆叠、`aria-live=polite`）：此前 `.page-toast-host` 与 `.toast-host` 各自 `position: fixed` 在同一坐标，谁后渲染谁盖住谁，页面发出的短时确认会被全局通知压掉。浮层几何只住这一处，页面不得再给自己的提示块写 fixed |
+| 短时反馈 TransientToast ／ 全局 ToastHost ／ 反馈堆叠 `#toast-stack` | `components/TransientToast.tsx`、`renderer/src/notifications.tsx`（**不在 `components/` 下**） | 已落地；两套不可混用（§11.5.1）。**2026-09-28 起两者共用同一枚固定堆叠容器 `#toast-stack`**（右下角、`gap: 8px` 纵向堆叠、`aria-live=polite`）：此前 `.page-toast-host` 与 `.toast-host` 各自 `position: fixed` 在同一坐标，谁后渲染谁盖住谁，页面发出的短时确认会被全局通知压掉。浮层几何只住这一处，页面不得再给自己的提示块写 fixed |
 | 内联错误 InlineError（message／problems／tone 两档／onRetry／onDismiss） | `components/InlineError.tsx` | 已落地（2026-09-28）：§11.5.1 第二落点的唯一出口。收编此前 **7 套同义几何**——`.inline-message.error`（`9px 11px`）、`.artifact-action-error`（同 padding 但自带 `margin-bottom`）、`.knowledge-issues`（`10px 12px` ＋自带 `<ul>` 与 `.btn { margin-top: 8px }`）、`.memory-warnings`（`10px 12px`、warning 色、`list-style: none`）、`.tool-detail-error`（`8px`、**无圆角、无字号**、`pre-wrap`）、`.field-error`（只有字色与底）、`.action-note.error`（**无底无 padding**）。四种 padding、一处没圆角、一处没字号、动作有三种摆法，与 ADR-0031 收口前的 Button 同源。**2026-09-28 全仓 35 处调用点已 100% 迁入**（`inline-message error` 28、`field-error` 4、`action-note error` 1、`memory-warnings`／`knowledge-issues`／`tool-detail-error`／`artifact-action-error` 各 1，另 `MemoryEditor` 的校验问题 `<ul>` 走 `problems` 槽），旧类名连同 `.inline-message` 基础规则一并删除并登记进「不得复活」清单；`.tool-detail-error` 降级为纯内容钩子（只剩 `white-space: pre-wrap`）。迁入后 `role="alert"` 在全仓只剩两个来源：本基座与 `EmptyState` 的整页错误态，护栏从「只降不升的存量清单」升级为绝对断言。**两处有意的语义变化**：`MemoryEditor` 的校验问题列表原来没有 `role="alert"`（读屏听不到提交为什么被拦），`KnowledgeView` 的「以下条目未完成」原来靠 `<strong>` 冒充标题——两者现在都归基座。**`message` 是可选的**：只有明细、没有结论的提示块（契约 §9.1 的「保存成功但带警告」）不该为了套基座被硬造一句标题 |
 | 空状态 EmptyContext／EmptyNotice／EmptyPage／LoadingPage／ErrorPage | `components/EmptyState.tsx` | 已落地：6 处内联占位（侧栏最近任务、模型清单、通用设置、MCP 连接、记忆清单与加载行、消息中心）2026-09-26 深夜全部收编；`EmptyContext` 管区域级、`EmptyNotice` 管行内与小节级 |
 | 页签 Tabs（tablist + roving tabindex + 方向键） | `components/Tabs.tsx` | 已落地：左右方向键与 Home／End 切换并把焦点带过去，只有选中页签进 Tab 顺序。记忆页分组与任务上下文两处已收编 |
 | 切换按钮组 SegmentedControl（group + aria-pressed） | `components/Tabs.tsx` | 已落地：技能页卡片／列表模式已收编；与页签的分工是「切换同一片内容的呈现方式」 |
 | 导航列表 NavList／NavItem（`aria-current` ＋ 两档变体 ＋ 窄栏折叠 ＋ 名称截断补全） | `components/NavList.tsx` | 已落地：侧栏一级导航（5 项）与设置左侧分区（6 项）；`NavItem` 同时承接侧栏「新建任务」与底部「设置」两颗单行导航。折叠成窄栏换的是自定义属性（`--nav-item-*`），几何仍只有一处；文字用 `clip-path` 收掉而不是 `font-size: 0`，以免只剩图标的按钮失去可及名称。名称一律由 `Tooltip` 基座承载（`.nav-item-label` 就是浮层锚点）：定宽列里放不下时收短，悬停读回全文，没被裁切则什么都不弹。可收缩的 `min-width: 0` 住在基座，领域类只声明「占多宽」（§9.8） |
-| Button（`variant` 八档 × `size` 三档 × `tone`） | `components/Button.tsx` | **已落地（2026-09-28，[ADR-0031](adr/0031-button-base-and-skin-closure.md) 反转了本行原先「不再单独组件化」的口径）**：11 套具名皮与 12 处页面级后代规则收成一处，`.btn` ＋ `[data-variant]`／`[data-size]`／`[data-tone]` 是按钮外观的唯一出口，`variant` 只管颜色、`size` 只管几何且两者正交；`tone` 只对 `outline` 生效，与 `Badge` 的 tone × shape 同构 |
+| Button（`variant` 八档 × `size` 三档 × `tone`） | `components/Button.tsx` | **已落地（2026-09-28，[ADR-0031](adr/0031-button-base-and-skin-closure.md) 反转了本行原先「不再单独组件化」的口径）**：11 套具名皮与 12 处页面级后代规则收成一处，`.btn` ＋ `[data-variant]`／`[data-size]`／`[data-tone]` 是按钮外观的唯一出口，`variant` 只管颜色、`size` 只管几何且两者正交；`tone` 的生效档位以本节正文「按钮一律用 `Button` 基座」那条为准（不在台账行里再抄一遍数字），与 `Badge` 的 tone × shape 同构 |
 | Input / Textarea | 只有样式类，无组件 | 几何取 `--control-*` 档位（§9.10），结构由 `Field` 负责；不再单独组件化，避免只为包一层壳而增加第二处真相。**Button 曾与本行同判，已由 [ADR-0031](adr/0031-button-base-and-skin-closure.md) 单独反转，本行判断对 Input／Textarea 继续成立** |
 | Switch（`role="switch"` ＋ 恒定名称 ＋ 轨道滑块） | `components/Switch.tsx` | 已落地：全站 13 处 `type="checkbox"` 里只有 4 处真是「开／关」，全部收进这里——知识页语义检索（类名本来就叫 `.knowledge-admin-switch`，实为原生勾选框）、记忆页自动建议与设置页模型启用（两处原来用「开启 X／关闭 X」的按钮文案翻转充当开关，读屏听到的名称随状态改变）、技能页受信任标记。**多选与全选保留原生 checkbox 是正确语义**，不为观感统一塞进开关 |
 | Tooltip（被裁切文本的悬停提示） | `components/Tooltip.tsx` | 已落地（2026-09-27）：只在锚点**真的被裁切**时出现——悬停 300ms、聚焦立即、移出与滚动即收；Portal 挂到应用外走 `--z-tooltip`，刻意不带 overlay 阴影（靠描边与升起面区分层级，不进 §10.1 的阴影存量）。完整文本本来就在锚点自己的文本里（行数钳制只裁视觉不裁可及名称），浮层对读屏是重复信息，所以显式 `aria-hidden`，不另挂 `aria-describedby`。除技能卡与专家卡的描述外，`NavItem` 的名称也一律由它承载——定宽列里收短的那一行，就是需要读回全文的那一行（§9.8） |
@@ -624,9 +620,9 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 | 来源行 SourceRow（`ListRow` 的具名用法：来源图标＋标题＋定位符·类型＋原文） | `components/SourceRow.tsx` | 已落地：上下文面板「已查阅来源」与成果详情「运行访问记录」两处逐字重复的三元式合成一处，此前两边连图标尺寸（12／10px）与类型详细度都不同——同一条 Evidence 在两处报出不同身份。来源类型→图标／标签的映射是一张表，不是渲染期三元式（`react-hooks/static-components` 会拦在渲染里造组件） |
 
 | 连接状态片 ConnectionStatus（模型档位与 MCP 连接共用的 Badge 映射） | `components/ConnectionStatus.tsx` | 已落地：设置页三处写着 `connection-status` ＋状态后缀的 `<span>` 改成它——此前只有 `.connected`／`.failed` 两条字色规则，同一个「失败」在模型行、Web 搜索小节与 MCP 列表里各自裸着写字色。两种状态枚举共用一张 tone 表，**文案仍各领域自给**（模型说「连接成功」，MCP 说「可用」），Badge 因此补出 `success` 一档 |
-| 消息块 MessageBlock（发言者标签＋正文＋就地动作） | `components/MessageBlock.tsx` | 已落地：§10.2 点名却内联在 `App.tsx` 的气泡外提。「你／算台」两个标签在此定稿；正文排版由 `author` 决定（用户原文预格式、算台走 Markdown）；**就地动作是这条消息的一个槽位**——此前 `.message-actions` 住在气泡外面，靠 `margin: -10px 0 18px` 追回下缘，那条负 margin 记的就是「两块本属一件事」，收进槽位后缝由 `.message` 自己的 grid gap 拥有（§9.8） |
-| 任务输入区 Composer（工作区＋绑定区＋正文＋提交） | `components/Composer.tsx` | 已落地：内联在 `App.tsx` 的 140 行 `<form>` 外提。工作区两颗按钮（打开本地文件夹／新建工作区）原来是**逐字相同**的两段 `reportAction(selectDirectory()…)`，只差一句失败文案，现由页面出一个 `applyWorkspaceDirectory(failureMessage)`；提交与 ⌘／Ctrl＋↵ 合成一个 `onStartRun`，输入法组合中的 Enter 不提交。`submit` 是三档可辨识联合（idle／starting／running＋onStop），与 `locked`（运行中锁绑定区）分列——停止按钮要求确实有一次可停的运行 |
-| 运行摘要行 RunSummaryRow（§10.2 `RunSummary`） | `components/RunSummaryRow.tsx` | 已落地：`ListRow` 的又一种具名填法（与 `SourceRow` 同源）。「状态 · 时间」这句措辞此前四份，侧栏把状态与时间并成一行、上下文面板拆成说明＋meta 两行，同一个运行在两个列表里报出的层次不同；现在行几何归 `ListRow`、**措辞与「没跑过时说什么」归这里**，整行的 `aria-label` 拼「动词＋标题＋状态·时间」，读屏不再只听到标题 |
+| 消息块 MessageBlock（发言者标签＋正文＋就地动作） | `components/MessageBlock.tsx` | 已落地：上面那份清单点名却内联在 `App.tsx` 的气泡外提。「你／算台」两个标签在此定稿；正文排版由 `author` 决定（用户原文预格式、算台走 Markdown）；**就地动作是这条消息的一个槽位**——此前 `.message-actions` 住在气泡外面，靠 `margin: -10px 0 18px` 追回下缘，那条负 margin 记的就是「两块本属一件事」，收进槽位后缝由 `.message` 自己的 grid gap 拥有（§9.8） |
+| 任务输入区 Composer（工作区＋绑定区＋正文＋提交） | `components/Composer.tsx` | 已落地：内联在 `App.tsx` 的 140 行 `<form>` 外提。工作区两颗按钮（打开本地文件夹／新建工作区）原来是**逐字相同**的两段 `reportAction(selectDirectory()…)`，只差一句失败文案，现由页面通过 `workspacePicker` prop 出一处实现（`Composer.tsx:34/106`，`App.tsx:1583` 传入）；提交与 ⌘／Ctrl＋↵ 合成一个 `onStartRun`，输入法组合中的 Enter 不提交。`submit` 是三档可辨识联合（idle／starting／running＋onStop），与 `locked`（运行中锁绑定区）分列——停止按钮要求确实有一次可停的运行 |
+| 运行摘要行 RunSummaryRow（清单里的 `RunSummary`） | `components/RunSummaryRow.tsx` | 已落地：`ListRow` 的又一种具名填法（与 `SourceRow` 同源）。「状态 · 时间」这句措辞此前四份，侧栏把状态与时间并成一行、上下文面板拆成说明＋meta 两行，同一个运行在两个列表里报出的层次不同；现在行几何归 `ListRow`、**措辞与「没跑过时说什么」归这里**，整行的 `aria-label` 拼「动词＋标题＋状态·时间」，读屏不再只听到标题 |
 | 回答捕获面板 MemoryCapturePanel | `components/MemoryCapturePanel.tsx` | 已落地：消息流里的 `.memory-capture` 整块（只读原文＋选区＋记忆正文）外提，「区间 → 来源选择器」这段推导跟着搬走；契约 §11.1 的口径不变，正文只能来自用户当场选中的片段 |
 | 单选选择器 SingleSelectPicker（一组具名选项里选一个） | `components/SingleSelectPicker.tsx` | 已落地（ADR-0029）：工作空间对话框的图标格与色板格共用一份。底层是**原生 radio**（同名互斥、方向键换档都是原生语义），不是靠切换按下态表达的按钮组——那样做既要把 radio 已经提供的东西重做一遍，又会撞上「页签与切换组纪律」护栏（护栏是对的，第一次实现确实被它拦下）。选项不带文字，所以 `name` 必填并落到 `aria-label`；选中态由 `[data-checked]` 一处决定 |
 | 工作空间分组列表 WorkspaceGroupList（侧栏：空间行＋组内任务行） | `components/WorkspaceGroupList.tsx` | 已落地（ADR-0029）：空间行复用 `NavItem`（补 `iconColor` 一个可选属性，几何仍只住在基座），就地动作用 `IconButton`＋`PopoverMenu`，任务行复用 `RunSummaryRow` 的 `compact` 档，空态用 `EmptyNotice`。它不新造行几何，只新增「分组外壳＋展开指示＋展示更多」这一层；窄栏换着色图标网格。展开偏好住在 `hooks/use-workspace-groups.ts`，读写与 storage 兜底一份（§6.1.7）。分组外壳的 grid 列与行都收到 0、`.workspace-groups` 只纵向滚动（§9.8）；被它接替的不分组最近任务列 `.run-list` 已删除并登记进「不得复活」清单 |
@@ -662,7 +658,7 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 
 **表单字段一律用 `Field`**：`<Field label="模型角色">…</Field>` 负责标签、控件与说明三件事的纵向结构，标签与控件之间的缝由 `Field` 自己的 `gap` 拥有（§9.8）。此前每个视图各写一份 `label { display: flex; gap: …; font-size: … }`，同一屏里因此并存 12px 与 13px 两种标签、4px 与 8px 两种缝（§3.2 的成因）。给出 `controlId` 时 `Field` 用 `<label htmlFor>` 精确关联，此时才能放说明文字；不给 `controlId` 时整个 `Field` 就是 `<label>`，点标签文字即可聚焦或展开控件，这种模式下不要再传 `hint`（包裹式标签会把说明读进控件名称）。勾选行（复选框与文字同排）不属于这个结构，仍在页面里自持排版。护栏两条：渲染层出现 `<select>`／`<option>` 即失败；除登记过的勾选行外，任何 `label` 选择器写 `gap` 或上下 `margin` 即失败。
 
-**按钮一律用 `Button` 基座**（`components/Button.tsx`，[ADR-0031](adr/0031-button-base-and-skin-closure.md)）：`variant` 八档（primary／secondary／text／outline／quiet／chip／danger／link）**只管颜色**，`size` 三档（sm 28／md 32／lg 36）**只管几何**，两者正交；`tone`（neutral／brand／danger）只对 `outline` 生效。皮由 `.btn` ＋ `[data-variant]`／`[data-size]`／`[data-tone]` 一处输出，页面不再手写 `className="secondary-button"`，也不再出现裸 `<button>`；`className` 只承载定位钩子。此前这里有 11 套自带外观的具名皮、12 条页面级容器后代规则、18 种 `padding` 组合和 7 处完全没有 `min-height` 的动作按钮——三档高度 Token 对最后那 7 处根本不生效，另有 8 颗按钮所在容器**根本没有 button 规则**，一直按浏览器默认外观渲染。`size` **不按 `variant` 给条件缺省**：主行动要不要比同排高一档是页面那一刻的选择，写成显式 `size="lg"` 才可解释（本轮的起点就是「保存修订 36px 与取消 28px 差 8px 被衬成一块砖」）。`AsyncButton` 是本基座的 `busy` 封装，`IconButton`（三档方块，含对齐侧栏行高的 `row`）与「选择卡／整片可点的领域形态」共 10 种是刻意另立的形态，逐一登记在护栏的 `NON_ACTION_BUTTON_SHAPES` 并带理由。护栏锁六条：被收编的皮类与容器后代规则不得复活；生产 `.tsx` 出现裸 `<button` 即失败（基座文件按名豁免）；`.btn[data-variant|data-size|data-tone]` 的档位集合与三个联合类型**穷举相等**；每一档 `size` 的 `min-height` 必须取 `--control-height-*`；`styles.css` 里选择器含 `button` 或 `.btn` 又声明了外观属性即失败（基座自己的选择器进白名单）；**一条 `ActionBar` 里出现的 `size` 档位不得超过一种**（起点那条 28＋36 的落差就是这条锁住的）。
+**按钮一律用 `Button` 基座**（`components/Button.tsx`，[ADR-0031](adr/0031-button-base-and-skin-closure.md)）：`variant` 八档（primary／secondary／text／outline／quiet／chip／danger／link）**只管颜色**，`size` 三档（sm 28／md 32／lg 36）**只管几何**，两者正交；`tone`（neutral／brand／danger）对 `secondary`／`text`／`outline`／`quiet` 四档生效（`neutral` 是缺省语义、无独立规则；CSS 另为 `link` 的 danger 留了一条规则，生产未用）。皮由 `.btn` ＋ `[data-variant]`／`[data-size]`／`[data-tone]` 一处输出，页面不再手写 `className="secondary-button"`，也不再出现裸 `<button>`；`className` 只承载定位钩子。此前这里有 11 套自带外观的具名皮、12 条页面级容器后代规则、18 种 `padding` 组合和 7 处完全没有 `min-height` 的动作按钮——三档高度 Token 对最后那 7 处根本不生效，另有 8 颗按钮所在容器**根本没有 button 规则**，一直按浏览器默认外观渲染。`size` **不按 `variant` 给条件缺省**：主行动要不要比同排高一档是页面那一刻的选择，写成显式 `size="lg"` 才可解释（本轮的起点就是「保存修订 36px 与取消 28px 差 8px 被衬成一块砖」）。`AsyncButton` 是本基座的 `busy` 封装，`IconButton`（三档方块，含对齐侧栏行高的 `row`）与「选择卡／整片可点的领域形态」共 8 种是刻意另立的形态，逐一登记在护栏的 `NON_ACTION_BUTTON_SHAPES` 并带理由。护栏锁六条：被收编的皮类与容器后代规则不得复活；生产 `.tsx` 出现裸 `<button` 即失败（基座文件按名豁免）；`.btn[data-variant|data-size|data-tone]` 的档位集合与三个联合类型**穷举相等**；每一档 `size` 的 `min-height` 必须取 `--control-height-*`；`styles.css` 里选择器含 `button` 或 `.btn` 又声明了外观属性即失败（基座自己的选择器进白名单）；**一条 `ActionBar` 里出现的 `size` 档位不得超过一种**（起点那条 28＋36 的落差就是这条锁住的）。
 
 **列表行一律用 `ListRow`**：「图标／徽标 + 标题 + 说明 + 次要信息 + 右侧动作」这一种结构走 `components/ListRow.tsx`，三个变体只决定外壳——`divider` 是列表里的分隔线行（默认），`card` 是带边框圆角的可点卡片，`plain` 是侧栏那种悬停才出底的裸行。内容一律填槽位：`leading`／`title`／`detail`／`meta`／`actions`／`trailing`，结构特殊的行（记忆行、MCP 工具片）把额外内容作为 `children` 交进主区，而不是另起一套行几何。给 `onClick` 时整行渲染成**一个** `<button>` 并必须给 `label` 作可及名称，此时 `actions` 里不能再放按钮（按钮套按钮是无效 DOM）；选中态走 `selected` → `aria-current`，降饱和走 `tone="muted"` 或 `disabled`，页面只保留自己的领域钩子类。行内文字的尺寸也收在基座：标题 13px、说明 12px 次要、meta 12px 弱化，页面不再各写一遍 `strong`／`small`。此前这种结构有 9 份独立几何（gap 从 4 到 16、padding 从 `10px 2px` 到 `16px 16px`、圆角 7／8／10 各写一遍），没有一条差异来自业务需求（§3.4）。护栏锁三条：`.run-item`／`.model-row`／`.evidence-row`／`.knowledge-card` 等 12 个已收编类的样式不得复活；行的 `gap`／`padding` 只能由 `.list-row*` 自己的选择器声明，页面用后代选择器替骨架补一遍即失败；迁完后仍留在行上承担状态外观的领域钩子（现登记 `.memory-row` 一个）不得再写 `display`／`gap`／`padding`／`align-items`／`flex-direction`／`border-bottom`。
 
@@ -727,11 +723,11 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 `--page-body-width` 必须在 `:root` 定义恰好一次并被 `.page-body` 消费。骨架的另一半由
 「页面不得替骨架补几何」守着：给 `.page-body`／`.page-header` 等六个骨架类补 `display`／`gap`／
 `padding`／`width` 的后代选择器一律失败，要一列可增长的内容就把钩子类给元素自己。
-**卡片描述一律三行定高，截断处交给 Tooltip 补全**（`components/Tooltip.tsx`）：技能卡与专家卡的描述固定占三行（13px × 1.55 × 3 ≈ 61px），一行也占满三行的位置，超出三行截断，悬停**只在真的被裁切时**弹出全文。此前专家卡只写 `min-height: 40px` 而不钳制，长描述把卡片撑高、短描述留白，同一屏卡片不等高；技能卡钳两行且一行会塌，两页并排看就是一处不一致。整卡仍是进入配置的点击区。
+**卡片描述一律三行定高，截断处交给 Tooltip 补全**（`components/Tooltip.tsx`）：技能卡与专家卡的描述固定占三行（13px × 1.55 × 3 ≈ 61px），一行也占满三行的位置，超出三行截断，悬停**只在真的被裁切时**弹出全文。此前专家卡只写 `min-height: 40px` 而不钳制，长描述把卡片撑高、短描述留白，同一屏卡片不等高；技能卡钳两行且一行会塌，两页并排看就是一处不一致。可点区只包住「身份＋说明」那一片（`Card.tsx:79` 的 `.card-main`），标签行与页脚动作留在点击区之外——点「删除」不该同时进详情。
 
 **卡片外壳只有一个出口**（2026-09-28）：网格里的卡片一律用 `components/Card.tsx`，列表里的卡片行走 `ListRow variant="card"`，两者的底、边框、圆角与内距来自 `styles.css` 里同一条规则（`.card, .option-card, .list-row[data-variant='card']`），档位是 `--card-padding`（12px 16px）与 `--card-gap`（12px）。**同一份几何两种排布**：行是横向的「左槽 + 主区 + 右槽」，卡是纵向的「身份 + 名称 + 说明 + 展开 + 页脚」，谁都不许再抄一遍外壳。领域钩子类（`.skill-card`／`.expert-card`／`.option-card`）可以留下悬停显形、网格定位这类差异，但不得声明 `padding`／`background`／`border`／`border-radius`；基座的槽位类（`.card-head`／`.card-mark`／`.card-description`…）不得由页面手写。护栏两条与变异验证见 `standards/coding-standard.test.ts`「卡片外壳基座纪律」。外观页的选择卡是 `<button>` 而非 `article`，进不了 `Card` 的根元素，因此和外壳规则并列登记——它共用几何，不共用组件。
 
-**折叠披露一律用 `Disclosure`，展开标记也画在基座里**（2026-09-28）：`<details>` 的语义（原生收起展开、内容始终留在 DOM 与可及树里、Tab 能走到那一行）继续由原生元素承担，这一轮收的是**那一行的外观**与**受控的 `open`**。基座只有 `label`／`defaultOpen`／`className` 三个入口：命中区取 `--control-height`，字号 12px，名称用 `--text-secondary`，展开后转成 `--text-primary` 并让标记转 90°。**焦点环单独立了一条 `.disclosure-label:focus-visible`**：全仓那条 `:focus-visible` 按元素名点名（`button`／`input`／`textarea`／`select`），不含 `summary`，也就是这六行此前 Tab 上去毫无反馈；基座给了 32px 命中带，焦点就得看得见。
+**折叠披露一律用 `Disclosure`，展开标记也画在基座里**（2026-09-28）：`<details>` 的语义（原生收起展开、内容始终留在 DOM 与可及树里、Tab 能走到那一行）继续由原生元素承担，这一轮收的是**那一行的外观**与**受控的 `open`**。基座对外只有 `label`／`children`／`defaultOpen`／`className` 四个入口（`open` 与 `onToggle` 是基座**内部**持有的受控状态，不是 props）：命中区取 `--control-height`，字号 12px，名称用 `--text-secondary`，展开后转成 `--text-primary` 并让标记转 90°。**焦点环单独立了一条 `.disclosure-label:focus-visible`**：全仓那条 `:focus-visible` 按元素名点名（`button`／`input`／`textarea`／`select`），不含 `summary`，也就是这六行此前 Tab 上去毫无反馈；基座给了 32px 命中带，焦点就得看得见。
 
 **标记由基座自己画而不靠 UA**：原生 disclosure 三角在 `summary` 改成 flex 之后会消失，六处里唯一带了图标的那一 flex 就没有了指示，剩下五处却还在——同一种「点一行展开更多」在同一个面板里有的有箭头有的没有，而应用里其他展开控件（导航分组、下拉触发器、工作过程条）本来就画的是 SVG chevron。分隔线、网格定位与展开出来的内容排版留在领域钩子类上（`.task-run-history` 的 `border-top`、`.context-details > small`、`.tool-field pre`），行本身的几何不许从钩子上长回来。**浮层仍然不得用 `<details>` 自造**（见上面 `PopoverMenu` 那条）：这里收的是就地展开一行，不是菜单。护栏三条见 `standards/coding-standard.test.ts`「折叠披露基座纪律」：生产代码不出现裸 `<details>`／`<summary>`，样式表不点名这两个元素，钩子类不重述行几何。
 
@@ -741,15 +737,15 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 
 **同一块内容的两种视图（卡片／列表）一律用 `ViewContainer` ＋ `SegmentedControl`，模式偏好走 `hooks/use-view-mode.ts`**：读写与 storage 不可用时的兜底只有一份，每页用自己的 storage key，互不覆盖；页面不再各自 `localStorage.getItem`。技能页与专家页共用这一个切换。
 
-落地现状：按钮、输入、页签、Sheet、Toast、内联提示、空状态、列表行、区块头、折叠披露、图标按钮、底部动作条、导航列表、复选组、绑定片、来源行、连接状态片、布尔开关与文本提示都有对应基座；页面骨架已由 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 负责结构，`KnowledgeDocumentCard` 负责知识条目的领域呈现，聚焦环用 `:focus-visible` 统一实现。破坏性确认统一使用 `ConfirmationDialog`，它以 `Modal` 的 `alertdialog` 变体实现：Portal 挂到应用外、背景 inert、初始焦点落在取消、Esc 与 Tab 焦点循环、关闭后恢复触发控件焦点。Popover 已落地为 `PopoverMenu` 基座（[ADR-0012](adr/0012-composer-capability-binding.md)）。尚未落地的只剩 Skeleton；Switch 与 Tooltip 已于 2026-09-27 落地（见 §10.1 台账）；区块头、图标按钮与底部动作条已于 2026-09-27 落地为 `SectionHeader`、`IconButton`、`ActionBar`。
+落地现状：按钮、输入、页签、Sheet、Toast、内联提示、空状态、列表行、区块头、折叠披露、图标按钮、底部动作条、导航列表、复选组、绑定片、来源行、连接状态片、布尔开关与文本提示都有对应基座；页面骨架已由 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 负责结构，`KnowledgeDocumentCard` 负责知识条目的领域呈现，聚焦环用 `:focus-visible` 统一实现。破坏性确认统一使用 `ConfirmationDialog`，它以 `Modal` 的 `dialog` 变体＋`alert` 属性实现（`role=alertdialog` 由该属性推出，`ModalVariant` 没有第四档）：Portal 挂到应用外、背景 inert、初始焦点落在取消、Esc 与 Tab 焦点循环、关闭后恢复触发控件焦点。Popover 已落地为 `PopoverMenu` 基座（[ADR-0012](adr/0012-composer-capability-binding.md)）。尚未落地的是 Skeleton、`PlanStep`、`ArtifactVersionMenu` 与 `Sidebar`／`TaskListItem`（见本节前面那份清单）；Switch 与 Tooltip 已于 2026-09-27 落地（见 §10.1 台账）；区块头、图标按钮与底部动作条已于 2026-09-27 落地为 `SectionHeader`、`IconButton`、`ActionBar`。
 
 2026-09-26 的[UI 一致性评估](reviews/2026-09-26-ui-consistency.md)给出本节台账的完整核对结果（哪些模式各写了几遍、缺哪个基座、分期收口计划）；新增基座或迁移自造控件前先查该报告。
 
-2026-09-27 的[UI 复用度与发布就绪度评估](reviews/2026-09-27-ui-reuse-audit.md)复核了那批基座的**真实使用面**（浮层与模态已无第二套实现，页签与徽标仍有绕过），并把账记到基座之外：区块头 26 处／13 个类名、底部动作条 8 处、就地 busy 文案 14 处、可移除 chip 与来源引用行各 3 份，以及 §10.2 那份业务组件清单里 10 项零实现、7 项内联在宿主文件。它的 R1（内联提示配色与缝收口、页面骨架回归、材料身份与词表上收 `lib/`、死样式与本文数字更正）与 R2 前两档（`AsyncButton`／`InlineLoading`、`SectionHeader`）已落地，落地状态与该报告的 §10 对齐；R2 余档与 R3 待开工。
+2026-09-27 的[UI 复用度与发布就绪度评估](reviews/2026-09-27-ui-reuse-audit.md)复核了那批基座的**真实使用面**（浮层与模态已无第二套实现，页签与徽标仍有绕过），并把账记到基座之外：区块头 26 处／13 个类名、底部动作条 8 处、就地 busy 文案 14 处、可移除 chip 与来源引用行各 3 份，以及本节那份业务组件清单里 10 项零实现、7 项内联在宿主文件。它的 R1（内联提示配色与缝收口、页面骨架回归、材料身份与词表上收 `lib/`、死样式与本文数字更正）与 R2 前两档（`AsyncButton`／`InlineLoading`、`SectionHeader`）已落地，落地状态与该报告的 §10 对齐；R2 余档与 R3 待开工。
 
-业务组件的落地边界：`views/` 承载工作、成果、知识、设置四个页面级视图，`components/` 承载跨视图复用的上下文面板、欢迎视图、空状态与模型编辑 Sheet，`hooks/` 承载外观、资料库、模型设置三个内聚状态簇，`lib/` 承载纯函数与常量。AppShell 与 Sidebar 仍在 `App.tsx` 内；`ConfirmationBlock`、`PlanStep`、`EvidenceChip`、`RunSummary` 未落地，`MessageBlock`、`Composer`、`ArtifactCard`、`ArtifactPreview`、`SourceList`、`SettingsLayout`／`SettingsNav`、`ModelProfileRow`、`ConnectionStatus` 同样只是宿主文件里的内联 JSX（`ConnectionStatus` 三份、`RunSummary` 四份、`ArtifactCard` 两份），登记在此以免被当成已落地基座。
+业务组件的落地边界：`views/` 承载工作、成果、知识、设置四个页面级视图，`components/` 承载跨视图复用的上下文面板、欢迎视图、空状态与模型编辑 Sheet，`hooks/` 承载外观、资料库、模型设置三个内聚状态簇，`lib/` 承载纯函数与常量。AppShell 与 Sidebar 仍在 `App.tsx` 内（该文件 1,829 行）。上面那份清单里的名字到 2026-09-28 的真实归口是：`MessageBlock`／`Composer`／`ConnectionStatus`／`RunSummary`（＝`RunSummaryRow`）／`SourceList` 与 `EvidenceChip`（＝`SourceRow`）／`ConfirmationBlock`（＝`ConfirmationDialog`）**均已是独立基座并在用**，不再是宿主文件里的内联 JSX；`SettingsLayout`／`SettingsNav`／`ModelProfileRow` 按本节前面的口径**明确不做**；`ArtifactCard`／`ArtifactPreview` 全仓 0 命中，不要当成「待合并的两份」；真正仍待落地的只有 `PlanStep`、`ArtifactVersionMenu` 与 `Sidebar`／`TaskListItem`（R3-D）。
 
-聚焦与状态覆盖已达标。曾经的死代码（从未被引用的 `CompletedWorkPage`、未使用的 `PanelLeftIcon` 与 `ChevronDownIcon`）已清理。`App.tsx` 一度从 2098 行降到约 720 行，此后又随 WM／MI／CF 三轮功能回到 **1,876 行**——侧栏（约 120 行）、消息流（约 170 行）与 Composer（约 137 行）仍是内联 JSX，这正是上面那份评估的 R3 目标；在此之前，本文与 docs/11 不得再写「App.tsx 约 720 行」。目录约定见 [工程规范](12-engineering-standards.md) §2。
+聚焦与状态覆盖已达标。曾经的死代码（从未被引用的 `CompletedWorkPage`、未使用的 `PanelLeftIcon` 与 `ChevronDownIcon`）已清理。`App.tsx` 一度从 2098 行降到约 720 行，此后又随 WM／MI／CF 三轮功能回到 **1,829 行**——消息流与 Composer 已于 2026-09-27 外提为 `MessageBlock`／`Composer`（R3-B），剩下侧栏（约 120 行）与 `ContextPanel` 内的局部组件仍是内联 JSX，属 R3-D；在此之前，本文与 docs/11 不得再写「App.tsx 约 720 行」。目录约定见 [工程规范](12-engineering-standards.md) §2。
 
 ## 11. 关键交互规则
 
@@ -833,9 +829,9 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 - **一次结果只有一个落点。** 同一条失败消息既写进对象的 `error` 状态（内联）又交给上层再播报一遍，是本表被绕过最常见的方式——用户看到的是同一句话出现在两个地方，并且关掉一处后以为「关不掉」。规则：调用链上**最先能承载这条消息的那一层**负责呈现，其余层只 `trackAction` 记录，不再上传到别的通道。
 - **代码里有两个「toast」，写文档或提 PR 必须指明是哪一个**：`TransientToast` 是局部、自消、**不落库**的短时确认；`ToastHost` 是全局右下角浮层，本质是**一条已持久化通知的投影**（必然伴随写入消息中心，并受「同页抑制」控制）。短时确认**不得**走 `NotificationService`，否则会把瞬时提醒沉淀进消息中心、污染可回溯列表。
 - **两个浮层共用一个堆叠容器。** `TransientToast` 与 `ToastHost` 都挂在 `#toast-stack` 这一枚固定容器里（右下角，`gap: 8px` 纵向堆叠），页面不得再给自己的提示块写 `position: fixed`——两处各自 fixed 在同一坐标，结果是谁后渲染谁盖住谁。
-- **内联反馈块不长出成功态。** 成功 / 信息一律用 `TransientToast`。禁止用常驻内联块充当「顶部成功横幅」，也禁止换个类名绕开护栏再开一条成功通道；列表页顶部的持久结果横幅、Hook 内自造的自动消失计时器都在禁止之列。**本条只管「表面」**——有底色、有内距、能自成一块的那种。`InlineError` 的档位因此只有 `danger`／`warning`，护栏直接锁死档位集合；而按钮旁边那句纯文字的状态说明（`.action-note`，无底无内距）不是反馈通道，它说的是「这颗按钮现在为什么可用／不可用」，属 §10.1 状态呈现那一轴，不迁进本基座。
+- **内联反馈块不长出成功态。** 成功 / 信息一律用 `TransientToast`。禁止用常驻内联块充当「顶部成功横幅」，也禁止换个类名绕开护栏再开一条成功通道；列表页顶部的持久结果横幅、Hook 内自造的自动消失计时器都在禁止之列。**本条只管「表面」**——有底色、有内距、能自成一块的那种。`InlineError` 的档位因此只有 `danger`／`warning`，护栏直接锁死档位集合。**「无底纯文字」不等于自动出表**——分界看「说的是哪一件事」：`.action-note`（`styles.css:3756`，唯一调用点 `App.tsx:1505` 写的是「保存成果」的成功／失败两档）讲的是动作结果，属**本表反馈轴**；`.success-copy`（`SkillsView.tsx:332`、`DependencyPanel.tsx:185`）讲的是「这个对象现在是什么」，属状态轴，需要一个只读状态说明的出口。两者与漏网的第 8 个带底错误条 `.memory-projection`（`MemoryView.tsx:398`）**同属已查出、尚未收口**，判据与处置见 [2026-09-28 UI 治理全面校准](reviews/2026-09-28-ui-governance-audit.md) §5。
 
-落地现状：知识页曾把作业终态写成常驻 `.inline-message`（「来源检查完成（9/9）」与消息中心重复且不会消失），2026-09-27 已收口——钩子的反馈通道拆成 `error`（内联、可行动）与 `toast`（`TransientToast`、自消、不落库），作业**成功**不再在页面重复播报，只有部分完成与失败留内联并带「查看条目／重试」入口。2026-09-28 接着收剩下的三处同源病灶：顶部常驻横幅 `.action-error-banner`（本表之外的第四个落点，25 个调用点共用一个全局单槽，互相覆盖且跨视图串台）、成果页自己的一套 `.artifact-action-error`、以及 `.action-note.ok`／`.success-copy` 两条内联成功通道；内联错误表面从 7 套几何（四种 padding、一处无圆角、一处无字号、动作有 float／margin／无三种摆法）收成 `InlineError` 一处。护栏锁四条：渲染层出现已废弃的反馈表面类名即失败；`role="alert"` 的节点必须走 `InlineError`；内联通道出现成功配色即失败；同一个动作链既写内联又上传全局通道即失败。
+落地现状：知识页曾把作业终态写成常驻 `.inline-message`（「来源检查完成（9/9）」与消息中心重复且不会消失），2026-09-27 已收口——钩子的反馈通道拆成 `error`（内联、可行动）与 `toast`（`TransientToast`、自消、不落库），作业**成功**不再在页面重复播报，只有部分完成与失败留内联并带「查看条目／重试」入口。2026-09-28 接着收两处同源病灶：顶部常驻横幅 `.action-error-banner`（本表之外的第四个落点，25 个调用点共用一个全局单槽，互相覆盖且跨视图串台）与成果页自己的一套 `.artifact-action-error`；同轮查出的 `.action-note.ok`／`.success-copy` 两条内联成功通道**尚未收口**（类与调用点仍在，见上一条）；内联错误表面从 7 套几何（四种 padding、一处无圆角、一处无字号、动作有 float／margin／无三种摆法）收成 `InlineError` 一处。护栏锁四条：渲染层出现已废弃的反馈表面类名即失败；`role="alert"` 的节点必须走 `InlineError`；内联通道出现成功配色即失败；同一个动作链既写内联又上传全局通道即失败。
 
 ## 12. 无障碍与可用性底线
 

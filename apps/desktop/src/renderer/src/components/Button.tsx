@@ -15,7 +15,7 @@ export type ButtonVariant =
 /** 三档几何，一对一绑 `--control-height-*`；页面不再用 padding 自己撑高度。 */
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
-/** 描边与文字的语义色，只对三档带边框的 variant（secondary／text／outline）生效。 */
+/** 描边与文字的语义色，对 `secondary`／`text`／`outline`／`quiet` 四档生效（`neutral` 是缺省，无独立规则）。 */
 export type ButtonTone = 'neutral' | 'brand' | 'danger';
 
 export interface ButtonProps extends Omit<ComponentProps<'button'>, 'className'> {
