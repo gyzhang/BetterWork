@@ -21,7 +21,7 @@ function Payload({ title, value }: { title: string; value: unknown }): React.JSX
       : [['内容', value]];
   return (
     <section className="tool-payload" aria-label={title}>
-      <h4>{title}</h4>
+      <SectionHeader title={title} />
       {entries.length === 0 ? (
         <p>无</p>
       ) : (

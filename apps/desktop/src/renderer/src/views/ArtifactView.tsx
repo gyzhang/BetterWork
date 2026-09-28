@@ -263,10 +263,10 @@ export function ArtifactPage({
             {(visibleVersion.inputRelations?.length ?? 0) > 0 ||
             visibleVersion.sourceDeclarationKind !== undefined ? (
               <section className="artifact-input-grid">
-                <h4>
-                  声明采用依据 ·{' '}
-                  {DECLARATION_KIND_LABEL[visibleVersion.sourceDeclarationKind ?? 'none']}
-                </h4>
+                <SectionHeader
+                  className="artifact-input-heading"
+                  title={`声明采用依据 · ${DECLARATION_KIND_LABEL[visibleVersion.sourceDeclarationKind ?? 'none']}`}
+                />
                 {(visibleVersion.inputRelations ?? []).length === 0 && (
                   <p className="muted-text">
                     {visibleVersion.sourceDeclarationKind === 'legacy'

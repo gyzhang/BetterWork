@@ -24,6 +24,7 @@ import { ScrollRegion } from '../components/layout/ScrollRegion';
 import { ViewContainer } from '../components/layout/ViewContainer';
 import { ListRow } from '../components/ListRow';
 import { McpToolBindingsPicker } from '../components/McpToolBindingsPicker';
+import { SectionHeader } from '../components/SectionHeader';
 import { SegmentedControl } from '../components/Tabs';
 import { Tooltip } from '../components/Tooltip';
 import type { ExpertsState } from '../hooks/use-experts';
@@ -680,11 +681,11 @@ function ExpertDetailPanel({
             <ExpertTags expert={detail} />
           </div>
           <section className="expert-detail-section">
-            <h2>人格与职责</h2>
+            <SectionHeader title="人格与职责" />
             <p>{detail.revision.identity}</p>
           </section>
           <section className="expert-detail-section">
-            <h2>能力</h2>
+            <SectionHeader title="能力" />
             <p>
               {detail.revision.skillPreset.length} 个 Skill 预设 ·{' '}
               {detail.revision.builtinToolPolicy.mode === 'application-defaults'
@@ -705,7 +706,7 @@ function ExpertDetailPanel({
             </small>
           </section>
           <section className="expert-detail-section">
-            <h2>记忆</h2>
+            <SectionHeader title="记忆" />
             <p>
               {confirmedMemoryCount} 条已确认
               {candidateMemoryCount > 0 ? ` · ${candidateMemoryCount} 条待确认` : ''}
@@ -725,7 +726,7 @@ function ExpertDetailPanel({
             </Button>
           </section>
           <section className="expert-detail-section">
-            <h2>生命周期</h2>
+            <SectionHeader title="生命周期" />
             <div className="expert-detail-actions">
               {detail.lifecycle === 'active' && (
                 <Button

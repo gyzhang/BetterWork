@@ -338,7 +338,7 @@ function SkillDetail({
       </div>
       <DependencyPanel skill={skill} state={dependencies} />
       <div className="skill-detail-section">
-        <h3>可运行性</h3>
+        <SectionHeader title="可运行性" />
         {skill.blockedReasons.length ? (
           <ul className="skill-blocked-reasons">
             {skill.blockedReasons.map((reason) => (
@@ -369,7 +369,7 @@ function SkillDetail({
         </Button>
       </div>
       <div className="skill-detail-section">
-        <h3>本地 Skill</h3>
+        <SectionHeader title="本地 Skill" />
         <p>删除会移除受管用户副本及其本地配置，不能恢复。</p>
         <Button
           variant="quiet"

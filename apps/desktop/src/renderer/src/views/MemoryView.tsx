@@ -451,7 +451,7 @@ export function MemoryPage({
 
       {session && (
         <div className="memory-editor-host">
-          <h3>{editorTitle}</h3>
+          <SectionHeader title={editorTitle} />
           <MemoryEditor
             scopes={
               session.mode === 'create' ? scopes : uniqueScopes([session.memory.scope, ...scopes])

@@ -1904,13 +1904,10 @@ small {
   line-height: 1.6;
 }
 .expert-detail-section {
+  display: grid;
+  gap: 8px;
   padding: 14px 0;
   border-top: 1px solid var(--border);
-}
-.expert-detail-section h2 {
-  margin: 0 0 8px;
-  color: var(--text-primary);
-  font-size: 13px;
 }
 .expert-detail-section p {
   margin: 0;
@@ -1921,7 +1918,6 @@ small {
 .expert-memory-summary {
   display: grid;
   gap: 4px;
-  margin: 8px 0 12px;
   padding-left: 18px;
   color: var(--text-secondary);
   font-size: 12px;
@@ -2354,10 +2350,6 @@ button.list-row:where(:not(:disabled)):hover {
   margin: 0 0 8px;
   color: var(--text-secondary);
   font-size: 12px;
-}
-.skill-detail-section h3 {
-  margin: 0;
-  font-size: 14px;
 }
 .skill-detail-section textarea {
   display: block;
@@ -2806,9 +2798,6 @@ button.list-row:where(:not(:disabled)):hover {
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
 }
-.memory-editor-host h3 {
-  font-size: 14px;
-}
 .memory-editor {
   display: grid;
   gap: 12px;
@@ -3057,9 +3046,16 @@ button.list-row:where(:not(:disabled)):hover {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.appearance-settings h3 {
-  margin: 32px 0 12px;
-  font-size: 14px;
+.appearance-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+/* 一个「小节头 + 它自己的选择卡」是一组：组内 12px，组与组之间 24px。 */
+.appearance-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 .appearance-modes {
   display: grid;
@@ -3215,7 +3211,6 @@ button.list-row:where(:not(:disabled)):hover {
 .appearance-note {
   display: flex;
   gap: 8px;
-  margin-top: 24px;
   padding: 12px;
   color: var(--text-secondary);
   background: var(--surface-raised);
@@ -3274,10 +3269,6 @@ button.list-row:where(:not(:disabled)):hover {
   border-left: 1px solid var(--border);
   border-radius: 0;
   box-shadow: -16px 0 42px var(--shadow-color-strong);
-}
-.confirmation-dialog h2 {
-  /* 纵向节奏归基座的 gap：这里不再自带上下外边距（docs/10 §9.8）。 */
-  font-size: 20px;
 }
 .confirmation-dialog-detail {
   color: var(--text-secondary);
@@ -3531,19 +3522,10 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .model-sheet {
   /* 外壳（宽度、内边距、左分隔线、抽屉阴影、层级）由 .modal-panel[data-variant=sheet] 负责，
-     这里只剩抽屉自己的排版。 */
+     这里只剩抽屉自己的排版。sheet 变体自带 gap: 0，标题与表单之间这道 24px 由这里给。 */
   display: flex;
   flex-direction: column;
-}
-.model-sheet header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 24px;
-}
-.model-sheet h2 {
-  margin-top: 8px;
-  font-size: 20px;
+  gap: 24px;
 }
 .model-sheet form {
   display: flex;
@@ -4132,17 +4114,9 @@ button.list-row:where(:not(:disabled)):hover {
 /* KM09：索引与模型管理、作业区域 */
 /* 「索引与作业」抽屉：面板几何归 Modal 的 sheet 变体，这里只有头与唯一滚动区。 */
 .knowledge-drawer-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  /* 排布与字号归 SectionHeader 基座；这条线是本抽屉自己的分隔线，按 docs/10 §10.1 写在钩子类上。 */
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
-}
-.knowledge-drawer-head h2 {
-  margin: 0;
-  /* 与「编辑模型」抽屉同一个标题档（docs/10 §9.7：20px 页面级标题）。 */
-  font-size: 20px;
 }
 .knowledge-drawer-body {
   display: flex;
@@ -4400,13 +4374,9 @@ button.list-row:where(:not(:disabled)):hover {
 
 /* 本版输入：主内容区顶部卡片网格 */
 .artifact-input-grid {
+  display: grid;
+  gap: 12px;
   padding: 16px 0 8px;
-}
-.artifact-input-grid > h4 {
-  margin: 0 0 12px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 500;
 }
 .artifact-input-cards {
   display: grid;
@@ -5068,16 +5038,13 @@ select,
   white-space: pre-wrap;
 }
 .tool-payload {
+  display: flex;
   min-width: 0;
   margin-top: 12px;
-}
-.tool-payload h4 {
-  margin: 0 0 8px;
-  color: var(--text-primary);
-  font-size: 13px;
+  flex-direction: column;
+  gap: 8px;
 }
 .tool-field {
-  margin: 4px 0;
   font-size: 12px;
 }
 .tool-field summary {
@@ -5137,10 +5104,6 @@ select,
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-}
-.mcp-editor h3 {
-  margin: 0;
-  font-size: 14px;
 }
 .mcp-editor input,
 .mcp-editor textarea {

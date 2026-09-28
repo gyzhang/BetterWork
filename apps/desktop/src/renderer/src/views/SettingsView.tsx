@@ -121,8 +121,7 @@ export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
         {tab === 'appearance' && <AppearanceSettings {...props} />}
         {tab === 'general' && (
           <section className="settings-section">
-            <p className="eyebrow">通用</p>
-            <h2>工作偏好</h2>
+            <SectionHeader variant="block" eyebrow="通用" title="工作偏好" />
             <EmptyNotice
               title="通用设置将在后续阶段开放"
               detail="工作目录、语言、数据与更新设置会在这里统一管理。"
@@ -253,54 +252,58 @@ function AppearanceSettings({
         title="选择适合长期工作的界面"
         hint="外观模式与色系独立保存；跟随系统时仍会保留你选择的色系。"
       />
-      <h3>外观模式</h3>
-      <div className="appearance-modes">
-        {(
-          [
-            ['light', '浅色'],
-            ['dark', '深色'],
-            ['system', '跟随系统'],
-          ] as const
-        ).map(([mode, label]) => (
-          <button
-            type="button"
-            className="option-card"
-            aria-pressed={appearance.mode === mode}
-            key={mode}
-            onClick={() => onMode(mode)}
-          >
-            <span className={`mode-preview ${mode}`}>
-              <i />
-              <b />
-              <em />
-            </span>
-            <strong>{label}</strong>
-            {mode === 'system' && (
-              <small>当前为{resolvedAppearance === 'dark' ? '深色' : '浅色'}</small>
-            )}
-          </button>
-        ))}
-      </div>
-      <h3>色系</h3>
-      <div className="scheme-grid">
-        {colorSchemes.map((scheme) => (
-          <button
-            type="button"
-            className="option-card"
-            aria-pressed={appearance.scheme === scheme.id}
-            key={scheme.id}
-            onClick={() => onScheme(scheme.id)}
-          >
-            <span className={`scheme-preview ${scheme.id}`}>
-              <i />
-              <i />
-              <i />
-            </span>
-            <strong>{scheme.name}</strong>
-            <small>{scheme.description}</small>
-          </button>
-        ))}
-      </div>
+      <section className="appearance-group">
+        <SectionHeader title="外观模式" />
+        <div className="appearance-modes">
+          {(
+            [
+              ['light', '浅色'],
+              ['dark', '深色'],
+              ['system', '跟随系统'],
+            ] as const
+          ).map(([mode, label]) => (
+            <button
+              type="button"
+              className="option-card"
+              aria-pressed={appearance.mode === mode}
+              key={mode}
+              onClick={() => onMode(mode)}
+            >
+              <span className={`mode-preview ${mode}`}>
+                <i />
+                <b />
+                <em />
+              </span>
+              <strong>{label}</strong>
+              {mode === 'system' && (
+                <small>当前为{resolvedAppearance === 'dark' ? '深色' : '浅色'}</small>
+              )}
+            </button>
+          ))}
+        </div>
+      </section>
+      <section className="appearance-group">
+        <SectionHeader title="色系" />
+        <div className="scheme-grid">
+          {colorSchemes.map((scheme) => (
+            <button
+              type="button"
+              className="option-card"
+              aria-pressed={appearance.scheme === scheme.id}
+              key={scheme.id}
+              onClick={() => onScheme(scheme.id)}
+            >
+              <span className={`scheme-preview ${scheme.id}`}>
+                <i />
+                <i />
+                <i />
+              </span>
+              <strong>{scheme.name}</strong>
+              <small>{scheme.description}</small>
+            </button>
+          ))}
+        </div>
+      </section>
       <div className="appearance-note">
         <span>
           <CheckIcon size={13} />
@@ -608,7 +611,7 @@ function McpSettings({ state }: { state: McpConnectionsState }): React.JSX.Eleme
       )}
       {editorOpen && (
         <div className="mcp-editor">
-          <h3>{editingId ? '编辑连接' : '新建连接'}</h3>
+          <SectionHeader title={editingId ? '编辑连接' : '新建连接'} />
           <Field label="名称">
             <input
               value={form.name}

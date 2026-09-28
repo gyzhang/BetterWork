@@ -19,6 +19,7 @@ import { ScrollRegion } from '../components/layout/ScrollRegion';
 import { ViewContainer } from '../components/layout/ViewContainer';
 import { ListRow } from '../components/ListRow';
 import { Modal } from '../components/Modal';
+import { SectionHeader } from '../components/SectionHeader';
 import { Switch } from '../components/Switch';
 import { TransientToast } from '../components/TransientToast';
 import type { KnowledgeLibrary } from '../hooks/use-knowledge-library';
@@ -287,14 +288,18 @@ export function KnowledgePage({
           </PageToolbar>
           {indexDrawerOpen && (
             <Modal variant="sheet" label="索引与作业" onClose={() => setIndexDrawerOpen(false)}>
-              <header className="knowledge-drawer-head">
-                <h2>索引与作业</h2>
-                <IconButton
-                  label="关闭"
-                  icon={CloseIcon}
-                  onClick={() => setIndexDrawerOpen(false)}
-                />
-              </header>
+              <SectionHeader
+                className="knowledge-drawer-head"
+                variant="block"
+                title="索引与作业"
+                actions={
+                  <IconButton
+                    label="关闭"
+                    icon={CloseIcon}
+                    onClick={() => setIndexDrawerOpen(false)}
+                  />
+                }
+              />
               <div className="knowledge-drawer-body">
                 {activeJobs.length > 0 && (
                   <section className="knowledge-jobs" aria-label="进行中的作业">

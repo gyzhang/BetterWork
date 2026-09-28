@@ -1590,6 +1590,87 @@ describe('区块头基座纪律', () => {
       '区块头请传 title／hint／eyebrow／actions，不要手排基座的槽位类（docs/10 §10.1）',
     ).toEqual([]);
   });
+
+  it('生产代码不再手写标题标签，一律走 SectionHeader', () => {
+    // 2026-09-28：同一件事此前有 16 处 `<h2>`／`<h3>`／`<h4>` 加 10 条容器后代规则，
+    // 字号在 13／14／20／21 之间来回。基座的两档（panel 13、block 21）从此是唯一出口。
+    const HEADING_OWNERS = new Set([
+      'apps/desktop/src/renderer/src/components/SectionHeader.tsx',
+      // 页面与空态的 h1 由它们自己的基座渲染。
+      'apps/desktop/src/renderer/src/components/layout/PageHeader.tsx',
+      'apps/desktop/src/renderer/src/components/EmptyState.tsx',
+    ]);
+    const HEADING_FILE_EXEMPTIONS: { readonly file: string; readonly reason: string }[] = [
+      {
+        file: 'apps/desktop/src/renderer/src/views/SettingsView.tsx',
+        reason:
+          '设置空间的 h1「偏好与能力」与二级导航同栏，是这一空间的标题带，不是页面区块头（docs/10 §8.3）',
+      },
+      {
+        file: 'apps/desktop/src/renderer/src/components/Welcome.tsx',
+        reason: '首屏 hero 用衬线品牌字形（28px Georgia／Kaiti），属品牌表达，套不进 13／21 两档',
+      },
+    ];
+    const exempt = new Set(HEADING_FILE_EXEMPTIONS.map((entry) => entry.file));
+    const offenders: string[] = [];
+    for (const relative of pathsUnder('apps/desktop/src/renderer/')) {
+      if (!/\.tsx$/.test(relative) || /\.test\.tsx$/.test(relative)) continue;
+      if (HEADING_OWNERS.has(relative) || exempt.has(relative)) continue;
+      const source = read(relative);
+      const matches = source.matchAll(/<h[1-4][\s>/]/g);
+      for (const match of matches) {
+        const line = source.slice(0, match.index ?? 0).split('\n').length;
+        offenders.push(`${relative}:${line} ${match[0].trim()}`);
+      }
+    }
+    expect(
+      offenders,
+      '「小标题＋说明＋右槽动作」与浮层标题都归 SectionHeader；新增一档请先给它理由（docs/10 §10.1）',
+    ).toEqual([]);
+  });
+
+  it('标题的外观只住在基座与登记过的表面里', () => {
+    // 上一那条锁的是 tsx，这一条锁 CSS：只要允许 `.某面板 h3 { font-size }`，
+    // 基座的档位就只是默认值，第二套字号总会自己长回来。
+    const HEADING_APPEARANCE = [
+      'font-size',
+      'font-weight',
+      'color',
+      'line-height',
+      'letter-spacing',
+      'margin',
+      'margin-top',
+      'margin-bottom',
+    ];
+    const HEADING_RULE_OWNERS: { readonly match: RegExp; readonly reason: string }[] = [
+      { match: /^\.section-header/, reason: 'SectionHeader 基座自己的两档' },
+      { match: /^h1,\s*h2,\s*h3,\s*p$/, reason: 'UA 默认外边距归零，不是外观' },
+      { match: /^\.page-header h1$/, reason: '页面标题带基座自己的坐标' },
+      { match: /^\.empty-page h1$/, reason: '空态页基座自己的主标题' },
+      { match: /^\.settings-nav-list h1$/, reason: '设置空间标题带（见上一条豁免的理由）' },
+      { match: /^\.welcome h2$/, reason: '首屏品牌 hero 的衬线字形' },
+      {
+        match: /^\.markdown-preview h[1-6]/,
+        reason: '用户成果正文的文档排版，受 §9 的 Artifact 不套主题约束，不是 UI 小节头',
+      },
+      {
+        match: /^\.message\.assistant \.markdown-preview h[1-6]$/,
+        reason: '同上：对话里的 Markdown 成果排版',
+      },
+    ];
+    const offenders = declarations
+      .filter((declaration) => /\bh[1-6]\b/.test(declaration.selector))
+      .filter((declaration) => HEADING_APPEARANCE.includes(declaration.property))
+      .filter((declaration) => {
+        const selector = declaration.selector.replace(/\/\*[\s\S]*?\*\//g, '').trim();
+        return !HEADING_RULE_OWNERS.some((owner) => owner.match.test(selector));
+      })
+      .map((declaration) => locate(declaration, styles ?? ''));
+    expect(
+      offenders,
+      '页面级后代标题规则会把基座档位变成默认值；层级请加进 SectionHeader 的变体或给它登记理由（docs/10 §10.1）',
+    ).toEqual([]);
+  });
 });
 
 /**

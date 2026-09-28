@@ -16,6 +16,7 @@ import { AsyncButton } from './AsyncButton';
 import { Button } from './Button';
 import { Field } from './Field';
 import { Modal } from './Modal';
+import { SectionHeader } from './SectionHeader';
 import { type PickerOption, SingleSelectPicker } from './SingleSelectPicker';
 
 export interface WorkspaceIdentityDialogProps {
@@ -92,7 +93,7 @@ export function WorkspaceIdentityDialog({
       onClose={onClose}
       {...(editing ? { initialFocusRef: nameRef } : {})}
     >
-      <h2>{title}</h2>
+      <SectionHeader variant="block" title={title} />
       <Field
         label="本地文件夹"
         hint="文件夹是真相源：材料读写边界与成果导出都以它为根，算台不会移动或改名它。"

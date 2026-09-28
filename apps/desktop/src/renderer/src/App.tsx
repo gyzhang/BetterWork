@@ -34,6 +34,7 @@ import type { CapabilityChip } from './components/ComposerCapabilityPicker';
 import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { ContextPanel } from './components/ContextPanel';
 import { DiscussionCheckpointPanel } from './components/DiscussionCheckpointPanel';
+import { EmptyPage } from './components/EmptyState';
 import { IconButton } from './components/IconButton';
 import { PageHeader } from './components/layout/PageHeader';
 import { type MemoryCaptureDraft, MemoryCapturePanel } from './components/MemoryCapturePanel';
@@ -1398,11 +1399,11 @@ export function App(): React.JSX.Element {
                 <div className="page-body message-flow">
                   {taskAllRuns.length === 0 && !activeRunId ? (
                     taskBindings.length > 0 ? (
-                      <div className="welcome">
-                        <p className="eyebrow">Skill 试运行</p>
-                        <h2>{taskBindings.map((chip) => chip.name).join('、')}</h2>
-                        <p>输入这次任务的具体要求，点击「开始工作」后执行。</p>
-                      </div>
+                      <EmptyPage
+                        eyebrow="Skill 试运行"
+                        title={taskBindings.map((chip) => chip.name).join('、')}
+                        detail="输入这次任务的具体要求，点击「开始工作」后执行。"
+                      />
                     ) : (
                       <Welcome setPrompt={setPrompt} />
                     )

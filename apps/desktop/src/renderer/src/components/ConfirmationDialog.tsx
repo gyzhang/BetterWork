@@ -2,6 +2,7 @@ import { useRef } from 'react';
 
 import { Button } from './Button';
 import { Modal } from './Modal';
+import { SectionHeader } from './SectionHeader';
 
 export interface ConfirmationDialogProps {
   title: string;
@@ -34,8 +35,7 @@ export function ConfirmationDialog({
       initialFocusRef={cancelButtonRef}
       onClose={onCancel}
     >
-      <p className="eyebrow">请确认</p>
-      <h2>{title}</h2>
+      <SectionHeader variant="block" eyebrow="请确认" title={title} />
       <p id="confirmation-dialog-detail" className="confirmation-dialog-detail">
         {detail}
       </p>

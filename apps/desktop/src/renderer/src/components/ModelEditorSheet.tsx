@@ -9,6 +9,7 @@ import { Field } from './Field';
 import { FieldSelect } from './FieldSelect';
 import { IconButton } from './IconButton';
 import { Modal } from './Modal';
+import { SectionHeader } from './SectionHeader';
 
 const ROLE_OPTIONS = [
   { id: 'language', label: '语言模型' },
@@ -41,13 +42,12 @@ export function ModelEditor({
       label={editing ? '编辑模型' : '添加模型'}
       onClose={onClose}
     >
-      <header>
-        <div>
-          <p className="eyebrow">模型配置</p>
-          <h2>{editing ? '编辑模型' : '添加模型'}</h2>
-        </div>
-        <IconButton label="关闭" icon={CloseIcon} onClick={onClose} />
-      </header>
+      <SectionHeader
+        variant="block"
+        eyebrow="模型配置"
+        title={editing ? '编辑模型' : '添加模型'}
+        actions={<IconButton label="关闭" icon={CloseIcon} onClick={onClose} />}
+      />
       <form onSubmit={(event) => trackAction(onSave(event), '保存模型配置')}>
         <Field label="显示名称">
           <input
