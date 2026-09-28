@@ -85,7 +85,14 @@
 - **被回退那轮的四条已核实缺陷**（成品在 `/tmp/bw-status-axis-20260928/`，`tracked.patch` 832 行＋两个新文件）：`.memory-*-hint` 字色被 `.memory-row small` 特异性吞；`TransientToast` 自消 `useEffect` 把内联箭头 `onDismiss` 列为依赖，运行中每次重渲染都重新计时；`.memory-projection` 是反馈收口漏掉的第 8 个带底错误条；`.action-note` 实为动作结果（＝P2-1 的根因）。
 - `docs/10` §3／§4 无子节编号，是 P2-10 那 15 处引用落空的根因。
 - **护栏只校验 `tone` 的值集合，不校验 `tone` × `variant` 矩阵**（`standards:2124` 只做三组档位穷举相等）：写 `variant="primary" tone="danger"` 不会红，但 CSS 里没有这条组合规则，语义色静默无效。要不要补一条矩阵护栏交光哥拍板。
-- **同一条规则在 docs/10 内部写两遍**（台账行 ＋ 正文段）是本轮实测踩到的坑：修 `tone` 时先改了正文 661、漏了台账行 607，靠回读 grep 才发现。凡改这类规则，必须同时 grep 台账行与正文段两处。
+- **护栏判据盲区：状态片的判据只看类名尾词，元素选择器不参与匹配**（`standards:1543-1566`，判据是「选择器里出现的类名以 `chip|badge|status|state|kind|pill` 结尾」）。`DiscussionCheckpointPanel.tsx:186` 的 `<span data-status>` 因此逃过「只读状态片必须由 Badge 画」——它的选择器是 `.discussion-checkpoint-history span`，唯一类名不以那些词结尾。附带：`data-status` 在 `styles.css` **0 命中**，该属性当前不驱动任何外观（死属性）。要不要把判据扩到「元素选择器 ＋ 片状三件套」交光哥拍板。
+- **`DiscussionCheckpointPanel.tsx:147-165` 手写复选框组未走 `CheckList`**：`<fieldset>`＋`.map()` 出 `<label><input type="checkbox">`，而 `CheckList.tsx:16-18` 的注释正好写了这种场景的用法（已在 `<fieldset><legend>` 里就不传 `label`）。护栏 `standards:788` 只把 `.discussion-checkpoint-artifacts label` 登记进 label 排版豁免，**豁免的不是结构**，所以门禁不红。
+- **`WorkspaceBrief` 的空态自造，但与既有登记打架（待拍板）**：`:73-79`／`:84-94` 的 `.context-placeholder`（`<strong>`＋`<p>`）与 `EmptyNotice` 的 block 档结构逐字同形，`:114`／`:150` 的 `.brief-empty` 同 line 档；但 `.context-placeholder` 已在 `ContextPanel.test.tsx:740` 与 docs/10 §9.8 登记为上下文面板认可的**分段内缩壳**。两条口径一个管「谁给水平内缩」、一个管「空态由谁渲染」，在此冲突；两个类都不在 `RETIRED_UTILITY_CLASSES` 里，现状不会被拦。**没找到拍板记录，未判定是有意例外还是漏迁。**
+- **`MemorySuggestionList.tsx:100-108`** 候选为空时写 `<p className="context-hint">` 而非 `EmptyNotice`（轻微：`.context-hint` 是通用提示类，`ContextPanel` 13 处在用，不是占位专用类）。
+- **`MemoryCaptureSource` 的可及名称有竞争**：包裹式 `Field` 的标签被 `<textarea aria-label="回答原文">`（`:51`／`:57`）覆盖，读屏听到的是后者。
+- **`WorkspaceSelector` 生产路径零覆盖**：无同名测试，`Composer.test.tsx:26` 传的是桩 `workspacePicker`。它是输入区顶部的空间入口，改坏了没有测试会红。
+- **同一条规则在 docs/10 内部写两遍**（台账行 ＋ 正文段）是本轮实测踩到的坑：修 `tone` 时先改了正文、漏了台账行，靠回读 grep 才发现。凡改这类规则，必须同时 grep 台账行与正文段两处。
+- **表格中间插散文或空行会把台账在渲染时截成几块**（实测 docs/10 §10.1：一行「本表是唯一台账」的散文夹在第 620 与 622 行之间，另有两处空行，45 行的表被切成三段，而全仓约 100 处指针指向它）。已修：散文移到表前、空行删净，并在表前写下这条约束。
 
 ## 6. 验证车道（本轮硬约束）
 
@@ -109,6 +116,7 @@
 | B4 | P1-1～P1-8：护栏锚点与死豁免。已修 6 条（运行摘要锚点放宽、`.suggestion-job-row` 补进行钩子清单、`.current-badge`×2／`.artifact-evidence-list b`／`.chip-button` 四条死豁免删除、`NavList.tsx` 白名单删除＋其 JSDoc 里那个会挡枪的 `className={…'active'…}` 字面量改写、`/^\.icon-button\b/` 删除、旧背板绊线提到 owners 豁免之前）；P1-7 的 `/^\.section-header/` 与 P1-8 的绊线本体经复核**保留**，理由见 §2 | ✅ |
 | — | B4 变异验证四发，每发都精确点名注入点、还原后工作树无残留：**M1** 探针文件写 compact 档措辞 → 报红；再用 node 单独跑两个正则证明**旧锚点对同一串命中 false**（漏洞是真的，不是我想象的）。**M2** 给 `.suggestion-job-row` 加 `gap: 8px` → 报红；把清单退回 `['memory-row']` 后同一条变异 **EXIT=0 静默通过**（反证成立）。**M3** 往 owner `Modal.tsx` 的 JSDoc 写 `sheet-backdrop` → 报红（改前该文件被 `continue` 整文件跳过）。**M4** 追加 `.mutation-probe { font-size: 10px }` → 报红，证明删掉 `.current-badge` 豁免没有把字号护栏一起拔掉 | ✅ |
 | — | 门禁：护栏＋`NavList.test.tsx`＋`Button.test.tsx` → **3 文件 / 103 用例全绿，EXIT=0**；`prettier --check` 干净；`tsc --noEmit` EXIT=0（负载 7.67） | ✅ |
-| B6′ | P3-8～P3-10、P3-12～P3-17：其余口径归一（标题例外两张表、字号阈值三档、色值例外四套、图标例外、定宽列、空态档数、多选、Toast 数量、AGENTS/docs12 覆盖缺口） | ⬜ |
-| B7 | P2-3（台账补 7 行）、P2-5 余下计数校准、P2-10（15 处 §3.x／§4.x 引用点名到 reviews 文件） | ⬜ |
+| B6′ | P3-8～P3-12、P3-14～P3-17 已归一：字号下限**五处落点**统一到 12px（AGENTS／docs/10 两处／docs/12／规则文件；此前 9–10px、9–11px、12px 三个阈值并存）；硬编码色值例外**四套清单**统一到护栏真实的两套机制，并把 docs/12 里混在一句的色值轴与字号轴拆开；docs/12「禁止第二套 Toast」改为「第三套」并点明既有两套分工（原文会让只读工程规范的智能体把合法的 `ToastHost` 当违禁删掉）；docs/12 §8 与 AGENTS §7 各补一条指针（基座纪律归 docs/10 台账、bench 车道归 §9）；空态补 `EmptyPage`／`LoadingPage`／`ErrorPage`；裸标题例外改准为 TSX 侧与 CSS 侧**两张**白名单；规则文件的成组勾选补 `CheckList`／`McpToolBindingsPicker` 指针。**P3-13 经核降级为不算互斥**：docs/10 §8.1 是「规格／现状」两列，现状列已注明拖拽未实现 | ✅ 提交 `95bc1ab` |
+| B7 | P2-5 计数与 P2-10 指针已处理：14 处（docs/10）＋12 处（护栏注释）裸 `§3.x`／`§4.x` 改为**三处消歧约定**（点名两份报告各自的小节范围与 `P` 编号上限，判据「P4 及以上一定在 09-27」），逐处改写 26 处成本高且会再漂；规则文件那条就地补报告名。计数类改成「快照处数＋不变量」两段式（gap／margin 逐档处数、IconButton 7→**10**、ActionBar 7→**8**，且 IconButton 那份清单里还列着已删除的错误横幅）。**过程中主线自己写错一个指针**（把 `§3.1 P10` 归给 09-26，实际在 09-27），已修——写新指针前必须先验目标存在 | ✅ 提交 `103ddaa` |
+| B7′ | P2-3：台账补 7 行（`WorkspaceSelector`／`WorkspaceIdentityDialog`／`ComposerCapabilityPicker`／`DiscussionCheckpointPanel`／`MemoryCaptureSource`／`MemorySuggestionList`／`WorkspaceBrief`），台账 38→**45 行**。**判定：7 个都不是「跨视图基座」**——只有 `MemorySuggestionList` 有两个生产消费者（`ContextPanel:228`、`MemoryView:435`），其余各一个。但按既有口径它们**仍应登记**：那条「单消费者不抽」的判据是「抽出来会不会制造第二处真相」（`SettingsLayout` 是三行壳、`ModelProfileRow` 就是 `ListRow` 填槽），不是消费者数量；这 6 个各自承载不可归约的领域推导。台账已有先例（`McpToolBindingsPicker` 行明写「不是新基座，是 `CheckList` 之上的领域组件」），7 行照此措辞登记。顺带修两处：`Composer` 行的「工作区两颗按钮（打开本地文件夹／新建工作区）」已过期（`App.tsx` 里 `selectDirectory` 0 命中，2026-09-28 合并成唯一入口 `onNewWorkspace`）；台账表被一行散文与两处空行**从中间截断**，45 行的表渲染成三块 | ✅ 护栏 90/90 绿 |
 | B8 | 收口：全量 verify（跑前看负载）＋当日日志＋记忆更新 | ⬜ |
