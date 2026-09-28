@@ -117,6 +117,8 @@ describe('MemoryRepository', () => {
       revision: {
         name: '测试专家',
         summary: '测试',
+        author: '',
+        tags: [],
         identity: '测试',
         principles: [],
         inputRequirements: [],

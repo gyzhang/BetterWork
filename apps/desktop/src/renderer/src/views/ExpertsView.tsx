@@ -12,7 +12,9 @@ import { useState } from 'react';
 
 import { ActionBar } from '../components/ActionBar';
 import { AsyncButton } from '../components/AsyncButton';
+import { Badge } from '../components/Badge';
 import { CheckList } from '../components/CheckList';
+import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
@@ -25,7 +27,7 @@ import { SegmentedControl } from '../components/Tabs';
 import { Tooltip } from '../components/Tooltip';
 import type { ExpertsState } from '../hooks/use-experts';
 import { useViewMode } from '../hooks/use-view-mode';
-import { ExpertIcon, PlusIcon } from '../icons';
+import { ExpertIcon, PlusIcon, SummonIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
 import { materialCandidateAppliesToWorkspace, materialReferenceKey } from '../lib/materials';
 
@@ -55,9 +57,13 @@ const builtinToolNames = [
   'read_office_material',
 ] as const;
 
+const MAX_TAGS = 6;
+
 const defaultDraft = (): ExpertRevisionDraft => ({
   name: '',
   summary: '',
+  author: '',
+  tags: [],
   identity: '',
   principles: [],
   inputRequirements: [],
@@ -75,9 +81,22 @@ const linesOf = (value: string): string[] =>
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
+/** 标签是一行短句，用逗号（中英文皆可）或换行分隔；重复与超出上限的直接丢掉。 */
+const tagsOf = (value: string): string[] =>
+  [
+    ...new Set(
+      value
+        .split(/[,，、\n]/u)
+        .map((tag) => tag.trim().slice(0, 40))
+        .filter((tag) => tag.length > 0),
+    ),
+  ].slice(0, MAX_TAGS);
+
 const draftOf = (detail: ExpertDetail): ExpertRevisionDraft => ({
   name: detail.revision.name,
   summary: detail.revision.summary,
+  author: detail.revision.author,
+  tags: detail.revision.tags,
   ...(detail.revision.avatarKey ? { avatarKey: detail.revision.avatarKey } : {}),
   identity: detail.revision.identity,
   principles: detail.revision.principles,
@@ -101,75 +120,143 @@ function ExpertSummon({
   expert,
   onSummon,
   onError,
+  className,
 }: {
   expert: ExpertSummary;
   onSummon: (expert: ExpertSummary) => Promise<void>;
   onError: (message: string) => void;
+  className?: string;
 }): React.JSX.Element {
   return (
     <button
-      className="primary-button"
+      className={`primary-button${className ? ` ${className}` : ''}`}
       type="button"
       disabled={expert.lifecycle !== 'active'}
       onClick={() => reportAction(onSummon(expert), onError, '无法召唤该专家。')}
     >
-      召唤
+      <SummonIcon size={13} /> 召唤
     </button>
   );
 }
 
-function ExpertCard({
-  expert,
-  onOpen,
-  onSummon,
-  onError,
-}: {
-  expert: ExpertSummary;
+/** 署名行：作者（没署名时按来源说明）+ 版本号。版本号就是修订号，保存一次配置就 +1。 */
+const expertByline = (expert: ExpertSummary): string =>
+  `${expert.author || (expert.sourceKind === 'builtin' ? '内置' : '本机')} · v${expert.currentRevision}`;
+
+/** 用途标签一行；停用／归档的状态片也走这一行，正常状态不占位置。 */
+function ExpertTags({ expert }: { expert: ExpertSummary }): React.JSX.Element | null {
+  if (expert.tags.length === 0 && expert.lifecycle === 'active') return null;
+  return (
+    <div className="expert-card-tags">
+      {expert.lifecycle === 'active' ? undefined : (
+        <Badge tone="neutral">{lifecycleName[expert.lifecycle]}</Badge>
+      )}
+      {expert.tags.map((tag) => (
+        <Badge key={tag} shape="tag">
+          {tag}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
+interface ExpertActionProps {
   onOpen: (expert: ExpertSummary) => void;
+  onEdit: (expert: ExpertSummary) => void;
+  onCopy: (expert: ExpertSummary) => void;
+  onDelete: (expert: ExpertSummary) => void;
+  onToggleEnabled: (expert: ExpertSummary) => void;
+}
+
+/** 卡片与列表行拿的是同一份输入，两种视图因此不会各自长出一套动作。 */
+interface ExpertCardProps {
+  expert: ExpertSummary;
+  actions: ExpertActionProps;
   onSummon: (expert: ExpertSummary) => Promise<void>;
   onError: (message: string) => void;
-}): React.JSX.Element {
+}
+
+/**
+ * 一排就地动作：详情／编辑（内置改为复制副本）／删除 ＋ 启用停用。
+ *
+ * 内置专家每次启动都由发布清单重新登记，改它会被后端拒（expert_builtin_readonly）、
+ * 删了也还会回来，所以这两个入口换成「复制副本」，不给点了才知道不行的按钮。
+ */
+function ExpertActionButtons({
+  expert,
+  onOpen,
+  onEdit,
+  onCopy,
+  onDelete,
+  onToggleEnabled,
+}: ExpertActionProps & { expert: ExpertSummary }): React.JSX.Element {
+  const builtin = expert.sourceKind === 'builtin';
+  return (
+    <>
+      <button className="text-button" type="button" onClick={() => onOpen(expert)}>
+        详情
+      </button>
+      {builtin ? (
+        <button className="text-button" type="button" onClick={() => onCopy(expert)}>
+          复制副本
+        </button>
+      ) : (
+        <>
+          <button className="text-button" type="button" onClick={() => onEdit(expert)}>
+            编辑
+          </button>
+          <button className="text-button danger" type="button" onClick={() => onDelete(expert)}>
+            删除
+          </button>
+        </>
+      )}
+      <button className="text-button" type="button" onClick={() => onToggleEnabled(expert)}>
+        {expert.lifecycle === 'active' ? '停用' : '启用'}
+      </button>
+    </>
+  );
+}
+
+/**
+ * 卡片：召唤是悬停才出现的浮层动作（`.expert-card-summon`），
+ * 平时卡片只讲「这是谁、谁做的、第几版、干什么用」。
+ */
+function ExpertCard({ expert, onSummon, onError, actions }: ExpertCardProps): React.JSX.Element {
   return (
     <article className="expert-card">
       <div className="expert-card-top">
-        <button className="expert-card-main" type="button" onClick={() => onOpen(expert)}>
+        <button className="expert-card-main" type="button" onClick={() => actions.onOpen(expert)}>
           <span className="expert-card-head">
             <span className="expert-card-mark" aria-hidden="true">
               <ExpertIcon size={18} />
             </span>
             <span className="expert-card-title">
               <strong>{expert.name}</strong>
-              <small>{lifecycleName[expert.lifecycle]}</small>
+              <small>{expertByline(expert)}</small>
             </span>
           </span>
           <Tooltip className="expert-card-desc">{expert.summary || '暂无说明'}</Tooltip>
         </button>
-        <ExpertSummon expert={expert} onSummon={onSummon} onError={onError} />
+        <ExpertSummon
+          className="expert-card-summon"
+          expert={expert}
+          onSummon={onSummon}
+          onError={onError}
+        />
       </div>
+      <ExpertTags expert={expert} />
       {expert.blockedReasons.length > 0 && (
         <p className="expert-card-status">{blockedHint(expert)}</p>
       )}
       <div className="expert-card-actions">
-        <button className="text-button" type="button" onClick={() => onOpen(expert)}>
-          配置详情
-        </button>
+        <ExpertActionButtons {...actions} expert={expert} />
       </div>
     </article>
   );
 }
 
 /** 列表模式：右槽已有按钮，所以整行不再是点击区；描述交给行的单行省略。 */
-function ExpertRow({
-  expert,
-  onOpen,
-  onSummon,
-  onError,
-}: {
-  expert: ExpertSummary;
-  onOpen: (expert: ExpertSummary) => void;
-  onSummon: (expert: ExpertSummary) => Promise<void>;
-  onError: (message: string) => void;
-}): React.JSX.Element {
+function ExpertRow({ expert, onSummon, onError, actions }: ExpertCardProps): React.JSX.Element {
   return (
     <ListRow
       as="article"
@@ -181,20 +268,19 @@ function ExpertRow({
       }
       title={expert.name}
       detail={expert.summary || '暂无说明'}
-      meta={
-        expert.blockedReasons.length > 0
-          ? `${lifecycleName[expert.lifecycle]} · ${blockedHint(expert)}`
-          : lifecycleName[expert.lifecycle]
-      }
+      meta={expertByline(expert)}
       actions={
         <>
           <ExpertSummon expert={expert} onSummon={onSummon} onError={onError} />
-          <button className="text-button" type="button" onClick={() => onOpen(expert)}>
-            配置详情
-          </button>
+          <ExpertActionButtons {...actions} expert={expert} />
         </>
       }
-    />
+    >
+      <ExpertTags expert={expert} />
+      {expert.blockedReasons.length > 0 && (
+        <p className="expert-card-status">{blockedHint(expert)}</p>
+      )}
+    </ListRow>
   );
 }
 
@@ -207,6 +293,7 @@ function ExpertEditor({
   workspaceId,
   editing,
   saving,
+  backLabel,
   onChange,
   onCancel,
   onSave,
@@ -219,12 +306,17 @@ function ExpertEditor({
   workspaceId?: string;
   editing: boolean;
   saving: boolean;
+  /** 编辑器可能从列表卡片进来，也可能从配置页进来：返回按钮说的必须是它真正去的地方。 */
+  backLabel: string;
   onChange: (draft: ExpertRevisionDraft) => void;
   onCancel: () => void;
   onSave: () => void;
 }): React.JSX.Element {
   const toolNames =
     draft.builtinToolPolicy.mode === 'allow-list' ? draft.builtinToolPolicy.toolNames : [];
+  // 标签输入框保留用户正在敲的分隔符：直接把 draft.tags 拼回去会在敲完一个逗号后
+  // 立刻把它吃掉，光标跟着被拽回去。
+  const [tagText, setTagText] = useState(() => draft.tags.join('，'));
   const referenceMaterials = draft.referenceMaterials ?? [];
   const languageModels = models.filter((model) => model.role === 'language');
   const selectedModelProfileId =
@@ -240,7 +332,7 @@ function ExpertEditor({
         title={editing ? '编辑专家修订' : '新建专家'}
         leading={
           <button className="text-button" type="button" onClick={onCancel}>
-            返回列表
+            {backLabel}
           </button>
         }
       />
@@ -257,6 +349,31 @@ function ExpertEditor({
               value={draft.summary}
               onChange={(event) => onChange({ ...draft, summary: event.target.value })}
               rows={2}
+            />
+          </Field>
+          <Field
+            controlId="expert-author"
+            label="作者"
+            hint="显示在卡片标题下方；留空时按来源显示「内置」或「本机」。"
+          >
+            <input
+              id="expert-author"
+              value={draft.author}
+              onChange={(event) => onChange({ ...draft, author: event.target.value })}
+            />
+          </Field>
+          <Field
+            controlId="expert-tags"
+            label={`用途标签（逗号分隔，最多 ${MAX_TAGS} 个）`}
+            hint="给卡片上的一眼看：这个专家擅长什么，例如「研究报告、数据分析」。"
+          >
+            <input
+              id="expert-tags"
+              value={tagText}
+              onChange={(event) => {
+                setTagText(event.target.value);
+                onChange({ ...draft, tags: tagsOf(event.target.value) });
+              }}
             />
           </Field>
           <Field label="人格与职责">
@@ -528,7 +645,7 @@ function ExpertDetailPanel({
               disabled={detail.lifecycle !== 'active'}
               onClick={onSummon}
             >
-              召唤
+              <SummonIcon size={13} /> 召唤
             </button>
             {/* 内置专家后端拒绝直接改（expert_builtin_readonly）：入口按来源分档，
                 不再让人点一次才知道不能改（ADR-0011，与技能页同口径）。 */}
@@ -546,7 +663,11 @@ function ExpertDetailPanel({
       />
       <ScrollRegion ariaLabel="专家详情">
         <div className="page-body expert-detail-body">
-          <p className="expert-detail-summary">{detail.summary || '暂无说明'}</p>
+          <div className="expert-detail-head">
+            <p className="expert-detail-byline">{expertByline(detail)}</p>
+            <p className="expert-detail-summary">{detail.summary || '暂无说明'}</p>
+            <ExpertTags expert={detail} />
+          </div>
           <section className="expert-detail-section">
             <h2>人格与职责</h2>
             <p>{detail.revision.identity}</p>
@@ -646,7 +767,10 @@ export function ExpertsPage({
   models: ModelProfileSummary[];
   materialCandidates: MaterialCandidate[];
   workspaceId?: string;
-  actions: Pick<ExpertsState, 'get' | 'create' | 'saveRevision' | 'copy' | 'setLifecycle'>;
+  actions: Pick<
+    ExpertsState,
+    'get' | 'create' | 'saveRevision' | 'copy' | 'setLifecycle' | 'remove'
+  >;
   onSummon: (expert: ExpertSummary) => Promise<void>;
   onError: (message: string) => void;
   onManageMemories: (expert: ExpertDetail) => void;
@@ -656,6 +780,8 @@ export function ExpertsPage({
   const [detailLoading, setDetailLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editorReturn, setEditorReturn] = useState<'list' | 'detail'>('list');
+  const [pendingDelete, setPendingDelete] = useState<ExpertSummary>();
   const { viewMode, changeViewMode } = useViewMode(VIEW_MODE_STORAGE_KEY);
 
   const openDetail = (summary: ExpertSummary): void => {
@@ -671,13 +797,73 @@ export function ExpertsPage({
   };
   const openCreate = (): void => {
     setSelected(undefined);
+    setEditorReturn('list');
     setDraft(defaultDraft());
     setEditorOpen(true);
   };
   const openEdit = (): void => {
     if (!selected) return;
+    setEditorReturn('detail');
     setDraft(draftOf(selected));
     setEditorOpen(true);
+  };
+  /** 卡片上的「编辑」：先把当前修订取回来，不让人对着摘要行改配置。 */
+  const openEditFromCard = (summary: ExpertSummary): void => {
+    setDetailLoading(true);
+    reportAction(
+      actions.get(summary.id).then((detail) => {
+        setDetailLoading(false);
+        if (!detail) return;
+        setSelected(detail);
+        setEditorReturn('list');
+        setDraft(draftOf(detail));
+        setEditorOpen(true);
+      }),
+      onError,
+      '无法加载专家配置。',
+    );
+  };
+  /** 编辑器离开时必须回到它来的那一层：写着「返回列表」却落在配置页，等于让人多点一次。 */
+  const cancelEditor = (): void => {
+    setEditorOpen(false);
+    if (editorReturn === 'list') setSelected(undefined);
+  };
+  const copyFromCard = (summary: ExpertSummary): void => {
+    reportAction(
+      actions.copy(summary.id).then(() => state.refresh()),
+      onError,
+      '复制专家失败。',
+    );
+  };
+  const toggleEnabled = (summary: ExpertSummary): void => {
+    reportAction(
+      actions
+        .setLifecycle({
+          expertId: summary.id,
+          lifecycle: summary.lifecycle === 'active' ? 'disabled' : 'active',
+          expectedRevision: summary.currentRevision,
+        })
+        .then(() => state.refresh()),
+      onError,
+      '更新专家状态失败。',
+    );
+  };
+  const confirmDelete = (): void => {
+    if (!pendingDelete) return;
+    setPendingDelete(undefined);
+    reportAction(
+      actions.remove(pendingDelete.id).then(() => state.refresh()),
+      onError,
+      '删除专家失败。',
+    );
+  };
+  /** 卡片与列表行共用同一组就地动作，两种视图的行为不允许分叉。 */
+  const rowActions: ExpertActionProps = {
+    onOpen: openDetail,
+    onEdit: openEditFromCard,
+    onCopy: copyFromCard,
+    onDelete: setPendingDelete,
+    onToggleEnabled: toggleEnabled,
   };
   const save = (): void => {
     if (!draft || !draft.name.trim() || !draft.identity.trim()) {
@@ -745,8 +931,9 @@ export function ExpertsPage({
         {...(workspaceId ? { workspaceId } : {})}
         editing={Boolean(selected)}
         saving={saving}
+        backLabel={editorReturn === 'detail' ? '返回详情' : '返回列表'}
         onChange={setDraft}
-        onCancel={() => setEditorOpen(false)}
+        onCancel={cancelEditor}
         onSave={save}
       />
     );
@@ -810,7 +997,7 @@ export function ExpertsPage({
                 <ExpertCard
                   key={expert.id}
                   expert={expert}
-                  onOpen={openDetail}
+                  actions={rowActions}
                   onSummon={onSummon}
                   onError={onError}
                 />
@@ -822,7 +1009,7 @@ export function ExpertsPage({
                 <ExpertRow
                   key={expert.id}
                   expert={expert}
-                  onOpen={openDetail}
+                  actions={rowActions}
                   onSummon={onSummon}
                   onError={onError}
                 />
@@ -831,6 +1018,15 @@ export function ExpertsPage({
           )}
         </section>
       </ScrollRegion>
+      {pendingDelete && (
+        <ConfirmationDialog
+          title={`删除「${pendingDelete.name}」？`}
+          detail="将删除这个专家的全部配置修订，以及挂在它名下的长期记忆，不能恢复。已经用它跑过的任务不受影响；若历史运行仍引用该专家，删除会被挡下，请改用归档。"
+          confirmLabel="删除专家"
+          onCancel={() => setPendingDelete(undefined)}
+          onConfirm={confirmDelete}
+        />
+      )}
     </section>
   );
 }

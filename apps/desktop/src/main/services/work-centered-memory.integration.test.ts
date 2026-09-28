@@ -242,6 +242,8 @@ const openServices = (directory: string): Services => {
 const expertRevision = {
   name: '经营分析专家',
   summary: '按用户口径完成经营分析',
+  author: '',
+  tags: [],
   identity: '负责经营分析与收入口径复核。',
   principles: [],
   inputRequirements: [],

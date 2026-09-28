@@ -10,6 +10,7 @@ import {
   type ExpertRevisionDraft,
   expertSkillPresetSchema,
   type ExpertSourceKind,
+  expertTagsSchema,
   mcpToolBindingSchema,
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
@@ -29,6 +30,8 @@ interface ExpertRevisionRow {
   revision: number;
   name: string;
   summary: string;
+  author: string;
+  tags_json: string;
   avatar_key: string | null;
   identity: string;
   principles_json: string;
@@ -69,6 +72,8 @@ const toRevision = (row: ExpertRevisionRow): ExpertRevision => ({
   revision: row.revision,
   name: row.name,
   summary: row.summary,
+  author: row.author,
+  tags: expertTagsSchema.parse(JSON.parse(row.tags_json)),
   ...(row.avatar_key === null ? {} : { avatarKey: row.avatar_key }),
   identity: row.identity,
   principles: parseStringArray(row.principles_json, 'principles'),
@@ -118,6 +123,8 @@ export class ExpertRepository {
       lifecycle: row.lifecycle,
       name: revision.name,
       summary: revision.summary,
+      author: revision.author,
+      tags: revision.tags,
       currentRevision: revision.revision,
       blockedReasons: emptyBlockedReasons(),
       createdAt: row.created_at,
@@ -237,6 +244,8 @@ export class ExpertRepository {
       revision: {
         name: name ?? `${source.revision.name} 副本`,
         summary: source.revision.summary,
+        author: source.revision.author,
+        tags: source.revision.tags,
         ...(source.revision.avatarKey ? { avatarKey: source.revision.avatarKey } : {}),
         identity: source.revision.identity,
         principles: source.revision.principles,
@@ -272,6 +281,22 @@ export class ExpertRepository {
     return updated;
   }
 
+  /**
+   * 有多少次运行把这个专家写进了快照。`run_context_snapshots.expert_id` 是 RESTRICT
+   * 外键：历史 Run 必须能解释当时用的是谁，所以计数大于 0 时不能硬删。
+   */
+  countRunReferences(id: string): number {
+    const row = this.db
+      .prepare('SELECT COUNT(*) AS total FROM run_context_snapshots WHERE expert_id = ?')
+      .get(id) as { total: number };
+    return row.total;
+  }
+
+  /** 硬删除身份与其全部修订；挂在专家名下的长期记忆按外键级联移除。 */
+  remove(id: string): boolean {
+    return this.db.prepare('DELETE FROM experts WHERE id = ?').run(id).changes > 0;
+  }
+
   private insertRevision(
     expertId: string,
     revisionId: string,
@@ -282,11 +307,12 @@ export class ExpertRepository {
     this.db
       .prepare(
         `INSERT INTO expert_revisions (
-           id, expert_id, revision, name, summary, avatar_key, identity,
+           id, expert_id, revision, name, summary, author, tags_json,
+           avatar_key, identity,
            principles_json, input_requirements_json, delivery_requirements_json,
            skill_preset_json, builtin_tool_policy_json, model_reference_json, mcp_tool_bindings_json,
            reference_materials_json, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         revisionId,
@@ -294,6 +320,8 @@ export class ExpertRepository {
         revisionNumber,
         draft.name,
         draft.summary,
+        draft.author,
+        JSON.stringify(draft.tags),
         draft.avatarKey ?? null,
         draft.identity,
         JSON.stringify(draft.principles),

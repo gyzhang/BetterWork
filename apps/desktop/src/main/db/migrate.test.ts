@@ -729,7 +729,7 @@ describe('application database migrations', () => {
       .all() as Array<Record<string, unknown>>;
 
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(33);
+    expect(readSchemaVersion(db)).toBe(appMigrations.length);
     expect(hasColumn(db, 'memory_records', 'recall_policy')).toBe(true);
     const after = db
       .prepare(
@@ -755,7 +755,7 @@ describe('application database migrations', () => {
 
     // 再次打开并迁移必须幂等，且不引入外键问题。
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(33);
+    expect(readSchemaVersion(db)).toBe(appMigrations.length);
     expect(db.pragma('foreign_key_check', { simple: false })).toEqual([]);
     db.close();
   });
@@ -1166,6 +1166,17 @@ it('adds immutable expert revision tables and keeps their ownership constraints'
   expect(expertColumns.find((column) => column.name === 'reference_materials_json')).toMatchObject({
     dflt_value: "'[]'",
   });
+  // v34：卡片要按「作者 + 用途标签」介绍专家。旧修订补空值，不替历史行猜一个作者。
+  expect(expertColumns.find((column) => column.name === 'author')).toMatchObject({
+    dflt_value: "''",
+  });
+  expect(expertColumns.find((column) => column.name === 'tags_json')).toMatchObject({
+    dflt_value: "'[]'",
+  });
+  const legacyRevision = db
+    .prepare('SELECT author, tags_json FROM expert_revisions WHERE id = ?')
+    .get('expert-revision-1') as { author: string; tags_json: string };
+  expect(legacyRevision).toEqual({ author: '', tags_json: '[]' });
   db.prepare('DELETE FROM experts WHERE id = ?').run('expert-1');
   expect(countRows(db, 'expert_revisions')).toBe(0);
   db.close();

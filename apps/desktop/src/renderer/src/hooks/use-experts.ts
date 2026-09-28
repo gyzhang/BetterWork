@@ -27,6 +27,7 @@ export interface ExpertsState {
     lifecycle: ExpertLifecycle;
     expectedRevision: number;
   }) => Promise<ExpertMutationResult>;
+  remove: (expertId: string) => Promise<{ deleted: boolean }>;
 }
 
 export function useExperts(): ExpertsState {
@@ -75,6 +76,22 @@ export function useExperts(): ExpertsState {
     }): Promise<ExpertMutationResult> => window.betterwork.experts.setLifecycle(input),
     [],
   );
+  const remove = useCallback(
+    (expertId: string): Promise<{ deleted: boolean }> =>
+      window.betterwork.experts.delete({ expertId }),
+    [],
+  );
 
-  return { experts, loading, error, refresh, get, create, saveRevision, copy, setLifecycle };
+  return {
+    experts,
+    loading,
+    error,
+    refresh,
+    get,
+    create,
+    saveRevision,
+    copy,
+    setLifecycle,
+    remove,
+  };
 }

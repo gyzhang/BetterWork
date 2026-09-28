@@ -1546,6 +1546,18 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 34,
+    name: 'add expert author and capability tags',
+    up(db: Database.Database): void {
+      // 卡片要按「作者署名 + 用途标签」介绍一个专家；两者都是修订自带的展示字段，
+      // 旧修订补空值而不是猜一个作者。
+      db.exec(`
+        ALTER TABLE expert_revisions ADD COLUMN author TEXT NOT NULL DEFAULT '';
+        ALTER TABLE expert_revisions ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]';
+      `);
+    },
+  },
 ];
 
 /**

@@ -73,6 +73,8 @@ const expertSummary: ExpertSummary = {
   lifecycle: 'active',
   name: '经营分析专家',
   summary: '按月度规则分析经营数字。',
+  author: '财务组',
+  tags: ['经营分析', '月度复盘'],
   currentRevision: 1,
   blockedReasons: [],
   createdAt: 1,
@@ -86,6 +88,8 @@ const expertDetail: ExpertDetail = {
     revision: 1,
     name: expertSummary.name,
     summary: expertSummary.summary,
+    author: expertSummary.author,
+    tags: expertSummary.tags,
     identity: '负责经营分析。',
     principles: [],
     inputRequirements: [],
@@ -358,6 +362,7 @@ function installApi(options?: {
       saveRevision: vi.fn(async () => ({ expert: expertDetail })),
       copy: vi.fn(async () => ({ expert: expertDetail })),
       setLifecycle: vi.fn(async () => ({ expert: expertDetail })),
+      delete: vi.fn(async () => ({ deleted: true })),
     },
     runs: {
       list: vi.fn(async (input?: { taskId?: string }): Promise<RunSummary[]> =>
@@ -1015,7 +1020,7 @@ describe('Expert configuration', () => {
     installApi({ expert: true, memories: [memory, workspaceMemory, otherWorkspaceMemory] });
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: '专家' }));
-    fireEvent.click(await screen.findByRole('button', { name: '配置详情' }));
+    fireEvent.click(await screen.findByRole('button', { name: '详情' }));
 
     expect(await screen.findByText('1 条已确认 · 1 条待确认')).toBeTruthy();
     expect(screen.getByText(memory.content)).toBeTruthy();
@@ -1035,7 +1040,7 @@ describe('Expert configuration', () => {
     });
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: '专家' }));
-    fireEvent.click(await screen.findByRole('button', { name: '配置详情' }));
+    fireEvent.click(await screen.findByRole('button', { name: '详情' }));
     fireEvent.click(await screen.findByRole('button', { name: '编辑配置' }));
 
     const modelSelect = await screen.findByRole('button', { name: '专家模型偏好' });
@@ -1058,7 +1063,7 @@ describe('Expert configuration', () => {
     const api = installApi({ expert: true });
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: '专家' }));
-    fireEvent.click(await screen.findByRole('button', { name: '配置详情' }));
+    fireEvent.click(await screen.findByRole('button', { name: '详情' }));
     fireEvent.click(await screen.findByRole('button', { name: '编辑配置' }));
     const identity = await screen.findByRole('textbox', { name: '人格与职责' });
     fireEvent.change(identity, { target: { value: '负责经营分析并检查交付。' } });
@@ -1078,24 +1083,114 @@ describe('Expert configuration', () => {
     api.experts.get.mockResolvedValue({ ...expertDetail, sourceKind: 'builtin' });
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: '专家' }));
-    fireEvent.click(await screen.findByRole('button', { name: '配置详情' }));
+    fireEvent.click(await screen.findByRole('button', { name: '详情' }));
 
     expect(await screen.findByRole('button', { name: '复制为用户专家' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '编辑配置' })).toBeNull();
   });
 
-  it('专家页在卡片与列表之间切换，列表行仍是「召唤＋配置详情」', async () => {
+  it('专家页在卡片与列表之间切换，两种视图都给同一组就地动作', async () => {
     installApi({ expert: true });
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: '专家' }));
-    expect(await screen.findByRole('button', { name: '配置详情' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: '详情' })).toBeTruthy();
     expect(document.querySelector('.expert-card')).not.toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: '列表' }));
     const row = document.querySelector('.expert-rows .list-row');
     expect(row).not.toBeNull();
     expect(row?.textContent).toContain('经营分析专家');
-    expect(row?.textContent).toContain('可召唤');
+    expect(row?.textContent).toContain('财务组 · v1');
+  });
+
+  /**
+   * 卡片不是只放一个名字：图标、署名与版本、描述、用途标签都要在一眼之内，
+   * 召唤则是悬停才显形的主动作（DOM 里始终存在，键盘与读屏都拿得到）。
+   */
+  it('卡片交代图标、作者·版本与用途标签，召唤按钮带图标', async () => {
+    installApi({ expert: true });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
+    expect(await screen.findByRole('button', { name: '详情' })).toBeTruthy();
+    const card = document.querySelector('.expert-card');
+    expect(card?.querySelector('.expert-card-mark svg')).not.toBeNull();
+    expect(card?.textContent).toContain('财务组 · v1');
+    expect(card?.querySelectorAll('.expert-card-tags .badge[data-shape="tag"]')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: '召唤' })).toBeTruthy();
+    expect(card?.querySelector('.expert-card-summon svg')).not.toBeNull();
+  });
+
+  it('卡片上的「停用」直接改生命周期，不需要先进配置页', async () => {
+    const api = installApi({ expert: true });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
+    fireEvent.click(await screen.findByRole('button', { name: '停用' }));
+    await waitFor(() => expect(api.experts.setLifecycle).toHaveBeenCalledTimes(1));
+    expect(api.experts.setLifecycle).toHaveBeenCalledWith({
+      expertId: expertSummary.id,
+      lifecycle: 'disabled',
+      expectedRevision: 1,
+    });
+  });
+
+  it('删除要先确认，确认之后才真的删', async () => {
+    const api = installApi({ expert: true });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
+    fireEvent.click(await screen.findByRole('button', { name: '删除' }));
+    expect(api.experts.delete).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole('button', { name: '删除专家' }));
+    await waitFor(() => expect(api.experts.delete).toHaveBeenCalledTimes(1));
+    expect(api.experts.delete).toHaveBeenCalledWith({ expertId: expertSummary.id });
+  });
+
+  it('内置专家的卡片给「复制副本」，不给编辑和删除', async () => {
+    const api = installApi({ expert: true });
+    api.experts.list.mockResolvedValue([{ ...expertSummary, sourceKind: 'builtin' }]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
+    fireEvent.click(await screen.findByRole('button', { name: '复制副本' }));
+    expect(screen.queryByRole('button', { name: '编辑' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '删除' })).toBeNull();
+    await waitFor(() =>
+      expect(api.experts.copy).toHaveBeenCalledWith({ expertId: expertSummary.id }),
+    );
+  });
+
+  it('卡片上的「编辑」先取当前修订再进编辑器，作者与用途标签可改', async () => {
+    const api = installApi({ expert: true });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
+    fireEvent.click(await screen.findByRole('button', { name: '编辑' }));
+    await waitFor(() => expect(api.experts.get).toHaveBeenCalledWith({ id: expertSummary.id }));
+    expect(await screen.findByRole('textbox', { name: '作者' })).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: /用途标签/ })).toBeTruthy();
+  });
+
+  /**
+   * 编辑器从哪来就回哪去：写着「返回列表」却落在配置详情页，等于骗人多点一次
+   * （光哥 2026-09-28 走查指出）。
+   */
+  it('从配置页进编辑器时返回按钮写「返回详情」，点了仍在配置页', async () => {
+    installApi({ expert: true });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
+    fireEvent.click(await screen.findByRole('button', { name: '详情' }));
+    fireEvent.click(await screen.findByRole('button', { name: '编辑配置' }));
+    fireEvent.click(await screen.findByRole('button', { name: '返回详情' }));
+    expect(screen.queryByRole('textbox', { name: '作者' })).toBeNull();
+    expect(screen.getByRole('button', { name: '编辑配置' })).toBeTruthy();
+  });
+
+  it('从卡片进编辑器时返回按钮写「返回列表」，点了真的回列表', async () => {
+    installApi({ expert: true });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
+    fireEvent.click(await screen.findByRole('button', { name: '编辑' }));
+    expect(await screen.findByRole('button', { name: '返回列表' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '返回列表' }));
+    expect(await screen.findByRole('button', { name: '详情' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '编辑配置' })).toBeNull();
   });
 });
 

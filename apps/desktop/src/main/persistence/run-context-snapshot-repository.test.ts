@@ -68,6 +68,8 @@ describe('RunContextSnapshotRepository', () => {
       revision: {
         name: '月报专家',
         summary: '测试',
+        author: '',
+        tags: [],
         identity: '负责月报',
         principles: [],
         inputRequirements: [],
@@ -151,6 +153,8 @@ describe('RunContextSnapshotRepository', () => {
       revision: {
         name: '专家一',
         summary: '',
+        author: '',
+        tags: [],
         identity: '负责一',
         principles: [],
         inputRequirements: [],
@@ -165,6 +169,8 @@ describe('RunContextSnapshotRepository', () => {
       revision: {
         name: '专家二',
         summary: '',
+        author: '',
+        tags: [],
         identity: '负责二',
         principles: [],
         inputRequirements: [],

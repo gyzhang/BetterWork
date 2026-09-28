@@ -14,7 +14,7 @@
 
 | 名称 | 语义 | 生命周期 |
 | --- | --- | --- |
-| Expert | 用户可召唤的长期工作方式身份 | 可启用、停用、归档；归档不删除历史 |
+| Expert | 用户可召唤的长期工作方式身份 | 可启用、停用、归档；归档不删除历史。只有从未被 Run 快照引用过才可硬删除，见 [ADR-0030](../adr/0030-expert-card-metadata-and-deletion.md) |
 | ExpertRevision | Expert 的不可变人格、能力和模型配置 | 保存后只读；编辑生成新修订 |
 | TaskContextRevision | 某 Task 下一次运行的可见草稿配置 | 可编辑；以期望修订号做并发控制 |
 | RunContextSnapshot | 一次 Run 实际采用的执行者和能力快照 | 启动事务成功后固定；不随配置编辑变化 |
@@ -59,6 +59,10 @@ interface ExpertRevision {
   revision: number;
   name: string;
   summary: string;
+  /** 卡片署名；空串表示不署名，展示时按来源退化为「内置／本机」。 */
+  author: string;
+  /** 用途标签，最多 6 项、每项最多 40 字符、不得重复；只服务展示，不进入人格指令。 */
+  tags: string[];
   avatarKey?: string;
   identity: string;
   principles: string[];
@@ -92,7 +96,7 @@ type ExpertModelReference =
   | { mode: 'profile'; modelProfileId: string };
 ```
 
-`identity`、`principles`、`inputRequirements` 和 `deliveryRequirements` 在执行前由 Application 合成为**一段唯一的 Expert 指令**，不能同时维护另一份可执行系统提示词。字段为空的语义如下：`summary` 可为空字符串；`principles`、`inputRequirements`、`deliveryRequirements` 允许空数组；`identity` 必须是非空文本。名称和摘要供 UI 展示，不能替代人格指令。
+`identity`、`principles`、`inputRequirements` 和 `deliveryRequirements` 在执行前由 Application 合成为**一段唯一的 Expert 指令**，不能同时维护另一份可执行系统提示词。字段为空的语义如下：`summary` 可为空字符串；`author` 可为空字符串（卡片退化为按来源署名）；`principles`、`inputRequirements`、`deliveryRequirements` 和 `tags` 允许空数组；`identity` 必须是非空文本。名称和摘要供 UI 展示，不能替代人格指令；`author` 与 `tags` 同样只是展示字段，不参与指令合成，也不构成新的授权。
 
 保存 Expert 时，Skill 必须解析为当前存在的 `skillId + revisionId`。Skill 缺失、已归档或修订不存在时可以保存草稿，但 Expert 标为不可用，发送时返回具体阻塞原因；不得静默替换成最新 Skill 修订。模型引用同样只保存 `modelProfileId`，不保存 API Key；被删除或停用的模型使发送失败而不是回退到另一个模型。
 
@@ -110,6 +114,7 @@ Skill 预设保持用户顺序，最多 6 项；同一 `skillId` 不能重复。
 | save revision | `expertId`、草稿、`expectedRevision` | 新的不可变修订并成为 current；期望版本不符返回 `expert_revision_conflict` |
 | copy | `expertId`、可选名称 | 独立 user Expert；不复制任务历史、记忆、凭据或信任授权 |
 | set lifecycle | `expertId`、`active/disabled/archived`、`expectedRevision` | 更新身份状态；归档不删除修订，活跃 Run 按 E12 的取消语义处理 |
+| delete | `expertId` | 硬删除身份与其全部修订（长期记忆按外键级联）。不存在 → `expert_not_found`；内置 → `expert_builtin_readonly`；被 Run 快照引用 → `expert_in_use`，提示改用归档（[ADR-0030](../adr/0030-expert-card-metadata-and-deletion.md)） |
 
 所有管理操作在 Main 事务中完成。用户草稿允许缺少 Skill 环境或模型，但非法 ID、重复 Skill、超过 6 项和超长文本在 IPC Schema 边界拒绝。内置 Expert 的原始修订不可被 `save revision` 覆盖，复制后才可编辑。
 
@@ -194,6 +199,7 @@ E12 的启动入口必须接收 `taskContextRevisionId` 和 `expectedTaskContext
 | `expert_disabled` / `expert_archived` | 不能开始新 Run | 召唤、发送边界 |
 | `expert_revision_not_found` | 修订已删除或归属错误 | 编辑保存、启动 |
 | `expert_revision_conflict` | 保存时 expectedRevision 过期 | Expert 编辑器 |
+| `expert_in_use` | 删除仍被 Run 快照引用的专家 | Expert 卡片、配置页 |
 | `expert_skill_missing` | 预设引用的 Skill/修订不存在 | Expert 详情、启动 |
 | `skill_blocked` | Skill 未启用、未信任、环境/依赖不可用 | Composer、发送边界 |
 | `skill_limit_exceeded` | 合并后超过 6 项 | Composer、上下文保存 |

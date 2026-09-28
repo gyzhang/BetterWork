@@ -14,6 +14,7 @@ import {
   createMemoryRequestSchema,
   declareArtifactSourcesRequestSchema,
   deletedResultSchema,
+  deleteExpertRequestSchema,
   deleteKnowledgeCollectionRequestSchema,
   deleteMcpConnectionRequestSchema,
   deleteSkillRequestSchema,
@@ -491,6 +492,12 @@ const api: BetterWorkDesktopApi = {
         IpcChannel.SetExpertLifecycle,
         setExpertLifecycleRequestSchema.parse(input),
         expertMutationResultSchema,
+      ),
+    delete: (input) =>
+      invokeValidated(
+        IpcChannel.DeleteExpert,
+        deleteExpertRequestSchema.parse(input),
+        deletedResultSchema,
       ),
   },
   taskContexts: {

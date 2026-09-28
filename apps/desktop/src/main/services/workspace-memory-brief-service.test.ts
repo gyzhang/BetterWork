@@ -74,6 +74,8 @@ const lostEventProvenance = (runId: string, excerpt: string): MemoryProvenance =
 const expertDraft = (name: string): ExpertRevisionDraft => ({
   name,
   summary: '按公司规则完成经营分析',
+  author: '',
+  tags: [],
   identity: '你负责经营分析和报告交付。',
   principles: ['先核对口径，再分析数据'],
   inputRequirements: ['本期经营数据'],

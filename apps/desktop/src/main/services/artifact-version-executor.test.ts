@@ -17,6 +17,8 @@ const directories: string[] = [];
 const expertRevision: ExpertRevisionDraft = {
   name: '经营分析专家',
   summary: '按用户口径完成经营分析',
+  author: '',
+  tags: [],
   identity: '负责经营分析。',
   principles: [],
   inputRequirements: [],

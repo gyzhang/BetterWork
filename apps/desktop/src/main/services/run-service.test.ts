@@ -307,6 +307,8 @@ describe('RunService', () => {
       revision: {
         name: '经营分析专家',
         summary: '使用工作区规则完成经营分析',
+        author: '',
+        tags: [],
         identity: '负责经营分析。',
         principles: [],
         inputRequirements: [],
@@ -321,6 +323,8 @@ describe('RunService', () => {
       revision: {
         name: '其他专家',
         summary: '其他专家',
+        author: '',
+        tags: [],
         identity: '不应被当前专家读取。',
         principles: [],
         inputRequirements: [],
@@ -1001,6 +1005,8 @@ describe('RunService', () => {
       revision: {
         name: '经营分析专家',
         summary: '取消后仍保留本次运行的专家身份',
+        author: '',
+        tags: [],
         identity: '负责经营分析。',
         principles: [],
         inputRequirements: [],
@@ -1068,6 +1074,8 @@ describe('RunService', () => {
       revision: {
         name: '连续报告专家',
         summary: '每期独立执行的报告专家',
+        author: '',
+        tags: [],
         identity: '负责连续期间报告。',
         principles: [],
         inputRequirements: [],
@@ -2033,6 +2041,8 @@ describe('RunService', () => {
       revision: {
         name: '只读专家',
         summary: '只允许读取工作区文件',
+        author: '',
+        tags: [],
         identity: '负责只读检查。',
         principles: [],
         inputRequirements: [],

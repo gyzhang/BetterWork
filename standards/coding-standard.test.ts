@@ -1046,6 +1046,27 @@ describe('界面观感基线', () => {
     ).toEqual([]);
   });
 
+  /**
+   * 「一排次级动作」竖成一列、每颗按钮占满一整行，是 2026-09-28 专家详情页被抓到的同类错误，
+   * 也是光哥明确点名「已经犯过无数次」的那一类（docs/10 §10.1）。动作条的宽度由内容决定，
+   * 放不下才换行；真正的纵向清单（下拉菜单项）按白名单登记，它不是「一排动作」。
+   * `@media` 里的重排不算：窄视口把一排动作折成列是 docs/10 认可的手段，不是设计失误。
+   */
+  it('动作条不得把一排就地按钮竖成一列', () => {
+    const VERTICAL_MENUS = ['.workspace-selector-actions'];
+    const offenders = declarations
+      .filter((declaration) => declaration.property === 'flex-direction')
+      .filter((declaration) => declaration.value === 'column')
+      .filter((declaration) => !declaration.selector.startsWith('@media'))
+      .filter((declaration) => /-actions\b/.test(declaration.selector))
+      .filter((declaration) => !VERTICAL_MENUS.some((name) => declaration.selector.includes(name)))
+      .map((declaration) => locate(declaration, styles ?? ''));
+    expect(
+      offenders,
+      '一排就地动作必须横排、放不下才换行；竖成一列会让每颗按钮占满整行（docs/10 §9.8、§10.1）',
+    ).toEqual([]);
+  });
+
   it('焦点环只有一种写法', () => {
     const offenders = declarations
       .filter((declaration) => declaration.property === 'outline')

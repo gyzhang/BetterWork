@@ -27,6 +27,7 @@ import {
   createTaskRequestSchema,
   declareArtifactSourcesRequestSchema,
   deletedResultSchema,
+  deleteExpertRequestSchema,
   deleteKnowledgeCollectionRequestSchema,
   deleteMcpConnectionRequestSchema,
   deleteSkillRequestSchema,
@@ -1351,6 +1352,9 @@ function registerExpertChannels({ expertService }: IpcDependencies): void {
       expert: expertService.setLifecycle(input.expertId, input.lifecycle, input.expectedRevision),
     }),
   );
+  handleInput(IpcChannel.DeleteExpert, deleteExpertRequestSchema, deletedResultSchema, (input) => ({
+    deleted: expertService.delete(input.expertId),
+  }));
 }
 
 function registerMemoryChannels({

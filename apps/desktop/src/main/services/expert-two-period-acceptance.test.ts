@@ -79,6 +79,8 @@ describe('Expert two-period acceptance path', () => {
       revision: {
         name: '经营分析专家',
         summary: '复用规则和历史报告完成月度分析',
+        author: '',
+        tags: [],
         identity: '负责月度经营分析和报告交付。',
         principles: ['先核对规则，再比较期间数据'],
         inputRequirements: ['本期经营数据'],

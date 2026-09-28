@@ -394,10 +394,21 @@ export const mcpToolBindingSchema = z
   .strict();
 export type McpToolBinding = z.infer<typeof mcpToolBindingSchema>;
 
+/** 用途标签：卡片上「这个专家干什么用」的只读片段，不参与执行解析。 */
+export const expertTagSchema = z.string().trim().min(1).max(40);
+export const expertTagsSchema = z
+  .array(expertTagSchema)
+  .max(6)
+  .refine((tags) => new Set(tags).size === tags.length, { message: '用途标签不能重复' });
+export type ExpertTag = z.infer<typeof expertTagSchema>;
+
 export const expertRevisionDraftSchema = z
   .object({
     name: z.string().trim().min(1).max(160),
     summary: z.string().trim().max(2_000),
+    /** 作者署名：内置专家随发布清单声明，用户专家自己填。空串表示不署名。 */
+    author: z.string().trim().max(160),
+    tags: expertTagsSchema,
     avatarKey: z.string().trim().min(1).max(160).optional(),
     identity: z.string().trim().min(1).max(20_000),
     principles: z.array(z.string().trim().min(1).max(2_000)).max(100),
@@ -429,6 +440,8 @@ export const expertSummarySchema = z
     lifecycle: expertLifecycleSchema,
     name: z.string(),
     summary: z.string(),
+    author: z.string(),
+    tags: z.array(z.string()),
     currentRevision: z.number().int().positive(),
     blockedReasons: z.array(expertBlockedReasonSchema),
     createdAt: z.number().int().nonnegative(),
@@ -477,6 +490,9 @@ export const setExpertLifecycleRequestSchema = z
   })
   .strict();
 export type SetExpertLifecycleRequest = z.infer<typeof setExpertLifecycleRequestSchema>;
+
+export const deleteExpertRequestSchema = z.object({ expertId: z.string().min(1) }).strict();
+export type DeleteExpertRequest = z.infer<typeof deleteExpertRequestSchema>;
 
 export const expertMutationResultSchema = z.object({ expert: expertDetailSchema }).strict();
 export type ExpertMutationResult = z.infer<typeof expertMutationResultSchema>;
@@ -4793,6 +4809,7 @@ export const IpcChannel = {
   SaveExpertRevision: 'expert:save-revision',
   CopyExpert: 'expert:copy',
   SetExpertLifecycle: 'expert:set-lifecycle',
+  DeleteExpert: 'expert:delete',
   GetTaskContext: 'task-context:get',
   SaveTaskContext: 'task-context:save',
   ListDiscussionCheckpoints: 'discussion-checkpoint:list',
@@ -4972,6 +4989,7 @@ export interface BetterWorkDesktopApi {
     saveRevision(input: SaveExpertRevisionRequest): Promise<ExpertMutationResult>;
     copy(input: CopyExpertRequest): Promise<ExpertMutationResult>;
     setLifecycle(input: SetExpertLifecycleRequest): Promise<ExpertMutationResult>;
+    delete(input: DeleteExpertRequest): Promise<{ deleted: boolean }>;
   };
   taskContexts: {
     get(input: GetTaskContextRequest): Promise<TaskContextRevision | null>;

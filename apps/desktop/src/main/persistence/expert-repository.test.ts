@@ -16,6 +16,8 @@ const draft = (
 ): ExpertRevisionDraft => ({
   name: typeof nameOrOverrides === 'string' ? nameOrOverrides : '经营分析专家',
   summary: '按公司规则完成经营分析',
+  author: '',
+  tags: [],
   identity: '你负责经营分析和报告交付。',
   principles: ['先核对口径，再分析数据'],
   inputRequirements: ['本期经营数据'],
@@ -101,5 +103,35 @@ describe('ExpertRepository', () => {
     expect(store.experts.list()).toEqual([]);
     expect(store.experts.list(true)).toHaveLength(1);
     expect(store.experts.get(created.id)?.revision.name).toBe('经营分析专家');
+  });
+
+  it('persists the author signature and capability tags on every revision', () => {
+    const store = openStore();
+    const created = store.experts.create({
+      sourceKind: 'user',
+      revision: draft({ author: '财务组', tags: ['经营分析', '月度复盘'] }),
+    });
+    expect(created.author).toBe('财务组');
+    expect(created.tags).toEqual(['经营分析', '月度复盘']);
+    const updated = store.experts.saveRevision(
+      created.id,
+      draft({ author: '财务二组', tags: ['经营分析'] }),
+      1,
+    );
+    expect(updated.revision.author).toBe('财务二组');
+    expect(updated.revision.tags).toEqual(['经营分析']);
+    const copy = store.experts.copy(updated.id);
+    expect(copy.revision.author).toBe('财务二组');
+    expect(copy.revision.tags).toEqual(['经营分析']);
+  });
+
+  it('removes an expert that no run references and reports nothing left behind', () => {
+    const store = openStore();
+    const created = store.experts.create({ sourceKind: 'user', revision: draft() });
+    expect(store.experts.countRunReferences(created.id)).toBe(0);
+    expect(store.experts.remove(created.id)).toBe(true);
+    expect(store.experts.get(created.id)).toBeUndefined();
+    expect(store.experts.list()).toEqual([]);
+    expect(store.experts.remove(created.id)).toBe(false);
   });
 });

@@ -63,6 +63,14 @@ export const ExpertIcon = (props: IconProps): React.JSX.Element => (
   </Icon>
 );
 
+/** 召唤：四角星闪光，表示把一个专家请进来开始工作，与发送（ArrowUp）区分开。 */
+export const SummonIcon = (props: IconProps): React.JSX.Element => (
+  <Icon {...props}>
+    <path d="M12 5.5Q12 12 18.5 12 12 12 12 18.5 12 12 5.5 12 12 12 12 5.5Z" />
+    <path d="M18.8 5.2v2.4M17.6 6.4h2.4" />
+  </Icon>
+);
+
 export const GlobeIcon = (props: IconProps): React.JSX.Element => (
   <Icon {...props}>
     <circle cx="12" cy="12" r="8.5" />

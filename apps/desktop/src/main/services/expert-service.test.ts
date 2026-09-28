@@ -14,6 +14,8 @@ const openStore = (): AppStore => {
 const draft = (overrides?: Partial<ExpertRevisionDraft>): ExpertRevisionDraft => ({
   name: '经营分析专家',
   summary: '按公司规则完成经营分析',
+  author: '',
+  tags: [],
   identity: '你负责经营分析和报告交付。',
   principles: ['先核对口径，再分析数据'],
   inputRequirements: ['本期经营数据'],
@@ -36,6 +38,8 @@ describe('ExpertService', () => {
       expertId: 'builtin-research-analyst',
       name: '研究分析专家',
       summary: '整理可验证的分析结论',
+      author: '算台团队',
+      tags: ['研究分析', '证据梳理'],
       identity: '你负责研究分析。',
       principles: ['区分事实和推断'],
       inputRequirements: [],
@@ -48,6 +52,11 @@ describe('ExpertService', () => {
     expect(service.registerBuiltinRelease([entry])).toHaveLength(1);
     const registered = service.get(entry.expertId);
     expect(registered?.sourceKind).toBe('builtin');
+    // 卡片要按署名与用途标签介绍内置专家：清单里声明的字段必须出现在摘要上。
+    expect(service.list()[0]).toMatchObject({
+      author: '算台团队',
+      tags: ['研究分析', '证据梳理'],
+    });
     service.setLifecycle(entry.expertId, 'disabled', registered?.currentRevision ?? 1);
     const copy = service.copy(entry.expertId, '我的研究分析专家');
     const upgraded = service.registerBuiltinRelease([
@@ -179,5 +188,85 @@ describe('ExpertService', () => {
     expect(() => service.saveRevision(created.id, draft({ summary: '过期草稿' }), 1)).toThrowError(
       expect.objectContaining<Partial<ExpertServiceError>>({ code: 'expert_revision_conflict' }),
     );
+  });
+
+  it('carries author and capability tags into the summary and into a copy', () => {
+    const store = openStore();
+    const service = new ExpertService(store);
+    const created = service.create(draft({ author: '财务组', tags: ['经营分析', '月度复盘'] }));
+    expect(service.list()[0]).toMatchObject({ author: '财务组', tags: ['经营分析', '月度复盘'] });
+    expect(service.copy(created.id)).toMatchObject({
+      author: '财务组',
+      tags: ['经营分析', '月度复盘'],
+    });
+  });
+
+  it('rejects duplicate capability tags at the Expert boundary', () => {
+    const store = openStore();
+    const service = new ExpertService(store);
+    expect(() => service.create(draft({ tags: ['经营分析', '经营分析'] }))).toThrow();
+  });
+
+  it('deletes an unused expert together with all of its revisions', () => {
+    const store = openStore();
+    const service = new ExpertService(store);
+    const created = service.create(draft());
+    service.saveRevision(created.id, draft({ summary: '新规则' }), created.currentRevision);
+    expect(service.delete(created.id)).toBe(true);
+    expect(service.get(created.id)).toBeUndefined();
+    const rows = store.experts.list(true);
+    expect(rows.find((row) => row.id === created.id)).toBeUndefined();
+  });
+
+  it('refuses to delete a builtin expert and one the run history still references', () => {
+    const store = openStore();
+    const service = new ExpertService(store);
+    service.registerBuiltinRelease([
+      {
+        expertId: 'builtin-keep-me',
+        name: '内置专家',
+        summary: '',
+        identity: '负责研究分析。',
+        principles: [],
+        inputRequirements: [],
+        deliveryRequirements: [],
+        skillPreset: [],
+        builtinToolPolicy: { mode: 'application-defaults' },
+        modelReference: { mode: 'application-default' },
+      },
+    ]);
+    expect(() => service.delete('builtin-keep-me')).toThrowError(
+      expect.objectContaining<Partial<ExpertServiceError>>({ code: 'expert_builtin_readonly' }),
+    );
+    expect(() => service.delete('missing-expert')).toThrowError(
+      expect.objectContaining<Partial<ExpertServiceError>>({ code: 'expert_not_found' }),
+    );
+
+    const created = service.create(draft());
+    const workspace = store.workspaces.getOrCreate('/tmp/expert-delete-guard', '删除守卫');
+    const task = store.tasks.create(workspace.id, '历史任务', '验证删除守卫');
+    store.runs.create({
+      id: 'run-expert-delete',
+      taskId: task.task.id,
+      sessionId: task.sessionId,
+      prompt: '测试',
+      status: 'completed',
+      createdAt: 1,
+    });
+    store.runContextSnapshots.create({
+      runId: 'run-expert-delete',
+      taskId: task.task.id,
+      workspaceId: workspace.id,
+      expertId: created.id,
+      expertRevisionId: created.revision.id,
+      contextSegmentId: 'segment-delete-guard',
+      materials: [],
+      createdAt: 2,
+    });
+    expect(() => service.delete(created.id)).toThrowError(
+      expect.objectContaining<Partial<ExpertServiceError>>({ code: 'expert_in_use' }),
+    );
+    // 挡下之后原对象必须还在：删除失败不能留下半个库。
+    expect(service.get(created.id)?.id).toBe(created.id);
   });
 });

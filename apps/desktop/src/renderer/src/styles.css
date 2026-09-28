@@ -1657,16 +1657,33 @@ small {
   color: var(--warning);
   font-size: 12px;
 }
-/* 卡片与详情里的动作列：上下相邻的按钮之间必须有可见缝（§9.8），
-   间距由容器 gap 拥有。这条规则此前与下面两个页面外壳共用一份，
-   外壳不能带 gap（页头与滚动区各自定位），于是动作列也没拿到缝。 */
+/* 召唤是悬停才显形的主动作：平时卡片只交代「这是谁、谁做的、第几版、干什么用」。
+   只压视觉不摘可及性——位置一直留着，键盘进卡片由 :focus-within 显形，
+   读屏也始终听得到这颗按钮。 */
+.expert-card-summon {
+  flex: none;
+  opacity: 0;
+  transition: opacity var(--motion-instant) var(--motion-easing);
+}
+.expert-card:hover .expert-card-summon,
+.expert-card:focus-within .expert-card-summon {
+  opacity: 1;
+}
+/* 用途标签与状态片共用一行；标签本身是 Badge，这里只排行。 */
+.expert-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* 一排就地动作：卡片页脚与详情小节共用同一口径——按钮宽度由内容决定，
+   放不下才换行。次级动作竖成一列各占一整行，会把一小排动作读成一堵表单墙
+   （docs/10 §9.8、§10.1，护栏见 coding-standard「动作条不得把一排就地按钮竖成一列」）。 */
 .expert-card-actions,
 .expert-detail-actions {
   display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
 }
 .expert-editor,
 .expert-detail-page {
@@ -1737,8 +1754,22 @@ small {
   width: 14px;
   height: 14px;
 }
+/* 详情页头部三行（署名·版本／简介／用途标签）是一组：行距归这里的 gap，
+   子元素不自带上下 margin；最后一行与下面小节的上边框之间必须留白，
+   否则标签会贴死分割线（docs/10 §9.8）。 */
+.expert-detail-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 16px;
+}
+.expert-detail-byline {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
 .expert-detail-summary {
-  margin: 0 0 22px;
+  margin: 0;
   color: var(--text-secondary);
   font-size: 15px;
   line-height: 1.6;

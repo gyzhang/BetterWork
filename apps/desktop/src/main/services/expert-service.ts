@@ -14,7 +14,8 @@ export type ExpertErrorCode =
   | 'expert_builtin_readonly'
   | 'expert_revision_conflict'
   | 'expert_invalid_tool'
-  | 'expert_invalid_mcp';
+  | 'expert_invalid_mcp'
+  | 'expert_in_use';
 
 export class ExpertServiceError extends Error {
   constructor(
@@ -68,6 +69,8 @@ const addReason = (reasons: Set<ExpertBlockedReason>, reason: ExpertBlockedReaso
 const sameRevision = (current: ExpertDetail['revision'], draft: ExpertRevisionDraft): boolean =>
   current.name === draft.name &&
   current.summary === draft.summary &&
+  current.author === draft.author &&
+  JSON.stringify(current.tags) === JSON.stringify(draft.tags) &&
   current.identity === draft.identity &&
   JSON.stringify(current.principles) === JSON.stringify(draft.principles) &&
   JSON.stringify(current.inputRequirements) === JSON.stringify(draft.inputRequirements) &&
@@ -83,6 +86,10 @@ export interface BuiltinExpertReleaseEntry {
   expertId: string;
   name: string;
   summary: string;
+  /** 发布方署名；缺省表示不署名。 */
+  author?: string;
+  /** 用途标签，卡片上用来一眼看出这个专家干什么。 */
+  tags?: string[];
   identity: string;
   principles: string[];
   inputRequirements: string[];
@@ -109,6 +116,8 @@ export class ExpertService {
         lifecycle: detail.lifecycle,
         name: detail.name,
         summary: detail.summary,
+        author: detail.author,
+        tags: detail.tags,
         currentRevision: detail.currentRevision,
         blockedReasons: detail.blockedReasons,
         createdAt: detail.createdAt,
@@ -143,6 +152,8 @@ export class ExpertService {
       const draft = validateDraft({
         name: entry.name,
         summary: entry.summary,
+        author: entry.author ?? '',
+        tags: entry.tags ?? [],
         identity: entry.identity,
         principles: entry.principles,
         inputRequirements: entry.inputRequirements,
@@ -251,6 +262,27 @@ export class ExpertService {
       }
       throw error;
     }
+  }
+
+  /**
+   * 删除一个用户专家。内置专家由发布清单在每次启动时重新登记，删了也还会回来，
+   * 所以直接拒绝；被历史 Run 引用过的专家删掉会让「当时用的是谁」无法解释，
+   * 只能改走归档。
+   */
+  delete(id: string): boolean {
+    const existing = this.store.experts.get(id);
+    if (!existing) throw new ExpertServiceError('expert_not_found', `Expert 不存在：${id}`);
+    if (existing.sourceKind === 'builtin') {
+      throw new ExpertServiceError('expert_builtin_readonly', '内置 Expert 不可删除，可先停用');
+    }
+    const references = this.store.experts.countRunReferences(id);
+    if (references > 0) {
+      throw new ExpertServiceError(
+        'expert_in_use',
+        `该专家已参与 ${references} 次运行，删除会让历史记录无法解释当时使用的专家，请改用归档`,
+      );
+    }
+    return this.store.experts.remove(id);
   }
 
   private withStatus(expert: ExpertDetail): ExpertDetail {

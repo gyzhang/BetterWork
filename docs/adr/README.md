@@ -29,6 +29,7 @@
 | [0025](0025-remote-mcp-and-capability-bindings.md) | Remote MCP and versioned capability bindings | Proposed; documentation only |
 | [0026](0026-work-centered-memory.md) | 工作型记忆的召回、来源治理与提炼边界 | Proposed（已按用户开工指令实施，接受状态待用户确认；WM01–WM15 有自动化证据） |
 | [0027](0027-knowledge-foundation.md) | 固定知识修订、受限读取与可重建混合检索 | Proposed（仅文档，尚未编码） |
+| [0030](0030-expert-card-metadata-and-deletion.md) | 专家卡片元信息与硬删除边界 | Accepted（2026-09-28 实施；0029 预留给工作空间身份记录） |
 
 [ADR-0027](0027-knowledge-foundation.md)（Proposed，2026-09-24 文档归档）提出固定知识修订正文读取、嵌入/混合检索、索引作业与显式成果来源声明；延续 ADR-0014/0018，拟细化 ADR-0005 的访问与采用语义，不改变 WM 的非向量记忆召回。产品见[知识基础闭环](../designs/knowledge-foundation.md)，字段见[知识契约](../development/knowledge-contracts.md)，状态只看 [KM 任务板](../development/tasks-knowledge.md)。
 
