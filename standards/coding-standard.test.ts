@@ -445,7 +445,6 @@ describe('界面 Token 纪律', () => {
     // 只留图标的写法，不属于「用小字号换空间」。
     const exemptions = [
       { match: '.brand small', reason: '品牌字标' },
-      { match: '.current-badge', reason: '当前模型徽标' },
       { match: '.completed-work-icon', reason: '成果格式徽标' },
       { match: '.knowledge-format', reason: '资料格式徽标（MD/PDF/DOC/TXT）' },
       { match: '.notification-badge', reason: '未读数徽标' },
@@ -745,18 +744,20 @@ describe('浮层基座纪律', () => {
     );
     const offenders: string[] = [];
     for (const relative of rendererFiles) {
-      if (owners.includes(relative)) continue;
       const body = read(relative);
-      const usesBase =
-        body.includes('useOverlaySemantics') ||
-        /from '.*\/Modal'/.test(body) ||
-        /from '.*\/PopoverMenu'/.test(body);
       const bespoke: string[] = [];
-      if (!usesBase && /role="dialog"|role="alertdialog"/.test(body))
-        bespoke.push('自写 role=dialog');
-      if (!usesBase && /aria-modal/.test(body)) bespoke.push('自写 aria-modal');
-      if (!usesBase && /key === 'Escape'/.test(body)) bespoke.push('自写 Esc 处理');
+      // 旧背板类是退役绊线：最可能把它写回来的正是基座自己，所以这条不吃 owners 豁免。
       if (/sheet-backdrop|dialog-backdrop/.test(body)) bespoke.push('引用已收编的旧背板类');
+      if (!owners.includes(relative)) {
+        const usesBase =
+          body.includes('useOverlaySemantics') ||
+          /from '.*\/Modal'/.test(body) ||
+          /from '.*\/PopoverMenu'/.test(body);
+        if (!usesBase && /role="dialog"|role="alertdialog"/.test(body))
+          bespoke.push('自写 role=dialog');
+        if (!usesBase && /aria-modal/.test(body)) bespoke.push('自写 aria-modal');
+        if (!usesBase && /key === 'Escape'/.test(body)) bespoke.push('自写 Esc 处理');
+      }
       if (bespoke.length > 0) offenders.push(`${relative}：${bespoke.join('、')}`);
     }
     expect(offenders, '模态与覆盖层请复用 Modal／useOverlaySemantics（docs/10 §10.1）').toEqual([]);
@@ -1511,10 +1512,8 @@ const MICRO_MARK_RADII: {
   readonly reason: string;
 }[] = [
   { match: '.composer-footer kbd', value: '4px', reason: '键帽' },
-  { match: '.current-badge', value: '4px', reason: '当前模型徽标' },
   { match: '.mode-preview b', value: '4px', reason: '外观模式预览色板' },
   { match: '.scheme-preview i', value: '3px', reason: '色系预览色块' },
-  { match: '.artifact-evidence-list b', value: '4px', reason: '来源格式微标' },
 ];
 
 describe('徽标与档位纪律', () => {
@@ -1530,7 +1529,6 @@ describe('徽标与档位纪律', () => {
    */
   const NON_BADGE_CHIP_CLASSES: { readonly match: string; readonly reason: string }[] = [
     { match: '.badge', reason: 'Badge 基座自己' },
-    { match: '.chip-button', reason: '具名按钮皮类（docs/10 §10.1），不是状态片' },
     { match: '.binding-chip', reason: 'BindingChip 基座自己：可移除的绑定片，不是只读状态' },
     { match: '.tool-pill', reason: '工具调用活动条：整片是按钮，选中态走 aria-expanded' },
     { match: '.notification-badge', reason: '未读数角标：图形化标识，Badge 文档明确排除' },
@@ -1679,9 +1677,10 @@ describe('列表行基座纪律', () => {
   });
 
   it('留在行上的领域钩子不再自带几何', () => {
-    // 迁进 ListRow 后，`.memory-row` 这样的名字还要承担状态外观（左侧状态条、降饱和）。
-    // 允许它活着的前提是行骨架不从它身上长回来——否则第 13 套行几何只是换了个入口。
-    const ROW_HOOK_CLASSES = ['memory-row'];
+    // 迁进 ListRow 后，`.memory-row` 这样的名字还要承担状态外观（左侧状态条、降饱和），
+    // `.suggestion-job-row` 只承担一层抬升底色。允许它们活着的前提是行骨架不从它们身上
+    // 长回来——否则第 13 套行几何只是换了个入口。
+    const ROW_HOOK_CLASSES = ['memory-row', 'suggestion-job-row'];
     const offenders = declarations
       .map((declaration) => ({
         declaration,
@@ -2046,7 +2045,6 @@ const BUTTON_APPEARANCE_PROPERTIES = [
 const BUTTON_BASE_OWNERS = [
   /^button\b/,
   /^\.btn\b/,
-  /^\.icon-button\b/,
   /^\.tabs\b/,
   /^\.segmented-control\b/,
   /^\.list-row\b/,
@@ -2212,11 +2210,8 @@ describe('导航列表纪律', () => {
   expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
   const declarations = declarationsOf(styles ?? '');
 
-  /** 基座自己渲染 `' active'` 高亮（键盘项），它们的类名与状态词不算自造选中态。 */
-  const NAV_BASE_FILES = [
-    'apps/desktop/src/renderer/src/components/NavList.tsx',
-    'apps/desktop/src/renderer/src/components/PopoverMenu.tsx',
-  ];
+  /** 基座自己渲染 `' active'` 高亮（键盘项），它的类名与状态词不算自造选中态。 */
+  const NAV_BASE_FILES = ['apps/desktop/src/renderer/src/components/PopoverMenu.tsx'];
 
   it('选中态不得再用一个 `.active` 类表达', () => {
     // §3.1 P10：CSS 类不是 ARIA。用 `className={当前 ? 'active' : ''}` 表达「这是当前项」，
@@ -2413,7 +2408,10 @@ describe('消息流与输入区纪律', () => {
     // 同一个运行在两个列表里报出的层次不同（docs/reviews/2026-09-27-ui-reuse-audit.md §3.2）。
     const offenders = productionPathsUnder('apps/desktop/src/renderer/')
       .filter((relative) => !relative.endsWith('components/RunSummaryRow.tsx'))
-      .filter((relative) => /runStatusName\[[^\]]*\]\}\s·\s\$\{formatTime/.test(read(relative)));
+      // 锚点只认「状态词 ＋ 中点 ＋ 一个插值」，不认是哪个格式化函数：基座自己把时间
+      // 提出了局部变量（compact 档走 relativeTime、常规档走 formatTime），把函数名写进
+      // 锚点等于只守一半——页面照抄 compact 那句就绕过去了。
+      .filter((relative) => /runStatusName\[[^\]]*\]\}\s·\s\$\{/.test(read(relative)));
     expect(offenders, '运行摘要行的措辞归 RunSummaryRow，页面不再自己拼（docs/10 §10.1）').toEqual(
       [],
     );

@@ -33,8 +33,8 @@
 | P1-4 | `standards:1508` `MICRO_MARK_RADII` | `.artifact-evidence-list b` 死条目：该后代规则已不存在（容器本体在 `styles.css:4257`） | 删条目；`docs/10:515`「5 处」改 3 处 |
 | P1-5 | `standards:1531` `NON_BADGE_CHIP_CLASSES` | `.chip-button` 死条目：活代码 0，仅 `styles.css:1061`／`3633` 注释提及；同名类另在 button 家族的退役清单里 | 删条目 |
 | P1-6 | `standards:2216` `NAV_BASE_FILES` | `NavList.tsx` 死条目：登记的豁免理由是「基座自己渲染 `' active'` 高亮」，而该文件活代码已无 `active`（`NavList.tsx:100` 是注释），改用 `aria-current`／`data-selected` | 删条目并核对护栏仍绿 |
-| P1-7 | `standards:1831`、`standards:2046` | 两条**从未被行使**的豁免：`HEADING_RULE_OWNERS` 的 `/^\.section-header/`（基座两档字号写在类选择器上，不含 `h1-h6` 词，进不了过滤器）与 `BUTTON_BASE_OWNERS` 的 `/^\.icon-button\b/`（`.icon-button` 既不含裸词 `button` 也不含 `.btn`） | 删或改写；留着等于给后来人一个「再加一行豁免」的模板 |
-| P1-8 | `standards:759` | 模态护栏里 `sheet-backdrop\|dialog-backdrop` 这一支全仓 0 命中（同规则其余锚点有 8 处命中，整条不空转） | 删该支或改锚点到现用类名 |
+| P1-7 | `standards:1828`、`standards:2043` | 两条豁免都「从未被行使」，但**性质不同**：`BUTTON_BASE_OWNERS` 的 `/^\.icon-button\b/` 是**结构性不可达**——`stylesAButton`（`standards:2170`）要求 `button` 前面是 `,`／`>`／空白／`(`／`+`，连字符不算，`.icon-button` 永远进不了 population；`HEADING_RULE_OWNERS` 的 `/^\.section-header/` 是**可达但当前未行使**（`.section-header h2` 一旦出现就会用到它） | 前者已删（纯噪声，还会误导读者以为图标按钮需要豁免；它的外观另由「图标按钮与动作条的外观只由基座的选择器拥有」那条管）；后者**保留**，它是基座的正当登记而非死条目。子代理把两条归成一类，判定被主线推翻 |
+| P1-8 | `standards:758` | `sheet-backdrop\|dialog-backdrop` 全仓 0 命中，但这是**退役绊线**——命中 0 正是它在工作，按 §1 判据不算 P1（子代理归类错误）。真缺陷是它躲在 `if (owners.includes(relative)) continue` 后面：最可能把旧背板类写回来的正是 `Modal.tsx`／`notifications.tsx` 这两个 owner，而它们被整文件跳过 | 已把这条检查提到 owners 豁免之前；变异验证：往 `Modal.tsx` 的 JSDoc 里写一个 `sheet-backdrop` → 精确报红 |
 
 ## 3. P2 文档声明与强制点断线（10 条）
 
@@ -104,7 +104,9 @@
 | B5 | P2-1／P2-2／P2-4／P2-6／P2-7／P2-8／P2-9 ＋ P2-5 的三项（字号构成、圆角 5→3 处、`App.tsx` 1,876→1,829 行） | ✅ 已回读 |
 | B6 | P3-5（`tone` 四档，三处全错）、P3-6（卡片可点区只包 `.card-main`）、P3-7（Disclosure 四个入口，`open`／`onToggle` 是内部状态） | ✅ 已回读 |
 | — | 门禁：`npx vitest run --project functional standards/coding-standard.test.ts` → **90 passed / EXIT=0**（负载 100.25 下跑的；本批只动文档与一处 JSDoc 注释） | ✅ |
-| B4 | P1-1～P1-8：护栏锚点与死豁免，逐条变异验证 | ⬜ 下一批 |
+| B4 | P1-1～P1-8：护栏锚点与死豁免。已修 6 条（运行摘要锚点放宽、`.suggestion-job-row` 补进行钩子清单、`.current-badge`×2／`.artifact-evidence-list b`／`.chip-button` 四条死豁免删除、`NavList.tsx` 白名单删除＋其 JSDoc 里那个会挡枪的 `className={…'active'…}` 字面量改写、`/^\.icon-button\b/` 删除、旧背板绊线提到 owners 豁免之前）；P1-7 的 `/^\.section-header/` 与 P1-8 的绊线本体经复核**保留**，理由见 §2 | ✅ |
+| — | B4 变异验证四发，每发都精确点名注入点、还原后工作树无残留：**M1** 探针文件写 compact 档措辞 → 报红；再用 node 单独跑两个正则证明**旧锚点对同一串命中 false**（漏洞是真的，不是我想象的）。**M2** 给 `.suggestion-job-row` 加 `gap: 8px` → 报红；把清单退回 `['memory-row']` 后同一条变异 **EXIT=0 静默通过**（反证成立）。**M3** 往 owner `Modal.tsx` 的 JSDoc 写 `sheet-backdrop` → 报红（改前该文件被 `continue` 整文件跳过）。**M4** 追加 `.mutation-probe { font-size: 10px }` → 报红，证明删掉 `.current-badge` 豁免没有把字号护栏一起拔掉 | ✅ |
+| — | 门禁：护栏＋`NavList.test.tsx`＋`Button.test.tsx` → **3 文件 / 103 用例全绿，EXIT=0**；`prettier --check` 干净；`tsc --noEmit` EXIT=0（负载 7.67） | ✅ |
 | B6′ | P3-8～P3-10、P3-12～P3-17：其余口径归一（标题例外两张表、字号阈值三档、色值例外四套、图标例外、定宽列、空态档数、多选、Toast 数量、AGENTS/docs12 覆盖缺口） | ⬜ |
 | B7 | P2-3（台账补 7 行）、P2-5 余下计数校准、P2-10（15 处 §3.x／§4.x 引用点名到 reviews 文件） | ⬜ |
 | B8 | 收口：全量 verify（跑前看负载）＋当日日志＋记忆更新 | ⬜ |
