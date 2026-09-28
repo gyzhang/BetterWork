@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react';
 
 import { ActionBar } from './ActionBar';
 import { AsyncButton } from './AsyncButton';
+import { Button } from './Button';
 import { Field } from './Field';
 import { FieldSelect } from './FieldSelect';
 import { SectionHeader } from './SectionHeader';
@@ -91,13 +92,14 @@ export function DiscussionCheckpointPanel({
         eyebrow="讨论节点"
         title={latestOpen ? stageLabel(latestOpen.stage) : '尚未记录阶段'}
         actions={
-          <button
+          <Button
+            variant="secondary"
+            size="md"
             type="button"
-            className="secondary-button"
             onClick={() => setExpanded((current) => !current)}
           >
             {expanded ? '收起' : '记录节点'}
-          </button>
+          </Button>
         }
       />
       {latestOpen && (

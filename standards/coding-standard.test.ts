@@ -740,9 +740,9 @@ describe('浮层基座纪律', () => {
   });
 });
 
-/** 表单控件与三档按钮的几何必须来自 Token；这些正则与迁移脚本保持同一套口径。 */
+/** 表单控件与按钮基座的几何必须来自 Token；这些正则与迁移脚本保持同一套口径。 */
 const CONTROL_SELECTOR =
-  /(^|[,>\s])input\b|(^|[,>\s])select\b|(^|[,>\s])textarea\b|\.field-select-trigger|\.primary-button|\.secondary-button|\.text-button/;
+  /(^|[,>\s])input\b|(^|[,>\s])select\b|(^|[,>\s])textarea\b|\.field-select-trigger|\.btn\b|\.icon-button\b/;
 const CONTROL_EXEMPTIONS =
   /checkbox|::placeholder|:focus|:hover|\.workspace-row input|\.composer textarea|textarea\[readonly\]|counted/;
 
@@ -764,8 +764,104 @@ const CHECKBOX_ROW_LABEL_SELECTORS: { readonly match: string; readonly reason: s
 const RETIRED_UTILITY_CLASSES: {
   readonly pattern: RegExp;
   readonly name: string;
-  readonly family: 'action-bar' | 'badge' | 'borrow' | 'empty' | 'heading' | 'nav' | 'row';
+  readonly family:
+    'action-bar' | 'badge' | 'borrow' | 'button' | 'empty' | 'heading' | 'nav' | 'row';
 }[] = [
+  /* === 按钮皮与页面级后代规则（ADR-0031：外观的唯一出口是 `Button`） === */
+  { pattern: /\.primary-button(?![-\w])/, name: '.primary-button', family: 'button' },
+  { pattern: /\.secondary-button(?![-\w])/, name: '.secondary-button', family: 'button' },
+  { pattern: /\.text-button(?![-\w])/, name: '.text-button', family: 'button' },
+  { pattern: /\.chip-button(?![-\w])/, name: '.chip-button', family: 'button' },
+  { pattern: /\.quiet-button(?![-\w])/, name: '.quiet-button', family: 'button' },
+  {
+    pattern: /\.danger-confirm-button(?![-\w])/,
+    name: '.danger-confirm-button',
+    family: 'button',
+  },
+  {
+    pattern: /\.knowledge-research-button(?![-\w])/,
+    name: '.knowledge-research-button',
+    family: 'button',
+  },
+  { pattern: /\.open-source-button(?![-\w])/, name: '.open-source-button', family: 'button' },
+  { pattern: /\.knowledge-more-button(?![-\w])/, name: '.knowledge-more-button', family: 'button' },
+  {
+    pattern: /\.evidence-open-button(?![-\w])/,
+    name: '.evidence-open-button',
+    family: 'button',
+  },
+  { pattern: /\.back-button(?![-\w])/, name: '.back-button', family: 'button' },
+  { pattern: /\.context-toggle(?![-\w])/, name: '.context-toggle', family: 'button' },
+  { pattern: /\.notification-bell(?![-\w])/, name: '.notification-bell', family: 'button' },
+  { pattern: /\.async-button(?![-\w])/, name: '.async-button', family: 'button' },
+  { pattern: /\.examples button/, name: '.examples button', family: 'button' },
+  {
+    pattern: /\.skill-detail-section[^{]*button/,
+    name: '.skill-detail-section :where(button)',
+    family: 'button',
+  },
+  {
+    pattern: /\.memory-conflict-actions button/,
+    name: '.memory-conflict-actions button',
+    family: 'button',
+  },
+  { pattern: /\.knowledge-search button/, name: '.knowledge-search button', family: 'button' },
+  {
+    pattern: /\.page-header-actions button/,
+    name: '.page-header-actions button',
+    family: 'button',
+  },
+  {
+    pattern: /\.knowledge-admin-row[^{]*button/,
+    name: '.knowledge-admin-row button:not(.switch)',
+    family: 'button',
+  },
+  { pattern: /\.knowledge-issues button/, name: '.knowledge-issues button', family: 'button' },
+  {
+    pattern: /\.knowledge-detail-members button/,
+    name: '.knowledge-detail-members button',
+    family: 'button',
+  },
+  {
+    pattern: /\.knowledge-detail-header button/,
+    name: '.knowledge-detail-header button',
+    family: 'button',
+  },
+  {
+    pattern: /\.knowledge-detail-actions button/,
+    name: '.knowledge-detail-actions button',
+    family: 'button',
+  },
+  {
+    pattern: /\.knowledge-revision-row button/,
+    name: '.knowledge-revision-row button',
+    family: 'button',
+  },
+  {
+    pattern: /\.knowledge-detail-pager button/,
+    name: '.knowledge-detail-pager button',
+    family: 'button',
+  },
+  {
+    pattern: /\.composer-footer button/,
+    name: '.composer-footer button',
+    family: 'button',
+  },
+  {
+    pattern: /\.list-row-actions[^{]*button/,
+    name: '.list-row-actions :where(button)',
+    family: 'button',
+  },
+  {
+    pattern: /\.appearance-modes button|\.scheme-grid button/,
+    name: '.appearance-modes button／.scheme-grid button',
+    family: 'button',
+  },
+  {
+    pattern: /\.latest-message-control button/,
+    name: '.latest-message-control button',
+    family: 'button',
+  },
   { pattern: /\.skill-chip(?![-\w])/, name: '.skill-chip', family: 'badge' },
   {
     pattern: /\.dependency-status-chip(?![-\w])/,
@@ -976,7 +1072,7 @@ const RETIRED_UTILITY_CLASSES: {
 /** 把 retired 清单变成一条断言：任一 CSS 文件里都不得再出现这些选择器。 */
 function assertRetiredClassesAbsent(
   offenders: string[],
-  family: 'action-bar' | 'badge' | 'borrow' | 'empty' | 'heading' | 'nav' | 'row',
+  family: 'action-bar' | 'badge' | 'borrow' | 'button' | 'empty' | 'heading' | 'nav' | 'row',
 ): void {
   const retired = RETIRED_UTILITY_CLASSES.filter((entry) => entry.family === family);
   for (const relative of cssPaths()) {
@@ -1568,6 +1664,202 @@ describe('图标按钮与动作条纪律', () => {
     expect(
       offenders,
       '图标按钮的方块归 IconButton；钩子只带位置与自己那份皮（docs/10 §10.1）',
+    ).toEqual([]);
+  });
+});
+
+/**
+ * 基座自己渲染 `<button>` 的文件：它们就是出口本身，不再回头套自己。
+ * 新增一条要写清为什么这件事不能交给 `Button`。
+ */
+const BUTTON_BASE_FILES = [
+  'apps/desktop/src/renderer/src/components/Button.tsx',
+  'apps/desktop/src/renderer/src/components/IconButton.tsx',
+  'apps/desktop/src/renderer/src/components/ListRow.tsx',
+  'apps/desktop/src/renderer/src/components/NavList.tsx',
+  'apps/desktop/src/renderer/src/components/Tabs.tsx',
+  'apps/desktop/src/renderer/src/components/FieldSelect.tsx',
+  'apps/desktop/src/renderer/src/components/Switch.tsx',
+  'apps/desktop/src/renderer/src/components/BindingChip.tsx',
+];
+
+/**
+ * 「形态不是动作按钮」的裸 `<button>`：整片可点的卡片、下拉触发器、状态条与投放区。
+ * 它们套不进 `Button` 的档位（卡片不吃控件高度、触发器的展开态由 `aria-expanded` 表达），
+ * 但每一枚都要在这里带理由登记——不登记就是在基座外另造一套皮（ADR-0031）。
+ */
+const NON_ACTION_BUTTON_SHAPES: { readonly match: string; readonly reason: string }[] = [
+  {
+    match: 'option-card',
+    reason: '外观预览的选择卡：取 --radius-card 与卡片底，不吃三档控件高度',
+  },
+  { match: 'expert-card-main', reason: '整张专家卡的主区可点：它是卡片，不是一排动作' },
+  { match: 'skill-card', reason: '整张技能卡可点：同上' },
+  { match: 'toast-body', reason: '整条通知可点：它是消息行的活动区' },
+  { match: 'tool-activity-toggle', reason: '工具活动条：整片是状态条，展开态走 aria-expanded' },
+  { match: 'tool-pill', reason: '工具状态片：选中态由 aria-expanded 表达，不是按钮档' },
+  { match: 'workspace-selector-trigger', reason: '工作空间下拉触发器：带搜索面板的复合浮层' },
+  { match: 'workspace-selector-action', reason: '浮层里的菜单项：宽度由面板给，不是就地动作' },
+  { match: 'workspace-folder-drop', reason: '文件夹投放区：可点，但首先是拖放目标' },
+  { match: 'artifact-thumbnail-trigger', reason: '缩略图放大触发器：整片是图片，cursor: zoom-in' },
+];
+
+/** 由 `Button` 的 `variant`／`size`／`tone` 负责的外观属性，页面与容器都不许自己写。 */
+const BUTTON_APPEARANCE_PROPERTIES = [
+  'min-height',
+  'padding',
+  'padding-inline',
+  'padding-block',
+  'border',
+  'border-color',
+  'border-radius',
+  'background',
+  'color',
+  'font-size',
+  'font-weight',
+];
+
+/**
+ * 允许自己给 `<button>` 发外观的**基座**选择器前缀：它们在管自己的槽位几何，
+ * 不是页面替别人的控件补外观。`.list-row-actions :where(button)` 曾在这里，
+ * ADR-0031 把它删了——行内动作从此一律由调用点写明档位。
+ */
+const BUTTON_BASE_OWNERS = [
+  /^button\b/,
+  /^\.btn\b/,
+  /^\.icon-button\b/,
+  /^\.tabs\b/,
+  /^\.segmented-control\b/,
+  /^\.list-row\b/,
+  /^button\.list-row\b/,
+];
+
+/** 从 `export type X = 'a' | 'b';` 里取出成员，顺序无关。 */
+function unionMembers(source: string, name: string): string[] {
+  const block = new RegExp(`export type ${name} =([\\s\\S]*?);`).exec(source);
+  if (!block) throw new Error(`找不到 export type ${name}`);
+  return [...(block[1] ?? '').matchAll(/'([^']+)'/g)].map((match) => match[1] ?? '').sort();
+}
+
+/**
+ * 从 CSS 里取出 `.btn[...]` 上出现过的档位。只看含 `.btn` 的选择器，
+ * 否则 `.icon-button[data-size='row']` 会把图标按钮的档位混进按钮的 `size` 集合。
+ */
+function cssDataSteps(
+  declarations: readonly { readonly selector: string }[],
+  attribute: string,
+): string[] {
+  const steps = declarations
+    .filter((declaration) => /\.btn\b/.test(declaration.selector))
+    .flatMap((declaration) => [
+      ...declaration.selector.matchAll(new RegExp(`\\[data-${attribute}='([^']+)'`, 'g')),
+    ])
+    .map((match) => match[1] ?? '');
+  return [...new Set(steps)].sort();
+}
+
+/**
+ * 类型里有、CSS 里刻意没有的档位：`neutral` 就是三档带边框 variant 的默认颜色，
+ * 「没有一条规则」本身就是它的实现。新增一条要写清为什么同理。
+ */
+const TONE_STEPS_WITHOUT_RULE = ['neutral'];
+
+describe('按钮基座纪律', () => {
+  const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
+  expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
+  const declarations = declarationsOf(styles ?? '');
+  const buttonSource = read('apps/desktop/src/renderer/src/components/Button.tsx');
+
+  it('被 Button 基座收编的皮与容器后代规则不得复活', () => {
+    const offenders: string[] = [];
+    assertRetiredClassesAbsent(offenders, 'button');
+    expect(
+      offenders,
+      '按钮外观只由 Button 基座输出；旧皮类与 `.某容器 button` 请改成 `variant`／`size`（ADR-0031）',
+    ).toEqual([]);
+  });
+
+  it('生产代码的按钮只有 Button／基座／登记过的形态三种来源', () => {
+    // 裸 `<button>` 没有档位，外观只能靠容器后代或浏览器默认——上一轮 9 颗、这一轮
+    // 又抓到 8 颗「容器上根本没有规则」的按钮，正是这种失效的现场（ADR-0031）。
+    const offenders: string[] = [];
+    for (const relative of productionPathsUnder('apps/desktop/src/renderer/')) {
+      if (!relative.endsWith('.tsx') || BUTTON_BASE_FILES.includes(relative)) continue;
+      const text = read(relative);
+      for (const match of text.matchAll(/<button\b/g)) {
+        const start = match.index ?? 0;
+        const line = text.slice(0, start).split('\n').length;
+        const tagEnd = text.indexOf('>', start);
+        // 开始标签到第一个 `>` 足够看清它带的是哪一类；多行属性由 prettier 收在同行内。
+        const head = text.slice(start, tagEnd < 0 ? undefined : tagEnd);
+        if (NON_ACTION_BUTTON_SHAPES.some((shape) => head.includes(shape.match))) continue;
+        offenders.push(`${relative}:${line} ${head.replace(/\s+/g, ' ').slice(0, 70)}`);
+      }
+    }
+    expect(
+      offenders,
+      '动作按钮请用 Button（variant × size）；确实不是动作按钮的形态，按理由登记进 NON_ACTION_BUTTON_SHAPES（docs/10 §10.1、ADR-0031）',
+    ).toEqual([]);
+  });
+
+  it('variant／size／tone 的档位集合与基座穷举相等', () => {
+    // 多一档：CSS 写了档位但类型没有，页面永远传不到；
+    // 少一档：类型能传但没有皮，按钮掉回 `.btn` 的裸壳——两边都不会有编译错误，
+    // 只会等到人工走查时才发现某档按钮没样式。
+    expect(cssDataSteps(declarations, 'variant'), '`variant` 档位与 ButtonVariant 不一致').toEqual(
+      unionMembers(buttonSource, 'ButtonVariant'),
+    );
+    expect(cssDataSteps(declarations, 'size'), '`size` 档位与 ButtonSize 不一致').toEqual(
+      unionMembers(buttonSource, 'ButtonSize'),
+    );
+    expect(
+      cssDataSteps(declarations, 'tone'),
+      '`tone` 档位与 ButtonTone 不一致（缺省档要登记进 TONE_STEPS_WITHOUT_RULE）',
+    ).toEqual(
+      unionMembers(buttonSource, 'ButtonTone').filter(
+        (tone) => !TONE_STEPS_WITHOUT_RULE.includes(tone),
+      ),
+    );
+  });
+
+  it('每一档 size 的 min-height 都取自控件高度 Token', () => {
+    const sizes = unionMembers(buttonSource, 'ButtonSize');
+    const offenders: string[] = [];
+    for (const size of sizes) {
+      const rules = declarations.filter(
+        (declaration) =>
+          declaration.selector.replace(/\s+/g, '') === `.btn[data-size='${size}']` &&
+          declaration.property === 'min-height',
+      );
+      if (rules.length === 0) {
+        offenders.push(`size='${size}' 没有 min-height——这一档的高度不受 Token 约束`);
+        continue;
+      }
+      if (!/--control-height(-sm|-lg)?\b/.test(rules[0]?.value ?? '')) {
+        offenders.push(
+          `size='${size}' 的 min-height 没有取 --control-height-*：${rules[0]?.value ?? ''}`,
+        );
+      }
+    }
+    expect(offenders, '三档高度必须全部来自 --control-*（docs/10 §9.10、ADR-0031）').toEqual([]);
+  });
+
+  it('容器后代不得替按钮发外观', () => {
+    // `.某容器 button { padding / background }` 记的是「这颗按钮属于哪个页面」，
+    // 不是「它是什么动作」：槽位结构一换就整片掉回浏览器默认，tsc 与 vitest 都不报。
+    const offenders = declarations
+      .filter((declaration) => {
+        const selector = declaration.selector.replace(/\s+/g, ' ').trim();
+        const stylesAButton =
+          /(^|[,>\s(+])button(?![\w-])/.test(selector) || /(^|[,>\s])\.btn(?![\w-])/.test(selector);
+        if (!stylesAButton) return false;
+        if (BUTTON_BASE_OWNERS.some((owner) => owner.test(selector))) return false;
+        return BUTTON_APPEARANCE_PROPERTIES.includes(declaration.property);
+      })
+      .map((declaration) => locate(declaration, styles ?? ''));
+    expect(
+      offenders,
+      '按钮外观只由 Button 基座或基座自己的槽位选择器负责（docs/10 §10.1、ADR-0031）',
     ).toEqual([]);
   });
 });

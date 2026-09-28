@@ -13,6 +13,7 @@ import { workspaceIconName } from '../lib/labels';
 import { folderNameOf, workspaceAccentVar } from '../lib/workspace-identity';
 import { ActionBar } from './ActionBar';
 import { AsyncButton } from './AsyncButton';
+import { Button } from './Button';
 import { Field } from './Field';
 import { Modal } from './Modal';
 import { type PickerOption, SingleSelectPicker } from './SingleSelectPicker';
@@ -158,9 +159,9 @@ export function WorkspaceIdentityDialog({
         </p>
       )}
       <ActionBar label={title}>
-        <button type="button" className="secondary-button" onClick={onClose}>
+        <Button variant="secondary" size="md" type="button" onClick={onClose}>
           取消
-        </button>
+        </Button>
         <AsyncButton
           variant="primary"
           label={editing ? '保存修改' : '创建'}

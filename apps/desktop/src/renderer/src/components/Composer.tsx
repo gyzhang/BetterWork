@@ -8,6 +8,7 @@ import type { FormEvent, KeyboardEvent, Ref } from 'react';
 import { ArrowUpIcon, ExpertIcon } from '../icons';
 import { AsyncButton } from './AsyncButton';
 import { BindingChip, BindingChipBar } from './BindingChip';
+import { Button } from './Button';
 import { type CapabilityChip, ComposerCapabilityPicker } from './ComposerCapabilityPicker';
 import { WorkspaceSelector, type WorkspaceSelectorProps } from './WorkspaceSelector';
 
@@ -153,9 +154,9 @@ export function Composer({
           {modelLabel} <kbd>⌘/Ctrl ↵</kbd>
         </span>
         {submit.state === 'running' ? (
-          <button type="button" className="stop" onClick={submit.onStop}>
+          <Button variant="danger" size="md" type="button" onClick={submit.onStop}>
             停止
-          </button>
+          </Button>
         ) : (
           <AsyncButton
             type="submit"

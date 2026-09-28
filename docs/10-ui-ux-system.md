@@ -485,7 +485,7 @@ UI Foundation 首批提供四套成对色系：
 | --- | --- | --- |
 | `--control-height-sm` | 28px | 密集行内的小控件（文字按钮、页签内动作） |
 | `--control-height` | 32px | **常规档**：输入框、下拉、日期/选择器、标准按钮 |
-| `--control-height-lg` | 36px | 主行动按钮（`.primary-button`）与大型输入 |
+| `--control-height-lg` | 36px | `Button size="lg"`（主行动）与大型输入 |
 | `--control-radius` | 6px | 所有表单控件与浮层内按钮 |
 | `--row-height-sm` | 23px | 侧栏工作空间行（不是控件，套不进三档控件高度） |
 | `--row-height` | 34px | 侧栏导航与「新建任务」行 |
@@ -501,7 +501,7 @@ UI Foundation 首批提供四套成对色系：
 - **24–40px 的密集高度带已并档**（2026-09-27，产品拍板）：行内小按钮 26 → 28、筛选与次级按钮 30 → 32、侧栏行 34 → `--row-height`、工作空间行 23 → `--row-height-sm`。带内裸值现为 0，护栏改为零容忍；原先登记为唯一例外的 `.expert-card-desc` 两行钳制高度，已随「卡片描述一律三行定高」移出这一带（§10.1），例外清单因此清空并被删除。
 - **圆角同样收进档位表**：样式表里 150 处裸圆角换成 `var(--radius-*)`，其中 7 → 8（`--radius-row`）、9 → 10（`--radius-card`）是两处有意的并档。剩下的 3–4px 只有 5 处，全是键帽、色板与格式微标这类图形化小件，由 `MICRO_MARK_RADII` 按「只降不升」登记；新增一处必须写清它为什么不算某一档。
 - **浮层字号跟随触发控件**：`PopoverMenu` 打开时读取触发元素的计算字号并内联到浮层根，菜单项不自带 `font-size`。浮层是触发器的延伸，两处字号不一致会让菜单看起来属于另一个控件（知识卡片「更多」曾继承正文 14px 而比自己的 12px 触发按钮大）。**只镜像有文字的触发器**：纯图标按钮（`IconButton`）不渲染文字，它的计算字号是从容器继承来的值（composer 的 `+` 一路继承到 UA 默认 16px），镜像过来等于把「浏览器没被设置过」当成控件的字号，菜单会比正文还大——这类触发器走基座兜底的 13px。
-- 落地现状：2026-09-26 已把 50 处控件边框/圆角/高度声明换成 `--control-*` 取值，表单控件里裸值残留 0（由护栏强制，`textarea` 的编辑区高度除外）；三档高度都有真实消费者，护栏的选择器口径除 `input/select/textarea/.field-select-trigger` 外还覆盖 `.primary-button`、`.secondary-button`、`.text-button` 三个按钮类。
+- 落地现状：2026-09-26 已把 50 处控件边框/圆角/高度声明换成 `--control-*` 取值，表单控件里裸值残留 0（由护栏强制，`textarea` 的编辑区高度除外）；三档高度都有真实消费者。**2026-09-28 起按钮几何不再靠「记得选对档」维持**：`Button` 基座把 `size` 与 `--control-height-*` 一对一绑死，护栏的 `CONTROL_SELECTOR` 口径同步换成 `.btn` 与 `.icon-button`，原先散在 11 套具名皮与 12 处页面级后代规则里的 16 种 `padding` 组合一并收进三档（[ADR-0031](adr/0031-button-base-and-skin-closure.md)）。
 
 ### 9.11 叠放层级
 
@@ -558,13 +558,16 @@ UI Foundation 首批提供四套成对色系：
 `ActivityGroup`＝`components/ContextPanel.tsx` 导出的 `ActivityGroupRow`。
 **明确不做并说明为什么**：`SettingsLayout`／`SettingsNav` 与 `ModelProfileRow` 都只有**一个消费者**
 （分别是 `SettingsPage` 与它内部的模型清单），外壳就是三行 JSX、行本身就是 `ListRow` 填槽——
-包一层只为壳的组件与 §10.1 对 Button／Input 的既有口径同源：**不新增第二处真相**。
+包一层只为壳的组件与 §10.1 对 Input／Textarea 的既有口径同源：**不新增第二处真相**。
+（Button 曾与它们同批判为「不组件化」，2026-09-28 由 [ADR-0031](adr/0031-button-base-and-skin-closure.md)
+反转：皮类方案缺一个封闭清单的执行者，11 套具名皮、12 处页面级后代规则与 16 种 padding 组合说明
+第二处真相已经长出来了，不是一层壳造出来的。）
 R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBlock.tsx`、
 `Composer`＝`components/Composer.tsx`、`RunSummary`＝`components/RunSummaryRow.tsx`（§10.2 里
 `RunSummary` 与它指的是同一件事），侧栏「最近任务」与上下文面板「执行记录」两处一起改用它；
 `.memory-capture` 那一整块也随消息流外提成 `components/MemoryCapturePanel.tsx`。
 仍待落地：`PlanStep`、`ArtifactVersionMenu`、`Sidebar`／`TaskListItem`、`ArtifactCard` 两份合并（R3-D
-与后续）。`AppShell`／`TitleBar`／`TaskHeader` 按 §10.1 对 Button／Input 的同一口径不做：
+与后续）。`AppShell`／`TitleBar`／`TaskHeader` 按 §10.1 对 Input／Textarea 的同一口径不做：
 它们的外壳就是窗口装饰与页头，另抽一层只会多出第二处真相。
 
 所有交互组件都必须定义：默认、悬停、聚焦、按下、禁用、加载、成功和错误状态。键盘焦点必须可见，不能只依赖颜色变化。
@@ -581,19 +584,20 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 | 列表行 ListRow（左槽／主区／右槽，divider／card／plain 三档，`multiline` 折行档） | `components/ListRow.tsx` | 已落地：§3.4 的 9 套行几何（`.run-item`／`.notification-item`／`.skill-list-item`／`.model-row`／`.memory-row`／`.evidence-row`／`.knowledge-job-row`／`.mcp-connection-row`／`.knowledge-card`）加上 `.completed-work-card`／`.context-row`／`.suggestion-job-row` 共 12 类并入一处，行内动作按钮的几何同时收进 `.list-row-actions`；2026-09-27 R2-E 再收三处漏网：简报条目（`.brief-list button`）、本次材料行（`.selected-material-row`）、自动建议开关行（`.suggestion-setting-row`） |
 | 模态确认 ConfirmationDialog | `components/ConfirmationDialog.tsx` | 已落地，走 Modal 的 `alertdialog` 变体；初始焦点落在「取消」 |
 | 区块头 SectionHeader（eyebrow／title／hint／actions，block／panel 两档） | `components/SectionHeader.tsx` | 已落地：§3.1 P1 的 26 处／13 个类名并成一处（`.settings-heading`／`.selected-materials-heading`／`.skill-detail-heading`／`.skill-section-heading`／`.memory-group-heading`／`.memory-heading-actions`／`.notification-panel-header`／`.artifact-reference-heading`／`.brief-section-head`／`.tool-detail-heading`／`.discussion-checkpoints-header`），16 处冒充标题的 `<strong>` 升级为真 h2／h3；面板自己的内缩与分隔线写在传给基座的领域钩子类上（现登记 `.notification-panel-heading`） |
-| 异步按钮 AsyncButton／行内加载 InlineLoading | `components/AsyncButton.tsx` | 已落地：§3.1 P4 的「disabled＋文案翻转＋aria-busy」三件事一次收口，busy 时只渲染当前那一行文字（曾为防抖宽叠两份标签，结果把 busy 文案读进了可及名称）；`InlineLoading` 统一 spinner，`page-spinner` 与 `spin` 两套 keyframes 合并为一套 |
+| 异步按钮 AsyncButton／行内加载 InlineLoading | `components/AsyncButton.tsx` | 已落地：§3.1 P4 的「disabled＋文案翻转＋aria-busy」三件事一次收口，busy 时只渲染当前那一行文字（曾为防抖宽叠两份标签，结果把 busy 文案读进了可及名称）；`InlineLoading` 统一 spinner，`page-spinner` 与 `spin` 两套 keyframes 合并为一套。**外观自 2026-09-28 委托给 `Button`（ADR-0031）**：它自己那张 `variant → 皮类名` 映射表随 11 套皮一起删除，`.async-button` 这个从未被 CSS 用过的类同时消失 |
 | 状态徽标 Badge（tone × shape，tone 六档：neutral／brand／warning／danger／outline／success） | `components/Badge.tsx` | 已落地：技能卡状态片、依赖面板环境片、记忆状态片、MCP 工具名片四套自造 chip 合并；图形化标识（格式徽标、未读角标）不在此基座内，按字号护栏登记 |
 | 短时反馈 TransientToast / 全局 ToastHost | `components/` | 已落地；两套不可混用（§11.5.1） |
 | 空状态 EmptyContext／EmptyNotice／EmptyPage／LoadingPage／ErrorPage | `components/EmptyState.tsx` | 已落地：6 处内联占位（侧栏最近任务、模型清单、通用设置、MCP 连接、记忆清单与加载行、消息中心）2026-09-26 深夜全部收编；`EmptyContext` 管区域级、`EmptyNotice` 管行内与小节级 |
 | 页签 Tabs（tablist + roving tabindex + 方向键） | `components/Tabs.tsx` | 已落地：左右方向键与 Home／End 切换并把焦点带过去，只有选中页签进 Tab 顺序。记忆页分组与任务上下文两处已收编 |
 | 切换按钮组 SegmentedControl（group + aria-pressed） | `components/Tabs.tsx` | 已落地：技能页卡片／列表模式已收编；与页签的分工是「切换同一片内容的呈现方式」 |
 | 导航列表 NavList／NavItem（`aria-current` ＋ 两档变体 ＋ 窄栏折叠） | `components/NavList.tsx` | 已落地：侧栏一级导航（5 项）与设置左侧分区（6 项）；`NavItem` 同时承接侧栏「新建任务」与底部「设置」两颗单行导航。折叠成窄栏换的是自定义属性（`--nav-item-*`），几何仍只有一处；文字用 `clip-path` 收掉而不是 `font-size: 0`，以免只剩图标的按钮失去可及名称 |
-| Button / Input / Textarea | 只有样式类，无组件 | 几何取 `--control-*` 档位（§9.10），结构由 `Field` 负责；不再单独组件化，避免只为包一层壳而增加第二处真相 |
+| Button（`variant` 八档 × `size` 三档 × `tone`） | `components/Button.tsx` | **已落地（2026-09-28，[ADR-0031](adr/0031-button-base-and-skin-closure.md) 反转了本行原先「不再单独组件化」的口径）**：11 套具名皮与 12 处页面级后代规则收成一处，`.btn` ＋ `[data-variant]`／`[data-size]`／`[data-tone]` 是按钮外观的唯一出口，`variant` 只管颜色、`size` 只管几何且两者正交；`tone` 只对 `outline` 生效，与 `Badge` 的 tone × shape 同构 |
+| Input / Textarea | 只有样式类，无组件 | 几何取 `--control-*` 档位（§9.10），结构由 `Field` 负责；不再单独组件化，避免只为包一层壳而增加第二处真相。**Button 曾与本行同判，已由 [ADR-0031](adr/0031-button-base-and-skin-closure.md) 单独反转，本行判断对 Input／Textarea 继续成立** |
 | Switch（`role="switch"` ＋ 恒定名称 ＋ 轨道滑块） | `components/Switch.tsx` | 已落地：全站 13 处 `type="checkbox"` 里只有 4 处真是「开／关」，全部收进这里——知识页语义检索（类名本来就叫 `.knowledge-admin-switch`，实为原生勾选框）、记忆页自动建议与设置页模型启用（两处原来用「开启 X／关闭 X」的按钮文案翻转充当开关，读屏听到的名称随状态改变）、技能页受信任标记。**多选与全选保留原生 checkbox 是正确语义**，不为观感统一塞进开关 |
 | Tooltip（被裁切文本的悬停提示） | `components/Tooltip.tsx` | 已落地（2026-09-27）：只在锚点**真的被裁切**时出现——悬停 300ms、聚焦立即、移出与滚动即收；Portal 挂到应用外走 `--z-tooltip`，刻意不带 overlay 阴影（靠描边与升起面区分层级，不进 §10.1 的阴影存量）。完整文本本来就在锚点自己的文本里（行数钳制只裁视觉不裁可及名称），浮层对读屏是重复信息，所以显式 `aria-hidden`，不另挂 `aria-describedby` |
 | Skeleton / Progress | — | 未落地。Progress 只有一枚不确定态 spinner（`.spinner`，由 `InlineLoading` 与页面加载态共用），没有百分比进度条。 |
 | 片里的微移除按钮 `.binding-chip-remove` | 随 `BindingChip` 一起收 | 刻意不进 IconButton：10px 命中区属于整枚片（图标＋名称＋×），塞进 24／28px 方块会把片撑破；登记在护栏的 `ICON_BUTTON_EXEMPT_CLASSES` 里（§3.1 P7） |
-| 图标按钮 IconButton（sm／md 两档方块） | `components/IconButton.tsx` | 已落地：面板头与条带里「只装一个图标的按钮」收成一处——7 个渲染点（侧栏折叠、错误横幅关闭、上下文面板折叠、模型抽屉关闭、知识抽屉关闭、结果提示关闭、能力选择器触发），此前它们是 24／26／28／30px 四种边长、两种圆角、字形 10／12／14／15px，还有两处留着 `font-size: 19px／22px` 配 `×` 字符的旧时代残留；`aria-label` 是必填项，`aria-expanded`／`aria-haspopup`／`ref`（浮层锚点）由基座转发 |
+| 图标按钮 IconButton（sm 23／md 28／row 34 三档方块） | `components/IconButton.tsx` | 已落地：面板头与条带里「只装一个图标的按钮」收成一处——7 个渲染点（侧栏折叠、错误横幅关闭、上下文面板折叠、模型抽屉关闭、知识抽屉关闭、结果提示关闭、能力选择器触发），此前它们是 24／26／28／30px 四种边长、两种圆角、字形 10／12／14／15px，还有两处留着 `font-size: 19px／22px` 配 `×` 字符的旧时代残留；`aria-label` 是必填项，`aria-expanded`／`aria-haspopup`／`title`／`ref`（浮层锚点）由基座转发。**2026-09-28 补第三档 `row`（`--row-height` 34px）**：侧栏底部的消息铃铛原先自写一套 34px 皮、又在折叠态与窄视口下各自放大到 36px，是 ADR-0031 清点时抓到的「形态没有名字就各造一套」又一例；未读数角标走 `trailing` 槽，`.icon-button` 因此补上 `position: relative` |
 | 底部动作条 ActionBar（说明在左、主行动恒在最右） | `components/ActionBar.tsx` | 已落地：7 处「主按钮＋取消」收成一处（记忆编辑、材料选择、MCP 编辑、讨论节点、模型抽屉、成果修订、专家修订），`gap` 8／12 与 `justify-content` flex-end／space-between 的分叉并掉，全仓第一次有了 `role="group"` 与动作条名称；两处「取消在最前」的调用点已按约定翻到主行动左侧 |
 
 | 复选框选项组 CheckList（一行一项，`label` 包住原生 checkbox） | `components/CheckList.tsx` | 已落地：专家编辑四处勾选（Skill 预设／内置工具白名单／MCP 工具／常用参考）与上下文面板的 MCP 工具勾选收成一处，此前它们在两个页面之间**互借带领域名的类**（上下文面板借 `.expert-option-list`，专家页借 `.selected-mcp-list`）；组名给了才写 `role="group"`，已经在 `<fieldset>` 里就不另包一层语义（§4.5） |
@@ -641,9 +645,11 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 
 **表单字段一律用 `Field`**：`<Field label="模型角色">…</Field>` 负责标签、控件与说明三件事的纵向结构，标签与控件之间的缝由 `Field` 自己的 `gap` 拥有（§9.8）。此前每个视图各写一份 `label { display: flex; gap: …; font-size: … }`，同一屏里因此并存 12px 与 13px 两种标签、4px 与 8px 两种缝（§3.2 的成因）。给出 `controlId` 时 `Field` 用 `<label htmlFor>` 精确关联，此时才能放说明文字；不给 `controlId` 时整个 `Field` 就是 `<label>`，点标签文字即可聚焦或展开控件，这种模式下不要再传 `hint`（包裹式标签会把说明读进控件名称）。勾选行（复选框与文字同排）不属于这个结构，仍在页面里自持排版。护栏两条：渲染层出现 `<select>`／`<option>` 即失败；除登记过的勾选行外，任何 `label` 选择器写 `gap` 或上下 `margin` 即失败。
 
+**按钮一律用 `Button` 基座**（`components/Button.tsx`，[ADR-0031](adr/0031-button-base-and-skin-closure.md)）：`variant` 八档（primary／secondary／text／outline／quiet／chip／danger／link）**只管颜色**，`size` 三档（sm 28／md 32／lg 36）**只管几何**，两者正交；`tone`（neutral／brand／danger）只对 `outline` 生效。皮由 `.btn` ＋ `[data-variant]`／`[data-size]`／`[data-tone]` 一处输出，页面不再手写 `className="secondary-button"`，也不再出现裸 `<button>`；`className` 只承载定位钩子。此前这里有 11 套自带外观的具名皮、12 条页面级容器后代规则、18 种 `padding` 组合和 7 处完全没有 `min-height` 的动作按钮——三档高度 Token 对最后那 7 处根本不生效，另有 8 颗按钮所在容器**根本没有 button 规则**，一直按浏览器默认外观渲染。`size` **不按 `variant` 给条件缺省**：主行动要不要比同排高一档是页面那一刻的选择，写成显式 `size="lg"` 才可解释（本轮的起点就是「保存修订 36px 与取消 28px 差 8px 被衬成一块砖」）。`AsyncButton` 是本基座的 `busy` 封装，`IconButton`（三档方块，含对齐侧栏行高的 `row`）与「选择卡／整片可点的领域形态」共 10 种是刻意另立的形态，逐一登记在护栏的 `NON_ACTION_BUTTON_SHAPES` 并带理由。护栏锁五条：被收编的皮类与容器后代规则不得复活；生产 `.tsx` 出现裸 `<button` 即失败（基座文件按名豁免）；`.btn[data-variant|data-size|data-tone]` 的档位集合与三个联合类型**穷举相等**；每一档 `size` 的 `min-height` 必须取 `--control-height-*`；`styles.css` 里选择器含 `button` 或 `.btn` 又声明了外观属性即失败（基座自己的选择器进白名单）。
+
 **列表行一律用 `ListRow`**：「图标／徽标 + 标题 + 说明 + 次要信息 + 右侧动作」这一种结构走 `components/ListRow.tsx`，三个变体只决定外壳——`divider` 是列表里的分隔线行（默认），`card` 是带边框圆角的可点卡片，`plain` 是侧栏那种悬停才出底的裸行。内容一律填槽位：`leading`／`title`／`detail`／`meta`／`actions`／`trailing`，结构特殊的行（记忆行、MCP 工具片）把额外内容作为 `children` 交进主区，而不是另起一套行几何。给 `onClick` 时整行渲染成**一个** `<button>` 并必须给 `label` 作可及名称，此时 `actions` 里不能再放按钮（按钮套按钮是无效 DOM）；选中态走 `selected` → `aria-current`，降饱和走 `tone="muted"` 或 `disabled`，页面只保留自己的领域钩子类。行内文字的尺寸也收在基座：标题 13px、说明 12px 次要、meta 12px 弱化，页面不再各写一遍 `strong`／`small`。此前这种结构有 9 份独立几何（gap 从 4 到 16、padding 从 `10px 2px` 到 `16px 16px`、圆角 7／8／10 各写一遍），没有一条差异来自业务需求（§3.4）。护栏锁三条：`.run-item`／`.model-row`／`.evidence-row`／`.knowledge-card` 等 12 个已收编类的样式不得复活；行的 `gap`／`padding` 只能由 `.list-row*` 自己的选择器声明，页面用后代选择器替骨架补一遍即失败；迁完后仍留在行上承担状态外观的领域钩子（现登记 `.memory-row` 一个）不得再写 `display`／`gap`／`padding`／`align-items`／`flex-direction`／`border-bottom`。
 
-**区块头一律用 `SectionHeader`**：「小标题（可带 eyebrow）＋ 一句说明 ＋ 右槽动作」这一种结构走 `components/SectionHeader.tsx`，两个变体只决定层级与密度——`block` 是页面区块头（h2、13／21px 标题、说明 13px 走 630px 版心），`panel` 是面板与卡片里的小节头（h3、13px 标题、说明 12px 弱化）。内容填 `title`／`hint`／`eyebrow`／`actions` 四个槽，空槽不渲染节点（否则基座的 `gap` 会撑出一道看不见的缝）。此前这种结构有 13 个类名、26 处写法，`gap` 取遍 4／8／12／16／24 五档，`display` 有 flex-row／column／grid 三种，16 处用 `<strong>` 冒充标题而不进文档大纲（§3.1 P1）。**面板自己那一道内缩与分隔线仍归面板**：把领域钩子类传进 `className`（如消息中心的 `.notification-panel-heading`），不要写 `.某面板 .section-header { padding }`。右槽按钮的外观由按钮自己带类：三档主皮（`.primary-button`／`.secondary-button`／`.text-button`）之外，密集面板里的两档小动作分别叫 `.chip-button`（品牌底小胶囊）与 `.quiet-button`（无底、悬停才出底）——这两档原先靠 `.selected-materials-actions button`、`.context-section .selected-materials-heading > button`、`.notification-panel-actions button` 这类容器后代选择器发力，槽位结构一换就整片掉回浏览器默认外观，2026-09-27 把它们上收成具名类。护栏锁三条：13 个已收编类的样式不得复活；含 `.section-header` 的选择器里只有基座自己的（`.section-header` 本体、两档变体、四个槽位类）能写 `gap`／`padding`／`margin`／`align-items`／`justify-content`；除基座文件外任何 `.tsx` 出现 `section-header*` 类名即失败（手写槽位等于又造一份结构）。
+**区块头一律用 `SectionHeader`**：「小标题（可带 eyebrow）＋ 一句说明 ＋ 右槽动作」这一种结构走 `components/SectionHeader.tsx`，两个变体只决定层级与密度——`block` 是页面区块头（h2、13／21px 标题、说明 13px 走 630px 版心），`panel` 是面板与卡片里的小节头（h3、13px 标题、说明 12px 弱化）。内容填 `title`／`hint`／`eyebrow`／`actions` 四个槽，空槽不渲染节点（否则基座的 `gap` 会撑出一道看不见的缝）。此前这种结构有 13 个类名、26 处写法，`gap` 取遍 4／8／12／16／24 五档，`display` 有 flex-row／column／grid 三种，16 处用 `<strong>` 冒充标题而不进文档大纲（§3.1 P1）。**面板自己那一道内缩与分隔线仍归面板**：把领域钩子类传进 `className`（如消息中心的 `.notification-panel-heading`），不要写 `.某面板 .section-header { padding }`。右槽按钮的外观不再由容器或类名代发：2026-09-27 先把靠 `.selected-materials-actions button`、`.context-section .selected-materials-heading > button`、`.notification-panel-actions button` 发力的 9 颗裸按钮上收成 `.chip-button`／`.quiet-button` 两档具名类，2026-09-28 再由 [ADR-0031](adr/0031-button-base-and-skin-closure.md) 把它们连同其余 9 套具名皮一并收进 `Button` 的 `variant`（`chip` 与 `quiet` 两档名字保留）。护栏锁三条：13 个已收编类的样式不得复活；含 `.section-header` 的选择器里只有基座自己的（`.section-header` 本体、两档变体、四个槽位类）能写 `gap`／`padding`／`margin`／`align-items`／`justify-content`；除基座文件外任何 `.tsx` 出现 `section-header*` 类名即失败（手写槽位等于又造一份结构）。
 
 **纵向导航一律用 `NavList`／`NavItem`，切换同一块内容的视图一律用 `SegmentedControl`**
 （`components/NavList.tsx`、`components/Tabs.tsx`）：「当前在哪一项」是 ARIA 事实，不是一个 CSS 类。

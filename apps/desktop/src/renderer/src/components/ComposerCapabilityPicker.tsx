@@ -12,6 +12,7 @@ import { materialCandidateKey, taskMaterialKey } from '../lib/materials';
 import { ActionBar } from './ActionBar';
 import { InlineLoading } from './AsyncButton';
 import { BindingChip, BindingChipBar } from './BindingChip';
+import { Button } from './Button';
 import { FieldSelect } from './FieldSelect';
 import { IconButton } from './IconButton';
 import { PopoverMenu } from './PopoverMenu';
@@ -332,9 +333,10 @@ export function ComposerCapabilityPicker({
             const status = computeSkillStatus(skill);
             return status !== 'ready' && skill.blockedReasons.length > 0;
           }) ? (
-            <button
+            <Button
+              variant="link"
+              size="md"
               type="button"
-              className="capability-locate-link"
               onClick={() => {
                 const firstBlocked = filteredSkills.find((skill) => {
                   const status = computeSkillStatus(skill);
@@ -344,7 +346,7 @@ export function ComposerCapabilityPicker({
               }}
             >
               查看不可用原因
-            </button>
+            </Button>
           ) : undefined
         }
       />
@@ -380,32 +382,34 @@ export function ComposerCapabilityPicker({
             <div className="material-picker-status">
               {materialsLoading ? <InlineLoading label="正在加载候选材料…" /> : materialPickerError}
               {materialPickerKind === 'artifact' && hasGlobalArtifacts && !materialsLoading && (
-                <button
+                <Button
+                  variant="link"
+                  size="md"
                   type="button"
-                  className="material-global-toggle"
                   onClick={() => setShowGlobalArtifacts((current) => !current)}
                 >
                   {showGlobalArtifacts ? '仅显示当前工作空间' : '显示其他工作空间成果'}
-                </button>
+                </Button>
               )}
             </div>
           ) : undefined
         }
         footer={
           <ActionBar as="div" label="添加材料">
-            <button type="button" className="text-button" onClick={onDismissMaterialPicker}>
+            <Button variant="text" size="sm" type="button" onClick={onDismissMaterialPicker}>
               取消
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="primary"
+              size="lg"
               type="button"
-              className="primary-button"
               onClick={() => {
                 onCommitMaterials(materialDraft);
                 onDismissMaterialPicker();
               }}
             >
               添加已选材料
-            </button>
+            </Button>
           </ActionBar>
         }
       />

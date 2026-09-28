@@ -4,6 +4,7 @@ import type { FormEvent } from 'react';
 import { CloseIcon } from '../icons';
 import { trackAction } from '../lib/async-action';
 import { ActionBar } from './ActionBar';
+import { Button } from './Button';
 import { Field } from './Field';
 import { FieldSelect } from './FieldSelect';
 import { IconButton } from './IconButton';
@@ -129,12 +130,12 @@ export function ModelEditor({
           </p>
         )}
         <ActionBar label="保存模型配置">
-          <button type="button" className="secondary-button" onClick={onTest}>
+          <Button variant="secondary" size="md" type="button" onClick={onTest}>
             测试连接
-          </button>
-          <button type="submit" className="primary-button">
+          </Button>
+          <Button variant="primary" size="lg" type="submit">
             {editing ? '保存修改' : '添加模型'}
-          </button>
+          </Button>
         </ActionBar>
       </form>
     </Modal>

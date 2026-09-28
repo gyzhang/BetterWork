@@ -1,25 +1,24 @@
 import type { ReactNode } from 'react';
 
+import type { ButtonSize, ButtonTone, ButtonVariant } from './Button';
+import { Button } from './Button';
+
 export interface AsyncButtonProps {
   /** 未忙碌时的文案；图标由调用方放进 label，与既有按钮保持一致。 */
   label: ReactNode;
-  /** 忙碌时的文案（如「正在保存…」）。两份文案叠在同一格，按钮取较宽者，切换时不跳位。 */
+  /** 忙碌时的文案（如「正在保存…」）。两份文案都由调用方给，基座只渲染当前那一份。 */
   busyLabel: ReactNode;
   busy: boolean;
   onClick?: (() => void) | undefined;
   type?: 'button' | 'submit' | undefined;
-  /** 复用既有按钮几何档位，不另造第二套按钮外观；省略时不加外观类（如输入框内的提交键）。 */
-  variant?: 'primary' | 'secondary' | 'text' | undefined;
+  /** 外观与几何一律交回 `Button` 的两个正交维度，这里不再自带一套皮。 */
+  variant?: ButtonVariant | undefined;
+  size?: ButtonSize | undefined;
+  tone?: ButtonTone | undefined;
   /** 额外的禁用条件（表单未填完等）；忙碌本身一定会禁用按钮。 */
   disabled?: boolean | undefined;
   className?: string | undefined;
 }
-
-const VARIANT_CLASS: Record<NonNullable<AsyncButtonProps['variant']>, string> = {
-  primary: 'primary-button',
-  secondary: 'secondary-button',
-  text: 'text-button',
-};
 
 /**
  * 会发长请求的按钮：`disabled` ＋ `aria-busy` ＋ 状态文案只有一处写法。
@@ -29,6 +28,9 @@ const VARIANT_CLASS: Record<NonNullable<AsyncButtonProps['variant']>, string> = 
  * 「正在进行」与「按钮消失」的区别（长操作三要素里的「可见状态」，docs/10 §11.1）。
  * 这里只渲染当前那一份文案：把两份都留在 DOM 里撑宽度的做法会把隐藏文本
  * 混进 `textContent`，测试与辅助技术读到的都不是用户看到的那句话。
+ *
+ * 外观自 2026-09-28 起委托给 `Button`（ADR-0031）——它管的是「什么时候算忙」，
+ * 不是「长什么样」，所以原来那张 `variant → 皮类名` 的映射表跟着皮一起删了。
  */
 export function AsyncButton({
   label,
@@ -37,24 +39,24 @@ export function AsyncButton({
   onClick,
   type = 'button',
   variant,
+  size,
+  tone,
   disabled = false,
   className,
 }: AsyncButtonProps): React.JSX.Element {
-  const classes = [
-    'async-button',
-    ...(variant ? [VARIANT_CLASS[variant]] : []),
-    ...(className ? [className] : []),
-  ].join(' ');
   return (
-    <button
-      className={classes}
+    <Button
       type={type}
+      variant={variant}
+      size={size}
+      tone={tone}
       disabled={disabled || busy}
       aria-busy={busy}
+      {...(className ? { className } : {})}
       {...(onClick ? { onClick } : {})}
     >
       {busy ? busyLabel : label}
-    </button>
+    </Button>
   );
 }
 

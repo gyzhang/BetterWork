@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { ChevronRightIcon } from '../icons';
 import { memoryScopeLabel } from '../lib/memory-labels';
 import { InlineLoading } from './AsyncButton';
+import { Button } from './Button';
 import { ListRow } from './ListRow';
 import { SectionHeader } from './SectionHeader';
 import { TransientToast } from './TransientToast';
@@ -61,9 +62,9 @@ export function WorkspaceBrief({
       <div className="brief-panel">
         <p className="inline-message error">
           {error}
-          <button type="button" onClick={onRetry}>
+          <Button variant="link" size="sm" tone="danger" type="button" onClick={onRetry}>
             重试
-          </button>
+          </Button>
         </p>
         <p className="brief-note">简报每次现取，读取失败时不会用旧内容代替现状。</p>
       </div>
@@ -171,13 +172,14 @@ export function WorkspaceBrief({
           </ul>
         )}
         {brief.referenceVersions.total > brief.referenceVersions.items.length && (
-          <button
+          <Button
+            variant="text"
+            size="sm"
             type="button"
-            className="text-button"
             onClick={() => setNotice('简报只列最近 5 个参考版本，完整列表在成果页。')}
           >
             共 {brief.referenceVersions.total} 个参考版本
-          </button>
+          </Button>
         )}
       </section>
       {notice && <TransientToast tone="success" message={notice} onDismiss={() => setNotice('')} />}

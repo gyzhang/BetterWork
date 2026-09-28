@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { AsyncButton } from '../components/AsyncButton';
 import { Badge, type BadgeTone } from '../components/Badge';
+import { Button } from '../components/Button';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -130,9 +131,9 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
         title="管理可复用的工作方法"
         leading={
           selected ? (
-            <button className="text-button" type="button" onClick={state.deselect}>
+            <Button variant="text" size="sm" type="button" onClick={state.deselect}>
               <ChevronLeftIcon size={14} /> 返回
-            </button>
+            </Button>
           ) : undefined
         }
         actions={
@@ -167,9 +168,9 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
       {state.error && (
         <p className="inline-message error" role="alert">
           {state.error}
-          <button type="button" onClick={state.clearError}>
+          <Button variant="link" size="sm" tone="danger" type="button" onClick={state.clearError}>
             关闭
-          </button>
+          </Button>
         </p>
       )}
       <ScrollRegion ariaLabel="技能列表与详情" busy={state.loading || state.detailLoading}>
@@ -252,21 +253,23 @@ function SkillDetail({
         title={skill.name}
         actions={
           <>
-            <button
+            <Button
+              variant="secondary"
+              size="md"
               type="button"
-              className="secondary-button"
               onClick={() => state.copy(skill)}
               disabled={skill.sourceKind === 'user'}
             >
               {skill.sourceKind === 'builtin' ? '复制并编辑' : '用户副本'}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="secondary"
+              size="md"
               type="button"
-              className="secondary-button"
               onClick={() => state.exportSkill(skill)}
             >
               导出
-            </button>
+            </Button>
           </>
         }
       />
@@ -299,9 +302,15 @@ function SkillDetail({
           <InfoIcon size={14} /> 脚本以本机用户权限运行，信任不提供沙箱隔离。
         </p>
         {skill.trustStatus === 'trusted' && (
-          <button type="button" className="danger-text" onClick={() => setConfirmRevoke(true)}>
+          <Button
+            variant="quiet"
+            size="sm"
+            tone="danger"
+            type="button"
+            onClick={() => setConfirmRevoke(true)}
+          >
             撤销信任
-          </button>
+          </Button>
         )}
       </div>
       <div className="skill-detail-section">
@@ -309,9 +318,9 @@ function SkillDetail({
           eyebrow="运行配置"
           title="保存配置草稿"
           actions={
-            <button type="button" className="secondary-button" onClick={save}>
+            <Button variant="secondary" size="md" type="button" onClick={save}>
               保存草稿
-            </button>
+            </Button>
           }
         />
         <p>当前仅保存配置，不会伪造环境已就绪，也不会启动脚本。</p>
@@ -339,35 +348,39 @@ function SkillDetail({
         ) : (
           <p className="success-copy">当前没有阻塞原因。</p>
         )}
-        <button
+        <Button
+          variant="secondary"
+          size="md"
           type="button"
-          className="secondary-button"
           onClick={() => state.setEnabled(skill, !skill.enabled)}
         >
           {skill.enabled ? '停用 Skill' : '启用 Skill'}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="secondary"
+          size="md"
           type="button"
-          className="secondary-button"
           disabled={
             skill.trustStatus !== 'trusted' || !skill.enabled || skill.blockedReasons.length > 0
           }
           onClick={() => state.testRun(skill)}
         >
           试运行
-        </button>
+        </Button>
       </div>
       <div className="skill-detail-section">
         <h3>本地 Skill</h3>
         <p>删除会移除受管用户副本及其本地配置，不能恢复。</p>
-        <button
+        <Button
+          variant="quiet"
+          size="sm"
+          tone="danger"
           type="button"
-          className="danger-text"
           disabled={skill.sourceKind === 'builtin'}
           onClick={() => setConfirmDelete(true)}
         >
           删除 Skill
-        </button>
+        </Button>
       </div>
       {confirmRevoke && (
         <ConfirmationDialog

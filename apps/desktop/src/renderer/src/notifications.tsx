@@ -6,6 +6,7 @@ import type {
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { Button } from './components/Button';
 import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { EmptyContext } from './components/EmptyState';
 import { IconButton } from './components/IconButton';
@@ -247,18 +248,20 @@ const NotificationPanel = ({
           actions={
             <>
               {unreadCount > 0 && (
-                <button className="quiet-button" type="button" onClick={onMarkAllRead}>
+                <Button variant="quiet" size="sm" type="button" onClick={onMarkAllRead}>
                   全部已读
-                </button>
+                </Button>
               )}
               {notifications.length > 0 && (
-                <button
-                  className="quiet-button danger-text"
+                <Button
+                  variant="quiet"
+                  size="sm"
+                  tone="danger"
                   type="button"
                   onClick={() => setClearRequested(true)}
                 >
                   清空
-                </button>
+                </Button>
               )}
             </>
           }
@@ -357,20 +360,21 @@ export const NotificationCenter = ({
 
   return (
     <div className="notification-anchor">
-      <button
-        ref={bellRef}
-        className="notification-bell"
+      <IconButton
+        size="row"
+        icon={BellIcon}
+        label={unreadCount > 0 ? `通知，${unreadCount} 条未读` : '通知'}
         title="通知"
-        aria-label={unreadCount > 0 ? `通知，${unreadCount} 条未读` : '通知'}
-        aria-haspopup="dialog"
-        aria-expanded={open}
+        hasPopup="dialog"
+        expanded={open}
+        buttonRef={bellRef}
         onClick={() => onOpenChange(!open)}
-      >
-        <BellIcon size={16} />
-        {unreadCount > 0 && (
-          <span className="notification-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
-        )}
-      </button>
+        trailing={
+          unreadCount > 0 ? (
+            <span className="notification-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
+          ) : undefined
+        }
+      />
       {open &&
         position &&
         createPortal(

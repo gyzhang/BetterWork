@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { ActionBar } from '../components/ActionBar';
 import { AsyncButton } from '../components/AsyncButton';
 import { Badge } from '../components/Badge';
+import { Button } from '../components/Button';
 import { CheckList } from '../components/CheckList';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
@@ -128,14 +129,16 @@ function ExpertSummon({
   className?: string;
 }): React.JSX.Element {
   return (
-    <button
-      className={`primary-button${className ? ` ${className}` : ''}`}
+    <Button
+      variant="primary"
+      size="lg"
       type="button"
       disabled={expert.lifecycle !== 'active'}
       onClick={() => reportAction(onSummon(expert), onError, '无法召唤该专家。')}
+      {...(className ? { className } : {})}
     >
       <SummonIcon size={13} /> 召唤
-    </button>
+    </Button>
   );
 }
 
@@ -193,26 +196,32 @@ function ExpertActionButtons({
   const builtin = expert.sourceKind === 'builtin';
   return (
     <>
-      <button className="text-button" type="button" onClick={() => onOpen(expert)}>
+      <Button variant="text" size="sm" type="button" onClick={() => onOpen(expert)}>
         详情
-      </button>
+      </Button>
       {builtin ? (
-        <button className="text-button" type="button" onClick={() => onCopy(expert)}>
+        <Button variant="text" size="sm" type="button" onClick={() => onCopy(expert)}>
           复制副本
-        </button>
+        </Button>
       ) : (
         <>
-          <button className="text-button" type="button" onClick={() => onEdit(expert)}>
+          <Button variant="text" size="sm" type="button" onClick={() => onEdit(expert)}>
             编辑
-          </button>
-          <button className="text-button danger" type="button" onClick={() => onDelete(expert)}>
+          </Button>
+          <Button
+            variant="text"
+            size="sm"
+            tone="danger"
+            type="button"
+            onClick={() => onDelete(expert)}
+          >
             删除
-          </button>
+          </Button>
         </>
       )}
-      <button className="text-button" type="button" onClick={() => onToggleEnabled(expert)}>
+      <Button variant="text" size="sm" type="button" onClick={() => onToggleEnabled(expert)}>
         {expert.lifecycle === 'active' ? '停用' : '启用'}
-      </button>
+      </Button>
     </>
   );
 }
@@ -331,9 +340,9 @@ function ExpertEditor({
         eyebrow="专家配置"
         title={editing ? '编辑专家修订' : '新建专家'}
         leading={
-          <button className="text-button" type="button" onClick={onCancel}>
+          <Button variant="text" size="sm" type="button" onClick={onCancel}>
             {backLabel}
-          </button>
+          </Button>
         }
       />
       <ScrollRegion ariaLabel="专家编辑表单">
@@ -565,9 +574,9 @@ function ExpertEditor({
             />
           </fieldset>
           <ActionBar as="div" label="保存专家修订">
-            <button className="text-button" type="button" onClick={onCancel}>
+            <Button variant="text" size="sm" type="button" onClick={onCancel}>
               取消
-            </button>
+            </Button>
             <AsyncButton
               variant="primary"
               busy={saving}
@@ -633,30 +642,31 @@ function ExpertDetailPanel({
         eyebrow="专家"
         title={detail.name}
         leading={
-          <button className="text-button" type="button" onClick={onBack}>
+          <Button variant="text" size="sm" type="button" onClick={onBack}>
             返回列表
-          </button>
+          </Button>
         }
         actions={
           <>
-            <button
-              className="primary-button"
+            <Button
+              variant="primary"
+              size="lg"
               type="button"
               disabled={detail.lifecycle !== 'active'}
               onClick={onSummon}
             >
               <SummonIcon size={13} /> 召唤
-            </button>
+            </Button>
             {/* 内置专家后端拒绝直接改（expert_builtin_readonly）：入口按来源分档，
                 不再让人点一次才知道不能改（ADR-0011，与技能页同口径）。 */}
             {detail.sourceKind === 'builtin' ? (
-              <button className="secondary-button" type="button" onClick={onCopy}>
+              <Button variant="secondary" size="md" type="button" onClick={onCopy}>
                 复制为用户专家
-              </button>
+              </Button>
             ) : (
-              <button className="secondary-button" type="button" onClick={onEdit}>
+              <Button variant="secondary" size="md" type="button" onClick={onEdit}>
                 编辑配置
-              </button>
+              </Button>
             )}
           </>
         }
@@ -709,35 +719,43 @@ function ExpertDetailPanel({
             {expertMemories.length === 0 && (
               <small className="muted-text">还没有与此专家关联的记忆，可在任务中确认经验。</small>
             )}
-            <button className="text-button" type="button" onClick={onManageMemories}>
+            <Button variant="text" size="sm" type="button" onClick={onManageMemories}>
               管理记忆
-            </button>
+            </Button>
           </section>
           <section className="expert-detail-section">
             <h2>生命周期</h2>
             <div className="expert-detail-actions">
               {detail.lifecycle === 'active' && (
-                <button
-                  className="text-button"
+                <Button
+                  variant="text"
+                  size="sm"
                   type="button"
                   onClick={() => onLifecycle('disabled')}
                 >
                   停用
-                </button>
+                </Button>
               )}
               {detail.lifecycle === 'disabled' && (
-                <button className="text-button" type="button" onClick={() => onLifecycle('active')}>
+                <Button
+                  variant="text"
+                  size="sm"
+                  type="button"
+                  onClick={() => onLifecycle('active')}
+                >
                   重新启用
-                </button>
+                </Button>
               )}
               {detail.lifecycle !== 'archived' && (
-                <button
-                  className="text-button danger"
+                <Button
+                  variant="text"
+                  size="sm"
+                  tone="danger"
                   type="button"
                   onClick={() => onLifecycle('archived')}
                 >
                   归档
-                </button>
+                </Button>
               )}
             </div>
           </section>
@@ -970,9 +988,9 @@ export function ExpertsPage({
                 { id: 'list', label: '列表' },
               ]}
             />
-            <button className="primary-button" type="button" onClick={openCreate}>
+            <Button variant="primary" size="lg" type="button" onClick={openCreate}>
               <PlusIcon size={13} /> 新建专家
-            </button>
+            </Button>
           </>
         }
       />

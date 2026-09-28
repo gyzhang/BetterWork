@@ -7,6 +7,7 @@ import type {
 import { useEffect, useState } from 'react';
 
 import { AsyncButton, InlineLoading } from '../components/AsyncButton';
+import { Button } from '../components/Button';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, ErrorPage, LoadingPage } from '../components/EmptyState';
 import { FieldSelect } from '../components/FieldSelect';
@@ -264,22 +265,25 @@ export function KnowledgePage({
                 placeholder="搜索资料库中的内容…"
                 aria-label="搜索个人资料库"
               />
-              <button type="submit">搜索</button>
+              <Button variant="primary" size="md" type="submit">
+                搜索
+              </Button>
               {showingResults && (
-                <button type="button" className="clear-search" onClick={() => setQuery('')}>
+                <Button variant="outline" size="sm" type="button" onClick={() => setQuery('')}>
                   清除
-                </button>
+                </Button>
               )}
             </form>
-            <button
+            <Button
+              variant="text"
+              size="md"
               type="button"
-              className="knowledge-admin-toggle"
               aria-haspopup="dialog"
               aria-expanded={indexDrawerOpen}
               onClick={() => setIndexDrawerOpen(true)}
             >
               {indexEntryLabel}
-            </button>
+            </Button>
           </PageToolbar>
           {indexDrawerOpen && (
             <Modal variant="sheet" label="索引与作业" onClose={() => setIndexDrawerOpen(false)}>
@@ -303,18 +307,22 @@ export function KnowledgePage({
                         }${job.failedCount > 0 ? ` · 失败 ${job.failedCount}` : ''}`}
                         actions={
                           <>
-                            <button
+                            <Button
+                              variant="quiet"
+                              size="sm"
                               type="button"
                               onClick={() => trackAction(openJobDetail(job.id), '查看作业条目')}
                             >
                               {jobDetail?.jobId === job.id ? '收起条目' : '查看条目'}
-                            </button>
-                            <button
+                            </Button>
+                            <Button
+                              variant="quiet"
+                              size="sm"
                               type="button"
                               onClick={() => trackAction(cancelJob(job.id), '取消作业')}
                             >
                               取消
-                            </button>
+                            </Button>
                           </>
                         }
                       />
@@ -364,39 +372,47 @@ export function KnowledgePage({
                     )}
                   </div>
                   <div className="knowledge-admin-row">
-                    <button
+                    <Button
+                      variant="secondary"
+                      size="md"
                       type="button"
                       disabled={!semanticOn}
                       onClick={() => setPendingRebuild('normal')}
                     >
                       重建语义索引
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      tone="danger"
                       type="button"
-                      className="knowledge-admin-danger"
                       disabled={!semanticOn}
                       onClick={() => setPendingRebuild('forced')}
                     >
                       强制重建语义索引
-                    </button>
+                    </Button>
                     <small>
                       普通重建只更新当前资料的兼容索引；强制重建会立即停用全部旧语义索引。关键词检索始终可用。
                     </small>
                   </div>
                   <div className="knowledge-admin-row">
-                    <button
+                    <Button
+                      variant="secondary"
+                      size="md"
                       type="button"
                       onClick={() => trackAction(rebuildKeyword(), '重建关键词索引')}
                     >
                       重建关键词索引
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="md"
                       type="button"
                       disabled={documents.length === 0}
                       onClick={() => trackAction(checkAllSources(), '检查当前列表来源')}
                     >
                       检查当前列表来源（{documents.length}）
-                    </button>
+                    </Button>
                     <small>
                       这两项只在本机进行、不调用模型：关键词重建重写全部登记资料的派生索引，来源检查只比对当前列表里的原件与登记内容是否一致。
                     </small>
@@ -420,9 +436,14 @@ export function KnowledgePage({
                         aria-label="新集合名称"
                         maxLength={60}
                       />
-                      <button type="submit" disabled={!newCollectionName.trim()}>
+                      <Button
+                        variant="secondary"
+                        size="md"
+                        type="submit"
+                        disabled={!newCollectionName.trim()}
+                      >
                         新建
-                      </button>
+                      </Button>
                     </form>
                     {collections.length === 0 && (
                       <small>还没有集合；资料可先留在全部资料中。</small>
@@ -442,7 +463,9 @@ export function KnowledgePage({
                             aria-label={`集合「${collection.name}」的新名称`}
                             maxLength={60}
                           />
-                          <button
+                          <Button
+                            variant="secondary"
+                            size="md"
                             type="button"
                             disabled={!draftName.trim() || draftName.trim() === collection.name}
                             onClick={() => {
@@ -459,14 +482,16 @@ export function KnowledgePage({
                             }}
                           >
                             改名
-                          </button>
-                          <button
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="md"
+                            tone="danger"
                             type="button"
-                            className="knowledge-admin-danger"
                             onClick={() => setPendingCollectionDelete(collection)}
                           >
                             删除
-                          </button>
+                          </Button>
                         </div>
                       );
                     })}
@@ -477,13 +502,15 @@ export function KnowledgePage({
                   <section className="knowledge-jobs" aria-label="最近作业">
                     <div className="knowledge-jobs-head">
                       <strong>{`最近作业（含已取消）· ${recentJobs.length} 条`}</strong>
-                      <button
-                        className="danger-text"
+                      <Button
+                        variant="quiet"
+                        size="sm"
+                        tone="danger"
                         type="button"
                         onClick={() => setPendingJobClear(true)}
                       >
                         清空
-                      </button>
+                      </Button>
                     </div>
                     {recentJobs.map((job) => (
                       <ListRow
@@ -493,12 +520,14 @@ export function KnowledgePage({
                           job.failedCount > 0 ? ` · 失败 ${job.failedCount}` : ''
                         }${job.failure ? ` · ${job.failure.message}` : ''}`}
                         actions={
-                          <button
+                          <Button
+                            variant="quiet"
+                            size="sm"
                             type="button"
                             onClick={() => trackAction(openJobDetail(job.id), '查看作业条目')}
                           >
                             {jobDetail?.jobId === job.id ? '收起条目' : '查看条目'}
-                          </button>
+                          </Button>
                         }
                       />
                     ))}
@@ -541,12 +570,15 @@ export function KnowledgePage({
                 ))}
               </ul>
               {retryTarget && (
-                <button
+                <Button
+                  variant="outline"
+                  size="md"
+                  tone="danger"
                   type="button"
                   onClick={() => trackAction(retryFailedItems(), '重试失败条目')}
                 >
                   重试未完成条目（{retryTarget.itemIds.length}）
-                </button>
+                </Button>
               )}
             </div>
           )}
@@ -571,14 +603,14 @@ export function KnowledgePage({
                 </small>
               )}
               {showingResults && items.length > 0 && (
-                <button type="button" onClick={selectAllResults}>
+                <Button variant="secondary" size="sm" type="button" onClick={selectAllResults}>
                   全选结果
-                </button>
+                </Button>
               )}
               {showingResults && selectedMaterials.length > 0 && (
-                <button type="button" onClick={clearSelection}>
+                <Button variant="secondary" size="sm" type="button" onClick={clearSelection}>
                   清除选择
-                </button>
+                </Button>
               )}
               {showingResults && (
                 <AsyncButton
@@ -596,16 +628,18 @@ export function KnowledgePage({
             <ScrollRegion ariaLabel="资料详情" className="knowledge-list-scroll">
               <section className="knowledge-detail">
                 <header className="knowledge-detail-header">
-                  <button type="button" onClick={closeDocument}>
+                  <Button variant="secondary" size="sm" type="button" onClick={closeDocument}>
                     返回列表
-                  </button>
+                  </Button>
                   <div>
                     <strong>{detailDocument.title}</strong>
                     <small>{sourceStateLine(detailDocument, detailRevision)}</small>
                   </div>
                 </header>
                 <div className="knowledge-detail-actions">
-                  <button
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     type="button"
                     onClick={() =>
                       reportAction(
@@ -617,14 +651,18 @@ export function KnowledgePage({
                     }
                   >
                     打开本机原件
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     type="button"
                     onClick={() => trackAction(checkDocumentSource(detailDocument.id), '检查来源')}
                   >
                     检查来源
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     type="button"
                     disabled={importing}
                     onClick={() =>
@@ -634,14 +672,16 @@ export function KnowledgePage({
                     }
                   >
                     刷新内容
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    tone="danger"
                     type="button"
-                    className="knowledge-admin-danger"
                     onClick={() => setRemovalTarget(detailDocument)}
                   >
                     移出资料库
-                  </button>
+                  </Button>
                 </div>
                 <p className="knowledge-detail-hint">
                   预览读取的是已保存文本：不产生任务访问记录，也不调用模型；原件变化不会自动刷新索引。
@@ -652,7 +692,9 @@ export function KnowledgePage({
                   {detailRevisions.length === 0 && !detailLoading && <small>暂无历史版本。</small>}
                   {detailRevisions.map((revision) => (
                     <div className="knowledge-revision-row" key={revision.id}>
-                      <button
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         type="button"
                         disabled={revision.id === detailRevisionId}
                         onClick={() =>
@@ -660,7 +702,7 @@ export function KnowledgePage({
                         }
                       >
                         第 {revision.revision} 版
-                      </button>
+                      </Button>
                       <small>
                         {`哈希 ${revision.contentHash.slice(0, 8)} · ${formatTime(revision.createdAt)}${
                           revision.warnings.length > 0
@@ -694,7 +736,10 @@ export function KnowledgePage({
                     </label>
                   ))}
                   <div>
-                    <button
+                    <Button
+                      variant="outline"
+                      size="md"
+                      tone="brand"
                       type="button"
                       disabled={memberDraft?.documentId !== detailDocument.id}
                       onClick={() => {
@@ -711,7 +756,7 @@ export function KnowledgePage({
                       }}
                     >
                       保存分类
-                    </button>
+                    </Button>
                     <small>勾选即加入、取消即移出；分类不改变内容版本，也不动任务材料。</small>
                   </div>
                 </section>
@@ -725,25 +770,29 @@ export function KnowledgePage({
                   ))}
                   {detailPage && (
                     <footer className="knowledge-detail-pager">
-                      <button
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         type="button"
                         disabled={!detailCanGoBack || detailLoading}
                         onClick={() => trackAction(loadPreviousDetailPage(), '上一页')}
                       >
                         上一页
-                      </button>
+                      </Button>
                       <small>
                         {detailPage.complete
                           ? `已读到结尾（本页 ${detailPage.returnedCodePoints} 字）`
                           : `本页 ${detailPage.returnedCodePoints} 字，仍有后续内容`}
                       </small>
-                      <button
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         type="button"
                         disabled={!detailPage.nextCursor || detailLoading}
                         onClick={() => trackAction(loadNextDetailPage(), '下一页')}
                       >
                         下一页
-                      </button>
+                      </Button>
                     </footer>
                   )}
                 </section>

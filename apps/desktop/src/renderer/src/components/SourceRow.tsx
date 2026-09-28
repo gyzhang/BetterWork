@@ -2,6 +2,7 @@ import type { EvidenceSummary, KnowledgeEvidenceSource } from '@betterwork/agent
 import type { ComponentType, ReactNode } from 'react';
 
 import { CapabilityIcon, GlobeIcon, KnowledgeIcon } from '../icons';
+import { Button } from './Button';
 import { ListRow } from './ListRow';
 
 /**
@@ -89,9 +90,9 @@ export function SourceRow({
         <>
           {actions}
           {onOpenSource && canOpenEvidenceSource(item) ? (
-            <button type="button" onClick={onOpenSource}>
+            <Button variant="quiet" size="sm" type="button" onClick={onOpenSource}>
               {openSourceLabel}
-            </button>
+            </Button>
           ) : undefined}
         </>
       }

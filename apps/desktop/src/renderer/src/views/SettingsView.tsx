@@ -15,6 +15,7 @@ import { colorSchemes } from '../appearance';
 import { ActionBar } from '../components/ActionBar';
 import { AsyncButton, InlineLoading } from '../components/AsyncButton';
 import { Badge } from '../components/Badge';
+import { Button } from '../components/Button';
 import { ConnectionStatus } from '../components/ConnectionStatus';
 import { EmptyNotice } from '../components/EmptyState';
 import { Field } from '../components/Field';
@@ -151,9 +152,9 @@ function ModelSettings({
         title="让每一种工作使用合适的模型"
         hint="API Key 仅保存于本机主进程。语言模型会用于当前任务，视觉与嵌入能力将在对应工作流启用。"
         actions={
-          <button className="primary-button" type="button" onClick={onAdd}>
+          <Button variant="primary" size="lg" type="button" onClick={onAdd}>
             <PlusIcon size={13} /> 添加模型
-          </button>
+          </Button>
         }
       />
       <SegmentedControl
@@ -205,18 +206,29 @@ function ModelSettings({
                 }
                 actions={
                   <>
-                    <button type="button" onClick={() => onEdit(model)}>
+                    <Button variant="quiet" size="sm" type="button" onClick={() => onEdit(model)}>
                       编辑
-                    </button>
+                    </Button>
                     {!isDefault && (
-                      <button disabled={!model.enabled} onClick={() => onSetDefault(model)}>
+                      <Button
+                        variant="quiet"
+                        size="sm"
+                        disabled={!model.enabled}
+                        onClick={() => onSetDefault(model)}
+                      >
                         设为默认
-                      </button>
+                      </Button>
                     )}
                     <Switch label="启用" checked={model.enabled} onChange={() => onToggle(model)} />
-                    <button type="button" className="danger-text" onClick={() => onDelete(model)}>
+                    <Button
+                      variant="quiet"
+                      size="sm"
+                      tone="danger"
+                      type="button"
+                      onClick={() => onDelete(model)}
+                    >
                       删除
-                    </button>
+                    </Button>
                   </>
                 }
               />
@@ -251,7 +263,9 @@ function AppearanceSettings({
           ] as const
         ).map(([mode, label]) => (
           <button
-            className={appearance.mode === mode ? 'selected' : ''}
+            type="button"
+            className="option-card"
+            aria-pressed={appearance.mode === mode}
             key={mode}
             onClick={() => onMode(mode)}
           >
@@ -271,7 +285,9 @@ function AppearanceSettings({
       <div className="scheme-grid">
         {colorSchemes.map((scheme) => (
           <button
-            className={appearance.scheme === scheme.id ? 'selected' : ''}
+            type="button"
+            className="option-card"
+            aria-pressed={appearance.scheme === scheme.id}
             key={scheme.id}
             onClick={() => onScheme(scheme.id)}
           >
@@ -370,13 +386,14 @@ export function SearchSettings(): React.JSX.Element {
             busyLabel="连接中…"
             onClick={() => trackAction(test(), '测试搜索连接')}
           />
-          <button
+          <Button
+            variant="primary"
+            size="lg"
             type="button"
-            className="primary-button"
             onClick={() => trackAction(save(), '保存搜索配置')}
           >
             保存并启用
-          </button>
+          </Button>
         </div>
       </div>
       <p className="search-status">
@@ -517,9 +534,9 @@ function McpSettings({ state }: { state: McpConnectionsState }): React.JSX.Eleme
         title="连接外部工作能力"
         hint="连接只保存本机启动命令和参数。检测后，专家和当前任务分别选择具体工具；新增工具不会自动进入既有选择。"
         actions={
-          <button className="primary-button" type="button" onClick={() => beginEdit()}>
+          <Button variant="primary" size="lg" type="button" onClick={() => beginEdit()}>
             新建连接
-          </button>
+          </Button>
         }
       />
       {state.loading ? (
@@ -548,24 +565,33 @@ function McpSettings({ state }: { state: McpConnectionsState }): React.JSX.Eleme
               }
               actions={
                 <>
-                  <button
+                  <Button
+                    variant="quiet"
+                    size="sm"
                     type="button"
                     disabled={busyId === connection.id}
                     onClick={() => test(connection)}
                   >
                     检测
-                  </button>
-                  <button type="button" onClick={() => beginEdit(connection)}>
-                    编辑
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="quiet"
+                    size="sm"
                     type="button"
-                    className="danger-text"
+                    onClick={() => beginEdit(connection)}
+                  >
+                    编辑
+                  </Button>
+                  <Button
+                    variant="quiet"
+                    size="sm"
+                    tone="danger"
+                    type="button"
                     disabled={busyId === connection.id}
                     onClick={() => remove(connection)}
                   >
                     删除
-                  </button>
+                  </Button>
                 </>
               }
             >
@@ -615,8 +641,9 @@ function McpSettings({ state }: { state: McpConnectionsState }): React.JSX.Eleme
             </p>
           )}
           <ActionBar as="div" label="保存 MCP 连接">
-            <button
-              className="text-button"
+            <Button
+              variant="text"
+              size="sm"
               type="button"
               onClick={() => {
                 setEditorOpen(false);
@@ -625,15 +652,16 @@ function McpSettings({ state }: { state: McpConnectionsState }): React.JSX.Eleme
               }}
             >
               取消
-            </button>
-            <button
-              className="primary-button"
+            </Button>
+            <Button
+              variant="primary"
+              size="lg"
               type="button"
               disabled={busyId !== undefined}
               onClick={save}
             >
               保存
-            </button>
+            </Button>
           </ActionBar>
         </div>
       )}

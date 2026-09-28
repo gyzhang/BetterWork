@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 
+import { Button } from './Button';
 import { Modal } from './Modal';
 
 export interface ConfirmationDialogProps {
@@ -39,12 +40,18 @@ export function ConfirmationDialog({
         {detail}
       </p>
       <footer>
-        <button ref={cancelButtonRef} className="secondary-button" type="button" onClick={onCancel}>
+        <Button
+          variant="secondary"
+          size="md"
+          ref={cancelButtonRef}
+          type="button"
+          onClick={onCancel}
+        >
           取消
-        </button>
-        <button className="danger-confirm-button" type="button" onClick={onConfirm}>
+        </Button>
+        <Button variant="danger" size="md" type="button" onClick={onConfirm}>
           {confirmLabel}
-        </button>
+        </Button>
       </footer>
     </Modal>
   );

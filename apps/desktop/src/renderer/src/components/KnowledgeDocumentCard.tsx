@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { MoreHorizontalIcon } from '../icons';
 import { formatTime } from '../lib/format';
 import { knowledgeSourceStateName } from '../lib/labels';
+import { Button } from './Button';
 import { ListRow } from './ListRow';
 import type { PopoverMenuItem } from './PopoverMenu';
 import { PopoverMenu } from './PopoverMenu';
@@ -86,12 +87,13 @@ export function KnowledgeDocumentCard({
       }
       actions={
         <>
-          <button className="open-source-button" type="button" onClick={onOpen}>
+          <Button variant="outline" size="sm" type="button" onClick={onOpen}>
             打开原文
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             ref={menuTriggerRef}
-            className="knowledge-more-button"
             type="button"
             aria-label={menuLabel}
             aria-haspopup="menu"
@@ -100,7 +102,7 @@ export function KnowledgeDocumentCard({
           >
             <MoreHorizontalIcon size={16} />
             <span>更多</span>
-          </button>
+          </Button>
           <PopoverMenu
             open={menuOpen}
             anchorRef={menuTriggerRef}

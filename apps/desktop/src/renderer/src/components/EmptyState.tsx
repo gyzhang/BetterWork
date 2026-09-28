@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { AlertIcon, ArtifactIcon } from '../icons';
+import { Button } from './Button';
 
 export function EmptyContext({
   title,
@@ -92,9 +93,9 @@ export function ErrorPage({
       </span>
       <strong>{title}</strong>
       <p>{detail}</p>
-      <button className="secondary-button" type="button" onClick={onRetry}>
+      <Button variant="secondary" size="md" type="button" onClick={onRetry}>
         重新加载
-      </button>
+      </Button>
     </section>
   );
 }

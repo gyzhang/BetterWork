@@ -25,6 +25,7 @@ import {
 } from '../lib/memory-labels';
 import { ActionBar } from './ActionBar';
 import { AsyncButton } from './AsyncButton';
+import { Button } from './Button';
 import { Field } from './Field';
 import { FieldSelect } from './FieldSelect';
 
@@ -414,9 +415,15 @@ export function MemoryEditor({
         </ul>
       )}
       <ActionBar as="div" label="保存经验">
-        <button type="button" className="secondary-button" onClick={onCancel} disabled={submitting}>
+        <Button
+          variant="secondary"
+          size="md"
+          type="button"
+          onClick={onCancel}
+          disabled={submitting}
+        >
           取消
-        </button>
+        </Button>
         <AsyncButton
           variant="primary"
           busy={submitting}

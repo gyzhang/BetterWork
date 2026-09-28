@@ -40,6 +40,7 @@ import {
 import { handleTitlebarDoubleClick } from '../lib/titlebar';
 import type { ContextTab } from '../lib/view-types';
 import { AsyncButton, InlineLoading } from './AsyncButton';
+import { Button } from './Button';
 import { EmptyContext } from './EmptyState';
 import { IconButton } from './IconButton';
 import { ListRow } from './ListRow';
@@ -286,27 +287,30 @@ export function ContextPanel({
                   hint={materials.length > 0 ? `${materials.length} 项已选择` : '尚未选择'}
                   actions={
                     <>
-                      <button
-                        className="chip-button"
+                      <Button
+                        variant="chip"
+                        size="sm"
                         type="button"
                         onClick={() => onRequestMaterials('file')}
                       >
                         文件
-                      </button>
-                      <button
-                        className="chip-button"
+                      </Button>
+                      <Button
+                        variant="chip"
+                        size="sm"
                         type="button"
                         onClick={() => onRequestMaterials('knowledge')}
                       >
                         知识
-                      </button>
-                      <button
-                        className="chip-button"
+                      </Button>
+                      <Button
+                        variant="chip"
+                        size="sm"
                         type="button"
                         onClick={() => onRequestMaterials('artifact')}
                       >
                         成果
-                      </button>
+                      </Button>
                     </>
                   }
                 />
@@ -507,9 +511,9 @@ function EvidencePreview({
       ) : error ? (
         <>
           <p className="inline-message error">{error}</p>
-          <button type="button" className="text-button" onClick={onClose}>
+          <Button variant="text" size="sm" type="button" onClick={onClose}>
             关闭
-          </button>
+          </Button>
         </>
       ) : preview === undefined ? null : preview.kind === 'exact' ? (
         <>
@@ -532,9 +536,9 @@ function EvidencePreview({
               </li>
             ))}
           </ul>
-          <button type="button" className="text-button" onClick={onClose}>
+          <Button variant="text" size="sm" type="button" onClick={onClose}>
             关闭
-          </button>
+          </Button>
         </>
       ) : (
         <p className="context-note">
@@ -571,14 +575,15 @@ function NextRunScopeSection({
         title="下次运行可用"
         hint="范围预览：按当前任务输入试算，不是本次实际使用记录"
         actions={
-          <button
-            className="chip-button"
+          <Button
+            variant="chip"
+            size="sm"
             type="button"
             onClick={requestPreview}
             disabled={!previewAvailable}
           >
             重新试算
-          </button>
+          </Button>
         }
       />
       {!previewAvailable ? (
@@ -590,9 +595,9 @@ function NextRunScopeSection({
       ) : previewError ? (
         <p className="inline-message error">
           {previewError}
-          <button type="button" onClick={requestPreview}>
+          <Button variant="quiet" size="sm" type="button" onClick={requestPreview}>
             重试
-          </button>
+          </Button>
         </p>
       ) : preview === undefined ? (
         <p className="context-hint">暂无预览结果。</p>
@@ -706,9 +711,9 @@ function ExcludedTaskMemoriesSection({
       {exclusions.error !== '' && (
         <p className="inline-message error">
           {exclusions.error}
-          <button type="button" onClick={exclusions.reload}>
+          <Button variant="quiet" size="sm" type="button" onClick={exclusions.reload}>
             重试
-          </button>
+          </Button>
         </p>
       )}
       {exclusions.error === '' && exclusions.items.length === 0 ? (
@@ -829,17 +834,17 @@ function ThisRunMemorySection({
         title="本次运行记忆"
         hint="登记的是宿主的准备阶段，不表示模型已读到"
         actions={
-          <button className="chip-button" type="button" onClick={refreshRunContext}>
+          <Button variant="chip" size="sm" type="button" onClick={refreshRunContext}>
             刷新
-          </button>
+          </Button>
         }
       />
       {contextError ? (
         <p className="inline-message error">
           {contextError}
-          <button type="button" onClick={refreshRunContext}>
+          <Button variant="quiet" size="sm" type="button" onClick={refreshRunContext}>
             重试
-          </button>
+          </Button>
         </p>
       ) : contextLoading && runContext === undefined ? (
         <InlineLoading label="正在读取本次运行的记忆登记…" />
@@ -952,15 +957,15 @@ function HistoryAdjustmentSection({
         旧轮次只是这次不发送，对话没有被删除；记忆被修订、排除、失效或材料换版本时，相关旧回答不会继续当作事实使用。
       </p>
       <div className="context-continuity-actions">
-        <button type="button" className="chip-button" onClick={onSelectMaterials}>
+        <Button variant="chip" size="sm" type="button" onClick={onSelectMaterials}>
           选择本期材料
-        </button>
-        <button type="button" className="chip-button" onClick={onOpenArtifacts}>
+        </Button>
+        <Button variant="chip" size="sm" type="button" onClick={onOpenArtifacts}>
           查看上期成果版本
-        </button>
-        <button type="button" className="chip-button" onClick={onOpenMemoryPage}>
+        </Button>
+        <Button variant="chip" size="sm" type="button" onClick={onOpenMemoryPage}>
           到记忆详情保留方法
-        </button>
+        </Button>
       </div>
       <p className="context-hint">
         引用旧成果只固定你选定的那一版，标记参考不等于已读取；要把上期方法长期留下，请在记忆详情以你的口径重新表述，系统不会自动摘要旧回答。

@@ -15,6 +15,7 @@ import { useCallback, useRef, useState } from 'react';
 
 import { ActionBar } from '../components/ActionBar';
 import { AsyncButton, InlineLoading } from '../components/AsyncButton';
+import { Button } from '../components/Button';
 import { EmptyPage } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
@@ -162,16 +163,17 @@ export function ArtifactPage({
           eyebrow={`${selected.type === 'markdown' ? 'Markdown' : fileTypeLabel(selected.mimeType)} · v${visibleVersion.versionNumber}${visibleVersion.origin === 'user-edit' ? ' · 人工修订' : ''}${visibleVersion.id !== selected.currentVersionId ? ' · 历史版本' : ''}`}
           title={selected.title}
           leading={
-            <button className="back-button" onClick={onBack}>
+            <Button variant="link" size="sm" onClick={onBack}>
               <ChevronLeftIcon size={13} /> 成果
-            </button>
+            </Button>
           }
           actions={
             !editing && (
               <>
                 {selected.type === 'presentation' && (
-                  <button
-                    className="secondary-button"
+                  <Button
+                    variant="secondary"
+                    size="md"
                     onClick={() =>
                       reportAction(
                         onOpenFile(selected.id, visibleVersion.id).then((result) => {
@@ -188,10 +190,11 @@ export function ArtifactPage({
                     }
                   >
                     打开
-                  </button>
+                  </Button>
                 )}
-                <button
-                  className="secondary-button"
+                <Button
+                  variant="secondary"
+                  size="md"
                   onClick={() =>
                     reportAction(
                       onExport(selected, visibleVersion.id).then((result) => {
@@ -208,10 +211,11 @@ export function ArtifactPage({
                   }
                 >
                   {selected.type === 'markdown' ? '导出 Markdown' : '导出文件'}
-                </button>
+                </Button>
                 {selected.type === 'markdown' && (
-                  <button
-                    className="secondary-button"
+                  <Button
+                    variant="secondary"
+                    size="md"
                     onClick={() =>
                       reportAction(onStartFromVersion(selected, visibleVersion), (errorMessage) =>
                         setToast({ tone: 'error', message: errorMessage || '无法开始新任务。' }),
@@ -219,12 +223,12 @@ export function ArtifactPage({
                     }
                   >
                     基于此版本开始新任务
-                  </button>
+                  </Button>
                 )}
                 {selected.type === 'markdown' && (
-                  <button className="primary-button" onClick={beginEditing}>
+                  <Button variant="primary" size="lg" onClick={beginEditing}>
                     编辑此版本
-                  </button>
+                  </Button>
                 )}
               </>
             )
@@ -411,13 +415,14 @@ export function ArtifactPage({
                           </div>
                         ))}
                         {sourceSelection.touched && (
-                          <button
-                            className="text-button"
+                          <Button
+                            variant="text"
+                            size="sm"
                             type="button"
                             onClick={sourceSelection.inheritPrevious}
                           >
                             改为沿用上一版声明
-                          </button>
+                          </Button>
                         )}
                       </fieldset>
                     )}
@@ -425,12 +430,12 @@ export function ArtifactPage({
                       hint={`保存后会创建 v${selected.versionNumber + 1} 人工修订版本。`}
                       label="保存成果修订"
                     >
-                      <button type="button" className="secondary-button" onClick={cancelEditing}>
+                      <Button variant="secondary" size="md" type="button" onClick={cancelEditing}>
                         取消
-                      </button>
-                      <button type="submit" className="primary-button">
+                      </Button>
+                      <Button variant="primary" size="lg" type="submit">
                         保存新版本
-                      </button>
+                      </Button>
                     </ActionBar>
                   </form>
                 ) : (
@@ -675,25 +680,27 @@ function SlideViewer({
           第 {pageNumber} / {pageCount} 页
         </span>
         <div>
-          <button
-            className="secondary-button"
+          <Button
+            variant="secondary"
+            size="md"
             type="button"
             disabled={pageNumber <= 1}
             onClick={() => step(-1)}
           >
             上一页
-          </button>
-          <button
-            className="secondary-button"
+          </Button>
+          <Button
+            variant="secondary"
+            size="md"
             type="button"
             disabled={pageNumber >= pageCount}
             onClick={() => step(1)}
           >
             下一页
-          </button>
-          <button ref={closeRef} className="secondary-button" type="button" onClick={onClose}>
+          </Button>
+          <Button variant="secondary" size="md" ref={closeRef} type="button" onClick={onClose}>
             关闭
-          </button>
+          </Button>
         </div>
       </header>
       <img
@@ -765,9 +772,9 @@ function ReferenceVersionSection({
         actions={
           <>
             {reference ? (
-              <button type="button" className="secondary-button" disabled={busy} onClick={remove}>
+              <Button variant="secondary" size="md" type="button" disabled={busy} onClick={remove}>
                 取消参考
-              </button>
+              </Button>
             ) : (
               <AsyncButton
                 variant="secondary"
@@ -778,13 +785,14 @@ function ReferenceVersionSection({
               />
             )}
             {onReferenceToTask && (
-              <button
+              <Button
+                variant="secondary"
+                size="md"
                 type="button"
-                className="secondary-button"
                 onClick={() => onReferenceToTask(version.id)}
               >
                 引用到当前任务
-              </button>
+              </Button>
             )}
           </>
         }

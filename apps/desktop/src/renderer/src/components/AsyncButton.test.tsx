@@ -26,13 +26,32 @@ describe('AsyncButton', () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
-  it('外观类复用既有按钮档位，缺省时不加外观类', () => {
+  it('外观委托给 Button 基座：皮类只有一枚，档位走 data 属性', () => {
     const { rerender } = render(
-      <AsyncButton label="导入" busyLabel="正在导入…" busy variant="primary" />,
+      <AsyncButton label="导入" busyLabel="正在导入…" busy variant="primary" size="lg" />,
     );
-    expect(screen.getByRole('button').className).toBe('async-button primary-button');
+    const button = screen.getByRole('button');
+    expect(button.className).toBe('btn');
+    expect(button.getAttribute('data-variant')).toBe('primary');
+    expect(button.getAttribute('data-size')).toBe('lg');
+    // 缺省档位由 Button 给（md），AsyncButton 不再自己造一套「无皮」的中间态。
     rerender(<AsyncButton label="导入" busyLabel="正在导入…" busy />);
-    expect(screen.getByRole('button').className).toBe('async-button');
+    const fallback = screen.getByRole('button');
+    expect(fallback.className).toBe('btn');
+    expect(fallback.getAttribute('data-variant')).toBe('secondary');
+    expect(fallback.getAttribute('data-size')).toBe('md');
+  });
+
+  it('定位钩子类留在 className 上，与基座的 .btn 并存', () => {
+    render(
+      <AsyncButton
+        label="导入"
+        busyLabel="正在导入…"
+        busy={false}
+        className="expert-card-summon"
+      />,
+    );
+    expect(screen.getByRole('button').className).toBe('btn expert-card-summon');
   });
 
   it('额外的禁用条件与忙碌同样生效', () => {

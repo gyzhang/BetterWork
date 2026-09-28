@@ -1,15 +1,18 @@
 import type { ComponentType, ReactNode, Ref } from 'react';
 
-/** 两档：`sm`＝密集条带里的 24px 方块（字形 12px），`md`＝面板头的 28px 方块（字形 14px）。 */
-const GLYPH_SIZE: Record<'sm' | 'md', number> = { sm: 12, md: 14 };
+/** 三档：`sm`＝密集条带里的 23px 方块（字形 12px），`md`＝面板头的 28px 方块（字形 14px），
+ *  `row`＝与侧栏导航行同高的 34px 方块（字形 16px）。 */
+const GLYPH_SIZE: Record<'sm' | 'md' | 'row', number> = { sm: 12, md: 14, row: 16 };
 
 export interface IconButtonProps {
   /** 图标按钮没有可读文字，名称只能由这里给——它是必填项，不是可选项。 */
   label: string;
+  /** 原生悬停提示；`label` 给可及名称，这句给人看的解释。 */
+  title?: string | undefined;
   /** `icons.tsx` 里的图标组件本身。字形尺寸由 `size` 档位决定，页面不再逐处写 `size={14}`。 */
   icon: ComponentType<{ size?: number }>;
   onClick?: (() => void) | undefined;
-  size?: 'sm' | 'md' | undefined;
+  size?: 'sm' | 'md' | 'row' | undefined;
   /** 折叠与浮层触发器要给出展开状态，读屏才听得懂这个按钮在开什么。 */
   expanded?: boolean | undefined;
   disabled?: boolean | undefined;
@@ -34,6 +37,7 @@ export interface IconButtonProps {
  */
 export function IconButton({
   label,
+  title,
   icon: Icon,
   onClick,
   size = 'md',
@@ -51,6 +55,7 @@ export function IconButton({
       type="button"
       data-size={size}
       aria-label={label}
+      {...(title ? { title } : {})}
       {...(buttonRef ? { ref: buttonRef } : {})}
       {...(hasPopup ? { 'aria-haspopup': hasPopup } : {})}
       {...(expanded === undefined ? {} : { 'aria-expanded': expanded })}

@@ -4,6 +4,7 @@ import type { SkillDependenciesState } from '../../hooks/use-skill-dependencies'
 import { skillEnvironmentName } from '../../lib/labels';
 import { InlineLoading } from '../AsyncButton';
 import { Badge } from '../Badge';
+import { Button } from '../Button';
 import { Field } from '../Field';
 import { FieldSelect } from '../FieldSelect';
 import { SectionHeader } from '../SectionHeader';
@@ -129,29 +130,31 @@ export function DependencyPanel({
               })),
             ]}
           />
-          <button type="button" className="secondary-button" onClick={state.registerToolchain}>
+          <Button variant="secondary" size="md" type="button" onClick={state.registerToolchain}>
             登记目录…
-          </button>
+          </Button>
         </div>
       </Field>
 
       <div className="dependency-actions">
-        <button
+        <Button
+          variant="primary"
+          size="lg"
           type="button"
-          className="primary-button"
           onClick={state.prepare}
           disabled={!state.base || !state.lockId || state.preparing || pending}
         >
           {environment?.status === 'ready' ? '重新准备（修复）' : '准备环境'}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="secondary"
+          size="md"
           type="button"
-          className="secondary-button"
           onClick={state.cancel}
           disabled={!pending}
         >
           取消准备
-        </button>
+        </Button>
         {state.loading && (
           <InlineLoading className="dependency-progress" label="正在计算依赖计划…" />
         )}
@@ -185,14 +188,15 @@ export function DependencyPanel({
             <p className="dependency-warning">
               {grant?.blockedReason ?? '依赖确定后需要确认授权才能执行脚本。'}
             </p>
-            <button
+            <Button
+              variant="secondary"
+              size="md"
               type="button"
-              className="secondary-button"
               onClick={state.confirmGrant}
               disabled={skill.trustStatus !== 'trusted' && skill.trustStatus !== 'needs-review'}
             >
               确认依赖授权
-            </button>
+            </Button>
           </>
         )}
         <p>

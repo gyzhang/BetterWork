@@ -439,22 +439,126 @@ small {
   /* 方块、配色与悬停归 IconButton；这里只管它在品牌行里的位置。 */
   margin-left: auto;
 }
-.primary-button {
+/* === Button 基座（ADR-0031）===
+   `variant` 只管颜色，`size` 只管几何，两者正交；`tone` 只对 outline 生效。
+   档位集合与 components/Button.tsx 的 ButtonVariant／ButtonSize／ButtonTone
+   由护栏穷举比对：这里多一档或少一档即红。 */
+.btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: var(--control-height-lg);
-  padding: 8px 12px;
-  color: var(--on-brand);
-  background: var(--brand);
   border: 1px solid transparent;
   border-radius: var(--control-radius);
+}
+.btn[data-size='sm'] {
+  min-height: var(--control-height-sm);
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.btn[data-size='md'] {
+  min-height: var(--control-height);
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.btn[data-size='lg'] {
+  min-height: var(--control-height-lg);
+  padding: 8px 12px;
   font-size: 13px;
+}
+.btn[data-variant='primary'] {
+  color: var(--on-brand);
+  background: var(--brand);
   font-weight: 600;
 }
-.primary-button:hover {
+.btn[data-variant='primary']:hover:not(:disabled) {
   background: var(--brand-hover);
+}
+.btn[data-variant='danger'] {
+  color: var(--on-danger);
+  background: var(--danger);
+  font-weight: 600;
+}
+.btn[data-variant='danger']:hover:not(:disabled) {
+  background: var(--danger-hover);
+}
+.btn[data-variant='secondary'] {
+  color: var(--text-secondary);
+  background: var(--surface);
+  border-color: var(--input-border);
+}
+.btn[data-variant='secondary']:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--surface-raised);
+}
+.btn[data-variant='text'] {
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+  border-color: var(--input-border);
+}
+.btn[data-variant='text']:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--brand);
+}
+.btn[data-variant='outline'] {
+  color: var(--text-secondary);
+  background: transparent;
+  border-color: var(--border);
+}
+.btn[data-variant='outline']:hover:not(:disabled) {
+  color: var(--brand);
+  border-color: var(--brand);
+}
+/* `tone` 只改「描边与文字」这两件事，因此只对三档带边框的 variant 生效：
+   primary／danger／chip／link 本身已经定了色，quiet 没有边框可描。
+   此前页面用 `.danger`／`.danger-text` 这类字色类盖在按钮上表达破坏性，
+   特异性低于 `.btn[data-variant]`，收口后会静默失效——所以把它升成档位。 */
+.btn[data-variant='secondary'][data-tone='brand'],
+.btn[data-variant='text'][data-tone='brand'],
+.btn[data-variant='outline'][data-tone='brand'],
+.btn[data-variant='quiet'][data-tone='brand'] {
+  color: var(--brand);
+  border-color: var(--brand);
+}
+.btn[data-variant='secondary'][data-tone='danger'],
+.btn[data-variant='text'][data-tone='danger'],
+.btn[data-variant='outline'][data-tone='danger'],
+.btn[data-variant='quiet'][data-tone='danger'],
+.btn[data-variant='link'][data-tone='danger'] {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.btn[data-variant='outline'][data-tone='brand']:hover:not(:disabled),
+.btn[data-variant='outline'][data-tone='brand'][aria-expanded='true'] {
+  color: var(--brand-hover);
+}
+.btn[data-variant='quiet'] {
+  color: var(--text-secondary);
+  background: transparent;
+}
+.btn[data-variant='quiet']:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--surface-raised);
+}
+.btn[data-variant='chip'] {
+  color: var(--brand);
+  background: var(--brand-soft);
+  font-weight: 600;
+}
+.btn[data-variant='chip']:hover:not(:disabled) {
+  background: var(--selection);
+}
+.btn[data-variant='link'] {
+  /* 唯一被 variant 覆写的几何是左右内距：链接文字必须与同一行的正文左缘对齐，
+     给它 8px 内缩会让它看起来比正文缩进一格。上下内距与 min-height 仍归 size，
+     命中区不小于控件档。 */
+  padding-inline: 0;
+  color: var(--brand);
+  background: transparent;
+}
+.btn[data-variant='link']:hover:not(:disabled) {
+  color: var(--brand-hover);
+  text-decoration: underline;
 }
 /* 侧栏导航行的几何归 NavItem；这里只留这一段自己的上下留白。 */
 .primary-nav {
@@ -532,18 +636,10 @@ small {
   gap: 4px;
   border-left: 1px solid var(--border);
 }
+/* 侧栏「展示更多（N）」是 `Button variant="quiet" size="sm"`：
+   皮归基座，这里只留它左对齐这一件排布事实（ADR-0031）。 */
 .workspace-group-more {
-  padding: 4px 8px;
-  color: var(--text-muted);
   text-align: left;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-row);
-  font-size: 12px;
-}
-button.workspace-group-more:hover {
-  color: var(--text-primary);
-  background: var(--surface-hover);
 }
 .workspace-rail {
   display: grid;
@@ -671,21 +767,6 @@ button.workspace-group-more:hover {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.65;
-}
-.context-toggle,
-.secondary-button {
-  min-height: var(--control-height);
-  padding: 6px 10px;
-  color: var(--text-secondary);
-  background: var(--surface);
-  border: var(--control-border);
-  border-radius: var(--control-radius);
-  font-size: 12px;
-}
-.context-toggle:hover,
-.secondary-button:hover {
-  color: var(--text-primary);
-  background: var(--surface-raised);
 }
 .workspace {
   display: flex;
@@ -838,18 +919,8 @@ button.workspace-group-more:hover {
   gap: 8px;
   margin-top: 22px;
 }
-.examples button {
-  padding: 8px 11px;
-  color: var(--text-secondary);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-row);
-  font-size: 12px;
-}
-.examples button:hover {
-  color: var(--brand);
-  border-color: var(--brand);
-}
+/* `.examples button` 这套「容器替首页示例发外观」的规则已收进
+   `Button variant="outline" size="md"`（ADR-0031）。 */
 /* 一条发言：标签、正文、就地动作三行，缝由消息块自己的 gap 拥有（§9.8）。
    动作收进气泡同一个块之前，`.message-actions` 靠 -10px 追回气泡下缘——那条负
    margin 记的就是「这两块本来属于同一件事」。 */
@@ -974,55 +1045,18 @@ button.workspace-group-more:hover {
 .workspace-selector-action:hover {
   background: var(--selection);
 }
-/* 文字按钮只有一处定义：此前它被前后两条规则各写一半，实际渲染成
-   带边框的 25px 小胶囊，与类名表达的「文字按钮」并不是一回事。 */
-.text-button {
-  min-height: var(--control-height-sm);
-  padding: 4px 8px;
-  color: var(--text-secondary);
-  background: var(--surface-raised);
-  border: var(--control-border);
-  border-radius: var(--control-radius);
-  font-size: 12px;
-}
-.text-button:hover {
-  color: var(--text-primary);
-  border-color: var(--brand);
-}
-/* 区块头右槽的两档小按钮。它们原来是靠容器后代选择器发力的
-   （`.selected-materials-actions button`、`.context-section .selected-materials-heading > button`、
-   `.notification-panel-actions button`）：槽位结构一换就整片掉回浏览器默认外观，
-   所以把皮收到具名类上，由按钮自己带着（docs/10 §9.7、docs/reviews/2026-09-27-ui-reuse-audit.md §5）。 */
-.chip-button {
-  min-height: var(--control-height-sm);
-  padding: 3px 8px;
-  color: var(--brand);
-  background: var(--brand-soft);
-  border: 0;
-  border-radius: var(--radius-tag);
-  font-size: 12px;
-}
-.chip-button:hover {
-  background: var(--selection);
-}
-.quiet-button {
-  padding: 5px 8px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-tag);
-  font-size: 12px;
-}
-.quiet-button:hover {
-  color: var(--text-primary);
-  background: var(--surface-raised);
-}
+/* 原先这里的 `.text-button`／`.chip-button`／`.quiet-button` 三套具名皮已收进
+   上面的 `Button` 基座（ADR-0031）：`.text` 与 `.chip` 两档名字保留为 `variant`，
+   `.quiet-button` 对应 `variant="quiet"`。它们曾在 2026-09-27 从
+   `.selected-materials-actions button` 这类容器后代选择器上收成具名类，
+   本轮再把具名类收进唯一出口。 */
 /* 图标按钮：面板头与条带里的关闭／折叠只有这一档方块（docs/10 §10.1）。
    此前同样的"一个小图标、悬停才出底"有 5 份写法——24／26／30px 三种边长、
    `--control-radius` 与 `--radius-tag` 两种圆角、字形 12／14／15px，
    还有两处留着 `font-size: 19px／22px`：那是用 `×` 字符充当图标的残留，
    图标改成 SVG 之后它只是把盒子撑高。 */
 .icon-button {
+  position: relative;
   display: grid;
   width: var(--control-height-sm);
   height: var(--control-height-sm);
@@ -1037,6 +1071,12 @@ button.workspace-group-more:hover {
 .icon-button[data-size='sm'] {
   width: var(--row-height-sm);
   height: var(--row-height-sm);
+}
+/* 侧栏底部的消息铃铛：方块要与之同行的 `--row-height` 同高，否则在一排 34px
+   的导航行里缩成一小格。原先这是页面自写的一套 34px 皮（ADR-0031 清点时补档）。 */
+.icon-button[data-size='row'] {
+  width: var(--row-height);
+  height: var(--row-height);
 }
 .icon-button:hover {
   color: var(--text-primary);
@@ -1099,22 +1139,8 @@ button.workspace-group-more:hover {
     Menlo,
     monospace;
 }
-.composer-footer button {
-  min-height: var(--control-height);
-  padding: 7px 11px;
-  color: var(--on-brand);
-  background: var(--brand);
-  border: 0;
-  border-radius: var(--radius-row);
-  font-size: 12px;
-  font-weight: 600;
-}
-.composer-footer button:hover {
-  background: var(--brand-hover);
-}
-.composer-footer .stop {
-  background: var(--danger);
-}
+/* `.composer-footer button` 与 `.composer-footer .stop` 两档皮已收进
+   `Button variant="primary" size="md"` 与 `variant="danger"`（ADR-0031）。 */
 .context-panel {
   display: flex;
   width: 380px;
@@ -2091,21 +2117,9 @@ button.list-row:where(:not(:disabled)):hover {
   flex-wrap: wrap;
   gap: 4px;
 }
-/* :where 让页面自己的动作按钮类（打开原文、更多）保持权重，基座只兜底。
-   兜底取「行内文字按钮」：行内动作是一排次级操作，描边框会把一行变成一堵按钮墙。 */
-.list-row-actions :where(button) {
-  min-height: var(--control-height-sm);
-  padding: 3px 8px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-tag);
-  font-size: 12px;
-}
-.list-row-actions :where(button):hover:not(:disabled) {
-  color: var(--text-primary);
-  background: var(--surface-raised);
-}
+/* 行内动作的外观不再由槽位兜底：ADR-0031 之前这里给裸 `<button>` 补一份
+   「行内文字按钮」皮，于是页面不写档位也能长得像按钮，档位一换就整片失效。
+   现在行内动作一律是 `Button variant="quiet" size="sm"`，槽位只管排布。 */
 .list-row-trailing {
   display: grid;
   flex: none;
@@ -2217,19 +2231,8 @@ button.list-row:where(:not(:disabled)):hover {
   font-size: 13px;
   line-height: 1.6;
 }
-.skill-detail-section :where(button) {
-  /* :where 把这条页面级按钮样式的权重降到 0-1-0，FieldSelect 的基座几何才不会被它改写。 */
-  min-height: var(--control-height);
-  padding: 6px 11px;
-  color: var(--text-primary);
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-row);
-  font-size: 13px;
-}
-.skill-detail-section button:hover {
-  background: var(--surface-hover);
-}
+/* `.skill-detail-section :where(button)` 靠 :where() 降权重才没顶掉 FieldSelect，
+   是页面替别人的控件补外观的代价；已收进 Button 基座（ADR-0031）。 */
 .skill-state-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2372,12 +2375,12 @@ button.list-row:where(:not(:disabled)):hover {
 }
 /* 错误条里的「重试」是这条消息自带的行内动作：只借文字色与浮动位置，
    字号必须跟正文同档，否则它从 body 继承到 16px，比消息本身还大。 */
-.inline-message.error button {
+/* 错误条里的「重试」改用 `Button variant="quiet" size="sm"`；
+   位置仍归这条消息（float 是它自己的排版），颜色一律跟正文。 */
+/* 错误条里的「重试／关闭」是 `Button variant="link" tone="danger"`——
+   字色由档位自己带，不再由这条消息替它改（ADR-0031）。这里只留浮动位置。 */
+.inline-message.error .btn {
   float: right;
-  color: inherit;
-  background: transparent;
-  border: 0;
-  font-size: 12px;
 }
 .danger-text {
   color: var(--danger) !important;
@@ -2771,19 +2774,6 @@ button.list-row:where(:not(:disabled)):hover {
   flex: 1;
   min-width: 200px;
 }
-.memory-conflict-actions button {
-  min-height: var(--control-height);
-  padding: 5px 9px;
-  color: var(--text-secondary);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--control-radius);
-  font-size: 12px;
-}
-.memory-conflict-actions button:hover {
-  color: var(--text-primary);
-  background: var(--surface-raised);
-}
 .memory-conflict-hint {
   width: 100%;
   color: var(--text-muted);
@@ -3057,8 +3047,10 @@ button.list-row:where(:not(:disabled)):hover {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
-.appearance-modes button,
-.scheme-grid button {
+/* 外观设置里的模式格与色系格：它们是**一格可点预览**，不是动作按钮——
+   取 `--radius-card` 与卡片底，不吃三档控件高度，所以刻意不进 `Button`。
+   类名带在自己的元素上，不再靠 `.某容器 button` 代发外观（ADR-0031）。 */
+.option-card {
   display: flex;
   min-width: 0;
   padding: 10px;
@@ -3070,12 +3062,10 @@ button.list-row:where(:not(:disabled)):hover {
   border-radius: var(--radius-card);
   text-align: left;
 }
-.appearance-modes button:hover,
-.scheme-grid button:hover {
+.option-card:hover {
   border-color: var(--brand);
 }
-.appearance-modes button.selected,
-.scheme-grid button.selected {
+.option-card[aria-pressed='true'] {
   border-color: var(--brand);
   box-shadow: 0 0 0 2px var(--brand-soft);
 }
@@ -3281,19 +3271,7 @@ button.list-row:where(:not(:disabled)):hover {
   gap: 8px;
   margin-top: 16px;
 }
-.danger-confirm-button {
-  min-height: var(--control-height);
-  padding: 7px 11px;
-  color: var(--on-danger);
-  background: var(--danger);
-  border: 1px solid transparent;
-  border-radius: var(--radius-row);
-  font-size: 12px;
-  font-weight: 600;
-}
-.danger-confirm-button:hover {
-  background: var(--danger-hover);
-}
+/* `.danger-confirm-button` 已收进 `Button variant="danger"`（ADR-0031）。 */
 
 /* === PopoverMenu 基座（ADR-0012 §UI / B00-3） === */
 .popover-backdrop {
@@ -3579,10 +3557,6 @@ button.list-row:where(:not(:disabled)):hover {
 .model-sheet summary {
   cursor: pointer;
 }
-.secondary-button {
-  color: var(--text-secondary);
-  background: var(--surface-raised);
-}
 ::-webkit-scrollbar {
   width: 7px;
   height: 7px;
@@ -3605,9 +3579,6 @@ button.list-row:where(:not(:disabled)):hover {
     z-index: var(--z-context-panel);
     width: 360px;
     box-shadow: -10px 0 30px var(--shadow-color-drawer);
-  }
-  .context-toggle {
-    display: inline-flex;
   }
 }
 @media (max-width: 960px) {
@@ -3680,22 +3651,6 @@ button.list-row:where(:not(:disabled)):hover {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
-.knowledge-search button,
-.memory-search .clear-search {
-  padding: 8px 12px;
-  color: var(--on-brand);
-  background: var(--brand);
-  border: 0;
-  border-radius: var(--radius-row);
-  font-size: 12px;
-  font-weight: 600;
-}
-.knowledge-search .clear-search,
-.memory-search .clear-search {
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid var(--border);
-}
 .knowledge-summary {
   display: flex;
   align-items: center;
@@ -3714,19 +3669,8 @@ button.list-row:where(:not(:disabled)):hover {
   align-items: center;
   gap: 12px;
 }
-.knowledge-research-button {
-  min-height: var(--control-height);
-  padding: 6px 9px;
-  color: var(--brand);
-  background: var(--brand-soft);
-  border: 1px solid transparent;
-  border-radius: var(--control-radius);
-  font-size: 12px;
-  font-weight: 600;
-}
-.knowledge-research-button:hover {
-  border-color: var(--brand);
-}
+/* `.knowledge-research-button` 与 `.chip-button` 是同一件事（品牌底小动作），
+   已一并收进 `Button variant="chip"`（ADR-0031）。 */
 /* KM03：搜索结果勾选与选择操作条 */
 .knowledge-card-select {
   display: flex;
@@ -3756,30 +3700,8 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--text-secondary);
   background: var(--surface-raised);
 }
-.open-source-button,
-.knowledge-more-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--control-radius);
-  font-size: 12px;
-}
-.open-source-button:hover {
-  color: var(--brand);
-  border-color: var(--brand);
-}
-.knowledge-more-button {
-  cursor: pointer;
-}
-.knowledge-more-button:hover,
-.knowledge-more-button[aria-expanded='true'] {
-  color: var(--brand-hover);
-  border-color: var(--brand);
-}
+/* `.open-source-button` 与 `.knowledge-more-button` 共用过同一条声明、只有 hover 分家，
+   连同 `.evidence-open-button` 一共三套「透明底＋描边」已收进 `Button variant="outline"`。 */
 .knowledge-page .empty-page {
   min-height: 300px;
   padding: 0;
@@ -3817,19 +3739,6 @@ button.list-row:where(:not(:disabled)):hover {
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
-}
-.evidence-open-button {
-  align-self: flex-start;
-  padding: 5px 6px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-tag);
-  font-size: 12px;
-}
-.evidence-open-button:hover {
-  color: var(--brand);
-  border-color: var(--brand);
 }
 .evidence-run-group {
   margin-top: 10px;
@@ -4000,16 +3909,8 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--text-muted);
   font-size: 12px;
 }
-.back-button {
-  padding: 5px 0;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 0;
-  font-size: 12px;
-}
-.back-button:hover {
-  color: var(--brand);
-}
+/* `.back-button` 与专家页那颗 `.text-button`「返回详情」是同一个入口的两种皮，
+   已收进 `Button variant="quiet" size="sm"`（ADR-0031）。 */
 .markdown-preview {
   margin-top: 24px;
   padding: 32px clamp(24px, 5vw, 52px);
@@ -4100,12 +4001,6 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .markdown-preview th {
   background: var(--surface-raised);
-}
-.page-header-actions button {
-  min-height: var(--control-height);
-  padding: 6px 11px;
-  border-radius: var(--radius-row);
-  font-size: 12px;
 }
 .artifact-editor {
   display: flex;
@@ -4273,23 +4168,6 @@ button.list-row:where(:not(:disabled)):hover {
 .knowledge-admin-row small {
   color: var(--text-muted);
 }
-/* `.switch` 自己带轨道与滑块，不吃这一档按钮皮（docs/10 §10.1）。 */
-.knowledge-admin-row button:not(.switch) {
-  min-height: var(--control-height);
-  padding: 6px 10px;
-  color: var(--text-primary);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--control-radius);
-  font-size: 12px;
-}
-.knowledge-admin-row button:not(.switch):hover:not(:disabled) {
-  border-color: var(--brand);
-}
-.knowledge-admin-row button:not(.switch):disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 .knowledge-admin-profile {
   display: flex;
   align-items: center;
@@ -4304,14 +4182,10 @@ button.list-row:where(:not(:disabled)):hover {
 .knowledge-admin-profile small {
   flex: none;
 }
-.knowledge-issues button {
+/* 描边语义改由 `Button variant="outline" tone="danger"` 表达；
+   这一行只剩它作为提示块里第一个动作的上下缝。 */
+.knowledge-issues .btn {
   margin-top: 8px;
-  padding: 5px 10px;
-  color: var(--danger);
-  background: var(--surface);
-  border: 1px solid var(--danger);
-  border-radius: var(--control-radius);
-  font-size: 12px;
 }
 .knowledge-jobs {
   display: flex;
@@ -4398,19 +4272,6 @@ button.list-row:where(:not(:disabled)):hover {
 .knowledge-detail-members small {
   color: var(--text-muted);
 }
-.knowledge-detail-members button {
-  min-height: var(--control-height);
-  padding: 6px 10px;
-  color: var(--brand);
-  background: transparent;
-  border: 1px solid var(--brand);
-  border-radius: var(--control-radius);
-  font-size: 12px;
-}
-.knowledge-detail-members button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 /* KM10：资料详情子视图 */
 .knowledge-detail {
   display: flex;
@@ -4434,31 +4295,6 @@ button.list-row:where(:not(:disabled)):hover {
 .knowledge-detail-text small {
   color: var(--text-muted);
   font-size: 12px;
-}
-.knowledge-detail-header button,
-.knowledge-detail-actions button,
-.knowledge-revision-row button,
-.knowledge-detail-pager button {
-  min-height: var(--control-height-sm);
-  padding: 5px 10px;
-  color: var(--text-primary);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--control-radius);
-  font-size: 12px;
-}
-.knowledge-detail-header button:hover:not(:disabled),
-.knowledge-detail-actions button:hover:not(:disabled),
-.knowledge-revision-row button:hover:not(:disabled),
-.knowledge-detail-pager button:hover:not(:disabled) {
-  border-color: var(--brand);
-}
-.knowledge-detail-header button:disabled,
-.knowledge-detail-actions button:disabled,
-.knowledge-revision-row button:disabled,
-.knowledge-detail-pager button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 .knowledge-detail-actions {
   display: flex;
@@ -4683,17 +4519,6 @@ button.list-row:where(:not(:disabled)):hover {
   -webkit-app-region: drag;
   app-region: drag;
 }
-.composer-footer button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-.back-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
 .brand svg {
   flex: none;
 }
@@ -4744,24 +4569,6 @@ button.list-row:where(:not(:disabled)):hover {
 .notification-anchor {
   position: relative;
   flex: none;
-}
-.notification-bell {
-  position: relative;
-  display: grid;
-  width: 34px;
-  height: 34px;
-  flex: none;
-  place-items: center;
-  color: var(--text-muted);
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-row);
-}
-/* 展开态直接用按钮自己发布的 `aria-expanded`，不再复制一份 `.active` 类。 */
-.notification-bell:hover,
-.notification-bell[aria-expanded='true'] {
-  color: var(--text-primary);
-  background: var(--surface);
 }
 .notification-badge {
   position: absolute;
@@ -4901,18 +4708,10 @@ button.list-row:where(:not(:disabled)):hover {
   flex-direction: column;
   gap: 12px;
 }
-.sidebar-collapsed .notification-bell {
-  width: 36px;
-  height: 36px;
-}
 @media (max-width: 960px) {
   .sidebar-bottom {
     flex-direction: column;
     gap: 12px;
-  }
-  .notification-bell {
-    width: 36px;
-    height: 36px;
   }
 }
 
@@ -5283,10 +5082,11 @@ select,
   position: relative;
   z-index: var(--z-inline);
 }
-.latest-message-control button {
+/* 悬浮在消息流之上的那颗「有新消息」：按钮自己的外观归 `Button`，
+   这里只剩它浮起来时的位置与投影（ADR-0031）。 */
+.latest-message-pill {
   position: absolute;
   bottom: 12px;
-  border-radius: var(--radius-pill);
   box-shadow: 0 4px 12px var(--shadow-color-soft);
 }
 

@@ -13,6 +13,7 @@ import {
 import { useEffect, useState } from 'react';
 
 import { Badge } from '../components/Badge';
+import { Button } from '../components/Button';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyNotice } from '../components/EmptyState';
 import { Field } from '../components/Field';
@@ -362,20 +363,21 @@ export function MemoryPage({
         actions={
           <>
             {scopeTarget && onClearScope ? (
-              <button className="text-button" type="button" onClick={onClearScope}>
+              <Button variant="text" size="sm" type="button" onClick={onClearScope}>
                 查看全部记忆
-              </button>
+              </Button>
             ) : null}
-            <button className="secondary-button" type="button" onClick={state.refresh}>
+            <Button variant="secondary" size="md" type="button" onClick={state.refresh}>
               刷新
-            </button>
-            <button
-              className="primary-button"
+            </Button>
+            <Button
+              variant="primary"
+              size="lg"
               type="button"
               onClick={() => setSession({ key: 'create', mode: 'create', restateFrom: undefined })}
             >
               <PlusIcon size={13} /> 新增经验
-            </button>
+            </Button>
           </>
         }
       />
@@ -386,9 +388,9 @@ export function MemoryPage({
           这条记忆在你编辑期间已被更新（你基于 v{state.revisionConflict.expectedRevision}， 当前 v
           {state.revisionConflict.currentRevision ?? '未知'}）。草稿仍在，
           刷新后可按最新版本重新提交。
-          <button type="button" className="text-button" onClick={state.refresh}>
+          <Button variant="text" size="sm" type="button" onClick={state.refresh}>
             刷新列表
-          </button>
+          </Button>
         </p>
       )}
       {state.projectionState !== undefined && state.projectionState !== 'synced' && (
@@ -399,9 +401,9 @@ export function MemoryPage({
               ? '记忆已保存，Markdown 投影待重建。'
               : '记忆已保存，但 Markdown 投影重建失败。数据库仍是真相源，可重试重建。'}
           </span>
-          <button type="button" className="text-button" onClick={rebuildProjection}>
+          <Button variant="text" size="sm" type="button" onClick={rebuildProjection}>
             重建投影
-          </button>
+          </Button>
         </div>
       )}
 
@@ -492,9 +494,9 @@ export function MemoryPage({
                 onChange={(event) => setDraftQuery(event.target.value)}
               />
               {draftQuery !== '' && (
-                <button className="clear-search" type="button" onClick={() => setDraftQuery('')}>
+                <Button variant="outline" size="sm" type="button" onClick={() => setDraftQuery('')}>
                   清除
-                </button>
+                </Button>
               )}
             </form>
             <Tabs
@@ -705,58 +707,86 @@ function MemoryRow({
       actions={
         <>
           {!readOnly && (
-            <button type="button" onClick={() => onEdit(memory)}>
+            <Button variant="quiet" size="sm" type="button" onClick={() => onEdit(memory)}>
               {editLabel}
-            </button>
+            </Button>
           )}
           {!readOnly &&
             memory.status === 'candidate' &&
             memory.candidateDisposition === 'pending' && (
               <>
-                <button type="button" onClick={() => onAction(memory, 'confirm')}>
+                <Button
+                  variant="quiet"
+                  size="sm"
+                  type="button"
+                  onClick={() => onAction(memory, 'confirm')}
+                >
                   确认
-                </button>
-                <button type="button" onClick={() => onAction(memory, 'reject')}>
+                </Button>
+                <Button
+                  variant="quiet"
+                  size="sm"
+                  type="button"
+                  onClick={() => onAction(memory, 'reject')}
+                >
                   暂不采用
-                </button>
+                </Button>
               </>
             )}
           {!readOnly &&
             memory.status === 'candidate' &&
             memory.candidateDisposition === 'rejected' && (
-              <button type="button" onClick={() => onAction(memory, 'restore-candidate')}>
+              <Button
+                variant="quiet"
+                size="sm"
+                type="button"
+                onClick={() => onAction(memory, 'restore-candidate')}
+              >
                 恢复待确认
-              </button>
+              </Button>
             )}
           {!readOnly && memory.sourceAvailability === 'review-required' && (
-            <button type="button" onClick={() => onReviewSource(memory)}>
+            <Button variant="quiet" size="sm" type="button" onClick={() => onReviewSource(memory)}>
               复核来源
-            </button>
+            </Button>
           )}
           {!readOnly && memory.effectiveStatus !== 'expired' && memory.status === 'confirmed' && (
-            <button type="button" onClick={() => onAction(memory, 'expire')}>
+            <Button
+              variant="quiet"
+              size="sm"
+              type="button"
+              onClick={() => onAction(memory, 'expire')}
+            >
               设为过期
-            </button>
+            </Button>
           )}
           {!readOnly && !isTerminalMemory(memory) && memory.status === 'confirmed' && (
-            <button
+            <Button
+              variant="quiet"
+              size="sm"
               type="button"
               onClick={() =>
                 onPolicy(memory, memory.recallPolicy === 'pinned' ? 'relevant' : 'pinned')
               }
             >
               {memory.recallPolicy === 'pinned' ? '取消优先带入' : '设为优先带入'}
-            </button>
+            </Button>
           )}
           {!readOnly && !isGlobalMemoryScope(memory.scope) && isDerived(memory) && (
-            <button type="button" onClick={() => onRestate(memory)}>
+            <Button variant="quiet" size="sm" type="button" onClick={() => onRestate(memory)}>
               作为我的工作口径重新保存
-            </button>
+            </Button>
           )}
           {!readOnly && !isTerminalMemory(memory) && (
-            <button className="danger-text" type="button" onClick={() => onDelete(memory)}>
+            <Button
+              variant="quiet"
+              size="sm"
+              tone="danger"
+              type="button"
+              onClick={() => onDelete(memory)}
+            >
               以后不用
-            </button>
+            </Button>
           )}
           {readOnly && <span className="memory-terminal-note">终态记录，不可恢复</span>}
         </>
@@ -908,7 +938,9 @@ function ConflictPair({
         </div>
       </div>
       <div className="memory-conflict-sources">
-        <button
+        <Button
+          variant="quiet"
+          size="sm"
           type="button"
           aria-expanded={sourcesOpen}
           onClick={() => {
@@ -940,7 +972,7 @@ function ConflictPair({
           }}
         >
           {sourcesOpen ? '收起两侧来源' : '查看两侧来源'}
-        </button>
+        </Button>
         {sourcesOpen && (
           <>
             {sources.lines.length > 0 && (
@@ -977,7 +1009,9 @@ function ConflictPair({
               ]}
             />
           </Field>
-          <button
+          <Button
+            variant="quiet"
+            size="sm"
             type="button"
             onClick={() =>
               onResolve(memory, other, 'replace', {
@@ -987,7 +1021,7 @@ function ConflictPair({
             }
           >
             {winner === memory.id ? '替代另一条' : '替代本条'}
-          </button>
+          </Button>
           <input
             aria-label="适用条件说明"
             value={note}
@@ -1003,7 +1037,9 @@ function ConflictPair({
               个，请先精简后再确认并存。
             </p>
           )}
-          <button
+          <Button
+            variant="quiet"
+            size="sm"
             type="button"
             disabled={!canKeepBoth}
             onClick={() =>
@@ -1014,7 +1050,7 @@ function ConflictPair({
             }
           >
             确认两条并存
-          </button>
+          </Button>
           <p className="memory-conflict-hint">
             替代要求两条处于同一规范范围，否则请先调整适用范围；写不出适用条件时不要确认并存。
             暂不处理可以让这组口径继续留在待澄清状态。

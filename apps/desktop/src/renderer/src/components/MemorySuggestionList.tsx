@@ -23,6 +23,7 @@ import {
 } from '../lib/memory-suggestions';
 import { InlineLoading } from './AsyncButton';
 import { Badge, type BadgeTone } from './Badge';
+import { Button } from './Button';
 import { ConfirmationDialog } from './ConfirmationDialog';
 import { ListRow } from './ListRow';
 import { SectionHeader } from './SectionHeader';
@@ -79,9 +80,9 @@ export function MemorySuggestionList({
         } · 候选不会自动生效，也不会自动进入模型`}
         actions={
           variant === 'context' && onOpenMemoryPage ? (
-            <button className="chip-button" type="button" onClick={onOpenMemoryPage}>
+            <Button variant="chip" size="sm" type="button" onClick={onOpenMemoryPage}>
               集中管理
-            </button>
+            </Button>
           ) : undefined
         }
       />
@@ -232,14 +233,26 @@ function SuggestionJobRow({
       actions={
         <>
           {isActiveMemoryJob(job.status) && (
-            <button type="button" disabled={busy} onClick={() => onCancel(job)}>
+            <Button
+              variant="quiet"
+              size="sm"
+              type="button"
+              disabled={busy}
+              onClick={() => onCancel(job)}
+            >
               取消
-            </button>
+            </Button>
           )}
           {canRetryJob(job) && (
-            <button type="button" disabled={busy} onClick={() => onRetry(job)}>
+            <Button
+              variant="quiet"
+              size="sm"
+              type="button"
+              disabled={busy}
+              onClick={() => onRetry(job)}
+            >
               重新提炼
-            </button>
+            </Button>
           )}
         </>
       }
@@ -314,15 +327,21 @@ function SuggestionCard({
         )}
       </ul>
       <div className="suggestion-actions">
-        <button type="button" className="primary-button" onClick={() => onEdit(candidate)}>
+        <Button variant="primary" size="lg" type="button" onClick={() => onEdit(candidate)}>
           编辑并确认
-        </button>
-        <button type="button" className="secondary-button" onClick={() => onReject(candidate)}>
+        </Button>
+        <Button variant="secondary" size="md" type="button" onClick={() => onReject(candidate)}>
           暂不采用
-        </button>
-        <button type="button" className="danger-text" onClick={() => onDelete(candidate)}>
+        </Button>
+        <Button
+          variant="quiet"
+          size="sm"
+          tone="danger"
+          type="button"
+          onClick={() => onDelete(candidate)}
+        >
           删除
-        </button>
+        </Button>
       </div>
     </article>
   );

@@ -28,6 +28,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { deriveActivityGroups } from './activity';
 import { BrandLogo } from './brand-logo';
 import { InlineLoading } from './components/AsyncButton';
+import { Button } from './components/Button';
 import { Composer } from './components/Composer';
 import type { CapabilityChip } from './components/ComposerCapabilityPicker';
 import { ConfirmationDialog } from './components/ConfirmationDialog';
@@ -1374,9 +1375,13 @@ export function App(): React.JSX.Element {
               eyebrow="工作"
               title={taskAllRuns.length > 0 || activeRun ? '继续完成任务' : '开始一件工作'}
               actions={
-                <button className="context-toggle" onClick={() => setContextOpen((open) => !open)}>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={() => setContextOpen((open) => !open)}
+                >
                   {contextOpen ? '收起上下文' : '查看上下文'}
-                </button>
+                </Button>
               }
             />
             <div className="workspace">
@@ -1439,8 +1444,9 @@ export function App(): React.JSX.Element {
                                 actions={
                                   isLatestCompleted ? (
                                     <>
-                                      <button
-                                        className="text-button"
+                                      <Button
+                                        variant="text"
+                                        size="sm"
                                         onClick={() => {
                                           const answer = finalAssistantAnswer(runEvents);
                                           if (!answer) {
@@ -1470,9 +1476,10 @@ export function App(): React.JSX.Element {
                                         }}
                                       >
                                         记住这段经验
-                                      </button>
-                                      <button
-                                        className="text-button"
+                                      </Button>
+                                      <Button
+                                        variant="text"
+                                        size="sm"
                                         onClick={() =>
                                           trackAction(saveCurrentArtifact(), '保存成果')
                                         }
@@ -1486,7 +1493,7 @@ export function App(): React.JSX.Element {
                                         )
                                           ? '已保存为成果'
                                           : '保存为成果'}
-                                      </button>
+                                      </Button>
                                       {artifactNote && (
                                         <span
                                           className={
@@ -1540,9 +1547,9 @@ export function App(): React.JSX.Element {
               </div>
               {detached && (
                 <div className="latest-message-control">
-                  <button type="button" className="secondary-button" onClick={jumpToLatest}>
+                  <Button variant="secondary" size="md" type="button" onClick={jumpToLatest}>
                     回到最新
-                  </button>
+                  </Button>
                 </div>
               )}
               <Composer

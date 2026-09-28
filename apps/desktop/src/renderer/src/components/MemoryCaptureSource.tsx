@@ -7,6 +7,7 @@ import {
   type ExcerptRange,
   excerptRangeFromTextarea,
 } from '../lib/memory-capture';
+import { Button } from './Button';
 import { Field } from './Field';
 
 /**
@@ -57,12 +58,13 @@ export function MemoryCaptureSource({
         />
       </Field>
       <div className="memory-capture-source-actions">
-        <button className="text-button" type="button" onClick={confirm}>
+        <Button variant="text" size="sm" type="button" onClick={confirm}>
           确认选区
-        </button>
+        </Button>
         {excerpt !== undefined && (
-          <button
-            className="text-button"
+          <Button
+            variant="text"
+            size="sm"
             type="button"
             onClick={() => {
               onRangeChange(undefined);
@@ -70,7 +72,7 @@ export function MemoryCaptureSource({
             }}
           >
             重选
-          </button>
+          </Button>
         )}
       </div>
       {error !== '' && (

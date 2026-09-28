@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 
 import { ChevronRightIcon, MoreHorizontalIcon, workspaceIcons } from '../icons';
 import { workspaceAccentVar } from '../lib/workspace-identity';
+import { Button } from './Button';
 import { EmptyNotice } from './EmptyState';
 import { IconButton } from './IconButton';
 import { NavItem } from './NavList';
@@ -145,13 +146,14 @@ export function WorkspaceGroupList({
                   />
                 ))}
                 {!expanded && remaining > 0 && (
-                  <button
+                  <Button
+                    variant="quiet"
+                    size="sm"
                     type="button"
-                    className="workspace-group-more"
                     onClick={() => onToggleShowAll(workspace.id)}
                   >
                     {`展示更多（${remaining}）`}
-                  </button>
+                  </Button>
                 )}
                 {expanded && remaining > 0 && (
                   <p className="workspace-group-more">{`另有 ${remaining} 项未列出`}</p>
