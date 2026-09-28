@@ -137,7 +137,7 @@ Skill 列表分别展示来源（内置/用户）、启用状态、信任状态�
 
 [工作型记忆产品设计](designs/work-centered-memory.md) §3 与 [ADR-0026](adr/0026-work-centered-memory.md) 规划的四处界面已落地，组件与 Hook 有自动化测试（[WM 任务板](development/tasks-memory.md) §15），真实桌面人工验收仍待确认；本节不改变上面已确认的导航规则，也不新增一级导航：
 
-- **记忆页（扩展）**：在现有设置分区「记忆」内完成人工保存表单（内容/分类/适用范围/可选议题/可选有效期/来源说明）、候选批次、冲突「可能冲突」并列呈现与裁决、有效期 set/clear、来源复核状态与投影重建入口。正文与常规控件不用 9–10px 换取空间。
+- **记忆页（扩展）**：在现有设置分区「记忆」内完成人工保存表单（内容/分类/适用范围/可选议题/可选有效期/来源说明）、候选批次、冲突「可能冲突」并列呈现与裁决、有效期 set/clear、来源复核状态与投影重建入口。正文与常规控件不用小于 12px 的字号换取空间。
 - **上下文面板（复用现有可关闭面板）**：按需区分「下次运行可用」（候选范围预览）、「本次运行记忆」（精确修订、顺序、选择理由、请求阶段）与「历史上下文调整」（被截断轮次及可解释原因）。阶段文案只用 `selected`/`request-prepared`/`dispatch-attempted`/`legacy_unknown` 的对应措辞，禁止显示「模型已收到/已阅读」或声称因果影响；面板必须允许完全收起。
 - **工作空间简报**：复用 WorkspaceSelector 的空间入口与上述可关闭面板，展示已确认目标/约束/决策/方法、未决讨论节点和用户指定的参考成果版本；每条可跳转来源，不整体自动注入模型，不设启动表单。
 - **参考成果标记**：成果版本详情提供「指定为本空间参考版本」「取消参考」「引用到当前任务」；标记只表示参考选择，**不表示内容正确、审批通过或已被本期读取**，固定精确版本与哈希、不跟随 latest。
@@ -415,7 +415,7 @@ UI Foundation 首批提供四套成对色系：
 
 ### 9.7 字体
 
-使用系统字体栈，优先适配 macOS 与 Windows 中文字体。正文基线为 14–15px，不允许用 9–10px 字体承载产品信息。全系统唯一使用展示字体的位置是欢迎页口号「以我所知，成我所作」，用 `Georgia + 楷体（Kaiti SC/STKaiti/KaiTi）` 衬线栈；其余所有界面文字（含各级页面标题、成果标题与成果内标题）一律使用系统默认字体栈，不用宋体或其他衬线承载展示文字。
+使用系统字体栈，优先适配 macOS 与 Windows 中文字体。正文基线为 14–15px，不允许用小于 12px 的字体承载产品信息。全系统唯一使用展示字体的位置是欢迎页口号「以我所知，成我所作」，用 `Georgia + 楷体（Kaiti SC/STKaiti/KaiTi）` 衬线栈；其余所有界面文字（含各级页面标题、成果标题与成果内标题）一律使用系统默认字体栈，不用宋体或其他衬线承载展示文字。
 
 推荐字号层级：
 
@@ -433,7 +433,7 @@ UI Foundation 首批提供四套成对色系：
 
 保留小字号的 5 处是图形化标识而非正文，属本节豁免范围：品牌字标 1 处（侧栏 `BETTERWORK` 副标）、格式徽标 3 处（资料卡的 `MD/PDF/DOC/TXT`，成果列表的 `markdown`／`file` 两枚）、通知未读数徽标 1 处。「当前模型徽标」曾是第 6 处，2026-09-27 已改走 `Badge tone="brand" shape="tag"`，护栏里那两条豁免登记随之删除。
 
-新增界面时不得再用 9–11px 承载产品信息；空间不够时用折叠、覆盖或响应式重排换，不要压字号。
+新增界面时不得再用小于 12px 的字号承载产品信息；空间不够时用折叠、覆盖或响应式重排换，不要压字号。
 
 ### 9.8 间距、圆角与阴影
 
@@ -636,7 +636,7 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 基座之外出现消息气泡或 `<form className="composer">` 结构即失败；「状态 · 时间」这句运行摘要
 只许在 `RunSummaryRow` 拼一次（`standards/coding-standard.test.ts`）。
 
-**空态一律用 `EmptyContext`／`EmptyNotice`**：区域级（整块内容区）用 `EmptyContext`——居中、带图标、吃掉整块高度，图标可按语义替换；放不下那种尺寸的列表行与小节用 `EmptyNotice`——只给一行说明，或标题加一句解释。此前侧栏、模型清单、通用设置、MCP 连接、记忆清单、消息中心六处各写各的占位类（`.empty-runs`／`.empty-models`／`.setting-placeholder`／`.notification-empty`），同一个「这里还没有东西」有四种尺寸与配色。护栏锁这些类不得复活。
+**空态一律用 `EmptyPage`（整页／对话列级，可带 eyebrow）、`EmptyContext`（区域级）、`EmptyNotice`（行内与小节级）**：「这一屏什么都没有」用 `EmptyPage`；区域级（整块内容区）用 `EmptyContext`——居中、带图标、吃掉整块高度，图标可按语义替换；放不下那种尺寸的列表行与小节用 `EmptyNotice`——只给一行说明，或标题加一句解释。同族的 `LoadingPage`／`ErrorPage`（整页加载态与整页错误态）也住在 `components/EmptyState.tsx`，同样不得另写占位类。此前侧栏、模型清单、通用设置、MCP 连接、记忆清单、消息中心六处各写各的占位类（`.empty-runs`／`.empty-models`／`.setting-placeholder`／`.notification-empty`），同一个「这里还没有东西」有四种尺寸与配色。护栏锁这些类不得复活。
 
 **状态徽标一律用 `Badge`**：一小段只读状态文字（已信任／已就绪／已过期）走 `components/Badge.tsx` 的 `tone`（neutral／brand／warning／danger／outline／success）× `shape`（pill／tag），颜色与圆角仍只取语义 Token。此前 6 套 chip 各写 padding、圆角与配色组合，同一个「已启用」在技能卡与依赖面板里长得不同（§3.4）。靠字形与小于 12px 字号成立的图形化标识（MD/PDF 徽标、未读数角标）不算状态徽标，留在原类名并按字号护栏登记。护栏锁四条：`.skill-chip`／`.dependency-status-chip`／`.memory-status-badge`／`.memory-kind`／`.memory-state`／`.connection-status` 的样式不得复活；胶囊圆角一律 `var(--radius-pill)`；24–40px 高度裸值只降不升；**任何类名以 chip／badge／status／state／kind／pill 结尾、又同时写了 `padding`＋`background`＋`border-radius` 这件「片状三件套」的，必须走 Badge**——确实不是徽标的（可移除的绑定片、整片是按钮的活动条、未读数角标）按理由登记进护栏的 `NON_BADGE_CHIP_CLASSES`。判据看外观而不是类名，所以 `.tool-pill-status` 那种只改字色的不会被误伤。
 
@@ -664,7 +664,7 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 
 **区块头一律用 `SectionHeader`**：「小标题（可带 eyebrow）＋ 一句说明 ＋ 右槽动作」这一种结构走 `components/SectionHeader.tsx`，两个变体只决定层级与密度——`block` 是页面区块头（h2、13／21px 标题、说明 13px 走 630px 版心），`panel` 是面板与卡片里的小节头（h3、13px 标题、说明 12px 弱化）。内容填 `title`／`hint`／`eyebrow`／`actions` 四个槽，空槽不渲染节点（否则基座的 `gap` 会撑出一道看不见的缝）。此前这种结构有 13 个类名、26 处写法，`gap` 取遍 4／8／12／16／24 五档，`display` 有 flex-row／column／grid 三种，16 处用 `<strong>` 冒充标题而不进文档大纲（§3.1 P1）。**面板自己那一道内缩与分隔线仍归面板**：把领域钩子类传进 `className`（如消息中心的 `.notification-panel-heading`），不要写 `.某面板 .section-header { padding }`。右槽按钮的外观不再由容器或类名代发：2026-09-27 先把靠 `.selected-materials-actions button`、`.context-section .selected-materials-heading > button`、`.notification-panel-actions button` 发力的 9 颗裸按钮上收成 `.chip-button`／`.quiet-button` 两档具名类，2026-09-28 再由 [ADR-0031](adr/0031-button-base-and-skin-closure.md) 把它们连同其余 9 套具名皮一并收进 `Button` 的 `variant`（`chip` 与 `quiet` 两档名字保留）。护栏锁五条（2026-09-28 起）：13 个已收编类的样式不得复活；含 `.section-header` 的选择器里只有基座自己的（`.section-header` 本体、两档变体、四个槽位类）能写 `gap`／`padding`／`margin`／`align-items`／`justify-content`；除基座文件外任何 `.tsx` 出现 `section-header*` 类名即失败（手写槽位等于又造一份结构）。
 
-**2026-09-28 收了另一半：页面不再自己写标题标签。** 基座落地时只回收了「带类名的区块头」，还留下一批没有类名的裸 `<h2>`／`<h3>`／`<h4>` 配容器后代规则——16 处标签、10 条规则，字号在 13／14／20／21 之间来回（`13` 与 `21` 是基座的两档，`14` 与 `20` 是各页自己调出来的）。现在：面板与卡片内的小节一律 `panel`（13px），页面区块与浮层标题一律 `block`（21px），**`Modal` 的 `dialog`／`sheet` 第一个子块统一是 `SectionHeader variant="block"`，右槽 `actions` 放那颗关闭按钮**——抽屉标题此前在「编辑模型」与「索引与作业」两处分别是 20px 与 20px 但字重与上缝不同，现在同为一档。护栏因此从三条加到**五条**，新增两条：① 生产 `.tsx` 出现 `<h1>`～`<h4>` 即失败，出口只有 `SectionHeader`、`PageHeader`、`EmptyState` 三个基座与两处登记例外；② `styles.css` 里选择器含标题元素的规则不得写 `font-size`／`font-weight`／`color`／`line-height`／`letter-spacing`／上下 `margin`，除非它就是那三个基座或登记过的表面。三处例外各自的理由必须写进白名单：**首屏 hero**（`.welcome h2` 用 28px 衬线品牌字形，属品牌表达不是区块头，套不进两档）、**Markdown 成果正文**（`.markdown-preview h*` 是用户文档的排版，受 §9「应用主题不得改变 Artifact 自身」约束）、**设置空间标题带**（`.settings-nav-list h1` 与二级导航同栏，不是页面区块头）。
+**2026-09-28 收了另一半：页面不再自己写标题标签。** 基座落地时只回收了「带类名的区块头」，还留下一批没有类名的裸 `<h2>`／`<h3>`／`<h4>` 配容器后代规则——16 处标签、10 条规则，字号在 13／14／20／21 之间来回（`13` 与 `21` 是基座的两档，`14` 与 `20` 是各页自己调出来的）。现在：面板与卡片内的小节一律 `panel`（13px），页面区块与浮层标题一律 `block`（21px），**`Modal` 的 `dialog`／`sheet` 第一个子块统一是 `SectionHeader variant="block"`，右槽 `actions` 放那颗关闭按钮**——抽屉标题此前在「编辑模型」与「索引与作业」两处分别是 20px 与 20px 但字重与上缝不同，现在同为一档。护栏因此从三条加到**五条**，新增两条：① 生产 `.tsx` 出现 `<h1>`～`<h4>` 即失败，出口只有 `SectionHeader`、`PageHeader`、`EmptyState` 三个基座，加 **TSX 侧白名单 `HEADING_FILE_EXEMPTIONS` 的两项**（`Welcome.tsx`、`SettingsView.tsx`）；② `styles.css` 里选择器含标题元素的规则不得写 `font-size`／`font-weight`／`color`／`line-height`／`letter-spacing`／上下 `margin`，除非它就是那三个基座或登记过的表面。三处例外分住在**两张**白名单里——TSX 侧 `HEADING_FILE_EXEMPTIONS` 两项、CSS 侧 `HEADING_RULE_OWNERS` 的 `.welcome h2`／`.settings-nav-list h1`／`.markdown-preview h*`，理由必须逐条写进白名单：**首屏 hero**（`.welcome h2` 用 28px 衬线品牌字形，属品牌表达不是区块头，套不进两档）、**Markdown 成果正文**（`.markdown-preview h*` 是用户文档的排版，受 §9「应用主题不得改变 Artifact 自身」约束；它只在 CSS 侧登记，生产 `.tsx` 里没有裸标题）、**设置空间标题带**（`.settings-nav-list h1` 与二级导航同栏，不是页面区块头）。
 
 同一天顺带收掉一处假复用：对话列的「Skill 试运行」空态此前借 `.welcome` 那套品牌 hero 排版（28px 衬线、居中），而 `.empty-page` 与它的几何完全同值（28／600／1.35、`margin: 8px 0 12px`），只差字体与对齐——空态一律用 `EmptyPage`，品牌字标留给首屏。
 
@@ -942,7 +942,7 @@ UI Foundation 完成后应达到：
 2. 用户始终知道当前 Task、运行状态和主要成果在哪里。**已达成**
 3. 过程信息可见但不喧宾夺主，右侧面板可以完全收起。**已达成**（收起后整体卸载，不留残条）
 4. 模型配置具有独立、完整、可理解的操作路径。**已达成**（并扩展出搜索配置分区）
-5. 字号、间距、颜色、圆角和组件状态来自统一 Token。**已达成**：颜色 Token 覆盖 8 个 Variant（含 `border-subtle` 与 `on-danger`），小字号已收敛到 12px 下限，动效时长来自 Token；硬编码色值只剩色系预览卡这一处刻意例外（§9.3）
+5. 字号、间距、颜色、圆角和组件状态来自统一 Token。**已达成**：颜色 Token 覆盖 8 个 Variant（含 `border-subtle` 与 `on-danger`），小字号已收敛到 12px 下限，动效时长来自 Token；硬编码色值只剩两类刻意例外：CSS 的色系预览卡（§9.3）与 TS 侧三个文件（首帧窗口主题、外观预览色板、品牌标志），清单以护栏白名单为准
 6. 浅色、深色与常见桌面尺寸均通过视觉验收。**部分达成**：每轮改动均有真实桌面人工验收记录，但没有 §13 UI-5 要求的三尺寸 × 3 模式 × 4 色系验收矩阵；字号与动效收敛后还需要重新走一轮人工验收
 7. UI 重构没有破坏现有 Agent 教学链路和真实模型链路。**已达成**（Fake Provider 与 OpenAI-compatible Provider 链路的回归测试持续通过）
 

@@ -155,7 +155,9 @@ standards/
 
 分层：`views/` 负责页面组合，`components/` 负责布局、反馈和领域呈现，`hooks/` 持有状态与动作，`lib/` 是纯函数。**视图组件里不应出现 IPC 调用**，它们从 hook 拿到已经包装好的动作。列表页优先复用 `components/layout/` 的页头、工具栏、滚动区和视图容器，不在每个页面重新发明滚动边界。
 
-反馈实现必须先按 [UI/UX 体系 §11.5](10-ui-ux-system.md) 路由语义，再选择组件：**三个落点各只有一个出口组件**——短时结果用 `TransientToast`，需要停留且当前对象可行动的错误／警告用 `InlineError`，跨页面可回看的长操作结果才进入消息中心（`NotificationService`）。禁止在 Hook 或页面里另造自动消失计时器、顶部横幅（常驻或固定悬浮皆算）或第二套 Toast；对象状态本身能表达结果时，不重复制造全局提示。
+**组件基座纪律不在本文复述**：按钮、卡片、列表行、区块头、导航、表单字段、页签、徽标、空态、模态、浮层菜单、折叠披露、图标按钮、动作条、busy 按钮、开关、文本提示、消息块与输入区等「一律用哪个基座、哪几档、护栏锁什么」，唯一真相源是 [UI/UX 体系 §10.1 组件台账](10-ui-ux-system.md)。写 UI 前先查台账，缺基座时先补基座再接页面，不得就地自造同类控件。
+
+反馈实现必须先按 [UI/UX 体系 §11.5](10-ui-ux-system.md) 路由语义，再选择组件：**三个落点各只有一个出口组件**——短时结果用 `TransientToast`，需要停留且当前对象可行动的错误／警告用 `InlineError`，跨页面可回看的长操作结果才进入消息中心（`NotificationService`）。禁止在 Hook 或页面里另造自动消失计时器、顶部横幅（常驻或固定悬浮皆算）或第三套 Toast——`TransientToast`（局部、自消、不落库）与 `ToastHost`（已持久化通知的投影）是既有的两套，分工见 §11.5.1，不可混用；对象状态本身能表达结果时，不重复制造全局提示。
 
 同一条消息**不得同时占用两个落点**。调用链上最先能承载它的那一层负责呈现，向上传递给另一个通道即视为重复播报。IPC 收口因此二选一：已经有内联／浮层承载的调用用 `trackAction`，只有全局短时提醒可去的调用才用 `reportAction`。
 
@@ -166,7 +168,7 @@ standards/
 - 正文与承载产品信息的次要文本不得小于 12px。豁免仅限图形化标识：格式徽标（MD / PDF / DOC / TXT）、品牌字标、未读数徽标。`<small>` 已在 `styles.css` 给出 12px 全局基线（UA 默认 `0.83em` 会掉到下限之下，且「没写声明」扫不出来），组件只在此之上放大，不得再靠逐处补 `font-size` 兜底。
 - 间距标尺是 4 / 8 / 12 / 16 / 24 / 32px：`gap` / `row-gap` / `column-gap` 与 `margin` 全系（含负值与 `margin-block` 等逻辑属性）的像素取值必须是这六档之一，由 `standards/coding-standard.test.ts` 强制；要加新档位先改 [UI/UX 体系 §9.8](10-ui-ux-system.md)。`padding` 不走这把尺，走 §9.10 的控件内距档位与容器留白。
 - 纵向堆叠的块之间必须有垂直间距：堆叠容器用 `gap` / `row-gap` 拥有节奏，`components/layout/` 的骨架容器必须自带 `display` + `gap`，页面不得用后代选择器覆写骨架的 `display` / `flex-direction` / `gap` / `align-items` / `justify-content`；表单控件不写 `width:100%`（在弹性行里会挤到同排标签逐字断行）。护栏见 `standards/coding-standard.test.ts`，理由见 [UI/UX 体系 §9.8](10-ui-ux-system.md)。
-- 界面功能图标一律用 `icons.tsx` 里的内联 SVG（`currentColor`、24 网格、统一笔画）。新增图标先进图标集再使用。禁止 Unicode 字符或 emoji 充当界面图标。
+- 界面功能图标一律用 `icons.tsx` 里的内联 SVG（`currentColor`、24 网格、统一笔画）。新增图标先进图标集再使用。禁止 Unicode 字符或 emoji 充当界面图标；品牌字标与格式徽标（MD／PDF／DOC／TXT）是**文字标识**，不在此列。
 - 原始 Run 事件不得出现在主界面。工具卡片显示阶段名与一句摘要（`lib/tool-summary.ts`），原始载荷只在过程面板的折叠区里。
 - 工具名到阶段名的映射在 `lib/labels.ts` 的 `TOOL_LABELS`，**新增工具必须同步**，否则界面会退化成通用文案。
 - React：不在渲染期间写 ref、不在渲染期间产生副作用；事件回调需要读最新值时用「effect 同步 ref」的模式（见 `notifications.tsx`）。挂载 effect 的依赖必须如实声明，靠 `useCallback` 让回调稳定，而不是用空依赖数组掩盖。
@@ -190,7 +192,7 @@ standards/
 
 - 源码里**不接受单点豁免**：`eslint-disable`、`@ts-ignore`、`@ts-expect-error`、`prettier-ignore` 一律为零，由结构护栏强制。真要放宽某条规则，改 `eslint.config.mjs` 并在配置注释里写清理由——这会迫使例外可见、可评审，而不是藏进一行注释。
 - 需要整类豁免时在 `eslint.config.mjs` 里按文件角色（如 `betterwork/tests`）配置，并写清为什么这类文件适用不同口径。
-- 结构性约定的例外写在 `standards/coding-standard.test.ts` 的白名单数组里并注明理由（外观预览色板可以用字面色值、格式与徽标类标识可以小于 12px、首帧窗口主题只能写字面值）。白名单里的每一项都必须能在本文或 [UI/UX 体系](10-ui-ux-system.md) 里找到对应条款；找不到就先补条款再加白名单。
+- 结构性约定的例外写在 `standards/coding-standard.test.ts` 的白名单数组里并注明理由。**色值与字号是两条不同的轴，别混在一句里**：色值一侧只有 TS 的三个文件（`appearance.ts` 外观预览色板、`window.ts` 首帧窗口主题、`brand-logo.tsx` 品牌标志）加 CSS 的 `:root` Token 定义与 `.mode-preview`／`.scheme-preview` 预览选择器；字号一侧只有图形化标识（格式徽标、品牌字标、未读数徽标）可以小于 12px。白名单里的每一项都必须能在本文或 [UI/UX 体系](10-ui-ux-system.md) 里找到对应条款；找不到就先补条款再加白名单。
 - 已经生效的三处策略性关闭及其理由都记录在配置注释中：`require-await`（接口签名要求 async，同步实现必然无 await）、`prefer-nullish-coalescing` 对字符串放行 `||`（空串回退是有意的）、React Compiler 的优化类规则（本项目未启用编译器）。
 
 发现规则产生大量误报时，先判断是「规则不适用于本项目的架构」还是「代码写法有问题」。前者改配置并记录理由，后者改代码。不要因为嫌麻烦而放宽规则。

@@ -117,9 +117,9 @@ Renderer -> Preload API -> Application -> Agent Core / Infrastructure
 - 过程信息按用户目标分组并渐进披露，原始运行事件不得作为默认主界面的视觉中心。
 - Artifact 是一等界面对象；右侧上下文面板按场景出现且必须允许完全收起。
 - 模型配置使用独立设置空间，不嵌入 Composer 或任务消息流。
-- 正文和常规控件不得通过 9–10px 小字号换取空间；优先折叠、覆盖和响应式重排。
+- 正文和承载产品信息的次要文本不得小于 12px，也不得用小字号换取空间；优先折叠、覆盖和响应式重排。豁免只有图形化标识（格式徽标、品牌字标、未读数徽标），清单以护栏白名单为准。
 - 外观由 `system / light / dark` 模式与可扩展色系两个维度组成；每套正式色系必须同时提供浅色和深色 Variant。
-- Renderer 组件只能使用语义化主题 Token，不得散落硬编码颜色或用局部 `.dark` 补丁绕过 Token 契约。
+- Renderer 组件只能使用语义化主题 Token，不得散落硬编码颜色或用局部 `.dark` 补丁绕过 Token 契约。字面色值只允许出现在四处：Token 定义、外观预览色板、首帧窗口主题、品牌标志（清单以护栏白名单为准）。
 - 应用主题不得改变 Artifact 自身的文档、演示、表格或图表配色。
 
 ## 7. 代码质量
@@ -133,7 +133,7 @@ Renderer -> Preload API -> Application -> Agent Core / Infrastructure
 - Schema 变更走版本化迁移并补迁移测试，不得在启动代码里探测后 `ALTER`。
 - 新增领域行为必须有单元测试；Agent 事件顺序、取消和工具失败必须有测试；涉及外部 HTTP 的代码必须可注入 `fetch`，测试不得触网。
 - 修复缺陷时优先添加回归测试。
-- 提交前执行 `npm run verify`（lint + format:check + typecheck + test + build）。**不要把它的输出接管道后只看末尾**——管道退出码取最后一个命令，会把失败读成成功。
+- 提交前执行 `npm run verify`（lint + format:check + typecheck + test + build）。**不要把它的输出接管道后只看末尾**——管道退出码取最后一个命令，会把失败读成成功。墙钟与内存预算断言不在 `verify` 里：它们只住在 `*.bench.test.ts`，由 `npm run bench` 串行跑（见 `docs/12-engineering-standards.md` §9）。
 - 不提交 `.env`、密钥、构建产物、数据库和本地工作文件。
 
 ## 8. 变更纪律
