@@ -5,6 +5,7 @@ import type {
   ModelProfileSummary,
   RunSummary,
   SkillEnvironmentStatus,
+  WorkspaceIconId,
 } from '@betterwork/agent-protocol';
 
 export const emptyModel: ModelProfileInput = {
@@ -110,3 +111,22 @@ const MIME_TYPE_LABELS: Readonly<Record<string, string>> = {
 /** 格式徽标文字：未登记的 MIME 退化成子类型大写，再退化成 FILE。 */
 export const fileTypeLabel = (mimeType: string): string =>
   MIME_TYPE_LABELS[mimeType] ?? mimeType.split('/').pop()?.toUpperCase() ?? 'FILE';
+
+/**
+ * 工作空间图标的名称。图标按钮没有文字，名称只能由词表给——读屏用户听到的
+ * 「图标」不该是一串「图标 3」。新增一档图标必须同时补这一行。
+ */
+export const workspaceIconName: Record<WorkspaceIconId, string> = {
+  folder: '文件夹',
+  doc: '文档',
+  sheet: '表格',
+  slides: '演示',
+  chart: '图表分析',
+  client: '客户',
+  research: '研究',
+  writing: '写作',
+  code: '代码',
+  project: '项目',
+  cycle: '周期工作',
+  library: '资料库',
+};

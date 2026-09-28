@@ -2959,13 +2959,8 @@ export const scriptExecutionSchema = z
   .strict();
 export type ScriptExecution = z.infer<typeof scriptExecutionSchema>;
 
-export interface WorkspaceSummary {
-  id: string;
-  name: string;
-  rootPath: string;
-  createdAt: number;
-  updatedAt: number;
-}
+/** 由 Schema 派生：工作空间的身份字段一旦加列，类型与边界校验不会各说一半。 */
+export type WorkspaceSummary = z.infer<typeof workspaceSummarySchema>;
 
 export interface TaskSummary {
   id: string;
@@ -2988,10 +2983,8 @@ export interface CreatedTask {
   sessionId: string;
 }
 
-export interface RecentTaskSummary extends TaskSummary {
-  sessionId: string;
-  latestRun?: RunSummary;
-}
+/** 同 `RunSummary`：分组查询把校验后的行直接交给行组件，两份定义就会分成两种类型。 */
+export type RecentTaskSummary = z.infer<typeof recentTaskSummarySchema>;
 
 export const listTasksRequestSchema = z.object({ workspaceId: z.string().min(1).optional() });
 export type ListTasksRequest = z.infer<typeof listTasksRequestSchema>;
@@ -3578,17 +3571,12 @@ export interface RunSkillBindingSummary {
   skillName: string;
 }
 
-export interface RunSummary {
-  id: string;
-  taskId: string;
-  sessionId: string;
-  prompt: string;
-  status: 'running' | 'completed' | 'failed' | 'cancelled';
-  createdAt: number;
-  completedAt?: number;
-  /** 本次 Run 绑定的技能集合（按绑定顺序），用于界面恢复 chip 条。 */
-  bindings?: RunSkillBindingSummary[];
-}
+/**
+ * 由 Schema 派生：侧栏分组会把 `recentTaskSummarySchema` 校验出来的行直接交给
+ * `RunSummaryRow`，接口与 Schema 各写一份时，`completedAt?: number` 与
+ * `?: number | undefined` 在 `exactOptionalPropertyTypes` 下就是两种类型。
+ */
+export type RunSummary = z.infer<typeof runSummarySchema>;
 
 export const notificationLevelSchema = z.enum(['info', 'success', 'warning', 'error']);
 export type NotificationLevel = z.infer<typeof notificationLevelSchema>;
@@ -3647,11 +3635,62 @@ export type NotificationChangeEvent = z.infer<typeof notificationChangeEventSche
 export const notificationActivatedSchema = z.object({ id: z.string().min(1) });
 export type NotificationActivated = z.infer<typeof notificationActivatedSchema>;
 
+/**
+ * 工作空间身份：图标与颜色都是**固定档位**而不是任意值。侧栏按空间分组后，
+ * 一屏里同时出现十几个空间，靠形状与色相区分比靠文字快；而任意取色会破坏
+ * 对比度与明暗两套 Variant 的成对要求（docs/10 §9.2）。
+ * 枚举是 Main 与 Renderer 共用的唯一清单：图标集与色板各自按它穷举，漏一项即编译不过。
+ */
+export const workspaceIconIdSchema = z.enum([
+  'folder',
+  'doc',
+  'sheet',
+  'slides',
+  'chart',
+  'client',
+  'research',
+  'writing',
+  'code',
+  'project',
+  'cycle',
+  'library',
+]);
+export type WorkspaceIconId = z.infer<typeof workspaceIconIdSchema>;
+
+export const workspaceAccentIdSchema = z.enum([
+  'moss',
+  'teal',
+  'azure',
+  'indigo',
+  'plum',
+  'rose',
+  'amber',
+  'slate',
+]);
+export type WorkspaceAccentId = z.infer<typeof workspaceAccentIdSchema>;
+
+/** 名称上限：侧栏一行与 Composer 那一行都只放得下一短句别名。 */
+export const workspaceNameMaxLength = 60;
+
+/**
+ * 新建时的初始身份。与迁移 v35 的列默认值同档——那里的字面值是历史库的兜底，
+ * 已冻结不再随本常量变动；改这一处只影响新建与对话框的默认选中。
+ */
+export const workspaceIdentityDefaults = {
+  iconId: 'folder',
+  accentId: 'moss',
+} as const satisfies { iconId: WorkspaceIconId; accentId: WorkspaceAccentId };
+
 /** IPC 返回值同样跨信任边界；这些 Schema 由 Main 注册器在交给 Preload 前校验。 */
 export const workspaceSummarySchema = z.object({
   id: z.string().min(1),
-  name: z.string(),
+  /** 用户可改的显示名（别名）；创建时默认取文件夹名。 */
+  name: z.string().min(1),
   rootPath: z.string().min(1),
+  iconId: workspaceIconIdSchema,
+  accentId: workspaceAccentIdSchema,
+  /** 有值＝已从侧栏隐藏。隐藏只影响可见性，数据一行不动（删除会级联整棵子树）。 */
+  hiddenAt: z.number().int().nonnegative().optional(),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
 });
@@ -3685,6 +3724,54 @@ export const recentTaskSummarySchema = taskSummarySchema.extend({
   sessionId: z.string().min(1),
   latestRun: runSummarySchema.optional(),
 });
+
+/**
+ * 新建工作空间。`rootPath` 只由主进程的文件对话框产生，Renderer 不拼路径；
+ * 名称省略或全空白时沿用文件夹名，与对话框「未填时取文件夹名」的说明一致。
+ */
+export const createWorkspaceRequestSchema = z
+  .object({
+    rootPath: z.string().min(1),
+    name: z.string().trim().max(workspaceNameMaxLength).optional(),
+    iconId: workspaceIconIdSchema.optional(),
+    accentId: workspaceAccentIdSchema.optional(),
+  })
+  .strict();
+export type CreateWorkspaceRequest = z.infer<typeof createWorkspaceRequestSchema>;
+
+/** 改身份（别名／图标／颜色）：至少改一项，空请求不该推进 updatedAt。 */
+export const updateWorkspaceIdentityRequestSchema = z
+  .object({
+    workspaceId: z.string().min(1),
+    name: z.string().trim().min(1).max(workspaceNameMaxLength).optional(),
+    iconId: workspaceIconIdSchema.optional(),
+    accentId: workspaceAccentIdSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.name !== undefined || value.iconId !== undefined || value.accentId !== undefined,
+    { message: '至少提供一项要修改的身份字段' },
+  );
+export type UpdateWorkspaceIdentityRequest = z.infer<typeof updateWorkspaceIdentityRequestSchema>;
+
+export const setWorkspaceHiddenRequestSchema = z
+  .object({ workspaceId: z.string().min(1), hidden: z.boolean() })
+  .strict();
+export type SetWorkspaceHiddenRequest = z.infer<typeof setWorkspaceHiddenRequestSchema>;
+
+/**
+ * 侧栏分组：一个空间连同它的最近任务与**总条数**。
+ * `totalTasks` 必须来自仓储而不是已加载数组的长度——一个活跃空间吃掉全局名额
+ * 会让别的空间在侧栏整组消失，「展示更多」也就无从报数。
+ */
+export const workspaceTaskGroupSchema = z.object({
+  workspace: workspaceSummarySchema,
+  tasks: z.array(recentTaskSummarySchema),
+  totalTasks: z.number().int().nonnegative(),
+});
+export type WorkspaceTaskGroup = z.infer<typeof workspaceTaskGroupSchema>;
+export const workspaceTaskGroupsSchema = z.array(workspaceTaskGroupSchema);
 export const evidenceSummarySchema = z.object({
   id: z.string().min(1),
   taskId: z.string().min(1),
@@ -4739,8 +4826,13 @@ export const IpcChannel = {
   ListRuns: 'run:list',
   RunEvent: 'run:event',
   GetDefaultWorkspace: 'workspace:get-default',
-  SelectWorkspace: 'workspace:select',
+  /** 只弹目录选择器并返回路径：选目录不等于建空间，登记走 workspace:create。 */
+  PickWorkspaceDirectory: 'workspace:pick-directory',
   ListWorkspaces: 'workspace:list',
+  CreateWorkspace: 'workspace:create',
+  UpdateWorkspaceIdentity: 'workspace:update-identity',
+  SetWorkspaceHidden: 'workspace:set-hidden',
+  ListWorkspaceTaskGroups: 'workspace:list-task-groups',
   CreateTask: 'task:create',
   ListTasks: 'task:list',
   ListEvidence: 'evidence:list',
@@ -4867,8 +4959,13 @@ export interface BetterWorkDesktopApi {
   };
   workspace: {
     getDefault(): Promise<WorkspaceSummary>;
-    selectDirectory(): Promise<WorkspaceSummary | null>;
+    /** 只弹目录选择器：`null` 是用户取消，不登记任何工作空间。 */
+    pickDirectory(): Promise<string | null>;
     listAll(): Promise<WorkspaceSummary[]>;
+    create(input: CreateWorkspaceRequest): Promise<WorkspaceSummary>;
+    updateIdentity(input: UpdateWorkspaceIdentityRequest): Promise<WorkspaceSummary>;
+    setHidden(input: SetWorkspaceHiddenRequest): Promise<WorkspaceSummary>;
+    listTaskGroups(): Promise<WorkspaceTaskGroup[]>;
     memoryBrief(input: WorkspaceMemoryBriefRequest): Promise<Result<WorkspaceBrief>>;
     listReferenceVersions(
       input: ListWorkspaceReferenceVersionsRequest,

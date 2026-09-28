@@ -1,4 +1,5 @@
-import type { SVGProps } from 'react';
+import type { WorkspaceIconId } from '@betterwork/agent-protocol';
+import type { ComponentType, SVGProps } from 'react';
 
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
@@ -171,3 +172,100 @@ export const FolderIcon = (props: IconProps): React.JSX.Element => (
     <path d="M3.5 7.5A2.5 2.5 0 0 1 6 5h3.5l2 2H18a2.5 2.5 0 0 1 2.5 2.5v7A2.5 2.5 0 0 1 18 19H6a2.5 2.5 0 0 1-2.5-2.5Z" />
   </Icon>
 );
+
+/* ——— 工作空间图标集（docs/10 §9.4）：形状承载「这是哪类持续工作」，颜色承载身份。 ——— */
+
+export const WorkspaceDocIcon = (props: IconProps): React.JSX.Element => (
+  <Icon {...props}>
+    <rect x="5" y="3.5" width="14" height="17" rx="2.5" />
+    <path d="M8.5 8.5h7M8.5 12h7M8.5 15.5h4" />
+  </Icon>
+);
+
+export const WorkspaceSheetIcon = (props: IconProps): React.JSX.Element => (
+  <Icon {...props}>
+    <rect x="4" y="5" width="16" height="14" rx="2.5" />
+    <path d="M4 10h16M4 14.5h16M10 10v9" />
+  </Icon>
+);
+
+export const WorkspaceSlidesIcon = (props: IconProps): React.JSX.Element => (
+  <Icon {...props}>
+    <rect x="3.5" y="4.5" width="17" height="11.5" rx="2.5" />
+    <path d="M12 16v3.5M9 19.5h6" />
+  </Icon>
+);
+
+export const WorkspaceChartIcon = (props: IconProps): React.JSX.Element => (
+  <Icon {...props}>
+    <path d="M4 19.5h16" />
+    <path d="M7 16.5V11M11.5 16.5V6.5M16 16.5v-5" />
+  </Icon>
+);
+
+export const WorkspaceClientIcon = (props: IconProps): React.JSX.Element => (
+  <Icon {...props}>
+    <rect x="5.5" y="4.5" width="13" height="15" rx="2" />
+    <path d="M9 8.5h2M13 8.5h2M9 12.5h2M13 12.5h2M10.5 19.5v-3h3v3" />
+  </Icon>
+);
+
+export const WorkspaceResearchIcon = (props: IconProps): React.JSX.Element => (
+  <Icon {...props}>
+    <circle cx="10.5" cy="10.5" r="6" />
+    <path d="m15 15 5 5" />
+  </Icon>
+);
+
+export const WorkspaceWritingIcon = (props: IconProps): React.JSX.Element => (
+  <Icon {...props}>
+    <path d="M15.5 4.5 19.5 8.5 8.8 19.2H4.8v-4Z" />
+    <path d="m13.4 6.6 4 4" />
+  </Icon>
+);
+
+export const WorkspaceCodeIcon = (props: IconProps): React.JSX.Element => (
+  <Icon {...props}>
+    <path d="m9 8.5-4 3.5 4 3.5M15 8.5l4 3.5-4 3.5" />
+  </Icon>
+);
+
+export const WorkspaceProjectIcon = (props: IconProps): React.JSX.Element => (
+  <Icon {...props}>
+    <path d="m12 3.6 8 4.2v8.4l-8 4.2-8-4.2V7.8Z" />
+    <path d="m4 7.8 8 4.3 8-4.3M12 12.1v8.3" />
+  </Icon>
+);
+
+export const WorkspaceCycleIcon = (props: IconProps): React.JSX.Element => (
+  <Icon {...props}>
+    <rect x="4" y="5.5" width="16" height="14" rx="2.5" />
+    <path d="M4 10.5h16M8.5 3.6v3.8M15.5 3.6v3.8" />
+  </Icon>
+);
+
+export const WorkspaceLibraryIcon = (props: IconProps): React.JSX.Element => (
+  <Icon {...props}>
+    <path d="M12 6.5C10.5 5 8.5 4.5 5 4.5v14c3.5 0 5.5.5 7 2 1.5-1.5 3.5-2 7-2v-14c-3.5 0-5.5.5-7 2Z" />
+    <path d="M12 6.5v14" />
+  </Icon>
+);
+
+/**
+ * 图标 id 由协议的 `workspaceIconIdSchema` 定义，这里用 `Record` 穷举：
+ * 枚举加了一档而图标集没跟上时，编译直接失败，而不是侧栏画出一个空白。
+ */
+export const workspaceIcons: Record<WorkspaceIconId, ComponentType<{ size?: number }>> = {
+  folder: FolderIcon,
+  doc: WorkspaceDocIcon,
+  sheet: WorkspaceSheetIcon,
+  slides: WorkspaceSlidesIcon,
+  chart: WorkspaceChartIcon,
+  client: WorkspaceClientIcon,
+  research: WorkspaceResearchIcon,
+  writing: WorkspaceWritingIcon,
+  code: WorkspaceCodeIcon,
+  project: WorkspaceProjectIcon,
+  cycle: WorkspaceCycleIcon,
+  library: WorkspaceLibraryIcon,
+};

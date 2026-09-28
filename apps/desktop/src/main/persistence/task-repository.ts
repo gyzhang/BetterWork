@@ -18,7 +18,7 @@ interface TaskRow {
 }
 
 /** 最近任务列表把 Task、它的首个 Session 与最新一次 Run 合成一行返回。 */
-interface RecentTaskRow extends TaskRow {
+export interface RecentTaskRow extends TaskRow {
   session_id: string;
   run_id: string | null;
   run_session_id: string | null;
@@ -69,6 +69,19 @@ const toLatestRun = (row: RecentTaskRow): RunSummary | undefined => {
     status: row.status,
     createdAt: row.run_created_at,
     ...(row.completed_at === null ? {} : { completedAt: row.completed_at }),
+  };
+};
+
+/**
+ * 「Task＋首个 Session＋最新 Run」的行到摘要只映射一次：
+ * 侧栏的工作空间分组查询与全局最近任务列表必须报出同一份字段，不能各写一份。
+ */
+export const toRecentTaskSummary = (row: RecentTaskRow): RecentTaskSummary => {
+  const latestRun = toLatestRun(row);
+  return {
+    ...toSummary(row),
+    sessionId: row.session_id,
+    ...(latestRun ? { latestRun } : {}),
   };
 };
 
@@ -138,14 +151,7 @@ export class TaskRepository {
     const rows = (
       workspaceId ? this.db.prepare(query).all(workspaceId) : this.db.prepare(query).all()
     ) as RecentTaskRow[];
-    return rows.map((row) => {
-      const latestRun = toLatestRun(row);
-      return {
-        ...toSummary(row),
-        sessionId: row.session_id,
-        ...(latestRun ? { latestRun } : {}),
-      };
-    });
+    return rows.map(toRecentTaskSummary);
   }
 
   /** 有新活动时把任务顶到最近列表前面。 */

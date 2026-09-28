@@ -21,6 +21,8 @@ import {
   type MemoryWriteReceipt,
   type Result,
   type WorkspaceMemorySettings,
+  type WorkspaceSummary,
+  type WorkspaceTaskGroup,
 } from '@betterwork/agent-protocol';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -304,8 +306,73 @@ describe('registerIpc', () => {
   });
 
   it('rejects unexpected data for a no-input dialog channel before opening the dialog', async () => {
-    await expect(invoke(IpcChannel.SelectWorkspace, { injected: true })).rejects.toThrow();
+    await expect(invoke(IpcChannel.PickWorkspaceDirectory, { injected: true })).rejects.toThrow();
     expect(mocks.showOpenDialog).not.toHaveBeenCalled();
+  });
+
+  it('picks a directory without registering it, then registers the identity chosen in the dialog', async () => {
+    const root = path.join(temporaryDirectory, 'identity-workspace');
+    mkdirSync(root, { recursive: true });
+
+    // 选目录与登记是两件事：对话框取消时不得留下半个工作空间行。
+    mocks.showOpenDialog.mockResolvedValueOnce({ canceled: true, filePaths: [] });
+    await expect(invoke(IpcChannel.PickWorkspaceDirectory, {})).resolves.toBeNull();
+    mocks.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [root] });
+    await expect(invoke(IpcChannel.PickWorkspaceDirectory, {})).resolves.toBe(root);
+    expect(store.workspaces.listAll().map((space) => space.rootPath)).not.toContain(root);
+
+    const created = (await invoke(IpcChannel.CreateWorkspace, {
+      rootPath: root,
+      name: '   ',
+      iconId: 'chart',
+      accentId: 'plum',
+    })) as WorkspaceSummary;
+    // 名称全空白时沿用文件夹名，与对话框「未填时取文件夹名」的说明一致。
+    expect(created).toMatchObject({
+      name: 'identity-workspace',
+      iconId: 'chart',
+      accentId: 'plum',
+    });
+    expect('hiddenAt' in created).toBe(false);
+
+    await expect(invoke(IpcChannel.CreateWorkspace, { rootPath: root })).rejects.toThrow(
+      '已经登记为工作空间',
+    );
+    // 身份枚举与「至少改一项」都在边界上拦住，不留给 Repository 猜。
+    await expect(
+      invoke(IpcChannel.CreateWorkspace, { rootPath: root, iconId: 'not-an-icon' }),
+    ).rejects.toThrow();
+    await expect(
+      invoke(IpcChannel.UpdateWorkspaceIdentity, { workspaceId: created.id }),
+    ).rejects.toThrow();
+
+    const renamed = (await invoke(IpcChannel.UpdateWorkspaceIdentity, {
+      workspaceId: created.id,
+      accentId: 'amber',
+    })) as WorkspaceSummary;
+    expect(renamed).toMatchObject({ iconId: 'chart', accentId: 'amber' });
+
+    const hidden = (await invoke(IpcChannel.SetWorkspaceHidden, {
+      workspaceId: created.id,
+      hidden: true,
+    })) as WorkspaceSummary;
+    expect(hidden.hiddenAt).toBeTypeOf('number');
+    const groupIds = async (): Promise<string[]> => {
+      const loaded = (await invoke(IpcChannel.ListWorkspaceTaskGroups, {})) as WorkspaceTaskGroup[];
+      return loaded.map((group) => group.workspace.id);
+    };
+    expect(await groupIds()).not.toContain(created.id);
+
+    const shown = (await invoke(IpcChannel.SetWorkspaceHidden, {
+      workspaceId: created.id,
+      hidden: false,
+    })) as WorkspaceSummary;
+    expect('hiddenAt' in shown).toBe(false);
+    const groups = (await invoke(IpcChannel.ListWorkspaceTaskGroups, {})) as WorkspaceTaskGroup[];
+    expect(groups.find((group) => group.workspace.id === created.id)).toMatchObject({
+      tasks: [],
+      totalTasks: 0,
+    });
   });
 
   it('opens the workspace file picker at the selected workspace root', async () => {

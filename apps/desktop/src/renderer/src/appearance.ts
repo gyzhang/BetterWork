@@ -1,3 +1,5 @@
+import type { WorkspaceAccentId } from '@betterwork/agent-protocol';
+
 export type AppearanceMode = 'system' | 'light' | 'dark';
 export type ColorScheme = 'jade' | 'ink' | 'ocean' | 'sand';
 export type ResolvedAppearance = 'light' | 'dark';
@@ -14,6 +16,24 @@ export const colorSchemes: ReadonlyArray<{ id: ColorScheme; name: string; descri
   { id: 'ink', name: '纸墨', description: '安静阅读，近黑强调' },
   { id: 'ocean', name: '远洋', description: '冷静专业，深海蓝调' },
   { id: 'sand', name: '暖砂', description: '温和办公，暗金铜色' },
+];
+
+/**
+ * 工作空间身份色（docs/10 §9.4）：与上面的色系正交的第三个维度。
+ *
+ * 这里只登记「有哪几档、中文叫什么」——色值住在 `styles.css` 的明暗两套 Variant 里，
+ * 选择器与侧栏都通过 `var(--ws-<id>)` 取用。把色值再抄一份进 TS 就会出现
+ * 「切了主题、色板还是那一套」的双真相源。
+ */
+export const workspaceAccents: ReadonlyArray<{ id: WorkspaceAccentId; name: string }> = [
+  { id: 'moss', name: '苔绿' },
+  { id: 'teal', name: '青碧' },
+  { id: 'azure', name: '天青' },
+  { id: 'indigo', name: '靛蓝' },
+  { id: 'plum', name: '紫檀' },
+  { id: 'rose', name: '胭脂' },
+  { id: 'amber', name: '琥珀' },
+  { id: 'slate', name: '石墨' },
 ];
 
 const modes: ReadonlySet<string> = new Set<AppearanceMode>(['system', 'light', 'dark']);

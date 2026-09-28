@@ -388,6 +388,40 @@ describe('界面 Token 纪律', () => {
     expect(offenders, '用了未定义的 Token 会让属性静默回退初值（docs/12 §8）').toEqual([]);
   });
 
+  it('工作空间身份色的每一档都在明暗两套 Variant 里成对定义', () => {
+    // 档位清单住在协议的 workspaceAccentIdSchema，色值只住在样式表（docs/10 §9.4）。
+    // 少一档深色值既不报错也不报错——它只是让暗色侧栏里的图标糊成一片，
+    // tsc 与 vitest 都发现不了，只能在这里逐档核对两套 Variant。
+    const protocol = read('packages/agent-protocol/src/index.ts');
+    const start = protocol.indexOf('export const workspaceAccentIdSchema');
+    expect(start, 'workspaceAccentIdSchema 是身份色档位的唯一清单').toBeGreaterThan(-1);
+    const accents = [
+      ...protocol.slice(start, protocol.indexOf('])', start)).matchAll(/'([a-z]+)'/g),
+    ]
+      .map((match) => match[1])
+      .filter((id): id is string => Boolean(id));
+    expect(accents.length).toBeGreaterThanOrEqual(8);
+
+    const identityDeclarations = declarationsOf('apps/desktop/src/renderer/src/styles.css').filter(
+      (declaration) => declaration.property.startsWith('--ws-'),
+    );
+    const offenders = accents.filter((accent) => {
+      const themes = new Set(
+        identityDeclarations
+          .filter((declaration) => declaration.property === `--ws-${accent}`)
+          .map((declaration) =>
+            declaration.selector.includes("data-theme='light'")
+              ? 'light'
+              : declaration.selector.includes("data-theme='dark'")
+                ? 'dark'
+                : 'other',
+          ),
+      );
+      return !(themes.has('light') && themes.has('dark'));
+    });
+    expect(offenders, '身份色必须同时给出浅色与深色 Variant，不留半套').toEqual([]);
+  });
+
   it('动效时长一律取自 Token', () => {
     const rawDuration = /\d+(?:\.\d+)?m?s\b/;
     const offenders: string[] = [];

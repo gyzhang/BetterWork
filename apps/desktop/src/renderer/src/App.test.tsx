@@ -23,6 +23,7 @@ import type {
   WorkspaceBrief,
   WorkspaceReferenceListData,
   WorkspaceReferenceSetData,
+  WorkspaceSummary,
 } from '@betterwork/agent-protocol';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -49,6 +50,15 @@ const skill: SkillDetail = {
   },
 };
 const goal = '使用「中电金信」模板，生成两页演示文稿——封面 + 一页内容页。';
+const workspaceFixture: WorkspaceSummary = {
+  id: 'workspace-1',
+  name: '我的工作区',
+  rootPath: '/workspace',
+  iconId: 'folder',
+  accentId: 'moss',
+  createdAt: 1,
+  updatedAt: 1,
+};
 const previousRun: RunSummary = {
   id: 'previous-run',
   taskId: 'previous-task',
@@ -198,8 +208,16 @@ function installApi(options?: {
   const api = {
     chrome: { updateTheme: vi.fn(async () => undefined) },
     workspace: {
-      getDefault: vi.fn(async () => ({ id: 'workspace-1', rootPath: '/workspace' })),
+      getDefault: vi.fn(async () => workspaceFixture),
       listAll: vi.fn(async () => []),
+      pickDirectory: vi.fn(async () => null),
+      create: vi.fn(),
+      updateIdentity: vi.fn(),
+      setHidden: vi.fn(async () => null),
+      // 侧栏分组与 tasks.list 报同一批任务，测试才能继续点得到「旧任务」那一行。
+      listTaskGroups: vi.fn(async () => [
+        { workspace: workspaceFixture, tasks: [previousTask], totalTasks: 1 },
+      ]),
       memoryBrief: vi.fn(async (): Promise<Result<WorkspaceBrief>> => okResult(briefFixture)),
       listReferenceVersions: vi.fn(async (): Promise<Result<WorkspaceReferenceListData>> =>
         okResult({ items: [] }),

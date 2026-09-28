@@ -33,7 +33,6 @@ import type { CapabilityChip } from './components/ComposerCapabilityPicker';
 import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { ContextPanel } from './components/ContextPanel';
 import { DiscussionCheckpointPanel } from './components/DiscussionCheckpointPanel';
-import { EmptyNotice } from './components/EmptyState';
 import { IconButton } from './components/IconButton';
 import { PageHeader } from './components/layout/PageHeader';
 import { type MemoryCaptureDraft, MemoryCapturePanel } from './components/MemoryCapturePanel';
@@ -41,10 +40,11 @@ import type { MemoryEditorSubmission } from './components/MemoryEditor';
 import { MessageBlock } from './components/MessageBlock';
 import { ModelEditor } from './components/ModelEditorSheet';
 import { type NavEntry, NavItem, NavList } from './components/NavList';
-import { RunSummaryRow } from './components/RunSummaryRow';
 import { ToolActivity } from './components/ToolActivity';
 import { TransientToast } from './components/TransientToast';
 import { Welcome } from './components/Welcome';
+import { type WorkspaceGroupAction, WorkspaceGroupList } from './components/WorkspaceGroupList';
+import { WorkspaceIdentityDialog } from './components/WorkspaceIdentityDialog';
 import { useAppearance } from './hooks/use-appearance';
 import { useExperts } from './hooks/use-experts';
 import { useKnowledgeLibrary } from './hooks/use-knowledge-library';
@@ -57,6 +57,8 @@ import { useSkills } from './hooks/use-skills';
 import { useTaskMemoryExclusions } from './hooks/use-task-memory-exclusions';
 import { useTaskScroll } from './hooks/use-task-scroll';
 import { useWorkspaceBrief } from './hooks/use-workspace-brief';
+import { useWorkspaceGroups } from './hooks/use-workspace-groups';
+import { useWorkspaceIdentity } from './hooks/use-workspace-identity';
 import { useWorkspaceReferences } from './hooks/use-workspace-references';
 import {
   AlertIcon,
@@ -250,6 +252,10 @@ export function App(): React.JSX.Element {
     expertId: activeExpert?.id,
   });
   const references = useWorkspaceReferences(workspace?.id);
+  const workspaceGroups = useWorkspaceGroups(workspace?.id);
+  // 只把稳定的方法取出来当依赖：容器对象每次渲染都是新的，整对象进依赖会让
+  // refreshTasks 每次都换身份，进而让依赖它的 effect 每帧重跑。
+  const { refreshGroups } = workspaceGroups;
   const memoryExclusion = useTaskMemoryExclusion();
   // 契约 §11.2：排除清单独立读取，与预览互不阻塞；调整成功后立即刷新。
   const taskExclusions = useTaskMemoryExclusions({
@@ -455,12 +461,19 @@ export function App(): React.JSX.Element {
       '刷新任务运行记录',
     );
   }, []);
-  const refreshTasks = useCallback((workspaceId = workspaceIdRef.current): void => {
-    trackAction(
-      window.betterwork.tasks.list(workspaceId ? { workspaceId } : undefined).then(setRecentTasks),
-      '刷新最近任务',
-    );
-  }, []);
+  const refreshTasks = useCallback(
+    (workspaceId = workspaceIdRef.current): void => {
+      trackAction(
+        window.betterwork.tasks
+          .list(workspaceId ? { workspaceId } : undefined)
+          .then(setRecentTasks),
+        '刷新最近任务',
+      );
+      // 侧栏分组与最近任务是同一批事实的两种切法，一起刷新才不会一处新一处旧。
+      refreshGroups();
+    },
+    [refreshGroups],
+  );
   const refreshEvidence = useCallback((taskId = activeTaskIdRef.current): void => {
     const requestId = evidenceRequestRef.current + 1;
     evidenceRequestRef.current = requestId;
@@ -521,9 +534,9 @@ export function App(): React.JSX.Element {
         setWorkspace(currentWorkspace);
         refreshTasks(currentWorkspace.id);
       }),
-      '加载默认工作区',
+      '加载默认工作空间',
     );
-    trackAction(window.betterwork.workspace.listAll().then(setAllWorkspaces), '加载工作区列表');
+    trackAction(window.betterwork.workspace.listAll().then(setAllWorkspaces), '加载工作空间列表');
     return window.betterwork.runs.onEvent((event) => {
       setEvents((current) =>
         event.runId === activeRunIdRef.current ? [...current, event] : current,
@@ -617,21 +630,56 @@ export function App(): React.JSX.Element {
     setArtifactNote(undefined);
     setView('work');
   };
-  /** 打开本地文件夹与新建工作区走的是同一件事：选一个目录并切过去。 */
-  const applyWorkspaceDirectory = (failureMessage: string): void => {
+  /** 刷新已登记空间清单：新建与改名之后侧栏与选择器都要看到同一份。 */
+  const refreshWorkspaces = (): void => {
+    trackAction(window.betterwork.workspace.listAll().then(setAllWorkspaces), '刷新工作空间列表');
+  };
+
+  /**
+   * 换到某个空间开新任务。清的是上一条会话的上下文，不是她当场正在写的草稿——
+   * 输入框里的话与已选的技能片都留下，切目录不等于清草稿。
+   */
+  const enterWorkspace = (selected: WorkspaceSummary): void => {
+    const draftPrompt = prompt;
+    const draftBindings = taskBindings;
+    startNewTask();
+    setPrompt(draftPrompt);
+    setTaskBindings(draftBindings);
+    workspaceIdRef.current = selected.id;
+    setWorkspace(selected);
+    refreshTasks(selected.id);
+  };
+
+  const workspaceIdentity = useWorkspaceIdentity({
+    workspaces: allWorkspaces,
+    onSaved: (saved, created) => {
+      refreshWorkspaces();
+      // 新建完就切过去：默认展开规则认的是「当前空间」，切过去后这一组自然摊开。
+      if (created) enterWorkspace(saved);
+    },
+  });
+
+  /** 隐藏只影响侧栏可见性；恢复走输入区那个工作空间选择器（它列全部空间）。 */
+  const applyWorkspaceGroupAction = (action: WorkspaceGroupAction): void => {
+    const target = allWorkspaces.find((item) => item.id === action.workspaceId);
+    if (!target) return;
+    if (action.kind === 'new-task') {
+      enterWorkspace(target);
+      return;
+    }
+    if (action.kind === 'edit-identity') {
+      workspaceIdentity.openEdit(target);
+      return;
+    }
     reportAction(
-      window.betterwork.workspace.selectDirectory().then((selected) => {
-        if (!selected) return;
-        startNewTask();
-        // 换目录开的是新任务，但保留当场已选的技能片：切目录不等于清草稿。
-        setTaskBindings(taskBindings);
-        workspaceIdRef.current = selected.id;
-        setWorkspace(selected);
-        refreshTasks(selected.id);
-        trackAction(window.betterwork.workspace.listAll().then(setAllWorkspaces), '刷新工作区列表');
-      }),
+      window.betterwork.workspace
+        .setHidden({ workspaceId: target.id, hidden: action.hidden })
+        .then(() => {
+          refreshWorkspaces();
+          refreshGroups();
+        }),
       setActionError,
-      failureMessage,
+      '更新工作空间显示状态失败，请重试。',
     );
   };
   const skills = useSkills({
@@ -1250,20 +1298,34 @@ export function App(): React.JSX.Element {
           items={PRIMARY_NAV_ITEMS}
         />
         <div className="sidebar-divider" />
-        <p className="section-label">最近任务</p>
-        <div className="run-list">
-          {recentTasks.length === 0 && <EmptyNotice title="你的任务会保存在这里。" />}
-          {recentTasks.map((task) => (
-            <RunSummaryRow
-              key={task.id}
-              run={task.latestRun}
-              title={task.title}
-              action="打开任务"
-              selected={task.id === activeTask?.id}
-              onSelect={() => reportAction(selectTask(task), setActionError, '无法打开这项任务。')}
-            />
-          ))}
-        </div>
+        <p className="section-label">工作空间</p>
+        <WorkspaceGroupList
+          groups={workspaceGroups.groups}
+          currentWorkspaceId={workspace?.id}
+          activeTaskId={activeTask?.id}
+          isOpen={workspaceGroups.isOpen}
+          showsAll={workspaceGroups.showsAll}
+          onToggleGroup={workspaceGroups.toggleGroup}
+          onToggleShowAll={workspaceGroups.toggleShowAll}
+          onSelectTask={(workspaceId, task) => {
+            // 打开别的空间里的任务，输入区的目录绑定要跟着过去——
+            // 这是「打开任务」的必然结果，不是第二处切换入口。
+            if (workspaceId !== workspaceIdRef.current) {
+              const target = allWorkspaces.find((item) => item.id === workspaceId);
+              if (target) {
+                workspaceIdRef.current = target.id;
+                setWorkspace(target);
+              }
+            }
+            reportAction(selectTask(task), setActionError, '无法打开这项任务。');
+          }}
+          onAction={applyWorkspaceGroupAction}
+          rail={sidebarCollapsed}
+          onRevealFromRail={(workspaceId) => {
+            setSidebarCollapsed(false);
+            workspaceGroups.openGroup(workspaceId);
+          }}
+        />
         <div className="sidebar-bottom">
           <NavItem
             label="设置"
@@ -1511,15 +1573,19 @@ export function App(): React.JSX.Element {
                   currentWorkspace: workspace,
                   workspaces: allWorkspaces,
                   onSelectWorkspace: (selected) => {
-                    startNewTask();
-                    // 换工作区开的是新任务，但保留当场已选的技能片：切目录不等于清草稿。
-                    setTaskBindings(taskBindings);
-                    workspaceIdRef.current = selected.id;
-                    setWorkspace(selected);
-                    refreshTasks(selected.id);
+                    // 从选择器回到一个曾隐藏的空间＝她又要在这里工作，隐藏随之解除。
+                    if (selected.hiddenAt !== undefined) {
+                      reportAction(
+                        window.betterwork.workspace
+                          .setHidden({ workspaceId: selected.id, hidden: false })
+                          .then(refreshGroups),
+                        setActionError,
+                        '更新工作空间显示状态失败，请重试。',
+                      );
+                    }
+                    enterWorkspace(selected);
                   },
-                  onOpenLocalFolder: () => applyWorkspaceDirectory('选择工作区失败，请重试。'),
-                  onNewWorkspace: () => applyWorkspaceDirectory('新建工作区失败，请重试。'),
+                  onNewWorkspace: workspaceIdentity.openCreate,
                 }}
                 expert={activeExpert}
                 onRemoveExpert={() => {
@@ -1712,6 +1778,21 @@ export function App(): React.JSX.Element {
           onClose={modelSettings.closeEditor}
           onSave={modelSettings.onSave}
           onTest={() => trackAction(modelSettings.onTest(), '测试模型连接')}
+        />
+      )}
+      {workspaceIdentity.open && (
+        <WorkspaceIdentityDialog
+          editing={workspaceIdentity.editing}
+          draft={workspaceIdentity.draft}
+          error={workspaceIdentity.error}
+          takenByName={workspaceIdentity.takenBy?.name}
+          busy={workspaceIdentity.busy}
+          picking={workspaceIdentity.picking}
+          canSubmit={workspaceIdentity.canSubmit}
+          onChangeDraft={workspaceIdentity.changeDraft}
+          onChooseDirectory={workspaceIdentity.chooseDirectory}
+          onSubmit={workspaceIdentity.submit}
+          onClose={workspaceIdentity.close}
         />
       )}
       {modelSettings.toast && (

@@ -1558,6 +1558,19 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 35,
+    name: 'add workspace identity columns',
+    up(db: Database.Database): void {
+      // 一个工作空间要能在侧栏里自我介绍：图标与颜色是身份，隐藏位只影响侧栏可见性，
+      // 不改任何归属关系。三列都带默认值或可空，历史行不回填也不替旧库猜一个图标。
+      db.exec(`
+        ALTER TABLE workspaces ADD COLUMN icon_id TEXT NOT NULL DEFAULT 'folder';
+        ALTER TABLE workspaces ADD COLUMN accent_id TEXT NOT NULL DEFAULT 'moss';
+        ALTER TABLE workspaces ADD COLUMN hidden_at INTEGER;
+      `);
+    },
+  },
 ];
 
 /**

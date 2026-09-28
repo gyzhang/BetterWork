@@ -16,6 +16,11 @@ export interface PopoverMenuItem {
   disabled?: boolean;
   /** 可选说明行（如 blockedReasons）。 */
   hint?: string;
+  /**
+   * 行首的图形（如工作空间的身份图标）。菜单本来就是「一排同构项」，
+   * 项与项的区别若只能靠文字认，颜色与形状这套更快的辨识通道就白建了。
+   */
+  leading?: React.ReactNode;
   /** 破坏性动作：红色文字，与「移出资料库」这类不可逆操作对应。 */
   tone?: 'danger';
 }
@@ -264,6 +269,11 @@ export function PopoverMenu({
               if (!item.disabled) setActiveIndex(index);
             }}
           >
+            {item.leading ? (
+              <span className="popover-menu-leading" aria-hidden="true">
+                {item.leading}
+              </span>
+            ) : undefined}
             <span className="popover-menu-label">{item.label}</span>
             {item.hint ? <span className="popover-menu-hint">{item.hint}</span> : undefined}
           </div>

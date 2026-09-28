@@ -10,6 +10,8 @@ const workspace: WorkspaceSummary = {
   id: 'w1',
   name: '季度复盘',
   rootPath: '/vault/quarter',
+  iconId: 'chart',
+  accentId: 'moss',
   createdAt: 0,
   updatedAt: 0,
 };
@@ -25,7 +27,6 @@ const base: ComposerProps = {
     currentWorkspace: workspace,
     workspaces: [workspace],
     onSelectWorkspace: () => {},
-    onOpenLocalFolder: () => {},
     onNewWorkspace: () => {},
   },
   expert: undefined,
@@ -97,7 +98,7 @@ describe('Composer 基座', () => {
     expect(start).toHaveProperty('disabled', true);
   });
 
-  it('没有工作区就不让开始：先选目录，再谈提交', () => {
+  it('没有工作空间就不让开始：先选目录，再谈提交', () => {
     composer({ workspacePicker: { ...base.workspacePicker, currentWorkspace: undefined } });
 
     expect(screen.getByRole('button', { name: /开始工作/ })).toHaveProperty('disabled', true);

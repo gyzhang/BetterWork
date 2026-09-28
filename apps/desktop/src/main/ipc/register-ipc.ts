@@ -1,4 +1,4 @@
-import { chmod, copyFile, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
@@ -25,6 +25,7 @@ import {
   createdTaskSchema,
   createMemoryRequestSchema,
   createTaskRequestSchema,
+  createWorkspaceRequestSchema,
   declareArtifactSourcesRequestSchema,
   deletedResultSchema,
   deleteExpertRequestSchema,
@@ -172,6 +173,7 @@ import {
   setModelEnabledRequestSchema,
   setSkillEnabledRequestSchema,
   setSkillTrustRequestSchema,
+  setWorkspaceHiddenRequestSchema,
   setWorkspaceReferenceVersionRequestSchema,
   skillDetailSchema,
   skillExportResultSchema,
@@ -192,6 +194,7 @@ import {
   updatedResultSchema,
   updateMemoryRequestSchema,
   updateWindowThemeRequestSchema,
+  updateWorkspaceIdentityRequestSchema,
   voidResultSchema,
   windowToggleMaximizeRequestSchema,
   workspaceBriefSchema,
@@ -200,6 +203,7 @@ import {
   workspaceReferenceListDataSchema,
   workspaceReferenceSetDataSchema,
   workspaceSummarySchema,
+  workspaceTaskGroupsSchema,
 } from '@betterwork/agent-protocol';
 import { type BrowserWindow, dialog, ipcMain, shell, systemPreferences } from 'electron';
 import { z, type ZodTypeAny } from 'zod';
@@ -342,6 +346,17 @@ function showSaveDialog(
   return parent ? dialog.showSaveDialog(parent, options) : dialog.showSaveDialog(options);
 }
 
+/**
+ * 工作空间根目录是 Tool 的文件沙箱边界（docs/03），而路径是 Renderer 回传的字符串，
+ * 因此登记前重新解析并确认它真的还是一个目录。
+ */
+async function requireDirectory(candidate: string): Promise<string> {
+  const rootPath = path.resolve(candidate);
+  const info = await stat(rootPath).catch(() => null);
+  if (!info?.isDirectory()) throw new Error('所选文件夹不存在或不是一个目录，请重新选择。');
+  return rootPath;
+}
+
 export function registerIpc(deps: IpcDependencies): void {
   registerRunChannels(deps);
   registerWorkspaceAndTaskChannels(deps);
@@ -395,17 +410,16 @@ function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
   );
 
   handleNoInput(
-    IpcChannel.SelectWorkspace,
+    IpcChannel.PickWorkspaceDirectory,
     emptyRequestSchema,
-    workspaceSummarySchema.nullable(),
+    z.string().min(1).nullable(),
     async () => {
       const result = await showOpenDialog(deps, {
-        title: '选择工作区',
+        title: '选择工作空间文件夹',
         properties: ['openDirectory', 'createDirectory'],
       });
-      const rootPath = result.filePaths[0];
-      if (result.canceled || !rootPath) return null;
-      return store.workspaces.getOrCreate(rootPath, path.basename(rootPath));
+      // 只回路径、不登记：选目录不等于建空间，用户可能看完对话框就取消。
+      return result.canceled ? null : (result.filePaths[0] ?? null);
     },
   );
 
@@ -414,6 +428,46 @@ function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
     emptyRequestSchema,
     z.array(workspaceSummarySchema),
     () => store.workspaces.listAll(),
+  );
+
+  handleInput(
+    IpcChannel.CreateWorkspace,
+    createWorkspaceRequestSchema,
+    workspaceSummarySchema,
+    async (input) =>
+      store.workspaces.create(
+        await requireDirectory(input.rootPath),
+        // 名称留空沿用文件夹名，与对话框「未填时取文件夹名」的说明一致。
+        input.name?.trim() || path.basename(input.rootPath),
+        input.iconId,
+        input.accentId,
+      ),
+  );
+
+  handleInput(
+    IpcChannel.UpdateWorkspaceIdentity,
+    updateWorkspaceIdentityRequestSchema,
+    workspaceSummarySchema,
+    (input) =>
+      store.workspaces.updateIdentity(input.workspaceId, {
+        ...(input.name === undefined ? {} : { name: input.name }),
+        ...(input.iconId === undefined ? {} : { iconId: input.iconId }),
+        ...(input.accentId === undefined ? {} : { accentId: input.accentId }),
+      }),
+  );
+
+  handleInput(
+    IpcChannel.SetWorkspaceHidden,
+    setWorkspaceHiddenRequestSchema,
+    workspaceSummarySchema,
+    (input) => store.workspaces.setHidden(input.workspaceId, input.hidden),
+  );
+
+  handleNoInput(
+    IpcChannel.ListWorkspaceTaskGroups,
+    emptyRequestSchema,
+    workspaceTaskGroupsSchema,
+    () => store.workspaces.listTaskGroups(),
   );
 
   handleInput(IpcChannel.CreateTask, createTaskRequestSchema, createdTaskSchema, (input) =>

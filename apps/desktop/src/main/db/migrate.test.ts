@@ -1088,6 +1088,27 @@ it('migrates v7 through the latest schema without losing Markdown versions', () 
   expect(db.prepare('SELECT content FROM artifact_versions WHERE id = ?').get('ver-1')).toEqual({
     content: '# 复盘',
   });
+  // v35：工作空间要能在侧栏里自我介绍。历史行补默认身份，隐藏位保持「未隐藏」。
+  const workspaceColumns = db.prepare('PRAGMA table_info(workspaces)').all() as Array<{
+    name: string;
+    dflt_value: string | null;
+    notnull: number;
+  }>;
+  expect(workspaceColumns.find((column) => column.name === 'icon_id')).toMatchObject({
+    notnull: 1,
+    dflt_value: "'folder'",
+  });
+  expect(workspaceColumns.find((column) => column.name === 'accent_id')).toMatchObject({
+    notnull: 1,
+    dflt_value: "'moss'",
+  });
+  expect(workspaceColumns.find((column) => column.name === 'hidden_at')).toMatchObject({
+    notnull: 0,
+    dflt_value: null,
+  });
+  expect(
+    db.prepare('SELECT icon_id, accent_id, hidden_at FROM workspaces WHERE id = ?').get('ws-1'),
+  ).toEqual({ icon_id: 'folder', accent_id: 'moss', hidden_at: null });
   const columns = db.prepare('PRAGMA table_info(script_executions)').all() as Array<{
     name: string;
     dflt_value: string;

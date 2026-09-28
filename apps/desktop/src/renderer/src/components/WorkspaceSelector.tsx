@@ -1,22 +1,32 @@
 import type { WorkspaceSummary } from '@betterwork/agent-protocol';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
-import { ChevronLeftIcon, FolderIcon, PlusIcon } from '../icons';
+import { ChevronLeftIcon, FolderIcon, PlusIcon, workspaceIcons } from '../icons';
+import { workspaceAccentVar } from '../lib/workspace-identity';
 import { PopoverMenu } from './PopoverMenu';
 
 export interface WorkspaceSelectorProps {
   currentWorkspace: WorkspaceSummary | undefined;
   workspaces: WorkspaceSummary[];
   onSelectWorkspace: (workspace: WorkspaceSummary) => void;
-  onOpenLocalFolder: () => void;
+  /** 唯一的入口：打开新建对话框。旧的「打开本地文件夹」与它是同一条路径，已合并。 */
   onNewWorkspace: () => void;
 }
+
+/** 触发器与列表项左侧的身份图标：与侧栏分组同一份颜色，认空间靠形状和色相，不靠路径。 */
+const identityIcon = (workspace: WorkspaceSummary): React.JSX.Element => {
+  const Icon = workspaceIcons[workspace.iconId];
+  return (
+    <span style={{ color: workspaceAccentVar(workspace.accentId) }}>
+      <Icon size={14} />
+    </span>
+  );
+};
 
 export function WorkspaceSelector({
   currentWorkspace,
   workspaces,
   onSelectWorkspace,
-  onOpenLocalFolder,
   onNewWorkspace,
 }: WorkspaceSelectorProps): React.JSX.Element {
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -38,6 +48,7 @@ export function WorkspaceSelector({
         id: ws.id,
         label: ws.name,
         hint: ws.rootPath,
+        leading: identityIcon(ws),
       })),
     [filteredWorkspaces],
   );
@@ -75,15 +86,15 @@ export function WorkspaceSelector({
         aria-expanded={open}
         onClick={handleTriggerClick}
       >
-        <FolderIcon size={14} />
-        <span className="workspace-selector-name">{currentWorkspace?.name ?? '选择工作区'}</span>
+        {currentWorkspace ? identityIcon(currentWorkspace) : <FolderIcon size={14} />}
+        <span className="workspace-selector-name">{currentWorkspace?.name ?? '选择工作空间'}</span>
         <ChevronLeftIcon size={12} className={`workspace-selector-chevron${open ? ' open' : ''}`} />
       </button>
       <PopoverMenu
         open={open}
         anchorRef={triggerRef}
         items={menuItems}
-        label="选择工作区"
+        label="选择工作空间"
         placement="bottom"
         onDismiss={handleDismiss}
         onSelect={handleSelect}
@@ -118,17 +129,6 @@ export function WorkspaceSelector({
             >
               <PlusIcon size={14} />
               <span>新建工作空间</span>
-            </button>
-            <button
-              type="button"
-              className="workspace-selector-action"
-              onClick={() => {
-                onOpenLocalFolder();
-                handleDismiss();
-              }}
-            >
-              <FolderIcon size={14} />
-              <span>打开本地文件夹</span>
             </button>
           </div>
         }

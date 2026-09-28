@@ -4,6 +4,11 @@ import type { ComponentType, ReactNode } from 'react';
 export interface NavItemProps {
   label: ReactNode;
   icon?: ComponentType<{ size?: number }> | undefined;
+  /**
+   * 图标自己的颜色。工作空间行用它把身份色带进导航行——几何仍然全住在基座，
+   * 换的只是一个 `color`，不为一个颜色再抄一份行。
+   */
+  iconColor?: string | undefined;
   /** 当前项。选中不只靠颜色：`aria-current` 与 `data-selected` 同时给出。 */
   selected?: boolean | undefined;
   onClick?: (() => void) | undefined;
@@ -27,6 +32,7 @@ export interface NavItemProps {
 export function NavItem({
   label,
   icon: Icon,
+  iconColor,
   selected = false,
   onClick,
   disabled,
@@ -46,7 +52,11 @@ export function NavItem({
       {...(onClick ? { onClick } : {})}
     >
       {Icon ? (
-        <span className="nav-item-icon" aria-hidden="true">
+        <span
+          className="nav-item-icon"
+          aria-hidden="true"
+          {...(iconColor ? { style: { color: iconColor } } : {})}
+        >
           <Icon size={15} />
         </span>
       ) : undefined}

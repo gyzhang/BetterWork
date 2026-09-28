@@ -165,8 +165,12 @@ const api: BetterWorkDesktopApi = {
   },
   workspace: {
     getDefault: () => ipcRenderer.invoke(IpcChannel.GetDefaultWorkspace),
-    selectDirectory: () => ipcRenderer.invoke(IpcChannel.SelectWorkspace),
+    pickDirectory: () => ipcRenderer.invoke(IpcChannel.PickWorkspaceDirectory),
     listAll: () => ipcRenderer.invoke(IpcChannel.ListWorkspaces),
+    create: (input) => ipcRenderer.invoke(IpcChannel.CreateWorkspace, input),
+    updateIdentity: (input) => ipcRenderer.invoke(IpcChannel.UpdateWorkspaceIdentity, input),
+    setHidden: (input) => ipcRenderer.invoke(IpcChannel.SetWorkspaceHidden, input),
+    listTaskGroups: () => ipcRenderer.invoke(IpcChannel.ListWorkspaceTaskGroups),
     memoryBrief: (input) =>
       invokeValidated(
         IpcChannel.GetWorkspaceMemoryBrief,
