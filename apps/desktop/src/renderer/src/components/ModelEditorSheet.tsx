@@ -133,7 +133,7 @@ export function ModelEditor({
           <Button variant="secondary" size="md" type="button" onClick={onTest}>
             测试连接
           </Button>
-          <Button variant="primary" size="lg" type="submit">
+          <Button variant="primary" size="md" type="submit">
             {editing ? '保存修改' : '添加模型'}
           </Button>
         </ActionBar>

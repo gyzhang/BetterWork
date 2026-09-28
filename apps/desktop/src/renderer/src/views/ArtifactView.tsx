@@ -433,7 +433,7 @@ export function ArtifactPage({
                       <Button variant="secondary" size="md" type="button" onClick={cancelEditing}>
                         取消
                       </Button>
-                      <Button variant="primary" size="lg" type="submit">
+                      <Button variant="primary" size="md" type="submit">
                         保存新版本
                       </Button>
                     </ActionBar>

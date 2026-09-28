@@ -1862,6 +1862,30 @@ describe('按钮基座纪律', () => {
       '按钮外观只由 Button 基座或基座自己的槽位选择器负责（docs/10 §10.1、ADR-0031）',
     ).toEqual([]);
   });
+  it('一条动作条里的按钮必须同档', () => {
+    // 本轮的起点就是这条：专家修订页「保存修订」36px 与「取消」28px 差 8px，
+    // 主行动被自己的同伴衬成一块砖。`size` 刻意不做条件缺省，所以同排同档
+    // 必须由调用点保证——不锁住它就会长回来。
+    const offenders: string[] = [];
+    for (const relative of productionPathsUnder('apps/desktop/src/renderer/')) {
+      if (!relative.endsWith('.tsx')) continue;
+      const text = read(relative);
+      for (const match of text.matchAll(/<ActionBar\b[\s\S]*?<\/ActionBar>/g)) {
+        const block = match[0];
+        // 只数按钮的档位：图标按钮的 `size` 与基座自己的属性不算。
+        const steps = [...block.matchAll(/\bsize="([a-z]+)"/g)].map((m) => m[1] ?? 'md');
+        const distinct = [...new Set(steps)];
+        if (distinct.length > 1) {
+          const line = text.slice(0, match.index ?? 0).split('\n').length;
+          offenders.push(`${relative}:${line} 动作条里出现 ${distinct.join('／')}`);
+        }
+      }
+    }
+    expect(
+      offenders,
+      'ActionBar 是一「排」动作，主行动与取消必须同档（docs/10 §10.1、ADR-0031）',
+    ).toEqual([]);
+  });
 });
 
 describe('导航列表纪律', () => {

@@ -643,7 +643,7 @@ function McpSettings({ state }: { state: McpConnectionsState }): React.JSX.Eleme
           <ActionBar as="div" label="保存 MCP 连接">
             <Button
               variant="text"
-              size="sm"
+              size="md"
               type="button"
               onClick={() => {
                 setEditorOpen(false);
@@ -655,7 +655,7 @@ function McpSettings({ state }: { state: McpConnectionsState }): React.JSX.Eleme
             </Button>
             <Button
               variant="primary"
-              size="lg"
+              size="md"
               type="button"
               disabled={busyId !== undefined}
               onClick={save}

@@ -61,6 +61,8 @@
 
 **不设「按 `variant` 给缺省 `size`」的条件缺省**：`primary` 不自动等于 36px。主行动要不要比同排的次级动作高一档，是页面在那一刻的选择，写成显式的 `size="lg"` 比藏在基座缺省里更可解释——本轮的起点就是「保存修订 36px 与取消 28px 差 8px 被衬成一块砖」，把档位差交回调用点，动作条里才可能出现「同排同档」这个约定。
 
+**这条约定本身也由护栏锁住**：`ActionBar` 是一「排」动作，槽内按钮必须同档。第一版迁移只机械保留了每颗按钮原有的档位，于是那条起点动作条仍然是 28＋36 的落差——**把系统收干净不等于把最初那件事修好，两件事都得做**。全仓 8 条 `ActionBar` 里有 5 条混档，现一律归到 `md`（32px）；`lg` 只留给不在动作条里的整页主行动（专家卡上的「召唤」、专家页空态的「新建专家」）。
+
 ### 刻意不进 `Button` 的四类
 
 - **`IconButton`**：方块几何、无文字、`aria-label` 是唯一名称来源。清点时给它补了第三档 `row`（34px，对齐侧栏行高）——消息铃铛原先自写一套 34px 皮，且在折叠侧栏与窄视口下又各自放大到 36px，是「形态没有名字就各造一套」的又一例。
@@ -74,13 +76,14 @@
 - `.page-header button`／`.context-topline button` 的 `app-region: no-drag` 与全局 `button { transition }` 不属于外观，保留。
 - 错误条里的「重试／关闭」原先由 `.inline-message.error button { color: inherit }` 替它改字色；现由 `variant="link" tone="danger"` 自己带，容器只留 `float` 这一件排布事实。
 - `PopoverMenu` 的字号镜像读的是触发元素计算字号，档位收敛后镜像值只会更规整，不需要改基座。
-- 护栏五条（`standards/coding-standard.test.ts` 的「按钮基座纪律」）：
+- 护栏六条（`standards/coding-standard.test.ts` 的「按钮基座纪律」）：
   1. 被收编的皮类与容器后代规则不得复活（进 `RETIRED_UTILITY_CLASSES` 的 `button` 家族，30 条）；
   2. 生产 `.tsx` 出现裸 `<button` 即失败，基座文件按名豁免、非动作形态按理由登记；
   3. `.btn[data-variant|data-size|data-tone]` 的档位集合必须与三个联合类型**穷举相等**（`neutral` 作为「没有规则就是它的实现」显式登记）；
   4. 每一档 `size` 的 `min-height` 必须取 `--control-height-*`；
-  5. 选择器含 `button` 或 `.btn` 又声明了 `min-height`／`padding`／`border-radius`／`font-size`／`background`／`border`／`color` 即失败，基座自己的选择器进白名单。
-  `CONTROL_SELECTOR` 的口径同步从三个旧皮类换成 `.btn` 与 `.icon-button`。五条都做过变异验证：新增裸按钮、CSS 多一档、抽掉某档 `min-height`、复活 `.examples button`、页面给 `.btn` 补 `font-weight`，逐一确认门禁转红。
+  5. 选择器含 `button` 或 `.btn` 又声明了 `min-height`／`padding`／`border-radius`／`font-size`／`background`／`border`／`color` 即失败，基座自己的选择器进白名单；
+  6. 一条 `ActionBar` 里出现的 `size` 档位不得超过一种。
+  `CONTROL_SELECTOR` 的口径同步从三个旧皮类换成 `.btn` 与 `.icon-button`。六条都做过变异验证：新增裸按钮、CSS 多一档、抽掉某档 `min-height`、复活 `.examples button`、页面给 `.btn` 补 `font-weight`、把动作条里的「保存」改回 `lg`，逐一确认门禁转红并还原源文件。
 - 迁移不改行为：`onClick`／`type`／`disabled`／`aria-*` 原样透传，可及名称与角色不变（`<button>` 仍是 `<button>`）。`AsyncButton` 的 `variant` 类型从自造的三档扩成 `ButtonVariant`，外观委托给 `Button`；`aria-busy` 语义不变。
 
 ## 取舍与后续

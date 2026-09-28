@@ -396,12 +396,12 @@ export function ComposerCapabilityPicker({
         }
         footer={
           <ActionBar as="div" label="添加材料">
-            <Button variant="text" size="sm" type="button" onClick={onDismissMaterialPicker}>
+            <Button variant="text" size="md" type="button" onClick={onDismissMaterialPicker}>
               取消
             </Button>
             <Button
               variant="primary"
-              size="lg"
+              size="md"
               type="button"
               onClick={() => {
                 onCommitMaterials(materialDraft);

@@ -574,11 +574,12 @@ function ExpertEditor({
             />
           </fieldset>
           <ActionBar as="div" label="保存专家修订">
-            <Button variant="text" size="sm" type="button" onClick={onCancel}>
+            <Button variant="text" size="md" type="button" onClick={onCancel}>
               取消
             </Button>
             <AsyncButton
               variant="primary"
+              size="md"
               busy={saving}
               label="保存修订"
               busyLabel="正在保存…"
