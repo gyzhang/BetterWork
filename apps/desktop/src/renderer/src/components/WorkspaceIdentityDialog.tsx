@@ -15,6 +15,7 @@ import { ActionBar } from './ActionBar';
 import { AsyncButton } from './AsyncButton';
 import { Button } from './Button';
 import { Field } from './Field';
+import { InlineError } from './InlineError';
 import { Modal } from './Modal';
 import { SectionHeader } from './SectionHeader';
 import { type PickerOption, SingleSelectPicker } from './SingleSelectPicker';
@@ -150,15 +151,11 @@ export function WorkspaceIdentityDialog({
         />
       </Field>
       {takenByName && (
-        <p className="inline-message error" role="alert">
-          {`这个文件夹已经登记为「${takenByName}」，请直接打开它，或换一个目录。`}
-        </p>
+        <InlineError
+          message={`这个文件夹已经登记为「${takenByName}」，请直接打开它，或换一个目录。`}
+        />
       )}
-      {error && (
-        <p className="inline-message error" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <InlineError message={error} />}
       <ActionBar label={title}>
         <Button variant="secondary" size="md" type="button" onClick={onClose}>
           取消

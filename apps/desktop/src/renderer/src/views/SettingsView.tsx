@@ -21,6 +21,7 @@ import { Disclosure } from '../components/Disclosure';
 import { EmptyNotice } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
+import { InlineError } from '../components/InlineError';
 import { ListRow } from '../components/ListRow';
 import { type NavEntry, NavList } from '../components/NavList';
 import { SectionHeader } from '../components/SectionHeader';
@@ -346,11 +347,7 @@ export function SearchSettings(): React.JSX.Element {
         title="为智能体接入联网搜索"
         hint="API Key 仅保存于本机主进程。启用后，智能体在任务需要时会搜索互联网，并给过程与成果标注网页来源。"
       />
-      {error && (
-        <p className="inline-message error" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <InlineError message={error} />}
       <div className="search-form">
         <Field label="搜索引擎">
           <FieldSelect
@@ -638,11 +635,7 @@ function McpSettings({ state }: { state: McpConnectionsState }): React.JSX.Eleme
               onChange={(event) => setForm({ ...form, cwd: event.target.value })}
             />
           </Field>
-          {error && (
-            <p className="inline-message error" role="alert">
-              {error}
-            </p>
-          )}
+          {error && <InlineError message={error} />}
           <ActionBar as="div" label="保存 MCP 连接">
             <Button
               variant="text"

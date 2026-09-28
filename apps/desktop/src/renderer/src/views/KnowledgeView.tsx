@@ -12,6 +12,7 @@ import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, ErrorPage, LoadingPage } from '../components/EmptyState';
 import { FieldSelect } from '../components/FieldSelect';
 import { IconButton } from '../components/IconButton';
+import { InlineError } from '../components/InlineError';
 import { KnowledgeDocumentCard } from '../components/KnowledgeDocumentCard';
 import { PageHeader } from '../components/layout/PageHeader';
 import { PageToolbar } from '../components/layout/PageToolbar';
@@ -541,7 +542,7 @@ export function KnowledgePage({
                 {jobDetailVisible && (
                   <section className="knowledge-jobs" aria-label="作业条目">
                     {jobDetailLoading && <InlineLoading label="正在读取条目…" />}
-                    {jobDetailError && <p className="inline-message error">{jobDetailError}</p>}
+                    {jobDetailError && <InlineError message={jobDetailError} />}
                     {jobDetail && (
                       <ul className="knowledge-job-items">
                         {jobDetail.items.map((item) => (
@@ -560,32 +561,32 @@ export function KnowledgePage({
                     )}
                   </section>
                 )}
-                {error && <p className="inline-message error">{error}</p>}
+                {error && <InlineError message={error} />}
               </div>
             </Modal>
           )}
           {/* 抽屉开着时失败原因显示在抽屉里——页面在它背后，把错误放那儿等于看不见。 */}
-          {!indexDrawerOpen && error && <p className="inline-message error">{error}</p>}
+          {!indexDrawerOpen && error && <InlineError message={error} />}
           {issues.length > 0 && (
-            <div className="knowledge-issues">
-              <strong>以下条目未完成</strong>
-              <ul>
-                {issues.map((issue, index) => (
-                  <li key={`${index}-${issue}`}>{issue}</li>
-                ))}
-              </ul>
-              {retryTarget && (
-                <Button
-                  variant="outline"
-                  size="md"
-                  tone="danger"
-                  type="button"
-                  onClick={() => trackAction(retryFailedItems(), '重试失败条目')}
-                >
-                  重试未完成条目（{retryTarget.itemIds.length}）
-                </Button>
-              )}
-            </div>
+            <InlineError
+              message="以下条目未完成"
+              problems={issues}
+              {...(retryTarget
+                ? {
+                    actions: (
+                      <Button
+                        variant="outline"
+                        size="md"
+                        tone="danger"
+                        type="button"
+                        onClick={() => trackAction(retryFailedItems(), '重试失败条目')}
+                      >
+                        重试未完成条目（{retryTarget.itemIds.length}）
+                      </Button>
+                    ),
+                  }
+                : {})}
+            />
           )}
           <div className="knowledge-summary">
             <span>
@@ -691,7 +692,7 @@ export function KnowledgePage({
                 <p className="knowledge-detail-hint">
                   预览读取的是已保存文本：不产生任务访问记录，也不调用模型；原件变化不会自动刷新索引。
                 </p>
-                {detailError && <p className="inline-message error">{detailError}</p>}
+                {detailError && <InlineError message={detailError} />}
                 <section className="knowledge-detail-revisions" aria-label="保存版本列表">
                   <strong>保存版本</strong>
                   {detailRevisions.length === 0 && !detailLoading && <small>暂无历史版本。</small>}

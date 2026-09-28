@@ -342,7 +342,7 @@ describe('ContextPanel 记忆可见性', () => {
 
   it('排除保存失败就地报错，不当作成功结果', () => {
     const container = renderPanel({ exclusion: exclusion({ error: '上下文刚被更新，请重试。' }) });
-    const error = container.querySelector('.memory-scope-section .inline-message.error');
+    const error = container.querySelector('.memory-scope-section .inline-error');
     expect(error?.textContent).toBe('上下文刚被更新，请重试。');
   });
 
@@ -366,7 +366,7 @@ describe('ContextPanel 记忆可见性', () => {
         requestPreview,
       }),
     });
-    expect(container.querySelector('.memory-scope-section .inline-message.error')).not.toBeNull();
+    expect(container.querySelector('.memory-scope-section .inline-error')).not.toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '重试' }));
     expect(requestPreview).toHaveBeenCalledTimes(1);
   });
@@ -620,7 +620,7 @@ describe('ContextPanel 按运行回看来源', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: '查看区间' }));
     const note = await screen.findByRole('note');
-    expect(note.querySelector('.inline-message.error')?.textContent).toContain(
+    expect(note.querySelector('.inline-error')?.textContent).toContain(
       '证据的修订身份与保存文本不一致',
     );
     fireEvent.click(screen.getByRole('button', { name: '关闭' }));
@@ -667,10 +667,12 @@ describe('ContextPanel 本任务已排除（MI03）', () => {
       exclusions: exclusions({ items, error: '读取本任务已排除记忆失败，请重试。', reload }),
     });
     const section = container.querySelector('.memory-excluded-section');
-    expect(section?.querySelector('.inline-message.error')?.textContent).toContain(
+    expect(section?.querySelector('.inline-error')?.textContent).toContain(
       '读取本任务已排除记忆失败',
     );
-    expect(section?.querySelector('.inline-message:not(.error)')).toBeNull();
+    // 内联错误已统一走 InlineError；`.inline-message` 这一层在面板里不该再留下任何痕迹，
+    // 更不该长出非错误态的配色变体（docs/10 §11.5.1）。
+    expect(section?.querySelector('.inline-message')).toBeNull();
     const retry = [...(section?.querySelectorAll('button') ?? [])].find(
       (button) => button.textContent === '重试',
     );
@@ -738,8 +740,8 @@ describe('上下文面板的分段内缩', () => {
     ['context-placeholder', '简报空态：26px 18px 的居中文案'],
     ['empty-context', '区域级空态基座：自带 28px 内距并居中'],
     [
-      'inline-message',
-      '带边框与底色的内联错误，它是表面不是文本，缝由 `.context-content > .inline-message` 给',
+      'inline-error',
+      '内联错误基座（docs/10 §11.5.1 第二落点）：它是表面不是文本，列内缩由 `.context-content > .inline-error` 给',
     ],
     ['inline-loading', '读取状态行，随上面的壳一起出现'],
   ];

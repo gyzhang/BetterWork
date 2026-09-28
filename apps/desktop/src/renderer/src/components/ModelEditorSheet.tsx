@@ -9,6 +9,7 @@ import { Disclosure } from './Disclosure';
 import { Field } from './Field';
 import { FieldSelect } from './FieldSelect';
 import { IconButton } from './IconButton';
+import { InlineError } from './InlineError';
 import { Modal } from './Modal';
 import { SectionHeader } from './SectionHeader';
 
@@ -124,11 +125,7 @@ export function ModelEditor({
             </Field>
           </div>
         </Disclosure>
-        {error && (
-          <p className="inline-message error" role="alert">
-            {error}
-          </p>
-        )}
+        {error && <InlineError message={error} />}
         <ActionBar label="保存模型配置">
           <Button variant="secondary" size="md" type="button" onClick={onTest}>
             测试连接

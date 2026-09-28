@@ -10,6 +10,7 @@ import { ChevronRightIcon } from '../icons';
 import { memoryScopeLabel } from '../lib/memory-labels';
 import { InlineLoading } from './AsyncButton';
 import { Button } from './Button';
+import { InlineError } from './InlineError';
 import { ListRow } from './ListRow';
 import { SectionHeader } from './SectionHeader';
 import { TransientToast } from './TransientToast';
@@ -60,12 +61,7 @@ export function WorkspaceBrief({
   if (error) {
     return (
       <div className="brief-panel">
-        <p className="inline-message error">
-          {error}
-          <Button variant="link" size="sm" tone="danger" type="button" onClick={onRetry}>
-            重试
-          </Button>
-        </p>
+        <InlineError message={error} onRetry={onRetry} />
         <p className="brief-note">简报每次现取，读取失败时不会用旧内容代替现状。</p>
       </div>
     );

@@ -172,11 +172,12 @@ describe('MemorySuggestionList', () => {
 
   it('读取失败才用内联错误，本轮没有建议是成功结果', () => {
     const empty = renderList(state(), []);
-    expect(empty.container.querySelector('.inline-message')).toBeNull();
+    // 没有失败就不该有内联错误块；`.inline-message` 这一层已整体并入 InlineError 基座。
+    expect(empty.container.querySelector('.inline-message, .inline-error')).toBeNull();
     expect(empty.container.textContent).toContain('本轮没有待确认的建议。');
 
     const failed = renderList(state({ candidatesError: '读取经验建议失败，请重试。' }), []);
-    const message = failed.container.querySelector('.inline-message.error');
+    const message = failed.container.querySelector('.inline-error');
     expect(message?.textContent).toBe('读取经验建议失败，请重试。');
   });
 

@@ -18,6 +18,7 @@ import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyNotice } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
+import { InlineError } from '../components/InlineError';
 import { PageToolbar } from '../components/layout/PageToolbar';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
 import { ListRow } from '../components/ListRow';
@@ -382,16 +383,16 @@ export function MemoryPage({
         }
       />
 
-      {state.error && <p className="inline-message error">{state.error}</p>}
+      {state.error && <InlineError message={state.error} />}
       {state.revisionConflict && (
-        <p className="inline-message error" role="alert">
-          这条记忆在你编辑期间已被更新（你基于 v{state.revisionConflict.expectedRevision}， 当前 v
-          {state.revisionConflict.currentRevision ?? '未知'}）。草稿仍在，
-          刷新后可按最新版本重新提交。
-          <Button variant="text" size="sm" type="button" onClick={state.refresh}>
-            刷新列表
-          </Button>
-        </p>
+        <InlineError
+          message={`这条记忆在你编辑期间已被更新（你基于 v${state.revisionConflict.expectedRevision}， 当前 v${state.revisionConflict.currentRevision ?? '未知'}）。草稿仍在，刷新后可按最新版本重新提交。`}
+          actions={
+            <Button variant="text" size="sm" type="button" onClick={state.refresh}>
+              刷新列表
+            </Button>
+          }
+        />
       )}
       {state.projectionState !== undefined && state.projectionState !== 'synced' && (
         <div className="memory-projection">
@@ -410,11 +411,7 @@ export function MemoryPage({
       {state.warnings.length > 0 && (
         // 成功带警告（契约 §9.1）：保存/读取都算成功，但原因必须让用户看得见，
         // 因此这里独立于 `state.error` 呈现，也不借用只表示错误的内联样式。
-        <ul className="memory-warnings">
-          {state.warnings.map((warning) => (
-            <li key={`${warning.code}:${warning.message}`}>{warning.message}</li>
-          ))}
-        </ul>
+        <InlineError tone="warning" problems={state.warnings.map((warning) => warning.message)} />
       )}
 
       {(pendingConflictPairs > 0 || pendingDuplicateCandidates > 0) && (
@@ -1032,10 +1029,9 @@ function ConflictPair({
             已写 {notePoints} / {MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS} 码点
           </p>
           {noteOverLimit && (
-            <p className="inline-message error" role="alert">
-              适用条件最多 {MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS} 个码点，当前 {notePoints}{' '}
-              个，请先精简后再确认并存。
-            </p>
+            <InlineError
+              message={`适用条件最多 ${MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS} 个码点，当前 ${notePoints} 个，请先精简后再确认并存。`}
+            />
           )}
           <Button
             variant="quiet"

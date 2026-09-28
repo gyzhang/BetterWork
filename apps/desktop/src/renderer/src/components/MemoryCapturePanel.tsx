@@ -1,6 +1,7 @@
 import type { MemoryScope } from '@betterwork/agent-protocol';
 
 import type { ExcerptRange } from '../lib/memory-capture';
+import { InlineError } from './InlineError';
 import { MemoryCaptureSource } from './MemoryCaptureSource';
 import { MemoryEditor, type MemoryEditorSubmission } from './MemoryEditor';
 
@@ -64,11 +65,7 @@ export function MemoryCapturePanel({
         onSubmit={onSubmit}
         onCancel={onClose}
       />
-      {error && (
-        <p className="inline-message error" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <InlineError message={error} />}
     </div>
   );
 }

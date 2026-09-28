@@ -9,8 +9,11 @@ import { Button } from './Button';
 export type InlineErrorTone = 'danger' | 'warning';
 
 export interface InlineErrorProps {
-  /** 一句话结论。必填：一条内联反馈首先得是一句能读的话，不是一堆明细。 */
-  message: ReactNode;
+  /**
+   * 一句话结论。与 `problems` **至少给一个**：只有明细、没有结论的提示块（如契约 §9.1
+   * 的「保存成功但带警告」）不该为了套基座被硬造出一句标题。
+   */
+  message?: ReactNode;
   /** 多条明细（校验问题、失败条目）。给了就排在结论下面，不另起一个块。 */
   problems?: readonly string[] | undefined;
   /** 缺省 `danger`。 */
@@ -53,7 +56,7 @@ export function InlineError({
       data-tone={tone}
       role="alert"
     >
-      <p className="inline-error-message">{message}</p>
+      {message !== undefined && <p className="inline-error-message">{message}</p>}
       {hasProblems && (
         <ul className="inline-error-problems">
           {problems?.map((problem) => (

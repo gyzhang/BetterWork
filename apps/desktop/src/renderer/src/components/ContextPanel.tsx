@@ -44,6 +44,7 @@ import { Button } from './Button';
 import { Disclosure } from './Disclosure';
 import { EmptyContext } from './EmptyState';
 import { IconButton } from './IconButton';
+import { InlineError } from './InlineError';
 import { ListRow } from './ListRow';
 import { McpToolBindingsPicker } from './McpToolBindingsPicker';
 import { MemorySuggestionList } from './MemorySuggestionList';
@@ -235,7 +236,7 @@ export function ContextPanel({
                 onDelete={onDeleteCandidate}
                 onOpenMemoryPage={onOpenMemoryPage}
               />
-              {memoriesError && <p className="inline-message error">{memoriesError}</p>}
+              {memoriesError && <InlineError message={memoriesError} />}
               {memoriesWarning && (
                 <section className="context-section">
                   <p className="context-note">{memoriesWarning}</p>
@@ -519,12 +520,14 @@ function EvidencePreview({
       {loading ? (
         <InlineLoading label="正在回看当时返回的区间…" />
       ) : error ? (
-        <>
-          <p className="inline-message error">{error}</p>
-          <Button variant="text" size="sm" type="button" onClick={onClose}>
-            关闭
-          </Button>
-        </>
+        <InlineError
+          message={error}
+          actions={
+            <Button variant="text" size="sm" type="button" onClick={onClose}>
+              关闭
+            </Button>
+          }
+        />
       ) : preview === undefined ? null : preview.kind === 'exact' ? (
         <>
           <p className="context-note">
@@ -603,12 +606,7 @@ function NextRunScopeSection({
       ) : previewLoading ? (
         <InlineLoading label="正在按当前输入试算可用范围…" />
       ) : previewError ? (
-        <p className="inline-message error">
-          {previewError}
-          <Button variant="quiet" size="sm" type="button" onClick={requestPreview}>
-            重试
-          </Button>
-        </p>
+        <InlineError message={previewError} onRetry={requestPreview} />
       ) : preview === undefined ? (
         <p className="context-hint">暂无预览结果。</p>
       ) : (
@@ -631,7 +629,7 @@ function NextRunScopeSection({
               ))}
             </div>
           )}
-          {exclusion.error && <p className="inline-message error">{exclusion.error}</p>}
+          {exclusion.error && <InlineError message={exclusion.error} />}
           <RecallExclusions summary={preview.decisionSummary} byId={byId} />
           <p className="context-note">
             以上是范围预览。本次运行真正带了哪些，以下方「本次运行记忆」为准。
@@ -719,12 +717,7 @@ function ExcludedTaskMemoriesSection({
         }
       />
       {exclusions.error !== '' && (
-        <p className="inline-message error">
-          {exclusions.error}
-          <Button variant="quiet" size="sm" type="button" onClick={exclusions.reload}>
-            重试
-          </Button>
-        </p>
+        <InlineError message={exclusions.error} onRetry={exclusions.reload} />
       )}
       {exclusions.error === '' && exclusions.items.length === 0 ? (
         <p className="context-hint">这个任务目前没有排除任何记忆。</p>
@@ -847,12 +840,7 @@ function ThisRunMemorySection({
         }
       />
       {contextError ? (
-        <p className="inline-message error">
-          {contextError}
-          <Button variant="quiet" size="sm" type="button" onClick={refreshRunContext}>
-            重试
-          </Button>
-        </p>
+        <InlineError message={contextError} onRetry={refreshRunContext} />
       ) : contextLoading && runContext === undefined ? (
         <InlineLoading label="正在读取本次运行的记忆登记…" />
       ) : runContext === undefined ? (

@@ -28,6 +28,7 @@ import { AsyncButton } from './AsyncButton';
 import { Button } from './Button';
 import { Field } from './Field';
 import { FieldSelect } from './FieldSelect';
+import { InlineError } from './InlineError';
 
 /**
  * 人工保存与编辑并确认的可编辑表单（产品设计 §3.1、§3.2、§3.4）。
@@ -407,13 +408,7 @@ export function MemoryEditor({
           <span>这是我的通用工作要求，与具体工作空间或资料无关</span>
         </label>
       )}
-      {problems.length > 0 && (
-        <ul className="inline-message error memory-editor-problems">
-          {problems.map((problem) => (
-            <li key={problem}>{problem}</li>
-          ))}
-        </ul>
-      )}
+      {problems.length > 0 && <InlineError problems={problems} />}
       <ActionBar as="div" label="保存经验">
         <Button
           variant="secondary"

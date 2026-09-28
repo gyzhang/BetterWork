@@ -7,6 +7,7 @@ import { Button } from '../components/Button';
 import { Card, CardMark } from '../components/Card';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
+import { InlineError } from '../components/InlineError';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
 import { ViewContainer } from '../components/layout/ViewContainer';
@@ -158,14 +159,7 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
           )
         }
       />
-      {state.error && (
-        <p className="inline-message error" role="alert">
-          {state.error}
-          <Button variant="link" size="sm" tone="danger" type="button" onClick={state.clearError}>
-            关闭
-          </Button>
-        </p>
-      )}
+      {state.error && <InlineError message={state.error} onDismiss={state.clearError} />}
       <ScrollRegion ariaLabel="技能列表与详情" busy={state.loading || state.detailLoading}>
         <section className="page-body skills-body">
           {selected ? (
@@ -323,11 +317,7 @@ function SkillDetail({
           onChange={(event) => setProfileText(event.target.value)}
           spellCheck={false}
         />
-        {profileError && (
-          <p className="field-error" role="alert">
-            {profileError}
-          </p>
-        )}
+        {profileError && <InlineError message={profileError} />}
       </div>
       <DependencyPanel skill={skill} state={dependencies} />
       <div className="skill-detail-section">

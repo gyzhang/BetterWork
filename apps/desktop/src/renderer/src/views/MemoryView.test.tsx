@@ -268,7 +268,7 @@ describe('MemoryPage', () => {
     expect(screen.getByRole('button', { name: '确认两条并存' })).toHaveProperty('disabled', true);
     expect(screen.getByText(/最多 300 个码点，当前 301 个/)).toBeTruthy();
     expect(screen.getByText(/已写 301 \/ 300 码点/)).toBeTruthy();
-    expect(document.querySelector('.inline-message:not(.error)')).toBeNull();
+    expect(document.querySelector('.inline-message')).toBeNull();
     expect(current.resolveConflict).not.toHaveBeenCalled();
 
     fireEvent.change(note, { target: { value: '签约口径用于合同。' } });
@@ -525,7 +525,7 @@ describe('MemoryPage 召回策略（MI06）', () => {
     render(<MemoryPage state={current} />);
     expect(screen.getByText('优先带入只用于工作要求，事实与经验仍按相关性选择。')).toBeDefined();
     // 反馈路由护栏（docs/10 §11.5.1）：策略拒绝属于当前对象可处理的错误，只能落内联错误槽。
-    expect(document.querySelector('.inline-message:not(.error)')).toBeNull();
+    expect(document.querySelector('.inline-message')).toBeNull();
   });
 
   it('终态记录不提供策略开关', () => {

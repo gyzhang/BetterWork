@@ -2,6 +2,7 @@ import type { MemoryJobSummary, MemoryViewItem } from '@betterwork/agent-protoco
 import { MEMORY_CANDIDATE_CONTENT_MAX_CODE_POINTS } from '@betterwork/agent-protocol';
 import { useState } from 'react';
 
+import { InlineError } from '../components/InlineError';
 import type { MemorySuggestionsState } from '../hooks/use-memory-suggestions';
 import { trackAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
@@ -41,7 +42,7 @@ import { TransientToast } from './TransientToast';
  * 三条来自验收清单的约束：
  * 1. **逐条候选不弹全局提示**——候选本身就是可见结果，动作交给调用方就地更新列表；
  * 2. **「0 条」与失败分开**——前者由 `jobOutcomeLabel` 说成成功结果，
- *    只有读取失败才落 `.inline-message.error`；
+ *    只有读取失败才落 `InlineError`（docs/10 §11.5.1 第二落点）；
  * 3. **开关前必须看到代价与同意版本**——开启与关闭都先经确认对话框。
  */
 
@@ -88,9 +89,7 @@ export function MemorySuggestionList({
         }
       />
       {variant === 'settings' && <SuggestionSettings suggestions={suggestions} />}
-      {suggestions.candidatesError && (
-        <p className="inline-message error">{suggestions.candidatesError}</p>
-      )}
+      {suggestions.candidatesError && <InlineError message={suggestions.candidatesError} />}
       {suggestions.polling && (
         <InlineLoading
           className="suggestion-polling"
@@ -168,10 +167,8 @@ function SuggestionSettings({
         }
       />
       <p className="context-hint">{consentStateNotice(suggestions.settings)}</p>
-      {suggestions.settingsError && (
-        <p className="inline-message error">{suggestions.settingsError}</p>
-      )}
-      {suggestions.jobsError && <p className="inline-message error">{suggestions.jobsError}</p>}
+      {suggestions.settingsError && <InlineError message={suggestions.settingsError} />}
+      {suggestions.jobsError && <InlineError message={suggestions.jobsError} />}
       {suggestions.jobs.length > 0 && (
         <ul className="suggestion-job-list">
           {suggestions.jobs.slice(0, 5).map((job) => (

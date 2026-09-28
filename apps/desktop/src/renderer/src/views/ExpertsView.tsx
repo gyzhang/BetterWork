@@ -20,6 +20,7 @@ import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
+import { InlineError } from '../components/InlineError';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
 import { ViewContainer } from '../components/layout/ViewContainer';
@@ -989,11 +990,7 @@ export function ExpertsPage({
           </>
         }
       />
-      {state.error && (
-        <p className="inline-message error" role="alert">
-          {state.error}
-        </p>
-      )}
+      {state.error && <InlineError message={state.error} />}
       <ScrollRegion ariaLabel="专家列表" busy={state.loading || detailLoading}>
         <section className="page-body skills-body">
           {state.loading || detailLoading ? (

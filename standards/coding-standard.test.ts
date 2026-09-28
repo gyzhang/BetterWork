@@ -2608,68 +2608,58 @@ describe('导出面纪律', () => {
 });
 
 describe('反馈通道纪律', () => {
-  it('内联提示只承载可行动的失败原因', () => {
-    // docs/10 §11.5.1 只有三个落点，`.inline-message` 是其中的错误态。
-    // 知识页曾把「来源检查完成（9/9）」写成常驻 `.inline-message`：与消息中心重复，
-    // 而且没有任何清除路径——只有下一次动作会覆盖它。
-    const offenders = pathsUnder('apps/desktop/src/renderer/')
-      .filter((relative) => /\.tsx$/.test(relative) && !/\.test\.tsx$/.test(relative))
-      .filter((relative) => /className="inline-message(?! error)"/.test(read(relative)));
-    expect(
-      offenders,
-      '成功与信息走 TransientToast（自消、不落库）；内联只留 .inline-message.error（docs/10 §11.5.1）',
-    ).toEqual([]);
-  });
-
-  it('.inline-message 不得长出错误以外的配色变体', () => {
+  it('内联反馈块的配色只能由 tone 档位提供', () => {
+    // docs/10 §11.5.1 只有三个落点，`InlineError` 是第二落点的唯一出口，档位是 danger／warning。
+    // 知识页曾把「来源检查完成（9/9）」写成常驻内联块：与消息中心重复，而且没有任何清除
+    // 路径——只有下一次动作会覆盖它。基础类一旦自己长出颜色，谁写一句就得到第二条成功通道。
     const styles = cssPaths().find((relative) => relative.endsWith('styles.css')) ?? '';
-    const offenders = declarationsOf(styles)
-      .map((declaration) => ({
-        declaration,
-        selector: declaration.selector.replace(/\/\*[\s\S]*?\*\//g, '').trim(),
-      }))
-      .filter(({ selector }) => /\.inline-message\.(?!error\b)[a-z]/.test(selector))
-      .map(({ declaration }) => locate(declaration, styles));
-    expect(
-      offenders,
-      '内联提示只有错误态；再补一个 .inline-message.success 就是第二个成功通道',
-    ).toEqual([]);
-  });
-
-  it('内联提示的基础类不得自带配色，也不得自带上下缝', () => {
-    // 上面两条只看「渲染层有没有裸用法」和「有没有别的变体类」，所以基础规则里的
-    // `color: var(--success)` 与 `margin: 15px 0` 一直活着：谁写一句 `<p className="inline-message">`
-    // 就得到一条绿色成功横幅（第二个成功通道），而 22 处已由容器 gap 提供缝的位置被它再叠一道。
-    // 配色归 `.inline-message.error`，上下缝归承载它的那个容器（docs/10 §9.8、§11.5.1）。
-    const styles = cssPaths().find((relative) => relative.endsWith('styles.css')) ?? '';
-    // 选择器组按逗号拆开逐个判，否则 `.field-error, .inline-message { … }` 整组漏网。
+    // 选择器组按逗号拆开逐个判，否则 `.a, .inline-error { … }` 整组漏网。
     const partsOf = (selector: string): string[] =>
       selector
         .split(',')
         .map((part) => part.trim())
         .filter((part) => part.length > 0);
+    const bareOf = (selector: string): boolean =>
+      partsOf(selector).some(
+        (part) => /^\.inline-error(?![\w-])/.test(part) && !/\[data-tone=/.test(part),
+      );
     const colorOffenders = declarationsOf(styles)
-      .filter(({ selector }) =>
-        partsOf(selector).some(
-          (part) => /\.inline-message(?![\w-])/.test(part) && !/\.error\b/.test(part),
-        ),
-      )
+      .filter(({ selector }) => bareOf(selector))
       .filter(({ property }) => property === 'color' || property.startsWith('background'))
       .map((declaration) => locate(declaration, styles));
-    expect(colorOffenders, '内联提示的配色只能由错误态提供').toEqual([]);
+    expect(
+      colorOffenders,
+      '色与底只能由 `.inline-error[data-tone=…]` 提供，写在基础类上等于开出第二个成功通道',
+    ).toEqual([]);
 
-    // 只审裸选择器（`.inline-message` 单独成条）。容器侧写成 `.某页面 > .inline-message`
-    // 正是「缝由承载它的位置拥有」的写法，不在本条范围内。
-    const marginOffenders = declarationsOf(styles)
+    const tones = [
+      ...new Set(
+        declarationsOf(styles)
+          .map(({ selector }) => /\.inline-error\[data-tone='([^']+)'\]/u.exec(selector)?.[1])
+          .filter((tone): tone is string => tone !== undefined),
+      ),
+    ].sort();
+    expect(tones, '内联反馈只有 danger／warning 两档（docs/10 §11.5.1）').toEqual([
+      'danger',
+      'warning',
+    ]);
+  });
+
+  it('InlineError 基座不得自带上下缝', () => {
+    // 上下缝由承载它的位置拥有：技能页与专家页给 `margin: 12px 32px`（页头带之下、
+    // 滚动区之外），知识页与设置页给 `12px 0`。基座自己再叠一道，就会在已有 gap 的
+    // 容器里读成双缝（docs/10 §9.8）。
+    const styles = cssPaths().find((relative) => relative.endsWith('styles.css')) ?? '';
+    const offenders = declarationsOf(styles)
       .filter(({ selector }) =>
-        partsOf(selector).some((part) => /^\.inline-message(?![\w-])$/.test(part)),
+        selector
+          .split(',')
+          .map((part) => part.trim())
+          .some((part) => /^\.inline-error(?![\w-])(\s*\[[^\]]*\])?$/u.test(part)),
       )
       .filter(({ property }) => property.startsWith('margin'))
       .map((declaration) => locate(declaration, styles));
-    expect(
-      marginOffenders,
-      '上下缝由容器拥有：`.inline-message` 自带 margin 会在已有 gap 的容器里叠成双缝（docs/10 §9.8）',
-    ).toEqual([]);
+    expect(offenders, '`.inline-error` 裸类不得声明 margin，缝归容器').toEqual([]);
   });
 
   it('已废弃的反馈表面不得复活', () => {
@@ -2678,7 +2668,20 @@ describe('反馈通道纪律', () => {
     // 用户关掉一处后读到的是「这个提示关不掉」。
     // `.page-toast-host` 与 `.toast-host` 在同一坐标各自 `position: fixed`，后渲染的整列
     // 盖住先渲染的，页面的短时确认会被全局通知压掉；两者已合并为 `#toast-stack` 一列。
-    const retiredSurfaces = ['action-error-banner', 'page-toast-host', 'toast-host'];
+    // 后六个是同一个「带底色的内联错误条」的七套几何，已收成 `InlineError` 一处
+    // （docs/10 §10.1 台账）。`.action-note` 不在其中：它是按钮旁那句**纯文字**状态说明，
+    // 无底无内距，不是反馈表面，也不归本条管。
+    const retiredSurfaces = [
+      'action-error-banner',
+      'page-toast-host',
+      'toast-host',
+      'inline-message',
+      'field-error',
+      'memory-warnings',
+      'knowledge-issues',
+      'artifact-action-error',
+      'memory-editor-problems',
+    ];
     const offenders: string[] = [];
     for (const relative of pathsUnder('apps/desktop/src/renderer/')) {
       if (!/\.(tsx|css)$/.test(relative) || /\.test\.tsx$/.test(relative)) continue;
@@ -2713,24 +2716,11 @@ describe('反馈通道纪律', () => {
 
   it('内联错误必须走 InlineError 基座', () => {
     // 基座之外留着 `role="alert"`，就是还有一处自己决定底色、字号与关闭路径的错误条。
-    // 下面这份清单是**只降不升**的存量：迁完一处删一行，不许往里加。
-    const unmigrated: readonly string[] = [
-      'apps/desktop/src/renderer/src/App.tsx',
-      'apps/desktop/src/renderer/src/components/MemoryCapturePanel.tsx',
-      'apps/desktop/src/renderer/src/components/MemoryCaptureSource.tsx',
-      'apps/desktop/src/renderer/src/components/ModelEditorSheet.tsx',
-      'apps/desktop/src/renderer/src/components/ToolActivity.tsx',
-      'apps/desktop/src/renderer/src/components/WorkspaceIdentityDialog.tsx',
-      'apps/desktop/src/renderer/src/components/skills/DependencyPanel.tsx',
-      'apps/desktop/src/renderer/src/views/ExpertsView.tsx',
-      'apps/desktop/src/renderer/src/views/MemoryView.tsx',
-      'apps/desktop/src/renderer/src/views/SettingsView.tsx',
-      'apps/desktop/src/renderer/src/views/SkillsView.tsx',
-    ];
+    // 35 处旧表面全部迁完之后，这条从「只降不升的存量清单」升级为绝对断言：
+    // 只有第二落点（`InlineError`）与整页错误态（`EmptyState` 的 `ErrorPage`）可以自写它。
     const exempt: readonly string[] = [
       'apps/desktop/src/renderer/src/components/InlineError.tsx',
       'apps/desktop/src/renderer/src/components/EmptyState.tsx',
-      ...unmigrated,
     ];
     const offenders = pathsUnder('apps/desktop/src/renderer/')
       .filter((relative) => /\.tsx$/.test(relative) && !/\.test\.tsx$/.test(relative))
@@ -2741,9 +2731,10 @@ describe('反馈通道纪律', () => {
       '新增内联错误请用 InlineError；整页错误态才是 EmptyState 里那个 role="alert"（docs/10 §10.1、§11.5.1）',
     ).toEqual([]);
 
-    // 清单要回对现状：已经迁走的文件必须当场从名单里删掉，否则这条棘轮只是看着像有。
-    const stale = unmigrated.filter((relative) => !read(relative).includes('role="alert"'));
-    expect(stale, '这些文件已经不再自写 role="alert"，把它们从存量清单里删掉').toEqual([]);
+    // 白名单自己也要回对现状：列进去却不再自写 `role="alert"` 的是死条目，留着它只会让
+    // 下一个绕过基座的人以为「再加一行是这里的规矩」。
+    const staleExemptions = exempt.filter((relative) => !read(relative).includes('role="alert"'));
+    expect(staleExemptions, '豁免清单里有文件已经不再自写 role="alert"，把它删掉').toEqual([]);
   });
 });
 

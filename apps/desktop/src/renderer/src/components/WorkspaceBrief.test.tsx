@@ -175,7 +175,7 @@ describe('WorkspaceBrief', () => {
       brief: briefOf(),
       error: '工作空间简报读取失败，请重试。',
     });
-    expect(container.querySelector('.inline-message.error')?.textContent).toContain(
+    expect(container.querySelector('.inline-error')?.textContent).toContain(
       '工作空间简报读取失败，请重试。',
     );
     expect(container.textContent).not.toContain('季度分析先对齐签约金额口径');

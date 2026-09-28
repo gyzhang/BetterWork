@@ -36,6 +36,7 @@ import { ContextPanel } from './components/ContextPanel';
 import { DiscussionCheckpointPanel } from './components/DiscussionCheckpointPanel';
 import { EmptyPage } from './components/EmptyState';
 import { IconButton } from './components/IconButton';
+import { InlineError } from './components/InlineError';
 import { PageHeader } from './components/layout/PageHeader';
 import { type MemoryCaptureDraft, MemoryCapturePanel } from './components/MemoryCapturePanel';
 import type { MemoryEditorSubmission } from './components/MemoryEditor';
@@ -1514,9 +1515,9 @@ export function App(): React.JSX.Element {
                               />
                             )}
                             {runFailure?.type === 'run.failed' && (
-                              <p className="action-note error run-failure-note" role="alert">
-                                本次运行未完成，回复内容未登记为正式成果。{runFailure.error}
-                              </p>
+                              <InlineError
+                                message={`本次运行未完成，回复内容未登记为正式成果。${runFailure.error ?? ''}`}
+                              />
                             )}
                             {memoryCapture?.runId === run.id && (
                               <MemoryCapturePanel

@@ -717,11 +717,11 @@ small {
    左右与页头的 28px 内缩对齐；知识页那条落在版心里，跟着版心齐边。
    两种都由承载它的位置决定缝，不让 `.inline-message` 组件自带上下 margin，
    否则 22 处已有 gap 的容器会被再叠一道（docs/10 §9.8、§11.5.1）。 */
-.skills-page > .inline-message,
-.experts-page > .inline-message {
+.skills-page > .inline-error,
+.experts-page > .inline-error {
   margin: 12px 32px;
 }
-.knowledge-page > .inline-message {
+.knowledge-page > .inline-error {
   margin: 12px 0;
 }
 .scroll-region {
@@ -1185,7 +1185,7 @@ small {
 }
 /* 上下文面板的分段之间靠各自的 padding 与分隔线相接，不能整列补 gap；
    夹在段与段之间的内联提示因此由这里给它自己的缝，左右与 `.context-section` 的 padding 对齐。 */
-.context-content > .inline-message {
+.context-content > .inline-error {
   margin: 12px 16px;
 }
 /* 「本次材料」的小节壳与记忆、简报用同一个 `.context-section`；
@@ -2390,20 +2390,9 @@ button.list-row:where(:not(:disabled)):hover {
   align-items: center;
   gap: 8px;
 }
-.field-error,
-.inline-message.error {
-  color: var(--danger);
-  background: var(--danger-soft);
-}
-/* 错误条里的「重试」是这条消息自带的行内动作：只借文字色与浮动位置，
-   字号必须跟正文同档，否则它从 body 继承到 16px，比消息本身还大。 */
-/* 错误条里的「重试」改用 `Button variant="quiet" size="sm"`；
-   位置仍归这条消息（float 是它自己的排版），颜色一律跟正文。 */
-/* 错误条里的「重试／关闭」是 `Button variant="link" tone="danger"`——
-   字色由档位自己带，不再由这条消息替它改（ADR-0031）。这里只留浮动位置。 */
-.inline-message.error .btn {
-  float: right;
-}
+/* 「重试／关闭」由 `InlineError` 的 actions 行承载（`Button variant="link" tone="danger"`，
+   字色由档位自己带，ADR-0031）；旧方案是 `.inline-message.error .btn { float: right }`，
+   把一排动作塞进正文排版里——那一行 float 已经随基座删除。 */
 .danger-text {
   color: var(--danger) !important;
 }
@@ -2415,16 +2404,8 @@ button.list-row:where(:not(:disabled)):hover {
   width: min(var(--page-body-width), 100%);
 }
 /* 设置页各段是块级流，段内没有纵向 gap 可用，因此由这一段自己给内联提示上下缝。 */
-.settings-section > .inline-message {
+.settings-section > .inline-error {
   margin: 12px 0;
-}
-/* 内联提示只有错误态一种配色：基础类只留排版，色与底一律由 `.error` 提供。
-   成功与信息走 TransientToast（docs/10 §11.5.1），这里长出绿色就等于开了第二个成功通道。
-   上下缝同样不在这里：缝由承载它的容器拥有，见下面的容器侧规则（docs/10 §9.8）。 */
-.inline-message {
-  padding: 9px 11px;
-  border-radius: var(--radius-row);
-  font-size: 12px;
 }
 /* 筛选组的外观归 SegmentedControl；这里只给它在清单上方留一口气。 */
 .model-filter {
@@ -2559,18 +2540,6 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .memory-projection span {
   flex: 1;
-}
-.memory-warnings {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 10px 12px;
-  color: var(--warning);
-  background: var(--warning-soft);
-  border-radius: var(--radius-row);
-  font-size: 12px;
-  line-height: 1.6;
-  list-style: none;
 }
 .memory-pending-governance {
   display: flex;
@@ -2906,12 +2875,6 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.5;
-}
-.memory-editor-problems {
-  display: grid;
-  gap: 4px;
-  padding-left: 11px;
-  list-style: none;
 }
 .memory-capture-hint {
   color: var(--text-muted);
@@ -4064,35 +4027,6 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--text-muted);
   font-size: 12px;
 }
-.artifact-action-error {
-  margin-bottom: 12px;
-  padding: 9px 11px;
-  color: var(--danger);
-  background: var(--danger-soft);
-  border-radius: var(--radius-row);
-  font-size: 12px;
-}
-.knowledge-issues {
-  margin: 12px 0;
-  padding: 10px 12px;
-  color: var(--danger);
-  background: var(--danger-soft);
-  border-radius: var(--radius-row);
-  font-size: 12px;
-}
-.knowledge-issues strong {
-  display: block;
-  margin-bottom: 4px;
-}
-.knowledge-issues ul {
-  margin: 0;
-  padding-left: 17px;
-}
-.knowledge-issues li {
-  margin-top: 4px;
-  line-height: 1.55;
-  word-break: break-all;
-}
 /* KM09：索引与模型管理、作业区域 */
 /* 「索引与作业」抽屉：面板几何归 Modal 的 sheet 变体，这里只有头与唯一滚动区。 */
 .knowledge-drawer-head {
@@ -4167,9 +4101,6 @@ button.list-row:where(:not(:disabled)):hover {
 }
 /* 描边语义改由 `Button variant="outline" tone="danger"` 表达；
    这一行只剩它作为提示块里第一个动作的上下缝。 */
-.knowledge-issues .btn {
-  margin-top: 8px;
-}
 .knowledge-jobs {
   display: flex;
   flex-direction: column;
@@ -4908,9 +4839,8 @@ select,
   font-size: 12px;
 }
 .tool-detail-error {
-  padding: 8px;
-  background: var(--danger-soft);
-  color: var(--danger);
+  /* 只剩内容差异：工具报错常是多行原文，折行由这里给。
+     底、色、内距与圆角一律归 `InlineError` 基座（docs/10 §10.1）。 */
   white-space: pre-wrap;
 }
 .tool-payload {

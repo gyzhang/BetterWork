@@ -82,7 +82,12 @@ describe('MemoryCapturePanel 基座', () => {
       />,
     );
 
-    const note = screen.getByRole('alert');
-    expect(note.getAttribute('class')).toBe('inline-message error');
+    // 两条内联反馈：面板自己的来源错误，加上编辑器给出的校验问题。
+    // 后者此前是一个没有 `role="alert"` 的 `<ul>`，读屏听不到提交为什么被拦；
+    // 进基座后它与前者共用同一个表面、同一套语义，这里连类名一起验。
+    const alerts = screen.getAllByRole('alert');
+    expect(alerts.every((element) => element.classList.contains('inline-error'))).toBe(true);
+    const note = alerts.find((element) => element.textContent?.includes('不止一次'));
+    expect(note?.getAttribute('class')).toBe('inline-error');
   });
 });

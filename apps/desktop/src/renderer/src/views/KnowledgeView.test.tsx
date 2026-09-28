@@ -500,10 +500,10 @@ describe('本机索引动作、作业回看与键盘可达（KM15 走查补齐�
         onResearch={() => undefined}
       />,
     );
-    expect(document.querySelectorAll('.inline-message.error')).toHaveLength(1);
+    expect(document.querySelectorAll('.inline-error')).toHaveLength(1);
 
     fireEvent.click(screen.getByRole('button', { name: '索引与作业' }));
-    const shown = document.querySelectorAll('.inline-message.error');
+    const shown = document.querySelectorAll('.inline-error');
     expect(shown).toHaveLength(1);
     expect(shown[0]?.closest('.modal-panel')).toBeTruthy();
   });

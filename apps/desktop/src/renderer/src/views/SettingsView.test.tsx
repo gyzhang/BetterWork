@@ -54,7 +54,7 @@ describe('模型设置反馈路由（docs/10 §11.5.1）', () => {
 
     const toast = await screen.findByRole('status');
     expect(within(toast).getByText('模型连接成功')).toBeTruthy();
-    expect(document.querySelector('.inline-message:not(.error)')).toBeNull();
+    expect(document.querySelector('.inline-message')).toBeNull();
   });
 
   it('连接失败走表单内联错误，不弹 toast', async () => {
@@ -77,7 +77,7 @@ describe('模型设置反馈路由（docs/10 §11.5.1）', () => {
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain('连接被拒绝');
     expect(document.querySelector('[role="status"]')).toBeNull();
-    expect(document.querySelector('.inline-message:not(.error)')).toBeNull();
+    expect(document.querySelector('.inline-message')).toBeNull();
   });
 });
 
@@ -98,6 +98,6 @@ describe('搜索设置反馈路由（docs/10 §11.5.1）', () => {
 
     const toast = await screen.findByRole('status');
     expect(within(toast).getByText('搜索服务连接成功')).toBeTruthy();
-    expect(document.querySelector('.inline-message:not(.error)')).toBeNull();
+    expect(document.querySelector('.inline-message')).toBeNull();
   });
 });

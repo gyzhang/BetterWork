@@ -9,6 +9,7 @@ import {
 } from '../lib/memory-capture';
 import { Button } from './Button';
 import { Field } from './Field';
+import { InlineError } from './InlineError';
 
 /**
  * 回答捕获的原文选择区（改进 Spec §4.1）：来源摘录只能来自这条回答的原始正文，
@@ -75,11 +76,7 @@ export function MemoryCaptureSource({
           </Button>
         )}
       </div>
-      {error !== '' && (
-        <p className="inline-message error" role="alert">
-          {error}
-        </p>
-      )}
+      {error !== '' && <InlineError message={error} />}
       {excerpt === undefined ? (
         <p className="memory-capture-source-state">
           尚未确认来源摘录；仅接受原文连续 1–{MEMORY_SOURCE_EXCERPT_MAX_CODE_POINTS} 码点。

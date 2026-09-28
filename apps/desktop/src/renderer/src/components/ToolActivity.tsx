@@ -5,6 +5,7 @@ import { AlertIcon, CheckIcon, ChevronRightIcon } from '../icons';
 import { toolStageLabel } from '../lib/labels';
 import { deriveToolActivity, formatToolValue, toolTarget } from '../lib/tool-activity';
 import { Disclosure } from './Disclosure';
+import { InlineError } from './InlineError';
 import { SectionHeader } from './SectionHeader';
 
 const statusLabel = {
@@ -111,9 +112,7 @@ export function ToolActivity({
               <p className="tool-detail-name">{selected.name}</p>
               {selected.progress && selected.status === 'running' && <p>{selected.progress}</p>}
               {selected.error && (
-                <p className="tool-detail-error" role="alert">
-                  {selected.error}
-                </p>
+                <InlineError className="tool-detail-error" message={selected.error} />
               )}
               <Payload title="输入参数" value={selected.input} />
               {selected.status === 'completed' && (

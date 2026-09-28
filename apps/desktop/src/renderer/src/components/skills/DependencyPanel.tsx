@@ -7,6 +7,7 @@ import { Badge } from '../Badge';
 import { Button } from '../Button';
 import { Field } from '../Field';
 import { FieldSelect } from '../FieldSelect';
+import { InlineError } from '../InlineError';
 import { SectionHeader } from '../SectionHeader';
 
 /**
@@ -166,18 +167,17 @@ export function DependencyPanel({
           {operation.step && <span>{operationStepName[operation.step] ?? operation.step}</span>}
           {operation.message && <p>{operation.message}</p>}
           {operation.failureCode && (
-            <p className="field-error" role="alert">
-              {operation.failureCode}
-              {operation.failureSummary ? `：${operation.failureSummary}` : ''}
-            </p>
+            <InlineError
+              message={`${operation.failureCode}${operation.failureSummary ? `：${operation.failureSummary}` : ''}`}
+            />
           )}
         </div>
       )}
 
       {environment?.failureSummary && !pending && (
-        <p className="field-error" role="alert">
-          环境{skillEnvironmentName[environment.status]}：{environment.failureSummary}
-        </p>
+        <InlineError
+          message={`环境${skillEnvironmentName[environment.status]}：${environment.failureSummary}`}
+        />
       )}
 
       <div className="dependency-grant">
@@ -206,11 +206,7 @@ export function DependencyPanel({
         </p>
       </div>
 
-      {state.error && (
-        <p className="inline-message error" role="alert">
-          {state.error}
-        </p>
-      )}
+      {state.error && <InlineError message={state.error} />}
     </div>
   );
 }

@@ -212,7 +212,7 @@ describe('SkillsPage', () => {
     const toast = await screen.findByRole('status');
     expect(within(toast).getByText('Skill 已停用。')).toBeTruthy();
     expect(setEnabled).toHaveBeenCalledWith({ skillId: summary.id, enabled: false });
-    expect(document.querySelector('.inline-message:not(.error)')).toBeNull();
+    expect(document.querySelector('.inline-message')).toBeNull();
   });
 
   it('requires explicit confirmation before deleting a user Skill', async () => {
