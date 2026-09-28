@@ -2029,14 +2029,17 @@ describe('导航列表纪律', () => {
 });
 
 /**
- * 定宽列：侧栏 240px、上下文面板 380px、消息中心 360px。
- * 这三列的宽度是写死的，横向溢出换不来「多看一点」，只换来一条滚动条——
- * 名字太长是截断问题（收短之后由 `Tooltip` 就地补全），不是滚动问题。
+ * 定宽列：侧栏 240px、上下文面板 380px、消息中心 360px、`Modal` 的 sheet 抽屉 480px。
+ * 这些表面的宽度是写死的，横向溢出换不来「多看一点」，只换来一条滚动条——
+ * 名字太长是截断问题（收短之后由 `Tooltip` 就地补全），说明文字放不下就是折行问题，
+ * 两者都不是滚动问题。
  */
 const FIXED_WIDTH_COLUMN_SCROLLERS = [
   '.workspace-groups',
   '.context-content',
   '.notification-list',
+  '.knowledge-drawer-body',
+  '.model-sheet',
 ];
 
 /** 选择器里出现的类名清单（注释已在解析前被抹平，不会误伤说明文字）。 */

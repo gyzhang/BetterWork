@@ -3549,7 +3549,8 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   gap: 16px;
   flex-direction: column;
-  overflow: auto;
+  /* 同为 480px 定宽抽屉：横向只能截断/折行，不放滚动条（docs/10 §9.8）。 */
+  overflow: hidden auto;
 }
 .model-sheet input {
   min-height: var(--control-height);
@@ -4149,7 +4150,8 @@ button.list-row:where(:not(:disabled)):hover {
   flex: 1;
   flex-direction: column;
   gap: 12px;
-  overflow: auto;
+  /* 480px 定宽抽屉，与侧栏同一件事：只纵向滚（docs/10 §9.8）。 */
+  overflow: hidden auto;
   padding-top: 16px;
 }
 .knowledge-jobs-head {
@@ -4190,9 +4192,13 @@ button.list-row:where(:not(:disabled)):hover {
 .knowledge-admin-row small {
   color: var(--text-muted);
 }
+/* 标签与下拉占一行，提示排不下就整句换到下一行：480px 抽屉的内容区只有 430px，
+   把 `small` 钉成不可收缩，等于让整列顶出可视区（docs/10 §9.8）。 */
 .knowledge-admin-profile {
   display: flex;
+  min-width: 0;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 /* 与标签、提示同排：给一个字段级的稳定宽度，切换模型时不抖动，超长模型名在按钮内省略。 */
@@ -4200,8 +4206,7 @@ button.list-row:where(:not(:disabled)):hover {
   min-width: 200px;
   max-width: 280px;
 }
-.knowledge-admin-profile > span,
-.knowledge-admin-profile small {
+.knowledge-admin-profile > span {
   flex: none;
 }
 /* 描边语义改由 `Button variant="outline" tone="danger"` 表达；
