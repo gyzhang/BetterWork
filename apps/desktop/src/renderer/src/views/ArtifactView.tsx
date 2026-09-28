@@ -19,6 +19,7 @@ import { Button } from '../components/Button';
 import { EmptyPage } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
+import { InlineError } from '../components/InlineError';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
 import { ViewContainer } from '../components/layout/ViewContainer';
@@ -106,6 +107,7 @@ export function ArtifactPage({
   onOpenSource,
   onStartFromVersion,
   references,
+  referenceScope,
   onReferenceToTask,
   onBack,
 }: {
@@ -131,6 +133,12 @@ export function ArtifactPage({
   onStartFromVersion: (artifact: ArtifactDetail, version: ArtifactVersionDetail) => Promise<void>;
   /** §3.6 参考成果版本：未接线（如测试或无空间）时不显示该区。 */
   references?: WorkspaceReferencesState | undefined;
+  /**
+   * 成果归属与当前空间的隔离关系。参考版本只允许同空间（仓储 `requireOwnedVersion`
+   * 会拒），所以不属于当前空间的成果不能提供「指定为参考」「引用到当前任务」
+   * 这两颗点了才知道不行的按钮（docs/10 §10.1「一张卡片要能自我介绍」同一口径）。
+   */
+  referenceScope?: { inScope: boolean; ownerWorkspaceName: string } | undefined;
   onReferenceToTask?: ((artifactVersionId: string) => void) | undefined;
   onBack: () => void;
 }): React.JSX.Element {
@@ -156,11 +164,25 @@ export function ArtifactPage({
     versionId: selected?.type === 'presentation' ? visibleVersion?.id : undefined,
   });
   const sourceSelection = useArtifactSourceSelection(visibleVersion);
+  // 页头那行小字要说清「这是哪一版、在不在本空间」：成果列表是跨空间全量的，
+  // 不写归属就会让人对着别的空间的成果点「引用到当前任务」，点了才被仓储拒掉。
+  const headerEyebrow =
+    selected && visibleVersion
+      ? [
+          selected.type === 'markdown' ? 'Markdown' : fileTypeLabel(selected.mimeType),
+          `v${visibleVersion.versionNumber}`,
+          ...(visibleVersion.origin === 'user-edit' ? ['人工修订'] : []),
+          ...(visibleVersion.id !== selected.currentVersionId ? ['历史版本'] : []),
+          ...(referenceScope && !referenceScope.inScope
+            ? [`属于「${referenceScope.ownerWorkspaceName}」`]
+            : []),
+        ].join(' · ')
+      : '';
   if (selected && visibleVersion)
     return (
       <>
         <PageHeader
-          eyebrow={`${selected.type === 'markdown' ? 'Markdown' : fileTypeLabel(selected.mimeType)} · v${visibleVersion.versionNumber}${visibleVersion.origin === 'user-edit' ? ' · 人工修订' : ''}${visibleVersion.id !== selected.currentVersionId ? ' · 历史版本' : ''}`}
+          eyebrow={headerEyebrow}
           title={selected.title}
           leading={
             <Button variant="link" size="sm" onClick={onBack}>
@@ -252,14 +274,11 @@ export function ArtifactPage({
                 references={references}
                 artifactTitle={selected.title}
                 version={visibleVersion}
+                scope={referenceScope}
                 onReferenceToTask={onReferenceToTask}
               />
             )}
-            {error && (
-              <p className="artifact-action-error" role="alert">
-                {error}
-              </p>
-            )}
+            {error && <InlineError message={error} onDismiss={() => setError('')} />}
             {(visibleVersion.inputRelations?.length ?? 0) > 0 ||
             visibleVersion.sourceDeclarationKind !== undefined ? (
               <section className="artifact-input-grid">
@@ -711,25 +730,47 @@ function SlideViewer({
 /**
  * 本空间的参考成果版本（产品设计 §3.6、实施契约 §10）。
  *
- * 三条约束：
+ * 四条约束：
  * - 标记固定到 `artifactVersionId` + 内容哈希，**不跟随最新**；
  * - 标记只表示参考选择，界面不得把它写成批准、正确或「本期已读取」；
- * - 写入失败（含 CAS 冲突）走内联错误，成功才是局部短时确认。
+ * - 写入失败（含 CAS 冲突）走内联错误，成功才是局部短时确认；
+ * - **只能参考本空间的成果版本**（仓储 `requireOwnedVersion` 会拒）。跨空间的成果整区
+ *   不可用并就地说明归属——后端会拒绝的操作不得做成按钮，让人点了才知道。
  */
 function ReferenceVersionSection({
   references,
   artifactTitle,
   version,
+  scope,
   onReferenceToTask,
 }: {
   references: WorkspaceReferencesState;
   artifactTitle: string;
   version: ArtifactVersionDetail;
+  scope: { inScope: boolean; ownerWorkspaceName: string } | undefined;
   onReferenceToTask: ((artifactVersionId: string) => void) | undefined;
 }): React.JSX.Element {
   const [note, setNote] = useState('');
   const reference = references.referenceOf(version.id);
   const busy = references.pendingVersionId === version.id;
+
+  if (scope && !scope.inScope) {
+    return (
+      <section className="artifact-reference-section">
+        <SectionHeader
+          title="本空间参考版本"
+          hint={`这项成果属于「${scope.ownerWorkspaceName}」，不是当前工作空间的成果`}
+        />
+        <p className="artifact-reference-note">
+          参考版本按工作空间隔离，只能标记与引用本空间的成果版本。需要参考它，请先在侧栏切到 「
+          {scope.ownerWorkspaceName}」再打开这项成果。
+        </p>
+        {references.error && (
+          <InlineError message={references.error} onDismiss={references.clearError} />
+        )}
+      </section>
+    );
+  }
 
   const mark = (): void => {
     trackAction(
@@ -798,9 +839,7 @@ function ReferenceVersionSection({
         不会自动发送，也不会改变当前专家。
       </p>
       {references.error && (
-        <p className="inline-message error" role="alert">
-          {references.error}
-        </p>
+        <InlineError message={references.error} onDismiss={references.clearError} />
       )}
       {note && <TransientToast tone="success" message={note} onDismiss={() => setNote('')} />}
     </section>

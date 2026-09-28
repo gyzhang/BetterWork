@@ -160,14 +160,14 @@ describe('WorkspaceBrief', () => {
   });
 
   it('超出列表上限时用局部提示说明完整入口在成果页', () => {
-    const { container } = renderPanel({
+    renderPanel({
       brief: briefOf({
         goals: section([]),
         referenceVersions: { items: [referenceItem()], total: 9, truncated: true },
       }),
     });
     fireEvent.click(screen.getByRole('button', { name: '共 9 个参考版本' }));
-    expect(container.querySelector('.page-toast-host')?.textContent).toContain('完整列表在成果页');
+    expect(document.querySelector('.toast-stack')?.textContent).toContain('完整列表在成果页');
   });
 
   it('读取失败时给重试入口，并且不显示上一次的简报内容', () => {

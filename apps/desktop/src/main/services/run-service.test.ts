@@ -2104,7 +2104,8 @@ describe('RunService', () => {
       expect.objectContaining({
         level: 'success',
         kind: 'run',
-        read: false,
+        // 跑成功照样留档，但落库即已读：铃铛那个数字只数还需要处理的（docs/10 §11.5）。
+        read: true,
         target: { kind: 'task', taskId: fixture.taskId },
       }),
     );

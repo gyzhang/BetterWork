@@ -181,7 +181,7 @@ describe('MemorySuggestionList', () => {
   });
 
   it('逐条候选的处理只回调调用方，不再叠一层全局提示', () => {
-    const { container, onEdit, onReject, onDelete } = renderList(
+    const { onEdit, onReject, onDelete } = renderList(
       state(),
       [candidateItem('经营分析先核对回款金额口径。')],
       'context',
@@ -195,7 +195,7 @@ describe('MemorySuggestionList', () => {
     expect(onReject).toHaveBeenCalledTimes(1);
     expect(onDelete).toHaveBeenCalledTimes(1);
     expect(onEdit.mock.calls[0]?.[0]?.content).toBe('经营分析先核对回款金额口径。');
-    expect(container.querySelector('.page-toast-host')).toBeNull();
+    expect(document.querySelector('.toast')).toBeNull();
   });
 
   it('进行中的作业只给取消，失败与中断才给重新提炼', async () => {

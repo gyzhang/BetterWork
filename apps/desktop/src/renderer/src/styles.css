@@ -60,7 +60,6 @@
      它不带 overlay 阴影，靠描边与升起面区分层级，因此不进 §10.1 的阴影存量。 */
   --z-tooltip: 22;
   --z-toast: 30;
-  --z-banner: 40;
 }
 :root[data-theme='light'][data-scheme='jade'],
 :root:not([data-theme]) {
@@ -2356,6 +2355,41 @@ button.list-row:where(:not(:disabled)):hover {
 .success-copy {
   color: var(--success) !important;
 }
+/* 内联反馈的唯一出口（docs/10 §11.5.1 第二落点、§10.1 台账）。
+   几何只住这一处：`padding` 取容器留白档，圆角取 `--radius-row`，字号与旧的
+   `.inline-message` 同档；上下缝一律由承载它的容器 `gap` 拥有，基座不自带 margin。 */
+.inline-error {
+  display: grid;
+  gap: 8px;
+  padding: var(--control-padding-lg);
+  border-radius: var(--radius-row);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.inline-error[data-tone='danger'] {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+.inline-error[data-tone='warning'] {
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+.inline-error p {
+  margin: 0;
+}
+.inline-error-problems {
+  margin: 0;
+  padding-left: 17px;
+}
+.inline-error-problems li {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.inline-error-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .field-error,
 .inline-message.error {
   color: var(--danger);
@@ -3704,15 +3738,6 @@ button.list-row:where(:not(:disabled)):hover {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
 }
-.evidence-run-group {
-  margin-top: 12px;
-}
-.evidence-run-group > strong {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--text-secondary);
-  font-size: 12px;
-}
 /* 证据回看块自己就是缝的拥有者：里面的提示、列表与按钮纵向排开，间距只由这里的 gap 负责。
    它自己挂在 `.evidence-list`（flex column gap 4px）里，所以不再自带上下 margin。 */
 .evidence-preview {
@@ -4282,21 +4307,6 @@ button.list-row:where(:not(:disabled)):hover {
   gap: 12px;
   padding-top: 10px;
 }
-.page-toast-host {
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
-  z-index: var(--z-toast);
-  width: 340px;
-}
-.page-toast-host .toast {
-  align-items: flex-start;
-}
-.page-toast-host .toast p {
-  min-width: 0;
-  flex: 1;
-  margin: 4px 0 0;
-}
 .task-run-history {
   margin-top: 16px;
   border-top: 1px solid var(--border);
@@ -4560,7 +4570,22 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--info);
   background: var(--info-soft);
 }
-.toast-host {
+.toast {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 11px 12px;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: 0 14px 34px var(--shadow-color-overlay);
+  text-align: left;
+}
+/* 一列浮层只有一个容器：`TransientToast` 与 `ToastHost` 都 portal 进 `#toast-stack`。
+   此前两者各自 `position: fixed` 在同一坐标、同 `--z-toast`，后渲染的盖住先渲染的，
+   页面发出的短时确认会被全局通知整列压掉（docs/10 §11.5.1）。 */
+.toast-stack {
   position: fixed;
   right: 20px;
   bottom: 20px;
@@ -4570,16 +4595,10 @@ button.list-row:where(:not(:disabled)):hover {
   flex-direction: column;
   gap: 8px;
 }
-.toast {
-  display: flex;
-  gap: 8px;
-  padding: 11px 12px;
-  color: var(--text-primary);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  box-shadow: 0 14px 34px var(--shadow-color-overlay);
-  text-align: left;
+.toast-stack .toast > p {
+  min-width: 0;
+  flex: 1;
+  margin: 4px 0 0;
 }
 .toast > span {
   display: grid;
@@ -4619,42 +4638,6 @@ button.list-row:where(:not(:disabled)):hover {
   }
 }
 
-/* 跨视图的动作错误条：固定悬浮，不挤动任何视图的页头带与版心 */
-.action-error-banner {
-  position: fixed;
-  top: 16px;
-  left: 50%;
-  z-index: var(--z-banner);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: min(560px, calc(100% - 48px));
-  padding: 10px 12px;
-  color: var(--text-primary);
-  background: var(--surface);
-  border: 1px solid var(--danger);
-  border-radius: var(--radius-card);
-  box-shadow: 0 14px 34px var(--shadow-color-overlay);
-  transform: translateX(-50%);
-}
-.action-error-banner > span {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  flex: none;
-  place-items: center;
-  color: var(--danger);
-  background: var(--danger-soft);
-  border-radius: var(--control-radius);
-}
-.action-error-banner p {
-  min-width: 0;
-  flex: 1;
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
 /* ---- 动效（docs/10 §9.9）---------------------------------------------
    三档时长一律取自 Token：即时反馈 120ms、展开切换 180ms、浮层与大区域 240ms。
    挂载即出现的浮层用 keyframes，状态变化用 transition。 */
@@ -4684,16 +4667,6 @@ button.list-row:where(:not(:disabled)):hover {
   to {
     opacity: 1;
     transform: translateX(0);
-  }
-}
-@keyframes betterwork-banner-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -6px);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0);
   }
 }
 
@@ -4746,9 +4719,6 @@ select,
 }
 .toast {
   animation: betterwork-rise-in var(--motion-expand) var(--motion-easing);
-}
-.action-error-banner {
-  animation: betterwork-banner-in var(--motion-expand) var(--motion-easing);
 }
 
 /* 系统要求减少动态效果时，动效与过渡一并降到最低；

@@ -5,7 +5,7 @@ import type {
   ArtifactInputRelationInput,
   WorkspaceArtifactReference,
 } from '@betterwork/agent-protocol';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { Mock } from 'vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -153,6 +153,7 @@ describe('ArtifactPage 本空间参考版本', () => {
     error: '',
     pendingVersionId: '',
     referenceOf: () => undefined,
+    clearError: vi.fn(),
     refresh: vi.fn(),
     markReference: vi.fn(async () => okWrite),
     removeReference: vi.fn(async () => okWrite),
@@ -163,6 +164,7 @@ describe('ArtifactPage 本空间参考版本', () => {
   const renderWithReferences = (
     references: WorkspaceReferencesState,
     onReferenceToTask?: (artifactVersionId: string) => void,
+    referenceScope?: { inScope: boolean; ownerWorkspaceName: string },
   ): HTMLElement => {
     Object.defineProperty(window, 'betterwork', {
       configurable: true,
@@ -185,6 +187,7 @@ describe('ArtifactPage 本空间参考版本', () => {
         onStartFromVersion={vi.fn(async () => undefined)}
         references={references}
         {...(onReferenceToTask ? { onReferenceToTask } : {})}
+        {...(referenceScope ? { referenceScope } : {})}
         onBack={vi.fn()}
       />,
     );
@@ -202,7 +205,7 @@ describe('ArtifactPage 本空间参考版本', () => {
     expect(references.markReference).toHaveBeenCalledWith('version-1', 'v1 · 季度复盘');
     await act(async () => undefined);
 
-    expect(section(container)?.textContent).toContain(
+    expect(document.querySelector('.toast-stack')?.textContent).toContain(
       '已把 v1 指定为本空间参考版本：标记只表示参考选择，不表示内容正确或审批通过。',
     );
     expect(section(container)?.textContent).toContain(
@@ -228,10 +231,35 @@ describe('ArtifactPage 本空间参考版本', () => {
     fireEvent.click(screen.getByRole('button', { name: '指定为本空间参考版本' }));
     await act(async () => undefined);
 
-    const alert = section(container)?.querySelector('.inline-message.error');
-    expect(alert?.textContent).toBe('参考标记刚被别处更新，请重新查看后再试。');
+    const alert = section(container)?.querySelector('.inline-error');
+    expect(alert?.textContent).toContain('参考标记刚被别处更新，请重新查看后再试。');
     expect(alert?.getAttribute('role')).toBe('alert');
     expect(section(container)?.textContent).not.toContain('已把 v1 指定为本空间参考版本');
+  });
+
+  it('内联错误带关闭入口：读过就能收掉，不必等下一次写入成功', () => {
+    const references = referencesState({
+      error: '参考标记刚被别处更新，请重新查看后再试。',
+    });
+    const container = renderWithReferences(references);
+
+    fireEvent.click(
+      within(section(container) as HTMLElement).getByRole('button', { name: '关闭' }),
+    );
+    expect(references.clearError).toHaveBeenCalled();
+  });
+
+  it('不属于当前空间的成果不给必然被拒的参考入口，并就地说明归属', () => {
+    const container = renderWithReferences(referencesState(), vi.fn(), {
+      inScope: false,
+      ownerWorkspaceName: 'BetterTest',
+    });
+
+    expect(screen.queryByRole('button', { name: '引用到当前任务' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '指定为本空间参考版本' })).toBeNull();
+    expect(section(container)?.textContent).toContain('这项成果属于「BetterTest」');
+    expect(section(container)?.textContent).toContain('参考版本按工作空间隔离');
+    expect(container.querySelector('.eyebrow')?.textContent).toContain('属于「BetterTest」');
   });
 
   it('已标记的版本给出取消入口，并按标记行本身回传', () => {

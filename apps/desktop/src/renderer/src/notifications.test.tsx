@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
-import type { NotificationSummary } from '@betterwork/agent-protocol';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import type { NotificationChangeEvent, NotificationSummary } from '@betterwork/agent-protocol';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { NotificationCenter } from './notifications';
+import { NotificationCenter, ToastHost, useNotifications } from './notifications';
 
 afterEach(() => cleanup());
 
@@ -100,5 +100,132 @@ describe('消息中心（Modal 基座的锚定覆盖层）', () => {
     last.focus();
     fireEvent.keyDown(last, { key: 'Tab' });
     expect(document.activeElement).toBe(screen.getByRole('button', { name: '全部已读' }));
+  });
+});
+
+/** `useNotifications` 的浮层投影没有页面可借，这里复刻 App 的接线：钩子出 toasts，`ToastHost` 画。 */
+function ToastProbe({ isTargetVisible }: { isTargetVisible: () => boolean }): React.JSX.Element {
+  const { toasts, dismissToast, pauseToast, resumeToast } = useNotifications({
+    navigate: () => undefined,
+    isTargetVisible,
+  });
+  return (
+    <ToastHost
+      toasts={toasts}
+      onActivate={() => undefined}
+      onDismiss={dismissToast}
+      onPause={pauseToast}
+      onResume={resumeToast}
+    />
+  );
+}
+
+describe('全局浮层投影（useNotifications + ToastHost）', () => {
+  let emit: ((event: NotificationChangeEvent) => void) | undefined;
+
+  const installApi = (): void => {
+    emit = undefined;
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        notifications: {
+          list: async () => [],
+          onChange: (cb: (event: NotificationChangeEvent) => void) => {
+            emit = cb;
+            return () => undefined;
+          },
+          onActivate: () => (): void => undefined,
+          markRead: async () => 0,
+          markAllRead: async () => 0,
+          clear: async () => undefined,
+        },
+      },
+    });
+  };
+
+  const renderHost = (isTargetVisible: boolean): HTMLElement => {
+    const { container } = render(<ToastProbe isTargetVisible={() => isTargetVisible} />);
+    return container;
+  };
+
+  it('失败通知投影成右下角浮层', () => {
+    installApi();
+    renderHost(false);
+
+    act(() => {
+      emit?.({
+        type: 'created',
+        notification: note({ level: 'error', title: '任务失败：回款核对', read: false }),
+        unreadCount: 1,
+      });
+    });
+
+    expect(document.querySelector('.toast-stack')?.textContent).toContain('任务失败：回款核对');
+  });
+
+  it('落库即已读的成功通知不再投影成浮层：它是留档，不是打扰', () => {
+    installApi();
+    renderHost(false);
+
+    act(() => {
+      emit?.({
+        type: 'created',
+        notification: note({ level: 'success', title: '任务完成：季度复盘', read: true }),
+        unreadCount: 0,
+      });
+    });
+
+    expect(document.querySelector('.toast')).toBeNull();
+    // 仍然进消息中心，只是不再弹浮层。
+    expect(screen.queryAllByRole('button', { name: /通知/ })).toHaveLength(0);
+  });
+
+  it('目标视图正可见时同页抑制，不重复播报', () => {
+    installApi();
+    renderHost(true);
+
+    act(() => {
+      emit?.({
+        type: 'created',
+        notification: note({ level: 'error', title: '任务失败：回款核对', read: false }),
+        unreadCount: 1,
+      });
+    });
+
+    expect(document.querySelector('.toast')).toBeNull();
+  });
+
+  it('浮层的 x 只收投影，不改动消息中心的底账', () => {
+    installApi();
+    renderHost(false);
+    const markRead = vi.fn(async () => 0);
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        notifications: {
+          list: async () => [],
+          onChange: (cb: (event: NotificationChangeEvent) => void) => {
+            emit = cb;
+            return () => undefined;
+          },
+          onActivate: () => (): void => undefined,
+          markRead,
+          markAllRead: async () => 0,
+          clear: async () => undefined,
+        },
+      },
+    });
+
+    act(() => {
+      emit?.({
+        type: 'created',
+        notification: note({ level: 'error', title: '任务失败：回款核对', read: false }),
+        unreadCount: 1,
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: '关闭提醒' }));
+
+    expect(document.querySelector('.toast')).toBeNull();
+    expect(markRead).not.toHaveBeenCalled();
   });
 });

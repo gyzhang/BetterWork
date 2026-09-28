@@ -3,6 +3,7 @@ import type {
   NotificationSummary,
   NotificationTarget,
 } from '@betterwork/agent-protocol';
+import type { ReactPortal } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -13,6 +14,7 @@ import { IconButton } from './components/IconButton';
 import { ListRow } from './components/ListRow';
 import { useOverlaySemantics } from './components/Modal';
 import { SectionHeader } from './components/SectionHeader';
+import { intoToastStack } from './components/TransientToast';
 import { AlertIcon, BellIcon, CheckIcon, CloseIcon, InfoIcon, WarningIcon } from './icons';
 import { trackAction } from './lib/async-action';
 import { relativeTime } from './lib/format';
@@ -68,7 +70,9 @@ export const useNotifications = ({
       if (event.type === 'created') {
         setNotifications((current) => [event.notification, ...current]);
         setUnreadCount(event.unreadCount);
-        if (!callbacksRef.current.isTargetVisible(event.notification)) {
+        // 落库即已读的通知（成功类）不再投影成浮层：它是一条留档，不是一次打扰。
+        // 同页抑制仍然只管「你正在看那个对象」，两者取与。
+        if (!event.notification.read && !callbacksRef.current.isTargetVisible(event.notification)) {
           const duration =
             event.notification.level === 'error' ? TOAST_ERROR_DURATION : TOAST_DURATION;
           setToasts((current) =>
@@ -414,10 +418,10 @@ export const ToastHost = ({
   onDismiss,
   onPause,
   onResume,
-}: ToastHostProps): React.JSX.Element | null => {
+}: ToastHostProps): ReactPortal | null => {
   if (toasts.length === 0) return null;
-  return (
-    <div className="toast-host" aria-live="polite">
+  return intoToastStack(
+    <>
       {toasts.map((toast) => (
         <div
           key={toast.id}
@@ -441,6 +445,6 @@ export const ToastHost = ({
           />
         </div>
       ))}
-    </div>
+    </>,
   );
 };

@@ -63,12 +63,10 @@ import { useWorkspaceGroups } from './hooks/use-workspace-groups';
 import { useWorkspaceIdentity } from './hooks/use-workspace-identity';
 import { useWorkspaceReferences } from './hooks/use-workspace-references';
 import {
-  AlertIcon,
   ArtifactIcon,
   CapabilityIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  CloseIcon,
   ExpertIcon,
   KnowledgeIcon,
   PlusIcon,
@@ -213,8 +211,10 @@ export function App(): React.JSX.Element {
   const [artifactNote, setArtifactNote] = useState<{ tone: 'ok' | 'error'; text: string }>();
   /** §3.6：来源专家不可用时不猜专家，改用通用助手并把这件事当场说出来。 */
   const [expertFallbackNotice, setExpertFallbackNotice] = useState<string>();
-  // 跨视图的动作错误出口：开始任务、切换任务、停止执行、选择工作空间等失败都在这里呈现，
-  // 而不是像此前那样被 `void` 静默吞掉。
+  // 全局短时提醒：只收「当前对象承载不了」的失败（导航失败、全局前置条件不满足），
+  // 由 `TransientToast` 6s 自消。此前它是一块常驻顶部横幅——本仓第三个落点之外的第四个
+  // 表面，25 个调用点共用一个槽互相覆盖，且要等到切换工作空间才清空（docs/10 §11.5.1）。
+  // 已经有内联承载点的失败不要再上传到这里，那会让同一句话出现在两个地方。
   const [actionError, setActionError] = useState('');
   const [view, setView] = useState<AppView>('work');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
@@ -393,12 +393,12 @@ export function App(): React.JSX.Element {
 
   /** §3.6「引用到当前任务」：固定精确版本，不改当前专家，不自动发送。 */
   const referenceVersionToTask = (artifactVersionId: string): void => {
+    // 失败只走内联：`ensureReference` 已把同一句话写进 `references.error`，由「本空间参考
+    // 版本」小节就地呈现。再上传到全局提醒就是同一句播报两遍——用户关掉一处后，
+    // 读到的是「这个提示关不掉」（docs/10 §11.5.1「一次结果只有一个落点」）。
     reportAction(
       references.ensureReference(artifactVersionId).then((result) => {
-        if (!result.ok || result.material === undefined) {
-          setActionError(result.message || '无法把该版本设为参考，请重试。');
-          return;
-        }
+        if (!result.ok || result.material === undefined) return;
         const reference = result.material;
         setTaskMaterials((current) =>
           current.some(
@@ -416,6 +416,19 @@ export function App(): React.JSX.Element {
       '引用该版本到当前任务失败。',
     );
   };
+
+  /**
+   * 成果列表是跨空间全量的，参考版本却按空间隔离（仓储 `requireOwnedVersion` 会拒）。
+   * 因此归属必须在打开的那一刻就说清楚，而不是让人点了才知道。
+   */
+  const artifactReferenceScope = selectedArtifact
+    ? {
+        inScope: selectedArtifact.workspaceId === workspace?.id,
+        ownerWorkspaceName:
+          allWorkspaces.find((item) => item.id === selectedArtifact.workspaceId)?.name ??
+          '所属工作空间',
+      }
+    : undefined;
 
   useEffect(() => {
     const requestId = expertMaterialCandidatesRequestRef.current + 1;
@@ -1354,18 +1367,7 @@ export function App(): React.JSX.Element {
       </aside>
       <section className="main-stage">
         {actionError && (
-          <div className="action-error-banner" role="alert">
-            <span aria-hidden="true">
-              <AlertIcon size={13} />
-            </span>
-            <p>{actionError}</p>
-            <IconButton
-              label="关闭提示"
-              icon={CloseIcon}
-              size="sm"
-              onClick={() => setActionError('')}
-            />
-          </div>
+          <TransientToast tone="error" message={actionError} onDismiss={() => setActionError('')} />
         )}
         {view === 'settings' && (
           <div className="window-drag-strip" onDoubleClick={handleTitlebarDoubleClick} />
@@ -1639,6 +1641,7 @@ export function App(): React.JSX.Element {
             onOpenSource={knowledge.onOpenSource}
             onStartFromVersion={startFromArtifactVersion}
             references={references}
+            referenceScope={artifactReferenceScope}
             onReferenceToTask={referenceVersionToTask}
             onBack={() => setSelectedArtifact(undefined)}
           />

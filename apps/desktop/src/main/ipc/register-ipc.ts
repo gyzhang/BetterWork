@@ -276,9 +276,6 @@ export interface IpcDependencies {
 const sanitizeFileName = (value: string): string =>
   value.replace(/[\\/:*?"<>|]/gu, '-').trim() || '算台成果';
 
-const describeError = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
 /** 协议层没有为「无入参」通道单独定义 Schema 时用它，语义与 clearNotifications 等一致。 */
 const emptyRequestSchema = z.object({}).strict();
 
@@ -756,7 +753,7 @@ async function exportMarkdown(
   artifactId: string,
   versionId: string | undefined,
 ): Promise<{ cancelled: boolean; filePath?: string }> {
-  const { store, notifications } = deps;
+  const { store } = deps;
   const artifact = store.artifacts.getDetail(artifactId);
   if (!artifact) throw new Error('Artifact does not exist');
   if (artifact.type !== 'markdown') throw new Error('Artifact is not a markdown artifact');
@@ -776,26 +773,10 @@ async function exportMarkdown(
   });
   if (result.canceled || !result.filePath) return { cancelled: true };
 
-  try {
-    await writeFile(result.filePath, content, 'utf8');
-  } catch (error) {
-    notifications.create({
-      level: 'error',
-      kind: 'artifact',
-      title: `导出「${artifact.title}」失败`,
-      detail: describeError(error),
-      target: { kind: 'artifact', artifactId: artifact.id },
-    });
-    throw error;
-  }
-
-  notifications.create({
-    level: 'success',
-    kind: 'artifact',
-    title: `已导出「${artifact.title}」`,
-    detail: result.filePath,
-    target: { kind: 'artifact', artifactId: artifact.id },
-  });
+  // 导出弹保存面板、当场完成，用户一定在这儿——按 docs/10 §11.5.1 这是第一落点，
+  // 由成果页的 `TransientToast` 就地播报。此前主进程还往消息中心写一份，
+  // 一次结果占了两个落点，40 条未读里就有 4 条是导出成功。
+  await writeFile(result.filePath, content, 'utf8');
   return { cancelled: false, filePath: result.filePath };
 }
 
@@ -808,7 +789,7 @@ async function exportFileArtifact(
   artifactId: string,
   versionId: string | undefined,
 ): Promise<ExportFileArtifactResult> {
-  const { store, notifications, fileArtifactService } = deps;
+  const { store, fileArtifactService } = deps;
   if (!fileArtifactService) throw new Error('File artifact service is not available');
 
   const artifact = store.artifacts.getDetail(artifactId);
@@ -835,36 +816,18 @@ async function exportFileArtifact(
   if (result.canceled || !result.filePath) return { cancelled: true };
 
   const sourcePath = fileArtifactService.resolveStoredPath(resolvedVersionId);
+  // 失败一律抛回 IPC：成果页已经用 `TransientToast` 就地报出原因，不再落消息中心（同上）。
+  // 保存面板在某些 macOS 版本会先创建一个 0400 目标文件；先提升权限，
+  // 否则 copyFile 无法覆盖这个已存在的只读占位文件。
   try {
-    // 保存面板在某些 macOS 版本会先创建一个 0400 目标文件；先提升权限，
-    // 否则 copyFile 无法覆盖这个已存在的只读占位文件。
-    try {
-      await chmod(result.filePath, 0o600);
-    } catch (error) {
-      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
-    }
-    await copyFile(sourcePath, result.filePath);
-    // 成果源文件为不可变存储（0400）；导出是用户自己的工作副本，必须可继续编辑。
-    // 保存面板可能已提前创建目标文件，单靠 copyFile 不会提升它的权限。
     await chmod(result.filePath, 0o600);
   } catch (error) {
-    notifications.create({
-      level: 'error',
-      kind: 'artifact',
-      title: `导出「${artifact.title}」失败`,
-      detail: describeError(error),
-      target: { kind: 'artifact', artifactId: artifact.id },
-    });
-    throw error;
+    if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
   }
-
-  notifications.create({
-    level: 'success',
-    kind: 'artifact',
-    title: `已导出「${artifact.title}」`,
-    detail: result.filePath,
-    target: { kind: 'artifact', artifactId: artifact.id },
-  });
+  await copyFile(sourcePath, result.filePath);
+  // 成果源文件为不可变存储（0400）；导出是用户自己的工作副本，必须可继续编辑。
+  // 保存面板可能已提前创建目标文件，单靠 copyFile 不会提升它的权限。
+  await chmod(result.filePath, 0o600);
   return { cancelled: false, filePath: result.filePath };
 }
 

@@ -505,7 +505,8 @@ describe('Skill test run in the task composer', () => {
     fireEvent.change(composer(), { target: { value: goal } });
     fireEvent.keyDown(composer(), { key: 'Enter', ctrlKey: true });
     fireEvent.keyDown(composer(), { key: 'Enter', ctrlKey: true });
-    await screen.findByRole('alert');
+    // 启动失败没有可承载它的对象，按 §11.5.1 走全局短时提醒（自消、不落库）。
+    await screen.findByText('启动失败，请重试');
     expect(api.tasks.create).toHaveBeenCalledTimes(1);
     expect(api.runs.start).toHaveBeenCalledTimes(1);
     expect(composer()).toHaveProperty('value', goal);
@@ -1367,9 +1368,9 @@ describe('参考成果版本接入当前任务', () => {
     fireEvent.click(screen.getByRole('tab', { name: '简报' }));
     fireEvent.click(await screen.findByRole('button', { name: /季度复盘/ }));
 
-    expect((await screen.findByRole('alert')).textContent).toContain(
-      '该参考版本对应的成果已不存在，请在成果列表中确认。',
-    );
+    // 这条失败没有可承载它的对象（成果已经不存在，视图也不切），按 §11.5.1 走全局短时提醒。
+    const notice = await screen.findByText('该参考版本对应的成果已不存在，请在成果列表中确认。');
+    expect(notice.closest('.toast-stack')).not.toBeNull();
     expect(api.artifacts.get).toHaveBeenCalledWith({ id: reportSummary.id });
     // 视图仍在工作页：失败不把用户扔到空白成果页
     expect(screen.getByRole('textbox', { name: /任务输入/ })).toBeTruthy();

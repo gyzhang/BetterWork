@@ -650,7 +650,7 @@ describe('界面间距与骨架纪律', () => {
  * 它记录的是「还没迁进基座的存量」，不是「允许继续这样写」。需要新浮层时先复用
  * `PopoverMenu`，或把待迁入的基座标注在 reason 里，而不是在这里加一行豁免。
  */
-const OVERLAY_SHADOW_BASELINE = 4;
+const OVERLAY_SHADOW_BASELINE = 3;
 const OVERLAY_SURFACES: { readonly match: string; readonly reason: string }[] = [
   { match: '.popover-menu', reason: '菜单类浮层基座（ADR-0012）' },
   {
@@ -658,7 +658,6 @@ const OVERLAY_SURFACES: { readonly match: string; readonly reason: string }[] = 
     reason: '模态与覆盖层基座（docs/10 §10.1）：确认框、模型抽屉、放映层、消息中心共用这一层外壳',
   },
   { match: '.toast', reason: '全局结果提示' },
-  { match: '.action-error-banner', reason: '全局错误横幅' },
 ];
 
 describe('浮层基座纪律', () => {
@@ -2671,6 +2670,80 @@ describe('反馈通道纪律', () => {
       marginOffenders,
       '上下缝由容器拥有：`.inline-message` 自带 margin 会在已有 gap 的容器里叠成双缝（docs/10 §9.8）',
     ).toEqual([]);
+  });
+
+  it('已废弃的反馈表面不得复活', () => {
+    // `.action-error-banner` 是 §11.5.1 三个落点之外的第四个表面：全局单槽被 25 个调用点
+    // 共用、后一个覆盖前一个、要等到切换工作空间才清空，还常与内联提示重复播报同一句话——
+    // 用户关掉一处后读到的是「这个提示关不掉」。
+    // `.page-toast-host` 与 `.toast-host` 在同一坐标各自 `position: fixed`，后渲染的整列
+    // 盖住先渲染的，页面的短时确认会被全局通知压掉；两者已合并为 `#toast-stack` 一列。
+    const retiredSurfaces = ['action-error-banner', 'page-toast-host', 'toast-host'];
+    const offenders: string[] = [];
+    for (const relative of pathsUnder('apps/desktop/src/renderer/')) {
+      if (!/\.(tsx|css)$/.test(relative) || /\.test\.tsx$/.test(relative)) continue;
+      const source = read(relative);
+      for (const name of retiredSurfaces) {
+        // 只看「有没有把它当类名用」：注释里提到这些名字记录的正是「为什么删」，
+        // 而 CSS 侧由 selector 判定，不会被散文误伤。
+        const usedAsClass = new RegExp(`className[^\\n]*\\b${name}\\b`, 'u').test(source);
+        const styled = declarationsOf(relative).some(({ selector }) =>
+          selector.includes(`.${name}`),
+        );
+        if (usedAsClass || styled) offenders.push(`${relative} → .${name}`);
+      }
+    }
+    expect(offenders, '这些表面已并入三个合法落点，不得复活（docs/10 §11.5.1）').toEqual([]);
+  });
+
+  it('右下角那一列浮层只有一个容器', () => {
+    const styles = cssPaths().find((relative) => relative.endsWith('styles.css')) ?? '';
+    const users = [
+      ...new Set(
+        declarationsOf(styles)
+          .filter(({ property, value }) => property === 'z-index' && value.includes('--z-toast'))
+          .map(({ selector }) => selector),
+      ),
+    ];
+    expect(
+      users,
+      '只有 `.toast-stack` 使用 `--z-toast`：再一处 fixed 容器就会在同一坐标盖住另一处（docs/10 §11.5.1）',
+    ).toEqual(['.toast-stack']);
+  });
+
+  it('内联错误必须走 InlineError 基座', () => {
+    // 基座之外留着 `role="alert"`，就是还有一处自己决定底色、字号与关闭路径的错误条。
+    // 下面这份清单是**只降不升**的存量：迁完一处删一行，不许往里加。
+    const unmigrated: readonly string[] = [
+      'apps/desktop/src/renderer/src/App.tsx',
+      'apps/desktop/src/renderer/src/components/MemoryCapturePanel.tsx',
+      'apps/desktop/src/renderer/src/components/MemoryCaptureSource.tsx',
+      'apps/desktop/src/renderer/src/components/ModelEditorSheet.tsx',
+      'apps/desktop/src/renderer/src/components/ToolActivity.tsx',
+      'apps/desktop/src/renderer/src/components/WorkspaceIdentityDialog.tsx',
+      'apps/desktop/src/renderer/src/components/skills/DependencyPanel.tsx',
+      'apps/desktop/src/renderer/src/views/ExpertsView.tsx',
+      'apps/desktop/src/renderer/src/views/MemoryView.tsx',
+      'apps/desktop/src/renderer/src/views/SettingsView.tsx',
+      'apps/desktop/src/renderer/src/views/SkillsView.tsx',
+    ];
+    const exempt: readonly string[] = [
+      'apps/desktop/src/renderer/src/components/InlineError.tsx',
+      'apps/desktop/src/renderer/src/components/EmptyState.tsx',
+      ...unmigrated,
+    ];
+    const offenders = pathsUnder('apps/desktop/src/renderer/')
+      .filter((relative) => /\.tsx$/.test(relative) && !/\.test\.tsx$/.test(relative))
+      .filter((relative) => read(relative).includes('role="alert"'))
+      .filter((relative) => !exempt.includes(relative));
+    expect(
+      offenders,
+      '新增内联错误请用 InlineError；整页错误态才是 EmptyState 里那个 role="alert"（docs/10 §10.1、§11.5.1）',
+    ).toEqual([]);
+
+    // 清单要回对现状：已经迁走的文件必须当场从名单里删掉，否则这条棘轮只是看着像有。
+    const stale = unmigrated.filter((relative) => !read(relative).includes('role="alert"'));
+    expect(stale, '这些文件已经不再自写 role="alert"，把它们从存量清单里删掉').toEqual([]);
   });
 });
 

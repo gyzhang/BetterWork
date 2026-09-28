@@ -530,10 +530,9 @@ UI Foundation 首批提供四套成对色系：
 | `--z-modal-backdrop` | 19 | 模态基座背板（对话框、抽屉、放映层同一档） |
 | `--z-popover-backdrop` / `--z-popover` | 20 / 21 | 浮层基座背板与菜单：**高于模态**，因为模态内也有下拉 |
 | `--z-tooltip` | 22 | 文本提示：一档高于菜单，它可能从菜单项或模态里长出来 |
-| `--z-toast` | 30 | 全局结果提示 |
-| `--z-banner` | 40 | 全局错误横幅 |
+| `--z-toast` | 30 | 反馈堆叠 `#toast-stack`：短时确认与全局通知投影共用同一列（§11.5.1） |
 
-相对顺序沿用改造前的实际叠放结果，两处有意改变：**菜单类浮层一档高于模态**（2026-09-27 凌晨修——模型抽屉里的「模型角色」曾以 12 压在 19 的模态面板之下，点了像没反应；模态内允许开浮层，浮层就必须在模态之上，护栏直接锁 `--z-popover` 与 `--z-popover-backdrop` 都要大于 `--z-modal-backdrop`）；`Modal` 基座落地后**抽屉与对话框背板合并为 `--z-modal-backdrop` 一档**（原 `--z-sheet` 10 与 `--z-dialog-backdrop` 19 并存没有语义依据）。面板本身不设 `z-index`，由背板这一层决定高低。
+相对顺序沿用改造前的实际叠放结果，两处有意改变：**菜单类浮层一档高于模态**（2026-09-27 凌晨修——模型抽屉里的「模型角色」曾以 12 压在 19 的模态面板之下，点了像没反应；模态内允许开浮层，浮层就必须在模态之上，护栏直接锁 `--z-popover` 与 `--z-popover-backdrop` 都要大于 `--z-modal-backdrop`）；`Modal` 基座落地后**抽屉与对话框背板合并为 `--z-modal-backdrop` 一档**（原 `--z-sheet` 10 与 `--z-dialog-backdrop` 19 并存没有语义依据）。面板本身不设 `z-index`，由背板这一层决定高低。`--z-banner`（40）已随顶部常驻错误横幅删除——那一档给的是第四个反馈落点，不是一个新的层级语义。
 
 ### 9.12 工作空间身份色与图标
 
@@ -555,7 +554,7 @@ UI Foundation 首批提供四套成对色系：
 ### 10.1 基础组件
 - Button、IconButton、Input、Textarea、Select、Switch
 - Tabs、Tooltip、Popover、Menu、Dialog、Sheet
-- Toast、InlineNotice、Progress、Skeleton、EmptyState
+- Toast、InlineError、Progress、Skeleton、EmptyState
 
 ### 10.2 业务组件
 
@@ -602,7 +601,8 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 | 区块头 SectionHeader（eyebrow／title／hint／actions，block／panel 两档） | `components/SectionHeader.tsx` | 已落地：§3.1 P1 的 26 处／13 个类名并成一处（`.settings-heading`／`.selected-materials-heading`／`.skill-detail-heading`／`.skill-section-heading`／`.memory-group-heading`／`.memory-heading-actions`／`.notification-panel-header`／`.artifact-reference-heading`／`.brief-section-head`／`.tool-detail-heading`／`.discussion-checkpoints-header`），16 处冒充标题的 `<strong>` 升级为真 h2／h3；面板自己的内缩与分隔线写在传给基座的领域钩子类上（现登记 `.notification-panel-heading` 与 `.knowledge-drawer-head`）。2026-09-28 再收 16 处裸标题标签与 10 条容器后代规则，浮层标题也走 `block` 档；护栏五条 |
 | 异步按钮 AsyncButton／行内加载 InlineLoading | `components/AsyncButton.tsx` | 已落地：§3.1 P4 的「disabled＋文案翻转＋aria-busy」三件事一次收口，busy 时只渲染当前那一行文字（曾为防抖宽叠两份标签，结果把 busy 文案读进了可及名称）；`InlineLoading` 统一 spinner，`page-spinner` 与 `spin` 两套 keyframes 合并为一套。**外观自 2026-09-28 委托给 `Button`（ADR-0031）**：它自己那张 `variant → 皮类名` 映射表随 11 套皮一起删除，`.async-button` 这个从未被 CSS 用过的类同时消失 |
 | 状态徽标 Badge（tone × shape，tone 六档：neutral／brand／warning／danger／outline／success） | `components/Badge.tsx` | 已落地：技能卡状态片、依赖面板环境片、记忆状态片、MCP 工具名片四套自造 chip 合并；图形化标识（格式徽标、未读角标）不在此基座内，按字号护栏登记 |
-| 短时反馈 TransientToast / 全局 ToastHost | `components/` | 已落地；两套不可混用（§11.5.1） |
+| 短时反馈 TransientToast ／ 全局 ToastHost ／ 反馈堆叠 `#toast-stack` | `components/TransientToast.tsx`、`notifications.tsx` | 已落地；两套不可混用（§11.5.1）。**2026-09-28 起两者共用同一枚固定堆叠容器 `#toast-stack`**（右下角、`gap: 8px` 纵向堆叠、`aria-live=polite`）：此前 `.page-toast-host` 与 `.toast-host` 各自 `position: fixed` 在同一坐标，谁后渲染谁盖住谁，页面发出的短时确认会被全局通知压掉。浮层几何只住这一处，页面不得再给自己的提示块写 fixed |
+| 内联错误 InlineError（message／problems／tone 两档／onRetry／onDismiss） | `components/InlineError.tsx` | 已落地（2026-09-28）：§11.5.1 第二落点的唯一出口。收编此前 **7 套同义几何**——`.inline-message.error`（`9px 11px`）、`.artifact-action-error`（同 padding 但自带 `margin-bottom`）、`.knowledge-issues`（`10px 12px` ＋自带 `<ul>` 与 `.btn { margin-top: 8px }`）、`.memory-warnings`（`10px 12px`、warning 色、`list-style: none`）、`.tool-detail-error`（`8px`、**无圆角、无字号**、`pre-wrap`）、`.field-error`（只有字色与底）、`.action-note.error`（**无底无 padding**）。四种 padding、一处没圆角、一处没字号、动作有三种摆法，与 ADR-0031 收口前的 Button 同源 |
 | 空状态 EmptyContext／EmptyNotice／EmptyPage／LoadingPage／ErrorPage | `components/EmptyState.tsx` | 已落地：6 处内联占位（侧栏最近任务、模型清单、通用设置、MCP 连接、记忆清单与加载行、消息中心）2026-09-26 深夜全部收编；`EmptyContext` 管区域级、`EmptyNotice` 管行内与小节级 |
 | 页签 Tabs（tablist + roving tabindex + 方向键） | `components/Tabs.tsx` | 已落地：左右方向键与 Home／End 切换并把焦点带过去，只有选中页签进 Tab 顺序。记忆页分组与任务上下文两处已收编 |
 | 切换按钮组 SegmentedControl（group + aria-pressed） | `components/Tabs.tsx` | 已落地：技能页卡片／列表模式已收编；与页签的分工是「切换同一片内容的呈现方式」 |
@@ -795,7 +795,7 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 
 | 层 | 载体 | 生命周期 | 职责 |
 | --- | --- | --- | --- |
-| 内联反馈 | 页面内 InlineNotice（`inline-message`、`action-note` 等） | 停留在页面期间 | 操作当时的直接说明（如导入跳过原因） |
+| 内联反馈 | `InlineError`（`components/InlineError.tsx`，danger／warning 两档） | 停留在页面期间 | 操作当时的直接说明（如导入跳过原因） |
 | Toast | 右下角浮层 | 自动消失（常规 4s，错误 6s） | 用户可能已切走视图时的即时提醒 |
 | 消息中心 | 侧栏铃铛 + 下拉面板 | 持久化，可回溯 | 所有长操作结果的统一留档与回溯入口 |
 
@@ -806,24 +806,35 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 - 通知条目必须携带可跳转 target（任务 / 成果 / 知识页）；点击条目复用既有导航入口（如最近任务、成果卡片）跳转并标记已读，不另造导航路径，不破坏进行中任务的状态。
 - 铃铛固定在侧栏底部、设置入口上方，全局唯一入口；侧栏折叠或窄屏图标栏下退化为图标 + 红点。面板自铃铛向右侧主区展开，宽度约 360px，须挂在与铃铛同级的定位容器内，避免被 `overflow: hidden` 外壳裁剪。
 - 未读徽标使用 danger 色圆点加数字，封顶显示 99+；面板内未读条目用 brand 色圆点与加粗区分，支持单条已读、全部已读与清空（清空需确认）。
+- **未读数只数「还需要处理的」**：`level: success` 的通知照样落库、照样能在消息中心回看，但**写入即已读**，因此不计入铃铛数字，也不再投影成右下角浮层——它是一条留档，不是一次打扰。这一条的由来是铃铛一度挂着 40 条未读、其中 25 条是「任务跑成功」：一个不携带任何信息的数字，比没有数字更糟。失败（`error`）与部分完成（`warning`）继续计未读并投影。窗口失焦时的系统通知按 `systemNotify` 单独决定，不随本条降级——那已经是「你不在这儿」的另一套口径。
 - Toast 堆叠上限 4 条，hover 暂停消失，可手动关闭，点击可按 target 跳转；位于右下角，短暂覆盖上下文面板属预期行为。
 - 窗口失焦时，run 完成 / 失败发送系统通知（Electron Notification）；点击系统通知聚焦窗口并跳转对应任务。导入与导出不发系统通知。
 - 通知颜色一律消费语义状态 Token；`warning` / `info` 及其柔和背景是 §9.3 契约的组成部分，引入时必须当场补齐全套色系 Variant，不得先出一套主题再补另一套。
 
-### 11.5.1 反馈通道决策表（所有界面反馈的归类入口）
+### 11.5.1 反馈通道决策表（所有界面反馈的唯一归类入口）
 
-任何「操作结果」先按下表归类，再选通道；只有三个合法落点，不得自造第四种呈现。上表描述的是**长操作结果**的三层投影；短时确认与表单错误由本表裁定。
+任何「操作结果」先按下表归类，再选通道；**只有三个合法落点，且每个落点只有一个出口组件**。上表描述的是**长操作结果**的三层投影；短时确认与表单错误由本表裁定。多一个表面——哪怕只是「换个位置显示同一句话」——就是制造第二处真相。
 
-| 事件类型 | 通道 / 组件 | 是否落库 | 生命周期 | 例 |
+| 事件类型 | 唯一出口 | 是否落库 | 生命周期 | 例 |
 | --- | --- | --- | --- | --- |
-| 用户当场发起、当场可见的短时确认（成功 / 信息 / 拒绝） | 局部 `TransientToast`（`components/TransientToast.tsx`，常规 4s、错误 6s 自动消失） | 否 | 数秒后自消 | 模型连接成功、Skill 已导入、MCP 检测完成 |
-| 当前表单 / 对象可据以行动的错误 | 内联反馈 `.inline-message.error`（仅错误态） | 否 | 停留并随修正消失 | 保存校验失败、连接失败原因 |
-| 用户可能已切走的长操作结果 | `NotificationService.create` → 消息中心 + 全局 `ToastHost`（同页抑制） | 是（`notifications` 表） | 持久可回溯 | 任务完成 / 失败、资料导入、成果导出 |
+| 用户当场发起、当场可见的结果（成功 / 信息 / 拒绝 / 失败） | `TransientToast`（`components/TransientToast.tsx`，成功与信息 4s、错误 6s 自动消失） | 否 | 数秒后自消 | 模型连接成功、Skill 已导入、成果已导出、打不开某条任务 |
+| 需要停留、且当前表单／对象可据以行动的错误或警告 | `InlineError`（`components/InlineError.tsx`，`danger`／`warning` 两档） | 否 | 停留并随修正消失 | 保存校验失败、跨空间引用被拒、依赖检测阻塞 |
+| 用户可能已切走的长操作结果 | `NotificationService.create` → 消息中心 + 全局 `ToastHost`（同页抑制） | 是（`notifications` 表） | 持久可回溯 | 任务 Run 终态、资料导入作业 |
 
-两条最易踩的边界：
+三问按顺序判，判到哪个就停：
 
+1. **用户还在这儿吗？** 发起与结果之间隔着秒级以上、期间可能已经切走视图 → 第三类。
+2. **这句话需要停留吗？** 用户要读完它并据此改点什么 → 第二类；只需要「知道了」→ 第一类。
+3. **当前对象承载得了吗？** 承载不了（导航失败、全局前置条件不满足）→ 第一类。**不得**为此造常驻横幅。
+
+四条最易踩的边界：
+
+- **一次结果只有一个落点。** 同一条失败消息既写进对象的 `error` 状态（内联）又交给上层再播报一遍，是本表被绕过最常见的方式——用户看到的是同一句话出现在两个地方，并且关掉一处后以为「关不掉」。规则：调用链上**最先能承载这条消息的那一层**负责呈现，其余层只 `trackAction` 记录，不再上传到别的通道。
 - **代码里有两个「toast」，写文档或提 PR 必须指明是哪一个**：`TransientToast` 是局部、自消、**不落库**的短时确认；`ToastHost` 是全局右下角浮层，本质是**一条已持久化通知的投影**（必然伴随写入消息中心，并受「同页抑制」控制）。短时确认**不得**走 `NotificationService`，否则会把瞬时提醒沉淀进消息中心、污染可回溯列表。
-- **`.inline-message` 只保留错误态**：成功 / 信息一律用 `TransientToast`，禁止用常驻 `.inline-message` 充当「顶部成功横幅」。列表页顶部的持久结果横幅、Hook 内自造的自动消失计时器都在禁止之列。落地现状：知识页曾把作业终态写成常驻 `.inline-message`（「来源检查完成（9/9）」与消息中心重复且不会消失），2026-09-27 已收口——钩子的反馈通道拆成 `error`（内联、可行动）与 `toast`（`TransientToast`、自消、不落库），作业**成功**不再在页面重复播报，只有部分完成与失败留内联并带「查看条目／重试」入口。护栏两条：渲染层出现不带 `.error` 的 `className="inline-message"` 即失败；`.inline-message` 不得长出 `.error` 以外的配色变体（`SkillsView.test.tsx` 对 `.inline-message:not(.error)` 的断言继续保留）。
+- **两个浮层共用一个堆叠容器。** `TransientToast` 与 `ToastHost` 都挂在 `#toast-stack` 这一枚固定容器里（右下角，`gap: 8px` 纵向堆叠），页面不得再给自己的提示块写 `position: fixed`——两处各自 fixed 在同一坐标，结果是谁后渲染谁盖住谁。
+- **内联通道不长出成功态。** 成功 / 信息一律用 `TransientToast`。禁止用常驻内联块充当「顶部成功横幅」，也禁止换个类名（`.action-note.ok`、`.success-copy` 之类）绕开护栏再开一条成功通道；列表页顶部的持久结果横幅、Hook 内自造的自动消失计时器都在禁止之列。
+
+落地现状：知识页曾把作业终态写成常驻 `.inline-message`（「来源检查完成（9/9）」与消息中心重复且不会消失），2026-09-27 已收口——钩子的反馈通道拆成 `error`（内联、可行动）与 `toast`（`TransientToast`、自消、不落库），作业**成功**不再在页面重复播报，只有部分完成与失败留内联并带「查看条目／重试」入口。2026-09-28 接着收剩下的三处同源病灶：顶部常驻横幅 `.action-error-banner`（本表之外的第四个落点，25 个调用点共用一个全局单槽，互相覆盖且跨视图串台）、成果页自己的一套 `.artifact-action-error`、以及 `.action-note.ok`／`.success-copy` 两条内联成功通道；内联错误表面从 7 套几何（四种 padding、一处无圆角、一处无字号、动作有 float／margin／无三种摆法）收成 `InlineError` 一处。护栏锁四条：渲染层出现已废弃的反馈表面类名即失败；`role="alert"` 的节点必须走 `InlineError`；内联通道出现成功配色即失败；同一个动作链既写内联又上传全局通道即失败。
 
 ## 12. 无障碍与可用性底线
 

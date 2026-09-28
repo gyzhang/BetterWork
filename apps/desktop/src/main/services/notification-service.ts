@@ -25,7 +25,14 @@ export class NotificationService {
     input: CreateNotificationInput,
     options?: { systemNotify?: boolean },
   ): NotificationSummary {
-    const notification = this.notifications.save(input);
+    // 成功是一件事「已经办完了」，不是一条待办。它照样落库留档、照样能在消息中心回看，
+    // 但计为已读：铃铛上那个数字回答的是「有什么还没处理」，25 条跑成功的任务把它撑到
+    // 40 之后，这个数字就不再携带任何信息（docs/10 §11.5.1）。
+    // 窗口失焦时的系统通知不受影响——那是「你不在这儿」的另一套打扰口径。
+    const notification = this.notifications.save(
+      input,
+      input.level === 'success' ? { read: true } : undefined,
+    );
     this.broadcast({
       type: 'created',
       notification,

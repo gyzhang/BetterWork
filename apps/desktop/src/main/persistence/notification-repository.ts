@@ -59,7 +59,11 @@ const toSummary = (row: NotificationRow): NotificationSummary => {
 export class NotificationRepository {
   constructor(private readonly db: Database.Database) {}
 
-  save(input: CreateNotificationInput): NotificationSummary {
+  /**
+   * `read` 由调用方决定：仓储只管「怎么写」，「哪一类结果不该再打扰用户」是
+   * `NotificationService` 的策略（docs/10 §11.5.1）。
+   */
+  save(input: CreateNotificationInput, options?: { read?: boolean }): NotificationSummary {
     const row: NotificationRow = {
       id: randomUUID(),
       level: input.level,
@@ -68,7 +72,7 @@ export class NotificationRepository {
       detail: input.detail ?? null,
       target_kind: input.target?.kind ?? null,
       target_id: targetIdOf(input.target),
-      read: 0,
+      read: options?.read ? 1 : 0,
       created_at: Date.now(),
     };
     const write = this.db.transaction(() => {

@@ -37,6 +37,9 @@ export interface WorkspaceReferencesState {
   /** 正在写入的 artifactVersionId，用于禁用重复点击。 */
   pendingVersionId: string;
   referenceOf: (artifactVersionId: string) => WorkspaceArtifactReference | undefined;
+  /** 关掉这条内联提示：用户已经读过它了。此前 `error` 只有下一次写入成功才会清空，
+   *  于是提示块留在页面上没有任何关闭路径。 */
+  clearError: () => void;
   refresh: () => void;
   markReference: (artifactVersionId: string, label?: string) => Promise<ReferenceVersionResult>;
   removeReference: (reference: WorkspaceArtifactReference) => Promise<ReferenceVersionResult>;
@@ -91,6 +94,8 @@ export function useWorkspaceReferences(workspaceId: string | undefined): Workspa
       items.find((item) => item.reference.artifactVersionId === artifactVersionId)?.reference,
     [items],
   );
+
+  const clearError = useCallback((): void => setError(''), []);
 
   const write = useCallback(
     async <TData>(
@@ -196,6 +201,7 @@ export function useWorkspaceReferences(workspaceId: string | undefined): Workspa
     error,
     pendingVersionId,
     referenceOf,
+    clearError,
     refresh: load,
     markReference,
     removeReference,

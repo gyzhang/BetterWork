@@ -119,13 +119,35 @@ describe('NotificationService', () => {
     });
 
     expect(store.notifications.list()).toEqual([
-      expect.objectContaining({ id: notification.id, read: false }),
+      // 成功照样留档，但落库即已读：它回答的是「办完了」，不是「有什么没处理」。
+      expect.objectContaining({ id: notification.id, read: true }),
     ]);
     expect(eventsOn(window, IpcChannel.NotificationChangeEvent)).toEqual([
-      { type: 'created', notification, unreadCount: 1 },
+      { type: 'created', notification, unreadCount: 0 },
     ]);
     // 没有要求系统通知时，即使窗口失焦也不该打扰用户
     expect(mocks.instances).toHaveLength(0);
+  });
+
+  it('成功落库即已读，失败与警告仍然计未读', () => {
+    const store = createStore();
+    const window = createWindowStub(true);
+    const service = new NotificationService(store.notifications, () => window.asBrowserWindow);
+
+    const done = service.create({ level: 'success', kind: 'run', title: '任务完成：季度复盘' });
+    const failed = service.create({ level: 'error', kind: 'run', title: '任务失败：回款核对' });
+    const partial = service.create({
+      level: 'warning',
+      kind: 'knowledge-import',
+      title: '部分资料未纳入',
+    });
+
+    expect(done.read).toBe(true);
+    expect(failed.read).toBe(false);
+    expect(partial.read).toBe(false);
+    // 三条都留档可回看，未读数只数那两条需要处理的。
+    expect(store.notifications.list()).toHaveLength(3);
+    expect(store.notifications.unreadCount()).toBe(2);
   });
 
   it('stays silent while the window is focused even when a system notification is requested', () => {
@@ -139,7 +161,7 @@ describe('NotificationService', () => {
     );
 
     expect(mocks.instances).toHaveLength(0);
-    expect(store.notifications.unreadCount()).toBe(1);
+    expect(store.notifications.unreadCount()).toBe(0);
   });
 
   it('notifies the system only when the window lost focus, and jumps back on click', () => {

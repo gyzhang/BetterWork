@@ -1,8 +1,39 @@
+import type { ReactNode, ReactPortal } from 'react';
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
-import { AlertIcon, CheckIcon } from '../icons';
+import { AlertIcon, CheckIcon, CloseIcon } from '../icons';
+import { IconButton } from './IconButton';
 
 export type ToastTone = 'success' | 'error';
+
+const TOAST_STACK_ID = 'toast-stack';
+const DURATION: Record<ToastTone, number> = { success: 4_000, error: 6_000 };
+
+/**
+ * 右下角那一列浮层的共用容器。
+ *
+ * 此前 `TransientToast` 自带 `.page-toast-host`、`ToastHost` 自带 `.toast-host`，
+ * 两者都 `position: fixed` 在 `right: 20px / bottom: 20px`、同为 `--z-toast`。
+ * 同一坐标上的两个固定层，谁后渲染谁盖住谁——App 在主体之后渲染 `ToastHost`，
+ * 于是页面发出的短时确认会被全局通知整列压掉，用户读到的是「点了没反应」。
+ * 一列浮层只能有一个容器，几何与堆叠因此只住在这里。
+ */
+function toastStack(): HTMLElement {
+  const existing = document.getElementById(TOAST_STACK_ID);
+  if (existing) return existing;
+  const created = document.createElement('div');
+  created.id = TOAST_STACK_ID;
+  created.className = 'toast-stack';
+  created.setAttribute('aria-live', 'polite');
+  document.body.appendChild(created);
+  return created;
+}
+
+/** 把一条浮层挂进共用堆叠容器；`ToastHost` 与 `TransientToast` 走同一个出口。 */
+export function intoToastStack(content: ReactNode): ReactPortal {
+  return createPortal(content, toastStack());
+}
 
 export function TransientToast({
   tone,
@@ -14,18 +45,17 @@ export function TransientToast({
   onDismiss: () => void;
 }): React.JSX.Element {
   useEffect(() => {
-    const timer = window.setTimeout(onDismiss, tone === 'error' ? 6_000 : 4_000);
+    const timer = window.setTimeout(onDismiss, DURATION[tone]);
     return () => window.clearTimeout(timer);
   }, [onDismiss, tone, message]);
 
-  return (
-    <div className="page-toast-host" aria-live="polite">
-      <div className="toast" role="status">
-        <span className={`level-${tone}`} aria-hidden="true">
-          {tone === 'success' ? <CheckIcon size={12} /> : <AlertIcon size={12} />}
-        </span>
-        <p>{message}</p>
-      </div>
-    </div>
+  return intoToastStack(
+    <div className="toast" role="status">
+      <span className={`level-${tone}`} aria-hidden="true">
+        {tone === 'success' ? <CheckIcon size={12} /> : <AlertIcon size={12} />}
+      </span>
+      <p>{message}</p>
+      <IconButton label="关闭提醒" icon={CloseIcon} size="sm" onClick={onDismiss} />
+    </div>,
   );
 }
