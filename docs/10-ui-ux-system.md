@@ -467,7 +467,7 @@ UI Foundation 首批提供四套成对色系：
 
 为什么不放行 2px／3px 的光学微调：上一轮收 `gap` 时 2／3 已经归进 4，理由是「同一档差 1–3px 就是肉眼可见的两套值」。`margin` 若单独留一档微调，同一条缝在横排用 `gap: 4px`、在竖排写 `margin-top: 3px`，护栏等于没锁。收口后有 15 条声明里的 2px／3px 上顶到 4px（图标与文字基线、两行标签之间），属可感但可接受的位移。
 
-`padding` 仍未纳档：控件的 `padding` 有 12 种取值，而它和 `min-height`、`border-radius` 是同一件事（控件几何），要先定档位再收，不能只把护栏加宽。另立一轮。
+同一天补上另一半：**控件的 `padding` 不再散落，但走的是档位而不是间距标尺**——内距与 `min-height`、`border-radius` 是同一件事（控件几何），套不进 4/8/12/16/24/32 那道缝的尺。`styles.css` 里 29 处控件几何声明原有 12 种 `padding` 组合（`8px 9px`／`6px 9px`／`10px 12px`／`7px 8px`／`6px 8px`／`9px 10px`／`11px 0`／`10px`／`5px 7px`／`2px 5px`／`0 8px`／`0`），现全部收进 `--control-padding-sm`／`--control-padding`／`--control-padding-lg` 三档，多行编辑区取最大那一档；`--field-padding` 这一档开出来又并掉了，因为它和 `--control-padding-lg` 同值、却配不上任何高度档。护栏口径同步从 `border|border-radius|min-height` 扩到 `height|width|padding`，`CONTROL_SELECTOR` 加收「类名以 `-input` 结尾」的输入框（工作空间选择器的搜索框此前不在口径内）。详见 §9.10。
 
 次要文本同步收口：`<small>` 的 UA 默认是 `0.83em`，嵌在 12–13px 的容器里会掉到 12px 下限之下（知识页「索引与模型」的说明文字就是这样），而只扫显式声明的字号护栏抓不到「压根没写」这种情况。`styles.css` 已给出 `small { font-size: 12px }` 全局基线，组件只在此之上按需放大；护栏钉住这条基线存在且不低于 12px。
 
@@ -492,6 +492,10 @@ UI Foundation 首批提供四套成对色系：
 | `--control-height-sm` | 28px | 密集行内的小控件（文字按钮、页签内动作） |
 | `--control-height` | 32px | **常规档**：输入框、下拉、日期/选择器、标准按钮 |
 | `--control-height-lg` | 36px | `Button size="lg"`（主行动）与大型输入 |
+| `--control-padding-sm` | 4px 8px | 28px 档的内距：紧凑按钮、chip 里的下拉、菜单内搜索框 |
+| `--control-padding` | 6px 10px | 32px 常规档的内距：按钮、单行输入框、下拉触发器、工具栏搜索框 |
+| `--control-padding-lg` | 8px 12px | 36px 档的内距：整页主行动按钮与多行编辑区 |
+| `--control-check-size` | 16px | 原生勾选框的方框边长（宽高同值，不是控件高度档） |
 | `--control-radius` | 6px | 所有表单控件与浮层内按钮 |
 | `--row-height-sm` | 23px | 侧栏工作空间行（不是控件，套不进三档控件高度） |
 | `--row-height` | 34px | 侧栏导航与「新建任务」行 |
@@ -503,11 +507,14 @@ UI Foundation 首批提供四套成对色系：
 | `--radius-circle` | 50% | 圆点与头像 |
 | `--control-border` | `1px solid var(--input-border)` | 表单控件与按钮边框；不得再混用 `--border` / `--border-subtle`。填充式主行动按钮可取 `1px solid transparent`，只为与带边框控件保持同一盒几何 |
 
-- 多行 `textarea` 的 `min-height` 表达「编辑区至少多高」，不属于控件档位，不受此表约束。
+- 多行 `textarea` 的 `min-height` 表达「编辑区至少多高」，不属于控件档位，不受此表约束；它的**内距**属于，一律取 `--control-padding-lg`。
+- **高度档与内距档必须成对**：只统一高度而不统一内距，同排的按钮与输入框仍会一个显得饱满一个显得瘦。护栏因此把 `padding` 与 `height`／`width` 一起纳进「控件几何」口径，裸 px 即红（`.composer textarea` 的 `11px 0` 是登记在案的例外——它的左右内距归 `.composer`）。
 - **24–40px 的密集高度带已并档**（2026-09-27，产品拍板）：行内小按钮 26 → 28、筛选与次级按钮 30 → 32、侧栏行 34 → `--row-height`、工作空间行 23 → `--row-height-sm`。带内裸值现为 0，护栏改为零容忍；原先登记为唯一例外的 `.expert-card-desc` 两行钳制高度，已随「卡片描述一律三行定高」移出这一带（§10.1），例外清单因此清空并被删除。
 - **圆角同样收进档位表**：样式表里 150 处裸圆角换成 `var(--radius-*)`，其中 7 → 8（`--radius-row`）、9 → 10（`--radius-card`）是两处有意的并档。剩下的 3–4px 只有 5 处，全是键帽、色板与格式微标这类图形化小件，由 `MICRO_MARK_RADII` 按「只降不升」登记；新增一处必须写清它为什么不算某一档。
 - **浮层字号跟随触发控件**：`PopoverMenu` 打开时读取触发元素的计算字号并内联到浮层根，菜单项不自带 `font-size`。浮层是触发器的延伸，两处字号不一致会让菜单看起来属于另一个控件（知识卡片「更多」曾继承正文 14px 而比自己的 12px 触发按钮大）。**只镜像有文字的触发器**：纯图标按钮（`IconButton`）不渲染文字，它的计算字号是从容器继承来的值（composer 的 `+` 一路继承到 UA 默认 16px），镜像过来等于把「浏览器没被设置过」当成控件的字号，菜单会比正文还大——这类触发器走基座兜底的 13px。
 - 落地现状：2026-09-26 已把 50 处控件边框/圆角/高度声明换成 `--control-*` 取值，表单控件里裸值残留 0（由护栏强制，`textarea` 的编辑区高度除外）；三档高度都有真实消费者。**2026-09-28 起按钮几何不再靠「记得选对档」维持**：`Button` 基座把 `size` 与 `--control-height-*` 一对一绑死，护栏的 `CONTROL_SELECTOR` 口径同步换成 `.btn` 与 `.icon-button`，原先散在 11 套具名皮与 12 处页面级后代规则里的 16 种 `padding` 组合一并收进三档（[ADR-0031](adr/0031-button-base-and-skin-closure.md)）。
+
+**同日把同一口径推到输入类控件**：29 处控件几何声明里的 12 种 `padding` 组合归进上表三档，勾选框边长 14／16 两套并成 `--control-check-size` 一套，`.capability-search input` 的 `height: 28px` 换成 `min-height: var(--control-height-sm)`；收口后控件几何里裸 px 残留 0，护栏变异验证 8/8 符合预期（含「`.artifact-input-card` 这类卡片名里带 input 不得误伤」这一条）。
 
 ### 9.11 叠放层级
 

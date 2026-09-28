@@ -764,9 +764,19 @@ describe('浮层基座纪律', () => {
   });
 });
 
-/** 表单控件与按钮基座的几何必须来自 Token；这些正则与迁移脚本保持同一套口径。 */
+/**
+ * 表单控件与按钮基座的几何必须来自 Token；这些正则与迁移脚本保持同一套口径。
+ * `.[\w-]*-input` 收尾的那一列收的是「类名即以 input 结尾」的输入框（工作空间选择器
+ * 里的搜索框就是这么命名的）；`(?![\w-])` 让它不会误伤 `.artifact-input-card` 这类卡片。
+ */
 const CONTROL_SELECTOR =
-  /(^|[,>\s])input\b|(^|[,>\s])select\b|(^|[,>\s])textarea\b|\.field-select-trigger|\.btn\b|\.icon-button\b/;
+  /(^|[,>\s])input\b|(^|[,>\s])select\b|(^|[,>\s])textarea\b|(^|[,>\s])\.[\w-]*-input(?![\w-])|\.field-select-trigger|\.btn\b|\.icon-button\b/;
+/**
+ * 逐条理由：勾选框的盒几何由 `--control-check-size` 与 UA 决定；`:focus`／`:hover`
+ * 只改颜色不改几何；`.workspace-row input` 是行内改名用的透明输入框，没有边框；
+ * `.composer textarea` 的左右内距归 `.composer`，它自己只留上下 11px；
+ * `textarea[readonly]` 与 `.counted` 是展示用的只读文本块，不是编辑控件。
+ */
 const CONTROL_EXEMPTIONS =
   /checkbox|::placeholder|:focus|:hover|\.workspace-row input|\.composer textarea|textarea\[readonly\]|counted/;
 
@@ -1232,14 +1242,22 @@ describe('界面观感基线', () => {
     ).toEqual([]);
   });
 
-  it('表单控件的边框、圆角与高度来自控件 Token', () => {
-    const raw = new RegExp(`^(border|border-radius|min-height)$`);
+  /**
+   * 控件几何只住在 Token 上：边框、圆角、高度与**内距**同一口径。
+   * 内距此前没人管，于是「同为 32px 档」的按钮与输入框，文字离边框一个 6px 一个 9px——
+   * 高度统一了观感仍不统一。`padding` 与 `height` 一起纳进来，档位见 styles.css 的
+   * `--control-padding-*`（docs/10 §9.8）。
+   */
+  it('表单控件的边框、圆角、高度与内距来自控件 Token', () => {
+    const raw = new RegExp(`^(border|border-radius|min-height|height|width|padding)$`);
     const offenders: string[] = [];
     for (const declaration of declarations) {
       if (!raw.test(declaration.property)) continue;
       if (!CONTROL_SELECTOR.test(declaration.selector)) continue;
       if (CONTROL_EXEMPTIONS.test(declaration.selector)) continue;
       if (declaration.value.startsWith('var(--control-')) continue;
+      // 侧栏的行不是控件：图标按钮的 sm／row 档取行高，那是 --row-height-* 的口径。
+      if (declaration.value.startsWith('var(--row-height')) continue;
       if (
         declaration.value === '0' ||
         declaration.value === 'none' ||
@@ -1252,7 +1270,13 @@ describe('界面观感基线', () => {
       if (declaration.property === 'border' && declaration.value === '1px solid transparent') {
         continue;
       }
-      if (declaration.property === 'min-height' && !/^\d+px$/.test(declaration.value)) continue;
+      // 宽度与高度只在写死 px 时才算偏离档位（`width: 100%` 是排版，不是几何档）。
+      if (
+        ['width', 'height', 'min-height'].includes(declaration.property) &&
+        !/^\d+px$/.test(declaration.value)
+      ) {
+        continue;
+      }
       // 多行文本框的 min-height 是「编辑区至少多高」，与单行控件档位不是一回事。
       if (declaration.property === 'min-height' && /textarea/.test(declaration.selector)) continue;
       offenders.push(locate(declaration, styles ?? ''));

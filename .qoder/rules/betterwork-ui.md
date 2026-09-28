@@ -10,10 +10,11 @@ trigger: glob: apps/desktop/src/renderer/**/*.tsx,ts,css
 - **纵向堆叠不得贴死**：同一容器里上下相邻的控件/表单/提示/卡片之间必须有可见垂直间距；间距由容器的 `gap` 拥有，子元素不自带上下 `margin` 凑同一道缝。`components/layout/` 骨架容器必须自带 `display` + `gap`，页面不得用后代选择器替骨架补 `gap`；表单控件不写 `width:100%`（在弹性行里会挤到同排标签逐字断行）。护栏见 `standards/coding-standard.test.ts`，理由见 docs/10 §9.8。
 - **新增/修改页面必须复用统一页面骨架**（docs/10 §8.3：`.page-header` 页头带 + `.page-body` 860px 版心）：禁止页面自定版心宽度、页头结构或标题坐标；工作视图的对话列与输入框必须同宽。
 - **只用语义化主题 Token**（定义于 `apps/desktop/src/renderer/src/appearance.ts` 与 `styles.css`）：禁止新增硬编码色值，禁止用局部 `.dark` 补丁绕过 Token 契约。建立新 Token 时必须当场迁移所有相关硬编码值，不留半套。
+- **控件几何取档，不写裸 px**（docs/10 §9.10）：高度档 `--control-height-sm`／`--control-height`／`--control-height-lg`（28／32／36）与内距档 `--control-padding-sm`／`--control-padding`／`--control-padding-lg`（4px 8px／6px 10px／8px 12px）**成对使用**——只对齐高度不对齐内距，同排的按钮与输入框仍是一个饱满一个瘦。多行编辑区的内距一律取 `--control-padding-lg`，原生勾选框边长取 `--control-check-size`，侧栏行高走 `--row-height*` 不套控件档；`.composer textarea` 的 `11px 0` 是登记在案的例外（左右内距归 `.composer`）。
+- **一道缝只有一把尺**（docs/10 §9.8）：`gap` / `row-gap` / `column-gap` 与 `margin`（含负值与逻辑属性）共用 4／8／12／16／24／32 六档，由护栏强制，不得再写 5／6／7／9／10／11／13／14／18／20／22px 这类「差一点就一样」的值；要加档位先改 docs/10 §9.8。`padding` 不走这把尺，走上面的控件档位或容器留白。
 - 外观由两个维度组成：`system / light / dark` 模式 × 可扩展色系；每套正式色系必须同时提供浅色与深色 Variant。
 - **应用主题不得改变 Artifact 自身的文档、演示、表格或图表配色**。
 - 中文体验优先；正文和常规控件禁止用 9–10px 小字号换取空间，优先折叠、覆盖和响应式重排。`<small>` 已有 12px 全局基线，组件只在此之上放大，不再逐处补 `font-size`。
-- `gap` / `row-gap` / `column-gap` 的像素取值只能是 4 / 8 / 12 / 16 / 24 / 32 六档，由护栏强制；要加档位先改 docs/10 §9.8。
 - **界面功能图标一律使用内联 SVG 描边图标**（图标集在 `apps/desktop/src/renderer/src/icons.tsx`，`currentColor`、统一 24 网格与笔画粗细）：禁止用 Unicode 字符或 emoji 充当系统操作、导航、按钮等界面图标；新增图标先进图标集再使用，品牌字标与格式徽标（MD/PDF）除外。
 - **浮层一律复用 `PopoverMenu` 基座**（docs/10 §10.1）：下拉、菜单、选择器不得用 `<details>` 或 `position:absolute` 面板自造；菜单字号由基座镜像触发控件，破坏性菜单项用 `tone: 'danger'`。护栏锁「`.popover-menu-item` 不自带字号」与「overlay 阴影只允许登记过的浮层表面」。
 - **空态一律用 `EmptyContext`（区域级，可换图标）或 `EmptyNotice`（行内与小节级）**（`components/EmptyState.tsx`，docs/10 §10.1）：不得再写 `.empty-*`／`.setting-placeholder` 之类的自造占位类。
