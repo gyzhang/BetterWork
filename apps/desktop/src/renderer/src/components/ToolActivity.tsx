@@ -4,6 +4,7 @@ import { useId, useState } from 'react';
 import { AlertIcon, CheckIcon, ChevronRightIcon } from '../icons';
 import { toolStageLabel } from '../lib/labels';
 import { deriveToolActivity, formatToolValue, toolTarget } from '../lib/tool-activity';
+import { Disclosure } from './Disclosure';
 import { SectionHeader } from './SectionHeader';
 
 const statusLabel = {
@@ -26,10 +27,14 @@ function Payload({ title, value }: { title: string; value: unknown }): React.JSX
         <p>无</p>
       ) : (
         entries.map(([key, field]) => (
-          <details key={key} className="tool-field" open={entries.length === 1}>
-            <summary>{key}</summary>
+          <Disclosure
+            key={key}
+            className="tool-field"
+            defaultOpen={entries.length === 1}
+            label={key}
+          >
             <pre tabIndex={0}>{formatToolValue(field)}</pre>
-          </details>
+          </Disclosure>
         ))
       )}
     </section>

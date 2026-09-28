@@ -5,6 +5,7 @@ import { CloseIcon } from '../icons';
 import { trackAction } from '../lib/async-action';
 import { ActionBar } from './ActionBar';
 import { Button } from './Button';
+import { Disclosure } from './Disclosure';
 import { Field } from './Field';
 import { FieldSelect } from './FieldSelect';
 import { IconButton } from './IconButton';
@@ -99,8 +100,7 @@ export function ModelEditor({
             placeholder={editing ? '留空则保持原有凭据' : '可留空'}
           />
         </Field>
-        <details>
-          <summary>高级参数</summary>
+        <Disclosure label="高级参数">
           <div className="form-grid">
             <Field label="上下文 Token">
               <input
@@ -123,7 +123,7 @@ export function ModelEditor({
               />
             </Field>
           </div>
-        </details>
+        </Disclosure>
         {error && (
           <p className="inline-message error" role="alert">
             {error}

@@ -1228,18 +1228,6 @@ small {
   border-color: var(--border-subtle);
   opacity: 0.66;
 }
-.context-details {
-  display: grid;
-  gap: 8px;
-}
-.context-details summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  cursor: pointer;
-}
 .context-details > small {
   color: var(--text-muted);
   font-size: 12px;
@@ -2015,6 +2003,46 @@ small {
 /* 可点卡片的名称在悬停时点亮——此前只有专家卡有这条反馈，技能卡整片是按钮却没有。 */
 .card-main:hover .card-title {
   color: var(--brand);
+}
+/* 折叠披露的唯一外壳（docs/10 §10.1）：一行名称 + 它展开出来的内容。此前六处 `<details>`
+   各写一套，其中「高级参数」那两条规则体逐字相同，而命中区有 `8px`、`12px 2px 8px`、无内距
+   三种，展开态的强调色只有一处有。这里不给 summary 内距：`min-height` 已经把 12px 那一行
+   居中成一条 32px 的命中带，分隔线两侧的留白由行高与父列的 gap 负责。 */
+.disclosure {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+.disclosure-label {
+  display: flex;
+  min-height: var(--control-height);
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  list-style: none;
+}
+.disclosure-label::-webkit-details-marker {
+  display: none;
+}
+/* 全局焦点环那条按元素名点名，不含 summary；这一行现在有了 32px 命中带，键盘焦点就得看得见。 */
+.disclosure-label:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.disclosure-marker {
+  flex: none;
+  transition: transform var(--motion-instant) var(--motion-easing);
+}
+/* 展开后那一行点亮自己：收起时它只是一个入口，展开后它就是这一块的小节头。 */
+.disclosure[open] > .disclosure-label {
+  color: var(--text-primary);
+}
+.disclosure[open] > .disclosure-label > .disclosure-marker {
+  transform: rotate(90deg);
 }
 .list-row[data-variant='plain'] {
   padding: 8px 9px;
@@ -3493,18 +3521,6 @@ button.list-row:where(:not(:disabled)):hover {
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
-.model-sheet details {
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-.model-sheet details[open] {
-  display: flex;
-  gap: 12px;
-  flex-direction: column;
-}
-.model-sheet summary {
-  cursor: pointer;
-}
 ::-webkit-scrollbar {
   width: 7px;
   height: 7px;
@@ -3694,11 +3710,6 @@ button.list-row:where(:not(:disabled)):hover {
 .evidence-run-group > strong {
   display: block;
   margin-bottom: 4px;
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-.evidence-run-group > summary {
-  cursor: pointer;
   color: var(--text-secondary);
   font-size: 12px;
 }
@@ -4289,15 +4300,6 @@ button.list-row:where(:not(:disabled)):hover {
 .task-run-history {
   margin-top: 16px;
   border-top: 1px solid var(--border);
-}
-.task-run-history summary {
-  padding: 12px 2px 8px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 12px;
-}
-.task-run-history[open] summary {
-  color: var(--text-primary);
 } /* 「本空间参考版本」小节此前完全没有样式：标题、说明与内联提示三块贴在一起，
    唯一的分隔来自 `.inline-message` 自带的上下 margin。现在由小节自己拥有纵向缝（docs/10 §9.8）。 */
 .artifact-reference-section {
@@ -4449,18 +4451,6 @@ button.list-row:where(:not(:disabled)):hover {
   background: var(--canvas);
   border: var(--control-border);
   border-radius: var(--control-radius);
-}
-.search-settings details {
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-.search-settings details[open] {
-  display: flex;
-  gap: 12px;
-  flex-direction: column;
-}
-.search-settings summary {
-  cursor: pointer;
 }
 .search-settings .search-actions {
   display: flex;
@@ -4960,18 +4950,9 @@ select,
   flex-direction: column;
   gap: 8px;
 }
-.tool-field {
-  font-size: 12px;
-}
-.tool-field summary {
-  min-height: var(--control-height);
-  padding: 8px;
-  cursor: pointer;
-  overflow-wrap: anywhere;
-}
 .tool-field pre {
   max-height: 240px;
-  margin: 0 0 8px;
+  margin: 0;
   padding: 12px;
   overflow: auto;
   overscroll-behavior: contain;

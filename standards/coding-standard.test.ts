@@ -1191,6 +1191,120 @@ describe('卡片外壳基座纪律', () => {
   });
 });
 
+/**
+ * 折叠披露的出口（docs/10 §10.1）。
+ *
+ * 六处 `<details>` 并成 `Disclosure` 之后，要防的是同一件事再从两个方向长回来：页面手写
+ * 一对 `details`／`summary`，或样式表替那一行补一遍几何。第二条锁 CSS 而不锁 tsx，是因为
+ * 基座连元素名都不点名——只用 `.disclosure*` 三个类，读起来就知道这一行只有一份实现。
+ */
+describe('折叠披露基座纪律', () => {
+  const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
+  expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
+  const declarations = declarationsOf(styles ?? '');
+
+  /** 点名 `details`／`summary` 元素的选择器：元素名前面必须是选择器分隔符，不能误伤 `.context-details`。 */
+  const DISCLOSURE_ELEMENT_SELECTOR = /(^|[\s,>+~(])details\b|(^|[\s,>+~(])summary\b/;
+
+  /** 那一行自己的几何与排版：命中区、字号、颜色、标记与展开内容的缝。 */
+  const DISCLOSURE_ROW_PROPERTIES = [
+    'align-items',
+    'color',
+    'cursor',
+    'display',
+    'flex-direction',
+    'font-size',
+    'gap',
+    'list-style',
+    'min-height',
+    'min-width',
+    'overflow-wrap',
+    'padding',
+  ];
+
+  /** 从 `<Disclosure className="…">` 上扫出领域钩子类：新增站点自动进这条锁的范围。 */
+  function disclosureHookClasses(): string[] {
+    const hooks = new Set<string>();
+    for (const relative of pathsUnder('apps/desktop/src/renderer/')) {
+      if (!/\.tsx$/.test(relative) || /\.test\.tsx$/.test(relative)) continue;
+      const source = read(relative);
+      for (const match of source.matchAll(/<Disclosure\b/g)) {
+        const tag = source.slice(match.index ?? 0);
+        const end = tag.indexOf('>');
+        for (const className of tag
+          .slice(0, end === -1 ? undefined : end)
+          .matchAll(/className="([^"]+)"/g)) {
+          for (const token of (className[1] ?? '').split(/\s+/)) {
+            if (token) hooks.add(token);
+          }
+        }
+      }
+    }
+    return [...hooks].sort();
+  }
+
+  it('生产代码不再手写 details／summary，一律走 Disclosure', () => {
+    // 2026-09-28：六处各写一遍，其中「高级参数」的两条规则体逐字相同，命中区却有三种，
+    // 展开态的强调色只有一处有。基座从此是唯一出口。
+    const owner = 'apps/desktop/src/renderer/src/components/Disclosure.tsx';
+    const offenders: string[] = [];
+    for (const relative of pathsUnder('apps/desktop/src/renderer/')) {
+      if (!/\.tsx$/.test(relative) || /\.test\.tsx$/.test(relative)) continue;
+      if (relative === owner) continue;
+      const source = read(relative);
+      for (const match of source.matchAll(/<(?:details|summary)[\s>/]/g)) {
+        const line = source.slice(0, match.index ?? 0).split('\n').length;
+        offenders.push(`${relative}:${line} ${match[0].trim()}`);
+      }
+    }
+    expect(
+      offenders,
+      '「点一行展开更多」请复用 Disclosure；要新的档位先给它理由（docs/10 §10.1）',
+    ).toEqual([]);
+  });
+
+  it('样式表不再点名 details／summary 元素', () => {
+    // 基座用类不用元素名，所以这条可以锁得干净：一旦出现 `.某面板 details { … }`，
+    // 就说明有人在这一行外面又起了一套几何。
+    const offenders = declarations
+      .map((declaration) => ({
+        declaration,
+        selector: declaration.selector.replace(/\/\*[\s\S]*?\*\//g, '').trim(),
+      }))
+      .filter(({ selector }) => DISCLOSURE_ELEMENT_SELECTOR.test(selector))
+      .map(({ declaration }) => locate(declaration, styles ?? ''));
+    expect(
+      offenders,
+      '披露行归 .disclosure-label；页面不得再按元素名给它发外观（docs/10 §10.1）',
+    ).toEqual([]);
+  });
+
+  it('披露行的几何只住在基座', () => {
+    const hooks = disclosureHookClasses();
+    expect(hooks.length, '一条领域钩子类都没扫到，这条护栏已经在空转').toBeGreaterThan(0);
+    const offenders = declarations
+      .map((declaration) => ({
+        declaration,
+        selector: declaration.selector.replace(/\/\*[\s\S]*?\*\//g, '').trim(),
+      }))
+      .filter(({ selector }) => {
+        if (selector.includes('.disclosure')) return false;
+        const parts = selector.split(',').map((part) => part.trim());
+        // 逗号分列的每一个选择器都是「那一行本身」，才算重述行几何；
+        // `.context-details > small` 这类后代规则管的是展开出来的内容，不在范围内。
+        return parts.every((part) =>
+          hooks.some((hook) => new RegExp(`^\\.${hook}(?![-\\w])(\\[[^\\]]*\\])?$`).test(part)),
+        );
+      })
+      .filter(({ declaration }) => DISCLOSURE_ROW_PROPERTIES.includes(declaration.property))
+      .map(({ declaration }) => locate(declaration, styles ?? ''));
+    expect(
+      offenders,
+      '钩子类只留分隔线、位置与内容排版；命中区、字号与颜色改了请动基座（docs/10 §9.8）',
+    ).toEqual([]);
+  });
+});
+
 describe('表单字段基座纪律', () => {
   const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
   expect(styles, '找不到 renderer 的 styles.css').toBeDefined();

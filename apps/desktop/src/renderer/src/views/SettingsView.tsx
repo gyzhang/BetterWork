@@ -17,6 +17,7 @@ import { AsyncButton, InlineLoading } from '../components/AsyncButton';
 import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { ConnectionStatus } from '../components/ConnectionStatus';
+import { Disclosure } from '../components/Disclosure';
 import { EmptyNotice } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
@@ -369,8 +370,7 @@ export function SearchSettings(): React.JSX.Element {
             }
           />
         </Field>
-        <details>
-          <summary>高级参数</summary>
+        <Disclosure label="高级参数">
           <Field label="网页结果数量 top_k">
             <input
               type="number"
@@ -380,7 +380,7 @@ export function SearchSettings(): React.JSX.Element {
               onChange={(event) => setWebTopK(Number(event.target.value))}
             />
           </Field>
-        </details>
+        </Disclosure>
         <div className="search-actions">
           <AsyncButton
             variant="secondary"

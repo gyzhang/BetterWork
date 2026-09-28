@@ -24,7 +24,7 @@ import type { RunMemoriesState, TaskMemoryExclusionState } from '../hooks/use-ru
 import { useRunSourcePreview } from '../hooks/use-run-source-preview';
 import type { TaskMemoryExclusionsState } from '../hooks/use-task-memory-exclusions';
 import type { WorkspaceBriefState } from '../hooks/use-workspace-brief';
-import { ArtifactIcon, ChevronRightIcon, WarningIcon } from '../icons';
+import { ArtifactIcon, ChevronRightIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
 import { fileTypeLabel, materialPurposeName, runStatusName } from '../lib/labels';
@@ -41,6 +41,7 @@ import { handleTitlebarDoubleClick } from '../lib/titlebar';
 import type { ContextTab } from '../lib/view-types';
 import { AsyncButton, InlineLoading } from './AsyncButton';
 import { Button } from './Button';
+import { Disclosure } from './Disclosure';
 import { EmptyContext } from './EmptyState';
 import { IconButton } from './IconButton';
 import { ListRow } from './ListRow';
@@ -203,8 +204,10 @@ export function ContextPanel({
                 ))}
                 <ToolActivity key={activeRun?.id ?? events[0]?.runId} events={events} />
                 {taskRuns.length > 1 && (
-                  <details className="task-run-history">
-                    <summary>执行记录 · {taskRuns.length} 次</summary>
+                  <Disclosure
+                    className="task-run-history"
+                    label={`执行记录 · ${taskRuns.length} 次`}
+                  >
                     {taskRuns.map((run) => (
                       <RunSummaryRow
                         key={run.id}
@@ -215,7 +218,7 @@ export function ContextPanel({
                         onSelect={() => onSelectRun(run)}
                       />
                     ))}
-                  </details>
+                  </Disclosure>
                 )}
               </div>
             ))}
@@ -484,10 +487,12 @@ function EvidenceSection({
             )}
           </div>
           {historical.length > 0 && (
-            <details className="evidence-run-group">
-              <summary>历史运行来源 · {historical.length} 条</summary>
+            <Disclosure
+              className="evidence-run-group"
+              label={`历史运行来源 · ${historical.length} 条`}
+            >
               <div className="evidence-list">{historical.map((item) => renderRow(item))}</div>
-            </details>
+            </Disclosure>
           )}
         </>
       )}
@@ -765,10 +770,7 @@ function RecallExclusions({
   const shown = summary.exclusions.filter((exclusion) => exclusion.count > 0);
   if (shown.length === 0 && !summary.conflictReviewRequired) return null;
   return (
-    <details className="context-details">
-      <summary>
-        <WarningIcon size={12} /> 为什么这些没有进入范围
-      </summary>
+    <Disclosure className="context-details" label="为什么这些没有进入范围">
       {summary.conflictReviewRequired && (
         <p className="context-hint">
           存在待澄清口径：同一议题下两条已确认规则尚未裁决，本次一组都不带入。请到记忆页澄清。
@@ -784,7 +786,7 @@ function RecallExclusions({
         {summary.budget.blockCodePoints} 字
         {summary.queryTruncated ? ' · 输入过长，已按首尾片段试算' : ''}
       </small>
-    </details>
+    </Disclosure>
   );
 }
 
