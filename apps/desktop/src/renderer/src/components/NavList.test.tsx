@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SettingsIcon, WorkIcon } from '../icons';
@@ -15,7 +15,16 @@ const ITEMS: readonly NavEntry<View>[] = [
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
 });
+
+/** jsdom 不做排版，能不能装下只能靠伪造滚动盒尺寸来表达（同 Tooltip 的用例口径）。 */
+const makeClipped = (element: HTMLElement, clipped: boolean): void => {
+  Object.defineProperty(element, 'scrollHeight', { configurable: true, value: clipped ? 60 : 20 });
+  Object.defineProperty(element, 'clientHeight', { configurable: true, value: 20 });
+  Object.defineProperty(element, 'scrollWidth', { configurable: true, value: clipped ? 320 : 120 });
+  Object.defineProperty(element, 'clientWidth', { configurable: true, value: 120 });
+};
 
 describe('NavList 基座', () => {
   it('列表是带名称的导航区域，当前项同时给 aria-current 与 data-selected', () => {
@@ -76,5 +85,44 @@ describe('NavList 基座', () => {
     const button = container.querySelector('button.nav-item') as HTMLButtonElement;
     expect(button.getAttribute('aria-current')).toBe('true');
     expect(button.disabled).toBe(true);
+  });
+});
+
+/**
+ * 侧栏与上下文面板都是定宽列：名称放不下时只能收短，不能横向滚出去。
+ * 收短必须就地读得回全文，否则用户看到的是「文字被砍断」而不是「名字长」。
+ */
+describe('导航行名称的截断补全', () => {
+  const LONG_NAME = 'betterwork-e55-two-periods-and-a-fairly-long-workspace-name';
+
+  it('名称被裁掉时悬停读出全文，且全文一直留在锚点里', () => {
+    vi.useFakeTimers();
+    const { container } = render(<NavItem label={LONG_NAME} onClick={vi.fn()} />);
+    const label = container.querySelector('.nav-item-label') as HTMLElement;
+    expect(label.classList.contains('tooltip-anchor')).toBe(true);
+    makeClipped(label, true);
+
+    fireEvent.mouseEnter(label);
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    const tip = screen.queryByRole('tooltip', { hidden: true });
+    expect(tip?.textContent).toBe(LONG_NAME);
+    expect(tip?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('放得下就什么都不弹——每行悬停都弹一句全文读起来像控件坏了', () => {
+    vi.useFakeTimers();
+    const { container } = render(<NavItem label="工作" onClick={vi.fn()} />);
+    const label = container.querySelector('.nav-item-label') as HTMLElement;
+    makeClipped(label, false);
+
+    fireEvent.mouseEnter(label);
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(screen.queryByRole('tooltip', { hidden: true })).toBeNull();
   });
 });

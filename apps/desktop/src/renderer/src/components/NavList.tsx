@@ -1,5 +1,7 @@
 import type { ComponentType, ReactNode } from 'react';
 
+import { Tooltip } from './Tooltip';
+
 /** 一行的图标：只画字形，名称由按钮自己带。 */
 export interface NavItemProps {
   label: ReactNode;
@@ -28,6 +30,9 @@ export interface NavItemProps {
  * （`min-height` 34、`padding` 7px 9px、圆角 `--radius-row`、`font-size` 13），
  * 折叠态再各自用 `font-size: 0` 把文字压没——那会让只剩图标的按钮失去可及名称，
  * 所以窄栏改用裁切隐藏（见 `.nav-list[data-rail]`）。
+ *
+ * 名称一律由 `Tooltip` 基座承载：侧栏与上下文面板都是定宽列，长名字只能收短不能横滚，
+ * 而收短处必须能就地读回全文——没被裁切时基座什么都不弹。
  */
 export function NavItem({
   label,
@@ -60,7 +65,7 @@ export function NavItem({
           <Icon size={15} />
         </span>
       ) : undefined}
-      <span className="nav-item-label">{label}</span>
+      <Tooltip className="nav-item-label">{label}</Tooltip>
       {trailing}
     </button>
   );

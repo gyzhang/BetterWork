@@ -586,35 +586,35 @@ small {
 .section-label {
   margin: 0 8px 8px;
 }
-.run-list {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 4px;
-  min-height: 0;
-  overflow: auto;
-}
-/* 工作空间分组（ADR-0029）：侧栏里接替「一条不分组的最近任务」的那一列，
-   与 .run-list 同一档滚动职责。空间行的几何归 NavItem，这里只管并列与展开指示。 */
+/* 工作空间分组（ADR-0029）：侧栏里接替「一条不分组的最近任务」的那一列。
+   侧栏是 240px 定宽列，横向溢出只能靠截断解决——放一条横向滚动条出去，等于把
+   「名字太长」变成一次操作成本，所以这里只允许纵向滚动（docs/10 §9.8）。
+   空间行的几何归 NavItem，这里只管并列与展开指示。 */
 .workspace-groups {
   display: flex;
   flex: 1;
   flex-direction: column;
   gap: 4px;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden auto;
 }
+/* 分组外壳是 grid：隐式列的下限取 min-content，一句不折行的空间名或任务名就能把
+   列顶破定宽，省略号随之落到可视区之外（读起来像文字被砍断而不是被收短）。
+   列与作为 grid 项的行都必须显式收到 0，截断才发生在看得见的那条边线上。 */
 .workspace-group {
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
 }
 .workspace-group-row {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 4px;
 }
+/* 名称行吃掉动作按钮之外的宽度；能不能收缩由 `.nav-item` 基座负责。 */
 .workspace-group-name {
-  min-width: 0;
   flex: 1;
 }
 .workspace-group-chevron {
@@ -638,6 +638,8 @@ small {
 }
 .workspace-group-tasks {
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   margin-left: 12px;
   padding-left: 8px;
   gap: 4px;
@@ -667,7 +669,6 @@ small {
 }
 .sidebar-collapsed .brand > div,
 .sidebar-collapsed .section-label,
-.sidebar-collapsed .run-list,
 .sidebar-collapsed .sidebar-divider {
   display: none;
 }
@@ -1174,10 +1175,11 @@ small {
   /* 面板给的是左右内缩，几何仍归 Tabs 基座。 */
   padding: 0 12px 4px;
 }
+/* 上下文面板是 380px 定宽列，与侧栏同一件事：只纵向滚，横向溢出交给行自己截断。 */
 .context-content {
   min-height: 0;
   flex: 1;
-  overflow: auto;
+  overflow: hidden auto;
 }
 /* 上下文面板的分段之间靠各自的 padding 与分隔线相接，不能整列补 gap；
    夹在段与段之间的内联提示因此由这里给它自己的缝，左右与 `.context-section` 的 padding 对齐。 */
@@ -1999,6 +2001,9 @@ small {
 .nav-item {
   display: flex;
   width: var(--nav-item-width, 100%);
+  /* 一行名字放不下的那一档由基座兜住：作为 flex／grid 项时若不收到 0，
+     不折行的名称会把父列顶宽，省略号落在可视区之外。领域类不必再各补一遍。 */
+  min-width: 0;
   min-height: var(--row-height);
   align-items: center;
   gap: var(--nav-item-gap, 12px);
@@ -3612,7 +3617,6 @@ button.list-row:where(:not(:disabled)):hover {
   }
   .brand > div,
   .section-label,
-  .run-list,
   .sidebar-divider {
     display: none;
   }
@@ -4653,9 +4657,10 @@ button.list-row:where(:not(:disabled)):hover {
   padding: 12px 14px;
   border-bottom: 1px solid var(--border);
 }
+/* 消息中心同样是定宽面板（360px），与侧栏、上下文面板一个口径。 */
 .notification-list {
   flex: 1;
-  overflow: auto;
+  overflow: hidden auto;
 }
 
 .level-success {

@@ -1070,6 +1070,11 @@ const RETIRED_UTILITY_CLASSES: {
   },
   { pattern: /\.filter-bar(?![-\w])/, name: '.filter-bar', family: 'nav' },
   {
+    pattern: /\.run-list(?![-\w])/,
+    name: '.run-list（不分组的最近任务列已由工作空间分组接替，ADR-0029）',
+    family: 'nav',
+  },
+  {
     pattern: /\.new-task(?![-\w])/,
     name: '.new-task（行几何已归 NavItem）',
     family: 'nav',
@@ -2020,6 +2025,84 @@ describe('导航列表纪律', () => {
       offenders,
       '导航行的几何与配色归 NavItem／NavList；位置与折叠态请换自定义属性（docs/10 §9.8）',
     ).toEqual([]);
+  });
+});
+
+/**
+ * 定宽列：侧栏 240px、上下文面板 380px、消息中心 360px。
+ * 这三列的宽度是写死的，横向溢出换不来「多看一点」，只换来一条滚动条——
+ * 名字太长是截断问题（收短之后由 `Tooltip` 就地补全），不是滚动问题。
+ */
+const FIXED_WIDTH_COLUMN_SCROLLERS = [
+  '.workspace-groups',
+  '.context-content',
+  '.notification-list',
+];
+
+/** 选择器里出现的类名清单（注释已在解析前被抹平，不会误伤说明文字）。 */
+function classesOf(selector: string): string[] {
+  return [...selector.matchAll(/\.[-\w]+/g)].map((match) => match[0] ?? '');
+}
+
+describe('定宽列的横向溢出纪律', () => {
+  const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
+  expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
+  const declarations = declarationsOf(styles ?? '');
+
+  it('定宽列的滚动容器不得横向可滚', () => {
+    // `overflow: auto` 不指明轴向＝两轴都可滚。2026-09-28 侧栏就是这么长出一条横向杠，
+    // 而它下面的分组外壳还是 `display: grid` 的隐式列，省略号被推到可视区之外——
+    // 用户读到的是「名字被砍断」，不是「名字太长」。
+    const offenders = declarations
+      .filter((declaration) =>
+        FIXED_WIDTH_COLUMN_SCROLLERS.some((scroller) =>
+          classesOf(declaration.selector).includes(scroller),
+        ),
+      )
+      .filter(
+        (declaration) =>
+          declaration.property === 'overflow' || declaration.property === 'overflow-x',
+      )
+      .filter((declaration) => {
+        const horizontal = declaration.value.split(/\s+/)[0] ?? '';
+        return horizontal !== 'hidden' && horizontal !== 'clip';
+      })
+      .map((declaration) => locate(declaration, styles ?? ''));
+    expect(
+      offenders,
+      '定宽列只允许纵向滚动：横向溢出请收到列宽或就地截断，不要放一条横向滚动条出去（docs/10 §9.8）',
+    ).toEqual([]);
+  });
+
+  it('定宽列的分组外壳必须把列收到 0', () => {
+    // grid 隐式列的下限是 min-content，一句不折行的名称就能把列顶宽。上一条护栏把
+    // 滚动条关掉之后，这种溢出从「能滚」变成「看不见」，所以列宽必须显式收到 0。
+    const shells = ['.workspace-group', '.workspace-group-tasks'];
+    const offenders = shells
+      .map((shell) => {
+        const track = declarations.find(
+          (declaration) =>
+            declaration.selector.trim() === shell &&
+            declaration.property === 'grid-template-columns',
+        );
+        if (track && /^minmax\(0,\s*1fr\)$/.test(track.value)) return undefined;
+        return `${shell} { grid-template-columns: ${track?.value ?? '(未声明)'} }`;
+      })
+      .filter((offender): offender is string => offender !== undefined);
+    expect(
+      offenders,
+      '承载单行文本的定宽列外壳请写 `grid-template-columns: minmax(0, 1fr)`（docs/10 §9.8）',
+    ).toEqual([]);
+  });
+
+  it('导航行的可收缩住在基座，不由领域类各补一遍', () => {
+    // `.workspace-group-name` 曾经自己补过一条 `min-width: 0`——于是每一个新用 NavItem
+    // 的定宽列都要记得补同一件事。收进基座之后，领域类只负责「占多宽」。
+    const minWidth = declarations.find(
+      (declaration) =>
+        declaration.selector.trim() === '.nav-item' && declaration.property === 'min-width',
+    );
+    expect(minWidth?.value, '.nav-item 基座缺 `min-width: 0`').toBe('0');
   });
 });
 
