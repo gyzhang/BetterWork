@@ -429,7 +429,7 @@ small {
   letter-spacing: 0.08em;
 }
 .brand small {
-  margin-top: 2px;
+  margin-top: 4px;
   color: var(--text-muted);
   font-size: 10px;
   letter-spacing: 0.1em;
@@ -566,7 +566,7 @@ small {
 }
 .sidebar-divider {
   height: 1px;
-  margin: 4px 8px 13px;
+  margin: 4px 8px 12px;
   background: var(--border);
 }
 .section-label,
@@ -577,7 +577,7 @@ small {
   letter-spacing: 0.08em;
 }
 .section-label {
-  margin: 0 9px 8px;
+  margin: 0 8px 8px;
 }
 .run-list {
   display: flex;
@@ -687,7 +687,7 @@ small {
   background: var(--overlay);
 }
 .page-header h1 {
-  margin-top: 3px;
+  margin-top: 4px;
   font-size: 19px;
   font-weight: 650;
 }
@@ -709,7 +709,7 @@ small {
    否则 22 处已有 gap 的容器会被再叠一道（docs/10 §9.8、§11.5.1）。 */
 .skills-page > .inline-message,
 .experts-page > .inline-message {
-  margin: 12px 28px;
+  margin: 12px 32px;
 }
 .knowledge-page > .inline-message {
   margin: 12px 0;
@@ -763,7 +763,7 @@ small {
 }
 .page-intro {
   max-width: 640px;
-  margin: 0 0 20px;
+  margin: 0 0 24px;
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.65;
@@ -897,7 +897,7 @@ small {
   box-shadow: 0 0 0 4px var(--brand-soft);
 }
 .welcome h2 {
-  margin: 8px 0 10px;
+  margin: 8px 0 12px;
   font:
     600 28px/1.35 Georgia,
     'Kaiti SC',
@@ -917,7 +917,7 @@ small {
   flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
-  margin-top: 22px;
+  margin-top: 24px;
 }
 /* `.examples button` 这套「容器替首页示例发外观」的规则已收进
    `Button variant="outline" size="md"`（ADR-0031）。 */
@@ -926,12 +926,12 @@ small {
    margin 记的就是「这两块本来属于同一件事」。 */
 .message {
   display: grid;
-  margin: 0 0 18px;
+  margin: 0 0 16px;
   gap: 8px;
 }
 .message > span {
   display: block;
-  margin-left: 2px;
+  margin-left: 4px;
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 600;
@@ -948,7 +948,7 @@ small {
 }
 .composer {
   width: min(var(--page-body-width), calc(100% - 48px));
-  margin: 0 auto 20px;
+  margin: 0 auto 24px;
   padding: 11px 13px 10px;
   background: var(--composer);
   border: 1px solid var(--input-border);
@@ -1127,7 +1127,7 @@ small {
 }
 .composer-footer kbd {
   display: inline-block;
-  margin-left: 5px;
+  margin-left: 8px;
   padding: 1px 4px;
   color: var(--text-muted);
   background: var(--surface-raised);
@@ -1172,7 +1172,7 @@ small {
 /* 上下文面板的分段之间靠各自的 padding 与分隔线相接，不能整列补 gap；
    夹在段与段之间的内联提示因此由这里给它自己的缝，左右与 `.context-section` 的 padding 对齐。 */
 .context-content > .inline-message {
-  margin: 12px 14px;
+  margin: 12px 16px;
 }
 /* 「本次材料」的小节壳与记忆、简报用同一个 `.context-section`；
    列表只负责 8px 的缝，行的几何归 ListRow（docs/10 §10.1、§9.8）。 */
@@ -1397,7 +1397,7 @@ small {
   font-size: 13px;
 }
 .empty-context p {
-  margin-top: 7px;
+  margin-top: 8px;
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.6;
@@ -1446,7 +1446,7 @@ small {
 .activity-marker {
   width: 7px;
   height: 7px;
-  margin: 4px 0 0 2px;
+  margin: 4px 0 0 4px;
   background: var(--brand);
   border-radius: var(--radius-circle);
 }
@@ -1464,7 +1464,7 @@ small {
 }
 .activity-row small {
   display: block;
-  margin-top: 5px;
+  margin-top: 8px;
   color: var(--text-muted);
   font-size: 12px;
 }
@@ -1478,7 +1478,7 @@ small {
   justify-content: center;
 }
 .empty-page h1 {
-  margin: 9px 0 11px;
+  margin: 8px 0 12px;
   font-size: 28px;
   font-weight: 600;
   line-height: 1.35;
@@ -1599,7 +1599,7 @@ small {
   background: var(--surface-raised);
 }
 .settings-nav-list h1 {
-  margin: 7px 0 22px;
+  margin: 8px 0 24px;
   font-size: 18px;
 }
 .skills-page {
@@ -1659,7 +1659,7 @@ small {
 }
 .skill-card-head small {
   display: block;
-  margin-top: 2px;
+  margin-top: 4px;
   color: var(--text-muted);
   font-size: 12px;
 }
@@ -1749,7 +1749,7 @@ small {
   font-size: 13px;
 }
 .expert-card-head small {
-  margin-top: 2px;
+  margin-top: 4px;
   color: var(--text-muted);
   font-size: 12px;
 }
@@ -1893,7 +1893,7 @@ small {
   border-top: 1px solid var(--border);
 }
 .expert-detail-section h2 {
-  margin: 0 0 7px;
+  margin: 0 0 8px;
   color: var(--text-primary);
   font-size: 13px;
 }
@@ -1906,7 +1906,7 @@ small {
 .expert-memory-summary {
   display: grid;
   gap: 4px;
-  margin: 8px 0 10px;
+  margin: 8px 0 12px;
   padding-left: 18px;
   color: var(--text-secondary);
   font-size: 12px;
@@ -2237,7 +2237,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-  margin: 24px 0 14px;
+  margin: 24px 0 16px;
 }
 .skill-state-grid div,
 .skill-trust-box {
@@ -2254,7 +2254,7 @@ button.list-row:where(:not(:disabled)):hover {
   font-size: 12px;
 }
 .skill-state-grid strong {
-  margin-top: 5px;
+  margin-top: 8px;
   font-size: 12px;
 }
 .skill-trust-box {
@@ -2270,12 +2270,12 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 9px 0 0 22px;
+  margin: 8px 0 0 24px;
   color: var(--text-secondary);
   font-size: 12px;
 }
 .skill-detail-section {
-  margin-top: 22px;
+  margin-top: 24px;
 }
 .dependency-panel {
   display: flex;
@@ -2295,7 +2295,7 @@ button.list-row:where(:not(:disabled)):hover {
   flex: 1;
 }
 .dependency-warning {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   color: var(--warning);
   font-size: 12px;
 }
@@ -2323,17 +2323,17 @@ button.list-row:where(:not(:disabled)):hover {
   font-size: 12px;
 }
 .dependency-operation p {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   color: var(--text-secondary);
   font-size: 12px;
 }
 .dependency-grant {
-  margin-top: 13px;
+  margin-top: 12px;
   padding-top: 11px;
   border-top: 1px solid var(--border-subtle);
 }
 .dependency-grant p {
-  margin: 0 0 7px;
+  margin: 0 0 8px;
   color: var(--text-secondary);
   font-size: 12px;
 }
@@ -2345,7 +2345,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: block;
   width: 100%;
   min-height: 190px;
-  margin-top: 10px;
+  margin-top: 12px;
   padding: 10px;
   color: var(--text-primary);
   background: var(--surface-raised);
@@ -2359,7 +2359,7 @@ button.list-row:where(:not(:disabled)):hover {
   resize: vertical;
 }
 .skill-blocked-reasons {
-  margin: 9px 0 12px;
+  margin: 8px 0 12px;
   padding-left: 18px;
   color: var(--warning);
   font-size: 12px;
@@ -2445,7 +2445,7 @@ button.list-row:where(:not(:disabled)):hover {
   font-size: 13px;
 }
 .empty-notice[data-variant='block'] p {
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: 12px;
   line-height: 1.6;
 }
@@ -2474,7 +2474,7 @@ button.list-row:where(:not(:disabled)):hover {
 .memory-capture {
   display: grid;
   gap: 8px;
-  margin: 10px 0 16px 32px;
+  margin: 12px 0 16px 32px;
   padding: 12px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
@@ -2573,7 +2573,7 @@ button.list-row:where(:not(:disabled)):hover {
   min-height: 200px;
 }
 .memory-list-empty {
-  margin: 18px 2px;
+  margin: 16px 4px;
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.6;
@@ -2650,7 +2650,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .memory-dependencies {
   display: block;
-  margin-top: 5px;
+  margin-top: 8px;
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.55;
@@ -2680,7 +2680,7 @@ button.list-row:where(:not(:disabled)):hover {
 
 .memory-duplicate-hint {
   display: block;
-  margin-top: 5px;
+  margin-top: 8px;
   color: var(--warning);
   font-size: 12px;
   line-height: 1.55;
@@ -2695,7 +2695,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .memory-policy-hint {
   display: block;
-  margin-top: 5px;
+  margin-top: 8px;
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.55;
@@ -2709,7 +2709,7 @@ button.list-row:where(:not(:disabled)):hover {
 .memory-conflict {
   display: grid;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 12px;
   padding: 10px 11px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
@@ -3039,7 +3039,7 @@ button.list-row:where(:not(:disabled)):hover {
   text-overflow: ellipsis;
 }
 .appearance-settings h3 {
-  margin: 28px 0 11px;
+  margin: 32px 0 12px;
   font-size: 14px;
 }
 .appearance-modes {
@@ -3076,7 +3076,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .appearance-modes small,
 .scheme-grid small {
-  margin-top: 3px;
+  margin-top: 4px;
   color: var(--text-muted);
   font-size: 12px;
 }
@@ -3196,7 +3196,7 @@ button.list-row:where(:not(:disabled)):hover {
 .appearance-note {
   display: flex;
   gap: 8px;
-  margin-top: 26px;
+  margin-top: 24px;
   padding: 12px;
   color: var(--text-secondary);
   background: var(--surface-raised);
@@ -3451,7 +3451,7 @@ button.list-row:where(:not(:disabled)):hover {
 .capability-picker-reason {
   font-size: 12px;
   color: var(--text-secondary);
-  margin-left: 6px;
+  margin-left: 8px;
 }
 .capability-search input {
   width: 100%;
@@ -3499,7 +3499,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .material-global-toggle {
   display: block;
-  margin-top: 5px;
+  margin-top: 8px;
   padding: 0;
   color: var(--brand);
   background: transparent;
@@ -3523,7 +3523,7 @@ button.list-row:where(:not(:disabled)):hover {
   margin-bottom: 24px;
 }
 .model-sheet h2 {
-  margin-top: 5px;
+  margin-top: 8px;
   font-size: 20px;
 }
 .model-sheet form {
@@ -3741,7 +3741,7 @@ button.list-row:where(:not(:disabled)):hover {
   -webkit-line-clamp: 3;
 }
 .evidence-run-group {
-  margin-top: 10px;
+  margin-top: 12px;
 }
 .evidence-run-group > strong {
   display: block;
@@ -3773,7 +3773,7 @@ button.list-row:where(:not(:disabled)):hover {
   font-size: 12px;
 }
 .evidence-preview li p {
-  margin: 2px 0 6px;
+  margin: 4px 0 8px;
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.55;
@@ -3935,17 +3935,17 @@ button.list-row:where(:not(:disabled)):hover {
   line-height: 1.4;
 }
 .markdown-preview h1 {
-  margin: 0 0 20px;
+  margin: 0 0 24px;
   font-size: 28px;
 }
 .markdown-preview h2 {
-  margin: 34px 0 14px;
+  margin: 32px 0 16px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
   font-size: 22px;
 }
 .markdown-preview h3 {
-  margin: 24px 0 10px;
+  margin: 24px 0 12px;
   font-size: 18px;
 }
 .markdown-preview p,
@@ -4095,14 +4095,14 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .knowledge-issues strong {
   display: block;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 .knowledge-issues ul {
   margin: 0;
   padding-left: 17px;
 }
 .knowledge-issues li {
-  margin-top: 3px;
+  margin-top: 4px;
   line-height: 1.55;
   word-break: break-all;
 }
@@ -4198,12 +4198,12 @@ button.list-row:where(:not(:disabled)):hover {
   font-size: 12px;
 }
 .knowledge-job-items {
-  margin: 2px 0 0;
+  margin: 4px 0 0;
   padding-left: 17px;
   color: var(--text-muted);
 }
 .knowledge-job-items li {
-  margin-top: 3px;
+  margin-top: 4px;
   line-height: 1.55;
   word-break: break-all;
 }
@@ -4337,7 +4337,7 @@ button.list-row:where(:not(:disabled)):hover {
 .page-toast-host .toast p {
   min-width: 0;
   flex: 1;
-  margin: 3px 0 0;
+  margin: 4px 0 0;
 }
 .task-run-history {
   margin-top: 16px;
@@ -4376,7 +4376,7 @@ button.list-row:where(:not(:disabled)):hover {
   padding: 16px 0 8px;
 }
 .artifact-input-grid > h4 {
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
@@ -4524,7 +4524,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .search-settings .search-form {
   display: flex;
-  margin-top: 22px;
+  margin-top: 24px;
   gap: 16px;
   flex-direction: column;
   max-width: 480px;
@@ -4556,7 +4556,7 @@ button.list-row:where(:not(:disabled)):hover {
   padding-top: 4px;
 }
 .search-settings .search-status {
-  margin-top: 14px;
+  margin-top: 16px;
   color: var(--text-secondary);
   font-size: 12px;
 }
@@ -4696,7 +4696,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .toast p {
   overflow: hidden;
-  margin-top: 2px;
+  margin-top: 4px;
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.5;
@@ -4926,7 +4926,7 @@ select,
 }
 .tool-activity {
   min-width: 0;
-  margin: 0 0 20px;
+  margin: 0 0 24px;
   color: var(--text-secondary);
 }
 .tool-activity-toggle {

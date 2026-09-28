@@ -576,17 +576,41 @@ describe('界面间距与骨架纪律', () => {
     ).toEqual([]);
   });
 
+  /**
+   * `gap` 与 `margin` 是同一道缝的两个所有者，所以共用一把标尺。
+   * 2026-09-26 那一轮只收了 `gap`，docs/10 §9.8 当时写下「margin 与 padding 属下一轮改造」；
+   * 本轮收 `margin`（含负值：抵消也取档）。`padding` 的档位要连控件几何一起定，另走一轮。
+   */
   it('间距只用标尺上的档位', () => {
     const SCALE = new Set([4, 8, 12, 16, 24, 32]);
+    const SPACING_PROPERTIES = [
+      'gap',
+      'row-gap',
+      'column-gap',
+      'margin',
+      'margin-top',
+      'margin-right',
+      'margin-bottom',
+      'margin-left',
+      'margin-block',
+      'margin-block-start',
+      'margin-block-end',
+      'margin-inline',
+      'margin-inline-start',
+      'margin-inline-end',
+    ];
     const offenders: string[] = [];
     for (const declaration of declarations) {
-      if (!['gap', 'row-gap', 'column-gap'].includes(declaration.property)) continue;
+      if (!SPACING_PROPERTIES.includes(declaration.property)) continue;
       for (const match of declaration.value.matchAll(/(\d+(?:\.\d+)?)px/g)) {
         const pixels = Number(match[1]);
         if (pixels !== 0 && !SCALE.has(pixels)) offenders.push(locate(declaration, styles ?? ''));
       }
     }
-    expect(offenders, '间距只允许 4 / 8 / 12 / 16 / 24 / 32px 档位（docs/10 §9.8）').toEqual([]);
+    expect(
+      offenders,
+      '缝只允许 4 / 8 / 12 / 16 / 24 / 32px 档位；同一档差 1–3px 正是「看着不统一」的来源（docs/10 §9.8）',
+    ).toEqual([]);
   });
 
   it('次要文本 small 有 12px 字号基线', () => {
