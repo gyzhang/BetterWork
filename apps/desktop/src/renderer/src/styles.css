@@ -1256,19 +1256,6 @@ small {
   line-height: 1.5;
   list-style: none;
 }
-.context-placeholder {
-  display: grid;
-  gap: 8px;
-  padding: 26px 18px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.7;
-  text-align: center;
-}
-.context-placeholder strong {
-  color: var(--text-primary);
-  font-size: 13px;
-}
 
 /* 工作空间简报：只读投影，每条都要看得出可跳转。 */
 .brief-panel {
@@ -1293,12 +1280,9 @@ small {
   list-style: none;
 }
 /* 简报的三条列表都换成 ListRow（docs/10 §10.1）：行的几何归基座，
-   `.brief-list` 只留「这是一个 8px 缝的 ul」这一件事。 */
-.brief-empty {
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.6;
-}
+   `.brief-list` 只留「这是一个 8px 缝的 ul」这一件事。空态归 `EmptyNotice`，
+   列内缩归 `.brief-panel` 这件分段壳——此前 `.brief-empty`／`.context-placeholder`
+   各自又写了一遍 12px 灰字与居中文案。 */
 .brief-truncated {
   color: var(--text-muted);
   font-size: 12px;
@@ -1628,11 +1612,6 @@ small {
   flex-direction: column;
   gap: 12px;
 }
-.expert-card-status {
-  margin: 0;
-  color: var(--warning);
-  font-size: 12px;
-}
 /* 召唤是悬停才显形的主动作：平时卡片只交代「这是谁、谁做的、第几版、干什么用」。
    只压视觉不摘可及性——位置一直留着，键盘进卡片由 :focus-within 显形，
    读屏也始终听得到这颗按钮。 */
@@ -1776,9 +1755,6 @@ small {
 .muted-text {
   color: var(--text-muted);
   font-size: 12px;
-}
-.danger {
-  color: var(--danger);
 }
 .skill-chips {
   display: flex;
@@ -2222,6 +2198,11 @@ button.list-row:where(:not(:disabled)):hover {
   font-size: 13px;
   line-height: 1.6;
 }
+/* 这一节是块级流、没有纵向 gap 可用，所以状态说明的上下缝由它自己给；
+   数值照搬迁移前的 `.skill-blocked-reasons`，只是把真相源从元素搬到容器（docs/10 §9.8）。 */
+.skill-detail-section > .status-note {
+  margin: 8px 0 12px;
+}
 /* `.skill-detail-section :where(button)` 靠 :where() 降权重才没顶掉 FieldSelect，
    是页面替别人的控件补外观的代价；已收进 Button 基座（ADR-0031）。 */
 .skill-state-grid {
@@ -2285,8 +2266,10 @@ button.list-row:where(:not(:disabled)):hover {
 .dependency-inline .field-select-trigger {
   flex: 1;
 }
+/* 「要注意的一段」留在领域类，不进 `StatusNote`：`Field` 的 hint 是 `<span>`（短语内容），
+   块级基座放进去是非法 HTML。折行与缝由下面的 `.field-hint .dependency-warning` 决定，
+   这里只出色与字号（docs/10 §11.5.2）。 */
 .dependency-warning {
-  margin: 8px 0 0;
   color: var(--warning);
   font-size: 12px;
 }
@@ -2323,10 +2306,15 @@ button.list-row:where(:not(:disabled)):hover {
   padding-top: 11px;
   border-top: 1px solid var(--border-subtle);
 }
-.dependency-grant p {
+.dependency-grant > p {
   margin: 0 0 8px;
   color: var(--text-secondary);
   font-size: 12px;
+}
+/* 状态说明不带上下缝，所以这一格 8px 由容器给；数值沿用迁移前那条被
+   `.dependency-grant p` 赢掉的 margin，只是把真相源从元素搬到容器（docs/10 §9.8）。 */
+.dependency-grant > .status-note {
+  margin: 0 0 8px;
 }
 .skill-detail-section textarea {
   display: block;
@@ -2344,16 +2332,6 @@ button.list-row:where(:not(:disabled)):hover {
     Menlo,
     monospace;
   resize: vertical;
-}
-.skill-blocked-reasons {
-  margin: 8px 0 12px;
-  padding-left: 18px;
-  color: var(--warning);
-  font-size: 12px;
-  line-height: 1.7;
-}
-.success-copy {
-  color: var(--success) !important;
 }
 /* 内联反馈的唯一出口（docs/10 §11.5.1 第二落点、§10.1 台账）。
    几何只住这一处：`padding` 取容器留白档，圆角取 `--radius-row`，字号与旧的
@@ -2390,11 +2368,39 @@ button.list-row:where(:not(:disabled)):hover {
   align-items: center;
   gap: 8px;
 }
-/* 「重试／关闭」由 `InlineError` 的 actions 行承载（`Button variant="link" tone="danger"`，
-   字色由档位自己带，ADR-0031）；旧方案是 `.inline-message.error .btn { float: right }`，
-   把一排动作塞进正文排版里——那一行 float 已经随基座删除。 */
-.danger-text {
-  color: var(--danger) !important;
+/* 状态轴的唯一出口（docs/10 §11.5.2、§10.1 台账）。与上面那条的分工是「说的是哪一件事」：
+   `InlineError` 说「你刚做的那一下怎么样了」，所以有底、有内距；`StatusNote` 只说
+   「这个对象现在是什么」，所以没有底、没有内距、不自带上下缝——缝由容器 `gap`
+   或容器侧规则拥有（docs/10 §9.8）。配色同样只由 tone 档位提供，档位只有四档。 */
+.status-note {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.status-note[data-tone='neutral'] {
+  color: var(--text-secondary);
+}
+.status-note[data-tone='success'] {
+  color: var(--success);
+}
+.status-note[data-tone='warning'] {
+  color: var(--warning);
+}
+.status-note[data-tone='danger'] {
+  color: var(--danger);
+}
+.status-note .status-note-message {
+  margin: 0;
+  color: inherit;
+}
+.status-note-problems {
+  margin: 0;
+  padding-left: 17px;
+}
+.status-note-problems li {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
 }
 .settings-content {
   min-width: 0;
@@ -2474,6 +2480,13 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--text-muted);
   font-size: 12px;
 }
+/* 行内主区的 `gap` 是 4px，这一格补到迁移前的 8px；缝由容器给，基座不自带上下缝。
+   迁移前这三行是 `.memory-dependencies`／`.memory-duplicate-hint`／`.memory-policy-hint`
+   三个单类规则（0,1,0），字色一直被上面的 `.memory-row small`（0,1,1）盖掉——
+   「与已确认记忆重复」那一行从来没红过。换基座后 tone 由 `[data-tone]` 出，才真落得上。 */
+.memory-row .status-note {
+  margin-top: 8px;
+}
 .memory-capture {
   display: grid;
   gap: 8px;
@@ -2526,31 +2539,6 @@ button.list-row:where(:not(:disabled)):hover {
 /* 本页纵向节奏由 .memory-settings 的 gap 统一负责，工具栏不再另加下边距。 */
 .memory-settings .page-toolbar {
   margin-bottom: 0;
-}
-.memory-projection {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  color: var(--warning);
-  background: var(--warning-soft);
-  border-radius: var(--radius-row);
-  font-size: 12px;
-  line-height: 1.6;
-}
-.memory-projection span {
-  flex: 1;
-}
-.memory-pending-governance {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 10px 12px;
-  color: var(--info);
-  background: var(--info-soft);
-  border-radius: var(--radius-row);
-  font-size: 12px;
-  line-height: 1.6;
 }
 .memory-group {
   display: flex;
@@ -2639,13 +2627,6 @@ button.list-row:where(:not(:disabled)):hover {
 .memory-source-review-required {
   color: var(--warning);
 }
-.memory-dependencies {
-  display: block;
-  margin-top: 8px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.55;
-}
 /* 换期恢复入口：解释之后立刻给出可返回的下一步，不提供「一键恢复全部历史」。 */
 .context-continuity-actions {
   display: flex;
@@ -2669,13 +2650,6 @@ button.list-row:where(:not(:disabled)):hover {
   list-style: disc;
 }
 
-.memory-duplicate-hint {
-  display: block;
-  margin-top: 8px;
-  color: var(--warning);
-  font-size: 12px;
-  line-height: 1.55;
-}
 /* 优先带入是用户显式选择的策略：徽标只强调「策略」，不冒充状态结论。 */
 .memory-policy-pinned {
   padding: 2px 6px;
@@ -2683,13 +2657,6 @@ button.list-row:where(:not(:disabled)):hover {
   background: var(--surface);
   border-radius: var(--radius-tag);
   font-size: 12px;
-}
-.memory-policy-hint {
-  display: block;
-  margin-top: 8px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.55;
 }
 .memory-terminal-note {
   display: grid;
@@ -3178,20 +3145,6 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .scheme-preview.sand i:nth-child(3) {
   background: #312820;
-}
-.appearance-note {
-  display: flex;
-  gap: 8px;
-  padding: 12px;
-  color: var(--text-secondary);
-  background: var(--surface-raised);
-  border-radius: var(--radius-row);
-  font-size: 12px;
-  line-height: 1.6;
-}
-.appearance-note span {
-  color: var(--success);
-  font-weight: 700;
 }
 /* 模态与覆盖层基座（docs/10 §10.1）：背板、层级、面板外壳与浮层阴影只在这里定义一次。
    变体决定几何，各表面类（`.confirmation-dialog`／`.model-sheet`／`.slide-viewer`）
@@ -3752,17 +3705,6 @@ button.list-row:where(:not(:disabled)):hover {
 .run-divider span {
   padding: 0 12px;
   white-space: nowrap;
-}
-.action-note {
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
-}
-.action-note.ok {
-  color: var(--success);
-}
-.action-note.error {
-  color: var(--danger);
 }
 .completed-work-icon.markdown {
   color: var(--brand);

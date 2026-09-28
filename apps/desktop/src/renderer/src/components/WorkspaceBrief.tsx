@@ -10,6 +10,7 @@ import { ChevronRightIcon } from '../icons';
 import { memoryScopeLabel } from '../lib/memory-labels';
 import { InlineLoading } from './AsyncButton';
 import { Button } from './Button';
+import { EmptyNotice } from './EmptyState';
 import { InlineError } from './InlineError';
 import { ListRow } from './ListRow';
 import { SectionHeader } from './SectionHeader';
@@ -70,10 +71,14 @@ export function WorkspaceBrief({
     return <InlineLoading className="brief-loading" label="正在读取工作空间简报…" />;
   }
   if (!brief) {
+    // 空态由 `EmptyNotice` 渲染，列内缩仍归 `.brief-panel` 这件已登记的分段壳——
+    // 此前 `.context-placeholder` 一个类同时管这两件事，于是简报的空态长得跟别处不一样。
     return (
-      <div className="context-placeholder">
-        <strong>暂无简报</strong>
-        <p>确认几条目标、约束或方法后，这里会按当前空间汇总。简报不落库，也不会整体交给模型。</p>
+      <div className="brief-panel">
+        <EmptyNotice
+          title="暂无简报"
+          detail="确认几条目标、约束或方法后，这里会按当前空间汇总。简报不落库，也不会整体交给模型。"
+        />
       </div>
     );
   }
@@ -83,12 +88,11 @@ export function WorkspaceBrief({
     brief.referenceVersions.items.length === 0;
   if (nothingYet) {
     return (
-      <div className="context-placeholder">
-        <strong>这个空间还没有可汇总的工作积累</strong>
-        <p>
-          在任务里保存或确认记忆后，简报会把已确认的目标、约束、决策与方法按当前空间列在这里；
-          候选与未确认内容不会进入简报。
-        </p>
+      <div className="brief-panel">
+        <EmptyNotice
+          title="这个空间还没有可汇总的工作积累"
+          detail="在任务里保存或确认记忆后，简报会把已确认的目标、约束、决策与方法按当前空间列在这里；候选与未确认内容不会进入简报。"
+        />
       </div>
     );
   }
@@ -111,7 +115,7 @@ export function WorkspaceBrief({
       <section className="brief-section">
         <SectionHeader title="未决事项" hint="讨论节点原样保留，未确认的结论不会被写成已确认" />
         {brief.openIssues.items.length === 0 ? (
-          <p className="brief-empty">当前没有开放的讨论节点。</p>
+          <EmptyNotice title="当前没有开放的讨论节点。" />
         ) : (
           <ul className="brief-list">
             {brief.openIssues.items.map((issue) => (
@@ -147,9 +151,7 @@ export function WorkspaceBrief({
           hint="标记只表示「选它作参考」，不表示内容正确、审批通过或本期已读取"
         />
         {brief.referenceVersions.items.length === 0 ? (
-          <p className="brief-empty">
-            还没有指定参考版本。在成果版本详情里可「指定为本空间参考版本」。
-          </p>
+          <EmptyNotice title="还没有指定参考版本。在成果版本详情里可「指定为本空间参考版本」。" />
         ) : (
           <ul className="brief-list">
             {brief.referenceVersions.items.map((item) => (

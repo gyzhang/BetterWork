@@ -9,6 +9,7 @@ import { Field } from '../Field';
 import { FieldSelect } from '../FieldSelect';
 import { InlineError } from '../InlineError';
 import { SectionHeader } from '../SectionHeader';
+import { StatusNote } from '../StatusNote';
 
 /**
  * Skill 依赖与运行环境面板（A12）。
@@ -182,12 +183,13 @@ export function DependencyPanel({
 
       <div className="dependency-grant">
         {grant?.grantActive ? (
-          <p className="success-copy">当前依赖已有有效执行授权。</p>
+          <StatusNote tone="success" message="当前依赖已有有效执行授权。" />
         ) : (
           <>
-            <p className="dependency-warning">
-              {grant?.blockedReason ?? '依赖确定后需要确认授权才能执行脚本。'}
-            </p>
+            <StatusNote
+              tone="warning"
+              message={grant?.blockedReason ?? '依赖确定后需要确认授权才能执行脚本。'}
+            />
             <Button
               variant="secondary"
               size="md"

@@ -161,6 +161,8 @@ standards/
 
 同一条消息**不得同时占用两个落点**。调用链上最先能承载它的那一层负责呈现，向上传递给另一个通道即视为重复播报。IPC 收口因此二选一：已经有内联／浮层承载的调用用 `trackAction`，只有全局短时提醒可去的调用才用 `reportAction`。
 
+反馈轴之外还有一条**状态轴**：一句常驻的只读状态说明（「这个对象现在是什么」）由 `StatusNote` 独家出口，档位只有 `neutral`／`success`／`warning`／`danger` 四档，无底、无内距、不自带上下缝。两轴的分界看「说的是哪一件事」，不看「有没有底」——一句无底纯文字，讲的是动作结果就仍归反馈轴。判据、清单与护栏见 [UI/UX 体系 §11.5.2](10-ui-ux-system.md)。
+
 界面规范以 [UI/UX 体系](10-ui-ux-system.md) 为真相源，其中与本节相关的硬约束：
 
 - 只用语义化 Token，禁止硬编码色值与局部 `.dark` 补丁。新增颜色先进 §9.3 的契约并**当场补齐 8 个 Variant**，不留半套。
@@ -171,7 +173,7 @@ standards/
 - 界面功能图标一律用 `icons.tsx` 里的内联 SVG（`currentColor`、24 网格、统一笔画）。新增图标先进图标集再使用。禁止 Unicode 字符或 emoji 充当界面图标；品牌字标与格式徽标（MD／PDF／DOC／TXT）是**文字标识**，不在此列。
 - 原始 Run 事件不得出现在主界面。工具卡片显示阶段名与一句摘要（`lib/tool-summary.ts`），原始载荷只在过程面板的折叠区里。
 - 工具名到阶段名的映射在 `lib/labels.ts` 的 `TOOL_LABELS`，**新增工具必须同步**，否则界面会退化成通用文案。
-- React：不在渲染期间写 ref、不在渲染期间产生副作用；事件回调需要读最新值时用「effect 同步 ref」的模式（见 `notifications.tsx`）。挂载 effect 的依赖必须如实声明，靠 `useCallback` 让回调稳定，而不是用空依赖数组掩盖。
+- React：不在渲染期间写 ref、不在渲染期间产生副作用；事件回调需要读最新值时用「effect 同步 ref」的模式（见 `notifications.tsx`、`TransientToast.tsx`）。挂载 effect 的依赖必须如实声明，靠 `useCallback` 让回调稳定，而不是用空依赖数组掩盖。**计时器 effect 是另一回事**：它的依赖应当是「这一条计时属于哪一件事」（如浮层的 `tone` 与 `message`），而不是回调的标识——把 `onDismiss` 列进去，调用点写内联箭头时宿主每次重渲染都会把计时清零，护栏因此直接锁 `TransientToast` 的依赖数组形状。
 
 ## 9. 测试
 

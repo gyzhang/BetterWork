@@ -27,6 +27,7 @@ import { ViewContainer } from '../components/layout/ViewContainer';
 import { ListRow } from '../components/ListRow';
 import { McpToolBindingsPicker } from '../components/McpToolBindingsPicker';
 import { SectionHeader } from '../components/SectionHeader';
+import { StatusNote } from '../components/StatusNote';
 import { SegmentedControl } from '../components/Tabs';
 import type { ExpertsState } from '../hooks/use-experts';
 import { useViewMode } from '../hooks/use-view-mode';
@@ -253,7 +254,7 @@ function ExpertCard({ expert, onSummon, onError, actions }: ExpertCardProps): Re
     >
       <ExpertTags expert={expert} />
       {expert.blockedReasons.length > 0 && (
-        <p className="expert-card-status">{blockedHint(expert)}</p>
+        <StatusNote tone="warning" message={blockedHint(expert)} />
       )}
     </Card>
   );
@@ -282,7 +283,7 @@ function ExpertRow({ expert, onSummon, onError, actions }: ExpertCardProps): Rea
     >
       <ExpertTags expert={expert} />
       {expert.blockedReasons.length > 0 && (
-        <p className="expert-card-status">{blockedHint(expert)}</p>
+        <StatusNote tone="warning" message={blockedHint(expert)} />
       )}
     </ListRow>
   );

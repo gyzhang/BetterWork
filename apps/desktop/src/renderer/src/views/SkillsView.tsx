@@ -14,6 +14,7 @@ import { ViewContainer } from '../components/layout/ViewContainer';
 import { ListRow } from '../components/ListRow';
 import { SectionHeader } from '../components/SectionHeader';
 import { DependencyPanel } from '../components/skills/DependencyPanel';
+import { StatusNote } from '../components/StatusNote';
 import { Switch } from '../components/Switch';
 import { SegmentedControl } from '../components/Tabs';
 import { TransientToast } from '../components/TransientToast';
@@ -323,13 +324,9 @@ function SkillDetail({
       <div className="skill-detail-section">
         <SectionHeader title="可运行性" />
         {skill.blockedReasons.length ? (
-          <ul className="skill-blocked-reasons">
-            {skill.blockedReasons.map((reason) => (
-              <li key={reason}>{reason}</li>
-            ))}
-          </ul>
+          <StatusNote tone="warning" problems={skill.blockedReasons} />
         ) : (
-          <p className="success-copy">当前没有阻塞原因。</p>
+          <StatusNote tone="success" message="当前没有阻塞原因。" />
         )}
         <Button
           variant="secondary"

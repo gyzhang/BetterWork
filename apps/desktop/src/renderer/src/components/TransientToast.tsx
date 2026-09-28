@@ -1,5 +1,5 @@
 import type { ReactNode, ReactPortal } from 'react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
 import { AlertIcon, CheckIcon, CloseIcon } from '../icons';
@@ -44,10 +44,18 @@ export function TransientToast({
   message: string;
   onDismiss: () => void;
 }): React.JSX.Element {
+  // 计时只认「这一条浮层是哪一句、哪一档」，不认 `onDismiss` 的标识：调用点写内联箭头时，
+  // 宿主每次重渲染都换一个函数，把它列进依赖等于每次重渲染都重新计时——运行中那 4s／6s
+  // 可能永远走不完。回调经 ref 转发，标识变化不再影响计时，触发的仍是最新那一个。
+  const dismissRef = useRef(onDismiss);
   useEffect(() => {
-    const timer = window.setTimeout(onDismiss, DURATION[tone]);
+    dismissRef.current = onDismiss;
+  }, [onDismiss]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => dismissRef.current(), DURATION[tone]);
     return () => window.clearTimeout(timer);
-  }, [onDismiss, tone, message]);
+  }, [tone, message]);
 
   return intoToastStack(
     <div className="toast" role="status">

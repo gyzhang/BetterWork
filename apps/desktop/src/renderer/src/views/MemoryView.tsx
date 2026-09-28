@@ -26,11 +26,12 @@ import type { MemoryEditorSubmission } from '../components/MemoryEditor';
 import { MemoryEditor } from '../components/MemoryEditor';
 import { MemorySuggestionList } from '../components/MemorySuggestionList';
 import { SectionHeader } from '../components/SectionHeader';
+import { StatusNote } from '../components/StatusNote';
 import { Tabs } from '../components/Tabs';
 import type { MemoriesState } from '../hooks/use-memories';
 import { newMemoryOperationId } from '../hooks/use-memories';
 import type { MemorySuggestionsState } from '../hooks/use-memory-suggestions';
-import { AlertIcon, PlusIcon } from '../icons';
+import { PlusIcon } from '../icons';
 import { trackAction } from '../lib/async-action';
 import {
   effectiveStatusLabel,
@@ -395,17 +396,21 @@ export function MemoryPage({
         />
       )}
       {state.projectionState !== undefined && state.projectionState !== 'synced' && (
-        <div className="memory-projection">
-          <AlertIcon size={13} />
-          <span>
-            {state.projectionState === 'pending'
+        // 保存成功但投影没跟上，是「你刚做的那一下」的结果，所以走反馈轴而不是状态轴
+        // （docs/10 §11.5.1 第二落点）。此前它自有一套 `--warning-soft` 的壳与 8px 缝。
+        <InlineError
+          tone="warning"
+          message={
+            state.projectionState === 'pending'
               ? '记忆已保存，Markdown 投影待重建。'
-              : '记忆已保存，但 Markdown 投影重建失败。数据库仍是真相源，可重试重建。'}
-          </span>
-          <Button variant="text" size="sm" type="button" onClick={rebuildProjection}>
-            重建投影
-          </Button>
-        </div>
+              : '记忆已保存，但 Markdown 投影重建失败。数据库仍是真相源，可重试重建。'
+          }
+          actions={
+            <Button variant="text" size="sm" type="button" onClick={rebuildProjection}>
+              重建投影
+            </Button>
+          }
+        />
       )}
 
       {state.warnings.length > 0 && (
@@ -415,20 +420,17 @@ export function MemoryPage({
       )}
 
       {(pendingConflictPairs > 0 || pendingDuplicateCandidates > 0) && (
-        <div className="memory-pending-governance" role="note">
-          <AlertIcon size={13} />
-          <span>
-            {[
-              pendingConflictPairs > 0 ? `${pendingConflictPairs} 组口径待澄清` : '',
-              pendingDuplicateCandidates > 0
-                ? `${pendingDuplicateCandidates} 条候选与已确认记忆重复`
-                : '',
-            ]
-              .filter((part) => part !== '')
-              .join(' · ')}
-            ：计数只是管理提示，请在「待确认」页签里裁决或拒绝。
-          </span>
-        </div>
+        <StatusNote
+          tone="warning"
+          message={`${[
+            pendingConflictPairs > 0 ? `${pendingConflictPairs} 组口径待澄清` : '',
+            pendingDuplicateCandidates > 0
+              ? `${pendingDuplicateCandidates} 条候选与已确认记忆重复`
+              : '',
+          ]
+            .filter((part) => part !== '')
+            .join(' · ')}：计数只是管理提示，请在「待确认」页签里裁决或拒绝。`}
+        />
       )}
 
       {suggestions && (
@@ -807,18 +809,20 @@ function MemoryRow({
       <p>{memory.content}</p>
       {memory.topicKey && <small>议题：{memory.topicKey}</small>}
       {dependencies !== undefined && (dependencies.materials > 0 || dependencies.memories > 0) && (
-        <small className="memory-dependencies">
-          依赖：资料 {dependencies.materials} 项 · 既有记忆 {dependencies.memories} 条
-          {memory.requiresMaterialSelection ? '；使用时仍需在本任务选入对应资料' : ''}
-        </small>
+        <StatusNote
+          message={`依赖：资料 ${dependencies.materials} 项 · 既有记忆 ${dependencies.memories} 条${
+            memory.requiresMaterialSelection ? '；使用时仍需在本任务选入对应资料' : ''
+          }`}
+        />
       )}
       {memory.requiresMaterialSelection && dependencies === undefined && (
-        <small className="memory-dependencies">使用时仍需在本任务选入对应资料。</small>
+        <StatusNote message="使用时仍需在本任务选入对应资料。" />
       )}
       {memory.duplicatesConfirmedMemoryId !== undefined && (
-        <small className="memory-duplicate-hint">
-          与已确认记忆重复：确认后会出现两条同口径记录，通常直接拒绝候选即可。
-        </small>
+        <StatusNote
+          tone="warning"
+          message="与已确认记忆重复：确认后会出现两条同口径记录，通常直接拒绝候选即可。"
+        />
       )}
       {memory.conflicts.map((pair) => (
         <ConflictPair
@@ -833,10 +837,12 @@ function MemoryRow({
         />
       ))}
       {!readOnly && memory.status === 'confirmed' && (
-        <small className="memory-policy-hint">
-          优先带入只免「词面命中」这一道门槛，不免范围、有效期、本任务排除、来源与冲突门禁；
-          调整会追加修订并只影响下次运行，也不表示模型一定采用。
-        </small>
+        <StatusNote
+          message={
+            '优先带入只免「词面命中」这一道门槛，不免范围、有效期、本任务排除、来源与冲突门禁；' +
+            '调整会追加修订并只影响下次运行，也不表示模型一定采用。'
+          }
+        />
       )}
     </ListRow>
   );

@@ -932,6 +932,8 @@ const RETIRED_UTILITY_CLASSES: {
   { pattern: /\.empty-models(?![-\w])/, name: '.empty-models', family: 'empty' },
   { pattern: /\.setting-placeholder(?![-\w])/, name: '.setting-placeholder', family: 'empty' },
   { pattern: /\.notification-empty(?![-\w])/, name: '.notification-empty', family: 'empty' },
+  { pattern: /\.context-placeholder(?![-\w])/, name: '.context-placeholder', family: 'empty' },
+  { pattern: /\.brief-empty(?![-\w])/, name: '.brief-empty', family: 'empty' },
   { pattern: /\.run-item(?![-\w])/, name: '.run-item', family: 'row' },
   { pattern: /\.notification-item(?![-\w])/, name: '.notification-item', family: 'row' },
   {
@@ -2671,9 +2673,12 @@ describe('反馈通道纪律', () => {
     // 用户关掉一处后读到的是「这个提示关不掉」。
     // `.page-toast-host` 与 `.toast-host` 在同一坐标各自 `position: fixed`，后渲染的整列
     // 盖住先渲染的，页面的短时确认会被全局通知压掉；两者已合并为 `#toast-stack` 一列。
-    // 后六个是同一个「带底色的内联错误条」的七套几何，已收成 `InlineError` 一处
-    // （docs/10 §10.1 台账）。`.action-note` 不在其中：它是按钮旁那句**纯文字**状态说明，
-    // 无底无内距，不是反馈表面，也不归本条管。
+    // 后七个是同一个「带底色的内联错误条」的七套几何，已收成 `InlineError` 一处
+    // （docs/10 §10.1 台账）。`.memory-projection` 是 2026-09-28 补漏抓到的第八个：
+    // 它自带 `--warning-soft` 底、`10px 12px` 内距，还在壳里手排「图标＋文字＋按钮」，
+    // 说的是「记忆已保存但投影没跟上」——一句动作结果，按 §11.5.1 归本基座。
+    // `.action-note` 曾在这一条外被划给状态轴，那是误判：它唯一的调用点写的是保存成果的
+    // 成功／失败，属反馈；两档现已按 §11.5.1 拆开，三条规则一并删除（见 §11.5.2）。
     const retiredSurfaces = [
       'action-error-banner',
       'page-toast-host',
@@ -2684,6 +2689,7 @@ describe('反馈通道纪律', () => {
       'knowledge-issues',
       'artifact-action-error',
       'memory-editor-problems',
+      'memory-projection',
     ];
     const offenders: string[] = [];
     for (const relative of pathsUnder('apps/desktop/src/renderer/')) {
@@ -2719,7 +2725,7 @@ describe('反馈通道纪律', () => {
 
   it('内联错误必须走 InlineError 基座', () => {
     // 基座之外留着 `role="alert"`，就是还有一处自己决定底色、字号与关闭路径的错误条。
-    // 35 处旧表面全部迁完之后，这条从「只降不升的存量清单」升级为绝对断言：
+    // 旧表面全部迁完之后，这条从「只降不升的存量清单」升级为绝对断言：
     // 只有第二落点（`InlineError`）与整页错误态（`EmptyState` 的 `ErrorPage`）可以自写它。
     const exempt: readonly string[] = [
       'apps/desktop/src/renderer/src/components/InlineError.tsx',
@@ -2738,6 +2744,202 @@ describe('反馈通道纪律', () => {
     // 下一个绕过基座的人以为「再加一行是这里的规矩」。
     const staleExemptions = exempt.filter((relative) => !read(relative).includes('role="alert"'));
     expect(staleExemptions, '豁免清单里有文件已经不再自写 role="alert"，把它删掉').toEqual([]);
+  });
+
+  it('短时浮层的自消计时不依赖 onDismiss 的标识', () => {
+    // `TransientToast` 承诺「4s／6s 后自己消失」。把 `onDismiss` 列进依赖数组就兑现不了这个
+    // 承诺：调用点写的是内联箭头（`onDismiss={() => setNote('')}`），宿主每次重渲染都换一个
+    // 函数标识，于是每次重渲染都把计时清零——运行中浮层可能永远不消失。这是 2026-09-28
+    // 核实的真缺陷，修法在基座（回调经 ref 转发）而不在调用点：包五个 `useCallback`
+    // 拦不住下一个页面。这条锁依赖数组的字面形状，同时兼作锚点——effect 被改写即红。
+    const relative = 'apps/desktop/src/renderer/src/components/TransientToast.tsx';
+    const source = read(relative);
+    const effect = /const timer = window\.setTimeout\([\s\S]*?\},\s*\[([^\]]*)\]\);/u.exec(source);
+    expect(
+      effect,
+      `${relative} 里那枚「一条浮层一枚自消计时器」的 effect 换了形状，请同步本条护栏`,
+    ).not.toBeNull();
+    const dependencies = (effect?.[1] ?? '')
+      .split(',')
+      .map((dependency) => dependency.trim())
+      .filter((dependency) => dependency.length > 0);
+    expect(
+      dependencies,
+      '自消计时只能由「换了哪一句、换了哪一档」重启；`onDismiss` 走 ref 转发，不进依赖（docs/10 §11.5.1）',
+    ).not.toContain('onDismiss');
+    expect(
+      /useRef[^\n]*\(onDismiss\)/u.test(source),
+      '回调必须由 ref 转发，否则最新那一个 `onDismiss` 不会被调用',
+    ).toBe(true);
+  });
+});
+
+describe('状态呈现纪律', () => {
+  // docs/10 §11.5.2：状态轴说「这个对象现在是什么」，反馈轴（§11.5.1）说「你刚做的那一下
+  // 怎么样了」。两轴各只有一个出口，否则同一句「现在如此」会散成八个类名、各写一遍语义字色。
+  const retiredStatusSurfaces = [
+    'success-copy',
+    'skill-blocked-reasons',
+    'expert-card-status',
+    'memory-duplicate-hint',
+    'memory-dependencies',
+    'memory-policy-hint',
+    'memory-pending-governance',
+    'appearance-note',
+    'action-note',
+  ];
+
+  it('已废弃的自造状态说明表面不得复活', () => {
+    // `.memory-pending-governance` 与 `.appearance-note` 借的是反馈表面的壳（`padding: 10px 12px`
+    // ＋ soft 底色），讲的却是一句常驻状态，读起来像「刚刚出事了」；`.success-copy` 的绿字
+    // 靠 `!important` 才盖得住容器的 `> p` 规则。三者都已并入 `StatusNote`。
+    const offenders: string[] = [];
+    for (const relative of pathsUnder('apps/desktop/src/renderer/')) {
+      if (!/\.(tsx|css)$/.test(relative) || /\.test\.tsx$/.test(relative)) continue;
+      const source = read(relative);
+      for (const name of retiredStatusSurfaces) {
+        const usedAsClass = new RegExp(`className[^\\n]*\\b${name}\\b`, 'u').test(source);
+        const styled = declarationsOf(relative).some(({ selector }) =>
+          selector
+            .split(',')
+            .map((part) => part.trim())
+            .some((part) => new RegExp(`\\.${name}(?![\\w-])`, 'u').test(part)),
+        );
+        if (usedAsClass || styled) offenders.push(`${relative} → .${name}`);
+      }
+    }
+    expect(offenders, '一句只读状态说明只能用 StatusNote（docs/10 §11.5.2、§10.1 台账）').toEqual(
+      [],
+    );
+  });
+
+  it('通用字色 utility 不得复活', () => {
+    // `.danger`／`.danger-text` 是「谁都能拿来给一句文字上红色」的裸工具类：
+    // 它们绕开 tone 档位，让状态色重新散回页面。ADR-0031 收口按钮时删掉了用法，
+    // 规则本身留到本轮才清掉，源码里已零引用——留着就是下一条内联成功通道的入口。
+    const styles = cssPaths().find((relative) => relative.endsWith('styles.css')) ?? '';
+    const offenders = declarationsOf(styles)
+      .filter(({ selector }) =>
+        selector
+          .split(',')
+          .map((part) => part.trim())
+          .some((part) => /^\.danger(-text)?(?![\w-])/u.test(part)),
+      )
+      .map((declaration) => locate(declaration, styles));
+    expect(
+      offenders,
+      '语义状态色只能由四个出口或登记清单给，不给「裸色类」留第二条路（docs/10 §11.5.2）',
+    ).toEqual([]);
+  });
+
+  it('StatusNote 基座不长出表面，档位只有四档', () => {
+    const styles = cssPaths().find((relative) => relative.endsWith('styles.css')) ?? '';
+    // 「裸类」只指不带 tone 属性的那一条——配色本来就归 `[data-tone]` 档位给。
+    const isBare = (selector: string): boolean =>
+      selector
+        .split(',')
+        .map((part) => part.trim())
+        .some((part) => /^\.status-note(?![\w-])$/u.test(part));
+    const isToneSlot = (selector: string): boolean =>
+      selector
+        .split(',')
+        .map((part) => part.trim())
+        .some((part) => /^\.status-note(?![\w-])\s*\[[^\]]*\]$/u.test(part));
+    // 有底、有内距、自带上下缝，它就变成第二个 `InlineError`——而 §11.5.1 明确禁止
+    // 常驻内联块长出一个成功态。
+    const surfaceOffenders = declarationsOf(styles)
+      .filter(({ selector }) => isBare(selector))
+      .filter(({ property }) =>
+        ['color', 'background', 'padding', 'margin'].some((head) => property.startsWith(head)),
+      )
+      .map((declaration) => locate(declaration, styles));
+    expect(
+      surfaceOffenders,
+      '`.status-note` 裸类不出底色与上下缝：配色归 tone 档位，缝归容器（docs/10 §9.8、§11.5.2）',
+    ).toEqual([]);
+
+    const tones = [
+      ...new Set(
+        declarationsOf(styles)
+          .filter(({ selector }) => isToneSlot(selector))
+          .map(({ selector }) => /data-tone='([^']+)'/u.exec(selector)?.[1])
+          .filter((tone) => tone !== undefined),
+      ),
+    ].sort();
+    expect(
+      tones,
+      '档位是 neutral／success／warning／danger 四档；`--info` 属通知等级词汇，不补第五档',
+    ).toEqual(['danger', 'neutral', 'success', 'warning']);
+  });
+
+  it('语义状态色只能由四个出口给，其余逐条登记理由', () => {
+    // 「一句状态说明」此前有八个类名各写一遍 `color: var(--warning)`，同一种「要注意」
+    // 在不同页面有不同的红。这条把剩下的每一处都点名：不是基座档位，就得给出不复用的理由。
+    const styles = cssPaths().find((relative) => relative.endsWith('styles.css')) ?? '';
+    const colored = declarationsOf(styles).filter(
+      ({ property, value }) =>
+        property === 'color' && /^var\(--(?:success|warning|danger)\)$/u.test(value),
+    );
+    const exits: readonly (readonly [RegExp, string])[] = [
+      [/^\.badge\[data-tone='\w+'\]$/u, 'Badge 的 tone 档位（§10.1）'],
+      [/^\.inline-error\[data-tone='\w+'\]$/u, 'InlineError 的 tone 档位（§11.5.1）'],
+      [/^\.status-note\[data-tone='\w+'\]$/u, 'StatusNote 的 tone 档位（§11.5.2）'],
+      [/^\.btn\[data-variant='\w+'\]\[data-tone='\w+'\]$/u, 'Button 的 tone 档位（ADR-0031）'],
+      [/^\.popover-menu-item\.danger$/u, '菜单里的破坏性动作项，由 PopoverMenu 基座出档'],
+      [/^\.binding-chip\[data-tone='danger'\]$/u, 'BindingChip 的 tone 档位'],
+    ];
+    const exceptions: Record<string, string> = {
+      '.suggestion-facts .warn': '建议卡事实行里的一段要注意文字，随事实折行不独立成行',
+      '.error-page-icon': '整页错误态的图标色，不给文字',
+      '.dependency-warning':
+        'Field 的 hint 是 <span>，块级基座放进去是非法 HTML，只能是一段带色文字（§11.5.2）',
+      '.memory-source-available':
+        'meta 行里的来源状态词，由 memory-source-${availability} 模板组合',
+      '.memory-source-unavailable': '同上',
+      '.memory-source-review-required': '同上',
+      '.memory-policy-pinned': '优先带入的策略徽片，有意不冒充状态结论',
+      '.memory-conflict.conflict-unresolved > strong': '冲突条的领域强调，讲的是这一对的裁决状态',
+      '.memory-editor small.over': '字数超限的计数提示，住在进场内右端',
+      '.level-success': '通知等级色块（aria-hidden 的图标容器），不是状态说明',
+      '.level-error': '同上',
+      '.level-warning': '同上',
+      '.tool-failure-count': '工作过程条里的失败计数',
+      '.tool-pill.failed .tool-pill-status': '工具条的状态文字，由状态类组合',
+      '.tool-pill.completed .tool-pill-status': '同上',
+    };
+    const offenders: string[] = [];
+    const hitExceptions = new Set<string>();
+    for (const declaration of colored) {
+      for (const part of declaration.selector
+        .split(',')
+        .map((raw) => raw.trim())
+        .filter((raw) => raw.length > 0)) {
+        if (exits.some(([pattern]) => pattern.test(part))) continue;
+        const reason = exceptions[part];
+        if (reason === undefined) {
+          offenders.push(locate(declaration, styles));
+          continue;
+        }
+        hitExceptions.add(part);
+      }
+    }
+    expect(
+      offenders,
+      '未登记的语义状态字色：新增一行状态说明请用 StatusNote，别的形态先补 docs/10 §11.5.2（清单见本条）',
+    ).toEqual([]);
+
+    // 清单自核：登记过的选择器已经不在样式表里，说明这条护栏已经空跑，删掉死条目而不是留着。
+    const stale = Object.keys(exceptions).filter(
+      (part) =>
+        !hitExceptions.has(part) &&
+        !colored.some(({ selector }) =>
+          selector
+            .split(',')
+            .map((raw) => raw.trim())
+            .includes(part),
+        ),
+    );
+    expect(stale, '登记清单里有选择器已经不存在，把它从清单删掉').toEqual([]);
   });
 });
 

@@ -69,7 +69,7 @@
 | P3-8 | 裸标题例外处数 | `docs/10:671` 同段并存「两处登记例外」与「三处例外」；`rules/ui:24` 写三处 | 护栏是**两张表**：TSX 侧 `HEADING_FILE_EXEMPTIONS` 2 项、CSS 侧 `HEADING_RULE_OWNERS`。两份文档都把两张表当一张 |
 | P3-9 | 字号下限 | `AGENTS.md:120`＋`rules/ui:17`「9–10px」／`docs/10:436`「9–11px」／`docs/12:166`＋护栏「12px」 | 12px（护栏 `standards:443`） |
 | P3-10 | 硬编码色值例外 | `AGENTS.md:122` 零例外／`docs/10:949`「只剩色系预览卡一处」／`rules/code-style:30` 四处／`docs/12:193` 三项且混入字号豁免 | `rules/code-style:30`（与护栏两套机制一致：CSS 侧 `SWATCH_SELECTOR`＋TS 侧 `allowedFiles` 三文件） |
-| P3-11 | IPC 收口判据 | `AGENTS.md:131`＋`rules/code-style:24`「按失败要不要让用户看见」 vs `docs/12:160`＋`rules/ui:44`＋`docs/10:833`「按是否已有内联／浮层承载」 | 后者（更新的判据，且配护栏「同一动作链既写内联又上传全局即失败」） |
+| P3-11 | IPC 收口判据 | `AGENTS.md:131`＋`rules/code-style:24`「按失败要不要让用户看见」 vs `docs/12:160`＋`rules/ui:44`＋`docs/10:833`「按是否已有内联／浮层承载」 | 后者（更新的判据）。**2026-09-29 更正**：本行原文还写了「且配护栏『同一动作链既写内联又上传全局即失败』」——`standards/coding-standard.test.ts` 里没有这条 `it()`，是主线自己写下的假声明（正是本文 P2 类「文档声明与强制点断线」的同一病灶，出现在账本自己身上）。docs/10 §11.5.1 的「护栏锁四条」同步改准：该判据静态测不到（要跨调用链做数据流分析），只能靠评审 |
 | P3-12 | 图标 SVG 例外 | `docs/12:169` 无例外 vs `rules/ui:18`「品牌字标与格式徽标除外」 | 后者（实现里品牌字标确为文字） |
 | P3-13 | 定宽列宽度 | `rules/ui:35`＋`docs/10:446`「宽度写死」 vs `docs/10:279/282`「可在 220–320／340–440px 调整」（§8.1 又注「拖拽未实现」） | 写死。删掉可调整那句或标明未实现 |
 | P3-14 | 空态档数 | `docs/10:643` 两档 vs `rules/ui:20`＋`docs/10:673` 三档 | 三档（`EmptyState.tsx` 导出五个） |
@@ -80,15 +80,16 @@
 
 ## 5. P4 只登记，本轮不实施
 
-- **9 个基座无同名测试**：`InlineError`（全仓 38 处调用的唯一出口）、`TransientToast`、`FieldSelect`、`MemoryCaptureSource`、`ModelEditorSheet`、`Welcome`、`WorkspaceGroupList`、`WorkspaceIdentityDialog`、`WorkspaceSelector`。
+- **8 个基座无同名测试**（2026-09-29 由 9 减为 8：`TransientToast` 已补，见 §7 的 C3）：`InlineError`（全仓 38 处调用的唯一出口）、`FieldSelect`、`MemoryCaptureSource`、`ModelEditorSheet`、`Welcome`、`WorkspaceGroupList`、`WorkspaceIdentityDialog`、`WorkspaceSelector`。
 - **R3-D 遗留**：`ContextPanel.tsx` 25 个局部组件下沉、`ArtifactCard` 两份合并、`ListRow` 缺「整行可点＋卡片底部动作区」档（`.expert-card`／`.skill-card` 因此各写一套）、容器后代选择器发的皮改具名皮。
-- **被回退那轮的四条已核实缺陷**（成品在 `/tmp/bw-status-axis-20260928/`，`tracked.patch` 832 行＋两个新文件）：`.memory-*-hint` 字色被 `.memory-row small` 特异性吞；`TransientToast` 自消 `useEffect` 把内联箭头 `onDismiss` 列为依赖，运行中每次重渲染都重新计时；`.memory-projection` 是反馈收口漏掉的第 8 个带底错误条；`.action-note` 实为动作结果（＝P2-1 的根因）。
+- ~~**被回退那轮的四条已核实缺陷**~~ **四条已全部落地（2026-09-29，见 §7 的 C1–C4）**：`.memory-*-hint` 字色被 `.memory-row small` 特异性吞（换基座后 tone 由 `[data-tone]` 出，才真落得上）；`TransientToast` 自消 `useEffect` 把内联箭头 `onDismiss` 列为依赖（**修法改在基座**：回调经 ref 转发，依赖只剩 `[tone, message]`——包五个 `useCallback` 拦不住下一个页面，全仓当时还有 3 处内联箭头没被那轮的 patch 覆盖）；`.memory-projection` 是反馈收口漏掉的第 8 个带底错误条（迁进 `InlineError`）；`.action-note` 实为动作结果（拆成失败进 `InlineError`、成功进 `TransientToast`，三条规则删除）。成品备份仍在 `/tmp/bw-status-axis-20260928/`。
 - `docs/10` §3／§4 无子节编号，是 P2-10 那 15 处引用落空的根因。
 - **护栏只校验 `tone` 的值集合，不校验 `tone` × `variant` 矩阵**（`standards:2124` 只做三组档位穷举相等）：写 `variant="primary" tone="danger"` 不会红，但 CSS 里没有这条组合规则，语义色静默无效。要不要补一条矩阵护栏交光哥拍板。
 - **护栏判据盲区：状态片的判据只看类名尾词，元素选择器不参与匹配**（`standards:1543-1566`，判据是「选择器里出现的类名以 `chip|badge|status|state|kind|pill` 结尾」）。`DiscussionCheckpointPanel.tsx:186` 的 `<span data-status>` 因此逃过「只读状态片必须由 Badge 画」——它的选择器是 `.discussion-checkpoint-history span`，唯一类名不以那些词结尾。附带：`data-status` 在 `styles.css` **0 命中**，该属性当前不驱动任何外观（死属性）。要不要把判据扩到「元素选择器 ＋ 片状三件套」交光哥拍板。
 - **`DiscussionCheckpointPanel.tsx:147-165` 手写复选框组未走 `CheckList`**：`<fieldset>`＋`.map()` 出 `<label><input type="checkbox">`，而 `CheckList.tsx:16-18` 的注释正好写了这种场景的用法（已在 `<fieldset><legend>` 里就不传 `label`）。护栏 `standards:788` 只把 `.discussion-checkpoint-artifacts label` 登记进 label 排版豁免，**豁免的不是结构**，所以门禁不红。
-- **`WorkspaceBrief` 的空态自造，但与既有登记打架（已拍板 2026-09-29）**：`:73-79`／`:84-94` 的 `.context-placeholder`（`<strong>`＋`<p>`）与 `EmptyNotice` 的 block 档结构逐字同形，`:114`／`:150` 的 `.brief-empty` 同 line 档；但 `.context-placeholder` 已在 `ContextPanel.test.tsx:740` 与 docs/10 §9.8 登记为上下文面板认可的**分段内缩壳**。两条口径一个管「谁给水平内缩」、一个管「空态由谁渲染」，在此冲突；两个类都不在 `RETIRED_UTILITY_CLASSES` 里，现状不会被拦。**光哥判定：空态归 `EmptyNotice`**（即判为漏迁，不是有意例外）——改用 `EmptyNotice`，水平内缩另由分段壳负责，两件事拆开。落地时要同步改 `ContextPanel.test.tsx`「上下文面板的分段内缩」清单与 docs/10 §9.8 的壳清单说明。
+- ~~**`WorkspaceBrief` 的空态自造，但与既有登记打架**~~ **已落地（2026-09-29，光哥拍板：判为漏迁，不是有意例外）**：四处空态（`:73-79`／`:84-94` 的 `.context-placeholder`＝`EmptyNotice` block 档同形，`:114`／`:150` 的 `.brief-empty`＝line 档同形）改用 `EmptyNotice`；「谁给水平内缩」与「空态由谁渲染」因此拆开——内缩仍由已登记的 `.brief-panel` 这件分段壳负责，两个自造类删除并进 `RETIRED_UTILITY_CLASSES`（`empty` 族）。同步改完 `ContextPanel.test.tsx:736` 的 `INSET_OWNERS`（删 `context-placeholder` 一行、`brief-panel` 的理由补上「简报空态也套这件壳」）、docs/10 §9.8 的壳清单（改为以 `INSET_OWNERS` 为唯一清单，不再在正文复述件数）、`.qoder/rules/betterwork-ui.md` 的同条。
 - **`MemorySuggestionList.tsx:100-108`** 候选为空时写 `<p className="context-hint">` 而非 `EmptyNotice`（轻微：`.context-hint` 是通用提示类，`ContextPanel` 13 处在用，不是占位专用类）。
+- **`MemoryView.tsx:984` 用内容当 React key**：`<li key={line}>{line}</li>`，两行文字相同时 key 重复。2026-09-29 跑 `MemoryView.test.tsx`（MI07 冲突来源回看那例）时 React 打出实测警告「Encountered two children with the same key … may cause children to be duplicated and/or omitted」。**经核不是本轮引入**：`git show HEAD:` 与本轮工作树的 `key=` 集合逐字相同（只有行号平移）。修法是一行（`key={`${index}:${line}`}`），但它改的是列表协调行为、与状态轴无关，留待拍板。
 - **`MemoryCaptureSource` 的可及名称有竞争**：包裹式 `Field` 的标签被 `<textarea aria-label="回答原文">`（`:51`／`:57`）覆盖，读屏听到的是后者。
 - **`WorkspaceSelector` 生产路径零覆盖**：无同名测试，`Composer.test.tsx:26` 传的是桩 `workspacePicker`。它是输入区顶部的空间入口，改坏了没有测试会红。
 - **同一条规则在 docs/10 内部写两遍**（台账行 ＋ 正文段）是本轮实测踩到的坑：修 `tone` 时先改了正文、漏了台账行，靠回读 grep 才发现。凡改这类规则，必须同时 grep 台账行与正文段两处。
@@ -121,13 +122,25 @@
 | B7′ | P2-3：台账补 7 行（`WorkspaceSelector`／`WorkspaceIdentityDialog`／`ComposerCapabilityPicker`／`DiscussionCheckpointPanel`／`MemoryCaptureSource`／`MemorySuggestionList`／`WorkspaceBrief`），台账 38→**45 行**。**判定：7 个都不是「跨视图基座」**——只有 `MemorySuggestionList` 有两个生产消费者（`ContextPanel:228`、`MemoryView:435`），其余各一个。但按既有口径它们**仍应登记**：那条「单消费者不抽」的判据是「抽出来会不会制造第二处真相」（`SettingsLayout` 是三行壳、`ModelProfileRow` 就是 `ListRow` 填槽），不是消费者数量；这 6 个各自承载不可归约的领域推导。台账已有先例（`McpToolBindingsPicker` 行明写「不是新基座，是 `CheckList` 之上的领域组件」），7 行照此措辞登记。顺带修两处：`Composer` 行的「工作区两颗按钮（打开本地文件夹／新建工作区）」已过期（`App.tsx` 里 `selectDirectory` 0 命中，2026-09-28 合并成唯一入口 `onNewWorkspace`）；台账表被一行散文与两处空行**从中间截断**，45 行的表渲染成三块 | ✅ 护栏 90/90 绿 |
 | B8 | 收口：全量 `npm run verify` **EXIT=1，归因并发争抢、非本轮回归**——`lint`／`format:check`／`typecheck` 三关全过，`test` 阶段 15 条失败**全是超时、断言失败 0 条**（13 条撞 5s，`mac-process-supervisor` 连 40s 的都撞线），跑时负载 37.26。取证三步：6 文件串行复跑 → 5 个全绿、只剩 `App.test.tsx` 2 条超时**且红的用例与全量跑时那 6 条完全不同**（红项轮换）；`App.test.tsx` 单独跑 → **35/35 绿**（43.27s，负载 14.04）；`git diff 8ce9d7f..HEAD -- apps packages` → 本轮对生产源码只动了 **2 文件 3 行 JSDoc 注释**。未改阈值、未跳用例、未写成「已绿」。当日日志 `docs/logs/2026-09-29.md`；记忆已更新（工作空间身份改为已落地、核对法补入本轮判据、被回退那轮加接手指针） | ✅ |
 | B9 | **门禁构成问题（新浮出，待拍板）**：`App.test.tsx` 整文件渲染全应用，同文件里已有用例被显式放宽到 15s、其余仍吃 5s 默认值，只要机器有别的会话在跑，红哪几条就是随机的。可选：把重型渲染文件挪进串行档（与 `*.bench.test.ts` 同机制、不同项目）／给整文件一个 `describe` 级统一超时／在 `verify` 里对它单独串行一遍。**不是本轮引入的，也不该靠调阈值掩盖** | ⬜ |
+| C1 | **接回被回退那轮的成品**：`git apply` 分三段——先 `--check` 逐段验，渲染层 7 文件与 `standards/` 两段都干净直应用；docs/10 两段**手写**（patch 在这里冲突：它基于更早的文本，而 B5 已把同一处措辞改准为「已查出、尚未收口」）。两个新文件 `cp` 回 `components/`。落地前先量负载：12.32，故本轮**不在批次中途跑全量 verify** | ✅ |
+| C2 | **状态轴落地**：`StatusNote` 基座＋8 处收编；`.memory-projection`（第 8 个带底错误条）迁 `InlineError`；`.action-note` 三条规则连同唯一调用点拆给 `TransientToast`／`InlineError`；`.danger`／`.danger-text` 两条裸字色 utility 清掉（源码零引用，留着就是下一条内联成功通道的入口） | ✅ |
+| C3 | **`TransientToast` 的自消缺陷修在基座**：那轮的 patch 只把 `App.tsx` 两处 `onDismiss` 包进 `useCallback`，实测全仓还有 3 处内联箭头（`App.tsx:1830`、`WorkspaceBrief.tsx:181`、`ArtifactView.tsx:844`）没被覆盖——同一类缺陷没在共享层收口。改为回调经 ref 转发、依赖只剩 `[tone, message]`，并补同名测试 5 例（P4「9 个基座无测试」→**8**）。`App.tsx` 那两个 `useCallback` 随之撤回：基座修好后它们的注释「回调必须稳定」就成了仓库里的假陈述 | ✅ |
+| C4 | **`WorkspaceBrief` 四处空态归 `EmptyNotice`**（光哥已拍板），`.context-placeholder`／`.brief-empty` 退役进 `empty` 族；`INSET_OWNERS`、docs/10 §9.8、规则文件三处同步 | ✅ |
+| C5 | 护栏 90→**95**（「状态呈现纪律」4 条＋「反馈通道纪律」1 条），**变异验证 9 发**逐条自证：M1 复活 `.appearance-note` → 1 红；M2 复活 `.danger` → 1 红；M3 给 `.status-note` 加 padding → 1 红；M3b 加 `[data-tone='info']` 第五档 → 1 红；M4 加未登记语义字色 → 1 红（**第一发不净**：拿已存在的 `.brief-note` 注入，连带触发「独立类选择器不得被拆成两处」，换新类名重跑才是 1 红）；M4b 把已登记例外的字色改掉 → 1 红且报的是**清单自核**那句；M5 把 `onDismiss` 塞回依赖 → 恰好 2 红（护栏＋组件测试，后者的报错正是旧行为「累计 6s 一次都没调用」）；M5b 拆掉 ref 转发 → 1 红；M6 复活 `.context-placeholder` → 1 红。还原后 `diff` 对生产源码为空 | ✅ |
+| C6 | **文档对齐**：docs/10 台账补 `StatusNote` 行（45→**46**）＋ 更正 `InlineError` 行那句「`.action-note` 已删」（实际当时没删干净，本轮才删）＋ 新增 §11.5.2 ＋ §11.5.1 的「护栏锁四条」改准；docs/12 §8 补状态轴一段与「计时器 effect 的依赖不是回调标识」判据；`.qoder/rules/betterwork-ui.md` 的 `.action-note` 误判作废、补 `StatusNote` 条与「内缩／空态是两件事」 | ✅ |
+| — | 门禁（按 §6 车道，负载 12.32 下不跑全量）：`npm run typecheck` **EXIT=0**；改动文件 `eslint` **EXIT=0**、`prettier --check` 干净；`vitest run --no-file-parallelism` 10 文件（护栏＋`TransientToast`＋`StatusNote`＋`ContextPanel`＋`DependencyPanel`＋`MemoryView`／`SettingsView`／`SkillsView`／`KnowledgeView`／`ArtifactView`）→ **202 passed / EXIT=0**。**收口全量 `npm run verify` EXIT=0**（07:54 负载 2.33，五关全过，169 文件 / 1601 用例全绿；对基线 167／1586 是 +2 文件 / +15 用例，恰为两个新测试文件与 5 条新护栏，算术闭合） | ✅ |
 
-## 8. 下一轮（2026-09-29 光哥拍板）
+## 8. 下一轮
 
-**先动状态呈现轴**：接回 `/tmp/bw-status-axis-20260928/` 的成品（`tracked.patch` 832 行＋`StatusNote.tsx`＋`StatusNote.test.tsx`）。理由是它修的是用户看得见的真缺陷，不是整洁度：`.memory-*-hint` 的字色被 `.memory-row small` 的特异性吞掉，「与已确认记忆重复」那行**从来没红过**；`TransientToast` 的自消 `useEffect` 把内联箭头 `onDismiss` 列为依赖，运行中每次重渲染都重新计时，「6s 自消」可能永不触发。
+§8 原先写的「先动状态呈现轴」已于 2026-09-29 落地（C1–C6）。**「一句界面文字该由谁出口」这条轴到此收完**：反馈轴（§11.5.1）与状态轴（§11.5.2）各立一条，两轴各只有一个出口组件，任何一句界面文字都能被问到「它是哪一轴的、由谁渲染」。
 
-落地时按本轮的车道规则分批：上一轮就是被「负载 >10 的机器上把全量门禁当提交必经之路」拖垮的（负载 26→9→20→56→150，全量测试每次换一组红项，单文件复跑却绿）。**先谈定哪些门本轮必跑、哪些留证明文补跑**，别在第三次红项轮换时才说明。
+剩下按优先级排的候选，都还**待光哥派发**：
 
-同一轮顺带做掉两件已拍板的小事：`WorkspaceBrief` 空态归 `EmptyNotice`（见 §5，含 `ContextPanel.test.tsx` 壳清单与 docs/10 §9.8 的同步）；`.action-note` 按 §11.5.1 三问拆给 `TransientToast`／`InlineError`（docs/10 的措辞本轮已改准为「尚未收口」）。
+1. **R3-D 大块**（P4 里唯一还剩的结构性欠账）：`ContextPanel.tsx` 25 个局部组件下沉、`ArtifactCard` 两份合并、`ListRow` 缺「整行可点＋卡片底部动作区」档（`.expert-card`／`.skill-card` 因此各写一套）、容器后代选择器发的皮改具名皮。
+2. **8 个基座补同名测试**，`InlineError` 优先（全仓 38 处调用的唯一出口，改坏了没有测试会红）。
+3. **B9 门禁构成**：`App.test.tsx` 整文件渲染全应用、超时档位不齐，红哪几条随机器负载而变。这个不解决，每一轮的收口取证都要重做一遍。
+4. **护栏判据补强**：`tone` × `variant` 矩阵、状态片判据的元素选择器盲区（`DiscussionCheckpointPanel` 的 `<span data-status>` 逃过 Badge 那条，且 `data-status` 在 CSS 0 命中＝死属性）、`DiscussionCheckpointPanel:147-165` 手写复选框组未走 `CheckList`。
+5. **零碎**：`MemoryView.tsx:984` 用内容当 React key（实测已打出重复 key 警告）；`MemorySuggestionList` 的空态未走 `EmptyNotice`；`MemoryCaptureSource` 的可及名称被内层 `aria-label` 覆盖；`WorkspaceSelector` 生产路径零覆盖。
+6. **`betterwork-code-style.md` 的自我声明**（仍未拍板）：它自称「只是速查入口、不复述也不另立标准」，实际 14 条是完整规则正文并已因复述产生过一次口径分叉（IPC 判据）。降级成指针会牺牲速查性；保留则要改那句声明，并加「改规则必须同步两处」的硬约束。
 
-**仍挂着未拍板**：`betterwork-code-style.md` 自称「只是速查入口、不复述也不另立标准」，实际 14 条是完整规则正文并已因复述产生过一次口径分叉（IPC 判据）——降级成指针会牺牲速查性，保留则要改那句自我声明并加「改规则必须同步两处」的约束。其余排进任务板的档：护栏判据补强（`tone`×`variant` 矩阵、状态片元素选择器盲区、`DiscussionCheckpointPanel` 两处复用）、9 个基座补测试、R3-D 大块。
+**本轮新沉淀的一条判据**：文档里写「已配护栏」之前，必须 `grep` 到那条 `it()` 的标题。P3-11 那行假声明是主线自己上一轮写下的——账本也会犯它正在查的那种错。

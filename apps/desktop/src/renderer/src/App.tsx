@@ -1498,17 +1498,6 @@ export function App(): React.JSX.Element {
                                           ? '已保存为成果'
                                           : '保存为成果'}
                                       </Button>
-                                      {artifactNote && (
-                                        <span
-                                          className={
-                                            artifactNote.tone === 'ok'
-                                              ? 'action-note ok'
-                                              : 'action-note error'
-                                          }
-                                        >
-                                          {artifactNote.text}
-                                        </span>
-                                      )}
                                     </>
                                   ) : undefined
                                 }
@@ -1517,6 +1506,22 @@ export function App(): React.JSX.Element {
                             {runFailure?.type === 'run.failed' && (
                               <InlineError
                                 message={`本次运行未完成，回复内容未登记为正式成果。${runFailure.error ?? ''}`}
+                              />
+                            )}
+                            {/* 「保存为成果」的失败需要停留并让人据此重试，属 §11.5.1 第二落点；
+                                成功那句改走自消浮层（同一处只留一个落点）。原先两档都写在按钮旁
+                                那句 `.action-note` 里，等于一条常驻的内联成功通道。 */}
+                            {artifactNote?.tone === 'error' && (
+                              <InlineError
+                                message={artifactNote.text}
+                                onDismiss={() => setArtifactNote(undefined)}
+                              />
+                            )}
+                            {artifactNote?.tone === 'ok' && (
+                              <TransientToast
+                                tone="success"
+                                message={artifactNote.text}
+                                onDismiss={() => setArtifactNote(undefined)}
                               />
                             )}
                             {memoryCapture?.runId === run.id && (

@@ -736,8 +736,7 @@ describe('上下文面板的分段内缩', () => {
   const INSET_OWNERS: ReadonlyArray<readonly [string, string]> = [
     ['context-section', '小节壳：13px 14px 12px ＋ 分隔线，面板里绝大多数段落'],
     ['activity-list', '过程页的列表壳：17px 15px'],
-    ['brief-panel', '简报壳：13px 14px 16px'],
-    ['context-placeholder', '简报空态：26px 18px 的居中文案'],
+    ['brief-panel', '简报壳：13px 14px 16px（简报的空态也套这件壳，空态本身由 EmptyNotice 渲染）'],
     ['empty-context', '区域级空态基座：自带 28px 内距并居中'],
     [
       'inline-error',

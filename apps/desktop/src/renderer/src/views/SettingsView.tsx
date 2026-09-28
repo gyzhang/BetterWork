@@ -25,6 +25,7 @@ import { InlineError } from '../components/InlineError';
 import { ListRow } from '../components/ListRow';
 import { type NavEntry, NavList } from '../components/NavList';
 import { SectionHeader } from '../components/SectionHeader';
+import { StatusNote } from '../components/StatusNote';
 import { Switch } from '../components/Switch';
 import { SegmentedControl } from '../components/Tabs';
 import { TransientToast } from '../components/TransientToast';
@@ -33,7 +34,7 @@ import type { MemoriesState } from '../hooks/use-memories';
 import type { MemorySuggestionsState } from '../hooks/use-memory-suggestions';
 import { useSearchEngineSettings } from '../hooks/use-search-engine-settings';
 import { useTransientToast } from '../hooks/use-transient-toast';
-import { CheckIcon, PlusIcon } from '../icons';
+import { PlusIcon } from '../icons';
 import { reportAction, trackAction } from '../lib/async-action';
 import { connectionStatusName, roleName } from '../lib/labels';
 import type { SettingsTab } from '../lib/view-types';
@@ -306,14 +307,7 @@ function AppearanceSettings({
           ))}
         </div>
       </section>
-      <div className="appearance-note">
-        <span>
-          <CheckIcon size={13} />
-        </span>
-        <p>
-          所有色系都提供浅色与深色 Variant。应用换肤不会改变 Word、PPT、Excel 和其他成果自身的配色。
-        </p>
-      </div>
+      <StatusNote message="所有色系都提供浅色与深色 Variant。应用换肤不会改变 Word、PPT、Excel 和其他成果自身的配色。" />
     </section>
   );
 }

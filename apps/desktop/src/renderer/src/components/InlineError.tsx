@@ -31,12 +31,16 @@ export interface InlineErrorProps {
 /**
  * 内联反馈的唯一出口（docs/10 §11.5.1 第二落点）。
  *
- * 在它之前，「一条带底色的错误条」有七套几何：`.inline-message.error` 与
+ * 在它之前，「一条带底色的错误条」有八套几何：`.inline-message.error` 与
  * `.artifact-action-error` 是 `9px 11px`，`.knowledge-issues` 与 `.memory-warnings` 是
  * `10px 12px`，`.tool-detail-error` 是 `8px` 且没有圆角也没有字号，`.field-error` 只借
- * 字色与底，`.action-note.error` 连底都没有。动作更有三种摆法——`float: right`、
- * `margin-top: 8px`、以及干脆写在正文里。同一件事的七处真相与 ADR-0031 收口前的
- * Button 同源：类名方案拦不住下一个页面再造一套。
+ * 字色与底，`.memory-projection` 是 `10px 12px` 配 `--warning-soft`，`.action-note.error`
+ * 连底都没有。动作更有三种摆法——`float: right`、`margin-top: 8px`、以及干脆写在正文里。
+ * 同一件事的八处真相与 ADR-0031 收口前的 Button 同源：类名方案拦不住下一个页面再造一套。
+ *
+ * 2026-09-28 那轮收掉六套，剩下两处 2026-09-29 才补：`.memory-projection` 当时不在扫描
+ * 清单里；`.action-note.error` 曾被算作已迁入，实际类与调用点都还在——它无底无内距，讲的是
+ * 「保存成果」那一下的结果，按 §11.5.1 归这里，成功那一档则归 `TransientToast`。
  */
 export function InlineError({
   message,
