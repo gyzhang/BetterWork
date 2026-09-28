@@ -79,7 +79,7 @@ const inputSourceLabel = (input: ArtifactInput): string => {
   if (input.kind === 'evidence') return '证据';
   if (input.kind === 'knowledge-revision') return '文档级依据，非全文已读';
   if (input.kind === 'artifact-version') return '成果版本';
-  return '工作区输入';
+  return '工作空间输入';
 };
 
 const VALIDATION_LABEL: Record<ValidationStatus, string> = {

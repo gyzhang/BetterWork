@@ -173,7 +173,7 @@ export const FolderIcon = (props: IconProps): React.JSX.Element => (
   </Icon>
 );
 
-/* ——— 工作空间图标集（docs/10 §9.4）：形状承载「这是哪类持续工作」，颜色承载身份。 ——— */
+/* ——— 工作空间图标集（docs/10 §9.12）：形状承载「这是哪类持续工作」，颜色承载身份。 ——— */
 
 export const WorkspaceDocIcon = (props: IconProps): React.JSX.Element => (
   <Icon {...props}>

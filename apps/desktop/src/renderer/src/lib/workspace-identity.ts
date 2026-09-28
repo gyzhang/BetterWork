@@ -3,7 +3,7 @@ import type { WorkspaceAccentId } from '@betterwork/agent-protocol';
 /**
  * 取一档工作空间身份色。
  *
- * 色值只住在 `styles.css` 的明暗两套 Variant 里（docs/10 §9.4），这里负责把档位 id
+ * 色值只住在 `styles.css` 的明暗两套 Variant 里（docs/10 §9.12），这里负责把档位 id
  * 换成对它的引用——侧栏的行与对话框里的色板因此画的是同一个颜色，而不是各抄一份十六进制。
  */
 export const workspaceAccentVar = (accentId: WorkspaceAccentId): string => `var(--ws-${accentId})`;

@@ -74,7 +74,7 @@ const materialTitle = (
   if (candidate) return candidate.title;
   if (selection.reference.kind === 'knowledge-revision') return '知识修订';
   if (selection.reference.kind === 'artifact-version') return '成果版本';
-  return '工作区文件';
+  return '工作空间文件';
 };
 
 const computeSkillStatus = (skill: SkillSummary): CapabilityChip['status'] => {

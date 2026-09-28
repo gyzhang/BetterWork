@@ -113,7 +113,7 @@ const inputSnapshotCandidate = (snapshot: InputSnapshot): MaterialCandidate => (
     fileKey: snapshot.fileKey,
   },
   title: fileNameOf(snapshot.sourcePath),
-  sourceLabel: `工作区文件 · ${snapshot.sourcePath}`,
+  sourceLabel: `工作空间文件 · ${snapshot.sourcePath}`,
   status: snapshot.status === 'ready' ? 'ready' : 'unavailable',
   ...(snapshot.status === 'ready'
     ? {}
@@ -211,7 +211,7 @@ export function App(): React.JSX.Element {
   const [artifactNote, setArtifactNote] = useState<{ tone: 'ok' | 'error'; text: string }>();
   /** §3.6：来源专家不可用时不猜专家，改用通用助手并把这件事当场说出来。 */
   const [expertFallbackNotice, setExpertFallbackNotice] = useState<string>();
-  // 跨视图的动作错误出口：开始任务、切换任务、停止执行、选择工作区等失败都在这里呈现，
+  // 跨视图的动作错误出口：开始任务、切换任务、停止执行、选择工作空间等失败都在这里呈现，
   // 而不是像此前那样被 `void` 静默吞掉。
   const [actionError, setActionError] = useState('');
   const [view, setView] = useState<AppView>('work');
@@ -843,7 +843,7 @@ export function App(): React.JSX.Element {
               setMaterialPickerError('');
             }),
           setActionError,
-          '无法添加工作区文件，请重试。',
+          '无法添加工作空间文件，请重试。',
         );
         return;
       }

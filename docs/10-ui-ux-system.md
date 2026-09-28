@@ -165,6 +165,21 @@ Skill 列表分别展示来源（内置/用户）、启用状态、信任状态�
 - **搜索**：工具条（`PageToolbar`）内一个搜索框，输入停顿即发请求、可「清除」；命中为 0 时说明「没有匹配」，不谎报成「还没有记忆」。搜索框与知识页共用同一组输入样式，不新建第二套视觉。
 - **不翻页**：本页只显示最近一页（`LIST_PAGE_DEFAULT_LIMIT`），命中超出一页时在列表尾部说明并引导用搜索定位；检索与分页口径见[契约 §9.1](development/memory-contracts.md)。
 
+### 6.1.7 工作空间身份与侧栏分组（已实现，ADR-0029）
+
+**命名口径**：Workspace 的中文一律「工作空间」（一个本地文件夹＋可改别名＋图标与颜色）；§6.2 的中栏继续叫「任务工作区」。此前「工作区」同时指这两件事，侧栏分组标题一旦叫「工作区」就会与中栏同名不同义，因此 2026-09-28 起收口：默认空间叫「我的工作空间」，材料来源叫「工作空间文件」，选择器与对话框一律「工作空间」。
+
+侧栏从「一条不分组的最近任务」改为「工作空间分组＋组内任务」：
+
+- 一次列出最近活跃的前 12 个空间（含新建后还没有任务的空空间），按各空间最近一次任务活动排序，没有任务时退回登记时间。空间与更多条目靠输入区那个工作空间选择器的搜索定位，侧栏不另开第二扇浏览门。
+- 每个空间默认**只有当前那一个展开**，其余折叠；展开偏好是界面状态，按「默认值＋例外」存 `localStorage`（只落用户手动改过的那几档，新出现的空间仍按默认摊开）。
+- **点空间行只展开收起**：不切换当前空间、不清草稿、不打断运行中的任务。切换当前空间只有两条路——打开别的空间里的任务（这是「打开任务」的必然结果），或在输入区的选择器里选。
+- 组内折叠时给 3 条任务，「展示更多（k）」就地展开到已加载的 20 条，`k` 来自仓储统计的真实总数；一页装不下时在尾部说明「另有 N 项未列出」，不假装能翻页。
+- 任务行是 `RunSummaryRow` 的 `compact` 档：meta 只报相对时间，只有进行中／失败仍带状态词——十几个空间并列时「已完成」在每个空间里都是多数派，报出来是噪声。
+- 身份（别名／图标／颜色）在新建对话框里一次定好，之后从空间行的「更多」菜单改。菜单里**没有删除**：`tasks / artifacts / input_snapshots / run_context_snapshots / memory_records` 全部 `ON DELETE CASCADE`，删一个空间会带走整棵子树，因此只提供「从侧栏隐藏」；恢复走选择器（它列全部空间，选中即解除隐藏）。
+- 「新建工作空间」与「打开本地文件夹」此前是两颗做同一件事的按钮，现合并为一个对话框入口；对话框第一步就是选目录，**选目录不再顺手登记一个空间**（`workspace:pick-directory` 只回路径），取消时不会留下半行数据。
+- 折叠成 88px 窄栏时这一组换成着色图标网格（最多 6 枚），点图标先展开侧栏再展开那一组。
+
 ### 6.2 任务工作区
 
 采用可折叠三层结构：
@@ -173,7 +188,7 @@ Skill 列表分别展示来源（内置/用户）、启用状态、信任状态�
 应用导航 | Task 主工作区 | 上下文面板
 ```
 
-- 左栏负责去哪里：应用入口、最近任务和设置。
+- 左栏负责去哪里：应用入口、工作空间分组（组内是该空间的最近任务）和设置。
 - 中栏负责做什么：任务协作、确认、编辑和主要内容。
 - 右栏负责参考什么：过程、资料和成果，默认按场景出现并允许收起。
 
@@ -506,10 +521,24 @@ UI Foundation 首批提供四套成对色系：
 
 相对顺序沿用改造前的实际叠放结果，两处有意改变：**菜单类浮层一档高于模态**（2026-09-27 凌晨修——模型抽屉里的「模型角色」曾以 12 压在 19 的模态面板之下，点了像没反应；模态内允许开浮层，浮层就必须在模态之上，护栏直接锁 `--z-popover` 与 `--z-popover-backdrop` 都要大于 `--z-modal-backdrop`）；`Modal` 基座落地后**抽屉与对话框背板合并为 `--z-modal-backdrop` 一档**（原 `--z-sheet` 10 与 `--z-dialog-backdrop` 19 并存没有语义依据）。面板本身不设 `z-index`，由背板这一层决定高低。
 
+### 9.12 工作空间身份色与图标
+
+侧栏按工作空间分组之后，一屏里会同时出现十几个空间，只靠文字名称认不出「这是哪一个」。因此外观有**第三个维度**：
+
+```text
+外观 = AppearanceMode（system｜light｜dark）× ColorScheme（jade｜…）× WorkspaceAccent（moss｜…｜slate）
+```
+
+- 身份色表达的是**这个空间是谁**，不是**应用长什么样**：切换色系或明暗都不改变某个空间的档位含义，只换它在这一档上的具体色值。
+- 因此它只提供两套值（浅色与深色），**不随四套色系各出一份**。这与 §9.1 对色系的要求不同，理由就是上一条：它不参与品牌表达，只参与识别。护栏「工作空间身份色的每一档都在明暗两套 Variant 里成对定义」锁住这件事，少一档深色值即红。
+- 8 档固定色板：苔绿 `moss`、青碧 `teal`、天青 `azure`、靛蓝 `indigo`、紫檀 `plum`、胭脂 `rose`、琥珀 `amber`、石墨 `slate`。**不提供取色器**，沿用 §9.2 的理由——任意颜色会破坏对比度与组件状态一致性。
+- 色值只住在 `styles.css` 的 `--ws-*` Token 里；`appearance.ts` 只登记档位与中文名，组件一律经 `lib/workspace-identity.ts` 的 `workspaceAccentVar()` 取 `var(--ws-<id>)`，页面不得再写十六进制。
+- 图标 12 枚（`folder / doc / sheet / slides / chart / client / research / writing / code / project / cycle / library`）先进 `icons.tsx` 再使用：形状承载「这是哪类持续工作」，颜色承载身份。两者都由协议枚举定档，图标集与色板各按 `Record` 穷举，漏一档即编译不过——枚举、色板、图标三处不会各说一半。
+- 带身份图标的行仍然只是行：图标不着色块底，选中与悬停继续走 §9.8 的表面档位。
+
 ## 10. 组件体系
 
 ### 10.1 基础组件
-
 - Button、IconButton、Input、Textarea、Select、Switch
 - Tabs、Tooltip、Popover、Menu、Dialog、Sheet
 - Toast、InlineNotice、Progress、Skeleton、EmptyState
@@ -578,6 +607,8 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 | 任务输入区 Composer（工作区＋绑定区＋正文＋提交） | `components/Composer.tsx` | 已落地：内联在 `App.tsx` 的 140 行 `<form>` 外提。工作区两颗按钮（打开本地文件夹／新建工作区）原来是**逐字相同**的两段 `reportAction(selectDirectory()…)`，只差一句失败文案，现由页面出一个 `applyWorkspaceDirectory(failureMessage)`；提交与 ⌘／Ctrl＋↵ 合成一个 `onStartRun`，输入法组合中的 Enter 不提交。`submit` 是三档可辨识联合（idle／starting／running＋onStop），与 `locked`（运行中锁绑定区）分列——停止按钮要求确实有一次可停的运行 |
 | 运行摘要行 RunSummaryRow（§10.2 `RunSummary`） | `components/RunSummaryRow.tsx` | 已落地：`ListRow` 的又一种具名填法（与 `SourceRow` 同源）。「状态 · 时间」这句措辞此前四份，侧栏把状态与时间并成一行、上下文面板拆成说明＋meta 两行，同一个运行在两个列表里报出的层次不同；现在行几何归 `ListRow`、**措辞与「没跑过时说什么」归这里**，整行的 `aria-label` 拼「动词＋标题＋状态·时间」，读屏不再只听到标题 |
 | 回答捕获面板 MemoryCapturePanel | `components/MemoryCapturePanel.tsx` | 已落地：消息流里的 `.memory-capture` 整块（只读原文＋选区＋记忆正文）外提，「区间 → 来源选择器」这段推导跟着搬走；契约 §11.1 的口径不变，正文只能来自用户当场选中的片段 |
+| 单选选择器 SingleSelectPicker（一组具名选项里选一个） | `components/SingleSelectPicker.tsx` | 已落地（ADR-0029）：工作空间对话框的图标格与色板格共用一份。底层是**原生 radio**（同名互斥、方向键换档都是原生语义），不是靠切换按下态表达的按钮组——那样做既要把 radio 已经提供的东西重做一遍，又会撞上「页签与切换组纪律」护栏（护栏是对的，第一次实现确实被它拦下）。选项不带文字，所以 `name` 必填并落到 `aria-label`；选中态由 `[data-checked]` 一处决定 |
+| 工作空间分组列表 WorkspaceGroupList（侧栏：空间行＋组内任务行） | `components/WorkspaceGroupList.tsx` | 已落地（ADR-0029）：空间行复用 `NavItem`（补 `iconColor` 一个可选属性，几何仍只住在基座），就地动作用 `IconButton`＋`PopoverMenu`，任务行复用 `RunSummaryRow` 的 `compact` 档，空态用 `EmptyNotice`。它不新造行几何，只新增「分组外壳＋展开指示＋展示更多」这一层；窄栏换着色图标网格。展开偏好住在 `hooks/use-workspace-groups.ts`，读写与 storage 兜底一份（§6.1.7） |
 **浮层一律复用 `PopoverMenu` 基座**：下拉、菜单、选择器等脱离文档流的浮层必须走 `components/PopoverMenu.tsx`——背板收起、Esc、焦点归还、方向键导航与视口碰撞处理都在基座里。不得用 `<details>` 或 `position:absolute` 面板自造：2026-09-26 知识卡片的「更多」正是这样写的，三个症状同源——点外面不收起（`<details>` 没有这个语义）、能同时打开两张卡片的菜单、菜单项继承正文 14px 而比自己的 12px 触发按钮还大。基座会把菜单字号镜像成触发控件的计算值，让浮层与触发器看起来属于同一个控件；破坏性菜单项用 `tone: 'danger'` 表达，颜色仍由 Token 决定。护栏锁两条：`.popover-menu-item` 不得自带字号；overlay 阴影只允许出现在登记过的浮层表面（`standards/coding-standard.test.ts`）。
 
 **模态与覆盖层一律复用 `Modal` 基座**：会夺走整页焦点的表面（确认框、抽屉、放映层）走 `components/Modal.tsx` 的 `dialog`／`sheet`／`viewer` 三个变体；锚定在触发器局部、不居中的覆盖层（消息中心）用同文件导出的 `useOverlaySemantics`，只借语义不借定位；但借用者必须把覆盖层 portal 到 `document.body`——被 `inert` 的是整个 `<main>`，2026-09-26 消息中心留在壳内时面板与背板一起被 pointer-events 锁死，滚动、点按钮、点外面全部失效，只剩挂在 window 上的 Esc 还能用。inert 应用主体、Esc、背板点击关闭、初始焦点、Tab 循环、焦点归还、`role=dialog`/`alertdialog` 与 `aria-modal` 全部只有一处实现——此前这里是四套并存：确认框什么都有、模型抽屉只有 `aria-modal` 外壳、放映层自己写键盘、消息中心连 `aria-expanded` 都没有。触发元素必须带 `aria-haspopup="dialog"` 与 `aria-expanded`（消息中心的铃铛已按此补齐）。**模态可以叠模态与浮层**，交接写在基座里：`useOverlaySemantics` 维护一份打开中的面板栈，Esc 与 Tab 只属于最上面那一层——抽屉里再开确认框时，一次 Esc 只关确认框，下层抽屉留着；确认框关掉后抽屉重新成为最上面一层。同理，下拉菜单 portal 在 `document.body` 上、层级高于模态，所以看得见也点得到；Esc 被浮层吃掉时（浮层 `preventDefault` 过）模态不跟着一起关；焦点落在浮层里时面板的 Tab 循环不抢焦点（靠浮层根上的 `data-overlay-layer` 识别，两个基座之间不互相 import 类名）。回归见 `Modal.test.tsx`「模态内的菜单类浮层」与「模态叠模态」各三条。护栏锁两条：`.modal-panel` 之外的表面不得自带浮层阴影（存量按棘轮只降不升）；渲染层里出现 `role="dialog"`／`aria-modal`／`key === 'Escape'`／旧背板类而没接 `Modal` 或 `useOverlaySemantics` 即失败。

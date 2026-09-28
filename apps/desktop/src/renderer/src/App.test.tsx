@@ -52,7 +52,7 @@ const skill: SkillDetail = {
 const goal = '使用「中电金信」模板，生成两页演示文稿——封面 + 一页内容页。';
 const workspaceFixture: WorkspaceSummary = {
   id: 'workspace-1',
-  name: '我的工作区',
+  name: '我的工作空间',
   rootPath: '/workspace',
   iconId: 'folder',
   accentId: 'moss',
@@ -737,7 +737,7 @@ describe('Workspace input material display', () => {
           fileKey: 'input-snapshots/hash-saved/content',
         },
         title: 'current-data-excel.xlsx',
-        sourceLabel: '工作区文件 · /workspace/current-data-excel.xlsx',
+        sourceLabel: '工作空间文件 · /workspace/current-data-excel.xlsx',
         status: 'ready',
       },
     ]);

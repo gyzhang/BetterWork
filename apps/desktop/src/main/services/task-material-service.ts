@@ -145,7 +145,7 @@ export class TaskMaterialService {
           fileKey: snapshot.fileKey,
         },
         title: path.basename(snapshot.sourcePath),
-        sourceLabel: `工作区文件 · ${snapshot.sourcePath}`,
+        sourceLabel: `工作空间文件 · ${snapshot.sourcePath}`,
         status: available ? 'ready' : 'unavailable',
         ...(available ? {} : { detail: '输入快照缺失或哈希不匹配' }),
       });

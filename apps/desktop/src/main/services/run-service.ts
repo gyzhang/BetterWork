@@ -868,7 +868,7 @@ export class RunService {
     };
     const lines = [
       '以下是用户为本次 Run 明确选择的材料清单。材料内容不会自动出现在对话中，必须先使用清单给出的工具和参数读取。',
-      '只使用这些材料中的事实和数字；如果材料无法读取或没有提供某个数字，应明确说明，不要用猜测或其他工作区文件补齐。',
+      '只使用这些材料中的事实和数字；如果材料无法读取或没有提供某个数字，应明确说明，不要用猜测或其他工作空间文件补齐。',
       '历史对话和旧助手回复不是本次 Run 的证据；开始分析前必须重新读取清单中的材料，后续结论只依据本次 Run 成功读取的内容。',
       '交付前用 artifact_declare_sources 声明成果实际采用的来源：只有真正读过的材料或已返回的精确知识证据可以声明，搜索过不等于采用。',
       '不要把不同期间的客户数相加，不要把“本期未提及”解释为已续约或已流失，也不要推导材料未给出的客户数、金额或未来期间；缺少依据时写“材料未提供”。',
@@ -883,7 +883,7 @@ export class RunService {
         const snapshot = this.store.inputSnapshots.get(reference.snapshotId);
         const sourcePath = snapshot?.sourcePath ?? reference.fileKey;
         lines.push(
-          `${index + 1}. 工作区文件「${sourcePath}」【${purpose}】`,
+          `${index + 1}. 工作空间文件「${sourcePath}」【${purpose}】`,
           `   - 文本/Markdown 使用 read_text_file，path="${sourcePath}"。`,
           `   - Office 使用 read_office_material，sourceKind="workspace-input-snapshot"，snapshotId="${reference.snapshotId}"。`,
         );
@@ -961,7 +961,7 @@ export class RunService {
         throw new Error('材料范围包含同一路径的多个输入快照，请只选择一个版本。');
       }
       const snapshot = snapshots.get(relative);
-      if (!snapshot) throw new Error('材料范围不允许读取该工作区文件，请先选择输入材料。');
+      if (!snapshot) throw new Error('材料范围不允许读取该工作空间文件，请先选择输入材料。');
       if (
         snapshot.workspaceId !==
         this.store.tasks.getWorkspaceId(this.store.runs.get(context.runId)?.taskId ?? '')

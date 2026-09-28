@@ -57,7 +57,7 @@ export interface WorkspaceIdentityDialogState {
 }
 
 /**
- * 工作空间身份对话框的状态簇（docs/10 §9.4、ADR-0029）。
+ * 工作空间身份对话框的状态簇（docs/10 §9.12、ADR-0029）。
  *
  * 选目录与登记是两次调用：`workspace:pick-directory` 只回路径，用户看完对话框就取消
  * 时不会留下半个工作空间行。名称留空沿用文件夹名，与对话框里那句说明一致——

@@ -19,7 +19,7 @@ export const colorSchemes: ReadonlyArray<{ id: ColorScheme; name: string; descri
 ];
 
 /**
- * 工作空间身份色（docs/10 §9.4）：与上面的色系正交的第三个维度。
+ * 工作空间身份色（docs/10 §9.12）：与上面的色系正交的第三个维度。
  *
  * 这里只登记「有哪几档、中文叫什么」——色值住在 `styles.css` 的明暗两套 Variant 里，
  * 选择器与侧栏都通过 `var(--ws-<id>)` 取用。把色值再抄一份进 TS 就会出现

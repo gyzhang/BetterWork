@@ -1,5 +1,13 @@
 # MVP 与路线图
 
+## 工作空间身份与侧栏分组 — 2026-09-28（代码与自动化已落地，待光哥真实窗口走查）
+
+光哥参照 WorkBuddy 与 Qoder 提出：工作空间要能为一个本地文件夹取别名、带图标与颜色，侧栏任务要按「空间＋任务」组织。[低保真原型](prototype/workspace-identity/index.html)给出 D1–D10 及推荐方案，同日全部批准并授权编码。
+
+落地范围：迁移 v35 给 `workspaces` 补 `icon_id / accent_id / hidden_at`，名称改为可编辑别名；新增 `workspace:create / update-identity / set-hidden / list-task-groups` 四条通道，`workspace:select` 改为只回路径的 `workspace:pick-directory`；身份色 8 档成对 Variant 与 12 枚图标进 Token 与图标集；新基座 `SingleSelectPicker`、`WorkspaceGroupList`；侧栏「最近任务」平铺改为空间分组（默认只展开当前空间，点空间行只展开收起、不切换当前空间也不打断运行中的任务）。命名收口：Workspace 中文一律「工作空间」，中栏继续叫「任务工作区」。
+
+三项明确不做：按空间的「索引」开关（算台没有工作空间级索引，知识集合不代表空间授权）、删除工作空间入口（子表全为 `ON DELETE CASCADE`，只提供隐藏）、任意取色器。规范见 [UI 体系 §6.1.7、§9.12、§10.1](10-ui-ux-system.md)，决策见 [ADR-0029](adr/0029-workspace-identity-and-sidebar-groups.md)，领域属性见 [领域模型 §2](02-domain-model.md)。真删工作空间、按空间知识索引、置顶与自定义排序、跨空间任务搜索、从空间行直达简报均为后续项，未排期。
+
 ## 记忆治理页检索与滚动区 — 2026-09-25（代码与自动化已落地，光哥真实窗口走查已通过）
 
 光哥把已确认记忆压到 61 条后判定原页面不可维护：整页滚动、且只看得见最近 50 条。两项拍板并已落地——分组收成页签（待确认/已确认/已过期/历史），页面唯一滚动区落在该组列表上，滚动条贴版心右缘；`memory:list` 增加 `query` 做后端全库检索（正文＋议题，NFC 归一＋小写折叠，空白切词取 AND，用 `instr` 所以 `%`/`_` 是字面量）。本页仍不翻页，命中超出一页时在列表尾部说明并引导检索。规范见 [UI 体系 §6.1.6](10-ui-ux-system.md) 与[记忆实施契约 §9.1](development/memory-contracts.md)；回归用例在 `memory-repository.test.ts`、`memory-service.test.ts`、`MemoryView.test.tsx`。人工走查已于 2026-09-26 通过、压测数据已按 id 清单清理；提交与推送仍需单独指令，也不改写 WM/MI 任务板状态。

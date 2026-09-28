@@ -39,8 +39,10 @@ describe('WorkspaceRepository', () => {
     ).toHaveLength(1);
 
     // getOrCreate 是默认工作空间的幂等引导，语义与 create 相反。
-    const first = store.workspaces.getOrCreate('/tmp/boot', '我的工作区');
-    expect(store.workspaces.getOrCreate('/tmp/boot', '我的工作区')).toMatchObject({ id: first.id });
+    const first = store.workspaces.getOrCreate('/tmp/boot', '我的工作空间');
+    expect(store.workspaces.getOrCreate('/tmp/boot', '我的工作空间')).toMatchObject({
+      id: first.id,
+    });
   });
 
   it('changes only the identity fields it is given', () => {

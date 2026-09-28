@@ -28,7 +28,7 @@ Workspace
 
 ## 2. Workspace
 
-Workspace 是长期工作上下文，而不只是文件目录。
+Workspace 是长期工作上下文，而不只是文件目录。中文界面一律叫**工作空间**，与 §「任务工作区」（UI 的中栏）区分开（见 [UI/UX 体系](10-ui-ux-system.md) §6.1.7）。
 
 示例：
 
@@ -44,17 +44,27 @@ Workspace 是长期工作上下文，而不只是文件目录。
 ```ts
 interface Workspace {
   id: string;
+  /** 用户可改的显示名（别名）；创建时默认取文件夹名。 */
   name: string;
-  description?: string;
+  /** 真相源是本地目录：材料读写边界与成果导出都以它为根，算台不移动也不改名它。 */
   rootPath: string;
-  defaultExpertId?: string;
-  knowledgeVaultIds: string[];
-  enabledSkillIds: string[];
-  enabledKitIds: string[];
+  /** 身份：形状承载「哪类持续工作」，颜色承载「是哪个空间」。档位由协议枚举定死。 */
+  iconId: WorkspaceIconId;
+  accentId: WorkspaceAccentId;
+  /** 有值＝已从侧栏分组里隐藏。只影响可见性，不改任何归属关系。 */
+  hiddenAt?: number;
   createdAt: number;
   updatedAt: number;
+  // 以下仍是规划，未落地：
+  // description?: string;
+  // defaultExpertId?: string;
+  // knowledgeVaultIds: string[];
+  // enabledSkillIds: string[];
+  // enabledKitIds: string[];
 }
 ```
+
+`name / rootPath / iconId / accentId / hiddenAt` 于 2026-09-28 落地（应用库迁移 v35，[ADR-0029](adr/0029-workspace-identity-and-sidebar-groups.md)）。**不提供删除工作空间**：`tasks`、`artifacts`、`input_snapshots`、`run_context_snapshots`、`memory_records` 等对 `workspaces.id` 全是 `ON DELETE CASCADE`，删除会带走整棵子树，因此侧栏只给「隐藏」；真删需要单独的确认设计与迁移，尚未排期。
 
 ## 3. Task、Session 与 Conversation
 

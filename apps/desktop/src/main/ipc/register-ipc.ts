@@ -268,7 +268,7 @@ export interface IpcDependencies {
   /** 随包依赖锁目录：开发态在仓库 resources 下，打包后在安装资源里。 */
   readonly dependencyLocksRoot: string;
   readonly getWindow: () => BrowserWindow | null;
-  /** 默认工作区根目录；开发态指向仓库根，打包后指向用户文档目录。 */
+  /** 默认工作空间根目录；开发态指向仓库根，打包后指向用户文档目录。 */
   readonly getDefaultWorkspaceRoot: () => string;
 }
 
@@ -406,7 +406,7 @@ function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
   const { store, getDefaultWorkspaceRoot, taskMaterials } = deps;
 
   handleNoInput(IpcChannel.GetDefaultWorkspace, emptyRequestSchema, workspaceSummarySchema, () =>
-    store.workspaces.getOrCreate(getDefaultWorkspaceRoot(), '我的工作区'),
+    store.workspaces.getOrCreate(getDefaultWorkspaceRoot(), '我的工作空间'),
   );
 
   handleNoInput(
@@ -1343,7 +1343,10 @@ function registerSkillChannels(deps: IpcDependencies): void {
       if (!skill.enabled) throw new Error(`Skill「${skill.name}」已停用`);
       if (skill.trustStatus !== 'trusted')
         throw new Error(`Skill「${skill.name}」尚未信任，无法试运行`);
-      const workspace = store.workspaces.getOrCreate(deps.getDefaultWorkspaceRoot(), '我的工作区');
+      const workspace = store.workspaces.getOrCreate(
+        deps.getDefaultWorkspaceRoot(),
+        '我的工作空间',
+      );
       const created = store.tasks.create(
         workspace.id,
         `Skill 试运行：${skill.name}`,
