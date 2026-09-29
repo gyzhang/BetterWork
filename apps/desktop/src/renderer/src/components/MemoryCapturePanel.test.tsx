@@ -39,7 +39,9 @@ describe('MemoryCapturePanel 基座', () => {
   it('只读原文与可改写正文同时在场，正文预填来自选区', () => {
     panel();
 
-    const source = screen.getByRole('textbox', { name: '回答原文' });
+    const source = screen.getByRole('textbox', {
+      name: '回答原文（只读，可拖选或用键盘选择）',
+    });
     const content = screen.getByRole('textbox', { name: '记忆正文' });
     expect(source).toHaveProperty('readOnly', true);
     expect(source).toHaveProperty('value', raw);

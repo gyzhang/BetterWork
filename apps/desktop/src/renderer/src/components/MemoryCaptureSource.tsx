@@ -49,14 +49,7 @@ export function MemoryCaptureSource({
   return (
     <div className="memory-capture-source">
       <Field label="回答原文（只读，可拖选或用键盘选择）">
-        <textarea
-          ref={fieldRef}
-          rows={5}
-          readOnly
-          value={raw}
-          aria-label="回答原文"
-          onFocus={() => setError('')}
-        />
+        <textarea ref={fieldRef} rows={5} readOnly value={raw} onFocus={() => setError('')} />
       </Field>
       <div className="memory-capture-source-actions">
         <Button variant="text" size="sm" type="button" onClick={confirm}>

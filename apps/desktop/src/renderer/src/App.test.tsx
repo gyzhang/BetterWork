@@ -839,7 +839,9 @@ describe('Task context restoration', () => {
     // 专家任务的捕获表单默认落在「专家 + 工作空间」范围，并给出只读原文选择区（§3.1、MI02）。
     const scopeButton = await screen.findByRole('button', { name: '记忆适用范围' });
     expect(scopeButton.textContent ?? '').toContain('专家与工作空间');
-    expect(screen.getByRole('textbox', { name: '回答原文' })).toBeDefined();
+    expect(
+      screen.getByRole('textbox', { name: '回答原文（只读，可拖选或用键盘选择）' }),
+    ).toBeDefined();
   });
 
   it('回答捕获保留原文选区来源，并且不提供全局范围', async () => {
@@ -889,7 +891,9 @@ describe('Task context restoration', () => {
     await Promise.resolve();
     expect(api.memories.create).not.toHaveBeenCalled();
 
-    const original = screen.getByRole<HTMLTextAreaElement>('textbox', { name: '回答原文' });
+    const original = screen.getByRole<HTMLTextAreaElement>('textbox', {
+      name: '回答原文（只读，可拖选或用键盘选择）',
+    });
     original.setSelectionRange(0, 9);
     fireEvent.select(original);
     fireEvent.click(screen.getByRole('button', { name: '确认选区' }));
@@ -967,7 +971,9 @@ describe('Task context restoration', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
     fireEvent.click(await screen.findByRole('button', { name: '记住这段经验' }));
-    const original = screen.getByRole<HTMLTextAreaElement>('textbox', { name: '回答原文' });
+    const original = screen.getByRole<HTMLTextAreaElement>('textbox', {
+      name: '回答原文（只读，可拖选或用键盘选择）',
+    });
     original.setSelectionRange(0, 9);
     fireEvent.select(original);
     fireEvent.click(screen.getByRole('button', { name: '确认选区' }));
