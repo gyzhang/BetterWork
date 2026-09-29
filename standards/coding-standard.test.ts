@@ -2957,17 +2957,36 @@ describe('计时基准车道纪律', () => {
     expect(offenders, '计时基准要挪进 `npm run bench` 的串行车道（docs/12 §9）').toEqual([]);
   });
 
-  it('两条车道的配置与脚本各就各位，且 verify 不含基准', () => {
+  it('三条车道的配置与脚本各就各位，且 verify 不含基准', () => {
     const config = read('vitest.config.ts');
     expect(config).toContain("name: 'functional'");
+    expect(config).toContain("name: 'heavy'");
     expect(config).toContain("name: 'bench'");
     expect(config).toContain("'**/*.bench.test.ts'");
     expect(config).toContain('fileParallelism: false');
 
     const scripts = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
+    // `test` 必须是两次独立调用：漏掉后半，heavy 档的文件会同时被 functional 的 exclude
+    // 排掉、又没有任何车道跑它——静默消失且门禁全绿。
     expect(scripts.scripts['test']).toContain('--project functional');
+    expect(scripts.scripts['test']).toContain('--project heavy');
     expect(scripts.scripts.bench).toContain('--project bench');
     expect(scripts.scripts.verify ?? '').not.toContain('bench');
+  });
+
+  it('heavy 档清单里的每个文件都真实存在', () => {
+    // 清单自核：路径写错或文件改名后，该文件既被 functional 的 exclude 排掉、又匹配不上
+    // heavy 的 include，于是**一个用例都不跑而门禁全绿**。这是 include／exclude 分档
+    // 最贵的失效方式，所以要有一条正向断言盯着清单本身。
+    const config = read('vitest.config.ts');
+    const block = /const HEAVY_TEST_FILES = \[([\s\S]*?)\];/u.exec(config);
+    expect(block, 'vitest.config.ts 里找不到 HEAVY_TEST_FILES 清单').not.toBeNull();
+    const listed = [...(block?.[1] ?? '').matchAll(/'([^']+)'/gu)]
+      .map((match) => match[1])
+      .filter((relative): relative is string => relative !== undefined);
+    expect(listed.length, 'heavy 档清单为空，等于这条车道不存在').toBeGreaterThan(0);
+    const missing = listed.filter((relative) => !REPO_FILES.includes(relative));
+    expect(missing, 'heavy 档清单里有文件已不存在，把它删掉或改准路径').toEqual([]);
   });
 
   it('基准车道里确实有用例，不给自己留空挡', () => {
