@@ -23,7 +23,7 @@ trigger: glob: **/*.ts,tsx,css,mjs,json
 
 - 生产代码禁止 `any` 与 `!`；可选属性用条件展开 `...(value ? { key: value } : {})` 构造，不显式赋 `undefined`。（docs/12 §4）
 - `catch (error)` 里 `error` 是 `unknown`，统一用 `describeError(error)` 转文本（§4）；重新抛出必须带 `cause`（§5）。
-- Renderer 到主进程的每一次调用都必须收口：`reportAction` 或 `trackAction`。**二选一的判据是「这句话是否已有内联或浮层承载」**——已有承载的用 `trackAction`，只去全局短时提醒的才用 `reportAction`；同一次结果不得两个通道各播一遍。不存在 `void someIpcCall()`。（docs/12 §5 的 API 表、§8 的判据）
+- Renderer 到主进程的每一次调用都必须**收口**：失败必须到达一个真实存在的呈现出口，或把 promise 交回调用方收口。**「收口」不等于「必须字面调用某个函数」**——`reportAction`（让用户看见）与 `trackAction`（只记录）是两类处置的缺省实现，为了在成功时也播报一句而手写 `try/catch`、把失败交给同一个出口属同一类处置。**二选一的判据是「这句话是否已有内联或浮层承载」**，同一次结果不得两个通道各播一遍；「让用户看见」的出口不必是全局的，接在局部 `TransientToast` 上同样合规。禁止的是第三种处置「不处理」：`void someIpcCall()`、空 `catch {}`、不写降级理由的 `.catch(() => undefined)`。（docs/12 §5 的 Renderer 小节含形状清单与实测口径、§8 的判据）
 - `views/` 与 `components/` 里不出现 `window.betterwork`；IPC 调用收在 `hooks/`。（docs/12 §8）
 - `ipcMain.handle` 只出现在 `apps/desktop/src/main/ipc/register-ipc.ts`，且必须走三个注册 helper 之一。（docs/12 §7）
 - 取消语义只有一处定义：`packages/agent-core/src/errors.ts`。任何地方都不许再写 `'AbortError'` 字面量。（docs/12 §5）

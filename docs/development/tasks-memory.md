@@ -543,7 +543,7 @@ Spec §15 是 WM00 的验收面，此前只按「文档已归档」处理，本�
 - §3.4 状态机：协议转换表只允许从 `candidate` 出发的候选动作，`deleted`／`superseded` 无回边，恢复待确认走 `restore-candidate` 复用同一 `governanceAction` 字段（§15.16 已补往返用例）。
 - §3.5 排除只写 `excludedMemoryIds`：该字段在 17 个文件出现，完整保存 TaskContext 时其余字段保留；界面三段（下次运行可用／本次运行记忆／历史上下文调整）在 `ContextPanel.tsx` 与 `use-run-memories.ts`。
 - §3.6 不猜专家：`App.tsx:214` 的注释与两条文案（有名字报名字、无名字报通用助手）；「引用到当前任务」在 `App.tsx:381` 注明固定精确版本、不改当前专家、不自动发送，`App.test.tsx` 三条用例分别覆盖不自动发送、不换专家与沿用来源专家。
-- §3.7 收口：五个记忆相关 Hook 全部经 `reportAction`／`trackAction`，`views/`、`components/` 内不出现 `window.betterwork`。
+- §3.7 收口：五个记忆相关 Hook 的 **18 个 IPC 调用点全部收口**（失败都到达一个真实存在的呈现出口），`views/`、`components/` 内不出现 `window.betterwork`。**2026-09-30 更正措辞**：原文写「全部经 `reportAction`／`trackAction`」，实测只有 8 处字面走这两个 helper，另 10 处是手写 `try/catch`（多经 `settleMemoryCall` 把失败转成 `outcome.message` 再交给 `setError`）与「`return` promise 交回调用方」两种形状——按 [工程规范 §5](../12-engineering-standards.md) 的 Renderer 小节，这三种都属合法收口，原文的字面会被读成「只有这两个函数」。收口这件事本身没有偏离。
 - §13.1「依赖递归／循环」两个阶段都有真实用例：入队阶段返回 `SOURCE_DEPENDENCY_CYCLE`，入队之后才被改出环的作业收口为 `skipped`＋`INPUT_LIMIT`，两者都不调模型、不建候选。
 
 **查到一处真缺口，本轮落进文档：** §1.4 把四件事并列写成「只定义采集口径」，读起来像都已就绪；实际「已展示候选数」这个分母没有任何生产者——§15.20 核过的 18 个通道里没有展示上报口，§13.3 又排除新增埋点，所以候选采纳率与建议负担当前**不可计算**，重复纠正次数与复用满意度同样只有口径、没有采集入口。已修订 `docs/designs/work-centered-memory.md` §1.4：逐项点名今天能取的是分子（`memory_operations` 的 `set-status`＋`governanceAction='confirm'` 回执）与真实耗时／usage（`memory_extraction_jobs` 的 `started_at`／`finished_at`／`usage_json`），并写死「不为凑分母补遥测，要采集必须先另立设计并单独授权」。这条与 ADR-0026「不承诺采纳率」一致，属于把既有边界说清，不改范围。

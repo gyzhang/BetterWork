@@ -83,6 +83,8 @@ export function DiscussionCheckpointPanel({
     }
   };
   const handleSubmit = (): void => {
+    // 失败已经由 `App.tsx` 的 `createDiscussionCheckpoint` 呈现（`setActionError`）并重新抛出，
+    // 抛出只是为了让 `submit()` 里的清空表单那几行不执行；这里接住它，避免变成未处理的 rejection。
     submit().catch(() => undefined);
   };
 

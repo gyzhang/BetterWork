@@ -348,6 +348,48 @@ describe('架构边界', () => {
       'UPSERT 的 DO UPDATE 覆写 api_key，会把从 credentials 解出的密钥写回明文列，一律禁止',
     ).toEqual([]);
   });
+
+  it('Renderer 里空体的 catch 必须写明降级理由', () => {
+    // 「收口」的不变量是**失败必须到达一个真实存在的呈现出口**，不是「必须字面调用某个
+    // helper」（docs/12 §5 的 Renderer 小节）。ESLint 的 no-floating-promises＋ignoreVoid:false
+    // 挡得住 `void someIpcCall()`，但挡不住 `.catch(() => undefined)`——它「处理」了 promise，
+    // 只是把失败扔了。空体 catch 因此只有一种合法形态：**降级，并把理由写在 catch 体里**。
+    // 只扫 Renderer：主进程那一批 `.catch(() => undefined)` 挂在 close()/cancel()/rm() 上，
+    // 讲的是「尽力释放资源」，与「失败要不要让用户看见」不是同一条不变量。
+    const offenders: string[] = [];
+    for (const relative of productionPathsUnder('apps/desktop/src/renderer/src/')) {
+      // 先抹掉块注释再扫，否则「文档里举例说明哪种写法违规」会被当成违规本身——
+      // `lib/async-action.ts` 的 JSDoc 正好写了 `catch {}` 与 `.catch(() => undefined)` 两个反例。
+      // 抹的时候保留换行，行号才对得上；`//` 注释留着，降级理由正是靠它认。
+      const source = read(relative).replace(/\/\*[\s\S]*?\*\//gu, (block) =>
+        block.replace(/[^\n]/gu, ' '),
+      );
+      const lineOf = (index: number): number => source.slice(0, index).split('\n').length;
+
+      // 形态一：`} catch {` ／ `} catch (error) {`，体内只有注释或什么都没有。
+      // 收尾用 `\s*` 而不是 `[ \t]*`：`catch {\n}` 这种跨行空体同样算空，
+      // 写成 `[ \t]*` 会漏掉它——这一处是变异验证时发现的（删掉理由注释后护栏仍然绿）。
+      for (const match of source.matchAll(
+        /catch(?:\s*\([^)]*\))?\s*\{((?:[ \t]*\/\/[^\n]*\n)*)\s*\}/gu,
+      )) {
+        if ((match[1] ?? '').trim() === '')
+          offenders.push(`${relative}:${lineOf(match.index)} 空 catch 体`);
+      }
+
+      // 形态二：`.catch(() => undefined)` ／ `.catch(() => {})`，理由写在本行或上一行。
+      const lines = source.split('\n');
+      for (const match of source.matchAll(/\.catch\(\(\)\s*=>\s*(?:undefined|\{\s*\})\s*\)/gu)) {
+        const line = lineOf(match.index);
+        const hasReason =
+          (lines[line - 1] ?? '').includes('//') || (lines[line - 2] ?? '').includes('//');
+        if (!hasReason) offenders.push(`${relative}:${line} .catch(() => …) 没有降级理由`);
+      }
+    }
+    expect(
+      offenders,
+      '失败被扔掉而不说明为什么可以扔，等于把「不处理」伪装成「已处理」（docs/12 §5 的 Renderer 小节）',
+    ).toEqual([]);
+  });
 });
 
 describe('界面 Token 纪律', () => {

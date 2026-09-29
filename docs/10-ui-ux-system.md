@@ -142,7 +142,7 @@ Skill 列表分别展示来源（内置/用户）、启用状态、信任状态�
 - **工作空间简报**：复用 WorkspaceSelector 的空间入口与上述可关闭面板，展示已确认目标/约束/决策/方法、未决讨论节点和用户指定的参考成果版本；每条可跳转来源，不整体自动注入模型，不设启动表单。
 - **参考成果标记**：成果版本详情提供「指定为本空间参考版本」「取消参考」「引用到当前任务」；标记只表示参考选择，**不表示内容正确、审批通过或已被本期读取**，固定精确版本与哈希、不跟随 latest。
 
-反馈继续按 §11.5.1 决策表归类：局部短时成功用 `TransientToast`，表单可处理错误用内联 `.inline-message.error`，只有确需跨页回看的长操作结果进消息中心 + 全局 `ToastHost`；候选结果本身可见时不重复通知，禁止逐条全局 Toast 或自造成功提示计时器。IPC 调用收在 hooks/ 并经 `reportAction`/`trackAction` 收口，视图不出现 `window.betterwork`。字段与通道见[记忆实施契约](development/memory-contracts.md)，界面落地卡片为 WM07/WM11/WM14，见 [WM 任务板](development/tasks-memory.md)。
+反馈继续按 §11.5.1 决策表归类：局部短时成功用 `TransientToast`，表单可处理错误用内联 `InlineError`（原文写的 `.inline-message.error` 已于 2026-09-28 连同基础规则一并删除并登记「不得复活」，见 §10.1 台账），只有确需跨页回看的长操作结果进消息中心 + 全局 `ToastHost`；候选结果本身可见时不重复通知，禁止逐条全局 Toast 或自造成功提示计时器。IPC 调用收在 hooks/ 并按 §11.5.1 的二选一走「让用户看见」或「只记录」两类处置（缺省实现是 `reportAction`／`trackAction`，形状清单见 [工程规范 §5](12-engineering-standards.md) 的 Renderer 小节），视图不出现 `window.betterwork`。字段与通道见[记忆实施契约](development/memory-contracts.md)，界面落地卡片为 WM07/WM11/WM14，见 [WM 任务板](development/tasks-memory.md)。
 
 ### 6.1.4 记忆可靠性改进（MI，D1–D5 已批准）
 

@@ -106,14 +106,20 @@ standards/
 
 **Renderer**
 
-到主进程的每一次调用都必须收口，只有两种方式（`lib/async-action.ts`）：
+到主进程的每一次调用都必须**收口**。收口指的是「失败必须到达一个真实存在的呈现出口」，**不是「必须字面调用某个函数」**——`lib/async-action.ts` 的两个 helper 是两类处置的缺省实现，不是唯一写法：
 
-| 方式 | 何时用 | 失败去向 |
-| --- | --- | --- |
-| `reportAction(promise, onError, fallback)` | 用户主动发起、且失败后用户能采取行动 | 调用方指定的可见出口（页面错误条、表单错误、内联提示） |
-| `trackAction(promise, label)` | 后台同步，或调用自身已负责呈现结果 | `console.error`，带 label 便于定位 |
+| 处置 | 何时用 | 失败去向 | 缺省实现 |
+| --- | --- | --- | --- |
+| 让用户看见 | 用户主动发起、且失败后用户能采取行动 | 调用方指定的可见出口（内联错误条、表单错误、局部浮层） | `reportAction(promise, onError, fallback)` |
+| 只记录 | 后台同步，或调用链上已有另一层负责呈现 | `console.error`，带 label 便于定位 | `trackAction(promise, label)` |
 
-不存在第三种「`void someIpcCall()`」。ESLint 的 `no-floating-promises` 已设为 `ignoreVoid: false`，正是为了让这种写法无法通过。
+**手写 `try/catch` 与 helper 属同一类处置，不算第三种**：`reportAction` 只有 `onError` 一个出口，表达不了「成功也要播报一句」，需要时就手写 `try { await …; showToast('success', …) } catch (error) { setError(describeActionError(error, …)) }`，把失败交给同一个呈现出口即可。`hooks/use-knowledge-library.ts` 的 22 处是这一形状。
+
+**另两种形状也不算违规**：hook 直接 `return window.betterwork.x(…)` 把 promise 交回调用方——收口发生在调用链上最先能承载这条消息的那一层（`hooks/use-experts.ts` 的 `get`／`create`／`saveRevision`／`copy`／`setLifecycle`／`remove` 六处）；以及 `await` 写在一个由上层 `try/catch` 包裹的 async 函数里。
+
+真正不存在的是第三种**处置**——「不处理」：`void someIpcCall()`（ESLint 的 `no-floating-promises` 已设为 `ignoreVoid: false`，正是为了让这种写法无法通过）、空 `catch {}`、以及不写降级理由的 `.catch(() => undefined)`。**降级本身是合法的**（「设置读取失败保持旧值；下一次动作仍会在错误里可解释」），但理由必须写在 catch 体里，护栏按此断言。
+
+2026-09-30 实测口径：`hooks/` 里 100 个 `window.betterwork` 调用点，41 处字面走 helper，其余 59 处分布在上面三种形状里，**没有一处失败被静默吞掉**。此前的字面（「只有两种方式」）会被读成「只有这两个函数」，与 59% 的合法现实不符，据此改准。
 
 列表刷新函数（`refreshX`）统一为「返回 `void`、永不 reject」，因此调用点不需要也不应该 `await` 它们。
 
@@ -159,7 +165,7 @@ standards/
 
 反馈实现必须先按 [UI/UX 体系 §11.5](10-ui-ux-system.md) 路由语义，再选择组件：**三个落点各只有一个出口组件**——短时结果用 `TransientToast`，需要停留且当前对象可行动的错误／警告用 `InlineError`，跨页面可回看的长操作结果才进入消息中心（`NotificationService`）。禁止在 Hook 或页面里另造自动消失计时器、顶部横幅（常驻或固定悬浮皆算）或第三套 Toast——`TransientToast`（局部、自消、不落库）与 `ToastHost`（已持久化通知的投影）是既有的两套，分工见 §11.5.1，不可混用；对象状态本身能表达结果时，不重复制造全局提示。
 
-同一条消息**不得同时占用两个落点**。调用链上最先能承载它的那一层负责呈现，向上传递给另一个通道即视为重复播报。IPC 收口因此二选一：已经有内联／浮层承载的调用用 `trackAction`，只有全局短时提醒可去的调用才用 `reportAction`。
+同一条消息**不得同时占用两个落点**。调用链上最先能承载它的那一层负责呈现，向上传递给另一个通道即视为重复播报。IPC 收口因此二选一（两类处置的形状与清单见 §5 的 Renderer 小节）：调用链上已经有内联／浮层承载这句话的，走「只记录」那一类；这句话还没有任何出口的，走「让用户看见」那一类，由 `reportAction` 的 `onError`、或手写 `catch` 把它交到内联错误条、表单错误与局部浮层之一。**「让用户看见」的出口不必是全局的**——`use-model-settings` 把 `onError` 接在局部 `TransientToast` 上同样合规，判据是「这句话有没有出口」，不是「出口有多大」。
 
 反馈轴之外还有一条**状态轴**：一句常驻的只读状态说明（「这个对象现在是什么」）由 `StatusNote` 独家出口，档位只有 `neutral`／`success`／`warning`／`danger` 四档，无底、无内距、不自带上下缝。两轴的分界看「说的是哪一件事」，不看「有没有底」——一句无底纯文字，讲的是动作结果就仍归反馈轴。判据、清单与护栏见 [UI/UX 体系 §11.5.2](10-ui-ux-system.md)。
 
