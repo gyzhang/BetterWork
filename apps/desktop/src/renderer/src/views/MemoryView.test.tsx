@@ -538,7 +538,12 @@ describe('MemoryPage 召回策略（MI06）', () => {
 });
 
 describe('MemoryPage 冲突来源回看（MI07）', () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    // 下面有一条用例监听 `console.error` 抓 React 的重复 key 警告，必须用完即还原，
+    // 否则同文件其余用例会一起听不见真正的错误。
+    vi.restoreAllMocks();
+  });
 
   const pairOf = (state: MemoryConflictPair['state'], note?: string): MemoryConflictPair =>
     state === 'keep-both'
@@ -594,6 +599,33 @@ describe('MemoryPage 冲突来源回看（MI07）', () => {
       'memory-1-r1',
       'memory-2-r1',
     ]);
+  });
+
+  it('两侧来源正文相同时各自占一行，不撞 React key', async () => {
+    // 夹具让两侧返回同一句正文与同一段摘录，`sources.lines` 因此两句逐字相同。
+    // 列表若拿正文本身当 key，React 会报 duplicate key：两条今天都还渲染得出来，但这是
+    // 官方标注「不受支持、行为可能改变」的状态——将来任一条变化就可能被合并或丢掉。
+    // 所以这条守的是警告本身，长度断言只是证明夹具真的渲染出了两行（不是空容器假绿）。
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const loadRevision = vi.fn(
+      async (input: GetMemoryRequest): Promise<MemoryOutcome<MemoryViewItem>> => ({
+        ok: true,
+        data: memoryViewItem({
+          content: '收入按回款金额统计。',
+          ...(input.revisionId === undefined ? {} : { revisionId: input.revisionId }),
+        }),
+        warnings: [],
+      }),
+    );
+    const { container } = render(<MemoryPage state={state({ memories: sides(), loadRevision })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '查看两侧来源' }));
+    await waitFor(() => expect(loadRevision).toHaveBeenCalledTimes(2));
+
+    expect(container.querySelectorAll('.memory-conflict-source-list li')).toHaveLength(2);
+    expect(error.mock.calls.map((call) => String(call[0])).join('\n')).not.toMatch(
+      /two children with the same key/u,
+    );
   });
 
   it('另一条越出可管理范围时不请求也不显示其正文', async () => {

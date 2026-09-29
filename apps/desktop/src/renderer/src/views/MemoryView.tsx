@@ -980,8 +980,8 @@ function ConflictPair({
           <>
             {sources.lines.length > 0 && (
               <ul className="memory-conflict-source-list">
-                {sources.lines.map((line) => (
-                  <li key={line}>{line}</li>
+                {sources.lines.map((line, index) => (
+                  <li key={`${index}:${line}`}>{line}</li>
                 ))}
               </ul>
             )}
