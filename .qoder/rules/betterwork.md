@@ -32,7 +32,7 @@ trigger: always_on
 
 | 规则文件 | 触发方式 | 职责 |
 | --- | --- | --- |
-| [betterwork-code-style.md](betterwork-code-style.md) | glob: **/*.ts,tsx,css,mjs,json | 唯一编码规范入口与不可协商项 |
+| [betterwork-code-style.md](betterwork-code-style.md) | glob: **/*.ts,tsx,css,mjs,json | docs/12 的速查复述（每条带出处）与不可协商项；标准本体在 docs/12 |
 | [betterwork-diagnosis.md](betterwork-diagnosis.md) | model_decision | GATE-0 缺陷诊断顺序与修复纪律 |
 | [betterwork-knowledge.md](betterwork-knowledge.md) | model_decision | Knowledge 只读边界与索引纪律 |
 | [betterwork-ui.md](betterwork-ui.md) | glob: apps/desktop/src/renderer/**/*.tsx,ts,css | Renderer UI 与主题 Token 纪律 |

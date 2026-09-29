@@ -3015,6 +3015,28 @@ describe('规则与文档索引', () => {
     expect(unregistered, '未登记的规则文件不会被 Qoder 加载，等于不存在').toEqual([]);
   });
 
+  it('编码规范速查文件的每条复述都要带出处', () => {
+    // `.qoder/rules/betterwork-code-style.md` 是 docs/12 的速查复述：它被自动加载，读到它的
+    // 概率远高于人手去翻 docs/12，所以最危险的不是它啰嗦，而是它与出处**各说一套**。
+    // IPC 收口判据就在这里漂过一次（账本 P3-11：四处两种措辞，本文件那处直到 2026-09-29
+    // 才对齐）。要求每条复述句末带 `§N`，让「这条出自哪一节」永远可查——没有出处的复述
+    // 等于另立标准，漂移时没人能判断哪一份对。
+    //
+    // **本条只管这一个文件**，不是「所有规则文件」。2026-09-29 实测另外 5 个规则文件共
+    // 38 条复述缺出处（ui 9／diagnosis 2／knowledge 7／ipc-artifact 10／dev-cycle 10），
+    // 扩过去要先逐条核准目标小节存在（写错指针比不写更糟），已按实数登记进账本 §8 待派发。
+    const relative = '.qoder/rules/betterwork-code-style.md';
+    const bullets = read(relative)
+      .split('\n')
+      .filter((line) => line.startsWith('- '));
+    expect(bullets.length, '速查文件里没有复述条目，本条护栏已空跑').toBeGreaterThan(0);
+    const unsourced = bullets.filter((line) => !/§\d/u.test(line)).map((line) => line.slice(0, 40));
+    expect(
+      unsourced,
+      `${relative} 的每条复述都要标出处（docs/12 §N 或 AGENTS.md §N），否则它就是第二份标准`,
+    ).toEqual([]);
+  });
+
   it('两个智能体入口都指向同一份工程规范', () => {
     const standard = 'docs/12-engineering-standards.md';
     expect(read('AGENTS.md'), 'Codex 入口 AGENTS.md 必须指向唯一规范').toContain(standard);
