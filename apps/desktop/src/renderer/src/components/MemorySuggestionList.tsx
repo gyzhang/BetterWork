@@ -27,8 +27,10 @@ import { Badge, type BadgeTone } from './Badge';
 import { Button } from './Button';
 import { Card } from './Card';
 import { ConfirmationDialog } from './ConfirmationDialog';
+import { EmptyNotice } from './EmptyState';
 import { ListRow } from './ListRow';
 import { SectionHeader } from './SectionHeader';
+import { StatusNote } from './StatusNote';
 import { Switch } from './Switch';
 import { TransientToast } from './TransientToast';
 
@@ -97,15 +99,18 @@ export function MemorySuggestionList({
         />
       )}
       {variant === 'settings' ? (
-        <p className="context-hint">
-          {candidates.length === 0
-            ? '本轮没有待确认的建议。'
-            : `当前有 ${candidates.length} 条待确认候选，见下方「待确认」分组。`}
-        </p>
+        candidates.length === 0 ? (
+          <EmptyNotice title="本轮没有待确认的建议。" />
+        ) : (
+          <StatusNote
+            message={`当前有 ${candidates.length} 条待确认候选，见下方「待确认」分组。`}
+          />
+        )
       ) : candidates.length === 0 ? (
-        <p className="context-hint">
-          没有与本任务相关的建议。开启自动建议后，每次运行最多产生 3 条，全部需要你亲自确认。
-        </p>
+        <EmptyNotice
+          title="没有与本任务相关的建议"
+          detail="开启自动建议后，每次运行最多产生 3 条，全部需要你亲自确认。"
+        />
       ) : (
         <div className="suggestion-list">
           {candidates.map((candidate) => (
@@ -166,7 +171,7 @@ function SuggestionSettings({
           />
         }
       />
-      <p className="context-hint">{consentStateNotice(suggestions.settings)}</p>
+      <StatusNote message={consentStateNotice(suggestions.settings)} />
       {suggestions.settingsError && <InlineError message={suggestions.settingsError} />}
       {suggestions.jobsError && <InlineError message={suggestions.jobsError} />}
       {suggestions.jobs.length > 0 && (

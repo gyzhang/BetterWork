@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
 import { cleanup, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { StatusNote } from './StatusNote';
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
 });
 
 /**
@@ -59,5 +60,18 @@ describe('StatusNote 基座', () => {
     const note = container.querySelector('.grant-state') as HTMLElement;
     expect(note.classList.contains('status-note')).toBe(true);
     expect(note.dataset['tone']).toBe('success');
+  });
+
+  it('两条相同的明细各占一行，不撞 React key', () => {
+    // 明细正文当 key 时，同一句阻塞原因出现两次就会撞——React 只发一条 stderr 警告，
+    // 退出码照旧是 0，所以这条必须显式钉住。与 `InlineError` 的同类用例是一对。
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { container } = render(<StatusNote tone="warning" problems={['尚未信任', '尚未信任']} />);
+
+    // 先证两行真的渲染出来了，否则「没有警告」可能只是「什么都没渲染」。
+    expect(container.querySelectorAll('.status-note-problems li')).toHaveLength(2);
+    expect(error.mock.calls.map((call) => String(call[0])).join('\n')).not.toMatch(
+      /two children with the same key/u,
+    );
   });
 });

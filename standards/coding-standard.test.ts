@@ -2787,12 +2787,20 @@ describe('状态呈现纪律', () => {
     'memory-pending-governance',
     'appearance-note',
     'action-note',
+    'context-hint',
+    'context-phase',
   ];
 
   it('已废弃的自造状态说明表面不得复活', () => {
     // `.memory-pending-governance` 与 `.appearance-note` 借的是反馈表面的壳（`padding: 10px 12px`
     // ＋ soft 底色），讲的却是一句常驻状态，读起来像「刚刚出事了」；`.success-copy` 的绿字
     // 靠 `!important` 才盖得住容器的 `> p` 规则。三者都已并入 `StatusNote`。
+    //
+    // `.context-hint`／`.context-note`／`.context-phase` 是同一件事的上下文面板版：三个类只差
+    // 字色（muted／secondary／secondary），21 处调用里混着空态、对象状态与读法说明。2026-09-29
+    // 逐句分类后前两个类退役——**空态归 `EmptyNotice`、对象状态归 `StatusNote`**，只剩
+    // `.context-note` 承载「该怎么读这一段」的说明（3 处），因为说明不属于这两条轴。
+    // 所以本条清单里既有并入 `StatusNote` 的类，也有并入 `EmptyNotice` 的类。
     const offenders: string[] = [];
     for (const relative of pathsUnder('apps/desktop/src/renderer/')) {
       if (!/\.(tsx|css)$/.test(relative) || /\.test\.tsx$/.test(relative)) continue;
@@ -2808,9 +2816,10 @@ describe('状态呈现纪律', () => {
         if (usedAsClass || styled) offenders.push(`${relative} → .${name}`);
       }
     }
-    expect(offenders, '一句只读状态说明只能用 StatusNote（docs/10 §11.5.2、§10.1 台账）').toEqual(
-      [],
-    );
+    expect(
+      offenders,
+      '一句只读说明不得自造类：空态归 EmptyNotice、对象状态归 StatusNote（docs/10 §10.1、§11.5.2）',
+    ).toEqual([]);
   });
 
   it('通用字色 utility 不得复活', () => {

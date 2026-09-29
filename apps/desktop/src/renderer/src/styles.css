@@ -1202,19 +1202,15 @@ small {
   padding: 13px 14px 12px;
   border-bottom: 1px solid var(--border-subtle);
 }
-.context-hint {
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.6;
-}
+/* 上下文面板里只剩这一类自造文字：一句「该怎么读这一段」的说明。
+   空态归 `EmptyNotice`、对象状态归 `StatusNote`（docs/10 §10.1、§11.5.2）——
+   `.context-hint` 与 `.context-phase` 曾与它并存，三个类只差字色，同一件事三处真相，
+   2026-09-29 逐句分类后退役。说明不属于那两条轴（它讲的不是「这里没有东西」也不是
+   「这个对象现在是什么」），所以留一个类，但只留一个。 */
 .context-note {
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.6;
-}
-.context-phase {
-  color: var(--text-secondary);
-  font-size: 12px;
 }
 .context-list {
   display: grid;

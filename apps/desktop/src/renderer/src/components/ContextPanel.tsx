@@ -42,7 +42,7 @@ import type { ContextTab } from '../lib/view-types';
 import { AsyncButton, InlineLoading } from './AsyncButton';
 import { Button } from './Button';
 import { Disclosure } from './Disclosure';
-import { EmptyContext } from './EmptyState';
+import { EmptyContext, EmptyNotice } from './EmptyState';
 import { IconButton } from './IconButton';
 import { InlineError } from './InlineError';
 import { ListRow } from './ListRow';
@@ -51,6 +51,7 @@ import { MemorySuggestionList } from './MemorySuggestionList';
 import { RunSummaryRow } from './RunSummaryRow';
 import { SectionHeader } from './SectionHeader';
 import { SourceRow } from './SourceRow';
+import { StatusNote } from './StatusNote';
 import { Tabs } from './Tabs';
 import { ToolActivity } from './ToolActivity';
 import { type ToastTone, TransientToast } from './TransientToast';
@@ -239,7 +240,7 @@ export function ContextPanel({
               {memoriesError && <InlineError message={memoriesError} />}
               {memoriesWarning && (
                 <section className="context-section">
-                  <p className="context-note">{memoriesWarning}</p>
+                  <StatusNote tone="warning" message={memoriesWarning} />
                 </section>
               )}
               <NextRunScopeSection
@@ -486,9 +487,9 @@ function EvidenceSection({
           <section className="context-section">
             <SectionHeader title={activeRunId ? '本次运行' : '任务来源'} />
             {current.length === 0 ? (
-              <p className="context-hint">
-                {activeRunId ? '本次运行还没有登记已查阅来源。' : '尚未开始运行。'}
-              </p>
+              <EmptyNotice
+                title={activeRunId ? '本次运行还没有登记已查阅来源。' : '尚未开始运行。'}
+              />
             ) : (
               <div className="evidence-list">{current.map((item) => renderRow(item))}</div>
             )}
@@ -530,13 +531,17 @@ function EvidencePreview({
         />
       ) : preview === undefined ? null : preview.kind === 'exact' ? (
         <>
-          <p className="context-note">
-            「{preview.page.title}」固定修订{' '}
-            {preview.page.reference.knowledgeRevisionId.slice(0, 8)} · 共返回{' '}
-            {preview.page.returnedCodePoints} 字，止于该区间；不提供续读。
-          </p>
+          <StatusNote
+            message={
+              <>
+                「{preview.page.title}」固定修订{' '}
+                {preview.page.reference.knowledgeRevisionId.slice(0, 8)} · 共返回{' '}
+                {preview.page.returnedCodePoints} 字，止于该区间；不提供续读。
+              </>
+            }
+          />
           {preview.page.warnings.length > 0 && (
-            <p className="context-note">解析提示：{preview.page.warnings.join('、')}</p>
+            <StatusNote tone="warning" message={`解析提示：${preview.page.warnings.join('、')}`} />
           )}
           <ul>
             {preview.page.parts.map((part) => (
@@ -554,9 +559,7 @@ function EvidencePreview({
           </Button>
         </>
       ) : (
-        <p className="context-note">
-          这条来源没有记录精确区间（历史数据），只能查看摘录与本机原文。
-        </p>
+        <StatusNote message="这条来源没有记录精确区间（历史数据），只能查看摘录与本机原文。" />
       )}
     </div>
   );
@@ -600,19 +603,20 @@ function NextRunScopeSection({
         }
       />
       {!previewAvailable ? (
-        <p className="context-hint">
-          还没有可试算的输入：任务上下文或输入变化后，这里才会给出候选范围。
-        </p>
+        <EmptyNotice
+          title="还没有可试算的输入"
+          detail="任务上下文或输入变化后，这里才会给出候选范围。"
+        />
       ) : previewLoading ? (
         <InlineLoading label="正在按当前输入试算可用范围…" />
       ) : previewError ? (
         <InlineError message={previewError} onRetry={requestPreview} />
       ) : preview === undefined ? (
-        <p className="context-hint">暂无预览结果。</p>
+        <EmptyNotice title="暂无预览结果。" />
       ) : (
         <>
           {preview.selectedItems.length === 0 ? (
-            <p className="context-hint">按当前输入，没有匹配到可用记忆。</p>
+            <EmptyNotice title="按当前输入，没有匹配到可用记忆。" />
           ) : (
             <div className="context-list">
               {preview.selectedItems.map((item) => (
@@ -720,7 +724,7 @@ function ExcludedTaskMemoriesSection({
         <InlineError message={exclusions.error} onRetry={exclusions.reload} />
       )}
       {exclusions.error === '' && exclusions.items.length === 0 ? (
-        <p className="context-hint">这个任务目前没有排除任何记忆。</p>
+        <EmptyNotice title="这个任务目前没有排除任何记忆。" />
       ) : (
         <div className="context-list">
           {exclusions.items.map((item) => (
@@ -751,7 +755,7 @@ function ExcludedTaskMemoriesSection({
         </div>
       )}
       {excludedMemoryIds.length > 0 && exclusions.items.length === 0 && exclusions.error === '' ? (
-        <p className="context-note">任务上下文记录了排除项，但清单尚未读取，请点击刷新。</p>
+        <StatusNote tone="warning" message="任务上下文记录了排除项，但清单尚未读取，请点击刷新。" />
       ) : null}
     </section>
   );
@@ -770,9 +774,10 @@ function RecallExclusions({
   return (
     <Disclosure className="context-details" label="为什么这些没有进入范围">
       {summary.conflictReviewRequired && (
-        <p className="context-hint">
-          存在待澄清口径：同一议题下两条已确认规则尚未裁决，本次一组都不带入。请到记忆页澄清。
-        </p>
+        <StatusNote
+          tone="warning"
+          message="存在待澄清口径：同一议题下两条已确认规则尚未裁决，本次一组都不带入。请到记忆页澄清。"
+        />
       )}
       <ul className="context-exclusion-list">
         {shown.map((exclusion) => (
@@ -844,7 +849,7 @@ function ThisRunMemorySection({
       ) : contextLoading && runContext === undefined ? (
         <InlineLoading label="正在读取本次运行的记忆登记…" />
       ) : runContext === undefined ? (
-        <p className="context-hint">还没有运行记录：任务开始后才能看到本次登记的精确修订。</p>
+        <EmptyNotice title="还没有运行记录" detail="任务开始后才能看到本次登记的精确修订。" />
       ) : (
         <RunContextBody context={runContext} memories={memories} />
       )}
@@ -863,20 +868,21 @@ function RunContextBody({
   const selected = context.context?.selectedItems ?? [];
   return (
     <>
-      <p className="context-phase">
-        请求阶段：{memoryRunPhaseLabel[context.phase]}
-        {context.phase === 'legacy_unknown' ? '' : ' · 阶段只描述宿主做到哪一步'}
-      </p>
+      <StatusNote
+        message={
+          <>
+            请求阶段：{memoryRunPhaseLabel[context.phase]}
+            {context.phase === 'legacy_unknown' ? '' : ' · 阶段只描述宿主做到哪一步'}
+          </>
+        }
+      />
       {context.phase === 'legacy_unknown' && (
-        <p className="context-hint">
-          这是记忆治理改造前的旧运行，没有请求审计行，无法确认当时带到哪一步；这里只列已登记的引用，
-          不回填发送时间与请求哈希。
-        </p>
+        <StatusNote message="这是记忆治理改造前的旧运行，没有请求审计行，无法确认当时带到哪一步；这里只列已登记的引用，不回填发送时间与请求哈希。" />
       )}
       {context.context === undefined && context.phase !== 'legacy_unknown' ? (
-        <p className="context-hint">审计行尚未写入，只有引用记录可读。</p>
+        <StatusNote message="审计行尚未写入，只有引用记录可读。" />
       ) : (
-        selected.length === 0 && <p className="context-hint">本次运行没有登记带入的记忆。</p>
+        selected.length === 0 && <EmptyNotice title="本次运行没有登记带入的记忆。" />
       )}
       <div className="context-list">
         {selected.map((item) => {
@@ -928,9 +934,9 @@ function HistoryAdjustmentSection({
     <section className="context-section memory-history-section">
       <SectionHeader title="历史上下文调整" hint="哪些旧轮次没带、为什么没带" />
       {!known ? (
-        <p className="context-hint">旧版运行没有历史重放审计，无法确认当时的轮次取舍。</p>
+        <StatusNote message="旧版运行没有历史重放审计，无法确认当时的轮次取舍。" />
       ) : replay.length === 0 ? (
-        <p className="context-hint">本次没有复用历史轮次：只按当前任务上下文工作。</p>
+        <EmptyNotice title="本次没有复用历史轮次" detail="只按当前任务上下文工作。" />
       ) : (
         <ul className="context-replay-list">
           {replay.map((entry) => (
@@ -962,7 +968,7 @@ function HistoryAdjustmentSection({
           到记忆详情保留方法
         </Button>
       </div>
-      <p className="context-hint">
+      <p className="context-note">
         引用旧成果只固定你选定的那一版，标记参考不等于已读取；要把上期方法长期留下，请在记忆详情以你的口径重新表述，系统不会自动摘要旧回答。
       </p>
     </section>

@@ -38,8 +38,8 @@ export function StatusNote({
       {message !== undefined && <p className="status-note-message">{message}</p>}
       {hasProblems && (
         <ul className="status-note-problems">
-          {problems?.map((problem) => (
-            <li key={problem}>{problem}</li>
+          {problems?.map((problem, index) => (
+            <li key={`${index}:${problem}`}>{problem}</li>
           ))}
         </ul>
       )}
