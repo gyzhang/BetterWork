@@ -63,8 +63,8 @@ export function InlineError({
       {message !== undefined && <p className="inline-error-message">{message}</p>}
       {hasProblems && (
         <ul className="inline-error-problems">
-          {problems?.map((problem) => (
-            <li key={problem}>{problem}</li>
+          {problems?.map((problem, index) => (
+            <li key={`${index}:${problem}`}>{problem}</li>
           ))}
         </ul>
       )}
