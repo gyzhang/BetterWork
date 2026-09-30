@@ -7,7 +7,7 @@ import type {
 } from '@betterwork/agent-protocol';
 import { useCallback, useEffect, useState } from 'react';
 
-import { trackAction } from '../lib/async-action';
+import { describeActionError, trackAction } from '../lib/async-action';
 
 export interface ExpertsState {
   experts: ExpertSummary[];
@@ -38,11 +38,16 @@ export function useExperts(): ExpertsState {
   const refresh = useCallback((): void => {
     setLoading(true);
     trackAction(
-      window.betterwork.experts.list().then((items) => {
-        setExperts(items);
-        setError('');
-        setLoading(false);
-      }),
+      window.betterwork.experts
+        .list()
+        .then((items) => {
+          setExperts(items);
+          setError('');
+        })
+        .catch((error: unknown) => {
+          setError(describeActionError(error, '读取专家列表失败，请重试。'));
+        })
+        .finally(() => setLoading(false)),
       '刷新专家列表',
     );
   }, []);

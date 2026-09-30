@@ -256,6 +256,19 @@ describe('DependencyPanel', () => {
     expect(screen.getByRole('button', { name: '取消准备' })).toHaveProperty('disabled', true);
   });
 
+  it('依赖计划读取失败时不停在「正在计算依赖计划…」，并把这句话显示出来', async () => {
+    // `inspect` 走 trackAction，而 loading 此前只在成功路径清除：一次读取失败会让进度条
+    // 永远转下去，DependencyPanel:211 那句内联错误也就永远等不到内容。
+    const api = installApi();
+    api.dependencies.inspectPlan.mockImplementation(async () => {
+      throw new Error('依赖计划通道不可用');
+    });
+    const { container } = render(<Harness skill={skillOf('skill-1')} />);
+
+    await waitFor(() => expect(screen.getByText('依赖计划通道不可用')).toBeTruthy());
+    expect(container.querySelector('.dependency-progress')).toBeNull();
+  });
+
   it('切换 Skill 后不显示上一个 Skill 的作业进度', async () => {
     const api = installApi({
       plan: planOf({ openOperationId: 'op-1' }),

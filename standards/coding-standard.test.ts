@@ -390,6 +390,50 @@ describe('架构边界', () => {
       '失败被扔掉而不说明为什么可以扔，等于把「不处理」伪装成「已处理」（docs/12 §5 的 Renderer 小节）',
     ).toEqual([]);
   });
+
+  it('hooks 里先置 true 的 busy 标志必须在失败路径也能清除', () => {
+    // 「只记录」那一类处置成立的前提，是这句话在调用链上已有别的承载，或者用户根本不需要
+    // 知道它失败了。两者都不满足时，最常见的破口不是丢一句错误，而是**界面停在转圈上**：
+    // `setLoading(true)` 之后只在 `.then` 里 `setLoading(false)`，一次 IPC 失败就让
+    // 「正在加载…」永远转下去，没有内容、没有报错、没有重试。
+    // 2026-09-30 实测这同一条缺陷在 5 处（use-skills ×2、use-experts、use-mcp-connections、
+    // use-skill-dependencies 各 1），本轮修完后把它钉成护栏。
+    //
+    // 只管 `trackAction`：`reportAction` 的 `onError` 是调用方写的回调，静态判不出它有没有清
+    // busy——那一半由 hook 的行为测试守（见 use-skills.test.ts 等）。
+    const offenders: string[] = [];
+    for (const relative of productionPathsUnder('apps/desktop/src/renderer/src/hooks/')) {
+      const source = read(relative).replace(/\/\*[\s\S]*?\*\//gu, (block) =>
+        block.replace(/[^\n]/gu, ' '),
+      );
+      const lines = source.split('\n');
+      lines.forEach((line, index) => {
+        if (!line.includes('trackAction(')) return;
+        // 调用前三行内把某个 busy 标志置 true —— 这是「这次调用要让界面进入等待态」的信号。
+        const before = lines.slice(Math.max(0, index - 3), index).join('\n');
+        if (!/set\w*(Loading|Busy|Preparing|Saving)\(true\)/u.test(before)) return;
+        // 取 trackAction( 到配对的 ) 之间的整段参数链。
+        let depth = 0;
+        let chain = '';
+        for (let k = index; k < Math.min(index + 45, lines.length); k += 1) {
+          chain += `${lines[k] ?? ''}\n`;
+          for (const char of lines[k] ?? '') {
+            if (char === '(') depth += 1;
+            else if (char === ')') depth -= 1;
+          }
+          if (depth <= 0 && k > index) break;
+        }
+        // 失败路径能清除的四种写法：链上 .catch／.finally，或经 settle*Call 把拒绝转成结果对象。
+        if (!/\.catch\(|\.finally\(|settle\w*Call\(/u.test(chain)) {
+          offenders.push(`${relative}:${index + 1} busy 只在成功路径清除`);
+        }
+      });
+    }
+    expect(
+      offenders,
+      '失败时 loading/busy 必须停下，且那句错误要到达一个呈现出口——否则用户只能看着转圈（docs/12 §5 的 Renderer 小节）',
+    ).toEqual([]);
+  });
 });
 
 describe('界面 Token 纪律', () => {

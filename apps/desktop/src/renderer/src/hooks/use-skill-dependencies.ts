@@ -8,7 +8,7 @@ import type {
 } from '@betterwork/agent-protocol';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { reportAction, trackAction } from '../lib/async-action';
+import { describeActionError, reportAction, trackAction } from '../lib/async-action';
 
 /**
  * Skill 依赖与环境准备（A12）。
@@ -112,7 +112,6 @@ export function useSkillDependencies(
           .then((result) => {
             if (requestId.current !== token) return;
             setPlan(result);
-            setLoading(false);
             // 关闭页面再回来：按环境键找回未完成的作业并继续回看进度。
             if (result.openOperationId) {
               trackAction(
@@ -127,6 +126,13 @@ export function useSkillDependencies(
             } else {
               setOperation(undefined);
             }
+          })
+          .catch((error: unknown) => {
+            if (requestId.current !== token) return;
+            setError(describeActionError(error, '查看依赖计划失败，请重试。'));
+          })
+          .finally(() => {
+            if (requestId.current === token) setLoading(false);
           }),
         '查看依赖计划',
       );

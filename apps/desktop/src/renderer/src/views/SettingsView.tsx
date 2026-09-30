@@ -535,6 +535,9 @@ function McpSettings({ state }: { state: McpConnectionsState }): React.JSX.Eleme
       />
       {state.loading ? (
         <InlineLoading label="正在加载连接…" />
+      ) : state.error ? (
+        // 读失败不能说成「还没有 MCP 连接」——清单没读回来，界面并不知道它是不是空的。
+        <InlineError message={state.error} onRetry={state.refresh} />
       ) : state.connections.length === 0 ? (
         <EmptyNotice
           title="还没有 MCP 连接"

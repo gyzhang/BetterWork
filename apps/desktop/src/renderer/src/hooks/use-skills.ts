@@ -1,7 +1,7 @@
 import type { RuntimeProfileDraft, SkillDetail, SkillSummary } from '@betterwork/agent-protocol';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { reportAction, trackAction } from '../lib/async-action';
+import { describeActionError, reportAction, trackAction } from '../lib/async-action';
 
 export interface SkillsState {
   skills: SkillSummary[];
@@ -48,10 +48,13 @@ export function useSkills(options: UseSkillsOptions): SkillsState {
   const refresh = useCallback((): void => {
     setLoading(true);
     trackAction(
-      window.betterwork.skills.list().then((items) => {
-        setSkills(items);
-        setLoading(false);
-      }),
+      window.betterwork.skills
+        .list()
+        .then((items) => setSkills(items))
+        .catch((error: unknown) => {
+          setError(describeActionError(error, '读取 Skill 列表失败，请重试。'));
+        })
+        .finally(() => setLoading(false)),
       '刷新 Skill 列表',
     );
   }, []);
@@ -65,11 +68,21 @@ export function useSkills(options: UseSkillsOptions): SkillsState {
     setDetailLoading(true);
     setError('');
     trackAction(
-      window.betterwork.skills.get({ id: skill.id }).then((detail) => {
-        if (requestId.current !== nextRequestId) return;
-        setSelected(detail ?? undefined);
-        setDetailLoading(false);
-      }),
+      window.betterwork.skills
+        .get({ id: skill.id })
+        .then((detail) => {
+          if (requestId.current !== nextRequestId) return;
+          setSelected(detail ?? undefined);
+        })
+        .catch((error: unknown) => {
+          // 过期请求的失败同样要丢掉：否则一次迟到的报错会把新一次详情加载的转圈停掉，
+          // 用户看到的是「上一次的错误」配「这一次的内容」。
+          if (requestId.current !== nextRequestId) return;
+          setError(describeActionError(error, '读取 Skill 详情失败，请重试。'));
+        })
+        .finally(() => {
+          if (requestId.current === nextRequestId) setDetailLoading(false);
+        }),
       '加载 Skill 详情',
     );
   }, []);
