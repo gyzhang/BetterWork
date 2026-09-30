@@ -38,6 +38,26 @@ const trustName = {
 
 type ChipKind = 'source' | 'trust' | 'enabled' | 'environment';
 
+/**
+ * 删除的后果按仓储与 Schema 的实际语义写，不写成「不能恢复」一句带过：
+ * `skills` 的四个子表都是 `ON DELETE CASCADE`，其中 `skill_revisions` 又带着
+ * `run_skill_bindings` 一起级联——Run 本身留着，但「那次运行用了哪个 Skill 的哪一版」
+ * 这条事实会消失（专家那边是 RESTRICT，删不掉被历史引用的，见 ADR-0030 §决策 3）。
+ */
+const DELETE_SKILL_WARNING =
+  '将删除这个用户 Skill 的受管副本、运行配置与本地资源目录，并连带删除它的修订、启用偏好和依赖授权。' +
+  '历史运行记录里指向这些修订的技能绑定也会一起删除——那次运行仍在，但不再能回答「当时用的是哪个版本的这个 Skill」。此操作不能恢复。';
+
+/** 卡片与列表行共用的就地动作回调；确认框由 `SkillsPage` 统一持有。 */
+interface SkillActions {
+  onOpen: (skill: SkillSummary) => void;
+  onToggleEnabled: (skill: SkillSummary) => void;
+  onTrust: (skill: SkillSummary) => void;
+  onRevokeTrust: (skill: SkillSummary) => void;
+  onCopy: (skill: SkillSummary) => void;
+  onDelete: (skill: SkillSummary) => void;
+}
+
 function chipTone(label: string, kind: ChipKind): BadgeTone {
   if (kind === 'trust' && label === '需复核') return 'warning';
   if (kind === 'trust' && label === '已信任') return 'brand';
@@ -61,12 +81,62 @@ function SkillChips({ skill }: { skill: SkillSummary }): React.JSX.Element {
   );
 }
 
-function SkillCard({
+/**
+ * 卡片与列表行共用的一组就地动作（docs/10 §10.1、ADR-0030 §决策 5 的同一口径）。
+ *
+ * 内置 Skill 每次启动都由发布清单重新登记，删不掉（`deleteUserSkill` 直接拒绝非 user 来源），
+ * 所以那一档给「复制副本」而不给禁用按钮——禁用入口点了只知道「不行」，不告诉用户下一步。
+ */
+function SkillActionButtons({
   skill,
-  onClick,
+  actions,
 }: {
   skill: SkillSummary;
-  onClick: () => void;
+  actions: SkillActions;
+}): React.JSX.Element {
+  const trusted = skill.trustStatus === 'trusted' || skill.trustStatus === 'needs-review';
+  return (
+    <>
+      <Button variant="text" size="sm" type="button" onClick={() => actions.onOpen(skill)}>
+        详情
+      </Button>
+      <Button variant="text" size="sm" type="button" onClick={() => actions.onToggleEnabled(skill)}>
+        {skill.enabled ? '停用' : '启用'}
+      </Button>
+      {trusted ? (
+        <Button variant="text" size="sm" type="button" onClick={() => actions.onRevokeTrust(skill)}>
+          撤销信任
+        </Button>
+      ) : (
+        <Button variant="text" size="sm" type="button" onClick={() => actions.onTrust(skill)}>
+          信任
+        </Button>
+      )}
+      {skill.sourceKind === 'builtin' ? (
+        <Button variant="text" size="sm" type="button" onClick={() => actions.onCopy(skill)}>
+          复制副本
+        </Button>
+      ) : (
+        <Button
+          variant="text"
+          size="sm"
+          tone="danger"
+          type="button"
+          onClick={() => actions.onDelete(skill)}
+        >
+          删除
+        </Button>
+      )}
+    </>
+  );
+}
+
+function SkillCard({
+  skill,
+  actions,
+}: {
+  skill: SkillSummary;
+  actions: SkillActions;
 }): React.JSX.Element {
   return (
     <Card
@@ -75,29 +145,34 @@ function SkillCard({
       title={skill.name}
       byline={`${sourceName[skill.sourceKind]} Skill`}
       description={skill.description || '暂无描述'}
-      onOpen={onClick}
+      onOpen={() => actions.onOpen(skill)}
+      footer={<SkillActionButtons skill={skill} actions={actions} />}
     >
       <SkillChips skill={skill} />
     </Card>
   );
 }
 
+/** 列表模式：右槽已有按钮，所以整行不再是点击区（与专家页同口径）。 */
 function SkillListItem({
   skill,
-  onClick,
+  actions,
 }: {
   skill: SkillSummary;
-  onClick: () => void;
+  actions: SkillActions;
 }): React.JSX.Element {
   return (
     <ListRow
+      as="article"
       variant="card"
-      onClick={onClick}
       leading={<CardMark>{skill.name.slice(0, 1).toUpperCase()}</CardMark>}
       title={skill.name}
-      meta={skill.description || '暂无描述'}
-      actions={<SkillChips skill={skill} />}
-    />
+      detail={skill.description || '暂无描述'}
+      meta={`${sourceName[skill.sourceKind]} Skill`}
+      actions={<SkillActionButtons skill={skill} actions={actions} />}
+    >
+      <SkillChips skill={skill} />
+    </ListRow>
   );
 }
 
@@ -118,6 +193,17 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
     dismissDepsToast();
   }, [dismissStateToast, dismissDepsToast]);
   const { viewMode, changeViewMode } = useViewMode(VIEW_MODE_STORAGE_KEY);
+  // 确认框由页面持有：卡片和列表行各有一组动作，同一时刻只可能有一个待确认对象。
+  const [pendingRevoke, setPendingRevoke] = useState<SkillSummary>();
+  const [pendingDelete, setPendingDelete] = useState<SkillSummary>();
+  const actions: SkillActions = {
+    onOpen: (skill) => state.select(skill),
+    onToggleEnabled: (skill) => state.setEnabled(skill, !skill.enabled),
+    onTrust: (skill) => state.setTrust(skill, true),
+    onRevokeTrust: (skill) => setPendingRevoke(skill),
+    onCopy: (skill) => state.copy(skill),
+    onDelete: (skill) => setPendingDelete(skill),
+  };
 
   return (
     <section className="skills-page">
@@ -180,18 +266,44 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
           ) : viewMode === 'grid' ? (
             <ViewContainer mode="grid" className="skill-cards">
               {state.skills.map((skill) => (
-                <SkillCard key={skill.id} skill={skill} onClick={() => state.select(skill)} />
+                <SkillCard key={skill.id} skill={skill} actions={actions} />
               ))}
             </ViewContainer>
           ) : (
             <ViewContainer mode="list" className="skill-rows">
               {state.skills.map((skill) => (
-                <SkillListItem key={skill.id} skill={skill} onClick={() => state.select(skill)} />
+                <SkillListItem key={skill.id} skill={skill} actions={actions} />
               ))}
             </ViewContainer>
           )}
         </section>
       </ScrollRegion>
+      {pendingRevoke ? (
+        <ConfirmationDialog
+          title="撤销 Skill 信任？"
+          detail="撤销后将立即禁止新的脚本执行；正在运行的执行会由运行服务负责清理。"
+          confirmLabel="撤销信任"
+          onCancel={() => setPendingRevoke(undefined)}
+          onConfirm={() => {
+            const target = pendingRevoke;
+            setPendingRevoke(undefined);
+            state.revokeTrust(target);
+          }}
+        />
+      ) : null}
+      {pendingDelete ? (
+        <ConfirmationDialog
+          title="删除这个 Skill？"
+          detail={DELETE_SKILL_WARNING}
+          confirmLabel="删除 Skill"
+          onCancel={() => setPendingDelete(undefined)}
+          onConfirm={() => {
+            const target = pendingDelete;
+            setPendingDelete(undefined);
+            reportAction(state.deleteSkill(target), state.clearError, '删除 Skill 失败，请重试。');
+          }}
+        />
+      ) : null}
       {toast && <TransientToast tone="success" message={toast} onDismiss={dismissToast} />}
     </section>
   );
@@ -350,17 +462,30 @@ function SkillDetail({
       </div>
       <div className="skill-detail-section">
         <SectionHeader title="本地 Skill" />
-        <p>删除会移除受管用户副本及其本地配置，不能恢复。</p>
-        <Button
-          variant="quiet"
-          size="sm"
-          tone="danger"
-          type="button"
-          disabled={skill.sourceKind === 'builtin'}
-          onClick={() => setConfirmDelete(true)}
-        >
-          删除 Skill
-        </Button>
+        {skill.sourceKind === 'builtin' ? (
+          <>
+            <p>
+              内置 Skill
+              每次启动都由发布清单重新登记，改不了也删不掉；要按自己的方式用，先复制一份。
+            </p>
+            <Button variant="secondary" size="md" type="button" onClick={() => state.copy(skill)}>
+              复制副本
+            </Button>
+          </>
+        ) : (
+          <>
+            <p>删除会移除受管用户副本及其本地配置，不能恢复。</p>
+            <Button
+              variant="quiet"
+              size="sm"
+              tone="danger"
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+            >
+              删除 Skill
+            </Button>
+          </>
+        )}
       </div>
       {confirmRevoke && (
         <ConfirmationDialog
@@ -377,7 +502,7 @@ function SkillDetail({
       {confirmDelete && (
         <ConfirmationDialog
           title="删除这个 Skill？"
-          detail="将删除用户 Skill 的受管副本和配置。内置 Skill 不能删除，请使用复制并编辑。"
+          detail={DELETE_SKILL_WARNING}
           confirmLabel="删除 Skill"
           onCancel={() => setConfirmDelete(false)}
           onConfirm={() => {

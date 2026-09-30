@@ -249,6 +249,111 @@ describe('SkillsPage', () => {
     await waitFor(() => expect(deleteSkill).toHaveBeenCalledWith({ skillId: summary.id }));
   });
 
+  it('lists one row of in-place actions per card, and never offers delete for a builtin Skill', async () => {
+    const builtin: SkillSummary = {
+      ...summary,
+      id: 'skill-2',
+      name: '内置样本',
+      sourceKind: 'builtin',
+      trustStatus: 'trusted',
+    };
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        dependencies: dependencyStub(),
+        skills: {
+          refreshDependencyGrant: grantStub(),
+          list: vi.fn(async () => [summary, builtin]),
+          get: vi.fn(async () => detail),
+        },
+      },
+    });
+
+    render(<Harness />);
+    await waitFor(() => expect(screen.getByText('研究方法')).toBeTruthy());
+
+    // 逐张卡断言，不数全局个数：把「内置给复制副本」的条件取反，两条计数都不变，
+    // 只比数量的断言会照样绿——那等于没测。
+    const userCard = screen.getByText('研究方法').closest('.card');
+    const builtinCard = screen.getByText('内置样本').closest('.card');
+    if (!userCard || !builtinCard) throw new Error('两张卡没都渲染出来，本条用例是空跑');
+
+    expect(within(userCard as HTMLElement).getByRole('button', { name: '停用' })).toBeTruthy();
+    expect(within(userCard as HTMLElement).getByRole('button', { name: '信任' })).toBeTruthy();
+    expect(within(userCard as HTMLElement).getByRole('button', { name: '删除' })).toBeTruthy();
+    expect(within(userCard as HTMLElement).queryByRole('button', { name: '复制副本' })).toBeNull();
+
+    expect(
+      within(builtinCard as HTMLElement).getByRole('button', { name: '撤销信任' }),
+    ).toBeTruthy();
+    expect(
+      within(builtinCard as HTMLElement).getByRole('button', { name: '复制副本' }),
+    ).toBeTruthy();
+    expect(within(builtinCard as HTMLElement).queryByRole('button', { name: '删除' })).toBeNull();
+  });
+
+  it('asks for confirmation from the card footer without opening the detail page', async () => {
+    const deleteSkill = vi.fn(async () => ({ deleted: true }));
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        dependencies: dependencyStub(),
+        skills: {
+          refreshDependencyGrant: grantStub(),
+          list: vi.fn(async () => [summary]),
+          get: vi.fn(async () => detail),
+          delete: deleteSkill,
+        },
+      },
+    });
+
+    render(<Harness />);
+    await waitFor(() => expect(screen.getByText('研究方法')).toBeTruthy());
+
+    screen.getByRole('button', { name: '删除' }).click();
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText('删除这个 Skill？')).toBeTruthy();
+    // 措辞要说清级联到哪：技能绑定随修订一起删，历史 Run 就回答不了「当时用的哪一版」。
+    expect(within(dialog).getByText(/技能绑定/)).toBeTruthy();
+    // 页脚动作不得冒泡进整片点击区——点删除不该同时把人带进详情。
+    expect(screen.queryByRole('button', { name: '返回' })).toBeNull();
+    expect(deleteSkill).not.toHaveBeenCalled();
+
+    within(dialog).getByRole('button', { name: '删除 Skill' }).click();
+    await waitFor(() => expect(deleteSkill).toHaveBeenCalledWith({ skillId: summary.id }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('keeps the actions in the list row and drops the whole-row click target', async () => {
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        dependencies: dependencyStub(),
+        skills: {
+          refreshDependencyGrant: grantStub(),
+          list: vi.fn(async () => [summary]),
+          get: vi.fn(async () => detail),
+        },
+      },
+    });
+
+    render(<Harness />);
+    await waitFor(() => expect(screen.getByText('研究方法')).toBeTruthy());
+    within(screen.getByRole('group', { name: '视图模式' }))
+      .getByRole('button', { name: '列表' })
+      .click();
+    await waitFor(() =>
+      expect(document.querySelector('.list-row[data-variant=card]')).toBeTruthy(),
+    );
+
+    // 右槽已有按钮，整行就不再是点击区：卡片模式那枚包住身份与说明的按钮必须消失。
+    expect(screen.queryByRole('button', { name: /研究方法/ })).toBeNull();
+    expect(screen.getByRole('button', { name: '详情' })).toBeTruthy();
+
+    screen.getByRole('button', { name: '详情' }).click();
+    await waitFor(() => expect(screen.getByRole('heading', { name: '研究方法' })).toBeTruthy());
+  });
+
   it('switches between card and list view via the segmented control', async () => {
     Object.defineProperty(window, 'betterwork', {
       configurable: true,
