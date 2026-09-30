@@ -3140,4 +3140,74 @@ describe('规则与文档索引', () => {
       'Qoder 入口 betterwork-code-style.md 必须指向唯一规范',
     ).toContain(standard);
   });
+
+  it('一级导航标签与 docs/10 §6.1 的称呼表两侧一致', () => {
+    // 侧栏有哪几项是**代码**说了算（`PRIMARY_NAV_ITEMS`），页面叫什么、页头写哪句是
+    // docs/10 §6.1 那张表说了算。2026-09-30 的漂移不是有人改了代码，是引用方凭印象造了
+    // 一个从未存在的页面名（把「技能页」写成「能力页」）——所以两侧都要钉：表里的导航列
+    // 必须与代码一致，代码将来改名而文档不跟同样红。
+    const appSource = read('apps/desktop/src/renderer/src/App.tsx');
+    const declarationStart = appSource.indexOf('PRIMARY_NAV_ITEMS');
+    expect(declarationStart, '找不到 PRIMARY_NAV_ITEMS，本条护栏已空跑').toBeGreaterThan(-1);
+    const declaration = appSource.slice(
+      declarationStart,
+      appSource.indexOf('];', declarationStart) === -1
+        ? appSource.length
+        : appSource.indexOf('];', declarationStart),
+    );
+    const navLabels = [...declaration.matchAll(/label: '([^']+)'/gu)]
+      .map((match) => match[1] ?? '')
+      .filter((label) => label !== '');
+    expect(navLabels, 'PRIMARY_NAV_ITEMS 里解析不出导航标签，本条护栏已空跑').not.toHaveLength(0);
+
+    const governance = read('docs/10-ui-ux-system.md');
+    const sectionStart = governance.indexOf('### 6.1 应用级导航');
+    expect(sectionStart, 'docs/10 §6.1 的标题被改名，本条护栏已空跑').toBeGreaterThan(-1);
+    const sectionEnd = governance.indexOf('### 6.1.1', sectionStart);
+    const section = governance.slice(sectionStart, sectionEnd === -1 ? undefined : sectionEnd);
+    const tableNavColumn = [...section.matchAll(/^\| ([^|]+?) \| [^|]+?\|/gmu)]
+      .map((match) => match[1]?.trim() ?? '')
+      .filter((cell) => cell !== '' && !/^-+$/.test(cell) && cell !== '一级导航');
+    for (const label of navLabels) {
+      expect(
+        tableNavColumn,
+        `代码里的导航项「${label}」没有登记进 docs/10 §6.1 的称呼表（docs/10 §6.1）`,
+      ).toContain(label);
+    }
+    expect(
+      tableNavColumn.filter((cell) => !navLabels.includes(cell)),
+      '称呼表的导航列多出代码里没有的项；设置是侧栏底部项，不在一级导航里',
+    ).toEqual(['设置']);
+  });
+
+  it('退役的页面称呼不得回到会被智能体读取的文本里', () => {
+    // 「能力」是模型／技能／MCP／搜索的**总称**，不是任何页面的名字（docs/10 §6.1）。
+    // 「能力页」在 2026-09-09 的日志与 2026-09-30 的走查清单里各出现过一次——历史文本里的
+    // 错名会被下一次引用捞回来，所以把它钉成绊线。
+    //
+    // **范围是「会被当成指令读」的文本**：AGENTS.md、`.qoder/**` 下的规则与规格、渲染层源码
+    // 与样式。docs/** 不锁——退役这件事本身要在文档里写明，锁住它等于禁止记录；那次改准的
+    // 事实记在 docs/logs/2026-09-30.md。`docs/prototype/skills-view/index.html` 也不锁：
+    // 它是 2026-09-09 拍板时的评审快照，改它等于改掉当时被批准的那件东西。
+    const retiredPageNames = ['能力页'];
+    const scanned = REPO_FILES.filter(
+      (file) =>
+        /^\.qoder\/.*\.md$/.test(file) ||
+        file === 'AGENTS.md' ||
+        (/^apps\/desktop\/src\/renderer\/.*\.(ts|tsx|css)$/.test(file) &&
+          !/^apps\/desktop\/src\/renderer\/.*\.test\.(ts|tsx)$/.test(file)),
+    );
+    expect(scanned, '一条没扫到文件的绊线等于没写，本条护栏已空跑').not.toHaveLength(0);
+    const offenders: string[] = [];
+    for (const relative of scanned) {
+      const text = read(relative);
+      for (const name of retiredPageNames) {
+        if (text.includes(name)) offenders.push(`${relative} → ${name}`);
+      }
+    }
+    expect(
+      offenders,
+      '页面称呼只有一张表：一级导航是 工作／成果／知识／技能／专家，Skill 管理那一页叫技能页（docs/10 §6.1）',
+    ).toEqual([]);
+  });
 });

@@ -108,6 +108,7 @@ Renderer -> Preload API -> Application -> Agent Core / Infrastructure
 ## 6. UI 原则
 
 - UI 实现以 `docs/10-ui-ux-system.md` 为设计真相源；变更核心信息架构或视觉语言时先更新文档。
+- **界面导航与页面称呼只有一张表**：`docs/10-ui-ux-system.md` §6.1。一级导航固定为 工作／成果／知识／技能／专家（`App.tsx` 的 `PRIMARY_NAV_ITEMS`），加侧栏底部「设置」；Skill 管理那一页叫**技能页**。「能力」是模型、技能、MCP 与搜索的总称，**不是任何页面的名字**，不得用它给页面命名。写走查清单、验收步骤或提交信息前先查那张表（表与代码的一致性、以及退役称呼的复活由 `standards/coding-standard.test.ts` 拦）。
 - UI 反馈必须先按 `docs/10-ui-ux-system.md` §11.5.1 决策表归类，只有三个落点、每个落点只有一个出口组件：用户当场发起的短时确认复用局部 `TransientToast`（自消、不落库），需要停留且当前表单/对象可据以行动的错误或警告用 `InlineError` 基座（danger／warning 两档），跨页面可回看的长操作结果才进入消息中心 + 全局 `ToastHost`；两个 toast 不可混用，短时确认禁止走 `NotificationService`，也禁止页面或 Hook 自造 Toast、顶部成功横幅或自动消失计时器。具体工程约束见 `docs/12-engineering-standards.md` §8。
 - 借鉴 LobsterAI 的信息架构和产品完成度，不复制其 OpenClaw 结构。
 - 界面服务于任务、过程与成果，不堆叠 AI 装饰。
