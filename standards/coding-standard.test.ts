@@ -1355,6 +1355,26 @@ describe('目录条目卡片纪律', () => {
     ).toEqual([]);
   });
 
+  it('行档的说明必须有截断出口：挂在 Tooltip 锚点上，样式给单行省略', () => {
+    // 2026-09-30 光哥走查撞出来的：ADR-0032 写的是「行档单行省略」，而 `.list-row-detail`
+    // 只有字号与颜色——长描述整段摊开，一屏列表一行一个高。话与对上实现之后，这条钉住
+    // 「不再退回整段摊开」：换档、加档都不许把这一格的截断丢掉。
+    expect(
+      /detail=\{<Tooltip className="entry-row-description"/.test(pairSource),
+      '行档的说明请走 Tooltip 锚点，长描述才有就地补全的出口（docs/10 §10.1）',
+    ).toBe(true);
+    const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
+    const clamp = declarationsOf(styles ?? '').filter(
+      (declaration) => declaration.selector.trim() === '.entry-row-description',
+    );
+    const byProperty = new Map(
+      clamp.map((declaration) => [declaration.property, declaration.value]),
+    );
+    expect(byProperty.get('white-space'), '.entry-row-description 缺单行钳制').toBe('nowrap');
+    expect(byProperty.get('text-overflow'), '.entry-row-description 缺省略号').toBe('ellipsis');
+    expect(byProperty.get('overflow'), '.entry-row-description 缺 overflow: hidden').toBe('hidden');
+  });
+
   it('卡片页脚与悬停显形的钩子不得从页面复活', () => {
     // `.expert-card-actions` 是死声明（卡片那排动作归 Card 的 footer 槽），
     // `.expert-card-summon` 被 `.card-primary` 取代：显形规则是卡片的视觉语言，不由页面点名。

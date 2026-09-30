@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import { Card, CardMark } from './Card';
 import { ListRow } from './ListRow';
+import { Tooltip } from './Tooltip';
 
 /**
  * 一条目录条目（专家、技能）要交代的那几件事。
@@ -20,7 +21,11 @@ export interface EntryFacts {
   name: ReactNode;
   /** 署名那一行：作者 · 版本号，或来源。 */
   byline: ReactNode;
-  /** 说明。卡片档三行定高并被裁切时弹 Tooltip，行档单行省略——同一格两种截断是有意的密度差。 */
+  /**
+   * 说明。同一格两种截断，是有意的密度差：卡片档三行定高（`.card-description`），
+   * 行档只给一行（`.entry-row-description`）——行高被长描述顶开，一屏就一行一个样。
+   * 两档都在截断处交给 `Tooltip` 就地补全，没被裁切则什么都不弹。
+   */
   description: ReactNode;
   /** 用途标签与状态片那一行；没有标签且状态正常时不给。 */
   notes?: ReactNode | undefined;
@@ -77,7 +82,7 @@ export function CatalogRow({ facts }: { facts: EntryFacts }): React.JSX.Element 
       variant="card"
       leading={<CardMark>{facts.mark}</CardMark>}
       title={facts.name}
-      detail={facts.description}
+      detail={<Tooltip className="entry-row-description">{facts.description}</Tooltip>}
       meta={facts.byline}
       actions={
         <>

@@ -34,7 +34,7 @@ ADR-0030 给专家卡定了固定顺序「图标 → 名称＋署名与版本号
    | --- | --- | --- |
    | 身份块（图标或首字） | `leading`（基座套 `CardMark`） | `leading`（**同由基座套**，页面不再手包） |
    | 名称 | `title` | `title` |
-   | 说明 | `description`（三行定高＋Tooltip） | `detail`（行的单行省略） |
+   | 说明 | `description`（三行定高＋Tooltip） | `detail`（单行省略＋Tooltip，`.entry-row-description`） |
    | 署名（作者·版本／来源） | `byline` | `meta` |
    | 用途标签与状态片 | `children` | `children` |
    | 一排就地动作 | `footer` | `actions` |
@@ -45,10 +45,11 @@ ADR-0030 给专家卡定了固定顺序「图标 → 名称＋署名与版本号
 5. **`onOpen` 与 `className` 拆给外层**（光哥拍板）：`EntryFacts` 只装「这条条目说的几件事」，交互与定位钩子从外面给——`CatalogCard({ facts, onOpen, className })`，`CatalogRow({ facts })` 没有这两个入参。代价是配对件多一层参数，收益是同一份 facts 将来可以在详情页头部那类地方复用，而不会夹带一个只有一档吃得到的格子。
 6. **主行动的「悬停与聚焦才显形」改由基座拥有**：`.expert-card-summon` 这个页面类退役，卡片档把 `primary` 包进 `.card-primary`（`styles.css` 里紧挨 `.card-top` 的那条），行档原样交出这颗按钮常驻。原因很直接：`primary` 是**同一份事实里的一格**，而显形规则在两档不同——让页面用一个只有自己那一档看得懂的类名去表达它，等于把差异藏回抄写里。`.card-footer` 那条同理收掉：卡片那排动作归 `Card` 的 `footer` 槽，页面上那颗 `.expert-card-actions` 是无人引用的死声明，一并删掉（`.expert-detail-actions` 是详情页小节，保留）。
 7. **领域差异留在页面，不抽。** 专家的「召唤」`primary`、`blockedReasons` 的 `StatusNote`、用途标签；技能的信任↔撤销信任、四枚状态 `Badge`、名称首字；两页 byline 的字面（`作者 · v{修订号}` 对 `内置/用户 Skill`）与删除语义（专家 RESTRICT 对技能 CASCADE，后者是 G4 登记、**仍待光哥拍板**的那条）。页面各自只留一个纯函数 `expertFacts()`／`skillFacts()` 把领域数据翻成 `EntryFacts`。
-8. **护栏四条并各带变异验证**（`standards/coding-standard.test.ts` 新增「目录条目卡片纪律」，101→**105** 条）：
+8. **护栏五条并各带变异验证**（`standards/coding-standard.test.ts` 新增「目录条目卡片纪律」，101→**106** 条）：
    - 配对件与 `Card` 之外，生产 `.tsx` 不得再出现 `<Card`——拦的就是「新页面自己手摆一遍六槽」；今天唯一的豁免是记忆候选卡（整块走 `children`，没有身份块与署名两格），理由写在白名单里。变异：新建一个手摆 `Card` 的视图 → 恰好 1 红。
    - `CatalogRow` 的实现里不得出现 `onClick`——拦「整行可点」回到私搭。变异：给行档加 `onClick={() => undefined}` → 恰好 1 红。
    - `EntryFacts` 的 `mark`／`name`／`byline`／`description`／`actions` 不得改成可选。变异：`byline` 放宽一格 → 恰好 1 红，且报的是「这五格是内容底线」那句而不是「解析不出」的空跑话（先按两种写法确认解析得到，再判可选——顺序反过来会指错方向，这条本轮真踩过）。
+   - 行档的说明必须有截断出口：`CatalogRow` 的 `detail` 挂在 `Tooltip` 锚点上，样式表给 `.entry-row-description` 单行钳制（`white-space: nowrap`＋`text-overflow: ellipsis`＋`overflow: hidden` 三条逐一验值）。变异两发：把 Tooltip 摘掉 → 2 红（基座用例＋这条）；把 `white-space` 删掉 → 恰好 1 红并报「缺单行钳制」。
    - `.expert-card-actions`／`.expert-card-summon` 不得复活，CSS 选择器与 `.tsx` 的 `className` 两侧都扫。变异两发：页面把 `expert-card-summon` 写回 `Button` 的 `className` → 1 红；把 `.expert-card-actions` 加回样式表 → 1 红并报出该选择器。同轮把三处按旧钩子点名处改到新出口：`App.test.tsx` 的 `.expert-card` → `.expert-cards .card`、`.expert-card-summon` → `.card-primary`，`AsyncButton.test.tsx` 那枚拿来当占位类名的 `expert-card-summon` 一并换掉——**它没被护栏扫到（护栏不吃测试文件），但把退役名留在测试里，等于给下一次复用留了样本**。
 
 ## 实现边界
@@ -61,6 +62,8 @@ ADR-0030 给专家卡定了固定顺序「图标 → 名称＋署名与版本号
 ## 取舍与后续
 
 - **正面代价**：docs/10 §10.1 那句「同一份几何两种排布」推进为「同一份事实两种视图」；G4 自记的那条「人工约定没有基座表达」由 `CatalogRow` 的类型收掉；下一次加同类条目只需要写一个 facts 函数。
-- **接受的代价**：多一层间接——读专家页时要看 `expertFacts()` 才知道卡片上那几行从哪来；`EntryFacts` 的 `description` 在两档分别是三行定高与单行省略，**同一格两种截断**是本记录明确保留的差异（行的密度本来就与卡不同），不是待修项。
+- **接受的代价**：多一层间接——读专家页时要看 `expertFacts()` 才知道卡片上那几行从哪来；`EntryFacts` 的 `description` 在两档分别是三行定高与单行省略，**同一格两种截断**是本记录明确保留的差异（行的密度本来就与卡不同），但**两档都必须有截断出口**——省略号后面那句全文由 `Tooltip` 就地给，见决策 9。
 - **仍待光哥拍板**（不在本记录范围）：`ListRow` 要不要长「整行可点＋底部动作」那一档（R3-D）；技能删除的 `ON DELETE CASCADE` 与专家的 `RESTRICT` 两种语义是否向专家靠（要迁移与另立 ADR）。
+9. **行档那一格的截断出口，是本记录落地之后由走查补上的**（2026-09-30 22:18 光哥报「列表每一行高度不一样、长描述整段摊开」）。上面那张表当时就写着「`detail`（行的单行省略）」，但 `.list-row-detail` 实际只有字号与颜色——**这句话是我照着 `ListRow` 的 `multiline` 注释写的，而那条注释讲的是 `title` 与 `meta`，从来不是 `detail`**。修法不是把默认档改掉（`KnowledgeDocumentCard` 的摘录与 `.evidence-list` 的三行钳制会跟着受伤），而是给这一格补出口：配对件把行档的 `detail` 挂到 `Tooltip` 锚点上，样式给单行钳制，并钉成护栏第五条。**教训**：ADR 的表写的是应然，逐格落地时要回读实现对不对得上，不能拿基座注释里相邻槽位的口径当这一格的口径。
+
 - 命名说明：`Catalog` 指「目录里的一条条目」，**不给页面当名字**——一级导航的正式称呼只看 [docs/10 §6.1](../10-ui-ux-system.md) 那张表（工作／成果／知识／技能／专家，加侧栏底部设置）。「能力」是模型／技能／MCP／搜索的总称且不含专家，所以本基座不叫 `Capability*`。

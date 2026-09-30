@@ -2053,6 +2053,16 @@ button.list-row:where(:not(:disabled)):hover {
   font-size: 12px;
   line-height: 1.55;
 }
+/* 目录条目行档的说明：只给一行，超出用省略号，截断处交给 Tooltip 就地补全。
+   与卡片档的 `.card-description` 是同一格的两种排布——卡片要等高所以钳三行，
+   行本身只有一行文字的高度可给（右槽站着动作，行高再被长描述顶开就一行一个样）。
+   字号与颜色仍由上面的 `.list-row-detail` 负责，这一类只管截断。 */
+.entry-row-description {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .list-row-meta {
   overflow: hidden;
   color: var(--text-muted);

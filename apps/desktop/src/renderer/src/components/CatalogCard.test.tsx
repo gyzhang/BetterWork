@@ -92,4 +92,11 @@ describe('CatalogRow 列表档', () => {
     expect(marks).toHaveLength(1);
     expect(marks[0]?.getAttribute('aria-hidden')).toBe('true');
   });
+
+  it('行档的说明挂在 Tooltip 锚点上：只给一行，全文仍留在 DOM 里', () => {
+    const { container } = render(<CatalogRow facts={facts()} />);
+    const anchor = container.querySelector('.list-row-detail .tooltip-anchor');
+    expect(anchor?.className).toContain('entry-row-description');
+    expect(anchor?.textContent).toBe('把材料交给它，它会给出结论与依据。');
+  });
 });
