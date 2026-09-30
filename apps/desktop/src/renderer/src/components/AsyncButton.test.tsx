@@ -48,10 +48,10 @@ describe('AsyncButton', () => {
         label="导入"
         busyLabel="正在导入…"
         busy={false}
-        className="expert-card-summon"
+        className="import-skill-button"
       />,
     );
-    expect(screen.getByRole('button').className).toBe('btn expert-card-summon');
+    expect(screen.getByRole('button').className).toBe('btn import-skill-button');
   });
 
   it('额外的禁用条件与忙碌同样生效', () => {

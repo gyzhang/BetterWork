@@ -14,7 +14,7 @@ import { ActionBar } from '../components/ActionBar';
 import { AsyncButton } from '../components/AsyncButton';
 import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
-import { Card, CardMark } from '../components/Card';
+import { CatalogCard, CatalogRow, type EntryFacts } from '../components/CatalogCard';
 import { CheckList } from '../components/CheckList';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
@@ -24,7 +24,6 @@ import { InlineError } from '../components/InlineError';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
 import { ViewContainer } from '../components/layout/ViewContainer';
-import { ListRow } from '../components/ListRow';
 import { McpToolBindingsPicker } from '../components/McpToolBindingsPicker';
 import { SectionHeader } from '../components/SectionHeader';
 import { StatusNote } from '../components/StatusNote';
@@ -124,12 +123,10 @@ function ExpertSummon({
   expert,
   onSummon,
   onError,
-  className,
 }: {
   expert: ExpertSummary;
   onSummon: (expert: ExpertSummary) => Promise<void>;
   onError: (message: string) => void;
-  className?: string;
 }): React.JSX.Element {
   return (
     <Button
@@ -138,7 +135,6 @@ function ExpertSummon({
       type="button"
       disabled={expert.lifecycle !== 'active'}
       onClick={() => reportAction(onSummon(expert), onError, '无法召唤该专家。')}
-      {...(className ? { className } : {})}
     >
       <SummonIcon size={13} /> 召唤
     </Button>
@@ -172,14 +168,6 @@ interface ExpertActionProps {
   onCopy: (expert: ExpertSummary) => void;
   onDelete: (expert: ExpertSummary) => void;
   onToggleEnabled: (expert: ExpertSummary) => void;
-}
-
-/** 卡片与列表行拿的是同一份输入，两种视图因此不会各自长出一套动作。 */
-interface ExpertCardProps {
-  expert: ExpertSummary;
-  actions: ExpertActionProps;
-  onSummon: (expert: ExpertSummary) => Promise<void>;
-  onError: (message: string) => void;
 }
 
 /**
@@ -230,63 +218,34 @@ function ExpertActionButtons({
 }
 
 /**
- * 卡片：召唤是悬停才出现的浮层动作（`.expert-card-summon`），
- * 平时卡片只讲「这是谁、谁做的、第几版、干什么用」。
+ * 一条专家条目要交代的那几件事，卡片档与列表档共用同一份（docs/10 §10.1、ADR-0032）。
+ *
+ * 「召唤」两档是同一颗按钮：卡片档由基座压成悬停与聚焦才显形（`styles.css` 的
+ * `.card-primary`），行档常驻——行没有悬停展开的语义。整行可点只有卡片档拿得到，
+ * 它由调用方作为 `onOpen` 传给 `CatalogCard`，不住在这份事实里。
  */
-function ExpertCard({ expert, onSummon, onError, actions }: ExpertCardProps): React.JSX.Element {
-  return (
-    <Card
-      className="expert-card"
-      leading={<ExpertIcon size={18} />}
-      title={expert.name}
-      byline={expertByline(expert)}
-      description={expert.summary || '暂无说明'}
-      onOpen={() => actions.onOpen(expert)}
-      topTrailing={
-        <ExpertSummon
-          className="expert-card-summon"
-          expert={expert}
-          onSummon={onSummon}
-          onError={onError}
-        />
-      }
-      footer={<ExpertActionButtons {...actions} expert={expert} />}
-    >
-      <ExpertTags expert={expert} />
-      {expert.blockedReasons.length > 0 && (
-        <StatusNote tone="warning" message={blockedHint(expert)} />
-      )}
-    </Card>
-  );
-}
-
-/** 列表模式：右槽已有按钮，所以整行不再是点击区；描述交给行的单行省略。 */
-function ExpertRow({ expert, onSummon, onError, actions }: ExpertCardProps): React.JSX.Element {
-  return (
-    <ListRow
-      as="article"
-      variant="card"
-      leading={
-        <CardMark>
-          <ExpertIcon size={18} />
-        </CardMark>
-      }
-      title={expert.name}
-      detail={expert.summary || '暂无说明'}
-      meta={expertByline(expert)}
-      actions={
-        <>
-          <ExpertSummon expert={expert} onSummon={onSummon} onError={onError} />
-          <ExpertActionButtons {...actions} expert={expert} />
-        </>
-      }
-    >
-      <ExpertTags expert={expert} />
-      {expert.blockedReasons.length > 0 && (
-        <StatusNote tone="warning" message={blockedHint(expert)} />
-      )}
-    </ListRow>
-  );
+function expertFacts(
+  expert: ExpertSummary,
+  actions: ExpertActionProps,
+  onSummon: (expert: ExpertSummary) => Promise<void>,
+  onError: (message: string) => void,
+): EntryFacts {
+  return {
+    mark: <ExpertIcon size={18} />,
+    name: expert.name,
+    byline: expertByline(expert),
+    description: expert.summary || '暂无说明',
+    actions: <ExpertActionButtons {...actions} expert={expert} />,
+    primary: <ExpertSummon expert={expert} onSummon={onSummon} onError={onError} />,
+    notes: (
+      <>
+        <ExpertTags expert={expert} />
+        {expert.blockedReasons.length > 0 && (
+          <StatusNote tone="warning" message={blockedHint(expert)} />
+        )}
+      </>
+    ),
+  };
 }
 
 function ExpertEditor({
@@ -1005,24 +964,19 @@ export function ExpertsPage({
           ) : viewMode === 'grid' ? (
             <ViewContainer mode="grid" className="expert-cards">
               {state.experts.map((expert) => (
-                <ExpertCard
+                <CatalogCard
                   key={expert.id}
-                  expert={expert}
-                  actions={rowActions}
-                  onSummon={onSummon}
-                  onError={onError}
+                  facts={expertFacts(expert, rowActions, onSummon, onError)}
+                  onOpen={() => rowActions.onOpen(expert)}
                 />
               ))}
             </ViewContainer>
           ) : (
             <ViewContainer mode="list" className="expert-rows">
               {state.experts.map((expert) => (
-                <ExpertRow
+                <CatalogRow
                   key={expert.id}
-                  expert={expert}
-                  actions={rowActions}
-                  onSummon={onSummon}
-                  onError={onError}
+                  facts={expertFacts(expert, rowActions, onSummon, onError)}
                 />
               ))}
             </ViewContainer>

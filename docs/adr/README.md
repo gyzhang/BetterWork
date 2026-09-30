@@ -32,6 +32,7 @@
 | [0029](0029-workspace-identity-and-sidebar-groups.md) | 工作空间身份与侧栏分组 | Accepted（2026-09-28 实施；迁移 v35，D1–D10 按原型推荐方案拍板） |
 | [0030](0030-expert-card-metadata-and-deletion.md) | 专家卡片元信息与硬删除边界 | Accepted（2026-09-28 实施；0029 为工作空间身份记录） |
 | [0031](0031-button-base-and-skin-closure.md) | 按钮基座与控件皮封闭清单 | Accepted（2026-09-28 实施；**替代** docs/10 §10.1 与 09-27 审计中「Button 不再组件化」那一条，`Input`／`Textarea` 原判断不变） |
+| [0032](0032-catalog-entry-card-facts.md) | 目录条目卡片的同一份事实 | Accepted（2026-09-30 实施；承接 [0030](0030-expert-card-metadata-and-deletion.md) §决策 1／5 并把它从专家推到技能，不改写 0030 的任何结论） |
 
 [ADR-0027](0027-knowledge-foundation.md)（Proposed，2026-09-24 文档归档）提出固定知识修订正文读取、嵌入/混合检索、索引作业与显式成果来源声明；延续 ADR-0014/0018，拟细化 ADR-0005 的访问与采用语义，不改变 WM 的非向量记忆召回。产品见[知识基础闭环](../designs/knowledge-foundation.md)，字段见[知识契约](../development/knowledge-contracts.md)，状态只看 [KM 任务板](../development/tasks-knowledge.md)。
 

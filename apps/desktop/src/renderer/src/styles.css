@@ -1608,28 +1608,16 @@ small {
   flex-direction: column;
   gap: 12px;
 }
-/* 召唤是悬停才显形的主动作：平时卡片只交代「这是谁、谁做的、第几版、干什么用」。
-   只压视觉不摘可及性——位置一直留着，键盘进卡片由 :focus-within 显形，
-   读屏也始终听得到这颗按钮。 */
-.expert-card-summon {
-  flex: none;
-  opacity: 0;
-  transition: opacity var(--motion-instant) var(--motion-easing);
-}
-.expert-card:hover .expert-card-summon,
-.expert-card:focus-within .expert-card-summon {
-  opacity: 1;
-}
 /* 用途标签与状态片共用一行；标签本身是 Badge，这里只排行。 */
 .expert-card-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
-/* 一排就地动作：卡片页脚与详情小节共用同一口径——按钮宽度由内容决定，
-   放不下才换行。次级动作竖成一列各占一整行，会把一小排动作读成一堵表单墙
-   （docs/10 §9.8、§10.1，护栏见 coding-standard「动作条不得把一排就地按钮竖成一列」）。 */
-.expert-card-actions,
+/* 一排就地动作：按钮宽度由内容决定，放不下才换行。次级动作竖成一列各占一整行，
+   会把一小排动作读成一堵表单墙（docs/10 §9.8、§10.1，护栏见 coding-standard
+   「动作条不得把一排就地按钮竖成一列」）。卡片那一排归 Card 的 footer 槽（`.card-footer`），
+   2026-09-30 起由配对件给，这里只剩详情页小节自己那排（ADR-0032）。 */
 .expert-detail-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1905,6 +1893,19 @@ small {
   display: flex;
   align-items: flex-start;
   gap: var(--card-gap);
+}
+/* 卡片档右上角那颗主行动：悬停与聚焦才显形（docs/10 §10.1「一张卡片要能自我介绍」、ADR-0032）。
+   只压视觉不摘可及性——位置常驻所以不抖布局，键盘进卡片由 :focus-within 显形，读屏也始终听得到。
+   列表档不吃这条：行的右槽里它常驻，因为行没有悬停展开的语义。 */
+.card-primary {
+  display: flex;
+  flex: none;
+  opacity: 0;
+  transition: opacity var(--motion-instant) var(--motion-easing);
+}
+.card:hover .card-primary,
+.card:focus-within .card-primary {
+  opacity: 1;
 }
 .card-main {
   display: flex;

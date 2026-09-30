@@ -4,14 +4,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { AsyncButton } from '../components/AsyncButton';
 import { Badge, type BadgeTone } from '../components/Badge';
 import { Button } from '../components/Button';
-import { Card, CardMark } from '../components/Card';
+import { CatalogCard, CatalogRow, type EntryFacts } from '../components/CatalogCard';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
 import { InlineError } from '../components/InlineError';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
 import { ViewContainer } from '../components/layout/ViewContainer';
-import { ListRow } from '../components/ListRow';
 import { SectionHeader } from '../components/SectionHeader';
 import { DependencyPanel } from '../components/skills/DependencyPanel';
 import { StatusNote } from '../components/StatusNote';
@@ -131,49 +130,21 @@ function SkillActionButtons({
   );
 }
 
-function SkillCard({
-  skill,
-  actions,
-}: {
-  skill: SkillSummary;
-  actions: SkillActions;
-}): React.JSX.Element {
-  return (
-    <Card
-      className="skill-card"
-      leading={skill.name.slice(0, 1).toUpperCase()}
-      title={skill.name}
-      byline={`${sourceName[skill.sourceKind]} Skill`}
-      description={skill.description || '暂无描述'}
-      onOpen={() => actions.onOpen(skill)}
-      footer={<SkillActionButtons skill={skill} actions={actions} />}
-    >
-      <SkillChips skill={skill} />
-    </Card>
-  );
-}
-
-/** 列表模式：右槽已有按钮，所以整行不再是点击区（与专家页同口径）。 */
-function SkillListItem({
-  skill,
-  actions,
-}: {
-  skill: SkillSummary;
-  actions: SkillActions;
-}): React.JSX.Element {
-  return (
-    <ListRow
-      as="article"
-      variant="card"
-      leading={<CardMark>{skill.name.slice(0, 1).toUpperCase()}</CardMark>}
-      title={skill.name}
-      detail={skill.description || '暂无描述'}
-      meta={`${sourceName[skill.sourceKind]} Skill`}
-      actions={<SkillActionButtons skill={skill} actions={actions} />}
-    >
-      <SkillChips skill={skill} />
-    </ListRow>
-  );
+/**
+ * 一条 Skill 要交代的那几件事，卡片档与列表档共用同一份（docs/10 §10.1、ADR-0032）。
+ *
+ * Skill 没有悬停才显形的主行动，四枚状态片同时充当标签行与状态说明；整行可点只有
+ * 卡片档拿得到，由调用方作为 `onOpen` 传给 `CatalogCard`。
+ */
+function skillFacts(skill: SkillSummary, actions: SkillActions): EntryFacts {
+  return {
+    mark: skill.name.slice(0, 1).toUpperCase(),
+    name: skill.name,
+    byline: `${sourceName[skill.sourceKind]} Skill`,
+    description: skill.description || '暂无描述',
+    actions: <SkillActionButtons skill={skill} actions={actions} />,
+    notes: <SkillChips skill={skill} />,
+  };
 }
 
 export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element {
@@ -266,13 +237,18 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
           ) : viewMode === 'grid' ? (
             <ViewContainer mode="grid" className="skill-cards">
               {state.skills.map((skill) => (
-                <SkillCard key={skill.id} skill={skill} actions={actions} />
+                <CatalogCard
+                  key={skill.id}
+                  className="skill-card"
+                  facts={skillFacts(skill, actions)}
+                  onOpen={() => actions.onOpen(skill)}
+                />
               ))}
             </ViewContainer>
           ) : (
             <ViewContainer mode="list" className="skill-rows">
               {state.skills.map((skill) => (
-                <SkillListItem key={skill.id} skill={skill} actions={actions} />
+                <CatalogRow key={skill.id} facts={skillFacts(skill, actions)} />
               ))}
             </ViewContainer>
           )}

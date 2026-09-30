@@ -1285,6 +1285,103 @@ describe('卡片外壳基座纪律', () => {
 });
 
 /**
+ * 目录条目卡片的出口（docs/10 §10.1、[ADR-0032](../../docs/adr/0032-catalog-entry-card-facts.md)）。
+ *
+ * `Card` 管外壳，`CatalogCard`／`CatalogRow` 管「一条条目要交代的那几格」。这四条防的是
+ * 同一件事再长回来：G4 把专家页的卡片抄到技能页时抄出两套 120 行同构装配，并在列表档
+ * 漏掉署名那一格——因为那份内容清单当时只写在散文与注释里，没有类型也没有绊线。
+ */
+describe('目录条目卡片纪律', () => {
+  const pairBase = 'apps/desktop/src/renderer/src/components/CatalogCard.tsx';
+  const pairSource = read(pairBase);
+
+  /** 手摆 `Card` 六槽的文件：配对件之外只剩一处结构特殊的卡，理由必须写在这里。 */
+  const HAND_BUILT_CARD_FILES = [
+    {
+      file: 'apps/desktop/src/renderer/src/components/MemorySuggestionList.tsx',
+      // 候选建议卡整块走 `children`，没有「身份块＋署名」这两格，套不进 EntryFacts 的必填五格。
+      reason: '记忆候选卡的结构与目录条目不同形',
+    },
+  ];
+
+  it('网格卡片只有配对件一个出口，不许页面再手摆 Card 的六槽', () => {
+    const owners = [
+      'apps/desktop/src/renderer/src/components/Card.tsx',
+      pairBase,
+      ...HAND_BUILT_CARD_FILES.map((entry) => entry.file),
+    ];
+    const offenders: string[] = [];
+    for (const relative of productionPathsUnder('apps/desktop/src/renderer/src/')) {
+      if (!relative.endsWith('.tsx') || owners.includes(relative)) continue;
+      if (/<Card\b/.test(read(relative))) offenders.push(relative);
+    }
+    expect(
+      offenders,
+      '同一种数据的卡片与列表行必须走 CatalogCard／CatalogRow 的同一份事实；结构确实不同形的卡，先登记进 HAND_BUILT_CARD_FILES 并写理由（docs/10 §10.1）',
+    ).toEqual([]);
+  });
+
+  it('行档永远不做整行按钮：右槽站着就地动作', () => {
+    // R3-D 原话是「列表行是靠『右槽有按钮就撤掉整行点击区』这条人工约定维持的，没有基座
+    // 表达」。这一条就是那件基座——`CatalogRow` 的入参里没有 onClick，实现里也不许出现它。
+    const rowImplementation = pairSource.slice(pairSource.indexOf('export function CatalogRow'));
+    expect(
+      rowImplementation.length > 'export function CatalogRow'.length,
+      '找不到 CatalogRow 的实现，本条护栏已空跑',
+    ).toBe(true);
+    expect(
+      /onClick/.test(rowImplementation),
+      '整行可点那一档要加在 ListRow 上（R3-D），不要在目录条目的行档里私搭（ADR-0032 §决策 4）',
+    ).toBe(false);
+  });
+
+  it('一份事实的五格内容必填，不许为了省事放宽成可选', () => {
+    // 放宽任何一格，就等于把「漏署名」那条路重新打开：技能列表档丢的那一格正是 byline。
+    const required = ['mark', 'name', 'byline', 'description', 'actions'];
+    const start = pairSource.indexOf('export interface EntryFacts');
+    expect(start, '找不到 EntryFacts，本条护栏已空跑').toBeGreaterThan(-1);
+    const body = pairSource.slice(start, pairSource.indexOf('\n}', start));
+    // 先按「必填与可选两种写法都认」确认这一格解析得到，再判它是不是被改成了可选——
+    // 反过来写，将来真有人放宽一格时报的会是「解析不出」这句空跑话，指错方向。
+    for (const field of required) {
+      expect(body, `EntryFacts 里解析不出 ${field}，本条护栏已空跑`).toMatch(
+        new RegExp(`^\\s{2}${field}(?:\\?)?:`, 'mu'),
+      );
+    }
+    const optional = required.filter((field) => new RegExp(`^\\s{2}${field}\\?:`, 'mu').test(body));
+    expect(
+      optional,
+      'EntryFacts 的这五格是「一张卡片要能自我介绍」的内容底线，改成可选就是给漏格开门（ADR-0030 §决策 1）',
+    ).toEqual([]);
+  });
+
+  it('卡片页脚与悬停显形的钩子不得从页面复活', () => {
+    // `.expert-card-actions` 是死声明（卡片那排动作归 Card 的 footer 槽），
+    // `.expert-card-summon` 被 `.card-primary` 取代：显形规则是卡片的视觉语言，不由页面点名。
+    const retired = ['expert-card-actions', 'expert-card-summon'] as const;
+    const offenders: string[] = [];
+    for (const relative of cssPaths()) {
+      for (const declaration of declarationsOf(relative)) {
+        const selector = declaration.selector.replace(/\/\*[\s\S]*?\*\//g, '').trim();
+        const hit = retired.find((name) =>
+          new RegExp(`(^|[\\s,>+~.])\\.${name}(?![-\\w])`).test(selector),
+        );
+        if (hit) offenders.push(`${relative} → .${hit}`);
+      }
+    }
+    for (const relative of productionPathsUnder('apps/desktop/src/renderer/src/')) {
+      if (!relative.endsWith('.tsx')) continue;
+      const hit = retired.find((name) => read(relative).includes(name));
+      if (hit) offenders.push(`${relative} → ${hit}`);
+    }
+    expect(
+      offenders,
+      '卡片页脚归 Card 的 footer 槽、主行动显形归 .card-primary；页面不再点名这两个钩子（docs/10 §10.1）',
+    ).toEqual([]);
+  });
+});
+
+/**
  * 折叠披露的出口（docs/10 §10.1）。
  *
  * 六处 `<details>` 并成 `Disclosure` 之后，要防的是同一件事再从两个方向长回来：页面手写

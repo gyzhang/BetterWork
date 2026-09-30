@@ -1119,7 +1119,7 @@ describe('Expert configuration', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: '专家' }));
     expect(await screen.findByRole('button', { name: '详情' })).toBeTruthy();
-    expect(document.querySelector('.expert-card')).not.toBeNull();
+    expect(document.querySelector('.expert-cards .card')).not.toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: '列表' }));
     const row = document.querySelector('.expert-rows .list-row');
@@ -1137,12 +1137,12 @@ describe('Expert configuration', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: '专家' }));
     expect(await screen.findByRole('button', { name: '详情' })).toBeTruthy();
-    const card = document.querySelector('.expert-card');
+    const card = document.querySelector('.expert-cards .card');
     expect(card?.querySelector('.card-mark svg')).not.toBeNull();
     expect(card?.textContent).toContain('财务组 · v1');
     expect(card?.querySelectorAll('.expert-card-tags .badge[data-shape="tag"]')).toHaveLength(2);
     expect(screen.getByRole('button', { name: '召唤' })).toBeTruthy();
-    expect(card?.querySelector('.expert-card-summon svg')).not.toBeNull();
+    expect(card?.querySelector('.card-primary svg')).not.toBeNull();
   });
 
   it('卡片上的「停用」直接改生命周期，不需要先进配置页', async () => {
