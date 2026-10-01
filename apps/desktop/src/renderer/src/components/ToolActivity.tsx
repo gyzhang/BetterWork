@@ -69,9 +69,9 @@ export function ToolActivity({
         {running ? (
           <span className="status-dot running" />
         ) : failed || cancelled ? (
-          <AlertIcon size={14} />
+          <AlertIcon size={13} />
         ) : (
-          <CheckIcon size={14} />
+          <CheckIcon size={13} />
         )}
         <span>
           {running ? `正在${toolStageLabel(running.name)}` : '工作过程'} · {tools.length} 步

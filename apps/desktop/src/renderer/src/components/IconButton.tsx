@@ -1,8 +1,15 @@
 import type { ComponentType, ReactNode, Ref } from 'react';
 
-/** 三档：`sm`＝密集条带里的 23px 方块（字形 12px），`md`＝面板头的 28px 方块（字形 14px），
- *  `row`＝与侧栏导航行同高的 34px 方块（字形 16px）。 */
-const GLYPH_SIZE: Record<IconButtonSize, number> = { sm: 12, md: 14, row: 16 };
+import type { IconSize } from '../icons';
+import { ICON_SIZES } from '../icons';
+
+/** 三档：`sm`＝密集条带里的 23px 方块（字形 12px），`md`＝面板头的 28px 方块（字形 13px），
+ *  `row`＝与侧栏导航行同高的 34px 方块（字形 16px）。字形一律取 §9.13 的图标档位。 */
+const GLYPH_SIZE: Record<IconButtonSize, IconSize> = {
+  sm: ICON_SIZES.inline,
+  md: ICON_SIZES.control,
+  row: ICON_SIZES.standalone,
+};
 
 /** 命中区轴，与文字按钮的高度档（28／32／36）是两张表：方块按内容取档，不参与同排等高。 */
 export type IconButtonSize = 'sm' | 'md' | 'row';
@@ -12,8 +19,8 @@ export interface IconButtonProps {
   label: string;
   /** 原生悬停提示；`label` 给可及名称，这句给人看的解释。 */
   title?: string | undefined;
-  /** `icons.tsx` 里的图标组件本身。字形尺寸由 `size` 档位决定，页面不再逐处写 `size={14}`。 */
-  icon: ComponentType<{ size?: number }>;
+  /** `icons.tsx` 里的图标组件本身。字形尺寸由 `size` 档位决定，页面不再逐处写数字。 */
+  icon: ComponentType<{ size?: IconSize }>;
   onClick?: (() => void) | undefined;
   /** 必填：省略档位会渲染成 `md` 那一格，而同排里另一颗写了 `sm`，读起来就是「同一排两种大小」。 */
   size: IconButtonSize;

@@ -184,7 +184,7 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
         leading={
           selected ? (
             <Button variant="text" size="sm" type="button" onClick={state.deselect}>
-              <ChevronLeftIcon size={14} /> 返回
+              <ChevronLeftIcon size={13} /> 返回
             </Button>
           ) : undefined
         }
@@ -376,7 +376,7 @@ function SkillDetail({
           onChange={(next) => state.setTrust(skill, next)}
         />
         <p>
-          <InfoIcon size={14} /> 脚本以本机用户权限运行，信任不提供沙箱隔离。
+          <InfoIcon size={13} /> 脚本以本机用户权限运行，信任不提供沙箱隔离。
         </p>
         {skill.trustStatus === 'trusted' && (
           <Button

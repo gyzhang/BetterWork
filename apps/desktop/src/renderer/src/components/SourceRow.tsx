@@ -1,6 +1,7 @@
 import type { EvidenceSummary, KnowledgeEvidenceSource } from '@betterwork/agent-protocol';
 import type { ComponentType, ReactNode } from 'react';
 
+import type { IconSize } from '../icons';
 import { CapabilityIcon, GlobeIcon, KnowledgeIcon } from '../icons';
 import { Button } from './Button';
 import { ListRow } from './ListRow';
@@ -30,7 +31,7 @@ const KNOWLEDGE_OPERATION_LABEL: Record<KnowledgeEvidenceSource['operation'], st
 export const canOpenEvidenceSource = (item: EvidenceSummary): boolean =>
   item.sourceType === 'local-file';
 
-const SOURCE_ICONS: Record<EvidenceSummary['sourceType'], ComponentType<{ size?: number }>> = {
+const SOURCE_ICONS: Record<EvidenceSummary['sourceType'], ComponentType<{ size?: IconSize }>> = {
   'local-file': KnowledgeIcon,
   'web-page': GlobeIcon,
   'mcp-tool': CapabilityIcon,

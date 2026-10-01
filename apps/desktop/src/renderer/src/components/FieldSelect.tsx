@@ -85,7 +85,7 @@ export function FieldSelect({
         <span className="field-select-label" title={selectedLabel || undefined}>
           {selectedLabel}
         </span>
-        <ChevronLeftIcon size={14} className={`field-select-chevron${open ? ' open' : ''}`} />
+        <ChevronLeftIcon size={13} className={`field-select-chevron${open ? ' open' : ''}`} />
       </button>
       <PopoverMenu
         open={open}

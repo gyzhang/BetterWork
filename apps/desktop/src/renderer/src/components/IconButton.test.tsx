@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ChevronLeftIcon, CloseIcon } from '../icons';
+import { ChevronLeftIcon, CloseIcon, ICON_SIZES } from '../icons';
 import { IconButton } from './IconButton';
 
 afterEach(() => {
@@ -34,10 +34,11 @@ describe('IconButton 基座', () => {
 
     const buttons = [...container.querySelectorAll('button')];
     expect(buttons.map((button) => button.dataset['size'])).toEqual(['sm', 'md', 'row']);
+    // 字形一律引用 §9.13 的图标档位，不在测试里再记一遍数字：`md` 那档随本轮由 14 并入 13。
     expect(buttons.map((button) => button.querySelector('svg')?.getAttribute('width'))).toEqual([
-      '12',
-      '14',
-      '16',
+      String(ICON_SIZES.inline),
+      String(ICON_SIZES.control),
+      String(ICON_SIZES.standalone),
     ]);
   });
 

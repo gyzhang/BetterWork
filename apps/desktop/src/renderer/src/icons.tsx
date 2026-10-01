@@ -1,9 +1,30 @@
 import type { WorkspaceIconId } from '@betterwork/agent-protocol';
 import type { ComponentType, SVGProps } from 'react';
 
-type IconProps = SVGProps<SVGSVGElement> & { size?: number };
+/**
+ * 图标字形档位（docs/10 §9.13）：四档各有一个用途，没有第五档。
+ * 省略 `size` 就是 `standalone`——缺省住在 `Icon` 里，页面不再各挑一个数。
+ */
+export const ICON_SIZES = {
+  /** 与 12px 说明文字并排的行内小图标（通知行、chevron、chip 的关闭）。 */
+  inline: 12,
+  /** 按钮与下拉触发器里的图标，与 13px 控件文字同高。 */
+  control: 13,
+  /** 独立出现的图标（导航行、空态区域、面板标记）。 */
+  standalone: 16,
+  /** 强调档：卡片身份块的标记。 */
+  emphasis: 18,
+} as const;
 
-const Icon = ({ size = 16, children, ...rest }: IconProps): React.JSX.Element => (
+export type IconSize = (typeof ICON_SIZES)[keyof typeof ICON_SIZES];
+
+type IconProps = SVGProps<SVGSVGElement> & { size?: IconSize };
+
+const Icon = ({
+  size = ICON_SIZES.standalone,
+  children,
+  ...rest
+}: IconProps): React.JSX.Element => (
   <svg
     width={size}
     height={size}
@@ -255,7 +276,7 @@ export const WorkspaceLibraryIcon = (props: IconProps): React.JSX.Element => (
  * 图标 id 由协议的 `workspaceIconIdSchema` 定义，这里用 `Record` 穷举：
  * 枚举加了一档而图标集没跟上时，编译直接失败，而不是侧栏画出一个空白。
  */
-export const workspaceIcons: Record<WorkspaceIconId, ComponentType<{ size?: number }>> = {
+export const workspaceIcons: Record<WorkspaceIconId, ComponentType<{ size?: IconSize }>> = {
   folder: FolderIcon,
   doc: WorkspaceDocIcon,
   sheet: WorkspaceSheetIcon,

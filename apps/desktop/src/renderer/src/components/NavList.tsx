@@ -1,11 +1,13 @@
 import type { ComponentType, ReactNode } from 'react';
 
+import type { IconSize } from '../icons';
+import { ICON_SIZES } from '../icons';
 import { Tooltip } from './Tooltip';
 
 /** 一行的图标：只画字形，名称由按钮自己带。 */
 export interface NavItemProps {
   label: ReactNode;
-  icon?: ComponentType<{ size?: number }> | undefined;
+  icon?: ComponentType<{ size?: IconSize }> | undefined;
   /**
    * 图标自己的颜色。工作空间行用它把身份色带进导航行——几何仍然全住在基座，
    * 换的只是一个 `color`，不为一个颜色再抄一份行。
@@ -62,7 +64,7 @@ export function NavItem({
           aria-hidden="true"
           {...(iconColor ? { style: { color: iconColor } } : {})}
         >
-          <Icon size={15} />
+          <Icon size={ICON_SIZES.standalone} />
         </span>
       ) : undefined}
       <Tooltip className="nav-item-label">{label}</Tooltip>
@@ -75,7 +77,7 @@ export function NavItem({
 export interface NavEntry<K extends string> {
   id: K;
   label: ReactNode;
-  icon?: ComponentType<{ size?: number }> | undefined;
+  icon?: ComponentType<{ size?: IconSize }> | undefined;
   trailing?: ReactNode | undefined;
 }
 

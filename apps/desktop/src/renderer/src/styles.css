@@ -44,6 +44,29 @@
      要更窄的排版请写成 max-width 或内缩一档，不要再另起一个 `width: min(Npx, …)`。 */
   --page-body-width: 860px;
 
+  /* 排版档位（docs/10 §9.13）：字号六档、行高四档，一档一个用途。
+     13px 与 14px、1.55 与 1.6 这类「差一点就一样」的取值是本轮消掉的对象——
+     它们不是两种设计，是同一处设计被两个人各记了一遍。 */
+  --font-size-caption: 12px;
+  --font-size-body: 13px;
+  --font-size-emphasis: 15px;
+  --font-size-heading: 18px;
+  --font-size-page: 20px;
+  --font-size-hero: 28px;
+  --line-height-tight: 1.4;
+  --line-height-normal: 1.5;
+  --line-height-body: 1.6;
+  --line-height-loose: 1.7;
+  /* 表面内距四档。卡片档沿用 §9.8 已有的 `--card-padding`（12px 16px），
+     不另起别名——两个名字指同一份几何正是这张表要消的东西。 */
+  --surface-padding-panel: 16px;
+  --surface-padding-modal: 24px;
+  --surface-padding-page: 28px 0 48px;
+  /* 标记方块（图标与格式徽标的底座）三档：行／卡／整页。 */
+  --mark-row: 24px;
+  --mark-card: 32px;
+  --mark-hero: 40px;
+
   /* 叠放层级（docs/10 §10.1、§9.11）：新增浮层必须先选档。
      菜单类浮层一档高于模态——模态里也有下拉（模型抽屉的「模型角色」），
      反过来会让菜单被自己的面板盖住，看起来像点了没反应。 */
@@ -395,7 +418,7 @@ p {
 /* 次要文本字号基线：`<small>` 的 UA 默认是 0.83em，嵌在 12–13px 容器里会掉到 12px 下限之下
    且不被只扫显式声明的护栏抓到；这里一次性收口，各组件只在此之上放大。 */
 small {
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .app-shell {
   display: grid;
@@ -463,17 +486,17 @@ small {
 .btn[data-size='sm'] {
   min-height: var(--control-height-sm);
   padding: var(--control-padding-sm);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .btn[data-size='md'] {
   min-height: var(--control-height);
   padding: var(--control-padding);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .btn[data-size='lg'] {
   min-height: var(--control-height-lg);
   padding: var(--control-padding-lg);
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .btn[data-variant='primary'] {
   color: var(--on-brand);
@@ -581,7 +604,7 @@ small {
 .section-label,
 .eyebrow {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 600;
   letter-spacing: 0.08em;
 }
@@ -699,7 +722,7 @@ small {
 .page-header h1 {
   margin-top: 4px;
   /* 页面标题 20px（docs/10 §9.7，2026-10-01 产品拍板）：此前代码写 19px 与文档各说各话。 */
-  font-size: 20px;
+  font-size: var(--font-size-page);
   font-weight: 650;
 }
 .page-header-leading {
@@ -770,14 +793,14 @@ small {
 .page-body {
   width: min(var(--page-body-width), calc(100% - 48px));
   margin: 0 auto;
-  padding: 28px 0 48px;
+  padding: var(--surface-padding-page);
 }
 .page-intro {
   max-width: 640px;
   margin: 0 0 24px;
   color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.65;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
 }
 .workspace {
   display: flex;
@@ -791,15 +814,15 @@ small {
   width: min(var(--page-body-width), calc(100% - 48px));
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-surface);
-  padding: 10px 12px;
+  padding: var(--card-padding);
   background: var(--surface-raised);
 }
 
 .discussion-checkpoint-summary {
   margin: 8px 0 0;
   color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-normal);
 }
 
 .discussion-checkpoint-form {
@@ -824,7 +847,7 @@ small {
   background: var(--surface);
   color: var(--text-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .discussion-checkpoint-fields textarea {
   padding: var(--control-padding-lg);
@@ -841,7 +864,7 @@ small {
 .discussion-checkpoint-artifacts legend {
   padding: 0 4px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 
 .discussion-checkpoint-artifacts label {
@@ -849,7 +872,7 @@ small {
   align-items: center;
   gap: 8px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 
 .discussion-checkpoint-history {
@@ -864,7 +887,7 @@ small {
   padding: 3px 7px;
   background: var(--surface-raised);
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .messages {
   flex: 1;
@@ -923,8 +946,8 @@ small {
 .welcome > p:last-of-type {
   max-width: 500px;
   color: var(--text-secondary);
-  font-size: 15px;
-  line-height: 1.7;
+  font-size: var(--font-size-emphasis);
+  line-height: var(--line-height-loose);
 }
 .examples {
   display: flex;
@@ -947,14 +970,14 @@ small {
   display: block;
   margin-left: 4px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 600;
 }
 .message p {
-  padding: 13px 15px;
+  padding: var(--card-padding);
   border-radius: var(--radius-card);
-  font-size: 15px;
-  line-height: 1.7;
+  font-size: var(--font-size-emphasis);
+  line-height: var(--line-height-loose);
   white-space: pre-wrap;
 }
 .message.user p {
@@ -975,7 +998,7 @@ small {
   gap: 8px;
   min-height: var(--row-height-sm);
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .workspace-row input {
   min-width: 0;
@@ -996,7 +1019,7 @@ small {
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-row);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   cursor: pointer;
   min-height: var(--control-height-sm);
 }
@@ -1026,7 +1049,7 @@ small {
   background: var(--surface);
   border: var(--control-border);
   border-radius: var(--control-radius);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   outline: none;
 }
 .workspace-selector-search-input::placeholder {
@@ -1053,7 +1076,7 @@ small {
   border: 0;
   border-radius: var(--radius-tag);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--font-size-body);
   text-align: left;
 }
 .workspace-selector-action:hover {
@@ -1109,8 +1132,8 @@ small {
   /* 左推不是凑缝：它把说明钉在行首，按钮组仍按 gap 排布。 */
   margin-right: auto;
   color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-normal);
 }
 .composer textarea {
   width: 100%;
@@ -1120,8 +1143,8 @@ small {
   background: transparent;
   border: 0;
   outline: 0;
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: var(--font-size-emphasis);
+  line-height: var(--line-height-body);
 }
 .composer textarea::placeholder {
   color: var(--text-muted);
@@ -1132,7 +1155,7 @@ small {
   justify-content: space-between;
   gap: 12px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .composer-footer > span {
   overflow: hidden;
@@ -1172,7 +1195,7 @@ small {
   min-height: var(--control-height-lg);
   padding: 0 14px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .context-panel .tabs {
   /* 面板给的是左右内缩，几何仍归 Tabs 基座。 */
@@ -1210,8 +1233,8 @@ small {
    「这个对象现在是什么」），所以留一个类，但只留一个。 */
 .context-note {
   color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
 }
 .context-list {
   display: grid;
@@ -1226,8 +1249,8 @@ small {
 }
 .context-details > small {
   color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-normal);
 }
 .context-exclusion-list {
   display: grid;
@@ -1235,8 +1258,8 @@ small {
   margin: 0;
   padding-left: 18px;
   color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-normal);
   list-style: none;
 }
 .context-exclusion-list small {
@@ -1249,8 +1272,8 @@ small {
   margin: 0;
   padding-left: 18px;
   color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-normal);
   list-style: none;
 }
 
@@ -1262,8 +1285,8 @@ small {
 }
 .brief-note {
   color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
 }
 .brief-section {
   display: grid;
@@ -1282,14 +1305,14 @@ small {
    各自又写了一遍 12px 灰字与居中文案。 */
 .brief-truncated {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 
 /* 经验建议：开关与作业行只在记忆页出现，候选卡片两处共用。 */
 .suggestion-consent {
   display: grid;
   gap: 8px;
-  padding: 11px 12px;
+  padding: var(--card-padding);
   background: var(--surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-card);
@@ -1299,7 +1322,7 @@ small {
   align-items: center;
   gap: 8px;
   color: var(--info);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .suggestion-job-list {
   display: grid;
@@ -1322,12 +1345,12 @@ small {
   align-items: center;
   gap: 8px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .suggestion-body {
   color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
   white-space: pre-wrap;
 }
 .suggestion-facts {
@@ -1336,8 +1359,8 @@ small {
   margin: 0;
   padding: 0;
   color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-normal);
   list-style: none;
 }
 .suggestion-facts .warn {
@@ -1357,8 +1380,8 @@ small {
 }
 .empty-context > span {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: var(--mark-card);
+  height: var(--mark-card);
   margin-bottom: 12px;
   place-items: center;
   color: var(--brand);
@@ -1367,13 +1390,13 @@ small {
 }
 .empty-context strong {
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .empty-context p {
   margin-top: 8px;
   color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
 }
 .activity-list {
   padding: 17px 15px;
@@ -1400,14 +1423,14 @@ small {
 }
 .activity-summary strong,
 .activity-row strong {
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .activity-summary p,
 .activity-row p {
   margin-top: 4px;
   color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-normal);
 }
 .activity-row {
   display: grid;
@@ -1439,27 +1462,27 @@ small {
   display: block;
   margin-top: 8px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .empty-page {
   display: flex;
   max-width: 630px;
   min-height: 100%;
   margin: auto;
-  padding: 40px;
+  padding: var(--surface-padding-modal);
   flex-direction: column;
   justify-content: center;
 }
 .empty-page h1 {
   margin: 8px 0 12px;
-  font-size: 28px;
+  font-size: var(--font-size-hero);
   font-weight: 600;
-  line-height: 1.35;
+  line-height: var(--line-height-tight);
 }
 .empty-page > p:last-child {
   color: var(--text-secondary);
-  font-size: 15px;
-  line-height: 1.7;
+  font-size: var(--font-size-emphasis);
+  line-height: var(--line-height-loose);
 }
 .loading-page,
 .error-page {
@@ -1468,7 +1491,7 @@ small {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 32px;
+  padding: var(--surface-padding-modal);
   color: var(--text-secondary);
   text-align: center;
 }
@@ -1496,7 +1519,7 @@ small {
   align-items: center;
   gap: 8px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .error-page {
   min-height: 300px;
@@ -1504,8 +1527,8 @@ small {
 }
 .error-page-icon {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: var(--mark-hero);
+  height: var(--mark-hero);
   place-items: center;
   color: var(--danger);
   background: var(--danger-soft);
@@ -1515,15 +1538,15 @@ small {
   max-width: 420px;
   margin: 0;
   color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
 }
 .work-count {
   padding: 5px 8px;
   color: var(--brand);
   background: var(--brand-soft);
   border-radius: var(--control-radius);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 600;
 }
 .completed-work-list {
@@ -1534,14 +1557,14 @@ small {
 
 .completed-work-icon {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: var(--mark-card);
+  height: var(--mark-card);
   flex: none;
   place-items: center;
   color: var(--on-brand);
   background: var(--success);
   border-radius: var(--radius-row);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 700;
 }
 
@@ -1573,7 +1596,7 @@ small {
 }
 .settings-nav-list h1 {
   margin: 8px 0 24px;
-  font-size: 18px;
+  font-size: var(--font-size-heading);
 }
 .skills-page {
   display: flex;
@@ -1649,7 +1672,7 @@ small {
   border: var(--control-border);
   border-radius: var(--control-radius);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-body);
   font-weight: 400;
   resize: vertical;
 }
@@ -1665,14 +1688,14 @@ small {
   display: grid;
   gap: 8px;
   align-content: start;
-  padding: 12px;
+  padding: var(--card-padding);
   border: 1px solid var(--border);
   border-radius: var(--radius-row);
 }
 .expert-editor-body legend {
   padding: 0 5px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 600;
 }
 /* 复选框选项组：结构与外观只有一处（docs/10 §10.1）。
@@ -1687,7 +1710,7 @@ small {
   align-items: center;
   gap: 8px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 400;
 }
 .check-list-item input {
@@ -1706,13 +1729,13 @@ small {
 .expert-detail-byline {
   margin: 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .expert-detail-summary {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 15px;
-  line-height: 1.6;
+  font-size: var(--font-size-emphasis);
+  line-height: var(--line-height-body);
 }
 .expert-detail-section {
   display: grid;
@@ -1723,20 +1746,20 @@ small {
 .expert-detail-section p {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
 }
 .expert-memory-summary {
   display: grid;
   gap: 4px;
   padding-left: 18px;
   color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-normal);
 }
 .muted-text {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .skill-chips {
   display: flex;
@@ -1772,21 +1795,23 @@ small {
 }
 .section-header-title {
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   font-weight: 650;
 }
 .section-header[data-variant='block'] .section-header-title {
-  font-size: 21px;
+  /* 18px 而不是先前各写的那句 21px：区块头住在版心里、页面标题住在页头带里，
+     21 会让小节喊得比自己所在的页面还响，而 20／21 只差 1px 正是 §9.13 要消的那类值。 */
+  font-size: var(--font-size-heading);
 }
 .section-header-hint {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .section-header[data-variant='block'] .section-header-hint {
   max-width: 630px;
   color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.65;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
 }
 .section-header-actions {
   display: flex;
@@ -1817,7 +1842,7 @@ small {
   background: transparent;
   border: 0;
   border-radius: var(--radius-row);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   text-align: left;
 }
 .nav-item:hover,
@@ -1929,14 +1954,14 @@ small {
 }
 .card-mark {
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: var(--mark-card);
+  height: var(--mark-card);
   flex: none;
   place-items: center;
   color: var(--brand);
   background: var(--brand-soft);
   border-radius: var(--radius-row);
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-weight: 700;
 }
 .card-names {
@@ -1947,13 +1972,13 @@ small {
 }
 .card-title {
   color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-tight);
 }
 .card-byline {
   color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-normal);
 }
 /* 卡片说明一律三行定高：一行也占满三行，卡片才真正等高；截断处交给 Tooltip 补全。 */
 .card-description {
@@ -1961,8 +1986,8 @@ small {
   min-height: 61px;
   width: 100%;
   color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
   overflow: hidden;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -1993,7 +2018,7 @@ small {
   align-items: center;
   gap: 8px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   cursor: pointer;
   overflow-wrap: anywhere;
   list-style: none;
@@ -2044,15 +2069,15 @@ button.list-row:where(:not(:disabled)):hover {
 .list-row-title {
   overflow: hidden;
   color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-tight);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .list-row-detail {
   color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
 }
 /* 目录条目行档的说明：只给一行，超出用省略号，截断处交给 Tooltip 就地补全。
    与卡片档的 `.card-description` 是同一格的两种排布——卡片要等高所以钳三行，
@@ -2067,8 +2092,8 @@ button.list-row:where(:not(:disabled)):hover {
 .list-row-meta {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-normal);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2118,7 +2143,7 @@ button.list-row:where(:not(:disabled)):hover {
      同特异度下排在后面就顶掉 `.list-row-actions :where(button)` 的 12px 兜底，
      于是「启用」比同一排「编辑／删除」大一号。字体族与行高交给全局
      `button { font: inherit }`（元素选择器，权重低于任何类），这里只钉字号。 */
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   text-align: left;
   cursor: pointer;
 }
@@ -2167,8 +2192,8 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--text-secondary);
   background: var(--surface-raised);
   border-radius: var(--radius-pill);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-normal);
   white-space: nowrap;
 }
 .badge[data-shape='tag'] {
@@ -2203,8 +2228,8 @@ button.list-row:where(:not(:disabled)):hover {
 .skill-detail-description,
 .skill-detail-section > p {
   color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
 }
 /* 这一节是块级流、没有纵向 gap 可用，所以状态说明的上下缝由它自己给；
    数值照搬迁移前的 `.skill-blocked-reasons`，只是把真相源从元素搬到容器（docs/10 §9.8）。 */
@@ -2221,7 +2246,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .skill-state-grid div,
 .skill-trust-box {
-  padding: 11px;
+  padding: var(--card-padding);
   background: var(--surface-raised);
   border-radius: var(--radius-row);
 }
@@ -2231,11 +2256,11 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .skill-state-grid span {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .skill-state-grid strong {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .skill-trust-box {
   border: 1px solid var(--border);
@@ -2244,7 +2269,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .skill-trust-box p {
   display: flex;
@@ -2252,7 +2277,7 @@ button.list-row:where(:not(:disabled)):hover {
   gap: 8px;
   margin: 8px 0 0 24px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .skill-detail-section {
   margin-top: 24px;
@@ -2261,7 +2286,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 13px;
+  padding: var(--surface-padding-panel);
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
@@ -2279,7 +2304,7 @@ button.list-row:where(:not(:disabled)):hover {
    这里只出色与字号（docs/10 §11.5.2）。 */
 .dependency-warning {
   color: var(--warning);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .dependency-actions {
   display: flex;
@@ -2288,7 +2313,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .dependency-progress {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .dependency-operation {
   padding: 10px;
@@ -2297,17 +2322,17 @@ button.list-row:where(:not(:disabled)):hover {
   border-radius: var(--radius-row);
 }
 .dependency-operation strong {
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .dependency-operation span {
   margin-left: 8px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .dependency-operation p {
   margin: 8px 0 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .dependency-grant {
   margin-top: 12px;
@@ -2317,7 +2342,7 @@ button.list-row:where(:not(:disabled)):hover {
 .dependency-grant > p {
   margin: 0 0 8px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 /* 状态说明不带上下缝，所以这一格 8px 由容器给；数值沿用迁移前那条被
    `.dependency-grant p` 赢掉的 margin，只是把真相源从元素搬到容器（docs/10 §9.8）。 */
@@ -2349,8 +2374,8 @@ button.list-row:where(:not(:disabled)):hover {
   gap: 8px;
   padding: var(--control-padding-lg);
   border-radius: var(--radius-row);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
 }
 .inline-error[data-tone='danger'] {
   color: var(--danger);
@@ -2383,8 +2408,8 @@ button.list-row:where(:not(:disabled)):hover {
 .status-note {
   display: grid;
   gap: 4px;
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
 }
 .status-note[data-tone='neutral'] {
   color: var(--text-secondary);
@@ -2431,14 +2456,14 @@ button.list-row:where(:not(:disabled)):hover {
 /* 模型行的骨架与动作都由 ListRow 提供，这里只剩领域标记：角色徽标与连接状态。 */
 .model-role-icon {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: var(--mark-card);
+  height: var(--mark-card);
   flex: none;
   place-items: center;
   color: var(--brand);
   background: var(--brand-soft);
   border-radius: var(--radius-row);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   font-weight: 600;
 }
 /* 连接状态是只读状态文字，走 Badge 的 tone 档位（docs/10 §10.1）；
@@ -2451,20 +2476,20 @@ button.list-row:where(:not(:disabled)):hover {
 .empty-notice[data-variant='line'] {
   padding: 8px 9px;
   color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-normal);
 }
 .empty-notice[data-variant='block'] {
   padding: 24px 4px;
 }
 .empty-notice strong {
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .empty-notice[data-variant='block'] p {
   margin-top: 8px;
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
 }
 .memory-list {
   border-top: 1px solid var(--border);
@@ -2476,17 +2501,17 @@ button.list-row:where(:not(:disabled)):hover {
   align-items: center;
   gap: 8px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .memory-row p {
   color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
   white-space: pre-wrap;
 }
 .memory-row small {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 /* 行内主区的 `gap` 是 4px，这一格补到迁移前的 8px；缝由容器给，基座不自带上下缝。
    迁移前这三行是 `.memory-dependencies`／`.memory-duplicate-hint`／`.memory-policy-hint`
@@ -2499,7 +2524,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: grid;
   gap: 8px;
   margin: 12px 0 16px 32px;
-  padding: 12px;
+  padding: var(--card-padding);
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-row);
@@ -2512,7 +2537,7 @@ button.list-row:where(:not(:disabled)):hover {
   border: var(--control-border);
   border-radius: var(--control-radius);
   font: inherit;
-  line-height: 1.5;
+  line-height: var(--line-height-normal);
   resize: vertical;
 }
 .memory-capture-source {
@@ -2531,8 +2556,8 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .memory-capture-source-state {
   color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
 }
 /* 记忆治理页（产品设计 §3.1–§3.4、契约 §9/§10）：
    提示带只报事实不裁决，冲突并列呈现必须两条同宽。 */
@@ -2562,14 +2587,14 @@ button.list-row:where(:not(:disabled)):hover {
 .memory-list-empty {
   margin: 16px 4px;
   color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
 }
 .memory-group-footer {
   padding: 12px 2px 2px;
   color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
 }
 /* === Tabs 与 SegmentedControl：页签带与切换按钮组的唯一几何（docs/10 §10.1） === */
 .tabs {
@@ -2582,7 +2607,7 @@ button.list-row:where(:not(:disabled)):hover {
   background: transparent;
   border: 0;
   border-radius: var(--control-radius);
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 /* 高度与内距成对取档（docs/10 §9.10）：页签与切换组会和按钮排在同一「动作排」里，
    没有档位 API 就必然一行两高——原来它们各自固定 28px 是这个样子。 */
@@ -2616,7 +2641,7 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--text-secondary);
   background: var(--surface);
   border: 0;
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   cursor: pointer;
 }
 .segmented-control[data-size='sm'] button {
@@ -2675,8 +2700,8 @@ button.list-row:where(:not(:disabled)):hover {
   margin: 0;
   padding-left: 18px;
   color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
   list-style: disc;
 }
 
@@ -2686,26 +2711,26 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--warning);
   background: var(--surface);
   border-radius: var(--radius-tag);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .memory-terminal-note {
   display: grid;
   align-content: center;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .memory-conflict {
   display: grid;
   gap: 8px;
   margin-top: 12px;
-  padding: 10px 11px;
+  padding: var(--card-padding);
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
 }
 .memory-conflict > strong {
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-normal);
 }
 .memory-conflict.conflict-unresolved {
   background: var(--warning-soft);
@@ -2732,16 +2757,16 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .memory-conflict-bodies > div > span {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .memory-conflict-bodies p {
   color: var(--text-primary);
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
 }
 .memory-conflict-bodies small {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .memory-conflict-note-input {
   min-height: var(--control-height);
@@ -2750,17 +2775,17 @@ button.list-row:where(:not(:disabled)):hover {
   background: var(--surface);
   border: var(--control-border);
   border-radius: var(--control-radius);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .memory-conflict-hint {
   color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
 }
 .memory-editor-host {
   display: grid;
   gap: 12px;
-  padding: 14px;
+  padding: var(--surface-padding-panel);
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
@@ -2778,8 +2803,8 @@ button.list-row:where(:not(:disabled)):hover {
   background: var(--surface);
   border: var(--control-border);
   border-radius: var(--control-radius);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-normal);
 }
 .memory-editor textarea {
   resize: vertical;
@@ -2793,7 +2818,7 @@ button.list-row:where(:not(:disabled)):hover {
 .memory-editor small {
   display: block;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .memory-editor small.over {
   color: var(--danger);
@@ -2823,13 +2848,13 @@ button.list-row:where(:not(:disabled)):hover {
 .memory-editor-diff {
   display: grid;
   gap: 8px;
-  padding: 11px 12px;
+  padding: var(--card-padding);
   background: var(--surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-card);
 }
 .memory-editor-diff > strong {
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .memory-editor-diff-row {
   display: grid;
@@ -2837,35 +2862,35 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .memory-editor-diff-row > span {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .memory-editor-diff-row p {
   color: var(--text-primary);
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
 }
 .memory-editor-diff > small {
   color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
 }
 .memory-editor-note {
   color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
 }
 .memory-editor-declaration {
   display: flex;
   align-items: flex-start;
   gap: 8px;
   color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-normal);
 }
 .memory-capture-hint {
   color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
 }
 
 /* === Field：标签 + 控件 + 说明的唯一结构（docs/10 §10.1） ===
@@ -2877,11 +2902,11 @@ button.list-row:where(:not(:disabled)):hover {
   flex-direction: column;
   gap: 8px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .field-hint {
   color: var(--text-muted);
-  line-height: 1.6;
+  line-height: var(--line-height-body);
 }
 .field-hint .dependency-warning {
   display: block;
@@ -2900,8 +2925,8 @@ button.list-row:where(:not(:disabled)):hover {
   background: var(--surface);
   border: var(--control-border);
   border-radius: var(--control-radius);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-normal);
   cursor: pointer;
   text-align: left;
 }
@@ -2993,7 +3018,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px;
+  padding: var(--card-padding);
   color: var(--text-secondary);
   text-align: left;
   background: var(--surface-raised);
@@ -3055,13 +3080,13 @@ button.list-row:where(:not(:disabled)):hover {
 .appearance-modes strong,
 .scheme-grid strong {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .appearance-modes small,
 .scheme-grid small {
   margin-top: 4px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .mode-preview {
   position: relative;
@@ -3199,7 +3224,7 @@ button.list-row:where(:not(:disabled)):hover {
   max-height: 100%;
   flex-direction: column;
   gap: 12px;
-  padding: 24px;
+  padding: var(--surface-padding-modal);
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -3212,13 +3237,13 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .modal-panel[data-variant='viewer'] {
   width: min(1080px, 100%);
-  padding: 16px;
+  padding: var(--surface-padding-panel);
 }
 .modal-panel[data-variant='sheet'] {
   gap: 0;
   width: min(480px, 100%);
   height: 100%;
-  padding: 25px;
+  padding: var(--surface-padding-modal);
   border: 0;
   border-left: 1px solid var(--border);
   border-radius: 0;
@@ -3226,8 +3251,8 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .confirmation-dialog-detail {
   color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
 }
 .confirmation-dialog footer {
   display: flex;
@@ -3259,7 +3284,7 @@ button.list-row:where(:not(:disabled)):hover {
   border-radius: var(--radius-row);
   box-shadow: 0 12px 28px var(--shadow-color-overlay);
   /* 兜底字号；打开时基座会按触发控件的计算值内联覆写（docs/10 §9.10）。 */
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .popover-menu-item {
   display: flex;
@@ -3294,7 +3319,7 @@ button.list-row:where(:not(:disabled)):hover {
   place-items: center;
 }
 .popover-menu-hint {
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   color: var(--text-secondary);
   white-space: nowrap;
 }
@@ -3320,8 +3345,8 @@ button.list-row:where(:not(:disabled)):hover {
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-tag);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-normal);
   pointer-events: none;
   animation: betterwork-fade-in var(--motion-instant) var(--motion-easing);
 }
@@ -3348,8 +3373,8 @@ button.list-row:where(:not(:disabled)):hover {
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-row);
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-tight);
 }
 .binding-chip[data-tone='brand'] {
   color: var(--brand);
@@ -3378,7 +3403,7 @@ button.list-row:where(:not(:disabled)):hover {
   min-height: var(--control-height-sm);
   padding: var(--control-padding-sm);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .binding-chip-remove {
   display: inline-flex;
@@ -3413,7 +3438,7 @@ button.list-row:where(:not(:disabled)):hover {
   opacity: 0.5;
 }
 .capability-picker-reason {
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   color: var(--text-secondary);
   margin-left: 8px;
 }
@@ -3424,7 +3449,7 @@ button.list-row:where(:not(:disabled)):hover {
   border-radius: var(--control-radius);
   background: var(--surface);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   min-height: var(--control-height-sm);
 }
 .capability-search input:focus {
@@ -3438,7 +3463,7 @@ button.list-row:where(:not(:disabled)):hover {
   border: none;
   background: transparent;
   color: var(--brand);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   text-align: left;
   cursor: pointer;
 }
@@ -3459,7 +3484,7 @@ button.list-row:where(:not(:disabled)):hover {
 .material-picker-status {
   padding: 6px 4px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .material-global-toggle {
   display: block;
@@ -3468,7 +3493,7 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--brand);
   background: transparent;
   border: 0;
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   cursor: pointer;
 }
 .material-global-toggle:hover {
@@ -3587,7 +3612,7 @@ button.list-row:where(:not(:disabled)):hover {
   border: var(--control-border);
   border-radius: var(--control-radius);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-body);
   min-height: var(--control-height);
 }
 .knowledge-search input:focus,
@@ -3602,11 +3627,11 @@ button.list-row:where(:not(:disabled)):hover {
   gap: 16px;
   padding: 9px 2px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .knowledge-summary small {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .knowledge-summary-actions {
   display: flex;
@@ -3630,8 +3655,8 @@ button.list-row:where(:not(:disabled)):hover {
 
 .knowledge-format {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: var(--mark-card);
+  height: var(--mark-card);
   flex: none;
   place-items: center;
   color: var(--brand);
@@ -3669,8 +3694,8 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .evidence-list .list-row-leading > span {
   display: grid;
-  width: 22px;
-  height: 22px;
+  width: var(--mark-row);
+  height: var(--mark-row);
   flex: none;
   place-items: center;
   color: var(--brand);
@@ -3700,13 +3725,13 @@ button.list-row:where(:not(:disabled)):hover {
 .evidence-preview li small {
   display: block;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .evidence-preview li p {
   margin: 4px 0 8px;
   color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
   white-space: pre-wrap;
 }
 .message-actions {
@@ -3723,7 +3748,7 @@ button.list-row:where(:not(:disabled)):hover {
   justify-content: center;
   margin: 24px 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .run-divider::before,
 .run-divider::after {
@@ -3750,7 +3775,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px;
+  padding: var(--card-padding);
   border: 1px solid var(--border);
   border-radius: var(--radius-row);
   background: var(--surface-raised);
@@ -3758,7 +3783,7 @@ button.list-row:where(:not(:disabled)):hover {
 .artifact-file-info-row {
   display: flex;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .artifact-file-info-label {
   flex: none;
@@ -3774,7 +3799,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 12px;
-  padding: 12px;
+  padding: var(--card-padding);
 }
 .artifact-thumbnail-item {
   display: flex;
@@ -3811,7 +3836,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .slide-viewer-counter {
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .slide-viewer-image {
   display: block;
@@ -3826,7 +3851,7 @@ button.list-row:where(:not(:disabled)):hover {
   padding: 6px 10px;
   border-top: 1px solid var(--border-subtle);
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 /* `.back-button` 与专家页那颗 `.text-button`「返回详情」是同一个入口的两种皮，
    已收进 `Button variant="quiet" size="sm"`（ADR-0031）。 */
@@ -3837,8 +3862,8 @@ button.list-row:where(:not(:disabled)):hover {
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   box-shadow: 0 12px 28px var(--shadow-color-soft);
-  font-size: 15px;
-  line-height: 1.8;
+  font-size: var(--font-size-emphasis);
+  line-height: var(--line-height-loose);
   overflow-y: auto;
 }
 .markdown-preview > *:first-child {
@@ -3851,11 +3876,11 @@ button.list-row:where(:not(:disabled)):hover {
 .markdown-preview h2,
 .markdown-preview h3 {
   color: var(--text-primary);
-  line-height: 1.4;
+  line-height: var(--line-height-tight);
 }
 .markdown-preview h1 {
   margin: 0 0 24px;
-  font-size: 28px;
+  font-size: var(--font-size-hero);
 }
 .markdown-preview h2 {
   margin: 32px 0 16px;
@@ -3865,7 +3890,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .markdown-preview h3 {
   margin: 24px 0 12px;
-  font-size: 18px;
+  font-size: var(--font-size-heading);
 }
 .markdown-preview p,
 .markdown-preview ul,
@@ -3943,8 +3968,8 @@ button.list-row:where(:not(:disabled)):hover {
   border: var(--control-border);
   border-radius: var(--control-radius);
   font: inherit;
-  font-size: 14px;
-  line-height: 1.65;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
 }
 .artifact-editor textarea {
   padding: var(--control-padding-lg);
@@ -3960,19 +3985,19 @@ button.list-row:where(:not(:disabled)):hover {
   flex-direction: column;
   gap: 8px;
   margin: 0;
-  padding: 12px;
+  padding: var(--card-padding);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-card);
 }
 .artifact-source-select legend {
   padding: 0 4px;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   font-weight: 600;
 }
 .artifact-source-select p {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .artifact-source-row {
   display: flex;
@@ -3993,11 +4018,11 @@ button.list-row:where(:not(:disabled)):hover {
   gap: 8px;
   flex-direction: row;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .artifact-source-name small {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 /* KM09：索引与模型管理、作业区域 */
 /* 「索引与作业」抽屉：面板几何归 Modal 的 sheet 变体，这里只有头与唯一滚动区。 */
@@ -4021,7 +4046,7 @@ button.list-row:where(:not(:disabled)):hover {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .knowledge-admin-toggle {
   align-self: flex-start;
@@ -4031,7 +4056,7 @@ button.list-row:where(:not(:disabled)):hover {
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--control-radius);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .knowledge-admin-toggle:hover {
   border-color: var(--brand);
@@ -4040,7 +4065,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 12px 14px;
+  padding: var(--surface-padding-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-row);
 }
@@ -4049,7 +4074,7 @@ button.list-row:where(:not(:disabled)):hover {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .knowledge-admin-row small {
   color: var(--text-muted);
@@ -4077,11 +4102,11 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px 12px;
+  padding: var(--card-padding);
   color: var(--text-secondary);
   background: var(--brand-soft);
   border-radius: var(--radius-row);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .knowledge-job-items {
   margin: 4px 0 0;
@@ -4090,7 +4115,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .knowledge-job-items li {
   margin-top: 4px;
-  line-height: 1.55;
+  line-height: var(--line-height-body);
   word-break: break-all;
 }
 /* 窄窗：知识页的摘要行、作业行与详情头改为纵向堆叠，用换行换空间，不压字号。 */
@@ -4127,13 +4152,13 @@ button.list-row:where(:not(:disabled)):hover {
   background: var(--surface);
   border: var(--control-border);
   border-radius: var(--control-radius);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .knowledge-collection-check {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .knowledge-collection-check input {
   width: var(--control-check-size);
@@ -4144,10 +4169,10 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px 14px;
+  padding: var(--surface-padding-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-row);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .knowledge-detail-members > div {
   display: flex;
@@ -4173,14 +4198,14 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .knowledge-detail-header strong {
   display: block;
-  font-size: 15px;
+  font-size: var(--font-size-emphasis);
 }
 .knowledge-detail-header small,
 .knowledge-detail-hint,
 .knowledge-revision-row small,
 .knowledge-detail-text small {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .knowledge-detail-actions {
   display: flex;
@@ -4199,8 +4224,8 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .knowledge-detail-text article p {
   margin: 4px 0 0;
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-loose);
   white-space: pre-wrap;
 }
 .knowledge-detail-pager {
@@ -4221,8 +4246,8 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .artifact-reference-note {
   color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-body);
 }
 /* 行几何、来源图标与类型标签都归 SourceRow／ListRow（docs/10 §10.1）；
    这一节只留「它与上面隔一道线」这件事。 */
@@ -4247,8 +4272,8 @@ button.list-row:where(:not(:disabled)):hover {
 
 .artifact-input-card-icon {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: var(--mark-card);
+  height: var(--mark-card);
   flex: none;
   place-items: center;
   color: var(--brand);
@@ -4374,7 +4399,7 @@ button.list-row:where(:not(:disabled)):hover {
 .search-settings .search-status {
   margin-top: 16px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .sidebar-bottom {
   display: flex;
@@ -4427,8 +4452,8 @@ button.list-row:where(:not(:disabled)):hover {
 /* 通知行的级别图标：尺寸与圆角属于这一种标记，不写进行骨架。 */
 .notification-list .list-row-leading > span {
   display: grid;
-  width: 24px;
-  height: 24px;
+  width: var(--mark-row);
+  height: var(--mark-row);
   place-items: center;
   border-radius: var(--control-radius);
 }
@@ -4477,7 +4502,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   gap: 8px;
   align-items: flex-start;
-  padding: 11px 12px;
+  padding: var(--card-padding);
   color: var(--text-primary);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -4505,8 +4530,8 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .toast > span {
   display: grid;
-  width: 24px;
-  height: 24px;
+  width: var(--mark-row);
+  height: var(--mark-row);
   flex: none;
   place-items: center;
   border-radius: var(--control-radius);
@@ -4517,15 +4542,15 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .toast strong {
   display: block;
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-tight);
 }
 .toast p {
   overflow: hidden;
   margin-top: 4px;
   color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-normal);
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -4678,7 +4703,7 @@ select,
   font-size: 24px;
 }
 .message.assistant .markdown-preview h2 {
-  font-size: 20px;
+  font-size: var(--font-size-page);
 }
 .message.assistant .markdown-preview pre {
   max-width: 100%;
@@ -4718,7 +4743,7 @@ select,
   border: 1px solid transparent;
   border-radius: var(--radius-row);
   text-align: left;
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .tool-activity-toggle:hover {
   background: var(--surface-raised);
@@ -4745,7 +4770,7 @@ select,
 .tool-activity-body {
   min-width: 0;
   margin-top: 8px;
-  padding: 12px;
+  padding: var(--card-padding);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-surface);
   background: var(--surface);
@@ -4770,7 +4795,7 @@ select,
   border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   text-align: left;
 }
 .tool-pill:hover,
@@ -4808,7 +4833,7 @@ select,
 .tool-detail-name {
   margin: 4px 0 12px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }
 .tool-detail-error {
   /* 只剩内容差异：工具报错常是多行原文，折行由这里给。
@@ -4867,7 +4892,7 @@ select,
   display: flex;
   max-width: 520px;
   margin-top: 24px;
-  padding: 16px;
+  padding: var(--surface-padding-panel);
   flex-direction: column;
   gap: 12px;
   background: var(--surface-raised);
@@ -4882,7 +4907,7 @@ select,
   border: var(--control-border);
   border-radius: var(--control-radius);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 .mcp-editor textarea {
   padding: var(--control-padding-lg);
@@ -4898,5 +4923,5 @@ select,
 }
 .mcp-binding-group > strong {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
 }

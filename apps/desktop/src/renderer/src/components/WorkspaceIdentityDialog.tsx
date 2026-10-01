@@ -80,7 +80,7 @@ export function WorkspaceIdentityDialog({
       name: workspaceIconName[id],
       visual: (
         <span style={{ color: accent }}>
-          <Icon size={17} />
+          <Icon size={16} />
         </span>
       ),
     };

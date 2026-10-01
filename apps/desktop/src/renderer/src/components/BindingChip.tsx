@@ -55,7 +55,7 @@ export function BindingChip({
         onClick={onRemove}
         disabled={disabled}
       >
-        <CloseIcon size={10} />
+        <CloseIcon size={12} />
       </button>
     </div>
   );

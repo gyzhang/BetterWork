@@ -612,6 +612,20 @@ function parsePixels(value: string): number | undefined {
   return undefined;
 }
 
+/**
+ * 取一条声明值的实际像素数，`var(--token)` 时回查它的定义。
+ * 档位一律住在 Token 里（docs/10 §9.13），护栏若只认字面 px，
+ * 就会把「老实用了档位」判成「没写」——那等于逼着代码退回裸值。
+ */
+function resolvePixels(declarations: CssDeclaration[], value: string): number | undefined {
+  const direct = parsePixels(value);
+  if (direct !== undefined) return direct;
+  const token = /^var\((--[a-zA-Z0-9-]+)\)$/.exec(value)?.[1];
+  if (!token) return undefined;
+  const definition = declarations.find((declaration) => declaration.property === token);
+  return definition ? parsePixels(definition.value) : undefined;
+}
+
 /** docs/10 §8.3 点名的页面骨架类。`ViewContainer` 用 `view-container-${mode}` 拼出变体，
  *  静态扫描取不到，因此显式登记。 */
 const SKELETON_CLASSES = [
@@ -710,8 +724,8 @@ describe('界面间距与骨架纪律', () => {
       (declaration) => declaration.selector === 'small' && declaration.property === 'font-size',
     );
     expect(baseline, '<small> 缺少全局字号基线（docs/10 §9.8）').toBeDefined();
-    const pixels = parsePixels(baseline?.value ?? '');
-    expect(pixels, 'small 基线必须用 px 或 rem 才能判定').toBeDefined();
+    const pixels = resolvePixels(declarations, baseline?.value ?? '');
+    expect(pixels, 'small 基线必须用 px、rem 或一个能解析成它们的档位 Token').toBeDefined();
     expect(pixels ?? 0, 'small 基线不得小于 12px').toBeGreaterThanOrEqual(12);
   });
 
@@ -3621,6 +3635,502 @@ describe('规则与文档索引', () => {
     expect(
       offenders,
       '页面称呼只有一张表：一级导航是 工作／成果／知识／技能／专家，Skill 管理那一页叫技能页（docs/10 §6.1）',
+    ).toEqual([]);
+  });
+});
+
+/**
+ * 排版、图标与表面档位（docs/10 §9.13、ADR-0033）。
+ *
+ * 2026-10-01 家底核查：`styles.css` 的 171 条 `font-size` 有 14 种取值、65 条 `line-height`
+ * 有 10 种，22–56px 的方块边长有 10 种，图标字形有 9 种。这几条轴当时**根本没有档位表**，
+ * 于是每个表面各挑一个数——本轮把档位、Token 与这五条护栏一起立起来。
+ *
+ * 例外清单只降不升：每一条都要说清它凭什么不吃档位（图形化标识、控件自己的几何、
+ * 成果文档自己的排版），而不是「这处就是差一点」。
+ */
+
+/** 字号与行高的例外（docs/10 §9.13 规矩 2、3）。 */
+const TYPE_LADDER_EXEMPTIONS: {
+  readonly selector: string;
+  readonly property: string;
+  readonly value: string;
+  readonly reason: string;
+}[] = [
+  { selector: '.brand strong', property: 'font-size', value: '16px', reason: '品牌字标' },
+  {
+    selector: '.brand small',
+    property: 'font-size',
+    value: '10px',
+    reason: '品牌字标的副标：图形化标识（docs/10 §9.7 豁免清单）',
+  },
+  {
+    selector: '.knowledge-format',
+    property: 'font-size',
+    value: '10px',
+    reason: '格式徽标 MD／PDF／DOC／TXT：图形化标识',
+  },
+  {
+    selector: '.completed-work-icon.markdown',
+    property: 'font-size',
+    value: '9px',
+    reason: '成果列表的格式徽标：图形化标识',
+  },
+  {
+    selector: '.completed-work-icon.file',
+    property: 'font-size',
+    value: '9px',
+    reason: '成果列表的文件徽标：图形化标识',
+  },
+  {
+    selector: '.notification-badge',
+    property: 'font-size',
+    value: '10px',
+    reason: '未读数徽标：图形化标识，不是承载产品信息的文字',
+  },
+  {
+    selector: '.notification-badge',
+    property: 'line-height',
+    value: '1',
+    reason: '绝对定位角标，行高只为自身居中，不参与排版',
+  },
+  {
+    selector: '.memory-editor-counted > small',
+    property: 'line-height',
+    value: '1',
+    reason: '绝对定位的字数角标，同上',
+  },
+  {
+    selector: '.markdown-preview h2',
+    property: 'font-size',
+    value: '22px',
+    reason: '成果文档自己的排版：应用主题不重排 Artifact（docs/10 §9.6、§9.13 规矩 3）',
+  },
+  {
+    selector: '.message.assistant .markdown-preview h1',
+    property: 'font-size',
+    value: '24px',
+    reason: '对话内预览的文档标题，同属成果文档排版',
+  },
+];
+
+/** 带内方块但不吃 `--mark-*` 的几何（docs/10 §9.13）：它们各有自己的轴。 */
+const NON_MARK_GEOMETRY: {
+  readonly selector: string;
+  readonly property: string;
+  readonly value: string;
+  readonly reason: string;
+}[] = [
+  { selector: '.brand-mark', property: 'width', value: '32px', reason: '品牌标志容器' },
+  { selector: '.brand-mark', property: 'height', value: '32px', reason: '品牌标志容器' },
+  {
+    selector: '.abacus::before, .abacus::after',
+    property: 'width',
+    value: '24px',
+    reason: '品牌算珠的横梁（配 height 1px），属品牌标志不是图标底座',
+  },
+  {
+    selector: '.switch-track',
+    property: 'width',
+    value: '32px',
+    reason: '开关轨道：控件几何，归 docs/10 §9.10 与 Switch 基座',
+  },
+  {
+    selector: '.mode-preview',
+    property: 'height',
+    value: '54px',
+    reason: '外观页的模式预览条：色板表面，不是标记底座',
+  },
+  {
+    selector: '.scheme-preview',
+    property: 'height',
+    value: '38px',
+    reason: '外观页的色系预览条：同上',
+  },
+  {
+    selector: '.sidebar-top-drag',
+    property: 'height',
+    value: '40px',
+    reason: '窗口拖拽带：可拖动区域的高度',
+  },
+  {
+    selector: '.window-drag-strip',
+    property: 'height',
+    value: '24px',
+    reason: '窗口拖拽带：同上',
+  },
+];
+
+/** 走过内距档位的独立表面（docs/10 §9.13 规矩 8）。新增一块表面先选档再登记在这里。 */
+const SURFACE_PADDING: {
+  readonly selector: string;
+  readonly token: string;
+  readonly reason: string;
+}[] = [
+  { selector: '.page-body', token: '--surface-padding-page', reason: '页面正文版心' },
+  {
+    selector: ".card, .option-card, .list-row[data-variant='card']",
+    token: '--card-padding',
+    reason: '卡片外壳基座（docs/10 §10.1）',
+  },
+  { selector: '.message p', token: '--card-padding', reason: '气泡正文表面' },
+  { selector: '.toast', token: '--card-padding', reason: '全局结果提示条' },
+  { selector: '.memory-conflict', token: '--card-padding', reason: '记忆冲突条' },
+  { selector: '.memory-capture', token: '--card-padding', reason: '记忆捕捉块' },
+  { selector: '.memory-editor-diff', token: '--card-padding', reason: '记忆编辑器差异块' },
+  { selector: '.suggestion-consent', token: '--card-padding', reason: '建议同意条' },
+  { selector: '.discussion-checkpoints', token: '--card-padding', reason: '讨论节点小节' },
+  { selector: '.knowledge-jobs', token: '--card-padding', reason: '知识库任务块' },
+  {
+    selector: '.skill-state-grid div, .skill-trust-box',
+    token: '--card-padding',
+    reason: '技能状态格与信任说明块',
+  },
+  {
+    selector: '.expert-editor-body fieldset',
+    token: '--card-padding',
+    reason: '专家编辑器的分组框',
+  },
+  { selector: '.workspace-folder-drop', token: '--card-padding', reason: '工作空间目录投放区' },
+  { selector: '.artifact-file-info', token: '--card-padding', reason: '成果文件信息块' },
+  { selector: '.artifact-thumbnail-gallery', token: '--card-padding', reason: '成果缩略图画廊' },
+  { selector: '.artifact-source-select', token: '--card-padding', reason: '成果输入选择区' },
+  { selector: '.tool-activity-body', token: '--card-padding', reason: '工作过程展开体' },
+  {
+    selector: '.dependency-panel',
+    token: '--surface-padding-panel',
+    reason: '面板级：技能依赖面板',
+  },
+  {
+    selector: '.memory-editor-host',
+    token: '--surface-padding-panel',
+    reason: '面板级：记忆编辑器宿主',
+  },
+  { selector: '.knowledge-admin', token: '--surface-padding-panel', reason: '面板级：知识库管理' },
+  {
+    selector: '.knowledge-detail-members',
+    token: '--surface-padding-panel',
+    reason: '面板级：资料成员列表',
+  },
+  { selector: '.mcp-editor', token: '--surface-padding-panel', reason: '面板级：MCP 服务编辑器' },
+  {
+    selector: ".modal-panel[data-variant='viewer']",
+    token: '--surface-padding-panel',
+    reason: '放映／查看器抽屉正文按面板档',
+  },
+  {
+    selector: '.modal-panel, .notification-panel',
+    token: '--surface-padding-modal',
+    reason: '模态与消息中心面板',
+  },
+  {
+    selector: ".modal-panel[data-variant='sheet']",
+    token: '--surface-padding-modal',
+    reason: '模态的 sheet 抽屉（原先写 25px，与模态档只差 1px）',
+  },
+  { selector: '.empty-page', token: '--surface-padding-modal', reason: '整页空态' },
+  {
+    selector: '.loading-page, .error-page',
+    token: '--surface-padding-modal',
+    reason: '整页首屏态',
+  },
+];
+
+const FONT_SIZE_TOKENS = [
+  '--font-size-body',
+  '--font-size-caption',
+  '--font-size-emphasis',
+  '--font-size-heading',
+  '--font-size-hero',
+  '--font-size-page',
+];
+const LINE_HEIGHT_TOKENS = [
+  '--line-height-body',
+  '--line-height-loose',
+  '--line-height-normal',
+  '--line-height-tight',
+];
+const MARK_TOKENS = ['--mark-card', '--mark-hero', '--mark-row'];
+const SURFACE_PADDING_TOKENS = [
+  '--card-padding',
+  '--surface-padding-modal',
+  '--surface-padding-page',
+  '--surface-padding-panel',
+];
+
+/** 不走图标档位的展示件：品牌标志有自己的边长，且 §9.7 把它列在豁免里。 */
+const BRAND_ICON_SIZES: {
+  readonly file: string;
+  readonly tag: string;
+  readonly value: number;
+  readonly reason: string;
+}[] = [
+  {
+    file: 'apps/desktop/src/renderer/src/brand-logo.tsx',
+    tag: 'BrandLogo',
+    value: 28,
+    reason:
+      '品牌标志（docs/10 §9.7）：24 网格上的展示件，边长不套界面图标档位，组件因此自持 size?: number',
+  },
+];
+
+describe('排版与图标档位纪律', () => {
+  const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
+  expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
+  const declarations = declarationsOf(styles ?? '');
+
+  /** `:root` 里以某前缀定义的档位 Token。档位表必须封闭：多一个名字就是第二把尺。 */
+  function rootTokens(prefixes: string[]): Map<string, string> {
+    const tokens = new Map<string, string>();
+    for (const declaration of declarations) {
+      if (declaration.selector !== ':root') continue;
+      if (prefixes.some((prefix) => declaration.property.startsWith(prefix))) {
+        tokens.set(declaration.property, declaration.value);
+      }
+    }
+    return tokens;
+  }
+
+  function exemptionCount(property: string): number {
+    return TYPE_LADDER_EXEMPTIONS.filter((entry) => entry.property === property).length;
+  }
+
+  it('字号只取六档，例外按图形化标识登记', () => {
+    const ladder = rootTokens(['--font-size-']);
+    expect(
+      [...ladder.keys()].sort(),
+      '字号档位表必须正好是 docs/10 §9.13 的六档；加一档先改文档',
+    ).toEqual(FONT_SIZE_TOKENS);
+
+    const offenders: string[] = [];
+    let exemptions = 0;
+    for (const declaration of declarations) {
+      if (declaration.property !== 'font-size') continue;
+      const token = /^var\((--font-size-[a-z-]+)\)$/u.exec(declaration.value)?.[1];
+      if (token) {
+        if (!ladder.has(token)) offenders.push(locate(declaration, styles ?? ''));
+        continue;
+      }
+      const registered = TYPE_LADDER_EXEMPTIONS.find(
+        (entry) =>
+          entry.property === 'font-size' &&
+          entry.selector === declaration.selector &&
+          entry.value === declaration.value,
+      );
+      if (registered) {
+        exemptions += 1;
+        continue;
+      }
+      offenders.push(locate(declaration, styles ?? ''));
+    }
+    expect(
+      offenders,
+      '字号必须取 var(--font-size-*) 档位；例外只有图形化标识与成果文档排版，按 selector＋值登记进 TYPE_LADDER_EXEMPTIONS（docs/10 §9.13）',
+    ).toEqual([]);
+    expect(
+      exemptions,
+      `字号例外存量 ${exemptions} 条与清单 ${exemptionCount('font-size')} 条不符——清单里不许留着已经改掉的，也不许顺手多出一条`,
+    ).toBe(exemptionCount('font-size'));
+
+    // 内联样式是档位的第二个出口：`.markdown-preview` 之外的表面一旦写死 `fontSize`，
+    // 调 :root 那一行就漏掉了它。
+    const inlineOffenders: string[] = [];
+    for (const relative of productionPathsUnder('apps/desktop/src/renderer/')) {
+      for (const match of read(relative).matchAll(
+        /\bfontSize:\s*(?:'(\d+(?:\.\d+)?)px'|(\d+))/gu,
+      )) {
+        const pixels = Number(match[1] ?? match[2]);
+        if (!Number.isNaN(pixels)) inlineOffenders.push(`${relative} → fontSize: ${pixels}px`);
+      }
+    }
+    expect(
+      inlineOffenders,
+      '生产代码不在内联样式里写字面字号；`PopoverMenu` 镜像的是触发控件的计算值，不是新档（docs/10 §9.13）',
+    ).toEqual([]);
+  });
+
+  it('行高只取四档', () => {
+    const ladder = rootTokens(['--line-height-']);
+    expect(
+      [...ladder.keys()].sort(),
+      '行高档位表必须正好是 docs/10 §9.13 的四档；1.35／1.45／1.55／1.65 这类「差不多」不许回来',
+    ).toEqual(LINE_HEIGHT_TOKENS);
+
+    const offenders: string[] = [];
+    let exemptions = 0;
+    for (const declaration of declarations) {
+      if (declaration.property !== 'line-height') continue;
+      const token = /^var\((--line-height-[a-z-]+)\)$/u.exec(declaration.value)?.[1];
+      if (token) {
+        if (!ladder.has(token)) offenders.push(locate(declaration, styles ?? ''));
+        continue;
+      }
+      const registered = TYPE_LADDER_EXEMPTIONS.find(
+        (entry) =>
+          entry.property === 'line-height' &&
+          entry.selector === declaration.selector &&
+          entry.value === declaration.value,
+      );
+      if (registered) {
+        exemptions += 1;
+        continue;
+      }
+      offenders.push(locate(declaration, styles ?? ''));
+    }
+    expect(
+      offenders,
+      '行高必须取 var(--line-height-*) 档位；绝对定位角标的 line-height: 1 按 selector＋值登记（docs/10 §9.13）',
+    ).toEqual([]);
+    expect(exemptions, `行高例外存量与清单 ${exemptionCount('line-height')} 条不符`).toBe(
+      exemptionCount('line-height'),
+    );
+  });
+
+  it('图标字形由 IconSize 类型定档', () => {
+    // 14px 曾有 8 个调用点、另有 15／17／10 各一处，靠「记得选对数」收不干净（ADR-0033 决策 6）。
+    const iconsPath = 'apps/desktop/src/renderer/src/icons.tsx';
+    const icons = read(iconsPath);
+    const ladderStart = icons.indexOf('export const ICON_SIZES');
+    expect(
+      ladderStart,
+      `找不到 ${iconsPath} 的 ICON_SIZES，图标档位已退回各写一遍数字`,
+    ).toBeGreaterThan(-1);
+    const ladderBody = icons.slice(ladderStart, icons.indexOf('} as const', ladderStart));
+    const steps = [...ladderBody.matchAll(/^\s+(\w+): (\d+),$/gmu)].map((match) => ({
+      name: match[1] ?? '',
+      value: Number(match[2]),
+    }));
+    expect(
+      steps.map((step) => `${step.name}:${step.value}`),
+      '图标档位必须正好是 docs/10 §9.13 的四档（inline 12／control 13／standalone 16／emphasis 18）',
+    ).toEqual(['inline:12', 'control:13', 'standalone:16', 'emphasis:18']);
+    expect(
+      icons,
+      'IconProps 的 size 必须是 IconSize——类型就是档位表，写 size={14} 要编译不过（docs/10 §9.13）',
+    ).toMatch(/size\?: IconSize/u);
+    expect(icons, '省略 size 时的缺省必须是 standalone').toMatch(/size = ICON_SIZES\.standalone/u);
+
+    const ladderValues = new Set(steps.map((step) => step.value));
+    const offenders: string[] = [];
+    for (const relative of productionPathsUnder('apps/desktop/src/renderer/')) {
+      const text = read(relative);
+      for (const match of text.matchAll(/<([A-Z][\w]*)\s+size=\{(\d+)\}/gu)) {
+        const tag = match[1] ?? '';
+        const value = Number(match[2]);
+        if (ladderValues.has(value)) continue;
+        if (BRAND_ICON_SIZES.some((entry) => entry.tag === tag && entry.value === value)) continue;
+        offenders.push(`${relative} → <${tag} size={${value}} />`);
+      }
+      for (const match of text.matchAll(/size=\{ICON_SIZES\.(\w+)\}/gu)) {
+        const name = match[1] ?? '';
+        if (!steps.some((step) => step.name === name)) {
+          offenders.push(`${relative} → ICON_SIZES.${name}（档位表里没有这一档）`);
+        }
+      }
+      if (relative === iconsPath) continue;
+      if (
+        /size\?:\s*number/u.test(text) &&
+        !BRAND_ICON_SIZES.some((entry) => entry.file === relative)
+      ) {
+        offenders.push(`${relative} → size?: number（图标尺寸的类型必须是 IconSize）`);
+      }
+    }
+    expect(
+      offenders,
+      '图标尺寸只走 IconSize 的四档；品牌标志按 BRAND_ICON_SIZES 登记，`ComponentType<{ size?: number }>` 不得复活（docs/10 §9.13、ADR-0033）',
+    ).toEqual([]);
+
+    // IconButton 的字形表引用档位，不留第二份数字。
+    const iconButton = read('apps/desktop/src/renderer/src/components/IconButton.tsx');
+    const glyphStart = iconButton.indexOf('const GLYPH_SIZE');
+    expect(glyphStart, '找不到 IconButton 的 GLYPH_SIZE，本条护栏已空跑').toBeGreaterThan(-1);
+    const glyphBody = iconButton.slice(glyphStart, iconButton.indexOf('};', glyphStart));
+    expect(
+      [...glyphBody.matchAll(/^\s+(\w+): ICON_SIZES\.(\w+),$/gmu)]
+        .map((match) => `${match[1] ?? ''}:${match[2] ?? ''}`)
+        .sort(),
+      'IconButton 的三档字形必须逐项引用 ICON_SIZES（sm 12／md 13／row 16），不写裸数字（docs/10 §9.13）',
+    ).toEqual(['md:control', 'row:standalone', 'sm:inline']);
+  });
+
+  it('标记方块只取三档', () => {
+    const ladder = rootTokens(['--mark-']);
+    expect(
+      [...ladder.keys()].sort(),
+      '标记方块档位表必须正好是 row／card／hero 三档（docs/10 §9.13）',
+    ).toEqual(MARK_TOKENS);
+
+    const offenders: string[] = [];
+    let nonMarks = 0;
+    for (const declaration of declarations) {
+      if (declaration.property !== 'width' && declaration.property !== 'height') continue;
+      const pixels = parsePixels(declaration.value);
+      if (pixels === undefined) {
+        const token = /^var\((--[a-z-]+)\)$/u.exec(declaration.value)?.[1];
+        if (token?.startsWith('--mark-') && !ladder.has(token)) {
+          offenders.push(locate(declaration, styles ?? ''));
+        }
+        continue;
+      }
+      if (pixels < 22 || pixels > 56) continue;
+      const registered = NON_MARK_GEOMETRY.find(
+        (entry) =>
+          entry.selector === declaration.selector &&
+          entry.property === declaration.property &&
+          entry.value === declaration.value,
+      );
+      if (registered) {
+        nonMarks += 1;
+        continue;
+      }
+      offenders.push(locate(declaration, styles ?? ''));
+    }
+    expect(
+      offenders,
+      '22–56px 的方块边长必须取 var(--mark-*)；控件几何、外观预览、窗口拖拽带与品牌标志各有各的轴，按 selector＋属性＋值登记（docs/10 §9.13）',
+    ).toEqual([]);
+    expect(
+      nonMarks,
+      `带内裸方块存量 ${nonMarks} 处，比清单 ${NON_MARK_GEOMETRY.length} 多——例外不是新增口（docs/10 §9.13）`,
+    ).toBeLessThanOrEqual(NON_MARK_GEOMETRY.length);
+  });
+
+  it('表面内距四档与登记清单两侧一致', () => {
+    // 双向比对：清单里留着已改掉的表面、或新表面用了档位却没登记，都读成一次漂移。
+    const ladder = rootTokens(['--card-padding', '--surface-padding-']);
+    expect(
+      [...ladder.keys()].sort(),
+      '表面内距只有这四档；给同一份几何起第二个名字正是这张表要消的东西（docs/10 §9.13 规矩 8）',
+    ).toEqual(SURFACE_PADDING_TOKENS);
+
+    const inCode = new Map<string, string>();
+    for (const declaration of declarations) {
+      if (!declaration.property.startsWith('padding')) continue;
+      const token = /^var\(--([a-z-]+)\)$/u.exec(declaration.value)?.[1];
+      if (!token) continue;
+      if (!SURFACE_PADDING_TOKENS.includes(`--${token}`)) continue;
+      inCode.set(declaration.selector, `--${token}`);
+    }
+    const offenders: string[] = [];
+    for (const entry of SURFACE_PADDING) {
+      if (!SURFACE_PADDING_TOKENS.includes(entry.token)) {
+        offenders.push(`${entry.selector} → ${entry.token}（不在四档里）`);
+        continue;
+      }
+      if (inCode.get(entry.selector) !== entry.token) {
+        offenders.push(
+          `${entry.selector} 期望 ${entry.token}，实际 ${inCode.get(entry.selector) ?? '没有这条登记'}`,
+        );
+      }
+    }
+    for (const [selector, token] of inCode) {
+      if (!SURFACE_PADDING.some((entry) => entry.selector === selector)) {
+        offenders.push(`${selector} → ${token}（用了档位却没登记进 SURFACE_PADDING）`);
+      }
+    }
+    expect(
+      offenders,
+      '每块独立表面的内距要取四档之一并登记进 SURFACE_PADDING；行内节奏与控件内距各归 §9.8、§9.10，不要串轴（docs/10 §9.13）',
     ).toEqual([]);
   });
 });

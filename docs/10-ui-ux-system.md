@@ -419,25 +419,19 @@ UI Foundation 首批提供四套成对色系：
 
 ### 9.7 字体
 
-使用系统字体栈，优先适配 macOS 与 Windows 中文字体。正文基线为 14–15px，不允许用小于 12px 的字体承载产品信息。全系统唯一使用展示字体的位置是欢迎页口号「以我所知，成我所作」，用 `Georgia + 楷体（Kaiti SC/STKaiti/KaiTi）` 衬线栈；其余所有界面文字（含各级页面标题、成果标题与成果内标题）一律使用系统默认字体栈，不用宋体或其他衬线承载展示文字。
+使用系统字体栈，优先适配 macOS 与 Windows 中文字体。**字号与行高的档位表只有一张，在 §9.13**，本节只管字体族、展示字体的唯一位置与小字号下限；不允许用小于 12px 的字体承载产品信息。全系统唯一使用展示字体的位置是欢迎页口号「以我所知，成我所作」，用 `Georgia + 楷体（Kaiti SC/STKaiti/KaiTi）` 衬线栈；其余所有界面文字（含各级页面标题、成果标题与成果内标题）一律使用系统默认字体栈，不用宋体或其他衬线承载展示文字。
 
-推荐字号层级：
+正文与控件一律 13px（`--font-size-body`），强调正文与对话 15px（`--font-size-emphasis`）；数字状态可使用等宽数字，不把代码字体用于普通说明。
 
-- 12px：时间、路径和非关键注释
-- 14px：控件、列表与常规 UI
-- 15–16px：正文与对话
-- 20px：页面标题
-- 28px：欢迎页主标题
+> 本节原先写的是「正文基线 14–15px」外加一张「12／14／15–16／20／28」的推荐层级表。那是**第二份档位表，而且与代码不符**：真正承载正文与控件的是 13px（36 条声明），14px 只剩两处。2026-10-01 家底核查后撤销本节的表，唯一表在 §9.13——两份表并存时没人能判断哪一份对，这与 IPC 收口判据曾四处并存是同一个坑。
 
-正文行高 1.6 左右，长文预览行高 1.7 左右；数字状态可使用等宽数字，不把代码字体用于普通说明。
+落地现状：**分轴达标，不再给整节盖章**（2026-10-01 核查，同日按 §9.13 收口）。核查时 `styles.css` 的 171 条 `font-size` 声明有 14 种取值、65 条 `line-height` 有 10 种，页面标题实际写 19px 而本节定 20px。各轴现状：
 
-落地现状：**分轴达标，不再给整节盖章**（2026-10-01 全仓家底核查后的口径修订）。上一句「字号层级已全面达标」是失真的——核查时 `styles.css` 的 171 条 `font-size` 声明里有 14 种取值，页面标题实际写 19px 而本节定 20px。各轴的真实现状：
-
-| 轴 | 本节定档？ | 现状 |
+| 轴 | 定档处 | 现状 |
 | --- | --- | --- |
-| 字号 | ✅ 上面五档 | 展示字体确只在欢迎页口号一处；12/13px 为绝对多数，但 15px 之外的正文档与 18/21/22/24/28px 的标题散在各表面，档位表尚未覆盖（§9.13 补） |
-| 页面标题 | ✅ 20px | 2026-10-01 由产品拍板定为 20px；`.page-header h1` 此前写 19px，已随本轮改准 |
-| 行高 | ⚠️ 只写了「1.6 左右／1.7 左右」 | 实际 10 种取值（1.35／1.4／1.45／1.5／1.55／1.6／1.65／1.7／1.8／1），无档位表（§9.13 补） |
+| 字号 | ✅ §9.13 六档 | 171 条声明里的 163 条已换成 `var(--font-size-*)`，其余 8 条按护栏的 `TYPE_LADDER_EXEMPTIONS` 逐条登记（全是图形化标识与成果文档排版）；展示字体确只在欢迎页口号一处 |
+| 页面标题 | ✅ §9.13 `page` 20px | 2026-10-01 由产品拍板定为 20px；`.page-header h1` 此前写 19px，已随本轮改准 |
+| 行高 | ✅ §9.13 四档 | 63 条声明全部换成 `var(--line-height-*)`；1.35／1.45／1.55／1.65／1.8 这五个「差不多」的档已并进去，只剩两处绝对定位微标写 `line-height: 1` |
 | 小字号 | ✅ 12px 下限 | 达标，豁免清单见下 |
 
 小字号一档已于 2026-09-05 专项收敛：41 处承载产品信息的 10px / 11px 声明统一提升到 12px 下限；另有 3 处「元素早已改为内联 SVG、字号声明实际失效」的死声明被删除。
@@ -564,6 +558,37 @@ UI Foundation 首批提供四套成对色系：
 - 图标 12 枚（`folder / doc / sheet / slides / chart / client / research / writing / code / project / cycle / library`）先进 `icons.tsx` 再使用：形状承载「这是哪类持续工作」，颜色承载身份。两者都由协议枚举定档，图标集与色板各按 `Record` 穷举，漏一档即编译不过——枚举、色板、图标三处不会各说一半。
 - 带身份图标的行仍然只是行：图标不着色块底，选中与悬停继续走 §9.8 的表面档位。
 
+### 9.13 排版、图标与表面档位
+
+§9.7 原先推荐了五档字号，却没有 Token、也没有护栏，行高只写「1.6 左右」；§9.10 管住了控件的高度与内距，却没有管**文字本身**。2026-10-01 的全仓家底核查因此抓到：`styles.css` 的 171 条 `font-size` 声明有 14 种取值、65 条 `line-height` 有 10 种，22–56px 的方块边长有 10 种，图标字形有 9 种。这不是「有规范不遵循」——**这几条轴从来没有档位表**，于是每个表面各挑一个数，谁都没有错可犯。
+
+本节给六条轴定档，每条轴同时落 Token 与护栏。
+
+| 轴 | 档位来源 | 档值与用途 |
+| --- | --- | --- |
+| 字号 | `--font-size-*` | `caption` 12px 说明与次要文字／`body` 13px 正文与控件／`emphasis` 15px 强调正文与对话／`heading` 18px 区块与表面标题／`page` 20px 页面标题／`hero` 28px 空态与欢迎页主标题 |
+| 行高 | `--line-height-*` | `tight` 1.4 标题与单行截断／`normal` 1.5 单行控件与密集行／`body` 1.6 正文（缺省）／`loose` 1.7 长文与对话 |
+| 表面内距 | `--card-padding`（§9.8 已有）·`--surface-padding-panel`·`--surface-padding-modal`·`--surface-padding-page` | 12px 16px 卡片与就地块／16px 面板、抽屉正文与编辑器／24px 模态、浮层面板与整页占位／28px 0 48px 页正文 |
+| 输入框几何 | 沿用 §9.10 的 `--control-height-*` × `--control-padding-*` | 与按钮同一张表、**成对使用**；收口基座是批次③的 `TextField` |
+| 图标字形 | `icons.tsx` 的 `ICON_SIZES`，类型即 `IconSize` | 12 与说明文字并排的行内图标／13 按钮与下拉里的图标／16 独立出现（省略 `size` 时的缺省）／18 卡片身份块的强调图标 |
+| 标记方块 | `--mark-row`·`--mark-card`·`--mark-hero` | 24px 行前小方块与通知条图标／32px 卡片·列表·抽屉标记与区域空态／40px 整页空态与错误页图标 |
+
+**规矩**
+
+1. **六条轴一律取档位，不写裸值**。字号与行高的 163／63 条声明已全部换成 `var(--…)`，护栏判的是「有没有落在档位表里」，所以将来调某一档只改 `:root` 一行。
+2. **例外只有两类，且只降不升**：图形化标识（品牌字标 16px 与其 10px 副标、格式徽标 10px／9px、未读数徽标 10px）与两处绝对定位微标的 `line-height: 1`（它只为自身居中，不参与排版）。清单在护栏的 `TYPE_LADDER_EXEMPTIONS`，新增一处必须写明它凭什么不算某一档。§9.7 那句「不得用小于 12px 的字号承载产品信息」仍然成立——这些例外全是徽标，不是文字。
+3. **成果文档正文不吃应用的字号档位**：`.markdown-preview` 是 Artifact 自己的排版，§9.6 已规定应用主题不得改它的配色，同理不替它重定字号（保留 22px 与对话内预览的 24px）。**行高是排版而不是文档语义**，因此 1.8 已并入 `loose` 1.7，§9.7「长文预览行高 1.7 左右」这句第一次有了唯一值。
+4. **21px 被请下档位表，区块标题取 18px**。页面标题在 2026-10-01 由产品定为 20px（§9.7），若再留一个 21px 的区块标题，等于同时供着两个只差 1px 的档——这正是本轮要消的缺陷形状；而且版心里的小节会喊得比自己所在的页面还响。**层级由「页头带／版心内」与字重承担，不由 1px 承担**。
+5. **1.45／1.55／1.65 全部并档**：它们与 1.4／1.6 的差别在任何一块屏上都读不出来，却是每次改样式都要重判一遍的三种「差不多」。`.composer textarea` 的 1.55 并入 `body` 1.6，`.card-title`／`.list-row-title` 的 1.45 并入 `tight` 1.4。
+6. **图标尺寸是类型，不是「记得选对数」**：`IconProps['size']` 是 `IconSize`，写 `size={14}` 编译不过。原先的 14px 有 8 个调用点，另有 15／17／10 各一处，本轮分别并入 13／16／12；`IconButton` 的字形表 `GLYPH_SIZE` 直接引用 `ICON_SIZES`（`md` 那一档 14 → 13，与按钮文字同一档），不再自己写一份数字。
+7. **表面内距只管「一块独立表面的内缩」**：行内节奏（徽标、chip、菜单项、代码块）、控件内距（§9.10）与堆叠的缝（§9.8 那把 4／8／12／16／24／32 的尺）各归各的轴，不要因为数字相同就混着用。**定宽列的段落内缩（`.context-section`／`.brief-panel`／`.activity-list`）由 §9.8 与 `components/ContextPanel.test.tsx` 的 `INSET_OWNERS` 清单管**，本轮不动它——一处有测试钉着的清单不该被另一条轴的批量迁移顺手改掉。
+8. **卡片档沿用 `--card-padding`，不另起别名**：两个名字指同一份几何，正是这张表要消的东西。新增表面要先选档并登记进护栏的 `SURFACE_PADDING` 清单；`.modal-panel[data-variant='sheet']` 的 25px、`.empty-page` 的 40px 与 `.loading-page,.error-page` 的 32px 已并入模态档 24px，`.message p` 的 13px 15px 与 `.toast` 的 11px 12px 已并入卡片档。
+9. **标记方块按所在表面选档**：`.card-mark` 36 → 32、`.knowledge-format` 34 → 32、`.completed-work-icon` 30 → 32、`.artifact-input-card-icon` 28 → 32、`.evidence-list` 行前方块 22 → 24、`.error-page-icon` 32 → 40。同一类方块此前有 10 种边长，其中 30／32／34／36 四种差的都是那 2–6px——没有人这样设计，是四个人各记了一遍。
+
+**不属于这三档的方块**（各有各的轴，护栏按理由登记）：`.switch-track` 一类的控件几何、外观页的模式与色系预览（54／38px）、窗口拖拽带（40／24px）、品牌算珠标与品牌字标容器。
+
+**落地现状**：字号六档与行高四档已全量覆盖 `styles.css`（171 条 `font-size` 里 163 条、65 条 `line-height` 里 63 条换成档位 Token，例外 10 条声明按清单登记）；图标档位由 `IconSize` 类型强制，调用点裸数字残留 0；标记方块 10 件（20 条 `width`／`height` 声明）取 `--mark-*`；表面内距 27 条登记取四档，输入框几何留给批次③的 `TextField` 基座（落地后护栏与动作排门禁才开始数原生 `input`／`textarea` 的档位）。护栏五条见 `standards/coding-standard.test.ts`「排版与图标档位纪律」。
+
 ## 10. 组件体系
 
 ### 10.1 组件台账与基座纪律
@@ -687,7 +712,7 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 
 **列表行一律用 `ListRow`**：「图标／徽标 + 标题 + 说明 + 次要信息 + 右侧动作」这一种结构走 `components/ListRow.tsx`，三个变体只决定外壳——`divider` 是列表里的分隔线行（默认），`card` 是带边框圆角的可点卡片，`plain` 是侧栏那种悬停才出底的裸行。内容一律填槽位：`leading`／`title`／`detail`／`meta`／`actions`／`trailing`，结构特殊的行（记忆行、MCP 工具片）把额外内容作为 `children` 交进主区，而不是另起一套行几何。给 `onClick` 时整行渲染成**一个** `<button>` 并必须给 `label` 作可及名称，此时 `actions` 里不能再放按钮（按钮套按钮是无效 DOM）；选中态走 `selected` → `aria-current`，降饱和走 `tone="muted"` 或 `disabled`，页面只保留自己的领域钩子类。行内文字的尺寸也收在基座：标题 13px、说明 12px 次要、meta 12px 弱化，页面不再各写一遍 `strong`／`small`。此前这种结构有 9 份独立几何（gap 从 4 到 16、padding 从 `10px 2px` 到 `16px 16px`、圆角 7／8／10 各写一遍），没有一条差异来自业务需求（§3.4）。护栏锁三条：`.run-item`／`.model-row`／`.evidence-row`／`.knowledge-card` 等 12 个已收编类的样式不得复活；行的 `gap`／`padding` 只能由 `.list-row*` 自己的选择器声明，页面用后代选择器替骨架补一遍即失败；迁完后仍留在行上承担状态外观的领域钩子（现登记 `.memory-row` 一个）不得再写 `display`／`gap`／`padding`／`align-items`／`flex-direction`／`border-bottom`。
 
-**区块头一律用 `SectionHeader`**：「小标题（可带 eyebrow）＋ 一句说明 ＋ 右槽动作」这一种结构走 `components/SectionHeader.tsx`，两个变体只决定层级与密度——`block` 是页面区块头（h2、13／21px 标题、说明 13px 走 630px 版心），`panel` 是面板与卡片里的小节头（h3、13px 标题、说明 12px 弱化）。内容填 `title`／`hint`／`eyebrow`／`actions` 四个槽，空槽不渲染节点（否则基座的 `gap` 会撑出一道看不见的缝）。此前这种结构有 13 个类名、26 处写法，`gap` 取遍 4／8／12／16／24 五档，`display` 有 flex-row／column／grid 三种，16 处用 `<strong>` 冒充标题而不进文档大纲（§3.1 P1）。**面板自己那一道内缩与分隔线仍归面板**：把领域钩子类传进 `className`（如消息中心的 `.notification-panel-heading`），不要写 `.某面板 .section-header { padding }`。右槽按钮的外观不再由容器或类名代发：2026-09-27 先把靠 `.selected-materials-actions button`、`.context-section .selected-materials-heading > button`、`.notification-panel-actions button` 发力的 9 颗裸按钮上收成 `.chip-button`／`.quiet-button` 两档具名类，2026-09-28 再由 [ADR-0031](adr/0031-button-base-and-skin-closure.md) 把它们连同其余 9 套具名皮一并收进 `Button` 的 `variant`（`chip` 与 `quiet` 两档名字保留）。护栏锁五条（2026-09-28 起）：13 个已收编类的样式不得复活；含 `.section-header` 的选择器里只有基座自己的（`.section-header` 本体、两档变体、四个槽位类）能写 `gap`／`padding`／`margin`／`align-items`／`justify-content`；除基座文件外任何 `.tsx` 出现 `section-header*` 类名即失败（手写槽位等于又造一份结构）。
+**区块头一律用 `SectionHeader`**：「小标题（可带 eyebrow）＋ 一句说明 ＋ 右槽动作」这一种结构走 `components/SectionHeader.tsx`，两个变体只决定层级与密度——`block` 是页面区块头（h2、标题取 §9.13 的 `heading` 18px、说明 13px 且限宽 630px——比 860px 版心窄，一句说明不该拉满一行），`panel` 是面板与卡片里的小节头（h3、13px 标题、说明 12px 弱化）。内容填 `title`／`hint`／`eyebrow`／`actions` 四个槽，空槽不渲染节点（否则基座的 `gap` 会撑出一道看不见的缝）。此前这种结构有 13 个类名、26 处写法，`gap` 取遍 4／8／12／16／24 五档，`display` 有 flex-row／column／grid 三种，16 处用 `<strong>` 冒充标题而不进文档大纲（§3.1 P1）。**面板自己那一道内缩与分隔线仍归面板**：把领域钩子类传进 `className`（如消息中心的 `.notification-panel-heading`），不要写 `.某面板 .section-header { padding }`。右槽按钮的外观不再由容器或类名代发：2026-09-27 先把靠 `.selected-materials-actions button`、`.context-section .selected-materials-heading > button`、`.notification-panel-actions button` 发力的 9 颗裸按钮上收成 `.chip-button`／`.quiet-button` 两档具名类，2026-09-28 再由 [ADR-0031](adr/0031-button-base-and-skin-closure.md) 把它们连同其余 9 套具名皮一并收进 `Button` 的 `variant`（`chip` 与 `quiet` 两档名字保留）。护栏锁五条（2026-09-28 起）：13 个已收编类的样式不得复活；含 `.section-header` 的选择器里只有基座自己的（`.section-header` 本体、两档变体、四个槽位类）能写 `gap`／`padding`／`margin`／`align-items`／`justify-content`；除基座文件外任何 `.tsx` 出现 `section-header*` 类名即失败（手写槽位等于又造一份结构）。
 
 **2026-09-28 收了另一半：页面不再自己写标题标签。** 基座落地时只回收了「带类名的区块头」，还留下一批没有类名的裸 `<h2>`／`<h3>`／`<h4>` 配容器后代规则——16 处标签、10 条规则，字号在 13／14／20／21 之间来回（`13` 与 `21` 是基座的两档，`14` 与 `20` 是各页自己调出来的）。现在：面板与卡片内的小节一律 `panel`（13px），页面区块与浮层标题一律 `block`（21px），**`Modal` 的 `dialog`／`sheet` 第一个子块统一是 `SectionHeader variant="block"`，右槽 `actions` 放那颗关闭按钮**——抽屉标题此前在「编辑模型」与「索引与作业」两处分别是 20px 与 20px 但字重与上缝不同，现在同为一档。护栏因此从三条加到**五条**，新增两条：① 生产 `.tsx` 出现 `<h1>`～`<h4>` 即失败，出口只有 `SectionHeader`、`PageHeader`、`EmptyState` 三个基座，加 **TSX 侧白名单 `HEADING_FILE_EXEMPTIONS` 的两项**（`Welcome.tsx`、`SettingsView.tsx`）；② `styles.css` 里选择器含标题元素的规则不得写 `font-size`／`font-weight`／`color`／`line-height`／`letter-spacing`／上下 `margin`，除非它就是那三个基座或登记过的表面。三处例外分住在**两张**白名单里——TSX 侧 `HEADING_FILE_EXEMPTIONS` 两项、CSS 侧 `HEADING_RULE_OWNERS` 的 `.welcome h2`／`.settings-nav-list h1`／`.markdown-preview h*`，理由必须逐条写进白名单：**首屏 hero**（`.welcome h2` 用 28px 衬线品牌字形，属品牌表达不是区块头，套不进两档）、**Markdown 成果正文**（`.markdown-preview h*` 是用户文档的排版，受 §9「应用主题不得改变 Artifact 自身」约束；它只在 CSS 侧登记，生产 `.tsx` 里没有裸标题）、**设置空间标题带**（`.settings-nav-list h1` 与二级导航同栏，不是页面区块头）。
 

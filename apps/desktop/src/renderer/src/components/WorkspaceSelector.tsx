@@ -18,7 +18,7 @@ const identityIcon = (workspace: WorkspaceSummary): React.JSX.Element => {
   const Icon = workspaceIcons[workspace.iconId];
   return (
     <span style={{ color: workspaceAccentVar(workspace.accentId) }}>
-      <Icon size={14} />
+      <Icon size={13} />
     </span>
   );
 };
@@ -86,7 +86,7 @@ export function WorkspaceSelector({
         aria-expanded={open}
         onClick={handleTriggerClick}
       >
-        {currentWorkspace ? identityIcon(currentWorkspace) : <FolderIcon size={14} />}
+        {currentWorkspace ? identityIcon(currentWorkspace) : <FolderIcon size={13} />}
         <span className="workspace-selector-name">{currentWorkspace?.name ?? '选择工作空间'}</span>
         <ChevronLeftIcon size={12} className={`workspace-selector-chevron${open ? ' open' : ''}`} />
       </button>
@@ -127,7 +127,7 @@ export function WorkspaceSelector({
                 handleDismiss();
               }}
             >
-              <PlusIcon size={14} />
+              <PlusIcon size={13} />
               <span>新建工作空间</span>
             </button>
           </div>
