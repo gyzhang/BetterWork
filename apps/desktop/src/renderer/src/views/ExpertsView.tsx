@@ -28,6 +28,7 @@ import { McpToolBindingsPicker } from '../components/McpToolBindingsPicker';
 import { SectionHeader } from '../components/SectionHeader';
 import { StatusNote } from '../components/StatusNote';
 import { SegmentedControl } from '../components/Tabs';
+import { TextArea, TextField } from '../components/TextField';
 import type { ExpertsState } from '../hooks/use-experts';
 import { useViewMode } from '../hooks/use-view-mode';
 import { ChevronLeftIcon, ExpertIcon, PlusIcon, SummonIcon } from '../icons';
@@ -307,13 +308,14 @@ function ExpertEditor({
       <ScrollRegion ariaLabel="专家编辑表单">
         <div className="page-body expert-editor-body">
           <Field label="名称">
-            <input
+            <TextField
+              size="md"
               value={draft.name}
               onChange={(event) => onChange({ ...draft, name: event.target.value })}
             />
           </Field>
           <Field label="简介">
-            <textarea
+            <TextArea
               value={draft.summary}
               onChange={(event) => onChange({ ...draft, summary: event.target.value })}
               rows={2}
@@ -324,7 +326,8 @@ function ExpertEditor({
             label="作者"
             hint="显示在卡片标题下方；留空时按来源显示「内置」或「用户」。"
           >
-            <input
+            <TextField
+              size="md"
               id="expert-author"
               value={draft.author}
               onChange={(event) => onChange({ ...draft, author: event.target.value })}
@@ -335,7 +338,8 @@ function ExpertEditor({
             label={`用途标签（逗号分隔，最多 ${MAX_TAGS} 个）`}
             hint="给卡片上的一眼看：这个专家擅长什么，例如「研究报告、数据分析」。"
           >
-            <input
+            <TextField
+              size="md"
               id="expert-tags"
               value={tagText}
               onChange={(event) => {
@@ -345,28 +349,28 @@ function ExpertEditor({
             />
           </Field>
           <Field label="人格与职责">
-            <textarea
+            <TextArea
               value={draft.identity}
               onChange={(event) => onChange({ ...draft, identity: event.target.value })}
               rows={4}
             />
           </Field>
           <Field label="工作原则（每行一条）">
-            <textarea
+            <TextArea
               value={draft.principles.join('\n')}
               onChange={(event) => updateLines('principles', event.target.value)}
               rows={3}
             />
           </Field>
           <Field label="输入要求（每行一条）">
-            <textarea
+            <TextArea
               value={draft.inputRequirements.join('\n')}
               onChange={(event) => updateLines('inputRequirements', event.target.value)}
               rows={3}
             />
           </Field>
           <Field label="交付要求（每行一条）">
-            <textarea
+            <TextArea
               value={draft.deliveryRequirements.join('\n')}
               onChange={(event) => updateLines('deliveryRequirements', event.target.value)}
               rows={3}

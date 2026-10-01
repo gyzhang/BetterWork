@@ -66,6 +66,9 @@
   --mark-row: 24px;
   --mark-card: 32px;
   --mark-hero: 40px;
+  /* 等宽字体栈（docs/10 §9.7）：代码、JSON、Markdown 正文与格式徽标一类的等宽标注
+     共用一份。收编前它在六条声明里各写了一遍，改一次字体要数完六处。 */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* 叠放层级（docs/10 §10.1、§9.11）：新增浮层必须先选档。
      菜单类浮层一档高于模态——模态里也有下拉（模型抽屉的「模型角色」），
@@ -838,21 +841,6 @@ small {
   gap: 12px;
 }
 
-.discussion-checkpoint-fields input,
-.discussion-checkpoint-fields textarea {
-  width: 100%;
-  border: var(--control-border);
-  border-radius: var(--control-radius);
-  padding: var(--control-padding);
-  background: var(--surface);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: var(--font-size-body);
-}
-.discussion-checkpoint-fields textarea {
-  padding: var(--control-padding-lg);
-}
-
 .discussion-checkpoint-artifacts {
   display: grid;
   gap: 8px;
@@ -935,12 +923,10 @@ small {
 }
 .welcome h2 {
   margin: 8px 0 12px;
-  font:
-    600 28px/1.35 Georgia,
-    'Kaiti SC',
-    'STKaiti',
-    'KaiTi',
-    serif;
+  font-family: Georgia, 'Kaiti SC', 'STKaiti', 'KaiTi', serif;
+  font-size: var(--font-size-hero);
+  font-weight: 600;
+  line-height: var(--line-height-tight);
   letter-spacing: 0.03em;
 }
 .welcome > p:last-of-type {
@@ -1000,14 +986,6 @@ small {
   color: var(--text-muted);
   font-size: var(--font-size-caption);
 }
-.workspace-row input {
-  min-width: 0;
-  flex: 1;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 0;
-  outline: 0;
-}
 
 /* === 工作区选择器 === */
 .workspace-selector-trigger {
@@ -1044,19 +1022,6 @@ small {
 }
 .workspace-selector-search-input {
   width: 100%;
-  padding: var(--control-padding);
-  color: var(--text-primary);
-  background: var(--surface);
-  border: var(--control-border);
-  border-radius: var(--control-radius);
-  font-size: var(--font-size-body);
-  outline: none;
-}
-.workspace-selector-search-input::placeholder {
-  color: var(--text-muted);
-}
-.workspace-selector-search-input:focus {
-  border-color: var(--focus-ring);
 }
 .workspace-selector-actions {
   display: flex;
@@ -1170,11 +1135,9 @@ small {
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: 4px;
-  font:
-    12px ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    monospace;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-normal);
 }
 /* `.composer-footer button` 与 `.composer-footer .stop` 两档皮已收进
    `Button variant="primary" size="md"` 与 `variant="danger"`（ADR-0031）。 */
@@ -1662,27 +1625,6 @@ small {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-.expert-editor-body input,
-.expert-editor-body textarea {
-  width: 100%;
-  padding: var(--control-padding);
-  color: var(--text-primary);
-  background: var(--surface);
-  border: var(--control-border);
-  border-radius: var(--control-radius);
-  font: inherit;
-  font-size: var(--font-size-body);
-  font-weight: 400;
-  resize: vertical;
-}
-.expert-editor-body textarea {
-  padding: var(--control-padding-lg);
-}
-.expert-editor-body input:focus,
-.expert-editor-body textarea:focus {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
 }
 .expert-editor-body fieldset {
   display: grid;
@@ -2349,22 +2291,10 @@ button.list-row:where(:not(:disabled)):hover {
 .dependency-grant > .status-note {
   margin: 0 0 8px;
 }
-.skill-detail-section textarea {
-  display: block;
+.skill-detail-section > .text-area {
   width: 100%;
   min-height: 190px;
   margin-top: 12px;
-  padding: var(--control-padding-lg);
-  color: var(--text-primary);
-  background: var(--surface-raised);
-  border: var(--control-border);
-  border-radius: var(--control-radius);
-  font:
-    12px/1.55 ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    monospace;
-  resize: vertical;
 }
 /* 内联反馈的唯一出口（docs/10 §11.5.1 第二落点、§10.1 台账）。
    几何只住这一处：`padding` 取容器留白档，圆角取 `--radius-row`，字号与旧的
@@ -2529,26 +2459,11 @@ button.list-row:where(:not(:disabled)):hover {
   border: 1px solid var(--border);
   border-radius: var(--radius-row);
 }
-.memory-capture textarea {
-  width: 100%;
-  padding: var(--control-padding-lg);
-  color: var(--text-primary);
-  background: var(--surface);
-  border: var(--control-border);
-  border-radius: var(--control-radius);
-  font: inherit;
-  line-height: var(--line-height-normal);
-  resize: vertical;
-}
 .memory-capture-source {
   display: grid;
   gap: 8px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
-}
-.memory-capture-source textarea[readonly] {
-  color: var(--text-secondary);
-  background: var(--surface-raised);
 }
 .memory-capture-source-actions {
   display: flex;
@@ -2768,15 +2683,6 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--text-muted);
   font-size: var(--font-size-caption);
 }
-.memory-conflict-note-input {
-  min-height: var(--control-height);
-  padding: var(--control-padding);
-  color: var(--text-primary);
-  background: var(--surface);
-  border: var(--control-border);
-  border-radius: var(--control-radius);
-  font-size: var(--font-size-caption);
-}
 .memory-conflict-hint {
   color: var(--text-muted);
   font-size: var(--font-size-caption);
@@ -2794,27 +2700,6 @@ button.list-row:where(:not(:disabled)):hover {
   display: grid;
   gap: 12px;
 }
-.memory-editor textarea,
-.memory-editor input {
-  width: 100%;
-  min-height: var(--control-height);
-  padding: var(--control-padding);
-  color: var(--text-primary);
-  background: var(--surface);
-  border: var(--control-border);
-  border-radius: var(--control-radius);
-  font-size: var(--font-size-body);
-  line-height: var(--line-height-normal);
-}
-.memory-editor textarea {
-  resize: vertical;
-  padding: var(--control-padding-lg);
-}
-.memory-editor input[type='checkbox'] {
-  width: auto;
-  min-height: 0;
-  padding: 0;
-}
 .memory-editor small {
   display: block;
   color: var(--text-muted);
@@ -2829,7 +2714,7 @@ button.list-row:where(:not(:disabled)):hover {
   position: relative;
   display: block;
 }
-.memory-editor-counted > input {
+.memory-editor-counted > .text-field {
   padding-right: 62px;
 }
 .memory-editor-counted > small {
@@ -2960,6 +2845,63 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .field-select-chevron.open {
   transform: rotate(90deg);
+}
+
+/* === TextField／TextArea：输入控件的唯一几何出口（docs/10 §9.10、§9.13 规矩 11、ADR-0034） ===
+   与 `FieldSelect` 同一条理由：不写 width:100%，放进 Field 的纵向结构里由 stretch
+   撑满，放进横向行里按内容取宽。底色取 `--surface`——下拉触发器用它，同排的
+   输入框不能与它一个白一个灰；此前 30 条自写规则里的四种底色就此并成一种。 */
+.text-field,
+.text-area {
+  min-width: 0;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: var(--control-border);
+  border-radius: var(--control-radius);
+  font-family: inherit;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-normal);
+}
+/* 与按钮同一张「高度 × 内距」成对档位表（docs/10 §9.10）：只对齐高度不对齐内距，
+   同排的输入框与按钮仍是一个饱满一个瘦。 */
+.text-field[data-size='sm'] {
+  min-height: var(--control-height-sm);
+  padding: var(--control-padding-sm);
+}
+.text-field[data-size='md'] {
+  min-height: var(--control-height);
+  padding: var(--control-padding);
+}
+.text-field[data-size='lg'] {
+  min-height: var(--control-height-lg);
+  padding: var(--control-padding-lg);
+}
+/* 多行区没有档高可配：高度由 `rows` 与内容决定，内距一律取最大那一档。 */
+.text-area {
+  padding: var(--control-padding-lg);
+  resize: vertical;
+}
+/* 只读说的是「这块内容你能看不能改」，这是输入控件的通用事实，归基座：
+   收编前只有记忆抓取来源那一处自己写过这一格，别处的只读框就长得像可编辑框。 */
+.text-field[readonly],
+.text-area[readonly] {
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+}
+.text-field::placeholder,
+.text-area::placeholder {
+  color: var(--text-muted);
+}
+/* 输入框在鼠标点击下也算 `:focus-visible`，所以一处就同时覆盖点选与键盘。
+   收编前这里有三种处置：档位环、`outline: none` 只改 `border-color`、`outline: 0`。
+   后两种把焦点环换成一条边框或干脆关掉——同一件事被记了三遍。 */
+.text-field:focus-visible,
+.text-area:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.text-area[data-mono='true'] {
+  font-family: var(--font-mono);
 }
 /* 单选选择器基座（docs/10 §10.1）：图标与色板问的是同一个问题——这一档是不是当前档，
    所以 `aria-pressed`、选中底色与方格几何只写一处。外观设置里的「模式／色系」是
@@ -3291,7 +3233,7 @@ button.list-row:where(:not(:disabled)):hover {
   align-items: center;
   gap: 8px;
   min-height: var(--control-height);
-  padding: 6px 10px;
+  padding: var(--control-padding);
   border-radius: var(--radius-tag);
   cursor: pointer;
   color: var(--text-primary);
@@ -3442,19 +3384,8 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--text-secondary);
   margin-left: 8px;
 }
-.capability-search input {
+.capability-search {
   width: 100%;
-  padding: var(--control-padding-sm);
-  border: var(--control-border);
-  border-radius: var(--control-radius);
-  background: var(--surface);
-  color: var(--text-primary);
-  font-size: var(--font-size-body);
-  min-height: var(--control-height-sm);
-}
-.capability-search input:focus {
-  outline: none;
-  border-color: var(--focus-ring);
 }
 .capability-locate-link {
   display: block;
@@ -3512,14 +3443,6 @@ button.list-row:where(:not(:disabled)):hover {
   flex-direction: column;
   /* 同为 480px 定宽抽屉：横向只能截断/折行，不放滚动条（docs/10 §9.8）。 */
   overflow: hidden auto;
-}
-.model-sheet input {
-  min-height: var(--control-height);
-  padding: var(--control-padding);
-  color: var(--text-primary);
-  background: var(--canvas);
-  border: var(--control-border);
-  border-radius: var(--control-radius);
 }
 .form-grid {
   display: grid;
@@ -3602,23 +3525,9 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   gap: 8px;
 }
-.knowledge-search input,
-.memory-search input {
-  min-width: 0;
+.knowledge-search > .text-field,
+.memory-search > .text-field {
   flex: 1;
-  padding: var(--control-padding);
-  color: var(--text-primary);
-  background: var(--surface-raised);
-  border: var(--control-border);
-  border-radius: var(--control-radius);
-  font: inherit;
-  font-size: var(--font-size-body);
-  min-height: var(--control-height);
-}
-.knowledge-search input:focus,
-.memory-search input:focus {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
 }
 .knowledge-summary {
   display: flex;
@@ -3912,11 +3821,9 @@ button.list-row:where(:not(:disabled)):hover {
   border-left: 3px solid var(--brand-soft);
 }
 .markdown-preview code {
-  font:
-    13px ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    monospace;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-normal);
 }
 .markdown-preview pre {
   overflow: auto;
@@ -3955,30 +3862,13 @@ button.list-row:where(:not(:disabled)):hover {
   min-height: 0;
 }
 /* 成果正文编辑器里，含 textarea 的字段要吃掉剩余高度；结构几何仍归 Field。 */
-.artifact-editor .field:has(textarea) {
+.artifact-editor .field:has(.text-area) {
   flex: 1;
   min-height: 0;
 }
-.artifact-editor input,
-.artifact-editor textarea {
-  width: 100%;
-  padding: var(--control-padding);
-  color: var(--text-primary);
-  background: var(--surface);
-  border: var(--control-border);
-  border-radius: var(--control-radius);
-  font: inherit;
-  font-size: var(--font-size-body);
-  line-height: var(--line-height-body);
-}
-.artifact-editor textarea {
-  padding: var(--control-padding-lg);
-}
-.artifact-editor textarea {
+.artifact-editor .text-area {
   flex: 1;
   min-height: 0;
-  resize: vertical;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .artifact-source-select {
   display: flex;
@@ -4142,17 +4032,9 @@ button.list-row:where(:not(:disabled)):hover {
   gap: 8px;
   width: 100%;
 }
-.knowledge-collection-create input,
-.knowledge-collection-row input {
+.knowledge-collection-create > .text-field,
+.knowledge-collection-row > .text-field {
   flex: 1;
-  min-width: 0;
-  min-height: var(--control-height);
-  padding: var(--control-padding);
-  color: var(--text-primary);
-  background: var(--surface);
-  border: var(--control-border);
-  border-radius: var(--control-radius);
-  font-size: var(--font-size-caption);
 }
 .knowledge-collection-check {
   display: flex;
@@ -4381,14 +4263,6 @@ button.list-row:where(:not(:disabled)):hover {
   gap: 16px;
   flex-direction: column;
   max-width: 480px;
-}
-.search-settings input {
-  min-height: var(--control-height);
-  padding: var(--control-padding);
-  color: var(--text-primary);
-  background: var(--canvas);
-  border: var(--control-border);
-  border-radius: var(--control-radius);
 }
 .search-settings .search-actions {
   display: flex;
@@ -4858,11 +4732,9 @@ select,
   background: var(--surface-raised);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-row);
-  font:
-    12px/1.7 ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    monospace;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-loose);
 }
 .latest-message-control {
   display: flex;
@@ -4898,19 +4770,6 @@ select,
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-}
-.mcp-editor input,
-.mcp-editor textarea {
-  padding: var(--control-padding);
-  color: var(--text-primary);
-  background: var(--canvas);
-  border: var(--control-border);
-  border-radius: var(--control-radius);
-  font: inherit;
-  font-size: var(--font-size-body);
-}
-.mcp-editor textarea {
-  padding: var(--control-padding-lg);
 }
 .mcp-binding-picker {
   display: grid;

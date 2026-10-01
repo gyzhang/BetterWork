@@ -4,6 +4,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { ChevronLeftIcon, FolderIcon, PlusIcon, workspaceIcons } from '../icons';
 import { workspaceAccentVar } from '../lib/workspace-identity';
 import { PopoverMenu } from './PopoverMenu';
+import { TextField } from './TextField';
 
 export interface WorkspaceSelectorProps {
   currentWorkspace: WorkspaceSummary | undefined;
@@ -100,7 +101,8 @@ export function WorkspaceSelector({
         onSelect={handleSelect}
         header={
           <div className="workspace-selector-search">
-            <input
+            <TextField
+              size="md"
               ref={searchInputRef}
               type="text"
               className="workspace-selector-search-input"

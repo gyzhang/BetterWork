@@ -16,6 +16,7 @@ import { Button } from './Button';
 import { FieldSelect } from './FieldSelect';
 import { IconButton } from './IconButton';
 import { PopoverMenu } from './PopoverMenu';
+import { TextField } from './TextField';
 
 /**
  * Composer 能力选择器（ADR-0012 §UI / B00-4）。
@@ -319,16 +320,15 @@ export function ComposerCapabilityPicker({
         }}
         onSelect={handleSkillSelect}
         header={
-          <div className="capability-search">
-            <input
-              ref={skillButtonRef as unknown as React.RefObject<HTMLInputElement>}
-              type="text"
-              placeholder="搜索技能…"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              aria-label="搜索技能"
-            />
-          </div>
+          <TextField
+            size="sm"
+            className="capability-search"
+            ref={skillButtonRef as unknown as React.RefObject<HTMLInputElement>}
+            placeholder="搜索技能…"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            aria-label="搜索技能"
+          />
         }
         footer={
           filteredSkills.some((skill) => {

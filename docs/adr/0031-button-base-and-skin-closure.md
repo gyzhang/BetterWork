@@ -2,7 +2,7 @@
 
 - 状态：Accepted（2026-09-28，按光哥「按钮收口走造基座并新增 ADR」的拍板实施）。**2026-10-01 修订**：`size` 由「缺省 `md`」改为**必填**，「一条动作条」的契约单位从组件名 `ActionBar` 换成**动作排**（七个槽位），`Tabs`／`SegmentedControl`／`FieldSelect` 同轮换档 API——三处都写在正文对应小节的「（2026-10-01 修订）」段落里，当时的判断与实测数据不改写。
 - 日期：2026-09-28。
-- **替代关系**：替代 [docs/10 §10.1](../10-ui-ux-system.md) 台账里「Button / Input / Textarea 不再单独组件化」这一条中**关于 Button 的部分**；`Input`／`Textarea` 的原判断维持不变（不组件化，结构归 `Field`，没有长出第二套皮）。**但本记录当时给这条判断配的理由是错的**：它写「它们的几何本来就由 `--control-*` 单一口径覆盖」，而当天实测控件 `padding` 有 12 种组合、29 处几何声明里只有 7 处吃高度档。该事实已于同日按 [docs/10 §9.10](../10-ui-ux-system.md) 收进 `--control-padding-*` 三档修正。同时替代 [UI 复用审计](../reviews/2026-09-27-ui-reuse-audit.md)「明确不做」清单中的「Button 组件化」一项。两份记录的日期与结论都不改写，只在此声明被本记录取代。
+- **替代关系**：替代 [docs/10 §10.1](../10-ui-ux-system.md) 台账里「Button / Input / Textarea 不再单独组件化」这一条中**关于 Button 的部分**；`Input`／`Textarea` 的原判断当时维持不变（不组件化，结构归 `Field`，没有长出第二套皮）——**这一半在同日被 [ADR-0034](0034-input-control-base.md) 按本记录自己的判据反转**，`Select` 那条已由 `FieldSelect` 落实。**但本记录当时给这条判断配的理由是错的**：它写「它们的几何本来就由 `--control-*` 单一口径覆盖」，而当天实测控件 `padding` 有 12 种组合、29 处几何声明里只有 7 处吃高度档。该事实已于同日按 [docs/10 §9.10](../10-ui-ux-system.md) 收进 `--control-padding-*` 三档修正。同时替代 [UI 复用审计](../reviews/2026-09-27-ui-reuse-audit.md)「明确不做」清单中的「Button 组件化」一项。两份记录的日期与结论都不改写，只在此声明被本记录取代。
 - 依据：2026-09-28 专家修订页「保存修订」按钮观感异常引发的全仓按钮清点。
 
 ## 背景
@@ -31,7 +31,7 @@
 2. **`variant` 八档 × `size` 三档，`variant` 只管颜色、`size` 只管几何，两者正交。** 这是对现状 11 套皮按「它到底在表达什么」重新切分，而不是给 11 套皮各配一个名字。
 3. **皮类只由基座输出**：`.btn` 一个类 ＋ `[data-variant]`／`[data-size]`／`[data-tone]` 三个数据属性，沿用仓库既有的 `.list-row[data-variant]`／`.icon-button[data-size]`／`.tabs[data-fill]` 约定，不引入第二套 BEM 命名。
 4. **`AsyncButton` 收成 `Button` 的薄封装**，`busy`／`busyLabel`／`aria-busy` 的语义与既有 8 个调用点不变；`IconButton` 保持独立基座（方块、无文字、`aria-label` 必填，套不进文字按钮的高度档）。
-5. **`Input`／`Textarea`／`Select` 不组件化**，本记录不扩大替代范围。
+5. **`Input`／`Textarea`／`Select` 不组件化**，本记录不扩大替代范围。**（2026-10-01 由 [ADR-0034](0034-input-control-base.md) 反转其中 `Input`／`Textarea` 两条）**：`Select` 那条早已由 `FieldSelect` 落实，剩下的这一半在同日按本记录自己的判据（是否存在没有唯一出口的重复）另立记录做掉了；`Select` 与本记录的其它结论不改写。
 6. **护栏四条**（见「实现边界」），并做变异验证。
 
 ### `variant` 归并映射
@@ -103,4 +103,4 @@
 
 两处已知遗留，不在本记录范围内：`ConfirmationDialog` 的底部仍是自写的 `.confirmation-dialog footer`（`display:flex` ＋ `gap:8`）而不是 `ActionBar` 基座；`.workspace-selector-action` 是浮层里的菜单项，长期看应并入 `PopoverMenu` 的 item 档。两者都是「容器替控件发外观」的同族，但换基座会改到浮层语义与焦点行为，按 ADR 的判据需要各自单独立项，不借本轮按钮收口一并混做。
 
-`Input`／`Textarea` 维持不组件化：结构归 `Field`，没有长出第二套皮。**本记录初稿在此写的「几何已经由 `--control-*` 单一口径覆盖」不成立**——那是把「护栏管了边框与圆角」当成「几何都收口了」；控件 `padding` 当时有 12 种取值，护栏的 `CONTROL_SELECTOR` 口径里根本没有 `padding`。同日补齐档位（`--control-padding-sm`／`--control-padding`／`--control-padding-lg` 与 `--control-check-size`）并把 `padding`／`height`／`width` 加进护栏后，这句话才成立（[docs/10 §9.8、§9.10](../10-ui-ux-system.md)）。若将来 `Select` 类控件再出现同类分叉，按本记录同一判据（**是否存在没有唯一出口的重复**）另立 ADR，而不是沿用「一律不组件化」或「一律组件化」的教条。
+`Input`／`Textarea` 维持不组件化：结构归 `Field`，没有长出第二套皮。**本记录初稿在此写的「几何已经由 `--control-*` 单一口径覆盖」不成立**——那是把「护栏管了边框与圆角」当成「几何都收口了」；控件 `padding` 当时有 12 种取值，护栏的 `CONTROL_SELECTOR` 口径里根本没有 `padding`。同日补齐档位（`--control-padding-sm`／`--control-padding`／`--control-padding-lg` 与 `--control-check-size`）并把 `padding`／`height`／`width` 加进护栏后，这句话才成立（[docs/10 §9.8、§9.10](../10-ui-ux-system.md)）。若将来 `Select` 类控件再出现同类分叉，按本记录同一判据（**是否存在没有唯一出口的重复**）另立 ADR，而不是沿用「一律不组件化」或「一律组件化」的教条。**这条出口当天就用掉了**：[ADR-0034](0034-input-control-base.md) 实测到输入框这一轴上有 30 条基座之外的规则在描述同一格几何、四种底色、三种聚焦处置，正是「没有唯一出口的重复」，于是按本记录的判据把它们收进 `TextField`——用判据而不是教条，两次结论相反都算数。

@@ -22,6 +22,7 @@ import { ListRow } from '../components/ListRow';
 import { Modal } from '../components/Modal';
 import { SectionHeader } from '../components/SectionHeader';
 import { Switch } from '../components/Switch';
+import { TextField } from '../components/TextField';
 import { TransientToast } from '../components/TransientToast';
 import type { KnowledgeLibrary } from '../hooks/use-knowledge-library';
 import {
@@ -263,7 +264,8 @@ export function KnowledgePage({
               className="knowledge-search"
               onSubmit={(event) => trackAction(onSearch(event), '检索资料')}
             >
-              <input
+              <TextField
+                size="md"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="搜索资料库中的内容…"
@@ -439,7 +441,8 @@ export function KnowledgePage({
                         trackAction(createCollection(name), '新建集合');
                       }}
                     >
-                      <input
+                      <TextField
+                        size="md"
                         value={newCollectionName}
                         onChange={(event) => setNewCollectionName(event.target.value)}
                         placeholder="新集合名称…"
@@ -462,7 +465,8 @@ export function KnowledgePage({
                       const draftName = renameDrafts[collection.id] ?? collection.name;
                       return (
                         <div className="knowledge-collection-row" key={collection.id}>
-                          <input
+                          <TextField
+                            size="md"
                             value={draftName}
                             onChange={(event) =>
                               setRenameDrafts((drafts) => ({

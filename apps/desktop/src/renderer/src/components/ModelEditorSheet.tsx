@@ -12,6 +12,7 @@ import { IconButton } from './IconButton';
 import { InlineError } from './InlineError';
 import { Modal } from './Modal';
 import { SectionHeader } from './SectionHeader';
+import { TextField } from './TextField';
 
 const ROLE_OPTIONS = [
   { id: 'language', label: '语言模型' },
@@ -52,7 +53,8 @@ export function ModelEditor({
       />
       <form onSubmit={(event) => trackAction(onSave(event), '保存模型配置')}>
         <Field label="显示名称">
-          <input
+          <TextField
+            size="md"
             required
             value={form.name}
             onChange={(event) => setForm({ ...form, name: event.target.value })}
@@ -69,7 +71,8 @@ export function ModelEditor({
             />
           </Field>
           <Field label="Provider">
-            <input
+            <TextField
+              size="md"
               required
               value={form.provider}
               onChange={(event) => setForm({ ...form, provider: event.target.value })}
@@ -78,7 +81,8 @@ export function ModelEditor({
           </Field>
         </div>
         <Field label="模型名称">
-          <input
+          <TextField
+            size="md"
             required
             value={form.model}
             onChange={(event) => setForm({ ...form, model: event.target.value })}
@@ -86,7 +90,8 @@ export function ModelEditor({
           />
         </Field>
         <Field label="API 地址">
-          <input
+          <TextField
+            size="md"
             required
             type="url"
             value={form.baseUrl}
@@ -95,7 +100,8 @@ export function ModelEditor({
           />
         </Field>
         <Field label="API Key">
-          <input
+          <TextField
+            size="md"
             type="password"
             value={form.apiKey}
             onChange={(event) => setForm({ ...form, apiKey: event.target.value })}
@@ -105,7 +111,8 @@ export function ModelEditor({
         <Disclosure label="高级参数">
           <div className="form-grid">
             <Field label="上下文 Token">
-              <input
+              <TextField
+                size="md"
                 type="number"
                 min="1"
                 value={form.maxContextTokens}
@@ -115,7 +122,8 @@ export function ModelEditor({
               />
             </Field>
             <Field label="最大输出 Token">
-              <input
+              <TextField
+                size="md"
                 type="number"
                 min="1"
                 value={form.maxOutputTokens}

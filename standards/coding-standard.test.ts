@@ -141,6 +141,69 @@ function locate(declaration: CssDeclaration, relativePath: string): string {
   return `${relativePath}:${declaration.line} ${declaration.selector} { ${declaration.property}: ${declaration.value} }`;
 }
 
+/**
+ * 从 `<` 处读出一个 JSX 开标签：属性文本只保留花括号深度 0 的部分。
+ *
+ * 动作排与输入控件两条护栏都要它：属性里的箭头函数带 `>`，用正则截到第一个 `>`
+ * 会把标签读断；花括号深度只在 0 时才算标签自己的收尾。
+ */
+function jsxOpenTag(
+  text: string,
+  start: number,
+): { name: string; attrs: string; end: number; selfClosing: boolean } | undefined {
+  const head = /^<([A-Za-z][\w.]*)/.exec(text.slice(start, start + 60));
+  const name = head?.[1];
+  if (!name) return undefined;
+  let cursor = start + name.length + 1;
+  let braceDepth = 0;
+  let quote: string | undefined;
+  let attrs = '';
+  while (cursor < text.length) {
+    const char = text[cursor];
+    if (char === undefined) break;
+    if (quote !== undefined) {
+      if (char === quote) quote = undefined;
+      if (braceDepth === 0) attrs += char;
+      cursor += 1;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char;
+      if (braceDepth === 0) attrs += char;
+      cursor += 1;
+      continue;
+    }
+    if (char === '{') braceDepth += 1;
+    else if (char === '}') braceDepth -= 1;
+    if (braceDepth === 0) attrs += char;
+    if (char === '>' && braceDepth === 0) break;
+    if (char === '/' && text[cursor + 1] === '>' && braceDepth === 0) break;
+    cursor += 1;
+  }
+  return { name, attrs, end: cursor, selfClosing: attrs.trimEnd().endsWith('/') };
+}
+
+/** 文本里每一处 `<tag>` 开标签（含属性文本与行号），供逐处判定用。 */
+function jsxOpenTags(
+  text: string,
+  tagPattern: RegExp,
+): { name: string; attrs: string; line: number }[] {
+  const found: { name: string; attrs: string; line: number }[] = [];
+  for (let cursor = 0; cursor < text.length; cursor += 1) {
+    if (text[cursor] !== '<') continue;
+    if (!tagPattern.test(text.slice(cursor, cursor + 12))) continue;
+    const tag = jsxOpenTag(text, cursor);
+    if (!tag) continue;
+    found.push({
+      name: tag.name,
+      attrs: tag.attrs,
+      line: text.slice(0, cursor).split('\n').length,
+    });
+    cursor = tag.end;
+  }
+  return found;
+}
+
 /** 只接受 px 与 rem，其余单位无法判定是否低于 12px 下限。 */
 describe('唯一规范源', () => {
   it('ESLint 与 Prettier 各只有一份根级配置', () => {
@@ -1580,6 +1643,263 @@ describe('表单字段基座纪律', () => {
   });
 });
 
+describe('输入控件基座纪律', () => {
+  const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
+  expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
+  const declarations = declarationsOf(styles ?? '');
+
+  /** 唯一允许写原生输入标签的两处：`TextField` 是出口，任务输入区的 textarea 归 `Composer`。 */
+  const INPUT_BASE_FILES: readonly string[] = [
+    'apps/desktop/src/renderer/src/components/TextField.tsx',
+    'apps/desktop/src/renderer/src/components/Composer.tsx',
+  ];
+  /**
+   * 留在原生上的只有勾选轴（docs/10 §10.1：布尔设置走 `Switch`，多选／全选留原生 `checkbox`）：
+   * 方框由操作系统绘制，套上控件档位高度反而把它撑歪，而 `CheckList`／`SingleSelectPicker`
+   * 已经把「勾了哪几个」与「这一档是不是当前档」各自包住。判据写在 `type` 上而不是文件清单上——
+   * 新增一处勾选行不必改护栏，新增一个文本框则必须走基座。
+   */
+  const CHECK_AXIS_TYPES: readonly string[] = ['checkbox', 'radio'];
+  /** 基座之外仍写输入控件外观的地方，按 selector＋属性登记，只降不升。 */
+  const INPUT_APPEARANCE_EXCEPTIONS: readonly {
+    readonly selector: string;
+    readonly property: string;
+    readonly reason: string;
+  }[] = [
+    {
+      selector: '.memory-editor-counted > .text-field',
+      property: 'padding-right',
+      reason: '给绝对定位的码点角标腾出右缘，不是重述控件内距',
+    },
+  ];
+
+  it('生产代码的输入控件只走 TextField／TextArea', () => {
+    const offenders: string[] = [];
+    for (const relative of productionPathsUnder('apps/desktop/src/renderer/')) {
+      if (!relative.endsWith('.tsx') || INPUT_BASE_FILES.includes(relative)) continue;
+      for (const tag of jsxOpenTags(read(relative), /^<(input|textarea)(?![\w-])/u)) {
+        const type = /\btype="([^"]+)"/u.exec(tag.attrs)?.[1];
+        if (tag.name === 'input' && type !== undefined && CHECK_AXIS_TYPES.includes(type)) continue;
+        offenders.push(`${relative}:${tag.line} <${tag.name}${type ? ` type="${type}"` : ''}>`);
+      }
+    }
+    expect(
+      offenders,
+      '输入控件请走 TextField／TextArea：高度与内距成对取档、底色与聚焦环只有一份；勾选与单选留原生并按 `type` 登记，任务输入区归 Composer（docs/10 §9.10、§10.1、ADR-0033 决策 10）',
+    ).toEqual([]);
+  });
+
+  it('输入框的三档高度与内距成对，基座自己把字面交回档位', () => {
+    // 只对齐高度不对齐内距，同排的输入框与按钮仍是一个饱满一个瘦（docs/10 §9.10）；
+    // 「这一档没声明」比「这一档写错」更隐蔽——调用点写了 `size="lg"`，CSS 里没有它，
+    // 于是静悄悄退成基座缺省。
+    const steps: { step: string; height: string; padding: string }[] = [
+      {
+        step: 'sm',
+        height: 'var(--control-height-sm)',
+        padding: 'var(--control-padding-sm)',
+      },
+      { step: 'md', height: 'var(--control-height)', padding: 'var(--control-padding)' },
+      {
+        step: 'lg',
+        height: 'var(--control-height-lg)',
+        padding: 'var(--control-padding-lg)',
+      },
+    ];
+    const offenders: string[] = [];
+    for (const entry of steps) {
+      const rules = declarations.filter(
+        (declaration) =>
+          declaration.selector.replace(/\s+/g, '') === `.text-field[data-size='${entry.step}']`,
+      );
+      if (rules.length === 0) {
+        offenders.push(`data-size='${entry.step}' 没有声明——调用点写了这一档却什么都不会变`);
+        continue;
+      }
+      for (const property of ['min-height', 'padding'] as const) {
+        const actual = rules.find((rule) => rule.property === property)?.value;
+        const expected = property === 'min-height' ? entry.height : entry.padding;
+        if (actual !== expected) {
+          offenders.push(
+            `.text-field[data-size='${entry.step}'] 的 ${property} 应为 ${expected}，实际 ${actual ?? '缺失'}`,
+          );
+        }
+      }
+    }
+    // 多行区没有档高：它的高度由 `rows` 与内容决定，基座里长出 `.text-area[data-size]`
+    // 就是给一个没有档的轴配了档。
+    if (
+      declarations.some((declaration) =>
+        /\.text-area\[data-size='\w+'\]/u.test(declaration.selector),
+      )
+    ) {
+      offenders.push('.text-area 不接受 data-size 档位（docs/10 §9.13 输入框几何一行）');
+    }
+    // 基座本体必须自带字号、行高与表面四件套，且全部取档位：
+    // 收编前那 30 条规则里字号跨三档、底色有四种、聚焦环有三种处置。
+    const base = declarations.filter(
+      (declaration) =>
+        declaration.selector.replace(/\s+/g, ' ').trim() === '.text-field, .text-area',
+    );
+    expect(base.length, '找不到 .text-field, .text-area 基座声明，本条护栏已空跑').toBeGreaterThan(
+      0,
+    );
+    const baseValue = (property: string): string | undefined =>
+      base.find((declaration) => declaration.property === property)?.value;
+    for (const [property, expected] of [
+      ['font-size', 'var(--font-size-body)'],
+      ['line-height', 'var(--line-height-normal)'],
+      ['background', 'var(--surface)'],
+      ['border', 'var(--control-border)'],
+      ['border-radius', 'var(--control-radius)'],
+    ] as const) {
+      if (baseValue(property) !== expected) {
+        offenders.push(
+          `基座的 ${property} 应为 ${expected}，实际 ${baseValue(property) ?? '缺失'}`,
+        );
+      }
+    }
+    expect(
+      offenders,
+      '输入控件的几何只从 --control-height-* × --control-padding-* 成对取档，文字取 §9.13 档位（docs/10 §9.10、§9.13）',
+    ).toEqual([]);
+  });
+
+  it('页面不得替输入控件发几何与外观', () => {
+    // 收编前 37 个 `<input>` 的长相由 30 条逐处自写的 CSS 规则决定；基座立起来之后，
+    // 这些属性再出现在钩子选择器上就是「第二处真相」，只是这次长得和基座一样。
+    const owned = (property: string): boolean =>
+      [
+        'background',
+        'border',
+        'border-radius',
+        'outline',
+        'font-size',
+        'font-family',
+        'color',
+      ].includes(property) ||
+      property === 'padding' ||
+      property.startsWith('padding-');
+    const offenders: string[] = [];
+    let exemptions = 0;
+    for (const declaration of declarations) {
+      const selector = declaration.selector.replace(/\s+/g, ' ').trim();
+      if (!/\.(text-field|text-area)(?![\w-])/.test(selector)) continue;
+      if (!owned(declaration.property)) continue;
+      // 基座自己的选择器（含 `[data-size]`、`:focus-visible` 等状态档）说的就是这条契约。
+      if (/^\.(text-field|text-area)(?![\w-])/.test(selector)) continue;
+      const registered = INPUT_APPEARANCE_EXCEPTIONS.find(
+        (entry) => entry.selector === selector && entry.property === declaration.property,
+      );
+      if (registered) {
+        exemptions += 1;
+        continue;
+      }
+      offenders.push(locate(declaration, styles ?? ''));
+    }
+    expect(
+      exemptions,
+      `输入控件外观的例外存量 ${exemptions} 处与清单 ${INPUT_APPEARANCE_EXCEPTIONS.length} 处不符——清单里不许留着已经改掉的`,
+    ).toBe(INPUT_APPEARANCE_EXCEPTIONS.length);
+    expect(
+      offenders,
+      '位置与尺寸留给领域钩子，底色、边框、圆角、内距与字号归 TextField／TextArea 基座（docs/10 §9.10、§10.1）',
+    ).toEqual([]);
+  });
+
+  it('docs/10 的档位表与 styles.css 的 Token 两侧同值', () => {
+    // 上面几条查的是「代码里有没有这一档」，这一条查的是「文档说的数是不是代码里那个数」：
+    // 页面标题曾一处写 20px、另一处写 19px，两份都对得上自己的邻居，只有并排读才发现差 1px。
+    const doc = read('docs/10-ui-ux-system.md');
+    const root = new Map<string, string>();
+    for (const declaration of declarations) {
+      if (declaration.selector === ':root' && declaration.property.startsWith('--')) {
+        root.set(declaration.property, declaration.value.replace(/\s+/g, ' ').trim());
+      }
+    }
+    const normalize = (value: string): string =>
+      value.replace(/`/g, '').replace(/\s+/g, ' ').trim();
+    const offenders: string[] = [];
+    let checked = 0;
+    const compare = (token: string, documented: string): void => {
+      const actual = root.get(token);
+      if (actual === undefined) {
+        offenders.push(`${token} 文档有档位、代码里没有定义`);
+        return;
+      }
+      checked += 1;
+      if (normalize(documented) !== actual) {
+        offenders.push(`${token} 文档写 ${normalize(documented)}，styles.css 是 ${actual}`);
+      }
+    };
+
+    const sectionOf = (from: string, to: string): string => {
+      const start = doc.indexOf(from);
+      expect(start, `docs/10 找不到小节「${from}」，本条护栏已空跑`).toBeGreaterThan(-1);
+      const end = doc.indexOf(to, start);
+      return doc.slice(start, end < 0 ? undefined : end);
+    };
+
+    // 表一：§9.10 的「| `--token` | 值 | 用在哪 |」。
+    for (const line of sectionOf('### 9.10 控件几何与浮层字号', '### 9.11').split('\n')) {
+      const row = /^\|\s*`(--[a-z0-9-]+)`\s*\|\s*([^|]+?)\s*\|/u.exec(line);
+      if (!row) continue;
+      compare(row[1] ?? '', row[2] ?? '');
+    }
+
+    // 表二：§9.13 的档位行。字号与行高写成「`名字` 值」的并排对，表面内距与标记方块
+    // 把名字与值分在两格，按出现顺序并起来比。
+    const ladder = sectionOf('### 9.13', '## 10. 组件体系');
+    const pairRows: { label: string; prefix: string }[] = [
+      { label: '字号', prefix: '--font-size-' },
+      { label: '行高', prefix: '--line-height-' },
+    ];
+    const zippedRows: { label: string; values: RegExp }[] = [
+      { label: '表面内距', values: /[\d.]+px/u },
+      { label: '标记方块', values: /[\d.]+px/u },
+    ];
+    for (const entry of pairRows) {
+      const row = ladder.split('\n').find((line) => line.startsWith(`| ${entry.label} |`));
+      if (!row) {
+        offenders.push(`§9.13 找不到「${entry.label}」那一行`);
+        continue;
+      }
+      for (const pair of row.matchAll(/`([a-z][a-z-]*)`\s+(\d+(?:\.\d+)?)(px)?/gu)) {
+        compare(`${entry.prefix}${pair[1] ?? ''}`, `${pair[2] ?? ''}${pair[3] ?? ''}`);
+      }
+    }
+    for (const entry of zippedRows) {
+      const row = ladder.split('\n').find((line) => line.startsWith(`| ${entry.label} |`));
+      if (!row) {
+        offenders.push(`§9.13 找不到「${entry.label}」那一行`);
+        continue;
+      }
+      const cells = row.split('|').map((cell) => cell.trim());
+      const tokens = [...(cells[2] ?? '').matchAll(/`(--[a-z-]+)`/gu)].map(
+        (match) => match[1] ?? '',
+      );
+      const values = (cells[3] ?? '')
+        .split('／')
+        .map(
+          (segment) => /^((?:[\d.]+(?:px|%)|0)(?:\s+(?:[\d.]+(?:px|%)|0))*)\s/u.exec(segment)?.[1],
+        );
+      if (tokens.length === 0 || tokens.length !== values.length || values.some((v) => !v)) {
+        offenders.push(`§9.13「${entry.label}」一行的名字与值对不上，护栏读不出档位`);
+        continue;
+      }
+      tokens.forEach((token, index) => compare(token, values[index] ?? ''));
+    }
+    expect(
+      checked,
+      `只比对到 ${checked} 条档位，两张表都没解析出来——本条护栏已空跑`,
+    ).toBeGreaterThanOrEqual(25);
+    expect(
+      offenders,
+      'docs/10 §9.10 与 §9.13 写的档值必须等于 styles.css `:root` 的 Token 值；调一档要同轮改两处（docs/10 §9.13、AGENTS.md §8）',
+    ).toEqual([]);
+  });
+});
+
 describe('页签与切换组纪律', () => {
   it('页签与切换按钮组的语义只住在 Tabs 基座', () => {
     // 两处页签各写一遍的后果是都没有 roving tabindex：键盘用户要按 Tab 一格一格穿过去。
@@ -2458,43 +2778,6 @@ describe('按钮基座纪律', () => {
     label: string;
   }
 
-  /** 从 `<` 处读出一个 JSX 开标签：属性文本只保留花括号深度 0 的部分。 */
-  function jsxOpenTag(
-    text: string,
-    start: number,
-  ): { name: string; attrs: string; end: number; selfClosing: boolean } | undefined {
-    const head = /^<([A-Za-z][\w.]*)/.exec(text.slice(start, start + 60));
-    const name = head?.[1];
-    if (!name) return undefined;
-    let cursor = start + name.length + 1;
-    let braceDepth = 0;
-    let quote: string | undefined;
-    let attrs = '';
-    while (cursor < text.length) {
-      const char = text[cursor];
-      if (char === undefined) break;
-      if (quote !== undefined) {
-        if (char === quote) quote = undefined;
-        if (braceDepth === 0) attrs += char;
-        cursor += 1;
-        continue;
-      }
-      if (char === '"' || char === "'" || char === '`') {
-        quote = char;
-        if (braceDepth === 0) attrs += char;
-        cursor += 1;
-        continue;
-      }
-      if (char === '{') braceDepth += 1;
-      else if (char === '}') braceDepth -= 1;
-      if (braceDepth === 0) attrs += char;
-      if (char === '>' && braceDepth === 0) break;
-      if (char === '/' && text[cursor + 1] === '>' && braceDepth === 0) break;
-      cursor += 1;
-    }
-    return { name, attrs, end: cursor, selfClosing: attrs.trimEnd().endsWith('/') };
-  }
-
   /** 控件 → 档位。返回 undefined 表示这一排不管它（纯容器、图标本身等）。 */
   function rowControlOf(tag: { name: string; attrs: string }): RowControl | undefined {
     const explicit = /\bsize="(\w+)"/.exec(tag.attrs)?.[1];
@@ -2524,8 +2807,17 @@ describe('按钮基座纪律', () => {
         label: `${tag.name}·${explicit ?? '隐式md'}`,
       };
     }
-    // 原生 input／textarea 的高度目前由逐处 CSS 决定（无档位 API），
-    // 批次③补 `TextField` 后这一支改成取它的 `size`，在那之前不参与比较也不算违规。
+    // `TextField` 与按钮共用同一张「高度 × 内距」档位表（docs/10 §9.10、ADR-0033 决策 10）：
+    // 搜索框挨着「搜索」按钮排时，它矮一档那一排就还是不齐。
+    // `TextArea` 不在这一轴上——它的高度由 `rows` 与内容决定，没有档可取，不参与比较。
+    if (tag.name === 'TextField') {
+      return {
+        step: explicit ?? 'md',
+        axis: 'control',
+        implicit: explicit === undefined,
+        label: `TextField·${explicit ?? '隐式md'}`,
+      };
+    }
     return undefined;
   }
 
@@ -2659,6 +2951,7 @@ describe('按钮基座纪律', () => {
       'apps/desktop/src/renderer/src/components/Tabs.tsx',
       'apps/desktop/src/renderer/src/components/FieldSelect.tsx',
       'apps/desktop/src/renderer/src/components/IconButton.tsx',
+      'apps/desktop/src/renderer/src/components/TextField.tsx',
     ];
     const offenders: string[] = [];
     for (const relative of requiredOn) {
@@ -4131,6 +4424,25 @@ describe('排版与图标档位纪律', () => {
     expect(
       offenders,
       '每块独立表面的内距要取四档之一并登记进 SURFACE_PADDING；行内节奏与控件内距各归 §9.8、§9.10，不要串轴（docs/10 §9.13）',
+    ).toEqual([]);
+  });
+
+  it('font 简写不得把字号与行高藏在里面', () => {
+    // `font:` 会连带设置 font-size 与 line-height，而上面两条护栏只认这两个属性名——
+    // 2026-10-01 核查时欢迎页口号与三处等宽块就是这么写的（1.35／1.55 与裸字号），
+    // 档位表改了它们不动；prettier 还把简写的值折行，单行 grep 也看不见。
+    // `font: inherit` 是元素复位，不带任何档位，是唯一留下的写法。
+    const shorthands = declarations.filter((declaration) => declaration.property === 'font');
+    expect(
+      shorthands.filter((declaration) => declaration.value.trim() === 'inherit').length,
+      '`font: inherit` 的复位声明不见了——本条护栏已空跑',
+    ).toBeGreaterThan(0);
+    const offenders = shorthands
+      .filter((declaration) => declaration.value.trim() !== 'inherit')
+      .map((declaration) => locate(declaration, styles ?? ''));
+    expect(
+      offenders,
+      '字号与行高请用长写法（font-size／line-height）声明，档位护栏才看得见（docs/10 §9.13）',
     ).toEqual([]);
   });
 });

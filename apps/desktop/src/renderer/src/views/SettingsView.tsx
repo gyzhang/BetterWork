@@ -28,6 +28,7 @@ import { SectionHeader } from '../components/SectionHeader';
 import { StatusNote } from '../components/StatusNote';
 import { Switch } from '../components/Switch';
 import { SegmentedControl } from '../components/Tabs';
+import { TextArea, TextField } from '../components/TextField';
 import { TransientToast } from '../components/TransientToast';
 import type { McpConnectionsState } from '../hooks/use-mcp-connections';
 import type { MemoriesState } from '../hooks/use-memories';
@@ -354,7 +355,8 @@ export function SearchSettings(): React.JSX.Element {
           />
         </Field>
         <Field label="API Key">
-          <input
+          <TextField
+            size="md"
             type="password"
             value={apiKey}
             onChange={(event) => setApiKey(event.target.value)}
@@ -365,7 +367,8 @@ export function SearchSettings(): React.JSX.Element {
         </Field>
         <Disclosure label="高级参数">
           <Field label="网页结果数量 top_k">
-            <input
+            <TextField
+              size="md"
               type="number"
               min={1}
               max={20}
@@ -610,27 +613,31 @@ function McpSettings({ state }: { state: McpConnectionsState }): React.JSX.Eleme
         <div className="mcp-editor">
           <SectionHeader title={editingId ? '编辑连接' : '新建连接'} />
           <Field label="名称">
-            <input
+            <TextField
+              size="md"
               value={form.name}
               onChange={(event) => setForm({ ...form, name: event.target.value })}
             />
           </Field>
           <Field label="启动命令">
-            <input
+            <TextField
+              size="md"
               value={form.command}
               onChange={(event) => setForm({ ...form, command: event.target.value })}
               placeholder="node"
             />
           </Field>
           <Field label="参数（每行一个）">
-            <textarea
+            <TextArea
+              mono
               rows={3}
               value={form.args}
               onChange={(event) => setForm({ ...form, args: event.target.value })}
             />
           </Field>
           <Field label="工作目录（可选）">
-            <input
+            <TextField
+              size="md"
               value={form.cwd}
               onChange={(event) => setForm({ ...form, cwd: event.target.value })}
             />

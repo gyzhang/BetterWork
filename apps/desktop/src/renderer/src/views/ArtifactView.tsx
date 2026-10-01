@@ -27,6 +27,7 @@ import { ListRow } from '../components/ListRow';
 import { Modal } from '../components/Modal';
 import { SectionHeader } from '../components/SectionHeader';
 import { SourceRow } from '../components/SourceRow';
+import { TextArea, TextField } from '../components/TextField';
 import { type ToastTone, TransientToast } from '../components/TransientToast';
 import { useArtifactSourceSelection } from '../hooks/use-artifact-source-selection';
 import { useArtifactThumbnails } from '../hooks/use-artifact-thumbnails';
@@ -379,7 +380,8 @@ export function ArtifactPage({
                     }}
                   >
                     <Field label="标题">
-                      <input
+                      <TextField
+                        size="md"
                         value={title}
                         onChange={(event) => setTitle(event.target.value)}
                         maxLength={160}
@@ -387,7 +389,8 @@ export function ArtifactPage({
                       />
                     </Field>
                     <Field label="Markdown 内容">
-                      <textarea
+                      <TextArea
+                        mono
                         value={content}
                         onChange={(event) => setContent(event.target.value)}
                         required

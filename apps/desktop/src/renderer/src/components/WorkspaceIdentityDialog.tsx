@@ -19,6 +19,7 @@ import { InlineError } from './InlineError';
 import { Modal } from './Modal';
 import { SectionHeader } from './SectionHeader';
 import { type PickerOption, SingleSelectPicker } from './SingleSelectPicker';
+import { TextField } from './TextField';
 
 export interface WorkspaceIdentityDialogProps {
   /** 有目标＝编辑身份；没有＝新建。 */
@@ -124,7 +125,8 @@ export function WorkspaceIdentityDialog({
         controlId="workspace-name-input"
         hint="显示在侧栏与输入区；留空则取文件夹名。"
       >
-        <input
+        <TextField
+          size="md"
           id="workspace-name-input"
           ref={nameRef}
           type="text"

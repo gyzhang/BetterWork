@@ -526,6 +526,8 @@ UI Foundation 首批提供四套成对色系：
 
 **同日把同一口径推到输入类控件**：29 处控件几何声明里的 12 种 `padding` 组合归进上表三档，勾选框边长 14／16 两套并成 `--control-check-size` 一套，`.capability-search input` 的 `height: 28px` 换成 `min-height: var(--control-height-sm)`；收口后控件几何里裸 px 残留 0，护栏变异验证 8/8 符合预期（含「`.artifact-input-card` 这类卡片名里带 input 不得误伤」这一条）。
 
+**2026-10-01 批次③把这条轴接到组件上**：上面那次收口只改了 CSS，`<input>` 本身仍然没有档位 API——所以「同一排里的输入框与按钮差一档」依然只能靠人眼，而护栏对它是盲的（`rowControlOf` 认不出原生输入控件）。现在 `TextField` 的 `size` **必填**、与 `Button`／`FieldSelect` 同一张成对档位表，`TextArea` 不吃档高（多行区的高度由 `rows` 与内容决定），内距一律取 `--control-padding-lg`；底色、边框、圆角、聚焦环与字号归基座，只读态也由基座表达（`[readonly]` 是「你能看不能改」这一格的唯一出口）。护栏四条见「输入控件基座纪律」，动作排门禁同日开始把 `TextField` 计进一排——知识页检索那一排（`PageToolbar.children`）现在真的会被数到。
+
 ### 9.11 叠放层级
 
 `z-index` 只允许取 `:root` 的 `--z-*` 档位，新增浮层必须先选档，不得随手写数字——数字各写各的，叠放关系就退化成「谁后渲染谁在上面」。
@@ -569,7 +571,7 @@ UI Foundation 首批提供四套成对色系：
 | 字号 | `--font-size-*` | `caption` 12px 说明与次要文字／`body` 13px 正文与控件／`emphasis` 15px 强调正文与对话／`heading` 18px 区块与表面标题／`page` 20px 页面标题／`hero` 28px 空态与欢迎页主标题 |
 | 行高 | `--line-height-*` | `tight` 1.4 标题与单行截断／`normal` 1.5 单行控件与密集行／`body` 1.6 正文（缺省）／`loose` 1.7 长文与对话 |
 | 表面内距 | `--card-padding`（§9.8 已有）·`--surface-padding-panel`·`--surface-padding-modal`·`--surface-padding-page` | 12px 16px 卡片与就地块／16px 面板、抽屉正文与编辑器／24px 模态、浮层面板与整页占位／28px 0 48px 页正文 |
-| 输入框几何 | 沿用 §9.10 的 `--control-height-*` × `--control-padding-*` | 与按钮同一张表、**成对使用**；收口基座是批次③的 `TextField` |
+| 输入框几何 | 沿用 §9.10 的 `--control-height-*` × `--control-padding-*` | 与按钮同一张表、**成对使用**；收口基座是 `TextField`／`TextArea`（2026-10-01 批次③落地，见 §9.10 与本节规矩 10） |
 | 图标字形 | `icons.tsx` 的 `ICON_SIZES`，类型即 `IconSize` | 12 与说明文字并排的行内图标／13 按钮与下拉里的图标／16 独立出现（省略 `size` 时的缺省）／18 卡片身份块的强调图标 |
 | 标记方块 | `--mark-row`·`--mark-card`·`--mark-hero` | 24px 行前小方块与通知条图标／32px 卡片·列表·抽屉标记与区域空态／40px 整页空态与错误页图标 |
 
@@ -584,10 +586,12 @@ UI Foundation 首批提供四套成对色系：
 7. **表面内距只管「一块独立表面的内缩」**：行内节奏（徽标、chip、菜单项、代码块）、控件内距（§9.10）与堆叠的缝（§9.8 那把 4／8／12／16／24／32 的尺）各归各的轴，不要因为数字相同就混着用。**定宽列的段落内缩（`.context-section`／`.brief-panel`／`.activity-list`）由 §9.8 与 `components/ContextPanel.test.tsx` 的 `INSET_OWNERS` 清单管**，本轮不动它——一处有测试钉着的清单不该被另一条轴的批量迁移顺手改掉。
 8. **卡片档沿用 `--card-padding`，不另起别名**：两个名字指同一份几何，正是这张表要消的东西。新增表面要先选档并登记进护栏的 `SURFACE_PADDING` 清单；`.modal-panel[data-variant='sheet']` 的 25px、`.empty-page` 的 40px 与 `.loading-page,.error-page` 的 32px 已并入模态档 24px，`.message p` 的 13px 15px 与 `.toast` 的 11px 12px 已并入卡片档。
 9. **标记方块按所在表面选档**：`.card-mark` 36 → 32、`.knowledge-format` 34 → 32、`.completed-work-icon` 30 → 32、`.artifact-input-card-icon` 28 → 32、`.evidence-list` 行前方块 22 → 24、`.error-page-icon` 32 → 40。同一类方块此前有 10 种边长，其中 30／32／34／36 四种差的都是那 2–6px——没有人这样设计，是四个人各记了一遍。
+10. **`font:` 简写不算档位**。简写会连带设置 `font-size` 与 `line-height`，而上面两条护栏只认这两个属性名——2026-10-01 核查时欢迎页口号与三处等宽块正是用简写写着 1.35／1.55 与裸字号，档位表改了它们不动，prettier 又把简写的值折到下一行，单行 grep 也看不见。字号与行高一律用长写法声明，元素复位那条 `font: inherit` 除外（它不带任何档位）。
+11. **输入框与多行区走同一张成对档位表，出口是 `TextField`／`TextArea`**（2026-10-01 批次③落地）：`TextField` 的 `size` 必填、与 `Button` 同一张 `--control-height-*` × `--control-padding-*`（§9.10），三档在 CSS 里成对穷举；`TextArea` 没有档高——它的高度由 `rows` 与内容决定，内距一律取 `--control-padding-lg`，等宽正文另走 `mono` 属性（字体栈只有 `--font-mono` 一份）。底色、边框、圆角、聚焦环与字号归基座，领域钩子只留位置与尺寸。原生 `<input>` 只剩勾选轴（`type="checkbox"`／`"radio"`，见 §10.1 的 `Switch` 与 `CheckList` 那条），任务输入区的 `<textarea>` 归 `Composer`。
 
 **不属于这三档的方块**（各有各的轴，护栏按理由登记）：`.switch-track` 一类的控件几何、外观页的模式与色系预览（54／38px）、窗口拖拽带（40／24px）、品牌算珠标与品牌字标容器。
 
-**落地现状**：字号六档与行高四档已全量覆盖 `styles.css`（171 条 `font-size` 里 163 条、65 条 `line-height` 里 63 条换成档位 Token，例外 10 条声明按清单登记）；图标档位由 `IconSize` 类型强制，调用点裸数字残留 0；标记方块 10 件（20 条 `width`／`height` 声明）取 `--mark-*`；表面内距 27 条登记取四档，输入框几何留给批次③的 `TextField` 基座（落地后护栏与动作排门禁才开始数原生 `input`／`textarea` 的档位）。护栏五条见 `standards/coding-standard.test.ts`「排版与图标档位纪律」。
+**落地现状**：字号六档与行高四档已全量覆盖 `styles.css`（171 条 `font-size` 里 163 条、65 条 `line-height` 里 63 条换成档位 Token，例外 10 条声明按清单登记）；图标档位由 `IconSize` 类型强制，调用点裸数字残留 0；标记方块 10 件（20 条 `width`／`height` 声明）取 `--mark-*`；表面内距 27 条登记取四档。**输入框几何同日收口**：41 处迁进 `TextField`／`TextArea`（37 个 `<input>` ＋ 13 个 `<textarea>`，留原生的 8 处勾选行与 `Composer` 那一处任务输入区不算）。`styles.css` 里选择器点名原生输入控件的块原有 34 条，其中 **30 条真的在写外观或几何**；收口后基座之外只剩 **6 条**——一条全局 `:focus-visible` 复位、`Composer` 输入区两条、只钉 `min-height` 的布局钩子三条。退役的 24 条由基座那一个出口（9 条规则）承担；勾选轴那 6 条里有 1 条本就是替勾选框撤销页面后代规则的，被撤销的那条先走了，它也就没了存在理由。这 30 条里底色曾有 `--surface`／`--surface-raised`／`--canvas`／`transparent` 四种、字号曾跨 `caption`／`body`／`emphasis` 三档、内距 shorthand 曾有 `11px 0` 一把裸值加三档 Token、聚焦环曾有档位环／`outline: 0`／`outline: none` 三种处置（后两种把焦点环换成一条边框或干脆关掉），现在各只剩一处出口。护栏见 `standards/coding-standard.test.ts`「排版与图标档位纪律」（六条，含新增的 `font` 简写一条）与「输入控件基座纪律」（四条，含 docs/10 档位表 ↔ `styles.css` Token 的双向同值比对——文档里写的数必须就是代码里那个数）。
 
 ## 10. 组件体系
 
@@ -606,18 +610,21 @@ UI Foundation 首批提供四套成对色系：
 `ActivityGroup`＝`components/ContextPanel.tsx` 内的 `ActivityGroupRow`（模块私有，未导出）。
 **明确不做并说明为什么**：`SettingsLayout`／`SettingsNav` 与 `ModelProfileRow` 都只有**一个消费者**
 （分别是 `SettingsPage` 与它内部的模型清单），外壳就是三行 JSX、行本身就是 `ListRow` 填槽——
-包一层只为壳的组件与 Input／Textarea 的既有口径同源（那两个只有样式类、没有组件层）：**不新增第二处真相**。
+包一层只为壳的组件：**不新增第二处真相**。
 （Button 曾与它们同批判为「不组件化」，2026-09-28 由 [ADR-0031](adr/0031-button-base-and-skin-closure.md)
 反转：皮类方案缺一个封闭清单的执行者，11 套具名皮、12 处页面级后代规则与 16 种 padding 组合说明
-第二处真相已经长出来了，不是一层壳造出来的。）
+第二处真相已经长出来了，不是一层壳造出来的。Input／Textarea 原本也在这条口径里（只有样式类、没有组件层），
+2026-10-01 由 [ADR-0034](adr/0034-input-control-base.md) 按同一判据反转：30 条规则在基座之外替原生输入控件写几何与外观，
+且控件没有档位 API 时动作排门禁根本数不到它——这一处不是壳，是那条轴的出口。）
 R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBlock.tsx`、
 `Composer`＝`components/Composer.tsx`、`RunSummary`＝`components/RunSummaryRow.tsx`（上面那份清单里的
 `RunSummary` 与它指的是同一件事），侧栏「最近任务」与上下文面板「执行记录」两处一起改用它；
 `.memory-capture` 那一整块也随消息流外提成 `components/MemoryCapturePanel.tsx`。
 仍待落地：`PlanStep`、`ArtifactVersionMenu`、`Sidebar`／`TaskListItem`（R3-D 与后续）。`ArtifactCard`
 这个名字全仓已无实现（`ArtifactCard` 与 `.artifact-card` 均 0 命中），不要再当成「两份待合并」。
-`AppShell`／`TitleBar`／`TaskHeader` 按 Input／Textarea 的同一口径不做：
-它们的外壳就是窗口装饰与页头，另抽一层只会多出第二处真相。
+`AppShell`／`TitleBar`／`TaskHeader` 仍不做：
+它们的外壳就是窗口装饰与页头，一处一个消费者，另抽一层只会多出第二处真相——与上面 `SettingsLayout`
+那条同源。（这条口径原本还引过 Input／Textarea，2026-10-01 那一处已经反转成基座，见上一段。）
 
 所有交互组件都必须定义：默认、悬停、聚焦、按下、禁用、加载、成功和错误状态。键盘焦点必须可见，不能只依赖颜色变化。
 
@@ -650,7 +657,7 @@ R3-B 已落地（2026-09-27 深夜）：`MessageBlock`＝`components/MessageBloc
 | 切换按钮组 SegmentedControl（group + aria-pressed） | `components/Tabs.tsx` | 已落地：技能页卡片／列表模式已收编；与页签的分工是「切换同一片内容的呈现方式」。**2026-10-01 补必填 `size`**，与 `Button` 同一张档位表——技能页与专家页页头那排「卡片／列表」正因为没有档位 API，才和旁边的主按钮差出 4px（§9.10、[ADR-0031](adr/0031-button-base-and-skin-closure.md) 修订段） |
 | 导航列表 NavList／NavItem（`aria-current` ＋ 两档变体 ＋ 窄栏折叠 ＋ 名称截断补全） | `components/NavList.tsx` | 已落地：侧栏一级导航（5 项）与设置左侧分区（6 项）；`NavItem` 同时承接侧栏「新建任务」与底部「设置」两颗单行导航。折叠成窄栏换的是自定义属性（`--nav-item-*`），几何仍只有一处；文字用 `clip-path` 收掉而不是 `font-size: 0`，以免只剩图标的按钮失去可及名称。名称一律由 `Tooltip` 基座承载（`.nav-item-label` 就是浮层锚点）：定宽列里放不下时收短，悬停读回全文，没被裁切则什么都不弹。可收缩的 `min-width: 0` 住在基座，领域类只声明「占多宽」（§9.8） |
 | Button（`variant` 八档 × `size` 三档 × `tone`） | `components/Button.tsx` | **已落地（2026-09-28，[ADR-0031](adr/0031-button-base-and-skin-closure.md) 反转了本行原先「不再单独组件化」的口径）**：11 套具名皮与 12 处页面级后代规则收成一处，`.btn` ＋ `[data-variant]`／`[data-size]`／`[data-tone]` 是按钮外观的唯一出口，`variant` 只管颜色、`size` 只管几何且两者正交；`tone` 的生效档位以本节正文「按钮一律用 `Button` 基座」那条为准（不在台账行里再抄一遍数字），与 `Badge` 的 tone × shape 同构。**`size` 自 2026-10-01 起必填、无缺省**（`AsyncButton` 同步），「不写」不再是第三种高度，判据见 §9.10「动作排」 |
-| Input / Textarea | 只有样式类，无组件 | 几何取 `--control-*` 档位（§9.10），结构由 `Field` 负责；不再单独组件化，避免只为包一层壳而增加第二处真相。**Button 曾与本行同判，已由 [ADR-0031](adr/0031-button-base-and-skin-closure.md) 单独反转，本行判断对 Input／Textarea 继续成立** |
+| 输入控件 TextField／TextArea（`size` 三档 × `mono`） | `components/TextField.tsx` | **已落地（2026-10-01，[ADR-0034](adr/0034-input-control-base.md) 反转了本行原先「只有样式类、无组件、不再单独组件化」的口径）**：37 个 `<input>` 与 13 个 `<textarea>` 里的 41 处迁入基座，`size` 必填且与 `Button`／`FieldSelect` 同一张「高度 × 内距」成对档位表（§9.10），`TextArea` 不吃档高、内距一律 `--control-padding-lg`、等宽正文走 `mono`；底色／边框／圆角／聚焦环／字号／只读态归基座，基座之外那 30 条自写规则收到 6 条（一条全局 `:focus-visible` 复位、`Composer` 输入区两条、只钉 `min-height` 的布局钩子三条）。**留原生的只有勾选轴**（`type="checkbox"`／`"radio"`，判据写在护栏的 `CHECK_AXIS_TYPES` 上，不是文件清单）与 `Composer` 那一处任务输入区；结构与说明仍由 `Field` 负责（§9.13 规矩 11） |
 | Switch（`role="switch"` ＋ 恒定名称 ＋ 轨道滑块） | `components/Switch.tsx` | 已落地：全站 13 处 `type="checkbox"` 里只有 4 处真是「开／关」，全部收进这里——知识页语义检索（类名本来就叫 `.knowledge-admin-switch`，实为原生勾选框）、记忆页自动建议与设置页模型启用（两处原来用「开启 X／关闭 X」的按钮文案翻转充当开关，读屏听到的名称随状态改变）、技能页受信任标记。**多选与全选保留原生 checkbox 是正确语义**，不为观感统一塞进开关 |
 | Tooltip（被裁切文本的悬停提示） | `components/Tooltip.tsx` | 已落地（2026-09-27）：只在锚点**真的被裁切**时出现——悬停 300ms、聚焦立即、移出与滚动即收；Portal 挂到应用外走 `--z-tooltip`，刻意不带 overlay 阴影（靠描边与升起面区分层级，不进 §10.1 的阴影存量）。完整文本本来就在锚点自己的文本里（行数钳制只裁视觉不裁可及名称），浮层对读屏是重复信息，所以显式 `aria-hidden`，不另挂 `aria-describedby`。除技能卡与专家卡的描述外，`NavItem` 的名称也一律由它承载——定宽列里收短的那一行，就是需要读回全文的那一行（§9.8） |
 | Skeleton / Progress | — | 未落地。Progress 只有一枚不确定态 spinner（`.spinner`，由 `InlineLoading` 与页面加载态共用），没有百分比进度条。 |

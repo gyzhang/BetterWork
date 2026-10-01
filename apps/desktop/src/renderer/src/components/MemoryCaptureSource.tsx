@@ -10,6 +10,7 @@ import {
 import { Button } from './Button';
 import { Field } from './Field';
 import { InlineError } from './InlineError';
+import { TextArea } from './TextField';
 
 /**
  * 回答捕获的原文选择区（改进 Spec §4.1）：来源摘录只能来自这条回答的原始正文，
@@ -49,7 +50,7 @@ export function MemoryCaptureSource({
   return (
     <div className="memory-capture-source">
       <Field label="回答原文（只读，可拖选或用键盘选择）">
-        <textarea ref={fieldRef} rows={5} readOnly value={raw} onFocus={() => setError('')} />
+        <TextArea ref={fieldRef} rows={5} readOnly value={raw} onFocus={() => setError('')} />
       </Field>
       <div className="memory-capture-source-actions">
         <Button variant="text" size="sm" type="button" onClick={confirm}>

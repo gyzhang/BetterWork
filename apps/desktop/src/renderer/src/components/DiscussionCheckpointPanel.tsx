@@ -12,6 +12,7 @@ import { Button } from './Button';
 import { Field } from './Field';
 import { FieldSelect } from './FieldSelect';
 import { SectionHeader } from './SectionHeader';
+import { TextArea, TextField } from './TextField';
 
 const STAGES: Array<{ value: DiscussionCheckpointStage; label: string }> = [
   { value: 'understanding', label: '理解与目标' },
@@ -122,28 +123,33 @@ export function DiscussionCheckpointPanel({
               />
             </Field>
             <Field label="标题">
-              <input
+              <TextField
+                size="md"
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 maxLength={200}
               />
             </Field>
             <Field label="当前结论">
-              <textarea
+              <TextArea
                 value={summary}
                 onChange={(event) => setSummary(event.target.value)}
                 rows={3}
               />
             </Field>
             <Field label="审阅反馈（可选）">
-              <textarea
+              <TextArea
                 value={feedback}
                 onChange={(event) => setFeedback(event.target.value)}
                 rows={2}
               />
             </Field>
             <Field label="下一步（可选）">
-              <input value={nextAction} onChange={(event) => setNextAction(event.target.value)} />
+              <TextField
+                size="md"
+                value={nextAction}
+                onChange={(event) => setNextAction(event.target.value)}
+              />
             </Field>
           </div>
           {artifacts.length > 0 && (

@@ -16,6 +16,7 @@ import { DependencyPanel } from '../components/skills/DependencyPanel';
 import { StatusNote } from '../components/StatusNote';
 import { Switch } from '../components/Switch';
 import { SegmentedControl } from '../components/Tabs';
+import { TextArea } from '../components/TextField';
 import { TransientToast } from '../components/TransientToast';
 import type { SkillDependenciesState } from '../hooks/use-skill-dependencies';
 import { useSkillDependencies } from '../hooks/use-skill-dependencies';
@@ -401,7 +402,8 @@ function SkillDetail({
           }
         />
         <p>当前仅保存配置，不会伪造环境已就绪，也不会启动脚本。</p>
-        <textarea
+        <TextArea
+          mono
           aria-label="运行配置 JSON"
           value={profileText}
           onChange={(event) => setProfileText(event.target.value)}

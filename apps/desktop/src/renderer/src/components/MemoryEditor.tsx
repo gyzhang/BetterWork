@@ -29,6 +29,7 @@ import { Button } from './Button';
 import { Field } from './Field';
 import { FieldSelect } from './FieldSelect';
 import { InlineError } from './InlineError';
+import { TextArea, TextField } from './TextField';
 
 /**
  * 人工保存与编辑并确认的可编辑表单（产品设计 §3.1、§3.2、§3.4）。
@@ -313,7 +314,7 @@ export function MemoryEditor({
   return (
     <div className="memory-editor">
       <Field label="要长期复用的内容">
-        <textarea
+        <TextArea
           value={content}
           rows={4}
           aria-label="记忆正文"
@@ -367,7 +368,8 @@ export function MemoryEditor({
         </Field>
         <Field label="议题（可选）">
           <span className="memory-editor-counted">
-            <input
+            <TextField
+              size="md"
               aria-label="议题标识"
               value={topicKey}
               placeholder="例如：收入口径"
@@ -379,7 +381,8 @@ export function MemoryEditor({
           </span>
         </Field>
         <Field label="生效日期（可选）">
-          <input
+          <TextField
+            size="md"
             aria-label="生效日期"
             type="date"
             value={validFrom}
@@ -387,7 +390,8 @@ export function MemoryEditor({
           />
         </Field>
         <Field label="失效日期（可选）">
-          <input
+          <TextField
+            size="md"
             aria-label="失效日期"
             type="date"
             value={validUntil}

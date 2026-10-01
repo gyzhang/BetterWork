@@ -29,6 +29,7 @@ import { MemorySuggestionList } from '../components/MemorySuggestionList';
 import { SectionHeader } from '../components/SectionHeader';
 import { StatusNote } from '../components/StatusNote';
 import { Tabs } from '../components/Tabs';
+import { TextField } from '../components/TextField';
 import type { MemoriesState } from '../hooks/use-memories';
 import { newMemoryOperationId } from '../hooks/use-memories';
 import type { MemorySuggestionsState } from '../hooks/use-memory-suggestions';
@@ -486,7 +487,8 @@ export function MemoryPage({
                 event.preventDefault();
               }}
             >
-              <input
+              <TextField
+                size="md"
                 type="search"
                 value={draftQuery}
                 placeholder="搜索记忆正文或议题…"
@@ -1021,9 +1023,9 @@ function ConflictPair({
             controlId={noteFieldId}
             hint={`已写 ${notePoints} / ${MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS} 码点`}
           >
-            <input
+            <TextField
+              size="md"
               id={noteFieldId}
-              className="memory-conflict-note-input"
               value={note}
               placeholder="并存：写出两条各自的适用条件"
               onChange={(event) => setNote(event.target.value)}
