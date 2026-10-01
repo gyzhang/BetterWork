@@ -2031,15 +2031,167 @@ describe('界面观感基线', () => {
     ).toEqual([]);
   });
 
-  it('焦点环只有一种写法', () => {
-    const offenders = declarations
-      .filter((declaration) => declaration.property === 'outline')
-      .filter((declaration) => declaration.value.includes('--focus-ring'))
-      .filter((declaration) => declaration.value !== '2px solid var(--focus-ring)');
+  /**
+   * 焦点环必须画在控件自己的盒子里（docs/10 §9.10、ADR-0035）。
+   *
+   * 画在边框盒之外的任何一段都可被祖先的 `overflow` 裁掉，而「这一层会不会裁」写页面时
+   * 预判不了：`overflow-y: auto` 会把 `overflow-x: visible` 强制成 `auto`，一个只打算纵向滚
+   * 的容器就顺手把左右两段的环切了。2026-10-01 光哥发现记忆页搜索框聚焦后左右边框不见，
+   * 扫出 `styles.css` 53 条 `overflow` 声明里至少 8 处吃到环，最重的 `.segmented-control`
+   * 四边全被吃——Tab 上去根本没有焦点指示（WCAG 2.4.7 失败）。
+   *
+   * 同日二轮补上「浅到环宽以内也不算盒内」：环带是 `[-偏移, -偏移 + 环宽)`，`-1px` 配 2px
+   * 的环仍有一半在盒外，取值由离屏 Electron 渲染逐像素量出（ADR-0035 第二轮的表）。
+   */
+  it('焦点环必须画在控件自己的盒子里', () => {
+    const offsets = declarations.filter((d) => d.property === 'outline-offset');
+    const offenders = offsets
+      .filter((declaration) => declaration.value !== 'var(--focus-ring-offset)')
+      .map((declaration) => locate(declaration, styles ?? ''));
+    for (const declaration of declarations) {
+      if (declaration.property !== 'outline') continue;
+      if (!declaration.value.includes('--focus-ring')) continue;
+      // 环宽与环色同口径：1px 的环在深色底上几乎看不见，各写各的宽就等于没有档。
+      if (declaration.value === '2px solid var(--focus-ring)') continue;
+      offenders.push(locate(declaration, styles ?? ''));
+    }
+    const token = declarations.filter(
+      (declaration) =>
+        declaration.selector === ':root' && declaration.property === '--focus-ring-offset',
+    );
     expect(
-      offenders.map((declaration) => locate(declaration, styles ?? '')),
-      '聚焦指示必须同宽同色，1px 的环在深色底上几乎看不见（docs/10 §9.11）',
+      token,
+      '找不到 :root 的 --focus-ring-offset 定义，本条护栏已空跑——偏移一旦不引用 Token，下面那条负值检查就是空的',
+    ).toHaveLength(1);
+    const value = token[0]?.value ?? '';
+    if (!/^-\d+(\.\d+)?px$/u.test(value)) {
+      offenders.push(`--focus-ring-offset 必须是负 px（画在盒内），styles.css 实际是 ${value}`);
+    }
+    /**
+     * 「负值」不等于「在盒内」：环带是 [-偏移, -偏移 + 环宽)，`-1px` 配 2px 的环只有一半
+     * 进盒，另一半照旧被贴边的滚动容器吃掉（2026-10-01 光哥量出记忆页搜索框的左右环比
+     * 上下细一倍）。所以这一条按可达深度判，不按符号判。
+     */
+    const RING_SEAM = 1;
+    const widths = [
+      ...new Set(
+        declarations
+          .filter((d) => d.property === 'outline' && d.value.includes('--focus-ring'))
+          .map((d) => Number.parseFloat(d.value))
+          .filter((width) => Number.isFinite(width)),
+      ),
+    ];
+    const reach = Math.abs(Number.parseFloat(value));
+    const widest = Math.max(0, ...widths);
+    if (Number.isFinite(reach) && widths.length > 0 && reach < widest + RING_SEAM) {
+      offenders.push(
+        `--focus-ring-offset 向内只走 ${reach}px，环宽 ${widest}px：环带跨在边框盒边线上，贴边的 overflow 仍能裁掉外侧那一段。盒内可达必须 ≥ 环宽 + ${RING_SEAM}px 分隔缝（ADR-0035 验证表）`,
+      );
+    }
+    expect(
+      offenders,
+      'outline-offset 只能取 var(--focus-ring-offset)：正值或 0 把环推到盒外，祖先一裁就少一段（docs/10 §9.10、ADR-0035）',
     ).toEqual([]);
+  });
+
+  /**
+   * 「带环就得带偏移」：漏写 `outline-offset` 不是「没有环」，而是环退回初始值 0、
+   * 又跑到盒子外面去——正是本轮要消灭的那个形状，且不会有任何报错。
+   */
+  it('带焦点环的规则必须同时声明偏移', () => {
+    const ringSelectors = new Set(
+      declarations
+        .filter((d) => d.property === 'outline' && d.value.includes('--focus-ring'))
+        .map((d) => d.selector),
+    );
+    const offenders = [...ringSelectors]
+      .filter(
+        (selector) =>
+          !declarations.some(
+            (d) =>
+              d.selector === selector &&
+              d.property === 'outline-offset' &&
+              d.value === 'var(--focus-ring-offset)',
+          ),
+      )
+      .map((selector) => `${selector} { outline: 2px solid var(--focus-ring) } 缺 outline-offset`);
+    expect(ringSelectors.size, 'styles.css 里一处焦点环都没有，本条护栏已空跑').toBeGreaterThan(0);
+    expect(offenders, '环画在盒外 0px 处仍会被祖先裁掉，偏移必须与环同块出现（ADR-0035）').toEqual(
+      [],
+    );
+  });
+
+  /**
+   * 「一种几何，五个出口」这句话必须能被计数（ADR-0035 后果第 2 条）。
+   *
+   * ADR-0034 写下「聚焦环只剩一处出口」时它并不成立，因为从来没人核过清单与存量是否等量。
+   * 新增一个吃环的表面必须在这里写明它是谁、为什么落不到全局那条元素规则上——`summary` 就是
+   * 一个走不通的例子：它被「样式表不再点名 details／summary 元素」挡在外面，所以环由
+   * `.disclosure-label` 这个类承载。
+   */
+  it('焦点环的出口只有登记的那几处', () => {
+    const RING_OUTLETS: readonly string[] = [
+      'button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible',
+      '.disclosure-label:focus-visible',
+      '.scroll-region:focus-visible',
+      '.single-select-picker-option:has(input:focus-visible)',
+      '.composer:has(textarea:focus-visible)',
+    ];
+    const outlets = [
+      ...new Set(
+        declarations
+          .filter((d) => d.property === 'outline' && d.value.includes('--focus-ring'))
+          .map((d) => d.selector),
+      ),
+    ].sort();
+    expect(
+      outlets,
+      '环的出口与清单不等量：多出来的那条要么并进全局元素规则，要么在这里写明理由；少掉的那条就是文档在讲一件不存在的事（docs/10 §9.10、ADR-0035）',
+    ).toEqual([...RING_OUTLETS].sort());
+  });
+
+  /**
+   * 关掉环与搬走环的差别只在「有没有指名搬到哪」：`.composer textarea` 的 `outline: 0`
+   * 是搬走（环由卡片承载），但它曾长期是「关掉」——ADR-0034 写下「聚焦环只剩一处出口」时，
+   * 全仓最重要的输入区正被这一条摘掉焦点指示，而护栏看不见它。
+   */
+  it('关掉焦点环必须指名搬到哪', () => {
+    const RING_SUPPRESSIONS: readonly { readonly selector: string; readonly carrier: string }[] = [
+      {
+        selector: '.composer textarea',
+        carrier: '.composer:has(textarea:focus-visible)',
+      },
+    ];
+    const ringSelectors = new Set(
+      declarations
+        .filter((d) => d.property === 'outline' && d.value.includes('--focus-ring'))
+        .map((d) => d.selector),
+    );
+    const offenders: string[] = [];
+    let exemptions = 0;
+    for (const declaration of declarations) {
+      if (declaration.property !== 'outline') continue;
+      if (!/^0$/u.test(declaration.value) && !/^none$/u.test(declaration.value)) continue;
+      const registered = RING_SUPPRESSIONS.find((entry) => entry.selector === declaration.selector);
+      if (registered === undefined) {
+        offenders.push(
+          `${locate(declaration, styles ?? '')} 关掉了焦点环却没有承载者（docs/10 §9.10、ADR-0035）`,
+        );
+        continue;
+      }
+      if (!ringSelectors.has(registered.carrier)) {
+        offenders.push(
+          `${registered.selector} 的环登记为由 ${registered.carrier} 承载，样式表里却没有那条规则`,
+        );
+        continue;
+      }
+      exemptions += 1;
+    }
+    expect(
+      exemptions,
+      `搬走环的存量 ${exemptions} 处与清单 ${RING_SUPPRESSIONS.length} 处不符——清单里不许留着已经改掉的`,
+    ).toBe(RING_SUPPRESSIONS.length);
+    expect(offenders).toEqual([]);
   });
 
   /**

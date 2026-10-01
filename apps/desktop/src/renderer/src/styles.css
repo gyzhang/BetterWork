@@ -40,6 +40,12 @@
   --row-height-sm: 23px;
   --row-height: 34px;
   --control-border: 1px solid var(--input-border);
+  /* 焦点环离控件边缘的偏移，负值＝画在盒内（docs/10 §9.10、ADR-0035）。
+     环画到盒外就会被祖先的 overflow 裁掉一段，而「这一层会不会裁」写页面时预判不了。
+     环带是 [-偏移, -偏移 + 环宽)，实测见 ADR-0035 的验证表：-1px 配 2px 环只有一半在盒内，
+     贴边的滚动容器仍会吃掉外侧那 1px（2026-10-01 光哥量出记忆页搜索框左右环比上下细一倍）。
+     -3px 让 2px 的环整体住在边框盒内，并留下控件自己那 1px 边框格当分隔缝。 */
+  --focus-ring-offset: -3px;
   /* 版心宽度（docs/10 §8.3）：全仓只有这一个正文行长，对话列与输入框同宽。
      要更窄的排版请写成 max-width 或内缩一档，不要再另起一个 `width: min(Npx, …)`。 */
   --page-body-width: 860px;
@@ -401,12 +407,20 @@ select {
 button {
   cursor: pointer;
 }
+/* `summary` 不在点名之列：那条「样式表不再点名 details／summary 元素」的护栏锁着它，
+   披露行的环住在 `.disclosure-label` 上（docs/10 §10.1、ADR-0035）。 */
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
   outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+  outline-offset: var(--focus-ring-offset);
+  /* 环与实心填充之间的那 1px 缝就是控件自己的 1px 边框格：偏移 -3px 让环带从边框盒往里 1px
+     起画，所以那一格轮不到环来盖；`background-clip: padding-box` 让它不铺控件的填充色，
+     于是缝取的是控件所在表面的底色。不留缝就等于没有环——`--focus-ring` 与 `--brand`／
+     `--danger` 同色系（docs/10 §9.10、ADR-0035）。带不透明边框的控件不受影响：那一格本来就是
+     它的边框，聚焦时读作「边框 + 环」。 */
+  background-clip: padding-box;
 }
 button:disabled {
   cursor: not-allowed;
@@ -763,7 +777,7 @@ small {
 }
 .scroll-region:focus-visible {
   outline: 2px solid var(--focus-ring);
-  outline-offset: -2px;
+  outline-offset: var(--focus-ring-offset);
 }
 /* 骨架级纵向堆叠容器：工具栏内各控件的垂直间距只由这里的 gap 负责，
    子元素不得再自带上下外边距，否则同一道缝由两个机制各占一半（docs/10 §9.8）。 */
@@ -1102,6 +1116,13 @@ small {
   font-size: var(--font-size-caption);
   line-height: var(--line-height-normal);
 }
+/* 任务输入区的环画在整张卡片上：`textarea` 自己是透明底、无边框，环落在它身上会在卡片
+   里面长出第二个盒子。用 `:has(textarea:focus-visible)` 而不是 `:focus-within`——后者会在
+   焦点走到卡片里的附件、能力选择器与主按钮时把整张卡点亮，那是「谁被聚焦」的假消息。 */
+.composer:has(textarea:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
 .composer textarea {
   width: 100%;
   padding: 11px 0;
@@ -1109,6 +1130,7 @@ small {
   resize: none;
   background: transparent;
   border: 0;
+  /* 环由上面那条承载，不是关掉它（ADR-0035）。 */
   outline: 0;
   font-size: var(--font-size-emphasis);
   line-height: var(--line-height-body);
@@ -1979,10 +2001,11 @@ small {
 .disclosure-label::-webkit-details-marker {
   display: none;
 }
-/* 全局焦点环那条按元素名点名，不含 summary；这一行现在有了 32px 命中带，键盘焦点就得看得见。 */
+/* 全局那条按元素名点名，不含 `summary`，所以这一行的环由基座自己的类承载。
+   这一行有 32px 命中带，键盘焦点就得看得见（docs/10 §10.1、ADR-0035）。 */
 .disclosure-label:focus-visible {
   outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+  outline-offset: var(--focus-ring-offset);
 }
 .disclosure-marker {
   flex: none;
@@ -2131,10 +2154,6 @@ button.list-row:where(:not(:disabled)):hover {
 .switch[aria-checked='true'] .switch-thumb {
   background: var(--on-brand);
   transform: translateX(16px);
-}
-.switch:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
 }
 
 /* === Badge：状态徽标的唯一外观（docs/10 §10.1） === */
@@ -2896,14 +2915,9 @@ button.list-row:where(:not(:disabled)):hover {
 .text-area::placeholder {
   color: var(--text-muted);
 }
-/* 输入框在鼠标点击下也算 `:focus-visible`，所以一处就同时覆盖点选与键盘。
-   收编前这里有三种处置：档位环、`outline: none` 只改 `border-color`、`outline: 0`。
-   后两种把焦点环换成一条边框或干脆关掉——同一件事被记了三遍。 */
-.text-field:focus-visible,
-.text-area:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
+/* 输入框在鼠标点击下也算 `:focus-visible`，所以全局那一条同时覆盖点选与键盘；
+   基座不再自带第二条环——收编前这里有三种处置（档位环、`outline: none` 只改
+   `border-color`、`outline: 0`），后两种把焦点环换成一条边框或干脆关掉。 */
 .text-area[data-mono='true'] {
   font-family: var(--font-mono);
 }
@@ -2947,7 +2961,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .single-select-picker-option:has(input:focus-visible) {
   outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+  outline-offset: var(--focus-ring-offset);
 }
 /* 色板方块：只定几何。色值由调用方以 `var(--ws-<档位>)` 传入，样式表不认具体档位。 */
 .workspace-accent-swatch {
