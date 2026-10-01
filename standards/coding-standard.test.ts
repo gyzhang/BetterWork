@@ -4904,3 +4904,41 @@ describe('排版与图标档位纪律', () => {
     ).toEqual([]);
   });
 });
+
+describe('设置页纵向间距由容器 gap 拥有', () => {
+  const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
+  expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
+  const declarations = declarationsOf(styles ?? '');
+
+  it('.settings-section 必须自带 flex 纵向 gap，不得靠子元素 margin 凑间距', () => {
+    const sectionDeclarations = declarations.filter(
+      (declaration) =>
+        classesOf(declaration.selector).includes('.settings-section') &&
+        declaration.selector.trim() === '.settings-section',
+    );
+    expect(
+      sectionDeclarations.length,
+      '.settings-section 基座规则不见了——护栏已空跑',
+    ).toBeGreaterThanOrEqual(1);
+    const hasGap = sectionDeclarations.some((declaration) => declaration.property === 'gap');
+    const hasFlex = sectionDeclarations.some(
+      (declaration) => declaration.property === 'display' && declaration.value.includes('flex'),
+    );
+    expect(hasFlex, '.settings-section 必须是 flex 容器（docs/10 §9.8）').toBe(true);
+    expect(hasGap, '.settings-section 必须自带 gap（docs/10 §9.8）').toBe(true);
+  });
+
+  it('.settings-section 的直接子元素不得用 margin-top/margin-bottom 凑纵向间距', () => {
+    const childMarginRules = declarations.filter(
+      (declaration) =>
+        (declaration.property === 'margin' ||
+          declaration.property === 'margin-top' ||
+          declaration.property === 'margin-bottom') &&
+        /\.settings-section\s*>/.test(declaration.selector),
+    );
+    expect(
+      childMarginRules,
+      '.settings-section > 子元素的纵向 margin 会跟容器 gap 叠加——间距由 gap 统一给（docs/10 §9.8）',
+    ).toEqual([]);
+  });
+});
