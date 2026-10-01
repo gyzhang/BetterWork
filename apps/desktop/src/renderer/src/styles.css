@@ -437,7 +437,9 @@ small {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: 18px 12px 14px;
+  /* 列壳给整列那道水平缝，档与段落壳同一天平（docs/10 §9.8）。
+     列里的 brand／小节标签／分隔线不再各补一遍，它们的左边缘由这里决定。 */
+  padding: 18px var(--surface-padding-panel) 14px;
   color: var(--text-primary);
   background: var(--sidebar);
   border-right: 1px solid var(--border);
@@ -446,7 +448,7 @@ small {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 24px 8px 18px;
+  padding: 24px 0 18px;
 }
 .brand-mark {
   display: grid;
@@ -601,7 +603,7 @@ small {
 }
 .sidebar-divider {
   height: 1px;
-  margin: 4px 8px 12px;
+  margin: 4px 0 12px;
   background: var(--border);
 }
 .section-label,
@@ -612,7 +614,7 @@ small {
   letter-spacing: 0.08em;
 }
 .section-label {
-  margin: 0 8px 8px;
+  margin: 0 0 8px;
 }
 /* 工作空间分组（ADR-0029）：侧栏里接替「一条不分组的最近任务」的那一列。
    侧栏是 240px 定宽列，横向溢出只能靠截断解决——放一条横向滚动条出去，等于把
@@ -1555,7 +1557,8 @@ small {
   flex-direction: column;
 }
 .settings-nav-list {
-  padding: 36px 20px;
+  /* 水平缝与侧栏、上下文面板同一天平；36px 是标题带离窗口顶的纵向呼吸，不在这条轴上。 */
+  padding: 36px var(--surface-padding-panel);
   border-right: 1px solid var(--border);
   background: var(--surface-raised);
 }
@@ -1780,7 +1783,9 @@ small {
   min-height: var(--row-height);
   align-items: center;
   gap: var(--nav-item-gap, 12px);
-  padding: var(--nav-item-padding, 7px 9px);
+  /* 行内距一档 8px（`--control-padding-sm` 的水平格），四边同值；行的高由 `--row-height` 定。
+     原先是 `7px 9px`：两个都不在任何档位表上，而窄栏那两处覆盖写的又是第三个数。 */
+  padding: 8px;
   overflow: hidden;
   color: var(--text-secondary);
   background: transparent;
@@ -1817,7 +1822,6 @@ small {
 .nav-item[data-rail],
 .nav-list[data-rail] .nav-item {
   --nav-item-width: 36px;
-  --nav-item-padding: 7px;
   --nav-item-gap: 0;
   --nav-item-label-clip: inset(50%);
 }
@@ -3499,7 +3503,6 @@ button.list-row:where(:not(:disabled)):hover {
   .sidebar .nav-list {
     /* 与手动折叠同一套几何：只换自定义属性，不重进行何。 */
     --nav-item-width: 36px;
-    --nav-item-padding: 7px;
     --nav-item-gap: 0;
   }
   .sidebar .nav-item-label {
@@ -4188,7 +4191,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: grid;
   align-self: start;
   gap: 8px;
-  padding: 10px;
+  padding: var(--card-padding);
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
