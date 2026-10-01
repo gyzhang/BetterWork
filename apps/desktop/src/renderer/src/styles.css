@@ -1276,6 +1276,11 @@ small {
 }
 
 /* 经验建议：开关与作业行只在记忆页出现，候选卡片两处共用。 */
+.suggestion-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
 .suggestion-consent {
   display: grid;
   gap: 8px;
