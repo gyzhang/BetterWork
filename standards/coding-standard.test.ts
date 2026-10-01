@@ -3156,6 +3156,216 @@ describe('定宽列的横向溢出纪律', () => {
   });
 });
 
+/**
+ * 定宽列里「段落壳给这一列的水平内缩」只有一档 16px（docs/10 §9.8、ADR-0033 决策 6 的 2026-10-01 追记）。
+ *
+ * 并档前 380px 那一列的同一格有 12／14／15／16 四种取值：`.activity-list` 比隔壁小节少缩 1px，夹在
+ * 段与段之间的 `InlineError` 比它上下两个小节各多缩 2px——而那句提示说的正是上面那段话失败了。
+ * 16px 不是新造的档：它已经在 §9.8 那把尺上，也是 `--card-padding`（12px 16px）与
+ * `--surface-padding-panel` 的水平格，「列里的块和卡片用同一把水平尺」一句讲得通。
+ *
+ * 侧栏与设置空间的左导航不在这一轴：它们的段落是**行**，行的水平缝归 `NavList` 基座
+ * （`--nav-item-padding`），列壳自己的 12／8／20px 则是「整块表面的内缩」，归 §9.13 那条轴。
+ * 名字族扫描管「这几件壳不许改档」，`components/ContextPanel.test.tsx` 的 DOM 断言管「新增段落必须
+ * 挑一件登记过的壳」——两条合起来才封住这一轴。
+ */
+const COLUMN_INSET_OWNERS: {
+  readonly selector: string;
+  readonly property: string;
+  readonly reason: string;
+}[] = [
+  { selector: '.context-topline', property: 'padding', reason: '列顶那一行（当前对象名）' },
+  {
+    selector: '.context-panel .tabs',
+    property: 'padding',
+    reason: '列内页签带：左右内缩由面板给，几何仍归 Tabs 基座',
+  },
+  { selector: '.context-section', property: 'padding', reason: '列里绝大多数段落的小节壳' },
+  { selector: '.brief-panel', property: 'padding', reason: '简报页的壳' },
+  { selector: '.activity-list', property: 'padding', reason: '过程页的列表壳' },
+  {
+    selector: '.context-content > .inline-error',
+    property: 'margin',
+    reason: '夹在段与段之间的内联提示，左右必须与段落壳对齐',
+  },
+  {
+    selector: '.notification-panel-heading',
+    property: 'padding',
+    reason: '消息中心（360px 那一列）面板头自己拥有的那道缝',
+  },
+];
+
+/** 命中列内类名族、但**不在这条轴**上的水平内缩：逐条写明凭什么不算，免得下一次又被当成漏档。 */
+const NOT_ON_COLUMN_INSET_AXIS: {
+  readonly selector: string;
+  readonly property: string;
+  readonly pixels: number;
+  readonly reason: string;
+}[] = [
+  {
+    selector: '.context-exclusion-list',
+    property: 'padding-left',
+    pixels: 18,
+    reason: '段落内部列表的符号缩进，不是列缝',
+  },
+  {
+    selector: '.context-replay-list',
+    property: 'padding-left',
+    pixels: 18,
+    reason: '同上：重放条目列表的符号缩进',
+  },
+  {
+    selector: '.activity-summary',
+    property: 'padding',
+    pixels: 12,
+    reason: '过程页一行的行内距，归「行」那一轴',
+  },
+  {
+    selector: '.activity-marker',
+    property: 'margin',
+    pixels: 4,
+    reason: '标记方块在行内的偏移，不是内缩',
+  },
+  {
+    selector: '.empty-context',
+    property: 'padding',
+    pixels: 28,
+    reason: '区域级空态的四周留白并水平居中，光哥 2026-10-01 确认它不是段落缝、不并档',
+  },
+  {
+    selector: '.modal-panel, .notification-panel',
+    property: 'padding',
+    pixels: 24,
+    reason: '整块表面的内缩，走 §9.13 的 `--surface-padding-modal`（已登记在 SURFACE_PADDING）',
+  },
+  {
+    selector: ".modal-panel[data-variant='sheet']",
+    property: 'padding',
+    pixels: 24,
+    reason: '480px 抽屉的外壳内距，同样是 §9.13 的模态档；它没有「列内段落」这一轴',
+  },
+  {
+    selector: ".modal-panel[data-variant='viewer']",
+    property: 'padding',
+    pixels: 16,
+    reason: '放映／查看器抽屉按面板档——数字与段落壳的 16px 撞车是巧合，不是同一件事',
+  },
+];
+
+const COLUMN_INSET_FAMILY =
+  /^\.(context|brief|activity|empty-context|notification-panel|modal-panel)/;
+
+describe('定宽列段落内缩档位', () => {
+  const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
+  expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
+  const declarations = declarationsOf(styles ?? '');
+
+  function isInsetProperty(property: string): boolean {
+    return /^(padding|margin)(-(left|right|inline))?$/.test(property);
+  }
+
+  /**
+   * 一条 padding／margin 的水平分量：shorthand 按一至四值展开取左右两侧。
+   * `0`、`auto` 与取不到像素数的（`var(--nav-item-padding, 7px 9px)` 这种带兜底的写法）都不算内缩——
+   * 前者是复位，后者归基座自己的档位表。
+   */
+  function horizontalPixelsOf(declaration: CssDeclaration): number[] {
+    const parts = declaration.value.trim().split(/\s+/).filter(Boolean);
+    const sides: string[] = [];
+    if (declaration.property === 'padding' || declaration.property === 'margin') {
+      if (parts.length === 1) sides.push(parts[0] ?? '');
+      else if (parts.length === 2 || parts.length === 3) sides.push(parts[1] ?? '');
+      else if (parts.length >= 4) sides.push(parts[1] ?? '', parts[3] ?? '');
+    } else if (/^padding-(left|right)$/.test(declaration.property)) {
+      sides.push(parts[0] ?? '');
+    } else if (/^margin-(left|right)$/.test(declaration.property)) {
+      sides.push(parts[0] ?? '');
+    } else {
+      sides.push(...parts);
+    }
+    return sides
+      .map((side) => resolvePixels(declarations, side))
+      .filter((pixels): pixels is number => pixels !== undefined && pixels > 0);
+  }
+
+  const scanned = declarations.filter(
+    (declaration) =>
+      isInsetProperty(declaration.property) &&
+      classesOf(declaration.selector).some((className) => COLUMN_INSET_FAMILY.test(className)) &&
+      horizontalPixelsOf(declaration).length > 0,
+  );
+
+  function keyOf(declaration: CssDeclaration): string {
+    return `${declaration.selector.trim()} :: ${declaration.property}`;
+  }
+
+  it('列内声明的水平内缩必须命中清单，存量与清单等量', () => {
+    expect(
+      COLUMN_INSET_OWNERS.length,
+      '段落壳清单不得清空（清空等于这条轴没有尺）',
+    ).toBeGreaterThanOrEqual(7);
+    const registered = new Map<string, string>([
+      ...COLUMN_INSET_OWNERS.map(
+        (entry) => [`${entry.selector} :: ${entry.property}`, '段落壳'] as const,
+      ),
+      ...NOT_ON_COLUMN_INSET_AXIS.map(
+        (entry) => [`${entry.selector} :: ${entry.property}`, '不在这一轴'] as const,
+      ),
+    ]);
+    const offenders = scanned
+      .filter((declaration) => !registered.has(keyOf(declaration)))
+      .map((declaration) => `新增未登记：${locate(declaration, styles ?? '')}`);
+    for (const [key, kind] of registered) {
+      if (scanned.some((declaration) => keyOf(declaration) === key)) continue;
+      offenders.push(`${kind}清单里的 ${key} 在 CSS 里找不到了——改了值就同步改清单，不许让它空着`);
+    }
+    expect(
+      offenders,
+      '定宽列的水平内缩要么登记成段落壳、要么登记成「不在这一轴」并写明理由（docs/10 §9.8）',
+    ).toEqual([]);
+  });
+
+  it('每一段左边缘都落在同一道 16px 缝上', () => {
+    const offenders: string[] = [];
+    for (const owner of COLUMN_INSET_OWNERS) {
+      const declaration = scanned.find(
+        (candidate) => keyOf(candidate) === `${owner.selector} :: ${owner.property}`,
+      );
+      if (!declaration) {
+        offenders.push(`${owner.selector} 的 ${owner.property} 不见了：${owner.reason}`);
+        continue;
+      }
+      const sides = horizontalPixelsOf(declaration);
+      if (sides.length === 0 || sides.some((pixels) => pixels !== 16)) {
+        offenders.push(
+          `${locate(declaration, styles ?? '')} → 水平分量 ${sides.join('／') || '无'}px，段落壳只许 16px（${owner.reason}）`,
+        );
+      }
+    }
+    expect(
+      offenders,
+      '列里的段落壳必须同档，否则同列相邻两块会差 1–2px 而没人报错；要改档先改 docs/10 §9.8',
+    ).toEqual([]);
+  });
+
+  it('「不在这一轴」的每一项仍与 CSS 实测一致', () => {
+    const offenders: string[] = [];
+    for (const entry of NOT_ON_COLUMN_INSET_AXIS) {
+      const declaration = scanned.find(
+        (candidate) => keyOf(candidate) === `${entry.selector} :: ${entry.property}`,
+      );
+      if (!declaration) continue;
+      const sides = horizontalPixelsOf(declaration);
+      if (!sides.includes(entry.pixels)) {
+        offenders.push(
+          `${entry.selector} 的水平分量实测 ${sides.join('／') || '无'}px，登记的却是 ${entry.pixels}px：口径变了就同轮改清单与 docs/10 §9.8（${entry.reason}）`,
+        );
+      }
+    }
+    expect(offenders, '不在这一轴不是免检：登记的理由与值都得对得上现场').toEqual([]);
+  });
+});
+
 describe('来源行纪律', () => {
   it('来源类型的图标与标签三元式只允许有一处', () => {
     // §3.1 P12：`isWeb ? GlobeIcon : isMcp ? CapabilityIcon : KnowledgeIcon` 与

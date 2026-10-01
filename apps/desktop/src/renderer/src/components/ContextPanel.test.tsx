@@ -731,12 +731,14 @@ describe('ContextPanel 换期恢复引导（MI08）', () => {
  * 左边缘，而同列其余段落都有 14px；成果列表与记忆提示行是同一件事的另外两处。
  * 分段外壳因此要有台账：新增一段必须先选一个自带水平内缩的壳，
  * 或者把新壳登记到这里并写明它凭什么自己定内缩。
+ * 2026-10-01 这条轴补上了档位——三件壳的水平内缩并到 16px（docs/10 §9.8），值由
+ * `standards/coding-standard.test.ts`「定宽列段落内缩档位」钉住，本清单只管「有没有壳」。
  */
 describe('上下文面板的分段内缩', () => {
   const INSET_OWNERS: ReadonlyArray<readonly [string, string]> = [
-    ['context-section', '小节壳：13px 14px 12px ＋ 分隔线，面板里绝大多数段落'],
-    ['activity-list', '过程页的列表壳：17px 15px'],
-    ['brief-panel', '简报壳：13px 14px 16px（简报的空态也套这件壳，空态本身由 EmptyNotice 渲染）'],
+    ['context-section', '小节壳：13px 16px 12px ＋ 分隔线，面板里绝大多数段落'],
+    ['activity-list', '过程页的列表壳：17px 16px'],
+    ['brief-panel', '简报壳：13px 16px 16px（简报的空态也套这件壳，空态本身由 EmptyNotice 渲染）'],
     ['empty-context', '区域级空态基座：自带 28px 内距并居中'],
     [
       'inline-error',

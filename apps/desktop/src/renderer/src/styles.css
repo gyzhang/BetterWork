@@ -1156,13 +1156,13 @@ small {
   align-items: center;
   justify-content: space-between;
   min-height: var(--control-height-lg);
-  padding: 0 14px;
+  padding: 0 16px;
   color: var(--text-muted);
   font-size: var(--font-size-caption);
 }
 .context-panel .tabs {
-  /* 面板给的是左右内缩，几何仍归 Tabs 基座。 */
-  padding: 0 12px 4px;
+  /* 面板给的是左右内缩，几何仍归 Tabs 基座；那道内缩与列里其余段落壳同档。 */
+  padding: 0 16px 4px;
 }
 /* 上下文面板是 380px 定宽列，与侧栏同一件事：只纵向滚，横向溢出交给行自己截断。 */
 .context-content {
@@ -1182,11 +1182,13 @@ small {
   gap: 8px;
 }
 /* 上下文面板里的记忆、简报与建议（docs/10 §8.3、§11.5.1）：
-   小节靠分隔线分级，条目卡用 --surface，不叠第二层背景。 */
+   小节靠分隔线分级，条目卡用 --surface，不叠第二层背景。
+   定宽列的段落壳只有一档水平内缩 16px（§9.8），与卡片档 `--card-padding` 的水平格同尺；
+   这件壳管列里绝大多数段落，`.brief-panel` 与 `.activity-list` 是同档的另一件壳。 */
 .context-section {
   display: grid;
   gap: 8px;
-  padding: 13px 14px 12px;
+  padding: 13px 16px 12px;
   border-bottom: 1px solid var(--border-subtle);
 }
 /* 上下文面板里只剩这一类自造文字：一句「该怎么读这一段」的说明。
@@ -1244,7 +1246,7 @@ small {
 .brief-panel {
   display: grid;
   gap: 16px;
-  padding: 13px 14px 16px;
+  padding: 13px 16px 16px;
 }
 .brief-note {
   color: var(--text-muted);
@@ -1362,7 +1364,7 @@ small {
   line-height: var(--line-height-body);
 }
 .activity-list {
-  padding: 17px 15px;
+  padding: 17px 16px;
 }
 .activity-summary {
   display: flex;
@@ -4347,7 +4349,7 @@ button.list-row:where(:not(:disabled)):hover {
 .notification-panel-heading {
   /* 结构（标题＋说明＋右槽）归 SectionHeader；这里只给消息中心这一块面板补它自己的
      内缩与分隔线，面板 `gap: 0`，缝由头部自己拥有。 */
-  padding: 12px 14px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border);
 }
 /* 消息中心同样是定宽面板（360px），与侧栏、上下文面板一个口径。 */
