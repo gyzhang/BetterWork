@@ -141,9 +141,13 @@ function ExpertSummon({
   );
 }
 
-/** 署名行：作者（没署名时按来源说明）+ 版本号。版本号就是修订号，保存一次配置就 +1。 */
-const expertByline = (expert: ExpertSummary): string =>
-  `${expert.author || (expert.sourceKind === 'builtin' ? '内置' : '本机')} · v${expert.currentRevision}`;
+const sourceName = { builtin: '内置', user: '用户' } as const;
+
+/** 署名行：来源（用户／内置）+ 作者（有则显示）+ 版本号。版本号就是修订号，保存一次配置就 +1。 */
+const expertByline = (expert: ExpertSummary): string => {
+  const authorPart = expert.author ? ` · ${expert.author}` : '';
+  return `${sourceName[expert.sourceKind]}${authorPart} · v${expert.currentRevision}`;
+};
 
 /** 用途标签一行；停用／归档的状态片也走这一行，正常状态不占位置。 */
 function ExpertTags({ expert }: { expert: ExpertSummary }): React.JSX.Element | null {
@@ -318,7 +322,7 @@ function ExpertEditor({
           <Field
             controlId="expert-author"
             label="作者"
-            hint="显示在卡片标题下方；留空时按来源显示「内置」或「本机」。"
+            hint="显示在卡片标题下方；留空时按来源显示「内置」或「用户」。"
           >
             <input
               id="expert-author"

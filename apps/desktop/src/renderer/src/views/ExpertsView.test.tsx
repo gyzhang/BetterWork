@@ -98,7 +98,7 @@ describe('ExpertsPage 的目录条目', () => {
     const container = renderCatalog([userExpert, builtinExpert]);
     const cards = [...container.querySelectorAll('.card')];
     const bylineOnCards = cards.map((card) => card.querySelector('.card-byline')?.textContent);
-    expect(bylineOnCards).toEqual(['财务组 · v3', '内置 · v2']);
+    expect(bylineOnCards).toEqual(['用户 · 财务组 · v3', '内置 · v2']);
 
     fireEvent.click(screen.getByRole('button', { name: '列表' }));
     await waitFor(() => expect(container.querySelector('.list-row')).not.toBeNull());
