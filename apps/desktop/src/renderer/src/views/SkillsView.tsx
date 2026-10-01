@@ -239,7 +239,6 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
               {state.skills.map((skill) => (
                 <CatalogCard
                   key={skill.id}
-                  className="skill-card"
                   facts={skillFacts(skill, actions)}
                   onOpen={() => actions.onOpen(skill)}
                 />

@@ -1589,9 +1589,6 @@ small {
   gap: 12px;
 }
 
-.skill-card:hover {
-  border-color: var(--brand);
-}
 .experts-page {
   display: flex;
   min-height: 0;
@@ -1880,6 +1877,9 @@ small {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
+}
+.card:hover {
+  border-color: var(--brand);
 }
 .card {
   display: flex;

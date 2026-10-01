@@ -376,7 +376,7 @@ describe('SkillsPage', () => {
     expect(cardButton.getAttribute('aria-pressed')).toBe('true');
     expect(listButton.getAttribute('aria-pressed')).toBe('false');
 
-    expect(document.querySelector('.skill-card')).toBeTruthy();
+    expect(document.querySelector('.card')).toBeTruthy();
     expect(document.querySelector('.list-row[data-variant=card]')).toBeNull();
 
     listButton.click();
@@ -390,7 +390,7 @@ describe('SkillsPage', () => {
       ).toBe('false');
     });
     expect(document.querySelector('.list-row[data-variant=card]')).toBeTruthy();
-    expect(document.querySelector('.skill-card')).toBeNull();
+    expect(document.querySelector('.card')).toBeNull();
   });
 
   it('returns to browse when the back button is pressed in detail view', async () => {
