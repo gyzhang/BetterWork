@@ -4905,8 +4905,8 @@ describe('排版与图标档位纪律', () => {
     }));
     expect(
       steps.map((step) => `${step.name}:${step.value}`),
-      '图标档位必须正好是 docs/10 §9.13 的四档（inline 12／control 13／standalone 16／emphasis 18）',
-    ).toEqual(['inline:12', 'control:13', 'standalone:16', 'emphasis:18']);
+      '图标档位必须正好是 docs/10 §9.13 的五档（inline 12／control 13／standalone 16／emphasis 18／nav 20）',
+    ).toEqual(['inline:12', 'control:13', 'standalone:16', 'emphasis:18', 'nav:20']);
     expect(
       icons,
       'IconProps 的 size 必须是 IconSize——类型就是档位表，写 size={14} 要编译不过（docs/10 §9.13）',
@@ -4940,7 +4940,7 @@ describe('排版与图标档位纪律', () => {
     }
     expect(
       offenders,
-      '图标尺寸只走 IconSize 的四档；品牌标志按 BRAND_ICON_SIZES 登记，`ComponentType<{ size?: number }>` 不得复活（docs/10 §9.13、ADR-0033）',
+      '图标尺寸只走 IconSize 的五档；品牌标志按 BRAND_ICON_SIZES 登记，`ComponentType<{ size?: number }>` 不得复活（docs/10 §9.13、ADR-0033）',
     ).toEqual([]);
 
     // IconButton 的字形表引用档位，不留第二份数字。
@@ -4952,8 +4952,8 @@ describe('排版与图标档位纪律', () => {
       [...glyphBody.matchAll(/^\s+(\w+): ICON_SIZES\.(\w+),$/gmu)]
         .map((match) => `${match[1] ?? ''}:${match[2] ?? ''}`)
         .sort(),
-      'IconButton 的三档字形必须逐项引用 ICON_SIZES（sm 12／md 13／row 16），不写裸数字（docs/10 §9.13）',
-    ).toEqual(['md:control', 'row:standalone', 'sm:inline']);
+      'IconButton 的三档字形必须逐项引用 ICON_SIZES（sm 12／md 13／row 20），不写裸数字（docs/10 §9.13）',
+    ).toEqual(['md:control', 'row:nav', 'sm:inline']);
   });
 
   it('标记方块只取三档', () => {

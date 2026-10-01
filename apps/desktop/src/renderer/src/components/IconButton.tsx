@@ -4,11 +4,11 @@ import type { IconSize } from '../icons';
 import { ICON_SIZES } from '../icons';
 
 /** 三档：`sm`＝密集条带里的 23px 方块（字形 12px），`md`＝面板头的 28px 方块（字形 13px），
- *  `row`＝与侧栏导航行同高的 34px 方块（字形 16px）。字形一律取 §9.13 的图标档位。 */
+ *  `row`＝与侧栏导航行同高的 34px 方块（字形 20px，与导航图标同档）。字形一律取 §9.13 的图标档位。 */
 const GLYPH_SIZE: Record<IconButtonSize, IconSize> = {
   sm: ICON_SIZES.inline,
   md: ICON_SIZES.control,
-  row: ICON_SIZES.standalone,
+  row: ICON_SIZES.nav,
 };
 
 /** 命中区轴，与文字按钮的高度档（28／32／36）是两张表：方块按内容取档，不参与同排等高。 */

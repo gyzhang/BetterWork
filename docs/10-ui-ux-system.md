@@ -579,7 +579,7 @@ UI Foundation 首批提供四套成对色系：
 | 行高 | `--line-height-*` | `tight` 1.4 标题与单行截断／`normal` 1.5 单行控件与密集行／`body` 1.6 正文（缺省）／`loose` 1.7 长文与对话 |
 | 表面内距 | `--card-padding`（§9.8 已有）·`--surface-padding-panel`·`--surface-padding-modal`·`--surface-padding-page` | 12px 16px 卡片与就地块／16px 面板、抽屉正文与编辑器／24px 模态、浮层面板与整页占位／28px 0 48px 页正文 |
 | 输入框几何 | 沿用 §9.10 的 `--control-height-*` × `--control-padding-*` | 与按钮同一张表、**成对使用**；收口基座是 `TextField`／`TextArea`（2026-10-01 批次③落地，见 §9.10 与本节规矩 10） |
-| 图标字形 | `icons.tsx` 的 `ICON_SIZES`，类型即 `IconSize` | 12 与说明文字并排的行内图标／13 按钮与下拉里的图标／16 独立出现（省略 `size` 时的缺省）／18 卡片身份块的强调图标 |
+| 图标字形 | `icons.tsx` 的 `ICON_SIZES`，类型即 `IconSize` | 12 与说明文字并排的行内图标／13 按钮与下拉里的图标／16 独立出现（省略 `size` 时的缺省）／18 卡片身份块的强调图标／20 导航行图标（侧栏一级导航与设置导航） |
 | 标记方块 | `--mark-row`·`--mark-card`·`--mark-hero` | 24px 行前小方块与通知条图标／32px 卡片·列表·抽屉标记与区域空态／40px 整页空态与错误页图标 |
 
 **规矩**

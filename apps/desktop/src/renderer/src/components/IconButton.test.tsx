@@ -38,7 +38,7 @@ describe('IconButton 基座', () => {
     expect(buttons.map((button) => button.querySelector('svg')?.getAttribute('width'))).toEqual([
       String(ICON_SIZES.inline),
       String(ICON_SIZES.control),
-      String(ICON_SIZES.standalone),
+      String(ICON_SIZES.nav),
     ]);
   });
 

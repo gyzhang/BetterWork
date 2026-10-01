@@ -10,10 +10,12 @@ export const ICON_SIZES = {
   inline: 12,
   /** 按钮与下拉触发器里的图标，与 13px 控件文字同高。 */
   control: 13,
-  /** 独立出现的图标（导航行、空态区域、面板标记）。 */
+  /** 独立出现的图标（省略 `size` 时的缺省）。 */
   standalone: 16,
   /** 强调档：卡片身份块的标记。 */
   emphasis: 18,
+  /** 导航行图标：侧栏一级导航与设置导航的图标，比 standalone 大一档以匹配 Codex 等参考产品的侧栏观感。 */
+  nav: 20,
 } as const;
 
 export type IconSize = (typeof ICON_SIZES)[keyof typeof ICON_SIZES];

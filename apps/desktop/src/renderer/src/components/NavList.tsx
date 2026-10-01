@@ -64,7 +64,7 @@ export function NavItem({
           aria-hidden="true"
           {...(iconColor ? { style: { color: iconColor } } : {})}
         >
-          <Icon size={ICON_SIZES.standalone} />
+          <Icon size={ICON_SIZES.nav} />
         </span>
       ) : undefined}
       <Tooltip className="nav-item-label">{label}</Tooltip>
