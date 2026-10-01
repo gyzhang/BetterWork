@@ -76,7 +76,7 @@ export function MemorySuggestionList({
 }: MemorySuggestionListProps): React.JSX.Element {
   const jobLabel = latestJobLabel(suggestions.jobs);
   return (
-    <section className={`context-section suggestion-section suggestion-${variant}`}>
+    <section className={`${variant === 'context' ? 'context-section ' : ''}suggestion-section suggestion-${variant}`}>
       <SectionHeader
         title="经验建议"
         hint={`${
