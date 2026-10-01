@@ -192,6 +192,7 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
           selected ? undefined : (
             <>
               <SegmentedControl
+                size="lg"
                 label="视图模式"
                 value={viewMode}
                 onChange={changeViewMode}
@@ -202,6 +203,7 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
               />
               <AsyncButton
                 variant="primary"
+                size="lg"
                 busy={state.importing}
                 label={
                   <>

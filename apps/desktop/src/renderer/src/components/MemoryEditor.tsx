@@ -343,6 +343,7 @@ export function MemoryEditor({
       <div className="memory-editor-grid">
         <Field label="分类">
           <FieldSelect
+            size="md"
             ariaLabel="记忆分类"
             value={facet}
             options={memoryFacetOrder.map((f) => ({ id: f, label: facetLabel[f] }))}
@@ -351,6 +352,7 @@ export function MemoryEditor({
         </Field>
         <Field label="适用范围">
           <FieldSelect
+            size="md"
             ariaLabel="记忆适用范围"
             value={scope.kind}
             options={scopes.map((option) => ({
@@ -421,6 +423,7 @@ export function MemoryEditor({
         </Button>
         <AsyncButton
           variant="primary"
+          size="md"
           busy={submitting}
           disabled={problems.length > 0}
           label={submitLabel ?? '保存'}

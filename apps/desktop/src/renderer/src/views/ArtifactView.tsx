@@ -195,7 +195,7 @@ export function ArtifactPage({
                 {selected.type === 'presentation' && (
                   <Button
                     variant="secondary"
-                    size="md"
+                    size="lg"
                     onClick={() =>
                       reportAction(
                         onOpenFile(selected.id, visibleVersion.id).then((result) => {
@@ -216,7 +216,7 @@ export function ArtifactPage({
                 )}
                 <Button
                   variant="secondary"
-                  size="md"
+                  size="lg"
                   onClick={() =>
                     reportAction(
                       onExport(selected, visibleVersion.id).then((result) => {
@@ -237,7 +237,7 @@ export function ArtifactPage({
                 {selected.type === 'markdown' && (
                   <Button
                     variant="secondary"
-                    size="md"
+                    size="lg"
                     onClick={() =>
                       reportAction(onStartFromVersion(selected, visibleVersion), (errorMessage) =>
                         setToast({ tone: 'error', message: errorMessage || '无法开始新任务。' }),
@@ -418,6 +418,7 @@ export function ArtifactPage({
                             </label>
                             {sourceSelection.isSelected(candidate.evidenceId) && (
                               <FieldSelect
+                                size="sm"
                                 options={RELATION_OPTIONS}
                                 value={sourceSelection.relationFor(candidate.evidenceId)}
                                 onChange={(id) => {
@@ -815,6 +816,7 @@ function ReferenceVersionSection({
             ) : (
               <AsyncButton
                 variant="secondary"
+                size="md"
                 busy={busy}
                 label="指定为本空间参考版本"
                 busyLabel="正在提交…"

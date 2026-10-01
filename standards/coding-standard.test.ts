@@ -1216,6 +1216,16 @@ function assertRetiredClassesAbsent(
 }
 
 /**
+ * 清单条目里「就是一个类名」的那一部分（`.chip-button(?![-\w])` → `chip-button`）。
+ * 复合选择器（`.examples button`）不是 className，取不到就返回 `undefined`；
+ * 没有 `(?![-\w])` 收尾的条目也跳过——它本来就会命中同类名前缀，不能当精确名字用。
+ */
+function singleRetiredClassName(pattern: RegExp): string | undefined {
+  const match = /^\\\.([a-z][\w-]*)\(\?!/.exec(pattern.source);
+  return match?.[1];
+}
+
+/**
  * 卡片外壳的唯一出口（docs/10 §10.1）。
  *
  * 五套自造外壳并轨之后，这两条锁的是「别再长回五套」：领域钩子类可以继续存在
@@ -2389,28 +2399,287 @@ describe('按钮基座纪律', () => {
       '按钮外观只由 Button 基座或基座自己的槽位选择器负责（docs/10 §10.1、ADR-0031）',
     ).toEqual([]);
   });
-  it('一条动作条里的按钮必须同档', () => {
-    // 本轮的起点就是这条：专家修订页「保存修订」36px 与「取消」28px 差 8px，
-    // 主行动被自己的同伴衬成一块砖。`size` 刻意不做条件缺省，所以同排同档
-    // 必须由调用点保证——不锁住它就会长回来。
+  /**
+   * 一排动作的槽位清单（docs/10 §9.10「动作排」）。
+   *
+   * 上一轮把同档规则写在 `ActionBar` 这个**组件名**上，代价是契约只管得住 8 排里的
+   * 1 排：页头那一排——专家页「新建专家」36px 挨着技能页「导入 Skill」32px——
+   * 从来不在任何约束里，而它恰恰是最显眼的一排。契约的单位应该是
+   * 「并排摆放的一排控件」，所以这里列的是**槽位**而不是组件。
+   * 新增一种「一排」必须先加进这张表，否则护栏对它是盲的。
+   * ADR-0031 第六条那条写在组件名上的旧断言已删——它管的每一排都在这里，
+   * 留着就是同一份契约的两处实现，弱的那一处还会给人「已经查过了」的错觉。
+   */
+  const ACTION_ROW_SLOTS: readonly { readonly owner: string; readonly slot: string }[] = [
+    { owner: 'ActionBar', slot: 'children' },
+    { owner: 'PageToolbar', slot: 'children' },
+    { owner: 'PageHeader', slot: 'leading' },
+    { owner: 'PageHeader', slot: 'actions' },
+    { owner: 'SectionHeader', slot: 'actions' },
+    { owner: 'Card', slot: 'footer' },
+    { owner: 'ListRow', slot: 'actions' },
+  ];
+
+  /** 文字／输入控件共用的高度档，对应 `--control-height-sm`／``／`-lg`。 */
+  const CONTROL_HEIGHT_STEPS: Record<string, number> = { sm: 28, md: 32, lg: 36 };
+  /**
+   * 图标按钮走自己的**命中区轴**（方块 23／28／34，见 docs/10 §10.1）：
+   * 它不是与文字按钮等高的控件，不参与等高要求，但同排的图标之间不得各选各的。
+   */
+  const ICON_HIT_STEPS: Record<string, number> = { sm: 23, md: 28, row: 34 };
+  /**
+   * 这些外壳内部自成一排（模态里的动作条、浮层菜单、输入区），出现在槽位里时
+   * 整条槽位跳过——它们各自的排由自己的槽位被检查。登记的取舍：这样会漏掉
+   * 「页头槽位里直接写模态」的写法，但那种写法本身没有一排并排的语义。
+   */
+  const ROW_SCOPE_BREAKS = ['Modal', 'PopoverMenu', 'ConfirmationDialog', 'Composer'];
+
+  interface RowControl {
+    /** 命中区／高度档的字面值（`sm`／`md`／`lg`／`row`）。 */
+    step: string;
+    /** 该控件属于哪一档：图标按钮单列，其余走高度档。 */
+    axis: 'control' | 'icon';
+    /** 调用点是否省略了 `size`（省略即隐式 `md`，仍然算一档）。 */
+    implicit: boolean;
+    label: string;
+  }
+
+  /** 从 `<` 处读出一个 JSX 开标签：属性文本只保留花括号深度 0 的部分。 */
+  function jsxOpenTag(
+    text: string,
+    start: number,
+  ): { name: string; attrs: string; end: number; selfClosing: boolean } | undefined {
+    const head = /^<([A-Za-z][\w.]*)/.exec(text.slice(start, start + 60));
+    const name = head?.[1];
+    if (!name) return undefined;
+    let cursor = start + name.length + 1;
+    let braceDepth = 0;
+    let quote: string | undefined;
+    let attrs = '';
+    while (cursor < text.length) {
+      const char = text[cursor];
+      if (char === undefined) break;
+      if (quote !== undefined) {
+        if (char === quote) quote = undefined;
+        if (braceDepth === 0) attrs += char;
+        cursor += 1;
+        continue;
+      }
+      if (char === '"' || char === "'" || char === '`') {
+        quote = char;
+        if (braceDepth === 0) attrs += char;
+        cursor += 1;
+        continue;
+      }
+      if (char === '{') braceDepth += 1;
+      else if (char === '}') braceDepth -= 1;
+      if (braceDepth === 0) attrs += char;
+      if (char === '>' && braceDepth === 0) break;
+      if (char === '/' && text[cursor + 1] === '>' && braceDepth === 0) break;
+      cursor += 1;
+    }
+    return { name, attrs, end: cursor, selfClosing: attrs.trimEnd().endsWith('/') };
+  }
+
+  /** 控件 → 档位。返回 undefined 表示这一排不管它（纯容器、图标本身等）。 */
+  function rowControlOf(tag: { name: string; attrs: string }): RowControl | undefined {
+    const explicit = /\bsize="(\w+)"/.exec(tag.attrs)?.[1];
+    if (tag.name === 'Button' || tag.name === 'AsyncButton') {
+      return {
+        step: explicit ?? 'md',
+        axis: 'control',
+        implicit: explicit === undefined,
+        label: `${tag.name}·${/\bvariant="(\w+)"/.exec(tag.attrs)?.[1] ?? '缺省'}·${explicit ?? '隐式md'}`,
+      };
+    }
+    if (tag.name === 'IconButton') {
+      return {
+        // 隐式档是基座那一格 28px（CSS 里没有 `[data-size='md']` 覆写），不是 `sm`；
+        // 写成 `sm` 会让「一颗隐式、一颗显式 sm」这一组真落差（28 与 23）被判成同档。
+        step: explicit ?? 'md',
+        axis: 'icon',
+        implicit: explicit === undefined,
+        label: `IconButton·${explicit ?? '隐式md'}`,
+      };
+    }
+    if (tag.name === 'SegmentedControl' || tag.name === 'Tabs' || tag.name === 'FieldSelect') {
+      return {
+        step: explicit ?? 'md',
+        axis: 'control',
+        implicit: explicit === undefined,
+        label: `${tag.name}·${explicit ?? '隐式md'}`,
+      };
+    }
+    // 原生 input／textarea 的高度目前由逐处 CSS 决定（无档位 API），
+    // 批次③补 `TextField` 后这一支改成取它的 `size`，在那之前不参与比较也不算违规。
+    return undefined;
+  }
+
+  /** 花括号配平：返回与 `openIndex` 处 `{` 相配的 `}` 下标。 */
+  function matchingBrace(text: string, openIndex: number): number {
+    let depth = 0;
+    for (let cursor = openIndex; cursor < text.length; cursor += 1) {
+      if (text[cursor] === '{') depth += 1;
+      else if (text[cursor] === '}') {
+        depth -= 1;
+        if (depth === 0) return cursor;
+      }
+    }
+    return text.length;
+  }
+
+  function controlsInRow(block: string): RowControl[] {
+    const controls: RowControl[] = [];
+    for (let cursor = 0; cursor < block.length; cursor += 1) {
+      if (block[cursor] !== '<') continue;
+      const tag = jsxOpenTag(block, cursor);
+      if (!tag) continue;
+      cursor = tag.end;
+      const control = rowControlOf(tag);
+      if (control) controls.push(control);
+    }
+    return controls;
+  }
+
+  /**
+   * 元素 `>` 之后到配对的 `</owner>` 为止的子区段（隐式 children 槽）。
+   *
+   * 两个模式都必须锚定在 `cursor` 上。不锚定时 `closePattern.test(rest)` 是拿**整段余文**
+   * 去匹配，第一个子元素的收尾标签就被当成外层收尾，区段于是截断在半句上——护栏只查到
+   * 「这一排只有一个控件」，同排混档与省略档位都看不见（2026-10-01 变异验证抓到：
+   * 把专家修订页的「保存修订」改回 `lg` 而门禁仍绿）。
+   */
+  function childrenRegion(text: string, owner: string, tagEnd: number): string {
+    const openPattern = new RegExp(`^<${owner}(?![\\w-])`);
+    const closePattern = new RegExp(`^</${owner}>`);
+    let depth = 0;
+    let cursor = tagEnd + 1;
+    while (cursor < text.length) {
+      const rest = text.slice(cursor);
+      if (closePattern.test(rest)) {
+        if (depth === 0) return text.slice(tagEnd + 1, cursor);
+        depth -= 1;
+        cursor += owner.length + 3;
+        continue;
+      }
+      if (openPattern.test(rest)) {
+        const nested = jsxOpenTag(text, cursor);
+        if (nested && !nested.selfClosing) depth += 1;
+        cursor = (nested?.end ?? cursor) + 1;
+        continue;
+      }
+      cursor += 1;
+    }
+    return '';
+  }
+
+  it('一排动作里的控件必须同档（动作排纪律）', () => {
+    // 这条护栏是本轮治理的核心补丁：「没写 size」与「不是 ActionBar 的那一排」
+    // 两处都不查，就会出现「89 颗按钮里 6 颗省略 size，其中 4 颗是主按钮」
+    // 以及「lg 主行动挨着 md 次级行动」这种没人报错的混排。
     const offenders: string[] = [];
     for (const relative of productionPathsUnder('apps/desktop/src/renderer/')) {
       if (!relative.endsWith('.tsx')) continue;
       const text = read(relative);
-      for (const match of text.matchAll(/<ActionBar\b[\s\S]*?<\/ActionBar>/g)) {
-        const block = match[0];
-        // 只数按钮的档位：图标按钮的 `size` 与基座自己的属性不算。
-        const steps = [...block.matchAll(/\bsize="([a-z]+)"/g)].map((m) => m[1] ?? 'md');
-        const distinct = [...new Set(steps)];
-        if (distinct.length > 1) {
-          const line = text.slice(0, match.index ?? 0).split('\n').length;
-          offenders.push(`${relative}:${line} 动作条里出现 ${distinct.join('／')}`);
+      for (const row of ACTION_ROW_SLOTS) {
+        for (const match of text.matchAll(new RegExp(`<${row.owner}(?![\\w-])`, 'g'))) {
+          const start = match.index ?? 0;
+          const tag = jsxOpenTag(text, start);
+          if (!tag) continue;
+          const rawTag = text.slice(start, tag.end + 1);
+          let block: string;
+          if (row.slot === 'children') {
+            if (tag.selfClosing) continue;
+            block = childrenRegion(text, row.owner, tag.end);
+          } else {
+            const slot = new RegExp(`\\b${row.slot}=\\{`).exec(rawTag);
+            if (!slot) continue;
+            const openIndex = start + (slot.index ?? 0) + row.slot.length + 1;
+            block = text.slice(openIndex + 1, matchingBrace(text, openIndex));
+          }
+          const line = text.slice(0, start).split('\n').length;
+          // 外壳内部自成排（模态里的 ActionBar），那一排由它自己的槽位被查到。
+          if (ROW_SCOPE_BREAKS.some((name) => new RegExp(`<${name}(?![\\w-])`).test(block)))
+            continue;
+          const controls = controlsInRow(block);
+          if (controls.length < 2) continue;
+          const stepOf = (control: RowControl): number =>
+            (control.axis === 'icon' ? ICON_HIT_STEPS : CONTROL_HEIGHT_STEPS)[control.step] ?? -1;
+          for (const axis of ['control', 'icon'] as const) {
+            const group = controls.filter((control) => control.axis === axis);
+            if (group.length < 2) continue;
+            const distinct = [...new Set(group.map(stepOf))];
+            if (distinct.length > 1) {
+              offenders.push(
+                `${relative}:${line} ${row.owner}.${row.slot} 一排出现 ${group
+                  .map((control) => control.label)
+                  .join(' | ')}（高度 ${distinct.join('／')}px）`,
+              );
+            }
+            const omitted = group
+              .filter((control) => control.implicit)
+              .map((control) => control.label);
+            if (omitted.length > 0) {
+              offenders.push(
+                `${relative}:${line} ${row.owner}.${row.slot} 省略 size：${omitted.join('、')}`,
+              );
+            }
+          }
         }
       }
     }
     expect(
       offenders,
-      'ActionBar 是一「排」动作，主行动与取消必须同档（docs/10 §10.1、ADR-0031）',
+      '一排动作是一个契约单位：同排控件取同一档，`size` 必须写明（docs/10 §9.10「动作排」）',
+    ).toEqual([]);
+  });
+
+  it('控件基座的 size 是必填属性，不得有隐式缺省', () => {
+    // `size?: ButtonSize` ＋ `size = 'md'` 的组合让「不写」成为第三种高度：
+    // 它不会编译失败、不会测试失败，只会让同一排里的两颗按钮差 4px。
+    // `IconButton` 在同一张榜上：它的隐式档是命中区的 `md`（28px），
+    // 隐式与显式混在一排里就是「一颗 23、一颗 28」，而它此前确实有 12 处没写。
+    const requiredOn: readonly string[] = [
+      'apps/desktop/src/renderer/src/components/Button.tsx',
+      'apps/desktop/src/renderer/src/components/AsyncButton.tsx',
+      'apps/desktop/src/renderer/src/components/Tabs.tsx',
+      'apps/desktop/src/renderer/src/components/FieldSelect.tsx',
+      'apps/desktop/src/renderer/src/components/IconButton.tsx',
+    ];
+    const offenders: string[] = [];
+    for (const relative of requiredOn) {
+      const source = read(relative);
+      // 属性声明必须是不带 `?` 的 `size: …`。
+      if (!/\n {2}size: (ButtonSize|ControlSize|IconButtonSize);/.test(source)) {
+        offenders.push(`${relative} 的 size 不是必填属性`);
+      }
+      // 解构里也不得再给缺省值。
+      if (/\bsize\s*=\s*'(sm|md|lg|row)'/.test(source)) {
+        offenders.push(`${relative} 的 size 仍带隐式缺省值`);
+      }
+    }
+    // 高度三档的 CSS 出口必须齐：`data-size` 少一档，那一档就会退成基座缺省。
+    // `.icon-button` 除外——它走自己的命中区轴 23／28／34（`sm`／基座／`row`），
+    // 与文字按钮等高不是它的契约（docs/10 §9.10「动作排」）。
+    const cssSizes = new Set(
+      declarations
+        .filter(
+          (declaration) =>
+            !declaration.selector.includes('.icon-button') &&
+            /\[data-size='(\w+)'\]/.test(declaration.selector),
+        )
+        .map((declaration) => /\[data-size='(\w+)'\]/.exec(declaration.selector)?.[1]),
+    );
+    expect([...cssSizes].sort(), 'CSS 的 data-size 档位必须与三档一致').toEqual(['lg', 'md', 'sm']);
+    const iconSizes = new Set(
+      declarations
+        .filter((declaration) => /\.icon-button\[data-size='(\w+)'\]/.test(declaration.selector))
+        .map((declaration) => /\.icon-button\[data-size='(\w+)'\]/.exec(declaration.selector)?.[1]),
+    );
+    expect([...iconSizes].sort(), '图标方块的命中区只有 sm 与 row 两档覆写').toEqual(['row', 'sm']);
+    expect(
+      offenders,
+      '按钮与同排控件的高度只能由调用点写明；缺省值会造出「隐式 md」这一档（docs/10 §9.10）',
     ).toEqual([]);
   });
 });
@@ -2666,6 +2935,33 @@ describe('页面骨架契约纪律', () => {
     const offenders: string[] = [];
     assertRetiredClassesAbsent(offenders, 'borrow');
     expect(offenders, '跨页面借类请改接基座或具名主皮（docs/10 §10.1）').toEqual([]);
+  });
+
+  it('已收编的类名不得留在调用点的 className 上', () => {
+    // 上面那几条只查 CSS：规则删干净了，调用点留着 `className="chip-button"` 不会红。
+    // 于是那颗按钮实际渲染成缺省的 `secondary`，而读代码的人（和文档）以为它走品牌底
+    // ——ADR-0031 收皮时留下过两处（`.chip-button`、`.knowledge-research-button`）。
+    // 这一条查的是「引用不存在的外观」：类名要么有 CSS 规则、要么是基座的 data 属性，
+    // 挂一个已退役的名字只能是一句假话。
+    const offenders: string[] = [];
+    for (const relative of productionPathsUnder('apps/desktop/src/renderer/')) {
+      if (!relative.endsWith('.tsx')) continue;
+      const text = read(relative);
+      const lines = text.split('\n');
+      for (const entry of RETIRED_UTILITY_CLASSES) {
+        const className = singleRetiredClassName(entry.pattern);
+        if (!className) continue;
+        const needle = new RegExp(`["'\` ]${className}["'\` ]`);
+        lines.forEach((line, index) => {
+          if (!/\bclassName=/.test(line) || !needle.test(line)) return;
+          offenders.push(`${relative}:${index + 1} className 仍引用已收编的 .${className}`);
+        });
+      }
+    }
+    expect(
+      offenders,
+      'CSS 里的规则已随收编删除，className 还挂着它就是声称一个不存在的外观（docs/10 §10.1）',
+    ).toEqual([]);
   });
 
   it('页面不得替骨架补几何', () => {

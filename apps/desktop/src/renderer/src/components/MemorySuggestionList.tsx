@@ -304,7 +304,7 @@ function SuggestionCard({
       className="suggestion-card"
       footer={
         <>
-          <Button variant="primary" size="lg" type="button" onClick={() => onEdit(candidate)}>
+          <Button variant="primary" size="md" type="button" onClick={() => onEdit(candidate)}>
             编辑并确认
           </Button>
           <Button variant="secondary" size="md" type="button" onClick={() => onReject(candidate)}>
@@ -312,7 +312,7 @@ function SuggestionCard({
           </Button>
           <Button
             variant="quiet"
-            size="sm"
+            size="md"
             tone="danger"
             type="button"
             onClick={() => onDelete(candidate)}

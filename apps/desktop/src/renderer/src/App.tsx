@@ -1288,6 +1288,7 @@ export function App(): React.JSX.Element {
             <small>BetterWork</small>
           </div>
           <IconButton
+            size="md"
             className="sidebar-collapse-button"
             label={sidebarCollapsed ? '展开导航' : '收起导航'}
             icon={sidebarCollapsed ? ChevronRightIcon : ChevronLeftIcon}

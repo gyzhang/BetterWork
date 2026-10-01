@@ -66,6 +66,7 @@ export function DependencyPanel({
         hint="受管制品按固定版本与校验值使用；本机解释器只作为 venv 基础，不会修改它的全局 site-packages。"
       >
         <FieldSelect
+          size="md"
           id="dependency-base"
           value={state.base?.kind === 'managed' ? state.base.distributionId : '__local__'}
           onChange={(value) => {
@@ -107,6 +108,7 @@ export function DependencyPanel({
         }
       >
         <FieldSelect
+          size="md"
           id="dependency-lock"
           value={state.lockId}
           onChange={(lockId) => state.selectLock(lockId)}
@@ -121,6 +123,7 @@ export function DependencyPanel({
       >
         <div className="dependency-inline">
           <FieldSelect
+            size="md"
             id="dependency-snapshot"
             value={state.snapshotId}
             onChange={(snapshotId) => state.selectSnapshot(snapshotId)}
@@ -141,7 +144,7 @@ export function DependencyPanel({
       <div className="dependency-actions">
         <Button
           variant="primary"
-          size="lg"
+          size="md"
           type="button"
           onClick={state.prepare}
           disabled={!state.base || !state.lockId || state.preparing || pending}

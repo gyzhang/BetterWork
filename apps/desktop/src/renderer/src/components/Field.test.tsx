@@ -21,7 +21,7 @@ describe('Field 与 FieldSelect', () => {
     const onChange = vi.fn();
     render(
       <Field label="适用范围">
-        <FieldSelect options={OPTIONS} value="a" onChange={onChange} />
+        <FieldSelect size="md" options={OPTIONS} value="a" onChange={onChange} />
       </Field>,
     );
 
@@ -38,6 +38,7 @@ describe('Field 与 FieldSelect', () => {
     render(
       <Field controlId="probe-select" label="基础 Python" hint="本机解释器只作为 venv 基础。">
         <FieldSelect
+          size="md"
           id="probe-select"
           options={OPTIONS}
           value="a"
@@ -49,6 +50,8 @@ describe('Field 与 FieldSelect', () => {
 
     const trigger = screen.getByRole('button', { name: '基础 Python' });
     expect(trigger).toHaveProperty('id', 'probe-select');
+    // 档位挂在触发器上，与按钮同一张高度／内距表（docs/10 §9.10）。
+    expect(trigger.getAttribute('data-size')).toBe('md');
     expect(screen.getByLabelText('基础 Python')).toBe(trigger);
     expect(screen.getByText('本机解释器只作为 venv 基础。')).toHaveProperty(
       'className',
@@ -58,7 +61,9 @@ describe('Field 与 FieldSelect', () => {
 
   it('不可选项在菜单里可见但选不动', () => {
     const onChange = vi.fn();
-    render(<FieldSelect options={OPTIONS} value="a" onChange={onChange} ariaLabel="用途" />);
+    render(
+      <FieldSelect size="md" options={OPTIONS} value="a" onChange={onChange} ariaLabel="用途" />,
+    );
 
     fireEvent.click(screen.getByRole('button', { name: '用途' }));
     const disabled = screen.getByRole('menuitem', { name: '尚未支持' });
@@ -71,6 +76,7 @@ describe('Field 与 FieldSelect', () => {
   it('禁用时触发器不展开', () => {
     render(
       <FieldSelect
+        size="md"
         options={OPTIONS}
         value="a"
         onChange={() => undefined}

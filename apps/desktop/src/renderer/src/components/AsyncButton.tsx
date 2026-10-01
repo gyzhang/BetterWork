@@ -13,7 +13,8 @@ export interface AsyncButtonProps {
   type?: 'button' | 'submit' | undefined;
   /** 外观与几何一律交回 `Button` 的两个正交维度，这里不再自带一套皮。 */
   variant?: ButtonVariant | undefined;
-  size?: ButtonSize | undefined;
+  /** 必填，与 `Button.size` 同一契约：一排动作的高度由调用点写明（docs/10 §9.10）。 */
+  size: ButtonSize;
   tone?: ButtonTone | undefined;
   /** 额外的禁用条件（表单未填完等）；忙碌本身一定会禁用按钮。 */
   disabled?: boolean | undefined;

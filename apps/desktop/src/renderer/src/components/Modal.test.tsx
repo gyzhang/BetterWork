@@ -163,6 +163,7 @@ describe('模态内的菜单类浮层', () => {
       <main>
         <Modal variant="sheet" label="编辑模型" onClose={onClose}>
           <FieldSelect
+            size="md"
             ariaLabel="模型角色"
             value="language"
             onChange={() => undefined}

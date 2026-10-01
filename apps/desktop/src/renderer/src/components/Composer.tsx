@@ -159,6 +159,7 @@ export function Composer({
           </Button>
         ) : (
           <AsyncButton
+            size="md"
             type="submit"
             busy={submit.state === 'starting'}
             disabled={!prompt.trim() || workspacePicker.currentWorkspace === undefined}

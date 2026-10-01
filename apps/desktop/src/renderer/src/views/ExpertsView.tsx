@@ -441,6 +441,7 @@ function ExpertEditor({
             <legend>模型偏好</legend>
             <Field label="新任务默认使用的语言模型">
               <FieldSelect
+                size="md"
                 ariaLabel="专家模型偏好"
                 value={
                   draft.modelReference.mode === 'profile'
@@ -620,11 +621,11 @@ function ExpertDetailPanel({
             {/* 内置专家后端拒绝直接改（expert_builtin_readonly）：入口按来源分档，
                 不再让人点一次才知道不能改（ADR-0011，与技能页同口径）。 */}
             {detail.sourceKind === 'builtin' ? (
-              <Button variant="secondary" size="md" type="button" onClick={onCopy}>
+              <Button variant="secondary" size="lg" type="button" onClick={onCopy}>
                 复制为用户专家
               </Button>
             ) : (
-              <Button variant="secondary" size="md" type="button" onClick={onEdit}>
+              <Button variant="secondary" size="lg" type="button" onClick={onEdit}>
                 编辑配置
               </Button>
             )}
@@ -940,6 +941,7 @@ export function ExpertsPage({
         actions={
           <>
             <SegmentedControl
+              size="lg"
               label="视图模式"
               value={viewMode}
               onChange={changeViewMode}

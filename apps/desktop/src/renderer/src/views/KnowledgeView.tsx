@@ -224,6 +224,7 @@ export function KnowledgePage({
         actions={
           <AsyncButton
             variant="primary"
+            size="lg"
             busy={importing}
             label={
               <>
@@ -243,6 +244,7 @@ export function KnowledgePage({
           </p>
           <PageToolbar ariaLabel="资料库操作">
             <FieldSelect
+              size="md"
               options={filterOptions}
               value={filterOptionId(filter)}
               ariaLabel="按集合筛选资料"
@@ -271,7 +273,7 @@ export function KnowledgePage({
                 搜索
               </Button>
               {showingResults && (
-                <Button variant="outline" size="sm" type="button" onClick={() => setQuery('')}>
+                <Button variant="outline" size="md" type="button" onClick={() => setQuery('')}>
                   清除
                 </Button>
               )}
@@ -295,6 +297,7 @@ export function KnowledgePage({
                 title="索引与作业"
                 actions={
                   <IconButton
+                    size="md"
                     label="关闭"
                     icon={CloseIcon}
                     onClick={() => setIndexDrawerOpen(false)}
@@ -359,6 +362,7 @@ export function KnowledgePage({
                       <div className="knowledge-admin-profile">
                         <span>嵌入模型</span>
                         <FieldSelect
+                          size="md"
                           options={profileOptions}
                           value={selectedProfileId}
                           ariaLabel="选择嵌入模型"
@@ -620,7 +624,8 @@ export function KnowledgePage({
               )}
               {showingResults && (
                 <AsyncButton
-                  className="knowledge-research-button"
+                  variant="chip"
+                  size="sm"
                   busy={researchBusy}
                   disabled={selectedMaterials.length === 0}
                   label={`用已选资料研究${selectedMaterials.length > 0 ? `（${selectedMaterials.length}）` : ''}`}

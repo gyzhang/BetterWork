@@ -20,10 +20,27 @@ describe('Tabs 基座', () => {
     render(
       <div>
         <button type="button">页签带之外的控件</button>
-        <Tabs items={ITEMS} value="b" onChange={onChange} label="示例分组" />
+        <Tabs size="md" items={ITEMS} value="b" onChange={onChange} label="示例分组" />
       </div>,
     );
   };
+
+  it('档位由调用点写明并落在根节点的 data-size 上（docs/10 §9.10「动作排」）', () => {
+    render(
+      <div>
+        <Tabs size="sm" items={ITEMS} value="b" onChange={() => undefined} label="示例分组" />
+        <SegmentedControl
+          size="lg"
+          items={ITEMS}
+          value="b"
+          onChange={() => undefined}
+          label="示例模式"
+        />
+      </div>,
+    );
+    expect(screen.getByRole('tablist').getAttribute('data-size')).toBe('sm');
+    expect(screen.getByRole('group').getAttribute('data-size')).toBe('lg');
+  });
 
   it('只有选中页签进入 Tab 顺序，其余靠方向键', () => {
     renderTabs();
@@ -67,7 +84,9 @@ describe('Tabs 基座', () => {
   });
 
   it('选中值不在清单里时，首项仍可被 Tab 命中', () => {
-    render(<Tabs items={ITEMS} value="zzz" onChange={() => undefined} label="示例分组" />);
+    render(
+      <Tabs size="md" items={ITEMS} value="zzz" onChange={() => undefined} label="示例分组" />,
+    );
 
     expect(screen.getAllByRole('tab').map((tab) => tab.tabIndex)).toEqual([0, -1, -1]);
   });
@@ -76,7 +95,9 @@ describe('Tabs 基座', () => {
 describe('SegmentedControl 基座', () => {
   it('用 aria-pressed 表达当前模式，每个按钮都参与 Tab 顺序', () => {
     const onChange = vi.fn();
-    render(<SegmentedControl items={ITEMS} value="b" onChange={onChange} label="示例模式" />);
+    render(
+      <SegmentedControl size="md" items={ITEMS} value="b" onChange={onChange} label="示例模式" />,
+    );
 
     const buttons = screen.getAllByRole('button');
     expect(buttons.map((button) => button.getAttribute('aria-pressed'))).toEqual([

@@ -160,6 +160,7 @@ function ModelSettings({
         }
       />
       <SegmentedControl
+        size="md"
         className="model-filter"
         label="按角色筛选模型"
         value={modelFilter}
@@ -345,6 +346,7 @@ export function SearchSettings(): React.JSX.Element {
       <div className="search-form">
         <Field label="搜索引擎">
           <FieldSelect
+            size="md"
             value={engine}
             onChange={setEngine}
             options={SEARCH_ENGINE_OPTIONS}
@@ -375,6 +377,7 @@ export function SearchSettings(): React.JSX.Element {
         <div className="search-actions">
           <AsyncButton
             variant="secondary"
+            size="md"
             busy={busy}
             label="测试连接"
             busyLabel="连接中…"
@@ -382,7 +385,7 @@ export function SearchSettings(): React.JSX.Element {
           />
           <Button
             variant="primary"
-            size="lg"
+            size="md"
             type="button"
             onClick={() => trackAction(save(), '保存搜索配置')}
           >

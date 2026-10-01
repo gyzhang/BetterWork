@@ -9,7 +9,7 @@ afterEach(cleanup);
 
 describe('AsyncButton', () => {
   it('忙碌时禁用自己并宣告 busy，文案换成进行中的那一句', () => {
-    render(<AsyncButton label="保存修订" busyLabel="正在保存…" busy onClick={vi.fn()} />);
+    render(<AsyncButton size="md" label="保存修订" busyLabel="正在保存…" busy onClick={vi.fn()} />);
     const button = screen.getByRole('button');
     expect(button).toHaveProperty('disabled', true);
     expect(button.getAttribute('aria-busy')).toBe('true');
@@ -18,7 +18,15 @@ describe('AsyncButton', () => {
 
   it('不忙碌时可点，且只留 idle 文案一份（隐藏的副本会把文本混进可及名称）', () => {
     const onClick = vi.fn();
-    render(<AsyncButton label="保存修订" busyLabel="正在保存…" busy={false} onClick={onClick} />);
+    render(
+      <AsyncButton
+        size="md"
+        label="保存修订"
+        busyLabel="正在保存…"
+        busy={false}
+        onClick={onClick}
+      />,
+    );
     const button = screen.getByRole('button');
     expect(button.textContent).toBe('保存修订');
     expect(button.getAttribute('aria-busy')).toBe('false');
@@ -28,23 +36,24 @@ describe('AsyncButton', () => {
 
   it('外观委托给 Button 基座：皮类只有一枚，档位走 data 属性', () => {
     const { rerender } = render(
-      <AsyncButton label="导入" busyLabel="正在导入…" busy variant="primary" size="lg" />,
+      <AsyncButton size="lg" label="导入" busyLabel="正在导入…" busy variant="primary" />,
     );
     const button = screen.getByRole('button');
     expect(button.className).toBe('btn');
     expect(button.getAttribute('data-variant')).toBe('primary');
     expect(button.getAttribute('data-size')).toBe('lg');
-    // 缺省档位由 Button 给（md），AsyncButton 不再自己造一套「无皮」的中间态。
-    rerender(<AsyncButton label="导入" busyLabel="正在导入…" busy />);
-    const fallback = screen.getByRole('button');
-    expect(fallback.className).toBe('btn');
-    expect(fallback.getAttribute('data-variant')).toBe('secondary');
-    expect(fallback.getAttribute('data-size')).toBe('md');
+    // 档位是必填的：AsyncButton 不自己造缺省，换档只能由调用点写明（docs/10 §9.10）。
+    rerender(<AsyncButton size="sm" label="导入" busyLabel="正在导入…" busy />);
+    const next = screen.getByRole('button');
+    expect(next.className).toBe('btn');
+    expect(next.getAttribute('data-variant')).toBe('secondary');
+    expect(next.getAttribute('data-size')).toBe('sm');
   });
 
   it('定位钩子类留在 className 上，与基座的 .btn 并存', () => {
     render(
       <AsyncButton
+        size="md"
         label="导入"
         busyLabel="正在导入…"
         busy={false}
@@ -56,7 +65,14 @@ describe('AsyncButton', () => {
 
   it('额外的禁用条件与忙碌同样生效', () => {
     render(
-      <AsyncButton label="提交" busyLabel="正在提交…" busy={false} disabled onClick={vi.fn()} />,
+      <AsyncButton
+        size="md"
+        label="提交"
+        busyLabel="正在提交…"
+        busy={false}
+        disabled
+        onClick={vi.fn()}
+      />,
     );
     expect(screen.getByRole('button')).toHaveProperty('disabled', true);
   });

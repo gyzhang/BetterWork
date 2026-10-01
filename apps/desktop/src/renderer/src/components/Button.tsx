@@ -15,6 +15,12 @@ export type ButtonVariant =
 /** 三档几何，一对一绑 `--control-height-*`；页面不再用 padding 自己撑高度。 */
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
+/**
+ * 控件高度档的共享名字。下拉触发器、页签与切换按钮组用同一张档位表，
+ * 因为它们和按钮会排在同一「动作排」里（docs/10 §9.10）。
+ */
+export type ControlSize = ButtonSize;
+
 /** 描边与文字的语义色，对 `secondary`／`text`／`outline`／`quiet` 四档生效（`neutral` 是缺省，无独立规则）。 */
 export type ButtonTone = 'neutral' | 'brand' | 'danger';
 
@@ -22,8 +28,13 @@ export interface ButtonProps extends Omit<ComponentProps<'button'>, 'className'>
   /** 可见内容：文字，或「图标＋文字」的片段。 */
   children: ReactNode;
   variant?: ButtonVariant | undefined;
-  /** 缺省 `md`。刻意不按 `variant` 给条件缺省：主行动要不要比同排高一档，是页面那一刻的选择。 */
-  size?: ButtonSize | undefined;
+  /**
+   * **必填**，没有缺省。ADR-0031 原先按 `md` 给缺省，代价是「隐式 md」与「显式 lg」
+   * 会在同一排里并存（技能页 32px 的「导入 Skill」挨着专家页 36px 的「新建专家」），
+   * 而缺省值本身不可能报错、不可能被测红。一排动作里的高度只能由调用点写明，
+   * 判据见 docs/10 §9.10「动作排」。
+   */
+  size: ButtonSize;
   tone?: ButtonTone | undefined;
   /** 只承载定位钩子（如 `margin-left: auto`），不得承载外观。 */
   className?: string | undefined;
@@ -44,7 +55,7 @@ export interface ButtonProps extends Omit<ComponentProps<'button'>, 'className'>
 export function Button({
   children,
   variant = 'secondary',
-  size = 'md',
+  size,
   tone = 'neutral',
   className,
   type = 'button',

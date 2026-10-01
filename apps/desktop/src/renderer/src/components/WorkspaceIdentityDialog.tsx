@@ -162,6 +162,7 @@ export function WorkspaceIdentityDialog({
         </Button>
         <AsyncButton
           variant="primary"
+          size="md"
           label={editing ? '保存修改' : '创建'}
           busyLabel={editing ? '正在保存…' : '正在创建…'}
           busy={busy}

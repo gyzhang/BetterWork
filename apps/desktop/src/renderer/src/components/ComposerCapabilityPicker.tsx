@@ -269,6 +269,7 @@ export function ComposerCapabilityPicker({
                 {...(candidate?.status === 'unavailable' ? { tone: 'danger' as const } : {})}
               >
                 <FieldSelect
+                  size="sm"
                   ariaLabel={`${title}用途`}
                   value={selection.purpose}
                   disabled={disabled}
@@ -289,6 +290,7 @@ export function ComposerCapabilityPicker({
         </BindingChipBar>
       )}
       <IconButton
+        size="md"
         buttonRef={buttonRef}
         className="capability-picker-trigger"
         label="添加能力"

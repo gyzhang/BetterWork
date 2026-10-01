@@ -115,6 +115,7 @@ export function DiscussionCheckpointPanel({
           <div className="discussion-checkpoint-fields">
             <Field label="阶段">
               <FieldSelect
+                size="md"
                 value={stage}
                 onChange={(next) => setStage(next as DiscussionCheckpointStage)}
                 options={STAGES.map((item) => ({ id: item.value, label: item.label }))}
@@ -173,6 +174,7 @@ export function DiscussionCheckpointPanel({
           >
             <AsyncButton
               variant="primary"
+              size="md"
               busy={saving}
               disabled={!title.trim() || !summary.trim()}
               label="保存节点"

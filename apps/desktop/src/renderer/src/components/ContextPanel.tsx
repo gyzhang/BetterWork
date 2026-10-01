@@ -171,12 +171,14 @@ export function ContextPanel({
         <div className="context-topline" onDoubleClick={handleTitlebarDoubleClick}>
           <span>当前任务</span>
           <IconButton
+            size="md"
             label="收起上下文面板"
             icon={ChevronRightIcon}
             onClick={() => setOpen(false)}
           />
         </div>
         <Tabs
+          size="sm"
           fill
           label="任务上下文"
           items={CONTEXT_TABS.map(([id, label]) => ({ id, label }))}
@@ -460,6 +462,7 @@ function EvidenceSection({
             ? {
                 actions: (
                   <AsyncButton
+                    size="sm"
                     busy={isPreviewing && runSource.loading}
                     label="查看区间"
                     busyLabel="正在回看…"
@@ -675,6 +678,7 @@ function MemoryScopeRow({
       }
       actions={
         <AsyncButton
+          size="sm"
           busy={saving}
           label={excluded ? '恢复使用' : '本任务不用'}
           busyLabel="正在调整…"
@@ -712,7 +716,8 @@ function ExcludedTaskMemoriesSection({
         hint="来自本任务的持久化设置：换问法、重启或预览失败都保留在这里"
         actions={
           <AsyncButton
-            className="chip-button"
+            variant="chip"
+            size="sm"
             busy={exclusions.loading}
             label="刷新"
             busyLabel="正在读取…"
@@ -744,6 +749,7 @@ function ExcludedTaskMemoriesSection({
               }
               actions={
                 <AsyncButton
+                  size="sm"
                   busy={exclusion.savingMemoryId === item.memoryId}
                   label={item.visibility === 'visible' ? '恢复参与选择' : '移除此排除'}
                   busyLabel="正在调整…"

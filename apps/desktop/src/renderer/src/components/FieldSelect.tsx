@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { ChevronLeftIcon } from '../icons';
+import type { ControlSize } from './Button';
 import { PopoverMenu } from './PopoverMenu';
 
 export interface FieldSelectOption {
@@ -16,6 +17,8 @@ export interface FieldSelectProps {
   onChange: (id: string) => void;
   /** 可及名称。在 `Field` 的包裹式 label 里可以省略，由标签文字提供。 */
   ariaLabel?: string;
+  /** 必填：与同排控件共用 `--control-height-*` 档位（docs/10 §9.10「动作排」）。 */
+  size: ControlSize;
   /** 供 `Field` 的 htmlFor 关联。 */
   id?: string;
   disabled?: boolean;
@@ -31,6 +34,7 @@ export function FieldSelect({
   value,
   onChange,
   ariaLabel,
+  size,
   id,
   disabled = false,
 }: FieldSelectProps): React.JSX.Element {
@@ -71,6 +75,7 @@ export function FieldSelect({
         id={id}
         type="button"
         className="field-select-trigger"
+        data-size={size}
         aria-haspopup="menu"
         aria-expanded={open}
         {...(ariaLabel ? { 'aria-label': ariaLabel } : {})}

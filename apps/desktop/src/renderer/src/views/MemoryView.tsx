@@ -10,8 +10,9 @@ import {
   LIST_PAGE_DEFAULT_LIMIT,
   MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS,
 } from '@betterwork/agent-protocol';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 
+import { ActionBar } from '../components/ActionBar';
 import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
@@ -365,11 +366,11 @@ export function MemoryPage({
         actions={
           <>
             {scopeTarget && onClearScope ? (
-              <Button variant="text" size="sm" type="button" onClick={onClearScope}>
+              <Button variant="text" size="lg" type="button" onClick={onClearScope}>
                 查看全部记忆
               </Button>
             ) : null}
-            <Button variant="secondary" size="md" type="button" onClick={state.refresh}>
+            <Button variant="secondary" size="lg" type="button" onClick={state.refresh}>
               刷新
             </Button>
             <Button
@@ -493,12 +494,13 @@ export function MemoryPage({
                 onChange={(event) => setDraftQuery(event.target.value)}
               />
               {draftQuery !== '' && (
-                <Button variant="outline" size="sm" type="button" onClick={() => setDraftQuery('')}>
+                <Button variant="outline" size="md" type="button" onClick={() => setDraftQuery('')}>
                   清除
                 </Button>
               )}
             </form>
             <Tabs
+              size="md"
               label="记忆分组"
               items={memoryTabOrder.map((key) => ({
                 id: key,
@@ -898,6 +900,7 @@ function ConflictPair({
     readonly missing: boolean;
   }>({ lines: [], missing: false });
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  const noteFieldId = useId();
   const other = allMemories.find(
     (item) =>
       item.revisionId ===
@@ -1000,9 +1003,10 @@ function ConflictPair({
         </p>
       )}
       {state === 'unresolved' && other && !isTerminalMemory(other) && !isTerminalMemory(memory) && (
-        <div className="memory-conflict-actions">
+        <>
           <Field label="替代：保留哪一条">
             <FieldSelect
+              size="md"
               ariaLabel="替代后保留的记忆"
               value={winner}
               onChange={setWinner}
@@ -1012,52 +1016,58 @@ function ConflictPair({
               ]}
             />
           </Field>
-          <Button
-            variant="quiet"
-            size="sm"
-            type="button"
-            onClick={() =>
-              onResolve(memory, other, 'replace', {
-                winnerId: winner,
-                applicabilityNote: '',
-              })
-            }
+          <Field
+            label="适用条件说明"
+            controlId={noteFieldId}
+            hint={`已写 ${notePoints} / ${MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS} 码点`}
           >
-            {winner === memory.id ? '替代另一条' : '替代本条'}
-          </Button>
-          <input
-            aria-label="适用条件说明"
-            value={note}
-            placeholder="并存：写出两条各自的适用条件"
-            onChange={(event) => setNote(event.target.value)}
-          />
-          <p className="memory-conflict-hint">
-            已写 {notePoints} / {MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS} 码点
-          </p>
+            <input
+              id={noteFieldId}
+              className="memory-conflict-note-input"
+              value={note}
+              placeholder="并存：写出两条各自的适用条件"
+              onChange={(event) => setNote(event.target.value)}
+            />
+          </Field>
           {noteOverLimit && (
             <InlineError
               message={`适用条件最多 ${MEMORY_APPLICABILITY_NOTE_MAX_CODE_POINTS} 个码点，当前 ${notePoints} 个，请先精简后再确认并存。`}
             />
           )}
-          <Button
-            variant="quiet"
-            size="sm"
-            type="button"
-            disabled={!canKeepBoth}
-            onClick={() =>
-              onResolve(memory, other, 'keep-both', {
-                winnerId: '',
-                applicabilityNote: note.trim(),
-              })
-            }
-          >
-            确认两条并存
-          </Button>
           <p className="memory-conflict-hint">
             替代要求两条处于同一规范范围，否则请先调整适用范围；写不出适用条件时不要确认并存。
             暂不处理可以让这组口径继续留在待澄清状态。
           </p>
-        </div>
+          <ActionBar as="div" label="处理这组口径冲突">
+            <Button
+              variant="quiet"
+              size="md"
+              type="button"
+              onClick={() =>
+                onResolve(memory, other, 'replace', {
+                  winnerId: winner,
+                  applicabilityNote: '',
+                })
+              }
+            >
+              {winner === memory.id ? '替代另一条' : '替代本条'}
+            </Button>
+            <Button
+              variant="quiet"
+              size="md"
+              type="button"
+              disabled={!canKeepBoth}
+              onClick={() =>
+                onResolve(memory, other, 'keep-both', {
+                  winnerId: '',
+                  applicabilityNote: note.trim(),
+                })
+              }
+            >
+              确认两条并存
+            </Button>
+          </ActionBar>
+        </>
       )}
     </div>
   );

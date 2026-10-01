@@ -48,7 +48,7 @@ export function ModelEditor({
         variant="block"
         eyebrow="模型配置"
         title={editing ? '编辑模型' : '添加模型'}
-        actions={<IconButton label="关闭" icon={CloseIcon} onClick={onClose} />}
+        actions={<IconButton size="md" label="关闭" icon={CloseIcon} onClick={onClose} />}
       />
       <form onSubmit={(event) => trackAction(onSave(event), '保存模型配置')}>
         <Field label="显示名称">
@@ -62,6 +62,7 @@ export function ModelEditor({
         <div className="form-grid">
           <Field label="模型角色">
             <FieldSelect
+              size="md"
               value={form.role}
               onChange={(role) => setForm({ ...form, role: role as ModelProfileInput['role'] })}
               options={ROLE_OPTIONS}

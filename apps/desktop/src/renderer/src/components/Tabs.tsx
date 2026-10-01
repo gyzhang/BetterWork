@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
 
+import type { ControlSize } from './Button';
+
 export interface TabItem<K extends string> {
   id: K;
   label: ReactNode;
@@ -12,6 +14,8 @@ export interface TabsProps<K extends string> {
   onChange: (id: K) => void;
   /** 页签带的可及名称（`aria-label`）。 */
   label: string;
+  /** 必填：页签与同排控件共用 `--control-height-*` 档位（docs/10 §9.10「动作排」）。 */
+  size: ControlSize;
   /** 均分整条页签带；默认按内容取宽。 */
   fill?: boolean;
   className?: string;
@@ -31,6 +35,7 @@ export function Tabs<K extends string>({
   value,
   onChange,
   label,
+  size,
   fill,
   className,
 }: TabsProps<K>): React.JSX.Element {
@@ -78,6 +83,7 @@ export function Tabs<K extends string>({
       className={`tabs${className ? ` ${className}` : ''}`}
       role="tablist"
       aria-label={label}
+      data-size={size}
       {...(fill ? { 'data-fill': 'true' } : {})}
       onKeyDown={onKeyDown}
     >
@@ -106,6 +112,8 @@ export interface SegmentedControlProps<K extends string> {
   onChange: (id: K) => void;
   /** 分组的可及名称（`aria-label`）。 */
   label: string;
+  /** 必填：与同排控件共用 `--control-height-*` 档位（docs/10 §9.10「动作排」）。 */
+  size: ControlSize;
   className?: string;
 }
 
@@ -121,6 +129,7 @@ export function SegmentedControl<K extends string>({
   value,
   onChange,
   label,
+  size,
   className,
 }: SegmentedControlProps<K>): React.JSX.Element {
   return (
@@ -128,6 +137,7 @@ export function SegmentedControl<K extends string>({
       className={`segmented-control${className ? ` ${className}` : ''}`}
       role="group"
       aria-label={label}
+      data-size={size}
     >
       {items.map((item) => (
         <button

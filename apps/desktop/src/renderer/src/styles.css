@@ -698,7 +698,8 @@ small {
 }
 .page-header h1 {
   margin-top: 4px;
-  font-size: 19px;
+  /* 页面标题 20px（docs/10 §9.7，2026-10-01 产品拍板）：此前代码写 19px 与文档各说各话。 */
+  font-size: 20px;
   font-weight: 650;
 }
 .page-header-leading {
@@ -2577,13 +2578,25 @@ button.list-row:where(:not(:disabled)):hover {
   border-bottom: 1px solid var(--border);
 }
 .tabs button {
-  min-height: var(--control-height-sm);
-  padding: 5px 11px;
   color: var(--text-secondary);
   background: transparent;
   border: 0;
   border-radius: var(--control-radius);
   font-size: 13px;
+}
+/* 高度与内距成对取档（docs/10 §9.10）：页签与切换组会和按钮排在同一「动作排」里，
+   没有档位 API 就必然一行两高——原来它们各自固定 28px 是这个样子。 */
+.tabs[data-size='sm'] button {
+  min-height: var(--control-height-sm);
+  padding: var(--control-padding-sm);
+}
+.tabs[data-size='md'] button {
+  min-height: var(--control-height);
+  padding: var(--control-padding);
+}
+.tabs[data-size='lg'] button {
+  min-height: var(--control-height-lg);
+  padding: var(--control-padding-lg);
 }
 .tabs button[aria-selected='true'] {
   color: var(--text-primary);
@@ -2600,13 +2613,23 @@ button.list-row:where(:not(:disabled)):hover {
   border-radius: var(--control-radius);
 }
 .segmented-control button {
-  min-height: var(--control-height-sm);
-  padding: 5px 12px;
   color: var(--text-secondary);
   background: var(--surface);
   border: 0;
   font-size: 12px;
   cursor: pointer;
+}
+.segmented-control[data-size='sm'] button {
+  min-height: var(--control-height-sm);
+  padding: var(--control-padding-sm);
+}
+.segmented-control[data-size='md'] button {
+  min-height: var(--control-height);
+  padding: var(--control-padding);
+}
+.segmented-control[data-size='lg'] button {
+  min-height: var(--control-height-lg);
+  padding: var(--control-padding-lg);
 }
 .segmented-control button[aria-pressed='true'] {
   color: var(--brand);
@@ -2720,13 +2743,7 @@ button.list-row:where(:not(:disabled)):hover {
   color: var(--text-muted);
   font-size: 12px;
 }
-.memory-conflict-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 8px;
-}
-.memory-conflict-actions input {
+.memory-conflict-note-input {
   min-height: var(--control-height);
   padding: var(--control-padding);
   color: var(--text-primary);
@@ -2735,12 +2752,7 @@ button.list-row:where(:not(:disabled)):hover {
   border-radius: var(--control-radius);
   font-size: 12px;
 }
-.memory-conflict-actions input {
-  flex: 1;
-  min-width: 200px;
-}
 .memory-conflict-hint {
-  width: 100%;
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.6;
@@ -2884,8 +2896,6 @@ button.list-row:where(:not(:disabled)):hover {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-height: var(--control-height);
-  padding: var(--control-padding);
   color: var(--text-primary);
   background: var(--surface);
   border: var(--control-border);
@@ -2894,6 +2904,19 @@ button.list-row:where(:not(:disabled)):hover {
   line-height: 1.5;
   cursor: pointer;
   text-align: left;
+}
+/* 与按钮同一张高度／内距档位表（docs/10 §9.10「动作排」）：下拉触发器和同排控件必须同档。 */
+.field-select-trigger[data-size='sm'] {
+  min-height: var(--control-height-sm);
+  padding: var(--control-padding-sm);
+}
+.field-select-trigger[data-size='md'] {
+  min-height: var(--control-height);
+  padding: var(--control-padding);
+}
+.field-select-trigger[data-size='lg'] {
+  min-height: var(--control-height-lg);
+  padding: var(--control-padding-lg);
 }
 .field-select-trigger:hover {
   border-color: var(--focus-ring);
