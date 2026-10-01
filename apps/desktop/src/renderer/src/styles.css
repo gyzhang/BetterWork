@@ -501,6 +501,7 @@ small {
   gap: 8px;
   border: 1px solid transparent;
   border-radius: var(--control-radius);
+  line-height: var(--line-height-normal);
 }
 .btn[data-size='sm'] {
   min-height: var(--control-height-sm);
@@ -510,7 +511,7 @@ small {
 .btn[data-size='md'] {
   min-height: var(--control-height);
   padding: var(--control-padding);
-  font-size: var(--font-size-caption);
+  font-size: var(--font-size-body);
 }
 .btn[data-size='lg'] {
   min-height: var(--control-height-lg);
@@ -2842,6 +2843,7 @@ button.list-row:where(:not(:disabled)):hover {
 .field-select-trigger[data-size='sm'] {
   min-height: var(--control-height-sm);
   padding: var(--control-padding-sm);
+  font-size: var(--font-size-caption);
 }
 .field-select-trigger[data-size='md'] {
   min-height: var(--control-height);
@@ -2890,6 +2892,7 @@ button.list-row:where(:not(:disabled)):hover {
 .text-field[data-size='sm'] {
   min-height: var(--control-height-sm);
   padding: var(--control-padding-sm);
+  font-size: var(--font-size-caption);
 }
 .text-field[data-size='md'] {
   min-height: var(--control-height);

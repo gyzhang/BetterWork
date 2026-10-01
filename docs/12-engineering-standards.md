@@ -17,7 +17,8 @@
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | Vitest **功能档并发 → 重档串行**两次独立调用（`--project functional`，然后 `--project heavy`），断言行为是否正确；重档收录单文件墙钟 ≥20s 的文件，判据见 §9 |
 | `npm run bench` | Vitest **计时基准档**（`--project bench`）：串行跑 `*.bench.test.ts`，断言墙钟与内存预算 |
-| `npm run verify` | lint + format:check + typecheck + `npm test` + build，任一失败即中止 |
+| `npm run ui:check` | 独立 Electron 合成页面的真实渲染：全部正式色系明暗 × 760/1380px，检查骨架、三档控件自然高度、菜单定位、焦点环与模态 Tab/Esc/焦点归还；截图/读数放临时目录 |
+| `npm run verify` | lint + format:check + typecheck + `npm test` + build + ui:check，任一失败即中止 |
 
 提交前必须跑 `npm run verify`。**不要**把它的输出接管道后只看末尾——`cmd | tail` 的退出码是 `tail` 的，会把失败读成成功。需要截取输出时用 `npm run verify > log 2>&1; echo $?`。
 
@@ -163,6 +164,8 @@ standards/
 
 **组件基座纪律不在本文复述**：按钮、卡片、列表行、区块头、导航、表单字段、页签、徽标、空态、模态、浮层菜单、折叠披露、图标按钮、动作条、busy 按钮、开关、文本提示、消息块与输入区等「一律用哪个基座、哪几档、护栏锁什么」，唯一真相源是 [UI/UX 体系 §10.1 组件台账](10-ui-ux-system.md)。写 UI 前先查台账，缺基座时先补基座再接页面，不得就地自造同类控件。
 
+新增页面检查实际 JSX 返回分支和组件使用关系，支持命名导入别名与合法包装，不把未使用 import 当成复用证据。跨文件护栏同时检查新命名 CSS 表面的所有者、页面额外版心与逐主题 Token 契约；检测器及违规变异用例放在 `standards/`，由 `coding-standard.test.ts` 接入全仓扫描，例外仍在该文件按用途登记。内联样式采用 TypeScript 语法树检查，未知表达式默认不能充当绕过通道；动态浮层位置和成果排版按精确出口处理。ESLint 的 Renderer 规则同时禁止非原生元素冒充按钮、要求自定义点击元素的角色/焦点/键盘处理；共享菜单的键盘委托由既有基座承担，规则和行为测试共同验证。
+
 反馈实现必须先按 [UI/UX 体系 §11.5](10-ui-ux-system.md) 路由语义，再选择组件：**三个落点各只有一个出口组件**——短时结果用 `TransientToast`，需要停留且当前对象可行动的错误／警告用 `InlineError`，跨页面可回看的长操作结果才进入消息中心（`NotificationService`）。禁止在 Hook 或页面里另造自动消失计时器、顶部横幅（常驻或固定悬浮皆算）或第三套 Toast——`TransientToast`（局部、自消、不落库）与 `ToastHost`（已持久化通知的投影）是既有的两套，分工见 §11.5.1，不可混用；对象状态本身能表达结果时，不重复制造全局提示。
 
 同一条消息**不得同时占用两个落点**。调用链上最先能承载它的那一层负责呈现，向上传递给另一个通道即视为重复播报。IPC 收口因此二选一（两类处置的形状与清单见 §5 的 Renderer 小节）：调用链上已经有内联／浮层承载这句话的，走「只记录」那一类；这句话还没有任何出口的，走「让用户看见」那一类，由 `reportAction` 的 `onError`、或手写 `catch` 把它交到内联错误条、表单错误与局部浮层之一。**「让用户看见」的出口不必是全局的**——`use-model-settings` 把 `onError` 接在局部 `TransientToast` 上同样合规，判据是「这句话有没有出口」，不是「出口有多大」。
@@ -187,6 +190,7 @@ standards/
 - 测试用真实的 SQLite（`:memory:` 或临时目录）而不是 mock 仓储——本仓已有多次「mock 通过、真实库失败」的教训来源是 schema 与约束。
 - 需要构造非法输入、按下标取断言目标时直接用 `!` 与 `any`，测试文件按角色放宽了这几条规则（见 `eslint.config.mjs` 的 `betterwork/tests` 块）。这是按文件角色划定的单一策略，不是逐文件例外；生产代码不享受。
 - 涉及外部 HTTP 的代码必须注入 `fetch`（或用 `vi.stubGlobal`），测试绝不触网。
+- 真实渲染检查复用生产组件与样式，在独立临时 Chromium 数据目录运行，不挂产品 Preload、不访问 SQLite/模型/网络、不抢桌面焦点。Linux CI 用 Xvfb；仅合成测试进程禁用受 Ubuntu userns/AppArmor 限制的 Chromium OS sandbox，产品窗口仍保持 `sandbox: true`。原生控件对比必须测自然高度，不能用 flex stretch 掩盖差异。`npm run ui:check -- --probe-control-height` 只改临时构建 CSS，预期失败且退出码 1，用于证明门禁能拦住退化。它是结构/交互冒烟与截图产出，不能替代整页视觉快照差异审阅、屏幕阅读器和真实 Run 验收。
 - 断言窗口广播时必须区分 channel：同一个 `webContents.send` 同时承载 Run 事件与通知事件，只按 `type` 断言会把两者混在一起。
 - 依赖重型动态导入的用例（PDF / DOCX 解析）要显式提高超时，冷缓存下的首次转换会超过默认 5 秒。
 - **墙钟与内存预算断言只允许住在 `*.bench.test.ts`，由 `npm run bench` 串行跑，不进 `npm run verify`**。原因不是性能不好，而是门禁不可信：137 个测试文件并发抢核时，同一份代码的 p95 会漂到 1.5–5 倍（2026-09-26 实测连跑四轮，红项组合每次都变；串行档里 p95 303ms，预算 1s）。随机红的门禁下一个被牺牲的永远是门禁本身。挪进串行档的同时保留三件事：样本值每次照旧打印、阈值一格没放宽、护栏锁「功能档里不得出现 `performance.now()`」，防止新的计时断言悄悄混回提交门禁。

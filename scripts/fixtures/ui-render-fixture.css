@@ -1,0 +1,12 @@
+/* 测试宿主只提供窗口高度，页面与控件几何全部消费生产样式。 */
+.fixture-main {
+  display: flex;
+  min-width: 0;
+  height: 100vh;
+}
+
+.fixture-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

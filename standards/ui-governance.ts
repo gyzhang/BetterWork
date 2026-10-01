@@ -1,0 +1,432 @@
+import path from 'node:path';
+
+import ts from 'typescript';
+
+export interface CssDeclaration {
+  selector: string;
+  property: string;
+  value: string;
+  line: number;
+}
+
+/** 注释等长替换；保留媒体查询上下文与原始行号，供所有 CSS 护栏共用。 */
+export function parseCssDeclarations(css: string): CssDeclaration[] {
+  const source = css.replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, ' '));
+  const declarations: CssDeclaration[] = [];
+  const selectorStack: string[] = [];
+  let buffer = '';
+  let line = 1;
+  for (const char of source) {
+    if (char === '\n') {
+      line += 1;
+      buffer += char;
+      continue;
+    }
+    if (char === '{') {
+      selectorStack.push(buffer.trim().replace(/\s+/g, ' '));
+      buffer = '';
+      continue;
+    }
+    if (char === '}') {
+      selectorStack.pop();
+      buffer = '';
+      continue;
+    }
+    if (char === ';') {
+      const declaration = buffer.trim();
+      const colon = declaration.indexOf(':');
+      if (colon > 0 && selectorStack.length > 0) {
+        declarations.push({
+          selector: selectorStack.join(' '),
+          property: declaration.slice(0, colon).trim(),
+          value: declaration.slice(colon + 1).trim(),
+          line,
+        });
+      }
+      buffer = '';
+      continue;
+    }
+    buffer += char;
+  }
+  return declarations;
+}
+
+function selectorsOf(selector: string): string[] {
+  return selector
+    .replace(/@[^{}]*?(?=\.[\w-]|:root|::)/g, '')
+    .split(',')
+    .map((part) => part.trim());
+}
+
+/** 按完整选择器合并声明，不依赖 card/badge 等类名后缀。 */
+export function surfaceShellSelectors(declarations: readonly CssDeclaration[]): string[] {
+  const properties = new Map<string, Set<string>>();
+  for (const declaration of declarations) {
+    if (declaration.property.startsWith('--')) continue;
+    for (const selector of selectorsOf(declaration.selector)) {
+      const seen = properties.get(selector) ?? new Set<string>();
+      seen.add(declaration.property);
+      properties.set(selector, seen);
+    }
+  }
+  return [...properties]
+    .filter(([, props]) => {
+      const background = props.has('background') || props.has('background-color');
+      const radius = props.has('border-radius');
+      const shell = [...props].some((prop) => /^padding(?:-|$)/u.test(prop)) || props.has('border');
+      return background && radius && shell;
+    })
+    .map(([selector]) => selector)
+    .sort();
+}
+
+export function fixedMaxWidthSelectors(declarations: readonly CssDeclaration[]): string[] {
+  return [
+    ...new Set(
+      declarations
+        .filter((item) => item.property === 'max-width' && /\d+(?:\.\d+)?px/u.test(item.value))
+        .flatMap((item) => selectorsOf(item.selector)),
+    ),
+  ].sort();
+}
+
+export function themeTokenIssues(
+  declarations: readonly CssDeclaration[],
+  schemes: readonly string[],
+  tokens: readonly string[],
+): string[] {
+  const issues: string[] = [];
+  for (const scheme of schemes) {
+    for (const mode of ['light', 'dark']) {
+      const selector = `:root[data-theme='${mode}'][data-scheme='${scheme}']`;
+      const items = declarations.filter(
+        (item) => selectorsOf(item.selector).includes(selector) && item.property.startsWith('--'),
+      );
+      for (const token of tokens) {
+        const count = items.filter((item) => item.property === token).length;
+        if (count !== 1) issues.push(`${selector} ${token}: 定义 ${count} 次，应为 1 次`);
+      }
+      for (const item of items) {
+        if (!tokens.includes(item.property))
+          issues.push(`${selector} 未登记 Token ${item.property}`);
+      }
+    }
+  }
+  const actual = new Set(
+    declarations
+      .flatMap((item) => selectorsOf(item.selector))
+      .filter((selector) => /^:root\[data-theme=.*\[data-scheme=/u.test(selector)),
+  );
+  const expected = new Set(
+    schemes.flatMap((scheme) =>
+      ['light', 'dark'].map((mode) => `:root[data-theme='${mode}'][data-scheme='${scheme}']`),
+    ),
+  );
+  for (const selector of actual)
+    if (!expected.has(selector)) issues.push(`未登记主题变体 ${selector}`);
+  return issues;
+}
+
+export interface UiSource {
+  file: string;
+  text: string;
+}
+
+export interface InlineStyleOutlet {
+  file: string;
+  tag: string;
+  className?: string;
+  attribute: string;
+  expression: string;
+  reason: string;
+}
+
+function compact(text: string): string {
+  return text.replace(/\s+/gu, '');
+}
+
+function expressionText(node: ts.Expression, source: ts.SourceFile): string {
+  let expression = node;
+  while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
+  return expression.getText(source);
+}
+
+/** style 的值可以是对象、变量、条件或展开式；未登记的出口一律进入审阅。 */
+export function inlineStyleIssues(
+  source: UiSource,
+  outlets: readonly InlineStyleOutlet[],
+): string[] {
+  const file = ts.createSourceFile(
+    source.file,
+    source.text,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const issues: string[] = [];
+  function visit(node: ts.Node): void {
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const tag = node.tagName.getText(file);
+      const classAttribute = node.attributes.properties.find(
+        (attr) => ts.isJsxAttribute(attr) && attr.name.getText(file) === 'className',
+      );
+      const className =
+        classAttribute &&
+        ts.isJsxAttribute(classAttribute) &&
+        classAttribute.initializer &&
+        ts.isStringLiteral(classAttribute.initializer)
+          ? classAttribute.initializer.text
+          : undefined;
+      for (const attr of node.attributes.properties) {
+        if (
+          ts.isJsxAttribute(attr) &&
+          ['style', 'customStyle', 'codeTagProps'].includes(attr.name.getText(file))
+        ) {
+          const attribute = attr.name.getText(file);
+          const expression =
+            attr.initializer && ts.isJsxExpression(attr.initializer)
+              ? (attr.initializer.expression?.getText(file) ?? '')
+              : (attr.initializer?.getText(file) ?? '');
+          if (
+            !outlets.some(
+              (outlet) =>
+                outlet.file === source.file &&
+                outlet.tag === tag &&
+                outlet.className === className &&
+                outlet.attribute === attribute &&
+                compact(outlet.expression) === compact(expression),
+            )
+          ) {
+            const line = file.getLineAndCharacterOfPosition(attr.getStart(file)).line + 1;
+            issues.push(`${source.file}:${line} <${tag}> ${attribute} 未登记：${expression}`);
+          }
+        } else if (ts.isJsxSpreadAttribute(attr)) {
+          if (
+            outlets.some(
+              (outlet) =>
+                outlet.file === source.file &&
+                outlet.tag === tag &&
+                outlet.className === className &&
+                outlet.attribute === 'spread' &&
+                compact(outlet.expression) === compact(expressionText(attr.expression, file)),
+            )
+          )
+            continue;
+          function inspectSpread(part: ts.Node): void {
+            if (
+              ts.isPropertyAssignment(part) &&
+              ['style', 'customStyle'].includes(part.name.getText(file).replace(/['"]/gu, ''))
+            ) {
+              issues.push(
+                `${source.file}:${file.getLineAndCharacterOfPosition(part.getStart(file)).line + 1} 展开属性包含未登记 style`,
+              );
+            }
+            ts.forEachChild(part, inspectSpread);
+          }
+          inspectSpread(attr.expression);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(file);
+  return issues;
+}
+
+export interface PageShapeException {
+  file: string;
+  component: string;
+  required: readonly string[];
+  reason: string;
+}
+
+interface ComponentBody {
+  key: string;
+  source: ts.SourceFile;
+  expressions: readonly ts.Expression[];
+  exported: boolean;
+}
+
+function returnBranches(expression: ts.Expression): ts.Expression[] {
+  if (ts.isParenthesizedExpression(expression)) return returnBranches(expression.expression);
+  if (ts.isConditionalExpression(expression))
+    return [...returnBranches(expression.whenTrue), ...returnBranches(expression.whenFalse)];
+  return [expression];
+}
+
+/** 跟随返回表达式里的实际组件调用；导入但不渲染、只在点击回调中写 JSX 均不计。 */
+export function pageCompositionIssues(
+  sources: readonly UiSource[],
+  exceptions: readonly PageShapeException[],
+): string[] {
+  const components = new Map<string, ComponentBody>();
+  const imports = new Map<string, Map<string, string>>();
+  const filenames = new Set(sources.map((source) => source.file));
+  for (const input of sources) {
+    const source = ts.createSourceFile(
+      input.file,
+      input.text,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const bindings = new Map<string, string>();
+    const exportedNames = new Set<string>();
+    for (const statement of source.statements) {
+      if (
+        ts.isExportDeclaration(statement) &&
+        !statement.moduleSpecifier &&
+        statement.exportClause &&
+        ts.isNamedExports(statement.exportClause)
+      ) {
+        for (const element of statement.exportClause.elements)
+          exportedNames.add(element.propertyName?.text ?? element.name.text);
+      } else if (ts.isExportAssignment(statement) && ts.isIdentifier(statement.expression))
+        exportedNames.add(statement.expression.text);
+    }
+    function register(
+      name: string,
+      node: ts.FunctionDeclaration | ts.ArrowFunction | ts.FunctionExpression,
+      exported: boolean,
+    ): void {
+      const expressions: ts.Expression[] = [];
+      function returns(part: ts.Node): void {
+        if (part !== node && ts.isFunctionLike(part)) return;
+        if (ts.isReturnStatement(part) && part.expression)
+          expressions.push(...returnBranches(part.expression));
+        ts.forEachChild(part, returns);
+      }
+      if (node.body && !ts.isBlock(node.body)) expressions.push(...returnBranches(node.body));
+      else returns(node);
+      components.set(`${input.file}#${name}`, {
+        key: `${input.file}#${name}`,
+        source,
+        expressions,
+        exported:
+          (exported || exportedNames.has(name)) &&
+          (/^[A-Z]/u.test(name) || Boolean(node.type?.getText(source).includes('JSX.Element'))),
+      });
+    }
+    for (const statement of source.statements) {
+      if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
+        const module = statement.moduleSpecifier.text;
+        if (!module.startsWith('.')) continue;
+        const base = path.posix.normalize(path.posix.join(path.posix.dirname(input.file), module));
+        const target = [base, `${base}.tsx`, `${base}.ts`, `${base}/index.tsx`].find((candidate) =>
+          filenames.has(candidate),
+        );
+        const named = statement.importClause?.namedBindings;
+        if (target && named && ts.isNamedImports(named)) {
+          for (const element of named.elements)
+            bindings.set(
+              element.name.text,
+              `${target}#${element.propertyName?.text ?? element.name.text}`,
+            );
+        }
+      }
+      if (ts.isFunctionDeclaration(statement) && statement.name && statement.body) {
+        register(
+          statement.name.text,
+          statement,
+          statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ??
+            false,
+        );
+      } else if (ts.isVariableStatement(statement)) {
+        for (const declaration of statement.declarationList.declarations) {
+          const init = declaration.initializer;
+          if (
+            ts.isIdentifier(declaration.name) &&
+            init &&
+            (ts.isArrowFunction(init) || ts.isFunctionExpression(init))
+          )
+            register(
+              declaration.name.text,
+              init,
+              statement.modifiers?.some(
+                (modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
+              ) ?? false,
+            );
+        }
+      }
+    }
+    imports.set(input.file, bindings);
+  }
+  function references(expression: ts.Expression, source: ts.SourceFile): string[] {
+    const found: string[] = [];
+    function walk(node: ts.Node): void {
+      if (ts.isJsxAttribute(node) && /^on[A-Z]/u.test(node.name.getText(source))) return;
+      if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+        const name = node.tagName.getText(source);
+        found.push(imports.get(source.fileName)?.get(name) ?? `${source.fileName}#${name}`);
+      }
+      ts.forEachChild(node, walk);
+    }
+    walk(expression);
+    return found;
+  }
+  function rendered(
+    expression: ts.Expression,
+    source: ts.SourceFile,
+    seen: ReadonlySet<string>,
+  ): Set<string> {
+    const result = new Set<string>();
+    for (const key of references(expression, source)) {
+      result.add(key);
+      if (seen.has(key)) continue;
+      const body = components.get(key);
+      if (!body) continue;
+      const next = new Set([...seen, key]);
+      const children = body.expressions.filter(
+        (child) =>
+          child.kind !== ts.SyntaxKind.NullKeyword && child.getText(body.source) !== 'undefined',
+      );
+      const paths = children.map((child) => rendered(child, body.source, next));
+      // 包装组件也必须在所有可见分支满足契约，不能用正常分支掩盖另一分支的自造骨架。
+      const first = paths[0];
+      if (first)
+        for (const item of first) if (paths.every((items) => items.has(item))) result.add(item);
+    }
+    return result;
+  }
+  const issues: string[] = [];
+  const layoutRoot = 'apps/desktop/src/renderer/src/components/layout/';
+  for (const source of sources) {
+    if (
+      source.file.includes('/views/') &&
+      ![...components.values()].some(
+        (component) => component.source.fileName === source.file && component.exported,
+      )
+    )
+      issues.push(
+        `${source.file} 没有可追溯的视图导出入口；页面使用具名函数/函数表达式，纯函数放 lib`,
+      );
+  }
+  for (const body of components.values()) {
+    if (!body.exported || !body.source.fileName.includes('/views/')) continue;
+    const component = body.key.split('#')[1] ?? '';
+    const exception = exceptions.find(
+      (item) => item.file === body.source.fileName && item.component === component,
+    );
+    const required = exception?.required ?? [
+      `${layoutRoot}PageHeader.tsx#PageHeader`,
+      `${layoutRoot}ScrollRegion.tsx#ScrollRegion`,
+    ];
+    let visible = 0;
+    for (const expression of body.expressions) {
+      if (
+        expression.kind === ts.SyntaxKind.NullKeyword ||
+        expression.getText(body.source) === 'undefined'
+      )
+        continue;
+      visible += 1;
+      const used = rendered(expression, body.source, new Set([body.key]));
+      for (const key of required)
+        if (!used.has(key))
+          issues.push(
+            `${body.key}:${body.source.getLineAndCharacterOfPosition(expression.getStart(body.source)).line + 1} 返回分支没有实际使用 ${key}`,
+          );
+    }
+    if (visible === 0) issues.push(`${body.key} 无可追溯的页面返回分支`);
+  }
+  return issues;
+}

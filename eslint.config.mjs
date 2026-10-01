@@ -5,6 +5,30 @@ import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import prettier from 'eslint-config-prettier';
 import globals from 'globals';
 
+// docs/10 §10.1：单加 role/tabIndex 的 div 不能成为另一套按钮出口。
+const interactiveSyntax = [
+  {
+    selector:
+      "JSXOpeningElement[name.name=/^[a-z]/][name.name!='button'][name.name!='input'][name.name!='a']:has(JSXAttribute[name.name='role'][value.value='button'])",
+    message: '按钮请复用 Button/IconButton 等原生语义基座，不用非原生元素冒充按钮。',
+  },
+  {
+    selector:
+      "JSXOpeningElement[name.name=/^[a-z]/][name.name!='button'][name.name!='input'][name.name!='a'][name.name!='summary']:has(JSXAttribute[name.name='onClick']):not(:has(JSXAttribute[name.name='role']))",
+    message: '自定义点击元素必须有明确交互角色；默认复用原生语义基座。',
+  },
+  {
+    selector:
+      "JSXOpeningElement[name.name=/^[a-z]/][name.name!='button'][name.name!='input'][name.name!='a'][name.name!='summary']:has(JSXAttribute[name.name='onClick']):not(:has(JSXAttribute[name.name='tabIndex']))",
+    message: '自定义点击元素必须可通过键盘聚焦。',
+  },
+];
+const keyboardSyntax = {
+  selector:
+    "JSXOpeningElement[name.name=/^[a-z]/][name.name!='button'][name.name!='input'][name.name!='a'][name.name!='summary']:has(JSXAttribute[name.name='onClick']):not(:has(JSXAttribute[name.name='onKeyDown'])):not(:has(JSXAttribute[name.name='onKeyUp']))",
+  message: '自定义点击元素必须有键盘激活处理；默认复用原生语义基座。',
+};
+
 /**
  * 全仓唯一的代码质量规范。任何新增或修改的代码都必须通过本配置，
  * 不允许在单个文件里用 eslint-disable 之外的方式另立标准。
@@ -128,6 +152,7 @@ export default tseslint.config(
     },
     plugins: { 'react-hooks': reactHooks },
     rules: {
+      'no-restricted-syntax': ['error', ...interactiveSyntax, keyboardSyntax],
       // 只启用能捕获真实缺陷的 Hooks 规则。
       // React Compiler 的优化类规则（use-memo、gating、preserve-manual-memoization 等）
       // 以「启用编译器自动记忆化」为前提，本项目未启用编译器，
@@ -148,6 +173,22 @@ export default tseslint.config(
       'react-hooks/unsupported-syntax': 'off',
       'react-hooks/config': 'off',
       'react-hooks/gating': 'off',
+    },
+  },
+
+  {
+    name: 'betterwork/delegated-menu-keyboard',
+    files: ['apps/desktop/src/renderer/src/components/PopoverMenu.tsx'],
+    rules: {
+      // 菜单容器处理 Enter/Space，条目负责焦点与点击；只豁免本基座的 menuitem。
+      'no-restricted-syntax': [
+        'error',
+        ...interactiveSyntax,
+        {
+          ...keyboardSyntax,
+          selector: `${keyboardSyntax.selector}:not(:has(JSXAttribute[name.name='role'][value.value='menuitem']))`,
+        },
+      ],
     },
   },
 

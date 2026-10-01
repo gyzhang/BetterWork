@@ -342,8 +342,8 @@ UI Foundation 首批提供四套成对色系：
 组件只能消费语义 Token，不直接绑定某套主题的色值。最小契约包括：
 
 - 品牌：`brand`、`brand-hover`、`brand-soft`、`on-brand`
-- 画布与表面：`canvas`、`surface`、`surface-raised`、`overlay`
-- 文本：`text-primary`、`text-secondary`、`text-muted`、`text-on-dark`
+- 画布与表面：`canvas`、`surface`、`surface-raised`、`surface-hover`、`overlay`
+- 文本：`text-primary`、`text-secondary`、`text-muted`、`on-danger`（品牌底前景用上行的 `on-brand`）
 - 边界与输入：`border`、`border-subtle`、`input-border`、`focus-ring`
 - 状态：`success`、`warning`、`danger`、`info` 及其柔和背景；实心危险按钮另带 `danger-hover` 作为 hover 背景，浅色 Variant 向暗取、深色 Variant 向亮取，与 `brand-hover` 同向
 - 专用区域：`sidebar`、`composer`、`selection`、`scrollbar`
@@ -494,6 +494,8 @@ UI Foundation 首批提供四套成对色系：
 
 ### 9.10 控件几何与浮层字号
 
+**单行控件的真实高度也要一致**：Button、TextField 与 FieldSelect 同档时共用 `--line-height-normal`，sm 文字统一 `--font-size-caption`，md/lg 统一 `--font-size-body`。高度表给的是最小命中区；实际高度还受字号、行高、内距与边框影响，不能只比较 `min-height` 就宣称等高。2026-10-01 真实渲染发现 md 输入框 33.5px、按钮 32px：不仅按钮沿用默认行高，md 字号也曾为 12px、输入/选择为 13px。统一同档字号与行高后再比较自然高度（不能用 flex stretch 把差异遮住）；多行 TextArea 仍由 rows 与内容决定高度。
+
 控件的边框、圆角与高度必须来自 `:root` 的 `--control-*` 档位，禁止各视图各写一遍——同一类控件在不同页面上长得不一样，就是「界面看着不统一」最直接的来源。
 
 | Token | 值 | 用在哪 |
@@ -603,6 +605,14 @@ UI Foundation 首批提供四套成对色系：
 ## 10. 组件体系
 
 ### 10.1 组件台账与基座纪律
+
+**新增页面的最短路径（2026-10-01）**：先查本节台账，选普通页面或设置内嵌分区；普通页面的每个可见返回分支必须实际组合 `PageHeader` 与 `ScrollRegion`，可以经本地或相对导入的包装组件组合，不能只导入不用。有工具栏用 `PageToolbar`，集合布局用 `ViewContainer`，正文列用既有 `.page-body`。设置外壳沿用 `SettingsPage`，设置内嵌分区用 `SectionHeader`；特殊形态按导出入口和理由登记，禁止新页面自行登记成特殊形态来省略基座。先复用控件、卡片/行、徽标、空态与 §11.5 的反馈出口，已有组件缺能力时补已有组件的变体或槽位，不在页面再造同类控件。最后验证长文本、空/错/忙状态、键盘与明暗主题。
+
+**新名字也受基座纪律约束**：CSS 表面的背景＋圆角＋内距（或边框）组合需要明确的基座/领域表面所有者，不以类名后缀决定是否检查；同一选择器分开声明也合并检查。现有独特的领域表面按用途登记，新增普通卡片与只读徽标继续走 `Card`／`ListRow`／`Badge`，不能用裸内距绕过表面 Token 登记。页面不得另设 `max-width` 版心；合法的固定列、浮层与成果文档排版仍按原有用途处理。
+
+**内联 style 不是几何的第二个出口**：应用 UI 的字号、行高、间距、内距、圆角和尺寸放在样式表并接受原有 Token/档位护栏，不允许借对象、变量、条件分支或展开运算绕开。只保留精确登记的动态浮层定位、工作空间语义色，以及成果文档的自有排版；登记按文件、元素、属性/表达式及理由核对，不能整文件豁免。自定义可点击元素默认改用原生语义基座，单加 `role="button"` 与 `tabIndex` 不等于键盘可用；菜单项的父级键盘委托是已有 `PopoverMenu` 基座的特例。
+
+**主题完整性逐套验**：§9.3 的语义色 Token 必须在每个正式色系的 light/dark 块中各有定义；全局几何、动效与工作空间身份色不混入这个集合。新增 Token 当场补齐所有正式变体，删除单套定义或所有套同时漏掉契约项都应失败。
 
 - AppShell、TitleBar、Sidebar、SidebarItem、TaskListItem
 - TaskHeader、Composer、MessageBlock、ConfirmationBlock

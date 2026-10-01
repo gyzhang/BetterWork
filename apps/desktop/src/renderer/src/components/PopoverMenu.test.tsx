@@ -111,10 +111,11 @@ describe('PopoverMenu', () => {
     const firstItem = screen.getByRole('menuitem', { name: '技能一' });
     expect(document.activeElement).toBe(firstItem);
 
-    // 关闭后归还焦点由组件卸载副作用处理——模拟 open=false 触发 unmount。
+    // 受控关闭移除 portal，但组件仍挂载；焦点必须回到原触发器。
     rerender(<Wrapper open={false} onDismiss={onDismiss} onSelect={onSelect} />);
     // portal 已移除
     expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 
   it('closes on Escape', () => {
@@ -123,6 +124,21 @@ describe('PopoverMenu', () => {
     const menu = screen.getByRole('menu');
     fireEvent.keyDown(menu, { key: 'Escape' });
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('items 更新不归还或重置焦点，真正关闭才归还', () => {
+    const onDismiss = vi.fn();
+    const onSelect = vi.fn();
+    const { rerender } = render(<Wrapper open={true} onDismiss={onDismiss} onSelect={onSelect} />);
+    const trigger = screen.getByRole('button', { name: '打开菜单' });
+    const menu = screen.getByRole('menu');
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    const second = screen.getByRole('menuitem', { name: '技能二' });
+    expect(document.activeElement).toBe(second);
+    rerender(<Wrapper open={true} items={[...ITEMS]} onDismiss={onDismiss} onSelect={onSelect} />);
+    expect(document.activeElement).toBe(second);
+    rerender(<Wrapper open={false} onDismiss={onDismiss} onSelect={onSelect} />);
+    expect(document.activeElement).toBe(trigger);
   });
 
   it('closes on backdrop click', () => {

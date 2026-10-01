@@ -21,4 +21,5 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run verify
+      # Electron 真实渲染检查需要显示服务；只在 CI 使用独立虚拟显示。
+      - run: xvfb-run --auto-servernum npm run verify

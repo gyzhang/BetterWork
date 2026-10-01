@@ -26,6 +26,7 @@
     "apps/**/*.tsx",
     "packages/**/*.ts",
     "scripts/**/*.ts",
+    "scripts/**/*.tsx",
     "standards/**/*.ts",
     "*.ts"
   ]

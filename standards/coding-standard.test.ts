@@ -5,6 +5,229 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
+import { colorSchemes } from '../apps/desktop/src/renderer/src/appearance';
+import {
+  type CssDeclaration,
+  fixedMaxWidthSelectors,
+  inlineStyleIssues,
+  type InlineStyleOutlet,
+  pageCompositionIssues,
+  type PageShapeException,
+  parseCssDeclarations,
+  surfaceShellSelectors,
+  themeTokenIssues,
+} from './ui-governance';
+
+/** docs/10 §10.1：内嵌设置分区沿用宿主骨架，不另造普通管理页。 */
+const PAGE_SHAPE_EXCEPTIONS: readonly PageShapeException[] = [
+  {
+    file: 'apps/desktop/src/renderer/src/views/SettingsView.tsx',
+    component: 'SettingsPage',
+    required: [
+      'apps/desktop/src/renderer/src/components/NavList.tsx#NavList',
+      'apps/desktop/src/renderer/src/components/SectionHeader.tsx#SectionHeader',
+    ],
+    reason: '设置已有独立二级导航与分区标题，滚动归设置宿主/内嵌列表',
+  },
+  {
+    file: 'apps/desktop/src/renderer/src/views/SettingsView.tsx',
+    component: 'SearchSettings',
+    required: ['apps/desktop/src/renderer/src/components/SectionHeader.tsx#SectionHeader'],
+    reason: '搜索配置是设置宿主内嵌分区',
+  },
+  {
+    file: 'apps/desktop/src/renderer/src/views/MemoryView.tsx',
+    component: 'MemoryPage',
+    required: [
+      'apps/desktop/src/renderer/src/components/SectionHeader.tsx#SectionHeader',
+      'apps/desktop/src/renderer/src/components/layout/ScrollRegion.tsx#ScrollRegion',
+    ],
+    reason: '记忆位于设置宿主内；分区标题和内部列表滚动仍使用基座',
+  },
+];
+
+/** 只登记精确的运行时样式出口；同文件的另一元素或多一个属性均不自动放行。 */
+const INLINE_STYLE_OUTLETS: readonly InlineStyleOutlet[] = [
+  {
+    file: 'apps/desktop/src/renderer/src/components/NavList.tsx',
+    tag: 'span',
+    className: 'nav-item-icon',
+    attribute: 'spread',
+    expression: 'iconColor ? { style: { color: iconColor } } : {}',
+    reason: 'NavItem 的工作空间语义身份色通过条件属性展开',
+  },
+  {
+    file: 'apps/desktop/src/renderer/src/notifications.tsx',
+    tag: 'section',
+    className: 'notification-panel',
+    attribute: 'style',
+    expression: '{ left: position.left, top: position.top, maxHeight: position.maxHeight, }',
+    reason: '消息中心依据触发器与窗口实时定位/限高',
+  },
+  {
+    file: 'apps/desktop/src/renderer/src/components/PopoverMenu.tsx',
+    tag: 'div',
+    className: 'popover-menu',
+    attribute: 'style',
+    expression:
+      'position ? { ...position, ...(anchorFontSize ? { fontSize: anchorFontSize } : {}) } : undefined',
+    reason: '菜单的动态定位与锚点计算字号，行为契约已有测试',
+  },
+  {
+    file: 'apps/desktop/src/renderer/src/components/Tooltip.tsx',
+    tag: 'div',
+    className: 'tooltip',
+    attribute: 'style',
+    expression: 'position',
+    reason: '提示浮层依据真实锚点尺寸实时定位',
+  },
+  {
+    file: 'apps/desktop/src/renderer/src/components/WorkspaceIdentityDialog.tsx',
+    tag: 'span',
+    className: 'workspace-accent-swatch',
+    attribute: 'style',
+    expression: '{ background: workspaceAccentVar(accent.id) }',
+    reason: '工作空间语义色预览',
+  },
+  {
+    file: 'apps/desktop/src/renderer/src/components/WorkspaceIdentityDialog.tsx',
+    tag: 'span',
+    attribute: 'style',
+    expression: '{ color: accent }',
+    reason: '工作空间身份草稿的语义色',
+  },
+  {
+    file: 'apps/desktop/src/renderer/src/components/WorkspaceGroupList.tsx',
+    tag: 'span',
+    attribute: 'style',
+    expression: '{ color: workspaceAccentVar(group.workspace.accentId) }',
+    reason: '工作空间树的语义身份色',
+  },
+  {
+    file: 'apps/desktop/src/renderer/src/components/WorkspaceSelector.tsx',
+    tag: 'span',
+    attribute: 'style',
+    expression: '{ color: workspaceAccentVar(workspace.accentId) }',
+    reason: '工作空间选择器的语义身份色',
+  },
+  {
+    file: 'apps/desktop/src/renderer/src/markdown-preview.tsx',
+    tag: 'SyntaxHighlighter',
+    attribute: 'style',
+    expression: 'getTheme()',
+    reason: '成果代码排版的高亮主题',
+  },
+  {
+    file: 'apps/desktop/src/renderer/src/markdown-preview.tsx',
+    tag: 'SyntaxHighlighter',
+    attribute: 'customStyle',
+    expression: "{ background: 'transparent', padding: 0, margin: 0 }",
+    reason: '成果代码块交还宿主背景与内距',
+  },
+  {
+    file: 'apps/desktop/src/renderer/src/markdown-preview.tsx',
+    tag: 'SyntaxHighlighter',
+    attribute: 'codeTagProps',
+    expression: "{ style: { font: 'inherit' } }",
+    reason: '成果代码文字继承宿主排版',
+  },
+];
+
+/** 已有表面 Token 登记复用 SURFACE_PADDING；这里仅补控件与独特领域表面。 */
+const SURFACE_SHELL_OWNERS: readonly { selector: string; reason: string }[] = [
+  { selector: '.activity-summary', reason: 'RunSummaryRow 的整体活动摘要' },
+  { selector: '.artifact-thumbnail-item', reason: '成果缩略图的原生按钮' },
+  { selector: '.badge', reason: 'Badge 基座' },
+  { selector: '.binding-chip', reason: 'BindingChip 可移除绑定基座' },
+  { selector: '.binding-chip-remove', reason: 'BindingChip 的移除命中区' },
+  { selector: '.composer', reason: 'Composer 基座' },
+  { selector: '.composer-footer kbd', reason: '键盘快捷键图形标识' },
+  { selector: '.dependency-operation', reason: '技能依赖执行记录，非普通卡片' },
+  { selector: '.discussion-checkpoint-history span', reason: '讨论节点修订历史标识' },
+  { selector: '.evidence-preview', reason: '上下文来源正文预览' },
+  { selector: '.field-select-trigger', reason: 'FieldSelect 基座' },
+  { selector: '.icon-button', reason: 'IconButton 基座' },
+  { selector: '.knowledge-admin-toggle', reason: '知识管理分区触发按钮' },
+  { selector: '.markdown-preview', reason: '成果 Markdown 文档排版' },
+  { selector: '.markdown-preview pre', reason: '成果代码排版' },
+  { selector: '.memory-conflict-bodies > div', reason: '冲突两侧内容并排预览，非目录卡片' },
+  { selector: '.memory-policy-pinned', reason: '记忆政策的固定状态容器' },
+  { selector: '.message.assistant .markdown-preview', reason: 'MessageBlock 内文档去外壳排版' },
+  { selector: '.nav-item', reason: 'NavItem 基座' },
+  { selector: '.notification-badge', reason: '未读数图形标识' },
+  { selector: '.popover-menu', reason: 'PopoverMenu 基座' },
+  { selector: '.single-select-picker-option', reason: 'SingleSelectPicker 选项基座' },
+  { selector: '.slide-viewer-image', reason: '成果幻灯片图像的中性衬底' },
+  { selector: '.switch-track', reason: 'Switch 基座' },
+  { selector: '.tabs button', reason: 'Tabs 基座' },
+  { selector: '.text-area', reason: 'TextArea 基座' },
+  { selector: '.text-field', reason: 'TextField 基座' },
+  { selector: '.tool-activity-toggle', reason: 'ToolActivity 基座触发按钮' },
+  { selector: '.tool-field pre', reason: '工具结构化结果的代码排版' },
+  { selector: '.tool-pill', reason: '工具调用原生按钮，非只读徽标' },
+  { selector: '.tooltip', reason: 'Tooltip 基座' },
+  { selector: '.work-count', reason: '上下文成果数量图形标识' },
+  { selector: '.workspace-selector-action', reason: 'WorkspaceSelector 内原生动作按钮' },
+  { selector: '.workspace-selector-trigger', reason: 'WorkspaceSelector 原生触发按钮' },
+  { selector: '::-webkit-scrollbar-thumb', reason: '平台滚动条绘制' },
+];
+
+/** 限宽可以属于提示/浮层/文档，不能成为新页面的第二版心。 */
+const FIXED_MAX_WIDTH_OWNERS: readonly { selector: string; reason: string }[] = [
+  { selector: '.binding-chip', reason: '绑定片宽度上限' },
+  { selector: '.binding-chip .field-select-trigger', reason: '绑定片内的选择器' },
+  { selector: '.binding-chip-label', reason: '绑定名称截断' },
+  { selector: '.empty-page', reason: '居中空态文本行长' },
+  { selector: '.error-page p', reason: '错误说明行长' },
+  { selector: '.knowledge-admin-profile .field-select-trigger', reason: '索引管理中的模型选择器' },
+  { selector: '.mcp-editor', reason: '设置内 MCP 编辑表单' },
+  { selector: '.page-intro', reason: '页面引导文案的行长' },
+  { selector: '.popover-menu', reason: '锚定菜单碰撞约束' },
+  { selector: '.search-settings .search-form', reason: '设置内搜索配置表单' },
+  {
+    selector: ".section-header[data-variant='block'] .section-header-hint",
+    reason: '设置分区帮助文案的行长',
+  },
+  { selector: '.tooltip', reason: '提示浮层行长' },
+  { selector: '.welcome', reason: '欢迎页独立展示块，非管理页版心' },
+  { selector: '.welcome > p:last-of-type', reason: '欢迎页说明行长' },
+  { selector: '.workspace-selector-name', reason: '工作空间名称截断' },
+];
+
+/** docs/10 §9.3：固定语义集合，不能从当前 CSS 推导而把所有变体同时漏项读成成功。 */
+const THEME_COLOR_TOKENS = [
+  '--canvas',
+  '--surface',
+  '--surface-raised',
+  '--surface-hover',
+  '--overlay',
+  '--sidebar',
+  '--composer',
+  '--text-primary',
+  '--text-secondary',
+  '--text-muted',
+  '--on-danger',
+  '--border',
+  '--border-subtle',
+  '--input-border',
+  '--focus-ring',
+  '--brand',
+  '--brand-hover',
+  '--brand-soft',
+  '--on-brand',
+  '--selection',
+  '--success',
+  '--success-soft',
+  '--danger',
+  '--danger-hover',
+  '--danger-soft',
+  '--scrollbar',
+  '--warning',
+  '--warning-soft',
+  '--info',
+  '--info-soft',
+] as const;
+
 /**
  * 规范护栏。
  *
@@ -68,59 +291,6 @@ function importSpecifiers(source: string): string[] {
   return [...source.matchAll(/from\s*'([^']+)'/g), ...source.matchAll(/^\s*import\s*'([^']+)'/gm)]
     .map((match) => match[1] ?? '')
     .filter((specifier) => specifier.length > 0);
-}
-
-interface CssDeclaration {
-  selector: string;
-  property: string;
-  value: string;
-  line: number;
-}
-
-/**
- * 最小 CSS 声明扫描器：只关心「哪个选择器块里写了哪条声明」，
- * 保留行号以便失败时能直接定位，并且保留 `@media` 等外层块作为选择器前缀。
- */
-function parseCssDeclarations(css: string): CssDeclaration[] {
-  // 注释按等长空白替换，行号因此与源文件保持一致。
-  const source = css.replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, ' '));
-  const declarations: CssDeclaration[] = [];
-  const selectorStack: string[] = [];
-  let buffer = '';
-  let line = 1;
-  for (const char of source) {
-    if (char === '\n') {
-      line += 1;
-      buffer += char;
-      continue;
-    }
-    if (char === '{') {
-      selectorStack.push(buffer.trim().replace(/\s+/g, ' '));
-      buffer = '';
-      continue;
-    }
-    if (char === '}') {
-      selectorStack.pop();
-      buffer = '';
-      continue;
-    }
-    if (char === ';') {
-      const declaration = buffer.trim();
-      const colon = declaration.indexOf(':');
-      if (colon > 0 && selectorStack.length > 0) {
-        declarations.push({
-          selector: selectorStack.join(' '),
-          property: declaration.slice(0, colon).trim(),
-          value: declaration.slice(colon + 1).trim(),
-          line,
-        });
-      }
-      buffer = '';
-      continue;
-    }
-    buffer += char;
-  }
-  return declarations;
 }
 
 const declarationCache = new Map<string, CssDeclaration[]>();
@@ -5091,6 +5261,65 @@ describe('设置页纵向间距由容器 gap 拥有', () => {
     expect(
       childMarginRules,
       '.settings-section > 子元素的纵向 margin 会跟容器 gap 叠加——间距由 gap 统一给（docs/10 §9.8）',
+    ).toEqual([]);
+  });
+});
+
+// 2026-10-01 评估中的绕过形态：补正向使用与新名字检查，而不是再堆一批退役类。
+describe('新增 UI 的实际基座归属', () => {
+  const rendererSources = productionPathsUnder('apps/desktop/src/renderer/src/')
+    .filter((file) => file.endsWith('.tsx'))
+    .map((file) => ({ file, text: read(file) }));
+  const declarations = cssPaths().flatMap(declarationsOf);
+
+  it('每个视图入口的可见返回分支实际使用页面骨架', () => {
+    expect(pageCompositionIssues(rendererSources, PAGE_SHAPE_EXCEPTIONS)).toEqual([]);
+    for (const exception of PAGE_SHAPE_EXCEPTIONS) {
+      expect(read(exception.file)).toContain(`export function ${exception.component}`);
+      expect(exception.reason.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('内联样式只有登记过的精确动态出口', () => {
+    expect(
+      rendererSources.flatMap((source) => inlineStyleIssues(source, INLINE_STYLE_OUTLETS)),
+    ).toEqual([]);
+    for (const outlet of INLINE_STYLE_OUTLETS) {
+      const text = read(outlet.file).replace(/\s+/gu, '');
+      expect(text, `已不存在的出口 ${outlet.file} ${outlet.reason}`).toContain(
+        outlet.expression.replace(/\s+/gu, ''),
+      );
+    }
+  });
+
+  it('新命名表面不能自造卡片或徽标外壳', () => {
+    const actual = surfaceShellSelectors(declarations);
+    const shared = SURFACE_PADDING.flatMap((entry) =>
+      entry.selector.split(',').map((selector) => selector.trim()),
+    );
+    const owners = SURFACE_SHELL_OWNERS.map((entry) => entry.selector);
+    expect(
+      actual.filter((selector) => !shared.includes(selector) && !owners.includes(selector)),
+    ).toEqual([]);
+    expect(
+      owners.filter((selector) => !actual.includes(selector)),
+      '表面所有者清单不能留已退役项',
+    ).toEqual([]);
+  });
+
+  it('新的裸 max-width 不能成为第二套页面版心', () => {
+    expect(fixedMaxWidthSelectors(declarations)).toEqual(
+      FIXED_MAX_WIDTH_OWNERS.map((entry) => entry.selector).sort(),
+    );
+  });
+
+  it('每个正式主题变体独立实现完整颜色 Token 契约', () => {
+    expect(
+      themeTokenIssues(
+        declarations,
+        colorSchemes.map((scheme) => scheme.id),
+        THEME_COLOR_TOKENS,
+      ),
     ).toEqual([]);
   });
 });

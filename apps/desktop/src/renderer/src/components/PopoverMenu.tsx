@@ -185,6 +185,15 @@ export function PopoverMenu({
     itemRefs.current[target]?.focus();
   }, [open, items]);
 
+  // 与打开时的聚焦分开：items 更新不能触发归还，关闭或卸载才把焦点交回锚点。
+  useEffect(() => {
+    if (!open) return;
+    const anchor = anchorRef.current;
+    return () => {
+      if (anchor?.isConnected && !anchor.closest('[inert]')) anchor.focus();
+    };
+  }, [open, anchorRef]);
+
   // 键盘导航。
   const handleKeyDown = (event: React.KeyboardEvent): void => {
     if (event.key === 'Escape') {
