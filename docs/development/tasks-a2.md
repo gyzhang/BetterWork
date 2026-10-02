@@ -1,5 +1,8 @@
 # A07–A12：执行器与依赖管理
 
+> 当前范围覆盖：Windows 已随 [ADR-0036](../adr/0036-macos-only-platform-scope.md) 退出范围。原 A09 条款及 Windows 前置仅保留历史设计，不授权实现、不阻塞 macOS 后续卡与验收；保留原证据，不把未测平台标为通过。
+
+
 共同遵守 [执行手册](README.md)、[共享契约](contracts.md) 与 [执行器设计](../designs/skill-executor-and-dependencies.md)。A00 必须提供相关 Proposed 技术方案的实施依据。本文不授权在用户原始环境中安装包。
 
 ## A07 执行协议与持久化生命周期
@@ -24,7 +27,7 @@
 - 验收：实际 macOS 测试展示子孙退出与文件句柄关闭；不给 daemonize 恶意逃逸承诺；用户原 Skill 未执行。
 - 停止条件：无法覆盖普通子进程清理时不得退化为只 kill 父 PID 后继续。
 
-## A09 Windows supervisor
+## A09 Windows supervisor（历史条款，已退出范围）
 
 - 前置：A08 接口稳定。需要可用 Windows 构建/运行环境，不能在 macOS 模拟后写 Windows 已验收。
 - 必读：执行器设计 §8、Microsoft Job Objects 官方资料、A08 结果、统一 helper 规范。
@@ -36,7 +39,7 @@
 
 ## A10 Python 环境准备作业
 
-- 前置：A09，或用户明确允许先行且 A08 已通过；D2 已有实施授权。
+- 前置：A08 已通过；原 A09 前置随 ADR-0036 退出范围，D2 已有实施授权。
 - 必读：执行器设计 §4、contracts §2/3、现有可注入 HTTP 服务测试、docs/12。
 - 目标：基础 Python 定位/探测、专属 venv、环境状态/准备 operation、依赖安装计划执行和恢复。
 - 允许改动：dependency-service、runtime environment/operation 仓储与迁移、下载/安装适配器和 tests；本卡不发布实际二进制制品。
@@ -58,7 +61,7 @@
 
 ## A12 配置/依赖 UI 与 A2 验收
 
-- 前置：A11；Windows 生命周期未验收时只能完成本卡本机部分，A2 不标跨平台完成。
+- 前置：A11；A2 按实际 macOS 证据验收，不要求已退出范围的 Windows 生命周期。
 - 必读：docs/10、A06 的组件/hook、执行器设计 §11，docs/12 §7/8。
 - 目标：Skill 详情可选择解释器/工具链登记项、查看缺项、准备/取消/修复环境；管理动作响应 operationId，进度可回看。
 - 允许改动：依赖 IPC/Preload、use-skills 或单独内聚依赖 hook、配置组件、消息/内联反馈必要接线及 tests。

@@ -1,5 +1,26 @@
 # 推送前跑完整门禁（docs/12 §1）：lint + format:check + typecheck + test + build + ui:check。
 # 为什么放在这一层：Actions 的历史是 28 次 push 红、2 次绿——红全部发生在 main 已经坏了之后。
 # ADR-0036 已定案「不靠远端闸门拦推送」，所以真正的拦截点只能在本地这一段。
-# 判据与覆盖关系由护栏「本地钩子必须覆盖 verify 的完整六步」钉住，改这里要同轮换它。
+# 覆盖关系见 standards/coding-standard.test.ts；实际提交与失败收口见 scripts/pre-push.test.ts。
+set -e
+if [ -n "$(git status --porcelain)" ]; then
+  printf '%s\n' '工作树不干净：先提交本轮改动，再推送；未提交的修复不能替 HEAD 取得绿灯。' >&2
+  exit 1
+fi
+checked_head=$(git rev-parse HEAD)
+while read -r local_ref local_oid remote_ref remote_oid; do
+  # 删除远端引用没有要验证的新提交。
+  case "$local_oid" in
+    0000000000000000000000000000000000000000) continue ;;
+  esac
+  pushed_commit=$(git rev-parse "$local_oid^{commit}" 2>/dev/null) || pushed_commit=''
+  if [ "$pushed_commit" != "$checked_head" ]; then
+    printf '%s\n' '推送对象不是当前 HEAD：先切换到要推送的提交并完成验证，再推送。' >&2
+    exit 1
+  fi
+done
 npm run verify
+if [ "$(git rev-parse HEAD)" != "$checked_head" ] || [ -n "$(git status --porcelain)" ]; then
+  printf '%s\n' '验证期间提交或工作树发生变化：本次推送停止，请在稳定状态重新验证。' >&2
+  exit 1
+fi

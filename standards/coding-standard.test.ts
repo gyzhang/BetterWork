@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { colorSchemes } from '../apps/desktop/src/renderer/src/appearance';
+import { readQoderRuleMetadata } from './agent-rules';
 import {
   componentCatalogIssues,
   type CssDeclaration,
@@ -4792,12 +4793,13 @@ describe('规则与文档索引', () => {
     expect(pipeline).toEqual(['lint', 'format:check', 'typecheck', 'test', 'build', 'ui:check']);
     for (const file of [
       'AGENTS.md',
+      'CONTRIBUTING.md',
       'docs/12-engineering-standards.md',
       'docs/11-qoder-handoff.md',
       '.qoder/rules/betterwork-code-style.md',
       '.qoder/rules/betterwork-dev-cycle.md',
     ]) {
-      const summaries = [...read(file).matchAll(/lint\s*\+\s*format:check(?:\s*\+\s*[\w:]+)+/gu)];
+      const summaries = [...read(file).matchAll(/lint(?:\s*\+\s*[\w:]+)+/gu)];
       expect(summaries.length, `${file} 缺少可核对的门禁摘要`).toBeGreaterThan(0);
       for (const summary of summaries)
         expect(
@@ -4908,6 +4910,7 @@ describe('规则与文档索引', () => {
       (relative) =>
         relative === 'AGENTS.md' ||
         relative === 'README.md' ||
+        relative === 'CONTRIBUTING.md' ||
         /^docs\/[^/]+\.md$/u.test(relative) ||
         /^docs\/(?:development|designs)\/[^/]+\.md$/u.test(relative) ||
         relative.startsWith('.qoder/rules/'),
@@ -4973,52 +4976,40 @@ describe('规则与文档索引', () => {
   });
 
   it('规则文件的触发元数据形状正确', () => {
-    // Qoder 按 frontmatter 决定什么时候把规则喂给模型：`trigger: model_decision` 少了
-    // description，这条规则就永远不会被加载——静默失效比写错更难发现，因为文件看起来是好的，
-    // 而它保护的那个约定从此没人守。触发值只认 `always_on`／`model_decision`／`glob: <模式>`
-    // 三种（`.qoder/rules/betterwork.md` 的场景化规则索引登记的就是这套）。
+    // 官方格式是 trigger: glob + 独立 glob 字段，不是 trigger: glob: <模式>。
+    // 解析仓内明确的 YAML 写法；匹配样本只证明文件路由，不代替 IDE 的实际加载证据。
     const ruleFiles = REPO_FILES.filter(
       (relative) => relative.startsWith('.qoder/rules/') && relative.endsWith('.md'),
     );
     expect(ruleFiles.length, '扫不到规则文件，本条护栏已空跑').toBeGreaterThan(0);
-
     const offenders: string[] = [];
-    let decisionTriggered = 0;
-    let globTriggered = 0;
     for (const file of ruleFiles) {
-      const frontmatter = /^---\n([\s\S]*?)\n---/u.exec(read(file))?.[1];
-      if (!frontmatter) {
-        offenders.push(`${file}: 没有 frontmatter，规则不会被任何场景触发`);
-        continue;
-      }
-      const trigger = (/^trigger:[ \t]*(.*)$/mu.exec(frontmatter)?.[1] ?? '').trim();
-      const description = (/^description:[ \t]*(.*)$/mu.exec(frontmatter)?.[1] ?? '').trim();
-      if (trigger === 'always_on') continue;
-      if (trigger.startsWith('glob:')) {
-        globTriggered += 1;
-        if (trigger.slice('glob:'.length).trim() === '') {
-          offenders.push(`${file}: glob 触发没有写匹配模式，等于永不触发`);
-        }
-        continue;
-      }
-      if (trigger === 'model_decision') {
-        decisionTriggered += 1;
-        // 触发描述是模型唯一的选路依据：空或过短（如「UI」）都不会被可靠命中。
-        if (description.length < 10) {
-          offenders.push(`${file}: model_decision 规则缺 description，模型无从加载它`);
-        }
-        continue;
-      }
-      offenders.push(`${file}: 无法识别的 trigger「${trigger}」`);
+      const metadata = readQoderRuleMetadata(read(file));
+      for (const issue of metadata.issues) offenders.push(`${file}: ${issue}`);
     }
-    expect(
-      decisionTriggered + globTriggered,
-      '既没有按场景也没有按文件触发的规则，本条护栏已空跑',
-    ).toBeGreaterThan(0);
-    expect(
-      offenders,
-      '规则文件必须带可识别的 trigger；model_decision 必须带能选路的 description（.qoder/rules/betterwork.md）',
-    ).toEqual([]);
+    expect(offenders, 'Qoder frontmatter 必须按官方格式登记触发模式与匹配范围').toEqual([]);
+    const samples: Record<string, readonly string[]> = {
+      '.qoder/rules/betterwork-code-style.md': [
+        'packages/example.ts',
+        'apps/desktop/src/renderer/src/App.tsx',
+        'apps/desktop/src/renderer/src/styles.css',
+        'scripts/drift-check.mjs',
+        'package.json',
+      ],
+      '.qoder/rules/betterwork-ui.md': [
+        'apps/desktop/src/renderer/src/hooks/use-example.ts',
+        'apps/desktop/src/renderer/src/views/Example.tsx',
+        'apps/desktop/src/renderer/src/styles.css',
+      ],
+    };
+    for (const [file, paths] of Object.entries(samples)) {
+      const metadata = readQoderRuleMetadata(read(file));
+      for (const sample of paths)
+        expect(
+          metadata.globs.some((glob) => path.matchesGlob(sample, glob)),
+          `${file} → ${sample}`,
+        ).toBe(true);
+    }
   });
 
   it('两个智能体入口都指向同一份工程规范', () => {
@@ -5107,6 +5098,7 @@ describe('规则与文档索引', () => {
     const pointerDocs = [
       'AGENTS.md',
       'README.md',
+      'CONTRIBUTING.md',
       'docs/10-ui-ux-system.md',
       'docs/11-qoder-handoff.md',
       'docs/12-engineering-standards.md',
@@ -5192,6 +5184,7 @@ describe('规则与文档索引', () => {
     const scaleDocs = [
       'AGENTS.md',
       'README.md',
+      'CONTRIBUTING.md',
       'docs/10-ui-ux-system.md',
       'docs/11-qoder-handoff.md',
       'docs/12-engineering-standards.md',

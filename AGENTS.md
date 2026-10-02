@@ -4,6 +4,8 @@
 
 `.qoder/rules/` 下的分层规则由 Qoder 自动加载（常驻铁律 + 按场景触发）；其他编码智能体按下方任务路由读取同一套约束，保持单一规则源。
 
+跨工具共同执行的时间、中文编辑回读与日志纪律，开始任务时读取 [共同纪律](.qoder/rules/betterwork.md)；Codex 不依赖 Qoder 的自动触发元数据，场景细则再按下方路由读取。
+
 **编码规范与风格已经固定，不接受按任务、按目录、按人或按智能体另行约定。** 唯一标准是 [工程规范](docs/12-engineering-standards.md)；`eslint.config.mjs` 与 `.prettierrc.json` 是它的可执行形式，`standards/coding-standard.test.ts` 是它的跨文件结构护栏。三者都在 `npm run verify` 门禁里。无论在 Qoder、Codex 还是其他智能体中工作，遵循的都是同一份：写代码前先读 docs/12 的相关小节，要改规范必须同时改文档、配置与护栏并说明理由，不得只在某一次对话里口头放宽。
 
 ## 任务路由（动手前按类型检查）
@@ -21,6 +23,7 @@
 | 排查缺陷 | GATE-0：先查 SQLite 数据，再看 `/tmp/betterwork-dev.log`，最后才看代码（`.qoder/rules/betterwork-diagnosis.md`） |
 | 范围变化 | 同步更新 [MVP 与路线图](docs/07-mvp-and-roadmap.md)；跨模块关系或关键技术选择新增 ADR |
 | **写任何代码**：目录结构、命名、类型、异步与错误处理、测试约定、lint/format 规则 | [工程规范](docs/12-engineering-standards.md)——全仓唯一规范；`eslint.config.mjs` + `.prettierrc.json` 是它的可执行形式，`standards/coding-standard.test.ts` 是它的结构护栏 |
+| AI+Human 协作、验证交接与推送后 CI 收口 | [工程规范](docs/12-engineering-standards.md) §1.1；人类定需求与方案并最终验收，AI 完成已授权的实现、测试、Review 与证据交接 |
 | 结束一次任务 | 写 `docs/logs/YYYY-MM-DD.md`（模板见 [docs/logs/README.md](docs/logs/README.md)） |
 
 ## 1. 产品北极星

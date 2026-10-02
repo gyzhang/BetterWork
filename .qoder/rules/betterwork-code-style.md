@@ -1,5 +1,11 @@
 ---
-trigger: glob: **/*.ts,tsx,css,mjs,json
+trigger: glob
+glob:
+  - '**/*.ts'
+  - '**/*.tsx'
+  - '**/*.css'
+  - '**/*.mjs'
+  - '**/*.json'
 ---
 
 # 编码规范与风格（速查复述，标准在 docs/12）

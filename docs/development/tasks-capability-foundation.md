@@ -3,7 +3,7 @@
 - 生效：2026-09-20，用户接受 [API tools and remote MCP 设计](../designs/api-tools-and-remote-mcp.md)、[ADR-0024](../adr/0024-api-services-and-credentials.md)、[ADR-0025](../adr/0025-remote-mcp-and-capability-bindings.md) 与 [capability-contracts](capability-contracts.md) 之后，要求以目标为导向拆分开发落地。
 - 决策基线：ADR-0024 与 ADR-0025 目前状态为 **Proposed**。CF12 关闭 M1 时把 ADR-0024 转 Accepted；CF42 关闭 M4 时把 ADR-0025 转 Accepted。之前的卡不把 Proposed 视为已接受。
 - 核对基线：`main` @ `7f78515`，工作树只含本轮设计文档；每张卡开工前重新核对 HEAD、工作树与任务板，不用旧基线覆盖新代码。
-- 平台：本轮 macOS；Windows 保留 A09 未收口的原状态，不扩入围。
+- 平台：本轮 macOS；Windows 按 [ADR-0036](../adr/0036-macos-only-platform-scope.md) 退出范围，A09 原状态仅保留历史记录。
 - 执行方式：串行、一次一张任务卡；遵守 [执行手册](README.md)、[工程规范](../12-engineering-standards.md) 与 [capability-contracts](capability-contracts.md)。不创建第二套规范、lint 配置或测试门禁。
 - 与旧任务的关系：[阶段 A](README.md) 的 A12/A16/A17/A21、[B0](tasks-b0.md) 的 B00-5、[专家计划](tasks-experts.md) 的 E55/E56 是本计划的耦合项；本计划不重复排期、不改写其状态，只在对应里程碑触发其复跑（见 §5 迁移映射）。
 - 验收边界：先验收 API/MCP/Skill 三类能力的技术链路、状态、范围、失败/取消与凭据保护是否自洽；不把示例专家/Skill 的产出业务质量作为功能通过条件。真实业务凭据、外部账号与签名身份缺失时保持 partial 并写明缺项。

@@ -189,20 +189,24 @@ function collectReadings() {
 
 /** 判据被引用的覆盖率：一条谁都没点过名的护栏，等于没人知道它存在。 */
 function collectReferenceReadings() {
-  const titles = new Set();
+  const titles = new Map();
+  const canonicalTitles = new Set();
   let describe = '';
   for (const line of read('standards/coding-standard.test.ts').split('\n')) {
     const describeMatch = /^describe\(\s*'([^']+)'/u.exec(line);
     if (describeMatch?.[1]) describe = describeMatch[1];
     const itMatch = /^ {2}it\(\s*'([^']+)'/u.exec(line);
     if (!itMatch?.[1]) continue;
-    titles.add(itMatch[1]);
-    if (describe !== '') titles.add(`${describe} › ${itMatch[1]}`);
+    const canonical = `${describe} › ${itMatch[1]}`;
+    canonicalTitles.add(canonical);
+    titles.set(itMatch[1], canonical);
+    titles.set(canonical, canonical);
   }
   const livingDocs = walk(repositoryRoot, []).filter(
     (file) =>
       file === 'AGENTS.md' ||
       file === 'README.md' ||
+      file === 'CONTRIBUTING.md' ||
       /^docs\/[^/]+\.md$/u.test(file) ||
       /^docs\/(?:development|designs)\/[^/]+\.md$/u.test(file) ||
       file.startsWith('.qoder/rules/'),
@@ -213,11 +217,12 @@ function collectReferenceReadings() {
     for (const match of read(file).matchAll(/(?:护栏|判据|守卫)[：:]?[「]([^」]{4,90})[」]/gu)) {
       mentions += 1;
       const name = (match[1] ?? '').trim();
-      if (titles.has(name)) referenced.add(name);
+      const canonical = titles.get(name);
+      if (canonical !== undefined) referenced.add(canonical);
     }
   }
   return {
-    判据总数: titles.size,
+    判据总数: canonicalTitles.size,
     现行文档点名次数: mentions,
     被点过名的判据: referenced.size,
   };

@@ -1,5 +1,8 @@
 # Skill 执行器与依赖管理设计
 
+> 当前平台覆盖：2026-10-02 [ADR-0036](../adr/0036-macos-only-platform-scope.md) 已接受，仅支持 macOS（darwin/arm64）。本文原 Windows helper/跨平台交付条款保留为历史设计，已退出范围，不构成实现或验收前置。
+
+
 - 日期：2026-09-08
 - 状态：执行技术仍为提案，配套 ADR-0010 为 Proposed；其中信任与本地目录/分发规则已由用户确认，见 [ADR-0011](../adr/0011-skill-trust-and-local-distribution.md)。用户未因此确认所有解释器、平台 helper 或协议字段。
 - 必需范围：遵循 [ADR-0009](../adr/0009-script-skill-baseline.md)，阶段 A 实际支持 `ppt-generation-expert`。

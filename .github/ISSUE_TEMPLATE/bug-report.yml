@@ -72,7 +72,8 @@ body:
       placeholder: |
         日志位置：
         - 开发模式：/tmp/betterwork-dev.log
-        - 生产模式：~/.betterwork/logs/
+        - 生产模式：描述错误出现位置与操作步骤；当前没有固定文件日志目录
+        请勿粘贴密钥或完整用户资料。
       render: shell
 
   - type: textarea

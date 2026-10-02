@@ -3,7 +3,7 @@
 - 生效：2026-09-14，用户通过[设计 v0.2](../designs/experts-and-task-materials.md)评审并要求落实设计、形成开发计划。
 - 决策：[ADR-0014](../adr/0014-expert-context-and-material-binding.md) 已接受；具体字段、记忆投影、MCP 与解析器实施选择按本计划对应任务落档，不把设计接受写成代码完成。
 - 核对基线：BetterWork `e283c47`，E11–E54 已按本计划提交并推送；E55/E56 仍按真实条件保持 partial。后续每张任务卡继续独立提交、推送并记录门禁结果。
-- 平台：本轮 macOS；Windows 保留原待办，不扩大自动调度、多 Agent、通用 DAG 或企业权限。
+- 平台：本轮 macOS；Windows 按 [ADR-0036](../adr/0036-macos-only-platform-scope.md) 退出范围，旧待办仅保留历史记录，不扩大自动调度、多 Agent、通用 DAG 或企业权限。
 - 执行方式：串行、每次一张任务卡；遵守 [执行手册](README.md)与全仓唯一 [工程规范](../12-engineering-standards.md)。不创建新规范或单独测试门禁。
 - 验收边界：本计划先验收 Expert/Skill/材料/工具/MCP/成果的技术链路、状态、范围与失败收口是否自洽；除非任务卡明确写出场景质量目标，不评价示例 Expert、Skill、提示词或模型产出的业务质量，也不因质量问题扩大实现范围。
 

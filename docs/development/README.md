@@ -1,5 +1,8 @@
 # 阶段 A 开发执行手册（供 5.6 Luna 使用）
 
+> 当前平台覆盖：2026-10-02 [ADR-0036](../adr/0036-macos-only-platform-scope.md) 已接受，Windows A09 退出产品与验收范围。下文 blocked 与早期跨平台条件保留为历史记录，不构成待开工任务，不阻塞当前 macOS 验收；本次不把未验收项改为 done。
+
+
 > 2026-09-25：周期专家工作已登记至 [SC00–SC11 定时任务待办](tasks-schedules.md)，设计见 [v0.3](../designs/scheduled-tasks.md)。同一工作目录持续积累资料和成果，可添加知识/知识库、引用历史月/季/半年资料；各次执行分别留档，定时配置不修改专家定义。候选推进时间为 2026-09-26，待光哥完成其他功能测试并另行启动；当前仅文档归档，代码未开工。SC 状态只在其任务板维护，不重排或关闭现有任务。
 
 > 2026-09-25：记忆可靠性增量见[改进 Spec](../designs/memory-improvements.md)、[契约 §11](memory-contracts.md#11-mi-改进契约proposed)、[MI00–MI10 计划](tasks-memory-improvements.md)与 [Qwen3.8-Flash 提示词](memory-improvement-coding-prompts.md)。光哥已查看[低保真原型](../prototype/memory-improvements/index.html)并批准 D1–D5 推荐方案，随后下达持续落地指令：MI00–MI05、MI09 的代码与自动化测试已按阶段提交，状态与证据只写任务板；MI02/MI03/MI06/MI07/MI08 的界面部分待光哥按 [MI 人工验收清单](memory-mi10-checklist.md)在真实窗口逐格走查，MI10 的真实模型语义验收仍待配置显示名与调用预算的单独授权。推送与发布未授权，不改 WM16/KM/E 系列状态。
@@ -75,7 +78,7 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | A07 | 执行协议、执行记录及生命周期接口 | A06 | done | [执行服务测试](../../apps/desktop/src/main/services/skill-execution-service.test.ts)、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)、[协议测试](../../packages/agent-protocol/src/index.test.ts)，2026-09-09 00:26 |
 | A08 | macOS 进程组 supervisor | A07 | done | [supervisor 测试](../../apps/desktop/src/main/infrastructure/mac-process-supervisor.test.ts)（17 项真机进程用例）、[guardian](../../apps/desktop/src/main/infrastructure/skill-guardian.ts) 构建产物在 Electron `ELECTRON_RUN_AS_NODE` 下实测取消/组核验，2026-09-09 01:33 |
 | A09 | Windows Job supervisor | A08 | blocked | 本机无 Windows 构建与运行环境。2026-09-09 用户明确授权跳过本卡先行推进 A10–A12；A2/A21 的跨平台门槛保留，不得据此把 Windows 标为已验收 |
-| A10 | Python 环境准备作业 | A09 | done | [依赖服务测试](../../apps/desktop/src/main/services/skill-dependency-service.test.ts)（20 项离线注入 + 真实 venv/import 探测验收）、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)、[依赖验证记录](dependency-verification.md)，2026-09-09 02:04；按用户授权在 A09 blocked 时先行 |
+| A10 | Python 环境准备作业 | A08（A09 已退出范围） | done | [依赖服务测试](../../apps/desktop/src/main/services/skill-dependency-service.test.ts)（20 项离线注入 + 真实 venv/import 探测验收）、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)、[依赖验证记录](dependency-verification.md)，2026-09-09 02:04；按用户授权在 A09 blocked 时先行 |
 | A11 | 外部工具链快照与依赖锁 | A10 | done | [快照服务测试](../../apps/desktop/src/main/services/toolchain-snapshot-service.test.ts)、[迁移测试](../../apps/desktop/src/main/db/migrate.test.ts)、[样本包锁](../../resources/dependency-locks/ppt-generation-expert-darwin-arm64-cp312.json)；真实快照 12,981 文件 + 真实环境准备 + CLI 探测于 macOS arm64 通过，见[依赖验证记录](dependency-verification.md) §4/§5，2026-09-09 02:33 |
 | A12 | 运行配置/环境 UI 与 A2 验收 | A11 | doing | 代码与自动测试完成：[IPC 测试](../../apps/desktop/src/main/ipc/register-ipc.test.ts)、[面板测试](../../apps/desktop/src/renderer/src/components/skills/DependencyPanel.test.tsx)、`npm run verify` 退出 0（32 文件 / 263 测试），真实启动核对 v6 迁移与无错误日志，2026-09-09 03:13。09-09 日志另记 17:56 本机手工验收通过；本轮绑定与依赖修正后仍需桌面回归。Windows 未验收，A2 不标跨平台完成 |
 | A13 | Skill 指令及运行绑定进入 Agent | A12 | done | [agent-engine 测试](../../packages/agent-core/src/agent-engine.test.ts)、[协议测试](../../packages/agent-protocol/src/index.test.ts)、[RunService 测试](../../apps/desktop/src/main/services/run-service.test.ts)、[SkillService 测试](../../apps/desktop/src/main/services/skill-service.test.ts)；`npm run verify` 退出 0（276 测试），2026-09-09 20:39 |
@@ -109,7 +112,7 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 - 每项最多完成卡中一个主题；发现额外缺口登记，不顺手重构或实现下一卡。
 - 先定义失败/取消语义，再编写业务逻辑。协议通过 Zod，新增行为有测试，迁移有真实 SQLite 测试。
 - 生产代码不加 any/非空断言/忽略注释；不创建第二套 lint/format/tsconfig，不复制 ClawBible 的旧代码。
-- 定向测试使用 `npm test -- <仓库相对测试路径>`；typecheck、相关测试通过后，交接前运行一次 `npm run verify`，不接管道截尾。只改文档的任务用链接/差异检查，不需要运行构建。
+- 定向测试按所属档使用 `npx vitest run --project functional <仓库相对测试路径>` 或 `--project heavy`；typecheck、相关测试通过后，交接前运行一次 `npm run verify`，不接管道截尾。纯文档交接检查与提交前完整验证的区别见 docs/12 §1.1。
 - UI 手工验收只通过 `bash scripts/dev-start.sh` 与 `bash scripts/dev-stop.sh`；记录实际步骤及结果。运行日志仍在规定位置。
 - 工具/网络测试用可注入实现与合成材料，不访问外部模型。真实 Skill 手工验收与自动测试分开记录。
 - 不把用户 Skill、公司模板、外部仓库、本机解释器、venv、wheel、PPT 产物或数据库提交到仓库。

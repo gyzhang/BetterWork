@@ -139,7 +139,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 
 1. IPC 注册器已有 Electron 替身行为测试：非法输入、无入参通道、输出 Schema、来源打开白名单，以及「Workspace → Task → Run → Artifact → 修订 → 导出」主进程旅程。后续新增 channel 必须在同一测试中补边界行为；真实桌面窗口自动化尚未建立。
 2. Renderer 已引入 `@testing-library/react` + jsdom，并覆盖 Confirmation Dialog 的焦点与 Escape 行为、成果版本加载错误，以及 `useArtifactViewer` 在受控异步乱序下忽略过期版本列表响应。仍无覆盖完整 AppShell 的组件测试与真实桌面 UI 自动化；其他视图和 hook 仍主要依靠人工桌面验收。
-3. GitHub Actions 在 **macOS runner** 上对 Pull Request 和 `main` 推送执行 `npm run verify`（[ADR-0036](adr/0036-macos-only-platform-scope.md)；平台范围只有 macOS，Windows 不在支持范围）。macOS 基础打包验证仍未达成；真实桌面 UI 自动化应在该专项中接入。。工作流除 push／Pull Request 外还接 `workflow_dispatch`（手动复跑拿读数），并按 ref 开 `concurrency` 取消被取代的运行（macOS runner 按分钟计费）；随失败上传截图与读数，随成功只上传 `.ui-render/results.json`（留 7 天）——绿跑的读数也是证据，形状由护栏「远端门禁跑在受支持的平台、能手动触发、并且留下绿跑读数」钉住。
+3. GitHub Actions 在 **macOS runner** 上对 Pull Request 和 `main` 推送执行 `npm run verify`（[ADR-0036](adr/0036-macos-only-platform-scope.md)；平台范围只有 macOS，Windows 不在支持范围）。macOS 基础打包验证仍未达成；真实桌面 UI 自动化应在该专项中接入。工作流除 push／Pull Request 外还接 `workflow_dispatch`（手动复跑拿读数），并按 ref 开 `concurrency` 取消被取代的运行（只保留当前 ref 最新运行）；随失败上传截图与读数，随成功只上传 `.ui-render/results.json`（留 7 天）——绿跑的读数也是证据，形状由护栏「远端门禁跑在受支持的平台、能手动触发、并且留下绿跑读数」钉住。
 
 **界面**
 

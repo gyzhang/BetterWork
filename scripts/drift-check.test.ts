@@ -53,6 +53,11 @@ describe('治理巡检 CLI', () => {
       for (const key of ['测试文件', '用例', '结构护栏', '例外登记', '规则文件', '产品源码行'])
         expect(typeof report.readings[key]).toBe('number');
       expect(typeof report.readings['判据总数']).toBe('number');
+      // 短标题和 describe › it 是同一判据的两个查找名，不能算成两条护栏。
+      expect(report.readings['判据总数']).toBe(report.readings['结构护栏']);
+      expect(report.readings['被点过名的判据']).toBeLessThanOrEqual(
+        Number(report.readings['判据总数']),
+      );
       // findings 与逐条 checks 的合计必须一致，否则「报告说没事」和「明细里有事」会各说一套。
       expect(report.findings.length).toBe(
         report.checks.reduce((total, check) => total + check.findings.length, 0),

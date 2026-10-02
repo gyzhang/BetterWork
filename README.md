@@ -24,7 +24,7 @@
 
 聊天是协作入口，Artifact 是主要交付物。
 
-Skill 配置将提供受信任选项：内置 Skill 默认信任，导入项由用户授权，已授权范围内脚本无需反复确认。产品通过本地目录携带完整 Skill，个人修改保存在用户副本，升级不覆盖。详见 [信任与分发规则](docs/adr/0011-skill-trust-and-local-distribution.md)（已确认、待实现）。
+Skill 配置已提供受信任选项：内置 Skill 默认信任，导入项由用户授权，已授权范围内脚本无需反复确认。产品通过本地目录携带完整 Skill，个人修改保存在用户副本，升级不覆盖。详见 [信任与分发规则](docs/adr/0011-skill-trust-and-local-distribution.md)（管理与授权已实现，分发验收见 A 任务板）。
 
 ## 核心原则
 
@@ -161,7 +161,7 @@ npm run format      # 或 npm run format:check
 
 仓库内的 [AGENTS.md](AGENTS.md) 是所有开发工作的持续约束：产品边界、架构硬约束、领域语言与完成定义。开始任何任务前，应同时阅读它和对应的产品、架构文档；实现与文档冲突时，先修正文档或新增 ADR，不得静默偏离。
 
-`.qoder/rules/` 下的分层规则由 Qoder 自动加载（常驻铁律加按场景触发），其他编码智能体按 AGENTS.md 的任务路由读取同一套约束，保持单一规则源。每完成一次任务，当天在 `docs/logs/` 追加一篇工作日志。
+`.qoder/rules/` 下的分层规则由 Qoder 自动加载（常驻铁律加按场景触发），其他编码智能体按 AGENTS.md 的任务路由读取同一套约束，保持单一规则源。AI+Human 的执行与证据交接见 [工程规范 §1.1](docs/12-engineering-standards.md#11-aihuman-执行与证据)，本仓内部使用 main 工作分支，Issue/PR 是可选协作入口。每完成一次任务，当天在 `docs/logs/` 追加一篇工作日志。
 
 ## 许可
 

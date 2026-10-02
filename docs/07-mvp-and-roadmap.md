@@ -76,7 +76,7 @@ This is documentation adoption only, not authorization to begin product developm
 
 | 阶段 | 已确认方向 | 范围与验收状态 |
 | --- | --- | --- |
-| A | Skill 管理、配置与脚本运行先行 | 管理、macOS 执行依赖、PPT 接线与文件成果已有实现；2026-09-11 补救门禁通过，真实样本、Office 编辑与冷安装验收仍待完成，Windows 受阻 |
+| A | Skill 管理、配置与脚本运行先行 | 管理、macOS 执行依赖、PPT 接线与文件成果已有实现；2026-09-11 补救门禁通过，真实样本、Office 编辑与冷安装验收仍待完成；Windows 已随 ADR-0036 退出范围 |
 | B | 专家配置接续，绑定多项 Skill | E11–E15 已完成专家管理、召唤、执行注入与内置分发；B0 双 Skill 的真实成功执行与撤销走查仍待可用模型 endpoint，见 [专家开发计划](development/tasks-experts.md) B00-5。 |
 | C | 长期目录下完成研究、场景方案、报告和公司模板可编辑 PPT | E20–E54 已完成材料范围、记忆、MCP/网页、Office 输入、讨论节点、经营分析和来源交付；E55/E56 的真实业务连续两期与签名安装验收仍待执行。 |
 
@@ -261,8 +261,8 @@ This is documentation adoption only, not authorization to begin product developm
 | 至少一个端到端用户旅程 | 已达成（主进程边界）：`register-ipc.test.ts` 经已注册 IPC 完成「Workspace → Task → Fake Run → Markdown Artifact → user-edit 版本 → 导出」；真实桌面 UI 自动化仍需在后续专项接入 |
 | 示例数据和 Fake Provider | 已达成：`FakeModelProvider` 可稳定复现事件顺序与工具行为 |
 | 对应教学文档 | 部分达成：架构与领域文档齐备，尚缺面向学习者的链路讲解材料 |
-| Artifact 生成后的自动验证 | **未达成**：无验证状态字段与自动校验 |
-| macOS 基础打包验证 | **未达成**：仅有 `electron-vite build`，未配置打包与图标导出管线；Windows 打包随 [ADR-0036](adr/0036-macos-only-platform-scope.md) 退出范围 |
+| Artifact 生成后的自动验证 | 文件成果的分项验证已实现，Markdown 等其他格式不能据此宣称已自动校验；具体证据与剩余验收见 A18–A21 任务板 |
+| macOS 基础打包验证 | **部分达成**：A20 已有 electron-builder 配置和 arm64 unpacked 静态/冷准备证据（见 [A 任务板](development/README.md)）；A21 的签名安装与真实用户旅程仍未完成。Windows 打包随 [ADR-0036](adr/0036-macos-only-platform-scope.md) 退出范围 |
 
 未达成项应在对应 Phase 收尾前补齐，或在本文档显式记录延后理由，不得默认跳过。
 

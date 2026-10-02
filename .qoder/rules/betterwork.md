@@ -32,9 +32,9 @@ trigger: always_on
 
 | 规则文件 | 触发方式 | 职责 |
 | --- | --- | --- |
-| [betterwork-code-style.md](betterwork-code-style.md) | glob: **/*.ts,tsx,css,mjs,json | docs/12 的速查复述（每条带出处）与不可协商项；标准本体在 docs/12 |
+| [betterwork-code-style.md](betterwork-code-style.md) | trigger: glob，独立 glob 列表逐项登记扩展名 | docs/12 的速查复述（每条带出处）与不可协商项；标准本体在 docs/12 |
 | [betterwork-diagnosis.md](betterwork-diagnosis.md) | model_decision | GATE-0 缺陷诊断顺序与修复纪律 |
 | [betterwork-knowledge.md](betterwork-knowledge.md) | model_decision | Knowledge 只读边界与索引纪律 |
-| [betterwork-ui.md](betterwork-ui.md) | glob: apps/desktop/src/renderer/**/*.tsx,ts,css | UI 页面检查/Review/创建的阅读路由，契约只在 docs/10 |
+| [betterwork-ui.md](betterwork-ui.md) | trigger: glob，独立 glob 列表限定 Renderer | UI 页面检查/Review/创建的阅读路由，契约只在 docs/10 |
 | [betterwork-dev-cycle.md](betterwork-dev-cycle.md) | model_decision | 应用启停、验证与提交纪律 |
 | [betterwork-ipc-artifact.md](betterwork-ipc-artifact.md) | model_decision | IPC 协议、持久化与 Artifact 版本纪律 |
