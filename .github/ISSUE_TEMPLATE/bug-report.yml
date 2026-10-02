@@ -1,0 +1,88 @@
+name: Bug 报告
+description: 报告一个 Bug，帮助我们改进
+title: '[Bug]: '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你花时间报告 Bug！请填写以下信息，帮助我们快速定位问题。
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug 描述
+      description: 清晰简洁地描述这个 Bug
+      placeholder: 当我尝试...时，发生了...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 如何复现这个 Bug
+      placeholder: |
+        1. 打开应用
+        2. 点击...
+        3. 输入...
+        4. 看到错误
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+      description: 你期望发生什么
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      description: 实际发生了什么
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本
+      description: 你使用的是哪个版本
+      placeholder: 例如：v0.1.0 或 commit hash
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: macOS 版本
+      description: 你的 macOS 版本
+      placeholder: 例如：macOS 14.0 (Sonoma)
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志
+      description: 如果有错误日志，请粘贴在这里
+      placeholder: |
+        日志位置：
+        - 开发模式：/tmp/betterwork-dev.log
+        - 生产模式：~/.betterwork/logs/
+      render: shell
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 截图
+      description: 如果可以，上传截图帮助说明问题
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 额外信息
+      description: 还有其他要补充的吗？
