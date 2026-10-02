@@ -76,10 +76,11 @@
 ```
 
 - **「规则没吃到」被证伪**：`outline-style` 已是作者写的 `solid`，两个 token 在该元素上都取到了值。12:37 那节里「`3px`＋`0px` 正好是初始值，所以规则没命中」只对了前半——初始值这一半对，「没命中」这一半错。
-- **`transition` 被证伪**：`.markdown-table` 不在 `styles.css` 任何 `transition` 的选择器列表里，全仓没有一条 transition 涉及 `outline`；`prefers-reduced-motion` 那段只压 `transition-duration`，不改 `transition-property`。
+- **`transition` 当时被判「证伪」，是这次排查里最贵的一次误判**：理由（`.markdown-table` 不在 `styles.css` 任何 `transition` 的选择器列表里、全仓没有一条 transition 涉及 `outline`、降级段只压 `transition-duration` 不改 `transition-property`）三条都成立，结论却反了——正因为降级段不改 `transition-property`，它的初始值 `all` 就等于替每个元素声明了「所有属性都动」，`0.01ms` 那一行才是根因本身。排除一条假设前先问它的**初始值**。
 - **IACVT（`var()` 取不到值）被证伪**：那条路径会把 `outline-style` 一并退回 `none`，与 `solid` 不符，且 `ring`／`ringOffset` 实测有值。
 - **系统对比度／forced-colors 被证伪**：CDP 模拟 `prefers-contrast: more` 与 `forced-colors: active`，本地几何仍读 `2px/-3px`。
 - 剩下的形状是「伪类已生效、几何还没跟上」。同一段里那条按钮焦点断言读的是**上一次 `executeJavaScript`** 里 Tab 过的元素，跨了一个 task，它在 runner 上一直绿；只有紧跟 `focus()` 的那一次读红。方向是读取时机，不是 CSS。
 - 于是把断言改成逐帧读到稳定再判（`settledRing()`）：每帧重读，连续两次一致才认，上限 8 帧。红字一次给全「稳定读数 · 首帧读数 · 帧数 · 环境」，`outline-color` 也补进读数——它把「简写整体生效」与「只有 `outline-style` 生效」分得很干净。
 - 变异验证（本地临时加一条 `.markdown-table:focus-visible { outline-offset: 0px }`）：退出码 1，红字给出 `稳定读数 {"outline":"2px","offset":"0px","style":"solid","color":"rgb(77, 138, 120)"…} · 首帧同值 · 帧数 1`——等待没把稳定的错几何读成绿。还原后本地 16 组全绿、每组帧数 1。
 - **已结（同日三跑，本地单变量复现）**：时序假设被 `帧数 1 · 首帧同值` 推翻——runner 上那个值是**稳定**的，不是读得太早。四项环境读数里 `prefers-reduced-motion: reduce` 为真就是线索本身：本地把这一个媒体特性模拟成 `reduce`，同一条断言立刻复现 `3px / 0px`，`getAnimations()` 当场给出三张正在跑的 `CSSTransition`（`outline-color`／`width`／`offset`）。根因与处置记在 [ADR-0035 第三轮](0035-focus-ring-inside-control-box.md)——降级块里那句 `transition-duration: 0.01ms` 因 `transition-property` 初始值为 `all` 而反向造出了过渡。这一类只有真 runner 会暴露：本地默认不减弱动效，矩阵里 16 组全绿也照不出它。
+- **真 runner 复绿（2026-10-02 15:39，run #246 / `325b2cc`）**：`npm run verify` 单作业 4m48s 全绿，功能档 `175 个文件／1,612 例`、heavy 档 `6 个文件／133 例`、`ui:check` 报「UI 真实渲染检查通过：16 组」。红时那个「渲染检查失败」的产物上传步骤这次是 `skipped`（`if: failure()` 生效），本地与 runner 的读数至此对齐：自 2026-10-01 起拖着的那条红（`宽表滚动区焦点环未完整落在盒内`／`jade-light-760`）关闭，门禁恢复可信。

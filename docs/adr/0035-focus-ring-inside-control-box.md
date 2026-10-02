@@ -128,3 +128,4 @@ CI（macOS runner）连红三次都红在同一处：`.markdown-table:focus-visi
 
 - 变异验证：把那一行改回 `0.01ms` → 护栏红并直接给出 `styles.css:4551` 那一处的选择器与取值；同时本地模拟 `reduce` 的探针又读出 `3px / 0px`＋三张 running 过渡。还原后护栏绿、探针绿、`ui:check` 16 组绿。
 - 夹具那一侧留着逐帧读到稳定再判的 `settledRing()`：它这次的产出正是「帧数 1 且首帧同值」这一句，把「读得太早」和「稳定地错」分开了——这两件事在只报一句标签的断言里是同一个红。
+- 真 runner 复绿（2026-10-02 15:39，run #246 / `325b2cc`）：`ui:check` 在 macOS runner 上 16 组全绿。判据一个没放宽——红字里那三个读数（`focusVisible`／`outline`／`offset`）要求的就是 ≥2px 且环带整体退进盒内，runner 上 `reducedMotion: true` 这个环境条件也没变，变的只有那一句 `transition-duration`。修的是共享层那一行 CSS，夹具只多了读数，没有为绿而改判据。
