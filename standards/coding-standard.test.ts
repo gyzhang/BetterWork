@@ -4976,8 +4976,8 @@ describe('规则与文档索引', () => {
   });
 
   it('规则文件的触发元数据形状正确', () => {
-    // 官方格式是 trigger: glob + 独立 glob 字段，不是 trigger: glob: <模式>。
-    // 解析仓内明确的 YAML 写法；匹配样本只证明文件路由，不代替 IDE 的实际加载证据。
+    // 采用 IDE 实际保存的 trigger: glob + glob 字符串；CLI YAML 列表在 IDE 中被判未启用。
+    // 匹配样本只证明文件路由，不代替 IDE 的实际识别或会话注入证据。
     const ruleFiles = REPO_FILES.filter(
       (relative) => relative.startsWith('.qoder/rules/') && relative.endsWith('.md'),
     );
@@ -4987,7 +4987,7 @@ describe('规则与文档索引', () => {
       const metadata = readQoderRuleMetadata(read(file));
       for (const issue of metadata.issues) offenders.push(`${file}: ${issue}`);
     }
-    expect(offenders, 'Qoder frontmatter 必须按官方格式登记触发模式与匹配范围').toEqual([]);
+    expect(offenders, 'Qoder frontmatter 必须按 IDE 可识别格式登记触发模式与匹配范围').toEqual([]);
     const samples: Record<string, readonly string[]> = {
       '.qoder/rules/betterwork-code-style.md': [
         'packages/example.ts',

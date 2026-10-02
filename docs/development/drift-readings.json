@@ -1,16 +1,16 @@
 {
-  "savedAt": "2026-10-02 22:06",
+  "savedAt": "2026-10-03 05:21",
   "readings": {
     "判据总数": 149,
     "现行文档点名次数": 13,
     "被点过名的判据": 10,
     "测试文件": 187,
-    "用例": 1716,
+    "用例": 1721,
     "结构护栏": 149,
     "例外登记": 200,
     "eslint配置块": 6,
     "规则文件": 7,
-    "产品源码行": 67005,
+    "产品源码行": 68603,
     "巡检窗口天数": 14
   },
   "ruleSnapshot": {
@@ -65,6 +65,5 @@
       "standards/coding-standard.test.ts › 排版与图标档位纪律 › 行高只取四档 › exemptions": "1d87fe5e3046599ea7b8dea9b157ae7d47155cceececfd9398baf3f748607d29",
       "standards/coding-standard.test.ts › 新增 UI 的实际基座归属 › 新命名表面不能自造卡片或徽标外壳 › owners": "92bb0f10115976a86172f280c87cb4bf569ba95be9c674b5b313a9f1bca1c01b"
     }
-  },
-  "reviewReason": "原有例外登记和 ESLint 未变；本批次升级 AST 指纹、日志增量与 Husky 探针，迁移旧读数以供后续比较"
+  }
 }

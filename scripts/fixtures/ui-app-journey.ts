@@ -63,7 +63,11 @@ interface JourneyServices {
   extractions: MemoryExtractionService;
 }
 
-function assemble(directory: string, getWindow: () => BrowserWindow | null): JourneyServices {
+export function assemble(
+  directory: string,
+  getWindow: () => BrowserWindow | null,
+  recoverRuns = true,
+): JourneyServices {
   const store = AppStore.open(path.join(directory, 'app.sqlite'));
   const vault = new KnowledgeVault(path.join(directory, 'vault.sqlite'));
   const inputSnapshots = new InputSnapshotService(store, directory);
@@ -158,12 +162,12 @@ function assemble(directory: string, getWindow: () => BrowserWindow | null): Jou
     getWindow,
     getDefaultWorkspaceRoot: () => path.join(directory, 'workspace'),
   });
-  store.runs.failInterruptedRuns('合成宿主重装配收口', Date.now());
+  if (recoverRuns) store.runs.failInterruptedRuns('合成宿主重装配收口', Date.now());
   extractions.recoverInterruptedJobs();
   return { store, vault, runs, extractions };
 }
 
-async function seed(services: JourneyServices, directory: string): Promise<void> {
+export async function seed(services: JourneyServices, directory: string): Promise<void> {
   const root = path.join(directory, 'workspace');
   await mkdir(root, { recursive: true });
   const sourcePath = path.join(root, '合成复盘资料.md');
@@ -220,12 +224,12 @@ async function seed(services: JourneyServices, directory: string): Promise<void>
   );
 }
 
-function syntheticResponse(delta: unknown): Response {
+export function syntheticResponse(delta: unknown): Response {
   return new Response(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`, {
     headers: { 'content-type': 'text/event-stream' },
   });
 }
-function toolResponse(name: string, input: unknown, ordinal: number): Response {
+export function toolResponse(name: string, input: unknown, ordinal: number): Response {
   return syntheticResponse({
     tool_calls: [
       {

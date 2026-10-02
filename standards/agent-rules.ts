@@ -1,4 +1,4 @@
-/** Qoder 官方 frontmatter 的仓内写法：trigger 标量，glob 使用带引号的 YAML 列表。 */
+/** Qoder IDE 实际保存的 frontmatter：trigger 标量，glob 是完整模式的逗号分隔字符串。 */
 export interface QoderRuleMetadata {
   trigger: string;
   globs: string[];
@@ -10,15 +10,16 @@ export function readQoderRuleMetadata(source: string): QoderRuleMetadata {
   if (header === undefined) return { trigger: '', globs: [], issues: ['缺少 frontmatter'] };
   const trigger = (/^trigger:[ \t]*(.*)$/mu.exec(header)?.[1] ?? '').trim();
   const description = (/^description:[ \t]*(.*)$/mu.exec(header)?.[1] ?? '').trim();
-  const globBlock = /^glob:\n((?: {2}- '[^'\n]+'(?:\n|$))+)/mu.exec(`${header}\n`)?.[1] ?? '';
-  const globs = [...globBlock.matchAll(/^ {2}- '([^'\n]+)'$/gmu)].map((match) => match[1] ?? '');
+  const globLine = (/^glob:[ \t]*([^\n]+)$/mu.exec(header)?.[1] ?? '').trim();
+  const globs = globLine.length === 0 ? [] : globLine.split(',').map((glob) => glob.trim());
   const issues: string[] = [];
   if (!['always_on', 'model_decision', 'glob'].includes(trigger))
     issues.push(`无法识别 trigger：${trigger}`);
   if (trigger === 'model_decision' && description.length < 10)
     issues.push('model_decision 缺少可选路的 description');
-  if (trigger === 'glob' && globs.length === 0) issues.push('glob 触发必须有独立的 glob 列表');
-  if (globs.some((glob) => glob.includes(',')))
-    issues.push('多个扩展名必须分别登记为 glob，不能拼成逗号后缀');
+  if (trigger === 'glob' && globs.length === 0)
+    issues.push('glob 触发必须有 IDE 可识别的 glob 字符串，不能使用 YAML 列表');
+  if (globs.some((glob) => glob.length === 0 || !/[.*/]/u.test(glob)))
+    issues.push('逗号分隔的每项必须是完整文件模式，不能为空或只写扩展名后缀');
   return { trigger, globs, issues };
 }

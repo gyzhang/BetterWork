@@ -54,9 +54,11 @@ jobs:
           path: |
             .ui-render/screenshots/
             .ui-render/results.json
+            .ui-render/matrix-results.json
             .ui-render/results.partial.json
             .ui-render/app-journey.partial.json
             .ui-render/app-journey-*/
+            .ui-render/process-recovery-*/
           retention-days: 14
       # 绿跑也要留读数：「这条判据这轮是不是变严了」「每组渲染耗时漂了多少」只能拿两次读数对比回答，
       # 而只随失败上传的产物在连着两次绿跑之间是空的。只传 results.json——绿跑的截图没有诊断价值，

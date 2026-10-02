@@ -17,7 +17,7 @@
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | Vitest **功能档并发 → 重档串行**两次独立调用（`--project functional`，然后 `--project heavy`），断言行为是否正确；重档收录单文件墙钟 ≥20s 的文件，判据见 §9 |
 | `npm run bench` | Vitest **计时基准档**（`--project bench`）：串行跑 `*.bench.test.ts`，断言墙钟与内存预算 |
-| `npm run ui:check` | 独立 Electron 宿主：全部正式色系明暗 × 760/1380px 的组件矩阵，加成果/知识/专家/设置内记忆分区的生产页面关键路径（青玉明暗、两档宿主宽度、普通/减动效），以及一条真实 App/Preload/IPC/临时 SQLite 离线旅程（青玉深色、1380px）；截图/读数放临时目录，边界见 docs/10 §10.1.3 |
+| `npm run ui:check` | 独立 Electron 宿主：全部正式色系明暗 × 760/1380px 的组件矩阵，加成果/知识/专家/设置内记忆分区的生产页面关键路径（青玉明暗、两档宿主宽度、普通/减动效）、一条真实 App/Preload/IPC/临时 SQLite 离线旅程与独立进程强杀恢复（青玉深色、1380px）；截图/读数放临时目录，边界见 docs/10 §10.1.3 |
 | `npm run verify` | lint + format:check + typecheck + test + build + ui:check，任一失败即中止 |
 
 提交前必须跑 `npm run verify`。**不要**把它的输出接管道后只看末尾——`cmd | tail` 的退出码是 `tail` 的，会把失败读成成功。需要截取输出时用 `npm run verify > log 2>&1; echo $?`。
@@ -45,7 +45,7 @@
 
 任务开始核对工作树、相关任务板与 AGENTS 的必读路由；修改契约先更新唯一规范/ADR，不从历史报告复制现行数字。Codex 不自动套用 Qoder frontmatter：跨工具共同执行的纪律必须在 AGENTS 或其必读入口能找到，Qoder 场景规则只补阅读路由。
 
-Qoder 的文件规则按[官方 frontmatter](https://docs.qoder.cn/en/cli/memory)使用 `trigger: glob` 和独立 `glob` 字段；仓内统一为带引号的 YAML 列表，每种扩展名单独一项。不能把模式拼进 trigger，也不能用 `**/*.ts,tsx,css` 表示多个扩展名。元数据与正反例测试检查仓内格式和代表文件匹配；它们不证明具体 IDE 会话已经注入正文。更新规则或工具后，AI 应在新会话核对规则实际加载情况，不能只凭静态绿灯宣布自动加载成功。
+Qoder 的文件规则采用本机 IDE 编辑入口实际保存并识别的 frontmatter；多个通配符按 [IDE 官方说明](https://docs.qoder.com/zh/user-guide/rules)用英文逗号分隔，每一项都是完整模式，不能用 `**/*.ts,tsx,css` 表示多个扩展名。CLI 文档接受的 YAML 列表不能直接推导为 IDE 可用。元数据与正反例测试检查仓内格式和代表文件匹配；实际 IDE 规则页还必须无“未启用”提示、编辑入口必须展示完整范围。设置页识别不证明模型会话已注入正文；更新规则或工具后，AI 另在新会话核对实际上下文，未取得该证据时如实交接。
 
 AI 交接按“已实现／自动化通过／AI 页面走查／待人工验收”分别描述，附改动范围、失败/取消证据、命令退出码、代码版本和未验证项；任务板的 done 判据仍以原卡为准，不新增一套状态。UI 证据按 docs/10 §10.1.1/§10.1.3，最终人类验收不能替代 AI 本轮应完成的测试与走查。只改文档可在交接前做链接与差异检查；**提交前完整 verify 的要求仍不豁免**。
 
@@ -63,7 +63,7 @@ AI 交接按“已实现／自动化通过／AI 页面走查／待人工验收�
 
 页面与 UI 状态的回归优先扩展现有 ui:check；组件/页面矩阵使用合成数据或最小 IPC 替身，应用旅程使用真实 App/Preload/IPC/Application 与临时 SQLite、确定性请求替身，明确命中路径与未覆盖项；不新建一套视觉规范或把合成宿主称为完整产品验收。
 
-应用旅程定向排查可用 `npm run ui:check -- --app-only`，只跑该旅程并留下独立结果；不能把这一组通过当作完整 `ui:check` 或 `verify` 通过。完整门禁默认始终执行全部矩阵与应用旅程。
+应用旅程定向排查可用 `npm run ui:check -- --app-only`，进程恢复定向排查用 `--recovery-only`；只跑对应旅程并留下独立结果，不能当作完整 `ui:check` 或 `verify` 通过。完整门禁默认始终执行全部矩阵、应用旅程与进程恢复。进程恢复只强杀 AI 创建的离线测试进程组；运行挂起后的落库标记就绪才能执行，禁止对用户正在使用的应用或库做强杀实验。
 
 格式化范围：所有 `.ts` / `.tsx` / `.css` / `.html` / `.json`。Markdown 与 `docs/assets/` 下的品牌 SVG **不格式化**——中文长行经重排后无法逐字回读校验，标志文件是人工定稿资产。
 
@@ -225,7 +225,7 @@ standards/
 - 测试用真实的 SQLite（`:memory:` 或临时目录）而不是 mock 仓储——本仓已有多次「mock 通过、真实库失败」的教训来源是 schema 与约束。
 - 需要构造非法输入、按下标取断言目标时直接用 `!` 与 `any`，测试文件按角色放宽了这几条规则（见 `eslint.config.mjs` 的 `betterwork/tests` 块）。这是按文件角色划定的单一策略，不是逐文件例外；生产代码不享受。
 - 涉及外部 HTTP 的代码必须注入 `fetch`（或用 `vi.stubGlobal`），测试绝不触网。
-- 真实渲染检查复用生产组件与样式，在独立临时 Chromium 数据目录运行，不抢桌面焦点。组件/页面矩阵不挂产品 Preload、不访问 SQLite；应用旅程挂生产 Preload 和真实 IPC/Application，只访问临时 SQLite 与合成资料，Provider 请求由确定性替身接管，两类均不联网、不调用真实模型。覆盖与恢复边界只维护在 UI/UX §10.1.3。测试宿主用软件合成，等待动画结束与新绘制帧；组件/页面矩阵另核对稳定截图中的主题画布、模态遮罩和面板像素，DOM 就绪不足以证明截图有效。门禁跑在 macOS runner 上（[ADR-0036](adr/0036-macos-only-platform-scope.md)），合成窗口保持 `sandbox: true`。原生控件对比测自然高度，不能用 flex stretch 掩盖差异。`npm run ui:check -- --probe-control-height`、`--probe-snapshot-theme`、`--probe-snapshot-modal`、`--probe-page-feedback` 只改临时构建 CSS；`--probe-app-persistence` 只改临时数据库，五个探针均预期退出 1，分别验证几何、截图主题、模态绘制、页面反馈与真实持久化退化会被拦截。这些证据不能替代整页视觉差异审阅、屏幕阅读器、真实模型与安装验收。
+- 真实渲染检查复用生产组件与样式，在独立临时 Chromium 数据目录运行，不抢桌面焦点。组件/页面矩阵不挂产品 Preload、不访问 SQLite；应用旅程与进程恢复挂生产 Preload 和真实 IPC/Application，只访问临时 SQLite 与合成资料，Provider 请求由确定性替身接管，全部均不联网、不调用真实模型。覆盖与恢复边界只维护在 UI/UX §10.1.3。测试宿主用软件合成，等待动画结束与新绘制帧；组件/页面矩阵另核对稳定截图中的主题画布、模态遮罩和面板像素，DOM 就绪不足以证明截图有效。门禁跑在 macOS runner 上（[ADR-0036](adr/0036-macos-only-platform-scope.md)），合成窗口保持 `sandbox: true`。原生控件对比测自然高度，不能用 flex stretch 掩盖差异。`npm run ui:check -- --probe-control-height`、`--probe-snapshot-theme`、`--probe-snapshot-modal`、`--probe-page-feedback` 只改临时构建 CSS；`--probe-app-persistence` 只改临时数据库，分别验证几何、截图主题、模态绘制、页面反馈与真实持久化退化会被拦截；`--probe-crash-recovery` 跳过合成宿主的 Run 启动收口。上述探针均预期退出 1。这些证据不能替代整页视觉差异审阅、屏幕阅读器、真实模型与安装验收。
 - **像素门禁按「连续两帧读数一致」下结论，不按单帧**：`capturePage` 在负载高的机器上会把「遮罩已画、面板主题还没换上」的中间态交出来，单帧即判就是把环境差异读成缺陷（2026-10-02 的 macOS runner 假红是这个形状；焦点环那一发是同一族的读取时机问题）。判据时机与容差都收在 `scripts/fixtures/frame-verdict.ts`：两帧一致且合规才落图放行，两帧报同一条违规才判红，两帧不同就继续等；通道容差仍是 2——**放宽容差等于把真实缺陷登记成环境差异**，要改的永远是「什么时候可以判」而不是「差多少算过」。
 - 断言窗口广播时必须区分 channel：同一个 `webContents.send` 同时承载 Run 事件与通知事件，只按 `type` 断言会把两者混在一起。
 - 依赖重型动态导入的用例（PDF / DOCX 解析）要显式提高超时，冷缓存下的首次转换会超过默认 5 秒。

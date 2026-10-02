@@ -1,9 +1,6 @@
 ---
 trigger: glob
-glob:
-  - 'apps/desktop/src/renderer/**/*.tsx'
-  - 'apps/desktop/src/renderer/**/*.ts'
-  - 'apps/desktop/src/renderer/**/*.css'
+glob: apps/desktop/src/renderer/**/*.tsx,apps/desktop/src/renderer/**/*.ts,apps/desktop/src/renderer/**/*.css
 ---
 
 # Renderer UI 任务入口

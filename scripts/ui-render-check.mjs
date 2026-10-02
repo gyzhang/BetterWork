@@ -10,6 +10,8 @@ import { fileURLToPath, URL } from 'node:url';
 
 import { build } from 'esbuild';
 
+import { runProcessRecovery } from './fixtures/process-recovery.mjs';
+
 const root = fileURLToPath(new URL('..', import.meta.url));
 const require = createRequire(import.meta.url);
 // 默认写进一次性临时目录；CI 用 UI_RENDER_OUTPUT_DIR 指到工作区内，失败时才能整目录传成 artifact。
@@ -20,8 +22,12 @@ if (requestedOutput) await mkdir(requestedOutput, { recursive: true });
 try {
   // 指定目录可能复用：旧完成读数不能掩盖本轮 Electron 提前退出。
   await rm(path.join(output, 'results.json'), { force: true });
+  await rm(path.join(output, 'matrix-results.json'), { force: true });
   const probe = process.argv.slice(2);
   const appOnly = probe.includes('--app-only');
+  const crashProbe = probe.includes('--probe-crash-recovery');
+  const recoveryOnly = probe.includes('--recovery-only') || crashProbe;
+  if (appOnly && recoveryOnly) throw new Error('应用与进程恢复定向选项不能混用');
   if (
     probe.some(
       (argument) =>
@@ -32,6 +38,8 @@ try {
           '--probe-page-feedback',
           '--probe-app-persistence',
           '--app-only',
+          '--recovery-only',
+          '--probe-crash-recovery',
         ].includes(argument),
     )
   )
@@ -51,6 +59,23 @@ try {
     platform: 'node',
     format: 'cjs',
     outfile: path.join(output, 'runner.cjs'),
+    external: [
+      'electron',
+      require.resolve('better-sqlite3', { paths: [path.join(root, 'apps/desktop')] }),
+    ],
+    alias: {
+      'better-sqlite3': require.resolve('better-sqlite3', {
+        paths: [path.join(root, 'apps/desktop')],
+      }),
+    },
+    tsconfig: path.join(root, 'tsconfig.json'),
+  });
+  await build({
+    entryPoints: [path.join(root, 'scripts/fixtures/ui-process-recovery.ts')],
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    outfile: path.join(output, 'recovery.cjs'),
     external: [
       'electron',
       require.resolve('better-sqlite3', { paths: [path.join(root, 'apps/desktop')] }),
@@ -120,50 +145,74 @@ try {
     );
   const environment = { ...process.env };
   delete environment.ELECTRON_RUN_AS_NODE;
-  const child = spawn(
-    require('electron'),
-    [
-      path.join(output, 'runner.cjs'),
-      output,
-      ...probe.filter((argument) =>
-        ['--probe-page-feedback', '--probe-app-persistence', '--app-only'].includes(argument),
-      ),
-    ],
-    {
-      cwd: root,
-      env: environment,
-      stdio: 'inherit',
-    },
-  );
-  // 限定单次离线宿主的寿命：启动失败或意外挂起必须给出失败，不能遗留测试窗口。
-  const timeout = setTimeout(() => child.kill('SIGTERM'), 180_000);
-  let status;
-  try {
-    status = await new Promise((resolve, reject) => {
-      child.once('error', reject);
-      child.once('exit', (code, signal) =>
-        signal ? reject(new Error(`UI 渲染检查被 ${signal} 中断`)) : resolve(code ?? 1),
-      );
-    });
-  } finally {
-    clearTimeout(timeout);
+  let status = 0;
+  if (!recoveryOnly) {
+    const child = spawn(
+      require('electron'),
+      [
+        path.join(output, 'runner.cjs'),
+        output,
+        ...probe.filter((argument) =>
+          ['--probe-page-feedback', '--probe-app-persistence', '--app-only'].includes(argument),
+        ),
+      ],
+      {
+        cwd: root,
+        env: environment,
+        stdio: 'inherit',
+      },
+    );
+    // 限定单次离线宿主的寿命：启动失败或意外挂起必须给出失败，不能遗留测试窗口。
+    const timeout = setTimeout(() => child.kill('SIGTERM'), 180_000);
+    try {
+      status = await new Promise((resolve, reject) => {
+        child.once('error', reject);
+        child.once('exit', (code, signal) =>
+          signal ? reject(new Error(`UI 渲染检查被 ${signal} 中断`)) : resolve(code ?? 1),
+        );
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
   }
   if (status === 0) {
+    // Electron 提前退出不能读成成功：只有跑完矩阵才会写这个完成结果。
+    const results = recoveryOnly
+      ? []
+      : JSON.parse(await readFile(path.join(output, 'matrix-results.json'), 'utf8'));
+    if (!appOnly && !probe.some((argument) => argument.startsWith('--probe-') && !crashProbe)) {
+      await mkdir(path.join(output, 'screenshots'), { recursive: true });
+      results.push(
+        await runProcessRecovery({
+          electron: require('electron'),
+          output,
+          root,
+          environment,
+          probe: crashProbe,
+        }),
+      );
+    }
     if (probe.some((argument) => argument.startsWith('--probe-')))
       throw new Error('违规探针未被拦截');
-    // Electron 提前退出不能读成成功：只有跑完矩阵才会写这个完成结果。
-    const results = JSON.parse(await readFile(path.join(output, 'results.json'), 'utf8'));
     if (!Array.isArray(results) || results.length === 0) throw new Error('UI 渲染矩阵缺完成证据');
     if (
-      !results.some(
-        (item) => item.coverage === 'production-app-with-real-ipc-and-temporary-sqlite',
-      ) ||
+      (!recoveryOnly &&
+        !results.some(
+          (item) => item.coverage === 'production-app-with-real-ipc-and-temporary-sqlite',
+        )) ||
       (!appOnly &&
+        !results.some(
+          (item) => item.coverage === 'production-process-recovery-with-temporary-sqlite',
+        )) ||
+      (!appOnly &&
+        !recoveryOnly &&
         !['artifact', 'knowledge', 'expert', 'memory'].every((page) =>
           results.some((item) => item.page === page && item.checks?.length > 0),
         ))
     )
       throw new Error('UI 渲染矩阵缺页面或应用旅程证据');
+    await writeFile(path.join(output, 'results.json'), JSON.stringify(results, null, 2));
+    console.warn(`UI 真实渲染检查通过：${results.length} 组；截图与读数：${output}`);
   }
   process.exitCode = status;
 } catch (error) {

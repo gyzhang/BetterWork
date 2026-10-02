@@ -338,8 +338,8 @@ async function run(): Promise<void> {
     );
     await persistPartial();
   }
-  await writeFile(path.join(output, 'results.json'), JSON.stringify(results, null, 2));
-  console.warn(`UI 真实渲染检查通过：${results.length} 组；截图与读数：${output}`);
+  await writeFile(path.join(output, 'matrix-results.json'), JSON.stringify(results, null, 2));
+  console.warn(`UI 矩阵与应用旅程完成：${results.length} 组；截图与读数：${output}`);
   app.exit(0);
 }
 

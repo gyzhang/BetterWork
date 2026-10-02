@@ -77,7 +77,8 @@ async function runStep(step: string): Promise<{ step: string; alerts: number; wi
     step === 'first-run' ||
     step === 'second-run' ||
     step === 'failed-run' ||
-    step === 'cancelled-run'
+    step === 'cancelled-run' ||
+    step === 'interrupted-start'
   ) {
     await input(
       'textarea[aria-label^="任务输入"]',
@@ -87,10 +88,12 @@ async function runStep(step: string): Promise<{ step: string; alerts: number; wi
           ? '生成 Markdown 下期复盘，使用精确参考与复盘口径。'
           : step === 'failed-run'
             ? '合成故障运行'
-            : '合成取消运行',
+            : step === 'interrupted-start'
+              ? '合成中断运行'
+              : '合成取消运行',
     );
     await click('开始工作');
-    if (step === 'cancelled-run') {
+    if (step === 'cancelled-run' || step === 'interrupted-start') {
       await waitFor(() => Boolean(findButton('停止')));
     } else if (step === 'failed-run') {
       await waitFor(() => hasText('合成故障：离线请求失败'));
@@ -193,6 +196,29 @@ async function runStep(step: string): Promise<{ step: string; alerts: number; wi
     if (!task) throw new Error('重启后任务导航丢失');
     task.click();
     await waitFor(() => hasText('下期复盘已完成') && hasText('合成故障：离线请求失败'));
+    await click('设置');
+    await click('记忆');
+    await waitFor(() => hasText(method) && hasText('取消优先带入'));
+  }
+  if (step === 'process-history') {
+    const findTask = (): HTMLButtonElement | undefined =>
+      [...document.querySelectorAll<HTMLButtonElement>('.workspace-group-tasks button')].find(
+        (item) => item.textContent?.includes('生成 Markdown 本期复盘'),
+      );
+    await waitFor(() => Boolean(findTask()));
+    const task = findTask();
+    if (!task) throw new Error('新进程丢失本期任务');
+    task.click();
+    await waitFor(
+      () => hasText('本期复盘已完成') && hasText('合成宿主重装配收口') && !findButton('停止'),
+    );
+  }
+  if (step === 'process-exclusions') {
+    await click('查看上下文');
+    await click('记忆');
+    await waitFor(() => Boolean(findButton('恢复参与选择')));
+  }
+  if (step === 'process-memory') {
     await click('设置');
     await click('记忆');
     await waitFor(() => hasText(method) && hasText('取消优先带入'));

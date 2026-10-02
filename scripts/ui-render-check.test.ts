@@ -101,3 +101,32 @@ it(
   },
   cliTimeout,
 );
+
+it(
+  '强杀后新进程回读生产应用与数据才算恢复通过',
+  () => {
+    const result = spawnSync(process.execPath, [script, '--recovery-only'], {
+      encoding: 'utf8',
+      env: cliEnvironment,
+      timeout: cliTimeout,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain('UI 真实渲染检查通过：1 组');
+  },
+  cliTimeout,
+);
+
+it(
+  '强杀后的 Run 未收口时，新进程恢复检查必须失败',
+  () => {
+    const result = spawnSync(process.execPath, [script, '--probe-crash-recovery'], {
+      encoding: 'utf8',
+      env: cliEnvironment,
+      timeout: cliTimeout,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('强杀后的 Run 未收口');
+    expect(result.stderr).not.toContain('UI 真实渲染检查通过');
+  },
+  cliTimeout,
+);

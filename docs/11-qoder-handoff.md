@@ -69,7 +69,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 提交前唯一门禁：
 
     npm run verify     # lint + format:check + typecheck + test + build + ui:check
-    npm run ui:check   # 组件矩阵 + 成果/知识/专家/记忆生产页面合成关键路径 + 真实 IPC/临时 SQLite 离线应用旅程；边界见 docs/10 §10.1.3
+    npm run ui:check   # 组件矩阵 + 成果/知识/专家/记忆生产页面合成关键路径 + 真实 IPC/临时 SQLite 离线应用旅程与进程恢复；边界见 docs/10 §10.1.3
     npm run bench      # 计时基准档（串行）：跑完规模/性能卡或专门核查时执行，不在提交门禁里
 
 测试分 functional/heavy/bench 三档：`npm test` 依次跑功能并发与重文件串行（均断言行为），`npm run bench` 跑独立计时基准（断言墙钟与内存预算）。`verify` 包含前两档及 ui:check，不含 bench——并发跑时计时值会漂 1.5–5 倍，随机红的门禁守不住任何东西；阈值没有放宽，样本值每次照旧打印。理由与口径见 [工程规范](12-engineering-standards.md) §1 与 §9。
@@ -138,7 +138,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 **测试覆盖**
 
 1. IPC 注册器已有 Electron 替身行为测试：非法输入、无入参通道、输出 Schema、来源打开白名单，以及「Workspace → Task → Run → Artifact → 修订 → 导出」主进程旅程。后续新增 channel 必须在同一测试中补边界行为；真实桌面窗口自动化尚未建立。
-2. Renderer 已有 App、视图、组件与 Hook 的 jsdom 行为测试，`ui:check` 另覆盖生产组件/四类页面矩阵和一条真实 App/Preload/IPC/临时 SQLite 离线旅程，具体命中与未覆盖项见 [UI/UX §10.1.3](10-ui-ux-system.md#1013-组合约束与检查边界)。这些证据不代表所有真实桌面路径、真实模型语义、屏幕阅读器或安装验收通过，人工尾项仍查原任务板。
+2. Renderer 已有 App、视图、组件与 Hook 的 jsdom 行为测试，`ui:check` 另覆盖生产组件/四类页面矩阵、真实 App/Preload/IPC/临时 SQLite 离线旅程和独立进程强杀恢复，具体命中与未覆盖项见 [UI/UX §10.1.3](10-ui-ux-system.md#1013-组合约束与检查边界)。这些证据不代表所有真实桌面路径、真实模型语义、屏幕阅读器或安装验收通过，人工尾项仍查原任务板。
 3. GitHub Actions 在 **macOS runner** 上对 Pull Request 和 `main` 推送执行 `npm run verify`（[ADR-0036](adr/0036-macos-only-platform-scope.md)；平台范围只有 macOS，Windows 不在支持范围）。macOS 基础打包验证仍未达成；真实桌面 UI 自动化应在该专项中接入。工作流除 push／Pull Request 外还接 `workflow_dispatch`（手动复跑拿读数），并按 ref 开 `concurrency` 取消被取代的运行（只保留当前 ref 最新运行）；随失败上传截图与读数，随成功只上传 `.ui-render/results.json`（留 7 天）——绿跑的读数也是证据，形状由护栏「远端门禁跑在受支持的平台、能手动触发、并且留下绿跑读数」钉住。
 
 **界面**
