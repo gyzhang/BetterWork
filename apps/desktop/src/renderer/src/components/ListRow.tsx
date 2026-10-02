@@ -15,6 +15,8 @@ export interface ListRowProps {
   meta?: ReactNode | undefined;
   /** 右槽：动作按钮组。 */
   actions?: ReactNode | undefined;
+  /** 长正文与多动作并存时，操作独占正文下方一行，避免挤压阅读宽度。 */
+  actionsPlacement?: 'side' | 'below' | undefined;
   /** 右端小标记（未读点之类）。 */
   trailing?: ReactNode | undefined;
   /** 主区内、三行之后的展开内容。 */
@@ -54,6 +56,7 @@ export function ListRow({
   detail,
   meta,
   actions,
+  actionsPlacement = 'side',
   trailing,
   children,
   onClick,
@@ -70,6 +73,7 @@ export function ListRow({
     className: classes,
     'data-variant': variant,
     'data-tone': tone,
+    'data-actions-placement': actionsPlacement,
     ...(selected ? { 'data-selected': 'true' } : {}),
     ...(multiline ? { 'data-overflow': 'wrap' } : {}),
   };
@@ -83,10 +87,22 @@ export function ListRow({
   );
   const body = (
     <>
-      {leading ? <span className="list-row-leading">{leading}</span> : undefined}
-      {main}
+      {actionsPlacement === 'below' ? (
+        <div className="list-row-content">
+          {leading ? <span className="list-row-leading">{leading}</span> : undefined}
+          {main}
+          {trailing ? <span className="list-row-trailing">{trailing}</span> : undefined}
+        </div>
+      ) : (
+        <>
+          {leading ? <span className="list-row-leading">{leading}</span> : undefined}
+          {main}
+        </>
+      )}
       {actions ? <div className="list-row-actions">{actions}</div> : undefined}
-      {trailing ? <span className="list-row-trailing">{trailing}</span> : undefined}
+      {trailing && actionsPlacement === 'side' ? (
+        <span className="list-row-trailing">{trailing}</span>
+      ) : undefined}
     </>
   );
 

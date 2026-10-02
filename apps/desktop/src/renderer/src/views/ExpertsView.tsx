@@ -15,13 +15,15 @@ import { AsyncButton } from '../components/AsyncButton';
 import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { CatalogCard, CatalogRow, type EntryFacts } from '../components/CatalogCard';
-import { CheckList } from '../components/CheckList';
+import { CheckList, type CheckOption } from '../components/CheckList';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
+import { Disclosure } from '../components/Disclosure';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
 import { InlineError } from '../components/InlineError';
 import { PageHeader } from '../components/layout/PageHeader';
+import { PageToolbar } from '../components/layout/PageToolbar';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
 import { ViewContainer } from '../components/layout/ViewContainer';
 import { McpToolBindingsPicker } from '../components/McpToolBindingsPicker';
@@ -287,6 +289,102 @@ function ExpertEditor({
   // 立刻把它吃掉，光标跟着被拽回去。
   const [tagText, setTagText] = useState(() => draft.tags.join('，'));
   const referenceMaterials = draft.referenceMaterials ?? [];
+  const [referenceQuery, setReferenceQuery] = useState('');
+  const [referenceKind, setReferenceKind] = useState('all');
+  const selectedKeys = new Set(
+    referenceMaterials.map((item) => materialReferenceKey(item.reference)),
+  );
+  const referenceCandidates = materialCandidates
+    .filter((candidate) => candidate.reference.kind !== 'workspace-input-snapshot')
+    .sort((left, right) =>
+      `${left.title} ${left.detail ?? ''}`.localeCompare(
+        `${right.title} ${right.detail ?? ''}`,
+        'zh-CN',
+        { numeric: true },
+      ),
+    );
+  const query = referenceQuery.trim().toLocaleLowerCase();
+  const availableCandidates = referenceCandidates.filter(
+    (candidate) =>
+      !selectedKeys.has(materialReferenceKey(candidate.reference)) &&
+      (referenceKind === 'all' || referenceKind === candidate.reference.kind) &&
+      `${candidate.title} ${candidate.sourceLabel} ${candidate.detail ?? ''}`
+        .toLocaleLowerCase()
+        .includes(query),
+  );
+  const referenceOptions = (candidates: MaterialCandidate[]): CheckOption<string>[] =>
+    candidates.map((candidate) => {
+      const key = materialReferenceKey(candidate.reference);
+      const checked = selectedKeys.has(key);
+      const applicable = materialCandidateAppliesToWorkspace(candidate, workspaceId);
+      const detail = candidate.detail?.startsWith(candidate.title)
+        ? candidate.detail.slice(candidate.title.length).replace(/^[\s·：:-]+/, '')
+        : candidate.detail;
+      return {
+        id: key,
+        label: (
+          <>
+            {candidate.title} ·{' '}
+            {candidate.reference.kind === 'artifact-version' ? '成果' : candidate.sourceLabel}
+            {detail ? ` · ${detail}` : ''}
+            {!applicable ? ' · 不适用于当前工作空间' : ''}
+            {candidate.status === 'unavailable' ? ' · 当前不可用' : ''}
+          </>
+        ),
+        checked,
+        disabled: (!applicable || candidate.status === 'unavailable') && !checked,
+      };
+    });
+  const toggleReference = (id: string, checked: boolean): void => {
+    // 已选引用可能已从候选库消失；移除只依赖精确身份，不要求原材料仍可读取。
+    if (!checked) {
+      onChange({
+        ...draft,
+        referenceMaterials: referenceMaterials.filter(
+          (item) => materialReferenceKey(item.reference) !== id,
+        ),
+      });
+      return;
+    }
+    const candidate = referenceCandidates.find(
+      (item) => materialReferenceKey(item.reference) === id,
+    );
+    if (!candidate) return;
+    onChange({
+      ...draft,
+      referenceMaterials: [
+        ...referenceMaterials,
+        { reference: candidate.reference, purpose: referencePurpose(candidate) },
+      ],
+    });
+  };
+  const selectedReferenceOptions = referenceMaterials.flatMap((item, index) => {
+    const key = materialReferenceKey(item.reference);
+    const candidate = referenceCandidates.find(
+      (candidate) => materialReferenceKey(candidate.reference) === key,
+    );
+    return candidate
+      ? referenceOptions([candidate])
+      : [
+          {
+            id: key,
+            label: `第 ${index + 1} 项已选参考 · 来源已不可用（可移除）`,
+            checked: true,
+            disabled: false,
+          },
+        ];
+  });
+  const knowledgeCandidates = availableCandidates.filter(
+    (candidate) => candidate.reference.kind === 'knowledge-revision',
+  );
+  const artifactCandidates = availableCandidates.filter(
+    (candidate) =>
+      candidate.reference.kind === 'artifact-version' &&
+      materialCandidateAppliesToWorkspace(candidate, workspaceId),
+  );
+  const otherWorkspaceCandidates = availableCandidates.filter(
+    (candidate) => !materialCandidateAppliesToWorkspace(candidate, workspaceId),
+  );
   const languageModels = models.filter((model) => model.role === 'language');
   const selectedModelProfileId =
     draft.modelReference.mode === 'profile' ? draft.modelReference.modelProfileId : undefined;
@@ -492,50 +590,59 @@ function ExpertEditor({
             <small className="muted-text">
               召唤专家时带入选定的知识修订或历史成果；本期任务仍可移除或补充。
             </small>
-            <CheckList
-              empty={<span className="muted-text">当前工作空间还没有可引用的知识或成果。</span>}
-              options={materialCandidates
-                .filter((candidate) => candidate.reference.kind !== 'workspace-input-snapshot')
-                .map((candidate) => {
-                  const key = materialReferenceKey(candidate.reference);
-                  const checked = referenceMaterials.some(
-                    (item) => materialReferenceKey(item.reference) === key,
-                  );
-                  const applicable = materialCandidateAppliesToWorkspace(candidate, workspaceId);
-                  return {
-                    id: key,
-                    label: (
-                      <>
-                        {candidate.title} · {candidate.sourceLabel}
-                        {candidate.detail ? ` · ${candidate.detail}` : ''}
-                        {!applicable ? ' · 不适用于当前工作空间' : ''}
-                      </>
-                    ),
-                    checked,
-                    disabled: (!applicable || candidate.status === 'unavailable') && !checked,
-                  };
-                })}
-              onToggle={(id, checked) => {
-                const candidate = materialCandidates.find(
-                  (item) => materialReferenceKey(item.reference) === id,
-                );
-                if (!candidate) return;
-                onChange({
-                  ...draft,
-                  referenceMaterials: checked
-                    ? [
-                        ...referenceMaterials,
-                        {
-                          reference: candidate.reference,
-                          purpose: referencePurpose(candidate),
-                        },
-                      ]
-                    : referenceMaterials.filter(
-                        (item) => materialReferenceKey(item.reference) !== id,
-                      ),
-                });
-              }}
+            <PageToolbar ariaLabel="筛选常用参考">
+              <TextField
+                size="md"
+                value={referenceQuery}
+                onChange={(event) => setReferenceQuery(event.target.value)}
+                aria-label="筛选参考标题或版本"
+                placeholder="筛选标题或版本…"
+              />
+              <FieldSelect
+                size="md"
+                ariaLabel="参考类型"
+                value={referenceKind}
+                onChange={setReferenceKind}
+                options={[
+                  { id: 'all', label: '全部类型' },
+                  { id: 'knowledge-revision', label: '知识修订' },
+                  { id: 'artifact-version', label: '成果版本' },
+                ]}
+              />
+            </PageToolbar>
+            <SectionHeader
+              title="已选参考"
+              hint={`${selectedReferenceOptions.length} 项 · 筛选时仍显示，可随时移除`}
             />
+            <CheckList
+              label="已选参考"
+              options={selectedReferenceOptions}
+              onToggle={toggleReference}
+              empty={<span className="muted-text">尚未选择常用参考。</span>}
+            />
+            <SectionHeader title="知识修订" hint={`${knowledgeCandidates.length} 项`} />
+            <CheckList
+              label="知识修订"
+              options={referenceOptions(knowledgeCandidates)}
+              onToggle={toggleReference}
+              empty={<span className="muted-text">没有匹配的知识修订。</span>}
+            />
+            <SectionHeader title="当前空间成果版本" hint={`${artifactCandidates.length} 项`} />
+            <CheckList
+              label="当前空间成果版本"
+              options={referenceOptions(artifactCandidates)}
+              onToggle={toggleReference}
+              empty={<span className="muted-text">没有匹配的成果版本。</span>}
+            />
+            {otherWorkspaceCandidates.length > 0 && (
+              <Disclosure label={`其他空间成果 · ${otherWorkspaceCandidates.length} 项（不可选）`}>
+                <CheckList
+                  label="其他空间成果"
+                  options={referenceOptions(otherWorkspaceCandidates)}
+                  onToggle={toggleReference}
+                />
+              </Disclosure>
+            )}
           </fieldset>
           <ActionBar as="div" label="保存专家修订">
             <Button variant="text" size="md" type="button" onClick={onCancel}>

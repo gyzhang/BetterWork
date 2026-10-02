@@ -174,7 +174,9 @@ describe('MemorySuggestionList', () => {
     const empty = renderList(state(), []);
     // 没有失败就不该有内联错误块；`.inline-message` 这一层已整体并入 InlineError 基座。
     expect(empty.container.querySelector('.inline-message, .inline-error')).toBeNull();
-    expect(empty.container.textContent).toContain('本轮没有待确认的建议。');
+    expect(empty.container.textContent).toContain('0 条待确认');
+    expect(empty.container.querySelector('.empty-notice')).toBeNull();
+    expect(empty.container.querySelector('details')?.open).toBe(false);
 
     const failed = renderList(state({ candidatesError: '读取经验建议失败，请重试。' }), []);
     const message = failed.container.querySelector('.inline-error');
@@ -212,6 +214,8 @@ describe('MemorySuggestionList', () => {
     });
     renderList(suggestions, []);
 
+    expect(screen.getByRole('button', { name: '取消' }).closest('details')).toBeNull();
+    expect(screen.getByRole('button', { name: '重新提炼' }).closest('details')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '取消' }));
     fireEvent.click(screen.getByRole('button', { name: '重新提炼' }));
 

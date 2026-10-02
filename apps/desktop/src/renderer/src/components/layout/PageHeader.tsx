@@ -20,9 +20,11 @@ export function PageHeader({
     <header className="page-header" onDoubleClick={handleTitlebarDoubleClick}>
       <div className="page-header-leading">
         {leading}
-        <div>
-          <p className="eyebrow">{eyebrow}</p>
-          <h1>{title}</h1>
+        <div className="page-header-titles">
+          <p className="eyebrow" title={eyebrow}>
+            {eyebrow}
+          </p>
+          <h1 title={title}>{title}</h1>
         </div>
       </div>
       {actions && <div className="page-header-actions">{actions}</div>}

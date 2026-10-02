@@ -293,7 +293,10 @@ describe('KnowledgePage 索引管理护栏（KM09）', () => {
     );
     expect(screen.getByText(/原件已变化/)).toBeTruthy();
     expect(screen.getByText(/向量索引需重建/)).toBeTruthy();
-    expect(screen.getByText('第二段保存文本')).toBeTruthy();
+    expect(screen.getByText('第二段保存文本').closest('details')).toBeNull();
+    expect(screen.queryByRole('textbox', { name: '搜索个人资料库' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '导入资料' })).toBeNull();
+    expect(screen.getByRole('heading', { name: '合同条款' })).toBeTruthy();
     expect(screen.getByText(/已读到结尾/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '返回列表' }));
     expect(closeDocument).toHaveBeenCalled();
@@ -359,6 +362,7 @@ describe('KnowledgePage 集合护栏（KM11）', () => {
         onResearch={() => undefined}
       />,
     );
+    fireEvent.click(screen.getByText('来源管理、保存版本与集合'));
     const save = screen.getByRole('button', { name: '保存分类' });
     expect(save.hasAttribute('disabled')).toBe(true);
     fireEvent.click(screen.getByRole('checkbox', { name: '研究' }));
@@ -469,6 +473,7 @@ describe('本机索引动作、作业回看与键盘可达（KM15 走查补齐�
         onResearch={() => undefined}
       />,
     );
+    fireEvent.click(screen.getByText('来源管理、保存版本与集合'));
     fireEvent.click(screen.getByRole('button', { name: '刷新内容' }));
     expect(screen.queryByText(/已刷新/)).toBeNull();
     expect(screen.getByText('已提交「合同条款」的刷新作业，索引正在后台重建。')).toBeTruthy();

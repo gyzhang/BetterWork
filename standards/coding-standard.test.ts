@@ -2302,7 +2302,8 @@ describe('界面观感基线', () => {
    */
   it('焦点环的出口只有登记的那几处', () => {
     const RING_OUTLETS: readonly string[] = [
-      'button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible',
+      // 宽表滚动区是可聚焦的 div，复用全局控件环，不新增一套环几何（docs/10 §8.3）。
+      'button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, .markdown-table:focus-visible',
       '.disclosure-label:focus-visible',
       '.scroll-region:focus-visible',
       '.single-select-picker-option:has(input:focus-visible)',

@@ -21,12 +21,15 @@ import { PageHeader } from '../../apps/desktop/src/renderer/src/components/layou
 import { PageToolbar } from '../../apps/desktop/src/renderer/src/components/layout/PageToolbar';
 import { ScrollRegion } from '../../apps/desktop/src/renderer/src/components/layout/ScrollRegion';
 import { ViewContainer } from '../../apps/desktop/src/renderer/src/components/layout/ViewContainer';
+import { ListRow } from '../../apps/desktop/src/renderer/src/components/ListRow';
 import { Modal } from '../../apps/desktop/src/renderer/src/components/Modal';
 import { PopoverMenu } from '../../apps/desktop/src/renderer/src/components/PopoverMenu';
 import { SectionHeader } from '../../apps/desktop/src/renderer/src/components/SectionHeader';
 import { SingleSelectPicker } from '../../apps/desktop/src/renderer/src/components/SingleSelectPicker';
 import { TextField } from '../../apps/desktop/src/renderer/src/components/TextField';
+import { ChevronLeftIcon } from '../../apps/desktop/src/renderer/src/icons';
 import { workspaceAccentVar } from '../../apps/desktop/src/renderer/src/lib/workspace-identity';
+import { MarkdownPreview } from '../../apps/desktop/src/renderer/src/markdown-preview';
 
 function requireElement<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);
@@ -39,9 +42,20 @@ function check(condition: boolean, reason: string): void {
 }
 
 function layoutChecks(): object {
-  check(document.documentElement.scrollWidth <= innerWidth, '页面出现横向溢出');
+  check(
+    document.documentElement.scrollWidth <= innerWidth,
+    `页面出现横向溢出：${document.documentElement.scrollWidth}/${innerWidth} · ${[
+      ...document.querySelectorAll<HTMLElement>('main, section, header, article'),
+    ]
+      .filter((element) => element.getBoundingClientRect().right > innerWidth + 1)
+      .map((element) => `${element.className}:${element.getBoundingClientRect().width}`)
+      .join(' · ')}`,
+  );
   const header = requireElement<HTMLElement>('.page-header');
-  check(Math.abs(header.getBoundingClientRect().height - 70) < 1, '页头离开 70px 基线');
+  check(
+    Math.abs(header.getBoundingClientRect().height - 70) < 1,
+    `页头离开 70px 基线：${header.getBoundingClientRect().height}`,
+  );
   const body = requireElement<HTMLElement>('.page-body').getBoundingClientRect();
   check(body.width <= 860 && body.left >= 23, '正文版心宽度或留白漂移');
   const card = requireElement<HTMLElement>('.card');
@@ -64,12 +78,50 @@ function layoutChecks(): object {
     check(Number.parseFloat(getComputedStyle(element).fontSize) >= 12, '产品文本小于 12px');
   const canvas = getComputedStyle(document.documentElement).getPropertyValue('--canvas').trim();
   check(canvas.length > 0, '主题没有画布 Token');
+  const reading = requireElement<HTMLElement>('.fixture-reading');
+  const back = requireElement<HTMLElement>('#fixture-back');
+  const backRect = back.getBoundingClientRect();
+  check(
+    backRect.width >= 36 && getComputedStyle(back).whiteSpace === 'nowrap',
+    '窄窗返回入口被挤成竖排',
+  );
+  const readingHeader = requireElement<HTMLElement>(
+    '.fixture-reading .page-header',
+  ).getBoundingClientRect();
+  check(readingHeader.height > 70, '长操作未换到下一行');
+  for (const action of reading.querySelectorAll<HTMLElement>('.page-header-actions button')) {
+    const rect = action.getBoundingClientRect();
+    check(
+      rect.right <= readingHeader.right && rect.top >= backRect.bottom,
+      '窄窗页头操作挤压标题或超出容器',
+    );
+  }
+  const row = requireElement<HTMLElement>('.fixture-reading .list-row').getBoundingClientRect();
+  const main = requireElement<HTMLElement>(
+    '.fixture-reading .list-row-main',
+  ).getBoundingClientRect();
+  const actions = requireElement<HTMLElement>(
+    '.fixture-reading .list-row-actions',
+  ).getBoundingClientRect();
+  check(main.width >= row.width - 10 && actions.top >= main.bottom, '记忆动作挤压正文阅读宽度');
+  const table = requireElement<HTMLElement>('.fixture-reading .markdown-table');
+  check(
+    table.scrollWidth > table.clientWidth && table.tabIndex === 0,
+    '宽表没有可聚焦的横向滚动区',
+  );
+  for (const cell of table.querySelectorAll<HTMLElement>('th'))
+    check(getComputedStyle(cell).whiteSpace === 'nowrap', '表头被挤成竖排');
   return {
     viewport: [innerWidth, innerHeight],
     bodyWidth: body.width,
     canvas,
     cardPadding: cardStyle.padding,
     controlHeights,
+    reading: {
+      headerHeight: readingHeader.height,
+      textWidth: main.width,
+      tableWidth: table.scrollWidth,
+    },
   };
 }
 
@@ -122,6 +174,17 @@ function focusChecks(): object {
   const width = Number.parseFloat(style.outlineWidth);
   const inward = -Number.parseFloat(style.outlineOffset);
   check(width >= 2 && inward >= width + 1, '焦点环未完整落在盒内并保留分隔缝');
+  const table = requireElement<HTMLElement>('.fixture-reading .markdown-table');
+  table.focus({ preventScroll: true });
+  const tableStyle = getComputedStyle(table);
+  const tableOutlineWidth = Number.parseFloat(tableStyle.outlineWidth);
+  check(
+    table.matches(':focus-visible') &&
+      tableOutlineWidth >= 2 &&
+      -Number.parseFloat(tableStyle.outlineOffset) >= tableOutlineWidth + 1,
+    '宽表滚动区焦点环未完整落在盒内',
+  );
+  active.focus({ preventScroll: true });
   return { outline: style.outlineWidth, offset: style.outlineOffset };
 }
 
@@ -230,6 +293,43 @@ function FixturePage(): React.JSX.Element {
                 </Field>
               </Disclosure>
               <EmptyNotice title="暂无其他资料" detail="空态应沿用共享组件。" />
+              <section className="fixture-reading" aria-label="窄栏阅读回归">
+                <PageHeader
+                  eyebrow="成果 · 历史版本"
+                  title={'长标题'.repeat(12)}
+                  leading={
+                    <Button id="fixture-back" size="sm" variant="link">
+                      <ChevronLeftIcon size={13} />
+                      成果
+                    </Button>
+                  }
+                  actions={
+                    <>
+                      <Button size="lg">导出</Button>
+                      <Button size="lg">从此版本开始新任务</Button>
+                      <Button size="lg">编辑修订</Button>
+                    </>
+                  }
+                />
+                <ListRow
+                  actionsPlacement="below"
+                  actions={
+                    <>
+                      <Button size="sm">编辑</Button>
+                      <Button size="sm">设为过期</Button>
+                      <Button size="sm">设为优先带入</Button>
+                      <Button size="sm">以后不用</Button>
+                    </>
+                  }
+                >
+                  <p>{'这段经验正文应保留整行阅读宽度。'.repeat(8)}</p>
+                </ListRow>
+                <MarkdownPreview
+                  content={
+                    '| 统计月份 | 销售额（万元） | 回款额（万元） | 同比增长（百分比） | 客户续约数（个） | 风险等级 | 责任部门 |\n| --- | --- | --- | --- | --- | --- | --- |\n| 九月 | 120 | 100 | 10% | 30 | 低 | 运营 |'
+                  }
+                />
+              </section>
             </div>
           </ScrollRegion>
         </section>

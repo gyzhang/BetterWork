@@ -51,12 +51,22 @@ const CodeBlock: Components['code'] = (props) => {
 
 const components: Components = {
   code: CodeBlock,
+  table: ({ children }) => (
+    <div className="markdown-table" role="region" aria-label="表格，可横向滚动" tabIndex={0}>
+      <table>{children}</table>
+    </div>
+  ),
 };
 
 const messageComponents: Components = {
   ...components,
   table: ({ children }) => (
-    <div className="message-table" tabIndex={0}>
+    <div
+      className="markdown-table message-table"
+      role="region"
+      aria-label="表格，可横向滚动"
+      tabIndex={0}
+    >
       <table>{children}</table>
     </div>
   ),

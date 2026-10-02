@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { AsyncButton, InlineLoading } from '../components/AsyncButton';
 import { Button } from '../components/Button';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
+import { Disclosure } from '../components/Disclosure';
 import { EmptyPage, ErrorPage, LoadingPage } from '../components/EmptyState';
 import { FieldSelect } from '../components/FieldSelect';
 import { IconButton } from '../components/IconButton';
@@ -221,68 +222,19 @@ export function KnowledgePage({
     <>
       <PageHeader
         eyebrow="知识 · 个人资料库"
-        title="让资料成为下一次工作的起点"
-        actions={
-          <AsyncButton
-            variant="primary"
-            size="lg"
-            busy={importing}
-            label={
-              <>
-                <PlusIcon size={13} /> 导入资料
-              </>
-            }
-            busyLabel="正在处理…"
-            onClick={() => trackAction(onImport(), '导入资料')}
-          />
+        title={detailDocument?.title ?? '让资料成为下一次工作的起点'}
+        leading={
+          detailDocument ? (
+            <Button variant="link" size="sm" type="button" onClick={closeDocument}>
+              返回列表
+            </Button>
+          ) : undefined
         }
-      />
-      <div className="knowledge-stage">
-        <section className="page-body knowledge-page">
-          <p className="page-intro">
-            资料保留在你的本机路径；算台只建立可重建的本地文本索引。当前支持 Markdown、文本、PDF、
-            Word、工作簿、CSV 与演示文稿。
-          </p>
-          <PageToolbar ariaLabel="资料库操作">
-            <FieldSelect
-              size="md"
-              options={filterOptions}
-              value={filterOptionId(filter)}
-              ariaLabel="按集合筛选资料"
-              onChange={(id) =>
-                setFilter(
-                  id.startsWith(COLLECTION_OPTION_PREFIX)
-                    ? {
-                        kind: 'collection',
-                        collectionId: id.slice(COLLECTION_OPTION_PREFIX.length),
-                      }
-                    : { kind: id === 'uncategorized' ? 'uncategorized' : 'all' },
-                )
-              }
-            />
-            <form
-              className="knowledge-search"
-              onSubmit={(event) => trackAction(onSearch(event), '检索资料')}
-            >
-              <TextField
-                size="md"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="搜索资料库中的内容…"
-                aria-label="搜索个人资料库"
-              />
-              <Button variant="primary" size="md" type="submit">
-                搜索
-              </Button>
-              {showingResults && (
-                <Button variant="outline" size="md" type="button" onClick={() => setQuery('')}>
-                  清除
-                </Button>
-              )}
-            </form>
+        actions={
+          detailDocument ? (
             <Button
               variant="text"
-              size="md"
+              size="lg"
               type="button"
               aria-haspopup="dialog"
               aria-expanded={indexDrawerOpen}
@@ -290,7 +242,80 @@ export function KnowledgePage({
             >
               {indexEntryLabel}
             </Button>
-          </PageToolbar>
+          ) : (
+            <AsyncButton
+              variant="primary"
+              size="lg"
+              busy={importing}
+              label={
+                <>
+                  <PlusIcon size={13} /> 导入资料
+                </>
+              }
+              busyLabel="正在处理…"
+              onClick={() => trackAction(onImport(), '导入资料')}
+            />
+          )
+        }
+      />
+      <div className="knowledge-stage">
+        <section className="page-body knowledge-page">
+          {!detailDocument && (
+            <>
+              <p className="page-intro">
+                资料保留在你的本机路径；算台只建立可重建的本地文本索引。当前支持
+                Markdown、文本、PDF、 Word、工作簿、CSV 与演示文稿。
+              </p>
+              <PageToolbar ariaLabel="资料库操作">
+                <FieldSelect
+                  size="md"
+                  options={filterOptions}
+                  value={filterOptionId(filter)}
+                  ariaLabel="按集合筛选资料"
+                  onChange={(id) =>
+                    setFilter(
+                      id.startsWith(COLLECTION_OPTION_PREFIX)
+                        ? {
+                            kind: 'collection',
+                            collectionId: id.slice(COLLECTION_OPTION_PREFIX.length),
+                          }
+                        : { kind: id === 'uncategorized' ? 'uncategorized' : 'all' },
+                    )
+                  }
+                />
+                <form
+                  className="knowledge-search"
+                  onSubmit={(event) => trackAction(onSearch(event), '检索资料')}
+                >
+                  <TextField
+                    size="md"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="搜索资料库中的内容…"
+                    aria-label="搜索个人资料库"
+                  />
+                  <Button variant="primary" size="md" type="submit">
+                    搜索
+                  </Button>
+                  {showingResults && (
+                    <Button variant="outline" size="md" type="button" onClick={() => setQuery('')}>
+                      清除
+                    </Button>
+                  )}
+                </form>
+                <Button
+                  variant="text"
+                  size="md"
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-expanded={indexDrawerOpen}
+                  onClick={() => setIndexDrawerOpen(true)}
+                >
+                  {indexEntryLabel}
+                </Button>
+              </PageToolbar>
+            </>
+          )}
           {indexDrawerOpen && (
             <Modal variant="sheet" label="索引与作业" onClose={() => setIndexDrawerOpen(false)}>
               <SectionHeader
@@ -596,185 +621,192 @@ export function KnowledgePage({
                 : {})}
             />
           )}
-          <div className="knowledge-summary">
-            <span>
-              {showingResults
-                ? `找到 ${items.length} 条相关资料`
-                : `已整理 ${documents.length} 份资料`}
-            </span>
-            <div className="knowledge-summary-actions">
-              {showingResults && searchStatus ? (
-                <small>
-                  {`本次检索方式：${knowledgeModeLabel(searchStatus.effectiveMode)}`}
-                  {searchStatus.degradedReason
-                    ? ` · ${knowledgeDegradedLabel(searchStatus.degradedReason)}`
-                    : ''}
-                  {` · 向量覆盖 ${searchStatus.coverage.indexedChunks}/${searchStatus.coverage.eligibleChunks}`}
-                </small>
-              ) : (
-                <small>
-                  {showingResults ? '检索仅在本地资料库中进行' : '提交搜索后可见检索方式与覆盖状态'}
-                </small>
-              )}
-              {showingResults && items.length > 0 && (
-                <Button variant="secondary" size="sm" type="button" onClick={selectAllResults}>
-                  全选结果
-                </Button>
-              )}
-              {showingResults && selectedMaterials.length > 0 && (
-                <Button variant="secondary" size="sm" type="button" onClick={clearSelection}>
-                  清除选择
-                </Button>
-              )}
-              {showingResults && (
-                <AsyncButton
-                  variant="chip"
-                  size="sm"
-                  busy={researchBusy}
-                  disabled={selectedMaterials.length === 0}
-                  label={`用已选资料研究${selectedMaterials.length > 0 ? `（${selectedMaterials.length}）` : ''}`}
-                  busyLabel="正在创建草稿…"
-                  onClick={onResearch}
-                />
-              )}
+          {!detailDocument && (
+            <div className="knowledge-summary">
+              <span>
+                {showingResults
+                  ? `找到 ${items.length} 条相关资料`
+                  : `已整理 ${documents.length} 份资料`}
+              </span>
+              <div className="knowledge-summary-actions">
+                {showingResults && searchStatus ? (
+                  <small>
+                    {`本次检索方式：${knowledgeModeLabel(searchStatus.effectiveMode)}`}
+                    {searchStatus.degradedReason
+                      ? ` · ${knowledgeDegradedLabel(searchStatus.degradedReason)}`
+                      : ''}
+                    {` · 向量覆盖 ${searchStatus.coverage.indexedChunks}/${searchStatus.coverage.eligibleChunks}`}
+                  </small>
+                ) : (
+                  <small>
+                    {showingResults
+                      ? '检索仅在本地资料库中进行'
+                      : '提交搜索后可见检索方式与覆盖状态'}
+                  </small>
+                )}
+                {showingResults && items.length > 0 && (
+                  <Button variant="secondary" size="sm" type="button" onClick={selectAllResults}>
+                    全选结果
+                  </Button>
+                )}
+                {showingResults && selectedMaterials.length > 0 && (
+                  <Button variant="secondary" size="sm" type="button" onClick={clearSelection}>
+                    清除选择
+                  </Button>
+                )}
+                {showingResults && (
+                  <AsyncButton
+                    variant="chip"
+                    size="sm"
+                    busy={researchBusy}
+                    disabled={selectedMaterials.length === 0}
+                    label={`用已选资料研究${selectedMaterials.length > 0 ? `（${selectedMaterials.length}）` : ''}`}
+                    busyLabel="正在创建草稿…"
+                    onClick={onResearch}
+                  />
+                )}
+              </div>
             </div>
-          </div>
+          )}
           {detailDocument ? (
             <ScrollRegion ariaLabel="资料详情" className="knowledge-list-scroll">
               <section className="knowledge-detail">
-                <header className="knowledge-detail-header">
-                  <Button variant="secondary" size="sm" type="button" onClick={closeDocument}>
-                    返回列表
-                  </Button>
-                  <div>
-                    <strong>{detailDocument.title}</strong>
-                    <small>{sourceStateLine(detailDocument, detailRevision)}</small>
-                  </div>
-                </header>
-                <div className="knowledge-detail-actions">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    type="button"
-                    onClick={() =>
-                      reportAction(
-                        onOpenSource(detailDocument.sourcePath).then(() =>
-                          showToast('success', `已打开「${detailDocument.title}」的原始资料。`),
-                        ),
-                        (failure) => showToast('error', failure || '无法打开原始资料。'),
-                      )
-                    }
-                  >
-                    打开本机原件
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    type="button"
-                    onClick={() => trackAction(checkDocumentSource(detailDocument.id), '检查来源')}
-                  >
-                    检查来源
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    type="button"
-                    disabled={importing}
-                    onClick={() =>
-                      reportAction(onRefresh(detailDocument), (failure) =>
-                        showToast('error', failure || '刷新索引失败，请重试。'),
-                      )
-                    }
-                  >
-                    刷新内容
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="md"
-                    tone="danger"
-                    type="button"
-                    onClick={() => setRemovalTarget(detailDocument)}
-                  >
-                    移出资料库
-                  </Button>
-                </div>
                 <p className="knowledge-detail-hint">
-                  预览读取的是已保存文本：不产生任务访问记录，也不调用模型；原件变化不会自动刷新索引。
+                  {sourceStateLine(detailDocument, detailRevision)}
                 </p>
                 {detailError && <InlineError message={detailError} />}
-                <section className="knowledge-detail-revisions" aria-label="保存版本列表">
-                  <strong>保存版本</strong>
-                  {detailRevisions.length === 0 && !detailLoading && <small>暂无历史版本。</small>}
-                  {detailRevisions.map((revision) => (
-                    <div className="knowledge-revision-row" key={revision.id}>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        type="button"
-                        disabled={revision.id === detailRevisionId}
-                        onClick={() =>
-                          trackAction(selectDetailRevision(revision.id), '切换保存版本')
-                        }
-                      >
-                        第 {revision.revision} 版
-                      </Button>
-                      <small>
-                        {`哈希 ${revision.contentHash.slice(0, 8)} · ${formatTime(revision.createdAt)}${
-                          revision.warnings.length > 0
-                            ? ` · 提取警告 ${revision.warnings.join('、')}`
-                            : ''
-                        }`}
-                      </small>
-                    </div>
-                  ))}
-                </section>
-                <section className="knowledge-detail-members" aria-label="所属集合">
-                  <strong>集合</strong>
-                  {collections.length === 0 && (
-                    <small>还没有集合，可在「索引与模型」面板新建。</small>
-                  )}
-                  {collections.map((collection) => (
-                    <label className="knowledge-collection-check" key={collection.id}>
-                      <input
-                        type="checkbox"
-                        checked={detailMemberIds.includes(collection.id)}
-                        onChange={(event) =>
-                          setMemberDraft({
-                            documentId: detailDocument.id,
-                            ids: event.target.checked
-                              ? [...detailMemberIds, collection.id]
-                              : detailMemberIds.filter((id) => id !== collection.id),
-                          })
-                        }
-                      />
-                      {collection.name}
-                    </label>
-                  ))}
-                  <div>
+                {detailRevision && detailRevision.warnings.length > 0 && (
+                  <InlineError tone="warning" problems={detailRevision.warnings} />
+                )}
+                <Disclosure label="来源管理、保存版本与集合">
+                  <div className="knowledge-detail-actions">
                     <Button
-                      variant="outline"
-                      size="md"
-                      tone="brand"
+                      variant="secondary"
+                      size="sm"
                       type="button"
-                      disabled={memberDraft?.documentId !== detailDocument.id}
-                      onClick={() => {
-                        const ids = memberDraft?.ids ?? [];
-                        setMemberDraft(undefined);
-                        trackAction(
-                          saveDocumentCollections(
-                            detailDocument.id,
-                            detailDocument.membershipRevision,
-                            ids,
+                      onClick={() =>
+                        reportAction(
+                          onOpenSource(detailDocument.sourcePath).then(() =>
+                            showToast('success', `已打开「${detailDocument.title}」的原始资料。`),
                           ),
-                          '保存集合分类',
-                        );
-                      }}
+                          (failure) => showToast('error', failure || '无法打开原始资料。'),
+                        )
+                      }
                     >
-                      保存分类
+                      打开本机原件
                     </Button>
-                    <small>勾选即加入、取消即移出；分类不改变内容版本，也不动任务材料。</small>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      type="button"
+                      onClick={() =>
+                        trackAction(checkDocumentSource(detailDocument.id), '检查来源')
+                      }
+                    >
+                      检查来源
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      type="button"
+                      disabled={importing}
+                      onClick={() =>
+                        reportAction(onRefresh(detailDocument), (failure) =>
+                          showToast('error', failure || '刷新索引失败，请重试。'),
+                        )
+                      }
+                    >
+                      刷新内容
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      tone="danger"
+                      type="button"
+                      onClick={() => setRemovalTarget(detailDocument)}
+                    >
+                      移出资料库
+                    </Button>
                   </div>
-                </section>
+                  <p className="knowledge-detail-hint">
+                    预览读取的是已保存文本：不产生任务访问记录，也不调用模型；原件变化不会自动刷新索引。
+                  </p>
+                  <section className="knowledge-detail-revisions" aria-label="保存版本列表">
+                    <strong>保存版本</strong>
+                    {detailRevisions.length === 0 && !detailLoading && (
+                      <small>暂无历史版本。</small>
+                    )}
+                    {detailRevisions.map((revision) => (
+                      <div className="knowledge-revision-row" key={revision.id}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          type="button"
+                          disabled={revision.id === detailRevisionId}
+                          onClick={() =>
+                            trackAction(selectDetailRevision(revision.id), '切换保存版本')
+                          }
+                        >
+                          第 {revision.revision} 版
+                        </Button>
+                        <small>
+                          {`哈希 ${revision.contentHash.slice(0, 8)} · ${formatTime(revision.createdAt)}${
+                            revision.warnings.length > 0
+                              ? ` · 提取警告 ${revision.warnings.join('、')}`
+                              : ''
+                          }`}
+                        </small>
+                      </div>
+                    ))}
+                  </section>
+                  <section className="knowledge-detail-members" aria-label="所属集合">
+                    <strong>集合</strong>
+                    {collections.length === 0 && (
+                      <small>还没有集合，可在「索引与模型」面板新建。</small>
+                    )}
+                    {collections.map((collection) => (
+                      <label className="knowledge-collection-check" key={collection.id}>
+                        <input
+                          type="checkbox"
+                          checked={detailMemberIds.includes(collection.id)}
+                          onChange={(event) =>
+                            setMemberDraft({
+                              documentId: detailDocument.id,
+                              ids: event.target.checked
+                                ? [...detailMemberIds, collection.id]
+                                : detailMemberIds.filter((id) => id !== collection.id),
+                            })
+                          }
+                        />
+                        {collection.name}
+                      </label>
+                    ))}
+                    <div>
+                      <Button
+                        variant="outline"
+                        size="md"
+                        tone="brand"
+                        type="button"
+                        disabled={memberDraft?.documentId !== detailDocument.id}
+                        onClick={() => {
+                          const ids = memberDraft?.ids ?? [];
+                          setMemberDraft(undefined);
+                          trackAction(
+                            saveDocumentCollections(
+                              detailDocument.id,
+                              detailDocument.membershipRevision,
+                              ids,
+                            ),
+                            '保存集合分类',
+                          );
+                        }}
+                      >
+                        保存分类
+                      </Button>
+                      <small>勾选即加入、取消即移出；分类不改变内容版本，也不动任务材料。</small>
+                    </div>
+                  </section>
+                </Disclosure>
                 <section className="knowledge-detail-text" aria-label="保存文本预览">
                   {detailLoading && <InlineLoading label="正在读取保存文本…" />}
                   {detailPage?.parts.map((part) => (

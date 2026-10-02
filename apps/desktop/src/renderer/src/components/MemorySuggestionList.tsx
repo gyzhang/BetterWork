@@ -27,6 +27,7 @@ import { Badge, type BadgeTone } from './Badge';
 import { Button } from './Button';
 import { Card } from './Card';
 import { ConfirmationDialog } from './ConfirmationDialog';
+import { Disclosure } from './Disclosure';
 import { EmptyNotice } from './EmptyState';
 import { ListRow } from './ListRow';
 import { SectionHeader } from './SectionHeader';
@@ -81,9 +82,13 @@ export function MemorySuggestionList({
     >
       <SectionHeader
         title="经验建议"
-        hint={`${
-          suggestions.loadingCandidates ? '正在读取建议批次…' : jobLabel
-        } · 候选不会自动生效，也不会自动进入模型`}
+        hint={
+          suggestions.loadingCandidates
+            ? '正在读取建议批次…'
+            : variant === 'settings'
+              ? `${suggestions.jobs.length === 0 ? '暂无提炼作业' : jobLabel} · ${candidates.length} 条待确认`
+              : `${jobLabel} · 候选不会自动生效，也不会自动进入模型`
+        }
         actions={
           variant === 'context' && onOpenMemoryPage ? (
             <Button variant="chip" size="sm" type="button" onClick={onOpenMemoryPage}>
@@ -101,13 +106,11 @@ export function MemorySuggestionList({
         />
       )}
       {variant === 'settings' ? (
-        candidates.length === 0 ? (
-          <EmptyNotice title="本轮没有待确认的建议。" />
-        ) : (
+        candidates.length > 0 ? (
           <StatusNote
             message={`当前有 ${candidates.length} 条待确认候选，见下方「待确认」分组。`}
           />
-        )
+        ) : null
       ) : candidates.length === 0 ? (
         <EmptyNotice
           title="没有与本任务相关的建议"
@@ -173,26 +176,47 @@ function SuggestionSettings({
           />
         }
       />
-      <StatusNote message={consentStateNotice(suggestions.settings)} />
       {suggestions.settingsError && <InlineError message={suggestions.settingsError} />}
       {suggestions.jobsError && <InlineError message={suggestions.jobsError} />}
-      {suggestions.jobs.length > 0 && (
+      {suggestions.jobs.some((job) => isActiveMemoryJob(job.status) || canRetryJob(job)) && (
         <ul className="suggestion-job-list">
-          {suggestions.jobs.slice(0, 5).map((job) => (
-            <SuggestionJobRow
-              key={job.id}
-              job={job}
-              busy={suggestions.savingSettings}
-              onCancel={(job) => {
-                trackAction(suggestions.cancelJob(job), '取消提炼作业');
-              }}
-              onRetry={(job) => {
-                trackAction(suggestions.retryJob(job), '重新提炼作业');
-              }}
-            />
-          ))}
+          {suggestions.jobs
+            .filter((job) => isActiveMemoryJob(job.status) || canRetryJob(job))
+            .map((job) => (
+              <SuggestionJobRow
+                key={job.id}
+                job={job}
+                busy={suggestions.savingSettings}
+                onCancel={(job) => {
+                  trackAction(suggestions.cancelJob(job), '取消提炼作业');
+                }}
+                onRetry={(job) => {
+                  trackAction(suggestions.retryJob(job), '重新提炼作业');
+                }}
+              />
+            ))}
         </ul>
       )}
+      <Disclosure label="提炼规则与历史作业">
+        <StatusNote message={consentStateNotice(suggestions.settings)} />
+        <StatusNote message="候选不会自动生效，也不会自动进入模型；确认前请核对内容与适用范围。" />
+        {suggestions.jobs.some((job) => !isActiveMemoryJob(job.status) && !canRetryJob(job)) && (
+          <ul className="suggestion-job-list">
+            {suggestions.jobs
+              .filter((job) => !isActiveMemoryJob(job.status) && !canRetryJob(job))
+              .slice(0, 5)
+              .map((job) => (
+                <SuggestionJobRow
+                  key={job.id}
+                  job={job}
+                  busy={suggestions.savingSettings}
+                  onCancel={(job) => trackAction(suggestions.cancelJob(job), '取消提炼作业')}
+                  onRetry={(job) => trackAction(suggestions.retryJob(job), '重新提炼作业')}
+                />
+              ))}
+          </ul>
+        )}
+      </Disclosure>
       {pendingToggle !== undefined && (
         <ConfirmationDialog
           title={pendingToggle ? '开启自动经验建议？' : '关闭自动经验建议？'}

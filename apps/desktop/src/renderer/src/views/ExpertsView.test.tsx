@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { ExpertSummary } from '@betterwork/agent-protocol';
+import type { ExpertSummary, MaterialCandidate } from '@betterwork/agent-protocol';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -80,6 +80,109 @@ function actionLabels(root: Element): string[] {
 }
 
 describe('ExpertsPage 的目录条目', () => {
+  it('筛选保留已选精确版本，越范围或失效后仍可移除，取消不再提交', async () => {
+    const state = stateStub([]);
+    const create = vi.fn<ExpertsState['create']>(async () => {
+      throw new Error('保留草稿');
+    });
+    const candidate = (version: number, workspaceId = 'ws-1'): MaterialCandidate => ({
+      title: '经营报告',
+      sourceLabel: '成果 · 经营报告',
+      status: 'ready',
+      detail: `经营报告 · v${version}`,
+      reference: {
+        kind: 'artifact-version',
+        artifactId: 'artifact-1',
+        artifactVersionId: `v${version}`,
+        contentHash: `${version}`.repeat(64),
+        originWorkspaceId: workspaceId,
+      },
+    });
+    const knowledge: MaterialCandidate = {
+      title: '核对口径',
+      sourceLabel: '知识',
+      status: 'ready',
+      detail: '第 3 版',
+      reference: {
+        kind: 'knowledge-revision',
+        knowledgeDocumentId: 'doc-1',
+        knowledgeRevisionId: 'r3',
+        contentHash: 'a'.repeat(64),
+        sourcePath: '/notes/rules.md',
+      },
+    };
+    const page = (candidates: MaterialCandidate[]) => (
+      <ExpertsPage
+        state={state}
+        actions={{ ...state, create }}
+        skills={[]}
+        mcpConnections={[]}
+        memories={[]}
+        models={[]}
+        workspaceId="ws-1"
+        materialCandidates={candidates}
+        onSummon={vi.fn(async () => undefined)}
+        onError={vi.fn()}
+        onManageMemories={vi.fn()}
+      />
+    );
+    const { rerender } = render(
+      page([candidate(1), candidate(2), candidate(3, 'ws-other'), knowledge]),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '新建专家' }));
+    fireEvent.change(screen.getByLabelText('名称'), { target: { value: '经营专家' } });
+    fireEvent.change(screen.getByLabelText('人格与职责'), { target: { value: '核对经营数据' } });
+    fireEvent.click(
+      within(screen.getByRole('group', { name: '当前空间成果版本' })).getByRole('checkbox', {
+        name: /v2/,
+      }),
+    );
+    fireEvent.change(screen.getByRole('textbox', { name: '筛选参考标题或版本' }), {
+      target: { value: '口径' },
+    });
+    expect(
+      within(screen.getByRole('group', { name: '已选参考' }))
+        .getByRole('checkbox', { name: /v2/ })
+        .getAttribute('disabled'),
+    ).toBeNull();
+    fireEvent.click(
+      within(screen.getByRole('group', { name: '知识修订' })).getByRole('checkbox', {
+        name: /核对口径/,
+      }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '保存修订' }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0]?.[0].referenceMaterials).toEqual([
+      { reference: candidate(2).reference, purpose: 'historical-comparison' },
+      { reference: knowledge.reference, purpose: 'rule' },
+    ]);
+    rerender(
+      page([
+        candidate(1),
+        { ...candidate(2, 'ws-other'), status: 'unavailable' },
+        candidate(3, 'ws-other'),
+        knowledge,
+      ]),
+    );
+    const selected = within(screen.getByRole('group', { name: '已选参考' })).getByRole('checkbox', {
+      name: /v2.*不适用于当前工作空间.*当前不可用/,
+    });
+    expect(selected.getAttribute('disabled')).toBeNull();
+    fireEvent.click(selected);
+    expect(
+      within(screen.getByRole('group', { name: '已选参考' })).queryByRole('checkbox', {
+        name: /v2/,
+      }),
+    ).toBeNull();
+    rerender(page([]));
+    const missing = screen.getByRole('checkbox', { name: /已选参考.*来源已不可用/ });
+    expect(missing.getAttribute('disabled')).toBeNull();
+    fireEvent.click(missing);
+    expect(screen.queryByRole('checkbox', { name: /来源已不可用/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: '新建专家' })).toBeTruthy();
+  });
   it('逐卡给出自己的动作：内置只有复制副本，没有编辑与删除', () => {
     const container = renderCatalog([userExpert, builtinExpert]);
     const cards = container.querySelectorAll('.card');

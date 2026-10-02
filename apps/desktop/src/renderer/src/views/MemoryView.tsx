@@ -16,6 +16,7 @@ import { ActionBar } from '../components/ActionBar';
 import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
+import { Disclosure } from '../components/Disclosure';
 import { EmptyNotice } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
@@ -362,7 +363,7 @@ export function MemoryPage({
         hint={
           scopeTarget
             ? `当前范围：${scopeTarget.expertName}${scopeTarget.workspaceId ? ' · 当前工作空间' : ''}`
-            : '只有已确认、来源可用且适用范围命中的经验才会随新任务带入；候选与来源待复核的记录不会自动进入模型。'
+            : '查看、检索和管理已保存的经验。'
         }
         actions={
           <>
@@ -435,21 +436,6 @@ export function MemoryPage({
         />
       )}
 
-      {suggestions && (
-        <MemorySuggestionList
-          suggestions={suggestions}
-          candidates={grouped.candidate}
-          variant="settings"
-          workspaceName={workspaceName}
-          expertName={expertName}
-          onEdit={(candidate) =>
-            setSession({ key: `confirm-${candidate.id}`, mode: 'confirm', memory: candidate })
-          }
-          onReject={(candidate) => actOn(candidate, 'reject')}
-          onDelete={(candidate) => setPendingDelete(candidate)}
-        />
-      )}
-
       {session && (
         <div className="memory-editor-host">
           <SectionHeader title={editorTitle} />
@@ -470,6 +456,25 @@ export function MemoryPage({
           />
         </div>
       )}
+
+      {suggestions && (
+        <MemorySuggestionList
+          suggestions={suggestions}
+          candidates={grouped.candidate}
+          variant="settings"
+          workspaceName={workspaceName}
+          expertName={expertName}
+          onEdit={(candidate) =>
+            setSession({ key: `confirm-${candidate.id}`, mode: 'confirm', memory: candidate })
+          }
+          onReject={(candidate) => actOn(candidate, 'reject')}
+          onDelete={(candidate) => setPendingDelete(candidate)}
+        />
+      )}
+
+      <Disclosure label="经验如何带入任务">
+        <StatusNote message="只有已确认、来源可用且适用范围命中的经验才会随新任务带入；候选与来源待复核的记录不会自动进入模型。" />
+      </Disclosure>
 
       {state.loading && state.memories.length === 0 ? (
         <EmptyNotice title="正在加载记忆…" />
@@ -709,6 +714,7 @@ function MemoryRow({
       key={memory.id}
       as="article"
       className={`memory-row memory-${memory.effectiveStatus}`}
+      actionsPlacement="below"
       actions={
         <>
           {!readOnly && (
@@ -843,12 +849,14 @@ function MemoryRow({
         />
       ))}
       {!readOnly && memory.status === 'confirmed' && (
-        <StatusNote
-          message={
-            '优先带入只免「词面命中」这一道门槛，不免范围、有效期、本任务排除、来源与冲突门禁；' +
-            '调整会追加修订并只影响下次运行，也不表示模型一定采用。'
-          }
-        />
+        <Disclosure label="优先带入规则">
+          <StatusNote
+            message={
+              '优先带入只免「词面命中」这一道门槛，不免范围、有效期、本任务排除、来源与冲突门禁；' +
+              '调整会追加修订并只影响下次运行，也不表示模型一定采用。'
+            }
+          />
+        </Disclosure>
       )}
     </ListRow>
   );

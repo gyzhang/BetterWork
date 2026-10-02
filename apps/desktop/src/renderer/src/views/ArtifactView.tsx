@@ -16,6 +16,7 @@ import { useCallback, useRef, useState } from 'react';
 import { ActionBar } from '../components/ActionBar';
 import { AsyncButton, InlineLoading } from '../components/AsyncButton';
 import { Button } from '../components/Button';
+import { Disclosure } from '../components/Disclosure';
 import { EmptyPage } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { FieldSelect } from '../components/FieldSelect';
@@ -259,64 +260,69 @@ export function ArtifactPage({
         />
         <ScrollRegion ariaLabel="成果版本详情">
           <section className="page-body artifact-detail-page">
-            <p className="page-intro">
-              {selected.type === 'presentation'
-                ? visibleVersion.id !== selected.currentVersionId
-                  ? '正在查看历史版本；可通过「打开」用系统应用查看。'
-                  : '来自一次任务运行，可用系统应用打开或导出到本地。'
-                : visibleVersion.id !== selected.currentVersionId
-                  ? '正在查看历史版本；编辑后会从这里创建新的人工修订版本。'
-                  : visibleVersion.origin === 'user-edit'
-                    ? '这是人工修订版本；此前版本仍可回溯。'
-                    : '来自一次任务运行，可在后续继续修订并形成新版本。'}
-            </p>
-            {references && !editing && (
-              <ReferenceVersionSection
-                references={references}
-                artifactTitle={selected.title}
-                version={visibleVersion}
-                scope={referenceScope}
-                onReferenceToTask={onReferenceToTask}
-              />
-            )}
             {error && <InlineError message={error} onDismiss={() => setError('')} />}
-            {(visibleVersion.inputRelations?.length ?? 0) > 0 ||
-            visibleVersion.sourceDeclarationKind !== undefined ? (
-              <section className="artifact-input-grid">
-                <SectionHeader
-                  className="artifact-input-heading"
-                  title={`声明采用依据 · ${DECLARATION_KIND_LABEL[visibleVersion.sourceDeclarationKind ?? 'none']}`}
+            {references?.error && (
+              <InlineError message={references.error} onDismiss={references.clearError} />
+            )}
+            <Disclosure label="参考设置与声明采用依据">
+              <p className="page-intro">
+                {selected.type === 'presentation'
+                  ? visibleVersion.id !== selected.currentVersionId
+                    ? '正在查看历史版本；可通过「打开」用系统应用查看。'
+                    : '来自一次任务运行，可用系统应用打开或导出到本地。'
+                  : visibleVersion.id !== selected.currentVersionId
+                    ? '正在查看历史版本；编辑后会从这里创建新的人工修订版本。'
+                    : visibleVersion.origin === 'user-edit'
+                      ? '这是人工修订版本；此前版本仍可回溯。'
+                      : '来自一次任务运行，可在后续继续修订并形成新版本。'}
+              </p>
+              {references && !editing && (
+                <ReferenceVersionSection
+                  references={references}
+                  artifactTitle={selected.title}
+                  version={visibleVersion}
+                  scope={referenceScope}
+                  onReferenceToTask={onReferenceToTask}
                 />
-                {(visibleVersion.inputRelations ?? []).length === 0 && (
-                  <p className="muted-text">
-                    {visibleVersion.sourceDeclarationKind === 'legacy'
-                      ? '这些输入关系来自旧版本，未经过采用核实。'
-                      : '本版本没有声明采用依据；下方访问记录只表示运行读到过。'}
-                  </p>
-                )}
-                <div className="artifact-input-cards">
-                  {(visibleVersion.inputRelations ?? []).map((relation) => {
-                    const fileName = inputLabel(relation.input);
-                    const sourceLabel = inputSourceLabel(relation.input);
-                    const isSnapshot = relation.input.kind === 'workspace-input-snapshot';
-                    const Icon = isSnapshot ? KnowledgeIcon : ArtifactIcon;
-                    return (
-                      <ListRow
-                        key={`${relation.outputVersionId}:${JSON.stringify(relation.input)}`}
-                        variant="card"
-                        leading={
-                          <span className="artifact-input-card-icon">
-                            <Icon size={16} />
-                          </span>
-                        }
-                        title={fileName}
-                        detail={`${RELATION_LABEL[relation.relation]} · ${sourceLabel}`}
-                      />
-                    );
-                  })}
-                </div>
-              </section>
-            ) : null}
+              )}
+              {(visibleVersion.inputRelations?.length ?? 0) > 0 ||
+              visibleVersion.sourceDeclarationKind !== undefined ? (
+                <section className="artifact-input-grid">
+                  <SectionHeader
+                    className="artifact-input-heading"
+                    title={`声明采用依据 · ${DECLARATION_KIND_LABEL[visibleVersion.sourceDeclarationKind ?? 'none']}`}
+                  />
+                  {(visibleVersion.inputRelations ?? []).length === 0 && (
+                    <p className="muted-text">
+                      {visibleVersion.sourceDeclarationKind === 'legacy'
+                        ? '这些输入关系来自旧版本，未经过采用核实。'
+                        : '本版本没有声明采用依据；下方访问记录只表示运行读到过。'}
+                    </p>
+                  )}
+                  <div className="artifact-input-cards">
+                    {(visibleVersion.inputRelations ?? []).map((relation) => {
+                      const fileName = inputLabel(relation.input);
+                      const sourceLabel = inputSourceLabel(relation.input);
+                      const isSnapshot = relation.input.kind === 'workspace-input-snapshot';
+                      const Icon = isSnapshot ? KnowledgeIcon : ArtifactIcon;
+                      return (
+                        <ListRow
+                          key={`${relation.outputVersionId}:${JSON.stringify(relation.input)}`}
+                          variant="card"
+                          leading={
+                            <span className="artifact-input-card-icon">
+                              <Icon size={16} />
+                            </span>
+                          }
+                          title={fileName}
+                          detail={`${RELATION_LABEL[relation.relation]} · ${sourceLabel}`}
+                        />
+                      );
+                    })}
+                  </div>
+                </section>
+              ) : null}
+            </Disclosure>
             <div className="artifact-detail-layout">
               <aside className="artifact-version-list">
                 <SectionHeader
@@ -769,9 +775,6 @@ function ReferenceVersionSection({
           参考版本按工作空间隔离，只能标记与引用本空间的成果版本。需要参考它，请先在侧栏切到 「
           {scope.ownerWorkspaceName}」再打开这项成果。
         </p>
-        {references.error && (
-          <InlineError message={references.error} onDismiss={references.clearError} />
-        )}
       </section>
     );
   }
@@ -843,9 +846,6 @@ function ReferenceVersionSection({
         标记与引用都固定到这一版的内容哈希，成果新增版本后参考仍指旧版本；引用只会把该版本加进当前任务材料，
         不会自动发送，也不会改变当前专家。
       </p>
-      {references.error && (
-        <InlineError message={references.error} onDismiss={references.clearError} />
-      )}
       {note && <TransientToast tone="success" message={note} onDismiss={() => setNote('')} />}
     </section>
   );

@@ -412,7 +412,8 @@ button {
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
-select:focus-visible {
+select:focus-visible,
+.markdown-table:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: var(--focus-ring-offset);
   /* 环与实心填充之间的那 1px 缝就是控件自己的 1px 边框格：偏移 -3px 让环带从边框盒往里 1px
@@ -732,10 +733,11 @@ small {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  height: 70px;
+  min-height: 70px;
   flex: none;
-  /* 页头从不生长：`flex: none` 归基座，页面不再各自替它补一条。 */
-  padding: 12px 28px;
+  flex-wrap: wrap;
+  /* 70px 为基准，窄窗长操作换行时按内容增高（docs/10 §8.3）。 */
+  padding: 8px 28px;
   border-bottom: 1px solid var(--border);
   background: var(--overlay);
 }
@@ -750,12 +752,29 @@ small {
   align-items: center;
   gap: 16px;
   min-width: 0;
+  flex: 1 1 280px;
+}
+.page-header-leading > .btn {
+  flex: none;
+  white-space: nowrap;
+}
+.page-header-titles {
+  min-width: 0;
+}
+.page-header-titles .eyebrow,
+.page-header-titles h1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .page-header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex: none;
+  max-width: 100%;
+  flex-wrap: wrap;
+  margin-left: auto;
 }
 /* 页面级内联提示：技能页与专家页的提示挂在页头带下方，是一条横贯内容区的带子，
    左右与页头的 28px 内缩对齐；知识页那条落在版心里，跟着版心齐边。
@@ -1596,6 +1615,7 @@ small {
 
 .experts-page {
   display: flex;
+  min-width: 0;
   min-height: 0;
   flex: 1;
   flex-direction: column;
@@ -1853,6 +1873,19 @@ small {
 .list-row[data-variant='divider'] {
   align-items: flex-start;
   border-bottom: 1px solid var(--border);
+}
+.list-row[data-actions-placement='below'] {
+  flex-wrap: wrap;
+}
+.list-row-content {
+  display: flex;
+  min-width: 0;
+  flex-basis: 100%;
+  align-items: flex-start;
+  gap: 12px;
+}
+.list-row[data-actions-placement='below'] > .list-row-actions {
+  margin-left: auto;
 }
 /* 卡片外壳只有这一处：网格里的 Card、列表里的 ListRow card 档，以及外观页那颗
    选择卡（它是 button，进不了 Card 的 article 根，但外壳没有理由再抄一遍）
@@ -4003,13 +4036,11 @@ button.list-row:where(:not(:disabled)):hover {
   line-height: var(--line-height-body);
   word-break: break-all;
 }
-/* 窄窗：知识页的摘要行、作业行与详情头改为纵向堆叠，用换行换空间，不压字号。 */
+/* 窄窗：知识页的摘要行与作业行用换行换空间，不压字号。 */
 @media (max-width: 960px) {
   .knowledge-summary,
   .knowledge-summary-actions,
-  .knowledge-jobs .list-row,
-  .knowledge-detail-header,
-  .knowledge-detail-actions {
+  .knowledge-jobs .list-row {
     flex-direction: column;
     align-items: flex-start;
   }
@@ -4067,17 +4098,6 @@ button.list-row:where(:not(:disabled)):hover {
   gap: 16px;
   padding: 14px 2px 28px;
 }
-.knowledge-detail-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-.knowledge-detail-header strong {
-  display: block;
-  font-size: var(--font-size-emphasis);
-}
-.knowledge-detail-header small,
 .knowledge-detail-hint,
 .knowledge-revision-row small,
 .knowledge-detail-text small {
@@ -4162,12 +4182,12 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   min-height: 100%;
   flex-direction: column;
+  gap: 16px;
 }
 .artifact-detail-layout {
   display: grid;
   grid-template-columns: 176px minmax(0, 1fr);
   gap: 24px;
-  margin-top: 24px;
   flex: 1;
   min-height: 0;
 }
@@ -4577,10 +4597,16 @@ select,
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.message-table {
+.markdown-table {
   max-width: 100%;
   overflow-x: auto;
   margin-bottom: 16px;
+}
+.markdown-table table {
+  min-width: max-content;
+}
+.markdown-table th {
+  white-space: nowrap;
 }
 .message-table table {
   min-width: 480px;

@@ -301,11 +301,20 @@ Skill 列表分别展示来源（内置/用户）、启用状态、信任状态�
 
 所有主内容页（工作、成果、知识、技能、专家）共用同一页面骨架，由两个 layout 层组成：
 
-- 页头带（page header）：贯穿中栏的同一横带——高度固定 70px、左缘 28px、同底部分隔线、同一拖拽区行为；左侧固定放「返回键 + eyebrow + 页标题」，右侧固定放本页操作区。标题与返回键在所有页面坐标一致，切换导航时不发生跳跃。右侧上下文面板展开时，其顶部区（面板标题行 + 页签行）总高必须等于页头带高度 70px，分隔线与页头带底边构成同一条贯通横线。
+- 页头带（page header）：贯穿中栏的同一横带——基准高度 70px、左缘 28px、同底部分隔线、同一拖拽区行为；左侧放「返回键 + eyebrow + 页标题」，右侧放本页操作区。返回键始终单行且不压缩；长标题单行省略，完整名称可通过 title 查看。标题与操作不能并排容纳时，操作区换到下一行，页头按内容增高，禁止把中文返回键或操作文字挤成竖排。该响应由 `PageHeader` 基座拥有，页面不覆盖页头几何。工作页的上下文开关可并排容纳，页头与上下文面板顶部仍以 70px 对齐。
 - 版心（page body）：统一 860px、水平居中；窄窗口时两侧各留 24px 最小间距。页内说明文字、内容列表、对话消息与输入框全部落在版心内；工作视图的对话列与输入框同宽。
 - 上下文面板按场景出现：右栏只在承载任务上下文的工作视图渲染（过程/资料/成果）；成果、知识、设置等无任务上下文的视图不渲染面板，主工作区占满剩余宽度，布局网格不得预留空栏。面板收起后整体移除、不留残条，重开入口固定为页头带右侧操作区的「查看上下文」开关。
 
 实现上以 `components/layout/` 下的 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 与共享 Token/样式为唯一来源；页面不得自定版心宽度、页头结构、滚动边界，也不得替骨架容器补纵向间距——间距机制必须由骨架自己拥有（§9.8）。设置页因保留二级导航布局作为声明特例，其余新增页面一律套用本骨架。数据加载、搜索和删除等业务编排留在页面对应的 hook，不在布局组件中复制 Cloud 的通用 CRUD 控制器。
+
+详情与密集管理页的阅读顺序（2026-10-02，真实产品走查 V03–V08）：
+
+- 成果详情首屏优先正文或演示预览；参考设置、声明采用依据和版本说明放入 `Disclosure`，版本历史与实际访问记录仍可回看。声明采用与运行访问不能合并成同一种来源语义。
+- Markdown 表格在 `MarkdownPreview` 内提供可聚焦的横向滚动区，表头单行；宽表不迫使页面横滚，也不缩小字号或改写成果内容。滚动区虽是 div，焦点仍复用全局控件规则的主题 Token 与盒内环，不依赖浏览器默认外扩环；`RING_OUTLETS` 同步登记这条组合选择器，仍保持五个出口。
+- 知识详情以资料标题、来源状态、保存文本为主；资料库搜索、集合筛选、导入和总量说明留在列表态。详情中的保存版本、集合分类和来源管理按需展开，索引作业仍从页头进入；失败及提取警告不随说明折叠。
+- 专家常用参考按已选、知识修订、当前空间成果版本分组，支持本地标题/版本信息筛选。其他空间的成果单独折叠并禁选；已选失效或越范围的引用仍显示并允许移除。精确修订、用途与运行范围校验不变。
+- 长正文且多动作的列表行使用 `ListRow actionsPlacement="below"`，正文独占一行，操作随后折行；槽位几何由基座拥有，页面不得覆盖 `.list-row-main` 或 `.list-row-actions`。
+- 记忆页常驻显示自动提炼开关、当前同意状态、错误和活动作业；低频规则与历史作业用 `Disclosure`。没有候选只给简短状态，不再叠加空态卡片；新增经验表单优先于说明。切换开关仍必须经过代价与同意版本确认，候选不自动确认，来源/依赖/冲突警告保持可见。
 
 ## 9. 视觉系统
 
@@ -657,7 +666,7 @@ UI Foundation 首批提供四套成对色系：
 | `NavList`、`NavItem` | `components/NavList.tsx` | 纵向导航；label/selected 表达语义，aria-current/aria-pressed 表达位置，不用 active 皮类 |
 | `SectionHeader` | `components/SectionHeader.tsx` | 标题/说明/右槽操作；block=h2、panel=h3，actions 分别 lg/sm；模态首块用 block |
 | `Card`、`CardMark` | `components/Card.tsx` | 独立卡片及身份标记；leading/title/byline/description/children/footer 六槽；外壳归基座 |
-| `ListRow` | `components/ListRow.tsx` | leading/title/description/meta/actions；divider/card/plain 与 multiline；右槽有动作时不再整行点击 |
+| `ListRow` | `components/ListRow.tsx` | leading/title/description/meta/actions；divider/card/plain 与 multiline；actionsPlacement=side/below；有动作时不再整行点击 |
 | `CatalogCard`、`CatalogRow` | `components/CatalogCard.tsx` | 技能/专家条目成对呈现，同一 EntryFacts 生成两档；截断说明由 Tooltip 补全 |
 | `Badge` | `components/Badge.tsx` | 只读短状态/标签；tone 六档、shape pill/tag；可移除绑定用 BindingChip |
 | `ConnectionStatus` | `components/ConnectionStatus.tsx` | 模型/MCP 状态统一 tone，领域自己给文案 |

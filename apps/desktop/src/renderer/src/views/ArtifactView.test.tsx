@@ -191,6 +191,7 @@ describe('ArtifactPage 本空间参考版本', () => {
         onBack={vi.fn()}
       />,
     );
+    fireEvent.click(screen.getByText('参考设置与声明采用依据'));
     return container;
   };
 
@@ -231,7 +232,8 @@ describe('ArtifactPage 本空间参考版本', () => {
     fireEvent.click(screen.getByRole('button', { name: '指定为本空间参考版本' }));
     await act(async () => undefined);
 
-    const alert = section(container)?.querySelector('.inline-error');
+    const alert = container.querySelector('.inline-error');
+    expect(alert?.closest('details')).toBeNull();
     expect(alert?.textContent).toContain('参考标记刚被别处更新，请重新查看后再试。');
     expect(alert?.getAttribute('role')).toBe('alert');
     expect(section(container)?.textContent).not.toContain('已把 v1 指定为本空间参考版本');
@@ -243,9 +245,7 @@ describe('ArtifactPage 本空间参考版本', () => {
     });
     const container = renderWithReferences(references);
 
-    fireEvent.click(
-      within(section(container) as HTMLElement).getByRole('button', { name: '关闭' }),
-    );
+    fireEvent.click(within(container).getByRole('button', { name: '关闭' }));
     expect(references.clearError).toHaveBeenCalled();
   });
 
