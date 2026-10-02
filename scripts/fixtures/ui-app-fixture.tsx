@@ -182,19 +182,16 @@ async function runStep(step: string): Promise<{ step: string; alerts: number; wi
       throw new Error('换期未清空本期要求');
   }
   if (step === 'restarted') {
+    const findRecoveredTask = (): HTMLButtonElement | undefined =>
+      [...document.querySelectorAll<HTMLButtonElement>('.workspace-group-tasks button')].find(
+        (item) => item.textContent?.includes('生成 Markdown 下期复盘'),
+      );
+    // 旅程入口安装早于 App 的异步 IPC 初始化；等待实际任务导航，不能把未加载当丢失。
+    await waitFor(() => Boolean(findRecoveredTask()));
     await click('工作');
-    const task = [
-      ...document.querySelectorAll<HTMLButtonElement>(
-        '.workspace-task-item, .task-nav-item, .workspace-task-row button',
-      ),
-    ].find((item) => item.textContent?.includes('生成 Markdown 下期复盘'));
-    if (task) task.click();
-    else {
-      const buttons = [...document.querySelectorAll<HTMLButtonElement>('button')];
-      const recent = buttons.find((item) => item.textContent?.includes('生成 Markdown 下期复盘'));
-      if (!recent) throw new Error('重启后任务导航丢失');
-      recent.click();
-    }
+    const task = findRecoveredTask();
+    if (!task) throw new Error('重启后任务导航丢失');
+    task.click();
     await waitFor(() => hasText('下期复盘已完成') && hasText('合成故障：离线请求失败'));
     await click('设置');
     await click('记忆');
