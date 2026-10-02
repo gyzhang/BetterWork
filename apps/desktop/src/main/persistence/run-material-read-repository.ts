@@ -247,7 +247,7 @@ export class RunMaterialReadRepository {
       .prepare(
         `SELECT 1 AS found FROM run_material_reads
           WHERE run_id = ? AND material_json = ? AND content_hash = ?
-            AND operation <> 'search'
+            AND operation IN ('read', 'parse')
           LIMIT 1`,
       )
       .get(runId, materialJson, contentHash) as { found?: number } | undefined;

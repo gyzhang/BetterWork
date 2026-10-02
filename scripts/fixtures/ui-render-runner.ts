@@ -19,7 +19,7 @@ function outputDirectory(): string {
   return directory;
 }
 const output = outputDirectory();
-// 独立的临时 Chromium 数据目录；不加载产品 Preload、不读取 SQLite、不调用服务。
+// 独立的临时 Chromium 数据目录；组件/页面矩阵不加载产品 Preload；最后一组应用旅程另用真实 IPC 与临时 SQLite。
 app.setPath('userData', path.join(output, 'user-data'));
 // 测试宿主使用软件合成，减少对桌面显示服务和 GPU 状态的依赖。
 app.disableHardwareAcceleration();
@@ -91,12 +91,22 @@ async function captureVerifiedFrame(
     const rect = panel?.getBoundingClientRect();
     const rgb = element => getComputedStyle(element).backgroundColor.match(/\\d+(?:\\.\\d+)?/g).map(Number);
     let canvas = rgb(document.body).slice(0,3);
+    const memoryPage = Boolean(document.querySelector('.settings-nav-list'));
+    if (memoryPage) {
+      // 设置侧栏是 raised 表面：从 Token 解析期望色，不能拿被测侧栏自己的声明当期望。
+      const swatch = document.createElement('span');
+      swatch.style.backgroundColor = 'var(--surface-raised)';
+      document.body.appendChild(swatch);
+      canvas = rgb(swatch).slice(0,3);
+      swatch.remove();
+    }
     if (${modal ? 'true' : 'false'}) {
       const overlay = rgb(document.querySelector('.modal-backdrop'));
       const alpha = overlay[3] ?? 1;
       canvas = canvas.map((channel,index) => Math.round(channel * (1-alpha) + overlay[index] * alpha));
     }
-    const samples = [{x: innerWidth - 20, y: innerHeight - 20,
+    // 业务页右下角可能有合法 toast/滚动条；页面取左侧空画布或设置导航表面。
+    const samples = [{x: ${filename.includes('page-') ? '20' : 'innerWidth - 20'}, y: innerHeight - 20,
       width: innerWidth, height: innerHeight, color: canvas}];
     if (${modal ? 'true' : 'false'} && panel && rect)
       samples.push({x: rect.left + 4, y: rect.top + rect.height / 2,
@@ -106,12 +116,13 @@ async function captureVerifiedFrame(
   let previous: string | undefined;
   for (let attempt = 0; attempt < MAX_SAMPLE_ATTEMPTS; attempt += 1) {
     await window.webContents.executeJavaScript(
-      'Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => false)))',
+      // 提炼中的 spinner 是合法持续状态；只等有限过渡，画布仍须连续两帧核对。
+      'Promise.all(document.getAnimations().filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => false)))',
     );
     const samples = (await window.webContents.executeJavaScript(sampleScript)) as FrameSample[];
     const image = await paintedFrame(window);
     const size = image.getSize();
-    // Chromium 的原始 N32 位图在本项目 macOS/Linux x64/arm64 运行环境为 BGRA。
+    // Chromium 的原始 N32 位图在本项目 macOS arm64 运行环境为 BGRA。
     const mismatch = frameMismatch(samples, {
       data: image.toBitmap(),
       width: size.width,
@@ -141,7 +152,11 @@ async function run(): Promise<void> {
     await writeFile(path.join(output, 'results.partial.json'), JSON.stringify(results, null, 2));
   };
   // 页面反馈反例只跑能触发失败的页面路径；普通 ui:check 仍跑完整矩阵。
-  for (const scheme of process.argv.includes('--probe-page-feedback') ? [] : colorSchemes) {
+  for (const scheme of process.argv.some((argument) =>
+    ['--probe-page-feedback', '--probe-app-persistence', '--app-only'].includes(argument),
+  )
+    ? []
+    : colorSchemes) {
     for (const mode of ['light', 'dark']) {
       for (const width of [760, 1380]) {
         const id = `${scheme.id}-${mode}-${width}`;
@@ -228,7 +243,11 @@ async function run(): Promise<void> {
     }
   }
   // 生产页面关键路径使用合成状态/IPC 替身；独立于上面的固定组件矩阵报告覆盖。
-  for (const page of ['artifact', 'knowledge']) {
+  for (const page of process.argv.some((argument) =>
+    ['--probe-app-persistence', '--app-only'].includes(argument),
+  )
+    ? []
+    : ['artifact', 'knowledge', 'expert', 'memory']) {
     for (const mode of ['light', 'dark']) {
       for (const width of [760, 1380]) {
         for (const reducedMotion of [false, true]) {
@@ -273,7 +292,7 @@ async function run(): Promise<void> {
             const checks: unknown[] = [];
             for (const step of steps) {
               const reading: unknown = await window.webContents.executeJavaScript(
-                `window.uiPageChecks.runStep(${JSON.stringify(step)})`,
+                `window.uiPageChecks.runStep(${JSON.stringify(step)}).catch(error => { throw new Error(${JSON.stringify(step)} + ": " + error.message + "; " + document.body.innerText.slice(-700)); })`,
               );
               if (errors.length > 0) throw new Error(`页面运行错误：${errors.join('；')}`);
               await captureVerifiedFrame(
@@ -305,6 +324,19 @@ async function run(): Promise<void> {
         }
       }
     }
+  }
+  if (!process.argv.includes('--probe-page-feedback')) {
+    const { runAppJourney } = await import('./ui-app-journey');
+    results.push(
+      await runAppJourney(
+        output,
+        async (window, filename) => {
+          await writeFile(filename, (await paintedFrame(window)).toPNG());
+        },
+        process.argv.includes('--probe-app-persistence'),
+      ),
+    );
+    await persistPartial();
   }
   await writeFile(path.join(output, 'results.json'), JSON.stringify(results, null, 2));
   console.warn(`UI 真实渲染检查通过：${results.length} 组；截图与读数：${output}`);

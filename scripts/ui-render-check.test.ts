@@ -4,6 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 
 const script = fileURLToPath(new URL('./ui-render-check.mjs', import.meta.url));
+// CI 的主矩阵输出由 workflow 留存；子进程反例各自用默认临时目录，避免相互覆盖。
+const cliEnvironment = { ...process.env };
+delete cliEnvironment.UI_RENDER_OUTPUT_DIR;
 
 /**
  * 这些反例各要真起一次 esbuild 打包＋Electron 矩阵（安静机实测 0.5／1.2／1.6s，整档并发或
@@ -18,6 +21,7 @@ it(
   () => {
     const result = spawnSync(process.execPath, [script, '--probe-control-height'], {
       encoding: 'utf8',
+      env: cliEnvironment,
     });
     expect(result.status).toBe(1);
     // 断言确实进入真实布局检查，进程/显示服务启动失败不算有效的反向验证。
@@ -32,6 +36,7 @@ it(
   () => {
     const result = spawnSync(process.execPath, [script, '--probe-snapshot-theme'], {
       encoding: 'utf8',
+      env: cliEnvironment,
     });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('截图绘制状态不一致：主题画布');
@@ -45,6 +50,7 @@ it(
   () => {
     const result = spawnSync(process.execPath, [script, '--probe-snapshot-modal'], {
       encoding: 'utf8',
+      env: cliEnvironment,
     });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('截图绘制状态不一致：模态');
@@ -58,9 +64,39 @@ it(
   () => {
     const result = spawnSync(process.execPath, [script, '--probe-page-feedback'], {
       encoding: 'utf8',
+      env: cliEnvironment,
     });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('页面反馈不可见');
+    expect(result.stdout).not.toContain('UI 真实渲染检查通过');
+  },
+  cliTimeout,
+);
+
+it(
+  '离线应用旅程完成后才给出定向检查成功',
+  () => {
+    const result = spawnSync(process.execPath, [script, '--app-only'], {
+      encoding: 'utf8',
+      env: cliEnvironment,
+      timeout: cliTimeout,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain('UI 真实渲染检查通过：1 组');
+  },
+  cliTimeout,
+);
+
+it(
+  '完整应用显示恢复而 SQLite 未保存时，真实持久化旅程必须失败',
+  () => {
+    const result = spawnSync(process.execPath, [script, '--probe-app-persistence'], {
+      encoding: 'utf8',
+      env: cliEnvironment,
+      timeout: cliTimeout,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('恢复参与选择未持久化');
     expect(result.stdout).not.toContain('UI 真实渲染检查通过');
   },
   cliTimeout,

@@ -43,6 +43,7 @@ import type { MemoryEditorSubmission } from './components/MemoryEditor';
 import { MessageBlock } from './components/MessageBlock';
 import { ModelEditor } from './components/ModelEditorSheet';
 import { type NavEntry, NavItem, NavList } from './components/NavList';
+import { StatusNote } from './components/StatusNote';
 import { ToolActivity } from './components/ToolActivity';
 import { TransientToast } from './components/TransientToast';
 import { Welcome } from './components/Welcome';
@@ -322,8 +323,9 @@ export function App(): React.JSX.Element {
   }, [activeExpert, workspace]);
 
   useEffect(() => {
-    trackAction(reloadTaskMemories(), '加载当前任务记忆');
-  }, [reloadTaskMemories]);
+    // 设置内新增/修订经验后返回工作，范围预览已经采用新记录，正文清单也必须重新读取。
+    if (view === 'work') trackAction(reloadTaskMemories(), '加载当前任务记忆');
+  }, [reloadTaskMemories, view]);
 
   /** 人工保存：`create` 的失败已由 hook 收口，这里只把它呈现在表单旁边。 */
   const submitMemoryCapture = async (submission: MemoryEditorSubmission): Promise<boolean> => {
@@ -1508,6 +1510,9 @@ export function App(): React.JSX.Element {
                               <InlineError
                                 message={`本次运行未完成，回复内容未登记为正式成果。${runFailure.error ?? ''}`}
                               />
+                            )}
+                            {runEvents.some((event) => event.type === 'run.cancelled') && (
+                              <StatusNote message="本次运行已停止。可以调整要求后重新开始。" />
                             )}
                             {/* 「保存为成果」的失败需要停留并让人据此重试，属 §11.5.1 第二落点；
                                 成功那句改走自消浮层（同一处只留一个落点）。原先两档都写在按钮旁

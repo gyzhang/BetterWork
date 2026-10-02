@@ -2,7 +2,6 @@ import {
   type ArtifactInputRelationInput,
   artifactInputRelationInputSchema,
   type ArtifactSourceDeclarationKind,
-  knowledgeMaterialReferenceSchema,
   type MaterialReference,
   type RunArtifactSourceDeclaration,
   sameKnowledgeReference,
@@ -191,9 +190,9 @@ export class ArtifactDeclarationService {
     if (reference.kind === 'knowledge-revision') {
       return this.store.materialReads.hasKnowledgeBodyRead(runId, reference);
     }
-    return this.store.materialReads.hasMaterialRead(
+    return this.store.materialReads.hasBodyRead(
       runId,
-      `${reference.kind}:${referenceId(reference)}`,
+      JSON.stringify(reference),
       reference.contentHash,
     );
   }
@@ -204,11 +203,4 @@ const sameReferenceLoose = (left: MaterialReference, right: MaterialReference): 
     return sameKnowledgeReference(left, right);
   }
   return JSON.stringify(left) === JSON.stringify(right);
-};
-
-const referenceId = (reference: MaterialReference): string => {
-  const knowledge = knowledgeMaterialReferenceSchema.safeParse(reference);
-  if (knowledge.success) return knowledge.data.knowledgeRevisionId;
-  const artifact = reference as { artifactVersionId?: string; snapshotId?: string };
-  return artifact.artifactVersionId ?? artifact.snapshotId ?? '';
 };

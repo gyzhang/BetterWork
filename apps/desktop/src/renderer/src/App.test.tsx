@@ -752,6 +752,27 @@ describe('Workspace input material display', () => {
 });
 
 describe('Task context restoration', () => {
+  it('没有工具调用的取消运行也显示可继续工作的终态', async () => {
+    const api = installApi();
+    api.runs.list.mockResolvedValue([{ ...previousRun, status: 'cancelled' }]);
+    api.runs.listEvents.mockResolvedValue([
+      {
+        id: 'cancelled-event',
+        runId: previousRun.id,
+        sequence: 1,
+        createdAt: 2,
+        type: 'run.cancelled',
+      },
+    ]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
+    const terminal = await screen.findByText('本次运行已停止。可以调整要求后重新开始。');
+    expect(terminal.closest('.status-note')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: '停止' })).toBeNull();
+    expect(screen.getByRole('button', { name: '开始工作' })).toBeTruthy();
+    expect(api.runs.start).not.toHaveBeenCalled();
+  });
+
   it('restores the saved Skill selection when reopening a task', async () => {
     const api = installApi({
       context: {

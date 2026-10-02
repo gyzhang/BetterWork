@@ -50,14 +50,17 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: ui-render-check
+          # 仅合成旅程的临时库/资料，用于先查 SQLite 再查截图；不含用户 Chromium 数据目录。
           path: |
             .ui-render/screenshots/
             .ui-render/results.json
             .ui-render/results.partial.json
+            .ui-render/app-journey.partial.json
+            .ui-render/app-journey-*/
           retention-days: 14
       # 绿跑也要留读数：「这条判据这轮是不是变严了」「每组渲染耗时漂了多少」只能拿两次读数对比回答，
       # 而只随失败上传的产物在连着两次绿跑之间是空的。只传 results.json——绿跑的截图没有诊断价值，
-      # 16 组 × 两档窗口的图白占空间，保留期也因此压到 7 天。
+      # 完整矩阵的逐步截图仅失败时保留，绿跑读数保留期压到 7 天。
       - name: 留存渲染检查读数
         if: success()
         uses: actions/upload-artifact@v6

@@ -7,6 +7,7 @@ import {
   type ArtifactInputRelationInput,
   type KnowledgeEvidenceSource,
   type KnowledgeMaterialReference,
+  type MaterialReference,
   type TaskMaterialSelection,
 } from '@betterwork/agent-protocol';
 import Database from 'better-sqlite3';
@@ -170,6 +171,69 @@ const materialRelation = (reference: KnowledgeMaterialReference): ArtifactInputR
 });
 
 describe('ArtifactDeclarationService.validate', () => {
+  it.each(['read', 'parse', 'preview', 'search'] as const)(
+    '成果版本与工作空间材料的 %s 足迹按实际正文读取判定',
+    (operation) => {
+      const fixture = setup();
+      const previous = fixture.store.runs.get(fixture.runId);
+      const snapshot = fixture.store.runContextSnapshots.get(fixture.runId);
+      if (!previous || !snapshot) throw new Error('缺运行基线');
+      const materials: MaterialReference[] = [
+        {
+          kind: 'artifact-version',
+          artifactId: 'previous-artifact',
+          artifactVersionId: 'previous-version',
+          contentHash: HASH,
+          originWorkspaceId: snapshot.workspaceId,
+        },
+        {
+          kind: 'workspace-input-snapshot',
+          snapshotId: 'input-snapshot',
+          workspaceId: snapshot.workspaceId,
+          contentHash: HASH,
+          format: 'txt',
+          fileKey: 'input-snapshots/input/content',
+        },
+      ];
+      const runId = randomUUID();
+      fixture.store.runs.create({ ...previous, id: runId });
+      fixture.store.runContextSnapshots.create({
+        runId,
+        taskId: fixture.taskId,
+        workspaceId: snapshot.workspaceId,
+        contextSegmentId: randomUUID(),
+        materials: materials.map((reference) => ({
+          reference,
+          purpose: 'historical-comparison',
+          addedFrom: 'user-input',
+        })),
+        createdAt: 1,
+      });
+      for (const material of materials) {
+        expect(fixture.declarations.wasReadDuring(material, runId)).toBe(false);
+        fixture.store.materialReads.save({
+          id: randomUUID(),
+          runId,
+          material,
+          operation,
+          locator: '全文',
+          contentHash: HASH,
+          capturedAt: 2,
+        });
+        const inputs = [{ input: material, relation: 'comparison' as const }];
+        if (operation === 'read' || operation === 'parse')
+          expect(fixture.declarations.validate(inputs, runId)).toEqual(inputs);
+        else
+          expect(() => fixture.declarations.validate(inputs, runId)).toThrow(
+            SourceDeclarationError,
+          );
+        expect(
+          fixture.declarations.wasReadDuring({ ...material, contentHash: 'b'.repeat(64) }, runId),
+        ).toBe(false);
+      }
+    },
+  );
+
   it('accepts a read material and an exact knowledge evidence, and dedupes identical entries', () => {
     const fixture = setup();
     const inputs = [

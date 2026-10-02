@@ -17,7 +17,7 @@
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | Vitest **功能档并发 → 重档串行**两次独立调用（`--project functional`，然后 `--project heavy`），断言行为是否正确；重档收录单文件墙钟 ≥20s 的文件，判据见 §9 |
 | `npm run bench` | Vitest **计时基准档**（`--project bench`）：串行跑 `*.bench.test.ts`，断言墙钟与内存预算 |
-| `npm run ui:check` | 独立 Electron 宿主：全部正式色系明暗 × 760/1380px 的组件矩阵，加成果/知识生产页面关键路径（青玉明暗、两档窗口、普通/减动效）；截图/读数放临时目录，边界见 docs/10 §10.1.3 |
+| `npm run ui:check` | 独立 Electron 宿主：全部正式色系明暗 × 760/1380px 的组件矩阵，加成果/知识/专家/设置内记忆分区的生产页面关键路径（青玉明暗、两档宿主宽度、普通/减动效），以及一条真实 App/Preload/IPC/临时 SQLite 离线旅程（青玉深色、1380px）；截图/读数放临时目录，边界见 docs/10 §10.1.3 |
 | `npm run verify` | lint + format:check + typecheck + test + build + ui:check，任一失败即中止 |
 
 提交前必须跑 `npm run verify`。**不要**把它的输出接管道后只看末尾——`cmd | tail` 的退出码是 `tail` 的，会把失败读成成功。需要截取输出时用 `npm run verify > log 2>&1; echo $?`。
@@ -61,7 +61,9 @@ AI 交接按“已实现／自动化通过／AI 页面走查／待人工验收�
 - **留档**：非规则发现未处理时，`--save` 拒绝写文件。例外变化或旧基线缺指纹时，AI 先 Review 具体差异，追加本批次日志，再带 `--batch-base=<起点SHA> --review-reason='具体理由' --save` 留档，理由随基线保存。该次命令仍返回 1 并保留发现，随后再跑一次巡检，确认与经 Review 的新基线一致。无规则变化时正常留读数无需重复理由；损坏的基线不能当成空基线。
 - **规模**：文件数含 bench，用例数粗读 it 声明、不展开参数化用例，不是实际运行结果。护栏短标题与完整路径只计同一判据一次；点名覆盖只表示专名引用，不表示未点名规则无人知晓。性能相关任务另跑对应 bench，不能从 verify 推导性能已验。
 
-页面与 UI 状态的回归优先扩展现有 ui:check，使用生产组件/页面与合成数据或最小 IPC 替身，明确命中路径与未覆盖项；不新建一套视觉规范或把合成宿主称为完整产品验收。
+页面与 UI 状态的回归优先扩展现有 ui:check；组件/页面矩阵使用合成数据或最小 IPC 替身，应用旅程使用真实 App/Preload/IPC/Application 与临时 SQLite、确定性请求替身，明确命中路径与未覆盖项；不新建一套视觉规范或把合成宿主称为完整产品验收。
+
+应用旅程定向排查可用 `npm run ui:check -- --app-only`，只跑该旅程并留下独立结果；不能把这一组通过当作完整 `ui:check` 或 `verify` 通过。完整门禁默认始终执行全部矩阵与应用旅程。
 
 格式化范围：所有 `.ts` / `.tsx` / `.css` / `.html` / `.json`。Markdown 与 `docs/assets/` 下的品牌 SVG **不格式化**——中文长行经重排后无法逐字回读校验，标志文件是人工定稿资产。
 
@@ -223,7 +225,7 @@ standards/
 - 测试用真实的 SQLite（`:memory:` 或临时目录）而不是 mock 仓储——本仓已有多次「mock 通过、真实库失败」的教训来源是 schema 与约束。
 - 需要构造非法输入、按下标取断言目标时直接用 `!` 与 `any`，测试文件按角色放宽了这几条规则（见 `eslint.config.mjs` 的 `betterwork/tests` 块）。这是按文件角色划定的单一策略，不是逐文件例外；生产代码不享受。
 - 涉及外部 HTTP 的代码必须注入 `fetch`（或用 `vi.stubGlobal`），测试绝不触网。
-- 真实渲染检查复用生产组件与样式，在独立临时 Chromium 数据目录运行，不挂产品 Preload、不访问 SQLite/模型/网络、不抢桌面焦点。测试宿主用软件合成，等待动画结束与新绘制帧，并核对截图中的主题画布、模态遮罩和面板像素；仅 DOM 就绪不足以证明截图有效。门禁跑在 macOS runner 上（[ADR-0036](adr/0036-macos-only-platform-scope.md)），不需要 Xvfb，也不为任何平台加 Chromium 启动开关；合成测试窗口与产品窗口一样保持 `sandbox: true`。原生控件对比必须测自然高度，不能用 flex stretch 掩盖差异。`npm run ui:check -- --probe-control-height`、`--probe-snapshot-theme`、`--probe-snapshot-modal` 各只改临时构建 CSS，预期失败且退出码 1，分别证明几何、主题截图与模态截图能拦住退化。它是结构/交互冒烟与截图产出，不能替代整页视觉快照差异审阅、屏幕阅读器和真实 Run 验收。
+- 真实渲染检查复用生产组件与样式，在独立临时 Chromium 数据目录运行，不抢桌面焦点。组件/页面矩阵不挂产品 Preload、不访问 SQLite；应用旅程挂生产 Preload 和真实 IPC/Application，只访问临时 SQLite 与合成资料，Provider 请求由确定性替身接管，两类均不联网、不调用真实模型。覆盖与恢复边界只维护在 UI/UX §10.1.3。测试宿主用软件合成，等待动画结束与新绘制帧；组件/页面矩阵另核对稳定截图中的主题画布、模态遮罩和面板像素，DOM 就绪不足以证明截图有效。门禁跑在 macOS runner 上（[ADR-0036](adr/0036-macos-only-platform-scope.md)），合成窗口保持 `sandbox: true`。原生控件对比测自然高度，不能用 flex stretch 掩盖差异。`npm run ui:check -- --probe-control-height`、`--probe-snapshot-theme`、`--probe-snapshot-modal`、`--probe-page-feedback` 只改临时构建 CSS；`--probe-app-persistence` 只改临时数据库，五个探针均预期退出 1，分别验证几何、截图主题、模态绘制、页面反馈与真实持久化退化会被拦截。这些证据不能替代整页视觉差异审阅、屏幕阅读器、真实模型与安装验收。
 - **像素门禁按「连续两帧读数一致」下结论，不按单帧**：`capturePage` 在负载高的机器上会把「遮罩已画、面板主题还没换上」的中间态交出来，单帧即判就是把环境差异读成缺陷（2026-10-02 的 macOS runner 假红是这个形状；焦点环那一发是同一族的读取时机问题）。判据时机与容差都收在 `scripts/fixtures/frame-verdict.ts`：两帧一致且合规才落图放行，两帧报同一条违规才判红，两帧不同就继续等；通道容差仍是 2——**放宽容差等于把真实缺陷登记成环境差异**，要改的永远是「什么时候可以判」而不是「差多少算过」。
 - 断言窗口广播时必须区分 channel：同一个 `webContents.send` 同时承载 Run 事件与通知事件，只按 `type` 断言会把两者混在一起。
 - 依赖重型动态导入的用例（PDF / DOCX 解析）要显式提高超时，冷缓存下的首次转换会超过默认 5 秒。
