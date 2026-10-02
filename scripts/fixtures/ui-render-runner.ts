@@ -140,7 +140,8 @@ async function run(): Promise<void> {
   const persistPartial = async (): Promise<void> => {
     await writeFile(path.join(output, 'results.partial.json'), JSON.stringify(results, null, 2));
   };
-  for (const scheme of colorSchemes) {
+  // 页面反馈反例只跑能触发失败的页面路径；普通 ui:check 仍跑完整矩阵。
+  for (const scheme of process.argv.includes('--probe-page-feedback') ? [] : colorSchemes) {
     for (const mode of ['light', 'dark']) {
       for (const width of [760, 1380]) {
         const id = `${scheme.id}-${mode}-${width}`;
@@ -222,6 +223,85 @@ async function run(): Promise<void> {
         } finally {
           await persistPartial();
           window.destroy();
+        }
+      }
+    }
+  }
+  // 生产页面关键路径使用合成状态/IPC 替身；独立于上面的固定组件矩阵报告覆盖。
+  for (const page of ['artifact', 'knowledge']) {
+    for (const mode of ['light', 'dark']) {
+      for (const width of [760, 1380]) {
+        for (const reducedMotion of [false, true]) {
+          const id = `page-${page}-jade-${mode}-${width}-${reducedMotion ? 'reduced' : 'normal'}`;
+          const window = new BrowserWindow({
+            width,
+            height: 800,
+            useContentSize: true,
+            show: false,
+            paintWhenInitiallyHidden: true,
+            webPreferences: {
+              offscreen: true,
+              contextIsolation: true,
+              nodeIntegration: false,
+              sandbox: true,
+            },
+          });
+          const errors: string[] = [];
+          window.webContents.on('console-message', (details) => {
+            if (details.level === 'error') errors.push(details.message);
+          });
+          try {
+            const url = pathToFileURL(path.join(output, 'pages.html'));
+            url.searchParams.set('page', page);
+            url.searchParams.set('mode', mode);
+            await window.loadURL(url.href);
+            window.webContents.debugger.attach('1.3');
+            await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', {
+              features: [
+                {
+                  name: 'prefers-reduced-motion',
+                  value: reducedMotion ? 'reduce' : 'no-preference',
+                },
+              ],
+            });
+            await waitFor(window, 'document.documentElement.dataset.fixtureReady === "true"');
+            await window.webContents.executeJavaScript('document.fonts.ready');
+            const steps = (await window.webContents.executeJavaScript(
+              'window.uiPageChecks.steps',
+            )) as string[];
+            if (steps.length === 0) throw new Error('页面回归缺用户路径');
+            const checks: unknown[] = [];
+            for (const step of steps) {
+              const reading: unknown = await window.webContents.executeJavaScript(
+                `window.uiPageChecks.runStep(${JSON.stringify(step)})`,
+              );
+              if (errors.length > 0) throw new Error(`页面运行错误：${errors.join('；')}`);
+              await captureVerifiedFrame(
+                window,
+                path.join(output, 'screenshots', `${id}-${step}.png`),
+                false,
+              );
+              checks.push({ step, reading });
+            }
+            results.push({
+              id,
+              coverage: 'production-page-with-synthetic-state',
+              page,
+              mode,
+              width,
+              reducedMotion,
+              checks,
+            });
+          } catch (error) {
+            await writeFile(
+              path.join(output, 'screenshots', `${id}-failed.png`),
+              (await window.webContents.capturePage()).toPNG(),
+            );
+            throw new Error(`生产页面回归失败：${id}`, { cause: error });
+          } finally {
+            await persistPartial();
+            window.destroy();
+          }
         }
       }
     }

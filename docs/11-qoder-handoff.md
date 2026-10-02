@@ -69,7 +69,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 提交前唯一门禁：
 
     npm run verify     # lint + format:check + typecheck + test + build + ui:check
-    npm run ui:check   # 全主题 × 两档窗口真实渲染；独立合成页面，截图/读数放临时目录
+    npm run ui:check   # 组件矩阵 + 成果/知识生产页面合成关键路径；覆盖边界见 docs/10 §10.1.3
     npm run bench      # 计时基准档（串行）：跑完规模/性能卡或专门核查时执行，不在提交门禁里
 
 测试分 functional/heavy/bench 三档：`npm test` 依次跑功能并发与重文件串行（均断言行为），`npm run bench` 跑独立计时基准（断言墙钟与内存预算）。`verify` 包含前两档及 ui:check，不含 bench——并发跑时计时值会漂 1.5–5 倍，随机红的门禁守不住任何东西；阈值没有放宽，样本值每次照旧打印。理由与口径见 [工程规范](12-engineering-standards.md) §1 与 §9。

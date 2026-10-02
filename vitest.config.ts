@@ -43,6 +43,8 @@ const HEAVY_TEST_FILES = [
   'apps/desktop/src/main/services/run-service.test.ts',
   'apps/desktop/src/main/services/skill-dependency-service.test.ts',
   'apps/desktop/src/renderer/src/App.test.tsx',
+  // 独立 Git/CLI 夹具多次启动 TypeScript 解析器：2026-10-02 定向实测 24.83s。
+  'scripts/drift-check.test.ts',
 ];
 
 export default defineConfig({

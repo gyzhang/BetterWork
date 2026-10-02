@@ -1,8 +1,12 @@
-/* 测试宿主只提供窗口高度，页面与控件几何全部消费生产样式。 */
+/* 测试宿主只提供窗口尺寸与挂载布局，页面与控件几何全部消费生产样式。 */
 .fixture-main {
   display: flex;
   min-width: 0;
   height: 100vh;
+}
+
+.fixture-main > .main-stage {
+  flex: 1;
 }
 
 .fixture-controls {

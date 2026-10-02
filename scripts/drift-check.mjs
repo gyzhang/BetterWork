@@ -9,12 +9,25 @@
 // 同类问题第二次出现时（AGENTS.md 的沉淀纪律）用它确认不是又一处无人核对的例外在扩大。
 // 它**不进** `npm run verify`：判据里有 `git log`，同一份代码在不同克隆上结论不同，
 // 把这种检查塞进提交门禁只会让人下次直接跳过门禁（docs/12 §1）。
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import console from 'node:console';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, URL } from 'node:url';
+
+import ts from 'typescript';
 
 const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
 const defaultBaseline = 'docs/development/drift-readings.json';
@@ -82,7 +95,7 @@ const dayOffset = (days) => {
 const isDay = (value) => /^\d{4}-\d{2}-\d{2}$/u.test(value);
 
 /** ① 制度有没有被执行：每个有提交的日子都要有一篇工作日志（AGENTS.md「结束一次任务」）。 */
-function checkLogs(sinceDay, requiredDays) {
+function checkLogs(sinceDay, requiredDays, batchBase) {
   const commits = git([
     'log',
     `--since=${sinceDay} 00:00:00`,
@@ -92,6 +105,41 @@ function checkLogs(sinceDay, requiredDays) {
   const commitDays = [...new Set(commits.filter((day) => day !== ''))].sort();
   const days = [...new Set([...commitDays, ...requiredDays])].sort();
   const missing = days.filter((day) => !exists(path.join('docs', 'logs', `${day}.md`)));
+  const findings = missing.map(
+    (day) =>
+      `${day} 有提交却没有 docs/logs/${day}.md${requiredDays.includes(day) ? '（本次点名要求的日期）' : ''}`,
+  );
+  if (batchBase !== undefined) {
+    const patch = git(['diff', '--unified=0', batchBase, '--', 'docs/logs/*.md']);
+    const untracked = git(['ls-files', '--others', '--exclude-standard', '--', 'docs/logs/*.md'])
+      .split('\n')
+      .filter(Boolean)
+      .map((file) => read(file));
+    const additions = patch
+      .split('\n')
+      .filter((line) => line.startsWith('+') && !line.startsWith('+++'))
+      .map((line) => line.slice(1))
+      .join('\n');
+    const sections = [additions, ...untracked].flatMap((text) => text.split(/^## /gmu).slice(1));
+    if (
+      !sections.some(
+        (section) =>
+          /^\d{2}:\d{2} .+（状态：.+）$/mu.test(section) &&
+          ['背景', '变更内容', '测试证据'].every((label) =>
+            section
+              .split('\n')
+              .some(
+                (line) =>
+                  line.startsWith(`- ${label}：`) &&
+                  line.slice(`- ${label}：`.length).trim() !== '',
+              ),
+          ),
+      )
+    )
+      findings.push(
+        `批次 ${batchBase} → 当前工作树缺新增的任务日志小节或背景/变更内容/测试证据；已有当天文件不能替本批次交接`,
+      );
+  }
   return {
     id: 'logs',
     label: '工作日志与提交对齐',
@@ -99,28 +147,64 @@ function checkLogs(sinceDay, requiredDays) {
       窗口起始: sinceDay,
       有提交的天数: commitDays.length,
       要求补齐的日期: requiredDays.length,
+      批次基点: batchBase ?? '(未指定，仅查按日存在)',
     },
-    findings: missing.map(
-      (day) =>
-        `${day} 有提交却没有 docs/logs/${day}.md${requiredDays.includes(day) ? '（本次点名要求的日期）' : ''}`,
-    ),
+    findings,
   };
 }
 
 /** ② 仓库外部的状态：钩子有没有装进这个克隆、本地是不是攒了没推的提交。 */
 function checkHookInstallation() {
-  const hooksPath = git(['config', 'core.hooksPath']);
+  const configured = spawnSync('git', ['config', '--get', 'core.hooksPath'], {
+    cwd: repositoryRoot,
+    encoding: 'utf8',
+  });
+  if (configured.error || (configured.status !== 0 && configured.status !== 1))
+    throw new Error(`读取 hooksPath 失败：${configured.stderr}`, { cause: configured.error });
+  const hooksPath = configured.stdout.trim();
+  const findings = [];
+  let enabled = false;
+  if (hooksPath !== '.husky/_')
+    findings.push('这个克隆没有把钩子指到 `.husky/_`：重新跑 `npm ci`（prepare 会执行 husky）');
+  else if (!['h', 'pre-commit', 'pre-push'].every((name) => exists(`.husky/_/${name}`)))
+    findings.push('Husky 入口或共享 wrapper 缺失：重新跑 `npm ci`，仅有 hooksPath 不构成接入证据');
+  else {
+    // 复制本机实际 wrapper，Git 临时路由到无副作用标记钩子；照常加载 Husky init.sh。
+    // 不修改安装入口，不跑 npm、不提交、不推送；HUSKY=0（含 init.sh 设置）会让标记缺失。
+    const directory = mkdtempSync(path.join(os.tmpdir(), 'betterwork-hook-probe-'));
+    try {
+      mkdirSync(path.join(directory, '_'));
+      copyFileSync(path.join(repositoryRoot, '.husky/_/h'), path.join(directory, '_/h'));
+      for (const name of ['pre-commit', 'pre-push']) {
+        copyFileSync(
+          path.join(repositoryRoot, `.husky/_/${name}`),
+          path.join(directory, '_', name),
+        );
+        writeFileSync(path.join(directory, name), ': > "$(dirname "$0")/probe-ran"\n');
+        execFileSync(
+          'git',
+          ['-c', `core.hooksPath=${path.join(directory, '_')}`, 'hook', 'run', name],
+          { cwd: repositoryRoot, encoding: 'utf8' },
+        );
+        if (!existsSync(path.join(directory, 'probe-ran')))
+          findings.push(`${name} 的实际 Husky 入口未执行标记钩子：检查 HUSKY=0 与 Husky init.sh`);
+        rmSync(path.join(directory, 'probe-ran'), { force: true });
+      }
+      enabled = findings.length === 0;
+    } catch (error) {
+      findings.push(`Husky 入口探针失败：${String(error)}`);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }
   return {
     id: 'hooks',
     label: '本地钩子已接入这个克隆',
-    readings: { coreHooksPath: hooksPath === '' ? '(未设置)' : hooksPath },
-    findings:
-      hooksPath === '.husky/_'
-        ? []
-        : [
-            '这个克隆没有把钩子指到 `.husky/_`：重新跑 `npm ci`（prepare 会执行 husky），' +
-              '否则护栏与 `verify` 一次都不会自己跑',
-          ],
+    readings: {
+      coreHooksPath: hooksPath === '' ? '(未设置)' : hooksPath,
+      Husky入口探针: enabled ? '已执行' : '未通过',
+    },
+    findings,
   };
 }
 
@@ -231,13 +315,87 @@ function collectReferenceReadings() {
 function loadBaseline(baselinePath) {
   if (!exists(baselinePath)) return null;
   try {
-    return JSON.parse(read(baselinePath));
+    const baseline = JSON.parse(read(baselinePath));
+    if (
+      typeof baseline.savedAt !== 'string' ||
+      !baseline.readings ||
+      typeof baseline.readings !== 'object'
+    )
+      throw new Error('缺 savedAt/readings');
+    if (
+      baseline.ruleSnapshot !== undefined &&
+      (baseline.ruleSnapshot.version !== 1 ||
+        !baseline.ruleSnapshot.entries ||
+        typeof baseline.ruleSnapshot.entries !== 'object' ||
+        Object.values(baseline.ruleSnapshot.entries).some(
+          (value) => typeof value !== 'string' || !/^[a-f0-9]{64}$/u.test(value),
+        ))
+    )
+      throw new Error('规则快照损坏或版本不支持');
+    return baseline;
   } catch (error) {
     throw new Error(`基线读数 ${baselinePath} 解析失败：${String(error)}`, { cause: error });
   }
 }
 
-function checkExceptions(baseline, creatingBaseline) {
+/** 跳过空白与注释，保留 AST 种类、字面值（含正则空白）和子节点顺序。 */
+function fingerprint(text, expression = false) {
+  const source = ts.createSourceFile(
+    'snapshot.ts',
+    expression ? `const value = ${text};` : text,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const tokens = [];
+  const visit = (node) => {
+    const literal =
+      ts.isIdentifier(node) || ts.isLiteralExpression(node) || ts.isTemplateLiteralToken(node);
+    tokens.push([node.kind, literal ? node.text : null]);
+    ts.forEachChild(node, visit);
+    tokens.push(null);
+  };
+  visit(source);
+  return createHash('sha256').update(JSON.stringify(tokens)).digest('hex');
+}
+
+function collectRuleSnapshot() {
+  const entries = { 'eslint.config.mjs': fingerprint(read('eslint.config.mjs')) };
+  const file = 'standards/coding-standard.test.ts';
+  const source = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true);
+  const containsReason = (node) => {
+    let found = false;
+    const visit = (child) => {
+      if (ts.isPropertyAssignment(child) && child.name.getText(source) === 'reason') found = true;
+      ts.forEachChild(child, visit);
+    };
+    visit(node);
+    return found;
+  };
+  const visit = (node, scopes) => {
+    const next =
+      ts.isCallExpression(node) &&
+      ['describe', 'it'].includes(node.expression.getText(source)) &&
+      node.arguments[0] &&
+      ts.isStringLiteral(node.arguments[0])
+        ? [...scopes, node.arguments[0].text]
+        : scopes;
+    if (
+      ts.isVariableDeclaration(node) &&
+      node.initializer &&
+      (containsReason(node.initializer) ||
+        /exception|exempt|allowlist|whitelist|outlet|owners/iu.test(node.name.getText(source)))
+    ) {
+      const key = [file, ...scopes, node.name.getText(source)].join(' › ');
+      if (key in entries) throw new Error(`规则快照键重名：${key}`);
+      entries[key] = fingerprint(node.initializer.getText(source), true);
+    }
+    ts.forEachChild(node, (child) => visit(child, next));
+  };
+  visit(source, []);
+  return { version: 1, entries };
+}
+
+function checkExceptions(baseline, creatingBaseline, snapshot) {
   const readings = collectReadings();
   const previous = baseline?.readings ?? null;
   const deltas = previous
@@ -255,25 +413,45 @@ function checkExceptions(baseline, creatingBaseline) {
       : previous && (previous['例外登记'] ?? 0) < readings['例外登记']
         ? [
             `例外登记从 ${previous['例外登记']} 增到 ${readings['例外登记']}：` +
-              '要么把代码改回收紧的那侧，要么 `--save` 重新留档并在当天日志写明为什么',
+              '要么把代码改回收紧的那侧，要么 Review 差异后带理由留档',
           ]
         : [];
+  const oldSnapshot = baseline?.ruleSnapshot;
+  const changes =
+    oldSnapshot?.version === 1 && oldSnapshot.entries
+      ? [...new Set([...Object.keys(oldSnapshot.entries), ...Object.keys(snapshot.entries)])]
+          .filter((key) => oldSnapshot.entries[key] !== snapshot.entries[key])
+          .map((key) => ({
+            key,
+            before: oldSnapshot.entries[key] ?? null,
+            after: snapshot.entries[key] ?? null,
+          }))
+      : [];
+  if (baseline && !oldSnapshot)
+    findings.push('旧基线缺规则文本指纹：Review 当前清单后带理由升级基线，不能只凭数量判定无漂移');
+  else if (oldSnapshot && oldSnapshot.version !== 1) findings.push('不支持的规则快照版本');
+  for (const change of changes)
+    findings.push(
+      `规则文本变化：${change.key}（${change.before === null ? '新增' : change.after === null ? '删除' : '修改'}），数量相同也须 Review`,
+    );
   return {
     id: 'scale',
     label: '规模与例外读数',
     readings,
     deltas: Object.fromEntries(deltas),
+    changes,
     findings,
   };
 }
 
 function run(options) {
   const baseline = loadBaseline(options.baselinePath);
+  const ruleSnapshot = collectRuleSnapshot();
   const checks = [
-    checkLogs(options.sinceDay, options.requiredDays),
+    checkLogs(options.sinceDay, options.requiredDays, options.batchBase),
     checkHookInstallation(),
     checkUnpushed(options.unpushedAgeLimitDays),
-    checkExceptions(baseline, options.save),
+    checkExceptions(baseline, options.save, ruleSnapshot),
   ];
   const findings = checks.flatMap((check) =>
     check.findings.map((finding) => `[${check.id}] ${finding}`),
@@ -290,6 +468,7 @@ function run(options) {
     },
     checks,
     findings,
+    ruleSnapshot,
   };
 }
 
@@ -325,6 +504,8 @@ function parseArguments(argv) {
     baselinePath: defaultBaseline,
     json: false,
     save: false,
+    batchBase: undefined,
+    reviewReason: undefined,
   };
   const unknown = [];
   for (const argument of argv) {
@@ -344,6 +525,11 @@ function parseArguments(argv) {
       options.unpushedAgeLimitDays = Number(value);
     } else if (flag === '--baseline' && typeof value === 'string' && value !== '') {
       options.baselinePath = value;
+    } else if (flag === '--batch-base' && typeof value === 'string' && value !== '') {
+      git(['rev-parse', '--verify', `${value}^{commit}`]);
+      options.batchBase = value;
+    } else if (flag === '--review-reason' && typeof value === 'string' && value.trim() !== '') {
+      options.reviewReason = value.trim();
     } else if (flag === '--json') options.json = true;
     else if (flag === '--save') options.save = true;
     else unknown.push(argument);
@@ -351,17 +537,26 @@ function parseArguments(argv) {
   if (unknown.length > 0)
     throw new Error(
       `不支持的参数：${unknown.join(' ')}。可用：--since=YYYY-MM-DD --require-log=YYYY-MM-DD ` +
-        '--max-unpushed-age-days=N --baseline=PATH --json --save',
+        '--max-unpushed-age-days=N --baseline=PATH --batch-base=REF --review-reason=TEXT --json --save',
     );
   return options;
 }
 
-function saveBaseline(baselinePath, readings) {
+function saveBaseline(baselinePath, readings, ruleSnapshot, reviewReason) {
   const absolute = path.join(repositoryRoot, baselinePath);
   mkdirSync(path.dirname(absolute), { recursive: true });
   writeFileSync(
     absolute,
-    `${JSON.stringify({ savedAt: isoNow(), readings: { ...readings } }, null, 2)}\n`,
+    `${JSON.stringify(
+      {
+        savedAt: isoNow(),
+        readings: { ...readings },
+        ruleSnapshot,
+        ...(reviewReason ? { reviewReason } : {}),
+      },
+      null,
+      2,
+    )}\n`,
     'utf8',
   );
 }
@@ -369,10 +564,21 @@ function saveBaseline(baselinePath, readings) {
 try {
   const options = parseArguments(process.argv.slice(2));
   const report = run(options);
+  const unresolved = report.checks
+    .filter((check) => check.id !== 'scale')
+    .flatMap((check) => check.findings);
+  const ruleFindings = report.checks.find((check) => check.id === 'scale')?.findings ?? [];
+  if (options.save && unresolved.length > 0)
+    throw new Error(`发现未处理，不写基线：${unresolved.join('；')}`);
+  if (options.save && ruleFindings.length > 0 && (!options.reviewReason || !options.batchBase))
+    throw new Error(
+      '规则变化留档需 --review-reason=理由 与 --batch-base=本批次基点；先 Review 差异并补本批次日志',
+    );
   if (options.save)
-    saveBaseline(options.baselinePath, { ...report.readings, ...collectReadings() });
+    saveBaseline(options.baselinePath, report.readings, report.ruleSnapshot, options.reviewReason);
   console.log(options.json ? JSON.stringify(report, null, 2) : render(report));
-  if (options.save) console.log(`已留存读数：${options.baselinePath}`);
+  if (options.save && !options.json)
+    console.log(`已留存读数：${options.baselinePath}；本次发现仍留在报告，须再跑一次巡检确认`);
   process.exitCode = report.findings.length > 0 ? 1 : 0;
 } catch (error) {
   console.error(String(error instanceof Error ? error.message : error));
