@@ -180,10 +180,16 @@ function focusChecks(): object {
   const tableOutlineWidth = Number.parseFloat(tableStyle.outlineWidth);
   // 三个条件各自都可能不成立（环没画、画在盒外、程序化 focus 没继承到 :focus-visible），
   // 只报一句标签的断言换台机器红了就无从下手——读数一起进错误消息，也进分组产物 results*.json。
+  // style 与两个 token 用来分「规则没命中」和「规则命中但 var() 取不到值」：
+  // outline-width 的初始值是 medium(3px)、outline-offset 是 0，两者同时回到初始值才是这条路径。
   const tableReadings = {
     focusVisible: table.matches(':focus-visible'),
+    focused: document.activeElement === table,
     outline: tableStyle.outlineWidth,
     offset: tableStyle.outlineOffset,
+    style: tableStyle.outlineStyle,
+    ring: tableStyle.getPropertyValue('--focus-ring').trim(),
+    ringOffset: tableStyle.getPropertyValue('--focus-ring-offset').trim(),
   };
   check(
     tableReadings.focusVisible &&
