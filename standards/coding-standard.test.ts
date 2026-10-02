@@ -2367,6 +2367,45 @@ describe('界面观感基线', () => {
   });
 
   /**
+   * 「减少动效」不能照通行配方写成 `* { transition-duration: 0.01ms }`。
+   * `animation-name` 的初始值是 `none`，设时长造不出动画；`transition-property` 的初始值却是
+   * `all`，给 `*` 设非零时长等于替每一个没声明过渡的元素声明了「所有属性都动一会儿」——
+   * 那条降级于是反过来**开启**了动效。2026-10-02 的焦点环就是这么坏的：`.markdown-table`
+   * 没有任何 `transition` 声明，`outline-width`／`outline-offset`／`outline-color` 被拉进
+   * 过渡，离屏窗口的时间线不推进，环永远停在聚焦前的 `3px / 0px / currentColor`
+   * （ADR-0035「减动效反而把环冻住」）。同一条几何也解释了按钮为什么一直是绿的：
+   * 按钮显式列了五个过渡属性，不含 outline。
+   */
+  it('全局动效降级只能关过渡、压动画，不得给 * 造出过渡', () => {
+    const starScope = /(^|\s)\*(?::{1,2}[a-z-]+)?$/u;
+    const globalDurations = declarations.filter(
+      (declaration) =>
+        declaration.property === 'transition-duration' && starScope.test(declaration.selector),
+    );
+    expect(
+      globalDurations.filter((declaration) =>
+        declaration.selector.includes('prefers-reduced-motion'),
+      ),
+      '找不到 prefers-reduced-motion 里的全局 transition-duration，本条护栏已空跑——降级不再全局处理，新增动效就得各自判（docs/12 §8）',
+    ).toHaveLength(1);
+    const offenders = globalDurations
+      .filter((declaration) => Number.parseFloat(declaration.value) !== 0)
+      .filter(
+        (declaration) =>
+          !declarations.some(
+            (sibling) =>
+              sibling.selector === declaration.selector &&
+              sibling.property === 'transition-property',
+          ),
+      )
+      .map((declaration) => locate(declaration, styles ?? ''));
+    expect(
+      offenders,
+      '`transition-property` 的初始值是 all：给 * 设非零 transition-duration 会替所有元素造出过渡，本来不动的属性（含焦点环）也跟着动。降级只能取 0s，或同块把 transition-property 收到具体清单（ADR-0035）',
+    ).toEqual([]);
+  });
+
+  /**
    * 控件几何只住在 Token 上：边框、圆角、高度与**内距**同一口径。
    * 内距此前没人管，于是「同为 32px 档」的按钮与输入框，文字离边框一个 6px 一个 9px——
    * 高度统一了观感仍不统一。`padding` 与 `height` 一起纳进来，档位见 styles.css 的

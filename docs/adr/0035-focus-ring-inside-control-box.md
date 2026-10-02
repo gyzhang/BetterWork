@@ -99,3 +99,32 @@
 护栏加第 5 条断言（并回写进第 1 条）：环带的**向内可达**必须 ≥ 最大环宽 + 1px 分隔缝（现算 3 ≥ 2 + 1），并按同一公式取 Token 值——符号为负不再算通过。变异验证两发，还原后 `styles.css`＋`docs/10` 的 sha256 与打前一致：把 Token 与档位表**一起**打回 `-1px`（这样「docs/10 ↔ `:root` 同值」那条不干扰），红在第 1 条的新文案「向内只走 1px，环宽 2px：环带跨在边框盒边线上」；同样两处打 `-2px` 也红（「向内只走 2px」）——那一档保得住环、保不住缝。反向一发：只把 `styles.css` 改成 `-3px` 而档位表留着 `-1px`，红在「docs/10 档位表 ↔ `:root` Token 同值」。
 
 夹具与像素读数留在 `/tmp/ring-lab/`（一次性验证产物，不入库）；本表是它的结论存档。
+
+## 第三轮：减动效那条降级把环冻回了盒外（2026-10-02）
+
+CI（macOS runner）连红三次都红在同一处：`.markdown-table:focus-visible` 的环读成 `3px / 0px`，本地同一条 16 组全绿读 `2px / -3px`。补了读数的第二发把它钉成一个此前没登记过的形状——`outline-style` 已是作者的 `solid`、`--focus-ring` 与 `--focus-ring-offset` 都取到值，宽与偏移却停在**聚焦前**那一组：
+
+```text
+{"focusVisible":true,"focused":true,"outline":"3px","offset":"0px","style":"solid","color":"rgb(29, 36, 32)","ring":"#4d8a78","ringOffset":"-3px"}
+```
+
+四条候选路径各有反证：规则没命中会给出 `style:"none"`；IACVT（`var()` 取不到值）会把 `outline-style` 一起退回 `none`，而两个 token 实测有值；`prefers-contrast: more` 与 `forced-colors: active` 经 CDP 模拟后本地几何仍是 `2px/-3px`；全仓没有一条 `transition` 涉及 `outline`，`.markdown-table` 也不在任何 `transition` 的选择器列表里。
+
+真正的机制在**另一条 CSS 上**，靠单变量复现才看见：runner 的 macOS 实例带着「减弱动态效果」，也就是 `prefers-reduced-motion: reduce` 为真。本地把这一个媒体特性模拟成 `reduce`，同一条断言立刻读出与 runner 一字不差的四元组，而 `element.getAnimations()` 当场给出三张正在跑的 `CSSTransition`——`outline-color`、`outline-width`、`outline-offset`：
+
+| 条件 | 环宽／偏移 | 环色 | 该元素上的过渡 |
+| --- | --- | --- | --- |
+| 默认（`reduce` 关） | `2px / -3px` | `rgb(77, 138, 120)` | 无 |
+| 模拟 `reduce`（原降级块） | **`3px / 0px`** | currentColor | `outline-color`／`width`／`offset` 三张 running |
+| 模拟 `reduce` ＋ `transition-duration: 0s` | `2px / -3px` | `rgb(77, 138, 120)` | 无 |
+
+链条是这样的：`styles.css` 的降级块按 docs/10 §9.9 那句「动效与过渡一律压到 0.01ms」写成 `* { transition-duration: 0.01ms !important }`。`animation-name` 的初始值是 `none`，设时长造不出动画，那两行动画降级是无害的；`transition-property` 的初始值却是 **`all`**，于是给 `*` 设非零时长等于**替每一个没声明过渡的元素声明了「所有属性都动 0.01ms」**——那条「减少动效」的降级反过来开启了动效。焦点环正好落在这批「本来不动」的属性里：`.markdown-table` 没有任何 `transition` 声明，`outline-width/offset/color` 被拉进过渡，起始值就是聚焦前的 `3px / 0px / currentColor`。离屏窗口的时间线不推进，0.01ms 的过渡永远走不完，读数于是**稳定地错**（逐帧重读到第二帧仍同值，这排除了「只是读得太早」）。真实窗口里它一帧就走完了，所以这条在界面上几乎看不见——但**环在聚焦的那一帧确实画在盒外**，被贴边的 `overflow` 裁掉的就是那一段，正是本记录第一轮消灭的形状。
+
+按钮为什么一直绿：`styles.css` 给 `button, input, textarea, select, .list-row` 显式列了五个过渡属性，不含 `outline`，`transition-property` 不是 `all`，降级压不到它头上。同一句 CSS、两种命运，分岔点就是「有没有自己声明过 transition-property」。
+
+处置落在**共享层**一处：降级块里 `transition-duration` 改 `0s`（`animation-duration: 0.01ms` 与 `animation-iteration-count: 1` 保留——那两轨按初始值本来就不产生动画，且留着 `animationend`）。产品代码没有任何地方等 `transitionend`（全仓只有渲染检查夹具用 `getAnimations()`），所以关过渡不带走任何契约。docs/10 §9.9 那句「一律压到 0.01ms」是同轮的错源，已按两轨改写；docs/12 §8 补上「两轨不可互换」的判据。
+
+护栏加第 6 条（`standards/coding-standard.test.ts`「界面观感基线 › 全局动效降级只能关过渡、压动画」）：凡作用域落在 `*`（含 `*::before`／`*::after`）的 `transition-duration`，取值必须是 `0s`，除非同一条规则里显式声明了 `transition-property`。它拦的是配方本身，不是某一行的历史。
+
+- 变异验证：把那一行改回 `0.01ms` → 护栏红并直接给出 `styles.css:4551` 那一处的选择器与取值；同时本地模拟 `reduce` 的探针又读出 `3px / 0px`＋三张 running 过渡。还原后护栏绿、探针绿、`ui:check` 16 组绿。
+- 夹具那一侧留着逐帧读到稳定再判的 `settledRing()`：它这次的产出正是「帧数 1 且首帧同值」这一句，把「读得太早」和「稳定地错」分开了——这两件事在只报一句标签的断言里是同一个红。

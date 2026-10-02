@@ -4536,15 +4536,19 @@ select,
   animation: betterwork-rise-in var(--motion-expand) var(--motion-easing);
 }
 
-/* 系统要求减少动态效果时，动效与过渡一并降到最低；
-   用 !important 是为了压过上面所有具体选择器。 */
+/* 系统要求减少动态效果时：动画压到一帧内结束（保留 animationend），过渡直接关掉。
+   用 !important 是为了压过上面所有具体选择器。
+   过渡这一行不能照抄「压到 0.01ms」的通行配方：`animation-name` 的初始值是 `none`，
+   设时长造不出动画；`transition-property` 的初始值却是 `all`，给 `*` 设非零时长等于
+   替每个没声明过渡的元素声明了「所有属性都动 0.01ms」。焦点环就这么停在聚焦前的
+   outline-width/offset/color 上——离屏窗口里过渡不推进，读到的永远是那一帧（ADR-0035）。 */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: 0s !important;
     scroll-behavior: auto !important;
   }
 }

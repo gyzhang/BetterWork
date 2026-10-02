@@ -82,4 +82,4 @@
 - 剩下的形状是「伪类已生效、几何还没跟上」。同一段里那条按钮焦点断言读的是**上一次 `executeJavaScript`** 里 Tab 过的元素，跨了一个 task，它在 runner 上一直绿；只有紧跟 `focus()` 的那一次读红。方向是读取时机，不是 CSS。
 - 于是把断言改成逐帧读到稳定再判（`settledRing()`）：每帧重读，连续两次一致才认，上限 8 帧。红字一次给全「稳定读数 · 首帧读数 · 帧数 · 环境」，`outline-color` 也补进读数——它把「简写整体生效」与「只有 `outline-style` 生效」分得很干净。
 - 变异验证（本地临时加一条 `.markdown-table:focus-visible { outline-offset: 0px }`）：退出码 1，红字给出 `稳定读数 {"outline":"2px","offset":"0px","style":"solid","color":"rgb(77, 138, 120)"…} · 首帧同值 · 帧数 1`——等待没把稳定的错几何读成绿。还原后本地 16 组全绿、每组帧数 1。
-- **未结**：时序假设只有在 runner 上才算验证，本地绿替代不了。若仍红，`帧数` 说明是否一直在收敛中，`color` 说明是否其实走的 IACVT，环境四项读数说明是否被系统设置改了渲染路径。
+- **已结（同日三跑，本地单变量复现）**：时序假设被 `帧数 1 · 首帧同值` 推翻——runner 上那个值是**稳定**的，不是读得太早。四项环境读数里 `prefers-reduced-motion: reduce` 为真就是线索本身：本地把这一个媒体特性模拟成 `reduce`，同一条断言立刻复现 `3px / 0px`，`getAnimations()` 当场给出三张正在跑的 `CSSTransition`（`outline-color`／`width`／`offset`）。根因与处置记在 [ADR-0035 第三轮](0035-focus-ring-inside-control-box.md)——降级块里那句 `transition-duration: 0.01ms` 因 `transition-property` 初始值为 `all` 而反向造出了过渡。这一类只有真 runner 会暴露：本地默认不减弱动效，矩阵里 16 组全绿也照不出它。

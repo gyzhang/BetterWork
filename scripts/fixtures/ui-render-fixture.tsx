@@ -176,7 +176,8 @@ interface RingReadings {
 
 // 五个样式读数各对应一条失败路径，缺一即无从定性：规则没命中 → style 回到 none；
 // 命中但 var() 取不到值 → outline-width 的初始值 medium(3px) 与 offset 初始 0 同时回归；
-// 伪类变化尚未算进计算样式 → style 已是 solid 而 width/offset 仍是聚焦前那一组。
+// 环被拖进过渡 → style 已是 solid 而 width/offset/color 停在聚焦前那一组（ADR-0035 第三轮：
+// 减动效降级给 * 设非零 transition-duration，transition-property 的初始值 all 把它放大成全局）。
 function readRing(target: HTMLElement): RingReadings {
   const style = getComputedStyle(target);
   return {
@@ -191,9 +192,9 @@ function readRing(target: HTMLElement): RingReadings {
   };
 }
 
-/** focus() 与读取同在一个 task：冷启动的渲染机上可能读到伪类生效前的计算样式。
-    逐帧重读直到连续两次一致才判定，帧数与首帧读数一起进断言消息——稳定＝时序，
-    稳定在错值＝真的坏了，两者不能混成同一句红字。 */
+/** 逐帧重读直到连续两次一致才判定，帧数与首帧读数一起进断言消息：「还在收敛」与
+    「稳定在错值」是两件事，只报一句标签的红字分不开。2026-10-02 就是靠 `帧数 1 · 首帧同值`
+    排除掉读取时机，把矛头指向那条走不完的过渡（ADR-0035 第三轮）。 */
 async function settledRing(
   target: HTMLElement,
 ): Promise<{ ring: RingReadings; first: RingReadings; frames: number }> {

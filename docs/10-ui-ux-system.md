@@ -501,7 +501,9 @@ UI Foundation 首批提供四套成对色系：
 
 落地现状：已实施。时长与缓动提为 `:root` 上的独立 Token（`--motion-instant` 120ms、`--motion-expand` 180ms、`--motion-overlay` 240ms、`--motion-easing`），组件不得写死毫秒数。
 
-交互控件的状态变化走 120ms transition；挂载即出现的浮层（Sheet、通知面板、Toast、上下文面板、动作错误条）走 keyframes，按浮层或展开档取时长；`prefers-reduced-motion: reduce` 下动效与过渡一律压到 0.01ms。「不使用循环发光和无意义等待动画」这一条天然满足。
+交互控件的状态变化走 120ms transition；挂载即出现的浮层（Sheet、通知面板、Toast、上下文面板、动作错误条）走 keyframes，按浮层或展开档取时长；`prefers-reduced-motion: reduce` 下降级**分两轨**：keyframes 压到 0.01ms 一帧内结束（保留 `animationend`），transition 直接取 `0s`。「不使用循环发光和无意义等待动画」这一条天然满足。
+
+两轨不能并成一句「一律压到 0.01ms」：`animation-name` 的初始值是 `none`，给 `*` 设动画时长造不出动画；`transition-property` 的初始值却是 `all`，给 `*` 设非零过渡时长等于**替每一个没声明过渡的元素声明了「所有属性都动一会儿」**——那条降级于是反过来开启动效。2026-10-02 焦点环就坏在这里：`.markdown-table` 不声明 transition，`outline-width`／`outline-offset`／`outline-color` 被拉进过渡后停在聚焦前的 `3px / 0px / currentColor`，环又跑到盒外（[ADR-0035](adr/0035-focus-ring-inside-control-box.md)）。护栏：「界面观感基线 › 全局动效降级只能关过渡、压动画」。
 
 ### 9.10 控件几何与浮层字号
 
