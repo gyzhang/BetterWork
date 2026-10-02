@@ -22,6 +22,8 @@ coverage/
 # Runtime task working directories
 .betterwork/
 /temp-asserts/
+# CI 里 UI_RENDER_OUTPUT_DIR 指的位置（本地默认仍写一次性临时目录）
+/.ui-render/
 
 # 书稿合稿产物：由脚本生成，永远不手改，也不入库
 #   .md  <- book/cn/build_book.py（合稿 parts/*.md）

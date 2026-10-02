@@ -138,6 +138,11 @@ async function run(): Promise<void> {
   if (process.platform === 'darwin') app.dock?.hide();
   await mkdir(path.join(output, 'screenshots'), { recursive: true });
   const results: unknown[] = [];
+  // 逐组另存一份 partial：红在半途时产物里也要有已跑过组的读数，否则跨组对比无从做起。
+  // 完成证据仍只写 results.json（矩阵跑完才落地，见 ui-render-check.mjs 的读取处）。
+  const persistPartial = async (): Promise<void> => {
+    await writeFile(path.join(output, 'results.partial.json'), JSON.stringify(results, null, 2));
+  };
   for (const scheme of colorSchemes) {
     for (const mode of ['light', 'dark']) {
       for (const width of [760, 1380]) {
@@ -218,6 +223,7 @@ async function run(): Promise<void> {
         } catch (error) {
           throw new Error(`真实渲染失败：${id}`, { cause: error });
         } finally {
+          await persistPartial();
           window.destroy();
         }
       }

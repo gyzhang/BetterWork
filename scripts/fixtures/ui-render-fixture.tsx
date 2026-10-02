@@ -178,14 +178,21 @@ function focusChecks(): object {
   table.focus({ preventScroll: true });
   const tableStyle = getComputedStyle(table);
   const tableOutlineWidth = Number.parseFloat(tableStyle.outlineWidth);
+  // 三个条件各自都可能不成立（环没画、画在盒外、程序化 focus 没继承到 :focus-visible），
+  // 只报一句标签的断言换台机器红了就无从下手——读数一起进错误消息，也进分组产物 results*.json。
+  const tableReadings = {
+    focusVisible: table.matches(':focus-visible'),
+    outline: tableStyle.outlineWidth,
+    offset: tableStyle.outlineOffset,
+  };
   check(
-    table.matches(':focus-visible') &&
+    tableReadings.focusVisible &&
       tableOutlineWidth >= 2 &&
       -Number.parseFloat(tableStyle.outlineOffset) >= tableOutlineWidth + 1,
-    '宽表滚动区焦点环未完整落在盒内',
+    `宽表滚动区焦点环未完整落在盒内：${JSON.stringify(tableReadings)}`,
   );
   active.focus({ preventScroll: true });
-  return { outline: style.outlineWidth, offset: style.outlineOffset };
+  return { outline: style.outlineWidth, offset: style.outlineOffset, table: tableReadings };
 }
 
 declare global {

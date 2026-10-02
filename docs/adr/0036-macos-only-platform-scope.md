@@ -45,4 +45,24 @@
 
 - 成对实验（本地 macOS，两发互为对照）：给 `SkillsView.test.tsx` 在模块加载时装一份**跨用例持久**的内存 store，用例立刻精确复现 CI 那两条红（`× switches between card and list view`、`× returns to browse`）；把 `beforeEach` 换成逐用例全新 store，同一条件下 12/12 绿。证明修的正是漏状态这一件事，不是碰运气换环境。
 - 探针（一次性文件，跑完即删）：`@vitest-environment jsdom` 下打印 `{ platform: 'darwin', type: 'undefined', url: 'http://localhost:3000/' }`。
-- 远端：推送后看 Actions 首跑的耗时与红绿，读数记回上一条。
+- 远端首跑读数见下一节。
+
+## 首跑读数（2026-10-02，run #242 / `4477f93`）
+
+`Set up job 1s · checkout 4s · setup-node 1s · npm ci 27s · npm run verify 207s`，整 job 4m6s。`better-sqlite3` 在 macOS 上装得很顺，15 分钟预算余量充足（ubuntu 上 verify 那一步 126s，macOS 慢到 207s，仍不到预算一半）。
+
+上一轮那四类红按预期收敛：`expert-release-preflight` 与 `SkillsView` 转绿，`ui-render-check` 不再崩在 sandbox。剩下的三条红性质不同：
+
+| 红项 | 定性 |
+| --- | --- |
+| `standards/ui-governance.test.ts > role/button + tabIndex + click 不能冒充原生按钮` | `Test timed out in 5000ms`——撞默认超时，不是断言失败 |
+| `scripts/ui-render-check.test.ts > 真实控件几何退化必须使 CLI 失败，不能把 Electron 提前退出读成成功` | 同上 |
+| `scripts/ui-render-check.test.ts > 模态有布局和焦点但没有绘制时，截图不能作为有效证据` | 它等的 `截图绘制状态不一致：模态` 没等到，因为**更早就**红在 `宽表滚动区焦点环未完整落在盒内`（jade-light-760） |
+
+前两条属 [工程规范 §9](../12-engineering-standards.md) 说的「为昂贵夹具放宽**超时**是另一回事，注释里写清放宽的是什么」——本轮未动，留给单独一拍。第三条本地 16 组全绿、runner 红，而那条断言原先只报一句标签不报读数，三个条件（环没画／画在盒外／程序化 focus 没继承到 `:focus-visible`）分不清是哪个，所以这里不猜根因，同轮只补可观测性：
+
+- 断言把 `focusVisible`／`outline`／`offset` 三项读数一起塞进错误消息，随 `stdio: 'inherit'` 落进 runner 日志；本地读数 `{"focusVisible":true,"outline":"2px","offset":"-3px"}`，红一次即可定性。
+- `UI_RENDER_OUTPUT_DIR` 把产物从一次性临时目录请进工作区（CLI 严格只收三个 `--probe-*` 参数，所以走 env 而不加新 flag），workflow 在 `failure()` 时把 `.ui-render/screenshots` 与读数文件传成 artifact 留 14 天。`permissions` 一旦写了键，未点名的作用域就是 `none`，上传要显式 `actions: write`。
+- 读数原本只在 16 组全绿时由 `results.json` 落地，而产物只在红的时候上传，两头正好错开。改为每组 `finally` 另存 `results.partial.json`；`results.json` 仍是「矩阵跑完」的完成证据（`ui-render-check.mjs` 只在退出码 0 时读它），这层语义没动。
+
+变异验证据（本地临时给该行条件加 `innerWidth < 1000`，让 1380 宽的那组先红）：退出码 1，日志给出 `宽表滚动区焦点环未完整落在盒内：{"focusVisible":true,"outline":"2px","offset":"-3px"}`，`.ui-render/` 里留下 3 张截图与含已通过组整份读数的 `results.partial.json`，且 `results.json` 不存在。还原后 16 组全绿、32 张截图、两份读数文件齐。一处诚实的限制：CI 现在红的是 `jade-light-760`，它是矩阵第 1 组，所以那次产物里 `results.partial.json` 只能是空数组，定性仍要靠错误消息里的那三个读数——partial 的作用在「往后几组才红」的场景。

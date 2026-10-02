@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import console from 'node:console';
-import { appendFile, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
@@ -11,7 +11,10 @@ import { build } from 'esbuild';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const require = createRequire(import.meta.url);
-const output = await mkdtemp(path.join(tmpdir(), 'betterwork-ui-render-'));
+// 默认写进一次性临时目录；CI 用 UI_RENDER_OUTPUT_DIR 指到工作区内，失败时才能整目录传成 artifact。
+const requestedOutput = process.env.UI_RENDER_OUTPUT_DIR;
+const output = requestedOutput ?? (await mkdtemp(path.join(tmpdir(), 'betterwork-ui-render-')));
+if (requestedOutput) await mkdir(requestedOutput, { recursive: true });
 
 try {
   const probe = process.argv.slice(2);

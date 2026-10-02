@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: read
+  # 写了 permissions 键之后未点名的作用域就是 none；上传渲染检查产物需要 actions: write。
+  actions: write
 
 jobs:
   verify:
@@ -25,3 +27,17 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run verify
+        env:
+          # 渲染检查的截图与读数写进工作区，失败时整目录传成 artifact（见下一步）。
+          UI_RENDER_OUTPUT_DIR: ${{ github.workspace }}/.ui-render
+      # 断言只留一句标签时，换台机器红了就无从下手；产物随失败上传，图与读数都能回看。
+      - name: 上传渲染检查产物
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-render-check
+          path: |
+            .ui-render/screenshots/
+            .ui-render/results.json
+            .ui-render/results.partial.json
+          retention-days: 14
