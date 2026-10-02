@@ -217,6 +217,14 @@ describe('逐主题颜色契约', () => {
 });
 
 describe('Renderer 交互语义的 ESLint 门禁', () => {
+  /**
+   * ESLint 扁平配置与 TS／JSX 解析器的冷加载只落在本组第一条用例上：安静机实测 1.8s
+   * （同组其余三条 22–72ms），整档并发时漂到 5.1s、撞过默认 5 秒超时（2026-10-02 本地
+   * `npm run verify` 与 macOS runner 各红一次）。放宽的是这条**夹具时间**，不是墙钟预算
+   * ——墙钟断言仍只住在 `*.bench.test.ts`（docs/12 §9）。断言的边界没有变化：这条仍要求
+   * `no-restricted-syntax` 命中冒充原生按钮的写法，不命中就红。
+   */
+  const eslintColdStartTimeout = 20_000;
   const eslint = new ESLint();
   const filename = path.resolve(`${root}views/ArtifactView.tsx`);
   const restricted = async (jsx: string): Promise<string[]> => {
@@ -231,13 +239,17 @@ describe('Renderer 交互语义的 ESLint 门禁', () => {
     );
   };
 
-  it('role/button + tabIndex + click 不能冒充原生按钮', async () => {
-    expect(
-      await restricted(
-        '<div role="button" tabIndex={0} onClick={() => console.warn("click")}>打开</div>',
-      ),
-    ).not.toEqual([]);
-  });
+  it(
+    'role/button + tabIndex + click 不能冒充原生按钮',
+    async () => {
+      expect(
+        await restricted(
+          '<div role="button" tabIndex={0} onClick={() => console.warn("click")}>打开</div>',
+        ),
+      ).not.toEqual([]);
+    },
+    eslintColdStartTimeout,
+  );
 
   it('新页面不能借 menuitem 声称自己已有父级键盘委托', async () => {
     expect(

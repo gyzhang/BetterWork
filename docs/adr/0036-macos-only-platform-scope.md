@@ -59,7 +59,7 @@
 | `scripts/ui-render-check.test.ts > 真实控件几何退化必须使 CLI 失败，不能把 Electron 提前退出读成成功` | 同上 |
 | `scripts/ui-render-check.test.ts > 模态有布局和焦点但没有绘制时，截图不能作为有效证据` | 它等的 `截图绘制状态不一致：模态` 没等到，因为**更早就**红在 `宽表滚动区焦点环未完整落在盒内`（jade-light-760） |
 
-前两条属 [工程规范 §9](../12-engineering-standards.md) 说的「为昂贵夹具放宽**超时**是另一回事，注释里写清放宽的是什么」——本轮未动，留给单独一拍。第三条本地 16 组全绿、runner 红，而那条断言原先只报一句标签不报读数，三个条件（环没画／画在盒外／程序化 focus 没继承到 `:focus-visible`）分不清是哪个，所以这里不猜根因，同轮只补可观测性：
+前两条属 [工程规范 §9](../12-engineering-standards.md) 说的「慢夹具 ≠ 计时基准」，随后单独一拍处理：两条各按该判据放宽到 20 秒（实测值与口径登在 §9），并证过预算真的接在用例上——把常量临时压到 1ms 时四条全部红成 `Test timed out in 1ms`，所以抬预算是把门禁变可信，不是把红挪个地方。第三条本地 16 组全绿、runner 红，而那条断言原先只报一句标签不报读数，三个条件（环没画／画在盒外／程序化 focus 没继承到 `:focus-visible`）分不清是哪个，所以这里不猜根因，同轮只补可观测性：
 
 - 断言把 `focusVisible`／`outline`／`offset` 三项读数一起塞进错误消息，随 `stdio: 'inherit'` 落进 runner 日志；本地读数 `{"focusVisible":true,"outline":"2px","offset":"-3px"}`，红一次即可定性。
 - `UI_RENDER_OUTPUT_DIR` 把产物从一次性临时目录请进工作区（CLI 严格只收三个 `--probe-*` 参数，所以走 env 而不加新 flag），workflow 在 `failure()` 时把 `.ui-render/screenshots` 与读数文件传成 artifact 留 14 天。`permissions` 一旦写了键，未点名的作用域就是 `none`，上传要显式 `actions: write`。
