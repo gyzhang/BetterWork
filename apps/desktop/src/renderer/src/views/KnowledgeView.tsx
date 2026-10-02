@@ -243,18 +243,30 @@ export function KnowledgePage({
               {indexEntryLabel}
             </Button>
           ) : (
-            <AsyncButton
-              variant="primary"
-              size="lg"
-              busy={importing}
-              label={
-                <>
-                  <PlusIcon size={13} /> 导入资料
-                </>
-              }
-              busyLabel="正在处理…"
-              onClick={() => trackAction(onImport(), '导入资料')}
-            />
+            <>
+              <Button
+                variant="text"
+                size="lg"
+                type="button"
+                aria-haspopup="dialog"
+                aria-expanded={indexDrawerOpen}
+                onClick={() => setIndexDrawerOpen(true)}
+              >
+                {indexEntryLabel}
+              </Button>
+              <AsyncButton
+                variant="primary"
+                size="lg"
+                busy={importing}
+                label={
+                  <>
+                    <PlusIcon size={13} /> 导入资料
+                  </>
+                }
+                busyLabel="正在处理…"
+                onClick={() => trackAction(onImport(), '导入资料')}
+              />
+            </>
           )
         }
       />
@@ -267,26 +279,26 @@ export function KnowledgePage({
                 Markdown、文本、PDF、 Word、工作簿、CSV 与演示文稿。
               </p>
               <PageToolbar ariaLabel="资料库操作">
-                <FieldSelect
-                  size="md"
-                  options={filterOptions}
-                  value={filterOptionId(filter)}
-                  ariaLabel="按集合筛选资料"
-                  onChange={(id) =>
-                    setFilter(
-                      id.startsWith(COLLECTION_OPTION_PREFIX)
-                        ? {
-                            kind: 'collection',
-                            collectionId: id.slice(COLLECTION_OPTION_PREFIX.length),
-                          }
-                        : { kind: id === 'uncategorized' ? 'uncategorized' : 'all' },
-                    )
-                  }
-                />
                 <form
                   className="knowledge-search"
                   onSubmit={(event) => trackAction(onSearch(event), '检索资料')}
                 >
+                  <FieldSelect
+                    size="md"
+                    options={filterOptions}
+                    value={filterOptionId(filter)}
+                    ariaLabel="按集合筛选资料"
+                    onChange={(id) =>
+                      setFilter(
+                        id.startsWith(COLLECTION_OPTION_PREFIX)
+                          ? {
+                              kind: 'collection',
+                              collectionId: id.slice(COLLECTION_OPTION_PREFIX.length),
+                            }
+                          : { kind: id === 'uncategorized' ? 'uncategorized' : 'all' },
+                      )
+                    }
+                  />
                   <TextField
                     size="md"
                     value={query}
@@ -303,16 +315,6 @@ export function KnowledgePage({
                     </Button>
                   )}
                 </form>
-                <Button
-                  variant="text"
-                  size="md"
-                  type="button"
-                  aria-haspopup="dialog"
-                  aria-expanded={indexDrawerOpen}
-                  onClick={() => setIndexDrawerOpen(true)}
-                >
-                  {indexEntryLabel}
-                </Button>
               </PageToolbar>
             </>
           )}
