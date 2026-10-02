@@ -5,19 +5,23 @@ description: 启动应用、停止应用、调试、运行开发环境、构建�
 
 # 应用启停、验证与提交纪律
 
+本文件是**速查复述**，不是第二份标准：每条句末括号里是它的唯一出处，与出处不一致时回到出处核对并同轮修好本文件。
+
 ## 启停（只用脚本）
 
     bash scripts/dev-start.sh   # 启动：先准确停止旧的开发实例，再写 PID
     bash scripts/dev-stop.sh    # 停止：按 PID 文件精确停止
 
-- 开发日志固定在 `/tmp/betterwork-dev.log`。
-- **产品开发实例禁止绕开脚本直接启动 Electron，禁止 `pkill -f electron` 等宽泛进程匹配**——那会误杀用户的其他 Electron 应用；必要时按 PID 并用 lsof 校验工作目录后再操作。
-- `ui:check` 的独立合成 Electron 测试进程由验证脚本管理，按 docs/12 §9 执行，不是产品开发实例。
-- 生产构建存在来自 Zod 的 Rollup `@PURE` 注释已知警告；构建成功即通过，**不得因此作无关依赖升级**。
+- 开发日志固定在 `/tmp/betterwork-dev.log`。（docs/11 §3）
+- **产品开发实例禁止绕开脚本直接启动 Electron，禁止 `pkill -f electron` 等宽泛进程匹配**——那会误杀用户的其他 Electron 应用；必要时按 PID 并用 lsof 校验工作目录后再操作。（docs/11 §3）
+- `ui:check` 的独立合成 Electron 测试进程由验证脚本管理，不是产品开发实例。（docs/12 §9）
+- 生产构建存在来自 Zod 的 Rollup `@PURE` 注释已知警告；构建成功即通过，**不得因此作无关依赖升级**。（docs/11 §3）
 
 ## 提交前最低验证
 
     npm run verify        # lint + format:check + typecheck + test + build + ui:check，任一失败即中止
+
+这句话现在有机器强制：`.husky/pre-commit` 跑 lint、format:check、typecheck 与 `git diff --cached --check`，`.husky/pre-push` 跑完整 verify。对应关系由护栏「本地钩子必须覆盖 verify 的完整步骤」钉住——删一行钩子或改了门禁步骤忘了同步，都会在 `npm test` 里红。（docs/12 §1）
 
 需要单独定位时：
 
@@ -28,18 +32,19 @@ description: 启动应用、停止应用、调试、运行开发环境、构建�
     npm run bench       # 计时基准档（*.bench.test.ts，串行），不属于 verify
     npm run build
     npm run ui:check    # 全正式主题 × 两档窗口；独立合成进程，不读取产品数据
-    git diff --check
+    git diff --cached --check
 
-- **禁止把 `npm run verify` 的输出接管道后只看末尾**（如 `npm run verify | tail`）：管道退出码取最后一个命令，`tail` 永远返回 0，会把失败读成成功。需要截取输出时用 `npm run verify > /tmp/verify.log 2>&1; echo $?`。
-- 规范本身见 [工程规范](../../docs/12-engineering-standards.md)；配置（`eslint.config.mjs`、`.prettierrc.json`）是规范的可执行形式，跨文件的结构约定由 `standards/coding-standard.test.ts` 守卫，同样跑在 `npm test` 里。改规则前先读该文档的例外机制一节。
+- **禁止把 `npm run verify` 的输出接管道后只看末尾**（如 `npm run verify | tail`）：管道退出码取最后一个命令，`tail` 永远返回 0，会把失败读成成功。需要截取输出时用 `npm run verify > /tmp/verify.log 2>&1; echo $?`。（docs/12 §1）
+- 治理巡检：`npm run drift:check` 查护栏看不见的三类漂移（钩子有没有接进这个克隆、未推送提交攒了多久、有提交的日子有没有工作日志），并对照 `docs/development/drift-readings.json` 报例外登记的增减；它**不进** `npm run verify`，因为它要读 git 与本机克隆配置，换台机器结论就不同。审计前、每完成一个批次后、同类问题第二次出现时各跑一次（docs/12 §1）。
+- 规范本身见 [工程规范](../../docs/12-engineering-standards.md)：配置（`eslint.config.mjs`、`.prettierrc.json`）是规范的可执行形式，跨文件的结构约定由 `standards/coding-standard.test.ts` 守卫，同样跑在 `npm test` 里。改规则前先读该文档的例外机制一节。（docs/12 §1、§10）
 
 ## 提交纪律
 
-- 每次开始先 `git status --short`；工作树中的既有改动属于用户，不得删除、覆盖或夹带进无关提交。
-- 每个提交聚焦一件事；必要的测试、文档与 ADR 和实现放在同一变更中。
-- 禁止提交：`.env`、API Key、SQLite/数据库文件、构建产物、用户资料、本地工作文件。
-- 产品范围、数据迁移策略或安全边界不明确时，先停在文档 / ADR 层澄清，不把猜测固化为实现。
+- 每次开始先 `git status --short`；工作树中的既有改动属于用户，不得删除、覆盖或夹带进无关提交。（docs/11 §8、AGENTS.md §8）
+- 每个提交聚焦一件事；必要的测试、文档与 ADR 和实现放在同一变更中。（AGENTS.md §8、docs/11 §8）
+- 禁止提交：`.env`、API Key、SQLite/数据库文件、构建产物、用户资料、本地工作文件。（AGENTS.md §7、docs/11 §8）
+- 产品范围、数据迁移策略或安全边界不明确时，先停在文档 / ADR 层澄清，不把猜测固化为实现。（docs/11 §8、AGENTS.md §8）
 
 ## 密钥
 
-- `model_profiles.api_key` 存于本地 SQLite；日志、错误消息、测试输出**绝不打印密钥**。如未来引入系统钥匙串，先新增 ADR 并设计迁移。
+- `model_profiles.api_key` 明文存于本地 SQLite，只在主进程内部流转；日志、错误消息、测试输出**绝不打印密钥**。如未来引入系统钥匙串，先新增 ADR 并设计迁移。（docs/12 §6、docs/11 §3）

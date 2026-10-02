@@ -76,7 +76,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 
 **不要把 verify 的输出接管道后只看末尾**（`npm run verify | tail` 的退出码是 `tail` 的，永远为 0，会把失败读成成功）。需要截取输出时用 `npm run verify > /tmp/verify.log 2>&1; echo $?`。
 
-2026-10-01 UI 门禁补强后的统计快照：**功能档 175 个测试文件、1,587 项测试**（含 `standards/coding-standard.test.ts` 的 135 条规范护栏和独立检测器的 21 项回归用例），**heavy 档 6 个文件、133 项测试**，共 181 文件/1,720 项；另有 **16 组真实 Electron 渲染检查**进入 `verify`。统计以当次验证输出为准，不把快照当作持续自动更新的数据。`bench` 仍独立，不纳入此数。CI 门禁跑在 macOS runner 上（[ADR-0036](adr/0036-macos-only-platform-scope.md)），不需要 Xvfb。生产构建存在来自 Zod 的 Rollup `@PURE` 注释已知警告，不应因此作无关依赖升级。
+车道构成：`npm test` 是功能档（并发）加 heavy 档（串行）两次独立调用，`npm run ui:check` 跑多组真实 Electron 渲染检查，`npm run bench` 独立、不进提交门禁。**规模数字（测试文件数／用例数／护栏条数／渲染检查组数）一律以当次 `npm run verify` 的输出为准，本文不登记快照**——2026-10-02 之前这里、README 与 docs/12 §9 各写着一套互不相符的过期数字，现由护栏「规模计数必须带日期或写明以当次为准」钉住。CI 门禁跑在 macOS runner 上（[ADR-0036](adr/0036-macos-only-platform-scope.md)），不需要 Xvfb。生产构建存在来自 Zod 的 Rollup `@PURE` 注释已知警告，不应因此作无关依赖升级。
 
 `knowledge-vault.test.ts` 的 PDF 与 DOCX 两个用例已显式提高超时——它们首次运行需要现场转换 `pdf-parse` 与 `mammoth`，冷 Vite 缓存下会超过默认的 5 秒。
 
@@ -92,7 +92,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 | `packages/agent-core/src/agent-engine.ts` | `ReActAgentEngine`：单循环 ReAct，工具轮次上限默认 8，取消与失败语义在此收口。核心输出必须保持 `AsyncIterable<AgentRuntimeEvent>`。 |
 | `packages/agent-core/src/errors.ts` | 取消与错误描述的**唯一**定义（`abortError` / `isAbortError` / `describeError`）。任何地方都不要再手写 `Object.assign(new Error(...), { name: 'AbortError' })`。 |
 | `packages/agent-core/src/fake-provider.ts` | 教学 Provider，不联网、输出可预测。刻意不支持 `web_search` 触发词——联网搜索会发起真实请求，与离线可复现的定位冲突。 |
-| `packages/agent-core/src/openai-compatible-provider.ts` | OpenAI 兼容 SSE 解析与 `tool_calls` 增量拼接。改动前先看它的 19 个测试。 |
+| `packages/agent-core/src/openai-compatible-provider.ts` | OpenAI 兼容 SSE 解析与 `tool_calls` 增量拼接。改动前先看它同目录的测试。 |
 | `packages/tool-runtime/src/` | 确定性工具实现。需要 Application 层资源的工具用「工厂 + 闭包注入」（`createKnowledgeSearchTool`、`createWebSearchTool`），保持本包不依赖 Electron、SQLite 或服务商 SDK。 |
 | `apps/desktop/src/main/index.ts` | 只做装配：建窗口、组装依赖、注册 IPC、管理生命周期；启动时收口上次被中断的 Run。**不放业务逻辑**。 |
 | `apps/desktop/src/main/window.ts` | 窗口构造、首帧主题常量（必须与青玉浅色 Token 一致，避免冷启动闪白）。 |
@@ -105,17 +105,17 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 | `apps/desktop/src/main/services/model-connectivity.ts` | 模型连通性探测的纯函数实现（可注入 fetch），含超时与 http/https 协议校验收窄。 |
 | `apps/desktop/src/main/ipc/register-ipc.ts` | 全部 channel 注册。三个 helper（`handleInput` / `handleOptionalInput` / `handleNoInput`）是入参校验的唯一通道，handler 不得自行解析 `raw`。 |
 | `apps/desktop/src/preload/index.ts` | 最小化、类型化的 Renderer API；所有推送事件过 Zod 后再交给 Renderer。必须维持 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。 |
-| `apps/desktop/src/renderer/src/App.tsx` | 跨簇编排与布局组装（1,736 行）：工作会话状态、视图切换、通知接线、Sidebar 与错误条。侧栏、消息流与 Composer 三段仍是内联 JSX，外提属 UI 复用评估的 R3。 |
+| `apps/desktop/src/renderer/src/App.tsx` | 跨簇编排与布局组装（行数以当次 `wc -l` 为准，本文不登记快照）：工作会话状态、视图切换、通知接线、Sidebar 与错误条。侧栏、消息流与 Composer 三段仍是内联 JSX，外提属 UI 复用评估的 R3。 |
 | `apps/desktop/src/renderer/src/views/` | 工作以外的页面级视图：`ArtifactView`、`KnowledgeView`、`MemoryView`、`SkillsView`、`ExpertsView`、`SettingsView`。视图内不出现 IPC 调用。 |
 | `apps/desktop/src/renderer/src/components/` | 跨视图复用组件与基座：`ContextPanel`、`Welcome`、`EmptyState`、`ModelEditorSheet`，以及 `Modal`、`PopoverMenu`、`ListRow`、`SectionHeader`、`AsyncButton`／`InlineLoading`、`IconButton`、`ActionBar`、`NavList`／`NavItem`、`Badge`、`Tabs`、`Field`／`FieldSelect`、`layout/` 四件（台账见 docs/10 §10.1）。 |
-| `apps/desktop/src/renderer/src/hooks/` | 五个内聚状态簇：`useAppearance`、`useKnowledgeLibrary`、`useModelSettings`、`useArtifactViewer`、`useSearchEngineSettings`。IPC 调用只出现在这一层与 `App.tsx`；刷新类回调用 `useCallback` 保持引用稳定，挂载 effect 才能如实声明依赖。 |
-| `apps/desktop/src/renderer/src/lib/` | 无状态纯函数与常量：`async-action`（异步收口的唯一入口）、`tool-summary`、`labels`（含 `TOOL_LABELS`，新增工具必须同步）、`format`、`titlebar`、`view-types`。 |
+| `apps/desktop/src/renderer/src/hooks/` | 有状态逻辑按内聚状态簇一个 hook（当前有哪几簇看目录本身，本文不登记数量）。IPC 调用只出现在这一层与 `App.tsx` 的跨簇编排接线——`App.tsx` 不在 docs/12 §8 的标识符判据（`views/`、`components/`）射程内，属登记例外，新增动作仍先落 hook。刷新类回调用 `useCallback` 保持引用稳定，挂载 effect 才能如实声明依赖。 |
+| `apps/desktop/src/renderer/src/lib/` | 无状态纯函数与常量：`async-action`（「让用户看见」与「只记录」两类处置的缺省实现，**不是**收口的唯一写法——判据与合法形状清单见 [工程规范 §5](12-engineering-standards.md)）、`tool-summary`、`labels`（含 `TOOL_LABELS`，新增工具必须同步）、`format`、`titlebar`、`view-types`。 |
 | `apps/desktop/src/renderer/src/notifications.tsx` | `useNotifications`（初始加载、增量广播、同页抑制、Toast 生命周期）、消息中心面板与 Toast 宿主。 |
 | `apps/desktop/src/renderer/src/activity.ts` | 从事件流派生用户可理解的工作阶段分组。 |
 | `apps/desktop/src/renderer/src/appearance.ts`、`styles.css` | 主题系统、Token 与全部界面样式。不得新增硬编码色值或局部 `.dark` 补丁；动效时长只能用 Token。 |
 | `apps/desktop/src/renderer/src/icons.tsx`、`brand-logo.tsx` | 内联 SVG 描边图标集（`currentColor`、统一 24 网格）与品牌标志。新增图标先进图标集再使用。 |
 | `apps/desktop/src/renderer/src/markdown-preview.tsx` | 成果的文档化 Markdown 预览，不渲染原始 HTML。 |
-| `standards/coding-standard.test.ts` | 跨文件的规范护栏：配置唯一性、源码零豁免、分层边界、Token 与动效纪律、规则索引完整、首帧主题一致。例外写成文件内的白名单数组并注明理由，不要在源码里加豁免注释。 |
+| `standards/coding-standard.test.ts` | 跨文件的规范护栏：配置唯一性、源码零豁免（扫描面含本目录与根级配置）、分层边界、Token 与动效纪律、规则索引完整、首帧主题一致，另钉本地钩子与 `verify` 的覆盖关系、文档指针的有效性、规模计数带日期、交接文档不得与组件台账相互打脸。例外写成文件内的白名单数组并注明理由，不要在源码里加豁免注释。 |
 ## 5. 不可破坏的实现约束
 
 - 依赖方向固定为 `Renderer -> Preload API -> Application -> Agent Core / Infrastructure -> Tool Runtime`。
@@ -139,14 +139,14 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 
 1. IPC 注册器已有 Electron 替身行为测试：非法输入、无入参通道、输出 Schema、来源打开白名单，以及「Workspace → Task → Run → Artifact → 修订 → 导出」主进程旅程。后续新增 channel 必须在同一测试中补边界行为；真实桌面窗口自动化尚未建立。
 2. Renderer 已引入 `@testing-library/react` + jsdom，并覆盖 Confirmation Dialog 的焦点与 Escape 行为、成果版本加载错误，以及 `useArtifactViewer` 在受控异步乱序下忽略过期版本列表响应。仍无覆盖完整 AppShell 的组件测试与真实桌面 UI 自动化；其他视图和 hook 仍主要依靠人工桌面验收。
-3. GitHub Actions 在 **macOS runner** 上对 Pull Request 和 `main` 推送执行 `npm run verify`（[ADR-0036](adr/0036-macos-only-platform-scope.md)；平台范围只有 macOS，Windows 不在支持范围）。macOS 基础打包验证仍未达成；真实桌面 UI 自动化应在该专项中接入。
+3. GitHub Actions 在 **macOS runner** 上对 Pull Request 和 `main` 推送执行 `npm run verify`（[ADR-0036](adr/0036-macos-only-platform-scope.md)；平台范围只有 macOS，Windows 不在支持范围）。macOS 基础打包验证仍未达成；真实桌面 UI 自动化应在该专项中接入。。工作流除 push／Pull Request 外还接 `workflow_dispatch`（手动复跑拿读数），并按 ref 开 `concurrency` 取消被取代的运行（macOS runner 按分钟计费）；随失败上传截图与读数，随成功只上传 `.ui-render/results.json`（留 7 天）——绿跑的读数也是证据，形状由护栏「远端门禁跑在受支持的平台、能手动触发、并且留下绿跑读数」钉住。
 
 **界面**
 
-4. `App.tsx` 仍有 1,736 行（R3-B 外提 `MessageBlock`／`Composer` 后从 1,851 降下来），AppShell 与 Sidebar 未拆出（此前写的「约 720 行」是 2026-09-26 之前的状态，功能三轮之后已不成立）。工作会话状态刻意留在 App（它同时牵动任务列表、上下文面板、成果列表与通知跳转），但 Sidebar、消息流与 Composer 三段是纯 JSX，可以继续外提。
+4. `App.tsx` 仍是全仓最大的视图文件（R3-B 外提 `MessageBlock`／`Composer` 后降过一截；行数不在本文登记，以当次 `wc -l` 为准），AppShell 与 Sidebar 未拆出（此前写的「约 720 行」是 2026-09-26 之前的状态，功能三轮之后已不成立）。工作会话状态刻意留在 App（它同时牵动任务列表、上下文面板、成果列表与通知跳转），但 Sidebar、消息流与 Composer 三段是纯 JSX，可以继续外提。
 5. Confirmation Dialog 已落地，但尚未覆盖所有未来的破坏性操作；新增此类操作必须复用组件并补键盘行为测试。
 6. 部分低频次级按钮的点击区域小于 32px（Composer 工作区行的文字按钮、上下文页签、模型行内动作、通知面板动作、证据「原文」按钮）。达标方式是扩大命中区，不是放大视觉尺寸。
-7. Tooltip、Skeleton、Switch 未落地（Progress 只有一枚不确定态 spinner `.spinner`，没有百分比进度条）；除 `⌘/Ctrl ↵` 外没有其他快捷键。
+7. Skeleton 与百分比进度条未落地（Progress 只有一枚不确定态 spinner `.spinner`）；除 `⌘/Ctrl ↵` 外没有其他快捷键。Tooltip 与 Switch 已落地，契约见 docs/10 §10.1 台账——本条此前把两者一并列为缺失，2026-10-02 由护栏「交接与规则文档不得宣称台账组件尚未落地」钉住这类反向陈述。
 8. docs/10 §13 UI-5 要求的三尺寸 × 3 模式 × 4 色系验收矩阵仍未建立；本轮字号与动效收敛后需要重新做一轮人工验收。
 9. 窄屏（`max-width: 960px`）是**强制**图标栏，不读取用户的折叠偏好；覆盖式右栏没有点击外部关闭的背板。
 10. 上下文面板展开状态未按 Task 记忆（侧栏折叠状态已持久化）。

@@ -17,6 +17,7 @@
 | Artifact / 版本 / 来源 / 导出 | [ADR-0005](docs/adr/0005-artifact-version-evidence.md)、[UI/UX 体系](docs/10-ui-ux-system.md) |
 | UI / 样式 / 主题 / 组件 / 页面检查与 Review | [UI/UX 体系](docs/10-ui-ux-system.md) §10.1（流程、真实台账、检查边界），再按任务读 §6/§8/§9/§11/§12；[工程规范](docs/12-engineering-standards.md) §5/§8/§9/§10 |
 | 启动/停止/构建/验证/提交 | [交接说明](docs/11-qoder-handoff.md) 第 3 节 |
+| 怀疑规范漂移、做治理巡检、核对例外与规模读数 | `npm run drift:check`（不进 `verify`），判据与触发时机见 [工程规范](docs/12-engineering-standards.md) §1 的第四层 |
 | 排查缺陷 | GATE-0：先查 SQLite 数据，再看 `/tmp/betterwork-dev.log`，最后才看代码（`.qoder/rules/betterwork-diagnosis.md`） |
 | 范围变化 | 同步更新 [MVP 与路线图](docs/07-mvp-and-roadmap.md)；跨模块关系或关键技术选择新增 ADR |
 | **写任何代码**：目录结构、命名、类型、异步与错误处理、测试约定、lint/format 规则 | [工程规范](docs/12-engineering-standards.md)——全仓唯一规范；`eslint.config.mjs` + `.prettierrc.json` 是它的可执行形式，`standards/coding-standard.test.ts` 是它的结构护栏 |
@@ -145,6 +146,7 @@ Renderer -> Preload API -> Application -> Agent Core / Infrastructure
 - 产品语言变化时同步更新 README、产品定义和品牌文档。
 - 保持提交聚焦；不混入无关格式化或重构。
 - 不删除或覆盖用户已有改动；发现冲突先停下说明。
+- **技术方案遇到两层以上障碍时先停下来澄清**，不埋头修一座不该修的桥；沉默、让步或「先这样吧」都不构成继续的授权。产品范围、数据迁移策略或安全边界不明确时，停在文档 / ADR 层，不把猜测固化为实现。
 
 ## 9. 完成定义
 
