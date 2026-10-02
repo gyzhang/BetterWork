@@ -2,7 +2,7 @@
 
 import type { SkillDetail, SkillSummary } from '@betterwork/agent-protocol';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useSkills } from '../hooks/use-skills';
 import { SkillsPage } from './SkillsView';
@@ -63,6 +63,24 @@ function grantStub(): (input: unknown) => Promise<Record<string, unknown>> {
 }
 
 const originalLocalStorage = window.localStorage;
+
+/**
+ * 卡片／列表偏好读自 `window.localStorage`，而 jsdom 这份 storage 在同一文件内是跨用例持久的：
+ * 不逐用例换新，前一个用例点过「列表」就会漏进后一个用例的缺省视图。本机 jsdom 恰好取不到
+ * `window.localStorage`（读失败兜底成卡片）才一直没暴露，依赖这个巧合等于把用例正确性交给环境。
+ */
+beforeEach(() => {
+  const store = new Map<string, string>();
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+    },
+  });
+});
 
 afterEach(() => {
   cleanup();
