@@ -15,7 +15,7 @@
 | Knowledge 导入/索引/检索/Evidence/打开源文件 | [知识库与记忆](docs/04-knowledge-and-memory.md) |
 | 记忆召回/来源治理/自动提炼建议/工作空间简报/参考成果版本 | [工作型记忆产品设计](docs/designs/work-centered-memory.md)、[记忆实施契约](docs/development/memory-contracts.md)、[WM 任务板](docs/development/tasks-memory.md)、[ADR-0026](docs/adr/0026-work-centered-memory.md)（Proposed，已按用户开工指令实施） |
 | Artifact / 版本 / 来源 / 导出 | [ADR-0005](docs/adr/0005-artifact-version-evidence.md)、[UI/UX 体系](docs/10-ui-ux-system.md) |
-| UI / 样式 / 主题 / 组件 | [UI/UX 体系](docs/10-ui-ux-system.md) |
+| UI / 样式 / 主题 / 组件 / 页面检查与 Review | [UI/UX 体系](docs/10-ui-ux-system.md) §10.1（流程、真实台账、检查边界），再按任务读 §6/§8/§9/§11/§12；[工程规范](docs/12-engineering-standards.md) §5/§8/§9/§10 |
 | 启动/停止/构建/验证/提交 | [交接说明](docs/11-qoder-handoff.md) 第 3 节 |
 | 排查缺陷 | GATE-0：先查 SQLite 数据，再看 `/tmp/betterwork-dev.log`，最后才看代码（`.qoder/rules/betterwork-diagnosis.md`） |
 | 范围变化 | 同步更新 [MVP 与路线图](docs/07-mvp-and-roadmap.md)；跨模块关系或关键技术选择新增 ADR |
@@ -52,7 +52,7 @@ Phase 0 与原 Phase 1 的知识库、搜索和 Markdown 成果部分能力已�
 
 首个必需兼容样本为用户提供的 `ppt-generation-expert`。阶段 A 必须支持文件夹 Skill、Python 脚本/CLI、外部本地工具链与依赖准备、任务文件读写、子进程取消/超时、质量报告及最小 PPTX 产物登记，见 [ADR-0009](docs/adr/0009-script-skill-baseline.md) 与 [运行边界](docs/reviews/2026-09-08-skill-runtime-boundary.md)。先设计执行约束和协议，再实现；不能以脚本后置或仅提示词试运行代替支持该样本。
 
-信任与分发规则已确认（[ADR-0011](docs/adr/0011-skill-trust-and-local-distribution.md)）：内置 Skill 默认信任，导入 Skill 由用户选择信任；有效授权范围内脚本自动执行，信任/启用/依赖状态独立，更新不得静默继承变化后的授权或覆盖用户撤销。源码 `resources/skills/`、安装资源 `skills/`、用户数据 `skills/` 各司其职；内置只读、用户副本可改。尚未实现，不得把信任选项称为原生进程沙箱。
+信任与分发规则已确认（[ADR-0011](docs/adr/0011-skill-trust-and-local-distribution.md)）：内置 Skill 默认信任，导入 Skill 由用户选择信任；有效授权范围内脚本自动执行，信任/启用/依赖状态独立，更新不得静默继承变化后的授权或覆盖用户撤销。源码 `resources/skills/`、安装资源 `skills/`、用户数据 `skills/` 各司其职；内置只读、用户副本可改。管理与授权实现已落地，分发验收见 A 任务板；不得把信任选项称为原生进程沙箱。
 
 基础配置前移不自动引入：OpenClaw 兼容、代码 Agent、多 Agent、通用 DAG、IM、定时任务、云同步、企业权限、公开 Skill 市场和完整 Kit 生态。完整 Office 工作流、网页正文、引用、讨论节点和最小记忆按第三阶段切片设计；阶段 A 先支持样本所需的真实 PPT 生成与校验。Embedding 和完整记忆不作为配置前置，MCP 范围独立确认。
 
@@ -134,7 +134,7 @@ Renderer -> Preload API -> Application -> Agent Core / Infrastructure
 - Schema 变更走版本化迁移并补迁移测试，不得在启动代码里探测后 `ALTER`。
 - 新增领域行为必须有单元测试；Agent 事件顺序、取消和工具失败必须有测试；涉及外部 HTTP 的代码必须可注入 `fetch`，测试不得触网。
 - 修复缺陷时优先添加回归测试。
-- 提交前执行 `npm run verify`（lint + format:check + typecheck + test + build）。**不要把它的输出接管道后只看末尾**——管道退出码取最后一个命令，会把失败读成成功。墙钟与内存预算断言不在 `verify` 里：它们只住在 `*.bench.test.ts`，由 `npm run bench` 串行跑（见 `docs/12-engineering-standards.md` §9）。
+- 提交前执行 `npm run verify`（lint + format:check + typecheck + test + build + ui:check）。**不要把它的输出接管道后只看末尾**——管道退出码取最后一个命令，会把失败读成成功。墙钟与内存预算断言不在 `verify` 里：它们只住在 `*.bench.test.ts`，由 `npm run bench` 串行跑（见 `docs/12-engineering-standards.md` §9）。
 - 不提交 `.env`、密钥、构建产物、数据库和本地工作文件。
 
 ## 8. 变更纪律

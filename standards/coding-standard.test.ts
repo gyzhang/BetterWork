@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { colorSchemes } from '../apps/desktop/src/renderer/src/appearance';
 import {
+  componentCatalogIssues,
   type CssDeclaration,
   fixedMaxWidthSelectors,
   inlineStyleIssues,
@@ -38,11 +39,14 @@ const PAGE_SHAPE_EXCEPTIONS: readonly PageShapeException[] = [
   {
     file: 'apps/desktop/src/renderer/src/views/MemoryView.tsx',
     component: 'MemoryPage',
-    required: [
-      'apps/desktop/src/renderer/src/components/SectionHeader.tsx#SectionHeader',
-      'apps/desktop/src/renderer/src/components/layout/ScrollRegion.tsx#ScrollRegion',
+    required: ['apps/desktop/src/renderer/src/components/SectionHeader.tsx#SectionHeader'],
+    alternatives: [
+      [
+        'apps/desktop/src/renderer/src/components/layout/ScrollRegion.tsx#ScrollRegion',
+        'apps/desktop/src/renderer/src/components/EmptyState.tsx#EmptyNotice',
+      ],
     ],
-    reason: '记忆位于设置宿主内；分区标题和内部列表滚动仍使用基座',
+    reason: '记忆位于设置宿主内；分区标题固定，内容为列表滚动或首读/空集合的 EmptyNotice',
   },
 ];
 
@@ -143,7 +147,6 @@ const SURFACE_SHELL_OWNERS: readonly { selector: string; reason: string }[] = [
   { selector: '.composer', reason: 'Composer 基座' },
   { selector: '.composer-footer kbd', reason: '键盘快捷键图形标识' },
   { selector: '.dependency-operation', reason: '技能依赖执行记录，非普通卡片' },
-  { selector: '.discussion-checkpoint-history span', reason: '讨论节点修订历史标识' },
   { selector: '.evidence-preview', reason: '上下文来源正文预览' },
   { selector: '.field-select-trigger', reason: 'FieldSelect 基座' },
   { selector: '.icon-button', reason: 'IconButton 基座' },
@@ -1168,20 +1171,17 @@ describe('浮层基座纪律', () => {
 const CONTROL_SELECTOR =
   /(^|[,>\s])input\b|(^|[,>\s])select\b|(^|[,>\s])textarea\b|(^|[,>\s])\.[\w-]*-input(?![\w-])|\.field-select-trigger|\.btn\b|\.icon-button\b/;
 /**
- * 逐条理由：勾选框的盒几何由 `--control-check-size` 与 UA 决定；`:focus`／`:hover`
- * 只改颜色不改几何；`.workspace-row input` 是行内改名用的透明输入框，没有边框；
- * `.composer textarea` 的左右内距归 `.composer`，它自己只留上下 11px；
- * `textarea[readonly]` 与 `.counted` 是展示用的只读文本块，不是编辑控件。
+ * 勾选轴的盒几何由 `--control-check-size` 与 UA 决定；Composer 的任务输入有独立契约。
+ * 只读 TextArea 仍归输入基座，hover/focus 不能成为另造几何的豁免；已退役的
+ * workspace-row input 与 counted 旧原生输入选择器不保留空白授权。
  */
-const CONTROL_EXEMPTIONS =
-  /checkbox|::placeholder|:focus|:hover|\.workspace-row input|\.composer textarea|textarea\[readonly\]|counted/;
+const CONTROL_EXEMPTIONS = /checkbox|\.composer textarea/;
 
 /**
  * 勾选行（复选框与文字同排）不是「标签 + 控件」结构，保留自己的排版；
  * 新增条目要说明为什么它不算表单字段，否则应改用 Field。
  */
 const CHECKBOX_ROW_LABEL_SELECTORS: { readonly match: string; readonly reason: string }[] = [
-  { match: '.discussion-checkpoint-artifacts label', reason: '成果版本勾选行：框在左、标题在右' },
   { match: '.skill-trust-box label', reason: 'Skill 信任确认行：框在左、说明在右' },
 ];
 
@@ -1197,6 +1197,7 @@ const RETIRED_UTILITY_CLASSES: {
   readonly family:
     'action-bar' | 'badge' | 'borrow' | 'button' | 'empty' | 'heading' | 'nav' | 'row';
 }[] = [
+  { pattern: /\.memory-list-empty(?![-\w])/, name: '.memory-list-empty', family: 'empty' },
   /* === 按钮皮与页面级后代规则（ADR-0031：外观的唯一出口是 `Button`） === */
   { pattern: /\.primary-button(?![-\w])/, name: '.primary-button', family: 'button' },
   { pattern: /\.secondary-button(?![-\w])/, name: '.secondary-button', family: 'button' },
@@ -4592,6 +4593,46 @@ describe('计时基准车道纪律', () => {
 });
 
 describe('规则与文档索引', () => {
+  it('当前组件台账与真实导出双向一致', () => {
+    const sources = productionPathsUnder('apps/desktop/src/renderer/src/components/')
+      .filter((file) => file.endsWith('.tsx'))
+      .map((file) => ({ file, text: read(file) }));
+    expect(componentCatalogIssues(read('docs/10-ui-ux-system.md'), sources)).toEqual([]);
+  });
+
+  it('所有现行门禁摘要包含实际 verify 的完整步骤', () => {
+    const pipeline = (
+      JSON.parse(read('package.json')) as { scripts: { verify: string } }
+    ).scripts.verify
+      .split(' && ')
+      .map((command) => command.replace(/^npm (?:run )?/u, '').trim());
+    expect(pipeline).toEqual(['lint', 'format:check', 'typecheck', 'test', 'build', 'ui:check']);
+    for (const file of [
+      'AGENTS.md',
+      'docs/12-engineering-standards.md',
+      'docs/11-qoder-handoff.md',
+      '.qoder/rules/betterwork-code-style.md',
+      '.qoder/rules/betterwork-dev-cycle.md',
+    ]) {
+      const summaries = [...read(file).matchAll(/lint\s*\+\s*format:check(?:\s*\+\s*[\w:]+)+/gu)];
+      expect(summaries.length, `${file} 缺少可核对的门禁摘要`).toBeGreaterThan(0);
+      for (const summary of summaries)
+        expect(
+          summary[0].split('+').map((item) => item.trim()),
+          file,
+        ).toEqual(pipeline);
+    }
+  });
+
+  it('讨论节点复用勾选组与徽标，不恢复旧的自造表面', () => {
+    const file = read('apps/desktop/src/renderer/src/components/DiscussionCheckpointPanel.tsx');
+    expect(file).toMatch(/<CheckList\b/u);
+    expect(file).toMatch(/<Badge\b/u);
+    expect(file).not.toMatch(/<input\b|data-status=/u);
+    expect(read('apps/desktop/src/renderer/src/styles.css')).not.toMatch(
+      /\.discussion-checkpoint-history span|\.discussion-checkpoint-artifacts label/u,
+    );
+  });
   it('.qoder/rules 下的每个规则文件都登记在场景索引里', () => {
     const index = read('.qoder/rules/betterwork.md');
     const unregistered = REPO_FILES.filter(

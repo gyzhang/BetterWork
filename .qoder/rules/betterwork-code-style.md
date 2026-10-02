@@ -6,17 +6,17 @@ trigger: glob: **/*.ts,tsx,css,mjs,json
 
 全仓只有**一份**代码规范：[docs/12-engineering-standards.md](../../docs/12-engineering-standards.md)。
 它的可执行形式是 `eslint.config.mjs` + `.prettierrc.json`，它的结构护栏是 `standards/coding-standard.test.ts`。
-三者冲突时以配置与护栏测试为准，并同时修正文档。
+发现冲突时按 docs/12 的语义与已接受决策核对实现，修正文档、配置或护栏；不得仅因机器通过就静默偏离规范。
 
 **动手前先读 docs/12 里与本任务相关的小节**（§2 目录结构、§3 命名与导出、§4 类型纪律、§5 异步与错误处理、§6 持久化与迁移、§7 IPC、§8 Renderer、§9 测试、§10 例外机制）。
 
-**本文件是速查复述，不是第二份标准。** 下面每一条都是 docs/12（少数几条是 AGENTS.md）某个小节的摘要，句末括号里的 `§N` 就是它的出处；本文件与出处不一致时**以出处 ＋ 配置 ＋ 护栏为准**，并同轮修好本文件。这么标注是付出过代价的：IPC 收口判据曾在 `AGENTS.md`／`docs/12`／本文件／`betterwork-ui.md` 四处并存两种措辞，其中本文件那一处直到 2026-09-29 才对齐（[治理校准账本](../../docs/reviews/2026-09-28-ui-governance-audit.md) P3-11）。**改 docs/12 的任一小节，必须同轮 grep 本文件有没有复述到它**；护栏「编码规范速查文件的每条复述都要带出处」会拦住新增的无源条目——没有出处的复述就是另立标准，而漂移时没人能判断哪一份对。
+**本文件是速查复述，不是第二份标准。** 下面每一条都是 docs/12（少数几条是 AGENTS.md）某个小节的摘要，句末括号里的 `§N` 就是它的出处；本文件与出处不一致时**回到出处核对配置与护栏**，并同轮修好本文件。这么标注是付出过代价的：IPC 收口判据曾在 `AGENTS.md`／`docs/12`／本文件／`betterwork-ui.md` 四处并存两种措辞，其中本文件那一处直到 2026-09-29 才对齐（[治理校准账本](../../docs/reviews/2026-09-28-ui-governance-audit.md) P3-11）。**改 docs/12 的任一小节，必须同轮 grep 本文件有没有复述到它**；护栏「编码规范速查文件的每条复述都要带出处」会拦住新增的无源条目——没有出处的复述就是另立标准，而漂移时没人能判断哪一份对。
 
 ## 不可协商
 
 - **不新建第二套标准**：不加第二份 ESLint / Prettier / tsconfig 配置，不在任何 `package.json` 里内嵌 `eslintConfig` 或 `prettier` 键，不新建会各自放宽严格度的子 tsconfig。（AGENTS.md §7、docs/12 §10）
 - **源码里零豁免**：禁止 `eslint-disable`、`@ts-ignore`、`@ts-expect-error`、`prettier-ignore`。例外只能写进配置（按文件角色）或护栏测试的白名单，并注明理由。（docs/12 §10）
-- **提交前跑 `npm run verify`**（lint + format:check + typecheck + test + build）。**不要把输出接管道后只看末尾**——管道退出码取最后一个命令，会把失败读成成功。需要截取时用 `npm run verify > log 2>&1; echo $?`。（docs/12 §1）
+- **提交前跑 `npm run verify`**（lint + format:check + typecheck + test + build + ui:check）。**不要把输出接管道后只看末尾**——管道退出码取最后一个命令，会把失败读成成功。需要截取时用 `npm run verify > log 2>&1; echo $?`。（docs/12 §1）
 - **墙钟与内存预算断言只写在 `*.bench.test.ts` 里**，由 `npm run bench` 串行跑，不属于 `verify`；功能档里出现 `performance.now()` 会被护栏拦下。为昂贵夹具放宽**超时**是另一回事，注释里写清放宽的是什么。单文件墙钟 ≥20s 的重文件走 `heavy` 串行档。（docs/12 §9）
 
 ## 最常踩的硬约束

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Field } from './Field';
 import { FieldSelect } from './FieldSelect';
+import { SingleSelectPicker } from './SingleSelectPicker';
 
 afterEach(() => {
   cleanup();
@@ -17,6 +18,22 @@ const OPTIONS = [
 ];
 
 describe('Field 与 FieldSelect', () => {
+  it('选择组使用独立名称和说明，不把多个原生标签嵌进一个标签', () => {
+    const { container } = render(
+      <Field group label="颜色" hint="固定色板">
+        <SingleSelectPicker
+          label="工作空间颜色"
+          value="jade"
+          options={[{ id: 'jade', name: '青玉', visual: <span /> }]}
+          onSelect={() => undefined}
+        />
+      </Field>,
+    );
+    const group = screen.getByRole('group', { name: '颜色' });
+    expect(group.getAttribute('aria-describedby')).toBe(screen.getByText('固定色板').id);
+    expect(screen.getByRole('radio', { name: '青玉' })).toBeTruthy();
+    expect(container.querySelector('label label')).toBeNull();
+  });
   it('包裹式标签为控件提供可及名称，点击标签文字也能展开菜单', () => {
     const onChange = vi.fn();
     render(

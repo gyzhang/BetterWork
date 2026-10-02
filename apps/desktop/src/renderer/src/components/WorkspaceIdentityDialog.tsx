@@ -98,9 +98,11 @@ export function WorkspaceIdentityDialog({
       <SectionHeader variant="block" title={title} />
       <Field
         label="本地文件夹"
+        controlId="workspace-folder-input"
         hint="文件夹是真相源：材料读写边界与成果导出都以它为根，算台不会移动或改名它。"
       >
         <button
+          id="workspace-folder-input"
           type="button"
           className="workspace-folder-drop"
           data-filled={draft.rootPath ? 'true' : undefined}
@@ -136,7 +138,7 @@ export function WorkspaceIdentityDialog({
           onChange={(event) => onChangeDraft({ name: event.target.value })}
         />
       </Field>
-      <Field label="图标">
+      <Field group label="图标">
         <SingleSelectPicker
           label="工作空间图标"
           value={draft.iconId}
@@ -144,7 +146,7 @@ export function WorkspaceIdentityDialog({
           onSelect={(iconId) => onChangeDraft({ iconId })}
         />
       </Field>
-      <Field label="颜色" hint="八档固定色板，浅色与深色下各有一套值。">
+      <Field group label="颜色" hint="八档固定色板，浅色与深色下各有一套值。">
         <SingleSelectPicker
           label="工作空间颜色"
           value={draft.accentId}

@@ -15,26 +15,26 @@
 | [MVP 与路线图](07-mvp-and-roadmap.md) | 定义第一阶段范围、验收标准和演进顺序 |
 | [品牌](08-brand.md) | 定义“算台 BetterWork”的名称、文案与图标方向 |
 | [参考项目与借鉴边界](09-reference-projects.md) | 记录 LobsterAI、ClawBible Desktop、ClawBible Cloud 的本机路径与借鉴边界 |
-| [UI/UX 体系与落地计划](10-ui-ux-system.md) | 定义界面信息架构、视觉语言、组件规范和 Terra 实施顺序 |
-| [Qoder 开发交接](11-qoder-handoff.md) | 记录当前实现基线、运行方式、架构入口、续作边界与验证要求 |
+| [UI/UX 体系与落地计划](10-ui-ux-system.md) | 定义界面信息架构、视觉语言、真实组件台账、AI 页面检查/Review/创建流程和验证边界 |
+| [Qoder 开发交接](11-qoder-handoff.md) | 运行方式、架构入口、验证要求与历史交接摘要；增量状态查任务板 |
 | [工程规范](12-engineering-standards.md) | 全仓唯一的代码规范：工具链、目录、命名、类型、异步与错误处理、持久化、IPC、测试与例外机制 |
 
 ## 技术设计提案
 
-- [知识管理与使用基础闭环](designs/knowledge-foundation.md)：2026-09-24 归档的知识补齐产品规范；[ADR-0027](adr/0027-knowledge-foundation.md) 为 Proposed，[知识实施契约](development/knowledge-contracts.md) 定义固定修订读取、精确来源、嵌入/混合检索、索引生命周期与 Office 导入。只写文档，尚未编码，不改变 WM 的非向量召回。
+- [知识管理与使用基础闭环](designs/knowledge-foundation.md)：2026-09-24 归档的知识补齐产品规范；[ADR-0027](adr/0027-knowledge-foundation.md) 为 Proposed，[知识实施契约](development/knowledge-contracts.md) 定义固定修订读取、精确来源、嵌入/混合检索、索引生命周期与 Office 导入。实现与验收状态见 KM 任务板，WM 的非向量召回边界不变。
 - [API tools and remote MCP](designs/api-tools-and-remote-mcp.md): documented next capability increment for named API service profiles, protected credentials, and remote MCP; [ADR-0024](adr/0024-api-services-and-credentials.md) and [ADR-0025](adr/0025-remote-mcp-and-capability-bindings.md) remain Proposed. Documentation only; product development requires a separate instruction.
-- [Skill 信任与本地分发](adr/0011-skill-trust-and-local-distribution.md)：已确认的产品规则，具体实现未落地。
+- [Skill 信任与本地分发](adr/0011-skill-trust-and-local-distribution.md)：已确认的产品规则，管理与授权实现已落地，分发验收见 A 任务板。
 - [Skill 执行器与依赖管理](designs/skill-executor-and-dependencies.md)：首个 PPT Skill 的执行、环境、文件成果与阶段 A 验收，配套 ADR-0010 为 Proposed。
 - [工作型记忆产品设计](designs/work-centered-memory.md)：2026-09-22 归档，同日开工、2026-09-23 收口。近期产品范围已获用户确认；[ADR-0026](adr/0026-work-centered-memory.md) 仍记为 Proposed 但已按其技术方案实施，WM01–WM15 有自动化验收记录，人工验收见任务板（实施状态以任务板为准）。字段/算法/迁移/接口唯一真相源是[记忆实施契约](development/memory-contracts.md)。
 
 ## 开发执行规划
 
-- [知识基础闭环 KM00–KM15](development/tasks-knowledge.md)：知识补齐的唯一任务板，全部新卡未开工；[Qwen3.8-Flash 编码交接](development/knowledge-coding-prompts.md)提供基线核对、单卡、恢复和里程碑指令。先评审 ADR 与文档线框，再在新会话逐卡编码；不改写 E/CF/WM 状态。
+- [知识基础闭环 KM00–KM15](development/tasks-knowledge.md)：知识补齐的唯一任务板，实现/验收状态查该表；[Qwen3.8-Flash 编码交接](development/knowledge-coding-prompts.md)提供基线核对、单卡、恢复和里程碑指令。不从旧归档说明推断未开工，不改写 E/CF/WM 状态。
 - [API/MCP capability contracts](development/capability-contracts.md): proposed fields, operations, readiness, Run resolution, migration, and acceptance requirements. Not a new implementation task board; existing A/B0/E statuses remain unchanged.
 - [能力基础开发计划 CF00–CF51](development/tasks-capability-foundation.md)：把 API tools 与远程 MCP 设计拆成 M0–M5 六个里程碑与 17 张任务卡，与现有 A/B0/E 并行。里程碑入口不自动开工，需单独开发指令。
-- [阶段 A 执行手册（供 5.6 Luna 使用）](development/README.md)：22 项顺序任务、共享实施契约、逐项验收与可复制派发提示词；仅规划，未开始实现。
+- [阶段 A 执行手册（供 5.6 Luna 使用）](development/README.md)：22 项顺序任务、共享实施契约、逐项验收与可复制派发提示词；已有代码实现，真实样本与安装验收状态查手册任务板，后续专家任务走 E 计划。
 - [阶段 B/C 后续规划](development/phase-b-c-roadmap.md)：专家配置、研究到汇报与积累复用。
-- [工作型记忆开发计划 WM00–WM16](development/tasks-memory.md)：2026-09-22 建立的唯一 WM 任务状态板；[记忆实施契约](development/memory-contracts.md) 定义字段与算法，[记忆编码提示词](development/memory-coding-prompts.md) 提供逐卡可复制指令。仅 WM00（文档归档）已执行；WM01 起需用户先批准 [ADR-0026](adr/0026-work-centered-memory.md) 的技术方案，且与 A/B0/E/CF 任务状态互不改写。
+- [工作型记忆开发计划 WM00–WM16](development/tasks-memory.md)：唯一 WM 任务状态板；[记忆实施契约](development/memory-contracts.md) 定义字段与算法，[记忆编码提示词](development/memory-coding-prompts.md) 提供逐卡可复制指令。WM01–WM15 已按用户实现指令收口，ADR-0026 的接受状态与 WM16 人工验收另查任务板，不能把 Proposed 标签当作未实施；与 A/B0/E/CF 状态互不改写。
 
 ## 架构决策记录
 
@@ -48,6 +48,6 @@ ADR 用于记录会影响多个模块、后续修改成本较高的决策。详�
 
 ## 阅读约定
 
-本目录同时承载**产品愿景**与**实现现状**两类内容：`01`–`06`、`08`、`10` 以长期目标和规范为主，`07` 定义阶段范围，`11` 记录当前真实实现基线。
+本目录同时承载**产品愿景**与**实现现状**两类内容：`01`–`06`、`08`、`10` 以长期目标和规范为主，`07` 定义阶段范围，`11` 提供运行与历史交接摘要，各开发任务板维护增量实现与验收状态。
 
-判断「现在到底做到了什么」时，以 [Qoder 开发交接](11-qoder-handoff.md) 第 2 节的能力表为准，不要把其他文档中的目标管线、接口示例或能力清单直接当成现状。范围归属以 [AGENTS.md](../AGENTS.md) 与 [MVP 与路线图](07-mvp-and-roadmap.md) 为准；两者冲突时 AGENTS.md 让位不了，应先修路线图。
+判断实现与验收状态时，以对应开发任务板的最新证据为准；[Qoder 开发交接](11-qoder-handoff.md) 是运行与历史摘要入口，不覆盖后续所有增量。UI 当前契约与组件查 [UI/UX §10.1](10-ui-ux-system.md#101-组件台账与基座纪律)，历史评估不充当当前待办。不要把目标管线、接口示例或能力清单直接当成现状。范围归属以 [AGENTS.md](../AGENTS.md) 与 [MVP 与路线图](07-mvp-and-roadmap.md) 为准；两者冲突时 AGENTS.md 让位不了，应先修路线图。

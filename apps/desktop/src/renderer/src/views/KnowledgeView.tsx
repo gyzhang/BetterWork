@@ -639,7 +639,7 @@ export function KnowledgePage({
               )}
             </div>
           </div>
-          {detailDocument && (
+          {detailDocument ? (
             <ScrollRegion ariaLabel="资料详情" className="knowledge-list-scroll">
               <section className="knowledge-detail">
                 <header className="knowledge-detail-header">
@@ -813,8 +813,7 @@ export function KnowledgePage({
                 </section>
               </section>
             </ScrollRegion>
-          )}
-          {!detailDocument && (
+          ) : (
             <ScrollRegion
               ariaLabel="知识资料列表"
               busy={importing}

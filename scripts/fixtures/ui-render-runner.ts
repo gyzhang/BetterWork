@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, type NativeImage } from 'electron';
 
 import { colorSchemes } from '../../apps/desktop/src/renderer/src/appearance';
 
@@ -14,6 +14,8 @@ function outputDirectory(): string {
 const output = outputDirectory();
 // 独立的临时 Chromium 数据目录；不加载产品 Preload、不读取 SQLite、不调用服务。
 app.setPath('userData', path.join(output, 'user-data'));
+// 测试宿主使用软件合成，减少对桌面显示服务和 GPU 状态的依赖。
+app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('force-device-scale-factor', '1');
 app.on('window-all-closed', () => {
   // 每一组结束会销毁窗口；矩阵完成前保持独立测试进程存活，由 run 显式给出退出码。
@@ -51,6 +53,89 @@ async function keyboard(window: BrowserWindow, keyCode: string): Promise<void> {
   await window.webContents.executeJavaScript(
     'new Promise(resolve => requestAnimationFrame(() => resolve(true)))',
   );
+}
+
+/** 读取 DOM 后等待新 paint；capturePage 可能仍拿到旧主题或打开模态前的帧。 */
+async function paintedFrame(window: BrowserWindow): Promise<NativeImage> {
+  await window.webContents.executeJavaScript(
+    'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))',
+  );
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      window.webContents.removeListener('paint', onPaint);
+      reject(new Error('等待新绘制帧超时'));
+    }, 1000);
+    const onPaint = (_event: unknown, _rect: unknown, image: NativeImage): void => {
+      clearTimeout(timeout);
+      resolve(image);
+    };
+    window.webContents.once('paint', onPaint);
+    window.webContents.invalidate();
+  });
+}
+
+interface FrameSample {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: number[];
+}
+
+async function captureVerifiedFrame(
+  window: BrowserWindow,
+  filename: string,
+  modal: boolean,
+): Promise<void> {
+  await window.webContents.executeJavaScript(
+    'Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => false)))',
+  );
+  const samples = (await window.webContents.executeJavaScript(`(() => {
+    const panel = document.querySelector('[aria-modal="true"]');
+    const rect = panel?.getBoundingClientRect();
+    const rgb = element => getComputedStyle(element).backgroundColor.match(/\\d+(?:\\.\\d+)?/g).map(Number);
+    let canvas = rgb(document.body).slice(0,3);
+    if (${modal ? 'true' : 'false'}) {
+      const overlay = rgb(document.querySelector('.modal-backdrop'));
+      const alpha = overlay[3] ?? 1;
+      canvas = canvas.map((channel,index) => Math.round(channel * (1-alpha) + overlay[index] * alpha));
+    }
+    const samples = [{x: innerWidth - 20, y: innerHeight - 20,
+      width: innerWidth, height: innerHeight, color: canvas}];
+    if (${modal ? 'true' : 'false'} && panel && rect)
+      samples.push({x: rect.left + 4, y: rect.top + rect.height / 2,
+        width: innerWidth, height: innerHeight, color: rgb(panel).slice(0,3)});
+    return samples;
+  })()`)) as FrameSample[];
+  let mismatch = '';
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const image = await paintedFrame(window);
+    const size = image.getSize();
+    // Chromium 的原始 N32 位图在本项目 macOS/Linux x64/arm64 运行环境为 BGRA。
+    const bitmap = image.toBitmap();
+    mismatch = '';
+    for (const sample of samples) {
+      const x = Math.floor((sample.x * size.width) / sample.width);
+      const y = Math.floor((sample.y * size.height) / sample.height);
+      const offset = (y * size.width + x) * 4;
+      const pixel = [bitmap[offset + 2], bitmap[offset + 1], bitmap[offset]];
+      if (
+        !pixel.every(
+          (value, index) =>
+            value !== undefined && Math.abs(value - (sample.color[index] ?? -1)) <= 2,
+        )
+      ) {
+        mismatch = `期望 ${sample.color.join('/')}，实测 ${pixel.join('/')}`;
+        break;
+      }
+    }
+    if (!mismatch) {
+      await writeFile(filename, image.toPNG());
+      return;
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`截图绘制状态不一致：${modal ? '模态' : '主题画布'} ${mismatch}`);
 }
 
 async function run(): Promise<void> {
@@ -92,10 +177,7 @@ async function run(): Promise<void> {
           const layout: unknown = await window.webContents.executeJavaScript(
             'window.uiRenderChecks.layout()',
           );
-          await writeFile(
-            path.join(output, 'screenshots', `${id}.png`),
-            (await window.webContents.capturePage()).toPNG(),
-          );
+          await captureVerifiedFrame(window, path.join(output, 'screenshots', `${id}.png`), false);
           await window.webContents.executeJavaScript(
             'document.getElementById("fixture-query").focus()',
           );
@@ -121,6 +203,11 @@ async function run(): Promise<void> {
           await waitFor(window, 'Boolean(document.querySelector("[aria-modal=true]"))');
           const modal: unknown = await window.webContents.executeJavaScript(
             'window.uiRenderChecks.overlay("modal")',
+          );
+          await captureVerifiedFrame(
+            window,
+            path.join(output, 'screenshots', `${id}-modal.png`),
+            true,
           );
           await window.webContents.executeJavaScript(
             'document.getElementById("fixture-modal-close").focus()',

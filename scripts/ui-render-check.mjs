@@ -15,8 +15,15 @@ const output = await mkdtemp(path.join(tmpdir(), 'betterwork-ui-render-'));
 
 try {
   const probe = process.argv.slice(2);
-  if (probe.some((argument) => argument !== '--probe-control-height'))
-    throw new Error('仅支持 --probe-control-height 违规探针');
+  if (
+    probe.some(
+      (argument) =>
+        !['--probe-control-height', '--probe-snapshot-theme', '--probe-snapshot-modal'].includes(
+          argument,
+        ),
+    )
+  )
+    throw new Error('仅支持控件高度、截图主题和截图模态的三个违规探针');
   await build({
     entryPoints: [path.join(root, 'scripts/fixtures/ui-render-fixture.tsx')],
     bundle: true,
@@ -42,6 +49,13 @@ try {
     await appendFile(
       path.join(output, 'fixture.css'),
       '\n#fixture-button-md { min-height: 16px; padding: 0; }\n',
+    );
+  if (probe.includes('--probe-snapshot-theme'))
+    await appendFile(path.join(output, 'fixture.css'), '\n.fixture-main { background: #fff; }\n');
+  if (probe.includes('--probe-snapshot-modal'))
+    await appendFile(
+      path.join(output, 'fixture.css'),
+      '\n.modal-backdrop { opacity: 0 !important; }\n',
     );
   const environment = { ...process.env };
   delete environment.ELECTRON_RUN_AS_NODE;

@@ -106,35 +106,48 @@ export function SettingsPage(props: SettingsPageProps): React.JSX.Element {
         />
       </aside>
       <section className="settings-content">
-        {tab === 'models' && <ModelSettings {...props} />}
-        {tab === 'search' && <SearchSettings />}
-        {tab === 'mcp' && <McpSettings state={props.mcp} />}
-        {tab === 'memory' && (
-          <MemoryPage
-            state={props.memories}
-            {...(props.memoryTarget ? { scopeTarget: props.memoryTarget } : {})}
-            onClearScope={props.onClearMemoryTarget}
-            {...(props.memorySuggestions ? { suggestions: props.memorySuggestions } : {})}
-            {...(props.workspaceId ? { workspaceId: props.workspaceId } : {})}
-            {...(props.workspaceName ? { workspaceName: props.workspaceName } : {})}
-            {...(props.expertName ? { expertName: props.expertName } : {})}
-            {...(props.memoryFocusId ? { focusMemoryId: props.memoryFocusId } : {})}
-            onFocusHandled={props.onClearMemoryFocus}
-          />
-        )}
-        {tab === 'appearance' && <AppearanceSettings {...props} />}
-        {tab === 'general' && (
-          <section className="settings-section">
-            <SectionHeader variant="block" eyebrow="通用" title="工作偏好" />
-            <EmptyNotice
-              title="通用设置将在后续阶段开放"
-              detail="工作目录、语言、数据与更新设置会在这里统一管理。"
-            />
-          </section>
-        )}
+        <SettingsContent {...props} />
       </section>
     </div>
   );
+}
+
+/** 显式分支让每个设置分区的标题/布局都能独立检查，避免多组互斥条件被合并计数。 */
+function SettingsContent(props: SettingsPageProps): React.JSX.Element {
+  switch (props.tab) {
+    case 'models':
+      return <ModelSettings {...props} />;
+    case 'search':
+      return <SearchSettings />;
+    case 'mcp':
+      return <McpSettings state={props.mcp} />;
+    case 'memory':
+      return (
+        <MemoryPage
+          state={props.memories}
+          {...(props.memoryTarget ? { scopeTarget: props.memoryTarget } : {})}
+          onClearScope={props.onClearMemoryTarget}
+          {...(props.memorySuggestions ? { suggestions: props.memorySuggestions } : {})}
+          {...(props.workspaceId ? { workspaceId: props.workspaceId } : {})}
+          {...(props.workspaceName ? { workspaceName: props.workspaceName } : {})}
+          {...(props.expertName ? { expertName: props.expertName } : {})}
+          {...(props.memoryFocusId ? { focusMemoryId: props.memoryFocusId } : {})}
+          onFocusHandled={props.onClearMemoryFocus}
+        />
+      );
+    case 'appearance':
+      return <AppearanceSettings {...props} />;
+    case 'general':
+      return (
+        <section className="settings-section">
+          <SectionHeader variant="block" eyebrow="通用" title="工作偏好" />
+          <EmptyNotice
+            title="通用设置将在后续阶段开放"
+            detail="工作目录、语言、数据与更新设置会在这里统一管理。"
+          />
+        </section>
+      );
+  }
 }
 function ModelSettings({
   models,
@@ -153,7 +166,7 @@ function ModelSettings({
         variant="block"
         eyebrow="模型"
         title="让每一种工作使用合适的模型"
-        hint="API Key 仅保存于本机主进程。语言模型会用于当前任务，视觉与嵌入能力将在对应工作流启用。"
+        hint="API Key 仅保存于本机主进程。语言模型用于任务协作；嵌入模型用于知识语义检索，索引状态在知识页管理。"
         actions={
           <Button variant="primary" size="lg" type="button" onClick={onAdd}>
             <PlusIcon size={13} /> 添加模型

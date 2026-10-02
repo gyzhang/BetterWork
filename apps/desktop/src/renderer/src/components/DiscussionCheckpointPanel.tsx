@@ -8,7 +8,9 @@ import { useMemo, useState } from 'react';
 
 import { ActionBar } from './ActionBar';
 import { AsyncButton } from './AsyncButton';
+import { Badge } from './Badge';
 import { Button } from './Button';
+import { CheckList } from './CheckList';
 import { Field } from './Field';
 import { FieldSelect } from './FieldSelect';
 import { SectionHeader } from './SectionHeader';
@@ -155,22 +157,18 @@ export function DiscussionCheckpointPanel({
           {artifacts.length > 0 && (
             <fieldset className="discussion-checkpoint-artifacts">
               <legend>关联当前成果版本</legend>
-              {artifacts.map((artifact) => (
-                <label key={artifact.id}>
-                  <input
-                    type="checkbox"
-                    checked={artifactVersionIds.includes(artifact.currentVersionId)}
-                    onChange={(event) =>
-                      setArtifactVersionIds((current) =>
-                        event.target.checked
-                          ? [...current, artifact.currentVersionId]
-                          : current.filter((id) => id !== artifact.currentVersionId),
-                      )
-                    }
-                  />
-                  {artifact.title}
-                </label>
-              ))}
+              <CheckList
+                options={artifacts.map((artifact) => ({
+                  id: artifact.currentVersionId,
+                  label: artifact.title,
+                  checked: artifactVersionIds.includes(artifact.currentVersionId),
+                }))}
+                onToggle={(versionId, checked) =>
+                  setArtifactVersionIds((current) =>
+                    checked ? [...current, versionId] : current.filter((id) => id !== versionId),
+                  )
+                }
+              />
             </fieldset>
           )}
           <ActionBar
@@ -193,9 +191,9 @@ export function DiscussionCheckpointPanel({
       {checkpoints.length > 1 && (
         <div className="discussion-checkpoint-history">
           {checkpoints.slice(-4).map((checkpoint) => (
-            <span key={checkpoint.id} data-status={checkpoint.status}>
+            <Badge key={checkpoint.id} tone={checkpoint.status === 'open' ? 'brand' : 'neutral'}>
               {stageLabel(checkpoint.stage)} · {checkpoint.status === 'open' ? '当前' : '已替代'}
-            </span>
+            </Badge>
           ))}
         </div>
       )}

@@ -622,11 +622,13 @@ function MemoryGroup({
       <SectionHeader title={title} hint={hint} />
       <ScrollRegion ariaLabel={ariaLabel} busy={state.loading} className="memory-list-scroll">
         {memories.length === 0 ? (
-          <p className="memory-list-empty">
-            {query === ''
-              ? '这一组还没有记录。'
-              : `没有匹配「${query}」的记录，换个关键词或清除搜索。`}
-          </p>
+          <EmptyNotice
+            title={
+              query === ''
+                ? '这一组还没有记录。'
+                : `没有匹配「${query}」的记录，换个关键词或清除搜索。`
+            }
+          />
         ) : (
           <>
             <div className="memory-list">

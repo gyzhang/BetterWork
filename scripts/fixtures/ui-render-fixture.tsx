@@ -4,7 +4,11 @@ import './ui-render-fixture.css';
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import { applyAppearance, colorSchemes } from '../../apps/desktop/src/renderer/src/appearance';
+import {
+  applyAppearance,
+  colorSchemes,
+  workspaceAccents,
+} from '../../apps/desktop/src/renderer/src/appearance';
 import { Badge } from '../../apps/desktop/src/renderer/src/components/Badge';
 import { Button } from '../../apps/desktop/src/renderer/src/components/Button';
 import { Card } from '../../apps/desktop/src/renderer/src/components/Card';
@@ -19,7 +23,10 @@ import { ScrollRegion } from '../../apps/desktop/src/renderer/src/components/lay
 import { ViewContainer } from '../../apps/desktop/src/renderer/src/components/layout/ViewContainer';
 import { Modal } from '../../apps/desktop/src/renderer/src/components/Modal';
 import { PopoverMenu } from '../../apps/desktop/src/renderer/src/components/PopoverMenu';
+import { SectionHeader } from '../../apps/desktop/src/renderer/src/components/SectionHeader';
+import { SingleSelectPicker } from '../../apps/desktop/src/renderer/src/components/SingleSelectPicker';
 import { TextField } from '../../apps/desktop/src/renderer/src/components/TextField';
+import { workspaceAccentVar } from '../../apps/desktop/src/renderer/src/lib/workspace-identity';
 
 function requireElement<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);
@@ -81,6 +88,25 @@ function overlayChecks(kind: 'modal' | 'menu'): object {
   if (kind === 'modal') {
     check(requireElement<HTMLElement>('main').hasAttribute('inert'), '模态没有使主页面 inert');
     check(panel.contains(document.activeElement), '模态初始焦点不在面板内');
+    check(!panel.querySelector('label label'), '选择组出现嵌套标签');
+    const group = requireElement<HTMLElement>('.field[role="group"]');
+    const label = document.getElementById(group.getAttribute('aria-labelledby') ?? '');
+    const hint = document.getElementById(group.getAttribute('aria-describedby') ?? '');
+    check(
+      label?.textContent === '身份选项' && hint?.textContent === '每项有独立名称。',
+      '选择组名称或说明关联丢失',
+    );
+    const swatches = panel.querySelectorAll<HTMLElement>('.workspace-accent-swatch');
+    check(swatches.length === workspaceAccents.length, '工作空间色板档位缺失');
+    const colors = new Set<string>();
+    for (const swatch of swatches) {
+      const rect = swatch.getBoundingClientRect();
+      const color = getComputedStyle(swatch).backgroundColor;
+      check(rect.width >= 16 && rect.height >= 16, '工作空间色块没有可见尺寸');
+      check(color !== 'rgba(0, 0, 0, 0)' && color !== 'transparent', '工作空间色块没有实色');
+      colors.add(color);
+    }
+    check(colors.size === workspaceAccents.length, '工作空间色板无法区分各档颜色');
   } else check(panel.contains(document.activeElement), '菜单初始焦点不在菜单内');
   return { kind, width: rect.width, height: rect.height };
 }
@@ -221,8 +247,26 @@ function FixturePage(): React.JSX.Element {
       />
       {modal && (
         <Modal variant="dialog" label="测试长表单" onClose={() => setModal(false)}>
+          <SectionHeader variant="block" title="测试长表单" />
           <Field label="名称" controlId="fixture-modal-name">
             <TextField id="fixture-modal-name" size="md" />
+          </Field>
+          <Field group label="身份选项" hint="每项有独立名称。">
+            <SingleSelectPicker
+              label="身份"
+              value="moss"
+              options={workspaceAccents.map((accent) => ({
+                id: accent.id,
+                name: accent.name,
+                visual: (
+                  <span
+                    className="workspace-accent-swatch"
+                    style={{ background: workspaceAccentVar(accent.id) }}
+                  />
+                ),
+              }))}
+              onSelect={() => undefined}
+            />
           </Field>
           <InlineError message="请补充名称。" />
           <Button size="md" id="fixture-modal-close" onClick={() => setModal(false)}>

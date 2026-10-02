@@ -16,34 +16,57 @@ export function parseCssDeclarations(css: string): CssDeclaration[] {
   const selectorStack: string[] = [];
   let buffer = '';
   let line = 1;
+  let quote = '';
+  let escaped = false;
+  let parentheses = 0;
+  function flush(): void {
+    const declaration = buffer.trim();
+    const colon = declaration.indexOf(':');
+    if (colon > 0 && selectorStack.length > 0) {
+      declarations.push({
+        selector: selectorStack.join(' '),
+        property: declaration.slice(0, colon).trim(),
+        value: declaration.slice(colon + 1).trim(),
+        line,
+      });
+    }
+    buffer = '';
+  }
   for (const char of source) {
+    if (quote) {
+      buffer += char;
+      if (char === '\n') line += 1;
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === quote) quote = '';
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      buffer += char;
+      continue;
+    }
     if (char === '\n') {
       line += 1;
       buffer += char;
       continue;
     }
-    if (char === '{') {
+    if (char === '(') parentheses += 1;
+    if (char === ')') parentheses -= 1;
+    if (char === '{' && parentheses === 0) {
       selectorStack.push(buffer.trim().replace(/\s+/g, ' '));
       buffer = '';
       continue;
     }
-    if (char === '}') {
+    if (char === '}' && parentheses === 0) {
+      // CSS 的最后一条声明可以省略分号，不能因此漏掉表面或主题契约。
+      flush();
       selectorStack.pop();
       buffer = '';
       continue;
     }
-    if (char === ';') {
-      const declaration = buffer.trim();
-      const colon = declaration.indexOf(':');
-      if (colon > 0 && selectorStack.length > 0) {
-        declarations.push({
-          selector: selectorStack.join(' '),
-          property: declaration.slice(0, colon).trim(),
-          value: declaration.slice(colon + 1).trim(),
-          line,
-        });
-      }
-      buffer = '';
+    if (char === ';' && parentheses === 0) {
+      flush();
       continue;
     }
     buffer += char;
@@ -130,6 +153,65 @@ export function themeTokenIssues(
 export interface UiSource {
   file: string;
   text: string;
+}
+
+/** docs/10 §10.1 的机器可核对台账：真实组件导出与表格逐项双向匹配。 */
+export function componentCatalogIssues(markdown: string, sources: readonly UiSource[]): string[] {
+  const start = markdown.indexOf('#### 10.1.2 当前组件台账');
+  const end = markdown.indexOf('#### 10.1.3', start);
+  if (start < 0 || end < 0) return ['docs/10 缺少当前组件台账边界'];
+  const root = 'apps/desktop/src/renderer/src/';
+  const documented: string[] = [];
+  const issues: string[] = [];
+  for (const row of markdown.slice(start, end).split('\n')) {
+    if (!row.startsWith('| `')) continue;
+    const cells = row.split('|');
+    const file = /`([^`]+\.tsx)`/u.exec(cells[2] ?? '')?.[1];
+    const names = [...(cells[1] ?? '').matchAll(/`([A-Z]\w*)`/gu)].map((match) => match[1] ?? '');
+    if (!file || names.length === 0) {
+      issues.push(`台账行无法解析：${row}`);
+      continue;
+    }
+    for (const name of names) documented.push(`${root}${file}#${name}`);
+  }
+  if (documented.length === 0) issues.push('当前组件台账为空');
+  const actual: string[] = [];
+  for (const input of sources) {
+    if (!input.file.startsWith(`${root}components/`)) continue;
+    const source = ts.createSourceFile(
+      input.file,
+      input.text,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    for (const node of source.statements) {
+      if (
+        !ts.canHaveModifiers(node) ||
+        !ts.getModifiers(node)?.some((mod) => mod.kind === ts.SyntaxKind.ExportKeyword)
+      )
+        continue;
+      if (ts.isFunctionDeclaration(node) && node.name && /^[A-Z]/u.test(node.name.text))
+        actual.push(`${input.file}#${node.name.text}`);
+      if (ts.isVariableStatement(node)) {
+        for (const item of node.declarationList.declarations) {
+          if (
+            ts.isIdentifier(item.name) &&
+            /^[A-Z]/u.test(item.name.text) &&
+            item.initializer &&
+            (ts.isArrowFunction(item.initializer) || ts.isFunctionExpression(item.initializer))
+          )
+            actual.push(`${input.file}#${item.name.text}`);
+        }
+      }
+    }
+  }
+  for (const key of actual) if (!documented.includes(key)) issues.push(`组件未登记：${key}`);
+  for (const key of documented) {
+    if (!actual.includes(key)) issues.push(`台账没有真实导出：${key}`);
+    if (documented.filter((item) => item === key).length !== 1) issues.push(`台账重复登记：${key}`);
+  }
+  return issues;
 }
 
 export interface InlineStyleOutlet {
@@ -237,6 +319,8 @@ export interface PageShapeException {
   file: string;
   component: string;
   required: readonly string[];
+  /** 每组至少实际渲染一个出口；用于内嵌列表的内容/加载/空态分支。 */
+  alternatives?: readonly (readonly string[])[];
   reason: string;
 }
 
@@ -351,41 +435,54 @@ export function pageCompositionIssues(
     }
     imports.set(input.file, bindings);
   }
-  function references(expression: ts.Expression, source: ts.SourceFile): string[] {
-    const found: string[] = [];
-    function walk(node: ts.Node): void {
-      if (ts.isJsxAttribute(node) && /^on[A-Z]/u.test(node.name.getText(source))) return;
-      if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
-        const name = node.tagName.getText(source);
-        found.push(imports.get(source.fileName)?.get(name) ?? `${source.fileName}#${name}`);
-      }
-      ts.forEachChild(node, walk);
-    }
-    walk(expression);
-    return found;
+  function intersection(sets: readonly Set<string>[]): Set<string> {
+    return new Set([...(sets[0] ?? [])].filter((item) => sets.every((set) => set.has(item))));
   }
   function rendered(
-    expression: ts.Expression,
+    expression: ts.Node,
     source: ts.SourceFile,
     seen: ReadonlySet<string>,
+    alternatives: readonly (readonly string[])[],
   ): Set<string> {
+    if (ts.isJsxAttribute(expression) || ts.isFunctionLike(expression)) return new Set();
+    if (ts.isConditionalExpression(expression))
+      return intersection([
+        rendered(expression.whenTrue, source, seen, alternatives),
+        rendered(expression.whenFalse, source, seen, alternatives),
+      ]);
+    if (
+      ts.isBinaryExpression(expression) &&
+      [
+        ts.SyntaxKind.AmpersandAmpersandToken,
+        ts.SyntaxKind.BarBarToken,
+        ts.SyntaxKind.QuestionQuestionToken,
+      ].includes(expression.operatorToken.kind)
+    )
+      return intersection([
+        rendered(expression.left, source, seen, alternatives),
+        rendered(expression.right, source, seen, alternatives),
+      ]);
     const result = new Set<string>();
-    for (const key of references(expression, source)) {
+    if (ts.isJsxOpeningElement(expression) || ts.isJsxSelfClosingElement(expression)) {
+      const name = expression.tagName.getText(source);
+      const key = imports.get(source.fileName)?.get(name) ?? `${source.fileName}#${name}`;
       result.add(key);
-      if (seen.has(key)) continue;
+      alternatives.forEach((group, index) => {
+        if (group.includes(key)) result.add(`alternative:${index}`);
+      });
       const body = components.get(key);
-      if (!body) continue;
-      const next = new Set([...seen, key]);
-      const children = body.expressions.filter(
-        (child) =>
-          child.kind !== ts.SyntaxKind.NullKeyword && child.getText(body.source) !== 'undefined',
-      );
-      const paths = children.map((child) => rendered(child, body.source, next));
-      // 包装组件也必须在所有可见分支满足契约，不能用正常分支掩盖另一分支的自造骨架。
-      const first = paths[0];
-      if (first)
-        for (const item of first) if (paths.every((items) => items.has(item))) result.add(item);
+      if (body && !seen.has(key)) {
+        const next = new Set([...seen, key]);
+        // 包装可能返回 null，同样不能把内部的可选骨架读成宿主必有。
+        const paths = body.expressions.map((child) =>
+          rendered(child, body.source, next, alternatives),
+        );
+        for (const item of intersection(paths)) result.add(item);
+      }
     }
+    ts.forEachChild(expression, (child) => {
+      for (const key of rendered(child, source, seen, alternatives)) result.add(key);
+    });
     return result;
   }
   const issues: string[] = [];
@@ -419,12 +516,17 @@ export function pageCompositionIssues(
       )
         continue;
       visible += 1;
-      const used = rendered(expression, body.source, new Set([body.key]));
+      const alternatives = exception?.alternatives ?? [];
+      const used = rendered(expression, body.source, new Set([body.key]), alternatives);
       for (const key of required)
         if (!used.has(key))
           issues.push(
             `${body.key}:${body.source.getLineAndCharacterOfPosition(expression.getStart(body.source)).line + 1} 返回分支没有实际使用 ${key}`,
           );
+      alternatives.forEach((group, index) => {
+        if (!used.has(`alternative:${index}`))
+          issues.push(`${body.key} 返回分支没有实际使用任一出口：${group.join(' 或 ')}`);
+      });
     }
     if (visible === 0) issues.push(`${body.key} 无可追溯的页面返回分支`);
   }

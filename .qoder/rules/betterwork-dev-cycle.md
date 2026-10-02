@@ -11,12 +11,13 @@ description: 启动应用、停止应用、调试、运行开发环境、构建�
     bash scripts/dev-stop.sh    # 停止：按 PID 文件精确停止
 
 - 开发日志固定在 `/tmp/betterwork-dev.log`。
-- **禁止绕开脚本直接启动 Electron，禁止 `pkill -f electron` 等宽泛进程匹配**——那会误杀用户的其他 Electron 应用；必要时按 PID 并用 lsof 校验工作目录后再操作。
-- 生产构建存在两条来自 Zod 的 Rollup `@PURE` 注释警告，属已知警告；构建成功即通过，**不得因此作无关依赖升级**。
+- **产品开发实例禁止绕开脚本直接启动 Electron，禁止 `pkill -f electron` 等宽泛进程匹配**——那会误杀用户的其他 Electron 应用；必要时按 PID 并用 lsof 校验工作目录后再操作。
+- `ui:check` 的独立合成 Electron 测试进程由验证脚本管理，按 docs/12 §9 执行，不是产品开发实例。
+- 生产构建存在来自 Zod 的 Rollup `@PURE` 注释已知警告；构建成功即通过，**不得因此作无关依赖升级**。
 
 ## 提交前最低验证
 
-    npm run verify        # lint + format:check + typecheck + test + build，任一失败即中止
+    npm run verify        # lint + format:check + typecheck + test + build + ui:check，任一失败即中止
 
 需要单独定位时：
 
@@ -26,6 +27,7 @@ description: 启动应用、停止应用、调试、运行开发环境、构建�
     npm test
     npm run bench       # 计时基准档（*.bench.test.ts，串行），不属于 verify
     npm run build
+    npm run ui:check    # 全正式主题 × 两档窗口；独立合成进程，不读取产品数据
     git diff --check
 
 - **禁止把 `npm run verify` 的输出接管道后只看末尾**（如 `npm run verify | tail`）：管道退出码取最后一个命令，`tail` 永远返回 0，会把失败读成成功。需要截取输出时用 `npm run verify > /tmp/verify.log 2>&1; echo $?`。

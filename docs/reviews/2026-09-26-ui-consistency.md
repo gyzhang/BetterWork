@@ -1,5 +1,7 @@
 # 算台 UI 一致性评估报告（2026-09-26）
 
+> 历史评估与分期实施记录：其中缺口、数量、别名和“待开工”只对当时基线有效。当前组件与 AI 工作流程查 [UI/UX §10.1](../10-ui-ux-system.md#101-组件台账与基座纪律)，本轮对齐结果见 [2026-10-02 评估](2026-10-02-ui-governance-alignment.md)；不得直接按本报告重建旧组件或扩大任务范围。
+
 评估范围：`apps/desktop/src/renderer/src/`（14 个视图与组件文件族、单一样式表 `styles.css`）。方法：全仓只读扫描 + 逐条人工核实（本报告里每条结论都有可核对的 file:line；调研子代理给出的两处判断经核实**不成立**，已在文末「核实修正」中记录）。参考对照：ClawBible Cloud 前端（`/Users/kevin/Dev4AI/ClawBible.AI/clawbible-cloud/frontend/`）。
 
 ---

@@ -8,6 +8,12 @@ import globals from 'globals';
 // docs/10 §10.1：单加 role/tabIndex 的 div 不能成为另一套按钮出口。
 const interactiveSyntax = [
   {
+    // docs/10 §10.1：说明不能成为包裹式 label 的一部分；选择组有独立名称。
+    selector:
+      "JSXOpeningElement[name.name='Field']:has(JSXAttribute[name.name='hint']):not(:has(JSXAttribute[name.name='controlId'])):not(:has(JSXAttribute[name.name='group'][value=null])):not(:has(JSXAttribute[name.name='group'] > JSXExpressionContainer > Literal[value=true]))",
+    message: 'Field 的说明用 controlId 关联单控件，或用 group 为多控件命名，不能塞进包裹式 label。',
+  },
+  {
     selector:
       "JSXOpeningElement[name.name=/^[a-z]/][name.name!='button'][name.name!='input'][name.name!='a']:has(JSXAttribute[name.name='role'][value.value='button'])",
     message: '按钮请复用 Button/IconButton 等原生语义基座，不用非原生元素冒充按钮。',
@@ -31,7 +37,7 @@ const keyboardSyntax = {
 
 /**
  * 全仓唯一的代码质量规范。任何新增或修改的代码都必须通过本配置，
- * 不允许在单个文件里用 eslint-disable 之外的方式另立标准。
+ * 不允许在单个文件里另立标准，源码禁止 eslint-disable 等单点豁免。
  *
  * 分层：
  * 1. JS 与 TypeScript 官方推荐规则（含类型感知规则）

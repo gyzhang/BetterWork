@@ -1,11 +1,14 @@
 import type { ReactNode } from 'react';
+import { useId } from 'react';
 
 export interface FieldProps {
   label: ReactNode;
-  /** 控件下方的补充说明。只在 controlId 模式下使用：包裹式 <label> 会把说明文字读进控件名称。 */
+  /** 控件下方的补充说明。只在 controlId 或 group 模式下使用。 */
   hint?: ReactNode;
-  /** 控件自身的 id。给出时用 htmlFor 精确关联，Field 退化成普通容器；否则整个 Field 就是 <label>。 */
+  /** 单控件自身的 id，用 htmlFor 精确关联；既无 controlId 也无 group 时整个 Field 是 label。 */
   controlId?: string;
+  /** 多个控件或已有内部标签的选择组，不能再包进单个 label。 */
+  group?: boolean;
   className?: string;
   children: ReactNode;
 }
@@ -21,11 +24,34 @@ export function Field({
   label,
   hint,
   controlId,
+  group = false,
   className,
   children,
 }: FieldProps): React.JSX.Element {
+  const labelId = useId();
+  const hintId = useId();
   const fieldClass = `field${className ? ` ${className}` : ''}`;
-  const hintNode = hint ? <span className="field-hint">{hint}</span> : undefined;
+  const hintNode = hint ? (
+    <span className="field-hint" id={hintId}>
+      {hint}
+    </span>
+  ) : undefined;
+  if (group) {
+    return (
+      <div
+        className={fieldClass}
+        role="group"
+        aria-labelledby={labelId}
+        {...(hint ? { 'aria-describedby': hintId } : {})}
+      >
+        <span className="field-label" id={labelId}>
+          {label}
+        </span>
+        {children}
+        {hintNode}
+      </div>
+    );
+  }
   if (controlId) {
     return (
       <div className={fieldClass}>

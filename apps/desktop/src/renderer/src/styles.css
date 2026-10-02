@@ -872,14 +872,6 @@ small {
   font-size: var(--font-size-caption);
 }
 
-.discussion-checkpoint-artifacts label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-secondary);
-  font-size: var(--font-size-caption);
-}
-
 .discussion-checkpoint-history {
   display: flex;
   flex-wrap: wrap;
@@ -887,13 +879,6 @@ small {
   margin-top: 8px;
 }
 
-.discussion-checkpoint-history span {
-  border-radius: var(--radius-pill);
-  padding: 3px 7px;
-  background: var(--surface-raised);
-  color: var(--text-muted);
-  font-size: var(--font-size-caption);
-}
 .messages {
   flex: 1;
   min-height: 0;
@@ -2523,12 +2508,6 @@ button.list-row:where(:not(:disabled)):hover {
 .memory-list-scroll {
   min-height: 200px;
 }
-.memory-list-empty {
-  margin: 16px 4px;
-  color: var(--text-muted);
-  font-size: var(--font-size-body);
-  line-height: var(--line-height-body);
-}
 .memory-group-footer {
   padding: 12px 2px 2px;
   color: var(--text-muted);
@@ -2968,6 +2947,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 /* 色板方块：只定几何。色值由调用方以 `var(--ws-<档位>)` 传入，样式表不认具体档位。 */
 .workspace-accent-swatch {
+  display: block;
   width: 16px;
   height: 16px;
   border-radius: var(--radius-circle);

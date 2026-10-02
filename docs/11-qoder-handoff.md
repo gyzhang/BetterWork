@@ -10,7 +10,7 @@
 
 这是一份给后续编码智能体和开发者的工作交接说明。它不替代 [AGENTS.md](../AGENTS.md)：开始任何改动前，必须先阅读 AGENTS、本文档，以及本次工作涉及的产品/架构文档。
 
-本文是「当前到底实现了什么」的唯一入口。其他产品文档（`01`–`06`、`08`、`10`）以长期目标为主，已按章节补注实现状态，但判断现状仍以本文为准。
+本文是运行与交接入口。§2 的能力表与 §4–§7 的缺口记录含早期交接快照，不是所有模块的实时状态真相源；现状与验收以各 A/B0/E/CF/WM/MI/KM/SC 任务板的最新证据为准。UI 契约以 docs/10 为准，§3 的命令与验证要求持续维护。
 
 > 最新产品确认：Skill 信任选项与本地目录分发见 [ADR-0011](adr/0011-skill-trust-and-local-distribution.md)，管理与授权实现已落地，安装分发仍待完整验收；ADR-0010 其余执行技术仍为 Proposed。
 
@@ -24,9 +24,9 @@ BetterWork 优先成为个人实际使用的工作台，再供周边同事用于
 - `/Users/kevin/Dev4AI/ClawBible.AI/clawbible-desktop/`：参考 Agent、工具、知识和 Office 工程实践；不作为直接代码依赖。
 - `/Users/kevin/Dev4AI/ClawBible.AI/clawbible-cloud/`：参考面向 AI Agent 的协作资产组织方式（分层规则、任务路由、工作日志）；已落地为 `.qoder/rules/` 与 `docs/logs/` 制度。
 
-2026-09-08 已确认后续顺序：Skill 管理与配置 → 专家管理与配置 → 研究到汇报完整路径。见 [ADR-0008](adr/0008-personal-workbench-and-capability-first.md)。当前仍只有下表所列运行能力；本轮只调整文档。具体配置范围和工程边界见 [修订稿](reviews/2026-09-08-product-scope.md)，建议项不能视为已实现或已接受技术选型；开工仍需相关实现 ADR。
+2026-09-08 已确认后续顺序：Skill 管理与配置 → 专家管理与配置 → 研究到汇报完整路径。见 [ADR-0008](adr/0008-personal-workbench-and-capability-first.md)。该顺序是产品决策记录；实现已持续推进，下面能力表不覆盖后续全部增量。具体配置范围和工程边界见 [修订稿](reviews/2026-09-08-product-scope.md)，建议项不能视为已实现或已接受技术选型；开工仍需相关实现 ADR。
 
-## 2. 已实现且应保持可用的能力
+## 2. 已实现能力的交接摘要（增量状态见任务板）
 
 | 领域 | 当前能力 |
 | --- | --- |
@@ -72,7 +72,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
     npm run ui:check   # 全主题 × 两档窗口真实渲染；独立合成页面，截图/读数放临时目录
     npm run bench      # 计时基准档（串行）：跑完规模/性能卡或专门核查时执行，不在提交门禁里
 
-门禁分两条车道：`npm test` 跑**功能档**（断言行为），`npm run bench` 串行跑**计时基准档** `*.bench.test.ts`（断言墙钟与内存预算）。`verify` 只含前者——并发跑时计时值会漂 1.5–5 倍，随机红的门禁守不住任何东西；阈值没有放宽，样本值每次照旧打印。理由与口径见 [工程规范](12-engineering-standards.md) §1 与 §9。
+测试分 functional/heavy/bench 三档：`npm test` 依次跑功能并发与重文件串行（均断言行为），`npm run bench` 跑独立计时基准（断言墙钟与内存预算）。`verify` 包含前两档及 ui:check，不含 bench——并发跑时计时值会漂 1.5–5 倍，随机红的门禁守不住任何东西；阈值没有放宽，样本值每次照旧打印。理由与口径见 [工程规范](12-engineering-standards.md) §1 与 §9。
 
 **不要把 verify 的输出接管道后只看末尾**（`npm run verify | tail` 的退出码是 `tail` 的，永远为 0，会把失败读成成功）。需要截取输出时用 `npm run verify > /tmp/verify.log 2>&1; echo $?`。
 
@@ -81,6 +81,8 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 `knowledge-vault.test.ts` 的 PDF 与 DOCX 两个用例已显式提高超时——它们首次运行需要现场转换 `pdf-parse` 与 `mammoth`，冷 Vite 缓存下会超过默认的 5 秒。
 
 数据文件位于 Electron `userData` 下：应用状态库 `betterwork.db` 与知识库 `vaults/default/vault.sqlite`，都是本地运行数据，绝不能提交到 Git。两个库的 schema 由 `db/` 下的版本化迁移管理；迁移制度之前建立的历史库会在首次启动时被识别并对账，不会丢数据。模型与搜索的 API Key 明文存于本地 SQLite，列表接口只回 `apiKeyConfigured`；日志和错误消息绝不能输出密钥。如未来引入系统钥匙串（`safeStorage`），须先新增 ADR 并设计迁移。
+以下 §4–§7 保留早期架构/质量治理的交接记录，不能直接作为新待办。新增 UI 工作走 docs/10 §10.1；历史问题是否仍存在须回到代码及最新任务板核实。
+
 ## 4. 代码地图
 
 

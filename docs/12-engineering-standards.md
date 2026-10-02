@@ -2,7 +2,7 @@
 
 本文是算台 BetterWork 的**唯一**代码规范。全仓只有一套标准：不允许某个目录、某个文件或某位贡献者另行约定。
 
-规范的**执行者是机器**，不是本文档：`eslint.config.mjs` 与 `.prettierrc.json` 是本文的可执行形式，`npm run verify` 是门禁。本文负责解释「为什么是这条规则」，配置负责保证「没有人能绕过它」。两者冲突时以配置为准，并同时修正本文。
+规范面向 AI 实现与 Review，机器检查负责执行可自动判断的部分：`eslint.config.mjs` 与 `.prettierrc.json` 是本文的可执行形式，`npm run verify` 是门禁。本文定义规则与适用理由，配置和护栏落实可检查的不变量。机器检查的覆盖边界见 UI/UX §10.1.3；文档与实现冲突时回到本文和已接受的设计/ADR 核对，同轮修正错误一侧，不能把门禁通过当作偏离规范的授权。
 
 相关文档：架构边界见 [系统架构](03-system-architecture.md)，界面规范见 [UI/UX 体系](10-ui-ux-system.md)，当前实现基线与已知缺陷见 [Qoder 开发交接](11-qoder-handoff.md)。
 
@@ -18,7 +18,7 @@
 | `npm test` | Vitest **功能档并发 → 重档串行**两次独立调用（`--project functional`，然后 `--project heavy`），断言行为是否正确；重档收录单文件墙钟 ≥20s 的文件，判据见 §9 |
 | `npm run bench` | Vitest **计时基准档**（`--project bench`）：串行跑 `*.bench.test.ts`，断言墙钟与内存预算 |
 | `npm run ui:check` | 独立 Electron 合成页面的真实渲染：全部正式色系明暗 × 760/1380px，检查骨架、三档控件自然高度、菜单定位、焦点环与模态 Tab/Esc/焦点归还；截图/读数放临时目录 |
-| `npm run verify` | lint + format:check + typecheck + `npm test` + build + ui:check，任一失败即中止 |
+| `npm run verify` | lint + format:check + typecheck + test + build + ui:check，任一失败即中止 |
 
 提交前必须跑 `npm run verify`。**不要**把它的输出接管道后只看末尾——`cmd | tail` 的退出码是 `tail` 的，会把失败读成成功。需要截取输出时用 `npm run verify > log 2>&1; echo $?`。
 
@@ -50,7 +50,7 @@ apps/desktop/src/
 └── renderer/src/
     ├── main.tsx          # 挂载入口
     ├── App.tsx           # 跨簇编排与布局组装
-    ├── views/            # 页面级视图（一个导航入口一个文件）
+    ├── views/            # 普通页面及设置内嵌分区，按内聚职责划分
     ├── components/       # 布局、反馈与稳定领域呈现组件
     ├── hooks/            # 有状态逻辑，一个内聚状态簇一个 hook
     ├── lib/              # 无状态纯函数与常量（可单测，不含 JSX）
@@ -62,7 +62,9 @@ packages/
 └── tool-runtime/         # 确定性工具实现
 
 standards/
-└── coding-standard.test.ts  # 跨文件的结构护栏，随 npm test 执行
+├── coding-standard.test.ts  # 跨文件结构与文档一致性，随 npm test 执行
+├── ui-governance.ts         # UI 结构检测器
+└── ui-governance.test.ts    # 合法与违规变异的检测器回归
 ```
 
 放置规则：
@@ -164,7 +166,7 @@ standards/
 
 **组件基座纪律不在本文复述**：按钮、卡片、列表行、区块头、导航、表单字段、页签、徽标、空态、模态、浮层菜单、折叠披露、图标按钮、动作条、busy 按钮、开关、文本提示、消息块与输入区等「一律用哪个基座、哪几档、护栏锁什么」，唯一真相源是 [UI/UX 体系 §10.1 组件台账](10-ui-ux-system.md)。写 UI 前先查台账，缺基座时先补基座再接页面，不得就地自造同类控件。
 
-新增页面检查实际 JSX 返回分支和组件使用关系，支持命名导入别名与合法包装，不把未使用 import 当成复用证据。跨文件护栏同时检查新命名 CSS 表面的所有者、页面额外版心与逐主题 Token 契约；检测器及违规变异用例放在 `standards/`，由 `coding-standard.test.ts` 接入全仓扫描，例外仍在该文件按用途登记。内联样式采用 TypeScript 语法树检查，未知表达式默认不能充当绕过通道；动态浮层位置和成果排版按精确出口处理。ESLint 的 Renderer 规则同时禁止非原生元素冒充按钮、要求自定义点击元素的角色/焦点/键盘处理；共享菜单的键盘委托由既有基座承担，规则和行为测试共同验证。
+页面检查、Review 与创建先执行 UI/UX §10.1.1 的同一流程；台账由真实组件导出双向核验。新增页面检查实际 JSX 返回分支和组件使用关系，支持命名导入别名与合法包装，不把未使用 import、可选 JSX 子树或回调里的 JSX 当成复用证据。内嵌列表的首读/空集合替代出口按精确形态逐分支核验。跨文件护栏同时检查新命名 CSS 表面的所有者、页面额外版心与逐主题 Token 契约；检测器及违规变异用例放在 `standards/`，由 `coding-standard.test.ts` 接入全仓扫描，例外仍在该文件按用途登记。内联样式采用 TypeScript 语法树检查，未知表达式默认不能充当绕过通道；动态浮层位置和成果排版按精确出口处理。ESLint 的 Renderer 规则同时禁止非原生元素冒充按钮、要求自定义点击元素的角色/焦点/键盘处理；共享菜单的键盘委托由既有基座承担，规则和行为测试共同验证。
 
 反馈实现必须先按 [UI/UX 体系 §11.5](10-ui-ux-system.md) 路由语义，再选择组件：**三个落点各只有一个出口组件**——短时结果用 `TransientToast`，需要停留且当前对象可行动的错误／警告用 `InlineError`，跨页面可回看的长操作结果才进入消息中心（`NotificationService`）。禁止在 Hook 或页面里另造自动消失计时器、顶部横幅（常驻或固定悬浮皆算）或第三套 Toast——`TransientToast`（局部、自消、不落库）与 `ToastHost`（已持久化通知的投影）是既有的两套，分工见 §11.5.1，不可混用；对象状态本身能表达结果时，不重复制造全局提示。
 
@@ -190,7 +192,7 @@ standards/
 - 测试用真实的 SQLite（`:memory:` 或临时目录）而不是 mock 仓储——本仓已有多次「mock 通过、真实库失败」的教训来源是 schema 与约束。
 - 需要构造非法输入、按下标取断言目标时直接用 `!` 与 `any`，测试文件按角色放宽了这几条规则（见 `eslint.config.mjs` 的 `betterwork/tests` 块）。这是按文件角色划定的单一策略，不是逐文件例外；生产代码不享受。
 - 涉及外部 HTTP 的代码必须注入 `fetch`（或用 `vi.stubGlobal`），测试绝不触网。
-- 真实渲染检查复用生产组件与样式，在独立临时 Chromium 数据目录运行，不挂产品 Preload、不访问 SQLite/模型/网络、不抢桌面焦点。Linux CI 用 Xvfb；仅合成测试进程禁用受 Ubuntu userns/AppArmor 限制的 Chromium OS sandbox，产品窗口仍保持 `sandbox: true`。原生控件对比必须测自然高度，不能用 flex stretch 掩盖差异。`npm run ui:check -- --probe-control-height` 只改临时构建 CSS，预期失败且退出码 1，用于证明门禁能拦住退化。它是结构/交互冒烟与截图产出，不能替代整页视觉快照差异审阅、屏幕阅读器和真实 Run 验收。
+- 真实渲染检查复用生产组件与样式，在独立临时 Chromium 数据目录运行，不挂产品 Preload、不访问 SQLite/模型/网络、不抢桌面焦点。测试宿主用软件合成，等待动画结束与新绘制帧，并核对截图中的主题画布、模态遮罩和面板像素；仅 DOM 就绪不足以证明截图有效。Linux CI 用 Xvfb；仅合成测试进程禁用受 Ubuntu userns/AppArmor 限制的 Chromium OS sandbox，产品窗口仍保持 `sandbox: true`。原生控件对比必须测自然高度，不能用 flex stretch 掩盖差异。`npm run ui:check -- --probe-control-height`、`--probe-snapshot-theme`、`--probe-snapshot-modal` 各只改临时构建 CSS，预期失败且退出码 1，分别证明几何、主题截图与模态截图能拦住退化。它是结构/交互冒烟与截图产出，不能替代整页视觉快照差异审阅、屏幕阅读器和真实 Run 验收。
 - 断言窗口广播时必须区分 channel：同一个 `webContents.send` 同时承载 Run 事件与通知事件，只按 `type` 断言会把两者混在一起。
 - 依赖重型动态导入的用例（PDF / DOCX 解析）要显式提高超时，冷缓存下的首次转换会超过默认 5 秒。
 - **墙钟与内存预算断言只允许住在 `*.bench.test.ts`，由 `npm run bench` 串行跑，不进 `npm run verify`**。原因不是性能不好，而是门禁不可信：137 个测试文件并发抢核时，同一份代码的 p95 会漂到 1.5–5 倍（2026-09-26 实测连跑四轮，红项组合每次都变；串行档里 p95 303ms，预算 1s）。随机红的门禁下一个被牺牲的永远是门禁本身。挪进串行档的同时保留三件事：样本值每次照旧打印、阈值一格没放宽、护栏锁「功能档里不得出现 `performance.now()`」，防止新的计时断言悄悄混回提交门禁。
@@ -216,3 +218,5 @@ standards/
 - 2026-09-06：新增 `standards/coding-standard.test.ts`，把 ESLint 表达不了的跨文件约定（配置唯一、源码零豁免、分层边界、Token 与动效纪律、规则索引完整、首帧主题一致）纳入 `npm test` 门禁。
 - 2026-09-07：修正 `foreign_key_check` 的事务语义：它可以读取同一事务的变更；迁移现在以迁移后、提交前的完整性检查为门槛。IPC 注册器同时校验共享协议定义的请求和响应。
 - 2026-09-23：`coding-standard.test.ts` 增加「协议导出的阈值常量都有真实消费者」，把 §7 新增的协议常量单一真相源条款纳入门禁；同轮把记忆召回与提炼里 9 个无人消费的协议常量接回实现侧。
+
+- 2026-10-02：对齐 AI 页面检查/Review/创建流程与真实组件台账；规则入口按职责路由，门禁摘要核对实际 verify 命令；补条件子树/CSS 末声明解析回归，Field 分组选项语义与讨论节点基座复用同步治理；真实截图增加绘制同步与像素正反校验，避免 DOM 通过而图像停在旧帧。
