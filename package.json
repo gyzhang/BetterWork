@@ -33,7 +33,7 @@
     "prepare": "husky"
   },
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=24.0.0"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.3",

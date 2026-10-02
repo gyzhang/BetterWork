@@ -97,7 +97,7 @@ BetterWork/
 
 ## 本地开发
 
-要求 Node.js 22.12 或更高版本。
+要求 Node.js 24（当前 LTS）。版本只有一个真相源 `.nvmrc`，CI 用 `node-version-file` 读它，`engines.node` 的下限是 24.0.0——本机与门禁跑同一个大版本，「我这跑过」才是证据。
 
 ```bash
 npm install

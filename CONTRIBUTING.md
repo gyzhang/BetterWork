@@ -15,7 +15,7 @@
 BetterWork 是 macOS 专属的 Electron 桌面应用，开发需要：
 
 - macOS (darwin/arm64)
-- Node.js 22+
+- Node.js 24（LTS；版本真相源是 `.nvmrc`，CI 也读它，`engines.node` 下限 24.0.0）
 - npm
 
 克隆仓库后运行：
