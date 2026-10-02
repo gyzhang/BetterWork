@@ -29,10 +29,15 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # 三个 Action 都要跑在 node24 上：GitHub 已在 runner 上关停 Node 20，2026-10-02 运行日志里那条
+      # 警告说的是 Action 自己的运行时，与产品依赖无关。checkout／setup-node 从 v5 起、upload-artifact 从
+      # v6 起才是 node24——注意 upload-artifact 的 v5 仍是 node20，别以为升一位就够。v7 换的是 direct uploads
+      # 与 ESM 内部实现，与这条警告无关，不在本笔里混进来。
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          # 版本只有一个真相源：.nvmrc（package.json 的 engines 给下限，README 与 CONTRIBUTING 说同一件事）。
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
       - run: npm run verify
@@ -42,7 +47,7 @@ jobs:
       # 断言只留一句标签时，换台机器红了就无从下手；产物随失败上传，图与读数都能回看。
       - name: 上传渲染检查产物
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ui-render-check
           path: |
@@ -55,7 +60,7 @@ jobs:
       # 16 组 × 两档窗口的图白占空间，保留期也因此压到 7 天。
       - name: 留存渲染检查读数
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ui-render-readings
           path: .ui-render/results.json
