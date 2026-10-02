@@ -1140,7 +1140,7 @@ describe('Expert configuration', () => {
     const card = document.querySelector('.expert-cards .card');
     expect(card?.querySelector('.card-mark svg')).not.toBeNull();
     expect(card?.textContent).toContain('财务组 · v1');
-    expect(card?.querySelectorAll('.expert-card-tags .badge[data-shape="tag"]')).toHaveLength(2);
+    expect(card?.querySelectorAll('.expert-card-tags .badge[data-shape="pill"]')).toHaveLength(2);
     expect(screen.getByRole('button', { name: '召唤' })).toBeTruthy();
     expect(card?.querySelector('.card-primary svg')).not.toBeNull();
   });

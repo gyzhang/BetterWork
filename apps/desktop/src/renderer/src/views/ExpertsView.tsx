@@ -161,9 +161,7 @@ function ExpertTags({ expert }: { expert: ExpertSummary }): React.JSX.Element | 
         <Badge tone="neutral">{lifecycleName[expert.lifecycle]}</Badge>
       )}
       {expert.tags.map((tag) => (
-        <Badge key={tag} shape="tag">
-          {tag}
-        </Badge>
+        <Badge key={tag}>{tag}</Badge>
       ))}
     </div>
   );
