@@ -76,7 +76,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 
 **不要把 verify 的输出接管道后只看末尾**（`npm run verify | tail` 的退出码是 `tail` 的，永远为 0，会把失败读成成功）。需要截取输出时用 `npm run verify > /tmp/verify.log 2>&1; echo $?`。
 
-2026-10-01 UI 门禁补强后的统计快照：**功能档 175 个测试文件、1,587 项测试**（含 `standards/coding-standard.test.ts` 的 135 条规范护栏和独立检测器的 21 项回归用例），**heavy 档 6 个文件、133 项测试**，共 181 文件/1,720 项；另有 **16 组真实 Electron 渲染检查**进入 `verify`。统计以当次验证输出为准，不把快照当作持续自动更新的数据。`bench` 仍独立，不纳入此数。Linux 使用 `xvfb-run --auto-servernum npm run verify`，CI 已配置；macOS 不需 Xvfb。生产构建存在来自 Zod 的 Rollup `@PURE` 注释已知警告，不应因此作无关依赖升级。
+2026-10-01 UI 门禁补强后的统计快照：**功能档 175 个测试文件、1,587 项测试**（含 `standards/coding-standard.test.ts` 的 135 条规范护栏和独立检测器的 21 项回归用例），**heavy 档 6 个文件、133 项测试**，共 181 文件/1,720 项；另有 **16 组真实 Electron 渲染检查**进入 `verify`。统计以当次验证输出为准，不把快照当作持续自动更新的数据。`bench` 仍独立，不纳入此数。CI 门禁跑在 macOS runner 上（[ADR-0036](adr/0036-macos-only-platform-scope.md)），不需要 Xvfb。生产构建存在来自 Zod 的 Rollup `@PURE` 注释已知警告，不应因此作无关依赖升级。
 
 `knowledge-vault.test.ts` 的 PDF 与 DOCX 两个用例已显式提高超时——它们首次运行需要现场转换 `pdf-parse` 与 `mammoth`，冷 Vite 缓存下会超过默认的 5 秒。
 
@@ -139,7 +139,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 
 1. IPC 注册器已有 Electron 替身行为测试：非法输入、无入参通道、输出 Schema、来源打开白名单，以及「Workspace → Task → Run → Artifact → 修订 → 导出」主进程旅程。后续新增 channel 必须在同一测试中补边界行为；真实桌面窗口自动化尚未建立。
 2. Renderer 已引入 `@testing-library/react` + jsdom，并覆盖 Confirmation Dialog 的焦点与 Escape 行为、成果版本加载错误，以及 `useArtifactViewer` 在受控异步乱序下忽略过期版本列表响应。仍无覆盖完整 AppShell 的组件测试与真实桌面 UI 自动化；其他视图和 hook 仍主要依靠人工桌面验收。
-3. GitHub Actions 已对 Pull Request 和 `main` 推送执行 `npm run verify`。macOS 和 Windows 基础打包验证仍未达成；真实桌面 UI 自动化应在该专项中接入。
+3. GitHub Actions 在 **macOS runner** 上对 Pull Request 和 `main` 推送执行 `npm run verify`（[ADR-0036](adr/0036-macos-only-platform-scope.md)；平台范围只有 macOS，Windows 不在支持范围）。macOS 基础打包验证仍未达成；真实桌面 UI 自动化应在该专项中接入。
 
 **界面**
 

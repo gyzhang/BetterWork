@@ -20,11 +20,6 @@ app.commandLine.appendSwitch('force-device-scale-factor', '1');
 app.on('window-all-closed', () => {
   // 每一组结束会销毁窗口；矩阵完成前保持独立测试进程存活，由 run 显式给出退出码。
 });
-if (process.platform === 'linux') {
-  // CI 的合成页面没有网络/宿主能力，避免 Ubuntu userns/AppArmor 限制妨碍离屏检查。
-  // 此开关只属于这个独立测试进程，不改变产品窗口的 sandbox 契约。
-  app.commandLine.appendSwitch('no-sandbox');
-}
 
 async function waitFor(window: BrowserWindow, expression: string): Promise<void> {
   for (let attempt = 0; attempt < 100; attempt += 1) {

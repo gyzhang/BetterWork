@@ -74,6 +74,7 @@ Renderer -> Preload API -> Application -> Agent Core / Infrastructure
 - UI 不是事件的唯一消费者；Application Layer 先持久化，再广播。
 - SQLite 是产品状态真相源；缓存、索引和预览必须可重建。
 - 用户文件默认只读；任何修改未来都通过 ArtifactVersion 产生新版本。
+- **平台范围只有 macOS（darwin/arm64）**：产品、测试宿主与 CI 门禁一律按 macOS 口径，不为其他操作系统写兼容分支或 runner 适配开关（已有的按死代码删）。平台专属能力自己的运行期守卫保留，那是产品语义不是跨平台兼容。见 [ADR-0036](docs/adr/0036-macos-only-platform-scope.md)。
 
 ## 4. 领域语言
 

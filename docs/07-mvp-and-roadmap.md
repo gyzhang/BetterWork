@@ -62,6 +62,8 @@ This is documentation adoption only, not authorization to begin product developm
 
 2026-09-12 用户明确将阶段 A 本轮交付与验收范围限定为 **macOS**：Windows A09 及对应安装/运行验收保留待办记录，暂不实施，也不作为本轮 macOS 完成的阻塞条件。其他功能与质量门保持，只有 macOS 全旅程通过后才可声明「阶段 A（macOS）完成」。
 
+2026-10-02 用户把这条范围定死为**项目只关注 macOS，其他操作系统暂不关注、也不兼容**（[ADR-0036](adr/0036-macos-only-platform-scope.md)）。上一条里的「Windows A09 保留待办记录」因此从「延后」改为「退出范围」：不再为 Windows／Linux 新增兼容分支或 CI runner 适配，门禁 runner 同日由 ubuntu 迁到 macOS。
+
 用户已确认 **A：Skill 管理与配置 → B：专家管理与配置 → C：研究到汇报完整路径**。专家以配置定义，一个专家可调用多项 Skill 持续完成任务。产品先服务个人自用和周边同事，实际可用性优先于教学。
 
 2026-09-13 专家需求澄清：固定专家承接月度经营分析、调研汇报等重复工作，具有自己的人格、工具、MCP 工具、Skill 和记忆；通用助手继续承接临时工作并自由选择能力。见[设计讨论稿](reviews/2026-09-13-expert-work-model.md)。阶段 B 的详细设计需覆盖 MCP 与最小专家记忆，具体传输、授权、记忆适用范围及实施顺序仍待实现 ADR 和任务卡落实；不表示已实现，也不自动引入定时任务或多 Agent。下文旧“MCP 独立确认、最小记忆随 C”排期据此重新细化。
@@ -260,7 +262,7 @@ This is documentation adoption only, not authorization to begin product developm
 | 示例数据和 Fake Provider | 已达成：`FakeModelProvider` 可稳定复现事件顺序与工具行为 |
 | 对应教学文档 | 部分达成：架构与领域文档齐备，尚缺面向学习者的链路讲解材料 |
 | Artifact 生成后的自动验证 | **未达成**：无验证状态字段与自动校验 |
-| macOS 和 Windows 基础打包验证 | **未达成**：仅有 `electron-vite build`，未配置打包与图标导出管线 |
+| macOS 基础打包验证 | **未达成**：仅有 `electron-vite build`，未配置打包与图标导出管线；Windows 打包随 [ADR-0036](adr/0036-macos-only-platform-scope.md) 退出范围 |
 
 未达成项应在对应 Phase 收尾前补齐，或在本文档显式记录延后理由，不得默认跳过。
 

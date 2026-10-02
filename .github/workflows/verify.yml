@@ -12,7 +12,10 @@ permissions:
 jobs:
   verify:
     name: Quality gate
-    runs-on: ubuntu-latest
+    # 产品只支持 macOS（ADR-0036）：门禁必须跑在被支持的那个平台上。
+    # ubuntu runner 测的是我们不需要兼容的平台，且 Electron 离屏渲染检查会在
+    # Ubuntu 的 userns/AppArmor 限制下崩成 SIGTRAP——那是测错平台的噪声，不是代码缺陷。
+    runs-on: macos-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -21,5 +24,4 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Electron 真实渲染检查需要显示服务；只在 CI 使用独立虚拟显示。
-      - run: xvfb-run --auto-servernum npm run verify
+      - run: npm run verify
