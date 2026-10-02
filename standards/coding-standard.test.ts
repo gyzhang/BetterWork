@@ -251,8 +251,19 @@ const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 const PRUNED_DIRECTORIES = new Set(['.git', 'coverage', 'dist', 'node_modules', 'out', 'release']);
 
-/** 生产源码的扫描根。本护栏自身在 `standards/`，因此不会与被扫描的字符串互相污染。 */
+/** 生产源码的扫描根。护栏自身的几何与分层判据只针对产品代码，本文件不计入。 */
 const SOURCE_ROOTS = ['apps/', 'packages/', 'scripts/'] as const;
+
+/**
+ * 「零豁免」的扫描面比 `SOURCE_ROOTS` 宽：除生产源码外还包括本目录与根级配置（docs/12 §10）。
+ *
+ * 之所以能扩，是因为判据从「字符串包含」换成了「指令形状」：`eslint.config.mjs` 与本文件的注释里
+ * 都要讲到这些词汇（「源码禁止 eslint-disable 等单点豁免」），用包含匹配就会把讲规则的那份文件
+ * 判成违规，于是 2026-10-02 之前的扫描根只能退回 apps/packages/scripts——那等于让零豁免规则
+ * 对护栏自己和 ESLint 配置本身不设防，而 docs/12 §10 的字面是「源码里不接受单点豁免」。
+ */
+const EXEMPTION_SCAN_ROOTS = [...SOURCE_ROOTS, 'standards/'] as const;
+const EXEMPTION_SCAN_ROOT_FILES = ['eslint.config.mjs', 'vitest.config.ts'] as const;
 
 function collectFiles(directory: string): string[] {
   const collected: string[] = [];
@@ -419,25 +430,43 @@ describe('唯一规范源', () => {
   });
 
   it('源码里没有任何规则豁免注释', () => {
-    const suppressions = [
-      'eslint-disable',
-      'eslint-enable',
-      '@ts-ignore',
-      '@ts-expect-error',
-      '@ts-nocheck',
-      'prettier-ignore',
+    // 判据取「指令形状」：注释符紧跟指令词才算豁免指令。讲规则的那句注释
+    // （`eslint.config.mjs:40`「源码禁止 eslint-disable 等单点豁免」、本文件上面的说明）
+    // 因此不会被误判，而真正的就地豁免一律拦下（docs/12 §10）。
+    const directiveShapes = [
+      {
+        pattern: /(?:\/\/|\/\*)\s*eslint-(?:disable|enable)(?:-next-line|-line)?\b/u,
+        label: 'eslint-disable／eslint-enable',
+      },
+      { pattern: /(?:\/\/|\/\*)\s*prettier-ignore\b/u, label: 'prettier-ignore' },
+      { pattern: /(?:\/\/|\/\*)\s*@ts-(?:nocheck|ignore|expect-error)\b/u, label: '@ts-* 豁免' },
     ];
+    const scanned = [
+      ...pathsUnder(...EXEMPTION_SCAN_ROOTS),
+      ...REPO_FILES.filter((relative) =>
+        (EXEMPTION_SCAN_ROOT_FILES as readonly string[]).includes(relative),
+      ),
+    ].filter((relative) => /\.(ts|tsx|mts|cts|js|mjs|cjs|css)$/u.test(relative));
+    expect(scanned.length, '零豁免的扫描面为空，本条护栏已空跑').toBeGreaterThan(0);
+    // 扫描面必须真的包含护栏自己与两份根配置——把根扩宽正是本条的意义，别让它在下次改动里悄悄缩回去。
+    for (const required of [
+      'standards/coding-standard.test.ts',
+      'eslint.config.mjs',
+      'vitest.config.ts',
+    ]) {
+      expect(scanned, `${required} 必须在零豁免的扫描面上`).toContain(required);
+    }
+
     const offenders: string[] = [];
-    for (const relative of pathsUnder(...SOURCE_ROOTS)) {
-      if (!/\.(ts|tsx|mts|cts|js|mjs|cjs|css)$/.test(relative)) continue;
+    for (const relative of scanned) {
       const text = read(relative);
-      for (const needle of suppressions) {
-        if (text.includes(needle)) offenders.push(`${relative} 含有 ${needle}`);
+      for (const { pattern, label } of directiveShapes) {
+        if (pattern.test(text)) offenders.push(`${relative} 含有 ${label}`);
       }
     }
     expect(
       offenders,
-      '例外必须写进 eslint.config.mjs 并注明理由，不允许散落在源码里（docs/12 §10）',
+      '例外必须写进 eslint.config.mjs 或本文件的白名单并注明理由，不允许散落在源码里（docs/12 §10）',
     ).toEqual([]);
   });
 });
@@ -4632,6 +4661,120 @@ describe('计时基准车道纪律', () => {
   });
 });
 
+/**
+ * 本地钩子与 `npm run verify` 的对应关系（docs/12 §1）。
+ *
+ * 2026-10-02 审计实测：Actions 最近 30 次运行 28 红 2 绿，且全部是 `push` 事件——四处文档都写着
+ * 「提交前跑 verify」，机器上却只有 lint + typecheck，于是红全部发生在 main 已经坏了之后。
+ * [ADR-0036](../docs/adr/0036-macos-only-platform-scope.md) 已定案「不靠远端闸门拦推送」，
+ * 所以这一段只能由本地补上；补上之后必须有护栏钉着对应关系，否则下一次谁删一行钩子，
+ * 那四处文档依然全绿地重复着同一句嘱咐。
+ */
+describe('提交与推送门禁纪律', () => {
+  const hookFiles = ['.husky/pre-commit', '.husky/pre-push'] as const;
+
+  it('本地钩子必须覆盖 verify 的完整步骤', () => {
+    const scripts = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
+    const pipeline = (scripts.scripts.verify ?? '')
+      .split(' && ')
+      .map((command) => command.replace(/^npm (?:run )?/u, '').trim())
+      .filter((step) => step !== '');
+    expect(pipeline).toEqual(['lint', 'format:check', 'typecheck', 'test', 'build', 'ui:check']);
+
+    for (const hookFile of hookFiles) {
+      expect(REPO_FILES, `${hookFile} 不存在，本条护栏已空跑`).toContain(hookFile);
+    }
+
+    const covered = new Set<string>();
+    for (const hookFile of hookFiles) {
+      for (const match of read(hookFile).matchAll(/^npm (?:run )?([\w:]+)/gmu)) {
+        const step = match[1] ?? '';
+        // `npm run verify` 展开成它自己的全部步骤：只写一行 verify 也算覆盖六步，
+        // 但反过来「pre-commit 里补一条 lint 就宣称齐了」骗不过这条判据。
+        if (step === 'verify') for (const inner of pipeline) covered.add(inner);
+        else covered.add(step);
+      }
+    }
+    const missing = pipeline.filter((step) => !covered.has(step));
+    expect(
+      missing,
+      '文档写着「提交前跑 npm run verify」，机器上却少跑这些步——补进 `.husky/` 或同轮改准文档（docs/12 §1）',
+    ).toEqual([]);
+  });
+
+  it('钩子不许写成空跑，也不许用管道把失败读成成功', () => {
+    // 两种失效形状：① 钩子只剩注释——husky 退出 0，看起来装了其实什么都没跑；
+    // ② 命令接管道（`npm run verify | tail`），退出码取最后一个命令，失败被读成成功（docs/12 §1）。
+    for (const hookFile of hookFiles) {
+      const body = read(hookFile)
+        .split('\n')
+        .filter((line) => line.trim() !== '' && !line.trim().startsWith('#'));
+      expect(body.length, `${hookFile} 里没有任何要执行的命令，等于没装钩子`).toBeGreaterThan(0);
+      const piped = body.filter((line) => line.includes('npm') && line.includes('|'));
+      expect(
+        piped,
+        `${hookFile} 把 npm 的输出接了管道，退出码会被最后一个命令顶掉（docs/12 §1）`,
+      ).toEqual([]);
+    }
+  });
+
+  it('远端门禁跑在受支持的平台、能手动触发、并且留下绿跑读数', () => {
+    // [ADR-0036](../docs/adr/0036-macos-only-platform-scope.md) 定案产品只有 macOS：门禁跑在别的
+    // 平台上测的是不兼容的靶子，`ui:check` 还会在 Ubuntu 的 userns 限制下崩成 SIGTRAP。
+    // 手动触发与绿跑读数管的是另一件事——审计要回答「这轮比上轮慢了多少」「这条判据是不是变严了」，
+    // 只有 push 事件时不改动代码就造不出一条运行；而产物只随失败上传时，连着两次绿跑之间什么都没有。
+    const workflowFile = '.github/workflows/verify.yml';
+    expect(REPO_FILES, '找不到远端门禁定义文件，本条护栏已空跑').toContain(workflowFile);
+    const workflow = read(workflowFile);
+    const triggers = [...workflow.matchAll(/^ {2}(\w+)[:$]/gmu)].map((match) => match[1] ?? '');
+    expect(
+      triggers,
+      `${workflowFile} 的触发器里没有 workflow_dispatch：不改动代码就制造不出一条运行`,
+    ).toContain('workflow_dispatch');
+    expect(workflow, '远端门禁必须跑在 darwin 上（ADR-0036）').toMatch(/runs-on:\s*macos/u);
+    expect(workflow, '远端不许把它改成只跑某几步').toContain('npm run verify');
+    const successUploads = workflow.includes('if: success()')
+      ? [...workflow.split(/- name:/u).filter((block) => block.includes('if: success()'))]
+      : [];
+    expect(
+      successUploads.length,
+      '没有随成功上传的步骤：绿跑的读数一个字节都没留下',
+    ).toBeGreaterThan(0);
+    expect(
+      successUploads.join('\n'),
+      '随成功上传的产物必须包含 ui:check 的 results.json，否则绿跑之间无从比较',
+    ).toContain('.ui-render/results.json');
+  });
+
+  it('治理巡检装在工具链里，但不进提交门禁', () => {
+    // `npm run drift:check` 管的是护栏看不见的三类漂移：仓库外部的状态（钩子有没有真的装进这个
+    // 克隆、本地攒了多少没推的提交）、跨时间的变化（例外登记在长吗、判据被不被引用）、制度有没有
+    // 被执行（每个有提交的日子都有工作日志吗）。它刻意**不进** verify：判据里有 `git log`，同一份
+    // 代码换台机器结论就不同，塞进提交门禁的随机红下一个被牺牲的永远是门禁本身（docs/12 §1、§9）。
+    // 这条护栏钉的是「机制还在不在」——脚本、CLI 测试、读数基线、npm 脚本、文档指认五样缺一样，
+    // 巡检就在某次重构里安静地消失了。
+    const scripts = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
+    expect(scripts.scripts['drift:check'], 'npm run drift:check 不见了').toBe(
+      'node scripts/drift-check.mjs',
+    );
+    for (const file of [
+      'scripts/drift-check.mjs',
+      'scripts/drift-check.test.ts',
+      'docs/development/drift-readings.json',
+    ])
+      expect(REPO_FILES, `${file} 不在仓里，治理巡检链路已断`).toContain(file);
+    expect(
+      scripts.scripts.verify ?? '',
+      '巡检要读 git 状态与本机克隆配置，换台机器结论就不同：不许混进提交门禁（docs/12 §1）',
+    ).not.toContain('drift:check');
+    expect(
+      read('docs/12-engineering-standards.md'),
+      'docs/12 §1 必须指认这条巡检命令，否则下一个人不知道该跑它',
+    ).toContain('npm run drift:check');
+    expect(read('AGENTS.md'), 'AGENTS.md 的任务路由必须能路由到巡检').toContain('drift:check');
+  });
+});
+
 describe('规则与文档索引', () => {
   it('当前组件台账与真实导出双向一致', () => {
     const sources = productionPathsUnder('apps/desktop/src/renderer/src/components/')
@@ -4685,25 +4828,196 @@ describe('规则与文档索引', () => {
     expect(unregistered, '未登记的规则文件不会被 Qoder 加载，等于不存在').toEqual([]);
   });
 
-  it('编码规范速查文件的每条复述都要带出处', () => {
-    // `.qoder/rules/betterwork-code-style.md` 是 docs/12 的速查复述：它被自动加载，读到它的
-    // 概率远高于人手去翻 docs/12，所以最危险的不是它啰嗦，而是它与出处**各说一套**。
-    // IPC 收口判据就在这里漂过一次（账本 P3-11：四处两种措辞，本文件那处直到 2026-09-29
-    // 才对齐）。要求每条复述句末带 `§N`，让「这条出自哪一节」永远可查——没有出处的复述
-    // 等于另立标准，漂移时没人能判断哪一份对。
+  it('规则文件的每条复述都要带出处', () => {
+    // `.qoder/rules/` 下的文件是被自动加载的：AI 读到它们的概率远高于人去翻 docs/12，所以最危险
+    // 的不是它们啰嗦，而是它们与出处**各说一套**。IPC 收口判据就在这里漂过一次（账本 P3-11：
+    // 四处两种措辞，本文件那处直到 2026-09-29 才对齐）。要求每条复述带出处，让「这条出自哪一节」
+    // 永远可查——没有出处的复述等于另立标准，漂移时没人能判断哪一份对。
     //
-    // **本条只管这一个文件**，不是「所有规则文件」。2026-09-29 实测另外 5 个规则文件共
-    // 38 条复述缺出处（ui 9／diagnosis 2／knowledge 7／ipc-artifact 10／dev-cycle 10），
-    // 扩过去要先逐条核准目标小节存在（写错指针比不写更糟），已按实数登记进账本 §8 待派发。
-    const relative = '.qoder/rules/betterwork-code-style.md';
-    const bullets = read(relative)
-      .split('\n')
-      .filter((line) => line.startsWith('- '));
-    expect(bullets.length, '速查文件里没有复述条目，本条护栏已空跑').toBeGreaterThan(0);
-    const unsourced = bullets.filter((line) => !/§\d/u.test(line)).map((line) => line.slice(0, 40));
+    // 范围在 2026-10-02 从「只管 code-style.md」扩到全部规则文件：当时另外 5 个文件共 29 条
+    // 复述没有出处（ipc-artifact 10／dev-cycle 10／knowledge 7／diagnosis 2），逐条核准目标小节
+    // 存在之后才补上指针——写错指针比不写更糟，所以扩之前先改文档再扩判据，顺序不能倒。
+    // 出处认四种形态：`§N` 小节号、`docs/NN` 文档名、`AGENTS.md`，或一条**指向仓内真实文件**的
+    // Markdown 链接——`betterwork.md` 那张场景化索引表的每一行都链接到它所要概括的规则文件本身，
+    // 那本身就是指针，不是「无出处另立标准」。
+    const pointsIntoRepo = (line: string, file: string): boolean =>
+      [...line.matchAll(/\]\(([^)#]+)(?:#[^)]*)?\)/gu)]
+        .map((match) => match[1] ?? '')
+        .filter((target) => target !== '' && !/^https?:/u.test(target))
+        .some((target) =>
+          REPO_FILES.includes(
+            path.posix.normalize(path.posix.join(path.posix.dirname(file), target)),
+          ),
+        );
+
+    const sourceMarker = /§\s*\d|docs\/\d\d|AGENTS\.md/u;
+    const ruleFiles = REPO_FILES.filter(
+      (relative) => relative.startsWith('.qoder/rules/') && relative.endsWith('.md'),
+    );
+    expect(ruleFiles.length, '扫不到规则文件，本条护栏已空跑').toBeGreaterThan(0);
+
+    const offenders: string[] = [];
+    let checked = 0;
+    for (const file of ruleFiles) {
+      const lines = read(file).split('\n');
+      lines.forEach((line, index) => {
+        const isBullet = /^- /u.test(line);
+        const isTableRow = /^\| /u.test(line) && !/^\|[-\s|]+\|$/u.test(line);
+        // 表格标题行（下一行是 `| --- |` 分隔符）不是复述，跳过。
+        const isHeader = isTableRow && /^\|[-\s|]+\|$/u.test(lines[index + 1] ?? '');
+        if (!isBullet && !isTableRow) return;
+        if (isHeader) return;
+        checked += 1;
+        if (sourceMarker.test(line) || pointsIntoRepo(line, file)) return;
+        offenders.push(`${file}: ${line.slice(0, 56)}`);
+      });
+    }
+    expect(checked, '规则文件里一条复述都没解析到，本条护栏已空跑').toBeGreaterThan(0);
     expect(
-      unsourced,
-      `${relative} 的每条复述都要标出处（docs/12 §N 或 AGENTS.md §N），否则它就是第二份标准`,
+      offenders,
+      '规则文件的每条复述都要带出处（§N、docs/NN 或 AGENTS.md）；没有出处的复述就是第二份标准（docs/12 §10）',
+    ).toEqual([]);
+  });
+
+  it('文档点名的护栏必须是一条真实存在的判据', () => {
+    // 「这条由护栏 X 钉住」是本仓最强的可追溯声明：读的人据此去找强制点。2026-10-02 我把
+    // 「编码规范速查文件的每条复述都要带出处」改名为「规则文件的每条复述都要带出处」，
+    // `betterwork-code-style.md` 里那句引用当场变成指着一个不存在的护栏——改名本身是对的，
+    // 缺一的是把引用一起带走的那道闸。同一天还查出两处简写引用（少打了标题后半截），
+    // 判据存在但名字对不上，下一个人无法确定自己找到的是不是同一条。
+    //
+    // 只认紧邻书写的那一种形状：`护栏「X」`／`护栏：「X」`／`判据「X」`。2026-10-02 实测过
+    // 宽的版本（同一行出现过「护栏」二字就算）会把 300 多处引用文案与术语的「」判成违规——
+    // 过宽到没人能修的判据等于没有判据。范围只取会被当现状读取的文档：`docs/logs` 与
+    // `docs/reviews` 是当天快照、`docs/adr` 是决策记录，它们记的是写下那天的名字，不能被
+    // 后续改名回改（要改的是正文里仍然生效的指针，那部分人负责）。
+    const titles = new Set<string>();
+    let enclosingDescribe = '';
+    for (const line of read('standards/coding-standard.test.ts').split('\n')) {
+      const describeMatch = /^describe\(\s*'([^']+)'/u.exec(line);
+      if (describeMatch?.[1]) enclosingDescribe = describeMatch[1];
+      const itMatch = /^ {2}it\(\s*'([^']+)'/u.exec(line);
+      if (!itMatch?.[1]) continue;
+      titles.add(itMatch[1]);
+      // 允许 `describe › it` 的完整路径写法：同名判据分散在多个块里时，只有路径能指准。
+      if (enclosingDescribe !== '') titles.add(`${enclosingDescribe} › ${itMatch[1]}`);
+    }
+    expect(titles.size, '解析不出本文件的任何判据标题，本条护栏已空跑').toBeGreaterThan(0);
+
+    const livingDocs = REPO_FILES.filter(
+      (relative) =>
+        relative === 'AGENTS.md' ||
+        relative === 'README.md' ||
+        /^docs\/[^/]+\.md$/u.test(relative) ||
+        /^docs\/(?:development|designs)\/[^/]+\.md$/u.test(relative) ||
+        relative.startsWith('.qoder/rules/'),
+    );
+    expect(livingDocs.length, '扫不到现行文档，本条护栏已空跑').toBeGreaterThan(0);
+
+    const reference = /(?:护栏|判据|守卫)[：:]?[「]([^」]{4,90})[」]/gu;
+    const offenders: string[] = [];
+    let referenced = 0;
+    for (const file of livingDocs) {
+      for (const line of read(file).split('\n')) {
+        for (const match of line.matchAll(reference)) {
+          referenced += 1;
+          const name = (match[1] ?? '').trim();
+          if (titles.has(name)) continue;
+          offenders.push(`${file}: 「${name}」`);
+        }
+      }
+    }
+    expect(referenced, '现行文档里一处护栏引用都没解析到，本条护栏已空跑').toBeGreaterThan(0);
+    expect(
+      offenders,
+      '文档说「由护栏 X 钉住」时 X 必须是本文件里真实的 it() 标题（可带 `describe › ` 路径）；改判据名要同轮改引用',
+    ).toEqual([]);
+  });
+
+  it('仓库文本里不得出现替换字符与编码重读产物', () => {
+    // 中文长行被编辑工具静默损坏时，最先掉出来的就是这几类字符：U+FFFD 是解码失败的占位符；
+    // 「Latin-1 字母紧跟一个间隔符／C1 控制符」是 UTF-8 字节被按 Latin-1 重读的形状——文件头的
+    // BOM 被这样读出来就是三个这样的字符，本文件不写它的字面量，否则这条护栏第一个判红自己。
+    // 本仓把「改完中文必须回读」写成了常驻铁律，但回读依赖自觉；这条护栏钉住其中最可机判的一类
+    // 后果（AGENTS.md 的中文字符编辑纪律）。
+    // 判据只认签名，不认「非 ASCII」：`×`、`÷` 与作者名里的 `ü` 在本仓都是正当用法，
+    // 按码位一刀切 2026-10-02 实测会误伤 200 多处。扫描面是全部文本文件，只排掉被 Git 忽略的
+    // 产品数据 `.betterwork/`。
+    const textFile = /\.(?:md|ts|tsx|mts|cts|js|mjs|cjs|json|css|ya?ml|sh|html|svg|txt)$/u;
+    const signatures: readonly { readonly label: string; readonly pattern: RegExp }[] = [
+      { label: 'U+FFFD 替换字符', pattern: /[\uFFFD]/u },
+      {
+        label: 'UTF-8 被按 Latin-1 重读',
+        pattern: /[\u00C0-\u00FF][\u00A0-\u00BF\u0080-\u009F]/u,
+      },
+      { label: 'C1 控制字符', pattern: /[\u0080-\u009F]/u },
+    ];
+    const offenders: string[] = [];
+    let scanned = 0;
+    for (const file of REPO_FILES) {
+      if (!textFile.test(file) || file.startsWith('.betterwork/')) continue;
+      scanned += 1;
+      const content = read(file);
+      for (const { label, pattern } of signatures) {
+        const match = pattern.exec(content);
+        if (!match) continue;
+        const line = content.slice(0, match.index).split('\n').length;
+        offenders.push(`${file}:${line} ${label}：${match[0]}`);
+      }
+    }
+    expect(scanned, '一个文本文件都没扫到，本条护栏已空跑').toBeGreaterThan(0);
+    expect(
+      offenders,
+      '这些字符是中文被静默损坏或编码被重读的产物：整段重写该处内容，别继续局部替换（AGENTS.md 中文字符编辑纪律）',
+    ).toEqual([]);
+  });
+
+  it('规则文件的触发元数据形状正确', () => {
+    // Qoder 按 frontmatter 决定什么时候把规则喂给模型：`trigger: model_decision` 少了
+    // description，这条规则就永远不会被加载——静默失效比写错更难发现，因为文件看起来是好的，
+    // 而它保护的那个约定从此没人守。触发值只认 `always_on`／`model_decision`／`glob: <模式>`
+    // 三种（`.qoder/rules/betterwork.md` 的场景化规则索引登记的就是这套）。
+    const ruleFiles = REPO_FILES.filter(
+      (relative) => relative.startsWith('.qoder/rules/') && relative.endsWith('.md'),
+    );
+    expect(ruleFiles.length, '扫不到规则文件，本条护栏已空跑').toBeGreaterThan(0);
+
+    const offenders: string[] = [];
+    let decisionTriggered = 0;
+    let globTriggered = 0;
+    for (const file of ruleFiles) {
+      const frontmatter = /^---\n([\s\S]*?)\n---/u.exec(read(file))?.[1];
+      if (!frontmatter) {
+        offenders.push(`${file}: 没有 frontmatter，规则不会被任何场景触发`);
+        continue;
+      }
+      const trigger = (/^trigger:[ \t]*(.*)$/mu.exec(frontmatter)?.[1] ?? '').trim();
+      const description = (/^description:[ \t]*(.*)$/mu.exec(frontmatter)?.[1] ?? '').trim();
+      if (trigger === 'always_on') continue;
+      if (trigger.startsWith('glob:')) {
+        globTriggered += 1;
+        if (trigger.slice('glob:'.length).trim() === '') {
+          offenders.push(`${file}: glob 触发没有写匹配模式，等于永不触发`);
+        }
+        continue;
+      }
+      if (trigger === 'model_decision') {
+        decisionTriggered += 1;
+        // 触发描述是模型唯一的选路依据：空或过短（如「UI」）都不会被可靠命中。
+        if (description.length < 10) {
+          offenders.push(`${file}: model_decision 规则缺 description，模型无从加载它`);
+        }
+        continue;
+      }
+      offenders.push(`${file}: 无法识别的 trigger「${trigger}」`);
+    }
+    expect(
+      decisionTriggered + globTriggered,
+      '既没有按场景也没有按文件触发的规则，本条护栏已空跑',
+    ).toBeGreaterThan(0);
+    expect(
+      offenders,
+      '规则文件必须带可识别的 trigger；model_decision 必须带能选路的 description（.qoder/rules/betterwork.md）',
     ).toEqual([]);
   });
 
@@ -4783,6 +5097,125 @@ describe('规则与文档索引', () => {
     expect(
       offenders,
       '页面称呼只有一张表：一级导航是 工作／成果／知识／技能／专家，Skill 管理那一页叫技能页（docs/10 §6.1）',
+    ).toEqual([]);
+  });
+
+  it('规则与规范文档里引用的仓库路径都必须存在', () => {
+    // 智能体是按这些指针动手的：规则文件写「实现主体在 X」，指错了就是去开一个不存在的文件，
+    // 或按错误的层次改代码。2026-10-02 审计实测两处已过期——`main/run-journal.ts` 随聚合拆分
+    // 早已不存在、`main/knowledge-vault.ts` 少了一层 `services/`，而没有任何断言盯着它们。
+    const pointerDocs = [
+      'AGENTS.md',
+      'README.md',
+      'docs/10-ui-ux-system.md',
+      'docs/11-qoder-handoff.md',
+      'docs/12-engineering-standards.md',
+      ...REPO_FILES.filter((relative) => /^\.qoder\/rules\/.*\.md$/u.test(relative)),
+    ];
+    const pathLike =
+      /`((?:apps|packages|scripts|standards|docs|resources)\/[A-Za-z0-9_.@/-]*\.(?:ts|tsx|css|mjs|json|md|sh|py))`/gu;
+    const missing: string[] = [];
+    let checked = 0;
+    for (const doc of pointerDocs) {
+      for (const match of read(doc).matchAll(pathLike)) {
+        const target = match[1] ?? '';
+        // 模板占位（`docs/logs/YYYY-MM-DD.md`）与带通配的形状不是指针，不参与存在性判断。
+        if (/YYYY|\*|</u.test(target)) continue;
+        checked += 1;
+        if (!REPO_FILES.includes(target)) missing.push(`${doc} → ${target}`);
+      }
+    }
+    expect(checked, '一条仓库路径指针都没解析出来，本条护栏已空跑').toBeGreaterThan(0);
+    expect(
+      missing,
+      '这些路径在仓库里不存在或已搬家：改准指针，别让下一个会话照着它去开一个空文件',
+    ).toEqual([]);
+  });
+
+  it('交接与规则文档不得宣称台账组件尚未落地', () => {
+    // 台账与真实导出的双向一致由上一条管；这一条管的是**另一个会被当现状读的地方**。
+    // 2026-10-02 实测 `docs/11:149` 写着「Tooltip、Skeleton、Switch 未落地」，而 `Switch.tsx`
+    // 与 `Tooltip.tsx` 都存在、都在台账里——照这句话干活的智能体会自造第二颗开关，
+    // 而基座护栏只认得台账里那一颗。
+    const ledger = read('docs/10-ui-ux-system.md');
+    const ledgerStart = ledger.indexOf('#### 10.1.2 当前组件台账');
+    expect(ledgerStart, '找不到 docs/10 §10.1.2 的组件台账，本条护栏已空跑').toBeGreaterThan(-1);
+    const ledgerSection = ledger.slice(
+      ledgerStart,
+      ledger.indexOf('#### 10.1.3', ledgerStart) === -1
+        ? ledger.length
+        : ledger.indexOf('#### 10.1.3', ledgerStart),
+    );
+    const exported = [
+      ...[...ledgerSection.matchAll(/^\| `([A-Z][A-Za-z]+)`(?:、`[A-Z][A-Za-z]+`)?\s*\|/gmu)].map(
+        (match) => match[1] ?? '',
+      ),
+    ].filter((name) => name !== '');
+    expect(exported.length, '台账解析不出任何组件，本条护栏已空跑').toBeGreaterThan(0);
+
+    const statusDocs = [
+      'AGENTS.md',
+      'docs/11-qoder-handoff.md',
+      ...REPO_FILES.filter((relative) => /^\.qoder\/rules\/.*\.md$/u.test(relative)),
+    ];
+    const notShipped = /未落地|尚未落地|还没有落地|未实现|尚未实现|没有实现/u;
+    const offenders: string[] = [];
+    for (const doc of statusDocs) {
+      for (const line of read(doc).split('\n')) {
+        if (!notShipped.test(line)) continue;
+        // 只在「说它没有」的那个分句里找组件名：`，。；：！？（）` 算分隔符，`、` 不算——
+        // 「Tooltip、Skeleton、Switch 未落地」整串是一份被否定的清单。这样既拦得住反向陈述，
+        // 也不会把「Skeleton 未落地；Tooltip 在台账里」这种改正句一起判成违规。
+        const denied = line
+          .split(/[，。；：！？（）]/u)
+          .filter((clause) => notShipped.test(clause));
+        for (const name of exported) {
+          const named = denied.filter((clause) => new RegExp(`\\b${name}\\b`, 'u').test(clause));
+          if (named.length === 0) continue;
+          offenders.push(
+            `${doc}：${name} 就在 §10.1 台账里，这一句却说它没落地——「${(named[0] ?? '').trim().slice(0, 48)}」`,
+          );
+        }
+      }
+    }
+    expect(
+      offenders,
+      '组件是否落地只有 docs/10 §10.1 台账与代码两个读点，别在交接或规则文档里另说一套（docs/10 §10.1）',
+    ).toEqual([]);
+  });
+
+  it('规模计数必须带日期或写明以当次为准', () => {
+    // 测试文件数、用例数、护栏条数这类「体系规模」的数字最容易被引用，也最先过期：
+    // 2026-10-02 实测同一个数在四处并存（README 20 文件／131 例、docs/12 §9 170／1,605、
+    // docs/11 §3 181／1,720、当次 verify 181／1,745）。本条不要求每处都算对——只要求每一处
+    // 要么带「截至哪一天」，要么写「以当次为准」，让读的人能判断它是不是现状（docs/12 §1）。
+    const scaleDocs = [
+      'AGENTS.md',
+      'README.md',
+      'docs/10-ui-ux-system.md',
+      'docs/11-qoder-handoff.md',
+      'docs/12-engineering-standards.md',
+      ...REPO_FILES.filter((relative) => /^\.qoder\/rules\/.*\.md$/u.test(relative)),
+    ];
+    const scaleCount =
+      /\d[\d,]*\s*(?:测试文件|个测试|项测试|测试用例|条规范护栏|条护栏|条断言|组渲染检查|渲染检查)/u;
+    const dated = /20\d\d-\d\d-\d\d|截至|实测|当次/u;
+    const offenders: string[] = [];
+    let checked = 0;
+    for (const doc of scaleDocs) {
+      // 按句切，不按行：整行放行会让一句里顺带出现的日期替另一句背书——2026-10-02 变异验证时
+      // 把 README 那套过期数字塞回带日期的同一行，护栏就读不到了，正是这个形状。
+      for (const sentence of read(doc).split(/[。！？；\n]/u)) {
+        if (!scaleCount.test(sentence)) continue;
+        checked += 1;
+        if (dated.test(sentence)) continue;
+        offenders.push(`${doc}: ${sentence.trim().slice(0, 60)}`);
+      }
+    }
+    expect(checked, '一条规模计数都没扫到，本条护栏已空跑').toBeGreaterThan(0);
+    expect(
+      offenders,
+      '这些规模数字既没有日期也没写「以当次为准」，会被下一个会话当成现状引用（docs/12 §1）',
     ).toEqual([]);
   });
 });

@@ -5,6 +5,15 @@ on:
   push:
     branches:
       - main
+  # 手动触发是这套门禁唯一的「同一份代码再跑一次拿读数」入口：审计时要回答
+  # 「绿跑长什么样」「这轮比上轮慢了多少」，只有 push 事件的话，不改动代码就制造不出一条运行。
+  workflow_dispatch:
+
+# 连续推送时只保留最新一次的读数：macOS runner 按分钟计费，跑完一条已经不代表 HEAD 的运行
+# 既烧钱又会把「当前 main 是否绿」读成旧事实。
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -41,3 +50,13 @@ jobs:
             .ui-render/results.json
             .ui-render/results.partial.json
           retention-days: 14
+      # 绿跑也要留读数：「这条判据这轮是不是变严了」「每组渲染耗时漂了多少」只能拿两次读数对比回答，
+      # 而只随失败上传的产物在连着两次绿跑之间是空的。只传 results.json——绿跑的截图没有诊断价值，
+      # 16 组 × 两档窗口的图白占空间，保留期也因此压到 7 天。
+      - name: 留存渲染检查读数
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-render-readings
+          path: .ui-render/results.json
+          retention-days: 7

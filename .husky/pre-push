@@ -1,0 +1,5 @@
+# 推送前跑完整门禁（docs/12 §1）：lint + format:check + typecheck + test + build + ui:check。
+# 为什么放在这一层：Actions 的历史是 28 次 push 红、2 次绿——红全部发生在 main 已经坏了之后。
+# ADR-0036 已定案「不靠远端闸门拦推送」，所以真正的拦截点只能在本地这一段。
+# 判据与覆盖关系由护栏「本地钩子必须覆盖 verify 的完整六步」钉住，改这里要同轮换它。
+npm run verify
