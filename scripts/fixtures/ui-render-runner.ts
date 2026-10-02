@@ -5,6 +5,13 @@ import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, type NativeImage } from 'electron';
 
 import { colorSchemes } from '../../apps/desktop/src/renderer/src/appearance';
+import {
+  frameMismatch,
+  type FrameSample,
+  isSettled,
+  MAX_SAMPLE_ATTEMPTS,
+  settleDelayMs,
+} from './frame-verdict';
 
 function outputDirectory(): string {
   const directory = process.argv[2];
@@ -69,23 +76,17 @@ async function paintedFrame(window: BrowserWindow): Promise<NativeImage> {
   });
 }
 
-interface FrameSample {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  color: number[];
-}
-
 async function captureVerifiedFrame(
   window: BrowserWindow,
   filename: string,
   modal: boolean,
 ): Promise<void> {
-  await window.webContents.executeJavaScript(
-    'Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => false)))',
-  );
-  const samples = (await window.webContents.executeJavaScript(`(() => {
+  const label = modal ? '模态' : '主题画布';
+  // 逐帧读到稳定再判：连续两帧在同一批采样点上读数一致，这一帧才有资格当证据。
+  // 慢机器（2026-10-02 的 macOS runner 容量吃紧那一次）第一帧常是「遮罩已画、面板主题还没换上」
+  // 的中间态——单帧即判会把环境差异读成缺陷；而真没画出来的形状在两帧里读数相同，照样拦得住。
+  // 期望读数每轮重读：DOM 侧的主题与面板矩形也要与刚采的那一帧同时刻，不能拿开帧前的声明比帧后的像素。
+  const sampleScript = `(() => {
     const panel = document.querySelector('[aria-modal="true"]');
     const rect = panel?.getBoundingClientRect();
     const rgb = element => getComputedStyle(element).backgroundColor.match(/\\d+(?:\\.\\d+)?/g).map(Number);
@@ -101,36 +102,32 @@ async function captureVerifiedFrame(
       samples.push({x: rect.left + 4, y: rect.top + rect.height / 2,
         width: innerWidth, height: innerHeight, color: rgb(panel).slice(0,3)});
     return samples;
-  })()`)) as FrameSample[];
-  let mismatch = '';
-  for (let attempt = 0; attempt < 10; attempt += 1) {
+  })()`;
+  let previous: string | undefined;
+  for (let attempt = 0; attempt < MAX_SAMPLE_ATTEMPTS; attempt += 1) {
+    await window.webContents.executeJavaScript(
+      'Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => false)))',
+    );
+    const samples = (await window.webContents.executeJavaScript(sampleScript)) as FrameSample[];
     const image = await paintedFrame(window);
     const size = image.getSize();
     // Chromium 的原始 N32 位图在本项目 macOS/Linux x64/arm64 运行环境为 BGRA。
-    const bitmap = image.toBitmap();
-    mismatch = '';
-    for (const sample of samples) {
-      const x = Math.floor((sample.x * size.width) / sample.width);
-      const y = Math.floor((sample.y * size.height) / sample.height);
-      const offset = (y * size.width + x) * 4;
-      const pixel = [bitmap[offset + 2], bitmap[offset + 1], bitmap[offset]];
-      if (
-        !pixel.every(
-          (value, index) =>
-            value !== undefined && Math.abs(value - (sample.color[index] ?? -1)) <= 2,
-        )
-      ) {
-        mismatch = `期望 ${sample.color.join('/')}，实测 ${pixel.join('/')}`;
-        break;
+    const mismatch = frameMismatch(samples, {
+      data: image.toBitmap(),
+      width: size.width,
+      height: size.height,
+    });
+    if (isSettled(previous, mismatch)) {
+      if (mismatch === '') {
+        await writeFile(filename, image.toPNG());
+        return;
       }
+      throw new Error(`截图绘制状态不一致：${label} ${mismatch}`);
     }
-    if (!mismatch) {
-      await writeFile(filename, image.toPNG());
-      return;
-    }
-    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    previous = mismatch;
+    await new Promise<void>((resolve) => setTimeout(resolve, settleDelayMs(attempt)));
   }
-  throw new Error(`截图绘制状态不一致：${modal ? '模态' : '主题画布'} ${mismatch}`);
+  throw new Error(`截图绘制状态未稳定：${label} 连采 ${MAX_SAMPLE_ATTEMPTS} 帧仍没有两帧读数一致`);
 }
 
 async function run(): Promise<void> {
