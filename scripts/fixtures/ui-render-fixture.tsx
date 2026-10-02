@@ -163,7 +163,58 @@ function overlayChecks(kind: 'modal' | 'menu'): object {
   return { kind, width: rect.width, height: rect.height };
 }
 
-function focusChecks(): object {
+interface RingReadings {
+  focusVisible: boolean;
+  focused: boolean;
+  outline: string;
+  offset: string;
+  style: string;
+  color: string;
+  ring: string;
+  ringOffset: string;
+}
+
+// 五个样式读数各对应一条失败路径，缺一即无从定性：规则没命中 → style 回到 none；
+// 命中但 var() 取不到值 → outline-width 的初始值 medium(3px) 与 offset 初始 0 同时回归；
+// 伪类变化尚未算进计算样式 → style 已是 solid 而 width/offset 仍是聚焦前那一组。
+function readRing(target: HTMLElement): RingReadings {
+  const style = getComputedStyle(target);
+  return {
+    focusVisible: target.matches(':focus-visible'),
+    focused: document.activeElement === target,
+    outline: style.outlineWidth,
+    offset: style.outlineOffset,
+    style: style.outlineStyle,
+    color: style.outlineColor,
+    ring: style.getPropertyValue('--focus-ring').trim(),
+    ringOffset: style.getPropertyValue('--focus-ring-offset').trim(),
+  };
+}
+
+/** focus() 与读取同在一个 task：冷启动的渲染机上可能读到伪类生效前的计算样式。
+    逐帧重读直到连续两次一致才判定，帧数与首帧读数一起进断言消息——稳定＝时序，
+    稳定在错值＝真的坏了，两者不能混成同一句红字。 */
+async function settledRing(
+  target: HTMLElement,
+): Promise<{ ring: RingReadings; first: RingReadings; frames: number }> {
+  const first = readRing(target);
+  let ring = first;
+  let frames = 0;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve());
+    });
+    frames += 1;
+    const next = readRing(target);
+    const stable =
+      next.outline === ring.outline && next.offset === ring.offset && next.style === ring.style;
+    ring = next;
+    if (stable) break;
+  }
+  return { ring, first, frames };
+}
+
+async function focusChecks(): Promise<object> {
   const active = document.activeElement;
   check(
     active instanceof HTMLElement && active.matches(':focus-visible'),
@@ -176,29 +227,21 @@ function focusChecks(): object {
   check(width >= 2 && inward >= width + 1, '焦点环未完整落在盒内并保留分隔缝');
   const table = requireElement<HTMLElement>('.fixture-reading .markdown-table');
   table.focus({ preventScroll: true });
-  const tableStyle = getComputedStyle(table);
-  const tableOutlineWidth = Number.parseFloat(tableStyle.outlineWidth);
-  // 三个条件各自都可能不成立（环没画、画在盒外、程序化 focus 没继承到 :focus-visible），
-  // 只报一句标签的断言换台机器红了就无从下手——读数一起进错误消息，也进分组产物 results*.json。
-  // style 与两个 token 用来分「规则没命中」和「规则命中但 var() 取不到值」：
-  // outline-width 的初始值是 medium(3px)、outline-offset 是 0，两者同时回到初始值才是这条路径。
-  const tableReadings = {
-    focusVisible: table.matches(':focus-visible'),
-    focused: document.activeElement === table,
-    outline: tableStyle.outlineWidth,
-    offset: tableStyle.outlineOffset,
-    style: tableStyle.outlineStyle,
-    ring: tableStyle.getPropertyValue('--focus-ring').trim(),
-    ringOffset: tableStyle.getPropertyValue('--focus-ring-offset').trim(),
+  const { ring, first, frames } = await settledRing(table);
+  // 环境读数只在红的时候有用：慢机器上系统级对比度／减弱动态设置会改变渲染路径。
+  const environment = {
+    reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+    forcedColors: matchMedia('(forced-colors: active)').matches,
+    contrast: matchMedia('(prefers-contrast: more)').matches,
+    dpr: devicePixelRatio,
   };
+  const tableWidth = Number.parseFloat(ring.outline);
   check(
-    tableReadings.focusVisible &&
-      tableOutlineWidth >= 2 &&
-      -Number.parseFloat(tableStyle.outlineOffset) >= tableOutlineWidth + 1,
-    `宽表滚动区焦点环未完整落在盒内：${JSON.stringify(tableReadings)}`,
+    ring.focusVisible && tableWidth >= 2 && -Number.parseFloat(ring.offset) >= tableWidth + 1,
+    `宽表滚动区焦点环未完整落在盒内：稳定读数 ${JSON.stringify(ring)} · 首帧 ${JSON.stringify(first)} · 帧数 ${frames} · 环境 ${JSON.stringify(environment)}`,
   );
   active.focus({ preventScroll: true });
-  return { outline: style.outlineWidth, offset: style.outlineOffset, table: tableReadings };
+  return { outline: style.outlineWidth, offset: style.outlineOffset, table: ring, frames };
 }
 
 declare global {

@@ -66,3 +66,20 @@
 - 读数原本只在 16 组全绿时由 `results.json` 落地，而产物只在红的时候上传，两头正好错开。改为每组 `finally` 另存 `results.partial.json`；`results.json` 仍是「矩阵跑完」的完成证据（`ui-render-check.mjs` 只在退出码 0 时读它），这层语义没动。
 
 变异验证据（本地临时给该行条件加 `innerWidth < 1000`，让 1380 宽的那组先红）：退出码 1，日志给出 `宽表滚动区焦点环未完整落在盒内：{"focusVisible":true,"outline":"2px","offset":"-3px"}`，`.ui-render/` 里留下 3 张截图与含已通过组整份读数的 `results.partial.json`，且 `results.json` 不存在。还原后 16 组全绿、32 张截图、两份读数文件齐。一处诚实的限制：CI 现在红的是 `jade-light-760`，它是矩阵第 1 组，所以那次产物里 `results.partial.json` 只能是空数组，定性仍要靠错误消息里的那三个读数——partial 的作用在「往后几组才红」的场景。
+
+## 二跑读数（2026-10-02，run #244 / `2f96308`）
+
+超时那一类清零（`Test timed out` 2 条 → 0 条），红只剩焦点环一条，仍落在矩阵第 1 组 `jade-light-760`。上一节补的四个读数把方向纠正了过来：
+
+```text
+{"focusVisible":true,"focused":true,"outline":"3px","offset":"0px","style":"solid","ring":"#4d8a78","ringOffset":"-3px"}
+```
+
+- **「规则没吃到」被证伪**：`outline-style` 已是作者写的 `solid`，两个 token 在该元素上都取到了值。12:37 那节里「`3px`＋`0px` 正好是初始值，所以规则没命中」只对了前半——初始值这一半对，「没命中」这一半错。
+- **`transition` 被证伪**：`.markdown-table` 不在 `styles.css` 任何 `transition` 的选择器列表里，全仓没有一条 transition 涉及 `outline`；`prefers-reduced-motion` 那段只压 `transition-duration`，不改 `transition-property`。
+- **IACVT（`var()` 取不到值）被证伪**：那条路径会把 `outline-style` 一并退回 `none`，与 `solid` 不符，且 `ring`／`ringOffset` 实测有值。
+- **系统对比度／forced-colors 被证伪**：CDP 模拟 `prefers-contrast: more` 与 `forced-colors: active`，本地几何仍读 `2px/-3px`。
+- 剩下的形状是「伪类已生效、几何还没跟上」。同一段里那条按钮焦点断言读的是**上一次 `executeJavaScript`** 里 Tab 过的元素，跨了一个 task，它在 runner 上一直绿；只有紧跟 `focus()` 的那一次读红。方向是读取时机，不是 CSS。
+- 于是把断言改成逐帧读到稳定再判（`settledRing()`）：每帧重读，连续两次一致才认，上限 8 帧。红字一次给全「稳定读数 · 首帧读数 · 帧数 · 环境」，`outline-color` 也补进读数——它把「简写整体生效」与「只有 `outline-style` 生效」分得很干净。
+- 变异验证（本地临时加一条 `.markdown-table:focus-visible { outline-offset: 0px }`）：退出码 1，红字给出 `稳定读数 {"outline":"2px","offset":"0px","style":"solid","color":"rgb(77, 138, 120)"…} · 首帧同值 · 帧数 1`——等待没把稳定的错几何读成绿。还原后本地 16 组全绿、每组帧数 1。
+- **未结**：时序假设只有在 runner 上才算验证，本地绿替代不了。若仍红，`帧数` 说明是否一直在收敛中，`color` 说明是否其实走的 IACVT，环境四项读数说明是否被系统设置改了渲染路径。
