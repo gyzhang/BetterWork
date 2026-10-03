@@ -1,5 +1,7 @@
 # 系统架构
 
+> 2026-10-03 定时任务技术提案：调度、来源准备、后台专家装配与恢复属于现有 Electron Main 的 Application 服务，不进入 Agent Core 或新建 package；Run 启动事务固定实例关联后才异步消费。见 [ADR-0037](adr/0037-scheduled-work-and-source-snapshots.md)、[契约](development/schedule-contracts.md)。产品原型通过，生产未实现。
+
 > 2026-09-24 知识增量提案：[ADR-0027](adr/0027-knowledge-foundation.md)与[知识契约](development/knowledge-contracts.md)提出固定修订正文读取、Main 所有的嵌入适配、可重建混合索引和受管工作进程；延续现有依赖方向与两库边界，不新建 Agent 引擎或 package。知识修订/历史证据不能当派生缓存删除。方案 Proposed，本轮只写文档；状态只看 [KM 任务板](development/tasks-knowledge.md)。
 
 > **Proposed architecture increment — 2026-09-20:** [ADR-0024](adr/0024-api-services-and-credentials.md) defines separate API/model/MCP configurations sharing Main-owned encrypted credentials; [ADR-0025](adr/0025-remote-mcp-and-capability-bindings.md) adds Streamable HTTP and Run-owned MCP clients. [Capability contracts](development/capability-contracts.md) retain the existing Agent Core boundary and specify preparation, revocation, provenance, and migration. Both ADRs are Proposed; current plaintext storage and stdio-only implementation are not changed by this documentation.

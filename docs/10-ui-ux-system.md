@@ -156,11 +156,13 @@ Skill 列表分别展示来源（内置/用户）、启用状态、信任状态�
 
 光哥已查看原型并批准 D1–D5 推荐方案，作为后续交互实现依据；同日下达持续落地指令后，五项交互的界面与主进程链路均已实现并分阶段提交（MI00–MI09 的代码与自动化证据见 [MI 计划](development/tasks-memory-improvements.md)），逐格人工走查记录在 [MI 人工验收清单](development/memory-mi10-checklist.md)，走查与真实模型语义未完成前不得写成已通过。沿用 §8.3 页面骨架、§11.5.1 反馈路由和 §12 可用性底线；不得用「模型已阅读」「恢复后必定使用」替代真实状态。具体规则只见 Spec 与[契约 §11](development/memory-contracts.md#11-mi-改进契约proposed)，不在本节重复技术字段。
 
-### 6.1.5 定时任务界面（已确认入口，设计 Proposed，未实现）
+### 6.1.5 定时任务界面（产品原型已通过，生产未实现）
 
-光哥已确认独立“定时任务”入口位于“专家”下方、业务主导航最后；消息中心与设置仍保留底部位置。创建先选已有专家、长期工作目录，再按需添加知识或知识库来源；不内嵌专家定义编辑，专家新修订必须提示，应用只改变调用绑定。详见[设计 v0.3](designs/scheduled-tasks.md)与 [SC 待办](development/tasks-schedules.md)，具体技术和原型仍需收口，不视为已实现。
+光哥已确认独立“定时任务”入口位于“专家”下方、业务主导航最后；消息中心与设置仍保留底部位置。2026-10-03 光哥通过[原型 P1–P6](prototype/scheduled-tasks/README.md)：紧凑列表、整页配置/详情、三次时间预览、默认同目录「定时成果」、事实分层的下一步、只读专家差异与显式启用。
 
-同一目录长期使用，生成物持续积累、人可增减资料；各次工作分别留档，历史月/季/半年资料仍可供对比，不把多期工作显示成多个新项目。后台不抢焦点、不切走任务或清空草稿，状态、取消和来源可主动查看；复用统一页面骨架与通知反馈。Workspace 将来的“项目”文案另行统一，本轮不改页面代码。
+[技术契约 §10](development/schedule-contracts.md#10-ui-实施清单组合基座不新增基础组件)逐分支映射当前真实组件，预定新增基础 UI 组件为 0；只新增定时业务页面组合/Hook/纯函数。每个普通页面可见分支沿用 PageHeader/ScrollRegion/.page-body，列表 ListRow、表单 Field 系列、来源 Modal/CheckList、状态 Badge/StatusNote、反馈按 §11.5。不复制造型相同的 ScheduleCard/Toast/Dialog，不复制原型 CSS，不硬塞面向固定材料的 ComposerCapabilityPicker；可用 SourceRow 只呈现真实 Evidence，missed 不伪造 RunSummaryRow。
+
+详见[设计](designs/scheduled-tasks.md)、[Luna 唯一任务板](development/tasks-schedules.md)及 [ADR-0037](adr/0037-scheduled-work-and-source-snapshots.md)。生产导航当前仍以 §6.1/源码为准；SC09-1 接入时同步导航表、代码与护栏，SC09-7 用真实生产页宿主验证主题/焦点/草稿/错误/反馈。通过原型不等于生产组件复用或真实窗口验收。
 
 ### 6.1.6 记忆治理页的检索与滚动区（2026-09-25 光哥拍板）
 

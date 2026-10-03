@@ -1,5 +1,7 @@
 # 材料、快照与运行来源契约（E20）
 
+> 2026-10-03 定时任务技术增量（Proposed，未实施）：[ADR-0037](../adr/0037-scheduled-work-and-source-snapshots.md)及[定时契约 §5](schedule-contracts.md#5-来源范围预算与本期继续协作)拟为定时 Task 增加 Main 校验归属的本期来源快照引用，支持每期动态目录/知识范围固定为具体 MaterialReference；普通 Task 的显式选择与 50 项草稿上限保持。本文件现行 §2.2 不因此自动放宽，实施证据只记 SC04/SC06 小卡。
+
 - 状态：契约已定案；E21–E25 已实现基础修订、快照、草稿持久化、运行时材料范围、读取/成果来源关系和选择/复用界面。
 - 日期：2026-09-14。
 - 依据：[专家与任务材料设计 v0.2](../designs/experts-and-task-materials.md)、[ADR-0014](../adr/0014-expert-context-and-material-binding.md)、[知识库与记忆](../04-knowledge-and-memory.md)、[成果版本与证据](../adr/0005-artifact-version-evidence.md)。

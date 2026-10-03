@@ -1,0 +1,1600 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>算台 · 定时任务低保真评审</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="bw-schedule-review">
+      <style>
+        #bw-schedule-review {
+          --bw-surface: light-dark(#ffffff, #222222);
+          --bw-canvas: light-dark(#fafafa, #1b1b1b);
+          --bw-muted: light-dark(#f0f0f0, #303030);
+          --bw-text: light-dark(#242424, #ededed);
+          --bw-secondary: light-dark(#626262, #b8b8b8);
+          --bw-border: light-dark(#d4d4d4, #505050);
+          --bw-action: light-dark(#333333, #dddddd);
+          --bw-action-text: light-dark(#ffffff, #222222);
+          --bw-warning: light-dark(#805215, #e3bf84);
+          --bw-warning-surface: light-dark(#fcf8ef, #302b24);
+          --bw-danger: light-dark(#a13838, #efaaaa);
+          --bw-overlay: light-dark(rgb(0 0 0 / 25%), rgb(0 0 0 / 55%));
+          --bw-danger-surface: light-dark(#fcf4f4, #342727);
+          --bw-font-caption: 12px;
+          --bw-font-body: 13px;
+          --bw-font-emphasis: 15px;
+          --bw-font-heading: 18px;
+          --bw-font-page: 20px;
+          --bw-line-normal: 1.5;
+          --bw-line-body: 1.6;
+          --bw-control-sm: 28px;
+          --bw-control-md: 32px;
+          --bw-control-lg: 36px;
+          --bw-radius: 6px;
+          font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+          font-size: var(--bw-font-body);
+          font-weight: 400;
+          line-height: var(--bw-line-body);
+          color: var(--bw-text);
+          isolation: isolate;
+        }
+        #bw-schedule-review * {
+          box-sizing: border-box;
+        }
+        #bw-schedule-review [hidden] {
+          display: none !important;
+        }
+        #bw-schedule-review button,
+        #bw-schedule-review input,
+        #bw-schedule-review select,
+        #bw-schedule-review textarea {
+          font: inherit;
+        }
+        #bw-schedule-review button,
+        #bw-schedule-review select,
+        #bw-schedule-review input:not([type='checkbox']) {
+          min-height: var(--bw-control-md);
+          padding: 4px 12px;
+          border: 1px solid var(--bw-border);
+          border-radius: var(--bw-radius);
+          background: var(--bw-surface);
+          color: var(--bw-text);
+          max-width: 100%;
+        }
+        #bw-schedule-review button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+        }
+        #bw-schedule-review button:hover {
+          background: var(--bw-muted);
+        }
+        #bw-schedule-review button:disabled {
+          opacity: 0.5;
+        }
+        #bw-schedule-review button.primary {
+          background: var(--bw-action);
+          color: var(--bw-action-text);
+          border-color: var(--bw-action);
+        }
+        #bw-schedule-review button.link {
+          border-color: transparent;
+          background: transparent;
+          padding-inline: 0;
+          text-align: left;
+          justify-content: flex-start;
+        }
+        #bw-schedule-review button.small {
+          min-height: var(--bw-control-sm);
+          padding: 4px 8px;
+        }
+        #bw-schedule-review .page-header button {
+          min-height: var(--bw-control-lg);
+        }
+        #bw-schedule-review textarea {
+          padding: 8px 12px;
+          border: 1px solid var(--bw-border);
+          border-radius: var(--bw-radius);
+          background: var(--bw-surface);
+          color: var(--bw-text);
+          resize: vertical;
+          min-width: 0;
+        }
+        #bw-schedule-review input[type='checkbox'] {
+          accent-color: var(--bw-action);
+        }
+        #bw-schedule-review h1,
+        #bw-schedule-review h2,
+        #bw-schedule-review h3,
+        #bw-schedule-review p {
+          margin: 0;
+        }
+        #bw-schedule-review h1 {
+          font-size: var(--bw-font-page);
+          font-weight: 500;
+        }
+        #bw-schedule-review h2 {
+          font-size: var(--bw-font-heading);
+          font-weight: 500;
+        }
+        #bw-schedule-review h3,
+        #bw-schedule-review .emphasis {
+          font-size: var(--bw-font-emphasis);
+          font-weight: 500;
+        }
+        #bw-schedule-review strong {
+          font-weight: 500;
+        }
+        #bw-schedule-review small,
+        #bw-schedule-review .caption {
+          font-size: var(--bw-font-caption);
+        }
+        #bw-schedule-review .secondary {
+          color: var(--bw-secondary);
+        }
+        #bw-schedule-review .stack {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          min-width: 0;
+        }
+        #bw-schedule-review .tight {
+          gap: 8px;
+        }
+        #bw-schedule-review .row {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+        }
+        #bw-schedule-review .between {
+          justify-content: space-between;
+        }
+        #bw-schedule-review .review-bar {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
+          align-items: center;
+          padding: 12px 0;
+          padding-right: 100px;
+        }
+        #bw-schedule-review .review-bar label {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        #bw-schedule-review .window {
+          display: grid;
+          grid-template-columns: 240px minmax(0, 1fr);
+          min-height: 720px;
+          border: 1px solid var(--bw-border);
+          border-radius: 8px;
+          background: var(--bw-surface);
+        }
+        #bw-schedule-review .sidebar {
+          background: var(--bw-canvas);
+          border-right: 1px solid var(--bw-border);
+          padding: 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 24px;
+          min-width: 0;
+          border-radius: 8px 0 0 8px;
+        }
+        #bw-schedule-review .window-dots {
+          display: flex;
+          gap: 8px;
+          padding-bottom: 8px;
+        }
+        #bw-schedule-review .window-dots span {
+          height: 12px;
+          width: 12px;
+          border: 1px solid var(--bw-border);
+          border-radius: 50%;
+        }
+        #bw-schedule-review .brand {
+          font-size: var(--bw-font-heading);
+          font-weight: 500;
+        }
+        #bw-schedule-review .navigation {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        #bw-schedule-review .navigation button {
+          border-color: transparent;
+          background: transparent;
+          justify-content: flex-start;
+        }
+        #bw-schedule-review .navigation button[aria-current='page'] {
+          background: var(--bw-muted);
+          border-color: var(--bw-border);
+        }
+        #bw-schedule-review .space-tree {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          color: var(--bw-secondary);
+        }
+        #bw-schedule-review .space-tree button {
+          justify-content: flex-start;
+          text-align: left;
+          border: 0;
+          background: transparent;
+        }
+        #bw-schedule-review .bw-compact-label {
+          display: none;
+        }
+        #bw-schedule-review .sidebar-footer {
+          margin-top: auto;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        #bw-schedule-review .page-header {
+          min-height: 70px;
+          padding: 12px 28px;
+          border-bottom: 1px solid var(--bw-border);
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+        }
+        #bw-schedule-review .header-title {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          min-width: 0;
+        }
+        #bw-schedule-review .page-body {
+          max-width: 860px;
+          margin-inline: auto;
+          padding: 24px;
+          display: flex;
+          flex-direction: column;
+          gap: 24px;
+          overflow-wrap: anywhere;
+        }
+        #bw-schedule-review .surface {
+          border: 1px solid var(--bw-border);
+          border-radius: 8px;
+          padding: 16px;
+          background: var(--bw-surface);
+        }
+        #bw-schedule-review .schedule-row {
+          border-bottom: 1px solid var(--bw-border);
+          padding-block: 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        #bw-schedule-review .schedule-row:first-child {
+          padding-top: 0;
+        }
+        #bw-schedule-review .schedule-row .identity {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: space-between;
+          align-items: center;
+          gap: 8px;
+        }
+        #bw-schedule-review .schedule-row .identity button {
+          font-size: var(--bw-font-emphasis);
+          font-weight: 500;
+        }
+        #bw-schedule-review .badge {
+          display: inline-block;
+          border: 1px solid var(--bw-border);
+          border-radius: 4px;
+          padding: 2px 8px;
+          font-size: var(--bw-font-caption);
+          white-space: nowrap;
+        }
+        #bw-schedule-review .badge.active {
+          background: var(--bw-muted);
+        }
+        #bw-schedule-review .facts {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px 24px;
+        }
+        #bw-schedule-review .facts > div {
+          min-width: 0;
+        }
+        #bw-schedule-review .field {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          min-width: 0;
+        }
+        #bw-schedule-review .field label {
+          font-weight: 500;
+        }
+        #bw-schedule-review .fields {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 16px 24px;
+        }
+        #bw-schedule-review .full {
+          grid-column: 1 / -1;
+        }
+        #bw-schedule-review .section {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+        #bw-schedule-review .section + .section {
+          border-top: 1px solid var(--bw-border);
+          padding-top: 24px;
+        }
+        #bw-schedule-review .chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 4px 8px;
+          border: 1px solid var(--bw-border);
+          border-radius: 4px;
+        }
+        #bw-schedule-review .chip button {
+          border: 0;
+          min-height: var(--bw-control-sm);
+          padding: 0 4px;
+        }
+        #bw-schedule-review .notice {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding: 12px 16px;
+          border: 1px solid var(--bw-border);
+          border-radius: 6px;
+        }
+        #bw-schedule-review .notice.warning {
+          background: var(--bw-warning-surface);
+          color: var(--bw-warning);
+        }
+        #bw-schedule-review .notice.danger {
+          background: var(--bw-danger-surface);
+          color: var(--bw-danger);
+        }
+        #bw-schedule-review .notice button {
+          color: var(--bw-text);
+        }
+        #bw-schedule-review .preview-times {
+          border-left: 2px solid var(--bw-border);
+          padding-left: 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        #bw-schedule-review .action-bar {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 8px;
+          border-top: 1px solid var(--bw-border);
+          padding-top: 16px;
+        }
+        #bw-schedule-review .action-bar .explanation {
+          margin-right: auto;
+          flex-basis: 220px;
+          flex-grow: 1;
+        }
+        #bw-schedule-review details {
+          border-top: 1px solid var(--bw-border);
+          padding-top: 12px;
+        }
+        #bw-schedule-review summary {
+          padding-block: 4px;
+        }
+        #bw-schedule-review details > .stack {
+          padding-top: 12px;
+        }
+        #bw-schedule-review table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+        #bw-schedule-review th,
+        #bw-schedule-review td {
+          text-align: left;
+          font-weight: 400;
+          padding: 12px 8px;
+          border-bottom: 1px solid var(--bw-border);
+          vertical-align: top;
+        }
+        #bw-schedule-review th {
+          color: var(--bw-secondary);
+          font-size: var(--bw-font-caption);
+        }
+        #bw-schedule-review .empty {
+          min-height: 280px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 16px;
+          text-align: center;
+        }
+        #bw-schedule-review .message {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        #bw-schedule-review .message.user {
+          background: var(--bw-canvas);
+          padding: 16px;
+          border-radius: 8px;
+        }
+        #bw-schedule-review .composer {
+          border: 1px solid var(--bw-border);
+          border-radius: 8px;
+          padding: 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        #bw-schedule-review dialog {
+          width: min(560px, calc(100% - 32px));
+          max-height: none;
+          padding: 24px;
+          border: 1px solid var(--bw-border);
+          border-radius: 8px;
+          background: var(--bw-surface);
+          color: var(--bw-text);
+        }
+        #bw-schedule-review dialog::backdrop {
+          background: var(--bw-overlay);
+        }
+        #bw-schedule-review dialog .modal-content {
+          display: flex;
+          flex-direction: column;
+          gap: 24px;
+        }
+        #bw-schedule-review .choice {
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          padding: 12px 0;
+          border-bottom: 1px solid var(--bw-border);
+        }
+        #bw-schedule-review .choice input {
+          margin-top: 4px;
+          flex: none;
+        }
+        #bw-schedule-review .choice > span {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        #bw-schedule-review .notification-list {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+        @media (max-width: 1100px) {
+          #bw-schedule-review .bw-full-label {
+            display: none;
+          }
+          #bw-schedule-review .bw-compact-label {
+            display: inline;
+          }
+          #bw-schedule-review .window {
+            grid-template-columns: 88px minmax(0, 1fr);
+          }
+          #bw-schedule-review .sidebar {
+            padding: 12px 8px;
+          }
+          #bw-schedule-review .navigation button {
+            padding-inline: 4px;
+            justify-content: center;
+          }
+          #bw-schedule-review .space-tree {
+            display: none;
+          }
+          #bw-schedule-review .brand {
+            text-align: center;
+          }
+          #bw-schedule-review .sidebar-footer button {
+            padding-inline: 4px;
+          }
+        }
+        @media (max-width: 700px) {
+          #bw-schedule-review .fields,
+          #bw-schedule-review .facts {
+            grid-template-columns: minmax(0, 1fr);
+          }
+          #bw-schedule-review .page-header {
+            padding: 16px;
+          }
+          #bw-schedule-review .page-body {
+            padding: 16px;
+          }
+          #bw-schedule-review table,
+          #bw-schedule-review tbody {
+            display: block;
+          }
+          #bw-schedule-review thead {
+            display: none;
+          }
+          #bw-schedule-review tr {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            padding-block: 12px;
+            border-bottom: 1px solid var(--bw-border);
+          }
+          #bw-schedule-review td {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            border: 0;
+            padding: 4px;
+          }
+          #bw-schedule-review td::before {
+            content: attr(data-label);
+            font-size: var(--bw-font-caption);
+            color: var(--bw-secondary);
+          }
+          #bw-schedule-review .review-bar {
+            padding-right: 0;
+          }
+        }
+        @media (max-width: 440px) {
+          #bw-schedule-review .window {
+            grid-template-columns: minmax(0, 1fr);
+          }
+          #bw-schedule-review .sidebar {
+            border-right: 0;
+            border-bottom: 1px solid var(--bw-border);
+            border-radius: 8px 8px 0 0;
+            gap: 12px;
+          }
+          #bw-schedule-review .window-dots,
+          #bw-schedule-review .brand,
+          #bw-schedule-review .sidebar-footer {
+            display: none;
+          }
+          #bw-schedule-review .navigation {
+            flex-direction: row;
+            flex-wrap: wrap;
+          }
+          #bw-schedule-review .page-header {
+            padding: 12px;
+          }
+          #bw-schedule-review .page-body {
+            padding: 12px;
+          }
+          #bw-schedule-review .surface,
+          #bw-schedule-review .composer {
+            padding: 12px;
+          }
+          #bw-schedule-review dialog {
+            padding: 16px;
+          }
+        }
+      </style>
+      <div class="review-bar" aria-label="原型评审导航">
+        <span class="caption secondary">低保真 v0.1 · 待评审 · 模拟数据</span>
+        <label
+          >评审场景
+          <select id="bw-review-scene">
+            <option value="list">定时任务列表</option>
+            <option value="create">新建定时任务</option>
+            <option value="detail">规则详情与六期历史</option>
+            <option value="missed">错过一期</option>
+            <option value="task">本期缺材料</option>
+            <option value="save-failed">成果保存失败</option>
+            <option value="no-output">未生成约定产物</option>
+            <option value="running">运行中与停止</option>
+            <option value="startup-blocked">启动前阻塞</option>
+            <option value="failed">执行失败或中断</option>
+            <option value="overlap">本期重叠跳过</option>
+            <option value="update">专家版本更新</option>
+            <option value="blocked">启用校验失败</option>
+            <option value="source-missing">知识来源缺失</option>
+            <option value="conflict">编辑冲突与草稿</option>
+            <option value="empty">首次空态</option>
+            <option value="load-failed">列表读取失败</option>
+            <option value="notifications">后台结果通知</option>
+          </select>
+        </label>
+      </div>
+      <div class="window">
+        <aside class="sidebar" aria-label="应用导航">
+          <div class="stack tight">
+            <div class="window-dots" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </div>
+            <div class="brand">算台</div>
+          </div>
+          <nav class="navigation">
+            <button type="button" data-action="work">工作</button>
+            <button type="button" disabled>成果</button>
+            <button type="button" disabled>知识</button>
+            <button type="button" disabled>技能</button>
+            <button type="button" disabled>专家</button>
+            <button type="button" data-action="list" aria-current="page">定时任务</button>
+          </nav>
+          <div class="space-tree">
+            <span class="caption">工作空间</span>
+            <span>部门经营</span>
+            <button type="button" data-action="task">8 月经营分析</button>
+            <span>AI 研究</span>
+            <span>我的工作空间</span>
+          </div>
+          <div class="sidebar-footer">
+            <button type="button" data-action="notifications">
+              <span class="bw-full-label">消息中心</span><span class="bw-compact-label">消息</span
+              ><span>· 2</span>
+            </button>
+            <button type="button" disabled>设置</button>
+          </div>
+        </aside>
+        <main id="bw-main" aria-label="定时任务原型"></main>
+      </div>
+      <dialog id="bw-dialog" aria-labelledby="bw-dialog-title">
+        <div class="modal-content" id="bw-dialog-body"></div>
+      </dialog>
+      <script>
+        (() => {
+          const root = document.getElementById('bw-schedule-review');
+          if (!root) return;
+          const main = root.querySelector('#bw-main');
+          const dialog = root.querySelector('#bw-dialog');
+          const dialogBody = root.querySelector('#bw-dialog-body');
+          const scene = root.querySelector('#bw-review-scene');
+          if (!main || !dialog || !dialogBody || !scene) return;
+          const sourceOptions = [
+            {
+              id: 'policy',
+              name: '财务制度',
+              kind: 'document',
+              detail: '单篇知识 · 每次使用已登记的可用修订',
+            },
+            {
+              id: 'template',
+              name: '经营分析模板说明',
+              kind: 'document',
+              detail: '单篇知识 · 每次使用已登记的可用修订',
+            },
+            {
+              id: 'collection',
+              name: '经营口径',
+              kind: 'collection',
+              detail: '知识集合 · 使用执行时的有效成员与修订',
+            },
+            {
+              id: 'vault',
+              name: '个人资料库',
+              kind: 'vault',
+              detail: '整个资料库 · 后续新增资料也进入可用范围',
+            },
+          ];
+          const history = [
+            {
+              id: 'sep',
+              date: '2026-09-05',
+              period: '2026-08',
+              status: '需要补充材料',
+              kind: 'missing',
+              task: true,
+              result: '缺少 8 月 GL；已创建本期任务，尚未开始分析。',
+            },
+            {
+              id: 'aug',
+              date: '2026-08-05',
+              period: '2026-07',
+              status: '已错过',
+              kind: 'missed',
+              task: false,
+              result: '计划时刻应用已退出。未自动执行，未调用模型。',
+            },
+            {
+              id: 'jul',
+              date: '2026-07-05',
+              period: '2026-06',
+              status: '未保存到目录',
+              kind: 'save-failed',
+              task: true,
+              result: 'PPTX v1 已在成果中登记；原工作目录当前不可写。',
+            },
+            {
+              id: 'jun',
+              date: '2026-06-05',
+              period: '2026-05',
+              status: '未生成约定产物',
+              kind: 'no-output',
+              task: true,
+              result: '执行已结束，专家先提供了分析大纲，等待你确认；没有登记 PPTX。',
+            },
+            {
+              id: 'may',
+              date: '2026-05-05',
+              period: '2026-04',
+              status: '已停止',
+              kind: 'cancelled',
+              task: true,
+              result: '由你停止本次执行；之后的周期仍按原规则安排。',
+            },
+            {
+              id: 'apr',
+              date: '2026-04-05',
+              period: '2026-03',
+              status: '已生成 · 请审阅',
+              kind: 'completed',
+              task: true,
+              result: 'PPTX v1 已生成并保存到部门经营目录；内容需人工检查。',
+            },
+          ];
+          const state = {
+            page: 'list',
+            selected: 'monthly',
+            occurrence: 'sep',
+            enabled: true,
+            archived: false,
+            expert: 4,
+            filter: 'all',
+            sourceKind: 'document',
+            sourceDraft: [],
+            modal: '',
+            blocked: false,
+            conflict: false,
+            sourceMissing: false,
+            savedOutput: false,
+            active: false,
+            manualHistory: [],
+            taskDraft: '补齐 GL 后，请继续分析；缺少的人员与项目资料请列为待核对项。',
+            taskMaterial: false,
+            draft: {
+              name: '月度经营分析',
+              expert: '经营分析专家 v4',
+              workspace: '部门经营',
+              sources: ['policy', 'collection'],
+              prompt:
+                '分析上月 GL，结合人员、财务与主要项目进展形成例会 PPT。与上月、上季度和上半年对比，说明数据口径与缺项，不以历史数据替代本期输入。',
+              frequency: 'monthly',
+              day: '5',
+              weekday: '1',
+              time: '09:00',
+              zone: 'Asia/Shanghai',
+              period: 'previous-month',
+              output: 'PPTX',
+            },
+          };
+          const escapeHtml = (value) =>
+            String(value).replace(
+              /[&<>"']/g,
+              (char) =>
+                ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] ||
+                char,
+            );
+          const btn = (label, action, className = '', extra = '') =>
+            `<button type="button" class="${className} cursor-interaction" data-action="${action}" ${extra}>${label}</button>`;
+          const option = (value, label, chosen) =>
+            `<option value="${value}" ${value === chosen ? 'selected' : ''}>${label}</option>`;
+          const aiHistory = [
+            {
+              id: 'ai-sep',
+              date: '2026-09-28',
+              period: '2026-09-21 08:00 — 09-28 08:00',
+              status: '已错过',
+              kind: 'missed',
+              task: false,
+              result: '应用未运行，未自动执行。',
+            },
+          ];
+          state.config = structuredClone(state.draft);
+          state.configIsNew = false;
+          state.configId = 'monthly';
+          state.nextConfigNumber = 1;
+          state.extraRecords = [];
+          state.aiEnabled = true;
+          state.activeSchedule = 'monthly';
+          const recordsFor = () => [
+            ...state.extraRecords,
+            ...state.manualHistory.filter(
+              (item) =>
+                item.schedule === state.selected &&
+                (state.selected === 'ai' || item.ruleId === state.configId),
+            ),
+            ...(state.selected === 'ai' ? aiHistory : state.configIsNew ? [] : history),
+          ];
+          const selectedRecord = () =>
+            recordsFor().find((item) => item.id === state.occurrence) || recordsFor()[0];
+          const name = () => (state.selected === 'ai' ? '周一 AI 动态调研' : state.config.name);
+          const workspacePath = (workspace) => `/工作资料/${workspace.replaceAll(' ', '')}`;
+          const zoneLabel = (zone) =>
+            zone === 'UTC' ? 'UTC' : zone === 'Asia/Tokyo' ? '东京时间' : '北京时间';
+          const frequencyLabel = (config) =>
+            `${config.frequency === 'daily' ? '每天' : config.frequency === 'weekly' ? ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][Number(config.weekday)] : `每月 ${config.day} 日`} ${config.time}`;
+          const periodLabel = (period) =>
+            ({
+              'previous-month': '上一自然月',
+              'last-seven': '截至计划时刻的过去 7 天',
+              'current-week': '本周一至计划时刻',
+              'previous-week': '上一自然周',
+              none: '不指定',
+            })[period] || '不指定';
+          const manualPeriod = () =>
+            state.selected === 'ai'
+              ? '2026-09-26 15:00 — 10-03 15:00'
+              : {
+                  'previous-month': '2026-09',
+                  'last-seven': '2026-09-26 15:00 — 10-03 15:00',
+                  'current-week': '2026-09-28 00:00 — 10-03 15:00',
+                  'previous-week': '2026-09-21 00:00 — 09-28 00:00',
+                  none: '不指定',
+                }[state.config.period] || '不指定';
+          const header = (title, actions = '', back = '') =>
+            `<header class="page-header"><div class="row">${back ? btn('返回', back, 'link small') : ''}<div class="header-title"><span class="caption secondary">定时任务</span><h1>${escapeHtml(title)}</h1></div></div><div class="row">${actions}</div></header>`;
+          const body = (content) => `<div class="page-body">${content}</div>`;
+          const notice = (title, text, actions = '', danger = false) =>
+            `<div class="notice ${danger ? 'danger' : 'warning'}" role="alert"><strong>${title}</strong><p>${text}</p>${actions ? `<div class="row">${actions}</div>` : ''}</div>`;
+          const sourceChips = () =>
+            state.draft.sources
+              .map((id) => {
+                const source = sourceOptions.find((item) => item.id === id);
+                if (!source) return '';
+                return `<span class="chip">${source.name} · ${source.kind === 'document' ? '单篇' : source.kind === 'collection' ? '集合' : '全库'}${btn('移除', 'remove-source', 'small', `data-id="${id}" aria-label="移除${source.name}"`)}</span>`;
+              })
+              .join('');
+          function timePreview(config = state.draft) {
+            const [hours = '09', minutes = '00'] = config.time.split(':');
+            const offset = config.zone === 'UTC' ? 0 : config.zone === 'Asia/Tokyo' ? 9 : 8;
+            const anchor = new Date(Date.UTC(2026, 9, 3, 15 - 8, 0));
+            const local = new Date(anchor.getTime() + offset * 3600000);
+            const results = [];
+            for (let delta = 0; delta < 400 && results.length < 3; delta += 1) {
+              const candidate = new Date(
+                Date.UTC(
+                  local.getUTCFullYear(),
+                  local.getUTCMonth(),
+                  local.getUTCDate() + delta,
+                  Number(hours),
+                  Number(minutes),
+                ),
+              );
+              const instant = candidate.getTime() - offset * 3600000;
+              if (instant <= anchor.getTime()) continue;
+              if (config.frequency === 'monthly' && candidate.getUTCDate() !== Number(config.day))
+                continue;
+              if (config.frequency === 'weekly' && candidate.getUTCDay() !== Number(config.weekday))
+                continue;
+              results.push(`${candidate.toISOString().slice(0, 10)} ${hours}:${minutes}`);
+            }
+            return results.map((value) => `<span>${value}</span>`).join('');
+          }
+          function listPage(mode = 'normal') {
+            const config = state.config;
+            const nextTime = timePreview(config)
+              .replaceAll(/<[^>]+>/g, '|')
+              .split('|')
+              .filter(Boolean)[0];
+            const isMonthlyActive = state.active && state.activeSchedule === 'monthly';
+            const heading = header('按约定时间开始工作', btn('新建定时任务', 'create', 'primary'));
+            if (mode === 'empty')
+              return (
+                heading +
+                body(
+                  `<div class="empty"><h2>把重复工作交给已有专家</h2><p class="secondary">选择专家、持续工作目录与周期，逐期查看结果。</p>${btn('新建定时任务', 'create', 'primary')}</div>`,
+                )
+              );
+            if (mode === 'failed')
+              return (
+                heading +
+                body(
+                  notice(
+                    '暂时无法读取定时任务',
+                    '已有规则不会因此被修改。可以重试读取。',
+                    btn('重试', 'list'),
+                    true,
+                  ),
+                )
+              );
+            const monthlyStatus = state.archived ? '已归档' : state.enabled ? '已启用' : '已暂停';
+            const monthly = `<article class="schedule-row"><div class="identity">${btn(escapeHtml(state.config.name), 'monthly-detail', 'link')}<span class="badge active">${monthlyStatus}</span></div><div class="facts"><div>${escapeHtml(config.expert)} ${config.expert === '经营分析专家 v4' ? btn('有新版本 v5', 'update', 'link small') : ''}</div><div>工作空间：${escapeHtml(config.workspace)}</div><div>${frequencyLabel(config)} · ${zoneLabel(config.zone)}</div><div>本期统计范围：${periodLabel(config.period)}</div></div><p class="secondary">${state.archived ? '未来不再触发；历次工作与成果仍可回看。' : state.enabled ? `下次：${nextTime} · ${periodLabel(config.period)}` : '已暂停；人工执行仍可用。'}</p><p>最近一期：${isMonthlyActive ? '正在执行，可查看过程或停止本次' : state.configIsNew ? '尚未执行' : '8 月分析需要补充 GL'}</p><div class="row">${state.configIsNew ? '' : btn('查看本期工作', 'task')}${!state.archived ? btn(isMonthlyActive ? '查看运行' : '立即执行', isMonthlyActive ? 'running-task' : 'trigger-now') : ''}${btn('查看历史', 'monthly-detail', 'link small')}</div></article>`;
+            const ai = `<article class="schedule-row"><div class="identity">${btn('周一 AI 动态调研', 'ai-detail', 'link')}<span class="badge active">${state.aiEnabled ? '已启用' : '已暂停'}</span></div><div class="facts"><div>调研专家 v2</div><div>工作空间：AI 研究</div><div>每周一 08:00 · 北京时间</div><div>统计范围：截至计划时刻的过去 7 天</div></div><p class="secondary">${state.aiEnabled ? '下次：2026-10-05 08:00（示例时刻）' : '已暂停，人工执行仍可用'}</p><p>最近一期：09-28 已错过，未自动执行</p><div class="row">${btn('查看错过的一期', 'ai-missed')}${btn('立即执行', 'ai-now')}${btn('查看历史', 'ai-detail', 'link small')}</div></article>`;
+            const weekly = `<article class="schedule-row"><div class="identity"><strong class="emphasis">工作周报</strong><span class="badge">已暂停</span></div><div class="facts"><div>周报专家 v1 · 我的工作空间</div><div>每周五 17:00 · 本周一至计划时刻</div></div><p>最近一期：已生成 Markdown 周报，请审阅</p><p class="secondary">只汇总所选目录与知识中的工作记录。</p></article>`;
+            let rows =
+              state.filter === 'archived'
+                ? state.archived
+                  ? monthly
+                  : '<p class="secondary">没有已归档的定时任务。</p>'
+                : (state.archived ? '' : monthly) + ai + weekly;
+            return (
+              heading +
+              body(
+                `<p class="secondary">应用运行且电脑唤醒时后台执行；关闭窗口仍可运行，完全退出或休眠会错过。错过仅提醒。</p><div class="row between"><label class="row">工作空间<select id="bw-workspace-filter">${option('all', '全部工作空间', state.filter)}${option('monthly', '部门经营', state.filter)}${option('archived', '已归档', state.filter)}</select></label><span class="caption secondary">每期独立留档 · 结果由你检查</span></div><div>${state.filter === 'monthly' ? (state.archived ? '<p>这项规则已归档。</p>' : monthly) : rows}</div>`,
+              )
+            );
+          }
+          function editPage() {
+            const draft = state.draft;
+            const timeControls = `<div class="row"><select data-field="frequency" aria-label="重复频率">${option('daily', '每天', draft.frequency)}${option('weekly', '每周', draft.frequency)}${option('monthly', '每月', draft.frequency)}</select><select data-field="day" aria-label="每月几日" ${draft.frequency !== 'monthly' ? 'hidden' : ''}>${Array.from({ length: 31 }, (_, i) => option(String(i + 1), `${i + 1} 日`, draft.day)).join('')}</select><select data-field="weekday" aria-label="每周几" ${draft.frequency !== 'weekly' ? 'hidden' : ''}>${['周日', '周一', '周二', '周三', '周四', '周五', '周六'].map((label, i) => option(String(i), label, draft.weekday)).join('')}</select><input type="time" data-field="time" aria-label="执行时刻" value="${draft.time}" required /></div>`;
+            return (
+              header(state.page === 'edit' ? '编辑定时任务' : '新建定时任务', '', 'list') +
+              body(`
+              <section class="section"><h2>谁来做，在哪里做</h2><div class="fields">
+                <div class="field"><label for="bw-expert">已有专家</label><select id="bw-expert" data-field="expert">${draft.expert === '经营分析专家 v5' ? option('经营分析专家 v5', '经营分析专家 v5', draft.expert) : ''}${option('经营分析专家 v4', '经营分析专家 v4', draft.expert)}${option('调研专家 v2', '调研专家 v2', draft.expert)}${option('周报专家 v1', '周报专家 v1', draft.expert)}</select><div class="row">${btn('查看专家定义', 'expert-readonly', 'link small')}<span class="caption secondary">选择不会修改专家</span></div></div>
+                <div class="field"><label for="bw-workspace">工作空间</label><select id="bw-workspace" data-field="workspace">${option('部门经营', '部门经营', draft.workspace)}${option('AI 研究', 'AI 研究', draft.workspace)}${option('我的工作空间', '我的工作空间', draft.workspace)}</select><span class="caption secondary">本地目录：${escapeHtml(workspacePath(draft.workspace))}（示例）</span></div>
+                <div class="field full"><label>附加知识 · 可选</label><div class="row">${sourceChips()}${btn('添加知识或知识库', 'sources')}</div><span class="caption secondary">后续执行使用所选知识的可用更新；集合或全库按当时成员取材。</span></div>
+              </div><p class="secondary">持续使用同一目录。你新增、修改、移走资料后，影响下一期；已开始的一期保留本次材料版本。</p>${state.sourceMissing ? notice('经营口径集合不可用', '请移除或重新选择这个来源；不会改用全部知识库。', btn('重新选择', 'sources')) : ''}</section>
+              <section class="section"><h2>每期完成什么</h2><div class="fields"><div class="field full"><label for="bw-name">名称</label><input id="bw-name" data-field="name" value="${escapeHtml(draft.name)}" /></div><div class="field full"><label for="bw-prompt">工作要求</label><textarea id="bw-prompt" data-field="prompt" rows="4">${escapeHtml(draft.prompt)}</textarea><span class="caption secondary">可以要求历史对比；本期统计范围不会排除上月、季度等合法对比材料。</span></div><div class="field"><label for="bw-output">交付目标</label><select id="bw-output" data-field="output">${option('PPTX', 'PPT 演示（PPTX）', draft.output)}${option('Markdown', '报告（Markdown）', draft.output)}</select></div><div class="field"><label>成果保存位置</label><span>所选工作目录 / 定时成果</span><span class="caption secondary">建议默认子目录；逐期保留，重名不覆盖。</span></div></div></section>
+              <section class="section"><h2>何时开始，处理哪个期间</h2><div class="fields"><div class="field"><label>执行时间</label>${timeControls}<span id="bw-month-hint" class="caption secondary" ${draft.frequency === 'monthly' && Number(draft.day) > 28 ? '' : 'hidden'}>没有该日期的月份跳过，不改为月末。</span></div><div class="field"><label for="bw-zone">固定时区</label><select id="bw-zone" data-field="zone">${option('Asia/Shanghai', '北京时间 · UTC+8', draft.zone)}${option('Asia/Tokyo', '东京时间 · UTC+9', draft.zone)}${option('UTC', '协调世界时 · UTC', draft.zone)}</select><span class="caption secondary">电脑时区变化不会改变这项约定。</span></div><div class="field"><label for="bw-period">本期统计范围</label><select id="bw-period" data-field="period">${option('previous-month', '上一自然月', draft.period)}${option('last-seven', '截至计划时刻的过去 7 天', draft.period)}${option('current-week', '本周一至计划时刻', draft.period)}${option('previous-week', '上一自然周', draft.period)}${option('none', '不指定统计期间', draft.period)}</select></div><div class="field"><label>接下来三次计划</label><div class="preview-times caption" id="bw-times">${timePreview()}</div></div></div></section>
+              <section class="section"><h2>启用前确认</h2><p>按所选专家调用已配置的模型与工具，可能产生费用。只在允许范围内读取资料、分析并生成本地产物。</p><p class="secondary">应用退出或电脑休眠时不执行；错过不自动补跑。结果需要你查看，多轮确认由你在本期任务中继续。</p>${state.blocked ? notice('暂时无法启用', '经营分析专家所需技能尚未获得有效授权。请先到技能页处理，再回来重试；表单已保留。', btn('重新检查', 'recheck'), true) : '<span class="caption secondary">示例检查：模型已配置 · 技能有效 · 来源可用 · 无需现场确认的外部写入</span>'}${state.conflict ? notice('配置已在另一处更新', '当前输入已保留。先查看最新配置，再决定重新应用你的改动。', btn('查看最新配置', 'conflict-diff'), true) : ''}<div id="bw-form-error"></div><div class="action-bar"><span class="explanation caption secondary">保存并暂停后，可随时启用。</span>${btn('取消', 'cancel-edit')}${state.page === 'edit' ? '' : btn('保存并暂停', 'save-paused', '', state.conflict || state.sourceMissing ? 'disabled' : '')}${btn(state.page === 'edit' ? '保存修改' : '保存并启用', 'save-enabled', 'primary', state.blocked || state.conflict || state.sourceMissing ? 'disabled' : '')}</div></section>`)
+            );
+          }
+          function detailPage() {
+            const ai = state.selected === 'ai';
+            const controls =
+              state.archived && !ai
+                ? ''
+                : (ai ? '' : btn('编辑', 'edit')) +
+                  btn((ai ? state.aiEnabled : state.enabled) ? '暂停' : '启用', 'toggle-enabled') +
+                  btn(
+                    state.active && state.activeSchedule === state.selected
+                      ? '查看运行'
+                      : '立即执行',
+                    state.active && state.activeSchedule === state.selected
+                      ? 'running-task'
+                      : 'trigger-now',
+                    'primary',
+                  );
+            const records = recordsFor();
+            const historyRows = records
+              .map(
+                (item) =>
+                  `<tr><td data-label="计划 / 人工时刻">${item.date}<br /><span class="caption secondary">${ai ? '08:00' : item.manual ? '15:00' : '09:00'}</span></td><td data-label="本期范围">${item.period}</td><td data-label="触发方式">${item.manual ? '人工' : '定时'}</td><td data-label="结果">${item.kind === 'save-failed' && state.savedOutput ? '已生成 · 请审阅' : item.status}</td><td data-label="本期产物">${item.kind === 'completed' || item.kind === 'save-failed' ? 'PPTX v1' : '—'}</td><td data-label="操作">${btn('详情', 'occurrence', 'small', `data-id="${item.id}"`)}</td></tr>`,
+              )
+              .join('');
+            return (
+              header(name(), controls, 'list') +
+              body(
+                `<div class="row between"><span class="badge active">${state.archived && !ai ? '已归档' : (ai ? state.aiEnabled : state.enabled) ? '已启用' : '已暂停'}</span>${!ai && !state.archived ? btn('归档定时任务', 'archive', 'link small') : ''}</div><div class="facts"><div class="stack tight"><span class="caption secondary">执行专家</span><span>${ai ? '调研专家 v2' : escapeHtml(state.config.expert)}</span>${!ai && state.config.expert === '经营分析专家 v4' ? btn('有新版本 v5 · 查看差异', 'update', 'link small') : ''}</div><div class="stack tight"><span class="caption secondary">持续工作空间</span><span>${ai ? 'AI 研究' : escapeHtml(state.config.workspace)}</span><span class="caption secondary">${ai ? '/工作资料/AI研究' : escapeHtml(workspacePath(state.config.workspace))}（示例）</span></div><div class="stack tight"><span class="caption secondary">周期与期间</span><span>${ai ? '每周一 08:00 · 过去 7 天' : `${frequencyLabel(state.config)} · ${periodLabel(state.config.period)}`}</span><span class="caption secondary">${ai ? '北京时间' : zoneLabel(state.config.zone)} · 固定时区</span></div><div class="stack tight"><span class="caption secondary">下次计划</span><span>${
+                  state.archived && !ai
+                    ? '不再触发'
+                    : !(ai ? state.aiEnabled : state.enabled)
+                      ? '已暂停'
+                      : ai
+                        ? '2026-10-05 08:00'
+                        : timePreview(state.config)
+                            .replaceAll(/<[^>]+>/g, '|')
+                            .split('|')
+                            .filter(Boolean)[0]
+                }</span><span class="caption secondary">${ai ? '目标：Markdown 报告' : `目标：${state.config.output} · 保存到定时成果子目录`}</span></div></div><details><summary>查看工作要求与来源范围</summary><div class="stack tight"><p>${ai ? '调研全球 AI 动态，重点关注智能体，附可核对的网页来源。' : escapeHtml(state.config.prompt)}</p><p>工作空间文件：执行时的可用资料，按需取材。</p><p>附加知识：${ai ? '未添加' : state.config.sources.map((id) => sourceOptions.find((source) => source.id === id)?.name || '').join('、') || '未添加'}。</p><p>专家自带参考：${ai ? '无' : `公司例会模板 v${state.config.expert === '经营分析专家 v5' ? 2 : 1}（固定）`}。</p><p class="secondary">运行开始后，本次成员与版本固定；所选范围不代表全部已读取。</p></div></details><section class="section"><div class="row between"><h2>执行历史</h2><span class="caption secondary">${ai ? '逐期留档' : state.configIsNew ? '尚未自动执行' : '六期计划与人工记录 · 保留当次目录'}</span></div><table><thead><tr><th>计划 / 人工时刻</th><th>本期范围</th><th>触发方式</th><th>结果</th><th>本期产物</th><th>操作</th></tr></thead><tbody>${historyRows || '<tr><td colspan="6">还没有执行记录。启用后等待下次计划，也可以人工立即执行。</td></tr>'}</tbody></table><p class="caption secondary">错过与停止同样留档。已生成仅代表产物存在，内容仍需你审阅。</p></section>`,
+              )
+            );
+          }
+          function occurrencePage() {
+            const record = selectedRecord();
+            const ai = state.selected === 'ai';
+            if (!record) return '';
+            const missed = record.kind === 'missed';
+            const status =
+              record.kind === 'save-failed' && state.savedOutput
+                ? '已生成 · 请审阅'
+                : record.status;
+            let result = missed
+              ? notice(
+                  '这期没有自动执行',
+                  `${ai ? '09-28 08:00' : `${record.date} 09:00`} 应用未运行。原计划与期间保留，由你决定是否做这一期。`,
+                  btn('为这一期执行', 'trigger-missed', 'primary'),
+                )
+              : `<p>${record.result}</p>`;
+            if (record.kind === 'blocked' || record.kind === 'failed' || record.kind === 'overlap')
+              result = notice(
+                record.status,
+                record.result,
+                record.task
+                  ? btn('打开原任务处理', 'task', 'primary')
+                  : record.kind === 'overlap'
+                    ? btn('查看现有运行', 'overlap-run')
+                    : btn('查看所需配置', 'blocked-reason'),
+                record.kind === 'failed',
+              );
+            if (record.kind === 'save-failed')
+              result = state.savedOutput
+                ? '<p>成果 v1 已保存到原工作目录。原执行与成果版本未改变，请审阅。</p>'
+                : notice(
+                    '成果已生成，未保存到工作目录',
+                    '目录当前不可写。PPTX v1 已保留在成果中；恢复目录后可单独重试保存。',
+                    btn('查看成果 v1', 'artifact') + btn('重试保存到目录', 'retry-save', 'primary'),
+                  );
+            if (record.kind === 'missing' && !missed)
+              result = notice(
+                '需要补充本期材料',
+                '缺少 8 月 GL。已创建本期任务，尚未开始分析；历史 7 月数据不能代替本期输入。',
+                btn('打开原任务补充', 'task', 'primary'),
+              );
+            return (
+              header(
+                ai ? `${record.period} · AI 动态调研` : `${record.period} · 经营分析`,
+                '',
+                'detail',
+              ) +
+              body(
+                `<div class="row between"><span class="badge">${missed ? '已错过' : status}</span><span class="caption secondary">${record.manual ? '人工执行记录' : '定时触发记录'}</span></div><div class="facts"><div>原计划：${record.manual ? `${record.date} 15:00（人工）` : ai ? `${record.date} 08:00` : `${record.date} 09:00`}</div><div>时区：北京时间</div><div>本期范围：${record.period}</div><div>执行专家：${record.expert || (ai ? '调研专家 v2' : '经营分析专家 v4')}（当次绑定）</div></div>${result}${record.originalMissed ? `<p class="secondary">人工执行关联原错过记录：${record.originalMissed}；原记录保留。</p>` : ''}${record.task ? `<div class="row">${btn('打开本期工作', 'task')}${btn('查看本次材料', 'materials')}${record.kind === 'completed' || record.kind === 'save-failed' ? btn('查看成果 v1', 'artifact') : ''}</div>` : '<p class="secondary">这期没有开始工作；此记录不会在恢复网络、唤醒或重启后自动重试。</p>'}<details><summary>本次记录与后续工作的关系</summary><div class="stack tight"><p>改变规则只影响后续执行。本次要求、专家绑定和材料版本均保留。</p><p>已存在本期任务时，在原任务补资料、反馈和修改。重新做一期需明确创建新工作。</p></div></details>`,
+              )
+            );
+          }
+          function taskPage() {
+            const record = selectedRecord();
+            if (!record)
+              return (
+                header('这项定时任务尚未开始工作', '', 'detail') +
+                body('<p>可以在规则详情中立即执行，或等待下次正常计划。</p>')
+              );
+            const running = state.active && state.activeSchedule === state.selected;
+            const ai = state.selected === 'ai';
+            let response = running
+              ? `<div class="stack tight"><strong>正在处理工作材料</strong><span class="secondary">已查阅 3 份资料，正在核对期间与口径。</span>${btn('停止本次执行', 'stop-run')}</div>`
+              : record.kind === 'failed'
+                ? notice('本次运行已终止', record.result)
+                : record.kind === 'missing'
+                  ? notice(
+                      '还需要 8 月 GL',
+                      '本期任务已保留，尚未调用模型。你可以补充本期文件后继续；后续周期规则不会因此更改。',
+                    )
+                  : `<p>${record.kind === 'no-output' ? '已形成分析大纲，请确认口径和结构后继续生成 PPT。本次尚未生成约定产物。' : record.kind === 'save-failed' ? 'PPTX v1 已生成。目录保存状态请在本期记录中查看。' : '本次工作已结束，成果与来源可以回看。'}</p>`;
+            return (
+              header(
+                `${record.period} · ${ai ? 'AI 调研' : '经营分析'}`,
+                btn('查看本期记录', 'occurrence-current'),
+                'detail',
+              ) +
+              body(
+                `<div class="row"><span class="badge">${ai ? 'AI 研究' : '部门经营'}</span><span class="badge">${record.expert || (ai ? '调研专家 v2' : '经营分析专家 v4')}</span><span class="caption secondary">定时任务：${escapeHtml(name())}</span></div><div class="message user"><strong>本期工作要求</strong><p>${ai ? `调研 ${record.period} 的全球 AI 与智能体动态，附可核对的来源。` : `分析 ${record.period} 的 GL、人员和主要项目进展，形成例会 PPT，并与历史月度和季度资料对比。`}</p></div><div class="message"><strong>算台</strong>${response}</div><div class="row">${btn('本次材料与读取情况', 'materials')}${record.kind === 'save-failed' || record.kind === 'completed' ? btn('成果 v1', 'artifact') : ''}</div><div class="composer"><div class="row"><strong>继续完成本期工作</strong><span class="caption secondary">只影响这期，不回写定时规则</span></div><label class="row" ${ai ? 'hidden' : ''}><input type="checkbox" id="bw-task-material" ${state.taskMaterial ? 'checked' : ''} ${running ? 'disabled' : ''} />添加 GL-${record.period}.xlsx（示例文件）</label><textarea id="bw-task-draft" rows="3" aria-label="本期补充要求" ${running ? 'disabled' : ''}>${escapeHtml(state.taskDraft)}</textarea><div class="row between"><span class="caption secondary">返回历史或查看来源后保留草稿。</span>${btn(running ? '停止' : '开始工作', running ? 'stop-run' : 'continue-task', 'primary', !running && record.kind === 'missing' && !state.taskMaterial ? 'disabled' : '')}</div></div>`,
+              )
+            );
+          }
+          function render() {
+            let content = '';
+            if (state.page === 'list') content = listPage();
+            else if (state.page === 'empty') content = listPage('empty');
+            else if (state.page === 'load-failed') content = listPage('failed');
+            else if (state.page === 'create' || state.page === 'edit') content = editPage();
+            else if (state.page === 'detail') content = detailPage();
+            else if (state.page === 'occurrence') content = occurrencePage();
+            else if (state.page === 'task') content = taskPage();
+            main.innerHTML = content;
+            const navWork = root.querySelector('[data-action="work"]');
+            const navSchedule = root.querySelector('.navigation [data-action="list"]');
+            if (navWork && navSchedule) {
+              navWork.setAttribute('aria-current', state.page === 'task' ? 'page' : 'false');
+              navSchedule.setAttribute('aria-current', state.page === 'task' ? 'false' : 'page');
+            }
+          }
+          function persist() {
+            if (!window.openai?.setWidgetState) return;
+            window.openai
+              .setWidgetState({
+                modelContent: {
+                  prototype: 'BetterWork 定时任务低保真 v0.1',
+                  page: state.page,
+                  scene: scene.value,
+                  fixedExpertRevision: state.expert,
+                },
+                privateContent: {
+                  page: state.page,
+                  occurrence: state.occurrence,
+                  taskDraft: state.taskDraft,
+                },
+              })
+              .catch((error) => {
+                // 评审页面状态保存失败不影响本地点击；下次打开使用默认评审场景。
+                console.error('Prototype state could not be saved', error);
+              });
+          }
+          function closeModal() {
+            if (dialog.open) dialog.close();
+            state.modal = '';
+          }
+          function openModal(kind, content) {
+            state.modal = kind;
+            dialogBody.innerHTML = content;
+            if (!dialog.open) dialog.showModal();
+            const first =
+              dialogBody.querySelector('[data-action="close"]') ||
+              dialogBody.querySelector('button');
+            first?.focus();
+          }
+          const modalTitle = (title) => `<h2 id="bw-dialog-title">${title}</h2>`;
+          const modalActions = (content) =>
+            `<div class="action-bar">${btn('取消', 'close')}${content}</div>`;
+          function sourceModal() {
+            const selected = sourceOptions.filter((item) => item.kind === state.sourceKind);
+            openModal(
+              'sources',
+              modalTitle('添加知识或知识库') +
+                `<div class="row"><label for="bw-source-kind">来源类型</label><select id="bw-source-kind">${option('document', '单篇知识', state.sourceKind)}${option('collection', '知识集合', state.sourceKind)}${option('vault', '整个知识库', state.sourceKind)}</select></div><div>${selected.map((item) => `<label class="choice"><input type="checkbox" data-source="${item.id}" ${state.sourceDraft.includes(item.id) ? 'checked' : ''} /><span><strong>${item.name}</strong><small class="secondary">${item.detail}</small></span></label>`).join('')}</div><p class="secondary">${state.sourceKind === 'vault' ? '选择全库意味着后续新增成员也进入可用范围。请只选择这项工作需要的范围。' : '这些来源属于本项定时任务，专家自带参考保持独立。'}</p>${modalActions(btn('添加所选来源', 'apply-sources', 'primary'))}`,
+            );
+          }
+          function triggerModal(missed) {
+            const ai = state.selected === 'ai';
+            const record = selectedRecord();
+            const period = missed ? record?.period || '2026-07' : manualPeriod();
+            if (state.active && state.activeSchedule === state.selected) {
+              openModal(
+                'overlap',
+                modalTitle('这项定时任务已有工作在运行') +
+                  '<p>本次不会新建第二个执行，也不会排队等待。</p>' +
+                  modalActions(btn('查看现有运行', 'open-active', 'primary')),
+              );
+              return;
+            }
+            openModal(
+              missed ? 'trigger-missed' : 'trigger-now',
+              modalTitle(missed ? '为错过的一期执行' : '立即执行一次') +
+                `<div class="stack tight"><strong>${escapeHtml(name())}</strong><p>本期范围：${period}</p><p>${missed ? `原计划：${ai ? '2026-09-28 08:00' : `${record?.date || '2026-08-05'} 09:00`}` : '时间锚点：2026-10-03 15:00（评审示例）'}</p><p>采用当前绑定专家：${ai ? '调研专家 v2' : escapeHtml(state.config.expert)}；重新准备当前可用资料。</p></div><p class="secondary">${missed ? '会新建人工执行记录并关联原错过记录；原记录保留。材料可能已更新，不承诺还原当时来源。' : '按当前时刻确定本期范围，创建一项新工作；不会改变下一次正常计划。'}</p>${modalActions(btn('开始本次工作', 'confirm-trigger', 'primary', `data-missed="${missed}"`))}`,
+            );
+          }
+          function updateModal() {
+            openModal(
+              'update',
+              modalTitle('查看专家更新 · v4 → v5') +
+                '<p>当前使用 v4，旧绑定有效时仍可继续执行。</p><table><thead><tr><th>变化</th><th>当前 v4</th><th>已有 v5</th></tr></thead><tbody><tr><td>工作原则</td><td>月度对比</td><td>补充季度口径核对</td></tr><tr><td>生成技能</td><td>PPT 生成 v2</td><td>PPT 生成 v3</td></tr><tr><td>固定参考</td><td>公司模板 v1</td><td>公司模板 v2</td></tr></tbody></table><p class="secondary">只更新这项定时任务的调用绑定。工作空间和附加知识保留；运行中与历史记录仍使用当次版本。</p><span class="caption secondary">示例校验：新修订所需能力与参考均可用。</span>' +
+                modalActions(btn('后续执行使用 v5', 'apply-update', 'primary')),
+            );
+          }
+          function materialsModal() {
+            const record = selectedRecord();
+            const missing = record?.kind === 'missing';
+            if (state.selected === 'ai') {
+              openModal(
+                'materials',
+                modalTitle('本次来源') +
+                  '<p>明确范围：本次调研取得的网页来源与日期；未选择个人知识库。</p><p class="secondary">这是模拟执行记录，未访问真实网页。</p><div class="action-bar">' +
+                  btn('关闭', 'close') +
+                  '</div>',
+              );
+              return;
+            }
+            openModal(
+              'materials',
+              modalTitle('本次材料与来源') +
+                `<div class="stack tight"><strong>本期输入 · ${record?.period || '2026-08'}</strong><p>${missing ? 'GL 缺失；人员安排.xlsx 已固定为快照 1（未读取）' : 'GL.xlsx · 快照 1 · 已读取并被成果采用'}</p><strong>历史对比</strong><p>上月 GL.xlsx · 快照 2 · ${missing ? '未读取' : '已读取'}</p><p>上季度经营报告.pptx · 快照 3 · ${missing ? '未读取' : '已读取，结构参考'}</p><strong>稳定参考</strong><p>财务制度 · 知识修订 r3（当次）</p><p>公司例会模板 · 成果 v1（专家固定参考）</p></div><p class="secondary">本次固定的版本不随源文件改动。可用范围、实际读取、成果采用分别记录；缺少本期资料不以历史材料顶替。</p><div class="action-bar">${btn('关闭', 'close')}</div>`,
+            );
+          }
+          function notificationModal() {
+            openModal(
+              'notifications',
+              modalTitle('消息中心') +
+                `<div class="notification-list"><div class="stack tight"><strong>月度经营分析 · 需要补充材料</strong><span class="caption secondary">9 月 5 日 · 未读</span><p>8 月 GL 缺失，打开本期任务继续。</p>${btn('打开本期工作', 'notification-task')}</div><div class="stack tight"><strong>AI 动态调研 · 错过一期</strong><span class="caption secondary">9 月 28 日 · 未读</span><p>关闭期间错过 1 次，未自动执行。</p>${btn('查看错过记录', 'notification-missed')}</div><div class="stack tight"><strong>工作周报 · 产物已生成，请审阅</strong><span class="caption secondary">9 月 25 日 · 已读</span><p>Markdown v1 已登记并保存到目录。</p></div></div><p class="secondary">后台结果不切走当前工作；你点击后才导航。成功结果按既有消息机制留档为已读。</p><div class="action-bar">${btn('关闭', 'close')}</div>`,
+            );
+          }
+          function setScene(value) {
+            closeModal();
+            state.blocked = false;
+            state.conflict = false;
+            state.sourceMissing = false;
+            state.selected = 'monthly';
+            state.active = false;
+            state.extraRecords = [];
+            if (state.configIsNew) {
+              state.configIsNew = false;
+              state.configId = 'monthly';
+              state.config = {
+                ...state.config,
+                name: '月度经营分析',
+                expert: '经营分析专家 v4',
+                workspace: '部门经营',
+                frequency: 'monthly',
+                day: '5',
+                time: '09:00',
+                period: 'previous-month',
+                zone: 'Asia/Shanghai',
+                output: 'PPTX',
+              };
+            }
+            if (['startup-blocked', 'failed', 'overlap'].includes(value)) {
+              const fixture =
+                value === 'startup-blocked'
+                  ? {
+                      id: value,
+                      date: '2026-09-05',
+                      period: '2026-08',
+                      status: '启动前阻塞',
+                      kind: 'blocked',
+                      task: false,
+                      result:
+                        '专家所需模型未配置；未创建运行、未调用模型。请处理模型配置，之后的正常计划仍会重新检查。',
+                    }
+                  : value === 'failed'
+                    ? {
+                        id: value,
+                        date: '2026-09-05',
+                        period: '2026-08',
+                        status: '执行失败 / 中断',
+                        kind: 'failed',
+                        task: true,
+                        result:
+                          '模型服务中断，本次运行已终止。保留原任务与已登记成果；恢复网络后不会自动重试。',
+                      }
+                    : {
+                        id: value,
+                        date: '2026-09-05',
+                        period: '2026-08',
+                        status: '重叠跳过',
+                        kind: 'overlap',
+                        task: false,
+                        result: '同一规则已有工作正在准备或运行；本期未执行，也不会排队补跑。',
+                      };
+              state.extraRecords = [fixture];
+              state.page = 'occurrence';
+              state.occurrence = value;
+              render();
+              persist();
+              return;
+            }
+            if (
+              value === 'create' ||
+              value === 'blocked' ||
+              value === 'conflict' ||
+              value === 'source-missing'
+            ) {
+              state.page = value === 'conflict' ? 'edit' : 'create';
+              state.blocked = value === 'blocked';
+              state.conflict = value === 'conflict';
+              state.sourceMissing = value === 'source-missing';
+              state.draft = structuredClone(state.config);
+            } else if (value === 'detail' || value === 'update') state.page = 'detail';
+            else if (value === 'missed' || value === 'save-failed' || value === 'no-output') {
+              state.page = 'occurrence';
+              state.occurrence =
+                value === 'missed' ? 'aug' : value === 'save-failed' ? 'jul' : 'jun';
+            } else if (value === 'task' || value === 'running') {
+              state.page = 'task';
+              state.occurrence = 'sep';
+              state.active = value === 'running';
+              state.activeSchedule = 'monthly';
+            } else state.page = value === 'notifications' ? 'list' : value;
+            render();
+            if (value === 'update') updateModal();
+            if (value === 'notifications') notificationModal();
+            persist();
+          }
+          root.addEventListener('input', (event) => {
+            const target = event.target;
+            if (!(
+              target instanceof HTMLInputElement ||
+              target instanceof HTMLTextAreaElement ||
+              target instanceof HTMLSelectElement
+            ))
+              return;
+            if (target.dataset.field) state.draft[target.dataset.field] = target.value;
+            if (target.id === 'bw-task-draft') state.taskDraft = target.value;
+          });
+          root.addEventListener('change', (event) => {
+            const target = event.target;
+            if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement))
+              return;
+            if (target.id === 'bw-review-scene') {
+              setScene(target.value);
+              return;
+            }
+            if (target.id === 'bw-workspace-filter') {
+              state.filter = target.value;
+              render();
+            }
+            if (target.id === 'bw-source-kind') {
+              state.sourceKind = target.value;
+              sourceModal();
+            }
+            if (target.dataset.source)
+              state.sourceDraft = target.checked
+                ? [...new Set([...state.sourceDraft, target.dataset.source])]
+                : state.sourceDraft.filter((id) => id !== target.dataset.source);
+            if (target.id === 'bw-task-material') {
+              state.taskMaterial = target.checked;
+              render();
+            }
+            if (target.dataset.field) {
+              state.draft[target.dataset.field] = target.value;
+              if (
+                ['frequency', 'day', 'weekday', 'time', 'zone', 'workspace', 'expert'].includes(
+                  target.dataset.field,
+                )
+              ) {
+                render();
+                const replacement = root.querySelector(`[data-field="${target.dataset.field}"]`);
+                replacement?.focus();
+              }
+            }
+            persist();
+          });
+          root.addEventListener('click', (event) => {
+            if (!(event.target instanceof Element)) return;
+            const target = event.target.closest('[data-action]');
+            if (!target || target.hasAttribute('disabled')) return;
+            const action = target.dataset.action;
+            if (action === 'close') {
+              closeModal();
+              return;
+            }
+            if (action === 'list') {
+              closeModal();
+              state.page = 'list';
+            }
+            if (action === 'create') {
+              state.page = 'create';
+              state.blocked = false;
+              state.conflict = false;
+              state.draft = structuredClone(state.config);
+            }
+            if (action === 'edit') {
+              state.page = 'edit';
+              state.draft = structuredClone(state.config);
+            }
+            if (action === 'monthly-detail') {
+              state.page = 'detail';
+              state.selected = 'monthly';
+            }
+            if (action === 'ai-detail') {
+              state.page = 'detail';
+              state.selected = 'ai';
+            }
+            if (action === 'detail') state.page = 'detail';
+            if (action === 'task' || action === 'work') {
+              const fromRecord = state.page === 'occurrence';
+              closeModal();
+              state.page = 'task';
+              if (!fromRecord) {
+                state.selected = 'monthly';
+                state.occurrence = 'sep';
+              }
+            }
+            if (action === 'running-task') {
+              state.page = 'task';
+              state.active = true;
+              const activeRecord = state.manualHistory.find(
+                (item) => item.kind === 'running' && item.schedule === state.selected,
+              );
+              if (activeRecord) state.occurrence = activeRecord.id;
+            }
+            if (action === 'occurrence') {
+              state.page = 'occurrence';
+              state.occurrence = target.dataset.id || 'sep';
+            }
+            if (action === 'occurrence-current') state.page = 'occurrence';
+            if (action === 'ai-missed') {
+              state.selected = 'ai';
+              state.occurrence = 'ai-sep';
+              state.page = 'occurrence';
+            }
+            if (action === 'sources') {
+              state.sourceDraft = [...state.draft.sources];
+              sourceModal();
+              return;
+            }
+            if (action === 'remove-source')
+              state.draft.sources = state.draft.sources.filter((id) => id !== target.dataset.id);
+            if (action === 'apply-sources') {
+              state.draft.sources = [...state.sourceDraft];
+              state.sourceMissing = false;
+              closeModal();
+            }
+            if (action === 'update') {
+              state.selected = 'monthly';
+              updateModal();
+              return;
+            }
+            if (action === 'apply-update') {
+              state.expert = 5;
+              state.config.expert = '经营分析专家 v5';
+              closeModal();
+            }
+            if (action === 'expert-readonly') {
+              openModal(
+                'expert',
+                modalTitle(`${escapeHtml(state.draft.expert)} · 只读`) +
+                  '<div class="stack tight"><p>方法：核对期间和口径，保留来源，列出缺项。</p><p>技能：经营分析、PPT 生成。</p><p>固定参考：公司例会模板 v1。</p><p>模型：使用专家既有模型配置。</p></div><p class="secondary">定时任务只调用此修订；专家编辑仍在专家页完成。</p><div class="action-bar">' +
+                  btn('关闭', 'close') +
+                  '</div>',
+              );
+              return;
+            }
+            if (action === 'trigger-now' || action === 'ai-now' || action === 'trigger-missed') {
+              if (action === 'ai-now') state.selected = 'ai';
+              else if (state.page === 'list') state.selected = 'monthly';
+              triggerModal(action === 'trigger-missed');
+              return;
+            }
+            if (action === 'confirm-trigger') {
+              const previous = selectedRecord();
+              const id = `manual-${state.manualHistory.length + 1}`;
+              state.manualHistory.unshift({
+                id,
+                date: '2026-10-03',
+                period:
+                  target.dataset.missed === 'true' ? previous?.period || '2026-07' : manualPeriod(),
+                schedule: state.selected,
+                ruleId: state.configId,
+                expert: state.selected === 'ai' ? '调研专家 v2' : state.config.expert,
+                originalMissed: target.dataset.missed === 'true' ? previous?.id : null,
+                status: '正在执行',
+                kind: 'running',
+                task: true,
+                manual: true,
+                result: '人工明确发起的新工作；未修改下次计划。',
+              });
+              state.occurrence = id;
+              state.active = true;
+              state.activeSchedule = state.selected;
+              closeModal();
+              state.page = 'detail';
+            }
+            if (action === 'open-active') {
+              closeModal();
+              state.page = 'task';
+            }
+            if (action === 'continue-task') {
+              state.active = true;
+              state.activeSchedule = state.selected;
+            }
+            if (action === 'stop-run') {
+              state.active = false;
+              const record = selectedRecord();
+              if (record?.manual) {
+                record.kind = 'cancelled';
+                record.status = '已停止';
+                record.result = '由你停止本次执行；定时规则保持原状态。';
+              }
+            }
+            if (action === 'blocked-reason') {
+              openModal(
+                'blocked-reason',
+                modalTitle('启动前检查未通过') +
+                  '<p>经营分析专家 v4 所需模型未配置。</p><p>请到设置中的模型分区完成配置；定时任务保留记录，不会自动切换为其他模型。</p><div class="action-bar">' +
+                  btn('关闭', 'close') +
+                  '</div>',
+              );
+              return;
+            }
+            if (action === 'overlap-run') {
+              state.extraRecords = [];
+              state.occurrence = 'sep';
+              state.page = 'task';
+              state.active = true;
+              state.activeSchedule = 'monthly';
+            }
+            if (action === 'materials') {
+              materialsModal();
+              return;
+            }
+            if (action === 'artifact') {
+              openModal(
+                'artifact',
+                modalTitle('经营分析 PPT · 精确成果 v1') +
+                  '<div class="surface stack tight"><strong>PPTX v1</strong><p>示例页面：经营概览、期间口径、主要变化、项目进展、待核对项。</p><p class="secondary">此处只展示成果身份与审阅入口，未生成真实 PPT。</p></div><p>本次版本保持不变；目录副本后续被人编辑时，将作为新输入。</p><div class="action-bar">' +
+                  btn('关闭', 'close') +
+                  '</div>',
+              );
+              return;
+            }
+            if (action === 'retry-save') state.savedOutput = true;
+            if (action === 'toggle-enabled') {
+              if (!(state.selected === 'ai' ? state.aiEnabled : state.enabled)) {
+                openModal(
+                  'enable',
+                  modalTitle('启用定时任务') +
+                    '<p>将按既定周期调用已配置的模型和工具，可能产生费用；错过不补跑，结果由你检查。</p><p class="secondary">从启用后的未来时刻开始，不补做暂停期间的工作。</p>' +
+                    modalActions(btn('确认启用', 'confirm-enable', 'primary')),
+                );
+                return;
+              }
+              if (state.selected === 'ai') state.aiEnabled = false;
+              else state.enabled = false;
+            }
+            if (action === 'confirm-enable') {
+              if (state.selected === 'ai') state.aiEnabled = true;
+              else state.enabled = true;
+              closeModal();
+            }
+            if (action === 'archive') {
+              openModal(
+                'archive',
+                modalTitle('归档这项定时任务？') +
+                  '<p>停止未来触发，保留历史任务、成果、来源与工作目录文件。</p><p class="secondary">归档不会停止已经开始的运行；停止本次是独立动作。</p>' +
+                  modalActions(btn('归档定时任务', 'confirm-archive')),
+              );
+              return;
+            }
+            if (action === 'confirm-archive') {
+              state.archived = true;
+              state.enabled = false;
+              closeModal();
+            }
+            if (action === 'save-enabled' || action === 'save-paused') {
+              if (!state.draft.name.trim() || !state.draft.prompt.trim() || !state.draft.time) {
+                const error = root.querySelector('#bw-form-error');
+                if (error)
+                  error.innerHTML = notice(
+                    '请补齐名称、工作要求与执行时刻',
+                    '输入已保留。',
+                    '',
+                    true,
+                  );
+                return;
+              }
+              if (action === 'save-enabled' && (state.blocked || state.conflict)) return;
+              if (state.page === 'create') {
+                state.configId = `new-${state.nextConfigNumber}`;
+                state.nextConfigNumber += 1;
+              }
+              state.configIsNew = state.page === 'create';
+              state.config = structuredClone(state.draft);
+              state.enabled =
+                state.page === 'edit'
+                  ? action === 'save-paused'
+                    ? false
+                    : state.enabled
+                  : action === 'save-enabled';
+              state.page = 'detail';
+              state.selected = 'monthly';
+            }
+            if (action === 'cancel-edit') state.page = 'list';
+            if (action === 'recheck') state.blocked = false;
+            if (action === 'conflict-diff') {
+              openModal(
+                'conflict',
+                modalTitle('最新配置与本地草稿') +
+                  `<p>最新配置：名称为“月度经营例会”，工作要求追加来源页。</p><p>你的草稿：${escapeHtml(state.draft.name)}</p><p class="secondary">取消会保留本地输入；核对后重新应用改动，不直接覆盖最新版本。</p>${modalActions(btn('保留草稿，重新校验', 'resolve-conflict', 'primary'))}`,
+              );
+              return;
+            }
+            if (action === 'resolve-conflict') {
+              state.conflict = false;
+              closeModal();
+            }
+            if (action === 'notifications') {
+              notificationModal();
+              return;
+            }
+            if (action === 'notification-task') {
+              closeModal();
+              state.page = 'task';
+              state.selected = 'monthly';
+              state.occurrence = 'sep';
+            }
+            if (action === 'notification-missed') {
+              closeModal();
+              state.page = 'occurrence';
+              state.selected = 'ai';
+              state.occurrence = 'ai-sep';
+            }
+            render();
+            persist();
+          });
+          dialog.addEventListener('close', () => {
+            state.modal = '';
+          });
+          const restored = window.openai?.widgetState?.privateContent;
+          if (restored && ['list', 'detail', 'task', 'occurrence'].includes(restored.page)) {
+            state.page = restored.page;
+            if (typeof restored.taskDraft === 'string') state.taskDraft = restored.taskDraft;
+            if (history.some((item) => item.id === restored.occurrence))
+              state.occurrence = restored.occurrence;
+          }
+          window.addEventListener('openai:set_globals', (event) => {
+            const saved = event.detail?.globals?.widgetState?.privateContent;
+            if (saved && typeof saved.taskDraft === 'string') state.taskDraft = saved.taskDraft;
+          });
+          render();
+        })();
+      </script>
+    </div>
+  </body>
+</html>

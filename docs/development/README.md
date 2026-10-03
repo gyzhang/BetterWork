@@ -3,7 +3,7 @@
 > 当前平台覆盖：2026-10-02 [ADR-0036](../adr/0036-macos-only-platform-scope.md) 已接受，Windows A09 退出产品与验收范围。下文 blocked 与早期跨平台条件保留为历史记录，不构成待开工任务，不阻塞当前 macOS 验收；本次不把未验收项改为 done。
 
 
-> 2026-09-25：周期专家工作已登记至 [SC00–SC11 定时任务待办](tasks-schedules.md)，设计见 [v0.3](../designs/scheduled-tasks.md)。同一工作目录持续积累资料和成果，可添加知识/知识库、引用历史月/季/半年资料；各次执行分别留档，定时配置不修改专家定义。候选推进时间为 2026-09-26，待光哥完成其他功能测试并另行启动；当前仅文档归档，代码未开工。SC 状态只在其任务板维护，不重排或关闭现有任务。
+> 2026-10-03：定时任务低保真原型 P1–P6 已获光哥批准，并按 GPT-6 Luna 后续编码要求形成[实施契约](schedule-contracts.md)、[ADR-0037](../adr/0037-scheduled-work-and-source-snapshots.md)（Proposed）、[32 张离线小卡及人工验收的 SC 唯一任务板](tasks-schedules.md)与[逐卡提示词](schedule-coding-prompts.md)。同一长期目录、每期独立工作、动态知识范围和专家只读保持。生产未开工，切换后从 SC03-1 按当次授权推进；真实模型、提交、推送、发布独立核对。2026-09-26 候选启动日是历史，SC 状态只在原任务板维护，不重排其他系列。
 
 > 2026-09-25：记忆可靠性增量见[改进 Spec](../designs/memory-improvements.md)、[契约 §11](memory-contracts.md#11-mi-改进契约proposed)、[MI00–MI10 计划](tasks-memory-improvements.md)与 [Qwen3.8-Flash 提示词](memory-improvement-coding-prompts.md)。光哥已查看[低保真原型](../prototype/memory-improvements/index.html)并批准 D1–D5 推荐方案，随后下达持续落地指令：MI00–MI05、MI09 的代码与自动化测试已按阶段提交，状态与证据只写任务板；MI02/MI03/MI06/MI07/MI08 的界面部分待光哥按 [MI 人工验收清单](memory-mi10-checklist.md)在真实窗口逐格走查，MI10 的真实模型语义验收仍待配置显示名与调用预算的单独授权。推送与发布未授权，不改 WM16/KM/E 系列状态。
 

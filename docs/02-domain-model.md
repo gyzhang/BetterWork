@@ -1,5 +1,7 @@
 # 领域模型
 
+> 2026-10-03 定时任务技术提案：产品原型已通过，[ADR-0037](adr/0037-scheduled-work-and-source-snapshots.md)及[契约](development/schedule-contracts.md)新增 Schedule/Occurrence、本期范围快照与保存/通知回执；继续复用 Workspace、Task、Session、Run 与 ArtifactVersion。普通任务显式材料权限不扩大；生产未实现，状态只记 [SC 任务板](development/tasks-schedules.md)。
+
 > **Proposed capability increment — 2026-09-20:** [API tools and remote MCP](designs/api-tools-and-remote-mcp.md) separates API tool definitions, named service-profile revisions, credentials, and concrete Run tool bindings. MCP selections add connection revisions and reviewed contract hashes; existing `RunSkillBinding` remains the Skill authority. See [capability contracts](development/capability-contracts.md). These are design targets, not implemented domain changes; existing Expert/Task/Run history and acceptance statuses remain unchanged.
 
 > 2026-09-14：专家修订、TaskContextRevision、材料引用/运行快照、上下文段、成果输入关系和最小记忆修订已随用户对设计 v0.2 的评审通过而定稿，见 [ADR-0014](adr/0014-expert-context-and-material-binding.md)、[ADR-0015](adr/0015-memory-scope-and-governance.md)、[专家与任务上下文契约](development/expert-contracts.md) 和 [材料、快照与运行来源契约](development/material-contracts.md)。下文会标注已落地的 E11–E15、E21–E25 与 E31–E32；历史接口不能替代该设计的增量契约。
