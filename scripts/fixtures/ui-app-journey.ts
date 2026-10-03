@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import process from 'node:process';
 
 import { abortError } from '@betterwork/agent-core';
 import { IpcChannel, type MaterialReference, type RunSummary } from '@betterwork/agent-protocol';
@@ -39,6 +40,9 @@ import { checkCaptureKeyboard } from './ui-keyboard';
 
 const method = '每次复盘先核对口径，再给结论。';
 const inputText = '合成资料：本期工作已完成，交付结论必须可追溯。';
+export const bookDraftPath = path.resolve(process.cwd(), 'book/cn/parts/15-ch14.md');
+const bookKnowledgeProof = '带坐标的断言';
+export const sourceFileName = '第14章 Excel 分析.md';
 const steps = [
   'ready',
   'navigation',
@@ -170,11 +174,13 @@ export function assemble(
   return { store, vault, runs, extractions };
 }
 
-export async function seed(services: JourneyServices, directory: string): Promise<void> {
+export async function seed(services: JourneyServices, directory: string): Promise<string> {
   const root = path.join(directory, 'workspace');
   await mkdir(root, { recursive: true });
-  const sourcePath = path.join(root, '合成复盘资料.md');
-  await writeFile(sourcePath, inputText);
+  const sourcePath = path.join(root, sourceFileName);
+  await copyFile(bookDraftPath, sourcePath);
+  const bookText = await readFile(sourcePath, 'utf8');
+  assert.ok(bookText.includes(bookKnowledgeProof), '知识夹具未使用中文书稿正文');
   const workspace = services.store.workspaces.getOrCreate(root, '协作旅程测试空间');
   await services.vault.importPaths([sourcePath]);
   const document = services.vault.listDocuments()[0];
@@ -225,6 +231,7 @@ export async function seed(services: JourneyServices, directory: string): Promis
     services.store.memoryExtractions.getSettings(workspace.id).autoSuggestEnabled,
     false,
   );
+  return bookText;
 }
 
 export function syntheticResponse(delta: unknown): Response {
@@ -332,7 +339,12 @@ export async function runAppJourney(
           : (() => {
               throw new Error('非预期材料类型');
             })();
-    if (ordinal === 2)
+    if (ordinal === 2) {
+      if (source.kind === 'knowledge-revision')
+        assert.ok(
+          body.includes(bookKnowledgeProof),
+          '从书稿读取的知识正文未进入后续 Provider 请求',
+        );
       return toolResponse(
         'artifact_declare_sources',
         {
@@ -345,6 +357,7 @@ export async function runAppJourney(
         },
         ordinal,
       );
+    }
     return syntheticResponse({
       content:
         source.kind === 'knowledge-revision'
@@ -357,6 +370,8 @@ export async function runAppJourney(
   let second: RunSummary | undefined;
   let firstVersionId: string | undefined;
   let excludedMemoryId: string | undefined;
+  const sourcePath = path.join(directory, 'workspace', sourceFileName);
+  let expectedSourceContent = '';
   const rendererErrors: string[] = [];
   const openWindow = async (): Promise<BrowserWindow> => {
     const instance = new BrowserWindow({
@@ -521,11 +536,7 @@ export async function runAppJourney(
     }
     assert.deepEqual(networkAttempts, [], '合成窗口发起了网络请求');
     assert.deepEqual(rendererErrors, [], '应用 Renderer 出现未预期错误');
-    assert.equal(
-      await readFile(path.join(directory, 'workspace', '合成复盘资料.md'), 'utf8'),
-      inputText,
-      '用户资料被修改',
-    );
+    assert.equal(await readFile(sourcePath, 'utf8'), expectedSourceContent, '用户资料被修改');
     await capture(host.window, path.join(output, 'screenshots', `app-journey-${step}.png`));
     readings.push({ step, reading, persistedRunCount: services.store.runs.list().length });
     await writeFile(
@@ -534,7 +545,9 @@ export async function runAppJourney(
     );
   };
   try {
-    if (!journeyOptions.reopenDirectory) await seed(services, directory);
+    expectedSourceContent = journeyOptions.reopenDirectory
+      ? await readFile(sourcePath, 'utf8')
+      : await seed(services, directory);
     await openWindow();
     if (journeyOptions.reopenDirectory) {
       assert.ok(host.window);
@@ -603,8 +616,8 @@ export async function runAppJourney(
     const sourceDocument = services.vault.listDocuments()[0];
     assert.ok(sourceDocument);
     await writeFile(
-      path.join(directory, 'workspace', '合成复盘资料.md'),
-      `${inputText}\n合成换期：下一期有四个项目。`,
+      sourcePath,
+      `${expectedSourceContent}\n\n${inputText}\n合成换期：下一期有四个项目。`,
     );
     const refreshed = await services.vault.refreshDocument(sourceDocument.id);
     assert.ok('refreshed' in refreshed && refreshed.refreshed, '换期资料刷新失败');

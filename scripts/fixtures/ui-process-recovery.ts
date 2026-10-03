@@ -4,7 +4,14 @@ import path from 'node:path';
 
 import { app, BrowserWindow, session } from 'electron';
 
-import { assemble, seed, syntheticResponse, toolResponse } from './ui-app-journey';
+import {
+  assemble,
+  bookDraftPath,
+  seed,
+  sourceFileName,
+  syntheticResponse,
+  toolResponse,
+} from './ui-app-journey';
 
 const output = process.argv[2];
 const directory = process.argv[3];
@@ -195,8 +202,9 @@ async function run(output: string, directory: string, phase: string): Promise<vo
     await step('process-memory');
     assert.equal(requests, 0, '恢复界面自动请求了模型');
     assert.equal(
-      await readFile(path.join(directory, 'workspace', '合成复盘资料.md'), 'utf8'),
-      '合成资料：本期工作已完成，交付结论必须可追溯。',
+      await readFile(path.join(directory, 'workspace', sourceFileName), 'utf8'),
+      await readFile(bookDraftPath, 'utf8'),
+      '恢复流程修改了测试用书稿副本',
     );
     await screenshot('recovered');
     await writeFile(
