@@ -12,6 +12,7 @@ import {
   MAX_SAMPLE_ATTEMPTS,
   settleDelayMs,
 } from './frame-verdict';
+import { checkConflictKeyboard, checkReferenceKeyboard, keyboard } from './ui-keyboard';
 
 function outputDirectory(): string {
   const directory = process.argv[2];
@@ -35,26 +36,6 @@ async function waitFor(window: BrowserWindow, expression: string): Promise<void>
     await new Promise<void>((resolve) => setTimeout(resolve, 20));
   }
   throw new Error(`等待渲染条件失败：${expression}`);
-}
-
-async function keyboard(window: BrowserWindow, keyCode: string): Promise<void> {
-  // 离屏窗口不抢用户桌面焦点；在该测试渲染器里发送受信键盘输入。
-  const parameters = {
-    key: keyCode,
-    code: keyCode,
-    windowsVirtualKeyCode: keyCode === 'Tab' ? 9 : 27,
-  };
-  await window.webContents.debugger.sendCommand('Input.dispatchKeyEvent', {
-    type: 'keyDown',
-    ...parameters,
-  });
-  await window.webContents.debugger.sendCommand('Input.dispatchKeyEvent', {
-    type: 'keyUp',
-    ...parameters,
-  });
-  await window.webContents.executeJavaScript(
-    'new Promise(resolve => requestAnimationFrame(() => resolve(true)))',
-  );
 }
 
 /** 读取 DOM 后等待新 paint；capturePage 可能仍拿到旧主题或打开模态前的帧。 */
@@ -153,7 +134,9 @@ async function run(): Promise<void> {
   };
   // 页面反馈反例只跑能触发失败的页面路径；普通 ui:check 仍跑完整矩阵。
   for (const scheme of process.argv.some((argument) =>
-    ['--probe-page-feedback', '--probe-app-persistence', '--app-only'].includes(argument),
+    ['--probe-page-feedback', '--probe-app-persistence', '--probe-keyboard', '--app-only'].includes(
+      argument,
+    ),
   )
     ? []
     : colorSchemes) {
@@ -247,7 +230,9 @@ async function run(): Promise<void> {
     ['--probe-app-persistence', '--app-only'].includes(argument),
   )
     ? []
-    : ['artifact', 'knowledge', 'expert', 'memory']) {
+    : process.argv.includes('--probe-keyboard')
+      ? ['expert']
+      : ['artifact', 'knowledge', 'expert', 'memory']) {
     for (const mode of ['light', 'dark']) {
       for (const width of [760, 1380]) {
         for (const reducedMotion of [false, true]) {
@@ -291,9 +276,17 @@ async function run(): Promise<void> {
             if (steps.length === 0) throw new Error('页面回归缺用户路径');
             const checks: unknown[] = [];
             for (const step of steps) {
-              const reading: unknown = await window.webContents.executeJavaScript(
+              let reading: unknown = await window.webContents.executeJavaScript(
                 `window.uiPageChecks.runStep(${JSON.stringify(step)}).catch(error => { throw new Error(${JSON.stringify(step)} + ": " + error.message + "; " + document.body.innerText.slice(-700)); })`,
               );
+              if (step === 'expert-keyboard') {
+                if (process.argv.includes('--probe-keyboard'))
+                  await window.webContents.executeJavaScript(
+                    'document.addEventListener("keydown", event => { if (event.key === "Tab") event.preventDefault(); }, { capture: true })',
+                  );
+                reading = await checkReferenceKeyboard(window);
+              }
+              if (step === 'memory-keyboard') reading = await checkConflictKeyboard(window);
               if (errors.length > 0) throw new Error(`页面运行错误：${errors.join('；')}`);
               await captureVerifiedFrame(
                 window,

@@ -1,4 +1,5 @@
 import type { MemoryScope } from '@betterwork/agent-protocol';
+import { useEffect, useRef } from 'react';
 
 import type { ExcerptRange } from '../lib/memory-capture';
 import { InlineError } from './InlineError';
@@ -39,8 +40,39 @@ export function MemoryCapturePanel({
   onSubmit,
   onClose,
 }: MemoryCapturePanelProps): React.JSX.Element {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const submittingRef = useRef(false);
+
+  useEffect(() => {
+    panelRef.current?.querySelector('textarea')?.focus();
+  }, [capture.runId, capture.eventId]);
+
+  const submit = async (submission: MemoryEditorSubmission): Promise<boolean> => {
+    submittingRef.current = true;
+    try {
+      return await onSubmit(submission);
+    } finally {
+      submittingRef.current = false;
+    }
+  };
+
   return (
-    <div className="memory-capture">
+    <div
+      ref={panelRef}
+      className="memory-capture"
+      onKeyDown={(event) => {
+        if (
+          event.key !== 'Escape' ||
+          event.defaultPrevented ||
+          event.nativeEvent.isComposing ||
+          submittingRef.current
+        )
+          return;
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }}
+    >
       <p className="memory-capture-hint">
         来源摘录取自这条回答的原文；正文可以另行改写，改写不会解除来源与依赖。
       </p>
@@ -62,7 +94,7 @@ export function MemoryCapturePanel({
               },
             }
           : {})}
-        onSubmit={onSubmit}
+        onSubmit={submit}
         onCancel={onClose}
       />
       {error && <InlineError message={error} />}

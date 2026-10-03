@@ -2,6 +2,7 @@ import type {
   ExpertDetail,
   ExpertRevisionDraft,
   MaterialCandidate,
+  MemoryConflictPair,
   MemoryJobSummary,
   MemoryViewItem,
   MemoryWriteReceipt,
@@ -76,8 +77,21 @@ const instruction: MemoryViewItem = {
   requiresMaterialSelection: false,
   conflicts: [],
 };
+const conflict: MemoryConflictPair = {
+  leftRevisionId: 'conflict-left-r1',
+  rightRevisionId: 'conflict-right-r1',
+  state: 'unresolved',
+};
 let memories: MemoryViewItem[] = [
   instruction,
+  ...['left', 'right'].map((side) => ({
+    ...instruction,
+    id: `conflict-${side}`,
+    revisionId: `conflict-${side}-r1`,
+    content: side === 'left' ? '月报按回款统计收入。' : '合同按签约统计收入。',
+    topicKey: '收入口径',
+    conflicts: [conflict],
+  })),
   {
     ...instruction,
     id: 'candidate-fixture',
@@ -253,6 +267,7 @@ export const governanceApi = {
 export function ExpertScenario(): React.JSX.Element {
   const experts = useExperts();
   const [error, setError] = useState('');
+  const [referencesError, setReferencesError] = useState('合成故障：常用参考读取失败');
   useEffect(() => {
     const recover = (): void => {
       referencesUnavailable = false;
@@ -279,7 +294,9 @@ export function ExpertScenario(): React.JSX.Element {
         memories={[]}
         models={[]}
         workspaceId={workspaceId}
-        materialCandidates={candidates}
+        materialCandidates={referencesError ? [] : candidates}
+        referencesError={referencesError}
+        onRetryReferences={() => setReferencesError('')}
         onSummon={async () => {
           throw new Error('页面场景不执行 Run');
         }}

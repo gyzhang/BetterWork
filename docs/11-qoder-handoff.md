@@ -72,6 +72,8 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
     npm run ui:check   # 组件矩阵 + 成果/知识/专家/记忆生产页面合成关键路径 + 真实 IPC/临时 SQLite 离线应用旅程与进程恢复；边界见 docs/10 §10.1.3
     npm run bench      # 计时基准档（串行）：跑完规模/性能卡或专门核查时执行，不在提交门禁里
 
+离线人工走查的前置对象由 AI 准备：`npm run ui:check -- --prepare-acceptance` 在独立目录运行生产 App/Preload/IPC/临时 SQLite，完成既有旅程与前置样本后打开合成窗口；关闭保留库，按输出目录用 `UI_RENDER_OUTPUT_DIR="原输出目录" npm run ui:check -- --reopen-acceptance` 重开。它不启停产品 dev 应用，模型/脚本为离线替身，不代表安装入口或真实模型验收。自动化回归用 `--acceptance-smoke` 验证准备、关闭、新 PID 重开；人类操作与结果仍只记 [MI 原清单](development/memory-mi10-checklist.md)，不代签、不另造任务板。
+
 测试分 functional/heavy/bench 三档：`npm test` 依次跑功能并发与重文件串行（均断言行为），`npm run bench` 跑独立计时基准（断言墙钟与内存预算）。`verify` 包含前两档及 ui:check，不含 bench——并发跑时计时值会漂 1.5–5 倍，随机红的门禁守不住任何东西；阈值没有放宽，样本值每次照旧打印。理由与口径见 [工程规范](12-engineering-standards.md) §1 与 §9。
 
 **不要把 verify 的输出接管道后只看末尾**（`npm run verify | tail` 的退出码是 `tail` 的，永远为 0，会把失败读成成功）。需要截取输出时用 `npm run verify > /tmp/verify.log 2>&1; echo $?`。

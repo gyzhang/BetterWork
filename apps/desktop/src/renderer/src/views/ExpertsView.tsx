@@ -8,7 +8,7 @@ import type {
   ModelProfileSummary,
   SkillSummary,
 } from '@betterwork/agent-protocol';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { ActionBar } from '../components/ActionBar';
 import { AsyncButton } from '../components/AsyncButton';
@@ -201,7 +201,13 @@ function ExpertActionButtons({
         </Button>
       ) : (
         <>
-          <Button variant="text" size="sm" type="button" onClick={() => onEdit(expert)}>
+          <Button
+            variant="text"
+            size="sm"
+            type="button"
+            data-expert-focus={`edit:${expert.id}`}
+            onClick={() => onEdit(expert)}
+          >
             编辑
           </Button>
           <Button
@@ -259,6 +265,9 @@ function ExpertEditor({
   mcpConnections,
   models,
   materialCandidates,
+  referencesLoading = false,
+  referencesError = '',
+  onRetryReferences,
   workspaceId,
   editing,
   saving,
@@ -272,6 +281,9 @@ function ExpertEditor({
   mcpConnections: McpConnectionSummary[];
   models: ModelProfileSummary[];
   materialCandidates: MaterialCandidate[];
+  referencesLoading?: boolean;
+  referencesError?: string;
+  onRetryReferences?: () => void;
   workspaceId?: string;
   editing: boolean;
   saving: boolean;
@@ -281,6 +293,10 @@ function ExpertEditor({
   onCancel: () => void;
   onSave: () => void;
 }): React.JSX.Element {
+  const nameRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    nameRef.current?.focus();
+  }, []);
   const toolNames =
     draft.builtinToolPolicy.mode === 'allow-list' ? draft.builtinToolPolicy.toolNames : [];
   // 标签输入框保留用户正在敲的分隔符：直接把 draft.tags 拼回去会在敲完一个逗号后
@@ -405,6 +421,7 @@ function ExpertEditor({
         <div className="page-body expert-editor-body">
           <Field label="名称">
             <TextField
+              ref={nameRef}
               size="md"
               value={draft.name}
               onChange={(event) => onChange({ ...draft, name: event.target.value })}
@@ -585,6 +602,10 @@ function ExpertEditor({
           </fieldset>
           <fieldset>
             <legend>常用参考</legend>
+            {referencesLoading && <StatusNote message="正在加载常用参考…" />}
+            {referencesError && (
+              <InlineError message={referencesError} onRetry={onRetryReferences} />
+            )}
             <small className="muted-text">
               召唤专家时带入选定的知识修订或历史成果；本期任务仍可移除或补充。
             </small>
@@ -623,14 +644,30 @@ function ExpertEditor({
               label="知识修订"
               options={referenceOptions(knowledgeCandidates)}
               onToggle={toggleReference}
-              empty={<span className="muted-text">没有匹配的知识修订。</span>}
+              empty={
+                <span className="muted-text">
+                  {referencesLoading
+                    ? '参考正在加载。'
+                    : referencesError
+                      ? '参考暂不可读取。'
+                      : '没有匹配的知识修订。'}
+                </span>
+              }
             />
             <SectionHeader title="当前空间成果版本" hint={`${artifactCandidates.length} 项`} />
             <CheckList
               label="当前空间成果版本"
               options={referenceOptions(artifactCandidates)}
               onToggle={toggleReference}
-              empty={<span className="muted-text">没有匹配的成果版本。</span>}
+              empty={
+                <span className="muted-text">
+                  {referencesLoading
+                    ? '参考正在加载。'
+                    : referencesError
+                      ? '参考暂不可读取。'
+                      : '没有匹配的成果版本。'}
+                </span>
+              }
             />
             {otherWorkspaceCandidates.length > 0 && (
               <Disclosure label={`其他空间成果 · ${otherWorkspaceCandidates.length} 项（不可选）`}>
@@ -734,7 +771,13 @@ function ExpertDetailPanel({
                 复制为用户专家
               </Button>
             ) : (
-              <Button variant="secondary" size="lg" type="button" onClick={onEdit}>
+              <Button
+                variant="secondary"
+                size="lg"
+                type="button"
+                data-expert-focus="detail-edit"
+                onClick={onEdit}
+              >
                 编辑配置
               </Button>
             )}
@@ -842,6 +885,9 @@ export function ExpertsPage({
   memories,
   models,
   materialCandidates,
+  referencesLoading = false,
+  referencesError = '',
+  onRetryReferences,
   workspaceId,
   actions,
   onSummon,
@@ -854,6 +900,9 @@ export function ExpertsPage({
   memories: MemoryRecord[];
   models: ModelProfileSummary[];
   materialCandidates: MaterialCandidate[];
+  referencesLoading?: boolean;
+  referencesError?: string;
+  onRetryReferences?: () => void;
   workspaceId?: string;
   actions: Pick<
     ExpertsState,
@@ -868,6 +917,15 @@ export function ExpertsPage({
   const [detailLoading, setDetailLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [focusTarget, setFocusTarget] = useState<string>();
+  useEffect(() => {
+    if (editorOpen || !focusTarget) return;
+    const target = [...document.querySelectorAll<HTMLButtonElement>('[data-expert-focus]')].find(
+      (button) => button.getAttribute('data-expert-focus') === focusTarget,
+    );
+    target?.focus();
+    setFocusTarget(undefined);
+  }, [editorOpen, focusTarget, selected]);
   const [editorReturn, setEditorReturn] = useState<'list' | 'detail'>('list');
   const [pendingDelete, setPendingDelete] = useState<ExpertSummary>();
   const { viewMode, changeViewMode } = useViewMode(VIEW_MODE_STORAGE_KEY);
@@ -884,6 +942,7 @@ export function ExpertsPage({
     );
   };
   const openCreate = (): void => {
+    setFocusTarget('create');
     setSelected(undefined);
     setEditorReturn('list');
     setDraft(defaultDraft());
@@ -891,6 +950,7 @@ export function ExpertsPage({
   };
   const openEdit = (): void => {
     if (!selected) return;
+    setFocusTarget('detail-edit');
     setEditorReturn('detail');
     setDraft(draftOf(selected));
     setEditorOpen(true);
@@ -904,6 +964,7 @@ export function ExpertsPage({
         if (!detail) return;
         setSelected(detail);
         setEditorReturn('list');
+        setFocusTarget(`edit:${summary.id}`);
         setDraft(draftOf(detail));
         setEditorOpen(true);
       }),
@@ -972,6 +1033,7 @@ export function ExpertsPage({
           setSelected(expert);
           setDraft(undefined);
           setEditorOpen(false);
+          setFocusTarget('detail-edit');
           state.refresh();
         })
         .finally(() => setSaving(false)),
@@ -1016,6 +1078,9 @@ export function ExpertsPage({
         mcpConnections={mcpConnections}
         models={models}
         materialCandidates={materialCandidates}
+        referencesLoading={referencesLoading}
+        referencesError={referencesError}
+        {...(onRetryReferences ? { onRetryReferences } : {})}
         {...(workspaceId ? { workspaceId } : {})}
         editing={Boolean(selected)}
         saving={saving}
@@ -1059,7 +1124,13 @@ export function ExpertsPage({
                 { id: 'list', label: '列表' },
               ]}
             />
-            <Button variant="primary" size="lg" type="button" onClick={openCreate}>
+            <Button
+              variant="primary"
+              size="lg"
+              type="button"
+              data-expert-focus="create"
+              onClick={openCreate}
+            >
               <PlusIcon size={13} /> 新建专家
             </Button>
           </>

@@ -16,6 +16,50 @@ delete cliEnvironment.UI_RENDER_OUTPUT_DIR;
  */
 const cliTimeout = 20_000;
 
+it('离线验收模式禁止混入检查，重开必须指定原目录', () => {
+  for (const [arguments_, message] of [
+    [['--prepare-acceptance', '--app-only'], '离线验收模式不能与检查或探针混用'],
+    [['--reopen-acceptance'], '重开验收需要指定原 UI_RENDER_OUTPUT_DIR'],
+  ] as const) {
+    const result = spawnSync(process.execPath, [script, ...arguments_], {
+      encoding: 'utf8',
+      env: cliEnvironment,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(message);
+  }
+});
+
+it(
+  '合成验收准备后新进程可重开原数据，人工结果仍未填写',
+  () => {
+    const result = spawnSync(process.execPath, [script, '--acceptance-smoke'], {
+      encoding: 'utf8',
+      env: cliEnvironment,
+      timeout: cliTimeout,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain('合成验收准备与重开通过；人工结果未填写');
+    expect(result.stderr).not.toContain('UI 真实渲染检查通过');
+  },
+  cliTimeout,
+);
+
+it(
+  '真实 Tab 路径被阻断时键盘门禁必须失败',
+  () => {
+    const result = spawnSync(process.execPath, [script, '--probe-keyboard'], {
+      encoding: 'utf8',
+      env: cliEnvironment,
+      timeout: cliTimeout,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('键盘焦点未到达：[aria-label="参考类型"]');
+    expect(result.stderr).not.toContain('UI 真实渲染检查通过');
+  },
+  cliTimeout,
+);
+
 it(
   '真实控件几何退化必须使 CLI 失败，不能把 Electron 提前退出读成成功',
   () => {

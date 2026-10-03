@@ -78,7 +78,8 @@ async function runStep(step: string): Promise<{ step: string; alerts: number; wi
     step === 'second-run' ||
     step === 'failed-run' ||
     step === 'cancelled-run' ||
-    step === 'interrupted-start'
+    step === 'interrupted-start' ||
+    step === 'acceptance-hang'
   ) {
     await input(
       'textarea[aria-label^="任务输入"]',
@@ -88,12 +89,14 @@ async function runStep(step: string): Promise<{ step: string; alerts: number; wi
           ? '生成 Markdown 下期复盘，使用精确参考与复盘口径。'
           : step === 'failed-run'
             ? '合成故障运行'
-            : step === 'interrupted-start'
-              ? '合成中断运行'
-              : '合成取消运行',
+            : step === 'acceptance-hang'
+              ? '合成挂起'
+              : step === 'interrupted-start'
+                ? '合成中断运行'
+                : '合成取消运行',
     );
     await click('开始工作');
-    if (step === 'cancelled-run' || step === 'interrupted-start') {
+    if (step === 'cancelled-run' || step === 'interrupted-start' || step === 'acceptance-hang') {
       await waitFor(() => Boolean(findButton('停止')));
     } else if (step === 'failed-run') {
       await waitFor(() => hasText('合成故障：离线请求失败'));
@@ -108,6 +111,7 @@ async function runStep(step: string): Promise<{ step: string; alerts: number; wi
     await click('停止');
     await waitFor(() => hasText('已停止') || hasText('已取消'));
   }
+  if (step === 'capture-keyboard') await click('记住这段经验');
   if (step === 'save-source') {
     await click('记住这段经验');
     await waitFor(() => Boolean(document.querySelector('.memory-capture-source')));
@@ -200,7 +204,8 @@ async function runStep(step: string): Promise<{ step: string; alerts: number; wi
     await click('记忆');
     await waitFor(() => hasText(method) && hasText('取消优先带入'));
   }
-  if (step === 'process-history') {
+  if (step === 'process-history' || step === 'acceptance-history') {
+    await click('工作');
     const findTask = (): HTMLButtonElement | undefined =>
       [...document.querySelectorAll<HTMLButtonElement>('.workspace-group-tasks button')].find(
         (item) => item.textContent?.includes('生成 Markdown 本期复盘'),
@@ -210,7 +215,10 @@ async function runStep(step: string): Promise<{ step: string; alerts: number; wi
     if (!task) throw new Error('新进程丢失本期任务');
     task.click();
     await waitFor(
-      () => hasText('本期复盘已完成') && hasText('合成宿主重装配收口') && !findButton('停止'),
+      () =>
+        hasText('本期复盘已完成') &&
+        (step === 'acceptance-history' || hasText('合成宿主重装配收口')) &&
+        !findButton('停止'),
     );
   }
   if (step === 'process-exclusions') {

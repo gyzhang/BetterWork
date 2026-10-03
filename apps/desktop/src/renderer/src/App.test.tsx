@@ -593,6 +593,26 @@ describe('Expert summon in the task composer', () => {
     expect(api.experts.get).toHaveBeenCalledWith({ id: expertSummary.id });
   });
 
+  it('专家参考读取失败可在原表单重试，失败与加载不伪装空态、不丢草稿', async () => {
+    const api = installApi({ expert: true });
+    api.materials.listCandidates.mockRejectedValue(new Error('参考暂不可读取'));
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
+    fireEvent.click(await screen.findByRole('button', { name: '新建专家' }));
+    fireEvent.change(screen.getByLabelText('名称'), { target: { value: '保留名称草稿' } });
+    expect(await screen.findByRole('alert')).toHaveProperty(
+      'textContent',
+      expect.stringContaining('参考暂不可读取'),
+    );
+    expect(screen.queryByText('没有匹配的知识修订。')).toBeNull();
+    expect(screen.queryByText('没有匹配的成果版本。')).toBeNull();
+    api.materials.listCandidates.mockResolvedValue([]);
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(screen.getByLabelText('名称')).toHaveProperty('value', '保留名称草稿');
+    expect(await screen.findByText('没有匹配的知识修订。')).toBeDefined();
+  });
+
   it('carries the Expert common references into the next TaskContext', async () => {
     const api = installApi({ expert: true });
     const reference = {
@@ -857,12 +877,27 @@ describe('Task context restoration', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
     fireEvent.click(await screen.findByRole('button', { name: '记住这段经验' }));
+    const trigger = screen.getByRole('button', { name: '记住这段经验' });
     // 专家任务的捕获表单默认落在「专家 + 工作空间」范围，并给出只读原文选择区（§3.1、MI02）。
     const scopeButton = await screen.findByRole('button', { name: '记忆适用范围' });
     expect(scopeButton.textContent ?? '').toContain('专家与工作空间');
-    expect(
-      screen.getByRole('textbox', { name: '回答原文（只读，可拖选或用键盘选择）' }),
-    ).toBeDefined();
+    const source = screen.getByRole('textbox', {
+      name: '回答原文（只读，可拖选或用键盘选择）',
+    });
+    expect(document.activeElement).toBe(source);
+    const content = screen.getByRole('textbox', { name: '记忆正文' });
+    content.focus();
+    fireEvent.change(content, { target: { value: '尚未提交的改写经验' } });
+    fireEvent.keyDown(content, { key: 'Escape' });
+    expect(screen.queryByRole('textbox', { name: '记忆正文' })).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(api.memories.create).not.toHaveBeenCalled();
+
+    fireEvent.click(trigger);
+    expect(screen.getByRole('textbox', { name: '记忆正文' })).toHaveProperty('value', '');
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    expect(document.activeElement).toBe(trigger);
+    expect(api.memories.create).not.toHaveBeenCalled();
   });
 
   it('回答捕获保留原文选区来源，并且不提供全局范围', async () => {

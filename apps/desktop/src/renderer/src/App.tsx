@@ -159,6 +159,7 @@ export function App(): React.JSX.Element {
   const [discussionCheckpoints, setDiscussionCheckpoints] = useState<DiscussionCheckpoint[]>([]);
   /** 人工保存表单（产品设计 §3.1）：只带用户当场选中的片段，不预填整段回答。 */
   const [memoryCapture, setMemoryCapture] = useState<MemoryCaptureDraft>();
+  const memoryCaptureTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [memoryCaptureError, setMemoryCaptureError] = useState('');
   const [pendingCandidateDelete, setPendingCandidateDelete] = useState<MemoryViewItem>();
   const expertModelReference = activeExpert?.modelReference;
@@ -178,6 +179,9 @@ export function App(): React.JSX.Element {
           : '未配置模型时使用教学 Provider';
   const [materialCandidates, setMaterialCandidates] = useState<MaterialCandidate[]>([]);
   const [expertMaterialCandidates, setExpertMaterialCandidates] = useState<MaterialCandidate[]>([]);
+  const [expertReferencesLoading, setExpertReferencesLoading] = useState(false);
+  const [expertReferencesError, setExpertReferencesError] = useState('');
+  const [expertReferencesAttempt, setExpertReferencesAttempt] = useState(0);
   const [materialPickerKind, setMaterialPickerKind] = useState<'knowledge' | 'artifact'>();
   const [materialsLoading, setMaterialsLoading] = useState(false);
   const [materialPickerError, setMaterialPickerError] = useState('');
@@ -327,13 +331,19 @@ export function App(): React.JSX.Element {
     if (view === 'work') trackAction(reloadTaskMemories(), '加载当前任务记忆');
   }, [reloadTaskMemories, view]);
 
+  const closeMemoryCapture = (): void => {
+    setMemoryCapture(undefined);
+    setMemoryCaptureError('');
+    memoryCaptureTriggerRef.current?.focus();
+    memoryCaptureTriggerRef.current = null;
+  };
+
   /** 人工保存：`create` 的失败已由 hook 收口，这里只把它呈现在表单旁边。 */
   const submitMemoryCapture = async (submission: MemoryEditorSubmission): Promise<boolean> => {
     if (submission.kind !== 'create') return false;
     const outcome = await memoriesState.create(submission.request);
     if (outcome.ok) {
-      setMemoryCapture(undefined);
-      setMemoryCaptureError('');
+      closeMemoryCapture();
       await reloadTaskMemories();
       return true;
     }
@@ -436,21 +446,31 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     const requestId = expertMaterialCandidatesRequestRef.current + 1;
     expertMaterialCandidatesRequestRef.current = requestId;
+    setExpertMaterialCandidates([]);
+    setExpertReferencesError('');
     if (view !== 'experts' || !workspace) {
-      setExpertMaterialCandidates([]);
+      setExpertReferencesLoading(false);
       return;
     }
-    trackAction(
+    setExpertReferencesLoading(true);
+    reportAction(
       window.betterwork.materials
         .listCandidates({ workspaceId: workspace.id })
         .then((candidates) => {
-          if (expertMaterialCandidatesRequestRef.current === requestId) {
+          if (expertMaterialCandidatesRequestRef.current === requestId)
             setExpertMaterialCandidates(candidates);
-          }
+        })
+        .finally(() => {
+          if (expertMaterialCandidatesRequestRef.current === requestId)
+            setExpertReferencesLoading(false);
         }),
-      '加载专家常用参考候选',
+      (message) => {
+        if (expertMaterialCandidatesRequestRef.current === requestId)
+          setExpertReferencesError(message);
+      },
+      '无法加载专家常用参考，请重试。',
     );
-  }, [view, workspace]);
+  }, [view, workspace, expertReferencesAttempt]);
 
   useEffect(() => {
     if (view === 'work' && taskBindings.length > 0) composerRef.current?.focus();
@@ -1454,7 +1474,7 @@ export function App(): React.JSX.Element {
                                       <Button
                                         variant="text"
                                         size="sm"
-                                        onClick={() => {
+                                        onClick={(event) => {
                                           const answer = finalAssistantAnswer(runEvents);
                                           if (!answer) {
                                             setMemoryCaptureError(
@@ -1470,6 +1490,7 @@ export function App(): React.JSX.Element {
                                             answer.content,
                                             selected,
                                           );
+                                          memoryCaptureTriggerRef.current = event.currentTarget;
                                           setMemoryCapture({
                                             runId: run.id,
                                             eventId: answer.eventId,
@@ -1540,10 +1561,7 @@ export function App(): React.JSX.Element {
                                   setMemoryCaptureError('');
                                 }}
                                 onSubmit={submitMemoryCapture}
-                                onClose={() => {
-                                  setMemoryCapture(undefined);
-                                  setMemoryCaptureError('');
-                                }}
+                                onClose={closeMemoryCapture}
                               />
                             )}
                             {isRunActive &&
@@ -1670,6 +1688,9 @@ export function App(): React.JSX.Element {
             memories={memoriesState.memories}
             models={modelSettings.models}
             materialCandidates={expertMaterialCandidates}
+            referencesLoading={expertReferencesLoading}
+            referencesError={expertReferencesError}
+            onRetryReferences={() => setExpertReferencesAttempt((attempt) => attempt + 1)}
             {...(workspace ? { workspaceId: workspace.id } : {})}
             actions={experts}
             onSummon={summonExpert}

@@ -34,6 +34,8 @@ import { TaskMaterialService } from '../../apps/desktop/src/main/services/task-m
 import { ToolchainSnapshotService } from '../../apps/desktop/src/main/services/toolchain-snapshot-service';
 import { WorkspaceBriefService } from '../../apps/desktop/src/main/services/workspace-memory-brief-service';
 import { WorkspaceReferenceService } from '../../apps/desktop/src/main/services/workspace-reference-service';
+import { prepareAcceptanceSamples } from './acceptance-samples';
+import { checkCaptureKeyboard } from './ui-keyboard';
 
 const method = '每次复盘先核对口径，再给结论。';
 const inputText = '合成资料：本期工作已完成，交付结论必须可追溯。';
@@ -42,6 +44,7 @@ const steps = [
   'navigation',
   'summon',
   'first-run',
+  'capture-keyboard',
   'save-source',
   'save-method',
   'exclude',
@@ -245,9 +248,12 @@ export async function runAppJourney(
   output: string,
   capture: (window: BrowserWindow, filename: string) => Promise<void>,
   probeLostRestore = false,
+  journeyOptions: { interactive?: boolean; reopenDirectory?: string; silent?: boolean } = {},
 ): Promise<unknown> {
   // 输出目录可以复用，但每次合成数据库必须全新，不能继承上轮 Run 或探针的排除项。
-  const directory = await mkdtemp(path.join(output, 'app-journey-'));
+  const directory =
+    journeyOptions.reopenDirectory ?? (await mkdtemp(path.join(output, 'app-journey-')));
+  let handedOff = false;
   const host: { window: BrowserWindow | null } = { window: null };
   let services = assemble(directory, () => host.window);
   const requests: RequestReading[] = [];
@@ -273,8 +279,30 @@ export async function runAppJourney(
     assert.ok(run, '请求必须属于已落库的 Run');
     const body = typeof options?.body === 'string' ? options.body : '';
     requests.push({ runId: run.id, body });
-    if (mode === 'failure') throw new Error('合成故障：离线请求失败');
-    if (mode === 'cancel') {
+    const payload: unknown = JSON.parse(body);
+    const messages: unknown[] =
+      payload &&
+      typeof payload === 'object' &&
+      'messages' in payload &&
+      Array.isArray(payload.messages)
+        ? (payload.messages as unknown[])
+        : [];
+    const latestUser = [...messages]
+      .reverse()
+      .find(
+        (message) =>
+          message && typeof message === 'object' && 'role' in message && message.role === 'user',
+      );
+    const prompt =
+      latestUser &&
+      typeof latestUser === 'object' &&
+      'content' in latestUser &&
+      typeof latestUser.content === 'string'
+        ? latestUser.content
+        : '';
+    if (mode === 'failure' || (journeyOptions.interactive && prompt.includes('合成故障')))
+      throw new Error('合成故障：离线请求失败');
+    if (mode === 'cancel' || (journeyOptions.interactive && prompt.includes('合成挂起'))) {
       const signal = options?.signal;
       assert.ok(signal, '取消必须接到真实请求信号');
       cancellation.entered = true;
@@ -335,11 +363,14 @@ export async function runAppJourney(
       width: 1380,
       height: 860,
       useContentSize: true,
+      title: 'BetterWork · 离线合成验收（尚未人工验收）',
+      minWidth: 980,
+      minHeight: 640,
       show: false,
       paintWhenInitiallyHidden: true,
       webPreferences: {
         preload: path.join(output, 'app-preload.cjs'),
-        offscreen: true,
+        offscreen: !journeyOptions.interactive,
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
@@ -366,6 +397,13 @@ export async function runAppJourney(
     let reading: unknown = await host.window.webContents.executeJavaScript(
       `window.uiAppChecks.runStep(${JSON.stringify(step)}).catch(error => { throw new Error(${JSON.stringify(step)} + ': ' + error.message); })`,
     );
+    if (step === 'capture-keyboard') {
+      assert.equal(services.store.memories.list().length, 0);
+      host.window.webContents.debugger.attach('1.3');
+      reading = await checkCaptureKeyboard(host.window);
+      host.window.webContents.debugger.detach();
+      assert.equal(services.store.memories.list().length, 0, 'Esc 取消写入了记忆');
+    }
     if (step === 'cancelled-run') {
       // 等真实 Provider 请求进入挂起态再点停止，避免只测到 dispatch 前取消。
       for (let attempt = 0; attempt < 100 && !cancellation.entered; attempt += 1)
@@ -496,8 +534,35 @@ export async function runAppJourney(
     );
   };
   try {
-    await seed(services, directory);
+    if (!journeyOptions.reopenDirectory) await seed(services, directory);
     await openWindow();
+    if (journeyOptions.reopenDirectory) {
+      assert.ok(host.window);
+      await writeFile(
+        path.join(output, 'acceptance-ready.json'),
+        JSON.stringify(
+          {
+            status: 'prepared-not-accepted',
+            pid: process.pid,
+            databaseDirectory: path.basename(directory),
+            reopened: true,
+            memoryCount: services.store.memories.list().length,
+            runCount: services.store.runs.list().length,
+            syntheticRequests: requests.length,
+            humanResultsWritten: false,
+          },
+          null,
+          2,
+        ),
+      );
+      handedOff = true;
+      if (!journeyOptions.silent) host.window.show();
+      host.window.on('closed', () => {
+        services.store.close();
+        services.vault.close();
+      });
+      return { reopened: true };
+    }
     for (const step of steps) await checkStep(step);
     assert.ok(first);
     assert.ok(second);
@@ -511,14 +576,114 @@ export async function runAppJourney(
     services = assemble(directory, () => host.window);
     assert.deepEqual(services.store.runs.list(), before, '重开库改变历史 Run');
     assert.equal(requests.length, requestCount, '重装配自动调用模型');
-    await openWindow();
+    const reopenedWindow = await openWindow();
     await checkStep('restarted');
+    const firstArtifact = services.store.artifacts.list(first.taskId)[0];
+    assert.ok(firstArtifact);
+    const versionPreparation: unknown = await reopenedWindow.webContents
+      .executeJavaScript(`(async () => {
+      const artifact = await window.betterwork.artifacts.get({ id: ${JSON.stringify(firstArtifact.id)} });
+      if (!artifact || artifact.type !== 'markdown') throw new Error('缺合成上期成果');
+      const saved = await window.betterwork.artifacts.saveMarkdown({ artifactId: artifact.id, taskId: artifact.taskId, origin: 'user-edit', title: artifact.title, content: artifact.content + '\\n\\n合成修订：下期仍需重新核对资料。' });
+      const context = await window.betterwork.taskContexts.get({ taskId: artifact.taskId });
+      if (!context || context.executor.kind !== 'expert') throw new Error('缺来源专家上下文');
+      const memoryPage = await window.betterwork.memories.list({ workspaceId: artifact.workspaceId });
+      if (!memoryPage.ok) throw new Error(memoryPage.error.message);
+      const method = memoryPage.data.items.find(item => item.content === ${JSON.stringify(method)});
+      if (!method) throw new Error('缺待排除的自主口径');
+      const copied = await window.betterwork.experts.copy({ expertId: context.executor.expertId, name: '离线换期专家' });
+      await window.betterwork.taskContexts.save({ taskId: artifact.taskId, expectedRevision: context.revision, executor: { kind: 'expert', expertId: copied.expert.id, expertRevisionId: copied.expert.revision.id }, skillBindings: context.skillBindings, materials: context.materials, excludedMemoryIds: [...new Set([...(context.excludedMemoryIds ?? []), method.id])], mcpToolBindings: context.mcpToolBindings, modelReference: context.modelReference, builtinToolPolicy: context.builtinToolPolicy });
+      const sourceIdentity = await window.betterwork.artifacts.getVersionExecutor({ artifactId: artifact.id, artifactVersionId: artifact.currentVersionId });
+      if (sourceIdentity?.kind !== 'expert' || sourceIdentity.expertId !== context.executor.expertId) throw new Error('上期精确版本丢失原专家身份');
+      return { excludedMemoryId: method.id, originalVersionId: artifact.currentVersionId, revisedVersionId: saved.currentVersionId, originalExpertId: context.executor.expertId, replacementExpertId: copied.expert.id };
+    })()`);
+    assert.equal(services.store.artifacts.listVersions(firstArtifact.id).length, 2);
+    assert.ok(firstVersionId);
+    assert.ok(services.store.artifacts.getVersionDetail(firstVersionId));
+    const sourceDocument = services.vault.listDocuments()[0];
+    assert.ok(sourceDocument);
+    await writeFile(
+      path.join(directory, 'workspace', '合成复盘资料.md'),
+      `${inputText}\n合成换期：下一期有四个项目。`,
+    );
+    const refreshed = await services.vault.refreshDocument(sourceDocument.id);
+    assert.ok('refreshed' in refreshed && refreshed.refreshed, '换期资料刷新失败');
+    assert.equal(services.vault.listRevisions(sourceDocument.id).length, 2);
+    const prepared = await prepareAcceptanceSamples(services.store, directory);
+    assert.ok(services.store.taskContexts.getLatest(first.taskId)?.excludedMemoryIds?.length);
+    await writeFile(
+      path.join(output, 'acceptance-preparation.json'),
+      JSON.stringify(
+        {
+          status: 'prepared-not-accepted',
+          databaseDirectory: path.basename(directory),
+          preparation: prepared,
+          versionPreparation,
+          humanResultsWritten: false,
+        },
+        null,
+        2,
+      ),
+    );
+    if (journeyOptions.interactive) {
+      mode = 'happy';
+      await reopenedWindow.webContents.executeJavaScript(
+        'window.uiAppChecks.runStep("acceptance-history")',
+      );
+      await reopenedWindow.webContents.executeJavaScript(
+        'window.uiAppChecks.runStep("process-exclusions")',
+      );
+      if (journeyOptions.silent) {
+        cancellation.entered = false;
+        cancellation.aborted = false;
+        await reopenedWindow.webContents.executeJavaScript(
+          'window.uiAppChecks.runStep("acceptance-hang")',
+        );
+        for (let attempt = 0; attempt < 100 && !cancellation.entered; attempt += 1)
+          await new Promise<void>((resolve) => setTimeout(resolve, 20));
+        assert.ok(cancellation.entered, '交接窗口的合成挂起未进入真实 Provider 请求');
+        await reopenedWindow.webContents.executeJavaScript(
+          'window.uiAppChecks.runStep("cancelled-stop")',
+        );
+        assert.ok(cancellation.aborted, '合成挂起停止未传到请求信号');
+        assert.equal(services.store.runs.list()[0]?.status, 'cancelled');
+        await reopenedWindow.webContents.executeJavaScript(
+          'window.uiAppChecks.runStep("failed-run")',
+        );
+        assert.equal(services.store.runs.list()[0]?.status, 'failed');
+      }
+      await writeFile(
+        path.join(output, 'acceptance-ready.json'),
+        JSON.stringify(
+          {
+            status: 'prepared-not-accepted',
+            pid: process.pid,
+            databaseDirectory: path.basename(directory),
+            preparation: prepared,
+            versionPreparation,
+            syntheticRequests: requests.length,
+            networkAttempts: networkAttempts.length,
+            humanResultsWritten: false,
+          },
+          null,
+          2,
+        ),
+      );
+      handedOff = true;
+      if (!journeyOptions.silent) reopenedWindow.show();
+      reopenedWindow.on('closed', () => {
+        services.store.close();
+        services.vault.close();
+      });
+    }
     return {
       id: 'app-journey-jade-dark-1380',
       coverage: 'production-app-with-real-ipc-and-temporary-sqlite',
       mode: 'dark',
       width: 1380,
       checks: readings,
+      acceptancePreparation: prepared,
+      versionPreparation,
       model: 'deterministic-fetch-substitute',
       recovery: 'window-destroyed-stores-reopened-services-reassembled',
       requests: requests.length,
@@ -533,10 +698,12 @@ export async function runAppJourney(
       );
     throw new Error('完整应用离线旅程失败', { cause: error });
   } finally {
-    host.window?.destroy();
-    services.store.close();
-    services.vault.close();
-    globalThis.fetch = originalFetch;
-    session.defaultSession.webRequest.onBeforeRequest(null);
+    if (!handedOff) {
+      host.window?.destroy();
+      services.store.close();
+      services.vault.close();
+      globalThis.fetch = originalFetch;
+      session.defaultSession.webRequest.onBeforeRequest(null);
+    }
   }
 }

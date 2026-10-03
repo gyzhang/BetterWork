@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { ExpertSummary, MaterialCandidate } from '@betterwork/agent-protocol';
+import type { ExpertDetail, ExpertSummary, MaterialCandidate } from '@betterwork/agent-protocol';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -80,6 +80,60 @@ function actionLabels(root: Element): string[] {
 }
 
 describe('ExpertsPage 的目录条目', () => {
+  it.each(['list', 'detail'])('从%s 编辑后取消归还对应入口，不修改原专家', async (origin) => {
+    const detail: ExpertDetail = {
+      ...userExpert,
+      revision: {
+        id: 'expert-r3',
+        expertId: userExpert.id,
+        revision: 3,
+        createdAt: 1,
+        name: userExpert.name,
+        summary: userExpert.summary,
+        author: userExpert.author,
+        tags: userExpert.tags,
+        identity: '整理纪要',
+        principles: [],
+        inputRequirements: [],
+        deliveryRequirements: [],
+        skillPreset: [],
+        builtinToolPolicy: { mode: 'application-defaults' },
+        modelReference: { mode: 'application-default' },
+        referenceMaterials: [],
+      },
+    };
+    const base = stateStub([userExpert]);
+    const actions = {
+      ...base,
+      get: vi.fn(async () => detail),
+      saveRevision: vi.fn<ExpertsState['saveRevision']>(),
+    };
+    render(
+      <ExpertsPage
+        state={base}
+        actions={actions}
+        skills={[]}
+        mcpConnections={[]}
+        memories={[]}
+        models={[]}
+        materialCandidates={[]}
+        onSummon={vi.fn(async () => undefined)}
+        onError={vi.fn()}
+        onManageMemories={vi.fn()}
+      />,
+    );
+    if (origin === 'detail') fireEvent.click(screen.getByRole('button', { name: '详情' }));
+    const name = origin === 'detail' ? '编辑配置' : '编辑';
+    fireEvent.click(await screen.findByRole('button', { name }));
+    const field = await screen.findByLabelText('名称');
+    expect(document.activeElement).toBe(field);
+    fireEvent.change(field, { target: { value: '未保存的名称' } });
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name }));
+    expect(actions.saveRevision).not.toHaveBeenCalled();
+    expect(detail.revision.name).toBe(userExpert.name);
+  });
+
   it('筛选保留已选精确版本，越范围或失效后仍可移除，取消不再提交', async () => {
     const state = stateStub([]);
     const create = vi.fn<ExpertsState['create']>(async () => {
@@ -130,6 +184,7 @@ describe('ExpertsPage 的目录条目', () => {
       page([candidate(1), candidate(2), candidate(3, 'ws-other'), knowledge]),
     );
     fireEvent.click(screen.getByRole('button', { name: '新建专家' }));
+    expect(document.activeElement).toBe(screen.getByLabelText('名称'));
     fireEvent.change(screen.getByLabelText('名称'), { target: { value: '经营专家' } });
     fireEvent.change(screen.getByLabelText('人格与职责'), { target: { value: '核对经营数据' } });
     fireEvent.click(
@@ -180,6 +235,7 @@ describe('ExpertsPage 的目录条目', () => {
     fireEvent.click(missing);
     expect(screen.queryByRole('checkbox', { name: /来源已不可用/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: '新建专家' }));
     expect(create).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: '新建专家' })).toBeTruthy();
   });

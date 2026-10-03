@@ -661,7 +661,7 @@ UI Foundation 首批提供四套成对色系：
 | `TextField`、`TextArea` | `components/TextField.tsx` | 单行输入 size 必填；多行无档高，rows 决定高度，mono 决定等宽；含只读态 |
 | `Field` | `components/Field.tsx` | 标签/控件/说明；单控件有 hint 用 controlId 关联，包裹式标签不另设竞争名称；多控件/已有内部标签用 group，不能嵌套 label |
 | `FieldSelect` | `components/FieldSelect.tsx` | 单选下拉；size 必填，与同排控件一致；原生 select/option 不回归 |
-| `CheckList` | `components/CheckList.tsx` | 多选项列表，原生 checkbox；fieldset/legend 已命名时不再传 label |
+| `CheckList` | `components/CheckList.tsx` | 多选项列表，原生 checkbox；外层 fieldset/legend 已完整命名单一列表时不再传 label；同一 fieldset 内有多个不同列表时，各列表保留独立 label |
 | `SingleSelectPicker` | `components/SingleSelectPicker.tsx` | 图标/色板选项；原生同名 radio，每项 name 提供可访问名称 |
 | `Switch` | `components/Switch.tsx` | 布尔设置；恒定 label、aria-checked；需要确认时由调用方确认，未确认不改状态 |
 | `Tabs`、`SegmentedControl` | `components/Tabs.tsx` | 页签/同内容呈现模式切换；size 必填；前者 roving Tab 与方向键，后者各项参与 Tab |
@@ -694,7 +694,7 @@ UI Foundation 首批提供四套成对色系：
 | `DependencyPanel` | `components/skills/DependencyPanel.tsx` | Skill 环境准备、授权与作业结果；取消/失败保持运行契约 |
 | `ModelEditor` | `components/ModelEditorSheet.tsx` | 模型编辑 Sheet；实际导出为 ModelEditor，不是 ModelEditorSheet |
 | `MemoryEditor` | `components/MemoryEditor.tsx` | 记忆编辑表单与有效性治理，业务契约见 memory-contracts |
-| `MemoryCapturePanel` | `components/MemoryCapturePanel.tsx` | 回答捕获宿主，来源选择与正文分开 |
+| `MemoryCapturePanel` | `components/MemoryCapturePanel.tsx` | 内联回答捕获宿主，来源选择与正文分开；打开聚焦只读原文，Tab 可进入正文；Esc 与取消关闭未提交草稿并归还打开它的按钮。提交等待期间不响应 Esc，菜单先处理自己的 Esc，不设置焦点陷阱 |
 | `MemoryCaptureSource` | `components/MemoryCaptureSource.tsx` | 只读 TextArea、原文选区及码点限制，名称由 Field 关联 |
 | `MemorySuggestionList` | `components/MemorySuggestionList.tsx` | context/settings 两档候选/作业呈现，候选空态用 EmptyNotice |
 | `WorkspaceBrief` | `components/WorkspaceBrief.tsx` | 工作空间简报与精确参考版本；六组 ListRow/SectionHeader，空态用 EmptyNotice |
@@ -705,6 +705,8 @@ UI Foundation 首批提供四套成对色系：
 | `Welcome` | `components/Welcome.tsx` | 工作首屏品牌引导，不能借它的 hero 排版充当普通空态 |
 
 `ToastHost` 位于 `notifications.tsx`，是持久化通知的全局投影；不属于页面自建组件或局部短时反馈。`useOverlaySemantics` 是 `Modal.tsx` 的语义 hook；`EntryFacts` 是 `CatalogCard.tsx` 的事实类型。它们各自的用途见 §11.5、上表及真实源码。
+
+专家编辑是页面内视图切换：进入聚焦「名称」，取消/返回回到原入口（新建按钮、该条目的编辑按钮或详情页的编辑配置），保存成功聚焦详情的编辑配置。常用参考沿自然 Tab 顺序，类型菜单打开聚焦首个可用项，Esc 关闭菜单并归还触发按钮、保留草稿和已选精确版本；原生 Disclosure 与页面内冲突卡片不按弹窗处理。候选读取区分加载、失败和空列表，失败在参考表单内复用 InlineError 给重试，不丢名称或已选精确版本。
 
 #### 10.1.3 组合约束与检查边界
 
@@ -731,6 +733,10 @@ UI Foundation 首批提供四套成对色系：
 应用旅程入口为 `scripts/fixtures/ui-app-journey.ts` 与 `ui-app-fixture.tsx`，复用真实 App、生产 Preload 与 IPC 注册。材料、工作空间与数据库均在当次临时目录，Provider HTTP 由确定性流式请求替身接管并拒绝其他目标，窗口拒绝 HTTP/HTTPS 请求，不调用真实模型或脚本。界面每一步均附 SQLite 断言；恢复探针故意让界面恢复而数据库仍保留排除项，必须退出 1。结束时销毁窗口、关闭并重开库、重装配服务，再验证历史与记忆；它不是操作系统进程重启。应用截图等待新绘制帧，组件/页面矩阵另外核对稳定截图像素。上述两类结果分别报告，不回写原任务板的人工验收状态。
 
 进程恢复入口为 `scripts/fixtures/ui-process-recovery.ts`；CLI 只终止自己创建的离线测试进程组，新进程 PID 必须不同。完成 Run 与事件不变、中断 Run 恰好补一个失败终态、重装配不自动重放模型请求、成果/记忆/TaskContext 与原资料保留均有独立断言。`--recovery-only` 是定向检查，不等于完整门禁；`--probe-crash-recovery` 故意跳过中断收口，预期退出 1。失败保留 `process-recovery-*/` 中的合成库/读数与截图，不包含 Chromium 用户目录；这个证据层与同进程重装配分别报告。
+
+现有页面矩阵另用 Chromium Input.dispatchKeyEvent 验证专家参考与内联冲突的 Tab/Shift+Tab、Enter、菜单 Esc、焦点环与输入保留；专家编辑进入/取消验证初始焦点与原入口归还。应用旅程的回答捕获另发真实键盘与输入事件，核对原文初始焦点、正文可达、取消未写入与焦点归还；`--probe-keyboard` 阻断 Tab 后必须退出 1。DOM 焦点和计算样式不等于屏幕阅读器或焦点环逐像素认证。
+
+同一旅程的 `--prepare-acceptance` 可生成独立离线合成窗口供人类走查；`--reopen-acceptance` 只重开原库，不重新播种，`--acceptance-smoke` 用新 PID 验证该交接入口。前置样本通过生产入口准备，库与资料只住临时目录，准备读数为 prepared-not-accepted，不写人类结果。最小窗口沿用 980×640；完整入口、真实模型、屏幕阅读器与人工结果仍各自留验。操作和唯一结果表见 [MI 人工清单](development/memory-mi10-checklist.md)。
 
 静态解析无法追踪的包装要改为可追溯组合或给出精确形态与行为证据；Review 必须看新增/扩大的白名单与规则变更。`npm run verify` 全绿是必要条件，不能独自证明产品与视觉验收完成。历史评估与日志只用于理解决策，不是当前待办；状态与开工授权仍查对应任务板。
 
