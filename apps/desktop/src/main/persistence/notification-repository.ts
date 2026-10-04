@@ -17,6 +17,7 @@ interface NotificationRow {
   detail: string | null;
   target_kind: string | null;
   target_id: string | null;
+  schedule_id?: string | null;
   read: 0 | 1;
   created_at: number;
 }
@@ -34,6 +35,12 @@ const toTarget = (row: NotificationRow): NotificationTarget | undefined => {
     return { kind: 'artifact', artifactId: row.target_id };
   }
   if (row.target_kind === 'knowledge') return { kind: 'knowledge' };
+  if (row.target_kind === 'schedule-rule' && row.target_id) {
+    return { kind: 'schedule', scheduleId: row.target_id };
+  }
+  if (row.target_kind === 'schedule-occurrence' && row.target_id && row.schedule_id) {
+    return { kind: 'schedule', scheduleId: row.schedule_id, occurrenceId: row.target_id };
+  }
   return undefined;
 };
 
@@ -59,6 +66,23 @@ const toSummary = (row: NotificationRow): NotificationSummary => {
 export class NotificationRepository {
   constructor(private readonly db: Database.Database) {}
 
+  private selectRows(): string {
+    return `SELECT n.*,
+              CASE
+                WHEN n.target_kind = 'schedule-rule' THEN n.target_id
+                WHEN n.target_kind = 'schedule-occurrence' THEN o.schedule_id
+              END AS schedule_id
+            FROM notifications n
+            LEFT JOIN schedule_occurrences o
+              ON n.target_kind = 'schedule-occurrence' AND o.id = n.target_id`;
+  }
+
+  get(notificationId: string): NotificationSummary | undefined {
+    const row = this.db.prepare(`${this.selectRows()} WHERE n.id = ?`).get(notificationId) as
+      NotificationRow | undefined;
+    return row ? toSummary(row) : undefined;
+  }
+
   /**
    * `read` 由调用方决定：仓储只管「怎么写」，「哪一类结果不该再打扰用户」是
    * `NotificationService` 的策略（docs/10 §11.5.1）。
@@ -70,8 +94,9 @@ export class NotificationRepository {
       kind: input.kind,
       title: input.title,
       detail: input.detail ?? null,
-      target_kind: input.target?.kind ?? null,
+      target_kind: targetKindOf(input.target),
       target_id: targetIdOf(input.target),
+      ...(input.target?.kind === 'schedule' ? { schedule_id: input.target.scheduleId } : {}),
       read: options?.read ? 1 : 0,
       created_at: Date.now(),
     };
@@ -108,7 +133,7 @@ export class NotificationRepository {
 
   list(): NotificationSummary[] {
     const rows = this.db
-      .prepare('SELECT * FROM notifications ORDER BY created_at DESC, rowid DESC LIMIT ?')
+      .prepare(`${this.selectRows()} ORDER BY n.created_at DESC, n.rowid DESC LIMIT ?`)
       .all(RETENTION_LIMIT) as NotificationRow[];
     return rows.map(toSummary);
   }
@@ -139,5 +164,14 @@ function targetIdOf(target: NotificationTarget | undefined): string | null {
   if (!target) return null;
   if (target.kind === 'task') return target.taskId;
   if (target.kind === 'artifact') return target.artifactId;
+  if (target.kind === 'schedule') return target.occurrenceId ?? target.scheduleId;
   return null;
+}
+
+function targetKindOf(target: NotificationTarget | undefined): string | null {
+  if (!target) return null;
+  if (target.kind === 'schedule') {
+    return target.occurrenceId ? 'schedule-occurrence' : 'schedule-rule';
+  }
+  return target.kind;
 }

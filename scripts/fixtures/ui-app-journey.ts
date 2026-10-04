@@ -29,6 +29,8 @@ import { MemoryService } from '../../apps/desktop/src/main/services/memory-servi
 import { ModelProviderFactory } from '../../apps/desktop/src/main/services/model-provider-factory';
 import { NotificationService } from '../../apps/desktop/src/main/services/notification-service';
 import { RunService } from '../../apps/desktop/src/main/services/run-service';
+import { ScheduleOutcomeService } from '../../apps/desktop/src/main/services/schedule-outcome-service';
+import { ScheduleOutputService } from '../../apps/desktop/src/main/services/schedule-output-service';
 import { ScheduleService } from '../../apps/desktop/src/main/services/schedule-service';
 import { SkillDependencyService } from '../../apps/desktop/src/main/services/skill-dependency-service';
 import { SkillService } from '../../apps/desktop/src/main/services/skill-service';
@@ -153,6 +155,8 @@ export function assemble(
     settleDue: async () => undefined,
     cancelPreparations: () => undefined,
   });
+  const scheduleOutputs = new ScheduleOutputService(store);
+  const scheduleOutcomes = new ScheduleOutcomeService(store, scheduleOutputs);
   registerIpc({
     store,
     knowledgeVault: vault,
@@ -170,6 +174,7 @@ export function assemble(
     workspaceBrief: new WorkspaceBriefService({ store }),
     workspaceReferences: new WorkspaceReferenceService({ store }),
     mcpClientService: new McpClientService(store),
+    markNotificationRendererReady: () => true,
     dependencies,
     snapshots,
     scheduleService,
@@ -180,6 +185,8 @@ export function assemble(
       prepareAndStart: async () => undefined,
       stopOccurrence: () => 'not-found',
     },
+    scheduleOutputs,
+    scheduleOutcomes,
     publishScheduleChange: () => undefined,
     dependencyLocksRoot: path.join(directory, 'locks'),
     getWindow,

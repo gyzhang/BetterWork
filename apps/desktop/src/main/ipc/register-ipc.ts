@@ -65,12 +65,14 @@ import {
   getMcpConnectionRequestSchema,
   getMemoryRequestSchema,
   getMemorySettingsRequestSchema,
+  getNotificationRequestSchema,
   getRunArtifactDeclarationsRequestSchema,
   getRunMemoryContextRequestSchema,
   getScheduleOccurrenceRequestSchema,
   getScheduleRequestSchema,
   getSkillRequestSchema,
   getTaskContextRequestSchema,
+  getTaskRequestSchema,
   importSkillRequestSchema,
   inputSnapshotSchema,
   IpcChannel,
@@ -130,6 +132,8 @@ import {
   modelProfileIdSchema,
   modelProfileSummarySchema,
   modelSaveResultSchema,
+  notificationRendererReadyRequestSchema,
+  notificationRendererReadyResultSchema,
   notificationSummarySchema,
   openFileArtifactRequestSchema,
   openFileArtifactResultSchema,
@@ -160,6 +164,7 @@ import {
   resultSchema,
   retryKnowledgeJobRequestSchema,
   retryMemoryJobRequestSchema,
+  retryScheduleOutputRequestSchema,
   revokeSkillTrustRequestSchema,
   runArtifactSourceDeclarationSchema,
   runSourcePreviewSchema,
@@ -186,6 +191,7 @@ import {
   scheduleManualExecutionResultSchema,
   scheduleOccurrenceDetailSchema,
   scheduleOccurrenceHistoryPageSchema,
+  scheduleOutputReceiptSchema,
   schedulePageSchema,
   schedulePreflightViewSchema,
   schedulePreviewResultSchema,
@@ -234,7 +240,14 @@ import {
   workspaceSummarySchema,
   workspaceTaskGroupsSchema,
 } from '@betterwork/agent-protocol';
-import { type BrowserWindow, dialog, ipcMain, shell, systemPreferences } from 'electron';
+import {
+  type BrowserWindow,
+  dialog,
+  ipcMain,
+  type IpcMainInvokeEvent,
+  shell,
+  systemPreferences,
+} from 'electron';
 import { z, type ZodTypeAny } from 'zod';
 
 import { createNodeFileSystem } from '../infrastructure/dependency-adapters';
@@ -245,6 +258,7 @@ import {
   ScheduleNotFoundError,
   ScheduleOccurrenceError,
   ScheduleOccurrenceStateError,
+  ScheduleOutputRepositoryError,
   ScheduleRequestKeyConflictError,
   ScheduleRevisionConflictError,
 } from '../persistence';
@@ -272,6 +286,8 @@ import { nextTimes, resolveSchedulePeriod } from '../services/schedule-calendar'
 import type { ScheduleDispatchService } from '../services/schedule-dispatch-service';
 import { ScheduleDispatchServiceError } from '../services/schedule-dispatch-service';
 import { ScheduleExecutionServiceError } from '../services/schedule-execution-service';
+import type { ScheduleOutcomeService } from '../services/schedule-outcome-service';
+import type { ScheduleOutputService } from '../services/schedule-output-service';
 import type { SchedulePreflightService } from '../services/schedule-preflight';
 import type { ScheduleService } from '../services/schedule-service';
 import { ScheduleServiceError } from '../services/schedule-service';
@@ -293,6 +309,7 @@ export interface IpcDependencies {
   readonly knowledgeSearch: KnowledgeSearchService;
   readonly taskMaterials: TaskMaterialService;
   readonly notifications: NotificationService;
+  readonly markNotificationRendererReady: (webContentsId: number) => boolean;
   readonly runs: RunService;
   /** 凭据入口（Main 侧）：供保存双写与连接测试的新读优先；缺省时保持旧行为。 */
   readonly credentialAccess?: CredentialResolver & CredentialProvisioner;
@@ -312,6 +329,8 @@ export interface IpcDependencies {
   readonly scheduleService: ScheduleService;
   readonly schedulePreflight: Pick<SchedulePreflightService, 'check'>;
   readonly scheduleDispatch: Pick<ScheduleDispatchService, 'prepareAndStart' | 'stopOccurrence'>;
+  readonly scheduleOutputs: Pick<ScheduleOutputService, 'retryFailedReceipt'>;
+  readonly scheduleOutcomes: Pick<ScheduleOutcomeService, 'projectOccurrence'>;
   readonly publishScheduleChange: (event: ScheduleChangedEvent) => void;
   readonly fileArtifactService?: FileArtifactService;
   /** 随包依赖锁目录：开发态在仓库 resources 下，打包后在安装资源里。 */
@@ -361,11 +380,11 @@ function handleNoInput<Result>(
   channel: string,
   schema: ZodTypeAny,
   responseSchema: ZodTypeAny,
-  handler: () => Result | Promise<Result>,
+  handler: (event: IpcMainInvokeEvent) => Result | Promise<Result>,
 ): void {
-  ipcMain.handle(channel, async (_event, raw: unknown) => {
+  ipcMain.handle(channel, async (event, raw: unknown) => {
     schema.parse(raw ?? {});
-    return responseSchema.parse(await handler());
+    return responseSchema.parse(await handler(event));
   });
 }
 
@@ -414,7 +433,8 @@ const scheduleErrorFrom = (error: unknown): ScheduleDomainError => {
   }
   if (
     error instanceof ScheduleDispatchServiceError ||
-    error instanceof ScheduleSourceRepositoryError
+    error instanceof ScheduleSourceRepositoryError ||
+    error instanceof ScheduleOutputRepositoryError
   ) {
     return boundedScheduleError({ code: error.code, message: error.message });
   }
@@ -567,7 +587,7 @@ function registerRunChannels({ store, runs }: IpcDependencies): void {
 }
 
 function registerScheduleChannels(deps: IpcDependencies): void {
-  const { store, scheduleService } = deps;
+  const { store, scheduleService, scheduleOutputs, scheduleOutcomes } = deps;
 
   handleScheduleInput(
     IpcChannel.ListSchedules,
@@ -605,7 +625,9 @@ function registerScheduleChannels(deps: IpcDependencies): void {
         history: {
           items: occurrences.items.map((occurrence) => {
             const run = occurrence.firstRunId ? store.runs.get(occurrence.firstRunId) : undefined;
-            return { occurrence, ...(run ? { run } : {}) };
+            const result = scheduleOutcomes.projectOccurrence(occurrence.id);
+            if (!result) throw scheduleIpcError('schedule_conflict', '定时实例结果不可用。');
+            return { occurrence, ...(run ? { run } : {}), result };
           }),
           ...(occurrences.nextCursor === undefined ? {} : { nextCursor: occurrences.nextCursor }),
         },
@@ -718,7 +740,9 @@ function registerScheduleChannels(deps: IpcDependencies): void {
       return {
         items: page.items.map((occurrence) => {
           const run = occurrence.firstRunId ? store.runs.get(occurrence.firstRunId) : undefined;
-          return { occurrence, ...(run ? { run } : {}) };
+          const result = scheduleOutcomes.projectOccurrence(occurrence.id);
+          if (!result) throw scheduleIpcError('schedule_conflict', '定时实例结果不可用。');
+          return { occurrence, ...(run ? { run } : {}), result };
         }),
         ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
       };
@@ -759,13 +783,16 @@ function registerScheduleChannels(deps: IpcDependencies): void {
           }
         }
       }
+      const result = scheduleOutcomes.projectOccurrence(occurrence.id);
+      if (!result) throw scheduleIpcError('schedule_conflict', '定时实例结果不可用。');
       return {
         occurrence,
+        result,
         config,
         ...(task ? { task } : {}),
         ...(run ? { run } : {}),
         ...(sourceSnapshot ? { sourceSnapshot } : {}),
-        outputReceipts: [],
+        outputReceipts: store.scheduleOutputs.listByOccurrence(occurrence.id),
         readMaterialCount: readMaterials.size,
         adoptedMaterialCount: adoptedMaterials.size,
       };
@@ -918,6 +945,24 @@ function registerScheduleChannels(deps: IpcDependencies): void {
       return { result };
     },
   );
+
+  handleScheduleInput(
+    IpcChannel.RetryScheduleOutput,
+    retryScheduleOutputRequestSchema,
+    scheduleOutputReceiptSchema,
+    async ({ receiptId, expectedAttempt }) => {
+      const receipt = await scheduleOutputs.retryFailedReceipt({ receiptId, expectedAttempt });
+      const occurrence = store.scheduleOccurrences.get(receipt.occurrenceId);
+      if (occurrence) {
+        notifyScheduleChanged(deps, {
+          scheduleId: occurrence.scheduleId,
+          occurrenceId: occurrence.id,
+          reason: 'occurrence',
+        });
+      }
+      return receipt;
+    },
+  );
 }
 
 function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
@@ -996,6 +1041,12 @@ function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
     listTasksRequestSchema,
     z.array(recentTaskSummarySchema),
     (input) => store.tasks.listRecent(input.workspaceId),
+  );
+  handleInput(
+    IpcChannel.GetTask,
+    getTaskRequestSchema,
+    recentTaskSummarySchema.nullable(),
+    ({ id }) => store.tasks.getRecentSummary(id) ?? null,
   );
   handleInput(
     IpcChannel.ListEvidence,
@@ -2193,12 +2244,32 @@ function registerDependencyChannels(deps: IpcDependencies): void {
   );
 }
 
-function registerNotificationChannels({ notifications }: IpcDependencies): void {
+function registerNotificationChannels({
+  notifications,
+  markNotificationRendererReady,
+}: IpcDependencies): void {
   handleNoInput(
     IpcChannel.ListNotifications,
     emptyRequestSchema,
     z.array(notificationSummarySchema),
     () => notifications.list(),
+  );
+  handleInput(
+    IpcChannel.GetNotification,
+    getNotificationRequestSchema,
+    notificationSummarySchema.nullable(),
+    ({ id }) => notifications.get(id) ?? null,
+  );
+  handleNoInput(
+    IpcChannel.NotificationRendererReady,
+    notificationRendererReadyRequestSchema,
+    notificationRendererReadyResultSchema,
+    (event) => {
+      if (!markNotificationRendererReady(event.sender.id)) {
+        throw new Error('Notification renderer is not the active window');
+      }
+      return { ready: true };
+    },
   );
   handleInput(
     IpcChannel.MarkNotificationRead,

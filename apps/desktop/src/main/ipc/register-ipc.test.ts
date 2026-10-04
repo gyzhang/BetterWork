@@ -23,6 +23,7 @@ import {
   scheduleAggregateSchema,
   scheduleCallResultSchema,
   scheduleManualExecutionResultSchema,
+  scheduleOutputReceiptSchema,
   type WorkspaceMemorySettings,
   type WorkspaceSummary,
   type WorkspaceTaskGroup,
@@ -31,6 +32,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { AppStore } from '../persistence';
 import { resolveSchedulePeriod } from '../services/schedule-calendar';
+import type { ScheduleOutcomeService } from '../services/schedule-outcome-service';
+import type { ScheduleOutputService } from '../services/schedule-output-service';
 import type { SkillDependencyService } from '../services/skill-dependency-service';
 import type { ToolchainSnapshotService } from '../services/toolchain-snapshot-service';
 
@@ -48,6 +51,7 @@ const mocks = vi.hoisted(() => ({
   openPath: vi.fn(async () => ''),
   prepareSchedule: vi.fn(async () => undefined),
   stopSchedule: vi.fn((): 'cancel-requested' => 'cancel-requested'),
+  markNotificationRendererReady: vi.fn(() => true),
 }));
 
 vi.mock('electron', () => ({
@@ -70,7 +74,7 @@ vi.mock('electron', () => ({
 const invoke = async (channel: string, raw: unknown): Promise<unknown> => {
   const handler = mocks.handlers.get(channel);
   if (!handler) throw new Error(`No handler registered for ${channel}`);
-  return handler({}, raw);
+  return handler({ sender: { id: 42 } }, raw);
 };
 
 /** 推送通道由主进程主动 send，不经 ipcMain.handle 注册。 */
@@ -92,6 +96,8 @@ describe('registerIpc', () => {
     interpreterPath: string;
   };
   let fileArtifactSourcePath: string;
+  let scheduleOutputs: ScheduleOutputService;
+  let scheduleOutcomes: ScheduleOutcomeService;
 
   beforeAll(async () => {
     temporaryDirectory = mkdtempSync(path.join(os.tmpdir(), 'betterwork-ipc-'));
@@ -103,6 +109,7 @@ describe('registerIpc', () => {
     const { SkillDependencyService } = await import('../services/skill-dependency-service');
     const { ToolchainSnapshotService } = await import('../services/toolchain-snapshot-service');
     const { FileArtifactService } = await import('../services/file-artifact-service');
+    const { ScheduleOutcomeService } = await import('../services/schedule-outcome-service');
     const { ExpertService } = await import('../services/expert-service');
     const { InputSnapshotService } = await import('../services/input-snapshot-service');
     const { TaskMaterialService } = await import('../services/task-material-service');
@@ -117,6 +124,7 @@ describe('registerIpc', () => {
     const { KnowledgeIndexService } = await import('../services/knowledge-index-service');
     const { KnowledgeSearchService } = await import('../services/knowledge-search');
     const { ScheduleService } = await import('../services/schedule-service');
+    const { ScheduleOutputService } = await import('../services/schedule-output-service');
     const { fakePptxRenderer } = await import('../infrastructure/fixtures/fake-pptx-renderer');
     const { FakeDownloader, FakeFileSystem, FakePythonRunner, scenarioOf } =
       await import('../services/fixtures/fake-python-runtime');
@@ -227,6 +235,8 @@ describe('registerIpc', () => {
       () => true,
       fakePptxRenderer(),
     );
+    scheduleOutputs = new ScheduleOutputService(store, { fileArtifacts: fileArtifactService });
+    scheduleOutcomes = new ScheduleOutcomeService(store, scheduleOutputs);
     dependencyTestContext = { dependencies, snapshots, locksRoot, interpreterPath };
 
     registerIpc({
@@ -243,6 +253,7 @@ describe('registerIpc', () => {
       workspaceReferences,
       mcpClientService,
       notifications,
+      markNotificationRendererReady: mocks.markNotificationRendererReady,
       runs,
       skillService,
       expertService,
@@ -260,6 +271,8 @@ describe('registerIpc', () => {
         prepareAndStart: mocks.prepareSchedule,
         stopOccurrence: mocks.stopSchedule,
       },
+      scheduleOutputs,
+      scheduleOutcomes,
       publishScheduleChange: () => undefined,
       fileArtifactService,
       dependencyLocksRoot: locksRoot,
@@ -293,10 +306,89 @@ describe('registerIpc', () => {
     expect(duplicated).toEqual([]);
   });
 
+  it('routes explicit Schedule output retry through validated IPC without creating another Run', async () => {
+    const receipt = scheduleOutputReceiptSchema.parse({
+      id: 'receipt-retry-fixture',
+      occurrenceId: 'occurrence-retry-fixture',
+      artifactVersionId: 'artifact-version-retry-fixture',
+      workspaceId: 'workspace-retry-fixture',
+      relativePath: '定时成果/复核-v1-version-id.md',
+      contentHash: 'a'.repeat(64),
+      status: 'saved',
+      attempt: 2,
+      createdAt: 10,
+      updatedAt: 20,
+    });
+    const retry = vi.spyOn(scheduleOutputs, 'retryFailedReceipt').mockResolvedValue(receipt);
+
+    await expect(
+      invoke(IpcChannel.RetryScheduleOutput, {
+        receiptId: receipt.id,
+        expectedAttempt: 1,
+      }),
+    ).resolves.toMatchObject({ status: 'success', data: receipt });
+    expect(retry).toHaveBeenCalledWith({ receiptId: receipt.id, expectedAttempt: 1 });
+    await expect(
+      invoke(IpcChannel.RetryScheduleOutput, {
+        receiptId: receipt.id,
+        expectedAttempt: 0,
+      }),
+    ).rejects.toThrow();
+    retry.mockRestore();
+  });
+
   it('rejects malformed request data before it reaches a handler', async () => {
     await expect(
       invoke(IpcChannel.CreateTask, { workspaceId: '', title: '', goal: '' }),
     ).rejects.toThrow();
+  });
+
+  it('retrieves a historical task by stable ID and returns null after deletion', async () => {
+    const workspace = store.workspaces.create(
+      path.join(temporaryDirectory, 'task-target-workspace'),
+      '历史任务目标空间',
+    );
+    const tasks = Array.from({ length: 101 }, (_unused, index) =>
+      store.tasks.create(workspace.id, `合成历史任务 ${String(index)}`, '定向 IPC 回看测试'),
+    );
+    const oldest = tasks[0];
+    if (!oldest) throw new Error('Historical task fixture was not created');
+    expect(store.tasks.listRecent().some((task) => task.id === oldest.task.id)).toBe(false);
+    await expect(invoke(IpcChannel.GetTask, { id: oldest.task.id })).resolves.toMatchObject({
+      id: oldest.task.id,
+      sessionId: oldest.sessionId,
+      title: oldest.task.title,
+    });
+    await expect(invoke(IpcChannel.GetTask, { id: 'missing-task' })).resolves.toBeNull();
+  });
+
+  it('retrieves notifications by stable ID and accepts Renderer readiness from its sender', async () => {
+    const notice = store.notifications.save({
+      level: 'warning',
+      kind: 'schedule',
+      title: '合成通知回看',
+      target: {
+        kind: 'schedule',
+        scheduleId: 'schedule-target',
+        occurrenceId: 'occurrence-target',
+      },
+    });
+    await expect(invoke(IpcChannel.GetNotification, { id: notice.id })).resolves.toMatchObject({
+      id: notice.id,
+      title: notice.title,
+    });
+    await expect(
+      invoke(IpcChannel.GetNotification, { id: 'missing-notification' }),
+    ).resolves.toBeNull();
+    await expect(invoke(IpcChannel.NotificationRendererReady, {})).resolves.toEqual({
+      ready: true,
+    });
+    expect(mocks.markNotificationRendererReady).toHaveBeenCalledWith(42);
+    mocks.markNotificationRendererReady.mockReturnValueOnce(false);
+    await expect(invoke(IpcChannel.NotificationRendererReady, {})).rejects.toThrow(
+      'Notification renderer is not the active window',
+    );
+    await expect(invoke(IpcChannel.NotificationRendererReady, { extra: true })).rejects.toThrow();
   });
 
   it('validates schedule ownership, CAS, manual idempotency, and archived execution at IPC', async () => {
@@ -444,6 +536,7 @@ describe('registerIpc', () => {
         items: [
           expect.objectContaining({
             occurrence: expect.objectContaining({ id: first.data.occurrence.id }),
+            result: expect.objectContaining({ status: 'preparing' }),
           }),
         ],
       },
@@ -452,7 +545,11 @@ describe('registerIpc', () => {
       invoke(IpcChannel.GetScheduleOccurrence, { occurrenceId: first.data.occurrence.id }),
     ).resolves.toMatchObject({
       status: 'success',
-      data: { occurrence: { id: first.data.occurrence.id }, readMaterialCount: 0 },
+      data: {
+        occurrence: { id: first.data.occurrence.id },
+        result: { status: 'preparing' },
+        readMaterialCount: 0,
+      },
     });
     await expect(
       invoke(IpcChannel.ListScheduleSourceItems, { occurrenceId: first.data.occurrence.id }),

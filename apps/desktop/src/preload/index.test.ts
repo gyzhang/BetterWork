@@ -104,6 +104,7 @@ describe('schedule preload API', () => {
         preflightFingerprint: 'fingerprint-1',
       }),
       schedules.cancelOccurrence({ occurrenceId: 'occurrence-1' }),
+      schedules.retryOutput({ receiptId: 'receipt-1', expectedAttempt: 1 }),
     ]);
 
     expect(mocks.invoke.mock.calls.map(([channel]) => channel)).toEqual([
@@ -120,8 +121,9 @@ describe('schedule preload API', () => {
       IpcChannel.ExecuteScheduleNow,
       IpcChannel.ExecuteMissedSchedule,
       IpcChannel.CancelScheduleOccurrence,
+      IpcChannel.RetryScheduleOutput,
     ]);
-    expect(mocks.invoke).toHaveBeenCalledTimes(13);
+    expect(mocks.invoke).toHaveBeenCalledTimes(14);
   });
 
   it('rejects malformed preload inputs before IPC and malformed responses after IPC', async () => {
@@ -144,5 +146,30 @@ describe('schedule preload API', () => {
 
     unsubscribe();
     expect(mocks.off).toHaveBeenCalledWith(IpcChannel.ScheduleChanged, handler);
+  });
+});
+
+describe('historical task and notification preload APIs', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.invoke.mockImplementation(async (channel) => {
+      if (channel === IpcChannel.NotificationRendererReady) return { ready: true };
+      return null;
+    });
+  });
+
+  it('validates stable IDs and the Renderer ready acknowledgment', async () => {
+    await Promise.all([
+      api().tasks.get({ id: 'historical-task' }),
+      api().notifications.get({ id: 'notification-1' }),
+      api().notifications.rendererReady(),
+    ]);
+    expect(mocks.invoke.mock.calls).toEqual([
+      [IpcChannel.GetTask, { id: 'historical-task' }],
+      [IpcChannel.GetNotification, { id: 'notification-1' }],
+      [IpcChannel.NotificationRendererReady, {}],
+    ]);
+    expect(() => api().tasks.get({ id: '' })).toThrow();
+    expect(() => api().notifications.get({ id: '' })).toThrow();
   });
 });

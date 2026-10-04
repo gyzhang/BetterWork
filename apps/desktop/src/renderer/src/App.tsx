@@ -1216,6 +1216,22 @@ export function App(): React.JSX.Element {
     setView('knowledge');
     refreshKnowledge();
   };
+  const openTaskTarget = async (taskId: string): Promise<void> => {
+    const task = await window.betterwork.tasks.get({ id: taskId });
+    if (!task) throw new Error('这项通知对应的任务已不存在，无法打开。');
+    let workspaces = allWorkspaces;
+    let targetWorkspace = workspaces.find((item) => item.id === task.workspaceId);
+    if (!targetWorkspace) {
+      workspaces = await window.betterwork.workspace.listAll();
+      setAllWorkspaces(workspaces);
+      targetWorkspace = workspaces.find((item) => item.id === task.workspaceId);
+    }
+    if (!targetWorkspace) throw new Error('这项任务所属的工作空间已不存在，无法打开。');
+    workspaceIdRef.current = targetWorkspace.id;
+    setWorkspace(targetWorkspace);
+    refreshTasks(targetWorkspace.id);
+    await selectTask(task);
+  };
   const startResearchFromKnowledge = (): void => {
     if (isRunning) {
       setActionError('当前任务仍在执行，请等待完成后再开始新的研究。');
@@ -1252,20 +1268,45 @@ export function App(): React.JSX.Element {
     );
   };
   const navigateToTarget = (target: NotificationTarget): void => {
+    setNotificationCenterOpen(false);
     if (target.kind === 'task') {
-      const task = recentTasks.find((item) => item.id === target.taskId);
-      if (task) reportAction(selectTask(task), setActionError, '无法打开这项任务。');
-      else setView('work');
+      reportAction(openTaskTarget(target.taskId), setActionError, '无法打开这项任务。');
       return;
     }
     if (target.kind === 'artifact') {
-      setView('artifacts');
       reportAction(
         window.betterwork.artifacts.get({ id: target.artifactId }).then((detail) => {
-          setSelectedArtifact(detail ?? undefined);
+          if (!detail) throw new Error('这项通知对应的成果已不存在，无法打开。');
+          setSelectedArtifact(detail);
+          setView('artifacts');
         }),
         setActionError,
         '无法打开这项成果。',
+      );
+      return;
+    }
+    if (target.kind === 'schedule') {
+      if (!target.occurrenceId) {
+        reportAction(
+          window.betterwork.schedules.get({ scheduleId: target.scheduleId }).then((result) => {
+            if (result.status === 'rejected') throw new Error(result.error.message);
+            throw new Error('定时任务已找到；请从定时任务页打开相关期间。');
+          }),
+          setActionError,
+          '无法打开这项定时任务。',
+        );
+        return;
+      }
+      reportAction(
+        window.betterwork.schedules
+          .getOccurrence({ occurrenceId: target.occurrenceId })
+          .then((result) => {
+            if (result.status === 'rejected') throw new Error(result.error.message);
+            if (result.data.task) return openTaskTarget(result.data.task.id);
+            throw new Error('这期错过的实例没有创建任务，也不会自动补跑。');
+          }),
+        setActionError,
+        '无法打开这期定时任务。',
       );
       return;
     }
@@ -1277,6 +1318,7 @@ export function App(): React.JSX.Element {
     if (target.kind === 'task') return view === 'work' && activeTask?.id === target.taskId;
     if (target.kind === 'artifact')
       return view === 'artifacts' && selectedArtifact?.id === target.artifactId;
+    if (target.kind === 'schedule') return false;
     return view === 'knowledge';
   };
   const {
@@ -1292,6 +1334,7 @@ export function App(): React.JSX.Element {
   } = useNotifications({
     navigate: navigateToTarget,
     isTargetVisible: isNotificationTargetVisible,
+    onActivationError: () => setActionError('这条通知对应的对象已不存在，或暂时无法打开。'),
   });
   const activateNotification = (notification: NotificationSummary): void => {
     setNotificationCenterOpen(false);

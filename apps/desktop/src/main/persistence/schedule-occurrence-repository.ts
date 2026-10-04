@@ -170,6 +170,46 @@ export class ScheduleOccurrenceRepository {
     return row ? toOccurrence(row) : undefined;
   }
 
+  findByFirstRunId(firstRunId: string): ScheduleOccurrence | undefined {
+    const row = this.db
+      .prepare('SELECT * FROM schedule_occurrences WHERE first_run_id = ?')
+      .get(firstRunId) as ScheduleOccurrenceRow | undefined;
+    return row ? toOccurrence(row) : undefined;
+  }
+
+  listDispatched(): ScheduleOccurrence[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM schedule_occurrences
+         WHERE phase = 'dispatched' ORDER BY created_at ASC, id ASC`,
+      )
+      .all() as ScheduleOccurrenceRow[];
+    return rows.map(toOccurrence);
+  }
+
+  listClosedWithoutInitialNotification(limit = 100): ScheduleOccurrence[] {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
+      throw new Error('Schedule occurrence notification limit must be between 1 and 500');
+    }
+    const rows = this.db
+      .prepare(
+        `SELECT o.* FROM schedule_occurrences o
+         LEFT JOIN runs r ON r.id = o.first_run_id
+         WHERE o.phase = 'closed'
+           AND NOT EXISTS (
+             SELECT 1 FROM schedule_notification_receipts nr
+             WHERE nr.occurrence_id = o.id AND nr.outcome_key = 'initial-outcome'
+           )
+           AND (
+             (o.first_run_id IS NULL AND o.preparation_outcome NOT IN ('missed', 'cancelled')) OR
+             (o.first_run_id IS NOT NULL AND r.status <> 'cancelled')
+           )
+         ORDER BY o.finished_at ASC, o.id ASC LIMIT ?`,
+      )
+      .all(limit) as ScheduleOccurrenceRow[];
+    return rows.map(toOccurrence);
+  }
+
   /** T3 发布清单后关联来源快照；调用方将其与清单发布包在同一 AppStore 事务。 */
   attachSourceSnapshot(occurrenceId: string, sourceSnapshotId: string): ScheduleOccurrence {
     const current = this.get(occurrenceId);
@@ -808,6 +848,45 @@ export class ScheduleOccurrenceRepository {
       return saved;
     });
     return close();
+  }
+
+  /** Close a dispatched occurrence only after its linked first Run has reached a terminal state. */
+  finishDispatched(input: {
+    occurrenceId: string;
+    firstRunId: string;
+    finishedAt: number;
+  }): ScheduleOccurrence {
+    validTimestamp(input.finishedAt, 'finishedAt');
+    const finish = this.db.transaction(() => {
+      const current = this.get(input.occurrenceId);
+      if (!current) throw new ScheduleOccurrenceStateError(input.occurrenceId, undefined);
+      if (
+        current.phase === 'closed' &&
+        current.firstRunId === input.firstRunId &&
+        current.finishedAt !== undefined
+      ) {
+        return current;
+      }
+      if (current.phase !== 'dispatched' || current.firstRunId !== input.firstRunId) {
+        throw new ScheduleOccurrenceStateError(input.occurrenceId, current.phase);
+      }
+      const update = this.db
+        .prepare(
+          `UPDATE schedule_occurrences SET phase = 'closed', finished_at = ?
+           WHERE id = ? AND phase = 'dispatched' AND first_run_id = ?`,
+        )
+        .run(input.finishedAt, input.occurrenceId, input.firstRunId);
+      if (update.changes !== 1) {
+        throw new ScheduleOccurrenceStateError(
+          input.occurrenceId,
+          this.get(input.occurrenceId)?.phase,
+        );
+      }
+      const saved = this.get(input.occurrenceId);
+      if (!saved) throw new Error('Finished Schedule occurrence was not available');
+      return saved;
+    });
+    return finish();
   }
 
   /** 暂停/归档只关闭尚未派发的准备；已经关联 Run 的实例保留原状态继续收口。 */

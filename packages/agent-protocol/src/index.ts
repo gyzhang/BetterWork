@@ -3004,6 +3004,8 @@ export type RecentTaskSummary = z.infer<typeof recentTaskSummarySchema>;
 
 export const listTasksRequestSchema = z.object({ workspaceId: z.string().min(1).optional() });
 export type ListTasksRequest = z.infer<typeof listTasksRequestSchema>;
+export const getTaskRequestSchema = z.object({ id: z.string().min(1) }).strict();
+export type GetTaskRequest = z.infer<typeof getTaskRequestSchema>;
 
 export const cancelRunRequestSchema = z.object({ runId: z.string().min(1) });
 export type CancelRunRequest = z.infer<typeof cancelRunRequestSchema>;
@@ -3597,13 +3599,26 @@ export type RunSummary = z.infer<typeof runSummarySchema>;
 
 export const notificationLevelSchema = z.enum(['info', 'success', 'warning', 'error']);
 export type NotificationLevel = z.infer<typeof notificationLevelSchema>;
-export const notificationKindSchema = z.enum(['run', 'knowledge-import', 'artifact', 'system']);
+export const notificationKindSchema = z.enum([
+  'run',
+  'knowledge-import',
+  'artifact',
+  'schedule',
+  'system',
+]);
 export type NotificationKind = z.infer<typeof notificationKindSchema>;
 
 export const notificationTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('task'), taskId: z.string().min(1) }),
   z.object({ kind: z.literal('artifact'), artifactId: z.string().min(1) }),
   z.object({ kind: z.literal('knowledge') }),
+  z
+    .object({
+      kind: z.literal('schedule'),
+      scheduleId: z.string().min(1),
+      occurrenceId: z.string().min(1).optional(),
+    })
+    .strict(),
 ]);
 export type NotificationTarget = z.infer<typeof notificationTargetSchema>;
 
@@ -3618,6 +3633,11 @@ export const notificationSummarySchema = z.object({
   createdAt: z.number().int().nonnegative(),
 });
 export type NotificationSummary = z.infer<typeof notificationSummarySchema>;
+
+export const getNotificationRequestSchema = z.object({ id: z.string().min(1) }).strict();
+export type GetNotificationRequest = z.infer<typeof getNotificationRequestSchema>;
+export const notificationRendererReadyRequestSchema = z.object({}).strict();
+export const notificationRendererReadyResultSchema = z.object({ ready: z.literal(true) }).strict();
 
 export const createNotificationInputSchema = z.object({
   level: notificationLevelSchema,
@@ -4852,6 +4872,7 @@ export const IpcChannel = {
   ListWorkspaceTaskGroups: 'workspace:list-task-groups',
   CreateTask: 'task:create',
   ListTasks: 'task:list',
+  GetTask: 'task:get',
   ListEvidence: 'evidence:list',
   ListArtifacts: 'artifact:list',
   GetArtifact: 'artifact:get',
@@ -4959,6 +4980,8 @@ export const IpcChannel = {
   UpdateWindowTheme: 'window:update-theme',
   WindowToggleMaximize: 'window:toggle-maximize',
   ListNotifications: 'notification:list',
+  GetNotification: 'notification:get',
+  NotificationRendererReady: 'notification:renderer-ready',
   MarkNotificationRead: 'notification:mark-read',
   MarkAllNotificationsRead: 'notification:mark-all-read',
   ClearNotifications: 'notification:clear',
@@ -4978,6 +5001,7 @@ export const IpcChannel = {
   ExecuteScheduleNow: 'schedule:execute-now',
   ExecuteMissedSchedule: 'schedule:execute-missed',
   CancelScheduleOccurrence: 'schedule:cancel-occurrence',
+  RetryScheduleOutput: 'schedule:retry-output',
 } as const;
 
 export interface BetterWorkDesktopApi {
@@ -5011,6 +5035,7 @@ export interface BetterWorkDesktopApi {
   tasks: {
     create(input: CreateTaskRequest): Promise<CreatedTask>;
     list(input?: ListTasksRequest): Promise<RecentTaskSummary[]>;
+    get(input: GetTaskRequest): Promise<RecentTaskSummary | null>;
   };
   evidence: {
     list(input: ListEvidenceRequest): Promise<EvidenceSummary[]>;
@@ -5048,6 +5073,8 @@ export interface BetterWorkDesktopApi {
   };
   notifications: {
     list(): Promise<NotificationSummary[]>;
+    get(input: GetNotificationRequest): Promise<NotificationSummary | null>;
+    rendererReady(): Promise<{ ready: true }>;
     markRead(input: MarkNotificationReadRequest): Promise<{ unreadCount: number }>;
     markAllRead(): Promise<{ unreadCount: number }>;
     clear(): Promise<{ cleared: boolean }>;
@@ -5084,6 +5111,9 @@ export interface BetterWorkDesktopApi {
     cancelOccurrence(
       input: CancelScheduleOccurrenceRequest,
     ): Promise<ScheduleCallResult<ScheduleCancelOccurrenceResult>>;
+    retryOutput(
+      input: RetryScheduleOutputRequest,
+    ): Promise<ScheduleCallResult<ScheduleOutputReceipt>>;
     onChange(listener: (event: ScheduleChangedEvent) => void): () => void;
   };
   chrome: {
@@ -5854,11 +5884,11 @@ export const scheduleOccurrenceResultSchema = z
       return;
     }
     if (occurrence.phase === 'dispatched') {
-      if (result.status !== 'running' || result.run?.status !== 'running') {
+      if (result.status !== 'running' || result.run === undefined) {
         context.addIssue({
           code: 'custom',
           path: ['status'],
-          message: '已派发实例只能在首个 Run running 时投影为 running',
+          message: '未关闭实例必须关联首个 Run，并投影为 running 或结果收口中',
         });
       }
       return;
@@ -6125,7 +6155,11 @@ export const schedulePreflightViewSchema = z
 export type SchedulePreflightView = z.infer<typeof schedulePreflightViewSchema>;
 
 export const scheduleOccurrenceHistoryItemSchema = z
-  .object({ occurrence: scheduleOccurrenceSchema, run: runSummarySchema.optional() })
+  .object({
+    occurrence: scheduleOccurrenceSchema,
+    run: runSummarySchema.optional(),
+    result: scheduleOccurrenceResultSchema,
+  })
   .strict();
 export type ScheduleOccurrenceHistoryItem = z.infer<typeof scheduleOccurrenceHistoryItemSchema>;
 export const scheduleOccurrenceHistoryPageSchema = z
@@ -6157,6 +6191,7 @@ export type ScheduleDetail = z.infer<typeof scheduleDetailSchema>;
 export const scheduleOccurrenceDetailSchema = z
   .object({
     occurrence: scheduleOccurrenceSchema,
+    result: scheduleOccurrenceResultSchema,
     config: scheduleConfigSchema,
     task: taskSummarySchema.optional(),
     run: runSummarySchema.optional(),

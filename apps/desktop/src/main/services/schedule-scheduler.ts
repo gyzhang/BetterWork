@@ -34,6 +34,9 @@ export interface ScheduleSchedulerOptions {
   ) => void | Promise<void>;
   readonly recoverPreparations?: () => void | Promise<void>;
   readonly onChanged?: (event: ScheduleChangedEvent) => void;
+  readonly onOccurrenceClosed?: (occurrenceId: string) => (() => void) | undefined;
+  /** Runs synchronously inside batch completion; its returned publisher runs after commit. */
+  readonly onRecoveryBatchCompleted?: (batchKey: string) => (() => void) | void;
   readonly onError: (error: unknown) => void;
   readonly yieldToEventLoop?: () => Promise<void>;
 }
@@ -78,6 +81,10 @@ export class ScheduleScheduler {
     ScheduleSchedulerOptions['recoverPreparations']
   >;
   private readonly onChanged: NonNullable<ScheduleSchedulerOptions['onChanged']>;
+  private readonly onOccurrenceClosed: NonNullable<ScheduleSchedulerOptions['onOccurrenceClosed']>;
+  private readonly onRecoveryBatchCompleted: NonNullable<
+    ScheduleSchedulerOptions['onRecoveryBatchCompleted']
+  >;
   private readonly onError: (error: unknown) => void;
   private readonly yieldToEventLoop: () => Promise<void>;
   private timerHandle: ReturnType<typeof globalThis.setInterval> | undefined;
@@ -99,6 +106,8 @@ export class ScheduleScheduler {
     this.dispatch = options.dispatch;
     this.recoverPreparations = options.recoverPreparations ?? (() => undefined);
     this.onChanged = options.onChanged ?? (() => undefined);
+    this.onOccurrenceClosed = options.onOccurrenceClosed ?? (() => undefined);
+    this.onRecoveryBatchCompleted = options.onRecoveryBatchCompleted ?? (() => undefined);
     this.onError = options.onError;
     this.yieldToEventLoop = options.yieldToEventLoop ?? yieldToEventLoop;
   }
@@ -201,30 +210,44 @@ export class ScheduleScheduler {
         if (nextScheduledAt === undefined) {
           throw new Error('Schedule calendar did not return a next time');
         }
-        const claim = this.store.scheduleOccurrences.claimMissedScheduled({
-          scheduleId: aggregate.schedule.id,
-          scheduledAt,
-          requestedAt: input.throughAt,
-          period: resolveSchedulePeriod(config.periodRule, config.timing.timeZone, scheduledAt),
-          nextScheduledAt,
-          reasonCode:
-            input.reason === 'pause' || input.reason === 'archive'
-              ? 'schedule_cancelled'
-              : input.reason === 'recheck'
-                ? 'schedule_capability_blocked'
-                : 'schedule_conflict',
-          reasonDetail:
-            input.reason === 'pause'
-              ? '规则暂停前已到期但未派发，本期已记为错过。'
-              : input.reason === 'archive'
-                ? '规则归档前已到期但未派发，本期已记为错过。'
-                : input.reason === 'timing-change'
-                  ? '修改计划前的旧计划时刻已到期，本期已记为错过。'
-                  : '重新检查能力前的旧计划时刻已到期，本期已记为错过。',
+        const scheduleId = aggregate.schedule.id;
+        const settledScheduledAt = scheduledAt;
+        const committed = this.store.transaction(() => {
+          const claim = this.store.scheduleOccurrences.claimMissedScheduled({
+            scheduleId,
+            scheduledAt: settledScheduledAt,
+            requestedAt: input.throughAt,
+            period: resolveSchedulePeriod(
+              config.periodRule,
+              config.timing.timeZone,
+              settledScheduledAt,
+            ),
+            nextScheduledAt,
+            reasonCode:
+              input.reason === 'pause' || input.reason === 'archive'
+                ? 'schedule_cancelled'
+                : input.reason === 'recheck'
+                  ? 'schedule_capability_blocked'
+                  : 'schedule_conflict',
+            reasonDetail:
+              input.reason === 'pause'
+                ? '规则暂停前已到期但未派发，本期已记为错过。'
+                : input.reason === 'archive'
+                  ? '规则归档前已到期但未派发，本期已记为错过。'
+                  : input.reason === 'timing-change'
+                    ? '修改计划前的旧计划时刻已到期，本期已记为错过。'
+                    : '重新检查能力前的旧计划时刻已到期，本期已记为错过。',
+          });
+          if (claim.kind === 'busy') {
+            throw new Error('Automatic Schedule claim unexpectedly returned a manual busy result');
+          }
+          return {
+            claim,
+            afterCommit: this.onOccurrenceClosed(claim.occurrence.id),
+          };
         });
-        if (claim.kind === 'busy') {
-          throw new Error('Automatic Schedule claim unexpectedly returned a manual busy result');
-        }
+        committed.afterCommit?.();
+        const claim = committed.claim;
         this.publishChanged(claim.occurrence.scheduleId, claim.occurrence.id, 'occurrence');
         aggregate = this.store.schedules.get(input.schedule.id);
         if (!aggregate) throw new Error(`Schedule no longer exists: ${input.schedule.id}`);
@@ -362,10 +385,18 @@ export class ScheduleScheduler {
       const candidate = this.nextPastSchedule(batch.cutoffAt, batch.cursor);
       if (!candidate) {
         const completedAt = this.validCurrentWallTime() ?? batch.cutoffAt;
-        return this.store.scheduleRecoveryBatches.complete({
-          batchKey: batch.batchKey,
-          completedAt,
+        const completion = this.store.transaction(() => {
+          const completed = this.store.scheduleRecoveryBatches.complete({
+            batchKey: batch.batchKey,
+            completedAt,
+          });
+          return {
+            completed,
+            afterCommit: this.onRecoveryBatchCompleted(completed.batchKey),
+          };
         });
+        if (completion.afterCommit) completion.afterCommit();
+        return this.store.scheduleRecoveryBatches.get(batch.batchKey) ?? completion.completed;
       }
       const configVersion = candidate.schedule.enabledConfigVersion;
       if (configVersion === undefined) {
@@ -454,17 +485,40 @@ export class ScheduleScheduler {
         nextScheduledAt,
       };
       if (this.activeDispatches.size >= MAX_CONCURRENT_PREPARATIONS) {
-        const skipped = this.store.scheduleOccurrences.skipScheduledForCapacity({
-          ...input,
-          reasonDetail: '后台准备容量已占用；本期已跳过，不会排队补跑。',
+        const committed = this.store.transaction(() => {
+          const skipped = this.store.scheduleOccurrences.skipScheduledForCapacity({
+            ...input,
+            reasonDetail: '后台准备容量已占用；本期已跳过，不会排队补跑。',
+          });
+          if (skipped.kind === 'busy') {
+            throw new Error(`Capacity skip did not close occurrence for Schedule ${schedule.id}`);
+          }
+          return {
+            skipped,
+            afterCommit: this.onOccurrenceClosed(skipped.occurrence.id),
+          };
         });
-        if (skipped.kind === 'busy') {
-          throw new Error(`Capacity skip did not close occurrence for Schedule ${schedule.id}`);
-        }
+        committed.afterCommit?.();
+        const skipped = committed.skipped;
         this.publishChanged(skipped.occurrence.scheduleId, skipped.occurrence.id, 'occurrence');
         continue;
       }
-      const claim = this.store.scheduleOccurrences.claimScheduled(input);
+      const committed = this.store.transaction(() => {
+        const claim = this.store.scheduleOccurrences.claimScheduled(input);
+        return {
+          claim,
+          afterCommit:
+            claim.kind === 'skipped-overlap'
+              ? this.onOccurrenceClosed(claim.occurrence.id)
+              : undefined,
+        };
+      });
+      committed.afterCommit?.();
+      const claim = committed.claim;
+      if (claim.kind === 'skipped-overlap') {
+        this.publishChanged(claim.occurrence.scheduleId, claim.occurrence.id, 'occurrence');
+        continue;
+      }
       if (claim.kind !== 'created') continue;
       this.publishChanged(claim.occurrence.scheduleId, claim.occurrence.id, 'occurrence');
       this.launchDispatch(claim.occurrence, generation);
@@ -498,13 +552,18 @@ export class ScheduleScheduler {
         try {
           const latest = this.store.scheduleOccurrences.get(occurrence.id);
           if (latest?.phase === 'preparing') {
-            this.store.scheduleOccurrences.closePreparation({
-              occurrenceId: occurrence.id,
-              outcome: 'blocked',
-              finishedAt: this.validCurrentWallTime() ?? occurrence.requestedAt,
-              reasonCode: 'schedule_preparation_failed',
-              reasonDetail: '自动派发准备失败；请打开本期记录检查后再继续。',
+            const afterCommit = this.store.transaction(() => {
+              this.store.scheduleOccurrences.closePreparation({
+                occurrenceId: occurrence.id,
+                outcome: 'blocked',
+                finishedAt: this.validCurrentWallTime() ?? occurrence.requestedAt,
+                reasonCode: 'schedule_preparation_failed',
+                reasonDetail: '自动派发准备失败；请打开本期记录检查后再继续。',
+              });
+              return this.onOccurrenceClosed(occurrence.id);
             });
+            afterCommit?.();
+            this.publishChanged(occurrence.scheduleId, occurrence.id, 'occurrence');
           }
         } catch (closeError) {
           this.reportError(closeError);

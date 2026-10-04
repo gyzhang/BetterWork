@@ -16,6 +16,7 @@ import { ScheduleSourceServiceError } from './schedule-source-service';
 export interface ScheduleDispatchServiceOptions {
   readonly now?: () => number;
   readonly onChanged?: (event: ScheduleChangedEvent) => void;
+  readonly onOccurrenceClosed?: (occurrenceId: string) => (() => void) | undefined;
   readonly preparationTimeoutMs?: number;
 }
 
@@ -67,6 +68,8 @@ export class ScheduleDispatchService {
   private readonly now: () => number;
   private readonly preparationTimeoutMs: number;
   private readonly onChanged: (event: ScheduleChangedEvent) => void;
+  private readonly onOccurrenceClosed:
+    ((occurrenceId: string) => (() => void) | undefined) | undefined;
   private readonly activePreparations = new Map<string, ActivePreparation>();
 
   constructor(
@@ -83,6 +86,7 @@ export class ScheduleDispatchService {
     this.now = options.now ?? Date.now;
     this.preparationTimeoutMs = options.preparationTimeoutMs ?? SCHEDULE_PREPARATION_TIMEOUT_MS;
     this.onChanged = options.onChanged ?? (() => undefined);
+    this.onOccurrenceClosed = options.onOccurrenceClosed;
   }
 
   get activePreparationCount(): number {
@@ -130,13 +134,17 @@ export class ScheduleDispatchService {
     if (aborted) active?.controller.abort(PREPARATION_CANCEL_REASON);
     const occurrence = this.store.scheduleOccurrences.get(occurrenceId);
     if (occurrence?.phase === 'preparing') {
-      this.store.scheduleOccurrences.closePreparation({
-        occurrenceId,
-        outcome: 'cancelled',
-        finishedAt: this.timestampFor(occurrence.requestedAt),
-        reasonCode: 'schedule_cancelled',
-        reasonDetail: '本期准备已取消；不会启动 Run。',
+      const afterCommit = this.store.transaction(() => {
+        this.store.scheduleOccurrences.closePreparation({
+          occurrenceId,
+          outcome: 'cancelled',
+          finishedAt: this.timestampFor(occurrence.requestedAt),
+          reasonCode: 'schedule_cancelled',
+          reasonDetail: '本期准备已取消；不会启动 Run。',
+        });
+        return this.onOccurrenceClosed?.(occurrenceId);
       });
+      afterCommit?.();
       this.publishChange(occurrence.scheduleId, occurrenceId);
     }
     return aborted || occurrence?.phase === 'preparing';
@@ -280,16 +288,20 @@ export class ScheduleDispatchService {
             : cancelled
               ? 'schedule_cancelled'
               : 'schedule_preparation_failed';
-    this.store.scheduleOccurrences.closePreparation({
-      occurrenceId,
-      outcome: cancelled && !timedOut ? 'cancelled' : 'blocked',
-      finishedAt: this.timestampFor(occurrence.requestedAt),
-      reasonCode: code,
-      reasonDetail:
-        error instanceof Error
-          ? error.message.slice(0, 2_000)
-          : '定时准备失败，尚未请求模型；请打开本期记录查看原因。',
+    const afterCommit = this.store.transaction(() => {
+      this.store.scheduleOccurrences.closePreparation({
+        occurrenceId,
+        outcome: cancelled && !timedOut ? 'cancelled' : 'blocked',
+        finishedAt: this.timestampFor(occurrence.requestedAt),
+        reasonCode: code,
+        reasonDetail:
+          error instanceof Error
+            ? error.message.slice(0, 2_000)
+            : '定时准备失败，尚未请求模型；请打开本期记录查看原因。',
+      });
+      return this.onOccurrenceClosed?.(occurrenceId);
     });
+    afterCommit?.();
     this.publishChange(occurrence.scheduleId, occurrenceId);
   }
 

@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
     emitClick: () => void;
   }>,
   supported: true,
+  supportProbeThrows: false,
 }));
 
 vi.mock('electron', () => {
@@ -54,7 +55,10 @@ vi.mock('electron', () => {
     return instance;
   }
 
-  FakeNotification.isSupported = (): boolean => mocks.supported;
+  FakeNotification.isSupported = (): boolean => {
+    if (mocks.supportProbeThrows) throw new Error('系统通知权限探测失败');
+    return mocks.supported;
+  };
   return { Notification: FakeNotification };
 });
 
@@ -96,6 +100,7 @@ const createStore = (): AppStore => {
 beforeEach(() => {
   mocks.instances.length = 0;
   mocks.supported = true;
+  mocks.supportProbeThrows = false;
 });
 
 afterEach(() => {
@@ -217,6 +222,44 @@ describe('NotificationService', () => {
     const notification = service.create({ level: 'warning', kind: 'artifact', title: '导出失败' });
     expect(store.notifications.list()).toHaveLength(1);
     expect(notification.read).toBe(false);
+  });
+
+  it('shows the system notification without a window and delegates click activation to Main', () => {
+    const store = createStore();
+    const activate = vi.fn();
+    const service = new NotificationService(store.notifications, () => null, activate);
+    const notification = service.create(
+      {
+        level: 'warning',
+        kind: 'run',
+        title: '任务需要查看：月度复盘',
+        target: { kind: 'task', taskId: 'historical-task' },
+      },
+      { systemNotify: true },
+    );
+
+    expect(mocks.instances).toHaveLength(1);
+    mocks.instances[0]?.emitClick();
+    expect(activate).toHaveBeenCalledExactlyOnceWith(notification.id);
+    expect(store.notifications.get(notification.id)).toMatchObject({
+      title: '任务需要查看：月度复盘',
+      target: { kind: 'task', taskId: 'historical-task' },
+    });
+  });
+
+  it('contains a failing system permission probe so notification persistence cannot interrupt Run completion', () => {
+    mocks.supportProbeThrows = true;
+    const store = createStore();
+    const service = new NotificationService(store.notifications, () => null);
+
+    expect(() =>
+      service.create(
+        { level: 'error', kind: 'run', title: '任务失败：系统通知不可用' },
+        { systemNotify: true },
+      ),
+    ).not.toThrow();
+    expect(store.notifications.list()).toHaveLength(1);
+    expect(mocks.instances).toHaveLength(0);
   });
 
   it('broadcasts read, read-all and cleared with the resulting unread count', () => {

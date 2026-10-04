@@ -2,6 +2,9 @@ import type { ExpertRevisionDraft, ScheduleConfigDraft } from '@betterwork/agent
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { AppStore, type ScheduleOccurrencePage } from '../persistence';
+import { NotificationService } from './notification-service';
+import { ScheduleNotificationService } from './schedule-notification-service';
+import { ScheduleOutcomeService } from './schedule-outcome-service';
 import { SCHEDULE_TICK_INTERVAL_MS, ScheduleScheduler } from './schedule-scheduler';
 
 const stores: AppStore[] = [];
@@ -116,11 +119,15 @@ describe('ScheduleScheduler', () => {
 
   it('records restart recovery as missed even when the occurrence is only milliseconds old', async () => {
     const { store } = fixture();
+    const completedBatchKeys: string[] = [];
     const scheduler = new ScheduleScheduler(store, {
       wallClock: () => DAILY_AT + 10,
       monotonicClock: () => 0,
       dispatch: () => {
         throw new Error('recovery must never dispatch');
+      },
+      onRecoveryBatchCompleted: (batchKey) => {
+        completedBatchKeys.push(batchKey);
       },
       onError: noError,
     });
@@ -128,6 +135,8 @@ describe('ScheduleScheduler', () => {
     const batch = await scheduler.recover();
 
     expect(batch?.phase).toBe('completed');
+    expect(batch?.notificationId).toBeUndefined();
+    expect(completedBatchKeys).toEqual([batch?.batchKey]);
     expect(allOccurrences(store, 'schedule-a')).toMatchObject([
       {
         scheduledAt: DAILY_AT,
@@ -244,6 +253,14 @@ describe('ScheduleScheduler', () => {
 
   it('persists a fixed 100-item batch cursor and resumes without duplicate occurrences', async () => {
     const { store } = fixture();
+    const notifications = new NotificationService(store.notifications, () => null);
+    const outcomes = new ScheduleOutcomeService(store, {
+      registerOccurrenceOutputs: () => [],
+      saveReceipt: async () => {
+        throw new Error('Recovery-only fixture must not save Run outputs');
+      },
+    });
+    const scheduleNotifications = new ScheduleNotificationService(store, notifications, outcomes);
     const recoveryAt = DAILY_AT + 200 * DAY_MS - 1;
     const interrupted = new ScheduleScheduler(store, {
       wallClock: () => recoveryAt,
@@ -265,8 +282,11 @@ describe('ScheduleScheduler', () => {
       cursor: { scheduleId: 'schedule-a', scheduledAt: DAILY_AT + 99 * DAY_MS },
     });
     expect(partialBatch?.coveredOccurrenceIds).toHaveLength(100);
+    expect(partialBatch?.notificationId).toBeUndefined();
+    expect(notifications.list()).toHaveLength(0);
     expect(allOccurrences(store, 'schedule-a')).toHaveLength(100);
 
+    const completedBatchKeys: string[] = [];
     const resumed = new ScheduleScheduler(store, {
       wallClock: () => recoveryAt + 10_000,
       monotonicClock: () => 0,
@@ -274,6 +294,10 @@ describe('ScheduleScheduler', () => {
         throw new Error('resumed missed recovery must not dispatch');
       },
       onError: noError,
+      onRecoveryBatchCompleted: (batchKey) => {
+        completedBatchKeys.push(batchKey);
+        return scheduleNotifications.persistRecoveryBatchWithinTransaction(batchKey).afterCommit;
+      },
       yieldToEventLoop: async () => Promise.resolve(),
     });
     const completed = await resumed.recover();
@@ -283,9 +307,18 @@ describe('ScheduleScheduler', () => {
     expect(occurrences).toHaveLength(200);
     expect(new Set(occurrences.map((item) => item.id)).size).toBe(200);
     expect(completed?.batchKey).toBeDefined();
+    expect(completed?.notificationId).toBeDefined();
+    expect(completedBatchKeys).toEqual([completed?.batchKey]);
+    expect(notifications.list()).toHaveLength(1);
+    expect(notifications.list()[0]).toMatchObject({
+      kind: 'schedule',
+      level: 'warning',
+      target: { kind: 'schedule', occurrenceId: completed?.coveredOccurrenceIds[0] },
+    });
     if (!completed) return;
     const repeated = await resumed.recover({ batchKey: completed.batchKey });
     expect(repeated?.batchKey).toBe(completed?.batchKey);
+    expect(completedBatchKeys).toEqual([completed.batchKey]);
     expect(allOccurrences(store, 'schedule-a')).toHaveLength(200);
   });
 
@@ -329,6 +362,14 @@ describe('ScheduleScheduler', () => {
 
   it('caps concurrent preparation at two and records a distinct capacity skip', async () => {
     const { store, scheduleIds } = fixture(['schedule-a', 'schedule-b', 'schedule-c']);
+    const notifications = new NotificationService(store.notifications, () => null);
+    const outcomes = new ScheduleOutcomeService(store, {
+      registerOccurrenceOutputs: () => [],
+      saveReceipt: async () => {
+        throw new Error('Capacity fixture must not save Run outputs');
+      },
+    });
+    const scheduleNotifications = new ScheduleNotificationService(store, notifications, outcomes);
     const release: (() => void)[] = [];
     const scheduler = new ScheduleScheduler(store, {
       wallClock: () => DAILY_AT + 60_000,
@@ -337,6 +378,8 @@ describe('ScheduleScheduler', () => {
         new Promise<void>((resolve) => {
           release.push(resolve);
         }),
+      onOccurrenceClosed: (occurrenceId) =>
+        scheduleNotifications.persistOccurrenceWithinTransaction(occurrenceId).afterCommit,
       onError: noError,
     });
 
@@ -346,11 +389,21 @@ describe('ScheduleScheduler', () => {
     for (const scheduleId of scheduleIds.slice(0, 2)) {
       expect(allOccurrences(store, scheduleId)).toMatchObject([{ phase: 'preparing' }]);
     }
-    expect(allOccurrences(store, 'schedule-c')).toMatchObject([
+    const [capacitySkipped] = allOccurrences(store, 'schedule-c');
+    expect([capacitySkipped]).toMatchObject([
       {
         phase: 'closed',
         preparationOutcome: 'skipped-overlap',
         reasonCode: 'schedule_capacity',
+      },
+    ]);
+    expect(
+      store.scheduleNotifications.get(capacitySkipped?.id ?? '', 'initial-outcome')?.notificationId,
+    ).toBeDefined();
+    expect(notifications.list()).toMatchObject([
+      {
+        kind: 'schedule',
+        target: { kind: 'schedule', occurrenceId: capacitySkipped?.id },
       },
     ]);
     for (const resolve of release) resolve();

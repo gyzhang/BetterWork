@@ -17,6 +17,7 @@ interface EventPayloadRow {
 }
 
 const RUNS_LIMIT = 100;
+export const RUN_INTERRUPTED_ON_STARTUP_REASON = '算台上次退出时这次执行被中断';
 
 /** 终态事件与 runs.status 的对应关系；非终态事件不改状态。 */
 const terminalStatusOf = (event: AgentRuntimeEvent): RunSummary['status'] | undefined => {

@@ -134,6 +134,7 @@ interface ResolvedRunContext {
 interface ActiveRun {
   taskId: string;
   prompt: string;
+  scheduleOccurrenceId?: string;
   controller: AbortController;
   workspacePath: string;
   /** 本次 Run 绑定的 Skill，仅用于撤销/停用级联；顺序与用户选择顺序一致。 */
@@ -445,6 +446,7 @@ export interface ScheduledRunAssociation {
 export class RunService {
   private readonly activeRuns = new Map<string, ActiveRun>();
   private readonly consumePromises = new Map<string, Promise<void>>();
+  private readonly scheduledOutcomePromises = new Map<string, Promise<void>>();
   private readonly engine = new ReActAgentEngine();
   private readonly fallbackModel = new FakeModelProvider();
   private knowledgeAuditInstance: KnowledgeAudit | undefined;
@@ -488,6 +490,7 @@ export class RunService {
     private readonly credentialAccess?: CredentialResolver,
     private readonly knowledgeSearchService?: KnowledgeSearchService,
     private readonly documentExtractor?: DocumentExtractor,
+    private readonly onScheduledRunTerminal?: (runId: string) => Promise<unknown>,
   ) {}
 
   start(input: StartRunRequest, scheduledAssociation?: ScheduledRunAssociation): string {
@@ -530,6 +533,7 @@ export class RunService {
     this.activeRuns.set(runId, {
       taskId: input.taskId,
       prompt: input.prompt,
+      ...(scheduledAssociation ? { scheduleOccurrenceId: scheduledAssociation.occurrenceId } : {}),
       controller,
       workspacePath: context.workspacePath,
       skillIds: (resolvedInput.skillBindings ?? []).map((binding) => binding.skillId),
@@ -657,6 +661,8 @@ export class RunService {
     if (pending.length > 0) {
       await Promise.allSettled(pending);
     }
+    const scheduledOutcomes = [...this.scheduledOutcomePromises.values()];
+    if (scheduledOutcomes.length > 0) await Promise.allSettled(scheduledOutcomes);
   }
 
   /** 撤销信任级联：取消绑定中包含指定 Skill 的所有活跃 Run。 */
@@ -831,6 +837,9 @@ export class RunService {
       }
       this.finalizeFailure(runId, message);
     } finally {
+      const scheduledOutcome = this.scheduledOutcomePromises.get(runId);
+      if (scheduledOutcome) await scheduledOutcome;
+      this.scheduledOutcomePromises.delete(runId);
       this.activeRuns.delete(runId);
     }
   }
@@ -1255,7 +1264,21 @@ export class RunService {
       this.persistEvidence(active.taskId, event, active.toolNames);
     }
     this.broadcast(event);
-    if (isTerminalEvent(event) && active) this.notifyTerminal(active, event);
+    if (isTerminalEvent(event) && active) {
+      if (active.scheduleOccurrenceId) {
+        if (this.onScheduledRunTerminal) {
+          const outcome = Promise.resolve()
+            .then(() => this.onScheduledRunTerminal?.(event.runId))
+            .then(() => undefined)
+            .catch((error: unknown) => {
+              console.error(`Scheduled Run ${event.runId} outcome finalization failed`, error);
+            });
+          this.scheduledOutcomePromises.set(event.runId, outcome);
+        }
+      } else {
+        this.notifyTerminal(active, event);
+      }
+    }
   }
 
   private recordMaterialFactsFromTool(

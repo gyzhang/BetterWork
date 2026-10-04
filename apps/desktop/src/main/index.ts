@@ -24,7 +24,7 @@ import {
 import { OfficeParserService } from './infrastructure/office-parser';
 import { createPptxRenderer } from './infrastructure/pptx-renderer';
 import { registerIpc } from './ipc/register-ipc';
-import { AppStore } from './persistence';
+import { AppStore, RUN_INTERRUPTED_ON_STARTUP_REASON } from './persistence';
 import { createQuitHandler } from './services/application-shutdown';
 import { CredentialAccess } from './services/credential-access';
 import { CredentialMigrationService } from './services/credential-migration-service';
@@ -47,6 +47,7 @@ import { MemoryExtractionService } from './services/memory-extraction-service';
 import { MemoryRecallService } from './services/memory-recall-service';
 import { MemoryService } from './services/memory-service';
 import { ModelProviderFactory } from './services/model-provider-factory';
+import { NotificationActivationService } from './services/notification-activation-service';
 import { NotificationService } from './services/notification-service';
 import {
   pptGenerationAdapterFactory,
@@ -58,6 +59,9 @@ import { ScheduleDispatchService } from './services/schedule-dispatch-service';
 import { ScheduleExecutionService } from './services/schedule-execution-service';
 import { ScheduleHostLifecycle, startPrimaryInstance } from './services/schedule-host-lifecycle';
 import { ScheduleKnowledgeSourcesService } from './services/schedule-knowledge-sources';
+import { ScheduleNotificationService } from './services/schedule-notification-service';
+import { ScheduleOutcomeService } from './services/schedule-outcome-service';
+import { ScheduleOutputService } from './services/schedule-output-service';
 import { SchedulePreflightService } from './services/schedule-preflight';
 import { ScheduleScheduler } from './services/schedule-scheduler';
 import { ScheduleService } from './services/schedule-service';
@@ -88,9 +92,11 @@ interface ApplicationContext {
   mcpClientService: McpClientService;
   scheduleHost: ScheduleHostLifecycle;
   scheduleScheduler: ScheduleScheduler;
+  scheduleNotifications?: ScheduleNotificationService;
   scheduleDispatch?: ScheduleDispatchService;
   runs?: RunService;
   window: BrowserWindow | null;
+  ensureWindow: () => BrowserWindow;
 }
 
 let context: ApplicationContext | null = null;
@@ -143,11 +149,17 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     { extractor: knowledgeWorker.extractor },
   );
   const inputSnapshots = new InputSnapshotService(store, userData);
+  const scheduleNotificationServiceRef: { current?: ScheduleNotificationService } = {};
   const scheduleSourceService = new ScheduleSourceService(
     store,
     new ScheduleDirectorySourcesService(store, inputSnapshots),
     new ScheduleKnowledgeSourcesService(knowledgeVault),
     inputSnapshots,
+    {
+      onOccurrenceClosed: (occurrenceId) =>
+        scheduleNotificationServiceRef.current?.persistOccurrenceWithinTransaction(occurrenceId)
+          .afterCommit,
+    },
   );
   const memories = new MemoryService(store, userData);
   const modelProviderFactory = new ModelProviderFactory({
@@ -274,7 +286,7 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
 
   // 上次进程被强杀时正在执行的 Run 会停在 running。启动时统一收口为 failed，
   // 维持「每个 Run 都有明确结果」这条不变量，历史列表不会出现永远转圈的任务。
-  const interrupted = store.runs.failInterruptedRuns('算台上次退出时这次执行被中断', Date.now());
+  const interrupted = store.runs.failInterruptedRuns(RUN_INTERRUPTED_ON_STARTUP_REASON, Date.now());
   if (interrupted > 0) {
     console.warn(`Marked ${interrupted} interrupted run(s) as failed on startup`);
   }
@@ -296,6 +308,20 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
   );
 
   const startupReady = Promise.all(startupReadiness).then(() => undefined);
+  const scheduleOutputServiceReadyResolvers: Array<(service: ScheduleOutputService) => void> = [];
+  const scheduleOutputServiceReady = new Promise<ScheduleOutputService>((resolve) => {
+    scheduleOutputServiceReadyResolvers.push(resolve);
+  });
+  const scheduleOutcomeServiceReadyResolvers: Array<(service: ScheduleOutcomeService) => void> = [];
+  const scheduleOutcomeServiceReady = new Promise<ScheduleOutcomeService>((resolve) => {
+    scheduleOutcomeServiceReadyResolvers.push(resolve);
+  });
+  const scheduleNotificationServiceReadyResolvers: Array<
+    (service: ScheduleNotificationService) => void
+  > = [];
+  const scheduleNotificationServiceReady = new Promise<ScheduleNotificationService>((resolve) => {
+    scheduleNotificationServiceReadyResolvers.push(resolve);
+  });
   const scheduleDispatchRef: { current?: ScheduleDispatchService } = {};
   const scheduleChangePublisherRef: {
     publish: (event: ScheduleChangedEvent) => void;
@@ -306,15 +332,44 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
       if (!activeDispatch) throw new Error('Schedule dispatch service was not initialized');
       return activeDispatch.dispatch(occurrence, dispatchContext.signal);
     },
-    recoverPreparations: () => {
+    recoverPreparations: async () => {
       const recovered = scheduleSourceService.recoverInterrupted();
       if (recovered.closedOccurrences > 0 || recovered.finishedSnapshots > 0) {
         console.warn(
           `定时实例启动收口：occurrences=${String(recovered.closedOccurrences)} snapshots=${String(recovered.finishedSnapshots)}`,
         );
       }
+      const outputRecovery = await (await scheduleOutputServiceReady).recoverIncomplete();
+      if (outputRecovery.examined > 0) {
+        console.warn(
+          `定时成果恢复：examined=${String(outputRecovery.examined)} saved=${String(outputRecovery.saved)} failed=${String(outputRecovery.failed)} unresolved=${String(outputRecovery.unresolved)}`,
+        );
+      }
+      const outcomeRecovery = await (await scheduleOutcomeServiceReady).recoverTerminalRuns();
+      if (outcomeRecovery.examined > 0) {
+        console.warn(
+          `定时结果恢复：examined=${String(outcomeRecovery.examined)} finalized=${String(outcomeRecovery.finalized)} unresolved=${String(outcomeRecovery.unresolved)}`,
+        );
+      }
+      const notificationService = await scheduleNotificationServiceReady;
+      const notificationRecovery = await notificationService.recoverMissing();
+      if (
+        notificationRecovery.examinedOccurrences > 0 ||
+        notificationRecovery.examinedBatches > 0
+      ) {
+        console.warn(
+          `定时通知恢复：occurrences=${String(notificationRecovery.examinedOccurrences)} restored=${String(notificationRecovery.restoredOccurrences)} batches=${String(notificationRecovery.examinedBatches)} restoredBatches=${String(notificationRecovery.restoredBatches)}`,
+        );
+      }
+      await notificationService.waitForPending();
     },
     onChanged: (event) => scheduleChangePublisherRef.publish(event),
+    onOccurrenceClosed: (occurrenceId) =>
+      scheduleNotificationServiceRef.current?.persistOccurrenceWithinTransaction(occurrenceId)
+        .afterCommit,
+    onRecoveryBatchCompleted: (batchKey) =>
+      scheduleNotificationServiceRef.current?.persistRecoveryBatchWithinTransaction(batchKey)
+        .afterCommit,
     onError: (error) => console.error('Schedule scheduler failed', error),
   });
   const scheduleHost = new ScheduleHostLifecycle({
@@ -325,6 +380,7 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     onError: (error) => console.error('Schedule host startup failed', error),
   });
 
+  const notificationActivationRef: { current?: NotificationActivationService } = {};
   const started: ApplicationContext = {
     store,
     knowledgeVault,
@@ -334,6 +390,18 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     scheduleHost,
     scheduleScheduler: scheduler,
     window: null,
+    ensureWindow: () => {
+      const existing = started.window;
+      if (existing && !existing.isDestroyed()) return existing;
+      const window = createMainWindow();
+      const webContentsId = window.webContents.id;
+      started.window = window;
+      window.once('closed', () => {
+        if (started.window === window) started.window = null;
+        notificationActivationRef.current?.windowClosed(webContentsId);
+      });
+      return window;
+    },
   };
   const getWindow = (): BrowserWindow | null => {
     const window = started.window;
@@ -342,16 +410,29 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
 
   scheduleChangePublisherRef.publish = (event) => {
     const window = getWindow();
-    if (!window) return;
-    try {
-      window.webContents.send(IpcChannel.ScheduleChanged, scheduleChangedEventSchema.parse(event));
-    } catch (error) {
-      console.error('Schedule change event publish failed', error);
+    if (window) {
+      try {
+        window.webContents.send(
+          IpcChannel.ScheduleChanged,
+          scheduleChangedEventSchema.parse(event),
+        );
+      } catch (error) {
+        console.error('Schedule change event publish failed', error);
+      }
+    }
+    if (event.occurrenceId) {
+      scheduleNotificationServiceRef.current?.queueOccurrence(event.occurrenceId);
     }
   };
 
-  started.window = createMainWindow();
-  const notifications = new NotificationService(store.notifications, getWindow);
+  notificationActivationRef.current = new NotificationActivationService({
+    getWindow,
+    ensureWindow: started.ensureWindow,
+  });
+  const notifications = new NotificationService(store.notifications, getWindow, (notificationId) =>
+    notificationActivationRef.current?.activate(notificationId),
+  );
+  started.ensureWindow();
   const embeddingClient = new EmbeddingClient({
     models: store.models,
     ...(credentialAccess ? { credentialAccess } : {}),
@@ -421,6 +502,38 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     (runId) => started.runs?.acceptsOutput(runId) ?? false,
     pptxRenderer,
   );
+  const scheduleOutputService = new ScheduleOutputService(store, {
+    fileArtifacts: fileArtifactService,
+  });
+  const resolveScheduleOutputService = scheduleOutputServiceReadyResolvers.shift();
+  if (!resolveScheduleOutputService) {
+    throw new Error('Schedule output recovery gate was not initialized');
+  }
+  resolveScheduleOutputService(scheduleOutputService);
+  const scheduleOutcomeService = new ScheduleOutcomeService(store, scheduleOutputService, {
+    onChanged: (event) => scheduleChangePublisherRef.publish(event),
+    persistOccurrenceNotification: (occurrenceId) =>
+      scheduleNotificationServiceRef.current?.persistOccurrenceWithinTransaction(occurrenceId)
+        .afterCommit,
+  });
+  const resolveScheduleOutcomeService = scheduleOutcomeServiceReadyResolvers.shift();
+  if (!resolveScheduleOutcomeService) {
+    throw new Error('Schedule outcome recovery gate was not initialized');
+  }
+  resolveScheduleOutcomeService(scheduleOutcomeService);
+  const scheduleNotificationService = new ScheduleNotificationService(
+    store,
+    notifications,
+    scheduleOutcomeService,
+    { systemNotifyOnPublish: true },
+  );
+  scheduleNotificationServiceRef.current = scheduleNotificationService;
+  const resolveScheduleNotificationService = scheduleNotificationServiceReadyResolvers.shift();
+  if (!resolveScheduleNotificationService) {
+    throw new Error('Schedule notification recovery gate was not initialized');
+  }
+  resolveScheduleNotificationService(scheduleNotificationService);
+  started.scheduleNotifications = scheduleNotificationService;
   // 统一混合检索（契约 §9）：管理页与 knowledge_search 工具共用一条管线。
   const knowledgeSearch = new KnowledgeSearchService({
     vault: knowledgeVault,
@@ -453,6 +566,7 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     credentialAccess,
     knowledgeSearch,
     knowledgeWorker.extractor,
+    (runId) => scheduleOutcomeService.finalizeRun(runId),
   );
   started.runs = runs;
 
@@ -481,7 +595,12 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     schedulePreflight,
     new ScheduleExecutionService(store),
     runs,
-    { onChanged: (event) => scheduleChangePublisherRef.publish(event) },
+    {
+      onChanged: (event) => scheduleChangePublisherRef.publish(event),
+      onOccurrenceClosed: (occurrenceId) =>
+        scheduleNotificationServiceRef.current?.persistOccurrenceWithinTransaction(occurrenceId)
+          .afterCommit,
+    },
   );
   scheduleDispatchRef.current = scheduleDispatch;
   started.scheduleDispatch = scheduleDispatch;
@@ -519,6 +638,8 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     workspaceReferences,
     mcpClientService,
     notifications,
+    markNotificationRendererReady: (webContentsId) =>
+      notificationActivationRef.current?.rendererReady(webContentsId) ?? false,
     runs,
     skillService,
     expertService,
@@ -527,6 +648,8 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     scheduleService: scheduleManager,
     schedulePreflight,
     scheduleDispatch,
+    scheduleOutputs: scheduleOutputService,
+    scheduleOutcomes: scheduleOutcomeService,
     publishScheduleChange: (event) => scheduleChangePublisherRef.publish(event),
     fileArtifactService,
     dependencyLocksRoot,
@@ -546,11 +669,7 @@ const focusMainWindow = (): void => {
     focusRequestedBeforeReady = true;
     return;
   }
-  const window =
-    currentContext.window && !currentContext.window.isDestroyed()
-      ? currentContext.window
-      : (BrowserWindow.getAllWindows()[0] ?? createMainWindow());
-  currentContext.window = window;
+  const window = currentContext.ensureWindow();
   if (window.isMinimized()) window.restore();
   window.show();
   window.focus();
@@ -570,6 +689,7 @@ startPrimaryInstance(
         await context?.scheduleDispatch?.waitForPreparations();
         await context?.scheduleScheduler.waitForPreparations();
         await context?.runs?.shutdown();
+        await context?.scheduleNotifications?.waitForPending();
         await context?.mcpClientService.shutdown();
         await context?.knowledgeWorker.shutdown();
       },
@@ -611,7 +731,7 @@ startPrimaryInstance(
         // macOS keeps the process and scheduler alive after the last window closes.
         app.on('activate', () => {
           if (BrowserWindow.getAllWindows().length === 0 && context) {
-            context.window = createMainWindow();
+            context.ensureWindow();
           }
         });
       })
@@ -621,7 +741,6 @@ startPrimaryInstance(
       });
   },
 );
-
 /**
  * 索引作业终态进消息中心（契约 §12）：取消不发失败通知，部分成功按 warning 呈现，
  * 目标固定为知识页，通知本身不导航、不清空当前任务。

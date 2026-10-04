@@ -286,6 +286,7 @@ const createService = (
   mcpClientService?: McpClientService,
   credentialAccess?: CredentialResolver,
   documentExtractor?: DocumentExtractor,
+  onScheduledRunTerminal?: (runId: string) => Promise<unknown>,
 ): RunService =>
   new RunService(
     fixture.store,
@@ -326,6 +327,7 @@ const createService = (
       },
     }),
     documentExtractor,
+    onScheduledRunTerminal,
   );
 
 const statusOf = (fixture: Fixture, runId: string): string | undefined =>
@@ -434,7 +436,18 @@ describe('RunService', () => {
       sseResponse(JSON.stringify({ choices: [{ delta: { content: '本期自动分析完成。' } }] })),
     );
     vi.stubGlobal('fetch', fetchMock);
-    const runs = createService(fixture);
+    const scheduleFinalizer = vi.fn(async () => undefined);
+    const runs = createService(
+      fixture,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      scheduleFinalizer,
+    );
 
     let failedRunId: string | undefined;
     const failedDispatch = vi
@@ -473,10 +486,12 @@ describe('RunService', () => {
     expect(scheduled.service.startFirstRun(scheduled.occurrence.id, runs)).toBe(runId);
     expect(fetchMock).not.toHaveBeenCalled();
     await waitForCompletion(fixture, runId);
+    await vi.waitFor(() => expect(scheduleFinalizer).toHaveBeenCalledWith(runId));
     committedDispatch.mockRestore();
 
     expect(statusOf(fixture, runId)).toBe('completed');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fixture.store.notifications.list()).toEqual([]);
     expect(fixture.store.scheduleOccurrences.get(scheduled.occurrence.id)).toMatchObject({
       phase: 'dispatched',
       firstRunId: runId,

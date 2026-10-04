@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 
-import type { NotificationChangeEvent, NotificationSummary } from '@betterwork/agent-protocol';
+import type {
+  NotificationChangeEvent,
+  NotificationSummary,
+  NotificationTarget,
+} from '@betterwork/agent-protocol';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -104,10 +108,19 @@ describe('消息中心（Modal 基座的锚定覆盖层）', () => {
 });
 
 /** `useNotifications` 的浮层投影没有页面可借，这里复刻 App 的接线：钩子出 toasts，`ToastHost` 画。 */
-function ToastProbe({ isTargetVisible }: { isTargetVisible: () => boolean }): React.JSX.Element {
+function ToastProbe({
+  isTargetVisible,
+  navigate = () => undefined,
+  onActivationError,
+}: {
+  isTargetVisible: () => boolean;
+  navigate?: (target: NotificationTarget) => void;
+  onActivationError?: () => void;
+}): React.JSX.Element {
   const { toasts, dismissToast, pauseToast, resumeToast } = useNotifications({
-    navigate: () => undefined,
+    navigate,
     isTargetVisible,
+    ...(onActivationError ? { onActivationError } : {}),
   });
   return (
     <ToastHost
@@ -122,19 +135,32 @@ function ToastProbe({ isTargetVisible }: { isTargetVisible: () => boolean }): Re
 
 describe('全局浮层投影（useNotifications + ToastHost）', () => {
   let emit: ((event: NotificationChangeEvent) => void) | undefined;
+  let activate: ((input: { id: string }) => void) | undefined;
+  let getNotification: ReturnType<
+    typeof vi.fn<(input: { id: string }) => Promise<NotificationSummary | null>>
+  >;
+  let ready: ReturnType<typeof vi.fn<() => Promise<{ ready: true }>>>;
 
   const installApi = (): void => {
     emit = undefined;
+    activate = undefined;
+    getNotification = vi.fn(async (): Promise<NotificationSummary | null> => null);
+    ready = vi.fn(async (): Promise<{ ready: true }> => ({ ready: true }));
     Object.defineProperty(window, 'betterwork', {
       configurable: true,
       value: {
         notifications: {
           list: async () => [],
+          get: getNotification,
+          rendererReady: ready,
           onChange: (cb: (event: NotificationChangeEvent) => void) => {
             emit = cb;
             return () => undefined;
           },
-          onActivate: () => (): void => undefined,
+          onActivate: (cb: (input: { id: string }) => void) => {
+            activate = cb;
+            return () => undefined;
+          },
           markRead: async () => 0,
           markAllRead: async () => 0,
           clear: async () => undefined,
@@ -193,6 +219,37 @@ describe('全局浮层投影（useNotifications + ToastHost）', () => {
     });
 
     expect(document.querySelector('.toast')).toBeNull();
+  });
+
+  it('ready 握手之后按稳定 ID 重新读取旧通知，而不依赖首屏列表', async () => {
+    installApi();
+    const old = note({
+      id: 'notification-outside-first-page',
+      target: { kind: 'task', taskId: 'old-task' },
+    });
+    getNotification.mockResolvedValue(old);
+    const navigate = vi.fn();
+    render(<ToastProbe isTargetVisible={() => false} navigate={navigate} />);
+    expect(ready).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      activate?.({ id: old.id });
+    });
+
+    expect(getNotification).toHaveBeenCalledWith({ id: old.id });
+    expect(navigate).toHaveBeenCalledWith(old.target);
+  });
+
+  it('稳定 ID 已清除时向页面反馈，而不是静默丢弃点击', async () => {
+    installApi();
+    const onActivationError = vi.fn();
+    render(<ToastProbe isTargetVisible={() => false} onActivationError={onActivationError} />);
+
+    await act(async () => {
+      activate?.({ id: 'cleared-notification' });
+    });
+
+    expect(onActivationError).toHaveBeenCalledOnce();
   });
 
   it('浮层的 x 只收投影，不改动消息中心的底账', () => {

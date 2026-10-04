@@ -97,6 +97,20 @@ export class ScheduleRecoveryBatchRepository {
     return row ? toBatch(row) : undefined;
   }
 
+  listCompletedWithoutNotification(limit = 100): ScheduleRecoveryBatch[] {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
+      throw new Error('Schedule recovery notification limit must be between 1 and 500');
+    }
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM schedule_recovery_batches
+         WHERE phase = 'completed' AND notification_id IS NULL
+         ORDER BY completed_at ASC, batch_key ASC LIMIT ?`,
+      )
+      .all(limit) as ScheduleRecoveryBatchRow[];
+    return rows.map(toBatch);
+  }
+
   begin(input: { cutoffAt: number; createdAt: number; batchKey?: string }): ScheduleRecoveryBatch {
     validTimestamp(input.cutoffAt, 'cutoffAt');
     validTimestamp(input.createdAt, 'createdAt');
@@ -181,6 +195,32 @@ export class ScheduleRecoveryBatchRepository {
     }
     const saved = this.get(input.batchKey);
     if (!saved) throw new Error('Schedule recovery batch disappeared after completion');
+    return saved;
+  }
+
+  attachNotification(input: {
+    batchKey: string;
+    notificationId: string;
+    updatedAt: number;
+  }): ScheduleRecoveryBatch {
+    const notificationId = input.notificationId.trim();
+    if (!notificationId) throw new Error('notificationId must not be empty');
+    validTimestamp(input.updatedAt, 'updatedAt');
+    const update = this.db
+      .prepare(
+        `UPDATE schedule_recovery_batches SET notification_id = ?, updated_at = ?
+         WHERE batch_key = ? AND phase = 'completed' AND notification_id IS NULL`,
+      )
+      .run(notificationId, input.updatedAt, input.batchKey);
+    if (update.changes === 0) {
+      const current = this.get(input.batchKey);
+      if (current?.phase === 'completed' && current.notificationId === notificationId) {
+        return current;
+      }
+      throw new Error(`Schedule recovery batch cannot attach a notification: ${input.batchKey}`);
+    }
+    const saved = this.get(input.batchKey);
+    if (!saved) throw new Error('Schedule recovery batch disappeared after notification attach');
     return saved;
   }
 }

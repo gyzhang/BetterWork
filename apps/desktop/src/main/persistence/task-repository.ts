@@ -154,6 +154,27 @@ export class TaskRepository {
     return rows.map(toRecentTaskSummary);
   }
 
+  /** Retrieves the historical task projection by stable ID, even after it leaves the recent page. */
+  getRecentSummary(taskId: string): RecentTaskSummary | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT t.id, t.workspace_id, t.title, t.goal, t.created_at, t.updated_at,
+                s.id AS session_id,
+                r.id AS run_id, r.session_id AS run_session_id, r.prompt, r.status,
+                r.created_at AS run_created_at, r.completed_at
+           FROM tasks t
+           JOIN sessions s ON s.id = (
+             SELECT id FROM sessions WHERE task_id = t.id ORDER BY created_at ASC, rowid ASC LIMIT 1
+           )
+           LEFT JOIN runs r ON r.id = (
+             SELECT id FROM runs WHERE task_id = t.id ORDER BY created_at DESC, rowid DESC LIMIT 1
+           )
+          WHERE t.id = ?`,
+      )
+      .get(taskId) as RecentTaskRow | undefined;
+    return row ? toRecentTaskSummary(row) : undefined;
+  }
+
   /** 有新活动时把任务顶到最近列表前面。 */
   touch(taskId: string, updatedAt: number): void {
     this.db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(updatedAt, taskId);

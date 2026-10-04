@@ -15,6 +15,8 @@ import type {
   MemoryViewItem,
   MemoryWriteReceipt,
   ModelProfileSummary,
+  NotificationChangeEvent,
+  NotificationSummary,
   RecentTaskSummary,
   Result,
   RunSummary,
@@ -142,6 +144,8 @@ const briefFixture: WorkspaceBrief = {
 };
 
 const memoryOperationUuid = '11111111-1111-4111-8111-111111111111';
+let emitNotificationChange: ((event: NotificationChangeEvent) => void) | undefined;
+let activateSystemNotification: ((input: { id: string }) => void) | undefined;
 
 const writeReceipt: MemoryWriteReceipt = {
   operationId: memoryOperationUuid,
@@ -205,11 +209,13 @@ function installApi(options?: {
   memories?: MemoryViewItem[];
   models?: ModelProfileSummary[];
 }) {
+  emitNotificationChange = undefined;
+  activateSystemNotification = undefined;
   const api = {
     chrome: { updateTheme: vi.fn(async () => undefined) },
     workspace: {
       getDefault: vi.fn(async () => workspaceFixture),
-      listAll: vi.fn(async () => []),
+      listAll: vi.fn(async () => [workspaceFixture]),
       pickDirectory: vi.fn(async () => null),
       create: vi.fn(),
       updateIdentity: vi.fn(),
@@ -257,14 +263,34 @@ function installApi(options?: {
     evidence: { list: vi.fn(async () => []) },
     notifications: {
       list: vi.fn(async () => []),
-      onChange: vi.fn(() => () => undefined),
-      onActivate: vi.fn(() => () => undefined),
+      get: vi.fn(async (): Promise<NotificationSummary | null> => null),
+      rendererReady: vi.fn(async () => ({ ready: true as const })),
+      markRead: vi.fn(async () => ({ unreadCount: 0 })),
+      onChange: vi.fn((listener: (event: NotificationChangeEvent) => void) => {
+        emitNotificationChange = listener;
+        return () => undefined;
+      }),
+      onActivate: vi.fn((listener: (input: { id: string }) => void) => {
+        activateSystemNotification = listener;
+        return () => undefined;
+      }),
     },
     tasks: {
       list: vi.fn(async (): Promise<RecentTaskSummary[]> => [previousTask]),
+      get: vi.fn(async (): Promise<RecentTaskSummary | null> => previousTask),
       create: vi.fn(async () => ({
         task: { id: 'new-task', title: goal },
         sessionId: 'new-session',
+      })),
+    },
+    schedules: {
+      get: vi.fn(async () => ({
+        status: 'rejected' as const,
+        error: { code: 'schedule_not_found', message: '没有该规则。' },
+      })),
+      getOccurrence: vi.fn(async () => ({
+        status: 'rejected' as const,
+        error: { code: 'schedule_not_found', message: '没有该实例。' },
       })),
     },
     taskContexts: {
@@ -772,6 +798,67 @@ describe('Workspace input material display', () => {
 });
 
 describe('Task context restoration', () => {
+  it('keeps a draft for background results and opens a historical task by notification ID on click', async () => {
+    const api = installApi();
+    api.tasks.list.mockResolvedValue([]);
+    const targetNotification: NotificationSummary = {
+      id: 'notification-old-task',
+      level: 'warning',
+      kind: 'run',
+      title: '旧任务运行失败',
+      createdAt: 10,
+      read: false,
+      target: { kind: 'task', taskId: previousTask.id },
+    };
+    api.notifications.get.mockResolvedValue(targetNotification);
+    render(<App />);
+    const input = await screen.findByRole('textbox', { name: /任务输入/ });
+    fireEvent.change(input, { target: { value: '正在编辑的草稿' } });
+
+    act(() => {
+      emitNotificationChange?.({
+        type: 'created',
+        notification: targetNotification,
+        unreadCount: 1,
+      });
+    });
+    expect(input).toHaveProperty('value', '正在编辑的草稿');
+
+    await act(async () => {
+      activateSystemNotification?.({ id: targetNotification.id });
+    });
+
+    expect(api.tasks.list).toHaveBeenCalledWith({ workspaceId: workspaceFixture.id });
+    expect(api.notifications.get).toHaveBeenCalledWith({ id: targetNotification.id });
+    expect(api.tasks.get).toHaveBeenCalledWith({ id: previousTask.id });
+    expect(await screen.findByText('旧任务的要求')).toBeTruthy();
+  });
+
+  it('explains a missing historical task and does not route to a different recent task', async () => {
+    const api = installApi();
+    api.tasks.get.mockResolvedValue(null);
+    const targetNotification: NotificationSummary = {
+      id: 'notification-missing-task',
+      level: 'error',
+      kind: 'run',
+      title: '原任务已删除',
+      createdAt: 10,
+      read: true,
+      target: { kind: 'task', taskId: 'deleted-task' },
+    };
+    api.notifications.get.mockResolvedValue(targetNotification);
+    render(<App />);
+    await screen.findByRole('textbox', { name: /任务输入/ });
+
+    await act(async () => {
+      activateSystemNotification?.({ id: targetNotification.id });
+    });
+
+    expect(api.tasks.get).toHaveBeenCalledWith({ id: 'deleted-task' });
+    expect(api.runs.list).not.toHaveBeenCalledWith({ taskId: previousTask.id });
+    expect(await screen.findByText('这项通知对应的任务已不存在，无法打开。')).toBeTruthy();
+  });
+
   it('没有工具调用的取消运行也显示可继续工作的终态', async () => {
     const api = installApi();
     api.runs.list.mockResolvedValue([{ ...previousRun, status: 'cancelled' }]);

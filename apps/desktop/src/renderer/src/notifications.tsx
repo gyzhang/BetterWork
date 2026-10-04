@@ -33,11 +33,13 @@ interface ToastItem {
 interface UseNotificationsOptions {
   navigate: (target: NotificationTarget) => void;
   isTargetVisible: (notification: NotificationSummary) => boolean;
+  onActivationError?: () => void;
 }
 
 export const useNotifications = ({
   navigate,
   isTargetVisible,
+  onActivationError,
 }: UseNotificationsOptions): {
   notifications: NotificationSummary[];
   unreadCount: number;
@@ -54,7 +56,12 @@ export const useNotifications = ({
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const notificationsRef = useRef<NotificationSummary[]>([]);
   const pausedToastsRef = useRef(new Set<string>());
-  const callbacksRef = useRef({ navigate, isTargetVisible });
+  const callbacksRef = useRef({ navigate, isTargetVisible, onActivationError });
+
+  // Renderer 回调在挂载时先就位，冷启动 ready 握手随后才可能触发 Main 的待处理目标。
+  useEffect(() => {
+    callbacksRef.current = { navigate, isTargetVisible, onActivationError };
+  });
 
   useEffect(() => {
     let disposed = false;
@@ -105,13 +112,28 @@ export const useNotifications = ({
       }
     });
     const offActivate = window.betterwork.notifications.onActivate(({ id }) => {
-      const notification = notificationsRef.current.find((item) => item.id === id);
-      if (!notification) return;
-      if (!notification.read) {
-        trackAction(window.betterwork.notifications.markRead({ id }), '标记通知已读');
-      }
-      if (notification.target) callbacksRef.current.navigate(notification.target);
+      trackAction(
+        window.betterwork.notifications
+          .get({ id })
+          .then((notification) => {
+            if (disposed) return;
+            if (!notification) {
+              callbacksRef.current.onActivationError?.();
+              return;
+            }
+            if (!notification.read) {
+              trackAction(window.betterwork.notifications.markRead({ id }), '标记通知已读');
+            }
+            if (notification.target) callbacksRef.current.navigate(notification.target);
+          })
+          .catch((error: unknown) => {
+            console.error('Unable to restore notification target', error);
+            callbacksRef.current.onActivationError?.();
+          }),
+        '打开系统通知目标',
+      );
     });
+    trackAction(window.betterwork.notifications.rendererReady(), '通知 Renderer 就绪握手');
     return () => {
       disposed = true;
       offChange();
@@ -122,12 +144,6 @@ export const useNotifications = ({
   useEffect(() => {
     notificationsRef.current = notifications;
   }, [notifications]);
-
-  // 渲染期间写 ref 违反 React 的纯度约束；改为在 effect 里同步最新值，
-  // 事件回调依然能读到当前的 navigate / isTargetVisible。
-  useEffect(() => {
-    callbacksRef.current = { navigate, isTargetVisible };
-  });
 
   useEffect(() => {
     const timer = window.setInterval(() => {

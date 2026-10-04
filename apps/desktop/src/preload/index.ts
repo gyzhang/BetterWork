@@ -41,12 +41,14 @@ import {
   getMcpConnectionRequestSchema,
   getMemoryRequestSchema,
   getMemorySettingsRequestSchema,
+  getNotificationRequestSchema,
   getRunArtifactDeclarationsRequestSchema,
   getRunMemoryContextRequestSchema,
   getScheduleOccurrenceRequestSchema,
   getScheduleRequestSchema,
   getSkillRequestSchema,
   getTaskContextRequestSchema,
+  getTaskRequestSchema,
   importSkillRequestSchema,
   inputSnapshotSchema,
   IpcChannel,
@@ -95,6 +97,9 @@ import {
   memoryWriteReceiptSchema,
   notificationActivatedSchema,
   notificationChangeEventSchema,
+  notificationRendererReadyRequestSchema,
+  notificationRendererReadyResultSchema,
+  notificationSummarySchema,
   preflightScheduleRequestSchema,
   prepareDependencyRequestSchema,
   prepareDependencyResultSchema,
@@ -105,6 +110,7 @@ import {
   previewScheduleRequestSchema,
   rebuildKnowledgeIndexRequestSchema,
   rebuildMemoryProjectionRequestSchema,
+  recentTaskSummarySchema,
   refreshKnowledgeDocumentRequestSchema,
   refreshSkillDependencyGrantRequestSchema,
   refreshSkillDependencyGrantResultSchema,
@@ -115,6 +121,7 @@ import {
   resultSchema,
   retryKnowledgeJobRequestSchema,
   retryMemoryJobRequestSchema,
+  retryScheduleOutputRequestSchema,
   revokeSkillTrustRequestSchema,
   runArtifactSourceDeclarationSchema,
   runSourcePreviewSchema,
@@ -133,6 +140,7 @@ import {
   scheduleManualExecutionResultSchema,
   scheduleOccurrenceDetailSchema,
   scheduleOccurrenceHistoryPageSchema,
+  scheduleOutputReceiptSchema,
   schedulePageSchema,
   schedulePreflightViewSchema,
   schedulePreviewResultSchema,
@@ -224,6 +232,12 @@ const api: BetterWorkDesktopApi = {
   tasks: {
     create: (input) => ipcRenderer.invoke(IpcChannel.CreateTask, input),
     list: (input) => ipcRenderer.invoke(IpcChannel.ListTasks, input),
+    get: (input) =>
+      invokeValidated(
+        IpcChannel.GetTask,
+        getTaskRequestSchema.parse(input),
+        recentTaskSummarySchema.nullable(),
+      ),
   },
   evidence: {
     list: (input) => ipcRenderer.invoke(IpcChannel.ListEvidence, input),
@@ -267,6 +281,18 @@ const api: BetterWorkDesktopApi = {
   },
   notifications: {
     list: () => ipcRenderer.invoke(IpcChannel.ListNotifications),
+    get: (input) =>
+      invokeValidated(
+        IpcChannel.GetNotification,
+        getNotificationRequestSchema.parse(input),
+        notificationSummarySchema.nullable(),
+      ),
+    rendererReady: () =>
+      invokeValidated(
+        IpcChannel.NotificationRendererReady,
+        notificationRendererReadyRequestSchema.parse({}),
+        notificationRendererReadyResultSchema,
+      ),
     markRead: (input) => ipcRenderer.invoke(IpcChannel.MarkNotificationRead, input),
     markAllRead: () => ipcRenderer.invoke(IpcChannel.MarkAllNotificationsRead, {}),
     clear: () => ipcRenderer.invoke(IpcChannel.ClearNotifications, {}),
@@ -363,6 +389,12 @@ const api: BetterWorkDesktopApi = {
         IpcChannel.CancelScheduleOccurrence,
         cancelScheduleOccurrenceRequestSchema.parse(input),
         scheduleCallResultSchema(scheduleCancelOccurrenceResultSchema),
+      ),
+    retryOutput: (input) =>
+      invokeValidated(
+        IpcChannel.RetryScheduleOutput,
+        retryScheduleOutputRequestSchema.parse(input),
+        scheduleCallResultSchema(scheduleOutputReceiptSchema),
       ),
     onChange(listener) {
       const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {

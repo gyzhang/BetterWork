@@ -43,6 +43,7 @@ interface PreparationState {
 export interface ScheduleSourceServiceOptions {
   now?: () => number;
   preparationTimeoutMs?: number;
+  onOccurrenceClosed?: (occurrenceId: string) => (() => void) | undefined;
 }
 
 export class ScheduleSourceServiceError extends Error {
@@ -143,6 +144,8 @@ export class ScheduleSourceService {
   private readonly inFlight = new Map<string, PreparationState>();
   private readonly now: () => number;
   private readonly preparationTimeoutMs: number;
+  private readonly onOccurrenceClosed:
+    ((occurrenceId: string) => (() => void) | undefined) | undefined;
 
   constructor(
     private readonly store: AppStore,
@@ -156,6 +159,7 @@ export class ScheduleSourceService {
   ) {
     this.now = options.now ?? Date.now;
     this.preparationTimeoutMs = options.preparationTimeoutMs ?? SCHEDULE_PREPARATION_TIMEOUT_MS;
+    this.onOccurrenceClosed = options.onOccurrenceClosed;
   }
 
   prepare(occurrenceId: string, signal?: AbortSignal): Promise<ScheduleSourceSnapshot> {
@@ -191,7 +195,7 @@ export class ScheduleSourceService {
     let finishedSnapshots = 0;
     for (const row of rows) {
       this.inFlight.get(row.occurrenceId)?.controller.abort();
-      this.store.transaction(() => {
+      const afterCommit = this.store.transaction(() => {
         const occurrence = this.store.scheduleOccurrences.get(row.occurrenceId);
         const snapshot = row.snapshotId
           ? this.store.scheduleSources.get(row.snapshotId)
@@ -215,8 +219,11 @@ export class ScheduleSourceService {
             reasonDetail: '应用在本期来源准备期间退出；保留已复制输入快照，不自动重试或启动 Run。',
           });
           closedOccurrences += 1;
+          return this.onOccurrenceClosed?.(occurrence.id);
         }
+        return undefined;
       });
+      afterCommit?.();
     }
     return { closedOccurrences, finishedSnapshots };
   }
@@ -550,7 +557,7 @@ export class ScheduleSourceService {
   ): void {
     const completedAt = this.now();
     this.assertTimestamp(completedAt);
-    this.store.transaction(() => {
+    const afterCommit = this.store.transaction(() => {
       const occurrence = this.store.scheduleOccurrences.get(occurrenceId);
       const snapshot = this.store.scheduleSources.getByOccurrence(occurrenceId);
       const externallyCancelled = occurrence?.preparationOutcome === 'cancelled';
@@ -570,8 +577,11 @@ export class ScheduleSourceService {
           reasonCode: failureCode,
           reasonDetail: reasonDetail.slice(0, 2_000),
         });
+        return this.onOccurrenceClosed?.(occurrence.id);
       }
+      return undefined;
     });
+    afterCommit?.();
   }
 
   private requirePreparingOccurrence(occurrenceId: string): ScheduleOccurrence {

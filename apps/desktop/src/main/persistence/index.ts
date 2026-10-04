@@ -25,7 +25,9 @@ import { RunMaterialReadRepository } from './run-material-read-repository';
 import { RunMemoryContextRepository } from './run-memory-context-repository';
 import { RunRepository } from './run-repository';
 import { RuntimeEnvironmentRepository } from './runtime-environment-repository';
+import { ScheduleNotificationRepository } from './schedule-notification-repository';
 import { ScheduleOccurrenceRepository } from './schedule-occurrence-repository';
+import { ScheduleOutputRepository } from './schedule-output-repository';
 import { ScheduleRecoveryBatchRepository } from './schedule-recovery-batch-repository';
 import { ScheduleRepository } from './schedule-repository';
 import { ScheduleSourceRepository } from './schedule-source-repository';
@@ -53,6 +55,8 @@ export class AppStore {
   readonly runs: RunRepository;
   readonly schedules: ScheduleRepository;
   readonly scheduleOccurrences: ScheduleOccurrenceRepository;
+  readonly scheduleOutputs: ScheduleOutputRepository;
+  readonly scheduleNotifications: ScheduleNotificationRepository;
   readonly scheduleRecoveryBatches: ScheduleRecoveryBatchRepository;
   readonly scheduleSources: ScheduleSourceRepository;
   readonly runContextSnapshots: RunContextSnapshotRepository;
@@ -101,6 +105,8 @@ export class AppStore {
     this.runs = new RunRepository(db);
     this.schedules = new ScheduleRepository(db);
     this.scheduleOccurrences = new ScheduleOccurrenceRepository(db);
+    this.scheduleOutputs = new ScheduleOutputRepository(db);
+    this.scheduleNotifications = new ScheduleNotificationRepository(db);
     this.scheduleRecoveryBatches = new ScheduleRecoveryBatchRepository(db);
     this.scheduleSources = new ScheduleSourceRepository(db);
     this.runContextSnapshots = new RunContextSnapshotRepository(db);
@@ -230,12 +236,13 @@ export {
   RunMemoryPhaseError,
   type RunMemorySelectionInput,
 } from './run-memory-context-repository';
-export { RunRepository } from './run-repository';
+export { RUN_INTERRUPTED_ON_STARTUP_REASON, RunRepository } from './run-repository';
 export {
   type CreateEnvironmentInput,
   type EnvironmentStatusPatch,
   RuntimeEnvironmentRepository,
 } from './runtime-environment-repository';
+export { ScheduleNotificationRepository } from './schedule-notification-repository';
 export {
   type ClaimManualOccurrenceInput,
   type ClaimMissedOccurrenceInput,
@@ -247,6 +254,10 @@ export {
   ScheduleOccurrenceStateError,
   ScheduleRequestKeyConflictError,
 } from './schedule-occurrence-repository';
+export {
+  ScheduleOutputRepository,
+  ScheduleOutputRepositoryError,
+} from './schedule-output-repository';
 export {
   type ScheduleRecoveryBatch,
   ScheduleRecoveryBatchRepository,

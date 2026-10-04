@@ -152,6 +152,11 @@ export class FileArtifactService {
     return path.join(this.artifactFilesRoot, versionId, 'output');
   }
 
+  /** 按版本 ID 从不可变成果库安全读取原始文件字节，调用方仍需核对 ArtifactVersion hash。 */
+  readVersionBytes(versionId: string): Buffer {
+    return readManagedFile(this.artifactFilesRoot, path.join(versionId, 'output'));
+  }
+
   /** 派生缓存目录：随版本产生、可随时删除重建，不参与成果真实性校验。 */
   private thumbnailDir(versionId: string): string {
     return path.join(this.artifactFilesRoot, versionId, 'thumbnails');
