@@ -968,9 +968,19 @@ async function runStep(step: string): Promise<ReturnType<typeof layoutChecks>> {
     await waitFor(() => !document.querySelector('[role="alert"]'));
     if (!hasText('月度经营复盘 · Monthly Business Review'))
       throw new Error('刷新恢复后列表旧事实丢失');
+    const resultBadge = [...document.querySelectorAll<HTMLElement>('.schedule-rows .badge')].find(
+      (item) => item.textContent?.trim() === '成果已生成',
+    );
+    const resultMain = resultBadge?.closest<HTMLElement>('.list-row-main');
+    if (
+      !resultBadge ||
+      !resultMain ||
+      resultBadge.getBoundingClientRect().width >= resultMain.getBoundingClientRect().width / 2
+    )
+      throw new Error('本期结果状态标签被拉伸为整行');
   }
   if (step === 'schedule-detail-open') {
-    click('详情');
+    click('规则与历史');
     await waitFor(() => hasText('2026 年 9 月') && hasText('本期固定配置'));
     if (!hasText('来源快照 · 0 项候选材料') || !hasText('2048 字节'))
       throw new Error('定时详情未呈现固定来源快照事实');

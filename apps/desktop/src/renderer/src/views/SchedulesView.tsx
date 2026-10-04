@@ -20,6 +20,7 @@ import { ListRow } from '../components/ListRow';
 import { StatusNote } from '../components/StatusNote';
 import { TransientToast } from '../components/TransientToast';
 import type { SchedulesState } from '../hooks/use-schedules';
+import { reportAction } from '../lib/async-action';
 import {
   filterSchedulesByWorkspace,
   lifecycleLabel,
@@ -39,15 +40,22 @@ function ScheduleListRow({
   workspaceName,
   onEdit,
   onOpenDetail,
+  onReviewVersion,
 }: {
   detail: ScheduleDetail;
   workspaceName: string;
   onEdit: () => void;
   onOpenDetail: () => void;
+  onReviewVersion: (versionId: string) => void;
 }): React.JSX.Element {
   const { schedule } = detail.aggregate;
   const { config } = detail.aggregate;
   const latest = detail.history.items[0];
+  const generated = latest?.result.status === 'generated';
+  const reviewVersionId =
+    generated && latest.result.outputReceipts.length === 1
+      ? latest.result.outputReceipts[0]?.artifactVersionId
+      : undefined;
   const lastRunLabel = latest
     ? `最近一期 · ${
         latest.occurrence.scheduledAt !== undefined
@@ -77,8 +85,18 @@ function ScheduleListRow({
       }
       actions={
         <>
+          {generated && (
+            <Button
+              variant="primary"
+              size="sm"
+              type="button"
+              onClick={() => (reviewVersionId ? onReviewVersion(reviewVersionId) : onOpenDetail())}
+            >
+              审阅本期成果
+            </Button>
+          )}
           <Button variant="secondary" size="sm" type="button" onClick={onOpenDetail}>
-            详情
+            规则与历史
           </Button>
           {schedule.lifecycle !== 'archived' && (
             <Button variant="secondary" size="sm" type="button" onClick={onEdit}>
@@ -90,7 +108,7 @@ function ScheduleListRow({
       multiline
     >
       <Badge tone={occurrenceResultTone(latest?.result.status)}>
-        {occurrenceResultLabel(latest?.result.status)}
+        {generated ? '成果已生成' : occurrenceResultLabel(latest?.result.status)}
       </Badge>
       {detail.expertUpdate.available && <Badge tone="warning">专家有新版本</Badge>}
       {schedule.dispatchBlock && (
@@ -127,6 +145,7 @@ export function SchedulesPage({
   >();
   const [detailTarget, setDetailTarget] = useState<ScheduleDetail>();
   const [savedMessage, setSavedMessage] = useState('');
+  const [openError, setOpenError] = useState('');
   const options = workspaceFilterOptions(workspaces);
   const visibleDetails = filterSchedulesByWorkspace(state.details, workspaceId);
 
@@ -256,6 +275,14 @@ export function SchedulesPage({
                   detail={detail}
                   onEdit={() => setEditorTarget({ kind: 'edit', detail })}
                   onOpenDetail={() => setDetailTarget(detail)}
+                  onReviewVersion={(versionId) => {
+                    setOpenError('');
+                    reportAction(
+                      onOpenArtifactVersion(versionId),
+                      setOpenError,
+                      '无法打开本期成果版本。',
+                    );
+                  }}
                   workspaceName={
                     workspaces.find((item) => item.id === detail.aggregate.schedule.workspaceId)
                       ?.name ?? '工作空间不可用'
@@ -272,6 +299,9 @@ export function SchedulesPage({
           message={savedMessage}
           onDismiss={() => setSavedMessage('')}
         />
+      )}
+      {openError && (
+        <TransientToast tone="error" message={openError} onDismiss={() => setOpenError('')} />
       )}
     </section>
   );

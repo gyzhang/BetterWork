@@ -161,6 +161,8 @@ Skill 列表分别展示来源（内置/用户）、启用状态、信任状态�
 
 光哥已确认独立“定时任务”入口位于“专家”下方、业务主导航最后；消息中心与设置仍保留底部位置。2026-10-03 光哥通过[原型 P1–P6](prototype/scheduled-tasks/README.md)：紧凑列表、整页配置/详情、三次时间预览、默认同目录「定时成果」、事实分层的下一步、只读专家差异与显式启用。
 
+列表中的本期结果是紧凑的只读状态标签，不使用横贯整行的胶囊承载行动提示。最近一期已生成成果时，独立按钮「审阅本期成果」是审阅入口：只有一份成果时直接打开该期固定 ArtifactVersion；有多份成果时进入该期详情，在「成果版本与目录保存」中分别打开。规则配置与执行历史由「规则与历史」进入，状态标签本身不承担点击动作。
+
 [技术契约 §10](development/schedule-contracts.md#10-ui-实施清单组合基座不新增基础组件)逐分支映射当前真实组件，预定新增基础 UI 组件为 0；只新增定时业务页面组合/Hook/纯函数。每个普通页面可见分支沿用 PageHeader/ScrollRegion/.page-body，列表 ListRow、表单 Field 系列、来源 Modal/CheckList、状态 Badge/StatusNote、反馈按 §11.5。不复制造型相同的 ScheduleCard/Toast/Dialog，不复制原型 CSS，不硬塞面向固定材料的 ComposerCapabilityPicker；可用 SourceRow 只呈现真实 Evidence，missed 不伪造 RunSummaryRow。
 
 详见[设计](designs/scheduled-tasks.md)、[Luna 唯一任务板](development/tasks-schedules.md)及 [ADR-0037](adr/0037-scheduled-work-and-source-snapshots.md)。SC09-1 已把 §6.1 导航表、生产入口、Hook 与列表页骨架接通；SC09-2 已接整页规则配置、Main 三次预览、预检和保存草稿路径；SC09-3 已接知识文档/集合/default Vault 的暂存选择、用途与预算提示；SC09-4 已接规则整页详情、历史分页和选中 occurrence 的固定期间/配置快照。候选来源快照与首个 Run 的真实 Evidence 分开呈现，Evidence 只按本期 runId 过滤，已读/采用计数单列；missed 清楚说明未创建 Task/Run、不自动补跑。输出回执按固定 ArtifactVersion 打开，不跟随成果 latest 热换。人工执行/启停/保存重试与专家差异按 SC09-5、原 Task 接续按 SC09-6 完成。SC09-7 在隔离 Electron 宿主实测青玉明暗、760/1380px、正常/减动效及草稿/冲突/Esc/焦点恢复等生产分支，8 变体共 128 步；只新增业务组合、Hook 与纯函数，基础组件新增 0。自动化及 AI 截图走查不代表 SC11 人工/业务验收。

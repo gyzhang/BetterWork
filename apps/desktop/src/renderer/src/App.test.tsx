@@ -938,7 +938,7 @@ describe('定时任务导航', () => {
     await screen.findByRole('heading', { name: '按约定时间开始工作' });
     await waitFor(() => expect(api.schedules.list).toHaveBeenCalled());
     const scheduleChangeListener = emitScheduleChange;
-    fireEvent.click(screen.getByRole('button', { name: '详情' }));
+    fireEvent.click(screen.getByRole('button', { name: '规则与历史' }));
     fireEvent.click(await screen.findByRole('button', { name: /打开本期原 Task「旧任务」/ }));
 
     await screen.findByRole('textbox', { name: /任务输入/ });

@@ -67,6 +67,69 @@ const makeDetail = (id = 'schedule-1', workspaceId = 'workspace-1'): ScheduleDet
   };
 };
 
+const makeGeneratedDetail = (receiptCount = 1): ScheduleDetail => {
+  const detail = makeDetail();
+  const occurrence = {
+    id: 'occurrence-1',
+    scheduleId: 'schedule-1',
+    configVersion: 1,
+    trigger: 'scheduled' as const,
+    scheduledAt: 10,
+    period: {
+      rule: 'previous-month' as const,
+      timeZone: 'Asia/Shanghai' as const,
+      anchorAt: 10,
+      startAt: 1,
+      endAt: 9,
+      label: '上一自然月',
+    },
+    phase: 'closed' as const,
+    taskId: 'task-1',
+    sessionId: 'session-1',
+    firstRunId: 'run-1',
+    createdAt: 10,
+    requestedAt: 10,
+    finishedAt: 20,
+  };
+  const run = {
+    id: 'run-1',
+    taskId: 'task-1',
+    sessionId: 'session-1',
+    prompt: '完成上月复盘',
+    status: 'completed' as const,
+    createdAt: 11,
+    completedAt: 20,
+  };
+  return {
+    ...detail,
+    history: {
+      items: [
+        {
+          occurrence,
+          run,
+          result: {
+            occurrence,
+            run,
+            status: 'generated',
+            outputReceipts: Array.from({ length: receiptCount }, (_, index) => ({
+              id: `receipt-${index + 1}`,
+              occurrenceId: occurrence.id,
+              artifactVersionId: `version-${index + 1}`,
+              workspaceId: 'workspace-1',
+              relativePath: `定时成果/复盘-${index + 1}.md`,
+              contentHash: 'a'.repeat(64),
+              status: 'saved' as const,
+              attempt: 1,
+              createdAt: 19,
+              updatedAt: 20,
+            })),
+          },
+        },
+      ],
+    },
+  };
+};
+
 const workspace = (id: string, name: string): WorkspaceSummary => ({
   id,
   name,
@@ -216,11 +279,38 @@ describe('SchedulesPage', () => {
       value: { schedules: { onChange: vi.fn(() => () => undefined) } },
     });
     render(<SchedulesPage state={stateOf({ details: [makeDetail()] })} {...pageProps} />);
-    fireEvent.click(screen.getByRole('button', { name: '详情' }));
+    fireEvent.click(screen.getByRole('button', { name: '规则与历史' }));
 
     expect(screen.getByRole('heading', { name: '月度经营复盘' })).toBeTruthy();
     expect(screen.getByRole('region', { name: '定时任务详情' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '返回列表' }));
     expect(screen.getByRole('heading', { name: '按约定时间开始工作' })).toBeTruthy();
+  });
+
+  it('shows a compact result and opens the exact generated version from a review button', () => {
+    const openVersion = vi.fn(async () => undefined);
+    render(
+      <SchedulesPage
+        state={stateOf({ details: [makeGeneratedDetail()] })}
+        {...pageProps}
+        onOpenArtifactVersion={openVersion}
+      />,
+    );
+
+    expect(screen.getByText('成果已生成').closest('.badge')).toBeTruthy();
+    expect(screen.queryByText('已生成，请审阅')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '审阅本期成果' }));
+    expect(openVersion).toHaveBeenCalledExactlyOnceWith('version-1');
+  });
+
+  it('opens the period detail when a generated period has multiple result versions', () => {
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: { schedules: { onChange: vi.fn(() => () => undefined) } },
+    });
+    render(<SchedulesPage state={stateOf({ details: [makeGeneratedDetail(2)] })} {...pageProps} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '审阅本期成果' }));
+    expect(screen.getByRole('region', { name: '定时任务详情' })).toBeTruthy();
   });
 });

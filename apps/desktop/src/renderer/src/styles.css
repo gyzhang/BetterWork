@@ -1657,6 +1657,9 @@ small {
   display: flex;
   flex-direction: column;
 }
+.schedule-rows .list-row-main > .badge {
+  align-self: flex-start;
+}
 .schedule-editor-sections {
   display: flex;
   min-width: 0;
