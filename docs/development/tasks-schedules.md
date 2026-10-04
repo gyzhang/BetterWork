@@ -319,7 +319,7 @@ SC05-1 提前验证日历库，再做依赖它的规则服务；不能为了编�
 | ------ | -------------------------------- | ------------------------------------------------------------------------- |
 | SC-M0  | SC03 全卡 + SC05-1               | 2026-10-03 21:54 CST：`npm run verify` 退出 0；functional 180 文件/1682 项、heavy 8 文件/157 项、Desktop build 与 UI 渲染检查均通过，UI 50 组。应用库 v36、Vault v7；截图/读数 `/var/folders/kq/ts17kvnd5yg2kjtkx645y1zw0000gn/T/betterwork-ui-render-vrjBM3`。无定时任务页面声明；AI 页面自动走查是既有 UI 矩阵证据，不是 SC09 定时任务生产页面验收。详见[日志](../logs/2026-10-03.md)。 |
 | SC-M1  | SC04 全卡 + SC05-2/3 + SC06 全卡 | 2026-10-04 09:08 CST：`npm run verify` 退出 0；lint、format、typecheck、functional 190 文件/1759 项、heavy 8 文件/163 项、Desktop build 与 UI 检查 50 组全通过。应用库 v38、Vault v7；临时 UI 产物 `/var/folders/kq/ts17kvnd5yg2kjtkx645y1zw0000gn/T/betterwork-ui-render-yBfolL`。AI 的共用矩阵/应用旅程检查不是定时生产页走查。详见[日志](../logs/2026-10-04.md)。 |
-| SC-M2  | SC07/SC08 全卡                   | 真实版本字节的非覆盖保存、回执恢复、唯一通知和无窗口导航；完整 verify     |
+| SC-M2  | SC07/SC08 全卡                   | 2026-10-04 11:33 CST：`npm run verify` 退出 0；lint、format、typecheck、functional 194 文件/1801 项、heavy 8 文件/165 项、Desktop build、Electron `ui:check` 50 组均通过。SC07 真实版本字节非覆盖保存/回执恢复、SC08 结果与通知事务去重/无窗口点击 ready 导航定向验收完成。隔离 UI 截图与读数 `/var/folders/kq/ts17kvnd5yg2kjtkx645y1zw0000gn/T/betterwork-ui-render-ZpER7s`；应用库 v38、Vault v7、无迁移。代码与卡片证据提交 `cb5fa9e`；详见[日志](../logs/2026-10-04.md)。 |
 | SC-M3  | SC09 全卡                        | 生产页/组件与离线应用旅程证据；完整 verify；标明人工待验                  |
 | SC-M4  | SC10 全卡                        | 六期 + 故障 + 普通任务回归；完整 verify；有 bench 改动另跑 bench          |
 | SC-M5  | SC11                             | 光哥真实窗口结论、授权真实模型语义与业务审阅，缺证据不代签                |
