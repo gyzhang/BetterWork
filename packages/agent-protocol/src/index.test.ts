@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import {
   artifactInputRelationSchema,
+  artifactTypeSchema,
   countCodePoints,
   createMemoryRequestSchema,
   deleteSkillRequestSchema,
   dependencyLockSchema,
   dependencyOperationSchema,
+  executeMissedScheduleRequestSchema,
+  executeScheduleNowRequestSchema,
   expertReferenceMaterialSchema,
   exportMarkdownArtifactRequestSchema,
   facetToKind,
@@ -14,6 +17,9 @@ import {
   jobResultSchema,
   jobSpecSchema,
   listPageSchema,
+  listScheduleOccurrencesRequestSchema,
+  listScheduleSourceItemsRequestSchema,
+  listSchedulesRequestSchema,
   MAX_RUN_SKILL_BINDINGS,
   mcpToolBindingSchema,
   mcpToolSummarySchema,
@@ -43,12 +49,36 @@ import {
   memoryWriteReceiptSchema,
   resolveMemoryConflictRequestSchema,
   resultSchema,
+  retryScheduleOutputRequestSchema,
   runMaterialReadSchema,
   runMemoryContextSchema,
   runtimeEnvironmentSchema,
   runtimeProfileDraftSchema,
+  saveScheduleRequestSchema,
   saveTaskContextRequestSchema,
+  SCHEDULE_KNOWLEDGE_SOURCE_MAX,
+  SCHEDULE_PREPARATION_TIMEOUT_MS,
+  SCHEDULE_PREVIEW_COUNT,
+  SCHEDULE_SOURCE_ITEM_MAX,
+  SCHEDULE_WORKSPACE_DIRECTORY_DEPTH_MAX,
+  SCHEDULE_WORKSPACE_FILE_MAX,
+  SCHEDULE_WORKSPACE_SINGLE_FILE_BYTES_MAX,
+  SCHEDULE_WORKSPACE_TOTAL_FILE_BYTES_MAX,
+  scheduleCasConflictSchema,
+  scheduleConfigDraftSchema,
+  scheduleConfigSchema,
+  scheduleDomainErrorSchema,
+  scheduleKnowledgeSourcesSchema,
+  scheduleOccurrenceResultSchema,
+  scheduleOccurrenceSchema,
+  scheduleOutputReceiptSchema,
+  scheduleResolvedPeriodSchema,
+  scheduleSchema,
+  scheduleSourceItemSchema,
+  scheduleSourceSnapshotSchema,
+  scheduleTimingSchema,
   scriptExecutionSchema,
+  setScheduleLifecycleRequestSchema,
   setSkillTrustRequestSchema,
   skillBindingSchema,
   skillRevisionSummarySchema,
@@ -445,6 +475,612 @@ describe('run protocol', () => {
     ).toThrow();
     expect(() => skillBindingSchema.parse({ skillId: '' })).toThrow();
     expect(() => skillBindingSchema.parse({ skillId: 'skill-1', revisionId: '' })).toThrow();
+  });
+});
+
+describe('scheduled task protocol', () => {
+  const period = {
+    rule: 'previous-month',
+    timeZone: 'Asia/Shanghai',
+    anchorAt: 1_790_000_000_000,
+    startAt: 1_787_000_000_000,
+    endAt: 1_789_000_000_000,
+    label: '2026 年 9 月',
+  } as const;
+
+  const config = {
+    name: '月度经营回顾',
+    expertId: 'expert-1',
+    expertRevisionId: 'expert-revision-3',
+    requirements: '核对上月经营变化并列出证据。',
+    expectedArtifactTypes: ['markdown'],
+    timing: {
+      frequency: 'monthly',
+      day: 5,
+      hour: 9,
+      minute: 0,
+      timeZone: 'Asia/Shanghai',
+    },
+    periodRule: 'previous-month',
+    knowledgeSources: [],
+    outputSubdirectory: '定时成果',
+  } as const;
+
+  const missedOccurrence = {
+    id: 'occurrence-1',
+    scheduleId: 'schedule-1',
+    configVersion: 1,
+    trigger: 'scheduled',
+    scheduledAt: 1_790_000_000_000,
+    requestedAt: 1_790_000_000_000,
+    period,
+    phase: 'closed',
+    preparationOutcome: 'missed',
+    createdAt: 1_790_000_000_000,
+    finishedAt: 1_790_000_000_001,
+  } as const;
+
+  it('accepts every timing and period branch and rejects invalid dates or zones', () => {
+    expect(
+      scheduleTimingSchema.safeParse({
+        frequency: 'daily',
+        hour: 23,
+        minute: 59,
+        timeZone: 'UTC',
+      }).success,
+    ).toBe(true);
+    expect(
+      scheduleTimingSchema.safeParse({
+        frequency: 'weekly',
+        weekday: 7,
+        hour: 9,
+        minute: 0,
+        timeZone: 'Asia/Tokyo',
+      }).success,
+    ).toBe(true);
+    expect(scheduleTimingSchema.safeParse(config.timing).success).toBe(true);
+    expect(scheduleTimingSchema.safeParse({ ...config.timing, day: 32 }).success).toBe(false);
+    expect(
+      scheduleTimingSchema.safeParse({ ...config.timing, timeZone: 'America/New_York' }).success,
+    ).toBe(false);
+    expect(
+      scheduleTimingSchema.safeParse({
+        frequency: 'daily',
+        hour: 9,
+        minute: 60,
+        timeZone: 'UTC',
+      }).success,
+    ).toBe(false);
+
+    for (const rule of ['previous-month', 'rolling-seven-days', 'current-week', 'previous-week']) {
+      expect(scheduleResolvedPeriodSchema.safeParse({ ...period, rule }).success, rule).toBe(true);
+    }
+    expect(
+      scheduleResolvedPeriodSchema.safeParse({
+        rule: 'none',
+        timeZone: 'UTC',
+        anchorAt: 1_790_000_000_000,
+        label: '不指定期间',
+      }).success,
+    ).toBe(true);
+    expect(
+      scheduleResolvedPeriodSchema.safeParse({ ...period, startAt: period.endAt }).success,
+    ).toBe(false);
+    const mondayMidnight = Date.UTC(2026, 0, 5);
+    const emptyCurrentWeek = {
+      rule: 'current-week',
+      timeZone: 'UTC',
+      anchorAt: mondayMidnight,
+      startAt: mondayMidnight,
+      endAt: mondayMidnight,
+      label: '本周（空期间）',
+    } as const;
+    expect(scheduleResolvedPeriodSchema.safeParse(emptyCurrentWeek).success).toBe(true);
+    expect(
+      scheduleResolvedPeriodSchema.safeParse({
+        ...emptyCurrentWeek,
+        rule: 'previous-week',
+      }).success,
+    ).toBe(false);
+    expect(
+      scheduleResolvedPeriodSchema.safeParse({ ...emptyCurrentWeek, anchorAt: mondayMidnight + 1 })
+        .success,
+    ).toBe(false);
+    expect(scheduleResolvedPeriodSchema.safeParse({ ...period, endAt: -1 }).success).toBe(false);
+  });
+
+  it('validates fixed scope descriptions and rejects duplicate or out-of-scope sources', () => {
+    expect(
+      scheduleKnowledgeSourcesSchema.safeParse([
+        { kind: 'document', documentId: 'doc-1', purpose: 'background' },
+        { kind: 'collection', collectionId: 'collection-1', purpose: 'template' },
+        { kind: 'vault', vaultId: 'default', purpose: 'other' },
+      ]).success,
+    ).toBe(true);
+    expect(
+      scheduleKnowledgeSourcesSchema.safeParse([
+        { kind: 'document', documentId: 'doc-1', purpose: 'background' },
+        { kind: 'document', documentId: 'doc-1', purpose: 'template' },
+      ]).success,
+    ).toBe(false);
+    expect(
+      scheduleKnowledgeSourcesSchema.safeParse([
+        { kind: 'vault', vaultId: 'another-vault', purpose: 'background' },
+      ]).success,
+    ).toBe(false);
+    expect(
+      scheduleKnowledgeSourcesSchema.safeParse([
+        { kind: 'document', documentId: '', purpose: 'background' },
+      ]).success,
+    ).toBe(false);
+    expect(
+      scheduleKnowledgeSourcesSchema.safeParse([
+        { kind: 'document', documentId: 'doc-2', purpose: 'background', unexpected: true },
+      ]).success,
+    ).toBe(false);
+    const sourceSetOf = (count: number) =>
+      Array.from({ length: count }, (_unused, index) => ({
+        kind: 'document' as const,
+        documentId: `document-${index}`,
+        purpose: 'background' as const,
+      }));
+    expect(SCHEDULE_KNOWLEDGE_SOURCE_MAX).toBe(50);
+    expect(SCHEDULE_SOURCE_ITEM_MAX).toBe(2_000);
+    expect(SCHEDULE_PREVIEW_COUNT).toBe(3);
+    expect(SCHEDULE_PREPARATION_TIMEOUT_MS).toBe(120_000);
+    expect(SCHEDULE_WORKSPACE_FILE_MAX).toBe(500);
+    expect(SCHEDULE_WORKSPACE_SINGLE_FILE_BYTES_MAX).toBe(100 * 1024 * 1024);
+    expect(SCHEDULE_WORKSPACE_TOTAL_FILE_BYTES_MAX).toBe(500 * 1024 * 1024);
+    expect(SCHEDULE_WORKSPACE_DIRECTORY_DEPTH_MAX).toBe(12);
+    expect(scheduleKnowledgeSourcesSchema.safeParse(sourceSetOf(50)).success).toBe(true);
+    expect(scheduleKnowledgeSourcesSchema.safeParse(sourceSetOf(51)).success).toBe(false);
+
+    expect(scheduleConfigDraftSchema.safeParse(config).success).toBe(true);
+    expect(
+      scheduleConfigDraftSchema.safeParse({
+        ...config,
+        expectedArtifactTypes: ['markdown', 'markdown'],
+      }).success,
+    ).toBe(false);
+    expect(
+      scheduleConfigDraftSchema.safeParse({ ...config, expectedArtifactTypes: ['spreadsheet'] })
+        .success,
+    ).toBe(false);
+    expect(artifactTypeSchema.parse('presentation')).toBe('presentation');
+    expect(scheduleConfigDraftSchema.safeParse({ ...config, unrecognized: 'value' }).success).toBe(
+      false,
+    );
+
+    const pinnedConfig = {
+      ...config,
+      scheduleId: 'schedule-1',
+      version: 1,
+      createdAt: 1_790_000_000_000,
+    } as const;
+    expect(scheduleConfigSchema.safeParse(pinnedConfig).success).toBe(true);
+    expect(scheduleConfigSchema.safeParse({ ...pinnedConfig, version: 0 }).success).toBe(false);
+    expect(
+      scheduleSourceItemSchema.safeParse({
+        snapshotId: 'source-1',
+        ordinal: 0,
+        reference: {
+          kind: 'knowledge-revision',
+          knowledgeDocumentId: 'document-1',
+          knowledgeRevisionId: 'document-revision-3',
+          contentHash: 'content-hash-1',
+          sourcePath: '/virtual/合成材料.md',
+        },
+        purpose: 'background',
+        origin: 'selected-document',
+        displayName: '合成材料.md',
+        sourcePath: '/virtual/合成材料.md',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('enforces automatic and manual occurrence identities and phase relationships', () => {
+    expect(scheduleOccurrenceSchema.safeParse(missedOccurrence).success).toBe(true);
+    expect(
+      scheduleOccurrenceSchema.safeParse({
+        ...missedOccurrence,
+        trigger: 'scheduled',
+        requestKey: 'should-not-appear',
+      }).success,
+    ).toBe(false);
+    expect(
+      scheduleOccurrenceSchema.safeParse({
+        ...missedOccurrence,
+        trigger: 'manual-now',
+        requestKey: 'request-1',
+      }).success,
+    ).toBe(false);
+    expect(
+      scheduleOccurrenceSchema.safeParse({
+        ...missedOccurrence,
+        scheduledAt: undefined,
+        trigger: 'manual-missed',
+        requestKey: 'request-2',
+        originalOccurrenceId: 'occurrence-original',
+        preparationOutcome: 'cancelled',
+      }).success,
+    ).toBe(true);
+    expect(
+      scheduleOccurrenceSchema.safeParse({
+        ...missedOccurrence,
+        scheduledAt: undefined,
+        trigger: 'manual-missed',
+        requestKey: 'request-2',
+        originalOccurrenceId: 'occurrence-original',
+        preparationOutcome: 'missed',
+      }).success,
+    ).toBe(false);
+    expect(
+      scheduleOccurrenceSchema.safeParse({
+        ...missedOccurrence,
+        scheduledAt: undefined,
+        trigger: 'manual-missed',
+        requestKey: 'request-2',
+      }).success,
+    ).toBe(false);
+
+    const preparing = {
+      ...missedOccurrence,
+      phase: 'preparing',
+      preparationOutcome: undefined,
+      finishedAt: undefined,
+    } as const;
+    expect(scheduleOccurrenceSchema.safeParse(preparing).success).toBe(true);
+    expect(scheduleOccurrenceSchema.safeParse({ ...preparing, taskId: 'task-1' }).success).toBe(
+      false,
+    );
+    const preparingAfterT3 = {
+      ...preparing,
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      sourceSnapshotId: 'source-1',
+      preparedAt: 1_790_000_000_001,
+    } as const;
+    expect(scheduleOccurrenceSchema.safeParse(preparingAfterT3).success).toBe(true);
+    expect(
+      scheduleOccurrenceSchema.safeParse({
+        ...preparingAfterT3,
+        sourceSnapshotId: undefined,
+      }).success,
+    ).toBe(false);
+    expect(
+      scheduleOccurrenceSchema.safeParse({
+        ...preparingAfterT3,
+        phase: 'closed',
+        preparationOutcome: 'interrupted-before-run',
+        finishedAt: 1_790_000_000_002,
+      }).success,
+    ).toBe(true);
+
+    const dispatched = {
+      ...missedOccurrence,
+      phase: 'dispatched',
+      preparationOutcome: undefined,
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      firstRunId: 'run-1',
+      sourceSnapshotId: 'source-1',
+      preparedAt: 1_790_000_000_001,
+      finishedAt: undefined,
+    } as const;
+    expect(scheduleOccurrenceSchema.safeParse(dispatched).success).toBe(true);
+    expect(
+      scheduleOccurrenceSchema.safeParse({ ...dispatched, firstRunId: undefined }).success,
+    ).toBe(false);
+    expect(
+      scheduleOccurrenceSchema.safeParse({
+        ...missedOccurrence,
+        preparationOutcome: undefined,
+      }).success,
+    ).toBe(false);
+    expect(
+      scheduleOccurrenceSchema.safeParse({
+        ...missedOccurrence,
+        preparationOutcome: 'needs-material',
+        taskId: 'task-1',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('requires enabled schedule records to retain their authorization basis', () => {
+    const enabledSchedule = {
+      id: 'schedule-1',
+      workspaceId: 'workspace-1',
+      revision: 3,
+      currentConfigVersion: 2,
+      lifecycle: 'enabled',
+      nextScheduledAt: 1_790_000_000_000,
+      enabledAt: 1_789_000_000_000,
+      enabledConfigVersion: 2,
+      capabilityFingerprint: 'fingerprint-1',
+      createdAt: 1_788_000_000_000,
+      updatedAt: 1_789_000_000_000,
+    } as const;
+    expect(scheduleSchema.safeParse(enabledSchedule).success).toBe(true);
+    expect(
+      scheduleSchema.safeParse({ ...enabledSchedule, capabilityFingerprint: undefined }).success,
+    ).toBe(false);
+    expect(
+      scheduleSchema.safeParse({
+        id: 'schedule-1',
+        workspaceId: 'workspace-1',
+        revision: 3,
+        currentConfigVersion: 2,
+        lifecycle: 'paused',
+        createdAt: 1_788_000_000_000,
+        updatedAt: 1_789_000_000_000,
+        unknown: true,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('validates snapshot/output failure facts and structured CAS responses', () => {
+    const hash = 'a'.repeat(64);
+    const readySnapshot = {
+      id: 'source-1',
+      occurrenceId: 'occurrence-1',
+      workspaceId: 'workspace-1',
+      status: 'ready',
+      configVersion: 1,
+      evaluatedAt: 1_790_000_000_000,
+      manifestHash: hash,
+      itemCount: 1,
+      totalFileBytes: 42,
+      createdAt: 1_790_000_000_000,
+      completedAt: 1_790_000_000_001,
+    } as const;
+    expect(scheduleSourceSnapshotSchema.safeParse(readySnapshot).success).toBe(true);
+    expect(
+      scheduleSourceSnapshotSchema.safeParse({
+        ...readySnapshot,
+        status: 'failed',
+        failureCode: undefined,
+      }).success,
+    ).toBe(false);
+    expect(
+      scheduleSourceSnapshotSchema.safeParse({ ...readySnapshot, unknown: true }).success,
+    ).toBe(false);
+
+    const receipt = {
+      id: 'receipt-1',
+      occurrenceId: 'occurrence-1',
+      artifactVersionId: 'artifact-version-1',
+      workspaceId: 'workspace-1',
+      relativePath: '定时成果/月度回顾.md',
+      contentHash: hash,
+      status: 'saved',
+      attempt: 1,
+      createdAt: 1_790_000_000_000,
+      updatedAt: 1_790_000_000_001,
+    } as const;
+    expect(scheduleOutputReceiptSchema.safeParse(receipt).success).toBe(true);
+    expect(
+      scheduleOutputReceiptSchema.safeParse({
+        ...receipt,
+        status: 'failed',
+        failureCode: 'schedule_output_save_failed',
+      }).success,
+    ).toBe(true);
+    expect(scheduleOutputReceiptSchema.safeParse({ ...receipt, contentHash: 'bad' }).success).toBe(
+      false,
+    );
+
+    expect(
+      scheduleDomainErrorSchema.safeParse({
+        code: 'schedule_busy',
+        message: '已有运行中的实例。',
+        existingOccurrenceId: 'occurrence-1',
+        problems: [{ code: 'run_busy', message: 'Run 尚未结束。' }],
+      }).success,
+    ).toBe(true);
+    expect(
+      scheduleDomainErrorSchema.safeParse({
+        code: 'schedule_capacity',
+        message: '后台准备容量已占用。',
+      }).success,
+    ).toBe(true);
+    expect(
+      scheduleDomainErrorSchema.safeParse({
+        code: 'schedule_preparation_failed',
+        message: '自动派发准备失败。',
+      }).success,
+    ).toBe(true);
+    expect(
+      scheduleCasConflictSchema.safeParse({
+        code: 'schedule_conflict',
+        message: '配置已被另一操作更新。',
+        currentRevision: 4,
+      }).success,
+    ).toBe(true);
+    expect(
+      scheduleCasConflictSchema.safeParse({
+        code: 'schedule_conflict',
+        message: '配置已被另一操作更新。',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('keeps save, lifecycle, execute and page requests strict and versioned', () => {
+    expect(
+      saveScheduleRequestSchema.safeParse({
+        operation: 'create',
+        workspaceId: 'workspace-1',
+        config,
+        targetLifecycle: 'paused',
+      }).success,
+    ).toBe(true);
+    expect(
+      saveScheduleRequestSchema.safeParse({
+        operation: 'create',
+        workspaceId: 'workspace-1',
+        config,
+        targetLifecycle: 'enabled',
+      }).success,
+    ).toBe(false);
+    expect(
+      saveScheduleRequestSchema.safeParse({
+        operation: 'create',
+        workspaceId: 'workspace-1',
+        config,
+        targetLifecycle: 'enabled',
+        preflightFingerprint: 'fingerprint-1',
+      }).success,
+    ).toBe(true);
+    expect(
+      saveScheduleRequestSchema.safeParse({
+        operation: 'update',
+        scheduleId: 'schedule-1',
+        expectedRevision: 2,
+        config,
+        targetLifecycle: 'paused',
+      }).success,
+    ).toBe(true);
+    expect(
+      saveScheduleRequestSchema.safeParse({
+        operation: 'update',
+        scheduleId: 'schedule-1',
+        expectedRevision: 0,
+        config,
+        targetLifecycle: 'paused',
+      }).success,
+    ).toBe(false);
+    expect(
+      saveScheduleRequestSchema.safeParse({
+        operation: 'create',
+        workspaceId: 'workspace-1',
+        scheduleId: 'cannot-move-workspace',
+        config,
+        targetLifecycle: 'paused',
+      }).success,
+    ).toBe(false);
+    expect(
+      setScheduleLifecycleRequestSchema.safeParse({
+        scheduleId: 'schedule-1',
+        expectedRevision: 1,
+        lifecycle: 'enabled',
+      }).success,
+    ).toBe(false);
+    expect(
+      setScheduleLifecycleRequestSchema.safeParse({
+        scheduleId: 'schedule-1',
+        expectedRevision: 1,
+        lifecycle: 'enabled',
+        preflightFingerprint: 'fingerprint-1',
+      }).success,
+    ).toBe(true);
+    expect(
+      executeScheduleNowRequestSchema.safeParse({
+        scheduleId: 'schedule-1',
+        expectedRevision: 1,
+        requestKey: 'request-1',
+        preflightFingerprint: 'fingerprint-1',
+        extra: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      executeMissedScheduleRequestSchema.safeParse({
+        scheduleId: 'schedule-1',
+        originalOccurrenceId: 'occurrence-1',
+        expectedRevision: 1,
+        requestKey: 'request-2',
+        preflightFingerprint: 'fingerprint-1',
+      }).success,
+    ).toBe(true);
+    expect(listSchedulesRequestSchema.parse({}).limit).toBe(50);
+    expect(
+      listScheduleOccurrencesRequestSchema.safeParse({
+        scheduleId: 'schedule-1',
+        cursor: { version: 1, createdAt: 10, id: 'occurrence-1' },
+        limit: 100,
+      }).success,
+    ).toBe(true);
+    expect(
+      listScheduleOccurrencesRequestSchema.safeParse({
+        scheduleId: 'schedule-1',
+        cursor: { version: 1, updatedAt: 10, id: 'occurrence-1' },
+      }).success,
+    ).toBe(false);
+    expect(
+      listScheduleSourceItemsRequestSchema.safeParse({
+        occurrenceId: 'occurrence-1',
+        cursor: { version: 1, snapshotId: 'source-1', ordinal: 10 },
+        limit: 20,
+      }).success,
+    ).toBe(true);
+    expect(
+      listScheduleSourceItemsRequestSchema.safeParse({ occurrenceId: 'occurrence-1', limit: 101 })
+        .success,
+    ).toBe(false);
+    expect(
+      retryScheduleOutputRequestSchema.safeParse({ receiptId: 'receipt-1', expectedAttempt: 1 })
+        .success,
+    ).toBe(true);
+  });
+
+  it('projects only the occurrence run and rejects unknown result fields', () => {
+    const run = {
+      id: 'run-1',
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      prompt: '生成经营回顾',
+      status: 'completed',
+      createdAt: 1_790_000_000_000,
+      completedAt: 1_790_000_000_100,
+    } as const;
+    const dispatchedThenClosed = {
+      ...missedOccurrence,
+      phase: 'closed',
+      preparationOutcome: undefined,
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      firstRunId: 'run-1',
+      sourceSnapshotId: 'source-1',
+      preparedAt: 1_790_000_000_010,
+    } as const;
+    const result = {
+      occurrence: dispatchedThenClosed,
+      status: 'generated',
+      run,
+      outputReceipts: [],
+    } as const;
+    expect(scheduleOccurrenceResultSchema.safeParse(result).success).toBe(true);
+    expect(
+      scheduleOccurrenceResultSchema.safeParse({ ...result, run: { ...run, id: 'other-run' } })
+        .success,
+    ).toBe(false);
+    expect(
+      scheduleOccurrenceResultSchema.safeParse({ ...result, privateThought: 'no' }).success,
+    ).toBe(false);
+    expect(
+      scheduleOccurrenceResultSchema.safeParse({
+        occurrence: missedOccurrence,
+        status: 'generated',
+        outputReceipts: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      scheduleOccurrenceResultSchema.safeParse({
+        ...result,
+        outputReceipts: [
+          {
+            id: 'receipt-1',
+            occurrenceId: 'another-occurrence',
+            artifactVersionId: 'artifact-version-1',
+            workspaceId: 'workspace-1',
+            relativePath: '定时成果/月度回顾.md',
+            contentHash: 'a'.repeat(64),
+            status: 'saved',
+            attempt: 1,
+            createdAt: 1_790_000_000_000,
+            updatedAt: 1_790_000_000_001,
+          },
+        ],
+      }).success,
+    ).toBe(false);
   });
 });
 
@@ -1186,5 +1822,18 @@ describe('MI 运行快照 v1/v2 兼容与优先预算字面量', () => {
     });
     expect(saveTaskContextRequestSchema.safeParse(saveOf(100)).success).toBe(true);
     expect(saveTaskContextRequestSchema.safeParse(saveOf(101)).success).toBe(false);
+  });
+
+  it('TaskContext 的 Schedule 范围区分未提供、明确移除和绑定 ID', () => {
+    const saveOf = (scope?: string | null) => ({
+      taskId: 'task-1',
+      executor: { kind: 'general' as const },
+      skillBindings: [],
+      ...(scope === undefined ? {} : { scheduleSourceSnapshotId: scope }),
+    });
+    expect(saveTaskContextRequestSchema.safeParse(saveOf()).success).toBe(true);
+    expect(saveTaskContextRequestSchema.safeParse(saveOf(null)).success).toBe(true);
+    expect(saveTaskContextRequestSchema.safeParse(saveOf('source-1')).success).toBe(true);
+    expect(saveTaskContextRequestSchema.safeParse(saveOf('')).success).toBe(false);
   });
 });

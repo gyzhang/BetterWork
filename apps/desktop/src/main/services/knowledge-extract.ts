@@ -32,6 +32,7 @@ export type DocumentExtractor = (
   format: KnowledgeFormat,
   bytes: Buffer,
   context?: KnowledgeWorkerJobContext,
+  signal?: AbortSignal,
 ) => Promise<ExtractedDocument>;
 
 /** Excel 值可能是 richText/超链接等对象：只接受标量或文本结构，绝不输出 [object Object]。 */

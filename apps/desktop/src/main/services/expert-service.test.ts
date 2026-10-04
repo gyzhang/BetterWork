@@ -1,4 +1,4 @@
-import type { ExpertRevisionDraft } from '@betterwork/agent-protocol';
+import type { ExpertRevisionDraft, ScheduleConfigDraft } from '@betterwork/agent-protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { AppStore } from '../persistence';
@@ -268,5 +268,38 @@ describe('ExpertService', () => {
     );
     // 挡下之后原对象必须还在：删除失败不能留下半个库。
     expect(service.get(created.id)?.id).toBe(created.id);
+  });
+
+  it('refuses to delete an Expert referenced by any immutable Schedule config version', () => {
+    const store = openStore();
+    const service = new ExpertService(store);
+    const expert = service.create(draft());
+    const workspace = store.workspaces.create('/tmp/expert-schedule-reference', '合成工作空间');
+    const config: ScheduleConfigDraft = {
+      name: '月度经营复盘',
+      expertId: expert.id,
+      expertRevisionId: expert.revision.id,
+      requirements: '分析上月经营变化，并给出依据。',
+      expectedArtifactTypes: ['markdown'],
+      timing: { frequency: 'monthly', day: 5, hour: 9, minute: 0, timeZone: 'UTC' },
+      periodRule: 'previous-month',
+      knowledgeSources: [],
+      outputSubdirectory: '定时成果',
+    };
+    const schedule = store.schedules.create({ workspaceId: workspace.id, config, createdAt: 1 });
+    store.schedules.appendConfig(schedule.schedule.id, {
+      config: { ...config, name: '月度经营复盘（已修订）' },
+      expectedRevision: schedule.schedule.revision,
+      updatedAt: 2,
+    });
+
+    expect(store.experts.countScheduleReferences(expert.id)).toBe(2);
+    expect(() => service.delete(expert.id)).toThrowError(
+      expect.objectContaining<Partial<ExpertServiceError>>({ code: 'expert_in_use' }),
+    );
+    expect(() => store.experts.remove(expert.id)).toThrow(
+      'Expert is referenced by 2 Schedule configuration(s)',
+    );
+    expect(store.experts.get(expert.id)).toBeDefined();
   });
 });

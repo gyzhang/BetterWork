@@ -1,10 +1,12 @@
 import type { BetterWorkDesktopApi } from '@betterwork/agent-protocol';
 import {
   agentRuntimeEventSchema,
+  applyScheduleExpertRevisionRequestSchema,
   artifactVersionExecutorSummarySchema,
   cancelDependencyRequestSchema,
   cancelDependencyResultSchema,
   cancelMemoryJobRequestSchema,
+  cancelScheduleOccurrenceRequestSchema,
   checkKnowledgeSourcesRequestSchema,
   chooseInterpreterResultSchema,
   clearedResultSchema,
@@ -24,6 +26,8 @@ import {
   dependencyPlanSchema,
   discussionCheckpointMutationResultSchema,
   discussionCheckpointSchema,
+  executeMissedScheduleRequestSchema,
+  executeScheduleNowRequestSchema,
   expertDetailSchema,
   expertMutationResultSchema,
   expertRevisionDraftSchema,
@@ -39,6 +43,8 @@ import {
   getMemorySettingsRequestSchema,
   getRunArtifactDeclarationsRequestSchema,
   getRunMemoryContextRequestSchema,
+  getScheduleOccurrenceRequestSchema,
+  getScheduleRequestSchema,
   getSkillRequestSchema,
   getTaskContextRequestSchema,
   importSkillRequestSchema,
@@ -67,6 +73,9 @@ import {
   listKnowledgeRevisionsRequestSchema,
   listMemoriesRequestSchema,
   listMemoryJobsRequestSchema,
+  listScheduleOccurrencesRequestSchema,
+  listScheduleSourceItemsRequestSchema,
+  listSchedulesRequestSchema,
   listTaskMaterialCandidatesRequestSchema,
   listWorkspaceReferenceVersionsRequestSchema,
   materialCandidateSchema,
@@ -86,12 +95,14 @@ import {
   memoryWriteReceiptSchema,
   notificationActivatedSchema,
   notificationChangeEventSchema,
+  preflightScheduleRequestSchema,
   prepareDependencyRequestSchema,
   prepareDependencyResultSchema,
   prepareWorkspaceInputSnapshotRequestSchema,
   previewKnowledgeRequestSchema,
   previewMemoryRequestSchema,
   previewRunSourceRequestSchema,
+  previewScheduleRequestSchema,
   rebuildKnowledgeIndexRequestSchema,
   rebuildMemoryProjectionRequestSchema,
   refreshKnowledgeDocumentRequestSchema,
@@ -111,12 +122,26 @@ import {
   saveKnowledgeCollectionRequestSchema,
   saveKnowledgeSettingsRequestSchema,
   saveMcpConnectionRequestSchema,
+  saveScheduleRequestSchema,
   saveSkillRuntimeProfileRequestSchema,
   saveTaskContextRequestSchema,
+  scheduleAggregateSchema,
+  scheduleCallResultSchema,
+  scheduleCancelOccurrenceResultSchema,
+  scheduleChangedEventSchema,
+  scheduleDetailSchema,
+  scheduleManualExecutionResultSchema,
+  scheduleOccurrenceDetailSchema,
+  scheduleOccurrenceHistoryPageSchema,
+  schedulePageSchema,
+  schedulePreflightViewSchema,
+  schedulePreviewResultSchema,
+  scheduleSourceItemsPageSchema,
   setExpertLifecycleRequestSchema,
   setKnowledgeCollectionMembersRequestSchema,
   setMemorySettingsRequestSchema,
   setMemoryStatusRequestSchema,
+  setScheduleLifecycleRequestSchema,
   setSkillEnabledRequestSchema,
   setSkillTrustRequestSchema,
   setWorkspaceReferenceVersionRequestSchema,
@@ -258,6 +283,93 @@ const api: BetterWorkDesktopApi = {
       };
       ipcRenderer.on(IpcChannel.NotificationActivated, handler);
       return () => ipcRenderer.off(IpcChannel.NotificationActivated, handler);
+    },
+  },
+  schedules: {
+    list: (input) =>
+      invokeValidated(
+        IpcChannel.ListSchedules,
+        listSchedulesRequestSchema.parse(input ?? {}),
+        scheduleCallResultSchema(schedulePageSchema),
+      ),
+    get: (input) =>
+      invokeValidated(
+        IpcChannel.GetSchedule,
+        getScheduleRequestSchema.parse(input),
+        scheduleCallResultSchema(scheduleDetailSchema),
+      ),
+    save: (input) =>
+      invokeValidated(
+        IpcChannel.SaveSchedule,
+        saveScheduleRequestSchema.parse(input),
+        scheduleCallResultSchema(scheduleAggregateSchema),
+      ),
+    setLifecycle: (input) =>
+      invokeValidated(
+        IpcChannel.SetScheduleLifecycle,
+        setScheduleLifecycleRequestSchema.parse(input),
+        scheduleCallResultSchema(scheduleAggregateSchema),
+      ),
+    preview: (input) =>
+      invokeValidated(
+        IpcChannel.PreviewSchedule,
+        previewScheduleRequestSchema.parse(input),
+        scheduleCallResultSchema(schedulePreviewResultSchema),
+      ),
+    preflight: (input) =>
+      invokeValidated(
+        IpcChannel.PreflightSchedule,
+        preflightScheduleRequestSchema.parse(input),
+        scheduleCallResultSchema(schedulePreflightViewSchema),
+      ),
+    applyExpertRevision: (input) =>
+      invokeValidated(
+        IpcChannel.ApplyScheduleExpertRevision,
+        applyScheduleExpertRevisionRequestSchema.parse(input),
+        scheduleCallResultSchema(scheduleAggregateSchema),
+      ),
+    listOccurrences: (input) =>
+      invokeValidated(
+        IpcChannel.ListScheduleOccurrences,
+        listScheduleOccurrencesRequestSchema.parse(input),
+        scheduleCallResultSchema(scheduleOccurrenceHistoryPageSchema),
+      ),
+    getOccurrence: (input) =>
+      invokeValidated(
+        IpcChannel.GetScheduleOccurrence,
+        getScheduleOccurrenceRequestSchema.parse(input),
+        scheduleCallResultSchema(scheduleOccurrenceDetailSchema),
+      ),
+    listSourceItems: (input) =>
+      invokeValidated(
+        IpcChannel.ListScheduleSourceItems,
+        listScheduleSourceItemsRequestSchema.parse(input),
+        scheduleCallResultSchema(scheduleSourceItemsPageSchema),
+      ),
+    executeNow: (input) =>
+      invokeValidated(
+        IpcChannel.ExecuteScheduleNow,
+        executeScheduleNowRequestSchema.parse(input),
+        scheduleCallResultSchema(scheduleManualExecutionResultSchema),
+      ),
+    executeMissed: (input) =>
+      invokeValidated(
+        IpcChannel.ExecuteMissedSchedule,
+        executeMissedScheduleRequestSchema.parse(input),
+        scheduleCallResultSchema(scheduleManualExecutionResultSchema),
+      ),
+    cancelOccurrence: (input) =>
+      invokeValidated(
+        IpcChannel.CancelScheduleOccurrence,
+        cancelScheduleOccurrenceRequestSchema.parse(input),
+        scheduleCallResultSchema(scheduleCancelOccurrenceResultSchema),
+      ),
+    onChange(listener) {
+      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
+        listener(scheduleChangedEventSchema.parse(raw));
+      };
+      ipcRenderer.on(IpcChannel.ScheduleChanged, handler);
+      return () => ipcRenderer.off(IpcChannel.ScheduleChanged, handler);
     },
   },
   chrome: {

@@ -1,9 +1,14 @@
 import { mkdirSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { IpcChannel, type KnowledgeJobSummary } from '@betterwork/agent-protocol';
-import { app, BrowserWindow } from 'electron';
+import {
+  IpcChannel,
+  type KnowledgeJobSummary,
+  type ScheduleChangedEvent,
+  scheduleChangedEventSchema,
+} from '@betterwork/agent-protocol';
+import { app, BrowserWindow, powerMonitor } from 'electron';
 
 import { ElectronSafeStorageAdapter } from './infrastructure/credential-store';
 import {
@@ -48,6 +53,15 @@ import {
   supportedPptContentHashes,
 } from './services/ppt-generation-preset';
 import { RunService } from './services/run-service';
+import { ScheduleDirectorySourcesService } from './services/schedule-directory-sources';
+import { ScheduleDispatchService } from './services/schedule-dispatch-service';
+import { ScheduleExecutionService } from './services/schedule-execution-service';
+import { ScheduleHostLifecycle, startPrimaryInstance } from './services/schedule-host-lifecycle';
+import { ScheduleKnowledgeSourcesService } from './services/schedule-knowledge-sources';
+import { SchedulePreflightService } from './services/schedule-preflight';
+import { ScheduleScheduler } from './services/schedule-scheduler';
+import { ScheduleService } from './services/schedule-service';
+import { ScheduleSourceService } from './services/schedule-source-service';
 import { SkillAdapterService } from './services/skill-adapter';
 import { SkillDependencyService } from './services/skill-dependency-service';
 import { SkillExecutionService } from './services/skill-execution-service';
@@ -72,6 +86,9 @@ interface ApplicationContext {
   knowledgeWorker: KnowledgeWorkerRunner;
   inputSnapshots: InputSnapshotService;
   mcpClientService: McpClientService;
+  scheduleHost: ScheduleHostLifecycle;
+  scheduleScheduler: ScheduleScheduler;
+  scheduleDispatch?: ScheduleDispatchService;
   runs?: RunService;
   window: BrowserWindow | null;
 }
@@ -83,35 +100,39 @@ function getDefaultWorkspaceRoot(): string {
   return app.isPackaged ? app.getPath('documents') : path.resolve(app.getAppPath(), '../..');
 }
 
-function bootstrap(): ApplicationContext {
+function bootstrap(initiallySuspended: boolean): ApplicationContext {
   const userData = app.getPath('userData');
   const store = AppStore.open(
     path.join(userData, 'betterwork.db'),
     new ElectronSafeStorageAdapter(),
   );
+  const startupReadiness: Promise<unknown>[] = [];
   // CF11：legacy 明文密钥→credentials 的启动迁移；safeStorage 不可用时整体跳过、pending 原样保留。
   const credentialAccess = store.credentials
     ? new CredentialAccess(store.credentials, store.credentialJournal)
     : undefined;
   if (store.credentials) {
     const migration = new CredentialMigrationService(store, store.credentials);
-    migration
-      .runPending()
-      .then(async (result) => {
-        if (result.done > 0 || result.failed > 0 || result.skipped) {
-          console.warn(
-            `凭据迁移：done=${result.done} failed=${result.failed} remaining=${result.remaining} skipped=${String(result.skipped)}`,
-          );
-        }
-        // 迁移完成后还要守住不变量：已 done 的 owner 不得再留明文副本。
-        const residual = await migration.sweepResidualPlaintext();
-        if (residual > 0) {
-          console.warn(`凭据明文残留清理：cleared=${residual}`);
-        }
-      })
-      .catch((error: unknown) => {
-        console.error('Credential migration failed', error);
-      });
+    startupReadiness.push(
+      migration
+        .runPending()
+        .then(async (result) => {
+          if (result.done > 0 || result.failed > 0 || result.skipped) {
+            console.warn(
+              `凭据迁移：done=${result.done} failed=${result.failed} remaining=${result.remaining} skipped=${String(result.skipped)}`,
+            );
+          }
+          // 迁移完成后还要守住不变量：已 done 的 owner 不得再留明文副本。
+          const residual = await migration.sweepResidualPlaintext();
+          if (residual > 0) {
+            console.warn(`凭据明文残留清理：cleared=${residual}`);
+          }
+        })
+        .catch((error: unknown) => {
+          console.error('Credential migration failed', error);
+          throw error;
+        }),
+    );
   }
   // 提取在受管 Worker 子进程执行（契约 §8.2）：Main 只给字节、收结果，不占解析 CPU。
   const knowledgeWorker = new KnowledgeWorkerRunner({
@@ -122,6 +143,12 @@ function bootstrap(): ApplicationContext {
     { extractor: knowledgeWorker.extractor },
   );
   const inputSnapshots = new InputSnapshotService(store, userData);
+  const scheduleSourceService = new ScheduleSourceService(
+    store,
+    new ScheduleDirectorySourcesService(store, inputSnapshots),
+    new ScheduleKnowledgeSourcesService(knowledgeVault),
+    inputSnapshots,
+  );
   const memories = new MemoryService(store, userData);
   const modelProviderFactory = new ModelProviderFactory({
     models: store.models,
@@ -143,26 +170,32 @@ function bootstrap(): ApplicationContext {
   const mcpClientService = new McpClientService(store);
   const webFetchService = new WebFetchService();
   const officeParser = new OfficeParserService();
-  memories.rebuildManagedProjection().catch((error: unknown) => {
-    console.error('Memory projection rebuild failed', error);
-  });
+  startupReadiness.push(
+    memories.rebuildManagedProjection().catch((error: unknown) => {
+      console.error('Memory projection rebuild failed', error);
+      throw error;
+    }),
+  );
   const taskMaterials = new TaskMaterialService({ store, knowledgeVault, inputSnapshots });
   const discussionCheckpoints = new DiscussionCheckpointService(store, memoryExtractions);
   const memoryRecall = new MemoryRecallService({ store });
   const workspaceBrief = new WorkspaceBriefService({ store });
   const workspaceReferences = new WorkspaceReferenceService({ store });
-  inputSnapshots
-    .recover()
-    .then((recovered) => {
-      if (recovered.cancelled > 0 || recovered.failed > 0 || recovered.removedFiles > 0) {
-        console.warn(
-          `Recovered input snapshots: ${recovered.cancelled} cancelled, ${recovered.failed} failed, ${recovered.removedFiles} orphan file group(s) removed`,
-        );
-      }
-    })
-    .catch((error: unknown) => {
-      console.error('Input snapshot recovery failed', error);
-    });
+  startupReadiness.push(
+    inputSnapshots
+      .recover()
+      .then((recovered) => {
+        if (recovered.cancelled > 0 || recovered.failed > 0 || recovered.removedFiles > 0) {
+          console.warn(
+            `Recovered input snapshots: ${recovered.cancelled} cancelled, ${recovered.failed} failed, ${recovered.removedFiles} orphan file group(s) removed`,
+          );
+        }
+      })
+      .catch((error: unknown) => {
+        console.error('Input snapshot recovery failed', error);
+        throw error;
+      }),
+  );
   const skillService = new SkillService(store, {
     developmentBuiltinRoot: path.resolve(app.getAppPath(), '../../resources/skills'),
     installedBuiltinRoot: path.join(process.resourcesPath, 'skills'),
@@ -181,10 +214,19 @@ function bootstrap(): ApplicationContext {
         console.warn(`Registered ${registered.length} builtin skill(s)`);
       }
     });
+  startupReadiness.push(
+    builtinSkillsReady.catch((error: unknown) => {
+      console.error('Builtin skill registration failed', error);
+      throw error;
+    }),
+  );
   const builtinExpertRoot = app.isPackaged
     ? path.join(process.resourcesPath, 'experts')
     : path.resolve(app.getAppPath(), '../../resources/experts');
-  readFile(path.join(builtinExpertRoot, 'release-manifest.json'), 'utf8')
+  const builtinExpertsReady = readFile(
+    path.join(builtinExpertRoot, 'release-manifest.json'),
+    'utf8',
+  )
     .then((content) => JSON.parse(content) as BuiltinExpertReleaseManifest)
     .then(async (manifest) => {
       await builtinSkillsReady;
@@ -197,7 +239,9 @@ function bootstrap(): ApplicationContext {
     })
     .catch((error: unknown) => {
       console.error('Builtin expert registration failed', error);
+      throw error;
     });
+  startupReadiness.push(builtinExpertsReady);
 
   // 受管资产目录（设计 §5）：基础 Python、专属环境与工具链快照都落在用户数据目录，
   // 不进仓库也不随安装包复制整套 venv。
@@ -235,18 +279,51 @@ function bootstrap(): ApplicationContext {
     console.warn(`Marked ${interrupted} interrupted run(s) as failed on startup`);
   }
   // 环境准备作业同样不能停在 preparing：半成品目录会被清掉，不把部分包集当作可用。
-  dependencies
-    .recoverInterruptedPreparations()
-    .then((recovered) => {
-      if (recovered.operations > 0 || recovered.environments > 0) {
+  startupReadiness.push(
+    dependencies
+      .recoverInterruptedPreparations()
+      .then((recovered) => {
+        if (recovered.operations > 0 || recovered.environments > 0) {
+          console.warn(
+            `Recovered ${recovered.operations} interrupted preparation(s) and ${recovered.environments} environment(s)`,
+          );
+        }
+      })
+      .catch((error: unknown) => {
+        console.error('Dependency preparation recovery failed', error);
+        throw error;
+      }),
+  );
+
+  const startupReady = Promise.all(startupReadiness).then(() => undefined);
+  const scheduleDispatchRef: { current?: ScheduleDispatchService } = {};
+  const scheduleChangePublisherRef: {
+    publish: (event: ScheduleChangedEvent) => void;
+  } = { publish: () => undefined };
+  const scheduler = new ScheduleScheduler(store, {
+    dispatch: (occurrence, dispatchContext) => {
+      const activeDispatch = scheduleDispatchRef.current;
+      if (!activeDispatch) throw new Error('Schedule dispatch service was not initialized');
+      return activeDispatch.dispatch(occurrence, dispatchContext.signal);
+    },
+    recoverPreparations: () => {
+      const recovered = scheduleSourceService.recoverInterrupted();
+      if (recovered.closedOccurrences > 0 || recovered.finishedSnapshots > 0) {
         console.warn(
-          `Recovered ${recovered.operations} interrupted preparation(s) and ${recovered.environments} environment(s)`,
+          `定时实例启动收口：occurrences=${String(recovered.closedOccurrences)} snapshots=${String(recovered.finishedSnapshots)}`,
         );
       }
-    })
-    .catch((error: unknown) => {
-      console.error('Dependency preparation recovery failed', error);
-    });
+    },
+    onChanged: (event) => scheduleChangePublisherRef.publish(event),
+    onError: (error) => console.error('Schedule scheduler failed', error),
+  });
+  const scheduleHost = new ScheduleHostLifecycle({
+    ownsInstance: true,
+    initiallySuspended,
+    readiness: startupReady,
+    scheduler,
+    onError: (error) => console.error('Schedule host startup failed', error),
+  });
 
   const started: ApplicationContext = {
     store,
@@ -254,11 +331,23 @@ function bootstrap(): ApplicationContext {
     knowledgeWorker,
     inputSnapshots,
     mcpClientService,
+    scheduleHost,
+    scheduleScheduler: scheduler,
     window: null,
   };
   const getWindow = (): BrowserWindow | null => {
     const window = started.window;
     return window && !window.isDestroyed() ? window : null;
+  };
+
+  scheduleChangePublisherRef.publish = (event) => {
+    const window = getWindow();
+    if (!window) return;
+    try {
+      window.webContents.send(IpcChannel.ScheduleChanged, scheduleChangedEventSchema.parse(event));
+    } catch (error) {
+      console.error('Schedule change event publish failed', error);
+    }
   };
 
   started.window = createMainWindow();
@@ -363,8 +452,58 @@ function bootstrap(): ApplicationContext {
     officeParser,
     credentialAccess,
     knowledgeSearch,
+    knowledgeWorker.extractor,
   );
   started.runs = runs;
+
+  const schedulePreflight = new SchedulePreflightService(store, {
+    verifySkillResource: async (skill) => {
+      await skillService.verifyResourceRoot(skill);
+    },
+    resolveEnvironmentPython: (environmentId) =>
+      dependencies.resolveEnvironmentPython(environmentId),
+    pathExists: async (target) => {
+      try {
+        await access(target);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    verifyToolchainSnapshot: async (snapshotId) => ({
+      valid: (await snapshots.verifySnapshot(snapshotId)).valid,
+    }),
+    resolveSnapshotRoot: (snapshot) => snapshots.resolveSnapshotRoot(snapshot),
+  });
+  const scheduleDispatch = new ScheduleDispatchService(
+    store,
+    scheduleSourceService,
+    schedulePreflight,
+    new ScheduleExecutionService(store),
+    runs,
+    { onChanged: (event) => scheduleChangePublisherRef.publish(event) },
+  );
+  scheduleDispatchRef.current = scheduleDispatch;
+  started.scheduleDispatch = scheduleDispatch;
+  const scheduleManager = new ScheduleService(store, {
+    now: Date.now,
+    preflight: async ({ workspaceId, config }) => {
+      const result = await schedulePreflight.check({ workspaceId, config });
+      return result.status === 'ready'
+        ? { status: 'ready', fingerprint: result.fingerprint }
+        : {
+            status: 'blocked',
+            message: result.problems.map((problem) => problem.message).join('\n'),
+          };
+    },
+    settleDue: (input) => scheduler.settleDue(input),
+    cancelPreparations: (occurrenceIds) => {
+      for (const occurrenceId of occurrenceIds) {
+        scheduler.cancelPreparation(occurrenceId);
+        scheduleDispatch.cancelPreparation(occurrenceId);
+      }
+    },
+  });
 
   registerIpc({
     store,
@@ -385,6 +524,10 @@ function bootstrap(): ApplicationContext {
     expertService,
     dependencies,
     snapshots,
+    scheduleService: scheduleManager,
+    schedulePreflight,
+    scheduleDispatch,
+    publishScheduleChange: (event) => scheduleChangePublisherRef.publish(event),
     fileArtifactService,
     dependencyLocksRoot,
     getWindow,
@@ -394,41 +537,89 @@ function bootstrap(): ApplicationContext {
   return started;
 }
 
-app
-  .whenReady()
-  .then(() => {
-    context = bootstrap();
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0 && context) {
-        context.window = createMainWindow();
-      }
+let systemSuspended = false;
+let focusRequestedBeforeReady = false;
+
+const focusMainWindow = (): void => {
+  const currentContext = context;
+  if (!currentContext) {
+    focusRequestedBeforeReady = true;
+    return;
+  }
+  const window =
+    currentContext.window && !currentContext.window.isDestroyed()
+      ? currentContext.window
+      : (BrowserWindow.getAllWindows()[0] ?? createMainWindow());
+  currentContext.window = window;
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
+};
+
+startPrimaryInstance(
+  {
+    requestSingleInstanceLock: () => app.requestSingleInstanceLock(),
+    quit: () => app.quit(),
+  },
+  () => {
+    app.on('second-instance', focusMainWindow);
+    const quitHandler = createQuitHandler(
+      async () => {
+        await context?.scheduleHost.ready;
+        context?.scheduleDispatch?.cancelPreparations();
+        await context?.scheduleDispatch?.waitForPreparations();
+        await context?.scheduleScheduler.waitForPreparations();
+        await context?.runs?.shutdown();
+        await context?.mcpClientService.shutdown();
+        await context?.knowledgeWorker.shutdown();
+      },
+      () => {
+        context?.knowledgeVault.close();
+        context?.store.close();
+        context = null;
+      },
+      () => app.quit(),
+      (error) => console.error('Application shutdown failed:', error),
+    );
+    app.on('before-quit', (event) => {
+      context?.scheduleHost.stopForQuit();
+      context?.scheduleScheduler.cancelPreparations();
+      quitHandler(event);
     });
-  })
-  .catch((error: unknown) => {
-    console.error('BetterWork failed to start', error);
-    app.quit();
-  });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
-
-app.on(
-  'before-quit',
-  createQuitHandler(
-    async () => {
-      await context?.runs?.shutdown();
-      await context?.mcpClientService.shutdown();
-      await context?.knowledgeWorker.shutdown();
-    },
-    () => {
-      context?.knowledgeVault.close();
-      context?.store.close();
-      context = null;
-    },
-    () => app.quit(),
-    (error) => console.error('RunService shutdown failed:', error),
-  ),
+    app
+      .whenReady()
+      .then(() => {
+        powerMonitor.on('suspend', () => {
+          systemSuspended = true;
+          context?.scheduleHost.suspend();
+        });
+        powerMonitor.on('resume', () => {
+          systemSuspended = false;
+          const scheduleHost = context?.scheduleHost;
+          if (scheduleHost) {
+            scheduleHost.resume().catch((error: unknown) => {
+              console.error('Schedule host resume failed', error);
+            });
+          }
+        });
+        context = bootstrap(systemSuspended);
+        if (focusRequestedBeforeReady) {
+          focusRequestedBeforeReady = false;
+          focusMainWindow();
+        }
+        // macOS keeps the process and scheduler alive after the last window closes.
+        app.on('activate', () => {
+          if (BrowserWindow.getAllWindows().length === 0 && context) {
+            context.window = createMainWindow();
+          }
+        });
+      })
+      .catch((error: unknown) => {
+        console.error('BetterWork failed to start', error);
+        app.quit();
+      });
+  },
 );
 
 /**

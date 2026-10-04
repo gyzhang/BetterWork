@@ -25,6 +25,10 @@ import { RunMaterialReadRepository } from './run-material-read-repository';
 import { RunMemoryContextRepository } from './run-memory-context-repository';
 import { RunRepository } from './run-repository';
 import { RuntimeEnvironmentRepository } from './runtime-environment-repository';
+import { ScheduleOccurrenceRepository } from './schedule-occurrence-repository';
+import { ScheduleRecoveryBatchRepository } from './schedule-recovery-batch-repository';
+import { ScheduleRepository } from './schedule-repository';
+import { ScheduleSourceRepository } from './schedule-source-repository';
 import { SearchEngineRepository } from './search-engine-repository';
 import { SkillExecutionRepository } from './skill-execution-repository';
 import { SkillRepository } from './skill-repository';
@@ -47,6 +51,10 @@ export class AppStore {
   readonly tasks: TaskRepository;
   readonly taskContexts: TaskContextRepository;
   readonly runs: RunRepository;
+  readonly schedules: ScheduleRepository;
+  readonly scheduleOccurrences: ScheduleOccurrenceRepository;
+  readonly scheduleRecoveryBatches: ScheduleRecoveryBatchRepository;
+  readonly scheduleSources: ScheduleSourceRepository;
   readonly runContextSnapshots: RunContextSnapshotRepository;
   readonly materialReads: RunMaterialReadRepository;
   readonly evidence: EvidenceRepository;
@@ -91,6 +99,10 @@ export class AppStore {
     this.tasks = new TaskRepository(db);
     this.taskContexts = new TaskContextRepository(db);
     this.runs = new RunRepository(db);
+    this.schedules = new ScheduleRepository(db);
+    this.scheduleOccurrences = new ScheduleOccurrenceRepository(db);
+    this.scheduleRecoveryBatches = new ScheduleRecoveryBatchRepository(db);
+    this.scheduleSources = new ScheduleSourceRepository(db);
     this.runContextSnapshots = new RunContextSnapshotRepository(db);
     this.materialReads = new RunMaterialReadRepository(db);
     this.evidence = new EvidenceRepository(db);
@@ -224,6 +236,40 @@ export {
   type EnvironmentStatusPatch,
   RuntimeEnvironmentRepository,
 } from './runtime-environment-repository';
+export {
+  type ClaimManualOccurrenceInput,
+  type ClaimMissedOccurrenceInput,
+  type ClaimScheduledOccurrenceInput,
+  type ScheduleOccurrenceClaim,
+  ScheduleOccurrenceError,
+  type ScheduleOccurrencePage,
+  ScheduleOccurrenceRepository,
+  ScheduleOccurrenceStateError,
+  ScheduleRequestKeyConflictError,
+} from './schedule-occurrence-repository';
+export {
+  type ScheduleRecoveryBatch,
+  ScheduleRecoveryBatchRepository,
+  type ScheduleRecoveryCursor,
+} from './schedule-recovery-batch-repository';
+export {
+  type ScheduleAggregate,
+  type ScheduleConfigState,
+  ScheduleExpertRevisionMismatchError,
+  type ScheduleLifecycleState,
+  ScheduleNotFoundError,
+  type SchedulePage,
+  ScheduleRepository,
+  ScheduleRevisionConflictError,
+} from './schedule-repository';
+export {
+  assertScheduleSourceReadyForTask,
+  type ScheduleSourceItemsPage,
+  scheduleSourceManifestHash,
+  type ScheduleSourceRecoveryRow,
+  ScheduleSourceRepository,
+  ScheduleSourceRepositoryError,
+} from './schedule-source-repository';
 export { type EnabledSearchEngine, SearchEngineRepository } from './search-engine-repository';
 export {
   type CreateBindingInput,

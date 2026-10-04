@@ -6,10 +6,13 @@ import {
   materialReferenceSchema,
   type McpToolBinding,
   mcpToolBindingSchema,
+  SCHEDULE_SOURCE_ITEM_MAX,
   type TaskMaterialSelection,
   taskMaterialSelectionSchema,
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
+
+import { assertScheduleSourceReadyForTask } from './schedule-source-repository';
 
 export interface RunContextSnapshot {
   runId: string;
@@ -23,6 +26,7 @@ export interface RunContextSnapshot {
   mcpToolBindings?: McpToolBinding[];
   contextSegmentId: string;
   materials: TaskMaterialSelection[];
+  scheduleSourceSnapshotId?: string;
   createdAt: number;
 }
 
@@ -38,13 +42,17 @@ interface RunContextSnapshotRow {
   mcp_tool_bindings_json: string | null;
   context_segment_id: string;
   materials_json: string;
+  schedule_source_snapshot_id: string | null;
   created_at: number;
 }
 
-const parseMaterials = (value: string): TaskMaterialSelection[] => {
+const parseMaterials = (value: string, scheduled: boolean): TaskMaterialSelection[] => {
   const parsed: unknown = JSON.parse(value);
   if (!Array.isArray(parsed)) throw new Error('Stored run materials must be an array');
-  return parsed.map((item) => taskMaterialSelectionSchema.parse(item));
+  const bounded = scheduled
+    ? taskMaterialSelectionSchema.array().max(SCHEDULE_SOURCE_ITEM_MAX).parse(parsed)
+    : taskMaterialSelectionSchema.array().max(50).parse(parsed);
+  return bounded;
 };
 
 const parseOptionalJson = (value: string | null): unknown =>
@@ -74,7 +82,10 @@ const toSnapshot = (row: RunContextSnapshotRow): RunContextSnapshot => ({
       }
     : {}),
   contextSegmentId: row.context_segment_id,
-  materials: parseMaterials(row.materials_json),
+  materials: parseMaterials(row.materials_json, row.schedule_source_snapshot_id !== null),
+  ...(row.schedule_source_snapshot_id === null
+    ? {}
+    : { scheduleSourceSnapshotId: row.schedule_source_snapshot_id }),
   createdAt: row.created_at,
 });
 
@@ -97,14 +108,30 @@ export class RunContextSnapshotRepository {
     if (run.workspace_id !== input.workspaceId) {
       throw new Error('Run context snapshot workspace does not match Run');
     }
+    let contextScheduleSourceSnapshotId: string | undefined;
     if (input.taskContextRevisionId) {
       const context = this.db
-        .prepare('SELECT task_id FROM task_context_revisions WHERE id = ?')
-        .get(input.taskContextRevisionId) as { task_id: string } | undefined;
+        .prepare(
+          'SELECT task_id, schedule_source_snapshot_id FROM task_context_revisions WHERE id = ?',
+        )
+        .get(input.taskContextRevisionId) as
+        { task_id: string; schedule_source_snapshot_id: string | null } | undefined;
       if (!context) throw new Error('Run context revision does not exist');
       if (context.task_id !== input.taskId) {
         throw new Error('Run context revision does not belong to task');
       }
+      contextScheduleSourceSnapshotId = context.schedule_source_snapshot_id ?? undefined;
+    }
+    if (contextScheduleSourceSnapshotId !== input.scheduleSourceSnapshotId) {
+      throw new Error('Run context Schedule source does not match TaskContext revision');
+    }
+    if (input.scheduleSourceSnapshotId) {
+      assertScheduleSourceReadyForTask(
+        this.db,
+        input.scheduleSourceSnapshotId,
+        input.taskId,
+        input.workspaceId,
+      );
     }
     if ((input.expertId === undefined) !== (input.expertRevisionId === undefined)) {
       throw new Error('Run expert snapshot must include both expertId and expertRevisionId');
@@ -130,15 +157,17 @@ export class RunContextSnapshotRepository {
       input.mcpToolBindings === undefined
         ? undefined
         : mcpToolBindingSchema.array().max(50).parse(input.mcpToolBindings);
-    const materials = taskMaterialSelectionSchema.array().max(50).parse(input.materials);
+    const materials = input.scheduleSourceSnapshotId
+      ? taskMaterialSelectionSchema.array().max(SCHEDULE_SOURCE_ITEM_MAX).parse(input.materials)
+      : taskMaterialSelectionSchema.array().max(50).parse(input.materials);
     this.db
       .prepare(
         `INSERT INTO run_context_snapshots (
            run_id, task_id, workspace_id, task_context_revision_id,
            expert_id, expert_revision_id, model_reference_json,
            builtin_tool_policy_json, mcp_tool_bindings_json,
-           context_segment_id, materials_json, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           context_segment_id, materials_json, schedule_source_snapshot_id, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.runId,
@@ -152,6 +181,7 @@ export class RunContextSnapshotRepository {
         mcpToolBindings ? JSON.stringify(mcpToolBindings) : null,
         input.contextSegmentId,
         JSON.stringify(materials),
+        input.scheduleSourceSnapshotId ?? null,
         input.createdAt,
       );
   }

@@ -3,23 +3,35 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { MemoryRecord, MemoryScope } from '@betterwork/agent-protocol';
-import { IpcChannel } from '@betterwork/agent-protocol';
+import { abortError } from '@betterwork/agent-core';
+import type {
+  ExpertRevisionDraft,
+  MaterialReference,
+  MemoryRecord,
+  MemoryScope,
+  ScheduleConfigDraft,
+  ScheduleSourceItem,
+} from '@betterwork/agent-protocol';
+import { countCodePoints, IpcChannel } from '@betterwork/agent-protocol';
 import type { WebFetch } from '@betterwork/tool-runtime';
+import type Database from 'better-sqlite3';
 import type { BrowserWindow } from 'electron';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { OfficeParserService } from '../infrastructure/office-parser';
 import type { ProcessSupervisor } from '../infrastructure/process-supervisor';
 import { AppStore } from '../persistence';
+import { scheduleSourceManifestHash } from '../persistence/schedule-source-repository';
 import type { CredentialResolver } from './credential-access';
 import { InputSnapshotService } from './input-snapshot-service';
+import type { DocumentExtractor } from './knowledge-extract';
 import { KnowledgeSearchService } from './knowledge-search';
 import { KnowledgeVault } from './knowledge-vault';
 import { McpClientService } from './mcp-client-service';
 import { MemoryService } from './memory-service';
 import { NotificationService } from './notification-service';
 import { createRunTools, RunService } from './run-service';
+import { ScheduleExecutionService } from './schedule-execution-service';
 import { SkillExecutionService } from './skill-execution-service';
 import { SkillService } from './skill-service';
 import { TaskMaterialService } from './task-material-service';
@@ -134,6 +146,137 @@ const createFixture = async (): Promise<Fixture> => {
   };
 };
 
+const testExpertRevision = (): ExpertRevisionDraft => ({
+  name: 'Run 材料测试专家',
+  summary: '核对定时来源材料的读取范围',
+  author: '',
+  tags: [],
+  identity: '只读取本期固定材料。',
+  principles: [],
+  inputRequirements: [],
+  deliveryRequirements: ['说明材料依据'],
+  skillPreset: [],
+  builtinToolPolicy: { mode: 'application-defaults' },
+  modelReference: { mode: 'application-default' },
+});
+
+const createScheduleConfig = (expertId: string, expertRevisionId: string): ScheduleConfigDraft => ({
+  name: 'Run 有效材料测试规则',
+  expertId,
+  expertRevisionId,
+  requirements: '读取本期固定材料并完成检查。',
+  expectedArtifactTypes: ['markdown'],
+  timing: { frequency: 'monthly', day: 5, hour: 9, minute: 0, timeZone: 'Asia/Shanghai' },
+  periodRule: 'none',
+  knowledgeSources: [],
+  outputSubdirectory: '定时成果',
+});
+
+const createScheduledContext = (
+  fixture: Fixture,
+  references: readonly MaterialReference[],
+  supplements: NonNullable<Parameters<AppStore['taskContexts']['save']>[1]['materials']> = [],
+) => {
+  const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+  if (!workspaceId) throw new Error('workspace missing');
+  const expert = fixture.store.experts.create({
+    sourceKind: 'user',
+    revision: testExpertRevision(),
+  });
+  const schedule = fixture.store.schedules.create({
+    workspaceId,
+    config: createScheduleConfig(expert.id, expert.revision.id),
+    createdAt: 1,
+  });
+  const claimed = fixture.store.scheduleOccurrences.claimManual({
+    scheduleId: schedule.schedule.id,
+    trigger: 'manual-now',
+    requestKey: randomUUID(),
+    requestedAt: 2,
+    period: { rule: 'none', timeZone: 'UTC', anchorAt: 2, label: '无期间' },
+  });
+  if (claimed.kind !== 'created') throw new Error('schedule occurrence was not created');
+  const source = fixture.store.scheduleSources.createPreparing({
+    occurrenceId: claimed.occurrence.id,
+    evaluatedAt: 3,
+    createdAt: 3,
+  });
+  const sourceItems: ScheduleSourceItem[] = references.map((reference, ordinal) => ({
+    snapshotId: source.id,
+    ordinal,
+    reference,
+    purpose: 'current-input',
+    origin: 'workspace-directory',
+    displayName:
+      reference.kind === 'workspace-input-snapshot'
+        ? (fixture.store.inputSnapshots.get(reference.snapshotId)?.sourcePath ?? reference.fileKey)
+        : `固定来源 ${ordinal + 1}`,
+  }));
+  const totalFileBytes = references.reduce((total, reference) => {
+    if (reference.kind !== 'workspace-input-snapshot') return total;
+    return total + (fixture.store.inputSnapshots.get(reference.snapshotId)?.byteSize ?? 0);
+  }, 0);
+  fixture.store.scheduleSources.publishReady({
+    snapshotId: source.id,
+    items: sourceItems,
+    totalFileBytes,
+    manifestHash: scheduleSourceManifestHash(sourceItems),
+    completedAt: 4,
+  });
+  fixture.store.scheduleOccurrences.attachSourceSnapshot(claimed.occurrence.id, source.id);
+  const db = (fixture.store as unknown as { db: Database.Database }).db;
+  db.prepare(
+    `UPDATE schedule_occurrences
+     SET task_id = ?, session_id = ?, prepared_at = ? WHERE id = ?`,
+  ).run(fixture.taskId, fixture.sessionId, 5, claimed.occurrence.id);
+  const context = fixture.store.taskContexts.save(fixture.taskId, {
+    executor: { kind: 'general' },
+    skillBindings: [],
+    builtinToolPolicy: { mode: 'allow-list', toolNames: ['read_text_file'] },
+    materials: supplements,
+    scheduleSourceSnapshotId: source.id,
+  });
+  return { context, source, schedule: schedule.schedule, occurrence: claimed.occurrence };
+};
+
+const createPreparedScheduleDraft = (fixture: Fixture) => {
+  const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+  if (!workspaceId) throw new Error('workspace missing');
+  const expert = fixture.store.experts.create({
+    sourceKind: 'user',
+    revision: testExpertRevision(),
+  });
+  const schedule = fixture.store.schedules.create({
+    workspaceId,
+    config: createScheduleConfig(expert.id, expert.revision.id),
+    createdAt: 1,
+  });
+  const claimed = fixture.store.scheduleOccurrences.claimManual({
+    scheduleId: schedule.schedule.id,
+    trigger: 'manual-now',
+    requestKey: randomUUID(),
+    requestedAt: 2,
+    period: { rule: 'none', timeZone: 'UTC', anchorAt: 2, label: '无期间' },
+  });
+  if (claimed.kind !== 'created') throw new Error('schedule occurrence was not created');
+  const source = fixture.store.scheduleSources.createPreparing({
+    occurrenceId: claimed.occurrence.id,
+    evaluatedAt: 3,
+    createdAt: 3,
+  });
+  fixture.store.scheduleSources.publishReady({
+    snapshotId: source.id,
+    items: [],
+    totalFileBytes: 0,
+    manifestHash: scheduleSourceManifestHash([]),
+    completedAt: 4,
+  });
+  fixture.store.scheduleOccurrences.attachSourceSnapshot(claimed.occurrence.id, source.id);
+  const service = new ScheduleExecutionService(fixture.store, { now: () => 5 });
+  const draft = service.prepareTaskDraft(claimed.occurrence.id);
+  return { service, draft, occurrence: claimed.occurrence };
+};
+
 const createService = (
   fixture: Fixture,
   window?: WindowStub,
@@ -142,6 +285,7 @@ const createService = (
   officeParser?: OfficeParserService,
   mcpClientService?: McpClientService,
   credentialAccess?: CredentialResolver,
+  documentExtractor?: DocumentExtractor,
 ): RunService =>
   new RunService(
     fixture.store,
@@ -181,6 +325,7 @@ const createService = (
         },
       },
     }),
+    documentExtractor,
   );
 
 const statusOf = (fixture: Fixture, runId: string): string | undefined =>
@@ -270,6 +415,77 @@ const wireMessages = (init: RequestInit | undefined): { role: string; content: s
 };
 
 describe('RunService', () => {
+  it('atomically links the scheduled first Run before Provider dispatch and retries T4 idempotently', async () => {
+    const fixture = await createFixture();
+    const scheduled = createPreparedScheduleDraft(fixture);
+    fixture.store.models.save({
+      name: '定时 T4 合成模型',
+      provider: 'openai-compatible',
+      baseUrl: 'https://model.fixture/v1',
+      model: 'fixture-model',
+      role: 'language',
+      apiKey: 'synthetic-t4-key',
+      maxContextTokens: 8_192,
+      maxOutputTokens: 1_024,
+      temperature: 0,
+      enabled: true,
+    });
+    const fetchMock = vi.fn(async () =>
+      sseResponse(JSON.stringify({ choices: [{ delta: { content: '本期自动分析完成。' } }] })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const runs = createService(fixture);
+
+    let failedRunId: string | undefined;
+    const failedDispatch = vi
+      .spyOn(fixture.store.scheduleOccurrences, 'dispatchRun')
+      .mockImplementation((input) => {
+        failedRunId = input.runId;
+        throw new Error('synthetic T4 association failure');
+      });
+    expect(() => scheduled.service.startFirstRun(scheduled.occurrence.id, runs)).toThrow(
+      'synthetic T4 association failure',
+    );
+    failedDispatch.mockRestore();
+
+    expect(failedRunId).toBeDefined();
+    if (!failedRunId) throw new Error('test setup: T4 did not allocate a Run identity');
+    expect(fixture.store.runs.get(failedRunId)).toBeUndefined();
+    expect(fixture.store.runContextSnapshots.get(failedRunId)).toBeUndefined();
+    expect(runs.isActive(failedRunId)).toBe(false);
+    expect(fixture.store.scheduleOccurrences.get(scheduled.occurrence.id)).toMatchObject({
+      phase: 'preparing',
+      taskId: scheduled.draft.task.id,
+      sessionId: scheduled.draft.sessionId,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const dispatchRun = fixture.store.scheduleOccurrences.dispatchRun.bind(
+      fixture.store.scheduleOccurrences,
+    );
+    const committedDispatch = vi
+      .spyOn(fixture.store.scheduleOccurrences, 'dispatchRun')
+      .mockImplementation((input) => {
+        expect(fetchMock).not.toHaveBeenCalled();
+        return dispatchRun(input);
+      });
+    const runId = scheduled.service.startFirstRun(scheduled.occurrence.id, runs);
+    expect(scheduled.service.startFirstRun(scheduled.occurrence.id, runs)).toBe(runId);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await waitForCompletion(fixture, runId);
+    committedDispatch.mockRestore();
+
+    expect(statusOf(fixture, runId)).toBe('completed');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fixture.store.scheduleOccurrences.get(scheduled.occurrence.id)).toMatchObject({
+      phase: 'dispatched',
+      firstRunId: runId,
+      taskId: scheduled.draft.task.id,
+      sessionId: scheduled.draft.sessionId,
+      sourceSnapshotId: scheduled.draft.occurrence.sourceSnapshotId,
+    });
+  });
+
   it('records the recalled revisions and the three-phase request audit', async () => {
     const fixture = await createFixture();
     const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
@@ -768,6 +984,7 @@ describe('RunService', () => {
       workspaceRoot: fixture.directory,
       sourcePath,
     });
+    await writeFile(sourcePath, '原路径在快照准备后已改写');
     const context = fixture.store.taskContexts.save(fixture.taskId, {
       executor: { kind: 'general' },
       skillBindings: [],
@@ -807,6 +1024,336 @@ describe('RunService', () => {
     expect(fixture.store.materialReads.listByRun(runId)).toEqual([
       expect.objectContaining({ runId, operation: 'read', locator: 'selected.txt' }),
     ]);
+  });
+
+  it('keeps the full scheduled material authorization while bounding its model summary', async () => {
+    const fixture = await createFixture();
+    const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+    if (!workspaceId) throw new Error('workspace missing');
+    const references: MaterialReference[] = [];
+    for (let index = 0; index < 55; index += 1) {
+      const filename = `固定-${String(index + 1).padStart(2, '0')}-${'经营资料'.repeat(18)}.md`;
+      const sourcePath = path.join(fixture.directory, filename);
+      await writeFile(sourcePath, `合成私密正文-${index + 1}`);
+      const receipt = await fixture.inputSnapshots.create({
+        workspaceId,
+        workspaceRoot: fixture.directory,
+        sourcePath,
+      });
+      references.push({
+        kind: 'workspace-input-snapshot',
+        snapshotId: receipt.snapshot.id,
+        workspaceId,
+        contentHash: receipt.snapshot.contentHash,
+        format: receipt.snapshot.format,
+        fileKey: receipt.snapshot.fileKey,
+      });
+    }
+    const scheduled = createScheduledContext(fixture, references);
+    let requestCount = 0;
+    let requestMessages: Array<{ role: string; content: string }> = [];
+    const fetchMock = vi.fn(async (_url: string | URL, init?: RequestInit) => {
+      requestCount += 1;
+      const body = JSON.parse(String(init?.body ?? '{}')) as {
+        messages: Array<{ role: string; content: string }>;
+      };
+      requestMessages = body.messages;
+      if (requestCount === 1) {
+        return sseResponse(
+          JSON.stringify({
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: 'read-scheduled-material',
+                      function: {
+                        name: 'read_text_file',
+                        arguments: JSON.stringify({
+                          path: '固定-01-经营资料'.concat('经营资料'.repeat(17), '.md'),
+                        }),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+        );
+      }
+      return sseResponse(JSON.stringify({ choices: [{ delta: { content: '已读取固定来源。' } }] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    fixture.store.models.save({
+      name: '定时材料摘要测试模型',
+      provider: 'openai-compatible',
+      baseUrl: 'http://model.test/v1',
+      model: 'fixture-model',
+      role: 'language',
+      apiKey: '',
+      maxContextTokens: 8_192,
+      maxOutputTokens: 1_024,
+      temperature: 0,
+      enabled: true,
+    });
+    const service = createService(fixture);
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '读取本期来源。',
+      taskContextRevisionId: scheduled.context.id,
+      expectedTaskContextRevision: scheduled.context.revision,
+    });
+    await waitForCompletion(fixture, runId);
+
+    const runSnapshot = fixture.store.runContextSnapshots.get(runId);
+    const summary = requestMessages.find(
+      (message) => message.role === 'system' && message.content.includes('本次固定可读材料共'),
+    );
+    expect(runSnapshot?.scheduleSourceSnapshotId).toBe(scheduled.source.id);
+    expect(runSnapshot?.materials).toHaveLength(references.length);
+    expect(summary).toBeDefined();
+    expect(countCodePoints(summary?.content ?? '')).toBeLessThanOrEqual(8_000);
+    const listedIdentities = (summary?.content ?? '')
+      .split('\n')
+      .filter((line) => /^\d+\. 工作空间文件/u.test(line));
+    expect(listedIdentities.length).toBeLessThanOrEqual(40);
+    expect(summary?.content).not.toContain('合成私密正文');
+    expect(statusOf(fixture, runId)).toBe('completed');
+  });
+
+  it.each(['pdf', 'docx'] as const)(
+    'dispatches selected %s bytes through the deterministic parser and audits source locators',
+    async (format) => {
+      const fixture = await createFixture();
+      const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+      if (!workspaceId) throw new Error('workspace missing');
+      const sourcePath = path.join(fixture.directory, `固定材料.${format}`);
+      const binary = Buffer.from([0xff, 0x00, 0x80, 0x25, 0x50, 0x44, 0x46]);
+      await writeFile(sourcePath, binary);
+      const receipt = await fixture.inputSnapshots.create({
+        workspaceId,
+        workspaceRoot: fixture.directory,
+        sourcePath,
+      });
+      const reference: MaterialReference = {
+        kind: 'workspace-input-snapshot',
+        snapshotId: receipt.snapshot.id,
+        workspaceId,
+        contentHash: receipt.snapshot.contentHash,
+        format,
+        fileKey: receipt.snapshot.fileKey,
+      };
+      const scheduled = createScheduledContext(fixture, [reference]);
+      let extractedBytes: Buffer | undefined;
+      const extractor: DocumentExtractor = async (receivedFormat, bytes, job, signal) => {
+        expect(receivedFormat).toBe(format);
+        expect(job?.jobId).toContain('-');
+        expect(signal?.aborted).toBe(false);
+        extractedBytes = bytes;
+        return {
+          format,
+          content: '确定性解析正文：收入保持稳定。',
+          sections: [
+            {
+              locator: format === 'pdf' ? '第 2 页' : '段落 1',
+              ordinal: 0,
+              content: '确定性解析正文：收入保持稳定。',
+            },
+          ],
+        };
+      };
+      let requestCount = 0;
+      let readOutput: unknown;
+      const fetchMock = vi.fn(async () => {
+        requestCount += 1;
+        return requestCount === 1
+          ? sseResponse(
+              JSON.stringify({
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: [
+                        {
+                          index: 0,
+                          id: 'read-office-source',
+                          function: {
+                            name: 'read_text_file',
+                            arguments: JSON.stringify({ path: `固定材料.${format}` }),
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              }),
+            )
+          : sseResponse(
+              JSON.stringify({ choices: [{ delta: { content: '已按定位读取解析文本。' } }] }),
+            );
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      fixture.store.models.save({
+        name: `${format} 解析测试模型`,
+        provider: 'openai-compatible',
+        baseUrl: 'http://model.test/v1',
+        model: 'fixture-model',
+        role: 'language',
+        apiKey: '',
+        maxContextTokens: 8_192,
+        maxOutputTokens: 1_024,
+        temperature: 0,
+        enabled: true,
+      });
+      const service = createService(
+        fixture,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        extractor,
+      );
+      const runId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '读取本期材料。',
+        taskContextRevisionId: scheduled.context.id,
+        expectedTaskContextRevision: scheduled.context.revision,
+      });
+      await waitForCompletion(fixture, runId);
+      const readEvent = fixture.store.runs
+        .listEvents(runId)
+        .find(
+          (event) => event.type === 'tool.completed' && event.toolCallId === 'read-office-source',
+        );
+      if (readEvent?.type === 'tool.completed') readOutput = readEvent.output;
+
+      expect(extractedBytes?.equals(binary)).toBe(true);
+      expect(readOutput).toMatchObject({
+        material: reference,
+        format,
+        content: '',
+        sections: [
+          {
+            locator: format === 'pdf' ? '第 2 页' : '段落 1',
+            content: '确定性解析正文：收入保持稳定。',
+          },
+        ],
+      });
+      expect(fixture.store.materialReads.listByRun(runId)).toEqual([
+        expect.objectContaining({
+          material: reference,
+          operation: 'parse',
+          locator: format === 'pdf' ? '第 2 页' : '段落 1',
+          contentHash: reference.contentHash,
+        }),
+      ]);
+      expect(statusOf(fixture, runId)).toBe('completed');
+    },
+  );
+
+  it('forwards Run cancellation into an in-flight PDF extraction before recording a read', async () => {
+    const fixture = await createFixture();
+    const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+    if (!workspaceId) throw new Error('workspace missing');
+    const sourcePath = path.join(fixture.directory, '等待取消.pdf');
+    await writeFile(sourcePath, Buffer.from([0xff, 0x00, 0x50, 0x44, 0x46]));
+    const receipt = await fixture.inputSnapshots.create({
+      workspaceId,
+      workspaceRoot: fixture.directory,
+      sourcePath,
+    });
+    const reference: MaterialReference = {
+      kind: 'workspace-input-snapshot',
+      snapshotId: receipt.snapshot.id,
+      workspaceId,
+      contentHash: receipt.snapshot.contentHash,
+      format: 'pdf',
+      fileKey: receipt.snapshot.fileKey,
+    };
+    const scheduled = createScheduledContext(fixture, [reference]);
+    let announceExtraction: (() => void) | undefined;
+    const extractionStarted = new Promise<void>((resolve) => {
+      announceExtraction = resolve;
+    });
+    let extractionSignal: AbortSignal | undefined;
+    const extractor: DocumentExtractor = async (_format, _bytes, _job, signal) => {
+      if (!signal) throw new Error('expected Run AbortSignal');
+      extractionSignal = signal;
+      announceExtraction?.();
+      await new Promise<void>((_resolve, reject) => {
+        const onAbort = (): void => reject(abortError());
+        if (signal.aborted) {
+          onAbort();
+          return;
+        }
+        signal.addEventListener('abort', onAbort, { once: true });
+      });
+      throw abortError();
+    };
+    const fetchMock = vi.fn(async () =>
+      sseResponse(
+        JSON.stringify({
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: 'cancel-parsing-pdf',
+                    function: {
+                      name: 'read_text_file',
+                      arguments: JSON.stringify({ path: '等待取消.pdf' }),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    fixture.store.models.save({
+      name: 'PDF 取消测试模型',
+      provider: 'openai-compatible',
+      baseUrl: 'http://model.test/v1',
+      model: 'fixture-model',
+      role: 'language',
+      apiKey: '',
+      maxContextTokens: 8_192,
+      maxOutputTokens: 1_024,
+      temperature: 0,
+      enabled: true,
+    });
+    const service = createService(
+      fixture,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      extractor,
+    );
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '读取并取消 PDF 提取。',
+      taskContextRevisionId: scheduled.context.id,
+      expectedTaskContextRevision: scheduled.context.revision,
+    });
+
+    await extractionStarted;
+    expect(service.cancel(runId)).toBe(true);
+    await waitForCompletion(fixture, runId);
+
+    expect(extractionSignal?.aborted).toBe(true);
+    expect(statusOf(fixture, runId)).toBe('cancelled');
+    expect(fixture.store.materialReads.listByRun(runId)).toEqual([]);
   });
 
   it('rejects ambiguous text reads when multiple selected snapshots share a path', async () => {
@@ -970,6 +1517,189 @@ describe('RunService', () => {
     await waitForCompletion(fixture, secondRun);
     expect(fixture.store.runContextSnapshots.get(firstRun)?.contextSegmentId).not.toBe(
       fixture.store.runContextSnapshots.get(secondRun)?.contextSegmentId,
+    );
+  });
+
+  it('shrinks a scheduled Task memory/history scope and allows an explicit supplement to restore it', async () => {
+    const fixture = await createFixture();
+    const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+    if (!workspaceId) throw new Error('workspace missing');
+    const sourcePath = path.join(fixture.directory, 'scope-source.md');
+    await writeFile(sourcePath, '收入按回款金额统计的当前期间规则。');
+    const snapshot = await fixture.inputSnapshots.create({
+      workspaceId,
+      workspaceRoot: fixture.directory,
+      sourcePath,
+    });
+    const reference: MaterialReference = {
+      kind: 'workspace-input-snapshot',
+      snapshotId: snapshot.snapshot.id,
+      workspaceId,
+      contentHash: snapshot.snapshot.contentHash,
+      format: snapshot.snapshot.format,
+      fileKey: snapshot.snapshot.fileKey,
+    };
+    const scheduled = createScheduledContext(fixture, [reference]);
+    let requestCount = 0;
+    const fetchMock = vi.fn(async () => {
+      requestCount += 1;
+      if (requestCount === 1 || requestCount === 4) {
+        return sseResponse(
+          JSON.stringify({
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id:
+                        requestCount === 1
+                          ? 'read-schedule-scope-source'
+                          : 'read-explicit-supplement',
+                      function: {
+                        name: 'read_text_file',
+                        arguments: JSON.stringify({ path: 'scope-source.md' }),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+        );
+      }
+      return sseResponse(JSON.stringify({ choices: [{ delta: { content: '本期分析已完成。' } }] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    fixture.store.models.save({
+      name: '定时记忆范围替身模型',
+      provider: 'openai-compatible',
+      baseUrl: 'http://model.test/v1',
+      model: 'fixture-model',
+      role: 'language',
+      apiKey: '',
+      maxContextTokens: 8_192,
+      maxOutputTokens: 1_024,
+      temperature: 0,
+      enabled: true,
+    });
+    const service = createService(fixture);
+    const firstRun = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '请按收入按回款金额统计的口径出月报。',
+      taskContextRevisionId: scheduled.context.id,
+      expectedTaskContextRevision: scheduled.context.revision,
+    });
+    await waitForCompletion(fixture, firstRun);
+    expect(statusOf(fixture, firstRun)).toBe('completed');
+    expect(fixture.store.runMemoryContexts.get(firstRun)?.materialDependencyUnion).toEqual([
+      reference,
+    ]);
+    expect(fixture.store.materialReads.listByRun(firstRun)).toContainEqual(
+      expect.objectContaining({ material: reference, operation: 'read' }),
+    );
+
+    const artifact = fixture.store.artifacts.saveMarkdown(
+      {
+        taskId: fixture.taskId,
+        origin: 'assistant-run',
+        runId: firstRun,
+        title: '本期定时参考成果',
+        content: '依据：收入按回款金额统计的经营分析口径。',
+      },
+      'model',
+    );
+    const version = fixture.store.artifacts.listVersions(artifact.id)[0];
+    if (!version) throw new Error('reference artifact version missing');
+    fixture.store.artifactInputRelations.saveForRun(
+      version.id,
+      firstRun,
+      [{ input: reference, relation: 'data' }],
+      (input, runId) =>
+        runId === firstRun &&
+        input.kind === 'workspace-input-snapshot' &&
+        input.snapshotId === reference.snapshotId,
+      'model',
+    );
+    const operationId = randomUUID();
+    const memoryReceipt = await fixture.memories.create({
+      operationId,
+      content: '收入按回款金额统计的经营分析口径。',
+      facet: 'fact',
+      scope: { kind: 'workspace', workspaceId },
+      sourceSelector: {
+        kind: 'artifact-version',
+        artifactVersionId: version.id,
+        locator: '第 1 段',
+        selectedText: '收入按回款金额统计的经营分析口径。',
+      },
+      asUserInstruction: false,
+    });
+    if (!memoryReceipt.ok) throw new Error(`参考成果记忆写入失败：${memoryReceipt.error.code}`);
+    const memoryRevisionId = memoryReceipt.data.committedRevisionIds[0];
+    const memory = memoryRevisionId
+      ? fixture.store.memories.getRevision(memoryRevisionId)
+      : undefined;
+    if (!memory) throw new Error('reference-derived memory missing');
+    expect(memory.provenance.verification).toBe('verified');
+    if (memory.provenance.verification === 'verified') {
+      expect(memory.provenance.materialDependencies).toContainEqual(reference);
+    }
+
+    const removedContext = fixture.store.taskContexts.save(
+      fixture.taskId,
+      {
+        executor: { kind: 'general' },
+        skillBindings: [],
+        materials: [],
+        scheduleSourceSnapshotId: null,
+      },
+      scheduled.context.revision,
+    );
+    const withoutSourceRun = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '请按收入按回款金额统计的口径出月报。',
+      taskContextRevisionId: removedContext.id,
+      expectedTaskContextRevision: removedContext.revision,
+    });
+    await waitForCompletion(fixture, withoutSourceRun);
+    expect(statusOf(fixture, withoutSourceRun)).toBe('completed');
+    expect(fixture.store.runContextSnapshots.get(firstRun)?.contextSegmentId).not.toBe(
+      fixture.store.runContextSnapshots.get(withoutSourceRun)?.contextSegmentId,
+    );
+    expect(fixture.store.runMemoryContexts.get(withoutSourceRun)?.selectedItems).toEqual([]);
+    expect(fixture.store.runMemoryContexts.get(withoutSourceRun)?.replay).toContainEqual(
+      expect.objectContaining({ runId: firstRun, replayed: false }),
+    );
+
+    const supplementedContext = fixture.store.taskContexts.save(
+      fixture.taskId,
+      {
+        executor: { kind: 'general' },
+        skillBindings: [],
+        materials: [{ reference, purpose: 'current-input', addedFrom: 'user-input' }],
+        scheduleSourceSnapshotId: null,
+      },
+      removedContext.revision,
+    );
+    const supplementedRun = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '请按收入按回款金额统计的口径出月报。',
+      taskContextRevisionId: supplementedContext.id,
+      expectedTaskContextRevision: supplementedContext.revision,
+    });
+    await waitForCompletion(fixture, supplementedRun);
+    expect(statusOf(fixture, supplementedRun)).toBe('completed');
+    expect(
+      fixture.store.runMemoryContexts
+        .get(supplementedRun)
+        ?.selectedItems.map((item) => item.revisionId),
+    ).toContain(memory.revisionId);
+    expect(fixture.store.runMemoryContexts.get(supplementedRun)?.replay).toContainEqual(
+      expect.objectContaining({ runId: firstRun, replayed: true }),
     );
   });
 

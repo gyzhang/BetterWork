@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import {
   agentRuntimeEventSchema,
+  applyScheduleExpertRevisionRequestSchema,
   artifactDetailSchema,
   artifactSummarySchema,
   artifactVersionDetailSchema,
@@ -13,6 +14,7 @@ import {
   cancelledResultSchema,
   cancelMemoryJobRequestSchema,
   cancelRunRequestSchema,
+  cancelScheduleOccurrenceRequestSchema,
   checkKnowledgeSourcesRequestSchema,
   chooseInterpreterResultSchema,
   clearedResultSchema,
@@ -39,6 +41,8 @@ import {
   discussionCheckpointMutationResultSchema,
   discussionCheckpointSchema,
   evidenceSummarySchema,
+  executeMissedScheduleRequestSchema,
+  executeScheduleNowRequestSchema,
   expertDetailSchema,
   expertMutationResultSchema,
   expertRevisionDraftSchema,
@@ -63,6 +67,8 @@ import {
   getMemorySettingsRequestSchema,
   getRunArtifactDeclarationsRequestSchema,
   getRunMemoryContextRequestSchema,
+  getScheduleOccurrenceRequestSchema,
+  getScheduleRequestSchema,
   getSkillRequestSchema,
   getTaskContextRequestSchema,
   importSkillRequestSchema,
@@ -96,6 +102,9 @@ import {
   listMemoryJobsRequestSchema,
   listRunEventsRequestSchema,
   listRunsRequestSchema,
+  listScheduleOccurrencesRequestSchema,
+  listScheduleSourceItemsRequestSchema,
+  listSchedulesRequestSchema,
   listSkillsRequestSchema,
   listTaskMaterialCandidatesRequestSchema,
   listTasksRequestSchema,
@@ -126,12 +135,14 @@ import {
   openFileArtifactResultSchema,
   openKnowledgeSourceRequestSchema,
   openKnowledgeSourceResultSchema,
+  preflightScheduleRequestSchema,
   prepareDependencyRequestSchema,
   prepareDependencyResultSchema,
   prepareWorkspaceInputSnapshotRequestSchema,
   previewKnowledgeRequestSchema,
   previewMemoryRequestSchema,
   previewRunSourceRequestSchema,
+  previewScheduleRequestSchema,
   rebuildKnowledgeIndexRequestSchema,
   rebuildMemoryProjectionRequestSchema,
   recentTaskSummarySchema,
@@ -159,9 +170,26 @@ import {
   saveMarkdownArtifactRequestSchema,
   saveMcpConnectionRequestSchema,
   saveModelProfileRequestSchema,
+  saveScheduleRequestSchema,
   saveSearchEngineRequestSchema,
   saveSkillRuntimeProfileRequestSchema,
   saveTaskContextRequestSchema,
+  scheduleAggregateSchema,
+  scheduleCallResultSchema,
+  scheduleCancelOccurrenceResultSchema,
+  type ScheduleChangedEvent,
+  scheduleChangedEventSchema,
+  scheduleConfigDraftSchema,
+  scheduleDetailSchema,
+  type ScheduleDomainError,
+  scheduleDomainErrorSchema,
+  scheduleManualExecutionResultSchema,
+  scheduleOccurrenceDetailSchema,
+  scheduleOccurrenceHistoryPageSchema,
+  schedulePageSchema,
+  schedulePreflightViewSchema,
+  schedulePreviewResultSchema,
+  scheduleSourceItemsPageSchema,
   searchEngineSaveResultSchema,
   searchEngineSummarySchema,
   searchKnowledgeRequestSchema,
@@ -171,6 +199,7 @@ import {
   setMemorySettingsRequestSchema,
   setMemoryStatusRequestSchema,
   setModelEnabledRequestSchema,
+  setScheduleLifecycleRequestSchema,
   setSkillEnabledRequestSchema,
   setSkillTrustRequestSchema,
   setWorkspaceHiddenRequestSchema,
@@ -210,8 +239,17 @@ import { z, type ZodTypeAny } from 'zod';
 
 import { createNodeFileSystem } from '../infrastructure/dependency-adapters';
 import { listDependencyLocks, loadDependencyLock } from '../infrastructure/dependency-lock-catalog';
-import type { AppStore } from '../persistence';
+import {
+  type AppStore,
+  ScheduleExpertRevisionMismatchError,
+  ScheduleNotFoundError,
+  ScheduleOccurrenceError,
+  ScheduleOccurrenceStateError,
+  ScheduleRequestKeyConflictError,
+  ScheduleRevisionConflictError,
+} from '../persistence';
 import { API_KEY_SLOT } from '../persistence/credential-repository';
+import { ScheduleSourceRepositoryError } from '../persistence/schedule-source-repository';
 import { ArtifactDeclarationService } from '../services/artifact-declaration-service';
 import { resolveArtifactVersionExecutor } from '../services/artifact-version-executor';
 import { type CredentialProvisioner, type CredentialResolver } from '../services/credential-access';
@@ -230,6 +268,13 @@ import { probeModelConnection } from '../services/model-connectivity';
 import type { NotificationService } from '../services/notification-service';
 import { ResearchDraftService } from '../services/research-draft-service';
 import type { RunService } from '../services/run-service';
+import { nextTimes, resolveSchedulePeriod } from '../services/schedule-calendar';
+import type { ScheduleDispatchService } from '../services/schedule-dispatch-service';
+import { ScheduleDispatchServiceError } from '../services/schedule-dispatch-service';
+import { ScheduleExecutionServiceError } from '../services/schedule-execution-service';
+import type { SchedulePreflightService } from '../services/schedule-preflight';
+import type { ScheduleService } from '../services/schedule-service';
+import { ScheduleServiceError } from '../services/schedule-service';
 import { createQianfanSearchClient } from '../services/search-engine-service';
 import {
   computeDependencyLockHash,
@@ -264,6 +309,10 @@ export interface IpcDependencies {
   readonly mcpClientService: McpClientService;
   readonly dependencies: SkillDependencyService;
   readonly snapshots: ToolchainSnapshotService;
+  readonly scheduleService: ScheduleService;
+  readonly schedulePreflight: Pick<SchedulePreflightService, 'check'>;
+  readonly scheduleDispatch: Pick<ScheduleDispatchService, 'prepareAndStart' | 'stopOccurrence'>;
+  readonly publishScheduleChange: (event: ScheduleChangedEvent) => void;
   readonly fileArtifactService?: FileArtifactService;
   /** 随包依赖锁目录：开发态在仓库 resources 下，打包后在安装资源里。 */
   readonly dependencyLocksRoot: string;
@@ -320,6 +369,123 @@ function handleNoInput<Result>(
   });
 }
 
+class ScheduleIpcError extends Error {
+  constructor(readonly domainError: ScheduleDomainError) {
+    super(domainError.message);
+    this.name = 'ScheduleIpcError';
+  }
+}
+
+const boundedScheduleError = (input: ScheduleDomainError): ScheduleDomainError =>
+  scheduleDomainErrorSchema.parse({
+    ...input,
+    message: Array.from(input.message).slice(0, 1_000).join(''),
+    ...(input.problems === undefined
+      ? {}
+      : {
+          problems: input.problems.slice(0, 50).map((problem) => ({
+            code: Array.from(problem.code).slice(0, 120).join(''),
+            message: Array.from(problem.message).slice(0, 1_000).join(''),
+          })),
+        }),
+  });
+
+const scheduleIpcError = (
+  code: ScheduleDomainError['code'],
+  message: string,
+  details: Omit<ScheduleDomainError, 'code' | 'message'> = {},
+): ScheduleIpcError =>
+  new ScheduleIpcError(
+    boundedScheduleError({
+      code,
+      message: Array.from(message).slice(0, 1_000).join(''),
+      ...details,
+    }),
+  );
+
+const scheduleErrorFrom = (error: unknown): ScheduleDomainError => {
+  if (error instanceof ScheduleIpcError) return boundedScheduleError(error.domainError);
+  if (error instanceof ScheduleServiceError) {
+    return boundedScheduleError({
+      code: error.code,
+      message: error.message,
+      ...(error.currentRevision === undefined ? {} : { currentRevision: error.currentRevision }),
+    });
+  }
+  if (
+    error instanceof ScheduleDispatchServiceError ||
+    error instanceof ScheduleSourceRepositoryError
+  ) {
+    return boundedScheduleError({ code: error.code, message: error.message });
+  }
+  if (error instanceof ScheduleOccurrenceError) {
+    return boundedScheduleError({
+      code: error.code,
+      message: error.message,
+      ...(error.currentRevision === undefined ? {} : { currentRevision: error.currentRevision }),
+    });
+  }
+  if (error instanceof ScheduleExecutionServiceError) {
+    return boundedScheduleError({ code: error.code, message: error.message });
+  }
+  if (error instanceof ScheduleRevisionConflictError) {
+    return boundedScheduleError({
+      code: 'schedule_conflict',
+      message: '定时规则已在其他位置更新，请载入最新配置后重试。',
+      currentRevision: error.currentRevision,
+    });
+  }
+  if (error instanceof ScheduleNotFoundError) {
+    return boundedScheduleError({ code: 'schedule_not_found', message: error.message });
+  }
+  if (
+    error instanceof ScheduleRequestKeyConflictError ||
+    error instanceof ScheduleExpertRevisionMismatchError ||
+    error instanceof ScheduleOccurrenceStateError
+  ) {
+    return boundedScheduleError({
+      code: 'schedule_conflict',
+      message: '请求与当前定时规则或实例状态冲突，请刷新后重试。',
+      problems: [{ code: error.name, message: error.message.slice(0, 1_000) }],
+    });
+  }
+  const message = error instanceof Error ? error.message : '定时操作未能完成。';
+  const code = error instanceof Error ? error.name : 'unknown_error';
+  return boundedScheduleError({
+    code: 'schedule_preparation_failed',
+    message: '定时操作未能完成。',
+    problems: [{ code: code.slice(0, 120), message: Array.from(message).slice(0, 1_000).join('') }],
+  });
+};
+
+function handleScheduleInput<Schema extends ZodTypeAny, Data>(
+  channel: string,
+  inputSchema: Schema,
+  dataSchema: ZodTypeAny,
+  handler: (input: z.output<Schema>) => Data | Promise<Data>,
+): void {
+  const responseSchema = scheduleCallResultSchema(dataSchema);
+  ipcMain.handle(channel, async (_event, raw: unknown) => {
+    const input = inputSchema.parse(raw);
+    let result: unknown;
+    try {
+      result = { status: 'success', data: await handler(input) };
+    } catch (error) {
+      result = { status: 'rejected', error: scheduleErrorFrom(error) };
+    }
+    return responseSchema.parse(result);
+  });
+}
+
+function notifyScheduleChanged(deps: IpcDependencies, input: ScheduleChangedEvent): void {
+  const event = scheduleChangedEventSchema.parse(input);
+  try {
+    deps.publishScheduleChange(event);
+  } catch (error) {
+    console.error('Schedule change event publish failed', error);
+  }
+}
+
 /** 对话框的父窗口；窗口还没就绪或已销毁时返回 undefined，对话框依然可用。 */
 function dialogParent(deps: IpcDependencies): BrowserWindow | undefined {
   const window = deps.getWindow();
@@ -369,6 +535,7 @@ export function registerIpc(deps: IpcDependencies): void {
   registerMcpChannels(deps);
   registerDependencyChannels(deps);
   registerNotificationChannels(deps);
+  registerScheduleChannels(deps);
   registerWindowChannels(deps);
 }
 
@@ -395,6 +562,360 @@ function registerRunChannels({ store, runs }: IpcDependencies): void {
         const bindings = store.executions.listBindingSummariesForRun(run.id);
         return bindings.length > 0 ? { ...run, bindings } : run;
       });
+    },
+  );
+}
+
+function registerScheduleChannels(deps: IpcDependencies): void {
+  const { store, scheduleService } = deps;
+
+  handleScheduleInput(
+    IpcChannel.ListSchedules,
+    listSchedulesRequestSchema,
+    schedulePageSchema,
+    (input) => store.schedules.list(input),
+  );
+
+  handleScheduleInput(
+    IpcChannel.GetSchedule,
+    getScheduleRequestSchema,
+    scheduleDetailSchema,
+    ({ scheduleId }) => {
+      const aggregate = scheduleService.get(scheduleId);
+      if (!aggregate) throw scheduleIpcError('schedule_not_found', '定时规则不存在。');
+      const expert = store.experts.get(aggregate.config.expertId);
+      const boundRevision = store.experts.getRevision(
+        aggregate.config.expertId,
+        aggregate.config.expertRevisionId,
+      );
+      if (!expert || !boundRevision) {
+        throw scheduleIpcError('schedule_capability_blocked', '固定专家修订已不可用。');
+      }
+      const occurrences = store.scheduleOccurrences.listBySchedule({
+        scheduleId,
+        limit: 6,
+      });
+      return {
+        aggregate,
+        expertUpdate: {
+          boundRevision,
+          currentRevision: expert.revision,
+          available: expert.revision.id !== boundRevision.id,
+        },
+        history: {
+          items: occurrences.items.map((occurrence) => {
+            const run = occurrence.firstRunId ? store.runs.get(occurrence.firstRunId) : undefined;
+            return { occurrence, ...(run ? { run } : {}) };
+          }),
+          ...(occurrences.nextCursor === undefined ? {} : { nextCursor: occurrences.nextCursor }),
+        },
+      };
+    },
+  );
+
+  handleScheduleInput(
+    IpcChannel.SaveSchedule,
+    saveScheduleRequestSchema,
+    scheduleAggregateSchema,
+    async (input) => {
+      const previous =
+        input.operation === 'update' ? scheduleService.get(input.scheduleId) : undefined;
+      const aggregate = await scheduleService.save(input);
+      const reason =
+        previous?.schedule.lifecycle !== undefined &&
+        previous.schedule.lifecycle !== aggregate.schedule.lifecycle
+          ? 'lifecycle'
+          : previous?.config.expertRevisionId !== undefined &&
+              previous.config.expertRevisionId !== aggregate.config.expertRevisionId
+            ? 'expert-revision'
+            : 'configuration';
+      notifyScheduleChanged(deps, { scheduleId: aggregate.schedule.id, reason });
+      return aggregate;
+    },
+  );
+
+  handleScheduleInput(
+    IpcChannel.SetScheduleLifecycle,
+    setScheduleLifecycleRequestSchema,
+    scheduleAggregateSchema,
+    async (input) => {
+      const aggregate = await scheduleService.setLifecycle(input);
+      notifyScheduleChanged(deps, { scheduleId: aggregate.schedule.id, reason: 'lifecycle' });
+      return aggregate;
+    },
+  );
+
+  handleScheduleInput(
+    IpcChannel.PreviewSchedule,
+    previewScheduleRequestSchema,
+    schedulePreviewResultSchema,
+    (input) => {
+      const previewedAt = Date.now();
+      const times = nextTimes(input.timing, previewedAt);
+      return {
+        previewedAt,
+        items: times.map((scheduledAt) => ({
+          scheduledAt,
+          period: resolveSchedulePeriod(input.periodRule, input.timing.timeZone, scheduledAt),
+        })),
+      };
+    },
+  );
+
+  handleScheduleInput(
+    IpcChannel.PreflightSchedule,
+    preflightScheduleRequestSchema,
+    schedulePreflightViewSchema,
+    async (input) => {
+      const target =
+        input.target === 'schedule'
+          ? (() => {
+              const aggregate = scheduleService.get(input.scheduleId);
+              if (!aggregate) throw scheduleIpcError('schedule_not_found', '定时规则不存在。');
+              return {
+                workspaceId: aggregate.schedule.workspaceId,
+                config: scheduleConfigDraftSchema.parse({
+                  name: aggregate.config.name,
+                  expertId: aggregate.config.expertId,
+                  expertRevisionId: aggregate.config.expertRevisionId,
+                  requirements: aggregate.config.requirements,
+                  expectedArtifactTypes: aggregate.config.expectedArtifactTypes,
+                  timing: aggregate.config.timing,
+                  periodRule: aggregate.config.periodRule,
+                  knowledgeSources: aggregate.config.knowledgeSources,
+                  outputSubdirectory: aggregate.config.outputSubdirectory,
+                }),
+              };
+            })()
+          : { workspaceId: input.workspaceId, config: input.config };
+      return deps.schedulePreflight.check(target);
+    },
+  );
+
+  handleScheduleInput(
+    IpcChannel.ApplyScheduleExpertRevision,
+    applyScheduleExpertRevisionRequestSchema,
+    scheduleAggregateSchema,
+    async (input) => {
+      const aggregate = await scheduleService.applyExpertRevision(input);
+      notifyScheduleChanged(deps, {
+        scheduleId: aggregate.schedule.id,
+        reason: 'expert-revision',
+      });
+      return aggregate;
+    },
+  );
+
+  handleScheduleInput(
+    IpcChannel.ListScheduleOccurrences,
+    listScheduleOccurrencesRequestSchema,
+    scheduleOccurrenceHistoryPageSchema,
+    (input) => {
+      if (!scheduleService.get(input.scheduleId)) {
+        throw scheduleIpcError('schedule_not_found', '定时规则不存在。');
+      }
+      const page = store.scheduleOccurrences.listBySchedule(input);
+      return {
+        items: page.items.map((occurrence) => {
+          const run = occurrence.firstRunId ? store.runs.get(occurrence.firstRunId) : undefined;
+          return { occurrence, ...(run ? { run } : {}) };
+        }),
+        ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
+      };
+    },
+  );
+
+  handleScheduleInput(
+    IpcChannel.GetScheduleOccurrence,
+    getScheduleOccurrenceRequestSchema,
+    scheduleOccurrenceDetailSchema,
+    ({ occurrenceId }) => {
+      const occurrence = store.scheduleOccurrences.get(occurrenceId);
+      if (!occurrence) throw scheduleIpcError('schedule_not_found', '定时实例不存在。');
+      const config = store.schedules.getConfig(occurrence.scheduleId, occurrence.configVersion);
+      if (!config) throw scheduleIpcError('schedule_conflict', '本期固定配置不可用。');
+      const run = occurrence.firstRunId ? store.runs.get(occurrence.firstRunId) : undefined;
+      if (occurrence.firstRunId && !run) {
+        throw scheduleIpcError('schedule_conflict', '本期关联的 Run 不可用。');
+      }
+      const task = occurrence.taskId ? store.tasks.getSummary(occurrence.taskId) : undefined;
+      const sourceSnapshot = occurrence.sourceSnapshotId
+        ? store.scheduleSources.get(occurrence.sourceSnapshotId)
+        : undefined;
+      const reads = run
+        ? store.materialReads
+            .listByRun(run.id)
+            .filter((item) => item.operation === 'read' || item.operation === 'parse')
+        : [];
+      const readMaterials = new Set(reads.map((item) => JSON.stringify(item.material)));
+      const adoptedMaterials = new Set<string>();
+      if (run) {
+        for (const artifact of store.artifacts.list(run.taskId)) {
+          for (const version of store.artifacts.listVersions(artifact.id)) {
+            if (version.sourceRunId !== run.id) continue;
+            for (const relation of store.artifactInputRelations.listByVersion(version.id)) {
+              adoptedMaterials.add(JSON.stringify(relation.input));
+            }
+          }
+        }
+      }
+      return {
+        occurrence,
+        config,
+        ...(task ? { task } : {}),
+        ...(run ? { run } : {}),
+        ...(sourceSnapshot ? { sourceSnapshot } : {}),
+        outputReceipts: [],
+        readMaterialCount: readMaterials.size,
+        adoptedMaterialCount: adoptedMaterials.size,
+      };
+    },
+  );
+
+  handleScheduleInput(
+    IpcChannel.ListScheduleSourceItems,
+    listScheduleSourceItemsRequestSchema,
+    scheduleSourceItemsPageSchema,
+    (input) => {
+      if (!store.scheduleOccurrences.get(input.occurrenceId)) {
+        throw scheduleIpcError('schedule_not_found', '定时实例不存在。');
+      }
+      return store.scheduleSources.listItems(input);
+    },
+  );
+
+  type ScheduleManualInput = {
+    scheduleId: string;
+    expectedRevision: number;
+    requestKey: string;
+    preflightFingerprint: string;
+  } & ({ trigger: 'manual-now' } | { trigger: 'manual-missed'; originalOccurrenceId: string });
+  const executeManual = async (input: ScheduleManualInput) => {
+    const requestedAt = Date.now();
+    const duplicate = store.scheduleOccurrences.findManualRequest({
+      scheduleId: input.scheduleId,
+      requestKey: input.requestKey,
+      trigger: input.trigger,
+      ...(input.trigger === 'manual-missed'
+        ? { originalOccurrenceId: input.originalOccurrenceId }
+        : {}),
+    });
+    if (duplicate) return { accepted: true as const, duplicate: true, occurrence: duplicate };
+
+    const aggregate = scheduleService.get(input.scheduleId);
+    if (!aggregate) throw scheduleIpcError('schedule_not_found', '定时规则不存在。');
+    if (aggregate.schedule.revision !== input.expectedRevision) {
+      throw scheduleIpcError(
+        'schedule_conflict',
+        '定时规则已在其他位置更新，请载入最新配置后重试。',
+        { currentRevision: aggregate.schedule.revision },
+      );
+    }
+    if (aggregate.schedule.lifecycle === 'archived') {
+      throw scheduleIpcError('schedule_archived', '已归档规则不能执行。');
+    }
+    if (input.trigger === 'manual-missed') {
+      const original = store.scheduleOccurrences.get(input.originalOccurrenceId);
+      if (
+        !original ||
+        original.scheduleId !== input.scheduleId ||
+        original.trigger !== 'scheduled' ||
+        original.phase !== 'closed' ||
+        original.preparationOutcome !== 'missed'
+      ) {
+        throw scheduleIpcError('schedule_conflict', '只能补做同一规则的已错过计划实例。');
+      }
+    }
+    const config = scheduleConfigDraftSchema.parse({
+      name: aggregate.config.name,
+      expertId: aggregate.config.expertId,
+      expertRevisionId: aggregate.config.expertRevisionId,
+      requirements: aggregate.config.requirements,
+      expectedArtifactTypes: aggregate.config.expectedArtifactTypes,
+      timing: aggregate.config.timing,
+      periodRule: aggregate.config.periodRule,
+      knowledgeSources: aggregate.config.knowledgeSources,
+      outputSubdirectory: aggregate.config.outputSubdirectory,
+    });
+    const preflight = await deps.schedulePreflight.check({
+      workspaceId: aggregate.schedule.workspaceId,
+      config,
+    });
+    if (preflight.status === 'blocked') {
+      throw scheduleIpcError('schedule_capability_blocked', '当前专家能力未通过执行前检查。', {
+        problems: preflight.problems.map(({ code, message }) => ({ code, message })),
+      });
+    }
+    if (preflight.fingerprint !== input.preflightFingerprint) {
+      throw scheduleIpcError('schedule_conflict', '能力预检结果已变化，请重新检查后再执行。');
+    }
+
+    const claim =
+      input.trigger === 'manual-now'
+        ? store.scheduleOccurrences.claimManual({
+            scheduleId: input.scheduleId,
+            expectedRevision: input.expectedRevision,
+            trigger: input.trigger,
+            requestKey: input.requestKey,
+            requestedAt,
+            period: resolveSchedulePeriod(config.periodRule, config.timing.timeZone, requestedAt),
+          })
+        : store.scheduleOccurrences.claimManual({
+            scheduleId: input.scheduleId,
+            expectedRevision: input.expectedRevision,
+            trigger: input.trigger,
+            requestKey: input.requestKey,
+            requestedAt,
+            originalOccurrenceId: input.originalOccurrenceId,
+          });
+    if (claim.kind === 'busy') {
+      throw scheduleIpcError('schedule_busy', '这条规则已有一期正在准备或执行。', {
+        existingOccurrenceId: claim.existingOccurrenceId,
+      });
+    }
+    if (claim.kind === 'existing') {
+      return { accepted: true as const, duplicate: true, occurrence: claim.occurrence };
+    }
+
+    notifyScheduleChanged(deps, {
+      scheduleId: claim.occurrence.scheduleId,
+      occurrenceId: claim.occurrence.id,
+      reason: 'occurrence',
+    });
+    void deps.scheduleDispatch
+      .prepareAndStart(claim.occurrence.id, undefined, preflight.fingerprint)
+      .catch((error: unknown) => console.error('Manual Schedule preparation failed', error));
+    return { accepted: true as const, duplicate: false, occurrence: claim.occurrence };
+  };
+
+  handleScheduleInput(
+    IpcChannel.ExecuteScheduleNow,
+    executeScheduleNowRequestSchema,
+    scheduleManualExecutionResultSchema,
+    (input) => executeManual({ ...input, trigger: 'manual-now' }),
+  );
+  handleScheduleInput(
+    IpcChannel.ExecuteMissedSchedule,
+    executeMissedScheduleRequestSchema,
+    scheduleManualExecutionResultSchema,
+    (input) => executeManual({ ...input, trigger: 'manual-missed' }),
+  );
+
+  handleScheduleInput(
+    IpcChannel.CancelScheduleOccurrence,
+    cancelScheduleOccurrenceRequestSchema,
+    scheduleCancelOccurrenceResultSchema,
+    ({ occurrenceId }) => {
+      const occurrence = store.scheduleOccurrences.get(occurrenceId);
+      const result = deps.scheduleDispatch.stopOccurrence(occurrenceId);
+      if (occurrence && result !== 'already-terminal') {
+        notifyScheduleChanged(deps, {
+          scheduleId: occurrence.scheduleId,
+          occurrenceId,
+          reason: 'occurrence',
+        });
+      }
+      return { result };
     },
   );
 }
@@ -503,6 +1024,9 @@ function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
             ...(input.modelReference ? { modelReference: input.modelReference } : {}),
             ...(input.builtinToolPolicy ? { builtinToolPolicy: input.builtinToolPolicy } : {}),
             ...(input.materials ? { materials: input.materials } : {}),
+            ...(input.scheduleSourceSnapshotId === undefined
+              ? {}
+              : { scheduleSourceSnapshotId: input.scheduleSourceSnapshotId }),
             ...(input.excludedMemoryIds ? { excludedMemoryIds: input.excludedMemoryIds } : {}),
             ...(input.mcpToolBindings ? { mcpToolBindings: input.mcpToolBindings } : {}),
           },

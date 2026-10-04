@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
   countCodePoints,
   type DeleteKnowledgeCollectionRequest,
+  type ExpertReferenceMaterial,
   KNOWLEDGE_REVISION_MAX_TEXT_CODE_POINTS,
   KNOWLEDGE_SEARCH_CANDIDATE_LIMIT,
   KNOWLEDGE_SEARCH_SUMMARY_MAX_CODE_POINTS,
@@ -26,6 +27,8 @@ import {
   knowledgeWarningCodeSchema,
   type KnowledgeWorkerJobContext,
   type SaveKnowledgeCollectionRequest,
+  SCHEDULE_SOURCE_ITEM_MAX,
+  type ScheduleKnowledgeSource,
   type SetKnowledgeCollectionMembersRequest,
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
@@ -98,6 +101,47 @@ export type { KnowledgeRevisionSummary } from '@betterwork/agent-protocol';
 export interface KnowledgeRevisionDetail extends KnowledgeRevisionSummary {
   content: string;
   chunks: Array<{ locator: string; ordinal: number; content: string }>;
+}
+
+export interface ScheduledKnowledgeReference {
+  reference: KnowledgeMaterialReference;
+  displayName: string;
+}
+
+export interface ScheduledKnowledgeScopeRead {
+  source: ScheduleKnowledgeSource;
+  documents: ScheduledKnowledgeReference[];
+}
+
+export interface ScheduledKnowledgeLookupFailure {
+  kind: 'document-missing' | 'collection-missing' | 'revision-missing' | 'reference-conflict';
+  identity: string;
+}
+
+export interface ScheduledKnowledgeRead {
+  scopes: ScheduledKnowledgeScopeRead[];
+  expertReferences: Array<{
+    material: ExpertReferenceMaterial;
+    document: ScheduledKnowledgeReference;
+  }>;
+  failures: ScheduledKnowledgeLookupFailure[];
+  overBudget: boolean;
+}
+
+interface ScheduledKnowledgeDocumentRow {
+  document_id: string;
+  revision_id: string | null;
+  revision_title: string | null;
+  revision_source_path: string | null;
+  content_hash: string | null;
+}
+
+interface ScheduledKnowledgeRevisionRow {
+  id: string;
+  document_id: string;
+  title: string;
+  source_path: string;
+  content_hash: string;
 }
 
 const supportedFormats: Record<string, KnowledgeFormat> = {
@@ -175,6 +219,161 @@ export class KnowledgeVault {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
+  }
+
+  /**
+   * Schedule preparation reads every selected scope and its current revisions from one Vault
+   * read transaction. The caller persists the returned immutable references in the App DB;
+   * this does not claim a transaction spanning the two databases.
+   */
+  readScheduledKnowledgeSources(input: {
+    workspaceId: string;
+    sources: readonly ScheduleKnowledgeSource[];
+    expertReferences: readonly ExpertReferenceMaterial[];
+  }): ScheduledKnowledgeRead {
+    const read = this.db.transaction((): ScheduledKnowledgeRead => {
+      const scopes: ScheduledKnowledgeScopeRead[] = [];
+      const expertReferences: ScheduledKnowledgeRead['expertReferences'] = [];
+      const failures: ScheduledKnowledgeLookupFailure[] = [];
+      const includedDocuments = new Set<string>();
+      let overBudget = false;
+
+      const sourceRows = (
+        where: string,
+        parameters: readonly string[],
+      ): ScheduledKnowledgeDocumentRow[] =>
+        this.db
+          .prepare(
+            `SELECT d.id AS document_id, r.id AS revision_id, r.title AS revision_title,
+                    r.source_path AS revision_source_path, r.content_hash AS content_hash
+               FROM knowledge_documents d
+               LEFT JOIN knowledge_revisions r ON r.id = (
+                 SELECT latest.id FROM knowledge_revisions latest
+                  WHERE latest.document_id = d.id
+                  ORDER BY latest.revision DESC LIMIT 1
+               )
+              WHERE ${where}
+              ORDER BY d.id COLLATE BINARY
+              LIMIT ?`,
+          )
+          .all(...parameters, SCHEDULE_SOURCE_ITEM_MAX + 1) as ScheduledKnowledgeDocumentRow[];
+
+      const currentReference = (
+        row: ScheduledKnowledgeDocumentRow,
+      ): ScheduledKnowledgeReference | undefined => {
+        if (
+          row.revision_id === null ||
+          row.revision_title === null ||
+          row.revision_source_path === null ||
+          row.content_hash === null
+        ) {
+          failures.push({ kind: 'revision-missing', identity: row.document_id });
+          return undefined;
+        }
+        return {
+          reference: {
+            kind: 'knowledge-revision',
+            knowledgeDocumentId: row.document_id,
+            knowledgeRevisionId: row.revision_id,
+            contentHash: row.content_hash,
+            sourcePath: row.revision_source_path,
+          },
+          displayName: row.revision_title,
+        };
+      };
+
+      for (const source of input.sources) {
+        let rows: ScheduledKnowledgeDocumentRow[];
+        if (source.kind === 'document') {
+          rows = sourceRows('d.id = ?', [source.documentId]);
+          if (rows.length === 0) {
+            failures.push({ kind: 'document-missing', identity: source.documentId });
+          }
+        } else if (source.kind === 'collection') {
+          const exists = this.db
+            .prepare('SELECT 1 AS present FROM knowledge_collections WHERE id = ?')
+            .get(source.collectionId) as { present: number } | undefined;
+          if (!exists) {
+            failures.push({ kind: 'collection-missing', identity: source.collectionId });
+            scopes.push({ source, documents: [] });
+            continue;
+          }
+          rows = sourceRows(
+            `EXISTS (
+               SELECT 1 FROM knowledge_collection_members m
+                WHERE m.collection_id = ? AND m.document_id = d.id
+             )`,
+            [source.collectionId],
+          );
+        } else {
+          rows = sourceRows('1 = 1', []);
+        }
+
+        if (rows.length > SCHEDULE_SOURCE_ITEM_MAX) {
+          overBudget = true;
+          break;
+        }
+        const documents: ScheduledKnowledgeReference[] = [];
+        for (const row of rows) {
+          const candidate = currentReference(row);
+          if (!candidate) continue;
+          documents.push(candidate);
+          includedDocuments.add(candidate.reference.knowledgeDocumentId);
+          if (includedDocuments.size > SCHEDULE_SOURCE_ITEM_MAX) {
+            overBudget = true;
+            break;
+          }
+        }
+        scopes.push({ source, documents });
+        if (overBudget) break;
+      }
+
+      if (!overBudget) {
+        for (const material of input.expertReferences) {
+          const reference = material.reference;
+          if (reference.kind !== 'knowledge-revision') continue;
+          if (
+            reference.originWorkspaceId !== undefined &&
+            reference.originWorkspaceId !== input.workspaceId
+          ) {
+            continue;
+          }
+          const row = this.db
+            .prepare(
+              `SELECT id, document_id, title, source_path, content_hash
+                 FROM knowledge_revisions WHERE id = ?`,
+            )
+            .get(reference.knowledgeRevisionId) as ScheduledKnowledgeRevisionRow | undefined;
+          if (!row) {
+            failures.push({ kind: 'revision-missing', identity: reference.knowledgeRevisionId });
+            continue;
+          }
+          if (
+            row.document_id !== reference.knowledgeDocumentId ||
+            row.content_hash !== reference.contentHash ||
+            row.source_path !== reference.sourcePath
+          ) {
+            failures.push({ kind: 'reference-conflict', identity: reference.knowledgeDocumentId });
+            continue;
+          }
+          expertReferences.push({
+            material,
+            document: {
+              reference,
+              displayName: row.title,
+            },
+          });
+          includedDocuments.add(reference.knowledgeDocumentId);
+          if (includedDocuments.size > SCHEDULE_SOURCE_ITEM_MAX) {
+            overBudget = true;
+            break;
+          }
+        }
+      }
+
+      return { scopes, expertReferences, failures, overBudget };
+    });
+    return read.deferred();
   }
 
   saveCollection(input: SaveKnowledgeCollectionRequest): KnowledgeCollection[] {

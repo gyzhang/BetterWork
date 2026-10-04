@@ -57,10 +57,12 @@ export interface WorkerScanRequest {
 }
 
 interface PendingRequest {
-  readonly handleKey: string;
-  readonly resolve: (value: WorkerReply) => void;
-  readonly reject: (error: unknown) => void;
-  readonly timeout: NodeJS.Timeout;
+  handleKey: string;
+  resolve: (value: WorkerReply) => void;
+  reject: (error: unknown) => void;
+  timeout: NodeJS.Timeout;
+  signal?: AbortSignal;
+  abortListener?: () => void;
 }
 
 type WorkerReply =
@@ -94,8 +96,8 @@ export class KnowledgeWorkerRunner {
   }
 
   /** 注入给 KnowledgeVault 的提取入口；作业上下文随条目传递。 */
-  readonly extractor: DocumentExtractor = async (format, bytes, context) =>
-    this.extract(format, bytes, context);
+  readonly extractor: DocumentExtractor = async (format, bytes, context, signal) =>
+    this.extract(format, bytes, context, signal);
 
   /** 当前登记的子进程 pid（按作业键）；只用于验证「终止只针对已登记 pid」。 */
   activePid(jobKey: string): number | undefined {
@@ -106,18 +108,20 @@ export class KnowledgeWorkerRunner {
     format: KnowledgeFormat,
     bytes: Buffer,
     context?: KnowledgeWorkerJobContext,
+    signal?: AbortSignal,
   ): Promise<ExtractedDocument> {
+    if (signal?.aborted) throw abortError();
     const dataBase64 = bytes.toString('base64');
     if (dataBase64.length > KNOWLEDGE_WORKER_REQUEST_MAX_BASE64_BYTES) {
       throw new KnowledgeServiceError('EXTRACTION_LIMIT_EXCEEDED', '文件超过提取上限，暂不导入。');
     }
     const job = context ?? { jobId: 'standalone', attempt: 1 };
-    const reply = await this.request(`extract:${job.jobId}`, KNOWLEDGE_WORKER_EXTRACT_TIMEOUT_MS, {
-      op: 'extract',
-      job,
-      format,
-      dataBase64,
-    });
+    const reply = await this.request(
+      `extract:${job.jobId}`,
+      KNOWLEDGE_WORKER_EXTRACT_TIMEOUT_MS,
+      { op: 'extract', job, format, dataBase64 },
+      signal,
+    );
     if (reply.kind !== 'document') {
       throw workerError('WORKER_UNAVAILABLE', '提取响应类型不符。');
     }
@@ -153,8 +157,7 @@ export class KnowledgeWorkerRunner {
     const key = `extract:${jobId}`;
     for (const [id, request] of [...this.pending]) {
       if (request.handleKey !== key) continue;
-      this.pending.delete(id);
-      clearTimeout(request.timeout);
+      this.clearPending(id, request);
       request.reject(abortError());
     }
     const handle = this.handles.get(key);
@@ -170,8 +173,8 @@ export class KnowledgeWorkerRunner {
   }
 
   private failPending(error: KnowledgeServiceError): void {
-    for (const [, request] of this.pending) {
-      clearTimeout(request.timeout);
+    for (const [id, request] of this.pending) {
+      this.clearPending(id, request);
       request.reject(error);
     }
     this.pending.clear();
@@ -181,30 +184,55 @@ export class KnowledgeWorkerRunner {
     handleKey: string,
     timeoutMs: number,
     payload: Record<string, unknown>,
+    signal?: AbortSignal,
   ): Promise<WorkerReply> {
     const handle = this.ensureHandle(handleKey);
     const id = randomUUID();
     return new Promise<WorkerReply>((resolve, reject) => {
       void handle.then(
         (settled) => {
+          if (signal?.aborted) {
+            reject(abortError());
+            return;
+          }
           if (settled.exited || this.handles.get(handleKey) !== settled) {
             reject(workerError('WORKER_UNAVAILABLE', '提取进程已被替换或退出。'));
             return;
           }
           const timeout = setTimeout(() => {
-            this.pending.delete(id);
+            const pending = this.pending.get(id);
+            if (!pending) return;
+            this.clearPending(id, pending);
             reject(workerError('WORKER_TIMEOUT', '提取超时，作业条目失败。'));
             this.stopHandle(settled).catch(() => undefined);
           }, timeoutMs);
-          this.pending.set(id, { handleKey, resolve, reject, timeout });
+          const pending: PendingRequest = {
+            handleKey,
+            resolve,
+            reject,
+            timeout,
+            ...(signal ? { signal } : {}),
+          };
+          this.pending.set(id, pending);
+          if (signal) {
+            const abortListener = (): void => {
+              if (this.pending.get(id) !== pending) return;
+              this.clearPending(id, pending);
+              reject(abortError());
+              this.stopHandle(settled).catch(() => undefined);
+            };
+            pending.abortListener = abortListener;
+            signal.addEventListener('abort', abortListener, { once: true });
+            if (signal.aborted) abortListener();
+          }
+          if (!this.pending.has(id)) return;
           settled.child.stdin.write(
             `${JSON.stringify({ id, nonce: settled.nonce, ...payload })}\n`,
             (error) => {
               if (!error) return;
               const pending = this.pending.get(id);
               if (!pending) return;
-              this.pending.delete(id);
-              clearTimeout(pending.timeout);
+              this.clearPending(id, pending);
               pending.reject(workerError('WORKER_UNAVAILABLE', '提取进程输入通道已断开。'));
             },
           );
@@ -217,6 +245,14 @@ export class KnowledgeWorkerRunner {
           ),
       );
     });
+  }
+
+  private clearPending(id: string, request: PendingRequest): void {
+    this.pending.delete(id);
+    clearTimeout(request.timeout);
+    if (request.signal && request.abortListener) {
+      request.signal.removeEventListener('abort', request.abortListener);
+    }
   }
 
   private async ensureHandle(key: string): Promise<WorkerHandle> {
@@ -284,8 +320,7 @@ export class KnowledgeWorkerRunner {
     if (!request) return;
     const handle = this.handles.get(request.handleKey);
     if (!handle || handle.nonce !== parsed.data.nonce) return;
-    this.pending.delete(parsed.data.id);
-    clearTimeout(request.timeout);
+    this.clearPending(parsed.data.id, request);
     if (parsed.data.kind === 'result') {
       request.resolve({ kind: 'document', document: toExtracted(parsed.data.document) });
     } else if (parsed.data.kind === 'scores') {
@@ -304,8 +339,7 @@ export class KnowledgeWorkerRunner {
     if (this.handles.get(handle.key) === handle) this.handles.delete(handle.key);
     for (const [id, request] of [...this.pending]) {
       if (request.handleKey !== handle.key) continue;
-      this.pending.delete(id);
-      clearTimeout(request.timeout);
+      this.clearPending(id, request);
       request.reject(error);
     }
     try {

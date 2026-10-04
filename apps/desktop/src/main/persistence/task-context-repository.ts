@@ -18,6 +18,8 @@ import {
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 
+import { assertScheduleSourceReadyForTask } from './schedule-source-repository';
+
 interface TaskContextRow {
   id: string;
   task_id: string;
@@ -31,6 +33,7 @@ interface TaskContextRow {
   materials_json: string;
   excluded_memory_ids_json: string;
   mcp_tool_bindings_json: string;
+  schedule_source_snapshot_id: string | null;
 }
 
 export interface SaveTaskContextInput {
@@ -39,6 +42,7 @@ export interface SaveTaskContextInput {
   modelReference?: ExpertModelReference;
   builtinToolPolicy?: BuiltinToolPolicy;
   materials?: TaskMaterialSelection[];
+  scheduleSourceSnapshotId?: string | null;
   excludedMemoryIds?: string[];
   mcpToolBindings?: McpToolBinding[];
 }
@@ -94,6 +98,9 @@ const toRevision = (row: TaskContextRow): TaskContextRevision => {
         }
       : {}),
     materials: parseMaterials(row.materials_json),
+    ...(row.schedule_source_snapshot_id === null
+      ? {}
+      : { scheduleSourceSnapshotId: row.schedule_source_snapshot_id }),
     ...(excludedMemoryIds.length > 0 ? { excludedMemoryIds } : {}),
     ...(mcpToolBindings.length > 0 ? { mcpToolBindings } : {}),
     createdAt: row.created_at,
@@ -171,6 +178,13 @@ export class TaskContextRepository {
         `Task context revision conflict: expected ${expectedRevision}, current ${latest?.revision ?? 0}`,
       );
     }
+    const scheduleSourceSnapshotId =
+      input.scheduleSourceSnapshotId === undefined
+        ? latest?.scheduleSourceSnapshotId
+        : (input.scheduleSourceSnapshotId ?? undefined);
+    if (scheduleSourceSnapshotId !== undefined) {
+      assertScheduleSourceReadyForTask(this.db, scheduleSourceSnapshotId, taskId);
+    }
     const revision = (latest?.revision ?? 0) + 1;
     const now = Date.now();
     const id = randomUUID();
@@ -179,8 +193,8 @@ export class TaskContextRepository {
         `INSERT INTO task_context_revisions (
            id, task_id, revision, executor_json, skill_bindings_json,
            model_reference_json, builtin_tool_policy_json, created_at, updated_at, materials_json,
-           excluded_memory_ids_json, mcp_tool_bindings_json
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           excluded_memory_ids_json, mcp_tool_bindings_json, schedule_source_snapshot_id
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -195,6 +209,7 @@ export class TaskContextRepository {
         JSON.stringify(materials),
         JSON.stringify(excludedMemoryIds),
         JSON.stringify(mcpToolBindings),
+        scheduleSourceSnapshotId ?? null,
       );
     const saved = this.get(id, taskId);
     if (!saved) throw new Error('Task context was not available after save');

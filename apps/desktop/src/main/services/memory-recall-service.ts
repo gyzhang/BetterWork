@@ -41,6 +41,7 @@ import {
   memorySelectedMemorySchema,
   memoryViewItemSchema,
   previewMemoryRequestSchema,
+  RUN_MEMORY_MATERIAL_DEPENDENCY_MAX,
   stableStringifyJson,
   taskMemoryExclusionsDataSchema,
   taskMemoryExclusionsRequestSchema,
@@ -1266,15 +1267,16 @@ export const prepareRunMemoryDecision = (
     materials: input.materials,
     excludedMemoryIds: input.excludedMemoryIds,
   });
-  const recall = recallMemoriesForQuery(store, queryContext);
+  const allowedMaterialKeys = new Set(
+    input.materials.map((selection) => referenceKeyOf(selection.reference)),
+  );
+  const recall = recallMemoriesForQuery(store, queryContext, { allowedMaterialKeys });
   const replay = planRunHistoryReplay(store, {
     taskId: input.taskId,
     currentRunId: input.runId,
     evaluatedAt: input.evaluatedAt,
     excludedMemoryIds: input.excludedMemoryIds,
-    allowedMaterialKeys: queryContext.materialTitles.map((entry) =>
-      referenceKeyOf(entry.reference),
-    ),
+    allowedMaterialKeys: [...allowedMaterialKeys],
   });
 
   const materialDependencyUnion: MaterialReference[] = [];
@@ -1291,6 +1293,9 @@ export const prepareRunMemoryDecision = (
     for (const dependency of record.provenance.materialDependencies) pushMaterial(dependency);
   }
   for (const reference of replay.inheritedMaterialReferences) pushMaterial(reference);
+  if (materialDependencyUnion.length > RUN_MEMORY_MATERIAL_DEPENDENCY_MAX) {
+    throw new Error('Run 记忆依赖超出本期有效材料上限。');
+  }
 
   const memoryDependencyUnion: MemoryDependency[] = [];
   const seenMemoryIds = new Set<string>();

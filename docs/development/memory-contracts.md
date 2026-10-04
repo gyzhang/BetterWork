@@ -225,7 +225,7 @@ Main 的 Provider 包装器在首个实际 `ModelRequest` 装配后计算规范�
 | memory_extraction_jobs | id PK、source_key UNIQUE、workspace_id、task_id、run_id?、checkpoint_id?、source_snapshot_json、source_version_hash、material_dependencies_json、memory_dependencies_json、model_profile_id?、model_snapshot_json?、trigger（automatic/manual-retry）、consent_revision?、status、revision、attempt、input_code_points、output_code_points、usage_json?、result_json?、error_code?、created_at、updated_at、started_at?、finished_at?。 |
 | workspace_artifact_references | id PK、workspace_id、artifact_version_id、content_hash、label?、status（active/removed）、revision、selected_at、updated_at；workspace_id＋artifact_version_id UNIQUE，同空间 active≤20。 |
 
-`run_memory_contexts` 中：`selectedItems`＝memoryId/revisionId/hash/order/score/reason；`replay`＝runId/finalEventId/promptHash 和边界理由；`decisionSummary`＝各原因计数和合法范围内最多 50 个身份/原因，不复制被排除正文；`policySnapshot` 保存算法版本及全部预算；依赖 union 保存精确引用，不得只存摘要文本。「最多 50 个身份」只有一个数字：`memory-recall-service.ts` 直接 `slice(0, MEMORY_DECISION_SUMMARY_IDENTITY_LIMIT)`，与协议里 `memoryDecisionSummary` 的 `.max(...)` 读同一常量。
+`run_memory_contexts` 中：`selectedItems`＝memoryId/revisionId/hash/order/score/reason；`replay`＝runId/finalEventId/promptHash 和边界理由；`decisionSummary`＝各原因计数和合法范围内最多 50 个身份/原因，不复制被排除正文；`policySnapshot` 保存算法版本及全部预算；依赖 union 保存精确引用，不得只存摘要文本。单条记忆来源仍最多 200 项材料依赖；Run 级 union 可保存最多 2,000 项，以涵盖定时 Run 的完整有效范围，不能使用查询标题摘要代替授权集合。「最多 50 个身份」只有一个数字：`memory-recall-service.ts` 直接 `slice(0, MEMORY_DECISION_SUMMARY_IDENTITY_LIMIT)`，与协议里 `memoryDecisionSummary` 的 `.max(...)` 读同一常量。
 
 索引：memory 最新修订及 scope 保留，补 scope＋normalized_hash、topic_key；job(status,created_at)；reference(workspace_id,status,selected_at)；精确修订/Run 外键查询索引。
 

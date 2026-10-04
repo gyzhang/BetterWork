@@ -8,6 +8,7 @@ import {
 } from '@betterwork/agent-protocol';
 
 import { type AppStore } from '../persistence';
+import { ExpertReferencedByScheduleError } from '../persistence/expert-repository';
 
 export type ExpertErrorCode =
   | 'expert_not_found'
@@ -41,11 +42,13 @@ const BUILTIN_TOOL_NAMES = new Set([
   'read_office_material',
 ]);
 
+export const isSupportedBuiltinToolName = (name: string): boolean => BUILTIN_TOOL_NAMES.has(name);
+
 const validateDraft = (draft: ExpertRevisionDraft): ExpertRevisionDraft => {
   const parsed = expertRevisionDraftSchema.parse(draft);
   if (
     parsed.builtinToolPolicy.mode === 'allow-list' &&
-    parsed.builtinToolPolicy.toolNames.some((name) => !BUILTIN_TOOL_NAMES.has(name))
+    parsed.builtinToolPolicy.toolNames.some((name) => !isSupportedBuiltinToolName(name))
   ) {
     throw new ExpertServiceError(
       'expert_invalid_tool',
@@ -266,8 +269,8 @@ export class ExpertService {
 
   /**
    * 删除一个用户专家。内置专家由发布清单在每次启动时重新登记，删了也还会回来，
-   * 所以直接拒绝；被历史 Run 引用过的专家删掉会让「当时用的是谁」无法解释，
-   * 只能改走归档。
+   * 所以直接拒绝；被历史 Run 或任一不可变 Schedule 配置引用的专家删掉会让历史
+   * 无法解释，只能改走归档。
    */
   delete(id: string): boolean {
     const existing = this.store.experts.get(id);
@@ -282,7 +285,25 @@ export class ExpertService {
         `该专家已参与 ${references} 次运行，删除会让历史记录无法解释当时使用的专家，请改用归档`,
       );
     }
-    return this.store.experts.remove(id);
+    const scheduleReferences = this.store.experts.countScheduleReferences(id);
+    if (scheduleReferences > 0) {
+      throw new ExpertServiceError(
+        'expert_in_use',
+        `该专家被 ${scheduleReferences} 个定时任务配置引用，删除会让规则历史无法解释，请先归档定时任务`,
+      );
+    }
+    try {
+      return this.store.experts.remove(id);
+    } catch (error) {
+      if (error instanceof ExpertReferencedByScheduleError) {
+        throw new ExpertServiceError(
+          'expert_in_use',
+          `该专家被 ${error.scheduleReferences} 个定时任务配置引用，删除会让规则历史无法解释，请先归档定时任务`,
+          { cause: error },
+        );
+      }
+      throw error;
+    }
   }
 
   private withStatus(expert: ExpertDetail): ExpertDetail {
@@ -303,7 +324,9 @@ export class ExpertService {
     }
     if (expert.revision.builtinToolPolicy.mode === 'allow-list') {
       if (
-        expert.revision.builtinToolPolicy.toolNames.some((name) => !BUILTIN_TOOL_NAMES.has(name))
+        expert.revision.builtinToolPolicy.toolNames.some(
+          (name) => !isSupportedBuiltinToolName(name),
+        )
       ) {
         addReason(blockedReasons, 'invalid-tool');
       }

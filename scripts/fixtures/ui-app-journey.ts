@@ -29,6 +29,7 @@ import { MemoryService } from '../../apps/desktop/src/main/services/memory-servi
 import { ModelProviderFactory } from '../../apps/desktop/src/main/services/model-provider-factory';
 import { NotificationService } from '../../apps/desktop/src/main/services/notification-service';
 import { RunService } from '../../apps/desktop/src/main/services/run-service';
+import { ScheduleService } from '../../apps/desktop/src/main/services/schedule-service';
 import { SkillDependencyService } from '../../apps/desktop/src/main/services/skill-dependency-service';
 import { SkillService } from '../../apps/desktop/src/main/services/skill-service';
 import { TaskMaterialService } from '../../apps/desktop/src/main/services/task-material-service';
@@ -146,6 +147,12 @@ export function assemble(
     runMaterials: () => undefined,
     embedding,
   });
+  const scheduleService = new ScheduleService(store, {
+    now: Date.now,
+    preflight: async () => ({ status: 'blocked', message: '合成 UI 宿主不启动定时规则' }),
+    settleDue: async () => undefined,
+    cancelPreparations: () => undefined,
+  });
   registerIpc({
     store,
     knowledgeVault: vault,
@@ -165,6 +172,15 @@ export function assemble(
     mcpClientService: new McpClientService(store),
     dependencies,
     snapshots,
+    scheduleService,
+    schedulePreflight: {
+      check: async () => ({ status: 'blocked', fingerprint: 'ui-fixture', problems: [] }),
+    },
+    scheduleDispatch: {
+      prepareAndStart: async () => undefined,
+      stopOccurrence: () => 'not-found',
+    },
+    publishScheduleChange: () => undefined,
     dependencyLocksRoot: path.join(directory, 'locks'),
     getWindow,
     getDefaultWorkspaceRoot: () => path.join(directory, 'workspace'),

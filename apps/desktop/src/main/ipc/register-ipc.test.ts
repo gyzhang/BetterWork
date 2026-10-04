@@ -20,6 +20,9 @@ import {
   type MemoryViewItem,
   type MemoryWriteReceipt,
   type Result,
+  scheduleAggregateSchema,
+  scheduleCallResultSchema,
+  scheduleManualExecutionResultSchema,
   type WorkspaceMemorySettings,
   type WorkspaceSummary,
   type WorkspaceTaskGroup,
@@ -27,6 +30,7 @@ import {
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { AppStore } from '../persistence';
+import { resolveSchedulePeriod } from '../services/schedule-calendar';
 import type { SkillDependencyService } from '../services/skill-dependency-service';
 import type { ToolchainSnapshotService } from '../services/toolchain-snapshot-service';
 
@@ -42,6 +46,8 @@ const mocks = vi.hoisted(() => ({
   showOpenDialog: vi.fn(),
   showSaveDialog: vi.fn(),
   openPath: vi.fn(async () => ''),
+  prepareSchedule: vi.fn(async () => undefined),
+  stopSchedule: vi.fn((): 'cancel-requested' => 'cancel-requested'),
 }));
 
 vi.mock('electron', () => ({
@@ -73,6 +79,7 @@ const PUSH_ONLY_CHANNELS = new Set<string>([
   IpcChannel.NotificationChangeEvent,
   IpcChannel.NotificationActivated,
   IpcChannel.KnowledgeJobEvent,
+  IpcChannel.ScheduleChanged,
 ]);
 
 describe('registerIpc', () => {
@@ -109,6 +116,7 @@ describe('registerIpc', () => {
     const { McpClientService } = await import('../services/mcp-client-service');
     const { KnowledgeIndexService } = await import('../services/knowledge-index-service');
     const { KnowledgeSearchService } = await import('../services/knowledge-search');
+    const { ScheduleService } = await import('../services/schedule-service');
     const { fakePptxRenderer } = await import('../infrastructure/fixtures/fake-pptx-renderer');
     const { FakeDownloader, FakeFileSystem, FakePythonRunner, scenarioOf } =
       await import('../services/fixtures/fake-python-runtime');
@@ -167,6 +175,12 @@ describe('registerIpc', () => {
     const memoryRecall = new MemoryRecallService({ store });
     const workspaceBrief = new WorkspaceBriefService({ store });
     const workspaceReferences = new WorkspaceReferenceService({ store });
+    const scheduleService = new ScheduleService(store, {
+      now: Date.now,
+      preflight: async () => ({ status: 'ready', fingerprint: 'ipc-fixture' }),
+      settleDue: async () => undefined,
+      cancelPreparations: () => undefined,
+    });
 
     // 依赖通道用离线替身根：不触网、不碰系统 Python，也不写受管目录之外的位置。
     const fakeFilesystem = new FakeFileSystem();
@@ -234,6 +248,19 @@ describe('registerIpc', () => {
       expertService,
       dependencies,
       snapshots,
+      scheduleService,
+      schedulePreflight: {
+        check: async () => ({
+          status: 'ready' as const,
+          fingerprint: 'ipc-fixture',
+          problems: [],
+        }),
+      },
+      scheduleDispatch: {
+        prepareAndStart: mocks.prepareSchedule,
+        stopOccurrence: mocks.stopSchedule,
+      },
+      publishScheduleChange: () => undefined,
       fileArtifactService,
       dependencyLocksRoot: locksRoot,
       getWindow: () => null,
@@ -270,6 +297,219 @@ describe('registerIpc', () => {
     await expect(
       invoke(IpcChannel.CreateTask, { workspaceId: '', title: '', goal: '' }),
     ).rejects.toThrow();
+  });
+
+  it('validates schedule ownership, CAS, manual idempotency, and archived execution at IPC', async () => {
+    const workspace = store.workspaces.create(
+      path.join(temporaryDirectory, 'schedule-ipc-workspace'),
+      '定时 IPC 合成空间',
+    );
+    const expert = store.experts.create({
+      sourceKind: 'user',
+      revision: {
+        name: '合成月报专家',
+        summary: '用于 IPC 离线测试',
+        author: '',
+        tags: [],
+        identity: '按固定口径分析来源资料。',
+        principles: ['区分事实和判断'],
+        inputRequirements: ['本期资料'],
+        deliveryRequirements: ['可追溯报告'],
+        skillPreset: [],
+        builtinToolPolicy: { mode: 'application-defaults' },
+        modelReference: { mode: 'application-default' },
+      },
+    });
+    const scheduleConfig = {
+      name: '月度复盘',
+      expertId: expert.id,
+      expertRevisionId: expert.revision.id,
+      requirements: '分析上月变化并列出依据。',
+      expectedArtifactTypes: ['markdown'] as const,
+      timing: {
+        frequency: 'monthly' as const,
+        day: 5,
+        hour: 9,
+        minute: 0,
+        timeZone: 'Asia/Shanghai' as const,
+      },
+      periodRule: 'previous-month' as const,
+      knowledgeSources: [],
+      outputSubdirectory: '定时成果' as const,
+    };
+    const created = scheduleCallResultSchema(scheduleAggregateSchema).parse(
+      await invoke(IpcChannel.SaveSchedule, {
+        operation: 'create',
+        workspaceId: workspace.id,
+        targetLifecycle: 'paused',
+        config: scheduleConfig,
+      }),
+    );
+    expect(created.status).toBe('success');
+    if (created.status !== 'success') throw new Error('Schedule fixture was not created');
+    const scheduleId = created.data.schedule.id;
+    await expect(invoke(IpcChannel.ListSchedules, { limit: 10 })).resolves.toMatchObject({
+      status: 'success',
+      data: {
+        items: [expect.objectContaining({ schedule: expect.objectContaining({ id: scheduleId }) })],
+      },
+    });
+    await expect(invoke(IpcChannel.GetSchedule, { scheduleId })).resolves.toMatchObject({
+      status: 'success',
+      data: { aggregate: { schedule: { id: scheduleId } }, expertUpdate: { available: false } },
+    });
+    await expect(
+      invoke(IpcChannel.PreviewSchedule, {
+        timing: scheduleConfig.timing,
+        periodRule: scheduleConfig.periodRule,
+      }),
+    ).resolves.toMatchObject({ status: 'success', data: { items: expect.any(Array) } });
+    await expect(
+      invoke(IpcChannel.PreflightSchedule, { target: 'schedule', scheduleId }),
+    ).resolves.toMatchObject({ status: 'success', data: { status: 'ready' } });
+
+    const foreignSchedule = scheduleCallResultSchema(scheduleAggregateSchema).parse(
+      await invoke(IpcChannel.SaveSchedule, {
+        operation: 'create',
+        workspaceId: workspace.id,
+        targetLifecycle: 'enabled',
+        preflightFingerprint: 'ipc-fixture',
+        config: { ...scheduleConfig, name: '另一条月度复盘' },
+      }),
+    );
+    expect(foreignSchedule.status).toBe('success');
+    if (foreignSchedule.status !== 'success') {
+      throw new Error('Foreign schedule fixture was not created');
+    }
+    const foreignScheduledAt = foreignSchedule.data.schedule.nextScheduledAt;
+    if (foreignScheduledAt === undefined) throw new Error('Enabled schedule has no due cursor');
+    const foreignMissed = store.scheduleOccurrences.claimMissedScheduled({
+      scheduleId: foreignSchedule.data.schedule.id,
+      scheduledAt: foreignScheduledAt,
+      requestedAt: foreignScheduledAt + 1,
+      period: resolveSchedulePeriod(
+        scheduleConfig.periodRule,
+        scheduleConfig.timing.timeZone,
+        foreignScheduledAt,
+      ),
+      nextScheduledAt: foreignScheduledAt + 60_000,
+      reasonDetail: '合成跨规则 missed 归属夹具',
+    });
+    expect(foreignMissed.kind).toBe('created');
+    if (foreignMissed.kind !== 'created') throw new Error('Missed fixture was not created');
+
+    const otherExpert = store.experts.create({
+      sourceKind: 'user',
+      revision: {
+        name: '另一位合成专家',
+        summary: '归属校验夹具',
+        author: '',
+        tags: [],
+        identity: '只用于验证 revision 归属。',
+        principles: [],
+        inputRequirements: [],
+        deliveryRequirements: [],
+        skillPreset: [],
+        builtinToolPolicy: { mode: 'application-defaults' },
+        modelReference: { mode: 'application-default' },
+      },
+    });
+    const wrongExpertRevision = await invoke(IpcChannel.ApplyScheduleExpertRevision, {
+      scheduleId,
+      expectedRevision: created.data.schedule.revision,
+      expertRevisionId: otherExpert.revision.id,
+    });
+    expect(wrongExpertRevision).toMatchObject({
+      status: 'rejected',
+      error: { code: 'schedule_conflict' },
+    });
+
+    const executeInput = {
+      scheduleId,
+      expectedRevision: created.data.schedule.revision,
+      requestKey: 'ipc-manual-once',
+      preflightFingerprint: 'ipc-fixture',
+    };
+    const first = scheduleCallResultSchema(scheduleManualExecutionResultSchema).parse(
+      await invoke(IpcChannel.ExecuteScheduleNow, executeInput),
+    );
+    expect(first.status).toBe('success');
+    if (first.status !== 'success') throw new Error('Manual execution was not accepted');
+    expect(first.data).toMatchObject({ accepted: true, duplicate: false });
+    await expect(
+      invoke(IpcChannel.ListScheduleOccurrences, { scheduleId, limit: 10 }),
+    ).resolves.toMatchObject({
+      status: 'success',
+      data: {
+        items: [
+          expect.objectContaining({
+            occurrence: expect.objectContaining({ id: first.data.occurrence.id }),
+          }),
+        ],
+      },
+    });
+    await expect(
+      invoke(IpcChannel.GetScheduleOccurrence, { occurrenceId: first.data.occurrence.id }),
+    ).resolves.toMatchObject({
+      status: 'success',
+      data: { occurrence: { id: first.data.occurrence.id }, readMaterialCount: 0 },
+    });
+    await expect(
+      invoke(IpcChannel.ListScheduleSourceItems, { occurrenceId: first.data.occurrence.id }),
+    ).resolves.toMatchObject({
+      status: 'rejected',
+      error: { code: 'schedule_source_missing' },
+    });
+    const replay = scheduleCallResultSchema(scheduleManualExecutionResultSchema).parse(
+      await invoke(IpcChannel.ExecuteScheduleNow, executeInput),
+    );
+    expect(replay).toMatchObject({ status: 'success', data: { accepted: true, duplicate: true } });
+    expect(mocks.prepareSchedule).toHaveBeenCalledTimes(1);
+
+    await expect(
+      invoke(IpcChannel.ExecuteMissedSchedule, {
+        scheduleId,
+        originalOccurrenceId: foreignMissed.occurrence.id,
+        expectedRevision: created.data.schedule.revision,
+        requestKey: 'ipc-missed-wrong-owner',
+        preflightFingerprint: 'ipc-fixture',
+      }),
+    ).resolves.toMatchObject({ status: 'rejected', error: { code: 'schedule_conflict' } });
+
+    await expect(
+      invoke(IpcChannel.ExecuteScheduleNow, {
+        ...executeInput,
+        expectedRevision: created.data.schedule.revision + 1,
+        requestKey: 'ipc-stale-cas',
+      }),
+    ).resolves.toMatchObject({
+      status: 'rejected',
+      error: { code: 'schedule_conflict', currentRevision: created.data.schedule.revision },
+    });
+
+    await expect(
+      invoke(IpcChannel.CancelScheduleOccurrence, {
+        occurrenceId: first.data.occurrence.id,
+      }),
+    ).resolves.toEqual({ status: 'success', data: { result: 'cancel-requested' } });
+    expect(mocks.stopSchedule).toHaveBeenCalledWith(first.data.occurrence.id);
+
+    const archived = scheduleCallResultSchema(scheduleAggregateSchema).parse(
+      await invoke(IpcChannel.SetScheduleLifecycle, {
+        scheduleId,
+        expectedRevision: created.data.schedule.revision,
+        lifecycle: 'archived',
+      }),
+    );
+    expect(archived.status).toBe('success');
+    if (archived.status !== 'success') throw new Error('Schedule fixture was not archived');
+    await expect(
+      invoke(IpcChannel.ExecuteScheduleNow, {
+        ...executeInput,
+        expectedRevision: archived.data.schedule.revision,
+        requestKey: 'ipc-after-archive',
+      }),
+    ).resolves.toMatchObject({ status: 'rejected', error: { code: 'schedule_archived' } });
   });
 
   it('persists and reads a task context through validated IPC', async () => {

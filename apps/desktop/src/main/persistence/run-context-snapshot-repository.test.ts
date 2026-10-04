@@ -1,6 +1,7 @@
+import type Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { AppStore } from './index';
+import { AppStore, scheduleSourceManifestHash } from './index';
 
 const stores: AppStore[] = [];
 
@@ -53,6 +54,112 @@ describe('RunContextSnapshotRepository', () => {
       createdAt: 2,
     });
     expect(store.runContextSnapshots.latestByTask(task.task.id)?.runId).toBe('run-snapshot-1');
+  });
+
+  it('persists the same ready Schedule scope as its TaskContext revision and rejects mismatch', () => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    const workspace = store.workspaces.getOrCreate(
+      '/tmp/betterwork-scheduled-run-context',
+      '定时 Run 工作区',
+    );
+    const task = store.tasks.create(workspace.id, '定时 Task', '固定本期来源快照');
+    const expert = store.experts.create({
+      sourceKind: 'user',
+      revision: {
+        name: '定时上下文专家',
+        summary: '',
+        author: '',
+        tags: [],
+        identity: '生成报告',
+        principles: [],
+        inputRequirements: [],
+        deliveryRequirements: [],
+        skillPreset: [],
+        builtinToolPolicy: { mode: 'application-defaults' },
+        modelReference: { mode: 'application-default' },
+      },
+    });
+    const schedule = store.schedules.create({
+      workspaceId: workspace.id,
+      createdAt: 1,
+      config: {
+        name: '上下文测试规则',
+        expertId: expert.id,
+        expertRevisionId: expert.revision.id,
+        requirements: '合成输入',
+        expectedArtifactTypes: ['markdown'],
+        timing: { frequency: 'daily', hour: 9, minute: 0, timeZone: 'UTC' },
+        periodRule: 'none',
+        knowledgeSources: [],
+        outputSubdirectory: '定时成果',
+      },
+    });
+    const claim = store.scheduleOccurrences.claimManual({
+      scheduleId: schedule.schedule.id,
+      trigger: 'manual-now',
+      requestKey: 'scheduled-run-context',
+      requestedAt: 2,
+      period: { rule: 'none', timeZone: 'UTC', anchorAt: 2, label: '无指定期间' },
+    });
+    if (claim.kind !== 'created') throw new Error('Schedule occurrence fixture was not created');
+    const source = store.scheduleSources.createPreparing({
+      occurrenceId: claim.occurrence.id,
+      evaluatedAt: 3,
+      createdAt: 3,
+    });
+    store.scheduleSources.publishReady({
+      snapshotId: source.id,
+      items: [],
+      totalFileBytes: 0,
+      manifestHash: scheduleSourceManifestHash([]),
+      completedAt: 4,
+    });
+    store.scheduleOccurrences.attachSourceSnapshot(claim.occurrence.id, source.id);
+    const db = (store as unknown as { db: Database.Database }).db;
+    db.prepare(
+      `UPDATE schedule_occurrences SET task_id = ?, session_id = ?, prepared_at = ?
+       WHERE id = ?`,
+    ).run(task.task.id, task.sessionId, 5, claim.occurrence.id);
+    const revision = store.taskContexts.save(task.task.id, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+      scheduleSourceSnapshotId: source.id,
+    });
+    store.runs.create({
+      id: 'run-scheduled-context-1',
+      taskId: task.task.id,
+      sessionId: task.sessionId,
+      prompt: '合成执行',
+      status: 'running',
+      createdAt: 6,
+    });
+
+    store.runContextSnapshots.create({
+      runId: 'run-scheduled-context-1',
+      taskId: task.task.id,
+      workspaceId: workspace.id,
+      taskContextRevisionId: revision.id,
+      contextSegmentId: 'segment-scheduled-1',
+      materials: [],
+      scheduleSourceSnapshotId: source.id,
+      createdAt: 7,
+    });
+    expect(store.runContextSnapshots.get('run-scheduled-context-1')).toMatchObject({
+      taskContextRevisionId: revision.id,
+      scheduleSourceSnapshotId: source.id,
+    });
+    expect(() =>
+      store.runContextSnapshots.create({
+        runId: 'run-scheduled-context-1',
+        taskId: task.task.id,
+        workspaceId: workspace.id,
+        taskContextRevisionId: revision.id,
+        contextSegmentId: 'segment-scheduled-mismatch',
+        materials: [],
+        createdAt: 8,
+      }),
+    ).toThrow('Run context Schedule source does not match TaskContext revision');
   });
 
   it('persists the immutable Expert identity and revision used by a Run', () => {

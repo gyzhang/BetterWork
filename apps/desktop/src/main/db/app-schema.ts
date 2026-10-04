@@ -1571,6 +1571,428 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 36,
+    name: 'add scheduled task tables',
+    up(db: Database.Database): void {
+      db.exec(`
+        CREATE TABLE schedules (
+          id TEXT PRIMARY KEY,
+          workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE RESTRICT,
+          revision INTEGER NOT NULL CHECK (revision > 0),
+          current_config_version INTEGER NOT NULL CHECK (current_config_version > 0),
+          lifecycle TEXT NOT NULL CHECK (lifecycle IN ('enabled', 'paused', 'archived')),
+          next_scheduled_at INTEGER CHECK (next_scheduled_at IS NULL OR next_scheduled_at >= 0),
+          last_processed_scheduled_at INTEGER
+            CHECK (last_processed_scheduled_at IS NULL OR last_processed_scheduled_at >= 0),
+          enabled_at INTEGER CHECK (enabled_at IS NULL OR enabled_at >= 0),
+          enabled_config_version INTEGER CHECK (
+            enabled_config_version IS NULL OR enabled_config_version > 0
+          ),
+          capability_fingerprint TEXT,
+          dispatch_block_json TEXT CHECK (
+            dispatch_block_json IS NULL OR json_valid(dispatch_block_json)
+          ),
+          created_at INTEGER NOT NULL CHECK (created_at >= 0),
+          updated_at INTEGER NOT NULL CHECK (updated_at >= 0),
+          FOREIGN KEY (id, current_config_version)
+            REFERENCES schedule_configs(schedule_id, version)
+            ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+          FOREIGN KEY (id, enabled_config_version)
+            REFERENCES schedule_configs(schedule_id, version)
+            ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+          CHECK (
+            lifecycle <> 'enabled' OR (
+              enabled_at IS NOT NULL AND
+              enabled_config_version IS NOT NULL AND
+              capability_fingerprint IS NOT NULL AND length(capability_fingerprint) > 0
+            )
+          )
+        );
+
+        CREATE TABLE schedule_configs (
+          schedule_id TEXT NOT NULL REFERENCES schedules(id) ON DELETE RESTRICT,
+          version INTEGER NOT NULL CHECK (version > 0),
+          name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 100),
+          expert_id TEXT NOT NULL REFERENCES experts(id) ON DELETE RESTRICT,
+          expert_revision_id TEXT NOT NULL REFERENCES expert_revisions(id) ON DELETE RESTRICT,
+          requirements TEXT NOT NULL CHECK (length(trim(requirements)) BETWEEN 1 AND 20000),
+          expected_artifact_types_json TEXT NOT NULL CHECK (
+            json_valid(expected_artifact_types_json) AND
+            json_type(expected_artifact_types_json) = 'array'
+          ),
+          timing_json TEXT NOT NULL CHECK (
+            json_valid(timing_json) AND json_type(timing_json) = 'object'
+          ),
+          period_rule TEXT NOT NULL CHECK (
+            period_rule IN (
+              'previous-month', 'rolling-seven-days', 'current-week', 'previous-week', 'none'
+            )
+          ),
+          knowledge_sources_json TEXT NOT NULL CHECK (
+            json_valid(knowledge_sources_json) AND json_type(knowledge_sources_json) = 'array'
+          ),
+          output_subdirectory TEXT NOT NULL CHECK (output_subdirectory = '定时成果'),
+          created_at INTEGER NOT NULL CHECK (created_at >= 0),
+          PRIMARY KEY (schedule_id, version)
+        );
+
+        CREATE TABLE schedule_occurrences (
+          id TEXT PRIMARY KEY,
+          schedule_id TEXT NOT NULL REFERENCES schedules(id) ON DELETE RESTRICT,
+          config_version INTEGER NOT NULL CHECK (config_version > 0),
+          trigger TEXT NOT NULL CHECK (trigger IN ('scheduled', 'manual-now', 'manual-missed')),
+          scheduled_at INTEGER CHECK (scheduled_at IS NULL OR scheduled_at >= 0),
+          requested_at INTEGER NOT NULL CHECK (requested_at >= 0),
+          request_key TEXT,
+          original_occurrence_id TEXT,
+          period_json TEXT NOT NULL CHECK (json_valid(period_json) AND json_type(period_json) = 'object'),
+          phase TEXT NOT NULL CHECK (phase IN ('preparing', 'dispatched', 'closed')),
+          preparation_outcome TEXT CHECK (
+            preparation_outcome IN (
+              'missed', 'skipped-overlap', 'blocked', 'needs-material', 'cancelled',
+              'interrupted-before-run'
+            )
+          ),
+          reason_code TEXT,
+          reason_detail TEXT,
+          task_id TEXT REFERENCES tasks(id) ON DELETE RESTRICT,
+          session_id TEXT REFERENCES sessions(id) ON DELETE RESTRICT,
+          first_run_id TEXT REFERENCES runs(id) ON DELETE RESTRICT,
+          source_snapshot_id TEXT REFERENCES schedule_source_snapshots(id) ON DELETE RESTRICT,
+          created_at INTEGER NOT NULL CHECK (created_at >= 0),
+          prepared_at INTEGER CHECK (prepared_at IS NULL OR prepared_at >= 0),
+          finished_at INTEGER CHECK (finished_at IS NULL OR finished_at >= 0),
+          UNIQUE (schedule_id, id),
+          FOREIGN KEY (schedule_id, config_version)
+            REFERENCES schedule_configs(schedule_id, version) ON DELETE RESTRICT,
+          FOREIGN KEY (schedule_id, original_occurrence_id)
+            REFERENCES schedule_occurrences(schedule_id, id) ON DELETE RESTRICT,
+          CHECK (
+            (trigger = 'scheduled' AND scheduled_at IS NOT NULL AND request_key IS NULL AND
+              original_occurrence_id IS NULL) OR
+            (trigger = 'manual-now' AND scheduled_at IS NULL AND
+              request_key IS NOT NULL AND length(trim(request_key)) > 0 AND
+              original_occurrence_id IS NULL) OR
+            (trigger = 'manual-missed' AND scheduled_at IS NULL AND
+              request_key IS NOT NULL AND length(trim(request_key)) > 0 AND
+              original_occurrence_id IS NOT NULL AND original_occurrence_id <> id)
+          ),
+          CHECK (
+            trigger = 'scheduled' OR
+            preparation_outcome IS NULL OR
+            preparation_outcome NOT IN ('missed', 'skipped-overlap')
+          ),
+          CHECK (
+            (phase = 'preparing' AND task_id IS NULL AND session_id IS NULL AND
+              first_run_id IS NULL AND preparation_outcome IS NULL AND
+              prepared_at IS NULL AND finished_at IS NULL) OR
+            (phase = 'dispatched' AND task_id IS NOT NULL AND session_id IS NOT NULL AND
+              first_run_id IS NOT NULL AND source_snapshot_id IS NOT NULL AND
+              preparation_outcome IS NULL AND prepared_at IS NOT NULL AND finished_at IS NULL) OR
+            (phase = 'closed' AND finished_at IS NOT NULL AND (
+              (first_run_id IS NOT NULL AND task_id IS NOT NULL AND session_id IS NOT NULL AND
+                source_snapshot_id IS NOT NULL AND prepared_at IS NOT NULL AND
+                preparation_outcome IS NULL) OR
+              (first_run_id IS NULL AND preparation_outcome IS NOT NULL AND (
+                (preparation_outcome = 'needs-material' AND task_id IS NOT NULL AND session_id IS NULL) OR
+                (preparation_outcome <> 'needs-material' AND task_id IS NULL AND session_id IS NULL)
+              ))
+            ))
+          )
+        );
+
+        CREATE TABLE schedule_source_snapshots (
+          id TEXT PRIMARY KEY,
+          occurrence_id TEXT NOT NULL UNIQUE
+            REFERENCES schedule_occurrences(id) ON DELETE RESTRICT,
+          workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE RESTRICT,
+          status TEXT NOT NULL CHECK (status IN ('preparing', 'ready', 'failed', 'cancelled')),
+          config_version INTEGER NOT NULL CHECK (config_version > 0),
+          evaluated_at INTEGER NOT NULL CHECK (evaluated_at >= 0),
+          manifest_hash TEXT NOT NULL CHECK (
+            length(manifest_hash) = 64 AND manifest_hash NOT GLOB '*[^0-9a-f]*'
+          ),
+          item_count INTEGER NOT NULL CHECK (item_count >= 0),
+          total_file_bytes INTEGER NOT NULL CHECK (total_file_bytes >= 0),
+          failure_code TEXT,
+          created_at INTEGER NOT NULL CHECK (created_at >= 0),
+          completed_at INTEGER CHECK (completed_at IS NULL OR completed_at >= 0),
+          CHECK (
+            (status = 'preparing' AND completed_at IS NULL AND failure_code IS NULL) OR
+            (status = 'ready' AND completed_at IS NOT NULL AND failure_code IS NULL) OR
+            (status IN ('failed', 'cancelled') AND completed_at IS NOT NULL AND
+              failure_code IS NOT NULL AND length(trim(failure_code)) > 0)
+          )
+        );
+
+        CREATE TABLE schedule_source_items (
+          snapshot_id TEXT NOT NULL REFERENCES schedule_source_snapshots(id) ON DELETE RESTRICT,
+          ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+          reference_json TEXT NOT NULL CHECK (
+            json_valid(reference_json) AND json_type(reference_json) = 'object'
+          ),
+          purpose TEXT NOT NULL CHECK (
+            purpose IN (
+              'rule', 'current-input', 'historical-comparison', 'structure-reference',
+              'template', 'background', 'other'
+            )
+          ),
+          origin TEXT NOT NULL CHECK (
+            origin IN (
+              'workspace-directory', 'selected-document', 'selected-collection',
+              'selected-vault', 'expert-reference'
+            )
+          ),
+          display_name TEXT NOT NULL CHECK (length(trim(display_name)) > 0),
+          source_path TEXT,
+          PRIMARY KEY (snapshot_id, ordinal)
+        );
+
+        CREATE TABLE schedule_output_receipts (
+          id TEXT PRIMARY KEY,
+          occurrence_id TEXT NOT NULL REFERENCES schedule_occurrences(id) ON DELETE RESTRICT,
+          artifact_version_id TEXT NOT NULL REFERENCES artifact_versions(id) ON DELETE RESTRICT,
+          workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE RESTRICT,
+          relative_path TEXT NOT NULL CHECK (length(trim(relative_path)) > 0),
+          content_hash TEXT NOT NULL CHECK (
+            length(content_hash) = 64 AND content_hash NOT GLOB '*[^0-9a-f]*'
+          ),
+          status TEXT NOT NULL CHECK (status IN ('pending', 'saving', 'saved', 'failed')),
+          attempt INTEGER NOT NULL CHECK (attempt > 0),
+          failure_code TEXT,
+          failure_detail TEXT,
+          created_at INTEGER NOT NULL CHECK (created_at >= 0),
+          updated_at INTEGER NOT NULL CHECK (updated_at >= 0),
+          CHECK (
+            (status = 'failed' AND failure_code IS NOT NULL AND length(trim(failure_code)) > 0) OR
+            (status <> 'failed' AND failure_code IS NULL)
+          )
+        );
+
+        CREATE TABLE schedule_notification_receipts (
+          occurrence_id TEXT NOT NULL REFERENCES schedule_occurrences(id) ON DELETE RESTRICT,
+          outcome_key TEXT NOT NULL CHECK (length(trim(outcome_key)) > 0),
+          notification_id TEXT NOT NULL CHECK (length(trim(notification_id)) > 0),
+          created_at INTEGER NOT NULL CHECK (created_at >= 0),
+          PRIMARY KEY (occurrence_id, outcome_key),
+          UNIQUE (notification_id)
+        );
+
+        CREATE TABLE schedule_recovery_batches (
+          batch_key TEXT PRIMARY KEY CHECK (length(trim(batch_key)) > 0),
+          cutoff_at INTEGER NOT NULL CHECK (cutoff_at >= 0),
+          phase TEXT NOT NULL CHECK (phase IN ('processing', 'completed')),
+          cursor_schedule_id TEXT REFERENCES schedules(id) ON DELETE RESTRICT,
+          cursor_scheduled_at INTEGER CHECK (
+            cursor_scheduled_at IS NULL OR cursor_scheduled_at >= 0
+          ),
+          covered_occurrence_ids_json TEXT NOT NULL DEFAULT '[]' CHECK (
+            json_valid(covered_occurrence_ids_json) AND
+            json_type(covered_occurrence_ids_json) = 'array'
+          ),
+          notification_id TEXT,
+          created_at INTEGER NOT NULL CHECK (created_at >= 0),
+          updated_at INTEGER NOT NULL CHECK (updated_at >= 0),
+          completed_at INTEGER CHECK (completed_at IS NULL OR completed_at >= 0),
+          CHECK (
+            (cursor_schedule_id IS NULL AND cursor_scheduled_at IS NULL) OR
+            (cursor_schedule_id IS NOT NULL AND cursor_scheduled_at IS NOT NULL)
+          ),
+          CHECK (
+            (phase = 'processing' AND completed_at IS NULL) OR
+            (phase = 'completed' AND completed_at IS NOT NULL)
+          )
+        );
+
+        CREATE INDEX idx_schedules_enabled_next
+          ON schedules(next_scheduled_at, id)
+          WHERE lifecycle = 'enabled' AND next_scheduled_at IS NOT NULL;
+        CREATE INDEX idx_schedule_configs_expert_revision
+          ON schedule_configs(expert_revision_id, expert_id);
+        CREATE INDEX idx_schedule_occurrences_history
+          ON schedule_occurrences(schedule_id, created_at DESC, id DESC);
+        CREATE UNIQUE INDEX idx_schedule_occurrences_scheduled_unique
+          ON schedule_occurrences(schedule_id, scheduled_at)
+          WHERE trigger = 'scheduled';
+        CREATE UNIQUE INDEX idx_schedule_occurrences_request_unique
+          ON schedule_occurrences(schedule_id, request_key)
+          WHERE trigger IN ('manual-now', 'manual-missed');
+        CREATE UNIQUE INDEX idx_schedule_occurrences_active_unique
+          ON schedule_occurrences(schedule_id)
+          WHERE phase IN ('preparing', 'dispatched');
+        CREATE UNIQUE INDEX idx_schedule_occurrences_run_unique
+          ON schedule_occurrences(first_run_id)
+          WHERE first_run_id IS NOT NULL;
+        CREATE UNIQUE INDEX idx_schedule_occurrences_task_unique
+          ON schedule_occurrences(task_id)
+          WHERE task_id IS NOT NULL;
+        CREATE UNIQUE INDEX idx_schedule_occurrences_session_unique
+          ON schedule_occurrences(session_id)
+          WHERE session_id IS NOT NULL;
+        CREATE INDEX idx_schedule_occurrences_original
+          ON schedule_occurrences(original_occurrence_id)
+          WHERE original_occurrence_id IS NOT NULL;
+        CREATE INDEX idx_schedule_source_snapshots_workspace
+          ON schedule_source_snapshots(workspace_id, created_at, id);
+        CREATE UNIQUE INDEX idx_schedule_output_receipts_version
+          ON schedule_output_receipts(workspace_id, artifact_version_id);
+        CREATE INDEX idx_schedule_output_receipts_occurrence
+          ON schedule_output_receipts(occurrence_id, created_at, id);
+        CREATE INDEX idx_schedule_recovery_batches_phase
+          ON schedule_recovery_batches(phase, cutoff_at, batch_key);
+      `);
+    },
+  },
+  {
+    version: 37,
+    name: 'bind scheduled sources and preserve T3 drafts',
+    up(db: Database.Database): void {
+      // T3 creates a resumable Task draft before T4 assigns a Run; pre-T4 recovery retains it.
+      rebuildTable(
+        db,
+        'schedule_occurrences',
+        `CREATE TABLE schedule_occurrences (
+          id TEXT PRIMARY KEY,
+          schedule_id TEXT NOT NULL REFERENCES schedules(id) ON DELETE RESTRICT,
+          config_version INTEGER NOT NULL CHECK (config_version > 0),
+          trigger TEXT NOT NULL CHECK (trigger IN ('scheduled', 'manual-now', 'manual-missed')),
+          scheduled_at INTEGER CHECK (scheduled_at IS NULL OR scheduled_at >= 0),
+          requested_at INTEGER NOT NULL CHECK (requested_at >= 0),
+          request_key TEXT,
+          original_occurrence_id TEXT,
+          period_json TEXT NOT NULL CHECK (json_valid(period_json) AND json_type(period_json) = 'object'),
+          phase TEXT NOT NULL CHECK (phase IN ('preparing', 'dispatched', 'closed')),
+          preparation_outcome TEXT CHECK (
+            preparation_outcome IN (
+              'missed', 'skipped-overlap', 'blocked', 'needs-material', 'cancelled',
+              'interrupted-before-run'
+            )
+          ),
+          reason_code TEXT,
+          reason_detail TEXT,
+          task_id TEXT REFERENCES tasks(id) ON DELETE RESTRICT,
+          session_id TEXT REFERENCES sessions(id) ON DELETE RESTRICT,
+          first_run_id TEXT REFERENCES runs(id) ON DELETE RESTRICT,
+          source_snapshot_id TEXT REFERENCES schedule_source_snapshots(id) ON DELETE RESTRICT,
+          created_at INTEGER NOT NULL CHECK (created_at >= 0),
+          prepared_at INTEGER CHECK (prepared_at IS NULL OR prepared_at >= 0),
+          finished_at INTEGER CHECK (finished_at IS NULL OR finished_at >= 0),
+          UNIQUE (schedule_id, id),
+          FOREIGN KEY (schedule_id, config_version)
+            REFERENCES schedule_configs(schedule_id, version) ON DELETE RESTRICT,
+          FOREIGN KEY (schedule_id, original_occurrence_id)
+            REFERENCES schedule_occurrences(schedule_id, id) ON DELETE RESTRICT,
+          CHECK (
+            (trigger = 'scheduled' AND scheduled_at IS NOT NULL AND request_key IS NULL AND
+              original_occurrence_id IS NULL) OR
+            (trigger = 'manual-now' AND scheduled_at IS NULL AND
+              request_key IS NOT NULL AND length(trim(request_key)) > 0 AND
+              original_occurrence_id IS NULL) OR
+            (trigger = 'manual-missed' AND scheduled_at IS NULL AND
+              request_key IS NOT NULL AND length(trim(request_key)) > 0 AND
+              original_occurrence_id IS NOT NULL AND original_occurrence_id <> id)
+          ),
+          CHECK (
+            trigger = 'scheduled' OR
+            preparation_outcome IS NULL OR
+            preparation_outcome NOT IN ('missed', 'skipped-overlap')
+          ),
+          CHECK (
+            (phase = 'preparing' AND first_run_id IS NULL AND
+              preparation_outcome IS NULL AND finished_at IS NULL AND (
+                (task_id IS NULL AND session_id IS NULL AND prepared_at IS NULL) OR
+                (task_id IS NOT NULL AND session_id IS NOT NULL AND
+                  source_snapshot_id IS NOT NULL AND prepared_at IS NOT NULL)
+              )) OR
+            (phase = 'dispatched' AND task_id IS NOT NULL AND session_id IS NOT NULL AND
+              first_run_id IS NOT NULL AND source_snapshot_id IS NOT NULL AND
+              preparation_outcome IS NULL AND prepared_at IS NOT NULL AND finished_at IS NULL) OR
+            (phase = 'closed' AND finished_at IS NOT NULL AND (
+              (first_run_id IS NOT NULL AND task_id IS NOT NULL AND session_id IS NOT NULL AND
+                source_snapshot_id IS NOT NULL AND prepared_at IS NOT NULL AND
+                preparation_outcome IS NULL) OR
+              (first_run_id IS NULL AND preparation_outcome IS NOT NULL AND (
+                (preparation_outcome = 'needs-material' AND task_id IS NOT NULL AND
+                  session_id IS NULL AND prepared_at IS NULL) OR
+                (preparation_outcome <> 'needs-material' AND task_id IS NULL AND
+                  session_id IS NULL AND prepared_at IS NULL) OR
+                (task_id IS NOT NULL AND session_id IS NOT NULL AND
+                  source_snapshot_id IS NOT NULL AND prepared_at IS NOT NULL)
+              ))
+            ))
+          )
+        )`,
+        [
+          'id',
+          'schedule_id',
+          'config_version',
+          'trigger',
+          'scheduled_at',
+          'requested_at',
+          'request_key',
+          'original_occurrence_id',
+          'period_json',
+          'phase',
+          'preparation_outcome',
+          'reason_code',
+          'reason_detail',
+          'task_id',
+          'session_id',
+          'first_run_id',
+          'source_snapshot_id',
+          'created_at',
+          'prepared_at',
+          'finished_at',
+        ],
+        [
+          `CREATE INDEX idx_schedule_occurrences_history
+            ON schedule_occurrences(schedule_id, created_at DESC, id DESC)`,
+          `CREATE UNIQUE INDEX idx_schedule_occurrences_scheduled_unique
+            ON schedule_occurrences(schedule_id, scheduled_at)
+            WHERE trigger = 'scheduled'`,
+          `CREATE UNIQUE INDEX idx_schedule_occurrences_request_unique
+            ON schedule_occurrences(schedule_id, request_key)
+            WHERE trigger IN ('manual-now', 'manual-missed')`,
+          `CREATE UNIQUE INDEX idx_schedule_occurrences_active_unique
+            ON schedule_occurrences(schedule_id)
+            WHERE phase IN ('preparing', 'dispatched')`,
+          `CREATE UNIQUE INDEX idx_schedule_occurrences_run_unique
+            ON schedule_occurrences(first_run_id)
+            WHERE first_run_id IS NOT NULL`,
+          `CREATE UNIQUE INDEX idx_schedule_occurrences_task_unique
+            ON schedule_occurrences(task_id)
+            WHERE task_id IS NOT NULL`,
+          `CREATE UNIQUE INDEX idx_schedule_occurrences_session_unique
+            ON schedule_occurrences(session_id)
+            WHERE session_id IS NOT NULL`,
+          `CREATE INDEX idx_schedule_occurrences_original
+            ON schedule_occurrences(original_occurrence_id)
+            WHERE original_occurrence_id IS NOT NULL`,
+        ],
+      );
+      db.exec(`
+        ALTER TABLE task_context_revisions
+          ADD COLUMN schedule_source_snapshot_id TEXT
+          REFERENCES schedule_source_snapshots(id) ON DELETE RESTRICT;
+        ALTER TABLE run_context_snapshots
+          ADD COLUMN schedule_source_snapshot_id TEXT
+          REFERENCES schedule_source_snapshots(id) ON DELETE RESTRICT;
+      `);
+    },
+  },
+  {
+    version: 38,
+    name: 'release schedules after terminal runs',
+    up(db: Database.Database): void {
+      db.exec(`
+        DROP INDEX idx_schedule_occurrences_active_unique;
+        CREATE UNIQUE INDEX idx_schedule_occurrences_preparing_unique
+          ON schedule_occurrences(schedule_id)
+          WHERE phase = 'preparing';
+      `);
+    },
+  },
 ];
 
 /**

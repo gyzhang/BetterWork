@@ -175,7 +175,10 @@ export class InputSnapshotService {
       failed += 1;
     }
 
-    const knownKeys = new Set(this.store.inputSnapshots.list().map((snapshot) => snapshot.fileKey));
+    const knownKeys = new Set([
+      ...this.store.inputSnapshots.list().map((snapshot) => snapshot.fileKey),
+      ...this.store.scheduleSources.listRetainedInputSnapshotFileKeys(),
+    ]);
     const removedFiles = await this.removeOrphanFiles(knownKeys);
     return { cancelled, failed, removedFiles };
   }

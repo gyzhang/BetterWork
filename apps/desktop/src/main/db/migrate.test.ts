@@ -2464,3 +2464,510 @@ describe('work-centered memory schema (WM02/WM05/WM09/WM12)', () => {
     db.close();
   });
 });
+
+describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
+  const SCHEDULE_TABLES = [
+    'schedules',
+    'schedule_configs',
+    'schedule_occurrences',
+    'schedule_source_snapshots',
+    'schedule_source_items',
+    'schedule_output_receipts',
+    'schedule_notification_receipts',
+    'schedule_recovery_batches',
+  ] as const;
+
+  const makeV35Database = (): Database.Database => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    migrate(db, { migrations: appMigrations.filter((migration) => migration.version <= 35) });
+    return db;
+  };
+
+  const seedParents = (db: Database.Database, now: number): void => {
+    db.prepare(
+      'INSERT INTO workspaces (id, name, root_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+    ).run('ws-1', '合成工作区', '/tmp/schedule-fixture', now, now);
+    db.prepare(
+      'INSERT INTO tasks (id, workspace_id, title, goal, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run('task-1', 'ws-1', '合成 Task', '合成目标', now, now);
+    db.prepare('INSERT INTO sessions (id, task_id, created_at) VALUES (?, ?, ?)').run(
+      'session-1',
+      'task-1',
+      now,
+    );
+    db.prepare(
+      'INSERT INTO runs (id, task_id, session_id, prompt, status, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run('run-1', 'task-1', 'session-1', '合成提示', 'running', now);
+    db.prepare(
+      `INSERT INTO artifacts (
+         id, workspace_id, task_id, type, title, current_version_id, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run('artifact-1', 'ws-1', 'task-1', 'markdown', '合成成果', 'version-1', now, now);
+    db.prepare(
+      `INSERT INTO artifact_versions (
+         id, artifact_id, version_number, content, content_hash, source_run_id, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run('version-1', 'artifact-1', 1, '# 合成成果', 'fixture-hash', 'run-1', now);
+    db.prepare(
+      `INSERT INTO experts (
+         id, source_kind, lifecycle, current_revision_id, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run('expert-1', 'user', 'active', 'expert-revision-1', now, now);
+    db.prepare(
+      `INSERT INTO expert_revisions (
+         id, expert_id, revision, name, summary, identity, principles_json,
+         input_requirements_json, delivery_requirements_json, skill_preset_json,
+         builtin_tool_policy_json, model_reference_json, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      'expert-revision-1',
+      'expert-1',
+      1,
+      '合成专家',
+      '合成摘要',
+      '合成身份',
+      '[]',
+      '[]',
+      '[]',
+      '[]',
+      '{}',
+      '{}',
+      now,
+    );
+  };
+
+  const insertBaseSchedule = (db: Database.Database, now: number): void => {
+    db.transaction(() => {
+      db.prepare(
+        `INSERT INTO schedules (
+           id, workspace_id, revision, current_config_version, lifecycle, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).run('schedule-1', 'ws-1', 1, 1, 'paused', now, now);
+      for (const version of [1, 2]) {
+        db.prepare(
+          `INSERT INTO schedule_configs (
+             schedule_id, version, name, expert_id, expert_revision_id, requirements,
+             expected_artifact_types_json, timing_json, period_rule, knowledge_sources_json,
+             output_subdirectory, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(
+          'schedule-1',
+          version,
+          `合成月报 v${version}`,
+          'expert-1',
+          'expert-revision-1',
+          '生成合成月报',
+          '["markdown"]',
+          '{"frequency":"monthly","day":5,"hour":9,"minute":0,"timeZone":"Asia/Shanghai"}',
+          'previous-month',
+          '[]',
+          '定时成果',
+          now + version,
+        );
+      }
+      db.prepare('UPDATE schedules SET current_config_version = 2 WHERE id = ?').run('schedule-1');
+    })();
+  };
+
+  const insertClosedScheduled = (
+    db: Database.Database,
+    id: string,
+    configVersion: number,
+    scheduledAt: number,
+  ): void => {
+    db.prepare(
+      `INSERT INTO schedule_occurrences (
+         id, schedule_id, config_version, trigger, scheduled_at, requested_at,
+         period_json, phase, preparation_outcome, created_at, finished_at
+       ) VALUES (?, ?, ?, 'scheduled', ?, ?, ?, 'closed', 'missed', ?, ?)`,
+    ).run(
+      id,
+      'schedule-1',
+      configVersion,
+      scheduledAt,
+      scheduledAt,
+      '{"rule":"previous-month","timeZone":"Asia/Shanghai","anchorAt":1}',
+      scheduledAt,
+      scheduledAt,
+    );
+  };
+
+  it('creates all eight tables and required indexes on an empty database, then stays idempotent', () => {
+    const db = new Database(':memory:');
+    migrate(db, { migrations: appMigrations });
+    expect(readSchemaVersion(db)).toBe(38);
+    expect(appMigrations.at(-1)?.version).toBe(38);
+    for (const table of SCHEDULE_TABLES) expect(hasTable(db, table), table).toBe(true);
+    const indexes = (
+      db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as Array<{
+        name: string;
+      }>
+    ).map(({ name }) => name);
+    expect(indexes).toEqual(
+      expect.arrayContaining([
+        'idx_schedules_enabled_next',
+        'idx_schedule_configs_expert_revision',
+        'idx_schedule_occurrences_history',
+        'idx_schedule_occurrences_scheduled_unique',
+        'idx_schedule_occurrences_request_unique',
+        'idx_schedule_occurrences_preparing_unique',
+        'idx_schedule_occurrences_run_unique',
+        'idx_schedule_occurrences_task_unique',
+        'idx_schedule_occurrences_session_unique',
+        'idx_schedule_source_snapshots_workspace',
+        'idx_schedule_output_receipts_version',
+        'idx_schedule_recovery_batches_phase',
+      ]),
+    );
+    expect(db.pragma('foreign_key_check')).toEqual([]);
+    migrate(db, { migrations: appMigrations });
+    expect(readSchemaVersion(db)).toBe(38);
+    expect(
+      db.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 37').get(),
+    ).toEqual({ count: 1 });
+    expect(hasColumn(db, 'task_context_revisions', 'schedule_source_snapshot_id')).toBe(true);
+    expect(hasColumn(db, 'run_context_snapshots', 'schedule_source_snapshot_id')).toBe(true);
+    const activeIndex = db
+      .prepare(
+        "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_schedule_occurrences_preparing_unique'",
+      )
+      .get() as { sql: string };
+    expect(activeIndex.sql).toContain("WHERE phase = 'preparing'");
+    db.close();
+  });
+
+  it('upgrades a v35 database without changing existing Task, Run or Artifact data', () => {
+    const db = makeV35Database();
+    const now = 1_790_000_000_000;
+    seedParents(db, now);
+    expect(readSchemaVersion(db)).toBe(35);
+    expect(hasTable(db, 'schedules')).toBe(false);
+    migrate(db, { migrations: appMigrations });
+    expect(readSchemaVersion(db)).toBe(38);
+    expect(db.prepare('SELECT id, workspace_id FROM tasks WHERE id = ?').get('task-1')).toEqual({
+      id: 'task-1',
+      workspace_id: 'ws-1',
+    });
+    expect(
+      db.prepare('SELECT id, task_id, session_id FROM runs WHERE id = ?').get('run-1'),
+    ).toEqual({
+      id: 'run-1',
+      task_id: 'task-1',
+      session_id: 'session-1',
+    });
+    expect(
+      db
+        .prepare('SELECT id, artifact_id, content FROM artifact_versions WHERE id = ?')
+        .get('version-1'),
+    ).toEqual({ id: 'version-1', artifact_id: 'artifact-1', content: '# 合成成果' });
+    expect(countRows(db, 'schedules')).toBe(0);
+    migrate(db, { migrations: appMigrations });
+    expect(readSchemaVersion(db)).toBe(38);
+    expect(db.pragma('foreign_key_check')).toEqual([]);
+    db.close();
+  });
+
+  it('enforces config/occurrence uniqueness, history links and receipt survival after notification deletion', () => {
+    const db = new Database(':memory:');
+    migrate(db, { migrations: appMigrations });
+    const now = 1_790_000_000_000;
+    seedParents(db, now);
+    insertBaseSchedule(db, now);
+
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO schedule_configs (
+             schedule_id, version, name, expert_id, expert_revision_id, requirements,
+             expected_artifact_types_json, timing_json, period_rule, knowledge_sources_json,
+             output_subdirectory, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          'schedule-1',
+          3,
+          '错误引用',
+          'missing-expert',
+          'missing-revision',
+          '要求',
+          '["markdown"]',
+          '{"frequency":"daily","hour":9,"minute":0,"timeZone":"UTC"}',
+          'none',
+          '[]',
+          '定时成果',
+          now,
+        ),
+    ).toThrow(/FOREIGN KEY/iu);
+
+    insertClosedScheduled(db, 'missed-1', 1, now + 100);
+    expect(() => insertClosedScheduled(db, 'missed-duplicate', 2, now + 100)).toThrow(/UNIQUE/iu);
+    const insertManual = db.prepare(
+      `INSERT INTO schedule_occurrences (
+         id, schedule_id, config_version, trigger, requested_at, request_key, period_json,
+         phase, preparation_outcome, created_at, finished_at
+       ) VALUES (?, 'schedule-1', 2, 'manual-now', ?, ?, '{"rule":"none"}', 'closed', 'cancelled', ?, ?)`,
+    );
+    insertManual.run('manual-1', now + 200, 'request-1', now + 200, now + 201);
+    expect(() =>
+      insertManual.run('manual-duplicate', now + 202, 'request-1', now + 202, now + 203),
+    ).toThrow(/UNIQUE/iu);
+    expect(() => insertClosedScheduled(db, 'missing-config', 999, now + 300)).toThrow(
+      /FOREIGN KEY/iu,
+    );
+
+    db.prepare(
+      `INSERT INTO schedule_occurrences (
+         id, schedule_id, config_version, trigger, scheduled_at, requested_at,
+         period_json, phase, created_at
+       ) VALUES (?, 'schedule-1', 2, 'scheduled', ?, ?, '{"rule":"previous-month"}', 'preparing', ?)`,
+    ).run('preparing-1', now + 400, now + 400, now + 400);
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO schedule_occurrences (
+             id, schedule_id, config_version, trigger, scheduled_at, requested_at,
+             period_json, phase, created_at
+           ) VALUES (?, 'schedule-1', 2, 'scheduled', ?, ?, '{"rule":"previous-month"}', 'preparing', ?)`,
+        )
+        .run('preparing-duplicate', now + 401, now + 401, now + 401),
+    ).toThrow(/UNIQUE/iu);
+
+    const hash = 'a'.repeat(64);
+    db.prepare(
+      `INSERT INTO schedule_source_snapshots (
+         id, occurrence_id, workspace_id, status, config_version, evaluated_at,
+         manifest_hash, item_count, total_file_bytes, created_at, completed_at
+       ) VALUES (?, ?, ?, 'ready', ?, ?, ?, ?, ?, ?, ?)`,
+    ).run('snapshot-1', 'preparing-1', 'ws-1', 2, now, hash, 1, 10, now, now + 1);
+    db.prepare(
+      `UPDATE schedule_occurrences
+          SET phase = 'dispatched', task_id = ?, session_id = ?, first_run_id = ?,
+              source_snapshot_id = ?, prepared_at = ?
+        WHERE id = ?`,
+    ).run('task-1', 'session-1', 'run-1', 'snapshot-1', now + 1, 'preparing-1');
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO schedule_occurrences (
+             id, schedule_id, config_version, trigger, requested_at, request_key, period_json,
+             phase, preparation_outcome, task_id, created_at, finished_at
+           ) VALUES (?, 'schedule-1', 2, 'manual-now', ?, ?, '{"rule":"none"}', 'closed', 'needs-material', ?, ?, ?)`,
+        )
+        .run('task-reuse', now + 2, 'request-task-reuse', 'task-1', now + 2, now + 3),
+    ).toThrow(/UNIQUE/iu);
+    db.prepare(
+      `INSERT INTO schedule_source_items (
+         snapshot_id, ordinal, reference_json, purpose, origin, display_name, source_path
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      'snapshot-1',
+      0,
+      '{"kind":"knowledge-revision","knowledgeDocumentId":"doc-1","knowledgeRevisionId":"rev-1","contentHash":"hash-1","sourcePath":"/synthetic/input.md"}',
+      'background',
+      'selected-document',
+      '合成输入.md',
+      '/synthetic/input.md',
+    );
+    db.prepare(
+      `INSERT INTO schedule_output_receipts (
+         id, occurrence_id, artifact_version_id, workspace_id, relative_path, content_hash,
+         status, attempt, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, 'saved', 1, ?, ?)`,
+    ).run(
+      'output-1',
+      'preparing-1',
+      'version-1',
+      'ws-1',
+      '定时成果/合成月报.md',
+      hash,
+      now,
+      now + 1,
+    );
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO schedule_output_receipts (
+             id, occurrence_id, artifact_version_id, workspace_id, relative_path, content_hash,
+             status, attempt, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, 'saved', 1, ?, ?)`,
+        )
+        .run(
+          'output-duplicate',
+          'preparing-1',
+          'version-1',
+          'ws-1',
+          '定时成果/不同文件名.md',
+          hash,
+          now,
+          now + 1,
+        ),
+    ).toThrow(/UNIQUE/iu);
+
+    db.prepare(
+      `INSERT INTO notifications (id, level, kind, title, target_kind, target_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run('notification-1', 'success', 'schedule', '一期完成', 'schedule', 'schedule-1', now);
+    const insertNotificationReceipt = db.prepare(
+      `INSERT INTO schedule_notification_receipts (
+         occurrence_id, outcome_key, notification_id, created_at
+       ) VALUES (?, ?, ?, ?)`,
+    );
+    insertNotificationReceipt.run('preparing-1', 'initial-outcome', 'notification-1', now);
+    expect(() =>
+      insertNotificationReceipt.run('preparing-1', 'initial-outcome', 'notification-2', now + 1),
+    ).toThrow(/UNIQUE/iu);
+    db.prepare('DELETE FROM notifications WHERE id = ?').run('notification-1');
+    expect(countRows(db, 'schedule_notification_receipts')).toBe(1);
+
+    db.prepare(
+      `INSERT INTO schedule_recovery_batches (
+         batch_key, cutoff_at, phase, covered_occurrence_ids_json, created_at, updated_at
+       ) VALUES (?, ?, 'processing', ?, ?, ?)`,
+    ).run('recovery-1', now + 500, '["missed-1"]', now, now);
+    expect(() => db.prepare('DELETE FROM tasks WHERE id = ?').run('task-1')).toThrow(
+      /FOREIGN KEY/iu,
+    );
+    expect(db.pragma('foreign_key_check')).toEqual([]);
+    db.close();
+  });
+
+  it('rolls back all v36 DDL and its version stamp when table creation fails', () => {
+    const db = makeV35Database();
+    db.exec('CREATE TABLE schedule_recovery_batches (batch_key TEXT PRIMARY KEY)');
+    expect(() => migrate(db, { migrations: appMigrations })).toThrow(/already exists/iu);
+    expect(readSchemaVersion(db)).toBe(35);
+    for (const table of SCHEDULE_TABLES.slice(0, -1))
+      expect(hasTable(db, table), table).toBe(false);
+    expect(hasTable(db, 'schedule_recovery_batches')).toBe(true);
+    expect(db.pragma('foreign_key_check')).toEqual([]);
+    db.close();
+  });
+
+  it('upgrades v36 rows and permits complete T3 draft bindings through interrupted recovery', () => {
+    const db = new Database(':memory:');
+    migrate(db, { migrations: appMigrations.filter((migration) => migration.version <= 36) });
+    const now = 1_790_000_000_000;
+    seedParents(db, now);
+    insertBaseSchedule(db, now);
+    insertClosedScheduled(db, 'old-missed', 1, now + 100);
+    db.prepare(
+      `INSERT INTO schedule_occurrences (
+         id, schedule_id, config_version, trigger, scheduled_at, requested_at,
+         period_json, phase, created_at
+       ) VALUES (?, 'schedule-1', 2, 'scheduled', ?, ?, '{"rule":"previous-month"}', 'preparing', ?)`,
+    ).run('preparing-1', now + 200, now + 200, now + 200);
+    db.prepare(
+      `INSERT INTO task_context_revisions (
+         id, task_id, revision, executor_json, skill_bindings_json, created_at, updated_at
+       ) VALUES ('context-1', 'task-1', 1, '{"kind":"general"}', '[]', ?, ?)`,
+    ).run(now, now);
+    db.prepare(
+      `INSERT INTO run_context_snapshots (
+         run_id, task_id, workspace_id, task_context_revision_id,
+         context_segment_id, materials_json, created_at
+       ) VALUES ('run-1', 'task-1', 'ws-1', 'context-1', 'segment-1', '[]', ?)`,
+    ).run(now);
+    expect(readSchemaVersion(db)).toBe(36);
+
+    migrate(db, { migrations: appMigrations.filter((migration) => migration.version <= 37) });
+    expect(readSchemaVersion(db)).toBe(37);
+    expect(
+      db
+        .prepare('SELECT id, phase, preparation_outcome FROM schedule_occurrences ORDER BY id')
+        .all(),
+    ).toEqual([
+      { id: 'old-missed', phase: 'closed', preparation_outcome: 'missed' },
+      { id: 'preparing-1', phase: 'preparing', preparation_outcome: null },
+    ]);
+    expect(
+      db.prepare('SELECT id, schedule_source_snapshot_id FROM task_context_revisions').get(),
+    ).toEqual({ id: 'context-1', schedule_source_snapshot_id: null });
+    expect(
+      db.prepare('SELECT run_id, schedule_source_snapshot_id FROM run_context_snapshots').get(),
+    ).toEqual({ run_id: 'run-1', schedule_source_snapshot_id: null });
+
+    const hash = createHash('sha256').update('[]').digest('hex');
+    db.prepare(
+      `INSERT INTO schedule_source_snapshots (
+         id, occurrence_id, workspace_id, status, config_version, evaluated_at,
+         manifest_hash, item_count, total_file_bytes, created_at, completed_at
+       ) VALUES ('source-1', 'preparing-1', 'ws-1', 'ready', 2, ?, ?, 0, 0, ?, ?)`,
+    ).run(now + 201, hash, now + 201, now + 202);
+    db.prepare(
+      `UPDATE schedule_occurrences
+         SET task_id = 'task-1', session_id = 'session-1',
+             source_snapshot_id = 'source-1', prepared_at = ?
+       WHERE id = 'preparing-1'`,
+    ).run(now + 202);
+    expect(
+      db
+        .prepare(
+          'SELECT phase, task_id, session_id, source_snapshot_id, prepared_at FROM schedule_occurrences WHERE id = ?',
+        )
+        .get('preparing-1'),
+    ).toEqual({
+      phase: 'preparing',
+      task_id: 'task-1',
+      session_id: 'session-1',
+      source_snapshot_id: 'source-1',
+      prepared_at: now + 202,
+    });
+    db.prepare(
+      `UPDATE task_context_revisions SET schedule_source_snapshot_id = 'source-1'
+       WHERE id = 'context-1'`,
+    ).run();
+    db.prepare(
+      `UPDATE schedule_occurrences SET phase = 'closed',
+         preparation_outcome = 'interrupted-before-run', finished_at = ?
+       WHERE id = 'preparing-1'`,
+    ).run(now + 203);
+    expect(
+      db
+        .prepare(
+          'SELECT phase, preparation_outcome, task_id, session_id FROM schedule_occurrences WHERE id = ?',
+        )
+        .get('preparing-1'),
+    ).toEqual({
+      phase: 'closed',
+      preparation_outcome: 'interrupted-before-run',
+      task_id: 'task-1',
+      session_id: 'session-1',
+    });
+    expect(db.pragma('foreign_key_check')).toEqual([]);
+    migrate(db, { migrations: appMigrations });
+    expect(readSchemaVersion(db)).toBe(38);
+    db.close();
+  });
+
+  it('rolls back the active index replacement when migration 38 fails, then retries idempotently', () => {
+    const db = new Database(':memory:');
+    migrate(db, { migrations: appMigrations.filter((migration) => migration.version <= 37) });
+    db.exec(`
+      CREATE TABLE migration_collision (id TEXT PRIMARY KEY);
+      CREATE INDEX idx_schedule_occurrences_preparing_unique ON migration_collision(id);
+    `);
+
+    expect(() => migrate(db, { migrations: appMigrations })).toThrow(/already exists/iu);
+    expect(readSchemaVersion(db)).toBe(37);
+    const previousIndex = db
+      .prepare(
+        "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_schedule_occurrences_active_unique'",
+      )
+      .get() as { sql: string };
+    expect(previousIndex.sql).toContain("phase IN ('preparing', 'dispatched')");
+    expect(db.pragma('foreign_key_check')).toEqual([]);
+
+    db.exec('DROP TABLE migration_collision');
+    migrate(db, { migrations: appMigrations });
+    expect(readSchemaVersion(db)).toBe(38);
+    expect(
+      db
+        .prepare(
+          "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_schedule_occurrences_preparing_unique'",
+        )
+        .get(),
+    ).toMatchObject({ sql: expect.stringContaining("WHERE phase = 'preparing'") });
+    db.close();
+  });
+});

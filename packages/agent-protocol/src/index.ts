@@ -606,6 +606,17 @@ export const MEMORY_QUERY_MAX_CODE_POINTS = 500;
 export const MEMORY_QUERY_TERM_MAX = 10;
 export const LIST_PAGE_DEFAULT_LIMIT = 50;
 export const LIST_PAGE_MAX_LIMIT = 100;
+export const SCHEDULE_KNOWLEDGE_SOURCE_MAX = 50;
+export const SCHEDULE_SOURCE_ITEM_MAX = 2_000;
+/** Run 记忆审计保存完整有效材料依赖集合，不受查询标题摘要预算影响。 */
+export const RUN_MEMORY_MATERIAL_DEPENDENCY_MAX = SCHEDULE_SOURCE_ITEM_MAX;
+export const SCHEDULE_PREPARATION_TIMEOUT_MS = 120_000;
+export const SCHEDULE_PREVIEW_COUNT = 3;
+/** 定时任务每期从 Workspace 收集当前目录来源的共享上限（schedule-contracts §5.1）。 */
+export const SCHEDULE_WORKSPACE_FILE_MAX = 500;
+export const SCHEDULE_WORKSPACE_SINGLE_FILE_BYTES_MAX = 100 * 1024 * 1024;
+export const SCHEDULE_WORKSPACE_TOTAL_FILE_BYTES_MAX = 500 * 1024 * 1024;
+export const SCHEDULE_WORKSPACE_DIRECTORY_DEPTH_MAX = 12;
 
 /** contentHash、normalizedHash、excerptHash 等摘要字段的统一形状；散列由 Main 计算。 */
 export const sha256HexSchema = z.string().regex(/^[0-9a-f]{64}$/u);
@@ -1869,7 +1880,9 @@ export const runMemoryContextSchema = z
     policySnapshot: memoryPolicySnapshotSchema,
     selectedItems: z.array(memorySelectedMemorySchema).max(MEMORY_RECALL_TOTAL_ITEM_LIMIT),
     replay: z.array(memoryReplayEntrySchema).max(MEMORY_REPLAY_PAIR_LIMIT * 2),
-    materialDependencyUnion: z.array(materialReferenceSchema).max(MEMORY_MATERIAL_DEPENDENCY_MAX),
+    materialDependencyUnion: z
+      .array(materialReferenceSchema)
+      .max(RUN_MEMORY_MATERIAL_DEPENDENCY_MAX),
     memoryDependencyUnion: z.array(memoryDependencySchema).max(MEMORY_MEMORY_DEPENDENCY_MAX),
     decisionSummary: memoryDecisionSummarySchema,
     authorizationHash: sha256HexSchema,
@@ -2502,6 +2515,7 @@ export const taskContextRevisionSchema = z
         { message: 'skillBindings 中存在重复的 skillId' },
       ),
     materials: taskMaterialSelectionSchema.array().max(50).optional(),
+    scheduleSourceSnapshotId: z.string().min(1).optional(),
     excludedMemoryIds: z.array(z.string().min(1)).max(MEMORY_TASK_EXCLUSION_MAX).optional(),
     mcpToolBindings: z.array(mcpToolBindingSchema).max(50).optional(),
     modelReference: expertModelReferenceSchema.optional(),
@@ -2522,6 +2536,8 @@ export const saveTaskContextRequestSchema = z
     executor: taskContextExecutorSchema,
     skillBindings: taskContextRevisionSchema.shape.skillBindings,
     materials: taskMaterialSelectionSchema.array().max(50).optional(),
+    /** absent preserves the current TaskContext value; null explicitly removes Schedule scope. */
+    scheduleSourceSnapshotId: z.string().min(1).nullable().optional(),
     excludedMemoryIds: taskContextRevisionSchema.shape.excludedMemoryIds,
     mcpToolBindings: taskContextRevisionSchema.shape.mcpToolBindings,
     modelReference: expertModelReferenceSchema.optional(),
@@ -3202,7 +3218,8 @@ export interface EvidenceSummary {
 
 export type ArtifactVersionOrigin = 'assistant-run' | 'user-edit';
 
-export type ArtifactType = 'markdown' | 'presentation';
+export const artifactTypeSchema = z.enum(['markdown', 'presentation']);
+export type ArtifactType = z.infer<typeof artifactTypeSchema>;
 
 export type ValidationStatus = 'pending' | 'passed' | 'failed' | 'not-checked';
 
@@ -4947,6 +4964,20 @@ export const IpcChannel = {
   ClearNotifications: 'notification:clear',
   NotificationChangeEvent: 'notification:event',
   NotificationActivated: 'notification:activated',
+  ScheduleChanged: 'schedule:changed',
+  ListSchedules: 'schedule:list',
+  GetSchedule: 'schedule:get',
+  SaveSchedule: 'schedule:save',
+  SetScheduleLifecycle: 'schedule:set-lifecycle',
+  PreviewSchedule: 'schedule:preview',
+  PreflightSchedule: 'schedule:preflight',
+  ApplyScheduleExpertRevision: 'schedule:apply-expert-revision',
+  ListScheduleOccurrences: 'schedule:list-occurrences',
+  GetScheduleOccurrence: 'schedule:get-occurrence',
+  ListScheduleSourceItems: 'schedule:list-source-items',
+  ExecuteScheduleNow: 'schedule:execute-now',
+  ExecuteMissedSchedule: 'schedule:execute-missed',
+  CancelScheduleOccurrence: 'schedule:cancel-occurrence',
 } as const;
 
 export interface BetterWorkDesktopApi {
@@ -5022,6 +5053,38 @@ export interface BetterWorkDesktopApi {
     clear(): Promise<{ cleared: boolean }>;
     onChange(listener: (event: NotificationChangeEvent) => void): () => void;
     onActivate(listener: (input: NotificationActivated) => void): () => void;
+  };
+  schedules: {
+    list(input?: ListSchedulesRequest): Promise<ScheduleCallResult<SchedulePage>>;
+    get(input: GetScheduleRequest): Promise<ScheduleCallResult<ScheduleDetail>>;
+    save(input: SaveScheduleRequest): Promise<ScheduleCallResult<ScheduleAggregate>>;
+    setLifecycle(
+      input: SetScheduleLifecycleRequest,
+    ): Promise<ScheduleCallResult<ScheduleAggregate>>;
+    preview(input: PreviewScheduleRequest): Promise<ScheduleCallResult<SchedulePreviewResult>>;
+    preflight(input: PreflightScheduleRequest): Promise<ScheduleCallResult<SchedulePreflightView>>;
+    applyExpertRevision(
+      input: ApplyScheduleExpertRevisionRequest,
+    ): Promise<ScheduleCallResult<ScheduleAggregate>>;
+    listOccurrences(
+      input: ListScheduleOccurrencesRequest,
+    ): Promise<ScheduleCallResult<ScheduleOccurrenceHistoryPage>>;
+    getOccurrence(
+      input: GetScheduleOccurrenceRequest,
+    ): Promise<ScheduleCallResult<ScheduleOccurrenceDetail>>;
+    listSourceItems(
+      input: ListScheduleSourceItemsRequest,
+    ): Promise<ScheduleCallResult<ScheduleSourceItemsPage>>;
+    executeNow(
+      input: ExecuteScheduleNowRequest,
+    ): Promise<ScheduleCallResult<ScheduleManualExecutionResult>>;
+    executeMissed(
+      input: ExecuteMissedScheduleRequest,
+    ): Promise<ScheduleCallResult<ScheduleManualExecutionResult>>;
+    cancelOccurrence(
+      input: CancelScheduleOccurrenceRequest,
+    ): Promise<ScheduleCallResult<ScheduleCancelOccurrenceResult>>;
+    onChange(listener: (event: ScheduleChangedEvent) => void): () => void;
   };
   chrome: {
     updateTheme(input: UpdateWindowThemeRequest): Promise<void>;
@@ -5139,4 +5202,1024 @@ export interface BetterWorkDesktopApi {
     chooseInterpreter(): Promise<ChooseInterpreterResult>;
     registerToolchain(input: RegisterToolchainRequest): Promise<RegisterToolchainResult>;
   };
+}
+
+export const scheduleTimeZoneSchema = z.enum(['Asia/Shanghai', 'Asia/Tokyo', 'UTC']);
+export type ScheduleTimeZone = z.infer<typeof scheduleTimeZoneSchema>;
+
+export const scheduleTimingSchema = z.discriminatedUnion('frequency', [
+  z
+    .object({
+      frequency: z.literal('daily'),
+      hour: z.number().int().min(0).max(23),
+      minute: z.number().int().min(0).max(59),
+      timeZone: scheduleTimeZoneSchema,
+    })
+    .strict(),
+  z
+    .object({
+      frequency: z.literal('weekly'),
+      weekday: z.number().int().min(1).max(7),
+      hour: z.number().int().min(0).max(23),
+      minute: z.number().int().min(0).max(59),
+      timeZone: scheduleTimeZoneSchema,
+    })
+    .strict(),
+  z
+    .object({
+      frequency: z.literal('monthly'),
+      day: z.number().int().min(1).max(31),
+      hour: z.number().int().min(0).max(23),
+      minute: z.number().int().min(0).max(59),
+      timeZone: scheduleTimeZoneSchema,
+    })
+    .strict(),
+]);
+export type ScheduleTiming = z.infer<typeof scheduleTimingSchema>;
+
+export const schedulePeriodRuleSchema = z.enum([
+  'previous-month',
+  'rolling-seven-days',
+  'current-week',
+  'previous-week',
+  'none',
+]);
+export type SchedulePeriodRule = z.infer<typeof schedulePeriodRuleSchema>;
+
+const scheduleResolvedIntervalPeriodSchema = (rule: Exclude<SchedulePeriodRule, 'none'>) =>
+  z
+    .object({
+      rule: z.literal(rule),
+      timeZone: scheduleTimeZoneSchema,
+      anchorAt: z.number().int().nonnegative(),
+      startAt: z.number().int().nonnegative(),
+      endAt: z.number().int().nonnegative(),
+      label: z.string().trim().min(1).max(120),
+    })
+    .strict()
+    .refine(
+      (period) =>
+        period.startAt < period.endAt ||
+        (rule === 'current-week' &&
+          period.startAt === period.endAt &&
+          period.anchorAt === period.startAt),
+      {
+        path: ['endAt'],
+        message: '期间 endAt 必须晚于 startAt；仅当前周锚点恰为周一 00:00 时可为空',
+      },
+    );
+
+export const scheduleResolvedPeriodSchema = z.discriminatedUnion('rule', [
+  scheduleResolvedIntervalPeriodSchema('previous-month'),
+  scheduleResolvedIntervalPeriodSchema('rolling-seven-days'),
+  scheduleResolvedIntervalPeriodSchema('current-week'),
+  scheduleResolvedIntervalPeriodSchema('previous-week'),
+  z
+    .object({
+      rule: z.literal('none'),
+      timeZone: scheduleTimeZoneSchema,
+      anchorAt: z.number().int().nonnegative(),
+      label: z.string().trim().min(1).max(120),
+    })
+    .strict(),
+]);
+export type ScheduleResolvedPeriod = z.infer<typeof scheduleResolvedPeriodSchema>;
+
+export const scheduleKnowledgeSourceSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('document'),
+      documentId: z.string().trim().min(1),
+      purpose: materialPurposeSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('collection'),
+      collectionId: z.string().trim().min(1),
+      purpose: materialPurposeSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('vault'),
+      vaultId: z.literal('default'),
+      purpose: materialPurposeSchema,
+    })
+    .strict(),
+]);
+export type ScheduleKnowledgeSource = z.infer<typeof scheduleKnowledgeSourceSchema>;
+
+export const scheduleKnowledgeSourcesSchema = z
+  .array(scheduleKnowledgeSourceSchema)
+  .max(SCHEDULE_KNOWLEDGE_SOURCE_MAX)
+  .superRefine((sources, context) => {
+    const identities = new Set<string>();
+    for (const [index, source] of sources.entries()) {
+      const identity =
+        source.kind === 'vault'
+          ? `${source.kind}:${source.vaultId}`
+          : source.kind === 'document'
+            ? `${source.kind}:${source.documentId}`
+            : `${source.kind}:${source.collectionId}`;
+      if (identities.has(identity)) {
+        context.addIssue({
+          code: 'custom',
+          path: [index],
+          message: '知识来源中存在重复身份',
+        });
+      }
+      identities.add(identity);
+    }
+  });
+
+export const scheduleDomainErrorCodeSchema = z.enum([
+  'schedule_not_found',
+  'schedule_archived',
+  'schedule_conflict',
+  'schedule_busy',
+  'schedule_capacity',
+  'schedule_invalid_timing',
+  'schedule_workspace_unavailable',
+  'schedule_source_missing',
+  'schedule_source_conflict',
+  'schedule_source_budget_exceeded',
+  'schedule_preparation_failed',
+  'schedule_preparation_timeout',
+  'schedule_capability_blocked',
+  'schedule_model_unavailable',
+  'schedule_clock_untrusted',
+  'schedule_output_collision',
+  'schedule_output_save_failed',
+  'schedule_cancelled',
+]);
+export type ScheduleDomainErrorCode = z.infer<typeof scheduleDomainErrorCodeSchema>;
+
+export const scheduleProblemSchema = z
+  .object({
+    code: z.string().trim().min(1).max(120),
+    message: z.string().trim().min(1).max(1_000),
+  })
+  .strict();
+export type ScheduleProblem = z.infer<typeof scheduleProblemSchema>;
+
+export const scheduleDomainErrorSchema = z
+  .object({
+    code: scheduleDomainErrorCodeSchema,
+    message: z.string().trim().min(1).max(1_000),
+    problems: z.array(scheduleProblemSchema).max(50).optional(),
+    existingOccurrenceId: z.string().min(1).optional(),
+    currentConfigVersion: z.number().int().positive().optional(),
+    currentRevision: z.number().int().positive().optional(),
+  })
+  .strict();
+export type ScheduleDomainError = z.infer<typeof scheduleDomainErrorSchema>;
+
+export const scheduleCasConflictSchema = scheduleDomainErrorSchema
+  .extend({
+    code: z.literal('schedule_conflict'),
+    currentRevision: z.number().int().positive(),
+  })
+  .strict();
+export type ScheduleCasConflict = z.infer<typeof scheduleCasConflictSchema>;
+
+export const scheduleConfigDraftSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100),
+    expertId: z.string().trim().min(1),
+    expertRevisionId: z.string().trim().min(1),
+    requirements: z.string().trim().min(1).max(20_000),
+    expectedArtifactTypes: z
+      .array(artifactTypeSchema)
+      .min(1)
+      .max(2)
+      .refine((types) => new Set(types).size === types.length, {
+        message: '成果类型不能重复',
+      }),
+    timing: scheduleTimingSchema,
+    periodRule: schedulePeriodRuleSchema,
+    knowledgeSources: scheduleKnowledgeSourcesSchema,
+    outputSubdirectory: z.literal('定时成果'),
+  })
+  .strict();
+export type ScheduleConfigDraft = z.infer<typeof scheduleConfigDraftSchema>;
+
+export const scheduleConfigSchema = scheduleConfigDraftSchema
+  .extend({
+    scheduleId: z.string().min(1),
+    version: z.number().int().positive(),
+    createdAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type ScheduleConfig = z.infer<typeof scheduleConfigSchema>;
+
+export const scheduleLifecycleSchema = z.enum(['enabled', 'paused', 'archived']);
+export type ScheduleLifecycle = z.infer<typeof scheduleLifecycleSchema>;
+
+export const scheduleDispatchBlockSchema = z
+  .object({
+    code: scheduleDomainErrorCodeSchema,
+    message: z.string().trim().min(1).max(1_000),
+    detectedAt: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export const scheduleSchema = z
+  .object({
+    id: z.string().min(1),
+    workspaceId: z.string().min(1),
+    revision: z.number().int().positive(),
+    currentConfigVersion: z.number().int().positive(),
+    lifecycle: scheduleLifecycleSchema,
+    nextScheduledAt: z.number().int().nonnegative().optional(),
+    lastProcessedScheduledAt: z.number().int().nonnegative().optional(),
+    enabledAt: z.number().int().nonnegative().optional(),
+    enabledConfigVersion: z.number().int().positive().optional(),
+    capabilityFingerprint: z.string().min(1).optional(),
+    dispatchBlock: scheduleDispatchBlockSchema.optional(),
+    createdAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+  })
+  .strict()
+  .superRefine((schedule, context) => {
+    if (schedule.lifecycle !== 'enabled') return;
+    if (schedule.enabledAt === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['enabledAt'],
+        message: '启用中的规则必须记录 enabledAt',
+      });
+    }
+    if (schedule.enabledConfigVersion === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['enabledConfigVersion'],
+        message: '启用中的规则必须记录 enabledConfigVersion',
+      });
+    }
+    if (schedule.capabilityFingerprint === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['capabilityFingerprint'],
+        message: '启用中的规则必须记录 capabilityFingerprint',
+      });
+    }
+  });
+export type Schedule = z.infer<typeof scheduleSchema>;
+
+export const scheduleOccurrenceTriggerSchema = z.enum(['scheduled', 'manual-now', 'manual-missed']);
+export type ScheduleOccurrenceTrigger = z.infer<typeof scheduleOccurrenceTriggerSchema>;
+export const scheduleOccurrencePhaseSchema = z.enum(['preparing', 'dispatched', 'closed']);
+export type ScheduleOccurrencePhase = z.infer<typeof scheduleOccurrencePhaseSchema>;
+export const schedulePreparationOutcomeSchema = z.enum([
+  'missed',
+  'skipped-overlap',
+  'blocked',
+  'needs-material',
+  'cancelled',
+  'interrupted-before-run',
+]);
+export type SchedulePreparationOutcome = z.infer<typeof schedulePreparationOutcomeSchema>;
+
+const scheduleOccurrenceBaseSchema = z
+  .object({
+    id: z.string().min(1),
+    scheduleId: z.string().min(1),
+    configVersion: z.number().int().positive(),
+    trigger: scheduleOccurrenceTriggerSchema,
+    scheduledAt: z.number().int().nonnegative().optional(),
+    requestedAt: z.number().int().nonnegative(),
+    requestKey: z.string().trim().min(1).max(200).optional(),
+    originalOccurrenceId: z.string().min(1).optional(),
+    period: scheduleResolvedPeriodSchema,
+    phase: scheduleOccurrencePhaseSchema,
+    preparationOutcome: schedulePreparationOutcomeSchema.optional(),
+    reasonCode: scheduleDomainErrorCodeSchema.optional(),
+    reasonDetail: z.string().trim().min(1).max(2_000).optional(),
+    taskId: z.string().min(1).optional(),
+    sessionId: z.string().min(1).optional(),
+    firstRunId: z.string().min(1).optional(),
+    sourceSnapshotId: z.string().min(1).optional(),
+    createdAt: z.number().int().nonnegative(),
+    preparedAt: z.number().int().nonnegative().optional(),
+    finishedAt: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+
+export const scheduleOccurrenceSchema = scheduleOccurrenceBaseSchema.superRefine(
+  (occurrence, context) => {
+    if (occurrence.trigger === 'scheduled') {
+      if (occurrence.scheduledAt === undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['scheduledAt'],
+          message: '计划实例必须记录 scheduledAt',
+        });
+      }
+      if (occurrence.requestKey !== undefined || occurrence.originalOccurrenceId !== undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['trigger'],
+          message: '计划实例不能携带人工请求字段',
+        });
+      }
+    } else {
+      if (occurrence.scheduledAt !== undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['scheduledAt'],
+          message: '人工实例不能携带计划时刻',
+        });
+      }
+      if (occurrence.requestKey === undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['requestKey'],
+          message: '人工实例必须携带幂等 requestKey',
+        });
+      }
+      if (occurrence.trigger === 'manual-now' && occurrence.originalOccurrenceId !== undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['originalOccurrenceId'],
+          message: '立即执行不能引用 missed 实例',
+        });
+      }
+      if (occurrence.trigger === 'manual-missed' && occurrence.originalOccurrenceId === undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['originalOccurrenceId'],
+          message: '补做实例必须引用原 missed 实例',
+        });
+      }
+      if (
+        occurrence.preparationOutcome === 'missed' ||
+        occurrence.preparationOutcome === 'skipped-overlap'
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['preparationOutcome'],
+          message: '人工实例不能产生自动错过或重叠结果',
+        });
+      }
+    }
+
+    const hasRun = occurrence.firstRunId !== undefined;
+    if (occurrence.phase === 'preparing') {
+      const taskAssociationIsPartial =
+        (occurrence.taskId === undefined) !== (occurrence.sessionId === undefined);
+      const taskAssociationIsComplete =
+        occurrence.taskId !== undefined &&
+        occurrence.sessionId !== undefined &&
+        occurrence.sourceSnapshotId !== undefined &&
+        occurrence.preparedAt !== undefined;
+      const hasAnyTaskAssociation =
+        occurrence.taskId !== undefined ||
+        occurrence.sessionId !== undefined ||
+        occurrence.preparedAt !== undefined;
+      if (
+        hasRun ||
+        occurrence.preparationOutcome !== undefined ||
+        occurrence.finishedAt !== undefined ||
+        taskAssociationIsPartial ||
+        (hasAnyTaskAssociation && !taskAssociationIsComplete)
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['phase'],
+          message: '准备中实例的 T3 Task/Session/来源/准备时间必须完整关联',
+        });
+      }
+      return;
+    }
+
+    if (occurrence.phase === 'dispatched' || hasRun) {
+      if (
+        occurrence.taskId === undefined ||
+        occurrence.sessionId === undefined ||
+        !hasRun ||
+        occurrence.sourceSnapshotId === undefined ||
+        occurrence.preparedAt === undefined
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['firstRunId'],
+          message: '已派发实例必须关联 Task、Session、首个 Run、本期来源快照与准备时间',
+        });
+      }
+      if (occurrence.preparationOutcome !== undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['preparationOutcome'],
+          message: '已启动 Run 的实例不能使用无 Run 准备结果',
+        });
+      }
+    }
+
+    if (occurrence.phase === 'dispatched' && occurrence.finishedAt !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['finishedAt'],
+        message: '运行中实例不能记录 finishedAt',
+      });
+    }
+    if (occurrence.phase === 'closed' && occurrence.finishedAt === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['finishedAt'],
+        message: '关闭实例必须记录 finishedAt',
+      });
+    }
+    if (occurrence.phase === 'closed' && !hasRun) {
+      if (occurrence.preparationOutcome === undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['preparationOutcome'],
+          message: '没有首个 Run 的关闭实例必须记录 preparationOutcome',
+        });
+      }
+      const needsMaterialDraft =
+        occurrence.preparationOutcome === 'needs-material' &&
+        occurrence.taskId !== undefined &&
+        occurrence.sessionId === undefined &&
+        occurrence.preparedAt === undefined;
+      const noTaskDraft =
+        occurrence.preparationOutcome !== 'needs-material' &&
+        occurrence.taskId === undefined &&
+        occurrence.sessionId === undefined &&
+        occurrence.preparedAt === undefined;
+      const preservedT3Draft =
+        occurrence.taskId !== undefined &&
+        occurrence.sessionId !== undefined &&
+        occurrence.sourceSnapshotId !== undefined &&
+        occurrence.preparedAt !== undefined;
+      if (!needsMaterialDraft && !noTaskDraft && !preservedT3Draft) {
+        context.addIssue({
+          code: 'custom',
+          path: ['taskId'],
+          message: '无 Run 关闭实例只能保留完整 T3 草稿或未关联 Task',
+        });
+      }
+    }
+  },
+);
+export type ScheduleOccurrence = z.infer<typeof scheduleOccurrenceSchema>;
+
+export const scheduleSourceSnapshotStatusSchema = z.enum([
+  'preparing',
+  'ready',
+  'failed',
+  'cancelled',
+]);
+export type ScheduleSourceSnapshotStatus = z.infer<typeof scheduleSourceSnapshotStatusSchema>;
+export const scheduleSourceSnapshotSchema = z
+  .object({
+    id: z.string().min(1),
+    occurrenceId: z.string().min(1),
+    workspaceId: z.string().min(1),
+    status: scheduleSourceSnapshotStatusSchema,
+    configVersion: z.number().int().positive(),
+    evaluatedAt: z.number().int().nonnegative(),
+    manifestHash: sha256HexSchema,
+    itemCount: z.number().int().nonnegative(),
+    totalFileBytes: z.number().int().nonnegative(),
+    failureCode: scheduleDomainErrorCodeSchema.optional(),
+    createdAt: z.number().int().nonnegative(),
+    completedAt: z.number().int().nonnegative().optional(),
+  })
+  .strict()
+  .superRefine((snapshot, context) => {
+    if (snapshot.status === 'preparing' && snapshot.completedAt !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['completedAt'],
+        message: '准备中的来源快照不能记录完成时间',
+      });
+    }
+    if (snapshot.status !== 'preparing' && snapshot.completedAt === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['completedAt'],
+        message: '已收口的来源快照必须记录完成时间',
+      });
+    }
+    if (snapshot.status === 'failed' || snapshot.status === 'cancelled') {
+      if (snapshot.failureCode === undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['failureCode'],
+          message: '失败或取消的来源快照必须记录结构化原因',
+        });
+      }
+    } else if (snapshot.failureCode !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['failureCode'],
+        message: '准备中或 ready 的来源快照不能记录失败原因',
+      });
+    }
+  });
+export type ScheduleSourceSnapshot = z.infer<typeof scheduleSourceSnapshotSchema>;
+
+export const scheduleSourceOriginSchema = z.enum([
+  'workspace-directory',
+  'selected-document',
+  'selected-collection',
+  'selected-vault',
+  'expert-reference',
+]);
+export type ScheduleSourceOrigin = z.infer<typeof scheduleSourceOriginSchema>;
+export const scheduleSourceItemSchema = z
+  .object({
+    snapshotId: z.string().min(1),
+    ordinal: z.number().int().nonnegative(),
+    reference: materialReferenceSchema,
+    purpose: materialPurposeSchema,
+    origin: scheduleSourceOriginSchema,
+    displayName: z.string().trim().min(1).max(500),
+    sourcePath: z.string().min(1).optional(),
+  })
+  .strict();
+export type ScheduleSourceItem = z.infer<typeof scheduleSourceItemSchema>;
+
+export const scheduleOutputReceiptStatusSchema = z.enum(['pending', 'saving', 'saved', 'failed']);
+export type ScheduleOutputReceiptStatus = z.infer<typeof scheduleOutputReceiptStatusSchema>;
+export const scheduleOutputReceiptSchema = z
+  .object({
+    id: z.string().min(1),
+    occurrenceId: z.string().min(1),
+    artifactVersionId: z.string().min(1),
+    workspaceId: z.string().min(1),
+    relativePath: z.string().trim().min(1),
+    contentHash: sha256HexSchema,
+    status: scheduleOutputReceiptStatusSchema,
+    attempt: z.number().int().positive(),
+    failureCode: scheduleDomainErrorCodeSchema.optional(),
+    failureDetail: z.string().trim().min(1).max(2_000).optional(),
+    createdAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+  })
+  .strict()
+  .superRefine((receipt, context) => {
+    if (receipt.status === 'failed' && receipt.failureCode === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['failureCode'],
+        message: '保存失败回执必须记录结构化原因',
+      });
+    }
+    if (receipt.status !== 'failed' && receipt.failureCode !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['failureCode'],
+        message: '非失败回执不能记录失败原因',
+      });
+    }
+  });
+export type ScheduleOutputReceipt = z.infer<typeof scheduleOutputReceiptSchema>;
+
+export const scheduleNotificationReceiptSchema = z
+  .object({
+    occurrenceId: z.string().min(1),
+    outcomeKey: z.string().trim().min(1).max(200),
+    notificationId: z.string().min(1),
+    createdAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type ScheduleNotificationReceipt = z.infer<typeof scheduleNotificationReceiptSchema>;
+
+export const scheduleOccurrenceViewStateSchema = z.enum([
+  'preparing',
+  'running',
+  'needs-material',
+  'generated',
+  'save-failed',
+  'no-target-artifact',
+  'failed',
+  'cancelled',
+  'missed',
+  'skipped-overlap',
+  'blocked',
+  'interrupted',
+]);
+export type ScheduleOccurrenceViewState = z.infer<typeof scheduleOccurrenceViewStateSchema>;
+export const scheduleOccurrenceResultSchema = z
+  .object({
+    occurrence: scheduleOccurrenceSchema,
+    status: scheduleOccurrenceViewStateSchema,
+    reasonCode: scheduleDomainErrorCodeSchema.optional(),
+    reasonDetail: z.string().trim().min(1).max(2_000).optional(),
+    run: runSummarySchema.optional(),
+    outputReceipts: z.array(scheduleOutputReceiptSchema),
+    missingArtifactTypes: z.array(artifactTypeSchema).max(2).optional(),
+  })
+  .strict()
+  .superRefine((result, context) => {
+    const { occurrence } = result;
+    if (result.run && result.occurrence.firstRunId !== result.run.id) {
+      context.addIssue({
+        code: 'custom',
+        path: ['run', 'id'],
+        message: '结果中的 Run 必须是实例关联的首个 Run',
+      });
+    }
+    for (const [index, receipt] of result.outputReceipts.entries()) {
+      if (receipt.occurrenceId !== occurrence.id) {
+        context.addIssue({
+          code: 'custom',
+          path: ['outputReceipts', index, 'occurrenceId'],
+          message: '成果回执必须属于当前实例',
+        });
+      }
+    }
+    if (
+      result.missingArtifactTypes &&
+      new Set(result.missingArtifactTypes).size !== result.missingArtifactTypes.length
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['missingArtifactTypes'],
+        message: '缺失成果类型不能重复',
+      });
+    }
+
+    if (occurrence.phase === 'preparing') {
+      if (result.status !== 'preparing' || result.run !== undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['status'],
+          message: '准备中实例只能投影为 preparing，且不能附带 Run',
+        });
+      }
+      return;
+    }
+    if (occurrence.phase === 'dispatched') {
+      if (result.status !== 'running' || result.run?.status !== 'running') {
+        context.addIssue({
+          code: 'custom',
+          path: ['status'],
+          message: '已派发实例只能在首个 Run running 时投影为 running',
+        });
+      }
+      return;
+    }
+    if (occurrence.firstRunId === undefined) {
+      const statusByPreparationOutcome: Record<
+        SchedulePreparationOutcome,
+        ScheduleOccurrenceViewState
+      > = {
+        missed: 'missed',
+        'skipped-overlap': 'skipped-overlap',
+        blocked: 'blocked',
+        'needs-material': 'needs-material',
+        cancelled: 'cancelled',
+        'interrupted-before-run': 'interrupted',
+      };
+      if (
+        occurrence.preparationOutcome === undefined ||
+        result.status !== statusByPreparationOutcome[occurrence.preparationOutcome] ||
+        result.run !== undefined ||
+        result.outputReceipts.length > 0
+      ) {
+        context.addIssue({
+          code: 'custom',
+          path: ['status'],
+          message: '无 Run 的实例结果必须与准备收口事实一致',
+        });
+      }
+      return;
+    }
+
+    const finalStatusMatchesRun =
+      (result.run?.status === 'completed' &&
+        ['generated', 'save-failed', 'no-target-artifact'].includes(result.status)) ||
+      (result.run?.status === 'failed' && ['failed', 'interrupted'].includes(result.status)) ||
+      (result.run?.status === 'cancelled' && result.status === 'cancelled');
+    if (!finalStatusMatchesRun) {
+      context.addIssue({
+        code: 'custom',
+        path: ['status'],
+        message: '关闭实例结果必须与首个 Run 的真实终态一致',
+      });
+    }
+  });
+export type ScheduleOccurrenceResult = z.infer<typeof scheduleOccurrenceResultSchema>;
+
+export const schedulePageCursorSchema = z
+  .object({
+    version: z.literal(1),
+    createdAt: z.number().int().nonnegative(),
+    id: z.string().min(1),
+  })
+  .strict();
+export type SchedulePageCursor = z.infer<typeof schedulePageCursorSchema>;
+
+export const scheduleSourceCursorSchema = z
+  .object({
+    version: z.literal(1),
+    snapshotId: z.string().min(1),
+    ordinal: z.number().int().nonnegative(),
+  })
+  .strict();
+export type ScheduleSourceCursor = z.infer<typeof scheduleSourceCursorSchema>;
+
+const schedulePageLimitSchema = z
+  .number()
+  .int()
+  .positive()
+  .max(LIST_PAGE_MAX_LIMIT)
+  .optional()
+  .default(LIST_PAGE_DEFAULT_LIMIT);
+
+export const listSchedulesRequestSchema = z
+  .object({
+    lifecycle: scheduleLifecycleSchema.optional(),
+    cursor: schedulePageCursorSchema.optional(),
+    limit: schedulePageLimitSchema,
+  })
+  .strict();
+export type ListSchedulesRequest = z.input<typeof listSchedulesRequestSchema>;
+
+export const getScheduleRequestSchema = z.object({ scheduleId: z.string().min(1) }).strict();
+export type GetScheduleRequest = z.infer<typeof getScheduleRequestSchema>;
+
+export const saveScheduleRequestSchema = z
+  .discriminatedUnion('operation', [
+    z
+      .object({
+        operation: z.literal('create'),
+        workspaceId: z.string().min(1),
+        config: scheduleConfigDraftSchema,
+        targetLifecycle: z.enum(['paused', 'enabled']),
+        preflightFingerprint: z.string().trim().min(1).optional(),
+      })
+      .strict(),
+    z
+      .object({
+        operation: z.literal('update'),
+        scheduleId: z.string().min(1),
+        expectedRevision: z.number().int().positive(),
+        config: scheduleConfigDraftSchema,
+        targetLifecycle: z.enum(['paused', 'enabled']),
+        preflightFingerprint: z.string().trim().min(1).optional(),
+      })
+      .strict(),
+  ])
+  .superRefine((request, context) => {
+    if (request.targetLifecycle === 'enabled' && request.preflightFingerprint === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['preflightFingerprint'],
+        message: '启用规则必须提交当前预检指纹',
+      });
+    }
+  });
+export type SaveScheduleRequest = z.infer<typeof saveScheduleRequestSchema>;
+
+export const setScheduleLifecycleRequestSchema = z
+  .object({
+    scheduleId: z.string().min(1),
+    expectedRevision: z.number().int().positive(),
+    lifecycle: z.enum(['enabled', 'paused', 'archived']),
+    preflightFingerprint: z.string().trim().min(1).optional(),
+  })
+  .strict()
+  .superRefine((request, context) => {
+    if (request.lifecycle === 'enabled' && request.preflightFingerprint === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['preflightFingerprint'],
+        message: '启用规则必须提交当前预检指纹',
+      });
+    }
+  });
+export type SetScheduleLifecycleRequest = z.infer<typeof setScheduleLifecycleRequestSchema>;
+
+export const previewScheduleRequestSchema = z
+  .object({ timing: scheduleTimingSchema, periodRule: schedulePeriodRuleSchema })
+  .strict();
+export type PreviewScheduleRequest = z.infer<typeof previewScheduleRequestSchema>;
+
+export const preflightScheduleRequestSchema = z.discriminatedUnion('target', [
+  z.object({ target: z.literal('schedule'), scheduleId: z.string().min(1) }).strict(),
+  z
+    .object({
+      target: z.literal('draft'),
+      workspaceId: z.string().min(1),
+      config: scheduleConfigDraftSchema,
+    })
+    .strict(),
+]);
+export type PreflightScheduleRequest = z.infer<typeof preflightScheduleRequestSchema>;
+
+export const applyScheduleExpertRevisionRequestSchema = z
+  .object({
+    scheduleId: z.string().min(1),
+    expectedRevision: z.number().int().positive(),
+    expertRevisionId: z.string().min(1),
+    preflightFingerprint: z.string().trim().min(1).optional(),
+  })
+  .strict();
+export type ApplyScheduleExpertRevisionRequest = z.infer<
+  typeof applyScheduleExpertRevisionRequestSchema
+>;
+
+export const listScheduleOccurrencesRequestSchema = z
+  .object({
+    scheduleId: z.string().min(1),
+    cursor: schedulePageCursorSchema.optional(),
+    limit: schedulePageLimitSchema,
+  })
+  .strict();
+export type ListScheduleOccurrencesRequest = z.input<typeof listScheduleOccurrencesRequestSchema>;
+
+export const getScheduleOccurrenceRequestSchema = z
+  .object({ occurrenceId: z.string().min(1) })
+  .strict();
+export type GetScheduleOccurrenceRequest = z.infer<typeof getScheduleOccurrenceRequestSchema>;
+
+export const listScheduleSourceItemsRequestSchema = z
+  .object({
+    occurrenceId: z.string().min(1),
+    cursor: scheduleSourceCursorSchema.optional(),
+    limit: schedulePageLimitSchema,
+  })
+  .strict();
+export type ListScheduleSourceItemsRequest = z.input<typeof listScheduleSourceItemsRequestSchema>;
+
+export const executeScheduleNowRequestSchema = z
+  .object({
+    scheduleId: z.string().min(1),
+    expectedRevision: z.number().int().positive(),
+    requestKey: z.string().trim().min(1).max(200),
+    preflightFingerprint: z.string().trim().min(1),
+  })
+  .strict();
+export type ExecuteScheduleNowRequest = z.infer<typeof executeScheduleNowRequestSchema>;
+
+export const executeMissedScheduleRequestSchema = z
+  .object({
+    scheduleId: z.string().min(1),
+    originalOccurrenceId: z.string().min(1),
+    expectedRevision: z.number().int().positive(),
+    requestKey: z.string().trim().min(1).max(200),
+    preflightFingerprint: z.string().trim().min(1),
+  })
+  .strict();
+export type ExecuteMissedScheduleRequest = z.infer<typeof executeMissedScheduleRequestSchema>;
+
+export const cancelScheduleOccurrenceRequestSchema = z
+  .object({ occurrenceId: z.string().min(1) })
+  .strict();
+export type CancelScheduleOccurrenceRequest = z.infer<typeof cancelScheduleOccurrenceRequestSchema>;
+
+export const retryScheduleOutputRequestSchema = z
+  .object({
+    receiptId: z.string().min(1),
+    expectedAttempt: z.number().int().positive(),
+  })
+  .strict();
+export type RetryScheduleOutputRequest = z.infer<typeof retryScheduleOutputRequestSchema>;
+
+export const scheduleAggregateSchema = z
+  .object({ schedule: scheduleSchema, config: scheduleConfigSchema })
+  .strict();
+export type ScheduleAggregate = z.infer<typeof scheduleAggregateSchema>;
+
+export const schedulePageSchema = z
+  .object({
+    items: z.array(scheduleAggregateSchema).max(LIST_PAGE_MAX_LIMIT),
+    nextCursor: schedulePageCursorSchema.optional(),
+  })
+  .strict();
+export type SchedulePage = z.infer<typeof schedulePageSchema>;
+
+export const schedulePreviewItemSchema = z
+  .object({
+    scheduledAt: z.number().int().nonnegative(),
+    period: scheduleResolvedPeriodSchema,
+  })
+  .strict();
+export const schedulePreviewResultSchema = z
+  .object({
+    previewedAt: z.number().int().nonnegative(),
+    items: z.array(schedulePreviewItemSchema).length(SCHEDULE_PREVIEW_COUNT),
+  })
+  .strict();
+export type SchedulePreviewResult = z.infer<typeof schedulePreviewResultSchema>;
+
+export const schedulePreflightProblemViewSchema = z
+  .object({
+    code: z.string().trim().min(1).max(120),
+    message: z.string().trim().min(1).max(1_000),
+    capabilityId: z.string().min(1).optional(),
+  })
+  .strict();
+export const schedulePreflightViewSchema = z
+  .object({
+    status: z.enum(['ready', 'blocked']),
+    fingerprint: z.string().min(1),
+    problems: z.array(schedulePreflightProblemViewSchema).max(100),
+  })
+  .strict();
+export type SchedulePreflightView = z.infer<typeof schedulePreflightViewSchema>;
+
+export const scheduleOccurrenceHistoryItemSchema = z
+  .object({ occurrence: scheduleOccurrenceSchema, run: runSummarySchema.optional() })
+  .strict();
+export type ScheduleOccurrenceHistoryItem = z.infer<typeof scheduleOccurrenceHistoryItemSchema>;
+export const scheduleOccurrenceHistoryPageSchema = z
+  .object({
+    items: z.array(scheduleOccurrenceHistoryItemSchema).max(LIST_PAGE_MAX_LIMIT),
+    nextCursor: schedulePageCursorSchema.optional(),
+  })
+  .strict();
+export type ScheduleOccurrenceHistoryPage = z.infer<typeof scheduleOccurrenceHistoryPageSchema>;
+
+export const scheduleExpertUpdateSchema = z
+  .object({
+    boundRevision: expertRevisionSchema,
+    currentRevision: expertRevisionSchema,
+    available: z.boolean(),
+  })
+  .strict();
+export type ScheduleExpertUpdate = z.infer<typeof scheduleExpertUpdateSchema>;
+
+export const scheduleDetailSchema = z
+  .object({
+    aggregate: scheduleAggregateSchema,
+    expertUpdate: scheduleExpertUpdateSchema,
+    history: scheduleOccurrenceHistoryPageSchema,
+  })
+  .strict();
+export type ScheduleDetail = z.infer<typeof scheduleDetailSchema>;
+
+export const scheduleOccurrenceDetailSchema = z
+  .object({
+    occurrence: scheduleOccurrenceSchema,
+    config: scheduleConfigSchema,
+    task: taskSummarySchema.optional(),
+    run: runSummarySchema.optional(),
+    sourceSnapshot: scheduleSourceSnapshotSchema.optional(),
+    outputReceipts: z.array(scheduleOutputReceiptSchema).max(100),
+    readMaterialCount: z.number().int().nonnegative(),
+    adoptedMaterialCount: z.number().int().nonnegative(),
+  })
+  .strict();
+export type ScheduleOccurrenceDetail = z.infer<typeof scheduleOccurrenceDetailSchema>;
+
+export const scheduleSourceItemsPageSchema = z
+  .object({
+    items: z.array(scheduleSourceItemSchema).max(LIST_PAGE_MAX_LIMIT),
+    nextCursor: scheduleSourceCursorSchema.optional(),
+  })
+  .strict();
+export type ScheduleSourceItemsPage = z.infer<typeof scheduleSourceItemsPageSchema>;
+
+export const scheduleManualExecutionResultSchema = z
+  .object({
+    accepted: z.literal(true),
+    duplicate: z.boolean(),
+    occurrence: scheduleOccurrenceSchema,
+  })
+  .strict();
+export type ScheduleManualExecutionResult = z.infer<typeof scheduleManualExecutionResultSchema>;
+
+export const scheduleCancelOccurrenceResultSchema = z
+  .object({
+    result: z.enum(['cancelled-preparation', 'cancel-requested', 'already-terminal', 'not-found']),
+  })
+  .strict();
+export type ScheduleCancelOccurrenceResult = z.infer<typeof scheduleCancelOccurrenceResultSchema>;
+
+export const scheduleChangedReasonSchema = z.enum([
+  'configuration',
+  'lifecycle',
+  'expert-revision',
+  'occurrence',
+  'recovery',
+]);
+export const scheduleChangedEventSchema = z
+  .object({
+    scheduleId: z.string().min(1),
+    occurrenceId: z.string().min(1).optional(),
+    reason: scheduleChangedReasonSchema,
+  })
+  .strict();
+export type ScheduleChangedEvent = z.infer<typeof scheduleChangedEventSchema>;
+
+export type ScheduleCallResult<TData> =
+  { status: 'success'; data: TData } | { status: 'rejected'; error: ScheduleDomainError };
+
+function buildScheduleCallResultSchema<TSchema extends z.ZodType>(dataSchema: TSchema) {
+  return z.union([
+    z.object({ status: z.literal('success'), data: dataSchema }).strict(),
+    z.object({ status: z.literal('rejected'), error: scheduleDomainErrorSchema }).strict(),
+  ]);
+}
+
+export function scheduleCallResultSchema<TSchema extends z.ZodType>(
+  dataSchema: TSchema,
+): ReturnType<typeof buildScheduleCallResultSchema<TSchema>> {
+  return buildScheduleCallResultSchema(dataSchema);
 }

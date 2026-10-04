@@ -22,6 +22,7 @@ import type {
   TaskMaterialSelection,
 } from '@betterwork/agent-protocol';
 import {
+  countCodePoints,
   IpcChannel,
   materialReferenceSchema,
   memoryRecallPolicyV2,
@@ -80,6 +81,7 @@ import type { FileArtifactService } from './file-artifact-service';
 import type { InputSnapshotService } from './input-snapshot-service';
 import { KnowledgeAudit, type KnowledgeRunAuditContext } from './knowledge-audit';
 import { KnowledgeServiceError } from './knowledge-errors';
+import type { DocumentExtractor } from './knowledge-extract';
 import type { KnowledgeSearchService } from './knowledge-search';
 import type { KnowledgeVault } from './knowledge-vault';
 import type { McpClientService } from './mcp-client-service';
@@ -95,6 +97,7 @@ import { ModelProviderFactory, type ResolvedLanguageModel } from './model-provid
 import type { NotificationService } from './notification-service';
 import { preparePptAttempt } from './ppt-execution-attempt';
 import { adaptPptCommand } from './ppt-script-adaptation';
+import { ScheduleMaterialResolver } from './schedule-material-resolver';
 import { createQianfanSearchClient } from './search-engine-service';
 import type { AdapterContext, SkillAdapter, SkillAdapterService } from './skill-adapter';
 import type { SkillDependencyService } from './skill-dependency-service';
@@ -119,6 +122,7 @@ interface ResolvedRunContext {
   builtinToolPolicy?: BuiltinToolPolicy;
   materials: TaskMaterialSelection[];
   materialScope: boolean;
+  scheduleSourceSnapshotId?: string;
   taskContextRevisionId?: string;
   expertId?: string;
   expertRevisionId?: string;
@@ -144,6 +148,12 @@ interface ActiveRun {
 
 const PROMPT_SUMMARY_LENGTH = 80;
 const FAILURE_DETAIL_LENGTH = 500;
+const SCHEDULE_MATERIAL_SUMMARY_MAX = 8_000;
+const SCHEDULE_MATERIAL_IDENTITY_MAX = 40;
+const READ_MATERIAL_CODE_POINT_MAX = 20_000;
+
+const sliceCodePoints = (value: string, max: number): string =>
+  Array.from(value).slice(0, max).join('');
 
 interface MaterialFactLedger {
   readonly enabled: boolean;
@@ -419,6 +429,11 @@ const memoryReadInputs = (
   return reads;
 };
 
+/** Main 内部 T4 关联参数；StartRun IPC 没有此字段或第二参数。 */
+export interface ScheduledRunAssociation {
+  readonly occurrenceId: string;
+}
+
 /**
  * 运行编排：选 Provider、选工具集、消费事件流。
  *
@@ -472,14 +487,24 @@ export class RunService {
     private readonly officeParser?: OfficeParserService,
     private readonly credentialAccess?: CredentialResolver,
     private readonly knowledgeSearchService?: KnowledgeSearchService,
+    private readonly documentExtractor?: DocumentExtractor,
   ) {}
 
-  start(input: StartRunRequest): string {
+  start(input: StartRunRequest, scheduledAssociation?: ScheduledRunAssociation): string {
     const context = this.store.tasks.getRunContext(input.taskId, input.sessionId);
     if (!context) throw new Error('Session does not belong to task');
     const workspaceId = this.store.tasks.getWorkspaceId(input.taskId);
     if (!workspaceId) throw new Error('Task workspace does not exist');
     const executionContext = this.resolveRunContext(input);
+    if (
+      scheduledAssociation &&
+      (!executionContext.taskContextRevisionId ||
+        !executionContext.scheduleSourceSnapshotId ||
+        !executionContext.expertId ||
+        !executionContext.expertRevisionId)
+    ) {
+      throw new Error('Scheduled Run requires a fixed Expert TaskContext and ready source scope');
+    }
     const resolvedInput = {
       ...input,
       ...(executionContext.skillBindings ? { skillBindings: executionContext.skillBindings } : {}),
@@ -549,6 +574,9 @@ export class RunService {
             : {}),
           contextSegmentId,
           materials: executionContext.materials,
+          ...(executionContext.scheduleSourceSnapshotId
+            ? { scheduleSourceSnapshotId: executionContext.scheduleSourceSnapshotId }
+            : {}),
           createdAt: Date.now(),
         });
         this.store.runMemoryContexts.recordSelection({
@@ -566,6 +594,19 @@ export class RunService {
         const reads = memoryReadInputs(this.store, runId, memory);
         if (reads.length > 0) this.store.memories.recordReads(reads);
         this.store.tasks.touch(input.taskId, Date.now());
+        if (scheduledAssociation) {
+          const taskContextRevisionId = executionContext.taskContextRevisionId;
+          if (!taskContextRevisionId) {
+            throw new Error('Scheduled Run TaskContext revision is missing');
+          }
+          this.store.scheduleOccurrences.dispatchRun({
+            occurrenceId: scheduledAssociation.occurrenceId,
+            runId,
+            taskId: input.taskId,
+            sessionId: input.sessionId,
+            taskContextRevisionId,
+          });
+        }
       });
     } catch (error) {
       this.activeRuns.delete(runId);
@@ -843,7 +884,10 @@ export class RunService {
       messages.push({ id: randomUUID(), role: turn.role, content: turn.content });
     }
     // 放在旧对话之后、当前用户请求之前，避免旧助手回复遮蔽本次材料范围和事实边界。
-    const materialMessage = this.buildMaterialContextMessage(executionContext.materials);
+    const materialMessage = this.buildMaterialContextMessage(
+      executionContext.materials,
+      executionContext.scheduleSourceSnapshotId !== undefined,
+    );
     if (materialMessage) messages.push(materialMessage);
     return messages;
   }
@@ -854,6 +898,7 @@ export class RunService {
    */
   private buildMaterialContextMessage(
     materials: readonly TaskMaterialSelection[],
+    scheduled = false,
   ): AgentMessage | undefined {
     if (materials.length === 0) return undefined;
 
@@ -866,45 +911,81 @@ export class RunService {
       background: '背景参考',
       other: '其他（未指定用途）',
     };
-    const lines = [
+    const header = [
       '以下是用户为本次 Run 明确选择的材料清单。材料内容不会自动出现在对话中，必须先使用清单给出的工具和参数读取。',
       '只使用这些材料中的事实和数字；如果材料无法读取或没有提供某个数字，应明确说明，不要用猜测或其他工作空间文件补齐。',
       '历史对话和旧助手回复不是本次 Run 的证据；开始分析前必须重新读取清单中的材料，后续结论只依据本次 Run 成功读取的内容。',
       '交付前用 artifact_declare_sources 声明成果实际采用的来源：只有真正读过的材料或已返回的精确知识证据可以声明，搜索过不等于采用。',
       '不要把不同期间的客户数相加，不要把“本期未提及”解释为已续约或已流失，也不要推导材料未给出的客户数、金额或未来期间；缺少依据时写“材料未提供”。',
       '',
-      '本次可读材料：',
+      `本次固定可读材料共 ${materials.length} 项：`,
     ];
 
-    for (const [index, selection] of materials.entries()) {
+    const formatEntry = (selection: TaskMaterialSelection, index: number): string[] => {
       const reference = selection.reference;
       const purpose = purposeLabels[selection.purpose];
       if (reference.kind === 'workspace-input-snapshot') {
         const snapshot = this.store.inputSnapshots.get(reference.snapshotId);
         const sourcePath = snapshot?.sourcePath ?? reference.fileKey;
-        lines.push(
-          `${index + 1}. 工作空间文件「${sourcePath}」【${purpose}】`,
-          `   - 文本/Markdown 使用 read_text_file，path="${sourcePath}"。`,
-          `   - Office 使用 read_office_material，sourceKind="workspace-input-snapshot"，snapshotId="${reference.snapshotId}"。`,
-        );
-        continue;
+        const standardText = ['md', 'markdown', 'txt', 'text'].includes(reference.format);
+        const extractedText = reference.format === 'pdf' || reference.format === 'docx';
+        return [
+          `${index + 1}. 工作空间文件 path=${JSON.stringify(sourcePath)}【${purpose}，${reference.format}】`,
+          `   - 固定 snapshotId=${JSON.stringify(reference.snapshotId)}。`,
+          ...(standardText
+            ? [`   - 使用 read_text_file，path=${JSON.stringify(sourcePath)}。`]
+            : []),
+          ...(extractedText
+            ? [
+                `   - 使用 read_text_file，path=${JSON.stringify(sourcePath)}；PDF/DOCX 返回带原文定位的解析片段。`,
+              ]
+            : []),
+          ...(isOfficeFormat(reference.format)
+            ? [
+                `   - 使用 read_office_material，sourceKind="workspace-input-snapshot"，snapshotId=${JSON.stringify(reference.snapshotId)}。`,
+              ]
+            : []),
+        ];
       }
       if (reference.kind === 'knowledge-revision') {
-        lines.push(
-          `${index + 1}. 知识修订「${reference.sourcePath}」【${purpose}】`,
-          `   - 使用 knowledge_search；检索范围已限制为 knowledgeRevisionId="${reference.knowledgeRevisionId}"。`,
-          `   - 需要正文时使用 read_knowledge，reference 必须逐字复制上面这条知识修订的材料引用（knowledgeDocumentId="${reference.knowledgeDocumentId}"，knowledgeRevisionId="${reference.knowledgeRevisionId}"，contentHash="${reference.contentHash}"，sourcePath="${reference.sourcePath}"），用 nextCursor 继续分页。`,
-        );
-        continue;
+        return [
+          `${index + 1}. 知识修订 sourcePath=${JSON.stringify(reference.sourcePath)}【${purpose}】`,
+          `   - knowledge_search 的范围固定为 knowledgeRevisionId=${JSON.stringify(reference.knowledgeRevisionId)}。`,
+          `   - read_knowledge 必须传完整引用 ${JSON.stringify(reference)}，用 nextCursor 继续分页。`,
+        ];
       }
-      lines.push(
-        `${index + 1}. 成果版本「${reference.artifactId} / ${reference.artifactVersionId}」【${purpose}】`,
-        `   - Markdown 使用 read_artifact，artifactId="${reference.artifactId}"，versionId="${reference.artifactVersionId}"。`,
+      return [
+        `${index + 1}. 成果版本 artifactId=${JSON.stringify(reference.artifactId)}，versionId=${JSON.stringify(reference.artifactVersionId)}【${purpose}】`,
+        `   - Markdown 使用 read_artifact，artifactId=${JSON.stringify(reference.artifactId)}，versionId=${JSON.stringify(reference.artifactVersionId)}。`,
         '   - Office 使用 read_office_material，并提供对应的 artifactId 和 versionId。',
-      );
+      ];
+    };
+
+    if (!scheduled) {
+      const lines = [...header, '本次可读材料：'];
+      materials.forEach((selection, index) => lines.push(...formatEntry(selection, index)));
+      return { id: randomUUID(), role: 'system', content: lines.join('\n') };
     }
 
-    return { id: randomUUID(), role: 'system', content: lines.join('\n') };
+    const visibleMaterials: string[] = [];
+    const candidateCount = Math.min(materials.length, SCHEDULE_MATERIAL_IDENTITY_MAX);
+    let visibleCount = 0;
+    for (let index = 0; index < candidateCount; index += 1) {
+      const selection = materials[index];
+      if (!selection) continue;
+      const candidate = formatEntry(selection, index);
+      const footer = `\n仅展示 ${visibleCount + 1}/${materials.length} 项身份摘要；其余材料仍属于本 Run 的固定授权范围。knowledge_search 会搜索全部已选修订，读取工具仍只接受该固定范围中的精确材料。`;
+      const content = [...header, ...visibleMaterials, ...candidate, footer].join('\n');
+      if (countCodePoints(content) > SCHEDULE_MATERIAL_SUMMARY_MAX) break;
+      visibleMaterials.push(...candidate);
+      visibleCount += 1;
+    }
+    const footer = `仅展示前 ${visibleCount}/${materials.length} 项身份摘要；其余材料仍属于本 Run 的固定授权范围。knowledge_search 会搜索全部已选修订，读取工具仍只接受该固定范围中的精确材料。`;
+    const content = [...header, ...visibleMaterials, footer].join('\n');
+    if (countCodePoints(content) > SCHEDULE_MATERIAL_SUMMARY_MAX) {
+      throw new Error('定时任务材料摘要超出安全长度上限。');
+    }
+    return { id: randomUUID(), role: 'system', content };
   }
 
   private knowledgeAuditContext(
@@ -942,7 +1023,13 @@ export class RunService {
     materials: readonly TaskMaterialSelection[],
     workspacePath: string,
   ): ReadTextFile {
-    const snapshots = new Map<string, InputSnapshot>();
+    const snapshots = new Map<
+      string,
+      {
+        snapshot: InputSnapshot;
+        reference: Extract<MaterialReference, { kind: 'workspace-input-snapshot' }>;
+      }
+    >();
     const ambiguousPaths = new Set<string>();
     for (const selection of materials) {
       if (selection.reference.kind !== 'workspace-input-snapshot') continue;
@@ -953,31 +1040,88 @@ export class RunService {
         ambiguousPaths.add(key);
         continue;
       }
-      snapshots.set(key, snapshot);
+      snapshots.set(key, { snapshot, reference: selection.reference });
     }
     return async (input, context) => {
       const relative = path.normalize(input.path);
       if (ambiguousPaths.has(relative)) {
         throw new Error('材料范围包含同一路径的多个输入快照，请只选择一个版本。');
       }
-      const snapshot = snapshots.get(relative);
-      if (!snapshot) throw new Error('材料范围不允许读取该工作空间文件，请先选择输入材料。');
+      const selected = snapshots.get(relative);
+      if (!selected) throw new Error('材料范围不允许读取该工作空间文件，请先选择输入材料。');
+      const { snapshot, reference } = selected;
       if (
+        snapshot.workspaceId !== reference.workspaceId ||
+        snapshot.contentHash !== reference.contentHash ||
+        snapshot.format !== reference.format ||
+        snapshot.fileKey !== reference.fileKey ||
         snapshot.workspaceId !==
-        this.store.tasks.getWorkspaceId(this.store.runs.get(context.runId)?.taskId ?? '')
+          this.store.tasks.getWorkspaceId(this.store.runs.get(context.runId)?.taskId ?? '')
       ) {
-        throw new Error('输入快照不属于当前工作空间。');
+        throw new Error('输入快照与本次 Run 固定材料引用不一致。');
       }
       if (!this.inputSnapshots || !(await this.inputSnapshots.verify(snapshot))) {
         throw new Error('输入快照缺失或已损坏，无法读取。');
       }
       if (context.signal.aborted) throw new Error('读取已取消。');
       context.reportProgress(`正在读取 ${relative}`);
-      const content = await readFile(this.inputSnapshots.resolvePath(snapshot), 'utf8');
+      const bytes = await readFile(this.inputSnapshots.resolvePath(snapshot));
+      const outputPath = path.relative(workspacePath, path.resolve(workspacePath, relative));
+      if (['md', 'markdown', 'txt', 'text'].includes(snapshot.format)) {
+        const content = bytes.toString('utf8').replace(/^\uFEFF/u, '');
+        return {
+          path: outputPath,
+          material: reference,
+          format:
+            snapshot.format === 'md'
+              ? 'markdown'
+              : snapshot.format === 'txt'
+                ? 'text'
+                : snapshot.format,
+          content: sliceCodePoints(content, READ_MATERIAL_CODE_POINT_MAX),
+          contentHash: snapshot.contentHash,
+          truncated: countCodePoints(content) > READ_MATERIAL_CODE_POINT_MAX,
+        };
+      }
+      if (snapshot.format !== 'pdf' && snapshot.format !== 'docx') {
+        throw new Error(`read_text_file 不支持此材料格式：${snapshot.format}`);
+      }
+      if (!this.documentExtractor) throw new Error('PDF/DOCX 文本提取器不可用。');
+      const extracted = await this.documentExtractor(
+        snapshot.format,
+        bytes,
+        { jobId: `${context.runId}-${context.toolCallId}`, attempt: 1 },
+        context.signal,
+      );
+      if (context.signal.aborted) throw abortError();
+      if (extracted.format !== snapshot.format) {
+        throw new Error('PDF/DOCX 提取器返回了与固定快照不同的格式。');
+      }
+      let remaining = READ_MATERIAL_CODE_POINT_MAX;
+      let truncated = false;
+      const sections: Array<{ locator: string; content: string }> = [];
+      for (const section of extracted.sections) {
+        const locatorCost = countCodePoints(section.locator) + 2;
+        if (remaining <= locatorCost) {
+          truncated = true;
+          break;
+        }
+        const content = sliceCodePoints(section.content, remaining - locatorCost);
+        sections.push({ locator: section.locator, content });
+        remaining -= locatorCost + countCodePoints(content);
+        if (countCodePoints(content) < countCodePoints(section.content)) {
+          truncated = true;
+          break;
+        }
+      }
       return {
-        path: path.relative(workspacePath, path.resolve(workspacePath, relative)),
-        content: content.slice(0, 20_000),
-        truncated: content.length > 20_000,
+        path: outputPath,
+        material: reference,
+        format: snapshot.format,
+        content: '',
+        sections,
+        contentHash: snapshot.contentHash,
+        truncated,
       };
     };
   }
@@ -1001,6 +1145,12 @@ export class RunService {
     }
     if (detail.type !== 'markdown') {
       throw new Error('当前成果版本为演示文件，文本读取将在文件解析阶段提供。');
+    }
+    if (
+      selected.reference.kind !== 'artifact-version' ||
+      detail.contentHash !== selected.reference.contentHash
+    ) {
+      throw new Error('成果版本与本次 Run 固定材料哈希不一致。');
     }
     return {
       artifactId: detail.artifactId,
@@ -1041,6 +1191,14 @@ export class RunService {
       const snapshot = this.store.inputSnapshots.get(reference.snapshotId);
       if (!snapshot || snapshot.status !== 'ready')
         throw new Error('输入快照不存在或尚未准备完成。');
+      if (
+        snapshot.workspaceId !== reference.workspaceId ||
+        snapshot.contentHash !== reference.contentHash ||
+        snapshot.format !== reference.format ||
+        snapshot.fileKey !== reference.fileKey
+      ) {
+        throw new Error('输入快照与本次 Run 固定材料引用不一致。');
+      }
       if (!this.inputSnapshots || !(await this.inputSnapshots.verify(snapshot)))
         throw new Error('输入快照缺失或已损坏，无法读取。');
       filePath = this.inputSnapshots.resolvePath(snapshot);
@@ -1051,6 +1209,9 @@ export class RunService {
       if (!detail || detail.artifactId !== reference.artifactId)
         throw new Error('成果版本不存在或已不可读取。');
       if (detail.type !== 'presentation') throw new Error('该成果版本不是 Office 演示文件。');
+      if (detail.fileHash !== reference.contentHash) {
+        throw new Error('成果版本与本次 Run 固定材料哈希不一致。');
+      }
       if (!this.fileArtifactService) throw new Error('成果文件服务不可用。');
       filePath = this.fileArtifactService.resolveStoredPath(detail.id);
       format = officeFormatFromMimeType(detail.mimeType);
@@ -1105,7 +1266,10 @@ export class RunService {
     if (!toolName) return;
     if (toolName === 'read_text_file' && isReadTextFileOutput(event.output)) {
       active.materialFacts.materialReadCount += 1;
-      recordMaterialFacts(active.materialFacts, event.output.content);
+      recordMaterialFacts(
+        active.materialFacts,
+        event.output.sections?.map((section) => section.content).join('\n') ?? event.output.content,
+      );
       return;
     }
     if (toolName === 'read_artifact' && isReadArtifactOutput(event.output)) {
@@ -1370,18 +1534,50 @@ export class RunService {
     }
     if (toolName === 'read_text_file' && isReadTextFileOutput(event.output)) {
       const output = event.output;
-      const material = snapshot.materials
-        .filter((selection) => selection.reference.kind === 'workspace-input-snapshot')
-        .map((selection) => selection.reference)
-        .find((reference) => {
-          if (reference.kind !== 'workspace-input-snapshot') return false;
-          const snapshotRecord = this.store.inputSnapshots.get(reference.snapshotId);
-          return (
-            snapshotRecord !== undefined &&
-            path.normalize(snapshotRecord.sourcePath) === path.normalize(output.path)
-          );
-        });
-      if (material && material.kind === 'workspace-input-snapshot') {
+      const exactMaterial = output.material;
+      const material = exactMaterial
+        ? snapshot.materials.find((selection) =>
+            sameMaterialReference(selection.reference, exactMaterial),
+          )?.reference
+        : snapshot.materials
+            .filter((selection) => selection.reference.kind === 'workspace-input-snapshot')
+            .map((selection) => selection.reference)
+            .find((reference) => {
+              if (reference.kind !== 'workspace-input-snapshot') return false;
+              const snapshotRecord = this.store.inputSnapshots.get(reference.snapshotId);
+              return (
+                snapshotRecord !== undefined &&
+                path.normalize(snapshotRecord.sourcePath) === path.normalize(output.path)
+              );
+            });
+      if (
+        material?.kind === 'workspace-input-snapshot' &&
+        (!output.contentHash || output.contentHash === material.contentHash)
+      ) {
+        if (output.sections) {
+          if (output.sections.length === 0) {
+            this.saveMaterialRead(
+              event.runId,
+              material,
+              'parse',
+              'document',
+              output.contentHash ?? material.contentHash,
+              '',
+            );
+            return;
+          }
+          for (const section of output.sections) {
+            this.saveMaterialRead(
+              event.runId,
+              material,
+              'parse',
+              section.locator,
+              output.contentHash ?? material.contentHash,
+              section.content,
+            );
+          }
+          return;
+        }
         this.saveMaterialRead(
           event.runId,
           material,
@@ -1523,13 +1719,39 @@ export class RunService {
     if (input.skillBindings && input.skillBindings.length > 0) {
       throw new Error('TaskContextRevision 与直接 Skill 绑定不能同时提交');
     }
+    const workspaceId = this.store.tasks.getWorkspaceId(input.taskId);
+    if (!workspaceId) throw new Error('Task workspace does not exist');
+    const explicitMaterials = context.materials ?? [];
+    const materials = new ScheduleMaterialResolver(this.store)
+      .resolve({
+        taskId: input.taskId,
+        workspaceId,
+        ...(context.scheduleSourceSnapshotId
+          ? { scheduleSourceSnapshotId: context.scheduleSourceSnapshotId }
+          : {}),
+        materials: explicitMaterials,
+      })
+      .map(
+        (material): TaskMaterialSelection =>
+          material.selection ?? {
+            reference: material.reference,
+            purpose: material.purpose,
+            addedFrom:
+              material.scheduleOrigin === 'expert-reference'
+                ? 'expert-reference'
+                : 'workspace-candidate',
+          },
+      );
     if (context.executor.kind === 'general') {
       return {
         ...(context.skillBindings.length > 0 ? { skillBindings: context.skillBindings } : {}),
         ...(context.modelReference ? { modelReference: context.modelReference } : {}),
         ...(context.builtinToolPolicy ? { builtinToolPolicy: context.builtinToolPolicy } : {}),
-        materials: context.materials ?? [],
+        materials,
         materialScope: true,
+        ...(context.scheduleSourceSnapshotId
+          ? { scheduleSourceSnapshotId: context.scheduleSourceSnapshotId }
+          : {}),
         taskContextRevisionId: context.id,
         excludedMemoryIds: context.excludedMemoryIds ?? [],
         mcpToolBindings: context.mcpToolBindings ?? [],
@@ -1548,8 +1770,11 @@ export class RunService {
       expertInstruction: this.composeExpertInstruction(revision),
       modelReference: context.modelReference ?? revision.modelReference,
       builtinToolPolicy: context.builtinToolPolicy ?? revision.builtinToolPolicy,
-      materials: context.materials ?? [],
+      materials,
       materialScope: true,
+      ...(context.scheduleSourceSnapshotId
+        ? { scheduleSourceSnapshotId: context.scheduleSourceSnapshotId }
+        : {}),
       taskContextRevisionId: context.id,
       expertId: context.executor.expertId,
       expertRevisionId: context.executor.expertRevisionId,
@@ -2001,10 +2226,24 @@ const isKnowledgeSearchOutput = (
 interface ReadTextFileOutput {
   path: string;
   content: string;
+  material?: MaterialReference;
+  format?: string;
+  contentHash?: string;
+  sections?: Array<{ locator: string; content: string }>;
 }
 
 const isReadTextFileOutput = (value: unknown): value is ReadTextFileOutput =>
-  isRecord(value) && isString(value.path) && isString(value.content);
+  isRecord(value) &&
+  isString(value.path) &&
+  isString(value.content) &&
+  (value.material === undefined || materialReferenceSchema.safeParse(value.material).success) &&
+  (value.format === undefined || isString(value.format)) &&
+  (value.contentHash === undefined || isString(value.contentHash)) &&
+  (value.sections === undefined ||
+    (Array.isArray(value.sections) &&
+      value.sections.every(
+        (section) => isRecord(section) && isString(section.locator) && isString(section.content),
+      )));
 
 interface ReadArtifactOutput {
   artifactId: string;

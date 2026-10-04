@@ -272,6 +272,19 @@ describe('RunMemoryContextRepository', () => {
     expect(context?.memoryDependencyUnion[0]?.revisionId).toBe(dependencyMemoryRevisionId);
   });
 
+  it('persists a Run-level material union larger than one memory provenance limit', () => {
+    const store = openStore();
+    const runId = seedRun(store, '大范围依赖运行');
+    const materials = Array.from({ length: 201 }, (_, index) => knowledgeRef(`krev-${index}`));
+
+    const recorded = store.runMemoryContexts.recordSelection(
+      selectionOf(runId, [], { materialDependencyUnion: materials }),
+    );
+
+    expect(recorded.materialDependencyUnion).toHaveLength(materials.length);
+    expect(store.runMemoryContexts.get(runId)?.materialDependencyUnion).toEqual(materials);
+  });
+
   it('lists the runs that pinned an exact revision, oldest snapshot first', () => {
     const store = openStore();
     const revisionId = seedMemory(store, '验收以演示环境为准。');

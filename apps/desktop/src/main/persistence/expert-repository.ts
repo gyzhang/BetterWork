@@ -53,6 +53,13 @@ export interface CreateExpertInput {
   revision: ExpertRevisionDraft;
 }
 
+export class ExpertReferencedByScheduleError extends Error {
+  constructor(readonly scheduleReferences: number) {
+    super(`Expert is referenced by ${scheduleReferences} Schedule configuration(s)`);
+    this.name = 'ExpertReferencedByScheduleError';
+  }
+}
+
 const parseStringArray = (value: string, field: string): string[] => {
   const parsed: unknown = JSON.parse(value);
   if (!Array.isArray(parsed)) {
@@ -292,8 +299,18 @@ export class ExpertRepository {
     return row.total;
   }
 
+  /** Includes every immutable config version so archived history keeps its Expert identity. */
+  countScheduleReferences(id: string): number {
+    const row = this.db
+      .prepare('SELECT COUNT(*) AS total FROM schedule_configs WHERE expert_id = ?')
+      .get(id) as { total: number };
+    return row.total;
+  }
+
   /** 硬删除身份与其全部修订；挂在专家名下的长期记忆按外键级联移除。 */
   remove(id: string): boolean {
+    const scheduleReferences = this.countScheduleReferences(id);
+    if (scheduleReferences > 0) throw new ExpertReferencedByScheduleError(scheduleReferences);
     return this.db.prepare('DELETE FROM experts WHERE id = ?').run(id).changes > 0;
   }
 

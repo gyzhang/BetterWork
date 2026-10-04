@@ -41,6 +41,7 @@ ID 使用既有 UUID 约定；时间落库为 UTC epoch milliseconds，显示按
 
 - `trigger = 'scheduled' | 'manual-now' | 'manual-missed'`；`scheduled` 必有 scheduledAt，人工必有 requestKey。`manual-missed` 必引用同规则的 missed 实例，复制其期间，不改其记录。
 - `phase = 'preparing' | 'dispatched' | 'closed'`。准备占用在同步事务内建立；只有 preparing 可进入 dispatched；关闭不可重新派发。
+- `preparing` 覆盖 T2 至 T4：T3 前允许还没有 Task/Session；T3 原子提交后必须同时保存 `taskId / sessionId / sourceSnapshotId / preparedAt`，并继续保持 `preparing`，直到 T4 写入首个 Run。T4 前中断关闭时保留完整 T3 关联，使原 Task 草稿可人工继续；不创建 Run，也不再次派发。
 - 无 Run 时，closed 的 `preparationOutcome = 'missed' | 'skipped-overlap' | 'blocked' | 'needs-material' | 'cancelled' | 'interrupted-before-run'`。允许 needs-material 携带原 Task，不允许伪造 Run。
 - dispatched 必有 `taskId / sessionId / firstRunId / sourceSnapshotId`。Run 结束后 closed；Run 状态从真实首个 Run 查询，不另造 `lastRunStatus`。
 - 自动唯一 `(scheduleId, scheduledAt)`，**配置版本不进入唯一键**。人工唯一 `(scheduleId, requestKey)`；重发相同键返回原实例，不能在客户端超时后造新键重试。
@@ -61,7 +62,7 @@ ID 使用既有 UUID 约定；时间落库为 UTC epoch milliseconds，显示按
 
 应用库新增 `schedules / schedule_configs / schedule_occurrences / schedule_source_snapshots / schedule_source_items / schedule_output_receipts / schedule_notification_receipts / schedule_recovery_batches`。外键指向已有 Workspace、ExpertRevision、Task、Session、Run、ArtifactVersion；历史关系使用 RESTRICT 或保留引用，不新增硬删除 API。原有 Expert 删除检查也必须把 ScheduleConfig 的引用纳入判断。
 
-索引至少覆盖 enabled + nextScheduledAt、规则历史 `(schedule_id, created_at, id)`、自动唯一键（仅 scheduled）、人工 requestKey（仅人工）、source ordinal、版本交付唯一键、通知 outcomeKey。分页默认 50、最大 100，游标 `(createdAt,id)`；不能只返回最近 Task 冒充完整历史。
+索引至少覆盖 enabled + nextScheduledAt、规则历史 `(schedule_id, created_at, id)`、自动唯一键（仅 scheduled）、人工 requestKey（仅人工）、source ordinal、版本交付唯一键、通知 outcomeKey。每规则只有一个 preparing 实例由部分唯一索引保护；claim 事务另检查 dispatched 实例关联的真实 Run 是否仍为 running，Run 终态后释放后续周期，不等结果通知收口。分页默认 50、最大 100，游标 `(createdAt,id)`；不能只返回最近 Task 冒充完整历史。
 
 迁移按实施时最后版本 + 1 分配，支持空库、旧库升级及重复启动；禁止启动时探表 ALTER。第一次迁移建新表与必要引用，后续 TaskContext/启用信息增量由所属卡追加迁移；不预分配固定 v36–vN。Vault 不新增调度表。
 
@@ -85,7 +86,7 @@ T4 在 RunService 现有启动事务内增加窄的宿主关联参数/回调；�
 
 Main 生成六段表达式，秒固定 0：daily `0 m h * * *`，weekly `0 m h * * w`（周日映射 0），monthly `0 m h d * *`。同一个 `nextTimes(timing, after, count)` 供预览和调度使用，结果严格晚于 after，count 首版 3；月末 29/30/31 不存在则跳过该月，不替换成最后一天。
 
-选择 `cron-parser` v5 API `CronExpressionParser.parse(expression, {currentDate, tz, strict:true})` 后迭代 next。2026-10-03 查阅[上游 README](https://github.com/harrisiirak/cron-parser)及[源 package.json](https://github.com/harrisiirak/cron-parser/blob/master/package.json)：源码版本 5.10.1；这不证明 registry 发布或 Electron 可打包。SC05-1 核对发布包并以精确版本 + lockfile 固定，测试通过前不开放该规则。不能手写 cron 解析器作降级。
+选择 `cron-parser` v5 API `CronExpressionParser.parse(expression, {currentDate, tz, strict:true})` 后迭代 next。2026-10-03 已核对 [npm 发布包](https://www.npmjs.com/package/cron-parser)为 5.10.1、MIT、Node ≥18；`npm view` 与发布 tarball dry-run 的完整性摘要一致。已将精确版本作为 Desktop 生产依赖并写入根 lockfile。实际 API 的六字段 strict、时区选项和月末 skip 已由 `schedule-calendar.test.ts` 验证；Desktop Electron Vite build 通过，未手写 cron 解析器降级。
 
 ### 4.2 期间
 
@@ -94,6 +95,7 @@ Main 生成六段表达式，秒固定 0：daily `0 m h * * *`，weekly `0 m h *
 - 上一自然月：anchor 所在月前一月 1 日 00:00 至 anchor 所在月 1 日 00:00。
 - 过去 7 天：anchor 前 7 个自然日同一时刻至 anchor；首版支持的固定偏移时区无 DST 差异。
 - 本周至计划时刻：本周一 00:00 至 anchor；上一自然周：前一周一 00:00 至本周一 00:00。
+- 若本周计划时刻恰为周一 00:00，当前周区间是合法空集，保存 `startAt = endAt = anchorAt` 并标示为空期间；其余有界期间必须 `startAt < endAt`。
 - 自动以 scheduledAt 为 anchor，即使准备延迟也不改期间；立即执行以请求到达 Main 的 now 为 anchor。
 - 人工补做以原 missed 的期间与 scheduledAt 为 anchor，使用**当前有效配置和新材料快照**，展示与原配置差异；不许诺恢复过去网页/文件。
 - 历史月/季/半年对比写入 requirements；不按主期间过滤全部历史参考，也不把文件名/mtime 当作业务所属期间的证据。
@@ -135,7 +137,7 @@ TaskContextRevision 新增可选 `scheduleSourceSnapshotId`；RunContextSnapshot
 
 模型材料说明只发送有界摘要：最多 40 项身份、最多 8,000 Unicode code points，带总数与检索/读取指引；没有列进摘要不等于失去已授权检索范围。搜索先按 Run 的有效修订集合过滤再排序/截断；文档读取必须校验精确 revision/hash；文件读取只落到 ready 输入快照。现有 KnowledgeSearchService 的 Run scope 接点优先复用。
 
-`resolveContextSegment`、记忆召回授权、materialDependencyUnion、历史安全重放、读取审计和成果输入关系统一使用这份有效具体材料。不能只扩搜索工具而让记忆仍按 50 项旧数组判权限。下一期是新 Task，旧 Task 历史不全量带入；参考成果若依赖已撤销资料，按既有依赖闭包排除。
+`resolveContextSegment`、记忆召回授权、materialDependencyUnion、历史安全重放、读取审计和成果输入关系统一使用这份有效具体材料。不能只扩搜索工具而让记忆仍按 50 项旧数组判权限；Run 记忆查询标题仍按既有预算摘要，但授权键来自完整有效集合，Run 级依赖 union 最多保存 2,000 项，单条记忆的依赖上限不变。下一期是新 Task，旧 Task 历史不全量带入；参考成果若依赖已撤销资料，按既有依赖闭包排除。
 
 本期继续协作保留原快照，新增文件经原材料入口成为显式材料；这些补充不写回 Schedule。允许移除整个本期来源范围（save 请求 null），界面显示权限缩小与后续运行影响，触发现有安全历史分段；不增加逐项修改不可变清单的编辑器。后续 Run 都没有第二次自动 Occurrence。
 
@@ -156,7 +158,15 @@ TaskContextRevision 新增可选 `scheduleSourceSnapshotId`；RunContextSnapshot
 | MCP                                                                  | 当前实现缺少可强制证明的后台效果契约，首版所选 MCP 绑定整次阻塞；将来在独立能力契约批准后开放，不凭 readOnlyHint 或工具名字放行                                            |
 | 外部发送、第三方数据写入、业务审批                                   | 不属于本功能首版，整次阻塞                                                                                                                                                 |
 
-SC06-1 必须审阅真实 ppt-generation 固定命令及 grants 后登记**具体支持清单与 hash 依据**，不得凭预设名自动通过。若现有执行器无法守住所需边界，记录不支持原因；不能临时引入 OS 沙箱、任意命令审批系统或宣称脚本已经沙箱化。上述拒绝规则明确显示在预检结果，不能保存后才静默少装 Skill/MCP。技术审阅若要求扩大支持，先更新 ADR/契约。
+SC06-1 实测支持的 Skill 包 hash 为 `4681d64c1736d8162493e9b2da6d2a54bd079338ec46dd92ecdbdaa2f1ee52e1`。它由本机用户提供的 `ppt-generation-expert.zip` 按生产导入算法复算：排除 `.DS_Store` 等操作系统元数据、恢复 ZIP 中的 GBK 路径名、按 Node `localeCompare` 排序；没有解压、复制或修改包。支持命令只有预设登记的 `project-init`、`icon-sync`、`svg-export`、`template-merge`、`pptx-validate`，profile 必须逐字段等于 `suggestedPptProfile(hash)`；命令参数 Schema 或包 hash 有变化即阻塞。
+
+预设解析为固定 managed Python 调用：`project-init` 固定 `init --dir <本期 run work> --quick-generate --format ppt169` 且项目名不得是路径/选项；`icon-sync` 项目目录被限制在本期 work 下，当前工具链脚本还会验证图标 ID 仅为登记图标库和单文件名；`svg-export`、`template-merge`、`pptx-validate` 的脚本路径固定在 Skill 资源内，输入/输出由 `preparePptAttempt` 限定本期 work，输出通过既有执行器校验。Skill 自带两处适配修改仍逐字节核对源码 SHA-256：`svg_native_export.py` 为 `b030b073e27c19524e14a7a9b71b40faeb8f35999e72b4239097e1917140ddd3`，`merge_into_template.py` 为 `c4a874cabefb16c85006fc2d3b082c4f37b2e1848d624b517241eb3cda03b817`；未知脚本修订不能沿用修改。
+
+`project-init` 与 `icon-sync` 依赖随 Skill 包未分发的 `ppt-master`。对照本机干净工作树 `ppt-master` commit `680de11f1bef4628b68d5daad9dffec569fbd51f` 的实际 CLI：init 的 `--dir` 覆盖默认项目根、项目名校验为单个路径段、只在其 base 下新建；icon-sync 校验固定图标库/文件名，目标只在所给项目目录 `icons/`。定时预检要求既有 Skill grant 的 dependency fingerprint 覆盖当前锁 hash 与工具链 manifest hash、一个 macOS arm64 ready 环境、且唯一工具链快照通过完整性复核并含 `skills/ppt-master/scripts/project_manager.py` 和 `icon_sync.py`。这只证明当前固定命令/profile/修订/授权和不可变依赖可用；OS 子进程仍以用户身份运行、能访问宿主授权范围，**不构成原生进程沙箱**。
+
+定时模型必须解析到已启用语言模型 profile；远程 endpoint 缺少凭据时阻塞，本机 loopback 服务允许按既有模型协议使用无 Key profile。预检只读查询 profile 的非敏感 `apiKeyConfigured` 与凭据迁移状态；已完成迁移的密文会在 Main 内解析一次后立即丢弃结果，用于确认受保护存储可用，不返回/记录 API Key，不发模型请求。它不创建 grant、不探测真实模型、不安装依赖。能力 fingerprint 包含 Workspace/固定 ExpertRevision/模型与工具授权/Skill 修订和依赖，但不含期间、要求文本、Knowledge 成员或来源内容，因此已授权的来源动态变化不会每期触发能力重新授权。
+
+其他 hash、profile 改动、未知命令、未就绪或失配依赖、非单一工具链快照及全部 MCP 绑定均阻塞。上述拒绝规则明确显示在预检结果，不能保存后才静默少装 Skill/MCP。技术审阅若要求扩大支持，先更新 ADR/契约；不得凭预设名自动通过，也不得宣称脚本已经沙箱化。
 
 启用说明复用配置页：应用进程运行、电脑不休眠才会执行；会调用已配置模型/工具并可能产生费用；输出待人审阅；错过不自动补做。确认后持久化本配置的 capabilityFingerprint（专家、技能/profile/命令资源、模型引用、授权策略）；不保存密钥。引用能力变动导致 fingerprint 不一致则 blocked 并要求重新检查；纯知识成员/content 变动依照已批准动态范围进入下一期，不逐次索要确认。
 
@@ -213,7 +223,7 @@ NotificationTarget 增加 `schedule {scheduleId, occurrenceId?}`；种类增加 
 
 系统通知在窗口失焦或没有窗口、进程存活时可发；系统权限关闭不影响消息中心。点击保存待消费目标，创建/恢复主窗口，等待 Renderer/preload ready 的显式握手后交付，消耗后清空；重复 ready 不重复跳转。自动结果从不主动聚焦/导航，不清当前 Composer。按 ID 获取旧 Task；不存在时 ErrorPage/InlineError 解释，不跳另一个任务。
 
-领域错误用结构化 `code / message / problems? / existingOccurrenceId? / currentConfigVersion? / currentRevision?`，不由中文字符串反向解析。至少覆盖：`schedule_not_found / schedule_archived / schedule_conflict / schedule_busy / schedule_invalid_timing / schedule_workspace_unavailable / schedule_source_missing / schedule_source_conflict / schedule_source_budget_exceeded / schedule_preparation_timeout / schedule_capability_blocked / schedule_model_unavailable / schedule_clock_untrusted / schedule_output_collision / schedule_output_save_failed / schedule_cancelled`。底层既有错误保留原 code 为 problem，不新增相同含义第二个 Tool 错误。
+领域错误用结构化 `code / message / problems? / existingOccurrenceId? / currentConfigVersion? / currentRevision?`，不由中文字符串反向解析。至少覆盖：`schedule_not_found / schedule_archived / schedule_conflict / schedule_busy / schedule_capacity / schedule_invalid_timing / schedule_workspace_unavailable / schedule_source_missing / schedule_source_conflict / schedule_source_budget_exceeded / schedule_preparation_failed / schedule_preparation_timeout / schedule_capability_blocked / schedule_model_unavailable / schedule_clock_untrusted / schedule_output_collision / schedule_output_save_failed / schedule_cancelled`。底层既有错误保留原 code 为 problem，不新增相同含义第二个 Tool 错误。
 
 ## 10. UI 实施清单：组合基座，不新增基础组件
 

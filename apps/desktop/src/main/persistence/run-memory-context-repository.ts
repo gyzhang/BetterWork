@@ -1,7 +1,6 @@
 import {
   type MaterialReference,
   materialReferenceSchema,
-  MEMORY_MATERIAL_DEPENDENCY_MAX,
   MEMORY_MEMORY_DEPENDENCY_MAX,
   MEMORY_RECALL_TOTAL_ITEM_LIMIT,
   MEMORY_REPLAY_PAIR_LIMIT,
@@ -17,6 +16,7 @@ import {
   memoryRunPhaseSchema,
   type MemorySelectedMemory,
   memorySelectedMemorySchema,
+  RUN_MEMORY_MATERIAL_DEPENDENCY_MAX,
   type RunMemoryContext,
   runMemoryContextSchema,
 } from '@betterwork/agent-protocol';
@@ -90,7 +90,7 @@ const toContext = (row: RunMemoryContextRow): RunMemoryContext =>
       .parse(parseJson(row.replay_json)),
     materialDependencyUnion: materialReferenceSchema
       .array()
-      .max(MEMORY_MATERIAL_DEPENDENCY_MAX)
+      .max(RUN_MEMORY_MATERIAL_DEPENDENCY_MAX)
       .parse(parseJson(row.material_dependency_union_json)),
     memoryDependencyUnion: memoryDependencySchema
       .array()

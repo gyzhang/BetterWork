@@ -123,6 +123,28 @@ describe('KnowledgeWorkerRunner', () => {
     expect(pid).toBeTypeOf('number');
   }, 30_000);
 
+  it('将调用方 AbortSignal 传到提取作业并收口对应 Worker', async () => {
+    const runner = createRunner(hangRuntime);
+    const controller = new AbortController();
+    const pending = runner.extract(
+      'text',
+      Buffer.from('调用方取消的提取', 'utf8'),
+      { jobId: 'job-signal-cancel', attempt: 1 },
+      controller.signal,
+    );
+    const pid = await waitForPid(runner, 'extract:job-signal-cancel');
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    controller.abort();
+
+    await expect(pending).rejects.toSatisfy(isAbortError);
+    const deadline = Date.now() + 5_000;
+    while (runner.activePid('extract:job-signal-cancel') !== undefined && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    expect(runner.activePid('extract:job-signal-cancel')).toBeUndefined();
+    expect(pid).toBeTypeOf('number');
+  }, 30_000);
+
   it('不相关作业的取消请求不动当前登记进程', async () => {
     const runner = createRunner(hangRuntime);
     const pending = runner.extract('text', Buffer.from('仍在进行', 'utf8'), {

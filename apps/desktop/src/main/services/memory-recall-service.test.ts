@@ -4,17 +4,19 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type {
+  MaterialReference,
   MemoryProvenance,
   MemoryQueryContext,
   MemoryRecord,
   MemoryScope,
+  TaskMaterialSelection,
 } from '@betterwork/agent-protocol';
 import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { AppStore } from '../persistence';
 import { buildDerivedProvenance, manualMemorySource } from './memory-provenance';
-import { recallMemoriesForQuery } from './memory-recall-service';
+import { prepareRunMemoryDecision, recallMemoriesForQuery } from './memory-recall-service';
 import { MemoryService } from './memory-service';
 
 /**
@@ -35,6 +37,21 @@ import { MemoryService } from './memory-service';
  */
 
 const CAPTURED_AT = 1_700_000_000_000;
+const CONTENT_HASH = 'a'.repeat(64);
+
+const knowledgeReference = (revisionId: string): MaterialReference => ({
+  kind: 'knowledge-revision',
+  knowledgeDocumentId: 'schedule-document',
+  knowledgeRevisionId: revisionId,
+  contentHash: CONTENT_HASH,
+  sourcePath: `资料/${revisionId}.md`,
+});
+
+const materialSelection = (reference: MaterialReference): TaskMaterialSelection => ({
+  reference,
+  purpose: 'background',
+  addedFrom: 'user-input',
+});
 
 /** 记忆依赖只带精确修订与哈希；生产写入层按同一形状构造。 */
 interface MemoryDependency {
@@ -159,6 +176,25 @@ describe('召回期的依赖闭包与冲突组装配', () => {
     }).record,
   });
 
+  const dependOnMaterials = (
+    store: AppStore,
+    seeded: Seeded,
+    dependencies: readonly MaterialReference[],
+  ): Seeded => ({
+    operationId: seeded.operationId,
+    record: store.memories.update({
+      id: seeded.record.id,
+      expectedRevision: seeded.record.revision,
+      patch: {},
+      provenance: buildDerivedProvenance({
+        capturedAt: CAPTURED_AT,
+        sources: [manualMemorySource(seeded.operationId, seeded.record.content)],
+        materialDependencies: [...dependencies],
+        memoryDependencies: [],
+      }),
+    }).record,
+  });
+
   const dependencyOf = (seeded: Seeded): MemoryDependency => ({
     memoryId: seeded.record.id,
     revisionId: seeded.record.revisionId,
@@ -187,6 +223,55 @@ describe('召回期的依赖闭包与冲突组装配', () => {
       db.close();
     }
   };
+
+  it('uses the complete effective reference set for recall and audit beyond the title summary', async () => {
+    const { store, service, scope, workspaceId } = await setup();
+    const target = knowledgeReference('zzzz-scheduled-tail');
+    const seeded = dependOnMaterials(
+      store,
+      await confirm(service, store, scope, '收入按回款金额统计的经营分析口径。'),
+      [target],
+    );
+    const task = store.tasks.create(workspaceId, '定时月报', '范围权限回归');
+    const materials = [
+      ...Array.from({ length: 200 }, (_, index) =>
+        materialSelection(knowledgeReference(`revision-${String(index).padStart(3, '0')}`)),
+      ),
+      materialSelection(target),
+    ];
+    const preparation = {
+      workspaceId,
+      taskId: task.task.id,
+      runId: randomUUID(),
+      taskContextRevisionId: 'schedule-context-revision',
+      evaluatedAt: CAPTURED_AT,
+      prompt: '请按收入按回款金额统计的口径出月报。',
+      materials,
+      excludedMemoryIds: [],
+      taskTitle: task.task.title,
+    };
+
+    const complete = prepareRunMemoryDecision(store, preparation);
+    const withoutTail = prepareRunMemoryDecision(store, {
+      ...preparation,
+      materials: materials.slice(0, -1),
+      runId: randomUUID(),
+    });
+
+    expect(complete.queryContext.materialTitles).toHaveLength(50);
+    expect(complete.queryContext.materialTitles).not.toContainEqual(
+      expect.objectContaining({ reference: target }),
+    );
+    expect(complete.selectedRecords.map((record) => record.revisionId)).toContain(
+      seeded.record.revisionId,
+    );
+    expect(complete.materialDependencyUnion).toHaveLength(201);
+    expect(complete.materialDependencyUnion).toContainEqual(target);
+    expect(withoutTail.selectedRecords.map((record) => record.revisionId)).not.toContain(
+      seeded.record.revisionId,
+    );
+    expect(withoutTail.authorizationHash).not.toBe(complete.authorizationHash);
+  });
 
   it('末端依赖被删除时，整条链都不再注入', async () => {
     const { store, service, scope, workspaceId } = await setup();

@@ -18,6 +18,7 @@
     "@betterwork/tool-runtime": "*",
     "@modelcontextprotocol/client": "^2.0.0",
     "better-sqlite3": "^13.0.3",
+    "cron-parser": "5.10.1",
     "exceljs": "^4.4.0",
     "fast-xml-parser": "^5.11.1",
     "mammoth": "^1.12.2",
