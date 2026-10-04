@@ -611,6 +611,19 @@ function layoutChecks(): {
     throw new Error(
       `页面骨架或横向溢出异常：${header.height}/${document.documentElement.scrollWidth}/${innerWidth}`,
     );
+  if (!memoryPage) {
+    const body = document.querySelector<HTMLElement>('.page-body');
+    if (!body || Number.parseFloat(getComputedStyle(body).paddingTop) !== 12)
+      throw new Error('生产页面正文入口不是 12px');
+  }
+  if (memoryPage) {
+    const section = requireElement<HTMLElement>('.memory-settings');
+    if (Number.parseFloat(getComputedStyle(section).rowGap) !== 12)
+      throw new Error('记忆页签入口不是 12px');
+  }
+  const sourceSheet = document.querySelector<HTMLElement>('.schedule-source-sheet');
+  if (sourceSheet && Number.parseFloat(getComputedStyle(sourceSheet).rowGap) !== 12)
+    throw new Error('定时任务知识范围页签入口不是 12px');
   for (const element of document.querySelectorAll<HTMLElement>(
     '.page-header button, [role="alert"], .knowledge-detail-text, .artifact-editor, .expert-editor input, .memory-editor-host textarea',
   )) {

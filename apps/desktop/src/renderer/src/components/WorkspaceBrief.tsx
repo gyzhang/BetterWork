@@ -76,6 +76,7 @@ export function WorkspaceBrief({
     return (
       <div className="brief-panel">
         <EmptyNotice
+          placement="start"
           title="暂无简报"
           detail="确认几条目标、约束或方法后，这里会按当前空间汇总。简报不落库，也不会整体交给模型。"
         />
@@ -90,6 +91,7 @@ export function WorkspaceBrief({
     return (
       <div className="brief-panel">
         <EmptyNotice
+          placement="start"
           title="这个空间还没有可汇总的工作积累"
           detail="在任务里保存或确认记忆后，简报会把已确认的目标、约束、决策与方法按当前空间列在这里；候选与未确认内容不会进入简报。"
         />

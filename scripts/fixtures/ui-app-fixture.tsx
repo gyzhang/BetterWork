@@ -56,6 +56,9 @@ async function runStep(step: string): Promise<{ step: string; alerts: number; wi
       if (!name || !title) throw new Error('缺导航验收项');
       await click(name);
       await waitFor(() => hasText(title));
+      const body = document.querySelector<HTMLElement>('.main-stage .page-body');
+      if (!body || Number.parseFloat(getComputedStyle(body).paddingTop) !== 12)
+        throw new Error(`${name} 页正文入口不是 12px`);
     }
   }
   if (step === 'summon') {
@@ -106,6 +109,49 @@ async function runStep(step: string): Promise<{ step: string; alerts: number; wi
           hasText(step === 'first-run' ? '本期复盘已完成' : '下期复盘已完成') &&
           !findButton('停止'),
       );
+  }
+  if (step === 'first-run') {
+    const header = document.querySelector<HTMLElement>('.main-stage > .page-header');
+    const checkpoint = document.querySelector<HTMLElement>('.workspace > .discussion-checkpoints');
+    if (!header || !checkpoint) throw new Error('工作页缺少页头或讨论节点');
+    const gap = checkpoint.getBoundingClientRect().top - header.getBoundingClientRect().bottom;
+    if (Math.abs(gap - 12) > 1) throw new Error(`讨论节点与页头间距错误：${gap}px`);
+    await click('查看上下文');
+    for (const name of ['过程', '资料', '记忆', '简报', '成果']) {
+      const tabButton = [
+        ...document.querySelectorAll<HTMLButtonElement>('.context-panel .tabs button'),
+      ].find((item) => item.textContent?.trim() === name);
+      if (!tabButton) throw new Error(`缺上下文页签：${name}`);
+      tabButton.click();
+      await waitFor(
+        () =>
+          document.querySelector('.context-panel .tabs [aria-selected="true"]')?.textContent ===
+          name,
+      );
+      if (name === '简报')
+        await waitFor(() => Boolean(document.querySelector('.brief-panel > .empty-notice')));
+      const tabs = document.querySelector<HTMLElement>('.context-panel .tabs');
+      const content = document.querySelector<HTMLElement>('.context-content');
+      const first = content?.firstElementChild;
+      if (!tabs || !content || !(first instanceof HTMLElement))
+        throw new Error(`${name} 页签缺少首块内容`);
+      content.scrollTop = 0;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const firstVisible = first.classList.contains('inline-loading')
+        ? first
+        : (first.firstElementChild ?? first);
+      const emptyNotice =
+        name === '简报'
+          ? first.querySelector<HTMLElement>('.empty-notice[data-variant="block"]')
+          : null;
+      const contentTop = emptyNotice
+        ? emptyNotice.getBoundingClientRect().top +
+          Number.parseFloat(getComputedStyle(emptyNotice).paddingTop)
+        : firstVisible.getBoundingClientRect().top;
+      const tabGap = contentTop - tabs.getBoundingClientRect().bottom;
+      if (Math.abs(tabGap - 12) > 1) throw new Error(`${name} 页签入口间距错误：${tabGap}px`);
+    }
+    await click('收起上下文面板');
   }
   if (step === 'cancelled-stop') {
     await click('停止');

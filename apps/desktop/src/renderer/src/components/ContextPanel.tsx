@@ -201,6 +201,7 @@ export function ContextPanel({
           {tab === 'process' &&
             (events.length === 0 ? (
               <EmptyContext
+                placement="start"
                 title="等待任务开始"
                 detail="开始后，这里会按工作阶段呈现过程，而不是堆叠底层日志。"
               />
@@ -434,6 +435,7 @@ export function ContextPanel({
           {tab === 'artifacts' &&
             (artifacts.length === 0 ? (
               <EmptyContext
+                placement="start"
                 title="尚无工作成果"
                 detail="将完成的回复保存为 Markdown 后，它会出现在这里。"
               />
@@ -540,6 +542,7 @@ function EvidenceSection({
     <>
       {evidence.length === 0 ? (
         <EmptyContext
+          placement="start"
           title="尚无已查阅来源"
           detail="本次运行实际读取的本地资料、网页与 MCP 来源会显示在这里。"
         />

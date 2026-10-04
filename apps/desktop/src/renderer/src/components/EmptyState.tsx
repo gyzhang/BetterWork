@@ -7,14 +7,17 @@ export function EmptyContext({
   title,
   detail,
   icon,
+  placement = 'center',
 }: {
   title: string;
   detail: string;
   /** 区域语义与默认成果图标不同时传入；图标纯装饰，不进可及名称。 */
   icon?: ReactNode;
+  /** 页签正文从同一入口缝开始；通知面板继续使用居中空态。 */
+  placement?: 'center' | 'start';
 }): React.JSX.Element {
   return (
-    <div className="empty-context">
+    <div className="empty-context" data-placement={placement}>
       <span aria-hidden="true">{icon ?? <ArtifactIcon size={16} />}</span>
       <strong>{title}</strong>
       <p>{detail}</p>
@@ -32,9 +35,12 @@ export function EmptyContext({
 export function EmptyNotice({
   title,
   detail,
+  placement = 'inset',
 }: {
   title: string;
   detail?: string;
+  /** 贴齐宿主的内容入口时去掉顶部内距；其余小节保留默认留白。 */
+  placement?: 'inset' | 'start';
 }): React.JSX.Element {
   if (!detail)
     return (
@@ -43,7 +49,7 @@ export function EmptyNotice({
       </div>
     );
   return (
-    <div className="empty-notice" data-variant="block">
+    <div className="empty-notice" data-variant="block" data-placement={placement}>
       <strong>{title}</strong>
       <p>{detail}</p>
     </div>

@@ -12,6 +12,15 @@
   --motion-overlay: 240ms;
   --motion-easing: cubic-bezier(0.2, 0, 0.2, 1);
 
+  /* 组件间距六档（docs/10 §9.8）：官方设计系统共同使用的 4／8／12／16／24／32 子集。
+     gap 与 margin 只引用这些原子档；位置语义另用别名，但不另存数值。 */
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-24: 24px;
+  --space-32: 32px;
+
   /* 控件几何 Token（docs/10 §9.8）：常规控件 32px，密集行内 28px，主行动与
      大型输入 36px。同一语义只有一个值，禁止各视图再各写一遍高度、圆角与边框。 */
   --control-height-sm: 28px;
@@ -26,7 +35,7 @@
   --control-check-size: 16px;
   /* 卡片外壳档位：卡片与 ListRow 的 card 档共用，网格里的卡片不再各写一套。 */
   --card-padding: 12px 16px;
-  --card-gap: 12px;
+  --card-gap: var(--space-12);
   --control-radius: 6px;
   /* 圆角档位（docs/10 §9.10）：一档一个用途，样式表里不得再出现字面 px。
      微标（kbd、色板、格式徽标）取 3–4px，属图形化例外，由护栏按清单登记。 */
@@ -49,6 +58,8 @@
   /* 版心宽度（docs/10 §8.3）：全仓只有这一个正文行长，对话列与输入框同宽。
      要更窄的排版请写成 max-width 或内缩一档，不要再另起一个 `width: min(Npx, …)`。 */
   --page-body-width: 860px;
+  /* 页头／页签分隔线到首块内容只留这一道入口缝（docs/10 §8.3、§9.8）。 */
+  --content-start-gap: var(--space-12);
 
   /* 排版档位（docs/10 §9.13）：字号六档、行高四档，一档一个用途。
      13px 与 14px、1.55 与 1.6 这类「差一点就一样」的取值是本轮消掉的对象——
@@ -67,7 +78,7 @@
      不另起别名——两个名字指同一份几何正是这张表要消的东西。 */
   --surface-padding-panel: 16px;
   --surface-padding-modal: 24px;
-  --surface-padding-page: 28px 0 48px;
+  --surface-padding-page: var(--content-start-gap) 0 48px;
   /* 标记方块（图标与格式徽标的底座）三档：行／卡／整页。 */
   --mark-row: 24px;
   --mark-card: 32px;
@@ -462,7 +473,7 @@ small {
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-12);
   padding: 24px 0 18px;
 }
 .brand-mark {
@@ -481,7 +492,7 @@ small {
   letter-spacing: 0.08em;
 }
 .brand small {
-  margin-top: 4px;
+  margin-top: var(--space-4);
   color: var(--text-muted);
   font-size: 10px;
   letter-spacing: 0.1em;
@@ -499,7 +510,7 @@ small {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--space-8);
   border: 1px solid transparent;
   border-radius: var(--control-radius);
   line-height: var(--line-height-normal);
@@ -619,7 +630,7 @@ small {
 }
 .sidebar-divider {
   height: 1px;
-  margin: 4px 0 12px;
+  margin: var(--space-4) 0 var(--space-12);
   background: var(--border);
 }
 .section-label,
@@ -630,7 +641,7 @@ small {
   letter-spacing: 0.08em;
 }
 .section-label {
-  margin: 0 0 8px;
+  margin: 0 0 var(--space-8);
 }
 /* 工作空间分组（ADR-0029）：侧栏里接替「一条不分组的最近任务」的那一列。
    侧栏是 240px 定宽列，横向溢出只能靠截断解决——放一条横向滚动条出去，等于把
@@ -640,7 +651,7 @@ small {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-4);
   min-height: 0;
   overflow: hidden auto;
 }
@@ -651,13 +662,13 @@ small {
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr);
-  gap: 4px;
+  gap: var(--space-4);
 }
 .workspace-group-row {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-4);
 }
 /* 名称行吃掉动作按钮之外的宽度；能不能收缩由 `.nav-item` 基座负责。 */
 .workspace-group-name {
@@ -686,9 +697,9 @@ small {
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr);
-  margin-left: 12px;
+  margin-left: var(--space-12);
   padding-left: 8px;
-  gap: 4px;
+  gap: var(--space-4);
   border-left: 1px solid var(--border);
 }
 /* 侧栏「展示更多（N）」是 `Button variant="quiet" size="sm"`：
@@ -699,7 +710,7 @@ small {
 .workspace-rail {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
+  gap: var(--space-4);
 }
 .sidebar-collapsed {
   grid-template-columns: 88px minmax(0, 1fr) auto;
@@ -732,7 +743,7 @@ small {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--space-16);
   min-height: 70px;
   flex: none;
   flex-wrap: wrap;
@@ -742,7 +753,7 @@ small {
   background: var(--overlay);
 }
 .page-header h1 {
-  margin-top: 4px;
+  margin-top: var(--space-4);
   /* 页面标题 20px（docs/10 §9.7，2026-10-01 产品拍板）：此前代码写 19px 与文档各说各话。 */
   font-size: var(--font-size-page);
   font-weight: 650;
@@ -750,7 +761,7 @@ small {
 .page-header-leading {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-16);
   min-width: 0;
   flex: 1 1 280px;
 }
@@ -770,7 +781,7 @@ small {
 .page-header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   flex: none;
   max-width: 100%;
   flex-wrap: wrap;
@@ -782,10 +793,10 @@ small {
    否则 22 处已有 gap 的容器会被再叠一道（docs/10 §9.8、§11.5.1）。 */
 .skills-page > .inline-error,
 .experts-page > .inline-error {
-  margin: 12px 32px;
+  margin: var(--space-12) var(--space-32);
 }
 .knowledge-page > .inline-error {
-  margin: 12px 0;
+  margin: var(--space-12) 0;
 }
 .scroll-region {
   display: flex;
@@ -804,11 +815,11 @@ small {
 .page-toolbar {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-12);
   flex: none;
   /* 与下一段之间的缝默认由这段自己给；容器的 gap 已经负责节奏的页面，
      把工具栏包在一层 `.toolbar-slot` 里由那一层决定留白（见 docs/10 §9.8）。 */
-  margin-bottom: 12px;
+  margin-bottom: var(--space-12);
 }
 .view-container {
   min-width: 0;
@@ -820,7 +831,7 @@ small {
 .view-container-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  gap: var(--space-16);
 }
 /* 知识页的两栏舞台本身不滚动（滚动交给里面的两个 ScrollRegion），
    所以它是「裁剪容器」而不是滚动区，不再借用滚动区类名。 */
@@ -836,7 +847,7 @@ small {
 }
 .page-intro {
   max-width: 640px;
-  margin: 0 0 24px;
+  margin: 0 0 var(--space-24);
   color: var(--text-secondary);
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
@@ -846,10 +857,11 @@ small {
   min-height: 0;
   flex: 1;
   flex-direction: column;
+  padding-top: var(--content-start-gap);
 }
 
 .discussion-checkpoints {
-  margin: 0 auto 12px;
+  margin: 0 auto var(--space-12);
   width: min(var(--page-body-width), calc(100% - 48px));
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-surface);
@@ -858,7 +870,7 @@ small {
 }
 
 .discussion-checkpoint-summary {
-  margin: 8px 0 0;
+  margin: var(--space-8) 0 0;
   color: var(--text-secondary);
   font-size: var(--font-size-caption);
   line-height: var(--line-height-normal);
@@ -866,20 +878,20 @@ small {
 
 .discussion-checkpoint-form {
   display: grid;
-  gap: 12px;
-  margin-top: 12px;
+  gap: var(--space-12);
+  margin-top: var(--space-12);
   padding-top: 12px;
   border-top: 1px solid var(--border-subtle);
 }
 
 .discussion-checkpoint-fields {
   display: grid;
-  gap: 12px;
+  gap: var(--space-12);
 }
 
 .discussion-checkpoint-artifacts {
   display: grid;
-  gap: 8px;
+  gap: var(--space-8);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-row);
   padding: 8px;
@@ -894,8 +906,8 @@ small {
 .discussion-checkpoint-history {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-8);
+  margin-top: var(--space-8);
 }
 
 .messages {
@@ -910,7 +922,7 @@ small {
   display: flex;
   min-height: 100%;
   flex-direction: column;
-  padding: 28px 0 12px;
+  padding: 0 0 12px;
 }
 .welcome {
   display: flex;
@@ -924,7 +936,7 @@ small {
 .abacus {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-12);
   padding: 0 0 19px;
 }
 .abacus::before,
@@ -943,7 +955,7 @@ small {
   box-shadow: 0 0 0 4px var(--brand-soft);
 }
 .welcome h2 {
-  margin: 8px 0 12px;
+  margin: var(--space-8) 0 var(--space-12);
   font-family: Georgia, 'Kaiti SC', 'STKaiti', 'KaiTi', serif;
   font-size: var(--font-size-hero);
   font-weight: 600;
@@ -960,8 +972,8 @@ small {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px;
-  margin-top: 24px;
+  gap: var(--space-8);
+  margin-top: var(--space-24);
 }
 /* `.examples button` 这套「容器替首页示例发外观」的规则已收进
    `Button variant="outline" size="md"`（ADR-0031）。 */
@@ -970,12 +982,12 @@ small {
    margin 记的就是「这两块本来属于同一件事」。 */
 .message {
   display: grid;
-  margin: 0 0 16px;
-  gap: 8px;
+  margin: 0 0 var(--space-16);
+  gap: var(--space-8);
 }
 .message > span {
   display: block;
-  margin-left: 4px;
+  margin-left: var(--space-4);
   color: var(--text-muted);
   font-size: var(--font-size-caption);
   font-weight: 600;
@@ -992,7 +1004,7 @@ small {
 }
 .composer {
   width: min(var(--page-body-width), calc(100% - 48px));
-  margin: 0 auto 24px;
+  margin: 0 auto var(--space-24);
   padding: 11px 13px 10px;
   background: var(--composer);
   border: 1px solid var(--input-border);
@@ -1002,7 +1014,7 @@ small {
 .workspace-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   min-height: var(--row-height-sm);
   color: var(--text-muted);
   font-size: var(--font-size-caption);
@@ -1012,7 +1024,7 @@ small {
 .workspace-selector-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 4px 8px;
   color: var(--text-secondary);
   background: var(--surface-raised);
@@ -1047,13 +1059,13 @@ small {
 .workspace-selector-actions {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-4);
   padding: 4px 6px;
 }
 .workspace-selector-action {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   width: 100%;
   min-height: var(--control-height);
   padding: 6px 10px;
@@ -1112,7 +1124,7 @@ small {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-8);
 }
 .action-bar-hint {
   /* 左推不是凑缝：它把说明钉在行首，按钮组仍按 gap 排布。 */
@@ -1147,7 +1159,7 @@ small {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-12);
   color: var(--text-muted);
   font-size: var(--font-size-caption);
 }
@@ -1158,7 +1170,7 @@ small {
 }
 .composer-footer kbd {
   display: inline-block;
-  margin-left: 8px;
+  margin-left: var(--space-8);
   padding: 1px 4px;
   color: var(--text-muted);
   background: var(--surface-raised);
@@ -1198,17 +1210,21 @@ small {
   min-height: 0;
   flex: 1;
   overflow: hidden auto;
+  padding-top: var(--content-start-gap);
 }
 /* 上下文面板的分段之间靠各自的 padding 与分隔线相接，不能整列补 gap；
    夹在段与段之间的内联提示因此由这里给它自己的缝，左右与 `.context-section` 的 padding 对齐。 */
 .context-content > .inline-error {
-  margin: 12px 16px;
+  margin: 0 var(--space-16) var(--space-12);
+}
+.context-content > .inline-error:not(:first-child) {
+  margin-top: var(--space-12);
 }
 /* 「本次材料」的小节壳与记忆、简报用同一个 `.context-section`；
    列表只负责 8px 的缝，行的几何归 ListRow（docs/10 §10.1、§9.8）。 */
 .selected-materials-list {
   display: grid;
-  gap: 8px;
+  gap: var(--space-8);
 }
 /* 上下文面板里的记忆、简报与建议（docs/10 §8.3、§11.5.1）：
    小节靠分隔线分级，条目卡用 --surface，不叠第二层背景。
@@ -1216,9 +1232,12 @@ small {
    这件壳管列里绝大多数段落，`.brief-panel` 与 `.activity-list` 是同档的另一件壳。 */
 .context-section {
   display: grid;
-  gap: 8px;
-  padding: 13px 16px 12px;
+  gap: var(--space-8);
+  padding: 0 16px 12px;
   border-bottom: 1px solid var(--border-subtle);
+}
+.context-content > .context-section:not(:first-child) {
+  padding-top: 12px;
 }
 /* 上下文面板里只剩这一类自造文字：一句「该怎么读这一段」的说明。
    空态归 `EmptyNotice`、对象状态归 `StatusNote`（docs/10 §10.1、§11.5.2）——
@@ -1232,7 +1251,7 @@ small {
 }
 .context-list {
   display: grid;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 /* 本任务已排除＝范围预览里降级显示，但不隐藏：用户要能把它恢复回来。 */
@@ -1248,7 +1267,7 @@ small {
 }
 .context-exclusion-list {
   display: grid;
-  gap: 8px;
+  gap: var(--space-8);
   margin: 0;
   padding-left: 18px;
   color: var(--text-secondary);
@@ -1262,7 +1281,7 @@ small {
 }
 .context-replay-list {
   display: grid;
-  gap: 8px;
+  gap: var(--space-8);
   margin: 0;
   padding-left: 18px;
   color: var(--text-secondary);
@@ -1274,8 +1293,8 @@ small {
 /* 工作空间简报：只读投影，每条都要看得出可跳转。 */
 .brief-panel {
   display: grid;
-  gap: 16px;
-  padding: 13px 16px 16px;
+  gap: var(--space-16);
+  padding: 0 16px 16px;
 }
 .brief-note {
   color: var(--text-muted);
@@ -1284,11 +1303,11 @@ small {
 }
 .brief-section {
   display: grid;
-  gap: 8px;
+  gap: var(--space-8);
 }
 .brief-list {
   display: grid;
-  gap: 8px;
+  gap: var(--space-8);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1306,11 +1325,11 @@ small {
 .suggestion-settings {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-16);
 }
 .suggestion-consent {
   display: grid;
-  gap: 8px;
+  gap: var(--space-8);
   padding: var(--card-padding);
   background: var(--surface);
   border: 1px solid var(--border-subtle);
@@ -1319,13 +1338,13 @@ small {
 .suggestion-polling {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   color: var(--info);
   font-size: var(--font-size-caption);
 }
 .suggestion-job-list {
   display: grid;
-  gap: 8px;
+  gap: var(--space-8);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1333,16 +1352,16 @@ small {
 
 .suggestion-list {
   display: grid;
-  gap: 8px;
+  gap: var(--space-8);
 }
 .suggestion-card {
-  gap: 8px;
+  gap: var(--space-8);
 }
 .suggestion-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   color: var(--text-muted);
   font-size: var(--font-size-caption);
 }
@@ -1354,7 +1373,7 @@ small {
 }
 .suggestion-facts {
   display: grid;
-  gap: 4px;
+  gap: var(--space-4);
   margin: 0;
   padding: 0;
   color: var(--text-secondary);
@@ -1377,11 +1396,19 @@ small {
   color: var(--text-secondary);
   text-align: center;
 }
+.empty-context[data-placement='start'] {
+  min-height: 0;
+  padding: 0 16px 12px;
+  justify-content: flex-start;
+}
+.context-content > .empty-context[data-placement='start']:not(:first-child) {
+  padding-top: 12px;
+}
 .empty-context > span {
   display: grid;
   width: var(--mark-card);
   height: var(--mark-card);
-  margin-bottom: 12px;
+  margin-bottom: var(--space-12);
   place-items: center;
   color: var(--brand);
   background: var(--brand-soft);
@@ -1392,17 +1419,17 @@ small {
   font-size: var(--font-size-body);
 }
 .empty-context p {
-  margin-top: 8px;
+  margin-top: var(--space-8);
   color: var(--text-muted);
   font-size: var(--font-size-caption);
   line-height: var(--line-height-body);
 }
 .activity-list {
-  padding: 17px 16px;
+  padding: 0 16px 12px;
 }
 .activity-summary {
   display: flex;
-  gap: 12px;
+  gap: var(--space-12);
   padding: 12px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1411,7 +1438,7 @@ small {
 .status-dot {
   width: 8px;
   height: 8px;
-  margin-top: 4px;
+  margin-top: var(--space-4);
   flex: none;
   background: var(--success);
   border-radius: var(--radius-circle);
@@ -1426,7 +1453,7 @@ small {
 }
 .activity-summary p,
 .activity-row p {
-  margin-top: 4px;
+  margin-top: var(--space-4);
   color: var(--text-secondary);
   font-size: var(--font-size-caption);
   line-height: var(--line-height-normal);
@@ -1434,14 +1461,14 @@ small {
 .activity-row {
   display: grid;
   grid-template-columns: 12px minmax(0, 1fr);
-  gap: 8px;
+  gap: var(--space-8);
   min-height: 58px;
   padding-top: 14px;
 }
 .activity-marker {
   width: 7px;
   height: 7px;
-  margin: 4px 0 0 4px;
+  margin: var(--space-4) 0 0 var(--space-4);
   background: var(--brand);
   border-radius: var(--radius-circle);
 }
@@ -1459,7 +1486,7 @@ small {
 }
 .activity-row small {
   display: block;
-  margin-top: 8px;
+  margin-top: var(--space-8);
   color: var(--text-muted);
   font-size: var(--font-size-caption);
 }
@@ -1473,7 +1500,7 @@ small {
   justify-content: center;
 }
 .empty-page h1 {
-  margin: 8px 0 12px;
+  margin: var(--space-8) 0 var(--space-12);
   font-size: var(--font-size-hero);
   font-weight: 600;
   line-height: var(--line-height-tight);
@@ -1489,7 +1516,7 @@ small {
   min-height: 260px;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: var(--space-12);
   padding: var(--surface-padding-modal);
   color: var(--text-secondary);
   text-align: center;
@@ -1516,7 +1543,7 @@ small {
 .inline-loading {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   color: var(--text-secondary);
   font-size: var(--font-size-caption);
 }
@@ -1595,7 +1622,7 @@ small {
   background: var(--surface-raised);
 }
 .settings-nav-list h1 {
-  margin: 8px 0 24px;
+  margin: var(--space-8) 0 var(--space-24);
   font-size: var(--font-size-heading);
 }
 .skills-page {
@@ -1604,13 +1631,9 @@ small {
   flex: 1;
   flex-direction: column;
 }
-.skills-body {
-  padding-top: 20px;
-}
-
 .skill-cards {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--space-12);
 }
 
 .experts-page {
@@ -1627,11 +1650,8 @@ small {
   flex: 1;
   flex-direction: column;
 }
-.schedules-body {
-  padding-top: 20px;
-}
 .schedules-refresh-error {
-  margin: 12px 32px;
+  margin: var(--space-12) var(--space-32);
 }
 .schedule-rows {
   display: flex;
@@ -1641,24 +1661,24 @@ small {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--space-24);
 }
 .schedule-editor-sections > section {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-16);
 }
 .schedule-detail-body {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: var(--space-32);
 }
 .schedule-detail-section {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-12);
 }
 .schedule-detail-history {
   display: flex;
@@ -1669,7 +1689,7 @@ small {
   display: grid;
   min-width: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: var(--space-16);
 }
 .schedule-editor-wide {
   grid-column: 1 / -1;
@@ -1677,30 +1697,30 @@ small {
 .schedule-editor-artifact-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 16px;
+  gap: var(--space-8) var(--space-16);
 }
 .schedule-source-control {
   display: grid;
   min-width: 0;
-  gap: 8px;
+  gap: var(--space-8);
 }
-.schedule-source-sheet {
+.modal-panel[data-variant='sheet'].schedule-source-sheet {
   min-width: 0;
-  gap: 12px;
+  gap: var(--content-start-gap);
 }
 .schedule-source-candidates {
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-12);
   overflow: hidden auto;
 }
 .schedule-source-check-list {
   min-height: 0;
   flex-direction: column;
   align-items: stretch;
-  gap: 8px;
+  gap: var(--space-8);
   overflow: auto;
 }
 .schedule-source-check-list .check-list-item {
@@ -1711,7 +1731,7 @@ small {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-4);
   overflow-wrap: anywhere;
 }
 .schedule-source-document-path {
@@ -1727,7 +1747,7 @@ small {
 .schedule-editor-preview-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-8);
   margin: 0;
   padding-inline-start: 1.5em;
   color: var(--text-primary);
@@ -1738,23 +1758,23 @@ small {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  gap: 4px 12px;
+  gap: var(--space-4) var(--space-12);
 }
 .expert-cards {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--space-12);
 }
 .expert-rows {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-12);
 }
 /* 用途标签与状态片共用一行；标签本身是 Badge，这里只排行。 */
 .expert-card-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-8);
 }
 /* 一排就地动作：按钮宽度由内容决定，放不下才换行。次级动作竖成一列各占一整行，
    会把一小排动作读成一堵表单墙（docs/10 §9.8、§10.1，护栏见 coding-standard
@@ -1764,7 +1784,7 @@ small {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
+  gap: var(--space-4) var(--space-8);
 }
 .expert-editor,
 .expert-detail-page {
@@ -1773,20 +1793,14 @@ small {
   flex: 1;
   flex-direction: column;
 }
-/* 专家编辑与详情的正文一律用 `.page-body` 的 860px 版心（docs/10 §8.3），
-   页面不再自定宽度；这里只留顶部留白的微调。 */
-.expert-editor-body,
-.expert-detail-body {
-  padding-top: 20px;
-}
 .expert-editor-body {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-16);
 }
 .expert-editor-body fieldset {
   display: grid;
-  gap: 8px;
+  gap: var(--space-8);
   align-content: start;
   padding: var(--card-padding);
   border: 1px solid var(--border);
@@ -1803,12 +1817,12 @@ small {
 .check-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 16px;
+  gap: var(--space-8) var(--space-16);
 }
 .check-list-item {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   color: var(--text-secondary);
   font-size: var(--font-size-caption);
   font-weight: 400;
@@ -1823,7 +1837,7 @@ small {
 .expert-detail-head {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-8);
   padding-bottom: 16px;
 }
 .expert-detail-byline {
@@ -1839,7 +1853,7 @@ small {
 }
 .expert-detail-section {
   display: grid;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 14px 0;
   border-top: 1px solid var(--border);
 }
@@ -1851,7 +1865,7 @@ small {
 }
 .expert-memory-summary {
   display: grid;
-  gap: 4px;
+  gap: var(--space-4);
   padding-left: 18px;
   color: var(--text-secondary);
   font-size: var(--font-size-caption);
@@ -1864,7 +1878,7 @@ small {
 .skill-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-8);
 }
 /* 提炼作业行用抬升底色区分状态，几何仍归 ListRow 的 plain 变体。 */
 .suggestion-job-row {
@@ -1879,19 +1893,19 @@ small {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-12);
 }
 .section-header[data-variant='block'] {
-  gap: 24px;
+  gap: var(--space-24);
 }
 .section-header-text {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-4);
 }
 .section-header[data-variant='block'] .section-header-text {
-  gap: 8px;
+  gap: var(--space-8);
 }
 .section-header-title {
   color: var(--text-primary);
@@ -1917,7 +1931,7 @@ small {
   display: flex;
   align-items: center;
   flex: none;
-  gap: 8px;
+  gap: var(--space-8);
 }
 /* === NavList：纵向导航列表（docs/10 §10.1） ===
    选中必须同时是底色与 `aria-current`；此前五族按钮只有一个 `.active` 类，
@@ -1925,7 +1939,7 @@ small {
 .nav-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-4);
 }
 .nav-item {
   display: flex;
@@ -1935,7 +1949,7 @@ small {
   min-width: 0;
   min-height: var(--row-height);
   align-items: center;
-  gap: var(--nav-item-gap, 12px);
+  gap: var(--nav-item-gap, var(--space-12));
   /* 行内距一档 8px（`--control-padding-sm` 的水平格），四边同值；行的高由 `--row-height` 定。
      原先是 `7px 9px`：两个都不在任何档位表上，而窄栏那两处覆盖写的又是第三个数。 */
   padding: 8px;
@@ -1980,7 +1994,7 @@ small {
 }
 .list-row {
   display: flex;
-  gap: 12px;
+  gap: var(--space-12);
   width: 100%;
   min-width: 0;
   align-items: center;
@@ -2002,7 +2016,7 @@ small {
   min-width: 0;
   flex-basis: 100%;
   align-items: flex-start;
-  gap: 12px;
+  gap: var(--space-12);
 }
 .list-row[data-actions-placement='below'] > .list-row-actions {
   margin-left: auto;
@@ -2082,7 +2096,7 @@ small {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-4);
 }
 .card-title {
   color: var(--text-primary);
@@ -2110,7 +2124,7 @@ small {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
+  gap: var(--space-4) var(--space-8);
 }
 /* 可点卡片的名称在悬停时点亮——此前只有专家卡有这条反馈，技能卡整片是按钮却没有。 */
 .card-main:hover .card-title {
@@ -2124,13 +2138,13 @@ small {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-8);
 }
 .disclosure-label {
   display: flex;
   min-height: var(--control-height);
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   color: var(--text-secondary);
   font-size: var(--font-size-caption);
   cursor: pointer;
@@ -2179,7 +2193,7 @@ button.list-row:where(:not(:disabled)):hover {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-4);
 }
 .list-row-title {
   overflow: hidden;
@@ -2230,7 +2244,7 @@ button.list-row:where(:not(:disabled)):hover {
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--space-4);
 }
 /* 行内动作的外观不再由槽位兜底：ADR-0031 之前这里给裸 `<button>` 补一份
    「行内文字按钮」皮，于是页面不写档位也能长得像按钮，档位一换就整片失效。
@@ -2248,7 +2262,7 @@ button.list-row:where(:not(:disabled)):hover {
 .switch {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   min-height: var(--control-height-sm);
   padding: 0;
   color: inherit;
@@ -2333,7 +2347,7 @@ button.list-row:where(:not(:disabled)):hover {
 .skill-rows {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-12);
 }
 
 .skill-detail-description,
@@ -2345,15 +2359,15 @@ button.list-row:where(:not(:disabled)):hover {
 /* 这一节是块级流、没有纵向 gap 可用，所以状态说明的上下缝由它自己给；
    数值照搬迁移前的 `.skill-blocked-reasons`，只是把真相源从元素搬到容器（docs/10 §9.8）。 */
 .skill-detail-section > .status-note {
-  margin: 8px 0 12px;
+  margin: var(--space-8) 0 var(--space-12);
 }
 /* `.skill-detail-section :where(button)` 靠 :where() 降权重才没顶掉 FieldSelect，
    是页面替别人的控件补外观的代价；已收进 Button 基座（ADR-0031）。 */
 .skill-state-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  margin: 24px 0 16px;
+  gap: var(--space-8);
+  margin: var(--space-24) 0 var(--space-16);
 }
 .skill-state-grid div,
 .skill-trust-box {
@@ -2370,7 +2384,7 @@ button.list-row:where(:not(:disabled)):hover {
   font-size: var(--font-size-caption);
 }
 .skill-state-grid strong {
-  margin-top: 8px;
+  margin-top: var(--space-8);
   font-size: var(--font-size-caption);
 }
 .skill-trust-box {
@@ -2379,24 +2393,24 @@ button.list-row:where(:not(:disabled)):hover {
 .skill-trust-box label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   font-size: var(--font-size-body);
 }
 .skill-trust-box p {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 8px 0 0 24px;
+  gap: var(--space-8);
+  margin: var(--space-8) 0 0 var(--space-24);
   color: var(--text-secondary);
   font-size: var(--font-size-caption);
 }
 .skill-detail-section {
-  margin-top: 24px;
+  margin-top: var(--space-24);
 }
 .dependency-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-12);
   padding: var(--surface-padding-panel);
   background: var(--surface-raised);
   border: 1px solid var(--border);
@@ -2404,7 +2418,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .dependency-inline {
   display: flex;
-  gap: 8px;
+  gap: var(--space-8);
   align-items: center;
 }
 .dependency-inline .field-select-trigger {
@@ -2419,7 +2433,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .dependency-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-8);
   align-items: center;
 }
 .dependency-progress {
@@ -2436,41 +2450,41 @@ button.list-row:where(:not(:disabled)):hover {
   font-size: var(--font-size-body);
 }
 .dependency-operation span {
-  margin-left: 8px;
+  margin-left: var(--space-8);
   color: var(--text-muted);
   font-size: var(--font-size-caption);
 }
 .dependency-operation p {
-  margin: 8px 0 0;
+  margin: var(--space-8) 0 0;
   color: var(--text-secondary);
   font-size: var(--font-size-caption);
 }
 .dependency-grant {
-  margin-top: 12px;
+  margin-top: var(--space-12);
   padding-top: 11px;
   border-top: 1px solid var(--border-subtle);
 }
 .dependency-grant > p {
-  margin: 0 0 8px;
+  margin: 0 0 var(--space-8);
   color: var(--text-secondary);
   font-size: var(--font-size-caption);
 }
 /* 状态说明不带上下缝，所以这一格 8px 由容器给；数值沿用迁移前那条被
    `.dependency-grant p` 赢掉的 margin，只是把真相源从元素搬到容器（docs/10 §9.8）。 */
 .dependency-grant > .status-note {
-  margin: 0 0 8px;
+  margin: 0 0 var(--space-8);
 }
 .skill-detail-section > .text-area {
   width: 100%;
   min-height: 190px;
-  margin-top: 12px;
+  margin-top: var(--space-12);
 }
 /* 内联反馈的唯一出口（docs/10 §11.5.1 第二落点、§10.1 台账）。
    几何只住这一处：`padding` 取容器留白档，圆角取 `--radius-row`，字号与旧的
    `.inline-message` 同档；上下缝一律由承载它的容器 `gap` 拥有，基座不自带 margin。 */
 .inline-error {
   display: grid;
-  gap: 8px;
+  gap: var(--space-8);
   padding: var(--control-padding-lg);
   border-radius: var(--radius-row);
   font-size: var(--font-size-caption);
@@ -2492,13 +2506,13 @@ button.list-row:where(:not(:disabled)):hover {
   padding-left: 17px;
 }
 .inline-error-problems li {
-  margin-top: 4px;
+  margin-top: var(--space-4);
   overflow-wrap: anywhere;
 }
 .inline-error-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
 }
 /* 状态轴的唯一出口（docs/10 §11.5.2、§10.1 台账）。与上面那条的分工是「说的是哪一件事」：
    `InlineError` 说「你刚做的那一下怎么样了」，所以有底、有内距；`StatusNote` 只说
@@ -2506,7 +2520,7 @@ button.list-row:where(:not(:disabled)):hover {
    或容器侧规则拥有（docs/10 §9.8）。配色同样只由 tone 档位提供，档位只有四档。 */
 .status-note {
   display: grid;
-  gap: 4px;
+  gap: var(--space-4);
   font-size: var(--font-size-caption);
   line-height: var(--line-height-body);
 }
@@ -2531,7 +2545,7 @@ button.list-row:where(:not(:disabled)):hover {
   padding-left: 17px;
 }
 .status-note-problems li {
-  margin-top: 4px;
+  margin-top: var(--space-4);
   overflow-wrap: anywhere;
 }
 .settings-content {
@@ -2541,7 +2555,7 @@ button.list-row:where(:not(:disabled)):hover {
 .settings-section {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--space-24);
   width: min(var(--page-body-width), 100%);
 }
 .model-list {
@@ -2576,12 +2590,15 @@ button.list-row:where(:not(:disabled)):hover {
 .empty-notice[data-variant='block'] {
   padding: 24px 4px;
 }
+.empty-notice[data-variant='block'][data-placement='start'] {
+  padding-top: 0;
+}
 .empty-notice strong {
   color: var(--text-primary);
   font-size: var(--font-size-body);
 }
 .empty-notice[data-variant='block'] p {
-  margin-top: 8px;
+  margin-top: var(--space-8);
   font-size: var(--font-size-caption);
   line-height: var(--line-height-body);
 }
@@ -2593,7 +2610,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   color: var(--text-muted);
   font-size: var(--font-size-caption);
 }
@@ -2612,12 +2629,12 @@ button.list-row:where(:not(:disabled)):hover {
    三个单类规则（0,1,0），字色一直被上面的 `.memory-row small`（0,1,1）盖掉——
    「与已确认记忆重复」那一行从来没红过。换基座后 tone 由 `[data-tone]` 出，才真落得上。 */
 .memory-row .status-note {
-  margin-top: 8px;
+  margin-top: var(--space-8);
 }
 .memory-capture {
   display: grid;
-  gap: 8px;
-  margin: 12px 0 16px 32px;
+  gap: var(--space-8);
+  margin: var(--space-12) 0 var(--space-16) var(--space-32);
   padding: var(--card-padding);
   background: var(--surface-raised);
   border: 1px solid var(--border);
@@ -2625,13 +2642,13 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .memory-capture-source {
   display: grid;
-  gap: 8px;
+  gap: var(--space-8);
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
 }
 .memory-capture-source-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-8);
 }
 .memory-capture-source-state {
   color: var(--text-secondary);
@@ -2643,7 +2660,7 @@ button.list-row:where(:not(:disabled)):hover {
 .memory-settings {
   min-height: 0;
   flex: 1;
-  gap: 12px;
+  gap: var(--content-start-gap);
   overflow-y: auto;
 }
 /* 本页纵向节奏由 .memory-settings 的 gap 统一负责，工具栏不再另加下边距。 */
@@ -2655,7 +2672,7 @@ button.list-row:where(:not(:disabled)):hover {
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-12);
 }
 /* 列表是本页唯一滚动区；窗口过矮时先保住可读高度，再让整页兜底滚动。 */
 .memory-list-scroll {
@@ -2670,7 +2687,7 @@ button.list-row:where(:not(:disabled)):hover {
 /* === Tabs 与 SegmentedControl：页签带与切换按钮组的唯一几何（docs/10 §10.1） === */
 .tabs {
   display: flex;
-  gap: 4px;
+  gap: var(--space-4);
   border-bottom: 1px solid var(--border);
 }
 .tabs button {
@@ -2757,15 +2774,15 @@ button.list-row:where(:not(:disabled)):hover {
 .context-continuity-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-8);
+  margin-top: var(--space-8);
 }
 
 /* 冲突两侧来源只按需展开，展开后也仅显示登记摘要，不显示原始事件载荷。 */
 .memory-conflict-sources {
   display: grid;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-8);
+  margin-top: var(--space-8);
 }
 .memory-conflict-source-list {
   margin: 0;
@@ -2792,8 +2809,8 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .memory-conflict {
   display: grid;
-  gap: 8px;
-  margin-top: 12px;
+  gap: var(--space-8);
+  margin-top: var(--space-12);
   padding: var(--card-padding);
   background: var(--surface-raised);
   border: 1px solid var(--border);
@@ -2816,11 +2833,11 @@ button.list-row:where(:not(:disabled)):hover {
 .memory-conflict-bodies {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 8px;
+  gap: var(--space-8);
 }
 .memory-conflict-bodies > div {
   display: grid;
-  gap: 4px;
+  gap: var(--space-4);
   padding: 8px 9px;
   background: var(--surface);
   border: 1px solid var(--border-subtle);
@@ -2846,7 +2863,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .memory-editor-host {
   display: grid;
-  gap: 12px;
+  gap: var(--space-12);
   padding: var(--surface-padding-panel);
   background: var(--surface-raised);
   border: 1px solid var(--border);
@@ -2854,7 +2871,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .memory-editor {
   display: grid;
-  gap: 12px;
+  gap: var(--space-12);
 }
 .memory-editor small {
   display: block;
@@ -2884,11 +2901,11 @@ button.list-row:where(:not(:disabled)):hover {
 .memory-editor-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 12px;
+  gap: var(--space-12);
 }
 .memory-editor-diff {
   display: grid;
-  gap: 8px;
+  gap: var(--space-8);
   padding: var(--card-padding);
   background: var(--surface);
   border: 1px solid var(--border-subtle);
@@ -2899,7 +2916,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .memory-editor-diff-row {
   display: grid;
-  gap: 4px;
+  gap: var(--space-4);
 }
 .memory-editor-diff-row > span {
   color: var(--text-muted);
@@ -2923,7 +2940,7 @@ button.list-row:where(:not(:disabled)):hover {
 .memory-editor-declaration {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--space-8);
   color: var(--text-secondary);
   font-size: var(--font-size-caption);
   line-height: var(--line-height-normal);
@@ -2941,7 +2958,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-8);
   color: var(--text-secondary);
   font-size: var(--font-size-caption);
 }
@@ -2951,7 +2968,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .field-hint .dependency-warning {
   display: block;
-  margin-top: 4px;
+  margin-top: var(--space-4);
 }
 
 /* === FieldSelect：基于 PopoverMenu 的下拉选择器 === */
@@ -2961,7 +2978,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-8);
   color: var(--text-primary);
   background: var(--surface);
   border: var(--control-border);
@@ -3062,7 +3079,7 @@ button.list-row:where(:not(:disabled)):hover {
 .single-select-picker {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-8);
 }
 .single-select-picker-option {
   position: relative;
@@ -3113,7 +3130,7 @@ button.list-row:where(:not(:disabled)):hover {
 .workspace-folder-drop {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   padding: var(--card-padding);
   color: var(--text-secondary);
   text-align: left;
@@ -3131,7 +3148,7 @@ button.list-row:where(:not(:disabled)):hover {
 .workspace-folder-drop-text {
   display: grid;
   min-width: 0;
-  gap: 4px;
+  gap: var(--space-4);
 }
 .workspace-folder-drop-text small {
   overflow: hidden;
@@ -3143,12 +3160,12 @@ button.list-row:where(:not(:disabled)):hover {
 .appearance-group {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-12);
 }
 .appearance-modes {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--space-12);
 }
 /* 外观设置里的模式格与色系格：它们是**一格可点预览**，不是动作按钮——
    取 `--radius-card` 与卡片底，不吃三档控件高度，所以刻意不进 `Button`。
@@ -3157,7 +3174,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-8);
   cursor: pointer;
   text-align: left;
 }
@@ -3170,12 +3187,12 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .appearance-modes strong,
 .scheme-grid strong {
-  margin-top: 8px;
+  margin-top: var(--space-8);
   font-size: var(--font-size-caption);
 }
 .appearance-modes small,
 .scheme-grid small {
-  margin-top: 4px;
+  margin-top: var(--space-4);
   color: var(--text-muted);
   font-size: var(--font-size-caption);
 }
@@ -3228,14 +3245,14 @@ button.list-row:where(:not(:disabled)):hover {
 .scheme-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--space-12);
 }
 .scheme-preview {
   display: flex;
   width: 100%;
   height: 38px;
   overflow: hidden;
-  gap: 4px;
+  gap: var(--space-4);
   padding: 5px;
   border-radius: var(--radius-tag);
 }
@@ -3314,7 +3331,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   max-height: 100%;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-12);
   padding: var(--surface-padding-modal);
   overflow: hidden;
   background: var(--surface);
@@ -3323,7 +3340,7 @@ button.list-row:where(:not(:disabled)):hover {
   box-shadow: 0 16px 40px var(--shadow-color-overlay);
 }
 .modal-panel[data-variant='dialog'] {
-  gap: 8px;
+  gap: var(--space-8);
   width: min(420px, 100%);
 }
 .modal-panel[data-variant='viewer'] {
@@ -3348,8 +3365,8 @@ button.list-row:where(:not(:disabled)):hover {
 .confirmation-dialog footer {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
+  gap: var(--space-8);
+  margin-top: var(--space-16);
 }
 /* `.danger-confirm-button` 已收进 `Button variant="danger"`（ADR-0031）。 */
 
@@ -3380,7 +3397,7 @@ button.list-row:where(:not(:disabled)):hover {
 .popover-menu-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   min-height: var(--control-height);
   padding: var(--control-padding);
   border-radius: var(--radius-tag);
@@ -3450,14 +3467,14 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
 }
 .binding-chip {
   display: inline-flex;
   max-width: min(360px, 100%);
   min-width: 0;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-4);
   min-height: var(--control-height-sm);
   padding: 2px 5px 2px 8px;
   color: var(--text-primary);
@@ -3531,7 +3548,7 @@ button.list-row:where(:not(:disabled)):hover {
 .capability-picker-reason {
   font-size: var(--font-size-caption);
   color: var(--text-secondary);
-  margin-left: 8px;
+  margin-left: var(--space-8);
 }
 .capability-search {
   width: 100%;
@@ -3554,7 +3571,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 4px 0;
 }
 /* 材料片那一组放不下就整行占位，不与能力片挤在同一行里（位置钩子，不带几何）。 */
@@ -3568,7 +3585,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .material-global-toggle {
   display: block;
-  margin-top: 8px;
+  margin-top: var(--space-8);
   padding: 0;
   color: var(--brand);
   background: transparent;
@@ -3584,11 +3601,11 @@ button.list-row:where(:not(:disabled)):hover {
      这里只剩抽屉自己的排版。sheet 变体自带 gap: 0，标题与表单之间这道 24px 由这里给。 */
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--space-24);
 }
 .model-sheet form {
   display: flex;
-  gap: 16px;
+  gap: var(--space-16);
   flex-direction: column;
   /* 同为 480px 定宽抽屉：横向只能截断/折行，不放滚动条（docs/10 §9.8）。 */
   overflow: hidden auto;
@@ -3596,7 +3613,7 @@ button.list-row:where(:not(:disabled)):hover {
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: var(--space-12);
 }
 ::-webkit-scrollbar {
   width: 7px;
@@ -3671,7 +3688,7 @@ button.list-row:where(:not(:disabled)):hover {
 .knowledge-search,
 .memory-search {
   display: flex;
-  gap: 8px;
+  gap: var(--space-8);
 }
 .knowledge-search > .text-field,
 .memory-search > .text-field {
@@ -3681,7 +3698,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--space-16);
   padding: 9px 2px;
   color: var(--text-secondary);
   font-size: var(--font-size-caption);
@@ -3693,7 +3710,7 @@ button.list-row:where(:not(:disabled)):hover {
 .knowledge-summary-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-12);
 }
 /* `.knowledge-research-button` 与 `.chip-button` 是同一件事（品牌底小动作），
    已一并收进 `Button variant="chip"`（ADR-0031）。 */
@@ -3747,7 +3764,7 @@ button.list-row:where(:not(:disabled)):hover {
 .evidence-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-4);
 }
 .evidence-list .list-row-leading > span {
   display: grid;
@@ -3770,7 +3787,7 @@ button.list-row:where(:not(:disabled)):hover {
    它自己挂在 `.evidence-list`（flex column gap 4px）里，所以不再自带上下 margin。 */
 .evidence-preview {
   display: grid;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 9px 10px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
@@ -3785,7 +3802,7 @@ button.list-row:where(:not(:disabled)):hover {
   font-size: var(--font-size-caption);
 }
 .evidence-preview li p {
-  margin: 4px 0 8px;
+  margin: var(--space-4) 0 var(--space-8);
   color: var(--text-secondary);
   font-size: var(--font-size-caption);
   line-height: var(--line-height-body);
@@ -3794,16 +3811,16 @@ button.list-row:where(:not(:disabled)):hover {
 .message-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-12);
 }
 .run-group {
-  margin-bottom: 8px;
+  margin-bottom: var(--space-8);
 }
 .run-divider {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 24px 0;
+  margin: var(--space-24) 0;
   color: var(--text-secondary);
   font-size: var(--font-size-caption);
 }
@@ -3831,7 +3848,7 @@ button.list-row:where(:not(:disabled)):hover {
 .artifact-file-info {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-8);
   padding: var(--card-padding);
   border: 1px solid var(--border);
   border-radius: var(--radius-row);
@@ -3839,7 +3856,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .artifact-file-info-row {
   display: flex;
-  gap: 8px;
+  gap: var(--space-8);
   font-size: var(--font-size-caption);
 }
 .artifact-file-info-label {
@@ -3850,12 +3867,12 @@ button.list-row:where(:not(:disabled)):hover {
 .artifact-presentation-preview {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-12);
 }
 .artifact-thumbnail-gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 12px;
+  gap: var(--space-12);
   padding: var(--card-padding);
 }
 .artifact-thumbnail-item {
@@ -3885,11 +3902,11 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-12);
 }
 .slide-viewer-bar > div {
   display: flex;
-  gap: 8px;
+  gap: var(--space-8);
 }
 .slide-viewer-counter {
   color: var(--text-secondary);
@@ -3913,7 +3930,7 @@ button.list-row:where(:not(:disabled)):hover {
 /* `.back-button` 与专家页那颗 `.text-button`「返回详情」是同一个入口的两种皮，
    已收进 `Button variant="quiet" size="sm"`（ADR-0031）。 */
 .markdown-preview {
-  margin-top: 24px;
+  margin-top: var(--space-24);
   padding: 32px clamp(24px, 5vw, 52px);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -3936,17 +3953,17 @@ button.list-row:where(:not(:disabled)):hover {
   line-height: var(--line-height-tight);
 }
 .markdown-preview h1 {
-  margin: 0 0 24px;
+  margin: 0 0 var(--space-24);
   font-size: var(--font-size-hero);
 }
 .markdown-preview h2 {
-  margin: 32px 0 16px;
+  margin: var(--space-32) 0 var(--space-16);
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
   font-size: 22px;
 }
 .markdown-preview h3 {
-  margin: 24px 0 12px;
+  margin: var(--space-24) 0 var(--space-12);
   font-size: var(--font-size-heading);
 }
 .markdown-preview p,
@@ -3954,14 +3971,14 @@ button.list-row:where(:not(:disabled)):hover {
 .markdown-preview ol,
 .markdown-preview blockquote,
 .markdown-preview pre {
-  margin: 0 0 16px;
+  margin: 0 0 var(--space-16);
 }
 .markdown-preview ul,
 .markdown-preview ol {
   padding-left: 24px;
 }
 .markdown-preview li + li {
-  margin-top: 4px;
+  margin-top: var(--space-4);
 }
 .markdown-preview blockquote {
   padding: 8px 14px;
@@ -3989,7 +4006,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .markdown-preview table {
   width: 100%;
-  margin: 0 0 16px;
+  margin: 0 0 var(--space-16);
   border-collapse: collapse;
 }
 .markdown-preview th,
@@ -4003,8 +4020,8 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .artifact-editor {
   display: flex;
-  gap: 16px;
-  margin-top: 24px;
+  gap: var(--space-16);
+  margin-top: var(--space-24);
   flex-direction: column;
   flex: 1;
   min-height: 0;
@@ -4021,7 +4038,7 @@ button.list-row:where(:not(:disabled)):hover {
 .artifact-source-select {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-8);
   margin: 0;
   padding: var(--card-padding);
   border: 1px solid var(--border-subtle);
@@ -4040,7 +4057,7 @@ button.list-row:where(:not(:disabled)):hover {
 .artifact-source-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-12);
 }
 .artifact-source-row input[type='checkbox'] {
   flex: none;
@@ -4053,7 +4070,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   flex: 1;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--space-8);
   flex-direction: row;
   color: var(--text-primary);
   font-size: var(--font-size-body);
@@ -4074,7 +4091,7 @@ button.list-row:where(:not(:disabled)):hover {
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-12);
   /* 480px 定宽抽屉，与侧栏同一件事：只纵向滚（docs/10 §9.8）。 */
   overflow: hidden auto;
   padding-top: 16px;
@@ -4083,7 +4100,7 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-12);
   font-size: var(--font-size-caption);
 }
 .knowledge-admin-toggle {
@@ -4102,7 +4119,7 @@ button.list-row:where(:not(:disabled)):hover {
 .knowledge-admin {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-12);
   padding: var(--surface-padding-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-row);
@@ -4110,7 +4127,7 @@ button.list-row:where(:not(:disabled)):hover {
 .knowledge-admin-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-12);
   flex-wrap: wrap;
   font-size: var(--font-size-caption);
 }
@@ -4124,7 +4141,7 @@ button.list-row:where(:not(:disabled)):hover {
   min-width: 0;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-8);
 }
 /* 与标签、提示同排：给一个字段级的稳定宽度，切换模型时不抖动，超长模型名在按钮内省略。 */
 .knowledge-admin-profile .field-select-trigger {
@@ -4139,7 +4156,7 @@ button.list-row:where(:not(:disabled)):hover {
 .knowledge-jobs {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-8);
   padding: var(--card-padding);
   color: var(--text-secondary);
   background: var(--brand-soft);
@@ -4147,12 +4164,12 @@ button.list-row:where(:not(:disabled)):hover {
   font-size: var(--font-size-caption);
 }
 .knowledge-job-items {
-  margin: 4px 0 0;
+  margin: var(--space-4) 0 0;
   padding-left: 17px;
   color: var(--text-muted);
 }
 .knowledge-job-items li {
-  margin-top: 4px;
+  margin-top: var(--space-4);
   line-height: var(--line-height-body);
   word-break: break-all;
 }
@@ -4169,13 +4186,13 @@ button.list-row:where(:not(:disabled)):hover {
 .knowledge-collections {
   align-items: flex-start;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-8);
 }
 .knowledge-collection-create,
 .knowledge-collection-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   width: 100%;
 }
 .knowledge-collection-create > .text-field,
@@ -4185,7 +4202,7 @@ button.list-row:where(:not(:disabled)):hover {
 .knowledge-collection-check {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   font-size: var(--font-size-caption);
 }
 .knowledge-collection-check input {
@@ -4196,7 +4213,7 @@ button.list-row:where(:not(:disabled)):hover {
 .knowledge-detail-members {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-8);
   padding: var(--surface-padding-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-row);
@@ -4205,7 +4222,7 @@ button.list-row:where(:not(:disabled)):hover {
 .knowledge-detail-members > div {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   flex-wrap: wrap;
 }
 .knowledge-detail-members small {
@@ -4215,7 +4232,7 @@ button.list-row:where(:not(:disabled)):hover {
 .knowledge-detail {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-16);
   padding: 14px 2px 28px;
 }
 .knowledge-detail-hint,
@@ -4227,12 +4244,12 @@ button.list-row:where(:not(:disabled)):hover {
 .knowledge-detail-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--space-12);
 }
 .knowledge-revision-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-12);
   padding: 6px 0;
 }
 .knowledge-detail-text article {
@@ -4240,7 +4257,7 @@ button.list-row:where(:not(:disabled)):hover {
   border-top: 1px solid var(--border);
 }
 .knowledge-detail-text article p {
-  margin: 4px 0 0;
+  margin: var(--space-4) 0 0;
   font-size: var(--font-size-body);
   line-height: var(--line-height-loose);
   white-space: pre-wrap;
@@ -4249,17 +4266,17 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-12);
   padding-top: 10px;
 }
 .task-run-history {
-  margin-top: 16px;
+  margin-top: var(--space-16);
   border-top: 1px solid var(--border);
 } /* 「本空间参考版本」小节此前完全没有样式：标题、说明与内联提示三块贴在一起，
    唯一的分隔来自 `.inline-message` 自带的上下 margin。现在由小节自己拥有纵向缝（docs/10 §9.8）。 */
 .artifact-reference-section {
   display: grid;
-  gap: 12px;
+  gap: var(--space-12);
 }
 .artifact-reference-note {
   color: var(--text-secondary);
@@ -4270,7 +4287,7 @@ button.list-row:where(:not(:disabled)):hover {
    这一节只留「它与上面隔一道线」这件事。 */
 .artifact-evidence-list {
   display: grid;
-  gap: 8px;
+  gap: var(--space-8);
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
@@ -4278,13 +4295,13 @@ button.list-row:where(:not(:disabled)):hover {
 /* 本版输入：主内容区顶部卡片网格 */
 .artifact-input-grid {
   display: grid;
-  gap: 12px;
+  gap: var(--space-12);
   padding: 16px 0 8px;
 }
 .artifact-input-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .artifact-input-card-icon {
@@ -4302,12 +4319,12 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   min-height: 100%;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-16);
 }
 .artifact-detail-layout {
   display: grid;
   grid-template-columns: 176px minmax(0, 1fr);
-  gap: 24px;
+  gap: var(--space-24);
   flex: 1;
   min-height: 0;
 }
@@ -4320,7 +4337,7 @@ button.list-row:where(:not(:disabled)):hover {
 .artifact-version-list {
   display: grid;
   align-self: start;
-  gap: 8px;
+  gap: var(--space-8);
   padding: var(--card-padding);
   background: var(--surface-raised);
   border: 1px solid var(--border);
@@ -4332,7 +4349,7 @@ button.list-row:where(:not(:disabled)):hover {
   }
   .artifact-version-list {
     display: flex;
-    gap: 4px;
+    gap: var(--space-4);
     overflow: auto;
   }
   .artifact-version-list .list-row {
@@ -4394,14 +4411,14 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .search-settings .search-form {
   display: flex;
-  gap: 16px;
+  gap: var(--space-16);
   flex-direction: column;
   max-width: 480px;
 }
 .search-settings .search-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-8);
   padding-top: 4px;
 }
 .search-settings .search-status {
@@ -4411,8 +4428,8 @@ button.list-row:where(:not(:disabled)):hover {
 .sidebar-bottom {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 12px;
+  gap: var(--space-8);
+  margin-top: var(--space-12);
 }
 .notification-anchor {
   position: relative;
@@ -4507,7 +4524,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .toast {
   display: flex;
-  gap: 8px;
+  gap: var(--space-8);
   align-items: flex-start;
   padding: var(--card-padding);
   color: var(--text-primary);
@@ -4528,12 +4545,12 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   width: 340px;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-8);
 }
 .toast-stack .toast > p {
   min-width: 0;
   flex: 1;
-  margin: 4px 0 0;
+  margin: var(--space-4) 0 0;
 }
 .toast > span {
   display: grid;
@@ -4554,7 +4571,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .toast p {
   overflow: hidden;
-  margin-top: 4px;
+  margin-top: var(--space-4);
   color: var(--text-secondary);
   font-size: var(--font-size-caption);
   line-height: var(--line-height-normal);
@@ -4564,12 +4581,12 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .sidebar-collapsed .sidebar-bottom {
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-12);
 }
 @media (max-width: 960px) {
   .sidebar-bottom {
     flex-direction: column;
-    gap: 12px;
+    gap: var(--space-12);
   }
 }
 
@@ -4686,7 +4703,7 @@ select,
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  margin-bottom: 24px;
+  margin-bottom: var(--space-24);
 }
 .message.user p {
   max-width: 90%;
@@ -4724,7 +4741,7 @@ select,
 .markdown-table {
   max-width: 100%;
   overflow-x: auto;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-16);
 }
 .markdown-table table {
   min-width: max-content;
@@ -4739,13 +4756,13 @@ select,
   white-space: nowrap;
 }
 .message.assistant .markdown-preview hr {
-  margin: 24px 0;
+  margin: var(--space-24) 0;
   border: 0;
   border-top: 1px solid var(--border-subtle);
 }
 .tool-activity {
   min-width: 0;
-  margin: 0 0 24px;
+  margin: 0 0 var(--space-24);
   color: var(--text-secondary);
 }
 .tool-activity-toggle {
@@ -4753,7 +4770,7 @@ select,
   max-width: 100%;
   min-height: var(--control-height-lg);
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 4px 8px;
   color: var(--text-secondary);
   background: transparent;
@@ -4786,7 +4803,7 @@ select,
 }
 .tool-activity-body {
   min-width: 0;
-  margin-top: 8px;
+  margin-top: var(--space-8);
   padding: var(--card-padding);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-surface);
@@ -4798,7 +4815,7 @@ select,
 .tool-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-8);
 }
 .tool-pill {
   display: inline-flex;
@@ -4806,7 +4823,7 @@ select,
   min-width: 0;
   min-height: var(--control-height);
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   padding: 4px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
@@ -4842,13 +4859,13 @@ select,
   color: var(--brand);
 }
 .tool-call-detail {
-  margin-top: 12px;
+  margin-top: var(--space-12);
   padding-top: 12px;
   border-top: 1px solid var(--border-subtle);
   overflow-wrap: anywhere;
 }
 .tool-detail-name {
-  margin: 4px 0 12px;
+  margin: var(--space-4) 0 var(--space-12);
   color: var(--text-muted);
   font-size: var(--font-size-caption);
 }
@@ -4860,9 +4877,9 @@ select,
 .tool-payload {
   display: flex;
   min-width: 0;
-  margin-top: 12px;
+  margin-top: var(--space-12);
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-8);
 }
 .tool-field pre {
   max-height: 240px;
@@ -4900,25 +4917,25 @@ select,
 .mcp-tool-summary {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-8);
 }
 .mcp-editor {
   display: flex;
   max-width: 520px;
   padding: var(--surface-padding-panel);
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-12);
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
 }
 .mcp-binding-picker {
   display: grid;
-  gap: 12px;
+  gap: var(--space-12);
 }
 .mcp-binding-group {
   display: grid;
-  gap: 8px;
+  gap: var(--space-8);
   align-content: start;
 }
 .mcp-binding-group > strong {

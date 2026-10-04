@@ -1011,13 +1011,11 @@ describe('界面间距与骨架纪律', () => {
     ).toEqual([]);
   });
 
-  /**
-   * `gap` 与 `margin` 是同一道缝的两个所有者，所以共用一把标尺。
-   * 2026-09-26 那一轮只收了 `gap`，docs/10 §9.8 当时写下「margin 与 padding 属下一轮改造」；
-   * 本轮收 `margin`（含负值：抵消也取档）。`padding` 的档位要连控件几何一起定，另走一轮。
-   */
-  it('间距只用标尺上的档位', () => {
-    const SCALE = new Set([4, 8, 12, 16, 24, 32]);
+  /** `gap` 与 `margin` 共用六档原子 Token；位置语义只能引用已登记别名。 */
+  it('组件间距只用六档 Token', () => {
+    const SCALE = [4, 8, 12, 16, 24, 32] as const;
+    const primitiveTokens = new Set(SCALE.map((size) => `--space-${size}`));
+    const semanticTokens = new Set(['--card-gap', '--content-start-gap', '--nav-item-gap']);
     const SPACING_PROPERTIES = [
       'gap',
       'row-gap',
@@ -1035,16 +1033,44 @@ describe('界面间距与骨架纪律', () => {
       'margin-inline-end',
     ];
     const offenders: string[] = [];
+    for (const size of SCALE) {
+      const values = declarations
+        .filter(
+          (declaration) =>
+            declaration.selector === ':root' && declaration.property === `--space-${size}`,
+        )
+        .map((declaration) => declaration.value);
+      if (values.length !== 1 || values[0] !== `${size}px`)
+        offenders.push(`--space-${size} 必须在 :root 唯一定义为 ${size}px`);
+    }
+    for (const declaration of declarations) {
+      if (declaration.property.startsWith('--space-') && declaration.selector !== ':root')
+        offenders.push(locate(declaration, styles ?? ''));
+    }
+    for (const alias of ['--card-gap', '--content-start-gap']) {
+      const values = declarations
+        .filter((declaration) => declaration.selector === ':root' && declaration.property === alias)
+        .map((declaration) => declaration.value);
+      if (values.length !== 1 || values[0] !== 'var(--space-12)')
+        offenders.push(`${alias} 必须引用 --space-12，不另存 12px`);
+    }
     for (const declaration of declarations) {
       if (!SPACING_PROPERTIES.includes(declaration.property)) continue;
-      for (const match of declaration.value.matchAll(/(\d+(?:\.\d+)?)px/g)) {
-        const pixels = Number(match[1]);
-        if (pixels !== 0 && !SCALE.has(pixels)) offenders.push(locate(declaration, styles ?? ''));
-      }
+      const refs = [...declaration.value.matchAll(/var\((--[a-z0-9-]+)/gu)].map(
+        (match) => match[1] ?? '',
+      );
+      const onlyKnownTokens = refs.every(
+        (token) => primitiveTokens.has(token) || semanticTokens.has(token),
+      );
+      const normalized = declaration.value
+        .replace(/var\(--nav-item-gap,\s*var\(--space-12\)\)/gu, 'token')
+        .replace(/var\(--[a-z0-9-]+\)/gu, 'token');
+      if (!onlyKnownTokens || !/^(?:0|auto|token)(?:\s+(?:0|auto|token))*$/u.test(normalized))
+        offenders.push(locate(declaration, styles ?? ''));
     }
     expect(
       offenders,
-      '缝只允许 4 / 8 / 12 / 16 / 24 / 32px 档位；同一档差 1–3px 正是「看着不统一」的来源（docs/10 §9.8）',
+      'gap／margin 的非零缝只准引用 4／8／12／16／24／32 六档 Token；不直接写像素或临时变量（docs/10 §9.8）',
     ).toEqual([]);
   });
 
@@ -2094,7 +2120,13 @@ describe('输入控件基座纪律', () => {
         return;
       }
       checked += 1;
-      if (normalize(documented) !== actual) {
+      let resolved = actual;
+      for (let depth = 0; depth < 4; depth += 1)
+        resolved = resolved.replace(
+          /var\((--[a-z0-9-]+)\)/gu,
+          (reference, name: string) => root.get(name) ?? reference,
+        );
+      if (normalize(documented) !== resolved) {
         offenders.push(`${token} 文档写 ${normalize(documented)}，styles.css 是 ${actual}`);
       }
     };
@@ -3642,6 +3674,11 @@ const COLUMN_INSET_OWNERS: {
   { selector: '.brief-panel', property: 'padding', reason: '简报页的壳' },
   { selector: '.activity-list', property: 'padding', reason: '过程页的列表壳' },
   {
+    selector: ".empty-context[data-placement='start']",
+    property: 'padding',
+    reason: '上下文页签空态的首块与其他段落共用 16px 水平内缩',
+  },
+  {
     selector: '.context-content > .inline-error',
     property: 'margin',
     reason: '夹在段与段之间的内联提示，左右必须与段落壳对齐',
@@ -4060,6 +4097,65 @@ describe('页面骨架契约纪律', () => {
   const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
   expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
   const declarations = declarationsOf(styles ?? '');
+
+  it('页头与页签到首块内容只留 12px 入口缝', () => {
+    const valueOf = (selector: string, property: string): string[] =>
+      declarations
+        .filter(
+          (declaration) => declaration.selector === selector && declaration.property === property,
+        )
+        .map((declaration) => declaration.value);
+    expect(valueOf(':root', '--content-start-gap')).toEqual(['var(--space-12)']);
+    expect(valueOf(':root', '--surface-padding-page')).toEqual(['var(--content-start-gap) 0 48px']);
+    for (const [selector, property, expected] of [
+      ['.page-body', 'padding', 'var(--surface-padding-page)'],
+      ['.workspace', 'padding-top', 'var(--content-start-gap)'],
+      ['.context-content', 'padding-top', 'var(--content-start-gap)'],
+      ['.memory-settings', 'gap', 'var(--content-start-gap)'],
+      [
+        ".modal-panel[data-variant='sheet'].schedule-source-sheet",
+        'gap',
+        'var(--content-start-gap)',
+      ],
+      ['.memory-settings .page-toolbar', 'margin-bottom', '0'],
+      ['.discussion-checkpoints', 'margin', '0 auto var(--space-12)'],
+      ['.message-flow', 'padding', '0 0 12px'],
+      ['.context-section', 'padding', '0 16px 12px'],
+      ['.activity-list', 'padding', '0 16px 12px'],
+      ['.brief-panel', 'padding', '0 16px 16px'],
+      [".empty-context[data-placement='start']", 'padding', '0 16px 12px'],
+    ] as const) {
+      expect(valueOf(selector, property), `${selector} 的入口间距偏离了 docs/10 §8.3`).toEqual([
+        expected,
+      ]);
+    }
+    const bodyModifiers = new Set<string>();
+    for (const relative of productionPathsUnder('apps/desktop/src/renderer/')) {
+      if (!relative.endsWith('.tsx')) continue;
+      for (const match of read(relative).matchAll(/className="([^"]*\bpage-body\b[^"]*)"/gu)) {
+        for (const name of (match[1] ?? '').split(/\s+/u)) {
+          if (name && name !== 'page-body') bodyModifiers.add(`.${name}`);
+        }
+      }
+    }
+    const offenders = declarations
+      .filter((declaration) =>
+        ['padding', 'padding-top', 'padding-block-start', 'margin-top'].includes(
+          declaration.property,
+        ),
+      )
+      .filter((declaration) =>
+        declaration.selector.split(',').some((part) => bodyModifiers.has(part.trim())),
+      )
+      .filter(
+        (declaration) =>
+          declaration.selector !== '.message-flow' ||
+          declaration.property !== 'padding' ||
+          declaration.value !== '0 0 12px',
+      )
+      .map((declaration) => locate(declaration, styles ?? ''));
+    expect(offenders, '页面正文变体不得另补顶部间距，入口缝只由骨架拥有').toEqual([]);
+  });
 
   /** 骨架的六个类：结构由 `components/layout/` 负责，页面只能往里面放内容。 */
   const SKELETON_CLASSES = [

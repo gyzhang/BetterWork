@@ -736,10 +736,10 @@ describe('ContextPanel 换期恢复引导（MI08）', () => {
  */
 describe('上下文面板的分段内缩', () => {
   const INSET_OWNERS: ReadonlyArray<readonly [string, string]> = [
-    ['context-section', '小节壳：13px 16px 12px ＋ 分隔线，面板里绝大多数段落'],
-    ['activity-list', '过程页的列表壳：17px 16px'],
-    ['brief-panel', '简报壳：13px 16px 16px（简报的空态也套这件壳，空态本身由 EmptyNotice 渲染）'],
-    ['empty-context', '区域级空态基座：自带 28px 内距并居中'],
+    ['context-section', '小节壳：顶部入口缝归面板、水平 16px ＋ 分隔线'],
+    ['activity-list', '过程页的列表壳：顶部入口缝归面板、水平 16px'],
+    ['brief-panel', '简报壳：顶部入口缝归面板、水平 16px'],
+    ['empty-context', '区域级空态基座：页签顶部对齐，消息中心保持居中'],
     [
       'inline-error',
       '内联错误基座（docs/10 §11.5.1 第二落点）：它是表面不是文本，列内缩由 `.context-content > .inline-error` 给',

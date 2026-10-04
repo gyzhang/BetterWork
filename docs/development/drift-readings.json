@@ -1,23 +1,23 @@
 {
-  "savedAt": "2026-10-03 07:59",
+  "savedAt": "2026-10-04 22:45",
   "readings": {
-    "判据总数": 149,
+    "判据总数": 150,
     "现行文档点名次数": 13,
     "被点过名的判据": 10,
-    "测试文件": 187,
-    "用例": 1728,
-    "结构护栏": 149,
-    "例外登记": 200,
+    "测试文件": 220,
+    "用例": 1953,
+    "结构护栏": 150,
+    "例外登记": 202,
     "eslint配置块": 6,
     "规则文件": 7,
-    "产品源码行": 69262,
+    "产品源码行": 85160,
     "巡检窗口天数": 14
   },
   "ruleSnapshot": {
     "version": 1,
     "entries": {
       "eslint.config.mjs": "a0d9062f7c49db5ba0592ec1acac82cb14722ae599ead4e6a0d464fe8426057b",
-      "standards/coding-standard.test.ts › PAGE_SHAPE_EXCEPTIONS": "90cf036129a1612d798d5ec208f1eabaf262d77a24a80e5c2ce3fc7f45c3be45",
+      "standards/coding-standard.test.ts › PAGE_SHAPE_EXCEPTIONS": "4bf5c40200ba2c9aa6cc7aa03424c8a0b8c964faa31c711f66a3f80a75be324f",
       "standards/coding-standard.test.ts › INLINE_STYLE_OUTLETS": "749073f72dfd8f4367a72bb8173be25427027e6fdc2e0fc783aabe64f4f87f74",
       "standards/coding-standard.test.ts › SURFACE_SHELL_OWNERS": "908272dab65b8e041da04144d70de7ae0ffb57fb3e83ca52ccf25f97b422150b",
       "standards/coding-standard.test.ts › FIXED_MAX_WIDTH_OWNERS": "75dab9ff5ce7e6fc282650cd93567f24ac79cdb7b65478e45382d47faa2ab99d",
@@ -46,7 +46,7 @@
       "standards/coding-standard.test.ts › 图标按钮与动作条纪律 › 留在图标按钮上的领域钩子不再自带方块 › ICON_BUTTON_HOOKS": "bdca389af17c423bec4b9b4993e8c0e04137d1ff70a2aa148b0d5125c75f3e41",
       "standards/coding-standard.test.ts › NON_ACTION_BUTTON_SHAPES": "01310cd9967f70114746de557be156649137ee43e3c8055e45ece8a449b50fd3",
       "standards/coding-standard.test.ts › BUTTON_BASE_OWNERS": "264435902a620cce2f9f10729358c00e2092994f76108940f5a1f3c803a98572",
-      "standards/coding-standard.test.ts › COLUMN_INSET_OWNERS": "3cba3abc93a5856fd9f2a2a095e8c0d10c00cc5493105acb1c9a526f43b8b6db",
+      "standards/coding-standard.test.ts › COLUMN_INSET_OWNERS": "c9be490b5faafa09a03d0f8d9d244c162178ecd148141de2cd7fcc188bc3d1b6",
       "standards/coding-standard.test.ts › NOT_ON_COLUMN_INSET_AXIS": "9c0f068cb7454eb928427e4843bb30219acb60e75dee2e33eb671757fa305dfb",
       "standards/coding-standard.test.ts › COLUMN_SHELL_WIDTH_OWNERS": "1e3cffaf3df0d728c2de6ed4cf6acc60e3e4161bf4ccb0a787e30d3d098bc502",
       "standards/coding-standard.test.ts › NOT_ON_COLUMN_SHELL_AXIS": "8fc73de5fd73145ac3c5999df24512245c5d0dcfe67eb9b26b49a00ced4bf299",
@@ -65,5 +65,6 @@
       "standards/coding-standard.test.ts › 排版与图标档位纪律 › 行高只取四档 › exemptions": "1d87fe5e3046599ea7b8dea9b157ae7d47155cceececfd9398baf3f748607d29",
       "standards/coding-standard.test.ts › 新增 UI 的实际基座归属 › 新命名表面不能自造卡片或徽标外壳 › owners": "92bb0f10115976a86172f280c87cb4bf569ba95be9c674b5b313a9f1bca1c01b"
     }
-  }
+  },
+  "reviewReason": "2026-10-04 工作日志 22:44：复核 SC09 页面私有来源 Modal 例外，以及上下文首块空态唯一列内缩所有者；两项均有具体边界，间距 Token 和入口护栏已验证。"
 }

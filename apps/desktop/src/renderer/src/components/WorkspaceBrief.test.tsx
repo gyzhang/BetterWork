@@ -205,6 +205,9 @@ describe('WorkspaceBrief', () => {
     const empty = renderPanel({ brief: briefOf({ goals: section([]) }) });
     expect(empty.container.textContent).toContain('这个空间还没有可汇总的工作积累');
     expect(empty.container.textContent).toContain('候选与未确认内容不会进入简报');
+    expect(
+      empty.container.querySelector('.brief-panel > .empty-notice')?.getAttribute('data-placement'),
+    ).toBe('start');
   });
 
   it('条目点击回到对应记忆修订，供就地复核', () => {
