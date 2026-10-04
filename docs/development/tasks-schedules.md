@@ -2,7 +2,7 @@
 
 - 登记：2026-09-25；细化：2026-10-03（本轮 `date`）。本文件是 **SC 系列唯一状态板**，原 SC03–SC10 拆成小卡，原编号保留为范围标题，不另维护父卡状态。
 - 产品：光哥于本轮明确「我 review 了你的设计，我的意见是通过」，批准[原型 P1–P6](../prototype/scheduled-tasks/README.md)。此前已确认的长期目录、既有专家只读、历史对比、错过不补跑、后台通知与导航方向保持。
-- 本轮：产品低保真、契约、任务与提示词已按评审完成；用户已授权使用当前 GPT-6 Luna 连续实现 SC03-1 至 SC10-2，不逐卡重复请求。[ADR-0037](../adr/0037-scheduled-work-and-source-snapshots.md)与[实施契约](schedule-contracts.md)仍为 Proposed，不自动 Accepted。用户已授权按阶段成果提交；真实模型、推送和发布仍需独立指令。
+- 本轮：产品低保真、契约、任务与提示词已按评审完成；用户已授权使用当前 GPT-6 Luna 连续实现 SC03-1 至 SC10-2，不逐卡重复请求。[ADR-0037](../adr/0037-scheduled-work-and-source-snapshots.md)与[实施契约](schedule-contracts.md)仍为 Proposed，不自动 Accepted。用户已授权按阶段成果提交，并另行授权本次内网模型/百度搜索功能验收与阶段推送；发布仍需独立指令。
 - 基线记录：SC00/SC01 归档基点 HEAD `9352dcbd5da2c1b5f11ab37ece794b3c475816ae`、应用库 v35、Vault v7；本轮编码起点 HEAD `0091732ca2712e2b29cefa44d6ad845261ae4f49`、应用库 v36、Vault v7。当前实现已到应用库 v38、Vault v7，迁移及完整门禁在临时库验证；没有打开或修改生产用户库。已有原型文档与目录始终保留。
 - 文档分工：[设计](../designs/scheduled-tasks.md)定产品，[契约](schedule-contracts.md)定字段/算法，[本板](tasks-schedules.md)定任务状态，[编码交接](schedule-coding-prompts.md)提供复制指令。E/WM/MI/KM/CF/A/B0 状态不代签、不重排。
 
@@ -67,7 +67,7 @@ SC05-1 提前验证日历库，再做依赖它的规则服务；不能为了编�
 | SC09-7 | 生产组件/反馈/焦点/主题验收      | SC09-6                    | done | 2026-10-04 15:13 CST 开始、15:51 CST 完成：[日志](../logs/2026-10-04.md)。复用现有 Electron `ui:check` 宿主和真实生产 Schedule 页面/组件，隔离合成 DTO + Fake IPC；青玉明暗 × 760/1380px × 正常/减动效共 8 变体，每变体 16 步覆盖列表失败/恢复、详情、动作 Modal/Esc、原 Task 接续、编辑冲突保留草稿、创建/放弃确认、来源长中英路径/确认/Esc 焦点返回；共 128 步截图，检查无横向溢出、主要文字 ≥12px。生产页面交互中发现并修复 React 异步 state updater 读取已失效 `event.currentTarget` 的输入问题。完整 `npm run verify` 退出 0，截图目录 `/var/folders/kq/ts17kvnd5yg2kjtkx645y1zw0000gn/T/betterwork-ui-render-yF7vqy/`；已查看失败/恢复列表、深色来源弹窗和浅色冲突草稿截图（AI 页面走查，不是人工业务验收）。基础 UI 组件新增 0；应用库 v38、Vault v7，无新迁移。SC-M3 完整门禁证据见下表。 |
 | SC10-1 | 同目录六期离线端到端             | SC04–SC09 全部小卡        | done  | 2026-10-04 15:54 CST 开始、16:31 完成：[日志](../logs/2026-10-04.md)。注入 wall/monotonic clock，以临时 AppStore/Knowledge Vault、合成中文材料和 loopback Fake HTTP Provider 真跑 2026-04–09 六期 Main Scheduler/Dispatch/Source/Execution/Run/Outcome/Output。Provider 对每期真实调用固定范围 `read_text_file`/`read_knowledge`，并登记 ArtifactVersion/输入关系；目录新增/改写/删除、集合成员和知识修订只影响后续期，季度/H1 内容进入请求。首期缺资料留原 Task，用户补料后原 Task 同 Workspace/Session 续 Run 生成新版本，既有首期版本/保存字节不覆盖；错过 7 月只留 missed，人工重试沿用原期间并创建新快照。六份版本与保存文件在同一成果目录，Run/版本/期间实例各自稳定唯一；普通 Task 回归通过。定向 Vitest 1 文件/1 场景、`npm run typecheck`、目标 ESLint/Prettier、`git diff --check` 退出 0。`npm run ui:check -- --app-only` 退出 0，隔离 Electron 真 App/IPC fixture 在同 Workspace 保存暂停规则；普通四个 Run 均未创建 occurrence，重开临时 SQLite 后仍成立，网络尝试 0。截图/`matrix-results.json` `/var/folders/kq/ts17kvnd5yg2kjtkx645y1zw0000gn/T/betterwork-ui-render-crETDF/`，AI 已查看真实 App 旅程截图。应用库 v38、Vault v7，无新迁移；SC-M4 完整 verify 留 SC10-2 后。 |
 | SC10-2 | 故障矩阵、回归与完整门禁         | SC10-1                    | done  | 2026-10-04 16:33 CST 开始、17:06 CST 收口；起始 HEAD `65fcc76`，最终验收 diff 共 9 个文件（含 SC10-1 六期测试与 SC11 清单），无生产功能扩张。补入受管快照篡改阻断回归；Electron SIGKILL 后定时 Run 收口 `interrupted`、0 模型/网络请求、不重放且通知 1 条。完整 `npm run verify` 退出 0：functional 210 文件/1871 项、heavy 8/167、build、UI 58 组；实读临时数据库 App v38/Vault v7。证据与截图见[日志](../logs/2026-10-04.md)。 |
-| SC11   | 真实窗口/专家/六期业务验收       | SC10-2；独立人工/模型授权 | todo | 验收材料已备，真实业务仍待光哥指定模型、Expert Revision、Workspace/资料、occurrence 数和 Provider 预算后执行；步骤、预检、记录模板与限制见[SC11 验收清单](schedule-sc11-acceptance.md)。不以离线六期或 AI 截图代签。 |
+| SC11   | 真实窗口/专家/功能完成度验收     | SC10-2；独立人工/模型授权 | done  | 2026-10-04：光哥授权三个内网模型测试验证不限次数、百度千帆搜索每项 1–3 次，并确认当前应用数据库可完整用于测试；允许新建测试 Expert/Skill。使用 `kevin1004` Workspace 与测试 Expert Revision 1，按「全球 AI 动态／最近 7 天／周一 09:00 Asia/Shanghai／Markdown」创建暂停规则并人工立即执行唯一一期。真实窗口 Run 完成，百度搜索工具恰 1 次、返回 8 条网页来源；未读 Workspace/Knowledge。Occurrence 生成、ArtifactVersion `a5f9f532-1ccf-46a5-baff-ac44a355fa6b` 保存回执成功、通知可回看，规则仍暂停且历史仅 1 期。光哥查看功能证据后明确回复「可以」，功能验收通过；内容质量及连续周业务结果不在本次验收范围。AI 截图走查、调用事实和脱敏记录见[SC11 验收清单](schedule-sc11-acceptance.md)与[日志](../logs/2026-10-04.md)。 |
 
 ## 3. 逐卡说明
 
@@ -309,9 +309,9 @@ SC05-1 提前验证日历库，再做依赖它的规则服务；不能为了编�
 
 ### SC11：人类最终验收
 
-由光哥明确选择真实模型配置显示名、材料目录、允许次数/预算后执行。AI 先准备完整可运行离线场景与预检；真实样本默认同目录月度经营分析、周一调研、工作周报，实际专家由光哥指定。
+本卡由光哥指定周一调研样本类型；测试过程中可使用当前工作模型和百度千帆搜索，并由 AI 新建独立测试 Expert/Revision 与 Skill，不修改已有 Expert 定义。以用户指定的测试 Workspace 仅执行一个立即 occurrence，规则执行前后保持暂停。验收限于真实窗口中的调度、搜索调用、Run 终态、结果登记/保存和通知等功能；不评价搜索数量/相关性、研究结论或最终交付物质量。
 
-核验真实窗口 P1–P6、已绑定专家工作方式、资料/历史对比、成果质量、保存/通知与人继续协作；六期离线证明调度链路，真实模型证明语义效果，两者不互代。缺真实材料/模型或人类意见保持 todo/doing，记录具体缺口；不重跑其他系列验收，不自动提交发布。
+核验结果：2026-10-04 光哥确认主题「全球 AI 动态」、每周一 09:00 Asia/Shanghai、最近 7 天、Markdown 与立即执行一次。真实窗口显示固定 ExpertRevision/configuration、唯一一期与完成 Task；Run 中百度搜索工具调用 1 次并返回 8 条网页来源，未读本地文件/知识材料；ArtifactVersion 保存回执成功，结果通知可回看，规则仍暂停。查看证据后光哥明确回复「可以」，SC11 功能验收通过。六期离线旅程继续作为多周期和故障恢复的自动化证据；人工确认不构成搜索语义、报告质量或连续周业务结果的评价。
 
 ## 4. 里程碑与具体验证命令
 
@@ -321,8 +321,8 @@ SC05-1 提前验证日历库，再做依赖它的规则服务；不能为了编�
 | SC-M1  | SC04 全卡 + SC05-2/3 + SC06 全卡 | 2026-10-04 09:08 CST：`npm run verify` 退出 0；lint、format、typecheck、functional 190 文件/1759 项、heavy 8 文件/163 项、Desktop build 与 UI 检查 50 组全通过。应用库 v38、Vault v7；临时 UI 产物 `/var/folders/kq/ts17kvnd5yg2kjtkx645y1zw0000gn/T/betterwork-ui-render-yBfolL`。AI 的共用矩阵/应用旅程检查不是定时生产页走查。详见[日志](../logs/2026-10-04.md)。 |
 | SC-M2  | SC07/SC08 全卡                   | 2026-10-04 11:33 CST：`npm run verify` 退出 0；lint、format、typecheck、functional 194 文件/1801 项、heavy 8 文件/165 项、Desktop build、Electron `ui:check` 50 组均通过。SC07 真实版本字节非覆盖保存/回执恢复、SC08 结果与通知事务去重/无窗口点击 ready 导航定向验收完成。隔离 UI 截图与读数 `/var/folders/kq/ts17kvnd5yg2kjtkx645y1zw0000gn/T/betterwork-ui-render-ZpER7s`；应用库 v38、Vault v7、无迁移。代码与卡片证据提交 `cb5fa9e`；详见[日志](../logs/2026-10-04.md)。 |
 | SC-M3  | SC09 全卡                        | 2026-10-04 15:51 CST：SC09-1 至 SC09-7 均有卡片证据；完整 `npm run verify` 退出 0（lint、format:check、typecheck、functional 209 文件/1869 项、heavy 8 文件/167 项、Desktop build、Electron `ui:check` 57 矩阵/旅程组 + 进程恢复组，共 58 组）。生产 Schedule 页面 8 变体 × 16 交互步骤截图及 `results.json`：`/var/folders/kq/ts17kvnd5yg2kjtkx645y1zw0000gn/T/betterwork-ui-render-yF7vqy/`；已做 AI 截图走查，SC11 人工/业务验收仍待执行。Build 仅有既有 Zod PURE 注释位置警告，无错误。应用库 v38、Vault v7，无迁移；本里程碑代码与证据按授权阶段提交。详见[日志](../logs/2026-10-04.md)。 |
-| SC-M4  | SC10 全卡                        | 2026-10-04：完整 `npm run verify` 两次退出 0，最终轮功能 210 文件/1871 项、heavy 8 文件/167 项、Desktop build、Electron `ui:check` 58 组全通过。六期 Fake Provider 集成、T2–T5 故障矩阵、普通 Run 回归通过；新增受管输入快照 hash 篡改拒绝断言。最终隔离 Electron 产物 `/var/folders/kq/ts17kvnd5yg2kjtkx645y1zw0000gn/T/betterwork-ui-render-LMj7X8/`（57 矩阵/应用组 + SIGKILL 恢复组）；实际临时 SQLite App v38/Vault v7。AI 截图走查完成，真实业务 SC11 仍 todo；详见[日志](../logs/2026-10-04.md)。 |
-| SC-M5  | SC11                             | 光哥真实窗口结论、授权真实模型语义与业务审阅，缺证据不代签                |
+| SC-M4  | SC10 全卡                        | 2026-10-04：完整 `npm run verify` 两次退出 0，最终轮功能 210 文件/1871 项、heavy 8 文件/167 项、Desktop build、Electron `ui:check` 58 组全通过。六期 Fake Provider 集成、T2–T5 故障矩阵、普通 Run 回归通过；新增受管输入快照 hash 篡改拒绝断言。最终隔离 Electron 产物 `/var/folders/kq/ts17kvnd5yg2kjtkx645y1zw0000gn/T/betterwork-ui-render-LMj7X8/`（57 矩阵/应用组 + SIGKILL 恢复组）；实际临时 SQLite App v38/Vault v7。该阶段结束时 SC11 真实窗口验收尚未执行；详见[日志](../logs/2026-10-04.md)。 |
+| SC-M5  | SC11                             | 2026-10-04：光哥已查看真实 BetterWork 规则详情和 Run/结果事实并确认功能验收通过。唯一一期实际调用百度搜索工具 1 次、Run 完成、Markdown ArtifactVersion 保存成功、结果通知可回看，规则保持暂停。AI 截图走查与用户人工结论分开记录；内容正确性/业务价值未评估，不在本次授权范围。详见[SC11 验收清单](schedule-sc11-acceptance.md)及[日志](../logs/2026-10-04.md)。 |
 
 下面是命令形状示例，文件名以本卡实际新增/既有测试为准；先确认测试属于 functional/heavy，不能一条 broad glob 重复跑全仓。迁移测试按现有 Vitest 档运行。
 
