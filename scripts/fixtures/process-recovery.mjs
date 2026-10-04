@@ -79,7 +79,7 @@ export async function runProcessRecovery({ electron, output, root, environment, 
   if (
     result.previousPid === result.recoveredPid ||
     result.requests !== 0 ||
-    result.checks?.length !== 8
+    result.checks?.length !== 10
   )
     throw new Error('进程恢复缺完整新进程证据');
   return { ...result, interruption: 'SIGKILL-owned-process-group' };

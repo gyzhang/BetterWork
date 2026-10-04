@@ -163,6 +163,39 @@ describe('ScheduleSourceService', () => {
     ).toThrow();
   });
 
+  it('blocks a tampered managed source before publishing the manifest or creating a Task', async () => {
+    const fixture = createHarness();
+    writeFileSync(path.join(fixture.workspaceRoot, '经营摘要.md'), '准备时读取的原始内容');
+    const occurrence = fixture.createOccurrence();
+    const directory = {
+      collect: async (request: Parameters<typeof fixture.directorySources.collect>[0]) => {
+        const result = await fixture.directorySources.collect(request);
+        const snapshot = fixture.store.inputSnapshots.list('ready')[0];
+        if (!snapshot) throw new Error('Expected a ready managed input snapshot');
+        writeFileSync(fixture.snapshots.resolvePath(snapshot), '已被篡改的受管快照');
+        return result;
+      },
+    };
+    const service = fixture.createService(directory);
+
+    await expect(service.prepare(occurrence.id)).rejects.toMatchObject({
+      name: 'ScheduleSourceServiceError',
+      code: 'schedule_source_missing',
+    });
+    const snapshot = fixture.store.scheduleSources.getByOccurrence(occurrence.id);
+    expect(snapshot).toMatchObject({ status: 'failed', itemCount: 0, totalFileBytes: 0 });
+    expect(fixture.store.scheduleOccurrences.get(occurrence.id)).toMatchObject({
+      phase: 'closed',
+      preparationOutcome: 'blocked',
+      reasonCode: 'schedule_source_missing',
+    });
+    expect(fixture.store.tasks.listRecent(fixture.workspace.id)).toEqual([]);
+    expect(fixture.store.runs.list()).toEqual([]);
+    expect(() =>
+      fixture.store.scheduleSources.listItems({ occurrenceId: occurrence.id }),
+    ).toThrow();
+  });
+
   it('combines directory and fixed Knowledge revisions into one deterministically ordered manifest', async () => {
     const fixture = createHarness();
     writeFileSync(path.join(fixture.workspaceRoot, '经营数据.md'), '本期数据');

@@ -4,11 +4,19 @@ import path from 'node:path';
 import process from 'node:process';
 
 import { abortError } from '@betterwork/agent-core';
-import { IpcChannel, type MaterialReference, type RunSummary } from '@betterwork/agent-protocol';
+import {
+  IpcChannel,
+  type MaterialReference,
+  type RunSummary,
+  type ScheduleConfigDraft,
+} from '@betterwork/agent-protocol';
 import { BrowserWindow, ipcMain, session } from 'electron';
 
 import { registerIpc } from '../../apps/desktop/src/main/ipc/register-ipc';
-import { AppStore } from '../../apps/desktop/src/main/persistence';
+import {
+  AppStore,
+  RUN_INTERRUPTED_ON_STARTUP_REASON,
+} from '../../apps/desktop/src/main/persistence';
 import { DiscussionCheckpointService } from '../../apps/desktop/src/main/services/discussion-checkpoint-service';
 import { ExpertService } from '../../apps/desktop/src/main/services/expert-service';
 import { createStoreExtractionSourceReader } from '../../apps/desktop/src/main/services/extraction-source-reader';
@@ -29,9 +37,13 @@ import { MemoryService } from '../../apps/desktop/src/main/services/memory-servi
 import { ModelProviderFactory } from '../../apps/desktop/src/main/services/model-provider-factory';
 import { NotificationService } from '../../apps/desktop/src/main/services/notification-service';
 import { RunService } from '../../apps/desktop/src/main/services/run-service';
+import { ScheduleDirectorySourcesService } from '../../apps/desktop/src/main/services/schedule-directory-sources';
+import { ScheduleKnowledgeSourcesService } from '../../apps/desktop/src/main/services/schedule-knowledge-sources';
+import { ScheduleNotificationService } from '../../apps/desktop/src/main/services/schedule-notification-service';
 import { ScheduleOutcomeService } from '../../apps/desktop/src/main/services/schedule-outcome-service';
 import { ScheduleOutputService } from '../../apps/desktop/src/main/services/schedule-output-service';
 import { ScheduleService } from '../../apps/desktop/src/main/services/schedule-service';
+import { ScheduleSourceService } from '../../apps/desktop/src/main/services/schedule-source-service';
 import { SkillDependencyService } from '../../apps/desktop/src/main/services/skill-dependency-service';
 import { SkillService } from '../../apps/desktop/src/main/services/skill-service';
 import { TaskMaterialService } from '../../apps/desktop/src/main/services/task-material-service';
@@ -71,6 +83,13 @@ interface JourneyServices {
   vault: KnowledgeVault;
   runs: RunService;
   extractions: MemoryExtractionService;
+  inputSnapshots: InputSnapshotService;
+  scheduleService: ScheduleService;
+  scheduleSourceService: ScheduleSourceService;
+  scheduleOutputs: ScheduleOutputService;
+  scheduleOutcomes: ScheduleOutcomeService;
+  scheduleNotifications: ScheduleNotificationService;
+  seededScheduleId?: string;
 }
 
 export function assemble(
@@ -155,8 +174,25 @@ export function assemble(
     settleDue: async () => undefined,
     cancelPreparations: () => undefined,
   });
+  const scheduleSourceService = new ScheduleSourceService(
+    store,
+    new ScheduleDirectorySourcesService(store, inputSnapshots),
+    new ScheduleKnowledgeSourcesService(vault),
+    inputSnapshots,
+  );
   const scheduleOutputs = new ScheduleOutputService(store);
-  const scheduleOutcomes = new ScheduleOutcomeService(store, scheduleOutputs);
+  const scheduleNotificationsRef: { current?: ScheduleNotificationService } = {};
+  const scheduleOutcomes = new ScheduleOutcomeService(store, scheduleOutputs, {
+    persistOccurrenceNotification: (occurrenceId) =>
+      scheduleNotificationsRef.current?.persistOccurrenceWithinTransaction(occurrenceId)
+        .afterCommit,
+  });
+  const scheduleNotifications = new ScheduleNotificationService(
+    store,
+    notifications,
+    scheduleOutcomes,
+  );
+  scheduleNotificationsRef.current = scheduleNotifications;
   registerIpc({
     store,
     knowledgeVault: vault,
@@ -192,9 +228,20 @@ export function assemble(
     getWindow,
     getDefaultWorkspaceRoot: () => path.join(directory, 'workspace'),
   });
-  if (recoverRuns) store.runs.failInterruptedRuns('合成宿主重装配收口', Date.now());
+  if (recoverRuns) store.runs.failInterruptedRuns(RUN_INTERRUPTED_ON_STARTUP_REASON, Date.now());
   extractions.recoverInterruptedJobs();
-  return { store, vault, runs, extractions };
+  return {
+    store,
+    vault,
+    runs,
+    extractions,
+    inputSnapshots,
+    scheduleService,
+    scheduleSourceService,
+    scheduleOutputs,
+    scheduleOutcomes,
+    scheduleNotifications,
+  };
 }
 
 export async function seed(services: JourneyServices, directory: string): Promise<string> {
@@ -222,7 +269,7 @@ export async function seed(services: JourneyServices, directory: string): Promis
     maxOutputTokens: 1024,
     temperature: 0,
   });
-  services.store.experts.create({
+  const expert = services.store.experts.create({
     sourceKind: 'user',
     revision: {
       name: '离线复盘专家',
@@ -250,6 +297,30 @@ export async function seed(services: JourneyServices, directory: string): Promis
       ],
     },
   });
+  const scheduleConfig: ScheduleConfigDraft = {
+    name: '离线旅程旁路定时规则',
+    expertId: expert.id,
+    expertRevisionId: expert.revision.id,
+    requirements: '保留为暂停状态，用于普通任务回归隔离。',
+    expectedArtifactTypes: ['markdown'],
+    timing: {
+      frequency: 'monthly',
+      day: 5,
+      hour: 9,
+      minute: 0,
+      timeZone: 'Asia/Shanghai',
+    },
+    periodRule: 'previous-month',
+    knowledgeSources: [],
+    outputSubdirectory: '定时成果',
+  };
+  const schedule = await services.scheduleService.save({
+    operation: 'create',
+    workspaceId: workspace.id,
+    config: scheduleConfig,
+    targetLifecycle: 'paused',
+  });
+  services.seededScheduleId = schedule.schedule.id;
   assert.equal(
     services.store.memoryExtractions.getSettings(workspace.id).autoSuggestEnabled,
     false,
@@ -292,6 +363,7 @@ export async function runAppJourney(
   let mode: 'happy' | 'failure' | 'cancel' = 'happy';
   const cancellation = { entered: false, aborted: false };
   const networkAttempts: string[] = [];
+  let seededScheduleId: string | undefined;
   session.defaultSession.webRequest.onBeforeRequest(
     { urls: ['http://*/*', 'https://*/*'] },
     (details, callback) => {
@@ -559,6 +631,25 @@ export async function runAppJourney(
     }
     assert.deepEqual(networkAttempts, [], '合成窗口发起了网络请求');
     assert.deepEqual(rendererErrors, [], '应用 Renderer 出现未预期错误');
+    if (seededScheduleId) {
+      const schedule = services.store.schedules.get(seededScheduleId);
+      assert.equal(schedule?.schedule.lifecycle, 'paused', '普通任务改变了旁路定时规则状态');
+      assert.deepEqual(
+        services.store.scheduleOccurrences.listBySchedule({
+          scheduleId: seededScheduleId,
+          limit: 10,
+        }).items,
+        [],
+        '暂停的定时规则不得占用或接管普通任务 Run',
+      );
+      if (current) {
+        assert.equal(
+          services.store.scheduleOccurrences.findByFirstRunId(current.id),
+          undefined,
+          '普通任务 Run 被错误关联到 Schedule occurrence',
+        );
+      }
+    }
     assert.equal(await readFile(sourcePath, 'utf8'), expectedSourceContent, '用户资料被修改');
     await capture(host.window, path.join(output, 'screenshots', `app-journey-${step}.png`));
     readings.push({ step, reading, persistedRunCount: services.store.runs.list().length });
@@ -568,9 +659,13 @@ export async function runAppJourney(
     );
   };
   try {
-    expectedSourceContent = journeyOptions.reopenDirectory
-      ? await readFile(sourcePath, 'utf8')
-      : await seed(services, directory);
+    if (journeyOptions.reopenDirectory) {
+      expectedSourceContent = await readFile(sourcePath, 'utf8');
+    } else {
+      expectedSourceContent = await seed(services, directory);
+      seededScheduleId = services.seededScheduleId;
+      assert.ok(seededScheduleId, '普通任务回归旅程未建立暂停定时规则');
+    }
     await openWindow();
     if (journeyOptions.reopenDirectory) {
       assert.ok(host.window);
@@ -647,6 +742,21 @@ export async function runAppJourney(
     assert.equal(services.vault.listRevisions(sourceDocument.id).length, 2);
     const prepared = await prepareAcceptanceSamples(services.store, directory);
     assert.ok(services.store.taskContexts.getLatest(first.taskId)?.excludedMemoryIds?.length);
+    assert.ok(seededScheduleId);
+    const scheduleIsolation = {
+      lifecycle: services.store.schedules.get(seededScheduleId)?.schedule.lifecycle,
+      occurrenceCount: services.store.scheduleOccurrences.listBySchedule({
+        scheduleId: seededScheduleId,
+        limit: 10,
+      }).items.length,
+      ordinaryRunCount: services.store.runs
+        .list()
+        .filter((run) => services.store.scheduleOccurrences.findByFirstRunId(run.id) === undefined)
+        .length,
+    };
+    assert.equal(scheduleIsolation.lifecycle, 'paused');
+    assert.equal(scheduleIsolation.occurrenceCount, 0);
+    assert.equal(scheduleIsolation.ordinaryRunCount, services.store.runs.list().length);
     await writeFile(
       path.join(output, 'acceptance-preparation.json'),
       JSON.stringify(
@@ -722,6 +832,7 @@ export async function runAppJourney(
       versionPreparation,
       model: 'deterministic-fetch-substitute',
       recovery: 'window-destroyed-stores-reopened-services-reassembled',
+      scheduleIsolation,
       requests: requests.length,
       networkAttempts: networkAttempts.length,
       databaseDirectory: path.basename(directory),

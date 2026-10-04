@@ -217,7 +217,7 @@ async function runStep(step: string): Promise<{ step: string; alerts: number; wi
     await waitFor(
       () =>
         hasText('本期复盘已完成') &&
-        (step === 'acceptance-history' || hasText('合成宿主重装配收口')) &&
+        (step === 'acceptance-history' || hasText('算台上次退出时这次执行被中断')) &&
         !findButton('停止'),
     );
   }

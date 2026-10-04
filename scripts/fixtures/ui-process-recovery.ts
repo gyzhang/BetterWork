@@ -4,6 +4,9 @@ import path from 'node:path';
 
 import { app, BrowserWindow, session } from 'electron';
 
+import { resolveSchedulePeriod } from '../../apps/desktop/src/main/services/schedule-calendar';
+import { ScheduleDispatchService } from '../../apps/desktop/src/main/services/schedule-dispatch-service';
+import { ScheduleExecutionService } from '../../apps/desktop/src/main/services/schedule-execution-service';
 import {
   assemble,
   bookDraftPath,
@@ -39,6 +42,9 @@ async function run(output: string, directory: string, phase: string): Promise<vo
   const { store, vault } = services;
   let hang = false;
   let entered = false;
+  const hangingRunIds: string[] = [];
+  let scheduledRecoveryTarget:
+    { scheduleId: string; occurrenceId: string; runId: string } | undefined;
   const errors: string[] = [];
   const networkAttempts: string[] = [];
   globalThis.fetch = (input) => {
@@ -47,11 +53,25 @@ async function run(output: string, directory: string, phase: string): Promise<vo
     assert.equal(phase, 'prepare', '恢复启动不得自动重放模型请求');
     if (hang) {
       entered = true;
+      const scheduledRunId = store.scheduleOccurrences
+        .listDispatched()
+        .flatMap((occurrence) => (occurrence.firstRunId ? [occurrence.firstRunId] : []))
+        .find((runId) => store.runs.get(runId)?.status === 'running');
+      const currentRunId =
+        scheduledRunId ?? store.runs.list().find((item) => item.status === 'running')?.id;
+      assert.ok(currentRunId, 'Fake Provider 请求没有对应的运行中 Run');
+      hangingRunIds.push(currentRunId);
       return new Promise<Response>(() => {
         // 真正挂起 Provider 请求；父进程 SIGKILL 不会执行 JS 取消或 close。
       });
     }
-    const current = store.runs.list().find((item) => item.status === 'running');
+    const scheduledRunId = store.scheduleOccurrences
+      .listDispatched()
+      .flatMap((occurrence) => (occurrence.firstRunId ? [occurrence.firstRunId] : []))
+      .find((runId) => store.runs.get(runId)?.status === 'running');
+    const current = scheduledRunId
+      ? store.runs.get(scheduledRunId)
+      : store.runs.list().find((item) => item.status === 'running');
     assert.ok(current);
     const reference = store.runContextSnapshots.get(current.id)?.materials[0]?.reference;
     assert.ok(reference?.kind === 'knowledge-revision');
@@ -87,11 +107,19 @@ async function run(output: string, directory: string, phase: string): Promise<vo
     versions: ReturnType<typeof store.artifacts.listVersions>;
     memories: ReturnType<typeof store.memories.list>;
     context: ReturnType<typeof store.taskContexts.getLatest>;
+    scheduledRecoveryTarget: NonNullable<typeof scheduledRecoveryTarget>;
   } => {
     const completed = store.runs.list().find((item) => item.status === 'completed');
-    const interrupted = store.runs.list().find((item) => item.status === 'running');
+    const interrupted = store.runs
+      .list()
+      .find((item) => item.status === 'running' && item.taskId === completed?.taskId);
     assert.ok(completed);
     assert.ok(interrupted);
+    assert.ok(scheduledRecoveryTarget, '强杀夹具没有启动 Schedule 首个 Run');
+    const scheduled = store.scheduleOccurrences.get(scheduledRecoveryTarget.occurrenceId);
+    assert.equal(scheduled?.firstRunId, scheduledRecoveryTarget.runId);
+    assert.equal(store.runs.get(scheduledRecoveryTarget.runId)?.status, 'running');
+    assert.ok(hangingRunIds.includes(scheduledRecoveryTarget.runId));
     const artifacts = store.artifacts.list();
     assert.ok(artifacts.length > 0, '合成完成 Run 未生成成果');
     const memories = store.memories.list();
@@ -110,6 +138,7 @@ async function run(output: string, directory: string, phase: string): Promise<vo
       versions: artifacts.flatMap((item) => store.artifacts.listVersions(item.id)),
       memories,
       context,
+      scheduledRecoveryTarget,
     };
   };
   const screenshot = async (name: string): Promise<void> => {
@@ -165,6 +194,54 @@ async function run(output: string, directory: string, phase: string): Promise<vo
       for (let attempt = 0; attempt < 100 && !entered; attempt += 1)
         await new Promise<void>((resolve) => setTimeout(resolve, 20));
       assert.ok(entered, '尚未进入真实 Provider 请求，不能强杀');
+      const scheduleId = services.seededScheduleId;
+      assert.ok(scheduleId, '强杀夹具未创建 Schedule 规则');
+      const schedule = store.schedules.get(scheduleId);
+      assert.ok(schedule, '强杀夹具 Schedule 规则不存在');
+      const requestedAt = Date.now();
+      const period = resolveSchedulePeriod(
+        schedule.config.periodRule,
+        schedule.config.timing.timeZone,
+        requestedAt,
+      );
+      const claim = store.scheduleOccurrences.claimManual({
+        scheduleId,
+        expectedRevision: schedule.schedule.revision,
+        trigger: 'manual-now',
+        requestKey: 'process-recovery-scheduled-run-v1',
+        requestedAt,
+        period,
+      });
+      assert.equal(claim.kind, 'created', '强杀夹具未占用唯一 Schedule occurrence');
+      if (claim.kind !== 'created') throw new Error('Schedule occurrence fixture was not created');
+      const fingerprint = 'offline-process-recovery-preflight';
+      const dispatch = new ScheduleDispatchService(
+        store,
+        services.scheduleSourceService,
+        {
+          check: async () => ({ status: 'ready', fingerprint, problems: [] }),
+        },
+        new ScheduleExecutionService(store),
+        services.runs,
+        {
+          onOccurrenceClosed: (occurrenceId) =>
+            services.scheduleNotifications.persistOccurrenceWithinTransaction(occurrenceId)
+              .afterCommit,
+        },
+      );
+      await dispatch.prepareAndStart(claim.occurrence.id, undefined, fingerprint);
+      const dispatched = store.scheduleOccurrences.get(claim.occurrence.id);
+      const scheduledRunId = dispatched?.firstRunId;
+      assert.equal(dispatched?.phase, 'dispatched');
+      assert.ok(scheduledRunId, 'T4 未原子登记 Schedule 首个 Run');
+      scheduledRecoveryTarget = {
+        scheduleId,
+        occurrenceId: claim.occurrence.id,
+        runId: scheduledRunId,
+      };
+      for (let attempt = 0; attempt < 100 && !hangingRunIds.includes(scheduledRunId); attempt += 1)
+        await new Promise<void>((resolve) => setTimeout(resolve, 20));
+      assert.ok(hangingRunIds.includes(scheduledRunId), 'Schedule Run 未进入挂起的 Fake Provider');
       await screenshot('running');
       await writeFile(
         path.join(directory, 'ready.pending.json'),
@@ -187,6 +264,18 @@ async function run(output: string, directory: string, phase: string): Promise<vo
       1,
       '中断 Run 必须恰好一个失败终态',
     );
+    assert.equal(
+      store.runs.get(before.scheduledRecoveryTarget.runId)?.status,
+      'failed',
+      '强杀后的 Schedule Run 未收口',
+    );
+    assert.equal(
+      store.runs
+        .listEvents(before.scheduledRecoveryTarget.runId)
+        .filter((event) => event.type === 'run.failed').length,
+      1,
+      'Schedule 中断 Run 必须恰好一个失败终态',
+    );
     assert.deepEqual(store.artifacts.list(), before.artifacts);
     assert.deepEqual(
       before.artifacts.flatMap((item) => store.artifacts.listVersions(item.id)),
@@ -194,7 +283,39 @@ async function run(output: string, directory: string, phase: string): Promise<vo
     );
     assert.deepEqual(store.memories.list(), before.memories);
     assert.deepEqual(store.taskContexts.getLatest(before.completed.taskId), before.context);
-    assert.equal(store.runs.list().length, 2, '恢复不得新建 Run');
+    assert.equal(store.runs.list().length, 3, '恢复不得新建 Run');
+    if (!probe) {
+      const sourceRecovery = services.scheduleSourceService.recoverInterrupted();
+      assert.deepEqual(sourceRecovery, { closedOccurrences: 0, finishedSnapshots: 0 });
+      await services.scheduleOutputs.recoverIncomplete();
+      const outcomeRecovery = await services.scheduleOutcomes.recoverTerminalRuns();
+      assert.deepEqual(outcomeRecovery, { examined: 1, finalized: 1, unresolved: 0 });
+      await services.scheduleNotifications.recoverMissing();
+      await services.scheduleNotifications.waitForPending();
+      const recoveredOccurrence = store.scheduleOccurrences.get(
+        before.scheduledRecoveryTarget.occurrenceId,
+      );
+      assert.equal(recoveredOccurrence?.phase, 'closed');
+      assert.equal(recoveredOccurrence?.firstRunId, before.scheduledRecoveryTarget.runId);
+      assert.equal(
+        services.scheduleOutcomes.projectOccurrence(before.scheduledRecoveryTarget.occurrenceId)
+          ?.status,
+        'interrupted',
+      );
+      assert.equal(
+        store.runs.list().filter((run) => run.status === 'running').length,
+        0,
+        '进程恢复后仍有 Run 未收口',
+      );
+      const targetNotifications = store.notifications
+        .list()
+        .filter(
+          (item) =>
+            item.target?.kind === 'schedule' &&
+            item.target.occurrenceId === before.scheduledRecoveryTarget.occurrenceId,
+        );
+      assert.equal(targetNotifications.length, 1, 'Schedule 恢复结果通知没有持久去重');
+    }
     await step('process-history');
     await screenshot('history');
     await step('process-exclusions');
@@ -218,11 +339,17 @@ async function run(output: string, directory: string, phase: string): Promise<vo
           previousPid: before.pid,
           recoveredPid: process.pid,
           interruptedRunId: before.interruptedId,
+          scheduledRecoveryTarget: before.scheduledRecoveryTarget,
+          scheduledOutcome:
+            services.scheduleOutcomes.projectOccurrence(before.scheduledRecoveryTarget.occurrenceId)
+              ?.status ?? 'missing',
           requests,
           networkAttempts: networkAttempts.length,
           checks: [
             'completed-history',
             'interrupted-terminal',
+            'scheduled-run-terminal',
+            'schedule-outcome-recovered-once',
             'artifacts-and-versions',
             'memory-policy',
             'task-exclusions',
