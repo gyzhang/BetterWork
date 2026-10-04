@@ -1,4 +1,5 @@
-export type AppView = 'work' | 'artifacts' | 'knowledge' | 'skills' | 'experts' | 'settings';
+export type AppView =
+  'work' | 'artifacts' | 'knowledge' | 'skills' | 'experts' | 'schedules' | 'settings';
 /**
  * 上下文面板页签（docs/10 §6.1.3、§6.2）：
  * 记忆页签承载「下次运行可用 / 本次运行记忆 / 历史上下文调整」三段，

@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 
-import type { ArtifactDetail, ArtifactVersionSummary } from '@betterwork/agent-protocol';
+import type {
+  ArtifactDetail,
+  ArtifactVersionDetail,
+  ArtifactVersionSummary,
+} from '@betterwork/agent-protocol';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -123,5 +127,27 @@ describe('useArtifactViewer', () => {
 
     expect(result.current.visibleVersion).not.toBe(initial);
     expect(result.current.visibleVersion?.artifactId).toBe('second');
+  });
+
+  it('opens the exact historical version supplied by a schedule receipt', async () => {
+    const selected = artifact('scheduled-output');
+    const exactVersion = {
+      id: 'version-scheduled-period',
+      artifactId: selected.id,
+      versionNumber: 2,
+      origin: 'assistant-run',
+      sourceRunId: 'run-scheduled-period',
+      createdAt: 2,
+      type: 'markdown',
+      content: '# 固定的本期版本',
+      contentHash: 'hash-period',
+      evidence: [],
+    } satisfies ArtifactVersionDetail;
+    installArtifactApi({ listVersions: async () => [] });
+    const { result } = renderHook(() => useArtifactViewer(selected, exactVersion));
+
+    await waitFor(() => expect(result.current.visibleVersion?.id).toBe(exactVersion.id));
+    expect(result.current.visibleVersion).toEqual(exactVersion);
+    expect(result.current.visibleVersion).toMatchObject({ content: '# 固定的本期版本' });
   });
 });

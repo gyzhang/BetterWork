@@ -134,9 +134,13 @@ async function run(): Promise<void> {
   };
   // 页面反馈反例只跑能触发失败的页面路径；普通 ui:check 仍跑完整矩阵。
   for (const scheme of process.argv.some((argument) =>
-    ['--probe-page-feedback', '--probe-app-persistence', '--probe-keyboard', '--app-only'].includes(
-      argument,
-    ),
+    [
+      '--probe-page-feedback',
+      '--probe-app-persistence',
+      '--probe-keyboard',
+      '--app-only',
+      '--schedule-only',
+    ].includes(argument),
   )
     ? []
     : colorSchemes) {
@@ -232,7 +236,9 @@ async function run(): Promise<void> {
     ? []
     : process.argv.includes('--probe-keyboard')
       ? ['expert']
-      : ['artifact', 'knowledge', 'expert', 'memory']) {
+      : process.argv.includes('--schedule-only')
+        ? ['schedule']
+        : ['artifact', 'knowledge', 'expert', 'memory', 'schedule']) {
     for (const mode of ['light', 'dark']) {
       for (const width of [760, 1380]) {
         for (const reducedMotion of [false, true]) {
@@ -288,10 +294,13 @@ async function run(): Promise<void> {
               }
               if (step === 'memory-keyboard') reading = await checkConflictKeyboard(window);
               if (errors.length > 0) throw new Error(`页面运行错误：${errors.join('；')}`);
+              const modalOpen = (await window.webContents.executeJavaScript(
+                'Boolean(document.querySelector("[aria-modal=true]"))',
+              )) as boolean;
               await captureVerifiedFrame(
                 window,
                 path.join(output, 'screenshots', `${id}-${step}.png`),
-                false,
+                modalOpen,
               );
               checks.push({ step, reading });
             }
@@ -309,7 +318,10 @@ async function run(): Promise<void> {
               path.join(output, 'screenshots', `${id}-failed.png`),
               (await window.webContents.capturePage()).toPNG(),
             );
-            throw new Error(`生产页面回归失败：${id}`, { cause: error });
+            throw new Error(
+              `生产页面回归失败：${id}；浏览器错误：${errors.join('；') || '无'}；页面诊断：${JSON.stringify(await window.webContents.executeJavaScript('({ error: document.documentElement.dataset.fixtureError, text: document.body.innerText, buttons: [...document.querySelectorAll("button")].map(button => button.textContent?.trim()), errors: [...document.querySelectorAll("[role=alert]")].map(item => item.textContent) })'))}`,
+              { cause: error },
+            );
           } finally {
             await persistPartial();
             window.destroy();
@@ -318,7 +330,10 @@ async function run(): Promise<void> {
       }
     }
   }
-  if (!process.argv.includes('--probe-page-feedback')) {
+  if (
+    !process.argv.includes('--probe-page-feedback') &&
+    !process.argv.includes('--schedule-only')
+  ) {
     const { runAppJourney } = await import('./ui-app-journey');
     results.push(
       await runAppJourney(

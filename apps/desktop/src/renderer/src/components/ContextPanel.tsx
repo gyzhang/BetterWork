@@ -11,6 +11,7 @@ import type {
   MemorySelectedMemory,
   MemoryViewItem,
   RunSummary,
+  ScheduleOccurrenceDetail,
   TaskMaterialSelection,
   WorkspaceBriefMemoryItem,
   WorkspaceBriefOpenIssue,
@@ -37,6 +38,7 @@ import {
   replayBoundaryLabel,
   selectionReasonLabel,
 } from '../lib/memory-labels';
+import { scheduleSourceSnapshotStatusLabel } from '../lib/schedule-detail';
 import { handleTitlebarDoubleClick } from '../lib/titlebar';
 import type { ContextTab } from '../lib/view-types';
 import { AsyncButton, InlineLoading } from './AsyncButton';
@@ -84,6 +86,15 @@ export interface ContextPanelProps {
   onSelectRun: (run: RunSummary) => void;
   onOpenSource: (sourcePath: string) => Promise<void>;
   materials: TaskMaterialSelection[];
+  /** 从定时任务详情打开原 Task 时，展示不可变本期快照事实；仅此 Task 后续 Run 使用。 */
+  scheduleContinuation?: {
+    occurrence: ScheduleOccurrenceDetail;
+    sourceSnapshotId?: string;
+    scopeAttached: boolean;
+    removingScope: boolean;
+    scopeError: string;
+    onRemoveScope: () => void;
+  };
   /** 当前范围内的记忆清单（契约 §9.1 治理视图），用于把选中的修订回显成正文。 */
   memories: MemoryViewItem[];
   excludedMemoryIds: string[];
@@ -134,6 +145,7 @@ export function ContextPanel({
   onSelectRun,
   onOpenSource,
   materials,
+  scheduleContinuation,
   memories,
   excludedMemoryIds,
   onToggleMemory,
@@ -292,6 +304,52 @@ export function ContextPanel({
           )}
           {tab === 'sources' && (
             <>
+              {scheduleContinuation && (
+                <section className="context-section">
+                  <SectionHeader
+                    title="定时任务本期范围"
+                    hint={
+                      scheduleContinuation.scopeAttached
+                        ? '后续运行仍包含此快照'
+                        : '当前任务未绑定此快照'
+                    }
+                  />
+                  <ListRow
+                    multiline
+                    variant="plain"
+                    title={scheduleContinuation.occurrence.occurrence.period.label}
+                    detail={`规则「${scheduleContinuation.occurrence.config.name}」 · 固定配置 v${scheduleContinuation.occurrence.occurrence.configVersion} · ${scheduleContinuation.occurrence.occurrence.period.timeZone}`}
+                    meta={
+                      scheduleContinuation.occurrence.sourceSnapshot
+                        ? `来源快照 ${scheduleContinuation.sourceSnapshotId ?? '不可用'} · ${scheduleSourceSnapshotStatusLabel(scheduleContinuation.occurrence.sourceSnapshot.status)} · ${scheduleContinuation.occurrence.sourceSnapshot.itemCount} 项 · ${scheduleContinuation.occurrence.sourceSnapshot.totalFileBytes} 字节 · 清单 ${scheduleContinuation.occurrence.sourceSnapshot.manifestHash}`
+                        : `来源快照 ${scheduleContinuation.sourceSnapshotId ?? '不可用'} · 快照详情暂不可用`
+                    }
+                  />
+                  <StatusNote
+                    tone={scheduleContinuation.scopeAttached ? 'warning' : 'neutral'}
+                    message={
+                      scheduleContinuation.scopeAttached
+                        ? '此 Task 的后续 Run 会沿用本期固定来源。移除会缩小后续权限范围并触发现有安全历史分段；不改变已经开始的 Run、本期历史或 Schedule 的后续配置。'
+                        : '本 Task 的后续 Run 当前不含这期自动来源；本期快照与历史仍保留，Schedule 的后续配置不变。下方补充材料只作用于当前原 Task。'
+                    }
+                  />
+                  {scheduleContinuation.scopeError && (
+                    <InlineError message={scheduleContinuation.scopeError} />
+                  )}
+                  {scheduleContinuation.scopeAttached && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      type="button"
+                      disabled={scheduleContinuation.removingScope}
+                      onClick={scheduleContinuation.onRemoveScope}
+                    >
+                      {scheduleContinuation.removingScope ? '正在移除本期范围…' : '移除本期范围'}
+                    </Button>
+                  )}
+                  <StatusNote message="下面选择的文件、知识或成果会补充到当前原 Task 的后续 Run，不会写回 Schedule。" />
+                </section>
+              )}
               <section className="context-section">
                 <SectionHeader
                   title="本次材料"

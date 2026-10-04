@@ -47,6 +47,7 @@ try {
           '--probe-page-feedback',
           '--probe-app-persistence',
           '--app-only',
+          '--schedule-only',
           '--recovery-only',
           '--probe-crash-recovery',
           '--probe-keyboard',
@@ -218,6 +219,7 @@ try {
               '--probe-app-persistence',
               '--probe-keyboard',
               '--app-only',
+              '--schedule-only',
             ].includes(argument),
           ),
         ],
@@ -245,7 +247,12 @@ try {
       const results = recoveryOnly
         ? []
         : JSON.parse(await readFile(path.join(output, 'matrix-results.json'), 'utf8'));
-      if (!appOnly && !probe.some((argument) => argument.startsWith('--probe-') && !crashProbe)) {
+      const scheduleOnly = probe.includes('--schedule-only');
+      if (
+        !appOnly &&
+        !scheduleOnly &&
+        !probe.some((argument) => argument.startsWith('--probe-') && !crashProbe)
+      ) {
         await mkdir(path.join(output, 'screenshots'), { recursive: true });
         results.push(
           await runProcessRecovery({
@@ -262,18 +269,20 @@ try {
       if (!Array.isArray(results) || results.length === 0) throw new Error('UI 渲染矩阵缺完成证据');
       if (
         (!recoveryOnly &&
+          !scheduleOnly &&
           !results.some(
             (item) => item.coverage === 'production-app-with-real-ipc-and-temporary-sqlite',
           )) ||
         (!appOnly &&
+          !scheduleOnly &&
           !results.some(
             (item) => item.coverage === 'production-process-recovery-with-temporary-sqlite',
           )) ||
         (!appOnly &&
           !recoveryOnly &&
-          !['artifact', 'knowledge', 'expert', 'memory'].every((page) =>
-            results.some((item) => item.page === page && item.checks?.length > 0),
-          ))
+          !(
+            scheduleOnly ? ['schedule'] : ['artifact', 'knowledge', 'expert', 'memory', 'schedule']
+          ).every((page) => results.some((item) => item.page === page && item.checks?.length > 0)))
       )
         throw new Error('UI 渲染矩阵缺页面或应用旅程证据');
       await writeFile(path.join(output, 'results.json'), JSON.stringify(results, null, 2));

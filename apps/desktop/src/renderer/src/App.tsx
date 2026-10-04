@@ -17,6 +17,7 @@ import type {
   NotificationTarget,
   RecentTaskSummary,
   RunSummary,
+  ScheduleOccurrenceDetail,
   TaskContextRevision,
   TaskMaterialSelection,
   WorkspaceBriefOpenIssue,
@@ -57,6 +58,8 @@ import { newMemoryOperationId, useMemories } from './hooks/use-memories';
 import { useMemorySuggestions } from './hooks/use-memory-suggestions';
 import { useModelSettings } from './hooks/use-model-settings';
 import { useRunMemories, useTaskMemoryExclusion } from './hooks/use-run-memories';
+import { useScheduleTaskContinuation } from './hooks/use-schedule-task-continuation';
+import { useSchedules } from './hooks/use-schedules';
 import { useSkills } from './hooks/use-skills';
 import { useTaskMemoryExclusions } from './hooks/use-task-memory-exclusions';
 import { useTaskScroll } from './hooks/use-task-scroll';
@@ -72,6 +75,7 @@ import {
   ExpertIcon,
   KnowledgeIcon,
   PlusIcon,
+  ScheduleIcon,
   SettingsIcon,
   WorkIcon,
 } from './icons';
@@ -90,6 +94,7 @@ import { ArtifactPage } from './views/ArtifactView';
 import { ExpertsPage } from './views/ExpertsView';
 import { KnowledgePage } from './views/KnowledgeView';
 import { type MemoryManagementTarget, scopeOptionsFor } from './views/MemoryView';
+import { SchedulesPage } from './views/SchedulesView';
 import { SettingsPage } from './views/SettingsView';
 import { SkillsPage } from './views/SkillsView';
 
@@ -103,6 +108,7 @@ const PRIMARY_NAV_ITEMS: readonly NavEntry<AppView>[] = [
   { id: 'knowledge', label: '知识', icon: KnowledgeIcon },
   { id: 'skills', label: '技能', icon: CapabilityIcon },
   { id: 'experts', label: '专家', icon: ExpertIcon },
+  { id: 'schedules', label: '定时任务', icon: ScheduleIcon },
 ];
 
 const inputSnapshotCandidate = (snapshot: InputSnapshot): MaterialCandidate => ({
@@ -193,6 +199,14 @@ export function App(): React.JSX.Element {
   const workspaceIdRef = useRef<string | undefined>(undefined);
   const [activeTask, setActiveTask] = useState<{ id: string; sessionId: string; title: string }>();
   const activeTaskIdRef = useRef<string | undefined>(undefined);
+  const scheduleTaskContinuation = useScheduleTaskContinuation({
+    taskContext,
+    onContextSaved: (context) => {
+      if (activeTaskIdRef.current === context.taskId) setTaskContext(context);
+    },
+  });
+  const clearScheduleTaskContinuation = scheduleTaskContinuation.clear;
+  const [pendingScheduleScopeRemoval, setPendingScheduleScopeRemoval] = useState(false);
   const materialCandidatesRequestRef = useRef(0);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [taskRuns, setTaskRuns] = useState<RunSummary[]>([]);
@@ -214,6 +228,8 @@ export function App(): React.JSX.Element {
   const [evidence, setEvidence] = useState<EvidenceSummary[]>([]);
   const [artifacts, setArtifacts] = useState<ArtifactSummary[]>([]);
   const [selectedArtifact, setSelectedArtifact] = useState<ArtifactDetail>();
+  const [selectedArtifactInitialVersion, setSelectedArtifactInitialVersion] =
+    useState<ArtifactVersionDetail>();
   const [artifactNote, setArtifactNote] = useState<{ tone: 'ok' | 'error'; text: string }>();
   /** §3.6：来源专家不可用时不猜专家，改用通用助手并把这件事当场说出来。 */
   const [expertFallbackNotice, setExpertFallbackNotice] = useState<string>();
@@ -223,6 +239,7 @@ export function App(): React.JSX.Element {
   // 已经有内联承载点的失败不要再上传到这里，那会让同一句话出现在两个地方。
   const [actionError, setActionError] = useState('');
   const [view, setView] = useState<AppView>('work');
+  const schedules = useSchedules(view === 'schedules');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => window.localStorage.getItem('betterwork-sidebar-collapsed') === 'true',
   );
@@ -395,6 +412,7 @@ export function App(): React.JSX.Element {
           setActionError('该参考版本对应的成果已不存在，请在成果列表中确认。');
           return;
         }
+        setSelectedArtifactInitialVersion(undefined);
         setSelectedArtifact(artifact);
         setContextOpen(false);
         setView('artifacts');
@@ -639,7 +657,8 @@ export function App(): React.JSX.Element {
   const activityGroups = useMemo(() => deriveActivityGroups(events), [events]);
   const currentTaskArtifacts = artifacts.filter((artifact) => artifact.taskId === activeTask?.id);
 
-  const startNewTask = (): void => {
+  const startNewTask = useCallback((): void => {
+    clearScheduleTaskContinuation();
     runSelectionRequestRef.current += 1;
     activeRunIdRef.current = undefined;
     activeTaskIdRef.current = undefined;
@@ -667,7 +686,7 @@ export function App(): React.JSX.Element {
     setPrompt('');
     setArtifactNote(undefined);
     setView('work');
-  };
+  }, [clearScheduleTaskContinuation]);
   /** 刷新已登记空间清单：新建与改名之后侧栏与选择器都要看到同一份。 */
   const refreshWorkspaces = (): void => {
     trackAction(window.betterwork.workspace.listAll().then(setAllWorkspaces), '刷新工作空间列表');
@@ -827,7 +846,7 @@ export function App(): React.JSX.Element {
       );
       setView('work');
     },
-    [expertMaterialCandidates, skillChipForBinding, workspace?.id],
+    [expertMaterialCandidates, skillChipForBinding, startNewTask, workspace?.id],
   );
   const commitTaskMaterials = useCallback((materials: TaskMaterialSelection[]): void => {
     setTaskMaterials(materials);
@@ -1016,7 +1035,8 @@ export function App(): React.JSX.Element {
     loadAllTaskRuns(run.taskId);
     setView('work');
   };
-  const selectTask = async (task: RecentTaskSummary): Promise<void> => {
+  const selectTask = async (task: RecentTaskSummary): Promise<TaskContextRevision | undefined> => {
+    if (activeTaskIdRef.current !== task.id) scheduleTaskContinuation.clear();
     setTaskAllRuns([]);
     setTaskAllEvents(new Map());
     setTaskRuns([]);
@@ -1033,7 +1053,7 @@ export function App(): React.JSX.Element {
     setEvents([]);
     const selectionId = runSelectionRequestRef.current;
     const loadedContext = await loadTaskContext(task.id, selectionId);
-    if (selectionId !== runSelectionRequestRef.current) return;
+    if (selectionId !== runSelectionRequestRef.current) return undefined;
     loadAllTaskRuns(task.id);
     refreshEvidence(task.id);
     refreshDiscussionCheckpoints(task.id);
@@ -1042,7 +1062,7 @@ export function App(): React.JSX.Element {
     const loadedRuns = await window.betterwork.runs.list({ taskId: task.id });
     if (selectionId !== runSelectionRequestRef.current) return;
     const latest = [...loadedRuns].sort((a, b) => b.createdAt - a.createdAt)[0];
-    if (!latest) return;
+    if (!latest) return loadedContext;
     // 旧任务没有 TaskContextRevision 时，才兼容恢复最近一次 Run 的 Skill chip；不补造 Expert 身份。
     if (!loadedContext && latest.bindings && latest.bindings.length > 0) {
       setTaskBindings(
@@ -1058,8 +1078,9 @@ export function App(): React.JSX.Element {
     activeRunIdRef.current = latest.id;
     setActiveRunId(latest.id);
     const snapshot = await window.betterwork.runs.listEvents({ runId: latest.id });
-    if (selectionId !== runSelectionRequestRef.current) return;
+    if (selectionId !== runSelectionRequestRef.current) return undefined;
     setEvents((current) => mergeRunEvents(snapshot, current));
+    return loadedContext;
   };
   const saveCurrentArtifact = async (): Promise<void> => {
     if (!activeTask || !latestCompletedRun) return;
@@ -1089,7 +1110,17 @@ export function App(): React.JSX.Element {
   const openArtifact = async (artifact: ArtifactSummary): Promise<void> => {
     const detail = await window.betterwork.artifacts.get({ id: artifact.id });
     if (!detail) throw new Error('成果已不存在，可能已被移除。');
+    setSelectedArtifactInitialVersion(undefined);
     setSelectedArtifact(detail);
+  };
+  const openArtifactVersion = async (versionId: string): Promise<void> => {
+    const version = await window.betterwork.artifacts.getVersion({ id: versionId });
+    if (!version) throw new Error('该成果版本已不存在，无法打开。');
+    const detail = await window.betterwork.artifacts.get({ id: version.artifactId });
+    if (!detail) throw new Error('该版本所属成果已不存在，无法打开。');
+    setSelectedArtifact(detail);
+    setSelectedArtifactInitialVersion(version);
+    setView('artifacts');
   };
   const startFromArtifactVersion = async (
     artifact: ArtifactDetail,
@@ -1137,6 +1168,7 @@ export function App(): React.JSX.Element {
           : '来源运行的执行记录不完整，无法确认当时的专家，新任务先用通用助手。';
     }
     startNewTask();
+    setSelectedArtifactInitialVersion(undefined);
     setSelectedArtifact(undefined);
     setExpertFallbackNotice(notice);
     if (sourceExpert) setActiveExpert(sourceExpert);
@@ -1187,7 +1219,10 @@ export function App(): React.JSX.Element {
     });
     refreshArtifacts();
     const detail = await window.betterwork.artifacts.get({ id: saved.id });
-    if (detail) setSelectedArtifact(detail);
+    if (detail) {
+      setSelectedArtifactInitialVersion(undefined);
+      setSelectedArtifact(detail);
+    }
   };
   const exportArtifact = (
     artifact: ArtifactDetail,
@@ -1216,7 +1251,10 @@ export function App(): React.JSX.Element {
     setView('knowledge');
     refreshKnowledge();
   };
-  const openTaskTarget = async (taskId: string): Promise<void> => {
+  const openTaskTarget = async (
+    taskId: string,
+    continuation?: ScheduleOccurrenceDetail,
+  ): Promise<void> => {
     const task = await window.betterwork.tasks.get({ id: taskId });
     if (!task) throw new Error('这项通知对应的任务已不存在，无法打开。');
     let workspaces = allWorkspaces;
@@ -1230,7 +1268,26 @@ export function App(): React.JSX.Element {
     workspaceIdRef.current = targetWorkspace.id;
     setWorkspace(targetWorkspace);
     refreshTasks(targetWorkspace.id);
-    await selectTask(task);
+    const validContinuation =
+      continuation?.task?.id === taskId && continuation.occurrence.taskId === taskId
+        ? continuation
+        : undefined;
+    if (activeTaskIdRef.current === taskId) {
+      if (validContinuation) {
+        scheduleTaskContinuation.attach(validContinuation);
+        setContextTab('sources');
+        setContextOpen(true);
+      }
+      setView('work');
+      return;
+    }
+    const loadedContext = await selectTask(task);
+    if (validContinuation && activeTaskIdRef.current === taskId) {
+      scheduleTaskContinuation.attach(validContinuation);
+      setTaskContext(loadedContext);
+      setContextTab('sources');
+      setContextOpen(true);
+    }
   };
   const startResearchFromKnowledge = (): void => {
     if (isRunning) {
@@ -1277,6 +1334,7 @@ export function App(): React.JSX.Element {
       reportAction(
         window.betterwork.artifacts.get({ id: target.artifactId }).then((detail) => {
           if (!detail) throw new Error('这项通知对应的成果已不存在，无法打开。');
+          setSelectedArtifactInitialVersion(undefined);
           setSelectedArtifact(detail);
           setView('artifacts');
         }),
@@ -1370,6 +1428,7 @@ export function App(): React.JSX.Element {
           onSelect={(next) => {
             setView(next);
             if (next === 'artifacts') {
+              setSelectedArtifactInitialVersion(undefined);
               setSelectedArtifact(undefined);
               refreshArtifacts();
             }
@@ -1705,6 +1764,9 @@ export function App(): React.JSX.Element {
           <ArtifactPage
             artifacts={artifacts}
             selected={selectedArtifact}
+            {...(selectedArtifactInitialVersion
+              ? { initialVersion: selectedArtifactInitialVersion }
+              : {})}
             onSelect={(artifact) =>
               reportAction(openArtifact(artifact), setActionError, '无法打开这项成果。')
             }
@@ -1716,7 +1778,10 @@ export function App(): React.JSX.Element {
             references={references}
             referenceScope={artifactReferenceScope}
             onReferenceToTask={referenceVersionToTask}
-            onBack={() => setSelectedArtifact(undefined)}
+            onBack={() => {
+              setSelectedArtifact(undefined);
+              setSelectedArtifactInitialVersion(undefined);
+            }}
           />
         )}
         {view === 'knowledge' && (
@@ -1747,6 +1812,19 @@ export function App(): React.JSX.Element {
               setView('settings');
               setSettingsTab('memory');
             }}
+          />
+        )}
+        {view === 'schedules' && (
+          <SchedulesPage
+            state={schedules}
+            workspaces={allWorkspaces}
+            experts={experts.experts}
+            expertsLoading={experts.loading}
+            expertsError={experts.error}
+            getExpert={experts.get}
+            onOpenTask={openTaskTarget}
+            onOpenArtifactVersion={openArtifactVersion}
+            onOpenSource={knowledge.onOpenSource}
           />
         )}
         {view === 'settings' && (
@@ -1792,6 +1870,16 @@ export function App(): React.JSX.Element {
           taskRuns={taskRuns}
           activityGroups={activityGroups}
           materials={taskMaterials}
+          {...(scheduleTaskContinuation.view
+            ? {
+                scheduleContinuation: {
+                  ...scheduleTaskContinuation.view,
+                  removingScope: scheduleTaskContinuation.removingScope,
+                  scopeError: scheduleTaskContinuation.scopeError,
+                  onRemoveScope: () => setPendingScheduleScopeRemoval(true),
+                },
+              }
+            : {})}
           memories={taskMemories}
           excludedMemoryIds={excludedMemoryIds}
           onToggleMemory={(memoryId) => {
@@ -1854,6 +1942,37 @@ export function App(): React.JSX.Element {
             setPendingCandidateDelete(undefined);
           }}
           onCancel={() => setPendingCandidateDelete(undefined)}
+        />
+      )}
+      {pendingScheduleScopeRemoval && scheduleTaskContinuation.view && (
+        <ConfirmationDialog
+          title="移除本 Task 的定时来源范围？"
+          detail="这会为原 Task 保存新的上下文修订：后续 Run 不再使用本期自动来源，并按既有规则缩小安全历史范围。已经开始的 Run、已有历史与本期来源快照不变；Schedule 配置和之后的新期间也不变。已显式补充到原 Task 的材料会保留。"
+          confirmLabel="移除本期范围"
+          onConfirm={() => {
+            setPendingScheduleScopeRemoval(false);
+            scheduleTaskContinuation.removeScope({
+              executor: activeExpert
+                ? {
+                    kind: 'expert',
+                    expertId: activeExpert.id,
+                    expertRevisionId: activeExpert.revisionId,
+                  }
+                : { kind: 'general' },
+              skillBindings: taskBindings.map((chip) => ({
+                skillId: chip.id,
+                revisionId:
+                  chip.revisionId ??
+                  skills.skills.find((skill) => skill.id === chip.id)?.currentRevisionId ??
+                  '',
+                source: chip.source ?? 'task-selection',
+              })),
+              materials: taskMaterials,
+              excludedMemoryIds,
+              mcpToolBindings,
+            });
+          }}
+          onCancel={() => setPendingScheduleScopeRemoval(false)}
         />
       )}
       {modelSettings.editorOpen && (

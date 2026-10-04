@@ -106,6 +106,7 @@ ClawBible Desktop 继续作为模型接入、Agent、工具、知识和 Office �
 | 知识 | 知识页 | 「知识 · 个人资料库」 | 「让资料成为下一次工作的起点」 | 「知识库」指 vault 与索引，不是页面名 |
 | 技能 | 技能页 | 「技能」 | 「管理可复用的工作方法」 | 详情态标题是 Skill 名称 |
 | 专家 | 专家页 | 「专家」 | 「召唤固定的工作方式」 | 编辑态是 eyebrow「专家配置」＋标题「新建专家」／「编辑专家修订」 |
+| 定时任务 | 定时任务页 | 「定时任务」 | 「按约定时间开始工作」 | 列表与整页规则配置/详情共用正式导航入口 |
 | 设置 | 设置页 | —（侧栏底部项，不在 `PRIMARY_NAV_ITEMS` 里） | 分区标签：模型／搜索／MCP／记忆／外观／通用 | 俗称的「记忆页」是**设置 → 记忆**那一分区，不是第七个一级导航 |
 
 **操作名词同理只有一套**（写在代码里，引用时按字面）：技能页「导入 Skill」；Skill 详情「信任」「启用」「环境」「来源」「试运行」；依赖面板「准备环境」（环境已就绪时是「重新准备（修复）」）、「取消准备」、「确认依赖授权」；专家页「召唤」；输入区「开始工作」与运行中的「停止」（占位文案「告诉算台你想完成什么工作…」）；空间入口「选择工作空间」，其菜单内「搜索工作空间」与「新建工作空间」。
@@ -156,13 +157,13 @@ Skill 列表分别展示来源（内置/用户）、启用状态、信任状态�
 
 光哥已查看原型并批准 D1–D5 推荐方案，作为后续交互实现依据；同日下达持续落地指令后，五项交互的界面与主进程链路均已实现并分阶段提交（MI00–MI09 的代码与自动化证据见 [MI 计划](development/tasks-memory-improvements.md)），逐格人工走查记录在 [MI 人工验收清单](development/memory-mi10-checklist.md)，走查与真实模型语义未完成前不得写成已通过。沿用 §8.3 页面骨架、§11.5.1 反馈路由和 §12 可用性底线；不得用「模型已阅读」「恢复后必定使用」替代真实状态。具体规则只见 Spec 与[契约 §11](development/memory-contracts.md#11-mi-改进契约proposed)，不在本节重复技术字段。
 
-### 6.1.5 定时任务界面（产品原型已通过，生产未实现）
+### 6.1.5 定时任务界面（产品原型已通过，生产实现完成；SC11 人工验收待做）
 
 光哥已确认独立“定时任务”入口位于“专家”下方、业务主导航最后；消息中心与设置仍保留底部位置。2026-10-03 光哥通过[原型 P1–P6](prototype/scheduled-tasks/README.md)：紧凑列表、整页配置/详情、三次时间预览、默认同目录「定时成果」、事实分层的下一步、只读专家差异与显式启用。
 
 [技术契约 §10](development/schedule-contracts.md#10-ui-实施清单组合基座不新增基础组件)逐分支映射当前真实组件，预定新增基础 UI 组件为 0；只新增定时业务页面组合/Hook/纯函数。每个普通页面可见分支沿用 PageHeader/ScrollRegion/.page-body，列表 ListRow、表单 Field 系列、来源 Modal/CheckList、状态 Badge/StatusNote、反馈按 §11.5。不复制造型相同的 ScheduleCard/Toast/Dialog，不复制原型 CSS，不硬塞面向固定材料的 ComposerCapabilityPicker；可用 SourceRow 只呈现真实 Evidence，missed 不伪造 RunSummaryRow。
 
-详见[设计](designs/scheduled-tasks.md)、[Luna 唯一任务板](development/tasks-schedules.md)及 [ADR-0037](adr/0037-scheduled-work-and-source-snapshots.md)。生产导航当前仍以 §6.1/源码为准；SC09-1 接入时同步导航表、代码与护栏，SC09-7 用真实生产页宿主验证主题/焦点/草稿/错误/反馈。通过原型不等于生产组件复用或真实窗口验收。
+详见[设计](designs/scheduled-tasks.md)、[Luna 唯一任务板](development/tasks-schedules.md)及 [ADR-0037](adr/0037-scheduled-work-and-source-snapshots.md)。SC09-1 已把 §6.1 导航表、生产入口、Hook 与列表页骨架接通；SC09-2 已接整页规则配置、Main 三次预览、预检和保存草稿路径；SC09-3 已接知识文档/集合/default Vault 的暂存选择、用途与预算提示；SC09-4 已接规则整页详情、历史分页和选中 occurrence 的固定期间/配置快照。候选来源快照与首个 Run 的真实 Evidence 分开呈现，Evidence 只按本期 runId 过滤，已读/采用计数单列；missed 清楚说明未创建 Task/Run、不自动补跑。输出回执按固定 ArtifactVersion 打开，不跟随成果 latest 热换。人工执行/启停/保存重试与专家差异按 SC09-5、原 Task 接续按 SC09-6 完成。SC09-7 在隔离 Electron 宿主实测青玉明暗、760/1380px、正常/减动效及草稿/冲突/Esc/焦点恢复等生产分支，8 变体共 128 步；只新增业务组合、Hook 与纯函数，基础组件新增 0。自动化及 AI 截图走查不代表 SC11 人工/业务验收。
 
 ### 6.1.6 记忆治理页的检索与滚动区（2026-09-25 光哥拍板）
 

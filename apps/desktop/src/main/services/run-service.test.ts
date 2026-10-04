@@ -1716,6 +1716,29 @@ describe('RunService', () => {
     expect(fixture.store.runMemoryContexts.get(supplementedRun)?.replay).toContainEqual(
       expect.objectContaining({ runId: firstRun, replayed: true }),
     );
+
+    const continuedArtifact = fixture.store.artifacts.saveMarkdown({
+      artifactId: artifact.id,
+      taskId: fixture.taskId,
+      origin: 'assistant-run',
+      runId: supplementedRun,
+      title: '本期定时参考成果（人工续作）',
+      content: '人工续作后的新版本。',
+    });
+    expect(continuedArtifact.id).toBe(artifact.id);
+    expect(continuedArtifact.versionNumber).toBe(2);
+    const preservedAutomaticVersion = fixture.store.artifacts.getVersionDetail(version.id);
+    expect(preservedAutomaticVersion).toMatchObject({
+      id: version.id,
+      artifactId: artifact.id,
+      versionNumber: 1,
+      sourceRunId: firstRun,
+      content: '依据：收入按回款金额统计的经营分析口径。',
+    });
+    expect(fixture.store.artifacts.listVersions(artifact.id).map((item) => item.id)).toEqual([
+      continuedArtifact.currentVersionId,
+      version.id,
+    ]);
   });
 
   it('cancels a running run, records the terminal event, and broadcasts every event in order', async () => {

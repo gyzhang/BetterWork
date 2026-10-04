@@ -102,6 +102,7 @@ function formatFileSize(bytes: number): string {
 export function ArtifactPage({
   artifacts,
   selected,
+  initialVersion,
   onSelect,
   onSave,
   onExport,
@@ -115,6 +116,7 @@ export function ArtifactPage({
 }: {
   artifacts: ArtifactSummary[];
   selected: ArtifactDetail | undefined;
+  initialVersion?: ArtifactVersionDetail | undefined;
   onSelect: (artifact: ArtifactSummary) => void;
   /** `inputRelations` 省略表示沿用前版声明，空数组表示用户主动清除采用声明。 */
   onSave: (
@@ -158,7 +160,7 @@ export function ArtifactPage({
     cancelEditing,
     finishEditing,
     selectVersion,
-  } = useArtifactViewer(selected);
+  } = useArtifactViewer(selected, initialVersion);
   const [toast, setToast] = useState<{ tone: ToastTone; message: string }>();
   const dismissToast = useCallback(() => setToast(undefined), []);
   const thumbnails = useArtifactThumbnails({

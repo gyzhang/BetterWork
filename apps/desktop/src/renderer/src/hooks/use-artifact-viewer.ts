@@ -71,13 +71,18 @@ const toVersionDetail = (artifact: ArtifactDetail): ArtifactVersionDetail | unde
  * 把 IPC 收在这里，视图就只剩呈现：切换成果时重置编辑态并重新拉版本列表，
  * 版本列表加载失败写进 `error` 而不是静默显示「0 个版本」。
  */
-export function useArtifactViewer(selected: ArtifactDetail | undefined): ArtifactViewer {
+export function useArtifactViewer(
+  selected: ArtifactDetail | undefined,
+  initialVersion?: ArtifactVersionDetail,
+): ArtifactViewer {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [error, setError] = useState('');
   const [versions, setVersions] = useState<ArtifactVersionSummary[]>([]);
-  const [viewingVersion, setViewingVersion] = useState<ArtifactVersionDetail>();
+  const [viewingVersion, setViewingVersion] = useState<ArtifactVersionDetail | undefined>(
+    initialVersion,
+  );
   const listRequestRef = useRef(0);
   const versionRequestRef = useRef(0);
 
@@ -89,7 +94,7 @@ export function useArtifactViewer(selected: ArtifactDetail | undefined): Artifac
     setError('');
     setTitle(selected?.title ?? '');
     setContent(selected?.type === 'markdown' ? selected.content : '');
-    setViewingVersion(undefined);
+    setViewingVersion(initialVersion?.artifactId === selected?.id ? initialVersion : undefined);
     if (!selected) {
       setVersions([]);
       return;
@@ -103,14 +108,21 @@ export function useArtifactViewer(selected: ArtifactDetail | undefined): Artifac
       },
       '版本历史加载失败，请重试。',
     );
-  }, [selected]);
+  }, [initialVersion, selected]);
 
   // 必须 memo：`toVersionDetail` 每次调用都返回新对象，若不收口，调用方把
   // `visibleVersion` 放进 useEffect / useCallback 依赖数组时会因引用永远变化而无限重跑。
   // `react-hooks/exhaustive-deps` 查不出这种错误——依赖在语法上是完整的。
   const visibleVersion = useMemo(
-    () => viewingVersion ?? (selected ? toVersionDetail(selected) : undefined),
-    [viewingVersion, selected],
+    () =>
+      viewingVersion?.artifactId === selected?.id
+        ? viewingVersion
+        : initialVersion?.artifactId === selected?.id
+          ? initialVersion
+          : selected
+            ? toVersionDetail(selected)
+            : undefined,
+    [initialVersion, selected, viewingVersion],
   );
 
   const selectVersion = async (version: ArtifactVersionSummary): Promise<void> => {

@@ -23,6 +23,13 @@ import {
 /** docs/10 §10.1：内嵌设置分区沿用宿主骨架，不另造普通管理页。 */
 const PAGE_SHAPE_EXCEPTIONS: readonly PageShapeException[] = [
   {
+    file: 'apps/desktop/src/renderer/src/views/schedules/ScheduleSourcePicker.tsx',
+    component: 'ScheduleSourcePicker',
+    required: [],
+    reason:
+      '定时配置页私有的来源 Modal 组合，由 ScheduleEditor 的来源 Field 承载，不是独立页面入口',
+  },
+  {
     file: 'apps/desktop/src/renderer/src/views/SettingsView.tsx',
     component: 'SettingsPage',
     required: [

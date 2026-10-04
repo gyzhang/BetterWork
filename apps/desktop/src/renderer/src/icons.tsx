@@ -87,6 +87,14 @@ export const ExpertIcon = (props: IconProps): React.JSX.Element => (
   </Icon>
 );
 
+export const ScheduleIcon = (props: IconProps): React.JSX.Element => (
+  <Icon {...props}>
+    <rect x="4" y="5.5" width="16" height="15" rx="2.5" />
+    <path d="M8 3.5v4M16 3.5v4M4 9.5h16M12 12.5v3l2 1" />
+    <circle cx="12" cy="15" r="4" />
+  </Icon>
+);
+
 /** 召唤：四角星闪光，表示把一个专家请进来开始工作，与发送（ArrowUp）区分开。 */
 export const SummonIcon = (props: IconProps): React.JSX.Element => (
   <Icon {...props}>

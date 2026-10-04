@@ -20,6 +20,9 @@ import type {
   RecentTaskSummary,
   Result,
   RunSummary,
+  ScheduleChangedEvent,
+  ScheduleDetail,
+  ScheduleOccurrenceDetail,
   SkillDetail,
   TaskContextRevision,
   WorkspaceBrief,
@@ -27,7 +30,7 @@ import type {
   WorkspaceReferenceSetData,
   WorkspaceSummary,
 } from '@betterwork/agent-protocol';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
@@ -112,6 +115,104 @@ const expertDetail: ExpertDetail = {
     createdAt: 1,
   },
 };
+const scheduleContinuationFixture = (): {
+  detail: ScheduleDetail;
+  occurrence: ScheduleOccurrenceDetail;
+} => {
+  const period = {
+    rule: 'previous-month' as const,
+    timeZone: 'Asia/Shanghai' as const,
+    anchorAt: 10,
+    startAt: 1,
+    endAt: 9,
+    label: '2026 年 8 月',
+  };
+  const occurrence = {
+    id: 'occurrence-1',
+    scheduleId: 'schedule-1',
+    configVersion: 3,
+    trigger: 'scheduled' as const,
+    period,
+    phase: 'closed' as const,
+    preparationOutcome: 'needs-material' as const,
+    taskId: previousTask.id,
+    sessionId: previousTask.sessionId,
+    sourceSnapshotId: 'snapshot-1',
+    createdAt: 1,
+    requestedAt: 1,
+    preparedAt: 2,
+    finishedAt: 3,
+  };
+  const config = {
+    scheduleId: 'schedule-1',
+    version: 3,
+    name: '月度经营分析',
+    expertId: expertSummary.id,
+    expertRevisionId: expertDetail.revision.id,
+    requirements: '分析经营表现',
+    expectedArtifactTypes: ['markdown' as const],
+    timing: {
+      frequency: 'monthly' as const,
+      day: 5,
+      hour: 9,
+      minute: 0,
+      timeZone: 'Asia/Shanghai' as const,
+    },
+    periodRule: 'previous-month' as const,
+    knowledgeSources: [],
+    outputSubdirectory: '定时成果' as const,
+    createdAt: 1,
+  };
+  const historyItem = {
+    occurrence,
+    result: { occurrence, status: 'needs-material' as const, outputReceipts: [] },
+  };
+  const detail: ScheduleDetail = {
+    aggregate: {
+      schedule: {
+        id: 'schedule-1',
+        workspaceId: workspaceFixture.id,
+        revision: 2,
+        currentConfigVersion: 3,
+        lifecycle: 'paused',
+        createdAt: 1,
+        updatedAt: 2,
+      },
+      config,
+    },
+    expertUpdate: {
+      boundRevision: expertDetail.revision,
+      currentRevision: expertDetail.revision,
+      available: false,
+    },
+    history: { items: [historyItem] },
+  };
+  return {
+    detail,
+    occurrence: {
+      occurrence,
+      result: historyItem.result,
+      config,
+      task: previousTask,
+      sourceSnapshot: {
+        id: 'snapshot-1',
+        occurrenceId: 'occurrence-1',
+        workspaceId: workspaceFixture.id,
+        status: 'ready',
+        configVersion: 3,
+        evaluatedAt: 1,
+        manifestHash: 'a'.repeat(64),
+        itemCount: 2,
+        totalFileBytes: 512,
+        createdAt: 1,
+        completedAt: 2,
+      },
+      outputReceipts: [],
+      readMaterialCount: 0,
+      adoptedMaterialCount: 0,
+    },
+  };
+};
 const languageModel: ModelProfileSummary = {
   id: 'model-language-1',
   name: '本地语言模型',
@@ -145,6 +246,7 @@ const briefFixture: WorkspaceBrief = {
 
 const memoryOperationUuid = '11111111-1111-4111-8111-111111111111';
 let emitNotificationChange: ((event: NotificationChangeEvent) => void) | undefined;
+let emitScheduleChange: ((event: ScheduleChangedEvent) => void) | undefined;
 let activateSystemNotification: ((input: { id: string }) => void) | undefined;
 
 const writeReceipt: MemoryWriteReceipt = {
@@ -210,7 +312,9 @@ function installApi(options?: {
   models?: ModelProfileSummary[];
 }) {
   emitNotificationChange = undefined;
+  emitScheduleChange = undefined;
   activateSystemNotification = undefined;
+  const removedScheduleScopeTaskIds = new Set<string>();
   const api = {
     chrome: { updateTheme: vi.fn(async () => undefined) },
     workspace: {
@@ -284,35 +388,78 @@ function installApi(options?: {
       })),
     },
     schedules: {
-      get: vi.fn(async () => ({
+      list: vi.fn<Window['betterwork']['schedules']['list']>(async () => ({
+        status: 'success',
+        data: { items: [] },
+      })),
+      onChange: vi.fn((listener: (event: ScheduleChangedEvent) => void) => {
+        emitScheduleChange = listener;
+        return () => {
+          emitScheduleChange = undefined;
+        };
+      }),
+      get: vi.fn<Window['betterwork']['schedules']['get']>(async () => ({
         status: 'rejected' as const,
         error: { code: 'schedule_not_found', message: '没有该规则。' },
       })),
-      getOccurrence: vi.fn(async () => ({
+      save: vi.fn<Window['betterwork']['schedules']['save']>(async () => ({
+        status: 'rejected',
+        error: { code: 'schedule_not_found', message: '没有该规则。' },
+      })),
+      setLifecycle: vi.fn<Window['betterwork']['schedules']['setLifecycle']>(async () => ({
+        status: 'rejected',
+        error: { code: 'schedule_not_found', message: '没有该规则。' },
+      })),
+      getOccurrence: vi.fn<Window['betterwork']['schedules']['getOccurrence']>(async () => ({
         status: 'rejected' as const,
         error: { code: 'schedule_not_found', message: '没有该实例。' },
       })),
     },
     taskContexts: {
       get: vi.fn(async (): Promise<TaskContextRevision | null> => options?.context ?? null),
-      save: vi.fn(
-        async (input: {
-          taskId: string;
-          expectedRevision?: number;
-          executor: TaskContextRevision['executor'];
-          skillBindings: TaskContextRevision['skillBindings'];
-        }) => ({
+      save: vi.fn<Window['betterwork']['taskContexts']['save']>(async (input) => {
+        const removesScheduleScope = input.scheduleSourceSnapshotId === null;
+        if (removesScheduleScope) removedScheduleScopeTaskIds.add(input.taskId);
+        const revision = removesScheduleScope ? (input.expectedRevision ?? 0) + 1 : 1;
+        const scheduleSourceSnapshotId =
+          removesScheduleScope || removedScheduleScopeTaskIds.has(input.taskId)
+            ? undefined
+            : (input.scheduleSourceSnapshotId ?? options?.context?.scheduleSourceSnapshotId);
+        const materials = input.materials ?? options?.context?.materials;
+        return {
           context: {
-            id: 'context-1',
+            id: removesScheduleScope ? `context-${String(revision)}` : 'context-1',
             taskId: input.taskId,
-            revision: 1,
+            revision,
             executor: input.executor,
             skillBindings: input.skillBindings,
+            ...(materials !== undefined ? { materials } : {}),
+            ...(scheduleSourceSnapshotId ? { scheduleSourceSnapshotId } : {}),
+            ...(input.excludedMemoryIds !== undefined
+              ? { excludedMemoryIds: input.excludedMemoryIds }
+              : options?.context?.excludedMemoryIds !== undefined
+                ? { excludedMemoryIds: options.context.excludedMemoryIds }
+                : {}),
+            ...(input.mcpToolBindings !== undefined
+              ? { mcpToolBindings: input.mcpToolBindings }
+              : options?.context?.mcpToolBindings !== undefined
+                ? { mcpToolBindings: options.context.mcpToolBindings }
+                : {}),
+            ...(input.modelReference !== undefined
+              ? { modelReference: input.modelReference }
+              : options?.context?.modelReference !== undefined
+                ? { modelReference: options.context.modelReference }
+                : {}),
+            ...(input.builtinToolPolicy !== undefined
+              ? { builtinToolPolicy: input.builtinToolPolicy }
+              : options?.context?.builtinToolPolicy !== undefined
+                ? { builtinToolPolicy: options.context.builtinToolPolicy }
+                : {}),
             createdAt: 1,
-            updatedAt: 1,
+            updatedAt: removesScheduleScope ? revision : 1,
           },
-        }),
-      ),
+        };
+      }),
     },
     discussionCheckpoints: {
       list: vi.fn(async () => []),
@@ -504,7 +651,7 @@ describe('Skill test run in the task composer', () => {
     const api = installApi();
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
-    await screen.findByText('旧任务的要求');
+    await screen.findByRole('textbox', { name: /任务输入/ });
     let resolveEvents: ((events: []) => void) | undefined;
     api.runs.listEvents.mockImplementationOnce(
       () =>
@@ -713,6 +860,144 @@ describe('Expert summon in the task composer', () => {
 
     await waitFor(() => expect(api.taskContexts.save).toHaveBeenCalledTimes(1));
     expect(api.taskContexts.save).toHaveBeenCalledWith(expect.objectContaining({ materials: [] }));
+  });
+});
+
+describe('定时任务导航', () => {
+  it('在专家下方显示入口，读取后台事实后往返仍保留 Composer 草稿', async () => {
+    const api = installApi();
+    render(<App />);
+    fireEvent.change(composer(), { target: { value: '保留这段工作要求' } });
+
+    const scheduleNavigation = screen.getByRole('button', { name: '定时任务' });
+    const expertNavigation = screen.getByRole('button', { name: '专家' });
+    expect(expertNavigation.compareDocumentPosition(scheduleNavigation)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    fireEvent.click(scheduleNavigation);
+    expect(await screen.findByRole('heading', { name: '按约定时间开始工作' })).toBeTruthy();
+    await waitFor(() => expect(api.schedules.list).toHaveBeenCalledTimes(1));
+
+    emitScheduleChange?.({ scheduleId: 'schedule-1', reason: 'occurrence' });
+    await waitFor(() => expect(api.schedules.list).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole('button', { name: '工作' }));
+    expect(composer()).toHaveProperty('value', '保留这段工作要求');
+  });
+
+  it('从固定期间打开原 Task、保留草稿并只把补充材料写入该 Task', async () => {
+    const context: TaskContextRevision = {
+      id: 'context-5',
+      taskId: previousTask.id,
+      revision: 5,
+      executor: { kind: 'general' },
+      skillBindings: [],
+      materials: [],
+      scheduleSourceSnapshotId: 'snapshot-1',
+      excludedMemoryIds: [],
+      mcpToolBindings: [],
+      createdAt: 1,
+      updatedAt: 5,
+    };
+    const { detail, occurrence } = scheduleContinuationFixture();
+    const api = installApi({ context });
+    api.schedules.list.mockResolvedValue({
+      status: 'success',
+      data: { items: [detail.aggregate] },
+    });
+    api.schedules.get.mockResolvedValue({ status: 'success', data: detail });
+    api.schedules.getOccurrence.mockResolvedValue({ status: 'success', data: occurrence });
+    api.runs.listEvents.mockResolvedValue([
+      {
+        id: 'previous-completed-event',
+        runId: previousRun.id,
+        sequence: 1,
+        createdAt: 2,
+        type: 'run.completed',
+        finalContent: '旧任务的既有成果。',
+      },
+    ]);
+    const candidate: MaterialCandidate = {
+      reference: {
+        kind: 'knowledge-revision',
+        knowledgeDocumentId: 'document-1',
+        knowledgeRevisionId: 'document-1-r2',
+        contentHash: 'b'.repeat(64),
+        sourcePath: '/workspace/财务规则.md',
+      },
+      title: '财务规则',
+      sourceLabel: '知识 · 财务规则.md',
+      status: 'ready',
+    };
+    api.materials.listCandidates.mockResolvedValue([candidate]);
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
+    await screen.findByText('旧任务的要求');
+    fireEvent.change(composer(), { target: { value: '保留原 Task 的续作草稿' } });
+    fireEvent.click(screen.getByRole('button', { name: '定时任务' }));
+    await screen.findByRole('heading', { name: '按约定时间开始工作' });
+    await waitFor(() => expect(api.schedules.list).toHaveBeenCalled());
+    const scheduleChangeListener = emitScheduleChange;
+    fireEvent.click(screen.getByRole('button', { name: '详情' }));
+    fireEvent.click(await screen.findByRole('button', { name: /打开本期原 Task「旧任务」/ }));
+
+    await screen.findByRole('textbox', { name: /任务输入/ });
+    expect(composer()).toHaveProperty('value', '保留原 Task 的续作草稿');
+    expect(screen.getByText(/来源快照 snapshot-1/)).toBeTruthy();
+    expect(screen.getByText(/缩小后续权限范围并触发现有安全历史分段/)).toBeTruthy();
+    const contextPanel = document.querySelector('.context-panel');
+    if (!(contextPanel instanceof HTMLElement)) throw new Error('未打开 Task 上下文面板');
+    const sources = within(contextPanel);
+    fireEvent.click(sources.getByRole('button', { name: '知识' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /财务规则/ }));
+    fireEvent.click(screen.getByRole('button', { name: '添加已选材料' }));
+    expect(screen.getByRole('list', { name: '本次材料' }).textContent).toContain('财务规则');
+
+    fireEvent.click(sources.getByRole('button', { name: '移除本期范围' }));
+    const confirmation = await screen.findByRole('alertdialog', {
+      name: '移除本 Task 的定时来源范围？',
+    });
+    expect(within(confirmation).getByText(/本期来源快照不变/)).toBeTruthy();
+    fireEvent.click(within(confirmation).getByRole('button', { name: '移除本期范围' }));
+    await waitFor(() => expect(api.taskContexts.save).toHaveBeenCalledTimes(1));
+    expect(api.taskContexts.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: previousTask.id,
+        expectedRevision: 5,
+        scheduleSourceSnapshotId: null,
+        materials: [
+          {
+            reference: candidate.reference,
+            purpose: 'rule',
+            addedFrom: 'workspace-candidate',
+          },
+        ],
+      }),
+    );
+    expect(screen.getByText(/后续 Run 当前不含这期自动来源/)).toBeTruthy();
+    expect(api.schedules.setLifecycle).not.toHaveBeenCalled();
+    scheduleChangeListener?.({ scheduleId: 'schedule-1', reason: 'occurrence' });
+    expect(screen.getByRole('button', { name: '工作' }).getAttribute('aria-current')).toBe('true');
+    expect(composer()).toHaveProperty('value', '保留原 Task 的续作草稿');
+
+    fireEvent.click(screen.getByRole('button', { name: /开始工作/ }));
+    await waitFor(() => expect(api.runs.start).toHaveBeenCalledTimes(1));
+    expect(api.runs.start).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: previousTask.id, prompt: '保留原 Task 的续作草稿' }),
+    );
+    expect(api.taskContexts.save).toHaveBeenCalledTimes(2);
+    expect(api.taskContexts.save.mock.calls[1]?.[0]).toMatchObject({
+      taskId: previousTask.id,
+      materials: [
+        {
+          reference: candidate.reference,
+          purpose: 'rule',
+          addedFrom: 'workspace-candidate',
+        },
+      ],
+    });
+    expect(api.taskContexts.save.mock.calls[1]?.[0]).not.toHaveProperty('scheduleSourceSnapshotId');
+    expect(api.schedules.setLifecycle).not.toHaveBeenCalled();
   });
 });
 
