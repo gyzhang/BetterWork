@@ -9,6 +9,7 @@ import {
   colorSchemes,
   workspaceAccents,
 } from '../../apps/desktop/src/renderer/src/appearance';
+import { BrandLogo } from '../../apps/desktop/src/renderer/src/brand-logo';
 import { Badge } from '../../apps/desktop/src/renderer/src/components/Badge';
 import { Button } from '../../apps/desktop/src/renderer/src/components/Button';
 import { Card } from '../../apps/desktop/src/renderer/src/components/Card';
@@ -274,6 +275,11 @@ function FixturePage(): React.JSX.Element {
           <PageHeader
             eyebrow="组件回归"
             title="可复用页面的真实渲染"
+            leading={
+              <span className="brand-mark" aria-hidden="true">
+                <BrandLogo size={28} />
+              </span>
+            }
             actions={
               <>
                 <Button size="lg" id="fixture-modal" onClick={() => setModal(true)}>

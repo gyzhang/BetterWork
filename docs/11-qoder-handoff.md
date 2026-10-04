@@ -160,7 +160,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 13. Evidence 已按版本关联，但没有正文 Claim/Citation 系统——Phase 1 验收项 3，需先立 ADR。
 14. 大纲确认（Phase 1 验收项 4）阻塞在协议层：`approval.requested` / `approval.resolved` / `run.waiting` 事件尚未定义，事件 Schema 也没有版本号字段。
 15. Run 历史与 Session 标识已持久化，但执行链路尚未把历史作为模型上下文传入，不构成记忆系统。
-16. Dock/打包图标（`.icns`）待打包阶段：logo 已定稿（`docs/assets/betterwork-logo.svg`，透明背景），缺 PNG/ICNS 导出管线。
+16. 2026-10-04 已采用「合页」标志（`docs/assets/betterwork-logo.svg`，透明背景），macOS 打包图标 PNG/ICNS 已落地于 `apps/desktop/build/` 并由 `electron-builder.yml` 引用；签名与安装态 Dock 显示仍随打包验收核对。
 
 ### 本轮已收敛
 

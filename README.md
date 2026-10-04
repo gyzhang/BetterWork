@@ -1,6 +1,6 @@
 # 算台 BetterWork
 
-<p align="center"><img src="docs/assets/betterwork-logo.svg" width="96" alt="算台 BetterWork 标志" /></p>
+<p align="center"><img src="docs/assets/betterwork-logo.svg" width="96" alt="算台 BetterWork 合页标志" /></p>
 
 <p align="center"><strong>以我所知，成我所作</strong></p>
 

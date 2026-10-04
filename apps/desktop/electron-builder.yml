@@ -41,6 +41,7 @@ extraResources:
       - '*.ttf'
 
 mac:
+  icon: build/icon.icns
   target:
     - target: dmg
       arch:

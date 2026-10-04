@@ -1,0 +1,32 @@
+Built-in image_gen; no CLI fallback.
+
+CONCEPT A
+Use case: logo-brand
+Asset type: original logo identity concept presentation for a macOS knowledge-work app.
+Primary request: Redesign the logo for the Chinese brand "算台", English "BetterWork", a personal AI workbench for product managers, market/strategy professionals, researchers and consultants. The core promise is "以我所知，成我所作": turn accumulated personal knowledge into reusable reports, analysis, plans and presentations. Create ONE exceptionally refined, memorable identity direction named "合页 / WORKFOLD".
+Subject: A distinctive abstract solid geometric monogram built from TWO broad folded paper-like ribbons joining into ONE compact W/workbench silhouette. The folded planes imply knowledge being assembled into an artifact. Subtle asymmetric top heights, a stable grounded bottom, balanced generous negative space, precise gently rounded corners. The W should emerge from shape, not look like a typed letter; give it a proprietary silhouette. A flat monocolor symbol whose outline alone works without a square container. Do NOT combine a book and another small symbol.
+Composition: wide elegant editorial brand presentation on warm ivory. Main large jade mark and Chinese "算台" with "BetterWork" wordmark, beside a large clean symbol alone. Below, three small evenly aligned real application samples: jade symbol on light paper, ivory reverse symbol on dark ink, and white symbol inside a jade macOS rounded-square tile. Keep the same exact symbol in all appearances. Wide calm margins, strong hierarchy, no busy annotations.
+Typography: impeccable contemporary Chinese sans-serif, substantial but not corporate-heavy; English neutral humanist sans-serif with normal capitalization. Verbatim text only: "算台", "BetterWork", "以我所知，成我所作", "合页". Keep the slogan subtle and well spaced.
+Color palette: jade #2F6B5D, warm ivory #F6F7F5, ink #1D2420. Flat solid shapes.
+Style: Swiss/Japanese clarity, calm professional warmth, premium desktop productivity brand. Optically balanced, vector-ready, scalable to 16 px.
+Avoid: sparkle, star, bulb, robot, brain, chat bubble, neural network, abacus, literal book icon, document UI icon, house/building, bank seal, growth arrow/checkmark, infinity knot, generic AI swirl, gradients, glow, 3D, shadows, textures, thin lines, extra dots, watermark. This must be a logo design, not a UI screen or product photo.
+
+CONCEPT B
+Use case: logo-brand
+Asset type: original logo identity concept presentation for a macOS knowledge-work app.
+Primary request: Redesign the logo for Chinese brand "算台", English "BetterWork", a personal AI workbench serving product leaders, strategy and marketing professionals, researchers and consultants. Brand promise: "以我所知，成我所作". Produce ONE compelling alternative identity direction named "知作 / KNOWLEDGE TO WORK".
+Subject: A highly distinctive B monogram sculpted from two substantial interlocking page planes sharing one stable vertical spine. A single flat jade silhouette. TWO open negative-space cuts arranged like ordered source/output pages express personal accumulated knowledge becoming new artifacts. Contemporary gently rounded geometry, a subtly forward-moving top plane with a diagonal fold edge. The letter B should be discoverable without becoming a stock font glyph; a strong compact silhouette, no extra symbol. Abstract page geometry, not a literal book or document icon. It should feel like a personal maker's workbench rather than finance.
+Composition: wide refined brand sheet on warm ivory. One large isolated jade symbol and a large horizontal Chinese "算台" / "BetterWork" wordmark lockup. Bottom strip with consistent monochrome black version, ivory reverse symbol on ink rectangle, and white symbol in a jade macOS rounded-square tile. All versions reproduce the exact same mark. Spacious intelligent layout, one concise concept label.
+Typography: crisp modern Chinese sans-serif; English warm neutral humanist sans-serif, normal capitalization. Verbatim text only: "算台", "BetterWork", "以我所知，成我所作", "知作". No extra copy.
+Color palette: jade #2F6B5D, paper #F6F7F5, ink #1D2420. All shapes flat solid color.
+Style: restrained, trustworthy, personal, elegant, practical, original, vector-ready. Broad strokes and clear internal apertures readable at 16 px.
+Avoid: AI sparkle, star, lightbulb, robot, brain, chat bubble, abacus, literal open book, generic page outline, bank seal, checkmark/growth arrow, infinity symbol, generic AI knot, gradients, glow, metallic materials, 3D, shadows, textures, thin details, floating dots, watermark. This is a logo identity, not a UI mockup.
+
+TRANSPARENT REFINEMENT
+Use case: precise-object-edit / logo-brand
+Input image: the attached "合页" BetterWork brand presentation is the edit target.
+Primary request: Extract and refine ONLY the large jade symbol at the upper LEFT of the reference presentation, to create a production-ready transparent logo symbol. Keep that left symbol's identity: a tall left folded page, a shorter right folded page, and a broad lower folded chevron creating an abstract W. Preserve left-tall/right-short asymmetry, do not mirror or substitute the upper-right variation.
+Remove all words, background, presentation panels, textures and application tile. Output ONE isolated centered symbol, solid flat jade #2F6B5D with genuinely transparent background outside and in both internal diagonal gaps. Keep broad geometric planes and softly rounded corners. Widen the TWO diagonal separators slightly to about 4% of the total mark width so that both page folds remain distinguishable at small sizes. Keep a single unified visual silhouette, no small fragments. Flat uniform color everywhere, absolutely no gradient, shadow, lighting, bevel, grain, outline or added details.
+Square canvas with mark occupying approximately 80% of width and height. Exact same overall fold construction as upper-left reference, optically balanced. This is the final symbol artwork, not a brand sheet, not a mockup. No letters or words anywhere.
+
+The selected raster concept was manually redrawn as three flat SVG paths. SVG variants and their PNG renders are the consistent candidate artwork; generated concept boards are exploration references.
