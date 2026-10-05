@@ -48,12 +48,13 @@ export interface ComposerProps {
   onRequestMaterials: (kind: 'file' | 'knowledge' | 'artifact') => void;
   onDismissMaterialPicker: () => void;
   onCommitMaterials: (materials: TaskMaterialSelection[]) => void;
+  onManageMaterials?: (() => void) | undefined;
   onRequestSkillDetail: () => void;
   onRequestExpert: () => void;
 }
 
 /**
- * 任务输入区：工作区、绑定区、正文与提交。
+ * 任务输入区与下方工具栏：正文和提交独立成卡；工作区、能力与材料摘要常驻下方预留区域。
  *
  * §10.2 把它列为业务组件却长期内联在 `App.tsx`（137 行）。外提的收益不只是行数：
  * 工作区那两颗按钮（打开本地文件夹／新建工作区）原本是**逐字相同**的两段
@@ -83,6 +84,7 @@ export function Composer({
   onRequestMaterials,
   onDismissMaterialPicker,
   onCommitMaterials,
+  onManageMaterials,
   onRequestSkillDetail,
   onRequestExpert,
 }: ComposerProps): React.JSX.Element {
@@ -101,23 +103,45 @@ export function Composer({
     onStartRun();
   };
   return (
-    <form className="composer" onSubmit={onSubmit}>
-      <div className="workspace-row">
-        <WorkspaceSelector {...workspacePicker} />
-      </div>
-      <div className="composer-capability-row">
-        {expert && (
-          <BindingChipBar label="当前专家">
-            <BindingChip
-              name={expert.name}
-              removeLabel={`移除专家 ${expert.name}`}
-              leading={<ExpertIcon size={12} />}
-              tone="brand"
-              disabled={locked}
-              onRemove={onRemoveExpert}
+    <div className="composer-dock">
+      <form className="composer" onSubmit={onSubmit}>
+        <textarea
+          ref={textareaRef}
+          aria-label="任务输入，按 Command 或 Control 加 Enter 开始工作"
+          value={prompt}
+          onChange={(event) => onPromptChange(event.target.value)}
+          onKeyDown={onKeyDown}
+          rows={3}
+          placeholder="描述你想完成的工作…"
+        />
+        <div className="composer-footer">
+          <span>
+            {modelLabel} <kbd>⌘↵</kbd>
+          </span>
+          {submit.state === 'running' ? (
+            <Button variant="danger" size="md" type="button" onClick={submit.onStop}>
+              停止
+            </Button>
+          ) : (
+            <AsyncButton
+              size="md"
+              type="submit"
+              busy={submit.state === 'starting'}
+              disabled={!prompt.trim() || workspacePicker.currentWorkspace === undefined}
+              label={
+                <>
+                  开始工作 <ArrowUpIcon size={13} />
+                </>
+              }
+              busyLabel="正在启动…"
             />
-          </BindingChipBar>
-        )}
+          )}
+        </div>
+      </form>
+      <div className="composer-utility-row">
+        <div className="workspace-row">
+          <WorkspaceSelector {...workspacePicker} />
+        </div>
         <ComposerCapabilityPicker
           skills={skills}
           selected={bindings}
@@ -130,7 +154,7 @@ export function Composer({
           materialsLoading={materialsLoading}
           {...(materialPickerError ? { materialPickerError } : {})}
           disabled={locked}
-          {...(locked ? { disabledReason: '运行中不可修改' } : {})}
+          {...(locked ? { disabledReason: '工作即将开始或运行中不可修改' } : {})}
           onAdd={onAddBinding}
           onRemove={onRemoveBinding}
           onRequestSkillDetail={onRequestSkillDetail}
@@ -138,40 +162,23 @@ export function Composer({
           onRequestMaterials={onRequestMaterials}
           onDismissMaterialPicker={onDismissMaterialPicker}
           onCommitMaterials={onCommitMaterials}
+          afterAddButton={
+            expert ? (
+              <BindingChipBar label="当前专家">
+                <BindingChip
+                  name={expert.name}
+                  removeLabel={`移除专家 ${expert.name}`}
+                  leading={<ExpertIcon size={12} />}
+                  tone="brand"
+                  disabled={locked}
+                  onRemove={onRemoveExpert}
+                />
+              </BindingChipBar>
+            ) : undefined
+          }
+          {...(onManageMaterials ? { onManageMaterials } : {})}
         />
       </div>
-      <textarea
-        ref={textareaRef}
-        aria-label="任务输入，按 Command 或 Control 加 Enter 开始工作"
-        value={prompt}
-        onChange={(event) => onPromptChange(event.target.value)}
-        onKeyDown={onKeyDown}
-        rows={3}
-        placeholder="告诉算台你想完成什么工作…"
-      />
-      <div className="composer-footer">
-        <span>
-          {modelLabel} <kbd>⌘/Ctrl ↵</kbd>
-        </span>
-        {submit.state === 'running' ? (
-          <Button variant="danger" size="md" type="button" onClick={submit.onStop}>
-            停止
-          </Button>
-        ) : (
-          <AsyncButton
-            size="md"
-            type="submit"
-            busy={submit.state === 'starting'}
-            disabled={!prompt.trim() || workspacePicker.currentWorkspace === undefined}
-            label={
-              <>
-                开始工作 <ArrowUpIcon size={13} />
-              </>
-            }
-            busyLabel="正在启动…"
-          />
-        )}
-      </div>
-    </form>
+    </div>
   );
 }

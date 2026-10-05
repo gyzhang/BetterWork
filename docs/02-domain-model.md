@@ -70,7 +70,7 @@ interface Workspace {
 
 ## 3. Task、Session 与 Conversation
 
-- Task：用户希望完成的一项工作，有明确目标和交付物。
+- Task：用户希望完成的一项工作，有明确目标和交付物，创建时固定归属一个 Workspace；需要切换 Workspace 时创建新 Task。
 - Session：用户与算台围绕任务进行协作的连续上下文。
 - Conversation：Session 中可见的对话记录。
 - Message：用户、助手、系统、工具等产生的一条可持久化消息。

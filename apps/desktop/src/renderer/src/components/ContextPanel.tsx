@@ -3,6 +3,7 @@ import type {
   ArtifactSummary,
   EvidenceSummary,
   MaterialCandidate,
+  MaterialPurpose,
   McpConnectionSummary,
   McpToolBinding,
   MemoryDecisionSummary,
@@ -25,7 +26,7 @@ import type { RunMemoriesState, TaskMemoryExclusionState } from '../hooks/use-ru
 import { useRunSourcePreview } from '../hooks/use-run-source-preview';
 import type { TaskMemoryExclusionsState } from '../hooks/use-task-memory-exclusions';
 import type { WorkspaceBriefState } from '../hooks/use-workspace-brief';
-import { ArtifactIcon, ChevronRightIcon } from '../icons';
+import { ArtifactIcon, ChevronRightIcon, CloseIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
 import { formatTime } from '../lib/format';
 import { fileTypeLabel, materialPurposeName, runStatusName } from '../lib/labels';
@@ -41,10 +42,12 @@ import {
 import { scheduleSourceSnapshotStatusLabel } from '../lib/schedule-detail';
 import { handleTitlebarDoubleClick } from '../lib/titlebar';
 import type { ContextTab } from '../lib/view-types';
+import { ActionBar } from './ActionBar';
 import { AsyncButton, InlineLoading } from './AsyncButton';
 import { Button } from './Button';
 import { Disclosure } from './Disclosure';
 import { EmptyContext, EmptyNotice } from './EmptyState';
+import { FieldSelect } from './FieldSelect';
 import { IconButton } from './IconButton';
 import { InlineError } from './InlineError';
 import { ListRow } from './ListRow';
@@ -72,6 +75,11 @@ const artifactTypeLabel = (artifact: ArtifactSummary): string =>
     ? fileTypeLabel(artifact.mimeType)
     : 'Markdown';
 
+const MATERIAL_PURPOSE_OPTIONS = Object.entries(materialPurposeName).map(([id, label]) => ({
+  id,
+  label,
+}));
+
 export interface ContextPanelProps {
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -86,6 +94,8 @@ export interface ContextPanelProps {
   onSelectRun: (run: RunSummary) => void;
   onOpenSource: (sourcePath: string) => Promise<void>;
   materials: TaskMaterialSelection[];
+  onCommitMaterials: (materials: TaskMaterialSelection[]) => void;
+  materialsDisabled: boolean;
   /** 从定时任务详情打开原 Task 时，展示不可变本期快照事实；仅此 Task 后续 Run 使用。 */
   scheduleContinuation?: {
     occurrence: ScheduleOccurrenceDetail;
@@ -145,6 +155,8 @@ export function ContextPanel({
   onSelectRun,
   onOpenSource,
   materials,
+  onCommitMaterials,
+  materialsDisabled,
   scheduleContinuation,
   memories,
   excludedMemoryIds,
@@ -361,6 +373,7 @@ export function ContextPanel({
                         variant="chip"
                         size="sm"
                         type="button"
+                        disabled={materialsDisabled}
                         onClick={() => onRequestMaterials('file')}
                       >
                         文件
@@ -369,6 +382,7 @@ export function ContextPanel({
                         variant="chip"
                         size="sm"
                         type="button"
+                        disabled={materialsDisabled}
                         onClick={() => onRequestMaterials('knowledge')}
                       >
                         知识
@@ -377,6 +391,7 @@ export function ContextPanel({
                         variant="chip"
                         size="sm"
                         type="button"
+                        disabled={materialsDisabled}
                         onClick={() => onRequestMaterials('artifact')}
                       >
                         成果
@@ -387,21 +402,56 @@ export function ContextPanel({
                 {materials.length > 0 && (
                   <div className="selected-materials-list">
                     {materials.map((selection) => {
+                      const materialKey = taskMaterialKey(selection);
                       const candidate = materialCandidates.find(
-                        (item) => materialCandidateKey(item) === taskMaterialKey(selection),
+                        (item) => materialCandidateKey(item) === materialKey,
                       );
+                      const title = candidate?.title ?? '已选材料';
                       return (
                         <ListRow
-                          key={taskMaterialKey(selection)}
+                          key={materialKey}
                           multiline
                           variant="plain"
-                          title={candidate?.title ?? '已选材料'}
+                          title={title}
                           meta={
                             <>
-                              {candidate?.sourceLabel ?? selection.reference.kind} ·{' '}
-                              {materialPurposeName[selection.purpose]}
+                              {candidate?.sourceLabel ?? selection.reference.kind}
                               {candidate?.status === 'unavailable' ? ' · 不可读取' : ''}
                             </>
+                          }
+                          actionsPlacement="below"
+                          actions={
+                            <ActionBar as="div" label={`管理材料 ${title}`}>
+                              <FieldSelect
+                                size="sm"
+                                ariaLabel={`${title}用途`}
+                                value={selection.purpose}
+                                disabled={materialsDisabled}
+                                options={MATERIAL_PURPOSE_OPTIONS}
+                                onChange={(purpose) =>
+                                  onCommitMaterials(
+                                    materials.map((item) =>
+                                      taskMaterialKey(item) === materialKey
+                                        ? { ...item, purpose: purpose as MaterialPurpose }
+                                        : item,
+                                    ),
+                                  )
+                                }
+                              />
+                              <IconButton
+                                size="sm"
+                                label={`移除材料 ${title}`}
+                                icon={CloseIcon}
+                                disabled={materialsDisabled}
+                                onClick={() =>
+                                  onCommitMaterials(
+                                    materials.filter(
+                                      (item) => taskMaterialKey(item) !== materialKey,
+                                    ),
+                                  )
+                                }
+                              />
+                            </ActionBar>
                           }
                         />
                       );

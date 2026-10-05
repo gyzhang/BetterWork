@@ -3,6 +3,7 @@
 import type {
   EvidenceSummary,
   KnowledgeEvidenceSource,
+  MaterialCandidate,
   MemoryJobSummary,
   MemoryPreviewData,
   MemoryRunContextData,
@@ -10,6 +11,7 @@ import type {
   RunMemoryContext,
   RunSourcePreview,
   RunSummary,
+  TaskMaterialSelection,
   WorkspaceBrief,
 } from '@betterwork/agent-protocol';
 import { memoryRecallPolicyV1 } from '@betterwork/agent-protocol';
@@ -257,6 +259,8 @@ const renderPanel = (overrides: Record<string, unknown> = {}): HTMLElement => {
       onSelectRun={vi.fn()}
       onOpenSource={vi.fn(async () => undefined)}
       materials={[]}
+      onCommitMaterials={vi.fn()}
+      materialsDisabled={false}
       memories={[memory()]}
       excludedMemoryIds={[]}
       onToggleMemory={vi.fn()}
@@ -290,6 +294,43 @@ const renderPanel = (overrides: Record<string, unknown> = {}): HTMLElement => {
 
 afterEach(() => {
   cleanup();
+});
+
+describe('ContextPanel 本次任务材料', () => {
+  it('allows a selected material to use the other purpose', () => {
+    const onCommitMaterials = vi.fn();
+    const candidate: MaterialCandidate = {
+      reference: {
+        kind: 'knowledge-revision',
+        knowledgeDocumentId: 'doc-rules',
+        knowledgeRevisionId: 'revision-rules-2',
+        contentHash: 'hash-rules-2',
+        sourcePath: '/workspace/财务规则.md',
+      },
+      title: '财务规则',
+      sourceLabel: '知识 · 财务规则.md',
+      status: 'ready',
+      detail: '修订 v2',
+    };
+    const selected: TaskMaterialSelection = {
+      reference: candidate.reference,
+      purpose: 'rule',
+      addedFrom: 'workspace-candidate',
+    };
+    renderPanel({
+      tab: 'sources',
+      materials: [selected],
+      materialCandidates: [candidate],
+      onCommitMaterials,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '财务规则用途' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '其他' }));
+
+    expect(onCommitMaterials).toHaveBeenCalledExactlyOnceWith([
+      expect.objectContaining({ purpose: 'other' }),
+    ] satisfies [TaskMaterialSelection]);
+  });
 });
 
 describe('ContextPanel 记忆可见性', () => {

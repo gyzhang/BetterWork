@@ -79,11 +79,10 @@ const INLINE_STYLE_OUTLETS: readonly InlineStyleOutlet[] = [
   {
     file: 'apps/desktop/src/renderer/src/components/PopoverMenu.tsx',
     tag: 'div',
-    className: 'popover-menu',
     attribute: 'style',
     expression:
       'position ? { ...position, ...(anchorFontSize ? { fontSize: anchorFontSize } : {}) } : undefined',
-    reason: '菜单的动态定位与锚点计算字号，行为契约已有测试',
+    reason: '菜单的动态定位与锚点计算字号，动态域布局类不放宽样式出口，行为契约已有测试',
   },
   {
     file: 'apps/desktop/src/renderer/src/components/Tooltip.tsx',
@@ -186,7 +185,6 @@ const SURFACE_SHELL_OWNERS: readonly { selector: string; reason: string }[] = [
 /** 限宽可以属于提示/浮层/文档，不能成为新页面的第二版心。 */
 const FIXED_MAX_WIDTH_OWNERS: readonly { selector: string; reason: string }[] = [
   { selector: '.binding-chip', reason: '绑定片宽度上限' },
-  { selector: '.binding-chip .field-select-trigger', reason: '绑定片内的选择器' },
   { selector: '.binding-chip-label', reason: '绑定名称截断' },
   { selector: '.empty-page', reason: '居中空态文本行长' },
   { selector: '.error-page p', reason: '错误说明行长' },
@@ -201,7 +199,6 @@ const FIXED_MAX_WIDTH_OWNERS: readonly { selector: string; reason: string }[] = 
   },
   { selector: '.tooltip', reason: '提示浮层行长' },
   { selector: '.welcome', reason: '欢迎页独立展示块，非管理页版心' },
-  { selector: '.welcome > p:last-of-type', reason: '欢迎页说明行长' },
   { selector: '.workspace-selector-name', reason: '工作空间名称截断' },
 ];
 
@@ -1288,7 +1285,6 @@ const RETIRED_UTILITY_CLASSES: {
   { pattern: /\.context-toggle(?![-\w])/, name: '.context-toggle', family: 'button' },
   { pattern: /\.notification-bell(?![-\w])/, name: '.notification-bell', family: 'button' },
   { pattern: /\.async-button(?![-\w])/, name: '.async-button', family: 'button' },
-  { pattern: /\.examples button/, name: '.examples button', family: 'button' },
   {
     pattern: /\.skill-detail-section[^{]*button/,
     name: '.skill-detail-section :where(button)',
@@ -1586,7 +1582,7 @@ function assertRetiredClassesAbsent(
 
 /**
  * 清单条目里「就是一个类名」的那一部分（`.chip-button(?![-\w])` → `chip-button`）。
- * 复合选择器（`.examples button`）不是 className，取不到就返回 `undefined`；
+ * 复合选择器（`.card-actions button`）不是 className，取不到就返回 `undefined`；
  * 没有 `(?![-\w])` 收尾的条目也跳过——它本来就会命中同类名前缀，不能当精确名字用。
  */
 function singleRetiredClassName(pattern: RegExp): string | undefined {
@@ -2877,7 +2873,7 @@ describe('区块头基座纪律', () => {
       { match: /^\.page-header h1$/, reason: '页面标题带基座自己的坐标' },
       { match: /^\.empty-page h1$/, reason: '空态页基座自己的主标题' },
       { match: /^\.settings-nav-list h1$/, reason: '设置空间标题带（见上一条豁免的理由）' },
-      { match: /^\.welcome h2$/, reason: '首屏品牌 hero 的衬线字形' },
+      { match: /^\.welcome h2$/, reason: '首屏任务问题标题的字号与紧凑排版' },
       {
         match: /^\.markdown-preview h[1-6]/,
         reason: '用户成果正文的文档排版，受 §9 的 Artifact 不套主题约束，不是 UI 小节头',
@@ -3925,9 +3921,8 @@ const NOT_ON_COLUMN_SHELL_AXIS: {
   {
     selector: '.workspace-selector-actions',
     property: 'padding',
-    pixels: 6,
-    reason:
-      '同上，且 `4px 6px` 的 6 与 `--control-padding`（6px 10px）不成对——已登记为 §9.10 的待处理项，不属这条轴',
+    pixels: 8,
+    reason: '同上：动作组横向内距使用 `--space-8`',
   },
   {
     selector: '.workspace-selector-action',
@@ -4283,6 +4278,10 @@ describe('页面骨架契约纪律', () => {
     {
       match: ".modal-panel[data-variant='sheet']",
       reason: 'Modal 基座的抽屉表面宽度：贴边滑出，与正文列无关',
+    },
+    {
+      match: '.popover-menu.workspace-selector-menu',
+      reason: '工作空间选择器的领域菜单宽度，受视口约束且不构成页面版心',
     },
   ];
 
@@ -5400,12 +5399,6 @@ const NON_MARK_GEOMETRY: {
 }[] = [
   { selector: '.brand-mark', property: 'width', value: '32px', reason: '品牌标志容器' },
   { selector: '.brand-mark', property: 'height', value: '32px', reason: '品牌标志容器' },
-  {
-    selector: '.abacus::before, .abacus::after',
-    property: 'width',
-    value: '24px',
-    reason: '品牌算珠的横梁（配 height 1px），属品牌标志不是图标底座',
-  },
   {
     selector: '.switch-track',
     property: 'width',

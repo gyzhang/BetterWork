@@ -1,25 +1,12 @@
-import { Button } from './Button';
+interface WelcomeProps {
+  userName?: string | undefined;
+}
 
-export function Welcome({ setPrompt }: { setPrompt: (value: string) => void }): React.JSX.Element {
+export function Welcome({ userName = '' }: WelcomeProps): React.JSX.Element {
   return (
     <div className="welcome">
-      <div className="abacus" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-        <i />
-      </div>
-      <p className="eyebrow">算台 · 知识工作台</p>
-      <h2>以我所知，成我所作</h2>
-      <p>从一个清楚的问题开始，算台会协助你把过程沉淀为可以继续使用的成果。</p>
-      <div className="examples">
-        <Button variant="outline" size="md" onClick={() => setPrompt('计算: (128 + 72) / 4')}>
-          计算一组数据
-        </Button>
-        <Button variant="outline" size="md" onClick={() => setPrompt('读取: README.md')}>
-          读取一份资料
-        </Button>
-      </div>
+      <h2>{userName ? `${userName}，今天要处理什么工作？` : '今天要处理什么工作？'}</h2>
+      <p>输入这次任务的具体要求，点击「开始工作」后执行。</p>
     </div>
   );
 }

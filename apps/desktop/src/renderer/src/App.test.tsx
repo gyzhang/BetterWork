@@ -586,9 +586,16 @@ async function openTestRun(): Promise<void> {
   fireEvent.click(screen.getByRole('button', { name: '技能' }));
   fireEvent.click(await screen.findByRole('button', { name: /演示生成专家/ }));
   fireEvent.click(await screen.findByRole('button', { name: '试运行' }));
-  // 现在以 chip 条形式显示已选技能，查找 aria-label 为“已选能力”的列表。
-  const chipBar = await screen.findByRole('list', { name: '已选能力' });
-  expect(chipBar.textContent).toContain('演示生成专家');
+  await screen.findByRole('button', { name: '技能 1 项' });
+}
+
+async function expectSelectedSkill(selectedName = skill.name): Promise<void> {
+  fireEvent.click(await screen.findByRole('button', { name: '技能 1 项' }));
+  const selectedSkill = await screen.findByRole('menuitem', {
+    name: new RegExp(selectedName),
+  });
+  expect(selectedSkill.textContent).toMatch(/已添加，点击移除|已绑定技能不可用，点击移除/u);
+  fireEvent.keyDown(selectedSkill, { key: 'Escape' });
 }
 
 function composer(): HTMLElement {
@@ -619,6 +626,7 @@ describe('Skill test run in the task composer', () => {
 
     expect(await screen.findByRole('textbox', { name: /任务输入/ })).toHaveProperty('value', '');
     expect(document.activeElement).toBe(composer());
+    expect(screen.getByRole('button', { name: '技能 1 项' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '开始工作' })).toHaveProperty('disabled', true);
     fireEvent.keyDown(composer(), { key: 'Enter', metaKey: true });
     expect(api.tasks.create).not.toHaveBeenCalled();
@@ -642,6 +650,17 @@ describe('Skill test run in the task composer', () => {
       title: goal,
       goal,
     });
+    expect(api.taskContexts.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skillBindings: [
+          {
+            skillId: skill.id,
+            revisionId: skill.currentRevisionId,
+            source: 'task-selection',
+          },
+        ],
+      }),
+    );
     expect(await screen.findByText(goal)).toBeTruthy();
     expect(api.skills.testRun).not.toHaveBeenCalled();
     // 首次挂载完整 App 含 Markdown 与所有页面；全量并行测试的冷启动需更长预算。
@@ -683,8 +702,8 @@ describe('Skill test run in the task composer', () => {
     expect(api.tasks.create).toHaveBeenCalledTimes(1);
     expect(api.runs.start).toHaveBeenCalledTimes(1);
     expect(composer()).toHaveProperty('value', goal);
-    // chip 条应该保留。
-    expect(screen.getByRole('list', { name: '已选能力' }).textContent).toContain('演示生成专家');
+    // 技能选择摘要仍保留；具体选择状态可从技能菜单查看。
+    await expectSelectedSkill();
 
     fireEvent.click(screen.getByRole('button', { name: '开始工作' }));
     await waitFor(() => expect(api.runs.start).toHaveBeenCalledTimes(2));
@@ -703,8 +722,8 @@ describe('Skill test run in the task composer', () => {
     render(<App />);
     await openTestRun();
     fireEvent.click(screen.getByRole('button', { name: new RegExp(destination) }));
-    // chip 条应该被清空。
-    expect(screen.queryByRole('list', { name: '已选能力' })).toBeNull();
+    // 切换任务后技能摘要应消失。
+    expect(screen.queryByRole('button', { name: '技能 1 项' })).toBeNull();
     fireEvent.change(composer(), { target: { value: '普通要求' } });
     fireEvent.click(screen.getByRole('button', { name: '开始工作' }));
     await waitFor(() => expect(api.runs.start).toHaveBeenCalledTimes(1));
@@ -951,7 +970,8 @@ describe('定时任务导航', () => {
     fireEvent.click(sources.getByRole('button', { name: '知识' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /财务规则/ }));
     fireEvent.click(screen.getByRole('button', { name: '添加已选材料' }));
-    expect(screen.getByRole('list', { name: '本次材料' }).textContent).toContain('财务规则');
+    expect(screen.getByText('本次材料 1 项 · 知识 1')).toBeTruthy();
+    expect(contextPanel.textContent).toContain('财务规则');
 
     fireEvent.click(sources.getByRole('button', { name: '移除本期范围' }));
     const confirmation = await screen.findByRole('alertdialog', {
@@ -1024,7 +1044,7 @@ describe('Workspace input material display', () => {
     expect(api.materials.prepareInputSnapshot).toHaveBeenCalledWith({
       workspaceId: 'workspace-1',
     });
-    expect(await screen.findByText('current-data-excel.xlsx')).toBeTruthy();
+    expect(await screen.findByText('本次材料 1 项 · 文件 1')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '查看上下文' }));
     fireEvent.click(screen.getByRole('tab', { name: '资料' }));
@@ -1077,7 +1097,10 @@ describe('Workspace input material display', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
 
-    expect(await screen.findByText('current-data-excel.xlsx')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: '查看 / 管理' }));
+    fireEvent.click(await screen.findByRole('tab', { name: '资料' }));
+    const contextPanel = document.querySelector('.context-panel');
+    expect(contextPanel?.textContent).toContain('current-data-excel.xlsx');
     expect(api.materials.listCandidates).toHaveBeenCalledWith({ taskId: previousTask.id });
   });
 });
@@ -1181,9 +1204,7 @@ describe('Task context restoration', () => {
     });
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
-    expect((await screen.findByRole('list', { name: '已选能力' })).textContent).toContain(
-      skill.name,
-    );
+    expect(await screen.findByRole('button', { name: '技能 1 项' })).toBeTruthy();
     expect(api.taskContexts.get).toHaveBeenCalledWith({ taskId: previousTask.id });
   });
 
@@ -1738,11 +1759,11 @@ describe('参考成果版本接入当前任务', () => {
     expect(await screen.findByText('本空间参考版本')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '引用到当前任务' }));
 
-    const chipBar = await screen.findByRole('list', { name: '本次材料' });
-    expect(chipBar.querySelectorAll('[role="listitem"]')).toHaveLength(1);
-    // 材料标题要等候选清单加载才有名字，这里断言的是引用本身：固定到结构参考用途、不自动发送
-    expect(chipBar.textContent).toContain('成果版本');
-    expect(screen.getByRole('button', { name: '成果版本用途' }).textContent).toContain('结构参考');
+    expect(await screen.findByText('本次材料 1 项 · 成果 1')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '查看 / 管理' }));
+    fireEvent.click(await screen.findByRole('tab', { name: '资料' }));
+    // 材料用途在资料面板管理；引用固定到结构参考用途，不自动发送。
+    expect(screen.getByRole('button', { name: '已选材料用途' }).textContent).toContain('结构参考');
     expect(api.runs.start).not.toHaveBeenCalled();
     expect(screen.queryByRole('list', { name: '当前专家' })).toBeNull();
 

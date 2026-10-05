@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { Tooltip } from './Tooltip';
+
 /**
  * 受控弹层菜单基座（ADR-0012 §UI）。
  *
@@ -32,6 +34,8 @@ export interface PopoverMenuProps {
   items: readonly PopoverMenuItem[];
   /** 菜单容器的 aria-label。 */
   label: string;
+  /** 领域菜单的宽度等布局钩子。 */
+  className?: string | undefined;
   /** 对齐边：start = 左对齐触发器，end = 右对齐。 */
   align?: 'start' | 'end';
   /** 浮动方向：auto 会根据视口空间在上方/下方选择，亦可强制指定方向。 */
@@ -103,6 +107,7 @@ export function PopoverMenu({
   anchorRef,
   items,
   label,
+  className,
   align = 'start',
   placement = 'auto',
   header,
@@ -246,7 +251,7 @@ export function PopoverMenu({
       <div className="popover-backdrop" role="presentation" onMouseDown={onDismiss} />
       <div
         ref={menuRef}
-        className="popover-menu"
+        className={`popover-menu${className ? ` ${className}` : ''}`}
         role="menu"
         // 模态基座靠这个属性认出「焦点在自己的浮层里」，不抢 Tab、也不被 Esc 双关。
         data-overlay-layer="popover"
@@ -259,34 +264,36 @@ export function PopoverMenu({
         onKeyDown={handleKeyDown}
       >
         {header ? <div className="popover-menu-header">{header}</div> : undefined}
-        {items.map((item, index) => (
-          <div
-            key={item.id}
-            ref={(el) => {
-              itemRefs.current[index] = el;
-            }}
-            role="menuitem"
-            tabIndex={-1}
-            aria-disabled={item.disabled ? true : undefined}
-            className={`popover-menu-item${index === activeIndex ? ' active' : ''}${
-              item.tone === 'danger' ? ' danger' : ''
-            }`}
-            onClick={() => {
-              if (!item.disabled) onSelect(item.id);
-            }}
-            onMouseEnter={() => {
-              if (!item.disabled) setActiveIndex(index);
-            }}
-          >
-            {item.leading ? (
-              <span className="popover-menu-leading" aria-hidden="true">
-                {item.leading}
-              </span>
-            ) : undefined}
-            <span className="popover-menu-label">{item.label}</span>
-            {item.hint ? <span className="popover-menu-hint">{item.hint}</span> : undefined}
-          </div>
-        ))}
+        <div className="popover-menu-items" role="presentation">
+          {items.map((item, index) => (
+            <div
+              key={item.id}
+              ref={(el) => {
+                itemRefs.current[index] = el;
+              }}
+              role="menuitem"
+              tabIndex={-1}
+              aria-disabled={item.disabled ? true : undefined}
+              className={`popover-menu-item${index === activeIndex ? ' active' : ''}${
+                item.tone === 'danger' ? ' danger' : ''
+              }`}
+              onClick={() => {
+                if (!item.disabled) onSelect(item.id);
+              }}
+              onMouseEnter={() => {
+                if (!item.disabled) setActiveIndex(index);
+              }}
+            >
+              {item.leading ? (
+                <span className="popover-menu-leading" aria-hidden="true">
+                  {item.leading}
+                </span>
+              ) : undefined}
+              <Tooltip className="popover-menu-label">{item.label}</Tooltip>
+              {item.hint ? <Tooltip className="popover-menu-hint">{item.hint}</Tooltip> : undefined}
+            </div>
+          ))}
+        </div>
         {footer ? <div className="popover-menu-footer">{footer}</div> : undefined}
       </div>
     </>,

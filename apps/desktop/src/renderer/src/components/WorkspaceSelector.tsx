@@ -1,5 +1,5 @@
 import type { WorkspaceSummary } from '@betterwork/agent-protocol';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { ChevronLeftIcon, FolderIcon, PlusIcon, workspaceIcons } from '../icons';
 import { workspaceAccentVar } from '../lib/workspace-identity';
@@ -9,6 +9,8 @@ import { TextField } from './TextField';
 export interface WorkspaceSelectorProps {
   currentWorkspace: WorkspaceSummary | undefined;
   workspaces: WorkspaceSummary[];
+  /** 已进入 Task 后工作空间固定；新建任务后才能选择其他空间。 */
+  disabled?: boolean | undefined;
   onSelectWorkspace: (workspace: WorkspaceSummary) => void;
   /** 唯一的入口：打开新建对话框。旧的「打开本地文件夹」与它是同一条路径，已合并。 */
   onNewWorkspace: () => void;
@@ -27,12 +29,14 @@ const identityIcon = (workspace: WorkspaceSummary): React.JSX.Element => {
 export function WorkspaceSelector({
   currentWorkspace,
   workspaces,
+  disabled = false,
   onSelectWorkspace,
   onNewWorkspace,
 }: WorkspaceSelectorProps): React.JSX.Element {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const menuOpen = open && !disabled;
 
   const filteredWorkspaces = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -72,8 +76,15 @@ export function WorkspaceSelector({
   }, []);
 
   const handleTriggerClick = useCallback(() => {
+    if (disabled) return;
     setOpen((prev) => !prev);
-  }, []);
+  }, [disabled]);
+
+  useEffect(() => {
+    if (!disabled) return;
+    setOpen(false);
+    setSearch('');
+  }, [disabled]);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -83,20 +94,25 @@ export function WorkspaceSelector({
         ref={triggerRef}
         type="button"
         className="workspace-selector-trigger"
+        disabled={disabled}
+        title={disabled ? '当前任务已固定工作空间；新建任务后可切换' : undefined}
         aria-haspopup="menu"
-        aria-expanded={open}
+        aria-expanded={menuOpen}
         onClick={handleTriggerClick}
       >
         {currentWorkspace ? identityIcon(currentWorkspace) : <FolderIcon size={13} />}
         <span className="workspace-selector-name">{currentWorkspace?.name ?? '选择工作空间'}</span>
-        <ChevronLeftIcon size={12} className={`workspace-selector-chevron${open ? ' open' : ''}`} />
+        <ChevronLeftIcon
+          size={12}
+          className={`workspace-selector-chevron${menuOpen ? ' open' : ''}`}
+        />
       </button>
       <PopoverMenu
-        open={open}
+        open={menuOpen}
         anchorRef={triggerRef}
         items={menuItems}
         label="选择工作空间"
-        placement="bottom"
+        className="workspace-selector-menu"
         onDismiss={handleDismiss}
         onSelect={handleSelect}
         header={

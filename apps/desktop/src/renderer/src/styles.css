@@ -933,55 +933,26 @@ small {
   justify-content: center;
   text-align: center;
 }
-.abacus {
-  display: flex;
-  align-items: center;
-  gap: var(--space-12);
-  padding: 0 0 19px;
-}
-.abacus::before,
-.abacus::after {
-  width: 24px;
-  height: 1px;
-  content: '';
-  background: var(--brand);
-  opacity: 0.45;
-}
-.abacus i {
-  width: 11px;
-  height: 11px;
-  background: var(--brand);
-  border-radius: var(--radius-circle);
-  box-shadow: 0 0 0 4px var(--brand-soft);
-}
 .welcome h2 {
-  margin: var(--space-8) 0 var(--space-12);
-  font-family: Georgia, 'Kaiti SC', 'STKaiti', 'KaiTi', serif;
+  margin: 0;
   font-size: var(--font-size-hero);
   font-weight: 600;
   line-height: var(--line-height-tight);
-  letter-spacing: 0.03em;
 }
-.welcome > p:last-of-type {
-  max-width: 500px;
+.welcome p {
+  margin: var(--space-12) 0 0;
   color: var(--text-secondary);
-  font-size: var(--font-size-emphasis);
-  line-height: var(--line-height-loose);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
 }
-.examples {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--space-8);
-  margin-top: var(--space-24);
-}
-/* `.examples button` 这套「容器替首页示例发外观」的规则已收进
-   `Button variant="outline" size="md"`（ADR-0031）。 */
+/* 单列轨道限制在消息宽度内，避免长 Markdown 内容的最大内容宽度撑出中栏。 */
 /* 一条发言：标签、正文、就地动作三行，缝由消息块自己的 gap 拥有（§9.8）。
    动作收进气泡同一个块之前，`.message-actions` 靠 -10px 追回气泡下缘——那条负
    margin 记的就是「这两块本来属于同一件事」。 */
 .message {
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   margin: 0 0 var(--space-16);
   gap: var(--space-8);
 }
@@ -1002,9 +973,19 @@ small {
 .message.user p {
   background: var(--selection);
 }
-.composer {
+/* 输入卡与绑定工具栏分开；工具栏始终预留两行，材料数量变化不推挤输入卡。
+   外壳承担页面版心与窗口下缘 Token 安全缝（docs/10 §7.1、§9.8）。 */
+.composer-dock {
+  display: flex;
   width: min(var(--page-body-width), calc(100% - 48px));
-  margin: 0 auto var(--space-24);
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: 0 auto var(--space-12);
+}
+.composer {
+  width: 100%;
+  margin: 0;
   padding: 11px 13px 10px;
   background: var(--composer);
   border: 1px solid var(--input-border);
@@ -1018,6 +999,14 @@ small {
   min-height: var(--row-height-sm);
   color: var(--text-muted);
   font-size: var(--font-size-caption);
+}
+.composer-utility-row {
+  display: flex;
+  min-height: calc(var(--row-height) + var(--space-8) + var(--control-height-sm));
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+  margin-inline: var(--space-16);
 }
 
 /* === 工作区选择器 === */
@@ -1051,7 +1040,8 @@ small {
   transform: rotate(-90deg);
 }
 .workspace-selector-search {
-  padding: 6px 8px;
+  /* 搜索框与弹层内容上边缘之间的 12px 由这一处单独负责（docs/10 §7.1、§9.8）。 */
+  padding: var(--space-12) var(--space-8) var(--space-4);
 }
 .workspace-selector-search-input {
   width: 100%;
@@ -1060,7 +1050,7 @@ small {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: 4px 6px;
+  padding: var(--space-4) var(--space-8);
 }
 .workspace-selector-action {
   display: flex;
@@ -3388,8 +3378,8 @@ button.list-row:where(:not(:disabled)):hover {
   min-width: 180px;
   max-width: 320px;
   max-height: 320px;
-  padding: 4px;
-  overflow-y: auto;
+  padding: var(--space-4);
+  overflow: hidden;
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-row);
@@ -3397,10 +3387,25 @@ button.list-row:where(:not(:disabled)):hover {
   /* 兜底字号；打开时基座会按触发控件的计算值内联覆写（docs/10 §9.10）。 */
   font-size: var(--font-size-body);
 }
+.popover-menu.workspace-selector-menu {
+  width: min(320px, calc(100vw - 16px));
+  padding-block-start: 0;
+}
+.popover-menu.workspace-selector-menu > .popover-menu-header {
+  padding-block-start: 0;
+}
+.popover-menu-items {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
 .popover-menu-item {
   display: flex;
   align-items: center;
   gap: var(--space-8);
+  min-width: 0;
   min-height: var(--control-height);
   padding: var(--control-padding);
   border-radius: var(--radius-tag);
@@ -3419,6 +3424,7 @@ button.list-row:where(:not(:disabled)):hover {
 }
 .popover-menu-label {
   flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3430,13 +3436,19 @@ button.list-row:where(:not(:disabled)):hover {
   place-items: center;
 }
 .popover-menu-hint {
+  min-width: 0;
+  flex: 0 1 48%;
+  overflow: hidden;
   font-size: var(--font-size-caption);
   color: var(--text-secondary);
   white-space: nowrap;
+  text-align: left;
+  text-overflow: ellipsis;
 }
 .popover-menu-header,
 .popover-menu-footer {
-  padding: 4px 6px;
+  flex: none;
+  padding: var(--space-4) var(--space-8);
 }
 .popover-menu-header {
   border-bottom: 1px solid var(--border-subtle);
@@ -3508,14 +3520,6 @@ button.list-row:where(:not(:disabled)):hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* 片内的下拉是材料片的「用途」：它必须缩到片的高度里，不另占一行。 */
-.binding-chip .field-select-trigger {
-  max-width: 104px;
-  min-height: var(--control-height-sm);
-  padding: var(--control-padding-sm);
-  color: var(--text-secondary);
-  font-size: var(--font-size-caption);
-}
 .binding-chip-remove {
   display: inline-flex;
   flex: none;
@@ -3548,11 +3552,6 @@ button.list-row:where(:not(:disabled)):hover {
   /* 光标交给全局 `button:disabled { cursor: not-allowed }`，这里只降透明度。 */
   opacity: 0.5;
 }
-.capability-picker-reason {
-  font-size: var(--font-size-caption);
-  color: var(--text-secondary);
-  margin-left: var(--space-8);
-}
 .capability-search {
   width: 100%;
 }
@@ -3570,16 +3569,24 @@ button.list-row:where(:not(:disabled)):hover {
 .capability-locate-link:hover {
   text-decoration: underline;
 }
-.composer-capability-row {
+.composer-material-summary {
   display: flex;
-  flex-wrap: wrap;
+  min-width: 0;
+  flex: 1 1 100%;
+  min-height: var(--control-height-sm);
   align-items: center;
   gap: var(--space-8);
-  padding: 4px 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-caption);
 }
-/* 材料片那一组放不下就整行占位，不与能力片挤在同一行里（位置钩子，不带几何）。 */
-.binding-chip-block {
-  width: 100%;
+.composer-material-summary-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-material-summary .btn {
+  margin-left: auto;
 }
 .material-picker-status {
   padding: 6px 4px;
@@ -4714,20 +4721,20 @@ select,
   overflow-wrap: anywhere;
 }
 .message.assistant .markdown-preview {
+  min-width: 0;
+  max-width: 100%;
   padding: 0;
   background: transparent;
   border: 0;
   border-radius: 0;
   box-shadow: none;
+  overflow-wrap: anywhere;
   overflow: visible;
 }
 .message.assistant .markdown-preview p {
   padding: 0;
   border-radius: 0;
   white-space: normal;
-  overflow-wrap: anywhere;
-}
-.message.assistant .markdown-preview {
   overflow-wrap: anywhere;
 }
 .message.assistant .markdown-preview h1 {

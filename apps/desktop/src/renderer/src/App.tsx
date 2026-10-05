@@ -35,7 +35,6 @@ import type { CapabilityChip } from './components/ComposerCapabilityPicker';
 import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { ContextPanel } from './components/ContextPanel';
 import { DiscussionCheckpointPanel } from './components/DiscussionCheckpointPanel';
-import { EmptyPage } from './components/EmptyState';
 import { IconButton } from './components/IconButton';
 import { InlineError } from './components/InlineError';
 import { PageHeader } from './components/layout/PageHeader';
@@ -1530,15 +1529,7 @@ export function App(): React.JSX.Element {
               <div className="messages" ref={containerRef} onScroll={onScroll}>
                 <div className="page-body message-flow">
                   {taskAllRuns.length === 0 && !activeRunId ? (
-                    taskBindings.length > 0 ? (
-                      <EmptyPage
-                        eyebrow="Skill 试运行"
-                        title={taskBindings.map((chip) => chip.name).join('、')}
-                        detail="输入这次任务的具体要求，点击「开始工作」后执行。"
-                      />
-                    ) : (
-                      <Welcome setPrompt={setPrompt} />
-                    )
+                    <Welcome userName={conversationAddresses.user.trim()} />
                   ) : (
                     <>
                       {taskAllRuns.map((run, idx) => {
@@ -1717,13 +1708,15 @@ export function App(): React.JSX.Element {
                       ? { state: 'starting' }
                       : { state: 'idle' }
                 }
-                locked={isRunning}
+                locked={isStarting || isRunning}
                 modelLabel={composerModelLabel}
                 textareaRef={composerRef}
                 workspacePicker={{
                   currentWorkspace: workspace,
                   workspaces: allWorkspaces,
+                  disabled: activeTask !== undefined || isStarting || isRunning,
                   onSelectWorkspace: (selected) => {
+                    if (activeTask || isStarting || isRunning) return;
                     // 从选择器回到一个曾隐藏的空间＝她又要在这里工作，隐藏随之解除。
                     if (selected.hiddenAt !== undefined) {
                       reportAction(
@@ -1760,6 +1753,10 @@ export function App(): React.JSX.Element {
                 onRequestMaterials={requestMaterials}
                 onDismissMaterialPicker={() => setMaterialPickerKind(undefined)}
                 onCommitMaterials={commitTaskMaterials}
+                onManageMaterials={() => {
+                  setContextTab('sources');
+                  setContextOpen(true);
+                }}
                 onRequestSkillDetail={() => setView('skills')}
                 onRequestExpert={() => {
                   setView('experts');
@@ -1886,6 +1883,8 @@ export function App(): React.JSX.Element {
           taskRuns={taskRuns}
           activityGroups={activityGroups}
           materials={taskMaterials}
+          onCommitMaterials={commitTaskMaterials}
+          materialsDisabled={isStarting || isRunning}
           {...(scheduleTaskContinuation.view
             ? {
                 scheduleContinuation: {

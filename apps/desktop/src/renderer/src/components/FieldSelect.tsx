@@ -92,7 +92,6 @@ export function FieldSelect({
         anchorRef={triggerRef}
         items={menuItems}
         label={ariaLabel ?? selectedLabel}
-        placement="bottom"
         onDismiss={handleDismiss}
         onSelect={handleSelect}
       />
