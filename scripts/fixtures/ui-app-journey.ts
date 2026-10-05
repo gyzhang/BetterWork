@@ -707,6 +707,17 @@ export async function runAppJourney(
     services = assemble(directory, () => host.window);
     assert.deepEqual(services.store.runs.list(), before, '重开库改变历史 Run');
     assert.equal(requests.length, requestCount, '重装配自动调用模型');
+    if (!first) throw new Error('重启前缺少首个合成 Task Run');
+    const restoredBrief = services.store.taskContinuity.getLatest(first.taskId);
+    const restoredRunContext = services.store.taskContinuity.getRunContext(first.id);
+    assert.ok(restoredBrief, '进程重启后 Task Continuity revision 丢失');
+    assert.ok(restoredRunContext, '进程重启后 Run Continuity snapshot 丢失');
+    assert.equal(
+      restoredRunContext.brief.objective.text,
+      restoredBrief.brief.objective.text,
+      'Run snapshot 与重启后的 Task Brief 目标不一致',
+    );
+    assert.ok(restoredRunContext.firstProviderRequestAt, 'Provider 请求审计未从 SQLite 恢复');
     const reopenedWindow = await openWindow();
     await checkStep('restarted');
     const firstArtifact = services.store.artifacts.list(first.taskId)[0];

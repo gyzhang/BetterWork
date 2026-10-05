@@ -683,6 +683,157 @@ describe('RunService', () => {
     }
   });
 
+  it('filters completed progress when its exact source material is removed from the next TaskContext', async () => {
+    const fixture = await createFixture();
+    const context = await saveSingleMaterialContext(fixture, '本轮选定的合成材料。');
+    const service = createService(fixture, createWindowStub());
+    const captured = captureFakeProviderRequests();
+    try {
+      const sourceRunId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '读取: selected.md',
+        taskContextRevisionId: context.id,
+        expectedTaskContextRevision: context.revision,
+      });
+      await waitForCompletion(fixture, sourceRunId);
+      expect(statusOf(fixture, sourceRunId)).toBe('completed');
+      expect(fixture.store.materialReads.listByRun(sourceRunId)).toHaveLength(1);
+      await vi.waitFor(() =>
+        expect(
+          fixture.store.taskContinuity.getLatest(fixture.taskId)?.brief.progress?.sourceRunId,
+        ).toBe(sourceRunId),
+      );
+
+      const narrowedContext = fixture.store.taskContexts.save(
+        fixture.taskId,
+        { executor: { kind: 'general' }, skillBindings: [], materials: [] },
+        context.revision,
+      );
+      const continuationRunId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '继续',
+        taskContextRevisionId: narrowedContext.id,
+        expectedTaskContextRevision: narrowedContext.revision,
+      });
+      await waitForCompletion(fixture, continuationRunId);
+
+      expect(statusOf(fixture, continuationRunId)).toBe('completed');
+      const frozen = fixture.store.taskContinuity.getRunContext(continuationRunId);
+      expect(frozen?.brief.progress).toBeUndefined();
+      expect(frozen?.omissions).toContain('assistant-progress-dependency-unverified');
+      const continuationRequest = captured.requests.find(
+        (messages) => messages.at(-1)?.content === '继续',
+      );
+      const continuationBrief = continuationRequest?.find((message) =>
+        message.content.startsWith('【TASK_CONTINUITY_BRIEF_V1】'),
+      );
+      expect(continuationBrief?.content).not.toContain(sourceRunId);
+    } finally {
+      captured.restore();
+    }
+  });
+
+  it('keeps Task goals, requirements and progress isolated across Workspace and Expert changes', async () => {
+    const fixture = await createFixture();
+    const currentRevision = fixture.store.taskContinuity.getLatest(fixture.taskId);
+    if (!currentRevision) throw new Error('New Task is missing its continuity revision');
+    const firstGoal = '第一工作区的季度经营目标';
+    const firstRequirement = '只属于第一任务的用户要求';
+    fixture.store.taskContinuity.append({
+      taskId: fixture.taskId,
+      expectedRevision: currentRevision.revision,
+      sourceKind: 'user-edit',
+      brief: {
+        ...currentRevision.brief,
+        objective: { text: firstGoal, source: 'user-edit' },
+        activeRequirements: [
+          { id: 'first-task-requirement', text: firstRequirement, authoredBy: 'user-edit' },
+        ],
+      },
+    });
+
+    const otherWorkspace = fixture.store.workspaces.getOrCreate(
+      path.join(fixture.directory, 'second-workspace'),
+      '第二个合成工作区',
+    );
+    const secondTask = fixture.store.tasks.create(
+      otherWorkspace.id,
+      '第二个合成任务',
+      '第二工作区自己的交付目标',
+    );
+    fixture.store.taskContinuity.initializeFromTaskGoal(secondTask.task.id);
+    const firstExpert = fixture.store.experts.create({
+      sourceKind: 'user',
+      revision: { ...testExpertRevision(), name: '第一工作方式', summary: '第一任务的专家' },
+    });
+    const secondExpert = fixture.store.experts.create({
+      sourceKind: 'user',
+      revision: { ...testExpertRevision(), name: '第二工作方式', summary: '第二任务的专家' },
+    });
+    const firstContext = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: {
+        kind: 'expert',
+        expertId: firstExpert.id,
+        expertRevisionId: firstExpert.revision.id,
+      },
+      skillBindings: [],
+    });
+    const secondContext = fixture.store.taskContexts.save(secondTask.task.id, {
+      executor: {
+        kind: 'expert',
+        expertId: secondExpert.id,
+        expertRevisionId: secondExpert.revision.id,
+      },
+      skillBindings: [],
+    });
+    const service = createService(fixture, createWindowStub());
+    const captured = captureFakeProviderRequests();
+    try {
+      const firstRunId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '第一任务的合成请求',
+        taskContextRevisionId: firstContext.id,
+        expectedTaskContextRevision: firstContext.revision,
+      });
+      await waitForCompletion(fixture, firstRunId);
+      expect(statusOf(fixture, firstRunId)).toBe('completed');
+
+      const secondRunId = service.start({
+        taskId: secondTask.task.id,
+        sessionId: secondTask.sessionId,
+        prompt: '第二任务的合成请求',
+        taskContextRevisionId: secondContext.id,
+        expectedTaskContextRevision: secondContext.revision,
+      });
+      await waitForCompletion(fixture, secondRunId);
+      expect(statusOf(fixture, secondRunId)).toBe('completed');
+
+      const request = captured.requests.find(
+        (messages) => messages.at(-1)?.content === '第二任务的合成请求',
+      );
+      if (!request) throw new Error('Fake Provider did not capture the second Task request');
+      const continuity = continuityMessagesOf(request).join('\n');
+      expect(continuity).toContain('第二工作区自己的交付目标');
+      expect(continuity).not.toContain(firstGoal);
+      expect(continuity).not.toContain(firstRequirement);
+      expect(continuity).not.toContain('第一任务的合成请求');
+      expect(continuity).not.toContain(firstRunId);
+      expect(fixture.store.runContextSnapshots.get(firstRunId)).toMatchObject({
+        expertId: firstExpert.id,
+        expertRevisionId: firstExpert.revision.id,
+      });
+      expect(fixture.store.runContextSnapshots.get(secondRunId)).toMatchObject({
+        expertId: secondExpert.id,
+        expertRevisionId: secondExpert.revision.id,
+      });
+    } finally {
+      captured.restore();
+    }
+  });
+
   it('skips over-budget completed history but keeps its prompt, and applies the prompt tail budget', async () => {
     const fixture = await createFixture();
     const service = createService(fixture);
