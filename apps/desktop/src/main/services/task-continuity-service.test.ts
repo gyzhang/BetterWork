@@ -179,4 +179,116 @@ describe('TaskContinuityService (TC01)', () => {
     ).toEqual(edited);
     expect(harness.store.taskContinuity.getLatest(created.task.id)).toEqual(edited);
   });
+
+  it('saves user edits with CAS while preserving assistant source chains and supports clearing progress', () => {
+    const harness = openHarness();
+    const workspace = harness.store.workspaces.getOrCreate('/tmp/tc-user-edit', 'TC user edit');
+    const service = new TaskContinuityService(harness.store);
+    const created = service.createTask(workspace.id, '持续分析', '请分析经营结果。');
+    harness.store.runs.create({
+      id: 'tc-user-edit-run',
+      taskId: created.task.id,
+      sessionId: created.sessionId,
+      prompt: '对照区域收入与费用',
+      status: 'completed',
+      createdAt: 1,
+      completedAt: 2,
+    });
+    const artifact = harness.store.artifacts.saveMarkdown(
+      {
+        taskId: created.task.id,
+        origin: 'assistant-run',
+        runId: 'tc-user-edit-run',
+        title: '区域分析',
+        content: '合成内容',
+      },
+      'model',
+    );
+    const progressRevision = service.recordCompletedRunProgress({
+      taskId: created.task.id,
+      runId: 'tc-user-edit-run',
+      expectedRevision: 1,
+    });
+    const promptHash = createHash('sha256').update('对照区域收入与费用').digest('hex');
+    const withRequirement = harness.store.taskContinuity.append({
+      taskId: created.task.id,
+      expectedRevision: progressRevision.revision,
+      sourceKind: 'user-edit',
+      brief: {
+        ...progressRevision.brief,
+        activeRequirements: [
+          {
+            id: 'requirement-source',
+            text: '比较区域收入',
+            authoredBy: 'assistant-summary',
+            sources: [{ runId: 'tc-user-edit-run', promptHash }],
+          },
+        ],
+      },
+    });
+
+    const input = {
+      taskId: created.task.id,
+      expectedRevision: withRequirement.revision,
+      objective: '完成区域经营复盘',
+      activeRequirements: [{ id: 'requirement-source', text: '比较区域收入与费用' }],
+      progress: {
+        status: 'blocked' as const,
+        completedActions: ['已核对登记成果'],
+        nextAction: '补齐费用口径',
+        blockers: ['等待财务确认'],
+        artifactVersionIds: [artifact.currentVersionId],
+      },
+    };
+    const saved = service.saveUserBrief(input);
+    expect(saved.kind).toBe('saved');
+    if (saved.kind !== 'saved') throw new Error('Expected user edit to save');
+    expect(saved.revision).toMatchObject({
+      revision: withRequirement.revision + 1,
+      sourceKind: 'user-edit',
+      brief: {
+        objective: { text: '完成区域经营复盘', source: 'user-edit' },
+        activeRequirements: [
+          {
+            id: 'requirement-source',
+            text: '比较区域收入与费用',
+            authoredBy: 'user-edit',
+            sources: [{ runId: 'tc-user-edit-run', promptHash }],
+          },
+        ],
+        progress: {
+          authoredBy: 'user-edit',
+          status: 'blocked',
+          completedActions: ['已核对登记成果'],
+          nextAction: '补齐费用口径',
+          blockers: ['等待财务确认'],
+          artifactVersionIds: [artifact.currentVersionId],
+          sourceRunId: 'tc-user-edit-run',
+          sourcePromptHash: promptHash,
+        },
+      },
+    });
+
+    expect(service.saveUserBrief({ ...input, expectedRevision: saved.revision.revision })).toEqual(
+      saved,
+    );
+    expect(service.saveUserBrief({ ...input, objective: '过期草稿' })).toEqual({
+      kind: 'conflict',
+      currentRevision: saved.revision.revision,
+    });
+
+    const cleared = service.saveUserBrief({
+      ...input,
+      expectedRevision: saved.revision.revision,
+      objective: saved.revision.brief.objective.text,
+      activeRequirements: saved.revision.brief.activeRequirements.map(({ id, text }) => ({
+        id,
+        text,
+      })),
+      progress: null,
+    });
+    expect(cleared.kind).toBe('saved');
+    if (cleared.kind !== 'saved') throw new Error('Expected progress to clear');
+    expect(cleared.revision.brief.progress).toBeUndefined();
+  });
 });

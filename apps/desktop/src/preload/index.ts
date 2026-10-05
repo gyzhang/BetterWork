@@ -48,6 +48,7 @@ import {
   getScheduleRequestSchema,
   getSkillRequestSchema,
   getTaskContextRequestSchema,
+  getTaskContinuityBriefRequestSchema,
   getTaskRequestSchema,
   importSkillRequestSchema,
   inputSnapshotSchema,
@@ -132,6 +133,7 @@ import {
   saveScheduleRequestSchema,
   saveSkillRuntimeProfileRequestSchema,
   saveTaskContextRequestSchema,
+  saveTaskContinuityBriefRequestSchema,
   scheduleAggregateSchema,
   scheduleCallResultSchema,
   scheduleCancelOccurrenceResultSchema,
@@ -160,6 +162,8 @@ import {
   skillSummarySchema,
   taskContextMutationResultSchema,
   taskContextRevisionSchema,
+  taskContinuityBriefMutationResultSchema,
+  taskContinuityRevisionSchema,
   taskMemoryExclusionsDataSchema,
   taskMemoryExclusionsRequestSchema,
   testSkillRunRequestSchema,
@@ -660,6 +664,20 @@ const api: BetterWorkDesktopApi = {
         IpcChannel.SaveTaskContext,
         saveTaskContextRequestSchema.parse(input),
         taskContextMutationResultSchema,
+      ),
+  },
+  taskContinuity: {
+    getBrief: (input) =>
+      invokeValidated(
+        IpcChannel.GetTaskContinuityBrief,
+        getTaskContinuityBriefRequestSchema.parse(input),
+        taskContinuityRevisionSchema.nullable(),
+      ),
+    saveBrief: (input) =>
+      invokeValidated(
+        IpcChannel.SaveTaskContinuityBrief,
+        saveTaskContinuityBriefRequestSchema.parse(input),
+        taskContinuityBriefMutationResultSchema,
       ),
   },
   discussionCheckpoints: {

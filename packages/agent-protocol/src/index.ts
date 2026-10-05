@@ -3791,6 +3791,13 @@ const taskContinuityTextSchema = exactTextSchema(
   TASK_CONTINUITY_OBJECTIVE_MAX_CODE_POINTS,
 );
 
+const taskContinuityProgressStatusSchema = z.enum([
+  'in-progress',
+  'blocked',
+  'awaiting-user',
+  'complete',
+]);
+
 export const taskContinuityBriefSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -3832,7 +3839,7 @@ export const taskContinuityBriefSchema = z
     progress: z
       .object({
         authoredBy: z.enum(['assistant-summary', 'user-edit']),
-        status: z.enum(['in-progress', 'blocked', 'awaiting-user', 'complete']),
+        status: taskContinuityProgressStatusSchema,
         completedActions: z.array(taskContinuityTextSchema),
         nextAction: taskContinuityTextSchema.optional(),
         blockers: z.array(taskContinuityTextSchema),
@@ -3864,6 +3871,84 @@ export const taskContinuityBriefSchema = z
   })
   .strict();
 export type TaskContinuityBrief = z.infer<typeof taskContinuityBriefSchema>;
+
+const taskContinuityUserRequirementEditSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    text: trimmedTextSchema('活跃要求', 1, TASK_CONTINUITY_ACTIVE_REQUIREMENTS_MAX_CODE_POINTS),
+  })
+  .strict();
+
+const taskContinuityProgressEditSchema = z
+  .object({
+    status: taskContinuityProgressStatusSchema,
+    completedActions: z.array(
+      trimmedTextSchema('已完成动作', 1, TASK_CONTINUITY_PROGRESS_MAX_CODE_POINTS),
+    ),
+    nextAction: trimmedTextSchema('下一步', 1, TASK_CONTINUITY_PROGRESS_MAX_CODE_POINTS).optional(),
+    blockers: z.array(trimmedTextSchema('阻塞事项', 1, TASK_CONTINUITY_PROGRESS_MAX_CODE_POINTS)),
+    artifactVersionIds: z.array(z.string().min(1)),
+  })
+  .strict()
+  .superRefine((progress, context) => {
+    const texts = [
+      ...progress.completedActions,
+      ...(progress.nextAction === undefined ? [] : [progress.nextAction]),
+      ...progress.blockers,
+    ];
+    const totalCodePoints = texts.reduce((sum, text) => sum + countCodePoints(text), 0);
+    if (totalCodePoints > TASK_CONTINUITY_PROGRESS_MAX_CODE_POINTS) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['completedActions'],
+        message: `进度文本总长度不能超过 ${TASK_CONTINUITY_PROGRESS_MAX_CODE_POINTS} 个字符`,
+      });
+    }
+    if (new Set(progress.artifactVersionIds).size !== progress.artifactVersionIds.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['artifactVersionIds'],
+        message: '精确成果版本不能重复',
+      });
+    }
+  });
+
+/** Renderer 只能提交可编辑字段；来源作者、Run、prompt hash 一律由 Main 从当前 revision 推导。 */
+export const saveTaskContinuityBriefRequestSchema = z
+  .object({
+    taskId: z.string().min(1),
+    expectedRevision: z.number().int().positive(),
+    objective: trimmedTextSchema('任务目标', 1, TASK_CONTINUITY_OBJECTIVE_MAX_CODE_POINTS),
+    activeRequirements: z
+      .array(taskContinuityUserRequirementEditSchema)
+      .max(TASK_CONTINUITY_ACTIVE_REQUIREMENTS_MAX),
+    progress: taskContinuityProgressEditSchema.nullable(),
+  })
+  .strict()
+  .superRefine((request, context) => {
+    const requirementCodePoints = request.activeRequirements.reduce(
+      (sum, requirement) => sum + countCodePoints(requirement.text),
+      0,
+    );
+    if (requirementCodePoints > TASK_CONTINUITY_ACTIVE_REQUIREMENTS_MAX_CODE_POINTS) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['activeRequirements'],
+        message: `活跃要求总长度不能超过 ${TASK_CONTINUITY_ACTIVE_REQUIREMENTS_MAX_CODE_POINTS} 个字符`,
+      });
+    }
+    const ids = request.activeRequirements.flatMap((requirement) =>
+      requirement.id === undefined ? [] : [requirement.id],
+    );
+    if (new Set(ids).size !== ids.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['activeRequirements'],
+        message: '活跃要求标识不能重复',
+      });
+    }
+  });
+export type SaveTaskContinuityBriefRequest = z.infer<typeof saveTaskContinuityBriefRequestSchema>;
 
 export const taskContinuityRevisionSourceKindSchema = z.enum([
   'task-goal',
@@ -3920,6 +4005,17 @@ export const taskContinuityRevisionSchema = z
     }
   });
 export type TaskContinuityRevision = z.infer<typeof taskContinuityRevisionSchema>;
+
+export const taskContinuityBriefMutationResultSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('saved'), revision: taskContinuityRevisionSchema }).strict(),
+  z.object({ kind: z.literal('conflict'), currentRevision: z.number().int().positive() }).strict(),
+]);
+export type TaskContinuityBriefMutationResult = z.infer<
+  typeof taskContinuityBriefMutationResultSchema
+>;
+
+export const getTaskContinuityBriefRequestSchema = z.object({ taskId: z.string().min(1) }).strict();
+export type GetTaskContinuityBriefRequest = z.infer<typeof getTaskContinuityBriefRequestSchema>;
 
 export const taskSummarySchema = z.object({
   id: z.string().min(1),
@@ -5049,6 +5145,8 @@ export const IpcChannel = {
   CreateTask: 'task:create',
   ListTasks: 'task:list',
   GetTask: 'task:get',
+  GetTaskContinuityBrief: 'task-continuity:get-brief',
+  SaveTaskContinuityBrief: 'task-continuity:save-brief',
   ListEvidence: 'evidence:list',
   ListArtifacts: 'artifact:list',
   GetArtifact: 'artifact:get',
@@ -5360,6 +5458,10 @@ export interface BetterWorkDesktopApi {
   taskContexts: {
     get(input: GetTaskContextRequest): Promise<TaskContextRevision | null>;
     save(input: SaveTaskContextRequest): Promise<TaskContextMutationResult>;
+  };
+  taskContinuity: {
+    getBrief(input: GetTaskContinuityBriefRequest): Promise<TaskContinuityRevision | null>;
+    saveBrief(input: SaveTaskContinuityBriefRequest): Promise<TaskContinuityBriefMutationResult>;
   };
   discussionCheckpoints: {
     list(input: ListDiscussionCheckpointsRequest): Promise<DiscussionCheckpoint[]>;

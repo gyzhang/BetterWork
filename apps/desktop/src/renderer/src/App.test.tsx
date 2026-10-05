@@ -387,6 +387,12 @@ function installApi(options?: {
         sessionId: 'new-session',
       })),
     },
+    taskContinuity: {
+      getBrief: vi.fn<Window['betterwork']['taskContinuity']['getBrief']>(async () => null),
+      saveBrief: vi.fn<Window['betterwork']['taskContinuity']['saveBrief']>(async () => {
+        throw new Error('App 测试没有配置 Task Continuity 保存结果');
+      }),
+    },
     schedules: {
       list: vi.fn<Window['betterwork']['schedules']['list']>(async () => ({
         status: 'success',

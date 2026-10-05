@@ -61,6 +61,7 @@ import { useRunMemories, useTaskMemoryExclusion } from './hooks/use-run-memories
 import { useScheduleTaskContinuation } from './hooks/use-schedule-task-continuation';
 import { useSchedules } from './hooks/use-schedules';
 import { useSkills } from './hooks/use-skills';
+import { useTaskContinuity } from './hooks/use-task-continuity';
 import { useTaskMemoryExclusions } from './hooks/use-task-memory-exclusions';
 import { useTaskScroll } from './hooks/use-task-scroll';
 import { useWorkspaceBrief } from './hooks/use-workspace-brief';
@@ -279,6 +280,7 @@ export function App(): React.JSX.Element {
     workspaceId: workspace?.id,
     expertId: activeExpert?.id,
   });
+  const taskContinuity = useTaskContinuity(activeTask?.id);
   const references = useWorkspaceReferences(workspace?.id);
   const workspaceGroups = useWorkspaceGroups(workspace?.id);
   // 只把稳定的方法取出来当依赖：容器对象每次渲染都是新的，整对象进依赖会让
@@ -1872,6 +1874,8 @@ export function App(): React.JSX.Element {
       </section>
       {view === 'work' && (
         <ContextPanel
+          taskId={activeTask?.id}
+          taskContinuity={taskContinuity}
           open={contextOpen}
           setOpen={setContextOpen}
           tab={contextTab}
@@ -1938,6 +1942,7 @@ export function App(): React.JSX.Element {
             reportAction(selectRun(run), setActionError, '无法打开这次执行记录。')
           }
           onOpenSource={knowledge.onOpenSource}
+          onOpenArtifactVersion={openArtifactVersion}
           onSelectArtifact={(artifact) =>
             reportAction(
               openArtifact(artifact).then(() => setView('artifacts')),

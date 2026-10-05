@@ -72,6 +72,7 @@ import {
   getScheduleRequestSchema,
   getSkillRequestSchema,
   getTaskContextRequestSchema,
+  getTaskContinuityBriefRequestSchema,
   getTaskRequestSchema,
   importSkillRequestSchema,
   inputSnapshotSchema,
@@ -179,6 +180,7 @@ import {
   saveSearchEngineRequestSchema,
   saveSkillRuntimeProfileRequestSchema,
   saveTaskContextRequestSchema,
+  saveTaskContinuityBriefRequestSchema,
   scheduleAggregateSchema,
   scheduleCallResultSchema,
   scheduleCancelOccurrenceResultSchema,
@@ -219,6 +221,8 @@ import {
   startRunResultSchema,
   taskContextMutationResultSchema,
   taskContextRevisionSchema,
+  taskContinuityBriefMutationResultSchema,
+  taskContinuityRevisionSchema,
   taskMemoryExclusionsDataSchema,
   taskMemoryExclusionsRequestSchema,
   testModelRequestSchema,
@@ -1049,6 +1053,18 @@ function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
     getTaskRequestSchema,
     recentTaskSummarySchema.nullable(),
     ({ id }) => store.tasks.getRecentSummary(id) ?? null,
+  );
+  handleInput(
+    IpcChannel.GetTaskContinuityBrief,
+    getTaskContinuityBriefRequestSchema,
+    taskContinuityRevisionSchema.nullable(),
+    (input) => taskContinuity.getBrief(input.taskId),
+  );
+  handleInput(
+    IpcChannel.SaveTaskContinuityBrief,
+    saveTaskContinuityBriefRequestSchema,
+    taskContinuityBriefMutationResultSchema,
+    (input) => taskContinuity.saveUserBrief(input),
   );
   handleInput(
     IpcChannel.ListEvidence,

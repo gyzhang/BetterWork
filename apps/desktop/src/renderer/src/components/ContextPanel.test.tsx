@@ -11,6 +11,7 @@ import type {
   RunMemoryContext,
   RunSourcePreview,
   RunSummary,
+  TaskContinuityRevision,
   TaskMaterialSelection,
   WorkspaceBrief,
 } from '@betterwork/agent-protocol';
@@ -20,6 +21,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 
 import type { MemorySuggestionsState } from '../hooks/use-memory-suggestions';
 import type { RunMemoriesState, TaskMemoryExclusionState } from '../hooks/use-run-memories';
+import type { TaskContinuityState } from '../hooks/use-task-continuity';
 import type { TaskMemoryExclusionsState } from '../hooks/use-task-memory-exclusions';
 import type { WorkspaceBriefState } from '../hooks/use-workspace-brief';
 import type { ContextTab } from '../lib/view-types';
@@ -249,6 +251,8 @@ const renderPanel = (overrides: Record<string, unknown> = {}): HTMLElement => {
     <ContextPanel
       open
       setOpen={vi.fn()}
+      taskId="task-1"
+      taskContinuity={taskContinuityState()}
       tab="memory"
       setTab={vi.fn()}
       events={[]}
@@ -258,6 +262,7 @@ const renderPanel = (overrides: Record<string, unknown> = {}): HTMLElement => {
       activityGroups={[]}
       onSelectRun={vi.fn()}
       onOpenSource={vi.fn(async () => undefined)}
+      onOpenArtifactVersion={vi.fn(async () => undefined)}
       materials={[]}
       onCommitMaterials={vi.fn()}
       materialsDisabled={false}
@@ -292,8 +297,175 @@ const renderPanel = (overrides: Record<string, unknown> = {}): HTMLElement => {
   return container;
 };
 
+const taskContinuityRevision = (
+  revision = 1,
+  objective = '完成季度经营分析',
+): TaskContinuityRevision => ({
+  id: `continuity-${revision}`,
+  taskId: 'task-1',
+  revision,
+  schemaVersion: 1,
+  briefHash: HASH,
+  sourceKind: revision === 1 ? 'task-goal' : 'user-edit',
+  createdAt: revision,
+  brief: {
+    schemaVersion: 1,
+    objective: { text: objective, source: revision === 1 ? 'task-goal' : 'user-edit' },
+    activeRequirements: [
+      {
+        id: 'requirement-1',
+        text: '重点分析现金流',
+        authoredBy: 'assistant-summary',
+        sources: [{ runId: 'run-1', promptHash: HASH }],
+      },
+    ],
+    progress: {
+      authoredBy: 'assistant-summary',
+      status: 'blocked',
+      completedActions: ['已核对季度汇总'],
+      nextAction: '等待补充回款数据',
+      blockers: ['缺少回款明细'],
+      artifactVersionIds: ['artifact-version-1'],
+      sourceRunId: 'run-1',
+      sourcePromptHash: HASH,
+    },
+  },
+});
+
+const taskContinuityState = (
+  overrides: Partial<TaskContinuityState> = {},
+): TaskContinuityState => ({
+  revision: null,
+  loading: false,
+  saving: false,
+  error: '',
+  errorKind: undefined,
+  conflict: false,
+  refresh: vi.fn(async () => undefined),
+  save: vi.fn(async () => null),
+  clearError: vi.fn(),
+  ...overrides,
+});
+
 afterEach(() => {
   cleanup();
+});
+
+describe('ContextPanel 本任务连续简报', () => {
+  const sourceRun: RunSummary = {
+    id: 'run-1',
+    taskId: 'task-1',
+    sessionId: 'session-1',
+    prompt: '核对季度汇总',
+    status: 'completed',
+    createdAt: 1,
+    completedAt: 2,
+  };
+  const artifact = {
+    id: 'artifact-1',
+    workspaceId: 'workspace-1',
+    taskId: 'task-1',
+    type: 'markdown' as const,
+    title: '季度分析草稿',
+    currentVersionId: 'artifact-version-1',
+    versionNumber: 1,
+    origin: 'assistant-run' as const,
+    sourceRunId: 'run-1',
+    createdAt: 1,
+    updatedAt: 2,
+  };
+
+  it('区分目标、用户要求与助手进度，并可回到来源 Run 和精确 ArtifactVersion', () => {
+    const onSelectRun = vi.fn();
+    const onOpenArtifactVersion = vi.fn(async () => undefined);
+    renderPanel({
+      tab: 'process',
+      taskRuns: [sourceRun],
+      artifacts: [artifact],
+      taskContinuity: taskContinuityState({ revision: taskContinuityRevision() }),
+      onSelectRun,
+      onOpenArtifactVersion,
+    });
+
+    expect(screen.getByText('完成季度经营分析')).toBeTruthy();
+    expect(screen.getByText('助手整理')).toBeTruthy();
+    expect(screen.getByText(/来源请求 · prompt 指纹 a{12}/u)).toBeTruthy();
+    expect(screen.getByText(/下一步：等待补充回款数据/u)).toBeTruthy();
+    const sourceButtons = screen.getAllByRole('button', { name: '查看来源执行记录' });
+    const firstSourceButton = sourceButtons.at(0);
+    if (!firstSourceButton) throw new Error('Brief source run action is missing');
+    fireEvent.click(firstSourceButton);
+    fireEvent.click(screen.getByRole('button', { name: '查看该版本' }));
+
+    expect(onSelectRun).toHaveBeenCalledWith(sourceRun);
+    expect(onOpenArtifactVersion).toHaveBeenCalledWith('artifact-version-1');
+  });
+
+  it('以当前 revision 提交目标、要求和进度修订', async () => {
+    const save = vi.fn(async () => ({
+      kind: 'saved' as const,
+      revision: taskContinuityRevision(2),
+    }));
+    renderPanel({
+      tab: 'process',
+      taskRuns: [sourceRun],
+      taskContinuity: taskContinuityState({ revision: taskContinuityRevision(), save }),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑简报' }));
+    fireEvent.change(screen.getByLabelText('任务目标'), {
+      target: { value: '完成季度经营分析并说明回款风险' },
+    });
+    fireEvent.change(screen.getByLabelText('要求 1'), {
+      target: { value: '重点分析现金流和逾期账款' },
+    });
+    fireEvent.change(screen.getByLabelText('下一步'), {
+      target: { value: '取得回款明细后完成核对' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '保存简报' }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(save).toHaveBeenCalledWith({
+      taskId: 'task-1',
+      expectedRevision: 1,
+      objective: '完成季度经营分析并说明回款风险',
+      activeRequirements: [{ id: 'requirement-1', text: '重点分析现金流和逾期账款' }],
+      progress: {
+        status: 'blocked',
+        completedActions: ['已核对季度汇总'],
+        nextAction: '取得回款明细后完成核对',
+        blockers: ['缺少回款明细'],
+        artifactVersionIds: ['artifact-version-1'],
+      },
+    });
+    await waitFor(() => expect(screen.queryByRole('button', { name: '保存简报' })).toBeNull());
+  });
+
+  it('冲突时保留当前内容并提供载入最新版本动作', () => {
+    const refresh = vi.fn(async () => undefined);
+    renderPanel({
+      tab: 'process',
+      taskContinuity: taskContinuityState({
+        revision: taskContinuityRevision(),
+        error: '本任务简报已被其他更新修改。',
+        errorKind: 'conflict',
+        conflict: true,
+        refresh,
+      }),
+    });
+
+    expect(screen.getByText('完成季度经营分析')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '载入最新版本' }));
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it('旧 Task 明确显示无连续简报，不伪造历史内容', () => {
+    renderPanel({ tab: 'process', taskContinuity: taskContinuityState({ revision: null }) });
+
+    expect(screen.getByText('此 Task 尚无连续简报')).toBeTruthy();
+    expect(screen.getByText(/旧 Task 不会从历史对话回填/u)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '编辑简报' })).toBeNull();
+  });
 });
 
 describe('ContextPanel 本次任务材料', () => {

@@ -56,6 +56,7 @@ import {
   runtimeProfileDraftSchema,
   saveScheduleRequestSchema,
   saveTaskContextRequestSchema,
+  saveTaskContinuityBriefRequestSchema,
   SCHEDULE_KNOWLEDGE_SOURCE_MAX,
   SCHEDULE_PREPARATION_TIMEOUT_MS,
   SCHEDULE_PREVIEW_COUNT,
@@ -1908,6 +1909,42 @@ describe('MI 运行快照 v1/v2 兼容与优先预算字面量', () => {
         sourceKind: 'assistant-summary',
         briefHash: promptHash,
         createdAt: 2,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('Task Continuity 用户编辑请求只接受可编辑字段并限制条目预算', () => {
+    const edit = {
+      taskId: 'task-1',
+      expectedRevision: 2,
+      objective: '完成经营复盘',
+      activeRequirements: [{ id: 'requirement-1', text: '保留同比口径' }, { text: '列出风险' }],
+      progress: {
+        status: 'blocked',
+        completedActions: ['已核对收入数据'],
+        nextAction: '补齐费用说明',
+        blockers: ['等待业务确认'],
+        artifactVersionIds: ['artifact-version-1'],
+      },
+    } as const;
+
+    expect(saveTaskContinuityBriefRequestSchema.safeParse(edit).success).toBe(true);
+    expect(
+      saveTaskContinuityBriefRequestSchema.safeParse({
+        ...edit,
+        activeRequirements: Array.from({ length: 5 }, (_, index) => ({ text: `要求 ${index}` })),
+      }).success,
+    ).toBe(false);
+    expect(
+      saveTaskContinuityBriefRequestSchema.safeParse({
+        ...edit,
+        activeRequirements: [{ text: '😀'.repeat(2_001) }],
+      }).success,
+    ).toBe(false);
+    expect(
+      saveTaskContinuityBriefRequestSchema.safeParse({
+        ...edit,
+        progress: { ...edit.progress, authoredBy: 'assistant-summary' },
       }).success,
     ).toBe(false);
   });

@@ -642,6 +642,58 @@ describe('registerIpc', () => {
     ).rejects.toThrow('Task context revision conflict');
   });
 
+  it('loads and saves the current Task Continuity revision with Main-derived source labels and CAS conflicts', async () => {
+    const workspace = (await invoke(IpcChannel.GetDefaultWorkspace, {})) as { id: string };
+    const created = (await invoke(IpcChannel.CreateTask, {
+      workspaceId: workspace.id,
+      title: '连续简报编辑',
+      goal: '先保存的任务目标',
+    })) as { task: { id: string } };
+    const initial = await invoke(IpcChannel.GetTaskContinuityBrief, { taskId: created.task.id });
+    expect(initial).toMatchObject({
+      revision: 1,
+      brief: { objective: { text: '先保存的任务目标', source: 'task-goal' } },
+    });
+
+    const saved = await invoke(IpcChannel.SaveTaskContinuityBrief, {
+      taskId: created.task.id,
+      expectedRevision: 1,
+      objective: '改写后的任务目标',
+      activeRequirements: [{ text: '保留季度口径' }],
+      progress: null,
+    });
+    expect(saved).toMatchObject({
+      kind: 'saved',
+      revision: {
+        revision: 2,
+        sourceKind: 'user-edit',
+        brief: {
+          objective: { text: '改写后的任务目标', source: 'user-edit' },
+          activeRequirements: [{ text: '保留季度口径', authoredBy: 'user-edit' }],
+        },
+      },
+    });
+
+    await expect(
+      invoke(IpcChannel.SaveTaskContinuityBrief, {
+        taskId: created.task.id,
+        expectedRevision: 1,
+        objective: '旧草稿',
+        activeRequirements: [],
+        progress: null,
+      }),
+    ).resolves.toEqual({ kind: 'conflict', currentRevision: 2 });
+    await expect(
+      invoke(IpcChannel.SaveTaskContinuityBrief, {
+        taskId: created.task.id,
+        expectedRevision: 2,
+        objective: '试图伪造作者',
+        activeRequirements: [{ text: '伪装助手来源', authoredBy: 'user-edit' }],
+        progress: null,
+      }),
+    ).rejects.toThrow();
+  });
+
   it('rejects unexpected data for a no-input dialog channel before opening the dialog', async () => {
     await expect(invoke(IpcChannel.PickWorkspaceDirectory, { injected: true })).rejects.toThrow();
     expect(mocks.showOpenDialog).not.toHaveBeenCalled();

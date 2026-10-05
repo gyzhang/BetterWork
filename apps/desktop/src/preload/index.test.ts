@@ -173,3 +173,64 @@ describe('historical task and notification preload APIs', () => {
     expect(() => api().notifications.get({ id: '' })).toThrow();
   });
 });
+
+describe('task continuity preload API', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.invoke.mockImplementation(async (channel) => {
+      if (channel === IpcChannel.GetTaskContinuityBrief) return null;
+      return { kind: 'conflict', currentRevision: 2 };
+    });
+  });
+
+  it('validates and forwards reads and CAS saves through their typed channels', async () => {
+    await expect(api().taskContinuity.getBrief({ taskId: 'task-1' })).resolves.toBeNull();
+    await expect(
+      api().taskContinuity.saveBrief({
+        taskId: 'task-1',
+        expectedRevision: 1,
+        objective: '分析季度结果',
+        activeRequirements: [],
+        progress: null,
+      }),
+    ).resolves.toEqual({ kind: 'conflict', currentRevision: 2 });
+
+    expect(mocks.invoke.mock.calls).toEqual([
+      [IpcChannel.GetTaskContinuityBrief, { taskId: 'task-1' }],
+      [
+        IpcChannel.SaveTaskContinuityBrief,
+        {
+          taskId: 'task-1',
+          expectedRevision: 1,
+          objective: '分析季度结果',
+          activeRequirements: [],
+          progress: null,
+        },
+      ],
+    ]);
+  });
+
+  it('rejects malformed requests before IPC and malformed mutation results after IPC', async () => {
+    expect(() =>
+      api().taskContinuity.saveBrief({
+        taskId: 'task-1',
+        expectedRevision: 0,
+        objective: '分析季度结果',
+        activeRequirements: [],
+        progress: null,
+      }),
+    ).toThrow();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+
+    mocks.invoke.mockResolvedValueOnce({ kind: 'saved', revision: {} });
+    await expect(
+      api().taskContinuity.saveBrief({
+        taskId: 'task-1',
+        expectedRevision: 1,
+        objective: '分析季度结果',
+        activeRequirements: [],
+        progress: null,
+      }),
+    ).rejects.toThrow();
+  });
+});
