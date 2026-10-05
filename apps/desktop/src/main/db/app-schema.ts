@@ -1993,6 +1993,73 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 39,
+    name: 'add task continuity revisions and run contexts',
+    up(db: Database.Database): void {
+      db.exec(`
+        CREATE UNIQUE INDEX idx_runs_id_task_id
+          ON runs(id, task_id);
+
+        CREATE TABLE task_continuity_revisions (
+          id TEXT NOT NULL PRIMARY KEY,
+          task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          revision INTEGER NOT NULL CHECK (revision > 0),
+          schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+          brief_json TEXT NOT NULL CHECK (json_valid(brief_json)),
+          source_kind TEXT NOT NULL CHECK (
+            source_kind IN ('task-goal', 'user-edit', 'assistant-summary')
+          ),
+          source_run_id TEXT,
+          brief_hash TEXT NOT NULL CHECK (
+            length(brief_hash) = 64 AND brief_hash NOT GLOB '*[^0-9a-f]*'
+          ),
+          created_at INTEGER NOT NULL CHECK (created_at >= 0),
+          UNIQUE(task_id, revision),
+          UNIQUE(task_id, id),
+          CHECK (
+            source_kind != 'task-goal' OR (revision = 1 AND source_run_id IS NULL)
+          ),
+          CHECK (source_kind != 'assistant-summary' OR source_run_id IS NOT NULL),
+          FOREIGN KEY(source_run_id, task_id)
+            REFERENCES runs(id, task_id) ON DELETE CASCADE
+        );
+        CREATE TRIGGER task_continuity_revisions_are_immutable
+          BEFORE UPDATE ON task_continuity_revisions
+          BEGIN
+            SELECT RAISE(ABORT, 'Task Continuity revisions are append-only');
+          END;
+
+        CREATE UNIQUE INDEX idx_task_continuity_revisions_task_run
+          ON task_continuity_revisions(task_id, source_run_id)
+          WHERE source_kind = 'assistant-summary' AND source_run_id IS NOT NULL;
+        CREATE INDEX idx_task_continuity_revisions_latest
+          ON task_continuity_revisions(task_id, revision DESC);
+
+        CREATE TABLE run_continuity_contexts (
+          run_id TEXT NOT NULL PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+          task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          revision_id TEXT NOT NULL,
+          schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+          brief_json TEXT NOT NULL CHECK (json_valid(brief_json)),
+          brief_hash TEXT NOT NULL CHECK (
+            length(brief_hash) = 64 AND brief_hash NOT GLOB '*[^0-9a-f]*'
+          ),
+          prepared_at INTEGER NOT NULL CHECK (prepared_at >= 0),
+          first_provider_request_at INTEGER,
+          CHECK (
+            first_provider_request_at IS NULL OR first_provider_request_at >= prepared_at
+          ),
+          FOREIGN KEY(run_id, task_id)
+            REFERENCES runs(id, task_id) ON DELETE CASCADE,
+          FOREIGN KEY(task_id, revision_id)
+            REFERENCES task_continuity_revisions(task_id, id) ON DELETE CASCADE
+        );
+        CREATE INDEX idx_run_continuity_contexts_task
+          ON run_continuity_contexts(task_id, prepared_at DESC);
+      `);
+    },
+  },
 ];
 
 /**

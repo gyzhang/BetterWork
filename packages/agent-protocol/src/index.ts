@@ -3745,6 +3745,146 @@ export const runSummarySchema = z.object({
   completedAt: z.number().int().nonnegative().optional(),
   bindings: z.array(runSkillBindingSummarySchema).optional(),
 });
+
+const taskContinuitySourceSchema = z
+  .object({
+    runId: z.string().min(1),
+    promptHash: sha256HexSchema,
+  })
+  .strict();
+
+const taskContinuityTextSchema = exactTextSchema('任务连续简报文本', 1, 20_000);
+
+export const taskContinuityBriefSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    objective: z
+      .object({
+        text: taskContinuityTextSchema,
+        source: z.enum(['task-goal', 'user-edit']),
+        sourceRunId: z.string().min(1).optional(),
+      })
+      .strict()
+      .superRefine((objective, context) => {
+        if (objective.source === 'task-goal' && objective.sourceRunId !== undefined) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['sourceRunId'],
+            message: 'Task 创建目标不能引用来源 Run',
+          });
+        }
+      }),
+    activeRequirements: z.array(
+      z
+        .object({
+          id: z.string().min(1),
+          text: taskContinuityTextSchema,
+          authoredBy: z.enum(['assistant-summary', 'user-edit']),
+          sources: z.array(taskContinuitySourceSchema).min(1).optional(),
+        })
+        .strict()
+        .superRefine((requirement, context) => {
+          if (requirement.authoredBy === 'assistant-summary' && !requirement.sources) {
+            context.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['sources'],
+              message: '助手整理的活跃要求必须保留来源',
+            });
+          }
+        }),
+    ),
+    progress: z
+      .object({
+        authoredBy: z.enum(['assistant-summary', 'user-edit']),
+        status: z.enum(['in-progress', 'blocked', 'awaiting-user', 'complete']),
+        completedActions: z.array(taskContinuityTextSchema),
+        nextAction: taskContinuityTextSchema.optional(),
+        blockers: z.array(taskContinuityTextSchema),
+        artifactVersionIds: z.array(z.string().min(1)),
+        sourceRunId: z.string().min(1).optional(),
+        sourcePromptHash: sha256HexSchema.optional(),
+      })
+      .strict()
+      .optional()
+      .superRefine((progress, context) => {
+        if (!progress) return;
+        const hasSourceRunId = progress.sourceRunId !== undefined;
+        const hasSourcePromptHash = progress.sourcePromptHash !== undefined;
+        if (hasSourceRunId !== hasSourcePromptHash) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['sourcePromptHash'],
+            message: '进度来源 Run 与 prompt hash 必须成对出现',
+          });
+        }
+        if (progress.authoredBy === 'assistant-summary' && !hasSourceRunId) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['sourceRunId'],
+            message: '助手整理的进度必须保留来源 Run 和 prompt hash',
+          });
+        }
+      }),
+  })
+  .strict();
+export type TaskContinuityBrief = z.infer<typeof taskContinuityBriefSchema>;
+
+export const taskContinuityRevisionSourceKindSchema = z.enum([
+  'task-goal',
+  'user-edit',
+  'assistant-summary',
+]);
+export type TaskContinuityRevisionSourceKind = z.infer<
+  typeof taskContinuityRevisionSourceKindSchema
+>;
+
+export const taskContinuityRevisionSchema = z
+  .object({
+    id: z.string().min(1),
+    taskId: z.string().min(1),
+    revision: z.number().int().positive(),
+    schemaVersion: z.literal(1),
+    brief: taskContinuityBriefSchema,
+    sourceKind: taskContinuityRevisionSourceKindSchema,
+    sourceRunId: z.string().min(1).optional(),
+    briefHash: sha256HexSchema,
+    createdAt: z.number().int().nonnegative(),
+  })
+  .strict()
+  .superRefine((revision, context) => {
+    if (revision.schemaVersion !== revision.brief.schemaVersion) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['schemaVersion'],
+        message: 'revision 与 Brief 的 schemaVersion 不一致',
+      });
+    }
+    if (revision.sourceKind === 'task-goal') {
+      if (revision.revision !== 1 || revision.sourceRunId !== undefined) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['sourceKind'],
+          message: 'Task 初始目标只能作为第一版且不能关联 Run',
+        });
+      }
+      if (revision.brief.objective.source !== 'task-goal') {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['brief', 'objective', 'source'],
+          message: '初始 revision 必须保留 Task goal 来源',
+        });
+      }
+    }
+    if (revision.sourceKind === 'assistant-summary' && revision.sourceRunId === undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['sourceRunId'],
+        message: '助手摘要 revision 必须关联来源 Run',
+      });
+    }
+  });
+export type TaskContinuityRevision = z.infer<typeof taskContinuityRevisionSchema>;
+
 export const taskSummarySchema = z.object({
   id: z.string().min(1),
   workspaceId: z.string().min(1),

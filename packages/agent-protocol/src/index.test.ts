@@ -85,6 +85,8 @@ import {
   skillSummarySchema,
   startRunRequestSchema,
   taskContextRevisionSchema,
+  taskContinuityBriefSchema,
+  taskContinuityRevisionSchema,
   taskMemoryExclusionItemSchema,
   taskMemoryExclusionsDataSchema,
   taskMemoryExclusionsRequestSchema,
@@ -1835,5 +1837,78 @@ describe('MI 运行快照 v1/v2 兼容与优先预算字面量', () => {
     expect(saveTaskContextRequestSchema.safeParse(saveOf(null)).success).toBe(true);
     expect(saveTaskContextRequestSchema.safeParse(saveOf('source-1')).success).toBe(true);
     expect(saveTaskContextRequestSchema.safeParse(saveOf('')).success).toBe(false);
+  });
+
+  it('Task Continuity Brief 与 revision 严格校验来源、版本和文本预算', () => {
+    const promptHash = 'a'.repeat(64);
+    const brief = {
+      schemaVersion: 1,
+      objective: { text: '完成季度分析', source: 'task-goal' },
+      activeRequirements: [
+        {
+          id: 'requirement-1',
+          text: '使用最新季度数据',
+          authoredBy: 'assistant-summary',
+          sources: [{ runId: 'run-1', promptHash }],
+        },
+      ],
+      progress: {
+        authoredBy: 'assistant-summary',
+        status: 'in-progress',
+        completedActions: ['核对数据范围'],
+        blockers: [],
+        artifactVersionIds: [],
+        sourceRunId: 'run-1',
+        sourcePromptHash: promptHash,
+      },
+    } as const;
+
+    expect(taskContinuityBriefSchema.safeParse(brief).success).toBe(true);
+    expect(
+      taskContinuityBriefSchema.safeParse({
+        ...brief,
+        progress: { ...brief.progress, status: 'finished' },
+      }).success,
+    ).toBe(false);
+    expect(
+      taskContinuityBriefSchema.safeParse({
+        ...brief,
+        activeRequirements: [{ ...brief.activeRequirements[0], sources: undefined }],
+      }).success,
+    ).toBe(false);
+    expect(
+      taskContinuityBriefSchema.safeParse({
+        ...brief,
+        objective: { text: '😀'.repeat(20_001), source: 'task-goal' },
+      }).success,
+    ).toBe(false);
+    expect(
+      taskContinuityBriefSchema.safeParse({ ...brief, unexpected: 'not accepted' }).success,
+    ).toBe(false);
+
+    expect(
+      taskContinuityRevisionSchema.safeParse({
+        id: 'continuity-revision-1',
+        taskId: 'task-1',
+        revision: 1,
+        schemaVersion: 1,
+        brief,
+        sourceKind: 'task-goal',
+        briefHash: promptHash,
+        createdAt: 1,
+      }).success,
+    ).toBe(true);
+    expect(
+      taskContinuityRevisionSchema.safeParse({
+        id: 'continuity-revision-2',
+        taskId: 'task-1',
+        revision: 2,
+        schemaVersion: 1,
+        brief,
+        sourceKind: 'assistant-summary',
+        briefHash: promptHash,
+        createdAt: 2,
+      }).success,
+    ).toBe(false);
   });
 });

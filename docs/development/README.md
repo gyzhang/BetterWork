@@ -15,7 +15,7 @@
 
 > 2026-09-22：工作型记忆开发计划[tasks-memory.md](tasks-memory.md)（WM00–WM16）以[工作型记忆产品设计](../designs/work-centered-memory.md)、[ADR-0026](../adr/0026-work-centered-memory.md)（Proposed，已按用户开工指令实施）与[记忆实施契约](memory-contracts.md)为依据，与 A/B0/E/CF 并行，不改写本手册任务状态，也不在本手册维护任何 WM 状态（状态只在 tasks-memory 的总表）。本轮记忆不引入 Embedding、向量库、全量聊天扫描或定时反思。
 
-> 2026-10-05：同一 Task 多轮连续上下文增量见 [Task Continuity 产品设计](../designs/task-continuity.md)（v1.0）、[ADR-0038](../adr/0038-task-continuity-across-runs.md)（Accepted）、[实施契约](task-continuity-contracts.md)（v1.0）、[TC00–TC05 唯一任务板](tasks-task-continuity.md)与 [GPT-6 Luna 逐卡提示词](task-continuity-coding-prompts.md)。用户已批准设计和计划，并明确开发/测试数据可重置、无需旧数据兼容；代码尚未开工。本增量不改写 A/B0/E/CF/WM/KM/SC 状态。
+> 2026-10-05：同一 Task 多轮连续上下文增量见 [Task Continuity 产品设计](../designs/task-continuity.md)（v1.0）、[ADR-0038](../adr/0038-task-continuity-across-runs.md)（Accepted）、[实施契约](task-continuity-contracts.md)（v1.0）、[TC00–TC05 唯一任务板](tasks-task-continuity.md)与 [GPT-6 Luna 逐卡提示词](task-continuity-coding-prompts.md)。用户已批准设计和计划，并明确开发/测试数据可重置、无需旧数据兼容；TC01 已完成，后续卡片状态见唯一任务板。本增量不改写 A/B0/E/CF/WM/KM/SC 状态。
 
 - 日期：2026-09-08
 - 状态：阶段 A 已有实现；2026-09-11 完成一轮代码补救，真实样本与安装验收仍未完成。本手册不自动把 Proposed ADR 改为 Accepted。

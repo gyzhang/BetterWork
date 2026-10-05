@@ -35,6 +35,7 @@ import { SearchEngineRepository } from './search-engine-repository';
 import { SkillExecutionRepository } from './skill-execution-repository';
 import { SkillRepository } from './skill-repository';
 import { TaskContextRepository } from './task-context-repository';
+import { TaskContinuityRepository } from './task-continuity-repository';
 import { TaskRepository } from './task-repository';
 import { WorkspaceReferenceRepository } from './workspace-reference-repository';
 import { WorkspaceRepository } from './workspace-repository';
@@ -52,6 +53,7 @@ export class AppStore {
   readonly workspaces: WorkspaceRepository;
   readonly tasks: TaskRepository;
   readonly taskContexts: TaskContextRepository;
+  readonly taskContinuity: TaskContinuityRepository;
   readonly runs: RunRepository;
   readonly schedules: ScheduleRepository;
   readonly scheduleOccurrences: ScheduleOccurrenceRepository;
@@ -102,6 +104,7 @@ export class AppStore {
     this.workspaces = new WorkspaceRepository(db);
     this.tasks = new TaskRepository(db);
     this.taskContexts = new TaskContextRepository(db);
+    this.taskContinuity = new TaskContinuityRepository(db);
     this.runs = new RunRepository(db);
     this.schedules = new ScheduleRepository(db);
     this.scheduleOccurrences = new ScheduleOccurrenceRepository(db);
@@ -299,6 +302,13 @@ export {
   type SkillTrustPreference,
 } from './skill-repository';
 export { type SaveTaskContextInput, TaskContextRepository } from './task-context-repository';
+export {
+  type AppendTaskContinuityRevisionInput,
+  TaskContinuityError,
+  type TaskContinuityErrorCode,
+  TaskContinuityRepository,
+  TaskContinuityRevisionConflictError,
+} from './task-continuity-repository';
 export { TaskRepository } from './task-repository';
 export {
   type ReferenceWriteOutcome,

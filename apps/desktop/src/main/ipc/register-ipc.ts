@@ -297,6 +297,7 @@ import {
   type SkillDependencyService,
 } from '../services/skill-dependency-service';
 import type { SkillService } from '../services/skill-service';
+import { TaskContinuityService } from '../services/task-continuity-service';
 import type { TaskMaterialService } from '../services/task-material-service';
 import type { ToolchainSnapshotService } from '../services/toolchain-snapshot-service';
 import type { WorkspaceBriefService } from '../services/workspace-memory-brief-service';
@@ -967,6 +968,7 @@ function registerScheduleChannels(deps: IpcDependencies): void {
 
 function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
   const { store, getDefaultWorkspaceRoot, taskMaterials } = deps;
+  const taskContinuity = new TaskContinuityService(store);
 
   handleNoInput(IpcChannel.GetDefaultWorkspace, emptyRequestSchema, workspaceSummarySchema, () =>
     store.workspaces.getOrCreate(getDefaultWorkspaceRoot(), '我的工作空间'),
@@ -1034,7 +1036,7 @@ function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
   );
 
   handleInput(IpcChannel.CreateTask, createTaskRequestSchema, createdTaskSchema, (input) =>
-    store.tasks.create(input.workspaceId, input.title, input.goal),
+    taskContinuity.createTask(input.workspaceId, input.title, input.goal),
   );
   handleOptionalInput(
     IpcChannel.ListTasks,
@@ -1772,6 +1774,7 @@ function skillSummary(skill: ReturnType<SkillService['setTrustPreference']>) {
 
 function registerSkillChannels(deps: IpcDependencies): void {
   const { skillService, store, runs } = deps;
+  const taskContinuity = new TaskContinuityService(store);
   handleNoInput(IpcChannel.ListSkills, listSkillsRequestSchema, z.array(skillSummarySchema), () =>
     store.skills.list(),
   );
@@ -1885,7 +1888,7 @@ function registerSkillChannels(deps: IpcDependencies): void {
         deps.getDefaultWorkspaceRoot(),
         '我的工作空间',
       );
-      const created = store.tasks.create(
+      const created = taskContinuity.createTask(
         workspace.id,
         `Skill 试运行：${skill.name}`,
         'Skill 试运行任务',

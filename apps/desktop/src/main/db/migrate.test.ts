@@ -2596,8 +2596,8 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
   it('creates all eight tables and required indexes on an empty database, then stays idempotent', () => {
     const db = new Database(':memory:');
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(38);
-    expect(appMigrations.at(-1)?.version).toBe(38);
+    expect(readSchemaVersion(db)).toBe(39);
+    expect(appMigrations.at(-1)?.version).toBe(39);
     for (const table of SCHEDULE_TABLES) expect(hasTable(db, table), table).toBe(true);
     const indexes = (
       db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as Array<{
@@ -2622,7 +2622,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
     );
     expect(db.pragma('foreign_key_check')).toEqual([]);
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(38);
+    expect(readSchemaVersion(db)).toBe(39);
     expect(
       db.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 37').get(),
     ).toEqual({ count: 1 });
@@ -2644,7 +2644,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
     expect(readSchemaVersion(db)).toBe(35);
     expect(hasTable(db, 'schedules')).toBe(false);
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(38);
+    expect(readSchemaVersion(db)).toBe(39);
     expect(db.prepare('SELECT id, workspace_id FROM tasks WHERE id = ?').get('task-1')).toEqual({
       id: 'task-1',
       workspace_id: 'ws-1',
@@ -2663,7 +2663,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
     ).toEqual({ id: 'version-1', artifact_id: 'artifact-1', content: '# 合成成果' });
     expect(countRows(db, 'schedules')).toBe(0);
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(38);
+    expect(readSchemaVersion(db)).toBe(39);
     expect(db.pragma('foreign_key_check')).toEqual([]);
     db.close();
   });
@@ -2936,7 +2936,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
     });
     expect(db.pragma('foreign_key_check')).toEqual([]);
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(38);
+    expect(readSchemaVersion(db)).toBe(39);
     db.close();
   });
 
@@ -2960,7 +2960,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
 
     db.exec('DROP TABLE migration_collision');
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(38);
+    expect(readSchemaVersion(db)).toBe(39);
     expect(
       db
         .prepare(
@@ -2968,6 +2968,90 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
         )
         .get(),
     ).toMatchObject({ sql: expect.stringContaining("WHERE phase = 'preparing'") });
+    db.close();
+  });
+});
+
+describe('Task Continuity schema migration v39 (TC01)', () => {
+  it('adds the new tables without backfilling existing Task or Run content and reopens idempotently', () => {
+    const directory = temporaryDirectory();
+    const filePath = path.join(directory, 'app.sqlite');
+    const before = new Database(filePath);
+    before.pragma('foreign_keys = ON');
+    migrate(before, { migrations: appMigrations.filter((migration) => migration.version <= 38) });
+    const now = 1_790_000_000_000;
+    before
+      .prepare(
+        'INSERT INTO workspaces (id, name, root_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+      )
+      .run('tc-workspace', 'TC 合成空间', '/tmp/tc-synthetic', now, now);
+    before
+      .prepare(
+        'INSERT INTO tasks (id, workspace_id, title, goal, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      )
+      .run('tc-old-task', 'tc-workspace', '旧 Task', '旧目标合成样本', now, now);
+    before
+      .prepare('INSERT INTO sessions (id, task_id, created_at) VALUES (?, ?, ?)')
+      .run('tc-old-session', 'tc-old-task', now);
+    before
+      .prepare(
+        `INSERT INTO runs (id, task_id, session_id, prompt, status, created_at, completed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run('tc-old-run', 'tc-old-task', 'tc-old-session', '旧 prompt 合成样本', 'failed', now, now);
+    before.close();
+
+    const firstOpen = openAppDatabase(filePath);
+    expect(readSchemaVersion(firstOpen)).toBe(39);
+    expect(hasTable(firstOpen, 'task_continuity_revisions')).toBe(true);
+    expect(hasTable(firstOpen, 'run_continuity_contexts')).toBe(true);
+    expect(
+      firstOpen
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name = 'task_continuity_revisions_are_immutable'",
+        )
+        .get(),
+    ).toEqual({ name: 'task_continuity_revisions_are_immutable' });
+    expect(countRows(firstOpen, 'task_continuity_revisions')).toBe(0);
+    expect(countRows(firstOpen, 'run_continuity_contexts')).toBe(0);
+    expect(firstOpen.pragma('foreign_key_check')).toEqual([]);
+    firstOpen.close();
+
+    const secondOpen = openAppDatabase(filePath);
+    expect(readSchemaVersion(secondOpen)).toBe(39);
+    expect(countRows(secondOpen, 'task_continuity_revisions')).toBe(0);
+    expect(countRows(secondOpen, 'run_continuity_contexts')).toBe(0);
+    secondOpen.close();
+  });
+
+  it('rolls back every v39 object and version stamp after a late DDL failure, then retries', () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    migrate(db, { migrations: appMigrations.filter((migration) => migration.version <= 38) });
+    db.exec(`
+      CREATE TABLE migration_collision (id TEXT PRIMARY KEY);
+      CREATE INDEX idx_run_continuity_contexts_task ON migration_collision(id);
+    `);
+
+    expect(() => migrate(db, { migrations: appMigrations })).toThrow(/already exists/iu);
+    expect(readSchemaVersion(db)).toBe(38);
+    expect(hasTable(db, 'task_continuity_revisions')).toBe(false);
+    expect(hasTable(db, 'run_continuity_contexts')).toBe(false);
+    expect(
+      db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_runs_id_task_id'",
+        )
+        .get(),
+    ).toBeUndefined();
+    expect(db.pragma('foreign_key_check')).toEqual([]);
+
+    db.exec('DROP TABLE migration_collision');
+    migrate(db, { migrations: appMigrations });
+    expect(readSchemaVersion(db)).toBe(39);
+    expect(hasTable(db, 'task_continuity_revisions')).toBe(true);
+    expect(hasTable(db, 'run_continuity_contexts')).toBe(true);
+    expect(db.pragma('foreign_key_check')).toEqual([]);
     db.close();
   });
 });

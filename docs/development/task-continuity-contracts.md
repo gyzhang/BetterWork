@@ -1,7 +1,7 @@
 # Task Continuity 实施契约 v1.0（Accepted）
 
 - 日期：2026-10-05。
-- 状态：**用户于 2026-10-05 批准设计、ADR 与开发计划；本轮仅修订文档，未实现产品代码。**
+- 状态：**用户于 2026-10-05 批准设计、ADR 与开发计划；TC01 已完成，TC02–TC05 尚未开始。**
 - 产品与架构：[Task 跨 Run 连续协作设计](../designs/task-continuity.md)（v1.0），维持“一个 Task 中持续多轮协作”的用户心智。
 - 决策：[ADR-0038](../adr/0038-task-continuity-across-runs.md) 为 Accepted。
 - 唯一实施入口：[TC00–TC05 任务板](tasks-task-continuity.md)。

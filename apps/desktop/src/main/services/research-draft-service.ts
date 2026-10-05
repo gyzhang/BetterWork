@@ -9,6 +9,7 @@ import type {
 import type { AppStore } from '../persistence';
 import { KnowledgeServiceError } from './knowledge-errors';
 import type { KnowledgeVault } from './knowledge-vault';
+import { TaskContinuityService } from './task-continuity-service';
 
 /**
  * KM03（契约 §4）：以勾选知识修订创建可恢复的研究草稿。
@@ -17,10 +18,14 @@ import type { KnowledgeVault } from './knowledge-vault';
  * 「查回执→验证登记→提交」之间不会插入其它写入。
  */
 export class ResearchDraftService {
+  private readonly taskContinuity: TaskContinuityService;
+
   constructor(
     private readonly store: AppStore,
     private readonly vault: KnowledgeVault,
-  ) {}
+  ) {
+    this.taskContinuity = new TaskContinuityService(store);
+  }
 
   create(request: KnowledgeCreateResearchDraftRequest): KnowledgeResearchDraftResult {
     const normalized = this.normalizeMaterials(request);
@@ -75,7 +80,7 @@ export class ResearchDraftService {
       }
       // 工作空间不可用时由 tasks.create 抛错并整体回滚。
       const title = request.prompt.split('\n')[0]?.trim() || '研究草稿';
-      const created = this.store.tasks.create(
+      const created = this.taskContinuity.createTask(
         request.workspaceId,
         title.slice(0, 80),
         request.prompt,

@@ -1,11 +1,12 @@
 # Task Continuity 开发计划（TC00–TC05）
 
 - 日期：2026-10-05。
-- 状态：**产品、ADR 与开发计划已于 2026-10-05 获用户批准；产品代码尚未开工。**
+- 状态：**产品、ADR 与开发计划已于 2026-10-05 获用户批准；TC01 已完成，TC02–TC05 尚未开始。**
 - 产品入口：[Task 跨 Run 连续协作设计](../designs/task-continuity.md)（v1.0）。
 - 技术入口：[ADR-0038](../adr/0038-task-continuity-across-runs.md)（Accepted）与[Task Continuity 实施契约](task-continuity-contracts.md)（v1.0 Accepted）。
 - GPT-6 Luna 交接：[逐卡编码提示词](task-continuity-coding-prompts.md)。本文是 TC 唯一任务状态真相源；每卡仍需单独开工指派，真实模型业务验收与发布分别处理。
-- 基线静态核对：HEAD `9031d41`；工作树仅含此前 Task Continuity 文档修改；应用库最新迁移 v38，`Task.goal` 当前上限 20,000 code points，Run prompt 上限 8,000；RunService 经 `AgentRunInput.messages` 注入 Memory、受限历史和本轮材料，Agent Core 把它们放在系统/Expert/Skill 指令之后、当前 prompt 之前。所有卡开工重核 HEAD、工作树、迁移号和等价实现，禁止按旧基线覆盖新代码。
+- TC00 文档阶段的静态基线快照：HEAD `9031d41`；工作树仅含此前 Task Continuity 文档修改；当时应用库迁移 v38，`Task.goal` 上限 20,000 code points、Run prompt 上限 8,000；RunService 经 `AgentRunInput.messages` 注入 Memory、受限历史和本轮材料，Agent Core 把它们放在系统/Expert/Skill 指令之后、当前 prompt 之前。每卡开工仍须重核，不按此历史快照覆盖新实现。
+- TC01 开工实测：HEAD `70cc423d5126fafd8a6209830522e3fe85652d5e`，分支 `main`，工作树干净；`app-schema.ts` 与实际应用数据库最新迁移均为 v38。TC01 迁移递增至 v39；未重置或写入实际应用数据库。
 - 执行：所有实现串行，一次一张卡。共享协议、`app-schema.ts`、RunService、App/ContextPanel 不并行修改。优先使用现有分层和组件，不创建新导航或第二套历史/记忆系统。
 
 ## 1. 目标与完成门槛
@@ -17,7 +18,8 @@
 ### 授权口径
 
 - 用户已明确批准产品/架构方案、ADR-0038、实施契约与 TC 开发计划，并说明开发期数据可重置、不需旧数据兼容，UI/编码须遵循当前规范。
-- 本轮授权范围是补齐并归档上述设计、开发计划与 GPT-6 Luna 提示词，以及提交/推送这些文档；产品代码仍须在后续任务中按 TC 卡片单独指派。
+- TC00 文档阶段的授权范围仅覆盖设计、计划、提示词和文档归档；产品代码须按 TC 卡片另行单独指派。
+- 用户于 2026-10-05 单独授权 TC01 的实现、必要自动化测试和文档/日志更新；不包含 TC02–TC05、UI、真实模型调用或提交/推送/发布。
 - 每卡交付只推进该卡，不自动进入下一卡；若实现发现可能改变已接受行为的技术边界，回到产品/ADR 记录后再继续，不能由编码卡静默发明。
 
 ## 2. 里程碑
@@ -38,7 +40,7 @@
 | 编号 | 用户可感知交付 | 前置 | 优先级 | Points | 状态 | 证据 |
 | --- | --- | --- | --- | ---: | --- | --- |
 | TC00 | 设计决策接受与基线复核 | 无 | P0 | 3 | done | 用户于 2026-10-05 批准产品/架构/计划；ADR-0038 与契约转 Accepted；固定 32,000 code point 初始总预算、同次响应更新/确定性 fallback、不发独立摘要请求及无旧数据回填。每张代码卡开工仍重核最新基线 |
-| TC01 | 新 Task 目标和连续简报可持久化、恢复 | TC00 | P0 | 5 | todo | 预期增量：协议 Schema、应用库版本化结构迁移、TaskContinuityRepository/Service、迁移/仓储测试。新 Task 从 `tasks.goal` 初始化 revision；不扫描/回填旧任务或聊天。CAS 冲突、幂等更新、外键归属和迁移原子回滚有证据 |
+| TC01 | 新 Task 目标和连续简报可持久化、恢复 | TC00 | P0 | 5 | done | v39 安装两张新表与归属/幂等/JSON/不可变约束；新 Task 通过 Main 同事务从已持久化 `tasks.goal` 初始化 revision。开工 HEAD `70cc423d`、工作树干净、实际库 v38；本地库未重置。定向测试 4 文件/113 项通过；完整 `npm run verify` 退出 0：functional 212/1,886、heavy 8/167、build、ui:check 58 组通过 |
 | TC02 | 每个新 Run 可回查它实际获得的任务简报 | TC01 | P0 | 8 | todo | 预期增量：RunService/Run continuity audit 与 Fake Provider 集成测试。持久化不可变 Run snapshot/hash；任务目标、带来源要求、最近用户 prompt 与确定性 Run/Artifact 状态进入真实 `ModelRequest.messages`；首轮失败后“继续”仍看到原始目标；所有模型/工具轮保留相同 snapshot |
 | TC03 | 完成轮次能安全更新进度，失败/取消有确定性降级 | TC02 | P1 | 8 | todo | 预期增量：类型化 update 传递、Run 完成后幂等写 revision、材料/记忆依赖复核、错误降级与测试。常规响应不能承载类型化更新时只实现确定性 Run/Artifact 状态与安全历史；不新增独立 summary completion 或隐藏模型请求 |
 | TC04 | 用户能查看并修正本任务目标与活跃要求 | TC01、TC02 | P1 | 8 | todo | 预期增量：最小 IPC/Preload/Hook/现有任务过程面板 UI；CAS 保存、来源 Run 跳转/说明、助手摘要与用户文本标签、局部错误出口；复用现有 UI 基座，无新导航。需真实桌面走查 |
@@ -71,6 +73,8 @@ Points 是相对复杂度建议，不是时间承诺；TC00 已关闭。若实�
 - 初始化只信任新 Task 创建时已持久化的 `tasks.goal`。不从 Run prompt 回退，不扫描、回填或总结旧 Task/历史聊天。开发数据库可为验收重建；新建 Task 作为主要测试对象。
 - revisions append-only；用户写入必须 CAS。重复 `(task_id, source_run_id)` 更新幂等；所有 Run/Task/Workspace 归属在 Main 校验。
 - 必测：迁移可在当前 schema 上原子新增结构、连续打开幂等、外键、非法 JSON/枚举、CAS 冲突、事务故障回滚。验证迁移不扫描或回填历史内容；无需证明旧业务数据保留。
+- 完成证据：共享 `TaskContinuityBrief` / revision Schema 严格校验；Repository 对 SQLite JSON 做 Schema 与 SHA-256 校验，损坏时报错；CAS、助手 Run 更新幂等与用户修订来源链分开；Brief 内 Run 来源均校验同 Task 且终态。Task 初始化失败与迁移 DDL 失败均证明事务回滚；应用迁移未扫描/回填旧 Task 或消息。
+- 最终验证：目标测试 4 文件/113 项；`npm run typecheck`、改动文件 lint/Prettier 检查、`git diff --check` 通过。`npm run verify` 退出 0（functional 212 文件/1,886 项，heavy 8 文件/167 项，build 成功，ui:check 58 组通过）。实际应用数据库 v38 保持未修改，迁移号将随应用正常启动升至 v39。
 
 ### TC02：Run 快照和上下文装配
 

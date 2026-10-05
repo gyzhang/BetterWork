@@ -10,6 +10,7 @@ import {
 
 import type { AppStore } from '../persistence';
 import type { RunService } from './run-service';
+import { TaskContinuityService } from './task-continuity-service';
 
 export interface ScheduleTaskDraft {
   readonly occurrence: ScheduleOccurrence;
@@ -64,12 +65,14 @@ const timestampIsValid = (value: number): boolean => Number.isSafeInteger(value)
 /** T3 事务内创建可恢复的独立 Task 草稿；不启动 Run，也不改写 ExpertRevision。 */
 export class ScheduleExecutionService {
   private readonly now: () => number;
+  private readonly taskContinuity: TaskContinuityService;
 
   constructor(
     private readonly store: AppStore,
     options: ScheduleExecutionServiceOptions = {},
   ) {
     this.now = options.now ?? Date.now;
+    this.taskContinuity = new TaskContinuityService(store);
   }
 
   prepareTaskDraft(occurrenceId: string): ScheduleTaskDraft {
@@ -119,7 +122,7 @@ export class ScheduleExecutionService {
         );
       }
 
-      const created = this.store.tasks.create(
+      const created = this.taskContinuity.createTask(
         workspace.id,
         titleFor(config.name, occurrence.period),
         goalFor(occurrence.period, snapshot, config.requirements),
