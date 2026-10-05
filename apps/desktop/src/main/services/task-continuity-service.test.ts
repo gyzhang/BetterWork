@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -75,5 +76,107 @@ describe('TaskContinuityService (TC01)', () => {
       count: 0,
     });
     raw.close();
+  });
+
+  it('records an idempotent deterministic completed Run update and exact ArtifactVersions', () => {
+    const harness = openHarness();
+    const workspace = harness.store.workspaces.getOrCreate('/tmp/tc-progress', 'TC progress');
+    const service = new TaskContinuityService(harness.store);
+    const created = service.createTask(workspace.id, '持续分析', '请分析经营结果。');
+    harness.store.runs.create({
+      id: 'tc-progress-run',
+      taskId: created.task.id,
+      sessionId: created.sessionId,
+      prompt: '整理本期经营结果',
+      status: 'completed',
+      createdAt: 1,
+      completedAt: 2,
+    });
+    const artifact = harness.store.artifacts.saveMarkdown(
+      {
+        taskId: created.task.id,
+        origin: 'assistant-run',
+        runId: 'tc-progress-run',
+        title: '本轮成果',
+        content: '合成内容',
+      },
+      'model',
+    );
+
+    const first = service.recordCompletedRunProgress({
+      taskId: created.task.id,
+      runId: 'tc-progress-run',
+      expectedRevision: 1,
+    });
+    const retry = service.recordCompletedRunProgress({
+      taskId: created.task.id,
+      runId: 'tc-progress-run',
+      expectedRevision: 1,
+    });
+
+    expect(first).toEqual(retry);
+    expect(first).toMatchObject({
+      revision: 2,
+      sourceKind: 'assistant-summary',
+      sourceRunId: 'tc-progress-run',
+      brief: {
+        objective: { text: '请分析经营结果。', source: 'task-goal' },
+        activeRequirements: [],
+        progress: {
+          authoredBy: 'assistant-summary',
+          status: 'in-progress',
+          completedActions: ['Run tc-progress-run 已进入 completed 终态。'],
+          blockers: [],
+          artifactVersionIds: [artifact.currentVersionId],
+          sourceRunId: 'tc-progress-run',
+          sourcePromptHash: createHash('sha256').update('整理本期经营结果').digest('hex'),
+        },
+      },
+    });
+  });
+
+  it('preserves user-edited progress when a completed Run is recorded', () => {
+    const harness = openHarness();
+    const workspace = harness.store.workspaces.getOrCreate(
+      '/tmp/tc-user-progress',
+      'TC user progress',
+    );
+    const service = new TaskContinuityService(harness.store);
+    const created = service.createTask(workspace.id, '持续分析', '请分析经营结果。');
+    const initial = harness.store.taskContinuity.getLatest(created.task.id);
+    if (!initial) throw new Error('New Task is missing its initial continuity revision');
+    const edited = harness.store.taskContinuity.append({
+      taskId: created.task.id,
+      expectedRevision: initial.revision,
+      sourceKind: 'user-edit',
+      brief: {
+        ...initial.brief,
+        progress: {
+          authoredBy: 'user-edit',
+          status: 'awaiting-user',
+          completedActions: [],
+          blockers: ['等待用户确认下一步'],
+          artifactVersionIds: [],
+        },
+      },
+    });
+    harness.store.runs.create({
+      id: 'tc-user-progress-run',
+      taskId: created.task.id,
+      sessionId: created.sessionId,
+      prompt: '继续分析',
+      status: 'completed',
+      createdAt: 1,
+      completedAt: 2,
+    });
+
+    expect(
+      service.recordCompletedRunProgress({
+        taskId: created.task.id,
+        runId: 'tc-user-progress-run',
+        expectedRevision: edited.revision,
+      }),
+    ).toEqual(edited);
+    expect(harness.store.taskContinuity.getLatest(created.task.id)).toEqual(edited);
   });
 });

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -60,7 +61,7 @@ const assistantBrief = (sourceRunId: string): TaskContinuityBrief => ({
     blockers: ['等待补充期间收入'],
     artifactVersionIds: [],
     sourceRunId,
-    sourcePromptHash: 'a'.repeat(64),
+    sourcePromptHash: createHash('sha256').update('检查本期现金流').digest('hex'),
   },
 });
 
@@ -137,7 +138,7 @@ describe('TaskContinuityRepository (TC01)', () => {
       taskId: firstTask.task.id,
       sessionId: firstTask.sessionId,
       prompt: '检查本期现金流',
-      status: 'failed',
+      status: 'completed',
       createdAt: 1,
       completedAt: 2,
     });
@@ -173,7 +174,7 @@ describe('TaskContinuityRepository (TC01)', () => {
           blockers: ['等待补充期间收入'],
           artifactVersionIds: [],
           sourceRunId: 'tc-source-run',
-          sourcePromptHash: 'a'.repeat(64),
+          sourcePromptHash: createHash('sha256').update('检查本期现金流').digest('hex'),
         },
       },
       sourceKind: 'user-edit',
@@ -195,7 +196,7 @@ describe('TaskContinuityRepository (TC01)', () => {
               blockers: ['改动后不能复用相同幂等键'],
               artifactVersionIds: [],
               sourceRunId: 'tc-source-run',
-              sourcePromptHash: 'a'.repeat(64),
+              sourcePromptHash: createHash('sha256').update('检查本期现金流').digest('hex'),
             },
           },
           sourceKind: 'assistant-summary',
@@ -216,7 +217,12 @@ describe('TaskContinuityRepository (TC01)', () => {
                 id: 'foreign-run-requirement',
                 text: '不可引用另一个 Task 的 Run',
                 authoredBy: 'assistant-summary',
-                sources: [{ runId: 'tc-source-run', promptHash: 'a'.repeat(64) }],
+                sources: [
+                  {
+                    runId: 'tc-source-run',
+                    promptHash: createHash('sha256').update('检查本期现金流').digest('hex'),
+                  },
+                ],
               },
             ],
           },
@@ -289,6 +295,107 @@ describe('TaskContinuityRepository (TC01)', () => {
     expect(
       continuityErrorOf(() => harness.store.taskContinuity.getLatest(hashMismatchTask.task.id)),
     ).toMatchObject({ code: 'corrupt-data' });
+  });
+
+  it('validates completed Run prompt hashes and exact Task-owned ArtifactVersions', () => {
+    const harness = openHarness();
+    const firstTask = createTask(harness, '进度来源任务', '完成持续分析');
+    const secondTask = createTask(harness, '进度成果归属', '独立目标');
+    harness.store.runs.create({
+      id: 'tc-completed-progress-run',
+      taskId: firstTask.task.id,
+      sessionId: firstTask.sessionId,
+      prompt: '检查本期现金流',
+      status: 'completed',
+      createdAt: 1,
+      completedAt: 2,
+    });
+    harness.store.runs.create({
+      id: 'tc-foreign-progress-run',
+      taskId: secondTask.task.id,
+      sessionId: secondTask.sessionId,
+      prompt: '生成另一 Task 的成果',
+      status: 'completed',
+      createdAt: 1,
+      completedAt: 2,
+    });
+    const foreignArtifact = harness.store.artifacts.saveMarkdown(
+      {
+        taskId: secondTask.task.id,
+        origin: 'assistant-run',
+        runId: 'tc-foreign-progress-run',
+        title: '其他任务成果',
+        content: '合成内容',
+      },
+      'model',
+    );
+
+    const validBrief = assistantBrief('tc-completed-progress-run');
+    const validProgress = validBrief.progress;
+    if (!validProgress) throw new Error('Test Brief is missing assistant progress');
+    const wrongHash = {
+      ...validBrief,
+      progress: {
+        ...validProgress,
+        sourcePromptHash: 'a'.repeat(64),
+      },
+    };
+    expect(
+      continuityErrorOf(() =>
+        harness.store.taskContinuity.append({
+          taskId: firstTask.task.id,
+          expectedRevision: 1,
+          brief: wrongHash,
+          sourceKind: 'assistant-summary',
+          sourceRunId: 'tc-completed-progress-run',
+        }),
+      ).code,
+    ).toBe('source-prompt-hash-mismatch');
+
+    for (const status of ['failed', 'cancelled'] as const) {
+      const runId = `tc-${status}-progress-run`;
+      harness.store.runs.create({
+        id: runId,
+        taskId: firstTask.task.id,
+        sessionId: firstTask.sessionId,
+        prompt: '检查本期现金流',
+        status,
+        createdAt: 3,
+        completedAt: 4,
+      });
+      expect(
+        continuityErrorOf(() =>
+          harness.store.taskContinuity.append({
+            taskId: firstTask.task.id,
+            expectedRevision: 1,
+            brief: assistantBrief(runId),
+            sourceKind: 'assistant-summary',
+            sourceRunId: runId,
+          }),
+        ).code,
+      ).toBe('source-run-not-completed');
+    }
+
+    for (const versionId of ['missing-version', foreignArtifact.currentVersionId]) {
+      const brief = {
+        ...validBrief,
+        progress: {
+          ...validProgress,
+          artifactVersionIds: [versionId],
+        },
+      };
+      expect(
+        continuityErrorOf(() =>
+          harness.store.taskContinuity.append({
+            taskId: firstTask.task.id,
+            expectedRevision: 1,
+            brief,
+            sourceKind: 'assistant-summary',
+            sourceRunId: 'tc-completed-progress-run',
+          }),
+        ).code,
+      ).toBe('artifact-version-unavailable');
+    }
   });
 
   it('relies on SQLite uniqueness, enum, JSON and foreign-key constraints for persisted revisions', () => {

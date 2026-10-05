@@ -67,6 +67,9 @@ export type TaskContinuityErrorCode =
   | 'invalid-revision-source'
   | 'run-task-mismatch'
   | 'revision-idempotency-conflict'
+  | 'source-prompt-hash-mismatch'
+  | 'artifact-version-unavailable'
+  | 'source-run-not-completed'
   | 'run-context-not-found'
   | 'run-context-already-prepared'
   | 'corrupt-data';
@@ -445,6 +448,37 @@ export class TaskContinuityRepository {
         this.assertTerminalRunBelongsToTask(sourceRunId, input.taskId);
       }
 
+      this.assertProgressArtifactsBelongToTask(brief, input.taskId);
+      this.assertRequirementPromptHashesMatch(brief);
+      if (sourceKind === 'assistant-summary' && input.sourceRunId !== undefined) {
+        const sourceRun = this.getRunSource(input.sourceRunId, input.taskId);
+        if (sourceRun.status !== 'completed') {
+          throw new TaskContinuityError(
+            'source-run-not-completed',
+            '只有 completed Run 可以产生助手进度。',
+          );
+        }
+        const progress = brief.progress;
+        if (
+          progress?.authoredBy !== 'assistant-summary' ||
+          progress.sourceRunId !== input.sourceRunId ||
+          progress.sourcePromptHash !== this.promptHash(sourceRun.prompt)
+        ) {
+          throw new TaskContinuityError(
+            'source-prompt-hash-mismatch',
+            '助手进度必须绑定来源 Run 的精确 prompt hash。',
+          );
+        }
+        for (const versionId of progress.artifactVersionIds) {
+          if (this.getArtifactVersionSourceRunId(versionId) !== input.sourceRunId) {
+            throw new TaskContinuityError(
+              'artifact-version-unavailable',
+              '助手进度只能列出由来源 Run 登记的 ArtifactVersion。',
+            );
+          }
+        }
+      }
+
       if (sourceKind === 'assistant-summary' && input.sourceRunId !== undefined) {
         const existing = this.db
           .prepare(
@@ -473,6 +507,17 @@ export class TaskContinuityRepository {
           'Task 尚无初始 Task Continuity revision。',
         );
       }
+      if (
+        sourceKind === 'assistant-summary' &&
+        (JSON.stringify(brief.objective) !== JSON.stringify(current.brief.objective) ||
+          JSON.stringify(brief.activeRequirements) !==
+            JSON.stringify(current.brief.activeRequirements))
+      ) {
+        throw new TaskContinuityError(
+          'invalid-revision-source',
+          '确定性 Run 进度更新不能改写 Task 目标或活跃要求。',
+        );
+      }
       if (current.revision !== input.expectedRevision) {
         throw new TaskContinuityRevisionConflictError(input.expectedRevision, current.revision);
       }
@@ -495,18 +540,67 @@ export class TaskContinuityRepository {
   }
 
   private assertTerminalRunBelongsToTask(runId: string, taskId: string): void {
-    const run = this.db
-      .prepare('SELECT status FROM runs WHERE id = ? AND task_id = ?')
-      .get(runId, taskId) as RunOwnerRow | undefined;
-    if (!run) {
-      throw new TaskContinuityError('run-task-mismatch', '来源 Run 不存在或不属于该 Task。');
-    }
+    const run = this.getRunSource(runId, taskId);
     if (!['completed', 'failed', 'cancelled'].includes(run.status)) {
       throw new TaskContinuityError(
         'invalid-revision-source',
         'Task Continuity revision 只能引用已进入终态的 Run。',
       );
     }
+  }
+
+  private getRunSource(runId: string, taskId: string): { status: string; prompt: string } {
+    const run = this.db
+      .prepare('SELECT status, prompt FROM runs WHERE id = ? AND task_id = ?')
+      .get(runId, taskId) as (RunOwnerRow & { prompt: string }) | undefined;
+    if (!run) {
+      throw new TaskContinuityError('run-task-mismatch', '来源 Run 不存在或不属于该 Task。');
+    }
+    return run;
+  }
+
+  private promptHash(prompt: string): string {
+    return createHash('sha256').update(prompt).digest('hex');
+  }
+
+  private assertRequirementPromptHashesMatch(brief: TaskContinuityBrief): void {
+    for (const requirement of brief.activeRequirements) {
+      for (const source of requirement.sources ?? []) {
+        const run = this.db.prepare('SELECT prompt FROM runs WHERE id = ?').get(source.runId) as
+          { prompt: string } | undefined;
+        if (!run || this.promptHash(run.prompt) !== source.promptHash) {
+          throw new TaskContinuityError(
+            'source-prompt-hash-mismatch',
+            '活跃要求的来源 prompt hash 与持久化 Run 不匹配。',
+          );
+        }
+      }
+    }
+  }
+
+  private assertProgressArtifactsBelongToTask(brief: TaskContinuityBrief, taskId: string): void {
+    for (const versionId of brief.progress?.artifactVersionIds ?? []) {
+      const row = this.db
+        .prepare(
+          `SELECT a.task_id FROM artifact_versions v
+             JOIN artifacts a ON a.id = v.artifact_id
+            WHERE v.id = ?`,
+        )
+        .get(versionId) as { task_id: string } | undefined;
+      if (!row || row.task_id !== taskId) {
+        throw new TaskContinuityError(
+          'artifact-version-unavailable',
+          'Task Continuity 进度引用的 ArtifactVersion 不存在或不属于当前 Task。',
+        );
+      }
+    }
+  }
+
+  private getArtifactVersionSourceRunId(versionId: string): string | undefined {
+    const row = this.db
+      .prepare('SELECT source_run_id FROM artifact_versions WHERE id = ?')
+      .get(versionId) as { source_run_id: string } | undefined;
+    return row?.source_run_id || undefined;
   }
 
   private insert(revision: TaskContinuityRevision): void {

@@ -113,6 +113,8 @@ import {
   createTaskContinuityContextPlan,
   type TaskContinuityContextPlan,
 } from './task-continuity-context';
+import { continuityProgressDependenciesAreCurrent } from './task-continuity-progress';
+import { TaskContinuityService } from './task-continuity-service';
 import type { TaskMaterialService } from './task-material-service';
 import type { ToolchainSnapshotService } from './toolchain-snapshot-service';
 
@@ -870,7 +872,10 @@ export class RunService {
         );
       }
       this.publish(terminalEvent);
-      if (terminalEvent.type === 'run.completed') this.requestRunExtraction(runId);
+      if (terminalEvent.type === 'run.completed') {
+        await this.syncCompletedRunContinuityProgress(runId, input.taskId);
+        this.requestRunExtraction(runId);
+      }
     } catch (error) {
       let message = describeError(error);
       try {
@@ -960,8 +965,28 @@ export class RunService {
     let progress: TaskContinuityBrief['progress'];
     const candidateProgress = revision.brief.progress;
     if (candidateProgress?.authoredBy === 'assistant-summary') {
-      // TC03 才会复核材料/记忆依赖闭包；在此之前不把助手生成进度发给模型。
-      omissions.add('assistant-progress-dependency-unverified');
+      const sourceRunId = candidateProgress.sourceRunId;
+      const sourcePromptHash = candidateProgress.sourcePromptHash;
+      const artifactsMatch = candidateProgress.artifactVersionIds.every(
+        (versionId) =>
+          this.store.artifacts.versionBelongsToTask(versionId, taskId) &&
+          this.store.artifacts.getVersionSourceRunId(versionId) === sourceRunId,
+      );
+      if (
+        sourceRunId === undefined ||
+        sourcePromptHash === undefined ||
+        !promptHashMatches(sourceRunId, sourcePromptHash)
+      ) {
+        omissions.add('progress-source-unavailable');
+      } else if (!artifactsMatch) {
+        omissions.add('progress-artifact-unavailable');
+      } else if (
+        !continuityProgressDependenciesAreCurrent(this.store, sourceRunId, taskId, currentRunId)
+      ) {
+        omissions.add('assistant-progress-dependency-unverified');
+      } else {
+        progress = candidateProgress;
+      }
     } else if (candidateProgress) {
       const sourceValid =
         candidateProgress.sourceRunId === undefined ||
@@ -1001,6 +1026,44 @@ export class RunService {
       omissions: [...omissions],
     });
     return { revisionId: revision.id, plan };
+  }
+
+  /** Run 终态已经发布后单独尝试更新；任何连续性写入失败都不能改写 Run 终态。 */
+  private async syncCompletedRunContinuityProgress(runId: string, taskId: string): Promise<void> {
+    try {
+      const sourceSnapshot = this.store.runContextSnapshots.get(runId);
+      if (
+        !continuityProgressDependenciesAreCurrent(this.store, runId, taskId, runId) ||
+        (sourceSnapshot && sourceSnapshot.materials.length > 0 && !this.taskMaterials)
+      ) {
+        console.warn(
+          `Task Continuity progress for completed Run ${runId} was omitted because its source dependencies are not currently verifiable.`,
+        );
+        return;
+      }
+      if (sourceSnapshot && sourceSnapshot.materials.length > 0 && this.taskMaterials) {
+        try {
+          await this.taskMaterials.validateSelections(taskId, sourceSnapshot.materials);
+        } catch {
+          console.warn(
+            `Task Continuity progress for completed Run ${runId} was omitted because a material source is no longer available.`,
+          );
+          return;
+        }
+      }
+      const latest = this.store.taskContinuity.getLatest(taskId);
+      if (!latest) throw new Error('Task is missing its initial continuity revision');
+      if (latest.brief.progress?.authoredBy === 'user-edit') return;
+      new TaskContinuityService(this.store).recordCompletedRunProgress({
+        taskId,
+        runId,
+        expectedRevision: latest.revision,
+      });
+    } catch (error) {
+      console.warn(
+        `Task Continuity progress for completed Run ${runId} was not synchronized: ${describeError(error)}`,
+      );
+    }
   }
 
   private buildPreviousMessages(

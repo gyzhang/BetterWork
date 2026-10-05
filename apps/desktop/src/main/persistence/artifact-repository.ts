@@ -509,6 +509,19 @@ export class ArtifactRepository {
     return rows.map(toVersionSummary);
   }
 
+  /** 返回某个 Run 实际登记的精确版本，Task Continuity 不把其他 Run 的成果当成本轮结果。 */
+  listVersionIdsBySourceRun(taskId: string, runId: string): string[] {
+    const rows = this.db
+      .prepare(
+        `SELECT v.id FROM artifact_versions v
+           JOIN artifacts a ON a.id = v.artifact_id
+          WHERE a.task_id = ? AND v.source_run_id = ?
+          ORDER BY v.created_at ASC, v.rowid ASC`,
+      )
+      .all(taskId, runId) as Array<{ id: string }>;
+    return rows.map((row) => row.id);
+  }
+
   getVersionDetail(id: string): ArtifactVersionDetail | undefined {
     const row = this.db
       .prepare(

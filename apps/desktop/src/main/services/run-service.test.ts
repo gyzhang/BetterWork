@@ -503,6 +503,7 @@ describe('RunService', () => {
       });
       await waitForCompletion(fixture, failedRunId);
       expect(statusOf(fixture, failedRunId)).toBe('failed');
+      expect(fixture.store.taskContinuity.getLatest(fixture.taskId)?.revision).toBe(1);
       const artifact = fixture.store.artifacts.saveMarkdown({
         taskId: fixture.taskId,
         origin: 'user-edit',
@@ -515,6 +516,8 @@ describe('RunService', () => {
         sessionId: fixture.sessionId,
         prompt: '继续',
       });
+      const preparedRevision = fixture.store.taskContinuity.getLatest(fixture.taskId);
+      if (!preparedRevision) throw new Error('Task continuity revision is missing');
       await waitForCompletion(fixture, continuedRunId);
       expect(statusOf(fixture, continuedRunId)).toBe('completed');
 
@@ -541,9 +544,7 @@ describe('RunService', () => {
 
       const persisted = fixture.store.taskContinuity.getRunContext(continuedRunId);
       expect(persisted?.firstProviderRequestAt).toBeDefined();
-      expect(persisted?.brief).toEqual(
-        fixture.store.taskContinuity.getLatest(fixture.taskId)?.brief,
-      );
+      expect(persisted?.brief).toEqual(preparedRevision.brief);
     } finally {
       captured.restore();
     }
@@ -570,6 +571,113 @@ describe('RunService', () => {
       }
       const context = fixture.store.taskContinuity.getRunContext(runId);
       expect(context?.firstProviderRequestAt).toBeDefined();
+    } finally {
+      captured.restore();
+    }
+  });
+
+  it('records deterministic completed progress and leaves Run completed when the Brief write fails', async () => {
+    const fixture = await createFixture();
+    const service = createService(fixture);
+    const originalAppend = fixture.store.taskContinuity.append.bind(fixture.store.taskContinuity);
+    const appendFailure = vi
+      .spyOn(fixture.store.taskContinuity, 'append')
+      .mockImplementation((input) => {
+        if (input.sourceKind === 'assistant-summary') {
+          throw new Error('synthetic continuity write failure');
+        }
+        return originalAppend(input);
+      });
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const runId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '整理一份本期分析',
+      });
+      await waitForCompletion(fixture, runId);
+
+      expect(statusOf(fixture, runId)).toBe('completed');
+      expect(fixture.store.runs.getLatestEvent(runId)).toMatchObject({ type: 'run.completed' });
+      expect(fixture.store.taskContinuity.getLatest(fixture.taskId)?.revision).toBe(1);
+      expect(warning).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `Task Continuity progress for completed Run ${runId} was not synchronized`,
+        ),
+      );
+    } finally {
+      appendFailure.mockRestore();
+      warning.mockRestore();
+    }
+  });
+
+  it('filters completed progress when its source memory is excluded from the next Run', async () => {
+    const fixture = await createFixture();
+    const service = createService(fixture);
+    const captured = captureFakeProviderRequests();
+    try {
+      const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+      if (!workspaceId) throw new Error('workspace missing');
+      const memory = await confirmedMemory(
+        fixture,
+        { kind: 'workspace', workspaceId },
+        '当前工作区的经营分析口径。',
+      );
+      const firstContext = fixture.store.taskContexts.save(fixture.taskId, {
+        executor: { kind: 'general' },
+        skillBindings: [],
+      });
+      const sourceRunId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '整理本月经营分析。',
+        taskContextRevisionId: firstContext.id,
+        expectedTaskContextRevision: firstContext.revision,
+      });
+      await waitForCompletion(fixture, sourceRunId);
+      const sourceTerminal = fixture.store.runs.getLatestEvent(sourceRunId);
+      if (sourceTerminal?.type === 'run.failed') throw new Error(sourceTerminal.error);
+      expect(sourceTerminal).toMatchObject({ type: 'run.completed' });
+      expect(
+        fixture.store.runMemoryContexts.get(sourceRunId)?.memoryDependencyUnion,
+      ).toContainEqual(
+        expect.objectContaining({ memoryId: memory.id, revisionId: memory.revisionId }),
+      );
+      await vi.waitFor(() =>
+        expect(
+          fixture.store.taskContinuity.getLatest(fixture.taskId)?.brief.progress?.sourceRunId,
+        ).toBe(sourceRunId),
+      );
+
+      const currentContext = fixture.store.taskContexts.save(
+        fixture.taskId,
+        {
+          executor: { kind: 'general' },
+          skillBindings: [],
+          materials: [],
+          excludedMemoryIds: [memory.id],
+        },
+        firstContext.revision,
+      );
+      const continuationRunId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '继续整理本月经营分析。',
+        taskContextRevisionId: currentContext.id,
+        expectedTaskContextRevision: currentContext.revision,
+      });
+      await waitForCompletion(fixture, continuationRunId);
+
+      const frozen = fixture.store.taskContinuity.getRunContext(continuationRunId);
+      expect(frozen?.brief.progress).toBeUndefined();
+      expect(frozen?.omissions).toContain('assistant-progress-dependency-unverified');
+      const request = captured.requests.find(
+        (messages) => messages.at(-1)?.content === '继续整理本月经营分析。',
+      );
+      const briefMessage = request?.find((message) =>
+        message.content.startsWith('【TASK_CONTINUITY_BRIEF_V1】'),
+      );
+      expect(briefMessage?.content).not.toContain(sourceRunId);
     } finally {
       captured.restore();
     }
@@ -2094,6 +2202,7 @@ describe('RunService', () => {
     expect(window.notificationEventTypes()).toEqual([]);
     // 取消是用户主动行为，不产生通知
     expect(fixture.store.notifications.list()).toEqual([]);
+    expect(fixture.store.taskContinuity.getLatest(fixture.taskId)?.revision).toBe(1);
 
     expect(service.isActive(runId)).toBe(false);
     expect(service.cancel(runId)).toBe(false);
