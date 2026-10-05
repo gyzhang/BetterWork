@@ -4859,6 +4859,11 @@ describe('提交与推送门禁纪律', () => {
     ).toContain('workflow_dispatch');
     expect(workflow, '远端门禁必须跑在 darwin 上（ADR-0036）').toMatch(/runs-on:\s*macos/u);
     expect(workflow, '远端不许把它改成只跑某几步').toContain('npm run verify');
+    const qualityJob = workflow.split('  quality:')[1] ?? '';
+    expect(
+      qualityJob,
+      'drift-check 读取 origin/main..HEAD，完整门禁必须取到远端分支与历史',
+    ).toMatch(/fetch-depth:\s*0/u);
     expect(workflow, 'main 不得通过 push 事件绕过 PR Gate').not.toMatch(/^ {2}push:/mu);
     expect(workflow, '必须有稳定的 PR Gate 汇总分支验证与文档验证').toContain('name: PR Gate');
     expect(workflow, '纯 Markdown PR 必须只走文档门禁').toContain('npm run docs:check');

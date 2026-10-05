@@ -46,7 +46,10 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 15
     steps:
+      # verify 包含 drift-check 的 CLI 回归；它按 origin/main..HEAD 读取本批提交，PR checkout 必须取到远端分支。
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
