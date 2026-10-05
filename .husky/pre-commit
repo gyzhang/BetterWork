@@ -1,9 +1,2 @@
-# 提交前的最低一次机器检查（docs/12 §1）。
-# 完整门禁是 `npm run verify`，这里先跑快的那几步：lint 11s、format:check 3s、typecheck 4s。
-# 剩下的 test / build / ui:check 全量在 pre-push 里跑——护栏「本地钩子必须覆盖 verify 的每一步」
-# 钉住这个对应关系，谁删一行都会红，文档里那句「提交前必须跑 verify」就不再只是嘱咐。
-# 判据的名字与 standards/coding-standard.test.ts 里的 it() 标题一致：本地钩子必须覆盖 verify 的完整步骤。
-npm run lint
-npm run format:check
-npm run typecheck
-git diff --cached --check
+# 只检查暂存范围；完整门禁在推送前对最终提交执行（docs/12 §1）。
+node scripts/pre-commit-check.mjs

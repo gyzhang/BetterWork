@@ -66,11 +66,15 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 
 开发应用只能通过 `bash scripts/dev-start.sh` 启动；它会准确停止旧的 BetterWork 开发实例并写入 PID。停止使用 `bash scripts/dev-stop.sh`，日志在 `/tmp/betterwork-dev.log`。不要绕开脚本直接启动 Electron，也不要用宽泛的进程匹配方式杀掉用户的其他 Electron 应用。
 
-提交前唯一门禁：
+提交与推送门禁：
 
-    npm run verify     # lint + format:check + typecheck + test + build + ui:check
+    # git commit 自动按暂存文件执行 diff、格式、lint、类型或文档快检
+    npm run docs:check # 文档结构、门禁摘要与规则链接的一致性快检
+    npm run verify     # lint + format:check + typecheck + test + build + ui:check；代码推送时 pre-push 自动执行一次
     npm run ui:check   # 组件矩阵 + 成果/知识/专家/记忆生产页面合成关键路径 + 真实 IPC/临时 SQLite 离线应用旅程与进程恢复；边界见 docs/10 §10.1.3
     npm run bench      # 计时基准档（串行）：跑完规模/性能卡或专门核查时执行，不在提交门禁里
+
+正常的代码提交后推送流程无需手动再运行完整 `verify`：pre-push 对当前干净 `HEAD` 自动执行一次；一次推送含多个代码提交也只执行一次。纯 Markdown 推送只跑 `git diff --check` 与 `docs:check`。如果人工先跑完整 `verify`，pre-push 仍会为最终推送范围再检查一次。GitHub Actions 推送后仍对本次 SHA 运行完整门禁，作为远端证据。
 
 离线人工走查的前置对象由 AI 准备：`npm run ui:check -- --prepare-acceptance` 在独立目录运行生产 App/Preload/IPC/临时 SQLite，完成既有旅程与前置样本后打开合成窗口；关闭保留库，按输出目录用 `UI_RENDER_OUTPUT_DIR="原输出目录" npm run ui:check -- --reopen-acceptance` 重开。它不启停产品 dev 应用，模型/脚本为离线替身，不代表安装入口或真实模型验收。自动化回归用 `--acceptance-smoke` 验证准备、关闭、新 PID 重开；人类操作与结果仍只记 [MI 原清单](development/memory-mi10-checklist.md)，不代签、不另造任务板。
 
@@ -188,7 +192,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 以下能力符合长期方向，但**不是自动授权的下一步**：Embedding 与混合检索、带 Citation 的研究流与大纲确认、网页正文 Fetch、DOCX 报告、Excel 分析、PPT、长期 Memory、Expert/Skill/Kit。开始其中任一项前，应先与项目负责人确认优先级；再更新 [MVP 与路线图](07-mvp-and-roadmap.md)，并在涉及跨模块关系或关键技术选择时新增 ADR。
 ## 8. 变更与提交纪律
 
-每次开始先执行 `git status --short`。工作树并不一定总是干净；既有改动属于用户，不能删除、覆盖或夹带进无关提交。多个会话并行改本仓库时，提交前要重新核对 `git status` 与 `git diff`，追加共享文档（如 `docs/logs/` 当天日志）前先重读文件末尾。每个提交保持聚焦，提交前完成第 3 节的验证，并将必要的测试、文档和 ADR 与实现放在同一变更中。
+每次开始先执行 `git status --short`。工作树并不一定总是干净；既有改动属于用户，不能删除、覆盖或夹带进无关提交。共享 checkout 与暂存区同一时刻只允许一个写任务；并行会话可以只读分析，写任务必须串行。提交前核对 `git status` 与 `git diff`，追加共享文档（如 `docs/logs/` 当天日志）前先重读文件末尾。每个提交保持聚焦，必要的测试、文档和 ADR 与实现放在同一变更中；验证层级按第 3 节执行，不逐提交手动重复完整 `verify`。
 
 禁止提交 `.env`、API Key、数据库、构建产物、用户资料或本地工作文件。遇到产品范围、数据迁移策略或安全边界不明确时，先停在文档/ADR 层澄清，不要把猜测固化为实现。
 

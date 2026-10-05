@@ -17,11 +17,14 @@ description: 启动应用、停止应用、调试、运行开发环境、构建�
 - `ui:check` 的独立合成 Electron 测试进程由验证脚本管理，不是产品开发实例。（docs/12 §9）
 - 生产构建存在来自 Zod 的 Rollup `@PURE` 注释已知警告；构建成功即通过，**不得因此作无关依赖升级**。（docs/11 §3）
 
-## 提交前最低验证
+## 提交与推送验证
 
-    npm run verify        # lint + format:check + typecheck + test + build + ui:check，任一失败即中止
+提交时由 pre-commit 对暂存文件做差异空白、定向 ESLint / Prettier、TypeScript 类型或文档结构快检。代码推送时 pre-push 对最终干净 `HEAD` 自动执行一次完整 `npm run verify`（lint + format:check + typecheck + test + build + ui:check）；纯 Markdown 推送只执行 `git diff --check` 与 `npm run docs:check`。正常提交后推送不用先手动重复跑完整 verify。
 
-这句话现在有机器强制：`.husky/pre-commit` 跑 lint、format:check、typecheck 与 `git diff --cached --check`，`.husky/pre-push` 跑完整 verify。对应关系由护栏「本地钩子必须覆盖 verify 的完整步骤」钉住——删一行钩子或改了门禁步骤忘了同步，都会在 `npm test` 里红。（docs/12 §1）
+    npm run verify        # 完整门禁；若随后推送，pre-push 仍会按最终提交范围执行
+    npm run docs:check    # 文档结构、摘要与规则链接一致性
+
+门禁范围现在有机器强制：`.husky/pre-commit` 按暂存路径运行 `scripts/pre-commit-check.mjs`，`.husky/pre-push` 按推送差异运行 `scripts/pre-push-check.mjs`。护栏「本地钩子按暂存与推送范围执行相应门禁」及两个脚本的夹具测试锁住快检选择、纯文档通道、最终 HEAD 与失败退出语义。（docs/12 §1）
 
 需要单独定位时：
 
@@ -42,6 +45,7 @@ description: 启动应用、停止应用、调试、运行开发环境、构建�
 
 - 每次开始先 `git status --short`；工作树中的既有改动属于用户，不得删除、覆盖或夹带进无关提交。（docs/11 §8、AGENTS.md §8）
 - 每个提交聚焦一件事；必要的测试、文档与 ADR 和实现放在同一变更中。（AGENTS.md §8、docs/11 §8）
+- 共享 checkout 和暂存区同一时刻只允许一个写任务；并行任务先只读分析，再串行修改。（docs/12 §1.1、docs/11 §8）
 - 禁止提交：`.env`、API Key、SQLite/数据库文件、构建产物、用户资料、本地工作文件。（AGENTS.md §7、docs/11 §8）
 - 产品范围、数据迁移策略或安全边界不明确时，先停在文档 / ADR 层澄清，不把猜测固化为实现。（docs/11 §8、AGENTS.md §8）
 

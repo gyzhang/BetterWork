@@ -4765,7 +4765,7 @@ describe('计时基准车道纪律', () => {
 });
 
 /**
- * 本地钩子与 `npm run verify` 的对应关系（docs/12 §1）。
+ * 本地提交/推送钩子的范围分工（docs/12 §1）。
  *
  * 2026-10-02 审计实测：Actions 最近 30 次运行 28 红 2 绿，且全部是 `push` 事件——四处文档都写着
  * 「提交前跑 verify」，机器上却只有 lint + typecheck，于是红全部发生在 main 已经坏了之后。
@@ -4776,33 +4776,47 @@ describe('计时基准车道纪律', () => {
 describe('提交与推送门禁纪律', () => {
   const hookFiles = ['.husky/pre-commit', '.husky/pre-push'] as const;
 
-  it('本地钩子必须覆盖 verify 的完整步骤', () => {
+  it('本地钩子按暂存与推送范围执行相应门禁', () => {
     const scripts = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
     const pipeline = (scripts.scripts.verify ?? '')
       .split(' && ')
       .map((command) => command.replace(/^npm (?:run )?/u, '').trim())
       .filter((step) => step !== '');
     expect(pipeline).toEqual(['lint', 'format:check', 'typecheck', 'test', 'build', 'ui:check']);
-
-    for (const hookFile of hookFiles) {
-      expect(REPO_FILES, `${hookFile} 不存在，本条护栏已空跑`).toContain(hookFile);
+    expect(scripts.scripts['docs:check']).toContain('standards/coding-standard.test.ts');
+    for (const file of [
+      '.husky/pre-commit',
+      '.husky/pre-push',
+      'scripts/pre-commit-check.mjs',
+      'scripts/pre-push-check.mjs',
+      'scripts/pre-commit-check.test.ts',
+      'scripts/pre-push.test.ts',
+    ]) {
+      expect(REPO_FILES, `${file} 不存在，本条护栏已空跑`).toContain(file);
     }
 
-    const covered = new Set<string>();
-    for (const hookFile of hookFiles) {
-      for (const match of read(hookFile).matchAll(/^npm (?:run )?([\w:]+)/gmu)) {
-        const step = match[1] ?? '';
-        // `npm run verify` 展开成它自己的全部步骤：只写一行 verify 也算覆盖六步，
-        // 但反过来「pre-commit 里补一条 lint 就宣称齐了」骗不过这条判据。
-        if (step === 'verify') for (const inner of pipeline) covered.add(inner);
-        else covered.add(step);
-      }
-    }
-    const missing = pipeline.filter((step) => !covered.has(step));
-    expect(
-      missing,
-      '文档写着「提交前跑 npm run verify」，机器上却少跑这些步——补进 `.husky/` 或同轮改准文档（docs/12 §1）',
-    ).toEqual([]);
+    expect(read('.husky/pre-commit')).toContain('scripts/pre-commit-check.mjs');
+    expect(read('.husky/pre-push')).toContain('scripts/pre-push-check.mjs');
+    const preCommitCheck = read('scripts/pre-commit-check.mjs');
+    expect(preCommitCheck).toContain("'--cached', '--check'");
+    expect(preCommitCheck).toContain('node_modules/.bin/eslint');
+    expect(preCommitCheck).toContain('node_modules/.bin/prettier');
+    expect(preCommitCheck).toContain("run('npm', ['run', 'typecheck'])");
+    expect(preCommitCheck).toContain("run('npm', ['run', 'docs:check'])");
+    const prePushCheck = read('scripts/pre-push-check.mjs');
+    expect(prePushCheck).toContain("runNpm(codeChanges ? 'verify' : 'docs:check')");
+    expect(prePushCheck).toContain("git(['status', '--porcelain'])");
+    expect(prePushCheck).toContain("git(['rev-parse', 'HEAD'])");
+  });
+
+  it('共享工作区规定单写者并将并行编辑串行化', () => {
+    expect(read('AGENTS.md')).toContain('同一个共享工作区与 Git 暂存区同一时刻只允许一个写任务');
+    expect(read('docs/12-engineering-standards.md')).toContain(
+      '共享的 `main` 工作区与暂存区同一时刻只允许一个写任务',
+    );
+    expect(read('docs/11-qoder-handoff.md')).toContain(
+      '共享 checkout 与暂存区同一时刻只允许一个写任务',
+    );
   });
 
   it('钩子不许写成空跑，也不许用管道把失败读成成功', () => {
