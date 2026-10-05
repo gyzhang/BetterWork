@@ -1,7 +1,7 @@
 # Task Continuity 开发计划（TC00–TC05）
 
 - 日期：2026-10-05。
-- 状态：**产品、ADR 与开发计划已于 2026-10-05 获用户批准；TC01–TC03 已完成，TC04–TC05 尚未开始。**
+- 状态：**产品、ADR 与开发计划已于 2026-10-05 获用户批准；TC01–TC05 已完成，TC04–TC05 已完成真实桌面走查。**
 - 产品入口：[Task 跨 Run 连续协作设计](../designs/task-continuity.md)（v1.0）。
 - 技术入口：[ADR-0038](../adr/0038-task-continuity-across-runs.md)（Accepted）与[Task Continuity 实施契约](task-continuity-contracts.md)（v1.0 Accepted）。
 - GPT-6 Luna 交接：[逐卡编码提示词](task-continuity-coding-prompts.md)。本文是 TC 唯一任务状态真相源；每卡仍需单独开工指派，真实模型业务验收与发布分别处理。
@@ -44,8 +44,8 @@
 | TC01 | 新 Task 目标和连续简报可持久化、恢复 | TC00 | P0 | 5 | done | v39 安装两张新表与归属/幂等/JSON/不可变约束；新 Task 通过 Main 同事务从已持久化 `tasks.goal` 初始化 revision。开工 HEAD `70cc423d`、工作树干净、实际库 v38；本地库未重置。定向测试 4 文件/113 项通过；完整 `npm run verify` 退出 0：functional 212/1,886、heavy 8/167、build、ui:check 58 组通过 |
 | TC02 | 每个新 Run 可回查它实际获得的任务简报 | TC01 | P0 | 8 | done | v40 在既有 Run 快照上持久化省略审计并加 SQLite 单次 Provider 请求时间护栏；Main 按固定预算装配目标/来源要求、最近同 Task 用户 prompt 与真实 Run/登记 Artifact 状态，快照写入后才允许派发，每轮核验相同 Brief。Fake Provider 集成覆盖失败后继续、长历史与 prompt 预算、跨 Task/材料隔离、第二轮一致性、缺 Brief/审计失败零派发；迁移/Repository/RunService 定向测试 3 文件 / 126 项通过，`npm run typecheck` 通过，完整 `npm run verify` 与 `git diff --check` 证据见 2026-10-05 日志 |
 | TC03 | 完成轮次能安全更新进度，失败/取消有确定性降级 | TC02 | P1 | 8 | done | Run completed 后由 Main 按 Journal/精确 ArtifactVersion 写入确定性助手进度；校验同 Task、completed 终态、源 prompt SHA-256、ArtifactVersion 归属及材料/记忆依赖闭包，按 source Run 幂等；user-edit 进度不被覆盖，失败/取消不写成功进度，更新失败不改 Run 终态。常规 Provider 没有可用的类型化 update 通道，因此未扩展 Provider 协议或发摘要请求。定向测试 4 文件/79 项、typecheck 通过；完整 `npm run verify` 退出 0（functional 213 文件/1,893 项，heavy 8 文件/174 项，build 成功，ui:check 58 组通过）；代码迁移 v40、实际应用库 v38 均未改动，详情见 2026-10-05 日志 |
-| TC04 | 用户能查看并修正本任务目标与活跃要求 | TC01、TC02 | P1 | 8 | doing | 已接入 Main IPC/Preload、按 taskId 隔离并丢弃迟到响应的 Hook，以及现有 ContextPanel；支持目标/要求/进度 CAS 修订、冲突重载、来源 Run 与精确 ArtifactVersion 入口。TC04 定向 7 个测试文件 / 180 项通过；完整 `npm run verify` 退出 0（functional 214 文件 / 1,905 项、heavy 8 文件 / 176 项、build、ui:check 58 组）；typecheck 通过。真实 macOS 窗口走查尚未完成，故保留 doing。 |
-| TC05 | 连续对话全链路满足安全与恢复契约 | TC02、TC03、TC04 | P0 | 5 | doing | 新增 Fake Provider 实际 ModelRequest + 临时 SQLite 回归：移除精确来源材料后不注入助手进度；跨 Workspace/Expert 的 Task 不泄露目标、要求、prompt 或 Run ID；UI 应用旅程重装配后恢复 Brief/snapshot/首次请求审计且不重跑模型。RunService 定向 67/67 通过；前置卡测试共同覆盖失败后继续、历史预算、撤销/依赖过滤、精确 ArtifactVersion、更新写入失败、取消、CAS 和 ToolCall 多轮一致性。完整 `npm run verify` 退出 0（functional 214 文件 / 1,905 项、heavy 8 文件 / 176 项、build、ui:check 58 组）。真实桌面主要旅程仍待用户在解锁的 Mac 窗口走查，未标 done。 |
+| TC04 | 用户能查看并修正本任务目标与活跃要求 | TC01、TC02 | P1 | 8 | done | 已接入 Main IPC/Preload、按 taskId 隔离并丢弃迟到响应的 Hook，以及现有 ContextPanel；支持目标/要求/进度 CAS 修订、冲突重载、来源 Run 与精确 ArtifactVersion 入口。TC04 定向 7 个测试文件 / 180 项通过；补充保存失败的类型化 IPC 结果与 Hook/IPC/Preload 回归后，相关 3 文件 / 54 项通过、typecheck 通过；完整 `npm run verify` 退出 0（functional 214 文件 / 1,907 项、heavy 8 文件 / 176 项、build、ui:check 58 组）。真实 macOS 走查：用户确认简报目标/要求编辑及来源；并发修订显示冲突、载入最新版本；SQLite 写锁故障显示现有 InlineError（无原始 IPC 弹窗），关闭提示后草稿仍在并成功重试为 v6。任务切换、折叠恢复、窄窗/键盘操作均按卡验收通过。 |
+| TC05 | 连续对话全链路满足安全与恢复契约 | TC02、TC03、TC04 | P0 | 5 | done | Fake Provider 实际 ModelRequest + 临时 SQLite 回归覆盖材料依赖移除后的进度过滤、跨 Workspace/Expert Task 隔离、重装配后恢复 Brief/snapshot/首次 Provider 请求审计且不重跑模型；RunService 定向 67/67 通过，完整 `npm run verify` 退出 0（functional 214 文件 / 1,907 项、heavy 8 文件 / 176 项、build、ui:check 58 组）。真实 macOS 走查使用仅含合成材料的离线宿主：完成 Run、精确 ArtifactVersion 查看、合成 Provider 失败与停止终态、Brief 重启恢复、Task 切换不串数据及错误/冲突/重试闭环；用户确认全部符合预期。验收库 schema v40，6 条 Run、`syntheticRequests=0`；应用宿主自身保留 `prepared-not-accepted` 标记，人工结论记录于任务板与当日日志。 |
 
 Points 是相对复杂度建议，不是时间承诺；TC00 已关闭。若实施中验证导致复杂度估计明显变化，在对应卡证据中记录理由，不因此擅自改变产品范围。
 

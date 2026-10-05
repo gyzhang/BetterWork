@@ -1064,7 +1064,18 @@ function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
     IpcChannel.SaveTaskContinuityBrief,
     saveTaskContinuityBriefRequestSchema,
     taskContinuityBriefMutationResultSchema,
-    (input) => taskContinuity.saveUserBrief(input),
+    (input) => {
+      try {
+        return taskContinuity.saveUserBrief(input);
+      } catch {
+        // Keep SQLite and service errors inside the typed IPC response so the Renderer can
+        // show an actionable InlineError without losing the open draft.
+        return {
+          kind: 'error' as const,
+          message: '保存本任务简报失败，草稿仍保留；请重试。',
+        };
+      }
+    },
   );
   handleInput(
     IpcChannel.ListEvidence,

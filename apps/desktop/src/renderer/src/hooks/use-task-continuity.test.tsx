@@ -102,6 +102,32 @@ describe('useTaskContinuity', () => {
     expect(result.current.error).toBe('');
   });
 
+  it('surfaces a typed save failure and preserves the current revision for retry', async () => {
+    installApi();
+    getBrief.mockResolvedValue(revisionOf('task-a', 4));
+    saveBrief.mockResolvedValue({
+      kind: 'error',
+      message: '保存本任务简报失败，草稿仍保留；请重试。',
+    });
+    const { result } = renderHook(() => useTaskContinuity('task-a'));
+    await waitFor(() => expect(result.current.revision?.revision).toBe(4));
+
+    await act(async () => {
+      await result.current.save({
+        taskId: 'task-a',
+        expectedRevision: 4,
+        objective: '尚未保存的合成草稿',
+        activeRequirements: [],
+        progress: null,
+      });
+    });
+
+    expect(result.current.revision?.revision).toBe(4);
+    expect(result.current.errorKind).toBe('save');
+    expect(result.current.error).toBe('保存本任务简报失败，草稿仍保留；请重试。');
+    expect(result.current.saving).toBe(false);
+  });
+
   it('does not apply a late save result to a different selected Task', async () => {
     installApi();
     getBrief.mockImplementation(async ({ taskId }) => revisionOf(taskId));

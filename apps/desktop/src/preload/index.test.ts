@@ -208,6 +208,23 @@ describe('task continuity preload API', () => {
         },
       ],
     ]);
+
+    mocks.invoke.mockResolvedValueOnce({
+      kind: 'error',
+      message: '保存本任务简报失败，草稿仍保留；请重试。',
+    });
+    await expect(
+      api().taskContinuity.saveBrief({
+        taskId: 'task-1',
+        expectedRevision: 1,
+        objective: '分析季度结果',
+        activeRequirements: [],
+        progress: null,
+      }),
+    ).resolves.toEqual({
+      kind: 'error',
+      message: '保存本任务简报失败，草稿仍保留；请重试。',
+    });
   });
 
   it('rejects malformed requests before IPC and malformed mutation results after IPC', async () => {

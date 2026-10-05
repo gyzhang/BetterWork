@@ -142,6 +142,18 @@ export function useTaskContinuity(taskId: string | undefined): TaskContinuitySta
           }));
           return result;
         }
+        if (result.kind === 'error') {
+          setState((current) => ({
+            taskId: targetTaskId,
+            revision: current.taskId === targetTaskId ? current.revision : undefined,
+            loading: false,
+            saving: false,
+            error: result.message,
+            errorKind: 'save',
+            conflict: false,
+          }));
+          return result;
+        }
         setState({
           taskId: targetTaskId,
           revision: result.revision,

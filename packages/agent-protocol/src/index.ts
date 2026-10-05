@@ -4009,6 +4009,7 @@ export type TaskContinuityRevision = z.infer<typeof taskContinuityRevisionSchema
 export const taskContinuityBriefMutationResultSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('saved'), revision: taskContinuityRevisionSchema }).strict(),
   z.object({ kind: z.literal('conflict'), currentRevision: z.number().int().positive() }).strict(),
+  z.object({ kind: z.literal('error'), message: z.string().trim().min(1).max(500) }).strict(),
 ]);
 export type TaskContinuityBriefMutationResult = z.infer<
   typeof taskContinuityBriefMutationResultSchema

@@ -694,6 +694,35 @@ describe('registerIpc', () => {
     ).rejects.toThrow();
   });
 
+  it('returns a typed save failure when Task Continuity persistence fails', async () => {
+    const workspace = (await invoke(IpcChannel.GetDefaultWorkspace, {})) as { id: string };
+    const created = (await invoke(IpcChannel.CreateTask, {
+      workspaceId: workspace.id,
+      title: '连续简报保存失败',
+      goal: '保留这份合成任务目标',
+    })) as { task: { id: string } };
+    const append = vi.spyOn(store.taskContinuity, 'append').mockImplementationOnce(() => {
+      throw new Error('synthetic sqlite write failure');
+    });
+
+    try {
+      await expect(
+        invoke(IpcChannel.SaveTaskContinuityBrief, {
+          taskId: created.task.id,
+          expectedRevision: 1,
+          objective: '尝试修改合成任务目标',
+          activeRequirements: [],
+          progress: null,
+        }),
+      ).resolves.toEqual({
+        kind: 'error',
+        message: '保存本任务简报失败，草稿仍保留；请重试。',
+      });
+    } finally {
+      append.mockRestore();
+    }
+  });
+
   it('rejects unexpected data for a no-input dialog channel before opening the dialog', async () => {
     await expect(invoke(IpcChannel.PickWorkspaceDirectory, { injected: true })).rejects.toThrow();
     expect(mocks.showOpenDialog).not.toHaveBeenCalled();
