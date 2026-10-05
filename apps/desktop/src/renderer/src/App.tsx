@@ -51,6 +51,7 @@ import { Welcome } from './components/Welcome';
 import { type WorkspaceGroupAction, WorkspaceGroupList } from './components/WorkspaceGroupList';
 import { WorkspaceIdentityDialog } from './components/WorkspaceIdentityDialog';
 import { useAppearance } from './hooks/use-appearance';
+import { useConversationAddresses } from './hooks/use-conversation-addresses';
 import { useExperts } from './hooks/use-experts';
 import { useKnowledgeLibrary } from './hooks/use-knowledge-library';
 import { useMcpConnections } from './hooks/use-mcp-connections';
@@ -134,6 +135,9 @@ export function App(): React.JSX.Element {
   const appearance = appearanceState.preference;
   const resolvedAppearance = appearanceState.resolved;
   const setAppearanceValue = appearanceState.update;
+  const conversationAddressesState = useConversationAddresses();
+  const conversationAddresses = conversationAddressesState.addresses;
+  const setConversationAddress = conversationAddressesState.update;
 
   const knowledge = useKnowledgeLibrary();
   const refreshKnowledge = knowledge.refresh;
@@ -1561,11 +1565,16 @@ export function App(): React.JSX.Element {
                                 <span>{formatTime(run.createdAt)}</span>
                               </div>
                             )}
-                            <MessageBlock author="user" content={run.prompt} />
+                            <MessageBlock
+                              author="user"
+                              authorName={conversationAddresses.user.trim() || '你'}
+                              content={run.prompt}
+                            />
                             <ToolActivity key={run.id} events={runEvents} />
                             {runAssistantText && (
                               <MessageBlock
                                 author="assistant"
+                                authorName={conversationAddresses.assistant.trim() || 'AI'}
                                 content={runAssistantText}
                                 anchorRef={
                                   idx === taskAllRuns.length - 1 ? latestReplyRef : undefined
@@ -1845,6 +1854,13 @@ export function App(): React.JSX.Element {
             resolvedAppearance={resolvedAppearance}
             onMode={(mode) => setAppearanceValue({ ...appearance, mode })}
             onScheme={(scheme) => setAppearanceValue({ ...appearance, scheme })}
+            conversationAddresses={conversationAddresses}
+            onAssistantAddressChange={(assistant) =>
+              setConversationAddress({ ...conversationAddresses, assistant })
+            }
+            onUserAddressChange={(user) =>
+              setConversationAddress({ ...conversationAddresses, user })
+            }
             memories={memoriesState}
             {...(memoryManagementTarget ? { memoryTarget: memoryManagementTarget } : {})}
             onClearMemoryTarget={() => setMemoryManagementTarget(undefined)}

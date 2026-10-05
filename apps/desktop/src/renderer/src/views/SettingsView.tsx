@@ -30,6 +30,7 @@ import { Switch } from '../components/Switch';
 import { SegmentedControl } from '../components/Tabs';
 import { TextArea, TextField } from '../components/TextField';
 import { TransientToast } from '../components/TransientToast';
+import type { ConversationAddresses } from '../hooks/use-conversation-addresses';
 import type { McpConnectionsState } from '../hooks/use-mcp-connections';
 import type { MemoriesState } from '../hooks/use-memories';
 import type { MemorySuggestionsState } from '../hooks/use-memory-suggestions';
@@ -58,6 +59,9 @@ export interface SettingsPageProps {
   resolvedAppearance: ResolvedAppearance;
   onMode: (mode: AppearanceMode) => void;
   onScheme: (scheme: ColorScheme) => void;
+  conversationAddresses: ConversationAddresses;
+  onAssistantAddressChange: (value: string) => void;
+  onUserAddressChange: (value: string) => void;
   memories: MemoriesState;
   memoryTarget?: MemoryManagementTarget;
   onClearMemoryTarget: () => void;
@@ -138,17 +142,49 @@ function SettingsContent(props: SettingsPageProps): React.JSX.Element {
     case 'appearance':
       return <AppearanceSettings {...props} />;
     case 'general':
-      return (
-        <section className="settings-section">
-          <SectionHeader variant="block" eyebrow="通用" title="工作偏好" />
-          <EmptyNotice
-            title="通用设置将在后续阶段开放"
-            detail="工作目录、语言、数据与更新设置会在这里统一管理。"
-          />
-        </section>
-      );
+      return <GeneralSettings {...props} />;
   }
 }
+
+function GeneralSettings({
+  conversationAddresses,
+  onAssistantAddressChange,
+  onUserAddressChange,
+}: SettingsPageProps): React.JSX.Element {
+  return (
+    <section className="settings-section">
+      <SectionHeader
+        variant="block"
+        eyebrow="通用"
+        title="相互称呼"
+        hint="工作对话中的发言人标签会使用这里设置的称呼。"
+      />
+      <Field
+        label="AI 的称呼"
+        controlId="conversation-assistant-address"
+        hint="显示在 AI 回复上方。"
+      >
+        <TextField
+          id="conversation-assistant-address"
+          size="md"
+          maxLength={40}
+          value={conversationAddresses.assistant}
+          onChange={(event) => onAssistantAddressChange(event.target.value)}
+        />
+      </Field>
+      <Field label="我的称呼" controlId="conversation-user-address" hint="显示在你的发言上方。">
+        <TextField
+          id="conversation-user-address"
+          size="md"
+          maxLength={40}
+          value={conversationAddresses.user}
+          onChange={(event) => onUserAddressChange(event.target.value)}
+        />
+      </Field>
+    </section>
+  );
+}
+
 function ModelSettings({
   models,
   modelFilter,

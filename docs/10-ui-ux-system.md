@@ -111,7 +111,7 @@ ClawBible Desktop 继续作为模型接入、Agent、工具、知识和 Office �
 
 **操作名词同理只有一套**（写在代码里，引用时按字面）：技能页「导入 Skill」；Skill 详情「信任」「启用」「环境」「来源」「试运行」；依赖面板「准备环境」（环境已就绪时是「重新准备（修复）」）、「取消准备」、「确认依赖授权」；专家页「召唤」；输入区「开始工作」与运行中的「停止」（占位文案「告诉算台你想完成什么工作…」）；空间入口「选择工作空间」，其菜单内「搜索工作空间」与「新建工作空间」。
 
-设置分区顺序按配置动作分组：模型与搜索都是填 API Key 即可用，MCP 是连接外部工具，记忆属于我的数据，外观与通用属于偏好。「搜索」随联网搜索能力新增（见 [ADR-0007](adr/0007-search-engine-config-and-web-search-tool.md)）；「通用」当前为占位，工作目录、语言、数据与更新设置尚未建设，原计划的独立「数据」分区并入「通用」。
+设置分区顺序按配置动作分组：模型与搜索都是填 API Key 即可用，MCP 是连接外部工具，记忆属于我的数据，外观与通用属于偏好。「搜索」随联网搜索能力新增（见 [ADR-0007](adr/0007-search-engine-config-and-web-search-tool.md)）；「通用」提供工作对话的双方称呼设置，工作目录、语言、数据与更新设置尚未建设，原计划的独立「数据」分区并入「通用」。
 
 「能力」是模型、技能、MCP 与搜索的**总称**，只用于设置面板标题和文档描述，**不作为任何页面的名字**。「能力页」是已退役叫法：2026-09-30 全仓改准为「技能页」共 **7 处**（`docs/logs/2026-09-08.md` 1 处、`docs/logs/2026-09-09.md` 5 处、`docs/acceptance/2026-09-14-b0-two-skill-restart.md` 1 处）；唯一有意保留的是 `docs/prototype/skills-view/index.html` 的 `<title>` 与 `<h1>`——那是 2026-09-09 拍板时的评审快照，改掉它等于改掉当时被批准的那件东西。Skill 管理只有「技能」一级导航一个入口：2026-09-08 为发现性把 Skill 提升为主导航时临时保留的「设置 → Skill」兼容入口已于 2026-09-21 收敛删除，同一页面不设第二扇门。
 
@@ -207,7 +207,7 @@ Skill 列表分别展示来源（内置/用户）、启用状态、信任状态�
 
 ### 6.3 设置空间
 
-设置是独立页面，不附着在输入框或任务消息中。设置左侧为类别导航，右侧为当前设置内容；编辑复杂配置时使用侧边 Sheet 或对话框。
+设置是独立页面，不附着在输入框或任务消息中。设置左侧为类别导航，右侧为当前设置内容；编辑复杂配置时使用侧边 Sheet 或对话框。「通用」中的相互称呼用于工作对话消息的发言人标签，初始 AI 称呼为「罗伯特」、用户称呼为「张三」。
 
 ## 7. 核心页面
 
@@ -694,7 +694,7 @@ UI Foundation 首批提供四套成对色系：
 | `SourceRow` | `components/SourceRow.tsx` | Evidence 类型/图标/定位符/打开源文件统一呈现，基于 ListRow |
 | `RunSummaryRow` | `components/RunSummaryRow.tsx` | Run 状态·时间与“未运行”措辞唯一出口，基于 ListRow |
 | `ToolActivity` | `components/ToolActivity.tsx` | 工具活动摘要与按需详情；原始载荷只在折叠详情 |
-| `MessageBlock` | `components/MessageBlock.tsx` | 发言者、正文与就地动作同一块，正文按 author 呈现 |
+| `MessageBlock` | `components/MessageBlock.tsx` | 发言者、正文与就地动作同一块；工作页发言者称呼来自设置，正文按 author 呈现 |
 | `Composer` | `components/Composer.tsx` | 工作空间/绑定/输入/提交；idle/starting/running 与 locked 分列，提交/快捷键/输入法语义统一 |
 | `ContextPanel` | `components/ContextPanel.tsx` | 可完全收起的任务上下文，按过程/资料/记忆/简报/成果分组 |
 | `ComposerCapabilityPicker` | `components/ComposerCapabilityPicker.tsx` | Composer 的能力/材料选择；PopoverMenu、BindingChip、FieldSelect 与 ActionBar 组合 |
