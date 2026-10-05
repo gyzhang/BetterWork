@@ -9,12 +9,14 @@ const cliEnvironment = { ...process.env };
 delete cliEnvironment.UI_RENDER_OUTPUT_DIR;
 
 /**
- * 这些反例各要真起一次 esbuild 打包＋Electron 矩阵（安静机实测 0.5／1.2／1.6s，整档并发或
+ * 这些负向探针各要真起一次 esbuild 打包＋Electron 矩阵（安静机实测 0.5／1.2／1.6s，整档并发或
  * runner 负载下撞过默认 5 秒超时，2026-10-02 macOS runner 红在第一条）。放宽的是这条子进程
  * **夹具时间**，不是墙钟预算——墙钟与内存断言仍只住在 `*.bench.test.ts`（docs/12 §9）。
  * 断言的边界没有变化：每条都要求 CLI 以指定错误退出，且不得把提前退出读成成功。
  */
 const cliTimeout = 20_000;
+// acceptance smoke 要连续准备、关闭并重开 Electron，runner 上已证明 20 秒不足；夹具预算独立给 60 秒。
+const acceptanceSmokeTimeout = 60_000;
 
 it('离线验收模式禁止混入检查，重开必须指定原目录', () => {
   for (const [arguments_, message] of [
@@ -36,13 +38,13 @@ it(
     const result = spawnSync(process.execPath, [script, '--acceptance-smoke'], {
       encoding: 'utf8',
       env: cliEnvironment,
-      timeout: cliTimeout,
+      timeout: acceptanceSmokeTimeout,
     });
     expect(result.status).toBe(0);
     expect(result.stderr).toContain('合成验收准备与重开通过；人工结果未填写');
     expect(result.stderr).not.toContain('UI 真实渲染检查通过');
   },
-  cliTimeout,
+  acceptanceSmokeTimeout,
 );
 
 it(
