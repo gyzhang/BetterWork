@@ -44,6 +44,12 @@ const temporaryDirectories: string[] = [];
 const openStores: AppStore[] = [];
 const openVaults: KnowledgeVault[] = [];
 
+const createTaskWithBrief = (store: AppStore, workspaceId: string, title: string, goal: string) => {
+  const created = store.tasks.create(workspaceId, title, goal);
+  store.taskContinuity.initializeFromTaskGoal(created.task.id);
+  return created;
+};
+
 interface WireMessage {
   readonly role: string;
   readonly content: string;
@@ -284,10 +290,10 @@ const createWorld = async (
   const workspaceA = store.workspaces.getOrCreate(rootA, '经营分析').id;
   const workspaceB = store.workspaces.getOrCreate(rootB, '市场研究').id;
   const expert = store.experts.create({ sourceKind: 'user', revision: expertRevision });
-  const a1 = store.tasks.create(workspaceA, '本月收入复盘', '产出收入口径分析');
-  const a2 = store.tasks.create(workspaceA, '季度收入汇报', '产出季度汇报段落');
-  const b1 = store.tasks.create(workspaceB, '竞品价格调研', '产出对比结论');
-  const b2 = store.tasks.create(workspaceB, '渠道投放复盘', '产出投放建议');
+  const a1 = createTaskWithBrief(store, workspaceA, '本月收入复盘', '产出收入口径分析');
+  const a2 = createTaskWithBrief(store, workspaceA, '季度收入汇报', '产出季度汇报段落');
+  const b1 = createTaskWithBrief(store, workspaceB, '竞品价格调研', '产出对比结论');
+  const b2 = createTaskWithBrief(store, workspaceB, '渠道投放复盘', '产出投放建议');
   store.close();
 
   const layout: Layout = {
@@ -1214,7 +1220,8 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
     const material = await addMaterial(world, '季度经营数据.md', '本期收入合计 128。');
 
     for (const [index, prompt] of PINNED_PROMPTS.entries()) {
-      const task = world.services.store.tasks.create(
+      const task = createTaskWithBrief(
+        world.services.store,
         world.layout.workspaceA,
         `Q${index + 1} 经营交付`,
         prompt,
@@ -1286,7 +1293,8 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
       throw new Error('注入：审计写入失败。');
     };
 
-    const task = world.services.store.tasks.create(
+    const task = createTaskWithBrief(
+      world.services.store,
       world.layout.workspaceA,
       '审计失败',
       '请汇总近期业务表现',
@@ -1365,7 +1373,8 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
       action: 'expire',
     });
     expect(expiredResult.ok).toBe(true);
-    const task = world.services.store.tasks.create(
+    const task = createTaskWithBrief(
+      world.services.store,
       world.layout.workspaceA,
       '过期与冲突',
       '请汇总近期业务表现',
@@ -1475,7 +1484,8 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
     });
     expect(resolved.ok).toBe(true);
 
-    const task = world.services.store.tasks.create(
+    const task = createTaskWithBrief(
+      world.services.store,
       world.layout.workspaceA,
       '并存组',
       '请整理本季简报',
@@ -1524,7 +1534,8 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
       facet: 'method',
       topicKey: 'income-unit',
     });
-    const controlTask = world.services.store.tasks.create(
+    const controlTask = createTaskWithBrief(
+      world.services.store,
       world.layout.workspaceA,
       'N8 对照',
       '做份经营回顾',
@@ -1572,7 +1583,8 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
     });
     expect(decided.ok).toBe(true);
 
-    const task = world.services.store.tasks.create(
+    const task = createTaskWithBrief(
+      world.services.store,
       world.layout.workspaceA,
       'N8 整组落选',
       '做份经营回顾',
@@ -1631,7 +1643,8 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
     if (!pinned.ok) throw new Error(`设优先失败：${pinned.error.code}`);
 
     // R3：新 Task、无历史，仅凭优先池入选。
-    const task = world.services.store.tasks.create(
+    const task = createTaskWithBrief(
+      world.services.store,
       world.layout.workspaceA,
       'R3 表格偏好',
       '请整理财务概览',
@@ -1892,7 +1905,8 @@ describe('工作型记忆系统级合成验收（WM15）', () => {
       new Set([expertRule.id, workspaceRule.id]),
     );
     // R2 单独占一行，矩阵给它的是另一个问法：逐行分母要求这条 When 也真走过一次。
-    const r2Task = world.services.store.tasks.create(
+    const r2Task = createTaskWithBrief(
+      world.services.store,
       world.layout.workspaceA,
       'R2 管理层沟通稿',
       '请整理下一场管理层沟通稿',

@@ -2596,8 +2596,8 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
   it('creates all eight tables and required indexes on an empty database, then stays idempotent', () => {
     const db = new Database(':memory:');
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(39);
-    expect(appMigrations.at(-1)?.version).toBe(39);
+    expect(readSchemaVersion(db)).toBe(40);
+    expect(appMigrations.at(-1)?.version).toBe(40);
     for (const table of SCHEDULE_TABLES) expect(hasTable(db, table), table).toBe(true);
     const indexes = (
       db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as Array<{
@@ -2622,7 +2622,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
     );
     expect(db.pragma('foreign_key_check')).toEqual([]);
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(39);
+    expect(readSchemaVersion(db)).toBe(40);
     expect(
       db.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 37').get(),
     ).toEqual({ count: 1 });
@@ -2644,7 +2644,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
     expect(readSchemaVersion(db)).toBe(35);
     expect(hasTable(db, 'schedules')).toBe(false);
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(39);
+    expect(readSchemaVersion(db)).toBe(40);
     expect(db.prepare('SELECT id, workspace_id FROM tasks WHERE id = ?').get('task-1')).toEqual({
       id: 'task-1',
       workspace_id: 'ws-1',
@@ -2663,7 +2663,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
     ).toEqual({ id: 'version-1', artifact_id: 'artifact-1', content: '# 合成成果' });
     expect(countRows(db, 'schedules')).toBe(0);
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(39);
+    expect(readSchemaVersion(db)).toBe(40);
     expect(db.pragma('foreign_key_check')).toEqual([]);
     db.close();
   });
@@ -2936,7 +2936,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
     });
     expect(db.pragma('foreign_key_check')).toEqual([]);
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(39);
+    expect(readSchemaVersion(db)).toBe(40);
     db.close();
   });
 
@@ -2960,7 +2960,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
 
     db.exec('DROP TABLE migration_collision');
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(39);
+    expect(readSchemaVersion(db)).toBe(40);
     expect(
       db
         .prepare(
@@ -3002,7 +3002,7 @@ describe('Task Continuity schema migration v39 (TC01)', () => {
     before.close();
 
     const firstOpen = openAppDatabase(filePath);
-    expect(readSchemaVersion(firstOpen)).toBe(39);
+    expect(readSchemaVersion(firstOpen)).toBe(40);
     expect(hasTable(firstOpen, 'task_continuity_revisions')).toBe(true);
     expect(hasTable(firstOpen, 'run_continuity_contexts')).toBe(true);
     expect(
@@ -3018,7 +3018,7 @@ describe('Task Continuity schema migration v39 (TC01)', () => {
     firstOpen.close();
 
     const secondOpen = openAppDatabase(filePath);
-    expect(readSchemaVersion(secondOpen)).toBe(39);
+    expect(readSchemaVersion(secondOpen)).toBe(40);
     expect(countRows(secondOpen, 'task_continuity_revisions')).toBe(0);
     expect(countRows(secondOpen, 'run_continuity_contexts')).toBe(0);
     secondOpen.close();
@@ -3048,10 +3048,45 @@ describe('Task Continuity schema migration v39 (TC01)', () => {
 
     db.exec('DROP TABLE migration_collision');
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(39);
+    expect(readSchemaVersion(db)).toBe(40);
     expect(hasTable(db, 'task_continuity_revisions')).toBe(true);
     expect(hasTable(db, 'run_continuity_contexts')).toBe(true);
     expect(db.pragma('foreign_key_check')).toEqual([]);
+    db.close();
+  });
+});
+
+describe('Task Continuity Run snapshot migration v40 (TC02)', () => {
+  it('adds omission audit and one-time dispatch guard atomically from v39', () => {
+    const db = new Database(':memory:');
+    db.pragma('foreign_keys = ON');
+    migrate(db, { migrations: appMigrations.filter((migration) => migration.version <= 39) });
+    expect(readSchemaVersion(db)).toBe(39);
+    expect(hasColumn(db, 'run_continuity_contexts', 'omissions_json')).toBe(false);
+    db.exec(`
+      CREATE TRIGGER run_continuity_contexts_only_mark_first_provider_request
+        BEFORE UPDATE ON tasks BEGIN SELECT 1; END;
+    `);
+
+    expect(() => migrate(db, { migrations: appMigrations })).toThrow(/already exists/iu);
+    expect(readSchemaVersion(db)).toBe(39);
+    expect(hasColumn(db, 'run_continuity_contexts', 'omissions_json')).toBe(false);
+    expect(db.pragma('foreign_key_check')).toEqual([]);
+
+    db.exec('DROP TRIGGER run_continuity_contexts_only_mark_first_provider_request');
+    migrate(db, { migrations: appMigrations });
+    expect(readSchemaVersion(db)).toBe(40);
+    expect(hasColumn(db, 'run_continuity_contexts', 'omissions_json')).toBe(true);
+    expect(
+      db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name = 'run_continuity_contexts_only_mark_first_provider_request'",
+        )
+        .get(),
+    ).toEqual({ name: 'run_continuity_contexts_only_mark_first_provider_request' });
+    expect(db.pragma('foreign_key_check')).toEqual([]);
+    migrate(db, { migrations: appMigrations });
+    expect(readSchemaVersion(db)).toBe(40);
     db.close();
   });
 });

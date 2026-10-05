@@ -2060,6 +2060,35 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 40,
+    name: 'freeze task continuity run snapshots',
+    up(db: Database.Database): void {
+      db.exec(`
+        ALTER TABLE run_continuity_contexts
+          ADD COLUMN omissions_json TEXT NOT NULL DEFAULT '[]'
+          CHECK (json_valid(omissions_json));
+
+        CREATE TRIGGER run_continuity_contexts_only_mark_first_provider_request
+          BEFORE UPDATE ON run_continuity_contexts
+          WHEN NOT (
+            NEW.run_id IS OLD.run_id AND
+            NEW.task_id IS OLD.task_id AND
+            NEW.revision_id IS OLD.revision_id AND
+            NEW.schema_version IS OLD.schema_version AND
+            NEW.brief_json IS OLD.brief_json AND
+            NEW.brief_hash IS OLD.brief_hash AND
+            NEW.prepared_at IS OLD.prepared_at AND
+            NEW.omissions_json IS OLD.omissions_json AND
+            OLD.first_provider_request_at IS NULL AND
+            NEW.first_provider_request_at IS NOT NULL
+          )
+          BEGIN
+            SELECT RAISE(ABORT, 'Run Continuity snapshots are immutable');
+          END;
+      `);
+    },
+  },
 ];
 
 /**

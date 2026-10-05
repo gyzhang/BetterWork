@@ -3550,6 +3550,38 @@ export type CredentialOwnerKind = z.infer<typeof credentialOwnerKindSchema>;
 /** 单条凭据明文的长度上限；空值在上层归一为 keep，超长直接拒绝。 */
 export const MAX_CREDENTIAL_LENGTH = 8_192;
 
+/** Task Continuity 首版装配预算；所有正文额度以 Unicode code point 计。 */
+export const TASK_CONTINUITY_OBJECTIVE_MAX_CODE_POINTS = 20_000;
+export const TASK_CONTINUITY_ACTIVE_REQUIREMENTS_MAX = 4;
+export const TASK_CONTINUITY_ACTIVE_REQUIREMENTS_MAX_CODE_POINTS = 2_000;
+export const TASK_CONTINUITY_RECENT_PROMPTS_MAX = 3;
+export const TASK_CONTINUITY_RECENT_PROMPTS_MAX_CODE_POINTS = 8_000;
+export const TASK_CONTINUITY_PROGRESS_MAX_CODE_POINTS = 2_000;
+export const TASK_CONTINUITY_TOTAL_MAX_CODE_POINTS = 32_000;
+
+/** Run 快照只记可复核的省略原因，不保存额外材料正文或模型请求副本。 */
+export const taskContinuityOmissionReasonSchema = z.enum([
+  'active-requirements-count',
+  'active-requirements-budget',
+  'active-requirements-source-unavailable',
+  'recent-user-prompts-count',
+  'recent-user-prompts-budget',
+  'assistant-progress-dependency-unverified',
+  'progress-source-unavailable',
+  'progress-artifact-unavailable',
+  'progress-budget',
+  'artifact-facts-budget',
+  'total-budget',
+]);
+export type TaskContinuityOmissionReason = z.infer<typeof taskContinuityOmissionReasonSchema>;
+export const taskContinuityOmissionsSchema = z
+  .array(taskContinuityOmissionReasonSchema)
+  .max(11)
+  .refine((reasons) => new Set(reasons).size === reasons.length, {
+    message: 'Task Continuity 省略原因不得重复',
+  });
+export type TaskContinuityOmission = z.infer<typeof taskContinuityOmissionsSchema>[number];
+
 /**
  * 只写不读的凭据变更语义（§4）：编辑器空输入归一为 `keep`，
  * `replace` 必须带非空值，`clear` 是显式动作。Renderer 持有的新值保存/取消即清空，不落 localStorage。
@@ -3753,7 +3785,11 @@ const taskContinuitySourceSchema = z
   })
   .strict();
 
-const taskContinuityTextSchema = exactTextSchema('任务连续简报文本', 1, 20_000);
+const taskContinuityTextSchema = exactTextSchema(
+  '任务连续简报文本',
+  1,
+  TASK_CONTINUITY_OBJECTIVE_MAX_CODE_POINTS,
+);
 
 export const taskContinuityBriefSchema = z
   .object({

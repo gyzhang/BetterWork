@@ -1,12 +1,13 @@
 # Task Continuity 开发计划（TC00–TC05）
 
 - 日期：2026-10-05。
-- 状态：**产品、ADR 与开发计划已于 2026-10-05 获用户批准；TC01 已完成，TC02–TC05 尚未开始。**
+- 状态：**产品、ADR 与开发计划已于 2026-10-05 获用户批准；TC01–TC02 已完成，TC03–TC05 尚未开始。**
 - 产品入口：[Task 跨 Run 连续协作设计](../designs/task-continuity.md)（v1.0）。
 - 技术入口：[ADR-0038](../adr/0038-task-continuity-across-runs.md)（Accepted）与[Task Continuity 实施契约](task-continuity-contracts.md)（v1.0 Accepted）。
 - GPT-6 Luna 交接：[逐卡编码提示词](task-continuity-coding-prompts.md)。本文是 TC 唯一任务状态真相源；每卡仍需单独开工指派，真实模型业务验收与发布分别处理。
 - TC00 文档阶段的静态基线快照：HEAD `9031d41`；工作树仅含此前 Task Continuity 文档修改；当时应用库迁移 v38，`Task.goal` 上限 20,000 code points、Run prompt 上限 8,000；RunService 经 `AgentRunInput.messages` 注入 Memory、受限历史和本轮材料，Agent Core 把它们放在系统/Expert/Skill 指令之后、当前 prompt 之前。每卡开工仍须重核，不按此历史快照覆盖新实现。
 - TC01 开工实测：HEAD `70cc423d5126fafd8a6209830522e3fe85652d5e`，分支 `main`，工作树干净；`app-schema.ts` 与实际应用数据库最新迁移均为 v38。TC01 迁移递增至 v39；未重置或写入实际应用数据库。
+- TC02 开工实测：HEAD `4188e3bd69d5367499b2545da0b3a71421a508be`（TC01 提交），分支 `main`，工作树干净；代码迁移为 v39，实际应用数据库通过只读 `schema_migrations` 查询为 v38。TC02 迁移递增至 v40；实际应用数据库未重置或写入。
 - 执行：所有实现串行，一次一张卡。共享协议、`app-schema.ts`、RunService、App/ContextPanel 不并行修改。优先使用现有分层和组件，不创建新导航或第二套历史/记忆系统。
 
 ## 1. 目标与完成门槛
@@ -41,7 +42,7 @@
 | --- | --- | --- | --- | ---: | --- | --- |
 | TC00 | 设计决策接受与基线复核 | 无 | P0 | 3 | done | 用户于 2026-10-05 批准产品/架构/计划；ADR-0038 与契约转 Accepted；固定 32,000 code point 初始总预算、同次响应更新/确定性 fallback、不发独立摘要请求及无旧数据回填。每张代码卡开工仍重核最新基线 |
 | TC01 | 新 Task 目标和连续简报可持久化、恢复 | TC00 | P0 | 5 | done | v39 安装两张新表与归属/幂等/JSON/不可变约束；新 Task 通过 Main 同事务从已持久化 `tasks.goal` 初始化 revision。开工 HEAD `70cc423d`、工作树干净、实际库 v38；本地库未重置。定向测试 4 文件/113 项通过；完整 `npm run verify` 退出 0：functional 212/1,886、heavy 8/167、build、ui:check 58 组通过 |
-| TC02 | 每个新 Run 可回查它实际获得的任务简报 | TC01 | P0 | 8 | todo | 预期增量：RunService/Run continuity audit 与 Fake Provider 集成测试。持久化不可变 Run snapshot/hash；任务目标、带来源要求、最近用户 prompt 与确定性 Run/Artifact 状态进入真实 `ModelRequest.messages`；首轮失败后“继续”仍看到原始目标；所有模型/工具轮保留相同 snapshot |
+| TC02 | 每个新 Run 可回查它实际获得的任务简报 | TC01 | P0 | 8 | done | v40 在既有 Run 快照上持久化省略审计并加 SQLite 单次 Provider 请求时间护栏；Main 按固定预算装配目标/来源要求、最近同 Task 用户 prompt 与真实 Run/登记 Artifact 状态，快照写入后才允许派发，每轮核验相同 Brief。Fake Provider 集成覆盖失败后继续、长历史与 prompt 预算、跨 Task/材料隔离、第二轮一致性、缺 Brief/审计失败零派发；迁移/Repository/RunService 定向测试 3 文件 / 126 项通过，`npm run typecheck` 通过，完整 `npm run verify` 与 `git diff --check` 证据见 2026-10-05 日志 |
 | TC03 | 完成轮次能安全更新进度，失败/取消有确定性降级 | TC02 | P1 | 8 | todo | 预期增量：类型化 update 传递、Run 完成后幂等写 revision、材料/记忆依赖复核、错误降级与测试。常规响应不能承载类型化更新时只实现确定性 Run/Artifact 状态与安全历史；不新增独立 summary completion 或隐藏模型请求 |
 | TC04 | 用户能查看并修正本任务目标与活跃要求 | TC01、TC02 | P1 | 8 | todo | 预期增量：最小 IPC/Preload/Hook/现有任务过程面板 UI；CAS 保存、来源 Run 跳转/说明、助手摘要与用户文本标签、局部错误出口；复用现有 UI 基座，无新导航。需真实桌面走查 |
 | TC05 | 连续对话全链路满足安全与恢复契约 | TC02、TC03、TC04 | P0 | 5 | todo | 覆盖失败/取消、历史超预算、材料撤销/来源失效、artifact 精确版本、更新写入失败、并发 revision、重启、跨 Task/Workspace/Expert 隔离；实际 ModelRequest + 临时 SQLite；相关全仓 verify 与用户桌面旅程证据 |

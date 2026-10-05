@@ -3,8 +3,9 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { abortError } from '@betterwork/agent-core';
+import { abortError, FakeModelProvider } from '@betterwork/agent-core';
 import type {
+  AgentMessage,
   ExpertRevisionDraft,
   MaterialReference,
   MemoryRecord,
@@ -133,6 +134,7 @@ const createFixture = async (): Promise<Fixture> => {
 
   const workspace = store.workspaces.getOrCreate(directory, path.basename(directory));
   const created = store.tasks.create(workspace.id, '测试任务', '用于运行编排测试');
+  store.taskContinuity.initializeFromTaskGoal(created.task.id);
   return {
     directory,
     store,
@@ -330,6 +332,77 @@ const createService = (
     onScheduledRunTerminal,
   );
 
+const captureFakeProviderRequests = () => {
+  const requests: AgentMessage[][] = [];
+  const fake = new FakeModelProvider(0);
+  const originalStream = fake.stream.bind(fake);
+  let shouldFailNextRequest = false;
+  let nextResponse: string | undefined;
+  const spy = vi.spyOn(FakeModelProvider.prototype, 'stream').mockImplementation((request) => {
+    requests.push(request.messages.slice());
+    if (shouldFailNextRequest) {
+      shouldFailNextRequest = false;
+      return (async function* () {
+        yield { type: 'text-delta' as const, delta: '' };
+        throw new Error('synthetic provider connection failure');
+      })();
+    }
+    if (nextResponse !== undefined) {
+      const response = nextResponse;
+      nextResponse = undefined;
+      return (async function* () {
+        yield { type: 'text-delta' as const, delta: response };
+        yield { type: 'done' as const };
+      })();
+    }
+    return originalStream(request);
+  });
+  return {
+    requests,
+    failNextRequest: (): void => {
+      shouldFailNextRequest = true;
+    },
+    respondNextRequest: (content: string): void => {
+      nextResponse = content;
+    },
+    restore: (): void => spy.mockRestore(),
+  };
+};
+
+const addFailedRun = (
+  fixture: Fixture,
+  input: {
+    id: string;
+    taskId: string;
+    sessionId: string;
+    prompt: string;
+    createdAt: number;
+    error?: string;
+  },
+): void => {
+  fixture.store.runs.create({
+    id: input.id,
+    taskId: input.taskId,
+    sessionId: input.sessionId,
+    prompt: input.prompt,
+    status: 'running',
+    createdAt: input.createdAt,
+  });
+  const event = fixture.store.runs.forceFailure(
+    input.id,
+    input.error ?? '合成运行失败',
+    input.createdAt + 1,
+  );
+  if (!event) throw new Error('Synthetic Run did not reach its failed terminal');
+};
+
+const continuityMessagesOf = (messages: readonly AgentMessage[]): string[] =>
+  messages
+    .filter(
+      (message) => message.role === 'system' && message.content.startsWith('【TASK_CONTINUITY_'),
+    )
+    .map((message) => message.content);
+
 const statusOf = (fixture: Fixture, runId: string): string | undefined =>
   fixture.store.runs.list().find((run) => run.id === runId)?.status;
 
@@ -417,6 +490,266 @@ const wireMessages = (init: RequestInit | undefined): { role: string; content: s
 };
 
 describe('RunService', () => {
+  it('keeps the original goal and the failed user request available after continue', async () => {
+    const fixture = await createFixture();
+    const service = createService(fixture);
+    const captured = captureFakeProviderRequests();
+    captured.failNextRequest();
+    try {
+      const failedRunId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '首次请求：整理季度经营复盘。',
+      });
+      await waitForCompletion(fixture, failedRunId);
+      expect(statusOf(fixture, failedRunId)).toBe('failed');
+      const artifact = fixture.store.artifacts.saveMarkdown({
+        taskId: fixture.taskId,
+        origin: 'user-edit',
+        title: '已登记的季度草稿',
+        content: '合成草稿内容',
+      });
+
+      const continuedRunId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '继续',
+      });
+      await waitForCompletion(fixture, continuedRunId);
+      expect(statusOf(fixture, continuedRunId)).toBe('completed');
+
+      const secondRequest = captured.requests[1];
+      if (!secondRequest) throw new Error('Fake Provider did not capture the continuation request');
+      const briefMessage = secondRequest.find((message) =>
+        message.content.startsWith('【TASK_CONTINUITY_BRIEF_V1】'),
+      );
+      const recentRequestsMessage = secondRequest.find((message) =>
+        message.content.startsWith('【TASK_CONTINUITY_RECENT_USER_REQUESTS_V1】'),
+      );
+      const factsMessage = secondRequest.find((message) =>
+        message.content.startsWith('【TASK_CONTINUITY_FACTS_V1】'),
+      );
+      expect(briefMessage?.content).toContain('用于运行编排测试');
+      expect(recentRequestsMessage?.content).toContain('首次请求：整理季度经营复盘。');
+      expect(recentRequestsMessage?.content).toContain(failedRunId);
+      expect(factsMessage?.content).toContain('"errorCategory":"failed"');
+      expect(factsMessage?.content).not.toContain('synthetic provider connection failure');
+      expect(factsMessage?.content).toContain('"status":"failed"');
+      expect(factsMessage?.content).toContain(artifact.currentVersionId);
+      expect(factsMessage?.content).toContain('"status":"registered"');
+      expect(secondRequest.at(-1)).toMatchObject({ role: 'user', content: '继续' });
+
+      const persisted = fixture.store.taskContinuity.getRunContext(continuedRunId);
+      expect(persisted?.firstProviderRequestAt).toBeDefined();
+      expect(persisted?.brief).toEqual(
+        fixture.store.taskContinuity.getLatest(fixture.taskId)?.brief,
+      );
+    } finally {
+      captured.restore();
+    }
+  });
+
+  it('keeps the exact persisted Brief messages in every Fake Provider tool round', async () => {
+    const fixture = await createFixture();
+    const service = createService(fixture);
+    const captured = captureFakeProviderRequests();
+    try {
+      const runId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '计算: 6 * 7',
+      });
+      await waitForCompletion(fixture, runId);
+
+      expect(statusOf(fixture, runId)).toBe('completed');
+      expect(captured.requests.length).toBeGreaterThanOrEqual(2);
+      const firstContinuity = continuityMessagesOf(captured.requests[0] ?? []);
+      expect(firstContinuity.length).toBeGreaterThanOrEqual(2);
+      for (const request of captured.requests.slice(1)) {
+        expect(continuityMessagesOf(request)).toEqual(firstContinuity);
+      }
+      const context = fixture.store.taskContinuity.getRunContext(runId);
+      expect(context?.firstProviderRequestAt).toBeDefined();
+    } finally {
+      captured.restore();
+    }
+  });
+
+  it('skips over-budget completed history but keeps its prompt, and applies the prompt tail budget', async () => {
+    const fixture = await createFixture();
+    const service = createService(fixture);
+    const captured = captureFakeProviderRequests();
+    const longAnswer = '合成长回答'.repeat(3_000);
+    try {
+      captured.respondNextRequest(longAnswer);
+      const longHistoryRunId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '上一轮用户明确要求：整理月度经营结果。',
+      });
+      await waitForCompletion(fixture, longHistoryRunId);
+      expect(statusOf(fixture, longHistoryRunId)).toBe('completed');
+
+      const continuationRunId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '继续',
+      });
+      await waitForCompletion(fixture, continuationRunId);
+      const continuationRequest = captured.requests[1];
+      if (!continuationRequest) throw new Error('Missing continuation Provider request');
+      expect(continuationRequest.some((message) => message.content.includes(longAnswer))).toBe(
+        false,
+      );
+      expect(
+        continuationRequest.some((message) =>
+          message.content.includes('上一轮用户明确要求：整理月度经营结果。'),
+        ),
+      ).toBe(true);
+      expect(fixture.store.runMemoryContexts.get(continuationRunId)?.replay).toContainEqual(
+        expect.objectContaining({
+          runId: longHistoryRunId,
+          replayed: false,
+          reason: 'history-budget',
+        }),
+      );
+
+      addFailedRun(fixture, {
+        id: 'tc-old-long-prompt',
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '旧'.repeat(3_000),
+        createdAt: Date.now() + 10,
+      });
+      addFailedRun(fixture, {
+        id: 'tc-new-long-prompt',
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '新'.repeat(6_000),
+        createdAt: Date.now() + 20,
+      });
+      const budgetRunId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: 'CURRENT_PROMPT_TAIL',
+      });
+      await waitForCompletion(fixture, budgetRunId);
+      const budgetRequest = captured.requests.at(-1);
+      if (!budgetRequest) throw new Error('Missing budget Provider request');
+      const requestsContext = budgetRequest.find((message) =>
+        message.content.startsWith('【TASK_CONTINUITY_RECENT_USER_REQUESTS_V1】'),
+      );
+      expect(requestsContext?.content).toContain('新'.repeat(100));
+      expect(requestsContext?.content).not.toContain('旧'.repeat(100));
+      expect(budgetRequest.at(-1)).toMatchObject({
+        role: 'user',
+        content: 'CURRENT_PROMPT_TAIL',
+      });
+      expect(fixture.store.taskContinuity.getRunContext(budgetRunId)?.omissions).toContain(
+        'recent-user-prompts-budget',
+      );
+    } finally {
+      captured.restore();
+    }
+  });
+
+  it('isolates previous Task prompts and keeps historical material references outside the current allowlist', async () => {
+    const fixture = await createFixture();
+    addFailedRun(fixture, {
+      id: 'tc-same-task-old-material-prompt',
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '上一轮提到 /tmp/unselected-private-material.md',
+      createdAt: 10,
+    });
+    const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+    if (!workspaceId) throw new Error('workspace missing');
+    const foreignTask = fixture.store.tasks.create(workspaceId, '隔离合成任务', '隔离目标');
+    fixture.store.taskContinuity.initializeFromTaskGoal(foreignTask.task.id);
+    addFailedRun(fixture, {
+      id: 'tc-foreign-task-secret-run',
+      taskId: foreignTask.task.id,
+      sessionId: foreignTask.sessionId,
+      prompt: 'CROSS_TASK_PROMPT_MUST_NOT_LEAK',
+      createdAt: 100,
+    });
+    const context = await saveSingleMaterialContext(fixture, '本轮唯一授权的合成材料。');
+    const service = createService(fixture);
+    const captured = captureFakeProviderRequests();
+    try {
+      const runId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '按当前材料继续',
+        taskContextRevisionId: context.id,
+        expectedTaskContextRevision: context.revision,
+      });
+      await waitForCompletion(fixture, runId);
+      const request = captured.requests[0];
+      if (!request) throw new Error('Missing material-scoped Provider request');
+      expect(
+        request.some((message) => message.content.includes('CROSS_TASK_PROMPT_MUST_NOT_LEAK')),
+      ).toBe(false);
+      const historical = request.find((message) =>
+        message.content.startsWith('【TASK_CONTINUITY_RECENT_USER_REQUESTS_V1】'),
+      );
+      expect(historical?.content).toContain('/tmp/unselected-private-material.md');
+      expect(historical?.content).toContain('不构成本 Run 的材料授权');
+      const materialAllowlist = request.find((message) =>
+        message.content.includes('以下是用户为本次 Run 明确选择的材料清单。'),
+      );
+      expect(materialAllowlist?.content).toContain('selected.md');
+      expect(materialAllowlist?.content).not.toContain('/tmp/unselected-private-material.md');
+    } finally {
+      captured.restore();
+    }
+  });
+
+  it('fails without Provider dispatch when the Brief is missing or dispatch audit cannot be stored', async () => {
+    const fixture = await createFixture();
+    const service = createService(fixture);
+    const captured = captureFakeProviderRequests();
+    try {
+      const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+      if (!workspaceId) throw new Error('workspace missing');
+      const legacyTask = fixture.store.tasks.create(workspaceId, '无初始简报的旧 Task', '不得回填');
+      const missingBriefRunId = service.start({
+        taskId: legacyTask.task.id,
+        sessionId: legacyTask.sessionId,
+        prompt: '继续',
+      });
+      await waitForCompletion(fixture, missingBriefRunId);
+      expect(statusOf(fixture, missingBriefRunId)).toBe('failed');
+      expect(fixture.store.taskContinuity.getRunContext(missingBriefRunId)).toBeUndefined();
+      expect(captured.requests).toHaveLength(0);
+
+      const dispatchFailure = vi
+        .spyOn(fixture.store.taskContinuity, 'markFirstProviderRequest')
+        .mockImplementation(() => {
+          throw new Error('synthetic dispatch audit write failure');
+        });
+      const failedAuditRunId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '不可在审计失败时派发',
+      });
+      await waitForCompletion(fixture, failedAuditRunId);
+      dispatchFailure.mockRestore();
+
+      expect(statusOf(fixture, failedAuditRunId)).toBe('failed');
+      expect(captured.requests).toHaveLength(0);
+      expect(
+        fixture.store.taskContinuity.getRunContext(failedAuditRunId)?.firstProviderRequestAt,
+      ).toBeUndefined();
+      expect(fixture.store.runs.listEvents(failedAuditRunId).at(-1)).toMatchObject({
+        type: 'run.failed',
+        error: expect.stringContaining('synthetic dispatch audit write failure'),
+      });
+    } finally {
+      captured.restore();
+    }
+  });
+
   it('atomically links the scheduled first Run before Provider dispatch and retries T4 idempotently', async () => {
     const fixture = await createFixture();
     const scheduled = createPreparedScheduleDraft(fixture);
@@ -1837,6 +2170,7 @@ describe('RunService', () => {
     const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
     if (!workspaceId) throw new Error('workspace missing');
     const secondTask = fixture.store.tasks.create(workspaceId, '第二期报告', '独立的下一期任务');
+    fixture.store.taskContinuity.initializeFromTaskGoal(secondTask.task.id);
     const expert = fixture.store.experts.create({
       sourceKind: 'user',
       revision: {

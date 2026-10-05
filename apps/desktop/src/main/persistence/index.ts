@@ -304,6 +304,7 @@ export {
 export { type SaveTaskContextInput, TaskContextRepository } from './task-context-repository';
 export {
   type AppendTaskContinuityRevisionInput,
+  type RunContinuityContext,
   TaskContinuityError,
   type TaskContinuityErrorCode,
   TaskContinuityRepository,

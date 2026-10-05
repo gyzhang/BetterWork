@@ -15,7 +15,7 @@
 
 > 2026-09-22：工作型记忆开发计划[tasks-memory.md](tasks-memory.md)（WM00–WM16）以[工作型记忆产品设计](../designs/work-centered-memory.md)、[ADR-0026](../adr/0026-work-centered-memory.md)（Proposed，已按用户开工指令实施）与[记忆实施契约](memory-contracts.md)为依据，与 A/B0/E/CF 并行，不改写本手册任务状态，也不在本手册维护任何 WM 状态（状态只在 tasks-memory 的总表）。本轮记忆不引入 Embedding、向量库、全量聊天扫描或定时反思。
 
-> 2026-10-05：同一 Task 多轮连续上下文增量见 [Task Continuity 产品设计](../designs/task-continuity.md)（v1.0）、[ADR-0038](../adr/0038-task-continuity-across-runs.md)（Accepted）、[实施契约](task-continuity-contracts.md)（v1.0）、[TC00–TC05 唯一任务板](tasks-task-continuity.md)与 [GPT-6 Luna 逐卡提示词](task-continuity-coding-prompts.md)。用户已批准设计和计划，并明确开发/测试数据可重置、无需旧数据兼容；TC01 已完成，后续卡片状态见唯一任务板。本增量不改写 A/B0/E/CF/WM/KM/SC 状态。
+> 2026-10-05：同一 Task 多轮连续上下文增量见 [Task Continuity 产品设计](../designs/task-continuity.md)（v1.0）、[ADR-0038](../adr/0038-task-continuity-across-runs.md)（Accepted）、[实施契约](task-continuity-contracts.md)（v1.0）、[TC00–TC05 唯一任务板](tasks-task-continuity.md)与 [GPT-6 Luna 逐卡提示词](task-continuity-coding-prompts.md)。用户已批准设计和计划，并明确开发/测试数据可重置、无需旧数据兼容；TC01–TC02 已完成，后续卡片状态见唯一任务板。本增量不改写 A/B0/E/CF/WM/KM/SC 状态。
 
 - 日期：2026-09-08
 - 状态：阶段 A 已有实现；2026-09-11 完成一轮代码补救，真实样本与安装验收仍未完成。本手册不自动把 Proposed ADR 改为 Accepted。
@@ -56,7 +56,7 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | [能力基础开发计划 CF00–CF51](tasks-capability-foundation.md) | API service profile、受保护凭据、版本化/远程 MCP、跨类绑定与 A21/E55/E56 联合收尾；依据 [ADR-0024](../adr/0024-api-services-and-credentials.md)、[ADR-0025](../adr/0025-remote-mcp-and-capability-bindings.md) 与 [capability-contracts](capability-contracts.md)。与 A/B0/E 并行，不重复排期 |
 | [工作型记忆开发计划 WM00–WM16](tasks-memory.md) | 记忆召回、来源治理、自动提炼建议、工作空间简报与参考成果版本的唯一任务板；依据 [工作型记忆产品设计](../designs/work-centered-memory.md)、[ADR-0026](../adr/0026-work-centered-memory.md)（Proposed，已实施）、[记忆实施契约](memory-contracts.md) 与[记忆编码提示词](memory-coding-prompts.md)。与 A/B0/E/CF 并行，不重复排期；本手册不维护 WM 状态 |
 | [Task Continuity 开发计划 TC00–TC05](tasks-task-continuity.md) | 跨 Run 连续上下文的唯一实施任务板；依据已批准的 [Task Continuity 产品设计](../designs/task-continuity.md)、[ADR-0038](../adr/0038-task-continuity-across-runs.md) 与[实施契约](task-continuity-contracts.md)，逐卡状态只维护在任务板；不改变 A/B0/E/CF/WM/KM/SC 状态 |
-| [Task Continuity GPT-6 Luna 逐卡提示词](task-continuity-coding-prompts.md) | 后续新任务按卡启动 TC01 等工作；一次只执行明确指派的卡片，不把整份计划当作批量实现授权 |
+| [Task Continuity GPT-6 Luna 逐卡提示词](task-continuity-coding-prompts.md) | 后续新任务按卡启动 TC03 等工作；一次只执行明确指派的卡片，不把整份计划当作批量实现授权 |
 | [后续 B/C](phase-b-c-roadmap.md) | 专家配置与研究汇报路径，阶段 A 完成后按模板细化 |
 | [依赖验证记录](dependency-verification.md) | 基础 Python 候选、逐字抄录的上游校验值、本机探测结果与待验证清单 |
 

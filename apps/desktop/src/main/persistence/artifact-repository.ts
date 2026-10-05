@@ -594,6 +594,18 @@ export class ArtifactRepository {
     return row?.artifact_id === artifactId;
   }
 
+  /** Task Continuity 只向模型列出当前 Task 确实登记的精确成果版本。 */
+  versionBelongsToTask(versionId: string, taskId: string): boolean {
+    const row = this.db
+      .prepare(
+        `SELECT a.task_id FROM artifact_versions v
+           JOIN artifacts a ON a.id = v.artifact_id
+          WHERE v.id = ?`,
+      )
+      .get(versionId) as { task_id: string } | undefined;
+    return row?.task_id === taskId;
+  }
+
   private readFileMeta(versionId: string): ArtifactFileRow | undefined {
     return this.db.prepare('SELECT * FROM artifact_files WHERE version_id = ?').get(versionId) as
       ArtifactFileRow | undefined;

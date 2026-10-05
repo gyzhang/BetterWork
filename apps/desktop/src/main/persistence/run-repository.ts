@@ -121,6 +121,25 @@ export class RunRepository {
     return rows.map(toSummary);
   }
 
+  /** 只读取 Task 最近的有限轮次，供连续简报来源和历史用户要求装配。 */
+  listRecentByTask(taskId: string, limit: number): RunSummary[] {
+    if (!Number.isSafeInteger(limit) || limit < 1) {
+      throw new Error('Recent Run limit must be a positive integer');
+    }
+    const rows = this.db
+      .prepare('SELECT * FROM runs WHERE task_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?')
+      .all(taskId, limit) as RunRow[];
+    return rows.map(toSummary);
+  }
+
+  /** 读取最近的单条事件，避免为 Run 状态摘要扫描整段事件历史。 */
+  getLatestEvent(runId: string): AgentRuntimeEvent | undefined {
+    const row = this.db
+      .prepare('SELECT payload FROM run_events WHERE run_id = ? ORDER BY sequence DESC LIMIT 1')
+      .get(runId) as EventPayloadRow | undefined;
+    return row ? agentRuntimeEventSchema.parse(JSON.parse(row.payload)) : undefined;
+  }
+
   listEvents(runId: string): AgentRuntimeEvent[] {
     const rows = this.db
       .prepare('SELECT payload FROM run_events WHERE run_id = ? ORDER BY sequence ASC')

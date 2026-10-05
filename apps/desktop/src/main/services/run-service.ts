@@ -19,6 +19,8 @@ import type {
   RuntimeProfileCommand,
   ScriptExecution,
   StartRunRequest,
+  TaskContinuityBrief,
+  TaskContinuityOmission,
   TaskMaterialSelection,
 } from '@betterwork/agent-protocol';
 import {
@@ -26,6 +28,7 @@ import {
   IpcChannel,
   materialReferenceSchema,
   memoryRecallPolicyV2,
+  TASK_CONTINUITY_RECENT_PROMPTS_MAX,
 } from '@betterwork/agent-protocol';
 import {
   type ArtifactFileRegistrar,
@@ -73,6 +76,7 @@ import {
   type InputSnapshot,
   materialReferenceKey,
   type MemoryReadInput,
+  type RunContinuityContext,
 } from '../persistence';
 import { API_KEY_SLOT, CredentialError } from '../persistence/credential-repository';
 import { ArtifactDeclarationService } from './artifact-declaration-service';
@@ -104,6 +108,11 @@ import type { SkillDependencyService } from './skill-dependency-service';
 import type { SkillExecutionService } from './skill-execution-service';
 import { composeRuntimeConvention } from './skill-runtime-conventions';
 import type { SkillService } from './skill-service';
+import {
+  assertTaskContinuityMessagesMatch,
+  createTaskContinuityContextPlan,
+  type TaskContinuityContextPlan,
+} from './task-continuity-context';
 import type { TaskMaterialService } from './task-material-service';
 import type { ToolchainSnapshotService } from './toolchain-snapshot-service';
 
@@ -617,6 +626,24 @@ export class RunService {
       throw error;
     }
 
+    let continuitySnapshot: RunContinuityContext;
+    let continuityPlan: TaskContinuityContextPlan;
+    try {
+      const prepared = this.prepareTaskContinuityContext(input.taskId, runId);
+      continuityPlan = prepared.plan;
+      continuitySnapshot = this.store.taskContinuity.prepareRunContext({
+        runId,
+        taskId: input.taskId,
+        revisionId: prepared.revisionId,
+        brief: continuityPlan.brief,
+        omissions: continuityPlan.omissions,
+      });
+    } catch (error) {
+      this.activeRuns.delete(runId);
+      this.finalizeFailure(runId, `Task Continuity 简报准备失败：${describeError(error)}`);
+      return runId;
+    }
+
     // 事件流是异步消费的；错误全部在 consume 内部收口，这里不会有未处理 rejection。
     const consumePromise = this.consume(
       runId,
@@ -625,6 +652,8 @@ export class RunService {
       controller,
       executionContext,
       memory,
+      continuitySnapshot,
+      continuityPlan.messages,
     )
       .catch((error: unknown) => {
         console.error(`Run ${runId} could not be finalized`, error);
@@ -690,6 +719,8 @@ export class RunService {
     controller: AbortController,
     executionContext: ResolvedRunContext,
     memory: RunMemoryPreparation,
+    continuitySnapshot: RunContinuityContext,
+    continuityMessages: readonly AgentMessage[],
   ): Promise<void> {
     let terminalEvent: AgentRuntimeEvent | undefined;
     try {
@@ -708,6 +739,19 @@ export class RunService {
         },
         // §6.4：装配消息与发包之间隔着工具循环，派发前按同一份快照核对记忆块。
         memoryBlock: memory.memoryBlock,
+        beforeDispatch: (request) => {
+          const persisted = this.store.taskContinuity.getRunContext(runId);
+          if (
+            !persisted ||
+            persisted.taskId !== input.taskId ||
+            persisted.revisionId !== continuitySnapshot.revisionId ||
+            persisted.briefHash !== continuitySnapshot.briefHash
+          ) {
+            throw new Error('Run Continuity snapshot 缺失或与已固定版本不一致。');
+          }
+          assertTaskContinuityMessagesMatch(request.messages, continuityMessages);
+          this.store.taskContinuity.markFirstProviderRequest(runId);
+        },
       });
       const webSearch = await this.resolveWebSearch();
       const allowedBuiltinToolNames = this.allowedBuiltinToolNames(
@@ -727,7 +771,7 @@ export class RunService {
         sessionId: input.sessionId,
         prompt: input.prompt,
         workspacePath,
-        messages: this.buildPreviousMessages(executionContext, memory),
+        messages: this.buildPreviousMessages(executionContext, memory, continuityMessages),
         model,
         tools: createRunTools({
           knowledgeSearch: (query, toolContext) =>
@@ -881,11 +925,90 @@ export class RunService {
    * 历史不再由本类自行遍历 Run：哪些轮次可重放、在哪一轮截断、为什么，
    * 全部来自 `prepareRunMemoryDecision` 与库里同一份快照（契约 §6.3）。
    */
+  private prepareTaskContinuityContext(
+    taskId: string,
+    currentRunId: string,
+  ): { revisionId: string; plan: TaskContinuityContextPlan } {
+    const revision = this.store.taskContinuity.getLatest(taskId);
+    if (!revision) throw new Error('Task 缺少 Task Continuity 初始 revision。');
+    const omissions = new Set<TaskContinuityOmission>();
+    const promptHashMatches = (runId: string, expectedHash: string): boolean => {
+      const sourceRun = this.store.runs.get(runId);
+      if (!sourceRun || sourceRun.taskId !== taskId) return false;
+      return createHash('sha256').update(sourceRun.prompt).digest('hex') === expectedHash;
+    };
+    const objectiveSourceRunId = revision.brief.objective.sourceRunId;
+    if (
+      objectiveSourceRunId !== undefined &&
+      this.store.runs.getTaskId(objectiveSourceRunId) !== taskId
+    ) {
+      throw new Error('Task Continuity 目标来源 Run 不属于当前 Task。');
+    }
+
+    const activeRequirements = revision.brief.activeRequirements.filter((requirement) => {
+      const sources = requirement.sources;
+      if (
+        sources &&
+        !sources.every((source) => promptHashMatches(source.runId, source.promptHash))
+      ) {
+        omissions.add('active-requirements-source-unavailable');
+        return false;
+      }
+      return true;
+    });
+
+    let progress: TaskContinuityBrief['progress'];
+    const candidateProgress = revision.brief.progress;
+    if (candidateProgress?.authoredBy === 'assistant-summary') {
+      // TC03 才会复核材料/记忆依赖闭包；在此之前不把助手生成进度发给模型。
+      omissions.add('assistant-progress-dependency-unverified');
+    } else if (candidateProgress) {
+      const sourceValid =
+        candidateProgress.sourceRunId === undefined ||
+        (candidateProgress.sourcePromptHash !== undefined &&
+          promptHashMatches(candidateProgress.sourceRunId, candidateProgress.sourcePromptHash));
+      if (!sourceValid) {
+        omissions.add('progress-source-unavailable');
+      } else if (
+        candidateProgress.artifactVersionIds.some(
+          (versionId) => !this.store.artifacts.versionBelongsToTask(versionId, taskId),
+        )
+      ) {
+        omissions.add('progress-artifact-unavailable');
+      } else {
+        progress = candidateProgress;
+      }
+    }
+
+    const priorRuns = this.store.runs
+      .listRecentByTask(taskId, TASK_CONTINUITY_RECENT_PROMPTS_MAX + 2)
+      .filter((run) => run.id !== currentRunId)
+      .map((run) => ({ runId: run.id, status: run.status, prompt: run.prompt }));
+    const latestRunId = priorRuns[0]?.runId;
+    const latestRun = latestRunId ? this.store.runs.get(latestRunId) : undefined;
+    const latestRunEvent = latestRun ? this.store.runs.getLatestEvent(latestRun.id) : undefined;
+    const plan = createTaskContinuityContextPlan({
+      brief: {
+        schemaVersion: revision.brief.schemaVersion,
+        objective: revision.brief.objective,
+        activeRequirements,
+        ...(progress ? { progress } : {}),
+      },
+      recentRuns: priorRuns,
+      ...(latestRun ? { latestRun } : {}),
+      ...(latestRunEvent ? { latestRunEvent } : {}),
+      artifacts: this.store.artifacts.list(taskId),
+      omissions: [...omissions],
+    });
+    return { revisionId: revision.id, plan };
+  }
+
   private buildPreviousMessages(
     executionContext: ResolvedRunContext,
     memory: RunMemoryPreparation,
+    continuityMessages: readonly AgentMessage[],
   ): AgentMessage[] {
-    const messages: AgentMessage[] = [];
+    const messages: AgentMessage[] = [...continuityMessages];
     if (memory.memoryBlock) {
       messages.push({ id: randomUUID(), role: 'system', content: memory.memoryBlock });
     }

@@ -473,4 +473,110 @@ describe('TaskContinuityRepository (TC01)', () => {
     expect(harness.store.taskContinuity.getLatest(secondTask.task.id)).toEqual(secondRevision);
     raw.close();
   });
+
+  it('freezes the exact Run Brief snapshot and restores its one-time dispatch audit', () => {
+    const harness = openHarness();
+    const created = createTask(harness, '快照恢复', '恢复季度经营分析目标');
+    const revision = harness.store.taskContinuity.getLatest(created.task.id);
+    if (!revision) throw new Error('New Task is missing its initial continuity revision');
+    harness.store.runs.create({
+      id: 'tc-run-continuity-snapshot',
+      taskId: created.task.id,
+      sessionId: created.sessionId,
+      prompt: '首次合成请求',
+      status: 'running',
+      createdAt: 20,
+    });
+
+    const prepared = harness.store.taskContinuity.prepareRunContext({
+      runId: 'tc-run-continuity-snapshot',
+      taskId: created.task.id,
+      revisionId: revision.id,
+      brief: revision.brief,
+      omissions: ['recent-user-prompts-budget'],
+      preparedAt: 50,
+    });
+    expect(prepared).toMatchObject({
+      runId: 'tc-run-continuity-snapshot',
+      taskId: created.task.id,
+      revisionId: revision.id,
+      brief: revision.brief,
+      briefHash: revision.briefHash,
+      preparedAt: 50,
+      omissions: ['recent-user-prompts-budget'],
+    });
+    const dispatched = harness.store.taskContinuity.markFirstProviderRequest(
+      'tc-run-continuity-snapshot',
+    );
+    expect(dispatched.firstProviderRequestAt).toBeGreaterThanOrEqual(50);
+    expect(
+      harness.store.taskContinuity.markFirstProviderRequest('tc-run-continuity-snapshot'),
+    ).toEqual(dispatched);
+
+    closeStore(harness.store);
+    const reopened = AppStore.open(harness.filePath);
+    stores.push(reopened);
+    expect(reopened.taskContinuity.getRunContext('tc-run-continuity-snapshot')).toEqual(dispatched);
+    const raw = new Database(harness.filePath);
+    raw.pragma('foreign_keys = ON');
+    expect(() =>
+      raw
+        .prepare('UPDATE run_continuity_contexts SET brief_hash = ? WHERE run_id = ?')
+        .run('f'.repeat(64), 'tc-run-continuity-snapshot'),
+    ).toThrow(/immutable/iu);
+    raw.close();
+  });
+
+  it('rejects malformed snapshot JSON and unknown omission reasons on restore', () => {
+    const harness = openHarness();
+    const malformedTask = createTask(harness, '损坏快照 JSON', '合成目标一');
+    const invalidOmissionsTask = createTask(harness, '损坏省略审计', '合成目标二');
+    const malformedRevision = harness.store.taskContinuity.getLatest(malformedTask.task.id);
+    const invalidOmissionsRevision = harness.store.taskContinuity.getLatest(
+      invalidOmissionsTask.task.id,
+    );
+    if (!malformedRevision || !invalidOmissionsRevision) {
+      throw new Error('New Tasks are missing their initial continuity revisions');
+    }
+    for (const [task, revision, runId] of [
+      [malformedTask, malformedRevision, 'tc-run-corrupt-json'],
+      [invalidOmissionsTask, invalidOmissionsRevision, 'tc-run-corrupt-omissions'],
+    ] as const) {
+      harness.store.runs.create({
+        id: runId,
+        taskId: task.task.id,
+        sessionId: task.sessionId,
+        prompt: '合成请求',
+        status: 'running',
+        createdAt: 30,
+      });
+      harness.store.taskContinuity.prepareRunContext({
+        runId,
+        taskId: task.task.id,
+        revisionId: revision.id,
+        brief: revision.brief,
+        preparedAt: 40,
+      });
+    }
+
+    const raw = new Database(harness.filePath);
+    raw.pragma('ignore_check_constraints = ON');
+    raw.exec('DROP TRIGGER run_continuity_contexts_only_mark_first_provider_request');
+    raw
+      .prepare('UPDATE run_continuity_contexts SET brief_json = ? WHERE run_id = ?')
+      .run('{', 'tc-run-corrupt-json');
+    raw
+      .prepare('UPDATE run_continuity_contexts SET omissions_json = ? WHERE run_id = ?')
+      .run('["unknown-reason"]', 'tc-run-corrupt-omissions');
+    raw.close();
+
+    expect(
+      continuityErrorOf(() => harness.store.taskContinuity.getRunContext('tc-run-corrupt-json')),
+    ).toMatchObject({ code: 'corrupt-data' });
+    expect(
+      continuityErrorOf(() =>
+        harness.store.taskContinuity.getRunContext('tc-run-corrupt-omissions'),
+      ),
+    ).toMatchObject({ code: 'corrupt-data' });
+  });
 });

@@ -3,6 +3,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import {
   type TaskContinuityBrief,
   taskContinuityBriefSchema,
+  type TaskContinuityOmission,
+  taskContinuityOmissionsSchema,
   type TaskContinuityRevision,
   taskContinuityRevisionSchema,
   type TaskContinuityRevisionSourceKind,
@@ -18,6 +20,10 @@ interface RunOwnerRow {
   status: string;
 }
 
+interface RunTaskRow {
+  task_id: string;
+}
+
 interface TaskContinuityRevisionRow {
   id: string;
   task_id: string;
@@ -30,6 +36,30 @@ interface TaskContinuityRevisionRow {
   created_at: number;
 }
 
+interface RunContinuityContextRow {
+  run_id: string;
+  task_id: string;
+  revision_id: string;
+  schema_version: number;
+  brief_json: string;
+  brief_hash: string;
+  prepared_at: number;
+  first_provider_request_at: number | null;
+  omissions_json: string;
+}
+
+export interface RunContinuityContext {
+  runId: string;
+  taskId: string;
+  revisionId: string;
+  schemaVersion: 1;
+  brief: TaskContinuityBrief;
+  briefHash: string;
+  preparedAt: number;
+  firstProviderRequestAt?: number;
+  omissions: TaskContinuityOmission[];
+}
+
 export type TaskContinuityErrorCode =
   | 'task-not-found'
   | 'revision-not-initialized'
@@ -37,6 +67,8 @@ export type TaskContinuityErrorCode =
   | 'invalid-revision-source'
   | 'run-task-mismatch'
   | 'revision-idempotency-conflict'
+  | 'run-context-not-found'
+  | 'run-context-already-prepared'
   | 'corrupt-data';
 
 export class TaskContinuityError extends Error {
@@ -118,6 +150,85 @@ const toRevision = (row: TaskContinuityRevisionRow): TaskContinuityRevision => {
   return result.data;
 };
 
+const toRunContinuityContext = (row: RunContinuityContextRow): RunContinuityContext => {
+  let parsedBrief: unknown;
+  try {
+    parsedBrief = JSON.parse(row.brief_json) as unknown;
+  } catch (error) {
+    throw new TaskContinuityError('corrupt-data', 'Run Continuity snapshot 包含无效 JSON。', {
+      cause: error,
+    });
+  }
+  const parsed = taskContinuityBriefSchema.safeParse(parsedBrief);
+  if (!parsed.success) {
+    throw new TaskContinuityError(
+      'corrupt-data',
+      `Run Continuity snapshot 未通过 Schema 校验：${parsed.error.message}`,
+      { cause: parsed.error },
+    );
+  }
+  if (briefHash(parsed.data) !== row.brief_hash) {
+    throw new TaskContinuityError('corrupt-data', 'Run Continuity snapshot 的 Brief hash 不匹配。');
+  }
+  let parsedOmissions: unknown;
+  try {
+    parsedOmissions = JSON.parse(row.omissions_json) as unknown;
+  } catch (error) {
+    throw new TaskContinuityError('corrupt-data', 'Run Continuity 省略审计包含无效 JSON。', {
+      cause: error,
+    });
+  }
+  const omissions = taskContinuityOmissionsSchema.safeParse(parsedOmissions);
+  if (!omissions.success) {
+    throw new TaskContinuityError(
+      'corrupt-data',
+      `Run Continuity 省略审计未通过 Schema 校验：${omissions.error.message}`,
+      { cause: omissions.error },
+    );
+  }
+  if (
+    row.schema_version !== parsed.data.schemaVersion ||
+    !Number.isSafeInteger(row.prepared_at) ||
+    row.prepared_at < 0 ||
+    (row.first_provider_request_at !== null &&
+      (!Number.isSafeInteger(row.first_provider_request_at) ||
+        row.first_provider_request_at < row.prepared_at))
+  ) {
+    throw new TaskContinuityError('corrupt-data', 'Run Continuity snapshot 元数据无效。');
+  }
+  return {
+    runId: row.run_id,
+    taskId: row.task_id,
+    revisionId: row.revision_id,
+    schemaVersion: parsed.data.schemaVersion,
+    brief: parsed.data,
+    briefHash: row.brief_hash,
+    preparedAt: row.prepared_at,
+    ...(row.first_provider_request_at === null
+      ? {}
+      : { firstProviderRequestAt: row.first_provider_request_at }),
+    omissions: omissions.data,
+  };
+};
+
+const isBriefSubset = (snapshot: TaskContinuityBrief, revision: TaskContinuityBrief): boolean => {
+  if (JSON.stringify(snapshot.objective) !== JSON.stringify(revision.objective)) return false;
+  if (
+    snapshot.activeRequirements.some(
+      (requirement) =>
+        !revision.activeRequirements.some(
+          (candidate) => JSON.stringify(candidate) === JSON.stringify(requirement),
+        ),
+    )
+  ) {
+    return false;
+  }
+  return (
+    snapshot.progress === undefined ||
+    JSON.stringify(snapshot.progress) === JSON.stringify(revision.progress)
+  );
+};
+
 /** Task 连续简报的追加式版本仓储；不读取历史消息，也不写其他聚合。 */
 export class TaskContinuityRepository {
   constructor(
@@ -182,6 +293,130 @@ export class TaskContinuityRepository {
       )
       .get(taskId, revision) as TaskContinuityRevisionRow | undefined;
     return row ? toRevision(row) : undefined;
+  }
+
+  /** 在 Run 行已持久化后冻结本次实际注入的 Brief；只允许基于最新 revision 的完整项子集。 */
+  prepareRunContext(input: {
+    runId: string;
+    taskId: string;
+    revisionId: string;
+    brief: TaskContinuityBrief;
+    omissions?: readonly TaskContinuityOmission[];
+    preparedAt?: number;
+  }): RunContinuityContext {
+    const brief = taskContinuityBriefSchema.parse(input.brief);
+    const omissions = taskContinuityOmissionsSchema.parse([...(input.omissions ?? [])]);
+    const prepare = this.db.transaction(() => {
+      const run = this.db.prepare('SELECT task_id FROM runs WHERE id = ?').get(input.runId) as
+        RunTaskRow | undefined;
+      if (!run || run.task_id !== input.taskId) {
+        throw new TaskContinuityError('run-task-mismatch', 'Run 不存在或不属于该 Task。');
+      }
+      const revision = this.getLatest(input.taskId);
+      if (!revision || revision.id !== input.revisionId) {
+        throw new TaskContinuityError(
+          'revision-not-initialized',
+          'Run Continuity snapshot 必须基于 Task 当前最新 revision。',
+        );
+      }
+      if (!isBriefSubset(brief, revision.brief)) {
+        throw new TaskContinuityError(
+          'invalid-revision-source',
+          'Run Continuity snapshot 不能增加或改写 Task Brief 内容。',
+        );
+      }
+
+      const existing = this.db
+        .prepare(
+          `SELECT run_id, task_id, revision_id, schema_version, brief_json, brief_hash,
+                  prepared_at, first_provider_request_at, omissions_json
+             FROM run_continuity_contexts WHERE run_id = ?`,
+        )
+        .get(input.runId) as RunContinuityContextRow | undefined;
+      const hash = briefHash(brief);
+      if (existing) {
+        const context = toRunContinuityContext(existing);
+        if (
+          context.taskId !== input.taskId ||
+          context.revisionId !== input.revisionId ||
+          context.briefHash !== hash ||
+          JSON.stringify(context.omissions) !== JSON.stringify(omissions)
+        ) {
+          throw new TaskContinuityError(
+            'run-context-already-prepared',
+            'Run 已经固定了不同的 Task Continuity snapshot。',
+          );
+        }
+        return context;
+      }
+
+      const preparedAt = input.preparedAt ?? this.clock();
+      this.db
+        .prepare(
+          `INSERT INTO run_continuity_contexts (
+             run_id, task_id, revision_id, schema_version, brief_json, brief_hash, prepared_at,
+             omissions_json
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          input.runId,
+          input.taskId,
+          revision.id,
+          brief.schemaVersion,
+          JSON.stringify(brief),
+          hash,
+          preparedAt,
+          JSON.stringify(omissions),
+        );
+      const inserted = this.db
+        .prepare(
+          `SELECT run_id, task_id, revision_id, schema_version, brief_json, brief_hash,
+                  prepared_at, first_provider_request_at, omissions_json
+             FROM run_continuity_contexts WHERE run_id = ?`,
+        )
+        .get(input.runId) as RunContinuityContextRow | undefined;
+      if (!inserted) throw new TaskContinuityError('corrupt-data', 'Run snapshot 写入后无法读取。');
+      return toRunContinuityContext(inserted);
+    });
+    return prepare();
+  }
+
+  getRunContext(runId: string): RunContinuityContext | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT run_id, task_id, revision_id, schema_version, brief_json, brief_hash,
+                prepared_at, first_provider_request_at, omissions_json
+           FROM run_continuity_contexts WHERE run_id = ?`,
+      )
+      .get(runId) as RunContinuityContextRow | undefined;
+    return row ? toRunContinuityContext(row) : undefined;
+  }
+
+  /** 首次 Provider 请求前写一次审计时间；重复读取幂等，数据库触发器锁定其余快照字段。 */
+  markFirstProviderRequest(runId: string): RunContinuityContext {
+    const mark = this.db.transaction(() => {
+      const current = this.getRunContext(runId);
+      if (!current) {
+        throw new TaskContinuityError(
+          'run-context-not-found',
+          'Run 缺少 Task Continuity snapshot。',
+        );
+      }
+      if (current.firstProviderRequestAt !== undefined) return current;
+      const requestedAt = Math.max(this.clock(), current.preparedAt);
+      this.db
+        .prepare(
+          `UPDATE run_continuity_contexts SET first_provider_request_at = ?
+            WHERE run_id = ? AND first_provider_request_at IS NULL`,
+        )
+        .run(requestedAt, runId);
+      const updated = this.getRunContext(runId);
+      if (!updated) {
+        throw new TaskContinuityError('run-context-not-found', 'Run snapshot 在派发审计时消失。');
+      }
+      return updated;
+    });
+    return mark();
   }
 
   append(input: AppendTaskContinuityRevisionInput): TaskContinuityRevision {

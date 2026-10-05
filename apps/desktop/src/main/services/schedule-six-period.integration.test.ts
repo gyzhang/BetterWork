@@ -897,6 +897,7 @@ describe('Schedule six period offline integration journey', () => {
       '普通人工任务',
       '验证普通人工任务能力没有被定时执行改变。',
     );
+    store.taskContinuity.initializeFromTaskGoal(ordinaryTask.task.id);
     const ordinaryContext = store.taskContexts.save(ordinaryTask.task.id, {
       executor: { kind: 'general' },
       skillBindings: [],

@@ -2,7 +2,7 @@
 
 - 依据：[Task Continuity 产品设计](../designs/task-continuity.md)、[ADR-0038](../adr/0038-task-continuity-across-runs.md)（Accepted）、[实施契约](task-continuity-contracts.md)（v1.0）与 [TC00–TC05 唯一任务板](tasks-task-continuity.md)。
 - 用法：在一个新的开发任务中一次粘贴并执行一张卡。不要把 TC00–TC05 全部放进同一个提示词；完成一张卡后，更新任务板和日志，再由用户决定是否开始下一张。
-- 当前可开工的首张代码卡是 TC01；TC00 为设计决策收口卡，已经完成。下面的 TC01 提示词仅在用户新建开发任务并提交它时使用，不表示本轮已经开始代码实施。
+- TC00–TC02 已完成；下面的 TC01 提示词保留作历史授权文本，不要重复提交。后续卡片是否可开工以唯一任务板状态和用户当次指派为准。
 
 ## TC01：新 Task 目标和连续简报持久化
 
@@ -46,7 +46,7 @@
 
 ## TC02–TC05 的后续派发方式
 
-完成 TC01 后，用户可在新开发任务中复制下面的短提示词，并将编号替换为当次获指派的卡：
+完成当前卡后，用户可在新开发任务中复制下面的短提示词，并将编号替换为当次获指派的卡：
 
 ```text
 请使用 GPT-6 Luna 完成 BetterWork Task Continuity 开发计划中的 [TC编号]。先读 AGENTS.md、docs/development/README.md、Task Continuity 设计、ADR-0038、实施契约、任务板对应卡片，以及 docs/10-ui-ux-system.md / docs/12-engineering-standards.md 的相关章节。核对前置卡证据、当前 HEAD、工作区和迁移版本；只完成被指派卡及必要测试/文档，不实现下一卡，不创建子任务或委派。遵守获批的无旧数据兼容、无历史回填边界；严格遵守现有 UI/工程规范。以任务卡验收证据更新唯一任务板和当日日志，运行卡片要求的离线测试与仓库验证，中文交接说明结果和限制；不要提交、推送或发布。

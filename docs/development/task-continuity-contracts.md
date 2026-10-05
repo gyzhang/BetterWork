@@ -1,7 +1,7 @@
 # Task Continuity 实施契约 v1.0（Accepted）
 
 - 日期：2026-10-05。
-- 状态：**用户于 2026-10-05 批准设计、ADR 与开发计划；TC01 已完成，TC02–TC05 尚未开始。**
+- 状态：**用户于 2026-10-05 批准设计、ADR 与开发计划；TC01–TC02 已完成，TC03–TC05 尚未开始。**
 - 产品与架构：[Task 跨 Run 连续协作设计](../designs/task-continuity.md)（v1.0），维持“一个 Task 中持续多轮协作”的用户心智。
 - 决策：[ADR-0038](../adr/0038-task-continuity-across-runs.md) 为 Accepted。
 - 唯一实施入口：[TC00–TC05 任务板](tasks-task-continuity.md)。
@@ -68,9 +68,9 @@ interface TaskContinuityBrief {
 | 记录 | 约束 | 用途 |
 | --- | --- | --- |
 | `task_continuity_revisions` | Task 外键、Task 内正整数 revision 唯一、不可变 brief JSON、Schema version、来源类型、可选来源 Run、哈希与时间 | 保存用户修订和每次已接受的 Run 更新；取最新 revision 作为下一次 Run 的默认 Brief |
-| `run_continuity_contexts` | `run_id` 唯一外键、Task / revision 归属、经 Schema 校验的实际 Brief 快照、规范哈希、准备时间、首个 Provider 请求阶段 | 证明某 Run 装配了哪一版 Brief；不保存密钥或完整 Provider 请求 |
+| `run_continuity_contexts` | `run_id` 唯一外键、Task / revision 归属、经 Schema 校验的实际 Brief 快照、规范哈希、准备时间、首个 Provider 请求阶段、经 Schema 校验的省略原因 | 证明某 Run 装配了哪一版 Brief；不保存密钥或完整 Provider 请求 |
 
-Repository 在一个 SQLite 同步事务内校验 Task/Run 归属、`expectedRevision` 并追加 revision；并发旧写入返回上下文冲突，不覆盖新状态。每个 Run 在第一次模型派发前固定快照；所有后续工具轮请求必须继续携带相同 Brief。Provider 审计检查消息中 Brief 与快照哈希相符后才允许派发。迁移不重写 `runs`、消息、历史记忆快照、材料快照或来源记录。
+Repository 在一个 SQLite 同步事务内校验 Task/Run 归属、`expectedRevision` 并追加 revision；并发旧写入返回上下文冲突，不覆盖新状态。v40 新增经 Schema 校验的 `omissions_json`，并用触发器限制快照只可将 `first_provider_request_at` 从空值写入一次、禁止其他字段更新。每个 Run 在第一次模型派发前固定快照；所有后续工具轮请求必须继续携带相同 Brief。Provider 审计检查消息中 Brief 与快照哈希相符后才允许派发。迁移不重写 `runs`、消息、历史记忆快照、材料快照或来源记录。
 
 `TaskContinuityRevision` 与 `TaskContextRevision` 完全分开：前者保存工作意图与进度；后者仍只保存执行者、能力、模型及材料选择。`RunContinuityContext` 不取代 `RunContextSnapshot` 或 `RunMemoryContext`。
 

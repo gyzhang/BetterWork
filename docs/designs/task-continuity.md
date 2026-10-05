@@ -1,7 +1,7 @@
 # Task 跨 Run 连续协作设计 v1.0
 
 > 日期：2026-10-05。
-> 状态：**产品与架构方案已于 2026-10-05 获用户批准；TC01 已完成，TC02–TC05 尚未开始。** 用户可见模型保持“一个任务中的连续多轮对话”；Task / Session / Run 的内部职责不合并。当前处于开发/测试阶段，既有数据无生产意义，可为验证重置；不做旧对话回填或历史 Task 兼容。
+> 状态：**产品与架构方案已于 2026-10-05 获用户批准；TC01–TC02 已完成，TC03–TC05 尚未开始。** 用户可见模型保持“一个任务中的连续多轮对话”；Task / Session / Run 的内部职责不合并。当前处于开发/测试阶段，既有数据无生产意义，可为验证重置；不做旧对话回填或历史 Task 兼容。
 > 决策见 [ADR-0038](../adr/0038-task-continuity-across-runs.md)（Accepted）。技术落地见 [Task Continuity 实施契约](../development/task-continuity-contracts.md)、[TC 唯一任务板](../development/tasks-task-continuity.md) 与 [GPT-6 Luna 逐卡提示词](../development/task-continuity-coding-prompts.md)。代码需遵守当前 [UI/UX 体系](../10-ui-ux-system.md) 和[工程规范](../12-engineering-standards.md)。
 > 依据：[领域模型](../02-domain-model.md)、[系统架构](../03-system-architecture.md)、[ADR-0008](../adr/0008-personal-workbench-and-capability-first.md)、[ADR-0014](../adr/0014-expert-context-and-material-binding.md)、[UI/UX 体系](../10-ui-ux-system.md)、[记忆实施契约](../development/memory-contracts.md)。
 

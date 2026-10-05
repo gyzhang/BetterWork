@@ -31,6 +31,6 @@
 
 ## 边界与后续细化
 
-实施细化见 [Task Continuity 实施契约](../development/task-continuity-contracts.md) 与 [TC00–TC05 任务板](../development/tasks-task-continuity.md)。类型化进度更新只可随常规 Run 输出产生，不另发摘要模型请求；若当前 Provider 无法提供同次响应的结构化更新，首版采用确定性 Run/Artifact 状态。初始预算和完整降级顺序见契约。TC01 已完成；后续代码卡、真实模型语义验收与发布仍按各自边界处理。
+实施细化见 [Task Continuity 实施契约](../development/task-continuity-contracts.md) 与 [TC00–TC05 任务板](../development/tasks-task-continuity.md)。类型化进度更新只可随常规 Run 输出产生，不另发摘要模型请求；若当前 Provider 无法提供同次响应的结构化更新，首版采用确定性 Run/Artifact 状态。初始预算和完整降级顺序见契约。TC01–TC02 已完成；TC03–TC05、真实模型语义验收与发布仍按各自边界处理。
 
 具体用户行为、字段语义、上下文优先级、材料边界、迁移和验收场景见[产品设计稿](../designs/task-continuity.md)。

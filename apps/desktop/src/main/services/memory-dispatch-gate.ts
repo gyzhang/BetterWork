@@ -65,21 +65,28 @@ export const withRunMemoryAudit = (
     modelSnapshot: Record<string, unknown>;
     /** 与 `selected_items_json` 同一次装配产出的记忆块正文；不注入时为空串。 */
     memoryBlock: string;
+    /** 其他 Main 侧审计门在委托 Provider 前执行；失败时不派发请求。 */
+    beforeDispatch?: (request: ModelRequest) => void;
   },
 ): ModelProvider => {
   let audited = false;
+  let dispatchAttempted = false;
   return {
     id: provider.id,
     stream: (request) => {
       if (!audited) {
-        audited = true;
         assertMemoryBlockMatches(request, gate.memoryBlock);
         gate.sink.markRequestPrepared({
           runId: gate.runId,
           requestHash: modelRequestHash(request),
           modelSnapshot: gate.modelSnapshot,
         });
+        audited = true;
+      }
+      gate.beforeDispatch?.(request);
+      if (!dispatchAttempted) {
         gate.sink.markDispatchAttempted({ runId: gate.runId });
+        dispatchAttempted = true;
       }
       return provider.stream(request);
     },
