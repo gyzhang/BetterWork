@@ -149,7 +149,7 @@ export function App(): React.JSX.Element {
   const memoriesState = useMemories();
   const mcpState = useMcpConnections();
 
-  const [prompt, setPrompt] = useState('计算: (12 + 8) * 3');
+  const [prompt, setPrompt] = useState('');
   const [taskBindings, setTaskBindings] = useState<CapabilityChip[]>([]);
   const [activeExpert, setActiveExpert] = useState<{
     id: string;
