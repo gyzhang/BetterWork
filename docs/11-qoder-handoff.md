@@ -66,15 +66,22 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 
 开发应用只能通过 `bash scripts/dev-start.sh` 启动；它会准确停止旧的 BetterWork 开发实例并写入 PID。停止使用 `bash scripts/dev-stop.sh`，日志在 `/tmp/betterwork-dev.log`。不要绕开脚本直接启动 Electron，也不要用宽泛的进程匹配方式杀掉用户的其他 Electron 应用。
 
-提交与推送门禁：
+分支与验证流程（[ADR-0039](adr/0039-task-branches-and-protected-main.md)）：
 
-    # git commit 自动按暂存文件执行 diff、格式、lint、类型或文档快检
+    # 每个任务从最新 origin/main 创建任务分支；并行写任务使用独立 worktree 与分支
+    git fetch origin
+    git switch -c codex/short-task-name origin/main
+    # 多次提交后，按个人节奏推送任务分支并创建 PR；main 只通过 PR Gate 合并
+
+提交与推送快检：
+
+    # git commit 自动按暂存文件执行 diff、格式、lint 或文档快检；不跑全仓 typecheck
     npm run docs:check # 文档结构、门禁摘要与规则链接的一致性快检
-    npm run verify     # lint + format:check + typecheck + test + build + ui:check；代码推送时 pre-push 自动执行一次
+    npm run verify     # lint + format:check + typecheck + test + build + ui:check；代码/混合 PR 自动执行
     npm run ui:check   # 组件矩阵 + 成果/知识/专家/记忆生产页面合成关键路径 + 真实 IPC/临时 SQLite 离线应用旅程与进程恢复；边界见 docs/10 §10.1.3
     npm run bench      # 计时基准档（串行）：跑完规模/性能卡或专门核查时执行，不在提交门禁里
 
-正常的代码提交后推送流程无需手动再运行完整 `verify`：pre-push 对当前干净 `HEAD` 自动执行一次；一次推送含多个代码提交也只执行一次。纯 Markdown 推送只跑 `git diff --check` 与 `docs:check`。如果人工先跑完整 `verify`，pre-push 仍会为最终推送范围再检查一次。GitHub Actions 推送后仍对本次 SHA 运行完整门禁，作为远端证据。
+日常提交只做暂存范围快检；一次任务可以包含多个提交，普通分支 push 不运行完整 `verify`。代码或混合 PR 的 Actions 执行一次完整门禁；纯 Markdown PR 只跑 `docs:check`。`PR Gate` 是 main 的必需状态。pre-push 阻止直推 main，并核对干净 HEAD 与空白差异。PR 合并后，删除已合并的短期分支；Codex 管理的 worktree 归档或移除。有未提交改动或尚未合并的任务时保留 worktree 与分支。
 
 离线人工走查的前置对象由 AI 准备：`npm run ui:check -- --prepare-acceptance` 在独立目录运行生产 App/Preload/IPC/临时 SQLite，完成既有旅程与前置样本后打开合成窗口；关闭保留库，按输出目录用 `UI_RENDER_OUTPUT_DIR="原输出目录" npm run ui:check -- --reopen-acceptance` 重开。它不启停产品 dev 应用，模型/脚本为离线替身，不代表安装入口或真实模型验收。自动化回归用 `--acceptance-smoke` 验证准备、关闭、新 PID 重开；人类操作与结果仍只记 [MI 原清单](development/memory-mi10-checklist.md)，不代签、不另造任务板。
 
@@ -145,7 +152,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 
 1. IPC 注册器已有 Electron 替身行为测试：非法输入、无入参通道、输出 Schema、来源打开白名单，以及「Workspace → Task → Run → Artifact → 修订 → 导出」主进程旅程。后续新增 channel 必须在同一测试中补边界行为；真实桌面窗口自动化尚未建立。
 2. Renderer 已有 App、视图、组件与 Hook 的 jsdom 行为测试，`ui:check` 另覆盖生产组件/四类页面矩阵、真实 App/Preload/IPC/临时 SQLite 离线旅程和独立进程强杀恢复，具体命中与未覆盖项见 [UI/UX §10.1.3](10-ui-ux-system.md#1013-组合约束与检查边界)。这些证据不代表所有真实桌面路径、真实模型语义、屏幕阅读器或安装验收通过，人工尾项仍查原任务板。
-3. GitHub Actions 在 **macOS runner** 上对 Pull Request 和 `main` 推送执行 `npm run verify`（[ADR-0036](adr/0036-macos-only-platform-scope.md)；平台范围只有 macOS，Windows 不在支持范围）。macOS 基础打包验证仍未达成；真实桌面 UI 自动化应在该专项中接入。工作流除 push／Pull Request 外还接 `workflow_dispatch`（手动复跑拿读数），并按 ref 开 `concurrency` 取消被取代的运行（只保留当前 ref 最新运行）；随失败上传截图与读数，随成功只上传 `.ui-render/results.json`（留 7 天）——绿跑的读数也是证据，形状由护栏「远端门禁跑在受支持的平台、能手动触发、并且留下绿跑读数」钉住。
+3. GitHub Actions 在 **macOS runner** 上对目标为 `main` 的 Pull Request 按变更范围执行门禁：代码或混合差异跑完整 `npm run verify`，纯 Markdown 跑 `npm run docs:check`（[ADR-0036](adr/0036-macos-only-platform-scope.md)、[ADR-0039](adr/0039-task-branches-and-protected-main.md)；平台范围只有 macOS，Windows 不在支持范围）。macOS 基础打包验证仍未达成；真实桌面 UI 自动化应在该专项中接入。工作流另接 `workflow_dispatch`（手动复跑完整 verify 拿读数），不在合并后的 main push 上重复运行。PR 两档结果聚合为 main 必需状态 `PR Gate`。工作流按 PR/ref 开 `concurrency` 取消被取代的运行（只保留当前 PR 最新运行）；随失败上传截图与读数，随成功只上传 `.ui-render/results.json`（留 7 天）——绿跑的读数也是证据，形状由护栏「远端门禁跑在受支持的平台、能手动触发、并且留下绿跑读数」钉住。
 
 **界面**
 
@@ -192,7 +199,7 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 以下能力符合长期方向，但**不是自动授权的下一步**：Embedding 与混合检索、带 Citation 的研究流与大纲确认、网页正文 Fetch、DOCX 报告、Excel 分析、PPT、长期 Memory、Expert/Skill/Kit。开始其中任一项前，应先与项目负责人确认优先级；再更新 [MVP 与路线图](07-mvp-and-roadmap.md)，并在涉及跨模块关系或关键技术选择时新增 ADR。
 ## 8. 变更与提交纪律
 
-每次开始先执行 `git status --short`。工作树并不一定总是干净；既有改动属于用户，不能删除、覆盖或夹带进无关提交。共享 checkout 与暂存区同一时刻只允许一个写任务；并行会话可以只读分析，写任务必须串行。提交前核对 `git status` 与 `git diff`，追加共享文档（如 `docs/logs/` 当天日志）前先重读文件末尾。每个提交保持聚焦，必要的测试、文档和 ADR 与实现放在同一变更中；验证层级按第 3 节执行，不逐提交手动重复完整 `verify`。
+每次开始先执行 `git status --short`。工作树并不一定总是干净；既有改动属于用户，不能删除、覆盖或夹带进无关提交。每个任务使用自己的分支；并行写任务使用独立 worktree 和分支，不共享编辑目录或 Git 暂存区。单个 checkout 同一时刻只允许一个写任务。提交前核对 `git status` 与 `git diff`，追加共享文档（如 `docs/logs/` 当天日志）前先重读文件末尾。每个提交保持聚焦，必要的测试、文档和 ADR 与实现放在同一变更中；完整验证在 PR Gate 收口，不逐提交手动重复完整 `verify`。PR 合并后清理已合并分支并归档/移除 worktree；未提交或未合并内容必须保留。
 
 禁止提交 `.env`、API Key、数据库、构建产物、用户资料或本地工作文件。遇到产品范围、数据迁移策略或安全边界不明确时，先停在文档/ADR 层澄清，不要把猜测固化为实现。
 

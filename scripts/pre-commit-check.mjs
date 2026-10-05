@@ -59,7 +59,6 @@ if (process.exitCode === undefined) {
     const existingFiles = stagedFiles.filter((file) => existsSync(path.resolve(root, file)));
     const lintFiles = existingFiles.filter((file) => lintExtensions.has(path.extname(file)));
     const formatFiles = existingFiles.filter((file) => formatExtensions.has(path.extname(file)));
-    const hasTypeScript = stagedFiles.some((file) => ['.ts', '.tsx'].includes(path.extname(file)));
     const hasMarkdown = stagedFiles.some((file) => file.endsWith('.md'));
 
     if (lintFiles.length > 0) {
@@ -69,9 +68,6 @@ if (process.exitCode === undefined) {
       stopOnFailure(
         run(path.join(root, 'node_modules/.bin/prettier'), ['--check', ...formatFiles]),
       );
-    }
-    if (process.exitCode === undefined && hasTypeScript) {
-      stopOnFailure(run('npm', ['run', 'typecheck']));
     }
     if (process.exitCode === undefined && hasMarkdown) {
       stopOnFailure(run('npm', ['run', 'docs:check']));

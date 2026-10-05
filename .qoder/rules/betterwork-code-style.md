@@ -17,7 +17,7 @@ glob: **/*.ts,**/*.tsx,**/*.css,**/*.mjs,**/*.json
 
 - **不新建第二套标准**：不加第二份 ESLint / Prettier / tsconfig 配置，不在任何 `package.json` 里内嵌 `eslintConfig` 或 `prettier` 键，不新建会各自放宽严格度的子 tsconfig。（AGENTS.md §7、docs/12 §10）
 - **源码里零豁免**：禁止 `eslint-disable`、`@ts-ignore`、`@ts-expect-error`、`prettier-ignore`。例外只能写进配置（按文件角色）或护栏测试的白名单，并注明理由。（docs/12 §10）
-- 提交时由 pre-commit 按暂存范围做快检；代码推送前由 pre-push 对最终提交自动跑完整 `npm run verify`（lint + format:check + typecheck + test + build + ui:check）。纯 Markdown 推送使用 `docs:check` 和差异空白检查；正常提交后推送无需提前手动重复完整 verify。（docs/12 §1）
+- 提交时由 pre-commit 按暂存范围做差异、ESLint / Prettier 与文档快检；每次提交不跑全仓 typecheck。pre-push 阻止直推 `main` 并核对 HEAD 与差异空白，不跑完整验证。代码或混合 PR 执行完整 `npm run verify`（lint + format:check + typecheck + test + build + ui:check）；纯 Markdown PR 执行 `docs:check`，均通过 `PR Gate` 汇总。（docs/12 §1、§1.1；ADR-0039）
 - **墙钟与内存预算断言只写在 `*.bench.test.ts` 里**，由 `npm run bench` 串行跑，不属于 `verify`；功能档里出现 `performance.now()` 会被护栏拦下。为昂贵夹具放宽**超时**是另一回事，注释里写清放宽的是什么。单文件墙钟 ≥20s 的重文件走 `heavy` 串行档。（docs/12 §9）
 
 ## 最常踩的硬约束

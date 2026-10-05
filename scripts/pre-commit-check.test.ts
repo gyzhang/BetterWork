@@ -67,7 +67,7 @@ describe('提交快检按暂存范围选择', () => {
     });
   });
 
-  it('TypeScript 只 lint/format 暂存路径并做类型检查', () => {
+  it('TypeScript 只 lint/format 暂存路径，不在每次提交运行全仓 typecheck', () => {
     withRepository((directory) => {
       mkdirSync(path.join(directory, 'src'));
       writeFileSync(path.join(directory, 'src/work.ts'), 'export const value = 1;\n');
@@ -78,7 +78,7 @@ describe('提交快检按暂存范围选择', () => {
 
       expect(result.status, String(result.stderr)).toBe(0);
       expect(readFileSync(path.join(directory, '.commands'), 'utf8')).toBe(
-        'eslint src/work.ts\nprettier --check src/work.ts\nnpm run typecheck\n',
+        'eslint src/work.ts\nprettier --check src/work.ts\n',
       );
     });
   });
@@ -96,7 +96,7 @@ describe('提交快检按暂存范围选择', () => {
     });
   });
 
-  it('删除的 TypeScript 仍触发类型检查', () => {
+  it('删除的 TypeScript 不触发全仓类型检查', () => {
     withRepository((directory) => {
       mkdirSync(path.join(directory, 'src'));
       writeFileSync(path.join(directory, 'src/gone.ts'), 'export const oldValue = 1;\n');
@@ -108,7 +108,7 @@ describe('提交快检按暂存范围选择', () => {
       const result = runCheck(directory);
 
       expect(result.status, String(result.stderr)).toBe(0);
-      expect(readFileSync(path.join(directory, '.commands'), 'utf8')).toBe('npm run typecheck\n');
+      expect(() => readFileSync(path.join(directory, '.commands'))).toThrow();
     });
   });
 });

@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import process from 'node:process';
 
 const zeroOid = '0000000000000000000000000000000000000000';
@@ -12,23 +12,12 @@ function fail(message) {
   process.exitCode = 1;
 }
 
-function runNpm(script) {
-  const result = spawnSync('npm', ['run', script], { stdio: 'inherit' });
-  if (result.error) {
-    process.stderr.write(`${result.error.message}\n`);
-    process.exitCode = 1;
-    return;
-  }
-  if (result.status !== 0) process.exitCode = result.status ?? 1;
-}
-
 const initialStatus = git(['status', '--porcelain']);
 if (initialStatus !== '') {
-  fail('工作树不干净：先提交本轮改动，再推送；未提交的修复不能替 HEAD 取得绿灯。');
+  fail('工作树不干净：先提交本轮改动，再推送；待推送对象必须与当前 HEAD 对应。');
 } else {
   const checkedHead = git(['rev-parse', 'HEAD']);
-  let hasNewCommit = false;
-  let codeChanges = false;
+  let hasCommitUpdate = false;
   let updates = '';
   for await (const chunk of process.stdin) updates += chunk.toString('utf8');
 
@@ -38,49 +27,41 @@ if (initialStatus !== '') {
       fail('Git 推送引用格式无效：无法确认本次待推送提交。');
       break;
     }
+    if (remoteRef === 'refs/heads/main') {
+      fail('禁止直接推送 main：请将任务分支推送后创建 Pull Request，并通过 PR Gate 合并。');
+      break;
+    }
     if (localOid === zeroOid) continue;
 
-    hasNewCommit = true;
+    hasCommitUpdate = true;
     const pushedCommit = resolveCommit(localOid);
     if (pushedCommit !== checkedHead) {
       fail('推送对象不是当前 HEAD：先切换到要推送的提交，再进行验证。');
       break;
     }
 
+    let base = remoteOid;
     if (remoteOid === zeroOid) {
-      codeChanges = true;
-      continue;
-    }
-
-    const changedFiles = execFileSync(
-      'git',
-      ['diff', '--name-only', '-z', remoteOid, pushedCommit],
-      {
-        encoding: 'utf8',
-      },
-    )
-      .split('\0')
-      .filter((file) => file !== '');
-    if (changedFiles.length === 0 || changedFiles.some((file) => !file.endsWith('.md'))) {
-      codeChanges = true;
+      try {
+        base = git(['merge-base', 'origin/main', pushedCommit]);
+      } catch {
+        fail('无法核对新分支差异：请先获取 origin/main，再推送任务分支。');
+        break;
+      }
     }
     try {
-      execFileSync('git', ['diff', '--check', remoteOid, pushedCommit], { stdio: 'ignore' });
+      execFileSync('git', ['diff', '--check', base, pushedCommit], { stdio: 'ignore' });
     } catch {
       fail('待推送差异包含空白错误：修正后再推送。');
       break;
     }
   }
 
-  if (process.exitCode === undefined && hasNewCommit) {
-    runNpm(codeChanges ? 'verify' : 'docs:check');
-  }
-
   if (process.exitCode === undefined) {
     const finalHead = git(['rev-parse', 'HEAD']);
     const finalStatus = git(['status', '--porcelain']);
-    if (finalHead !== checkedHead || finalStatus !== '') {
-      fail('验证期间提交或工作树发生变化：本次推送停止，请在稳定状态重新验证。');
+    if (hasCommitUpdate && (finalHead !== checkedHead || finalStatus !== '')) {
+      fail('核对期间提交或工作树发生变化：本次推送停止，请在稳定状态重试。');
     }
   }
 }
