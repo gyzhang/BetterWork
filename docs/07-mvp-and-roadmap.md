@@ -1,5 +1,13 @@
 # MVP 与路线图
 
+## Task 内多轮连续上下文增量 — 2026-10-05（设计与开发计划已批准，代码未开工）
+
+产品按常见桌面智能体的心智呈现：**一个 Task 是一项可持续多轮协作的工作**。用户留在同一 Task 对话中追问、修订和继续；每次用户提交仍对应一条独立 Run，用于执行状态、当轮材料/授权快照、取消、失败恢复与审计，Run 不作为用户需要管理的新对话。
+
+[Task 跨 Run 连续协作设计](designs/task-continuity.md)明确每轮注入有界、Task 局部的 Continuity Brief，以持久化任务目标、明确的用户要求、来源可追溯的近期进度和真实成果状态保障短期连续性；现有安全历史重放继续补充细节，且不得突破每轮材料和权限边界。用户于 2026-10-05 批准设计、[ADR-0038](adr/0038-task-continuity-across-runs.md)（Accepted）、[实施契约](development/task-continuity-contracts.md)和 [TC00–TC05 唯一任务板](development/tasks-task-continuity.md)。当前为开发/测试阶段，既有数据可重置，不做历史对话回填或旧 Task 兼容；UI 与代码遵循 [UI/UX 体系](10-ui-ux-system.md) 和[工程规范](12-engineering-standards.md)。
+
+本轮完成设计与计划批准及文档归档，产品代码尚未开工；后续由用户在新任务中按 [GPT-6 Luna 逐卡提示词](development/task-continuity-coding-prompts.md)指派 TC01 起逐卡实施。真实模型语义验收与发布按各自授权处理；不重排 A/B0/E/CF/WM/KM/SC 等既有计划和状态，也不创建竞争性实施任务板。
+
 ## 工作空间身份与侧栏分组 — 2026-09-28（代码与自动化已落地，待光哥真实窗口走查）
 
 光哥参照 WorkBuddy 与 Qoder 提出：工作空间要能为一个本地文件夹取别名、带图标与颜色，侧栏任务要按「空间＋任务」组织。[低保真原型](prototype/workspace-identity/index.html)给出 D1–D10 及推荐方案，同日全部批准并授权编码。
