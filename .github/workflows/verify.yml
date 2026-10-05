@@ -2,55 +2,64 @@ name: Verify
 
 on:
   pull_request:
-  push:
     branches:
       - main
-  # 手动触发是这套门禁唯一的「同一份代码再跑一次拿读数」入口：审计时要回答
-  # 「绿跑长什么样」「这轮比上轮慢了多少」，只有 push 事件的话，不改动代码就制造不出一条运行。
+  # 手动触发用于对当前代码重跑完整门禁并留存读数。
   workflow_dispatch:
 
-# 连续推送时只保留最新一次的读数：macOS runner 按分钟计费，跑完一条已经不代表 HEAD 的运行
-# 既烧钱又会把「当前 main 是否绿」读成旧事实。
+# 同一 PR 只保留最新差异的验证结果；手动运行按当前分支归组。
 concurrency:
-  group: verify-${{ github.ref }}
+  group: verify-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
-  # 写了 permissions 键之后未点名的作用域就是 none；上传渲染检查产物需要 actions: write。
   actions: write
 
 jobs:
-  verify:
-    name: Quality gate
-    # 产品只支持 macOS（ADR-0036）：门禁必须跑在被支持的那个平台上。
-    # ubuntu runner 测的是我们不需要兼容的平台，且 Electron 离屏渲染检查会在
-    # Ubuntu 的 userns/AppArmor 限制下崩成 SIGTRAP——那是测错平台的噪声，不是代码缺陷。
+  classify:
+    name: Classify changes
+    runs-on: macos-latest
+    outputs:
+      has_code: ${{ steps.changes.outputs.has_code || steps.manual.outputs.has_code }}
+      docs_only: ${{ steps.changes.outputs.docs_only || steps.manual.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: 选择 PR 验证范围
+        id: changes
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/classify-pr-changes.mjs --pull-request "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
+      - name: 手动运行完整门禁
+        id: manual
+        if: github.event_name == 'workflow_dispatch'
+        run: node scripts/classify-pr-changes.mjs --full >> "$GITHUB_OUTPUT"
+
+  quality:
+    name: Full verify
+    needs: classify
+    if: needs.classify.outputs.has_code == 'true'
     runs-on: macos-latest
     timeout-minutes: 15
     steps:
-      # 三个 Action 都要跑在 node24 上：GitHub 已在 runner 上关停 Node 20，2026-10-02 运行日志里那条
-      # 警告说的是 Action 自己的运行时，与产品依赖无关。checkout／setup-node 从 v5 起、upload-artifact 从
-      # v6 起才是 node24——注意 upload-artifact 的 v5 仍是 node20，别以为升一位就够。v7 换的是 direct uploads
-      # 与 ESM 内部实现，与这条警告无关，不在本笔里混进来。
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          # 版本只有一个真相源：.nvmrc（package.json 的 engines 给下限，README 与 CONTRIBUTING 说同一件事）。
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
       - run: npm run verify
         env:
-          # 渲染检查的截图与读数写进工作区，失败时整目录传成 artifact（见下一步）。
           UI_RENDER_OUTPUT_DIR: ${{ github.workspace }}/.ui-render
-      # 断言只留一句标签时，换台机器红了就无从下手；产物随失败上传，图与读数都能回看。
       - name: 上传渲染检查产物
         if: failure()
         uses: actions/upload-artifact@v6
         with:
           name: ui-render-check
-          # 仅合成旅程的临时库/资料，用于先查 SQLite 再查截图；不含用户 Chromium 数据目录。
           path: |
             .ui-render/screenshots/
             .ui-render/results.json
@@ -60,9 +69,6 @@ jobs:
             .ui-render/app-journey-*/
             .ui-render/process-recovery-*/
           retention-days: 14
-      # 绿跑也要留读数：「这条判据这轮是不是变严了」「每组渲染耗时漂了多少」只能拿两次读数对比回答，
-      # 而只随失败上传的产物在连着两次绿跑之间是空的。只传 results.json——绿跑的截图没有诊断价值，
-      # 完整矩阵的逐步截图仅失败时保留，绿跑读数保留期压到 7 天。
       - name: 留存渲染检查读数
         if: success()
         uses: actions/upload-artifact@v6
@@ -70,3 +76,49 @@ jobs:
           name: ui-render-readings
           path: .ui-render/results.json
           retention-days: 7
+
+  documentation:
+    name: Documentation check
+    needs: classify
+    if: github.event_name == 'pull_request' && needs.classify.outputs.docs_only == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run docs:check
+
+  pr-gate:
+    name: PR Gate
+    needs:
+      - classify
+      - quality
+      - documentation
+    if: always() && github.event_name == 'pull_request'
+    runs-on: macos-latest
+    steps:
+      - name: 确认对应范围的门禁通过
+        env:
+          CLASSIFY_RESULT: ${{ needs.classify.result }}
+          HAS_CODE: ${{ needs.classify.outputs.has_code }}
+          DOCS_ONLY: ${{ needs.classify.outputs.docs_only }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          DOCUMENTATION_RESULT: ${{ needs.documentation.result }}
+        run: |
+          if [ "$CLASSIFY_RESULT" != "success" ]; then
+            echo "差异分类失败：不能判断应运行哪一档门禁。"
+            exit 1
+          fi
+          if [ "$HAS_CODE" = "true" ] && [ "$QUALITY_RESULT" != "success" ]; then
+            echo "代码或混合差异必须通过 Full verify；结果：$QUALITY_RESULT"
+            exit 1
+          fi
+          if [ "$DOCS_ONLY" = "true" ] && [ "$DOCUMENTATION_RESULT" != "success" ]; then
+            echo "纯 Markdown 差异必须通过 Documentation check；结果：$DOCUMENTATION_RESULT"
+            exit 1
+          fi
+          echo "PR Gate passed."

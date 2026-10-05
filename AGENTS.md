@@ -139,7 +139,7 @@ Renderer -> Preload API -> Application -> Agent Core / Infrastructure
 - Schema 变更走版本化迁移并补迁移测试，不得在启动代码里探测后 `ALTER`。
 - 新增领域行为必须有单元测试；Agent 事件顺序、取消和工具失败必须有测试；涉及外部 HTTP 的代码必须可注入 `fetch`，测试不得触网。
 - 修复缺陷时优先添加回归测试。
-- 提交时由 pre-commit 按暂存范围做快检；代码推送前由 pre-push 对最终提交自动执行一次 `npm run verify`（lint + format:check + typecheck + test + build + ui:check）。纯 Markdown 变更执行 `docs:check` 与差异空白检查。正常提交后推送无需再手动跑完整 `verify`；如手动运行，推送钩子仍会按最终提交范围验证。完整门禁不要把输出接管道后只看末尾。墙钟与内存预算断言不在 `verify` 里：它们只住在 `*.bench.test.ts`，由 `npm run bench` 串行跑（见 `docs/12-engineering-standards.md` §9）。
+- 提交时由 pre-commit 按暂存范围做差异空白、定向 ESLint/Prettier 与纯文档 `docs:check`；不在每次提交时运行全仓 typecheck。pre-push 阻止直推 `main`，只核对待推送的干净 HEAD 与差异空白。代码或混合变更在 Pull Request 上由 macOS Actions 执行一次完整 `npm run verify`（lint + format:check + typecheck + test + build + ui:check）；纯 Markdown PR 只执行 `docs:check`，必需状态统一为 `PR Gate`。GitHub `main` 仅接受通过 PR Gate 的 Pull Request，不接受直接推送（见 [ADR-0039](docs/adr/0039-task-branches-and-protected-main.md)）。完整门禁不要把输出接管道后只看末尾。墙钟与内存预算断言不在 `verify` 里：它们只住在 `*.bench.test.ts`，由 `npm run bench` 串行跑（见 `docs/12-engineering-standards.md` §9）。
 - 不提交 `.env`、密钥、构建产物、数据库和本地工作文件。
 
 ## 8. 变更纪律
@@ -148,7 +148,7 @@ Renderer -> Preload API -> Application -> Agent Core / Infrastructure
 - 功能范围变化时同步更新 `docs/07-mvp-and-roadmap.md`。
 - 产品语言变化时同步更新 README、产品定义和品牌文档。
 - 保持提交聚焦；不混入无关格式化或重构。
-- 同一个共享工作区与 Git 暂存区同一时刻只允许一个写任务；其他并行任务先做只读分析，随后串行修改和提交。不要让两个任务同时编辑或暂存同一 checkout。
+- 每个任务都在自己的任务分支上工作；Codex 并行任务各用独立 worktree 和分支，不共享编辑目录或暂存区。单个 checkout 同一时刻只允许一个写任务。任务完成后创建 PR 合并回 `main`，合并后删除已合并分支并归档/移除对应 worktree；未合并工作不得清理。
 - 不删除或覆盖用户已有改动；发现冲突先停下说明。
 - **技术方案遇到两层以上障碍时先停下来澄清**，不埋头修一座不该修的桥；沉默、让步或「先这样吧」都不构成继续的授权。产品范围、数据迁移策略或安全边界不明确时，停在文档 / ADR 层，不把猜测固化为实现。
 

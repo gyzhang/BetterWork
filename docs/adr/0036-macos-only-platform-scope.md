@@ -32,7 +32,7 @@
 
 - 不引入 Windows／Linux 的 CI 档，也不为「以后可能要跨平台」预留抽象——那属路线图外的系统（AGENTS.md §5「不为了以后可能需要提前实现」）。
 - 不改 Electron、Node、`jsdom` 的版本策略；`package-lock.json` 里那些 `@esbuild/linux-*`、`@rollup/win32-*` 是 npm 可选依赖的正常产物，不是兼容承诺，不动。
-- **`main` 不设分支保护**（2026-10-02 光哥定案：这是单人项目，`main` 就是他的工作分支，没有也不需要他人协作）：门禁的红当信号看，不靠 GitHub 拦推送。真正拦人的是提交前那次 `npm run verify`，不是远端闸门；本记录不留「要不要变成阻塞闸门」这个悬空问题。
+- **2026-10-02 曾决定 `main` 不设分支保护**，当时以单人项目直接在 `main` 工作为前提。该工作流决策由 [ADR-0039](0039-task-branches-and-protected-main.md)（2026-10-05）取代；本 ADR 的 macOS 平台决策不受影响。
 
 ## 后果
 

@@ -38,6 +38,8 @@
 | [0035](0035-focus-ring-inside-control-box.md) | 焦点环画进控件自己的盒子 | Accepted（2026-10-01 实施，同日二轮把 `--focus-ring-offset` 由 `-1px` 改为 **`-3px`**——`-1px` 的环带只有一半在盒内，左右仍被贴边的滚动容器裁掉；现值让 2px 环整体住在盒内并留 1px 缝，一处几何，**替代** [0034](0034-input-control-base.md) 表第 7 行「聚焦环 → 1 处出口」的结论——`.composer textarea` 那条 `outline: 0` 当时作为例外留下，任务输入区因此从来没有焦点指示；2026-10-02 第三轮把降级块里那条 `transition-duration: 0.01ms` 改成 `0s`——`transition-property` 的初始值是 `all`，非零时长反过来替没声明过渡的元素造出过渡，把焦点环冻回盒外） |
 | [0036](0036-macos-only-platform-scope.md) | 平台范围只有 macOS | Accepted（2026-10-02 光哥指令；门禁 runner 由 ubuntu 改 macos-latest 并去掉 xvfb-run，删掉测试宿主的 Linux `--no-sandbox` 分支；顺带照出 SkillsView 用例间漏偏好的真实缺陷，成对实验已验） |
 | [0037](0037-scheduled-work-and-source-snapshots.md) | 周期工作实例与本期来源快照 | Proposed（2026-10-03 产品原型通过后细化；生产未开工） |
+| [0038](0038-task-continuity-across-runs.md) | Task 跨 Run 的目标、要求、进度与恢复 | Accepted |
+| [0039](0039-task-branches-and-protected-main.md) | 任务分支、PR 门禁与受保护的 main | Accepted（2026-10-05；替代 ADR-0036 的直接在 main 工作流约定） |
 
 [ADR-0027](0027-knowledge-foundation.md)（Proposed，2026-09-24 文档归档）提出固定知识修订正文读取、嵌入/混合检索、索引作业与显式成果来源声明；延续 ADR-0014/0018，拟细化 ADR-0005 的访问与采用语义，不改变 WM 的非向量记忆召回。产品见[知识基础闭环](../designs/knowledge-foundation.md)，字段见[知识契约](../development/knowledge-contracts.md)，状态只看 [KM 任务板](../development/tasks-knowledge.md)。
 

@@ -4765,18 +4765,15 @@ describe('计时基准车道纪律', () => {
 });
 
 /**
- * 本地提交/推送钩子的范围分工（docs/12 §1）。
+ * 提交、推送与 PR 门禁的范围分工（docs/12 §1、§1.1；ADR-0039）。
  *
- * 2026-10-02 审计实测：Actions 最近 30 次运行 28 红 2 绿，且全部是 `push` 事件——四处文档都写着
- * 「提交前跑 verify」，机器上却只有 lint + typecheck，于是红全部发生在 main 已经坏了之后。
- * [ADR-0036](../docs/adr/0036-macos-only-platform-scope.md) 已定案「不靠远端闸门拦推送」，
- * 所以这一段只能由本地补上；补上之后必须有护栏钉着对应关系，否则下一次谁删一行钩子，
- * 那四处文档依然全绿地重复着同一句嘱咐。
+ * 提交只按暂存范围做快检；分支 push 不重复全仓验证；PR 上按差异运行完整 verify 或 docs:check，
+ * 并以稳定的 PR Gate 作为 main 的必需状态。文档、钩子、工作流与夹具测试必须保持同一关系。
  */
 describe('提交与推送门禁纪律', () => {
   const hookFiles = ['.husky/pre-commit', '.husky/pre-push'] as const;
 
-  it('本地钩子按暂存与推送范围执行相应门禁', () => {
+  it('本地钩子按暂存范围快检并阻止直推 main', () => {
     const scripts = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
     const pipeline = (scripts.scripts.verify ?? '')
       .split(' && ')
@@ -4791,6 +4788,8 @@ describe('提交与推送门禁纪律', () => {
       'scripts/pre-push-check.mjs',
       'scripts/pre-commit-check.test.ts',
       'scripts/pre-push.test.ts',
+      'scripts/classify-pr-changes.mjs',
+      'scripts/classify-pr-changes.test.ts',
     ]) {
       expect(REPO_FILES, `${file} 不存在，本条护栏已空跑`).toContain(file);
     }
@@ -4801,22 +4800,32 @@ describe('提交与推送门禁纪律', () => {
     expect(preCommitCheck).toContain("'--cached', '--check'");
     expect(preCommitCheck).toContain('node_modules/.bin/eslint');
     expect(preCommitCheck).toContain('node_modules/.bin/prettier');
-    expect(preCommitCheck).toContain("run('npm', ['run', 'typecheck'])");
+    expect(preCommitCheck).not.toContain("run('npm', ['run', 'typecheck'])");
     expect(preCommitCheck).toContain("run('npm', ['run', 'docs:check'])");
     const prePushCheck = read('scripts/pre-push-check.mjs');
-    expect(prePushCheck).toContain("runNpm(codeChanges ? 'verify' : 'docs:check')");
+    expect(prePushCheck).toContain("remoteRef === 'refs/heads/main'");
+    expect(prePushCheck).toContain("git(['merge-base', 'origin/main', pushedCommit])");
     expect(prePushCheck).toContain("git(['status', '--porcelain'])");
     expect(prePushCheck).toContain("git(['rev-parse', 'HEAD'])");
   });
 
-  it('共享工作区规定单写者并将并行编辑串行化', () => {
-    expect(read('AGENTS.md')).toContain('同一个共享工作区与 Git 暂存区同一时刻只允许一个写任务');
+  it('任务分支隔离并要求并行写任务使用独立 worktree', () => {
+    expect(read('AGENTS.md')).toContain('每个任务都在自己的任务分支上工作');
+    expect(read('AGENTS.md')).toContain('并行任务各用独立 worktree 和分支');
     expect(read('docs/12-engineering-standards.md')).toContain(
-      '共享的 `main` 工作区与暂存区同一时刻只允许一个写任务',
+      '并行写任务各用独立 worktree 与分支',
     );
-    expect(read('docs/11-qoder-handoff.md')).toContain(
-      '共享 checkout 与暂存区同一时刻只允许一个写任务',
-    );
+    expect(read('docs/11-qoder-handoff.md')).toContain('并行写任务使用独立 worktree 和分支');
+  });
+
+  it('main 只允许通过必需 PR Gate 的 Pull Request 更新', () => {
+    const workflow = read('.github/workflows/verify.yml');
+    expect(workflow).toContain('pull_request:');
+    expect(workflow).toContain('PR Gate');
+    expect(workflow).toContain('npm run docs:check');
+    expect(workflow).not.toMatch(/^ {2}push:/mu);
+    expect(read('docs/adr/0039-task-branches-and-protected-main.md')).toContain('PR Gate');
+    expect(read('docs/adr/0036-macos-only-platform-scope.md')).toContain('由 [ADR-0039]');
   });
 
   it('钩子不许写成空跑，也不许用管道把失败读成成功', () => {
@@ -4838,8 +4847,8 @@ describe('提交与推送门禁纪律', () => {
   it('远端门禁跑在受支持的平台、能手动触发、并且留下绿跑读数', () => {
     // [ADR-0036](../docs/adr/0036-macos-only-platform-scope.md) 定案产品只有 macOS：门禁跑在别的
     // 平台上测的是不兼容的靶子，`ui:check` 还会在 Ubuntu 的 userns 限制下崩成 SIGTRAP。
-    // 手动触发与绿跑读数管的是另一件事——审计要回答「这轮比上轮慢了多少」「这条判据是不是变严了」，
-    // 只有 push 事件时不改动代码就造不出一条运行；而产物只随失败上传时，连着两次绿跑之间什么都没有。
+    // PR 是进入 main 的唯一入口；手动触发与绿跑读数管的是另一件事——审计要回答「这轮比上轮慢了多少」
+    // 「这条判据是不是变严了」，而产物只随失败上传时，连着两次绿跑之间什么都没有。
     const workflowFile = '.github/workflows/verify.yml';
     expect(REPO_FILES, '找不到远端门禁定义文件，本条护栏已空跑').toContain(workflowFile);
     const workflow = read(workflowFile);
@@ -4850,6 +4859,9 @@ describe('提交与推送门禁纪律', () => {
     ).toContain('workflow_dispatch');
     expect(workflow, '远端门禁必须跑在 darwin 上（ADR-0036）').toMatch(/runs-on:\s*macos/u);
     expect(workflow, '远端不许把它改成只跑某几步').toContain('npm run verify');
+    expect(workflow, 'main 不得通过 push 事件绕过 PR Gate').not.toMatch(/^ {2}push:/mu);
+    expect(workflow, '必须有稳定的 PR Gate 汇总分支验证与文档验证').toContain('name: PR Gate');
+    expect(workflow, '纯 Markdown PR 必须只走文档门禁').toContain('npm run docs:check');
     const successUploads = workflow.includes('if: success()')
       ? [...workflow.split(/- name:/u).filter((block) => block.includes('if: success()'))]
       : [];

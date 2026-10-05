@@ -1,4 +1,4 @@
 #!/usr/bin/env sh
-# 代码推送执行完整 verify；纯 Markdown 推送执行文档结构检查（docs/12 §1）。
-# 主分支没有远端保护，代码门禁必须在推送前本地拦截。检查及引用归属由脚本验证。
+# 提交门禁由 PR 上的 GitHub Actions 执行；此处只阻止直推 main 并核对待推送提交。
+# 分支保护与门禁选择见 docs/12 §1、ADR-0039。
 exec node scripts/pre-push-check.mjs
