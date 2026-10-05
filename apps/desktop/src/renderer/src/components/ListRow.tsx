@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import { Tooltip } from './Tooltip';
+
 export type ListRowVariant = 'divider' | 'card' | 'plain';
 
 export interface ListRowProps {
@@ -7,7 +9,10 @@ export interface ListRowProps {
   variant?: ListRowVariant | undefined;
   /** 左槽：图标、复选框、格式徽标。装饰由槽内元素自己负责，基座只给位置。 */
   leading?: ReactNode | undefined;
-  /** 主区第一行；不给时主区完全交给 children（结构特殊的行用这种）。 */
+  /**
+   * 主区第一行；不给时主区完全交给 children（结构特殊的行用这种）。
+   * 默认单行截断，被裁切时由 Tooltip 补全。
+   */
   title?: ReactNode | undefined;
   /** 主区第二行：一句说明。 */
   detail?: ReactNode | undefined;
@@ -79,7 +84,11 @@ export function ListRow({
   };
   const main = (
     <div className="list-row-main">
-      {title ? <strong className="list-row-title">{title}</strong> : undefined}
+      {title ? (
+        <Tooltip className="list-row-title">
+          <strong>{title}</strong>
+        </Tooltip>
+      ) : undefined}
       {detail ? <p className="list-row-detail">{detail}</p> : undefined}
       {meta ? <small className="list-row-meta">{meta}</small> : undefined}
       {children}
