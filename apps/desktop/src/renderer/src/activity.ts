@@ -1,6 +1,7 @@
 import type { AgentRuntimeEvent } from '@betterwork/agent-protocol';
 
 import { toolStageLabel } from './lib/labels';
+import { completedToolOutcome } from './lib/tool-activity';
 
 export type ActivityStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
@@ -14,7 +15,6 @@ export interface ActivityGroup {
 
 type ToolStartedEvent = Extract<AgentRuntimeEvent, { type: 'tool.requested' | 'tool.started' }>;
 type ToolCompletedEvent = Extract<AgentRuntimeEvent, { type: 'tool.completed' }>;
-type ToolFailedEvent = Extract<AgentRuntimeEvent, { type: 'tool.failed' }>;
 
 const mostRecent = <T>(items: readonly T[]): T | undefined => items.at(-1);
 
@@ -72,8 +72,26 @@ export function deriveActivityGroups(events: AgentRuntimeEvent[]): ActivityGroup
     const completed = toolEvents.filter(
       (event): event is ToolCompletedEvent => event.type === 'tool.completed',
     );
-    const failed = toolEvents.find(
-      (event): event is ToolFailedEvent => event.type === 'tool.failed',
+    const toolNames = new Map(started.map(({ toolCall }) => [toolCall.id, toolCall.name]));
+    const failure = toolEvents.find((event) => {
+      if (event.type === 'tool.failed') return true;
+      if (event.type !== 'tool.completed') return false;
+      return (
+        completedToolOutcome(toolNames.get(event.toolCallId), event.output)?.status === 'failed'
+      );
+    });
+    const failureDescription =
+      failure?.type === 'tool.failed'
+        ? failure.error
+        : failure?.type === 'tool.completed'
+          ? (completedToolOutcome(toolNames.get(failure.toolCallId), failure.output)?.error ??
+            '技能命令执行失败')
+          : undefined;
+    const hasFailure = failure !== undefined;
+    const hasCancelledCommand = toolEvents.some(
+      (event) =>
+        event.type === 'tool.completed' &&
+        completedToolOutcome(toolNames.get(event.toolCallId), event.output)?.status === 'cancelled',
     );
     const lastCompleted = mostRecent(completed);
     const sources = lastCompleted ? countSources(lastCompleted) : undefined;
@@ -81,14 +99,22 @@ export function deriveActivityGroups(events: AgentRuntimeEvent[]): ActivityGroup
     groups.push({
       id: 'tools',
       title: toolStageLabel(mostRecent(started)?.toolCall.name),
-      description: failed
-        ? failed.error
-        : completed.length === 0
-          ? '正在执行工作步骤'
-          : sources === undefined
-            ? `已完成 ${completed.length} 个工作步骤`
-            : `已查阅 ${sources} 条来源`,
-      status: failed ? 'failed' : completed.length > 0 && terminal ? 'completed' : 'running',
+      description: hasFailure
+        ? failureDescription || '工作步骤失败'
+        : hasCancelledCommand
+          ? '技能命令已取消'
+          : completed.length === 0
+            ? '正在执行工作步骤'
+            : sources === undefined
+              ? `已完成 ${completed.length} 个工作步骤`
+              : `已查阅 ${sources} 条来源`,
+      status: hasFailure
+        ? 'failed'
+        : hasCancelledCommand
+          ? 'cancelled'
+          : completed.length > 0 && terminal
+            ? 'completed'
+            : 'running',
       updatedAt: mostRecent(toolEvents)?.createdAt ?? latest.createdAt,
     });
   }

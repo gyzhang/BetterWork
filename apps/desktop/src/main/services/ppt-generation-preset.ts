@@ -64,8 +64,10 @@ const packageCommand = (
 /** Current authoring package profile; the package-local manifest mirrors this reviewed contract. */
 const pptGenerationExpertPreviousPackageHash =
   'dfc5086e9196d4c2fb7720b65d9cc903f27fae7e872fe90d4cf35847fb7e5188';
-const pptGenerationExpertPackageHash =
+const pptGenerationExpertPreviousSplitPackageHash =
   'af96cb802a79e22a96ae29c6a6e542b8984321ca7195ddf3745249555988472f';
+const pptGenerationExpertPackageHash =
+  '10e9fd879e2ad98e277ab0aa77e3c548e998530c75065c581799f675381fffe5';
 
 const pptGenerationExpertPackageProfile: RuntimeProfileDraft = {
   commands: [
@@ -411,12 +413,14 @@ export const __internal = { parseValidateIssues, interpretValidateOutput };
 export const supportedPptContentHashes = [
   '4681d64c1736d8162493e9b2da6d2a54bd079338ec46dd92ecdbdaa2f1ee52e1',
   pptGenerationExpertPreviousPackageHash,
+  pptGenerationExpertPreviousSplitPackageHash,
   pptGenerationExpertPackageHash,
 ];
 
 export function suggestedPptProfile(contentHash: string): RuntimeProfileDraft | undefined {
   if (
     contentHash === pptGenerationExpertPackageHash ||
+    contentHash === pptGenerationExpertPreviousSplitPackageHash ||
     contentHash === pptGenerationExpertPreviousPackageHash
   ) {
     return pptGenerationExpertPackageProfile;

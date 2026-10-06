@@ -899,7 +899,7 @@ describe('定时任务导航', () => {
     render(<App />);
     fireEvent.change(composer(), { target: { value: '保留这段工作要求' } });
 
-    const scheduleNavigation = screen.getByRole('button', { name: '定时任务' });
+    const scheduleNavigation = screen.getByRole('button', { name: '定时' });
     const expertNavigation = screen.getByRole('button', { name: '专家' });
     expect(expertNavigation.compareDocumentPosition(scheduleNavigation)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
@@ -964,7 +964,7 @@ describe('定时任务导航', () => {
     fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
     await screen.findByText('旧任务的要求');
     fireEvent.change(composer(), { target: { value: '保留原 Task 的续作草稿' } });
-    fireEvent.click(screen.getByRole('button', { name: '定时任务' }));
+    fireEvent.click(screen.getByRole('button', { name: '定时' }));
     await screen.findByRole('heading', { name: '按约定时间开始工作' });
     await waitFor(() => expect(api.schedules.list).toHaveBeenCalled());
     const scheduleChangeListener = emitScheduleChange;
