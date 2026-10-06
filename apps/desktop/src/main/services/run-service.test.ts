@@ -1570,7 +1570,7 @@ describe('RunService', () => {
     const runId = service.start({
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
-      prompt: '读取: secret.txt',
+      prompt: `读取: ${path.join(fixture.directory, 'secret.txt')}`,
       taskContextRevisionId: context.id,
       expectedTaskContextRevision: context.revision,
     });
