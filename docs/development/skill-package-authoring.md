@@ -100,6 +100,8 @@
 
 这 8 个锁项来自当前产品的 PPT 依赖基线拷贝：7 项与锁中列出的目标模块相对应，另有传递依赖 `typing_extensions`。这不是导入扫描数出来的。忽略目录样例的 `betterwork.skill.json` 现在声明 5 个审核入口：`project-init`、`icon-sync`、`svg-export`、`template-merge`、`pptx-validate`；BetterWork 按该包的精确内容 hash 选择对应执行适配器。不要把其他 Skill 扫描到的线索直接复制成命令入口。
 
+内容 hash 覆盖 Skill 包的全部文件；拆分或修改 Markdown 也会改变 hash。发布新版本前要复核运行元数据、命令契约和相关脚本，再把新 hash 登记到 `ppt-generation-preset.ts` 的精确兼容列表，并保留仍需支持的旧 hash。不能只按相同 `skillId` 放宽匹配。
+
 2026-10-06 在隔离目录中以受管 CPython 3.12.14 创建 venv，从样例 wheelhouse 离线安装锁定的 8 个 wheel，7 个必需模块导入探针全部通过；再使用声明的 PPT Master 6.6.0 commit 验证了项目初始化、图标同步、SVG 三项质检和导出、公司模板合并、最终 PPTX 结构校验。SVG 质检和结构校验通过，导出报告为 `quality_gate=passed`（上游另有 1 个 warning）。这证明代表性命令链在该版本组合中可执行；还没有通过 BetterWork Electron 界面完成导入、授权、快照绑定和 Run 的完整人工验收。当前锁最初从产品基线复制，正式发布前仍应按本包的 `requirements.in` 在目标环境重新生成并 Review 完整闭包及许可证。
 
 该 Skill 对 `ppt-master` 的外部依赖已由元数据显式声明；扫描器也会从真实 `os.environ`/shell 变量使用和明确配置语句提取线索，不再把内部的 `SKILL_DIR`、`DIAGRAMS_DIR`、`STYLES_DIR` 常量误报成用户目录。导入后 UI 会按 `PPTM_HOME` 声明展示工具链配置。当前样例尚未把 `ppt-master` 制作为包内或服务端固定下载制品，所以登记这一项仍要求选取本机来源目录并校验版本；它还不符合「导入后所有资源自动准备」的最终目标。

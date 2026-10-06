@@ -7,6 +7,7 @@ import {
   pptGenerationAdapterFactory,
   resolvePptExecutionOutputs,
   suggestedPptProfile,
+  supportedPptContentHashes,
 } from './ppt-generation-preset';
 import type { AdapterContext, AwaitedExecutionSnapshot } from './skill-adapter';
 
@@ -118,15 +119,21 @@ describe('PptGenerationAdapter', () => {
       expect(emptyAdapter.isCompatible(KNOWN_HASH)).toBe(false);
     });
 
-    it('recognizes the current package content hash', () => {
-      const currentPackage = pptGenerationAdapterFactory.create([
+    it.each([
+      [
+        'reimported split package',
+        'af96cb802a79e22a96ae29c6a6e542b8984321ca7195ddf3745249555988472f',
+      ],
+      [
+        'previous reviewed package',
         'dfc5086e9196d4c2fb7720b65d9cc903f27fae7e872fe90d4cf35847fb7e5188',
-      ]);
+      ],
+    ])('recognizes the %s content hash and supplies its profile', (_label, contentHash) => {
+      const adapter = pptGenerationAdapterFactory.create(supportedPptContentHashes);
+      expect(adapter.isCompatible(contentHash)).toBe(true);
       expect(
-        currentPackage.isCompatible(
-          'dfc5086e9196d4c2fb7720b65d9cc903f27fae7e872fe90d4cf35847fb7e5188',
-        ),
-      ).toBe(true);
+        suggestedPptProfile(contentHash)?.commands.map((command) => command.commandId),
+      ).toEqual(['project-init', 'icon-sync', 'svg-export', 'template-merge', 'pptx-validate']);
     });
   });
 

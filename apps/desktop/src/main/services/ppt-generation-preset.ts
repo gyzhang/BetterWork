@@ -62,8 +62,10 @@ const packageCommand = (
 });
 
 /** Current authoring package profile; the package-local manifest mirrors this reviewed contract. */
-const pptGenerationExpertPackageHash =
+const pptGenerationExpertPreviousPackageHash =
   'dfc5086e9196d4c2fb7720b65d9cc903f27fae7e872fe90d4cf35847fb7e5188';
+const pptGenerationExpertPackageHash =
+  'af96cb802a79e22a96ae29c6a6e542b8984321ca7195ddf3745249555988472f';
 
 const pptGenerationExpertPackageProfile: RuntimeProfileDraft = {
   commands: [
@@ -408,11 +410,17 @@ export const __internal = { parseValidateIssues, interpretValidateOutput };
 /** Exact source package reviewed locally; no private content is distributed. */
 export const supportedPptContentHashes = [
   '4681d64c1736d8162493e9b2da6d2a54bd079338ec46dd92ecdbdaa2f1ee52e1',
+  pptGenerationExpertPreviousPackageHash,
   pptGenerationExpertPackageHash,
 ];
 
 export function suggestedPptProfile(contentHash: string): RuntimeProfileDraft | undefined {
-  if (contentHash === pptGenerationExpertPackageHash) return pptGenerationExpertPackageProfile;
+  if (
+    contentHash === pptGenerationExpertPackageHash ||
+    contentHash === pptGenerationExpertPreviousPackageHash
+  ) {
+    return pptGenerationExpertPackageProfile;
+  }
   if (!supportedPptContentHashes.includes(contentHash)) return undefined;
   const argumentsByCommand: Record<string, string[]> = {
     'project-init': ['project_name'],
