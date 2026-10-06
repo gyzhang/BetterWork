@@ -50,6 +50,7 @@ import {
   getTaskContextRequestSchema,
   getTaskContinuityBriefRequestSchema,
   getTaskRequestSchema,
+  importSkillFromUrlRequestSchema,
   importSkillRequestSchema,
   inputSnapshotSchema,
   IpcChannel,
@@ -551,6 +552,12 @@ const api: BetterWorkDesktopApi = {
       invokeValidated(
         IpcChannel.ImportSkill,
         importSkillRequestSchema.parse({}),
+        skillImportResultSchema,
+      ),
+    importFromUrl: (input) =>
+      invokeValidated(
+        IpcChannel.ImportSkillFromUrl,
+        importSkillFromUrlRequestSchema.parse(input),
         skillImportResultSchema,
       ),
     saveRuntimeProfile: (input) =>

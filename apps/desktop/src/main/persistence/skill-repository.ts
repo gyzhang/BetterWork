@@ -26,6 +26,7 @@ export interface SaveSkillInput {
 export interface SaveSkillRevisionInput {
   id?: string;
   skillId: string;
+  packageId?: string;
   contentHash: string;
   originalVersion?: string;
   resourceKey: string;
@@ -62,6 +63,7 @@ interface SkillRow {
 interface RevisionRow {
   id: string;
   skill_id: string;
+  package_id: string | null;
   content_hash: string;
   original_version: string | null;
   resource_key: string;
@@ -97,6 +99,7 @@ const parseRecord = (value: string): Record<string, unknown> => {
 const toRevision = (row: RevisionRow): SkillRevisionSummary => ({
   id: row.id,
   skillId: row.skill_id,
+  ...(row.package_id === null ? {} : { packageId: row.package_id }),
   contentHash: row.content_hash,
   ...(row.original_version === null ? {} : { originalVersion: row.original_version }),
   resourceKey: row.resource_key,
@@ -300,8 +303,8 @@ export class SkillRepository {
     this.db
       .prepare(
         `INSERT INTO skill_revisions
-          (id, skill_id, content_hash, original_version, resource_key, frontmatter_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          (id, skill_id, content_hash, original_version, resource_key, package_id, frontmatter_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -309,6 +312,7 @@ export class SkillRepository {
         input.contentHash,
         input.originalVersion ?? null,
         input.resourceKey,
+        input.packageId ?? null,
         JSON.stringify(input.frontmatter),
         Date.now(),
       );

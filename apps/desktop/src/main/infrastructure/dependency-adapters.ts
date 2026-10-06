@@ -58,7 +58,7 @@ export interface DependencyFileSystem {
 
 export interface DependencyDownloader {
   /** 只允许已批准来源；实现必须带超时，错误信息不得包含凭据。 */
-  download(url: string): Promise<Uint8Array>;
+  download(url: string, signal: AbortSignal): Promise<Uint8Array>;
 }
 
 /** 安装/探测输出的保留上限：够诊断，又不会把整段 pip 日志塞进操作记录。 */
@@ -189,11 +189,13 @@ const downloadTimeoutMs = 10 * 60_000;
 
 /** 生产下载器：只接受 https，带超时，错误信息只含状态码与主机名，不含查询串或凭据。 */
 export const createFetchDownloader = (fetchImpl: typeof fetch = fetch): DependencyDownloader => ({
-  async download(url: string): Promise<Uint8Array> {
+  async download(url: string, signal: AbortSignal): Promise<Uint8Array> {
     if (!url.startsWith('https://')) {
       throw new Error('依赖制品只允许通过 https 下载');
     }
-    const response = await fetchImpl(url, { signal: AbortSignal.timeout(downloadTimeoutMs) });
+    const response = await fetchImpl(url, {
+      signal: AbortSignal.any([signal, AbortSignal.timeout(downloadTimeoutMs)]),
+    });
     if (!response.ok) {
       throw new Error(`下载失败（HTTP ${response.status}，主机 ${new URL(url).host}）`);
     }

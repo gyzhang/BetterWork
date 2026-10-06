@@ -162,6 +162,7 @@ export const skillRevisionSummarySchema = z
   .object({
     id: skillRevisionIdSchema,
     skillId: skillIdSchema,
+    packageId: z.string().trim().min(1).max(160).optional(),
     contentHash: z.string().min(1),
     originalVersion: z.string().min(1).optional(),
     resourceKey: z.string().min(1),
@@ -184,10 +185,78 @@ export const runtimeProfileCommandSchema = z
   .strict();
 export type RuntimeProfileCommand = z.infer<typeof runtimeProfileCommandSchema>;
 
+export const skillToolchainRequirementSchema = z
+  .object({
+    id: z
+      .string()
+      .trim()
+      .regex(/^[a-z0-9][a-z0-9._-]{0,99}$/u),
+    name: z.string().trim().min(1).max(160),
+    environmentVariable: z.string().regex(/^[A-Z_][A-Z0-9_]*$/u),
+    versionHint: z.string().trim().min(1).max(100).optional(),
+    /** 需要 Git 来源时锁定完整提交；导入包不会把作者机器路径写入配置。 */
+    expectedCommit: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/u)
+      .optional(),
+  })
+  .strict();
+export type SkillToolchainRequirement = z.infer<typeof skillToolchainRequirementSchema>;
+
+const packageRelativePathSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(500)
+  .refine(
+    (value) =>
+      !value.startsWith('/') &&
+      !value.includes('\\') &&
+      value
+        .split('/')
+        .every((segment) => segment.length > 0 && segment !== '.' && segment !== '..'),
+    { message: 'Skill 运行资源路径必须是包内相对路径' },
+  );
+
+/** Skill 包内自带的锁与可选 wheelhouse；目录名不会进入应用级全局锁目录。 */
+export const skillDependencyBundleSchema = z
+  .object({
+    id: z.string().trim().min(1).max(160),
+    lockPath: packageRelativePathSchema,
+    wheelhousePath: packageRelativePathSchema.optional(),
+  })
+  .strict();
+export type SkillDependencyBundle = z.infer<typeof skillDependencyBundleSchema>;
+
+export const skillRuntimeDiscoveryFindingSchema = z
+  .object({
+    kind: z.enum([
+      'python-script',
+      'dependency-file',
+      'package-install-hint',
+      'python-runtime-hint',
+      'environment-variable',
+      'toolchain-name',
+    ]),
+    sourcePath: z.string().min(1).max(500),
+    lineNumber: z.number().int().positive(),
+    label: z.string().trim().min(1).max(200),
+  })
+  .strict();
+export type SkillRuntimeDiscoveryFinding = z.infer<typeof skillRuntimeDiscoveryFindingSchema>;
+
 export const runtimeProfileDraftSchema = z
   .object({
     commands: z.array(runtimeProfileCommandSchema).max(100),
     environmentRequirements: z.array(z.string().trim().min(1).max(200)).max(100),
+    /** 应用统一选择 CPython；Skill 只声明需要的兼容版本。 */
+    pythonRequirement: z.string().trim().min(1).max(100).optional(),
+    /** 旧版兼容：引用应用随包审核的锁；新版 Skill 包使用 package-local dependencyBundle。 */
+    dependencyLockId: z.string().trim().min(1).max(160).optional(),
+    /** 新版 Skill 包将锁和可选 wheelhouse 放在自己的运行资源目录中。 */
+    dependencyBundle: skillDependencyBundleSchema.optional(),
+    /** 外部工具链按需求逐项声明；一个 Skill 可没有，也可需要多项。 */
+    toolchainRequirements: z.array(skillToolchainRequirementSchema).max(20).optional(),
     outputContract: z
       .object({
         reportPath: z.string().trim().min(1).optional(),
@@ -195,7 +264,21 @@ export const runtimeProfileDraftSchema = z
       })
       .strict(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (profile) => {
+      const requirements = profile.toolchainRequirements ?? [];
+      return (
+        new Set(requirements.map((requirement) => requirement.id)).size === requirements.length &&
+        new Set(requirements.map((requirement) => requirement.environmentVariable)).size ===
+          requirements.length
+      );
+    },
+    { message: '工具链需求 ID 与环境变量必须唯一' },
+  )
+  .refine((profile) => !(profile.dependencyLockId && profile.dependencyBundle), {
+    message: '应用目录锁与 Skill 包内依赖锁不能同时声明',
+  });
 export type RuntimeProfileDraft = z.infer<typeof runtimeProfileDraftSchema>;
 
 export const runtimeProfileRevisionSchema = z
@@ -228,6 +311,8 @@ export const skillDetailSchema = skillSummarySchema
   .extend({
     revision: skillRevisionSummarySchema,
     runtimeProfile: runtimeProfileRevisionSchema.optional(),
+    /** 导入时对包内文本做静态识别，不执行脚本；仅作为配置提示，不构成信任或运行授权。 */
+    runtimeDiscovery: z.array(skillRuntimeDiscoveryFindingSchema).max(200).optional(),
   })
   .strict();
 export type SkillDetail = z.infer<typeof skillDetailSchema>;
@@ -2658,6 +2743,21 @@ export type DeleteSkillRequest = z.infer<typeof deleteSkillRequestSchema>;
 
 export const importSkillRequestSchema = z.object({}).strict();
 export type ImportSkillRequest = z.infer<typeof importSkillRequestSchema>;
+export const importSkillFromUrlRequestSchema = z
+  .object({ url: z.string().trim().min(1).max(2048) })
+  .strict()
+  .refine(
+    ({ url }) => {
+      try {
+        const parsed = new URL(url);
+        return parsed.protocol === 'https:' && !parsed.username && !parsed.password;
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Skill 链接必须是没有内嵌凭据的 HTTPS 地址' },
+  );
+export type ImportSkillFromUrlRequest = z.infer<typeof importSkillFromUrlRequestSchema>;
 
 export const skillMutationResultSchema = z
   .object({
@@ -5004,6 +5104,8 @@ export const dependencyPlanRequestSchema = z
   .object({
     base: dependencyBaseChoiceSchema,
     lockId: z.string().trim().min(1).max(160),
+    /** 新版包依赖锁由 Main 按 Skill 声明从包内读取；Renderer 不能提交任意资源路径。 */
+    skillId: skillIdSchema.optional(),
   })
   .strict();
 export type DependencyPlanRequest = z.infer<typeof dependencyPlanRequestSchema>;
@@ -5199,6 +5301,7 @@ export const IpcChannel = {
   ListSkills: 'skill:list',
   GetSkill: 'skill:get',
   ImportSkill: 'skill:import',
+  ImportSkillFromUrl: 'skill:import-url',
   SaveSkillRuntimeProfile: 'skill:save-runtime-profile',
   SetSkillTrust: 'skill:set-trust',
   RevokeSkillTrust: 'skill:revoke-trust',
@@ -5435,6 +5538,7 @@ export interface BetterWorkDesktopApi {
     list(): Promise<SkillSummary[]>;
     get(input: GetSkillRequest): Promise<SkillDetail | null>;
     importFromDialog(): Promise<SkillImportResult>;
+    importFromUrl(input: ImportSkillFromUrlRequest): Promise<SkillImportResult>;
     saveRuntimeProfile(input: SaveSkillRuntimeProfileRequest): Promise<SkillMutationResult>;
     setTrust(input: SetSkillTrustRequest): Promise<SkillMutationResult>;
     revokeTrust(input: RevokeSkillTrustRequest): Promise<SkillMutationResult>;

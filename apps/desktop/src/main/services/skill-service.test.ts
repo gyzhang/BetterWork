@@ -12,7 +12,8 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import JSZip from 'jszip';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AppStore } from '../persistence';
 import { type BuiltinReleaseManifest, SkillService } from './skill-service';
@@ -69,6 +70,119 @@ describe('SkillService', () => {
     store.close();
   });
 
+  it('imports a ZIP Skill package with one wrapper directory without extracting outside its root', async () => {
+    const directory = temporaryDirectory();
+    const archive = new JSZip();
+    archive.file('packaged-skill/SKILL.md', '---\nname: ZIP Skill\n---\n# Instructions');
+    archive.file('packaged-skill/scripts/run.py', 'print("must not run")');
+    const archivePath = path.join(directory, 'packaged-skill.zip');
+    writeFileSync(archivePath, await archive.generateAsync({ type: 'nodebuffer' }));
+    const store = AppStore.open(path.join(directory, 'app.sqlite'));
+    const service = new SkillService(store, rootsFor(directory));
+
+    const imported = await service.importSource(archivePath);
+
+    expect(imported.skill.name).toBe('ZIP Skill');
+    expect(existsSync(path.join(imported.resourceRoot, 'scripts', 'run.py'))).toBe(true);
+    expect(existsSync(path.join(directory, 'scripts', 'run.py'))).toBe(false);
+    store.close();
+  });
+
+  it('downloads HTTPS Skill ZIP packages with a byte limit and rejects credentialed or insecure URLs', async () => {
+    const directory = temporaryDirectory();
+    const archive = new JSZip();
+    archive.file('SKILL.md', '---\nname: URL Skill\n---\n# Instructions');
+    const bytes = await archive.generateAsync({ type: 'nodebuffer' });
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(new Uint8Array(bytes)));
+    const store = AppStore.open(path.join(directory, 'app.sqlite'));
+    const service = new SkillService(store, rootsFor(directory), fetcher);
+
+    const imported = await service.importFromUrl('https://skills.example.com/url-skill.zip');
+
+    expect(imported.skill.name).toBe('URL Skill');
+    expect(fetcher).toHaveBeenCalledOnce();
+    await expect(service.importFromUrl('http://skills.example.com/url-skill.zip')).rejects.toThrow(
+      /HTTPS/iu,
+    );
+    await expect(
+      service.importFromUrl('https://user:secret@skills.example.com/url-skill.zip'),
+    ).rejects.toThrow(/HTTPS/iu);
+    expect(fetcher).toHaveBeenCalledOnce();
+    store.close();
+  });
+
+  it('shows static runtime clues with source locations and never executes imported files', async () => {
+    const directory = temporaryDirectory();
+    const source = path.join(directory, 'static-discovery');
+    mkdirSync(path.join(source, 'scripts'), { recursive: true });
+    writeFileSync(path.join(source, 'SKILL.md'), '---\nname: Static discovery\n---\n');
+    writeFileSync(path.join(source, 'requirements.txt'), 'python-pptx==1.0.2\n');
+    writeFileSync(
+      path.join(source, 'scripts', 'run.py'),
+      [
+        'from pathlib import Path',
+        'import os',
+        'SKILL_DIR = Path(__file__).resolve().parent.parent',
+        "DIAGRAMS_DIR = SKILL_DIR / 'references' / 'diagrams'",
+        "STYLES_DIR = SKILL_DIR / 'references' / 'styles'",
+        "PPTM_HOME = Path(os.environ.get('PPTM_HOME', '/local/default'))",
+        'raise RuntimeError("must not run")',
+      ].join('\n'),
+    );
+    writeFileSync(
+      path.join(source, 'README.md'),
+      'Use system Python3 and run `pip install python-pptx`. Set PPTM_HOME to your local ppt-master checkout before running.\n',
+    );
+    const store = AppStore.open(path.join(directory, 'app.sqlite'));
+    const service = new SkillService(store, rootsFor(directory));
+    const imported = await service.importDirectory(source);
+
+    const detail = await service.getDetail(imported.skill.id);
+    expect(detail?.runtimeDiscovery).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'python-script',
+          sourcePath: 'scripts/run.py',
+          lineNumber: 1,
+        }),
+        expect.objectContaining({
+          kind: 'dependency-file',
+          sourcePath: 'requirements.txt',
+          lineNumber: 1,
+        }),
+        expect.objectContaining({
+          kind: 'environment-variable',
+          sourcePath: 'README.md',
+          label: '发现外部目录变量 PPTM_HOME',
+        }),
+        expect.objectContaining({
+          kind: 'toolchain-name',
+          sourcePath: 'README.md',
+          label: '发现外部工具链引用 ppt-master',
+        }),
+        expect.objectContaining({
+          kind: 'package-install-hint',
+          sourcePath: 'README.md',
+          label: '发现 Python 包安装提示 python-pptx',
+        }),
+        expect.objectContaining({
+          kind: 'python-runtime-hint',
+          sourcePath: 'README.md',
+          label: '发现 Python 运行环境说明',
+        }),
+      ]),
+    );
+    expect(
+      detail?.runtimeDiscovery
+        ?.filter((finding) => finding.kind === 'environment-variable')
+        .map((finding) => finding.label),
+    ).toEqual(['发现外部目录变量 PPTM_HOME']);
+    expect(readFileSync(path.join(imported.resourceRoot, 'scripts', 'run.py'), 'utf8')).toContain(
+      'must not run',
+    );
+    store.close();
+  });
+
   it('accepts flat frontmatter descriptions containing an unquoted colon', async () => {
     const directory = temporaryDirectory();
     const source = path.join(directory, 'ppt-generation-expert');
@@ -115,6 +229,17 @@ describe('SkillService', () => {
     const store = AppStore.open(path.join(directory, 'app.sqlite'));
     const service = new SkillService(store, roots);
     const imported = await service.importDirectory(source);
+    const profile = {
+      commands: [],
+      environmentRequirements: [],
+      pythonRequirement: '3.12',
+      dependencyLockId: 'sample-lock',
+      toolchainRequirements: [
+        { id: 'ppt-master', name: 'PPT Master', environmentVariable: 'PPTM_HOME' },
+      ],
+      outputContract: { outputPaths: [] },
+    };
+    service.saveRuntimeProfile(imported.skill.id, profile);
     const destination = path.join(directory, 'exported');
     await service.exportDirectory(imported.skill.id, destination);
 
@@ -125,6 +250,80 @@ describe('SkillService', () => {
     expect(manifest.skillId).toBe(imported.skill.id);
     expect(manifest.trustGrant).toBeUndefined();
     expect(manifest.apiKey).toBeUndefined();
+
+    const reimported = await service.importDirectory(destination);
+    expect(reimported.contentHash).toBe(imported.contentHash);
+    expect(reimported.skill.runtimeProfile?.profile).toEqual(profile);
+    store.close();
+  });
+
+  it('loads the exact dependency lock and optional wheelhouse from a versioned Skill package', async () => {
+    const directory = temporaryDirectory();
+    const source = path.join(directory, 'skill-package-v2');
+    mkdirSync(path.join(source, 'runtime', 'locks'), { recursive: true });
+    mkdirSync(path.join(source, 'runtime', 'wheelhouse'), { recursive: true });
+    writeFileSync(path.join(source, 'SKILL.md'), '---\nname: Packaged Skill\n---\n# Skill\n');
+    const lock = {
+      lockVersion: 1,
+      platform: { os: 'darwin', arch: 'arm64', abi: 'cp312' },
+      pythonRequirement: '3.12',
+      packages: [],
+      importProbes: [],
+    };
+    writeFileSync(
+      path.join(source, 'runtime', 'locks', 'darwin-arm64-cp312.json'),
+      JSON.stringify(lock),
+    );
+    writeFileSync(path.join(source, 'runtime', 'wheelhouse', 'cache-marker.whl'), 'cached wheel');
+    writeFileSync(
+      path.join(source, 'betterwork.skill.json'),
+      JSON.stringify({
+        formatVersion: 2,
+        skillId: 'vendor.packaged-skill',
+        name: 'Packaged Skill',
+        description: 'package-owned runtime declaration',
+        packageVersion: '1.2.0',
+        runtimeProfile: {
+          commands: [],
+          environmentRequirements: [],
+          pythonRequirement: '3.12',
+          dependencyBundle: {
+            id: 'packaged-skill-darwin-arm64-cp312',
+            lockPath: 'runtime/locks/darwin-arm64-cp312.json',
+            wheelhousePath: 'runtime/wheelhouse',
+          },
+          outputContract: { outputPaths: [] },
+        },
+      }),
+    );
+    const store = AppStore.open(path.join(directory, 'app.sqlite'));
+    const service = new SkillService(store, rootsFor(directory));
+
+    const imported = await service.importDirectory(source);
+    const assets = await service.getDependencyAssets(imported.skill.id);
+    expect(imported.skill.revision.packageId).toBe('vendor.packaged-skill');
+    expect(imported.skill.runtimeProfile?.profile.dependencyBundle).toEqual({
+      id: 'packaged-skill-darwin-arm64-cp312',
+      lockPath: 'runtime/locks/darwin-arm64-cp312.json',
+      wheelhousePath: 'runtime/wheelhouse',
+    });
+    expect(assets?.lock).toEqual(lock);
+    expect(assets?.wheelhouseRoot).toBe(path.join(imported.resourceRoot, 'runtime', 'wheelhouse'));
+
+    const exportRoot = path.join(directory, 'exported-package');
+    await service.exportDirectory(imported.skill.id, exportRoot);
+    const exportedManifest = JSON.parse(
+      readFileSync(path.join(exportRoot, 'betterwork.skill.json'), 'utf8'),
+    ) as { skillId: string };
+    expect(exportedManifest.skillId).toBe('vendor.packaged-skill');
+    const reimported = await service.importDirectory(exportRoot);
+    expect(reimported.skill.revision.packageId).toBe('vendor.packaged-skill');
+
+    writeFileSync(
+      path.join(imported.resourceRoot, 'runtime', 'wheelhouse', 'cache-marker.whl'),
+      'missing or replaced cache payload',
+    );
+    await expect(service.getDependencyAssets(imported.skill.id)).resolves.toMatchObject({ lock });
     store.close();
   });
 

@@ -48,6 +48,9 @@ const resolveWorkPath = (value: string, workDir: string): string => {
   return target;
 };
 
+const pptMasterRoot = (context: AdapterContext): string | undefined =>
+  context.toolchainRoots?.['ppt-master'] ?? context.pptmHome ?? context.toolchainSnapshotRoot;
+
 class PptGenerationAdapter implements SkillAdapter {
   readonly name = 'ppt-generation';
 
@@ -111,7 +114,7 @@ class PptGenerationAdapter implements SkillAdapter {
     args: Record<string, unknown>,
     context: AdapterContext,
   ): ResolvedCommand {
-    const pptmHome = context.pptmHome ?? context.toolchainSnapshotRoot;
+    const pptmHome = pptMasterRoot(context);
     if (!pptmHome) {
       throw new Error('project-init requires PPTM_HOME or toolchain snapshot');
     }
@@ -143,7 +146,7 @@ class PptGenerationAdapter implements SkillAdapter {
   }
 
   private resolveIconSync(args: Record<string, unknown>, context: AdapterContext): ResolvedCommand {
-    const pptmHome = context.pptmHome ?? context.toolchainSnapshotRoot;
+    const pptmHome = pptMasterRoot(context);
     if (!pptmHome) {
       throw new Error('icon-sync requires PPTM_HOME or toolchain snapshot');
     }
@@ -166,7 +169,7 @@ class PptGenerationAdapter implements SkillAdapter {
     args: Record<string, unknown>,
     context: AdapterContext,
   ): ResolvedCommand {
-    const pptmHome = context.pptmHome ?? context.toolchainSnapshotRoot;
+    const pptmHome = pptMasterRoot(context);
     if (!pptmHome) {
       throw new Error('svg-export requires PPTM_HOME or toolchain snapshot');
     }
@@ -194,7 +197,7 @@ class PptGenerationAdapter implements SkillAdapter {
     const configPath = resolveWorkPath(stringArg(args, 'config_path'), context.runWorkDir);
     const script = path.join(context.skillScriptsRoot, 'scripts', 'merge_into_template.py');
     const argv = [script, sourcePptx, templatePath, finalOutput, configPath];
-    const pptmHome = context.pptmHome ?? context.toolchainSnapshotRoot;
+    const pptmHome = pptMasterRoot(context);
     return {
       executable: context.managedPythonPath,
       argv,
@@ -210,7 +213,7 @@ class PptGenerationAdapter implements SkillAdapter {
     const pptxPath = resolveWorkPath(stringArg(args, 'pptx_path'), context.runWorkDir);
     const script = path.join(context.skillScriptsRoot, 'scripts', 'validate_pptx.py');
     const argv = [script, pptxPath];
-    const pptmHome = context.pptmHome ?? context.toolchainSnapshotRoot;
+    const pptmHome = pptMasterRoot(context);
     return {
       executable: context.managedPythonPath,
       argv,
@@ -336,7 +339,17 @@ export function suggestedPptProfile(contentHash: string): RuntimeProfileDraft | 
       expectedOutputs: [],
       ...(commandId === 'pptx-validate' ? { validatorId: 'pptx-validate' } : {}),
     })),
-    environmentRequirements: ['python', 'ppt-master'],
+    environmentRequirements: [],
+    pythonRequirement: '3.12',
+    dependencyLockId: 'ppt-generation-expert-darwin-arm64-cp312',
+    toolchainRequirements: [
+      {
+        id: 'ppt-master',
+        name: 'PPT Master',
+        environmentVariable: 'PPTM_HOME',
+        versionHint: '6.6.0',
+      },
+    ],
     outputContract: { outputPaths: [] },
   };
 }

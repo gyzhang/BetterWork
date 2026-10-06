@@ -1,17 +1,42 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 
 import type { SkillInstruction } from '@betterwork/agent-core';
-import type { RuntimeProfileDraft, SkillDetail } from '@betterwork/agent-protocol';
+import type {
+  DependencyLock,
+  RuntimeProfileDraft,
+  SkillDetail,
+  SkillRuntimeDiscoveryFinding,
+} from '@betterwork/agent-protocol';
+import {
+  dependencyLockSchema,
+  runtimeProfileDraftSchema,
+  runtimeProfileRevisionSchema,
+} from '@betterwork/agent-protocol';
+import JSZip from 'jszip';
 import { parse } from 'yaml';
+import { z } from 'zod';
 
 import { type AppStore } from '../persistence';
 import { suggestedPptProfile } from './ppt-generation-preset';
 
 const skillFileName = 'SKILL.md';
+const skillExportFileName = 'betterwork.skill.json';
 const maxFiles = 2_000;
 const maxBytes = 50 * 1024 * 1024;
+const archiveDownloadTimeoutMs = 60_000;
 
 interface SkillFile {
   relativePath: string;
@@ -38,12 +63,75 @@ export interface ImportedSkill {
 }
 
 export interface SkillExportManifest {
-  formatVersion: 1;
+  formatVersion: 2;
+  /** Stable publisher identity; the host database keeps its own local skillId. */
   skillId: string;
   name: string;
   description: string;
-  runtimeProfile?: SkillDetail['runtimeProfile'];
+  packageVersion: string;
+  runtimeProfile?: RuntimeProfileDraft;
 }
+
+const legacySkillExportManifestSchema = z
+  .object({
+    formatVersion: z.literal(1),
+    skillId: z.string().trim().min(1).max(160),
+    name: z.string().min(1),
+    description: z.string(),
+    runtimeProfile: runtimeProfileRevisionSchema.optional(),
+  })
+  .strict();
+
+const skillPackageManifestSchema = z.discriminatedUnion('formatVersion', [
+  legacySkillExportManifestSchema,
+  z
+    .object({
+      formatVersion: z.literal(2),
+      skillId: z.string().trim().min(1).max(160),
+      name: z.string().min(1),
+      description: z.string(),
+      packageVersion: z.string().trim().min(1).max(100),
+      runtimeProfile: runtimeProfileDraftSchema.optional(),
+    })
+    .strict(),
+]);
+
+export interface SkillDependencyAssets {
+  lock: DependencyLock;
+  wheelhouseRoot?: string;
+}
+
+const zipDeclaredSize = (entry: JSZip.JSZipObject): number | undefined => {
+  const data = (entry as unknown as { _data?: Record<string, unknown> })._data;
+  const size = data?.['uncompressedSize'];
+  return typeof size === 'number' && Number.isSafeInteger(size) && size >= 0 ? size : undefined;
+};
+
+const archiveRelativePath = (name: string): string => {
+  if (!name || name.includes('\\') || name.startsWith('/') || /^[A-Za-z]:/u.test(name)) {
+    throw new Error(`Skill ZIP 包含非法路径：${name}`);
+  }
+  const segments = name.split('/').filter((segment) => segment.length > 0);
+  if (segments.some((segment) => segment === '.' || segment === '..')) {
+    throw new Error(`Skill ZIP 路径不能离开包目录：${name}`);
+  }
+  const normalized = path.posix.normalize(segments.join('/'));
+  if (!normalized || normalized === '.' || normalized.startsWith('../')) {
+    throw new Error(`Skill ZIP 包含非法路径：${name}`);
+  }
+  return normalized;
+};
+
+const isZipSymlink = (entry: JSZip.JSZipObject): boolean => {
+  const permissions = entry.unixPermissions;
+  const mode =
+    typeof permissions === 'number'
+      ? permissions
+      : typeof permissions === 'string'
+        ? Number.parseInt(permissions, 8)
+        : 0;
+  return Number.isFinite(mode) && (mode & 0o170000) === 0o120000;
+};
 
 export interface BuiltinReleaseEntry {
   skillId: string;
@@ -128,10 +216,20 @@ const isOperatingSystemMetadata = (name: string): boolean =>
 
 const readPackage = async (
   sourceRoot: string,
-): Promise<{ files: SkillFile[]; frontmatter: SkillFrontmatter }> => {
+): Promise<{
+  files: SkillFile[];
+  frontmatter: SkillFrontmatter;
+  importedRuntimeProfile?: RuntimeProfileDraft;
+  packageId?: string;
+  packageName?: string;
+  packageDescription?: string;
+  packageVersion?: string;
+}> => {
   const root = path.resolve(sourceRoot);
-  const rootInfo = await stat(root);
-  if (!rootInfo.isDirectory()) throw new Error('Skill source must be a directory');
+  const rootInfo = await lstat(root);
+  if (rootInfo.isSymbolicLink() || !rootInfo.isDirectory()) {
+    throw new Error('Skill source must be a real directory');
+  }
   const files: SkillFile[] = [];
   let totalBytes = 0;
   const visit = async (directory: string): Promise<void> => {
@@ -165,15 +263,187 @@ const readPackage = async (
   };
   await visit(root);
   files.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
-  const skillFile = files.find((file) => file.relativePath === skillFileName);
+  const exportFile = files.find((file) => file.relativePath === skillExportFileName);
+  let importedRuntimeProfile: RuntimeProfileDraft | undefined;
+  let packageName: string | undefined;
+  let packageDescription: string | undefined;
+  let packageVersion: string | undefined;
+  let packageId: string | undefined;
+  if (exportFile) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(exportFile.bytes.toString('utf8')) as unknown;
+    } catch (error) {
+      throw new Error('betterwork.skill.json 不是合法 JSON', { cause: error });
+    }
+    const manifest = skillPackageManifestSchema.parse(parsed);
+    importedRuntimeProfile =
+      manifest.formatVersion === 1 ? manifest.runtimeProfile?.profile : manifest.runtimeProfile;
+    packageName = manifest.name;
+    packageDescription = manifest.description;
+    packageId = manifest.skillId;
+    if (manifest.formatVersion === 2) packageVersion = manifest.packageVersion;
+  }
+  const packageFiles = files.filter((file) => file.relativePath !== skillExportFileName);
+  validatePackageDependencyBundle(packageFiles, importedRuntimeProfile);
+  const skillFile = packageFiles.find((file) => file.relativePath === skillFileName);
   if (!skillFile) throw new Error('Skill package must contain SKILL.md at its root');
-  return { files, frontmatter: parseFrontmatter(skillFile.bytes.toString('utf8')) };
+  return {
+    files: packageFiles,
+    frontmatter: parseFrontmatter(skillFile.bytes.toString('utf8')),
+    ...(importedRuntimeProfile ? { importedRuntimeProfile } : {}),
+    ...(packageId ? { packageId } : {}),
+    ...(packageName ? { packageName } : {}),
+    ...(packageDescription !== undefined ? { packageDescription } : {}),
+    ...(packageVersion ? { packageVersion } : {}),
+  };
 };
 
 const hashFiles = (files: readonly SkillFile[]): string => {
   const hash = createHash('sha256');
-  for (const file of files) hash.update(file.relativePath).update('\0').update(file.bytes);
+  for (const file of files) {
+    // Wheelhouse 内容可由锁内 SHA-256 和下载地址重建；缺失 wheel 不应使 Skill 源码失效。
+    if (file.relativePath.startsWith('runtime/wheelhouse/')) continue;
+    hash.update(file.relativePath).update('\0').update(file.bytes);
+  }
   return hash.digest('hex');
+};
+
+const validatePackageDependencyBundle = (
+  files: readonly SkillFile[],
+  profile: RuntimeProfileDraft | undefined,
+): void => {
+  const bundle = profile?.dependencyBundle;
+  if (!bundle) return;
+  const lockFile = files.find((file) => file.relativePath === bundle.lockPath);
+  if (!lockFile) throw new Error(`Skill 包缺少依赖锁文件：${bundle.lockPath}`);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(lockFile.bytes.toString('utf8')) as unknown;
+  } catch (error) {
+    throw new Error(`Skill 依赖锁不是合法 JSON：${bundle.lockPath}`, { cause: error });
+  }
+  const result = dependencyLockSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error(
+      `Skill 依赖锁格式无效：${result.error.issues.map((issue) => issue.message).join('；')}`,
+    );
+  }
+  if (profile.pythonRequirement && result.data.pythonRequirement !== profile.pythonRequirement) {
+    throw new Error('Skill 依赖锁的 Python 版本与运行声明不一致');
+  }
+};
+
+const externalDirectoryVariables = (line: string): string[] => {
+  const variables = new Set<string>();
+  const patterns = [
+    /\bos\.environ(?:\.get)?\s*\[?\s*\(?\s*['"]([A-Z][A-Z0-9_]*_(?:HOME|ROOT|DIR))['"]/gu,
+    /\bos\.getenv\s*\(\s*['"]([A-Z][A-Z0-9_]*_(?:HOME|ROOT|DIR))['"]/gu,
+    /\$\{?([A-Z][A-Z0-9_]*_(?:HOME|ROOT|DIR))\}?/gu,
+    /\b(?:set|export|configure|设置|配置)\s+([A-Z][A-Z0-9_]*_(?:HOME|ROOT|DIR))\b/giu,
+  ];
+  for (const pattern of patterns) {
+    for (const match of line.matchAll(pattern)) {
+      const variable = match[1];
+      if (variable) variables.add(variable.toUpperCase());
+    }
+  }
+  return [...variables];
+};
+
+/**
+ * 只对包内文本做静态提示：不 import Python、不读取 requirements 执行、不启动 git/npm。
+ * 发现结果是线索，不会自动成为已验证的运行配置。
+ */
+export const discoverSkillRuntime = (
+  files: readonly Pick<SkillFile, 'relativePath' | 'bytes'>[],
+): SkillRuntimeDiscoveryFinding[] => {
+  const findings: SkillRuntimeDiscoveryFinding[] = [];
+  const add = (finding: SkillRuntimeDiscoveryFinding): void => {
+    if (findings.length < 200) findings.push(finding);
+  };
+  const pythonFiles = files.filter((file) => file.relativePath.toLowerCase().endsWith('.py'));
+  for (const file of pythonFiles.slice(0, 50)) {
+    add({
+      kind: 'python-script',
+      sourcePath: file.relativePath,
+      lineNumber: 1,
+      label: '发现 Python 脚本',
+    });
+  }
+  const dependencyFiles = files.filter((file) =>
+    /(?:^|\/)(?:requirements(?:[-_.][^/]*)?\.txt|pyproject\.toml|Pipfile|environment\.ya?ml)$/iu.test(
+      file.relativePath,
+    ),
+  );
+  for (const file of dependencyFiles.slice(0, 50)) {
+    add({
+      kind: 'dependency-file',
+      sourcePath: file.relativePath,
+      lineNumber: 1,
+      label: '发现 Python 依赖声明文件',
+    });
+  }
+  const textExtensions = /\.(?:md|py|txt|toml|ya?ml|json|sh)$/iu;
+  const seenEnvironmentVariables = new Set<string>();
+  const seenPackages = new Set<string>();
+  const seenToolchains = new Set<string>();
+  let sawPythonRuntimeHint = false;
+  for (const file of files) {
+    if (!textExtensions.test(file.relativePath) || file.bytes.includes(0)) continue;
+    const content = file.bytes.toString('utf8');
+    const lines = content.split(/\r?\n/u);
+    for (const [index, line] of lines.entries()) {
+      const lineNumber = index + 1;
+      const variables = externalDirectoryVariables(line);
+      for (const variable of variables) {
+        if (seenEnvironmentVariables.has(variable)) continue;
+        seenEnvironmentVariables.add(variable);
+        add({
+          kind: 'environment-variable',
+          sourcePath: file.relativePath,
+          lineNumber,
+          label: `发现外部目录变量 ${variable}`,
+        });
+      }
+      const packages = line.matchAll(
+        /\b(?:pip(?:3(?:\.\d+)?)?|python(?:3(?:\.\d+)?)?\s+-m\s+pip)\s+install\s+([^\s`|;]+)/giu,
+      );
+      for (const match of packages) {
+        const packageName = /^([A-Za-z0-9][A-Za-z0-9._-]*)/u.exec(match[1] ?? '')?.[1];
+        if (!packageName || seenPackages.has(packageName.toLowerCase())) continue;
+        seenPackages.add(packageName.toLowerCase());
+        add({
+          kind: 'package-install-hint',
+          sourcePath: file.relativePath,
+          lineNumber,
+          label: `发现 Python 包安装提示 ${packageName}`,
+        });
+      }
+      if (
+        !sawPythonRuntimeHint &&
+        /(?:系统|system)\s*python|托管\s*python|managed\s+python/iu.test(line)
+      ) {
+        sawPythonRuntimeHint = true;
+        add({
+          kind: 'python-runtime-hint',
+          sourcePath: file.relativePath,
+          lineNumber,
+          label: '发现 Python 运行环境说明',
+        });
+      }
+      if (/\bppt[-_]master\b/iu.test(line) && !seenToolchains.has('ppt-master')) {
+        seenToolchains.add('ppt-master');
+        add({
+          kind: 'toolchain-name',
+          sourcePath: file.relativePath,
+          lineNumber,
+          label: '发现外部工具链引用 ppt-master',
+        });
+      }
+    }
+  }
+  return findings;
 };
 
 const copyFiles = async (files: readonly SkillFile[], destination: string): Promise<void> => {
@@ -194,6 +464,7 @@ export class SkillService {
   constructor(
     private readonly store: AppStore,
     private readonly roots: SkillResourceRoots,
+    private readonly fetcher: typeof fetch = fetch,
   ) {}
 
   private userRevisionRoot(skill: SkillDetail): string {
@@ -227,7 +498,148 @@ export class SkillService {
     }
   }
 
-  async importDirectory(sourceRoot: string): Promise<ImportedSkill> {
+  async importSource(sourcePath: string): Promise<ImportedSkill> {
+    const source = path.resolve(sourcePath);
+    const info = await lstat(source);
+    if (info.isSymbolicLink()) throw new Error('Skill source cannot be a symbolic link');
+    if (info.isDirectory()) return this.importDirectory(source);
+    if (info.isFile() && path.extname(source).toLowerCase() === '.zip') {
+      if (info.size > maxBytes) throw new Error('Skill ZIP 压缩包超过 50 MB 上限');
+      return this.importArchiveBytes(
+        await readFile(source),
+        path.basename(source, path.extname(source)),
+      );
+    }
+    throw new Error('请选择 Skill 文件夹或 ZIP 包');
+  }
+
+  async importFromUrl(value: string): Promise<ImportedSkill> {
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch (error) {
+      throw new Error('Skill 下载地址无效', { cause: error });
+    }
+    if (url.protocol !== 'https:' || url.username || url.password) {
+      throw new Error('Skill 下载地址必须是没有内嵌凭据的 HTTPS 链接');
+    }
+    const response = await this.fetcher(url, {
+      redirect: 'follow',
+      signal: AbortSignal.timeout(archiveDownloadTimeoutMs),
+    });
+    if (!response.ok) throw new Error(`Skill 下载失败（HTTP ${response.status}）`);
+    const finalUrl = response.url ? new URL(response.url) : url;
+    if (finalUrl.protocol !== 'https:' || finalUrl.username || finalUrl.password) {
+      throw new Error('Skill 下载重定向必须保持 HTTPS 且不能包含凭据');
+    }
+    const declaredLength = Number(response.headers.get('content-length'));
+    if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+      throw new Error('Skill 下载包超过 50 MB 上限');
+    }
+    if (!response.body) throw new Error('Skill 下载响应没有文件内容');
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        await reader.cancel();
+        throw new Error('Skill 下载包超过 50 MB 上限');
+      }
+      chunks.push(value);
+    }
+    const archive = Buffer.concat(
+      chunks.map((chunk) => Buffer.from(chunk)),
+      totalBytes,
+    );
+    const fallbackName = path.posix.basename(finalUrl.pathname).replace(/\.zip$/iu, '');
+    return this.importArchiveBytes(archive, fallbackName || 'skill-package');
+  }
+
+  private async importArchiveBytes(
+    archiveBytes: Uint8Array,
+    fallbackName: string,
+  ): Promise<ImportedSkill> {
+    if (archiveBytes.byteLength > maxBytes) throw new Error('Skill ZIP 压缩包超过 50 MB 上限');
+    const archive = await JSZip.loadAsync(archiveBytes, { checkCRC32: true });
+    const entries = Object.values(archive.files).filter((entry) => !entry.dir);
+    if (entries.length > maxFiles) throw new Error(`Skill ZIP 包超过 ${maxFiles} 个文件`);
+    const normalizedEntries: Array<{
+      entry: JSZip.JSZipObject;
+      relativePath: string;
+      size: number;
+    }> = [];
+    const seenPaths = new Set<string>();
+    let declaredBytes = 0;
+    for (const entry of entries) {
+      if (isZipSymlink(entry)) throw new Error(`Skill ZIP 不能包含符号链接：${entry.name}`);
+      const permissions = entry.unixPermissions;
+      const mode =
+        typeof permissions === 'number'
+          ? permissions
+          : typeof permissions === 'string'
+            ? Number.parseInt(permissions, 8)
+            : 0;
+      const fileType = mode & 0o170000;
+      if (fileType !== 0 && fileType !== 0o100000) {
+        throw new Error(`Skill ZIP 不能包含特殊文件：${entry.name}`);
+      }
+      const relativePath = archiveRelativePath(entry.name);
+      if (
+        relativePath.startsWith('__MACOSX/') ||
+        isOperatingSystemMetadata(path.posix.basename(relativePath))
+      ) {
+        continue;
+      }
+      if (seenPaths.has(relativePath)) throw new Error(`Skill ZIP 路径重复：${relativePath}`);
+      seenPaths.add(relativePath);
+      const size = zipDeclaredSize(entry);
+      if (size === undefined) throw new Error(`Skill ZIP 缺少条目大小信息：${relativePath}`);
+      declaredBytes += size;
+      if (declaredBytes > maxBytes) throw new Error('Skill ZIP 解压内容超过 50 MB 上限');
+      normalizedEntries.push({ entry, relativePath, size });
+    }
+    if (normalizedEntries.length === 0) throw new Error('Skill ZIP 包中没有文件');
+    const hasRootSkill = normalizedEntries.some((item) => item.relativePath === skillFileName);
+    let wrapper = '';
+    if (!hasRootSkill) {
+      const roots = new Set(normalizedEntries.map((item) => item.relativePath.split('/')[0]));
+      const onlyRoot = roots.values().next().value;
+      if (
+        roots.size !== 1 ||
+        !onlyRoot ||
+        !normalizedEntries.some((item) => item.relativePath === `${onlyRoot}/${skillFileName}`)
+      ) {
+        throw new Error('Skill ZIP 必须在根目录或唯一顶层目录中包含 SKILL.md');
+      }
+      wrapper = `${onlyRoot}/`;
+    }
+    const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'betterwork-skill-zip-'));
+    try {
+      let extractedBytes = 0;
+      for (const item of normalizedEntries) {
+        const relativePath = wrapper ? item.relativePath.slice(wrapper.length) : item.relativePath;
+        if (!relativePath) continue;
+        const target = path.resolve(temporaryRoot, ...relativePath.split('/'));
+        if (!isWithin(temporaryRoot, target)) throw new Error('Skill ZIP 路径逃逸出临时目录');
+        const bytes = await item.entry.async('nodebuffer');
+        if (bytes.byteLength !== item.size)
+          throw new Error(`Skill ZIP 条目大小不符：${relativePath}`);
+        extractedBytes += bytes.byteLength;
+        if (extractedBytes > maxBytes) throw new Error('Skill ZIP 解压内容超过 50 MB 上限');
+        await mkdir(path.dirname(target), { recursive: true });
+        await writeFile(target, bytes, { flag: 'wx' });
+      }
+      return await this.importDirectory(temporaryRoot, fallbackName);
+    } finally {
+      await rm(temporaryRoot, { recursive: true, force: true });
+    }
+  }
+
+  async importDirectory(sourceRoot: string, fallbackName?: string): Promise<ImportedSkill> {
     const source = path.resolve(sourceRoot);
     const packageData = await readPackage(source);
     const contentHash = hashFiles(packageData.files);
@@ -237,11 +649,11 @@ export class SkillService {
     const name =
       typeof packageData.frontmatter.name === 'string' && packageData.frontmatter.name.trim()
         ? packageData.frontmatter.name.trim()
-        : path.basename(source);
+        : (packageData.packageName ?? fallbackName ?? path.basename(source));
     const description =
       typeof packageData.frontmatter.description === 'string'
         ? packageData.frontmatter.description
-        : '';
+        : (packageData.packageDescription ?? '');
     try {
       this.store.transaction(() => {
         this.store.skills.save({
@@ -254,8 +666,14 @@ export class SkillService {
         const createdRevisionId = this.store.skills.saveRevision({
           skillId,
           contentHash,
-          ...(typeof packageData.frontmatter.version === 'string'
-            ? { originalVersion: packageData.frontmatter.version }
+          ...(packageData.packageId ? { packageId: packageData.packageId } : {}),
+          ...(typeof packageData.frontmatter.version === 'string' || packageData.packageVersion
+            ? {
+                originalVersion:
+                  typeof packageData.frontmatter.version === 'string'
+                    ? packageData.frontmatter.version
+                    : packageData.packageVersion,
+              }
             : {}),
           resourceKey,
           frontmatter: packageData.frontmatter,
@@ -269,7 +687,8 @@ export class SkillService {
         });
         return createdRevisionId;
       });
-      const suggestedProfile = suggestedPptProfile(contentHash);
+      const suggestedProfile =
+        packageData.importedRuntimeProfile ?? suggestedPptProfile(contentHash);
       if (suggestedProfile) this.saveRuntimeProfile(skillId, suggestedProfile);
       const skill = this.store.skills.get(skillId);
       if (!skill) throw new Error('Imported Skill was not available after database registration');
@@ -285,12 +704,55 @@ export class SkillService {
     return this.resolveBuiltinResource(skill.revision.resourceKey.replace(/^builtin\//u, ''));
   }
 
+  async getDetail(skillId: string): Promise<SkillDetail | undefined> {
+    const skill = this.store.skills.get(skillId);
+    if (!skill) return undefined;
+    const resourceRoot = await this.resolveResourceRoot(skill);
+    const packageData = await readPackage(resourceRoot);
+    if (hashFiles(packageData.files) !== skill.revision.contentHash) {
+      throw new Error('Skill 内容 hash 已变化，请重新导入并确认信任');
+    }
+    return { ...skill, runtimeDiscovery: discoverSkillRuntime(packageData.files) };
+  }
+
   async verifyResourceRoot(skill: SkillDetail): Promise<string> {
     const root = await this.resolveResourceRoot(skill);
     const data = await readPackage(root);
     if (hashFiles(data.files) !== skill.revision.contentHash)
       throw new Error('Skill 内容 hash 已变化，请重新导入并确认信任');
     return root;
+  }
+
+  async getDependencyAssets(skillId: string): Promise<SkillDependencyAssets | undefined> {
+    const skill = this.store.skills.get(skillId);
+    if (!skill) throw new Error(`Skill ${skillId} does not exist`);
+    const bundle = skill?.runtimeProfile?.profile.dependencyBundle;
+    if (!bundle) return undefined;
+    const root = await this.verifyResourceRoot(skill);
+    const lockPath = path.resolve(root, bundle.lockPath);
+    if (!isWithin(root, lockPath)) throw new Error('Skill 依赖锁路径逃逸出 Skill 包');
+    let raw: unknown;
+    try {
+      raw = JSON.parse((await readFile(lockPath)).toString('utf8')) as unknown;
+    } catch (error) {
+      throw new Error(`无法读取 Skill 依赖锁 ${bundle.lockPath}`, { cause: error });
+    }
+    const result = dependencyLockSchema.safeParse(raw);
+    if (!result.success) {
+      throw new Error(
+        `Skill 依赖锁格式无效：${result.error.issues.map((issue) => issue.message).join('；')}`,
+      );
+    }
+    const wheelhouseRoot = bundle.wheelhousePath
+      ? path.resolve(root, bundle.wheelhousePath)
+      : undefined;
+    if (wheelhouseRoot && !isWithin(root, wheelhouseRoot)) {
+      throw new Error('Skill wheelhouse 路径逃逸出 Skill 包');
+    }
+    return {
+      lock: result.data,
+      ...(wheelhouseRoot ? { wheelhouseRoot } : {}),
+    };
   }
 
   async readSkillInstruction(skill: SkillDetail): Promise<SkillInstruction> {
@@ -377,6 +839,7 @@ export class SkillService {
         const revisionId = this.store.skills.saveRevision({
           skillId: entry.skillId,
           contentHash: entry.contentHash,
+          packageId: entry.skillId,
           ...(entry.originalVersion ? { originalVersion: entry.originalVersion } : {}),
           resourceKey: `builtin/${entry.resourceName}`,
           frontmatter: packageData.frontmatter,
@@ -436,6 +899,7 @@ export class SkillService {
         const revisionId = this.store.skills.saveRevision({
           skillId: userSkillId,
           contentHash,
+          ...(sourceSkill.revision.packageId ? { packageId: sourceSkill.revision.packageId } : {}),
           ...(sourceSkill.revision.originalVersion
             ? { originalVersion: sourceSkill.revision.originalVersion }
             : {}),
@@ -510,11 +974,12 @@ export class SkillService {
     const source = await this.resolveResourceRoot(skill);
     await copyDirectory(source, target);
     const manifest: SkillExportManifest = {
-      formatVersion: 1,
-      skillId: skill.id,
+      formatVersion: 2,
+      skillId: skill.revision.packageId ?? skill.id,
       name: skill.name,
       description: skill.description,
-      ...(skill.runtimeProfile ? { runtimeProfile: skill.runtimeProfile } : {}),
+      packageVersion: skill.revision.originalVersion ?? '1.0.0',
+      ...(skill.runtimeProfile ? { runtimeProfile: skill.runtimeProfile.profile } : {}),
     };
     await writeFile(
       path.join(target, 'betterwork.skill.json'),

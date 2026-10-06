@@ -74,6 +74,7 @@ import {
   getTaskContextRequestSchema,
   getTaskContinuityBriefRequestSchema,
   getTaskRequestSchema,
+  importSkillFromUrlRequestSchema,
   importSkillRequestSchema,
   inputSnapshotSchema,
   IpcChannel,
@@ -1809,7 +1810,7 @@ function registerSkillChannels(deps: IpcDependencies): void {
     IpcChannel.GetSkill,
     getSkillRequestSchema,
     skillDetailSchema.nullable(),
-    (input) => store.skills.get(input.id) ?? null,
+    async (input) => (await skillService.getDetail(input.id)) ?? null,
   );
   handleNoInput(
     IpcChannel.ImportSkill,
@@ -1818,11 +1819,21 @@ function registerSkillChannels(deps: IpcDependencies): void {
     async () => {
       const result = await showOpenDialog(deps, {
         title: '导入 Skill',
-        properties: ['openDirectory'],
+        properties: ['openDirectory', 'openFile'],
+        filters: [{ name: 'Skill ZIP', extensions: ['zip'] }],
       });
-      const sourceRoot = result.filePaths[0];
-      if (result.canceled || !sourceRoot) return { cancelled: true };
-      const imported = await skillService.importDirectory(sourceRoot);
+      const sourcePath = result.filePaths[0];
+      if (result.canceled || !sourcePath) return { cancelled: true };
+      const imported = await skillService.importSource(sourcePath);
+      return { cancelled: false, skill: skillSummary(imported.skill) };
+    },
+  );
+  handleInput(
+    IpcChannel.ImportSkillFromUrl,
+    importSkillFromUrlRequestSchema,
+    skillImportResultSchema,
+    async ({ url }) => {
+      const imported = await skillService.importFromUrl(url);
       return { cancelled: false, skill: skillSummary(imported.skill) };
     },
   );
@@ -2148,8 +2159,13 @@ function registerMcpChannels({ mcpClientService }: IpcDependencies): void {
 }
 
 function registerDependencyChannels(deps: IpcDependencies): void {
-  const { dependencies, snapshots, dependencyLocksRoot, store } = deps;
+  const { dependencies, snapshots, dependencyLocksRoot, skillService, store } = deps;
   const filesystem = createNodeFileSystem();
+  const loadLockForSkill = async (skillId: string, lockId: string) => {
+    const assets = await skillService.getDependencyAssets(skillId);
+    if (assets) return assets;
+    return { lock: await loadDependencyLock(dependencyLocksRoot, lockId, filesystem) };
+  };
 
   handleNoInput(
     IpcChannel.ListDependencyOptions,
@@ -2168,14 +2184,16 @@ function registerDependencyChannels(deps: IpcDependencies): void {
     dependencyPlanRequestSchema,
     dependencyPlanSchema,
     async (input) => {
-      const lock = await loadDependencyLock(dependencyLocksRoot, input.lockId, filesystem);
-      const plan = await dependencies.inspectPlan(input.base, lock);
+      const assets = input.skillId
+        ? await loadLockForSkill(input.skillId, input.lockId)
+        : { lock: await loadDependencyLock(dependencyLocksRoot, input.lockId, filesystem) };
+      const plan = await dependencies.inspectPlan(input.base, assets.lock, assets.wheelhouseRoot);
       return {
         environmentKey: plan.environmentKey,
         base: plan.base,
         platform: plan.platform,
         lockHash: plan.lockHash,
-        lock,
+        lock: assets.lock,
         missingWheels: plan.missingWheels,
         requiresDownload: plan.requiresDownload,
         environment: plan.environment ?? null,
@@ -2189,8 +2207,15 @@ function registerDependencyChannels(deps: IpcDependencies): void {
     prepareDependencyRequestSchema,
     prepareDependencyResultSchema,
     async (input) => {
-      const lock = await loadDependencyLock(dependencyLocksRoot, input.lockId, filesystem);
-      return dependencies.prepareEnvironment(input.base, lock, input.kind);
+      const assets = input.skillId
+        ? await loadLockForSkill(input.skillId, input.lockId)
+        : { lock: await loadDependencyLock(dependencyLocksRoot, input.lockId, filesystem) };
+      return dependencies.prepareEnvironment(
+        input.base,
+        assets.lock,
+        input.kind,
+        assets.wheelhouseRoot,
+      );
     },
   );
 
@@ -2249,7 +2274,7 @@ function registerDependencyChannels(deps: IpcDependencies): void {
     refreshSkillDependencyGrantRequestSchema,
     refreshSkillDependencyGrantResultSchema,
     async (input) => {
-      const lock = await loadDependencyLock(dependencyLocksRoot, input.lockId, filesystem);
+      const assets = await loadLockForSkill(input.skillId, input.lockId);
       const manifestHashes: string[] = [];
       for (const snapshotId of input.snapshotIds) {
         const snapshot = snapshots.getSnapshot(snapshotId);
@@ -2257,7 +2282,7 @@ function registerDependencyChannels(deps: IpcDependencies): void {
         manifestHashes.push(snapshot.manifestHash);
       }
       const outcome = dependencies.confirmDependencyGrant(input.skillId, {
-        lockHash: computeDependencyLockHash(lock),
+        lockHash: computeDependencyLockHash(assets.lock),
         snapshotManifestHashes: manifestHashes,
         ...(input.confirm === true ? { confirm: true } : {}),
       });

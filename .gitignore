@@ -42,5 +42,8 @@ __pycache__/
 # External tool caches
 book/cn/.workbuddy/
 
+# Local Skill authoring and packaging workspace (not shipped from this directory)
+/skills/
+
 # Sensitive data
 book/cn/sensitive.txt

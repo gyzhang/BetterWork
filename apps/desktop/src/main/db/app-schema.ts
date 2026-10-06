@@ -2089,6 +2089,18 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 41,
+    name: 'retain publisher Skill package identity',
+    up(db: Database.Database): void {
+      db.exec(`
+        ALTER TABLE skill_revisions ADD COLUMN package_id TEXT
+          CHECK (package_id IS NULL OR length(package_id) BETWEEN 1 AND 160);
+        CREATE INDEX idx_skill_revisions_package_id
+          ON skill_revisions(package_id) WHERE package_id IS NOT NULL;
+      `);
+    },
+  },
 ];
 
 /**

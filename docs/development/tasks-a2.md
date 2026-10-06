@@ -43,8 +43,8 @@
 - 必读：执行器设计 §4、contracts §2/3、现有可注入 HTTP 服务测试、docs/12。
 - 目标：基础 Python 定位/探测、专属 venv、环境状态/准备 operation、依赖安装计划执行和恢复。
 - 允许改动：dependency-service、runtime environment/operation 仓储与迁移、下载/安装适配器和 tests；本卡不发布实际二进制制品。
-- 实施：注入 download/process/filesystem 根；最终唯一目录创建 venv，ready 前不可用；同 environmentKey 独占锁；安装完整 hash lock、只选已批准来源；旧环境保留；失败清理本作业目录。选定实际 Python 发行候选与版本记录在依赖验证记录，不凭空填写 hash。
-- 必测：同键重复准备、部分安装失败/取消、重启 preparing 恢复、hash 不匹配、缺 wheel、代理凭据不出日志、解释器无 venv、非目标架构、全局 Python 包不修改、无网络缓存路径可用。
+- 实施：注入 download/process/filesystem 根；最终唯一目录创建 venv，ready 前不可用；同 environmentKey 独占锁；安装完整 hash lock、只选已批准来源；下载接收作业 AbortSignal，进程取消调用 supervisor kill；旧环境保留；失败/取消清理本作业目录。选定实际 Python 发行候选与版本记录在依赖验证记录，不凭空填写 hash。
+- 必测：同键重复准备、下载中取消受管 Python/包 wheel、安装中取消、部分安装失败、重启 preparing 恢复、hash 不匹配、缺 wheel、代理凭据不出日志、解释器无 venv、非目标架构、全局 Python 包不修改、无网络缓存路径可用。
 - 验收：自动测试全离线注入；在授权临时目录做真实 venv/import probe，不修改系统环境；依赖未完全探测时不能 ready。
 - 不做：读取并直接执行 Skill 中 pip 命令，默认装全量 ppt-master requirements，运行时自更新。
 
@@ -54,7 +54,7 @@
 - 必读：样本 SKILL.md、三个脚本、执行器设计 §4/9、样本边界文档。
 - 目标：绑定可复现的 ppt-master 快照及样本真正需要的依赖闭包；形成可用于 A16 的 environment/profile。
 - 允许改动：快照服务、dependency 仓储/迁移、依赖锁描述与制品清单格式、测试、依赖验证报告。不得把本机私有 deck 或二进制包加入源码。
-- 实施：枚举用户选择的外部目录；记录 commit + 所选内容 hash（包括本地修改）；排除历史 projects、缓存、.git；所有排除项列明；PPTM_HOME 指向快照。生成 OS/ABI 对应精确包锁，使用真实下载校验值，保留许可清单。外部资源不足则显示缺项，不绕过上游 integrity check。
+- 实施：枚举用户选择的外部目录；记录 commit + 所选内容 hash（包括本地修改）；排除历史 projects、缓存、.git；所有排除项列明；PPTM_HOME 指向快照。新 Skill 包将 OS/ABI 精确锁放在包内，显式 requirements 与目标 CPython 的 pip report 通过 `scripts/generate-skill-dependency-lock.mjs` 生成；可带 wheelhouse，缺项按锁 URL/hash 下载。保留许可清单。外部资源不足则显示缺项，不绕过上游 integrity check。维护流程见[Skill 包作者指南](skill-package-authoring.md)。
 - 必测：dirty tree 快照区别于 HEAD；修改源后已绑定快照不变；失配不执行；缺图标/脚本明确失败；环境共享仅完整 key 相同；撤销/授权指纹随依赖变化失效；升级旧 binding 仍可回看。
 - 验收：`import pptx/lxml` 等实际模块探测与关键 CLI --help，在临时环境运行并记录平台；命令入口/路径已经验证；PPT 生成留给 A16/A17。
 - 停止条件：无法满足上游完整性或所需 wheel，说明缺项，不能把可选依赖误删以强行标 ready。
@@ -63,8 +63,8 @@
 
 - 前置：A11；A2 按实际 macOS 证据验收，不要求已退出范围的 Windows 生命周期。
 - 必读：docs/10、A06 的组件/hook、执行器设计 §11，docs/12 §7/8。
-- 目标：Skill 详情可选择解释器/工具链登记项、查看缺项、准备/取消/修复环境；管理动作响应 operationId，进度可回看。
+- 目标：应用设置的「运行组件」集中展示受管 CPython 版本与落地状态；Skill 详情依据 profile 展示依赖锁及零项/多项工具链登记入口，并可准备/取消/修复专属环境。默认解释器由应用按 Skill 声明自动选择；本机解释器只留在高级折叠区。管理动作响应 operationId，进度可回看。
 - 允许改动：依赖 IPC/Preload、use-skills 或单独内聚依赖 hook、配置组件、消息/内联反馈必要接线及 tests。
-- 必测：重复点击只启动一个作业；切换 Skill 不显示旧进度；未信任但可准备环境与不可执行区分；准备成功后需要新 grant 时明确提示；关闭页面后状态可恢复；取消/失败有结果。
-- 验收：用户不需要输入 Shell 命令就能选择本地 Python/工具链或受管环境；重启后依赖状态真实；全 verify + 本机手工旅程。
+- 必测：重复点击只启动一个作业；切换 Skill 不显示旧进度；静态发现不执行 Skill 代码；零项与多项工具链需求按 profile 显示并按声明顺序绑定；未信任但可准备环境与不可执行区分；准备成功后需要新 grant 时明确提示；关闭页面后状态可恢复；取消/失败有结果。
+- 验收：普通用户无需编辑 JSON、输入 Shell 命令或选择 Python 路径；Skill 包的 v2 manifest 经 Schema 校验后恢复包内锁与 toolchain 声明，按元数据生成详情项，信任仍独立。`ppt-expert-skill` 样例已声明包内锁/wheelhouse 与 `PPTM_HOME` 的版本/commit；其 commands 为空，直到受管 CPython 兼容性、命令契约和产物验证通过，不得显示或交接成可执行样例。通用静态发现展示文件/行号证据且不误报包内目录常量；重启后依赖状态真实；全 verify + 本机手工旅程。
 - 不做：把试运行按钮接到虚构成功返回；把模型 Key 放进 Skill env。

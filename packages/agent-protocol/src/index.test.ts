@@ -1252,6 +1252,66 @@ describe('skill management protocol', () => {
     ).toThrow();
   });
 
+  it('declares multiple external toolchains with unique stable IDs and environment variables', () => {
+    const profile = {
+      commands: [],
+      environmentRequirements: [],
+      toolchainRequirements: [
+        { id: 'ppt-master', name: 'PPT Master', environmentVariable: 'PPTM_HOME' },
+        { id: 'svg-tools', name: 'SVG Tools', environmentVariable: 'SVG_TOOLS_HOME' },
+      ],
+      outputContract: { outputPaths: [] },
+    };
+    expect(runtimeProfileDraftSchema.parse(profile).toolchainRequirements).toHaveLength(2);
+    expect(() =>
+      runtimeProfileDraftSchema.parse({
+        ...profile,
+        toolchainRequirements: [
+          ...profile.toolchainRequirements,
+          { id: 'ppt-master', name: 'Duplicate', environmentVariable: 'PPTM_HOME' },
+        ],
+      }),
+    ).toThrow();
+  });
+
+  it('accepts package-local dependency locks and rejects paths outside the Skill package', () => {
+    const profile = {
+      commands: [],
+      environmentRequirements: [],
+      pythonRequirement: '3.12',
+      dependencyBundle: {
+        id: 'ppt-expert-darwin-arm64-cp312',
+        lockPath: 'runtime/locks/darwin-arm64-cp312.json',
+        wheelhousePath: 'runtime/wheelhouse',
+      },
+      toolchainRequirements: [
+        {
+          id: 'ppt-master',
+          name: 'PPT Master',
+          environmentVariable: 'PPTM_HOME',
+          versionHint: '6.6.0',
+          expectedCommit: '680de11f1bef4628b68d5daad9dffec569fbd51f',
+        },
+      ],
+      outputContract: { outputPaths: [] },
+    };
+    expect(runtimeProfileDraftSchema.parse(profile).dependencyBundle).toEqual(
+      profile.dependencyBundle,
+    );
+    expect(() =>
+      runtimeProfileDraftSchema.parse({
+        ...profile,
+        dependencyBundle: { id: 'unsafe', lockPath: '../outside.json' },
+      }),
+    ).toThrow();
+    expect(() =>
+      runtimeProfileDraftSchema.parse({
+        ...profile,
+        dependencyLockId: 'global-lock',
+      }),
+    ).toThrow();
+  });
+
   it('limits Skill deletion to an application-owned identifier', () => {
     expect(deleteSkillRequestSchema.parse({ skillId: 'skill-1' })).toEqual({ skillId: 'skill-1' });
     expect(() =>

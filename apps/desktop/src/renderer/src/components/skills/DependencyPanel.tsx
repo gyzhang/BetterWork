@@ -2,9 +2,14 @@ import type { SkillDetail } from '@betterwork/agent-protocol';
 
 import type { SkillDependenciesState } from '../../hooks/use-skill-dependencies';
 import { skillEnvironmentName } from '../../lib/labels';
+import {
+  effectiveToolchainRequirements,
+  unconfiguredExternalRuntimeClues,
+} from '../../lib/skill-runtime-discovery';
 import { InlineLoading } from '../AsyncButton';
 import { Badge } from '../Badge';
 import { Button } from '../Button';
+import { Disclosure } from '../Disclosure';
 import { Field } from '../Field';
 import { FieldSelect } from '../FieldSelect';
 import { InlineError } from '../InlineError';
@@ -47,12 +52,36 @@ export function DependencyPanel({
   const environment = plan?.environment ?? undefined;
   const pending = operation?.status === 'queued' || operation?.status === 'running';
   const canExecute = skill.trustStatus === 'trusted' && environment?.status === 'ready';
+  const profile = skill.runtimeProfile?.profile;
+  const dependencyLockId = profile?.dependencyBundle?.id ?? profile?.dependencyLockId;
+  const toolchainRequirements = effectiveToolchainRequirements(profile);
+  const externalRuntimeClues = unconfiguredExternalRuntimeClues(
+    skill.runtimeDiscovery,
+    toolchainRequirements,
+  );
+  const hasUnconfiguredExternalClues = externalRuntimeClues.length > 0;
+  const managedDistribution = options?.distributions.find(
+    (distribution) =>
+      state.base?.kind === 'managed' && distribution.id === state.base.distributionId,
+  );
+
+  if (!profile) {
+    return (
+      <section className="skill-detail-section dependency-panel">
+        <SectionHeader eyebrow="运行环境" title="等待审核运行配置" />
+        <StatusNote
+          tone="warning"
+          message="当前 Skill 只发现了静态线索，尚未匹配已审核的运行配置；在配置确认前不会准备依赖或外部工具链。"
+        />
+      </section>
+    );
+  }
 
   return (
     <div className="skill-detail-section dependency-panel">
       <SectionHeader
         eyebrow="运行环境"
-        title="依赖与解释器"
+        title="依赖与工具链"
         actions={
           <Badge tone="outline">
             {environment ? skillEnvironmentName[environment.status] : '未准备'}
@@ -60,35 +89,50 @@ export function DependencyPanel({
         }
       />
 
-      <Field
-        controlId="dependency-base"
-        label="基础 Python"
-        hint="受管制品按固定版本与校验值使用；本机解释器只作为 venv 基础，不会修改它的全局 site-packages。"
-      >
-        <FieldSelect
-          size="md"
-          id="dependency-base"
-          value={state.base?.kind === 'managed' ? state.base.distributionId : '__local__'}
-          onChange={(value) => {
-            if (value === '__local__') {
-              state.chooseLocalInterpreter();
-              return;
-            }
-            state.selectManagedDistribution(value);
-          }}
-          options={[
-            ...(options?.distributions ?? []).map((distribution) => ({
-              id: distribution.id,
-              label: `算台受管 Python ${distribution.version}（${distribution.platform.os}/${distribution.platform.arch}）${distribution.installed ? '· 已下载' : '· 需下载'}`,
-            })),
-            {
-              id: '__local__',
-              label:
-                state.base?.kind === 'local' ? `本机解释器 ${state.base.path}` : '选择本机 Python…',
-            },
-          ]}
+      <p>
+        基础 Python 由 BetterWork 在“设置 → 运行组件”统一管理
+        {managedDistribution ? `，当前使用 ${managedDistribution.version}` : ''}；首次准备 Skill
+        环境时自动下载并校验。
+      </p>
+      {!state.base && !state.loading && (
+        <StatusNote
+          tone="warning"
+          message={`没有找到符合 Skill 声明版本 ${profile?.pythonRequirement ?? ''} 的受管 Python；请检查“设置 → 运行组件”或打开高级选项。`}
         />
-      </Field>
+      )}
+      <Disclosure label="高级：更换基础 Python">
+        <Field
+          controlId="dependency-base"
+          label="基础 Python"
+          hint="本机解释器只用来创建 Skill 专属环境，不会修改全局 site-packages。"
+        >
+          <FieldSelect
+            size="md"
+            id="dependency-base"
+            value={state.base?.kind === 'managed' ? state.base.distributionId : '__local__'}
+            onChange={(value) => {
+              if (value === '__local__') {
+                state.chooseLocalInterpreter();
+                return;
+              }
+              state.selectManagedDistribution(value);
+            }}
+            options={[
+              ...(options?.distributions ?? []).map((distribution) => ({
+                id: distribution.id,
+                label: `算台受管 Python ${distribution.version}（${distribution.platform.os}/${distribution.platform.arch}）${distribution.installed ? '· 已落地' : '· 首次使用时准备'}`,
+              })),
+              {
+                id: '__local__',
+                label:
+                  state.base?.kind === 'local'
+                    ? `本机解释器 ${state.base.path}`
+                    : '选择本机 Python…',
+              },
+            ]}
+          />
+        </Field>
+      </Disclosure>
 
       <Field
         controlId="dependency-lock"
@@ -104,42 +148,68 @@ export function DependencyPanel({
                 </span>
               )}
             </>
+          ) : !dependencyLockId ? (
+            '运行配置尚未指定依赖锁。请确认兼容的审核锁后手动选择；BetterWork 不会自动套用目录中的锁。'
           ) : undefined
         }
       >
-        <FieldSelect
-          size="md"
-          id="dependency-lock"
-          value={state.lockId}
-          onChange={(lockId) => state.selectLock(lockId)}
-          options={(options?.lockIds ?? []).map((lockId) => ({ id: lockId, label: lockId }))}
-        />
-      </Field>
-
-      <Field
-        controlId="dependency-snapshot"
-        label="外部工具链快照"
-        hint="快照是外部目录的受管不可变副本，运行时 PPTM_HOME 指向它；源目录之后再改动也不影响已登记的快照。"
-      >
-        <div className="dependency-inline">
+        {dependencyLockId ? (
+          <p>
+            {dependencyLockId}
+            {profile?.dependencyBundle ? '（随 Skill 包提供）' : ''}
+          </p>
+        ) : (
           <FieldSelect
             size="md"
-            id="dependency-snapshot"
-            value={state.snapshotId}
-            onChange={(snapshotId) => state.selectSnapshot(snapshotId)}
-            options={[
-              { id: '', label: '不使用外部工具链' },
-              ...(options?.snapshots ?? []).map((snapshot) => ({
-                id: snapshot.id,
-                label: `${snapshot.manifestHash.slice(0, 12)} · ${snapshot.fileCount} 文件 · ${snapshot.originState === 'dirty' ? '含本地修改' : snapshot.originState}`,
-              })),
-            ]}
+            id="dependency-lock"
+            value={state.lockId}
+            onChange={(lockId) => state.selectLock(lockId)}
+            options={(options?.lockIds ?? []).map((lockId) => ({ id: lockId, label: lockId }))}
           />
-          <Button variant="secondary" size="md" type="button" onClick={state.registerToolchain}>
-            登记目录…
-          </Button>
-        </div>
+        )}
       </Field>
+
+      {toolchainRequirements.map((requirement, index) => (
+        <Field
+          key={requirement.id}
+          controlId={`dependency-snapshot-${requirement.id}`}
+          label={`${requirement.name}${requirement.versionHint ? ` ${requirement.versionHint}` : ''}`}
+          hint={`${requirement.environmentVariable} 将指向只读的受管快照；源目录后续修改不会改变已登记内容。`}
+        >
+          <div className="dependency-inline">
+            <FieldSelect
+              size="md"
+              id={`dependency-snapshot-${requirement.id}`}
+              value={state.snapshotIds[index] ?? ''}
+              onChange={(snapshotId) => state.selectSnapshot(index, snapshotId)}
+              options={[
+                { id: '', label: '选择已登记快照…' },
+                ...(options?.snapshots ?? []).map((snapshot) => ({
+                  id: snapshot.id,
+                  label: `${snapshot.manifestHash.slice(0, 12)} · ${snapshot.fileCount} 文件 · ${snapshot.originState === 'dirty' ? '含本地修改' : snapshot.originState}`,
+                })),
+              ]}
+            />
+            <Button
+              variant="secondary"
+              size="md"
+              type="button"
+              onClick={() => state.registerToolchain(index)}
+            >
+              登记目录…
+            </Button>
+          </div>
+        </Field>
+      ))}
+      {toolchainRequirements.length === 0 &&
+        (hasUnconfiguredExternalClues ? (
+          <StatusNote
+            tone="warning"
+            message={`导入扫描发现尚未映射到运行配置的目录或工具链线索：${externalRuntimeClues.join('、')}。依赖环境就绪不代表这些资源已准备。`}
+          />
+        ) : (
+          <p>当前运行配置未声明外部工具链。</p>
+        ))}
 
       <div className="dependency-actions">
         <Button

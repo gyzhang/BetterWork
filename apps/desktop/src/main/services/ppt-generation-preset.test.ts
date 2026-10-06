@@ -136,6 +136,24 @@ describe('PptGenerationAdapter', () => {
       expect(resolved?.cwd).toBe(WORK_DIR);
     });
 
+    it('resolves the sample toolchain by its declared requirement ID', () => {
+      const resolved = adapter.resolveCommand(
+        'project-init',
+        { project_name: 'test-project' },
+        makeContext({ toolchainRoots: { 'ppt-master': '/managed/ppt-master-snapshot' } }),
+      );
+      expect(resolved?.argv[0]).toBe(
+        path.join(
+          '/managed/ppt-master-snapshot',
+          'skills',
+          'ppt-master',
+          'scripts',
+          'project_manager.py',
+        ),
+      );
+      expect(resolved?.env.PPTM_HOME).toBe('/managed/ppt-master-snapshot');
+    });
+
     it('project-init throws without PPTM_HOME or snapshot', () => {
       expect(() =>
         adapter.resolveCommand('project-init', { project_name: 'test' }, makeContext()),

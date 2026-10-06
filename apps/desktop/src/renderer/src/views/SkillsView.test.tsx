@@ -36,7 +36,7 @@ function Harness(): React.JSX.Element {
 }
 
 /** A12 之后技能页会同时加载依赖面板：视图测试只需一个安静的替身，不触发任何真实准备。 */
-function dependencyStub(): Record<string, unknown> {
+function dependencyStub() {
   return {
     listOptions: vi.fn(async () => ({
       distributions: [],
@@ -113,6 +113,122 @@ describe('SkillsPage', () => {
     expect(screen.getAllByText('已启用').length).toBeGreaterThan(0);
     expect(screen.getAllByText('未准备').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /试运行/ })).toHaveProperty('disabled', true);
+  });
+
+  it('shows import-time runtime clues without exposing profile JSON or preparing an unknown Skill', async () => {
+    const dependencies = dependencyStub();
+    const importedDetail: SkillDetail = {
+      ...detail,
+      runtimeDiscovery: [
+        {
+          kind: 'package-install-hint',
+          sourcePath: 'SKILL.md',
+          lineNumber: 34,
+          label: '发现 Python 包安装提示 python-pptx',
+        },
+        {
+          kind: 'python-runtime-hint',
+          sourcePath: 'SKILL.md',
+          lineNumber: 34,
+          label: '发现 Python 运行环境说明',
+        },
+        {
+          kind: 'environment-variable',
+          sourcePath: 'SKILL.md',
+          lineNumber: 34,
+          label: '发现外部目录变量 PPTM_HOME',
+        },
+        {
+          kind: 'toolchain-name',
+          sourcePath: 'SKILL.md',
+          lineNumber: 34,
+          label: '发现外部工具链引用 ppt-master',
+        },
+      ],
+    };
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        dependencies,
+        skills: {
+          refreshDependencyGrant: grantStub(),
+          list: vi.fn(async () => [summary]),
+          get: vi.fn(async () => importedDetail),
+        },
+      },
+    });
+
+    render(<Harness />);
+    await waitFor(() => expect(screen.getByText('研究方法')).toBeTruthy());
+    screen.getByRole('button', { name: /研究方法/ }).click();
+
+    expect(
+      await screen.findByText('发现 Python 包安装提示 python-pptx · SKILL.md:34'),
+    ).toBeTruthy();
+    expect(screen.getByText('发现 Python 运行环境说明 · SKILL.md:34')).toBeTruthy();
+    expect(screen.getByText('发现外部目录变量 PPTM_HOME · SKILL.md:34')).toBeTruthy();
+    expect(screen.getByText('发现外部工具链引用 ppt-master · SKILL.md:34')).toBeTruthy();
+    expect(screen.queryByLabelText('运行配置 JSON')).toBeNull();
+    expect(screen.queryByRole('button', { name: '准备环境' })).toBeNull();
+    expect(dependencies.listOptions).not.toHaveBeenCalled();
+  });
+
+  it('does not summarize discovered external dependencies as absent from an empty profile', async () => {
+    const dependencies = dependencyStub();
+    const configuredDetail: SkillDetail = {
+      ...detail,
+      environmentStatus: 'ready',
+      blockedReasons: [],
+      runtimeProfile: {
+        id: 'profile-empty',
+        skillId: 'skill-1',
+        profileHash: 'profile-hash-empty',
+        profile: {
+          commands: [],
+          environmentRequirements: [],
+          outputContract: { outputPaths: [] },
+        },
+        createdAt: 1,
+      },
+      runtimeDiscovery: [
+        {
+          kind: 'environment-variable',
+          sourcePath: 'SKILL.md',
+          lineNumber: 34,
+          label: '发现外部目录变量 PPTM_HOME',
+        },
+        {
+          kind: 'toolchain-name',
+          sourcePath: 'SKILL.md',
+          lineNumber: 34,
+          label: '发现外部工具链引用 ppt-master',
+        },
+      ],
+    };
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        dependencies,
+        skills: {
+          refreshDependencyGrant: grantStub(),
+          list: vi.fn(async () => [summary]),
+          get: vi.fn(async () => configuredDetail),
+        },
+      },
+    });
+
+    render(<Harness />);
+    await waitFor(() => expect(screen.getByText('研究方法')).toBeTruthy());
+    screen.getByRole('button', { name: /研究方法/ }).click();
+
+    expect(await screen.findByText('外部工具链：未配置（发现线索待确认）')).toBeTruthy();
+    expect(screen.queryByText('外部工具链：无')).toBeNull();
+    expect(
+      await screen.findByText(/尚未映射到运行配置的目录或工具链线索：PPTM_HOME、ppt-master/),
+    ).toBeTruthy();
+    expect(screen.getByText('导入扫描发现尚未配置的 Skill 运行需求')).toBeTruthy();
+    expect(screen.queryByText('当前没有阻塞原因。')).toBeNull();
+    expect(screen.getByRole('button', { name: '试运行' })).toHaveProperty('disabled', true);
   });
 
   it('does not let an older detail response replace the new selection', async () => {

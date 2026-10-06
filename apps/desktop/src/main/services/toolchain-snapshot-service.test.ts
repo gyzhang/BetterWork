@@ -524,6 +524,22 @@ describe('外部工具链快照', () => {
       harness.store.executions.findActiveGrant(ids.skillId, ids.revisionId, ids.profileHash),
     ).toBeDefined();
   });
+
+  it('工具链快照顺序参与授权指纹，交换声明绑定会要求重新确认', () => {
+    const lockHash = 'a'.repeat(64);
+    const first = 'b'.repeat(64);
+    const second = 'c'.repeat(64);
+    const original = computeDependencyFingerprint({
+      lockHash,
+      snapshotManifestHashes: [first, second],
+    });
+    const swapped = computeDependencyFingerprint({
+      lockHash,
+      snapshotManifestHashes: [second, first],
+    });
+
+    expect(swapped).not.toBe(original);
+  });
 });
 
 const seedBindingChain = (

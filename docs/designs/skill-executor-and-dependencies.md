@@ -20,6 +20,16 @@
 6. 首版执行模式为「受信任本地代码」，不是恶意代码沙箱。文件代理有强制路径校验，原生脚本拥有当前用户的系统权限；这项限制在启用说明中明确，详见 §7。
 7. PPT 质量报告和本次输出文件一起校验，再登记不可变成果版本；不以日志中的 Done 或退出码 0 独立判成功。
 
+### 2026-10-06：Skill 包元数据与包内依赖锁（实现进行中，ADR-0040 Proposed）
+
+应用负责管理公共 CPython 发行制品，并在设置 → 运行组件展示版本和落地状态；Skill 包通过 `betterwork.skill.json` 声明兼容 Python 版本、包内依赖锁和零项或多项外部工具链。目录、ZIP 和 HTTPS ZIP 导入均读取同一份元数据；Skill 详情按声明生成配置项，不让普通用户手选包版本或编辑原始 profile JSON。安装解释器、建立 venv、安装包、信任代码仍是相互独立的状态。
+
+新 Skill 包把锁 JSON 放在自己的 `runtime/locks/`，可选 wheel 放在自己的 `runtime/wheelhouse/`。BetterWork 校验相对路径、锁 Schema 与 CPython 兼容声明；wheel 缺失时从锁内的精确 HTTPS URL 下载并复核 SHA-256，包内 wheelhouse 可支持离线/受限网络分发。包锁不是由导入扫描推断，也不进入应用级全局锁目录。锁开发由显式 `requirements.in` 和目标 CPython 下的 pip 安装报告产生，过程见[Skill 包作者指南](../development/skill-package-authoring.md)。旧版 profile 的应用目录锁仍兼容读取。
+
+静态扫描只列出 Python 脚本、依赖声明文件、真实环境变量访问、安装提示和工具链名的文件/行号证据。扫描是未映射配置的辅助线索：不会生成锁、命令、信任状态或快照绑定；导入不运行代码、不执行 pip/git，也不读取被引用目录。内部 `SKILL_DIR` 等 Skill 自身路径常量不等同外部环境变量。快照按 profile 中工具链声明的顺序逐项选择和绑定；零项 Skill 不附加快照，多项声明需要多项快照。
+
+以 `/Users/kevin/Downloads/ppt-expert-skill` 为样例，包元数据现在明确声明 `PPTM_HOME`、ppt-master 版本提示和完整 commit；作者绝对路径不进入包。PPT 锁和 8 个 wheel 已放入本机忽略的开发包目录。原始 Skill 文档仍要求系统 Python，而受管 CPython 兼容性、命令/产物契约和对应适配尚未完成验证，因此样例 manifest 的 `commands` 保持为空，不能声称此包已可运行或已达到分发验收。当前工具链快照 UI 可要求用户选一次本机源目录并校验版本；ppt-master 固定下载制品与自动安装尚未实现。
+
 ## 2. 现有代码约束与需要修改的接点
 
 | 当前证据 | 设计变化 |
@@ -62,7 +72,7 @@
 | 原始 Skill | SKILL.md、scripts、references、templates、assets、原始元数据 | 不可变导入文件及其 hash |
 | 宿主配置 | 解释器需求、依赖绑定、执行入口、参数 Schema、资源作用域、结果适配器、超时、授权记录 | SQLite 中版本化配置；可导出描述，不导出本机路径/密钥 |
 
-不是要求每个作者制作专有 manifest。首个样本使用产品提供的适配预设，根据原包文件特征建议配置，用户能检查/调整。对未识别 Skill 自动发现脚本与依赖提示，但绝不从自然语言直接推断「已验证可运行」。
+不是要求每个普通使用者编辑专有 JSON。`betterwork.skill.json` 作为目录/ZIP/HTTPS ZIP 的宿主配置交换文件，不参与 Skill 源内容 hash；再次导入时校验并恢复运行 profile、锁相对路径和工具链版本声明，但不恢复信任或本机路径。内置 Skill 可从产品审核 release manifest 恢复同一配置；非内置包声明仍是待用户信任的作者输入。Skill 详情将有效声明呈现成依赖与工具链表单。对未映射资源的扫描结果只显示来源文件与行号，不会被当作已验证运行 profile。
 
 运行时先给模型 Skill 简介，按需读取完整指令和资源。宿主附加环境说明：当前 Skill 根、任务输出目录、依赖根以及可用命令。已识别的 WorkBuddy 绝对路径在渲染给模型的副本中显式映射，并记录 adapterRevision；不做系统级软链接、不改原包、不对未知任意字符串进行静默全局替换。
 
@@ -70,7 +80,7 @@
 
 ### 4.1 默认路径与高级路径
 
-**默认：算台管理的 Python 环境。** 按目标 OS/架构分发固定版本的 Python 运行时和锁定 wheels；首次准备在用户数据目录创建专属 venv。基础 Python 建议使用 python-build-standalone 的固定发行制品，发布时记录下载来源、SHA-256、许可证与目标平台，不能跟随 latest。该项目提供可再分发 Python 构建，具体选中的版本仍需执行样本验证。[上游说明](https://github.com/astral-sh/python-build-standalone)
+**默认：应用管理的 Python 运行时。** 按目标 OS/架构提供固定版本的 Python 发行制品，并在「设置 → 运行组件」呈现版本和是否已落地；首次准备 Skill 环境时由应用自动下载与校验，在用户数据目录创建专属 venv。Skill profile 只给出兼容版本范围和所用依赖锁，不能为每个 Skill 另带解释器。基础 Python 使用固定发行制品，记录下载来源、SHA-256、许可证与目标平台，不能跟随 latest。[上游说明](https://github.com/astral-sh/python-build-standalone)
 
 **高级：选用本机 Python 作为基础解释器。** 探测路径、版本、架构与 venv 能力后仍创建算台专属环境，不向该解释器的全局 site-packages 安装；不直接复用用户 Conda 中随时会变化的包集合。检测在用户选择/准备环境后进行，不能在纯 Skill 导入时执行。
 
@@ -80,16 +90,19 @@
 
 环境键由基础解释器制品 hash、OS/架构/ABI、完整包锁 hash 组成。不同 Skill 只有在环境键完全一致时共享环境；工具链快照独立绑定到 Run，不通过工作目录共享可变状态。
 
-产品内置样本生成完整传递依赖锁（精确版本 + 每个目标 wheel 的 hash），默认只从随包 wheelhouse 离线安装。使用 `python -m pip install --no-index --find-links <wheelhouse> --only-binary=:all: --require-hashes -r <lock>`；不用宽松 `>=` 作为最终安装依据。pip hash 模式要求完整依赖覆盖，只有 wheel 时缺包明确失败，不在用户机静默编译源码。[pip 安装约束](https://pip.pypa.io/en/stable/topics/secure-installs/)
+完整传递依赖锁（精确版本 + 每个目标 wheel 的 SHA-256）属于 Skill 自己的 `runtime/locks/`。wheelhouse 可随该包分发；缺 wheel 时应用按锁的精确 HTTPS URL 下载并校验，然后用 hash 模式离线安装，不静默编译源码。[pip 安装约束](https://pip.pypa.io/en/stable/topics/secure-installs/)
 
-用户导入 Skill 的 requirements 只作为待解析输入。环境准备界面列出依赖计划与来源；可以选择已准备的依赖包或显式启动联网准备。解析/下载作业独立于模型 Run，不由模型临时 pip install。自定义索引凭据不写入 Skill/导出包或日志。首次准备需联网时说明下载内容，之后同一 lock 的任务执行不重复下载。
+未审核的 requirements 文件只用于作者审查，不直接 pip install。新 package manifest 引用自身包内锁；旧版产品 profile 引用应用审核锁仍作为兼容方式。依赖准备界面展示该 Skill 锁内的包数、版本和制品来源。解析/下载作业独立于模型 Run，不由模型临时 pip install。自定义索引凭据不写入 Skill/导出包或日志。工具下载中断后重试按锁检查 wheelhouse/缓存，缺项再下载。
 
 不能直接安装 ppt-master 全量 requirements：其中包含语音、图片生成、Web 编辑器等与样本无关能力。首个 profile 从 python-pptx、lxml、PyYAML、Pillow、XlsxWriter 和导出所需模块闭包开始；skia-pathops、uharfbuzz 等按所选管线路径纳入并测试。最终版本锁在实现首个验证切片时产生，本稿不虚构已通过的包版本组合。缺少能力时不得悄悄降低原生可编辑标准。
 
 ### 4.3 外部工具链
 
-- 导入本地 ppt-master 目录或选取产品提供的固定工具链包，复制为受管不可变快照；`PPTM_HOME` 指向快照，不指向可被 git pull 修改的开发仓库。
-- 本机当前 HEAD 为 `82dd5cccec652cbcff342cbdabce85a1ae7af1e5`，另有 decks_index 修改和未跟踪公司 deck。因此快照记录 originCommit 与完整所选文件 hash，不能仅记录 commit；用户本地公司资产不进入公共制品。
+外部工具链属于具体 Skill 的运行需求，同一 Skill 可声明零项、一项或多项。每项声明固定需求标识、显示名、版本提示和运行环境变量；用户只在该 Skill 需要时选择一个本地来源，登记后运行一律使用不可变快照。快照按声明顺序与 Run binding 固定，依赖授权指纹保留此顺序。
+
+- `toolchainRequirements` 只声明需求 ID、显示名、环境变量、版本提示和可选完整 commit；作者本机路径不进入包。导入后由对应 Skill 详情呈现登记/绑定 UI。
+- 用户可导入本机目录，复制为受管不可变快照；`PPTM_HOME` 指向快照，不指向后续可能变化的源目录。快照记录 originCommit 与完整选取文件 hash；不因 commit 相同就忽略本地内容变化。
+- 当前 `ppt-expert-skill` 样例期待 `ppt-master` commit `680de11f1bef4628b68d5daad9dffec569fbd51f`。包没有包含此工具链，也没有下载制品声明；用户需要选择来源目录。固定 URL 制品、压缩包解包与完整性校验尚待开发，不能承诺该外部资源会自动下载。
 - 默认包含完整所需脚本与静态模板/图标资产，排除 `.git`、缓存、历史 projects 和无关用户文件；所有被排除内容在导入摘要列明。工具链的完整性检查保持有效，不能为精简体积绕过它。
 - 输入材料中引用的旧项目 spec_lock 由用户选择后复制到本次任务；不能通过扫描开发仓库 projects 自动获取其他项目资料。
 - 普通运行不更新依赖、不修改 snapshot；增加公司模板或升级工具链创建新快照。
@@ -99,6 +112,8 @@
 状态：`unprepared → preparing → ready`，准备过程可进入 `failed / cancelled`；已准备环境健康检查失败变 `invalid`。每次作业有 operationId、进度、错误和持久化记录。
 
 对环境键加独占构建锁。同一环境只准备一次；其他请求观察已有作业。环境直接在唯一最终目录创建，准备完成前没有 ready 标记、不能被任务使用。失败清理该作业专属目录，旧 ready 环境不受影响；崩溃后把 preparing 作业标为 interrupted，再重建，不把部分包集当作可用。
+
+用户取消准备时，把同一作业的 `AbortSignal` 传给正在运行的制品下载，并终止当前解释器/安装子进程；下载器自身的超时仍作为失败处理。作业进入终态前清除本次下载和环境半成品，取消中的环境不能被 Skill 执行复用。
 
 升级先建新环境并通过 probe/import/最小样例，成功才切换绑定。旧环境有活跃执行或版本引用时不清理；移除 Skill 不删除用户源目录。环境可从 lock 重建，实际成果和原始 Skill 资产必须备份。
 
@@ -269,7 +284,7 @@ PPTX 新增 `presentation` 文件型内容，与 markdown 文本型组成判别�
 - skills.testRun：传 Skill/config 修订 ID 与测试输入，主进程创建真实 Task/Session/Run 并记录试运行标签；不提供任意命令执行 IPC。
 - artifacts：fileDetail/exportFile/openFile 与校验状态读取；保留既有 Markdown 接口。
 
-用户流程：导入 → 看到用途/所需依赖 → 选择信任并启用（可保持不可运行草稿）→ 准备环境 → 试运行 → 检查成果。内置 Skill 默认信任，用户撤销/停用优先；自定义 Skill 未信任时试运行提示先授权。已准备资源不重复请求；内置分发已验证的环境无需用户手工运行 pip/git。失败提示分清「缺环境」「脚本失败」「质量未通过」「清理未完成」，给出对应动作。
+用户流程：导入目录/ZIP/HTTPS ZIP → 校验包内运行元数据、展示静态发现证据 → 独立选择信任并启用（可保持不可运行草稿）→ BetterWork 按 Skill 声明准备应用 Python、包依赖和可用工具链快照 → 试运行 → 检查成果。设置 → 运行组件展示应用管理的 CPython；Skill 详情只出现本 Skill 声明的锁和工具链项。已准备资源不重复请求；包内缺 wheel 时按精确 hash 来源恢复。没有工具链分发制品的声明时仍需登记本机来源，不能误称所有资源都会自动下载。内置 Skill 信任来自产品 release manifest，用户撤销/停用优先。失败提示分清「缺环境」「脚本失败」「质量未通过」「清理未完成」，给出对应动作。
 
 ## 12. 实施与验收顺序
 

@@ -2400,6 +2400,28 @@ button.list-row:where(:not(:disabled)):hover {
 .skill-detail-section {
   margin-top: var(--space-24);
 }
+.skill-runtime-discovery {
+  display: grid;
+  gap: var(--space-8);
+  margin-top: var(--space-12);
+  color: var(--text-secondary);
+}
+.skill-runtime-discovery > strong {
+  color: var(--text-primary);
+  font-size: var(--font-size-caption);
+}
+.skill-runtime-discovery ul {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding-left: 18px;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  overflow-wrap: anywhere;
+}
+.runtime-component-list {
+  border-top: 1px solid var(--border);
+}
 .dependency-panel {
   display: flex;
   flex-direction: column;

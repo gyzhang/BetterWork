@@ -1,3 +1,4 @@
+import type { SkillToolchainRequirement } from '@betterwork/agent-protocol';
 import type { SkillCommandExecuteOutput } from '@betterwork/tool-runtime';
 
 /**
@@ -9,11 +10,33 @@ import type { SkillCommandExecuteOutput } from '@betterwork/tool-runtime';
 
 export interface AdapterContext {
   readonly skillScriptsRoot: string;
+  /** Requirement ID → verified immutable snapshot root, in addition to the legacy single root. */
+  readonly toolchainRoots?: Readonly<Record<string, string>>;
   readonly toolchainSnapshotRoot?: string;
   readonly pptmHome?: string;
   readonly managedPythonPath: string;
   readonly runWorkDir: string;
 }
+
+/** 将已校验快照根映射到 Skill 声明的环境变量；旧 PPT profile 保留 PPTM_HOME。 */
+export const buildToolchainEnvironment = (
+  requirements: readonly SkillToolchainRequirement[] | undefined,
+  roots: Readonly<Record<string, string>>,
+  legacyRequirements: readonly string[],
+): Record<string, string> => {
+  const environment: Record<string, string> = {};
+  if (requirements) {
+    for (const requirement of requirements) {
+      const root = roots[requirement.id];
+      if (root) environment[requirement.environmentVariable] = root;
+    }
+    return environment;
+  }
+  if (legacyRequirements.includes('ppt-master') && roots['ppt-master']) {
+    environment['PPTM_HOME'] = roots['ppt-master'];
+  }
+  return environment;
+};
 
 export interface ResolvedCommand {
   readonly executable: string;

@@ -65,7 +65,11 @@ const planOf = (overrides: Partial<DependencyPlan> = {}): DependencyPlan => ({
   ...overrides,
 });
 
-const skillOf = (id: string, overrides: Partial<SkillDetail> = {}): SkillDetail => ({
+const skillOf = (
+  id: string,
+  overrides: Partial<SkillDetail> = {},
+  withRuntimeProfile = true,
+): SkillDetail => ({
   id,
   name: id === 'skill-1' ? '样本能力' : '第二个能力',
   description: '公司模板 PPT',
@@ -83,6 +87,22 @@ const skillOf = (id: string, overrides: Partial<SkillDetail> = {}): SkillDetail 
     frontmatter: {},
     createdAt: 1,
   },
+  ...(withRuntimeProfile
+    ? {
+        runtimeProfile: {
+          id: `${id}-profile`,
+          skillId: id,
+          profileHash: `${id}-profile-hash`,
+          profile: {
+            commands: [],
+            environmentRequirements: [],
+            dependencyLockId: lockId,
+            outputContract: { outputPaths: [] },
+          },
+          createdAt: 1,
+        },
+      }
+    : {}),
   ...overrides,
 });
 
@@ -166,6 +186,17 @@ afterEach(() => {
 });
 
 describe('DependencyPanel', () => {
+  it('未匹配已审核运行配置时只显示静态线索状态，不加载或准备依赖', async () => {
+    const api = installApi();
+    render(<Harness skill={skillOf('skill-unconfigured', {}, false)} />);
+
+    expect(
+      await screen.findByText(/尚未匹配已审核的运行配置；在配置确认前不会准备依赖或外部工具链/),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '准备环境' })).toBeNull();
+    expect(api.dependencies.listOptions).not.toHaveBeenCalled();
+  });
+
   it('未信任也能准备环境，但明确区分「可准备」与「可执行」', async () => {
     installApi();
     render(<Harness skill={skillOf('skill-1', { trustStatus: 'untrusted' })} />);
@@ -176,6 +207,72 @@ describe('DependencyPanel', () => {
     expect(screen.getByText(/环境准备不需要信任授权/)).toBeTruthy();
     // 授权按钮在未信任时不可用：不能让「准备环境」被误读成「可以执行」
     expect(screen.getByRole('button', { name: '确认依赖授权' })).toHaveProperty('disabled', true);
+  });
+
+  it('未声明依赖锁时不自动套用目录中的第一份锁', async () => {
+    const api = installApi();
+    const skill = skillOf('skill-unlocked', {
+      runtimeProfile: {
+        id: 'profile-unlocked',
+        skillId: 'skill-unlocked',
+        profileHash: 'profile-hash-unlocked',
+        profile: {
+          commands: [],
+          environmentRequirements: [],
+          outputContract: { outputPaths: [] },
+        },
+        createdAt: 1,
+      },
+    });
+    render(<Harness skill={skill} />);
+
+    const selector = await screen.findByRole('button', { name: '依赖锁' });
+    expect(selector.textContent).toBe('');
+    expect(screen.getByText(/尚未指定依赖锁.*不会自动套用目录中的锁/)).toBeTruthy();
+    expect(api.dependencies.inspectPlan).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: '准备环境' })).toHaveProperty('disabled', true);
+
+    selector.click();
+    fireEvent.click(await screen.findByRole('menuitem', { name: lockId }));
+    await waitFor(() => expect(api.dependencies.inspectPlan).toHaveBeenCalledTimes(1));
+  });
+
+  it('发现外部工具链线索但运行配置未声明时不显示「没有依赖」', async () => {
+    installApi();
+    const skill = skillOf('skill-with-unconfigured-clue', {
+      runtimeProfile: {
+        id: 'profile-with-unconfigured-clue',
+        skillId: 'skill-with-unconfigured-clue',
+        profileHash: 'profile-hash-with-unconfigured-clue',
+        profile: {
+          commands: [],
+          environmentRequirements: [],
+          dependencyLockId: lockId,
+          outputContract: { outputPaths: [] },
+        },
+        createdAt: 1,
+      },
+      runtimeDiscovery: [
+        {
+          kind: 'environment-variable',
+          sourcePath: 'SKILL.md',
+          lineNumber: 34,
+          label: '发现外部目录变量 PPTM_HOME',
+        },
+        {
+          kind: 'toolchain-name',
+          sourcePath: 'SKILL.md',
+          lineNumber: 34,
+          label: '发现外部工具链引用 ppt-master',
+        },
+      ],
+    });
+    render(<Harness skill={skill} />);
+
+    expect(
+      await screen.findByText(/尚未映射到运行配置的目录或工具链线索：PPTM_HOME、ppt-master/),
+    ).toBeTruthy();
+    expect(screen.queryByText('此 Skill 不依赖外部工具链。')).toBeNull();
   });
 
   it('重复点击只启动一个准备作业', async () => {
@@ -362,16 +459,59 @@ describe('DependencyPanel', () => {
     expect(screen.getByText(/需要显式联网下载并逐个校验/)).toBeTruthy();
   });
 
-  it('工具链快照列出文件数与是否含本地修改', async () => {
+  it('只为 Skill 声明的外部工具链展示快照选择，并显示快照身份', async () => {
     installApi();
-    render(<Harness skill={skillOf('skill-1')} />);
+    const skill = skillOf('skill-1', {
+      runtimeProfile: {
+        id: 'profile-1',
+        skillId: 'skill-1',
+        profileHash: 'profile-hash',
+        profile: {
+          commands: [],
+          environmentRequirements: [],
+          toolchainRequirements: [
+            { id: 'ppt-master', name: 'PPT Master', environmentVariable: 'PPTM_HOME' },
+          ],
+          outputContract: { outputPaths: [] },
+        },
+        createdAt: 1,
+      },
+    });
+    render(<Harness skill={skill} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '外部工具链快照' }));
-    const named = (fragment: string): boolean =>
-      screen
-        .queryAllByRole('menuitem')
-        .some((element) => (element.textContent ?? '').includes(fragment));
-    await waitFor(() => expect(named('12981 文件')).toBe(true));
-    expect(named('含本地修改')).toBe(true);
+    const selector = await screen.findByLabelText('PPT Master');
+    expect(selector).toBeTruthy();
+    expect(selector.textContent).toContain('选择已登记快照…');
+    fireEvent.click(selector);
+    fireEvent.click(await screen.findByRole('menuitem', { name: /12981 文件 · 含本地修改/ }));
+    await waitFor(() => expect(selector.textContent).toContain('12981 文件 · 含本地修改'));
+  });
+
+  it('根据 profile 展示多项工具链，不强行塞进单个外部目录选择', async () => {
+    installApi();
+    const skill = skillOf('skill-1', {
+      runtimeProfile: {
+        id: 'profile-2',
+        skillId: 'skill-1',
+        profileHash: 'profile-hash-2',
+        profile: {
+          commands: [],
+          environmentRequirements: [],
+          toolchainRequirements: [
+            { id: 'ppt-master', name: 'PPT Master', environmentVariable: 'PPTM_HOME' },
+            { id: 'svg-tools', name: 'SVG Tools', environmentVariable: 'SVG_TOOLS_HOME' },
+          ],
+          outputContract: { outputPaths: [] },
+        },
+        createdAt: 1,
+      },
+    });
+    render(<Harness skill={skill} />);
+
+    expect(await screen.findByLabelText('PPT Master')).toBeTruthy();
+    expect(screen.getByLabelText('SVG Tools')).toBeTruthy();
+    expect(screen.getByLabelText('PPT Master').textContent).toContain('选择已登记快照…');
+    expect(screen.getByLabelText('SVG Tools').textContent).toContain('选择已登记快照…');
+    expect(screen.getAllByRole('button', { name: '登记目录…' })).toHaveLength(2);
   });
 });

@@ -18,6 +18,7 @@ import type {
   McpToolBinding,
   RuntimeProfileCommand,
   ScriptExecution,
+  SkillToolchainRequirement,
   StartRunRequest,
   TaskContinuityBrief,
   TaskContinuityOmission,
@@ -103,7 +104,12 @@ import { preparePptAttempt } from './ppt-execution-attempt';
 import { adaptPptCommand } from './ppt-script-adaptation';
 import { ScheduleMaterialResolver } from './schedule-material-resolver';
 import { createQianfanSearchClient } from './search-engine-service';
-import type { AdapterContext, SkillAdapter, SkillAdapterService } from './skill-adapter';
+import {
+  type AdapterContext,
+  buildToolchainEnvironment,
+  type SkillAdapter,
+  type SkillAdapterService,
+} from './skill-adapter';
 import type { SkillDependencyService } from './skill-dependency-service';
 import type { SkillExecutionService } from './skill-execution-service';
 import { composeRuntimeConvention } from './skill-runtime-conventions';
@@ -124,6 +130,11 @@ interface ResolvedSkillBindings {
   bindingIds: string[];
   /** 无绑定时为 undefined，避免向模型注入空的 system 指令段。 */
   instructions?: SkillInstruction[];
+}
+
+interface ResolvedToolchainSnapshots {
+  roots: Record<string, string>;
+  environment: Record<string, string>;
 }
 
 interface ResolvedRunContext {
@@ -2210,10 +2221,24 @@ export class RunService {
     const cwd = path.dirname(
       managedPath(activeRun.workspacePath, path.join(workRelativePath, '.ready'), true),
     );
+    const toolchains = await this.resolveToolchainSnapshots(
+      binding.dependencySnapshotIds,
+      profile.profile.toolchainRequirements,
+      profile.profile.environmentRequirements,
+    );
 
     const adapter = this.skillAdapterService?.findAdapter(skill.revision.contentHash);
     if (adapter) {
-      return this.executeWithAdapter(runId, bindingId, input, command, skill, adapter, cwd);
+      return this.executeWithAdapter(
+        runId,
+        bindingId,
+        input,
+        command,
+        skill,
+        adapter,
+        cwd,
+        toolchains,
+      );
     }
 
     if (
@@ -2228,7 +2253,7 @@ export class RunService {
     if (!binding.environmentId || !this.dependencies) throw new Error('绑定的运行环境不可用');
     const python = this.dependencies.resolveEnvironmentPython(binding.environmentId);
     const argv = [script, ...this.buildArgv(command, input.args)];
-    const env = this.buildCleanEnv();
+    const env = { ...this.buildCleanEnv(), ...toolchains.environment };
     const execution = await this.skillExecutionService.startExecution({
       runId,
       bindingId,
@@ -2260,6 +2285,7 @@ export class RunService {
     skill: NonNullable<ReturnType<AppStore['skills']['getBoundDetail']>>,
     adapter: SkillAdapter,
     cwd: string,
+    toolchains: ResolvedToolchainSnapshots,
   ): Promise<SkillCommandExecuteOutput> {
     if (!this.skillExecutionService) {
       throw new Error('Skill execution service is not available');
@@ -2267,14 +2293,17 @@ export class RunService {
     const skillScriptsRoot = await this.skillService.verifyResourceRoot(skill);
     const binding = this.store.executions.getBinding(bindingId);
     if (!binding?.environmentId || !this.dependencies) throw new Error('绑定的运行环境不可用');
-    const toolchainSnapshotRoot = this.resolveToolchainSnapshotRoot(binding.dependencySnapshotIds);
-    for (const snapshotId of binding.dependencySnapshotIds) {
-      const verification = await this.toolchainSnapshotService?.verifySnapshot(snapshotId);
-      if (!verification?.valid) throw new Error('绑定的工具链快照内容已变化，请重新登记并确认授权');
-    }
+    const toolchainRoots = toolchains.roots;
+    const defaultToolchainRoot = Object.values(toolchainRoots)[0];
     const adapterContext: AdapterContext = {
       skillScriptsRoot,
-      ...(toolchainSnapshotRoot ? { toolchainSnapshotRoot, pptmHome: toolchainSnapshotRoot } : {}),
+      ...(defaultToolchainRoot
+        ? {
+            toolchainRoots,
+            toolchainSnapshotRoot: defaultToolchainRoot,
+            pptmHome: toolchainRoots['ppt-master'] ?? defaultToolchainRoot,
+          }
+        : {}),
       managedPythonPath: this.dependencies.resolveEnvironmentPython(binding.environmentId),
       runWorkDir: cwd,
     };
@@ -2294,7 +2323,7 @@ export class RunService {
       argv: resolved.argv,
       executable: resolved.executable,
       cwd: resolved.cwd,
-      env: resolved.env,
+      env: { ...resolved.env, ...toolchains.environment },
       timeoutMs: command.timeoutMs,
       maxOutputBytes: 32 * 1024,
       maxLogBytes: 10 * 1024 * 1024,
@@ -2310,13 +2339,41 @@ export class RunService {
     return { ...result, message: `${result.message}；本次参数：${JSON.stringify(attemptArgs)}` };
   }
 
-  private resolveToolchainSnapshotRoot(snapshotIds: string[]): string | undefined {
-    if (!this.toolchainSnapshotService || snapshotIds.length === 0) return undefined;
-    if (snapshotIds.length !== 1) throw new Error('PPT 预设需要明确绑定一个工具链快照');
-    const id = snapshotIds[0];
-    const snapshot = id ? this.store.snapshots.getSnapshot(id) : undefined;
-    if (!snapshot) throw new Error('绑定的工具链快照不存在');
-    return this.toolchainSnapshotService.resolveSnapshotRoot(snapshot);
+  private async resolveToolchainSnapshots(
+    snapshotIds: string[],
+    requirements: SkillToolchainRequirement[] | undefined,
+    legacyRequirements: string[],
+  ): Promise<ResolvedToolchainSnapshots> {
+    const toolchainSnapshotService = this.toolchainSnapshotService;
+    if (!toolchainSnapshotService && snapshotIds.length > 0) {
+      throw new Error('工具链快照服务不可用');
+    }
+    const requirementIds =
+      requirements?.map((requirement) => requirement.id) ??
+      (legacyRequirements.includes('ppt-master') ? ['ppt-master'] : []);
+    if (snapshotIds.length === 0) {
+      if (requirementIds.length > 0) {
+        throw new Error('运行绑定缺少配置声明的外部工具链快照');
+      }
+      return { roots: {}, environment: {} };
+    }
+    if (!toolchainSnapshotService) throw new Error('工具链快照服务不可用');
+    if (requirementIds.length !== snapshotIds.length) {
+      throw new Error('绑定的工具链快照数量与 Skill 配置不一致');
+    }
+    const roots: Record<string, string> = {};
+    for (const [index, requirementId] of requirementIds.entries()) {
+      const id = snapshotIds[index];
+      const snapshot = id ? this.store.snapshots.getSnapshot(id) : undefined;
+      if (!snapshot) throw new Error(`绑定的工具链快照不存在：${requirementId}`);
+      const verification = await toolchainSnapshotService.verifySnapshot(snapshot.id);
+      if (!verification?.valid) throw new Error('绑定的工具链快照内容已变化，请重新登记并确认授权');
+      roots[requirementId] = toolchainSnapshotService.resolveSnapshotRoot(snapshot);
+    }
+    return {
+      roots,
+      environment: buildToolchainEnvironment(requirements, roots, legacyRequirements),
+    };
   }
 
   private runSignal(runId: string): AbortSignal {

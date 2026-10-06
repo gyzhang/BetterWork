@@ -6,4 +6,5 @@ export type AppView =
  * 简报页签承载工作空间简报——两者都在同一个可关闭面板里，不新增一级导航。
  */
 export type ContextTab = 'process' | 'sources' | 'memory' | 'brief' | 'artifacts';
-export type SettingsTab = 'models' | 'search' | 'mcp' | 'memory' | 'appearance' | 'general';
+export type SettingsTab =
+  'models' | 'search' | 'mcp' | 'memory' | 'appearance' | 'runtime-components' | 'general';

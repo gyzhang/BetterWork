@@ -9,6 +9,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { describeActionError, reportAction, trackAction } from '../lib/async-action';
+import { effectiveToolchainRequirements } from '../lib/skill-runtime-discovery';
 
 /**
  * Skill 依赖与环境准备（A12）。
@@ -27,16 +28,16 @@ export interface SkillDependenciesState {
   grant: RefreshSkillDependencyGrantResult | undefined;
   base: DependencyBaseChoice | undefined;
   lockId: string;
-  snapshotId: string;
+  snapshotIds: string[];
   loading: boolean;
   preparing: boolean;
   error: string;
   toast: string;
   selectManagedDistribution: (distributionId: string) => void;
   selectLock: (lockId: string) => void;
-  selectSnapshot: (snapshotId: string) => void;
+  selectSnapshot: (index: number, snapshotId: string) => void;
   chooseLocalInterpreter: () => void;
-  registerToolchain: () => void;
+  registerToolchain: (index: number) => void;
   prepare: () => void;
   cancel: () => void;
   confirmGrant: () => void;
@@ -58,18 +59,21 @@ export function useSkillDependencies(
   const [grant, setGrant] = useState<RefreshSkillDependencyGrantResult>();
   const [base, setBase] = useState<DependencyBaseChoice>();
   const [lockId, setLockId] = useState('');
-  const [snapshotId, setSnapshotId] = useState('');
+  const [snapshotIds, setSnapshotIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
 
   const requestId = useRef(0);
+  const snapshotIdsRef = useRef<string[]>([]);
   /** 重复点击只启动一个作业：in-flight 期间不再发起第二次准备。 */
   const prepareInFlight = useRef(false);
   const pollTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   const skillId = skill?.id;
+  const profile = skill?.runtimeProfile?.profile;
+  const toolchainCount = effectiveToolchainRequirements(profile).length;
 
   const stopPolling = useCallback((): void => {
     const timer = pollTimer.current;
@@ -81,7 +85,7 @@ export function useSkillDependencies(
     (
       currentSkillId: string,
       currentLockId: string,
-      currentSnapshotId: string,
+      currentSnapshotIds: string[],
       token: number,
     ): void => {
       if (!currentLockId) return;
@@ -90,7 +94,7 @@ export function useSkillDependencies(
           .refreshDependencyGrant({
             skillId: currentSkillId,
             lockId: currentLockId,
-            snapshotIds: currentSnapshotId ? [currentSnapshotId] : [],
+            snapshotIds: currentSnapshotIds.filter((id) => id.length > 0),
           })
           .then((result) => {
             if (requestId.current !== token) return;
@@ -108,7 +112,11 @@ export function useSkillDependencies(
       setLoading(true);
       trackAction(
         window.betterwork.dependencies
-          .inspectPlan({ base: choice, lockId: currentLockId })
+          .inspectPlan({
+            base: choice,
+            lockId: currentLockId,
+            ...(skillId ? { skillId } : {}),
+          })
           .then((result) => {
             if (requestId.current !== token) return;
             setPlan(result);
@@ -137,7 +145,7 @@ export function useSkillDependencies(
         '查看依赖计划',
       );
     },
-    [],
+    [skillId],
   );
 
   // 切换 Skill：清空上一个 Skill 的计划、进度与授权提示，再按当前选择重新加载。
@@ -152,35 +160,47 @@ export function useSkillDependencies(
     setToast('');
     setPreparing(false);
     prepareInFlight.current = false;
-    if (!skillId) {
+    snapshotIdsRef.current = [];
+    if (!skillId || !profile) {
+      setOptions(undefined);
       setBase(undefined);
       setLockId('');
-      setSnapshotId('');
+      setSnapshotIds([]);
+      setLoading(false);
       return;
     }
     trackAction(
       window.betterwork.dependencies.listOptions().then((result) => {
         if (requestId.current !== token) return;
         setOptions(result);
-        const firstLock = result.lockIds[0] ?? '';
-        const preferred =
-          result.distributions.find(
-            (distribution) =>
-              distribution.platform.os === 'darwin' && distribution.platform.arch === 'arm64',
-          ) ?? result.distributions[0];
+        // A catalog lock is not evidence that this Skill needs it. Only inspect and prepare
+        // a lock explicitly declared by its reviewed runtime profile or chosen by the user.
+        const configuredLockId = profile?.dependencyBundle?.id ?? profile?.dependencyLockId ?? '';
+        const requestedPython = profile?.pythonRequirement;
+        const platformDistributions = result.distributions.filter(
+          (distribution) =>
+            distribution.platform.os === 'darwin' && distribution.platform.arch === 'arm64',
+        );
+        const preferred = requestedPython
+          ? platformDistributions.find((distribution) =>
+              distribution.version.startsWith(requestedPython),
+            )
+          : (platformDistributions[0] ?? result.distributions[0]);
         const nextBase: DependencyBaseChoice | undefined = preferred
           ? { kind: 'managed', distributionId: preferred.id }
           : undefined;
-        const nextSnapshot = result.snapshots[0]?.id ?? '';
-        setLockId(firstLock);
-        setSnapshotId(nextSnapshot);
+        // A registered snapshot is only a candidate; never bind it to a requirement by list order.
+        const nextSnapshots = Array.from({ length: toolchainCount }, () => '');
+        snapshotIdsRef.current = nextSnapshots;
+        setLockId(configuredLockId);
+        setSnapshotIds(nextSnapshots);
         setBase(nextBase);
-        if (nextBase && firstLock) inspect(nextBase, firstLock, token);
-        reviewGrant(skillId, firstLock, nextSnapshot, token);
+        if (nextBase && configuredLockId) inspect(nextBase, configuredLockId, token);
+        reviewGrant(skillId, configuredLockId, nextSnapshots, token);
       }),
       '加载依赖选项',
     );
-  }, [skillId, inspect, reviewGrant, stopPolling]);
+  }, [skillId, inspect, profile, reviewGrant, stopPolling, toolchainCount]);
 
   // 作业进行中每秒轮询一次阶段状态；终态后停止并刷新环境与授权。
   useEffect(() => {
@@ -204,7 +224,7 @@ export function useSkillDependencies(
             refreshSkills();
             if (skillId && refreshSkillDetail) refreshSkillDetail(skillId);
             if (base && lockId) inspect(base, lockId, token);
-            if (skillId) reviewGrant(skillId, lockId, snapshotId, token);
+            if (skillId) reviewGrant(skillId, lockId, snapshotIds, token);
           }
           if (found.status === 'failed' || found.status === 'cancelled') {
             setPreparing(false);
@@ -220,7 +240,7 @@ export function useSkillDependencies(
     plan,
     base,
     lockId,
-    snapshotId,
+    snapshotIds,
     skillId,
     inspect,
     reviewGrant,
@@ -237,10 +257,10 @@ export function useSkillDependencies(
       const token = requestId.current;
       if (skillId && lockId) {
         inspect(choice, lockId, token);
-        reviewGrant(skillId, lockId, snapshotId, token);
+        reviewGrant(skillId, lockId, snapshotIds, token);
       }
     },
-    [inspect, lockId, reviewGrant, skillId, snapshotId],
+    [inspect, lockId, reviewGrant, skillId, snapshotIds],
   );
 
   const selectManagedDistribution = useCallback(
@@ -261,28 +281,34 @@ export function useSkillDependencies(
     );
   }, [applyChoice]);
 
-  const registerToolchain = useCallback((): void => {
-    const token = requestId.current;
-    reportAction(
-      window.betterwork.dependencies.registerToolchain({}).then((result) => {
-        if (requestId.current !== token) return;
-        const snapshot = result.snapshot;
-        if (result.cancelled || !snapshot) return;
-        setSnapshotId(snapshot.id);
-        setOptions((current) =>
-          current ? { ...current, snapshots: [snapshot, ...current.snapshots] } : current,
-        );
-        setToast(
-          result.reused
-            ? '同样内容的工具链快照已存在，直接复用。'
-            : `工具链快照已登记（${snapshot.fileCount} 个文件）。`,
-        );
-        if (skillId && lockId) reviewGrant(skillId, lockId, snapshot.id, token);
-      }),
-      setError,
-      '登记工具链快照失败，请重试。',
-    );
-  }, [lockId, reviewGrant, skillId]);
+  const registerToolchain = useCallback(
+    (index: number): void => {
+      const token = requestId.current;
+      reportAction(
+        window.betterwork.dependencies.registerToolchain({}).then((result) => {
+          if (requestId.current !== token) return;
+          const snapshot = result.snapshot;
+          if (result.cancelled || !snapshot) return;
+          const nextSnapshotIds = [...snapshotIdsRef.current];
+          nextSnapshotIds[index] = snapshot.id;
+          snapshotIdsRef.current = nextSnapshotIds;
+          setSnapshotIds(nextSnapshotIds);
+          setOptions((current) =>
+            current ? { ...current, snapshots: [snapshot, ...current.snapshots] } : current,
+          );
+          setToast(
+            result.reused
+              ? '同样内容的工具链快照已存在，直接复用。'
+              : `工具链快照已登记（${snapshot.fileCount} 个文件）。`,
+          );
+          if (skillId && lockId) reviewGrant(skillId, lockId, nextSnapshotIds, token);
+        }),
+        setError,
+        '登记工具链快照失败，请重试。',
+      );
+    },
+    [lockId, reviewGrant, skillId],
+  );
 
   const prepare = useCallback((): void => {
     if (!base || !lockId || prepareInFlight.current) return;
@@ -291,18 +317,20 @@ export function useSkillDependencies(
     setPreparing(true);
     setError('');
     reportAction(
-      window.betterwork.dependencies.prepare({ base, lockId }).then((receipt) => {
-        if (requestId.current !== token) return;
-        setToast(
-          receipt.reused ? '已有同一环境的准备作业，正在回看它的进度。' : '已开始准备环境。',
-        );
-        return window.betterwork.dependencies
-          .getOperation({ operationId: receipt.operationId })
-          .then((found) => {
-            if (requestId.current !== token) return;
-            setOperation(found ?? undefined);
-          });
-      }),
+      window.betterwork.dependencies
+        .prepare({ base, lockId, ...(skillId ? { skillId } : {}) })
+        .then((receipt) => {
+          if (requestId.current !== token) return;
+          setToast(
+            receipt.reused ? '已有同一环境的准备作业，正在回看它的进度。' : '已开始准备环境。',
+          );
+          return window.betterwork.dependencies
+            .getOperation({ operationId: receipt.operationId })
+            .then((found) => {
+              if (requestId.current !== token) return;
+              setOperation(found ?? undefined);
+            });
+        }),
       (message) => {
         prepareInFlight.current = false;
         setPreparing(false);
@@ -310,7 +338,7 @@ export function useSkillDependencies(
       },
       '准备环境失败，请重试。',
     );
-  }, [base, lockId]);
+  }, [base, lockId, skillId]);
 
   const cancel = useCallback((): void => {
     const current = operation;
@@ -341,7 +369,7 @@ export function useSkillDependencies(
         .refreshDependencyGrant({
           skillId,
           lockId,
-          snapshotIds: snapshotId ? [snapshotId] : [],
+          snapshotIds: snapshotIds.filter((id) => id.length > 0),
           confirm: true,
         })
         .then((result) => {
@@ -352,7 +380,7 @@ export function useSkillDependencies(
       setError,
       '确认授权失败，请重试。',
     );
-  }, [lockId, skillId, snapshotId]);
+  }, [lockId, skillId, snapshotIds]);
 
   const dismissToast = useCallback((): void => setToast(''), []);
   const clearError = useCallback((): void => setError(''), []);
@@ -364,7 +392,7 @@ export function useSkillDependencies(
     grant,
     base,
     lockId,
-    snapshotId,
+    snapshotIds,
     loading,
     preparing,
     error,
@@ -375,13 +403,16 @@ export function useSkillDependencies(
       const token = requestId.current;
       if (base && skillId) {
         inspect(base, nextLockId, token);
-        reviewGrant(skillId, nextLockId, snapshotId, token);
+        reviewGrant(skillId, nextLockId, snapshotIds, token);
       }
     },
-    selectSnapshot: (nextSnapshotId: string): void => {
-      setSnapshotId(nextSnapshotId);
+    selectSnapshot: (index: number, nextSnapshotId: string): void => {
+      const nextSnapshotIds = [...snapshotIdsRef.current];
+      nextSnapshotIds[index] = nextSnapshotId;
+      snapshotIdsRef.current = nextSnapshotIds;
+      setSnapshotIds(nextSnapshotIds);
       const token = requestId.current;
-      if (skillId && lockId) reviewGrant(skillId, lockId, nextSnapshotId, token);
+      if (skillId && lockId) reviewGrant(skillId, lockId, nextSnapshotIds, token);
     },
     chooseLocalInterpreter,
     registerToolchain,
