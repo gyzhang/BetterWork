@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { SkillDetail, SkillSummary } from '@betterwork/agent-protocol';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useSkills } from '../hooks/use-skills';
@@ -56,6 +56,7 @@ function dependencyStub() {
 function grantStub(): (input: unknown) => Promise<Record<string, unknown>> {
   return vi.fn(async () => ({
     skill: summary,
+    selectedSnapshotIds: [],
     grantActive: false,
     grantCreated: false,
     blockedReason: '尚未记录信任意愿',
@@ -162,9 +163,12 @@ describe('SkillsPage', () => {
     await waitFor(() => expect(screen.getByText('研究方法')).toBeTruthy());
     screen.getByRole('button', { name: /研究方法/ }).click();
 
-    expect(
-      await screen.findByText('发现 Python 包安装提示 python-pptx · SKILL.md:34'),
-    ).toBeTruthy();
+    const findingsTrigger = await screen.findByText('导入时发现的线索(4)');
+    const findingsDisclosure = findingsTrigger.closest('details');
+    expect(findingsDisclosure?.hasAttribute('open')).toBe(false);
+    expect(screen.getByText('发现 Python 包安装提示 python-pptx · SKILL.md:34')).toBeTruthy();
+    fireEvent.click(findingsTrigger);
+    expect(findingsDisclosure?.hasAttribute('open')).toBe(true);
     expect(screen.getByText('发现 Python 运行环境说明 · SKILL.md:34')).toBeTruthy();
     expect(screen.getByText('发现外部目录变量 PPTM_HOME · SKILL.md:34')).toBeTruthy();
     expect(screen.getByText('发现外部工具链引用 ppt-master · SKILL.md:34')).toBeTruthy();
@@ -319,6 +323,76 @@ describe('SkillsPage', () => {
         'true',
       ),
     );
+    expect(screen.getByText('当前依赖尚未授权执行')).toBeTruthy();
+    expect(screen.getByText('当前依赖环境尚未准备或绑定')).toBeTruthy();
+    expect(screen.queryByText('trust-needs-review')).toBeNull();
+    expect(screen.queryByText('environment-unprepared')).toBeNull();
+  });
+
+  it('refreshes selected Skill readiness after dependency authorization without reloading its runtime profile', async () => {
+    const profileDetail: SkillDetail = {
+      ...detail,
+      trustStatus: 'needs-review',
+      blockedReasons: ['trust-needs-review', 'environment-unprepared'],
+      runtimeProfile: {
+        id: 'skill-1-profile',
+        skillId: 'skill-1',
+        profileHash: 'skill-1-profile-hash',
+        profile: {
+          commands: [],
+          environmentRequirements: [],
+          dependencyLockId: 'skill-1-lock',
+          outputContract: { outputPaths: [] },
+        },
+        createdAt: 1,
+      },
+    };
+    const authorizedSummary: SkillSummary = {
+      ...summary,
+      trustStatus: 'trusted',
+      environmentStatus: 'ready',
+      blockedReasons: [],
+    };
+    const list = vi
+      .fn<() => Promise<SkillSummary[]>>()
+      .mockResolvedValueOnce([summary])
+      .mockResolvedValue([authorizedSummary]);
+    const refreshDependencyGrant = vi
+      .fn<(input: unknown) => Promise<Record<string, unknown>>>()
+      .mockResolvedValueOnce({
+        skill: profileDetail,
+        selectedSnapshotIds: [],
+        grantActive: false,
+        grantCreated: false,
+        blockedReason: '依赖已确定但没有覆盖它的授权，需要用户确认后建立',
+      })
+      .mockResolvedValue({
+        skill: authorizedSummary,
+        selectedSnapshotIds: [],
+        grantActive: true,
+        grantCreated: true,
+      });
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        dependencies: dependencyStub(),
+        skills: {
+          refreshDependencyGrant,
+          list,
+          get: vi.fn(async () => profileDetail),
+        },
+      },
+    });
+
+    render(<Harness />);
+    await waitFor(() => expect(screen.getByText('研究方法')).toBeTruthy());
+    screen.getByRole('button', { name: /研究方法/ }).click();
+    (await screen.findByRole('button', { name: '确认依赖授权' })).click();
+
+    expect(await screen.findByText('当前没有阻塞原因。')).toBeTruthy();
+    expect(screen.getByText('已信任')).toBeTruthy();
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(refreshDependencyGrant).toHaveBeenCalledTimes(2);
   });
 
   it('routes short-lived success feedback through the shared toast', async () => {

@@ -312,6 +312,21 @@ export class SkillDependencyService {
     return summaries;
   }
 
+  /** 读取与当前 Skill revision/profile/lock 对应的最近持久化快照选择。 */
+  getSavedDependencySelection(skillId: string, lockHash: string): string[] {
+    const skill = this.store.skills.get(skillId);
+    const profile = skill?.runtimeProfile;
+    if (!skill || !profile) return [];
+    return (
+      this.store.skills.getLatestDependencySelection(
+        skillId,
+        skill.revision.id,
+        profile.profileHash,
+        lockHash,
+      ) ?? []
+    );
+  }
+
   /**
    * 依赖确定后确认授权（契约 §2：有效授权在依赖准备完成、scope 指纹确定后建立或确认）。
    *

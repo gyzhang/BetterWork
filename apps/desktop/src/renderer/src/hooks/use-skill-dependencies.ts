@@ -1,4 +1,5 @@
 import type {
+  DeleteToolchainSnapshotResult,
   DependencyBaseChoice,
   DependencyOperation,
   DependencyOptions,
@@ -31,6 +32,7 @@ export interface SkillDependenciesState {
   snapshotIds: string[];
   loading: boolean;
   preparing: boolean;
+  checking: boolean;
   error: string;
   toast: string;
   selectManagedDistribution: (distributionId: string) => void;
@@ -38,7 +40,11 @@ export interface SkillDependenciesState {
   selectSnapshot: (index: number, snapshotId: string) => void;
   chooseLocalInterpreter: () => void;
   registerToolchain: (index: number) => void;
+  deleteToolchainSnapshot: (
+    snapshotId: string,
+  ) => Promise<DeleteToolchainSnapshotResult | { status: 'error'; message: string }>;
   prepare: () => void;
+  checkEnvironment: () => void;
   cancel: () => void;
   confirmGrant: () => void;
   dismissToast: () => void;
@@ -51,7 +57,6 @@ const isPending = (operation: DependencyOperation | undefined): boolean =>
 export function useSkillDependencies(
   skill: SkillDetail | undefined,
   refreshSkills: () => void,
-  refreshSkillDetail?: (skillId: string) => void,
 ): SkillDependenciesState {
   const [options, setOptions] = useState<DependencyOptions>();
   const [plan, setPlan] = useState<DependencyPlan>();
@@ -62,6 +67,7 @@ export function useSkillDependencies(
   const [snapshotIds, setSnapshotIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [preparing, setPreparing] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
 
@@ -69,7 +75,9 @@ export function useSkillDependencies(
   const snapshotIdsRef = useRef<string[]>([]);
   /** 重复点击只启动一个作业：in-flight 期间不再发起第二次准备。 */
   const prepareInFlight = useRef(false);
+  const verificationInFlight = useRef(false);
   const pollTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const grantReviewId = useRef(0);
 
   const skillId = skill?.id;
   const profile = skill?.runtimeProfile?.profile;
@@ -85,25 +93,40 @@ export function useSkillDependencies(
     (
       currentSkillId: string,
       currentLockId: string,
-      currentSnapshotIds: string[],
+      currentSnapshotIds: string[] | undefined,
       token: number,
+      availableSnapshotIds?: readonly string[],
     ): void => {
       if (!currentLockId) return;
+      const reviewId = grantReviewId.current + 1;
+      grantReviewId.current = reviewId;
+      const restoringSelection = currentSnapshotIds === undefined;
       trackAction(
         window.betterwork.skills
           .refreshDependencyGrant({
             skillId: currentSkillId,
             lockId: currentLockId,
-            snapshotIds: currentSnapshotIds.filter((id) => id.length > 0),
+            ...(currentSnapshotIds === undefined
+              ? {}
+              : { snapshotIds: currentSnapshotIds.filter((id) => id.length > 0) }),
           })
           .then((result) => {
-            if (requestId.current !== token) return;
+            if (requestId.current !== token || grantReviewId.current !== reviewId) return;
             setGrant(result);
+            if (restoringSelection) {
+              const available = new Set(availableSnapshotIds ?? []);
+              const restoredSnapshotIds = Array.from({ length: toolchainCount }, (_, index) => {
+                const snapshotId = result.selectedSnapshotIds[index];
+                return snapshotId && available.has(snapshotId) ? snapshotId : '';
+              });
+              snapshotIdsRef.current = restoredSnapshotIds;
+              setSnapshotIds(restoredSnapshotIds);
+            }
           }),
         '复核依赖授权',
       );
     },
-    [],
+    [toolchainCount],
   );
 
   const inspect = useCallback(
@@ -159,7 +182,9 @@ export function useSkillDependencies(
     setError('');
     setToast('');
     setPreparing(false);
+    setChecking(false);
     prepareInFlight.current = false;
+    verificationInFlight.current = false;
     snapshotIdsRef.current = [];
     if (!skillId || !profile) {
       setOptions(undefined);
@@ -196,7 +221,13 @@ export function useSkillDependencies(
         setSnapshotIds(nextSnapshots);
         setBase(nextBase);
         if (nextBase && configuredLockId) inspect(nextBase, configuredLockId, token);
-        reviewGrant(skillId, configuredLockId, nextSnapshots, token);
+        reviewGrant(
+          skillId,
+          configuredLockId,
+          undefined,
+          token,
+          result.snapshots.map((snapshot) => snapshot.id),
+        );
       }),
       '加载依赖选项',
     );
@@ -222,7 +253,6 @@ export function useSkillDependencies(
             prepareInFlight.current = false;
             setToast('环境已就绪。');
             refreshSkills();
-            if (skillId && refreshSkillDetail) refreshSkillDetail(skillId);
             if (base && lockId) inspect(base, lockId, token);
             if (skillId) reviewGrant(skillId, lockId, snapshotIds, token);
           }
@@ -246,7 +276,6 @@ export function useSkillDependencies(
     reviewGrant,
     stopPolling,
     refreshSkills,
-    refreshSkillDetail,
   ]);
 
   useEffect(() => stopPolling, [stopPolling]);
@@ -294,7 +323,15 @@ export function useSkillDependencies(
           snapshotIdsRef.current = nextSnapshotIds;
           setSnapshotIds(nextSnapshotIds);
           setOptions((current) =>
-            current ? { ...current, snapshots: [snapshot, ...current.snapshots] } : current,
+            current
+              ? {
+                  ...current,
+                  snapshots: [
+                    snapshot,
+                    ...current.snapshots.filter((entry) => entry.id !== snapshot.id),
+                  ],
+                }
+              : current,
           );
           setToast(
             result.reused
@@ -310,15 +347,83 @@ export function useSkillDependencies(
     [lockId, reviewGrant, skillId],
   );
 
+  const deleteToolchainSnapshot = useCallback(
+    async (
+      snapshotId: string,
+    ): Promise<DeleteToolchainSnapshotResult | { status: 'error'; message: string }> => {
+      try {
+        const result = await window.betterwork.dependencies.deleteToolchainSnapshot({ snapshotId });
+        if (result.status === 'in-use') {
+          setOptions((current) =>
+            current
+              ? {
+                  ...current,
+                  snapshots: current.snapshots.map((snapshot) =>
+                    snapshot.id === result.snapshot.id ? result.snapshot : snapshot,
+                  ),
+                }
+              : current,
+          );
+          return result;
+        }
+        if (result.status === 'not-found') {
+          setOptions((current) =>
+            current
+              ? {
+                  ...current,
+                  snapshots: current.snapshots.filter((snapshot) => snapshot.id !== snapshotId),
+                }
+              : current,
+          );
+          return result;
+        }
+
+        setOptions((current) =>
+          current
+            ? {
+                ...current,
+                snapshots: current.snapshots.filter((snapshot) => snapshot.id !== snapshotId),
+              }
+            : current,
+        );
+        const nextSnapshotIds = snapshotIdsRef.current.map((id) => (id === snapshotId ? '' : id));
+        snapshotIdsRef.current = nextSnapshotIds;
+        setSnapshotIds(nextSnapshotIds);
+        if (skillId && lockId) {
+          reviewGrant(skillId, lockId, nextSnapshotIds, requestId.current);
+        }
+        if (!result.cleanupPending) {
+          setToast(
+            result.clearedRevokedAuthorizationReferences > 0
+              ? `工具链快照已删除，并清理了 ${result.clearedRevokedAuthorizationReferences} 条已撤销授权引用。`
+              : '工具链快照已删除。',
+          );
+        }
+        return result;
+      } catch (error) {
+        return {
+          status: 'error',
+          message: describeActionError(error, '删除工具链快照失败，请重试。'),
+        };
+      }
+    },
+    [lockId, reviewGrant, skillId],
+  );
+
   const prepare = useCallback((): void => {
-    if (!base || !lockId || prepareInFlight.current) return;
+    if (!base || !lockId || prepareInFlight.current || verificationInFlight.current) return;
     const token = requestId.current;
     prepareInFlight.current = true;
     setPreparing(true);
     setError('');
     reportAction(
       window.betterwork.dependencies
-        .prepare({ base, lockId, ...(skillId ? { skillId } : {}) })
+        .prepare({
+          base,
+          lockId,
+          ...(skillId ? { skillId } : {}),
+          ...(plan?.environment?.status === 'invalid' ? { kind: 'repair' as const } : {}),
+        })
         .then((receipt) => {
           if (requestId.current !== token) return;
           setToast(
@@ -338,7 +443,54 @@ export function useSkillDependencies(
       },
       '准备环境失败，请重试。',
     );
-  }, [base, lockId, skillId]);
+  }, [base, lockId, plan?.environment?.status, skillId]);
+
+  const checkEnvironment = useCallback((): void => {
+    const environment = plan?.environment;
+    if (
+      !environment ||
+      environment.status !== 'ready' ||
+      prepareInFlight.current ||
+      verificationInFlight.current
+    ) {
+      return;
+    }
+    const token = requestId.current;
+    verificationInFlight.current = true;
+    setChecking(true);
+    setError('');
+    const verification = Promise.resolve()
+      .then(() =>
+        window.betterwork.dependencies.verifyEnvironment({ environmentId: environment.id }),
+      )
+      .then((checkedEnvironment) => {
+        if (requestId.current !== token) return;
+        setPlan((current) => (current ? { ...current, environment: checkedEnvironment } : current));
+        if (checkedEnvironment.status === 'ready') {
+          setToast('环境检查通过，锁定模块均可导入。');
+        } else {
+          setError(
+            checkedEnvironment.failureSummary
+              ? `环境检查未通过：${checkedEnvironment.failureSummary}`
+              : '环境检查未通过，请修复环境后重试。',
+          );
+        }
+        refreshSkills();
+      })
+      .finally(() => {
+        if (requestId.current !== token) return;
+        setChecking(false);
+        verificationInFlight.current = false;
+      });
+    reportAction(
+      verification,
+      (message) => {
+        if (requestId.current !== token) return;
+        setError(message);
+      },
+      '检查环境失败，请重试。',
+    );
+  }, [plan?.environment, refreshSkills]);
 
   const cancel = useCallback((): void => {
     const current = operation;
@@ -376,11 +528,12 @@ export function useSkillDependencies(
           if (requestId.current !== token) return;
           setGrant(result);
           setToast(result.grantCreated ? '已按当前依赖建立执行授权。' : '授权状态已更新。');
+          refreshSkills();
         }),
       setError,
       '确认授权失败，请重试。',
     );
-  }, [lockId, skillId, snapshotIds]);
+  }, [lockId, refreshSkills, skillId, snapshotIds]);
 
   const dismissToast = useCallback((): void => setToast(''), []);
   const clearError = useCallback((): void => setError(''), []);
@@ -395,6 +548,7 @@ export function useSkillDependencies(
     snapshotIds,
     loading,
     preparing,
+    checking,
     error,
     toast,
     selectManagedDistribution,
@@ -416,7 +570,9 @@ export function useSkillDependencies(
     },
     chooseLocalInterpreter,
     registerToolchain,
+    deleteToolchainSnapshot,
     prepare,
+    checkEnvironment,
     cancel,
     confirmGrant,
     dismissToast,

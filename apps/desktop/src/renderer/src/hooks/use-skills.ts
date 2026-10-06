@@ -51,7 +51,14 @@ export function useSkills(options: UseSkillsOptions): SkillsState {
     trackAction(
       window.betterwork.skills
         .list()
-        .then((items) => setSkills(items))
+        .then((items) => {
+          setSkills(items);
+          setSelected((current) => {
+            if (!current) return current;
+            const summary = items.find((item) => item.id === current.id);
+            return summary ? { ...current, ...summary } : current;
+          });
+        })
         .catch((error: unknown) => {
           setError(describeActionError(error, '读取 Skill 列表失败，请重试。'));
         })

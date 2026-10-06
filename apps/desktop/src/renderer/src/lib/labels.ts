@@ -4,6 +4,7 @@ import type {
   ModelProfileInput,
   ModelProfileSummary,
   RunSummary,
+  SkillBlockedReason,
   SkillEnvironmentStatus,
   WorkspaceIconId,
 } from '@betterwork/agent-protocol';
@@ -99,6 +100,27 @@ export const skillEnvironmentName: Record<SkillEnvironmentStatus, string> = {
   cancelled: '已取消',
   invalid: '已失效',
 };
+
+/** Skill 阻塞原因在详情与能力选择器中共用中文名称，不直接暴露协议枚举值。 */
+const SKILL_BLOCKED_REASON_NAMES = {
+  disabled: 'Skill 已停用',
+  untrusted: 'Skill 尚未信任',
+  'trust-needs-review': '当前依赖尚未授权执行',
+  'trust-revoked': 'Skill 信任已撤销',
+  'environment-unprepared': '当前依赖环境尚未准备或绑定',
+  'environment-preparing': 'Skill 运行环境正在准备',
+  'environment-failed': 'Skill 运行环境准备失败',
+  'environment-cancelled': 'Skill 运行环境准备已取消',
+  'environment-invalid': 'Skill 运行环境检查未通过',
+  'missing-runtime-profile': '缺少已审核的 Skill 运行配置',
+} satisfies Record<SkillBlockedReason, string>;
+
+const skillBlockedReasonNames: ReadonlyMap<string, string> = new Map(
+  Object.entries(SKILL_BLOCKED_REASON_NAMES),
+);
+
+export const skillBlockedReasonName = (reason: string): string =>
+  skillBlockedReasonNames.get(reason) ?? reason;
 
 const MIME_TYPE_LABELS: Readonly<Record<string, string>> = {
   'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',

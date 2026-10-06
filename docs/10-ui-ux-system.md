@@ -121,7 +121,11 @@ ClawBible Desktop 继续作为模型接入、Agent、工具、知识和 Office �
 
 Skill 列表分别展示来源（内置/用户）、启用状态、信任状态和依赖状态，不能用单一开关混同「启用」「信任」「可运行」。详情页提供「受信任：允许在已授权范围内执行脚本」选项，附简短提示「脚本以本机用户权限运行，信任不提供沙箱隔离」。
 
-Skill 详情以配置摘要显示兼容 Python 版本、审核过的依赖锁、执行入口和该 Skill 声明的外部工具链；配置有几项就呈现几项，不显示通用原始 JSON 编辑器。目录导入同时对文本做静态识别，展示线索所在的相对文件和行号；发现结果不自动成为已验证配置或信任授权。应用提供的 CPython 状态集中显示在「设置 → 运行组件」，基础解释器不要求用户在每个 Skill 中重复选择。
+Skill 详情以配置摘要显示兼容 Python 版本、审核过的依赖锁、执行入口和该 Skill 声明的外部工具链；配置有几项就呈现几项，不显示通用原始 JSON 编辑器。目录导入同时对文本做静态识别，线索默认折叠为「导入时发现的线索(N)」，N 是发现条目数；展开后显示线索所在的相对文件和行号。发现结果不自动成为已验证配置或信任授权。应用提供的 CPython 状态集中显示在「设置 → 运行组件」，基础解释器不要求用户在每个 Skill 中重复选择。
+
+依赖面板按环境状态区分「准备环境」「检查环境」「修复环境」和「重新准备环境」：检查只验证依赖锁声明的 Python 模块能否导入，不安装包；检查失败后才显示修复，修复会重建 Skill 专属环境并安装锁定依赖。环境准备、健康检查与 Skill 执行授权分别呈现，不互相代替。
+
+外部工具链快照可从 Skill 依赖面板的「管理已登记快照」打开统一清单。每条记录显示来源目录、内容指纹、文件数、登记时间，以及引用它的 Skill、当前授权、已撤销授权和历史 Run；活跃授权或历史 Run 引用会阻止删除。没有活跃授权或历史 Run 的快照可以删除，删除时同时清理已撤销授权留下的旧选择记录；源目录始终保留。
 
 内置项默认信任、可撤销；用户导入项允许在导入完成时选择信任，不默认勾选。未信任项可以查看和编辑，试运行说明缺少授权并进入信任设置。缺依赖进入环境准备，不显示误导性的「已就绪」。授权范围变化时展示差异。
 
@@ -707,7 +711,8 @@ UI Foundation 首批提供四套成对色系：
 | `ComposerCapabilityPicker` | `components/ComposerCapabilityPicker.tsx` | Composer 的能力/材料选择；技能摘要可打开管理，材料按类别计数，锁定原因并入材料摘要；PopoverMenu、ActionBar 组合 |
 | `McpToolBindingsPicker` | `components/McpToolBindingsPicker.tsx` | 按连接分组的 CheckList，专家预设与任务选择共用 |
 | `KnowledgeDocumentCard` | `components/KnowledgeDocumentCard.tsx` | 知识条目身份、修订与索引状态及更多动作，复用 Card/PopoverMenu |
-| `DependencyPanel` | `components/skills/DependencyPanel.tsx` | Skill 环境准备、授权与作业结果；取消/失败保持运行契约 |
+| `DependencyPanel` | `components/skills/DependencyPanel.tsx` | Skill 环境准备、授权、外部快照选择与作业结果；快照管理由 ToolchainSnapshotManager 承接 |
+| `ToolchainSnapshotManager` | `components/skills/ToolchainSnapshotManager.tsx` | 全局工具链快照及 Skill 授权/历史 Run 引用管理；删除前确认并拒绝仍被使用的记录 |
 | `ModelEditor` | `components/ModelEditorSheet.tsx` | 模型编辑 Sheet；实际导出为 ModelEditor，不是 ModelEditorSheet |
 | `MemoryEditor` | `components/MemoryEditor.tsx` | 记忆编辑表单与有效性治理，业务契约见 memory-contracts |
 | `MemoryCapturePanel` | `components/MemoryCapturePanel.tsx` | 内联回答捕获宿主，来源选择与正文分开；打开聚焦只读原文，Tab 可进入正文；Esc 与取消关闭未提交草稿并归还打开它的按钮。提交等待期间不响应 Esc，菜单先处理自己的 Esc，不设置焦点陷阱 |

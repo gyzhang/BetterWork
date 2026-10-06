@@ -6,6 +6,7 @@ import { Badge, type BadgeTone } from '../components/Badge';
 import { Button } from '../components/Button';
 import { CatalogCard, CatalogRow, type EntryFacts } from '../components/CatalogCard';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
+import { Disclosure } from '../components/Disclosure';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
 import { Field } from '../components/Field';
 import { InlineError } from '../components/InlineError';
@@ -26,7 +27,7 @@ import type { SkillsState } from '../hooks/use-skills';
 import { useViewMode } from '../hooks/use-view-mode';
 import { ChevronLeftIcon, InfoIcon, PlusIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
-import { skillEnvironmentName } from '../lib/labels';
+import { skillBlockedReasonName, skillEnvironmentName } from '../lib/labels';
 import {
   effectiveToolchainRequirements,
   unconfiguredExternalRuntimeClues,
@@ -156,14 +157,7 @@ function skillFacts(skill: SkillSummary, actions: SkillActions): EntryFacts {
 
 export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element {
   const { selected, dismissToast: dismissStateToast } = state;
-  const refreshSkillDetail = useCallback(
-    (skillId: string): void => {
-      const current = state.skills.find((s) => s.id === skillId);
-      if (current) state.select(current);
-    },
-    [state],
-  );
-  const dependencies = useSkillDependencies(selected, state.refresh, refreshSkillDetail);
+  const dependencies = useSkillDependencies(selected, state.refresh);
   const { dismissToast: dismissDepsToast } = dependencies;
   const toast = state.toast || dependencies.toast;
   const dismissToast = useCallback((): void => {
@@ -512,8 +506,10 @@ function SkillDetail({
           />
         )}
         {skill.runtimeDiscovery && skill.runtimeDiscovery.length > 0 ? (
-          <div className="skill-runtime-discovery">
-            <strong>导入时发现的线索</strong>
+          <Disclosure
+            className="skill-runtime-discovery"
+            label={<Badge>导入时发现的线索({skill.runtimeDiscovery.length})</Badge>}
+          >
             <ul>
               {skill.runtimeDiscovery.map((finding, index) => (
                 <li key={`${finding.sourcePath}:${finding.lineNumber}:${index}`}>
@@ -521,16 +517,26 @@ function SkillDetail({
                 </li>
               ))}
             </ul>
-          </div>
+          </Disclosure>
         ) : (
           <p>没有发现常见 Python 脚本、依赖声明文件或外部工具链引用。</p>
         )}
       </div>
-      <DependencyPanel skill={skill} state={dependencies} />
+      <DependencyPanel
+        skill={skill}
+        state={dependencies}
+        onOpenSkill={(skillId) => {
+          const referenced = state.skills.find((item) => item.id === skillId);
+          if (referenced) state.select(referenced);
+        }}
+      />
       <div className="skill-detail-section">
         <SectionHeader title="可运行性" />
         {displayedBlockedReasons.length ? (
-          <StatusNote tone="warning" problems={displayedBlockedReasons} />
+          <StatusNote
+            tone="warning"
+            problems={displayedBlockedReasons.map(skillBlockedReasonName)}
+          />
         ) : (
           <StatusNote tone="success" message="当前没有阻塞原因。" />
         )}

@@ -573,7 +573,12 @@ function installApi(options?: {
       list: vi.fn(async () => [skill]),
       get: vi.fn(async () => skill),
       testRun: vi.fn(async () => ({ runId: 'unexpected-run' })),
-      refreshDependencyGrant: vi.fn(async () => ({ skill, grantActive: true })),
+      refreshDependencyGrant: vi.fn(async () => ({
+        skill,
+        selectedSnapshotIds: [],
+        grantActive: true,
+        grantCreated: false,
+      })),
     },
     dependencies: {
       listOptions: vi.fn(async () => ({

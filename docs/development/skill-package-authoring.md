@@ -98,10 +98,12 @@
 
 本机 `skills/ppt-generation-expert/` 是基于 `/Users/kevin/Downloads/ppt-expert-skill` 的忽略目录打包样本；源下载目录没有被修改。样例包把锁和 8 个 wheel 放在自身 `runtime/` 下，元数据声明 Python 3.12、锁 bundle 与 `PPTM_HOME` 工具链的版本/commit，不包含 `ppt-master` 的作者绝对路径。`requirements.in` 记录锁候选的直接依赖根。
 
-这 8 个锁项来自当前产品的 PPT 依赖基线拷贝：7 项与锁中列出的目标模块相对应，另有传递依赖 `typing_extensions`。这不是导入扫描数出来的，也不是说所有依赖已经按该源 Skill 的完整执行路径验证。此样例的 `commands` 仍为空：原 Skill 文档要求系统 Python，并未在 BetterWork 管理的 CPython 3.12 上完成适配验收；目前不能把它标成可执行或可发布内置 Skill。
+这 8 个锁项来自当前产品的 PPT 依赖基线拷贝：7 项与锁中列出的目标模块相对应，另有传递依赖 `typing_extensions`。这不是导入扫描数出来的。忽略目录样例的 `betterwork.skill.json` 现在声明 5 个审核入口：`project-init`、`icon-sync`、`svg-export`、`template-merge`、`pptx-validate`；BetterWork 按该包的精确内容 hash 选择对应执行适配器。不要把其他 Skill 扫描到的线索直接复制成命令入口。
+
+2026-10-06 在隔离目录中以受管 CPython 3.12.14 创建 venv，从样例 wheelhouse 离线安装锁定的 8 个 wheel，7 个必需模块导入探针全部通过；再使用声明的 PPT Master 6.6.0 commit 验证了项目初始化、图标同步、SVG 三项质检和导出、公司模板合并、最终 PPTX 结构校验。SVG 质检和结构校验通过，导出报告为 `quality_gate=passed`（上游另有 1 个 warning）。这证明代表性命令链在该版本组合中可执行；还没有通过 BetterWork Electron 界面完成导入、授权、快照绑定和 Run 的完整人工验收。当前锁最初从产品基线复制，正式发布前仍应按本包的 `requirements.in` 在目标环境重新生成并 Review 完整闭包及许可证。
 
 该 Skill 对 `ppt-master` 的外部依赖已由元数据显式声明；扫描器也会从真实 `os.environ`/shell 变量使用和明确配置语句提取线索，不再把内部的 `SKILL_DIR`、`DIAGRAMS_DIR`、`STYLES_DIR` 常量误报成用户目录。导入后 UI 会按 `PPTM_HOME` 声明展示工具链配置。当前样例尚未把 `ppt-master` 制作为包内或服务端固定下载制品，所以登记这一项仍要求选取本机来源目录并校验版本；它还不符合「导入后所有资源自动准备」的最终目标。
 
 样例源 README 将 `ppt-expert-skill` 标为私有仓库并注明不得公开转发，因此它只能用于获准的内部验证和客户定向分发，不能放入公开 Skill 市场。当前本机 `ppt-master` 工作目录约 973 MB，其中 `skills/ppt-master` 子树约 129 MB；BetterWork 的 Skill 包导入上限为 50 MiB。不能把这个工作目录原样塞进 Skill 包，也不能把作者机器路径当作可下载来源。正式分发前必须由发布者筛选运行必需文件，生成经许可审查和 SHA-256 固定的精简工具链制品，并放在目标客户可访问的受控分发端点；随后还需实现受限大小、校验、解包、快照登记和准备进度的自动链路。
 
-正式发布前仍需完成：验证该 Skill 在受管 CPython 中的真实兼容性；定义并审核命令/参数/输出契约与适配实现；用该样例自己的需求重新生成并验证完整锁；确定受控分发的 `ppt-master` 工具链制品体积、来源 hash、许可证及自动安装方式；最后再把已审查版本纳入产品内置资源或客户 ZIP/HTTPS 分发。
+正式发布前仍需完成：从该样例自己的依赖声明重新生成并 Review 完整锁；在 BetterWork Electron 中人工走完导入、信任/依赖授权、工具链快照绑定与 Run；确定受控分发的 `ppt-master` 工具链制品体积、来源 hash、许可证及自动安装方式；最后再把已审查版本纳入产品内置资源或客户 ZIP/HTTPS 分发。

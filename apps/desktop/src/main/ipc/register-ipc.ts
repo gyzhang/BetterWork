@@ -34,6 +34,8 @@ import {
   deleteKnowledgeCollectionRequestSchema,
   deleteMcpConnectionRequestSchema,
   deleteSkillRequestSchema,
+  deleteToolchainSnapshotRequestSchema,
+  deleteToolchainSnapshotResultSchema,
   dependencyOperationSchema,
   dependencyOptionsSchema,
   dependencyPlanRequestSchema,
@@ -171,6 +173,7 @@ import {
   runArtifactSourceDeclarationSchema,
   runSourcePreviewSchema,
   runSummarySchema,
+  runtimeEnvironmentSchema,
   saveExpertRevisionRequestSchema,
   saveKnowledgeCollectionRequestSchema,
   saveKnowledgeSettingsRequestSchema,
@@ -235,6 +238,7 @@ import {
   updateMemoryRequestSchema,
   updateWindowThemeRequestSchema,
   updateWorkspaceIdentityRequestSchema,
+  verifyDependencyEnvironmentRequestSchema,
   voidResultSchema,
   windowToggleMaximizeRequestSchema,
   workspaceBriefSchema,
@@ -2174,7 +2178,7 @@ function registerDependencyChannels(deps: IpcDependencies): void {
     async () => ({
       distributions: await dependencies.listManagedDistributions(),
       lockIds: await listDependencyLocks(dependencyLocksRoot, filesystem),
-      snapshots: snapshots.listSnapshots(),
+      snapshots: snapshots.listSnapshotsWithUsage(),
       environments: dependencies.listEnvironments(),
     }),
   );
@@ -2200,6 +2204,13 @@ function registerDependencyChannels(deps: IpcDependencies): void {
         ...(plan.openOperationId ? { openOperationId: plan.openOperationId } : {}),
       };
     },
+  );
+
+  handleInput(
+    IpcChannel.VerifyDependencyEnvironment,
+    verifyDependencyEnvironmentRequestSchema,
+    runtimeEnvironmentSchema,
+    (input) => dependencies.verifyEnvironment(input.environmentId),
   );
 
   handleInput(
@@ -2265,8 +2276,19 @@ function registerDependencyChannels(deps: IpcDependencies): void {
         origin,
         ...(input.include ? { include: input.include } : {}),
       });
-      return { cancelled: false, snapshot: receipt.snapshot, reused: receipt.reused };
+      return {
+        cancelled: false,
+        snapshot: snapshots.getSnapshotWithUsage(receipt.snapshot.id) ?? null,
+        reused: receipt.reused,
+      };
     },
+  );
+
+  handleInput(
+    IpcChannel.DeleteToolchainSnapshot,
+    deleteToolchainSnapshotRequestSchema,
+    deleteToolchainSnapshotResultSchema,
+    (input) => snapshots.deleteSnapshot(input.snapshotId),
   );
 
   handleInput(
@@ -2275,14 +2297,23 @@ function registerDependencyChannels(deps: IpcDependencies): void {
     refreshSkillDependencyGrantResultSchema,
     async (input) => {
       const assets = await loadLockForSkill(input.skillId, input.lockId);
+      const lockHash = computeDependencyLockHash(assets.lock);
+      const restoringSelection = input.snapshotIds === undefined;
+      const requestedSnapshotIds =
+        input.snapshotIds ?? dependencies.getSavedDependencySelection(input.skillId, lockHash);
+      const selectedSnapshotIds: string[] = [];
       const manifestHashes: string[] = [];
-      for (const snapshotId of input.snapshotIds) {
+      for (const snapshotId of requestedSnapshotIds) {
         const snapshot = snapshots.getSnapshot(snapshotId);
-        if (!snapshot) throw new Error(`工具链快照 ${snapshotId} 不存在`);
+        if (!snapshot) {
+          if (restoringSelection) continue;
+          throw new Error(`工具链快照 ${snapshotId} 不存在`);
+        }
+        selectedSnapshotIds.push(snapshotId);
         manifestHashes.push(snapshot.manifestHash);
       }
       const outcome = dependencies.confirmDependencyGrant(input.skillId, {
-        lockHash: computeDependencyLockHash(assets.lock),
+        lockHash,
         snapshotManifestHashes: manifestHashes,
         ...(input.confirm === true ? { confirm: true } : {}),
       });
@@ -2290,6 +2321,7 @@ function registerDependencyChannels(deps: IpcDependencies): void {
       if (!skill) throw new Error('Skill does not exist');
       return {
         skill: skillSummary(skill),
+        selectedSnapshotIds,
         ...(outcome.fingerprint ? { fingerprint: outcome.fingerprint } : {}),
         grantActive: outcome.grantActive,
         grantCreated: outcome.grantCreated,

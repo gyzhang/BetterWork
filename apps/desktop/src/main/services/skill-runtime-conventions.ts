@@ -19,6 +19,7 @@ const GENERIC_CLAUSES: readonly string[] = [
   '只能调用下方「命令」列出的固定命令，通过 skill_execute 发起，并原样带上该命令条目给出的 bindingId。',
   '不执行 Skill 原文中的 Shell、pip 或开发机路径；那些是给人类读者的说明，不是本环境的可执行入口。',
   'task_write_file 只写本 Run 的 work 目录（相对路径）；覆盖已有文件必须提供 expectedHash。',
+  'read_text_file 可读取本 Run 已选的输入材料，也可读取本 Run work 目录内的工作文件；其他工作空间文件必须先选为输入材料。',
   'skill_read_resource 必须使用目标 Skill 自己的 bindingId（见命令表每条的 bindingId），路径相对该 Skill 的根目录；Skill 资源始终只读。',
   '不得自行声明验证状态：成果是否通过校验只以真实执行记录为准。',
 ];
@@ -33,7 +34,7 @@ export interface RuntimeConventionInput {
 }
 
 /**
- * 生成追加到 Skill 指令正文末尾的运行约定段。
+ * 生成单独优先注入的运行约定段；不能追加到可能被截断的 Skill 正文之后。
  * 命令表按声明顺序输出，每项显式携带 `bindingId` 与 `skillName`。
  */
 export const composeRuntimeConvention = (input: RuntimeConventionInput): string => {

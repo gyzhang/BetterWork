@@ -101,6 +101,7 @@ import {
 import { ModelProviderFactory, type ResolvedLanguageModel } from './model-provider-factory';
 import type { NotificationService } from './notification-service';
 import { preparePptAttempt } from './ppt-execution-attempt';
+import { resolvePptExecutionOutputs } from './ppt-generation-preset';
 import { adaptPptCommand } from './ppt-script-adaptation';
 import { ScheduleMaterialResolver } from './schedule-material-resolver';
 import { createQianfanSearchClient } from './search-engine-service';
@@ -805,6 +806,7 @@ export class RunService {
                 readTextFile: this.createScopedReadTextFile(
                   executionContext.materials,
                   workspacePath,
+                  input.taskId,
                 ),
               }
             : {}),
@@ -1228,6 +1230,7 @@ export class RunService {
   private createScopedReadTextFile(
     materials: readonly TaskMaterialSelection[],
     workspacePath: string,
+    taskId: string,
   ): ReadTextFile {
     const snapshots = new Map<
       string,
@@ -1254,7 +1257,38 @@ export class RunService {
         throw new Error('材料范围包含同一路径的多个输入快照，请只选择一个版本。');
       }
       const selected = snapshots.get(relative);
-      if (!selected) throw new Error('材料范围不允许读取该工作空间文件，请先选择输入材料。');
+      if (!selected) {
+        if (context.signal.aborted) throw abortError();
+        const workDirectoryRelative = path.join(
+          '.betterwork',
+          'tasks',
+          taskId,
+          'runs',
+          context.runId,
+          'work',
+        );
+        const workDirectory = path.join(workspacePath, workDirectoryRelative);
+        const requestedWorkPath = path.isAbsolute(input.path)
+          ? path.resolve(input.path)
+          : path.resolve(workDirectory, input.path);
+        if (!isWithinRoot(workDirectory, requestedWorkPath)) {
+          throw new Error('材料范围不允许读取该工作空间文件，请先选择输入材料。');
+        }
+        const workFilePath = path.relative(workDirectory, requestedWorkPath);
+        if (!workFilePath) throw new Error('不能读取 Run 工作目录本身。');
+        const managedWorkFilePath = path.join(workDirectoryRelative, workFilePath);
+        const bytes = readManagedFile(workspacePath, managedWorkFilePath);
+        if (context.signal.aborted) throw abortError();
+        context.reportProgress(`正在读取本 Run 工作文件 ${workFilePath}`);
+        const content = bytes.toString('utf8');
+        return {
+          path: workFilePath,
+          scope: 'run-work-file',
+          content: sliceCodePoints(content, READ_MATERIAL_CODE_POINT_MAX),
+          contentHash: createHash('sha256').update(bytes).digest('hex'),
+          truncated: countCodePoints(content) > READ_MATERIAL_CODE_POINT_MAX,
+        };
+      }
       const { snapshot, reference } = selected;
       if (
         snapshot.workspaceId !== reference.workspaceId ||
@@ -1485,6 +1519,7 @@ export class RunService {
     const toolName = active.toolNames.get(event.toolCallId);
     if (!toolName) return;
     if (toolName === 'read_text_file' && isReadTextFileOutput(event.output)) {
+      if (event.output.scope === 'run-work-file') return;
       active.materialFacts.materialReadCount += 1;
       recordMaterialFacts(
         active.materialFacts,
@@ -1754,6 +1789,7 @@ export class RunService {
     }
     if (toolName === 'read_text_file' && isReadTextFileOutput(event.output)) {
       const output = event.output;
+      if (output.scope === 'run-work-file') return;
       const exactMaterial = output.material;
       const material = exactMaterial
         ? snapshot.materials.find((selection) =>
@@ -2082,15 +2118,16 @@ export class RunService {
         const presetConventions = adapter?.runtimeConventions?.(
           new Set(commands.map((command) => command.commandId)),
         );
-        instruction.instruction += composeRuntimeConvention({
+        instruction.runtimeInstruction = composeRuntimeConvention({
           bindingId: binding.id,
           skillName: skill.name,
           commands,
           ...(presetConventions ? { presetConventions } : {}),
         });
       }
-      // 正文为空时不注入：否则会给模型一条只剩标题的空 system 段。
-      if (instruction.instruction.trim().length > 0) instructions.push(instruction);
+      // 正文和运行约定均为空时不注入：否则会给模型一条只剩标题的空 system 段。
+      if (instruction.instruction.trim() || instruction.runtimeInstruction?.trim())
+        instructions.push(instruction);
     }
     return { bindingIds, instructions };
   }
@@ -2327,10 +2364,7 @@ export class RunService {
       timeoutMs: command.timeoutMs,
       maxOutputBytes: 32 * 1024,
       maxLogBytes: 10 * 1024 * 1024,
-      expectedOutputs:
-        input.commandId === 'pptx-validate' && resolved.argv[1]
-          ? [path.relative(cwd, resolved.argv[1])]
-          : command.expectedOutputs,
+      expectedOutputs: resolvePptExecutionOutputs(command, resolved, cwd),
       ...(input.commandId === 'pptx-validate' ? { validatorId: 'pptx-validate' } : {}),
       workDirKey: createHash('sha256').update(cwd).digest('hex'),
     });
@@ -2492,9 +2526,11 @@ const isKnowledgeSearchOutput = (
 interface ReadTextFileOutput {
   path: string;
   content: string;
+  scope?: 'run-work-file';
   material?: MaterialReference;
   format?: string;
   contentHash?: string;
+  truncated?: boolean;
   sections?: Array<{ locator: string; content: string }>;
 }
 
@@ -2502,9 +2538,11 @@ const isReadTextFileOutput = (value: unknown): value is ReadTextFileOutput =>
   isRecord(value) &&
   isString(value.path) &&
   isString(value.content) &&
+  (value.scope === undefined || value.scope === 'run-work-file') &&
   (value.material === undefined || materialReferenceSchema.safeParse(value.material).success) &&
   (value.format === undefined || isString(value.format)) &&
   (value.contentHash === undefined || isString(value.contentHash)) &&
+  (value.truncated === undefined || typeof value.truncated === 'boolean') &&
   (value.sections === undefined ||
     (Array.isArray(value.sections) &&
       value.sections.every(

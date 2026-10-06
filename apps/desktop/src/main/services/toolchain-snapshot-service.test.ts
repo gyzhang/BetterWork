@@ -385,6 +385,86 @@ describe('外部工具链快照', () => {
     expect(harness.service.listSnapshots()).toHaveLength(1);
   });
 
+  it('管理视图显示 Skill 授权与历史 Run 引用，并拒绝删除正在使用的快照', async () => {
+    const harness = openHarness();
+    const receipt = await harness.service.createSnapshot({ origin: harness.origin });
+    const seeded = seedBindingChain(harness.store, [receipt.snapshot.id]);
+    harness.store.skills.saveDependencySelection(seeded.grantId, 'lock-hash', [
+      receipt.snapshot.id,
+    ]);
+
+    const [managed] = harness.service.listSnapshotsWithUsage();
+    expect(managed).toMatchObject({
+      id: receipt.snapshot.id,
+      canDelete: false,
+      usage: [
+        {
+          skillId: seeded.skillId,
+          skillName: '样本能力',
+          activeAuthorizationCount: 1,
+          revokedAuthorizationCount: 0,
+          runCount: 1,
+        },
+      ],
+    });
+    await expect(harness.service.deleteSnapshot(receipt.snapshot.id)).resolves.toMatchObject({
+      status: 'in-use',
+    });
+    expect(harness.service.getSnapshot(receipt.snapshot.id)).toBeDefined();
+    expect(await harness.tree.exists(snapshotRootOf(harness, receipt.snapshot.manifestHash))).toBe(
+      true,
+    );
+  });
+
+  it('无当前授权和 Run 引用时可删除；已撤销授权的旧选择随之清理', async () => {
+    const harness = openHarness();
+    const receipt = await harness.service.createSnapshot({ origin: harness.origin });
+    const seeded = seedBindingChain(harness.store, []);
+    harness.store.skills.saveDependencySelection(seeded.grantId, 'lock-hash', [
+      receipt.snapshot.id,
+    ]);
+    harness.store.skills.setTrustPreference(seeded.skillId, 'revoked');
+
+    expect(harness.service.listSnapshotsWithUsage()[0]).toMatchObject({
+      canDelete: true,
+      usage: [
+        {
+          skillId: seeded.skillId,
+          activeAuthorizationCount: 0,
+          revokedAuthorizationCount: 1,
+          runCount: 0,
+        },
+      ],
+    });
+    await expect(harness.service.deleteSnapshot(receipt.snapshot.id)).resolves.toEqual({
+      status: 'deleted',
+      cleanupPending: false,
+      clearedRevokedAuthorizationReferences: 1,
+    });
+    expect(harness.store.skills.getDependencySelection(seeded.grantId)?.snapshotIds).toEqual([]);
+    expect(harness.service.getSnapshot(receipt.snapshot.id)).toBeUndefined();
+    expect(await harness.tree.exists(snapshotRootOf(harness, receipt.snapshot.manifestHash))).toBe(
+      false,
+    );
+    expect(await harness.tree.exists(`${harness.origin}/README.md`)).toBe(true);
+  });
+
+  it('删除无引用快照会清理受管副本和登记，但保留原来源目录', async () => {
+    const harness = openHarness();
+    const receipt = await harness.service.createSnapshot({ origin: harness.origin });
+
+    await expect(harness.service.deleteSnapshot(receipt.snapshot.id)).resolves.toEqual({
+      status: 'deleted',
+      cleanupPending: false,
+      clearedRevokedAuthorizationReferences: 0,
+    });
+    expect(harness.service.getSnapshot(receipt.snapshot.id)).toBeUndefined();
+    expect(await harness.tree.exists(snapshotRootOf(harness, receipt.snapshot.manifestHash))).toBe(
+      false,
+    );
+    expect(await harness.tree.exists(`${harness.origin}/README.md`)).toBe(true);
+  });
+
   it('受管副本被改动或缺文件时核验失败，运行方必须拒绝执行', async () => {
     const harness = openHarness();
     const receipt = await harness.service.createSnapshot({ origin: harness.origin });
@@ -546,7 +626,13 @@ const seedBindingChain = (
   store: AppStore,
   snapshotIds: string[],
   dependencyFingerprint = 'fingerprint-1',
-): { bindingId: string; skillId: string; revisionId: string; profileHash: string } => {
+): {
+  bindingId: string;
+  grantId: string;
+  skillId: string;
+  revisionId: string;
+  profileHash: string;
+} => {
   const now = 1_700_000_000_000;
   const workspace = store.workspaces.getOrCreate('/tmp/snapshot-workspace', '快照工作区');
   const created = store.tasks.create(workspace.id, '制作演示', '生成 deck');
@@ -605,7 +691,7 @@ const seedBindingChain = (
     dependencySnapshotIds: snapshotIds,
     grantId,
   });
-  return { bindingId: binding.id, skillId, revisionId, profileHash };
+  return { bindingId: binding.id, grantId, skillId, revisionId, profileHash };
 };
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..');

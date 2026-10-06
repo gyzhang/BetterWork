@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,6 +10,7 @@ import type {
   MaterialReference,
   MemoryRecord,
   MemoryScope,
+  RuntimeProfileDraft,
   ScheduleConfigDraft,
   ScheduleSourceItem,
 } from '@betterwork/agent-protocol';
@@ -33,6 +34,7 @@ import { MemoryService } from './memory-service';
 import { NotificationService } from './notification-service';
 import { createRunTools, RunService } from './run-service';
 import { ScheduleExecutionService } from './schedule-execution-service';
+import { computeDependencyFingerprint } from './skill-dependency-service';
 import { SkillExecutionService } from './skill-execution-service';
 import { SkillService } from './skill-service';
 import { TaskMaterialService } from './task-material-service';
@@ -334,12 +336,14 @@ const createService = (
 
 const captureFakeProviderRequests = () => {
   const requests: AgentMessage[][] = [];
+  const toolNames: string[][] = [];
   const fake = new FakeModelProvider(0);
   const originalStream = fake.stream.bind(fake);
   let shouldFailNextRequest = false;
   let nextResponse: string | undefined;
   const spy = vi.spyOn(FakeModelProvider.prototype, 'stream').mockImplementation((request) => {
     requests.push(request.messages.slice());
+    toolNames.push(request.tools.map((tool) => tool.name));
     if (shouldFailNextRequest) {
       shouldFailNextRequest = false;
       return (async function* () {
@@ -359,6 +363,7 @@ const captureFakeProviderRequests = () => {
   });
   return {
     requests,
+    toolNames,
     failNextRequest: (): void => {
       shouldFailNextRequest = true;
     },
@@ -3641,12 +3646,22 @@ describe('RunService', () => {
     fixture: Fixture,
     id: string,
     name = '测试 Skill',
+    runtimeProfile: RuntimeProfileDraft = {
+      commands: [],
+      environmentRequirements: [],
+      outputContract: { outputPaths: [] },
+    },
   ): Promise<string> => {
-    const contentHash = id.repeat(32).slice(0, 64);
+    const skillContent = `---\nname: ${name}\n---\n指令内容`;
+    const contentHash = createHash('sha256')
+      .update('SKILL.md')
+      .update('\0')
+      .update(skillContent)
+      .digest('hex');
     const resourceKey = `user/${id}/revisions/${contentHash}`;
     const skillDir = path.join(fixture.directory, 'skills', id, 'revisions', contentHash);
     await mkdir(skillDir, { recursive: true });
-    await writeFile(path.join(skillDir, 'SKILL.md'), `---\nname: ${name}\n---\n指令内容`);
+    await writeFile(path.join(skillDir, 'SKILL.md'), skillContent);
     fixture.store.skills.save({
       id,
       name,
@@ -3661,14 +3676,11 @@ describe('RunService', () => {
       frontmatter: { name },
     });
     const profileHash = `${id}-profile-hash`;
+    const lockHash = `${id}-lock`;
     const profileId = fixture.store.skills.saveProfile({
       skillId: id,
       profileHash,
-      profile: {
-        commands: [],
-        environmentRequirements: [],
-        outputContract: { outputPaths: [] },
-      },
+      profile: runtimeProfile,
     });
     fixture.store.skills.save({
       id,
@@ -3680,14 +3692,34 @@ describe('RunService', () => {
     });
     fixture.store.skills.setEnabled(id, true);
     fixture.store.skills.setTrustPreference(id, 'trusted');
-    fixture.store.skills.saveTrustGrant({
+    const grantId = fixture.store.skills.saveTrustGrant({
       skillId: id,
       revisionId,
       profileHash,
-      dependencyFingerprint: 'fp',
+      dependencyFingerprint:
+        runtimeProfile.commands.length > 0 ? computeDependencyFingerprint({ lockHash }) : 'fp',
       scopeHash: 'scope',
       source: 'user',
     });
+    if (runtimeProfile.commands.length > 0) {
+      const platform = { os: 'darwin', arch: 'arm64', abi: 'cp312' } as const;
+      fixture.store.skills.saveDependencySelection(grantId, lockHash, []);
+      const environment = fixture.store.environments.createEnvironment({
+        environmentKey: `${id}-environment`,
+        base: { kind: 'local', path: '/python', version: '3.12.14' },
+        platform,
+        lockHash,
+        lock: {
+          lockVersion: 1,
+          platform,
+          pythonRequirement: '3.12',
+          packages: [],
+          importProbes: [],
+        },
+        pathKey: `environments/${id}/instance`,
+      });
+      fixture.store.environments.updateStatus(environment.id, 'ready');
+    }
     return id;
   };
 
@@ -4022,6 +4054,53 @@ describe('RunService', () => {
       // 每个技能必须各自快照，且只能用自己那份 grant，否则一个技能的授权会被另一个继承。
       expect(binding?.profileRevisionId).toBe(profileId);
       expect(fixture.store.executions.isBindingAuthorized(binding?.id ?? '')).toBe(true);
+    }
+  });
+
+  it('sends the bound skill runtime contract and execution tools to the model', async () => {
+    const fixture = await createFixture();
+    const skillId = await createTrustedSkill(fixture, 'skill-runtime-tools', '可执行 Skill', {
+      commands: [
+        {
+          commandId: 'project-init',
+          label: '初始化项目',
+          executableKey: 'managed-python',
+          argumentSchema: { type: 'object', properties: { projectDir: { type: 'string' } } },
+          timeoutMs: 60_000,
+          expectedOutputs: [],
+        },
+      ],
+      environmentRequirements: [],
+      outputContract: { outputPaths: [] },
+    });
+    const captured = captureFakeProviderRequests();
+    const service = createService(fixture, undefined, createRealExecutionService(fixture));
+
+    try {
+      const runId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '按技能指令开始工作。',
+        skillBindings: [{ skillId }],
+      });
+      await waitForCompletion(fixture, runId);
+
+      expect(statusOf(fixture, runId), JSON.stringify(fixture.store.runs.listEvents(runId))).toBe(
+        'completed',
+      );
+      const binding = fixture.store.executions.listBindingsByRun(runId)[0];
+      expect(binding).toBeDefined();
+      expect(captured.toolNames.at(-1)).toEqual(
+        expect.arrayContaining(['skill_read_resource', 'task_write_file', 'skill_execute']),
+      );
+      const runtimeMessage = captured.requests
+        .at(-1)
+        ?.find((message) => message.role === 'system' && message.content.includes('算台运行约定'));
+      expect(runtimeMessage?.content).toContain(binding?.id ?? 'missing-binding');
+      expect(runtimeMessage?.content).toContain('project-init');
+      expect(runtimeMessage?.content).toContain('skill_execute');
+    } finally {
+      captured.restore();
     }
   });
 

@@ -2889,6 +2889,26 @@ export const dependencySnapshotSchema = z
   .strict();
 export type DependencySnapshot = z.infer<typeof dependencySnapshotSchema>;
 
+export const dependencySnapshotSkillUsageSchema = z
+  .object({
+    skillId: z.string().min(1),
+    skillName: z.string().min(1),
+    activeAuthorizationCount: z.number().int().nonnegative(),
+    revokedAuthorizationCount: z.number().int().nonnegative(),
+    runCount: z.number().int().nonnegative(),
+  })
+  .strict();
+export type DependencySnapshotSkillUsage = z.infer<typeof dependencySnapshotSkillUsageSchema>;
+
+export const managedDependencySnapshotSchema = dependencySnapshotSchema
+  .extend({
+    usage: z.array(dependencySnapshotSkillUsageSchema),
+    /** 活跃授权或历史 Run 正在引用时不能删除；已撤销授权可在删除时清理其旧选择。 */
+    canDelete: z.boolean(),
+  })
+  .strict();
+export type ManagedDependencySnapshot = z.infer<typeof managedDependencySnapshotSchema>;
+
 export const runtimeEnvironmentSchema = z
   .object({
     id: z.string().min(1),
@@ -5091,7 +5111,7 @@ export const dependencyOptionsSchema = z
   .object({
     distributions: z.array(managedDistributionSummarySchema),
     lockIds: z.array(z.string().min(1)),
-    snapshots: z.array(dependencySnapshotSchema),
+    snapshots: z.array(managedDependencySnapshotSchema),
     environments: z.array(runtimeEnvironmentSchema),
   })
   .strict();
@@ -5124,6 +5144,13 @@ export const dependencyPlanSchema = z
   })
   .strict();
 export type DependencyPlan = z.infer<typeof dependencyPlanSchema>;
+
+export const verifyDependencyEnvironmentRequestSchema = z
+  .object({ environmentId: z.string().min(1) })
+  .strict();
+export type VerifyDependencyEnvironmentRequest = z.infer<
+  typeof verifyDependencyEnvironmentRequestSchema
+>;
 
 export const prepareDependencyRequestSchema = dependencyPlanRequestSchema
   .extend({
@@ -5177,17 +5204,36 @@ export type RegisterToolchainRequest = z.infer<typeof registerToolchainRequestSc
 export const registerToolchainResultSchema = z
   .object({
     cancelled: z.boolean(),
-    snapshot: dependencySnapshotSchema.nullable(),
+    snapshot: managedDependencySnapshotSchema.nullable(),
     reused: z.boolean(),
   })
   .strict();
 export type RegisterToolchainResult = z.infer<typeof registerToolchainResultSchema>;
 
+export const deleteToolchainSnapshotRequestSchema = z
+  .object({ snapshotId: z.string().min(1) })
+  .strict();
+export type DeleteToolchainSnapshotRequest = z.infer<typeof deleteToolchainSnapshotRequestSchema>;
+
+export const deleteToolchainSnapshotResultSchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      status: z.literal('deleted'),
+      cleanupPending: z.boolean(),
+      clearedRevokedAuthorizationReferences: z.number().int().nonnegative(),
+    })
+    .strict(),
+  z.object({ status: z.literal('in-use'), snapshot: managedDependencySnapshotSchema }).strict(),
+  z.object({ status: z.literal('not-found') }).strict(),
+]);
+export type DeleteToolchainSnapshotResult = z.infer<typeof deleteToolchainSnapshotResultSchema>;
+
 export const refreshSkillDependencyGrantRequestSchema = z
   .object({
     skillId: z.string().min(1),
     lockId: z.string().trim().min(1).max(160),
-    snapshotIds: z.array(z.string().min(1)).max(20),
+    /** 显式传入时复核该选择；省略时恢复该 Skill 已保存的最近一次选择。 */
+    snapshotIds: z.array(z.string().min(1)).max(20).optional(),
     /**
      * 省略或 false 时只复核授权是否覆盖当前依赖，供界面如实展示；
      * true 才在用户明确点击后建立授权。查看与确认必须是两个意图。
@@ -5202,6 +5248,8 @@ export type RefreshSkillDependencyGrantRequest = z.infer<
 export const refreshSkillDependencyGrantResultSchema = z
   .object({
     skill: skillSummarySchema,
+    /** 本次检查采用的快照选择；面板初始化时据此恢复下拉框。 */
+    selectedSnapshotIds: z.array(z.string().min(1)).max(20),
     /** 授权被拒绝（未信任/已撤销/缺运行配置）时没有指纹可言，因此可选。 */
     fingerprint: z.string().min(1).optional(),
     grantActive: z.boolean(),
@@ -5350,11 +5398,13 @@ export const IpcChannel = {
   TestMcpConnection: 'mcp:test-connection',
   ListDependencyOptions: 'dependency:list-options',
   InspectDependencyPlan: 'dependency:inspect-plan',
+  VerifyDependencyEnvironment: 'dependency:verify-environment',
   PrepareDependencyEnvironment: 'dependency:prepare',
   CancelDependencyPreparation: 'dependency:cancel',
   GetDependencyOperation: 'dependency:get-operation',
   ChoosePythonInterpreter: 'dependency:choose-interpreter',
   RegisterToolchainSnapshot: 'dependency:register-toolchain',
+  DeleteToolchainSnapshot: 'dependency:delete-toolchain-snapshot',
   UpdateWindowTheme: 'window:update-theme',
   WindowToggleMaximize: 'window:toggle-maximize',
   ListNotifications: 'notification:list',
@@ -5609,11 +5659,15 @@ export interface BetterWorkDesktopApi {
   dependencies: {
     listOptions(): Promise<DependencyOptions>;
     inspectPlan(input: DependencyPlanRequest): Promise<DependencyPlan>;
+    verifyEnvironment(input: VerifyDependencyEnvironmentRequest): Promise<RuntimeEnvironment>;
     prepare(input: PrepareDependencyRequest): Promise<PrepareDependencyResult>;
     cancel(input: CancelDependencyRequest): Promise<CancelDependencyResult>;
     getOperation(input: GetDependencyOperationRequest): Promise<DependencyOperation | null>;
     chooseInterpreter(): Promise<ChooseInterpreterResult>;
     registerToolchain(input: RegisterToolchainRequest): Promise<RegisterToolchainResult>;
+    deleteToolchainSnapshot(
+      input: DeleteToolchainSnapshotRequest,
+    ): Promise<DeleteToolchainSnapshotResult>;
   };
 }
 

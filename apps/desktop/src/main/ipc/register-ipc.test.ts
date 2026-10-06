@@ -1295,6 +1295,10 @@ describe('registerIpc', () => {
       id: prepared.environmentId,
       status: 'ready',
     });
+
+    await expect(
+      invoke(IpcChannel.VerifyDependencyEnvironment, { environmentId: prepared.environmentId }),
+    ).resolves.toMatchObject({ id: prepared.environmentId, status: 'ready' });
   });
 
   it('reviews a dependency grant without creating it, then confirms on explicit intent', async () => {
@@ -1339,6 +1343,71 @@ describe('registerIpc', () => {
         confirm: true,
       }),
     ).resolves.toMatchObject({ grantActive: true, grantCreated: false });
+  });
+
+  it('restores the persisted external toolchain selection when the grant review omits snapshot IDs', async () => {
+    const skillId = seedDependencySkill('persisted-toolchain-selection');
+    const current = store.skills.get(skillId);
+    if (!current?.runtimeProfile) throw new Error('Expected a runtime profile');
+    const profileId = store.skills.saveProfile({
+      skillId,
+      profileHash: 'profile-persisted-toolchain-selection-with-ppt-master',
+      profile: {
+        ...current.runtimeProfile.profile,
+        toolchainRequirements: [
+          {
+            id: 'ppt-master',
+            name: 'PPT Master',
+            environmentVariable: 'PPTM_HOME',
+            versionHint: '6.6.0',
+            expectedCommit: 'persisted-toolchain-commit',
+          },
+        ],
+      },
+    });
+    store.skills.save({
+      id: skillId,
+      name: current.name,
+      description: current.description,
+      sourceKind: current.sourceKind,
+      currentRevisionId: current.revision.id,
+      currentProfileRevisionId: profileId,
+    });
+    expect(store.skills.get(skillId)?.runtimeProfile?.profile.toolchainRequirements).toHaveLength(
+      1,
+    );
+    const snapshotId = 'snapshot-persisted-toolchain';
+    const manifestHash = createHash('sha256').update(snapshotId).digest('hex');
+    store.snapshots.createSnapshot({
+      id: snapshotId,
+      origin: '/fixture/ppt-master',
+      originCommit: 'persisted-toolchain-commit',
+      originState: 'clean',
+      manifestHash,
+      pathKey: `dependency-assets/${manifestHash}`,
+      fileCount: 1,
+      totalBytes: 1,
+      exclusions: [],
+    });
+
+    const confirmed = (await invoke(IpcChannel.RefreshSkillDependencyGrant, {
+      skillId,
+      lockId: 'ipc-sample-darwin-arm64-cp312',
+      snapshotIds: [snapshotId],
+      confirm: true,
+    })) as { grantActive: boolean; selectedSnapshotIds: string[]; blockedReason?: string };
+    expect(confirmed.blockedReason).toBeUndefined();
+    expect(confirmed).toMatchObject({ grantActive: true, selectedSnapshotIds: [snapshotId] });
+
+    const restored = (await invoke(IpcChannel.RefreshSkillDependencyGrant, {
+      skillId,
+      lockId: 'ipc-sample-darwin-arm64-cp312',
+    })) as { grantActive: boolean; grantCreated: boolean; selectedSnapshotIds: string[] };
+    expect(restored).toMatchObject({
+      grantActive: true,
+      grantCreated: false,
+      selectedSnapshotIds: [snapshotId],
+    });
   });
 
   it('refuses a dependency grant for a Skill whose trust was revoked', async () => {

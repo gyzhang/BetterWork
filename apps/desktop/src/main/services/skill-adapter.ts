@@ -43,6 +43,7 @@ export interface ResolvedCommand {
   readonly argv: string[];
   readonly env: Record<string, string>;
   readonly cwd: string;
+  readonly expectedOutputs?: string[];
 }
 
 export interface SkillAdapter {
