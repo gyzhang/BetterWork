@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { SkillDetail, SkillSummary } from '@betterwork/agent-protocol';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useSkills } from '../hooks/use-skills';
@@ -372,10 +372,19 @@ describe('SkillsPage', () => {
         grantActive: true,
         grantCreated: true,
       });
+    const dependencies = dependencyStub();
+    let completeOptions: (() => void) | undefined;
+    dependencies.listOptions.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          completeOptions = () =>
+            resolve({ distributions: [], lockIds: [], snapshots: [], environments: [] });
+        }),
+    );
     Object.defineProperty(window, 'betterwork', {
       configurable: true,
       value: {
-        dependencies: dependencyStub(),
+        dependencies,
         skills: {
           refreshDependencyGrant,
           list,
@@ -387,10 +396,21 @@ describe('SkillsPage', () => {
     render(<Harness />);
     await waitFor(() => expect(screen.getByText('研究方法')).toBeTruthy());
     screen.getByRole('button', { name: /研究方法/ }).click();
-    (await screen.findByRole('button', { name: '确认依赖授权' })).click();
+    const confirmButton = await screen.findByRole('button', { name: '确认依赖授权' });
+    expect(confirmButton.hasAttribute('disabled')).toBe(true);
+    await act(async () => {
+      completeOptions?.();
+    });
+    await waitFor(() => expect(confirmButton.hasAttribute('disabled')).toBe(false));
+    confirmButton.click();
 
-    expect(await screen.findByText('当前没有阻塞原因。')).toBeTruthy();
-    expect(screen.getByText('已信任')).toBeTruthy();
+    await waitFor(
+      () => {
+        expect(screen.getByText('当前没有阻塞原因。')).toBeTruthy();
+        expect(screen.getByText('已信任')).toBeTruthy();
+      },
+      { timeout: 5_000 },
+    );
     expect(list).toHaveBeenCalledTimes(2);
     expect(refreshDependencyGrant).toHaveBeenCalledTimes(2);
   });

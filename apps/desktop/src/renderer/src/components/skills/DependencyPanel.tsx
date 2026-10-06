@@ -361,7 +361,10 @@ export function DependencyPanel({
               size="md"
               type="button"
               onClick={state.confirmGrant}
-              disabled={skill.trustStatus !== 'trusted' && skill.trustStatus !== 'needs-review'}
+              disabled={
+                !state.lockId ||
+                (skill.trustStatus !== 'trusted' && skill.trustStatus !== 'needs-review')
+              }
             >
               确认依赖授权
             </Button>

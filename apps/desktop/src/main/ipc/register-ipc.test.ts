@@ -1183,6 +1183,21 @@ describe('registerIpc', () => {
   const seedDependencySkill = (suffix: string): string => {
     const skillId = `skill-dependency-${suffix}`;
     const revisionId = `${skillId}-rev`;
+    const skillContent = `---\nname: Dependency grant fixture ${suffix}\ndescription: IPC test fixture\n---\n# Dependency grant fixture\n`;
+    const contentHash = createHash('sha256')
+      .update('SKILL.md')
+      .update('\0')
+      .update(skillContent)
+      .digest('hex');
+    const resourceRoot = path.join(
+      temporaryDirectory,
+      'user-skills',
+      skillId,
+      'revisions',
+      contentHash,
+    );
+    mkdirSync(resourceRoot, { recursive: true });
+    writeFileSync(path.join(resourceRoot, 'SKILL.md'), skillContent);
     store.skills.save({
       id: skillId,
       name: '依赖样本',
@@ -1193,8 +1208,8 @@ describe('registerIpc', () => {
     store.skills.saveRevision({
       id: revisionId,
       skillId,
-      contentHash: `hash-${suffix}`,
-      resourceKey: `user/${skillId}/revisions/hash`,
+      contentHash,
+      resourceKey: `user/${skillId}/revisions/${contentHash}`,
       frontmatter: {},
     });
     const profileId = store.skills.saveProfile({
