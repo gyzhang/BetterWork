@@ -7,6 +7,7 @@ import type {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { CapabilityIcon, PlusIcon } from '../icons';
+import { skillBlockedReasonName } from '../lib/labels';
 import { materialCandidateKey, taskMaterialKey } from '../lib/materials';
 import { ActionBar } from './ActionBar';
 import { InlineLoading } from './AsyncButton';
@@ -69,7 +70,9 @@ const computeSkillStatus = (skill: SkillSummary): CapabilityChip['status'] => {
 };
 
 const statusHint = (skill: SkillSummary): string | undefined => {
-  if (skill.blockedReasons.length > 0) return skill.blockedReasons.join('；');
+  if (skill.blockedReasons.length > 0) {
+    return skill.blockedReasons.map(skillBlockedReasonName).join('；');
+  }
   return undefined;
 };
 

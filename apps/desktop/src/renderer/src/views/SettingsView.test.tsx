@@ -7,7 +7,7 @@ import { ModelEditor } from '../components/ModelEditorSheet';
 import { TransientToast } from '../components/TransientToast';
 import { useModelSettings } from '../hooks/use-model-settings';
 import { trackAction } from '../lib/async-action';
-import { SearchSettings } from './SettingsView';
+import { RuntimeComponentsSettings, SearchSettings } from './SettingsView';
 
 afterEach(() => {
   cleanup();
@@ -78,6 +78,38 @@ describe('模型设置反馈路由（docs/10 §11.5.1）', () => {
     expect(alert.textContent).toContain('连接被拒绝');
     expect(document.querySelector('[role="status"]')).toBeNull();
     expect(document.querySelector('.inline-message')).toBeNull();
+  });
+});
+
+describe('应用运行组件设置', () => {
+  it('显示应用受管 Python 的版本与按需准备状态', async () => {
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        dependencies: {
+          listOptions: vi.fn(async () => ({
+            distributions: [
+              {
+                id: 'managed-python-3.12',
+                version: '3.12.14',
+                platform: { os: 'darwin', arch: 'arm64', abi: 'cp312' },
+                license: 'PSF-2.0',
+                installed: false,
+              },
+            ],
+            lockIds: [],
+            snapshots: [],
+            environments: [],
+          })),
+        },
+      },
+    });
+
+    render(<RuntimeComponentsSettings />);
+
+    expect(await screen.findByText('受管 CPython 3.12.14')).toBeTruthy();
+    expect(screen.getByText('按需准备')).toBeTruthy();
+    expect(screen.getByText(/通常不需要选择 Python 路径/)).toBeTruthy();
   });
 });
 

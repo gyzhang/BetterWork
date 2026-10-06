@@ -115,7 +115,7 @@ export function ToolActivity({
                 <InlineError className="tool-detail-error" message={selected.error} />
               )}
               <Payload title="输入参数" value={selected.input} />
-              {selected.status === 'completed' && (
+              {selected.output !== undefined && (
                 <Payload title="执行结果" value={selected.output} />
               )}
             </section>

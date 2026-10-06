@@ -41,7 +41,7 @@
 - 目标：目录 Skill 原包复制为受管修订；开发/安装/用户根有统一定位器；支持目录导出。
 - 允许改动：skill-service、资源文件 helper、对应测试；必要依赖仅为 frontmatter/受限 YAML 解析（沿用根配置），不调用进程。
 - 实施顺序：注入源/目标根、hash/复制函数 → 解析 frontmatter → 枚举/限额/边界 → staging 复制复核 → 文件落盘/DB 登记 → 导出所选修订。导出不含 grant/密钥/本机绑定。
-- 必测：嵌套 scripts/references/assets 完整保留；未知字段；中文/空格；同名导入；损坏 YAML；绝对/.. 路径、符号链接、特殊文件；复制或 DB 失败；未产生可见半安装；源目录 hash 不变。
+- 必测：嵌套 scripts/references/assets 完整保留；未知字段；package manifest 的发布者 ID 在导入/复制/导出往返中保留且不覆盖本机 Skill ID；中文/空格；同名导入；损坏 YAML；绝对/.. 路径、符号链接、特殊文件；复制或 DB 失败；未产生可见半安装；源目录 hash 不变。
 - 验收：用临时合成 Skill 往返内容 hash；用户样本仅在授权本地操作中复制到测试用户目录，原目录不变，不放入 Git。
 - 不做：ZIP、脚本探测执行、pip、模板解析。
 

@@ -4,6 +4,7 @@ import {
   type DependencySnapshot,
   type DependencySnapshotExclusion,
   dependencySnapshotExclusionSchema,
+  type ManagedDependencySnapshot,
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 
@@ -31,6 +32,15 @@ interface SnapshotRow {
   exclusions_json: string;
   created_at: number;
   verified_at: number | null;
+}
+
+interface SnapshotUsageRow {
+  snapshot_id: string;
+  skill_id: string;
+  skill_name: string;
+  activeAuthorizationCount: number;
+  revokedAuthorizationCount: number;
+  runCount: number;
 }
 
 const toSnapshot = (row: SnapshotRow): DependencySnapshot => {
@@ -108,11 +118,99 @@ export class DependencySnapshotRepository {
     return rows.map(toSnapshot);
   }
 
+  listSnapshotsWithUsage(): ManagedDependencySnapshot[] {
+    const usage = this.listUsageRows();
+    return this.listSnapshots().map((snapshot) => {
+      const snapshotUsage = usage.filter((entry) => entry.snapshot_id === snapshot.id);
+      return {
+        ...snapshot,
+        usage: snapshotUsage.map((entry) => ({
+          skillId: entry.skill_id,
+          skillName: entry.skill_name,
+          activeAuthorizationCount: entry.activeAuthorizationCount,
+          revokedAuthorizationCount: entry.revokedAuthorizationCount,
+          runCount: entry.runCount,
+        })),
+        canDelete: snapshotUsage.every(
+          (entry) => entry.activeAuthorizationCount === 0 && entry.runCount === 0,
+        ),
+      };
+    });
+  }
+
+  getSnapshotWithUsage(id: string): ManagedDependencySnapshot | undefined {
+    const snapshot = this.getSnapshot(id);
+    if (!snapshot) return undefined;
+    const usage = this.listUsageRows()
+      .filter((entry) => entry.snapshot_id === id)
+      .map((entry) => ({
+        skillId: entry.skill_id,
+        skillName: entry.skill_name,
+        activeAuthorizationCount: entry.activeAuthorizationCount,
+        revokedAuthorizationCount: entry.revokedAuthorizationCount,
+        runCount: entry.runCount,
+      }));
+    return {
+      ...snapshot,
+      usage,
+      canDelete: usage.every(
+        (entry) => entry.activeAuthorizationCount === 0 && entry.runCount === 0,
+      ),
+    };
+  }
+
+  /** 删除只写快照聚合；调用方需在同一事务中先检查跨表引用。 */
+  deleteSnapshot(id: string): boolean {
+    return this.db.prepare('DELETE FROM dependency_snapshots WHERE id = ?').run(id).changes === 1;
+  }
+
   /** 核验通过后记下时间：运行前可以据此判断快照是否从未核验或核验已过期。 */
   markVerified(id: string, verifiedAt: number): boolean {
     const result = this.db
       .prepare('UPDATE dependency_snapshots SET verified_at = ? WHERE id = ?')
       .run(verifiedAt, id);
     return result.changes === 1;
+  }
+
+  private listUsageRows(): SnapshotUsageRow[] {
+    return this.db
+      .prepare(
+        `SELECT snapshot_id, skill_id, skill_name,
+                SUM(active_authorization_count) AS activeAuthorizationCount,
+                SUM(revoked_authorization_count) AS revokedAuthorizationCount,
+                SUM(run_count) AS runCount
+         FROM (
+           SELECT CAST(selected.value AS TEXT) AS snapshot_id,
+                  skill.id AS skill_id,
+                  skill.name AS skill_name,
+                  COUNT(DISTINCT CASE WHEN grant_record.revoked_at IS NULL THEN grant_record.id END)
+                    AS active_authorization_count,
+                  COUNT(DISTINCT CASE WHEN grant_record.revoked_at IS NOT NULL THEN grant_record.id END)
+                    AS revoked_authorization_count,
+                  0 AS run_count
+           FROM skill_dependency_selections AS selection
+           JOIN skill_trust_grants AS grant_record ON grant_record.id = selection.grant_id
+           JOIN skills AS skill ON skill.id = grant_record.skill_id
+           JOIN json_each(selection.snapshot_ids_json) AS selected
+           GROUP BY selected.value, skill.id, skill.name
+
+           UNION ALL
+
+           SELECT CAST(bound.value AS TEXT) AS snapshot_id,
+                  skill.id AS skill_id,
+                  skill.name AS skill_name,
+                  0 AS active_authorization_count,
+                  0 AS revoked_authorization_count,
+                  COUNT(DISTINCT binding.id) AS run_count
+           FROM run_skill_bindings AS binding
+           JOIN skill_revisions AS revision ON revision.id = binding.skill_revision_id
+           JOIN skills AS skill ON skill.id = revision.skill_id
+           JOIN json_each(binding.dependency_snapshot_ids_json) AS bound
+           GROUP BY bound.value, skill.id, skill.name
+         ) AS snapshot_usage
+         GROUP BY snapshot_id, skill_id, skill_name
+         ORDER BY skill_name COLLATE NOCASE, skill_id`,
+      )
+      .all() as SnapshotUsageRow[];
   }
 }

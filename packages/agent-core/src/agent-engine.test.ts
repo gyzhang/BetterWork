@@ -578,6 +578,28 @@ describe('ReActAgentEngine', () => {
     expect(messages[0]?.content).toContain('skill_read_resource');
   });
 
+  it('preserves the run-specific runtime contract before truncating a long skill body', () => {
+    const runtimeInstruction =
+      'skill_execute 必须使用 bindingId 9d19e1f5-9864-4993-8a64-c2f1a4316f29；命令表包含 project-init。';
+    const messages = buildSkillMessages([
+      {
+        skillId: 'skill-ppt',
+        name: 'PPT 生成专家',
+        instruction: '正文'.repeat(SKILL_INSTRUCTION_BUDGET),
+        runtimeInstruction,
+      },
+    ]);
+
+    expect(messages[0]?.content).toContain(runtimeInstruction);
+    expect(messages[0]?.content).toContain('PPT 生成专家');
+    expect(messages[0]?.content).toContain('bindingId 9d19e1f5-9864-4993-8a64-c2f1a4316f29');
+    expect(messages.some((message) => message.content.includes('skill_read_resource'))).toBe(true);
+    expect(messages.at(-1)?.content).toContain('部分 Skill 指令因长度被截断');
+    expect(
+      messages.reduce((length, message) => length + message.content.length, 0),
+    ).toBeLessThanOrEqual(SKILL_INSTRUCTION_BUDGET);
+  });
+
   it('terminates at the tool round limit even with skill instructions', async () => {
     const events = [];
     const engine = new ReActAgentEngine();

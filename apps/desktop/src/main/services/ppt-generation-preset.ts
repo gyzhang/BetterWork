@@ -11,6 +11,15 @@ import type {
   SkillAdapterFactory,
 } from './skill-adapter';
 
+export const resolvePptExecutionOutputs = (
+  command: RuntimeProfileDraft['commands'][number],
+  resolved: ResolvedCommand,
+  runWorkDir: string,
+): string[] =>
+  command.commandId === 'pptx-validate' && resolved.argv[1]
+    ? [path.relative(runWorkDir, resolved.argv[1])]
+    : (resolved.expectedOutputs ?? command.expectedOutputs);
+
 /**
  * PPT 生成样本适配预设（设计 §9、任务 A16）。
  *
@@ -32,6 +41,94 @@ const SUPPORTED_COMMANDS = new Set([
   'pptx-validate',
 ]);
 
+const packageCommand = (
+  commandId: string,
+  label: string,
+  properties: Record<string, unknown>,
+  required: string[],
+) => ({
+  commandId,
+  label,
+  executableKey: 'managed-python',
+  argumentSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties,
+    required,
+  },
+  timeoutMs: 300_000,
+  expectedOutputs: [] as string[],
+  ...(commandId === 'pptx-validate' ? { validatorId: 'pptx-validate' } : {}),
+});
+
+/** Current authoring package profile; the package-local manifest mirrors this reviewed contract. */
+const pptGenerationExpertPreviousPackageHash =
+  'dfc5086e9196d4c2fb7720b65d9cc903f27fae7e872fe90d4cf35847fb7e5188';
+const pptGenerationExpertPreviousSplitPackageHash =
+  'af96cb802a79e22a96ae29c6a6e542b8984321ca7195ddf3745249555988472f';
+const pptGenerationExpertPackageHash =
+  '10e9fd879e2ad98e277ab0aa77e3c548e998530c75065c581799f675381fffe5';
+
+const pptGenerationExpertPackageProfile: RuntimeProfileDraft = {
+  commands: [
+    packageCommand(
+      'project-init',
+      '初始化 PPT 项目',
+      { project_name: { type: 'string', minLength: 1, maxLength: 100 } },
+      ['project_name'],
+    ),
+    packageCommand(
+      'icon-sync',
+      '同步图标',
+      {
+        project_dir: { type: 'string', minLength: 1 },
+        icons: { type: 'array', items: { type: 'string', minLength: 1 }, maxItems: 100 },
+      },
+      ['project_dir', 'icons'],
+    ),
+    packageCommand(
+      'svg-export',
+      '检查并导出 SVG',
+      { project_dir: { type: 'string', minLength: 1 } },
+      ['project_dir'],
+    ),
+    packageCommand(
+      'template-merge',
+      '合并公司模板',
+      {
+        source_pptx: { type: 'string', minLength: 1 },
+        template_path: { type: 'string', minLength: 1 },
+        final_output: { type: 'string', minLength: 1 },
+        config_path: { type: 'string', minLength: 1 },
+      },
+      ['source_pptx', 'template_path', 'final_output', 'config_path'],
+    ),
+    packageCommand('pptx-validate', '校验 PPTX', { pptx_path: { type: 'string', minLength: 1 } }, [
+      'pptx_path',
+    ]),
+  ],
+  environmentRequirements: [],
+  pythonRequirement: '3.12',
+  dependencyBundle: {
+    id: 'ppt-generation-expert-darwin-arm64-cp312',
+    lockPath: 'runtime/locks/ppt-generation-expert-darwin-arm64-cp312.json',
+    wheelhousePath: 'runtime/wheelhouse',
+  },
+  toolchainRequirements: [
+    {
+      id: 'ppt-master',
+      name: 'PPT Master',
+      environmentVariable: 'PPTM_HOME',
+      versionHint: '6.6.0',
+      expectedCommit: '680de11f1bef4628b68d5daad9dffec569fbd51f',
+    },
+  ],
+  outputContract: {
+    reportPath: '.outputs/<executionId>/<outputId>.pptx.report.json',
+    outputPaths: ['.outputs/<executionId>/<outputId>.pptx'],
+  },
+};
+
 const stringArg = (args: Record<string, unknown>, key: string): string => {
   const value = args[key];
   if (typeof value !== 'string' || value.length === 0) {
@@ -47,6 +144,9 @@ const resolveWorkPath = (value: string, workDir: string): string => {
     throw new Error('Command path escapes work directory');
   return target;
 };
+
+const pptMasterRoot = (context: AdapterContext): string | undefined =>
+  context.toolchainRoots?.['ppt-master'] ?? context.pptmHome ?? context.toolchainSnapshotRoot;
 
 class PptGenerationAdapter implements SkillAdapter {
   readonly name = 'ppt-generation';
@@ -111,7 +211,7 @@ class PptGenerationAdapter implements SkillAdapter {
     args: Record<string, unknown>,
     context: AdapterContext,
   ): ResolvedCommand {
-    const pptmHome = context.pptmHome ?? context.toolchainSnapshotRoot;
+    const pptmHome = pptMasterRoot(context);
     if (!pptmHome) {
       throw new Error('project-init requires PPTM_HOME or toolchain snapshot');
     }
@@ -143,7 +243,7 @@ class PptGenerationAdapter implements SkillAdapter {
   }
 
   private resolveIconSync(args: Record<string, unknown>, context: AdapterContext): ResolvedCommand {
-    const pptmHome = context.pptmHome ?? context.toolchainSnapshotRoot;
+    const pptmHome = pptMasterRoot(context);
     if (!pptmHome) {
       throw new Error('icon-sync requires PPTM_HOME or toolchain snapshot');
     }
@@ -166,7 +266,7 @@ class PptGenerationAdapter implements SkillAdapter {
     args: Record<string, unknown>,
     context: AdapterContext,
   ): ResolvedCommand {
-    const pptmHome = context.pptmHome ?? context.toolchainSnapshotRoot;
+    const pptmHome = pptMasterRoot(context);
     if (!pptmHome) {
       throw new Error('svg-export requires PPTM_HOME or toolchain snapshot');
     }
@@ -178,6 +278,12 @@ class PptGenerationAdapter implements SkillAdapter {
       argv,
       env: this.buildEnv(context, pptmHome),
       cwd: context.runWorkDir,
+      expectedOutputs: [
+        path.relative(
+          context.runWorkDir,
+          path.join(projectDir, 'exports', 'betterwork-output.pptx'),
+        ),
+      ],
     };
   }
 
@@ -194,12 +300,13 @@ class PptGenerationAdapter implements SkillAdapter {
     const configPath = resolveWorkPath(stringArg(args, 'config_path'), context.runWorkDir);
     const script = path.join(context.skillScriptsRoot, 'scripts', 'merge_into_template.py');
     const argv = [script, sourcePptx, templatePath, finalOutput, configPath];
-    const pptmHome = context.pptmHome ?? context.toolchainSnapshotRoot;
+    const pptmHome = pptMasterRoot(context);
     return {
       executable: context.managedPythonPath,
       argv,
       env: pptmHome ? this.buildEnv(context, pptmHome) : this.buildBaseEnv(),
       cwd: context.runWorkDir,
+      expectedOutputs: [path.relative(context.runWorkDir, finalOutput)],
     };
   }
 
@@ -210,7 +317,7 @@ class PptGenerationAdapter implements SkillAdapter {
     const pptxPath = resolveWorkPath(stringArg(args, 'pptx_path'), context.runWorkDir);
     const script = path.join(context.skillScriptsRoot, 'scripts', 'validate_pptx.py');
     const argv = [script, pptxPath];
-    const pptmHome = context.pptmHome ?? context.toolchainSnapshotRoot;
+    const pptmHome = pptMasterRoot(context);
     return {
       executable: context.managedPythonPath,
       argv,
@@ -305,9 +412,19 @@ export const __internal = { parseValidateIssues, interpretValidateOutput };
 /** Exact source package reviewed locally; no private content is distributed. */
 export const supportedPptContentHashes = [
   '4681d64c1736d8162493e9b2da6d2a54bd079338ec46dd92ecdbdaa2f1ee52e1',
+  pptGenerationExpertPreviousPackageHash,
+  pptGenerationExpertPreviousSplitPackageHash,
+  pptGenerationExpertPackageHash,
 ];
 
 export function suggestedPptProfile(contentHash: string): RuntimeProfileDraft | undefined {
+  if (
+    contentHash === pptGenerationExpertPackageHash ||
+    contentHash === pptGenerationExpertPreviousSplitPackageHash ||
+    contentHash === pptGenerationExpertPreviousPackageHash
+  ) {
+    return pptGenerationExpertPackageProfile;
+  }
   if (!supportedPptContentHashes.includes(contentHash)) return undefined;
   const argumentsByCommand: Record<string, string[]> = {
     'project-init': ['project_name'],
@@ -336,7 +453,17 @@ export function suggestedPptProfile(contentHash: string): RuntimeProfileDraft | 
       expectedOutputs: [],
       ...(commandId === 'pptx-validate' ? { validatorId: 'pptx-validate' } : {}),
     })),
-    environmentRequirements: ['python', 'ppt-master'],
+    environmentRequirements: [],
+    pythonRequirement: '3.12',
+    dependencyLockId: 'ppt-generation-expert-darwin-arm64-cp312',
+    toolchainRequirements: [
+      {
+        id: 'ppt-master',
+        name: 'PPT Master',
+        environmentVariable: 'PPTM_HOME',
+        versionHint: '6.6.0',
+      },
+    ],
     outputContract: { outputPaths: [] },
   };
 }

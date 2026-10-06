@@ -156,6 +156,64 @@ describe('AppStore', () => {
     store.close();
   });
 
+  it('restores dependency selections only for the matching Skill revision, profile, and lock', () => {
+    const store = openStore();
+    store.skills.save({
+      id: 'skill-selection',
+      name: 'Selection',
+      description: '',
+      sourceKind: 'user',
+      currentRevisionId: 'revision-selection',
+    });
+    const revisionId = store.skills.saveRevision({
+      id: 'revision-selection',
+      skillId: 'skill-selection',
+      contentHash: 'selection-hash',
+      resourceKey: 'user/skill-selection/selection-hash',
+      frontmatter: {},
+    });
+    const profileId = store.skills.saveProfile({
+      skillId: 'skill-selection',
+      profileHash: 'profile-selection',
+      profile: { commands: [], environmentRequirements: [], outputContract: { outputPaths: [] } },
+    });
+    store.skills.save({
+      id: 'skill-selection',
+      name: 'Selection',
+      description: '',
+      sourceKind: 'user',
+      currentRevisionId: revisionId,
+      currentProfileRevisionId: profileId,
+    });
+    const grantId = store.skills.saveTrustGrant({
+      skillId: 'skill-selection',
+      revisionId,
+      profileHash: 'profile-selection',
+      dependencyFingerprint: 'dependency-selection',
+      scopeHash: 'scope-selection',
+      source: 'user',
+    });
+    store.skills.saveDependencySelection(grantId, 'lock-selection', ['snapshot-selection']);
+
+    expect(
+      store.skills.getLatestDependencySelection(
+        'skill-selection',
+        revisionId,
+        'profile-selection',
+        'lock-selection',
+      ),
+    ).toEqual(['snapshot-selection']);
+    expect(
+      store.skills.getLatestDependencySelection(
+        'skill-selection',
+        revisionId,
+        'profile-selection',
+        'another-lock',
+      ),
+    ).toBeUndefined();
+    store.close();
+  });
+
   it('keeps old Skill revisions when a new revision becomes current', () => {
     const store = openStore();
     store.skills.save({

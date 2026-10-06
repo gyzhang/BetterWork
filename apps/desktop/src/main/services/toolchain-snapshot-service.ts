@@ -1,7 +1,12 @@
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 
-import type { DependencySnapshot, DependencySnapshotExclusion } from '@betterwork/agent-protocol';
+import type {
+  DeleteToolchainSnapshotResult,
+  DependencySnapshot,
+  DependencySnapshotExclusion,
+  ManagedDependencySnapshot,
+} from '@betterwork/agent-protocol';
 import { z } from 'zod';
 
 import type {
@@ -130,8 +135,56 @@ export class ToolchainSnapshotService {
     return this.store.snapshots.listSnapshots();
   }
 
+  listSnapshotsWithUsage(): ManagedDependencySnapshot[] {
+    return this.store.snapshots.listSnapshotsWithUsage();
+  }
+
+  getSnapshotWithUsage(id: string): ManagedDependencySnapshot | undefined {
+    return this.store.snapshots.getSnapshotWithUsage(id);
+  }
+
   getSnapshot(id: string): DependencySnapshot | undefined {
     return this.store.snapshots.getSnapshot(id);
+  }
+
+  /** 活跃授权或历史 Run 引用的快照保留；仅清理由已撤销授权留下的选择后允许删除。 */
+  async deleteSnapshot(snapshotId: string): Promise<DeleteToolchainSnapshotResult> {
+    const outcome = this.store.transaction(() => {
+      const snapshot = this.store.snapshots.getSnapshot(snapshotId);
+      if (!snapshot) return { status: 'not-found' } as const;
+      const expectedPathKey = path.join('dependency-assets', snapshot.manifestHash);
+      if (path.normalize(snapshot.pathKey) !== expectedPathKey) {
+        throw new Error(`Refusing to delete snapshot outside managed assets: ${snapshot.pathKey}`);
+      }
+      const current = this.store.snapshots.getSnapshotWithUsage(snapshotId);
+      if (!current) return { status: 'not-found' } as const;
+      if (!current.canDelete) return { status: 'in-use', snapshot: current } as const;
+      const clearedRevokedAuthorizationReferences =
+        this.store.skills.removeRevokedSnapshotReferences(snapshotId);
+      if (!this.store.snapshots.deleteSnapshot(snapshotId)) {
+        return { status: 'not-found' } as const;
+      }
+      return {
+        status: 'deleted',
+        snapshot,
+        clearedRevokedAuthorizationReferences,
+      } as const;
+    });
+
+    if (outcome.status !== 'deleted') return outcome;
+    let cleanupPending = false;
+    const snapshotRoot = this.resolveSnapshotRoot(outcome.snapshot);
+    try {
+      await this.roots.filesystem.remove(snapshotRoot);
+    } catch (error) {
+      cleanupPending = true;
+      console.error(`[toolchain-snapshot] failed to remove ${snapshotRoot}`, error);
+    }
+    return {
+      status: 'deleted',
+      cleanupPending,
+      clearedRevokedAuthorizationReferences: outcome.clearedRevokedAuthorizationReferences,
+    };
   }
 
   /** 快照在磁盘上的绝对根：PPTM_HOME 用它，绝不指向用户的开发仓库。 */

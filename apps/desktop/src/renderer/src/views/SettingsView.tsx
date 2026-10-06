@@ -34,6 +34,7 @@ import type { ConversationAddresses } from '../hooks/use-conversation-addresses'
 import type { McpConnectionsState } from '../hooks/use-mcp-connections';
 import type { MemoriesState } from '../hooks/use-memories';
 import type { MemorySuggestionsState } from '../hooks/use-memory-suggestions';
+import { useRuntimeComponents } from '../hooks/use-runtime-components';
 import { useSearchEngineSettings } from '../hooks/use-search-engine-settings';
 import { useTransientToast } from '../hooks/use-transient-toast';
 import { PlusIcon } from '../icons';
@@ -89,6 +90,7 @@ const SETTINGS_NAV_ITEMS: readonly NavEntry<SettingsTab>[] = [
   { id: 'models', label: '模型' },
   { id: 'search', label: '搜索' },
   { id: 'mcp', label: 'MCP' },
+  { id: 'runtime-components', label: '运行组件' },
   { id: 'memory', label: '记忆' },
   { id: 'appearance', label: '外观' },
   { id: 'general', label: '通用' },
@@ -141,9 +143,60 @@ function SettingsContent(props: SettingsPageProps): React.JSX.Element {
       );
     case 'appearance':
       return <AppearanceSettings {...props} />;
+    case 'runtime-components':
+      return <RuntimeComponentsSettings />;
     case 'general':
       return <GeneralSettings {...props} />;
   }
+}
+
+export function RuntimeComponentsSettings(): React.JSX.Element {
+  const { distributions, loading, error, refresh } = useRuntimeComponents();
+
+  return (
+    <section className="settings-section">
+      <SectionHeader
+        variant="block"
+        eyebrow="运行组件"
+        title="由 BetterWork 管理 Skill 的运行时"
+        hint="应用统一维护受管 CPython。Skill 只声明兼容版本和依赖锁；首次准备该 Skill 环境时，BetterWork 会按固定来源下载、校验并创建隔离环境。"
+        actions={
+          <Button variant="secondary" size="md" type="button" onClick={refresh}>
+            重新检查
+          </Button>
+        }
+      />
+      {error && <InlineError message={error} />}
+      {loading ? (
+        <InlineLoading label="正在检查运行组件…" />
+      ) : distributions.length > 0 ? (
+        <div className="runtime-component-list">
+          {distributions.map((distribution) => (
+            <ListRow
+              key={distribution.id}
+              title={`受管 CPython ${distribution.version}`}
+              detail={`${distribution.platform.os}/${distribution.platform.arch} · ${distribution.license}`}
+              meta={distribution.installed ? '运行时制品已落地' : '尚未下载，首次使用时自动准备'}
+              trailing={
+                <Badge tone={distribution.installed ? 'success' : 'outline'}>
+                  {distribution.installed ? '已落地' : '按需准备'}
+                </Badge>
+              }
+            />
+          ))}
+        </div>
+      ) : (
+        <EmptyNotice
+          title="没有适用于当前设备的受管 Python"
+          detail="当前 Skill 运行时目录没有可用发行版本。"
+        />
+      )}
+      <p>
+        通常不需要选择 Python 路径。解释器版本、下载状态与包来源由应用控制，Skill 的 Python
+        包安装在独立环境中。
+      </p>
+    </section>
+  );
 }
 
 function GeneralSettings({

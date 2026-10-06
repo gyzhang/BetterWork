@@ -284,11 +284,28 @@ export class FakePythonRunner implements DependencyProcessRunner {
 
 export class FakeDownloader implements DependencyDownloader {
   readonly urls: string[] = [];
+  readonly signals: AbortSignal[] = [];
   payload: Uint8Array = encoder.encode('artifact');
   error: Error | null = null;
+  holdUntilAbort = false;
+  onDownloadStart: (() => void) | null = null;
 
-  async download(url: string): Promise<Uint8Array> {
+  async download(url: string, signal: AbortSignal): Promise<Uint8Array> {
     this.urls.push(url);
+    this.signals.push(signal);
+    this.onDownloadStart?.();
+    if (this.holdUntilAbort) {
+      await new Promise<never>((_resolve, reject) => {
+        const rejectOnAbort = (): void => {
+          reject(new Error('Download aborted'));
+        };
+        if (signal.aborted) {
+          rejectOnAbort();
+          return;
+        }
+        signal.addEventListener('abort', rejectOnAbort, { once: true });
+      });
+    }
     if (this.error) throw this.error;
     return this.payload;
   }

@@ -5,12 +5,14 @@ import type {
   DependencyOptions,
   DependencyPlan,
   RefreshSkillDependencyGrantResult,
+  RuntimeEnvironment,
   SkillDetail,
 } from '@betterwork/agent-protocol';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, type Mock, vi } from 'vitest';
 
 import { useSkillDependencies } from '../../hooks/use-skill-dependencies';
+import { TransientToast } from '../TransientToast';
 import { DependencyPanel } from './DependencyPanel';
 
 const lockId = 'ppt-generation-expert-darwin-arm64-cp312';
@@ -37,6 +39,16 @@ const options: DependencyOptions = {
       totalBytes: 80_179_334,
       exclusions: [{ path: '.git', reason: '版本库对象不是运行所需内容' }],
       createdAt: 1,
+      usage: [
+        {
+          skillId: 'skill-1',
+          skillName: 'PPT 生成 Skill',
+          activeAuthorizationCount: 1,
+          revokedAuthorizationCount: 0,
+          runCount: 2,
+        },
+      ],
+      canDelete: false,
     },
   ],
   environments: [],
@@ -65,7 +77,29 @@ const planOf = (overrides: Partial<DependencyPlan> = {}): DependencyPlan => ({
   ...overrides,
 });
 
-const skillOf = (id: string, overrides: Partial<SkillDetail> = {}): SkillDetail => ({
+const environmentOf = (
+  status: RuntimeEnvironment['status'],
+  failureSummary?: string,
+): RuntimeEnvironment => ({
+  id: 'env-1',
+  environmentKey: 'key-1',
+  base: planOf().base,
+  platform: planOf().platform,
+  lockHash: planOf().lockHash,
+  lock: planOf().lock,
+  pathKey: 'environments/key-1/instance',
+  status,
+  createdAt: 1,
+  updatedAt: 2,
+  ...(status === 'ready' ? { readyAt: 2 } : {}),
+  ...(failureSummary ? { failureCode: 'environment-unhealthy', failureSummary } : {}),
+});
+
+const skillOf = (
+  id: string,
+  overrides: Partial<SkillDetail> = {},
+  withRuntimeProfile = true,
+): SkillDetail => ({
   id,
   name: id === 'skill-1' ? '样本能力' : '第二个能力',
   description: '公司模板 PPT',
@@ -83,6 +117,22 @@ const skillOf = (id: string, overrides: Partial<SkillDetail> = {}): SkillDetail 
     frontmatter: {},
     createdAt: 1,
   },
+  ...(withRuntimeProfile
+    ? {
+        runtimeProfile: {
+          id: `${id}-profile`,
+          skillId: id,
+          profileHash: `${id}-profile-hash`,
+          profile: {
+            commands: [],
+            environmentRequirements: [],
+            dependencyLockId: lockId,
+            outputContract: { outputPaths: [] },
+          },
+          createdAt: 1,
+        },
+      }
+    : {}),
   ...overrides,
 });
 
@@ -98,12 +148,20 @@ interface ApiShape {
   dependencies: {
     listOptions: Mock<() => Promise<DependencyOptions>>;
     inspectPlan: Mock<(input: unknown) => Promise<DependencyPlan>>;
+    verifyEnvironment: Mock<(input: unknown) => Promise<RuntimeEnvironment>>;
     prepare: Mock<(input: unknown) => Promise<PrepareReceiptShape>>;
     cancel: Mock<(input: unknown) => Promise<{ applied: boolean; status: string }>>;
     getOperation: Mock<(input: unknown) => Promise<DependencyOperation | null>>;
     chooseInterpreter: Mock<() => Promise<{ cancelled: boolean }>>;
     registerToolchain: Mock<
       (input: unknown) => Promise<{ cancelled: boolean; snapshot: null; reused: boolean }>
+    >;
+    deleteToolchainSnapshot: Mock<
+      (input: unknown) => Promise<{
+        status: 'deleted';
+        cleanupPending: boolean;
+        clearedRevokedAuthorizationReferences: number;
+      }>
     >;
   };
   skills: {
@@ -122,12 +180,14 @@ const installApi = (
       environmentKey: string;
       reused: boolean;
     };
+    verifiedEnvironment?: RuntimeEnvironment;
   } = {},
 ): ApiShape => {
   const api: ApiShape = {
     dependencies: {
       listOptions: vi.fn(async () => options),
       inspectPlan: vi.fn(async () => overrides.plan ?? planOf()),
+      verifyEnvironment: vi.fn(async () => overrides.verifiedEnvironment ?? environmentOf('ready')),
       prepare: vi.fn(async () => ({
         operationId: 'op-1',
         environmentId: 'env-1',
@@ -139,10 +199,16 @@ const installApi = (
       getOperation: vi.fn(async () => overrides.operation ?? null),
       chooseInterpreter: vi.fn(async () => ({ cancelled: true })),
       registerToolchain: vi.fn(async () => ({ cancelled: true, snapshot: null, reused: false })),
+      deleteToolchainSnapshot: vi.fn(async () => ({
+        status: 'deleted',
+        cleanupPending: false,
+        clearedRevokedAuthorizationReferences: 0,
+      })),
     },
     skills: {
       refreshDependencyGrant: vi.fn(async (): Promise<RefreshSkillDependencyGrantResult> => ({
         skill: skillOf('skill-1'),
+        selectedSnapshotIds: [],
         grantActive: false,
         grantCreated: false,
         blockedReason: '依赖已确定但没有覆盖它的授权，需要用户确认后建立',
@@ -156,7 +222,14 @@ const installApi = (
 
 function Harness({ skill }: { skill: SkillDetail }): React.JSX.Element {
   const state = useSkillDependencies(skill, () => {});
-  return <DependencyPanel skill={skill} state={state} />;
+  return (
+    <>
+      <DependencyPanel skill={skill} state={state} />
+      {state.toast && (
+        <TransientToast tone="success" message={state.toast} onDismiss={state.dismissToast} />
+      )}
+    </>
+  );
 }
 
 afterEach(() => {
@@ -166,6 +239,66 @@ afterEach(() => {
 });
 
 describe('DependencyPanel', () => {
+  it('未匹配已审核运行配置时只显示静态线索状态，不加载或准备依赖', async () => {
+    const api = installApi();
+    render(<Harness skill={skillOf('skill-unconfigured', {}, false)} />);
+
+    expect(
+      await screen.findByText(/尚未匹配已审核的运行配置；在配置确认前不会准备依赖或外部工具链/),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '准备环境' })).toBeNull();
+    expect(api.dependencies.listOptions).not.toHaveBeenCalled();
+  });
+
+  it('从依赖面板打开快照管理，并说明每条快照被哪个 Skill、授权和 Run 使用', async () => {
+    installApi();
+    render(<Harness skill={skillOf('skill-1')} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '管理已登记快照' }));
+
+    expect(await screen.findByRole('dialog', { name: '管理工具链快照' })).toBeTruthy();
+    expect(screen.getByText('PPT 生成 Skill')).toBeTruthy();
+    expect(screen.getByText(/当前授权 1 · 已撤销 0 · 历史 Run 2/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: '删除快照' })).toHaveProperty('disabled', true);
+  });
+
+  it('重新打开 Skill 时恢复已保存的工具链选择，并保留现有授权', async () => {
+    const skill = skillOf('skill-1', {
+      runtimeProfile: {
+        id: 'profile-1',
+        skillId: 'skill-1',
+        profileHash: 'profile-hash-1',
+        profile: {
+          commands: [],
+          environmentRequirements: [],
+          dependencyLockId: lockId,
+          toolchainRequirements: [
+            {
+              id: 'ppt-master',
+              name: 'PPT Master',
+              environmentVariable: 'PPTM_HOME',
+              versionHint: '6.6.0',
+            },
+          ],
+          outputContract: { outputPaths: [] },
+        },
+        createdAt: 1,
+      },
+    });
+    const api = installApi({
+      grant: { grantActive: true, selectedSnapshotIds: ['snapshot-1'] },
+    });
+    render(<Harness skill={skill} />);
+
+    const snapshotSelect = await screen.findByRole('button', { name: 'PPT Master 6.6.0' });
+    expect(snapshotSelect.textContent).toContain('aaaaaaaaaaaa · 12981 文件');
+    expect(api.skills.refreshDependencyGrant).toHaveBeenCalledWith({
+      skillId: 'skill-1',
+      lockId,
+    });
+    expect(screen.queryByRole('button', { name: '确认依赖授权' })).toBeNull();
+  });
+
   it('未信任也能准备环境，但明确区分「可准备」与「可执行」', async () => {
     installApi();
     render(<Harness skill={skillOf('skill-1', { trustStatus: 'untrusted' })} />);
@@ -176,6 +309,72 @@ describe('DependencyPanel', () => {
     expect(screen.getByText(/环境准备不需要信任授权/)).toBeTruthy();
     // 授权按钮在未信任时不可用：不能让「准备环境」被误读成「可以执行」
     expect(screen.getByRole('button', { name: '确认依赖授权' })).toHaveProperty('disabled', true);
+  });
+
+  it('未声明依赖锁时不自动套用目录中的第一份锁', async () => {
+    const api = installApi();
+    const skill = skillOf('skill-unlocked', {
+      runtimeProfile: {
+        id: 'profile-unlocked',
+        skillId: 'skill-unlocked',
+        profileHash: 'profile-hash-unlocked',
+        profile: {
+          commands: [],
+          environmentRequirements: [],
+          outputContract: { outputPaths: [] },
+        },
+        createdAt: 1,
+      },
+    });
+    render(<Harness skill={skill} />);
+
+    const selector = await screen.findByRole('button', { name: '依赖锁' });
+    expect(selector.textContent).toBe('');
+    expect(screen.getByText(/尚未指定依赖锁.*不会自动套用目录中的锁/)).toBeTruthy();
+    expect(api.dependencies.inspectPlan).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: '准备环境' })).toHaveProperty('disabled', true);
+
+    selector.click();
+    fireEvent.click(await screen.findByRole('menuitem', { name: lockId }));
+    await waitFor(() => expect(api.dependencies.inspectPlan).toHaveBeenCalledTimes(1));
+  });
+
+  it('发现外部工具链线索但运行配置未声明时不显示「没有依赖」', async () => {
+    installApi();
+    const skill = skillOf('skill-with-unconfigured-clue', {
+      runtimeProfile: {
+        id: 'profile-with-unconfigured-clue',
+        skillId: 'skill-with-unconfigured-clue',
+        profileHash: 'profile-hash-with-unconfigured-clue',
+        profile: {
+          commands: [],
+          environmentRequirements: [],
+          dependencyLockId: lockId,
+          outputContract: { outputPaths: [] },
+        },
+        createdAt: 1,
+      },
+      runtimeDiscovery: [
+        {
+          kind: 'environment-variable',
+          sourcePath: 'SKILL.md',
+          lineNumber: 34,
+          label: '发现外部目录变量 PPTM_HOME',
+        },
+        {
+          kind: 'toolchain-name',
+          sourcePath: 'SKILL.md',
+          lineNumber: 34,
+          label: '发现外部工具链引用 ppt-master',
+        },
+      ],
+    });
+    render(<Harness skill={skill} />);
+
+    expect(
+      await screen.findByText(/尚未映射到运行配置的目录或工具链线索：PPTM_HOME、ppt-master/),
+    ).toBeTruthy();
+    expect(screen.queryByText('此 Skill 不依赖外部工具链。')).toBeNull();
   });
 
   it('重复点击只启动一个准备作业', async () => {
@@ -231,6 +430,66 @@ describe('DependencyPanel', () => {
     expect(screen.getByText(/需要用户确认后建立/)).toBeTruthy();
     expect(screen.queryByText(/环境就绪且授权有效，可以执行脚本。/)).toBeNull();
     expect(screen.getByRole('button', { name: '确认依赖授权' })).toHaveProperty('disabled', false);
+  });
+
+  it('Python 环境已就绪但依赖授权未生效时不宣称 Skill 可以执行', async () => {
+    installApi({
+      plan: planOf({ environment: environmentOf('ready') }),
+      grant: { grantActive: false },
+    });
+    render(<Harness skill={skillOf('skill-1', { trustStatus: 'trusted' })} />);
+
+    expect(
+      await screen.findByText('Python 依赖环境已就绪，但当前依赖授权尚未生效，不能执行 Skill。'),
+    ).toBeTruthy();
+    expect(screen.queryByText('环境就绪且授权有效，可以执行脚本。')).toBeNull();
+  });
+
+  it('已就绪时检查锁定模块可否导入，不会调用环境准备', async () => {
+    const api = installApi({
+      plan: planOf({ environment: environmentOf('ready') }),
+    });
+    render(<Harness skill={skillOf('skill-1')} />);
+
+    const checkButton = await screen.findByRole('button', { name: '检查环境' });
+    fireEvent.click(checkButton);
+
+    await waitFor(() =>
+      expect(api.dependencies.verifyEnvironment).toHaveBeenCalledWith({ environmentId: 'env-1' }),
+    );
+    expect(api.dependencies.prepare).not.toHaveBeenCalled();
+    expect(await screen.findByText('环境检查通过，锁定模块均可导入。')).toBeTruthy();
+    expect(screen.getByText(/不会重新安装/)).toBeTruthy();
+  });
+
+  it('检查接口同步抛错时复位检查状态并显示错误', async () => {
+    const api = installApi({ plan: planOf({ environment: environmentOf('ready') }) });
+    api.dependencies.verifyEnvironment.mockImplementation(() => {
+      throw new Error('当前应用尚未加载环境检查接口');
+    });
+    render(<Harness skill={skillOf('skill-1')} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '检查环境' }));
+
+    expect(await screen.findByText('当前应用尚未加载环境检查接口')).toBeTruthy();
+    expect(await screen.findByRole('button', { name: '检查环境' })).toBeTruthy();
+  });
+
+  it('检查失败后提供修复动作，并以 repair 模式重建环境', async () => {
+    const api = installApi({
+      plan: planOf({ environment: environmentOf('ready') }),
+      verifiedEnvironment: environmentOf('invalid', '缺少模块 pptx'),
+    });
+    render(<Harness skill={skillOf('skill-1')} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '检查环境' }));
+    expect(await screen.findByRole('button', { name: '修复环境' })).toBeTruthy();
+    expect(screen.getByText('环境检查未通过：缺少模块 pptx')).toBeTruthy();
+    expect(screen.getByText(/修复会重建 Skill 专属环境/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '修复环境' }));
+    await waitFor(() => expect(api.dependencies.prepare).toHaveBeenCalledTimes(1));
+    expect(api.dependencies.prepare.mock.calls[0]?.[0]).toMatchObject({ kind: 'repair' });
   });
 
   it('失败与取消都有可见结果，不停在「准备中」', async () => {
@@ -362,16 +621,59 @@ describe('DependencyPanel', () => {
     expect(screen.getByText(/需要显式联网下载并逐个校验/)).toBeTruthy();
   });
 
-  it('工具链快照列出文件数与是否含本地修改', async () => {
+  it('只为 Skill 声明的外部工具链展示快照选择，并显示快照身份', async () => {
     installApi();
-    render(<Harness skill={skillOf('skill-1')} />);
+    const skill = skillOf('skill-1', {
+      runtimeProfile: {
+        id: 'profile-1',
+        skillId: 'skill-1',
+        profileHash: 'profile-hash',
+        profile: {
+          commands: [],
+          environmentRequirements: [],
+          toolchainRequirements: [
+            { id: 'ppt-master', name: 'PPT Master', environmentVariable: 'PPTM_HOME' },
+          ],
+          outputContract: { outputPaths: [] },
+        },
+        createdAt: 1,
+      },
+    });
+    render(<Harness skill={skill} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '外部工具链快照' }));
-    const named = (fragment: string): boolean =>
-      screen
-        .queryAllByRole('menuitem')
-        .some((element) => (element.textContent ?? '').includes(fragment));
-    await waitFor(() => expect(named('12981 文件')).toBe(true));
-    expect(named('含本地修改')).toBe(true);
+    const selector = await screen.findByLabelText('PPT Master');
+    expect(selector).toBeTruthy();
+    expect(selector.textContent).toContain('选择已登记快照…');
+    fireEvent.click(selector);
+    fireEvent.click(await screen.findByRole('menuitem', { name: /12981 文件 · 含本地修改/ }));
+    await waitFor(() => expect(selector.textContent).toContain('12981 文件 · 含本地修改'));
+  });
+
+  it('根据 profile 展示多项工具链，不强行塞进单个外部目录选择', async () => {
+    installApi();
+    const skill = skillOf('skill-1', {
+      runtimeProfile: {
+        id: 'profile-2',
+        skillId: 'skill-1',
+        profileHash: 'profile-hash-2',
+        profile: {
+          commands: [],
+          environmentRequirements: [],
+          toolchainRequirements: [
+            { id: 'ppt-master', name: 'PPT Master', environmentVariable: 'PPTM_HOME' },
+            { id: 'svg-tools', name: 'SVG Tools', environmentVariable: 'SVG_TOOLS_HOME' },
+          ],
+          outputContract: { outputPaths: [] },
+        },
+        createdAt: 1,
+      },
+    });
+    render(<Harness skill={skill} />);
+
+    expect(await screen.findByLabelText('PPT Master')).toBeTruthy();
+    expect(screen.getByLabelText('SVG Tools')).toBeTruthy();
+    expect(screen.getByLabelText('PPT Master').textContent).toContain('选择已登记快照…');
+    expect(screen.getByLabelText('SVG Tools').textContent).toContain('选择已登记快照…');
+    expect(screen.getAllByRole('button', { name: '登记目录…' })).toHaveLength(2);
   });
 });

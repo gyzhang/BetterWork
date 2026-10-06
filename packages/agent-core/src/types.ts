@@ -59,6 +59,7 @@ export interface SkillInstruction {
   skillId: string;
   name: string;
   instruction: string;
+  runtimeInstruction?: string;
 }
 
 export interface AgentRunInput {

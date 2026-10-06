@@ -162,6 +162,7 @@ export const skillRevisionSummarySchema = z
   .object({
     id: skillRevisionIdSchema,
     skillId: skillIdSchema,
+    packageId: z.string().trim().min(1).max(160).optional(),
     contentHash: z.string().min(1),
     originalVersion: z.string().min(1).optional(),
     resourceKey: z.string().min(1),
@@ -184,10 +185,78 @@ export const runtimeProfileCommandSchema = z
   .strict();
 export type RuntimeProfileCommand = z.infer<typeof runtimeProfileCommandSchema>;
 
+export const skillToolchainRequirementSchema = z
+  .object({
+    id: z
+      .string()
+      .trim()
+      .regex(/^[a-z0-9][a-z0-9._-]{0,99}$/u),
+    name: z.string().trim().min(1).max(160),
+    environmentVariable: z.string().regex(/^[A-Z_][A-Z0-9_]*$/u),
+    versionHint: z.string().trim().min(1).max(100).optional(),
+    /** 需要 Git 来源时锁定完整提交；导入包不会把作者机器路径写入配置。 */
+    expectedCommit: z
+      .string()
+      .regex(/^[a-f0-9]{40}$/u)
+      .optional(),
+  })
+  .strict();
+export type SkillToolchainRequirement = z.infer<typeof skillToolchainRequirementSchema>;
+
+const packageRelativePathSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(500)
+  .refine(
+    (value) =>
+      !value.startsWith('/') &&
+      !value.includes('\\') &&
+      value
+        .split('/')
+        .every((segment) => segment.length > 0 && segment !== '.' && segment !== '..'),
+    { message: 'Skill 运行资源路径必须是包内相对路径' },
+  );
+
+/** Skill 包内自带的锁与可选 wheelhouse；目录名不会进入应用级全局锁目录。 */
+export const skillDependencyBundleSchema = z
+  .object({
+    id: z.string().trim().min(1).max(160),
+    lockPath: packageRelativePathSchema,
+    wheelhousePath: packageRelativePathSchema.optional(),
+  })
+  .strict();
+export type SkillDependencyBundle = z.infer<typeof skillDependencyBundleSchema>;
+
+export const skillRuntimeDiscoveryFindingSchema = z
+  .object({
+    kind: z.enum([
+      'python-script',
+      'dependency-file',
+      'package-install-hint',
+      'python-runtime-hint',
+      'environment-variable',
+      'toolchain-name',
+    ]),
+    sourcePath: z.string().min(1).max(500),
+    lineNumber: z.number().int().positive(),
+    label: z.string().trim().min(1).max(200),
+  })
+  .strict();
+export type SkillRuntimeDiscoveryFinding = z.infer<typeof skillRuntimeDiscoveryFindingSchema>;
+
 export const runtimeProfileDraftSchema = z
   .object({
     commands: z.array(runtimeProfileCommandSchema).max(100),
     environmentRequirements: z.array(z.string().trim().min(1).max(200)).max(100),
+    /** 应用统一选择 CPython；Skill 只声明需要的兼容版本。 */
+    pythonRequirement: z.string().trim().min(1).max(100).optional(),
+    /** 旧版兼容：引用应用随包审核的锁；新版 Skill 包使用 package-local dependencyBundle。 */
+    dependencyLockId: z.string().trim().min(1).max(160).optional(),
+    /** 新版 Skill 包将锁和可选 wheelhouse 放在自己的运行资源目录中。 */
+    dependencyBundle: skillDependencyBundleSchema.optional(),
+    /** 外部工具链按需求逐项声明；一个 Skill 可没有，也可需要多项。 */
+    toolchainRequirements: z.array(skillToolchainRequirementSchema).max(20).optional(),
     outputContract: z
       .object({
         reportPath: z.string().trim().min(1).optional(),
@@ -195,7 +264,21 @@ export const runtimeProfileDraftSchema = z
       })
       .strict(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (profile) => {
+      const requirements = profile.toolchainRequirements ?? [];
+      return (
+        new Set(requirements.map((requirement) => requirement.id)).size === requirements.length &&
+        new Set(requirements.map((requirement) => requirement.environmentVariable)).size ===
+          requirements.length
+      );
+    },
+    { message: '工具链需求 ID 与环境变量必须唯一' },
+  )
+  .refine((profile) => !(profile.dependencyLockId && profile.dependencyBundle), {
+    message: '应用目录锁与 Skill 包内依赖锁不能同时声明',
+  });
 export type RuntimeProfileDraft = z.infer<typeof runtimeProfileDraftSchema>;
 
 export const runtimeProfileRevisionSchema = z
@@ -228,6 +311,8 @@ export const skillDetailSchema = skillSummarySchema
   .extend({
     revision: skillRevisionSummarySchema,
     runtimeProfile: runtimeProfileRevisionSchema.optional(),
+    /** 导入时对包内文本做静态识别，不执行脚本；仅作为配置提示，不构成信任或运行授权。 */
+    runtimeDiscovery: z.array(skillRuntimeDiscoveryFindingSchema).max(200).optional(),
   })
   .strict();
 export type SkillDetail = z.infer<typeof skillDetailSchema>;
@@ -2658,6 +2743,21 @@ export type DeleteSkillRequest = z.infer<typeof deleteSkillRequestSchema>;
 
 export const importSkillRequestSchema = z.object({}).strict();
 export type ImportSkillRequest = z.infer<typeof importSkillRequestSchema>;
+export const importSkillFromUrlRequestSchema = z
+  .object({ url: z.string().trim().min(1).max(2048) })
+  .strict()
+  .refine(
+    ({ url }) => {
+      try {
+        const parsed = new URL(url);
+        return parsed.protocol === 'https:' && !parsed.username && !parsed.password;
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Skill 链接必须是没有内嵌凭据的 HTTPS 地址' },
+  );
+export type ImportSkillFromUrlRequest = z.infer<typeof importSkillFromUrlRequestSchema>;
 
 export const skillMutationResultSchema = z
   .object({
@@ -2788,6 +2888,26 @@ export const dependencySnapshotSchema = z
   })
   .strict();
 export type DependencySnapshot = z.infer<typeof dependencySnapshotSchema>;
+
+export const dependencySnapshotSkillUsageSchema = z
+  .object({
+    skillId: z.string().min(1),
+    skillName: z.string().min(1),
+    activeAuthorizationCount: z.number().int().nonnegative(),
+    revokedAuthorizationCount: z.number().int().nonnegative(),
+    runCount: z.number().int().nonnegative(),
+  })
+  .strict();
+export type DependencySnapshotSkillUsage = z.infer<typeof dependencySnapshotSkillUsageSchema>;
+
+export const managedDependencySnapshotSchema = dependencySnapshotSchema
+  .extend({
+    usage: z.array(dependencySnapshotSkillUsageSchema),
+    /** 活跃授权或历史 Run 正在引用时不能删除；已撤销授权可在删除时清理其旧选择。 */
+    canDelete: z.boolean(),
+  })
+  .strict();
+export type ManagedDependencySnapshot = z.infer<typeof managedDependencySnapshotSchema>;
 
 export const runtimeEnvironmentSchema = z
   .object({
@@ -4991,7 +5111,7 @@ export const dependencyOptionsSchema = z
   .object({
     distributions: z.array(managedDistributionSummarySchema),
     lockIds: z.array(z.string().min(1)),
-    snapshots: z.array(dependencySnapshotSchema),
+    snapshots: z.array(managedDependencySnapshotSchema),
     environments: z.array(runtimeEnvironmentSchema),
   })
   .strict();
@@ -5004,6 +5124,8 @@ export const dependencyPlanRequestSchema = z
   .object({
     base: dependencyBaseChoiceSchema,
     lockId: z.string().trim().min(1).max(160),
+    /** 新版包依赖锁由 Main 按 Skill 声明从包内读取；Renderer 不能提交任意资源路径。 */
+    skillId: skillIdSchema.optional(),
   })
   .strict();
 export type DependencyPlanRequest = z.infer<typeof dependencyPlanRequestSchema>;
@@ -5022,6 +5144,13 @@ export const dependencyPlanSchema = z
   })
   .strict();
 export type DependencyPlan = z.infer<typeof dependencyPlanSchema>;
+
+export const verifyDependencyEnvironmentRequestSchema = z
+  .object({ environmentId: z.string().min(1) })
+  .strict();
+export type VerifyDependencyEnvironmentRequest = z.infer<
+  typeof verifyDependencyEnvironmentRequestSchema
+>;
 
 export const prepareDependencyRequestSchema = dependencyPlanRequestSchema
   .extend({
@@ -5075,17 +5204,36 @@ export type RegisterToolchainRequest = z.infer<typeof registerToolchainRequestSc
 export const registerToolchainResultSchema = z
   .object({
     cancelled: z.boolean(),
-    snapshot: dependencySnapshotSchema.nullable(),
+    snapshot: managedDependencySnapshotSchema.nullable(),
     reused: z.boolean(),
   })
   .strict();
 export type RegisterToolchainResult = z.infer<typeof registerToolchainResultSchema>;
 
+export const deleteToolchainSnapshotRequestSchema = z
+  .object({ snapshotId: z.string().min(1) })
+  .strict();
+export type DeleteToolchainSnapshotRequest = z.infer<typeof deleteToolchainSnapshotRequestSchema>;
+
+export const deleteToolchainSnapshotResultSchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      status: z.literal('deleted'),
+      cleanupPending: z.boolean(),
+      clearedRevokedAuthorizationReferences: z.number().int().nonnegative(),
+    })
+    .strict(),
+  z.object({ status: z.literal('in-use'), snapshot: managedDependencySnapshotSchema }).strict(),
+  z.object({ status: z.literal('not-found') }).strict(),
+]);
+export type DeleteToolchainSnapshotResult = z.infer<typeof deleteToolchainSnapshotResultSchema>;
+
 export const refreshSkillDependencyGrantRequestSchema = z
   .object({
     skillId: z.string().min(1),
     lockId: z.string().trim().min(1).max(160),
-    snapshotIds: z.array(z.string().min(1)).max(20),
+    /** 显式传入时复核该选择；省略时恢复该 Skill 已保存的最近一次选择。 */
+    snapshotIds: z.array(z.string().min(1)).max(20).optional(),
     /**
      * 省略或 false 时只复核授权是否覆盖当前依赖，供界面如实展示；
      * true 才在用户明确点击后建立授权。查看与确认必须是两个意图。
@@ -5100,6 +5248,8 @@ export type RefreshSkillDependencyGrantRequest = z.infer<
 export const refreshSkillDependencyGrantResultSchema = z
   .object({
     skill: skillSummarySchema,
+    /** 本次检查采用的快照选择；面板初始化时据此恢复下拉框。 */
+    selectedSnapshotIds: z.array(z.string().min(1)).max(20),
     /** 授权被拒绝（未信任/已撤销/缺运行配置）时没有指纹可言，因此可选。 */
     fingerprint: z.string().min(1).optional(),
     grantActive: z.boolean(),
@@ -5199,6 +5349,7 @@ export const IpcChannel = {
   ListSkills: 'skill:list',
   GetSkill: 'skill:get',
   ImportSkill: 'skill:import',
+  ImportSkillFromUrl: 'skill:import-url',
   SaveSkillRuntimeProfile: 'skill:save-runtime-profile',
   SetSkillTrust: 'skill:set-trust',
   RevokeSkillTrust: 'skill:revoke-trust',
@@ -5247,11 +5398,13 @@ export const IpcChannel = {
   TestMcpConnection: 'mcp:test-connection',
   ListDependencyOptions: 'dependency:list-options',
   InspectDependencyPlan: 'dependency:inspect-plan',
+  VerifyDependencyEnvironment: 'dependency:verify-environment',
   PrepareDependencyEnvironment: 'dependency:prepare',
   CancelDependencyPreparation: 'dependency:cancel',
   GetDependencyOperation: 'dependency:get-operation',
   ChoosePythonInterpreter: 'dependency:choose-interpreter',
   RegisterToolchainSnapshot: 'dependency:register-toolchain',
+  DeleteToolchainSnapshot: 'dependency:delete-toolchain-snapshot',
   UpdateWindowTheme: 'window:update-theme',
   WindowToggleMaximize: 'window:toggle-maximize',
   ListNotifications: 'notification:list',
@@ -5435,6 +5588,7 @@ export interface BetterWorkDesktopApi {
     list(): Promise<SkillSummary[]>;
     get(input: GetSkillRequest): Promise<SkillDetail | null>;
     importFromDialog(): Promise<SkillImportResult>;
+    importFromUrl(input: ImportSkillFromUrlRequest): Promise<SkillImportResult>;
     saveRuntimeProfile(input: SaveSkillRuntimeProfileRequest): Promise<SkillMutationResult>;
     setTrust(input: SetSkillTrustRequest): Promise<SkillMutationResult>;
     revokeTrust(input: RevokeSkillTrustRequest): Promise<SkillMutationResult>;
@@ -5505,11 +5659,15 @@ export interface BetterWorkDesktopApi {
   dependencies: {
     listOptions(): Promise<DependencyOptions>;
     inspectPlan(input: DependencyPlanRequest): Promise<DependencyPlan>;
+    verifyEnvironment(input: VerifyDependencyEnvironmentRequest): Promise<RuntimeEnvironment>;
     prepare(input: PrepareDependencyRequest): Promise<PrepareDependencyResult>;
     cancel(input: CancelDependencyRequest): Promise<CancelDependencyResult>;
     getOperation(input: GetDependencyOperationRequest): Promise<DependencyOperation | null>;
     chooseInterpreter(): Promise<ChooseInterpreterResult>;
     registerToolchain(input: RegisterToolchainRequest): Promise<RegisterToolchainResult>;
+    deleteToolchainSnapshot(
+      input: DeleteToolchainSnapshotRequest,
+    ): Promise<DeleteToolchainSnapshotResult>;
   };
 }
 

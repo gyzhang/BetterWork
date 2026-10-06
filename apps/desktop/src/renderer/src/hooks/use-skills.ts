@@ -16,6 +16,7 @@ export interface SkillsState {
   deselect: () => void;
   refresh: () => void;
   importSkill: () => Promise<void>;
+  importSkillFromUrl: (url: string) => Promise<boolean>;
   setTrust: (skill: SkillSummary, trusted: boolean) => void;
   revokeTrust: (skill: SkillSummary) => void;
   setEnabled: (skill: SkillSummary, enabled: boolean) => void;
@@ -50,7 +51,14 @@ export function useSkills(options: UseSkillsOptions): SkillsState {
     trackAction(
       window.betterwork.skills
         .list()
-        .then((items) => setSkills(items))
+        .then((items) => {
+          setSkills(items);
+          setSelected((current) => {
+            if (!current) return current;
+            const summary = items.find((item) => item.id === current.id);
+            return summary ? { ...current, ...summary } : current;
+          });
+        })
         .catch((error: unknown) => {
           setError(describeActionError(error, '读取 Skill 列表失败，请重试。'));
         })
@@ -123,6 +131,27 @@ export function useSkills(options: UseSkillsOptions): SkillsState {
       setImporting(false);
     }
   }, [refresh, select]);
+
+  const importSkillFromUrl = useCallback(
+    async (url: string): Promise<boolean> => {
+      setImporting(true);
+      setError('');
+      try {
+        const result = await window.betterwork.skills.importFromUrl({ url });
+        if (result.cancelled) return false;
+        refresh();
+        if (result.skill) select(result.skill);
+        setToast('Skill 已从链接导入，默认未信任。');
+        return true;
+      } catch (caughtError) {
+        setError(caughtError instanceof Error ? caughtError.message : '导入 Skill 失败。');
+        return false;
+      } finally {
+        setImporting(false);
+      }
+    },
+    [refresh, select],
+  );
 
   const setTrust = useCallback(
     (skill: SkillSummary, trusted: boolean): void => {
@@ -199,6 +228,7 @@ export function useSkills(options: UseSkillsOptions): SkillsState {
     deselect,
     refresh,
     importSkill,
+    importSkillFromUrl,
     setTrust,
     revokeTrust,
     setEnabled,

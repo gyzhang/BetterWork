@@ -2400,6 +2400,22 @@ button.list-row:where(:not(:disabled)):hover {
 .skill-detail-section {
   margin-top: var(--space-24);
 }
+.skill-runtime-discovery {
+  margin-top: var(--space-12);
+}
+.skill-runtime-discovery ul {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  overflow-wrap: anywhere;
+}
+.runtime-component-list {
+  border-top: 1px solid var(--border);
+}
 .dependency-panel {
   display: flex;
   flex-direction: column;
@@ -2417,6 +2433,48 @@ button.list-row:where(:not(:disabled)):hover {
 .dependency-inline .field-select-trigger {
   flex: 1;
 }
+.toolchain-snapshot-manager-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-8);
+  overflow: auto;
+}
+.toolchain-snapshot-manager-list .list-row-detail {
+  overflow-wrap: anywhere;
+}
+.toolchain-snapshot-usage {
+  display: grid;
+  width: 100%;
+  gap: var(--space-4);
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+}
+.toolchain-snapshot-usage strong {
+  color: var(--text-primary);
+}
+.toolchain-snapshot-usage p,
+.toolchain-snapshot-manager-footer p {
+  margin: 0;
+}
+.toolchain-snapshot-usage ul {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding-inline-start: 18px;
+}
+.toolchain-snapshot-manager-footer {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-8);
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+}
 /* 「要注意的一段」留在领域类，不进 `StatusNote`：`Field` 的 hint 是 `<span>`（短语内容），
    块级基座放进去是非法 HTML。折行与缝由下面的 `.field-hint .dependency-warning` 决定，
    这里只出色与字号（docs/10 §11.5.2）。 */
@@ -2428,6 +2486,12 @@ button.list-row:where(:not(:disabled)):hover {
   display: flex;
   gap: var(--space-8);
   align-items: center;
+}
+.dependency-action-hint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
 }
 .dependency-progress {
   color: var(--text-muted);

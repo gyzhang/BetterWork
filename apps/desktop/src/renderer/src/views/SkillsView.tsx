@@ -1,22 +1,25 @@
-import type { RuntimeProfileDraft, SkillSummary } from '@betterwork/agent-protocol';
-import { useCallback, useEffect, useState } from 'react';
+import type { SkillSummary } from '@betterwork/agent-protocol';
+import { useCallback, useState } from 'react';
 
 import { AsyncButton } from '../components/AsyncButton';
 import { Badge, type BadgeTone } from '../components/Badge';
 import { Button } from '../components/Button';
 import { CatalogCard, CatalogRow, type EntryFacts } from '../components/CatalogCard';
 import { ConfirmationDialog } from '../components/ConfirmationDialog';
+import { Disclosure } from '../components/Disclosure';
 import { EmptyPage, LoadingPage } from '../components/EmptyState';
+import { Field } from '../components/Field';
 import { InlineError } from '../components/InlineError';
 import { PageHeader } from '../components/layout/PageHeader';
 import { ScrollRegion } from '../components/layout/ScrollRegion';
 import { ViewContainer } from '../components/layout/ViewContainer';
+import { Modal } from '../components/Modal';
 import { SectionHeader } from '../components/SectionHeader';
 import { DependencyPanel } from '../components/skills/DependencyPanel';
 import { StatusNote } from '../components/StatusNote';
 import { Switch } from '../components/Switch';
 import { SegmentedControl } from '../components/Tabs';
-import { TextArea } from '../components/TextField';
+import { TextField } from '../components/TextField';
 import { TransientToast } from '../components/TransientToast';
 import type { SkillDependenciesState } from '../hooks/use-skill-dependencies';
 import { useSkillDependencies } from '../hooks/use-skill-dependencies';
@@ -24,7 +27,11 @@ import type { SkillsState } from '../hooks/use-skills';
 import { useViewMode } from '../hooks/use-view-mode';
 import { ChevronLeftIcon, InfoIcon, PlusIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
-import { skillEnvironmentName } from '../lib/labels';
+import { skillBlockedReasonName, skillEnvironmentName } from '../lib/labels';
+import {
+  effectiveToolchainRequirements,
+  unconfiguredExternalRuntimeClues,
+} from '../lib/skill-runtime-discovery';
 
 const VIEW_MODE_STORAGE_KEY = 'skills-view-mode';
 
@@ -150,14 +157,7 @@ function skillFacts(skill: SkillSummary, actions: SkillActions): EntryFacts {
 
 export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element {
   const { selected, dismissToast: dismissStateToast } = state;
-  const refreshSkillDetail = useCallback(
-    (skillId: string): void => {
-      const current = state.skills.find((s) => s.id === skillId);
-      if (current) state.select(current);
-    },
-    [state],
-  );
-  const dependencies = useSkillDependencies(selected, state.refresh, refreshSkillDetail);
+  const dependencies = useSkillDependencies(selected, state.refresh);
   const { dismissToast: dismissDepsToast } = dependencies;
   const toast = state.toast || dependencies.toast;
   const dismissToast = useCallback((): void => {
@@ -168,6 +168,19 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
   // 确认框由页面持有：卡片和列表行各有一组动作，同一时刻只可能有一个待确认对象。
   const [pendingRevoke, setPendingRevoke] = useState<SkillSummary>();
   const [pendingDelete, setPendingDelete] = useState<SkillSummary>();
+  const [importUrlOpen, setImportUrlOpen] = useState(false);
+  const [importUrl, setImportUrl] = useState('');
+  const submitUrl = (): void => {
+    reportAction(
+      state.importSkillFromUrl(importUrl).then((imported) => {
+        if (!imported) return;
+        setImportUrlOpen(false);
+        setImportUrl('');
+      }),
+      state.clearError,
+      '导入 Skill 失败。',
+    );
+  };
   const actions: SkillActions = {
     onOpen: (skill) => state.select(skill),
     onToggleEnabled: (skill) => state.setEnabled(skill, !skill.enabled),
@@ -192,6 +205,17 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
         actions={
           selected ? undefined : (
             <>
+              <Button
+                variant="secondary"
+                size="lg"
+                type="button"
+                onClick={() => {
+                  state.clearError();
+                  setImportUrlOpen(true);
+                }}
+              >
+                从链接导入
+              </Button>
               <SegmentedControl
                 size="lg"
                 label="视图模式"
@@ -220,7 +244,9 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
           )
         }
       />
-      {state.error && <InlineError message={state.error} onDismiss={state.clearError} />}
+      {state.error && !importUrlOpen && (
+        <InlineError message={state.error} onDismiss={state.clearError} />
+      )}
       <ScrollRegion ariaLabel="技能列表与详情" busy={state.loading || state.detailLoading}>
         <section className="page-body skills-body">
           {selected ? (
@@ -235,7 +261,7 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
             <EmptyPage
               eyebrow="技能"
               title="还没有 Skill"
-              detail="导入一个目录型 Skill，或等待内置技能加入这里。"
+              detail="导入文件夹、ZIP 包或 HTTPS 链接，也可以等待内置技能加入这里。"
             />
           ) : viewMode === 'grid' ? (
             <ViewContainer mode="grid" className="skill-cards">
@@ -282,6 +308,53 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
           }}
         />
       ) : null}
+      {importUrlOpen ? (
+        <Modal variant="dialog" label="从链接导入 Skill" onClose={() => setImportUrlOpen(false)}>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitUrl();
+            }}
+          >
+            <SectionHeader variant="block" title="从链接导入 Skill" />
+            <Field
+              controlId="skill-package-url"
+              label="Skill ZIP 链接"
+              hint="使用 HTTPS ZIP 包。BetterWork 会读取包内元数据并校验依赖，不会在导入时执行脚本。"
+            >
+              <TextField
+                id="skill-package-url"
+                size="md"
+                type="url"
+                autoComplete="url"
+                value={importUrl}
+                onChange={(event) => setImportUrl(event.currentTarget.value)}
+                placeholder="https://example.com/skill-package.zip"
+              />
+            </Field>
+            {state.error && <InlineError message={state.error} onDismiss={state.clearError} />}
+            <div className="dependency-actions">
+              <Button
+                variant="secondary"
+                size="md"
+                type="button"
+                onClick={() => setImportUrlOpen(false)}
+              >
+                取消
+              </Button>
+              <AsyncButton
+                variant="primary"
+                size="md"
+                type="submit"
+                busy={state.importing}
+                label="导入"
+                busyLabel="正在下载并导入…"
+                disabled={!importUrl.trim()}
+              />
+            </div>
+          </form>
+        </Modal>
+      ) : null}
       {toast && <TransientToast tone="success" message={toast} onDismiss={dismissToast} />}
     </section>
   );
@@ -295,33 +368,29 @@ function SkillDetail({
   dependencies: SkillDependenciesState;
 }): React.JSX.Element {
   const skill = state.selected;
-  const initialProfile = JSON.stringify(
-    skill?.runtimeProfile?.profile ?? {
-      commands: [],
-      environmentRequirements: [],
-      outputContract: { outputPaths: [] },
-    },
-    null,
-    2,
-  );
-  const [profileText, setProfileText] = useState(initialProfile);
-  const [profileError, setProfileError] = useState('');
   const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  useEffect(() => {
-    setProfileText(initialProfile);
-    setProfileError('');
-  }, [initialProfile]);
   if (!skill) return <></>;
-  const save = (): void => {
-    try {
-      const profile = JSON.parse(profileText) as RuntimeProfileDraft;
-      setProfileError('');
-      reportAction(state.saveProfile(skill.id, profile), setProfileError, '运行配置格式不正确。');
-    } catch {
-      setProfileError('运行配置必须是有效的 JSON。');
-    }
-  };
+  const profile = skill.runtimeProfile?.profile;
+  const toolchainRequirements = effectiveToolchainRequirements(profile);
+  const unconfiguredToolchainClues = unconfiguredExternalRuntimeClues(
+    skill.runtimeDiscovery,
+    toolchainRequirements,
+  );
+  const hasUnconfiguredPythonDependencies =
+    !profile?.dependencyLockId &&
+    !profile?.dependencyBundle &&
+    (skill.runtimeDiscovery ?? []).some(
+      (finding) => finding.kind === 'package-install-hint' || finding.kind === 'dependency-file',
+    );
+  const runtimeConfigurationNeedsReview =
+    unconfiguredToolchainClues.length > 0 || hasUnconfiguredPythonDependencies;
+  const displayedEnvironmentStatus = runtimeConfigurationNeedsReview
+    ? 'unprepared'
+    : skill.environmentStatus;
+  const displayedBlockedReasons = runtimeConfigurationNeedsReview
+    ? [...skill.blockedReasons, '导入扫描发现尚未配置的 Skill 运行需求']
+    : skill.blockedReasons;
   const trustRequested = skill.trustStatus === 'trusted' || skill.trustStatus === 'needs-review';
   return (
     <>
@@ -367,7 +436,7 @@ function SkillDetail({
         </div>
         <div>
           <span>环境</span>
-          <strong>{skillEnvironmentName[skill.environmentStatus]}</strong>
+          <strong>{skillEnvironmentName[displayedEnvironmentStatus]}</strong>
         </div>
       </div>
       <div className="skill-trust-box">
@@ -394,28 +463,80 @@ function SkillDetail({
       <div className="skill-detail-section">
         <SectionHeader
           eyebrow="运行配置"
-          title="保存配置草稿"
-          actions={
-            <Button variant="secondary" size="md" type="button" onClick={save}>
-              保存草稿
-            </Button>
-          }
+          title="Skill 运行需求"
+          hint="应用识别并显示 Skill 声明的需求；导入检查只读取文件，不会执行脚本。"
         />
-        <p>当前仅保存配置，不会伪造环境已就绪，也不会启动脚本。</p>
-        <TextArea
-          mono
-          aria-label="运行配置 JSON"
-          value={profileText}
-          onChange={(event) => setProfileText(event.target.value)}
-          spellCheck={false}
-        />
-        {profileError && <InlineError message={profileError} />}
+        {profile ? (
+          <>
+            <p>
+              Python {profile.pythonRequirement ?? '由应用默认选择'}
+              {profile.dependencyBundle
+                ? ` · Skill 包依赖锁 ${profile.dependencyBundle.id}`
+                : profile.dependencyLockId
+                  ? ` · 依赖锁 ${profile.dependencyLockId}`
+                  : ''}
+            </p>
+            <p>
+              执行入口：
+              {profile.commands.length > 0
+                ? profile.commands.map((command) => command.label).join('、')
+                : '无脚本命令'}
+            </p>
+            <p>
+              外部工具链：
+              {toolchainRequirements.length > 0
+                ? toolchainRequirements
+                    .map(
+                      (requirement) =>
+                        `${requirement.name}${requirement.versionHint ? ` ${requirement.versionHint}` : ''}（${requirement.environmentVariable}）`,
+                    )
+                    .join('、')
+                : unconfiguredToolchainClues.length > 0
+                  ? '未配置（发现线索待确认）'
+                  : '未在运行配置中声明'}
+              {toolchainRequirements.length > 0 && unconfiguredToolchainClues.length > 0
+                ? ` · 另有线索待确认：${unconfiguredToolchainClues.join('、')}`
+                : ''}
+            </p>
+          </>
+        ) : (
+          <StatusNote
+            tone="warning"
+            message="当前 Skill 尚未匹配已审核的运行配置。静态发现结果只提供线索，不会自动允许执行。"
+          />
+        )}
+        {skill.runtimeDiscovery && skill.runtimeDiscovery.length > 0 ? (
+          <Disclosure
+            className="skill-runtime-discovery"
+            label={<Badge>导入时发现的线索({skill.runtimeDiscovery.length})</Badge>}
+          >
+            <ul>
+              {skill.runtimeDiscovery.map((finding, index) => (
+                <li key={`${finding.sourcePath}:${finding.lineNumber}:${index}`}>
+                  {finding.label} · {finding.sourcePath}:{finding.lineNumber}
+                </li>
+              ))}
+            </ul>
+          </Disclosure>
+        ) : (
+          <p>没有发现常见 Python 脚本、依赖声明文件或外部工具链引用。</p>
+        )}
       </div>
-      <DependencyPanel skill={skill} state={dependencies} />
+      <DependencyPanel
+        skill={skill}
+        state={dependencies}
+        onOpenSkill={(skillId) => {
+          const referenced = state.skills.find((item) => item.id === skillId);
+          if (referenced) state.select(referenced);
+        }}
+      />
       <div className="skill-detail-section">
         <SectionHeader title="可运行性" />
-        {skill.blockedReasons.length ? (
-          <StatusNote tone="warning" problems={skill.blockedReasons} />
+        {displayedBlockedReasons.length ? (
+          <StatusNote
+            tone="warning"
+            problems={displayedBlockedReasons.map(skillBlockedReasonName)}
+          />
         ) : (
           <StatusNote tone="success" message="当前没有阻塞原因。" />
         )}
@@ -432,7 +553,10 @@ function SkillDetail({
           size="md"
           type="button"
           disabled={
-            skill.trustStatus !== 'trusted' || !skill.enabled || skill.blockedReasons.length > 0
+            skill.trustStatus !== 'trusted' ||
+            !skill.enabled ||
+            displayedBlockedReasons.length > 0 ||
+            runtimeConfigurationNeedsReview
           }
           onClick={() => state.testRun(skill)}
         >

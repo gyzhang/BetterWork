@@ -109,7 +109,7 @@ const PRIMARY_NAV_ITEMS: readonly NavEntry<AppView>[] = [
   { id: 'knowledge', label: '知识', icon: KnowledgeIcon },
   { id: 'skills', label: '技能', icon: CapabilityIcon },
   { id: 'experts', label: '专家', icon: ExpertIcon },
-  { id: 'schedules', label: '定时任务', icon: ScheduleIcon },
+  { id: 'schedules', label: '定时', icon: ScheduleIcon },
 ];
 
 const inputSnapshotCandidate = (snapshot: InputSnapshot): MaterialCandidate => ({

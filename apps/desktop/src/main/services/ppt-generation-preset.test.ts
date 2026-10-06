@@ -2,7 +2,13 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { __internal, pptGenerationAdapterFactory } from './ppt-generation-preset';
+import {
+  __internal,
+  pptGenerationAdapterFactory,
+  resolvePptExecutionOutputs,
+  suggestedPptProfile,
+  supportedPptContentHashes,
+} from './ppt-generation-preset';
 import type { AdapterContext, AwaitedExecutionSnapshot } from './skill-adapter';
 
 const { parseValidateIssues, interpretValidateOutput } = __internal;
@@ -112,6 +118,23 @@ describe('PptGenerationAdapter', () => {
       const emptyAdapter = pptGenerationAdapterFactory.create([]);
       expect(emptyAdapter.isCompatible(KNOWN_HASH)).toBe(false);
     });
+
+    it.each([
+      [
+        'reimported split package',
+        'af96cb802a79e22a96ae29c6a6e542b8984321ca7195ddf3745249555988472f',
+      ],
+      [
+        'previous reviewed package',
+        'dfc5086e9196d4c2fb7720b65d9cc903f27fae7e872fe90d4cf35847fb7e5188',
+      ],
+    ])('recognizes the %s content hash and supplies its profile', (_label, contentHash) => {
+      const adapter = pptGenerationAdapterFactory.create(supportedPptContentHashes);
+      expect(adapter.isCompatible(contentHash)).toBe(true);
+      expect(
+        suggestedPptProfile(contentHash)?.commands.map((command) => command.commandId),
+      ).toEqual(['project-init', 'icon-sync', 'svg-export', 'template-merge', 'pptx-validate']);
+    });
   });
 
   describe('resolveCommand', () => {
@@ -134,6 +157,24 @@ describe('PptGenerationAdapter', () => {
       expect(resolved?.argv).toContain(WORK_DIR);
       expect(resolved?.env.PPTM_HOME).toBe(pptmHome);
       expect(resolved?.cwd).toBe(WORK_DIR);
+    });
+
+    it('resolves the sample toolchain by its declared requirement ID', () => {
+      const resolved = adapter.resolveCommand(
+        'project-init',
+        { project_name: 'test-project' },
+        makeContext({ toolchainRoots: { 'ppt-master': '/managed/ppt-master-snapshot' } }),
+      );
+      expect(resolved?.argv[0]).toBe(
+        path.join(
+          '/managed/ppt-master-snapshot',
+          'skills',
+          'ppt-master',
+          'scripts',
+          'project_manager.py',
+        ),
+      );
+      expect(resolved?.env.PPTM_HOME).toBe('/managed/ppt-master-snapshot');
     });
 
     it('project-init throws without PPTM_HOME or snapshot', () => {
@@ -166,6 +207,9 @@ describe('PptGenerationAdapter', () => {
       expect(resolved?.argv[0]).toContain(
         path.join(SKILL_SCRIPTS_ROOT, 'scripts', 'svg_native_export.py'),
       );
+      expect(resolved?.expectedOutputs).toEqual([
+        path.join('proj', 'exports', 'betterwork-output.pptx'),
+      ]);
     });
 
     it('resolves template-merge with all paths', () => {
@@ -184,6 +228,7 @@ describe('PptGenerationAdapter', () => {
       expect(resolved?.argv).toContain(path.resolve(WORK_DIR, 'template.pptx'));
       expect(resolved?.argv).toContain(path.resolve(WORK_DIR, 'output.pptx'));
       expect(resolved?.argv).toContain(path.resolve(WORK_DIR, 'config.json'));
+      expect(resolved?.expectedOutputs).toEqual([path.join('output.pptx')]);
     });
 
     it('resolves pptx-validate with pptx_path', () => {
@@ -303,6 +348,71 @@ describe('PptGenerationAdapter', () => {
       );
       expect(withValidate).toContain('artifact_register_file');
       expect(withValidate).toContain('pptx-validate');
+    });
+  });
+
+  it('uses per-attempt PPT outputs and keeps validation bound to its input file', () => {
+    const profile = suggestedPptProfile(
+      'dfc5086e9196d4c2fb7720b65d9cc903f27fae7e872fe90d4cf35847fb7e5188',
+    );
+    const templateMerge = profile?.commands.find(
+      (command) => command.commandId === 'template-merge',
+    );
+    const validate = profile?.commands.find((command) => command.commandId === 'pptx-validate');
+    expect(templateMerge).toBeDefined();
+    expect(validate).toBeDefined();
+    if (!templateMerge || !validate) throw new Error('Expected the reviewed PPT commands');
+
+    expect(
+      resolvePptExecutionOutputs(
+        templateMerge,
+        {
+          executable: PYTHON_PATH,
+          argv: [],
+          env: {},
+          cwd: WORK_DIR,
+          expectedOutputs: [path.join('.attempts', 'attempt-1', 'result.pptx')],
+        },
+        WORK_DIR,
+      ),
+    ).toEqual([path.join('.attempts', 'attempt-1', 'result.pptx')]);
+    expect(
+      resolvePptExecutionOutputs(
+        validate,
+        {
+          executable: PYTHON_PATH,
+          argv: [
+            path.join(SKILL_SCRIPTS_ROOT, 'scripts', 'validate_pptx.py'),
+            path.join(WORK_DIR, 'candidate.pptx'),
+          ],
+          env: {},
+          cwd: WORK_DIR,
+        },
+        WORK_DIR,
+      ),
+    ).toEqual(['candidate.pptx']);
+  });
+
+  it('declares the package-local dependency bundle and the five reviewed entry points', () => {
+    const profile = suggestedPptProfile(
+      'dfc5086e9196d4c2fb7720b65d9cc903f27fae7e872fe90d4cf35847fb7e5188',
+    );
+    expect(profile?.dependencyBundle).toEqual({
+      id: 'ppt-generation-expert-darwin-arm64-cp312',
+      lockPath: 'runtime/locks/ppt-generation-expert-darwin-arm64-cp312.json',
+      wheelhousePath: 'runtime/wheelhouse',
+    });
+    expect(profile?.commands.map((command) => command.commandId)).toEqual([
+      'project-init',
+      'icon-sync',
+      'svg-export',
+      'template-merge',
+      'pptx-validate',
+    ]);
+    expect(profile?.commands.at(-1)?.validatorId).toBe('pptx-validate');
+    expect(profile?.outputContract).toEqual({
+      reportPath: '.outputs/<executionId>/<outputId>.pptx.report.json',
+      outputPaths: ['.outputs/<executionId>/<outputId>.pptx'],
     });
   });
 });

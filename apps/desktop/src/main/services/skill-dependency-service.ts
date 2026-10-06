@@ -125,6 +125,7 @@ interface ActiveJob {
   readonly operationId: string;
   readonly environmentId: string;
   readonly environmentKey: string;
+  readonly abortController: AbortController;
   completion: Promise<void>;
   cancelRequested: boolean;
   activeHandle: DependencyProcessHandle | null;
@@ -221,7 +222,8 @@ export const computeDependencyFingerprint = (input: {
     .update(
       JSON.stringify({
         lockHash: input.lockHash,
-        snapshots: [...(input.snapshotManifestHashes ?? [])].sort(),
+        // Snapshot 顺序与 profile.toolchainRequirements 顺序一一对应；换位就是不同配置。
+        snapshots: [...(input.snapshotManifestHashes ?? [])],
       }),
     )
     .digest('hex');
@@ -310,6 +312,21 @@ export class SkillDependencyService {
     return summaries;
   }
 
+  /** 读取与当前 Skill revision/profile/lock 对应的最近持久化快照选择。 */
+  getSavedDependencySelection(skillId: string, lockHash: string): string[] {
+    const skill = this.store.skills.get(skillId);
+    const profile = skill?.runtimeProfile;
+    if (!skill || !profile) return [];
+    return (
+      this.store.skills.getLatestDependencySelection(
+        skillId,
+        skill.revision.id,
+        profile.profileHash,
+        lockHash,
+      ) ?? []
+    );
+  }
+
   /**
    * 依赖确定后确认授权（契约 §2：有效授权在依赖准备完成、scope 指纹确定后建立或确认）。
    *
@@ -349,6 +366,34 @@ export class SkillDependencyService {
         grantCreated: false,
         blockedReason: '尚未记录信任意愿，先勾选「受信任」再确认依赖授权',
       };
+    }
+    const expectedToolchains =
+      profile.profile.toolchainRequirements?.length ??
+      (profile.profile.environmentRequirements.includes('ppt-master') ? 1 : 0);
+    if (input.snapshotManifestHashes.length !== expectedToolchains) {
+      return {
+        grantActive: false,
+        grantCreated: false,
+        blockedReason:
+          expectedToolchains === 0
+            ? '当前 Skill 不声明外部工具链，不应绑定工具链快照'
+            : `还需要按配置登记 ${expectedToolchains} 项外部工具链快照`,
+      };
+    }
+    const requirements = profile.profile.toolchainRequirements ?? [];
+    for (const [index, requirement] of requirements.entries()) {
+      if (!requirement.expectedCommit) continue;
+      const manifestHash = input.snapshotManifestHashes[index];
+      const snapshot = manifestHash
+        ? this.store.snapshots.findByManifestHash(manifestHash)
+        : undefined;
+      if (snapshot?.originCommit !== requirement.expectedCommit) {
+        return {
+          grantActive: false,
+          grantCreated: false,
+          blockedReason: `${requirement.name} 需要版本 ${requirement.versionHint ?? requirement.expectedCommit}，当前快照来源不匹配`,
+        };
+      }
     }
     const fingerprint = computeDependencyFingerprint(input);
     // 范围指纹暂以 profile 的命令集合代表；A14 落地真实资源作用域后在此扩展，
@@ -440,7 +485,11 @@ export class SkillDependencyService {
    * 依赖计划：探测基础解释器、算出环境键、检查 wheelhouse 缺项。
    * 只读，不写数据库；A12 的准备界面用它列出「要装什么、从哪来、缺什么」。
    */
-  async inspectPlan(base: BaseInterpreterRequest, lock: DependencyLock): Promise<DependencyPlan> {
+  async inspectPlan(
+    base: BaseInterpreterRequest,
+    lock: DependencyLock,
+    packageWheelhouseRoot?: string,
+  ): Promise<DependencyPlan> {
     const resolved = await this.resolveBaseIdentity(base);
     const lockHash = computeDependencyLockHash(lock);
     const environmentKey = computeEnvironmentKey(resolved.base, resolved.platform, lockHash);
@@ -449,9 +498,17 @@ export class SkillDependencyService {
 
     const missingWheels: string[] = [];
     for (const entry of lock.packages) {
-      const present = await this.roots.filesystem.exists(
-        path.join(this.roots.paths.wheelhouseRoot, entry.wheel),
-      );
+      const candidates = [
+        ...(packageWheelhouseRoot ? [packageWheelhouseRoot] : []),
+        this.roots.paths.wheelhouseRoot,
+      ];
+      let present = false;
+      for (const candidate of candidates) {
+        if (await this.roots.filesystem.exists(path.join(candidate, entry.wheel))) {
+          present = true;
+          break;
+        }
+      }
       if (!present) missingWheels.push(entry.name);
     }
     const requiresDownload =
@@ -479,8 +536,9 @@ export class SkillDependencyService {
     base: BaseInterpreterRequest,
     lock: DependencyLock,
     kind: DependencyOperationKind = 'prepare',
+    packageWheelhouseRoot?: string,
   ): Promise<PrepareReceipt> {
-    const plan = await this.inspectPlan(base, lock);
+    const plan = await this.inspectPlan(base, lock, packageWheelhouseRoot);
     const existing = plan.environment;
 
     if (existing?.status === 'ready' && !plan.openOperationId) {
@@ -550,13 +608,16 @@ export class SkillDependencyService {
       operationId: operation.id,
       environmentId: environment.id,
       environmentKey: plan.environmentKey,
+      abortController: new AbortController(),
       completion: Promise.resolve(),
       cancelRequested: false,
       activeHandle: null,
     };
-    job.completion = this.runPreparation(job, plan, lock).catch((error: unknown) => {
-      console.error(`[skill-dependency] preparation ${operation.id} crashed`, error);
-    });
+    job.completion = this.runPreparation(job, plan, lock, packageWheelhouseRoot).catch(
+      (error: unknown) => {
+        console.error(`[skill-dependency] preparation ${operation.id} crashed`, error);
+      },
+    );
     this.active.set(operation.id, job);
     return {
       operationId: operation.id,
@@ -574,6 +635,7 @@ export class SkillDependencyService {
       return { applied: false, status: operation?.status ?? 'interrupted' };
     }
     job.cancelRequested = true;
+    job.abortController.abort();
     job.activeHandle?.kill();
     await Promise.race([
       job.completion,
@@ -802,7 +864,7 @@ export class SkillDependencyService {
     this.reportProgress(job, 'resolve-interpreter', `下载受管 Python ${distribution.version}`);
     let bytes: Uint8Array;
     try {
-      bytes = await this.roots.download.download(distribution.url);
+      bytes = await this.roots.download.download(distribution.url, job.abortController.signal);
     } catch (error) {
       await this.roots.filesystem.remove(directory);
       throw new DependencyPreparationError(
@@ -877,58 +939,72 @@ export class SkillDependencyService {
     return venvPython;
   }
 
-  /** 安装前逐个校验 wheel 的 sha256：失配就在装之前失败，而不是让 pip 半途报错。 */
+  /** 安装前逐个校验 wheel，并只把验证通过的文件暴露给 pip。 */
   private async stageWheels(
     lock: DependencyLock,
     instanceRoot: string,
     job: ActiveJob,
+    packageWheelhouseRoot?: string,
   ): Promise<{ findLinks: string[]; requirementsFile: string }> {
-    const findLinks = [this.roots.paths.wheelhouseRoot];
+    const wheelhouseRoots = Array.from(
+      new Set([
+        ...(packageWheelhouseRoot ? [packageWheelhouseRoot] : []),
+        this.roots.paths.wheelhouseRoot,
+      ]),
+    );
     const downloadDirectory = path.join(instanceRoot, 'downloads');
-    if (lock.packages.some((entry) => entry.source === 'approved-index')) {
-      await this.roots.filesystem.mkdir(downloadDirectory);
-      findLinks.push(downloadDirectory);
-    }
+    await this.roots.filesystem.mkdir(downloadDirectory);
 
     for (const entry of lock.packages) {
-      const bundled = path.join(this.roots.paths.wheelhouseRoot, entry.wheel);
-      if (await this.roots.filesystem.exists(bundled)) {
-        const actual = sha256Of(await this.roots.filesystem.readFile(bundled));
-        if (actual !== entry.sha256) {
+      let verifiedBytes: Uint8Array | undefined;
+      let checksumMismatch = false;
+      for (const root of wheelhouseRoots) {
+        const bundled = path.join(root, entry.wheel);
+        if (await this.roots.filesystem.exists(bundled)) {
+          const bytes = await this.roots.filesystem.readFile(bundled);
+          if (sha256Of(bytes) === entry.sha256) {
+            verifiedBytes = bytes;
+            break;
+          }
+          checksumMismatch = true;
+        }
+      }
+      if (!verifiedBytes && entry.source === 'approved-index' && (entry.url || entry.origin)) {
+        this.reportProgress(job, 'install-packages', `下载 ${entry.name}==${entry.version}`);
+        // 优先用锁里登记的精确制品地址：各索引的目录布局不同，拼接容易取错文件。
+        const source = entry.url ?? `${(entry.origin ?? '').replace(/\/$/u, '')}/${entry.wheel}`;
+        try {
+          verifiedBytes = await this.roots.download.download(source, job.abortController.signal);
+        } catch (error) {
           throw new DependencyPreparationError(
-            'wheel-checksum-mismatch',
-            `${entry.wheel} 的 SHA-256 与包锁不符，已拒绝安装`,
+            'wheel-missing',
+            `下载 ${entry.wheel} 失败：${redactCredentials(messageOf(error))}`,
+            { cause: error },
           );
         }
-        continue;
+        if (sha256Of(verifiedBytes) !== entry.sha256) {
+          throw new DependencyPreparationError(
+            'wheel-checksum-mismatch',
+            `${entry.wheel} 下载结果的 SHA-256 与包锁不符，已拒绝安装`,
+          );
+        }
       }
-      if (entry.source !== 'approved-index' || (!entry.url && !entry.origin)) {
+      if (!verifiedBytes) {
+        if (checksumMismatch) {
+          throw new DependencyPreparationError(
+            'wheel-checksum-mismatch',
+            `${entry.wheel} 的 SHA-256 与包锁不符，且没有可用的批准下载来源`,
+          );
+        }
         throw new DependencyPreparationError(
           'wheel-missing',
           `随包 wheelhouse 缺少 ${entry.name}==${entry.version}（${entry.wheel}），且未批准联网来源`,
         );
       }
-      this.reportProgress(job, 'install-packages', `下载 ${entry.name}==${entry.version}`);
-      // 优先用锁里登记的精确制品地址：各索引的目录布局不同，拼接容易取错文件。
-      const source = entry.url ?? `${(entry.origin ?? '').replace(/\/$/u, '')}/${entry.wheel}`;
-      let bytes: Uint8Array;
-      try {
-        bytes = await this.roots.download.download(source);
-      } catch (error) {
-        throw new DependencyPreparationError(
-          'wheel-missing',
-          `下载 ${entry.wheel} 失败：${redactCredentials(messageOf(error))}`,
-          { cause: error },
-        );
-      }
-      const actual = sha256Of(bytes);
-      if (actual !== entry.sha256) {
-        throw new DependencyPreparationError(
-          'wheel-checksum-mismatch',
-          `${entry.wheel} 下载结果的 SHA-256 与包锁不符，已拒绝安装`,
-        );
-      }
-      await this.roots.filesystem.writeFile(path.join(downloadDirectory, entry.wheel), bytes);
+      await this.roots.filesystem.writeFile(
+        path.join(downloadDirectory, entry.wheel),
+        verifiedBytes,
+      );
     }
 
     const requirementsFile = path.join(instanceRoot, 'betterwork-lock.txt');
@@ -936,7 +1012,7 @@ export class SkillDependencyService {
       (entry) => `${entry.name}==${entry.version} --hash=sha256:${entry.sha256}`,
     );
     await this.roots.filesystem.writeFile(requirementsFile, `${lines.join('\n')}\n`);
-    return { findLinks, requirementsFile };
+    return { findLinks: [downloadDirectory], requirementsFile };
   }
 
   private async installPackages(
@@ -944,10 +1020,16 @@ export class SkillDependencyService {
     venvRoot: string,
     lock: DependencyLock,
     job: ActiveJob,
+    packageWheelhouseRoot?: string,
   ): Promise<void> {
     // 空包锁是合法计划（只依赖标准库）：空 requirements 会让 pip 报「至少需要一个依赖」。
     if (lock.packages.length === 0) return;
-    const { findLinks, requirementsFile } = await this.stageWheels(lock, venvRoot, job);
+    const { findLinks, requirementsFile } = await this.stageWheels(
+      lock,
+      venvRoot,
+      job,
+      packageWheelhouseRoot,
+    );
     this.reportProgress(job, 'install-packages', `安装 ${lock.packages.length} 个锁定包`);
     const argv = ['-m', 'pip', 'install', '--no-index'];
     for (const link of findLinks) argv.push('--find-links', link);
@@ -1063,6 +1145,7 @@ export class SkillDependencyService {
     job: ActiveJob,
     plan: DependencyPlan,
     lock: DependencyLock,
+    packageWheelhouseRoot?: string,
   ): Promise<void> {
     let instanceRoot: string | null = null;
     try {
@@ -1099,7 +1182,7 @@ export class SkillDependencyService {
       );
       this.throwIfCancelled(job);
 
-      await this.installPackages(venvPython, instanceRoot, lock, job);
+      await this.installPackages(venvPython, instanceRoot, lock, job, packageWheelhouseRoot);
       this.throwIfCancelled(job);
 
       this.reportProgress(job, 'probe-imports', `探测 ${lock.importProbes.length} 个必需模块`);

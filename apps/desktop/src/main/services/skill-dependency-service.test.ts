@@ -292,6 +292,75 @@ describe('Python 环境准备作业', () => {
     expect(again.status).toBe('cancelled');
   });
 
+  it('取消受管 Python 下载：中止网络请求并清理制品目录', async () => {
+    const harness = openService();
+    const distribution = pythonDistributions.find(
+      (entry) => entry.platform.os === 'darwin' && entry.platform.arch === 'arm64',
+    );
+    if (!distribution) throw new Error('缺少 macOS arm64 受管 Python 候选');
+
+    const downloadStarted = new Promise<void>((resolve) => {
+      harness.download.onDownloadStart = resolve;
+    });
+    harness.download.holdUntilAbort = true;
+
+    const receipt = await harness.service.prepareEnvironment(
+      { kind: 'managed', distributionId: distribution.id },
+      lockOf(),
+    );
+    await downloadStarted;
+    const cancel = await harness.service.cancelPreparation(receipt.operationId);
+    await finishOperation(harness, receipt.operationId);
+
+    expect(cancel.status).toBe('cancelled');
+    expect(harness.download.signals[0]?.aborted).toBe(true);
+    expect(harness.service.getOperation(receipt.operationId)?.status).toBe('cancelled');
+    expect(harness.service.getEnvironment(receipt.environmentId)?.status).toBe('cancelled');
+    expect(
+      await harness.filesystem.exists(path.join(harness.paths.pythonRoot, distribution.sha256)),
+    ).toBe(false);
+    expect(harness.process.calls).toHaveLength(0);
+  });
+
+  it('取消 wheel 下载：中止网络请求并清理未就绪环境', async () => {
+    const harness = openService();
+    harness.download.payload = wheelBytes;
+    const downloadStarted = new Promise<void>((resolve) => {
+      harness.download.onDownloadStart = resolve;
+    });
+    harness.download.holdUntilAbort = true;
+    const lock = lockOf({
+      packages: [
+        {
+          name: 'python-pptx',
+          version: '1.0.2',
+          wheel: wheelName,
+          sha256: sha256Of(wheelBytes),
+          source: 'approved-index',
+          origin: 'https://pypi.internal/simple',
+        },
+      ],
+    });
+
+    const receipt = await harness.service.prepareEnvironment(localBase, lock);
+    await downloadStarted;
+    const cancel = await harness.service.cancelPreparation(receipt.operationId);
+    await finishOperation(harness, receipt.operationId);
+
+    expect(cancel.status).toBe('cancelled');
+    expect(harness.download.urls).toEqual([`https://pypi.internal/simple/${wheelName}`]);
+    expect(harness.download.signals[0]?.aborted).toBe(true);
+    expect(harness.service.getOperation(receipt.operationId)?.status).toBe('cancelled');
+    expect(harness.service.getEnvironment(receipt.environmentId)?.status).toBe('cancelled');
+    expect(harness.process.callsMatching('pip', 'install')).toHaveLength(0);
+    const environment = harness.service.getEnvironment(receipt.environmentId);
+    expect(
+      await harness.filesystem.exists(
+        path.join(harness.paths.userDataRoot, environment?.pathKey ?? 'missing'),
+      ),
+    ).toBe(false);
+  });
+
   it('重启恢复：上次留下的 preparing 作业与环境收口为中断，半成品目录被清掉', async () => {
     const harness = openService();
     const lock = lockOf();
@@ -352,6 +421,35 @@ describe('Python 环境准备作业', () => {
     expect(operation?.failureCode).toBe('wheel-missing');
     expect(operation?.message).toContain('python-pptx==1.0.2');
     expect(harness.process.callsMatching('pip', 'install')).toHaveLength(0);
+  });
+
+  it('从 Skill 包自己的 wheelhouse 检查并离线安装，不依赖应用全局目录', async () => {
+    const harness = openService();
+    const packageWheelhouseRoot = path.join(temporaryDirectory(), 'runtime', 'wheelhouse');
+    await harness.filesystem.writeFile(path.join(packageWheelhouseRoot, wheelName), wheelBytes);
+
+    const plan = await harness.service.inspectPlan(localBase, lockOf(), packageWheelhouseRoot);
+    expect(plan.missingWheels).toEqual([]);
+    expect(plan.requiresDownload).toBe(false);
+
+    const receipt = await harness.service.prepareEnvironment(
+      localBase,
+      lockOf(),
+      'prepare',
+      packageWheelhouseRoot,
+    );
+    await finishOperation(harness, receipt.operationId);
+
+    expect(harness.service.getEnvironment(receipt.environmentId)?.status).toBe('ready');
+    expect(harness.download.urls).toEqual([]);
+    const pipCall = harness.process.callsMatching('pip', 'install')[0];
+    expect(pipCall?.argv).toContain(
+      path.join(
+        harness.paths.userDataRoot,
+        harness.service.getEnvironment(receipt.environmentId)?.pathKey ?? '',
+        'downloads',
+      ),
+    );
   });
 
   it('凭据不落库：下载或安装错误里的代理凭据被脱敏后才进入记录', async () => {
@@ -466,6 +564,81 @@ describe('Python 环境准备作业', () => {
 
     expect(harness.service.getEnvironment(receipt.environmentId)?.status).toBe('ready');
     expect(harness.download.urls).toEqual([]);
+  });
+
+  it('批准来源只用于预取锁定 wheel，pip 安装仍保持离线和 hash 校验', async () => {
+    const harness = openService();
+    harness.download.payload = wheelBytes;
+    const lock = lockOf({
+      packages: [
+        {
+          name: 'python-pptx',
+          version: '1.0.2',
+          wheel: wheelName,
+          sha256: sha256Of(wheelBytes),
+          source: 'approved-index',
+          origin: 'https://pypi.internal/simple',
+        },
+      ],
+    });
+
+    const receipt = await harness.service.prepareEnvironment(localBase, lock);
+    await finishOperation(harness, receipt.operationId);
+
+    expect(harness.service.getOperation(receipt.operationId)?.status).toBe('succeeded');
+    expect(harness.service.getEnvironment(receipt.environmentId)?.status).toBe('ready');
+    expect(harness.download.urls).toEqual([`https://pypi.internal/simple/${wheelName}`]);
+    const environment = harness.service.getEnvironment(receipt.environmentId);
+    if (!environment) throw new Error('环境记录缺失');
+    const pipCall = harness.process.callsMatching('pip', 'install')[0];
+    expect(pipCall?.argv).toContain('--no-index');
+    expect(pipCall?.argv).toContain('--require-hashes');
+    expect(pipCall?.argv).toContain(
+      path.join(harness.paths.userDataRoot, environment.pathKey, 'downloads'),
+    );
+    const stagedWheel = path.join(
+      harness.paths.userDataRoot,
+      environment.pathKey,
+      'downloads',
+      wheelName,
+    );
+    expect(await harness.filesystem.readFile(stagedWheel)).toEqual(wheelBytes);
+  });
+
+  it('缓存 wheel 损坏时从锁定地址重新下载并校验，再交给离线 pip', async () => {
+    const harness = openService();
+    await seedWheelhouse(harness, encoder.encode('corrupted cached wheel'));
+    harness.download.payload = wheelBytes;
+    const lock = lockOf({
+      packages: [
+        {
+          name: 'python-pptx',
+          version: '1.0.2',
+          wheel: wheelName,
+          sha256: sha256Of(wheelBytes),
+          source: 'approved-index',
+          url: `https://packages.example.test/wheels/${wheelName}`,
+        },
+      ],
+    });
+
+    const receipt = await harness.service.prepareEnvironment(localBase, lock);
+    await finishOperation(harness, receipt.operationId);
+
+    expect(harness.service.getEnvironment(receipt.environmentId)?.status).toBe('ready');
+    expect(harness.download.urls).toEqual([`https://packages.example.test/wheels/${wheelName}`]);
+    const environment = harness.service.getEnvironment(receipt.environmentId);
+    if (!environment) throw new Error('环境记录缺失');
+    const stagedWheel = path.join(
+      harness.paths.userDataRoot,
+      environment.pathKey,
+      'downloads',
+      wheelName,
+    );
+    expect(await harness.filesystem.readFile(stagedWheel)).toEqual(wheelBytes);
+    const pipCall = harness.process.callsMatching('pip', 'install')[0];
+    expect(pipCall?.argv).toContain(path.dirname(stagedWheel));
+    expect(pipCall?.argv).toContain('--no-index');
   });
 
   it('受管制品：校验值不符就拒绝使用并清掉半成品', async () => {

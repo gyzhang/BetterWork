@@ -25,6 +25,8 @@ const OVERFLOW_HINT =
 
 const formatSkillHeader = (name: string): string =>
   `以下是 Skill「${name}」的指令，请在后续回答中遵循这些说明：`;
+const formatRuntimeHeader = (name: string): string =>
+  `以下是 Skill「${name}」的固定运行约定，执行时必须遵循：`;
 
 export const buildSkillMessages = (
   instructions: readonly SkillInstruction[] | undefined,
@@ -42,27 +44,38 @@ export const buildSkillMessages = (
   const messages: AgentMessage[] = [];
   let totalLength = 0;
 
+  // 运行约定含当前 Run 的真实 bindingId 和可执行命令表，不能被长 SKILL.md 正文截掉。
   for (const item of deduped) {
-    const header = formatSkillHeader(item.name);
-    const entryLength = header.length + item.instruction.length;
+    const runtimeInstruction = item.runtimeInstruction?.trim();
+    if (!runtimeInstruction) continue;
+    const content = `${formatRuntimeHeader(item.name)}\n\n${runtimeInstruction}`;
+    if (totalLength + content.length > SKILL_INSTRUCTION_BUDGET) {
+      throw new Error('所选 Skill 的运行约定超过上下文预算，无法安全启动 Run。');
+    }
+    messages.push({ id: randomUUID(), role: 'system', content });
+    totalLength += content.length;
+  }
 
-    if (totalLength + entryLength <= SKILL_INSTRUCTION_BUDGET) {
-      messages.push({
-        id: randomUUID(),
-        role: 'system',
-        content: `${header}\n\n${item.instruction}`,
-      });
-      totalLength += entryLength;
+  for (const item of deduped) {
+    if (!item.instruction.trim()) continue;
+    const header = formatSkillHeader(item.name);
+    const fullContent = `${header}\n\n${item.instruction}`;
+
+    if (totalLength + fullContent.length <= SKILL_INSTRUCTION_BUDGET) {
+      messages.push({ id: randomUUID(), role: 'system', content: fullContent });
+      totalLength += fullContent.length;
       continue;
     }
 
     const remaining = SKILL_INSTRUCTION_BUDGET - totalLength;
-    if (remaining > OVERFLOW_HINT.length + 4) {
-      const truncated = item.instruction.slice(0, remaining - OVERFLOW_HINT.length);
+    const fixedLength = header.length + 2 + OVERFLOW_HINT.length;
+    if (remaining > fixedLength) {
+      const truncated = item.instruction.slice(0, remaining - fixedLength);
+      const content = `${header}\n\n${truncated}${OVERFLOW_HINT}`;
       messages.push({
         id: randomUUID(),
         role: 'system',
-        content: `${header}\n\n${truncated}${OVERFLOW_HINT}`,
+        content,
       });
     }
     break;

@@ -45,6 +45,12 @@ const PAGE_SHAPE_EXCEPTIONS: readonly PageShapeException[] = [
     reason: '搜索配置是设置宿主内嵌分区',
   },
   {
+    file: 'apps/desktop/src/renderer/src/views/SettingsView.tsx',
+    component: 'RuntimeComponentsSettings',
+    required: ['apps/desktop/src/renderer/src/components/SectionHeader.tsx#SectionHeader'],
+    reason: '运行组件是设置宿主内嵌分区',
+  },
+  {
     file: 'apps/desktop/src/renderer/src/views/MemoryView.tsx',
     component: 'MemoryPage',
     required: ['apps/desktop/src/renderer/src/components/SectionHeader.tsx#SectionHeader'],

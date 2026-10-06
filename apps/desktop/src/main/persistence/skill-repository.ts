@@ -26,6 +26,7 @@ export interface SaveSkillInput {
 export interface SaveSkillRevisionInput {
   id?: string;
   skillId: string;
+  packageId?: string;
   contentHash: string;
   originalVersion?: string;
   resourceKey: string;
@@ -62,6 +63,7 @@ interface SkillRow {
 interface RevisionRow {
   id: string;
   skill_id: string;
+  package_id: string | null;
   content_hash: string;
   original_version: string | null;
   resource_key: string;
@@ -86,6 +88,19 @@ interface GrantRow {
   profile_hash: string;
 }
 
+interface DependencySelectionRow {
+  lock_hash: string;
+  snapshot_ids_json: string;
+}
+
+const parseSnapshotIds = (snapshotIdsJson: string): string[] => {
+  const ids: unknown = JSON.parse(snapshotIdsJson);
+  if (!Array.isArray(ids) || !ids.every((id): id is string => typeof id === 'string')) {
+    throw new Error('Invalid dependency selection');
+  }
+  return ids;
+};
+
 const parseRecord = (value: string): Record<string, unknown> => {
   const parsed: unknown = JSON.parse(value);
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
@@ -97,6 +112,7 @@ const parseRecord = (value: string): Record<string, unknown> => {
 const toRevision = (row: RevisionRow): SkillRevisionSummary => ({
   id: row.id,
   skillId: row.skill_id,
+  ...(row.package_id === null ? {} : { packageId: row.package_id }),
   contentHash: row.content_hash,
   ...(row.original_version === null ? {} : { originalVersion: row.original_version }),
   resourceKey: row.resource_key,
@@ -283,12 +299,60 @@ export class SkillRepository {
       .prepare(
         'SELECT lock_hash, snapshot_ids_json FROM skill_dependency_selections WHERE grant_id = ?',
       )
-      .get(grantId) as { lock_hash: string; snapshot_ids_json: string } | undefined;
+      .get(grantId) as DependencySelectionRow | undefined;
     if (!row) return undefined;
-    const ids: unknown = JSON.parse(row.snapshot_ids_json);
-    if (!Array.isArray(ids) || !ids.every((id): id is string => typeof id === 'string'))
-      throw new Error('Invalid dependency selection');
-    return { lockHash: row.lock_hash, snapshotIds: ids };
+    return { lockHash: row.lock_hash, snapshotIds: parseSnapshotIds(row.snapshot_ids_json) };
+  }
+
+  /** 按当前内容、运行配置和依赖锁恢复用户最近一次选定的快照。 */
+  getLatestDependencySelection(
+    skillId: string,
+    revisionId: string,
+    profileHash: string,
+    lockHash: string,
+  ): string[] | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT selection.snapshot_ids_json
+         FROM skill_dependency_selections AS selection
+         JOIN skill_trust_grants AS grant_record ON grant_record.id = selection.grant_id
+         WHERE grant_record.skill_id = ?
+           AND grant_record.revision_id = ?
+           AND grant_record.profile_hash = ?
+           AND selection.lock_hash = ?
+         ORDER BY grant_record.granted_at DESC, grant_record.id DESC
+         LIMIT 1`,
+      )
+      .get(skillId, revisionId, profileHash, lockHash) as
+      Pick<DependencySelectionRow, 'snapshot_ids_json'> | undefined;
+    return row ? parseSnapshotIds(row.snapshot_ids_json) : undefined;
+  }
+
+  /** 删除快照时只清理由已撤销授权留下的选择；活跃授权必须由调用方阻止删除。 */
+  removeRevokedSnapshotReferences(snapshotId: string): number {
+    const rows = this.db
+      .prepare(
+        `SELECT selection.grant_id, selection.snapshot_ids_json
+         FROM skill_dependency_selections AS selection
+         JOIN skill_trust_grants AS grant_record ON grant_record.id = selection.grant_id
+         WHERE grant_record.revoked_at IS NOT NULL`,
+      )
+      .all() as { grant_id: string; snapshot_ids_json: string }[];
+    let removedReferences = 0;
+    const update = this.db.prepare(
+      'UPDATE skill_dependency_selections SET snapshot_ids_json = ? WHERE grant_id = ?',
+    );
+    for (const row of rows) {
+      const parsed: unknown = JSON.parse(row.snapshot_ids_json);
+      if (!Array.isArray(parsed) || !parsed.every((id): id is string => typeof id === 'string')) {
+        throw new Error(`Invalid dependency selection for revoked grant ${row.grant_id}`);
+      }
+      const nextIds = parsed.filter((id) => id !== snapshotId);
+      if (nextIds.length === parsed.length) continue;
+      removedReferences += parsed.length - nextIds.length;
+      update.run(JSON.stringify(nextIds), row.grant_id);
+    }
+    return removedReferences;
   }
 
   saveRevision(input: SaveSkillRevisionInput): string {
@@ -300,8 +364,8 @@ export class SkillRepository {
     this.db
       .prepare(
         `INSERT INTO skill_revisions
-          (id, skill_id, content_hash, original_version, resource_key, frontmatter_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          (id, skill_id, content_hash, original_version, resource_key, package_id, frontmatter_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -309,6 +373,7 @@ export class SkillRepository {
         input.contentHash,
         input.originalVersion ?? null,
         input.resourceKey,
+        input.packageId ?? null,
         JSON.stringify(input.frontmatter),
         Date.now(),
       );

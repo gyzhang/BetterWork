@@ -20,6 +20,8 @@ import {
   deleteKnowledgeCollectionRequestSchema,
   deleteMcpConnectionRequestSchema,
   deleteSkillRequestSchema,
+  deleteToolchainSnapshotRequestSchema,
+  deleteToolchainSnapshotResultSchema,
   dependencyOperationSchema,
   dependencyOptionsSchema,
   dependencyPlanRequestSchema,
@@ -50,6 +52,7 @@ import {
   getTaskContextRequestSchema,
   getTaskContinuityBriefRequestSchema,
   getTaskRequestSchema,
+  importSkillFromUrlRequestSchema,
   importSkillRequestSchema,
   inputSnapshotSchema,
   IpcChannel,
@@ -126,6 +129,7 @@ import {
   revokeSkillTrustRequestSchema,
   runArtifactSourceDeclarationSchema,
   runSourcePreviewSchema,
+  runtimeEnvironmentSchema,
   saveExpertRevisionRequestSchema,
   saveKnowledgeCollectionRequestSchema,
   saveKnowledgeSettingsRequestSchema,
@@ -169,6 +173,7 @@ import {
   testSkillRunRequestSchema,
   testSkillRunResultSchema,
   updateMemoryRequestSchema,
+  verifyDependencyEnvironmentRequestSchema,
   workspaceBriefSchema,
   workspaceMemoryBriefRequestSchema,
   workspaceMemorySettingsSchema,
@@ -553,6 +558,12 @@ const api: BetterWorkDesktopApi = {
         importSkillRequestSchema.parse({}),
         skillImportResultSchema,
       ),
+    importFromUrl: (input) =>
+      invokeValidated(
+        IpcChannel.ImportSkillFromUrl,
+        importSkillFromUrlRequestSchema.parse(input),
+        skillImportResultSchema,
+      ),
     saveRuntimeProfile: (input) =>
       invokeValidated(
         IpcChannel.SaveSkillRuntimeProfile,
@@ -841,6 +852,12 @@ const api: BetterWorkDesktopApi = {
         dependencyPlanRequestSchema.parse(input),
         dependencyPlanSchema,
       ),
+    verifyEnvironment: (input) =>
+      invokeValidated(
+        IpcChannel.VerifyDependencyEnvironment,
+        verifyDependencyEnvironmentRequestSchema.parse(input),
+        runtimeEnvironmentSchema,
+      ),
     prepare: (input) =>
       invokeValidated(
         IpcChannel.PrepareDependencyEnvironment,
@@ -866,6 +883,12 @@ const api: BetterWorkDesktopApi = {
         IpcChannel.RegisterToolchainSnapshot,
         registerToolchainRequestSchema.parse(input),
         registerToolchainResultSchema,
+      ),
+    deleteToolchainSnapshot: (input) =>
+      invokeValidated(
+        IpcChannel.DeleteToolchainSnapshot,
+        deleteToolchainSnapshotRequestSchema.parse(input),
+        deleteToolchainSnapshotResultSchema,
       ),
   },
 };

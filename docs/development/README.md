@@ -48,6 +48,7 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | 文档 | 用途 |
 | --- | --- |
 | [共享实施契约](contracts.md) | 术语、ID、状态、目录、接口、跨任务约定；设计选择需由 A00 固定 |
+| [BetterWork Skill 包作者指南](skill-package-authoring.md) | `betterwork.skill.json`、包内依赖锁/wheelhouse、导入与客户分发的维护流程 |
 | [A00–A06：管理配置](tasks-a1.md) | 基线、协议、存储、目录、信任、IPC、UI |
 | [A07–A12：执行依赖](tasks-a2.md) | 执行契约、macOS/Windows supervisor、环境准备、快照、管理 UI |
 | [A13–A17：样本接线](tasks-a3.md) | 模型指令、文件工具、Run 收口、PPT 样本适配、真实试运行 |

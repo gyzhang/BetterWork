@@ -18,6 +18,7 @@ import type {
   McpToolBinding,
   RuntimeProfileCommand,
   ScriptExecution,
+  SkillToolchainRequirement,
   StartRunRequest,
   TaskContinuityBrief,
   TaskContinuityOmission,
@@ -100,10 +101,16 @@ import {
 import { ModelProviderFactory, type ResolvedLanguageModel } from './model-provider-factory';
 import type { NotificationService } from './notification-service';
 import { preparePptAttempt } from './ppt-execution-attempt';
+import { resolvePptExecutionOutputs } from './ppt-generation-preset';
 import { adaptPptCommand } from './ppt-script-adaptation';
 import { ScheduleMaterialResolver } from './schedule-material-resolver';
 import { createQianfanSearchClient } from './search-engine-service';
-import type { AdapterContext, SkillAdapter, SkillAdapterService } from './skill-adapter';
+import {
+  type AdapterContext,
+  buildToolchainEnvironment,
+  type SkillAdapter,
+  type SkillAdapterService,
+} from './skill-adapter';
 import type { SkillDependencyService } from './skill-dependency-service';
 import type { SkillExecutionService } from './skill-execution-service';
 import { composeRuntimeConvention } from './skill-runtime-conventions';
@@ -124,6 +131,11 @@ interface ResolvedSkillBindings {
   bindingIds: string[];
   /** 无绑定时为 undefined，避免向模型注入空的 system 指令段。 */
   instructions?: SkillInstruction[];
+}
+
+interface ResolvedToolchainSnapshots {
+  roots: Record<string, string>;
+  environment: Record<string, string>;
 }
 
 interface ResolvedRunContext {
@@ -794,6 +806,7 @@ export class RunService {
                 readTextFile: this.createScopedReadTextFile(
                   executionContext.materials,
                   workspacePath,
+                  input.taskId,
                 ),
               }
             : {}),
@@ -1217,6 +1230,7 @@ export class RunService {
   private createScopedReadTextFile(
     materials: readonly TaskMaterialSelection[],
     workspacePath: string,
+    taskId: string,
   ): ReadTextFile {
     const snapshots = new Map<
       string,
@@ -1243,7 +1257,38 @@ export class RunService {
         throw new Error('材料范围包含同一路径的多个输入快照，请只选择一个版本。');
       }
       const selected = snapshots.get(relative);
-      if (!selected) throw new Error('材料范围不允许读取该工作空间文件，请先选择输入材料。');
+      if (!selected) {
+        if (context.signal.aborted) throw abortError();
+        const workDirectoryRelative = path.join(
+          '.betterwork',
+          'tasks',
+          taskId,
+          'runs',
+          context.runId,
+          'work',
+        );
+        const workDirectory = path.join(workspacePath, workDirectoryRelative);
+        const requestedWorkPath = path.isAbsolute(input.path)
+          ? path.resolve(input.path)
+          : path.resolve(workDirectory, input.path);
+        if (!isWithinRoot(workDirectory, requestedWorkPath)) {
+          throw new Error('材料范围不允许读取该工作空间文件，请先选择输入材料。');
+        }
+        const workFilePath = path.relative(workDirectory, requestedWorkPath);
+        if (!workFilePath) throw new Error('不能读取 Run 工作目录本身。');
+        const managedWorkFilePath = path.join(workDirectoryRelative, workFilePath);
+        const bytes = readManagedFile(workspacePath, managedWorkFilePath);
+        if (context.signal.aborted) throw abortError();
+        context.reportProgress(`正在读取本 Run 工作文件 ${workFilePath}`);
+        const content = bytes.toString('utf8');
+        return {
+          path: workFilePath,
+          scope: 'run-work-file',
+          content: sliceCodePoints(content, READ_MATERIAL_CODE_POINT_MAX),
+          contentHash: createHash('sha256').update(bytes).digest('hex'),
+          truncated: countCodePoints(content) > READ_MATERIAL_CODE_POINT_MAX,
+        };
+      }
       const { snapshot, reference } = selected;
       if (
         snapshot.workspaceId !== reference.workspaceId ||
@@ -1474,6 +1519,7 @@ export class RunService {
     const toolName = active.toolNames.get(event.toolCallId);
     if (!toolName) return;
     if (toolName === 'read_text_file' && isReadTextFileOutput(event.output)) {
+      if (event.output.scope === 'run-work-file') return;
       active.materialFacts.materialReadCount += 1;
       recordMaterialFacts(
         active.materialFacts,
@@ -1743,6 +1789,7 @@ export class RunService {
     }
     if (toolName === 'read_text_file' && isReadTextFileOutput(event.output)) {
       const output = event.output;
+      if (output.scope === 'run-work-file') return;
       const exactMaterial = output.material;
       const material = exactMaterial
         ? snapshot.materials.find((selection) =>
@@ -2071,15 +2118,16 @@ export class RunService {
         const presetConventions = adapter?.runtimeConventions?.(
           new Set(commands.map((command) => command.commandId)),
         );
-        instruction.instruction += composeRuntimeConvention({
+        instruction.runtimeInstruction = composeRuntimeConvention({
           bindingId: binding.id,
           skillName: skill.name,
           commands,
           ...(presetConventions ? { presetConventions } : {}),
         });
       }
-      // 正文为空时不注入：否则会给模型一条只剩标题的空 system 段。
-      if (instruction.instruction.trim().length > 0) instructions.push(instruction);
+      // 正文和运行约定均为空时不注入：否则会给模型一条只剩标题的空 system 段。
+      if (instruction.instruction.trim() || instruction.runtimeInstruction?.trim())
+        instructions.push(instruction);
     }
     return { bindingIds, instructions };
   }
@@ -2210,10 +2258,24 @@ export class RunService {
     const cwd = path.dirname(
       managedPath(activeRun.workspacePath, path.join(workRelativePath, '.ready'), true),
     );
+    const toolchains = await this.resolveToolchainSnapshots(
+      binding.dependencySnapshotIds,
+      profile.profile.toolchainRequirements,
+      profile.profile.environmentRequirements,
+    );
 
     const adapter = this.skillAdapterService?.findAdapter(skill.revision.contentHash);
     if (adapter) {
-      return this.executeWithAdapter(runId, bindingId, input, command, skill, adapter, cwd);
+      return this.executeWithAdapter(
+        runId,
+        bindingId,
+        input,
+        command,
+        skill,
+        adapter,
+        cwd,
+        toolchains,
+      );
     }
 
     if (
@@ -2228,7 +2290,7 @@ export class RunService {
     if (!binding.environmentId || !this.dependencies) throw new Error('绑定的运行环境不可用');
     const python = this.dependencies.resolveEnvironmentPython(binding.environmentId);
     const argv = [script, ...this.buildArgv(command, input.args)];
-    const env = this.buildCleanEnv();
+    const env = { ...this.buildCleanEnv(), ...toolchains.environment };
     const execution = await this.skillExecutionService.startExecution({
       runId,
       bindingId,
@@ -2260,6 +2322,7 @@ export class RunService {
     skill: NonNullable<ReturnType<AppStore['skills']['getBoundDetail']>>,
     adapter: SkillAdapter,
     cwd: string,
+    toolchains: ResolvedToolchainSnapshots,
   ): Promise<SkillCommandExecuteOutput> {
     if (!this.skillExecutionService) {
       throw new Error('Skill execution service is not available');
@@ -2267,14 +2330,17 @@ export class RunService {
     const skillScriptsRoot = await this.skillService.verifyResourceRoot(skill);
     const binding = this.store.executions.getBinding(bindingId);
     if (!binding?.environmentId || !this.dependencies) throw new Error('绑定的运行环境不可用');
-    const toolchainSnapshotRoot = this.resolveToolchainSnapshotRoot(binding.dependencySnapshotIds);
-    for (const snapshotId of binding.dependencySnapshotIds) {
-      const verification = await this.toolchainSnapshotService?.verifySnapshot(snapshotId);
-      if (!verification?.valid) throw new Error('绑定的工具链快照内容已变化，请重新登记并确认授权');
-    }
+    const toolchainRoots = toolchains.roots;
+    const defaultToolchainRoot = Object.values(toolchainRoots)[0];
     const adapterContext: AdapterContext = {
       skillScriptsRoot,
-      ...(toolchainSnapshotRoot ? { toolchainSnapshotRoot, pptmHome: toolchainSnapshotRoot } : {}),
+      ...(defaultToolchainRoot
+        ? {
+            toolchainRoots,
+            toolchainSnapshotRoot: defaultToolchainRoot,
+            pptmHome: toolchainRoots['ppt-master'] ?? defaultToolchainRoot,
+          }
+        : {}),
       managedPythonPath: this.dependencies.resolveEnvironmentPython(binding.environmentId),
       runWorkDir: cwd,
     };
@@ -2294,14 +2360,11 @@ export class RunService {
       argv: resolved.argv,
       executable: resolved.executable,
       cwd: resolved.cwd,
-      env: resolved.env,
+      env: { ...resolved.env, ...toolchains.environment },
       timeoutMs: command.timeoutMs,
       maxOutputBytes: 32 * 1024,
       maxLogBytes: 10 * 1024 * 1024,
-      expectedOutputs:
-        input.commandId === 'pptx-validate' && resolved.argv[1]
-          ? [path.relative(cwd, resolved.argv[1])]
-          : command.expectedOutputs,
+      expectedOutputs: resolvePptExecutionOutputs(command, resolved, cwd),
       ...(input.commandId === 'pptx-validate' ? { validatorId: 'pptx-validate' } : {}),
       workDirKey: createHash('sha256').update(cwd).digest('hex'),
     });
@@ -2310,13 +2373,41 @@ export class RunService {
     return { ...result, message: `${result.message}；本次参数：${JSON.stringify(attemptArgs)}` };
   }
 
-  private resolveToolchainSnapshotRoot(snapshotIds: string[]): string | undefined {
-    if (!this.toolchainSnapshotService || snapshotIds.length === 0) return undefined;
-    if (snapshotIds.length !== 1) throw new Error('PPT 预设需要明确绑定一个工具链快照');
-    const id = snapshotIds[0];
-    const snapshot = id ? this.store.snapshots.getSnapshot(id) : undefined;
-    if (!snapshot) throw new Error('绑定的工具链快照不存在');
-    return this.toolchainSnapshotService.resolveSnapshotRoot(snapshot);
+  private async resolveToolchainSnapshots(
+    snapshotIds: string[],
+    requirements: SkillToolchainRequirement[] | undefined,
+    legacyRequirements: string[],
+  ): Promise<ResolvedToolchainSnapshots> {
+    const toolchainSnapshotService = this.toolchainSnapshotService;
+    if (!toolchainSnapshotService && snapshotIds.length > 0) {
+      throw new Error('工具链快照服务不可用');
+    }
+    const requirementIds =
+      requirements?.map((requirement) => requirement.id) ??
+      (legacyRequirements.includes('ppt-master') ? ['ppt-master'] : []);
+    if (snapshotIds.length === 0) {
+      if (requirementIds.length > 0) {
+        throw new Error('运行绑定缺少配置声明的外部工具链快照');
+      }
+      return { roots: {}, environment: {} };
+    }
+    if (!toolchainSnapshotService) throw new Error('工具链快照服务不可用');
+    if (requirementIds.length !== snapshotIds.length) {
+      throw new Error('绑定的工具链快照数量与 Skill 配置不一致');
+    }
+    const roots: Record<string, string> = {};
+    for (const [index, requirementId] of requirementIds.entries()) {
+      const id = snapshotIds[index];
+      const snapshot = id ? this.store.snapshots.getSnapshot(id) : undefined;
+      if (!snapshot) throw new Error(`绑定的工具链快照不存在：${requirementId}`);
+      const verification = await toolchainSnapshotService.verifySnapshot(snapshot.id);
+      if (!verification?.valid) throw new Error('绑定的工具链快照内容已变化，请重新登记并确认授权');
+      roots[requirementId] = toolchainSnapshotService.resolveSnapshotRoot(snapshot);
+    }
+    return {
+      roots,
+      environment: buildToolchainEnvironment(requirements, roots, legacyRequirements),
+    };
   }
 
   private runSignal(runId: string): AbortSignal {
@@ -2435,9 +2526,11 @@ const isKnowledgeSearchOutput = (
 interface ReadTextFileOutput {
   path: string;
   content: string;
+  scope?: 'run-work-file';
   material?: MaterialReference;
   format?: string;
   contentHash?: string;
+  truncated?: boolean;
   sections?: Array<{ locator: string; content: string }>;
 }
 
@@ -2445,9 +2538,11 @@ const isReadTextFileOutput = (value: unknown): value is ReadTextFileOutput =>
   isRecord(value) &&
   isString(value.path) &&
   isString(value.content) &&
+  (value.scope === undefined || value.scope === 'run-work-file') &&
   (value.material === undefined || materialReferenceSchema.safeParse(value.material).success) &&
   (value.format === undefined || isString(value.format)) &&
   (value.contentHash === undefined || isString(value.contentHash)) &&
+  (value.truncated === undefined || typeof value.truncated === 'boolean') &&
   (value.sections === undefined ||
     (Array.isArray(value.sections) &&
       value.sections.every(
