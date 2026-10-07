@@ -66,8 +66,12 @@ const pptGenerationExpertPreviousPackageHash =
   'dfc5086e9196d4c2fb7720b65d9cc903f27fae7e872fe90d4cf35847fb7e5188';
 const pptGenerationExpertPreviousSplitPackageHash =
   'af96cb802a79e22a96ae29c6a6e542b8984321ca7195ddf3745249555988472f';
-const pptGenerationExpertPackageHash =
+const pptGenerationExpertPreviousCurrentPackageHash =
   '10e9fd879e2ad98e277ab0aa77e3c548e998530c75065c581799f675381fffe5';
+const pptGenerationExpertPreviousAlignedPackageHash =
+  '2c32f14bd78fd63cc77baf6ced9d1d0f809822e97ec8bc7d6f0642ca4c36c5b7';
+const pptGenerationExpertPackageHash =
+  'cdb384ff5df07175a659140ead972e2f75abd983932878732b76c60f65263e3d';
 
 const pptGenerationExpertPackageProfile: RuntimeProfileDraft = {
   commands: [
@@ -414,12 +418,16 @@ export const supportedPptContentHashes = [
   '4681d64c1736d8162493e9b2da6d2a54bd079338ec46dd92ecdbdaa2f1ee52e1',
   pptGenerationExpertPreviousPackageHash,
   pptGenerationExpertPreviousSplitPackageHash,
+  pptGenerationExpertPreviousCurrentPackageHash,
+  pptGenerationExpertPreviousAlignedPackageHash,
   pptGenerationExpertPackageHash,
 ];
 
 export function suggestedPptProfile(contentHash: string): RuntimeProfileDraft | undefined {
   if (
     contentHash === pptGenerationExpertPackageHash ||
+    contentHash === pptGenerationExpertPreviousAlignedPackageHash ||
+    contentHash === pptGenerationExpertPreviousCurrentPackageHash ||
     contentHash === pptGenerationExpertPreviousSplitPackageHash ||
     contentHash === pptGenerationExpertPreviousPackageHash
   ) {
