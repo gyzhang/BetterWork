@@ -1,8 +1,6 @@
 import { createHash } from 'node:crypto';
 
 import {
-  DEFAULT_ENABLE_BUILTIN_EXPERTS,
-  DEFAULT_ENABLE_BUILTIN_SKILLS,
   DEFAULT_MAX_SKILL_TOOL_ROUNDS,
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
@@ -2129,10 +2127,10 @@ export const appMigrations: readonly Migration[] = [
     up(db: Database.Database): void {
       db.exec(`
         ALTER TABLE run_settings ADD COLUMN enable_builtin_skills INTEGER NOT NULL
-          DEFAULT ${DEFAULT_ENABLE_BUILTIN_SKILLS ? 1 : 0}
+          DEFAULT 1
           CHECK (enable_builtin_skills IN (0, 1));
         ALTER TABLE run_settings ADD COLUMN enable_builtin_experts INTEGER NOT NULL
-          DEFAULT ${DEFAULT_ENABLE_BUILTIN_EXPERTS ? 1 : 0}
+          DEFAULT 1
           CHECK (enable_builtin_experts IN (0, 1));
       `);
     },
