@@ -2133,6 +2133,13 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 44,
+    name: 'track workspace delivery paths for file artifacts',
+    up(db: Database.Database): void {
+      db.exec('ALTER TABLE artifact_files ADD COLUMN workspace_relative_path TEXT');
+    },
+  },
 ];
 
 /**

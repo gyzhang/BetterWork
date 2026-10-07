@@ -49,6 +49,7 @@ const mocks = vi.hoisted(() => ({
   showOpenDialog: vi.fn(),
   showSaveDialog: vi.fn(),
   openPath: vi.fn(async () => ''),
+  showItemInFolder: vi.fn(),
   prepareSchedule: vi.fn(async () => undefined),
   stopSchedule: vi.fn((): 'cancel-requested' => 'cancel-requested'),
   markNotificationRendererReady: vi.fn(() => true),
@@ -62,7 +63,7 @@ vi.mock('electron', () => ({
     },
   },
   dialog: { showOpenDialog: mocks.showOpenDialog, showSaveDialog: mocks.showSaveDialog },
-  shell: { openPath: mocks.openPath },
+  shell: { openPath: mocks.openPath, showItemInFolder: mocks.showItemInFolder },
   systemPreferences: { getUserDefault: () => 'Maximize' },
   Notification: class {
     static isSupported(): boolean {

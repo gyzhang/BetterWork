@@ -262,6 +262,7 @@ function expertFacts(
 function ExpertEditor({
   draft,
   skills,
+  skillsLoading = false,
   mcpConnections,
   models,
   materialCandidates,
@@ -278,6 +279,7 @@ function ExpertEditor({
 }: {
   draft: ExpertRevisionDraft;
   skills: SkillSummary[];
+  skillsLoading?: boolean;
   mcpConnections: McpConnectionSummary[];
   models: ModelProfileSummary[];
   materialCandidates: MaterialCandidate[];
@@ -299,6 +301,23 @@ function ExpertEditor({
   }, []);
   const toolNames =
     draft.builtinToolPolicy.mode === 'allow-list' ? draft.builtinToolPolicy.toolNames : [];
+  const availableSkillIds = new Set(skills.map((skill) => skill.id));
+  const unavailableSkillBindings = skillsLoading
+    ? []
+    : draft.skillPreset.filter((binding) => !availableSkillIds.has(binding.skillId));
+  const skillOptions: CheckOption<string>[] = [
+    ...skills.map((skill) => ({
+      id: skill.id,
+      label: skill.name,
+      checked: draft.skillPreset.some((binding) => binding.skillId === skill.id),
+    })),
+    ...unavailableSkillBindings.map((binding) => ({
+      id: binding.skillId,
+      label: `Skill 不可用 · ${binding.skillId.slice(0, 8)}… / ${binding.revisionId.slice(0, 8)}…（取消勾选移除）`,
+      checked: true,
+      hint: `完整 Skill ID：${binding.skillId}；修订 ID：${binding.revisionId}。从新专家修订中移除后，历史修订仍会保留。`,
+    })),
+  ];
   // 标签输入框保留用户正在敲的分隔符：直接把 draft.tags 拼回去会在敲完一个逗号后
   // 立刻把它吃掉，光标跟着被拽回去。
   const [tagText, setTagText] = useState(() => draft.tags.join('，'));
@@ -406,6 +425,24 @@ function ExpertEditor({
     key: 'principles' | 'inputRequirements' | 'deliveryRequirements',
     value: string,
   ): void => onChange({ ...draft, [key]: linesOf(value) });
+  const toggleSkill = (id: string, checked: boolean): void => {
+    if (!checked) {
+      onChange({
+        ...draft,
+        skillPreset: draft.skillPreset.filter((binding) => binding.skillId !== id),
+      });
+      return;
+    }
+    const skill = skills.find((candidate) => candidate.id === id);
+    if (!skill) return;
+    onChange({
+      ...draft,
+      skillPreset: [
+        ...draft.skillPreset.filter((binding) => binding.skillId !== id),
+        { skillId: skill.id, revisionId: skill.currentRevisionId },
+      ],
+    });
+  };
   return (
     <section className="expert-editor" aria-label={editing ? '编辑专家' : '新建专家'}>
       <PageHeader
@@ -492,27 +529,13 @@ function ExpertEditor({
           <fieldset>
             <legend>Skill 预设</legend>
             <CheckList
-              empty={<span className="muted-text">当前还没有可配置的 Skill。</span>}
-              options={skills.map((skill) => ({
-                id: skill.id,
-                label: skill.name,
-                checked: draft.skillPreset.some((binding) => binding.skillId === skill.id),
-              }))}
-              onToggle={(id, checked) =>
-                onChange({
-                  ...draft,
-                  skillPreset: checked
-                    ? [
-                        ...draft.skillPreset,
-                        {
-                          skillId: id,
-                          revisionId:
-                            skills.find((skill) => skill.id === id)?.currentRevisionId ?? '',
-                        },
-                      ]
-                    : draft.skillPreset.filter((binding) => binding.skillId !== id),
-                })
+              empty={
+                <span className="muted-text">
+                  {skillsLoading ? '正在读取 Skill 清单…' : '当前还没有可配置的 Skill。'}
+                </span>
               }
+              options={skillOptions}
+              onToggle={toggleSkill}
             />
           </fieldset>
           <fieldset>
@@ -881,6 +904,7 @@ function ExpertDetailPanel({
 export function ExpertsPage({
   state,
   skills,
+  skillsLoading = false,
   mcpConnections,
   memories,
   models,
@@ -896,6 +920,7 @@ export function ExpertsPage({
 }: {
   state: ExpertsState;
   skills: SkillSummary[];
+  skillsLoading?: boolean;
   mcpConnections: McpConnectionSummary[];
   memories: MemoryRecord[];
   models: ModelProfileSummary[];
@@ -1079,6 +1104,7 @@ export function ExpertsPage({
       <ExpertEditor
         draft={draft}
         skills={skills}
+        skillsLoading={skillsLoading}
         mcpConnections={mcpConnections}
         models={models}
         materialCandidates={materialCandidates}

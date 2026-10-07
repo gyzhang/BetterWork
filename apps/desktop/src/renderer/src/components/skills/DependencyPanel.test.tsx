@@ -361,19 +361,11 @@ describe('DependencyPanel', () => {
           lineNumber: 34,
           label: '发现外部目录变量 PPTM_HOME',
         },
-        {
-          kind: 'toolchain-name',
-          sourcePath: 'SKILL.md',
-          lineNumber: 34,
-          label: '发现外部工具链引用 ppt-master',
-        },
       ],
     });
     render(<Harness skill={skill} />);
 
-    expect(
-      await screen.findByText(/尚未映射到运行配置的目录或工具链线索：PPTM_HOME、ppt-master/),
-    ).toBeTruthy();
+    expect(await screen.findByText(/尚未映射到运行配置的外部目录变量：PPTM_HOME/)).toBeTruthy();
     expect(screen.queryByText('此 Skill 不依赖外部工具链。')).toBeNull();
   });
 

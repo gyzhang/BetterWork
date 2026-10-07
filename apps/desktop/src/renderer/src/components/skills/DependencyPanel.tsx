@@ -4,8 +4,8 @@ import { useState } from 'react';
 import type { SkillDependenciesState } from '../../hooks/use-skill-dependencies';
 import { skillEnvironmentName } from '../../lib/labels';
 import {
-  effectiveToolchainRequirements,
-  unconfiguredExternalRuntimeClues,
+  declaredToolchainRequirements,
+  unconfiguredEnvironmentVariableClues,
 } from '../../lib/skill-runtime-discovery';
 import { ActionBar } from '../ActionBar';
 import { InlineLoading } from '../AsyncButton';
@@ -117,12 +117,12 @@ export function DependencyPanel({
     grant?.grantActive === true;
   const profile = skill.runtimeProfile?.profile;
   const dependencyLockId = profile?.dependencyBundle?.id ?? profile?.dependencyLockId;
-  const toolchainRequirements = effectiveToolchainRequirements(profile);
-  const externalRuntimeClues = unconfiguredExternalRuntimeClues(
+  const toolchainRequirements = declaredToolchainRequirements(profile);
+  const unconfiguredEnvironmentVariables = unconfiguredEnvironmentVariableClues(
     skill.runtimeDiscovery,
     toolchainRequirements,
   );
-  const hasUnconfiguredExternalClues = externalRuntimeClues.length > 0;
+  const hasUnconfiguredEnvironmentVariables = unconfiguredEnvironmentVariables.length > 0;
   const managedDistribution = options?.distributions.find(
     (distribution) =>
       state.base?.kind === 'managed' && distribution.id === state.base.distributionId,
@@ -269,10 +269,10 @@ export function DependencyPanel({
         </Field>
       ))}
       {toolchainRequirements.length === 0 &&
-        (hasUnconfiguredExternalClues ? (
+        (hasUnconfiguredEnvironmentVariables ? (
           <StatusNote
             tone="warning"
-            message={`导入扫描发现尚未映射到运行配置的目录或工具链线索：${externalRuntimeClues.join('、')}。依赖环境就绪不代表这些资源已准备。`}
+            message={`导入扫描发现尚未映射到运行配置的外部目录变量：${unconfiguredEnvironmentVariables.join('、')}。依赖环境就绪不代表这些资源已准备。`}
           />
         ) : (
           <p>当前运行配置未声明外部工具链。</p>

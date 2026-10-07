@@ -425,16 +425,18 @@ export class SchedulePreflightService {
       add('skill-dependency-unavailable', '脚本 Skill 缺少已确认的固定依赖选择。', skill.id);
       return { ...baseFingerprint, resourceVerified };
     }
-    const snapshots: DependencySnapshot[] = [];
+    const selectedSnapshots: (DependencySnapshot | undefined)[] = [];
     let snapshotInvalid = false;
     for (const snapshotId of selection.snapshotIds) {
       const snapshot = this.store.snapshots.getSnapshot(snapshotId);
+      selectedSnapshots.push(snapshot);
       if (!snapshot) {
         snapshotInvalid = true;
-        continue;
       }
-      snapshots.push(snapshot);
     }
+    const snapshots = selectedSnapshots.filter(
+      (snapshot): snapshot is DependencySnapshot => snapshot !== undefined,
+    );
     const snapshotManifestHashes = snapshots.map((snapshot) => snapshot.manifestHash);
     const dependencyFingerprint = computeDependencyFingerprint({
       lockHash: selection.lockHash,
@@ -466,33 +468,46 @@ export class SchedulePreflightService {
       }
     }
 
-    let toolchainReady = snapshots.length === 1 && !snapshotInvalid;
-    if (snapshots.length !== 1 || snapshotInvalid) {
-      toolchainReady = false;
-    } else {
-      const snapshot = snapshots[0];
-      if (snapshot) {
-        try {
-          const verification = await this.runtime.verifyToolchainSnapshot(snapshot.id);
-          const snapshotRoot = this.runtime.resolveSnapshotRoot(snapshot);
-          const scripts = [
-            path.join(snapshotRoot, 'skills', 'ppt-master', 'scripts', 'project_manager.py'),
-            path.join(snapshotRoot, 'skills', 'ppt-master', 'scripts', 'icon_sync.py'),
-          ];
-          toolchainReady =
-            verification.valid &&
-            (await Promise.all(scripts.map((script) => this.runtime.pathExists(script)))).every(
-              Boolean,
-            );
-        } catch {
+    const toolchainRequirements = runtimeProfile.profile.toolchainRequirements ?? [];
+    let toolchainReady =
+      !snapshotInvalid &&
+      selectedSnapshots.length === toolchainRequirements.length &&
+      snapshots.length === toolchainRequirements.length;
+    const toolchainRoots = new Map<string, string>();
+    for (const [index, requirement] of toolchainRequirements.entries()) {
+      const snapshot = selectedSnapshots[index];
+      if (!snapshot) {
+        toolchainReady = false;
+        continue;
+      }
+      try {
+        const verification = await this.runtime.verifyToolchainSnapshot(snapshot.id);
+        if (!verification.valid) {
           toolchainReady = false;
+          continue;
+        }
+        toolchainRoots.set(requirement.id, this.runtime.resolveSnapshotRoot(snapshot));
+      } catch {
+        toolchainReady = false;
+      }
+    }
+    const toolchainEntrypoints = runtimeProfile.profile.commands.flatMap((command) => {
+      const entrypoint = command.execution?.entrypoint;
+      return entrypoint?.scope === 'toolchain' ? [entrypoint] : [];
+    });
+    if (toolchainReady) {
+      for (const entrypoint of toolchainEntrypoints) {
+        const root = toolchainRoots.get(entrypoint.toolchainId);
+        if (!root || !(await this.runtime.pathExists(path.join(root, entrypoint.path)))) {
+          toolchainReady = false;
+          break;
         }
       }
     }
     if (!toolchainReady) {
       add(
         'skill-toolchain-unavailable',
-        'ppt-generation 需要一个完整、已校验的固定 ppt-master 工具链快照。',
+        'Skill 声明的工具链快照或命令入口缺失、未通过校验或不可读取。',
         skill.id,
       );
     }

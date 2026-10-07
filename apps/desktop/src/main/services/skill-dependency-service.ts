@@ -367,9 +367,7 @@ export class SkillDependencyService {
         blockedReason: '尚未记录信任意愿，先勾选「受信任」再确认依赖授权',
       };
     }
-    const expectedToolchains =
-      profile.profile.toolchainRequirements?.length ??
-      (profile.profile.environmentRequirements.includes('ppt-master') ? 1 : 0);
+    const expectedToolchains = profile.profile.toolchainRequirements?.length ?? 0;
     if (input.snapshotManifestHashes.length !== expectedToolchains) {
       return {
         grantActive: false,

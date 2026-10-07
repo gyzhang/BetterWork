@@ -1,5 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 
 import type {
@@ -9,12 +18,55 @@ import type {
   ValidationState,
 } from '@betterwork/agent-protocol';
 
-import { hashBytes, readManagedFile } from '../infrastructure/managed-files';
+import { hashBytes, managedPath, readManagedFile } from '../infrastructure/managed-files';
 import type { PptxRenderer, RenderedSlide } from '../infrastructure/pptx-renderer';
 import type { AppStore } from '../persistence';
+import { fileArtifactExtensionForMimeType } from './file-artifact-format';
 
 const describeError = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+const hasCode = (error: unknown, code: string): boolean =>
+  error instanceof Error && 'code' in error && error.code === code;
+
+const cleanFilenamePart = (value: string): string => {
+  const cleaned = Array.from(value.normalize('NFC'), (character) => {
+    const codePoint = character.codePointAt(0);
+    const isControl =
+      codePoint !== undefined && (codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f));
+    return isControl || '/\\:<>?*"|'.includes(character) ? '_' : character;
+  })
+    .join('')
+    .replace(/\s+/gu, '_')
+    .replace(/_+/gu, '_')
+    .replace(/^[._]+|[._]+$/gu, '');
+  return Array.from(cleaned || '未命名')
+    .slice(0, 60)
+    .join('');
+};
+
+const workspaceFilename = (
+  title: string,
+  versionNumber: number,
+  extension: string,
+  collisionIndex: number,
+): string => {
+  const titleWithoutExtension = title.replace(new RegExp(`\\.${extension}$`, 'iu'), '');
+  const suffix = collisionIndex > 1 ? `-${collisionIndex}` : '';
+  return `${cleanFilenamePart(titleWithoutExtension)}-v${versionNumber}${suffix}.${extension}`;
+};
+
+const fileMatchesHash = (
+  workspaceRoot: string,
+  relativePath: string,
+  fileHash: string,
+): boolean => {
+  try {
+    return hashBytes(readManagedFile(workspaceRoot, relativePath)) === fileHash;
+  } catch {
+    return false;
+  }
+};
 
 export type ArtifactFileSourceResolver = (executionId: string, outputId: string) => Promise<string>;
 
@@ -99,8 +151,9 @@ export class FileArtifactService {
     const versionId = randomUUID();
     const destDir = path.join(this.artifactFilesRoot, versionId);
     const destPath = path.join(destDir, 'output');
+    let registered: RegisterFileArtifactResult;
     try {
-      return this.store.transaction(() => {
+      registered = this.store.transaction(() => {
         if (
           this.store.runs.get(input.runId)?.status !== 'running' ||
           !this.acceptsRun(input.runId) ||
@@ -149,6 +202,86 @@ export class FileArtifactService {
       rmSync(destDir, { recursive: true, force: true });
       throw error;
     }
+    try {
+      await this.ensureWorkspaceCopy(
+        registered.artifactId,
+        registered.versionId,
+        path.extname(sourcePath).slice(1),
+      );
+    } catch (error) {
+      throw new Error(`成果已登记，但未能复制到工作空间：${describeError(error)}`, {
+        cause: error,
+      });
+    }
+    return registered;
+  }
+
+  /**
+   * Ensure a visible, editable delivery copy exists in the Artifact's Workspace.
+   * The internal immutable copy remains the canonical source for previews and exports.
+   */
+  async ensureWorkspaceCopy(
+    artifactId: string,
+    versionId: string,
+    declaredExtension?: string,
+  ): Promise<string> {
+    const artifact = this.store.artifacts.getDetail(artifactId);
+    if (!artifact || artifact.type !== 'presentation')
+      throw new Error('File artifact does not exist');
+    const version = this.store.artifacts.getVersionDetail(versionId);
+    if (!version || version.artifactId !== artifactId || version.type !== 'presentation') {
+      throw new Error('Artifact version does not belong to artifact');
+    }
+    const workspace = this.store.workspaces.get(artifact.workspaceId);
+    if (!workspace) throw new Error('Artifact workspace does not exist');
+
+    const bytes = this.readVersionBytes(versionId);
+    if (bytes.length !== version.fileSize || hashBytes(bytes) !== version.fileHash) {
+      throw new Error('Stored artifact does not match its registered hash');
+    }
+    const workspaceRoot = workspace.rootPath;
+    const knownRelativePath = this.store.artifacts.getWorkspaceRelativePath(versionId);
+    if (knownRelativePath) {
+      const target = managedPath(workspaceRoot, knownRelativePath, true);
+      if (existsSync(target)) {
+        if (!lstatSync(target).isFile())
+          throw new Error('Workspace delivery path is not a regular file');
+        return target;
+      }
+      this.publishWorkspaceCopy(workspaceRoot, knownRelativePath, bytes);
+      return managedPath(workspaceRoot, knownRelativePath);
+    }
+
+    const extension =
+      this.safeExtension(declaredExtension) ??
+      (await this.extensionFromVerifiedOutput(version.fileKey)) ??
+      fileArtifactExtensionForMimeType(version.mimeType);
+    for (let collisionIndex = 1; collisionIndex <= 10_000; collisionIndex += 1) {
+      const relativePath = path.join(
+        '成果',
+        workspaceFilename(artifact.title, version.versionNumber, extension, collisionIndex),
+      );
+      const target = managedPath(workspaceRoot, relativePath, true);
+      if (existsSync(target)) {
+        if (fileMatchesHash(workspaceRoot, relativePath, version.fileHash)) {
+          this.store.artifacts.setWorkspaceRelativePath(versionId, relativePath);
+          return target;
+        }
+        continue;
+      }
+      try {
+        this.publishWorkspaceCopy(workspaceRoot, relativePath, bytes);
+      } catch (error) {
+        if (hasCode(error, 'EEXIST')) continue;
+        throw error;
+      }
+      const persistedPath = this.store.artifacts.setWorkspaceRelativePath(versionId, relativePath);
+      if (persistedPath !== relativePath) {
+        return this.ensureWorkspaceCopy(artifactId, versionId, declaredExtension);
+      }
+      return managedPath(workspaceRoot, relativePath);
+    }
+    throw new Error('Could not find an unused filename in the Workspace delivery folder');
   }
 
   resolveStoredPath(versionId: string): string {
@@ -158,6 +291,41 @@ export class FileArtifactService {
   /** 按版本 ID 从不可变成果库安全读取原始文件字节，调用方仍需核对 ArtifactVersion hash。 */
   readVersionBytes(versionId: string): Buffer {
     return readManagedFile(this.artifactFilesRoot, path.join(versionId, 'output'));
+  }
+
+  private publishWorkspaceCopy(workspaceRoot: string, relativePath: string, bytes: Buffer): void {
+    const target = managedPath(workspaceRoot, relativePath, true);
+    const temporaryRelativePath = path.join(
+      path.dirname(relativePath),
+      `.betterwork-artifact-${randomUUID()}.tmp`,
+    );
+    const temporary = managedPath(workspaceRoot, temporaryRelativePath, true);
+    try {
+      writeFileSync(temporary, bytes, { flag: 'wx', mode: 0o600 });
+      managedPath(workspaceRoot, relativePath);
+      linkSync(temporary, target);
+    } finally {
+      rmSync(temporary, { force: true });
+    }
+  }
+
+  private async extensionFromVerifiedOutput(fileKey: string): Promise<string | undefined> {
+    const separator = fileKey.indexOf('/');
+    if (separator < 1 || separator === fileKey.length - 1) return undefined;
+    try {
+      const sourcePath = await this.sourceResolver(
+        fileKey.slice(0, separator),
+        fileKey.slice(separator + 1),
+      );
+      return this.safeExtension(path.extname(sourcePath).slice(1));
+    } catch {
+      return undefined;
+    }
+  }
+
+  private safeExtension(extension: string | undefined): string | undefined {
+    const normalized = extension?.replace(/^\./u, '').toLowerCase();
+    return normalized && /^[a-z0-9]{1,16}$/u.test(normalized) ? normalized : undefined;
   }
 
   /** 派生缓存目录：随版本产生、可随时删除重建，不参与成果真实性校验。 */

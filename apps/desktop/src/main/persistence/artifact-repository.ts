@@ -64,6 +64,7 @@ interface ArtifactFileRow {
   validation_structure: ValidationState['structure'];
   validation_visual: ValidationState['visual'];
   validation_manual_edit: ValidationState['manualEdit'];
+  workspace_relative_path: string | null;
 }
 
 interface EvidenceRow {
@@ -568,6 +569,27 @@ export class ArtifactRepository {
       ...(file.description ? { description: file.description } : {}),
       evidence: this.listVersionEvidence(row.id),
     };
+  }
+
+  getWorkspaceRelativePath(versionId: string): string | undefined {
+    const row = this.db
+      .prepare('SELECT workspace_relative_path FROM artifact_files WHERE version_id = ?')
+      .get(versionId) as { workspace_relative_path: string | null } | undefined;
+    return row?.workspace_relative_path ?? undefined;
+  }
+
+  setWorkspaceRelativePath(versionId: string, relativePath: string): string {
+    this.db
+      .prepare(
+        `UPDATE artifact_files SET workspace_relative_path = ?
+          WHERE version_id = ? AND workspace_relative_path IS NULL`,
+      )
+      .run(relativePath, versionId);
+    const row = this.db
+      .prepare('SELECT workspace_relative_path FROM artifact_files WHERE version_id = ?')
+      .get(versionId) as { workspace_relative_path: string | null } | undefined;
+    if (!row?.workspace_relative_path) throw new Error('File artifact does not exist');
+    return row.workspace_relative_path;
   }
 
   getVersionDeclarationKind(versionId: string): ArtifactSourceDeclarationKind {

@@ -84,6 +84,8 @@ This is documentation adoption only, not authorization to begin product developm
 | B | 专家配置接续，绑定多项 Skill | E11–E15 已完成专家管理、召唤、执行注入与内置分发；B0 双 Skill 的真实成功执行与撤销走查仍待可用模型 endpoint，见 [专家开发计划](development/tasks-experts.md) B00-5。 |
 | C | 长期目录下完成研究、场景方案、报告和公司模板可编辑 PPT | E20–E54 已完成材料范围、记忆、MCP/网页、Office 输入、讨论节点、经营分析和来源交付；E55/E56 的真实业务连续两期与签名安装验收仍待执行。 |
 
+2026-10-07 文件成果交付约定：每个已登记文件版本除保留应用数据目录中的不可变原件外，还会在所属工作空间的可见 `成果/` 目录生成保留扩展名的交付副本。副本按版本记录相对路径、原子创建且不覆盖已有文件；成果页的「打开」和「打开所在文件夹」均指向该工作空间副本。细则见 [ADR-0041](adr/0041-file-artifact-workspace-delivery.md)。
+
 [产品修订稿](reviews/2026-09-08-product-scope.md) 区分已确认决策和待审阅建议；[ADR-0008](adr/0008-personal-workbench-and-capability-first.md) 固定本次产品及职责决策。A/B/C 是新的交付顺序，不代表下方旧 Phase 已完成，也不自动批准修订稿中的技术提议。后续已确认首个脚本型 Skill 必须从 A 支持，见 [ADR-0009](adr/0009-script-skill-baseline.md) 与 [样本边界](reviews/2026-09-08-skill-runtime-boundary.md)；「首轮仅指令、脚本后置」建议撤回。执行器、依赖准备和文件边界已形成 [设计提案](designs/skill-executor-and-dependencies.md) 与 [ADR-0010](adr/0010-skill-executor-and-dependencies.md)（Proposed）；A1–A4 的实现次序和验收已列出，当前实现与验收缺口见阶段 A 任务板。
 
 阶段 A 同时纳入已确认的 [Skill 信任与本地分发规则](adr/0011-skill-trust-and-local-distribution.md)：内置默认信任、导入显式选择、更新与撤销语义、三类目录、用户副本和共享依赖分发。配置验收必须覆盖启用/信任/依赖状态分离以及更新不覆盖用户选择。

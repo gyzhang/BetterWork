@@ -26,7 +26,7 @@
 
 新 Skill 包把锁 JSON 放在自己的 `runtime/locks/`，可选 wheel 放在自己的 `runtime/wheelhouse/`。BetterWork 校验相对路径、锁 Schema 与 CPython 兼容声明；wheel 缺失时从锁内的精确 HTTPS URL 下载并复核 SHA-256，包内 wheelhouse 可支持离线/受限网络分发。包锁不是由导入扫描推断，也不进入应用级全局锁目录。锁开发由显式 `requirements.in` 和目标 CPython 下的 pip 安装报告产生，过程见[Skill 包作者指南](../development/skill-package-authoring.md)。旧版 profile 的应用目录锁仍兼容读取。
 
-静态扫描只列出 Python 脚本、依赖声明文件、真实环境变量访问、安装提示和工具链名的文件/行号证据。扫描是未映射配置的辅助线索：不会生成锁、命令、信任状态或快照绑定；导入不运行代码、不执行 pip/git，也不读取被引用目录。内部 `SKILL_DIR` 等 Skill 自身路径常量不等同外部环境变量。快照按 profile 中工具链声明的顺序逐项选择和绑定；零项 Skill 不附加快照，多项声明需要多项快照。
+静态扫描只列出 Python 脚本、依赖声明文件、真实环境变量访问和安装提示的文件/行号证据。扫描是未映射配置的辅助线索：不会生成锁、命令、信任状态或快照绑定；导入不运行代码、不执行 pip/git，也不读取被引用目录。内部 `SKILL_DIR` 等 Skill 自身路径常量不等同外部环境变量。工具链 ID、版本和命令入口只从 Skill manifest 的结构化声明读取；快照按 profile 中工具链声明的顺序逐项选择和绑定，零项 Skill 不附加快照，多项声明需要多项快照。
 
 以 `/Users/kevin/Downloads/ppt-expert-skill` 为样例，包元数据现在明确声明 `PPTM_HOME`、ppt-master 版本提示和完整 commit；作者绝对路径不进入包。PPT 锁和 8 个 wheel 已放入本机忽略的开发包目录。原始 Skill 文档仍要求系统 Python，而受管 CPython 兼容性、命令/产物契约和对应适配尚未完成验证，因此样例 manifest 的 `commands` 保持为空，不能声称此包已可运行或已达到分发验收。当前工具链快照 UI 可要求用户选一次本机源目录并校验版本；ppt-master 固定下载制品与自动安装尚未实现。
 
@@ -138,6 +138,7 @@ userData/
   execution-logs/<executionId>/               # 有界日志，用户按需查看
   artifact-files/<versionId>/                 # 不可变文件成果与来源清单
 workspace/
+  成果/                                       # ArtifactVersion 的可见交付副本，保留扩展名
   .betterwork/tasks/<taskId>/runs/<runId>/
     inputs/                                  # 本次选定输入副本
     work/                                    # SVG、spec_lock、项目文件
@@ -150,9 +151,11 @@ workspace/
 
 - run_skill_bindings：Run → Skill 修订、配置修订、环境、工具链快照、授权修订。
 - script_executions：executionId、Run、toolCallId、binding、命令 ID、参数摘要、输入 hash 清单、执行目录、状态、终止原因、报告/输出 hash。
-- artifact_files：ArtifactVersion → 相对存储键、MIME、大小、hash、生成 executionId。
+- artifact_files：ArtifactVersion → 相对存储键、MIME、大小、hash、生成 executionId，以及可见交付副本的工作空间相对路径。
 
 SQLite 记录有效配置、关联和状态；文件承载不可重建资产，不能将成果文件称为可随意清理的缓存。落盘和 DB 无跨介质事务：先写临时文件并同文件系统 rename 到最终资源位，再提交关联；无 DB 关联的遗留文件延迟回收。引用存在但文件缺失时显示「文件缺失」，不伪造可用成果。
+
+文件成果的内部不可变原件保存在 `userData/artifact-files/<versionId>/output`；登记后，通用宿主还会把它交付到所属工作空间的可见 `成果/`，以 Skill 已验证输出扩展名为优先，并持久化相对路径。工作空间副本可被用户编辑，宿主不覆盖已有文件；「打开」和「打开所在文件夹」指向该副本。交付副本缺失时可从不可变原件重建，细则见 [ADR-0041](../adr/0041-file-artifact-workspace-delivery.md)。
 
 ### 5.1 本地目录发现与版本升级（产品规则已确认）
 

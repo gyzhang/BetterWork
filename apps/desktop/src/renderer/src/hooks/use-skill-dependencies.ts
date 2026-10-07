@@ -10,7 +10,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { describeActionError, reportAction, trackAction } from '../lib/async-action';
-import { effectiveToolchainRequirements } from '../lib/skill-runtime-discovery';
+import { declaredToolchainRequirements } from '../lib/skill-runtime-discovery';
 
 /**
  * Skill 依赖与环境准备（A12）。
@@ -81,7 +81,7 @@ export function useSkillDependencies(
 
   const skillId = skill?.id;
   const profile = skill?.runtimeProfile?.profile;
-  const toolchainCount = effectiveToolchainRequirements(profile).length;
+  const toolchainCount = declaredToolchainRequirements(profile).length;
 
   const stopPolling = useCallback((): void => {
     const timer = pollTimer.current;

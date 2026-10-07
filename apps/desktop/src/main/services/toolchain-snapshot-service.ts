@@ -18,9 +18,8 @@ import type { AppStore } from '../persistence';
 /**
  * 外部工具链快照（设计 §4.3、任务 A11）。
  *
- * 样本依赖的 ppt-master 是用户机器上的开发仓库：它会被 `git pull` 改动，带未提交修改，
- * 还混着历史项目与用户私有资料。因此运行前必须把它复制成**受管不可变快照**，
- * `PPTM_HOME` 指向快照而不是开发仓库。
+ * 外部工具链源目录可能继续变化，也可能包含与运行无关的文件。因此运行前必须将声明
+ * 所需的文件复制成**受管不可变快照**，并只把快照路径注入对应的声明环境变量。
  *
  * 三条纪律：
  * - 快照按内容清单 hash 寻址：源目录之后再怎么改，已登记的快照内容与 hash 都不变；
@@ -187,7 +186,7 @@ export class ToolchainSnapshotService {
     };
   }
 
-  /** 快照在磁盘上的绝对根：PPTM_HOME 用它，绝不指向用户的开发仓库。 */
+  /** 快照在磁盘上的绝对根；声明的环境变量只指向受管快照，不指向用户源目录。 */
   resolveSnapshotRoot(snapshot: DependencySnapshot): string {
     return path.join(this.roots.userDataRoot, snapshot.pathKey);
   }

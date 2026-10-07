@@ -104,6 +104,7 @@ import {
   notificationRendererReadyRequestSchema,
   notificationRendererReadyResultSchema,
   notificationSummarySchema,
+  openFileArtifactRequestSchema,
   preflightScheduleRequestSchema,
   prepareDependencyRequestSchema,
   prepareDependencyResultSchema,
@@ -126,6 +127,7 @@ import {
   retryKnowledgeJobRequestSchema,
   retryMemoryJobRequestSchema,
   retryScheduleOutputRequestSchema,
+  revealFileArtifactResultSchema,
   revokeSkillTrustRequestSchema,
   runArtifactSourceDeclarationSchema,
   runSettingsSchema,
@@ -279,6 +281,12 @@ const api: BetterWorkDesktopApi = {
     getFileDetail: (input) => ipcRenderer.invoke(IpcChannel.GetFileArtifact, input),
     exportFile: (input) => ipcRenderer.invoke(IpcChannel.ExportFileArtifact, input),
     openFile: (input) => ipcRenderer.invoke(IpcChannel.OpenFileArtifact, input),
+    revealFile: (input) =>
+      invokeValidated(
+        IpcChannel.RevealFileArtifact,
+        openFileArtifactRequestSchema.parse(input),
+        revealFileArtifactResultSchema,
+      ),
     getThumbnails: (input) =>
       invokeValidated(
         IpcChannel.GetArtifactThumbnails,
