@@ -29,7 +29,7 @@ import { MemoryEditor } from '../components/MemoryEditor';
 import { MemorySuggestionList } from '../components/MemorySuggestionList';
 import { SectionHeader } from '../components/SectionHeader';
 import { StatusNote } from '../components/StatusNote';
-import { Tabs } from '../components/Tabs';
+import { Tab, TabList, TabPanel, Tabs } from '../components/Tabs';
 import { TextField } from '../components/TextField';
 import type { MemoriesState } from '../hooks/use-memories';
 import { newMemoryOperationId } from '../hooks/use-memories';
@@ -354,6 +354,23 @@ export function MemoryPage({
     trackAction(state.rebuildProjection(newMemoryOperationId()), '重建记忆投影');
   };
 
+  const memoryGroupSharedProps: MemoryGroupSharedProps = {
+    query: appliedQuery,
+    truncated: state.truncated,
+    state,
+    onEdit: openEditor,
+    onAction: actOn,
+    onRestate: (memory) =>
+      setSession({ key: `restate-${memory.id}`, mode: 'create', restateFrom: memory }),
+    onDelete: setPendingDelete,
+    onReviewSource: reviewLegacySource,
+    onPolicy: setPolicy,
+    onResolve: resolveConflict,
+    onLoadRevision: loadRevisionById,
+    ...(workspaceName ? { workspaceName } : {}),
+    ...(expertName ? { expertName } : {}),
+  };
+
   return (
     <section className="settings-section memory-settings">
       <SectionHeader
@@ -484,7 +501,7 @@ export function MemoryPage({
           detail="在这里记录稳定的偏好和工作方法，下一次任务会按适用范围与来源状态决定是否带入。"
         />
       ) : (
-        <>
+        <Tabs value={activeKey} onChange={setTabKey}>
           <PageToolbar ariaLabel="记忆检索与分组">
             <form
               className="memory-search"
@@ -506,41 +523,16 @@ export function MemoryPage({
                 </Button>
               )}
             </form>
-            <Tabs
-              size="md"
-              label="记忆分组"
-              items={memoryTabOrder.map((key) => ({
-                id: key,
-                label: `${memoryTabLabels[key]} · ${grouped[key].length}`,
-              }))}
-              value={activeKey}
-              onChange={setTabKey}
-            />
+            <TabList size="md" label="记忆分组">
+              {memoryTabOrder.map((key) => (
+                <Tab key={key} value={key}>
+                  {`${memoryTabLabels[key]} · ${grouped[key].length}`}
+                </Tab>
+              ))}
+            </TabList>
           </PageToolbar>
-          <MemoryGroup
-            title={memoryTabLabels[activeKey]}
-            hint={memoryTabHints[activeKey]}
-            ariaLabel={`${memoryTabLabels[activeKey]}记忆列表`}
-            memories={grouped[activeKey]}
-            query={appliedQuery}
-            truncated={state.truncated}
-            state={state}
-            readOnly={activeKey === 'history'}
-            {...(activeKey === 'expired' ? { editLabel: '修改有效期并重新确认' } : {})}
-            onEdit={openEditor}
-            onAction={actOn}
-            onRestate={(memory) =>
-              setSession({ key: `restate-${memory.id}`, mode: 'create', restateFrom: memory })
-            }
-            onDelete={setPendingDelete}
-            onReviewSource={reviewLegacySource}
-            onPolicy={setPolicy}
-            onResolve={resolveConflict}
-            onLoadRevision={loadRevisionById}
-            {...(workspaceName ? { workspaceName } : {})}
-            {...(expertName ? { expertName } : {})}
-          />
-        </>
+          <MemoryTabPanels grouped={grouped} sharedProps={memoryGroupSharedProps} />
+        </Tabs>
       )}
 
       {pendingDelete && (
@@ -595,6 +587,61 @@ interface MemoryGroupProps {
   onLoadRevision: (memoryId: string, revisionId: string) => Promise<MemoryViewItem | undefined>;
   workspaceName?: string;
   expertName?: string;
+}
+
+type MemoryGroupSharedProps = Omit<
+  MemoryGroupProps,
+  'title' | 'hint' | 'ariaLabel' | 'memories' | 'readOnly' | 'editLabel'
+>;
+
+interface MemoryTabPanelsProps {
+  grouped: Record<MemoryTabKey, MemoryViewItem[]>;
+  sharedProps: MemoryGroupSharedProps;
+}
+
+function MemoryTabPanels({ grouped, sharedProps }: MemoryTabPanelsProps): React.JSX.Element {
+  return (
+    <>
+      <TabPanel value="candidate" className="memory-tab-panel">
+        <MemoryGroup
+          title={memoryTabLabels.candidate}
+          hint={memoryTabHints.candidate}
+          ariaLabel={`${memoryTabLabels.candidate}记忆列表`}
+          memories={grouped.candidate}
+          {...sharedProps}
+        />
+      </TabPanel>
+      <TabPanel value="confirmed" className="memory-tab-panel">
+        <MemoryGroup
+          title={memoryTabLabels.confirmed}
+          hint={memoryTabHints.confirmed}
+          ariaLabel={`${memoryTabLabels.confirmed}记忆列表`}
+          memories={grouped.confirmed}
+          {...sharedProps}
+        />
+      </TabPanel>
+      <TabPanel value="expired" className="memory-tab-panel">
+        <MemoryGroup
+          title={memoryTabLabels.expired}
+          hint={memoryTabHints.expired}
+          ariaLabel={`${memoryTabLabels.expired}记忆列表`}
+          memories={grouped.expired}
+          editLabel="修改有效期并重新确认"
+          {...sharedProps}
+        />
+      </TabPanel>
+      <TabPanel value="history" className="memory-tab-panel">
+        <MemoryGroup
+          title={memoryTabLabels.history}
+          hint={memoryTabHints.history}
+          ariaLabel={`${memoryTabLabels.history}记忆列表`}
+          memories={grouped.history}
+          readOnly
+          {...sharedProps}
+        />
+      </TabPanel>
+    </>
+  );
 }
 
 /**

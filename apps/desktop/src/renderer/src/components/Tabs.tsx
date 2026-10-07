@@ -1,109 +1,208 @@
-import type { ReactNode } from 'react';
-import { useRef } from 'react';
+import {
+  Children,
+  createContext,
+  isValidElement,
+  type KeyboardEvent,
+  type ReactElement,
+  type ReactNode,
+  useContext,
+  useId,
+} from 'react';
 
 import type { ControlSize } from './Button';
 
-export interface TabItem<K extends string> {
-  id: K;
-  label: ReactNode;
+interface TabsContextValue {
+  id: string;
+  value: string;
+  tabStopValue: string;
+  onChange: (value: string) => void;
 }
+
+const TabsContext = createContext<TabsContextValue | null>(null);
 
 export interface TabsProps<K extends string> {
-  items: readonly TabItem<K>[];
   value: K;
-  onChange: (id: K) => void;
-  /** 页签带的可及名称（`aria-label`）。 */
-  label: string;
-  /** 必填：页签与同排控件共用 `--control-height-*` 档位（docs/10 §9.10「动作排」）。 */
-  size: ControlSize;
-  /** 均分整条页签带；默认按内容取宽。 */
-  fill?: boolean;
-  className?: string;
+  onChange: (value: K) => void;
+  children: ReactNode;
 }
 
-/**
- * 页签基座：`tablist` + roving tabindex + 左右方向键。
- *
- * WAI-ARIA 的页签模式要求「Tab 只进出页签带、组内切换交给方向键」。此前
- * `MemoryView` 与 `ContextPanel` 两处都只有 `role` 与 `aria-selected`，键盘
- * 用户只能一个一个 Tab 过去（docs/reviews/2026-09-26-ui-consistency.md §3.3）。
- * 切换采用 automatic activation：方向键直接改选中项，页签带里的筛选面板没有
- * 惰性渲染的必要。
- */
+/** Controlled state and stable IDs shared by a tab list and its matching panels. */
 export function Tabs<K extends string>({
-  items,
   value,
   onChange,
+  children,
+}: TabsProps<K>): React.JSX.Element {
+  const id = useId();
+  const context: TabsContextValue = {
+    id,
+    value,
+    tabStopValue: value,
+    onChange: (nextValue) => onChange(nextValue as K),
+  };
+
+  return <TabsContext.Provider value={context}>{children}</TabsContext.Provider>;
+}
+
+export interface TabListProps {
+  label: string;
+  size: ControlSize;
+  fill?: boolean;
+  className?: string;
+  children: ReactNode;
+}
+
+/** Tablist semantics, roving focus, automatic activation, and horizontal key handling. */
+export function TabList({
   label,
   size,
   fill,
   className,
-}: TabsProps<K>): React.JSX.Element {
-  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const selectedIndex = items.findIndex((item) => item.id === value);
-  // 选中项缺失时（如筛选后该组为空）让首项仍可被 Tab 命中，否则整条页签带进不去。
-  const tabbableIndex = selectedIndex === -1 ? 0 : selectedIndex;
+  children,
+}: TabListProps): React.JSX.Element {
+  const tabs = useTabsContext();
+  const enabledTabs = getTabElements(children).filter((tab) => !tab.props.disabled);
+  const selectedTab = enabledTabs.find((tab) => tab.props.value === tabs.value);
+  const tabStopValue = selectedTab?.props.value ?? enabledTabs.at(0)?.props.value ?? tabs.value;
 
-  const activate = (index: number): void => {
-    const item = items[index];
-    if (!item) return;
-    onChange(item.id);
-    tabRefs.current[index]?.focus();
-  };
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    const tabElements = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]:not(:disabled)'),
+    );
+    if (tabElements.length === 0) return;
 
-  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
-    if (items.length === 0) return;
-    // 从当前焦点出发而不是从 value 出发：受控父组件重渲染之前连按方向键也应连续走格。
-    const focused = tabRefs.current.findIndex((node) => node === document.activeElement);
-    const current = focused >= 0 ? focused : tabbableIndex;
+    const focusedIndex = tabElements.findIndex((tab) => tab === document.activeElement);
+    const selectedIndex = tabElements.findIndex(
+      (tab) => tab.getAttribute('aria-selected') === 'true',
+    );
+    const currentIndex = focusedIndex >= 0 ? focusedIndex : selectedIndex >= 0 ? selectedIndex : 0;
+    let nextIndex: number | undefined;
+
     switch (event.key) {
       case 'ArrowRight':
-        event.preventDefault();
-        activate((current + 1) % items.length);
+        nextIndex = (currentIndex + 1) % tabElements.length;
         break;
       case 'ArrowLeft':
-        event.preventDefault();
-        activate((current - 1 + items.length) % items.length);
+        nextIndex = (currentIndex - 1 + tabElements.length) % tabElements.length;
         break;
       case 'Home':
-        event.preventDefault();
-        activate(0);
+        nextIndex = 0;
         break;
       case 'End':
-        event.preventDefault();
-        activate(items.length - 1);
+        nextIndex = tabElements.length - 1;
         break;
       default:
         break;
     }
+
+    if (nextIndex === undefined) return;
+    event.preventDefault();
+    const nextTab = tabElements[nextIndex];
+    const nextValue = enabledTabs[nextIndex]?.props.value;
+    if (!nextTab || nextValue === undefined) return;
+    if (nextValue !== tabs.value) tabs.onChange(nextValue);
+    nextTab.focus();
   };
 
   return (
-    <div
-      className={`tabs${className ? ` ${className}` : ''}`}
-      role="tablist"
-      aria-label={label}
-      data-size={size}
-      {...(fill ? { 'data-fill': 'true' } : {})}
-      onKeyDown={onKeyDown}
+    <TabsContext.Provider value={{ ...tabs, tabStopValue }}>
+      <div
+        className={`tabs${className ? ` ${className}` : ''}`}
+        role="tablist"
+        aria-label={label}
+        aria-orientation="horizontal"
+        data-size={size}
+        {...(fill ? { 'data-fill': 'true' } : {})}
+        onKeyDown={onKeyDown}
+      >
+        {children}
+      </div>
+    </TabsContext.Provider>
+  );
+}
+
+export interface TabProps<K extends string = string> {
+  value: K;
+  disabled?: boolean;
+  children: ReactNode;
+}
+
+/** A single selectable tab in a TabList. */
+export function Tab<K extends string>({
+  value,
+  disabled,
+  children,
+}: TabProps<K>): React.JSX.Element {
+  const tabs = useTabsContext();
+  const selected = value === tabs.value;
+
+  return (
+    <button
+      id={tabId(tabs.id, value)}
+      type="button"
+      role="tab"
+      aria-selected={selected}
+      aria-controls={panelId(tabs.id, value)}
+      tabIndex={!disabled && tabs.tabStopValue === value ? 0 : -1}
+      disabled={disabled}
+      onClick={() => {
+        if (!disabled && !selected) tabs.onChange(value);
+      }}
     >
-      {items.map((item, index) => (
-        <button
-          key={item.id}
-          ref={(element) => {
-            tabRefs.current[index] = element;
-          }}
-          type="button"
-          role="tab"
-          aria-selected={item.id === value}
-          tabIndex={index === tabbableIndex ? 0 : -1}
-          onClick={() => onChange(item.id)}
-        >
-          {item.label}
-        </button>
-      ))}
+      {children}
+    </button>
+  );
+}
+
+export interface TabPanelProps {
+  value: string;
+  className?: string;
+  children: ReactNode;
+}
+
+/** A matching content panel; inactive panels stay linked but do not mount their contents. */
+export function TabPanel({ value, className, children }: TabPanelProps): React.JSX.Element {
+  const tabs = useTabsContext();
+  const selected = tabs.value === value;
+
+  return (
+    <div
+      className={`tab-panel${className ? ` ${className}` : ''}`}
+      id={panelId(tabs.id, value)}
+      role="tabpanel"
+      aria-labelledby={tabId(tabs.id, value)}
+      hidden={!selected}
+      tabIndex={0}
+    >
+      {selected ? children : null}
     </div>
   );
+}
+
+function useTabsContext(): TabsContextValue {
+  const context = useContext(TabsContext);
+  if (context === null) throw new Error('Tab components must be nested inside Tabs.');
+  return context;
+}
+
+function isTabElement(child: ReactNode): child is ReactElement<TabProps> {
+  return isValidElement<TabProps>(child) && child.type === Tab;
+}
+
+function getTabElements(children: ReactNode): ReactElement<TabProps>[] {
+  return Children.toArray(children).filter(isTabElement);
+}
+
+function tabId(id: string, value: string): string {
+  return `${id}-tab-${encodeURIComponent(value)}`;
+}
+
+function panelId(id: string, value: string): string {
+  return `${id}-panel-${encodeURIComponent(value)}`;
+}
+
+export interface TabItem<K extends string> {
+  id: K;
+  label: ReactNode;
 }
 
 export interface SegmentedControlProps<K extends string> {

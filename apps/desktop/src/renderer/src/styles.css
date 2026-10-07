@@ -1192,8 +1192,8 @@ small {
   font-size: var(--font-size-caption);
 }
 .context-panel .tabs {
-  /* 面板给的是左右内缩，几何仍归 Tabs 基座；那道内缩与列里其余段落壳同档。 */
-  padding: 0 16px 4px;
+  /* 面板只补左右内缩，选中指示线贴齐页签带分隔线；高度与内距归 TabList 基座。 */
+  padding: 0 16px;
 }
 /* 上下文面板是 380px 定宽列，与侧栏同一件事：只纵向滚，横向溢出交给行自己截断。 */
 .context-content {
@@ -2736,6 +2736,12 @@ button.list-row:where(:not(:disabled)):hover {
   flex-direction: column;
   gap: var(--space-12);
 }
+.memory-tab-panel {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
 /* 列表是本页唯一滚动区；窗口过矮时先保住可读高度，再让整页兜底滚动。 */
 .memory-list-scroll {
   min-height: 200px;
@@ -2752,34 +2758,41 @@ button.list-row:where(:not(:disabled)):hover {
   gap: var(--space-4);
   border-bottom: 1px solid var(--border);
 }
-.tabs button {
+.tabs [role='tab'] {
   color: var(--text-secondary);
   background: transparent;
   border: 0;
-  border-radius: var(--control-radius);
+  border-radius: 0;
   font-size: var(--font-size-body);
 }
 /* 高度与内距成对取档（docs/10 §9.10）：页签与切换组会和按钮排在同一「动作排」里，
    没有档位 API 就必然一行两高——原来它们各自固定 28px 是这个样子。 */
-.tabs[data-size='sm'] button {
+.tabs[data-size='sm'] [role='tab'] {
   min-height: var(--control-height-sm);
   padding: var(--control-padding-sm);
 }
-.tabs[data-size='md'] button {
+.tabs[data-size='md'] [role='tab'] {
   min-height: var(--control-height);
   padding: var(--control-padding);
 }
-.tabs[data-size='lg'] button {
+.tabs[data-size='lg'] [role='tab'] {
   min-height: var(--control-height-lg);
   padding: var(--control-padding-lg);
 }
-.tabs button[aria-selected='true'] {
+.tabs [role='tab'][aria-selected='true'] {
   color: var(--text-primary);
-  background: var(--surface);
-  box-shadow: 0 1px 2px var(--shadow-color-raised);
+  background: transparent;
+  box-shadow: inset 0 -2px 0 var(--brand);
 }
-.tabs[data-fill='true'] button {
+.tabs[data-fill='true'] [role='tab'] {
   flex: 1;
+}
+.tab-panel[hidden] {
+  display: none;
+}
+.tab-panel:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
 .segmented-control {
   display: flex;

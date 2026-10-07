@@ -18,7 +18,7 @@ import { InlineError } from '../../components/InlineError';
 import { Modal } from '../../components/Modal';
 import { SectionHeader } from '../../components/SectionHeader';
 import { StatusNote } from '../../components/StatusNote';
-import { Tabs } from '../../components/Tabs';
+import { Tab, TabList, TabPanel, Tabs } from '../../components/Tabs';
 import { TextField } from '../../components/TextField';
 import { materialPurposeName } from '../../lib/labels';
 import {
@@ -156,146 +156,161 @@ export function ScheduleSourcePicker({
             title="附加知识范围"
             hint="这里保存范围描述；每期执行前读取当时的修订或集合成员并固定成该期快照，之后的变化用于下一期。"
           />
-          <Tabs
-            items={sourceTabs}
-            value={activeTab}
-            onChange={setActiveTab}
-            label="知识范围类型"
-            size="md"
-            fill
-          />
+          <Tabs value={activeTab} onChange={setActiveTab}>
+            <TabList size="md" fill label="知识范围类型">
+              {sourceTabs.map((sourceTab) => (
+                <Tab key={sourceTab.id} value={sourceTab.id}>
+                  {sourceTab.label}
+                </Tab>
+              ))}
+            </TabList>
+            {sourceTabs.map((sourceTab) => (
+              <TabPanel
+                key={sourceTab.id}
+                value={sourceTab.id}
+                className="schedule-source-candidates"
+              >
+                {sourceTab.id === activeTab &&
+                  (loading ? (
+                    <StatusNote message="正在读取文档与集合候选…" />
+                  ) : error ? (
+                    <InlineError tone="warning" message={error} onRetry={onRefresh} />
+                  ) : (
+                    <>
+                      {activeTab === 'document' && (
+                        <>
+                          <TextField
+                            size="md"
+                            aria-label="搜索文档"
+                            placeholder="按文档名或路径搜索"
+                            value={search}
+                            onChange={(event) => setSearch(event.currentTarget.value)}
+                          />
+                          <CheckList
+                            className="schedule-source-check-list"
+                            label="可选知识文档"
+                            options={filteredDocuments.map((document) => {
+                              const source: ScheduleKnowledgeSource = {
+                                kind: 'document',
+                                documentId: document.id,
+                                purpose: 'background',
+                              };
+                              const key = scheduleKnowledgeSourceKey(source);
+                              const checked = selectedKeys.has(key);
+                              const unavailable = !document.currentRevisionId;
+                              const blockedByVault = hasVault && !checked;
+                              const blockedByLimit =
+                                draftSources.length >= SCHEDULE_KNOWLEDGE_SOURCE_MAX && !checked;
+                              return {
+                                id: document.id,
+                                label: (
+                                  <span className="schedule-source-document-option">
+                                    <strong>{document.title || document.sourcePath}</strong>
+                                    <span className="schedule-source-document-path">
+                                      {document.sourcePath}
+                                    </span>
+                                  </span>
+                                ),
+                                checked,
+                                disabled:
+                                  (unavailable || blockedByVault || blockedByLimit) && !checked,
+                                hint: unavailable
+                                  ? `${document.sourcePath}（没有当前知识修订）`
+                                  : document.sourcePath,
+                              };
+                            })}
+                            onToggle={(documentId, checked) =>
+                              toggleSource(
+                                { kind: 'document', documentId, purpose: 'background' },
+                                checked,
+                              )
+                            }
+                            empty="没有匹配的文档；可修改关键词，或到知识页导入资料。"
+                          />
+                          {filteredDocuments.length === 0 && documents.length > 0 && (
+                            <StatusNote message="搜索只过滤候选，不会缩小已确认的范围。" />
+                          )}
+                        </>
+                      )}
 
-          {loading ? (
-            <StatusNote message="正在读取文档与集合候选…" />
-          ) : error ? (
-            <InlineError tone="warning" message={error} onRetry={onRefresh} />
-          ) : (
-            <div className="schedule-source-candidates">
-              {activeTab === 'document' && (
-                <>
-                  <TextField
-                    size="md"
-                    aria-label="搜索文档"
-                    placeholder="按文档名或路径搜索"
-                    value={search}
-                    onChange={(event) => setSearch(event.currentTarget.value)}
-                  />
-                  <CheckList
-                    className="schedule-source-check-list"
-                    label="可选知识文档"
-                    options={filteredDocuments.map((document) => {
-                      const source: ScheduleKnowledgeSource = {
-                        kind: 'document',
-                        documentId: document.id,
-                        purpose: 'background',
-                      };
-                      const key = scheduleKnowledgeSourceKey(source);
-                      const checked = selectedKeys.has(key);
-                      const unavailable = !document.currentRevisionId;
-                      const blockedByVault = hasVault && !checked;
-                      const blockedByLimit =
-                        draftSources.length >= SCHEDULE_KNOWLEDGE_SOURCE_MAX && !checked;
-                      return {
-                        id: document.id,
-                        label: (
-                          <span className="schedule-source-document-option">
-                            <strong>{document.title || document.sourcePath}</strong>
-                            <span className="schedule-source-document-path">
-                              {document.sourcePath}
-                            </span>
-                          </span>
-                        ),
-                        checked,
-                        disabled: (unavailable || blockedByVault || blockedByLimit) && !checked,
-                        hint: unavailable
-                          ? `${document.sourcePath}（没有当前知识修订）`
-                          : document.sourcePath,
-                      };
-                    })}
-                    onToggle={(documentId, checked) =>
-                      toggleSource({ kind: 'document', documentId, purpose: 'background' }, checked)
-                    }
-                    empty="没有匹配的文档；可修改关键词，或到知识页导入资料。"
-                  />
-                  {filteredDocuments.length === 0 && documents.length > 0 && (
-                    <StatusNote message="搜索只过滤候选，不会缩小已确认的范围。" />
-                  )}
-                </>
-              )}
+                      {activeTab === 'collection' && (
+                        <CheckList
+                          className="schedule-source-check-list"
+                          label="可选知识集合"
+                          options={collections.map((collection) => {
+                            const source: ScheduleKnowledgeSource = {
+                              kind: 'collection',
+                              collectionId: collection.id,
+                              purpose: 'background',
+                            };
+                            const key = scheduleKnowledgeSourceKey(source);
+                            const checked = selectedKeys.has(key);
+                            const memberCount = documents.filter((document) =>
+                              document.collectionIds.includes(collection.id),
+                            ).length;
+                            return {
+                              id: collection.id,
+                              label: `${collection.name} · ${memberCount} 项当前成员`,
+                              checked,
+                              disabled:
+                                (hasVault ||
+                                  draftSources.length >= SCHEDULE_KNOWLEDGE_SOURCE_MAX) &&
+                                !checked,
+                            };
+                          })}
+                          onToggle={(collectionId, checked) =>
+                            toggleSource(
+                              { kind: 'collection', collectionId, purpose: 'background' },
+                              checked,
+                            )
+                          }
+                          empty="还没有知识集合。可先在知识页整理集合，空集合也可以保留为有效范围。"
+                        />
+                      )}
 
-              {activeTab === 'collection' && (
-                <CheckList
-                  className="schedule-source-check-list"
-                  label="可选知识集合"
-                  options={collections.map((collection) => {
-                    const source: ScheduleKnowledgeSource = {
-                      kind: 'collection',
-                      collectionId: collection.id,
-                      purpose: 'background',
-                    };
-                    const key = scheduleKnowledgeSourceKey(source);
-                    const checked = selectedKeys.has(key);
-                    const memberCount = documents.filter((document) =>
-                      document.collectionIds.includes(collection.id),
-                    ).length;
-                    return {
-                      id: collection.id,
-                      label: `${collection.name} · ${memberCount} 项当前成员`,
-                      checked,
-                      disabled:
-                        (hasVault || draftSources.length >= SCHEDULE_KNOWLEDGE_SOURCE_MAX) &&
-                        !checked,
-                    };
-                  })}
-                  onToggle={(collectionId, checked) =>
-                    toggleSource(
-                      { kind: 'collection', collectionId, purpose: 'background' },
-                      checked,
-                    )
-                  }
-                  empty="还没有知识集合。可先在知识页整理集合，空集合也可以保留为有效范围。"
-                />
-              )}
-
-              {activeTab === 'vault' && (
-                <>
-                  <CheckList
-                    className="schedule-source-check-list"
-                    label="整个资料库候选"
-                    options={[
-                      {
-                        id: 'default',
-                        label: `默认资料库 · 当前登记 ${budget.itemCount} 项，约 ${formatScheduleSourceBytes(budget.byteSize)}`,
-                        checked: hasVault,
-                        disabled:
-                          (!hasVault && draftSources.length > 0) ||
-                          (!hasVault && draftSources.length >= SCHEDULE_KNOWLEDGE_SOURCE_MAX),
-                        hint: '此范围会包含每期执行时默认资料库中的全部有效文档和修订。',
-                      },
-                    ]}
-                    onToggle={(vaultId, checked) =>
-                      toggleSource(
-                        { kind: 'vault', vaultId: 'default', purpose: 'background' },
-                        checked,
-                      )
-                    }
-                  />
-                  <StatusNote message="整库范围会跟随下一期执行时的资料库内容；本期快照固定后不受后续变化影响。" />
-                  {(budget.overItemBudget || budget.overByteBudget) && (
-                    <InlineError
-                      tone="warning"
-                      message="当前整库范围估算已超过单期来源预算；请改选具体文档或集合以缩小范围。"
-                      problems={[
-                        `${budget.itemCount.toLocaleString('zh-CN')} 项登记资料，单期材料清单上限为 ${SCHEDULE_SOURCE_ITEM_MAX.toLocaleString('zh-CN')} 项。`,
-                        `${formatScheduleSourceBytes(budget.byteSize)} 登记大小；单期总材料预算为 ${formatScheduleSourceBytes(SCHEDULE_WORKSPACE_TOTAL_FILE_BYTES_MAX)}，还需计入工作空间与专家参考。`,
-                        '此处为界面估算，Main 会在每期读取并重新校验实际清单。',
-                      ]}
-                    />
-                  )}
-                </>
-              )}
-            </div>
-          )}
+                      {activeTab === 'vault' && (
+                        <>
+                          <CheckList
+                            className="schedule-source-check-list"
+                            label="整个资料库候选"
+                            options={[
+                              {
+                                id: 'default',
+                                label: `默认资料库 · 当前登记 ${budget.itemCount} 项，约 ${formatScheduleSourceBytes(budget.byteSize)}`,
+                                checked: hasVault,
+                                disabled:
+                                  (!hasVault && draftSources.length > 0) ||
+                                  (!hasVault &&
+                                    draftSources.length >= SCHEDULE_KNOWLEDGE_SOURCE_MAX),
+                                hint: '此范围会包含每期执行时默认资料库中的全部有效文档和修订。',
+                              },
+                            ]}
+                            onToggle={(vaultId, checked) =>
+                              toggleSource(
+                                { kind: 'vault', vaultId: 'default', purpose: 'background' },
+                                checked,
+                              )
+                            }
+                          />
+                          <StatusNote message="整库范围会跟随下一期执行时的资料库内容；本期快照固定后不受后续变化影响。" />
+                          {(budget.overItemBudget || budget.overByteBudget) && (
+                            <InlineError
+                              tone="warning"
+                              message="当前整库范围估算已超过单期来源预算；请改选具体文档或集合以缩小范围。"
+                              problems={[
+                                `${budget.itemCount.toLocaleString('zh-CN')} 项登记资料，单期材料清单上限为 ${SCHEDULE_SOURCE_ITEM_MAX.toLocaleString('zh-CN')} 项。`,
+                                `${formatScheduleSourceBytes(budget.byteSize)} 登记大小；单期总材料预算为 ${formatScheduleSourceBytes(SCHEDULE_WORKSPACE_TOTAL_FILE_BYTES_MAX)}，还需计入工作空间与专家参考。`,
+                                '此处为界面估算，Main 会在每期读取并重新校验实际清单。',
+                              ]}
+                            />
+                          )}
+                        </>
+                      )}
+                    </>
+                  ))}
+              </TabPanel>
+            ))}
+          </Tabs>
 
           {loading && (
             <Button variant="link" size="sm" type="button" onClick={onRefresh}>

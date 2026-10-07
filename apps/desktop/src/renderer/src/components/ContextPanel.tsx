@@ -66,7 +66,7 @@ import { RunSummaryRow } from './RunSummaryRow';
 import { SectionHeader } from './SectionHeader';
 import { SourceRow } from './SourceRow';
 import { StatusNote } from './StatusNote';
-import { Tabs } from './Tabs';
+import { Tab, TabList, TabPanel, Tabs } from './Tabs';
 import { TextArea } from './TextField';
 import { ToolActivity } from './ToolActivity';
 import { type ToastTone, TransientToast } from './TransientToast';
@@ -217,336 +217,345 @@ export function ContextPanel({
             onClick={() => setOpen(false)}
           />
         </div>
-        <Tabs
-          size="sm"
-          fill
-          label="任务上下文"
-          items={CONTEXT_TABS.map(([id, label]) => ({ id, label }))}
-          value={tab}
-          onChange={setTab}
-        />
-        <div className="context-content">
-          {tab === 'process' && (
-            <>
-              {taskId && (
-                <TaskContinuitySection
-                  taskId={taskId}
-                  state={taskContinuity}
-                  taskRuns={taskRuns}
-                  artifacts={artifacts}
-                  onSelectRun={onSelectRun}
-                  onOpenArtifactVersion={onOpenArtifactVersion}
-                  onError={(tone, message) => setSourceToast({ tone, message })}
-                />
-              )}
-              {events.length === 0 ? (
-                <EmptyContext
-                  placement="start"
-                  title="等待任务开始"
-                  detail="开始后，这里会按工作阶段呈现过程，而不是堆叠底层日志。"
-                />
-              ) : (
-                <div className="activity-list">
-                  <div className="activity-summary">
-                    <span
-                      className={`status-dot ${activeRun?.status === 'running' ? 'running' : ''}`}
-                    />
-                    <div>
-                      <strong>
-                        {activeRun ? runStatusName[activeRun.status] : '正在处理任务'}
-                      </strong>
-                      <p>{activityGroups.length} 个工作阶段</p>
+        <Tabs value={tab} onChange={setTab}>
+          <TabList size="sm" fill label="任务上下文">
+            {CONTEXT_TABS.map(([id, label]) => (
+              <Tab key={id} value={id}>
+                {label}
+              </Tab>
+            ))}
+          </TabList>
+          <TabPanel value="process" className="context-content">
+            {tab === 'process' && (
+              <>
+                {taskId && (
+                  <TaskContinuitySection
+                    taskId={taskId}
+                    state={taskContinuity}
+                    taskRuns={taskRuns}
+                    artifacts={artifacts}
+                    onSelectRun={onSelectRun}
+                    onOpenArtifactVersion={onOpenArtifactVersion}
+                    onError={(tone, message) => setSourceToast({ tone, message })}
+                  />
+                )}
+                {events.length === 0 ? (
+                  <EmptyContext
+                    placement="start"
+                    title="等待任务开始"
+                    detail="开始后，这里会按工作阶段呈现过程，而不是堆叠底层日志。"
+                  />
+                ) : (
+                  <div className="activity-list">
+                    <div className="activity-summary">
+                      <span
+                        className={`status-dot ${activeRun?.status === 'running' ? 'running' : ''}`}
+                      />
+                      <div>
+                        <strong>
+                          {activeRun ? runStatusName[activeRun.status] : '正在处理任务'}
+                        </strong>
+                        <p>{activityGroups.length} 个工作阶段</p>
+                      </div>
                     </div>
-                  </div>
-                  {activityGroups.map((group) => (
-                    <ActivityGroupRow group={group} key={group.id} />
-                  ))}
-                  <ToolActivity key={activeRun?.id ?? events[0]?.runId} events={events} />
-                  {taskRuns.length > 1 && (
-                    <Disclosure
-                      className="task-run-history"
-                      label={`执行记录 · ${taskRuns.length} 次`}
-                    >
-                      {taskRuns.map((run) => (
-                        <RunSummaryRow
-                          key={run.id}
-                          run={run}
-                          title={run.prompt}
-                          action="查看执行记录"
-                          selected={run.id === activeRun?.id}
-                          onSelect={() => onSelectRun(run)}
-                        />
-                      ))}
-                    </Disclosure>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-          {tab === 'memory' && (
-            <>
-              <MemorySuggestionList
-                suggestions={suggestions}
-                candidates={taskCandidates}
-                variant="context"
-                workspaceName={workspaceName}
-                expertName={expertName}
-                onEdit={onEditCandidate}
-                onReject={onRejectCandidate}
-                onDelete={onDeleteCandidate}
-                onOpenMemoryPage={onOpenMemoryPage}
-              />
-              {memoriesError && <InlineError message={memoriesError} />}
-              {memoriesWarning && (
-                <section className="context-section">
-                  <StatusNote tone="warning" message={memoriesWarning} />
-                </section>
-              )}
-              <NextRunScopeSection
-                runMemories={runMemories}
-                memories={memories}
-                excludedMemoryIds={excludedMemoryIds}
-                onToggleMemory={onToggleMemory}
-                exclusion={exclusion}
-                workspaceName={workspaceName}
-                expertName={expertName}
-              />
-              <ExcludedTaskMemoriesSection
-                exclusions={exclusions}
-                excludedMemoryIds={excludedMemoryIds}
-                onToggleMemory={onToggleMemory}
-                exclusion={exclusion}
-                workspaceName={workspaceName}
-                expertName={expertName}
-              />
-              <ThisRunMemorySection runMemories={runMemories} memories={memories} />
-              <HistoryAdjustmentSection
-                runMemories={runMemories}
-                onSelectMaterials={() => {
-                  setTab('sources');
-                  onRequestMaterials('file');
-                }}
-                onOpenArtifacts={() => {
-                  setTab('sources');
-                  onRequestMaterials('artifact');
-                }}
-                onOpenMemoryPage={onOpenMemoryPage}
-              />
-            </>
-          )}
-          {tab === 'brief' && (
-            <WorkspaceBrief
-              brief={brief.brief}
-              loading={brief.loading}
-              error={brief.error}
-              workspaceName={workspaceName}
-              expertName={expertName}
-              onRetry={brief.refresh}
-              onOpenMemory={onOpenBriefMemory}
-              onOpenIssue={onOpenBriefIssue}
-              onOpenReference={onOpenBriefReference}
-            />
-          )}
-          {tab === 'sources' && (
-            <>
-              {scheduleContinuation && (
-                <section className="context-section">
-                  <SectionHeader
-                    title="定时任务本期范围"
-                    hint={
-                      scheduleContinuation.scopeAttached
-                        ? '后续运行仍包含此快照'
-                        : '当前任务未绑定此快照'
-                    }
-                  />
-                  <ListRow
-                    multiline
-                    variant="plain"
-                    title={scheduleContinuation.occurrence.occurrence.period.label}
-                    detail={`规则「${scheduleContinuation.occurrence.config.name}」 · 固定配置 v${scheduleContinuation.occurrence.occurrence.configVersion} · ${scheduleContinuation.occurrence.occurrence.period.timeZone}`}
-                    meta={
-                      scheduleContinuation.occurrence.sourceSnapshot
-                        ? `来源快照 ${scheduleContinuation.sourceSnapshotId ?? '不可用'} · ${scheduleSourceSnapshotStatusLabel(scheduleContinuation.occurrence.sourceSnapshot.status)} · ${scheduleContinuation.occurrence.sourceSnapshot.itemCount} 项 · ${scheduleContinuation.occurrence.sourceSnapshot.totalFileBytes} 字节 · 清单 ${scheduleContinuation.occurrence.sourceSnapshot.manifestHash}`
-                        : `来源快照 ${scheduleContinuation.sourceSnapshotId ?? '不可用'} · 快照详情暂不可用`
-                    }
-                  />
-                  <StatusNote
-                    tone={scheduleContinuation.scopeAttached ? 'warning' : 'neutral'}
-                    message={
-                      scheduleContinuation.scopeAttached
-                        ? '此 Task 的后续 Run 会沿用本期固定来源。移除会缩小后续权限范围并触发现有安全历史分段；不改变已经开始的 Run、本期历史或 Schedule 的后续配置。'
-                        : '本 Task 的后续 Run 当前不含这期自动来源；本期快照与历史仍保留，Schedule 的后续配置不变。下方补充材料只作用于当前原 Task。'
-                    }
-                  />
-                  {scheduleContinuation.scopeError && (
-                    <InlineError message={scheduleContinuation.scopeError} />
-                  )}
-                  {scheduleContinuation.scopeAttached && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      type="button"
-                      disabled={scheduleContinuation.removingScope}
-                      onClick={scheduleContinuation.onRemoveScope}
-                    >
-                      {scheduleContinuation.removingScope ? '正在移除本期范围…' : '移除本期范围'}
-                    </Button>
-                  )}
-                  <StatusNote message="下面选择的文件、知识或成果会补充到当前原 Task 的后续 Run，不会写回 Schedule。" />
-                </section>
-              )}
-              <section className="context-section">
-                <SectionHeader
-                  title="本次材料"
-                  hint={materials.length > 0 ? `${materials.length} 项已选择` : '尚未选择'}
-                  actions={
-                    <>
-                      <Button
-                        variant="chip"
-                        size="sm"
-                        type="button"
-                        disabled={materialsDisabled}
-                        onClick={() => onRequestMaterials('file')}
+                    {activityGroups.map((group) => (
+                      <ActivityGroupRow group={group} key={group.id} />
+                    ))}
+                    <ToolActivity key={activeRun?.id ?? events[0]?.runId} events={events} />
+                    {taskRuns.length > 1 && (
+                      <Disclosure
+                        className="task-run-history"
+                        label={`执行记录 · ${taskRuns.length} 次`}
                       >
-                        文件
-                      </Button>
-                      <Button
-                        variant="chip"
-                        size="sm"
-                        type="button"
-                        disabled={materialsDisabled}
-                        onClick={() => onRequestMaterials('knowledge')}
-                      >
-                        知识
-                      </Button>
-                      <Button
-                        variant="chip"
-                        size="sm"
-                        type="button"
-                        disabled={materialsDisabled}
-                        onClick={() => onRequestMaterials('artifact')}
-                      >
-                        成果
-                      </Button>
-                    </>
-                  }
-                />
-                {materials.length > 0 && (
-                  <div className="selected-materials-list">
-                    {materials.map((selection) => {
-                      const materialKey = taskMaterialKey(selection);
-                      const candidate = materialCandidates.find(
-                        (item) => materialCandidateKey(item) === materialKey,
-                      );
-                      const title = candidate?.title ?? '已选材料';
-                      return (
-                        <ListRow
-                          key={materialKey}
-                          multiline
-                          variant="plain"
-                          title={title}
-                          meta={
-                            <>
-                              {candidate?.sourceLabel ?? selection.reference.kind}
-                              {candidate?.status === 'unavailable' ? ' · 不可读取' : ''}
-                            </>
-                          }
-                          actionsPlacement="below"
-                          actions={
-                            <ActionBar as="div" label={`管理材料 ${title}`}>
-                              <FieldSelect
-                                size="sm"
-                                ariaLabel={`${title}用途`}
-                                value={selection.purpose}
-                                disabled={materialsDisabled}
-                                options={MATERIAL_PURPOSE_OPTIONS}
-                                onChange={(purpose) =>
-                                  onCommitMaterials(
-                                    materials.map((item) =>
-                                      taskMaterialKey(item) === materialKey
-                                        ? { ...item, purpose: purpose as MaterialPurpose }
-                                        : item,
-                                    ),
-                                  )
-                                }
-                              />
-                              <IconButton
-                                size="sm"
-                                label={`移除材料 ${title}`}
-                                icon={CloseIcon}
-                                disabled={materialsDisabled}
-                                onClick={() =>
-                                  onCommitMaterials(
-                                    materials.filter(
-                                      (item) => taskMaterialKey(item) !== materialKey,
-                                    ),
-                                  )
-                                }
-                              />
-                            </ActionBar>
-                          }
-                        />
-                      );
-                    })}
+                        {taskRuns.map((run) => (
+                          <RunSummaryRow
+                            key={run.id}
+                            run={run}
+                            title={run.prompt}
+                            action="查看执行记录"
+                            selected={run.id === activeRun?.id}
+                            onSelect={() => onSelectRun(run)}
+                          />
+                        ))}
+                      </Disclosure>
+                    )}
                   </div>
                 )}
-              </section>
-              <section className="context-section">
-                <SectionHeader
-                  title="本次 MCP 工具"
-                  hint={
-                    mcpToolBindings.length > 0
-                      ? `${mcpToolBindings.length} 项已选择`
-                      : '未选择，专家预设也不会自动加入'
-                  }
+              </>
+            )}
+          </TabPanel>
+          <TabPanel value="memory" className="context-content">
+            {tab === 'memory' && (
+              <>
+                <MemorySuggestionList
+                  suggestions={suggestions}
+                  candidates={taskCandidates}
+                  variant="context"
+                  workspaceName={workspaceName}
+                  expertName={expertName}
+                  onEdit={onEditCandidate}
+                  onReject={onRejectCandidate}
+                  onDelete={onDeleteCandidate}
+                  onOpenMemoryPage={onOpenMemoryPage}
                 />
-                <McpToolBindingsPicker
-                  connections={mcpConnections}
-                  bindings={mcpToolBindings}
-                  onChange={onMcpToolBindingsChange}
+                {memoriesError && <InlineError message={memoriesError} />}
+                {memoriesWarning && (
+                  <section className="context-section">
+                    <StatusNote tone="warning" message={memoriesWarning} />
+                  </section>
+                )}
+                <NextRunScopeSection
+                  runMemories={runMemories}
+                  memories={memories}
+                  excludedMemoryIds={excludedMemoryIds}
+                  onToggleMemory={onToggleMemory}
+                  exclusion={exclusion}
+                  workspaceName={workspaceName}
+                  expertName={expertName}
                 />
-              </section>
-              <EvidenceSection
-                key={activeRun?.id ?? 'task'}
-                evidence={evidence}
-                activeRunId={activeRun?.id}
-                onOpenSource={onOpenSource}
+                <ExcludedTaskMemoriesSection
+                  exclusions={exclusions}
+                  excludedMemoryIds={excludedMemoryIds}
+                  onToggleMemory={onToggleMemory}
+                  exclusion={exclusion}
+                  workspaceName={workspaceName}
+                  expertName={expertName}
+                />
+                <ThisRunMemorySection runMemories={runMemories} memories={memories} />
+                <HistoryAdjustmentSection
+                  runMemories={runMemories}
+                  onSelectMaterials={() => {
+                    setTab('sources');
+                    onRequestMaterials('file');
+                  }}
+                  onOpenArtifacts={() => {
+                    setTab('sources');
+                    onRequestMaterials('artifact');
+                  }}
+                  onOpenMemoryPage={onOpenMemoryPage}
+                />
+              </>
+            )}
+          </TabPanel>
+          <TabPanel value="brief" className="context-content">
+            {tab === 'brief' && (
+              <WorkspaceBrief
+                brief={brief.brief}
+                loading={brief.loading}
+                error={brief.error}
+                workspaceName={workspaceName}
+                expertName={expertName}
+                onRetry={brief.refresh}
+                onOpenMemory={onOpenBriefMemory}
+                onOpenIssue={onOpenBriefIssue}
+                onOpenReference={onOpenBriefReference}
               />
-            </>
-          )}
-          {tab === 'artifacts' &&
-            (artifacts.length === 0 ? (
-              <EmptyContext
-                placement="start"
-                title="尚无工作成果"
-                detail="将完成的回复保存为 Markdown 后，它会出现在这里。"
-              />
-            ) : (
-              <section className="context-section">
-                <div className="evidence-list">
-                  {artifacts.map((artifact) => (
-                    <ListRow
-                      key={artifact.id}
-                      onClick={() => onSelectArtifact?.(artifact)}
-                      label={`查看成果「${artifact.title}」`}
-                      leading={
-                        <span aria-hidden="true">
-                          <ArtifactIcon size={12} />
-                        </span>
+            )}
+          </TabPanel>
+          <TabPanel value="sources" className="context-content">
+            {tab === 'sources' && (
+              <>
+                {scheduleContinuation && (
+                  <section className="context-section">
+                    <SectionHeader
+                      title="定时任务本期范围"
+                      hint={
+                        scheduleContinuation.scopeAttached
+                          ? '后续运行仍包含此快照'
+                          : '当前任务未绑定此快照'
                       }
-                      title={artifact.title}
-                      meta={
-                        <>
-                          {artifactTypeLabel(artifact)} · v{artifact.versionNumber}
-                        </>
-                      }
-                      trailing={<ChevronRightIcon size={12} />}
                     />
-                  ))}
-                </div>
-              </section>
-            ))}
-        </div>
+                    <ListRow
+                      multiline
+                      variant="plain"
+                      title={scheduleContinuation.occurrence.occurrence.period.label}
+                      detail={`规则「${scheduleContinuation.occurrence.config.name}」 · 固定配置 v${scheduleContinuation.occurrence.occurrence.configVersion} · ${scheduleContinuation.occurrence.occurrence.period.timeZone}`}
+                      meta={
+                        scheduleContinuation.occurrence.sourceSnapshot
+                          ? `来源快照 ${scheduleContinuation.sourceSnapshotId ?? '不可用'} · ${scheduleSourceSnapshotStatusLabel(scheduleContinuation.occurrence.sourceSnapshot.status)} · ${scheduleContinuation.occurrence.sourceSnapshot.itemCount} 项 · ${scheduleContinuation.occurrence.sourceSnapshot.totalFileBytes} 字节 · 清单 ${scheduleContinuation.occurrence.sourceSnapshot.manifestHash}`
+                          : `来源快照 ${scheduleContinuation.sourceSnapshotId ?? '不可用'} · 快照详情暂不可用`
+                      }
+                    />
+                    <StatusNote
+                      tone={scheduleContinuation.scopeAttached ? 'warning' : 'neutral'}
+                      message={
+                        scheduleContinuation.scopeAttached
+                          ? '此 Task 的后续 Run 会沿用本期固定来源。移除会缩小后续权限范围并触发现有安全历史分段；不改变已经开始的 Run、本期历史或 Schedule 的后续配置。'
+                          : '本 Task 的后续 Run 当前不含这期自动来源；本期快照与历史仍保留，Schedule 的后续配置不变。下方补充材料只作用于当前原 Task。'
+                      }
+                    />
+                    {scheduleContinuation.scopeError && (
+                      <InlineError message={scheduleContinuation.scopeError} />
+                    )}
+                    {scheduleContinuation.scopeAttached && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        type="button"
+                        disabled={scheduleContinuation.removingScope}
+                        onClick={scheduleContinuation.onRemoveScope}
+                      >
+                        {scheduleContinuation.removingScope ? '正在移除本期范围…' : '移除本期范围'}
+                      </Button>
+                    )}
+                    <StatusNote message="下面选择的文件、知识或成果会补充到当前原 Task 的后续 Run，不会写回 Schedule。" />
+                  </section>
+                )}
+                <section className="context-section">
+                  <SectionHeader
+                    title="本次材料"
+                    hint={materials.length > 0 ? `${materials.length} 项已选择` : '尚未选择'}
+                    actions={
+                      <>
+                        <Button
+                          variant="chip"
+                          size="sm"
+                          type="button"
+                          disabled={materialsDisabled}
+                          onClick={() => onRequestMaterials('file')}
+                        >
+                          文件
+                        </Button>
+                        <Button
+                          variant="chip"
+                          size="sm"
+                          type="button"
+                          disabled={materialsDisabled}
+                          onClick={() => onRequestMaterials('knowledge')}
+                        >
+                          知识
+                        </Button>
+                        <Button
+                          variant="chip"
+                          size="sm"
+                          type="button"
+                          disabled={materialsDisabled}
+                          onClick={() => onRequestMaterials('artifact')}
+                        >
+                          成果
+                        </Button>
+                      </>
+                    }
+                  />
+                  {materials.length > 0 && (
+                    <div className="selected-materials-list">
+                      {materials.map((selection) => {
+                        const materialKey = taskMaterialKey(selection);
+                        const candidate = materialCandidates.find(
+                          (item) => materialCandidateKey(item) === materialKey,
+                        );
+                        const title = candidate?.title ?? '已选材料';
+                        return (
+                          <ListRow
+                            key={materialKey}
+                            multiline
+                            variant="plain"
+                            title={title}
+                            meta={
+                              <>
+                                {candidate?.sourceLabel ?? selection.reference.kind}
+                                {candidate?.status === 'unavailable' ? ' · 不可读取' : ''}
+                              </>
+                            }
+                            actionsPlacement="below"
+                            actions={
+                              <ActionBar as="div" label={`管理材料 ${title}`}>
+                                <FieldSelect
+                                  size="sm"
+                                  ariaLabel={`${title}用途`}
+                                  value={selection.purpose}
+                                  disabled={materialsDisabled}
+                                  options={MATERIAL_PURPOSE_OPTIONS}
+                                  onChange={(purpose) =>
+                                    onCommitMaterials(
+                                      materials.map((item) =>
+                                        taskMaterialKey(item) === materialKey
+                                          ? { ...item, purpose: purpose as MaterialPurpose }
+                                          : item,
+                                      ),
+                                    )
+                                  }
+                                />
+                                <IconButton
+                                  size="sm"
+                                  label={`移除材料 ${title}`}
+                                  icon={CloseIcon}
+                                  disabled={materialsDisabled}
+                                  onClick={() =>
+                                    onCommitMaterials(
+                                      materials.filter(
+                                        (item) => taskMaterialKey(item) !== materialKey,
+                                      ),
+                                    )
+                                  }
+                                />
+                              </ActionBar>
+                            }
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+                <section className="context-section">
+                  <SectionHeader
+                    title="本次 MCP 工具"
+                    hint={
+                      mcpToolBindings.length > 0
+                        ? `${mcpToolBindings.length} 项已选择`
+                        : '未选择，专家预设也不会自动加入'
+                    }
+                  />
+                  <McpToolBindingsPicker
+                    connections={mcpConnections}
+                    bindings={mcpToolBindings}
+                    onChange={onMcpToolBindingsChange}
+                  />
+                </section>
+                <EvidenceSection
+                  key={activeRun?.id ?? 'task'}
+                  evidence={evidence}
+                  activeRunId={activeRun?.id}
+                  onOpenSource={onOpenSource}
+                />
+              </>
+            )}
+          </TabPanel>
+          <TabPanel value="artifacts" className="context-content">
+            {tab === 'artifacts' &&
+              (artifacts.length === 0 ? (
+                <EmptyContext
+                  placement="start"
+                  title="尚无工作成果"
+                  detail="将完成的回复保存为 Markdown 后，它会出现在这里。"
+                />
+              ) : (
+                <section className="context-section">
+                  <div className="evidence-list">
+                    {artifacts.map((artifact) => (
+                      <ListRow
+                        key={artifact.id}
+                        onClick={() => onSelectArtifact?.(artifact)}
+                        label={`查看成果「${artifact.title}」`}
+                        leading={
+                          <span aria-hidden="true">
+                            <ArtifactIcon size={12} />
+                          </span>
+                        }
+                        title={artifact.title}
+                        meta={
+                          <>
+                            {artifactTypeLabel(artifact)} · v{artifact.versionNumber}
+                          </>
+                        }
+                        trailing={<ChevronRightIcon size={12} />}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
+          </TabPanel>
+        </Tabs>
       </aside>
       {sourceToast && <TransientToast {...sourceToast} onDismiss={dismissSourceToast} />}
     </>
