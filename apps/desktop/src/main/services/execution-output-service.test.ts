@@ -22,8 +22,8 @@ const temporary = (): string => {
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
-const goodReport = '== deck.pptx  (parts=20, slides=2)\n   OK: 未发现触发修复的结构问题\n';
-const specFor = (cwd: string): JobSpec => ({
+const successReport = 'validation report for this package';
+const specFor = (cwd: string, mode: 'create' | 'unchanged' = 'unchanged'): JobSpec => ({
   protocolVersion: 1,
   executionId: 'e',
   runId: 'r',
@@ -37,8 +37,20 @@ const specFor = (cwd: string): JobSpec => ({
   timeoutMs: 10_000,
   maxOutputBytes: 32768,
   maxLogBytes: 32768,
-  validatorId: 'pptx-validate',
   expectedOutputs: ['deck.pptx'],
+  outputContracts: [
+    {
+      mode,
+      extension: 'pptx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      validation: {
+        structure: mode === 'unchanged' ? 'passed' : 'not-checked',
+        visual: 'not-checked',
+        manualEdit: 'not-checked',
+      },
+    },
+  ],
+  requireCompleteStdout: true,
 });
 const capture = (stdout: string, truncated = false) => ({
   stdout,
@@ -48,35 +60,38 @@ const capture = (stdout: string, truncated = false) => ({
   droppedBytes: 0,
 });
 
-describe('execution output validation', () => {
-  it.each(['', 'OK', '{"issues":[]}', `${goodReport}!! broken relation`])(
-    'rejects incomplete or failed report: %s',
+describe('execution output collection', () => {
+  it.each(['', 'OK', '{"issues":[]}', 'package-specific diagnostics'])(
+    'preserves stdout without interpreting Skill-specific report formats: %s',
     (stdout) => {
       const root = temporary();
-      writeFileSync(path.join(root, 'deck.pptx'), 'PK-test');
+      writeFileSync(path.join(root, 'deck.pptx'), 'fixture bytes');
       const collector = new ExecutionOutputService();
       const spec = specFor(root);
       collector.prepare(spec);
-      expect(() => collector.collect(spec, capture(stdout))).toThrow('报告');
+      const [output] = collector.collect(spec, capture(stdout));
+      expect(output).toBeDefined();
+      if (!output) throw new Error('test setup: output was not returned');
+      const reportPath = path.join(root, `${output.relativePath}.report.json`);
+      expect(JSON.parse(readFileSync(reportPath, 'utf8'))).toMatchObject({ stdout });
     },
   );
   it('rejects truncated reports and output changes during validation', () => {
     const root = temporary();
     const file = path.join(root, 'deck.pptx');
-    writeFileSync(file, 'PK-test');
+    writeFileSync(file, 'fixture bytes');
     const collector = new ExecutionOutputService();
     const spec = specFor(root);
     collector.prepare(spec);
-    expect(() => collector.collect(spec, capture(goodReport, true))).toThrow('报告');
+    expect(() => collector.collect(spec, capture(successReport, true))).toThrow('truncated');
     collector.prepare(spec);
     writeFileSync(file, 'PK-changed');
-    expect(() => collector.collect(spec, capture(goodReport))).toThrow('changed');
+    expect(() => collector.collect(spec, capture(successReport))).toThrow('changed');
   });
   it('rejects old outputs for a generation command', () => {
     const root = temporary();
-    writeFileSync(path.join(root, 'deck.pptx'), 'PK-old');
-    const spec = specFor(root);
-    delete spec.validatorId;
+    writeFileSync(path.join(root, 'deck.pptx'), 'old output');
+    const spec = specFor(root, 'create');
     expect(() => new ExecutionOutputService().prepare(spec)).toThrow('already exists');
   });
   it('connects real process cleanup, verified output persistence and artifact registration', async () => {
@@ -139,20 +154,23 @@ describe('execution output validation', () => {
     });
     const service = new SkillExecutionService(store, supervisor, new ExecutionOutputService());
     const binding = service.createBinding({ runId: 'r', skillId: 's' });
-    writeFileSync(path.join(root, 'deck.pptx'), 'PK-synthetic-fixture');
+    writeFileSync(path.join(root, 'deck.pptx'), 'synthetic fixture bytes');
     const spec = specFor(root);
+    const { outputContracts, requireCompleteStdout, ...startSpec } = spec;
     const execution = await service.startExecution({
-      ...spec,
+      ...startSpec,
+      ...(outputContracts ? { outputContracts } : {}),
+      ...(requireCompleteStdout === undefined ? {} : { requireCompleteStdout }),
       bindingId: binding.id,
-      validatorId: 'pptx-validate',
       args: {},
       workDirKey: 'work',
-      argv: ['-e', `process.stdout.write(${JSON.stringify(goodReport)})`],
+      argv: ['-e', `process.stdout.write(${JSON.stringify(successReport)})`],
     });
     const result = await service.awaitExecution(execution.id);
     expect(result.execution.status).toBe('succeeded');
     expect(result.execution.outputIds).toHaveLength(1);
-    const output = store.executions.getVerifiedOutputs(execution.id)[0]!;
+    const output = store.executions.getVerifiedOutputs(execution.id)[0];
+    if (!output) throw new Error('test setup: verified output is missing');
     const artifacts = new FileArtifactService(
       store,
       path.join(root, 'artifacts'),
@@ -172,7 +190,7 @@ describe('execution output validation', () => {
       manualEdit: 'not-checked',
     });
     expect(readFileSync(artifacts.resolveStoredPath(registered.versionId), 'utf8')).toBe(
-      'PK-synthetic-fixture',
+      'synthetic fixture bytes',
     );
     // This is a synthetic CLI fixture, not a real PPT/PowerPoint acceptance claim.
     await service.finishRun('r');

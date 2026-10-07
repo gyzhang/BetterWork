@@ -24,6 +24,7 @@ export interface CreateExecutionBindingInput {
 }
 
 export interface StartExecutionInput {
+  executionId?: string;
   signal?: AbortSignal;
   runId: string;
   bindingId: string;
@@ -38,7 +39,8 @@ export interface StartExecutionInput {
   maxOutputBytes: number;
   maxLogBytes: number;
   expectedOutputs: string[];
-  validatorId?: string;
+  outputContracts?: NonNullable<JobSpec['outputContracts']>;
+  requireCompleteStdout?: boolean;
   workDirKey: string;
 }
 
@@ -166,7 +168,7 @@ export class SkillExecutionService {
       this.store.environments.getEnvironment(binding.environmentId)?.status !== 'ready'
     )
       throw new Error('Bound environment is no longer ready');
-    const executionId = randomUUID();
+    const executionId = input.executionId ?? randomUUID();
     this.store.executions.createExecution({
       id: executionId,
       runId: input.runId,
@@ -194,7 +196,10 @@ export class SkillExecutionService {
       maxOutputBytes: input.maxOutputBytes,
       maxLogBytes: input.maxLogBytes,
       expectedOutputs: input.expectedOutputs,
-      ...(input.validatorId ? { validatorId: input.validatorId } : {}),
+      ...(input.outputContracts ? { outputContracts: input.outputContracts } : {}),
+      ...(input.requireCompleteStdout === undefined
+        ? {}
+        : { requireCompleteStdout: input.requireCompleteStdout }),
     };
 
     let handle: SupervisorHandle;

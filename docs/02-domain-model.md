@@ -148,7 +148,7 @@ interface CapabilityBinding {
 - 撤销信任或停用某个 Skill 会取消所有包含它的活跃 Run，即使它只是多个绑定中的一个。
 - 运行期不增删绑定；调整绑定属于下一次 Run。
 
-当前实现状态：`RunSkillBinding` 与 `run_skill_bindings` 表已按上述结构落地，表上 `run_id` 只有普通索引、无唯一约束，存储层天然支持一个 Run 多条绑定；`skill_read_resource` 与 `skill_execute` 的入参携带 `bindingId`，`AgentRunInput.skillInstructions` 是数组。应用层已按本节约束改造：`StartRunRequest.skillBindings` 是 1–6 项数组（顺序即注入顺序，重复 `skillId` 在 Schema 层拒绝），RunService 先整体校验前置条件再逐个建立快照，任一不合格则整个 Run 不启动且不留下任何绑定记录；工具桥接按模型传入的 `bindingId` 寻址，并先校验该绑定属于本 Run。「未显式指定时延续同 Task 最近一次绑定」的隐式继承连同其查询已删除。运行约定已分层：通用契约（`bindingId`、`expectedHash`、work 目录、不自行声明验证状态）由 `skill-runtime-conventions` 统一持有，样本专属口径（如 PPT 的 attempt 合并与校验闸门）由适配预设按 `contentHash` 匹配后提供，不再泄漏给其他 Skill。Composer 的 `+` 菜单与 chip 条已落地；B00-5 的真实双技能运行与重启后历史绑定回看仍待人工验收。E11 已落地专家身份管理，E12 已落地 TaskContextRevision 与运行时人格/模型/内置工具裁决；召唤与材料范围仍按 E13–E25 实现。
+当前实现状态：`RunSkillBinding` 与 `run_skill_bindings` 表已按上述结构落地，表上 `run_id` 只有普通索引、无唯一约束，存储层天然支持一个 Run 多条绑定；`skill_read_resource` 与 `skill_execute` 的入参携带 `bindingId`，`AgentRunInput.skillInstructions` 是数组。应用层已按本节约束改造：`StartRunRequest.skillBindings` 是 1–6 项数组（顺序即注入顺序，重复 `skillId` 在 Schema 层拒绝），RunService 先整体校验前置条件再逐个建立快照，任一不合格则整个 Run 不启动且不留下任何绑定记录；工具桥接按模型传入的 `bindingId` 寻址，并先校验该绑定属于本 Run。「未显式指定时延续同 Task 最近一次绑定」的隐式继承连同其查询已删除。运行约定中的入口、argv、路径范围、工具链引用与输出验证状态由 Skill manifest 声明，`skill-runtime-conventions` 只持有所有 Skill 共用的边界，宿主以通用运行时解释声明，不按 `contentHash` 匹配专属预设。Composer 的 `+` 菜单与 chip 条已落地；B00-5 的真实双技能运行与重启后历史绑定回看仍待人工验收。E11 已落地专家身份管理，E12 已落地 TaskContextRevision 与运行时人格/模型/内置工具裁决；召唤与材料范围仍按 E13–E25 实现。
 
 ## 5. Step
 

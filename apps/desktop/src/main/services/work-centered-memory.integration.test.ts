@@ -225,7 +225,6 @@ const openServices = (directory: string): Services => {
     undefined,
     undefined,
     undefined,
-    undefined,
     inputSnapshots,
     taskMaterials,
     extractions,

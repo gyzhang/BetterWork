@@ -16,11 +16,7 @@ import type {
   DependencyProcessRunner,
 } from '../infrastructure/dependency-adapters';
 import { createNodeFileSystem } from '../infrastructure/dependency-adapters';
-import {
-  listDependencyLocks,
-  loadDependencyLock,
-  pptGenerationLockId,
-} from '../infrastructure/dependency-lock-catalog';
+import { listDependencyLocks, loadDependencyLock } from '../infrastructure/dependency-lock-catalog';
 import { AppStore } from '../persistence';
 import { computeDependencyFingerprint } from './skill-dependency-service';
 import {
@@ -31,6 +27,7 @@ import {
 
 const encoder = new TextEncoder();
 const temporaryDirectories: string[] = [];
+const sampleLockId = 'ppt-generation-expert-darwin-arm64-cp312';
 
 const temporaryDirectory = (): string => {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'betterwork-snapshot-'));
@@ -701,9 +698,9 @@ describe('随包依赖锁', () => {
   it('样本锁通过协议校验，并带真实校验值与许可', async () => {
     const filesystem = createNodeFileSystem();
     const lockIds = await listDependencyLocks(locksRoot, filesystem);
-    expect(lockIds).toContain(pptGenerationLockId);
+    expect(lockIds).toContain(sampleLockId);
 
-    const lock = await loadDependencyLock(locksRoot, pptGenerationLockId, filesystem);
+    const lock = await loadDependencyLock(locksRoot, sampleLockId, filesystem);
     expect(lock.platform).toEqual({ os: 'darwin', arch: 'arm64', abi: 'cp312' });
     expect(lock.pythonRequirement).toBe('3.12');
     expect(lock.packages.map((entry) => entry.name)).toEqual([

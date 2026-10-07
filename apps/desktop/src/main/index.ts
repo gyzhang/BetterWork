@@ -49,10 +49,6 @@ import { MemoryService } from './services/memory-service';
 import { ModelProviderFactory } from './services/model-provider-factory';
 import { NotificationActivationService } from './services/notification-activation-service';
 import { NotificationService } from './services/notification-service';
-import {
-  pptGenerationAdapterFactory,
-  supportedPptContentHashes,
-} from './services/ppt-generation-preset';
 import { RunService } from './services/run-service';
 import { ScheduleDirectorySourcesService } from './services/schedule-directory-sources';
 import { ScheduleDispatchService } from './services/schedule-dispatch-service';
@@ -66,7 +62,6 @@ import { SchedulePreflightService } from './services/schedule-preflight';
 import { ScheduleScheduler } from './services/schedule-scheduler';
 import { ScheduleService } from './services/schedule-service';
 import { ScheduleSourceService } from './services/schedule-source-service';
-import { SkillAdapterService } from './services/skill-adapter';
 import { SkillDependencyService } from './services/skill-dependency-service';
 import { SkillExecutionService } from './services/skill-execution-service';
 import { type BuiltinReleaseManifest, SkillService } from './services/skill-service';
@@ -494,8 +489,6 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
   if (interruptedExecutions > 0) {
     console.warn(`Marked ${interruptedExecutions} interrupted execution(s) as failed on startup`);
   }
-  const skillAdapterService = new SkillAdapterService();
-  skillAdapterService.register(pptGenerationAdapterFactory, supportedPptContentHashes);
   const artifactFilesRoot = path.join(userData, 'artifact-files');
   mkdirSync(artifactFilesRoot, { recursive: true });
   // 中文幻灯片预览依赖随包的思源黑体：系统自带的中文字体是 TTC + AAT，解析不了。
@@ -582,7 +575,6 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     skillService,
     getWindow,
     skillExecutionService,
-    skillAdapterService,
     snapshots,
     fileArtifactService,
     dependencies,

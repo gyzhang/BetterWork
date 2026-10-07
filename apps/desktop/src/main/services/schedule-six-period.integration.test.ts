@@ -325,7 +325,6 @@ describe('Schedule six period offline integration journey', () => {
       undefined,
       undefined,
       undefined,
-      undefined,
       inputSnapshots,
       taskMaterials,
       undefined,

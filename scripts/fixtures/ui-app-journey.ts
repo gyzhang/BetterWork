@@ -127,7 +127,6 @@ export function assemble(
     undefined,
     undefined,
     undefined,
-    undefined,
     inputSnapshots,
     taskMaterials,
     extractions,

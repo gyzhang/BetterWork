@@ -2,56 +2,65 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import type { JobSpec, VerifiedExecutionOutput } from '@betterwork/agent-protocol';
+import type {
+  JobSpec,
+  ValidationStateInput,
+  VerifiedExecutionOutput,
+} from '@betterwork/agent-protocol';
 
 import { hashBytes, managedPath, readManagedFile } from '../infrastructure/managed-files';
 import type { SupervisorCapture } from '../infrastructure/process-supervisor';
-import { isCompleteValidationReport } from './ppt-generation-preset';
 
 /** Application-owned collector, deliberately separate from process control messages. */
 export class ExecutionOutputService {
-  private readonly validationInputs = new Map<string, string[]>();
+  private readonly validationInputs = new Map<string, Array<string | undefined>>();
 
   prepare(spec: JobSpec): void {
-    if (spec.validatorId && spec.validatorId !== 'pptx-validate')
-      throw new Error('Unknown validator');
-    if (spec.validatorId === 'pptx-validate') {
-      if (spec.expectedOutputs.length !== 1)
-        throw new Error('Validation requires exactly one output');
-      this.validationInputs.set(
-        spec.executionId,
-        spec.expectedOutputs.map((file) => hashBytes(readManagedFile(spec.cwd, file))),
-      );
-    } else {
-      for (const file of spec.expectedOutputs) {
+    const contracts = this.contractsFor(spec);
+    if (contracts.length !== spec.expectedOutputs.length) {
+      throw new Error('Output declaration count does not match expected output paths');
+    }
+    this.validationInputs.set(
+      spec.executionId,
+      spec.expectedOutputs.map((file, index) => {
+        const contract = contracts[index];
+        if (!contract) throw new Error('Output contract is missing');
+        if (contract.mode === 'unchanged') return hashBytes(readManagedFile(spec.cwd, file));
         if (existsSync(managedPath(spec.cwd, file)))
           throw new Error('Output already exists; use a new attempt');
-      }
-    }
+        return undefined;
+      }),
+    );
   }
 
   collect(spec: JobSpec, capture: SupervisorCapture): VerifiedExecutionOutput[] {
     const before = this.validationInputs.get(spec.executionId);
     this.validationInputs.delete(spec.executionId);
-    if (spec.validatorId && (capture.truncated || !isCompleteValidationReport(capture.stdout))) {
-      throw new Error('完整结构校验报告缺失或包含问题，拒绝登记输出');
+    if (spec.requireCompleteStdout && capture.truncated) {
+      throw new Error('Command output was truncated; refusing to publish an incomplete report');
     }
+    const contracts = this.contractsFor(spec);
     return spec.expectedOutputs.map((file, index) => {
+      const contract = contracts[index];
+      if (!contract) throw new Error('Output contract is missing');
       const bytes = readManagedFile(spec.cwd, file);
       const fileHash = hashBytes(bytes);
-      if (spec.validatorId && before?.[index] !== fileHash)
-        throw new Error('Output changed during validation');
-      if (spec.validatorId && (bytes[0] !== 0x50 || bytes[1] !== 0x4b))
-        throw new Error('Output is not a PPTX ZIP');
+      if (contract.mode === 'unchanged' && before?.[index] !== fileHash)
+        throw new Error('Command changed a declared read-only output source');
       const report = JSON.stringify({
         version: 1,
         executionId: spec.executionId,
         fileHash,
-        validatorId: spec.validatorId ?? null,
-        report: spec.validatorId ? capture.stdout : null,
+        mimeType: contract.mimeType,
+        validation: contract.validation,
+        stdout: capture.stdout,
       });
       const outputId = randomUUID();
-      const relativePath = path.join('.outputs', spec.executionId, `${outputId}.pptx`);
+      const relativePath = path.join(
+        '.outputs',
+        spec.executionId,
+        `${outputId}.${contract.extension}`,
+      );
       const destination = managedPath(spec.cwd, relativePath, true);
       mkdirSync(path.dirname(destination), { recursive: true });
       writeFileSync(destination, bytes, { flag: 'wx', mode: 0o400 });
@@ -62,13 +71,26 @@ export class ExecutionOutputService {
         fileHash,
         fileSize: bytes.length,
         reportHash: hashBytes(Buffer.from(report)),
-        validation: {
-          structure: spec.validatorId ? 'passed' : 'not-checked',
-          visual: 'not-checked',
-          manualEdit: 'not-checked',
-        },
+        validation: contract.validation,
+        mimeType: contract.mimeType,
       };
     });
+  }
+
+  private contractsFor(spec: JobSpec): NonNullable<JobSpec['outputContracts']> {
+    return (
+      spec.outputContracts ??
+      spec.expectedOutputs.map((file) => ({
+        mode: 'create' as const,
+        extension: path.extname(file).slice(1).toLowerCase() || 'bin',
+        mimeType: 'application/octet-stream',
+        validation: {
+          structure: 'not-checked',
+          visual: 'not-checked',
+          manualEdit: 'not-checked',
+        } satisfies ValidationStateInput,
+      }))
+    );
   }
 
   discard(executionId: string): void {

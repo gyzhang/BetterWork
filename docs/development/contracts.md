@@ -56,7 +56,7 @@ A01 可先定义完整配置形状，A02 只创建当前需要的 Skill/profile/
 
 模型输入 `bindingId + commandId + args对象`；Main 根据参数 Schema 解析为 `executable + argv数组 + cwd + env`。不提供 Shell 字符串、任意可执行路径、任意环境变量、用户指定 runId 的执行 IPC。
 
-首个 profile 命令语义固定为：project-init、icon-sync、svg-export、template-merge、pptx-validate；svg-export 包含其原有 SVG 质量门。名称是 profile 的命令 ID，不是新增一组模型 PPT 专用工具。
+首个 PPT 样例 manifest 声明 project-init、icon-sync、svg-export、template-merge、pptx-validate，并由包内脚本承担 SVG 质量门。它们是该 Skill profile 的命令 ID；BetterWork 不为这些名称提供产品专属入口或预设。
 
 模型工具名称：skill_read_resource、task_write_file、skill_execute、artifact_register_file，均 snake_case。资源读取支持长度/范围，二进制不强行解码；文本生成工具足够编写 SVG/JSON，不要求自由 Python -c。
 

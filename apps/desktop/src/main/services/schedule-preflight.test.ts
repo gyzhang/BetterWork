@@ -8,7 +8,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SafeStorageAdapter } from '../infrastructure/credential-store';
 import { AppStore } from '../persistence';
 import { API_KEY_SLOT } from '../persistence/credential-repository';
-import { suggestedPptProfile, supportedPptContentHashes } from './ppt-generation-preset';
 import {
   type SchedulePreflightRuntimeAccess,
   SchedulePreflightService,
@@ -61,6 +60,50 @@ const scheduleConfig = (expertId: string, expertRevisionId: string): ScheduleCon
   outputSubdirectory: '定时成果',
 });
 
+const genericCommand = {
+  commandId: 'verify-input',
+  label: '验证输入',
+  executableKey: 'managed-python',
+  argumentSchema: { type: 'object', additionalProperties: false, properties: {} },
+  timeoutMs: 300_000,
+  expectedOutputs: [],
+  execution: {
+    entrypoint: {
+      scope: 'toolchain' as const,
+      runtime: 'managed-python' as const,
+      toolchainId: 'ppt-master',
+      path: 'scripts/verify.py',
+    },
+    pathArguments: [],
+    argv: [],
+    outputs: [],
+  },
+};
+
+const legacyCommand = {
+  commandId: 'verify-input',
+  label: '验证输入',
+  executableKey: 'managed-python',
+  argumentSchema: { type: 'object', additionalProperties: false, properties: {} },
+  timeoutMs: 300_000,
+  expectedOutputs: [],
+};
+
+const runtimeProfile: RuntimeProfileDraft = {
+  commands: [genericCommand],
+  environmentRequirements: [],
+  pythonRequirement: '3.12',
+  dependencyLockId: 'schedule-preflight-lock',
+  toolchainRequirements: [
+    {
+      id: 'ppt-master',
+      name: 'Fixture toolchain',
+      environmentVariable: 'FIXTURE_TOOLCHAIN_HOME',
+    },
+  ],
+  outputContract: { outputPaths: [] },
+};
+
 const openStore = (): AppStore => {
   const store = AppStore.open(':memory:');
   stores.push(store);
@@ -110,27 +153,16 @@ const makeFixture = (
 
   let skillBinding: ExpertRevisionDraft['skillPreset'][number] | undefined;
   if (options.skillCommands) {
-    const contentHash =
-      supportedPptContentHashes[0] ??
-      '4681d64c1736d8162493e9b2da6d2a54bd079338ec46dd92ecdbdaa2f1ee52e1';
-    const suggested = suggestedPptProfile(contentHash);
-    if (!suggested) throw new Error('test setup: the reviewed PPT profile is missing');
-    const firstSuggestedCommand = suggested.commands[0];
-    if (!firstSuggestedCommand) throw new Error('test setup: the reviewed command is missing');
+    const contentHash = 'fixture-skill-content-hash';
     const profile: RuntimeProfileDraft =
       options.skillCommands === 'unknown'
         ? {
-            ...suggested,
-            commands: [
-              {
-                ...firstSuggestedCommand,
-                commandId: 'arbitrary-shell',
-              },
-            ],
+            ...runtimeProfile,
+            commands: [legacyCommand],
           }
         : options.skillCommands === 'none'
-          ? { ...suggested, commands: [] }
-          : suggested;
+          ? { ...runtimeProfile, commands: [] }
+          : runtimeProfile;
     store.skills.save({
       id: 'ppt-generation-expert',
       name: 'PPT 生成专家',
@@ -367,7 +399,7 @@ describe('SchedulePreflightService', () => {
     expect(mcpResult.problems.map((problem) => problem.code)).toContain('mcp-unsupported');
   });
 
-  it('requires the exact reviewed PPT profile, active grant, ready environment and one verified toolchain snapshot', async () => {
+  it('accepts declared generic commands with an active grant, ready environment and verified toolchain snapshot', async () => {
     const fixture = makeFixture({ skillCommands: 'ppt' });
     const ready = await fixture.service.check({
       workspaceId: fixture.workspace.id,
@@ -385,7 +417,7 @@ describe('SchedulePreflightService', () => {
     expect(revoked.problems.map((problem) => problem.code)).toContain('skill-trust-unavailable');
   });
 
-  it('blocks changed command profiles, missing grant selections and altered toolchain snapshots', async () => {
+  it('blocks commands without a runtime declaration, missing grant selections and altered toolchain snapshots', async () => {
     const altered = makeFixture({ skillCommands: 'unknown' });
     const alteredResult = await altered.service.check({
       workspaceId: altered.workspace.id,

@@ -121,7 +121,10 @@ export class FileArtifactService {
           versionId,
           title: input.title,
           runId: input.runId,
-          mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          mimeType:
+            output.mimeType ??
+            input.mimeType ??
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
           fileSize,
           fileHash,
           fileKey,

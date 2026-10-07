@@ -12,7 +12,6 @@ import type {
 import type { AppStore } from '../persistence';
 import { API_KEY_SLOT } from '../persistence/credential-repository';
 import { isSupportedBuiltinToolName } from './expert-service';
-import { suggestedPptProfile, supportedPptContentHashes } from './ppt-generation-preset';
 import { computeDependencyFingerprint } from './skill-dependency-service';
 
 export type SchedulePreflightProblemCode =
@@ -108,15 +107,10 @@ const resolveLanguageModel = (
   return models.find((model) => model.role === 'language' && model.enabled);
 };
 
-const profileMatchesReviewedPreset = (skill: SkillDetail): boolean => {
-  const expected = suggestedPptProfile(skill.revision.contentHash);
-  const actual = skill.runtimeProfile?.profile;
-  return (
-    expected !== undefined &&
-    actual !== undefined &&
-    JSON.stringify(sortedValue(actual)) === JSON.stringify(sortedValue(expected))
-  );
-};
+const hasDeclarativeCommandContracts = (skill: SkillDetail): boolean =>
+  skill.runtimeProfile?.profile.commands.every(
+    (command) => command.execution !== undefined && !command.validatorId,
+  ) === true;
 
 const findReadyEnvironment = (
   store: AppStore,
@@ -409,18 +403,10 @@ export class SchedulePreflightService {
       return { ...baseFingerprint, resourceVerified };
     }
 
-    if (!supportedPptContentHashes.includes(skill.revision.contentHash)) {
+    if (!hasDeclarativeCommandContracts(skill)) {
       add(
         'skill-command-unsupported',
-        '后台只支持已审核的 ppt-generation 固定命令；此脚本 Skill 内容哈希未登记。',
-        skill.id,
-      );
-      return baseFingerprint;
-    }
-    if (!profileMatchesReviewedPreset(skill)) {
-      add(
-        'skill-command-unsupported',
-        '脚本命令表与审核过的 ppt-generation 运行配置不同，请重新审核。',
+        'Skill 命令缺少受支持的声明式入口，或使用了旧版校验器标识。',
         skill.id,
       );
       return baseFingerprint;

@@ -172,17 +172,212 @@ export const skillRevisionSummarySchema = z
   .strict();
 export type SkillRevisionSummary = z.infer<typeof skillRevisionSummarySchema>;
 
+export const validationStatusSchema = z.enum(['pending', 'passed', 'failed', 'not-checked']);
+export type ValidationStatusInput = z.infer<typeof validationStatusSchema>;
+
+export const validationStateSchema = z
+  .object({
+    structure: validationStatusSchema,
+    visual: validationStatusSchema,
+    manualEdit: validationStatusSchema,
+  })
+  .strict();
+export type ValidationStateInput = z.infer<typeof validationStateSchema>;
+
+const runtimePackagePathSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(500)
+  .refine(
+    (value) =>
+      !value.startsWith('/') &&
+      !value.includes('\\') &&
+      value
+        .split('/')
+        .every((segment) => segment.length > 0 && segment !== '.' && segment !== '..'),
+    { message: 'Skill 运行资源路径必须是包内相对路径' },
+  );
+
+const runtimeCommandEntrypointSchema = z.discriminatedUnion('scope', [
+  z
+    .object({
+      scope: z.literal('skill'),
+      runtime: z.literal('managed-python'),
+      path: runtimePackagePathSchema,
+    })
+    .strict(),
+  z
+    .object({
+      scope: z.literal('toolchain'),
+      runtime: z.literal('managed-python'),
+      toolchainId: z.string().trim().min(1).max(100),
+      path: runtimePackagePathSchema,
+    })
+    .strict(),
+]);
+
+const runtimeCommandArgumentPathSchema = z
+  .object({
+    argumentName: z.string().trim().min(1).max(100),
+    scope: z.enum(['skill', 'work']),
+    access: z.enum(['read', 'write', 'read-write']),
+  })
+  .strict();
+
+const runtimeCommandArgumentTokenSchema = z
+  .object({
+    kind: z.literal('argument'),
+    name: z.string().trim().min(1).max(100),
+    repeat: z.boolean().optional(),
+  })
+  .strict();
+
+const runtimeCommandTokenSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('literal'), value: z.string().max(2_000) }).strict(),
+  runtimeCommandArgumentTokenSchema,
+  z.object({ kind: z.literal('work-directory') }).strict(),
+  z.object({ kind: z.literal('output'), outputId: z.string().trim().min(1).max(100) }).strict(),
+]);
+
+const runtimeCommandOutputSourceSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('generated'),
+      relativePath: runtimePackagePathSchema,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('argument'),
+      argumentName: z.string().trim().min(1).max(100),
+    })
+    .strict(),
+]);
+
+export const runtimeProfileCommandOutputSchema = z
+  .object({
+    outputId: z
+      .string()
+      .trim()
+      .regex(/^[a-z0-9][a-z0-9._-]{0,99}$/u),
+    source: runtimeCommandOutputSourceSchema,
+    extension: z
+      .string()
+      .trim()
+      .regex(/^[a-z0-9]{1,16}$/u),
+    mimeType: z
+      .string()
+      .trim()
+      .regex(/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/iu)
+      .max(160),
+    validation: validationStateSchema,
+  })
+  .strict();
+export type RuntimeProfileCommandOutput = z.infer<typeof runtimeProfileCommandOutputSchema>;
+
+const runtimeProfileCommandExecutionSchema = z
+  .object({
+    entrypoint: runtimeCommandEntrypointSchema,
+    pathArguments: z.array(runtimeCommandArgumentPathSchema).max(100),
+    argv: z.array(runtimeCommandTokenSchema).max(300),
+    outputs: z.array(runtimeProfileCommandOutputSchema).max(100),
+  })
+  .strict()
+  .superRefine((execution, context) => {
+    const pathArgumentNames = execution.pathArguments.map((argument) => argument.argumentName);
+    if (new Set(pathArgumentNames).size !== pathArgumentNames.length) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: '路径参数名称必须唯一' });
+    }
+    for (const [index, argument] of execution.pathArguments.entries()) {
+      if (argument.scope === 'skill' && argument.access !== 'read') {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['pathArguments', index, 'access'],
+          message: 'Skill 包资源只能以只读方式传入命令',
+        });
+      }
+    }
+    const outputIds = execution.outputs.map((output) => output.outputId);
+    if (new Set(outputIds).size !== outputIds.length) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: '命令输出 ID 必须唯一' });
+    }
+    const outputIdSet = new Set(outputIds);
+    for (const [index, token] of execution.argv.entries()) {
+      if (token.kind === 'output' && !outputIdSet.has(token.outputId)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['argv', index, 'outputId'],
+          message: 'argv 引用了未声明的命令输出',
+        });
+      }
+    }
+    for (const [index, output] of execution.outputs.entries()) {
+      const source = output.source;
+      if (source.kind === 'argument' && !pathArgumentNames.includes(source.argumentName)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['outputs', index, 'source', 'argumentName'],
+          message: '命令输出引用的来源必须声明为受管路径参数',
+        });
+      } else if (source.kind === 'argument') {
+        const sourcePath = execution.pathArguments.find(
+          (argument) => argument.argumentName === source.argumentName,
+        );
+        if (sourcePath?.scope !== 'work' || sourcePath.access === 'write') {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['outputs', index, 'source', 'argumentName'],
+            message: '可发布输出必须来自 Run 工作区中的可读路径',
+          });
+        }
+      }
+    }
+  });
+
 export const runtimeProfileCommandSchema = z
   .object({
     commandId: z.string().trim().min(1).max(100),
     label: z.string().trim().min(1).max(160),
-    executableKey: z.string().trim().min(1).max(160),
+    executableKey: z.string().trim().min(1).max(160).optional(),
     argumentSchema: z.record(z.string(), z.unknown()),
     timeoutMs: z.number().int().positive().max(1_800_000),
-    expectedOutputs: z.array(z.string().trim().min(1)).max(100),
+    expectedOutputs: z.array(z.string().trim().min(1)).max(100).optional(),
     validatorId: z.string().trim().min(1).max(160).optional(),
+    execution: runtimeProfileCommandExecutionSchema.optional(),
+    requireCompleteStdout: z.boolean().optional(),
+    runtimeInstruction: z.string().trim().min(1).max(2_000).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((command, context) => {
+    if (!command.execution) return;
+    if (command.validatorId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['validatorId'],
+        message: '声明式命令不得引用宿主 validatorId',
+      });
+    }
+    const properties = command.argumentSchema['properties'];
+    const declaresArgument = (name: string): boolean =>
+      typeof properties === 'object' &&
+      properties !== null &&
+      !Array.isArray(properties) &&
+      Object.prototype.hasOwnProperty.call(properties, name);
+    const argumentsUsed = new Set([
+      ...command.execution.pathArguments.map((argument) => argument.argumentName),
+      ...command.execution.argv.flatMap((token) => (token.kind === 'argument' ? [token.name] : [])),
+    ]);
+    for (const name of argumentsUsed) {
+      if (!declaresArgument(name)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['argumentSchema', 'properties', name],
+          message: '执行声明引用了未在参数 Schema 中声明的字段',
+        });
+      }
+    }
+  });
 export type RuntimeProfileCommand = z.infer<typeof runtimeProfileCommandSchema>;
 
 export const skillToolchainRequirementSchema = z
@@ -203,20 +398,7 @@ export const skillToolchainRequirementSchema = z
   .strict();
 export type SkillToolchainRequirement = z.infer<typeof skillToolchainRequirementSchema>;
 
-const packageRelativePathSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(500)
-  .refine(
-    (value) =>
-      !value.startsWith('/') &&
-      !value.includes('\\') &&
-      value
-        .split('/')
-        .every((segment) => segment.length > 0 && segment !== '.' && segment !== '..'),
-    { message: 'Skill 运行资源路径必须是包内相对路径' },
-  );
+const packageRelativePathSchema = runtimePackagePathSchema;
 
 /** Skill 包内自带的锁与可选 wheelhouse；目录名不会进入应用级全局锁目录。 */
 export const skillDependencyBundleSchema = z
@@ -262,7 +444,8 @@ export const runtimeProfileDraftSchema = z
         reportPath: z.string().trim().min(1).optional(),
         outputPaths: z.array(z.string().trim().min(1)).max(100),
       })
-      .strict(),
+      .strict()
+      .optional(),
   })
   .strict()
   .refine(
@@ -278,6 +461,19 @@ export const runtimeProfileDraftSchema = z
   )
   .refine((profile) => !(profile.dependencyLockId && profile.dependencyBundle), {
     message: '应用目录锁与 Skill 包内依赖锁不能同时声明',
+  })
+  .superRefine((profile, context) => {
+    const requirementIds = new Set((profile.toolchainRequirements ?? []).map((entry) => entry.id));
+    for (const [commandIndex, command] of profile.commands.entries()) {
+      const entrypoint = command.execution?.entrypoint;
+      if (entrypoint?.scope === 'toolchain' && !requirementIds.has(entrypoint.toolchainId)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['commands', commandIndex, 'execution', 'entrypoint', 'toolchainId'],
+          message: '命令入口引用了未声明的工具链',
+        });
+      }
+    }
   });
 export type RuntimeProfileDraft = z.infer<typeof runtimeProfileDraftSchema>;
 
@@ -3017,7 +3213,23 @@ export const jobSpecSchema = z
     maxOutputBytes: z.number().int().positive(),
     maxLogBytes: z.number().int().positive(),
     expectedOutputs: z.array(z.string().min(1)).max(100),
-    validatorId: z.string().min(1).optional(),
+    outputContracts: z
+      .array(
+        z
+          .object({
+            mode: z.enum(['create', 'unchanged']),
+            extension: z.string().regex(/^[a-z0-9]{1,16}$/u),
+            mimeType: z
+              .string()
+              .regex(/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/iu)
+              .max(160),
+            validation: validationStateSchema,
+          })
+          .strict(),
+      )
+      .max(100)
+      .optional(),
+    requireCompleteStdout: z.boolean().optional(),
   })
   .strict();
 export type JobSpec = z.infer<typeof jobSpecSchema>;
@@ -3537,18 +3749,6 @@ export interface ExportMarkdownArtifactResult {
   filePath?: string;
 }
 
-export const validationStatusSchema = z.enum(['pending', 'passed', 'failed', 'not-checked']);
-export type ValidationStatusInput = z.infer<typeof validationStatusSchema>;
-
-export const validationStateSchema = z
-  .object({
-    structure: validationStatusSchema,
-    visual: validationStatusSchema,
-    manualEdit: validationStatusSchema,
-  })
-  .strict();
-export type ValidationStateInput = z.infer<typeof validationStateSchema>;
-
 /** Host-owned output metadata; never supplied by the model. */
 export const verifiedExecutionOutputSchema = z
   .object({
@@ -3558,6 +3758,7 @@ export const verifiedExecutionOutputSchema = z
     fileSize: z.number().int().nonnegative(),
     reportHash: z.string().regex(/^[a-f0-9]{64}$/u),
     validation: validationStateSchema,
+    mimeType: z.string().min(1).optional(),
   })
   .strict();
 export type VerifiedExecutionOutput = z.infer<typeof verifiedExecutionOutputSchema>;

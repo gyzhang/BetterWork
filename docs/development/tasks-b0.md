@@ -20,10 +20,10 @@
 ## B00-2 指令注入顺序与运行约定解耦
 
 - 前置：B00-1。
-- 必读：RunService resolveSkillInstructions 现约 L432–L464、skill-adapter、ppt-generation-preset、agent-core engine messages 构造、执行器设计 §6。
+- 必读：RunService `resolveSkillInstructions`、`skill-runtime-conventions`、Agent Core engine messages 构造、执行器设计 §6。`skill-adapter` 与 `ppt-generation-preset` 是本卡完成时的历史实现，已由 A16 的 Skill manifest 命令契约与通用解释器替代。
 - 目标：N 份 Skill 指令按绑定顺序注入，命令表携带 bindingId 与技能名，样本专属约定不再泄漏给其他 Skill。
-- 允许改动：RunService 指令组装、SkillAdapter 接口增加 per-skill 运行约定、ppt 预设承接专属段落、相应 tests。
-- 实施：每条指令正文前缀 `[Skill: <名称>]`；通用段落保留 task_write_file 写本 Run work 目录、覆盖必须 expectedHash、不得自行声明验证状态、必须使用所给 bindingId；svg-export/template-merge/pptx-validate 等 PPT 口径移入预设，仅对匹配的 Skill 生效；命令表每项显式带 bindingId 与 skillName。
+- 允许改动：RunService 指令组装、当时的 per-Skill 运行约定接口及对应测试；这些预设式实现已在 A16 收敛为包内声明。
+- 实施记录：每条指令正文前缀 `[Skill: <名称>]`；通用段落约定本 Run work 目录、覆盖保护、验证状态与 bindingId；命令表每项显式带 bindingId 与 skillName。当时的 PPT 专属段落只注入匹配 Skill；2026-10-07 A16 已将命令使用与校验契约迁回 Skill 包，BetterWork 不再保留该专属预设。
 - 必测：两技能同时注入时模型请求里两份指令顺序正确、PPT 段落只出现在 PPT 技能那一份里；单技能路径与 B00-1 前行为等价；Fake Provider 断言 messages 结构；指令为空时不产生空 system 段。
 - 验收：Fake Provider 离线断言完整注入结果，不触网。
 - 不做：不做上下文预算截断，超限由 B00-1 的显式上限承担；不把指令拼进 user prompt。

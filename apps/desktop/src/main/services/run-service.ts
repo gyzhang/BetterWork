@@ -16,7 +16,6 @@ import type {
   ExpertModelReference,
   MaterialReference,
   McpToolBinding,
-  RuntimeProfileCommand,
   ScriptExecution,
   SkillToolchainRequirement,
   StartRunRequest,
@@ -100,17 +99,10 @@ import {
 } from './memory-recall-service';
 import { ModelProviderFactory, type ResolvedLanguageModel } from './model-provider-factory';
 import type { NotificationService } from './notification-service';
-import { preparePptAttempt } from './ppt-execution-attempt';
-import { resolvePptExecutionOutputs } from './ppt-generation-preset';
-import { adaptPptCommand } from './ppt-script-adaptation';
 import { ScheduleMaterialResolver } from './schedule-material-resolver';
 import { createQianfanSearchClient } from './search-engine-service';
-import {
-  type AdapterContext,
-  buildToolchainEnvironment,
-  type SkillAdapter,
-  type SkillAdapterService,
-} from './skill-adapter';
+import type { ResolvedToolchainSnapshots } from './skill-command-runtime';
+import { buildToolchainEnvironment, resolveSkillCommand } from './skill-command-runtime';
 import type { SkillDependencyService } from './skill-dependency-service';
 import type { SkillExecutionService } from './skill-execution-service';
 import { composeRuntimeConvention } from './skill-runtime-conventions';
@@ -131,11 +123,6 @@ interface ResolvedSkillBindings {
   bindingIds: string[];
   /** 无绑定时为 undefined，避免向模型注入空的 system 指令段。 */
   instructions?: SkillInstruction[];
-}
-
-interface ResolvedToolchainSnapshots {
-  roots: Record<string, string>;
-  environment: Record<string, string>;
 }
 
 interface ResolvedRunContext {
@@ -500,7 +487,6 @@ export class RunService {
     private readonly skillService: SkillService,
     private readonly getWindow: () => BrowserWindow | null,
     private readonly skillExecutionService?: SkillExecutionService,
-    private readonly skillAdapterService?: SkillAdapterService,
     private readonly toolchainSnapshotService?: ToolchainSnapshotService,
     private readonly fileArtifactService?: FileArtifactService,
     private readonly dependencies?: SkillDependencyService,
@@ -2138,15 +2124,10 @@ export class RunService {
       if (binding && snapshot.runtimeProfile?.profile.commands.length) {
         // 命令表逐条带上自己的 bindingId 与技能名：多绑定下模型只拿 commandId 无法寻址到哪个 Skill。
         const commands = snapshot.runtimeProfile.profile.commands;
-        const adapter = this.skillAdapterService?.findAdapter(snapshot.revision.contentHash);
-        const presetConventions = adapter?.runtimeConventions?.(
-          new Set(commands.map((command) => command.commandId)),
-        );
         instruction.runtimeInstruction = composeRuntimeConvention({
           bindingId: binding.id,
           skillName: skill.name,
           commands,
-          ...(presetConventions ? { presetConventions } : {}),
         });
       }
       // 正文和运行约定均为空时不注入：否则会给模型一条只剩标题的空 system 段。
@@ -2285,96 +2266,25 @@ export class RunService {
     const toolchains = await this.resolveToolchainSnapshots(
       binding.dependencySnapshotIds,
       profile.profile.toolchainRequirements,
-      profile.profile.environmentRequirements,
     );
-
-    const adapter = this.skillAdapterService?.findAdapter(skill.revision.contentHash);
-    if (adapter) {
-      return this.executeWithAdapter(
-        runId,
-        bindingId,
-        input,
-        command,
-        skill,
-        adapter,
-        cwd,
-        toolchains,
-      );
+    if (command.validatorId) {
+      throw new Error('此 Skill 使用旧版校验器标识；请重新导入包含声明式执行契约的包');
     }
-
-    if (
-      !command.executableKey.startsWith('scripts/') ||
-      !command.executableKey.endsWith('.py') ||
-      command.validatorId
-    ) {
-      throw new Error('未匹配受支持的执行适配预设；通用入口必须是 Skill 内已授权的 scripts/*.py');
-    }
+    if (!this.skillExecutionService) throw new Error('Skill execution service is not available');
     const resourceRoot = await this.skillService.verifyResourceRoot(skill);
-    const script = managedPath(resourceRoot, command.executableKey);
     if (!binding.environmentId || !this.dependencies) throw new Error('绑定的运行环境不可用');
     const python = this.dependencies.resolveEnvironmentPython(binding.environmentId);
-    const argv = [script, ...this.buildArgv(command, input.args)];
+    const executionId = randomUUID();
+    const resolved = resolveSkillCommand(command, input.args, {
+      skillRoot: resourceRoot,
+      toolchainRoots: toolchains.roots,
+      managedPythonPath: python,
+      workDir: cwd,
+      executionId,
+    });
     const env = { ...this.buildCleanEnv(), ...toolchains.environment };
     const execution = await this.skillExecutionService.startExecution({
-      runId,
-      bindingId,
-      signal: this.runSignal(runId),
-      toolCallId: input.toolCallId,
-      commandId: input.commandId,
-      args: input.args,
-      argv,
-      executable: python,
-      cwd,
-      env,
-      timeoutMs: command.timeoutMs,
-      maxOutputBytes: 32 * 1024,
-      maxLogBytes: 10 * 1024 * 1024,
-      expectedOutputs: command.expectedOutputs,
-      ...(command.validatorId ? { validatorId: command.validatorId } : {}),
-      workDirKey: createHash('sha256').update(cwd).digest('hex'),
-    });
-    const awaited = await this.skillExecutionService.awaitExecution(execution.id);
-    return this.formatExecutionResult(awaited);
-  }
-
-  /** 适配预设路径：adapter 解析 executable/argv/env，执行后可覆盖结果解释。 */
-  private async executeWithAdapter(
-    runId: string,
-    bindingId: string,
-    input: SkillCommandExecuteInput,
-    command: RuntimeProfileCommand,
-    skill: NonNullable<ReturnType<AppStore['skills']['getBoundDetail']>>,
-    adapter: SkillAdapter,
-    cwd: string,
-    toolchains: ResolvedToolchainSnapshots,
-  ): Promise<SkillCommandExecuteOutput> {
-    if (!this.skillExecutionService) {
-      throw new Error('Skill execution service is not available');
-    }
-    const skillScriptsRoot = await this.skillService.verifyResourceRoot(skill);
-    const binding = this.store.executions.getBinding(bindingId);
-    if (!binding?.environmentId || !this.dependencies) throw new Error('绑定的运行环境不可用');
-    const toolchainRoots = toolchains.roots;
-    const defaultToolchainRoot = Object.values(toolchainRoots)[0];
-    const adapterContext: AdapterContext = {
-      skillScriptsRoot,
-      ...(defaultToolchainRoot
-        ? {
-            toolchainRoots,
-            toolchainSnapshotRoot: defaultToolchainRoot,
-            pptmHome: toolchainRoots['ppt-master'] ?? defaultToolchainRoot,
-          }
-        : {}),
-      managedPythonPath: this.dependencies.resolveEnvironmentPython(binding.environmentId),
-      runWorkDir: cwd,
-    };
-    const attemptArgs = preparePptAttempt(input.commandId, input.args, cwd, skillScriptsRoot);
-    const candidate = adapter.resolveCommand(input.commandId, attemptArgs, adapterContext);
-    if (!candidate) {
-      throw new Error(`Adapter ${adapter.name} cannot resolve command ${input.commandId}`);
-    }
-    const resolved = adaptPptCommand(input.commandId, candidate, skillScriptsRoot);
-    const execution = await this.skillExecutionService.startExecution({
+      executionId,
       runId,
       bindingId,
       signal: this.runSignal(runId),
@@ -2384,31 +2294,28 @@ export class RunService {
       argv: resolved.argv,
       executable: resolved.executable,
       cwd: resolved.cwd,
-      env: { ...resolved.env, ...toolchains.environment },
+      env,
       timeoutMs: command.timeoutMs,
       maxOutputBytes: 32 * 1024,
       maxLogBytes: 10 * 1024 * 1024,
-      expectedOutputs: resolvePptExecutionOutputs(command, resolved, cwd),
-      ...(input.commandId === 'pptx-validate' ? { validatorId: 'pptx-validate' } : {}),
+      expectedOutputs: resolved.expectedOutputs,
+      outputContracts: resolved.outputContracts,
+      requireCompleteStdout: resolved.requireCompleteStdout,
       workDirKey: createHash('sha256').update(cwd).digest('hex'),
     });
     const awaited = await this.skillExecutionService.awaitExecution(execution.id);
-    const result = this.formatExecutionResult(awaited);
-    return { ...result, message: `${result.message}；本次参数：${JSON.stringify(attemptArgs)}` };
+    return this.formatExecutionResult(awaited);
   }
 
   private async resolveToolchainSnapshots(
     snapshotIds: string[],
     requirements: SkillToolchainRequirement[] | undefined,
-    legacyRequirements: string[],
   ): Promise<ResolvedToolchainSnapshots> {
     const toolchainSnapshotService = this.toolchainSnapshotService;
     if (!toolchainSnapshotService && snapshotIds.length > 0) {
       throw new Error('工具链快照服务不可用');
     }
-    const requirementIds =
-      requirements?.map((requirement) => requirement.id) ??
-      (legacyRequirements.includes('ppt-master') ? ['ppt-master'] : []);
+    const requirementIds = requirements?.map((requirement) => requirement.id) ?? [];
     if (snapshotIds.length === 0) {
       if (requirementIds.length > 0) {
         throw new Error('运行绑定缺少配置声明的外部工具链快照');
@@ -2430,7 +2337,7 @@ export class RunService {
     }
     return {
       roots,
-      environment: buildToolchainEnvironment(requirements, roots, legacyRequirements),
+      environment: buildToolchainEnvironment(requirements, roots),
     };
   }
 
@@ -2438,22 +2345,6 @@ export class RunService {
     const active = this.activeRuns.get(runId);
     if (!active || active.controller.signal.aborted) throw new Error('Run is no longer active');
     return active.controller.signal;
-  }
-
-  private buildArgv(command: RuntimeProfileCommand, args: Record<string, unknown>): string[] {
-    const argv: string[] = [];
-    for (const [key, value] of Object.entries(args)) {
-      if (value === undefined || value === null) continue;
-      if (value === false) continue;
-      argv.push(`--${key}`);
-      if (value === true) continue;
-      if (typeof value === 'string' || typeof value === 'number') {
-        argv.push(String(value));
-      } else {
-        argv.push(JSON.stringify(value));
-      }
-    }
-    return argv;
   }
 
   private buildCleanEnv(): Record<string, string> {

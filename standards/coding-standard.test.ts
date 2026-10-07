@@ -4884,6 +4884,14 @@ describe('提交与推送门禁纪律', () => {
       successUploads.join('\n'),
       '随成功上传的产物必须包含 ui:check 的 results.json，否则绿跑之间无从比较',
     ).toContain('.ui-render/results.json');
+    const artifactUploads = workflow
+      .split(/- name:/u)
+      .filter((block) => block.includes('uses: actions/upload-artifact@v6'));
+    expect(artifactUploads).toHaveLength(2);
+    expect(
+      artifactUploads.every((block) => block.includes('include-hidden-files: true')),
+      'UI 检查产物目录以 .ui-render 开头，上传步骤必须显式包含隐藏文件',
+    ).toBe(true);
   });
 
   it('治理巡检装在工具链里，但不进提交门禁', () => {
