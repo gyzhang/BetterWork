@@ -15,6 +15,7 @@ import { runProcessRecovery } from './fixtures/process-recovery.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const require = createRequire(import.meta.url);
+const uiRenderTimeoutMs = 360_000;
 // 默认写进一次性临时目录；CI 用 UI_RENDER_OUTPUT_DIR 指到工作区内，失败时才能整目录传成 artifact。
 const requestedOutput = process.env.UI_RENDER_OUTPUT_DIR;
 const output = requestedOutput ?? (await mkdtemp(path.join(tmpdir(), 'betterwork-ui-render-')));
@@ -230,13 +231,21 @@ try {
         },
       );
       // 限定单次离线宿主的寿命：启动失败或意外挂起必须给出失败，不能遗留测试窗口。
-      const timeout = setTimeout(() => child.kill('SIGTERM'), 180_000);
+      let timedOut = false;
+      const timeout = setTimeout(() => {
+        timedOut = true;
+        child.kill('SIGTERM');
+      }, uiRenderTimeoutMs);
       try {
         status = await new Promise((resolve, reject) => {
           child.once('error', reject);
-          child.once('exit', (code, signal) =>
-            signal ? reject(new Error(`UI 渲染检查被 ${signal} 中断`)) : resolve(code ?? 1),
-          );
+          child.once('exit', (code, signal) => {
+            if (timedOut) {
+              reject(new Error(`UI 渲染检查超过 ${uiRenderTimeoutMs / 1_000} 秒后被终止`));
+            } else if (signal) {
+              reject(new Error(`UI 渲染检查被 ${signal} 中断`));
+            } else resolve(code ?? 1);
+          });
         });
       } finally {
         clearTimeout(timeout);

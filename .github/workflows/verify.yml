@@ -72,6 +72,7 @@ jobs:
             .ui-render/app-journey-*/
             .ui-render/process-recovery-*/
           retention-days: 14
+          include-hidden-files: true
       - name: 留存渲染检查读数
         if: success()
         uses: actions/upload-artifact@v6
@@ -79,6 +80,7 @@ jobs:
           name: ui-render-readings
           path: .ui-render/results.json
           retention-days: 7
+          include-hidden-files: true
 
   documentation:
     name: Documentation check
