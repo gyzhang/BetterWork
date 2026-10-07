@@ -24,6 +24,7 @@ import { RunContextSnapshotRepository } from './run-context-snapshot-repository'
 import { RunMaterialReadRepository } from './run-material-read-repository';
 import { RunMemoryContextRepository } from './run-memory-context-repository';
 import { RunRepository } from './run-repository';
+import { RunSettingsRepository } from './run-settings-repository';
 import { RuntimeEnvironmentRepository } from './runtime-environment-repository';
 import { ScheduleNotificationRepository } from './schedule-notification-repository';
 import { ScheduleOccurrenceRepository } from './schedule-occurrence-repository';
@@ -55,6 +56,7 @@ export class AppStore {
   readonly taskContexts: TaskContextRepository;
   readonly taskContinuity: TaskContinuityRepository;
   readonly runs: RunRepository;
+  readonly runSettings: RunSettingsRepository;
   readonly schedules: ScheduleRepository;
   readonly scheduleOccurrences: ScheduleOccurrenceRepository;
   readonly scheduleOutputs: ScheduleOutputRepository;
@@ -106,6 +108,7 @@ export class AppStore {
     this.taskContexts = new TaskContextRepository(db);
     this.taskContinuity = new TaskContinuityRepository(db);
     this.runs = new RunRepository(db);
+    this.runSettings = new RunSettingsRepository(db);
     this.schedules = new ScheduleRepository(db);
     this.scheduleOccurrences = new ScheduleOccurrenceRepository(db);
     this.scheduleOutputs = new ScheduleOutputRepository(db);
@@ -240,6 +243,7 @@ export {
   type RunMemorySelectionInput,
 } from './run-memory-context-repository';
 export { RUN_INTERRUPTED_ON_STARTUP_REASON, RunRepository } from './run-repository';
+export { RunSettingsRepository } from './run-settings-repository';
 export {
   type CreateEnvironmentInput,
   type EnvironmentStatusPatch,

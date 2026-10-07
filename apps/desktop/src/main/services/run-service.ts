@@ -535,6 +535,10 @@ export class RunService {
       ...input,
       ...(executionContext.skillBindings ? { skillBindings: executionContext.skillBindings } : {}),
     };
+    const maxSkillToolRounds =
+      resolvedInput.skillBindings && resolvedInput.skillBindings.length > 0
+        ? this.store.runSettings.get().maxSkillToolRounds
+        : undefined;
 
     const runId = randomUUID();
     const controller = new AbortController();
@@ -668,6 +672,7 @@ export class RunService {
       memory,
       continuitySnapshot,
       continuityPlan.messages,
+      maxSkillToolRounds,
     )
       .catch((error: unknown) => {
         console.error(`Run ${runId} could not be finalized`, error);
@@ -735,6 +740,7 @@ export class RunService {
     memory: RunMemoryPreparation,
     continuitySnapshot: RunContinuityContext,
     continuityMessages: readonly AgentMessage[],
+    maxSkillToolRounds?: number,
   ): Promise<void> {
     let terminalEvent: AgentRuntimeEvent | undefined;
     try {
@@ -843,7 +849,7 @@ export class RunService {
           ...(mcpTools.length > 0 ? { mcpTools } : {}),
         }),
         signal: controller.signal,
-        ...(bindingIds.length > 0 ? { maxToolRounds: 40 } : {}),
+        ...(maxSkillToolRounds !== undefined ? { maxToolRounds: maxSkillToolRounds } : {}),
         ...(executionContext.expertInstruction
           ? { expertInstruction: executionContext.expertInstruction }
           : {}),
@@ -1956,7 +1962,9 @@ export class RunService {
   }
 
   private resolveRunContext(input: StartRunRequest): ResolvedRunContext {
+    const settings = this.store.runSettings.get();
     if (!input.taskContextRevisionId) {
+      this.assertBuiltinSkillsAvailable(input.skillBindings ?? [], settings.enableBuiltinSkills);
       return {
         ...(input.skillBindings ? { skillBindings: input.skillBindings } : {}),
         materials: [],
@@ -1975,6 +1983,7 @@ export class RunService {
     if (input.skillBindings && input.skillBindings.length > 0) {
       throw new Error('TaskContextRevision 与直接 Skill 绑定不能同时提交');
     }
+    this.assertBuiltinSkillsAvailable(context.skillBindings, settings.enableBuiltinSkills);
     const workspaceId = this.store.tasks.getWorkspaceId(input.taskId);
     if (!workspaceId) throw new Error('Task workspace does not exist');
     const explicitMaterials = context.materials ?? [];
@@ -2015,12 +2024,16 @@ export class RunService {
     }
     const expert = this.store.experts.get(context.executor.expertId);
     if (!expert) throw new Error(`Expert 不存在：${context.executor.expertId}`);
+    if (expert.sourceKind === 'builtin' && !settings.enableBuiltinExperts) {
+      throw new Error(`内置 Expert「${expert.name}」已在设置中停用`);
+    }
     if (expert.lifecycle !== 'active') throw new Error(`Expert「${expert.name}」当前不可用`);
     const revision = this.store.experts.getRevision(
       context.executor.expertId,
       context.executor.expertRevisionId,
     );
     if (!revision) throw new Error('Expert 修订不存在或不属于该 Expert');
+    this.assertBuiltinSkillsAvailable(revision.skillPreset, settings.enableBuiltinSkills);
     return {
       skillBindings: context.skillBindings,
       expertInstruction: this.composeExpertInstruction(revision),
@@ -2037,6 +2050,17 @@ export class RunService {
       excludedMemoryIds: context.excludedMemoryIds ?? [],
       mcpToolBindings: context.mcpToolBindings ?? [],
     };
+  }
+
+  private assertBuiltinSkillsAvailable(
+    bindings: readonly { skillId: string }[],
+    enabled: boolean,
+  ): void {
+    if (enabled) return;
+    const builtinSkill = bindings
+      .map(({ skillId }) => this.store.skills.get(skillId))
+      .find((skill) => skill?.sourceKind === 'builtin');
+    if (builtinSkill) throw new Error(`内置 Skill「${builtinSkill.name}」已在设置中停用`);
   }
 
   private composeExpertInstruction(revision: {

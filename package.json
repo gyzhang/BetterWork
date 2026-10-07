@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "cd apps/desktop && npm run dev",
     "dev:start": "bash scripts/dev-start.sh",
+    "dev:start:empty": "BETTERWORK_SKIP_BUILTIN_REGISTRATION=1 bash scripts/dev-start.sh",
     "dev:stop": "bash scripts/dev-stop.sh",
     "build": "npm run build --workspace @betterwork/desktop",
     "lint": "eslint .",

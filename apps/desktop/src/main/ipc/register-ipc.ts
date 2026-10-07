@@ -171,6 +171,7 @@ import {
   retryScheduleOutputRequestSchema,
   revokeSkillTrustRequestSchema,
   runArtifactSourceDeclarationSchema,
+  runSettingsSchema,
   runSourcePreviewSchema,
   runSummarySchema,
   runtimeEnvironmentSchema,
@@ -180,6 +181,7 @@ import {
   saveMarkdownArtifactRequestSchema,
   saveMcpConnectionRequestSchema,
   saveModelProfileRequestSchema,
+  saveRunSettingsRequestSchema,
   saveScheduleRequestSchema,
   saveSearchEngineRequestSchema,
   saveSkillRuntimeProfileRequestSchema,
@@ -570,6 +572,15 @@ export function registerIpc(deps: IpcDependencies): void {
 }
 
 function registerRunChannels({ store, runs }: IpcDependencies): void {
+  handleNoInput(IpcChannel.GetRunSettings, emptyRequestSchema, runSettingsSchema, () =>
+    store.runSettings.get(),
+  );
+  handleInput(
+    IpcChannel.SaveRunSettings,
+    saveRunSettingsRequestSchema,
+    runSettingsSchema,
+    (input) => store.runSettings.save(input),
+  );
   handleInput(IpcChannel.StartRun, startRunRequestSchema, startRunResultSchema, (input) => ({
     runId: runs.start(input),
   }));
@@ -1807,14 +1818,23 @@ function skillSummary(skill: ReturnType<SkillService['setTrustPreference']>) {
 function registerSkillChannels(deps: IpcDependencies): void {
   const { skillService, store, runs } = deps;
   const taskContinuity = new TaskContinuityService(store);
-  handleNoInput(IpcChannel.ListSkills, listSkillsRequestSchema, z.array(skillSummarySchema), () =>
-    store.skills.list(),
-  );
+  handleNoInput(IpcChannel.ListSkills, listSkillsRequestSchema, z.array(skillSummarySchema), () => {
+    const settings = store.runSettings.get();
+    return store.skills
+      .list()
+      .filter((skill) => settings.enableBuiltinSkills || skill.sourceKind !== 'builtin');
+  });
   handleInput(
     IpcChannel.GetSkill,
     getSkillRequestSchema,
     skillDetailSchema.nullable(),
-    async (input) => (await skillService.getDetail(input.id)) ?? null,
+    async (input) => {
+      const skill = await skillService.getDetail(input.id);
+      if (skill?.sourceKind === 'builtin' && !store.runSettings.get().enableBuiltinSkills) {
+        return null;
+      }
+      return skill ?? null;
+    },
   );
   handleNoInput(
     IpcChannel.ImportSkill,
@@ -1890,6 +1910,11 @@ function registerSkillChannels(deps: IpcDependencies): void {
     copySkillRequestSchema,
     skillMutationResultSchema,
     async (input) => {
+      const source = store.skills.get(input.skillId);
+      if (!source) throw new Error('Skill does not exist');
+      if (source.sourceKind === 'builtin' && !store.runSettings.get().enableBuiltinSkills) {
+        throw new Error('内置 Skill 已在设置中停用');
+      }
       const copied = await skillService.copyAsUser(input.skillId);
       return { skill: skillSummary(copied.skill) };
     },
