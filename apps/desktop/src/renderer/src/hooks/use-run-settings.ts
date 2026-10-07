@@ -1,4 +1,6 @@
 import {
+  DEFAULT_ENABLE_BUILTIN_EXPERTS,
+  DEFAULT_ENABLE_BUILTIN_SKILLS,
   DEFAULT_MAX_SKILL_TOOL_ROUNDS,
   MAX_SKILL_TOOL_ROUNDS,
   type RunSettings,
@@ -11,20 +13,30 @@ import { useTransientToast } from './use-transient-toast';
 export interface RunSettingsState {
   settings: RunSettings | undefined;
   draft: string;
+  enableBuiltinSkills: boolean;
+  enableBuiltinExperts: boolean;
   loading: boolean;
   saving: boolean;
   error: string;
   toast: ReturnType<typeof useTransientToast>['toast'];
   setDraft: (value: string) => void;
+  setEnableBuiltinSkills: (enabled: boolean) => void;
+  setEnableBuiltinExperts: (enabled: boolean) => void;
   refresh: () => void;
   save: () => void;
   dismissToast: () => void;
 }
 
-/** 持久化 Skill Run 执行轮数；设置变更只作用于后续启动的 Run。 */
+/** 持久化运行与内置资源设置；内置资源立即影响可用性，运行轮数作用于新 Run。 */
 export function useRunSettings(): RunSettingsState {
   const [settings, setSettings] = useState<RunSettings>();
   const [draft, setDraft] = useState(String(DEFAULT_MAX_SKILL_TOOL_ROUNDS));
+  const [enableBuiltinSkills, setEnableBuiltinSkills] = useState<boolean>(
+    DEFAULT_ENABLE_BUILTIN_SKILLS,
+  );
+  const [enableBuiltinExperts, setEnableBuiltinExperts] = useState<boolean>(
+    DEFAULT_ENABLE_BUILTIN_EXPERTS,
+  );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -39,12 +51,14 @@ export function useRunSettings(): RunSettingsState {
         .then((current) => {
           setSettings(current);
           setDraft(String(current.maxSkillToolRounds));
+          setEnableBuiltinSkills(current.enableBuiltinSkills);
+          setEnableBuiltinExperts(current.enableBuiltinExperts);
         })
         .catch((failure: unknown) => {
-          setError(describeActionError(failure, '读取 Skill 执行设置失败。'));
+          setError(describeActionError(failure, '读取运行设置失败。'));
         })
         .finally(() => setLoading(false)),
-      '读取 Skill 执行设置',
+      '读取运行设置',
     );
   }, []);
 
@@ -62,21 +76,38 @@ export function useRunSettings(): RunSettingsState {
     setError('');
     trackAction(
       window.betterwork.runSettings
-        .save({ maxSkillToolRounds })
+        .save({ maxSkillToolRounds, enableBuiltinSkills, enableBuiltinExperts })
         .then((saved) => {
           setSettings(saved);
           setDraft(String(saved.maxSkillToolRounds));
-          showToast('success', 'Skill 执行设置已保存');
+          setEnableBuiltinSkills(saved.enableBuiltinSkills);
+          setEnableBuiltinExperts(saved.enableBuiltinExperts);
+          showToast('success', '运行设置已保存');
         })
         .catch((failure: unknown) => {
-          setError(describeActionError(failure, '保存 Skill 执行设置失败。'));
+          setError(describeActionError(failure, '保存运行设置失败。'));
         })
         .finally(() => setSaving(false)),
-      '保存 Skill 执行设置',
+      '保存运行设置',
     );
-  }, [draft, showToast]);
+  }, [draft, enableBuiltinExperts, enableBuiltinSkills, showToast]);
 
   useEffect(() => refresh(), [refresh]);
 
-  return { settings, draft, loading, saving, error, toast, setDraft, refresh, save, dismissToast };
+  return {
+    settings,
+    draft,
+    enableBuiltinSkills,
+    enableBuiltinExperts,
+    loading,
+    saving,
+    error,
+    toast,
+    setDraft,
+    setEnableBuiltinSkills,
+    setEnableBuiltinExperts,
+    refresh,
+    save,
+    dismissToast,
+  };
 }

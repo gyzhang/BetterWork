@@ -156,6 +156,7 @@ export class SchedulePreflightService {
 
   async check(input: SchedulePreflightInput): Promise<SchedulePreflightResult> {
     const problems: SchedulePreflightProblem[] = [];
+    const settings = this.store.runSettings.get();
     const add = (
       code: SchedulePreflightProblemCode,
       message: string,
@@ -174,6 +175,9 @@ export class SchedulePreflightService {
     }
     if (expert.lifecycle !== 'active') {
       add('expert-disabled', '指定的专家已停用或归档，请先恢复专家。', expert.id);
+    }
+    if (expert.sourceKind === 'builtin' && !settings.enableBuiltinExperts) {
+      add('expert-disabled', '内置专家已在设置中停用，无法用于定时任务。', expert.id);
     }
     const revision = this.store.experts.getRevision(expert.id, input.config.expertRevisionId);
     if (!revision) {
@@ -258,7 +262,7 @@ export class SchedulePreflightService {
 
     const skillFingerprints: SkillFingerprint[] = [];
     for (const binding of revision.skillPreset) {
-      const result = await this.checkSkill(binding, add);
+      const result = await this.checkSkill(binding, add, settings.enableBuiltinSkills);
       skillFingerprints.push(result);
     }
 
@@ -268,6 +272,10 @@ export class SchedulePreflightService {
       workspacePath: workspace?.rootPath ?? null,
       expertId: expert.id,
       expertLifecycle: expert.lifecycle,
+      builtinAvailability: {
+        skills: settings.enableBuiltinSkills,
+        experts: settings.enableBuiltinExperts,
+      },
       expertRevision: revision,
       model: model
         ? {
@@ -331,6 +339,7 @@ export class SchedulePreflightService {
   private async checkSkill(
     binding: ExpertRevision['skillPreset'][number],
     add: (code: SchedulePreflightProblemCode, message: string, capabilityId?: string) => void,
+    builtinSkillsEnabled: boolean,
   ): Promise<SkillFingerprint> {
     const skill = this.store.skills.get(binding.skillId);
     const fingerprint: SkillFingerprint = {
@@ -349,6 +358,9 @@ export class SchedulePreflightService {
       );
     }
     if (!skill.enabled) add('skill-disabled', '专家绑定的 Skill 已停用。', binding.skillId);
+    if (skill.sourceKind === 'builtin' && !builtinSkillsEnabled) {
+      add('skill-disabled', '内置 Skill 已在设置中停用，无法用于定时任务。', binding.skillId);
+    }
     if (skill.trustStatus !== 'trusted') {
       add('skill-trust-unavailable', 'Skill 没有当前有效的信任授权。', binding.skillId);
     }

@@ -4612,10 +4612,14 @@ export type SaveKnowledgeSettingsRequest = z.infer<typeof saveKnowledgeSettingsR
 
 export const DEFAULT_MAX_SKILL_TOOL_ROUNDS = 200;
 export const MAX_SKILL_TOOL_ROUNDS = 1000;
+export const DEFAULT_ENABLE_BUILTIN_SKILLS = true;
+export const DEFAULT_ENABLE_BUILTIN_EXPERTS = true;
 
 export const runSettingsSchema = z
   .object({
     maxSkillToolRounds: z.number().int().min(1).max(MAX_SKILL_TOOL_ROUNDS),
+    enableBuiltinSkills: z.boolean(),
+    enableBuiltinExperts: z.boolean(),
     updatedAt: z.number().int().nonnegative(),
   })
   .strict();
@@ -4624,6 +4628,8 @@ export type RunSettings = z.infer<typeof runSettingsSchema>;
 export const saveRunSettingsRequestSchema = z
   .object({
     maxSkillToolRounds: z.number().int().min(1).max(MAX_SKILL_TOOL_ROUNDS),
+    enableBuiltinSkills: z.boolean(),
+    enableBuiltinExperts: z.boolean(),
   })
   .strict();
 export type SaveRunSettingsRequest = z.infer<typeof saveRunSettingsRequestSchema>;

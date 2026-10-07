@@ -217,48 +217,71 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
 
   const skipBuiltinRegistration =
     !app.isPackaged && process.env.BETTERWORK_SKIP_BUILTIN_REGISTRATION === '1';
+  const runSettings = store.runSettings.get();
+  const registerBuiltinSkills = !skipBuiltinRegistration && runSettings.enableBuiltinSkills;
+  const registerBuiltinExperts = !skipBuiltinRegistration && runSettings.enableBuiltinExperts;
   if (skipBuiltinRegistration) {
     console.warn('Skipping builtin Skill/Expert registration in development mode');
   } else {
-    const builtinRoot = app.isPackaged
-      ? path.join(process.resourcesPath, 'skills')
-      : path.resolve(app.getAppPath(), '../../resources/skills');
-    const builtinSkillsReady = readFile(path.join(builtinRoot, 'release-manifest.json'), 'utf8')
-      .then((content) => JSON.parse(content) as BuiltinReleaseManifest)
-      .then((manifest) => skillService.registerBuiltinRelease(manifest))
-      .then((registered) => {
-        if (registered.length > 0) {
-          console.warn(`Registered ${registered.length} builtin skill(s)`);
-        }
-      });
-    startupReadiness.push(
-      builtinSkillsReady.catch((error: unknown) => {
-        console.error('Builtin skill registration failed', error);
-        throw error;
-      }),
-    );
-    const builtinExpertRoot = app.isPackaged
-      ? path.join(process.resourcesPath, 'experts')
-      : path.resolve(app.getAppPath(), '../../resources/experts');
-    const builtinExpertsReady = readFile(
-      path.join(builtinExpertRoot, 'release-manifest.json'),
-      'utf8',
-    )
-      .then((content) => JSON.parse(content) as BuiltinExpertReleaseManifest)
-      .then(async (manifest) => {
-        await builtinSkillsReady;
-        return expertService.registerBuiltinRelease(manifest.experts);
-      })
-      .then((registered) => {
-        if (registered.length > 0) {
-          console.warn(`Registered ${registered.length} builtin expert(s)`);
-        }
-      })
-      .catch((error: unknown) => {
-        console.error('Builtin expert registration failed', error);
-        throw error;
-      });
-    startupReadiness.push(builtinExpertsReady);
+    if (!registerBuiltinSkills) console.warn('Builtin Skills are disabled in settings');
+    if (!registerBuiltinExperts) console.warn('Builtin Experts are disabled in settings');
+
+    let builtinSkillsReady: Promise<void> | undefined;
+    if (registerBuiltinSkills) {
+      const builtinRoot = app.isPackaged
+        ? path.join(process.resourcesPath, 'skills')
+        : path.resolve(app.getAppPath(), '../../resources/skills');
+      builtinSkillsReady = readFile(path.join(builtinRoot, 'release-manifest.json'), 'utf8')
+        .then((content) => JSON.parse(content) as BuiltinReleaseManifest)
+        .then((manifest) => skillService.registerBuiltinRelease(manifest))
+        .then((registered) => {
+          if (registered.length > 0) {
+            console.warn(`Registered ${registered.length} builtin skill(s)`);
+          }
+        });
+      startupReadiness.push(
+        builtinSkillsReady.catch((error: unknown) => {
+          console.error('Builtin skill registration failed', error);
+          throw error;
+        }),
+      );
+    }
+
+    if (registerBuiltinExperts) {
+      const builtinExpertRoot = app.isPackaged
+        ? path.join(process.resourcesPath, 'experts')
+        : path.resolve(app.getAppPath(), '../../resources/experts');
+      const builtinExpertsReady = readFile(
+        path.join(builtinExpertRoot, 'release-manifest.json'),
+        'utf8',
+      )
+        .then((content) => JSON.parse(content) as BuiltinExpertReleaseManifest)
+        .then(async (manifest) => {
+          if (registerBuiltinSkills) {
+            if (!builtinSkillsReady) throw new Error('Builtin Skill manifest was not loaded');
+            await builtinSkillsReady;
+          }
+          const experts = runSettings.enableBuiltinSkills
+            ? manifest.experts
+            : manifest.experts.filter((expert) => expert.skillPreset.length === 0);
+          if (experts.length < manifest.experts.length) {
+            console.warn(
+              `Skipped ${manifest.experts.length - experts.length} builtin Expert(s) because their builtin Skills are disabled`,
+            );
+          }
+          return expertService.registerBuiltinRelease(experts);
+        })
+        .then((registered) => {
+          if (registered.length > 0) {
+            console.warn(`Registered ${registered.length} builtin expert(s)`);
+          }
+        })
+        .catch((error: unknown) => {
+          console.error('Builtin expert registration failed', error);
+          throw error;
+        });
+      startupReadiness.push(builtinExpertsReady);
+    }
   }
 
   // 受管资产目录（设计 §5）：基础 Python、专属环境与工具链快照都落在用户数据目录，

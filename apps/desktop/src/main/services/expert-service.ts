@@ -5,6 +5,7 @@ import {
   type ExpertRevisionDraft,
   expertRevisionDraftSchema,
   type ExpertSummary,
+  type RunSettings,
 } from '@betterwork/agent-protocol';
 
 import { type AppStore } from '../persistence';
@@ -111,27 +112,32 @@ export class ExpertService {
   constructor(private readonly store: AppStore) {}
 
   list(includeArchived = false): ExpertSummary[] {
-    return this.store.experts.list(includeArchived).map((expert) => {
-      const detail = this.withStatus(expert);
-      return {
-        id: detail.id,
-        sourceKind: detail.sourceKind,
-        lifecycle: detail.lifecycle,
-        name: detail.name,
-        summary: detail.summary,
-        author: detail.author,
-        tags: detail.tags,
-        currentRevision: detail.currentRevision,
-        blockedReasons: detail.blockedReasons,
-        createdAt: detail.createdAt,
-        updatedAt: detail.updatedAt,
-      };
-    });
+    const settings = this.store.runSettings.get();
+    return this.store.experts
+      .list(includeArchived)
+      .filter((expert) => this.isAvailable(expert, settings))
+      .map((expert) => {
+        const detail = this.withStatus(expert, settings);
+        return {
+          id: detail.id,
+          sourceKind: detail.sourceKind,
+          lifecycle: detail.lifecycle,
+          name: detail.name,
+          summary: detail.summary,
+          author: detail.author,
+          tags: detail.tags,
+          currentRevision: detail.currentRevision,
+          blockedReasons: detail.blockedReasons,
+          createdAt: detail.createdAt,
+          updatedAt: detail.updatedAt,
+        };
+      });
   }
 
   get(id: string): ExpertDetail | undefined {
     const expert = this.store.experts.get(id);
-    return expert ? this.withStatus(expert) : undefined;
+    if (!expert || !this.isAvailable(expert, this.store.runSettings.get())) return undefined;
+    return this.withStatus(expert);
   }
 
   create(draft: ExpertRevisionDraft): ExpertDetail {
@@ -238,7 +244,8 @@ export class ExpertService {
   }
 
   copy(id: string, name?: string): ExpertDetail {
-    if (!this.store.experts.get(id)) {
+    const source = this.store.experts.get(id);
+    if (!source || !this.isAvailable(source, this.store.runSettings.get())) {
       throw new ExpertServiceError('expert_not_found', `Expert 不存在：${id}`);
     }
     return this.withStatus(this.store.experts.copy(id, name));
@@ -306,12 +313,17 @@ export class ExpertService {
     }
   }
 
-  private withStatus(expert: ExpertDetail): ExpertDetail {
+  private withStatus(
+    expert: ExpertDetail,
+    settings: RunSettings = this.store.runSettings.get(),
+  ): ExpertDetail {
     const blockedReasons = new Set<ExpertBlockedReason>();
     for (const binding of expert.revision.skillPreset) {
       const skill = this.store.skills.get(binding.skillId);
       if (!skill || !this.store.skills.hasRevision(binding.skillId, binding.revisionId)) {
         addReason(blockedReasons, 'missing-skill');
+      } else if (skill.sourceKind === 'builtin' && !settings.enableBuiltinSkills) {
+        addReason(blockedReasons, 'skill-blocked');
       } else if (skill.blockedReasons.length > 0) {
         addReason(blockedReasons, 'skill-blocked');
       }
@@ -338,5 +350,11 @@ export class ExpertService {
       }
     }
     return { ...expert, blockedReasons: [...blockedReasons] };
+  }
+
+  private isAvailable(expert: ExpertDetail, settings: RunSettings): boolean {
+    if (expert.sourceKind !== 'builtin') return true;
+    if (!settings.enableBuiltinExperts) return false;
+    return settings.enableBuiltinSkills || expert.revision.skillPreset.length === 0;
   }
 }

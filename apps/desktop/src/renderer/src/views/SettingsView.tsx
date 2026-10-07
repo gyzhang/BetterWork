@@ -244,30 +244,80 @@ function GeneralSettings({
 }
 
 function RunExecutionSettings(): React.JSX.Element {
-  const { settings, draft, loading, saving, error, toast, setDraft, refresh, save, dismissToast } =
-    useRunSettings();
+  const {
+    settings,
+    draft,
+    enableBuiltinSkills,
+    enableBuiltinExperts,
+    loading,
+    saving,
+    error,
+    toast,
+    setDraft,
+    setEnableBuiltinSkills,
+    setEnableBuiltinExperts,
+    refresh,
+    save,
+    dismissToast,
+  } = useRunSettings();
   const value = Number(draft);
   const valid = Number.isInteger(value) && value >= 1 && value <= MAX_SKILL_TOOL_ROUNDS;
-  const dirty = settings !== undefined && value !== settings.maxSkillToolRounds;
+  const dirty =
+    settings !== undefined &&
+    (value !== settings.maxSkillToolRounds ||
+      enableBuiltinSkills !== settings.enableBuiltinSkills ||
+      enableBuiltinExperts !== settings.enableBuiltinExperts);
 
   return (
     <section className="settings-section">
       <SectionHeader
         variant="block"
         eyebrow="通用 · 运行"
-        title="Skill 工具调用上限"
-        hint="默认 200 轮，只影响新启动的、绑定了 Skill 的 Run。调高可容纳更长的生成与修订流程；上限越高，运行时间和模型调用量也可能增加。"
+        title="运行设置"
+        hint="控制内置 Skill 与专家的可用范围，以及带 Skill 的 Run 工具调用轮数。"
         actions={
-          <Button variant="secondary" size="md" type="button" onClick={refresh}>
+          <Button
+            variant="secondary"
+            size="md"
+            type="button"
+            disabled={loading || saving}
+            onClick={refresh}
+          >
             重新读取
           </Button>
         }
       />
       {error && <InlineError message={error} />}
       {loading ? (
-        <InlineLoading label="正在读取 Skill 执行设置…" />
+        <InlineLoading label="正在读取运行设置…" />
       ) : (
         <>
+          <SectionHeader
+            variant="block"
+            eyebrow="通用 · 内置资源"
+            title="启用内置 Skill 与专家"
+            hint="保存后立即影响列表和新 Run。关闭会隐藏已有内置项并阻止新 Run 使用，不删除数据库记录或历史；关闭内置 Skill 时，依赖它的内置专家也不可用。若本地缺少记录，重新开启后普通启动应用会完成登记。"
+          />
+          <div className="settings-switch-list">
+            <Switch
+              label="启用内置 Skill"
+              checked={enableBuiltinSkills}
+              disabled={saving}
+              onChange={setEnableBuiltinSkills}
+            />
+            <Switch
+              label="启用内置专家"
+              checked={enableBuiltinExperts}
+              disabled={saving}
+              onChange={setEnableBuiltinExperts}
+            />
+          </div>
+          <SectionHeader
+            variant="block"
+            eyebrow="通用 · 运行"
+            title="Skill 工具调用上限"
+            hint="默认 200 轮，只影响新启动的、绑定了 Skill 的 Run。调高可容纳更长的生成与修订流程；上限越高，运行时间和模型调用量也可能增加。"
+          />
           <Field
             label="最大工具轮数"
             controlId="max-skill-tool-rounds"
@@ -281,11 +331,12 @@ function RunExecutionSettings(): React.JSX.Element {
               max={MAX_SKILL_TOOL_ROUNDS}
               step={1}
               value={draft}
+              disabled={saving}
               onChange={(event) => setDraft(event.target.value)}
               aria-invalid={!valid}
             />
           </Field>
-          <ActionBar label="保存 Skill 执行设置">
+          <ActionBar label="保存运行设置">
             <AsyncButton
               variant="primary"
               size="md"

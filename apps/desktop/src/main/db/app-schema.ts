@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 
-import { DEFAULT_MAX_SKILL_TOOL_ROUNDS } from '@betterwork/agent-protocol';
+import {
+  DEFAULT_ENABLE_BUILTIN_EXPERTS,
+  DEFAULT_ENABLE_BUILTIN_SKILLS,
+  DEFAULT_MAX_SKILL_TOOL_ROUNDS,
+} from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 
 import { hasColumn, hasTable, type Migration, rebuildTable } from './migrate';
@@ -2117,6 +2121,20 @@ export const appMigrations: readonly Migration[] = [
       db.prepare(
         'INSERT INTO run_settings (id, max_skill_tool_rounds, updated_at) VALUES (1, ?, ?)',
       ).run(DEFAULT_MAX_SKILL_TOOL_ROUNDS, Date.now());
+    },
+  },
+  {
+    version: 43,
+    name: 'configure builtin Skill and Expert availability',
+    up(db: Database.Database): void {
+      db.exec(`
+        ALTER TABLE run_settings ADD COLUMN enable_builtin_skills INTEGER NOT NULL
+          DEFAULT ${DEFAULT_ENABLE_BUILTIN_SKILLS ? 1 : 0}
+          CHECK (enable_builtin_skills IN (0, 1));
+        ALTER TABLE run_settings ADD COLUMN enable_builtin_experts INTEGER NOT NULL
+          DEFAULT ${DEFAULT_ENABLE_BUILTIN_EXPERTS ? 1 : 0}
+          CHECK (enable_builtin_experts IN (0, 1));
+      `);
     },
   },
 ];
