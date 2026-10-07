@@ -5262,6 +5262,11 @@ export interface OpenFileArtifactResult {
   opened: boolean;
   error?: string;
 }
+export const revealFileArtifactResultSchema = z.object({
+  revealed: z.boolean(),
+  error: z.string().optional(),
+});
+export type RevealFileArtifactResult = z.infer<typeof revealFileArtifactResultSchema>;
 
 export const getArtifactThumbnailsRequestSchema = z.object({
   artifactId: z.string().min(1),
@@ -5537,6 +5542,7 @@ export const IpcChannel = {
   GetFileArtifact: 'artifact:get-file',
   ExportFileArtifact: 'artifact:export-file',
   OpenFileArtifact: 'artifact:open-file',
+  RevealFileArtifact: 'artifact:reveal-file',
   GetArtifactThumbnails: 'artifact:get-thumbnails',
   ListModels: 'model:list',
   SaveModel: 'model:save',
@@ -5713,6 +5719,7 @@ export interface BetterWorkDesktopApi {
     getFileDetail(input: GetFileArtifactRequest): Promise<FileArtifactDetail | null>;
     exportFile(input: ExportFileArtifactRequest): Promise<ExportFileArtifactResult>;
     openFile(input: OpenFileArtifactRequest): Promise<OpenFileArtifactResult>;
+    revealFile(input: OpenFileArtifactRequest): Promise<RevealFileArtifactResult>;
     getThumbnails(input: GetArtifactThumbnailsRequest): Promise<GetArtifactThumbnailsResult>;
   };
   models: {

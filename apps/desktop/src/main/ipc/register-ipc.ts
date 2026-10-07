@@ -169,6 +169,7 @@ import {
   retryKnowledgeJobRequestSchema,
   retryMemoryJobRequestSchema,
   retryScheduleOutputRequestSchema,
+  revealFileArtifactResultSchema,
   revokeSkillTrustRequestSchema,
   runArtifactSourceDeclarationSchema,
   runSettingsSchema,
@@ -1339,6 +1340,33 @@ function registerArtifactChannels(deps: IpcDependencies): void {
       const storedPath = fileArtifactService.resolveStoredPath(resolvedVersionId);
       const error = await shell.openPath(storedPath);
       return error ? { opened: false, error } : { opened: true };
+    },
+  );
+  handleInput(
+    IpcChannel.RevealFileArtifact,
+    openFileArtifactRequestSchema,
+    revealFileArtifactResultSchema,
+    async (input) => {
+      const { store, fileArtifactService } = deps;
+      if (!fileArtifactService) throw new Error('File artifact service is not available');
+      const artifact = store.artifacts.getDetail(input.artifactId);
+      if (!artifact || artifact.type !== 'presentation')
+        return { revealed: false, error: '该成果不存在或不是文件类型。' };
+      const resolvedVersionId = input.versionId ?? artifact.currentVersionId;
+      if (
+        input.versionId &&
+        !store.artifacts.versionBelongsToArtifact(input.versionId, input.artifactId)
+      ) {
+        return { revealed: false, error: '该版本不属于此成果。' };
+      }
+      const storedPath = fileArtifactService.resolveStoredPath(resolvedVersionId);
+      try {
+        await stat(storedPath);
+        shell.showItemInFolder(storedPath);
+        return { revealed: true };
+      } catch {
+        return { revealed: false, error: '成果文件不存在或无法在 Finder 中显示。' };
+      }
     },
   );
   handleInput(

@@ -2,6 +2,7 @@ import type {
   ArtifactDetail,
   ArtifactVersionDetail,
   ArtifactVersionSummary,
+  RevealFileArtifactResult,
 } from '@betterwork/agent-protocol';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -22,6 +23,7 @@ export interface ArtifactViewer {
   cancelEditing: () => void;
   finishEditing: () => void;
   selectVersion: (version: ArtifactVersionSummary) => Promise<void>;
+  revealFile: (artifactId: string, versionId?: string) => Promise<RevealFileArtifactResult>;
 }
 
 const toVersionDetail = (artifact: ArtifactDetail): ArtifactVersionDetail | undefined => {
@@ -136,6 +138,12 @@ export function useArtifactViewer(
     setError('');
   };
 
+  const revealFile = (artifactId: string, versionId?: string): Promise<RevealFileArtifactResult> =>
+    window.betterwork.artifacts.revealFile({
+      artifactId,
+      ...(versionId ? { versionId } : {}),
+    });
+
   const beginEditing = (): void => {
     if (!selected || !visibleVersion || !('content' in visibleVersion)) return;
     setTitle(selected.title);
@@ -167,5 +175,6 @@ export function useArtifactViewer(
     cancelEditing,
     finishEditing,
     selectVersion,
+    revealFile,
   };
 }

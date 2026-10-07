@@ -160,6 +160,7 @@ export function ArtifactPage({
     cancelEditing,
     finishEditing,
     selectVersion,
+    revealFile,
   } = useArtifactViewer(selected, initialVersion);
   const [toast, setToast] = useState<{ tone: ToastTone; message: string }>();
   const dismissToast = useCallback(() => setToast(undefined), []);
@@ -216,6 +217,31 @@ export function ArtifactPage({
                     }
                   >
                     打开
+                  </Button>
+                )}
+                {selected.type === 'presentation' && (
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    onClick={() =>
+                      reportAction(
+                        revealFile(selected.id, visibleVersion.id).then((result) => {
+                          if (!result.revealed) {
+                            setToast({
+                              tone: 'error',
+                              message: result.error || '无法打开成果所在文件夹。',
+                            });
+                          }
+                        }),
+                        (errorMessage) =>
+                          setToast({
+                            tone: 'error',
+                            message: errorMessage || '无法打开成果所在文件夹。',
+                          }),
+                      )
+                    }
+                  >
+                    打开所在文件夹
                   </Button>
                 )}
                 <Button
