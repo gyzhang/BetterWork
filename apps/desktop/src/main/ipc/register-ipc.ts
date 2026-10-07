@@ -281,6 +281,7 @@ import { resolveArtifactVersionExecutor } from '../services/artifact-version-exe
 import { type CredentialProvisioner, type CredentialResolver } from '../services/credential-access';
 import type { DiscussionCheckpointService } from '../services/discussion-checkpoint-service';
 import type { ExpertService } from '../services/expert-service';
+import { fileArtifactExtensionForMimeType } from '../services/file-artifact-format';
 import type { FileArtifactService } from '../services/file-artifact-service';
 import { KnowledgeAudit } from '../services/knowledge-audit';
 import type { KnowledgeIndexService } from '../services/knowledge-index-service';
@@ -1337,8 +1338,11 @@ function registerArtifactChannels(deps: IpcDependencies): void {
       ) {
         return { opened: false, error: '该版本不属于此成果。' };
       }
-      const storedPath = fileArtifactService.resolveStoredPath(resolvedVersionId);
-      const error = await shell.openPath(storedPath);
+      const workspacePath = await fileArtifactService.ensureWorkspaceCopy(
+        input.artifactId,
+        resolvedVersionId,
+      );
+      const error = await shell.openPath(workspacePath);
       return error ? { opened: false, error } : { opened: true };
     },
   );
@@ -1359,13 +1363,18 @@ function registerArtifactChannels(deps: IpcDependencies): void {
       ) {
         return { revealed: false, error: '该版本不属于此成果。' };
       }
-      const storedPath = fileArtifactService.resolveStoredPath(resolvedVersionId);
       try {
-        await stat(storedPath);
-        shell.showItemInFolder(storedPath);
+        const workspacePath = await fileArtifactService.ensureWorkspaceCopy(
+          input.artifactId,
+          resolvedVersionId,
+        );
+        shell.showItemInFolder(workspacePath);
         return { revealed: true };
-      } catch {
-        return { revealed: false, error: '成果文件不存在或无法在 Finder 中显示。' };
+      } catch (error) {
+        return {
+          revealed: false,
+          error: error instanceof Error ? error.message : '成果文件不存在或无法在 Finder 中显示。',
+        };
       }
     },
   );
@@ -1452,7 +1461,7 @@ async function exportFileArtifact(
     }
   }
 
-  const extension = mimeToExtension(artifact.mimeType);
+  const extension = fileArtifactExtensionForMimeType(artifact.mimeType);
   const result = await showSaveDialog(deps, {
     title: '导出文件成果',
     defaultPath: `${sanitizeFileName(artifact.title)}.${extension}`,
@@ -1477,19 +1486,6 @@ async function exportFileArtifact(
   // 保存面板可能已提前创建目标文件，单靠 copyFile 不会提升它的权限。
   await chmod(result.filePath, 0o600);
   return { cancelled: false, filePath: result.filePath };
-}
-
-const MIME_EXTENSION_MAP: Record<string, string> = {
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
-  'application/pdf': 'pdf',
-  'text/plain': 'txt',
-  'text/markdown': 'md',
-};
-
-function mimeToExtension(mimeType: string): string {
-  return MIME_EXTENSION_MAP[mimeType] ?? 'bin';
 }
 
 function registerModelChannels({ store, credentialAccess }: IpcDependencies): void {

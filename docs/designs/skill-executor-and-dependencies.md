@@ -138,6 +138,7 @@ userData/
   execution-logs/<executionId>/               # 有界日志，用户按需查看
   artifact-files/<versionId>/                 # 不可变文件成果与来源清单
 workspace/
+  成果/                                       # ArtifactVersion 的可见交付副本，保留扩展名
   .betterwork/tasks/<taskId>/runs/<runId>/
     inputs/                                  # 本次选定输入副本
     work/                                    # SVG、spec_lock、项目文件
@@ -150,9 +151,11 @@ workspace/
 
 - run_skill_bindings：Run → Skill 修订、配置修订、环境、工具链快照、授权修订。
 - script_executions：executionId、Run、toolCallId、binding、命令 ID、参数摘要、输入 hash 清单、执行目录、状态、终止原因、报告/输出 hash。
-- artifact_files：ArtifactVersion → 相对存储键、MIME、大小、hash、生成 executionId。
+- artifact_files：ArtifactVersion → 相对存储键、MIME、大小、hash、生成 executionId，以及可见交付副本的工作空间相对路径。
 
 SQLite 记录有效配置、关联和状态；文件承载不可重建资产，不能将成果文件称为可随意清理的缓存。落盘和 DB 无跨介质事务：先写临时文件并同文件系统 rename 到最终资源位，再提交关联；无 DB 关联的遗留文件延迟回收。引用存在但文件缺失时显示「文件缺失」，不伪造可用成果。
+
+文件成果的内部不可变原件保存在 `userData/artifact-files/<versionId>/output`；登记后，通用宿主还会把它交付到所属工作空间的可见 `成果/`，以 Skill 已验证输出扩展名为优先，并持久化相对路径。工作空间副本可被用户编辑，宿主不覆盖已有文件；「打开」和「打开所在文件夹」指向该副本。交付副本缺失时可从不可变原件重建，细则见 [ADR-0041](../adr/0041-file-artifact-workspace-delivery.md)。
 
 ### 5.1 本地目录发现与版本升级（产品规则已确认）
 
