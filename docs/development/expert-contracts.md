@@ -100,6 +100,8 @@ type ExpertModelReference =
 
 保存 Expert 时，Skill 必须解析为当前存在的 `skillId + revisionId`。Skill 缺失、已归档或修订不存在时可以保存草稿，但 Expert 标为不可用，发送时返回具体阻塞原因；不得静默替换成最新 Skill 修订。模型引用同样只保存 `modelProfileId`，不保存 API Key；被删除或停用的模型使发送失败而不是回退到另一个模型。
 
+专家编辑器会把当前 Skill 清单中找不到的预设绑定作为已勾选的失效项展示，允许用户取消勾选并从新修订中移除。保存编辑只追加新的 ExpertRevision，不改写包含该绑定的历史修订。
+
 Skill 预设保持用户顺序，最多 6 项；同一 `skillId` 不能重复。E12 将其转换为现有 `StartRunRequest.skillBindings`，保留顺序和 `revisionId`，再经过既有启用、信任、环境和依赖校验。Expert 不创建第二套 Skill 授权或工具执行器。
 
 ### 2.3 Expert 管理操作

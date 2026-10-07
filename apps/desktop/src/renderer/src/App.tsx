@@ -1800,6 +1800,7 @@ export function App(): React.JSX.Element {
           <ExpertsPage
             state={experts}
             skills={skills.skills}
+            skillsLoading={skills.loading}
             mcpConnections={mcpState.connections}
             memories={memoriesState.memories}
             models={modelSettings.models}
