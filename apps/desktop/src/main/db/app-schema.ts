@@ -1,8 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import {
-  DEFAULT_MAX_SKILL_TOOL_ROUNDS,
-} from '@betterwork/agent-protocol';
+import { DEFAULT_MAX_SKILL_TOOL_ROUNDS } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 
 import { hasColumn, hasTable, type Migration, rebuildTable } from './migrate';
