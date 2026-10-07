@@ -26,7 +26,7 @@
 
 新 Skill 包把锁 JSON 放在自己的 `runtime/locks/`，可选 wheel 放在自己的 `runtime/wheelhouse/`。BetterWork 校验相对路径、锁 Schema 与 CPython 兼容声明；wheel 缺失时从锁内的精确 HTTPS URL 下载并复核 SHA-256，包内 wheelhouse 可支持离线/受限网络分发。包锁不是由导入扫描推断，也不进入应用级全局锁目录。锁开发由显式 `requirements.in` 和目标 CPython 下的 pip 安装报告产生，过程见[Skill 包作者指南](../development/skill-package-authoring.md)。旧版 profile 的应用目录锁仍兼容读取。
 
-静态扫描只列出 Python 脚本、依赖声明文件、真实环境变量访问、安装提示和工具链名的文件/行号证据。扫描是未映射配置的辅助线索：不会生成锁、命令、信任状态或快照绑定；导入不运行代码、不执行 pip/git，也不读取被引用目录。内部 `SKILL_DIR` 等 Skill 自身路径常量不等同外部环境变量。快照按 profile 中工具链声明的顺序逐项选择和绑定；零项 Skill 不附加快照，多项声明需要多项快照。
+静态扫描只列出 Python 脚本、依赖声明文件、真实环境变量访问和安装提示的文件/行号证据。扫描是未映射配置的辅助线索：不会生成锁、命令、信任状态或快照绑定；导入不运行代码、不执行 pip/git，也不读取被引用目录。内部 `SKILL_DIR` 等 Skill 自身路径常量不等同外部环境变量。工具链 ID、版本和命令入口只从 Skill manifest 的结构化声明读取；快照按 profile 中工具链声明的顺序逐项选择和绑定，零项 Skill 不附加快照，多项声明需要多项快照。
 
 以 `/Users/kevin/Downloads/ppt-expert-skill` 为样例，包元数据现在明确声明 `PPTM_HOME`、ppt-master 版本提示和完整 commit；作者绝对路径不进入包。PPT 锁和 8 个 wheel 已放入本机忽略的开发包目录。原始 Skill 文档仍要求系统 Python，而受管 CPython 兼容性、命令/产物契约和对应适配尚未完成验证，因此样例 manifest 的 `commands` 保持为空，不能声称此包已可运行或已达到分发验收。当前工具链快照 UI 可要求用户选一次本机源目录并校验版本；ppt-master 固定下载制品与自动安装尚未实现。
 

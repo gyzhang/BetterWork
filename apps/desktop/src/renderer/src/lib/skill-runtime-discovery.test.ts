@@ -4,7 +4,7 @@ import type {
 } from '@betterwork/agent-protocol';
 import { describe, expect, it } from 'vitest';
 
-import { unconfiguredExternalRuntimeClues } from './skill-runtime-discovery';
+import { unconfiguredEnvironmentVariableClues } from './skill-runtime-discovery';
 
 const finding = (
   kind: SkillRuntimeDiscoveryFinding['kind'],
@@ -16,19 +16,17 @@ const finding = (
   label,
 });
 
-describe('unconfiguredExternalRuntimeClues', () => {
+describe('unconfiguredEnvironmentVariableClues', () => {
   it('returns only external clues not covered by the declared toolchains', () => {
     const requirements: SkillToolchainRequirement[] = [
-      { id: 'ppt-master', name: 'PPT Master', environmentVariable: 'PPTM_HOME' },
+      { id: 'media-indexer', name: 'Media Indexer', environmentVariable: 'MEDIA_INDEXER_HOME' },
     ];
 
     expect(
-      unconfiguredExternalRuntimeClues(
+      unconfiguredEnvironmentVariableClues(
         [
-          finding('environment-variable', '发现外部目录变量 PPTM_HOME'),
-          finding('toolchain-name', '发现外部工具链引用 ppt-master'),
+          finding('environment-variable', '发现外部目录变量 MEDIA_INDEXER_HOME'),
           finding('environment-variable', '发现外部目录变量 SKILL_DIR'),
-          finding('toolchain-name', '发现外部工具链引用 other-tool'),
           finding('python-script', '发现 Python 脚本'),
         ],
         requirements,
@@ -36,27 +34,24 @@ describe('unconfiguredExternalRuntimeClues', () => {
     ).toEqual(['SKILL_DIR', 'other-tool']);
   });
 
-  it('returns all directory and toolchain clues when no toolchain is declared', () => {
+  it('returns external directory clues when no toolchain is declared', () => {
     expect(
-      unconfiguredExternalRuntimeClues(
-        [
-          finding('environment-variable', '发现外部目录变量 PPTM_HOME'),
-          finding('toolchain-name', '发现外部工具链引用 ppt-master'),
-        ],
+      unconfiguredEnvironmentVariableClues(
+        [finding('environment-variable', '发现外部目录变量 MEDIA_INDEXER_HOME')],
         [],
       ),
-    ).toEqual(['PPTM_HOME', 'ppt-master']);
+    ).toEqual(['MEDIA_INDEXER_HOME']);
   });
 
   it('deduplicates the same external clue found in multiple files', () => {
     expect(
-      unconfiguredExternalRuntimeClues(
+      unconfiguredEnvironmentVariableClues(
         [
-          finding('environment-variable', '发现外部目录变量 PPTM_HOME'),
-          finding('environment-variable', '发现外部目录变量 PPTM_HOME'),
+          finding('environment-variable', '发现外部目录变量 MEDIA_INDEXER_HOME'),
+          finding('environment-variable', '发现外部目录变量 MEDIA_INDEXER_HOME'),
         ],
         [],
       ),
-    ).toEqual(['PPTM_HOME']);
+    ).toEqual(['MEDIA_INDEXER_HOME']);
   });
 });

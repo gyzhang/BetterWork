@@ -139,12 +139,6 @@ describe('SkillsPage', () => {
           lineNumber: 34,
           label: '发现外部目录变量 PPTM_HOME',
         },
-        {
-          kind: 'toolchain-name',
-          sourcePath: 'SKILL.md',
-          lineNumber: 34,
-          label: '发现外部工具链引用 ppt-master',
-        },
       ],
     };
     Object.defineProperty(window, 'betterwork', {
@@ -163,7 +157,7 @@ describe('SkillsPage', () => {
     await waitFor(() => expect(screen.getByText('研究方法')).toBeTruthy());
     screen.getByRole('button', { name: /研究方法/ }).click();
 
-    const findingsTrigger = await screen.findByText('导入时发现的线索(4)');
+    const findingsTrigger = await screen.findByText('导入时发现的线索(3)');
     const findingsDisclosure = findingsTrigger.closest('details');
     expect(findingsDisclosure?.hasAttribute('open')).toBe(false);
     expect(screen.getByText('发现 Python 包安装提示 python-pptx · SKILL.md:34')).toBeTruthy();
@@ -171,7 +165,6 @@ describe('SkillsPage', () => {
     expect(findingsDisclosure?.hasAttribute('open')).toBe(true);
     expect(screen.getByText('发现 Python 运行环境说明 · SKILL.md:34')).toBeTruthy();
     expect(screen.getByText('发现外部目录变量 PPTM_HOME · SKILL.md:34')).toBeTruthy();
-    expect(screen.getByText('发现外部工具链引用 ppt-master · SKILL.md:34')).toBeTruthy();
     expect(screen.queryByLabelText('运行配置 JSON')).toBeNull();
     expect(screen.queryByRole('button', { name: '准备环境' })).toBeNull();
     expect(dependencies.listOptions).not.toHaveBeenCalled();
@@ -201,12 +194,6 @@ describe('SkillsPage', () => {
           lineNumber: 34,
           label: '发现外部目录变量 PPTM_HOME',
         },
-        {
-          kind: 'toolchain-name',
-          sourcePath: 'SKILL.md',
-          lineNumber: 34,
-          label: '发现外部工具链引用 ppt-master',
-        },
       ],
     };
     Object.defineProperty(window, 'betterwork', {
@@ -227,9 +214,7 @@ describe('SkillsPage', () => {
 
     expect(await screen.findByText('外部工具链：未配置（发现线索待确认）')).toBeTruthy();
     expect(screen.queryByText('外部工具链：无')).toBeNull();
-    expect(
-      await screen.findByText(/尚未映射到运行配置的目录或工具链线索：PPTM_HOME、ppt-master/),
-    ).toBeTruthy();
+    expect(await screen.findByText(/尚未映射到运行配置的外部目录变量：PPTM_HOME/)).toBeTruthy();
     expect(screen.getByText('导入扫描发现尚未配置的 Skill 运行需求')).toBeTruthy();
     expect(screen.queryByText('当前没有阻塞原因。')).toBeNull();
     expect(screen.getByRole('button', { name: '试运行' })).toHaveProperty('disabled', true);

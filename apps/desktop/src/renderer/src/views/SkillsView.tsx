@@ -29,8 +29,8 @@ import { ChevronLeftIcon, InfoIcon, PlusIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
 import { skillBlockedReasonName, skillEnvironmentName } from '../lib/labels';
 import {
-  effectiveToolchainRequirements,
-  unconfiguredExternalRuntimeClues,
+  declaredToolchainRequirements,
+  unconfiguredEnvironmentVariableClues,
 } from '../lib/skill-runtime-discovery';
 
 const VIEW_MODE_STORAGE_KEY = 'skills-view-mode';
@@ -372,8 +372,8 @@ function SkillDetail({
   const [confirmDelete, setConfirmDelete] = useState(false);
   if (!skill) return <></>;
   const profile = skill.runtimeProfile?.profile;
-  const toolchainRequirements = effectiveToolchainRequirements(profile);
-  const unconfiguredToolchainClues = unconfiguredExternalRuntimeClues(
+  const toolchainRequirements = declaredToolchainRequirements(profile);
+  const unconfiguredEnvironmentVariables = unconfiguredEnvironmentVariableClues(
     skill.runtimeDiscovery,
     toolchainRequirements,
   );
@@ -384,7 +384,7 @@ function SkillDetail({
       (finding) => finding.kind === 'package-install-hint' || finding.kind === 'dependency-file',
     );
   const runtimeConfigurationNeedsReview =
-    unconfiguredToolchainClues.length > 0 || hasUnconfiguredPythonDependencies;
+    unconfiguredEnvironmentVariables.length > 0 || hasUnconfiguredPythonDependencies;
   const displayedEnvironmentStatus = runtimeConfigurationNeedsReview
     ? 'unprepared'
     : skill.environmentStatus;
@@ -491,11 +491,11 @@ function SkillDetail({
                         `${requirement.name}${requirement.versionHint ? ` ${requirement.versionHint}` : ''}（${requirement.environmentVariable}）`,
                     )
                     .join('、')
-                : unconfiguredToolchainClues.length > 0
+                : unconfiguredEnvironmentVariables.length > 0
                   ? '未配置（发现线索待确认）'
                   : '未在运行配置中声明'}
-              {toolchainRequirements.length > 0 && unconfiguredToolchainClues.length > 0
-                ? ` · 另有线索待确认：${unconfiguredToolchainClues.join('、')}`
+              {toolchainRequirements.length > 0 && unconfiguredEnvironmentVariables.length > 0
+                ? ` · 另有线索待确认：${unconfiguredEnvironmentVariables.join('、')}`
                 : ''}
             </p>
           </>

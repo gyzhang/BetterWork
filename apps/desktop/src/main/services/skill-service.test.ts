@@ -156,11 +156,6 @@ describe('SkillService', () => {
           label: '发现外部目录变量 PPTM_HOME',
         }),
         expect.objectContaining({
-          kind: 'toolchain-name',
-          sourcePath: 'README.md',
-          label: '发现外部工具链引用 ppt-master',
-        }),
-        expect.objectContaining({
           kind: 'package-install-hint',
           sourcePath: 'README.md',
           label: '发现 Python 包安装提示 python-pptx',

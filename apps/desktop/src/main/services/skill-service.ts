@@ -386,7 +386,6 @@ export const discoverSkillRuntime = (
   const textExtensions = /\.(?:md|py|txt|toml|ya?ml|json|sh)$/iu;
   const seenEnvironmentVariables = new Set<string>();
   const seenPackages = new Set<string>();
-  const seenToolchains = new Set<string>();
   let sawPythonRuntimeHint = false;
   for (const file of files) {
     if (!textExtensions.test(file.relativePath) || file.bytes.includes(0)) continue;
@@ -429,15 +428,6 @@ export const discoverSkillRuntime = (
           sourcePath: file.relativePath,
           lineNumber,
           label: '发现 Python 运行环境说明',
-        });
-      }
-      if (/\bppt[-_]master\b/iu.test(line) && !seenToolchains.has('ppt-master')) {
-        seenToolchains.add('ppt-master');
-        add({
-          kind: 'toolchain-name',
-          sourcePath: file.relativePath,
-          lineNumber,
-          label: '发现外部工具链引用 ppt-master',
         });
       }
     }

@@ -418,7 +418,6 @@ export const skillRuntimeDiscoveryFindingSchema = z
       'package-install-hint',
       'python-runtime-hint',
       'environment-variable',
-      'toolchain-name',
     ]),
     sourcePath: z.string().min(1).max(500),
     lineNumber: z.number().int().positive(),
@@ -430,6 +429,7 @@ export type SkillRuntimeDiscoveryFinding = z.infer<typeof skillRuntimeDiscoveryF
 export const runtimeProfileDraftSchema = z
   .object({
     commands: z.array(runtimeProfileCommandSchema).max(100),
+    /** 非结构化说明；宿主不得从文本中推断 Python 环境、依赖包或外部工具链。 */
     environmentRequirements: z.array(z.string().trim().min(1).max(200)).max(100),
     /** 应用统一选择 CPython；Skill 只声明需要的兼容版本。 */
     pythonRequirement: z.string().trim().min(1).max(100).optional(),
@@ -437,7 +437,7 @@ export const runtimeProfileDraftSchema = z
     dependencyLockId: z.string().trim().min(1).max(160).optional(),
     /** 新版 Skill 包将锁和可选 wheelhouse 放在自己的运行资源目录中。 */
     dependencyBundle: skillDependencyBundleSchema.optional(),
-    /** 外部工具链按需求逐项声明；一个 Skill 可没有，也可需要多项。 */
+    /** 外部工具链按需求逐项声明；缺省表示零项，绝不从名称或环境文本推断。 */
     toolchainRequirements: z.array(skillToolchainRequirementSchema).max(20).optional(),
     outputContract: z
       .object({
@@ -3074,7 +3074,7 @@ export const dependencySnapshotSchema = z
     originState: z.enum(['clean', 'dirty', 'unknown']),
     /** 所选内容（含本地修改）的清单 hash；内容寻址，因此相同内容只有一个快照。 */
     manifestHash: z.string().min(1),
-    /** 相对受管资产根的目录键；PPTM_HOME 指向它解析出的绝对路径，不指向开发仓库。 */
+    /** 相对受管资产根的目录键；声明的环境变量指向它解析出的绝对路径，不指向源目录。 */
     pathKey: z.string().min(1),
     fileCount: z.number().int().nonnegative(),
     totalBytes: z.number().int().nonnegative(),
