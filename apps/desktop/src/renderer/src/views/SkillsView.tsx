@@ -91,7 +91,7 @@ function SkillChips({ skill }: { skill: SkillSummary }): React.JSX.Element {
 /**
  * 卡片与列表行共用的一组就地动作（docs/10 §10.1、ADR-0030 §决策 5 的同一口径）。
  *
- * 内置 Skill 每次启动都由发布清单重新登记，删不掉（`deleteUserSkill` 直接拒绝非 user 来源），
+ * 内置 Skill 正常启动时由发布清单重新登记，删不掉（`deleteUserSkill` 直接拒绝非 user 来源），
  * 所以那一档给「复制副本」而不给禁用按钮——禁用入口点了只知道「不行」，不告诉用户下一步。
  */
 function SkillActionButtons({
@@ -569,7 +569,7 @@ function SkillDetail({
           <>
             <p>
               内置 Skill
-              每次启动都由发布清单重新登记，改不了也删不掉；要按自己的方式用，先复制一份。
+              正常启动时由发布清单重新登记，改不了也删不掉；要按自己的方式用，先复制一份。
             </p>
             <Button variant="secondary" size="md" type="button" onClick={() => state.copy(skill)}>
               复制副本

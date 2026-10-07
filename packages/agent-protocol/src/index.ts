@@ -4610,6 +4610,24 @@ export const saveKnowledgeSettingsRequestSchema = z
   .strict();
 export type SaveKnowledgeSettingsRequest = z.infer<typeof saveKnowledgeSettingsRequestSchema>;
 
+export const DEFAULT_MAX_SKILL_TOOL_ROUNDS = 200;
+export const MAX_SKILL_TOOL_ROUNDS = 1000;
+
+export const runSettingsSchema = z
+  .object({
+    maxSkillToolRounds: z.number().int().min(1).max(MAX_SKILL_TOOL_ROUNDS),
+    updatedAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type RunSettings = z.infer<typeof runSettingsSchema>;
+
+export const saveRunSettingsRequestSchema = z
+  .object({
+    maxSkillToolRounds: z.number().int().min(1).max(MAX_SKILL_TOOL_ROUNDS),
+  })
+  .strict();
+export type SaveRunSettingsRequest = z.infer<typeof saveRunSettingsRequestSchema>;
+
 /** 重建：关键词按目标文档或精确历史修订；语义整体重建不接受局部目标。 */
 export const rebuildKnowledgeIndexRequestSchema = z.discriminatedUnion('kind', [
   z
@@ -5281,6 +5299,8 @@ export type TestSkillRunResult = z.infer<typeof testSkillRunResultSchema>;
 
 export const IpcChannel = {
   StartRun: 'run:start',
+  GetRunSettings: 'run:get-settings',
+  SaveRunSettings: 'run:save-settings',
   CancelRun: 'run:cancel',
   ListRunEvents: 'run:list-events',
   ListRuns: 'run:list',
@@ -5439,6 +5459,10 @@ export interface BetterWorkDesktopApi {
     list(input?: ListRunsRequest): Promise<RunSummary[]>;
     listEvents(input: ListRunEventsRequest): Promise<AgentRuntimeEvent[]>;
     onEvent(listener: (event: AgentRuntimeEvent) => void): () => void;
+  };
+  runSettings: {
+    get(): Promise<RunSettings>;
+    save(input: SaveRunSettingsRequest): Promise<RunSettings>;
   };
   workspace: {
     getDefault(): Promise<WorkspaceSummary>;

@@ -80,7 +80,7 @@ This is documentation adoption only, not authorization to begin product developm
 
 | 阶段 | 已确认方向 | 范围与验收状态 |
 | --- | --- | --- |
-| A | Skill 管理、配置与脚本运行先行 | 管理、macOS 执行依赖、PPT 接线与文件成果已有实现；2026-09-11 补救门禁通过，真实样本、Office 编辑与冷安装验收仍待完成；Windows 已随 ADR-0036 退出范围 |
+| A | Skill 管理、配置与脚本运行先行 | 管理、macOS 执行依赖、PPT 接线与文件成果已有实现；Skill Run 最大工具轮数可在设置中调整（默认 200，范围 1–1000）；2026-09-11 补救门禁通过，真实样本、Office 编辑与冷安装验收仍待完成；Windows 已随 ADR-0036 退出范围 |
 | B | 专家配置接续，绑定多项 Skill | E11–E15 已完成专家管理、召唤、执行注入与内置分发；B0 双 Skill 的真实成功执行与撤销走查仍待可用模型 endpoint，见 [专家开发计划](development/tasks-experts.md) B00-5。 |
 | C | 长期目录下完成研究、场景方案、报告和公司模板可编辑 PPT | E20–E54 已完成材料范围、记忆、MCP/网页、Office 输入、讨论节点、经营分析和来源交付；E55/E56 的真实业务连续两期与签名安装验收仍待执行。 |
 

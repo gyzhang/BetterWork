@@ -178,7 +178,7 @@ interface ExpertActionProps {
 /**
  * 一排就地动作：详情／编辑（内置改为复制副本）／删除 ＋ 启用停用。
  *
- * 内置专家每次启动都由发布清单重新登记，改它会被后端拒（expert_builtin_readonly）、
+ * 内置专家正常启动时由发布清单重新登记，改它会被后端拒（expert_builtin_readonly）、
  * 删了也还会回来，所以这两个入口换成「复制副本」，不给点了才知道不行的按钮。
  */
 function ExpertActionButtons({
@@ -933,10 +933,12 @@ export function ExpertsPage({
   const openDetail = (summary: ExpertSummary): void => {
     setDetailLoading(true);
     reportAction(
-      actions.get(summary.id).then((detail) => {
-        setSelected(detail ?? undefined);
-        setDetailLoading(false);
-      }),
+      actions
+        .get(summary.id)
+        .then((detail) => {
+          setSelected(detail ?? undefined);
+        })
+        .finally(() => setDetailLoading(false)),
       onError,
       '无法加载专家配置。',
     );
@@ -959,15 +961,17 @@ export function ExpertsPage({
   const openEditFromCard = (summary: ExpertSummary): void => {
     setDetailLoading(true);
     reportAction(
-      actions.get(summary.id).then((detail) => {
-        setDetailLoading(false);
-        if (!detail) return;
-        setSelected(detail);
-        setEditorReturn('list');
-        setFocusTarget(`edit:${summary.id}`);
-        setDraft(draftOf(detail));
-        setEditorOpen(true);
-      }),
+      actions
+        .get(summary.id)
+        .then((detail) => {
+          if (!detail) return;
+          setSelected(detail);
+          setEditorReturn('list');
+          setFocusTarget(`edit:${summary.id}`);
+          setDraft(draftOf(detail));
+          setEditorOpen(true);
+        })
+        .finally(() => setDetailLoading(false)),
       onError,
       '无法加载专家配置。',
     );

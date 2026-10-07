@@ -3,6 +3,7 @@ import type {
   ModelProfileSummary,
   SaveMcpConnectionRequest,
 } from '@betterwork/agent-protocol';
+import { DEFAULT_MAX_SKILL_TOOL_ROUNDS, MAX_SKILL_TOOL_ROUNDS } from '@betterwork/agent-protocol';
 import React from 'react';
 
 import type {
@@ -34,6 +35,7 @@ import type { ConversationAddresses } from '../hooks/use-conversation-addresses'
 import type { McpConnectionsState } from '../hooks/use-mcp-connections';
 import type { MemoriesState } from '../hooks/use-memories';
 import type { MemorySuggestionsState } from '../hooks/use-memory-suggestions';
+import { useRunSettings } from '../hooks/use-run-settings';
 import { useRuntimeComponents } from '../hooks/use-runtime-components';
 import { useSearchEngineSettings } from '../hooks/use-search-engine-settings';
 import { useTransientToast } from '../hooks/use-transient-toast';
@@ -205,35 +207,98 @@ function GeneralSettings({
   onUserAddressChange,
 }: SettingsPageProps): React.JSX.Element {
   return (
+    <>
+      <RunExecutionSettings />
+      <section className="settings-section">
+        <SectionHeader
+          variant="block"
+          eyebrow="通用"
+          title="相互称呼"
+          hint="工作对话中的发言人标签会使用这里设置的称呼。"
+        />
+        <Field
+          label="AI 的称呼"
+          controlId="conversation-assistant-address"
+          hint="显示在 AI 回复上方。"
+        >
+          <TextField
+            id="conversation-assistant-address"
+            size="md"
+            maxLength={40}
+            value={conversationAddresses.assistant}
+            onChange={(event) => onAssistantAddressChange(event.target.value)}
+          />
+        </Field>
+        <Field label="我的称呼" controlId="conversation-user-address" hint="显示在你的发言上方。">
+          <TextField
+            id="conversation-user-address"
+            size="md"
+            maxLength={40}
+            value={conversationAddresses.user}
+            onChange={(event) => onUserAddressChange(event.target.value)}
+          />
+        </Field>
+      </section>
+    </>
+  );
+}
+
+function RunExecutionSettings(): React.JSX.Element {
+  const { settings, draft, loading, saving, error, toast, setDraft, refresh, save, dismissToast } =
+    useRunSettings();
+  const value = Number(draft);
+  const valid = Number.isInteger(value) && value >= 1 && value <= MAX_SKILL_TOOL_ROUNDS;
+  const dirty = settings !== undefined && value !== settings.maxSkillToolRounds;
+
+  return (
     <section className="settings-section">
       <SectionHeader
         variant="block"
-        eyebrow="通用"
-        title="相互称呼"
-        hint="工作对话中的发言人标签会使用这里设置的称呼。"
+        eyebrow="通用 · 运行"
+        title="Skill 工具调用上限"
+        hint="默认 200 轮，只影响新启动的、绑定了 Skill 的 Run。调高可容纳更长的生成与修订流程；上限越高，运行时间和模型调用量也可能增加。"
+        actions={
+          <Button variant="secondary" size="md" type="button" onClick={refresh}>
+            重新读取
+          </Button>
+        }
       />
-      <Field
-        label="AI 的称呼"
-        controlId="conversation-assistant-address"
-        hint="显示在 AI 回复上方。"
-      >
-        <TextField
-          id="conversation-assistant-address"
-          size="md"
-          maxLength={40}
-          value={conversationAddresses.assistant}
-          onChange={(event) => onAssistantAddressChange(event.target.value)}
-        />
-      </Field>
-      <Field label="我的称呼" controlId="conversation-user-address" hint="显示在你的发言上方。">
-        <TextField
-          id="conversation-user-address"
-          size="md"
-          maxLength={40}
-          value={conversationAddresses.user}
-          onChange={(event) => onUserAddressChange(event.target.value)}
-        />
-      </Field>
+      {error && <InlineError message={error} />}
+      {loading ? (
+        <InlineLoading label="正在读取 Skill 执行设置…" />
+      ) : (
+        <>
+          <Field
+            label="最大工具轮数"
+            controlId="max-skill-tool-rounds"
+            hint={`允许范围 1–${MAX_SKILL_TOOL_ROUNDS}；当前默认值为 ${DEFAULT_MAX_SKILL_TOOL_ROUNDS}。`}
+          >
+            <TextField
+              id="max-skill-tool-rounds"
+              size="md"
+              type="number"
+              min={1}
+              max={MAX_SKILL_TOOL_ROUNDS}
+              step={1}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              aria-invalid={!valid}
+            />
+          </Field>
+          <ActionBar label="保存 Skill 执行设置">
+            <AsyncButton
+              variant="primary"
+              size="md"
+              busy={saving}
+              label="保存设置"
+              busyLabel="正在保存…"
+              disabled={!settings || !valid || !dirty}
+              onClick={save}
+            />
+          </ActionBar>
+        </>
+      )}
+      {toast && <TransientToast {...toast} onDismiss={dismissToast} />}
     </section>
   );
 }

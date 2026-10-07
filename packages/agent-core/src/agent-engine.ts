@@ -150,6 +150,10 @@ export class ReActAgentEngine implements AgentEngine {
           } else if (chunk.type === 'tool-call') {
             pendingToolCalls.push(chunk.toolCall);
             yield events.create({ type: 'tool.requested', toolCall: chunk.toolCall });
+          } else if (chunk.type === 'done' && chunk.finishReason === 'length') {
+            throw new Error(
+              '模型响应达到输出上限，Run 未完成。请提高模型输出上限或缩短任务输入后重试。',
+            );
           }
         }
 

@@ -171,6 +171,7 @@ import {
   retryScheduleOutputRequestSchema,
   revokeSkillTrustRequestSchema,
   runArtifactSourceDeclarationSchema,
+  runSettingsSchema,
   runSourcePreviewSchema,
   runSummarySchema,
   runtimeEnvironmentSchema,
@@ -180,6 +181,7 @@ import {
   saveMarkdownArtifactRequestSchema,
   saveMcpConnectionRequestSchema,
   saveModelProfileRequestSchema,
+  saveRunSettingsRequestSchema,
   saveScheduleRequestSchema,
   saveSearchEngineRequestSchema,
   saveSkillRuntimeProfileRequestSchema,
@@ -570,6 +572,15 @@ export function registerIpc(deps: IpcDependencies): void {
 }
 
 function registerRunChannels({ store, runs }: IpcDependencies): void {
+  handleNoInput(IpcChannel.GetRunSettings, emptyRequestSchema, runSettingsSchema, () =>
+    store.runSettings.get(),
+  );
+  handleInput(
+    IpcChannel.SaveRunSettings,
+    saveRunSettingsRequestSchema,
+    runSettingsSchema,
+    (input) => store.runSettings.save(input.maxSkillToolRounds),
+  );
   handleInput(IpcChannel.StartRun, startRunRequestSchema, startRunResultSchema, (input) => ({
     runId: runs.start(input),
   }));

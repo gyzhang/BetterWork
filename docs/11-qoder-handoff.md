@@ -66,6 +66,10 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
 
 开发应用只能通过 `bash scripts/dev-start.sh` 启动；它会准确停止旧的 BetterWork 开发实例并写入 PID。停止使用 `bash scripts/dev-stop.sh`，日志在 `/tmp/betterwork-dev.log`。不要绕开脚本直接启动 Electron，也不要用宽泛的进程匹配方式杀掉用户的其他 Electron 应用。
 
+需要跳过内置 Skill/Expert 注册进行空白态开发验收时，运行 `npm run dev:start:empty`。该开关只对未打包的开发应用生效，不删除数据库已有记录；普通开发启动和打包应用仍会按发布清单登记内置资源。
+
+为人工验收启动开发应用时，必须在持久终端会话中运行并保持终端打开；可在同一命令后持续查看日志：`npm run dev:start:empty; tail -f /tmp/betterwork-dev.log`。启动后核对日志和实际窗口：窗口标题应为「算台 BetterWork」，Renderer URL 应为 `localhost:5173/`；Electron 自带的「To run a local app」示例页不算启动成功。不要关闭承载该会话的终端。
+
 分支与验证流程（[ADR-0039](adr/0039-task-branches-and-protected-main.md)）：
 
     # 每个任务从最新 origin/main 创建任务分支；并行写任务使用独立 worktree 与分支

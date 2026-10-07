@@ -128,12 +128,14 @@ import {
   retryScheduleOutputRequestSchema,
   revokeSkillTrustRequestSchema,
   runArtifactSourceDeclarationSchema,
+  runSettingsSchema,
   runSourcePreviewSchema,
   runtimeEnvironmentSchema,
   saveExpertRevisionRequestSchema,
   saveKnowledgeCollectionRequestSchema,
   saveKnowledgeSettingsRequestSchema,
   saveMcpConnectionRequestSchema,
+  saveRunSettingsRequestSchema,
   saveScheduleRequestSchema,
   saveSkillRuntimeProfileRequestSchema,
   saveTaskContextRequestSchema,
@@ -204,6 +206,15 @@ const api: BetterWorkDesktopApi = {
       ipcRenderer.on(IpcChannel.RunEvent, handler);
       return () => ipcRenderer.off(IpcChannel.RunEvent, handler);
     },
+  },
+  runSettings: {
+    get: () => invokeValidated(IpcChannel.GetRunSettings, {}, runSettingsSchema),
+    save: (input) =>
+      invokeValidated(
+        IpcChannel.SaveRunSettings,
+        saveRunSettingsRequestSchema.parse(input),
+        runSettingsSchema,
+      ),
   },
   workspace: {
     getDefault: () => ipcRenderer.invoke(IpcChannel.GetDefaultWorkspace),

@@ -535,6 +535,10 @@ export class RunService {
       ...input,
       ...(executionContext.skillBindings ? { skillBindings: executionContext.skillBindings } : {}),
     };
+    const maxSkillToolRounds =
+      resolvedInput.skillBindings && resolvedInput.skillBindings.length > 0
+        ? this.store.runSettings.get().maxSkillToolRounds
+        : undefined;
 
     const runId = randomUUID();
     const controller = new AbortController();
@@ -668,6 +672,7 @@ export class RunService {
       memory,
       continuitySnapshot,
       continuityPlan.messages,
+      maxSkillToolRounds,
     )
       .catch((error: unknown) => {
         console.error(`Run ${runId} could not be finalized`, error);
@@ -735,6 +740,7 @@ export class RunService {
     memory: RunMemoryPreparation,
     continuitySnapshot: RunContinuityContext,
     continuityMessages: readonly AgentMessage[],
+    maxSkillToolRounds?: number,
   ): Promise<void> {
     let terminalEvent: AgentRuntimeEvent | undefined;
     try {
@@ -843,7 +849,7 @@ export class RunService {
           ...(mcpTools.length > 0 ? { mcpTools } : {}),
         }),
         signal: controller.signal,
-        ...(bindingIds.length > 0 ? { maxToolRounds: 40 } : {}),
+        ...(maxSkillToolRounds !== undefined ? { maxToolRounds: maxSkillToolRounds } : {}),
         ...(executionContext.expertInstruction
           ? { expertInstruction: executionContext.expertInstruction }
           : {}),

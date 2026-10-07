@@ -244,10 +244,27 @@ export class OpenAICompatibleProvider implements ModelProvider {
       reader.releaseLock();
     }
     if (!completed) throw new Error('模型流在收到完成信号前结束');
-    for (const call of toolCalls.values()) {
-      const input = JSON.parse(call.arguments || '{}') as Record<string, unknown>;
-      yield { type: 'tool-call', toolCall: { id: call.id, name: call.name, input } };
+    const parsedToolCalls: Extract<ModelStreamChunk, { type: 'tool-call' }>[] = [];
+    if (wireFinishReason !== 'length') {
+      for (const call of toolCalls.values()) {
+        let input: Record<string, unknown>;
+        try {
+          input = JSON.parse(call.arguments || '{}') as Record<string, unknown>;
+        } catch (error) {
+          const toolName = call.name || '未知工具';
+          const detail = error instanceof Error ? error.message : '未知 JSON 解析错误';
+          throw new Error(
+            `模型返回的工具参数不是有效 JSON（${toolName}，调用 ID ${call.id}，参数长度 ${call.arguments.length}）：${detail}`,
+            { cause: error },
+          );
+        }
+        parsedToolCalls.push({
+          type: 'tool-call',
+          toolCall: { id: call.id, name: call.name, input },
+        });
+      }
     }
+    for (const chunk of parsedToolCalls) yield chunk;
     yield {
       type: 'done',
       ...(wireFinishReason === undefined ? {} : { finishReason: finishReasonOf(wireFinishReason) }),

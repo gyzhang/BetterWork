@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { DEFAULT_MAX_SKILL_TOOL_ROUNDS } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 
 import { hasColumn, hasTable, type Migration, rebuildTable } from './migrate';
@@ -2099,6 +2100,23 @@ export const appMigrations: readonly Migration[] = [
         CREATE INDEX idx_skill_revisions_package_id
           ON skill_revisions(package_id) WHERE package_id IS NOT NULL;
       `);
+    },
+  },
+  {
+    version: 42,
+    name: 'add editable Skill tool round limit',
+    up(db: Database.Database): void {
+      db.exec(`
+        CREATE TABLE run_settings (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          max_skill_tool_rounds INTEGER NOT NULL
+            CHECK (max_skill_tool_rounds BETWEEN 1 AND 1000),
+          updated_at INTEGER NOT NULL CHECK (updated_at >= 0)
+        );
+      `);
+      db.prepare(
+        'INSERT INTO run_settings (id, max_skill_tool_rounds, updated_at) VALUES (1, ?, ?)',
+      ).run(DEFAULT_MAX_SKILL_TOOL_ROUNDS, Date.now());
     },
   },
 ];
