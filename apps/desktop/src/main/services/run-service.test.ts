@@ -302,7 +302,6 @@ const createService = (
     undefined,
     undefined,
     undefined,
-    undefined,
     fixture.inputSnapshots,
     fixture.taskMaterials,
     undefined,

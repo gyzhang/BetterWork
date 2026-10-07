@@ -174,9 +174,9 @@ SC05-1 提前验证日历库，再做依赖它的规则服务；不能为了编�
 
 #### SC06-1 — 专家预检
 
-- 必读：契约 §6；ExpertService、RunService 的 resolveRunContext/Skill/model 接点；SkillAdapter/ppt-generation、信任 grants/凭据/MCP 契约。
+- 必读：契约 §6；ExpertService、RunService 的 resolveRunContext/Skill/model 接点；Skill manifest 命令契约、信任 grants/凭据/MCP 契约。
 - 文件边界：`apps/desktop/src/main/services/schedule-preflight.ts`（新增）、既有能力只读校验方法及测试。
-- 实现：Main 固定版本装配、预检与 fingerprint；逐命令审阅并记录候选 ppt-generation 支持与不支持证据。既有 grant 不足就拒绝，不把信任叫沙箱；不支持的 MCP/脚本整次阻塞。
+- 实现：Main 固定版本装配、预检与 fingerprint；校验 Skill 声明的命令契约、资源/工具链修订、有效 grant 和依赖快照。既有 grant 不足就拒绝，不把信任叫沙箱；未声明可解释命令的旧脚本与不支持的 MCP 整次阻塞。
 - 必测：缺真实模型不 Fake 回退、凭据引用不泄露、专家停用、Skill 更新/撤销/依赖缺失、未审阅命令/MCP 拒绝、预检 stale fingerprint、来源动态更新不每次重新索权；预检不调用模型/安装/自动信任。
 
 #### SC06-2 — 本期 Task 装配

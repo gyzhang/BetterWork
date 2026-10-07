@@ -3,13 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { composeRuntimeConvention } from './skill-runtime-conventions';
 
-/**
- * 运行约定分层的护栏（ADR-0012 决策 4）。
- *
- * 这里最要紧的一条是「不匹配预设的 Skill 看不到样本专属口径」：
- * 曾经通用段落里混着 svg-export / pptx-validate 的说明，任何带命令的 Skill 都会被告知
- * 一套并不存在的命令，模型照着编造调用。修改通用层时不得把样本词汇写回来。
- */
+/** The generic runtime section stays separate from package-declared command instructions. */
 
 const makeCommand = (commandId: string): RuntimeProfileCommand => ({
   commandId,
@@ -41,7 +35,7 @@ describe('composeRuntimeConvention', () => {
     expect(convention).toContain('task_write_file 只写本 Run 的 work 目录');
     expect(convention).toContain('覆盖已有文件必须提供 expectedHash');
     expect(convention).toContain('Skill 资源始终只读');
-    expect(convention).toContain('不得自行声明验证状态');
+    expect(convention).toContain('只能按命令输出契约报告已声明的验证状态');
   });
 
   it('labels every command row with its own bindingId and skill name, in declared order', () => {
@@ -66,7 +60,7 @@ describe('composeRuntimeConvention', () => {
     ]);
   });
 
-  it('keeps sample specific wording out of a skill without a matching preset', () => {
+  it('keeps package-specific wording out unless the package declares it on a command', () => {
     const convention = composeRuntimeConvention({
       bindingId: 'binding-a',
       skillName: '技能 A',
@@ -77,25 +71,57 @@ describe('composeRuntimeConvention', () => {
     }
   });
 
-  it('appends preset conventions only for the skill that supplied them', () => {
-    const preset = 'PPT 生成补充约定：pptx-validate 返回成功后才能登记成果。';
-    const withPreset = composeRuntimeConvention({
+  it('injects the runtime instructions declared by each package command', () => {
+    const packageInstruction = 'Use the output id returned by this validation command.';
+    const outputSource = {
+      kind: 'generated' as const,
+      relativePath: '.attempts/{executionId}/deck.pptx',
+    };
+    const withInstruction = composeRuntimeConvention({
       bindingId: 'binding-ppt',
       skillName: 'PPT 生成专家',
-      commands: [makeCommand('pptx-validate')],
-      presetConventions: preset,
+      commands: [
+        {
+          ...makeCommand('validate'),
+          execution: {
+            entrypoint: {
+              scope: 'skill',
+              runtime: 'managed-python',
+              path: 'scripts/validate.py',
+            },
+            pathArguments: [],
+            argv: [],
+            outputs: [
+              {
+                outputId: 'deck',
+                source: outputSource,
+                extension: 'pptx',
+                mimeType:
+                  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                validation: {
+                  structure: 'passed',
+                  visual: 'not-checked',
+                  manualEdit: 'not-checked',
+                },
+              },
+            ],
+          },
+          runtimeInstruction: packageInstruction,
+        },
+      ],
     });
-    const withoutPreset = composeRuntimeConvention({
+    const withoutInstruction = composeRuntimeConvention({
       bindingId: 'binding-other',
       skillName: '技能 A',
       commands: [makeCommand('analyze')],
     });
 
-    expect(withPreset).toContain(preset);
-    expect(withoutPreset).not.toContain('PPT 生成补充约定');
-    // 预设段落在通用层之后、命令表之前，模型先读到约束再看到可调用清单。
-    expect(withPreset.indexOf('PPT 生成补充约定')).toBeLessThan(withPreset.indexOf('命令：'));
-    expect(withPreset.indexOf('算台运行约定')).toBeLessThan(withPreset.indexOf('PPT 生成补充约定'));
+    expect(withInstruction).toContain(packageInstruction);
+    expect(withoutInstruction).not.toContain(packageInstruction);
+    expect(commandTable(withInstruction)[0]).toMatchObject({
+      runtimeInstruction: packageInstruction,
+      outputs: [{ pathKey: 'deck', source: outputSource }],
+    });
   });
 
   it('gives two bindings of the same run disjoint command tables', () => {

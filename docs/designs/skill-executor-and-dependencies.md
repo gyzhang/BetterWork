@@ -6,7 +6,7 @@
 - 日期：2026-09-08
 - 状态：执行技术仍为提案，配套 ADR-0010 为 Proposed；其中信任与本地目录/分发规则已由用户确认，见 [ADR-0011](../adr/0011-skill-trust-and-local-distribution.md)。用户未因此确认所有解释器、平台 helper 或协议字段。
 - 必需范围：遵循 [ADR-0009](../adr/0009-script-skill-baseline.md)，阶段 A 实际支持 `ppt-generation-expert`。
-- 本轮不安装依赖、不执行用户脚本、不修改原始 Skill、外部工具链或产品数据库。
+- 2026-10-07 用户授权把样例命令契约迁入 Skill 包并建设通用解释器；本轮不安装依赖、不执行样例脚本、不改外部工具链或产品数据库。
 
 ## 1. 方案摘要
 
@@ -30,6 +30,12 @@
 
 以 `/Users/kevin/Downloads/ppt-expert-skill` 为样例，包元数据现在明确声明 `PPTM_HOME`、ppt-master 版本提示和完整 commit；作者绝对路径不进入包。PPT 锁和 8 个 wheel 已放入本机忽略的开发包目录。原始 Skill 文档仍要求系统 Python，而受管 CPython 兼容性、命令/产物契约和对应适配尚未完成验证，因此样例 manifest 的 `commands` 保持为空，不能声称此包已可运行或已达到分发验收。当前工具链快照 UI 可要求用户选一次本机源目录并校验版本；ppt-master 固定下载制品与自动安装尚未实现。
 
+### 2026-10-07：移除按 Skill hash 匹配的样本适配
+
+用户要求命令入口、参数、工具链脚本路径、attempt 输出与校验结果契约由 Skill 包自包含声明，BetterWork 只提供通用解释器和平台职责。`betterwork.skill.json` 增加受限入口/argv/路径/输出声明；运行时在启动前校验 Skill 根、工具链根和 work 路径，使用受管 Python 与 supervisor。输出来源、MIME、扩展名和通过状态进入宿主报告，完整 stdout 可按包声明要求。样例包自带报告与校验退出码语义；BetterWork 不解析其专属 stdout。
+
+适配器 hash allowlist、PPT 参数映射、脚本 hash 补丁和 PPT 专用 validator 均退役。受管 Python、真实路径校验、工具链快照完整性、取消/超时、stdout 截断拒绝和输出 hash 绑定仍由通用宿主运行时负责。真实 Electron 导入/授权/Run 验收仍待完成；不得将代码切片或合成测试记为 A16/A17 样本验收。
+
 ## 2. 现有代码约束与需要修改的接点
 
 | 当前证据 | 设计变化 |
@@ -45,11 +51,11 @@
 
 - `apps/desktop/src/main/services/skill-service.ts`：导入、修订、启停、导出与绑定。
 - `.../services/skill-dependency-service.ts`：检测、安装作业、环境健康状态、锁与修复。
-- `.../services/skill-execution-service.ts`：运行快照、执行校验、结果适配、Run 级清理。
+- `.../services/skill-execution-service.ts`：运行快照、通用输出收集、Run 级清理。
+- `.../services/skill-command-runtime.ts`：解释 Skill 包中的受限入口、argv、路径和输出声明；不含任何单 Skill 命令表。
 - `.../infrastructure/process-supervisor.ts`：进程创建、输出读取、OS 进程组/Job、超时与父进程断开处理；不持有业务 Repository。
 - `.../services/file-artifact-service.ts`：文件成果校验、落盘、版本登记及导出。
 - `packages/tool-runtime`：小型工具工厂，依赖注入 read/write/execute 函数；不得反向依赖上述 Electron 应用模块。
-- `resources/skill-adapters`：宿主维护的样本路径/结果适配资源；运行环境制品通过构建清单引入，不提交解释器、wheel 或公司模板。
 
 执行服务以普通 CLI 为外部协议；受管 supervisor 的控制消息采用版本化 JSON，与脚本 stdout 分开。现阶段不引入常驻 Python RPC 服务，未来 Office Worker 可复用进程管理边界。
 
@@ -70,11 +76,11 @@
 | 层 | 内容 | 真相源 |
 | --- | --- | --- |
 | 原始 Skill | SKILL.md、scripts、references、templates、assets、原始元数据 | 不可变导入文件及其 hash |
-| 宿主配置 | 解释器需求、依赖绑定、执行入口、参数 Schema、资源作用域、结果适配器、超时、授权记录 | SQLite 中版本化配置；可导出描述，不导出本机路径/密钥 |
+| 运行配置 | 解释器/依赖/工具链需求、入口、参数 Schema、argv token、路径范围、输出契约、超时 | Skill 包 manifest 声明；导入后作为 SQLite 版本化运行快照，不含本机路径/密钥或信任授权 |
 
 不是要求每个普通使用者编辑专有 JSON。`betterwork.skill.json` 作为目录/ZIP/HTTPS ZIP 的宿主配置交换文件，不参与 Skill 源内容 hash；再次导入时校验并恢复运行 profile、锁相对路径和工具链版本声明，但不恢复信任或本机路径。内置 Skill 可从产品审核 release manifest 恢复同一配置；非内置包声明仍是待用户信任的作者输入。Skill 详情将有效声明呈现成依赖与工具链表单。对未映射资源的扫描结果只显示来源文件与行号，不会被当作已验证运行 profile。
 
-运行时先给模型 Skill 简介，按需读取完整指令和资源。宿主附加环境说明：当前 Skill 根、任务输出目录、依赖根以及可用命令。已识别的 WorkBuddy 绝对路径在渲染给模型的副本中显式映射，并记录 adapterRevision；不做系统级软链接、不改原包、不对未知任意字符串进行静默全局替换。
+运行时先给模型 Skill 简介，按需读取完整指令和资源。宿主附加当前 Run 的工作目录、绑定 ID 和包中声明的命令表。运行时解释受限 argv token，不执行 Shell；Skill 自己的命令用法和验证逻辑留在包内脚本及指令中。不做系统级软链接、不改原包、不对任意字符串进行静默全局替换。
 
 ## 4. 依赖管理
 
@@ -167,16 +173,16 @@ SQLite 记录有效配置、关联和状态；文件承载不可重建资产，�
 | --- | --- | --- |
 | skill_read_resource | bindingId、resourceRootId、相对路径、读取范围 | 读取指令、参考/图表骨架；二进制返回元信息或由指定解析工具处理 |
 | task_write_file | task 内相对路径、文本、可选 expectedHash | 写入本次工作目录，拒绝覆盖输入/旧版本；hash 不匹配不覆盖并提示重读 |
-| skill_execute | bindingId、commandId、结构化参数 | 宿主把 command 映射为 executable + argv，无 shell 拼串 |
+| skill_execute | bindingId、commandId、结构化参数 | 通用运行时按 Skill manifest 声明解析 executable + argv，无 shell 拼串；入口、路径根和输出只能来自有效命令声明 |
 | artifact_register_file | executionId、outputId、title、可选 artifactId | 登记宿主已验证的本次输出，不接受任意机器路径 |
 
-模型不能设置 runId/workspacePath/解释器路径/原始 env/超时上限或把 executable 换为任意程序。ID 归属从当前 Run 注入。CLI command 可配置，不把全部执行器写成三个 PPT 专用入口；当前 profile 必须包含初始化、图标同步、质检、导出、合并、校验。
+模型不能设置 runId/workspacePath/解释器路径/原始 env/超时上限或把 executable 换为任意程序。ID 归属从当前 Run 注入。命令、参数、argv、工具链入口、输出和验证结果格式由 Skill 包声明；静态扫描不生成可执行入口。需要模型生成额外 Python 脚本时仍需另行定义受审查的命令契约。
 
 首版命令调用不提供自由 Shell 文本。Python 脚本本身及其子进程仍能完成样本需要的代码执行；这不是只允许调用原有内置工具。未注册脚本入口先在 Skill 配置新增并验证，新 profile 下一次运行生效。需要模型生成的额外 Python 脚本时作为扩展执行 profile 单独设计，本样本的 SVG/JSON 文本生成不需要此能力。
 
 ### 6.2 宿主内部 JobSpec / JobResult
 
-JobSpec 必需字段：protocolVersion=1、executionId、runId、toolCallId、bindingId、commandId、绝对 executable、argv 数组、cwd、筛选后的 env、timeoutMs、输出捕获限额、expectedOutputs、validatorId。Main 校验构造，不由 Renderer 或模型直接提交。
+JobSpec 必需字段：protocolVersion=1、executionId、runId、toolCallId、bindingId、commandId、绝对 executable、argv 数组、cwd、筛选后的 env、timeoutMs、输出捕获限额、expectedOutputs、与输出逐项对齐的 MIME/扩展名/验证状态、是否要求完整 stdout。Main 校验构造，不由 Renderer 或模型直接提交。
 
 JobResult 使用判别联合：
 
@@ -184,7 +190,7 @@ JobResult 使用判别联合：
 - failed：阶段（spawn/execute/validate/publish/cleanup）、错误码、可展示摘要、有界日志引用、是否可重试。
 - cancelled/timed-out：清理是否完成、已生成但未发布的诊断文件引用。
 
-stdout/stderr 是不可信文本，不作为控制通道。结构化报告使用宿主约定位置读取并做 Zod 校验；文件存在不代表报告完整。控制通道只由宿主 supervisor 持有。
+stdout/stderr 是不可信文本，不作为控制通道。宿主不解析 Skill 专有报告语法；包内 validator 以退出码表达成败，manifest 可要求 stdout 不得截断。宿主只绑定捕获文本、输入/输出文件 hash 与包声明的输出契约。控制通道只由宿主 supervisor 持有。
 
 建议初值：单命令最长 5 分钟、样本 profile 最多 30 分钟、输出给模型最多 32 KiB、单执行日志最多 10 MiB，超过日志上限继续排空但截断并标注。按 profile 与实测调整，不因无 stdout 判定失败；每秒最多一次阶段状态更新，不伪造百分比。输入/输出大小另设限额并显示错误，避免超限截断产生有效性误判。
 
@@ -239,23 +245,22 @@ RunService 在消费到引擎终态后先保留候选终态，调用 executionSe
 
 脚本状态：`queued → running → succeeded/failed/cancelled/timed-out`；running 期间可派生 UI「正在停止」，cleanup failure 记录为 failed。启动时所有非终态执行标为 interrupted failure；不自动重放脚本。重试创建新 executionId 和 attempt，用户源输入与已登记版本不变。
 
-## 9. PPT 样本适配预设
+## 9. Skill 包命令声明示例
 
-| 步骤 | 注册入口/适配 |
+此表描述 `ppt-generation-expert` manifest 应声明的内容，不构成 BetterWork 中的 PPT 专用实现：
+
+| 步骤 | Skill 包声明 | 通用运行时行为 |
 | --- | --- |
-| 初始化 | ppt-master project_manager.py init，注入 `--dir <run.work>`、`--quick-generate --format ppt169`，避免默认写工具链 projects |
-| 图标 | icon_sync.py，项目路径必须是本次已登记项目，图标名作为参数数组 |
-| 编写 | Agent 根据模板/骨架写 SVG、pages.json、spec_lock；宿主使用文件工具，模板不变 |
-| 质检与导出 | 原 svg_native_export.py 在受管 Python 中运行；适配层检查 exporter 状态、当前 attempt 输出和报告，不依靠历史 LATEST_PPTX |
-| 合并 | 原 merge_into_template.py；source/template/config 为句柄解析，输出为新 attempt 文件 |
-| 静态校验 | 宿主 Python adapter 调用原 validate(path)，输出含 issues 的 JSON，并以存在 issues 设置失败状态；不只看原 CLI 退出码 |
-| 登记 | 验证输出属于本次执行，报告绑定相同 hash，再写文件型 ArtifactVersion |
+| 初始化 | toolchain 脚本相对路径、固定子命令、受限 project name、work 目录 token 和格式参数 |
+| 图标 | toolchain 脚本、work 根路径参数和按序展开的 icons 数组 |
+| 质检与导出 | Skill 包脚本、项目路径参数和本次 executionId 对应的输出 token |
+| 合并 | Skill 包脚本、work 输入路径、Skill 只读模板路径和新建 attempt 输出 |
+| 静态校验 | Skill 包内 validator、work 输入路径、完整 stdout 要求、成功输出及结构状态 |
+| 登记 | 通用输出收集器校验路径/大小/hash，按 manifest 的 MIME 和扩展名发布不可变 outputId |
 
-适配预设按样本内容 hash 匹配，未知更新标为需复核，不冒充已兼容。
+入口在资源 hash 变化时仍依赖当前 Skill 修订和 trust grant；但兼容性来自命令声明与脚本，而非宿主的 hash allowlist。样本脚本把输出路径从 argv 收取，校验失败以非零退出码返回；BetterWork 不扫描 LATEST_PPTX、修补脚本源码或解释 PPT 专属报告。
 
-原包装把输出写 project/exports，首版每次导出在独立 attempt 的项目副本执行，复制当前 SVG/spec_lock/templates 而不复制旧 exports/validation，杜绝历史产物回收。保留逻辑项目源用于下一次修改。若需修改包装传递 exporter 返回码，补丁只进入可追溯适配副本，同时保存原文件 hash 与差异。
-
-补齐 spec_lock 时显式使用样本要求的 zh-Hans，不依赖包装默认 zh-CN。封面/内容标题按模板版式验证；merge 默认写死字号的问题通过适配副本修正，不在不了解模板时统一改成一个值。字体缺失给可操作诊断，不声称系统自动具备微软雅黑，也不随包分发无权分发字体。
+Skill 包脚本显式使用样本要求的 zh-Hans；模板字号从实际版式继承。字体缺失给可操作诊断，不声称系统自动具备微软雅黑，也不随包分发无权分发字体。
 
 最小默认使用 flat → merge；structured 不作为 A 首个样例的前提。该 Skill 的生成内容必须为原生可编辑形状；模板图像与生成内容分别计数，不能用整个 ZIP 没有图片作为通用验收。
 

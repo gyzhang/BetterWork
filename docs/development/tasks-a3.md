@@ -35,16 +35,16 @@
 - 验收：真实受控子孙进程测试 + 单元时序；Run 一定有唯一终态且先清理后宣布安全取消；cleanup failure 可见，不冒充成功。
 - 不做：删除已登记成果或取消其他 Skill 的全部任务。
 
-## A16 PPT 样本适配预设
+## A16 Skill 包声明式命令契约与通用运行时
 
 - 前置：A15，A11 的依赖/工具链实际就绪。
-- 必读：`/Users/kevin/Downloads/ppt-generation-expert/SKILL.md`、scripts 三文件、references、模板档案；运行边界文档与执行器设计 §9。
-- 目标：用宿主预设把原目录 Skill 的路径、命令、报告和产物契约接上，不改用户原包。
-- 允许改动：通用 adapter 接口与 ppt-generation 预设、公开非敏感配置、合成测试/报告；本地适配副本保存在受管用户目录。
-- 实施：project-init 注入 --dir，PPTM_HOME 用快照，Python 用受管解释器；导出每个 attempt 新项目副本，不复制旧 exports/validation；LATEST_PPTX 必须属于本次；validate(path) 的 issues 形成结构结果；zh-Hans/模板标题适配记录原 hash 和差异。
-- 必测：exit=0 但 issues 非空失败；错误/缺失/不完整 JSON；导出失败却留旧 PPT 拒绝；超时不发布；未知原包 hash 不套用已验证预设；脚本不修改源模板；路径不依赖 .workbuddy；初始化不写外部仓库 projects。
-- 验收：使用合成 SVG/模板直接执行该链路得到正确输出；不是通过替代 PPT 生成库绕过原工具链；原包 hash 前后相同。
-- 停止条件：模板/脚本契约矛盾无法适配则报告具体差异，不绕过 quality gate。
+- 必读：样例 Skill 包的 `SKILL.md`、manifest、相关脚本与模板档案；运行边界文档、ADR-0040 和执行器设计 §6/9/10。
+- 目标：命令入口、参数、工具链需求、输出和验证契约由 Skill 包自包含声明；BetterWork 的通用运行时解释声明并保留平台职责。
+- 允许改动：共享协议、通用命令解释器、Run/输出服务、调度预检、样例 Skill 包分支、合成测试和文档；不得新增按 Skill ID/content hash 分流的 adapter/validator。
+- 实施：manifest 以受限字段声明包内或工具链脚本入口、argv token、路径参数根、超时、输出来源/MIME/扩展名/验证状态；由宿主使用受管 Python、验证快照和真实路径、运行 supervisor、处理取消/超时、拒绝截断报告并绑定输出 hash。样例包负责调用自身 validator 并以退出码表达质量结果；不在宿主解析样本 stdout 或修补 Skill 脚本。
+- 必测：包内与工具链入口解析、argv 与重复参数、路径穿越/符号链接拒绝、未绑定工具链拒绝、executionId 输出隔离、只读输入 hash 不变、validator 退出码与完整 stdout 契约、失败/取消/超时不发布输出。
+- 验收：合成 fixture 通过通用 runtime 执行链；Skill 包无需 BetterWork 内的样本 hash 注册即可导入并形成 profile。真实 Electron 导入、授权、快照绑定和 Run 另由 A17 人工验收；未完成不得上调 A16/A17 的真实样本状态。
+- 停止条件：无法在不增加 Skill 专属宿主分支的情况下表达必要契约时，先更新 ADR/Schema 说明具体缺口，不绕过路径、质量或取消约束。
 
 ## A17 真实 Skill 试运行入口与 A3 验收（入口已实现，真实验收待完成）
 

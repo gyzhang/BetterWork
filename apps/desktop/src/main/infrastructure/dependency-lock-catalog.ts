@@ -12,9 +12,6 @@ import type { DependencyFileSystem } from './dependency-adapters';
  * 因此手工改坏的锁在加载时就被拒绝，不会带着错误 hash 去装包。
  */
 
-/** 首个样本在 macOS arm64 / CPython 3.12 上的实测闭包。 */
-export const pptGenerationLockId = 'ppt-generation-expert-darwin-arm64-cp312';
-
 const lockIdPattern = /^[a-z0-9][a-z0-9-]{0,120}$/u;
 
 export class DependencyLockError extends Error {

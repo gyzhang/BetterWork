@@ -56,7 +56,7 @@
 ### 指令注入与命令表
 
 - 每个 Skill 一条 `SkillInstruction`，正文前缀 `[Skill: <名称>]`，按绑定顺序拼接。
-- **移除 `run-service.ts` 中把 PPT 专用约定注入给任意带命令 Skill 的硬编码段**（现约 L456–L462，含 `svg-export`、`template-merge`、`pptx-validate`）。拆分方式：通用段落（`task_write_file` 写本 Run work 目录、覆盖已有文件必须提供 `expectedHash`、不得自行声明验证状态）保留在 RunService；样本专属段落由 `SkillAdapter` 按 Skill 提供。这是 1:N 的前置修复——两个 Skill 时该段文字会重复且互相误导。
+- **运行指令按通用边界与 Skill 声明分层。** 通用段落说明本 Run work 目录、`expectedHash` 覆盖保护、binding 寻址和验证状态的含义；命令入口、参数、argv、路径根、工具链、输出格式与验证契约由 Skill manifest 声明，并由通用运行时解释。不得按 Skill ID 或 `contentHash` 注入专属命令/validator 预设，也不得允许模型越过命令输出契约自行报告校验状态。
 - 注入的命令表每项显式携带 `bindingId` 与所属 Skill 名称，并在通用段落说明必须使用所给 `bindingId`。
 
 ### 绑定解析
@@ -93,7 +93,9 @@
 1. **前置校验原本只在有绑定快照时生效。** 旧 `resolveSkillInstructions` 在 `skillExecutionService` 缺失时走 `trustStatus` 分支，有快照时走 `isBindingAuthorized` 分支；拆成「先建快照、后读指令」两步后，若快照建立前短路，一个技能都不会被校验。现改为单次遍历内先整体校验后落快照。
 2. **不合格绑定会留下半个快照。** 逐个处理时，第一个技能已写入 `run_skill_bindings`，第二个才报错，于是一个失败 Run 持有授权记录。现在校验全部通过后才开始建立快照，失败 Run 的绑定记录为空。
 
-2026-09-13 B00-2 已落地：运行约定拆为通用层（`skill-runtime-conventions.ts`）与预设层（`SkillAdapter.runtimeConventions`）。`svg-export` / `template-merge` / `pptx-validate` 等样本专属口径移入 `ppt-generation-preset`，只对该预设匹配的 Skill 生效；通用层负责 `bindingId`、`expectedHash`、work 目录、不自行声明验证状态等对所有带命令 Skill 都成立的契约。命令表每项显式带上 `bindingId` 与 `skillName`，多绑定下模型能寻址到正确 Skill。正文为空的 Skill 不再注入空 system 段。
+2026-09-13 B00-2 曾落地为运行约定通用层（`skill-runtime-conventions.ts`）与按 `contentHash` 匹配的 `SkillAdapter.runtimeConventions` 预设层。该实现记录如下，仅作为历史状态。
+
+2026-10-07 按用户授权及 ADR-0040 的声明式命令契约收敛：移除 PPT preset/adapter 和内容 hash 分流。命令入口、参数 Schema、argv、受管路径范围、工具链引用、输出 MIME/扩展名与验证状态由 Skill manifest 声明；通用层继续负责 binding、Run 工作目录、真实路径校验、执行取消/超时和输出 hash。Skill 可按实际命令结果声明验证状态，不再由通用指令禁止所有 Skill 声明校验契约。真实 Electron 样本旅程仍需 A17 验收。
 
 顺带删除：`SkillExecutionRepository.findLatestBindingByTask`——它只服务隐式继承，没有别的调用方。不保留备用查询：界面需要的是「某任务最近一个 Run 的绑定集合」（多条），不是「最近一条」；到 B00-4 按真实需求重新定义。
 

@@ -32,11 +32,13 @@
 - `pythonRequirement`：兼容版本范围；解释器本体仍由 BetterWork 的「设置 → 运行组件」提供。
 - `dependencyBundle`：Skill 包内锁的稳定 ID、相对 `lockPath`，以及可选的相对 `wheelhousePath`。
 - `toolchainRequirements`：零项或多项外部工具链声明；每项含稳定 ID、显示名、环境变量、版本提示，可用完整 Git commit 锁定源版本。
-- `commands` 与 `outputContract`：审核过的命令、参数、超时、产物和报告约定。仅当 BetterWork 有对应适配实现并完成样例验证后才声明可执行命令。
+- `commands`：命令入口、参数 Schema、argv token、路径根、超时、输出来源、文件类型和验证状态都可按命令声明。新包不需要旧版的 `executableKey`、`expectedOutputs` 或 profile 级 `outputContract`；BetterWork 的通用运行时解释命令声明，Skill 专属的调用/校验语义留在包内脚本和说明中，不依赖按 Skill ID 或内容 hash 注册的宿主 adapter。旧字段仅为已导入 profile 保留兼容读取。
 
 清单中的 `skillId` 是发布者稳定的包 ID。BetterWork 为本机 Skill 另外分配自己的数据库 ID，并把包 ID 保存在修订上；导出、复制与再次导入会保留包 ID。包 ID 不是信任凭据，也不会覆盖本机 Skill 主键。目前重复导入相同包仍会新建本地 Skill，按包 ID 发现并升级已有安装尚未实现。
 
 路径必须是包内 POSIX 相对路径，不能包含绝对路径、`..` 或反斜杠。不要把作者机器上的 Python、`PPTM_HOME` 或工具链目录写进元数据。`expectedCommit` 是源版本校验值，不是本机路径，也不等于 BetterWork 已自动下载该工具链。
+
+声明式命令入口使用 `execution.entrypoint`：`scope: skill` 时 `path` 相对包根；`scope: toolchain` 时还要引用 `toolchainRequirements` 中的 `toolchainId`，`path` 相对校验过的快照根。`argv` 由 literal、参数、work 目录和已声明输出路径 token 组成，始终以 argv 数组启动进程，不拼接 Shell 字符串。传入文件/目录的参数必须在 `pathArguments` 声明为 `skill` 或 `work` 根及读写方式；宿主仍执行真实路径和符号链接检查。输出声明可指向本次执行创建的包内相对路径，或声明为从 Run work 中某个输入参数发布；验证命令应以退出码表达成功/失败，并在需要完整报告时设置 `requireCompleteStdout`。
 
 元数据声明不自动获得信任。用户导入的 Skill 仍按独立信任流程处理；依赖可准备与代码获准执行是两项状态。
 
@@ -98,9 +100,9 @@
 
 本机 `skills/ppt-generation-expert/` 是基于 `/Users/kevin/Downloads/ppt-expert-skill` 的忽略目录打包样本；源下载目录没有被修改。样例包把锁和 8 个 wheel 放在自身 `runtime/` 下，元数据声明 Python 3.12、锁 bundle 与 `PPTM_HOME` 工具链的版本/commit，不包含 `ppt-master` 的作者绝对路径。`requirements.in` 记录锁候选的直接依赖根。
 
-这 8 个锁项来自当前产品的 PPT 依赖基线拷贝：7 项与锁中列出的目标模块相对应，另有传递依赖 `typing_extensions`。这不是导入扫描数出来的。忽略目录样例的 `betterwork.skill.json` 现在声明 5 个审核入口：`project-init`、`icon-sync`、`svg-export`、`template-merge`、`pptx-validate`；BetterWork 按该包的精确内容 hash 选择对应执行适配器。不要把其他 Skill 扫描到的线索直接复制成命令入口。
+这 8 个锁项来自当前产品的 PPT 依赖基线拷贝：7 项与锁中列出的目标模块相对应，另有传递依赖 `typing_extensions`。这不是导入扫描数出来的。忽略目录样例的 `betterwork.skill.json` 声明 5 个命令：`project-init`、`icon-sync`、`svg-export`、`template-merge`、`pptx-validate`。清单逐项给出受管 Python 入口、argv 和路径参数；导出与合并使用 `{executionId}` 生成本次唯一目标，校验命令以退出码表达成功/失败并发布已检查输入。BetterWork 不按资源 hash 选择样本适配器，也不从静态扫描线索生成命令。
 
-执行适配器使用的 Skill 资源 hash 不包含 `betterwork.skill.json`、`runtime/wheelhouse/` 下的 wheel 或系统元数据；它按资源相对路径和文件字节计算。运行 profile 从 manifest 单独解析，wheelhouse 中的每个 wheel 由锁内 SHA-256 校验。其余资源文件（包括 `SKILL.md`、references、scripts、assets 和锁 JSON）发生变化都会改变资源 hash。发布新版本前要复核运行 profile、命令契约和相关脚本，再把新 hash 登记到 `ppt-generation-preset.ts` 的精确兼容列表。只有仍需要兼容的旧资源版本才保留其 hash；不能只按相同 `skillId` 放宽匹配。
+Skill 资源 hash 不包含 `betterwork.skill.json`、`runtime/wheelhouse/` 下的 wheel 或系统元数据；它按资源相对路径和文件字节计算。运行 profile 从 manifest 单独解析，wheelhouse 中的每个 wheel 由锁内 SHA-256 校验。其余资源文件（包括 `SKILL.md`、references、scripts、assets 和锁 JSON）发生变化都会改变资源 hash。发布新版本前复核运行 profile、命令契约和相关脚本；内容变化形成新的 Skill 修订并触发授权复核，运行时不维护内容 hash allowlist。
 
 2026-10-06 在隔离目录中以受管 CPython 3.12.14 创建 venv，从样例 wheelhouse 离线安装锁定的 8 个 wheel，7 个必需模块导入探针全部通过；再使用声明的 PPT Master 6.6.0 commit 验证了项目初始化、图标同步、SVG 三项质检和导出、公司模板合并、最终 PPTX 结构校验。SVG 质检和结构校验通过，导出报告为 `quality_gate=passed`（上游另有 1 个 warning）。这证明代表性命令链在该版本组合中可执行；还没有通过 BetterWork Electron 界面完成导入、授权、快照绑定和 Run 的完整人工验收。当前锁最初从产品基线复制，正式发布前仍应按本包的 `requirements.in` 在目标环境重新生成并 Review 完整闭包及许可证。
 

@@ -66,5 +66,5 @@
 - 目标：应用设置的「运行组件」集中展示受管 CPython 版本与落地状态；Skill 详情依据 profile 展示依赖锁及零项/多项工具链登记入口，并可准备/取消/修复专属环境。默认解释器由应用按 Skill 声明自动选择；本机解释器只留在高级折叠区。管理动作响应 operationId，进度可回看。
 - 允许改动：依赖 IPC/Preload、use-skills 或单独内聚依赖 hook、配置组件、消息/内联反馈必要接线及 tests。
 - 必测：重复点击只启动一个作业；切换 Skill 不显示旧进度；静态发现不执行 Skill 代码；零项与多项工具链需求按 profile 显示并按声明顺序绑定；未信任但可准备环境与不可执行区分；准备成功后需要新 grant 时明确提示；关闭页面后状态可恢复；取消/失败有结果。
-- 验收：普通用户无需编辑 JSON、输入 Shell 命令或选择 Python 路径；Skill 包的 v2 manifest 经 Schema 校验后恢复包内锁与 toolchain 声明，按元数据生成详情项，信任仍独立。`ppt-expert-skill` 样例已声明包内锁/wheelhouse 与 `PPTM_HOME` 的版本/commit；其 commands 为空，直到受管 CPython 兼容性、命令契约和产物验证通过，不得显示或交接成可执行样例。通用静态发现展示文件/行号证据且不误报包内目录常量；重启后依赖状态真实；全 verify + 本机手工旅程。
+- 验收：普通用户无需编辑 JSON、输入 Shell 命令或选择 Python 路径；Skill 包的 v2 manifest 经 Schema 校验后恢复包内锁、toolchain 与声明式命令，详情按元数据生成配置项，信任仍独立。样例命令只有在受管 CPython、声明契约和真实产物验收通过后才可作为样本交接；通用静态发现展示文件/行号且不误报包内目录常量；重启后依赖状态真实；全 verify + 本机手工旅程。
 - 不做：把试运行按钮接到虚构成功返回；把模型 Key 放进 Skill env。

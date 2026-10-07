@@ -30,7 +30,6 @@ import { parse } from 'yaml';
 import { z } from 'zod';
 
 import { type AppStore } from '../persistence';
-import { suggestedPptProfile } from './ppt-generation-preset';
 
 const skillFileName = 'SKILL.md';
 const skillExportFileName = 'betterwork.skill.json';
@@ -687,9 +686,9 @@ export class SkillService {
         });
         return createdRevisionId;
       });
-      const suggestedProfile =
-        packageData.importedRuntimeProfile ?? suggestedPptProfile(contentHash);
-      if (suggestedProfile) this.saveRuntimeProfile(skillId, suggestedProfile);
+      if (packageData.importedRuntimeProfile) {
+        this.saveRuntimeProfile(skillId, packageData.importedRuntimeProfile);
+      }
       const skill = this.store.skills.get(skillId);
       if (!skill) throw new Error('Imported Skill was not available after database registration');
       return { skill, contentHash, resourceRoot };

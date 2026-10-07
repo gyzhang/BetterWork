@@ -3,17 +3,11 @@ import type { RuntimeProfileCommand } from '@betterwork/agent-protocol';
 /**
  * Skill 运行约定的组装（ADR-0012 决策 4）。
  *
- * 分成两层是有意为之：
- * - **通用层**对任何带命令的 Skill 都成立，由本文件唯一持有；
- * - **预设层**是某个适配预设（目前只有 PPT 样本）才适用的口径，由 `SkillAdapter` 提供。
- *
- * 事故背景：两者曾写在同一段字符串里，于是 `svg-export`、`pptx-validate` 这类样本专属
- * 指令会被注入给任意带命令的 Skill，模型照着不存在的命令编造调用。
+ * 通用运行边界由本文件持有；命令用法、产物类型和验证结果则来自 Skill 包自己的声明。
  */
 
 /**
- * 通用运行约定。修改这里等于修改所有 Skill 看到的执行契约，
- * 任何只适用于某个样本的要求都必须放到适配预设里，不得写进本列表。
+ * 修改这里等于修改所有 Skill 看到的执行契约；命令特有说明不得写进本列表。
  */
 const GENERIC_CLAUSES: readonly string[] = [
   '只能调用下方「命令」列出的固定命令，通过 skill_execute 发起，并原样带上该命令条目给出的 bindingId。',
@@ -21,7 +15,8 @@ const GENERIC_CLAUSES: readonly string[] = [
   'task_write_file 只写本 Run 的 work 目录（相对路径）；覆盖已有文件必须提供 expectedHash。',
   'read_text_file 可读取本 Run 已选的输入材料，也可读取本 Run work 目录内的工作文件；其他工作空间文件必须先选为输入材料。',
   'skill_read_resource 必须使用目标 Skill 自己的 bindingId（见命令表每条的 bindingId），路径相对该 Skill 的根目录；Skill 资源始终只读。',
-  '不得自行声明验证状态：成果是否通过校验只以真实执行记录为准。',
+  '命令表 outputs 中的 pathKey 是包内路径标识；工具返回的 outputIds 才是成果登记句柄。跨命令读取生成文件时，按 source 声明和本次返回的 executionId 在本 Run work 下定位。',
+  '只能按命令输出契约报告已声明的验证状态；命令未成功结束时不得发布输出，未声明或未执行的检查不得标为通过。',
 ];
 
 export interface RuntimeConventionInput {
@@ -29,8 +24,6 @@ export interface RuntimeConventionInput {
   readonly bindingId: string;
   readonly skillName: string;
   readonly commands: readonly RuntimeProfileCommand[];
-  /** 适配预设给出的该样本专属约定；没有匹配预设时省略。 */
-  readonly presetConventions?: string;
 }
 
 /**
@@ -43,8 +36,19 @@ export const composeRuntimeConvention = (input: RuntimeConventionInput): string 
     skillName: input.skillName,
     commandId: command.commandId,
     argumentSchema: command.argumentSchema,
+    ...(command.execution?.outputs.length
+      ? {
+          outputs: command.execution.outputs.map((output) => ({
+            pathKey: output.outputId,
+            source: output.source,
+            extension: output.extension,
+            mimeType: output.mimeType,
+            validation: output.validation,
+          })),
+        }
+      : {}),
+    ...(command.runtimeInstruction ? { runtimeInstruction: command.runtimeInstruction } : {}),
   }));
   const sections = [`算台运行约定：\n${GENERIC_CLAUSES.map((clause) => `- ${clause}`).join('\n')}`];
-  if (input.presetConventions) sections.push(input.presetConventions);
   return `\n\n${sections.join('\n')}\n命令：${JSON.stringify(commands)}`;
 };

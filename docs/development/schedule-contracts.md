@@ -153,20 +153,18 @@ TaskContextRevision 新增可选 `scheduleSourceSnapshotId`；RunContextSnapshot
 | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 现有计算、受范围约束读取/检索、已配置网页只读搜索/正文、内部成果登记 | 复用既有 Tool policy；凭据与范围有效才开放                                                                                                                                 |
 | 仅指令 Skill                                                         | 复用已信任/启用修订；不因指令文字执行任意 Shell                                                                                                                            |
-| 已有脚本 Skill 固定命令                                              | 仅允许既有适配预设中经审阅、限定本期 work 目录产物的固定命令；首版候选为 ppt-generation。同时验证现有信任与有效 grant、profile/资源 hash、依赖就绪；无法确认的命令整次阻塞 |
-| 其他用户脚本/需交互授权的工具                                        | 整次阻塞，给出回到原任务人工执行入口；不自动扩权或安装                                                                                                                     |
+| 声明式命令 Skill                                                      | 只接受 manifest 声明了通用运行时可解释入口、参数、工具链、路径和输出契约的命令；校验信任与有效 grant、Skill/profile 修订、受管环境及全部声明工具链快照。旧版无契约命令整次阻塞 |
+| 未声明命令契约的旧脚本/需交互授权的工具                               | 整次阻塞，给出回到原任务人工执行入口；不自动扩权或安装                                                                                                                     |
 | MCP                                                                  | 当前实现缺少可强制证明的后台效果契约，首版所选 MCP 绑定整次阻塞；将来在独立能力契约批准后开放，不凭 readOnlyHint 或工具名字放行                                            |
 | 外部发送、第三方数据写入、业务审批                                   | 不属于本功能首版，整次阻塞                                                                                                                                                 |
 
-SC06-1 实测支持的 Skill 包 hash 为 `4681d64c1736d8162493e9b2da6d2a54bd079338ec46dd92ecdbdaa2f1ee52e1`。它由本机用户提供的 `ppt-generation-expert.zip` 按生产导入算法复算：排除 `.DS_Store` 等操作系统元数据、恢复 ZIP 中的 GBK 路径名、按 Node `localeCompare` 排序；没有解压、复制或修改包。支持命令只有预设登记的 `project-init`、`icon-sync`、`svg-export`、`template-merge`、`pptx-validate`，profile 必须逐字段等于 `suggestedPptProfile(hash)`；命令参数 Schema 或包 hash 有变化即阻塞。
+定时执行不按 Skill ID 或资源 hash 注册命令。每个命令的入口、argv、受管路径参数、超时、输出及验证状态来自该 Skill 修订的 manifest；命令所需的依赖环境和工具链快照按同一修订解析并纳入授权 fingerprint。manifest/profile/资源修订发生变化时必须重新满足 grant 与 fingerprint 校验，不会沿用旧授权。老版本未声明 execution contract 的脚本在人工 Run 中可按兼容路径处理，但无人值守预检会阻塞，直到重新导入声明式 Skill 包。
 
-预设解析为固定 managed Python 调用：`project-init` 固定 `init --dir <本期 run work> --quick-generate --format ppt169` 且项目名不得是路径/选项；`icon-sync` 项目目录被限制在本期 work 下，当前工具链脚本还会验证图标 ID 仅为登记图标库和单文件名；`svg-export`、`template-merge`、`pptx-validate` 的脚本路径固定在 Skill 资源内，输入/输出由 `preparePptAttempt` 限定本期 work，输出通过既有执行器校验。Skill 自带两处适配修改仍逐字节核对源码 SHA-256：`svg_native_export.py` 为 `b030b073e27c19524e14a7a9b71b40faeb8f35999e72b4239097e1917140ddd3`，`merge_into_template.py` 为 `c4a874cabefb16c85006fc2d3b082c4f37b2e1848d624b517241eb3cda03b817`；未知脚本修订不能沿用修改。
-
-`project-init` 与 `icon-sync` 依赖随 Skill 包未分发的 `ppt-master`。对照本机干净工作树 `ppt-master` commit `680de11f1bef4628b68d5daad9dffec569fbd51f` 的实际 CLI：init 的 `--dir` 覆盖默认项目根、项目名校验为单个路径段、只在其 base 下新建；icon-sync 校验固定图标库/文件名，目标只在所给项目目录 `icons/`。定时预检要求既有 Skill grant 的 dependency fingerprint 覆盖当前锁 hash 与工具链 manifest hash、一个 macOS arm64 ready 环境、且唯一工具链快照通过完整性复核并含 `skills/ppt-master/scripts/project_manager.py` 和 `icon_sync.py`。这只证明当前固定命令/profile/修订/授权和不可变依赖可用；OS 子进程仍以用户身份运行、能访问宿主授权范围，**不构成原生进程沙箱**。
+通用执行器只将声明的相对路径解析到 Skill 根、Run work 根或已校验工具链快照；输出收集器核对产物路径、hash、大小、MIME 和扩展名，并依据成功的命令结果记录包内声明的验证状态。Skill 信任与受管路径边界仍不构成原生进程沙箱：OS 子进程以用户身份运行，可能访问宿主授权范围；定时启用需由用户审阅实际 Skill 修订及授权范围。
 
 定时模型必须解析到已启用语言模型 profile；远程 endpoint 缺少凭据时阻塞，本机 loopback 服务允许按既有模型协议使用无 Key profile。预检只读查询 profile 的非敏感 `apiKeyConfigured` 与凭据迁移状态；已完成迁移的密文会在 Main 内解析一次后立即丢弃结果，用于确认受保护存储可用，不返回/记录 API Key，不发模型请求。它不创建 grant、不探测真实模型、不安装依赖。能力 fingerprint 包含 Workspace/固定 ExpertRevision/模型与工具授权/Skill 修订和依赖，但不含期间、要求文本、Knowledge 成员或来源内容，因此已授权的来源动态变化不会每期触发能力重新授权。
 
-其他 hash、profile 改动、未知命令、未就绪或失配依赖、非单一工具链快照及全部 MCP 绑定均阻塞。上述拒绝规则明确显示在预检结果，不能保存后才静默少装 Skill/MCP。技术审阅若要求扩大支持，先更新 ADR/契约；不得凭预设名自动通过，也不得宣称脚本已经沙箱化。
+缺少命令契约、命令未注册、Skill/profile 修订与授权 fingerprint 不匹配、受管环境或任一声明工具链未就绪，以及全部 MCP 绑定均阻塞。上述拒绝规则明确显示在预检结果，不能保存后才静默少装 Skill/MCP。不得宣称脚本已经沙箱化。
 
 启用说明复用配置页：应用进程运行、电脑不休眠才会执行；会调用已配置模型/工具并可能产生费用；输出待人审阅；错过不自动补做。确认后持久化本配置的 capabilityFingerprint（专家、技能/profile/命令资源、模型引用、授权策略）；不保存密钥。引用能力变动导致 fingerprint 不一致则 blocked 并要求重新检查；纯知识成员/content 变动依照已批准动态范围进入下一期，不逐次索要确认。
 

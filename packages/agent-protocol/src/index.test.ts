@@ -1312,6 +1312,105 @@ describe('skill management protocol', () => {
     ).toThrow();
   });
 
+  it('accepts declarative command contracts and rejects unsafe entrypoints or undeclared toolchains', () => {
+    const profile = {
+      commands: [
+        {
+          commandId: 'render',
+          label: 'Render',
+          argumentSchema: { type: 'object', properties: {} },
+          timeoutMs: 60_000,
+          execution: {
+            entrypoint: {
+              scope: 'toolchain',
+              runtime: 'managed-python',
+              toolchainId: 'renderer',
+              path: 'scripts/render.py',
+            },
+            pathArguments: [],
+            argv: [
+              { kind: 'literal', value: 'render' },
+              { kind: 'work-directory' },
+              { kind: 'output', outputId: 'rendered' },
+            ],
+            outputs: [
+              {
+                outputId: 'rendered',
+                source: { kind: 'generated', relativePath: '.attempts/{executionId}/deck.bin' },
+                extension: 'bin',
+                mimeType: 'application/octet-stream',
+                validation: {
+                  structure: 'not-checked',
+                  visual: 'not-checked',
+                  manualEdit: 'not-checked',
+                },
+              },
+            ],
+          },
+        },
+      ],
+      environmentRequirements: [],
+      toolchainRequirements: [
+        { id: 'renderer', name: 'Renderer', environmentVariable: 'RENDERER_HOME' },
+      ],
+      outputContract: { outputPaths: [] },
+    };
+
+    expect(runtimeProfileDraftSchema.parse(profile).commands[0]?.execution).toEqual(
+      profile.commands[0]?.execution,
+    );
+    expect(() =>
+      runtimeProfileDraftSchema.parse({
+        ...profile,
+        commands: [
+          {
+            ...profile.commands[0],
+            execution: {
+              ...profile.commands[0]?.execution,
+              entrypoint: {
+                scope: 'toolchain',
+                runtime: 'managed-python',
+                toolchainId: 'renderer',
+                path: '../outside.py',
+              },
+            },
+          },
+        ],
+      }),
+    ).toThrow();
+    expect(() =>
+      runtimeProfileDraftSchema.parse({
+        ...profile,
+        toolchainRequirements: [],
+      }),
+    ).toThrow('未声明的工具链');
+    expect(() =>
+      runtimeProfileDraftSchema.parse({
+        ...profile,
+        commands: [
+          {
+            ...profile.commands[0],
+            validatorId: 'host-only-validator',
+          },
+        ],
+      }),
+    ).toThrow('不得引用宿主 validatorId');
+    expect(() =>
+      runtimeProfileDraftSchema.parse({
+        ...profile,
+        commands: [
+          {
+            ...profile.commands[0],
+            execution: {
+              ...profile.commands[0]?.execution,
+              pathArguments: [{ argumentName: 'template', scope: 'skill', access: 'write' }],
+            },
+          },
+        ],
+      }),
+    ).toThrow('Skill 包资源只能以只读方式传入命令');
+  });
+
   it('limits Skill deletion to an application-owned identifier', () => {
     expect(deleteSkillRequestSchema.parse({ skillId: 'skill-1' })).toEqual({ skillId: 'skill-1' });
     expect(() =>
