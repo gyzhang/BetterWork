@@ -17,7 +17,7 @@ const finding = (
 });
 
 describe('unconfiguredEnvironmentVariableClues', () => {
-  it('returns only external clues not covered by the declared toolchains', () => {
+  it('returns only external environment-variable clues not covered by the declared toolchains', () => {
     const requirements: SkillToolchainRequirement[] = [
       { id: 'media-indexer', name: 'Media Indexer', environmentVariable: 'MEDIA_INDEXER_HOME' },
     ];
@@ -31,7 +31,7 @@ describe('unconfiguredEnvironmentVariableClues', () => {
         ],
         requirements,
       ),
-    ).toEqual(['SKILL_DIR', 'other-tool']);
+    ).toEqual(['SKILL_DIR']);
   });
 
   it('returns external directory clues when no toolchain is declared', () => {
