@@ -121,6 +121,18 @@ describe('PptGenerationAdapter', () => {
 
     it.each([
       [
+        'current authoring package',
+        'cdb384ff5df07175a659140ead972e2f75abd983932878732b76c60f65263e3d',
+      ],
+      [
+        'previous aligned package',
+        '2c32f14bd78fd63cc77baf6ced9d1d0f809822e97ec8bc7d6f0642ca4c36c5b7',
+      ],
+      [
+        'previous current package',
+        '10e9fd879e2ad98e277ab0aa77e3c548e998530c75065c581799f675381fffe5',
+      ],
+      [
         'reimported split package',
         'af96cb802a79e22a96ae29c6a6e542b8984321ca7195ddf3745249555988472f',
       ],
