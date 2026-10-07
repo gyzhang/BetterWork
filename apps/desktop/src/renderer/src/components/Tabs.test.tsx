@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { SegmentedControl, Tabs } from './Tabs';
+import { SegmentedControl, Tab, TabList, TabPanel, Tabs } from './Tabs';
 
 afterEach(() => {
   cleanup();
@@ -16,19 +16,45 @@ const ITEMS = [
 ] as const;
 
 describe('Tabs 基座', () => {
-  const renderTabs = (onChange = vi.fn()): void => {
+  const renderTabs = (onChange: (value: string) => void = vi.fn(), value: string = 'b'): void => {
     render(
-      <div>
-        <button type="button">页签带之外的控件</button>
-        <Tabs size="md" items={ITEMS} value="b" onChange={onChange} label="示例分组" />
-      </div>,
+      <Tabs value={value} onChange={onChange}>
+        <div>
+          <button type="button">页签带之外的控件</button>
+          <TabList size="md" label="示例分组">
+            {ITEMS.map((item) => (
+              <Tab key={item.id} value={item.id}>
+                {item.label}
+              </Tab>
+            ))}
+          </TabList>
+          {ITEMS.map((item) => (
+            <TabPanel key={item.id} value={item.id}>
+              {item.label}内容
+            </TabPanel>
+          ))}
+        </div>
+      </Tabs>,
     );
   };
 
-  it('档位由调用点写明并落在根节点的 data-size 上（docs/10 §9.10「动作排」）', () => {
+  it('档位由调用点写明并落在页签带的 data-size 上（docs/10 §9.10「动作排」）', () => {
     render(
       <div>
-        <Tabs size="sm" items={ITEMS} value="b" onChange={() => undefined} label="示例分组" />
+        <Tabs value="b" onChange={() => undefined}>
+          <TabList size="sm" label="示例分组">
+            {ITEMS.map((item) => (
+              <Tab key={item.id} value={item.id}>
+                {item.label}
+              </Tab>
+            ))}
+          </TabList>
+          {ITEMS.map((item) => (
+            <TabPanel key={item.id} value={item.id}>
+              {item.label}内容
+            </TabPanel>
+          ))}
+        </Tabs>
         <SegmentedControl
           size="lg"
           items={ITEMS}
@@ -84,9 +110,7 @@ describe('Tabs 基座', () => {
   });
 
   it('选中值不在清单里时，首项仍可被 Tab 命中', () => {
-    render(
-      <Tabs size="md" items={ITEMS} value="zzz" onChange={() => undefined} label="示例分组" />,
-    );
+    renderTabs(() => undefined, 'zzz');
 
     expect(screen.getAllByRole('tab').map((tab) => tab.tabIndex)).toEqual([0, -1, -1]);
   });

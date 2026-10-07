@@ -119,7 +119,7 @@ async function runStep(step: string): Promise<{ step: string; alerts: number; wi
     await click('查看上下文');
     for (const name of ['过程', '资料', '记忆', '简报', '成果']) {
       const tabButton = [
-        ...document.querySelectorAll<HTMLButtonElement>('.context-panel .tabs button'),
+        ...document.querySelectorAll<HTMLButtonElement>('.context-panel .tabs [role="tab"]'),
       ].find((item) => item.textContent?.trim() === name);
       if (!tabButton) throw new Error(`缺上下文页签：${name}`);
       tabButton.click();
@@ -131,7 +131,11 @@ async function runStep(step: string): Promise<{ step: string; alerts: number; wi
       if (name === '简报')
         await waitFor(() => Boolean(document.querySelector('.brief-panel > .empty-notice')));
       const tabs = document.querySelector<HTMLElement>('.context-panel .tabs');
-      const content = document.querySelector<HTMLElement>('.context-content');
+      const selectedTab = document.querySelector<HTMLButtonElement>(
+        '.context-panel [role="tab"][aria-selected="true"]',
+      );
+      const contentId = selectedTab?.getAttribute('aria-controls');
+      const content = contentId ? document.getElementById(contentId) : null;
       const first = content?.firstElementChild;
       if (!tabs || !content || !(first instanceof HTMLElement))
         throw new Error(`${name} 页签缺少首块内容`);

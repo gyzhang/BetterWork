@@ -175,7 +175,7 @@ const SURFACE_SHELL_OWNERS: readonly { selector: string; reason: string }[] = [
   { selector: '.single-select-picker-option', reason: 'SingleSelectPicker 选项基座' },
   { selector: '.slide-viewer-image', reason: '成果幻灯片图像的中性衬底' },
   { selector: '.switch-track', reason: 'Switch 基座' },
-  { selector: '.tabs button', reason: 'Tabs 基座' },
+  { selector: ".tabs [role='tab']", reason: 'Tab 基座' },
   { selector: '.text-area', reason: 'TextArea 基座' },
   { selector: '.text-field', reason: 'TextField 基座' },
   { selector: '.tool-activity-toggle', reason: 'ToolActivity 基座触发按钮' },
@@ -2364,12 +2364,12 @@ describe('界面观感基线', () => {
   });
 
   /**
-   * 「一种几何，五个出口」这句话必须能被计数（ADR-0035 后果第 2 条）。
+   * 「一种几何，六个出口」这句话必须能被计数（ADR-0035 后果第 2 条）。
    *
    * ADR-0034 写下「聚焦环只剩一处出口」时它并不成立，因为从来没人核过清单与存量是否等量。
    * 新增一个吃环的表面必须在这里写明它是谁、为什么落不到全局那条元素规则上——`summary` 就是
    * 一个走不通的例子：它被「样式表不再点名 details／summary 元素」挡在外面，所以环由
-   * `.disclosure-label` 这个类承载。
+   * `.disclosure-label` 这个类承载；可聚焦的 `tabpanel` 由 `.tab-panel` 承载。
    */
   it('焦点环的出口只有登记的那几处', () => {
     const RING_OUTLETS: readonly string[] = [
@@ -2378,6 +2378,7 @@ describe('界面观感基线', () => {
       '.disclosure-label:focus-visible',
       '.scroll-region:focus-visible',
       '.single-select-picker-option:has(input:focus-visible)',
+      '.tab-panel:focus-visible',
       '.composer:has(textarea:focus-visible)',
     ];
     const outlets = [
