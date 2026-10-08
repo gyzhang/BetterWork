@@ -12,7 +12,7 @@
 
 ## 决策
 
-1. **BetterWork 管理公共 Python。** CPython 固定版本、制品来源、校验和落地状态归应用设置「运行组件」管理。Skill 只声明 Python 兼容要求；创建和验证 venv 时才需要已有受管解释器。锁 JSON 可独立存在、导入和分发。
+1. **BetterWork 管理公共 Python。** CPython 固定版本、制品来源、校验和落地状态归应用设置「运行」分区管理；该分区同时承载运行策略与内置 Skill／专家开关。Skill 只声明 Python 兼容要求；创建和验证 venv 时才需要已有受管解释器。锁 JSON 可独立存在、导入和分发。
 2. **Skill 包是需求配置边界。** 格式 v2 的 `betterwork.skill.json` 随 Skill 目录/ZIP 分发，可通过 HTTPS ZIP 导入。它声明经 Schema 校验的 runtime profile、包版本、依赖 bundle 和工具链 requirements。导入不执行包内代码、不调用 pip/git、不读取元数据提及的本机目录；Schema 有效不代表代码已获信任或已经过兼容验证。
 3. **锁和可选 wheelhouse 随 Skill 归属。** `dependencyBundle.lockPath` 与可选 `wheelhousePath` 是包内相对路径。锁记录目标平台、Python 兼容版本、完整传递包闭包、精确版本、wheel 名、来源 URL/SHA-256、许可证线索和 import probes。BetterWork 先复用 Skill 包 wheelhouse，缺 wheel 时可按锁里的 HTTPS URL 下载并校验 hash；缺少有效 wheel 和下载来源则准备失败。旧版应用级锁仅保留兼容读取，不作为新 Skill 包的作者维护入口。开发者用显式 `requirements.in`、目标 CPython pip report 和仓库生成脚本维护锁，不从静态扫描结果推导锁。
 4. **静态扫描仅提供未映射线索。** Python/依赖文件、安装提示、Python 运行时说明和 shell/env 外部目录变量访问附相对路径与行号供作者/用户核对。外部工具链 ID、版本、环境变量和命令入口只认 manifest 的结构化声明；不从 Skill ID、目录名或文档自由文本推断。内部变量赋值不视为外部资源；扫描绝不自动生成执行命令、锁、快照绑定或授权。

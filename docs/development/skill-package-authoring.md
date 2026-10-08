@@ -29,7 +29,7 @@
 
 `betterwork.skill.json` 使用 `formatVersion: 2`，其中 `runtimeProfile` 是经过 Zod 校验的 `RuntimeProfileDraft`。推荐只包含该包实际需要的字段：
 
-- `pythonRequirement`：兼容版本范围；解释器本体仍由 BetterWork 的「设置 → 运行组件」提供。
+- `pythonRequirement`：兼容版本范围；解释器本体仍由 BetterWork 的「设置 → 运行」提供。
 - `dependencyBundle`：Skill 包内锁的稳定 ID、相对 `lockPath`，以及可选的相对 `wheelhousePath`。
 - `toolchainRequirements`：零项或多项外部工具链声明；每项含稳定 ID、显示名、环境变量、版本提示，可用完整 Git commit 锁定源版本。
 - `commands`：命令入口、参数 Schema、argv token、路径根、超时、输出来源、文件类型和验证状态都可按命令声明。新包不需要旧版的 `executableKey`、`expectedOutputs` 或 profile 级 `outputContract`；BetterWork 的通用运行时解释命令声明，Skill 专属的调用/校验语义留在包内脚本和说明中，不依赖按 Skill ID 或内容 hash 注册的宿主 adapter。旧字段仅为已导入 profile 保留兼容读取。
@@ -78,7 +78,7 @@
 
 | 资源 | 归属 | 是否必须先有受管 CPython | 缺失时的处理 |
 | --- | --- | --- | --- |
-| CPython 制品 | BetterWork 应用 | — | 由应用下载、校验、修复，并在「运行组件」显示 |
+| CPython 制品 | BetterWork 应用 | — | 由应用下载、校验、修复，并在「运行」显示 |
 | Skill 锁 JSON | Skill 包 | 否；它是静态元数据 | 包内应有；导入时校验格式与路径 |
 | Wheel 文件 | Skill wheelhouse 或审核制品 URL | 否；下载不依赖 Python | wheelhouse 缺件时按精确 URL 下载并校验 SHA-256 |
 | Skill venv | BetterWork 用户数据 | **是** | 以受管 CPython 和完整锁新建或修复；不修改系统 Python |

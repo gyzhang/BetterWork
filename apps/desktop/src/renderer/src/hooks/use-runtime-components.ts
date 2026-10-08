@@ -31,10 +31,10 @@ export function useRuntimeComponents(): RuntimeComponentsState {
           );
         })
         .catch((failure: unknown) => {
-          setError(describeActionError(failure, '读取运行组件状态失败。'));
+          setError(describeActionError(failure, '读取受管运行时状态失败。'));
         })
         .finally(() => setLoading(false)),
-      '检查运行组件状态',
+      '检查受管运行时状态',
     );
   }, []);
 

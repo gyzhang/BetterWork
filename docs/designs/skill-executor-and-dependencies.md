@@ -36,6 +36,10 @@
 
 适配器 hash allowlist、PPT 参数映射、脚本 hash 补丁和 PPT 专用 validator 均退役。受管 Python、真实路径校验、工具链快照完整性、取消/超时、stdout 截断拒绝和输出 hash 绑定仍由通用宿主运行时负责。真实 Electron 导入/授权/Run 验收仍待完成；不得将代码切片或合成测试记为 A16/A17 样本验收。
 
+### 2026-10-08：设置运行分区
+
+设置保留七个入口，第四项由「运行组件」改为「运行」。运行策略、内置 Skill／专家开关与受管 CPython 状态合并在该分区；「通用」只保留工作对话双方称呼。信息架构真相源见 [UI/UX 体系 §6.1](../10-ui-ux-system.md#61-应用级导航)。
+
 ## 2. 现有代码约束与需要修改的接点
 
 | 当前证据 | 设计变化 |
@@ -86,7 +90,7 @@
 
 ### 4.1 默认路径与高级路径
 
-**默认：应用管理的 Python 运行时。** 按目标 OS/架构提供固定版本的 Python 发行制品，并在「设置 → 运行组件」呈现版本和是否已落地；首次准备 Skill 环境时由应用自动下载与校验，在用户数据目录创建专属 venv。Skill profile 只给出兼容版本范围和所用依赖锁，不能为每个 Skill 另带解释器。基础 Python 使用固定发行制品，记录下载来源、SHA-256、许可证与目标平台，不能跟随 latest。[上游说明](https://github.com/astral-sh/python-build-standalone)
+**默认：应用管理的 Python 运行时。** 按目标 OS/架构提供固定版本的 Python 发行制品，并在「设置 → 运行」呈现版本和是否已落地；首次准备 Skill 环境时由应用自动下载与校验，在用户数据目录创建专属 venv。Skill profile 只给出兼容版本范围和所用依赖锁，不能为每个 Skill 另带解释器。基础 Python 使用固定发行制品，记录下载来源、SHA-256、许可证与目标平台，不能跟随 latest。[上游说明](https://github.com/astral-sh/python-build-standalone)
 
 **高级：选用本机 Python 作为基础解释器。** 探测路径、版本、架构与 venv 能力后仍创建算台专属环境，不向该解释器的全局 site-packages 安装；不直接复用用户 Conda 中随时会变化的包集合。检测在用户选择/准备环境后进行，不能在纯 Skill 导入时执行。
 
@@ -292,7 +296,7 @@ PPTX 新增 `presentation` 文件型内容，与 markdown 文本型组成判别�
 - skills.testRun：传 Skill/config 修订 ID 与测试输入，主进程创建真实 Task/Session/Run 并记录试运行标签；不提供任意命令执行 IPC。
 - artifacts：fileDetail/exportFile/openFile 与校验状态读取；保留既有 Markdown 接口。
 
-用户流程：导入目录/ZIP/HTTPS ZIP → 校验包内运行元数据、展示静态发现证据 → 独立选择信任并启用（可保持不可运行草稿）→ BetterWork 按 Skill 声明准备应用 Python、包依赖和可用工具链快照 → 试运行 → 检查成果。设置 → 运行组件展示应用管理的 CPython；Skill 详情只出现本 Skill 声明的锁和工具链项。已准备资源不重复请求；包内缺 wheel 时按精确 hash 来源恢复。没有工具链分发制品的声明时仍需登记本机来源，不能误称所有资源都会自动下载。内置 Skill 信任来自产品 release manifest，用户撤销/停用优先。失败提示分清「缺环境」「脚本失败」「质量未通过」「清理未完成」，给出对应动作。
+用户流程：导入目录/ZIP/HTTPS ZIP → 校验包内运行元数据、展示静态发现证据 → 独立选择信任并启用（可保持不可运行草稿）→ BetterWork 按 Skill 声明准备应用 Python、包依赖和可用工具链快照 → 试运行 → 检查成果。设置 → 运行展示运行策略和应用管理的 CPython；Skill 详情只出现本 Skill 声明的锁和工具链项。已准备资源不重复请求；包内缺 wheel 时按精确 hash 来源恢复。没有工具链分发制品的声明时仍需登记本机来源，不能误称所有资源都会自动下载。内置 Skill 信任来自产品 release manifest，用户撤销/停用优先。失败提示分清「缺环境」「脚本失败」「质量未通过」「清理未完成」，给出对应动作。
 
 ## 12. 实施与验收顺序
 

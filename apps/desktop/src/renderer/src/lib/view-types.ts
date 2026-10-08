@@ -7,4 +7,4 @@ export type AppView =
  */
 export type ContextTab = 'process' | 'sources' | 'memory' | 'brief' | 'artifacts';
 export type SettingsTab =
-  'models' | 'search' | 'mcp' | 'memory' | 'appearance' | 'runtime-components' | 'general';
+  'models' | 'search' | 'mcp' | 'runtime' | 'memory' | 'appearance' | 'general';
