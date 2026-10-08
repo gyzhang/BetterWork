@@ -1,5 +1,4 @@
 import { spawnSync } from 'node:child_process';
-import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
@@ -21,7 +20,7 @@ describe('PR 验证按差异范围选择', () => {
     expect(result.stdout).toBe('has_code=false\ndocs_only=true\n');
   });
 
-  it('代码与文档混合差异选择完整 verify', () => {
+  it('代码与文档混合差异选择代码快门禁', () => {
     const result = classifyFiles(['README.md', 'apps/desktop/src/main.ts']);
     expect(result.status, String(result.stderr)).toBe(0);
     expect(result.stdout).toBe('has_code=true\ndocs_only=false\n');
@@ -33,18 +32,18 @@ describe('PR 验证按差异范围选择', () => {
     expect(result.stdout).toBe('has_code=true\ndocs_only=false\n');
   });
 
-  it('空差异按完整 verify 处理，避免空跑 PR 门禁', () => {
+  it('空差异按代码快门禁处理，避免空跑 PR 门禁', () => {
     const result = classifyFiles([]);
     expect(result.status, String(result.stderr)).toBe(0);
     expect(result.stdout).toBe('has_code=true\ndocs_only=false\n');
   });
 
-  it('手动运行总是选择完整 verify', () => {
-    const result = spawnSync(process.execPath, [scriptPath, '--full'], {
+  it('非法 PR 基点明确失败，不能跳过检查', () => {
+    const result = spawnSync(process.execPath, [scriptPath, '--pull-request', 'main', 'HEAD'], {
       encoding: 'utf8',
-      cwd: path.dirname(scriptPath),
     });
-    expect(result.status, String(result.stderr)).toBe(0);
-    expect(result.stdout).toBe('has_code=true\ndocs_only=false\n');
+    expect(result.status, String(result.stderr)).toBe(1);
+    expect(result.stderr).toContain('SHA 格式无效');
+    expect(result.stdout).toBe('');
   });
 });

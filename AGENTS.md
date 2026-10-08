@@ -139,7 +139,9 @@ Renderer -> Preload API -> Application -> Agent Core / Infrastructure
 - Schema 变更走版本化迁移并补迁移测试，不得在启动代码里探测后 `ALTER`。
 - 新增领域行为必须有单元测试；Agent 事件顺序、取消和工具失败必须有测试；涉及外部 HTTP 的代码必须可注入 `fetch`，测试不得触网。
 - 修复缺陷时优先添加回归测试。
-- 提交时由 pre-commit 按暂存范围做差异空白、定向 ESLint/Prettier 与纯文档 `docs:check`；不在每次提交时运行全仓 typecheck。pre-push 阻止直推 `main`，只核对待推送的干净 HEAD 与差异空白。代码或混合变更在 Pull Request 上由 macOS Actions 执行一次完整 `npm run verify`（lint + format:check + typecheck + test + build + ui:check）；纯 Markdown PR 只执行 `docs:check`，必需状态统一为 `PR Gate`。GitHub `main` 仅接受通过 PR Gate 的 Pull Request，不接受直接推送（见 [ADR-0039](docs/adr/0039-task-branches-and-protected-main.md)）。完整门禁不要把输出接管道后只看末尾。墙钟与内存预算断言不在 `verify` 里：它们只住在 `*.bench.test.ts`，由 `npm run bench` 串行跑（见 `docs/12-engineering-standards.md` §9）。
+- 提交时由 pre-commit 按暂存范围做差异空白、定向 ESLint/Prettier 与纯文档 `docs:check`；不在每次提交时运行全仓 typecheck。pre-push 阻止直推 `main`，只核对待推送的干净 HEAD 与差异空白。
+- 代码或混合 PR 在 macOS Actions 上执行快门禁（lint、format:check、typecheck、docs:check 和按 PR 基点选择的相关测试）；纯 Markdown PR 只执行 `docs:check`，必需状态统一为 `PR Gate`。GitHub `main` 仅接受通过 PR Gate 的 Pull Request，不接受直接推送（见 [ADR-0039](docs/adr/0039-task-branches-and-protected-main.md)、[ADR-0042](docs/adr/0042-pr-quick-check-and-scheduled-verify.md)）。
+- 完整 `npm run verify`（lint + format:check + typecheck + test + build + ui:check）只由用户按需触发或每天北京时间 23:30 的夜间计划运行；AI 不因局部修改、提交、推送或合并自行启动完整验证。完整验证不要把输出接管道后只看末尾。墙钟与内存预算断言不在 `verify` 里：它们只住在 `*.bench.test.ts`，由 `npm run bench` 串行跑（见 `docs/12-engineering-standards.md` §9）。
 - 不提交 `.env`、密钥、构建产物、数据库和本地工作文件。
 
 ## 8. 变更纪律

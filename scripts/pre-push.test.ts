@@ -63,7 +63,7 @@ function runHook(
   });
 }
 
-describe('推送钩子只做轻量边界检查，完整验证由 PR Gate 执行', () => {
+describe('推送钩子只做轻量边界检查，PR 快门禁由 PR Gate 汇总', () => {
   it.each(['code', 'docs', 'mixed'] as const)('%s 分支推送不重复运行 npm 检查', (kind) => {
     withRepository(kind, (directory, base, head) => {
       const result = runHook(directory, head, base);

@@ -42,6 +42,7 @@
 | [0039](0039-task-branches-and-protected-main.md) | 任务分支、PR 门禁与受保护的 main | Accepted（2026-10-05；替代 ADR-0036 的直接在 main 工作流约定） |
 | [0040](0040-skill-runtime-requirements-and-app-components.md) | Skill 运行需求声明与应用级运行组件 | Proposed（2026-10-05 用户授权；2026-10-06 落地包内锁与元数据导入切片，完整样本验收未完成） |
 | [0041](0041-file-artifact-workspace-delivery.md) | 文件成果在工作空间中的交付副本 | Accepted（2026-10-07 用户确认并授权实现） |
+| [0042](0042-pr-quick-check-and-scheduled-verify.md) | PR 快门禁与按需、夜间完整验证 | Accepted（2026-10-08；替代 ADR-0039 的所有代码 PR 必跑完整 verify 范围） |
 
 [ADR-0027](0027-knowledge-foundation.md)（Proposed，2026-09-24 文档归档）提出固定知识修订正文读取、嵌入/混合检索、索引作业与显式成果来源声明；延续 ADR-0014/0018，拟细化 ADR-0005 的访问与采用语义，不改变 WM 的非向量记忆召回。产品见[知识基础闭环](../designs/knowledge-foundation.md)，字段见[知识契约](../development/knowledge-contracts.md)，状态只看 [KM 任务板](../development/tasks-knowledge.md)。
 

@@ -17,7 +17,8 @@ glob: **/*.ts,**/*.tsx,**/*.css,**/*.mjs,**/*.json
 
 - **不新建第二套标准**：不加第二份 ESLint / Prettier / tsconfig 配置，不在任何 `package.json` 里内嵌 `eslintConfig` 或 `prettier` 键，不新建会各自放宽严格度的子 tsconfig。（AGENTS.md §7、docs/12 §10）
 - **源码里零豁免**：禁止 `eslint-disable`、`@ts-ignore`、`@ts-expect-error`、`prettier-ignore`。例外只能写进配置（按文件角色）或护栏测试的白名单，并注明理由。（docs/12 §10）
-- 提交时由 pre-commit 按暂存范围做差异、ESLint / Prettier 与文档快检；每次提交不跑全仓 typecheck。pre-push 阻止直推 `main` 并核对 HEAD 与差异空白，不跑完整验证。代码或混合 PR 执行完整 `npm run verify`（lint + format:check + typecheck + test + build + ui:check）；纯 Markdown PR 执行 `docs:check`，均通过 `PR Gate` 汇总。（docs/12 §1、§1.1；ADR-0039）
+- 提交时由 pre-commit 按暂存范围做差异、ESLint / Prettier 与文档快检；每次提交不跑全仓 typecheck。pre-push 阻止直推 `main` 并核对 HEAD 与差异空白，不跑完整验证。代码或混合 PR 执行 lint、format:check、typecheck、docs:check 和按 PR 基点选择的相关测试；纯 Markdown PR 执行 `docs:check`，均通过 `PR Gate` 汇总。（docs/12 §1、§1.1；ADR-0039、ADR-0042）
+- 完整 `npm run verify`（lint + format:check + typecheck + test + build + ui:check）只由用户按需或夜间计划运行，AI 不因局部修改、提交、推送或合并自行触发。（docs/12 §1、§1.1；ADR-0042）
 - **墙钟与内存预算断言只写在 `*.bench.test.ts` 里**，由 `npm run bench` 串行跑，不属于 `verify`；功能档里出现 `performance.now()` 会被护栏拦下。为昂贵夹具放宽**超时**是另一回事，注释里写清放宽的是什么。单文件墙钟 ≥20s 的重文件走 `heavy` 串行档。（docs/12 §9）
 
 ## 最常踩的硬约束
@@ -37,4 +38,4 @@ glob: **/*.ts,**/*.tsx,**/*.css,**/*.mjs,**/*.json
 
 1. 先判断是「规则不适用于本项目架构」还是「代码写法有问题」。前者改配置，后者改代码。**不要因为嫌麻烦而放宽规则。**
 2. 改 `eslint.config.mjs` 时按文件角色配置并写清理由；改护栏测试时把例外加进对应白名单数组并写清理由。
-3. 同步更新 docs/12（§10 记录策略性关闭，其余小节记录规则本身）与本文件的对应复述，再跑 `npm run verify`。
+3. 同步更新 docs/12（§10 记录策略性关闭，其余小节记录规则本身）与本文件的对应复述，再核对定向护栏和反例；完整 `npm run verify` 按用户按需/夜间计划执行。（docs/12 §1、§10）

@@ -4,6 +4,7 @@
 - 日期：2026-10-05。
 - 依据：[AGENTS.md](../../AGENTS.md)、[工程规范](../12-engineering-standards.md) §1/§1.1、[Qoder 开发交接](../11-qoder-handoff.md) §3/§8。
 - 关系：取代 [ADR-0036](0036-macos-only-platform-scope.md) 中「单人工作直接在 main，main 不设保护」的流程决策；不改写 ADR-0036 的 macOS 平台范围。
+- 后续：2026-10-08 [ADR-0042](0042-pr-quick-check-and-scheduled-verify.md) 替代第 4、5 条的完整验证范围，现行规则为 PR 快门禁、手动/夜间完整 verify；本记录保留当时的决策。
 
 ## 背景
 
