@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import {
   type BitmapFrame,
   CHANNEL_TOLERANCE,
+  frameAttemptVerdict,
   frameMismatch,
   type FrameSample,
   isSettled,
+  MAX_SAMPLE_ATTEMPTS,
   readPixel,
   sampleMismatch,
   settleDelayMs,
@@ -86,9 +88,19 @@ describe('截图采样判据', () => {
     // 第一帧中间态、第二帧画对 ⇒ 两帧不同，继续等，不许把中间态读成缺陷。
     expect(isSettled(intermediate, '')).toBe(false);
     expect(isSettled('', intermediate)).toBe(false);
-    // 两帧都画对 ⇒ 放行；两帧报同一条违规 ⇒ 判红（真没画出来拦得住）。
+    // 两帧都画对 ⇒ 稳定；两帧报同一条违规 ⇒ 只能说明读数稳定，不能证明捕获到了当前窗口状态。
     expect(isSettled('', '')).toBe(true);
     expect(isSettled(intermediate, intermediate)).toBe(true);
+  });
+
+  it('稳定错误帧仍继续采样，耗尽预算后才判失败', () => {
+    const mismatch = '期望 160/161/159，实测 246/247/245';
+
+    expect(frameAttemptVerdict(undefined, mismatch, 0)).toBe('retry');
+    expect(frameAttemptVerdict(mismatch, mismatch, 1)).toBe('retry');
+    expect(frameAttemptVerdict('', '', 1)).toBe('pass');
+    expect(frameAttemptVerdict(mismatch, mismatch, MAX_SAMPLE_ATTEMPTS - 1)).toBe('fail');
+    expect(frameAttemptVerdict(mismatch, '', MAX_SAMPLE_ATTEMPTS - 1)).toBe('retry');
   });
 
   it('预算够长且退避，慢机器上等得到稳定帧', () => {
