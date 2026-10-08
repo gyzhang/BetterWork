@@ -4523,6 +4523,41 @@ button.list-row:where(:not(:disabled)):hover {
   gap: var(--space-8);
   margin-top: var(--space-12);
 }
+.sidebar-help {
+  flex: none;
+}
+.help-page {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+.markdown-preview[data-variant='guide'] {
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.markdown-preview[data-variant='guide'] img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.help-screenshot-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+.help-screenshot {
+  min-height: 0;
+  max-width: 100%;
+  max-height: 75vh;
+  align-self: center;
+  object-fit: contain;
+}
 .notification-anchor {
   position: relative;
   flex: none;

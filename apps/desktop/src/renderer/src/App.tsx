@@ -74,6 +74,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ExpertIcon,
+  HelpIcon,
   KnowledgeIcon,
   PlusIcon,
   ScheduleIcon,
@@ -93,6 +94,7 @@ import type { AppView, ContextTab, SettingsTab } from './lib/view-types';
 import { NotificationCenter, ToastHost, useNotifications } from './notifications';
 import { ArtifactPage } from './views/ArtifactView';
 import { ExpertsPage } from './views/ExpertsView';
+import { HelpPage } from './views/HelpView';
 import { KnowledgePage } from './views/KnowledgeView';
 import { type MemoryManagementTarget, scopeOptionsFor } from './views/MemoryView';
 import { SchedulesPage } from './views/SchedulesView';
@@ -1485,6 +1487,14 @@ export function App(): React.JSX.Element {
               refreshModels();
             }}
           />
+          <NavItem
+            label="帮助"
+            icon={HelpIcon}
+            rail
+            className="sidebar-help"
+            selected={view === 'help'}
+            onClick={() => setView('help')}
+          />
           <NotificationCenter
             notifications={notifications}
             unreadCount={unreadCount}
@@ -1796,6 +1806,7 @@ export function App(): React.JSX.Element {
           <KnowledgePage library={knowledge} onResearch={startResearchFromKnowledge} />
         )}
         {view === 'skills' && <SkillsPage state={skills} />}
+        {view === 'help' && <HelpPage />}
         {view === 'experts' && (
           <ExpertsPage
             state={experts}

@@ -7,8 +7,8 @@ import { persistAppearance } from '../../apps/desktop/src/renderer/src/appearanc
 
 const method = '每次复盘先核对口径，再给结论。';
 const hasText = (text: string): boolean => document.body.textContent?.includes(text) ?? false;
-const findButton = (name: string): HTMLButtonElement | undefined =>
-  [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+const findButton = (name: string): HTMLElement | undefined =>
+  [...document.querySelectorAll<HTMLElement>('button, [role="menuitem"]')].find(
     (item) =>
       item.getAttribute('aria-label') === name ||
       item.textContent?.trim() === name ||
@@ -16,7 +16,8 @@ const findButton = (name: string): HTMLButtonElement | undefined =>
   );
 const click = async (name: string): Promise<void> => {
   const item = findButton(name);
-  if (!item || item.disabled) throw new Error(`缺应用动作：${name}`);
+  if (!item || (item instanceof HTMLButtonElement && item.disabled))
+    throw new Error(`缺应用动作：${name}`);
   item.scrollIntoView({ block: 'nearest' });
   item.focus();
   item.click();
@@ -52,6 +53,7 @@ async function runStep(step: string): Promise<{ step: string; alerts: number; wi
       ['技能', '管理可复用的工作方法'],
       ['成果', '可继续工作的交付物'],
       ['专家', '召唤固定的工作方式'],
+      ['帮助', '操作手册'],
     ]) {
       if (!name || !title) throw new Error('缺导航验收项');
       await click(name);
@@ -60,6 +62,17 @@ async function runStep(step: string): Promise<{ step: string; alerts: number; wi
       if (!body || Number.parseFloat(getComputedStyle(body).paddingTop) !== 12)
         throw new Error(`${name} 页正文入口不是 12px`);
     }
+    await click('目录');
+    await click('2. 首次配置');
+    await waitFor(() => document.activeElement?.id === '2-首次配置');
+    const image = document.querySelector<HTMLImageElement>('.help-page img');
+    if (!image) throw new Error('手册缺少随包截图');
+    image.scrollIntoView({ block: 'center' });
+    await waitFor(() => image.complete && image.naturalWidth > 0);
+    image.parentElement?.click();
+    await waitFor(() => Boolean(document.querySelector('.help-screenshot')));
+    await click('关闭截图');
+    if (document.activeElement !== image.parentElement) throw new Error('关闭截图没有返回阅读位置');
   }
   if (step === 'summon') {
     await click('专家');

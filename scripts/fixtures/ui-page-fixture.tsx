@@ -25,6 +25,7 @@ import { applyAppearance } from '../../apps/desktop/src/renderer/src/appearance'
 import type { KnowledgeLibrary } from '../../apps/desktop/src/renderer/src/hooks/use-knowledge-library';
 import type { SchedulesState } from '../../apps/desktop/src/renderer/src/hooks/use-schedules';
 import { ArtifactPage } from '../../apps/desktop/src/renderer/src/views/ArtifactView';
+import { HelpPage } from '../../apps/desktop/src/renderer/src/views/HelpView';
 import { KnowledgePage } from '../../apps/desktop/src/renderer/src/views/KnowledgeView';
 import { SchedulesPage } from '../../apps/desktop/src/renderer/src/views/SchedulesView';
 import {
@@ -34,7 +35,7 @@ import {
   MemoryScenario,
 } from './ui-governance-fixture';
 
-// 全部资料为合成文本；宿主不挂产品 Preload、SQLite、网络或文件动作。
+// 业务资料为合成文本，帮助页读取随包指南；宿主不挂产品 Preload、SQLite、网络或文件动作。
 const longTitle = '季度复盘与合同条款核对：跨部门研究资料与长期项目的版本边界';
 const longPath =
   '/synthetic/这是一个用于检验长路径换行的资料目录/' + 'contract-review-'.repeat(12) + '.md';
@@ -734,8 +735,59 @@ async function setInput(label: string, value: string): Promise<void> {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 const knowledgeSteps = ['list', 'detail-failed', 'return', 'detail-recovered'];
+const helpSteps = [
+  'help-read',
+  'help-directory',
+  'help-chapter',
+  'help-image',
+  'help-image-close',
+  'help-example',
+  'help-return',
+];
 async function runStep(step: string): Promise<ReturnType<typeof layoutChecks>> {
   const hasText = (text: string): boolean => document.body.textContent?.includes(text) ?? false;
+  if (step === 'help-read') {
+    await waitFor(() => Boolean(document.querySelector('.help-page')));
+    const images = [...document.querySelectorAll<HTMLImageElement>('.help-page img')];
+    if (!images.length) throw new Error('手册没有随包截图');
+    await Promise.all(
+      images.map(async (image) => {
+        image.loading = 'eager';
+        await image.decode();
+      }),
+    );
+  }
+  if (step === 'help-directory') {
+    click('目录');
+    await waitFor(() => document.querySelectorAll('[role="menuitem"]').length === 14);
+  }
+  if (step === 'help-chapter') {
+    click('4. 从材料到成果的完整示例');
+    await waitFor(() => document.activeElement?.id === '4-从材料到成果的完整示例');
+  }
+  if (step === 'help-image') {
+    const link = requireElement<HTMLAnchorElement>('.help-page a[aria-label^="放大截图"]');
+    link.scrollIntoView({ block: 'center' });
+    link.click();
+    await waitFor(() => Boolean(document.querySelector('.help-screenshot')));
+    await requireElement<HTMLImageElement>('.help-screenshot').decode();
+  }
+  if (step === 'help-image-close') {
+    click('关闭截图');
+    await waitFor(() => !document.querySelector('[role="dialog"]'));
+    if (!document.activeElement?.matches('a[aria-label^="放大截图"]'))
+      throw new Error('截图焦点未归还');
+  }
+  if (step === 'help-example') {
+    requireElement<HTMLAnchorElement>(
+      '.help-page a[href="examples/collaboration-notes.md"]',
+    ).click();
+    await waitFor(() => hasText('返回手册'));
+  }
+  if (step === 'help-return') {
+    click('返回手册');
+    await waitFor(() => hasText('1. 设计用途'));
+  }
   if (step === 'open') {
     click(longTitle);
     await waitFor(() => hasText('当前版本') && hasText('2 个版本'));
@@ -1155,7 +1207,9 @@ function PageScenario(): React.JSX.Element {
               ? memorySteps
               : pageId === 'schedule'
                 ? scheduleSteps
-                : knowledgeSteps,
+                : pageId === 'help'
+                  ? helpSteps
+                  : knowledgeSteps,
       runStep,
     };
     document.documentElement.dataset.fixtureReady = 'true';
@@ -1171,6 +1225,8 @@ function PageScenario(): React.JSX.Element {
           <MemoryScenario />
         ) : pageId === 'schedule' ? (
           <SchedulesScenario />
+        ) : pageId === 'help' ? (
+          <HelpPage />
         ) : (
           <KnowledgeScenario />
         )}

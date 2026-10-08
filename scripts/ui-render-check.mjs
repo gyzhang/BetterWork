@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import console from 'node:console';
-import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { appendFile, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
@@ -60,11 +60,14 @@ try {
   )
     throw new Error('仅支持应用旅程定向检查与已登记的违规探针');
   if (acceptance) await assertAcceptanceDestination(output, probe.includes('--reopen-acceptance'));
+  // 与 Renderer 的 publicDir 一致，离线旅程读取随包的指南截图。
+  await cp(path.join(root, 'docs/guide'), output, { recursive: true });
   await build({
     entryPoints: [path.join(root, 'scripts/fixtures/ui-render-fixture.tsx')],
     bundle: true,
     format: 'iife',
     platform: 'browser',
+    loader: { '.md': 'text' },
     outfile: path.join(output, 'fixture.js'),
     tsconfig: path.join(root, 'tsconfig.json'),
     define: { 'process.env.NODE_ENV': '"production"' },
@@ -126,6 +129,7 @@ try {
     format: 'iife',
     platform: 'browser',
     outfile: path.join(output, 'pages.js'),
+    loader: { '.md': 'text' },
     tsconfig: path.join(root, 'tsconfig.json'),
     define: { 'process.env.NODE_ENV': '"production"' },
   });
@@ -135,6 +139,7 @@ try {
     format: 'iife',
     platform: 'browser',
     outfile: path.join(output, 'app.js'),
+    loader: { '.md': 'text' },
     tsconfig: path.join(root, 'tsconfig.json'),
     define: { 'process.env.NODE_ENV': '"production"' },
   });

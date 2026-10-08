@@ -6,6 +6,7 @@
 
 | 文档 | 作用 |
 | --- | --- |
+| [操作手册](guide/README.md) | 面向使用者的配置、工作空间、材料、任务与成果操作步骤，附实际界面截图 |
 | [产品定义](01-product-definition.md) | 说明为谁解决什么问题，以及明确不做什么 |
 | [领域模型](02-domain-model.md) | 定义 Workspace、Task、Run、Artifact、Evidence 等核心对象 |
 | [系统架构](03-system-architecture.md) | 定义 Electron、Agent Core、工具运行时、存储与 Worker 的边界 |

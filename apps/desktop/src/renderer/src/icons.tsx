@@ -122,6 +122,14 @@ export const SettingsIcon = (props: IconProps): React.JSX.Element => (
   </Icon>
 );
 
+export const HelpIcon = (props: IconProps): React.JSX.Element => (
+  <Icon {...props}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M9.5 9a2.5 2.5 0 0 1 5 .2c0 1.8-2.5 2-2.5 3.8" />
+    <path d="M12 16.3v.1" />
+  </Icon>
+);
+
 export const PlusIcon = (props: IconProps): React.JSX.Element => (
   <Icon {...props}>
     <path d="M12 5.5v13M5.5 12h13" />
