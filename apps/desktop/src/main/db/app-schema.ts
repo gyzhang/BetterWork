@@ -2140,6 +2140,62 @@ export const appMigrations: readonly Migration[] = [
       db.exec('ALTER TABLE artifact_files ADD COLUMN workspace_relative_path TEXT');
     },
   },
+  {
+    version: 45,
+    name: 'version MCP connections and reviewed Run bindings',
+    up(db: Database.Database): void {
+      db.exec(`
+        ALTER TABLE mcp_connections ADD COLUMN lifecycle TEXT NOT NULL DEFAULT 'enabled'
+          CHECK (lifecycle IN ('enabled', 'disabled', 'archived'));
+        ALTER TABLE mcp_connections ADD COLUMN current_revision_id TEXT;
+        CREATE TABLE mcp_connection_revisions (
+          id TEXT PRIMARY KEY,
+          connection_id TEXT NOT NULL REFERENCES mcp_connections(id),
+          revision INTEGER NOT NULL CHECK (revision > 0),
+          name TEXT NOT NULL,
+          transport_json TEXT NOT NULL CHECK (json_valid(transport_json)),
+          created_at INTEGER NOT NULL,
+          UNIQUE(connection_id, revision), UNIQUE(connection_id, id)
+        );
+        INSERT INTO mcp_connection_revisions
+          SELECT id || ':initial', id, 1, name,
+            json_object('kind', 'stdio', 'command', command, 'args', json(args_json))
+              || '', created_at FROM mcp_connections;
+        UPDATE mcp_connection_revisions SET transport_json = json_set(transport_json, '$.cwd',
+          (SELECT cwd FROM mcp_connections WHERE id = connection_id))
+          WHERE (SELECT cwd FROM mcp_connections WHERE id = connection_id) IS NOT NULL;
+        UPDATE mcp_connections SET current_revision_id = id || ':initial';
+        CREATE TRIGGER mcp_revision_immutable BEFORE UPDATE ON mcp_connection_revisions
+          BEGIN SELECT RAISE(ABORT, 'MCP configuration revisions are immutable'); END;
+        CREATE TABLE mcp_catalogs (
+          revision_id TEXT PRIMARY KEY REFERENCES mcp_connection_revisions(id),
+          data_json TEXT NOT NULL CHECK (json_valid(data_json))
+        );
+        INSERT INTO mcp_catalogs SELECT id || ':initial', json_object(
+          'status', status, 'tools', json(tools_json), 'stale', json('true')) FROM mcp_connections;
+        CREATE TABLE mcp_tool_reviews (
+          revision_id TEXT NOT NULL REFERENCES mcp_connection_revisions(id),
+          tool_id TEXT NOT NULL, contract_hash TEXT NOT NULL, reviewed_at INTEGER NOT NULL,
+          PRIMARY KEY(revision_id, tool_id, contract_hash)
+        );
+        CREATE TABLE mcp_oauth_authorizations (
+          connection_id TEXT NOT NULL,
+          revision_id TEXT NOT NULL,
+          issuer TEXT NOT NULL, resource TEXT NOT NULL, slot TEXT NOT NULL,
+          PRIMARY KEY(connection_id, revision_id),
+          FOREIGN KEY(connection_id, revision_id) REFERENCES mcp_connection_revisions(connection_id, id)
+        );
+        CREATE TABLE run_mcp_tool_bindings (
+          id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+          connection_id TEXT NOT NULL, revision_id TEXT NOT NULL, tool_id TEXT NOT NULL,
+          contract_hash TEXT NOT NULL, model_alias TEXT NOT NULL,
+          credential_versions_json TEXT NOT NULL CHECK (json_valid(credential_versions_json)),
+          FOREIGN KEY(connection_id, revision_id) REFERENCES mcp_connection_revisions(connection_id, id),
+          UNIQUE(run_id, model_alias), UNIQUE(run_id, connection_id, tool_id)
+        );
+      `);
+    },
+  },
 ];
 
 /**

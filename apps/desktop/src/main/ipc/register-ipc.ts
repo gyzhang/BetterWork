@@ -121,7 +121,12 @@ import {
   materialCandidateSchema,
   maximizedResultSchema,
   mcpConnectionSummarySchema,
+  mcpLifecycleRequestSchema,
+  mcpLoginContinueRequestSchema,
   mcpMutationResultSchema,
+  mcpOAuthPreparationSchema,
+  mcpOperationRequestSchema,
+  mcpReviewRequestSchema,
   mcpTestResultSchema,
   memoryConflictResolutionDataSchema,
   memoryJobListDataSchema,
@@ -2202,13 +2207,51 @@ function registerMcpChannels({ mcpClientService }: IpcDependencies): void {
     IpcChannel.DeleteMcpConnection,
     deleteMcpConnectionRequestSchema,
     deletedResultSchema,
-    async (input) => ({ deleted: await mcpClientService.deleteConnection(input.id) }),
+    async (input) => ({
+      deleted: await mcpClientService.deleteConnection(input.id, input.expectedRevisionId),
+    }),
   );
   handleInput(
     IpcChannel.TestMcpConnection,
-    getMcpConnectionRequestSchema,
+    mcpOperationRequestSchema,
     mcpTestResultSchema,
-    (input) => mcpClientService.testConnection(input.id),
+    (input) => mcpClientService.testConnection(input),
+  );
+  handleInput(
+    IpcChannel.SetMcpLifecycle,
+    mcpLifecycleRequestSchema,
+    mcpMutationResultSchema,
+    (input) => ({ connection: mcpClientService.setLifecycle(input) }),
+  );
+  handleInput(
+    IpcChannel.ReviewMcpTool,
+    mcpReviewRequestSchema,
+    mcpMutationResultSchema,
+    (input) => ({ connection: mcpClientService.reviewTool(input) }),
+  );
+  handleInput(
+    IpcChannel.CancelMcpOperation,
+    mcpOperationRequestSchema,
+    z.object({ cancelled: z.boolean() }),
+    (input) => ({ cancelled: mcpClientService.cancelOperation(input) }),
+  );
+  handleInput(
+    IpcChannel.PrepareMcpLogin,
+    mcpOperationRequestSchema,
+    mcpOAuthPreparationSchema,
+    (input) => mcpClientService.prepareLogin(input),
+  );
+  handleInput(
+    IpcChannel.ContinueMcpLogin,
+    mcpLoginContinueRequestSchema,
+    mcpTestResultSchema,
+    (input) => mcpClientService.continueLogin(input),
+  );
+  handleInput(
+    IpcChannel.LogoutMcpConnection,
+    mcpOperationRequestSchema,
+    mcpMutationResultSchema,
+    async (input) => ({ connection: await mcpClientService.logout(input) }),
   );
 }
 

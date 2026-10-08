@@ -16,10 +16,20 @@ export const setMcpToolBinding = (
   connectionId: string,
   toolId: string,
   checked: boolean,
+  revisionId?: string,
+  contractHash?: string,
 ): McpToolBinding[] => {
   if (checked) {
     if (hasMcpToolBinding(bindings, connectionId, toolId)) return [...bindings];
-    return [...bindings, { connectionId, toolId }];
+    return [
+      ...bindings,
+      {
+        connectionId,
+        toolId,
+        ...(revisionId ? { connectionRevisionId: revisionId } : {}),
+        ...(contractHash ? { contractHash } : {}),
+      },
+    ];
   }
   return bindings.filter(
     (binding) => binding.connectionId !== connectionId || binding.toolId !== toolId,

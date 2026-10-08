@@ -17,6 +17,17 @@ describe('canToggleMcpTool', () => {
     expect(canToggleMcpTool('connecting', true)).toBe(true);
   });
 
+  it('pins the reviewed configuration and contract when adding a tool', () => {
+    expect(setMcpToolBinding([], 'connection', 'tool', true, 'revision', 'a'.repeat(64))).toEqual([
+      {
+        connectionId: 'connection',
+        toolId: 'tool',
+        connectionRevisionId: 'revision',
+        contractHash: 'a'.repeat(64),
+      },
+    ]);
+  });
+
   it('matches and toggles by connection plus tool identity', () => {
     const bindings = [
       { connectionId: 'connection-a', toolId: 'monthly_summary' },

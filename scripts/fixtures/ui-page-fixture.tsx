@@ -34,6 +34,7 @@ import {
   governanceApi,
   MemoryScenario,
 } from './ui-governance-fixture';
+import { McpScenario, mcpSteps } from './ui-mcp-fixture';
 
 // 业务资料为合成文本，帮助页读取随包指南；宿主不挂产品 Preload、SQLite、网络或文件动作。
 const longTitle = '季度复盘与合同条款核对：跨部门研究资料与长期项目的版本边界';
@@ -601,18 +602,19 @@ function layoutChecks(): {
   minimumFontPx: number;
 } {
   const memoryPage = new URLSearchParams(location.search).get('page') === 'memory';
+  const mcpPage = new URLSearchParams(location.search).get('page') === 'mcp';
   const schedulePage = new URLSearchParams(location.search).get('page') === 'schedule';
   const header = requireElement<HTMLElement>(
-    memoryPage ? '.section-header[data-variant="block"]' : '.page-header',
+    memoryPage || mcpPage ? '.section-header[data-variant="block"]' : '.page-header',
   ).getBoundingClientRect();
   if (
-    (!memoryPage && (header.height < 70 || Math.abs(header.width - innerWidth) > 1)) ||
+    (!memoryPage && !mcpPage && (header.height < 70 || Math.abs(header.width - innerWidth) > 1)) ||
     document.documentElement.scrollWidth > innerWidth + 1
   )
     throw new Error(
       `页面骨架或横向溢出异常：${header.height}/${document.documentElement.scrollWidth}/${innerWidth}`,
     );
-  if (!memoryPage) {
+  if (!memoryPage && !mcpPage) {
     const body = document.querySelector<HTMLElement>('.page-body');
     if (!body || Number.parseFloat(getComputedStyle(body).paddingTop) !== 12)
       throw new Error('生产页面正文入口不是 12px');
@@ -642,7 +644,7 @@ function layoutChecks(): {
   }
   const readableCopy = [
     ...document.querySelectorAll<HTMLElement>(
-      '.schedules-page .page-header h1, .schedules-page .section-header-title, .schedules-page .section-header-hint, .schedules-page .field-label, .schedules-page .field-hint, .schedules-page .status-note, .schedules-page .inline-error, .schedules-page .list-row-title, .schedules-page .list-row-detail, .schedules-page .list-row-meta, .schedules-page .schedule-source-document-path, .schedules-page .action-bar-hint, .modal-panel .section-header-title, .modal-panel .section-header-hint, .modal-panel .field-label, .modal-panel .field-hint, .modal-panel .status-note, .modal-panel .inline-error, .modal-panel .action-bar-hint',
+      '.mcp-settings .section-header-title, .mcp-settings .section-header-hint, .mcp-settings .field-label, .mcp-settings .field-hint, .mcp-settings .status-note, .mcp-settings .inline-error, .mcp-settings .list-row-title, .mcp-settings .list-row-detail, .mcp-settings .list-row-meta, .schedules-page .page-header h1, .schedules-page .section-header-title, .schedules-page .section-header-hint, .schedules-page .field-label, .schedules-page .field-hint, .schedules-page .status-note, .schedules-page .inline-error, .schedules-page .list-row-title, .schedules-page .list-row-detail, .schedules-page .list-row-meta, .schedules-page .schedule-source-document-path, .schedules-page .action-bar-hint, .modal-panel .section-header-title, .modal-panel .section-header-hint, .modal-panel .field-label, .modal-panel .field-hint, .modal-panel .status-note, .modal-panel .inline-error, .modal-panel .action-bar-hint',
     ),
   ].filter((element) => element.getBoundingClientRect().width > 0);
   const minimumFontPx = readableCopy.length
@@ -650,7 +652,7 @@ function layoutChecks(): {
         ...readableCopy.map((element) => Number.parseFloat(getComputedStyle(element).fontSize)),
       )
     : 0;
-  if (schedulePage && readableCopy.length > 0 && minimumFontPx < 12)
+  if ((schedulePage || mcpPage) && readableCopy.length > 0 && minimumFontPx < 12)
     throw new Error(`定时任务正文/说明字号低于 12px：${minimumFontPx}px`);
   return {
     headerHeight: header.height,
@@ -746,6 +748,45 @@ const helpSteps = [
 ];
 async function runStep(step: string): Promise<ReturnType<typeof layoutChecks>> {
   const hasText = (text: string): boolean => document.body.textContent?.includes(text) ?? false;
+  if (step === 'mcp-editor') {
+    click('新建连接');
+    await waitFor(() => Boolean(document.querySelector('.mcp-editor input')));
+    await setInput('名称', '本机经营资料与长标题 / Local contract review');
+  }
+  if (step === 'mcp-http') {
+    click('本地命令 · stdio');
+    await waitFor(() => Boolean(document.querySelector('[role="menuitem"]')));
+    click('HTTP · Streamable HTTP');
+    await waitFor(() =>
+      Boolean(document.querySelector('.mcp-editor input[placeholder="https://example.com/mcp"]')),
+    );
+    await setInput('服务地址', 'https://mcp.synthetic.invalid/' + 'long-path-'.repeat(16));
+  }
+  if (step === 'mcp-secret') {
+    click('无认证');
+    await waitFor(() => Boolean(document.querySelector('[role="menuitem"]')));
+    click('API Key 请求头');
+    await waitFor(() => Boolean(document.querySelector('#mcp-http-secret')));
+    await setInput('API Key 请求头名称', 'X-API-Key');
+    await setInput('API Key', 'synthetic-write-only-value');
+  }
+  if (step === 'mcp-failed-save') {
+    click('保存');
+    await waitFor(() => hasText('合成配置冲突'));
+  }
+  if (step === 'mcp-return') click('取消');
+  if (step === 'mcp-consent') {
+    click('登录');
+    await waitFor(() => hasText('contract.read'));
+  }
+  if (step === 'mcp-failed-login') {
+    click('在浏览器中继续');
+    await waitFor(() => hasText('合成授权失败'));
+  }
+  if (step === 'mcp-menu') {
+    click('更多操作');
+    await waitFor(() => Boolean(document.querySelector('[role="menu"]')));
+  }
   if (step === 'help-read') {
     await waitFor(() => Boolean(document.querySelector('.help-page')));
     const images = [...document.querySelectorAll<HTMLImageElement>('.help-page img')];
@@ -1199,17 +1240,19 @@ function PageScenario(): React.JSX.Element {
     }
     window.uiPageChecks = {
       steps:
-        pageId === 'artifact'
-          ? artifactSteps
-          : pageId === 'expert'
-            ? expertSteps
-            : pageId === 'memory'
-              ? memorySteps
-              : pageId === 'schedule'
-                ? scheduleSteps
-                : pageId === 'help'
-                  ? helpSteps
-                  : knowledgeSteps,
+        pageId === 'mcp'
+          ? mcpSteps
+          : pageId === 'artifact'
+            ? artifactSteps
+            : pageId === 'expert'
+              ? expertSteps
+              : pageId === 'memory'
+                ? memorySteps
+                : pageId === 'schedule'
+                  ? scheduleSteps
+                  : pageId === 'help'
+                    ? helpSteps
+                    : knowledgeSteps,
       runStep,
     };
     document.documentElement.dataset.fixtureReady = 'true';
@@ -1217,7 +1260,9 @@ function PageScenario(): React.JSX.Element {
   return (
     <main className="fixture-main">
       <section className="main-stage">
-        {pageId === 'artifact' ? (
+        {pageId === 'mcp' ? (
+          <McpScenario />
+        ) : pageId === 'artifact' ? (
           <ArtifactScenario />
         ) : pageId === 'expert' ? (
           <ExpertScenario />

@@ -1,6 +1,10 @@
 import type {
   McpConnectionSummary,
+  McpLifecycleRequest,
+  McpLoginContinueRequest,
   McpMutationResult,
+  McpOAuthPreparation,
+  McpReviewRequest,
   McpTestResult,
   SaveMcpConnectionRequest,
 } from '@betterwork/agent-protocol';
@@ -15,7 +19,13 @@ export interface McpConnectionsState {
   refresh: () => void;
   save: (input: SaveMcpConnectionRequest) => Promise<McpMutationResult>;
   remove: (id: string) => Promise<{ deleted: boolean }>;
-  test: (id: string) => Promise<McpTestResult>;
+  test: (id: string, operationId?: string) => Promise<McpTestResult>;
+  setLifecycle: (input: McpLifecycleRequest) => Promise<McpMutationResult>;
+  reviewTool: (input: McpReviewRequest) => Promise<McpMutationResult>;
+  cancel: (id: string, operationId: string) => Promise<{ cancelled: boolean }>;
+  prepareLogin: (id: string, operationId: string) => Promise<McpOAuthPreparation>;
+  continueLogin: (input: McpLoginContinueRequest) => Promise<McpTestResult>;
+  logout: (id: string) => Promise<McpMutationResult>;
 }
 
 export function useMcpConnections(): McpConnectionsState {
@@ -24,30 +34,44 @@ export function useMcpConnections(): McpConnectionsState {
   const [error, setError] = useState('');
   const refresh = useCallback((): void => {
     setLoading(true);
+    setError('');
     trackAction(
       window.betterwork.mcp
         .listConnections()
         .then(setConnections)
-        .catch((failure: unknown) => {
-          setError(describeActionError(failure, '读取 MCP 连接失败，请重试。'));
-        })
+        .catch((failure: unknown) =>
+          setError(describeActionError(failure, '读取 MCP 连接失败，请重试。')),
+        )
         .finally(() => setLoading(false)),
       '刷新 MCP 连接',
     );
   }, []);
   useEffect(() => refresh(), [refresh]);
-  const save = useCallback(
-    (input: SaveMcpConnectionRequest): Promise<McpMutationResult> =>
-      window.betterwork.mcp.saveConnection(input),
-    [],
-  );
-  const remove = useCallback(
-    (id: string): Promise<{ deleted: boolean }> => window.betterwork.mcp.deleteConnection({ id }),
-    [],
-  );
-  const test = useCallback(
-    (id: string): Promise<McpTestResult> => window.betterwork.mcp.testConnection({ id }),
-    [],
-  );
-  return { connections, loading, error, refresh, save, remove, test };
+  const request = (
+    id: string,
+    operationId: string = crypto.randomUUID(),
+  ): { id: string; operationId: string; expectedRevisionId: string } => {
+    const connection = connections.find((item) => item.id === id);
+    if (!connection?.revisionId) throw new Error('MCP 连接修订不可用，请重新读取。');
+    return { id, operationId, expectedRevisionId: connection.revisionId };
+  };
+  return {
+    connections,
+    loading,
+    error,
+    refresh,
+    save: (input) => window.betterwork.mcp.saveConnection(input),
+    remove: (id) =>
+      window.betterwork.mcp.deleteConnection({
+        id,
+        expectedRevisionId: request(id).expectedRevisionId,
+      }),
+    test: (id, operationId) => window.betterwork.mcp.testConnection(request(id, operationId)),
+    setLifecycle: (input) => window.betterwork.mcp.setLifecycle(input),
+    reviewTool: (input) => window.betterwork.mcp.reviewTool(input),
+    cancel: (id, operationId) => window.betterwork.mcp.cancelOperation(request(id, operationId)),
+    prepareLogin: (id, operationId) => window.betterwork.mcp.prepareLogin(request(id, operationId)),
+    continueLogin: (input) => window.betterwork.mcp.continueLogin(input),
+    logout: (id) => window.betterwork.mcp.logout(request(id)),
+  };
 }

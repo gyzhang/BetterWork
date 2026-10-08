@@ -338,6 +338,57 @@ describe('registerIpc', () => {
     retry.mockRestore();
   });
 
+  it('persists a remote MCP revision through typed IPC and enforces lifecycle and operation boundaries', async () => {
+    const saved = (await invoke(IpcChannel.SaveMcpConnection, {
+      name: 'HTTP IPC fixture',
+      transport: {
+        kind: 'streamable-http',
+        endpoint: 'https://mcp.example/mcp',
+        networkMode: 'public',
+        networkApproved: false,
+        authentication: { mode: 'none' },
+      },
+    })) as { connection: { id: string; revisionId: string; lifecycle: string } };
+    expect(saved.connection.lifecycle).toBe('disabled');
+    await expect(
+      invoke(IpcChannel.SetMcpLifecycle, {
+        id: saved.connection.id,
+        expectedRevisionId: 'stale',
+        lifecycle: 'enabled',
+      }),
+    ).rejects.toThrow();
+    await expect(
+      invoke(IpcChannel.SetMcpLifecycle, {
+        id: saved.connection.id,
+        expectedRevisionId: saved.connection.revisionId,
+        lifecycle: 'enabled',
+      }),
+    ).resolves.toMatchObject({ connection: { lifecycle: 'enabled' } });
+    await expect(
+      invoke(IpcChannel.TestMcpConnection, {
+        id: saved.connection.id,
+        expectedRevisionId: saved.connection.revisionId,
+        operationId: 'invalid',
+      }),
+    ).rejects.toThrow();
+    await expect(
+      invoke(IpcChannel.CancelMcpOperation, {
+        id: saved.connection.id,
+        expectedRevisionId: saved.connection.revisionId,
+        operationId: 'ba17e5bd-b537-4a68-9b32-231634967f0c',
+      }),
+    ).resolves.toEqual({ cancelled: false });
+    await expect(
+      invoke(IpcChannel.DeleteMcpConnection, {
+        id: saved.connection.id,
+        expectedRevisionId: saved.connection.revisionId,
+      }),
+    ).resolves.toEqual({ deleted: true });
+    await expect(
+      invoke(IpcChannel.GetMcpConnection, { id: saved.connection.id }),
+    ).resolves.toMatchObject({ lifecycle: 'archived', revisionId: saved.connection.revisionId });
+  });
+
   it('rejects malformed request data before it reaches a handler', async () => {
     await expect(
       invoke(IpcChannel.CreateTask, { workspaceId: '', title: '', goal: '' }),

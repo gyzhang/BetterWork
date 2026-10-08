@@ -8,6 +8,8 @@
 - 与旧任务的关系：[阶段 A](README.md) 的 A12/A16/A17/A21、[B0](tasks-b0.md) 的 B00-5、[专家计划](tasks-experts.md) 的 E55/E56 是本计划的耦合项；本计划不重复排期、不改写其状态，只在对应里程碑触发其复跑（见 §5 迁移映射）。
 - 验收边界：先验收 API/MCP/Skill 三类能力的技术链路、状态、范围、失败/取消与凭据保护是否自洽；不把示例专家/Skill 的产出业务质量作为功能通过条件。真实业务凭据、外部账号与签名身份缺失时保持 partial 并写明缺项。
 
+> 2026-10-08 MCP 专项：用户确认 [ADR-0043](../adr/0043-mcp-multi-transport-and-oauth.md) 的推荐方案并授权编码，CF30–CF32/CF40–CF41 按已实现 CF10/CF11 底座推进，不前置开发百度 profile。CF12/CF33/CF42 的人工或真实服务验收保持独立；下文旧卡的仅静态认证、排除 SSE/OAuth、自动重建并重放会话及自行运行完整 verify 等条款由 ADR-0043 与 ADR-0042 替代。
+
 ## 1. 交付顺序与完成口径
 
 | 里程碑 | 用户得到什么 | 结束位置 |
@@ -16,7 +18,7 @@
 | M1 · 契约与凭据 | 模型、搜索、MCP 的 Key 全部经 Main-only 加密；旧凭据一次性迁移可恢复；ADR-0024 转 Accepted | CF12 |
 | M2 · API 工具一等化 | 专家/任务能选具体百度 profile；`web_search` 从内置 allow-list 迁出；E55 的百度侧复跑 | CF23 |
 | M3 · stdio MCP 版本化 | MCP 连接 revision + 契约审阅 + per-Run 客户端；至少一个真实只读业务 MCP 走通 | CF33 |
-| M4 · 远程 MCP | Streamable HTTP 端到端可用；ADR-0025 转 Accepted | CF42 |
+| M4 · 远程 MCP | Streamable HTTP/旧 SSE 与 OAuth 真实接入验收；技术方案由 Accepted ADR-0043 管理 | CF42 |
 | M5 · 跨类收口 | A21 + E55 + E56 联合收口；设计 §9 验收矩阵逐条对齐；整体完成口径达成 | CF51 |
 
 不承诺未经验证的工期。每张卡记录实际开始/完成时间、变更、测试与遗留；M2 完成后按真实工作量更新后续排程。
@@ -28,8 +30,8 @@
 | 协议/迁移/持久化 | v23 迁移；IPC channel 85 项；`packages/agent-protocol` 是唯一定义入口 | 沿用现有分层；CF 系列新增字段按 capability-contracts §10.1 逐步迁移 |
 | 内置工具与 allow-list | 12 个内置工具、`BUILTIN_TOOL_NAMES` 常量在 [expert-service](../../apps/desktop/src/main/services/expert-service.ts#L30)、编辑器 checkbox 在 [ExpertsView](../../apps/desktop/src/renderer/src/views/ExpertsView.tsx#L35) | CF22 把 `web_search` 从 allow-list 迁到 API profile 选择，其余 7 个 checkbox 保持不变 |
 | 搜索配置 | 单表 `search_engine_configs`；`enabled` 全局唯一；明文 Key | CF11 迁移到 API service profile；CF20–CF22 引入 profile/revision/默认 |
-| MCP stdio | `McpClientService` 应用级 cache；无托管凭据；无版本化连接 | CF30–CF32 拆身份/修订/审阅/per-Run 客户端 |
-| MCP 远程 | 无 | CF40–CF42 新增 transport 变体 |
+| MCP stdio | 2026-10-09 任务分支已实现 v45 身份/修订、托管 env、合同审阅与 per-Run client | CF30–CF32 代码与自动化证据见本轮记录；真实业务验收留 CF33 |
+| MCP 远程 | 2026-10-09 任务分支已实现 Streamable HTTP/旧 SSE、现代/旧版本、静态认证与 OAuth | CF40–CF41 离线协议与页面检查；真实接入留 CF42 |
 | Skill 生命周期 | A1–A20 已落地；信任/依赖/沙箱边界不变 | 保持原状；只新增 API/MCP 的选择路径与 Skill 平行 |
 | Expert/Task/Run 上下文 | E11–E54 已落地；CAS、revision 与 snapshot 可用 | CF 系列扩字段并保留兼容投影 |
 | Developer ID | `security find-identity` 返回 0 身份 | CF00 前置动作；A21/E56 的签名走查依赖此项 |
@@ -51,13 +53,13 @@ CF00 不重复此前已证实且未受变更影响的测试；以最新提交、
 | CF21 | API profile 管理 IPC/UI 与设置迁移 | CF20 | todo | 待补 |
 | CF22 | 专家/任务/Run 的 API profile 绑定与兼容投影 | CF21 | todo | 待补 |
 | CF23 | M2 里程碑与百度端到端复跑 | CF22 | todo | 待补 |
-| CF30 | MCP 连接身份/修订与凭据 env 绑定 | CF12 | todo | 待补 |
-| CF31 | 工具 contract hash 与审阅记录 | CF30 | todo | 待补 |
-| CF32 | Per-Run MCP 客户端与取消收口 | CF31 | todo | 待补 |
-| CF33 | M3 里程碑与真实业务 MCP 接入 | CF32 | todo | 待补 |
-| CF40 | Streamable HTTP transport 与目的地校验 | CF33 | todo | 待补 |
-| CF41 | 远程 session、SSE 与运行时限制 | CF40 | todo | 待补 |
-| CF42 | M4 里程碑与远程 MCP 端到端 | CF41 | todo | 待补 |
+| CF30 | MCP 连接身份/修订与凭据 env 绑定 | CF10/CF11 实现 | doing | v45 保留旧连接/专家/任务/Run/Evidence/成果；配置与所有者凭据原子 CAS、移除清密钥；迁移/仓储/凭据回归通过。待真实存储与用户窗口验收；[完整证据](../acceptance/2026-10-09-mcp-connections.md) |
+| CF31 | 工具 contract hash 与审阅记录 | CF30 | doing | 确定性合同 hash、修订内审阅、写/破坏工具禁选、执行前重发现、变更阻断与绑定选择已落地；合同/服务/页面回归通过。待用户审阅操作验收；[完整证据](../acceptance/2026-10-09-mcp-connections.md) |
+| CF32 | Per-Run MCP 客户端与取消收口 | CF31 | doing | Run-owned client、测试隔离、旧检测不覆盖新目录、模型前取消终态、guardian 探测/子孙清理与实际绑定 Evidence 已落地；离线回归通过。待真实业务取消/重启验收；[完整证据](../acceptance/2026-10-09-mcp-connections.md) |
+| CF33 | M3 里程碑与真实业务 MCP 接入 | CF32 | partial | 真实业务 stdio server 尚未提供；保持未验收，不代签 E55。离线夹具见本轮证据；[完整证据](../acceptance/2026-10-09-mcp-connections.md) |
+| CF40 | 三种传输与目的地校验 | CF32 实现 | doing | 三种传输、DNS socket pinning、目的地隔离、JSON/SSE 限额、仅握手 404/405 显式回退已落地；HTTP/网络策略回归通过。待真实端点验收；[完整证据](../acceptance/2026-10-09-mcp-connections.md) |
+| CF41 | 版本协商、OAuth 与运行时限制 | CF40 | doing | SDK auto/legacy、PKCE/state/issuer/resource、预注册/CIMD/DCR、refresh 合并/CAS、登录取消/监听器清理、设置与通知已落地；OAuth/运行时/页面回归通过。待真实账号与 Keychain 重启验收；[完整证据](../acceptance/2026-10-09-mcp-connections.md) |
+| CF42 | M4 里程碑与远程 MCP 端到端 | CF41 | partial | 真实 HTTP/SSE/OAuth 账号尚未提供；保持未验收，不提升 ADR-0025 或关闭 M4；ADR-0043 已接受只代表方案已定案；[完整证据](../acceptance/2026-10-09-mcp-connections.md) |
 | CF50 | 跨类迁移回归与用户走查脚本 | CF42 | todo | 待补 |
 | CF51 | M5 里程碑、ADR Accepted 与整体收尾 | CF50 | todo | 待补 |
 
@@ -67,7 +69,7 @@ CF00 不重复此前已证实且未受变更影响的测试；以最新提交、
 
 ### 通用完成条件
 
-每卡开工前读 [AGENTS.md](../../AGENTS.md)、[capability-contracts](capability-contracts.md)、对应 ADR 与卡片"必读"清单；执行 `git status --short` 与 `git rev-parse --short HEAD`；用 rg 确认没有等价实现。代码卡完成：定向测试、`npm run typecheck` 与 `npm run verify` 通过（不接管道截尾）；影响真实操作时补一次桌面验收，`npm run verify` 与本卡桌面证据同时列在交接。全量验证失败不得标 done；桌面未走完保持 doing 并列缺项。文档/契约卡完成：链接、字段一致性与 `git diff --check` 通过，不跑无关构建。每卡写当日日志，任务板行状态与证据同时更新。
+每卡开工前读 [AGENTS.md](../../AGENTS.md)、[capability-contracts](capability-contracts.md)、对应 ADR 与卡片"必读"清单；执行 `git status --short` 与 `git rev-parse --short HEAD`；用 rg 确认没有等价实现。代码卡验证按 ADR-0042：typecheck、定向 lint/format、docs:check 与相关功能/重档测试；界面改动补现有 Electron 页面矩阵与 AI 走查。完整 verify 仅用户按需或夜间触发，记录覆盖范围与退出码；真实服务/用户验收未完成时明确列缺项，不能以离线替身代签。文档/契约卡完成：链接、字段一致性与 `git diff --check` 通过，不跑无关构建。每卡写当日日志，任务板行状态与证据同时更新。
 
 外部 HTTP/MCP 调用一律用可注入 `fetch`/transport，测试不触网；真实服务验收另列人工证据。密钥、用户资料、构建产物、`.betterwork/` 工作目录不入库。
 
@@ -241,115 +243,63 @@ CF00 不重复此前已证实且未受变更影响的测试；以最新提交、
 
 ### CF30 MCP 连接身份/修订与凭据 env 绑定
 
-- 前置：CF12。
-- 必读：[capability-contracts §3.1](capability-contracts.md)、[ADR-0025 §4](../adr/0025-remote-mcp-and-capability-bindings.md)、`mcp-client-service.ts`、`mcp-connection-repository.ts`。
-- 目标：拆现有 `mcp_connections` 为 identity + revisions；给 stdio 增加凭据 env 绑定；新连接默认 disabled/untested。
-- 落点：新表 `mcp_connection_revisions`、`mcp_connections` 扩 `lifecycle/current_revision_id`；协议判别联合 `stdio`；`McpConnectionRepository`；`McpClientService` 读取路径改造但暂不换 cache；UI 增加 transport 编辑与 credential slot；测试。
-- 工作：
-  1. 迁移：现有连接保 identity，生成初始 revision 1；旧记录 `enabled` 保留为"具备启用资格"，但执行仍需审阅合同（CF31）；未审阅的旧绑定在下次执行前保持不可执行。
-  2. 凭据 env 绑定：stdio `envBindings[]` 每条 `{ name, credentialId }`；变量名合法唯一；不继承 `process.env`；启动子进程时只注入白名单最小环境 + 显式 secret 映射。
-  3. Repository：save 追加 revision；`setLifecycle` 独立于 discovery/test；`updateDiscovery` 归属当前 revision。
-  4. UI：编辑面板可选"无凭据 / 环境变量绑定"；绑定走 CF10 credentials 写入通道，读取仅显示 `configured/available`。
-  5. 单元测试：revision 归属；env 变量名注入攻击（`PATH`、`DYLD_*`）拒绝；secret 不出现在 Repository 输出。
-- 失败/取消：非法 env 名或 credential 归属错误 Schema 层拒绝；不影响现有 stdio 连接运行。
-- 必测：`migrate.test.ts`；`mcp-connection-repository.test.ts`；`mcp-client-service.test.ts` 至少覆盖"未审阅旧连接仍可发现但不可调用"。
-- 完成：连接身份/修订可用；CF31 可开工。
-- 不做：不引入 contract hash（属 CF31）；不引入 per-Run 客户端（属 CF32）；不改现有 stdio 逻辑行为。
+- 实现依赖：CF10 与 CF11 已落地的凭据代码；CF12 真机验收独立保留。
+- 必读：[ADR-0043](../adr/0043-mcp-multi-transport-and-oauth.md)、[capability-contracts §3/§4](capability-contracts.md)、迁移与协议入口。
+- 范围：v45 identity + 不可变 revisions + catalogs/reviews/authorizations/run bindings；新建 disabled/untested；旧连接保持 ID、command/args/cwd 及历史引用，不补造审阅。
+- stdio `env[]` 区分普通值与 secret slot；`secrets[]` 使用所有者绑定的 keep/replace/clear 与 expectedVersion；环境最小化且禁止运行时注入变量。保存与密钥变更在一个 SQL 事务提交，加密在事务外；普通编辑保留旧 Run 客户端，主动密钥变更取消依赖方。
+- 必测：旧 v44→v45 真实 SQLite 迁移、幂等/FK/不可变性、配置 CAS、凭据 CAS/失败回滚、归属与归档清除。
+- 状态与范围：代码和离线回归已落地；真实 Keychain/用户窗口验收待完成，不代签 CF12。
 
 ### CF31 工具 contract hash 与审阅记录
 
-- 前置：CF30。
-- 必读：[capability-contracts §3.2](capability-contracts.md)、[ADR-0025 §4](../adr/0025-remote-mcp-and-capability-bindings.md)、`mcp-client-service.ts` `toToolSummary/discover/createAgentTools`。
-- 目标：定义 canonical contract hash 与审阅记录；执行前比对。
-- 落点：`services/mcp-tool-contract.ts`（canonicalization + hash）；`persistence/mcp-tool-review-repository.ts`；协议 `McpToolBinding` 扩 `connectionRevisionId/contractHash`；`expert-service.ts` availability；UI 显示"未审阅/已审阅/已变更"；测试。
-- 工作：
-  1. hash 覆盖 description + inputSchema + outputSchema + annotations；对 key 顺序稳定；输出 sha256 hex。
-  2. `mcp_tool_reviews` 表：`(connection_id, connection_revision_id, tool_id, contract_hash, reviewed_at)` 唯一；reviewed 记录只在显式审阅动作时写入。
-  3. `createAgentTools` 前校验：绑定的 `contractHash` 与最新 discovery 的一致；不一致拒绝并不注册工具；缺失审阅也拒绝。
-  4. UI：工具行显示"标记为只读使用"复选框与当前 hash 前 8 位；变更时行内提示"合同已变"要求重审。
-  5. 单元测试：同 schema 的 key 顺序变化 hash 稳定；描述变化 hash 变；未审阅执行拒绝；审阅后成功；变更要求重审。
-- 失败/取消：`mcp_tool_missing/mcp_contract_changed/mcp_tool_not_approved` 三码；不静默剔除工具。
-- 必测：`mcp-tool-contract.test.ts`；`mcp-client-service.test.ts`；`run-service.test.ts` 覆盖 MCP 工具因合同变更被拒。
-- 完成：审阅模型生效；CF32 可开工。
-- 不做：不引入通用审批引擎；不改 remote transport（尚无）。
+- 实现依赖：CF30；依据：[capability-contracts §3.3](capability-contracts.md)。
+- hash 包含 description/inputSchema/outputSchema/annotations 的 canonical JSON；显式审阅绑定 revision/tool/hash。新或变化工具未审阅；明确非只读/破坏工具不可用，缺 annotations 需人工确认。
+- 设置中展开合同并「确认只读合同」；专家/任务选择携带修订/hash。旧未审阅绑定保留历史，下一执行要求审阅并重新选择，不静默剔除。
+- 每 Run 首次使用重新发现并核对合同；input/output schema 本地校验，拒绝远程 ref。失败目录保留最后成功内容并标 stale，Run 使用自己的发现快照。
+- 必测：hash 顺序稳定/语义变化、未审阅/变更阻断、重复/混修订选择、Schema/输出限制、正确 Evidence 归属。
+- 状态：代码与离线回归已落地；待用户工具审阅/选择窗口验收。没有通用审批引擎。
 
 ### CF32 Per-Run MCP 客户端与取消收口
 
-- 前置：CF31。
-- 必读：[capability-contracts §7.3](capability-contracts.md)、[ADR-0025 §5/§6](../adr/0025-remote-mcp-and-capability-bindings.md)、`mcp-client-service.ts` `active` cache、`run-service.ts` `consume` 生命周期、`shutdown()`。
-- 目标：把 MCP 客户端从"应用级 mutable cache"改为"Run 拥有"；连接测试与 Run 客户端互不影响；单 Run 内同连接共享一份客户端。
-- 落点：`McpClientService` 拆 `RunScopedClients`；`RunService.consume` 在 finally 关闭本 Run 客户端；测试取消与断线；日志脱敏 session id。
-- 工作：
-  1. `createAgentTools` 返回的 AgentTool 内部持有 `runId`；`callTool` 走本 Run 客户端映射；跨 Run 不共享。
-  2. 连接测试路径独立 client 生命周期，不进入 Run 池；测试取消不干扰活跃 Run。
-  3. Run 结束/取消时关闭本 Run 客户端；stdio 子进程沿用 [mac-process-supervisor](../../apps/desktop/src/main/infrastructure/mac-process-supervisor.ts)；清理失败按现有兜底显式记录。
-  4. Cancellation 传到 SDK 单次调用；late output 被丢弃且不写 Evidence。
-  5. MCP transport session id 与 BetterWork Session 名区分；日志/错误消息不出现 session id。
-- 失败/取消：`shutdown()` 保证全部活跃客户端关闭；启动失败只影响该 Run；不影响其他 Run。
-- 必测：两 Run 同连接并发其一取消不影响另一；测试取消不中断活跃 Run；stdio 清理失败可见；`npm run verify` 全绿。
-- 完成：per-Run 生命周期落地。
-- 不做：不引入 HTTP transport；不宣称远程可用。
+- 实现依赖：CF31；依据：[capability-contracts §7](capability-contracts.md)、ADR-0043。
+- 同 Run 同连接共享 client，其他 Run/检测独立；取消只作用于所属 operation/client。较旧检测即使晚到也不能覆盖新目录，配置普通编辑不改旧 Run 快照。
+- Run 终态前释放 MCP；模型派发前取消也只写一次 cancelled，清理失败显式收口。关闭/退出沿用 macOS guardian，版本探测的短暂进程及子孙同样受管。
+- 停用/移除/退出登录/主动凭据轮换取消受影响 Run。历史绑定记录 revision/hash/alias/凭据版本，Evidence 反查实际绑定，不解析 alias；不存 session/token/env。
+- 必测：两 Run 隔离、检测取消、晚到结果、主动撤销、模型前取消、探测退出/子孙清理及失败路径。
+- 状态：代码与离线回归已落地；真实业务 server 取消/重启验收留 CF33。
 
 ### CF33 M3 里程碑与真实业务 MCP 接入
 
-- 前置：CF32。
-- 目标：M3 达成；至少一个真实只读业务 MCP 端到端跑通；E55 的 MCP 腿收口。
-- 工作：
-  1. 用户选定并配置一个真实只读业务 MCP（例如内部财务月报的 stdio 客户端）；审阅工具合同；在内置研究分析专家里预设并召唤走查。
-  2. 走查记录写入新的 `docs/acceptance/YYYY-MM-DD-capability-mcp.md`：包含连接 revision、审阅 hash、Run ID、Evidence、跨 Workspace 隔离与断线重启后的取消收口。
-  3. 更新 [E55 走查记录](../acceptance/2026-09-15-expert-human-acceptance.md) 的"MCP"行：把"未验收"改为"CF33 真实业务 MCP 已跑通"；不关闭 E55 整卡（连续两期腿仍在）。
-  4. 若真实端点不可得，本卡保持 partial；CF40 不阻塞起步（Streamable HTTP 可先用离线 fixture 走通）。
-- 失败/取消：设计验收 MCP-2、MCP-3、MCP-4、MCP-5 有真实走查记录；EXP-2 有走查记录。
-- 必测：`npm run verify` 全绿。
-- 完成：M3 关闭或标 partial + 缺项。
-- 不做：不引入远程 transport。
+- 验收依赖：CF30–CF32；不阻塞本次 CF40/CF41 实现。
+- 真实只读业务 stdio server 尚未提供，保持 partial。用户配置后审阅合同、专家预设并召唤，记录 revision/hash/Run/Evidence、跨 Workspace 与断线重启/取消。
+- 只在取得真实证据后更新 E55 的 MCP 腿；不关闭 E55 连续两期整卡。离线夹具与页面矩阵不替代本卡。
 
-### CF40 Streamable HTTP transport 与目的地校验
+### CF40 三种传输与目的地校验
 
-- 前置：CF33（可并行进入，按串行提交）。
-- 必读：[capability-contracts §3.1](capability-contracts.md)、[ADR-0025 §1/§2/§3](../adr/0025-remote-mcp-and-capability-bindings.md)、`node_modules/@modelcontextprotocol/client/dist/index.d.mts`、`mcp-client-service.ts`。
-- 目标：为 MCP 添加 `streamable-http` transport 变体；目的地与认证策略严格边界。
-- 落点：`McpTransport` 协议扩 `streamable-http`；`infrastructure/mcp-http-fetch.ts`（注入 fetch + DNS/TLS 校验 + 目的地策略）；UI 编辑面板；测试。
-- 工作：
-  1. 认证三模式 `none/bearer/api-key-header`，凭据经 CF10 credentials；header 名校验拒绝 CR/LF 与保留头。
-  2. `networkMode`：`public` 只允许公网 HTTPS；`private` 需显式确认；`loopback` 允许 HTTP + 字面回环；三态均拒绝 URL user-info/query/fragment 与重定向。
-  3. DNS 校验用可注入解析器；实际连接前二次核验；覆盖 IPv6 映射、link-local、metadata、组播与 unspecified。
-  4. `StreamableHTTPClientTransport` 使用 SDK 的注入 fetch；不关闭证书验证选项。
-  5. 单元测试：三种认证模式；错误 destination 拒绝；redirect 拒绝；CR/LF header 名拒绝；IPv6 案例；`loopback` 之外的 HTTP 拒绝。
-- 失败/取消：`endpoint_not_allowed/redirect_not_allowed/tls_failed/authentication_failed/authorization_denied/oauth_required` 分类返回；不静默 retry。
-- 必测：`mcp-client-service.test.ts` 扩；`npm run verify` 全绿。
-- 完成：远程 transport 可配置与发现工具，不宣称端到端。
-- 不做：不宣称"完整 MCP 授权"；不引入 OAuth 浏览器流。
+- 实现依赖：CF32；依据：ADR-0043、[capability-contracts §3.1](capability-contracts.md)。
+- 支持 stdio、Streamable HTTP、明确的旧 HTTP+SSE；静态 none/Bearer/API-key header 与 OAuth 配置分开。旧 SSE 同源 POST endpoint 与协议查询逐请求校验；HTTP 兼容回退默认关闭，仅握手 404/405 可用，认证/工具错误不回退或重放。
+- 公网/私网 HTTPS；本机 HTTP 只允许显式授权的字面 loopback；配置 URL 禁 user-info/query/fragment，无证书绕过。所有 DNS 答案校验后在 socket lookup 固定实际地址，拒绝混合/特殊网络与跨目的地重定向。
+- 落点：共享 Zod、`mcp-network-policy.ts`、SDK transport、设置表单与可注入 fetch。认证与业务目的地独立，不放宽 web_fetch。
+- 必测：modern/legacy/旧 SSE、JSON/SSE、会话隔离、404/405 回退与 401 拒绝、跨源 endpoint、IPv6/mapped/DNS/重定向/限额/abort。
+- 状态：代码与离线回归已落地；真实远程验收留 CF42。
 
-### CF41 远程 session、SSE 与运行时限制
+### CF41 版本协商、OAuth 与运行时限制
 
-- 前置：CF40。
-- 必读：[capability-contracts §8](capability-contracts.md)、[ADR-0025 §6](../adr/0025-remote-mcp-and-capability-bindings.md)。
-- 目标：session 生命周期、SSE 响应/恢复、字节/条数/字符上限、超时。
-- 落点：`McpClientService`；`services/mcp-limits.ts`；测试。
-- 工作：
-  1. Connect 10s、discovery 30s、tool call 60s；progress 不重置 deadline。
-  2. 每 message/SSE 事件 ≤ 1 MiB 在流式解析时截断；文本与结构化结果统一 ≤ 100,000 字符；discovery ≤ 200 工具。
-  3. MCP session id 处理：401/404/会话过期 → 无效化 + 重新初始化，不 replay 不确定 `tools/call`；有界 SSE 恢复原响应不重新提交调用。
-  4. 关闭客户端时尝试 HTTP DELETE 终止会话；stdio 走 supervisor。
-  5. 单元测试：超时、超字节、超条数、session 404、SSE 恢复、cancel mid-stream。
-- 失败/取消：所有边界以 `tool_timeout/rate_limited/result_too_large/connection_timeout` 分类；不掩盖。
-- 必测：设计验收 MCP-1、MCP-5、MCP-6 有离线 fixture 覆盖；`npm run verify` 全绿。
-- 完成：远程 MCP 端到端可解释；CF42 可开工。
-- 不做：不宣称"真实远程"（属 CF42）。
+- 实现依赖：CF40；依据：ADR-0043、[capability-contracts §3.2/§8](capability-contracts.md)。
+- 官方 SDK 2.0.0 明确 auto/legacy 协商；modern 无会话/initialize/独立 GET/Last-Event-ID，legacy 使用拥有方临时会话。业务断线/401/404 不自动重发不确定调用，下次显式操作可重建。
+- connect 10 秒、完整 discovery 30 秒、调用 60 秒；progress 不延长硬限；最多 200 工具、50 选择、1 MiB 消息/事件与 100,000 字符结果。`input_required` 明确失败。
+- OAuth 先发现并审阅 issuer/scope，再系统浏览器与 loopback 回调；PKCE S256/state/issuer/resource 校验；预注册、已有 HTTPS CIMD、DCR 兼容及缺注册信息修复。私网认证 origin 独立授权，不虚构 metadata URL。
+- token/client/refresh bundle 加密按所有者/issuer/resource 保存；共享有界 refresh、scope 不扩张、轮换 CAS，取消 waiter 不影响另一方；invalid_grant 要求重新登录。Run 不弹浏览器，登出只声明本地清理。授权码/state/verifier 仅内存，取消/超时/退出释放监听器。
+- 设置反馈复用 InlineError/TransientToast；登录/检测长操作结果进入消息中心，正常取消不报失败。所有操作使用 UUID 与 revision CAS，失败保留输入。
+- 必测：OAuth 预注册/CIMD/DCR、PKCE/state/iss/resource/metadata 拒绝、取消与晚 callback、占用端口、共享 refresh 与 invalid_grant、CAS 竞争、UI 明暗/窄窗/减动效/键盘。
+- 状态：代码、自动化与 AI 生产组件页面走查已落地；真实 OAuth/Keychain/重启与用户窗口验收留 CF42。
 
 ### CF42 M4 里程碑与远程 MCP 端到端
 
-- 前置：CF41。
-- 目标：M4 达成；ADR-0025 从 Proposed 转 Accepted；真实远程只读 MCP 端到端跑通。
-- 工作：
-  1. 用户提供/配置一个真实 Streamable HTTP 只读 MCP；审阅合同；专家预设；召唤走查；写入 `docs/acceptance/YYYY-MM-DD-capability-mcp.md` 的远程段。
-  2. ADR-0025 状态升 Accepted，标注"CF42 生效"；`docs/adr/README.md` 与 [capability-contracts](capability-contracts.md) §3 状态同步。
-  3. 更新 [docs/05-capability-system.md §8 表](../05-capability-system.md)：MCP 只读工具行加"stdio 与 Streamable HTTP"。
-- 失败/取消：真实端点缺失时保持 partial；不合并 CF40/CF41 的证据。
-- 必测：真实走查 + 全部设计验收。
-- 完成：M4 关闭。
-- 不做：不引入 MCP Resource/Prompt/sampling/elicitation；不引入写型工具。
+- 验收依赖：CF40/CF41 的代码与自动化证据；真实服务/账号可用。
+- 真实 HTTP/SSE/OAuth 服务尚未提供，保持 partial；配置并审阅后走专家/任务调用、scope 修复、两 Run 取消、logout/重启与 Evidence，逐条记录。
+- 方案状态由 Accepted ADR-0043 管理，不以离线测试提升 ADR-0025 或关闭里程碑；API/CF12/A/B0/E 等验收独立保留。
+- 不引入 Resources/Prompts/sampling/elicitation、写型工具、Tasks/MCP Apps 扩展。
 
 ### CF50 跨类迁移回归与用户走查脚本
 
@@ -392,4 +342,4 @@ CF 系列不产生第二套任务板：A/B0/E 的原卡状态仍以各自原任�
 
 每卡交接说明按 [执行手册](README.md) §4 交接模板输出：完成的具体行为（含失败/取消）、修改文件、测试命令与退出码、真实验收证据、已更新日志与任务行、下一可执行卡。若只完成代码而缺人工验收，保持 doing 并列缺项；不依靠一句"基本完成"跨过门槛。
 
-CF12、CF23、CF33、CF42、CF51 是里程碑验收点；其余是实现/契约切片。里程碑不升，下一里程碑起点不开。
+CF12、CF23、CF33、CF42、CF51 是里程碑验收点；其余是实现/契约切片。已授权的 MCP 专项实现依赖按 ADR-0043 推进，真实验收依赖分别保留；不得由某项实现通过推导其他里程碑已关闭。

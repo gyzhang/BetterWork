@@ -1,8 +1,4 @@
-import type {
-  McpConnectionSummary,
-  ModelProfileSummary,
-  SaveMcpConnectionRequest,
-} from '@betterwork/agent-protocol';
+import type { ModelProfileSummary } from '@betterwork/agent-protocol';
 import { DEFAULT_MAX_SKILL_TOOL_ROUNDS, MAX_SKILL_TOOL_ROUNDS } from '@betterwork/agent-protocol';
 import React from 'react';
 
@@ -29,7 +25,7 @@ import { SectionHeader } from '../components/SectionHeader';
 import { StatusNote } from '../components/StatusNote';
 import { Switch } from '../components/Switch';
 import { SegmentedControl } from '../components/Tabs';
-import { TextArea, TextField } from '../components/TextField';
+import { TextField } from '../components/TextField';
 import { TransientToast } from '../components/TransientToast';
 import type { ConversationAddresses } from '../hooks/use-conversation-addresses';
 import type { McpConnectionsState } from '../hooks/use-mcp-connections';
@@ -38,11 +34,11 @@ import type { MemorySuggestionsState } from '../hooks/use-memory-suggestions';
 import { useRunSettings } from '../hooks/use-run-settings';
 import { useRuntimeComponents } from '../hooks/use-runtime-components';
 import { useSearchEngineSettings } from '../hooks/use-search-engine-settings';
-import { useTransientToast } from '../hooks/use-transient-toast';
 import { PlusIcon } from '../icons';
-import { reportAction, trackAction } from '../lib/async-action';
+import { trackAction } from '../lib/async-action';
 import { connectionStatusName, roleName } from '../lib/labels';
 import type { SettingsTab } from '../lib/view-types';
+import { McpSettings } from './McpSettings';
 import { type MemoryManagementTarget, MemoryPage } from './MemoryView';
 
 export interface SettingsPageProps {
@@ -612,260 +608,4 @@ export function SearchSettings(): React.JSX.Element {
   );
 }
 
-const mcpStatusName: Record<McpConnectionSummary['status'], string> = {
-  unconfigured: '未检测',
-  connecting: '检测中',
-  ready: '可用',
-  failed: '失败',
-  disconnected: '已断开',
-};
-
-interface McpFormState {
-  name: string;
-  command: string;
-  args: string;
-  cwd: string;
-}
-
-const emptyMcpForm = (): McpFormState => ({ name: '', command: '', args: '', cwd: '' });
-
-function McpSettings({ state }: { state: McpConnectionsState }): React.JSX.Element {
-  const [form, setForm] = React.useState<McpFormState>(emptyMcpForm);
-  const [editingId, setEditingId] = React.useState<string>();
-  const [editorOpen, setEditorOpen] = React.useState(false);
-  const [error, setError] = React.useState('');
-  const { toast, showToast, dismissToast } = useTransientToast();
-  const [busyId, setBusyId] = React.useState<string>();
-  const beginEdit = (connection?: McpConnectionSummary): void => {
-    setError('');
-    if (!connection) {
-      setEditingId(undefined);
-      setForm(emptyMcpForm());
-      setEditorOpen(true);
-      return;
-    }
-    setEditingId(connection.id);
-    setEditorOpen(true);
-    setForm({
-      name: connection.name,
-      command: connection.transport.command,
-      args: connection.transport.args.join('\n'),
-      cwd: connection.transport.cwd ?? '',
-    });
-  };
-  const save = (): void => {
-    if (!form.name.trim() || !form.command.trim()) {
-      setError('连接名称和启动命令不能为空。');
-      return;
-    }
-    const input: SaveMcpConnectionRequest = {
-      ...(editingId ? { id: editingId } : {}),
-      name: form.name.trim(),
-      transport: {
-        kind: 'stdio',
-        command: form.command.trim(),
-        args: form.args
-          .split('\n')
-          .map((arg) => arg.trim())
-          .filter(Boolean),
-        ...(form.cwd.trim() ? { cwd: form.cwd.trim() } : {}),
-      },
-    };
-    setBusyId(editingId ?? 'new');
-    setError('');
-    reportAction(
-      state
-        .save(input)
-        .then(() => {
-          setEditorOpen(false);
-          setEditingId(undefined);
-          setForm(emptyMcpForm());
-          state.refresh();
-          showToast('success', '连接已保存。请检测后再授权具体工具。');
-        })
-        .finally(() => setBusyId(undefined)),
-      (message) => showToast('error', message),
-      '保存 MCP 连接失败，请重试。',
-    );
-  };
-  const test = (connection: McpConnectionSummary): void => {
-    setBusyId(connection.id);
-    setError('');
-    reportAction(
-      state
-        .test(connection.id)
-        .then((result) => {
-          state.refresh();
-          showToast('success', `${result.connection.name} 已发现 ${result.tools.length} 个工具。`);
-        })
-        .finally(() => setBusyId(undefined)),
-      (message) => showToast('error', message),
-      '检测 MCP 连接失败，请重试。',
-    );
-  };
-  const remove = (connection: McpConnectionSummary): void => {
-    setBusyId(connection.id);
-    setError('');
-    reportAction(
-      state
-        .remove(connection.id)
-        .then(() => {
-          if (editingId === connection.id) {
-            setEditorOpen(false);
-            setEditingId(undefined);
-            setForm(emptyMcpForm());
-          }
-          state.refresh();
-          showToast('success', '连接已删除，历史任务中的绑定仍会保留为失效记录。');
-        })
-        .finally(() => setBusyId(undefined)),
-      (message) => showToast('error', message),
-      '删除 MCP 连接失败，请重试。',
-    );
-  };
-  return (
-    <section className="settings-section mcp-settings">
-      <SectionHeader
-        variant="block"
-        eyebrow="MCP"
-        title="连接外部工作能力"
-        hint="连接只保存本机启动命令和参数。检测后，专家和当前任务分别选择具体工具；新增工具不会自动进入既有选择。"
-        actions={
-          <Button variant="primary" size="lg" type="button" onClick={() => beginEdit()}>
-            新建连接
-          </Button>
-        }
-      />
-      {state.loading ? (
-        <InlineLoading label="正在加载连接…" />
-      ) : state.error ? (
-        // 读失败不能说成「还没有 MCP 连接」——清单没读回来，界面并不知道它是不是空的。
-        <InlineError message={state.error} onRetry={state.refresh} />
-      ) : state.connections.length === 0 ? (
-        <EmptyNotice
-          title="还没有 MCP 连接"
-          detail="添加一个 stdio 服务后，在专家配置或任务资料面板选择工具。"
-        />
-      ) : (
-        <div className="mcp-connection-list">
-          {state.connections.map((connection) => (
-            <ListRow
-              key={connection.id}
-              as="article"
-              title={connection.name}
-              detail={`${connection.transport.command} · ${connection.tools.length} 个已发现工具`}
-              meta={
-                <>
-                  <ConnectionStatus
-                    status={connection.status}
-                    label={mcpStatusName[connection.status]}
-                  />
-                  {connection.failureMessage ? ` · ${connection.failureMessage}` : ''}
-                </>
-              }
-              actions={
-                <>
-                  <Button
-                    variant="quiet"
-                    size="sm"
-                    type="button"
-                    disabled={busyId === connection.id}
-                    onClick={() => test(connection)}
-                  >
-                    检测
-                  </Button>
-                  <Button
-                    variant="quiet"
-                    size="sm"
-                    type="button"
-                    onClick={() => beginEdit(connection)}
-                  >
-                    编辑
-                  </Button>
-                  <Button
-                    variant="quiet"
-                    size="sm"
-                    tone="danger"
-                    type="button"
-                    disabled={busyId === connection.id}
-                    onClick={() => remove(connection)}
-                  >
-                    删除
-                  </Button>
-                </>
-              }
-            >
-              {connection.tools.length > 0 && (
-                <div className="mcp-tool-summary">
-                  {connection.tools.map((tool) => (
-                    <Badge key={tool.id}>{tool.name}</Badge>
-                  ))}
-                </div>
-              )}
-            </ListRow>
-          ))}
-        </div>
-      )}
-      {editorOpen && (
-        <div className="mcp-editor">
-          <SectionHeader title={editingId ? '编辑连接' : '新建连接'} />
-          <Field label="名称">
-            <TextField
-              size="md"
-              value={form.name}
-              onChange={(event) => setForm({ ...form, name: event.target.value })}
-            />
-          </Field>
-          <Field label="启动命令">
-            <TextField
-              size="md"
-              value={form.command}
-              onChange={(event) => setForm({ ...form, command: event.target.value })}
-              placeholder="node"
-            />
-          </Field>
-          <Field label="参数（每行一个）">
-            <TextArea
-              mono
-              rows={3}
-              value={form.args}
-              onChange={(event) => setForm({ ...form, args: event.target.value })}
-            />
-          </Field>
-          <Field label="工作目录（可选）">
-            <TextField
-              size="md"
-              value={form.cwd}
-              onChange={(event) => setForm({ ...form, cwd: event.target.value })}
-            />
-          </Field>
-          {error && <InlineError message={error} />}
-          <ActionBar as="div" label="保存 MCP 连接">
-            <Button
-              variant="text"
-              size="md"
-              type="button"
-              onClick={() => {
-                setEditorOpen(false);
-                setEditingId(undefined);
-                setForm(emptyMcpForm());
-              }}
-            >
-              取消
-            </Button>
-            <Button
-              variant="primary"
-              size="md"
-              type="button"
-              disabled={busyId !== undefined}
-              onClick={save}
-            >
-              保存
-            </Button>
-          </ActionBar>
-        </div>
-      )}
-      {toast && <TransientToast {...toast} onDismiss={dismissToast} />}
-    </section>
-  );
-}
+// MCP uses its existing settings host and shared feedback/form primitives.

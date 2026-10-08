@@ -140,6 +140,7 @@ async function run(): Promise<void> {
       '--probe-keyboard',
       '--app-only',
       '--schedule-only',
+      '--mcp-only',
     ].includes(argument),
   )
     ? []
@@ -236,9 +237,11 @@ async function run(): Promise<void> {
     ? []
     : process.argv.includes('--probe-keyboard')
       ? ['expert']
-      : process.argv.includes('--schedule-only')
-        ? ['schedule']
-        : ['artifact', 'knowledge', 'expert', 'memory', 'schedule', 'help']) {
+      : process.argv.includes('--mcp-only')
+        ? ['mcp']
+        : process.argv.includes('--schedule-only')
+          ? ['schedule']
+          : ['artifact', 'knowledge', 'expert', 'memory', 'schedule', 'help', 'mcp']) {
     for (const mode of ['light', 'dark']) {
       for (const width of [760, 1380]) {
         for (const reducedMotion of [false, true]) {
@@ -332,7 +335,8 @@ async function run(): Promise<void> {
   }
   if (
     !process.argv.includes('--probe-page-feedback') &&
-    !process.argv.includes('--schedule-only')
+    !process.argv.includes('--schedule-only') &&
+    !process.argv.includes('--mcp-only')
   ) {
     const { runAppJourney } = await import('./ui-app-journey');
     results.push(

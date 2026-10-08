@@ -8,7 +8,7 @@ import {
   type ScheduleChangedEvent,
   scheduleChangedEventSchema,
 } from '@betterwork/agent-protocol';
-import { app, BrowserWindow, powerMonitor } from 'electron';
+import { app, BrowserWindow, powerMonitor, shell } from 'electron';
 
 import { ElectronSafeStorageAdapter } from './infrastructure/credential-store';
 import {
@@ -174,7 +174,10 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
   if (interruptedJobs > 0) {
     console.warn(`记忆提炼作业启动收口：interrupted=${String(interruptedJobs)}`);
   }
-  const mcpClientService = new McpClientService(store);
+  const mcpClientService = new McpClientService(store, {
+    guardian: resolveGuardianRuntime(__dirname),
+    openBrowser: (url) => shell.openExternal(url),
+  });
   const webFetchService = new WebFetchService();
   const officeParser = new OfficeParserService();
   startupReadiness.push(
@@ -456,6 +459,22 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
   const notifications = new NotificationService(store.notifications, getWindow, (notificationId) =>
     notificationActivationRef.current?.activate(notificationId),
   );
+  mcpClientService.setOperationReporter((name, success, phase) => {
+    notifications.create({
+      kind: 'system',
+      level: success ? 'success' : 'error',
+      title:
+        phase === 'login'
+          ? success
+            ? 'MCP 登录与检测完成'
+            : 'MCP 登录或检测失败'
+          : success
+            ? 'MCP 检测完成'
+            : 'MCP 检测失败',
+      detail: name,
+      target: { kind: 'settings', section: 'mcp' },
+    });
+  });
   started.ensureWindow();
   const embeddingClient = new EmbeddingClient({
     models: store.models,
@@ -589,6 +608,9 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     knowledgeWorker.extractor,
     (runId) => scheduleOutcomeService.finalizeRun(runId),
   );
+  mcpClientService.setRunCanceller((runId) => {
+    runs.cancel(runId);
+  });
   started.runs = runs;
 
   const schedulePreflight = new SchedulePreflightService(store, {

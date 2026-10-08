@@ -43,12 +43,27 @@ export function McpToolBindingsPicker({
                   id: tool.id,
                   label: tool.name,
                   checked,
-                  disabled: !canToggleMcpTool(connection.status, checked),
+                  disabled:
+                    !checked &&
+                    (!canToggleMcpTool(connection.status, checked) ||
+                      connection.lifecycle !== 'enabled' ||
+                      !tool.reviewed ||
+                      !tool.contractHash ||
+                      connection.stale === true),
                   ...(tool.description ? { hint: tool.description } : {}),
                 };
               })}
               onToggle={(toolId, checked) =>
-                onChange(setMcpToolBinding(bindings, connection.id, toolId, checked))
+                onChange(
+                  setMcpToolBinding(
+                    bindings,
+                    connection.id,
+                    toolId,
+                    checked,
+                    connection.revisionId,
+                    connection.tools.find((tool) => tool.id === toolId)?.contractHash,
+                  ),
+                )
               }
             />
           )}

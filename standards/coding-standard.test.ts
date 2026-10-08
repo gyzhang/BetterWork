@@ -25,6 +25,12 @@ import {
 /** docs/10 §10.1：内嵌设置分区沿用宿主骨架，不另造普通管理页。 */
 const PAGE_SHAPE_EXCEPTIONS: readonly PageShapeException[] = [
   {
+    file: 'apps/desktop/src/renderer/src/views/McpSettings.tsx',
+    component: 'McpSettings',
+    required: ['apps/desktop/src/renderer/src/components/SectionHeader.tsx#SectionHeader'],
+    reason: 'MCP 是既有设置宿主内嵌分区，拆出文件承载多传输与登录表单，不另造页面骨架',
+  },
+  {
     file: 'apps/desktop/src/renderer/src/views/schedules/ScheduleSourcePicker.tsx',
     component: 'ScheduleSourcePicker',
     required: [],

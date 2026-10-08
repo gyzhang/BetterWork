@@ -1,5 +1,11 @@
 # MVP 与路线图
 
+## 设置中的 MCP 多传输与 OAuth — 2026-10-08 定案，2026-10-09 实现
+
+用户审阅预览后按推荐 D1–D5 定案并授权编码，[ADR-0043](adr/0043-mcp-multi-transport-and-oauth.md) 已 Accepted。[设置中的 MCP](designs/mcp-connections.md)按 MCP 2026-07-28 实现本地 stdio、Streamable HTTP（含显式授权的本机 HTTP）、旧 HTTP+SSE 与 OAuth 浏览器登录，支持新旧版本协商、受管凭据、配置修订、工具合同审阅、Run 独立客户端及取消/历史保留。
+
+代码与离线自动化、AI 生产组件页面检查已落地，证据见 [CF 唯一任务板](development/tasks-capability-foundation.md)与[本轮记录](acceptance/2026-10-09-mcp-connections.md)。真实业务 server/OAuth 账号、真机 Keychain 与用户窗口验收仍待完成；CF33/CF42 保持 partial，不代签 API 或 A/B0/E 等既有验收。用户已授权本地提交，实际实现版本以任务分支的 Git 记录为准；BetterWork 尚未推送或发布。
+
 ## 应用内帮助 — 2026-10-08（实现与自动化通过，待用户验收）
 
 侧栏底部设置与通知之间增加圆圈问号「帮助」入口；点击后在应用主内容区阅读带目录的操作手册，保留左侧导航和当前任务草稿。手册正文、示例与截图随 Renderer 静态构建进入安装包，离线可用。阅读复用现有页面、Markdown、菜单与模态基座，不新增数据库、IPC 或模型调用；操作与核验记录见当日工作日志，不改写其他任务板状态。
