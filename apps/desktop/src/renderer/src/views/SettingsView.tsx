@@ -170,7 +170,7 @@ export function RuntimeComponentsSettings(): React.JSX.Element {
         variant="block"
         eyebrow="运行时"
         title="由 BetterWork 管理 Skill 的运行时"
-        hint="应用统一维护受管 CPython；首次准备 Skill 环境时会按固定来源下载并校验。通常无需选择 Python 路径，依赖安装在 Skill 专属环境中。"
+        hint="应用统一维护受管 CPython；首次准备 Skill 环境时会按固定来源下载并校验。通常不需要选择 Python 路径，依赖安装在 Skill 专属环境中。"
         actions={
           <Button variant="secondary" size="lg" type="button" onClick={refresh}>
             重新检查
