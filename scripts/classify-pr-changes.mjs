@@ -20,9 +20,7 @@ function outputsFor(files) {
 
 try {
   const [mode, base, head] = process.argv.slice(2);
-  if (mode === '--full') {
-    process.stdout.write('has_code=true\ndocs_only=false\n');
-  } else if (mode === '--files') {
+  if (mode === '--files') {
     const input = await readStandardInput();
     process.stdout.write(outputsFor(input.split('\0').filter((file) => file !== '')));
   } else if (mode === '--pull-request' && base && head) {
@@ -34,9 +32,7 @@ try {
     });
     process.stdout.write(outputsFor(output.split('\0').filter((file) => file !== '')));
   } else {
-    throw new Error(
-      '用法：classify-pr-changes.mjs --pull-request <base-sha> <head-sha> | --files | --full',
-    );
+    throw new Error('用法：classify-pr-changes.mjs --pull-request <base-sha> <head-sha> | --files');
   }
 } catch (error) {
   process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);

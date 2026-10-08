@@ -116,7 +116,7 @@ npm run dev:stop
 
 默认日志和 PID 文件分别位于 `/tmp/betterwork-dev.log` 与 `/tmp/betterwork-dev.pid`，也可以通过 `BETTERWORK_DEV_LOG`、`BETTERWORK_DEV_PID` 覆盖。请只用这两个脚本启停应用，不要绕开脚本直接启动 Electron，也不要用宽泛的进程匹配杀进程——那会误伤机器上的其他 Electron 应用。
 
-提交前执行完整验证（lint + 格式校验 + 类型检查 + 单元测试 + 构建）：
+提交时由本地钩子按暂存范围快检；PR 自动运行代码快门禁或纯文档检查。完整验证由用户按需运行，GitHub Actions 也会每天北京时间 23:30 检查 main（见 [ADR-0042](docs/adr/0042-pr-quick-check-and-scheduled-verify.md)）：
 
 ```bash
 npm run verify

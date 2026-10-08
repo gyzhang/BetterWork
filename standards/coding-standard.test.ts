@@ -1,9 +1,11 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
+import { parse } from 'yaml';
 
 import { colorSchemes } from '../apps/desktop/src/renderer/src/appearance';
 import { readQoderRuleMetadata } from './agent-rules';
@@ -4776,13 +4778,33 @@ describe('计时基准车道纪律', () => {
 });
 
 /**
- * 提交、推送与 PR 门禁的范围分工（docs/12 §1、§1.1；ADR-0039）。
+ * 提交、推送与 PR 门禁的范围分工（docs/12 §1、§1.1；ADR-0039/0042）。
  *
- * 提交只按暂存范围做快检；分支 push 不重复全仓验证；PR 上按差异运行完整 verify 或 docs:check，
+ * 提交只按暂存范围做快检；PR 上按差异运行代码快门禁或 docs:check；完整 verify 按需/夜间运行，
  * 并以稳定的 PR Gate 作为 main 的必需状态。文档、钩子、工作流与夹具测试必须保持同一关系。
  */
 describe('提交与推送门禁纪律', () => {
   const hookFiles = ['.husky/pre-commit', '.husky/pre-push'] as const;
+
+  interface VerifyJob {
+    if?: string;
+    needs?: string | string[];
+    'runs-on': string;
+    steps: {
+      run?: string;
+      env?: Record<string, string>;
+      uses?: string;
+      with?: Record<string, unknown>;
+    }[];
+  }
+
+  function readVerifyWorkflow(): {
+    on: Record<string, unknown>;
+    jobs: Record<string, VerifyJob>;
+    concurrency: { group: string };
+  } {
+    return parse(read('.github/workflows/verify.yml')) as ReturnType<typeof readVerifyWorkflow>;
+  }
 
   it('本地钩子按暂存范围快检并阻止直推 main', () => {
     const scripts = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
@@ -4836,6 +4858,7 @@ describe('提交与推送门禁纪律', () => {
     expect(workflow).toContain('npm run docs:check');
     expect(workflow).not.toMatch(/^ {2}push:/mu);
     expect(read('docs/adr/0039-task-branches-and-protected-main.md')).toContain('PR Gate');
+    expect(read('docs/adr/0042-pr-quick-check-and-scheduled-verify.md')).toContain('PR Gate');
     expect(read('docs/adr/0036-macos-only-platform-scope.md')).toContain('由 [ADR-0039]');
   });
 
@@ -4855,6 +4878,80 @@ describe('提交与推送门禁纪律', () => {
     }
   });
 
+  it('PR 快门禁包含静态约束和相关测试，不等待完整 verify', () => {
+    const workflow = readVerifyWorkflow();
+    const quick = workflow.jobs.quick;
+    expect(quick?.if).toBe(
+      "github.event_name == 'pull_request' && needs.classify.outputs.has_code == 'true'",
+    );
+    expect(quick?.needs).toBe('classify');
+    expect(quick?.steps.find((step) => step.uses === 'actions/checkout@v7')?.with).toMatchObject({
+      'fetch-depth': 0,
+    });
+    expect(quick?.steps.flatMap((step) => (step.run ? [step.run] : []))).toEqual([
+      'npm ci',
+      'npm run lint',
+      'npm run format:check',
+      'npm run typecheck',
+      'npm run docs:check',
+      'npx vitest run --project functional --changed="$BASE_SHA" --passWithNoTests',
+      'npx vitest run --project heavy --changed="$BASE_SHA" --passWithNoTests',
+    ]);
+    for (const step of quick?.steps.filter((item) => item.run?.includes('--changed')) ?? []) {
+      expect(step.env?.BASE_SHA).toBe('${{ github.event.pull_request.base.sha }}');
+    }
+    expect(workflow.jobs.classify?.if).toBe("github.event_name == 'pull_request'");
+    expect(workflow.jobs.documentation?.if).toBe(
+      "github.event_name == 'pull_request' && needs.classify.outputs.docs_only == 'true'",
+    );
+    expect(
+      workflow.jobs.documentation?.steps.flatMap((step) => (step.run ? [step.run] : [])),
+    ).toEqual(['npm ci', 'npm run docs:check']);
+    expect(workflow.jobs['pr-gate']?.if).toBe("always() && github.event_name == 'pull_request'");
+    expect(workflow.jobs['pr-gate']?.needs).toEqual(['classify', 'quick', 'documentation']);
+  });
+
+  it('PR Gate 只接受有效分类且对应快检成功，失败或跳过均拒绝合并', () => {
+    const gate = readVerifyWorkflow().jobs['pr-gate'];
+    const script = gate?.steps.find((step) => step.run)?.run;
+    if (!script) throw new Error('PR Gate 缺少实际检查脚本。');
+    const successfulCode = {
+      CLASSIFY_RESULT: 'success',
+      HAS_CODE: 'true',
+      DOCS_ONLY: 'false',
+      QUICK_RESULT: 'success',
+      DOCUMENTATION_RESULT: 'skipped',
+    };
+    const successfulDocs = {
+      ...successfulCode,
+      HAS_CODE: 'false',
+      DOCS_ONLY: 'true',
+      QUICK_RESULT: 'skipped',
+      DOCUMENTATION_RESULT: 'success',
+    };
+    const cases = [
+      { env: successfulCode, status: 0 },
+      { env: successfulDocs, status: 0 },
+      { env: { ...successfulCode, CLASSIFY_RESULT: 'failure' }, status: 1 },
+      { env: { ...successfulCode, QUICK_RESULT: 'failure' }, status: 1 },
+      { env: { ...successfulCode, QUICK_RESULT: 'cancelled' }, status: 1 },
+      { env: { ...successfulCode, QUICK_RESULT: 'skipped' }, status: 1 },
+      { env: { ...successfulDocs, DOCUMENTATION_RESULT: 'failure' }, status: 1 },
+      { env: { ...successfulDocs, DOCUMENTATION_RESULT: 'cancelled' }, status: 1 },
+      { env: { ...successfulDocs, DOCUMENTATION_RESULT: 'skipped' }, status: 1 },
+      { env: { ...successfulCode, HAS_CODE: '' }, status: 1 },
+      { env: { ...successfulCode, HAS_CODE: 'false' }, status: 1 },
+      { env: { ...successfulDocs, HAS_CODE: 'true' }, status: 1 },
+    ];
+    for (const scenario of cases) {
+      const result = spawnSync('bash', ['-c', script], {
+        encoding: 'utf8',
+        env: { ...process.env, ...scenario.env },
+      });
+      expect(result.status, JSON.stringify(scenario.env)).toBe(scenario.status);
+    }
+  });
+
   it('远端门禁跑在受支持的平台、能手动触发、并且留下绿跑读数', () => {
     // [ADR-0036](../docs/adr/0036-macos-only-platform-scope.md) 定案产品只有 macOS：门禁跑在别的
     // 平台上测的是不兼容的靶子，`ui:check` 还会在 Ubuntu 的 userns 限制下崩成 SIGTRAP。
@@ -4868,6 +4965,22 @@ describe('提交与推送门禁纪律', () => {
       triggers,
       `${workflowFile} 的触发器里没有 workflow_dispatch：不改动代码就制造不出一条运行`,
     ).toContain('workflow_dispatch');
+    const config = readVerifyWorkflow();
+    expect(Object.keys(config.on).sort()).toEqual([
+      'pull_request',
+      'schedule',
+      'workflow_dispatch',
+    ]);
+    expect(config.on.pull_request).toEqual({ branches: ['main'] });
+    expect(config.on.schedule).toEqual([{ cron: '30 15 * * *' }]);
+    expect(config.jobs.quality?.if).toBe(
+      "github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'",
+    );
+    expect(config.jobs.quality?.needs, '完整验证不能依赖只在 PR 运行的分类或快检').toBeUndefined();
+    expect(config.concurrency.group).toContain('github.event_name');
+    expect(Object.values(config.jobs).every((job) => job['runs-on'].startsWith('macos'))).toBe(
+      true,
+    );
     expect(workflow, '远端门禁必须跑在 darwin 上（ADR-0036）').toMatch(/runs-on:\s*macos/u);
     expect(workflow, '远端不许把它改成只跑某几步').toContain('npm run verify');
     const qualityJob = workflow.split('  quality:')[1] ?? '';

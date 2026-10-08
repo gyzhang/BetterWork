@@ -19,7 +19,8 @@
 
 ## 检查清单
 
-- [ ] `npm run verify` 全绿
+- [ ] 本次 SHA 的 `PR Gate` 通过（代码快门禁或纯文档检查）
+- 完整 `npm run verify`：按需/夜间运行；在测试说明中记录结果、SHA 或尚未运行
 - [ ] 新增功能有对应的单元测试
 - [ ] 修复的 Bug 有回归测试
 - [ ] 代码符合 [工程规范](https://github.com/gyzhang/BetterWork/blob/main/docs/12-engineering-standards.md)

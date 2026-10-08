@@ -4,12 +4,15 @@ on:
   pull_request:
     branches:
       - main
-  # 手动触发用于对当前代码重跑完整门禁并留存读数。
+  # 手动触发对所选分支运行完整验证；夜间计划检查 main 最新提交。
   workflow_dispatch:
+  schedule:
+    # UTC 15:30 = Asia/Shanghai 23:30，避开整点的调度高峰。
+    - cron: '30 15 * * *'
 
-# 同一 PR 只保留最新差异的验证结果；手动运行按当前分支归组。
+# 同一 PR 只保留最新差异；手动与夜间完整验证分别归组。
 concurrency:
-  group: verify-${{ github.event.pull_request.number || github.ref }}
+  group: verify-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -19,34 +22,60 @@ permissions:
 jobs:
   classify:
     name: Classify changes
+    if: github.event_name == 'pull_request'
     runs-on: macos-latest
     outputs:
-      has_code: ${{ steps.changes.outputs.has_code || steps.manual.outputs.has_code }}
-      docs_only: ${{ steps.changes.outputs.docs_only || steps.manual.outputs.docs_only }}
+      has_code: ${{ steps.changes.outputs.has_code }}
+      docs_only: ${{ steps.changes.outputs.docs_only }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: 选择 PR 验证范围
         id: changes
-        if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: node scripts/classify-pr-changes.mjs --pull-request "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
-      - name: 手动运行完整门禁
-        id: manual
-        if: github.event_name == 'workflow_dispatch'
-        run: node scripts/classify-pr-changes.mjs --full >> "$GITHUB_OUTPUT"
+        run: |
+          git diff --check "$BASE_SHA...$HEAD_SHA"
+          node scripts/classify-pr-changes.mjs --pull-request "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
 
-  quality:
-    name: Full verify
+  quick:
+    name: Quick code check
     needs: classify
-    if: needs.classify.outputs.has_code == 'true'
+    if: github.event_name == 'pull_request' && needs.classify.outputs.has_code == 'true'
     runs-on: macos-latest
     timeout-minutes: 15
     steps:
-      # verify 包含 drift-check 的 CLI 回归；它按 origin/main..HEAD 读取本批提交，PR checkout 必须取到远端分支。
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run typecheck
+      - run: npm run docs:check
+      # Vitest 按 PR 基点和依赖图选择相关测试；两档依次运行，保留重档的串行约束。
+      - name: 检查受影响的功能测试
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: npx vitest run --project functional --changed="$BASE_SHA" --passWithNoTests
+      - name: 检查受影响的重档测试
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: npx vitest run --project heavy --changed="$BASE_SHA" --passWithNoTests
+
+  quality:
+    name: Full verify
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      # verify 包含 drift-check 的 CLI 回归，必须取到 origin/main 与完整历史。
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -101,7 +130,7 @@ jobs:
     name: PR Gate
     needs:
       - classify
-      - quality
+      - quick
       - documentation
     if: always() && github.event_name == 'pull_request'
     runs-on: macos-latest
@@ -111,19 +140,25 @@ jobs:
           CLASSIFY_RESULT: ${{ needs.classify.result }}
           HAS_CODE: ${{ needs.classify.outputs.has_code }}
           DOCS_ONLY: ${{ needs.classify.outputs.docs_only }}
-          QUALITY_RESULT: ${{ needs.quality.result }}
+          QUICK_RESULT: ${{ needs.quick.result }}
           DOCUMENTATION_RESULT: ${{ needs.documentation.result }}
         run: |
           if [ "$CLASSIFY_RESULT" != "success" ]; then
             echo "差异分类失败：不能判断应运行哪一档门禁。"
             exit 1
           fi
-          if [ "$HAS_CODE" = "true" ] && [ "$QUALITY_RESULT" != "success" ]; then
-            echo "代码或混合差异必须通过 Full verify；结果：$QUALITY_RESULT"
-            exit 1
-          fi
-          if [ "$DOCS_ONLY" = "true" ] && [ "$DOCUMENTATION_RESULT" != "success" ]; then
-            echo "纯 Markdown 差异必须通过 Documentation check；结果：$DOCUMENTATION_RESULT"
+          if [ "$HAS_CODE" = "true" ] && [ "$DOCS_ONLY" = "false" ]; then
+            if [ "$QUICK_RESULT" != "success" ]; then
+              echo "代码或混合差异必须通过 Quick code check；结果：$QUICK_RESULT"
+              exit 1
+            fi
+          elif [ "$HAS_CODE" = "false" ] && [ "$DOCS_ONLY" = "true" ]; then
+            if [ "$DOCUMENTATION_RESULT" != "success" ]; then
+              echo "纯 Markdown 差异必须通过 Documentation check；结果：$DOCUMENTATION_RESULT"
+              exit 1
+            fi
+          else
+            echo "差异分类输出无效：不能选择对应的 PR 门禁。"
             exit 1
           fi
           echo "PR Gate passed."
