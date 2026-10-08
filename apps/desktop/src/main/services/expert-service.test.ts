@@ -154,6 +154,41 @@ describe('ExpertService', () => {
     ).toThrowError(
       expect.objectContaining<Partial<ExpertServiceError>>({ code: 'expert_invalid_mcp' }),
     );
+    expect(service.list()).toHaveLength(0);
+  });
+
+  it('rejects mixed MCP revisions without changing the saved Expert', () => {
+    const store = openStore();
+    const service = new ExpertService(store);
+    const binding = {
+      connectionId: 'finance',
+      toolId: 'finance/monthly_summary',
+      connectionRevisionId: 'revision-1',
+      contractHash: 'a'.repeat(64),
+    };
+    const created = service.create(draft({ mcpToolBindings: [binding] }));
+    expect(() =>
+      service.saveRevision(
+        created.id,
+        draft({
+          mcpToolBindings: [
+            binding,
+            {
+              ...binding,
+              toolId: 'finance/quarterly_summary',
+              connectionRevisionId: 'revision-2',
+            },
+          ],
+        }),
+        created.currentRevision,
+      ),
+    ).toThrowError(
+      expect.objectContaining<Partial<ExpertServiceError>>({ code: 'expert_invalid_mcp' }),
+    );
+    expect(service.get(created.id)).toMatchObject({
+      currentRevision: created.currentRevision,
+      revision: { mcpToolBindings: [binding] },
+    });
   });
 
   it('rejects unknown built-in tools at the management boundary', () => {

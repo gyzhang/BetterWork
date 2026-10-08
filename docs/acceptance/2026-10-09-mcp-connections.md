@@ -45,6 +45,14 @@
 
 04:25 执行 `git fetch origin main` 退出 0，远端仍为 `14252db`；当时 `HEAD...origin/main` ahead/behind 为 0/0，任务基线未落后。当时没有提交、自动 stash/rebase 或合并用户工作树。最终生产源文件与测试/帮助共 42 个文件的 SHA256 清单位于附件目录 `source.sha256`，清单 SHA256 为 `caef87000fd89e2ee4ae7d7986fd6e0215e89cff90c3152482f547301831b258`，用于区分已验证实现与基点 SHA。06:25 本地提交前重新核对，42 个文件均与该清单一致。
 
+### 06:49 PR 首发失败与修正
+
+[PR #16 首次 CI](https://github.com/gyzhang/BetterWork/actions/runs/37855163747) 对 HEAD `f19646b` 的 lint、format、typecheck 与 docs:check 均通过，功能档 226 文件/1975 测试中仅专家服务的重复 MCP 绑定错误码断言失败（1974 通过）；重档因前序失败未运行，PR Gate 未通过。
+
+根因在 Schema 与服务边界：新增共享 Schema 提前拒绝重复选择，导致 ExpertService 直接抛出 ZodError，原有 `expert_invalid_mcp` 未保留。已在本地复现，随后让服务把 MCP 字段校验失败转换回现有错误码，保留 cause，移除不可达的重复检查；没有放宽 Schema 或旧断言。补混用连接修订的保存回归，核对拒绝后原专家修订与绑定不变，重复创建失败不留专家记录。
+
+修正后专家服务、共享协议、IPC 三文件/117 测试、typecheck、定向 ESLint/Prettier 与差异空白检查均退出 0。上述初始 42 文件指纹只对应最初实现；本次另修改专家服务及其测试，最新 SHA 的 CI 结果以 PR 记录和交接为准，不能用首次失败的其他绿灯代替新版本门禁。
+
 ## AI 页面走查
 
 `UI_RENDER_OUTPUT_DIR=/tmp/betterwork-mcp-ui node scripts/ui-render-check.mjs --mcp-only` 退出 0：8 组（青玉明暗 × 760/1380px × 普通/减少动效），每组 9 步，共 72 截图。覆盖列表、新建、HTTP/API Key 字段切换、机密输入、保存失败保留草稿、返回、issuer/scope 审阅、登录失败与更多菜单。正文最小字号读数 12px、无横向溢出，反馈有实际绘制。生产组件使用合成状态，覆盖标识为 `production-page-with-synthetic-state`，不能称为完整 App/真实服务验收。

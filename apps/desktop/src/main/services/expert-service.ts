@@ -46,7 +46,18 @@ const BUILTIN_TOOL_NAMES = new Set([
 export const isSupportedBuiltinToolName = (name: string): boolean => BUILTIN_TOOL_NAMES.has(name);
 
 const validateDraft = (draft: ExpertRevisionDraft): ExpertRevisionDraft => {
-  const parsed = expertRevisionDraftSchema.parse(draft);
+  const result = expertRevisionDraftSchema.safeParse(draft);
+  if (!result.success) {
+    if (result.error.issues.some((issue) => issue.path[0] === 'mcpToolBindings')) {
+      throw new ExpertServiceError(
+        'expert_invalid_mcp',
+        'Expert 的 MCP 工具绑定无效，请检查重复选择和配置修订',
+        { cause: result.error },
+      );
+    }
+    throw result.error;
+  }
+  const parsed = result.data;
   if (
     parsed.builtinToolPolicy.mode === 'allow-list' &&
     parsed.builtinToolPolicy.toolNames.some((name) => !isSupportedBuiltinToolName(name))
@@ -55,13 +66,6 @@ const validateDraft = (draft: ExpertRevisionDraft): ExpertRevisionDraft => {
       'expert_invalid_tool',
       'Expert 包含尚未登记的内置工具，请移除后重试',
     );
-  }
-  const mcpToolBindings = parsed.mcpToolBindings ?? [];
-  if (
-    new Set(mcpToolBindings.map((binding) => `${binding.connectionId}\u0000${binding.toolId}`))
-      .size !== mcpToolBindings.length
-  ) {
-    throw new ExpertServiceError('expert_invalid_mcp', 'Expert 的 MCP 工具绑定不能重复');
   }
   return parsed;
 };
