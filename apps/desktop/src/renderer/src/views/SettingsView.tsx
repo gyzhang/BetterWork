@@ -92,7 +92,7 @@ const SETTINGS_NAV_ITEMS: readonly NavEntry<SettingsTab>[] = [
   { id: 'models', label: '模型' },
   { id: 'search', label: '搜索' },
   { id: 'mcp', label: 'MCP' },
-  { id: 'runtime-components', label: '运行组件' },
+  { id: 'runtime', label: '运行' },
   { id: 'memory', label: '记忆' },
   { id: 'appearance', label: '外观' },
   { id: 'general', label: '通用' },
@@ -145,11 +145,20 @@ function SettingsContent(props: SettingsPageProps): React.JSX.Element {
       );
     case 'appearance':
       return <AppearanceSettings {...props} />;
-    case 'runtime-components':
-      return <RuntimeComponentsSettings />;
+    case 'runtime':
+      return <RuntimeSettings />;
     case 'general':
       return <GeneralSettings {...props} />;
   }
+}
+
+function RuntimeSettings(): React.JSX.Element {
+  return (
+    <div className="settings-section-stack">
+      <RunExecutionSettings />
+      <RuntimeComponentsSettings />
+    </div>
+  );
 }
 
 export function RuntimeComponentsSettings(): React.JSX.Element {
@@ -159,18 +168,18 @@ export function RuntimeComponentsSettings(): React.JSX.Element {
     <section className="settings-section">
       <SectionHeader
         variant="block"
-        eyebrow="运行组件"
+        eyebrow="运行时"
         title="由 BetterWork 管理 Skill 的运行时"
-        hint="应用统一维护受管 CPython。Skill 只声明兼容版本和依赖锁；首次准备该 Skill 环境时，BetterWork 会按固定来源下载、校验并创建隔离环境。"
+        hint="应用统一维护受管 CPython；首次准备 Skill 环境时会按固定来源下载并校验。通常不需要选择 Python 路径，依赖安装在 Skill 专属环境中。"
         actions={
-          <Button variant="secondary" size="md" type="button" onClick={refresh}>
+          <Button variant="secondary" size="lg" type="button" onClick={refresh}>
             重新检查
           </Button>
         }
       />
       {error && <InlineError message={error} />}
       {loading ? (
-        <InlineLoading label="正在检查运行组件…" />
+        <InlineLoading label="正在检查运行时…" />
       ) : distributions.length > 0 ? (
         <div className="runtime-component-list">
           {distributions.map((distribution) => (
@@ -193,10 +202,6 @@ export function RuntimeComponentsSettings(): React.JSX.Element {
           detail="当前 Skill 运行时目录没有可用发行版本。"
         />
       )}
-      <p>
-        通常不需要选择 Python 路径。解释器版本、下载状态与包来源由应用控制，Skill 的 Python
-        包安装在独立环境中。
-      </p>
     </section>
   );
 }
@@ -207,39 +212,36 @@ function GeneralSettings({
   onUserAddressChange,
 }: SettingsPageProps): React.JSX.Element {
   return (
-    <>
-      <RunExecutionSettings />
-      <section className="settings-section">
-        <SectionHeader
-          variant="block"
-          eyebrow="通用"
-          title="相互称呼"
-          hint="工作对话中的发言人标签会使用这里设置的称呼。"
+    <section className="settings-section">
+      <SectionHeader
+        variant="block"
+        eyebrow="通用"
+        title="相互称呼"
+        hint="工作对话中的发言人标签会使用这里设置的称呼。"
+      />
+      <Field
+        label="AI 的称呼"
+        controlId="conversation-assistant-address"
+        hint="显示在 AI 回复上方。"
+      >
+        <TextField
+          id="conversation-assistant-address"
+          size="md"
+          maxLength={40}
+          value={conversationAddresses.assistant}
+          onChange={(event) => onAssistantAddressChange(event.target.value)}
         />
-        <Field
-          label="AI 的称呼"
-          controlId="conversation-assistant-address"
-          hint="显示在 AI 回复上方。"
-        >
-          <TextField
-            id="conversation-assistant-address"
-            size="md"
-            maxLength={40}
-            value={conversationAddresses.assistant}
-            onChange={(event) => onAssistantAddressChange(event.target.value)}
-          />
-        </Field>
-        <Field label="我的称呼" controlId="conversation-user-address" hint="显示在你的发言上方。">
-          <TextField
-            id="conversation-user-address"
-            size="md"
-            maxLength={40}
-            value={conversationAddresses.user}
-            onChange={(event) => onUserAddressChange(event.target.value)}
-          />
-        </Field>
-      </section>
-    </>
+      </Field>
+      <Field label="我的称呼" controlId="conversation-user-address" hint="显示在你的发言上方。">
+        <TextField
+          id="conversation-user-address"
+          size="md"
+          maxLength={40}
+          value={conversationAddresses.user}
+          onChange={(event) => onUserAddressChange(event.target.value)}
+        />
+      </Field>
+    </section>
   );
 }
 
@@ -252,76 +254,64 @@ function RunExecutionSettings(): React.JSX.Element {
     loading,
     saving,
     error,
-    toast,
     setDraft,
     setEnableBuiltinSkills,
     setEnableBuiltinExperts,
+    flushDraft,
+    retrySave,
     refresh,
-    save,
-    dismissToast,
   } = useRunSettings();
   const value = Number(draft);
   const valid = Number.isInteger(value) && value >= 1 && value <= MAX_SKILL_TOOL_ROUNDS;
-  const dirty =
-    settings !== undefined &&
-    (value !== settings.maxSkillToolRounds ||
-      enableBuiltinSkills !== settings.enableBuiltinSkills ||
-      enableBuiltinExperts !== settings.enableBuiltinExperts);
 
   return (
     <section className="settings-section">
       <SectionHeader
         variant="block"
-        eyebrow="通用 · 运行"
+        eyebrow="运行"
         title="运行设置"
-        hint="控制内置 Skill 与专家的可用范围，以及带 Skill 的 Run 工具调用轮数。"
-        actions={
-          <Button
-            variant="secondary"
-            size="md"
-            type="button"
-            disabled={loading || saving}
-            onClick={refresh}
-          >
-            重新读取
-          </Button>
-        }
+        hint="控制内置 Skill 与专家的可用范围，以及带 Skill 的 Run 工具调用轮数。开关立即保存；轮数停止输入后自动保存，也会在离开输入框时保存。"
       />
-      {error && <InlineError message={error} />}
-      {loading ? (
-        <InlineLoading label="正在读取运行设置…" />
-      ) : (
+      {loading && <InlineLoading label="正在读取运行设置…" />}
+      {!loading && !settings && error && <InlineError message={error} onRetry={refresh} />}
+      {!loading && settings && (
         <>
+          {error && <InlineError message={error} onRetry={retrySave} />}
+          {saving && <StatusNote message="正在保存运行设置…" />}
           <SectionHeader
             variant="block"
-            eyebrow="通用 · 内置资源"
+            eyebrow="运行 · 内置资源"
             title="启用内置 Skill 与专家"
-            hint="保存后立即影响列表和新 Run。关闭会隐藏已有内置项并阻止新 Run 使用，不删除数据库记录或历史；关闭内置 Skill 时，依赖它的内置专家也不可用。若本地缺少记录，重新开启后普通启动应用会完成登记。"
+            hint="更改后立即影响列表和新 Run。关闭会隐藏已有内置项并阻止新 Run 使用，不删除数据库记录或历史；关闭内置 Skill 时，依赖它的内置专家也不可用。若本地缺少记录，重新开启后普通启动应用会完成登记。"
           />
           <div className="settings-switch-list">
             <Switch
               label="启用内置 Skill"
               checked={enableBuiltinSkills}
-              disabled={saving}
+              disabled={loading}
               onChange={setEnableBuiltinSkills}
             />
             <Switch
               label="启用内置专家"
               checked={enableBuiltinExperts}
-              disabled={saving}
+              disabled={loading}
               onChange={setEnableBuiltinExperts}
             />
           </div>
           <SectionHeader
             variant="block"
-            eyebrow="通用 · 运行"
+            eyebrow="运行"
             title="Skill 工具调用上限"
             hint="默认 200 轮，只影响新启动的、绑定了 Skill 的 Run。调高可容纳更长的生成与修订流程；上限越高，运行时间和模型调用量也可能增加。"
           />
           <Field
             label="最大工具轮数"
             controlId="max-skill-tool-rounds"
-            hint={`允许范围 1–${MAX_SKILL_TOOL_ROUNDS}；当前默认值为 ${DEFAULT_MAX_SKILL_TOOL_ROUNDS}。`}
+            hint={
+              valid
+                ? `允许范围 1–${MAX_SKILL_TOOL_ROUNDS}；当前默认值为 ${DEFAULT_MAX_SKILL_TOOL_ROUNDS}。`
+                : `请输入 1–${MAX_SKILL_TOOL_ROUNDS} 之间的整数；修正后会自动保存。`
+            }
           >
             <TextField
               id="max-skill-tool-rounds"
@@ -331,25 +321,14 @@ function RunExecutionSettings(): React.JSX.Element {
               max={MAX_SKILL_TOOL_ROUNDS}
               step={1}
               value={draft}
-              disabled={saving}
+              disabled={loading}
               onChange={(event) => setDraft(event.target.value)}
+              onBlur={flushDraft}
               aria-invalid={!valid}
             />
           </Field>
-          <ActionBar label="保存运行设置">
-            <AsyncButton
-              variant="primary"
-              size="md"
-              busy={saving}
-              label="保存设置"
-              busyLabel="正在保存…"
-              disabled={!settings || !valid || !dirty}
-              onClick={save}
-            />
-          </ActionBar>
         </>
       )}
-      {toast && <TransientToast {...toast} onDismiss={dismissToast} />}
     </section>
   );
 }
@@ -595,7 +574,7 @@ export function SearchSettings(): React.JSX.Element {
             />
           </Field>
         </Disclosure>
-        <div className="search-actions">
+        <ActionBar as="div" label="联网搜索设置操作">
           <AsyncButton
             variant="secondary"
             size="md"
@@ -612,7 +591,7 @@ export function SearchSettings(): React.JSX.Element {
           >
             保存并启用
           </Button>
-        </div>
+        </ActionBar>
       </div>
       <p className="search-status">
         {configured ? (

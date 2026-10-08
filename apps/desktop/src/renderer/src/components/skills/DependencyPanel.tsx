@@ -153,14 +153,14 @@ export function DependencyPanel({
       />
 
       <p>
-        基础 Python 由 BetterWork 在“设置 → 运行组件”统一管理
+        基础 Python 由 BetterWork 在“设置 → 运行”统一管理
         {managedDistribution ? `，当前使用 ${managedDistribution.version}` : ''}；首次准备 Skill
         环境时自动下载并校验。
       </p>
       {!state.base && !state.loading && (
         <StatusNote
           tone="warning"
-          message={`没有找到符合 Skill 声明版本 ${profile?.pythonRequirement ?? ''} 的受管 Python；请检查“设置 → 运行组件”或打开高级选项。`}
+          message={`没有找到符合 Skill 声明版本 ${profile?.pythonRequirement ?? ''} 的受管 Python；请检查“设置 → 运行”或打开高级选项。`}
         />
       )}
       <Disclosure label="高级：更换基础 Python">
