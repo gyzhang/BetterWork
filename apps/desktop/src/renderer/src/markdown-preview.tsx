@@ -75,15 +75,20 @@ const messageComponents: Components = {
 export function MarkdownPreview({
   content,
   variant = 'document',
+  componentOverrides,
 }: {
   content: string;
-  variant?: 'document' | 'message';
+  variant?: 'document' | 'message' | 'guide';
+  componentOverrides?: Components;
 }): React.JSX.Element {
   return (
-    <article className="markdown-preview">
+    <article className="markdown-preview" data-variant={variant}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        components={variant === 'message' ? messageComponents : components}
+        components={{
+          ...(variant === 'message' ? messageComponents : components),
+          ...componentOverrides,
+        }}
       >
         {content}
       </ReactMarkdown>

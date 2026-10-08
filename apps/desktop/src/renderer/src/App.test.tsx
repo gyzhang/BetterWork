@@ -893,6 +893,26 @@ describe('Expert summon in the task composer', () => {
   });
 });
 
+describe('应用内帮助', () => {
+  it('保留任务草稿与已选技能，阅读手册不启动执行', async () => {
+    const api = installApi();
+    render(<App />);
+    await openTestRun();
+    fireEvent.change(composer(), { target: { value: '待继续的任务草稿' } });
+    fireEvent.click(screen.getByRole('button', { name: '帮助' }));
+    expect(screen.getByRole('heading', { name: '操作手册' })).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: /任务输入/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '工作' }));
+    expect(await screen.findByRole('textbox', { name: /任务输入/ })).toHaveProperty(
+      'value',
+      '待继续的任务草稿',
+    );
+    expect(screen.getByRole('button', { name: '技能 1 项' })).toBeTruthy();
+    expect(api.tasks.create).not.toHaveBeenCalled();
+    expect(api.runs.start).not.toHaveBeenCalled();
+  });
+});
+
 describe('定时任务导航', () => {
   it('在专家下方显示入口，读取后台事实后往返仍保留 Composer 草稿', async () => {
     const api = installApi();

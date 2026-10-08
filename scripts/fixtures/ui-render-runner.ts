@@ -238,7 +238,7 @@ async function run(): Promise<void> {
       ? ['expert']
       : process.argv.includes('--schedule-only')
         ? ['schedule']
-        : ['artifact', 'knowledge', 'expert', 'memory', 'schedule']) {
+        : ['artifact', 'knowledge', 'expert', 'memory', 'schedule', 'help']) {
     for (const mode of ['light', 'dark']) {
       for (const width of [760, 1380]) {
         for (const reducedMotion of [false, true]) {

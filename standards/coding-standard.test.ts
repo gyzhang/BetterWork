@@ -165,6 +165,10 @@ const SURFACE_SHELL_OWNERS: readonly { selector: string; reason: string }[] = [
   { selector: '.icon-button', reason: 'IconButton 基座' },
   { selector: '.knowledge-admin-toggle', reason: '知识管理分区触发按钮' },
   { selector: '.markdown-preview', reason: '成果 Markdown 文档排版' },
+  {
+    selector: ".markdown-preview[data-variant='guide']",
+    reason: 'MarkdownPreview 的指南变体移除文档卡片外壳，版心仍由 page-body 管理（docs/10 §6.1）',
+  },
   { selector: '.markdown-preview pre', reason: '成果代码排版' },
   { selector: '.memory-conflict-bodies > div', reason: '冲突两侧内容并排预览，非目录卡片' },
   { selector: '.memory-policy-pinned', reason: '记忆政策的固定状态容器' },
@@ -5204,8 +5208,9 @@ describe('规则与文档索引', () => {
     }
     expect(
       tableNavColumn.filter((cell) => !navLabels.includes(cell)),
-      '称呼表的导航列多出代码里没有的项；设置是侧栏底部项，不在一级导航里',
-    ).toEqual(['设置']);
+      '称呼表的导航列多出代码里没有的项；设置与帮助是侧栏底部项，不在一级导航里',
+    ).toEqual(['设置', '帮助']);
+    expect(appSource).toContain('label="帮助"');
   });
 
   it('退役的页面称呼不得回到会被智能体读取的文本里', () => {

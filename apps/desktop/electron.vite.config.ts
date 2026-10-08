@@ -45,6 +45,8 @@ export default defineConfig({
     },
   },
   renderer: {
+    // 操作手册的正文、示例和截图随 out/renderer 一起进入 app.asar。
+    publicDir: `${root}/docs/guide`,
     resolve: { alias: aliases },
     plugins: [react()],
   },
