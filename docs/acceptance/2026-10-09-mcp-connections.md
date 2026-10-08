@@ -1,7 +1,7 @@
 # MCP 多传输与 OAuth 实现证据
 
 - 范围：用户已审阅设计并批准 D1–D5，授权继续编码；[ADR-0043](../adr/0043-mcp-multi-transport-and-oauth.md) Accepted。
-- 代码：`codex/mcp-connections`，基点 `14252db`（已含 PR #15）；下列验证执行时为未提交工作树。用户随后已授权本地提交，实际实现版本以该任务分支的 Git 记录为准，不能把基点 SHA 当作实现提交。
+- 代码：`codex/mcp-connections`，基点 `14252db`（已含 PR #15）；下列验证执行时为未提交工作树，本地实现随后提交为 `9479562`。用户已授权推送与合并，实际最终版本及合并结果以 Git/PR 记录为准，不能把基点 SHA 当作实现提交。
 - 平台：本机 macOS arm64。测试使用临时/内存 SQLite、确定性 HTTP 替身和 AI 创建的本地夹具进程/loopback 回调；未访问真实业务 MCP/OAuth 账号，未调用真实模型，未修改产品数据库或启停用户应用。
 - 状态真相：[CF 任务板](../development/tasks-capability-foundation.md)。CF30–CF32/CF40–CF41 代码与自动化已落地，真实存储/业务及用户验收未关闭；CF33/CF42 保持 partial。
 
@@ -64,4 +64,4 @@ AI 已打开回看本轮窄窗深色保存失败、宽窗浅色授权确认与�
 | 用户窗口 | 确认日常宽度/主题下新建三种协议、保存失败草稿、登录确认/取消、合同审阅、启停与失效选择修复；AI 页面矩阵是辅助证据 |
 | 跨项目原验收 | CF12/A/B0/E 的真实模型、签名与连续两期验收保持独立；本轮不提升其他 Proposed ADR，也不关闭其他任务卡 |
 
-用户已授权 BetterWork 本地提交；推送、PR 与发布尚未执行，按已有授权边界另行处理。实现不包含 Resources/Prompts/sampling/elicitation、写型工具、Tasks/MCP Apps、公开市场、云代理或新 Agent 引擎。
+用户已授权 BetterWork 本地提交、推送与合并；产品发布尚未执行。实际 PR 门禁与合并结果由 Git/PR 记录及交接报告补齐，不能用本地成功代替 CI 结论。实现不包含 Resources/Prompts/sampling/elicitation、写型工具、Tasks/MCP Apps、公开市场、云代理或新 Agent 引擎。

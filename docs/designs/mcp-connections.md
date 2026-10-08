@@ -164,4 +164,4 @@ stdio 由 Main 启动；进程与取消清理复用 macOS supervisor。新旧版
 
 实现、自动化、AI 页面走查及待人工验收分别记录在 [CF 任务板](../development/tasks-capability-foundation.md) 与 [本轮验收证据](../acceptance/2026-10-09-mcp-connections.md)。生产组件的离线 Electron 页面矩阵不等于真实服务验收；真实 OAuth 账号、业务 server、真机 Keychain/重启与签名包验收仍待条件具备。退出登录只声明本地授权已清除，不声明远端 token 已撤销。
 
-[可点击预览](https://betterwork-mcp-settings-preview.xprogrammer-net.chatgpt.site/)保留原始文件、沙盒 iframe 和 CSP，只演示交互，不联网、不保存真实凭据。它不替代已实现页面或协议验收。用户已授权本地提交，实际实现版本以任务分支的 Git 记录为准；BetterWork 尚未推送或发布。本轮未调用真实模型，未修改产品数据库，未启停用户正在使用的应用。
+[可点击预览](https://betterwork-mcp-settings-preview.xprogrammer-net.chatgpt.site/)保留原始文件、沙盒 iframe 和 CSP，只演示交互，不联网、不保存真实凭据。它不替代已实现页面或协议验收。本地实现提交为 `9479562`，用户已授权推送与合并，实际版本及合并结果以 Git/PR 记录为准；BetterWork 产品发布尚未执行。实现验证阶段未调用真实模型、未修改产品数据库或启停用户应用；随后已按用户要求启动开发应用供人工检查。
