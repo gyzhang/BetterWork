@@ -4515,12 +4515,6 @@ button.list-row:where(:not(:disabled)):hover {
   flex-direction: column;
   max-width: 480px;
 }
-.search-settings .search-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-8);
-  padding-top: 4px;
-}
 .search-settings .search-status {
   color: var(--text-secondary);
   font-size: var(--font-size-caption);

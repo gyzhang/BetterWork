@@ -163,7 +163,7 @@ export function RuntimeComponentsSettings(): React.JSX.Element {
         title="由 BetterWork 管理 Skill 的运行时"
         hint="应用统一维护受管 CPython。Skill 只声明兼容版本和依赖锁；首次准备该 Skill 环境时，BetterWork 会按固定来源下载、校验并创建隔离环境。"
         actions={
-          <Button variant="secondary" size="md" type="button" onClick={refresh}>
+          <Button variant="secondary" size="lg" type="button" onClick={refresh}>
             重新检查
           </Button>
         }
@@ -278,7 +278,7 @@ function RunExecutionSettings(): React.JSX.Element {
         actions={
           <Button
             variant="secondary"
-            size="md"
+            size="lg"
             type="button"
             disabled={loading || saving}
             onClick={refresh}
@@ -595,7 +595,7 @@ export function SearchSettings(): React.JSX.Element {
             />
           </Field>
         </Disclosure>
-        <div className="search-actions">
+        <ActionBar as="div" label="联网搜索设置操作">
           <AsyncButton
             variant="secondary"
             size="md"
@@ -612,7 +612,7 @@ export function SearchSettings(): React.JSX.Element {
           >
             保存并启用
           </Button>
-        </div>
+        </ActionBar>
       </div>
       <p className="search-status">
         {configured ? (
