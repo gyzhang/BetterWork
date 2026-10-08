@@ -6,9 +6,9 @@ import { app, BrowserWindow, type NativeImage } from 'electron';
 
 import { colorSchemes } from '../../apps/desktop/src/renderer/src/appearance';
 import {
+  frameAttemptVerdict,
   frameMismatch,
   type FrameSample,
-  isSettled,
   MAX_SAMPLE_ATTEMPTS,
   settleDelayMs,
 } from './frame-verdict';
@@ -109,13 +109,13 @@ async function captureVerifiedFrame(
       width: size.width,
       height: size.height,
     });
-    if (isSettled(previous, mismatch)) {
-      if (mismatch === '') {
-        await writeFile(filename, image.toPNG());
-        return;
-      }
-      throw new Error(`截图绘制状态不一致：${label} ${mismatch}`);
+    const verdict = frameAttemptVerdict(previous, mismatch, attempt);
+    if (verdict === 'pass') {
+      await writeFile(filename, image.toPNG());
+      return;
     }
+    // 隐藏窗口可能连续返回上个交互状态的旧帧；只有采样预算耗尽后，重复错误才判为稳定缺陷。
+    if (verdict === 'fail') throw new Error(`截图绘制状态不一致：${label} ${mismatch}`);
     previous = mismatch;
     await new Promise<void>((resolve) => setTimeout(resolve, settleDelayMs(attempt)));
   }

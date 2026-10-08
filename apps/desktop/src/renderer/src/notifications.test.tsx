@@ -36,6 +36,7 @@ function Bell({ onOpenChange = vi.fn() } = {}) {
         onOpenChange={onOpenChange}
         onActivate={vi.fn()}
         onMarkAllRead={vi.fn()}
+        onDelete={vi.fn(async () => ({ deleted: true }))}
         onClear={vi.fn()}
       />
     </main>
@@ -100,7 +101,7 @@ describe('消息中心（Modal 基座的锚定覆盖层）', () => {
   it('Tab 在面板内循环，不会走到已经 inert 的页面里', () => {
     const bell = Bell();
     bell.open(true);
-    const last = screen.getByRole('button', { name: /索引已重建/ });
+    const last = screen.getByRole('button', { name: '删除通知：索引已重建' });
     last.focus();
     fireEvent.keyDown(last, { key: 'Tab' });
     expect(document.activeElement).toBe(screen.getByRole('button', { name: '全部已读' }));

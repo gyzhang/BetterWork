@@ -11,12 +11,14 @@ import { Button } from './components/Button';
 import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { EmptyContext } from './components/EmptyState';
 import { IconButton } from './components/IconButton';
+import { InlineError } from './components/InlineError';
 import { ListRow } from './components/ListRow';
 import { useOverlaySemantics } from './components/Modal';
 import { SectionHeader } from './components/SectionHeader';
+import { Tooltip } from './components/Tooltip';
 import { intoToastStack } from './components/TransientToast';
 import { AlertIcon, BellIcon, CheckIcon, CloseIcon, InfoIcon, WarningIcon } from './icons';
-import { trackAction } from './lib/async-action';
+import { describeActionError, trackAction } from './lib/async-action';
 import { relativeTime } from './lib/format';
 
 const TOAST_MAX = 4;
@@ -46,6 +48,7 @@ export const useNotifications = ({
   toasts: ToastItem[];
   activate: (notification: NotificationSummary) => void;
   markAllRead: () => void;
+  deleteNotification: (id: string) => Promise<{ deleted: boolean }>;
   clear: () => void;
   dismissToast: (id: string) => void;
   pauseToast: (id: string) => void;
@@ -105,6 +108,11 @@ export const useNotifications = ({
           current.map((item) => (item.read ? item : { ...item, read: true })),
         );
         setUnreadCount(event.unreadCount);
+      } else if (event.type === 'deleted') {
+        setNotifications((current) => current.filter((item) => item.id !== event.notificationId));
+        setUnreadCount(event.unreadCount);
+        setToasts((current) => current.filter((toast) => toast.id !== event.notificationId));
+        pausedToastsRef.current.delete(event.notificationId);
       } else {
         setNotifications([]);
         setUnreadCount(event.unreadCount);
@@ -168,6 +176,10 @@ export const useNotifications = ({
   const markAllRead = useCallback((): void => {
     trackAction(window.betterwork.notifications.markAllRead(), '全部标记已读');
   }, []);
+  const deleteNotification = useCallback(
+    (id: string): Promise<{ deleted: boolean }> => window.betterwork.notifications.delete({ id }),
+    [],
+  );
   const clear = useCallback((): void => {
     trackAction(window.betterwork.notifications.clear(), '清空通知');
   }, []);
@@ -192,6 +204,7 @@ export const useNotifications = ({
     toasts,
     activate,
     markAllRead,
+    deleteNotification,
     clear,
     dismissToast,
     pauseToast,
@@ -213,6 +226,7 @@ interface NotificationCenterProps {
   onOpenChange: (open: boolean) => void;
   onActivate: (notification: NotificationSummary) => void;
   onMarkAllRead: () => void;
+  onDelete: (id: string) => Promise<{ deleted: boolean }>;
   onClear: () => void;
 }
 
@@ -220,10 +234,11 @@ interface NotificationPanelProps {
   notifications: NotificationSummary[];
   unreadCount: number;
   /** 由铃铛 rect 算出的视口坐标；面板 portal 到 body 后 CSS 已无锚点可依。 */
-  position: { left: number; top: number; maxHeight: number };
+  position: { left: number; bottom: number; maxHeight: number };
   onClose: () => void;
   onActivate: (notification: NotificationSummary) => void;
   onMarkAllRead: () => void;
+  onDelete: (id: string) => Promise<{ deleted: boolean }>;
   onClear: () => void;
 }
 
@@ -241,11 +256,42 @@ const NotificationPanel = ({
   onClose,
   onActivate,
   onMarkAllRead,
+  onDelete,
   onClear,
 }: NotificationPanelProps): React.JSX.Element => {
   const [clearRequested, setClearRequested] = useState(false);
+  const [deleteRequested, setDeleteRequested] = useState<NotificationSummary | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<{
+    tone: 'danger' | 'warning';
+    message: string;
+  } | null>(null);
   const panelRef = useRef<HTMLElement>(null);
   useOverlaySemantics(panelRef, { onClose });
+
+  const confirmDelete = (): void => {
+    if (!deleteRequested || deletingId !== null) return;
+    const notification = deleteRequested;
+    setDeletingId(notification.id);
+    setDeleteError(null);
+    void onDelete(notification.id)
+      .then(({ deleted }) => {
+        if (!deleted) {
+          setDeleteError({ tone: 'warning', message: '这条消息已不存在，列表已同步。' });
+          setDeleteRequested(null);
+          return;
+        }
+        setDeleteRequested(null);
+      })
+      .catch((error: unknown) => {
+        setDeleteError({
+          tone: 'danger',
+          message: describeActionError(error, '删除消息失败，请重试。'),
+        });
+        setDeleteRequested(null);
+      })
+      .finally(() => setDeletingId(null));
+  };
 
   return (
     <>
@@ -257,7 +303,7 @@ const NotificationPanel = ({
         aria-label="消息中心"
         style={{
           left: position.left,
-          top: position.top,
+          bottom: position.bottom,
           maxHeight: position.maxHeight,
         }}
       >
@@ -286,6 +332,14 @@ const NotificationPanel = ({
             </>
           }
         />
+        {deleteError !== null && (
+          <InlineError
+            className="notification-delete-error"
+            message={deleteError.message}
+            tone={deleteError.tone}
+            onDismiss={() => setDeleteError(null)}
+          />
+        )}
         <div className="notification-list">
           {notifications.length === 0 ? (
             <EmptyContext
@@ -297,20 +351,48 @@ const NotificationPanel = ({
             notifications.map((item) => (
               <ListRow
                 key={item.id}
-                className={item.read ? undefined : 'unread'}
-                onClick={() => onActivate(item)}
+                as="article"
+                className={`notification-row${item.read ? '' : ' unread'}`}
                 leading={
                   <span className={`level-${item.level}`} aria-hidden="true">
                     <LevelIcon level={item.level} />
                   </span>
                 }
-                title={item.title}
-                detail={item.detail}
-                meta={relativeTime(item.createdAt)}
                 trailing={
                   item.read ? undefined : <span className="notification-dot" aria-hidden="true" />
                 }
-              />
+              >
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="notification-open-action"
+                  type="button"
+                  aria-label={`打开通知：${item.title}`}
+                  onClick={() => onActivate(item)}
+                >
+                  <Tooltip className="list-row-title">
+                    <strong>{item.title}</strong>
+                  </Tooltip>
+                  {item.detail && <span className="list-row-detail">{item.detail}</span>}
+                </Button>
+                <div className="notification-row-meta">
+                  <small className="list-row-meta">{relativeTime(item.createdAt)}</small>
+                  <Button
+                    variant="link"
+                    size="sm"
+                    tone="danger"
+                    type="button"
+                    aria-label={`删除通知：${item.title}`}
+                    disabled={deletingId !== null}
+                    onClick={() => {
+                      setDeleteError(null);
+                      setDeleteRequested(item);
+                    }}
+                  >
+                    删除
+                  </Button>
+                </div>
+              </ListRow>
             ))
           )}
         </div>
@@ -325,6 +407,16 @@ const NotificationPanel = ({
             setClearRequested(false);
             onClear();
           }}
+        />
+      )}
+      {deleteRequested && (
+        <ConfirmationDialog
+          title="删除这条消息？"
+          detail={`删除“${deleteRequested.title}”后将无法恢复。`}
+          confirmLabel={deletingId === deleteRequested.id ? '删除中…' : '删除消息'}
+          busy={deletingId === deleteRequested.id}
+          onCancel={() => setDeleteRequested(null)}
+          onConfirm={confirmDelete}
         />
       )}
     </>
@@ -343,12 +435,15 @@ export const NotificationCenter = ({
   onOpenChange,
   onActivate,
   onMarkAllRead,
+  onDelete,
   onClear,
 }: NotificationCenterProps): React.JSX.Element => {
   const bellRef = useRef<HTMLButtonElement>(null);
-  const [position, setPosition] = useState<{ left: number; top: number; maxHeight: number } | null>(
-    null,
-  );
+  const [position, setPosition] = useState<{
+    left: number;
+    bottom: number;
+    maxHeight: number;
+  } | null>(null);
 
   // 覆盖层已 portal 到 body，锚点只剩铃铛的视口坐标；窗口变化时重测。
   useLayoutEffect(() => {
@@ -361,15 +456,18 @@ export const NotificationCenter = ({
       if (!bell) return;
       const rect = bell.getBoundingClientRect();
       const fitsRight = rect.right + PANEL_GAP + PANEL_WIDTH <= innerWidth - PANEL_VIEWPORT_MARGIN;
-      // 面板底边贴铃铛底，向上生长；480px 是旧版锚定面板的高度上限，
-      // 通高面板会把整窗吞掉（2026-09-26 光哥验收打回）。
-      const maxHeight = Math.min(PANEL_MAX_HEIGHT, innerHeight - 2 * PANEL_VIEWPORT_MARGIN);
-      const bottom = Math.max(PANEL_VIEWPORT_MARGIN, rect.bottom);
+      // 左下角落在铃铛上方，与铃铛留一个 gap；需要滚动时最多向上生长 480px。
+      const viewportBottom = Math.max(PANEL_VIEWPORT_MARGIN, innerHeight - PANEL_VIEWPORT_MARGIN);
+      const bottomEdge = Math.max(
+        PANEL_VIEWPORT_MARGIN,
+        Math.min(viewportBottom, rect.top - PANEL_GAP),
+      );
+      const maxHeight = Math.min(PANEL_MAX_HEIGHT, bottomEdge - PANEL_VIEWPORT_MARGIN);
       setPosition({
         left: fitsRight
           ? rect.right + PANEL_GAP
           : Math.max(PANEL_VIEWPORT_MARGIN, rect.left - PANEL_GAP - PANEL_WIDTH),
-        top: Math.max(PANEL_VIEWPORT_MARGIN, bottom - maxHeight),
+        bottom: innerHeight - bottomEdge,
         maxHeight,
       });
     };
@@ -411,6 +509,7 @@ export const NotificationCenter = ({
               onClose={() => onOpenChange(false)}
               onActivate={onActivate}
               onMarkAllRead={onMarkAllRead}
+              onDelete={onDelete}
               onClear={onClear}
             />
           </>,

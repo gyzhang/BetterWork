@@ -64,9 +64,23 @@ export function frameMismatch(samples: readonly FrameSample[], frame: BitmapFram
 }
 
 /**
- * 连续两帧读数相同才算稳定：两帧都无违规 ⇒ 放行并落图；两帧报同一条违规 ⇒ 判红；
- * 不同或还没有上一帧 ⇒ 继续等。中间态只会出现在单帧里，所以它永远凑不齐「相同」这一条。
+ * 连续两帧读数相同才算稳定：两帧都无违规即可放行并落图；相同的错误读数先继续采样，
+ * 排除隐藏窗口仍返回状态切换前旧帧的情况。预算耗尽时，末尾两帧相同才作为稳定违规；
+ * 读数不同或还没有上一帧时继续等待。
  */
 export function isSettled(previous: string | undefined, current: string): boolean {
   return previous !== undefined && previous === current;
+}
+
+export type FrameAttemptVerdict = 'pass' | 'fail' | 'retry';
+
+/** 旧帧可能连续出现；成功读数可立即收敛，错误读数要用完整采样预算确认。 */
+export function frameAttemptVerdict(
+  previous: string | undefined,
+  current: string,
+  attempt: number,
+): FrameAttemptVerdict {
+  if (!isSettled(previous, current)) return 'retry';
+  if (current === '') return 'pass';
+  return attempt === MAX_SAMPLE_ATTEMPTS - 1 ? 'fail' : 'retry';
 }

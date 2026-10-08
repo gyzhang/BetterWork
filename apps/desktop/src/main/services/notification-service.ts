@@ -70,6 +70,17 @@ export class NotificationService {
     return unreadCount;
   }
 
+  delete(id: string): boolean {
+    const deleted = this.notifications.delete(id);
+    // Even a stale delete request tells Renderer that this id is absent and should be removed.
+    this.broadcast({
+      type: 'deleted',
+      notificationId: id,
+      unreadCount: this.notifications.unreadCount(),
+    });
+    return deleted;
+  }
+
   clear(): void {
     this.notifications.clear();
     this.broadcast({ type: 'cleared', unreadCount: 0 });

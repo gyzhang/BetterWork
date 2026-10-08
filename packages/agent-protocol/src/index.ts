@@ -3989,6 +3989,8 @@ export type NotificationSummary = z.infer<typeof notificationSummarySchema>;
 
 export const getNotificationRequestSchema = z.object({ id: z.string().min(1) }).strict();
 export type GetNotificationRequest = z.infer<typeof getNotificationRequestSchema>;
+export const deleteNotificationRequestSchema = z.object({ id: z.string().min(1) }).strict();
+export type DeleteNotificationRequest = z.infer<typeof deleteNotificationRequestSchema>;
 export const notificationRendererReadyRequestSchema = z.object({}).strict();
 export const notificationRendererReadyResultSchema = z.object({ ready: z.literal(true) }).strict();
 
@@ -4018,6 +4020,11 @@ export const notificationChangeEventSchema = z.discriminatedUnion('type', [
     unreadCount: z.number().int().nonnegative(),
   }),
   z.object({ type: z.literal('read-all'), unreadCount: z.number().int().nonnegative() }),
+  z.object({
+    type: z.literal('deleted'),
+    notificationId: z.string().min(1),
+    unreadCount: z.number().int().nonnegative(),
+  }),
   z.object({ type: z.literal('cleared'), unreadCount: z.number().int().nonnegative() }),
 ]);
 export type NotificationChangeEvent = z.infer<typeof notificationChangeEventSchema>;
@@ -5645,6 +5652,7 @@ export const IpcChannel = {
   NotificationRendererReady: 'notification:renderer-ready',
   MarkNotificationRead: 'notification:mark-read',
   MarkAllNotificationsRead: 'notification:mark-all-read',
+  DeleteNotification: 'notification:delete',
   ClearNotifications: 'notification:clear',
   NotificationChangeEvent: 'notification:event',
   NotificationActivated: 'notification:activated',
@@ -5743,6 +5751,7 @@ export interface BetterWorkDesktopApi {
     rendererReady(): Promise<{ ready: true }>;
     markRead(input: MarkNotificationReadRequest): Promise<{ unreadCount: number }>;
     markAllRead(): Promise<{ unreadCount: number }>;
+    delete(input: DeleteNotificationRequest): Promise<{ deleted: boolean }>;
     clear(): Promise<{ cleared: boolean }>;
     onChange(listener: (event: NotificationChangeEvent) => void): () => void;
     onActivate(listener: (input: NotificationActivated) => void): () => void;

@@ -1392,6 +1392,7 @@ export function App(): React.JSX.Element {
     toasts,
     activate: activateNotificationFromCenter,
     markAllRead,
+    deleteNotification,
     clear: clearAllNotifications,
     dismissToast,
     pauseToast,
@@ -1502,6 +1503,7 @@ export function App(): React.JSX.Element {
             onOpenChange={setNotificationCenterOpen}
             onActivate={activateNotification}
             onMarkAllRead={markAllRead}
+            onDelete={deleteNotification}
             onClear={clearAllNotifications}
           />
         </div>

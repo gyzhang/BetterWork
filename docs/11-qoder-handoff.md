@@ -38,7 +38,7 @@ BetterWork 优先成为个人实际使用的工作台，再供周边同事用于
 | 联网搜索 | 搜索引擎配置（百度千帆 AI 搜索先行，每服务商一行、`enabled` 全局唯一）；仅在存在已启用且配置了 Key 的引擎时注册 `web_search` 工具。见 [ADR-0007](adr/0007-search-engine-config-and-web-search-tool.md)。 |
 | Evidence | `knowledge_search`、`web_search`、`web_fetch` 与选定 MCP 工具的结果会在 Run 中去重持久化为 Evidence（`local-file` / `web-page` / `mcp-tool` 共用一张表）；任务侧栏和成果版本可回看，本地来源可打开原始文件，网页与 MCP 来源只读展示。 |
 | Artifact | 将任务最终回复保存为版本化 Markdown Artifact；可预览、查看版本历史、从任意版本创建 `user-edit` 修订、导出任意版本为 Markdown。AI 版本关联该 Run 实际 Evidence，人工修订继承前一版本的来源关系。 |
-| 通知 | 三层反馈：页面内联反馈 / Toast（同页抑制、右下角、常规 4s 错误 6s、堆叠上限 4、hover 暂停）/ 消息中心（侧栏铃铛 + 下拉面板、SQLite 200 条滚动上限、单条与全部已读、清空需确认）。通知携带可跳转 target，点击复用既有导航入口。窗口失焦且 run 终态时发系统通知，点击聚焦并跳转；run 取消静默。见 [ADR-0006](adr/0006-notification-feedback.md)。 |
+| 通知 | 三层反馈：页面内联反馈 / Toast（同页抑制、右下角、常规 4s 错误 6s、堆叠上限 4、hover 暂停）/ 消息中心（侧栏铃铛 + 下拉面板、SQLite 200 条滚动上限、单条与全部已读、单条删除与清空均需确认）。通知携带可跳转 target，点击复用既有导航入口。窗口失焦且 run 终态时发系统通知，点击聚焦并跳转；run 取消静默。见 [ADR-0006](adr/0006-notification-feedback.md)。 |
 
 ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-evidence.md) 决定。当前不自动往正文伪造引用标记；未来的 Claim/Citation 与人工来源编修应在完整研究工作流中显式设计，开工前先新增 ADR。
 

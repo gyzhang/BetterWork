@@ -21,7 +21,7 @@ export type ButtonSize = 'sm' | 'md' | 'lg';
  */
 export type ControlSize = ButtonSize;
 
-/** 描边与文字的语义色，对 `secondary`／`text`／`outline`／`quiet` 四档生效（`neutral` 是缺省，无独立规则）。 */
+/** 语义色：secondary/text/outline/quiet 调整文字与描边；link 仅调整文字并保持无框。 */
 export type ButtonTone = 'neutral' | 'brand' | 'danger';
 
 export interface ButtonProps extends Omit<ComponentProps<'button'>, 'className'> {
