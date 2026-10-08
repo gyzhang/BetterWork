@@ -383,6 +383,7 @@ describe('SkillsPage', () => {
     screen.getByRole('button', { name: /研究方法/ }).click();
     const confirmButton = await screen.findByRole('button', { name: '确认依赖授权' });
     expect(confirmButton.hasAttribute('disabled')).toBe(true);
+    await waitFor(() => expect(completeOptions).toBeTypeOf('function'));
     await act(async () => {
       completeOptions?.();
     });
