@@ -1333,6 +1333,11 @@ export function App(): React.JSX.Element {
   };
   const navigateToTarget = (target: NotificationTarget): void => {
     setNotificationCenterOpen(false);
+    if (target.kind === 'settings') {
+      setView('settings');
+      setSettingsTab(target.section);
+      return;
+    }
     if (target.kind === 'task') {
       reportAction(openTaskTarget(target.taskId), setActionError, '无法打开这项任务。');
       return;
@@ -1383,6 +1388,7 @@ export function App(): React.JSX.Element {
     if (target.kind === 'task') return view === 'work' && activeTask?.id === target.taskId;
     if (target.kind === 'artifact')
       return view === 'artifacts' && selectedArtifact?.id === target.artifactId;
+    if (target.kind === 'settings') return view === 'settings' && settingsTab === target.section;
     if (target.kind === 'schedule') return false;
     return view === 'knowledge';
   };

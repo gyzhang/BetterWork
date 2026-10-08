@@ -21,8 +21,11 @@ import {
   listScheduleSourceItemsRequestSchema,
   listSchedulesRequestSchema,
   MAX_RUN_SKILL_BINDINGS,
+  mcpLoginContinueRequestSchema,
+  mcpOperationRequestSchema,
   mcpToolBindingSchema,
   mcpToolSummarySchema,
+  mcpTransportSchema,
   MEMORY_RECALL_BLOCK_CODE_POINT_BUDGET,
   MEMORY_RECALL_CONTENT_CODE_POINT_BUDGET,
   MEMORY_RECALL_PINNED_CODE_POINT_BUDGET,
@@ -54,6 +57,7 @@ import {
   runMemoryContextSchema,
   runtimeEnvironmentSchema,
   runtimeProfileDraftSchema,
+  saveMcpConnectionRequestSchema,
   saveScheduleRequestSchema,
   saveTaskContextRequestSchema,
   saveTaskContinuityBriefRequestSchema,
@@ -327,6 +331,128 @@ describe('run protocol', () => {
       updatedAt: 1,
     });
     expect(context.excludedMemoryIds).toEqual(['memory-1']);
+  });
+
+  it('validates multi-transport authentication and rejects unsafe or duplicate secret mappings', () => {
+    const remote = {
+      kind: 'streamable-http',
+      endpoint: 'https://mcp.example/mcp',
+      networkMode: 'public',
+      networkApproved: false,
+      authentication: { mode: 'none' },
+    };
+    expect(mcpTransportSchema.safeParse(remote).success).toBe(true);
+    expect(mcpTransportSchema.safeParse({ ...remote, kind: 'sse' }).success).toBe(true);
+    for (const headerName of ['Authorization', 'Mcp-Session-Id', 'Cookie', 'X-Key\r\nInjected'])
+      expect(
+        mcpTransportSchema.safeParse({
+          ...remote,
+          authentication: { mode: 'api-key-header', headerName },
+        }).success,
+      ).toBe(false);
+    for (const endpoint of [
+      'http://mcp.example/mcp',
+      'https://user:password@mcp.example',
+      'https://mcp.example?token=secret',
+    ])
+      expect(mcpTransportSchema.safeParse({ ...remote, endpoint }).success).toBe(false);
+    expect(mcpTransportSchema.safeParse({ ...remote, networkMode: 'private' }).success).toBe(false);
+    expect(
+      mcpTransportSchema.safeParse({
+        ...remote,
+        authentication: { mode: 'oauth', clientId: 'client-without-issuer' },
+      }).success,
+    ).toBe(false);
+    for (const name of [
+      'NODE_OPTIONS',
+      'DYLD_INSERT_LIBRARIES',
+      'LD_PRELOAD',
+      'PATH',
+      'A'.repeat(201),
+    ])
+      expect(
+        mcpTransportSchema.safeParse({
+          kind: 'stdio',
+          command: 'node',
+          env: [{ name, secret: true }],
+        }).success,
+      ).toBe(false);
+    expect(
+      mcpTransportSchema.safeParse({
+        kind: 'stdio',
+        command: 'node',
+        env: [{ name: 'KEY', secret: true, value: 'secret' }],
+      }).success,
+    ).toBe(false);
+    const slot = {
+      slot: 'http-token',
+      expectedVersion: 0,
+      mutation: { action: 'replace', value: 'secret' },
+    };
+    expect(
+      saveMcpConnectionRequestSchema.safeParse({
+        name: 'MCP',
+        transport: remote,
+        secrets: [slot, slot],
+      }).success,
+    ).toBe(false);
+    expect(
+      saveMcpConnectionRequestSchema.safeParse({ id: 'existing', name: 'MCP', transport: remote })
+        .success,
+    ).toBe(false);
+    expect(
+      saveMcpConnectionRequestSchema.safeParse({
+        name: 'MCP',
+        transport: { ...remote, authentication: { mode: 'oauth' } },
+        secrets: [{ ...slot, slot: 'oauth-client-secret' }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('requires operation correlation and consent and rejects duplicate or mixed-revision task bindings', () => {
+    const operation = {
+      id: 'connection',
+      expectedRevisionId: 'revision',
+      operationId: 'ba17e5bd-b537-4a68-9b32-231634967f0c',
+    };
+    expect(mcpOperationRequestSchema.safeParse(operation).success).toBe(true);
+    expect(
+      mcpOperationRequestSchema.safeParse({ ...operation, operationId: 'arbitrary' }).success,
+    ).toBe(false);
+    expect(
+      mcpLoginContinueRequestSchema.safeParse({
+        ...operation,
+        issuer: 'https://auth.example',
+        consent: false,
+      }).success,
+    ).toBe(false);
+    const binding = {
+      connectionId: 'connection',
+      connectionRevisionId: 'revision',
+      toolId: 'connection/tool',
+      contractHash: 'a'.repeat(64),
+    };
+    const task = {
+      taskId: 'task',
+      executor: { kind: 'general' },
+      skillBindings: [],
+      excludedMemoryIds: [],
+      mcpToolBindings: [binding],
+    };
+    expect(saveTaskContextRequestSchema.safeParse(task).success).toBe(true);
+    expect(
+      saveTaskContextRequestSchema.safeParse({ ...task, mcpToolBindings: [binding, binding] })
+        .success,
+    ).toBe(false);
+    expect(
+      saveTaskContextRequestSchema.safeParse({
+        ...task,
+        mcpToolBindings: [
+          binding,
+          { ...binding, toolId: 'connection/second', connectionRevisionId: 'other-revision' },
+        ],
+      }).success,
+    ).toBe(false);
   });
 
   it('keeps MCP tool bindings stable and separate from discovered descriptions', () => {

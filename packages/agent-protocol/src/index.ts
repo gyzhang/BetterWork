@@ -671,9 +671,39 @@ export const expertModelReferenceSchema = z.discriminatedUnion('mode', [
 export type ExpertModelReference = z.infer<typeof expertModelReferenceSchema>;
 
 export const mcpToolBindingSchema = z
-  .object({ connectionId: z.string().min(1), toolId: z.string().min(1) })
+  .object({
+    connectionId: z.string().min(1),
+    toolId: z.string().min(1),
+    connectionRevisionId: z.string().min(1).optional(),
+    contractHash: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/u)
+      .optional(),
+  })
   .strict();
 export type McpToolBinding = z.infer<typeof mcpToolBindingSchema>;
+const mcpToolBindingsSchema = z
+  .array(mcpToolBindingSchema)
+  .max(50)
+  .superRefine((bindings, context) => {
+    const pairs = new Set<string>();
+    const revisions = new Map<string, string | undefined>();
+    for (const [index, binding] of bindings.entries()) {
+      const pair = JSON.stringify([binding.connectionId, binding.toolId]);
+      if (
+        pairs.has(pair) ||
+        (revisions.has(binding.connectionId) &&
+          revisions.get(binding.connectionId) !== binding.connectionRevisionId)
+      )
+        context.addIssue({
+          code: 'custom',
+          path: [index],
+          message: 'MCP 工具不能重复选择或混用同一连接的不同配置修订',
+        });
+      pairs.add(pair);
+      revisions.set(binding.connectionId, binding.connectionRevisionId);
+    }
+  });
 
 /** 用途标签：卡片上「这个专家干什么用」的只读片段，不参与执行解析。 */
 export const expertTagSchema = z.string().trim().min(1).max(40);
@@ -698,7 +728,7 @@ export const expertRevisionDraftSchema = z
     skillPreset: expertSkillPresetSchema,
     builtinToolPolicy: builtinToolPolicySchema,
     modelReference: expertModelReferenceSchema,
-    mcpToolBindings: z.array(mcpToolBindingSchema).max(50).optional(),
+    mcpToolBindings: mcpToolBindingsSchema.optional(),
     referenceMaterials: z.array(expertReferenceMaterialSchema).max(50).optional(),
   })
   .strict();
@@ -2664,14 +2694,169 @@ export const mcpConnectionStatusSchema = z.enum([
   'disconnected',
 ]);
 export type McpConnectionStatus = z.infer<typeof mcpConnectionStatusSchema>;
+export const mcpNetworkModeSchema = z.enum(['public', 'private', 'loopback']);
+export type McpNetworkMode = z.infer<typeof mcpNetworkModeSchema>;
+const mcpEndpointSchema = z
+  .string()
+  .trim()
+  .url()
+  .max(4_000)
+  .refine((value) => {
+    const url = new URL(value);
+    return (
+      ['https:', 'http:'].includes(url.protocol) &&
+      !url.username &&
+      !url.password &&
+      !url.search &&
+      !url.hash
+    );
+  }, '服务地址必须是无账号、查询参数和片段的 HTTP(S) 地址');
+const mcpHeaderNameSchema = z
+  .string()
+  .regex(/^[!#$%&'*+.^_`|~0-9a-z-]+$/iu)
+  .max(100)
+  .refine(
+    (name) =>
+      ![
+        'authorization',
+        'cookie',
+        'set-cookie',
+        'host',
+        'content-length',
+        'content-type',
+        'accept',
+        'connection',
+        'transfer-encoding',
+        'upgrade',
+        'proxy-authorization',
+        'origin',
+        'last-event-id',
+      ].includes(name.toLowerCase()) &&
+      !name.toLowerCase().startsWith('mcp-') &&
+      !name.toLowerCase().startsWith('sec-') &&
+      !name.toLowerCase().startsWith('proxy-'),
+    '请求头名称由传输控制，不能作为 API Key 请求头',
+  );
+export const mcpAuthenticationSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('none') }).strict(),
+  z.object({ mode: z.literal('bearer') }).strict(),
+  z.object({ mode: z.literal('api-key-header'), headerName: mcpHeaderNameSchema }).strict(),
+  z
+    .object({
+      mode: z.literal('oauth'),
+      issuer: mcpEndpointSchema.optional(),
+      clientId: z.string().trim().min(1).max(2_000).optional(),
+      clientMetadataUrl: z
+        .string()
+        .url()
+        .max(4_000)
+        .refine((v) => {
+          const url = new URL(v);
+          return (
+            url.protocol === 'https:' &&
+            !url.username &&
+            !url.password &&
+            !url.search &&
+            !url.hash &&
+            url.pathname !== '/'
+          );
+        }, '客户端元数据文档必须是无账号、查询参数和片段且具有非根路径的 HTTPS URL')
+        .optional(),
+      callbackPort: z.number().int().min(1024).max(65535).optional(),
+      approvedOrigins: z
+        .array(
+          z
+            .object({
+              origin: mcpEndpointSchema.refine(
+                (value) => new URL(value).pathname === '/',
+                '认证目的地只能填写完整 origin',
+              ),
+              networkMode: mcpNetworkModeSchema,
+            })
+            .strict(),
+        )
+        .max(20)
+        .optional(),
+    })
+    .strict()
+    .refine((v) => !v.clientId || !!v.issuer, '预注册 Client ID 必须绑定精确 issuer'),
+]);
+export type McpAuthentication = z.infer<typeof mcpAuthenticationSchema>;
+const mcpRemoteTransportShape = {
+  endpoint: mcpEndpointSchema,
+  networkMode: mcpNetworkModeSchema,
+  networkApproved: z.boolean(),
+  authentication: mcpAuthenticationSchema,
+};
 export const mcpTransportSchema = z
-  .object({
-    kind: z.literal('stdio'),
-    command: z.string().trim().min(1).max(2_000),
-    args: z.array(z.string().max(2_000)).max(100).default([]),
-    cwd: z.string().trim().min(1).max(4_000).optional(),
-  })
-  .strict();
+  .discriminatedUnion('kind', [
+    z
+      .object({
+        kind: z.literal('stdio'),
+        command: z.string().trim().min(1).max(2_000),
+        args: z.array(z.string().max(2_000)).max(100).default([]),
+        cwd: z.string().trim().min(1).max(4_000).optional(),
+        env: z
+          .array(
+            z
+              .object({
+                name: z
+                  .string()
+                  .max(200)
+                  .regex(/^[A-Za-z_][A-Za-z0-9_]*$/u)
+                  .refine(
+                    (name) =>
+                      ![
+                        'PATH',
+                        'HOME',
+                        'USER',
+                        'LOGNAME',
+                        'SHELL',
+                        'TERM',
+                        'NODE_OPTIONS',
+                        'NODE_PATH',
+                        'ELECTRON_RUN_AS_NODE',
+                      ].includes(name.toUpperCase()) &&
+                      !name.toUpperCase().startsWith('DYLD_') &&
+                      !name.toUpperCase().startsWith('LD_'),
+                    '不能覆盖受管进程的运行环境变量',
+                  ),
+                value: z.string().max(8_192).optional(),
+                secret: z.boolean(),
+              })
+              .strict(),
+          )
+          .max(50)
+          .optional(),
+      })
+      .strict()
+      .refine((v) => {
+        const env = v.env ?? [];
+        return (
+          new Set(env.map((e) => e.name)).size === env.length &&
+          env.every((e) => !e.secret || e.value === undefined)
+        );
+      }, '环境变量名称不能重复，机密值必须通过凭据槽位保存'),
+    z
+      .object({
+        kind: z.literal('streamable-http'),
+        ...mcpRemoteTransportShape,
+        allowLegacySse: z.boolean().optional(),
+      })
+      .strict(),
+    z.object({ kind: z.literal('sse'), ...mcpRemoteTransportShape }).strict(),
+  ])
+  .refine(
+    (v) => v.kind === 'stdio' || v.networkMode === 'public' || v.networkApproved,
+    '请明确授权此连接的精确主机与端口',
+  )
+  .refine(
+    (v) =>
+      v.kind === 'stdio' ||
+      v.networkMode === 'loopback' ||
+      new URL(v.endpoint).protocol === 'https:',
+    '远程 MCP 服务必须使用 HTTPS',
+  );
 export type McpTransport = z.input<typeof mcpTransportSchema>;
 export const mcpToolSummarySchema = z
   .object({
@@ -2680,7 +2865,23 @@ export const mcpToolSummarySchema = z
     name: z.string().trim().min(1).max(200),
     description: z.string().max(4_000),
     inputSchema: z.record(z.string(), z.unknown()),
+    outputSchema: z.record(z.string(), z.unknown()).optional(),
+    annotations: z
+      .object({
+        readOnlyHint: z.boolean().optional(),
+        destructiveHint: z.boolean().optional(),
+        idempotentHint: z.boolean().optional(),
+        openWorldHint: z.boolean().optional(),
+        title: z.string().optional(),
+      })
+      .strict()
+      .optional(),
     schemaHash: z.string().min(1),
+    contractHash: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/u)
+      .optional(),
+    reviewed: z.boolean().optional(),
     discoveredAt: z.number().int().nonnegative(),
   })
   .strict();
@@ -2690,10 +2891,27 @@ export const mcpConnectionSummarySchema = z
     id: z.string().min(1),
     name: z.string().trim().min(1).max(160),
     transport: mcpTransportSchema,
+    revisionId: z.string().min(1).optional(),
+    revision: z.number().int().positive().optional(),
+    lifecycle: z.enum(['enabled', 'disabled', 'archived']).optional(),
     status: mcpConnectionStatusSchema,
+    stale: z.boolean().optional(),
     serverName: z.string().min(1).optional(),
     serverVersion: z.string().min(1).optional(),
+    protocolVersion: z.string().min(1).optional(),
     tools: mcpToolSummarySchema.array().max(200),
+    credentialSlots: z
+      .array(
+        z
+          .object({
+            slot: z.string(),
+            configured: z.boolean(),
+            version: z.number().int().nonnegative(),
+          })
+          .strict(),
+      )
+      .optional(),
+    oauthStatus: z.enum(['signed-out', 'authorized', 'reauthorization-required']).optional(),
     failureMessage: z.string().min(1).optional(),
     lastCheckedAt: z.number().int().nonnegative().optional(),
     createdAt: z.number().int().nonnegative(),
@@ -2701,24 +2919,108 @@ export const mcpConnectionSummarySchema = z
   })
   .strict();
 export type McpConnectionSummary = z.infer<typeof mcpConnectionSummarySchema>;
+export const mcpSecretMutationSchema = z
+  .object({
+    slot: z.string().min(1).max(200),
+    expectedVersion: z.number().int().nonnegative(),
+    mutation: z.discriminatedUnion('action', [
+      z.object({ action: z.literal('keep') }).strict(),
+      z
+        .object({
+          action: z.literal('replace'),
+          value: z
+            .string()
+            .min(1)
+            .max(8_192)
+            .refine((v) => !/[\r\n]/u.test(v), '凭据不能包含换行'),
+        })
+        .strict(),
+      z.object({ action: z.literal('clear') }).strict(),
+    ]),
+  })
+  .strict();
+export type McpSecretMutation = z.infer<typeof mcpSecretMutationSchema>;
 export const saveMcpConnectionRequestSchema = z
   .object({
     id: z.string().min(1).optional(),
     name: z.string().trim().min(1).max(160),
     transport: mcpTransportSchema,
+    expectedRevisionId: z.string().min(1).optional(),
+    secrets: z.array(mcpSecretMutationSchema).max(51).optional(),
   })
-  .strict();
+  .strict()
+  .refine((v) => !v.id || !!v.expectedRevisionId, '编辑连接需要期望配置修订')
+  .refine(
+    (v) => new Set((v.secrets ?? []).map((e) => e.slot)).size === (v.secrets ?? []).length,
+    '凭据槽位不能重复',
+  )
+  .refine(
+    (v) =>
+      !(v.secrets ?? []).some(
+        (item) => item.slot === 'oauth-client-secret' && item.mutation.action === 'replace',
+      ) ||
+      (v.transport.kind !== 'stdio' &&
+        v.transport.authentication.mode === 'oauth' &&
+        !!v.transport.authentication.clientId &&
+        !!v.transport.authentication.issuer),
+    'Client Secret 必须绑定预注册 Client ID 与 issuer',
+  );
 export type SaveMcpConnectionRequest = z.input<typeof saveMcpConnectionRequestSchema>;
 export const getMcpConnectionRequestSchema = z.object({ id: z.string().min(1) }).strict();
 export type GetMcpConnectionRequest = z.infer<typeof getMcpConnectionRequestSchema>;
-export const deleteMcpConnectionRequestSchema = z.object({ id: z.string().min(1) }).strict();
+export const deleteMcpConnectionRequestSchema = z
+  .object({ id: z.string().min(1), expectedRevisionId: z.string().min(1).optional() })
+  .strict();
 export type DeleteMcpConnectionRequest = z.infer<typeof deleteMcpConnectionRequestSchema>;
+export const mcpLifecycleRequestSchema = z
+  .object({
+    id: z.string().min(1),
+    expectedRevisionId: z.string().min(1),
+    lifecycle: z.enum(['enabled', 'disabled']),
+  })
+  .strict();
+export type McpLifecycleRequest = z.infer<typeof mcpLifecycleRequestSchema>;
+export const mcpReviewRequestSchema = z
+  .object({
+    connectionId: z.string().min(1),
+    connectionRevisionId: z.string().min(1),
+    toolId: z.string().min(1),
+    contractHash: z.string().regex(/^[a-f0-9]{64}$/u),
+    readOnlyConfirmed: z.literal(true),
+  })
+  .strict();
+export type McpReviewRequest = z.infer<typeof mcpReviewRequestSchema>;
+export const mcpOperationRequestSchema = z
+  .object({
+    id: z.string().min(1),
+    operationId: z.string().uuid(),
+    expectedRevisionId: z.string().min(1),
+  })
+  .strict();
+export type McpOperationRequest = z.infer<typeof mcpOperationRequestSchema>;
+export const mcpLoginContinueRequestSchema = mcpOperationRequestSchema
+  .extend({ issuer: mcpEndpointSchema, consent: z.literal(true) })
+  .strict();
+export type McpLoginContinueRequest = z.infer<typeof mcpLoginContinueRequestSchema>;
+export const mcpOAuthPreparationSchema = z
+  .object({
+    operationId: z.string().uuid(),
+    resource: z.string().url(),
+    issuers: z.array(z.string().url()).min(1).max(20),
+    scopes: z.array(z.string()).max(100),
+  })
+  .strict();
+export type McpOAuthPreparation = z.infer<typeof mcpOAuthPreparationSchema>;
 export const mcpMutationResultSchema = z
   .object({ connection: mcpConnectionSummarySchema })
   .strict();
 export type McpMutationResult = z.infer<typeof mcpMutationResultSchema>;
 export const mcpTestResultSchema = z
-  .object({ connection: mcpConnectionSummarySchema, tools: mcpToolSummarySchema.array() })
+  .object({
+    connection: mcpConnectionSummarySchema,
+    tools: mcpToolSummarySchema.array(),
+    operationId: z.string().uuid().optional(),
+  })
   .strict();
 export type McpTestResult = z.infer<typeof mcpTestResultSchema>;
 
@@ -2798,7 +3100,7 @@ export const taskContextRevisionSchema = z
     materials: taskMaterialSelectionSchema.array().max(50).optional(),
     scheduleSourceSnapshotId: z.string().min(1).optional(),
     excludedMemoryIds: z.array(z.string().min(1)).max(MEMORY_TASK_EXCLUSION_MAX).optional(),
-    mcpToolBindings: z.array(mcpToolBindingSchema).max(50).optional(),
+    mcpToolBindings: mcpToolBindingsSchema.optional(),
     modelReference: expertModelReferenceSchema.optional(),
     builtinToolPolicy: builtinToolPolicySchema.optional(),
     createdAt: z.number().int().nonnegative(),
@@ -3965,6 +4267,7 @@ export const notificationTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('task'), taskId: z.string().min(1) }),
   z.object({ kind: z.literal('artifact'), artifactId: z.string().min(1) }),
   z.object({ kind: z.literal('knowledge') }),
+  z.object({ kind: z.literal('settings'), section: z.literal('mcp') }).strict(),
   z
     .object({
       kind: z.literal('schedule'),
@@ -5636,6 +5939,12 @@ export const IpcChannel = {
   SaveMcpConnection: 'mcp:save-connection',
   DeleteMcpConnection: 'mcp:delete-connection',
   TestMcpConnection: 'mcp:test-connection',
+  SetMcpLifecycle: 'mcp:set-lifecycle',
+  ReviewMcpTool: 'mcp:review-tool',
+  CancelMcpOperation: 'mcp:cancel-operation',
+  PrepareMcpLogin: 'mcp:prepare-login',
+  ContinueMcpLogin: 'mcp:continue-login',
+  LogoutMcpConnection: 'mcp:logout',
   ListDependencyOptions: 'dependency:list-options',
   InspectDependencyPlan: 'dependency:inspect-plan',
   VerifyDependencyEnvironment: 'dependency:verify-environment',
@@ -5901,7 +6210,13 @@ export interface BetterWorkDesktopApi {
     getConnection(input: GetMcpConnectionRequest): Promise<McpConnectionSummary | null>;
     saveConnection(input: SaveMcpConnectionRequest): Promise<McpMutationResult>;
     deleteConnection(input: DeleteMcpConnectionRequest): Promise<{ deleted: boolean }>;
-    testConnection(input: GetMcpConnectionRequest): Promise<McpTestResult>;
+    testConnection(input: McpOperationRequest): Promise<McpTestResult>;
+    setLifecycle(input: McpLifecycleRequest): Promise<McpMutationResult>;
+    reviewTool(input: McpReviewRequest): Promise<McpMutationResult>;
+    cancelOperation(input: McpOperationRequest): Promise<{ cancelled: boolean }>;
+    prepareLogin(input: McpOperationRequest): Promise<McpOAuthPreparation>;
+    continueLogin(input: McpLoginContinueRequest): Promise<McpTestResult>;
+    logout(input: McpOperationRequest): Promise<McpMutationResult>;
   };
   dependencies: {
     listOptions(): Promise<DependencyOptions>;

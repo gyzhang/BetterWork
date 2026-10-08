@@ -251,3 +251,30 @@ describe('task continuity preload API', () => {
     ).rejects.toThrow();
   });
 });
+
+describe('MCP preload operations', () => {
+  it('validates operation IDs and consent before IPC and correlates the login/cancel channels', async () => {
+    mocks.invoke.mockClear();
+    const operation = {
+      id: 'connection',
+      expectedRevisionId: 'revision',
+      operationId: 'ba17e5bd-b537-4a68-9b32-231634967f0c',
+    };
+    expect(() => api().mcp.cancelOperation({ ...operation, operationId: 'invalid' })).toThrow();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    mocks.invoke.mockResolvedValueOnce({ cancelled: true });
+    await expect(api().mcp.cancelOperation(operation)).resolves.toEqual({ cancelled: true });
+    expect(mocks.invoke).toHaveBeenLastCalledWith(IpcChannel.CancelMcpOperation, operation);
+    mocks.invoke.mockResolvedValueOnce({
+      operationId: operation.operationId,
+      resource: 'https://mcp.example/mcp',
+      issuers: ['https://auth.example'],
+      scopes: ['read'],
+    });
+    await expect(api().mcp.prepareLogin(operation)).resolves.toMatchObject({ scopes: ['read'] });
+    expect(mocks.invoke).toHaveBeenLastCalledWith(IpcChannel.PrepareMcpLogin, operation);
+    mocks.invoke.mockResolvedValueOnce({ secret: 'unexpected response' });
+    await expect(api().mcp.logout(operation)).rejects.toThrow();
+    expect(mocks.invoke).toHaveBeenLastCalledWith(IpcChannel.LogoutMcpConnection, operation);
+  });
+});

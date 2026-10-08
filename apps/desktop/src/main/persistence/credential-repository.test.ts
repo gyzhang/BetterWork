@@ -55,6 +55,63 @@ const expectCode = (error: unknown, code: CredentialErrorCode): void => {
 };
 
 describe('CredentialRepository', () => {
+  it('commits MCP slots and configuration atomically and rejects stale versions without partial writes', async () => {
+    const repo = freshRepository(new FakeCredentialStore());
+    const owner = { ownerKind: 'mcp-connection' as const, ownerId: 'mcp-1', slot: 'http-token' };
+    const events: number[] = [];
+    repo.onSuperseded((_ref, version) => {
+      events.push(version);
+    });
+    await repo.mutateOwned(
+      owner.ownerId,
+      [{ slot: owner.slot, expectedVersion: 0, mutation: { action: 'replace', value: 'first' } }],
+      () => 1,
+    );
+    await expect(
+      repo.mutateOwned(
+        owner.ownerId,
+        [
+          { slot: 'env:KEY', expectedVersion: 0, mutation: { action: 'replace', value: 'key' } },
+          { slot: owner.slot, expectedVersion: 0, mutation: { action: 'replace', value: 'stale' } },
+        ],
+        () => 2,
+      ),
+    ).rejects.toThrow();
+    expect(repo.hasSecret({ ...owner, slot: 'env:KEY' })).toBe(false);
+    expect((await repo.resolveForOwner(owner)).plaintext).toBe('first');
+    await expect(
+      repo.mutateOwned(
+        owner.ownerId,
+        [
+          {
+            slot: owner.slot,
+            expectedVersion: 1,
+            mutation: { action: 'replace', value: 'second' },
+          },
+        ],
+        () => {
+          throw new Error('Configuration CAS failed');
+        },
+      ),
+    ).rejects.toThrow();
+    expect((await repo.resolveForOwner(owner)).version).toBe(1);
+    expect(events).toEqual([]);
+    await repo.mutateOwned(
+      owner.ownerId,
+      [{ slot: owner.slot, expectedVersion: 1, mutation: { action: 'replace', value: 'refresh' } }],
+      () => 3,
+      false,
+    );
+    expect(events).toEqual([]);
+    await repo.mutateOwned(
+      owner.ownerId,
+      [{ slot: owner.slot, expectedVersion: 2, mutation: { action: 'clear' } }],
+      () => 4,
+    );
+    expect(events).toEqual([2]);
+    expect(repo.hasSecret(owner)).toBe(false);
+  });
+
   it('round-trips a secret and never returns plaintext from put', async () => {
     const store = new FakeCredentialStore();
     const repo = freshRepository(store);

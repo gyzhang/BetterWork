@@ -49,6 +49,7 @@ try {
           '--probe-app-persistence',
           '--app-only',
           '--schedule-only',
+          '--mcp-only',
           '--recovery-only',
           '--probe-crash-recovery',
           '--probe-keyboard',
@@ -226,6 +227,7 @@ try {
               '--probe-keyboard',
               '--app-only',
               '--schedule-only',
+              '--mcp-only',
             ].includes(argument),
           ),
         ],
@@ -261,7 +263,7 @@ try {
       const results = recoveryOnly
         ? []
         : JSON.parse(await readFile(path.join(output, 'matrix-results.json'), 'utf8'));
-      const scheduleOnly = probe.includes('--schedule-only');
+      const scheduleOnly = probe.includes('--schedule-only') || probe.includes('--mcp-only');
       if (
         !appOnly &&
         !scheduleOnly &&
@@ -295,7 +297,11 @@ try {
         (!appOnly &&
           !recoveryOnly &&
           !(
-            scheduleOnly ? ['schedule'] : ['artifact', 'knowledge', 'expert', 'memory', 'schedule']
+            scheduleOnly
+              ? probe.includes('--mcp-only')
+                ? ['mcp']
+                : ['schedule']
+              : ['artifact', 'knowledge', 'expert', 'memory', 'schedule']
           ).every((page) => results.some((item) => item.page === page && item.checks?.length > 0)))
       )
         throw new Error('UI 渲染矩阵缺页面或应用旅程证据');

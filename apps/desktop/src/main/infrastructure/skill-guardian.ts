@@ -20,6 +20,8 @@ import type { JobSpec } from '@betterwork/agent-protocol';
  */
 
 const protocolVersion = 1;
+// SDK probe siblings and live MCP processes share this guardian's group cleanup.
+const mcpPipeMode = process.argv[2] === '--mcp-pipe';
 
 /** pid 已分配却没有 error 事件时的兜底等待，避免宿主一直等不到握手结果。 */
 const spawnFailureGraceMs = 2_000;
@@ -143,6 +145,7 @@ const resumeStreams = (current: Job): void => {
 };
 
 const writeEvent = (event: GuardianEvent): void => {
+  if (mcpPipeMode) return;
   writeQueue = writeQueue
     .then(
       () =>
@@ -356,7 +359,18 @@ const shutdown = async (exitCode: number): Promise<void> => {
 /** 终止并退出；所有调用点都必须收口失败，不允许 `void` 丢弃。 */
 const terminateAndExit = (origin: TerminationOrigin, exitCode: number): void => {
   terminate(origin)
-    .then(() => shutdown(exitCode))
+    .then(async (report) => {
+      if (mcpPipeMode)
+        await new Promise<void>((resolve) => {
+          process.stderr.write(
+            report.cleanupCompleted
+              ? 'BETTERWORK_MCP_CLEANUP_OK\n'
+              : 'BETTERWORK_MCP_CLEANUP_FAILED\n',
+            () => resolve(),
+          );
+        });
+      await shutdown(exitCode);
+    })
     .catch((error: unknown) => {
       writeDiagnostic(`shutdown after ${origin} failed: ${describeError(error)}`);
       process.exit(exitCode);
@@ -371,6 +385,11 @@ const attachOutputStream = (current: Job, name: OutputStreamName): void => {
     return;
   }
   stream.on('data', (chunk: Buffer) => {
+    if (mcpPipeMode) {
+      if (name === 'stdout' && !process.stdout.write(chunk)) stream.pause();
+      // Server stderr is drained but never logged: it may echo managed secrets.
+      return;
+    }
     const budget = current.spec.maxLogBytes - current.forwardedBytes;
     if (budget <= 0) {
       current.droppedBytes[name] += chunk.byteLength;
@@ -412,7 +431,7 @@ const startTarget = (command: LaunchCommand): void => {
     child = spawn(spec.executable, spec.argv, {
       cwd: spec.cwd,
       env: spec.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [mcpPipeMode ? 'pipe' : 'ignore', 'pipe', 'pipe'],
       // detached 让目标成为新会话与新进程组的组长，guardian 留在组外监控控制通道。
       detached: true,
     });
@@ -485,6 +504,10 @@ const startTarget = (command: LaunchCommand): void => {
     terminateAndExit('natural', exitCode === 0 ? 0 : 1);
   });
 
+  if (mcpPipeMode && child.stdin) {
+    process.stdin.pipe(child.stdin);
+    child.stdin.on('error', () => onParentGone());
+  }
   attachOutputStream(current, 'stdout');
   attachOutputStream(current, 'stderr');
 
@@ -596,16 +619,48 @@ const onSignal = (): void => {
 
 const main = (): void => {
   let buffer = '';
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', (chunk: string) => {
-    buffer += chunk;
-    const lines = buffer.split('\n');
-    buffer = lines.pop() ?? '';
-    for (const line of lines) {
-      if (line.trim() === '') continue;
-      handleCommand(line);
-    }
-  });
+  if (mcpPipeMode) {
+    const raw = process.argv[3];
+    const parsed: unknown = raw ? JSON.parse(raw) : undefined;
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      !('command' in parsed) ||
+      typeof parsed.command !== 'string' ||
+      !('args' in parsed) ||
+      !isStringArray(parsed.args)
+    )
+      throw new Error('Invalid MCP launch configuration');
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter(
+        (entry): entry is [string, string] =>
+          entry[1] !== undefined && entry[0] !== 'ELECTRON_RUN_AS_NODE',
+      ),
+    );
+    startTarget({
+      nonce: 'mcp-pipe',
+      graceMs: 125,
+      spec: {
+        executable: parsed.command,
+        argv: parsed.args,
+        cwd: 'cwd' in parsed && typeof parsed.cwd === 'string' ? parsed.cwd : process.cwd(),
+        env,
+        timeoutMs: 2_147_483_647,
+        maxLogBytes: 1_048_576,
+      },
+    });
+  } else {
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk: string) => {
+      buffer += chunk;
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (line.trim() === '') continue;
+        handleCommand(line);
+      }
+    });
+  }
   process.stdin.on('end', onParentGone);
   process.stdin.on('error', (error: Error) => {
     writeDiagnostic(`control channel error: ${describeError(error)}`);

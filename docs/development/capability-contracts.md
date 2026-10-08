@@ -1,9 +1,9 @@
 # API and MCP Capability Contracts
 
-- Version: v1.0, 2026-09-20.
-- Status: proposed implementation contracts, adopted as documentation only. No fields, tables, IPC handlers, or runtime behavior below have been added by this task.
+- Version: v1.1, 2026-10-09 (MCP increment).
+- Status: API contracts remain Proposed. MCP contracts are Accepted under ADR-0043 and implemented on the task branch; automated and human acceptance are recorded separately in the CF board. The common credential service already exists.
 - Product authority: [API tools and remote MCP design](../designs/api-tools-and-remote-mcp.md).
-- Decisions: [ADR-0024](../adr/0024-api-services-and-credentials.md) and [ADR-0025](../adr/0025-remote-mcp-and-capability-bindings.md), both Proposed.
+- Decisions: [ADR-0024](../adr/0024-api-services-and-credentials.md) and [ADR-0025](../adr/0025-remote-mcp-and-capability-bindings.md) remain Proposed; [ADR-0043](../adr/0043-mcp-multi-transport-and-oauth.md) is Accepted and governs this MCP implementation.
 - Existing contracts: [Expert/Task](expert-contracts.md), [materials](material-contracts.md), and [Skill execution](contracts.md).
 
 > 2026-09-22 memory increment note (proposed, not implemented): the [work-centered memory design](../designs/work-centered-memory.md), [ADR-0026](../adr/0026-work-centered-memory.md) and [memory contracts](memory-contracts.md) plan a Main-side shared model provider factory that reuses the existing model profiles and Main-only credential access. That increment deliberately depends on no unfinished CF remote MCP or API-service capability, and it implements none of the interfaces below. If a memory card later needs a CF-owned field, the CF card owns the change; missing model availability only blocks the corresponding real-extraction acceptance and never reopens the credential design. Existing A/B0/E/CF statuses remain unchanged.
@@ -69,46 +69,68 @@ interface TaskApiToolBinding extends ApiToolBinding {
 
 ## 3. MCP contracts
 
+The MCP increment is accepted under [ADR-0043](../adr/0043-mcp-multi-transport-and-oauth.md). Its multi-transport, OAuth, version negotiation, cancellation, secret scope and history requirements supersede the earlier static-only proposal. The following MCP fields match the shared Zod protocol; unrelated API contracts remain proposed. Implementation status belongs only to the CF task board.
+
 ### 3.1 Configuration identity and revisions
 
 Preserve the existing connection ID. Separate mutable lifecycle/current-revision metadata from immutable `McpConnectionRevision` content: `id`, `connectionId`, positive `revision`, `name`, `transport`, and `createdAt`.
 
 The target lifecycle vocabulary is `enabled/disabled/archived`; lifecycle is independent of discovery/test status. New MCP connections start disabled and untested; testing/review does not enable them. An ordinary edit appends a revision and does not close an active Run's client. Archived identities remain available for historical attribution.
 
-Proposed transport vocabulary:
+Implemented transport vocabulary (optional fields are omitted when unavailable):
 
 ```ts
+type McpNetworkMode = 'public' | 'private' | 'loopback';
 type McpAuthentication =
   | { mode: 'none' }
-  | { mode: 'bearer'; credentialId?: string }
-  | { mode: 'api-key-header'; headerName: string; credentialId?: string };
-
+  | { mode: 'bearer' }
+  | { mode: 'api-key-header'; headerName: string }
+  | {
+      mode: 'oauth';
+      issuer?: string;
+      clientId?: string;
+      clientMetadataUrl?: string;
+      callbackPort?: number;
+      approvedOrigins?: { origin: string; networkMode: McpNetworkMode }[];
+    };
 type McpTransport =
   | {
-      kind: 'stdio';
-      command: string;
-      args: string[];
-      cwd?: string;
-      envBindings: { name: string; credentialId: string }[];
+      kind: 'stdio'; command: string; args: string[]; cwd?: string;
+      env?: { name: string; value?: string; secret: boolean }[];
     }
   | {
-      kind: 'streamable-http';
-      endpoint: string;
-      networkMode: 'public' | 'private' | 'loopback';
-      authentication: McpAuthentication;
+      kind: 'streamable-http' | 'sse'; endpoint: string;
+      networkMode: McpNetworkMode; networkApproved: boolean;
+      authentication: McpAuthentication; allowLegacySse?: boolean;
     };
 ```
 
-Missing credentials make a draft incomplete, not implicitly anonymous. `none` is an explicit mode. stdio mappings have unique valid environment variable names and owner-validated credential slots; they carry references, never secret values. Keep the minimal executable runtime environment, not the whole parent environment. Do not support secret values in command arguments.
+The actual schema makes `allowLegacySse` legal only for Streamable HTTP. HTTP-to-SSE fallback defaults off and is permitted only after a 404/405 handshake failure. Authentication errors and business calls do not trigger fallback or replay. The official client SDK 2.0.0 explicitly negotiates modern `2026-07-28` and legacy versions; the selected legacy SSE transport uses legacy negotiation.
+
+`SaveMcpConnectionRequest` contains optional `id`, `expectedRevisionId`, `name`, `transport`, and write-only `secrets[]` of `{ slot, expectedVersion, mutation }`. Main assigns the connection/revision identity. Existing saves require the current expected revision. Ciphertext and plaintext secret values never appear in a revision or read DTO. Slots are owner-bound: `env:<NAME>`, `http-token`, `oauth-client-secret`, and host-generated `oauth:<issuer/resource hash>` authorization bundles. Public `credentialSlots` contains only slot/configured/version metadata. Removal atomically archives the identity and clears every owned secret, preserving revision/history references.
+
+Missing credentials block authenticated dispatch; `none` is explicit. Ordinary stdio env values belong to the nonsecret revision; secret env values use write-only slot mutations. Names are unique and cannot override the executable/runtime environment (including PATH/HOME/NODE_OPTIONS/NODE_PATH and DYLD_/LD_ injection). Only the minimal executable runtime environment plus explicit env entries reaches the managed child. Secrets are not supported in command arguments. Version probing also uses the guardian, with probe/server/descendant cleanup.
 
 Network validation:
-- `public` permits only public HTTPS destinations; `private` requires explicit confirmation and HTTPS for the exact configured host/port; `loopback` requires explicit confirmation and a literal loopback address and may use HTTP.
-- All modes reject URL user-info, query parameters, fragments, and redirects. TLS certificate verification cannot be disabled.
-- Validate DNS and the actual socket destination, including IPv6/mapped forms. Reject link-local/metadata, multicast, unspecified, and out-of-mode addresses. There must be no unchecked second DNS resolution.
-- Apply the policy to every transport operation, including SSE and session termination. Do not relax public `web_fetch` restrictions.
-- Header names must be valid HTTP tokens. Reject CR/LF, cookies, and overrides of transport-controlled Host, Content-Length, Content-Type, Accept, Authorization, and MCP protocol/session headers. Bearer mode owns Authorization.
 
-### 3.2 Tool identity and review
+- `public` permits public HTTPS destinations; `private` requires explicit authorization for the exact configured host/port and HTTPS; `loopback` requires explicit authorization and a literal loopback address and may use HTTP.
+- User-configured MCP/issuer URLs reject user-info, query and fragment. TLS verification stays enabled and transport redirects are rejected. Generated OAuth authorization queries and same-origin legacy SSE session POST queries are protocol data, still subject to destination validation.
+- Resolve all DNS answers, reject mixed or forbidden addresses, and pin the validated address in the actual socket lookup. Reject metadata/link-local, multicast, unspecified and out-of-mode addresses, including mapped IPv6. Apply the policy to every transport request; public `web_fetch` is unchanged.
+- Header names are valid HTTP tokens and cannot override cookies, proxy/security headers, Host, Content-Length, Content-Type, Accept, Authorization or MCP protocol/session headers. Bearer authentication owns Authorization.
+
+### 3.2 OAuth and versioned runtime
+
+Login is explicit in settings. `prepareLogin` performs RFC 9728 protected-resource discovery without a Bearer token, binds the resource to the MCP endpoint, and returns the candidate issuers/scopes for review. `continueLogin` requires consent and the exact selected issuer, operation ID and saved revision. Verified metadata follows RFC 8414/OIDC. Public HTTPS discovery is allowed; private authentication origins require their own exact authorization and never enlarge business-tool destinations.
+
+Authorization Code + PKCE S256 uses the system browser and a one-use `127.0.0.1/mcp/oauth/callback` listener, constant-time state comparison, RFC 9207 issuer checks and resource-bound exchange. The normal callback uses a temporary port; a pre-registered/CIMD client may supply a validated fixed port. Occupied ports fail without changing the saved grant. Callback/server/state/verifier are disposed on completion, cancellation, timeout or shutdown.
+
+Client identity priority is issuer-bound pre-registration, a verified existing HTTPS Client ID Metadata Document, then supported DCR (`application_type: native`), otherwise an actionable registration requirement. No BetterWork product URL is invented. Changing issuer/client ID cannot reuse an old configured client secret without explicit replace/clear. Tokens, refresh tokens, client information and verified discovery are one encrypted owner/issuer/resource bundle. Authorized scopes cannot silently increase on refresh.
+
+Refreshes coalesce by authorization slot, with a 30-second budget and atomic token rotation. Cancelling one waiter does not cancel another Run's refresh; logout/removal cancels the shared refresh and blocks late persistence. `invalid_grant` clears unusable tokens and produces reauthorization-required status. Run dispatch never opens a browser, expands permissions or automatically replays an uncertain call. Logout clears local authorization and cancels dependent Runs; remote revocation is not claimed.
+
+Modern HTTP uses per-request metadata, `server/discover`, `resultType` and no protocol session/standalone GET/Last-Event-ID recovery. Legacy HTTP/SSE keeps protocol session state only in its owned client and sends supported termination on close. Business-call failures are explicit, without automatic resubmission. `input_required`, remote schema references and explicitly destructive/write tools are unsupported.
+
+### 3.3 Tool identity and review
 
 Extend `McpToolBinding` with:
 - `connectionId` and `connectionRevisionId`;
@@ -129,7 +151,7 @@ Existing maximum selection count remains 50 MCP tools. Duplicate connection/tool
 
 `CredentialRecord` is private to Main/persistence. Its logical fields are `id`, `ownerKind` (`api-service-profile/mcp-connection/model-profile`), `ownerId`, `slot`, optional `ciphertext`, nonsecret `version`, and timestamps. A cleared record can retain identity/version metadata without a usable secret.
 
-- API/model owners have their API-key slot; MCP supports its selected HTTP credential or named stdio environment slots.
+- API/model owners have their API-key slot; MCP uses the slots and encrypted OAuth bundles defined in §3.1/§3.2. `mutateOwned` prepares encryption outside SQL and atomically commits owner-scoped CAS mutations with the configuration/grant callback.
 - A credential reference must belong to the consumer's owner and slot. A guessed credential ID from another configuration is rejected.
 - Store ciphertext in SQLite using the Main-owned, injectable asynchronous safeStorage adapter. Profile/revision/Run read responses never include ciphertext.
 - Public credential status contains only reference/version metadata and `configured`/availability information. There is no read-secret operation.
@@ -163,16 +185,18 @@ These are logical operation names for the shared protocol. They do not establish
 | API profiles: duplicate | Source identity/revision and optional name | Independent disabled profile; no credential/default |
 | API profiles: setLifecycle/remove | Identity, expected revision, selected lifecycle; removal is archive | Result plus affected-reference information; safety cancellation when applicable |
 | API defaults: set/unset | Tool ID, optional profile ID, expected default revision | One mapping or none; no task-history edits |
-| API/MCP tests: test | Request ID and saved revision or unsaved draft; transient credential mutation if testing a draft | Sanitized test/discovery result correlated to request and tested configuration |
-| API/MCP tests: cancelTest | Request ID owned by the originating operation | Idempotent cancellation acknowledgment; no unrelated client shutdown |
+| API tests: test (proposed) | Request ID and saved revision or unsaved draft | Sanitized result correlated to configuration |
+| MCP tests: test/cancelOperation | Saved identity, expected revision and UUID operationId; no unsaved-draft test | Sanitized catalog or cancellation acknowledgment; latest operation alone updates diagnostics |
+| API tests: cancelTest (proposed) | Request ID owned by originating operation | Cancellation acknowledgment |
 | MCP: list/get/save | Reuse existing boundary; save includes versioned transport and expected revision | Nonsecret configuration/revision and availability |
 | MCP: setLifecycle/remove | Identity, expected revision; remove archives referenced identity | Safety cancellation and visible invalid historical selections |
-| MCP: reviewToolContract | Connection revision, tool ID, expected contract hash, explicit read-only confirmation | Review for that exact contract only |
+| MCP: reviewTool | Connection revision, tool ID, contract hash, readOnlyConfirmed | Review for that exact contract only |
+| MCP: prepareLogin/continueLogin/logout | Saved identity/revision, UUID operationId; continue also selects issuer and consent | Reviewed issuer/scope preparation, then login/detection result; logout clears local authorization |
 | Task context: save/read | Extend existing revision/CAS operations with API bindings and versioned MCP selections | Explicit category selections plus host-derived availability |
 
 Mutations of existing objects require expected revisions/versions; creation has no existing revision to claim. Unknown fields, invalid modes, ownership mismatches, duplicate selections, and incompatible providers are rejected at the boundary. A conflicting save preserves the local draft.
 
-A profile/connection test is not a Task, Run, or Evidence. A saved-revision test may update only diagnostics for that tested revision. An unsaved-draft test cannot save credentials, configuration, enablement, defaults, or durable tool reviews. Cancellation/stale responses do not overwrite a newer result or revision. Tests may run without enabling a saved configuration, but execution requires enablement.
+A profile/connection test is not a Task, Run, or Evidence. The implemented MCP test accepts saved revisions only; unsaved-draft testing remains an API proposal. A saved-revision test may update only diagnostics for that tested revision. An unsaved-draft test cannot save credentials, configuration, enablement, defaults, or durable tool reviews. Cancellation/stale responses do not overwrite a newer result or revision. Tests may run without enabling a saved configuration, but execution requires enablement.
 
 Credential fields appear only in write/test requests to the owning configuration. Read/list/notification payloads return statuses, not values. The host's availability resolver serves Expert details, task repair UI, and send-time validation so they cannot disagree through separate rules.
 
@@ -198,7 +222,7 @@ Credential fields appear only in write/test requests to the owning configuration
 | `authentication_failed`, `authorization_denied`, `oauth_required` | Correct credentials/account rights or choose a supported service |
 | `rate_limited`, `connection_timeout`, `tool_timeout`, `result_too_large` | Explain the boundary and provide an explicit retry path |
 
-Keep existing ownership, invalid-input, Skill, model, and task-context errors where applicable; do not repurpose them into generic credential or network failures. Return a safe message, code, and repair target. Reuse current inline/toast/notification routing and the existing cancellation vocabulary.
+Keep existing ownership, invalid-input, Skill, model, and task-context errors where applicable; do not repurpose them into generic credential or network failures. API codes/CapabilityAvailability in this section remain a proposal. MCP uses the existing typed IPC error envelope and safe actionable messages; it does not claim that every proposed code below has shipped. Return no raw remote error/header/cause content. Reuse current inline/toast/notification routing and the existing cancellation vocabulary.
 
 ## 7. Run resolution and execution
 
@@ -216,7 +240,7 @@ A newer ordinary configuration revision does not invalidate a deliberately pinne
 
 ### 7.2 Run binding metadata
 
-`RunToolBinding` records the concrete API/MCP execution selection:
+`RunToolBinding` remains the proposed common API/MCP vocabulary. MCP implements its concrete selection in `run_mcp_tool_bindings` (binding ID, run/connection/revision/tool, contract hash, model alias and credentialVersions JSON); API bindings remain future work. The intended common metadata is:
 - host-generated binding ID and `runId`;
 - capability kind (`api-tool/mcp-tool`), stable tool identity, and model-visible alias;
 - API profile/revision or MCP connection/revision, as a discriminated reference;
@@ -254,6 +278,8 @@ When a capability removal/replacement starts a new context segment, retain the c
 | MCP connect | 10 seconds |
 | Complete MCP discovery, including pages | 30 seconds |
 | Individual MCP tool call | 60 seconds |
+| Browser login / consent | 5-minute operation lifetime |
+| OAuth metadata/token HTTP headers and refresh | 30 seconds |
 | Discovered tools | Maximum 200 per connection catalog |
 | Selected MCP tools | Existing maximum 50 |
 | Decoded HTTP message or SSE event | Maximum 1 MiB each |
@@ -276,7 +302,7 @@ Local diagnostic records contain capability binding, request correlation, durati
 
 ### 10.1 Schema and data responsibilities
 
-Use sequential versioned schema migrations, with real SQLite foreign-key/ownership checks and rollback tests. Recheck the actual migration baseline when implementation begins; this document reserves no numeric schema version.
+Use sequential versioned schema migrations, with real SQLite foreign-key/ownership checks and rollback tests. MCP migration v45 adds revisions, catalogs, reviews, OAuth authorizations and Run bindings. Legacy stdio identities/configuration/history are retained, catalogs become stale and no reviews are invented. Existing API migration proposals below do not ship as part of this increment.
 
 Logical storage additions are API identities/revisions/defaults, credential ciphertext/metadata and migration progress, MCP revisions/reviews/catalog metadata, and Run tool-binding references. Physical migrations must keep parent identity → revision → selection/Run binding → call/Evidence references consistent. Do not collapse model/API/MCP configurations or existing Skill execution tables.
 

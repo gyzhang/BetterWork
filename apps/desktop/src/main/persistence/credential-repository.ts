@@ -6,6 +6,7 @@ import {
   type CredentialOwnerKind,
   type CredentialStatus,
   MAX_CREDENTIAL_LENGTH,
+  type McpSecretMutation,
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 
@@ -216,6 +217,57 @@ export class CredentialRepository {
     } catch (error) {
       throw new CredentialError('credential_unavailable', '凭据解密失败', { cause: error });
     }
+  }
+
+  /** Prepare encryption first; commit configuration and all slots atomically with CAS. */
+  async mutateOwned<T>(
+    ownerId: string,
+    mutations: readonly McpSecretMutation[],
+    commit: () => T,
+    notify = true,
+  ): Promise<T> {
+    for (const item of mutations)
+      if (item.mutation.action === 'replace') assertPlaintext(item.mutation.value);
+    const prepared = await Promise.all(
+      mutations.map(async (item) => ({
+        ...item,
+        ciphertext:
+          item.mutation.action === 'replace' ? await this.encrypt(item.mutation.value) : null,
+      })),
+    );
+    const superseded: Array<{ ref: CredentialOwnerRef; version: number }> = [];
+    const result = this.db.transaction(() => {
+      for (const item of prepared) {
+        const ref: CredentialOwnerRef = { ownerKind: 'mcp-connection', ownerId, slot: item.slot };
+        const current = this.find(ref);
+        if ((current?.version ?? 0) !== item.expectedVersion)
+          throw new CredentialError(
+            'credential_unavailable',
+            '凭据版本已变化，请重新读取后再保存。',
+          );
+        if (item.mutation.action === 'keep') continue;
+        const now = Date.now();
+        this.db
+          .prepare(
+            `INSERT INTO credentials (id, owner_kind, owner_id, slot, ciphertext, version, created_at, updated_at)
+          VALUES (?, 'mcp-connection', ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(owner_kind, owner_id, slot) DO UPDATE SET ciphertext = excluded.ciphertext, version = excluded.version, updated_at = excluded.updated_at`,
+          )
+          .run(
+            current?.id ?? randomUUID(),
+            ownerId,
+            item.slot,
+            item.ciphertext,
+            (current?.version ?? 0) + 1,
+            current?.created_at ?? now,
+            now,
+          );
+        if (current) superseded.push({ ref, version: current.version });
+      }
+      return commit();
+    })();
+    if (notify) for (const item of superseded) this.notify(item.ref, item.version);
+    return result;
   }
 
   private async encrypt(plaintext: string): Promise<Buffer> {

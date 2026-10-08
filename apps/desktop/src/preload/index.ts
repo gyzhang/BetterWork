@@ -87,7 +87,12 @@ import {
   listWorkspaceReferenceVersionsRequestSchema,
   materialCandidateSchema,
   mcpConnectionSummarySchema,
+  mcpLifecycleRequestSchema,
+  mcpLoginContinueRequestSchema,
   mcpMutationResultSchema,
+  mcpOAuthPreparationSchema,
+  mcpOperationRequestSchema,
+  mcpReviewRequestSchema,
   mcpTestResultSchema,
   memoryConflictResolutionDataSchema,
   memoryJobListDataSchema,
@@ -861,8 +866,44 @@ const api: BetterWorkDesktopApi = {
     testConnection: (input) =>
       invokeValidated(
         IpcChannel.TestMcpConnection,
-        getMcpConnectionRequestSchema.parse(input),
+        mcpOperationRequestSchema.parse(input),
         mcpTestResultSchema,
+      ),
+    setLifecycle: (input) =>
+      invokeValidated(
+        IpcChannel.SetMcpLifecycle,
+        mcpLifecycleRequestSchema.parse(input),
+        mcpMutationResultSchema,
+      ),
+    reviewTool: (input) =>
+      invokeValidated(
+        IpcChannel.ReviewMcpTool,
+        mcpReviewRequestSchema.parse(input),
+        mcpMutationResultSchema,
+      ),
+    cancelOperation: (input) =>
+      invokeValidated(
+        IpcChannel.CancelMcpOperation,
+        mcpOperationRequestSchema.parse(input),
+        z.object({ cancelled: z.boolean() }),
+      ),
+    prepareLogin: (input) =>
+      invokeValidated(
+        IpcChannel.PrepareMcpLogin,
+        mcpOperationRequestSchema.parse(input),
+        mcpOAuthPreparationSchema,
+      ),
+    continueLogin: (input) =>
+      invokeValidated(
+        IpcChannel.ContinueMcpLogin,
+        mcpLoginContinueRequestSchema.parse(input),
+        mcpTestResultSchema,
+      ),
+    logout: (input) =>
+      invokeValidated(
+        IpcChannel.LogoutMcpConnection,
+        mcpOperationRequestSchema.parse(input),
+        mcpMutationResultSchema,
       ),
   },
   dependencies: {

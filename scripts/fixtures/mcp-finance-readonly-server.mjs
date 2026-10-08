@@ -1,6 +1,25 @@
+import { spawn } from 'node:child_process';
+import { appendFileSync, writeFileSync } from 'node:fs';
 import readline from 'node:readline';
 import process from 'node:process';
 
+const modern = process.argv.includes('--modern');
+if (process.env.MCP_FIXTURE_ENV_FILE)
+  writeFileSync(
+    process.env.MCP_FIXTURE_ENV_FILE,
+    JSON.stringify({
+      inheritedSecret: process.env.MCP_PARENT_SECRET ?? null,
+      nodeOptions: process.env.NODE_OPTIONS ?? null,
+      electronNode: process.env.ELECTRON_RUN_AS_NODE ?? null,
+      explicitValue: process.env.MCP_EXPLICIT_VALUE ?? null,
+    }),
+  );
+if (process.env.MCP_FIXTURE_PID_FILE) {
+  const descendant = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+    stdio: 'ignore',
+  });
+  appendFileSync(process.env.MCP_FIXTURE_PID_FILE, `${process.pid},${descendant.pid}\n`);
+}
 const serverInfo = { name: 'betterwork-finance-fixture', version: '0.1.0' };
 const tools = [
   {
@@ -16,7 +35,9 @@ const tools = [
 ];
 
 const reply = (id, result) =>
-  process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id, result })}\n`);
+  process.stdout.write(
+    `${JSON.stringify({ jsonrpc: '2.0', id, result: modern ? { ...result, resultType: 'complete' } : result })}\n`,
+  );
 const error = (id, code, message) =>
   process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id, error: { code, message } })}\n`);
 
@@ -26,6 +47,13 @@ const handle = (message) => {
     message.method === 'notifications/cancelled'
   )
     return;
+  if (message.method === 'server/discover') {
+    if (process.argv.includes('--exit-on-probe')) process.exit(0);
+    if (modern) {
+      reply(message.id, { supportedVersions: ['2026-07-28'], capabilities: { tools: {} } });
+      return;
+    }
+  }
   if (message.method === 'initialize') {
     reply(message.id, {
       protocolVersion: '2025-06-18',
@@ -35,7 +63,7 @@ const handle = (message) => {
     return;
   }
   if (message.method === 'tools/list') {
-    reply(message.id, { tools });
+    reply(message.id, { tools, ...(modern ? { ttlMs: 0, cacheScope: 'private' } : {}) });
     return;
   }
   if (message.method === 'tools/call') {

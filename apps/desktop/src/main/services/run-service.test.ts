@@ -30,6 +30,7 @@ import type { DocumentExtractor } from './knowledge-extract';
 import { KnowledgeSearchService } from './knowledge-search';
 import { KnowledgeVault } from './knowledge-vault';
 import { McpClientService } from './mcp-client-service';
+import { mcpModelAlias } from './mcp-tool-contract';
 import { MemoryService } from './memory-service';
 import { NotificationService } from './notification-service';
 import { createRunTools, RunService } from './run-service';
@@ -3287,6 +3288,67 @@ describe('RunService', () => {
     );
   });
 
+  it('closes cancellation during MCP discovery before model dispatch with one cancelled terminal event', async () => {
+    const fixture = await createFixture();
+    const mcp = new McpClientService(fixture.store);
+    const connection = fixture.store.mcpConnections.save({
+      name: 'Cancellation fixture',
+      transport: { kind: 'stdio', command: process.execPath, args: [mcpFixturePath] },
+    });
+    const context = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+      materials: [],
+      mcpToolBindings: [
+        {
+          connectionId: connection.id,
+          toolId: `${connection.id}/read`,
+          connectionRevisionId: connection.revisionId,
+          contractHash: 'a'.repeat(64),
+        },
+      ],
+    });
+    let entered: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    vi.spyOn(mcp, 'createAgentTools').mockImplementation(
+      async (_bindings, _runId, signal) =>
+        new Promise((resolve, reject) => {
+          entered?.();
+          const abort = (): void => reject(abortError());
+          signal.addEventListener('abort', abort, { once: true });
+          if (signal.aborted) abort();
+          void resolve;
+        }),
+    );
+    const provider = captureFakeProviderRequests();
+    const service = createService(fixture, undefined, undefined, undefined, undefined, mcp);
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: 'Read',
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    try {
+      await started;
+      expect(service.cancel(runId)).toBe(true);
+      await waitForCompletion(fixture, runId);
+      expect(statusOf(fixture, runId)).toBe('cancelled');
+      expect(
+        fixture.store.runs
+          .listEvents(runId)
+          .filter((event) => ['run.completed', 'run.failed', 'run.cancelled'].includes(event.type)),
+      ).toHaveLength(1);
+      expect(provider.requests).toHaveLength(0);
+      expect(service.isActive(runId)).toBe(false);
+    } finally {
+      provider.restore();
+      await mcp.shutdown();
+    }
+  });
+
   it('routes a selected MCP tool through the Run model tool boundary', async () => {
     const fixture = await createFixture();
     const mcp = new McpClientService(fixture.store);
@@ -3297,10 +3359,27 @@ describe('RunService', () => {
     const discovered = await mcp.testConnection(connection.id);
     const discoveredTool = discovered.tools[0];
     if (!discoveredTool) throw new Error('MCP tool was not discovered');
-    const agentTool = (
-      await mcp.createAgentTools([{ connectionId: connection.id, toolId: discoveredTool.id }])
-    )[0];
-    if (!agentTool) throw new Error('MCP AgentTool was not created');
+    if (!connection.revisionId || !discoveredTool.contractHash)
+      throw new Error('Missing MCP revision or contract');
+    mcp.reviewTool({
+      connectionId: connection.id,
+      connectionRevisionId: connection.revisionId,
+      toolId: discoveredTool.id,
+      contractHash: discoveredTool.contractHash,
+      readOnlyConfirmed: true,
+    });
+    mcp.setLifecycle({
+      id: connection.id,
+      expectedRevisionId: connection.revisionId,
+      lifecycle: 'enabled',
+    });
+    const binding = {
+      connectionId: connection.id,
+      connectionRevisionId: connection.revisionId,
+      toolId: discoveredTool.id,
+      contractHash: discoveredTool.contractHash,
+    };
+    const agentTool = { name: mcpModelAlias(connection.id, discoveredTool.id) };
 
     const fetchMock = vi.fn(async () =>
       fetchMock.mock.calls.length === 1
@@ -3345,7 +3424,7 @@ describe('RunService', () => {
       executor: { kind: 'general' },
       skillBindings: [],
       materials: [],
-      mcpToolBindings: [{ connectionId: connection.id, toolId: discoveredTool.id }],
+      mcpToolBindings: [binding],
     });
     const service = createService(fixture, undefined, undefined, undefined, undefined, mcp);
     const runId = service.start({
@@ -3369,14 +3448,14 @@ describe('RunService', () => {
         expect.objectContaining({
           runId,
           sourceType: 'mcp-tool',
-          sourceUri: `mcp:${agentTool.name}`,
+          sourceUri: `mcp:${binding.connectionId}/${binding.toolId}`,
           excerpt: expect.stringContaining('fixture-ledger'),
         }),
       ]);
       expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(fixture.store.runContextSnapshots.get(runId)).toMatchObject({
         taskContextRevisionId: context.id,
-        mcpToolBindings: [{ connectionId: connection.id, toolId: discoveredTool.id }],
+        mcpToolBindings: [binding],
       });
       const firstCall = fetchMock.mock.calls[0] as unknown[] | undefined;
       const firstRequest = firstCall?.[1] as RequestInit | undefined;

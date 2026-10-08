@@ -1,23 +1,23 @@
 {
-  "savedAt": "2026-10-08 21:26",
+  "savedAt": "2026-10-09 06:41",
   "readings": {
     "判据总数": 154,
     "现行文档点名次数": 14,
     "被点过名的判据": 10,
-    "测试文件": 230,
-    "用例": 2025,
+    "测试文件": 236,
+    "用例": 2063,
     "结构护栏": 154,
-    "例外登记": 202,
+    "例外登记": 203,
     "eslint配置块": 6,
     "规则文件": 7,
-    "产品源码行": 91666,
+    "产品源码行": 94951,
     "巡检窗口天数": 14
   },
   "ruleSnapshot": {
     "version": 1,
     "entries": {
       "eslint.config.mjs": "a0d9062f7c49db5ba0592ec1acac82cb14722ae599ead4e6a0d464fe8426057b",
-      "standards/coding-standard.test.ts › PAGE_SHAPE_EXCEPTIONS": "e96ca8d5b0a7ca96c2ce67e18e7f3f39fef0136a8f74bb08565955774143bb79",
+      "standards/coding-standard.test.ts › PAGE_SHAPE_EXCEPTIONS": "d8e7b4ae54dec1a6906122242f9b6999924304b28d02372642b737944392e240",
       "standards/coding-standard.test.ts › INLINE_STYLE_OUTLETS": "8d4fb7ff18a112c2f94da9130aec51ccb654c967012dbe01d0f1af7c36e23ff7",
       "standards/coding-standard.test.ts › SURFACE_SHELL_OWNERS": "4c1f92c824bf27c4c52f033beaa3a42456231dfd67d74df146a944fddabfe794",
       "standards/coding-standard.test.ts › FIXED_MAX_WIDTH_OWNERS": "9098081ab3bdee20b658e43471ae81fe45ff64d6f803e7cd51b058dade8f7113",
@@ -66,5 +66,5 @@
       "standards/coding-standard.test.ts › 新增 UI 的实际基座归属 › 新命名表面不能自造卡片或徽标外壳 › owners": "92bb0f10115976a86172f280c87cb4bf569ba95be9c674b5b313a9f1bca1c01b"
     }
   },
-  "reviewReason": "PR #12 已验收并合并的消息中心 top 到 bottom 精确定位出口；本轮 CI 快门禁规则不修改该清单，Review 见 docs/logs/2026-10-08.md 21:23"
+  "reviewReason": "Review PAGE_SHAPE_EXCEPTIONS: only McpSettings in the existing SettingsView host is added; SectionHeader remains required, docs/10 section 10.1 records the exact embedded section, and 8 production Electron page groups passed. No ordinary-page or error-outlet rule is relaxed."
 }

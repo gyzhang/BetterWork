@@ -7,6 +7,7 @@ import {
   abortError,
   describeError,
   FakeModelProvider,
+  isAbortError,
   ReActAgentEngine,
 } from '@betterwork/agent-core';
 import type {
@@ -769,7 +770,11 @@ export class RunService {
       );
       const mcpTools =
         this.mcpClientService && executionContext.mcpToolBindings.length > 0
-          ? await this.mcpClientService.createAgentTools(executionContext.mcpToolBindings)
+          ? await this.mcpClientService.createAgentTools(
+              executionContext.mcpToolBindings,
+              runId,
+              controller.signal,
+            )
           : [];
       const events = this.engine.run({
         runId,
@@ -867,6 +872,7 @@ export class RunService {
           return;
         }
       }
+      await this.mcpClientService?.releaseRun(runId);
       if (terminalEvent.type === 'run.completed') {
         await this.persistRequestedMarkdownArtifact(
           runId,
@@ -883,13 +889,33 @@ export class RunService {
       }
     } catch (error) {
       let message = describeError(error);
+      let cleanupFailed = false;
+      try {
+        await this.mcpClientService?.releaseRun(runId);
+      } catch {
+        cleanupFailed = true;
+        message += '；MCP 连接清理失败';
+      }
       try {
         const cleanup = await this.skillExecutionService?.finishRun(runId);
-        if (cleanup && cleanup.cleanupFailed > 0) message += '；子进程清理失败';
+        if (cleanup && cleanup.cleanupFailed > 0) {
+          cleanupFailed = true;
+          message += '；子进程清理失败';
+        }
       } catch (cleanupError) {
+        cleanupFailed = true;
         message += `；子进程清理失败：${describeError(cleanupError)}`;
       }
-      this.finalizeFailure(runId, message);
+      if (!cleanupFailed && controller.signal.aborted && isAbortError(error)) {
+        if (this.store.runs.get(runId)?.status === 'running')
+          this.publish({
+            id: randomUUID(),
+            runId,
+            sequence: (this.store.runs.getLatestEvent(runId)?.sequence ?? -1) + 1,
+            createdAt: Date.now(),
+            type: 'run.cancelled',
+          });
+      } else this.finalizeFailure(runId, message);
     } finally {
       const scheduledOutcome = this.scheduledOutcomePromises.get(runId);
       if (scheduledOutcome) await scheduledOutcome;
@@ -1754,14 +1780,16 @@ export class RunService {
       return;
     }
     if (toolName?.startsWith('mcp_')) {
-      const sourceUri = `mcp:${toolName}`;
+      const binding = this.mcpClientService?.getRunToolBinding(event.runId, toolName);
+      if (!binding) return;
+      const sourceUri = `mcp:${binding.connectionId}/${binding.toolId}`;
       const excerpt = serializeToolOutput(event.output).slice(0, 2_000);
       this.store.evidence.saveMcp({
         taskId,
         runId: event.runId,
         sourceUri,
         title: toolName,
-        locator: 'MCP 工具结果',
+        locator: `MCP 工具结果；配置修订 ${binding.connectionRevisionId ?? 'legacy'}；合同 ${binding.contractHash ?? 'legacy'}`,
         excerpt,
         contentHash: createHash('sha256').update(`${sourceUri}\n${excerpt}`).digest('hex'),
       });
