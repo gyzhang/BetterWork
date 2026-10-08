@@ -3395,6 +3395,8 @@ button.list-row:where(:not(:disabled)):hover {
   padding: 24px;
   place-items: center;
   background: var(--scrim);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 /* 抽屉贴右边缘；锚定覆盖层（消息中心）不套这层壳，只复用基座的键盘与焦点语义。 */
 .modal-backdrop[data-variant='sheet'] {
