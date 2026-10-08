@@ -79,7 +79,7 @@ const INLINE_STYLE_OUTLETS: readonly InlineStyleOutlet[] = [
     tag: 'section',
     className: 'notification-panel',
     attribute: 'style',
-    expression: '{ left: position.left, top: position.top, maxHeight: position.maxHeight, }',
+    expression: '{ left: position.left, bottom: position.bottom, maxHeight: position.maxHeight, }',
     reason: '消息中心依据触发器与窗口实时定位/限高',
   },
   {

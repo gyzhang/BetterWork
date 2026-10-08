@@ -503,7 +503,7 @@ small {
   margin-left: auto;
 }
 /* === Button 基座（ADR-0031）===
-   `variant` 只管颜色，`size` 只管几何，两者正交；`tone` 只对 outline 生效。
+   `variant` 只管颜色，`size` 只管几何，两者正交；`tone` 在 link 上只改文字色，不加边框。
    档位集合与 components/Button.tsx 的 ButtonVariant／ButtonSize／ButtonTone
    由护栏穷举比对：这里多一档或少一档即红。 */
 .btn {
@@ -573,8 +573,8 @@ small {
   color: var(--brand);
   border-color: var(--brand);
 }
-/* `tone` 只改「描边与文字」这两件事，因此只对三档带边框的 variant 生效：
-   primary／danger／chip／link 本身已经定了色，quiet 没有边框可描。
+/* `tone` 对带框的文字 variant 改「描边与文字」；link 是纯文字动作，单独保持无框：
+   primary／danger／chip 本身已经定了色，quiet 虽无底但仍有语义描边。
    此前页面用 `.danger`／`.danger-text` 这类字色类盖在按钮上表达破坏性，
    特异性低于 `.btn[data-variant]`，收口后会静默失效——所以把它升成档位。 */
 .btn[data-variant='secondary'][data-tone='brand'],
@@ -587,8 +587,7 @@ small {
 .btn[data-variant='secondary'][data-tone='danger'],
 .btn[data-variant='text'][data-tone='danger'],
 .btn[data-variant='outline'][data-tone='danger'],
-.btn[data-variant='quiet'][data-tone='danger'],
-.btn[data-variant='link'][data-tone='danger'] {
+.btn[data-variant='quiet'][data-tone='danger'] {
   color: var(--danger);
   border-color: var(--danger);
 }
@@ -623,6 +622,13 @@ small {
 .btn[data-variant='link']:hover:not(:disabled) {
   color: var(--brand-hover);
   text-decoration: underline;
+}
+.btn[data-variant='link'][data-tone='danger'] {
+  color: var(--danger);
+  border-color: transparent;
+}
+.btn[data-variant='link'][data-tone='danger']:hover:not(:disabled) {
+  color: var(--danger-hover);
 }
 /* 侧栏导航行的几何归 NavItem；这里只留这一段自己的上下留白。 */
 .primary-nav {
@@ -4583,7 +4589,7 @@ button.list-row:where(:not(:disabled)):hover {
 .notification-panel {
   /* 锚定覆盖层：外壳（背景、边框、圆角、浮层阴影、纵向节奏）与 .modal-panel 同一份。
      面板与背板 portal 到 body（否则被 <main> 的 inert 锁死，见 notifications.tsx），
-     left/top/maxHeight 由铃铛 rect 算出（高度上限见 notifications.tsx），这里只留宽度与层级。 */
+     left/bottom/maxHeight 由铃铛 rect 算出（高度上限见 notifications.tsx），这里只留宽度与层级。 */
   position: fixed;
   z-index: var(--z-notification);
   width: 360px;
@@ -4633,6 +4639,40 @@ button.list-row:where(:not(:disabled)):hover {
 .notification-list {
   flex: 1;
   overflow: hidden auto;
+}
+.notification-delete-error {
+  margin: var(--space-8) var(--space-12) 0;
+}
+.notification-row:hover {
+  background: var(--surface-hover);
+}
+.btn.notification-open-action {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-4);
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 0;
+  color: var(--text-primary);
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.btn.notification-open-action:hover:not(:disabled) {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+.notification-row-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+.notification-row-meta .list-row-meta {
+  flex: none;
+  overflow: visible;
 }
 
 .level-success {

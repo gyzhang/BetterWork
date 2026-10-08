@@ -33,6 +33,7 @@ import {
   deleteExpertRequestSchema,
   deleteKnowledgeCollectionRequestSchema,
   deleteMcpConnectionRequestSchema,
+  deleteNotificationRequestSchema,
   deleteSkillRequestSchema,
   deleteToolchainSnapshotRequestSchema,
   deleteToolchainSnapshotResultSchema,
@@ -2422,6 +2423,12 @@ function registerNotificationChannels({
     () => ({
       unreadCount: notifications.markAllRead(),
     }),
+  );
+  handleInput(
+    IpcChannel.DeleteNotification,
+    deleteNotificationRequestSchema,
+    deletedResultSchema,
+    ({ id }) => ({ deleted: notifications.delete(id) }),
   );
   handleNoInput(
     IpcChannel.ClearNotifications,

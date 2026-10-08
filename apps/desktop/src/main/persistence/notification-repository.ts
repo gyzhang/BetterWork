@@ -148,6 +148,11 @@ export class NotificationRepository {
     return this.unreadCount();
   }
 
+  delete(id: string): boolean {
+    const result = this.db.prepare('DELETE FROM notifications WHERE id = ?').run(id);
+    return result.changes === 1;
+  }
+
   clear(): void {
     this.db.prepare('DELETE FROM notifications').run();
   }

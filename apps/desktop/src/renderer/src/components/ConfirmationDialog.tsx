@@ -8,6 +8,7 @@ export interface ConfirmationDialogProps {
   title: string;
   detail: string;
   confirmLabel: string;
+  busy?: boolean | undefined;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -20,6 +21,7 @@ export function ConfirmationDialog({
   title,
   detail,
   confirmLabel,
+  busy = false,
   onConfirm,
   onCancel,
 }: ConfirmationDialogProps): React.JSX.Element {
@@ -45,11 +47,12 @@ export function ConfirmationDialog({
           size="md"
           ref={cancelButtonRef}
           type="button"
+          disabled={busy}
           onClick={onCancel}
         >
           取消
         </Button>
-        <Button variant="danger" size="md" type="button" onClick={onConfirm}>
+        <Button variant="danger" size="md" type="button" disabled={busy} onClick={onConfirm}>
           {confirmLabel}
         </Button>
       </footer>

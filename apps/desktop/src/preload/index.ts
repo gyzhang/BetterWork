@@ -19,6 +19,7 @@ import {
   deleteExpertRequestSchema,
   deleteKnowledgeCollectionRequestSchema,
   deleteMcpConnectionRequestSchema,
+  deleteNotificationRequestSchema,
   deleteSkillRequestSchema,
   deleteToolchainSnapshotRequestSchema,
   deleteToolchainSnapshotResultSchema,
@@ -323,6 +324,12 @@ const api: BetterWorkDesktopApi = {
       ),
     markRead: (input) => ipcRenderer.invoke(IpcChannel.MarkNotificationRead, input),
     markAllRead: () => ipcRenderer.invoke(IpcChannel.MarkAllNotificationsRead, {}),
+    delete: (input) =>
+      invokeValidated(
+        IpcChannel.DeleteNotification,
+        deleteNotificationRequestSchema.parse(input),
+        deletedResultSchema,
+      ),
     clear: () => ipcRenderer.invoke(IpcChannel.ClearNotifications, {}),
     onChange(listener) {
       const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
