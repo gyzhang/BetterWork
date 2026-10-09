@@ -113,9 +113,15 @@ RunService 通过 `RunServiceDependencies` 具名对象接收宿主依赖，禁�
 
 ### 3.3 Run 材料事实策略
 
-`material-fact-policy.ts` 在现有 Application 层集中处理材料范围启用、数字/定性采集与最终输出审计，是不依赖宿主 I/O 的纯策略。RunService 只传入已确认成功的材料片段或既有确定性工具结果，保留工具结果识别、读取足迹、Evidence 和终态协调。数字采集只保存直接值，旧派生许可在输出审计时按需判定，不在每次读取时展开全数字配对集合。
+`material-fact-policy.ts` 在现有 Application 层集中处理材料范围启用、数字/定性采集与最终输出审计，是不依赖宿主 I/O 的纯策略。工具结果适配器只传入已确认成功的材料片段或既有确定性工具结果；RunService 保留适配入口调用和终态协调。数字采集只保存直接值，旧派生许可在输出审计时按需判定，不在每次读取时展开全数字配对集合。
 
 本次沿用 `materialScope && selectedMaterialCount > 0` 的启用规则与原失败语义；不按专家或提示词缩小/扩大防护。它是现行启发式防护，不代表指标/期间/单位的关联已经证明；范围、兼容规则和未解决边界见 [C2 说明](reviews/2026-10-09-material-fact-policy.md)。
+
+### 3.4 Run 工具结果适配
+
+`run-tool-result.ts` 在宿主边界定义实际消费字段的 Schema 与判别联合，每个已适配工具结果只解析一次；`run-tool-result-adapter.ts` 根据已解析类型分别处理事实、读取足迹、Evidence 和 Markdown 写入跟踪。RunService 在事件持久化后调用一个具名适配入口，再按原顺序广播，不再重建各类输出守卫。模块保持在同一 Application 层，不扩展 Core 的 `Promise<unknown>` 或事件协议。
+
+KnowledgeAudit 继续在工具回调事务内登记精确来源，适配器只核验归属并复用；成果登记/采用声明和 Skill 运行仍由原回调负责。MCP 不透明结果、未绑定时不登记、网页摘录与哈希、各类材料身份匹配保持。非法已适配结果或缺失/未知工具名给出不含原正文的契约错误，再由既有编排 catch 收敛为失败；已持久化工具事件保留。范围与证据见 [C3 说明](reviews/2026-10-10-tool-result-adapters.md)。
 
 ## 4. Agent Core
 

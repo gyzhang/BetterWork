@@ -3283,6 +3283,54 @@ describe('RunService', () => {
     ]);
   });
 
+  it('fails malformed completed tool results once without broadcasting or registering them', async () => {
+    const fixture = await createFixture();
+    const window = createWindowStub();
+    const service = createService(fixture, {
+      window,
+      webFetch: (async (url: string) => ({
+        url,
+        content: '敏感正文不能进入错误通知',
+        contentType: 'text/plain',
+        status: 200,
+        retrievedAt: 1,
+        truncated: false,
+      })) as unknown as WebFetch,
+    });
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '抓取网页: https://example.test/malformed',
+    });
+    await waitForCompletion(fixture, runId);
+
+    expect(statusOf(fixture, runId)).toBe('failed');
+    const events = fixture.store.runs.listEvents(runId);
+    expect(events.filter((event) => event.type === 'tool.completed')).toHaveLength(1);
+    expect(
+      events.filter((event) =>
+        ['run.completed', 'run.failed', 'run.cancelled'].includes(event.type),
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        type: 'run.failed',
+        error: '工具结果契约错误：web_fetch；字段 title',
+      }),
+    ]);
+    expect(window.runEventTypes()).not.toContain('tool.completed');
+    expect(
+      window
+        .runEventTypes()
+        .filter((type) => ['run.completed', 'run.failed', 'run.cancelled'].includes(type)),
+    ).toEqual(['run.failed']);
+    expect(fixture.store.evidence.listByTask(fixture.taskId)).toEqual([]);
+    expect(fixture.store.materialReads.listByRun(runId)).toEqual([]);
+    expect(fixture.store.artifacts.list(fixture.taskId)).toEqual([]);
+    expect(fixture.store.notifications.list()[0]?.detail).toBe(
+      '工具结果契约错误：web_fetch；字段 title',
+    );
+  });
+
   it('parses a selected CSV through read_office_material and records its locator', async () => {
     const fixture = await createFixture();
     const sourcePath = path.join(fixture.directory, 'monthly.csv');
