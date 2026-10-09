@@ -27,7 +27,12 @@
 
 初次新夹具缺 run.started 的 taskId/sessionId，被协议 Schema 全部拒绝，已补真实 Task/Session 字段；新集成夹具采用 Promise.withResolvers 在运行时可用但不在仓库 ES2022 类型范围内，已改普通 Promise 门闩。没有改协议、tsconfig 或断言绕过失败；定向 lint/format、typecheck 与生产 build 已通过。RunService 从 2,066 行到 2,009 行，新模块 111 行，按 wc -l 的物理行口径，生产源码总量净增 54 行，收益是单独可测的顺序边界。
 
-真实 App/Preload/IPC/临时 SQLite 的 app-only 旅程完成 4 个 Run（完成/失败/取消及重开），网络尝试 0；AI 回读取消与重开截图。证据在 `/var/folders/kq/ts17kvnd5yg2kjtkx645y1zw0000gn/T/betterwork-ui-render-erKiTK`。独立进程 recovery-only 通过，强杀自己的合成宿主后以新 PID 恢复，普通/定时遗留 Run 收口、定时结果只恢复一次、成果/版本和用户资料保持、请求/网络尝试均 0；证据在 `/var/folders/kq/ts17kvnd5yg2kjtkx645y1zw0000gn/T/betterwork-ui-render-fJZdu5`。已核对恢复宿主 bundle 中两处顺序为正常实现；不计入破坏探针。未运行完整 verify、全 UI 矩阵、真实模型或安装态人工验收；最新 SHA 的 PR Gate 与合并继续收口。
+真实 App/Preload/IPC/临时 SQLite 的 app-only 旅程完成 4 个 Run（完成/失败/取消及重开），网络尝试 0；AI 回读取消与重开截图。证据在 `/var/folders/kq/ts17kvnd5yg2kjtkx645y1zw0000gn/T/betterwork-ui-render-erKiTK`。独立进程 recovery-only 通过，强杀自己的合成宿主后以新 PID 恢复，普通/定时遗留 Run 收口、定时结果只恢复一次、成果/版本和合成源文件保持、请求/网络尝试均 0；证据在 `/var/folders/kq/ts17kvnd5yg2kjtkx645y1zw0000gn/T/betterwork-ui-render-fJZdu5`。已核对恢复宿主 bundle 中两处顺序为正常实现；不计入破坏探针。未运行完整 verify、全 UI 矩阵、真实模型或安装态人工验收；最新 SHA 的 PR Gate 与合并继续收口。
 
 
 2026-10-10 06:18 治理终检：原批次基点的 drift:check 通过并保存读数；测试文件 244、粗略用例声明 2,145、护栏 154、例外 203、配置块 6、规则文件 7。规则指纹与例外保持；巡检源码读数 97,022（净增 55），它按换行分割计数，新文件的尾部空项使增量比 wc -l 多 1，并非另一项代码变更。保存后再查确认没有漂移。最终文档检查与源提交随后收口。
+
+
+2026-10-10 06:23 远端收口：源提交 `97e805ead7ba2e64f2ec9f761517fda2bf2287a6` 的 [macOS PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/37998559802) 成功；静态快检、文档护栏 154、相关 functional 101 与 heavy 86 项通过，CI 共 6 文件 / 341 项，Full verify 跳过。本地额外执行的结果适配、KnowledgeAudit、成果采用声明与 AppStore 共 76 项不混入 CI 数字；build、app-only 和 recovery-only 沿用本地证据。
+
+[PR #36](https://github.com/gyzhang/BetterWork/pull/36) 已 squash 合入 main，合并提交 `4b1783f0087f013414a328255478c0a5b3d0e4e6`。原 checkout 已同步 main，代码分支本地/远端均已删除，没有新建 worktree；从此提交建立 `codex/review-c4-closeout`，仅以 Markdown 归档最终证据。C1–C4 的计划切片完成，R06 的其他上下文/工具职责与 C2 事实关联限制仍如前述，不宣称全部重构结束；后续按已接受顺序进入 D 的 Task 草稿/请求生命周期整理，待下一次开发指令。
