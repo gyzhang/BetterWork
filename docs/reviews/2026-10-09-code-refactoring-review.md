@@ -397,3 +397,17 @@ B 开始时先刷新 R17 的只读审计与安装树证据。若确认存在可�
 2026-10-09 20:21 合并前复核：[PR #24](https://github.com/gyzhang/BetterWork/pull/24) 的首轮源提交 `7e0fb6a8121cf6a7929707c7110c5d2fcf7b5bd8` 已通过 [macOS PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/37908708758)。继续核对时补上 OAuth 本地回调监听器关闭回执的等待；新回归在移除等待时失败，补齐后 OAuth/MCP/工程护栏 181 项通过，本地累计按文件去重为 399 项。补充提交必须核对自己的最新 SHA 门禁，不能沿用首轮绿灯；尚未合并。
 
 2026-10-09 20:27 最终收口：源提交 `007aa279e0f9b685bf9a5933defc44af40e6c5ec` 的 [macOS PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/37929647973) 成功，静态检查、受影响 functional/heavy 均通过；Full verify 按规则跳过。[PR #24](https://github.com/gyzhang/BetterWork/pull/24) 已 squash 合入 main，合并提交 `d095fc87820da97a07a8e0d44f36177088d092f5`；原 checkout 已同步 main，已合并代码分支已清理，全程没有新建 worktree。B1/R04 的代码与自动化验证收口；本轮未代替人类验收，B2/B3 与 C–F 仍保持原边界。
+
+## 11. B2 实施跟踪
+
+2026-10-09 20:56：用户要求推进 B2，从干净 main `da622d3e49bf05bd12f4882885b2f5d4ecd0def6` 建立 `codex/review-web-request-boundary`，使用原 checkout，不新建 worktree。先完成 [ADR-0046](../adr/0046-web-fetch-destination-binding.md) 的具体连接方案，用户选择“同意完整方案并实施”，状态记为 Accepted；本节为实现与本地证据，远端门禁、合并另记。
+
+- R05 的域名/IP 分类使用 `isIP` 与 BlockList；正常 fc/fd 域名放行，localhost/local 尾点、IPv4 各 URL 表示、私网/链路本地/共享/组播/保留及 IPv6 映射/特殊网段拒绝。具体地址策略固定在 ADR-0046，不把所有通过分类的地址称为已证明可达。
+- 每跳检查全部 DNS 回答，混合/空/非法结果拒绝；第一个批准地址复制后固定在独立 Undici Agent 的实际 socket lookup 中，域名、TLS SNI 与证书校验保留。重定向先释放前一跳，再重新校验与解析；同主机重定向也重新解析。成功、拒绝、HTTP/正文错误、截断、取消和超时释放响应与 Agent；DNS/HTTP 迟到结果不能派发新工作或成为成果证据。
+- DNS、连接、重定向和正文共用 15 秒预算，正文停滞也能结束等待；用户取消与超时保留第一原因。超时是 `tool.failed`，不是用户取消；Core 仍允许模型处理工具错误后继续，未借 B2 改变 Run 失败策略或 Evidence 接口。保留既有 1,000,000 字节正文截断数值。
+- 最早的 27 项回归在修复前 17 项失败；最终网页服务/网络策略 111 项通过。连接退化探针临时移除 socket lookup 时 TCP/TLS 两项失败，恢复后通过；测试走真实 Undici 到被拦截的 Node 连接入口，全部离线，没有真实内网或公网请求。
+- 工具/Core/MCP/工程护栏 180 项、RunService 79 项通过；按文件去重共 370 项，覆盖既有网页 Evidence 持久化。typecheck 通过，定向 lint/format、中文回读、差异空白、文档/治理终检继续核对；本批不运行完整 verify、真实模型、安装包或人工公网旅程，也不启停用户开发应用或写用户数据库。
+
+没有新依赖、package、IPC、Schema 或迁移；MCP 的 public/private/loopback 授权独立保持。B3/R17 依赖治理与 C–F 未实施，不由本批离线绿灯推导依赖风险已排除。
+
+2026-10-09 20:58 本地终检：定向 ESLint/Prettier、typecheck、docs:check、差异空白与带批次基点的 drift:check 通过，读数已留档；结构护栏 154 条、例外 203 条保持，未修改规则或扩大例外。最终中文文档已回读；远端最新源 SHA 的 PR Gate 尚待执行。

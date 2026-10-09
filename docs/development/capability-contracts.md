@@ -116,7 +116,7 @@ Network validation:
 
 - `public` permits public HTTPS destinations; `private` requires explicit authorization for the exact configured host/port and HTTPS; `loopback` requires explicit authorization and a literal loopback address and may use HTTP.
 - User-configured MCP/issuer URLs reject user-info, query and fragment. TLS verification stays enabled and transport redirects are rejected. Generated OAuth authorization queries and same-origin legacy SSE session POST queries are protocol data, still subject to destination validation.
-- Resolve all DNS answers, reject mixed or forbidden addresses, and pin the validated address in the actual socket lookup. Reject metadata/link-local, multicast, unspecified and out-of-mode addresses, including mapped IPv6. Apply the policy to every transport request; public `web_fetch` is unchanged.
+- Resolve all DNS answers, reject mixed or forbidden addresses, and pin the validated address in the actual socket lookup. Reject metadata/link-local, multicast, unspecified and out-of-mode addresses, including mapped IPv6. Apply the policy to every transport request; CF does not alter public `web_fetch`. The later B2 increment is independently specified by [ADR-0046](../adr/0046-web-fetch-destination-binding.md), without changing MCP grants.
 - Header names are valid HTTP tokens and cannot override cookies, proxy/security headers, Host, Content-Length, Content-Type, Accept, Authorization or MCP protocol/session headers. Bearer authentication owns Authorization.
 
 ### 3.2 OAuth and versioned runtime
