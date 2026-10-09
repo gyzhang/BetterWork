@@ -243,6 +243,8 @@ Jobs kind：`import | refresh | rebuild-keyword | rebuild-semantic | check-sourc
 
 聚合：全部 succeeded 才 succeeded；成功与失败混合为 partial；全失败为 failed。用户取消优先 job=cancelled，保留已经 succeeded/failed 的 item，未完成项 cancelled。重启把 queued/running 收口 interrupted，终态不改；未完成 item interrupted。
 
+应用退出同样先将未完成 job/item 收口 `interrupted`，停止接收新作业并中止当前提取/嵌入，等待索引排空循环及在途清理结束后才关闭 Worker 与知识库。迟到结果不能改写中断终态或发布向量，已发布的关键词与兼容 active 索引保留；退出等待预算和再次退出语义见[系统架构 §3.1](../03-system-architecture.md#31-应用退出与后台工作所有权)。
+
 ### 8.2 调度、原子性与恢复
 
 - 一个持久知识作业同时运行；其他排队。Embedding HTTP 另设并发 1，知识页/Run 查询在两个索引批次之间优先，不能打断并发布半批索引。排队期间用户取消立即生效。

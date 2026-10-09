@@ -123,6 +123,7 @@ export class KnowledgeIndexService {
   private readonly onJobCancel: ((jobId: string) => void) | undefined;
   private readonly controllers = new Map<string, AbortController>();
   private draining: Promise<void> = Promise.resolve();
+  private stopping = false;
 
   constructor(deps: KnowledgeIndexServiceDeps) {
     this.vault = deps.vault;
@@ -153,6 +154,7 @@ export class KnowledgeIndexService {
    * 关闭语义时取消仍在排队或运行的语义作业，但保留用户设置与已发布向量。
    */
   saveSettings(input: SaveKnowledgeSettingsRequest): KnowledgeSearchSettings {
+    this.assertAccepting();
     let profileId = this.index.settings().embeddingProfileId;
     if (input.embeddingProfileId) {
       profileId = this.probeEmbedding(input.embeddingProfileId).profileId ?? profileId;
@@ -230,6 +232,7 @@ export class KnowledgeIndexService {
   startRebuildSemantic(
     input: Extract<RebuildKnowledgeIndexRequest, { kind: 'semantic' }>,
   ): KnowledgeJobAck {
+    this.assertAccepting();
     const settings = this.index.settings();
     if (!settings.semanticEnabled) {
       throw jobError('EMBEDDING_MODEL_UNAVAILABLE', '语义检索未启用，无法建立向量索引。');
@@ -309,6 +312,7 @@ export class KnowledgeIndexService {
 
   /** 重试是新作业：引用原 job、attempt 递增，只带走用户选定的未完成条目。 */
   retryJob(jobId: string, itemIds: readonly string[]): KnowledgeJobAck {
+    this.assertAccepting();
     const original = this.jobs.job(jobId);
     if (!original) throw jobError('INDEX_CONFIGURATION_CHANGED', '原作业已不存在。');
     if (!isTerminalJob(original.status)) {
@@ -370,6 +374,22 @@ export class KnowledgeIndexService {
     return this.draining;
   }
 
+  shutdown(): Promise<void> {
+    if (!this.stopping) {
+      this.stopping = true;
+      for (const [jobId, controller] of this.controllers) {
+        controller.abort();
+        this.onJobCancel?.(jobId);
+      }
+      this.recoverInterrupted();
+    }
+    return this.draining;
+  }
+
+  private assertAccepting(): void {
+    if (this.stopping) throw jobError('WORKER_UNAVAILABLE', '应用正在退出，不再接受知识作业。');
+  }
+
   private enqueue(input: {
     kind: KnowledgeJobSummary['kind'];
     request: JobRequest;
@@ -378,6 +398,7 @@ export class KnowledgeIndexService {
     spaceId?: string;
     attempt?: number;
   }): KnowledgeJobAck {
+    this.assertAccepting();
     const job = this.jobs.createJob({
       kind: input.kind,
       request: input.request,
@@ -396,7 +417,7 @@ export class KnowledgeIndexService {
   }
 
   private async drain(): Promise<void> {
-    for (;;) {
+    while (!this.stopping) {
       const next = this.jobs.nextQueued();
       if (!next) return;
       await this.runJob(next);
@@ -419,11 +440,13 @@ export class KnowledgeIndexService {
       }
       try {
         await this.runItem(job, item, controller.signal);
+        if (this.stopping) break;
         const done = this.jobs.item(item.id);
         if (!done || done.status === 'running') {
           this.jobs.updateItem(item.id, { status: 'succeeded' });
         }
       } catch (error) {
+        if (this.stopping) break;
         if (isAbortError(error) || controller.signal.aborted) {
           this.jobs.updateItem(item.id, { status: 'cancelled' });
           aborted = true;
@@ -433,6 +456,7 @@ export class KnowledgeIndexService {
       }
     }
     this.controllers.delete(job.id);
+    if (this.stopping) return;
     const current = this.jobs.job(job.id);
     if (!current || isTerminalJob(current.status)) return;
     const finished = aborted

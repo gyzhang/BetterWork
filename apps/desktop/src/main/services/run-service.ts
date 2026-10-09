@@ -457,6 +457,7 @@ export interface ScheduledRunAssociation {
  *    进入事件循环前后仍可能抛错，这时用 `forceFailure` 兜底合成 `run.failed`。
  */
 export class RunService {
+  private stopping = false;
   private readonly activeRuns = new Map<string, ActiveRun>();
   private readonly consumePromises = new Map<string, Promise<void>>();
   private readonly scheduledOutcomePromises = new Map<string, Promise<void>>();
@@ -506,6 +507,7 @@ export class RunService {
   ) {}
 
   start(input: StartRunRequest, scheduledAssociation?: ScheduledRunAssociation): string {
+    if (this.stopping) throw new Error('应用正在退出，不再接受新 Run。');
     const context = this.store.tasks.getRunContext(input.taskId, input.sessionId);
     if (!context) throw new Error('Session does not belong to task');
     const workspaceId = this.store.tasks.getWorkspaceId(input.taskId);
@@ -691,6 +693,7 @@ export class RunService {
 
   /** 应用关闭前调用：取消所有活跃 Run，等待全部消费结束。 */
   async shutdown(): Promise<void> {
+    this.stopping = true;
     for (const active of this.activeRuns.values()) {
       active.controller.abort();
     }

@@ -6,7 +6,7 @@ import path from 'node:path';
 
 import { isAbortError } from '@betterwork/agent-core';
 import type { DependencyLock, TargetPlatform } from '@betterwork/agent-protocol';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createNodeFileSystem,
@@ -31,6 +31,14 @@ import {
 } from './skill-dependency-service';
 
 const encoder = new TextEncoder();
+const deferred = (): { promise: Promise<void>; resolve: () => void } => {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+};
+
 const temporaryDirectories: string[] = [];
 
 const temporaryDirectory = (): string => {
@@ -111,6 +119,115 @@ const lockOf = (overrides: Partial<DependencyLock> = {}): DependencyLock => ({
 const seedWheelhouse = async (harness: Harness, bytes: Uint8Array = wheelBytes): Promise<void> => {
   await harness.filesystem.writeFile(path.join(harness.paths.wheelhouseRoot, wheelName), bytes);
 };
+
+describe('SkillDependencyService shutdown', () => {
+  it('joins a cancelled download, its cleanup, and callers waiting for the preparation result', async () => {
+    const harness = openService();
+    const entered = deferred();
+    const release = deferred();
+    let signal: AbortSignal | undefined;
+    vi.spyOn(harness.download, 'download').mockImplementation(async (_url, requestSignal) => {
+      signal = requestSignal;
+      entered.resolve();
+      await release.promise;
+      requestSignal.throwIfAborted();
+      return wheelBytes;
+    });
+    const lock = lockOf({
+      packages: [
+        {
+          name: 'python-pptx',
+          version: '1.0.2',
+          wheel: wheelName,
+          sha256: sha256Of(wheelBytes),
+          source: 'approved-index',
+          url: 'https://packages.example/wheel.whl',
+        },
+      ],
+    });
+    const preparing = harness.service.prepareEnvironmentAndWait(
+      localBase,
+      lock,
+      new AbortController().signal,
+    );
+    const failure = expect(preparing).rejects.toThrow();
+    await entered.promise;
+    let finished = false;
+    const shutdown = harness.service.shutdown().then(() => {
+      finished = true;
+    });
+    expect(signal?.aborted).toBe(true);
+    await Promise.resolve();
+    expect(finished).toBe(false);
+    release.resolve();
+    await Promise.all([shutdown, failure]);
+    const environment = harness.store.environments.listEnvironments()[0];
+    expect(environment?.status).toBe('failed');
+    expect(environment?.failureCode).toBe('interrupted');
+    expect(harness.service.listOperations(environment?.environmentKey ?? '')[0]?.status).toBe(
+      'interrupted',
+    );
+    expect(harness.process.callsMatching('pip')).toHaveLength(0);
+    harness.store.close();
+    await harness.service.shutdown();
+    await expect(harness.service.cancelPreparation('closed')).rejects.toThrow('退出');
+  });
+  it.each(['plan-probe', 'base-probe', 'venv', 'pip', 'imports'])(
+    'joins %s and prevents any later preparation',
+    async (stage) => {
+      const harness = openService();
+      await seedWheelhouse(harness);
+      const entered = deferred();
+      const release = deferred();
+      const originalRun = harness.process.run.bind(harness.process);
+      let probes = 0;
+      let killed = false;
+      const processSpy = vi.spyOn(harness.process, 'run').mockImplementation((request) => {
+        const script = request.argv[1] ?? '';
+        if (script.includes('importlib.util')) probes += 1;
+        const matched =
+          (stage === 'plan-probe' && probes === 1 && script.includes('importlib.util')) ||
+          (stage === 'base-probe' && probes === 2 && script.includes('importlib.util')) ||
+          (stage === 'venv' && request.argv.includes('venv')) ||
+          (stage === 'pip' && request.argv.includes('pip')) ||
+          (stage === 'imports' && script.includes('importlib.import_module'));
+        const handle = originalRun(request);
+        if (!matched) return handle;
+        entered.resolve();
+        return {
+          result: release.promise.then(() => handle.result),
+          kill: () => {
+            killed = true;
+            handle.kill();
+          },
+        };
+      });
+      const preparing = harness.service.prepareEnvironment(localBase, lockOf());
+      const receipt = preparing.catch(() => undefined);
+      await entered.promise;
+      let finished = false;
+      const pending = harness.service.shutdown().then(() => {
+        finished = true;
+      });
+      expect(killed).toBe(true);
+      await Promise.resolve();
+      expect(finished).toBe(false);
+      release.resolve();
+      await Promise.all([pending, receipt]);
+      const operations = harness.store.dependencyOperations.listOperationsByEnvironment(
+        harness.store.environments.listEnvironments()[0]?.id ?? '',
+      );
+      expect(operations.map((operation) => operation.status)).toEqual(
+        stage === 'plan-probe' ? [] : ['interrupted'],
+      );
+      const callCount = processSpy.mock.calls.length;
+      harness.store.close();
+      await harness.service.shutdown();
+      await expect(harness.service.prepareEnvironment(localBase, lockOf())).rejects.toThrow('退出');
+      expect(processSpy).toHaveBeenCalledTimes(callCount);
+    },
+  );
+});
 
 const finishOperation = async (
   harness: Harness,

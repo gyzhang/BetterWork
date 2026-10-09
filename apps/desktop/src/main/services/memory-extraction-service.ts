@@ -487,6 +487,8 @@ export class MemoryExtractionService {
   /** jobId → 执行中的中止句柄；取消必须先落库终态，再由本表中止请求。 */
   private readonly activeControllers = new Map<string, AbortController>();
   private draining: Promise<number> | undefined;
+  private stopping = false;
+  private readonly pendingRequests = new Set<Promise<Result<MemoryExtractionRequestOutcome>>>();
   /** 来源依赖的下一跳：legacy 来源没有可展开的依赖。 */
   private readonly revisionDependencies = (revisionId: string): readonly string[] => {
     const provenance = this.memories.getRevision(revisionId)?.provenance;
@@ -597,6 +599,8 @@ export class MemoryExtractionService {
 
   /** 单次手动重试带独立同意；不修改自动开关（§7.3）。 */
   async retryJob(input: RetryMemoryJobRequest): Promise<Result<MemoryJobSummary>> {
+    if (this.stopping)
+      return errorResult(domainError('JOB_STATE_CONFLICT', '应用正在退出，不再接受提炼作业。'));
     if (input.consentVersion !== MEMORY_SUGGESTION_CONSENT_VERSION) {
       return errorResult(domainError('CONSENT_REQUIRED', '重试需要确认当前同意版本。'));
     }
@@ -660,14 +664,19 @@ export class MemoryExtractionService {
    * 自动提炼入队：默认关闭零入队；依赖先证明再登记；队列满不阻塞、
    * 不影响主 Run 终态；同一来源版本只保留一条逻辑作业。
    */
-  async requestExtraction(
+  requestExtraction(
     source: MemoryExtractionSource,
   ): Promise<Result<MemoryExtractionRequestOutcome>> {
-    try {
-      return okResult(await this.enqueueAutomatic(source));
-    } catch (error) {
-      return errorResult(mapError(error));
-    }
+    if (this.stopping)
+      return Promise.resolve(
+        errorResult(domainError('JOB_STATE_CONFLICT', '应用正在退出，不再接受提炼作业。')),
+      );
+    const pending = this.enqueueAutomatic(source)
+      .then((outcome) => okResult(outcome))
+      .catch((error: unknown) => errorResult(mapError(error)))
+      .finally(() => this.pendingRequests.delete(pending));
+    this.pendingRequests.add(pending);
+    return pending;
   }
 
   // ---------------------------------------------------------------- 队列排空与启动收口（§7.3）
@@ -675,6 +684,7 @@ export class MemoryExtractionService {
   /** 全局并发 1：单实例串行排空；并发调用共享同一轮排空，claim 本身是 CAS。 */
   runPendingJobs(): Promise<number> {
     if (this.draining) return this.draining;
+    if (this.stopping) return Promise.resolve(0);
     this.draining = this.drainLoop().finally(() => {
       this.draining = undefined;
     });
@@ -684,6 +694,15 @@ export class MemoryExtractionService {
   /** 启动收口：遗留 queued/running 一律 interrupted，零网络。 */
   recoverInterruptedJobs(): number {
     return this.jobs.interruptLeftoverJobs(this.now());
+  }
+
+  async shutdown(): Promise<void> {
+    if (!this.stopping) {
+      this.stopping = true;
+      this.jobs.interruptLeftoverJobs(this.now());
+      for (const controller of this.activeControllers.values()) controller.abort();
+    }
+    await Promise.allSettled([this.draining, ...this.pendingRequests]);
   }
 
   /**
@@ -711,7 +730,7 @@ export class MemoryExtractionService {
 
   private async drainLoop(): Promise<number> {
     let executed = 0;
-    for (;;) {
+    while (!this.stopping) {
       const job = this.jobs.claimNext(this.now());
       if (!job) break;
       await this.executeJob(job);
@@ -778,6 +797,7 @@ export class MemoryExtractionService {
       if (error instanceof CredentialError) return notEnqueued('CREDENTIAL_UNAVAILABLE');
       throw error;
     }
+    if (this.stopping) return notEnqueued();
     const fragments = storedFragmentsOf(request, snapshot.partialByRole);
     try {
       const enqueued = this.jobs.enqueue({
@@ -894,6 +914,7 @@ export class MemoryExtractionService {
       return;
     }
     const storedFingerprint = job.modelSnapshot?.fingerprint;
+    if (this.stopping || controller.signal.aborted) return;
     if (typeof storedFingerprint === 'string' && storedFingerprint !== resolved.fingerprint) {
       this.finish(job, 'skipped', 'MODEL_PROFILE_CHANGED');
       return;
@@ -1021,6 +1042,7 @@ export class MemoryExtractionService {
       readonly usage?: ModelUsage;
     },
   ): void {
+    if (this.stopping) return;
     if (
       outcome.candidates.some(
         (candidate) =>
@@ -1211,6 +1233,7 @@ export class MemoryExtractionService {
     kind: 'failed' | 'skipped',
     errorCode: MemoryJobErrorCode,
   ): void {
+    if (this.stopping) return;
     try {
       const patch = {
         jobId: job.id,

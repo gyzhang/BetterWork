@@ -1,6 +1,7 @@
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { mkdir, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
 
 /**
  * 依赖准备的可注入根（设计 §4、docs/12 §9）。
@@ -63,6 +64,21 @@ export interface DependencyDownloader {
 
 /** 安装/探测输出的保留上限：够诊断，又不会把整段 pip 日志塞进操作记录。 */
 const maxCapturedBytes = 256 * 1024;
+const execute = promisify(execFile);
+
+const waitForProcessGroupExit = async (group: number): Promise<void> => {
+  const deadline = Date.now() + 2000;
+  for (;;) {
+    const { stdout } = await execute('/bin/ps', ['-axo', 'pgid=,state='], { timeout: 1000 });
+    const alive = stdout.split('\n').some((line) => {
+      const fields = line.trim().split(/\s+/u);
+      return Number(fields[0]) === group && !fields[1]?.startsWith('Z');
+    });
+    if (!alive) return;
+    if (Date.now() >= deadline) throw new Error('Dependency process group failed to stop');
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+  }
+};
 
 export const createNodeProcessRunner = (): DependencyProcessRunner => ({
   run(request: DependencyProcessRequest): DependencyProcessHandle {
@@ -70,6 +86,7 @@ export const createNodeProcessRunner = (): DependencyProcessRunner => ({
     const child = spawn(request.executable, request.argv, {
       ...(request.cwd ? { cwd: request.cwd } : {}),
       ...(request.env ? { env: request.env } : {}),
+      detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const collectors: Record<
@@ -94,14 +111,37 @@ export const createNodeProcessRunner = (): DependencyProcessRunner => ({
     attach('stdout');
     attach('stderr');
 
+    let killed = false;
+    let closed = false;
+    const kill = (): void => {
+      if (killed || closed) return;
+      if (child.pid !== undefined) {
+        try {
+          process.kill(-child.pid, 'SIGKILL');
+        } catch (error) {
+          // The group may already have exited between cancellation and delivery.
+          if (!(error instanceof Error && 'code' in error && error.code === 'ESRCH')) throw error;
+        }
+      }
+      killed = true;
+    };
     let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGKILL');
-    }, request.timeoutMs);
-
-    const result = new Promise<DependencyProcessResult>((resolve) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const result = new Promise<DependencyProcessResult>((resolve, reject) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        try {
+          kill();
+        } catch (error) {
+          reject(
+            error instanceof Error
+              ? error
+              : new Error('Dependency process cleanup failed', { cause: error }),
+          );
+        }
+      }, request.timeoutMs);
       child.on('error', (error: Error) => {
+        closed = true;
         clearTimeout(timer);
         resolve({
           exitCode: null,
@@ -113,30 +153,44 @@ export const createNodeProcessRunner = (): DependencyProcessRunner => ({
       });
       child.on('close', (exitCode: number | null, signal: NodeJS.Signals | null) => {
         clearTimeout(timer);
+        let cleanup: Promise<void>;
+        try {
+          kill();
+          cleanup =
+            child.pid === undefined ? Promise.resolve() : waitForProcessGroupExit(child.pid);
+        } catch (error) {
+          reject(
+            error instanceof Error
+              ? error
+              : new Error('Dependency process cleanup failed', { cause: error }),
+          );
+          closed = true;
+          return;
+        }
+        closed = true;
         const render = (name: 'stdout' | 'stderr'): string => {
           const collector = collectors[name];
           const text = collector.chunks.join('');
           const dropped = collector.received - collector.kept;
           return dropped > 0 ? `${text}\n[输出已截断，丢弃 ${dropped} 字节]` : text;
         };
-        resolve({
-          exitCode,
-          signal,
-          stdout: render('stdout'),
-          stderr: render('stderr'),
-          timedOut,
-        });
+        cleanup.then(
+          () =>
+            resolve({
+              exitCode,
+              signal,
+              stdout: render('stdout'),
+              stderr: render('stderr'),
+              timedOut,
+            }),
+          reject,
+        );
       });
     });
 
-    let killed = false;
     return {
       result,
-      kill: () => {
-        if (killed) return;
-        killed = true;
-        child.kill('SIGKILL');
-      },
+      kill,
     };
   },
 });

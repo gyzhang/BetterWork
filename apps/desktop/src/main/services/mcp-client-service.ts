@@ -146,6 +146,15 @@ const sanitize = (value: unknown, secrets: readonly string[]): unknown => {
 };
 
 export class McpClientService {
+  private stopping = false;
+  private readonly pendingOperations = new Set<Promise<unknown>>();
+
+  private async trackOperation<T>(operation: () => Promise<T>): Promise<T> {
+    if (this.stopping) throw new McpClientError('应用正在退出，不再接受 MCP 操作。');
+    const pending = operation().finally(() => this.pendingOperations.delete(pending));
+    this.pendingOperations.add(pending);
+    return pending;
+  }
   private readonly runs = new Map<string, RunConnections>();
   private readonly operations = new Map<
     string,
@@ -179,7 +188,13 @@ export class McpClientService {
     return connection ? this.oauth.summary(connection) : null;
   }
 
-  async saveConnection(input: SaveMcpConnectionRequest): Promise<McpConnectionSummary> {
+  saveConnection(input: SaveMcpConnectionRequest): Promise<McpConnectionSummary> {
+    return this.trackOperation(() => this.saveConnectionInternal(input));
+  }
+
+  private async saveConnectionInternal(
+    input: SaveMcpConnectionRequest,
+  ): Promise<McpConnectionSummary> {
     const parsed = saveMcpConnectionRequestSchema.parse(input);
     if (parsed.id) this.store.mcpConnections.assertRevision(parsed.id, parsed.expectedRevisionId);
     const transport = parsed.transport;
@@ -229,7 +244,14 @@ export class McpClientService {
     return this.oauth.summary(result);
   }
 
-  async deleteConnection(id: string, expectedRevisionId?: string): Promise<boolean> {
+  deleteConnection(id: string, expectedRevisionId?: string): Promise<boolean> {
+    return this.trackOperation(() => this.deleteConnectionInternal(id, expectedRevisionId));
+  }
+
+  private async deleteConnectionInternal(
+    id: string,
+    expectedRevisionId?: string,
+  ): Promise<boolean> {
     const connection = this.store.mcpConnections.assertRevision(id, expectedRevisionId);
     const commit = (): boolean => {
       const result = this.store.mcpConnections.delete(id, expectedRevisionId);
@@ -269,7 +291,13 @@ export class McpClientService {
     }
     return this.oauth.cancel(input);
   }
-  async prepareLogin(input: McpOperationRequest): ReturnType<McpOAuthService['prepare']> {
+  prepareLogin(input: McpOperationRequest): ReturnType<McpOAuthService['prepare']> {
+    return this.trackOperation(() => this.prepareLoginInternal(input));
+  }
+
+  private async prepareLoginInternal(
+    input: McpOperationRequest,
+  ): ReturnType<McpOAuthService['prepare']> {
     try {
       return await this.oauth.prepare(input);
     } catch (error) {
@@ -282,7 +310,11 @@ export class McpClientService {
       throw error;
     }
   }
-  async continueLogin(input: McpLoginContinueRequest): Promise<McpTestResult> {
+  continueLogin(input: McpLoginContinueRequest): Promise<McpTestResult> {
+    return this.trackOperation(() => this.continueLoginInternal(input));
+  }
+
+  private async continueLoginInternal(input: McpLoginContinueRequest): Promise<McpTestResult> {
     try {
       await this.oauth.login(input);
     } catch (error) {
@@ -296,7 +328,11 @@ export class McpClientService {
     }
     return this.testConnection(input, 'login');
   }
-  async logout(input: McpOperationRequest): Promise<McpConnectionSummary> {
+  logout(input: McpOperationRequest): Promise<McpConnectionSummary> {
+    return this.trackOperation(() => this.logoutInternal(input));
+  }
+
+  private async logoutInternal(input: McpOperationRequest): Promise<McpConnectionSummary> {
     this.store.mcpConnections.assertRevision(input.id, input.expectedRevisionId);
     this.invalidate(input.id);
     await this.oauth.logout(input.id);
@@ -305,7 +341,14 @@ export class McpClientService {
     return result;
   }
 
-  async testConnection(
+  testConnection(
+    input: McpOperationRequest | string,
+    phase: 'test' | 'login' = 'test',
+  ): Promise<McpTestResult> {
+    return this.trackOperation(() => this.testConnectionInternal(input, phase));
+  }
+
+  private async testConnectionInternal(
     input: McpOperationRequest | string,
     phase: 'test' | 'login' = 'test',
   ): Promise<McpTestResult> {
@@ -525,10 +568,15 @@ export class McpClientService {
       throw new McpClientError('MCP 连接清理失败。');
   }
   async shutdown(): Promise<void> {
+    this.stopping = true;
     this.unsubscribe?.();
-    this.oauth.shutdown();
+    const oauth = this.oauth.shutdown();
     for (const operation of this.operations.values()) operation.controller.abort();
-    await Promise.allSettled([...this.runs.keys()].map((runId) => this.releaseRun(runId)));
+    await Promise.allSettled([
+      oauth,
+      ...this.pendingOperations,
+      ...[...this.runs.keys()].map((runId) => this.releaseRun(runId)),
+    ]);
   }
   private invalidate(id: string): void {
     for (const [runId, run] of this.runs)

@@ -1,6 +1,71 @@
-import { describe, expect, it } from 'vitest';
+import { execFile } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { promisify } from 'node:util';
 
-import { createFetchDownloader } from './dependency-adapters';
+import { describe, expect, it, vi } from 'vitest';
+
+import { createFetchDownloader, createNodeProcessRunner } from './dependency-adapters';
+
+const execute = promisify(execFile);
+
+describe('createNodeProcessRunner', () => {
+  it.each(['cancel-live-parent', 'cancel-exited-parent', 'natural-exit', 'timeout'] as const)(
+    'joins descendant processes on %s',
+    async (mode) => {
+      const directory = await mkdtemp(path.join(os.tmpdir(), 'dependency-process-'));
+      const script = path.join(directory, 'tree.mjs');
+      const pidFile = path.join(directory, 'pids.json');
+      await writeFile(
+        script,
+        `
+        import { spawn } from 'node:child_process';
+        import { writeFileSync } from 'node:fs';
+        const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { stdio: '${mode === 'natural-exit' ? 'ignore' : 'inherit'}' });
+        writeFileSync(process.argv[2], JSON.stringify({ parent: process.pid, child: child.pid }));
+        ${mode === 'cancel-exited-parent' || mode === 'natural-exit' ? 'child.unref();' : 'setTimeout(() => {}, 60000);'}
+      `,
+      );
+      const handle = createNodeProcessRunner().run({
+        executable: process.execPath,
+        argv: [script, pidFile],
+        timeoutMs: mode === 'timeout' ? 1000 : 20_000,
+      });
+      try {
+        let pids: { parent: number; child: number } | undefined;
+        await vi.waitFor(async () => {
+          pids = JSON.parse(await readFile(pidFile, 'utf8')) as { parent: number; child: number };
+          expect(pids.child).toBeGreaterThan(0);
+        });
+        if (!pids) throw new Error('Missing process fixture PIDs');
+        const group = pids.parent;
+        if (mode === 'cancel-exited-parent') {
+          await vi.waitFor(() => expect(() => process.kill(group, 0)).toThrow());
+        }
+        if (mode !== 'timeout' && mode !== 'natural-exit') {
+          handle.kill();
+          handle.kill();
+        }
+        const result = await handle.result;
+        expect(result.timedOut).toBe(mode === 'timeout');
+        await vi.waitFor(async () => {
+          const { stdout } = await execute('/bin/ps', ['-axo', 'pid=,pgid=,state=']);
+          const members = stdout.split('\n').filter((line) => {
+            const fields = line.trim().split(/\s+/u);
+            return Number(fields[1]) === group && !fields[2]?.startsWith('Z');
+          });
+          expect(members).toEqual([]);
+        });
+      } finally {
+        handle.kill();
+        await handle.result;
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+    25_000,
+  );
+});
 
 describe('createFetchDownloader', () => {
   it('rejects non-HTTPS URLs without making a request', async () => {

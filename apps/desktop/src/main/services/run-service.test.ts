@@ -3983,6 +3983,10 @@ describe('RunService', () => {
     expect(service.isActive(runId)).toBe(false);
     // shutdown 是批量取消，不产生通知
     expect(fixture.store.notifications.list()).toEqual([]);
+    await service.shutdown();
+    expect(() =>
+      service.start({ taskId: fixture.taskId, sessionId: fixture.sessionId, prompt: 'late run' }),
+    ).toThrow('退出');
   });
 
   it('cancelRunsForSkill() only cancels runs bound to the matching skill', async () => {
