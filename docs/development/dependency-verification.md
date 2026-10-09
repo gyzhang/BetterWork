@@ -14,14 +14,12 @@
 | 目标平台 | 文件名 | SHA-256 |
 | --- | --- | --- |
 | macOS arm64 | `cpython-3.12.14+20260901-aarch64-apple-darwin-install_only.tar.gz` | `3ee3ee547cedfeb7c2b16b2b7156039f7b470bb8f857e226fd3d2eb11db83c76` |
-| macOS x64 | `cpython-3.12.14+20260901-x86_64-apple-darwin-install_only.tar.gz` | `2e31b23f3f1319f707d0e620b48847a0046577541d357276821f9f1b5492e0ba` |
-| Windows x64 | `cpython-3.12.14+20260901-x86_64-pc-windows-msvc-install_only.tar.gz` | `e90c1b6419da3bd812dd73bb3de40287a21abf153438147639ec5e20375ea93f` |
 
 下载基址：`https://github.com/astral-sh/python-build-standalone/releases/download/20260901/<文件名>`
 
 - 许可：PSF-2.0；上游 `install_only` 制品另捆绑若干第三方组件（OpenSSL、zlib、libffi 等），各自许可以上游发行说明为准。随包分发前的许可清单整理属于 A20。
 - 代码落点：`apps/desktop/src/main/infrastructure/python-distribution.ts`（目录常量）＋ `services/skill-dependency-service.ts` 的下载→校验→解压流程。校验值不符一律拒绝使用并清掉半成品目录，不回退到「先跑起来再说」。
-- 状态：**机制已实现并有离线测试；macOS arm64 制品已按锁定 hash 完成真实下载、解压和解释器探测**（2026-09-15，结果见下方第 2 节）。制品尚未随最终安装包完成冷环境准备；Windows 条目仅登记，A09 blocked，本机无法验收。
+- 状态：**macOS arm64 制品已按锁定 hash 完成真实下载、解压和解释器探测**（2026-09-15，结果见下方第 2 节）。首次发行包随包带入受管制品与 MCP fetch wheels 的完成状态见 CF43；用户离线安装态仍需单独验收。
 
 ## 2. 受管 CPython 制品实测（2026-09-15）
 
@@ -113,5 +111,14 @@
 | 工具链快照 + 真实环境准备 + CLI 探测（macOS arm64） | A11 | **已完成**，见第 6 节 |
 | 受管 Python 制品真实下载、校验、解压后建 venv | A20 | **macOS arm64 已完成**真实下载、校验、解压、服务建 venv、8 个 wheel 离线安装和 import 探测，见第 2、7 节 |
 | wheelhouse 制品与许可清单随包分发 | A20 | **macOS arm64 已完成**，见 `resources/wheelhouse`、第 7 节和[打包预检](package-preflight.md) |
-| Windows 平台环境与解释器 | A09/A21 | blocked，本机无 Windows 环境 |
+| 随包 MCP fetch 依赖锁（macOS arm64/cp312） | CF43 | 43 个 wheel 已锁定，精确制品 hash 来自 PyPI JSON 并与真实下载文件一致；资源打包与冷安装验收按 CF43 记录 |
 | 环境准备 UI（选择解释器、查看缺项、进度与取消） | A12 | 服务尚未被 `main/index.ts` 装配 |
+
+## 9. 内置 MCP fetch 运行时（CF43）
+
+- Python 服务：上游 `modelcontextprotocol/servers` 的 `mcp-server-fetch`，PyPI 版本 `2026.8.18`，MIT；安装入口为 `python -m mcp_server_fetch`。它要求 MCP Python SDK 1.x（`mcp>=1.29,<2`），所以与 BetterWork MCP 客户端 SDK 2.x 保持独立环境。
+- 解析平台：macOS arm64 / CPython 3.12；使用本机 CPython 3.12.13 解析同一 cp312 ABI 的固定闭包，共 43 个精确版本 wheel。每个制品都从 PyPI JSON 取得 SHA-256 与 URL，再与真实下载文件逐项比对；锁文件 [`mcp-server-fetch-darwin-arm64-cp312.json`](../../resources/dependency-locks/mcp-server-fetch-darwin-arm64-cp312.json) 同时记录版本、URL、哈希和许可。
+- Wheelhouse 实测：43 个 wheel 共 18,330,231 字节；包含 `mcp-server-fetch`、`mcp`、`pydantic`、`httpx`、`readabilipy`、`lxml`、`cryptography` 等完整运行依赖闭包。锁内 import probes 在 venv 完成后验证服务入口与主要模块。
+- 打包生成：[prepare-mcp-runtime-assets.mjs](../../scripts/prepare-mcp-runtime-assets.mjs) 读取共享 CPython 候选与依赖锁，把 CPython 压缩包和 wheels 写到 `apps/desktop/build/mcp-runtime-assets/`；每个资产写入缓存前校验锁定 SHA-256，缺资产时仅下载锁内精确 URL，校验失败则停止打包。该目录由 `.gitignore` 排除并由 electron-builder 复制进安装包。
+- 冷启动机制：首次检测时沿用 `SkillDependencyService` 解压随包 CPython、建立受管 fetch venv，并从随包 wheelhouse 使用 `--no-index --require-hashes` 安装；缺少打包资源时才回退到受批准的固定下载地址。fetch venv 的 lock hash 与 PPT Skill 不同，因此目录键不同，不会复用 PPT 环境。
+- 当前状态：lock、PyPI hash 与资源生成脚本已就绪；完整资源生成、实际离线 venv、四个 server 握手及 macOS arm64 unpacked 安装包检查由 CF43 追加实测结果。在这些验证完成前不将其写成已验收。

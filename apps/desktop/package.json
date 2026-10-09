@@ -8,19 +8,23 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "dist": "electron-vite build && electron-builder",
-    "dist:mac": "electron-vite build && electron-builder --mac",
-    "dist:win": "electron-vite build && electron-builder --win"
+    "dist": "npm run dist:mac",
+    "mcp:runtimes:prepare": "node ../../scripts/prepare-mcp-runtime-assets.mjs",
+    "dist:mac": "npm run mcp:runtimes:prepare && electron-vite build && electron-builder --mac --arm64"
   },
   "dependencies": {
     "@betterwork/agent-core": "*",
     "@betterwork/agent-protocol": "*",
     "@betterwork/tool-runtime": "*",
     "@modelcontextprotocol/client": "^2.0.0",
+    "@modelcontextprotocol/server-filesystem": "2026.8.31",
+    "@modelcontextprotocol/server-memory": "2026.8.31",
+    "@modelcontextprotocol/server-sequential-thinking": "2026.8.31",
     "better-sqlite3": "^13.0.3",
     "cron-parser": "5.10.1",
     "exceljs": "^4.4.0",
     "fast-xml-parser": "^5.11.1",
+    "jszip": "^3.10.1",
     "mammoth": "^1.12.2",
     "pdf-parse": "^2.4.5",
     "pptx-glimpse": "0.10.4",
@@ -29,8 +33,7 @@
     "react-markdown": "^10.1.0",
     "undici": "6.28.0",
     "yaml": "2.9.0",
-    "zod": "^4.5.4",
-    "jszip": "^3.10.1"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

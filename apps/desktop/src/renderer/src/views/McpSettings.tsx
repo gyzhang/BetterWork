@@ -43,6 +43,7 @@ interface SecretEnv {
 interface McpForm {
   name: string;
   kind: McpTransport['kind'];
+  stdioRuntime: 'custom' | 'filesystem' | 'memory' | 'sequential-thinking' | 'fetch';
   command: string;
   args: string;
   cwd: string;
@@ -65,6 +66,7 @@ interface McpForm {
 const emptyForm = (): McpForm => ({
   name: '',
   kind: 'stdio',
+  stdioRuntime: 'custom',
   command: '',
   args: '',
   cwd: '',
@@ -89,6 +91,19 @@ const transportOptions = [
   { id: 'streamable-http', label: 'HTTP · Streamable HTTP' },
   { id: 'sse', label: '旧版 SSE · HTTP+SSE' },
 ];
+const stdioRuntimeOptions = [
+  { id: 'custom', label: '自定义命令' },
+  { id: 'filesystem', label: '内置 · 文件系统' },
+  { id: 'memory', label: '内置 · 记忆' },
+  { id: 'sequential-thinking', label: '内置 · 顺序思考' },
+  { id: 'fetch', label: '内置 · 网页抓取' },
+];
+const stdioRuntimeNames: Record<Exclude<McpForm['stdioRuntime'], 'custom'>, string> = {
+  filesystem: '内置 · 文件系统',
+  memory: '内置 · 记忆',
+  'sequential-thinking': '内置 · 顺序思考',
+  fetch: '内置 · 网页抓取',
+};
 const authOptions = [
   { id: 'none', label: '无认证' },
   { id: 'bearer', label: 'Bearer Token' },
@@ -178,7 +193,8 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
     const transport = connection.transport;
     const next = { ...emptyForm(), name: connection.name, kind: transport.kind };
     if (transport.kind === 'stdio') {
-      next.command = transport.command;
+      next.stdioRuntime = transport.runtime?.serverId ?? 'custom';
+      next.command = transport.command ?? '';
       next.args = transport.args.join('\n');
       next.cwd = transport.cwd ?? '';
       next.env = (transport.env ?? [])
@@ -256,9 +272,11 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
           secrets.push(secret(`env:${item.name}`, item.value, item.clear));
         transport = {
           kind: 'stdio',
-          command: form.command,
+          ...(form.stdioRuntime === 'custom'
+            ? { command: form.command }
+            : { runtime: { kind: 'bundled', serverId: form.stdioRuntime } }),
           args: form.args.split('\n').filter((value) => value !== ''),
-          ...(form.cwd ? { cwd: form.cwd } : {}),
+          ...(form.stdioRuntime === 'custom' && form.cwd ? { cwd: form.cwd } : {}),
           env: [...env, ...form.secretEnv.map((item) => ({ name: item.name, secret: true }))],
         };
       } else {
@@ -551,7 +569,7 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
       ) : state.connections.length === 0 ? (
         <EmptyNotice
           title="还没有 MCP 连接"
-          detail="支持本地 stdio、Streamable HTTP 和旧 HTTP+SSE。添加连接后检测工具，再选择允许助手使用的工具。"
+          detail="支持内置或自定义 stdio、Streamable HTTP 和旧 HTTP+SSE。内置服务随安装包提供运行时；添加连接后检测工具，再选择允许助手使用的工具。"
         />
       ) : (
         <div className="mcp-connection-list">
@@ -562,7 +580,7 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
               as="article"
               key={connection.id}
               title={connection.name}
-              detail={`${connection.transport.kind === 'stdio' ? connection.transport.command : connection.transport.endpoint} · ${connection.tools.length} 个工具`}
+              detail={`${connection.transport.kind === 'stdio' ? (connection.transport.runtime ? stdioRuntimeNames[connection.transport.runtime.serverId] : (connection.transport.command ?? '自定义命令')) : connection.transport.endpoint} · ${connection.tools.length} 个工具`}
               meta={
                 <>
                   <ConnectionStatus
@@ -630,7 +648,14 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
               {busy?.id === connection.id && busy.kind !== 'save' && busy.kind !== 'review' && (
                 <ActionBar as="div" label="MCP 操作">
                   <InlineLoading
-                    label={busy.kind === 'login' ? '等待授权或浏览器登录…' : '正在检测连接…'}
+                    label={
+                      busy.kind === 'login'
+                        ? '等待授权或浏览器登录…'
+                        : connection.transport.kind === 'stdio' &&
+                            connection.transport.runtime?.serverId === 'fetch'
+                          ? '正在准备内置 Python 运行时并检测…'
+                          : '正在检测连接…'
+                    }
                   />
                   <Button size="md" variant="secondary" onClick={cancel}>
                     取消{busy.kind === 'login' ? '登录' : '检测'}
@@ -898,15 +923,31 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
           </Field>
           {form.kind === 'stdio' ? (
             <>
-              <Field label="启动命令">
-                <TextField
+              <Field label="服务来源">
+                <FieldSelect
                   size="md"
-                  value={form.command}
-                  placeholder="node"
-                  onChange={(event) => change({ command: event.target.value })}
+                  options={stdioRuntimeOptions}
+                  value={form.stdioRuntime}
+                  onChange={(stdioRuntime) =>
+                    change({
+                      stdioRuntime: stdioRuntime as McpForm['stdioRuntime'],
+                      command: stdioRuntime === 'custom' ? form.command : '',
+                      cwd: stdioRuntime === 'custom' ? form.cwd : '',
+                    })
+                  }
                 />
               </Field>
-              <Field label="参数（每行一个）">
+              {form.stdioRuntime === 'custom' ? (
+                <Field label="启动命令">
+                  <TextField
+                    size="md"
+                    value={form.command}
+                    placeholder="node"
+                    onChange={(event) => change({ command: event.target.value })}
+                  />
+                </Field>
+              ) : null}
+              <Field label="服务参数（每行一个）">
                 <TextArea
                   mono
                   rows={3}
@@ -914,13 +955,15 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
                   onChange={(event) => change({ args: event.target.value })}
                 />
               </Field>
-              <Field label="工作目录（可选）">
-                <TextField
-                  size="md"
-                  value={form.cwd}
-                  onChange={(event) => change({ cwd: event.target.value })}
-                />
-              </Field>
+              {form.stdioRuntime === 'custom' ? (
+                <Field label="工作目录（可选）">
+                  <TextField
+                    size="md"
+                    value={form.cwd}
+                    onChange={(event) => change({ cwd: event.target.value })}
+                  />
+                </Field>
+              ) : null}
               <Disclosure label="环境变量">
                 <Field label="普通环境变量（每行 NAME=value）">
                   <TextArea

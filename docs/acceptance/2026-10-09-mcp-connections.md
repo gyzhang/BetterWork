@@ -83,3 +83,16 @@ AI 已打开回看本轮窄窗深色保存失败、宽窗浅色授权确认与�
 - SQLite：`filesystem` ready、14 个工具；`memory` 与 `sequential-thinking` 仍记录 10 秒连接超时；`fetch` 当前命令为 `uvx mcp-server-fetch`，尚未检测。
 - 修正：stdio 冷启动/握手预算 60 秒，完整检测/发现 90 秒；HTTP 连接仍为 10 秒。此预算调整已同步 MCP 设计与 CF41。工具合同预览使用全宽、14 行只读区。
 - 待验：新时限生效后的真实包安装/握手、`fetch` 可用性与用户界面观感由开发应用中的人工复测确认；本补充不把真实 MCP 验收标为通过。
+
+## 2026-10-09 内置 MCP 运行时离线打包验收
+
+- 分支：`codex/mcp-managed-runtimes`；本轮变更尚未提交、推送或发布。
+- 产品目标：安装包提供一组开箱可用的内置 MCP、CLI、Skill、Expert；当前运行时切片覆盖四个内置 stdio MCP，并让共享 Skill 依赖服务优先使用随包 CPython 3.12.14。用户自定义命令及未登记的外部 CLI 仍遵循各自依赖契约。
+- 打包：`npm run build --workspace @betterwork/desktop` 退出 0；`npx electron-builder --mac --arm64 --dir --publish never --config.directories.output=/tmp/betterwork-mcp-package-check` 退出 0，生成 arm64 unpacked app。electron-builder 因本机没有 Developer ID 身份而跳过签名；没有运行 DMG 覆盖现存 `apps/desktop/dist`。
+- 资源：在 unpacked `.app` 中核对 app.asar 含 filesystem、memory、sequential-thinking 三个 Node server 入口；`Resources/mcp-runtime-assets` 含 CPython archive 和 43 个 fetch wheels，manifest 登记的 44 项逐项 SHA-256/字节数均相符；现有 PPT wheelhouse 的 8 项也随包存在。
+- Node MCP：由打包 `.app` 的 Electron 可执行文件运行内置 Node server，并通过打包后的 `skill-guardian.js` 握手；子进程 `PATH=/usr/bin:/bin`，不调用系统 Node/npm/npx。MCP `tools/list` 分别返回 filesystem 14、memory 9、sequential-thinking 1 个工具。
+- Python fetch：提取随包 CPython，版本为 3.12.14；在 `PIP_NO_INDEX=1`、`--no-index` 下仅用安装包内 43 个锁定 wheels 建 venv，`python -m mcp_server_fetch` 经打包 guardian 握手并列出 fetch 工具。没有调用抓取工具，不产生外部网页请求。
+- PPT Python：同一随包 CPython 使用另一 venv；`PIP_NO_INDEX=1` 下从安装包现有 PPT wheelhouse 安装锁内 8 个制品，并成功导入 `pptx`、`lxml`、`yaml`、`PIL`、`xlsxwriter`。验证了该 Python 运行时可由共享依赖服务供 Skill 环境使用，同时与 fetch venv 隔离。
+- 自动化：`npm run lint`、`npm run format:check`、`npm run typecheck` 均退出 0；`npm run docs:check` 154 项通过；六个功能测试文件 139 项、两个重档文件 44 项通过；`npm run ui:check -- --mcp-only` 8 组通过。首轮 docs:check 报一个新测试直接写取消错误名称，已改用 `isAbortError` 后重跑通过。
+- 边界：上述是无签名 arm64 unpacked 包和合成/离线环境证据；尚未做 Developer ID 签名、Gatekeeper 安装、干净用户目录首次安装、真实产品窗口及真实业务 MCP 验收。没有改用户 SQLite、用户 MCP 连接或授权。
+- 状态：CF43 的协议、实现、自动化和离线包级技术路径已通过；整体卡保持 partial，等待签名安装与用户窗口验收，不提升 CF33/CF42。

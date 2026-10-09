@@ -628,7 +628,8 @@ const main = (): void => {
       !('command' in parsed) ||
       typeof parsed.command !== 'string' ||
       !('args' in parsed) ||
-      !isStringArray(parsed.args)
+      !isStringArray(parsed.args) ||
+      ('runAsNode' in parsed && typeof parsed.runAsNode !== 'boolean')
     )
       throw new Error('Invalid MCP launch configuration');
     const env = Object.fromEntries(
@@ -637,6 +638,7 @@ const main = (): void => {
           entry[1] !== undefined && entry[0] !== 'ELECTRON_RUN_AS_NODE',
       ),
     );
+    if ('runAsNode' in parsed && parsed.runAsNode === true) env['ELECTRON_RUN_AS_NODE'] = '1';
     startTarget({
       nonce: 'mcp-pipe',
       graceMs: 125,

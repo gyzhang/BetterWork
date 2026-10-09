@@ -33,6 +33,12 @@ extraResources:
       - '*.whl'
       - 'manifest.json'
       - 'README.md'
+  - from: build/mcp-runtime-assets
+    to: mcp-runtime-assets
+    filter:
+      - '**/*'
+      - '!.DS_Store'
+      - '!._*'
   # 幻灯片预览的中文字体：系统自带中文字体是 TTC + AAT，opentype.js 解析不了，必须随包。
   - from: ../../resources/fonts
     to: fonts
@@ -46,19 +52,8 @@ mac:
     - target: dmg
       arch:
         - arm64
-        - x64
   category: public.app-category.productivity
   hardenedRuntime: true
   gatekeeperAssess: false
-
-win:
-  target:
-    - target: nsis
-      arch:
-        - x64
-
-nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
 
 publish: []

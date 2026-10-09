@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { abortError, type AgentTool, isAbortError } from '@betterwork/agent-core';
 import {
+  type McpBundledServerId,
   type McpConnectionSummary,
   type McpLifecycleRequest,
   type McpLoginContinueRequest,
@@ -28,6 +29,7 @@ import {
 import { z } from 'zod';
 
 import type { GuardianRuntime } from '../infrastructure/mac-process-supervisor';
+import type { McpStdioLaunch } from '../infrastructure/mcp-stdio-launch';
 import type { AppStore } from '../persistence';
 import {
   createMcpPolicyFetch,
@@ -66,6 +68,11 @@ interface RunConnections {
 }
 export interface McpClientOptions extends McpNetworkOptions {
   guardian?: GuardianRuntime;
+  resolveBundledRuntime?: (
+    serverId: McpBundledServerId,
+    args: readonly string[],
+    signal: AbortSignal,
+  ) => Promise<McpStdioLaunch>;
   openBrowser?: (url: string) => Promise<void>;
   onOperationComplete?: (name: string, success: boolean, phase: 'test' | 'login') => void;
 }
@@ -543,7 +550,9 @@ export class McpClientService {
     const connectionTimeoutMs = config.kind === 'stdio' ? 60_000 : 10_000;
     const timeoutMessage =
       config.kind === 'stdio'
-        ? 'MCP 本地服务启动或握手超过 60 秒，请检查启动命令、包名、依赖安装和网络后重试。'
+        ? config.runtime
+          ? '内置 MCP 运行时准备或握手超过 60 秒，请重试；若资源损坏，请重新安装应用。'
+          : 'MCP 本地服务启动或握手超过 60 秒，请检查启动命令、包名、依赖安装和网络后重试。'
         : 'MCP 连接超过 10 秒，请检查服务状态后重试。';
     signal = AbortSignal.any([signal, AbortSignal.timeout(connectionTimeoutMs)]);
     signal.throwIfAborted();
@@ -626,6 +635,16 @@ export class McpClientService {
           env[name] = value;
       for (const item of config.env ?? [])
         env[item.name] = item.secret ? await resolve(`env:${item.name}`) : (item.value ?? '');
+      const launch = config.runtime
+        ? await this.options.resolveBundledRuntime?.(config.runtime.serverId, config.args, signal)
+        : config.command
+          ? {
+              command: config.command,
+              args: config.args,
+              ...(config.cwd ? { cwd: config.cwd } : {}),
+            }
+          : undefined;
+      if (!launch) throw new McpClientError('没有配置此内置 MCP 的运行时解析器。');
       transport = new StdioClientTransport({
         command: runtime.executable,
         args: [
@@ -633,9 +652,10 @@ export class McpClientService {
           runtime.scriptPath,
           '--mcp-pipe',
           JSON.stringify({
-            command: config.command,
-            args: config.args,
-            ...(config.cwd ? { cwd: config.cwd } : {}),
+            command: launch.command,
+            args: launch.args,
+            ...(launch.cwd ? { cwd: launch.cwd } : {}),
+            ...(launch.runAsNode ? { runAsNode: true } : {}),
           }),
         ],
         env,
@@ -733,7 +753,9 @@ export class McpClientService {
         signal.aborted
           ? timeoutMessage
           : config.kind === 'stdio' && hasCauseMessage(error, 'Connection closed')
-            ? 'MCP 本地进程在握手前退出，请检查启动命令、包名与依赖安装。'
+            ? config.runtime
+              ? '内置 MCP 进程在握手前退出，请检查应用内运行时资源并重试。'
+              : 'MCP 本地进程在握手前退出，请检查启动命令、包名与依赖安装。'
             : safeFailureMessage(error, 'MCP 连接失败，请检查地址、认证与协议。'),
         { cause: error },
       );
