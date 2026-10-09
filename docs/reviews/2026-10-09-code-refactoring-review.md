@@ -411,3 +411,5 @@ B 开始时先刷新 R17 的只读审计与安装树证据。若确认存在可�
 没有新依赖、package、IPC、Schema 或迁移；MCP 的 public/private/loopback 授权独立保持。B3/R17 依赖治理与 C–F 未实施，不由本批离线绿灯推导依赖风险已排除。
 
 2026-10-09 20:58 本地终检：定向 ESLint/Prettier、typecheck、docs:check、差异空白与带批次基点的 drift:check 通过，读数已留档；结构护栏 154 条、例外 203 条保持，未修改规则或扩大例外。最终中文文档已回读；远端最新源 SHA 的 PR Gate 尚待执行。
+
+2026-10-09 21:05 最终收口：源提交 `23e451645c9a583f2aad5f5afddb83a032254e4e` 的 [macOS PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/37933802737) 成功，静态快检、文档护栏和按依赖图选择的相关测试步骤均通过；Full verify 按规则跳过。[PR #26](https://github.com/gyzhang/BetterWork/pull/26) 已 squash 合入 main，合并提交 `e7551eddb9b5a6c5dface0c502ca9a8337f8ec8b`。原 checkout 已同步 main，代码任务分支本地/远端均已清理，全程未新建 worktree；本归档仅修改 Markdown，按独立文档 PR 门禁收口。B2/R05 的代码与自动化证据完成，真实公网和安装包旅程仍待人工验收；B3/R17 与 C–F 继续保持原边界。
