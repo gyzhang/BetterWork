@@ -414,7 +414,7 @@ export class McpClientService {
         }
         const tool = connected.tools.find((item) => item.id === binding.toolId);
         if (!tool || tool.contractHash !== binding.contractHash)
-          throw new McpClientError('工具信息已变化或已不可用，请重新检测并允许使用。');
+          throw new McpClientError('MCP 工具合同已变化或已不可用，请重新检测并允许使用。');
         const alias = mcpModelAlias(binding.connectionId, binding.toolId);
         if (run.bindings.has(alias)) throw new McpClientError('MCP 工具选择重复或模型别名碰撞。');
         run.bindings.set(alias, binding);
