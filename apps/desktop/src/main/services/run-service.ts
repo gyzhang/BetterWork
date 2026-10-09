@@ -448,6 +448,61 @@ export interface ScheduledRunAssociation {
   readonly occurrenceId: string;
 }
 
+/** 具名宿主依赖；测试可声明能力子集，生产必须经 createRunService 完整装配。 */
+export interface RunServiceDependencies {
+  readonly store: AppStore;
+  readonly knowledgeVault: KnowledgeVault;
+  readonly notifications: NotificationService;
+  readonly skillService: SkillService;
+  readonly getWindow: () => BrowserWindow | null;
+  readonly skillExecutionService?: SkillExecutionService;
+  readonly toolchainSnapshotService?: ToolchainSnapshotService;
+  readonly fileArtifactService?: FileArtifactService;
+  readonly dependencies?: SkillDependencyService;
+  readonly inputSnapshots?: InputSnapshotService;
+  readonly taskMaterials?: TaskMaterialService;
+  readonly memoryExtractions?: MemoryExtractionService;
+  readonly mcpClientService?: McpClientService;
+  readonly webFetch?: WebFetch;
+  readonly officeParser?: OfficeParserService;
+  readonly credentialAccess?: CredentialResolver;
+  readonly knowledgeSearchService?: KnowledgeSearchService;
+  readonly documentExtractor?: DocumentExtractor;
+  readonly onScheduledRunTerminal?: (runId: string) => Promise<unknown>;
+}
+
+const productionDependencyKeys = {
+  store: true,
+  knowledgeVault: true,
+  notifications: true,
+  skillService: true,
+  getWindow: true,
+  skillExecutionService: true,
+  toolchainSnapshotService: true,
+  fileArtifactService: true,
+  dependencies: true,
+  inputSnapshots: true,
+  taskMaterials: true,
+  memoryExtractions: true,
+  mcpClientService: true,
+  webFetch: true,
+  officeParser: true,
+  credentialAccess: true,
+  knowledgeSearchService: true,
+  documentExtractor: true,
+  onScheduledRunTerminal: true,
+} satisfies Record<keyof RunServiceDependencies, true>;
+
+/** 生产装配边界：接线错误在任何 Run 派发前失败，错误只包含依赖名。 */
+export const createRunService = (ports: Required<RunServiceDependencies>): RunService => {
+  const keys = Object.keys(productionDependencyKeys) as Array<keyof RunServiceDependencies>;
+  const missing = keys.filter((key) => ports[key] === undefined || ports[key] === null);
+  if (missing.length > 0) {
+    throw new Error(`RunService dependencies are missing: ${missing.join(', ')}`);
+  }
+  return new RunService(ports);
+};
+
 /**
  * 运行编排：选 Provider、选工具集、消费事件流。
  *
@@ -457,6 +512,25 @@ export interface ScheduledRunAssociation {
  *    进入事件循环前后仍可能抛错，这时用 `forceFailure` 兜底合成 `run.failed`。
  */
 export class RunService {
+  private readonly store: AppStore;
+  private readonly knowledgeVault: KnowledgeVault;
+  private readonly notifications: NotificationService;
+  private readonly skillService: SkillService;
+  private readonly getWindow: () => BrowserWindow | null;
+  private readonly skillExecutionService: SkillExecutionService | undefined;
+  private readonly toolchainSnapshotService: ToolchainSnapshotService | undefined;
+  private readonly fileArtifactService: FileArtifactService | undefined;
+  private readonly dependencies: SkillDependencyService | undefined;
+  private readonly inputSnapshots: InputSnapshotService | undefined;
+  private readonly taskMaterials: TaskMaterialService | undefined;
+  private readonly memoryExtractions: MemoryExtractionService | undefined;
+  private readonly mcpClientService: McpClientService | undefined;
+  private readonly webFetch: WebFetch | undefined;
+  private readonly officeParser: OfficeParserService | undefined;
+  private readonly credentialAccess: CredentialResolver | undefined;
+  private readonly knowledgeSearchService: KnowledgeSearchService | undefined;
+  private readonly documentExtractor: DocumentExtractor | undefined;
+  private readonly onScheduledRunTerminal: ((runId: string) => Promise<unknown>) | undefined;
   private stopping = false;
   private readonly activeRuns = new Map<string, ActiveRun>();
   private readonly consumePromises = new Map<string, Promise<void>>();
@@ -466,7 +540,7 @@ export class RunService {
   private knowledgeAuditInstance: KnowledgeAudit | undefined;
   private artifactDeclarationsInstance: ArtifactDeclarationService | undefined;
 
-  /** 审计服务惰性装配：参数属性在构造体内先于字段完成赋值。 */
+  /** 审计服务惰性装配：使用构造器已接入的具名依赖。 */
   private get knowledgeAudit(): KnowledgeAudit {
     this.knowledgeAuditInstance ??= new KnowledgeAudit(this.store, this.knowledgeVault, (input) =>
       this.knowledgeSearchService
@@ -484,27 +558,27 @@ export class RunService {
     return this.artifactDeclarationsInstance;
   }
 
-  constructor(
-    private readonly store: AppStore,
-    private readonly knowledgeVault: KnowledgeVault,
-    private readonly notifications: NotificationService,
-    private readonly skillService: SkillService,
-    private readonly getWindow: () => BrowserWindow | null,
-    private readonly skillExecutionService?: SkillExecutionService,
-    private readonly toolchainSnapshotService?: ToolchainSnapshotService,
-    private readonly fileArtifactService?: FileArtifactService,
-    private readonly dependencies?: SkillDependencyService,
-    private readonly inputSnapshots?: InputSnapshotService,
-    private readonly taskMaterials?: TaskMaterialService,
-    private readonly memoryExtractions?: MemoryExtractionService,
-    private readonly mcpClientService?: McpClientService,
-    private readonly webFetch?: WebFetch,
-    private readonly officeParser?: OfficeParserService,
-    private readonly credentialAccess?: CredentialResolver,
-    private readonly knowledgeSearchService?: KnowledgeSearchService,
-    private readonly documentExtractor?: DocumentExtractor,
-    private readonly onScheduledRunTerminal?: (runId: string) => Promise<unknown>,
-  ) {}
+  constructor(ports: RunServiceDependencies) {
+    this.store = ports.store;
+    this.knowledgeVault = ports.knowledgeVault;
+    this.notifications = ports.notifications;
+    this.skillService = ports.skillService;
+    this.getWindow = ports.getWindow;
+    this.skillExecutionService = ports.skillExecutionService;
+    this.toolchainSnapshotService = ports.toolchainSnapshotService;
+    this.fileArtifactService = ports.fileArtifactService;
+    this.dependencies = ports.dependencies;
+    this.inputSnapshots = ports.inputSnapshots;
+    this.taskMaterials = ports.taskMaterials;
+    this.memoryExtractions = ports.memoryExtractions;
+    this.mcpClientService = ports.mcpClientService;
+    this.webFetch = ports.webFetch;
+    this.officeParser = ports.officeParser;
+    this.credentialAccess = ports.credentialAccess;
+    this.knowledgeSearchService = ports.knowledgeSearchService;
+    this.documentExtractor = ports.documentExtractor;
+    this.onScheduledRunTerminal = ports.onScheduledRunTerminal;
+  }
 
   start(input: StartRunRequest, scheduledAssociation?: ScheduledRunAssociation): string {
     if (this.stopping) throw new Error('应用正在退出，不再接受新 Run。');

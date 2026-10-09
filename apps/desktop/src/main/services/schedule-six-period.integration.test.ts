@@ -315,27 +315,17 @@ describe('Schedule six period offline integration journey', () => {
       webContents: { send: () => undefined },
     } as unknown as BrowserWindow;
     const notifications = new NotificationService(store.notifications, () => focusedWindow);
-    const runs = new RunService(
+    const runs = new RunService({
       store,
-      vault,
+      knowledgeVault: vault,
       notifications,
       skillService,
-      () => null,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
+      getWindow: () => null,
       inputSnapshots,
       taskMaterials,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      knowledgeSearch,
-      undefined,
-      (runId) => outcomeService.finalizeRun(runId).then(() => undefined),
-    );
+      knowledgeSearchService: knowledgeSearch,
+      onScheduledRunTerminal: (runId) => outcomeService.finalizeRun(runId).then(() => undefined),
+    });
     const execution = new ScheduleExecutionService(store, { now: clock.wall });
     const dispatch = new ScheduleDispatchService(store, sourceService, preflight, execution, runs, {
       now: clock.wall,

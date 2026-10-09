@@ -425,3 +425,15 @@ B 开始时先刷新 R17 的只读审计与安装树证据。若确认存在可�
 
 
 2026-10-09 21:40 最终收口：源提交 `5ecc080e5f7feeb0fb93b9f7fb3660f692928b88` 的 [macOS PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/37937420161) 通过，按依赖图选择的 237 文件 / 2333 项测试通过；Full verify 按规则跳过。[PR #28](https://github.com/gyzhang/BetterWork/pull/28) 已 squash 合入 main，合并提交 `c021db2ebab354ebbea79557e8bd7f8dfbaeffc9`。原 checkout 已同步，代码分支本地/远端已清理，没有新建 worktree；最终合并证据以纯文档 PR 归档。B3/R17 的修复和逐链分析完成，剩余告警与人工验收边界见依赖治理报告，C–F 未自动开工。
+
+## 13. C1：RunService 具名依赖与生产装配
+
+2026-10-09 22:06：用户授权从 C1 开始，从干净 main `b00873b553406c947e4964729b8e371ef7545124` 建立 `codex/review-run-service-dependencies`，继续原 checkout，不新建 worktree。当前为实施边界，验证与合并事实另记。
+
+- 将 19 个位置参数改为具名依赖，生产工厂要求完整接线并在构造前拒绝缺失项；迁移生产、测试和离线宿主全部六处调用，不把占位问题转移到测试 helper。
+- 测试与离线宿主通过具名构造器明确能力子集，保留原有可选能力行为；生产入口只使用完整工厂。窗口返回 `null` 是合法状态，不能误判为依赖缺失。
+- 保留 Run 事件、终态、取消、撤权、材料范围和来源原子性；不抽取材料事实策略、工具结果或终态编排。C2 及 C 的其余切片、D–F 继续待后续指令。
+
+装配契约见[系统架构 §3.2](../03-system-architecture.md#32-runservice-的具名依赖装配)。没有新 package、IPC、Schema、迁移或产品范围变化；同层装配调整无需新增 ADR。
+
+2026-10-09 22:13 本地证据：六处调用和 32 处 helper 调用迁移完成；RunService 83 项（新增装配回归 4 项）、IPC/记忆集成/定时六期与工程护栏 228 项通过，去重共 311 项。临时禁用装配检查后新增 4 项全部失败，恢复后通过；未放宽现有断言。typecheck、定向 ESLint、生产 build 通过；真实 Electron `--app-only` 离线旅程完成 4 个 Run、失败/取消及重开恢复，网络尝试 0，AI 已回读重开截图。首次测试遇到 Electron 本地自动安装并发冲突，确认运行文件完整后原命令复查通过，没有修改依赖或产品代码绕过环境失败。文档、格式、治理终检与最新 SHA 的 PR Gate 继续核对；完整 verify 未自动触发，未调用真实模型或操作用户数据库/开发窗口。

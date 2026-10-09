@@ -103,6 +103,14 @@ Electron Main 的 `ApplicationContext` 显式持有 Run、知识索引、记忆�
 
 OAuth 本地回调监听器也属于退出资源：取消登录后等待 HTTP listener 的关闭回执，不能把已调用 `close()` 当成已关闭。
 
+### 3.2 RunService 的具名依赖装配
+
+RunService 通过 `RunServiceDependencies` 具名对象接收宿主依赖，禁止以位置参数和 `undefined` 占位装配。生产入口 `main/index.ts` 使用 `createRunService`：类型要求全部依赖，运行期在创建服务前检查缺失项并列出名称；材料校验、统一检索、MCP、脚本、Office、记忆和定时终态等依赖不能因漏接而静默降级。窗口查询函数必须接入，但允许查询结果为 `null`。
+
+生产 `AppStore` 必须接入凭据仓储；Main 注入 safeStorage 适配器即创建仓储，操作系统加密暂时不可用由既有凭据操作与迁移契约处理，不等于装配缺失，也不回退明文。
+
+单元测试与离线应用宿主可直接用具名构造器声明所需能力子集，保留现有可选能力语义；这不是生产装配入口。该组织调整不改变工具选择、材料策略、事件顺序、终态、取消、撤权、来源登记与启动恢复，不引入容器或新的跨模块依赖。
+
 ## 4. Agent Core
 
 Agent Core 不允许直接导入：
