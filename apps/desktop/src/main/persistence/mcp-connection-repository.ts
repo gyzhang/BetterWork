@@ -152,9 +152,7 @@ export class McpConnectionRepository {
     const connection = this.assertRevision(input.connectionId, input.connectionRevisionId);
     const tool = connection.tools.find((candidate) => candidate.id === input.toolId);
     if (connection.stale || !tool || tool.contractHash !== input.contractHash)
-      throw new Error('MCP 工具合同已变化，请重新检测并审阅。');
-    if (tool.annotations?.readOnlyHint === false || tool.annotations?.destructiveHint === true)
-      throw new Error('此 MCP 工具声明为非只读或破坏性工具，不能启用。');
+      throw new Error('工具信息已变化，请重新检测后再允许使用。');
     this.db
       .prepare(
         'INSERT OR IGNORE INTO mcp_tool_reviews (revision_id, tool_id, contract_hash, reviewed_at) VALUES (?, ?, ?, ?)',

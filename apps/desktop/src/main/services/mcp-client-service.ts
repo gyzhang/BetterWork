@@ -115,6 +115,15 @@ const safeFailureMessage = (error: unknown, fallback: string): string => {
   return fallback;
 };
 
+const hasCauseMessage = (error: unknown, message: string): boolean => {
+  let current = error;
+  for (let depth = 0; depth < 6 && current && typeof current === 'object'; depth += 1) {
+    if ('message' in current && current.message === message) return true;
+    current = 'cause' in current ? current.cause : undefined;
+  }
+  return false;
+};
+
 const sanitize = (value: unknown, secrets: readonly string[]): unknown => {
   if (typeof value === 'string')
     return secrets.reduce(
@@ -309,7 +318,7 @@ export class McpClientService {
     const timer = setTimeout(() => {
       timedOut = true;
       controller.abort();
-    }, 30_000);
+    }, 90_000);
     this.operations.set(operationId, { connectionId: id, controller });
     let connected: Connected | undefined;
     try {
@@ -333,7 +342,7 @@ export class McpClientService {
             status: 'failed',
             tools: connection.tools,
             failureMessage: timedOut
-              ? 'MCP 检测超过 30 秒，请检查服务状态后重试。'
+              ? 'MCP 检测超过 90 秒，请检查服务状态后重试。'
               : controller.signal.aborted
                 ? 'MCP 检测已取消。'
                 : safeFailureMessage(error, 'MCP 检测失败，请检查地址、认证与协议。'),
@@ -345,7 +354,7 @@ export class McpClientService {
       this.options.onOperationComplete?.(connection.name, false, phase);
       throw new McpClientError(
         timedOut
-          ? 'MCP 检测超过 30 秒，请检查服务状态后重试。'
+          ? 'MCP 检测超过 90 秒，请检查服务状态后重试。'
           : safeFailureMessage(error, 'MCP 检测失败，请检查地址、凭据或登录状态。'),
         { cause: error },
       );
@@ -376,7 +385,11 @@ export class McpClientService {
     };
     this.runs.set(runId, run);
     const tools: AgentTool[] = [];
-    const discoveryTimer = setTimeout(abort, 30_000);
+    let timedOut = false;
+    const discoveryTimer = setTimeout(() => {
+      timedOut = true;
+      abort();
+    }, 90_000);
     try {
       for (const binding of bindings) {
         if (
@@ -401,9 +414,7 @@ export class McpClientService {
         }
         const tool = connected.tools.find((item) => item.id === binding.toolId);
         if (!tool || tool.contractHash !== binding.contractHash)
-          throw new McpClientError('MCP 工具合同已变化或工具缺失，请重新检测并审阅。');
-        if (tool.annotations?.readOnlyHint === false || tool.annotations?.destructiveHint === true)
-          throw new McpClientError('MCP 非只读或破坏性工具不能运行。');
+          throw new McpClientError('MCP 工具合同已变化或已不可用，请重新检测并允许使用。');
         const alias = mcpModelAlias(binding.connectionId, binding.toolId);
         if (run.bindings.has(alias)) throw new McpClientError('MCP 工具选择重复或模型别名碰撞。');
         run.bindings.set(alias, binding);
@@ -453,7 +464,7 @@ export class McpClientService {
                   .safeParse('structuredContent' in result ? result.structuredContent : undefined)
                   .success
               )
-                throw new McpClientError('MCP 工具输出不符合已审阅的 Schema。');
+                throw new McpClientError('工具返回数据与检测时记录的定义不一致，已停止使用。');
               return sanitize(mcpSafeResult(result), [
                 ...secrets,
                 ...this.oauth.activeSecrets(binding.connectionId),
@@ -480,7 +491,11 @@ export class McpClientService {
     } catch (error) {
       const cancelled = controller.signal.aborted;
       await this.releaseRun(runId);
-      if (cancelled) throw abortError();
+      if (cancelled && !timedOut) throw abortError();
+      if (timedOut)
+        throw new McpClientError('MCP 连接与工具发现超过 90 秒，请检查服务状态后重试。', {
+          cause: error,
+        });
       throw error;
     } finally {
       clearTimeout(discoveryTimer);
@@ -524,7 +539,13 @@ export class McpClientService {
 
   private async connect(connection: McpConnectionSummary, signal: AbortSignal): Promise<Connected> {
     const lifetimeSignal = signal;
-    signal = AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
+    const config = connection.transport;
+    const connectionTimeoutMs = config.kind === 'stdio' ? 60_000 : 10_000;
+    const timeoutMessage =
+      config.kind === 'stdio'
+        ? 'MCP 本地服务启动或握手超过 60 秒，请检查启动命令、包名、依赖安装和网络后重试。'
+        : 'MCP 连接超过 10 秒，请检查服务状态后重试。';
+    signal = AbortSignal.any([signal, AbortSignal.timeout(connectionTimeoutMs)]);
     signal.throwIfAborted();
     const secrets: string[] = [];
     const versions: Record<string, number> = {};
@@ -539,7 +560,6 @@ export class McpClientService {
       versions[slot] = value.version;
       return value.plaintext;
     };
-    const config = connection.transport;
     let lastStatus = 0;
     let closing = false;
     let lastOAuthToken: string | undefined;
@@ -673,7 +693,7 @@ export class McpClientService {
     let client = createClient(config.kind === 'sse');
     try {
       try {
-        await client.connect(transport, { signal, timeout: 10_000 });
+        await client.connect(transport, { signal, timeout: connectionTimeoutMs });
       } catch (error) {
         await client.close();
         if (
@@ -685,7 +705,7 @@ export class McpClientService {
           throw error;
         transport = makeTransport(true);
         client = createClient(true);
-        await client.connect(transport, { signal, timeout: 10_000 });
+        await client.connect(transport, { signal, timeout: connectionTimeoutMs });
       }
       signal.throwIfAborted();
       return {
@@ -711,8 +731,10 @@ export class McpClientService {
       if (lifetimeSignal.aborted) throw abortError();
       throw new McpClientError(
         signal.aborted
-          ? 'MCP 连接超过 10 秒，请检查服务状态后重试。'
-          : safeFailureMessage(error, 'MCP 连接失败，请检查地址、认证与协议。'),
+          ? timeoutMessage
+          : config.kind === 'stdio' && hasCauseMessage(error, 'Connection closed')
+            ? 'MCP 本地进程在握手前退出，请检查启动命令、包名与依赖安装。'
+            : safeFailureMessage(error, 'MCP 连接失败，请检查地址、认证与协议。'),
         { cause: error },
       );
     }

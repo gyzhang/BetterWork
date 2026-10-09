@@ -50,7 +50,7 @@ describe('MCP immutable configuration and review repository', () => {
     expect(f.repo.get(f.connection.id)?.name).toBe('Edited');
   });
 
-  it('binds review to an exact visible contract, prevents destructive approval and preserves history after archival', () => {
+  it('binds review to an exact visible contract and preserves history after archival', () => {
     const f = fixture();
     const hash = 'a'.repeat(64);
     const tool = {
@@ -79,7 +79,7 @@ describe('MCP immutable configuration and review repository', () => {
       ...binding,
       connectionRevisionId: f.revisionId,
       contractHash: hash,
-      readOnlyConfirmed: true,
+      userConfirmed: true,
     });
     expect(f.repo.isReviewed(binding)).toBe(true);
     const workspace = f.db.workspaces.create('/tmp/mcp-repository', 'Repository');
@@ -103,14 +103,13 @@ describe('MCP immutable configuration and review repository', () => {
       },
       f.revisionId,
     );
-    expect(() =>
-      f.repo.review({
-        ...binding,
-        connectionRevisionId: f.revisionId,
-        contractHash: 'b'.repeat(64),
-        readOnlyConfirmed: true,
-      }),
-    ).toThrow();
+    const changedBinding = { ...binding, contractHash: 'b'.repeat(64) };
+    f.repo.review({
+      ...changedBinding,
+      connectionRevisionId: f.revisionId,
+      userConfirmed: true,
+    });
+    expect(f.repo.isReviewed(changedBinding)).toBe(true);
     f.repo.delete(f.connection.id, f.revisionId);
     expect(f.repo.list()).toEqual([]);
     expect(f.repo.get(f.connection.id, f.revisionId)?.lifecycle).toBe('archived');

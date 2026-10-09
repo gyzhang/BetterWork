@@ -6,6 +6,10 @@
 
 代码与离线自动化、AI 生产组件页面检查已落地，证据见 [CF 唯一任务板](development/tasks-capability-foundation.md)与[本轮记录](acceptance/2026-10-09-mcp-connections.md)。真实业务 server/OAuth 账号、真机 Keychain 与用户窗口验收仍待完成；CF33/CF42 保持 partial，不代签 API 或 A/B0/E 等既有验收。本地实现提交为 `9479562`，用户已授权推送与合并，实际版本及合并结果以 Git/PR 记录为准；BetterWork 产品发布尚未执行。
 
+## MCP 有副作用工具的显式授权 — 2026-10-09
+
+用户确认不应把写入/破坏性工具永久封禁；见 [ADR-0044](adr/0044-mcp-explicit-side-effect-tool-authorization.md)。工具默认未允许、未选择；用户逐项允许，或在单独风险确认后批量允许服务明确标记为有副作用的工具。授权仍固定到连接修订、工具 ID 与合同 hash；未知读写性质的工具不进批量操作。允许后模型可在所选 Run 中直接调用，不逐次弹确认；MCP 服务能触达的范围和副作用可撤回性由服务决定。
+
 ## 应用内帮助 — 2026-10-08（实现与自动化通过，待用户验收）
 
 侧栏底部设置与通知之间增加圆圈问号「帮助」入口；点击后在应用主内容区阅读带目录的操作手册，保留左侧导航和当前任务草稿。手册正文、示例与截图随 Renderer 静态构建进入安装包，离线可用。阅读复用现有页面、Markdown、菜单与模态基座，不新增数据库、IPC 或模型调用；操作与核验记录见当日工作日志，不改写其他任务板状态。
@@ -170,7 +174,7 @@ This is documentation adoption only, not authorization to begin product developm
 | Embedding / 向量检索 | 移出当前切片 | 按 AGENTS.md 范围约束留待后续切片单独实现；开工前需先确认向量存储选型（[知识库与记忆](04-knowledge-and-memory.md) §5 建议 sqlite-vec）并新增 ADR |
 | Web Search | 已落地 | 搜索引擎配置 + `web_search` Tool，见 [ADR-0007](adr/0007-search-engine-config-and-web-search-tool.md) |
 | Web Fetch（网页正文） | 已落地 | 公开网页正文、重定向/大小/超时边界与 `web-page` Evidence，见 [ADR-0017](adr/0017-web-fetch-and-evidence-boundary.md) |
-| MCP 只读工具 | 已落地 | stdio 连接、具体工具绑定、Run 调用和 `mcp-tool` Evidence，真实业务账号仍待 E55 |
+| MCP 工具 | 已落地 | 逐工具授权与选择，含用户明确允许的写入/破坏性工具；Run 调用和 `mcp-tool` Evidence，真实业务账号仍待 E55 |
 | Office 输入读取 | 已落地 | PPTX/XLSX/CSV 受管输入快照读取与定位足迹，见开发计划 E50/E51 |
 | Evidence | 已落地 | 本地、网页和 MCP 来源共用一张表，Run 内去重登记；MCP 结果只在算台内回看 |
 | Markdown Artifact + Version | 已落地 | 保存、预览、`user-edit` 修订、导出、版本—Evidence 关联 |

@@ -222,7 +222,7 @@ MVP 期间不建设通用 DAG 引擎，只支持顺序步骤、条件步骤、�
 | Knowledge Search | 已落地 | `knowledge_search` Tool + 知识页手动检索，FTS5 关键词加子串兜底 |
 | Web Search | 已落地 | `web_search` Tool，百度千帆 AI 搜索先行（[ADR-0007](adr/0007-search-engine-config-and-web-search-tool.md)） |
 | Web Fetch | 已落地 | `web_fetch` 抓取公开网页正文，限制协议、重定向、大小与超时；见 [ADR-0017](adr/0017-web-fetch-and-evidence-boundary.md) |
-| MCP 只读工具 | 任务分支代码与离线自动化已落地，真实接入待验收 | stdio、Streamable HTTP、旧 HTTP+SSE，静态认证/OAuth、修订与合同审阅、Run 独立客户端、Schema/输出限制与取消；`mcp-tool` Evidence 反查实际绑定；见 [ADR-0043](adr/0043-mcp-multi-transport-and-oauth.md) 与 [CF 任务板](development/tasks-capability-foundation.md) |
+| MCP 工具 | 任务分支代码与离线自动化已落地，真实接入待验收 | stdio、Streamable HTTP、旧 HTTP+SSE，静态认证/OAuth、修订与合同审阅、用户显式允许有副作用工具、Run 独立客户端、Schema/输出限制与取消；`mcp-tool` Evidence 反查实际绑定；见 [ADR-0043](adr/0043-mcp-multi-transport-and-oauth.md)、[ADR-0044](adr/0044-mcp-explicit-side-effect-tool-authorization.md) 与 [CF 任务板](development/tasks-capability-foundation.md) |
 | Office 材料读取 | 已落地 | `read_office_material` 读取受管 PPTX/XLSX/CSV 输入并记录 slide/Sheet/Range/rows 定位 |
 | Evidence 登记 | 已落地 | 不是独立 Tool：Application 层观察 `knowledge_search` / `web_search` / `web_fetch` / MCP 的 `tool.completed` 输出后自动去重落库 |
 | Markdown Artifact | 已落地 | 保存、预览、`user-edit` 修订、导出 `.md` |

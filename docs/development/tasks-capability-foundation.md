@@ -17,7 +17,7 @@
 | M0 · 前置收口 | A12/A16/A17 桌面回归证据齐全，B00-5 双 Skill 真实撤销走查有记录，Developer ID 到位 | CF00 |
 | M1 · 契约与凭据 | 模型、搜索、MCP 的 Key 全部经 Main-only 加密；旧凭据一次性迁移可恢复；ADR-0024 转 Accepted | CF12 |
 | M2 · API 工具一等化 | 专家/任务能选具体百度 profile；`web_search` 从内置 allow-list 迁出；E55 的百度侧复跑 | CF23 |
-| M3 · stdio MCP 版本化 | MCP 连接 revision + 契约审阅 + per-Run 客户端；至少一个真实只读业务 MCP 走通 | CF33 |
+| M3 · stdio MCP 版本化 | MCP 连接 revision + 契约审阅 + per-Run 客户端；至少一个真实业务 MCP 走通 | CF33 |
 | M4 · 远程 MCP | Streamable HTTP/旧 SSE 与 OAuth 真实接入验收；技术方案由 Accepted ADR-0043 管理 | CF42 |
 | M5 · 跨类收口 | A21 + E55 + E56 联合收口；设计 §9 验收矩阵逐条对齐；整体完成口径达成 | CF51 |
 
@@ -253,8 +253,8 @@ CF00 不重复此前已证实且未受变更影响的测试；以最新提交、
 ### CF31 工具 contract hash 与审阅记录
 
 - 实现依赖：CF30；依据：[capability-contracts §3.3](capability-contracts.md)。
-- hash 包含 description/inputSchema/outputSchema/annotations 的 canonical JSON；显式审阅绑定 revision/tool/hash。新或变化工具未审阅；明确非只读/破坏工具不可用，缺 annotations 需人工确认。
-- 设置中展开合同并「确认只读合同」；专家/任务选择携带修订/hash。旧未审阅绑定保留历史，下一执行要求审阅并重新选择，不静默剔除。
+- hash 包含 description/inputSchema/outputSchema/annotations 的 canonical JSON；用户审阅绑定 revision/tool/hash。新或变化工具未审阅；明确只读工具可批量允许，明确可能写入/破坏的工具可单独允许或经风险确认后批量允许；未知读写性质须逐项查看与确认。
+- 设置中展开工具说明与参数并明确允许；副作用工具的批量确认说明可能创建、修改或删除数据以及不会逐次弹窗。服务声明不是安全保证。专家/任务选择携带修订/hash。旧未审阅绑定保留历史，下一执行要求审阅并重新选择，不静默剔除。
 - 每 Run 首次使用重新发现并核对合同；input/output schema 本地校验，拒绝远程 ref。失败目录保留最后成功内容并标 stale，Run 使用自己的发现快照。
 - 必测：hash 顺序稳定/语义变化、未审阅/变更阻断、重复/混修订选择、Schema/输出限制、正确 Evidence 归属。
 - 状态：代码与离线回归已落地；待用户工具审阅/选择窗口验收。没有通用审批引擎。
@@ -271,7 +271,7 @@ CF00 不重复此前已证实且未受变更影响的测试；以最新提交、
 ### CF33 M3 里程碑与真实业务 MCP 接入
 
 - 验收依赖：CF30–CF32；不阻塞本次 CF40/CF41 实现。
-- 真实只读业务 stdio server 尚未提供，保持 partial。用户配置后审阅合同、专家预设并召唤，记录 revision/hash/Run/Evidence、跨 Workspace 与断线重启/取消。
+- 真实业务 stdio server 尚未提供，保持 partial。用户配置后审阅合同、专家预设并召唤，记录 revision/hash/Run/Evidence、跨 Workspace 与断线重启/取消；如验证有副作用的工具，须明确记录用户允许范围和调用影响。
 - 只在取得真实证据后更新 E55 的 MCP 腿；不关闭 E55 连续两期整卡。离线夹具与页面矩阵不替代本卡。
 
 ### CF40 三种传输与目的地校验
@@ -287,7 +287,7 @@ CF00 不重复此前已证实且未受变更影响的测试；以最新提交、
 
 - 实现依赖：CF40；依据：ADR-0043、[capability-contracts §3.2/§8](capability-contracts.md)。
 - 官方 SDK 2.0.0 明确 auto/legacy 协商；modern 无会话/initialize/独立 GET/Last-Event-ID，legacy 使用拥有方临时会话。业务断线/401/404 不自动重发不确定调用，下次显式操作可重建。
-- connect 10 秒、完整 discovery 30 秒、调用 60 秒；progress 不延长硬限；最多 200 工具、50 选择、1 MiB 消息/事件与 100,000 字符结果。`input_required` 明确失败。
+- stdio 首次启动/安装与握手 60 秒、HTTP connect 10 秒、完整检测/discovery 90 秒（单次 discovery 30 秒）、调用 60 秒；progress 不延长硬限；最多 200 工具、50 选择、1 MiB 消息/事件与 100,000 字符结果。`input_required` 明确失败。
 - OAuth 先发现并审阅 issuer/scope，再系统浏览器与 loopback 回调；PKCE S256/state/issuer/resource 校验；预注册、已有 HTTPS CIMD、DCR 兼容及缺注册信息修复。私网认证 origin 独立授权，不虚构 metadata URL。
 - token/client/refresh bundle 加密按所有者/issuer/resource 保存；共享有界 refresh、scope 不扩张、轮换 CAS，取消 waiter 不影响另一方；invalid_grant 要求重新登录。Run 不弹浏览器，登出只声明本地清理。授权码/state/verifier 仅内存，取消/超时/退出释放监听器。
 - 设置反馈复用 InlineError/TransientToast；登录/检测长操作结果进入消息中心，正常取消不报失败。所有操作使用 UUID 与 revision CAS，失败保留输入。
@@ -299,7 +299,7 @@ CF00 不重复此前已证实且未受变更影响的测试；以最新提交、
 - 验收依赖：CF40/CF41 的代码与自动化证据；真实服务/账号可用。
 - 真实 HTTP/SSE/OAuth 服务尚未提供，保持 partial；配置并审阅后走专家/任务调用、scope 修复、两 Run 取消、logout/重启与 Evidence，逐条记录。
 - 方案状态由 Accepted ADR-0043 管理，不以离线测试提升 ADR-0025 或关闭里程碑；API/CF12/A/B0/E 等验收独立保留。
-- 不引入 Resources/Prompts/sampling/elicitation、写型工具、Tasks/MCP Apps 扩展。
+- 不引入 Resources/Prompts/sampling/elicitation、Tasks/MCP Apps 扩展或通用逐次审批引擎。
 
 ### CF50 跨类迁移回归与用户走查脚本
 

@@ -2986,7 +2986,7 @@ export const mcpReviewRequestSchema = z
     connectionRevisionId: z.string().min(1),
     toolId: z.string().min(1),
     contractHash: z.string().regex(/^[a-f0-9]{64}$/u),
-    readOnlyConfirmed: z.literal(true),
+    userConfirmed: z.literal(true),
   })
   .strict();
 export type McpReviewRequest = z.infer<typeof mcpReviewRequestSchema>;

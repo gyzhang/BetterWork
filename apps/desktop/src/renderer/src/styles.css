@@ -5082,6 +5082,11 @@ select,
 .mcp-connection-list {
   border-top: 1px solid var(--border);
 }
+.mcp-tool-contract-viewer {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
 .mcp-tool-summary {
   display: flex;
   flex-wrap: wrap;
