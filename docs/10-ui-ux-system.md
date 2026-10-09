@@ -692,7 +692,7 @@ UI Foundation 首批提供四套成对色系：
 | `TextField`、`TextArea` | `components/TextField.tsx` | 单行输入 size 必填；多行无档高，rows 决定高度，mono 决定等宽；含只读态 |
 | `Field` | `components/Field.tsx` | 标签/控件/说明；单控件有 hint 用 controlId 关联，包裹式标签不另设竞争名称；多控件/已有内部标签用 group，不能嵌套 label |
 | `FieldSelect` | `components/FieldSelect.tsx` | 单选下拉；size 必填，与同排控件一致；原生 select/option 不回归 |
-| `CheckList` | `components/CheckList.tsx` | 多选项列表，原生 checkbox；外层 fieldset/legend 已完整命名单一列表时不再传 label；同一 fieldset 内有多个不同列表时，各列表保留独立 label |
+| `CheckList` | `components/CheckList.tsx` | 多选项列表，原生 checkbox，支持单项半选态；外层 fieldset/legend 已完整命名单一列表时不再传 label；同一 fieldset 内有多个不同列表时，各列表保留独立 label |
 | `SingleSelectPicker` | `components/SingleSelectPicker.tsx` | 图标/色板选项；原生同名 radio，每项 name 提供可访问名称 |
 | `Switch` | `components/Switch.tsx` | 布尔设置；恒定 label、aria-checked；需要确认时由调用方确认，未确认不改状态 |
 | `Tabs`、`TabList`、`Tab`、`TabPanel`、`SegmentedControl` | `components/Tabs.tsx` | `Tabs` 提供受控选择状态；`TabList`/`Tab`/`TabPanel` 提供 tablist、tab、tabpanel 语义，每个 Tab 与同 value 的 TabPanel 双向 ID 关联，TabList 管 roving Tab 与方向键；size 必填；`SegmentedControl` 表达同内容呈现模式，各项参与 Tab |
@@ -720,7 +720,7 @@ UI Foundation 首批提供四套成对色系：
 | `Composer` | `components/Composer.tsx` | 任务要求卡与固定高度工具栏分离；工具栏与窗口底部留 `--space-12`，材料变化不推挤输入卡；idle/starting/running 与 locked 分列 |
 | `ContextPanel` | `components/ContextPanel.tsx` | 可完全收起的任务上下文，按过程/资料/记忆/简报/成果分组；资料页管理本次材料用途与移除 |
 | `ComposerCapabilityPicker` | `components/ComposerCapabilityPicker.tsx` | Composer 的能力/材料选择；技能摘要可打开管理，材料按类别计数，锁定原因并入材料摘要；PopoverMenu、ActionBar 组合 |
-| `McpToolBindingsPicker` | `components/McpToolBindingsPicker.tsx` | 按连接分组的 CheckList，专家预设与任务选择共用；新选项携带修订/hash，禁选 stale/停用/未审阅工具，旧失效选项允许移除 |
+| `McpToolBindingsPicker` | `components/McpToolBindingsPicker.tsx` | 按连接分组；可选工具组提供“全部工具”批量选择与默认折叠的工具列表，专家预设与任务选择共用；新选项携带修订/hash，禁选 stale/停用/未审阅工具，旧失效选项允许移除 |
 | `KnowledgeDocumentCard` | `components/KnowledgeDocumentCard.tsx` | 知识条目身份、修订与索引状态及更多动作，复用 Card/PopoverMenu |
 | `DependencyPanel` | `components/skills/DependencyPanel.tsx` | Skill 环境准备、授权、外部快照选择与作业结果；快照管理由 ToolchainSnapshotManager 承接 |
 | `ToolchainSnapshotManager` | `components/skills/ToolchainSnapshotManager.tsx` | 全局工具链快照及 Skill 授权/历史 Run 引用管理；删除前确认并拒绝仍被使用的记录 |

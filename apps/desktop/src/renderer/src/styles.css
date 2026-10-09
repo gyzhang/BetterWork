@@ -5111,9 +5111,23 @@ select,
   gap: var(--space-8);
   align-content: start;
 }
-.mcp-binding-group > strong {
+.mcp-binding-group-header {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8) var(--space-16);
+}
+.mcp-binding-group-header > strong {
+  min-width: 0;
   color: var(--text-secondary);
   font-size: var(--font-size-caption);
+  overflow-wrap: anywhere;
+}
+.mcp-binding-select-all .check-list-item {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 @media (max-width: 840px) {
   .schedule-editor-grid {

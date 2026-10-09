@@ -5,6 +5,7 @@ export interface CheckOption<K extends string> {
   label: ReactNode;
   checked: boolean;
   disabled?: boolean | undefined;
+  indeterminate?: boolean | undefined;
   /** 悬停说明（MCP 工具的描述这类）。原生 `title` 是这里唯一的兜底通道。 */
   hint?: string | undefined;
 }
@@ -49,6 +50,9 @@ export function CheckList<K extends string>({
           <input
             type="checkbox"
             checked={option.checked}
+            ref={(input) => {
+              if (input) input.indeterminate = option.indeterminate ?? false;
+            }}
             {...(option.disabled ? { disabled: true } : {})}
             {...(option.hint ? { title: option.hint } : {})}
             onChange={(event) => onToggle(option.id, event.target.checked)}
