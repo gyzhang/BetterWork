@@ -144,7 +144,7 @@ standards/
 
 **主进程**
 
-- `RunService.consume` 必须有 `catch`：引擎自身会收口失败与取消，但编排层在进入事件循环之前（读模型配置、构造搜索客户端）或在写库、广播过程中抛错时，引擎不会产出任何终态事件。兜底靠 `RunRepository.forceFailure`，它只在 Run 仍为 `running` 时合成 `run.failed`，因此重复调用安全，也不会与引擎的终态冲突。
+- `RunService.consume` 必须有 `catch`：引擎自身会收口失败与取消，但编排层在进入事件循环之前（读模型配置、构造搜索客户端）或在写库、广播过程中抛错时，引擎不会产出任何终态事件。当前 catch 调用 Application 内的 `RunEventLifecycle.recover`，兜底仍靠 `RunRepository.forceFailure`，它只在 Run 仍为 `running` 时合成 `run.failed`，因此重复调用安全，也不会与引擎的终态冲突。
 - 不变量：**每个 Run 都必须有明确终态**。启动时 `failInterruptedRuns` 会把上次进程被强杀留下的 `running` 收口为 `failed`。
 - 启动失败要 `console.error` 后退出，不能静默留在半初始化状态。
 

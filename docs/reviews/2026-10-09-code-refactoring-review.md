@@ -465,3 +465,10 @@ B 开始时先刷新 R17 的只读审计与安装树证据。若确认存在可�
 
 
 2026-10-10 02:50 远端收口：源提交 `7fcc6158441b35ca1bd69ef2bc2f0bf5b70b26d5` 的 [macOS PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/37975561521) 成功，静态快检、文档护栏 154、相关 functional 140 与 heavy 84 项通过，按本次 CI 输出共 7 文件 / 378 项；本地额外执行的 KnowledgeAudit 与成果采用声明共 26 项不计入该 CI 数字。Full verify 跳过。[PR #34](https://github.com/gyzhang/BetterWork/pull/34) 已 squash 合入 main，合并提交 `6c05b73e6de1ce4a27ee09dd21e68cc35a595a38`。原 checkout 已同步，代码分支本地/远端均已删除，没有新建 worktree；最终证据从此合并提交建立 `codex/review-c3-closeout`，以纯 Markdown PR 归档。 C3 的工具结果入口、非法结果失败与自动化验证完成；R06 的上下文/事件消费与终态协调、C2 的事实关联限制及其余治理仍待后续切片，不自动开工。
+
+
+## 16. C4：Run 事件消费与终态协调
+
+2026-10-10 06:17：用户授权继续 C3 后建议的终态切片，从干净 main `3532e952e9c98b16115e0407142c61f25c1de0e6` 建立 `codex/review-run-event-lifecycle`，使用原 checkout。RunEventLifecycle 在同一 Application 层收口事件持久化、候选终态消费、正常清理与异常恢复；RunService 保留准备/装配、启动/取消、活动注册表、外围 catch/finally、来源/广播/通知、定时结果等待及成果/记忆回调。原有失败快速分支、取消裁决、来源与唯一终态保持，没有协议/迁移或规范例外变化。详见 [C4 说明](2026-10-10-run-event-lifecycle.md)。
+
+本地相关 functional 9 文件 / 331 项、RunService heavy 86 项，去重共 10 文件 / 417 项通过；新模块 27 项、新集成 2 项。两次顺序破坏探针均失败，恢复后通过；typecheck、定向 lint/format 与生产 build 通过。app-only 完成 4 个 Run，recovery-only 完成独立进程强杀与新 PID 恢复，均只用临时 SQLite，网络尝试 0。最终文档/治理与最新 SHA 的 macOS PR Gate 继续核对，没有自动运行完整 verify。RunService 减少 57 行、生产源码净增 54 行，不以单文件长度代替职责评估；R06 的上下文/工具装配及其余治理仍待后续切片。

@@ -7,7 +7,6 @@ import {
   abortError,
   describeError,
   FakeModelProvider,
-  isAbortError,
   ReActAgentEngine,
 } from '@betterwork/agent-core';
 import type {
@@ -104,6 +103,7 @@ import {
 } from './memory-recall-service';
 import { ModelProviderFactory, type ResolvedLanguageModel } from './model-provider-factory';
 import type { NotificationService } from './notification-service';
+import { isRunTerminalEvent, RunEventLifecycle } from './run-event-lifecycle';
 import { RunToolResultAdapter } from './run-tool-result-adapter';
 import { ScheduleMaterialResolver } from './schedule-material-resolver';
 import { createQianfanSearchClient } from './search-engine-service';
@@ -386,6 +386,7 @@ export class RunService {
   private readonly fallbackModel = new FakeModelProvider();
   private knowledgeAuditInstance: KnowledgeAudit | undefined;
   private readonly toolResultAdapter: RunToolResultAdapter;
+  private readonly eventLifecycle: RunEventLifecycle;
   private artifactDeclarationsInstance: ArtifactDeclarationService | undefined;
 
   /** 审计服务惰性装配：使用构造器已接入的具名依赖。 */
@@ -429,6 +430,14 @@ export class RunService {
     this.toolResultAdapter = new RunToolResultAdapter({
       store: this.store,
       getMcpBinding: (runId, toolName) => this.mcpClientService?.getRunToolBinding(runId, toolName),
+    });
+    const skillExecution = ports.skillExecutionService;
+    const mcpClient = ports.mcpClientService;
+    this.eventLifecycle = new RunEventLifecycle({
+      journal: this.store.runs,
+      dispatch: (event) => this.dispatch(event),
+      ...(skillExecution ? { finishSkills: (runId) => skillExecution.finishRun(runId) } : {}),
+      ...(mcpClient ? { releaseMcp: (runId) => mcpClient.releaseRun(runId) } : {}),
     });
   }
 
@@ -576,7 +585,7 @@ export class RunService {
       });
     } catch (error) {
       this.activeRuns.delete(runId);
-      this.finalizeFailure(runId, `Task Continuity 简报准备失败：${describeError(error)}`);
+      this.eventLifecycle.fail(runId, `Task Continuity 简报准备失败：${describeError(error)}`);
       return runId;
     }
 
@@ -661,7 +670,6 @@ export class RunService {
     continuityMessages: readonly AgentMessage[],
     maxSkillToolRounds?: number,
   ): Promise<void> {
-    let terminalEvent: AgentRuntimeEvent | undefined;
     try {
       if (executionContext.materialScope && this.taskMaterials) {
         await this.taskMaterials.validateSelections(input.taskId, executionContext.materials);
@@ -779,88 +787,32 @@ export class RunService {
         ...(skillInstructions ? { skillInstructions } : {}),
       });
 
-      for await (const event of events) {
-        if (isTerminalEvent(event)) {
-          if (event.type === 'run.completed') {
-            const factError = this.auditMaterialFacts(runId, event.finalContent);
-            if (factError) throw new Error(factError);
-          }
-          terminalEvent = event;
-          break;
-        }
-        this.publish(event);
-      }
-      if (!terminalEvent) {
-        throw new Error('Agent 事件流结束时没有给出终态事件');
-      }
-      // 设计 §8：先清理子进程，再发布终态；清理失败走 forceFailure 兜底。
-      if (this.skillExecutionService) {
-        try {
-          const cleanup = await this.skillExecutionService.finishRun(runId);
-          if (cleanup.cleanupFailed > 0) throw new Error('未能确认全部子进程已停止');
-        } catch (error) {
-          terminalEvent = undefined;
-          this.finalizeFailure(runId, `子进程清理失败：${describeError(error)}`);
-          return;
-        }
-      }
-      await this.mcpClientService?.releaseRun(runId);
-      if (terminalEvent.type === 'run.completed') {
-        await this.persistRequestedMarkdownArtifact(
-          runId,
-          input,
-          workspacePath,
-          executionContext,
-          terminalEvent.finalContent,
-        );
-      }
-      this.publish(terminalEvent);
-      if (terminalEvent.type === 'run.completed') {
-        await this.syncCompletedRunContinuityProgress(runId, input.taskId);
-        this.requestRunExtraction(runId);
-      }
-    } catch (error) {
-      let message = describeError(error);
-      let cleanupFailed = false;
-      try {
-        await this.mcpClientService?.releaseRun(runId);
-      } catch {
-        cleanupFailed = true;
-        message += '；MCP 连接清理失败';
-      }
-      try {
-        const cleanup = await this.skillExecutionService?.finishRun(runId);
-        if (cleanup && cleanup.cleanupFailed > 0) {
-          cleanupFailed = true;
-          message += '；子进程清理失败';
-        }
-      } catch (cleanupError) {
-        cleanupFailed = true;
-        message += `；子进程清理失败：${describeError(cleanupError)}`;
-      }
-      if (!cleanupFailed && controller.signal.aborted && isAbortError(error)) {
-        if (this.store.runs.get(runId)?.status === 'running')
-          this.publish({
-            id: randomUUID(),
+      await this.eventLifecycle.consume(runId, events, {
+        auditFinalContent: (content) => {
+          const factError = this.auditMaterialFacts(runId, content);
+          if (factError) throw new Error(factError);
+        },
+        saveMarkdownArtifact: (content) =>
+          this.persistRequestedMarkdownArtifact(
             runId,
-            sequence: (this.store.runs.getLatestEvent(runId)?.sequence ?? -1) + 1,
-            createdAt: Date.now(),
-            type: 'run.cancelled',
-          });
-      } else this.finalizeFailure(runId, message);
+            input,
+            workspacePath,
+            executionContext,
+            content,
+          ),
+        afterCompleted: async () => {
+          await this.syncCompletedRunContinuityProgress(runId, input.taskId);
+          this.requestRunExtraction(runId);
+        },
+      });
+    } catch (error) {
+      await this.eventLifecycle.recover(runId, controller.signal, error);
     } finally {
       const scheduledOutcome = this.scheduledOutcomePromises.get(runId);
       if (scheduledOutcome) await scheduledOutcome;
       this.scheduledOutcomePromises.delete(runId);
       this.activeRuns.delete(runId);
     }
-  }
-
-  /** 兜底收口：只有 Run 仍在 running 时才会合成事件，因此与引擎自身的终态不冲突。 */
-  private finalizeFailure(runId: string, message: string): void {
-    const event = this.store.runs.forceFailure(runId, message, Date.now());
-    if (!event) return;
-    this.dispatch(event);
   }
 
   /**
@@ -1429,12 +1381,6 @@ export class RunService {
     };
   }
 
-  /** 落库后再分发；顺序不可颠倒，否则 UI 可能看到库里还不存在的事件。 */
-  private publish(event: AgentRuntimeEvent): void {
-    this.store.runs.appendEvent(event);
-    this.dispatch(event);
-  }
-
   private dispatch(event: AgentRuntimeEvent): void {
     const active = this.activeRuns.get(event.runId);
     if (active) this.recordToolProgress(active, event);
@@ -1449,7 +1395,7 @@ export class RunService {
       });
     }
     this.broadcast(event);
-    if (isTerminalEvent(event) && active) {
+    if (isRunTerminalEvent(event) && active) {
       if (active.scheduleOccurrenceId) {
         if (this.onScheduledRunTerminal) {
           const outcome = Promise.resolve()
@@ -2050,9 +1996,6 @@ export class RunService {
     };
   }
 }
-
-const isTerminalEvent = (event: AgentRuntimeEvent): boolean =>
-  event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.cancelled';
 
 const isOfficeFormat = (value: unknown): value is OfficeFormat =>
   value === 'pptx' || value === 'xlsx' || value === 'csv';
