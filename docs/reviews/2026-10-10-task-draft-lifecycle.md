@@ -29,3 +29,7 @@
 当次 TypeScript AST 读数：App 的 useState 调用从 49 到 38；物理行从 2,232 到 2,230。三个生产模块分别为草稿 Hook 113 行、选择 Hook 144 行、纯 reducer 101 行，生产源码净增 356 行。收益是可单独验证的状态所有权和过期语义，不把职责搬迁称为全仓代码变少。事件索引和唯一反馈出口保持；R07 的消息投影、历史成果保存与上下文组合仍待 D2，不能标为整项完成。
 
 2026-10-10 07:01 治理终检：原批次基点的 drift:check 通过并保存读数，随后复查无漂移。测试文件 247、粗略用例声明 2,165、护栏 154、例外 203、配置块 6、规则文件 7，规则指纹保持。巡检按换行分割的源码读数 97,381（+359），三个新增生产文件的尾部空项使其比物理行增量多 3；未增加规范例外。最终 docs:check、定向 ESLint/Prettier 和差异空白通过，源提交与精确 SHA 门禁继续收口。
+
+2026-10-10 07:06 远端收口：源提交 `c58c96ddbe62ba0ccbf6f34d7678eff8fac4cbbe` 的 [macOS PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/38002417765) 成功，宿主为 macos-26-arm64。全仓静态快检、文档护栏 154、新模块 functional 17 与完整 App heavy 59 项通过，CI 共 5 文件 / 230 项，Full verify 跳过。本地额外的 8 文件 / 38 项既有 Hook/Composer/事件回归不混入 CI 数字；build、app-only 和破坏探针沿用本地证据，日志 `/tmp/betterwork-d1-pr-gate.log` 不提交。
+
+[PR #38](https://github.com/gyzhang/BetterWork/pull/38) 已 squash 合入 main，合并提交 `8d7a3e1cf427e9614d2c05ca217c8d4cf19d5fe4`。原 checkout 已同步 main，代码分支本地/远端均已删除，没有新建 worktree；从此提交建立 `codex/review-d1-closeout`，以三份 Markdown 归档最终证据。D1 的代码和自动化完成，R07 其余界面职责仍待 D2；下一步建议评估工作消息投影、历史成果保存对象与单一反馈出口、上下文面板组合，待后续开发指令。
