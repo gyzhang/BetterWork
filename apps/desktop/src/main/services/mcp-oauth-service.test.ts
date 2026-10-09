@@ -29,6 +29,7 @@ const fixture = async (
     pkce?: boolean;
     dynamic?: boolean;
     metadataIssuer?: string;
+    authorizationServers?: string[];
     resource?: string;
     clientMetadata?: boolean;
     callbackPort?: number;
@@ -82,7 +83,7 @@ const fixture = async (
     if (url.includes('oauth-protected-resource'))
       return Response.json({
         resource: options.resource ?? 'https://mcp.example/mcp',
-        authorization_servers: ['https://auth.example'],
+        authorization_servers: options.authorizationServers ?? ['https://auth.example'],
         scopes_supported: ['report.read'],
       });
     if (url.includes('oauth-authorization-server'))
@@ -324,6 +325,22 @@ describe('MCP OAuth browser flow', () => {
         ),
       ).not.toContain('access-secret');
       expect(f.service.summary(f.connection).oauthStatus).toBe('authorized');
+      const authorization = f.store.mcpConnections.authorization(
+        f.connection.id,
+        f.operation.expectedRevisionId,
+      );
+      expect(authorization).toBeDefined();
+      const stored = await f.store.credentials!.resolveForOwner({
+        ownerKind: 'mcp-connection',
+        ownerId: f.connection.id,
+        slot: authorization!.slot,
+      });
+      const bundle = JSON.parse(stored.plaintext) as {
+        tokens: { issuer?: string };
+        clientInformation: { issuer?: string };
+      };
+      expect(bundle.tokens.issuer).toBe('https://auth.example');
+      expect(bundle.clientInformation.issuer).toBe('https://auth.example');
       await f.service.logout(f.connection.id);
       expect(f.service.summary(f.connection).oauthStatus).toBe('signed-out');
       await expect(
@@ -331,6 +348,24 @@ describe('MCP OAuth browser flow', () => {
       ).rejects.toThrow();
     },
   );
+
+  it('refreshes only at the approved issuer after the MCP server changes its discovery hints', async () => {
+    const options = { expiresIn: 0, authorizationServers: ['https://auth.example'] };
+    const f = await fixture(options);
+    await f.login();
+    options.authorizationServers = ['https://evil.example'];
+    const requestsBefore = f.requests.length;
+    expect(await f.service.accessToken(f.connection, new AbortController().signal)).toBe(
+      'refreshed-secret',
+    );
+    const refreshRequests = f.requests.slice(requestsBefore);
+    expect(refreshRequests).toHaveLength(1);
+    expect(refreshRequests[0]?.url).toBe('https://auth.example/token');
+    expect(new URLSearchParams(refreshRequests[0]?.body).get('refresh_token')).toBe(
+      'refresh-secret',
+    );
+    expect(f.browserUrls).toHaveLength(1);
+  });
 
   it.each([
     { wrongState: true },
