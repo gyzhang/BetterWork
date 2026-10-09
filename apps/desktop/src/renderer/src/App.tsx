@@ -622,11 +622,8 @@ export function App(): React.JSX.Element {
   const loadAllTaskRuns = useCallback((taskId: string): void => {
     const requestId = taskHistoryRequestRef.current + 1;
     taskHistoryRequestRef.current = requestId;
-    const selectionId = runSelectionRequestRef.current;
     const isCurrent = (): boolean =>
-      taskHistoryRequestRef.current === requestId &&
-      runSelectionRequestRef.current === selectionId &&
-      activeTaskIdRef.current === taskId;
+      taskHistoryRequestRef.current === requestId && activeTaskIdRef.current === taskId;
     trackAction(
       (async () => {
         const allRuns = await window.betterwork.runs.list({ taskId });
@@ -737,6 +734,7 @@ export function App(): React.JSX.Element {
     (options: { preservePrompt?: boolean } = {}): void => {
       clearScheduleTaskContinuation();
       runSelectionRequestRef.current += 1;
+      taskHistoryRequestRef.current += 1;
       activeRunIdRef.current = undefined;
       activeTaskIdRef.current = undefined;
       setActiveRunId(undefined);
@@ -1160,6 +1158,7 @@ export function App(): React.JSX.Element {
   };
   const selectRun = async (run: RunSummary): Promise<void> => {
     if (activeTaskIdRef.current !== run.taskId) {
+      taskHistoryRequestRef.current += 1;
       setTaskAllRuns([]);
       setTaskAllEvents(new Map());
       scheduleTaskContinuation.clear();
@@ -1196,6 +1195,7 @@ export function App(): React.JSX.Element {
   };
   const selectTask = async (task: RecentTaskSummary): Promise<TaskContextRevision | undefined> => {
     if (activeTaskIdRef.current !== task.id) scheduleTaskContinuation.clear();
+    taskHistoryRequestRef.current += 1;
     setTaskAllRuns([]);
     setTaskAllEvents(new Map());
     setTaskRuns([]);

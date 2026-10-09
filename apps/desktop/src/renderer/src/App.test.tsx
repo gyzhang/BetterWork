@@ -689,6 +689,43 @@ describe('Skill test run in the task composer', () => {
     expect(screen.getByText(followup.prompt)).toBeTruthy();
   });
 
+  it('同一 Task 开始续作后，未完成的历史读取仍能补齐旧 Run', async () => {
+    const api = installApi();
+    const previousCompleted: AgentRuntimeEvent = {
+      id: 'previous-completed',
+      runId: previousRun.id,
+      sequence: 1,
+      createdAt: 2,
+      type: 'run.completed',
+      finalContent: '已完成的旧回答',
+    };
+    let resolveHistory: ((events: AgentRuntimeEvent[]) => void) | undefined;
+    api.runs.listEvents
+      .mockImplementation(async ({ runId }) =>
+        runId === previousRun.id ? [previousCompleted] : [],
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveHistory = resolve;
+          }),
+      );
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
+    await waitFor(() => expect(api.runs.listEvents).toHaveBeenCalledTimes(2));
+    expect(resolveHistory).toBeTypeOf('function');
+    fireEvent.change(composer(), { target: { value: '继续完成下一期分析' } });
+    fireEvent.click(screen.getByRole('button', { name: '开始工作' }));
+    await screen.findByText('继续完成下一期分析');
+    await act(async () => resolveHistory?.([previousCompleted]));
+    expect(screen.getByText(previousRun.prompt)).toBeTruthy();
+    expect(screen.getByText('已完成的旧回答')).toBeTruthy();
+    expect(screen.getByText('继续完成下一期分析')).toBeTruthy();
+    expect(api.runs.start).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: previousTask.id }),
+    );
+  });
+
   it('离开再返回同一 Task 时不让旧讨论节点替换新节点', async () => {
     const api = installApi();
     let resolveOldCheckpoints: ((items: DiscussionCheckpoint[]) => void) | undefined;
