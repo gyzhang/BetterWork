@@ -437,3 +437,5 @@ B 开始时先刷新 R17 的只读审计与安装树证据。若确认存在可�
 装配契约见[系统架构 §3.2](../03-system-architecture.md#32-runservice-的具名依赖装配)。没有新 package、IPC、Schema、迁移或产品范围变化；同层装配调整无需新增 ADR。
 
 2026-10-09 22:13 本地证据：六处调用和 32 处 helper 调用迁移完成；RunService 83 项（新增装配回归 4 项）、IPC/记忆集成/定时六期与工程护栏 228 项通过，去重共 311 项。临时禁用装配检查后新增 4 项全部失败，恢复后通过；未放宽现有断言。typecheck、定向 ESLint、生产 build 通过；真实 Electron `--app-only` 离线旅程完成 4 个 Run、失败/取消及重开恢复，网络尝试 0，AI 已回读重开截图。首次测试遇到 Electron 本地自动安装并发冲突，确认运行文件完整后原命令复查通过，没有修改依赖或产品代码绕过环境失败。文档、格式、治理终检与最新 SHA 的 PR Gate 继续核对；完整 verify 未自动触发，未调用真实模型或操作用户数据库/开发窗口。
+
+2026-10-09 22:20 最终收口：源提交 `a1c2a356f13821d7d392ad22043652e69079aece` 的 [macOS PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/37942836781) 成功，静态快检、文档护栏 154 项、相关 functional 74 项与 heavy 83 项通过，共 5 文件 / 311 项；Full verify 跳过。[PR #30](https://github.com/gyzhang/BetterWork/pull/30) 已 squash 合入 main，合并提交 `8ac5002419ff1e795e9cf8abda30151491791526`。原 checkout 已同步 main，代码任务分支本地/远端均已删除，全程没有新建 worktree；最终证据以独立纯文档 PR 归档。C1 的依赖装配与自动化验证完成，R06 的其他职责仍未全面拆分；下一项为 C2 材料事实策略，先核对 ADR-0020 与现有适用范围，再按后续授权抽取。D–F 继续待推进。
