@@ -393,3 +393,5 @@ B 开始时先刷新 R17 的只读审计与安装树证据。若确认存在可�
 契约落点见[系统架构 §3.1](../03-system-architecture.md#31-应用退出与后台工作所有权)、[知识作业](../development/knowledge-contracts.md#8-索引作业与代次)及[记忆生命周期](../development/memory-contracts.md#73-持久化生命周期)。没有新 package、IPC/Schema 或迁移，不改原功能任务板与 ADR 状态；未启动完整 verify、真实模型或用户数据库验收，也未启停用户开发应用。
 
 2026-10-09 16:59 本地收口：补启动屏障后退出/进程回归 11 项通过；MCP 与工程护栏复查 180 项通过。相关用例按文件去重共 398 项通过（132 functional、33 依赖准备、79 RunService、154 工程护栏），最终 typecheck、定向 ESLint/Prettier、docs:check 与带批次基点的 drift:check 通过。护栏初次指出测试直接写取消名称，已统一使用 `isAbortError`，未放宽规则；PR Gate 尚待远端执行。
+
+2026-10-09 20:21 合并前复核：[PR #24](https://github.com/gyzhang/BetterWork/pull/24) 的首轮源提交 `7e0fb6a8121cf6a7929707c7110c5d2fcf7b5bd8` 已通过 [macOS PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/37908708758)。继续核对时补上 OAuth 本地回调监听器关闭回执的等待；新回归在移除等待时失败，补齐后 OAuth/MCP/工程护栏 181 项通过，本地累计按文件去重为 399 项。补充提交必须核对自己的最新 SHA 门禁，不能沿用首轮绿灯；尚未合并。

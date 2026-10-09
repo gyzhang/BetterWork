@@ -45,7 +45,6 @@ interface LoginOperation {
   timer: NodeJS.Timeout;
   metadata: OAuthProtectedResourceMetadata;
   scope?: string;
-  server?: Server;
   started: boolean;
   timedOut: boolean;
   disposeCallback?: () => void;
@@ -92,6 +91,7 @@ const constantEqual = (left: string, right: string): boolean => {
 export class McpOAuthService {
   private stopping = false;
   private readonly pendingRequests = new Set<Promise<unknown>>();
+  private readonly callbackClosures = new Set<Promise<void>>();
 
   private async trackRequest<T>(request: () => Promise<T>): Promise<T> {
     if (this.stopping) throw abortError();
@@ -590,6 +590,7 @@ export class McpOAuthService {
       ...this.pendingRequests,
       ...[...this.refreshes.values()].map((refresh) => refresh.promise),
     ]);
+    await Promise.all(this.callbackClosures);
     this.secrets.clear();
   }
 
@@ -734,7 +735,14 @@ export class McpOAuthService {
     this.operations.delete(id);
     clearTimeout(operation.timer);
     operation.disposeCallback?.();
-    operation.server?.close();
+  }
+
+  private closeCallbackServer(server: Server): void {
+    const closing = new Promise<void>((resolve) => {
+      // An already closed listener also invokes this callback; either case owns no open server.
+      server.close(() => resolve());
+    }).finally(() => this.callbackClosures.delete(closing));
+    this.callbackClosures.add(closing);
   }
 
   private async callback(
@@ -796,10 +804,9 @@ export class McpOAuthService {
         response.end('授权校验失败，请返回算台重试。');
       }
     });
-    operation.server = server;
     const cancel = (): void => {
       reject?.(abortError());
-      server.close();
+      this.closeCallbackServer(server);
     };
     operation.controller.signal.addEventListener('abort', cancel, { once: true });
     operation.disposeCallback = () => {
