@@ -6,6 +6,7 @@ import type {
   ArtifactSummary,
   ArtifactVersionExecutorSummary,
   CreateMemoryRequest,
+  DiscussionCheckpoint,
   ExpertDetail,
   ExpertSummary,
   InputSnapshot,
@@ -468,7 +469,7 @@ function installApi(options?: {
       }),
     },
     discussionCheckpoints: {
-      list: vi.fn(async () => []),
+      list: vi.fn(async (): Promise<DiscussionCheckpoint[]> => []),
       create: vi.fn(async () => ({ checkpoint: undefined })),
     },
     materials: {
@@ -565,9 +566,9 @@ function installApi(options?: {
       list: vi.fn(async (input?: { taskId?: string }): Promise<RunSummary[]> =>
         input?.taskId === previousTask.id ? [previousRun] : [],
       ),
-      listEvents: vi.fn(async (): Promise<AgentRuntimeEvent[]> => []),
+      listEvents: vi.fn<Window['betterwork']['runs']['listEvents']>(async () => []),
       start: vi.fn(async () => ({ runId: 'new-run' })),
-      onEvent: vi.fn(() => () => undefined),
+      onEvent: vi.fn<Window['betterwork']['runs']['onEvent']>(() => () => undefined),
     },
     skills: {
       list: vi.fn(async () => [skill]),
@@ -626,10 +627,176 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   Reflect.deleteProperty(window, 'betterwork');
 });
 
 describe('Skill test run in the task composer', () => {
+  it('任务历史快照迟到时保留已经广播的终态与最终回答', async () => {
+    const api = installApi();
+    api.runs.list.mockResolvedValue([{ ...previousRun, status: 'running' }]);
+    let emitEvent: ((event: AgentRuntimeEvent) => void) | undefined;
+    api.runs.onEvent.mockImplementation((listener) => {
+      emitEvent = listener;
+      return () => undefined;
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
+    await screen.findByText(previousRun.prompt);
+    await waitFor(() => expect(api.runs.listEvents).toHaveBeenCalledTimes(2));
+    let resolveSnapshot: ((events: AgentRuntimeEvent[]) => void) | undefined;
+    api.runs.listEvents.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSnapshot = resolve;
+        }),
+    );
+    const completed: AgentRuntimeEvent = {
+      id: 'live-completed',
+      runId: previousRun.id,
+      sequence: 2,
+      createdAt: 3,
+      type: 'run.completed',
+      finalContent: '加载期间收到的最终回答',
+    };
+    act(() => emitEvent?.(completed));
+    await waitFor(() => expect(resolveSnapshot).toBeTypeOf('function'));
+    expect(screen.getByText(completed.finalContent)).toBeTruthy();
+    await act(async () => resolveSnapshot?.([]));
+    expect(screen.getByText(completed.finalContent)).toBeTruthy();
+    expect(screen.getByRole('button', { name: '记住这段经验' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '停止' })).toBeNull();
+  });
+
+  it('离开再返回同一 Task 时丢弃上一轮历史读取，保留新增 Run', async () => {
+    const api = installApi();
+    let resolveOldSnapshot: ((events: AgentRuntimeEvent[]) => void) | undefined;
+    api.runs.listEvents.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOldSnapshot = resolve;
+        }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
+    await waitFor(() => expect(resolveOldSnapshot).toBeTypeOf('function'));
+    await openTestRun();
+    const followup = { ...previousRun, id: 'followup-run', prompt: '后来的续作要求', createdAt: 2 };
+    api.runs.list.mockResolvedValue([followup, previousRun]);
+    fireEvent.click(screen.getByRole('button', { name: /旧任务/ }));
+    await screen.findByText(followup.prompt);
+    await act(async () => resolveOldSnapshot?.([]));
+    expect(screen.getByText(followup.prompt)).toBeTruthy();
+  });
+
+  it('离开再返回同一 Task 时不让旧讨论节点替换新节点', async () => {
+    const api = installApi();
+    let resolveOldCheckpoints: ((items: DiscussionCheckpoint[]) => void) | undefined;
+    api.discussionCheckpoints.list.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOldCheckpoints = resolve;
+        }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
+    await waitFor(() => expect(resolveOldCheckpoints).toBeTypeOf('function'));
+    await openTestRun();
+    const checkpoint: DiscussionCheckpoint = {
+      id: 'new-checkpoint',
+      taskId: previousTask.id,
+      stage: 'report-outline',
+      status: 'open',
+      title: '新的讨论节点',
+      summary: '重新整理大纲',
+      artifactVersionIds: [],
+      createdAt: 2,
+      updatedAt: 2,
+    };
+    api.discussionCheckpoints.list.mockResolvedValue([checkpoint]);
+    fireEvent.click(screen.getByRole('button', { name: /旧任务/ }));
+    await screen.findByText(/新的讨论节点/);
+    await act(async () => resolveOldCheckpoints?.([]));
+    expect(screen.getByText(/新的讨论节点/)).toBeTruthy();
+  });
+
+  it.each([false, true])(
+    '启动回执之前已结束的 Run 保留事件，补读失败=%s',
+    async (recoveryFails) => {
+      const api = installApi();
+      const backgroundErrors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      let emitEvent: ((event: AgentRuntimeEvent) => void) | undefined;
+      api.runs.onEvent.mockImplementation((listener) => {
+        emitEvent = listener;
+        return () => undefined;
+      });
+      let acknowledge: ((receipt: { runId: string }) => void) | undefined;
+      api.runs.start.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            acknowledge = resolve;
+          }),
+      );
+      render(<App />);
+      await openTestRun();
+      fireEvent.change(composer(), { target: { value: goal } });
+      fireEvent.click(screen.getByRole('button', { name: '开始工作' }));
+      await waitFor(() => expect(acknowledge).toBeTypeOf('function'));
+      const earlyEvents: AgentRuntimeEvent[] = [
+        {
+          id: 'early-start',
+          runId: 'new-run',
+          sequence: 0,
+          createdAt: 2,
+          type: 'run.started',
+          taskId: 'new-task',
+          sessionId: 'new-session',
+        },
+        {
+          id: 'early-completed',
+          runId: 'new-run',
+          sequence: 1,
+          createdAt: 3,
+          type: 'run.completed',
+          finalContent: '回执之前已完成的报告',
+        },
+      ];
+      if (recoveryFails) api.runs.listEvents.mockRejectedValue(new Error('补读暂不可用'));
+      else api.runs.listEvents.mockResolvedValue(earlyEvents);
+      act(() => earlyEvents.forEach((event) => emitEvent?.(event)));
+      await act(async () => acknowledge?.({ runId: 'new-run' }));
+      expect(await screen.findByText('回执之前已完成的报告')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: '停止' })).toBeNull();
+      expect(screen.getByRole('button', { name: '记住这段经验' })).toBeTruthy();
+      if (recoveryFails)
+        expect(backgroundErrors).toHaveBeenCalledWith('恢复新执行的事件 failed', expect.any(Error));
+      else expect(backgroundErrors).not.toHaveBeenCalled();
+    },
+  );
+
+  it('启动回执迟到时保留用户新开的任务草稿', async () => {
+    const api = installApi();
+    let acknowledge: ((receipt: { runId: string }) => void) | undefined;
+    api.runs.start.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          acknowledge = resolve;
+        }),
+    );
+    render(<App />);
+    await openTestRun();
+    fireEvent.change(composer(), { target: { value: goal } });
+    fireEvent.click(screen.getByRole('button', { name: '开始工作' }));
+    await waitFor(() => expect(acknowledge).toBeTypeOf('function'));
+    fireEvent.click(screen.getByRole('button', { name: '新建任务' }));
+    fireEvent.change(composer(), { target: { value: '新开任务的草稿' } });
+    await act(async () => acknowledge?.({ runId: 'new-run' }));
+    expect(composer()).toHaveProperty('value', '新开任务的草稿');
+    expect(screen.queryByText(goal)).toBeNull();
+    expect(screen.queryByRole('button', { name: '停止' })).toBeNull();
+    expect(api.runs.start).toHaveBeenCalledTimes(1);
+  });
+
   it('opens an empty focused draft and starts only after explicit submission with the Skill binding', async () => {
     const api = installApi();
     render(<App />);
@@ -1053,6 +1220,100 @@ describe('定时任务导航', () => {
 });
 
 describe('Workspace input material display', () => {
+  it.each(['success', 'failure'])(
+    '旧材料候选 %s 不覆盖后一次选择或提前停止加载',
+    async (outcome) => {
+      const api = installApi();
+      let resolveFirst: ((items: MaterialCandidate[]) => void) | undefined;
+      let rejectFirst: ((error: Error) => void) | undefined;
+      let resolveSecond: ((items: MaterialCandidate[]) => void) | undefined;
+      api.materials.listCandidates
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve, reject) => {
+              resolveFirst = resolve;
+              rejectFirst = reject;
+            }),
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveSecond = resolve;
+            }),
+        );
+      render(<App />);
+      await waitFor(() => expect(api.tasks.list).toHaveBeenCalled());
+      const openKnowledgePicker = async (): Promise<void> => {
+        fireEvent.click(screen.getByRole('button', { name: '添加能力' }));
+        fireEvent.click(await screen.findByRole('menuitem', { name: /引用知识/ }));
+      };
+      await openKnowledgePicker();
+      fireEvent.click(screen.getByRole('button', { name: '取消' }));
+      await openKnowledgePicker();
+      expect(resolveSecond).toBeTypeOf('function');
+      await act(async () => {
+        if (outcome === 'success') resolveFirst?.([]);
+        else rejectFirst?.(new Error('旧候选读取失败'));
+      });
+      expect(screen.getByText('正在加载候选材料…')).toBeTruthy();
+      expect(screen.queryByText('旧候选读取失败')).toBeNull();
+      const latestCandidate: MaterialCandidate = {
+        reference: {
+          kind: 'knowledge-revision',
+          knowledgeDocumentId: 'latest-document',
+          knowledgeRevisionId: 'latest-revision',
+          contentHash: 'latest-hash',
+          sourcePath: '/workspace/新规则.md',
+        },
+        title: '新规则',
+        sourceLabel: '知识 · 新规则.md',
+        status: 'ready',
+      };
+      await act(async () => resolveSecond?.([latestCandidate]));
+      expect(screen.getByRole('menuitem', { name: /新规则/ })).toBeTruthy();
+      expect(screen.queryByText('正在加载候选材料…')).toBeNull();
+    },
+  );
+
+  it.each(['success', 'failure'])('文件选择迟到 %s 时不污染另一份任务草稿', async (outcome) => {
+    const api = installApi();
+    let resolveSnapshot: ((snapshot: InputSnapshot) => void) | undefined;
+    let rejectSnapshot: ((error: Error) => void) | undefined;
+    api.materials.prepareInputSnapshot.mockImplementationOnce(
+      () =>
+        new Promise((resolve, reject) => {
+          resolveSnapshot = resolve;
+          rejectSnapshot = reject;
+        }),
+    );
+    render(<App />);
+    await waitFor(() => expect(api.tasks.list).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: '添加能力' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /添加文件/ }));
+    expect(resolveSnapshot).toBeTypeOf('function');
+    fireEvent.click(screen.getByRole('button', { name: '新建任务' }));
+    fireEvent.change(composer(), { target: { value: '新的任务草稿' } });
+    await act(async () => {
+      if (outcome === 'success')
+        resolveSnapshot?.({
+          id: 'stale-input',
+          workspaceId: workspaceFixture.id,
+          sourcePath: '/workspace/旧材料.md',
+          contentHash: 'old-hash',
+          byteSize: 1,
+          format: 'markdown',
+          fileKey: 'input-snapshots/old-hash/content',
+          status: 'ready',
+          createdAt: 1,
+          updatedAt: 1,
+        });
+      else rejectSnapshot?.(new Error('旧文件选择失败'));
+    });
+    expect(screen.queryByText(/本次材料 1 项/)).toBeNull();
+    expect(screen.queryByText('旧文件选择失败')).toBeNull();
+    expect(composer()).toHaveProperty('value', '新的任务草稿');
+  });
+
   it('shows the filename immediately after adding a workspace file', async () => {
     const api = installApi();
     api.materials.prepareInputSnapshot.mockResolvedValue({
@@ -1882,6 +2143,46 @@ describe('参考成果版本接入当前任务', () => {
     fireEvent.click(await screen.findByRole('button', { name: /季度复盘/ }));
     fireEvent.click(await screen.findByRole('button', { name: '基于此版本开始新任务' }));
   };
+
+  it.each([
+    ['success', false],
+    ['success', true],
+    ['failure', true],
+  ] as const)(
+    '来源身份迟到 %s 时保留新的选择与草稿，返回原 Task=%s',
+    async (outcome, returnToTask) => {
+      const api = installReferenceApi({ expert: true, context: expertContext() });
+      let resolveExecutor: ((value: ArtifactVersionExecutorSummary | null) => void) | undefined;
+      let rejectExecutor: ((error: Error) => void) | undefined;
+      api.artifacts.getVersionExecutor.mockImplementationOnce(
+        () =>
+          new Promise((resolve, reject) => {
+            resolveExecutor = resolve;
+            rejectExecutor = reject;
+          }),
+      );
+      render(<App />);
+      fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
+      await screen.findByText(previousRun.prompt);
+      await openVersionAction();
+      expect(resolveExecutor).toBeTypeOf('function');
+      fireEvent.click(screen.getByRole('button', { name: '新建任务' }));
+      if (returnToTask) {
+        fireEvent.click(screen.getByRole('button', { name: /旧任务/ }));
+        await screen.findByText(previousRun.prompt);
+      }
+      fireEvent.change(composer(), { target: { value: '用户切换后写下的草稿' } });
+      await act(async () => {
+        if (outcome === 'success')
+          resolveExecutor?.({ kind: 'unavailable', reason: 'expert-unavailable' });
+        else rejectExecutor?.(new Error('旧来源身份读取失败'));
+      });
+      expect(composer()).toHaveProperty('value', '用户切换后写下的草稿');
+      expect(screen.queryByText(/无法确认该版本的来源执行身份/)).toBeNull();
+      expect(screen.queryByText(/来源任务的专家已不可用/)).toBeNull();
+      expect(api.runs.start).not.toHaveBeenCalled();
+    },
+  );
 
   it('沿用来源专家：草稿交给该专家当前可用修订，不自动发送也不提示', async () => {
     const api = installReferenceApi({ expert: true, context: expertContext() });

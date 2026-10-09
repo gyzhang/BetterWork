@@ -230,9 +230,10 @@ const createMaterialFactLedger = (enabled: boolean, prompt: string): MaterialFac
     const value = Number(match[1]);
     if (!Number.isFinite(value)) continue;
     ledger.rawNumbers.add(value);
-    if (isCountUnit(match[2])) ledger.rawCountNumbers.add(value);
+    const unit = match[2]?.trim();
+    if (isCountUnit(unit)) ledger.rawCountNumbers.add(value);
     addNormalizedNumber(ledger.allowedNumbers, value);
-    if (isPercentageUnit(match[2])) addNormalizedNumber(ledger.allowedPercentages, value);
+    if (isPercentageUnit(unit)) addNormalizedNumber(ledger.allowedPercentages, value);
   }
   for (const match of prompt.matchAll(labeledCountPattern)) {
     const value = Number(match[1]);
@@ -251,8 +252,9 @@ const recordMaterialFacts = (ledger: MaterialFactLedger, text: string): void => 
   for (const match of text.matchAll(claimNumberPattern)) {
     const value = Number(match[1]);
     if (!Number.isFinite(value)) continue;
-    if (isCountUnit(match[2])) ledger.rawCountNumbers.add(value);
-    if (isPercentageUnit(match[2])) addNormalizedNumber(ledger.allowedPercentages, value);
+    const unit = match[2]?.trim();
+    if (isCountUnit(unit)) ledger.rawCountNumbers.add(value);
+    if (isPercentageUnit(unit)) addNormalizedNumber(ledger.allowedPercentages, value);
   }
   for (const match of text.matchAll(labeledCountPattern)) {
     const value = Number(match[1]);

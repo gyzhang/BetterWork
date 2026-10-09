@@ -2785,6 +2785,84 @@ describe('RunService', () => {
     ]);
   });
 
+  it.each([
+    ['material', '家', ' ', '10'],
+    ['material', '户', '\t', '10'],
+    ['material', '客户', '　', '10'],
+    ['material', '%', ' ', '10'],
+    ['material', '％', '　', '10'],
+    ['prompt', '家', ' ', '10'],
+    ['prompt', '%', '\t', '10'],
+    ['material', '％', ' ', '-12.5'],
+    ['prompt', '%', '　', '+10.25'],
+    ['material', '家', '\n', '10.5'],
+  ])(
+    'accepts %s facts with whitespace before %s (%j): %s',
+    async (source, unit, whitespace, value) => {
+      const fixture = await createFixture();
+      const fact = `本期记录：${value}${whitespace}${unit}。`;
+      const context = await saveSingleMaterialContext(
+        fixture,
+        source === 'material' ? fact : '本期口径说明。',
+      );
+      let requestCount = 0;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          requestCount += 1;
+          if (requestCount === 1)
+            return sseResponse(
+              JSON.stringify({
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: [
+                        {
+                          index: 0,
+                          id: 'read-whitespace-fact',
+                          function: {
+                            name: 'read_text_file',
+                            arguments: JSON.stringify({ path: 'selected.md' }),
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              }),
+            );
+          return sseResponse(
+            JSON.stringify({ choices: [{ delta: { content: `本期记录：${value}${unit}。` } }] }),
+          );
+        }),
+      );
+      fixture.store.models.save({
+        name: '单位空白回归模型',
+        provider: 'openai-compatible',
+        baseUrl: 'http://model.test/v1',
+        model: 'fixture-model',
+        role: 'language',
+        apiKey: '',
+        maxContextTokens: 8_192,
+        maxOutputTokens: 1_024,
+        temperature: 0,
+        enabled: true,
+      });
+      const service = createService(fixture);
+      const runId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: `读取材料并整理经营摘要。${source === 'prompt' ? fact : ''}`,
+        taskContextRevisionId: context.id,
+        expectedTaskContextRevision: context.revision,
+      });
+      await waitForCompletion(fixture, runId);
+      expect(fixture.store.runs.listEvents(runId).at(-1)).toMatchObject({ type: 'run.completed' });
+      expect(statusOf(fixture, runId)).toBe('completed');
+      expect(fixture.store.materialReads.listByRun(runId)).toHaveLength(1);
+    },
+  );
+
   it('accepts a customer-count table label with a supported value', async () => {
     const fixture = await createFixture();
     const context = await saveSingleMaterialContext(fixture, '客户数（家） | 本期 | 1');
