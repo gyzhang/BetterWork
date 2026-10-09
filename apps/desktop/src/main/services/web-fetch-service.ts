@@ -1,53 +1,24 @@
 import { abortError } from '@betterwork/agent-core';
 import type { WebFetchResponse } from '@betterwork/tool-runtime';
 
+import {
+  awaitWebFetchOperation,
+  requestWebFetch,
+  validateWebFetchUrl,
+  webFetchAbortReason,
+  type WebFetchNetworkOptions,
+} from './web-fetch-network-policy';
+
 const MAX_BYTES = 1_000_000;
 const MAX_REDIRECTS = 3;
 const TIMEOUT_MS = 15_000;
-
-const isPrivateHostname = (hostname: string): boolean => {
-  const lower = hostname.toLowerCase().replace(/^\[|\]$/gu, '');
-  if (lower === 'localhost' || lower.endsWith('.localhost') || lower.endsWith('.local'))
-    return true;
-  if (
-    lower === '::1' ||
-    lower === '::' ||
-    lower.startsWith('::ffff:') ||
-    lower.startsWith('fe80:') ||
-    lower.startsWith('fc') ||
-    lower.startsWith('fd')
-  )
-    return true;
-  const parts = lower.split('.').map(Number);
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255))
-    return false;
-  const first = parts[0] ?? -1;
-  const second = parts[1] ?? -1;
-  return (
-    first === 10 ||
-    first === 127 ||
-    (first === 172 && second >= 16 && second <= 31) ||
-    (first === 192 && second === 168) ||
-    first === 0
-  );
-};
-
-const validateUrl = (raw: string): URL => {
-  const url = new URL(raw);
-  if (url.protocol !== 'http:' && url.protocol !== 'https:')
-    throw new Error('仅支持 http(s) 网页地址');
-  if (url.username || url.password || isPrivateHostname(url.hostname))
-    throw new Error('网页地址指向了不允许访问的主机');
-  return url;
-};
 
 const readBody = async (
   response: Response,
   signal: AbortSignal,
 ): Promise<{ text: string; truncated: boolean }> => {
   if (!response.body) {
-    const text = await response.text();
-    return { text: text.slice(0, MAX_BYTES), truncated: text.length > MAX_BYTES };
+    return { text: '', truncated: false };
   }
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -55,8 +26,8 @@ const readBody = async (
   let truncated = false;
   try {
     while (true) {
-      if (signal.aborted) throw abortError();
-      const { done, value } = await reader.read();
+      if (signal.aborted) throw webFetchAbortReason(signal);
+      const { done, value } = await awaitWebFetchOperation(reader.read(), signal);
       if (done) break;
       if (!value) continue;
       const remaining = MAX_BYTES - total;
@@ -70,7 +41,13 @@ const readBody = async (
       total += value.byteLength;
     }
   } finally {
-    await reader.cancel().catch(() => undefined);
+    try {
+      await reader.cancel().catch(() => {
+        // Preserve the original read failure; the owning Agent is destroyed by the caller.
+      });
+    } finally {
+      reader.releaseLock();
+    }
   }
   const text = new TextDecoder().decode(concat(chunks, total));
   return { text, truncated };
@@ -108,58 +85,66 @@ const toReadableText = (html: string): { title: string; content: string } => {
 };
 
 export class WebFetchService {
-  constructor(private readonly fetchImpl: typeof fetch = fetch) {}
+  constructor(private readonly options: WebFetchNetworkOptions = {}) {}
 
   async fetch(url: string, signal: AbortSignal): Promise<WebFetchResponse> {
-    let current = validateUrl(url);
-    for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
-      if (signal.aborted) throw abortError();
-      const timeout = new AbortController();
-      const timer = setTimeout(() => timeout.abort(), TIMEOUT_MS);
-      const onAbort = (): void => timeout.abort();
-      signal.addEventListener('abort', onAbort, { once: true });
-      try {
-        const response = await this.fetchImpl(current, {
-          redirect: 'manual',
-          signal: timeout.signal,
-        });
-        if (response.status >= 300 && response.status < 400) {
-          const location = response.headers.get('location');
-          if (!location || redirects === MAX_REDIRECTS)
-            throw new Error('网页重定向次数过多或缺少目标');
-          current = validateUrl(new URL(location, current).toString());
-          continue;
+    if (signal.aborted) throw abortError();
+    let current = validateWebFetchUrl(url);
+    const operation = new AbortController();
+    const timer = setTimeout(() => operation.abort(new Error('网页读取超时（15 秒）')), TIMEOUT_MS);
+    const onAbort = (): void => operation.abort(abortError());
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) onAbort();
+    try {
+      for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
+        const connection = await requestWebFetch(current, operation.signal, this.options);
+        let result: WebFetchResponse;
+        try {
+          const { response } = connection;
+          if (response.status >= 300 && response.status < 400) {
+            const location = response.headers.get('location');
+            if (!location || redirects === MAX_REDIRECTS)
+              throw new Error('网页重定向次数过多或缺少目标');
+            // requestWebFetch validates the next hop after this connection is released.
+            current = new URL(location, current);
+            continue;
+          }
+          if (!response.ok) throw new Error(`网页返回 HTTP ${response.status}`);
+          const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim() ?? '';
+          if (!(
+            contentType.startsWith('text/') ||
+            contentType.includes('html') ||
+            contentType.includes('json')
+          ))
+            throw new Error('网页返回的不是可读取正文');
+          const body = await readBody(response, operation.signal);
+          if (operation.signal.aborted) throw webFetchAbortReason(operation.signal);
+          const readable = contentType.includes('html')
+            ? toReadableText(body.text)
+            : { title: '', content: body.text.trim() };
+          if (!readable.content) throw new Error('网页没有可读取正文');
+          result = {
+            url: current.toString(),
+            title: readable.title || current.hostname,
+            content: readable.content,
+            contentType,
+            status: response.status,
+            retrievedAt: Date.now(),
+            truncated: body.truncated,
+          };
+        } finally {
+          await connection.release();
         }
-        if (!response.ok) throw new Error(`网页返回 HTTP ${response.status}`);
-        const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim() ?? '';
-        if (!(
-          contentType.startsWith('text/') ||
-          contentType.includes('html') ||
-          contentType.includes('json')
-        ))
-          throw new Error('网页返回的不是可读取正文');
-        const body = await readBody(response, timeout.signal);
-        const readable = contentType.includes('html')
-          ? toReadableText(body.text)
-          : { title: '', content: body.text.trim() };
-        if (!readable.content) throw new Error('网页没有可读取正文');
-        return {
-          url: current.toString(),
-          title: readable.title || current.hostname,
-          content: readable.content,
-          contentType,
-          status: response.status,
-          retrievedAt: Date.now(),
-          truncated: body.truncated,
-        };
-      } catch (error) {
-        if (signal.aborted || timeout.signal.aborted) throw abortError();
-        throw error;
-      } finally {
-        clearTimeout(timer);
-        signal.removeEventListener('abort', onAbort);
+        if (operation.signal.aborted) throw webFetchAbortReason(operation.signal);
+        return result;
       }
+      throw new Error('网页重定向失败');
+    } catch (error) {
+      if (operation.signal.aborted) throw webFetchAbortReason(operation.signal);
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
     }
-    throw new Error('网页重定向失败');
   }
 }

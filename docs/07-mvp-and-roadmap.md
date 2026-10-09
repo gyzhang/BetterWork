@@ -1,5 +1,9 @@
 # MVP 与路线图
 
+## 公开网页目的地边界补强 — 2026-10-09
+
+代码 Review 的 B2/R05 延续 E43 只读公开网页范围；用户接受 [ADR-0046](adr/0046-web-fetch-destination-binding.md) 并授权实施逐跳 DNS 全回答校验、实际 socket 地址绑定、统一 15 秒预算与资源释放。域名/TLS 身份保留，特殊地址拒绝，不自动跟随系统代理；不新增私网网页授权，不改变 MCP 授权、Evidence 或既有任务板验收状态。实现、离线回归与 PR 证据只记 [Review 报告](reviews/2026-10-09-code-refactoring-review.md) 的 B2 跟踪。
+
 ## 设置中的 MCP 多传输与 OAuth — 2026-10-08 定案，2026-10-09 实现
 
 用户审阅预览后按推荐 D1–D5 定案并授权编码，[ADR-0043](adr/0043-mcp-multi-transport-and-oauth.md) 已 Accepted。[设置中的 MCP](designs/mcp-connections.md)按 MCP 2026-07-28 实现本地 stdio、Streamable HTTP（含显式授权的本机 HTTP）、旧 HTTP+SSE 与 OAuth 浏览器登录，支持新旧版本协商、受管凭据、配置修订、工具合同审阅、Run 独立客户端及取消/历史保留。2026-10-09 用户明确要求产品安装包内置一组可直接使用的 MCP/CLI/Skill/Expert，尽量不要求用户另装 Node.js/Python 或联网准备运行时；[ADR-0045](adr/0045-bundled-runtimes-for-local-mcp.md) 与 CF43 落实当前内置 stdio MCP 和共享 Python 3.12.14 基础运行时，外部 CLI 仍按各自依赖契约处理。
