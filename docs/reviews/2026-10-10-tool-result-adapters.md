@@ -29,3 +29,6 @@
 
 
 2026-10-10 02:44 本地终检：docs:check（154 项）、差异空白与原批次基点的 drift:check 通过，读数已保存，护栏 154、例外 203 和规则指纹保持。app-only 一组真实 App/Preload/IPC/临时 SQLite 旅程通过，4 个 Run、失败/取消和窗口销毁后重组服务恢复，网络尝试 0；AI 已查看首次完成与失败截图。证据在 `/var/folders/kq/ts17kvnd5yg2kjtkx645y1zw0000gn/T/betterwork-ui-render-9m07Si`。不代表完整 UI、真实模型或安装态验收，最新源 SHA 的 macOS PR Gate 与合并继续收口。
+
+
+2026-10-10 02:50 远端收口：源提交 `7fcc6158441b35ca1bd69ef2bc2f0bf5b70b26d5` 的 [macOS PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/37975561521) 成功，静态快检、文档护栏 154、相关 functional 140 与 heavy 84 项通过，按本次 CI 输出共 7 文件 / 378 项；本地额外执行的 KnowledgeAudit 与成果采用声明共 26 项不计入该 CI 数字。Full verify 跳过。[PR #34](https://github.com/gyzhang/BetterWork/pull/34) 已 squash 合入 main，合并提交 `6c05b73e6de1ce4a27ee09dd21e68cc35a595a38`。原 checkout 已同步，代码分支本地/远端均已删除，没有新建 worktree；最终证据从此合并提交建立 `codex/review-c3-closeout`，以纯 Markdown PR 归档。 C3 的工具结果入口、非法结果失败与自动化验证完成；R06 的上下文/事件消费与终态协调、C2 的事实关联限制及其余治理仍待后续切片，不自动开工。
