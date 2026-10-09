@@ -3366,7 +3366,7 @@ describe('RunService', () => {
       connectionRevisionId: connection.revisionId,
       toolId: discoveredTool.id,
       contractHash: discoveredTool.contractHash,
-      readOnlyConfirmed: true,
+      userConfirmed: true,
     });
     mcp.setLifecycle({
       id: connection.id,

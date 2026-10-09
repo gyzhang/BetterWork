@@ -197,7 +197,7 @@ const fixture = async (
       toolId: tool.id,
       contractHash: tool.contractHash,
     };
-    service.reviewTool({ ...binding, readOnlyConfirmed: true });
+    service.reviewTool({ ...binding, userConfirmed: true });
     service.setLifecycle({
       id: connection.id,
       expectedRevisionId: connection.revisionId,

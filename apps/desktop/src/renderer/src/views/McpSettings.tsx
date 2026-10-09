@@ -6,7 +6,7 @@ import {
   type McpTransport,
   saveMcpConnectionRequestSchema,
 } from '@betterwork/agent-protocol';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { ActionBar } from '../components/ActionBar';
 import { InlineLoading } from '../components/AsyncButton';
@@ -29,6 +29,11 @@ import { TransientToast } from '../components/TransientToast';
 import type { McpConnectionsState } from '../hooks/use-mcp-connections';
 import { useTransientToast } from '../hooks/use-transient-toast';
 import { describeActionError, trackAction } from '../lib/async-action';
+import {
+  createMcpImportSaveRequest,
+  type McpConfigImportServer,
+  parseMcpServersConfig,
+} from '../lib/mcp-config-import';
 
 interface SecretEnv {
   name: string;
@@ -97,6 +102,28 @@ const statusNames = {
   failed: '失败',
   disconnected: '已断开',
 };
+type McpTool = McpConnectionSummary['tools'][number];
+
+const isPotentiallyRiskyMcpTool = (tool: McpTool): boolean =>
+  tool.annotations?.readOnlyHint === false || tool.annotations?.destructiveHint === true;
+
+const isBatchReviewableMcpTool = (tool: McpTool): boolean =>
+  !tool.reviewed &&
+  !!tool.contractHash &&
+  tool.annotations?.readOnlyHint === true &&
+  tool.annotations?.destructiveHint !== true;
+
+const isBatchReviewableRiskyMcpTool = (tool: McpTool): boolean =>
+  !tool.reviewed && !!tool.contractHash && isPotentiallyRiskyMcpTool(tool);
+
+type McpConfirmation =
+  | { kind: 'remove'; connection: McpConnectionSummary }
+  | { kind: 'allow-risky-tools'; connection: McpConnectionSummary; tools: McpTool[] };
+
+const describeMcpActionError = (error: unknown, fallback: string): string =>
+  describeActionError(error, fallback)
+    .replace(/^Error invoking remote method '[^']+':\s*/, '')
+    .replace(/^McpClientError:\s*/, '');
 
 export function McpSettings({ state }: { state: McpConnectionsState }): React.JSX.Element {
   const [form, setForm] = useState<McpForm>();
@@ -105,20 +132,44 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
   const [busy, setBusy] = useState<{
     id: string;
     operationId: string;
-    kind: 'test' | 'login' | 'save';
+    kind: 'test' | 'login' | 'save' | 'import' | 'review';
   }>();
+  const [importOpen, setImportOpen] = useState(false);
+  const [importJson, setImportJson] = useState('');
+  const [importProgress, setImportProgress] = useState<{ completed: number; total: number }>();
+  const [reviewProgress, setReviewProgress] = useState<{ completed: number; total: number }>();
   const [login, setLogin] = useState<{
     connection: McpConnectionSummary;
     preparation: McpOAuthPreparation;
     issuer: string;
   }>();
-  const [confirmation, setConfirmation] = useState<McpConnectionSummary>();
+  const [confirmation, setConfirmation] = useState<McpConfirmation>();
   const generation = useRef(0);
   const { toast, showToast, dismissToast } = useTransientToast();
+  const importPlan = useMemo(() => {
+    if (!importOpen || !importJson.trim()) return { servers: undefined, error: '' };
+    try {
+      return { servers: parseMcpServersConfig(importJson), error: '' };
+    } catch (failure) {
+      return {
+        servers: undefined,
+        error: failure instanceof Error ? failure.message : '无法读取 MCP JSON 配置。',
+      };
+    }
+  }, [importJson, importOpen]);
+  const existingConnectionNames = new Set(
+    state.connections.map((connection) => connection.name.trim().toLowerCase()),
+  );
+  const importCandidates = (importPlan.servers ?? []).filter(
+    (server) => !existingConnectionNames.has(server.name.toLowerCase()),
+  );
+  const skippedImportCount = (importPlan.servers?.length ?? 0) - importCandidates.length;
   const change = (patch: Partial<McpForm>): void =>
     setForm((current) => (current ? { ...current, ...patch } : current));
   const beginEdit = (connection?: McpConnectionSummary): void => {
     setError('');
+    setImportOpen(false);
+    setImportJson('');
     setEditing(connection);
     if (!connection) {
       setForm(emptyForm());
@@ -158,6 +209,13 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
     }
     setForm(next);
   };
+  const beginImport = (): void => {
+    setError('');
+    setForm(undefined);
+    setEditing(undefined);
+    setImportJson('');
+    setImportOpen(true);
+  };
   const act = (operation: () => Promise<unknown>, label: string, success?: string): void => {
     setError('');
     trackAction(
@@ -167,7 +225,7 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
           state.refresh();
           if (success) showToast('success', success);
         })
-        .catch((failure: unknown) => setError(describeActionError(failure, label))),
+        .catch((failure: unknown) => setError(describeMcpActionError(failure, label))),
       label,
     );
   };
@@ -259,17 +317,133 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
             setForm(undefined);
             setEditing(undefined);
             state.refresh();
-            showToast('success', '连接已保存，请登录或检测后审阅具体工具。');
+            showToast('success', '连接已保存，请登录或检测后允许助手使用需要的工具。');
           })
           .catch((failure: unknown) =>
-            setError(describeActionError(failure, '保存失败，请检查输入。')),
+            setError(describeMcpActionError(failure, '保存失败，请检查输入。')),
           )
           .finally(() => setBusy(undefined)),
         '保存 MCP 连接',
       );
     } catch (failure) {
-      setError(describeActionError(failure, '请检查 MCP 配置字段。'));
+      setError(describeMcpActionError(failure, '请检查 MCP 配置字段。'));
     }
+  };
+  const importConfig = (): void => {
+    if (importPlan.error || importCandidates.length === 0 || busy || state.loading || state.error)
+      return;
+    const candidates = importCandidates;
+    const skipped = skippedImportCount;
+    const operationId = crypto.randomUUID();
+    setBusy({ id: 'import', operationId, kind: 'import' });
+    setImportProgress({ completed: 0, total: candidates.length });
+    setError('');
+    const saveImportedConnections = async (): Promise<void> => {
+      const failed: Array<{ server: McpConfigImportServer; reason: string }> = [];
+      let savedCount = 0;
+      for (const [index, server] of candidates.entries()) {
+        try {
+          await state.save(createMcpImportSaveRequest(server));
+          savedCount += 1;
+        } catch (failure) {
+          failed.push({
+            server,
+            reason: describeActionError(failure, '保存连接失败。'),
+          });
+        }
+        setImportProgress({ completed: index + 1, total: candidates.length });
+      }
+      state.refresh();
+      if (failed.length > 0) {
+        const failedServers = Object.fromEntries(
+          failed.map(({ server }) => [
+            server.name,
+            {
+              command: server.command,
+              args: server.args,
+              ...(server.cwd ? { cwd: server.cwd } : {}),
+              ...(server.env.length > 0
+                ? { env: Object.fromEntries(server.env.map(({ name, value }) => [name, value])) }
+                : {}),
+            },
+          ]),
+        );
+        const firstFailure = failed[0];
+        setImportJson(JSON.stringify({ mcpServers: failedServers }, null, 2));
+        setError(
+          `${savedCount > 0 ? `已导入 ${savedCount} 项，` : ''}${failed.length} 项未保存。可重试失败项；已保存项不会重复提交。${firstFailure ? ` ${firstFailure.server.name}：${firstFailure.reason}` : ''}`,
+        );
+        return;
+      }
+      setImportOpen(false);
+      setImportJson('');
+      setError('');
+      showToast(
+        'success',
+        `${savedCount} 个 MCP 连接已导入${skipped > 0 ? `，跳过 ${skipped} 个同名连接` : ''}。新连接默认停用，请检测并允许助手使用需要的工具。`,
+      );
+    };
+    trackAction(
+      saveImportedConnections()
+        .catch((failure: unknown) =>
+          setError(describeMcpActionError(failure, '导入 MCP 配置失败。')),
+        )
+        .finally(() => setBusy(undefined)),
+      '导入 MCP JSON 配置',
+    );
+  };
+  const reviewTools = (
+    connection: McpConnectionSummary,
+    tools: readonly McpTool[],
+    successMessage: string,
+  ): void => {
+    const candidates = tools.filter((tool) => !tool.reviewed && !!tool.contractHash);
+    if (!connection.revisionId || connection.stale || candidates.length === 0 || busy) return;
+    const operationId = crypto.randomUUID();
+    setBusy({ id: connection.id, operationId, kind: 'review' });
+    setReviewProgress({ completed: 0, total: candidates.length });
+    setError('');
+    const saveReviews = async (): Promise<void> => {
+      const failedTools: Array<{ name: string; reason: string }> = [];
+      let reviewedCount = 0;
+      for (const [index, tool] of candidates.entries()) {
+        try {
+          if (!tool.contractHash) continue;
+          await state.reviewTool({
+            connectionId: connection.id,
+            connectionRevisionId: connection.revisionId ?? '',
+            toolId: tool.id,
+            contractHash: tool.contractHash,
+            userConfirmed: true,
+          });
+          reviewedCount += 1;
+        } catch (failure) {
+          failedTools.push({
+            name: tool.name,
+            reason: describeMcpActionError(failure, '允许失败。'),
+          });
+        }
+        setReviewProgress({ completed: index + 1, total: candidates.length });
+      }
+      state.refresh();
+      if (failedTools.length > 0) {
+        const firstFailure = failedTools[0];
+        setError(
+          `${reviewedCount} 个工具已允许，${failedTools.length} 个失败。${firstFailure ? `${firstFailure.name}：${firstFailure.reason}` : ''}请重新检测后重试。`,
+        );
+      } else showToast('success', successMessage);
+    };
+    trackAction(
+      saveReviews()
+        .catch((failure: unknown) =>
+          setError(describeMcpActionError(failure, '允许 MCP 工具失败，请重新检测后重试。')),
+        )
+        .finally(() => {
+          setBusy(undefined);
+          setReviewProgress(undefined);
+        }),
+      '允许 MCP 工具',
+    );
   };
   const test = (connection: McpConnectionSummary): void => {
     const operationId = crypto.randomUUID();
@@ -282,7 +456,7 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
         .then(() => state.refresh())
         .catch((failure: unknown) => {
           if (current === generation.current)
-            setError(describeActionError(failure, 'MCP 检测失败。'));
+            setError(describeMcpActionError(failure, 'MCP 检测失败。'));
         })
         .finally(() => {
           if (current === generation.current) setBusy(undefined);
@@ -305,7 +479,7 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
         .catch((failure: unknown) => {
           if (current === generation.current) {
             setBusy(undefined);
-            setError(describeActionError(failure, 'OAuth 发现失败。'));
+            setError(describeMcpActionError(failure, 'OAuth 发现失败。'));
           }
         }),
       '准备 OAuth 登录',
@@ -328,7 +502,7 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
         .then(() => state.refresh())
         .catch((failure: unknown) => {
           if (current === generation.current)
-            setError(describeActionError(failure, 'OAuth 登录失败。'));
+            setError(describeMcpActionError(failure, 'OAuth 登录失败。'));
         })
         .finally(() => {
           if (current === generation.current) setBusy(undefined);
@@ -352,23 +526,37 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
         title="连接外部工作能力"
         hint="接入本地或远程 MCP 服务，登录并检测后，为专家和任务选择工具。"
         actions={
-          <Button variant="primary" size="lg" disabled={!!busy} onClick={() => beginEdit()}>
-            新建连接
-          </Button>
+          <>
+            <Button
+              variant="secondary"
+              size="lg"
+              disabled={!!busy || state.loading || !!state.error}
+              onClick={beginImport}
+            >
+              导入 JSON
+            </Button>
+            <Button variant="primary" size="lg" disabled={!!busy} onClick={() => beginEdit()}>
+              新建连接
+            </Button>
+          </>
         }
       />
-      {error && !form && <InlineError message={error} onDismiss={() => setError('')} />}
-      {state.loading ? (
+      {error && !form && !importOpen && (
+        <InlineError message={error} onDismiss={() => setError('')} />
+      )}
+      {state.connections.length === 0 && state.loading ? (
         <InlineLoading label="正在加载连接…" />
-      ) : state.error ? (
+      ) : state.connections.length === 0 && state.error ? (
         <InlineError message={state.error} onRetry={state.refresh} />
       ) : state.connections.length === 0 ? (
         <EmptyNotice
           title="还没有 MCP 连接"
-          detail="支持本地 stdio、Streamable HTTP 和旧 HTTP+SSE。添加连接后检测并审阅工具。"
+          detail="支持本地 stdio、Streamable HTTP 和旧 HTTP+SSE。添加连接后检测工具，再选择允许助手使用的工具。"
         />
       ) : (
         <div className="mcp-connection-list">
+          {state.loading && <InlineLoading label="正在刷新连接…" />}
+          {state.error && <InlineError message={state.error} onRetry={state.refresh} />}
           {state.connections.map((connection) => (
             <ListRow
               as="article"
@@ -434,12 +622,12 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
                         );
                     }}
                     onLogout={() => act(() => state.logout(connection.id), '退出登录失败。')}
-                    onRemove={() => setConfirmation(connection)}
+                    onRemove={() => setConfirmation({ kind: 'remove', connection })}
                   />
                 </>
               }
             >
-              {busy?.id === connection.id && busy.kind !== 'save' && (
+              {busy?.id === connection.id && busy.kind !== 'save' && busy.kind !== 'review' && (
                 <ActionBar as="div" label="MCP 操作">
                   <InlineLoading
                     label={busy.kind === 'login' ? '等待授权或浏览器登录…' : '正在检测连接…'}
@@ -448,6 +636,11 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
                     取消{busy.kind === 'login' ? '登录' : '检测'}
                   </Button>
                 </ActionBar>
+              )}
+              {busy?.id === connection.id && busy.kind === 'review' && (
+                <InlineLoading
+                  label={`正在允许工具 ${reviewProgress?.completed ?? 0}/${reviewProgress?.total ?? 0}…`}
+                />
               )}
               <Disclosure label="工具与诊断">
                 <StatusNote
@@ -459,59 +652,124 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
                     onRetry={() => test(connection)}
                   />
                 )}
+                {connection.tools.some(
+                  (tool) =>
+                    !tool.reviewed &&
+                    !isPotentiallyRiskyMcpTool(tool) &&
+                    tool.annotations?.readOnlyHint !== true,
+                ) && (
+                  <StatusNote
+                    tone="warning"
+                    message={`${connection.tools.filter((tool) => !tool.reviewed && !isPotentiallyRiskyMcpTool(tool) && tool.annotations?.readOnlyHint !== true).length} 个工具没有说明是否只读，请查看工具说明与参数后逐项允许。`}
+                  />
+                )}
+                {connection.tools.some(isBatchReviewableMcpTool) && (
+                  <ActionBar
+                    as="div"
+                    label="批量允许只读工具"
+                    hint="只包含服务标记为只读的工具；该标记不是安全保证，允许后仍需在专家或任务中选择。"
+                  >
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      disabled={!!busy || connection.stale === true}
+                      onClick={() => {
+                        const tools = connection.tools.filter(isBatchReviewableMcpTool);
+                        reviewTools(
+                          connection,
+                          tools,
+                          `已允许 ${tools.length} 个只读工具；仍需在专家或任务中选择。`,
+                        );
+                      }}
+                    >
+                      允许全部只读工具（
+                      {connection.tools.filter(isBatchReviewableMcpTool).length}）
+                    </Button>
+                  </ActionBar>
+                )}
+                {connection.tools.some(isBatchReviewableRiskyMcpTool) && (
+                  <>
+                    <StatusNote
+                      tone="warning"
+                      message={`${connection.tools.filter(isBatchReviewableRiskyMcpTool).length} 个工具被服务标记为非只读或有破坏性影响，可能创建、修改、覆盖或删除数据，也可能触发外部操作。允许后，助手可在你选用它的 Run 中直接调用；服务提供的说明和标记不是安全保证，操作也未必能撤回。`}
+                    />
+                    <ActionBar
+                      as="div"
+                      label="批量允许可能改动数据的工具"
+                      hint="会一次允许此连接中已标记为有副作用的待审工具；其他未说明用途的工具仍需逐项查看。"
+                    >
+                      <Button
+                        variant="secondary"
+                        size="md"
+                        disabled={!!busy || connection.stale === true}
+                        onClick={() =>
+                          setConfirmation({
+                            kind: 'allow-risky-tools',
+                            connection,
+                            tools: connection.tools.filter(isBatchReviewableRiskyMcpTool),
+                          })
+                        }
+                      >
+                        允许这些工具（
+                        {connection.tools.filter(isBatchReviewableRiskyMcpTool).length}）
+                      </Button>
+                    </ActionBar>
+                  </>
+                )}
                 {connection.tools.map((tool) => (
                   <ListRow
                     key={tool.id}
                     title={tool.name}
                     detail={tool.description}
-                    meta={<Badge>{tool.reviewed ? '已审阅' : '待审阅'}</Badge>}
+                    meta={
+                      <Badge>
+                        {tool.reviewed
+                          ? isPotentiallyRiskyMcpTool(tool)
+                            ? '已允许 · 可能改动数据'
+                            : '已允许'
+                          : isPotentiallyRiskyMcpTool(tool)
+                            ? '待允许 · 可能改动数据'
+                            : tool.annotations?.readOnlyHint === true
+                              ? '待确认'
+                              : '待确认用途'}
+                      </Badge>
+                    }
                     actions={
-                      <Button
-                        variant="quiet"
-                        size="sm"
-                        disabled={
-                          !!busy ||
-                          (tool.reviewed ?? false) ||
-                          !tool.contractHash ||
-                          (connection.stale ?? false) ||
-                          tool.annotations?.readOnlyHint === false ||
-                          tool.annotations?.destructiveHint === true
-                        }
-                        onClick={() => {
-                          if (connection.revisionId && tool.contractHash)
-                            act(
-                              () =>
-                                state.reviewTool({
-                                  connectionId: connection.id,
-                                  connectionRevisionId: connection.revisionId ?? '',
-                                  toolId: tool.id,
-                                  contractHash: tool.contractHash ?? '',
-                                  readOnlyConfirmed: true,
-                                }),
-                              '审阅工具失败。',
-                            );
-                        }}
-                      >
-                        确认只读合同
-                      </Button>
+                      tool.reviewed ? undefined : (
+                        <Button
+                          variant="quiet"
+                          size="sm"
+                          disabled={!!busy || !tool.contractHash || connection.stale === true}
+                          onClick={() =>
+                            reviewTools(connection, [tool], `已允许助手使用「${tool.name}」。`)
+                          }
+                        >
+                          {tool.annotations?.readOnlyHint === true ||
+                          isPotentiallyRiskyMcpTool(tool)
+                            ? '允许使用'
+                            : '查看后允许'}
+                        </Button>
+                      )
                     }
                   >
-                    <Disclosure label="查看工具合同">
-                      <TextArea
-                        mono
-                        rows={5}
-                        readOnly
-                        aria-label={`${tool.name} 的合同`}
-                        value={JSON.stringify(
-                          {
-                            inputSchema: tool.inputSchema,
-                            outputSchema: tool.outputSchema,
-                            annotations: tool.annotations,
-                          },
-                          null,
-                          2,
-                        )}
-                      />
+                    <Disclosure label="查看工具说明与参数">
+                      <div className="mcp-tool-contract-viewer">
+                        <TextArea
+                          mono
+                          rows={14}
+                          readOnly
+                          aria-label={`${tool.name} 的工具说明与参数`}
+                          value={JSON.stringify(
+                            {
+                              inputSchema: tool.inputSchema,
+                              outputSchema: tool.outputSchema,
+                              annotations: tool.annotations,
+                            },
+                            null,
+                            2,
+                          )}
+                        />
+                      </div>
                     </Disclosure>
                   </ListRow>
                 ))}
@@ -541,6 +799,78 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
             </Button>
             <Button size="md" variant="primary" onClick={continueLogin}>
               在浏览器中继续
+            </Button>
+          </ActionBar>
+        </div>
+      )}
+      {importOpen && (
+        <div className="mcp-editor">
+          <SectionHeader title="导入 MCP JSON 配置" />
+          <Field
+            controlId="mcp-json-import"
+            label="mcpServers 配置 JSON"
+            hint="粘贴包含 mcpServers 的 stdio 配置。非空 env 值会作为机密写入系统安全存储。"
+          >
+            <TextArea
+              mono
+              rows={10}
+              id="mcp-json-import"
+              value={importJson}
+              onChange={(event) => {
+                setImportJson(event.target.value);
+                setError('');
+              }}
+              placeholder={`{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/kevin/temp"]
+    }
+  }
+}`}
+            />
+          </Field>
+          {importPlan.servers && (
+            <StatusNote
+              message={`识别到 ${importPlan.servers.length} 个 stdio 服务；${skippedImportCount > 0 ? `跳过 ${skippedImportCount} 个已有同名连接。` : ''}${importCandidates.length === 0 ? '请从连接列表编辑已有连接。' : '新连接默认停用，需检测并审阅工具后再启用。'}`}
+            />
+          )}
+          {importPlan.error && <InlineError message={importPlan.error} />}
+          {error && (
+            <InlineError message={error} onRetry={importConfig} onDismiss={() => setError('')} />
+          )}
+          {busy?.kind === 'import' && (
+            <InlineLoading
+              label={`正在导入 MCP 连接 ${importProgress?.completed ?? 0}/${importProgress?.total ?? 0}…`}
+            />
+          )}
+          <ActionBar as="div" label="导入 MCP JSON 配置">
+            <Button
+              variant="secondary"
+              size="md"
+              disabled={!!busy}
+              onClick={() => {
+                setImportOpen(false);
+                setImportJson('');
+                setError('');
+              }}
+            >
+              取消
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              disabled={
+                !!busy ||
+                state.loading ||
+                !!state.error ||
+                !importJson.trim() ||
+                !!importPlan.error ||
+                importCandidates.length === 0
+              }
+              onClick={importConfig}
+            >
+              导入连接
             </Button>
           </ActionBar>
         </div>
@@ -855,19 +1185,41 @@ export function McpSettings({ state }: { state: McpConnectionsState }): React.JS
           </ActionBar>
         </div>
       )}
-      {confirmation && (
+      {confirmation?.kind === 'remove' && (
         <ConfirmationDialog
           title="移除 MCP 连接"
           detail="这会取消使用此连接的活跃 Run，专家和任务中的选择将失效；历史身份与来源仍会保留。"
           confirmLabel="移除连接"
           onCancel={() => setConfirmation(undefined)}
           onConfirm={() => {
-            const connection = confirmation;
+            const { connection } = confirmation;
             setConfirmation(undefined);
             act(
               () => state.remove(connection.id),
               '移除连接失败。',
               '连接已移除，历史记录已保留。',
+            );
+          }}
+        />
+      )}
+      {confirmation?.kind === 'allow-risky-tools' && (
+        <ConfirmationDialog
+          title={`允许 ${confirmation.tools.length} 个可能改动数据的工具？`}
+          detail={`这会允许助手在后续 Run 中直接调用此连接的这些工具，可能创建、修改或删除数据，或产生其他外部影响；调用前不会逐次弹窗，服务端副作用也未必能撤回。共 ${confirmation.tools.length} 项：${confirmation.tools
+            .slice(0, 8)
+            .map((tool) => tool.name)
+            .join(
+              '、',
+            )}${confirmation.tools.length > 8 ? ' 等' : ''}。服务提供的说明和只读/破坏性标记不能证明工具的实际行为。`}
+          confirmLabel="我了解风险，允许使用"
+          onCancel={() => setConfirmation(undefined)}
+          onConfirm={() => {
+            const { connection, tools } = confirmation;
+            setConfirmation(undefined);
+            reviewTools(
+              connection,
+              tools,
+              `已允许 ${tools.length} 个可能改动数据的工具；助手可在你选用它们的 Run 中调用。`,
             );
           }}
         />

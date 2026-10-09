@@ -1,7 +1,7 @@
 # API and MCP Capability Contracts
 
-- Version: v1.1, 2026-10-09 (MCP increment).
-- Status: API contracts remain Proposed. MCP contracts are Accepted under ADR-0043 and implemented on the task branch; automated and human acceptance are recorded separately in the CF board. The common credential service already exists.
+- Version: v1.2, 2026-10-09 (MCP explicit side-effect authorization).
+- Status: API contracts remain Proposed. MCP contracts are Accepted under ADR-0043 and ADR-0044; automated and human acceptance are recorded separately in the CF board. The common credential service already exists.
 - Product authority: [API tools and remote MCP design](../designs/api-tools-and-remote-mcp.md).
 - Decisions: [ADR-0024](../adr/0024-api-services-and-credentials.md) and [ADR-0025](../adr/0025-remote-mcp-and-capability-bindings.md) remain Proposed; [ADR-0043](../adr/0043-mcp-multi-transport-and-oauth.md) is Accepted and governs this MCP implementation.
 - Existing contracts: [Expert/Task](expert-contracts.md), [materials](material-contracts.md), and [Skill execution](contracts.md).
@@ -128,7 +128,7 @@ Client identity priority is issuer-bound pre-registration, a verified existing H
 
 Refreshes coalesce by authorization slot, with a 30-second budget and atomic token rotation. Cancelling one waiter does not cancel another Run's refresh; logout/removal cancels the shared refresh and blocks late persistence. `invalid_grant` clears unusable tokens and produces reauthorization-required status. Run dispatch never opens a browser, expands permissions or automatically replays an uncertain call. Logout clears local authorization and cancels dependent Runs; remote revocation is not claimed.
 
-Modern HTTP uses per-request metadata, `server/discover`, `resultType` and no protocol session/standalone GET/Last-Event-ID recovery. Legacy HTTP/SSE keeps protocol session state only in its owned client and sends supported termination on close. Business-call failures are explicit, without automatic resubmission. `input_required`, remote schema references and explicitly destructive/write tools are unsupported.
+Modern HTTP uses per-request metadata, `server/discover`, `resultType` and no protocol session/standalone GET/Last-Event-ID recovery. Legacy HTTP/SSE keeps protocol session state only in its owned client and sends supported termination on close. Business-call failures are explicit, without automatic resubmission. `input_required` and remote schema references are unsupported. Write and destructive tools may be used after explicit user review; MCP annotations are advisory and cannot guarantee behavior.
 
 ### 3.3 Tool identity and review
 
@@ -141,7 +141,9 @@ The connection revision must belong to the identity, and the tool must belong to
 
 Compute the contract hash from deterministic canonical JSON of the tool's description, input/output schemas, and advertised annotations. Object-key order is irrelevant; meaningful schema/description/annotation changes invalidate review. A review record identifies connection revision, tool ID, contract hash, and confirmation time. It is not a general-purpose approval engine.
 
-New tools are unreviewed and unselected. Explicit user review is required for read-only suitability; advertised destructive/non-read-only tools are unavailable. Missing annotations are not proof of safety. Compile/check schemas locally and do not resolve remote Schema references.
+New tools are unreviewed and unselected. The user must explicitly allow each exact tool contract before it can be selected. Tools marked read-only may be batch allowed. Tools marked non-read-only or destructive may be batch allowed only through a separate confirmation that names the affected tools and explains that calls may create, change, or delete data without another prompt for every call. They may also be allowed individually. Tools with unknown read/write status require individual inspection and confirmation; they are not included in either batch. Annotations are untrusted service claims, not proof of behavior; allowed tools can affect anything the MCP service itself can reach, and side effects may not be reversible. Compile/check schemas locally and do not resolve remote Schema references.
+
+The settings UI offers separate batch actions for explicitly read-only contracts and explicitly side-effect-capable contracts. The latter requires a confirmation step that lists up to eight tool names (plus a total count) and describes possible writes/deletions and lack of per-call prompts. Both actions persist one review per exact connection revision, tool ID, and contract hash. Unknown read/write status requires individual inspection and confirmation; batch actions must never include it. Service annotations are untrusted claims, not proof of behavior.
 
 Keep the last successful catalog on discovery failure and mark it stale. Fresh discovery before each connection's first use in a Run must match selected reviewed contracts. A stale catalog alone cannot authorize a call.
 
@@ -190,7 +192,7 @@ These are logical operation names for the shared protocol. They do not establish
 | API tests: cancelTest (proposed) | Request ID owned by originating operation | Cancellation acknowledgment |
 | MCP: list/get/save | Reuse existing boundary; save includes versioned transport and expected revision | Nonsecret configuration/revision and availability |
 | MCP: setLifecycle/remove | Identity, expected revision; remove archives referenced identity | Safety cancellation and visible invalid historical selections |
-| MCP: reviewTool | Connection revision, tool ID, contract hash, readOnlyConfirmed | Review for that exact contract only |
+| MCP: reviewTool | Connection revision, tool ID, contract hash, userConfirmed | User review for that exact contract only |
 | MCP: prepareLogin/continueLogin/logout | Saved identity/revision, UUID operationId; continue also selects issuer and consent | Reviewed issuer/scope preparation, then login/detection result; logout clears local authorization |
 | Task context: save/read | Extend existing revision/CAS operations with API bindings and versioned MCP selections | Explicit category selections plus host-derived availability |
 

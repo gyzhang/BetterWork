@@ -57,7 +57,7 @@ const fixture = async () => {
       ...binding,
       connectionRevisionId: connection.revisionId ?? '',
       contractHash: tool.contractHash ?? '',
-      readOnlyConfirmed: true,
+      userConfirmed: true,
     });
     service.setLifecycle({
       id: connection.id,

@@ -32,7 +32,7 @@ BetterWork 优先成为个人实际使用的工作台，再供周边同事用于
 | --- | --- |
 | 应用与交互 | Electron 桌面应用；任务工作区、可完全收起的过程/资料/成果上下文面板、成果页、资料页、设置页；`system / light / dark` 与 jade、ink、ocean、sand 四套成对色系；统一页面骨架（70px 页头带 + 860px 版心）。 |
 | 模型 | Fake Provider 与 OpenAI-compatible Provider（SSE 流式，支持 `reasoning_content` 与 `tool_calls` 增量拼接）；语言、视觉、嵌入三种角色可保存、启停、设默认与连通性测试。目前只有语言模型进入 Agent 执行，另两类仅完成配置层。 |
-| Agent | `AsyncIterable<AgentRuntimeEvent>` 事件协议、流式回复、工具卡片、取消、执行历史；按 Expert/TaskContext 裁决 Calculator、Read Text File、Knowledge Search、Artifact/Office 读取、Web Search/Fetch、经营分析和选定 MCP 只读工具。 |
+| Agent | `AsyncIterable<AgentRuntimeEvent>` 事件协议、流式回复、工具卡片、取消、执行历史；按 Expert/TaskContext 裁决 Calculator、Read Text File、Knowledge Search、Artifact/Office 读取、Web Search/Fetch、经营分析和经用户授权的 MCP 工具。 |
 | 任务数据 | Workspace、Task、Session、Run、Run Event 均有稳定持久化标识；侧栏按真实 Task 展示近期工作，可按 Task 回看历史 Run 与对应事件。 |
 | 本地 Knowledge | 可导入 Markdown、Text、PDF、DOCX（单文件上限 20 MB）；保存源路径和内容哈希，PDF 按页、DOCX 按提取段落建立 SQLite FTS5 索引，命中为空时回退子串匹配；可检索、刷新索引、从资料库索引移除、打开已登记源文件。所有这些操作不得修改或删除用户源文件。 |
 | 联网搜索 | 搜索引擎配置（百度千帆 AI 搜索先行，每服务商一行、`enabled` 全局唯一）；仅在存在已启用且配置了 Key 的引擎时注册 `web_search` 工具。见 [ADR-0007](adr/0007-search-engine-config-and-web-search-tool.md)。 |
