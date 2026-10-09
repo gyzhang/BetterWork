@@ -91,3 +91,12 @@ Transport 使用应用的 token provider，刷新走应用的 `refreshAuthorizat
 安装包测试覆盖依赖装配、原生模块与三个 Node MCP 的离线启动，不代替 Developer ID/Gatekeeper 安装态、用户窗口或真实 OAuth 服务验收；CF43 的原人工尾项不在本批关闭。没有自动运行完整 verify，没有修改用户数据或启停开发应用。
 
 2026-10-09 21:29，docs:check 与带批次基点的 drift:check 通过并保存读数；护栏 154、例外 203 保持，未修改规范或扩大例外。PR Gate 与最终合并证据随本批收口补充。
+
+
+## PR 与合并收口
+
+2026-10-09 21:40，源提交 `5ecc080e5f7feeb0fb93b9f7fb3660f692928b88` 的 [macOS PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/37937420161) 通过：干净安装、lint、format、typecheck、文档检查均成功；按 PR 基点与依赖图选择的 functional 229 文件 / 2117 项、heavy 8 文件 / 216 项通过，合计 **237 文件 / 2333 项**，不重复累加单独 docs:check 的护栏。Full verify 按规则跳过。
+
+[PR #28](https://github.com/gyzhang/BetterWork/pull/28) 已 squash 合入 main，合并提交 `c021db2ebab354ebbea79557e8bd7f8dfbaeffc9`。原 checkout 已同步，代码任务分支本地/远端均已删除，没有创建 worktree。本页最终证据通过纯 Markdown 收口 PR 归档。
+
+B3/R17 的依赖修复、逐链风险分析与自动化证据完成。四个开发期 high 和十二个 moderate 保留为有明确条件的未修复依赖，不宣称全仓零漏洞。人工安装态/真实账号尾项仍由既有 CF 任务承接，后续重构批次 C–F 未自动开工。
