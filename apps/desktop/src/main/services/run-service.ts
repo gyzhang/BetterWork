@@ -89,6 +89,12 @@ import { KnowledgeServiceError } from './knowledge-errors';
 import type { DocumentExtractor } from './knowledge-extract';
 import type { KnowledgeSearchService } from './knowledge-search';
 import type { KnowledgeVault } from './knowledge-vault';
+import {
+  auditMaterialFacts,
+  createMaterialFactLedger,
+  type MaterialFactLedger,
+  recordMaterialFacts,
+} from './material-fact-policy';
 import type { McpClientService } from './mcp-client-service';
 import { withRunMemoryAudit } from './memory-dispatch-gate';
 import type { MemoryExtractionService } from './memory-extraction-service';
@@ -167,160 +173,11 @@ const READ_MATERIAL_CODE_POINT_MAX = 20_000;
 const sliceCodePoints = (value: string, max: number): string =>
   Array.from(value).slice(0, max).join('');
 
-interface MaterialFactLedger {
-  readonly enabled: boolean;
-  materialReadCount: number;
-  readonly rawNumbers: Set<number>;
-  readonly rawCountNumbers: Set<number>;
-  readonly allowedNumbers: Set<number>;
-  readonly allowedPercentages: Set<number>;
-  readonly supportedQualitativeClaims: Set<string>;
-}
-
-const numberPattern = /[-+]?\d+(?:\.\d+)?/gu;
-const claimNumberPattern = /([-+]?\d+(?:\.\d+)?)(\s*(?:%|％|万元|万|元|家|户|客户))/gu;
-const labeledCountPattern =
-  /(?:客户数|客户数量)(?:\s*[（(]\s*(?:家|户|客户)\s*[）)])?(?:\s*(?:为|是|[:：]|[|｜\t])\s*|\s*(?:本期|上期|预算|目标|当前|历史)\s*)*([-+]?\d+(?:\.\d+)?)/gu;
 const markdownArtifactRequestPattern =
   /(?:保存|生成|写入|创建|导出|产出|输出|交付).*?(?:markdown|\.md)/iu;
-const qualitativeClaimPatterns = [
-  { phrase: '已续约', label: '已续约状态' },
-  { phrase: '已流失', label: '已流失状态' },
-  { phrase: '平均客单价', label: '平均客单价' },
-  { phrase: '续约率', label: '续约率' },
-  { phrase: '流失率', label: '流失率' },
-  { phrase: '客户总数', label: '客户总数' },
-  { phrase: '总客户数', label: '总客户数' },
-] as const;
-const qualitativeNegationPattern =
-  /材料(?:未|没有)|未(?:提供|提及|确认)|不可推断|无法(?:判断|确认|推断)|待确认|不确定|未知|没有给出|不能/iu;
-const qualitativeNonAssertionPattern =
-  /是否|核实|确认|跟进|追踪|了解|检查|判断|若|如果|可能|意向|计划|建议/iu;
-
-const numbersIn = (text: string): number[] =>
-  [...text.matchAll(numberPattern)]
-    .map((match) => Number(match[0]))
-    .filter((value) => Number.isFinite(value));
-
-const addNormalizedNumber = (target: Set<number>, value: number): void => {
-  if (!Number.isFinite(value)) return;
-  for (const precision of [0, 1, 2, 3, 4]) {
-    target.add(Number(value.toFixed(precision)));
-  }
-  if (Math.abs(value) <= 1) {
-    const percentage = value * 100;
-    for (const precision of [0, 1, 2, 3, 4]) {
-      target.add(Number(percentage.toFixed(precision)));
-    }
-  }
-};
-
-const createMaterialFactLedger = (enabled: boolean, prompt: string): MaterialFactLedger => {
-  const ledger: MaterialFactLedger = {
-    enabled,
-    materialReadCount: 0,
-    rawNumbers: new Set<number>(),
-    rawCountNumbers: new Set<number>(),
-    allowedNumbers: new Set<number>(),
-    allowedPercentages: new Set<number>(),
-    supportedQualitativeClaims: new Set<string>(),
-  };
-  // 用户在当前请求中明确给出的带业务单位数字属于本 Run 输入，允许模型继续引用。
-  for (const match of prompt.matchAll(claimNumberPattern)) {
-    const value = Number(match[1]);
-    if (!Number.isFinite(value)) continue;
-    ledger.rawNumbers.add(value);
-    const unit = match[2]?.trim();
-    if (isCountUnit(unit)) ledger.rawCountNumbers.add(value);
-    addNormalizedNumber(ledger.allowedNumbers, value);
-    if (isPercentageUnit(unit)) addNormalizedNumber(ledger.allowedPercentages, value);
-  }
-  for (const match of prompt.matchAll(labeledCountPattern)) {
-    const value = Number(match[1]);
-    if (!Number.isFinite(value)) continue;
-    ledger.rawNumbers.add(value);
-    ledger.rawCountNumbers.add(value);
-    addNormalizedNumber(ledger.allowedNumbers, value);
-  }
-  recordQualitativeClaims(ledger.supportedQualitativeClaims, prompt);
-  return ledger;
-};
-
-const recordMaterialFacts = (ledger: MaterialFactLedger, text: string): void => {
-  if (!ledger.enabled) return;
-  recordQualitativeClaims(ledger.supportedQualitativeClaims, text);
-  for (const match of text.matchAll(claimNumberPattern)) {
-    const value = Number(match[1]);
-    if (!Number.isFinite(value)) continue;
-    const unit = match[2]?.trim();
-    if (isCountUnit(unit)) ledger.rawCountNumbers.add(value);
-    if (isPercentageUnit(unit)) addNormalizedNumber(ledger.allowedPercentages, value);
-  }
-  for (const match of text.matchAll(labeledCountPattern)) {
-    const value = Number(match[1]);
-    if (Number.isFinite(value)) ledger.rawCountNumbers.add(value);
-  }
-  const values = numbersIn(text);
-  for (const value of values) {
-    ledger.rawNumbers.add(value);
-    addNormalizedNumber(ledger.allowedNumbers, value);
-  }
-  const raw = [...ledger.rawNumbers];
-  for (const current of raw) {
-    for (const comparison of raw) {
-      if (comparison === 0) continue;
-      addNormalizedNumber(ledger.allowedNumbers, current - comparison);
-      const varianceRate = ((current - comparison) / Math.abs(comparison)) * 100;
-      addNormalizedNumber(ledger.allowedNumbers, varianceRate);
-      addNormalizedNumber(ledger.allowedPercentages, varianceRate);
-      addNormalizedNumber(ledger.allowedPercentages, (current / comparison) * 100);
-    }
-  }
-};
-
-const isCountUnit = (unit: string | undefined): boolean =>
-  unit === '家' || unit === '户' || unit === '客户';
-
-const isPercentageUnit = (unit: string | undefined): boolean => unit === '%' || unit === '％';
-
 const requestsMarkdownArtifact = (prompt: string): boolean =>
   markdownArtifactRequestPattern.test(prompt) &&
   !/(?:不要|无需|不必|不需要).{0,12}(?:保存|生成|写入|创建|导出|产出|输出|交付)/u.test(prompt);
-
-const recordQualitativeClaims = (target: Set<string>, text: string): void => {
-  for (const claim of qualitativeClaimPatterns) {
-    let index = text.indexOf(claim.phrase);
-    while (index >= 0) {
-      if (!hasNonAssertiveQualitativeClaim(text, claim.phrase, index)) {
-        target.add(claim.phrase);
-        break;
-      }
-      index = text.indexOf(claim.phrase, index + claim.phrase.length);
-    }
-  }
-};
-
-const hasAllowedNumber = (
-  ledger: MaterialFactLedger,
-  value: number,
-  unit: string | undefined,
-): boolean => {
-  const candidates = isCountUnit(unit)
-    ? ledger.rawCountNumbers
-    : isPercentageUnit(unit)
-      ? ledger.allowedPercentages
-      : ledger.allowedNumbers;
-  return [...candidates].some((candidate) => Math.abs(candidate - value) < 0.01);
-};
-
-const hasNonAssertiveQualitativeClaim = (
-  content: string,
-  phrase: string,
-  index: number,
-): boolean => {
-  const context = content.slice(Math.max(0, index - 50), index + phrase.length + 50);
-  return qualitativeNegationPattern.test(context) || qualitativeNonAssertionPattern.test(context);
-};
 
 const serializeToolOutput = (output: unknown): string => {
   if (typeof output === 'string') return output;
@@ -631,10 +488,11 @@ export class RunService {
       skillIds: (resolvedInput.skillBindings ?? []).map((binding) => binding.skillId),
       toolNames: new Map(),
       contextSegmentId,
-      materialFacts: createMaterialFactLedger(
-        executionContext.materialScope && executionContext.materials.length > 0,
-        input.prompt,
-      ),
+      materialFacts: createMaterialFactLedger({
+        materialScope: executionContext.materialScope,
+        selectedMaterialCount: executionContext.materials.length,
+        prompt: input.prompt,
+      }),
       markdownWrites: new Map(),
     });
 
@@ -1617,45 +1475,50 @@ export class RunService {
     if (!toolName) return;
     if (toolName === 'read_text_file' && isReadTextFileOutput(event.output)) {
       if (event.output.scope === 'run-work-file') return;
-      active.materialFacts.materialReadCount += 1;
-      recordMaterialFacts(
-        active.materialFacts,
-        event.output.sections?.map((section) => section.content).join('\n') ?? event.output.content,
-      );
+      recordMaterialFacts(active.materialFacts, {
+        kind: 'material-read',
+        content:
+          event.output.sections?.map((section) => section.content).join('\n') ??
+          event.output.content,
+      });
       return;
     }
     if (toolName === 'read_artifact' && isReadArtifactOutput(event.output)) {
-      active.materialFacts.materialReadCount += 1;
-      recordMaterialFacts(active.materialFacts, event.output.content);
+      recordMaterialFacts(active.materialFacts, {
+        kind: 'material-read',
+        content: event.output.content,
+      });
       return;
     }
     if (toolName === 'read_office_material' && isOfficeMaterialReadOutput(event.output)) {
-      active.materialFacts.materialReadCount += 1;
-      recordMaterialFacts(
-        active.materialFacts,
-        JSON.stringify(event.output.sections.map((section) => officeFactValues(section.content))),
-      );
+      recordMaterialFacts(active.materialFacts, {
+        kind: 'material-read',
+        content: JSON.stringify(
+          event.output.sections.map((section) => officeFactValues(section.content)),
+        ),
+      });
       return;
     }
     if (toolName === 'knowledge_search' && isKnowledgeSearchOutput(event.output)) {
-      active.materialFacts.materialReadCount += 1;
-      recordMaterialFacts(
-        active.materialFacts,
-        event.output.results.map((result) => result.excerpt).join('\n'),
-      );
+      recordMaterialFacts(active.materialFacts, {
+        kind: 'material-read',
+        content: event.output.results.map((result) => result.excerpt).join('\n'),
+      });
       return;
     }
     if (toolName === 'read_knowledge' && isKnowledgeReadOutput(event.output)) {
-      active.materialFacts.materialReadCount += 1;
       // 事实池只用工具实际返回的正文片段（契约 §5.2）。
-      recordMaterialFacts(
-        active.materialFacts,
-        event.output.parts.map((part) => part.text).join('\n'),
-      );
+      recordMaterialFacts(active.materialFacts, {
+        kind: 'material-read',
+        content: event.output.parts.map((part) => part.text).join('\n'),
+      });
       return;
     }
     if (toolName === 'analyze_business_metrics') {
-      recordMaterialFacts(active.materialFacts, serializeToolOutput(event.output));
+      recordMaterialFacts(active.materialFacts, {
+        kind: 'deterministic-result',
+        content: serializeToolOutput(event.output),
+      });
     }
   }
 
@@ -1734,42 +1597,7 @@ export class RunService {
 
   private auditMaterialFacts(runId: string, content: string): string | undefined {
     const active = this.activeRuns.get(runId);
-    if (!active?.materialFacts.enabled) return undefined;
-    if (active.materialFacts.materialReadCount === 0) {
-      return '材料事实校验失败：本次 Run 选择了材料，但没有成功读取任何材料。请先读取清单中的材料后再完成输出。';
-    }
-    const unsupported = new Set<number>();
-    for (const match of content.matchAll(claimNumberPattern)) {
-      const value = Number(match[1]);
-      if (!Number.isFinite(value)) continue;
-      const unit = match[2]?.trim();
-      if (!unit) continue;
-      if (!hasAllowedNumber(active.materialFacts, value, unit)) unsupported.add(value);
-    }
-    for (const match of content.matchAll(labeledCountPattern)) {
-      const value = Number(match[1]);
-      if (Number.isFinite(value) && !hasAllowedNumber(active.materialFacts, value, '客户')) {
-        unsupported.add(value);
-      }
-    }
-    const unsupportedQualitative = qualitativeClaimPatterns
-      .filter((claim) => !active.materialFacts.supportedQualitativeClaims.has(claim.phrase))
-      .filter((claim) => {
-        let index = content.indexOf(claim.phrase);
-        while (index >= 0) {
-          if (!hasNonAssertiveQualitativeClaim(content, claim.phrase, index)) return true;
-          index = content.indexOf(claim.phrase, index + claim.phrase.length);
-        }
-        return false;
-      })
-      .map((claim) => claim.label);
-    if (unsupported.size > 0) {
-      return `材料事实校验失败：最终输出包含本次 Run 材料或确定性工具未提供的数字（${[...unsupported].join('、')}）。请重新读取材料，并将缺失数据明确写为“材料未提供”。`;
-    }
-    if (unsupportedQualitative.length > 0) {
-      return `材料事实校验失败：最终输出包含材料未提供的定性事实（${unsupportedQualitative.join('、')}）。请将缺失状态明确写为“材料未提供”或“不可推断”。`;
-    }
-    return undefined;
+    return active ? auditMaterialFacts(active.materialFacts, content) : undefined;
   }
 
   private recordToolProgress(active: ActiveRun, event: AgentRuntimeEvent): void {
