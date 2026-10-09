@@ -25,7 +25,11 @@ import { OfficeParserService } from './infrastructure/office-parser';
 import { createPptxRenderer } from './infrastructure/pptx-renderer';
 import { registerIpc } from './ipc/register-ipc';
 import { AppStore, RUN_INTERRUPTED_ON_STARTUP_REASON } from './persistence';
-import { createQuitHandler } from './services/application-shutdown';
+import {
+  type ApplicationShutdownServices,
+  createQuitHandler,
+  shutdownApplication,
+} from './services/application-shutdown';
 import { BuiltinMcpRuntimeService } from './services/builtin-mcp-runtime-service';
 import { CredentialAccess } from './services/credential-access';
 import { CredentialMigrationService } from './services/credential-migration-service';
@@ -80,7 +84,7 @@ import { createMainWindow } from './window';
  * 装配完成后各依赖通过闭包传递，不再有可空模块级单例，
  * 因此不需要任何非空断言。
  */
-interface ApplicationContext {
+interface ApplicationContext extends ApplicationShutdownServices {
   store: AppStore;
   knowledgeVault: KnowledgeVault;
   knowledgeWorker: KnowledgeWorkerRunner;
@@ -350,6 +354,7 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
       }),
   );
 
+  const startupSettled = Promise.allSettled(startupReadiness);
   const startupReady = Promise.all(startupReadiness).then(() => undefined);
   const scheduleOutputServiceReadyResolvers: Array<(service: ScheduleOutputService) => void> = [];
   const scheduleOutputServiceReady = new Promise<ScheduleOutputService>((resolve) => {
@@ -425,11 +430,14 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
 
   const notificationActivationRef: { current?: NotificationActivationService } = {};
   const started: ApplicationContext = {
+    startupSettled,
     store,
     knowledgeVault,
     knowledgeWorker,
     inputSnapshots,
     mcpClientService,
+    memoryExtractions,
+    dependencies,
     scheduleHost,
     scheduleScheduler: scheduler,
     window: null,
@@ -505,6 +513,7 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
       notifyKnowledgeJob(notifications, job);
     },
   });
+  started.knowledgeIndex = knowledgeIndex;
   // 索引作业同样只在启动时收口为 interrupted，绝不自动重跑付费向量。
   const interruptedIndexJobs = knowledgeIndex.recoverInterrupted().length;
   if (interruptedIndexJobs > 0) {
@@ -743,14 +752,7 @@ startPrimaryInstance(
     app.on('second-instance', focusMainWindow);
     const quitHandler = createQuitHandler(
       async () => {
-        await context?.scheduleHost.ready;
-        context?.scheduleDispatch?.cancelPreparations();
-        await context?.scheduleDispatch?.waitForPreparations();
-        await context?.scheduleScheduler.waitForPreparations();
-        await context?.runs?.shutdown();
-        await context?.scheduleNotifications?.waitForPending();
-        await context?.mcpClientService.shutdown();
-        await context?.knowledgeWorker.shutdown();
+        if (context) await shutdownApplication(context);
       },
       () => {
         context?.knowledgeVault.close();

@@ -4,8 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { isAbortError } from '@betterwork/agent-core';
 import type { McpToolBinding } from '@betterwork/agent-protocol';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { SafeStorageAdapter } from '../infrastructure/credential-store';
 import { AppStore } from '../persistence';
@@ -76,6 +77,95 @@ const context = (runId: string, signal = new AbortController().signal) => ({
 });
 
 describe('McpClientService', () => {
+  it('joins pending credential persistence before storage closes', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const encrypt = vi.fn(async (value: string) => {
+      await gate;
+      return Buffer.from(value);
+    });
+    const store = AppStore.open(':memory:', {
+      isAvailableAsync: async () => true,
+      encryptAsync: encrypt,
+      decryptAsync: async (value) => value.toString(),
+    });
+    stores.push(store);
+    const service = new McpClientService(store);
+    services.push(service);
+    const input = {
+      name: 'Credential shutdown fixture',
+      transport: {
+        kind: 'stdio' as const,
+        command: process.execPath,
+        args: [],
+        env: [{ name: 'TOKEN', secret: true }],
+      },
+      secrets: [
+        {
+          slot: 'env:TOKEN',
+          expectedVersion: 0,
+          mutation: { action: 'replace' as const, value: 'synthetic-token' },
+        },
+      ],
+    };
+    const saving = service.saveConnection(input);
+    await vi.waitFor(() => expect(encrypt).toHaveBeenCalledOnce());
+    let finished = false;
+    const shutdown = service.shutdown().then(() => {
+      finished = true;
+    });
+    await Promise.resolve();
+    expect(finished).toBe(false);
+    release();
+    await Promise.all([saving, shutdown]);
+    store.close();
+    stores.splice(stores.indexOf(store), 1);
+    await expect(service.saveConnection(input)).rejects.toThrow('退出');
+    await service.shutdown();
+  });
+  it('waits for a cancelled detection to finish before storage closes', async () => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let requestSignal: AbortSignal | undefined;
+    const resolveBundledRuntime = vi.fn(
+      async (_serverId: string, _args: readonly string[], signal: AbortSignal) => {
+        requestSignal = signal;
+        await gate;
+        signal.throwIfAborted();
+        return { command: process.execPath, args: [fixturePath] };
+      },
+    );
+    const service = new McpClientService(store, { resolveBundledRuntime });
+    services.push(service);
+    const connection = await service.saveConnection({
+      name: 'Shutdown fixture',
+      transport: { kind: 'stdio', runtime: { kind: 'bundled', serverId: 'memory' }, args: [] },
+    });
+    const testing = service.testConnection(connection.id);
+    const failure = expect(testing).rejects.toSatisfy(isAbortError);
+    await vi.waitFor(() => expect(resolveBundledRuntime).toHaveBeenCalledOnce());
+    let finished = false;
+    const shutdown = service.shutdown().then(() => {
+      finished = true;
+    });
+    expect(requestSignal?.aborted).toBe(true);
+    await Promise.resolve();
+    expect(finished).toBe(false);
+    release();
+    await Promise.all([shutdown, failure]);
+    expect(service.getConnection(connection.id)?.failureMessage).toContain('取消');
+    store.close();
+    stores.splice(stores.indexOf(store), 1);
+    await service.shutdown();
+    await expect(service.testConnection(connection.id)).rejects.toThrow('退出');
+    expect(resolveBundledRuntime).toHaveBeenCalledOnce();
+  });
   it('atomically clears every owned credential when archiving a connection while retaining its revision', async () => {
     const adapter: SafeStorageAdapter = {
       isAvailableAsync: async () => true,

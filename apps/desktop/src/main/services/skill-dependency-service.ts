@@ -283,8 +283,51 @@ const satisfiesRequirement = (version: string, requirement: string): boolean => 
 
 export class SkillDependencyService {
   private readonly active = new Map<string, ActiveJob>();
+  private readonly processes = new Set<DependencyProcessHandle>();
+  private readonly pendingOperations = new Set<Promise<unknown>>();
+  private stopping = false;
 
   constructor(private readonly roots: SkillDependencyRoots) {}
+
+  private assertAccepting(): void {
+    if (this.stopping)
+      throw new DependencyPreparationError('cancelled', '应用正在退出，不再接受依赖准备。');
+  }
+
+  private async trackOperation<T>(operation: () => Promise<T>): Promise<T> {
+    this.assertAccepting();
+    const pending = operation().finally(() => this.pendingOperations.delete(pending));
+    this.pendingOperations.add(pending);
+    return pending;
+  }
+
+  async shutdown(): Promise<void> {
+    if (!this.stopping) {
+      this.stopping = true;
+      this.store.dependencyOperations.failInterruptedOperations(this.now());
+      this.store.environments.failInterruptedEnvironments(
+        '算台在准备过程中退出，环境需要重新准备',
+        this.now(),
+      );
+    }
+    for (const job of this.active.values()) {
+      job.cancelRequested = true;
+      job.abortController.abort();
+    }
+    const errors: unknown[] = [];
+    for (const handle of this.processes) {
+      try {
+        handle.kill();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    await Promise.allSettled([
+      ...this.pendingOperations,
+      ...[...this.active.values()].map((job) => job.completion),
+    ]);
+    if (errors.length > 0) throw new AggregateError(errors, 'Dependency processes failed to stop');
+  }
 
   private get store(): AppStore {
     return this.roots.store;
@@ -484,12 +527,21 @@ export class SkillDependencyService {
    * 依赖计划：探测基础解释器、算出环境键、检查 wheelhouse 缺项。
    * 只读，不写数据库；A12 的准备界面用它列出「要装什么、从哪来、缺什么」。
    */
-  async inspectPlan(
+  inspectPlan(
+    base: BaseInterpreterRequest,
+    lock: DependencyLock,
+    packageWheelhouseRoot?: string,
+  ): Promise<DependencyPlan> {
+    return this.trackOperation(() => this.inspectPlanInternal(base, lock, packageWheelhouseRoot));
+  }
+
+  private async inspectPlanInternal(
     base: BaseInterpreterRequest,
     lock: DependencyLock,
     packageWheelhouseRoot?: string,
   ): Promise<DependencyPlan> {
     const resolved = await this.resolveBaseIdentity(base);
+    this.assertAccepting();
     const lockHash = computeDependencyLockHash(lock);
     const environmentKey = computeEnvironmentKey(resolved.base, resolved.platform, lockHash);
     const environment = this.store.environments.findByKey(environmentKey);
@@ -538,13 +590,25 @@ export class SkillDependencyService {
    * 启动（或复用）一次准备作业，立刻返回 operationId 供进度查询与取消，
    * 不占用一个长等待：下载、建 venv、装包都在后台作业里进行。
    */
-  async prepareEnvironment(
+  prepareEnvironment(
+    base: BaseInterpreterRequest,
+    lock: DependencyLock,
+    kind: DependencyOperationKind = 'prepare',
+    packageWheelhouseRoot?: string,
+  ): Promise<PrepareReceipt> {
+    return this.trackOperation(() =>
+      this.prepareEnvironmentInternal(base, lock, kind, packageWheelhouseRoot),
+    );
+  }
+
+  private async prepareEnvironmentInternal(
     base: BaseInterpreterRequest,
     lock: DependencyLock,
     kind: DependencyOperationKind = 'prepare',
     packageWheelhouseRoot?: string,
   ): Promise<PrepareReceipt> {
     const plan = await this.inspectPlan(base, lock, packageWheelhouseRoot);
+    this.assertAccepting();
     const existing = plan.environment;
 
     if (existing?.status === 'ready' && !plan.openOperationId) {
@@ -619,12 +683,12 @@ export class SkillDependencyService {
       cancelRequested: false,
       activeHandle: null,
     };
+    this.active.set(operation.id, job);
     job.completion = this.runPreparation(job, plan, lock, packageWheelhouseRoot).catch(
       (error: unknown) => {
         console.error(`[skill-dependency] preparation ${operation.id} crashed`, error);
       },
     );
-    this.active.set(operation.id, job);
     return {
       operationId: operation.id,
       environmentId: environment.id,
@@ -638,7 +702,19 @@ export class SkillDependencyService {
    * preparation job and cancellation semantics, while allowing that caller to await its terminal
    * result instead of exposing a separate runtime preparation flow.
    */
-  async prepareEnvironmentAndWait(
+  prepareEnvironmentAndWait(
+    base: BaseInterpreterRequest,
+    lock: DependencyLock,
+    signal: AbortSignal,
+    kind: DependencyOperationKind = 'prepare',
+    packageWheelhouseRoot?: string,
+  ): Promise<RuntimeEnvironment> {
+    return this.trackOperation(() =>
+      this.prepareEnvironmentAndWaitInternal(base, lock, signal, kind, packageWheelhouseRoot),
+    );
+  }
+
+  private async prepareEnvironmentAndWaitInternal(
     base: BaseInterpreterRequest,
     lock: DependencyLock,
     signal: AbortSignal,
@@ -663,7 +739,7 @@ export class SkillDependencyService {
       }
     } catch (error) {
       if (signal.aborted) {
-        await this.cancelPreparation(receipt.operationId);
+        await this.cancelPreparationInternal(receipt.operationId);
         signal.throwIfAborted();
       }
       throw error;
@@ -671,7 +747,11 @@ export class SkillDependencyService {
   }
 
   /** 取消准备作业：终止当前子进程、清理本作业目录、把作业与环境落到取消态。 */
-  async cancelPreparation(operationId: string): Promise<CancelReceipt> {
+  cancelPreparation(operationId: string): Promise<CancelReceipt> {
+    return this.trackOperation(() => this.cancelPreparationInternal(operationId));
+  }
+
+  private async cancelPreparationInternal(operationId: string): Promise<CancelReceipt> {
     const job = this.active.get(operationId);
     if (!job) {
       const operation = this.store.dependencyOperations.getOperation(operationId);
@@ -680,12 +760,17 @@ export class SkillDependencyService {
     job.cancelRequested = true;
     job.abortController.abort();
     job.activeHandle?.kill();
-    await Promise.race([
-      job.completion,
-      new Promise<void>((resolve) => {
-        setTimeout(resolve, cancelJoinTimeoutMs);
-      }),
-    ]);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        job.completion,
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, cancelJoinTimeoutMs);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
     const finished = this.store.dependencyOperations.getOperation(operationId);
     return { applied: true, status: finished?.status ?? 'cancelled' };
   }
@@ -694,7 +779,11 @@ export class SkillDependencyService {
    * 已准备环境的健康检查：重新跑 import 探测。
    * 探测不过说明环境已不可用（被外部改动、解释器被卸载），标为 invalid 而不是 ready。
    */
-  async verifyEnvironment(environmentId: string): Promise<RuntimeEnvironment> {
+  verifyEnvironment(environmentId: string): Promise<RuntimeEnvironment> {
+    return this.trackOperation(() => this.verifyEnvironmentInternal(environmentId));
+  }
+
+  private async verifyEnvironmentInternal(environmentId: string): Promise<RuntimeEnvironment> {
     const environment = this.store.environments.getEnvironment(environmentId);
     if (!environment) throw new Error(`Environment ${environmentId} does not exist`);
     if (environment.status !== 'ready') return environment;
@@ -702,6 +791,7 @@ export class SkillDependencyService {
       await this.probeImports(this.venvPythonOf(environment), environment.lock.importProbes);
       return environment;
     } catch (error) {
+      if (this.stopping) throw error;
       const summary = redactCredentials(messageOf(error)).slice(0, 600);
       this.store.environments.markInvalid(environmentId, 'environment-unhealthy', summary);
       const updated = this.store.environments.getEnvironment(environmentId);
@@ -715,7 +805,14 @@ export class SkillDependencyService {
   }
 
   /** 启动恢复：上次被强杀留下的作业与环境收口，并清掉半成品目录。 */
-  async recoverInterruptedPreparations(): Promise<{ operations: number; environments: number }> {
+  recoverInterruptedPreparations(): Promise<{ operations: number; environments: number }> {
+    return this.trackOperation(() => this.recoverInterruptedPreparationsInternal());
+  }
+
+  private async recoverInterruptedPreparationsInternal(): Promise<{
+    operations: number;
+    environments: number;
+  }> {
     const now = this.now();
     const operations = this.store.dependencyOperations.failInterruptedOperations(now);
     const environments = this.store.environments.failInterruptedEnvironments(
@@ -869,6 +966,8 @@ export class SkillDependencyService {
     timeoutMs: number;
     job?: ActiveJob;
   }): Promise<ProcessOutcome> {
+    this.assertAccepting();
+    if (request.job) this.throwIfCancelled(request.job);
     const handle = this.roots.process.run({
       executable: request.executable,
       argv: request.argv,
@@ -876,10 +975,15 @@ export class SkillDependencyService {
       timeoutMs: request.timeoutMs,
     });
     const job = request.job;
+    this.processes.add(handle);
     if (job) job.activeHandle = handle;
     try {
-      return await handle.result;
+      const result = await handle.result;
+      this.assertAccepting();
+      if (job) this.throwIfCancelled(job);
+      return result;
     } finally {
+      this.processes.delete(handle);
       if (job) job.activeHandle = null;
     }
   }
@@ -1142,6 +1246,7 @@ export class SkillDependencyService {
   }
 
   private reportProgress(job: ActiveJob, step: DependencyOperationStep, message: string): void {
+    this.throwIfCancelled(job);
     this.store.dependencyOperations.updateProgress(job.operationId, { step, message });
   }
 

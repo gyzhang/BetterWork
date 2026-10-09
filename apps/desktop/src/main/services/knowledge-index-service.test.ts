@@ -4,12 +4,20 @@ import path from 'node:path';
 
 import { abortError } from '@betterwork/agent-core';
 import type { EmbeddingModelSnapshot, KnowledgeJobSummary } from '@betterwork/agent-protocol';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { EmbeddingRequest, EmbeddingResult } from './embedding-client';
 import { KnowledgeServiceError } from './knowledge-errors';
 import { type EmbeddingRunner, KnowledgeIndexService } from './knowledge-index-service';
 import { KnowledgeVault } from './knowledge-vault';
+
+const deferred = (): { promise: Promise<void>; resolve: () => void } => {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+};
 
 const temporaryDirectories: string[] = [];
 const temporaryDirectory = (): string => {
@@ -118,6 +126,43 @@ const enableSemantic = (harness: Harness): void => {
 };
 
 const failureCode = (summary: KnowledgeJobSummary): string | undefined => summary.failure?.code;
+
+describe('KnowledgeIndexService shutdown', () => {
+  it('interrupts active and queued jobs, waits for late embedding, and rejects new work after close', async () => {
+    const entered = deferred();
+    const release = deferred();
+    const harness = createHarness({
+      gate: () => {
+        entered.resolve();
+        return release.promise;
+      },
+    });
+    enableSemantic(harness);
+    const file = writeSource(harness.directory, 'shutdown.md', 'Published keyword text.');
+    const active = harness.service.startImport([file]);
+    await entered.promise;
+    const queued = harness.service.startImport([file]);
+    let finished = false;
+    const pending = harness.service.shutdown().then(() => {
+      finished = true;
+    });
+    expect(harness.service.getJob(active.jobId)?.status).toBe('interrupted');
+    expect(harness.service.getJob(queued.jobId)?.status).toBe('interrupted');
+    expect(() => harness.service.startImport([file])).toThrow('退出');
+    await Promise.resolve();
+    expect(finished).toBe(false);
+    release.resolve();
+    await pending;
+    expect(harness.service.jobDetail(active.jobId)?.items[0]?.status).toBe('interrupted');
+    expect(harness.embedding.requests).toHaveLength(0);
+    expect(harness.vault.listDocuments()).toHaveLength(1);
+    const eventCount = harness.events.length;
+    harness.vault.close();
+    await harness.service.shutdown();
+    expect(() => harness.service.startImport([file])).toThrow('退出');
+    await vi.waitFor(() => expect(harness.events).toHaveLength(eventCount));
+  });
+});
 
 describe('KnowledgeIndexService 导入与刷新作业', () => {
   it('混合成功与失败时聚合为 partial，成功资料仍有关键词块，失败条目带可解释原因', async () => {

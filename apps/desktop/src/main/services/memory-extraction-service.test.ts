@@ -30,6 +30,14 @@ import {
 import { buildUserInstructionProvenance, memoryDependencyOf } from './memory-provenance';
 import { ModelFactoryError } from './model-provider-factory';
 
+const deferred = (): { promise: Promise<void>; resolve: () => void } => {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+};
+
 const RUN_ID = 'run-source-1';
 
 /** 假 Provider 的行为脚本，仅测试内部使用。 */
@@ -99,6 +107,7 @@ const makeFixture = (
     resolverFailure?: 'unavailable' | 'credential';
     timeoutMs?: number;
     knownSecrets?: readonly string[];
+    resolverGate?: (call: number) => Promise<void>;
   } = {},
 ): Harness => {
   const db = openAppDatabase(':memory:');
@@ -151,6 +160,7 @@ const makeFixture = (
   const modelFactory: ExtractionModelResolver = {
     async requireConfiguredLanguageModel() {
       resolveCalls.count += 1;
+      await options.resolverGate?.(resolveCalls.count);
       if (options.resolverFailure === 'unavailable') {
         throw new ModelFactoryError('MODEL_UNAVAILABLE', '未配置可用的语言模型。');
       }
@@ -326,6 +336,65 @@ const seedMemory = (harness: Harness, content: string): MemoryRecord =>
     confidence: 1,
     status: 'confirmed',
   }).record;
+
+describe('MemoryExtractionService shutdown', () => {
+  it.each([1, 2])(
+    'joins model resolution at call %i without a late enqueue or dispatch',
+    async (call) => {
+      const entered = deferred();
+      const release = deferred();
+      const harness = makeFixture({
+        resolverGate: (current) => {
+          if (current !== call) return Promise.resolve();
+          entered.resolve();
+          return release.promise;
+        },
+        behaviour: { kind: 'chunks', chunks: stopChunks(validOutput()) },
+      });
+      await enableAutoSuggest(harness);
+      harness.putRunRecord();
+      const request = harness.service.requestExtractionForRun(RUN_ID);
+      await entered.promise;
+      let finished = false;
+      const pending = harness.service.shutdown().then(() => {
+        finished = true;
+      });
+      await Promise.resolve();
+      expect(finished).toBe(false);
+      release.resolve();
+      await Promise.all([pending, request]);
+      expect(harness.streamCalls.count).toBe(0);
+      const rows = harness.db.prepare('SELECT status FROM memory_extraction_jobs').all();
+      expect(rows).toEqual(call === 1 ? [] : [{ status: 'interrupted' }]);
+      expect(harness.db.prepare('SELECT COUNT(*) AS count FROM memory_records').get()).toEqual({
+        count: 0,
+      });
+      harness.db.close();
+      await harness.service.shutdown();
+      expect((await harness.service.requestExtractionForRun(RUN_ID)).ok).toBe(false);
+      expect(await harness.service.runPendingJobs()).toBe(0);
+    },
+  );
+
+  it('aborts the active provider, interrupts the queue, and preserves existing memories', async () => {
+    const harness = makeFixture({ behaviour: { kind: 'hang' } });
+    await enableAutoSuggest(harness);
+    harness.putRunRecord();
+    const existing = seedMemory(harness, 'Existing instruction');
+    const request = await harness.service.requestExtractionForRun(RUN_ID);
+    expect(request.ok).toBe(true);
+    await waitFor(() => harness.streamCalls.count === 1, 'provider started');
+    const queued = seedQueuedJob(harness, { runId: 'queued-on-exit' });
+    await harness.service.shutdown();
+    expect(harness.jobs.get(queued)?.status).toBe('interrupted');
+    expect(harness.memories.getRevision(existing.revisionId)?.content).toBe('Existing instruction');
+    expect(harness.db.prepare('SELECT DISTINCT status FROM memory_extraction_jobs').all()).toEqual([
+      { status: 'interrupted' },
+    ]);
+    harness.db.close();
+    await harness.service.shutdown();
+  });
+});
 
 const seedCandidate = (
   harness: Harness,

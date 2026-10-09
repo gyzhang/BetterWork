@@ -90,6 +90,15 @@ const constantEqual = (left: string, right: string): boolean => {
 };
 
 export class McpOAuthService {
+  private stopping = false;
+  private readonly pendingRequests = new Set<Promise<unknown>>();
+
+  private async trackRequest<T>(request: () => Promise<T>): Promise<T> {
+    if (this.stopping) throw abortError();
+    const pending = request().finally(() => this.pendingRequests.delete(pending));
+    this.pendingRequests.add(pending);
+    return pending;
+  }
   private readonly operations = new Map<string, LoginOperation>();
   private readonly refreshes = new Map<
     string,
@@ -130,7 +139,11 @@ export class McpOAuthService {
     return [...(this.secrets.get(id) ?? [])];
   }
 
-  async prepare(input: McpOperationRequest): Promise<McpOAuthPreparation> {
+  prepare(input: McpOperationRequest): Promise<McpOAuthPreparation> {
+    return this.trackRequest(() => this.prepareInternal(input));
+  }
+
+  private async prepareInternal(input: McpOperationRequest): Promise<McpOAuthPreparation> {
     const connection = this.store.mcpConnections.assertRevision(input.id, input.expectedRevisionId);
     if (
       connection.transport.kind === 'stdio' ||
@@ -213,7 +226,11 @@ export class McpOAuthService {
     }
   }
 
-  async login(input: McpLoginContinueRequest): Promise<void> {
+  login(input: McpLoginContinueRequest): Promise<void> {
+    return this.trackRequest(() => this.loginInternal(input));
+  }
+
+  private async loginInternal(input: McpLoginContinueRequest): Promise<void> {
     const operation = this.operations.get(input.operationId);
     if (
       !operation ||
@@ -455,7 +472,11 @@ export class McpOAuthService {
     }
   }
 
-  async accessToken(
+  accessToken(connection: McpConnectionSummary, signal: AbortSignal): Promise<string | undefined> {
+    return this.trackRequest(() => this.accessTokenInternal(connection, signal));
+  }
+
+  private async accessTokenInternal(
     connection: McpConnectionSummary,
     signal: AbortSignal,
   ): Promise<string | undefined> {
@@ -470,6 +491,7 @@ export class McpOAuthService {
       slot: authorization.slot,
     };
     const stored = await this.store.credentials.resolveForOwner(ref);
+    if (this.stopping) throw abortError();
     let bundle = tokenBundleSchema.parse(
       JSON.parse(stored.plaintext) as unknown,
     ) as unknown as TokenBundle;
@@ -537,7 +559,11 @@ export class McpOAuthService {
         this.finish(operationId);
       }
   }
-  async logout(id: string): Promise<void> {
+  logout(id: string): Promise<void> {
+    return this.trackRequest(() => this.logoutInternal(id));
+  }
+
+  private async logoutInternal(id: string): Promise<void> {
     this.cancelConnection(id);
     const slots =
       this.store.mcpConnections
@@ -555,10 +581,15 @@ export class McpOAuthService {
     );
     this.secrets.delete(id);
   }
-  shutdown(): void {
+  async shutdown(): Promise<void> {
+    this.stopping = true;
     for (const refresh of this.refreshes.values()) refresh.controller.abort();
     for (const operation of this.operations.values()) operation.controller.abort();
     for (const id of [...this.operations.keys()]) this.finish(id);
+    await Promise.allSettled([
+      ...this.pendingRequests,
+      ...[...this.refreshes.values()].map((refresh) => refresh.promise),
+    ]);
     this.secrets.clear();
   }
 
@@ -713,6 +744,7 @@ export class McpOAuthService {
     issSupported: boolean,
     port?: number,
   ): Promise<{ redirectUrl: string; result: Promise<{ code: string; iss?: string }> }> {
+    operation.controller.signal.throwIfAborted();
     let resolve: ((value: { code: string; iss?: string }) => void) | undefined;
     let reject: ((error: Error) => void) | undefined;
     let consumed = false;

@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { isAbortError } from '@betterwork/agent-core';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { SafeStorageAdapter } from '../infrastructure/credential-store';
 import { AppStore } from '../persistence';
@@ -14,9 +15,9 @@ const adapter: SafeStorageAdapter = {
     Buffer.from(Buffer.from(value).map((byte) => byte ^ 0x7f)).toString(),
 };
 const opened: Array<{ service: McpOAuthService; store: AppStore }> = [];
-afterEach(() => {
+afterEach(async () => {
   for (const { service, store } of opened.splice(0)) {
-    service.shutdown();
+    await service.shutdown();
     store.close();
   }
 });
@@ -183,10 +184,42 @@ const fixture = async (
 };
 
 describe('MCP OAuth browser flow', () => {
+  it('joins an aborted refresh before storage closes and rejects later authorization work', async () => {
+    const f = await fixture({ expiresIn: 1 });
+    await f.login();
+    let release!: () => void;
+    f.gateRefresh(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    const token = f.service.accessToken(f.connection, new AbortController().signal);
+    const failure = expect(token).rejects.toSatisfy(isAbortError);
+    await vi.waitFor(() => expect(f.refreshCalls()).toBe(1));
+    let finished = false;
+    const shutdown = f.service.shutdown().then(() => {
+      finished = true;
+    });
+    await Promise.resolve();
+    expect(finished).toBe(false);
+    release();
+    await Promise.all([shutdown, failure]);
+    f.store.close();
+    opened.splice(
+      opened.findIndex((entry) => entry.store === f.store),
+      1,
+    );
+    await f.service.shutdown();
+    await expect(f.service.prepare(f.operation)).rejects.toSatisfy(isAbortError);
+    await expect(
+      f.service.accessToken(f.connection, new AbortController().signal),
+    ).rejects.toSatisfy(isAbortError);
+    expect(f.refreshCalls()).toBe(1);
+  });
   it('rehydrates an encrypted authorization in a fresh service without another browser login', async () => {
     const f = await fixture();
     await f.login();
-    f.service.shutdown();
+    await f.service.shutdown();
     const rehydrated = new McpOAuthService(f.store, {});
     try {
       expect(rehydrated.summary(f.connection).oauthStatus).toBe('authorized');
@@ -196,7 +229,7 @@ describe('MCP OAuth browser flow', () => {
       expect(f.browserUrls).toHaveLength(1);
       expect(rehydrated.activeSecrets(f.connection.id)).toContain('access-secret');
     } finally {
-      rehydrated.shutdown();
+      await rehydrated.shutdown();
     }
   });
 
