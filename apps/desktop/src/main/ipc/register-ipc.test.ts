@@ -139,7 +139,13 @@ describe('registerIpc', () => {
       installedBuiltinRoot: path.join(temporaryDirectory, 'builtin-installed'),
       userRoot: path.join(temporaryDirectory, 'user-skills'),
     });
-    const runs = new RunService(store, knowledgeVault, notifications, skillService, () => null);
+    const runs = new RunService({
+      store,
+      knowledgeVault,
+      notifications,
+      skillService,
+      getWindow: () => null,
+    });
     const expertService = new ExpertService(store);
     const inputSnapshots = new InputSnapshotService(store, temporaryDirectory);
     const taskMaterials = new TaskMaterialService({ store, knowledgeVault, inputSnapshots });

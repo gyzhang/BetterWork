@@ -54,7 +54,7 @@ import { MemoryService } from './services/memory-service';
 import { ModelProviderFactory } from './services/model-provider-factory';
 import { NotificationActivationService } from './services/notification-activation-service';
 import { NotificationService } from './services/notification-service';
-import { RunService } from './services/run-service';
+import { createRunService, type RunService } from './services/run-service';
 import { ScheduleDirectorySourcesService } from './services/schedule-directory-sources';
 import { ScheduleDispatchService } from './services/schedule-dispatch-service';
 import { ScheduleExecutionService } from './services/schedule-execution-service';
@@ -114,9 +114,9 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
   );
   const startupReadiness: Promise<unknown>[] = [];
   // CF11：legacy 明文密钥→credentials 的启动迁移；safeStorage 不可用时整体跳过、pending 原样保留。
-  const credentialAccess = store.credentials
-    ? new CredentialAccess(store.credentials, store.credentialJournal)
-    : undefined;
+  const credentialRepository = store.credentials;
+  if (!credentialRepository) throw new Error('Production credential repository is missing');
+  const credentialAccess = new CredentialAccess(credentialRepository, store.credentialJournal);
   if (store.credentials) {
     const migration = new CredentialMigrationService(store, store.credentials);
     startupReadiness.push(
@@ -612,27 +612,27 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     scan: (request) => knowledgeWorker.scan(request),
   });
 
-  const runs = new RunService(
+  const runs = createRunService({
     store,
     knowledgeVault,
     notifications,
     skillService,
     getWindow,
     skillExecutionService,
-    snapshots,
+    toolchainSnapshotService: snapshots,
     fileArtifactService,
     dependencies,
     inputSnapshots,
     taskMaterials,
     memoryExtractions,
     mcpClientService,
-    (url, signal) => webFetchService.fetch(url, signal),
+    webFetch: (url, signal) => webFetchService.fetch(url, signal),
     officeParser,
     credentialAccess,
-    knowledgeSearch,
-    knowledgeWorker.extractor,
-    (runId) => scheduleOutcomeService.finalizeRun(runId),
-  );
+    knowledgeSearchService: knowledgeSearch,
+    documentExtractor: knowledgeWorker.extractor,
+    onScheduledRunTerminal: (runId) => scheduleOutcomeService.finalizeRun(runId),
+  });
   mcpClientService.setRunCanceller((runId) => {
     runs.cancel(runId);
   });

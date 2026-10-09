@@ -117,20 +117,16 @@ export function assemble(
   });
   // 通知仍真实落库；合成宿主不发操作系统通知、不抢用户焦点。
   const notifications = new NotificationService(store.notifications, () => null);
-  const runs = new RunService(
+  const runs = new RunService({
     store,
-    vault,
+    knowledgeVault: vault,
     notifications,
     skillService,
     getWindow,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
     inputSnapshots,
     taskMaterials,
-    extractions,
-  );
+    memoryExtractions: extractions,
+  });
   const filesystem = new FakeFileSystem();
   const processRunner = new FakePythonRunner(scenarioOf(), filesystem);
   const dependencies = new SkillDependencyService({

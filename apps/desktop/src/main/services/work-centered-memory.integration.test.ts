@@ -215,24 +215,17 @@ const openServices = (directory: string): Services => {
     userRoot: path.join(directory, 'skills'),
   });
   const notifications = new NotificationService(store.notifications, () => null);
-  const runs = new RunService(
+  const runs = new RunService({
     store,
-    vault,
+    knowledgeVault: vault,
     notifications,
     skillService,
-    () => null,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
+    getWindow: () => null,
     inputSnapshots,
     taskMaterials,
-    extractions,
-    undefined,
-    undefined,
-    undefined,
-    credentialResolver,
-  );
+    memoryExtractions: extractions,
+    credentialAccess: credentialResolver,
+  });
   return {
     store,
     vault,

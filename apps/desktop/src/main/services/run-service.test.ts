@@ -33,7 +33,12 @@ import { McpClientService } from './mcp-client-service';
 import { mcpModelAlias } from './mcp-tool-contract';
 import { MemoryService } from './memory-service';
 import { NotificationService } from './notification-service';
-import { createRunTools, RunService } from './run-service';
+import {
+  createRunService,
+  createRunTools,
+  RunService,
+  type RunServiceDependencies,
+} from './run-service';
 import { ScheduleExecutionService } from './schedule-execution-service';
 import { computeDependencyFingerprint } from './skill-dependency-service';
 import { SkillExecutionService } from './skill-execution-service';
@@ -282,57 +287,66 @@ const createPreparedScheduleDraft = (fixture: Fixture) => {
   return { service, draft, occurrence: claimed.occurrence };
 };
 
-const createService = (
+interface ServiceOptions {
+  window?: WindowStub;
+  skillExecutionService?: SkillExecutionService;
+  webFetch?: WebFetch;
+  officeParser?: OfficeParserService;
+  mcpClientService?: McpClientService;
+  credentialAccess?: CredentialResolver;
+  documentExtractor?: DocumentExtractor;
+  onScheduledRunTerminal?: (runId: string) => Promise<unknown>;
+}
+
+const createServiceDependencies = (
   fixture: Fixture,
-  window?: WindowStub,
-  skillExecutionService?: SkillExecutionService,
-  webFetch?: WebFetch,
-  officeParser?: OfficeParserService,
-  mcpClientService?: McpClientService,
-  credentialAccess?: CredentialResolver,
-  documentExtractor?: DocumentExtractor,
-  onScheduledRunTerminal?: (runId: string) => Promise<unknown>,
-): RunService =>
-  new RunService(
-    fixture.store,
-    fixture.vault,
-    new NotificationService(fixture.store.notifications, () => window?.asBrowserWindow ?? null),
-    fixture.skillService,
-    () => window?.asBrowserWindow ?? null,
-    skillExecutionService,
-    undefined,
-    undefined,
-    undefined,
-    fixture.inputSnapshots,
-    fixture.taskMaterials,
-    undefined,
-    mcpClientService,
-    webFetch,
-    officeParser,
-    credentialAccess,
-    new KnowledgeSearchService({
-      vault: fixture.vault,
-      index: fixture.vault.index,
-      // Run 材料只信宿主快照，与 main/index 生产接线一致。
-      runMaterials: (runId) =>
-        (fixture.store.runContextSnapshots.get(runId)?.materials ?? []).flatMap((material) =>
-          material.reference.kind === 'knowledge-revision' ? [material.reference] : [],
-        ),
-      embedding: {
-        defaultSnapshot: () => {
-          throw new Error('Run 编排测试不应调用嵌入模型');
-        },
-        snapshotOf: () => {
-          throw new Error('Run 编排测试不应调用嵌入模型');
-        },
-        embed: async () => {
-          throw new Error('Run 编排测试不应调用嵌入模型');
-        },
+  options: ServiceOptions = {},
+): RunServiceDependencies => ({
+  store: fixture.store,
+  knowledgeVault: fixture.vault,
+  notifications: new NotificationService(
+    fixture.store.notifications,
+    () => options.window?.asBrowserWindow ?? null,
+  ),
+  skillService: fixture.skillService,
+  getWindow: () => options.window?.asBrowserWindow ?? null,
+  inputSnapshots: fixture.inputSnapshots,
+  taskMaterials: fixture.taskMaterials,
+  knowledgeSearchService: new KnowledgeSearchService({
+    vault: fixture.vault,
+    index: fixture.vault.index,
+    // Run 材料只信宿主快照，与 main/index 生产接线一致。
+    runMaterials: (runId) =>
+      (fixture.store.runContextSnapshots.get(runId)?.materials ?? []).flatMap((material) =>
+        material.reference.kind === 'knowledge-revision' ? [material.reference] : [],
+      ),
+    embedding: {
+      defaultSnapshot: () => {
+        throw new Error('Run 编排测试不应调用嵌入模型');
       },
-    }),
-    documentExtractor,
-    onScheduledRunTerminal,
-  );
+      snapshotOf: () => {
+        throw new Error('Run 编排测试不应调用嵌入模型');
+      },
+      embed: async () => {
+        throw new Error('Run 编排测试不应调用嵌入模型');
+      },
+    },
+  }),
+  ...(options.skillExecutionService
+    ? { skillExecutionService: options.skillExecutionService }
+    : {}),
+  ...(options.webFetch ? { webFetch: options.webFetch } : {}),
+  ...(options.officeParser ? { officeParser: options.officeParser } : {}),
+  ...(options.mcpClientService ? { mcpClientService: options.mcpClientService } : {}),
+  ...(options.credentialAccess ? { credentialAccess: options.credentialAccess } : {}),
+  ...(options.documentExtractor ? { documentExtractor: options.documentExtractor } : {}),
+  ...(options.onScheduledRunTerminal
+    ? { onScheduledRunTerminal: options.onScheduledRunTerminal }
+    : {}),
+});
+
+const createService = (fixture: Fixture, options: ServiceOptions = {}): RunService =>
+  new RunService(createServiceDependencies(fixture, options));
 
 const captureFakeProviderRequests = () => {
   const requests: AgentMessage[][] = [];
@@ -495,6 +509,32 @@ const wireMessages = (init: RequestInit | undefined): { role: string; content: s
 };
 
 describe('RunService', () => {
+  it('rejects a partial production assembly before accessing storage or a window', async () => {
+    const fixture = await createFixture();
+    const getWindow = vi.fn(() => null);
+    const ports = { ...createServiceDependencies(fixture), getWindow };
+    // 模拟绕过 TypeScript 的宿主漏接；具名测试子集不能作为完整生产装配。
+    expect(() => createRunService(ports as Required<RunServiceDependencies>)).toThrow(
+      'RunService dependencies are missing: skillExecutionService, toolchainSnapshotService, fileArtifactService, dependencies, memoryExtractions, mcpClientService, webFetch, officeParser, credentialAccess, documentExtractor, onScheduledRunTerminal',
+    );
+    expect(getWindow).not.toHaveBeenCalled();
+    expect(fixture.store.runs.list()).toEqual([]);
+  });
+
+  it.each([
+    ['taskMaterials', undefined],
+    ['knowledgeSearchService', null],
+    ['getWindow', undefined],
+  ] as const)('rejects a missing production %s port before a Run can start', async (key, value) => {
+    const fixture = await createFixture();
+    const ports = { ...createServiceDependencies(fixture), [key]: value };
+    // 非法输入用于证明运行期检查覆盖显式 undefined/null，不只检查对象是否有键。
+    expect(() => createRunService(ports as unknown as Required<RunServiceDependencies>)).toThrow(
+      new RegExp(`RunService dependencies are missing: .*\\b${key}\\b`),
+    );
+    expect(fixture.store.runs.list()).toEqual([]);
+  });
+
   it('keeps the original goal and the failed user request available after continue', async () => {
     const fixture = await createFixture();
     const service = createService(fixture);
@@ -691,7 +731,9 @@ describe('RunService', () => {
   it('filters completed progress when its exact source material is removed from the next TaskContext', async () => {
     const fixture = await createFixture();
     const context = await saveSingleMaterialContext(fixture, '本轮选定的合成材料。');
-    const service = createService(fixture, createWindowStub());
+    const service = createService(fixture, {
+      window: createWindowStub(),
+    });
     const captured = captureFakeProviderRequests();
     try {
       const sourceRunId = service.start({
@@ -793,7 +835,9 @@ describe('RunService', () => {
       },
       skillBindings: [],
     });
-    const service = createService(fixture, createWindowStub());
+    const service = createService(fixture, {
+      window: createWindowStub(),
+    });
     const captured = captureFakeProviderRequests();
     try {
       const firstRunId = service.start({
@@ -1034,17 +1078,9 @@ describe('RunService', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
     const scheduleFinalizer = vi.fn(async () => undefined);
-    const runs = createService(
-      fixture,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      scheduleFinalizer,
-    );
+    const runs = createService(fixture, {
+      onScheduledRunTerminal: scheduleFinalizer,
+    });
 
     let failedRunId: string | undefined;
     const failedDispatch = vi
@@ -1337,15 +1373,9 @@ describe('RunService', () => {
       { kind: 'workspace', workspaceId },
       '经营分析先核对回款金额口径。',
     );
-    const service = createService(
-      fixture,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      resolver,
-    );
+    const service = createService(fixture, {
+      credentialAccess: resolver,
+    });
     const startRun = (prompt: string): string => {
       const runId = service.start({ taskId: fixture.taskId, sessionId: fixture.sessionId, prompt });
       return runId;
@@ -1818,16 +1848,9 @@ describe('RunService', () => {
         temperature: 0,
         enabled: true,
       });
-      const service = createService(
-        fixture,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        extractor,
-      );
+      const service = createService(fixture, {
+        documentExtractor: extractor,
+      });
       const runId = service.start({
         taskId: fixture.taskId,
         sessionId: fixture.sessionId,
@@ -1941,16 +1964,9 @@ describe('RunService', () => {
       temperature: 0,
       enabled: true,
     });
-    const service = createService(
-      fixture,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      extractor,
-    );
+    const service = createService(fixture, {
+      documentExtractor: extractor,
+    });
     const runId = service.start({
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
@@ -2341,7 +2357,9 @@ describe('RunService', () => {
   it('cancels a running run, records the terminal event, and broadcasts every event in order', async () => {
     const fixture = await createFixture();
     const window = createWindowStub();
-    const service = createService(fixture, window);
+    const service = createService(fixture, {
+      window,
+    });
 
     const runId = service.start({
       taskId: fixture.taskId,
@@ -3221,15 +3239,17 @@ describe('RunService', () => {
   it('runs selected web_fetch and records the fetched page as web evidence', async () => {
     const fixture = await createFixture();
     const fetchedUrl = 'https://example.com/finance';
-    const service = createService(fixture, undefined, undefined, async (url) => ({
-      url,
-      title: '财务规则页面',
-      content: '公开页面中的财务规则正文。',
-      contentType: 'text/html',
-      status: 200,
-      retrievedAt: 1,
-      truncated: false,
-    }));
+    const service = createService(fixture, {
+      webFetch: async (url) => ({
+        url,
+        title: '财务规则页面',
+        content: '公开页面中的财务规则正文。',
+        contentType: 'text/html',
+        status: 200,
+        retrievedAt: 1,
+        truncated: false,
+      }),
+    });
     const context = fixture.store.taskContexts.save(fixture.taskId, {
       executor: { kind: 'general' },
       skillBindings: [],
@@ -3293,13 +3313,9 @@ describe('RunService', () => {
         },
       ],
     });
-    const service = createService(
-      fixture,
-      undefined,
-      undefined,
-      undefined,
-      new OfficeParserService(),
-    );
+    const service = createService(fixture, {
+      officeParser: new OfficeParserService(),
+    });
     const runId = service.start({
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
@@ -3401,7 +3417,9 @@ describe('RunService', () => {
         }),
     );
     const provider = captureFakeProviderRequests();
-    const service = createService(fixture, undefined, undefined, undefined, undefined, mcp);
+    const service = createService(fixture, {
+      mcpClientService: mcp,
+    });
     const runId = service.start({
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
@@ -3504,7 +3522,9 @@ describe('RunService', () => {
       materials: [],
       mcpToolBindings: [binding],
     });
-    const service = createService(fixture, undefined, undefined, undefined, undefined, mcp);
+    const service = createService(fixture, {
+      mcpClientService: mcp,
+    });
     const runId = service.start({
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
@@ -3612,7 +3632,9 @@ describe('RunService', () => {
   it('creates a notification with a task target when a run completes', async () => {
     const fixture = await createFixture();
     const window = createWindowStub({ focused: true });
-    const service = createService(fixture, window);
+    const service = createService(fixture, {
+      window,
+    });
 
     const runId = service.start({
       taskId: fixture.taskId,
@@ -3639,7 +3661,9 @@ describe('RunService', () => {
   it('synthesizes a terminal failure when orchestration breaks before the event loop', async () => {
     const fixture = await createFixture();
     const window = createWindowStub();
-    const service = createService(fixture, window);
+    const service = createService(fixture, {
+      window,
+    });
     // 模拟编排层在进入事件循环前出错：读模型配置就抛异常。
     // 引擎因此根本不会产出任何事件，终态必须由 RunService 兜底。
     fixture.store.models.getForRun = () => {
@@ -3697,7 +3721,9 @@ describe('RunService', () => {
   it('refuses to start a run with an untrusted skill', async () => {
     const fixture = await createFixture();
     const window = createWindowStub();
-    const service = createService(fixture, window);
+    const service = createService(fixture, {
+      window,
+    });
 
     const skillId = 'skill-untrusted';
     const contentHash = 'a'.repeat(64);
@@ -3744,7 +3770,9 @@ describe('RunService', () => {
   it('refuses to start a run with a disabled skill', async () => {
     const fixture = await createFixture();
     const window = createWindowStub();
-    const service = createService(fixture, window);
+    const service = createService(fixture, {
+      window,
+    });
 
     const skillId = 'skill-disabled';
     const contentHash = 'b'.repeat(64);
@@ -3894,7 +3922,10 @@ describe('RunService', () => {
         return { cancelled: 0, cleanupFailed: 0 };
       },
     } as unknown as SkillExecutionService;
-    const service = createService(fixture, window, mockExecution);
+    const service = createService(fixture, {
+      window,
+      skillExecutionService: mockExecution,
+    });
 
     const runId = service.start({
       taskId: fixture.taskId,
@@ -3925,7 +3956,10 @@ describe('RunService', () => {
         throw new Error('子进程清理超时');
       },
     } as unknown as SkillExecutionService;
-    const service = createService(fixture, window, mockExecution);
+    const service = createService(fixture, {
+      window,
+      skillExecutionService: mockExecution,
+    });
 
     const runId = service.start({
       taskId: fixture.taskId,
@@ -3951,7 +3985,10 @@ describe('RunService', () => {
         return { cancelled: 1, cleanupFailed: 1 };
       },
     } as unknown as SkillExecutionService;
-    const service = createService(fixture, window, execution);
+    const service = createService(fixture, {
+      window,
+      skillExecutionService: execution,
+    });
     const runId = service.start({
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
@@ -3968,7 +4005,9 @@ describe('RunService', () => {
   it('shutdown() aborts all active runs and waits for them to settle', async () => {
     const fixture = await createFixture();
     const window = createWindowStub();
-    const service = createService(fixture, window);
+    const service = createService(fixture, {
+      window,
+    });
 
     const runId = service.start({
       taskId: fixture.taskId,
@@ -3994,7 +4033,9 @@ describe('RunService', () => {
     const window = createWindowStub();
     const targetSkill = await createTrustedSkill(fixture, 'skill-target', '目标 Skill');
     const otherSkill = await createTrustedSkill(fixture, 'skill-other', '其他 Skill');
-    const service = createService(fixture, window);
+    const service = createService(fixture, {
+      window,
+    });
 
     const targetRunId = service.start({
       taskId: fixture.taskId,
@@ -4023,7 +4064,9 @@ describe('RunService', () => {
     const window = createWindowStub();
     const targetSkill = await createTrustedSkill(fixture, 'skill-target-multi', '目标 Skill');
     const otherSkill = await createTrustedSkill(fixture, 'skill-other-multi', '其他 Skill');
-    const service = createService(fixture, window);
+    const service = createService(fixture, {
+      window,
+    });
 
     const runId = service.start({
       taskId: fixture.taskId,
@@ -4052,7 +4095,9 @@ describe('RunService', () => {
     const fixture = await createFixture();
     const window = createWindowStub();
     const skillId = await createTrustedSkill(fixture, 'skill-ppt', 'PPT 生成专家');
-    const service = createService(fixture, window);
+    const service = createService(fixture, {
+      window,
+    });
 
     const runId = service.start({
       taskId: fixture.taskId,
@@ -4129,7 +4174,9 @@ describe('RunService', () => {
       temperature: 0,
       enabled: true,
     });
-    const service = createService(fixture, undefined, createRealExecutionService(fixture));
+    const service = createService(fixture, {
+      skillExecutionService: createRealExecutionService(fixture),
+    });
 
     const runId = service.start({
       taskId: fixture.taskId,
@@ -4181,11 +4228,12 @@ describe('RunService', () => {
     const researchSkill = await createTrustedSkill(fixture, 'skill-multi-a', '研究 Skill');
     const reportSkill = await createTrustedSkill(fixture, 'skill-multi-b', '报告 Skill');
     const bindingOrder: string[] = [];
-    const service = createService(
-      fixture,
+    const service = createService(fixture, {
       window,
-      createRecordingExecutionService(fixture, (skillId) => bindingOrder.push(skillId)),
-    );
+      skillExecutionService: createRecordingExecutionService(fixture, (skillId) =>
+        bindingOrder.push(skillId),
+      ),
+    });
 
     const runId = service.start({
       taskId: fixture.taskId,
@@ -4234,7 +4282,9 @@ describe('RunService', () => {
       outputContract: { outputPaths: [] },
     });
     const captured = captureFakeProviderRequests();
-    const service = createService(fixture, undefined, createRealExecutionService(fixture));
+    const service = createService(fixture, {
+      skillExecutionService: createRealExecutionService(fixture),
+    });
 
     try {
       const runId = service.start({
@@ -4274,7 +4324,10 @@ describe('RunService', () => {
       '未信任 Skill',
     );
     fixture.store.skills.setTrustPreference(untrustedSkill, 'untrusted');
-    const service = createService(fixture, window, createRealExecutionService(fixture));
+    const service = createService(fixture, {
+      window,
+      skillExecutionService: createRealExecutionService(fixture),
+    });
 
     const runId = service.start({
       taskId: fixture.taskId,
@@ -4298,7 +4351,10 @@ describe('RunService', () => {
     const fixture = await createFixture();
     const window = createWindowStub();
     const skillId = await createTrustedSkill(fixture, 'skill-stale-revision');
-    const service = createService(fixture, window, createRealExecutionService(fixture));
+    const service = createService(fixture, {
+      window,
+      skillExecutionService: createRealExecutionService(fixture),
+    });
 
     const runId = service.start({
       taskId: fixture.taskId,
@@ -4320,7 +4376,10 @@ describe('RunService', () => {
     const fixture = await createFixture();
     const window = createWindowStub();
     const skillId = await createTrustedSkill(fixture, 'skill-no-inherit');
-    const service = createService(fixture, window, createRealExecutionService(fixture));
+    const service = createService(fixture, {
+      window,
+      skillExecutionService: createRealExecutionService(fixture),
+    });
 
     const firstRunId = service.start({
       taskId: fixture.taskId,
@@ -4347,7 +4406,10 @@ describe('RunService', () => {
     const fixture = await createFixture();
     const window = createWindowStub();
     const skillId = await createTrustedSkill(fixture, 'skill-disabled-unrelated');
-    const service = createService(fixture, window, createRealExecutionService(fixture));
+    const service = createService(fixture, {
+      window,
+      skillExecutionService: createRealExecutionService(fixture),
+    });
 
     const firstRunId = service.start({
       taskId: fixture.taskId,
@@ -4373,7 +4435,10 @@ describe('RunService', () => {
     const fixture = await createFixture();
     const window = createWindowStub();
     const skillId = await createTrustedSkill(fixture, 'skill-cancel-unbound');
-    const service = createService(fixture, window, createRealExecutionService(fixture));
+    const service = createService(fixture, {
+      window,
+      skillExecutionService: createRealExecutionService(fixture),
+    });
 
     const boundRunId = service.start({
       taskId: fixture.taskId,
@@ -4418,15 +4483,9 @@ describe('CF11 credential dispatch gate', () => {
     const resolver: CredentialResolver = { migrationStatus: () => 'pending', resolveSecret };
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    const service = createService(
-      fixture,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      resolver,
-    );
+    const service = createService(fixture, {
+      credentialAccess: resolver,
+    });
     const runId = service.start({
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
@@ -4461,15 +4520,9 @@ describe('CF11 credential dispatch gate', () => {
       sseResponse(JSON.stringify({ choices: [{ delta: { content: '完成。' } }] })),
     );
     vi.stubGlobal('fetch', fetchMock);
-    const service = createService(
-      fixture,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      resolver,
-    );
+    const service = createService(fixture, {
+      credentialAccess: resolver,
+    });
     const runId = service.start({
       taskId: fixture.taskId,
       sessionId: fixture.sessionId,
