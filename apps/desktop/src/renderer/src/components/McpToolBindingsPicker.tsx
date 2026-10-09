@@ -2,7 +2,18 @@ import type { McpConnectionSummary, McpToolBinding } from '@betterwork/agent-pro
 
 import { canToggleMcpTool, hasMcpToolBinding, setMcpToolBinding } from '../lib/mcp-selection';
 import { CheckList } from './CheckList';
+import { Disclosure } from './Disclosure';
 import { EmptyNotice } from './EmptyState';
+
+const canAddMcpTool = (
+  connection: McpConnectionSummary,
+  tool: McpConnectionSummary['tools'][number],
+): boolean =>
+  canToggleMcpTool(connection.status, false) &&
+  connection.lifecycle === 'enabled' &&
+  tool.reviewed === true &&
+  Boolean(tool.contractHash) &&
+  connection.stale !== true;
 
 /**
  * 「按连接分组的 MCP 工具勾选」的唯一结构。
@@ -29,46 +40,95 @@ export function McpToolBindingsPicker({
   if (connections.length === 0) return <EmptyNotice title="请先在设置 → MCP 中配置并检测连接。" />;
   return (
     <div className="mcp-binding-picker">
-      {connections.map((connection) => (
-        <div className="mcp-binding-group" key={connection.id}>
-          <strong>{connection.name}</strong>
-          {connection.tools.length === 0 ? (
-            <EmptyNotice title="尚未检测到工具" />
-          ) : (
-            <CheckList
-              label={`${connection.name} 的工具`}
-              options={connection.tools.map((tool) => {
-                const checked = hasMcpToolBinding(bindings, connection.id, tool.id);
-                return {
-                  id: tool.id,
-                  label: tool.name,
-                  checked,
-                  disabled:
-                    !checked &&
-                    (!canToggleMcpTool(connection.status, checked) ||
-                      connection.lifecycle !== 'enabled' ||
-                      !tool.reviewed ||
-                      !tool.contractHash ||
-                      connection.stale === true),
-                  ...(tool.description ? { hint: tool.description } : {}),
-                };
-              })}
-              onToggle={(toolId, checked) =>
-                onChange(
-                  setMcpToolBinding(
-                    bindings,
-                    connection.id,
-                    toolId,
-                    checked,
-                    connection.revisionId,
-                    connection.tools.find((tool) => tool.id === toolId)?.contractHash,
-                  ),
-                )
-              }
-            />
-          )}
-        </div>
-      ))}
+      {connections.map((connection) => {
+        const selected = (toolId: string): boolean =>
+          hasMcpToolBinding(bindings, connection.id, toolId);
+        const selectableTools = connection.tools.filter(
+          (tool) => selected(tool.id) || canAddMcpTool(connection, tool),
+        );
+        const selectedCount = selectableTools.filter((tool) => selected(tool.id)).length;
+        const allSelectableToolsSelected =
+          selectableTools.length > 0 && selectedCount === selectableTools.length;
+
+        return (
+          <div className="mcp-binding-group" key={connection.id}>
+            <div className="mcp-binding-group-header">
+              <strong>{connection.name}</strong>
+              {connection.tools.length > 0 ? (
+                <CheckList
+                  className="mcp-binding-select-all"
+                  label={`${connection.name} 的工具选择`}
+                  options={[
+                    {
+                      id: 'all-tools',
+                      label: '全部工具',
+                      checked: allSelectableToolsSelected,
+                      indeterminate: selectedCount > 0 && !allSelectableToolsSelected,
+                      disabled: selectableTools.length === 0,
+                    },
+                  ]}
+                  onToggle={(_, checked) => {
+                    if (!checked) {
+                      onChange(
+                        bindings.filter((binding) => binding.connectionId !== connection.id),
+                      );
+                      return;
+                    }
+                    const nextBindings = connection.tools.reduce<McpToolBinding[]>(
+                      (currentBindings, tool) => {
+                        if (selected(tool.id) || !canAddMcpTool(connection, tool)) {
+                          return currentBindings;
+                        }
+                        return setMcpToolBinding(
+                          currentBindings,
+                          connection.id,
+                          tool.id,
+                          true,
+                          connection.revisionId,
+                          tool.contractHash,
+                        );
+                      },
+                      [...bindings],
+                    );
+                    onChange(nextBindings);
+                  }}
+                />
+              ) : null}
+            </div>
+            {connection.tools.length === 0 ? (
+              <EmptyNotice title="尚未检测到工具" />
+            ) : (
+              <Disclosure label={`工具列表（${connection.tools.length}）`}>
+                <CheckList
+                  label={`${connection.name} 的工具`}
+                  options={connection.tools.map((tool) => {
+                    const checked = selected(tool.id);
+                    return {
+                      id: tool.id,
+                      label: tool.name,
+                      checked,
+                      disabled: !checked && !canAddMcpTool(connection, tool),
+                      ...(tool.description ? { hint: tool.description } : {}),
+                    };
+                  })}
+                  onToggle={(toolId, checked) =>
+                    onChange(
+                      setMcpToolBinding(
+                        bindings,
+                        connection.id,
+                        toolId,
+                        checked,
+                        connection.revisionId,
+                        connection.tools.find((tool) => tool.id === toolId)?.contractHash,
+                      ),
+                    )
+                  }
+                />
+              </Disclosure>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
