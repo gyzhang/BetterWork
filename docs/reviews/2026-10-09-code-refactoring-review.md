@@ -413,3 +413,12 @@ B 开始时先刷新 R17 的只读审计与安装树证据。若确认存在可�
 2026-10-09 20:58 本地终检：定向 ESLint/Prettier、typecheck、docs:check、差异空白与带批次基点的 drift:check 通过，读数已留档；结构护栏 154 条、例外 203 条保持，未修改规则或扩大例外。最终中文文档已回读；远端最新源 SHA 的 PR Gate 尚待执行。
 
 2026-10-09 21:05 最终收口：源提交 `23e451645c9a583f2aad5f5afddb83a032254e4e` 的 [macOS PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/37933802737) 成功，静态快检、文档护栏和按依赖图选择的相关测试步骤均通过；Full verify 按规则跳过。[PR #26](https://github.com/gyzhang/BetterWork/pull/26) 已 squash 合入 main，合并提交 `e7551eddb9b5a6c5dface0c502ca9a8337f8ec8b`。原 checkout 已同步 main，代码任务分支本地/远端均已清理，全程未新建 worktree；本归档仅修改 Markdown，按独立文档 PR 门禁收口。B2/R05 的代码与自动化证据完成，真实公网和安装包旅程仍待人工验收；B3/R17 与 C–F 继续保持原边界。
+
+
+## 12. B3 依赖治理实施证据
+
+2026-10-09 21:25，B3/R17 已完成兼容依赖升级与本地验证，进入 PR Gate 收口；详见[逐链处置报告](2026-10-09-dependency-governance.md)。MCP client/core 升至 2.3.1，应用 Undici 精确锁定 6.29.0，builder 26.15.3 移除嵌套 rebuild 3.x/node-gyp 9.x/tar 6.x；兼容叶依赖同步修复，既有 PPTX patch 保留。
+
+干净安装后全树审计为 16 项（12 moderate、4 high、0 critical），生产审计为 5 moderate、0 high/critical。四个 high 是同一无稳定修复版 braces 告警沿 patch-package 开发工具链传播；当前 glob 来自仓库固定 workspaces，四包未进入产品制品。其余 moderate 的 Office/构建调用条件与保留理由均逐链记录，未强制降级或隐去告警。
+
+328 项相关回归、类型/定向静态检查、生产构建、macOS arm64 未签名 DMG 和校验通过；包内 SQLite、空 PATH 下的三个 Node stdio MCP、44 项随包资源哈希及 PPTX patch 均核对。完整 verify 未自动触发，真实账号、Developer ID 安装态和用户窗口不由本批代签，C–F 仍未开工。
