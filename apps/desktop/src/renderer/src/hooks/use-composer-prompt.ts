@@ -18,12 +18,7 @@ export function useComposerPrompt({
   onPromptChange,
   onPromptSettled,
 }: UseComposerPromptOptions): ComposerPromptState {
-  const [prompt, setPrompt] = useState('');
-
-  useEffect(() => {
-    const draft = readPromptDraft();
-    setPrompt(draft);
-  }, [readPromptDraft]);
+  const [prompt, setPrompt] = useState(readPromptDraft);
 
   useEffect(() => {
     if (prompt.length === 0) return;

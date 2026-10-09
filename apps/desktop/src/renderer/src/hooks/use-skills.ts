@@ -44,14 +44,19 @@ export function useSkills(options: UseSkillsOptions): SkillsState {
   const [toast, setToast] = useState('');
   const [error, setError] = useState('');
   const requestId = useRef(0);
+  const listRequestId = useRef(0);
+  const selectedIdRef = useRef<string | undefined>(undefined);
   const dismissToast = useCallback((): void => setToast(''), []);
 
   const refresh = useCallback((): void => {
+    const nextRequestId = listRequestId.current + 1;
+    listRequestId.current = nextRequestId;
     setLoading(true);
     trackAction(
       window.betterwork.skills
         .list()
         .then((items) => {
+          if (listRequestId.current !== nextRequestId) return;
           setSkills(items);
           setSelected((current) => {
             if (!current) return current;
@@ -60,19 +65,30 @@ export function useSkills(options: UseSkillsOptions): SkillsState {
           });
         })
         .catch((error: unknown) => {
+          if (listRequestId.current !== nextRequestId) return;
           setError(describeActionError(error, '读取 Skill 列表失败，请重试。'));
         })
-        .finally(() => setLoading(false)),
+        .finally(() => {
+          if (listRequestId.current === nextRequestId) setLoading(false);
+        }),
       '刷新 Skill 列表',
     );
   }, []);
 
-  useEffect(() => refresh(), [refresh]);
+  useEffect(() => {
+    refresh();
+    return () => {
+      requestId.current += 1;
+      listRequestId.current += 1;
+    };
+  }, [refresh]);
 
   const select = useCallback((skill: SkillSummary): void => {
     const nextRequestId = requestId.current + 1;
     requestId.current = nextRequestId;
+    selectedIdRef.current = skill.id;
     setSelectedId(skill.id);
+    setSelected(undefined);
     setDetailLoading(true);
     setError('');
     trackAction(
@@ -96,8 +112,12 @@ export function useSkills(options: UseSkillsOptions): SkillsState {
   }, []);
 
   const deselect = useCallback((): void => {
+    requestId.current += 1;
+    selectedIdRef.current = undefined;
     setSelected(undefined);
     setSelectedId(undefined);
+    setDetailLoading(false);
+    setError('');
     refresh();
   }, [refresh]);
 
@@ -200,8 +220,13 @@ export function useSkills(options: UseSkillsOptions): SkillsState {
   const deleteSkill = useCallback(async (skill: SkillSummary): Promise<void> => {
     await window.betterwork.skills.delete({ skillId: skill.id });
     setSkills((current) => current.filter((item) => item.id !== skill.id));
-    setSelected(undefined);
-    setSelectedId(undefined);
+    if (selectedIdRef.current === skill.id) {
+      requestId.current += 1;
+      selectedIdRef.current = undefined;
+      setSelected(undefined);
+      setSelectedId(undefined);
+      setDetailLoading(false);
+    }
     setToast('Skill 已删除。');
   }, []);
   const saveProfile = useCallback(

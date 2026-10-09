@@ -221,6 +221,7 @@ export function App(): React.JSX.Element {
   const clearScheduleTaskContinuation = scheduleTaskContinuation.clear;
   const [pendingScheduleScopeRemoval, setPendingScheduleScopeRemoval] = useState(false);
   const materialCandidatesRequestRef = useRef(0);
+  const materialInputRequestRef = useRef(0);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [taskRuns, setTaskRuns] = useState<RunSummary[]>([]);
   const [recentTasks, setRecentTasks] = useState<RecentTaskSummary[]>([]);
@@ -228,11 +229,17 @@ export function App(): React.JSX.Element {
   const activeRunIdRef = useRef<string | undefined>(undefined);
   const runSelectionRequestRef = useRef(0);
   const taskRunsRequestRef = useRef(0);
+  const taskHistoryRequestRef = useRef(0);
+  const recentTasksRequestRef = useRef(0);
+  const discussionCheckpointsRequestRef = useRef(0);
   const evidenceRequestRef = useRef(0);
   const expertMaterialCandidatesRequestRef = useRef(0);
-  const [events, setEvents] = useState<AgentRuntimeEvent[]>([]);
   const [taskAllRuns, setTaskAllRuns] = useState<RunSummary[]>([]);
   const [taskAllEvents, setTaskAllEvents] = useState<Map<string, AgentRuntimeEvent[]>>(new Map());
+  const events = useMemo(
+    () => (activeRunId ? (taskAllEvents.get(activeRunId) ?? []) : []),
+    [activeRunId, taskAllEvents],
+  );
   const { containerRef, latestReplyRef, detached, onScroll, jumpToLatest } = useTaskScroll(
     activeTask?.id,
     taskAllEvents,
@@ -527,6 +534,7 @@ export function App(): React.JSX.Element {
     trackAction(window.betterwork.runs.list().then(setRuns), '刷新运行列表');
   }, []);
   const refreshTaskRuns = useCallback((taskId = activeTaskIdRef.current): void => {
+    const selectionId = runSelectionRequestRef.current;
     const requestId = taskRunsRequestRef.current + 1;
     taskRunsRequestRef.current = requestId;
     if (!taskId) {
@@ -535,7 +543,11 @@ export function App(): React.JSX.Element {
     }
     trackAction(
       window.betterwork.runs.list({ taskId }).then((loaded) => {
-        if (taskRunsRequestRef.current === requestId && activeTaskIdRef.current === taskId) {
+        if (
+          taskRunsRequestRef.current === requestId &&
+          runSelectionRequestRef.current === selectionId &&
+          activeTaskIdRef.current === taskId
+        ) {
           setTaskRuns(loaded);
         }
       }),
@@ -544,10 +556,17 @@ export function App(): React.JSX.Element {
   }, []);
   const refreshTasks = useCallback(
     (workspaceId = workspaceIdRef.current): void => {
+      const requestId = recentTasksRequestRef.current + 1;
+      recentTasksRequestRef.current = requestId;
       trackAction(
-        window.betterwork.tasks
-          .list(workspaceId ? { workspaceId } : undefined)
-          .then(setRecentTasks),
+        window.betterwork.tasks.list(workspaceId ? { workspaceId } : undefined).then((loaded) => {
+          if (
+            recentTasksRequestRef.current === requestId &&
+            workspaceIdRef.current === workspaceId
+          ) {
+            setRecentTasks(loaded);
+          }
+        }),
         '刷新最近任务',
       );
       // 侧栏分组与最近任务是同一批事实的两种切法，一起刷新才不会一处新一处旧。
@@ -556,6 +575,7 @@ export function App(): React.JSX.Element {
     [refreshGroups],
   );
   const refreshEvidence = useCallback((taskId = activeTaskIdRef.current): void => {
+    const selectionId = runSelectionRequestRef.current;
     const requestId = evidenceRequestRef.current + 1;
     evidenceRequestRef.current = requestId;
     if (!taskId) {
@@ -564,7 +584,11 @@ export function App(): React.JSX.Element {
     }
     trackAction(
       window.betterwork.evidence.list({ taskId }).then((loaded) => {
-        if (evidenceRequestRef.current === requestId && activeTaskIdRef.current === taskId) {
+        if (
+          evidenceRequestRef.current === requestId &&
+          runSelectionRequestRef.current === selectionId &&
+          activeTaskIdRef.current === taskId
+        ) {
           setEvidence(loaded);
         }
       }),
@@ -572,12 +596,23 @@ export function App(): React.JSX.Element {
     );
   }, []);
   const refreshDiscussionCheckpoints = useCallback((taskId = activeTaskIdRef.current): void => {
+    const selectionId = runSelectionRequestRef.current;
+    const requestId = discussionCheckpointsRequestRef.current + 1;
+    discussionCheckpointsRequestRef.current = requestId;
     if (!taskId) {
       setDiscussionCheckpoints([]);
       return;
     }
     trackAction(
-      window.betterwork.discussionCheckpoints.list({ taskId }).then(setDiscussionCheckpoints),
+      window.betterwork.discussionCheckpoints.list({ taskId }).then((loaded) => {
+        if (
+          discussionCheckpointsRequestRef.current === requestId &&
+          runSelectionRequestRef.current === selectionId &&
+          activeTaskIdRef.current === taskId
+        ) {
+          setDiscussionCheckpoints(loaded);
+        }
+      }),
       '刷新讨论节点',
     );
   }, []);
@@ -585,9 +620,14 @@ export function App(): React.JSX.Element {
     trackAction(window.betterwork.artifacts.list().then(setArtifacts), '刷新成果列表');
   }, []);
   const loadAllTaskRuns = useCallback((taskId: string): void => {
+    const requestId = taskHistoryRequestRef.current + 1;
+    taskHistoryRequestRef.current = requestId;
+    const isCurrent = (): boolean =>
+      taskHistoryRequestRef.current === requestId && activeTaskIdRef.current === taskId;
     trackAction(
       (async () => {
         const allRuns = await window.betterwork.runs.list({ taskId });
+        if (!isCurrent()) return;
         const ordered = [...allRuns].sort((a, b) => a.createdAt - b.createdAt);
         const eventsMap = new Map<string, AgentRuntimeEvent[]>();
         await Promise.all(
@@ -596,9 +636,19 @@ export function App(): React.JSX.Element {
             eventsMap.set(run.id, runEvents);
           }),
         );
-        if (activeTaskIdRef.current !== taskId) return;
-        setTaskAllRuns(ordered);
-        setTaskAllEvents(eventsMap);
+        if (!isCurrent()) return;
+        setTaskAllRuns((current) => {
+          const byId = new Map(current.map((run) => [run.id, run]));
+          for (const run of ordered) byId.set(run.id, run);
+          return [...byId.values()].sort((left, right) => left.createdAt - right.createdAt);
+        });
+        setTaskAllEvents((current) => {
+          const merged = new Map(current);
+          for (const [runId, snapshot] of eventsMap) {
+            merged.set(runId, mergeRunEvents(snapshot, current.get(runId) ?? []));
+          }
+          return merged;
+        });
       })(),
       '加载任务全部执行记录',
     );
@@ -619,14 +669,16 @@ export function App(): React.JSX.Element {
     );
     trackAction(window.betterwork.workspace.listAll().then(setAllWorkspaces), '加载工作空间列表');
     return window.betterwork.runs.onEvent((event) => {
-      setEvents((current) =>
-        event.runId === activeRunIdRef.current ? [...current, event] : current,
-      );
       setTaskAllEvents((prev) => {
         const existing = prev.get(event.runId);
-        if (!existing) return prev;
+        if (
+          !existing &&
+          event.runId !== activeRunIdRef.current &&
+          !(event.type === 'run.started' && event.taskId === activeTaskIdRef.current)
+        )
+          return prev;
         const next = new Map(prev);
-        next.set(event.runId, [...existing, event]);
+        next.set(event.runId, mergeRunEvents([event], existing ?? []));
         return next;
       });
       if (
@@ -673,12 +725,8 @@ export function App(): React.JSX.Element {
     return undefined;
   }, [taskAllRuns, taskAllEvents]);
   const isRunning =
-    activeRun?.status === 'running' ||
-    events.at(-1)?.type === 'run.started' ||
-    (!!activeRunId &&
-      !events.some((event) =>
-        ['run.completed', 'run.failed', 'run.cancelled'].includes(event.type),
-      ));
+    activeRunId !== undefined &&
+    !events.some((event) => ['run.completed', 'run.failed', 'run.cancelled'].includes(event.type));
   const activityGroups = useMemo(() => deriveActivityGroups(events), [events]);
   const currentTaskArtifacts = artifacts.filter((artifact) => artifact.taskId === activeTask?.id);
 
@@ -686,6 +734,7 @@ export function App(): React.JSX.Element {
     (options: { preservePrompt?: boolean } = {}): void => {
       clearScheduleTaskContinuation();
       runSelectionRequestRef.current += 1;
+      taskHistoryRequestRef.current += 1;
       activeRunIdRef.current = undefined;
       activeTaskIdRef.current = undefined;
       setActiveRunId(undefined);
@@ -705,10 +754,10 @@ export function App(): React.JSX.Element {
       setMemoryCaptureError('');
       setMaterialCandidates([]);
       setMaterialPickerKind(undefined);
+      setMaterialsLoading(false);
       setMaterialPickerError('');
       setActionError('');
       setEvidence([]);
-      setEvents([]);
       if (!options.preservePrompt) replaceComposerPrompt('');
       setArtifactNote(undefined);
       setView('work');
@@ -798,17 +847,28 @@ export function App(): React.JSX.Element {
     [skills.skills],
   );
   const refreshMaterialCandidates = useCallback((taskId: string): void => {
+    const selectionId = runSelectionRequestRef.current;
     const requestId = materialCandidatesRequestRef.current + 1;
     materialCandidatesRequestRef.current = requestId;
     trackAction(
-      window.betterwork.materials.listCandidates({ taskId }).then((candidates) => {
-        if (
-          materialCandidatesRequestRef.current === requestId &&
-          activeTaskIdRef.current === taskId
-        ) {
-          setMaterialCandidates(candidates);
-        }
-      }),
+      window.betterwork.materials
+        .listCandidates({ taskId })
+        .then((candidates) => {
+          if (
+            materialCandidatesRequestRef.current === requestId &&
+            runSelectionRequestRef.current === selectionId &&
+            activeTaskIdRef.current === taskId
+          ) {
+            setMaterialCandidates(candidates);
+          }
+        })
+        .finally(() => {
+          if (
+            materialCandidatesRequestRef.current === requestId &&
+            runSelectionRequestRef.current === selectionId
+          )
+            setMaterialsLoading(false);
+        }),
       '加载任务材料候选',
     );
   }, []);
@@ -878,13 +938,25 @@ export function App(): React.JSX.Element {
     setTaskMaterials(materials);
     setMaterialPickerError('');
   }, []);
+  const dismissMaterialPicker = useCallback((): void => {
+    materialCandidatesRequestRef.current += 1;
+    setMaterialPickerKind(undefined);
+    setMaterialsLoading(false);
+  }, []);
   const requestMaterials = useCallback(
     (kind: 'file' | 'knowledge' | 'artifact'): void => {
       if (!workspace) {
         setMaterialPickerError('工作空间尚未准备好，请稍后重试。');
         return;
       }
+      const selectionId = runSelectionRequestRef.current;
+      const workspaceId = workspace.id;
+      const isSameScope = (): boolean =>
+        runSelectionRequestRef.current === selectionId && workspaceIdRef.current === workspaceId;
       if (kind === 'file') {
+        const requestId = (materialInputRequestRef.current += 1);
+        const isCurrent = (): boolean =>
+          isSameScope() && materialInputRequestRef.current === requestId;
         setMaterialPickerKind(undefined);
         reportAction(
           window.betterwork.materials
@@ -892,7 +964,7 @@ export function App(): React.JSX.Element {
               ...(activeTask?.id ? { taskId: activeTask.id } : { workspaceId: workspace.id }),
             })
             .then((snapshot) => {
-              if (!snapshot) return;
+              if (!isCurrent() || !snapshot) return;
               const candidate = inputSnapshotCandidate(snapshot);
               const selection: TaskMaterialSelection = {
                 reference: {
@@ -925,11 +997,16 @@ export function App(): React.JSX.Element {
               ]);
               setMaterialPickerError('');
             }),
-          setActionError,
+          (message) => {
+            if (isCurrent()) setActionError(message);
+          },
           '无法添加工作空间文件，请重试。',
         );
         return;
       }
+      const requestId = (materialCandidatesRequestRef.current += 1);
+      const isCurrent = (): boolean =>
+        isSameScope() && materialCandidatesRequestRef.current === requestId;
       setMaterialPickerKind(kind);
       setMaterialsLoading(true);
       setMaterialPickerError('');
@@ -938,11 +1015,16 @@ export function App(): React.JSX.Element {
           .listCandidates({
             ...(activeTask?.id ? { taskId: activeTask.id } : { workspaceId: workspace.id }),
           })
-          .then(setMaterialCandidates)
+          .then((candidates) => {
+            if (isCurrent()) setMaterialCandidates(candidates);
+          })
           .catch((error: unknown) => {
+            if (!isCurrent()) return;
             setMaterialPickerError(error instanceof Error ? error.message : '候选材料加载失败。');
           })
-          .finally(() => setMaterialsLoading(false)),
+          .finally(() => {
+            if (isCurrent()) setMaterialsLoading(false);
+          }),
         setActionError,
         '无法加载候选材料，请重试。',
       );
@@ -951,6 +1033,10 @@ export function App(): React.JSX.Element {
   );
   const startRun = async (prompt: string): Promise<void> => {
     if (startingRef.current || isRunning || !prompt.trim() || !workspace) return;
+    const selectionAtStart = runSelectionRequestRef.current;
+    const isCurrentStart = (): boolean =>
+      runSelectionRequestRef.current === selectionAtStart &&
+      workspaceIdRef.current === workspace.id;
     startingRef.current = true;
     setIsStarting(true);
     setActionError('');
@@ -964,8 +1050,10 @@ export function App(): React.JSX.Element {
           goal,
         });
         task = { id: created.task.id, sessionId: created.sessionId, title: created.task.title };
-        activeTaskIdRef.current = task.id;
-        setActiveTask(task);
+        if (isCurrentStart()) {
+          activeTaskIdRef.current = task.id;
+          setActiveTask(task);
+        }
       }
       const contextResult = await window.betterwork.taskContexts.save({
         taskId: task.id,
@@ -989,7 +1077,7 @@ export function App(): React.JSX.Element {
         excludedMemoryIds,
         mcpToolBindings,
       });
-      setTaskContext(contextResult.context);
+      if (isCurrentStart()) setTaskContext(contextResult.context);
       const result = await window.betterwork.runs.start({
         taskId: task.id,
         sessionId: task.sessionId,
@@ -997,10 +1085,13 @@ export function App(): React.JSX.Element {
         taskContextRevisionId: contextResult.context.id,
         expectedTaskContextRevision: contextResult.context.revision,
       });
+      refreshRuns();
+      refreshTasks();
+      if (!isCurrentStart()) return;
       runSelectionRequestRef.current += 1;
+      const selectionId = runSelectionRequestRef.current;
       activeRunIdRef.current = result.runId;
       setActiveRunId(result.runId);
-      setEvents([]);
       replaceComposerPrompt('');
       setArtifactNote(undefined);
       setContextTab('process');
@@ -1012,15 +1103,32 @@ export function App(): React.JSX.Element {
         status: 'running',
         createdAt: Date.now(),
       };
-      setTaskAllRuns((prev) => [...prev, newRun]);
+      setTaskAllRuns((prev) =>
+        prev.some((run) => run.id === result.runId) ? prev : [...prev, newRun],
+      );
       setTaskAllEvents((prev) => {
         const next = new Map(prev);
-        next.set(result.runId, []);
+        if (!next.has(result.runId)) next.set(result.runId, []);
         return next;
       });
-      refreshRuns();
+      trackAction(
+        window.betterwork.runs.listEvents({ runId: result.runId }).then((snapshot) => {
+          if (
+            runSelectionRequestRef.current !== selectionId ||
+            activeRunIdRef.current !== result.runId
+          )
+            return;
+          setTaskAllEvents((current) => {
+            const next = new Map(current);
+            next.set(result.runId, mergeRunEvents(snapshot, current.get(result.runId) ?? []));
+            return next;
+          });
+        }),
+        '恢复新执行的事件',
+      );
       refreshTaskRuns(task.id);
-      refreshTasks();
+      refreshEvidence(task.id);
+      refreshDiscussionCheckpoints(task.id);
     } finally {
       startingRef.current = false;
       setIsStarting(false);
@@ -1029,18 +1137,39 @@ export function App(): React.JSX.Element {
   const createDiscussionCheckpoint = async (
     input: CreateDiscussionCheckpointRequest,
   ): Promise<void> => {
+    const selectionId = runSelectionRequestRef.current;
     try {
       const result = await window.betterwork.discussionCheckpoints.create(input);
+      if (
+        selectionId !== runSelectionRequestRef.current ||
+        activeTaskIdRef.current !== input.taskId
+      )
+        return;
       setDiscussionCheckpoints((current) => [...current, result.checkpoint]);
     } catch (error: unknown) {
+      if (
+        selectionId !== runSelectionRequestRef.current ||
+        activeTaskIdRef.current !== input.taskId
+      )
+        return;
       setActionError(describeActionError(error, '无法保存讨论节点，请重试。'));
       throw error;
     }
   };
   const selectRun = async (run: RunSummary): Promise<void> => {
+    if (activeTaskIdRef.current !== run.taskId) {
+      taskHistoryRequestRef.current += 1;
+      setTaskAllRuns([]);
+      setTaskAllEvents(new Map());
+      scheduleTaskContinuation.clear();
+      setDiscussionCheckpoints([]);
+      setEvidence([]);
+    }
     setTaskBindings([]);
     setActiveExpert(undefined);
     setTaskContext(undefined);
+    setMaterialPickerKind(undefined);
+    setMaterialsLoading(false);
     const requestId = runSelectionRequestRef.current + 1;
     runSelectionRequestRef.current = requestId;
     activeRunIdRef.current = run.id;
@@ -1049,12 +1178,15 @@ export function App(): React.JSX.Element {
     setActiveTask({ id: run.taskId, sessionId: run.sessionId, title: run.prompt.slice(0, 80) });
     replaceComposerPrompt('');
     setArtifactNote(undefined);
-    setEvents([]);
     await loadTaskContext(run.taskId, requestId);
     if (runSelectionRequestRef.current !== requestId) return;
     const snapshot = await window.betterwork.runs.listEvents({ runId: run.id });
     if (runSelectionRequestRef.current !== requestId) return;
-    setEvents((current) => mergeRunEvents(snapshot, current));
+    setTaskAllEvents((current) => {
+      const next = new Map(current);
+      next.set(run.id, mergeRunEvents(snapshot, current.get(run.id) ?? []));
+      return next;
+    });
     refreshTaskRuns(run.taskId);
     refreshEvidence(run.taskId);
     refreshDiscussionCheckpoints(run.taskId);
@@ -1063,9 +1195,14 @@ export function App(): React.JSX.Element {
   };
   const selectTask = async (task: RecentTaskSummary): Promise<TaskContextRevision | undefined> => {
     if (activeTaskIdRef.current !== task.id) scheduleTaskContinuation.clear();
+    taskHistoryRequestRef.current += 1;
     setTaskAllRuns([]);
     setTaskAllEvents(new Map());
     setTaskRuns([]);
+    setDiscussionCheckpoints([]);
+    setEvidence([]);
+    setMaterialPickerKind(undefined);
+    setMaterialsLoading(false);
     setTaskBindings([]);
     setActiveExpert(undefined);
     setTaskContext(undefined);
@@ -1076,7 +1213,6 @@ export function App(): React.JSX.Element {
     setActiveTask({ id: task.id, sessionId: task.sessionId, title: task.title });
     replaceComposerPrompt('');
     setArtifactNote(undefined);
-    setEvents([]);
     const selectionId = runSelectionRequestRef.current;
     const loadedContext = await loadTaskContext(task.id, selectionId);
     if (selectionId !== runSelectionRequestRef.current) return undefined;
@@ -1105,7 +1241,11 @@ export function App(): React.JSX.Element {
     setActiveRunId(latest.id);
     const snapshot = await window.betterwork.runs.listEvents({ runId: latest.id });
     if (selectionId !== runSelectionRequestRef.current) return undefined;
-    setEvents((current) => mergeRunEvents(snapshot, current));
+    setTaskAllEvents((current) => {
+      const next = new Map(current);
+      next.set(latest.id, mergeRunEvents(snapshot, current.get(latest.id) ?? []));
+      return next;
+    });
     return loadedContext;
   };
   const saveCurrentArtifact = async (): Promise<void> => {
@@ -1158,7 +1298,14 @@ export function App(): React.JSX.Element {
     // MI08 AC4：读取期间用户可能已切走或正在写别的草稿——迟到响应不得改动当前任务，
     // 读取失败也要保留原任务与草稿而不是先清空再报错。
     const requestId = (startFromVersionRequest.current += 1);
-    const taskAtRequest = activeTask?.id;
+    const selectionId = runSelectionRequestRef.current;
+    const workspaceId = workspaceIdRef.current;
+    const promptAtRequest = composerPromptRef.current;
+    const isCurrent = (): boolean =>
+      requestId === startFromVersionRequest.current &&
+      selectionId === runSelectionRequestRef.current &&
+      workspaceIdRef.current === workspaceId &&
+      composerPromptRef.current === promptAtRequest;
     let executor: Awaited<ReturnType<typeof window.betterwork.artifacts.getVersionExecutor>>;
     try {
       executor = await window.betterwork.artifacts.getVersionExecutor({
@@ -1167,10 +1314,10 @@ export function App(): React.JSX.Element {
       });
     } catch (error: unknown) {
       // 读取失败：原任务与草稿保持不动，失败由调用方的 reportAction 呈现。
-      if (requestId !== startFromVersionRequest.current) return;
+      if (!isCurrent()) return;
       throw new Error('无法确认该版本的来源执行身份，原任务保持不变。', { cause: error });
     }
-    if (requestId !== startFromVersionRequest.current || activeTask?.id !== taskAtRequest) return;
+    if (!isCurrent()) return;
     // MI08：默认身份取自这个精确版本的来源 Run 快照，不读旧 Task 的当前草稿，
     // 也不复制来源任务的技能/模型/MCP 绑定；配置已更新时先按当前版本使用并说明。
     let sourceExpert: { id: string; revisionId: string; name: string } | undefined;
@@ -1558,6 +1705,7 @@ export function App(): React.JSX.Element {
             <div className="workspace">
               {activeTask && (
                 <DiscussionCheckpointPanel
+                  key={activeTask.id}
                   taskId={activeTask.id}
                   {...(activeRunId ? { runId: activeRunId } : {})}
                   checkpoints={discussionCheckpoints}
@@ -1792,7 +1940,7 @@ export function App(): React.JSX.Element {
                 {...(materialPickerKind ? { materialPickerKind } : {})}
                 {...(materialPickerError ? { materialPickerError } : {})}
                 onRequestMaterials={requestMaterials}
-                onDismissMaterialPicker={() => setMaterialPickerKind(undefined)}
+                onDismissMaterialPicker={dismissMaterialPicker}
                 onCommitMaterials={commitTaskMaterials}
                 onManageMaterials={() => {
                   setContextTab('sources');

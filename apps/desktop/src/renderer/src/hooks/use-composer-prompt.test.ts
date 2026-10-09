@@ -11,6 +11,25 @@ afterEach(() => {
 });
 
 describe('useComposerPrompt', () => {
+  it('首次渲染即提供已有草稿，重新挂载不经历空草稿帧', () => {
+    const renderedPrompts: string[] = [];
+    const options = {
+      readPromptDraft: () => '待继续的任务草稿',
+      onPromptChange: vi.fn(),
+      onPromptSettled: vi.fn(),
+    };
+    const mount = () =>
+      renderHook(() => {
+        const state = useComposerPrompt(options);
+        renderedPrompts.push(state.prompt);
+        return state;
+      });
+    const first = mount();
+    first.unmount();
+    mount();
+    expect(renderedPrompts.every((prompt) => prompt === '待继续的任务草稿')).toBe(true);
+  });
+
   it('保留已有草稿，并在最后一次输入停顿 300 毫秒后通知预览', async () => {
     vi.useFakeTimers();
     let draft = '沿用现有草稿';

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { SkillDetail, SkillSummary } from '@betterwork/agent-protocol';
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useSkills } from './use-skills';
@@ -46,21 +46,109 @@ const detailOf = (id: string): SkillDetail => ({
 const install = (
   list: () => Promise<SkillSummary[]> = async () => [summary],
   get: (input: { id: string }) => Promise<SkillDetail | null> = async () => detailOf(summary.id),
+  remove: () => Promise<{ deleted: boolean }> = async () => ({ deleted: true }),
 ): void => {
   Object.defineProperty(window, 'betterwork', {
     configurable: true,
-    value: { skills: { list: vi.fn(list), get: vi.fn(get) } },
+    value: { skills: { list: vi.fn(list), get: vi.fn(get), delete: vi.fn(remove) } },
   });
 };
 
 const renderSkills = () => renderHook(() => useSkills({ onTestRunRequested: () => undefined }));
 
 afterEach(() => {
+  cleanup();
   Reflect.deleteProperty(window, 'betterwork');
   vi.restoreAllMocks();
 });
 
 describe('useSkills 的取数收口', () => {
+  it.each(['success', 'failure'])('取消选择后丢弃迟到的详情 %s', async (outcome) => {
+    let resolveDetail: ((detail: SkillDetail) => void) | undefined;
+    let rejectDetail: ((error: Error) => void) | undefined;
+    install(
+      undefined,
+      () =>
+        new Promise<SkillDetail>((resolve, reject) => {
+          resolveDetail = resolve;
+          rejectDetail = reject;
+        }),
+    );
+    const { result } = renderSkills();
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.select(summary));
+    expect(result.current.detailLoading).toBe(true);
+    act(() => result.current.deselect());
+    await act(async () => {
+      if (outcome === 'success') resolveDetail?.(detailOf(summary.id));
+      else rejectDetail?.(new Error('已取消的详情请求失败'));
+    });
+    expect(result.current.selected).toBeUndefined();
+    expect(result.current.selectedId).toBeUndefined();
+    expect(result.current.detailLoading).toBe(false);
+    expect(result.current.error).toBe('');
+  });
+
+  it.each(['old-first', 'new-first'])('列表读取按 %s 返回时只采用最新请求', async (order) => {
+    let resolveFirst: ((items: SkillSummary[]) => void) | undefined;
+    let resolveSecond: ((items: SkillSummary[]) => void) | undefined;
+    let calls = 0;
+    install(
+      () =>
+        new Promise<SkillSummary[]>((resolve) => {
+          calls += 1;
+          if (calls === 1) resolveFirst = resolve;
+          else resolveSecond = resolve;
+        }),
+    );
+    const { result } = renderSkills();
+    act(() => result.current.refresh());
+    const currentSummary = { ...summary, name: '更新后的技能' };
+    if (order === 'old-first') {
+      await act(async () => resolveFirst?.([summary]));
+      expect(result.current.loading).toBe(true);
+      expect(result.current.skills).toEqual([]);
+    }
+    await act(async () => resolveSecond?.([currentSummary]));
+    if (order === 'new-first') await act(async () => resolveFirst?.([summary]));
+    expect(result.current.skills).toEqual([currentSummary]);
+    expect(result.current.loading).toBe(false);
+  });
+
+  it.each([false, true])(
+    '删除技能后迟到的详情不能恢复它，保留新选择=%s',
+    async (switchSelection) => {
+      let resolveDetail: ((detail: SkillDetail) => void) | undefined;
+      let resolveDeletion: ((receipt: { deleted: boolean }) => void) | undefined;
+      install(
+        undefined,
+        ({ id }) =>
+          id === summary.id
+            ? new Promise<SkillDetail>((resolve) => {
+                resolveDetail = resolve;
+              })
+            : Promise.resolve(detailOf(id)),
+        () =>
+          new Promise((resolve) => {
+            resolveDeletion = resolve;
+          }),
+      );
+      const { result } = renderSkills();
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.select(summary));
+      const deletion = result.current.deleteSkill(summary);
+      if (switchSelection) act(() => result.current.select({ ...summary, id: 'skill-2' }));
+      await act(async () => {
+        resolveDeletion?.({ deleted: true });
+        await deletion;
+        resolveDetail?.(detailOf(summary.id));
+      });
+      expect(result.current.selectedId).toBe(switchSelection ? 'skill-2' : undefined);
+      expect(result.current.selected?.id).toBe(switchSelection ? 'skill-2' : undefined);
+      expect(result.current.detailLoading).toBe(false);
+    },
+  );
+
   it('列表读取失败时停下转圈，并把这句话交给可见出口', async () => {
     install(async () => {
       throw new Error('channel rejected');
