@@ -27,7 +27,6 @@ import type {
 import {
   countCodePoints,
   IpcChannel,
-  materialReferenceSchema,
   memoryRecallPolicyV2,
   TASK_CONTINUITY_RECENT_PROMPTS_MAX,
 } from '@betterwork/agent-protocol';
@@ -93,7 +92,6 @@ import {
   auditMaterialFacts,
   createMaterialFactLedger,
   type MaterialFactLedger,
-  recordMaterialFacts,
 } from './material-fact-policy';
 import type { McpClientService } from './mcp-client-service';
 import { withRunMemoryAudit } from './memory-dispatch-gate';
@@ -106,6 +104,7 @@ import {
 } from './memory-recall-service';
 import { ModelProviderFactory, type ResolvedLanguageModel } from './model-provider-factory';
 import type { NotificationService } from './notification-service';
+import { RunToolResultAdapter } from './run-tool-result-adapter';
 import { ScheduleMaterialResolver } from './schedule-material-resolver';
 import { createQianfanSearchClient } from './search-engine-service';
 import type { ResolvedToolchainSnapshots } from './skill-command-runtime';
@@ -178,15 +177,6 @@ const markdownArtifactRequestPattern =
 const requestsMarkdownArtifact = (prompt: string): boolean =>
   markdownArtifactRequestPattern.test(prompt) &&
   !/(?:不要|无需|不必|不需要).{0,12}(?:保存|生成|写入|创建|导出|产出|输出|交付)/u.test(prompt);
-
-const serializeToolOutput = (output: unknown): string => {
-  if (typeof output === 'string') return output;
-  try {
-    return JSON.stringify(output) ?? 'undefined';
-  } catch (error) {
-    return `MCP 工具结果无法序列化：${describeError(error)}`;
-  }
-};
 
 const officeFormatFromSnapshot = (format: string): OfficeFormat => {
   if (format === 'pptx' || format === 'xlsx' || format === 'csv') return format;
@@ -395,6 +385,7 @@ export class RunService {
   private readonly engine = new ReActAgentEngine();
   private readonly fallbackModel = new FakeModelProvider();
   private knowledgeAuditInstance: KnowledgeAudit | undefined;
+  private readonly toolResultAdapter: RunToolResultAdapter;
   private artifactDeclarationsInstance: ArtifactDeclarationService | undefined;
 
   /** 审计服务惰性装配：使用构造器已接入的具名依赖。 */
@@ -435,6 +426,10 @@ export class RunService {
     this.knowledgeSearchService = ports.knowledgeSearchService;
     this.documentExtractor = ports.documentExtractor;
     this.onScheduledRunTerminal = ports.onScheduledRunTerminal;
+    this.toolResultAdapter = new RunToolResultAdapter({
+      store: this.store,
+      getMcpBinding: (runId, toolName) => this.mcpClientService?.getRunToolBinding(runId, toolName),
+    });
   }
 
   start(input: StartRunRequest, scheduledAssociation?: ScheduledRunAssociation): string {
@@ -1444,10 +1439,14 @@ export class RunService {
     const active = this.activeRuns.get(event.runId);
     if (active) this.recordToolProgress(active, event);
     if (event.type === 'tool.completed' && active) {
-      this.recordMarkdownWrite(active, event);
-      this.recordMaterialFactsFromTool(active, event);
-      this.persistMaterialReads(event, active.toolNames);
-      this.persistEvidence(active.taskId, event, active.toolNames);
+      this.toolResultAdapter.apply({
+        runId: event.runId,
+        taskId: active.taskId,
+        toolName: active.toolNames.get(event.toolCallId),
+        output: event.output,
+        materialFacts: active.materialFacts,
+        markdownWrites: active.markdownWrites,
+      });
     }
     this.broadcast(event);
     if (isTerminalEvent(event) && active) {
@@ -1465,71 +1464,6 @@ export class RunService {
         this.notifyTerminal(active, event);
       }
     }
-  }
-
-  private recordMaterialFactsFromTool(
-    active: ActiveRun,
-    event: Extract<AgentRuntimeEvent, { type: 'tool.completed' }>,
-  ): void {
-    const toolName = active.toolNames.get(event.toolCallId);
-    if (!toolName) return;
-    if (toolName === 'read_text_file' && isReadTextFileOutput(event.output)) {
-      if (event.output.scope === 'run-work-file') return;
-      recordMaterialFacts(active.materialFacts, {
-        kind: 'material-read',
-        content:
-          event.output.sections?.map((section) => section.content).join('\n') ??
-          event.output.content,
-      });
-      return;
-    }
-    if (toolName === 'read_artifact' && isReadArtifactOutput(event.output)) {
-      recordMaterialFacts(active.materialFacts, {
-        kind: 'material-read',
-        content: event.output.content,
-      });
-      return;
-    }
-    if (toolName === 'read_office_material' && isOfficeMaterialReadOutput(event.output)) {
-      recordMaterialFacts(active.materialFacts, {
-        kind: 'material-read',
-        content: JSON.stringify(
-          event.output.sections.map((section) => officeFactValues(section.content)),
-        ),
-      });
-      return;
-    }
-    if (toolName === 'knowledge_search' && isKnowledgeSearchOutput(event.output)) {
-      recordMaterialFacts(active.materialFacts, {
-        kind: 'material-read',
-        content: event.output.results.map((result) => result.excerpt).join('\n'),
-      });
-      return;
-    }
-    if (toolName === 'read_knowledge' && isKnowledgeReadOutput(event.output)) {
-      // 事实池只用工具实际返回的正文片段（契约 §5.2）。
-      recordMaterialFacts(active.materialFacts, {
-        kind: 'material-read',
-        content: event.output.parts.map((part) => part.text).join('\n'),
-      });
-      return;
-    }
-    if (toolName === 'analyze_business_metrics') {
-      recordMaterialFacts(active.materialFacts, {
-        kind: 'deterministic-result',
-        content: serializeToolOutput(event.output),
-      });
-    }
-  }
-
-  private recordMarkdownWrite(
-    active: ActiveRun,
-    event: Extract<AgentRuntimeEvent, { type: 'tool.completed' }>,
-  ): void {
-    if (active.toolNames.get(event.toolCallId) !== 'task_write_file') return;
-    if (!isTaskFileWriteOutput(event.output)) return;
-    if (path.extname(event.output.path).toLowerCase() !== '.md') return;
-    active.markdownWrites.set(event.output.path, event.output.contentHash);
   }
 
   /**
@@ -1624,225 +1558,6 @@ export class RunService {
       },
       { systemNotify: true },
     );
-  }
-
-  private assertAuditedKnowledgeEvidence(runId: string, evidenceIds: (string | undefined)[]): void {
-    for (const evidenceId of evidenceIds) {
-      if (!evidenceId) continue;
-      if (this.store.evidence.get(evidenceId)?.runId !== runId) {
-        throw new Error('Knowledge evidence does not belong to this run');
-      }
-    }
-  }
-
-  private persistEvidence(
-    taskId: string,
-    event: Extract<AgentRuntimeEvent, { type: 'tool.completed' }>,
-    toolNames: Map<string, string>,
-  ): void {
-    const toolName = toolNames.get(event.toolCallId);
-    if (toolName === 'knowledge_search' && isKnowledgeSearchOutput(event.output)) {
-      // 搜索回调已在同事务内落审计；通用消费者只核验归属，不再第二次插入。
-      this.assertAuditedKnowledgeEvidence(
-        event.runId,
-        event.output.results.map((result) => result.evidenceId),
-      );
-      return;
-    }
-    if (toolName === 'read_knowledge' && isKnowledgeReadOutput(event.output)) {
-      this.assertAuditedKnowledgeEvidence(
-        event.runId,
-        event.output.parts.map((part) => part.evidenceId),
-      );
-      return;
-    }
-    if (toolName === 'web_search' && isWebSearchOutput(event.output)) {
-      for (const result of event.output.results) {
-        if (!result.url) continue;
-        this.store.evidence.saveWeb({
-          taskId,
-          runId: event.runId,
-          sourceUri: result.url,
-          title: result.title,
-          locator: result.site || '网页',
-          excerpt: result.snippet,
-          contentHash: createHash('sha256')
-            .update(`${result.url}\n${result.snippet}`)
-            .digest('hex'),
-        });
-      }
-    }
-    if (toolName === 'web_fetch' && isWebFetchOutput(event.output)) {
-      this.store.evidence.saveWeb({
-        taskId,
-        runId: event.runId,
-        sourceUri: event.output.url,
-        title: event.output.title,
-        locator: `${event.output.contentType} · HTTP ${event.output.status}`,
-        excerpt: event.output.content.slice(0, 2_000),
-        contentHash: createHash('sha256')
-          .update(`${event.output.url}\n${event.output.content}`)
-          .digest('hex'),
-      });
-      return;
-    }
-    if (toolName?.startsWith('mcp_')) {
-      const binding = this.mcpClientService?.getRunToolBinding(event.runId, toolName);
-      if (!binding) return;
-      const sourceUri = `mcp:${binding.connectionId}/${binding.toolId}`;
-      const excerpt = serializeToolOutput(event.output).slice(0, 2_000);
-      this.store.evidence.saveMcp({
-        taskId,
-        runId: event.runId,
-        sourceUri,
-        title: toolName,
-        locator: `MCP 工具结果；配置修订 ${binding.connectionRevisionId ?? 'legacy'}；合同 ${binding.contractHash ?? 'legacy'}`,
-        excerpt,
-        contentHash: createHash('sha256').update(`${sourceUri}\n${excerpt}`).digest('hex'),
-      });
-    }
-  }
-
-  private persistMaterialReads(
-    event: Extract<AgentRuntimeEvent, { type: 'tool.completed' }>,
-    toolNames: Map<string, string>,
-  ): void {
-    const snapshot = this.store.runContextSnapshots.get(event.runId);
-    if (!snapshot) return;
-    const toolName = toolNames.get(event.toolCallId);
-    if (toolName === 'knowledge_search' || toolName === 'read_knowledge') {
-      // 精确足迹由 KnowledgeAudit 在工具执行事务内写入，这里不再重复记录。
-      return;
-    }
-    if (toolName === 'read_text_file' && isReadTextFileOutput(event.output)) {
-      const output = event.output;
-      if (output.scope === 'run-work-file') return;
-      const exactMaterial = output.material;
-      const material = exactMaterial
-        ? snapshot.materials.find((selection) =>
-            sameMaterialReference(selection.reference, exactMaterial),
-          )?.reference
-        : snapshot.materials
-            .filter((selection) => selection.reference.kind === 'workspace-input-snapshot')
-            .map((selection) => selection.reference)
-            .find((reference) => {
-              if (reference.kind !== 'workspace-input-snapshot') return false;
-              const snapshotRecord = this.store.inputSnapshots.get(reference.snapshotId);
-              return (
-                snapshotRecord !== undefined &&
-                path.normalize(snapshotRecord.sourcePath) === path.normalize(output.path)
-              );
-            });
-      if (
-        material?.kind === 'workspace-input-snapshot' &&
-        (!output.contentHash || output.contentHash === material.contentHash)
-      ) {
-        if (output.sections) {
-          if (output.sections.length === 0) {
-            this.saveMaterialRead(
-              event.runId,
-              material,
-              'parse',
-              'document',
-              output.contentHash ?? material.contentHash,
-              '',
-            );
-            return;
-          }
-          for (const section of output.sections) {
-            this.saveMaterialRead(
-              event.runId,
-              material,
-              'parse',
-              section.locator,
-              output.contentHash ?? material.contentHash,
-              section.content,
-            );
-          }
-          return;
-        }
-        this.saveMaterialRead(
-          event.runId,
-          material,
-          'read',
-          output.path,
-          material.contentHash,
-          output.content,
-        );
-      }
-      return;
-    }
-    if (toolName === 'read_artifact' && isReadArtifactOutput(event.output)) {
-      const output = event.output;
-      const material = snapshot.materials.find(
-        (selection) =>
-          selection.reference.kind === 'artifact-version' &&
-          selection.reference.artifactId === output.artifactId &&
-          selection.reference.artifactVersionId === output.versionId &&
-          selection.reference.contentHash === output.contentHash,
-      )?.reference;
-      if (material) {
-        this.saveMaterialRead(
-          event.runId,
-          material,
-          'read',
-          `artifact-version:${output.versionId}`,
-          output.contentHash,
-          output.content,
-        );
-      }
-      return;
-    }
-    if (toolName === 'read_office_material' && isOfficeMaterialReadOutput(event.output)) {
-      const output = event.output;
-      const selectedMaterial = snapshot.materials.find((selection) =>
-        sameMaterialReference(selection.reference, output.material),
-      )?.reference;
-      if (!selectedMaterial) return;
-      const sections = output.sections;
-      if (sections.length === 0) {
-        this.saveMaterialRead(
-          event.runId,
-          selectedMaterial,
-          'parse',
-          'document',
-          output.contentHash,
-          'Office 材料未产生可读取片段。',
-        );
-        return;
-      }
-      for (const section of sections) {
-        const excerpt = JSON.stringify(section.content).slice(0, 20_000);
-        this.saveMaterialRead(
-          event.runId,
-          selectedMaterial,
-          'parse',
-          section.locator,
-          output.contentHash,
-          excerpt,
-        );
-      }
-    }
-  }
-
-  private saveMaterialRead(
-    runId: string,
-    material: MaterialReference,
-    operation: 'search' | 'read' | 'parse',
-    locator: string,
-    contentHash: string,
-    excerpt: string,
-  ): void {
-    this.store.materialReads.save({
-      id: randomUUID(),
-      runId,
-      material,
-      operation,
-      locator,
-      contentHash,
-      excerptHash: createHash('sha256').update(excerpt).digest('hex'),
-      capturedAt: Date.now(),
-    });
   }
 
   /** 语言模型解析统一走 Main 内共享工厂；未配置时保持既有的教学 Provider 回落（契约 §7.1）。 */
@@ -2339,166 +2054,8 @@ export class RunService {
 const isTerminalEvent = (event: AgentRuntimeEvent): boolean =>
   event.type === 'run.completed' || event.type === 'run.failed' || event.type === 'run.cancelled';
 
-interface KnowledgeSearchOutputItem {
-  title: string;
-  sourcePath: string;
-  locator: string;
-  excerpt: string;
-  contentHash: string;
-  evidenceId?: string;
-}
-
-interface KnowledgeReadOutputPart {
-  evidenceId: string;
-  text: string;
-}
-
-const isKnowledgeReadOutput = (value: unknown): value is { parts: KnowledgeReadOutputPart[] } =>
-  isRecord(value) &&
-  Array.isArray(value.parts) &&
-  value.parts.every((part) => isRecord(part) && isString(part.evidenceId) && isString(part.text));
-
-const isKnowledgeSearchOutput = (
-  value: unknown,
-): value is { results: KnowledgeSearchOutputItem[] } => {
-  if (!isRecord(value) || !Array.isArray(value.results)) return false;
-  return value.results.every(
-    (result) =>
-      isRecord(result) &&
-      isString(result.title) &&
-      isString(result.sourcePath) &&
-      isString(result.locator) &&
-      isString(result.excerpt) &&
-      isString(result.contentHash),
-  );
-};
-
-interface ReadTextFileOutput {
-  path: string;
-  content: string;
-  scope?: 'run-work-file';
-  material?: MaterialReference;
-  format?: string;
-  contentHash?: string;
-  truncated?: boolean;
-  sections?: Array<{ locator: string; content: string }>;
-}
-
-const isReadTextFileOutput = (value: unknown): value is ReadTextFileOutput =>
-  isRecord(value) &&
-  isString(value.path) &&
-  isString(value.content) &&
-  (value.scope === undefined || value.scope === 'run-work-file') &&
-  (value.material === undefined || materialReferenceSchema.safeParse(value.material).success) &&
-  (value.format === undefined || isString(value.format)) &&
-  (value.contentHash === undefined || isString(value.contentHash)) &&
-  (value.truncated === undefined || typeof value.truncated === 'boolean') &&
-  (value.sections === undefined ||
-    (Array.isArray(value.sections) &&
-      value.sections.every(
-        (section) => isRecord(section) && isString(section.locator) && isString(section.content),
-      )));
-
-interface ReadArtifactOutput {
-  artifactId: string;
-  versionId: string;
-  contentHash: string;
-  content: string;
-}
-
-const isReadArtifactOutput = (value: unknown): value is ReadArtifactOutput =>
-  isRecord(value) &&
-  isString(value.artifactId) &&
-  isString(value.versionId) &&
-  isString(value.contentHash) &&
-  isString(value.content);
-
-interface WebSearchOutputItem {
-  title: string;
-  url: string;
-  snippet: string;
-  site?: string;
-}
-
-interface WebFetchOutput {
-  url: string;
-  title: string;
-  content: string;
-  contentType: string;
-  status: number;
-}
-
-interface OfficeMaterialReadOutput {
-  material: MaterialReference;
-  format: OfficeFormat;
-  sections: Array<{ locator: string; content: unknown }>;
-  contentHash: string;
-}
-
-const isOfficeMaterialReadOutput = (value: unknown): value is OfficeMaterialReadOutput => {
-  if (!isRecord(value) || !materialReferenceSchema.safeParse(value.material).success) return false;
-  if (
-    !isOfficeFormat(value.format) ||
-    !isString(value.contentHash) ||
-    !Array.isArray(value.sections)
-  )
-    return false;
-  return value.sections.every(
-    (section) => isRecord(section) && isString(section.locator) && 'content' in section,
-  );
-};
-
 const isOfficeFormat = (value: unknown): value is OfficeFormat =>
   value === 'pptx' || value === 'xlsx' || value === 'csv';
-
-const officeFactValues = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(officeFactValues);
-  if (!isRecord(value)) return value;
-  if ('value' in value) return officeFactValues(value.value);
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([key]) => key !== 'address' && key !== 'locator')
-      .map(([key, child]) => [key, officeFactValues(child)]),
-  );
-};
-
-const isTaskFileWriteOutput = (value: unknown): value is { path: string; contentHash: string } =>
-  isRecord(value) && isString(value.path) && isString(value.contentHash);
-
-const sameMaterialReference = (left: MaterialReference, right: MaterialReference): boolean => {
-  if (left.kind !== right.kind) return false;
-  if (left.kind === 'knowledge-revision' && right.kind === 'knowledge-revision')
-    return left.knowledgeRevisionId === right.knowledgeRevisionId;
-  if (left.kind === 'artifact-version' && right.kind === 'artifact-version')
-    return left.artifactVersionId === right.artifactVersionId;
-  if (left.kind === 'workspace-input-snapshot' && right.kind === 'workspace-input-snapshot')
-    return left.snapshotId === right.snapshotId;
-  return false;
-};
-
-const isWebFetchOutput = (value: unknown): value is WebFetchOutput =>
-  isRecord(value) &&
-  isString(value.url) &&
-  isString(value.title) &&
-  isString(value.content) &&
-  isString(value.contentType) &&
-  typeof value.status === 'number';
-
-const isWebSearchOutput = (value: unknown): value is { results: WebSearchOutputItem[] } => {
-  if (!isRecord(value) || !Array.isArray(value.results)) return false;
-  return value.results.every(
-    (result) =>
-      isRecord(result) &&
-      isString(result.title) &&
-      isString(result.url) &&
-      isString(result.snippet),
-  );
-};
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
-const isString = (value: unknown): value is string => typeof value === 'string';
 
 const isWithinRoot = (root: string, target: string): boolean => {
   const relative = path.relative(root, target);

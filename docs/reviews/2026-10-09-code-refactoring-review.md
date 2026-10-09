@@ -452,3 +452,13 @@ B 开始时先刷新 R17 的只读审计与安装树证据。若确认存在可�
 
 
 2026-10-09 22:56 远端收口：源提交 `82809db2f986e39ebd4846222d08c2e132e8b179` 的 [macOS PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/37947330899) 成功，静态快检、文档护栏 154、相关 functional 115 与 heavy 83 项通过，按本次 CI 输出共 6 文件 / 352 项；本地另执行的经营工具 2 项不计入该 CI 数字。Full verify 跳过。[PR #32](https://github.com/gyzhang/BetterWork/pull/32) 已 squash 合入 main，合并提交 `eaeaf76df3f838330bd9b556b1d50cef4f59b199`。原 checkout 已同步，代码分支本地/远端均已删除，没有新建 worktree；最终证据从此合并提交建立 `codex/review-c2-closeout`，以纯 Markdown PR 归档。 C2 完成；R02 的关联语义问题、C3 工具结果适配和其余治理继续待后续切片。
+
+
+## 15. C3：工具结果契约与宿主适配
+
+2026-10-10 02:42，用户授权继续 C3，从 main `de6f9c7be508e5d53cef60b866e0cc8d1a2e7e29` 建立 `codex/review-tool-result-adapters`，原 checkout 顺序开发。九类结果在宿主契约中单次校验，类型化适配器处理事实、足迹、来源和 Markdown 跟踪；RunService 只调用入口，正常结果保持原行为。非法结果与缺失/未知工具名明确失败，KnowledgeAudit 的来源事务、MCP 不透明结果、取消与终态编排保持。详见 [C3 说明](2026-10-10-tool-result-adapters.md)。
+
+本地相关 functional 8 文件 / 320 项、RunService heavy 84 项通过，按文件去重共 9 文件 / 404 项；新契约/真实 SQLite 适配占 66 项。新增端到端回归放回旧实现会失败：格式错误的 web_fetch 原先以 completed 结束，新入口明确 failed；恢复后通过。typecheck、定向 lint/format 与生产构建通过，离线应用旅程、最终文档/治理与精确 SHA 的 PR Gate 继续核对。R12 的结果入口与失败契约已落地，R06 终态/上下文职责和其余治理仍待后续切片，未启动完整 verify 或真实模型。
+
+
+2026-10-10 02:44 本地终检：docs:check（154 项）、差异空白与原批次基点的 drift:check 通过，读数已保存，护栏 154、例外 203 和规则指纹保持。app-only 一组真实 App/Preload/IPC/临时 SQLite 旅程通过，4 个 Run、失败/取消和窗口销毁后重组服务恢复，网络尝试 0；AI 已查看首次完成与失败截图。证据在 `/var/folders/kq/ts17kvnd5yg2kjtkx645y1zw0000gn/T/betterwork-ui-render-9m07Si`。不代表完整 UI、真实模型或安装态验收，最新源 SHA 的 macOS PR Gate 与合并继续收口。
