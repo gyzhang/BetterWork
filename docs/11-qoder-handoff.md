@@ -121,7 +121,7 @@ pre-push 阻止直推 main，并核对干净 HEAD 与空白差异。PR 合并后
 | `apps/desktop/src/main/window.ts` | 窗口构造、首帧主题常量（必须与青玉浅色 Token 一致，避免冷启动闪白）。 |
 | `apps/desktop/src/main/db/` | 连接与 PRAGMA、版本化迁移执行器（`migrate.ts`）、两个库的 schema 与历史库对账。新增 schema 变更只能加迁移，不能改已发布的迁移。 |
 | `apps/desktop/src/main/persistence/` | 按聚合拆分的 Repository（workspace / task / run / evidence / artifact / model / search-engine / notification）与组装它们的 `AppStore`。Repository 只写自己的表，可读其他表做归属校验；跨聚合写入由调用方用 `store.transaction()` 显式包起来。 |
-| `apps/desktop/src/main/services/run-service.ts` | 运行编排：选 Provider、按是否有可用搜索引擎决定工具集、先持久化再广播、终态触发通知，并在编排自身出错时用 `forceFailure` 兜底。 |
+| `apps/desktop/src/main/services/run-service.ts` | 运行编排：选 Provider、装配工具、持有启动/取消与活动注册表；`RunEventLifecycle` 集中先持久化再分发与清理/终态，外围 catch 保留并调用恢复入口；终态通知与定时结果等待仍在 RunService。 |
 | `apps/desktop/src/main/services/knowledge-vault.ts` | 资料导入、格式解析与分块、FTS5 与子串兜底检索、来源路径验证、刷新与仅索引移除。不碰 DDL。 |
 | `apps/desktop/src/main/services/notification-service.ts` | 通知的持久化—广播收口，以及窗口失焦时的系统通知与点击激活。 |
 | `apps/desktop/src/main/services/search-engine-service.ts` | 千帆 `web_summary` 客户端与连接测试；外部字段一律经 `readString` 收窄，错误信息不得含 Key。 |

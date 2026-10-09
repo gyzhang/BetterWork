@@ -123,6 +123,12 @@ RunService 通过 `RunServiceDependencies` 具名对象接收宿主依赖，禁�
 
 KnowledgeAudit 继续在工具回调事务内登记精确来源，适配器只核验归属并复用；成果登记/采用声明和 Skill 运行仍由原回调负责。MCP 不透明结果、未绑定时不登记、网页摘录与哈希、各类材料身份匹配保持。非法已适配结果或缺失/未知工具名给出不含原正文的契约错误，再由既有编排 catch 收敛为失败；已持久化工具事件保留。范围与证据见 [C3 说明](reviews/2026-10-10-tool-result-adapters.md)。
 
+### 3.5 Run 事件消费与终态协调
+
+`RunEventLifecycle` 在 Application 层集中事件先落库再分发、候选终态延迟、Skill/MCP 清理与失败/取消恢复。RunService 保留准备/装配、外围 catch/finally、活动注册表、工具结果分发、通知与定时结果等待；材料审计、Markdown 成果和成功后连续简报/记忆行为以具名回调接入。
+
+终态发布前仍按事实审计、Skill 清理、MCP 释放、成功成果登记的顺序处理。清理失败不发布候选成功或安全取消；forceFailure 仍仅收口 running，启动恢复不变。没有新的事件总线、协议或 Core 宿主依赖，既有快速失败和取消裁决保持。范围与证据见 [C4 说明](reviews/2026-10-10-run-event-lifecycle.md)。
+
 ## 4. Agent Core
 
 Agent Core 不允许直接导入：

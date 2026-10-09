@@ -45,6 +45,14 @@ import { SkillExecutionService } from './skill-execution-service';
 import { SkillService } from './skill-service';
 import { TaskMaterialService } from './task-material-service';
 
+const createCompletionGate = () => {
+  let resolve = () => {};
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+};
+
 const temporaryDirectories: string[] = [];
 const openStores: AppStore[] = [];
 const openVaults: KnowledgeVault[] = [];
@@ -3954,6 +3962,96 @@ describe('RunService', () => {
     }
     return id;
   };
+
+  it('keeps a Run active without terminal, notification or artifact while Skill and MCP cleanup wait', async () => {
+    const fixture = await createFixture();
+    const window = createWindowStub();
+    const skillEntered = createCompletionGate();
+    const skillDone = createCompletionGate();
+    const mcpEntered = createCompletionGate();
+    const mcpDone = createCompletionGate();
+    const service = createService(fixture, {
+      window,
+      skillExecutionService: {
+        finishRun: async () => {
+          skillEntered.resolve();
+          await skillDone.promise;
+          return { cancelled: 0, cleanupFailed: 0 };
+        },
+      } as unknown as SkillExecutionService,
+      mcpClientService: {
+        releaseRun: async () => {
+          mcpEntered.resolve();
+          await mcpDone.promise;
+        },
+      } as unknown as McpClientService,
+    });
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '请把结果保存为 Markdown 成果。',
+    });
+    try {
+      await skillEntered.promise;
+      expect(statusOf(fixture, runId)).toBe('running');
+      expect(service.isActive(runId)).toBe(true);
+      expect(fixture.store.artifacts.list(fixture.taskId)).toEqual([]);
+      expect(fixture.store.notifications.list()).toEqual([]);
+      expect(window.runEventTypes()).not.toContain('run.completed');
+      skillDone.resolve();
+      await mcpEntered.promise;
+      expect(statusOf(fixture, runId)).toBe('running');
+      expect(fixture.store.artifacts.list(fixture.taskId)).toEqual([]);
+      mcpDone.resolve();
+      await vi.waitFor(() => expect(service.isActive(runId)).toBe(false));
+      expect(statusOf(fixture, runId)).toBe('completed');
+      expect(fixture.store.artifacts.list(fixture.taskId)).toHaveLength(1);
+      expect(fixture.store.notifications.list()).toHaveLength(1);
+      expect(window.runEventTypes().filter((type) => type === 'run.completed')).toHaveLength(1);
+    } finally {
+      skillDone.resolve();
+      mcpDone.resolve();
+      await service.shutdown();
+    }
+  });
+
+  it('waits for scheduled terminal outcome before clearing active Run and settling shutdown', async () => {
+    const fixture = await createFixture();
+    const scheduled = createPreparedScheduleDraft(fixture);
+    const outcomeEntered = createCompletionGate();
+    const outcomeDone = createCompletionGate();
+    const service = createService(fixture, {
+      onScheduledRunTerminal: async (runId) => {
+        expect(statusOf(fixture, runId)).toBe('completed');
+        outcomeEntered.resolve();
+        await outcomeDone.promise;
+      },
+    });
+    const runId = scheduled.service.startFirstRun(scheduled.occurrence.id, service);
+    try {
+      await outcomeEntered.promise;
+      expect(service.isActive(runId)).toBe(true);
+      expect(fixture.store.notifications.list()).toEqual([]);
+      let stopped = false;
+      const shutdown = service.shutdown().then(() => {
+        stopped = true;
+      });
+      await Promise.resolve();
+      expect(stopped).toBe(false);
+      expect(service.isActive(runId)).toBe(true);
+      outcomeDone.resolve();
+      await shutdown;
+      expect(stopped).toBe(true);
+      expect(service.isActive(runId)).toBe(false);
+      expect(statusOf(fixture, runId)).toBe('completed');
+      expect(
+        fixture.store.runs.listEvents(runId).filter((event) => event.type === 'run.cancelled'),
+      ).toEqual([]);
+    } finally {
+      outcomeDone.resolve();
+      await service.shutdown();
+    }
+  });
 
   it('calls finishRun before publishing the terminal event for a skill-bound run', async () => {
     const fixture = await createFixture();
