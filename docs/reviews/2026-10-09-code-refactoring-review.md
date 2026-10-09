@@ -449,3 +449,6 @@ B 开始时先刷新 R17 的只读审计与安装树证据。若确认存在可�
 本批完成 R06 的纯策略边界和 R02 的读取阶段枚举问题；指标、单位、期间和来源关联仍不是现行数字池能证明的事实。保留原许可与错误契约，最坏审计扫描仍为二次量级；不能将本批称为 R02 全部语义问题已解决。工具结果适配、终态整理和 D–F 待后续切片。
 
 2026-10-09 22:50 本地终检：docs:check（154 项）、差异空白与原批次基点的 drift:check 通过，护栏 154、例外 203 及规则指纹保持。app-only 一组真实 IPC/临时 SQLite 离线旅程通过，4 个 Run、失败/取消与重开恢复、网络尝试 0，AI 已回读截图；不等于完整 UI 或人工验收。代码与自动化已完成，最新源 SHA 的 PR Gate 和合并证据继续收口。
+
+
+2026-10-09 22:56 远端收口：源提交 `82809db2f986e39ebd4846222d08c2e132e8b179` 的 [macOS PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/37947330899) 成功，静态快检、文档护栏 154、相关 functional 115 与 heavy 83 项通过，按本次 CI 输出共 6 文件 / 352 项；本地另执行的经营工具 2 项不计入该 CI 数字。Full verify 跳过。[PR #32](https://github.com/gyzhang/BetterWork/pull/32) 已 squash 合入 main，合并提交 `eaeaf76df3f838330bd9b556b1d50cef4f59b199`。原 checkout 已同步，代码分支本地/远端均已删除，没有新建 worktree；最终证据从此合并提交建立 `codex/review-c2-closeout`，以纯 Markdown PR 归档。 C2 完成；R02 的关联语义问题、C3 工具结果适配和其余治理继续待后续切片。

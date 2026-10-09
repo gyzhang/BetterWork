@@ -31,3 +31,6 @@
 同一 200 数字/40 未支持输出查询的独立样本：旧采集 79.3ms、审计 19.6ms，允许数字/百分比集合共 164,957 项；新采集 0.3ms、审计 60.2ms，直接许可集合 919 项。另测 1,000 数字采集约 1.2ms；bench 采用采集 200ms/堆分配 16MiB、200 数字/40 查询审计 500ms 的宽松上界。这些是本机样本，不是所有任务的延迟保证；审计部分成本后移，最坏二次扫描仍存在。
 
 2026-10-09 22:50 本地终检：typecheck、定向 ESLint/Prettier、生产 build、docs:check（154 项）、差异空白与带原批次基点的 drift:check 均通过，规范/例外指纹未变。`ui:check -- --app-only` 一组真实 App/Preload/IPC/临时 SQLite 旅程通过，覆盖 4 个 Run、失败/取消与窗口销毁后重组服务恢复，网络尝试 0；AI 已查看首次完成与重开截图。证据在 `/var/folders/kq/ts17kvnd5yg2kjtkx645y1zw0000gn/T/betterwork-ui-render-Cbkufn`。最新源 SHA 的 macOS PR Gate 继续核对；完整 verify 未自动触发，真实模型/用户资料/安装态验收不由本批代签。
+
+
+2026-10-09 22:56 远端收口：源提交 `82809db2f986e39ebd4846222d08c2e132e8b179` 的 [macOS PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/37947330899) 成功，静态快检、文档护栏 154、相关 functional 115 与 heavy 83 项通过，按本次 CI 输出共 6 文件 / 352 项；本地另执行的经营工具 2 项不计入该 CI 数字。Full verify 跳过。[PR #32](https://github.com/gyzhang/BetterWork/pull/32) 已 squash 合入 main，合并提交 `eaeaf76df3f838330bd9b556b1d50cef4f59b199`。原 checkout 已同步，代码分支本地/远端均已删除，没有新建 worktree；最终证据从此合并提交建立 `codex/review-c2-closeout`，以纯 Markdown PR 归档。 C2 的代码与自动化验证完成，启发式许可的关联限制与最坏审计成本仍按前述说明保留；C3 工具结果适配、终态整理及 D–F 未自动开工。
