@@ -129,6 +129,41 @@ describe('useRunMemories', () => {
     expect(result.current.previewError).toBe('');
   });
 
+  it('面板关闭时不发起范围预览，打开后才读取当前草稿', async () => {
+    const preview = vi.fn(async (input: PreviewMemoryRequest) => ok(previewData(input.taskId)));
+    const runContext = vi.fn(async () => ok(runContextData('run-1', 'memory-1')));
+    installMemoryApi(preview, runContext);
+
+    const { rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) => useRunMemories(query, 'run-1', enabled),
+      { initialProps: { enabled: false } },
+    );
+
+    expect(preview).not.toHaveBeenCalled();
+    rerender({ enabled: true });
+    await waitFor(() => expect(preview).toHaveBeenCalledTimes(1));
+    expect(preview).toHaveBeenCalledWith({
+      taskId: 'task-1',
+      taskContextRevisionId: 'context-1',
+      expectedTaskContextRevision: 3,
+      prompt: '准备本月经营分析。',
+    });
+  });
+
+  it('输入变化可立即作废正在返回的旧预览', async () => {
+    const pending = deferred<Result<MemoryPreviewData>>();
+    const preview = vi.fn(() => pending.promise);
+    const runContext = vi.fn(async () => ok(runContextData('run-1', 'memory-1')));
+    installMemoryApi(preview, runContext);
+
+    const { result } = renderHook(() => useRunMemories(query, 'run-1'));
+    await waitFor(() => expect(preview).toHaveBeenCalledTimes(1));
+    act(() => result.current.invalidatePreview());
+    act(() => pending.resolve(ok(previewData('memory-stale'))));
+    await waitFor(() => expect(result.current.previewLoading).toBe(false));
+    expect(result.current.preview).toBeUndefined();
+  });
+
   it('任务上下文尚未建立时不预览，并说明前置条件不足', async () => {
     const preview = vi.fn(async () => ok(previewData('memory-1')));
     const runContext = vi.fn(async () => ok(runContextData('run-1', 'memory-1')));
