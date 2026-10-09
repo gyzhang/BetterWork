@@ -5,6 +5,7 @@ import type {
 } from '@betterwork/agent-protocol';
 import type { FormEvent, KeyboardEvent, Ref } from 'react';
 
+import { useComposerPrompt } from '../hooks/use-composer-prompt';
 import { ArrowUpIcon, ExpertIcon } from '../icons';
 import { AsyncButton } from './AsyncButton';
 import { BindingChip, BindingChipBar } from './BindingChip';
@@ -20,10 +21,12 @@ export type ComposerSubmitState =
   { state: 'idle' } | { state: 'starting' } | { state: 'running'; onStop: () => void };
 
 export interface ComposerProps {
-  prompt: string;
+  promptResetRevision: number;
+  readPromptDraft: () => string;
   onPromptChange: (value: string) => void;
+  onPromptSettled: (value: string) => void;
   /** 表单提交与 ⌘／Ctrl＋↵ 走同一个入口，页面只给一个回调。 */
-  onStartRun: () => void;
+  onStartRun: (prompt: string) => void;
   submit: ComposerSubmitState;
   /** 运行中不许改绑定区（技能／材料／专家）。 */
   locked: boolean;
@@ -62,8 +65,10 @@ export interface ComposerProps {
  * `reportAction(startRun()…)`。复制的每一次都可能只改一处。
  */
 export function Composer({
-  prompt,
+  promptResetRevision,
+  readPromptDraft,
   onPromptChange,
+  onPromptSettled,
   onStartRun,
   submit,
   locked,
@@ -88,56 +93,19 @@ export function Composer({
   onRequestSkillDetail,
   onRequestExpert,
 }: ComposerProps): React.JSX.Element {
-  const onSubmit = (event: FormEvent): void => {
-    event.preventDefault();
-    onStartRun();
-  };
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (
-      event.key !== 'Enter' ||
-      (!event.metaKey && !event.ctrlKey) ||
-      event.nativeEvent.isComposing
-    )
-      return;
-    event.preventDefault();
-    onStartRun();
-  };
   return (
     <div className="composer-dock">
-      <form className="composer" onSubmit={onSubmit}>
-        <textarea
-          ref={textareaRef}
-          aria-label="任务输入，按 Command 或 Control 加 Enter 开始工作"
-          value={prompt}
-          onChange={(event) => onPromptChange(event.target.value)}
-          onKeyDown={onKeyDown}
-          rows={3}
-          placeholder="描述你想完成的工作…"
-        />
-        <div className="composer-footer">
-          <span>
-            {modelLabel} <kbd>⌘↵</kbd>
-          </span>
-          {submit.state === 'running' ? (
-            <Button variant="danger" size="md" type="button" onClick={submit.onStop}>
-              停止
-            </Button>
-          ) : (
-            <AsyncButton
-              size="md"
-              type="submit"
-              busy={submit.state === 'starting'}
-              disabled={!prompt.trim() || workspacePicker.currentWorkspace === undefined}
-              label={
-                <>
-                  开始工作 <ArrowUpIcon size={13} />
-                </>
-              }
-              busyLabel="正在启动…"
-            />
-          )}
-        </div>
-      </form>
+      <ComposerPromptCard
+        key={promptResetRevision}
+        readPromptDraft={readPromptDraft}
+        textareaRef={textareaRef}
+        modelLabel={modelLabel}
+        submit={submit}
+        workspaceAvailable={workspacePicker.currentWorkspace !== undefined}
+        onPromptChange={onPromptChange}
+        onPromptSettled={onPromptSettled}
+        onStartRun={onStartRun}
+      />
       <div className="composer-utility-row">
         <div className="workspace-row">
           <WorkspaceSelector {...workspacePicker} />
@@ -180,5 +148,84 @@ export function Composer({
         />
       </div>
     </div>
+  );
+}
+
+function ComposerPromptCard({
+  readPromptDraft,
+  textareaRef,
+  modelLabel,
+  submit,
+  workspaceAvailable,
+  onPromptChange,
+  onPromptSettled,
+  onStartRun,
+}: {
+  readPromptDraft: () => string;
+  textareaRef: Ref<HTMLTextAreaElement> | undefined;
+  modelLabel: string;
+  submit: ComposerSubmitState;
+  workspaceAvailable: boolean;
+  onPromptChange: (value: string) => void;
+  onPromptSettled: (value: string) => void;
+  onStartRun: (prompt: string) => void;
+}): React.JSX.Element {
+  const { prompt, changePrompt } = useComposerPrompt({
+    readPromptDraft,
+    onPromptChange,
+    onPromptSettled,
+  });
+
+  const onSubmit = (event: FormEvent): void => {
+    event.preventDefault();
+    onStartRun(prompt);
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (
+      event.key !== 'Enter' ||
+      (!event.metaKey && !event.ctrlKey) ||
+      event.nativeEvent.isComposing
+    )
+      return;
+    event.preventDefault();
+    onStartRun(prompt);
+  };
+  return (
+    <form className="composer" onSubmit={onSubmit}>
+      <textarea
+        ref={textareaRef}
+        aria-label="任务输入，按 Command 或 Control 加 Enter 开始工作"
+        value={prompt}
+        onChange={(event) => {
+          changePrompt(event.target.value);
+        }}
+        onKeyDown={onKeyDown}
+        rows={3}
+        placeholder="描述你想完成的工作…"
+      />
+      <div className="composer-footer">
+        <span>
+          {modelLabel} <kbd>⌘↵</kbd>
+        </span>
+        {submit.state === 'running' ? (
+          <Button variant="danger" size="md" type="button" onClick={submit.onStop}>
+            停止
+          </Button>
+        ) : (
+          <AsyncButton
+            size="md"
+            type="submit"
+            busy={submit.state === 'starting'}
+            disabled={!prompt.trim() || !workspaceAvailable}
+            label={
+              <>
+                开始工作 <ArrowUpIcon size={13} />
+              </>
+            }
+            busyLabel="正在启动…"
+          />
+        )}
+      </div>
+    </form>
   );
 }

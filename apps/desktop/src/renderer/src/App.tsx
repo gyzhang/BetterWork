@@ -151,7 +151,14 @@ export function App(): React.JSX.Element {
   const memoriesState = useMemories();
   const mcpState = useMcpConnections();
 
-  const [prompt, setPrompt] = useState('');
+  const composerPromptRef = useRef('');
+  const [promptResetRevision, setPromptResetRevision] = useState(0);
+  const [memoryPreviewPrompt, setMemoryPreviewPrompt] = useState('');
+  const replaceComposerPrompt = useCallback((value: string): void => {
+    composerPromptRef.current = value;
+    setPromptResetRevision((current) => current + 1);
+    setMemoryPreviewPrompt(value);
+  }, []);
   const [taskBindings, setTaskBindings] = useState<CapabilityChip[]>([]);
   const [activeExpert, setActiveExpert] = useState<{
     id: string;
@@ -274,10 +281,21 @@ export function App(): React.JSX.Element {
       taskId: activeTask?.id,
       taskContextRevisionId: taskContext?.id,
       expectedTaskContextRevision: taskContext?.revision,
-      prompt,
+      prompt: memoryPreviewPrompt,
     },
     activeRunId,
+    view === 'work' && contextOpen && contextTab === 'memory',
   );
+  const invalidateMemoryPreview = runMemories.invalidatePreview;
+  const onComposerPromptChange = useCallback(
+    (value: string): void => {
+      composerPromptRef.current = value;
+      invalidateMemoryPreview();
+      setMemoryPreviewPrompt('');
+    },
+    [invalidateMemoryPreview],
+  );
+  const readComposerPromptDraft = useCallback((): string => composerPromptRef.current, []);
   const brief = useWorkspaceBrief({
     workspaceId: workspace?.id,
     expertId: activeExpert?.id,
@@ -664,36 +682,39 @@ export function App(): React.JSX.Element {
   const activityGroups = useMemo(() => deriveActivityGroups(events), [events]);
   const currentTaskArtifacts = artifacts.filter((artifact) => artifact.taskId === activeTask?.id);
 
-  const startNewTask = useCallback((): void => {
-    clearScheduleTaskContinuation();
-    runSelectionRequestRef.current += 1;
-    activeRunIdRef.current = undefined;
-    activeTaskIdRef.current = undefined;
-    setActiveRunId(undefined);
-    setActiveTask(undefined);
-    setTaskRuns([]);
-    setTaskAllRuns([]);
-    setTaskAllEvents(new Map());
-    setTaskBindings([]);
-    setActiveExpert(undefined);
-    setTaskContext(undefined);
-    setTaskMaterials([]);
-    setTaskMemories([]);
-    setExcludedMemoryIds([]);
-    setMcpToolBindings([]);
-    setDiscussionCheckpoints([]);
-    setMemoryCapture(undefined);
-    setMemoryCaptureError('');
-    setMaterialCandidates([]);
-    setMaterialPickerKind(undefined);
-    setMaterialPickerError('');
-    setActionError('');
-    setEvidence([]);
-    setEvents([]);
-    setPrompt('');
-    setArtifactNote(undefined);
-    setView('work');
-  }, [clearScheduleTaskContinuation]);
+  const startNewTask = useCallback(
+    (options: { preservePrompt?: boolean } = {}): void => {
+      clearScheduleTaskContinuation();
+      runSelectionRequestRef.current += 1;
+      activeRunIdRef.current = undefined;
+      activeTaskIdRef.current = undefined;
+      setActiveRunId(undefined);
+      setActiveTask(undefined);
+      setTaskRuns([]);
+      setTaskAllRuns([]);
+      setTaskAllEvents(new Map());
+      setTaskBindings([]);
+      setActiveExpert(undefined);
+      setTaskContext(undefined);
+      setTaskMaterials([]);
+      setTaskMemories([]);
+      setExcludedMemoryIds([]);
+      setMcpToolBindings([]);
+      setDiscussionCheckpoints([]);
+      setMemoryCapture(undefined);
+      setMemoryCaptureError('');
+      setMaterialCandidates([]);
+      setMaterialPickerKind(undefined);
+      setMaterialPickerError('');
+      setActionError('');
+      setEvidence([]);
+      setEvents([]);
+      if (!options.preservePrompt) replaceComposerPrompt('');
+      setArtifactNote(undefined);
+      setView('work');
+    },
+    [clearScheduleTaskContinuation, replaceComposerPrompt],
+  );
   /** 刷新已登记空间清单：新建与改名之后侧栏与选择器都要看到同一份。 */
   const refreshWorkspaces = (): void => {
     trackAction(window.betterwork.workspace.listAll().then(setAllWorkspaces), '刷新工作空间列表');
@@ -704,10 +725,8 @@ export function App(): React.JSX.Element {
    * 输入框里的话与已选的技能片都留下，切目录不等于清草稿。
    */
   const enterWorkspace = (selected: WorkspaceSummary): void => {
-    const draftPrompt = prompt;
     const draftBindings = taskBindings;
-    startNewTask();
-    setPrompt(draftPrompt);
+    startNewTask({ preservePrompt: true });
     setTaskBindings(draftBindings);
     workspaceIdRef.current = selected.id;
     setWorkspace(selected);
@@ -930,7 +949,7 @@ export function App(): React.JSX.Element {
     },
     [activeTask?.id, workspace],
   );
-  const startRun = async (): Promise<void> => {
+  const startRun = async (prompt: string): Promise<void> => {
     if (startingRef.current || isRunning || !prompt.trim() || !workspace) return;
     startingRef.current = true;
     setIsStarting(true);
@@ -982,7 +1001,7 @@ export function App(): React.JSX.Element {
       activeRunIdRef.current = result.runId;
       setActiveRunId(result.runId);
       setEvents([]);
-      setPrompt('');
+      replaceComposerPrompt('');
       setArtifactNote(undefined);
       setContextTab('process');
       const newRun: RunSummary = {
@@ -1028,7 +1047,7 @@ export function App(): React.JSX.Element {
     activeTaskIdRef.current = run.taskId;
     setActiveRunId(run.id);
     setActiveTask({ id: run.taskId, sessionId: run.sessionId, title: run.prompt.slice(0, 80) });
-    setPrompt('');
+    replaceComposerPrompt('');
     setArtifactNote(undefined);
     setEvents([]);
     await loadTaskContext(run.taskId, requestId);
@@ -1055,7 +1074,7 @@ export function App(): React.JSX.Element {
     activeTaskIdRef.current = task.id;
     setActiveRunId(undefined);
     setActiveTask({ id: task.id, sessionId: task.sessionId, title: task.title });
-    setPrompt('');
+    replaceComposerPrompt('');
     setArtifactNote(undefined);
     setEvents([]);
     const selectionId = runSelectionRequestRef.current;
@@ -1323,7 +1342,7 @@ export function App(): React.JSX.Element {
         const created = tasks.find((task) => task.id === outcome.result.task.id);
         if (created) {
           await selectTask(created);
-          setPrompt(outcome.result.prompt);
+          replaceComposerPrompt(outcome.result.prompt);
         }
         knowledge.clearSelection();
       })(),
@@ -1708,10 +1727,12 @@ export function App(): React.JSX.Element {
                 </div>
               )}
               <Composer
-                prompt={prompt}
-                onPromptChange={setPrompt}
-                onStartRun={() =>
-                  reportAction(startRun(), setActionError, '无法开始这项工作，请重试。')
+                promptResetRevision={promptResetRevision}
+                readPromptDraft={readComposerPromptDraft}
+                onPromptChange={onComposerPromptChange}
+                onPromptSettled={setMemoryPreviewPrompt}
+                onStartRun={(prompt) =>
+                  reportAction(startRun(prompt), setActionError, '无法开始这项工作，请重试。')
                 }
                 submit={
                   isRunning && activeRunId

@@ -42,6 +42,7 @@ export interface RunMemoriesState {
   /** 预览的前置条件是否齐备；不齐备时界面显示「任务上下文尚未建立」。 */
   previewAvailable: boolean;
   requestPreview: () => void;
+  invalidatePreview: () => void;
   runContext: MemoryRunContextData | undefined;
   contextLoading: boolean;
   contextError: string;
@@ -51,6 +52,7 @@ export interface RunMemoriesState {
 export function useRunMemories(
   query: RunMemoryPreviewQuery,
   runId: string | undefined,
+  previewEnabled = true,
 ): RunMemoriesState {
   const { taskId, taskContextRevisionId, expectedTaskContextRevision, prompt } = query;
   const trimmedPrompt = prompt.trim();
@@ -72,6 +74,7 @@ export function useRunMemories(
 
   const requestPreview = useCallback((): void => {
     if (
+      !previewEnabled ||
       taskId === undefined ||
       taskContextRevisionId === undefined ||
       expectedTaskContextRevision === undefined ||
@@ -110,18 +113,38 @@ export function useRunMemories(
       }),
       '预览下次运行可用的记忆',
     );
-  }, [taskId, taskContextRevisionId, expectedTaskContextRevision, trimmedPrompt, previewKey]);
+  }, [
+    previewEnabled,
+    taskId,
+    taskContextRevisionId,
+    expectedTaskContextRevision,
+    trimmedPrompt,
+    previewKey,
+  ]);
+
+  const invalidatePreview = useCallback((): void => {
+    if (previewGuard.current.key === '') return;
+    previewGuard.current.request += 1;
+    previewGuard.current.key = '';
+    setPreview(undefined);
+    setPreviewLoading(false);
+    setPreviewError('');
+  }, []);
 
   useEffect(() => {
-    // 上下文一变就丢掉旧预览：留着上一次的清单会被误读成「这次也会用这些」。
+    if (!previewEnabled) {
+      invalidatePreview();
+      return;
+    }
     setPreview(undefined);
     setPreviewError('');
     if (previewKey !== previewGuard.current.key) {
       previewGuard.current.request += 1;
       previewGuard.current.key = '';
+      setPreviewLoading(false);
     }
     if (previewAvailable) requestPreview();
-  }, [previewKey, previewAvailable, requestPreview]);
+  }, [previewEnabled, previewKey, previewAvailable, requestPreview, invalidatePreview]);
 
   const loadRunContext = useCallback((target: string | undefined): void => {
     contextGuard.current.request += 1;
@@ -165,6 +188,7 @@ export function useRunMemories(
     previewError,
     previewAvailable,
     requestPreview,
+    invalidatePreview,
     runContext,
     contextLoading,
     contextError,

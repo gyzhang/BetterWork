@@ -17,8 +17,10 @@ const workspace: WorkspaceSummary = {
 };
 
 const base: ComposerProps = {
-  prompt: '把三条产品线的差值列成表',
+  promptResetRevision: 0,
+  readPromptDraft: () => '把三条产品线的差值列成表',
   onPromptChange: () => {},
+  onPromptSettled: () => {},
   onStartRun: vi.fn(),
   submit: { state: 'idle' },
   locked: false,
@@ -50,8 +52,15 @@ const composer = (overrides: Partial<ComposerProps> = {}): HTMLElement => {
   return container;
 };
 
+function CountedComposer(props: ComposerProps & { onRender: () => void }): React.JSX.Element {
+  const { onRender, ...composerProps } = props;
+  onRender();
+  return <Composer {...composerProps} />;
+}
+
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
 });
 
 describe('Composer 基座', () => {
@@ -78,6 +87,18 @@ describe('Composer 基座', () => {
 
     fireEvent.keyDown(box, { key: 'Enter', metaKey: true, isComposing: true });
     expect(onStartRun).not.toHaveBeenCalled();
+  });
+
+  it('逐字输入不会让 Composer 的父级重新渲染', () => {
+    const onRender = vi.fn();
+    render(<CountedComposer {...base} readPromptDraft={() => ''} onRender={onRender} />);
+    const renderCount = onRender.mock.calls.length;
+
+    fireEvent.change(screen.getByRole('textbox', { name: /任务输入/ }), {
+      target: { value: '只更新输入卡' },
+    });
+
+    expect(onRender).toHaveBeenCalledTimes(renderCount);
   });
 
   it('运行中给出「停止」，绑定区随之锁住', () => {

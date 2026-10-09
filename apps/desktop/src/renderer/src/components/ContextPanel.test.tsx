@@ -166,6 +166,7 @@ const runMemories = (overrides?: Partial<RunMemoriesState>): RunMemoriesState =>
   previewError: '',
   previewAvailable: true,
   requestPreview: vi.fn(),
+  invalidatePreview: vi.fn(),
   runContext: runContextOf(),
   contextLoading: false,
   contextError: '',
