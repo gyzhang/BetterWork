@@ -477,3 +477,9 @@ B 开始时先刷新 R17 的只读审计与安装树证据。若确认存在可�
 2026-10-10 06:23 远端收口：源提交 `97e805ead7ba2e64f2ec9f761517fda2bf2287a6` 的 [macOS PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/37998559802) 成功；静态快检、文档护栏 154、相关 functional 101 与 heavy 86 项通过，CI 共 6 文件 / 341 项，Full verify 跳过。本地额外执行的结果适配、KnowledgeAudit、成果采用声明与 AppStore 共 76 项不混入 CI 数字；build、app-only 和 recovery-only 沿用本地证据。
 
 [PR #36](https://github.com/gyzhang/BetterWork/pull/36) 已 squash 合入 main，合并提交 `4b1783f0087f013414a328255478c0a5b3d0e4e6`。原 checkout 已同步 main，代码分支本地/远端均已删除，没有新建 worktree；从此提交建立 `codex/review-c4-closeout`，仅以 Markdown 归档最终证据。C1–C4 的计划切片完成，R06 的其他上下文/工具职责与 C2 事实关联限制仍如前述，不宣称全部重构结束；后续按已接受顺序进入 D 的 Task 草稿/请求生命周期整理，待下一次开发指令。
+
+## 17. D1：Task 草稿所有权与请求生命周期
+
+2026-10-10 07:00：用户授权推进 D1，从干净 main `3e39a7c5cf83170301f42e7aa56bba316dd41d2d` 建立 `codex/review-task-draft-lifecycle`，沿用原 checkout。Task 草稿收口到 reducer/Hook；选择身份收口到另一 Hook，统一选择/Workspace 有效性判断，Task 历史保留独立代际。App 保留跨区域 IPC 装配和已有事件索引。已保存上下文作为 CAS 基线，保存回执不覆盖本地配置；切 Workspace 保留正文与技能。无协议/迁移、安全边界、规范例外或新依赖变化。详见 [D1 说明](2026-10-10-task-draft-lifecycle.md)。
+
+当次本地回归去重 13 文件 / 268 项（新增 20 项）通过，包含完整 App 59 项；typecheck、定向 lint/format、生产 build、app-only 旅程通过，网络尝试 0。CAS 覆盖草稿与启动错误作废历史的两个探针均被检出，恢复后通过。App useState 的当次 AST 读数 49→38，物理行 2,232→2,230，生产源码净增 356 行；职责更清楚，不宣称总量减少。完整 verify、全 UI 矩阵、真实模型和安装态人工验收未执行；最新源 SHA 的 PR Gate、合并与证据归档继续收口。R07 的其余界面职责与保存语义留 D2。

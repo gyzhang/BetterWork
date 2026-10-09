@@ -1434,6 +1434,144 @@ describe('Workspace input material display', () => {
   });
 });
 
+describe('Task draft ownership in App', () => {
+  const savedContext: TaskContextRevision = {
+    id: 'saved-context',
+    taskId: previousTask.id,
+    revision: 4,
+    executor: { kind: 'general' },
+    skillBindings: [
+      { skillId: skill.id, revisionId: skill.currentRevisionId, source: 'task-selection' },
+    ],
+    materials: [
+      {
+        reference: artifactVersionReference,
+        purpose: 'structure-reference',
+        addedFrom: 'user-input',
+      },
+    ],
+    excludedMemoryIds: ['excluded-memory'],
+    mcpToolBindings: [{ connectionId: 'connection', toolId: 'tool' }],
+    createdAt: 1,
+    updatedAt: 2,
+  };
+  const completed: AgentRuntimeEvent = {
+    id: 'previous-completed',
+    runId: previousRun.id,
+    sequence: 1,
+    createdAt: 2,
+    type: 'run.completed',
+    finalContent: 'Previous completed answer',
+  };
+
+  it('A to B to A never restores the old context over the new CAS baseline and working configuration', async () => {
+    const api = installApi({ context: savedContext });
+    let resolveOldContext: ((context: TaskContextRevision) => void) | undefined;
+    api.taskContexts.get.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOldContext = resolve;
+        }),
+    );
+    api.runs.listEvents.mockResolvedValue([completed]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
+    await waitFor(() => expect(resolveOldContext).toBeTypeOf('function'));
+    fireEvent.click(screen.getByRole('button', { name: '新建任务' }));
+    fireEvent.click(screen.getByRole('button', { name: /旧任务/ }));
+    await screen.findByText(completed.finalContent);
+    await act(async () =>
+      resolveOldContext?.({
+        ...savedContext,
+        revision: 1,
+        skillBindings: [],
+        materials: [],
+        excludedMemoryIds: [],
+        mcpToolBindings: [],
+      }),
+    );
+    fireEvent.change(composer(), { target: { value: 'Continue with restored configuration' } });
+    fireEvent.click(screen.getByRole('button', { name: '开始工作' }));
+    await waitFor(() => expect(api.runs.start).toHaveBeenCalledTimes(1));
+    expect(api.taskContexts.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: previousTask.id,
+        expectedRevision: 4,
+        executor: savedContext.executor,
+        skillBindings: savedContext.skillBindings,
+        materials: savedContext.materials,
+        excludedMemoryIds: savedContext.excludedMemoryIds,
+        mcpToolBindings: savedContext.mcpToolBindings,
+      }),
+    );
+  });
+
+  it('a CAS failure retains the full working draft and retries against the same baseline', async () => {
+    const api = installApi({ context: savedContext });
+    api.runs.listEvents.mockResolvedValue([completed]);
+    api.taskContexts.save.mockRejectedValueOnce(new Error('Task context conflict'));
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
+    await screen.findByText(completed.finalContent);
+    fireEvent.change(composer(), { target: { value: 'Unsent after conflict' } });
+    fireEvent.click(screen.getByRole('button', { name: '开始工作' }));
+    await screen.findByText('Task context conflict');
+    expect(composer()).toHaveProperty('value', 'Unsent after conflict');
+    expect(api.runs.start).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '开始工作' }));
+    await waitFor(() => expect(api.runs.start).toHaveBeenCalledTimes(1));
+    expect(api.taskContexts.save).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        taskId: previousTask.id,
+        expectedRevision: 4,
+        executor: savedContext.executor,
+        skillBindings: savedContext.skillBindings,
+        materials: savedContext.materials,
+        excludedMemoryIds: savedContext.excludedMemoryIds,
+        mcpToolBindings: savedContext.mcpToolBindings,
+      }),
+    );
+  });
+
+  it('entering another workspace keeps prompt and skills but clears old Task materials and permissions', async () => {
+    const api = installApi({ context: savedContext });
+    const secondWorkspace = {
+      ...workspaceFixture,
+      id: 'workspace-2',
+      name: '第二空间',
+      rootPath: '/second',
+    };
+    api.workspace.listAll.mockResolvedValue([workspaceFixture, secondWorkspace]);
+    api.workspace.listTaskGroups.mockResolvedValue([
+      { workspace: workspaceFixture, tasks: [previousTask], totalTasks: 1 },
+      { workspace: secondWorkspace, tasks: [], totalTasks: 0 },
+    ]);
+    api.runs.listEvents.mockResolvedValue([completed]);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
+    await screen.findByText(completed.finalContent);
+    fireEvent.change(composer(), { target: { value: 'Draft for the new workspace' } });
+    fireEvent.click(screen.getByRole('button', { name: '「第二空间」工作空间的操作' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: '在此空间新建任务' }));
+    expect(composer()).toHaveProperty('value', 'Draft for the new workspace');
+    expect(screen.getByRole('button', { name: '技能 1 项' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '开始工作' }));
+    await waitFor(() => expect(api.runs.start).toHaveBeenCalledTimes(1));
+    expect(api.tasks.create).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: secondWorkspace.id }),
+    );
+    expect(api.taskContexts.save).toHaveBeenCalledWith({
+      taskId: 'new-task',
+      executor: { kind: 'general' },
+      skillBindings: savedContext.skillBindings,
+      materials: [],
+      excludedMemoryIds: [],
+      mcpToolBindings: [],
+    });
+  });
+});
+
 describe('Task context restoration', () => {
   it('keeps a draft for background results and opens a historical task by notification ID on click', async () => {
     const api = installApi();
