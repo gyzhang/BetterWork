@@ -155,6 +155,45 @@ describe('McpClientService', () => {
     }
   });
 
+  it('sets Electron run-as-Node only on the bundled stdio target', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'mcp-bundled-node-'));
+    try {
+      const store = AppStore.open(':memory:');
+      stores.push(store);
+      const service = new McpClientService(store, {
+        guardian: {
+          executable: process.execPath,
+          scriptPath: path.resolve('apps/desktop/src/main/infrastructure/skill-guardian.ts'),
+          env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+        },
+        resolveBundledRuntime: async (_serverId, args) => ({
+          command: process.execPath,
+          args: [fixturePath, ...args, '--modern'],
+          runAsNode: true,
+        }),
+      });
+      services.push(service);
+      const envFile = path.join(directory, 'target-env.json');
+      const connection = await service.saveConnection({
+        name: 'Bundled runtime fixture',
+        transport: {
+          kind: 'stdio',
+          runtime: { kind: 'bundled', serverId: 'memory' },
+          args: [],
+          env: [{ name: 'MCP_FIXTURE_ENV_FILE', value: envFile, secret: false }],
+        },
+      });
+
+      await service.testConnection(connection.id);
+
+      expect(JSON.parse(await readFile(envFile, 'utf8')) as unknown).toMatchObject({
+        electronNode: '1',
+      });
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
   it('surfaces an unsuccessful guardian cleanup acknowledgment', async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), 'mcp-cleanup-failure-'));
     try {

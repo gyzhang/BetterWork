@@ -4,6 +4,7 @@ import { realpath } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import { isAbortError } from '@betterwork/agent-core';
 import type { DependencyLock, TargetPlatform } from '@betterwork/agent-protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -661,6 +662,83 @@ describe('Python 环境准备作业', () => {
     expect(
       await harness.filesystem.exists(path.join(harness.paths.pythonRoot, distribution.sha256)),
     ).toBe(false);
+  });
+
+  it('使用随包 CPython 资产并校验哈希；有资产时不触网', async () => {
+    const harness = openService();
+    await seedWheelhouse(harness);
+    const distribution = pythonDistributions[0];
+    if (!distribution) throw new Error('缺少受管 Python 候选');
+    const bundledPythonRoot = path.join(harness.paths.userDataRoot, 'bundled-python');
+    const service = new SkillDependencyService({
+      store: harness.store,
+      paths: { ...harness.paths, bundledPythonRoot },
+      filesystem: harness.filesystem,
+      process: harness.process,
+      download: harness.download,
+    });
+    await harness.filesystem.writeFile(
+      path.join(bundledPythonRoot, distribution.fileName),
+      encoder.encode('not a valid bundled archive'),
+    );
+
+    const receipt = await service.prepareEnvironment(
+      { kind: 'managed', distributionId: distribution.id },
+      lockOf(),
+    );
+    await finishOperation({ ...harness, service }, receipt.operationId);
+
+    expect(harness.download.urls).toEqual([]);
+    expect(service.getOperation(receipt.operationId)?.failureCode).toBe(
+      'distribution-checksum-mismatch',
+    );
+    expect(
+      await harness.filesystem.exists(path.join(harness.paths.pythonRoot, distribution.sha256)),
+    ).toBe(false);
+  });
+
+  it('可等待到就绪环境并将取消传递给正在准备的环境作业', async () => {
+    const readyHarness = openService();
+    await seedWheelhouse(readyHarness);
+    const ready = await readyHarness.service.prepareEnvironmentAndWait(
+      localBase,
+      lockOf(),
+      new AbortController().signal,
+    );
+    expect(ready.status).toBe('ready');
+
+    const cancelledHarness = openService();
+    cancelledHarness.download.holdUntilAbort = true;
+    let markDownloadStarted: (() => void) | undefined;
+    const downloadStarted = new Promise<void>((resolve) => {
+      markDownloadStarted = resolve;
+    });
+    cancelledHarness.download.onDownloadStart = () => markDownloadStarted?.();
+    const controller = new AbortController();
+    const pending = cancelledHarness.service.prepareEnvironmentAndWait(
+      localBase,
+      lockOf({
+        packages: [
+          {
+            name: 'python-pptx',
+            version: '1.0.2',
+            wheel: wheelName,
+            sha256: sha256Of(wheelBytes),
+            source: 'approved-index',
+            url: `https://packages.example.test/wheels/${wheelName}`,
+          },
+        ],
+      }),
+      controller.signal,
+    );
+    await downloadStarted;
+    controller.abort();
+    await expect(pending).rejects.toSatisfy(isAbortError);
+    const environment = cancelledHarness.store.environments.listEnvironments()[0];
+    if (!environment) throw new Error('取消后环境记录缺失');
+    expect(cancelledHarness.service.listOperations(environment.environmentKey)[0]?.status).toBe(
+      'cancelled',
+    );
   });
 
   it('受管制品已落地：不重复下载，直接用它建 venv', async () => {

@@ -144,6 +144,91 @@ it('migrates legacy MCP identity without inventing reviews or rewriting Expert, 
   db.close();
 });
 
+it('moves only the four recognized stdio servers to bundled runtime revisions in v46', () => {
+  const db = new Database(':memory:');
+  db.pragma('foreign_keys = ON');
+  migrate(db, { migrations: appMigrations.filter((migration) => migration.version <= 44) });
+  const known = [
+    ['mcp-filesystem', 'npx', ['-y', '@modelcontextprotocol/server-filesystem', '/tmp/files']],
+    ['mcp-memory', 'npx', ['--yes', '@modelcontextprotocol/server-memory']],
+    ['mcp-sequential', 'npx', ['-y', '@modelcontextprotocol/server-sequential-thinking']],
+    ['mcp-fetch', 'uvx', ['mcp-server-fetch', '--ignore-robots-txt']],
+    ['mcp-custom', 'npx', ['-y', 'custom-server']],
+  ] as const;
+  for (const [id, command, args] of known)
+    db.prepare(
+      `INSERT INTO mcp_connections
+       (id, name, transport_kind, command, args_json, status, tools_json, created_at, updated_at)
+       VALUES (?, ?, 'stdio', ?, ?, 'ready', '[]', 1, 1)`,
+    ).run(id, id, command, JSON.stringify(args));
+  migrate(db, { migrations: appMigrations.filter((migration) => migration.version <= 45) });
+  db.prepare(
+    `INSERT INTO mcp_tool_reviews (revision_id, tool_id, contract_hash, reviewed_at)
+     VALUES (?, 'filesystem/read_file', ?, 1)`,
+  ).run('mcp-filesystem:initial', 'a'.repeat(64));
+
+  migrate(db, { migrations: appMigrations });
+
+  const currentFor = (id: string): { current_revision_id: string } =>
+    db.prepare('SELECT current_revision_id FROM mcp_connections WHERE id = ?').get(id) as {
+      current_revision_id: string;
+    };
+  const transportFor = (revisionId: string): unknown => {
+    const row = db
+      .prepare('SELECT transport_json FROM mcp_connection_revisions WHERE id = ?')
+      .get(revisionId) as { transport_json: string };
+    return JSON.parse(row.transport_json);
+  };
+  for (const id of known.slice(0, 4).map(([connectionId]) => connectionId)) {
+    const currentRevisionId = currentFor(id).current_revision_id;
+    expect(currentRevisionId).toBe(`${id}:initial:builtin-v46`);
+    expect(
+      db
+        .prepare('SELECT revision FROM mcp_connection_revisions WHERE id = ?')
+        .get(currentRevisionId),
+    ).toEqual({ revision: 2 });
+    expect(
+      db.prepare('SELECT id FROM mcp_connection_revisions WHERE id = ?').get(`${id}:initial`),
+    ).toEqual({ id: `${id}:initial` });
+    expect(
+      db
+        .prepare('SELECT revision_id FROM mcp_catalogs WHERE revision_id = ?')
+        .get(currentRevisionId),
+    ).toBeUndefined();
+  }
+  expect(transportFor('mcp-filesystem:initial:builtin-v46')).toEqual({
+    kind: 'stdio',
+    runtime: { kind: 'bundled', serverId: 'filesystem' },
+    args: ['/tmp/files'],
+  });
+  expect(transportFor('mcp-memory:initial:builtin-v46')).toEqual({
+    kind: 'stdio',
+    runtime: { kind: 'bundled', serverId: 'memory' },
+    args: [],
+  });
+  expect(transportFor('mcp-sequential:initial:builtin-v46')).toEqual({
+    kind: 'stdio',
+    runtime: { kind: 'bundled', serverId: 'sequential-thinking' },
+    args: [],
+  });
+  expect(transportFor('mcp-fetch:initial:builtin-v46')).toEqual({
+    kind: 'stdio',
+    runtime: { kind: 'bundled', serverId: 'fetch' },
+    args: ['--ignore-robots-txt'],
+  });
+  expect(currentFor('mcp-custom').current_revision_id).toBe('mcp-custom:initial');
+  expect(transportFor('mcp-custom:initial')).toEqual({
+    kind: 'stdio',
+    command: 'npx',
+    args: ['-y', 'custom-server'],
+  });
+  expect(db.prepare('SELECT revision_id FROM mcp_tool_reviews').all()).toEqual([
+    { revision_id: 'mcp-filesystem:initial' },
+  ]);
+  expect(db.pragma('foreign_key_check')).toEqual([]);
+  db.close();
+});
+
 /** 外键常开，因此绑定类用例必须建真实的父级链，不能塞伪造 id。 */
 const seedSkillChain = (db: Database.Database, now: number): void => {
   db.prepare(
@@ -2650,8 +2735,8 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
   it('creates all eight tables and required indexes on an empty database, then stays idempotent', () => {
     const db = new Database(':memory:');
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(45);
-    expect(appMigrations.at(-1)?.version).toBe(45);
+    expect(readSchemaVersion(db)).toBe(46);
+    expect(appMigrations.at(-1)?.version).toBe(46);
     for (const table of SCHEDULE_TABLES) expect(hasTable(db, table), table).toBe(true);
     const indexes = (
       db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as Array<{
@@ -2676,7 +2761,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
     );
     expect(db.pragma('foreign_key_check')).toEqual([]);
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(45);
+    expect(readSchemaVersion(db)).toBe(46);
     expect(
       db.prepare('SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 37').get(),
     ).toEqual({ count: 1 });
@@ -2698,7 +2783,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
     expect(readSchemaVersion(db)).toBe(35);
     expect(hasTable(db, 'schedules')).toBe(false);
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(45);
+    expect(readSchemaVersion(db)).toBe(46);
     expect(db.prepare('SELECT id, workspace_id FROM tasks WHERE id = ?').get('task-1')).toEqual({
       id: 'task-1',
       workspace_id: 'ws-1',
@@ -2717,7 +2802,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
     ).toEqual({ id: 'version-1', artifact_id: 'artifact-1', content: '# 合成成果' });
     expect(countRows(db, 'schedules')).toBe(0);
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(45);
+    expect(readSchemaVersion(db)).toBe(46);
     expect(db.pragma('foreign_key_check')).toEqual([]);
     db.close();
   });
@@ -2990,7 +3075,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
     });
     expect(db.pragma('foreign_key_check')).toEqual([]);
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(45);
+    expect(readSchemaVersion(db)).toBe(46);
     db.close();
   });
 
@@ -3014,7 +3099,7 @@ describe('scheduled task schema v36-v38 (SC03-2 / SC04-4 / SC06-4)', () => {
 
     db.exec('DROP TABLE migration_collision');
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(45);
+    expect(readSchemaVersion(db)).toBe(46);
     expect(
       db
         .prepare(
@@ -3056,7 +3141,7 @@ describe('Task Continuity schema migration v39 (TC01)', () => {
     before.close();
 
     const firstOpen = openAppDatabase(filePath);
-    expect(readSchemaVersion(firstOpen)).toBe(45);
+    expect(readSchemaVersion(firstOpen)).toBe(46);
     expect(hasTable(firstOpen, 'task_continuity_revisions')).toBe(true);
     expect(hasTable(firstOpen, 'run_continuity_contexts')).toBe(true);
     expect(
@@ -3072,7 +3157,7 @@ describe('Task Continuity schema migration v39 (TC01)', () => {
     firstOpen.close();
 
     const secondOpen = openAppDatabase(filePath);
-    expect(readSchemaVersion(secondOpen)).toBe(45);
+    expect(readSchemaVersion(secondOpen)).toBe(46);
     expect(countRows(secondOpen, 'task_continuity_revisions')).toBe(0);
     expect(countRows(secondOpen, 'run_continuity_contexts')).toBe(0);
     secondOpen.close();
@@ -3102,7 +3187,7 @@ describe('Task Continuity schema migration v39 (TC01)', () => {
 
     db.exec('DROP TABLE migration_collision');
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(45);
+    expect(readSchemaVersion(db)).toBe(46);
     expect(hasTable(db, 'task_continuity_revisions')).toBe(true);
     expect(hasTable(db, 'run_continuity_contexts')).toBe(true);
     expect(db.pragma('foreign_key_check')).toEqual([]);
@@ -3129,7 +3214,7 @@ describe('Task Continuity Run snapshot migration v40 (TC02)', () => {
 
     db.exec('DROP TRIGGER run_continuity_contexts_only_mark_first_provider_request');
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(45);
+    expect(readSchemaVersion(db)).toBe(46);
     expect(hasColumn(db, 'run_continuity_contexts', 'omissions_json')).toBe(true);
     expect(
       db
@@ -3140,7 +3225,7 @@ describe('Task Continuity Run snapshot migration v40 (TC02)', () => {
     ).toEqual({ name: 'run_continuity_contexts_only_mark_first_provider_request' });
     expect(db.pragma('foreign_key_check')).toEqual([]);
     migrate(db, { migrations: appMigrations });
-    expect(readSchemaVersion(db)).toBe(45);
+    expect(readSchemaVersion(db)).toBe(46);
     db.close();
   });
 });
@@ -3162,7 +3247,7 @@ describe('Skill publisher package identity migration v41', () => {
 
     migrate(db, { migrations: appMigrations });
 
-    expect(readSchemaVersion(db)).toBe(45);
+    expect(readSchemaVersion(db)).toBe(46);
     expect(hasColumn(db, 'skill_revisions', 'package_id')).toBe(true);
     expect(
       db.prepare('SELECT id, package_id FROM skill_revisions WHERE id = ?').get('revision-1'),
@@ -3189,7 +3274,7 @@ describe('builtin availability settings migration v43', () => {
 
     migrate(db, { migrations: appMigrations });
 
-    expect(readSchemaVersion(db)).toBe(45);
+    expect(readSchemaVersion(db)).toBe(46);
     expect(
       db
         .prepare(

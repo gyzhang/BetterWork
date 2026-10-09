@@ -26,6 +26,7 @@ import { createPptxRenderer } from './infrastructure/pptx-renderer';
 import { registerIpc } from './ipc/register-ipc';
 import { AppStore, RUN_INTERRUPTED_ON_STARTUP_REASON } from './persistence';
 import { createQuitHandler } from './services/application-shutdown';
+import { BuiltinMcpRuntimeService } from './services/builtin-mcp-runtime-service';
 import { CredentialAccess } from './services/credential-access';
 import { CredentialMigrationService } from './services/credential-migration-service';
 import { DiscussionCheckpointService } from './services/discussion-checkpoint-service';
@@ -174,10 +175,6 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
   if (interruptedJobs > 0) {
     console.warn(`记忆提炼作业启动收口：interrupted=${String(interruptedJobs)}`);
   }
-  const mcpClientService = new McpClientService(store, {
-    guardian: resolveGuardianRuntime(__dirname),
-    openBrowser: (url) => shell.openExternal(url),
-  });
   const webFetchService = new WebFetchService();
   const officeParser = new OfficeParserService();
   startupReadiness.push(
@@ -289,6 +286,12 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
   const dependencyLocksRoot = app.isPackaged
     ? path.join(process.resourcesPath, 'dependency-locks')
     : path.resolve(app.getAppPath(), '../../resources/dependency-locks');
+  const resourcesRoot = app.isPackaged
+    ? process.resourcesPath
+    : path.resolve(app.getAppPath(), '../../resources');
+  const mcpRuntimeAssetsRoot = app.isPackaged
+    ? path.join(process.resourcesPath, 'mcp-runtime-assets')
+    : path.join(app.getAppPath(), 'build', 'mcp-runtime-assets');
   const dependencies = new SkillDependencyService({
     store,
     paths: {
@@ -298,10 +301,23 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
       wheelhouseRoot: app.isPackaged
         ? path.join(process.resourcesPath, 'wheelhouse')
         : path.resolve(app.getAppPath(), '../../resources/wheelhouse'),
+      bundledPythonRoot: path.join(mcpRuntimeAssetsRoot, 'python'),
     },
     filesystem: dependencyFilesystem,
     process: dependencyProcess,
     download: createFetchDownloader(),
+  });
+  const builtinMcpRuntime = new BuiltinMcpRuntimeService({
+    appRoot: app.getAppPath(),
+    resourcesRoot,
+    runtimeAssetsRoot: mcpRuntimeAssetsRoot,
+    dependencies,
+  });
+  const mcpClientService = new McpClientService(store, {
+    guardian: resolveGuardianRuntime(__dirname),
+    openBrowser: (url) => shell.openExternal(url),
+    resolveBundledRuntime: (serverId, args, signal) =>
+      builtinMcpRuntime.resolve(serverId, args, signal),
   });
   const snapshots = new ToolchainSnapshotService({
     store,

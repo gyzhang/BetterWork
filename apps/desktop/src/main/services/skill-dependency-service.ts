@@ -43,6 +43,7 @@ export interface DependencyPaths {
   readonly pythonRoot: string;
   readonly environmentsRoot: string;
   readonly wheelhouseRoot: string;
+  readonly bundledPythonRoot?: string;
 }
 
 export interface SkillDependencyRoots {
@@ -509,10 +510,17 @@ export class SkillDependencyService {
       }
       if (!present) missingWheels.push(entry.name);
     }
+    const bundledArchivePresent =
+      resolved.distribution !== undefined &&
+      this.roots.paths.bundledPythonRoot !== undefined &&
+      (await this.roots.filesystem.exists(
+        path.join(this.roots.paths.bundledPythonRoot, resolved.distribution.fileName),
+      ));
     const requiresDownload =
       missingWheels.length > 0 ||
       (resolved.distribution !== undefined &&
-        !(await this.distributionPresent(resolved.distribution)));
+        !(await this.distributionPresent(resolved.distribution)) &&
+        !bundledArchivePresent);
 
     return {
       environmentKey,
@@ -623,6 +631,43 @@ export class SkillDependencyService {
       environmentKey: plan.environmentKey,
       reused: false,
     };
+  }
+
+  /**
+   * Built-in MCP needs a ready interpreter before it can launch. Keep the existing persisted
+   * preparation job and cancellation semantics, while allowing that caller to await its terminal
+   * result instead of exposing a separate runtime preparation flow.
+   */
+  async prepareEnvironmentAndWait(
+    base: BaseInterpreterRequest,
+    lock: DependencyLock,
+    signal: AbortSignal,
+    kind: DependencyOperationKind = 'prepare',
+    packageWheelhouseRoot?: string,
+  ): Promise<RuntimeEnvironment> {
+    const receipt = await this.prepareEnvironment(base, lock, kind, packageWheelhouseRoot);
+    try {
+      while (true) {
+        signal.throwIfAborted();
+        const operation = this.getOperation(receipt.operationId);
+        if (!operation) throw new Error('Python 环境准备记录已丢失。');
+        if (operation.status === 'succeeded') {
+          const environment = this.getEnvironment(receipt.environmentId);
+          if (!environment || environment.status !== 'ready')
+            throw new Error('Python 环境准备完成，但环境状态未就绪。');
+          return environment;
+        }
+        if (['failed', 'cancelled', 'interrupted'].includes(operation.status))
+          throw new Error(operation.failureSummary ?? operation.message ?? 'Python 环境准备失败。');
+        await new Promise<void>((resolve) => setTimeout(resolve, 100));
+      }
+    } catch (error) {
+      if (signal.aborted) {
+        await this.cancelPreparation(receipt.operationId);
+        signal.throwIfAborted();
+      }
+      throw error;
+    }
   }
 
   /** 取消准备作业：终止当前子进程、清理本作业目录、把作业与环境落到取消态。 */
@@ -859,17 +904,25 @@ export class SkillDependencyService {
     if (await this.roots.filesystem.exists(entry)) return entry;
 
     await this.roots.filesystem.mkdir(directory);
-    this.reportProgress(job, 'resolve-interpreter', `下载受管 Python ${distribution.version}`);
+    const bundledArchive = this.roots.paths.bundledPythonRoot
+      ? path.join(this.roots.paths.bundledPythonRoot, distribution.fileName)
+      : undefined;
     let bytes: Uint8Array;
-    try {
-      bytes = await this.roots.download.download(distribution.url, job.abortController.signal);
-    } catch (error) {
-      await this.roots.filesystem.remove(directory);
-      throw new DependencyPreparationError(
-        'distribution-download-failed',
-        `下载 ${distribution.fileName} 失败：${redactCredentials(messageOf(error))}`,
-        { cause: error },
-      );
+    if (bundledArchive && (await this.roots.filesystem.exists(bundledArchive))) {
+      this.reportProgress(job, 'resolve-interpreter', `读取随包 Python ${distribution.version}`);
+      bytes = await this.roots.filesystem.readFile(bundledArchive);
+    } else {
+      this.reportProgress(job, 'resolve-interpreter', `下载受管 Python ${distribution.version}`);
+      try {
+        bytes = await this.roots.download.download(distribution.url, job.abortController.signal);
+      } catch (error) {
+        await this.roots.filesystem.remove(directory);
+        throw new DependencyPreparationError(
+          'distribution-download-failed',
+          `下载 ${distribution.fileName} 失败：${redactCredentials(messageOf(error))}`,
+          { cause: error },
+        );
+      }
     }
     const actual = sha256Of(bytes);
     if (actual !== distribution.sha256) {

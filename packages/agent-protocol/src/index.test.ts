@@ -409,6 +409,35 @@ describe('run protocol', () => {
     ).toBe(false);
   });
 
+  it('validates bundled stdio runtimes separately from user commands', () => {
+    expect(
+      mcpTransportSchema.safeParse({
+        kind: 'stdio',
+        runtime: { kind: 'bundled', serverId: 'filesystem' },
+        args: ['/Users/test/Documents'],
+      }).success,
+    ).toBe(true);
+    expect(
+      mcpTransportSchema.safeParse({
+        kind: 'stdio',
+        runtime: { kind: 'bundled', serverId: 'fetch' },
+        command: 'python',
+        args: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      mcpTransportSchema.safeParse({
+        kind: 'stdio',
+        runtime: { kind: 'bundled', serverId: 'custom' },
+        args: [],
+      }).success,
+    ).toBe(false);
+    expect(mcpTransportSchema.safeParse({ kind: 'stdio', command: 'node', args: [] }).success).toBe(
+      true,
+    );
+    expect(mcpTransportSchema.safeParse({ kind: 'stdio', args: [] }).success).toBe(false);
+  });
+
   it('requires operation correlation and consent and rejects duplicate or mixed-revision task bindings', () => {
     const operation = {
       id: 'connection',

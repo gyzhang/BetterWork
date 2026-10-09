@@ -9,6 +9,7 @@
 - 验收边界：先验收 API/MCP/Skill 三类能力的技术链路、状态、范围、失败/取消与凭据保护是否自洽；不把示例专家/Skill 的产出业务质量作为功能通过条件。真实业务凭据、外部账号与签名身份缺失时保持 partial 并写明缺项。
 
 > 2026-10-08 MCP 专项：用户确认 [ADR-0043](../adr/0043-mcp-multi-transport-and-oauth.md) 的推荐方案并授权编码，CF30–CF32/CF40–CF41 按已实现 CF10/CF11 底座推进，不前置开发百度 profile。CF12/CF33/CF42 的人工或真实服务验收保持独立；下文旧卡的仅静态认证、排除 SSE/OAuth、自动重建并重放会话及自行运行完整 verify 等条款由 ADR-0043 与 ADR-0042 替代。
+> 2026-10-09 内置 MCP 运行时：用户明确要求安装包内置运行时、减少用户安装 Node/Python 和冷启动联网；[ADR-0045](../adr/0045-bundled-runtimes-for-local-mcp.md) Accepted。新增 CF43；真实业务与签名安装验收仍按 CF33/CF42/CF51 边界记录。
 
 ## 1. 交付顺序与完成口径
 
@@ -60,7 +61,8 @@ CF00 不重复此前已证实且未受变更影响的测试；以最新提交、
 | CF40 | 三种传输与目的地校验 | CF32 实现 | doing | 三种传输、DNS socket pinning、目的地隔离、JSON/SSE 限额、仅握手 404/405 显式回退已落地；HTTP/网络策略回归通过。待真实端点验收；[完整证据](../acceptance/2026-10-09-mcp-connections.md) |
 | CF41 | 版本协商、OAuth 与运行时限制 | CF40 | doing | SDK auto/legacy、PKCE/state/issuer/resource、预注册/CIMD/DCR、refresh 合并/CAS、登录取消/监听器清理、设置与通知已落地；OAuth/运行时/页面回归通过。待真实账号与 Keychain 重启验收；[完整证据](../acceptance/2026-10-09-mcp-connections.md) |
 | CF42 | M4 里程碑与远程 MCP 端到端 | CF41 | partial | 真实 HTTP/SSE/OAuth 账号尚未提供；保持未验收，不提升 ADR-0025 或关闭 M4；ADR-0043 已接受只代表方案已定案；[完整证据](../acceptance/2026-10-09-mcp-connections.md) |
-| CF50 | 跨类迁移回归与用户走查脚本 | CF42 | todo | 待补 |
+| CF43 | 内置 stdio MCP 与随包运行时 | CF32 | partial | ADR-0045 Accepted；三个 Node MCP 与 Python fetch 通过随包 guardian 握手；打包 CPython、fetch wheelhouse 与现有 PPT wheelhouse 均完成离线环境准备。未签名 unpacked 包验证通过；Developer ID 安装态及用户窗口验收待后续窗口；[证据](../acceptance/2026-10-09-mcp-connections.md#2026-10-09-内置-mcp-运行时离线打包验收) |
+| CF50 | 跨类迁移回归与用户走查脚本 | CF42, CF43 | todo | 待补 |
 | CF51 | M5 里程碑、ADR Accepted 与整体收尾 | CF50 | todo | 待补 |
 
 串行理由：CF 系列几乎每张卡触碰 `packages/agent-protocol/src/index.ts`、`apps/desktop/src/main/db/app-schema.ts` 与 `run-service.ts`；按 [执行手册](README.md) §4 不并行派发。CF20/CF30 之间在协议字段上耦合弱，可以在 M2 完成后并行进入 M3 起点，但仍按串行提交。
@@ -301,9 +303,18 @@ CF00 不重复此前已证实且未受变更影响的测试；以最新提交、
 - 方案状态由 Accepted ADR-0043 管理，不以离线测试提升 ADR-0025 或关闭里程碑；API/CF12/A/B0/E 等验收独立保留。
 - 不引入 Resources/Prompts/sampling/elicitation、Tasks/MCP Apps 扩展或通用逐次审批引擎。
 
+### CF43 内置 stdio MCP 与随包运行时
+
+- 依据：[ADR-0045](../adr/0045-bundled-runtimes-for-local-mcp.md)、[MCP 连接设计](../designs/mcp-connections.md)、[capability-contracts §3.1](capability-contracts.md)。
+- 目标：干净 macOS arm64 安装不要求用户预装 Node.js、npm/npx、Python、uv/uvx；优先使用随安装包资源，缺少资源时才使用登记的固定地址并校验 SHA-256。
+- 范围：filesystem、memory、sequential-thinking 三个锁版 Node server 与 mcp-server-fetch Python server；自定义 stdio 命令不变。现有可精确识别配置由 v46 新 revision 迁移，旧 revision、连接身份和历史保留，工具审阅不继承。
+- Python：CPython 3.12.14 macOS arm64 制品、PPT Skill wheelhouse 与 fetch 依赖闭包随包；SkillDependencyService 共享基础解释器，各锁仍生成独立受管 venv；进度、取消与失败原因可见。
+- 验收：schema/迁移/service/guardian 回归；分别在 PATH 不含 Node/Python 的宿主启动四项内置服务；CPython、wheels 与 Node package 资源确实出现在 unpacked/安装包；断网准备成功；损坏哈希拒绝执行；取消后无孤儿进程/半成品环境；不自动启用连接或授权工具。真实业务服务、签名安装与用户窗口结果继续分开记录。
+- 状态：partial；代码、自动化、未签名 unpacked 包、受管 guardian 与禁网环境离线握手已验证；Developer ID 签名安装与人工首装验收仍待后续窗口。
+
 ### CF50 跨类迁移回归与用户走查脚本
 
-- 前置：CF42。
+- 前置：CF42、CF43。
 - 必读：[设计 §9 验收矩阵](../designs/api-tools-and-remote-mcp.md)、[E55 走查脚本](../acceptance/2026-09-15-expert-human-acceptance.md)。
 - 目标：新增一份覆盖 API + MCP + Skill + 材料 + 记忆 + 撤销 + 重启的连续两期走查脚本；给出 SQLite 只读核对查询。
 - 落点：`docs/acceptance/YYYY-MM-DD-capability-two-periods.md`；`scripts/capability-walkthrough-checklist.mjs`（可选，仅只读核对）。
@@ -316,7 +327,7 @@ CF00 不重复此前已证实且未受变更影响的测试；以最新提交、
 - 前置：CF50。
 - 目标：M5 达成；A21 + E55 + E56 一起收口；整体设计验收矩阵逐条对应。
 - 工作：
-  1. 用 `npm run dist:mac` 生成 arm64/x64；带 Developer ID 签名 + Gatekeeper；安装态按 CF50 脚本走一次；旧凭据模型在升级后仍可用（[capability-contracts §10](capability-contracts.md)）。
+  1. 用 `npm run dist:mac` 生成 macOS arm64；带 Developer ID 签名 + Gatekeeper；安装态按 CF50 脚本走一次；旧凭据模型在升级后仍可用（[capability-contracts §10](capability-contracts.md)）。
   2. [A21](README.md)、[E55](tasks-experts.md)、[E56](tasks-experts.md) 三卡在真实证据到位后升 done；否则保持 partial 并写清缺项。
   3. [AGENTS.md §2](../../AGENTS.md) 与 [docs/07-mvp-and-roadmap.md §0](../07-mvp-and-roadmap.md) 加一段 CF 完成口径；[docs/05-capability-system.md](../05-capability-system.md) 与 [docs/10-ui-ux-system.md](../10-ui-ux-system.md) 把"Proposed"提示改为"已落地"；本计划文档同步状态。
   4. 最终一次 `npm run verify`；写当日日志。

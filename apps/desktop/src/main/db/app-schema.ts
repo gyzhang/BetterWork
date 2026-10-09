@@ -2196,6 +2196,92 @@ export const appMigrations: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 46,
+    name: 'migrate known local MCP services to bundled runtimes',
+    up(db: Database.Database): void {
+      const rows = db
+        .prepare(
+          `SELECT r.id, r.connection_id, r.revision, r.name, r.transport_json
+           FROM mcp_connection_revisions r
+           JOIN mcp_connections c ON c.id = r.connection_id
+           WHERE c.current_revision_id = r.id`,
+        )
+        .all() as Array<{
+        id: string;
+        connection_id: string;
+        revision: number;
+        name: string;
+        transport_json: string;
+      }>;
+      const insertRevision = db.prepare(
+        `INSERT INTO mcp_connection_revisions
+         (id, connection_id, revision, name, transport_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      );
+      const advanceConnection = db.prepare(
+        `UPDATE mcp_connections SET current_revision_id = ?, updated_at = ?
+         WHERE id = ? AND current_revision_id = ?`,
+      );
+      const now = Date.now();
+
+      for (const row of rows) {
+        const transport: unknown = JSON.parse(row.transport_json);
+        if (!transport || typeof transport !== 'object' || !('kind' in transport)) continue;
+        const config = transport as {
+          kind?: unknown;
+          command?: unknown;
+          args?: unknown;
+          cwd?: unknown;
+          env?: unknown;
+        };
+        if (
+          config.kind !== 'stdio' ||
+          typeof config.command !== 'string' ||
+          !Array.isArray(config.args) ||
+          !config.args.every((argument) => typeof argument === 'string') ||
+          config.cwd !== undefined
+        )
+          continue;
+
+        const executable = config.command.split('/').at(-1);
+        const args = config.args;
+        let serverId: 'filesystem' | 'memory' | 'sequential-thinking' | 'fetch' | undefined;
+        let serverArgs: string[] = [];
+        if (executable === 'npx' && ['-y', '--yes'].includes(args[0] ?? '')) {
+          const packageName = args[1];
+          const nodeServers: Record<string, typeof serverId> = {
+            '@modelcontextprotocol/server-filesystem': 'filesystem',
+            '@modelcontextprotocol/server-memory': 'memory',
+            '@modelcontextprotocol/server-sequential-thinking': 'sequential-thinking',
+          };
+          serverId = packageName ? nodeServers[packageName] : undefined;
+          serverArgs = args.slice(2);
+        } else if (executable === 'uvx' && args[0] === 'mcp-server-fetch') {
+          serverId = 'fetch';
+          serverArgs = args.slice(1);
+        }
+        if (!serverId) continue;
+
+        const builtinTransport = {
+          kind: 'stdio',
+          runtime: { kind: 'bundled', serverId },
+          args: serverArgs,
+          ...(Array.isArray(config.env) ? { env: config.env } : {}),
+        };
+        const revisionId = `${row.id}:builtin-v46`;
+        insertRevision.run(
+          revisionId,
+          row.connection_id,
+          row.revision + 1,
+          row.name,
+          JSON.stringify(builtinTransport),
+          now,
+        );
+        advanceConnection.run(revisionId, now, row.connection_id, row.id);
+      }
+    },
+  },
 ];
 
 /**

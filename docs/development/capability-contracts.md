@@ -95,7 +95,8 @@ type McpAuthentication =
     };
 type McpTransport =
   | {
-      kind: 'stdio'; command: string; args: string[]; cwd?: string;
+      kind: 'stdio'; runtime?: { kind: 'bundled'; serverId: 'filesystem' | 'memory' | 'sequential-thinking' | 'fetch' };
+      command?: string; args: string[]; cwd?: string;
       env?: { name: string; value?: string; secret: boolean }[];
     }
   | {
@@ -352,4 +353,4 @@ No implementation is scheduled by this document. After a separate instruction, c
 
 Required future verification is the [design acceptance matrix](../designs/api-tools-and-remote-mcp.md#9-acceptance-matrix), including negative isolation/credential cases, real SQLite migrations, cancelable injectable network tests, and user-led real-service acceptance. Automated tests do not use external services. Implementation requires `npm run verify`; documentation-only adoption checks links, consistency, and scope without claiming runtime results.
 
-Old A/B0/E task cards and statuses are not changed or duplicated. Credential storage changes require a coordinated update to the existing engineering standard and applicable guards when implemented; documentation adoption alone does not change the current plaintext implementation.
+Old A/B0/E task cards and statuses are not changed or duplicated. Local stdio may carry the explicit bundled runtime selector defined by [ADR-0045](../adr/0045-bundled-runtimes-for-local-mcp.md); when it is present, `command` and `cwd` are omitted and `args` contains only server arguments. Without a selector, `command` remains required for a custom stdio server. Credential storage changes require a coordinated update to the existing engineering standard and applicable guards when implemented; documentation adoption alone does not change the current plaintext implementation.

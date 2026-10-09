@@ -2788,55 +2788,79 @@ const mcpRemoteTransportShape = {
   networkApproved: z.boolean(),
   authentication: mcpAuthenticationSchema,
 };
-export const mcpTransportSchema = z
-  .discriminatedUnion('kind', [
-    z
+export const mcpBundledServerIdSchema = z.enum([
+  'filesystem',
+  'memory',
+  'sequential-thinking',
+  'fetch',
+]);
+export type McpBundledServerId = z.infer<typeof mcpBundledServerIdSchema>;
+const mcpStdioTransportSchema = z
+  .object({
+    kind: z.literal('stdio'),
+    runtime: z
       .object({
-        kind: z.literal('stdio'),
-        command: z.string().trim().min(1).max(2_000),
-        args: z.array(z.string().max(2_000)).max(100).default([]),
-        cwd: z.string().trim().min(1).max(4_000).optional(),
-        env: z
-          .array(
-            z
-              .object({
-                name: z
-                  .string()
-                  .max(200)
-                  .regex(/^[A-Za-z_][A-Za-z0-9_]*$/u)
-                  .refine(
-                    (name) =>
-                      ![
-                        'PATH',
-                        'HOME',
-                        'USER',
-                        'LOGNAME',
-                        'SHELL',
-                        'TERM',
-                        'NODE_OPTIONS',
-                        'NODE_PATH',
-                        'ELECTRON_RUN_AS_NODE',
-                      ].includes(name.toUpperCase()) &&
-                      !name.toUpperCase().startsWith('DYLD_') &&
-                      !name.toUpperCase().startsWith('LD_'),
-                    '不能覆盖受管进程的运行环境变量',
-                  ),
-                value: z.string().max(8_192).optional(),
-                secret: z.boolean(),
-              })
-              .strict(),
-          )
-          .max(50)
-          .optional(),
+        kind: z.literal('bundled'),
+        serverId: mcpBundledServerIdSchema,
       })
       .strict()
-      .refine((v) => {
-        const env = v.env ?? [];
-        return (
-          new Set(env.map((e) => e.name)).size === env.length &&
-          env.every((e) => !e.secret || e.value === undefined)
-        );
-      }, '环境变量名称不能重复，机密值必须通过凭据槽位保存'),
+      .optional(),
+    command: z.string().trim().min(1).max(2_000).optional(),
+    args: z.array(z.string().max(2_000)).max(100).default([]),
+    cwd: z.string().trim().min(1).max(4_000).optional(),
+    env: z
+      .array(
+        z
+          .object({
+            name: z
+              .string()
+              .max(200)
+              .regex(/^[A-Za-z_][A-Za-z0-9_]*$/u)
+              .refine(
+                (name) =>
+                  ![
+                    'PATH',
+                    'HOME',
+                    'USER',
+                    'LOGNAME',
+                    'SHELL',
+                    'TERM',
+                    'NODE_OPTIONS',
+                    'NODE_PATH',
+                    'ELECTRON_RUN_AS_NODE',
+                  ].includes(name.toUpperCase()) &&
+                  !name.toUpperCase().startsWith('DYLD_') &&
+                  !name.toUpperCase().startsWith('LD_'),
+                '不能覆盖受管进程的运行环境变量',
+              ),
+            value: z.string().max(8_192).optional(),
+            secret: z.boolean(),
+          })
+          .strict(),
+      )
+      .max(50)
+      .optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.runtime?.kind === 'bundled') {
+      if (value.command !== undefined || value.cwd !== undefined)
+        context.addIssue({
+          code: 'custom',
+          message: '内置 MCP 不能覆盖受管启动命令或工作目录',
+        });
+    } else if (value.command === undefined) {
+      context.addIssue({ code: 'custom', message: '自定义 stdio MCP 必须提供启动命令' });
+    }
+    const env = value.env ?? [];
+    if (new Set(env.map((item) => item.name)).size !== env.length)
+      context.addIssue({ code: 'custom', message: '环境变量名称不能重复' });
+    if (env.some((item) => item.secret && item.value !== undefined))
+      context.addIssue({ code: 'custom', message: '机密值必须通过凭据槽位保存' });
+  });
+export const mcpTransportSchema = z
+  .discriminatedUnion('kind', [
+    mcpStdioTransportSchema,
     z
       .object({
         kind: z.literal('streamable-http'),

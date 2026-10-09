@@ -2,7 +2,7 @@
 
 ## 设置中的 MCP 多传输与 OAuth — 2026-10-08 定案，2026-10-09 实现
 
-用户审阅预览后按推荐 D1–D5 定案并授权编码，[ADR-0043](adr/0043-mcp-multi-transport-and-oauth.md) 已 Accepted。[设置中的 MCP](designs/mcp-connections.md)按 MCP 2026-07-28 实现本地 stdio、Streamable HTTP（含显式授权的本机 HTTP）、旧 HTTP+SSE 与 OAuth 浏览器登录，支持新旧版本协商、受管凭据、配置修订、工具合同审阅、Run 独立客户端及取消/历史保留。
+用户审阅预览后按推荐 D1–D5 定案并授权编码，[ADR-0043](adr/0043-mcp-multi-transport-and-oauth.md) 已 Accepted。[设置中的 MCP](designs/mcp-connections.md)按 MCP 2026-07-28 实现本地 stdio、Streamable HTTP（含显式授权的本机 HTTP）、旧 HTTP+SSE 与 OAuth 浏览器登录，支持新旧版本协商、受管凭据、配置修订、工具合同审阅、Run 独立客户端及取消/历史保留。2026-10-09 用户明确要求产品安装包内置一组可直接使用的 MCP/CLI/Skill/Expert，尽量不要求用户另装 Node.js/Python 或联网准备运行时；[ADR-0045](adr/0045-bundled-runtimes-for-local-mcp.md) 与 CF43 落实当前内置 stdio MCP 和共享 Python 3.12.14 基础运行时，外部 CLI 仍按各自依赖契约处理。
 
 代码与离线自动化、AI 生产组件页面检查已落地，证据见 [CF 唯一任务板](development/tasks-capability-foundation.md)与[本轮记录](acceptance/2026-10-09-mcp-connections.md)。真实业务 server/OAuth 账号、真机 Keychain 与用户窗口验收仍待完成；CF33/CF42 保持 partial，不代签 API 或 A/B0/E 等既有验收。本地实现提交为 `9479562`，用户已授权推送与合并，实际版本及合并结果以 Git/PR 记录为准；BetterWork 产品发布尚未执行。
 

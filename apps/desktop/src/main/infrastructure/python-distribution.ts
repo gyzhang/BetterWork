@@ -40,29 +40,6 @@ export const pythonDistributions: readonly PythonDistribution[] = [
     license: cpythonLicense,
     entryRelativePath: 'python/bin/python3.12',
   },
-  {
-    id: 'python-build-standalone-3.12.14-darwin-x64',
-    version: '3.12.14',
-    release: '20260901',
-    platform: { os: 'darwin', arch: 'x64', abi: 'cp312' },
-    fileName: 'cpython-3.12.14+20260901-x86_64-apple-darwin-install_only.tar.gz',
-    url: upstream('cpython-3.12.14+20260901-x86_64-apple-darwin-install_only.tar.gz'),
-    sha256: '2e31b23f3f1319f707d0e620b48847a0046577541d357276821f9f1b5492e0ba',
-    license: cpythonLicense,
-    entryRelativePath: 'python/bin/python3.12',
-  },
-  {
-    // 记录在案但本机无法验收：Windows supervisor（A09）blocked，跨平台门槛保留到 A21。
-    id: 'python-build-standalone-3.12.14-win32-x64',
-    version: '3.12.14',
-    release: '20260901',
-    platform: { os: 'win32', arch: 'x64', abi: 'cp312' },
-    fileName: 'cpython-3.12.14+20260901-x86_64-pc-windows-msvc-install_only.tar.gz',
-    url: upstream('cpython-3.12.14+20260901-x86_64-pc-windows-msvc-install_only.tar.gz'),
-    sha256: 'e90c1b6419da3bd812dd73bb3de40287a21abf153438147639ec5e20375ea93f',
-    license: cpythonLicense,
-    entryRelativePath: 'python/python.exe',
-  },
 ];
 
 export const findDistribution = (id: string): PythonDistribution | undefined =>

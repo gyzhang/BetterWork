@@ -90,7 +90,7 @@
 
 ### 4.1 默认路径与高级路径
 
-**默认：应用管理的 Python 运行时。** 按目标 OS/架构提供固定版本的 Python 发行制品，并在「设置 → 运行」呈现版本和是否已落地；首次准备 Skill 环境时由应用自动下载与校验，在用户数据目录创建专属 venv。Skill profile 只给出兼容版本范围和所用依赖锁，不能为每个 Skill 另带解释器。基础 Python 使用固定发行制品，记录下载来源、SHA-256、许可证与目标平台，不能跟随 latest。[上游说明](https://github.com/astral-sh/python-build-standalone)
+**默认：应用管理的 Python 运行时。** 按目标 OS/架构提供固定版本的 Python 发行制品，并在「设置 → 运行」呈现版本和是否已落地；macOS arm64 安装包内置 CPython 3.12.14，首次准备时优先从应用资源校验并提取，在用户数据目录创建专属 venv，不要求用户另装 Python。开发态或缺少随包制品时，应用才从登记地址下载并校验。Skill profile 只给出兼容版本范围和所用依赖锁，不能为每个 Skill 另带解释器。基础 Python 使用固定发行制品，记录下载来源、SHA-256、许可证与目标平台，不能跟随 latest。[上游说明](https://github.com/astral-sh/python-build-standalone)
 
 **高级：选用本机 Python 作为基础解释器。** 探测路径、版本、架构与 venv 能力后仍创建算台专属环境，不向该解释器的全局 site-packages 安装；不直接复用用户 Conda 中随时会变化的包集合。检测在用户选择/准备环境后进行，不能在纯 Skill 导入时执行。
 
