@@ -72,6 +72,7 @@ const steps = [
   'second-run',
   'failed-run',
   'cancelled-run',
+  'historical-save',
 ];
 
 interface RequestReading {
@@ -623,6 +624,33 @@ export async function runAppJourney(
     if (step === 'failed-run' || step === 'cancelled-run') {
       assert.ok(current);
       assert.equal(current.status, step === 'failed-run' ? 'failed' : 'cancelled');
+    }
+    if (step === 'historical-save') {
+      assert.ok(second);
+      const sourceRunId = second.id;
+      const artifact = services.store.artifacts.list(second.taskId)[0];
+      assert.ok(artifact);
+      assert.equal(artifact.versionNumber, 3, '历史保存没有形成新版本');
+      assert.equal(artifact.sourceRunId, second.id, '历史版本来源错误指向新的失败或取消 Run');
+      const detail = services.store.artifacts.getDetail(artifact.id);
+      assert.ok(detail?.type === 'markdown');
+      const final = services.store.runs
+        .listEvents(second.id)
+        .find((event) => event.type === 'run.completed');
+      assert.ok(final?.type === 'run.completed');
+      assert.equal(detail.content, final.finalContent, '历史保存混入人工修订或其他 Run 正文');
+      const expectedEvidence = services.store.evidence
+        .listByTask(second.taskId)
+        .filter((item) => item.runId === sourceRunId);
+      assert.deepEqual(
+        detail.evidence.map((item) => item.id).sort(),
+        expectedEvidence.map((item) => item.id).sort(),
+        '历史保存与目标 Run 的 Evidence 不一致',
+      );
+      assert.ok(
+        detail.evidence.every((item) => item.runId === sourceRunId),
+        '历史保存混入其他 Run 的 Evidence',
+      );
     }
     assert.deepEqual(networkAttempts, [], '合成窗口发起了网络请求');
     assert.deepEqual(rendererErrors, [], '应用 Renderer 出现未预期错误');

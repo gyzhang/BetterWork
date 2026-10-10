@@ -717,8 +717,12 @@ UI Foundation 首批提供四套成对色系：
 | `RunSummaryRow` | `components/RunSummaryRow.tsx` | Run 状态·时间与“未运行”措辞唯一出口，基于 ListRow |
 | `ToolActivity` | `components/ToolActivity.tsx` | 工具活动摘要与按需详情；原始载荷只在折叠详情 |
 | `MessageBlock` | `components/MessageBlock.tsx` | 发言者、正文与就地动作同一块；工作页发言者称呼来自设置，正文按 author 呈现 |
+| `WorkMessageList` | `components/WorkMessageList.tsx` | 工作页按 Run 呈现请求、工具、回答与终态；各 Run 按自身事件缓存投影。已完成回答的保存动作固定其 Run 与正文，失败只在对应回答呈现，成功只有一枚局部 TransientToast |
 | `Composer` | `components/Composer.tsx` | 任务要求卡与固定高度工具栏分离；工具栏与窗口底部留 `--space-12`，材料变化不推挤输入卡；idle/starting/running 与 locked 分列 |
 | `ContextPanel` | `components/ContextPanel.tsx` | 可完全收起的任务上下文，按过程/资料/记忆/简报/成果分组；资料页管理本次材料用途与移除 |
+| `ProcessContext` | `components/context/ProcessContext.tsx` | 过程页签的连续简报表单、工作阶段与执行历史；保留目标/进度冲突及精确来源回看 |
+| `SourcesContext` | `components/context/SourcesContext.tsx` | 资料页签的本期定时来源、本次材料、MCP 选择与逐 Run 已查阅来源；区间回看保持精确修订 |
+| `MemoryContext` | `components/context/MemoryContext.tsx` | 记忆页签的建议、下次范围、本任务排除、本次运行登记与历史调整；各类事实与反馈保持独立出口 |
 | `ComposerCapabilityPicker` | `components/ComposerCapabilityPicker.tsx` | Composer 的能力/材料选择；技能摘要可打开管理，材料按类别计数，锁定原因并入材料摘要；PopoverMenu、ActionBar 组合 |
 | `McpToolBindingsPicker` | `components/McpToolBindingsPicker.tsx` | 按连接分组；可选工具组提供“全部工具”批量选择与默认折叠的工具列表，专家预设与任务选择共用；新选项携带修订/hash，禁选 stale/停用/未审阅工具，旧失效选项允许移除 |
 | `KnowledgeDocumentCard` | `components/KnowledgeDocumentCard.tsx` | 知识条目身份、修订与索引状态及更多动作，复用 Card/PopoverMenu |
@@ -765,6 +769,8 @@ UI Foundation 首批提供四套成对色系：
 帮助页复用同一生产页面矩阵，在青玉明暗主题、两档窗口与正常/减少动效下，检查章节目录、跳转焦点、全部随包截图解码、放大与焦点归还、示例打开及返回。应用旅程的导航步骤也检查帮助入口、目录与离线图片，读取指南静态资源，不新增业务状态。该证据与未签名 arm64 应用包内资源核对不代表签名安装验收。
 
 应用旅程入口为 `scripts/fixtures/ui-app-journey.ts` 与 `ui-app-fixture.tsx`，复用真实 App、生产 Preload 与 IPC 注册。知识样本从 `book/cn/parts/15-ch14.md` 复制到当次临时目录，并在后续 Provider 请求中断言读到书稿正文；工作空间、其他材料与数据库也均在临时目录。Provider HTTP 由确定性流式请求替身接管并拒绝其他目标，窗口拒绝 HTTP/HTTPS 请求，不调用真实模型或脚本。界面每一步均附 SQLite 断言；恢复探针故意让界面恢复而数据库仍保留排除项，必须退出 1。结束时销毁窗口、关闭并重开库、重装配服务，再验证历史与记忆；它不是操作系统进程重启。应用截图等待新绘制帧，组件/页面矩阵另外核对稳定截图像素。上述两类结果分别报告，不回写原任务板的人工验收状态。
+
+历史回答保存回归在同一应用旅程内：通过生产 IPC 准备合成人工修订版本，再从含完成、失败与取消 Run 的消息列保存那条已完成回答；核对新版本正文、来源 Run、该 Run 的实际 Evidence 集合与唯一局部 TransientToast。合成准备不发起新模型请求，也不把空 Evidence 集合当成没有材料读取。
 
 进程恢复入口为 `scripts/fixtures/ui-process-recovery.ts`；CLI 只终止自己创建的离线测试进程组，新进程 PID 必须不同。完成 Run 与事件不变、中断 Run 恰好补一个失败终态、重装配不自动重放模型请求、成果/记忆/TaskContext 与原资料保留均有独立断言。`--recovery-only` 是定向检查，不等于完整门禁；`--probe-crash-recovery` 故意跳过中断收口，预期退出 1。失败保留 `process-recovery-*/` 中的合成库/读数与截图，不包含 Chromium 用户目录；这个证据层与同进程重装配分别报告。
 

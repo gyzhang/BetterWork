@@ -485,3 +485,12 @@ B 开始时先刷新 R17 的只读审计与安装树证据。若确认存在可�
 当次本地回归去重 13 文件 / 268 项（新增 20 项）通过，包含完整 App 59 项；typecheck、定向 lint/format、生产 build、app-only 旅程通过，网络尝试 0。CAS 覆盖草稿与启动错误作废历史的两个探针均被检出，恢复后通过。App useState 的当次 AST 读数 49→38，物理行 2,232→2,230，生产源码净增 356 行；职责更清楚，不宣称总量减少。完整 verify、全 UI 矩阵、真实模型和安装态人工验收未执行；最新源 SHA 的 PR Gate、合并与证据归档继续收口。R07 的其余界面职责与保存语义留 D2。
 
 2026-10-10 07:06：[PR #38](https://github.com/gyzhang/BetterWork/pull/38) 已合并，squash 提交 `8d7a3e1cf427e9614d2c05ca217c8d4cf19d5fe4`。源 SHA `c58c96ddbe62ba0ccbf6f34d7678eff8fac4cbbe` 的 [Actions 38002417765](https://github.com/gyzhang/BetterWork/actions/runs/38002417765) / PR Gate 成功：macos-26-arm64 上静态、文档 154、functional 17、App heavy 59 项通过，共 5 文件 / 230 项；Full verify 跳过。本地额外 38 项、build、app-only 与两个探针不混入 CI 数字。代码分支已清理，原 checkout 同步 main，从此建立 Markdown 归档分支 `codex/review-d1-closeout`。D1 代码与自动化完成；D2 仍按下一次指令推进，不标为 R07 整项完成。
+
+## 18. D2：工作消息投影、成果保存与上下文组合
+
+2026-10-10 14:39 CST：用户授权 D2，沿用原 checkout，分支 `codex/review-work-presentation`，起点 `94d7e66f21d0cf5f6e1563c257e9c774914a44e6`。具体实施契约与证据见 [D2 专题](2026-10-10-work-message-presentation.md)。
+
+- 已实现：WorkMessageList 按 Run 缓存正文/终态与工具投影；历史完成回答的保存动作固定该 Run、Task 和最终正文，只追加 Markdown 成果。失败只在对应回答，成功只挂一枚局部 TransientToast；等待期间阻止重复提交，选择令牌防止 A→B→A 与新草稿被晚到结果污染。
+- 已实现：ContextPanel 按过程、资料、记忆、简报、成果五组组合；前三组进入内聚组件，简报复用原 WorkspaceBrief，成果保留原 ListRow。精确版本打开的短时反馈仍由面板共同出口承载，切页签后不丢失败；原连续简报、来源区间和记忆子区块正文逐段对比一致。
+- 本地自动化：新增 21 项，functional 12 文件 / 260 项、App heavy 61、UI CLI heavy 11，去重共 14 文件 / 332 项；typecheck、定向 lint/format、build、app-only 通过。历史投影缓存与晚到结果保护两个破坏探针准确失败，恢复后通过。app-only 核对 4 个 Run、失败/取消、重装配历史、五页签入口、历史回答保存 v3 与单一反馈，网络尝试 0；AI 回读最终历史保存与失败/取消截图。
+- 当前边界：等待最新源 SHA 的 macOS PR Gate、合并与归档。D1+D2 覆盖 R07 约定范围；不要求继续清空 App 的所有跨簇接线。下一项建议 E1，先核对 R08–R11 用例/读模型边界并形成小切片，等待后续开发指令。完整 verify、真实模型与安装态人工验收未执行。

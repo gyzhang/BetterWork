@@ -16,7 +16,7 @@ import type {
   WorkspaceBrief,
 } from '@betterwork/agent-protocol';
 import { memoryRecallPolicyV1 } from '@betterwork/agent-protocol';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { MemorySuggestionsState } from '../hooks/use-memory-suggestions';
@@ -247,53 +247,117 @@ const suggestions = (overrides?: Partial<MemorySuggestionsState>): MemorySuggest
   };
 };
 
-const renderPanel = (overrides: Record<string, unknown> = {}): HTMLElement => {
+const renderPanel = (
+  overrides: Record<string, unknown> = {},
+  reuseContainer?: HTMLElement,
+): HTMLElement => {
+  const props = {
+    open: true,
+    setOpen: vi.fn(),
+    taskId: 'task-1',
+    taskContinuity: taskContinuityState(),
+    tab: 'memory' as ContextTab,
+    setTab: vi.fn(),
+    events: [],
+    evidence: [],
+    artifacts: [],
+    taskRuns: [],
+    activityGroups: [],
+    onSelectRun: vi.fn(),
+    onOpenSource: vi.fn(async () => undefined),
+    onOpenArtifactVersion: vi.fn(async () => undefined),
+    materials: [],
+    onCommitMaterials: vi.fn(),
+    materialsDisabled: false,
+    memories: [memory()],
+    excludedMemoryIds: [],
+    onToggleMemory: vi.fn(),
+    exclusion: exclusion(),
+    exclusions: exclusions(),
+    materialCandidates: [],
+    onRequestMaterials: vi.fn(),
+    mcpConnections: [],
+    mcpToolBindings: [],
+    onMcpToolBindingsChange: vi.fn(),
+    runMemories: runMemories(),
+    brief: briefState(),
+    workspaceName: '我的空间',
+    expertName: '经营分析师',
+    onOpenBriefMemory: vi.fn(),
+    onOpenBriefIssue: vi.fn(),
+    onOpenBriefReference: vi.fn(),
+    suggestions: suggestions(),
+    taskCandidates: [],
+    onEditCandidate: vi.fn(),
+    onRejectCandidate: vi.fn(),
+    onDeleteCandidate: vi.fn(),
+    onOpenMemoryPage: vi.fn(),
+    memoriesError: '',
+    memoriesWarning: '',
+    ...overrides,
+  };
   const { container } = render(
     <ContextPanel
-      open
-      setOpen={vi.fn()}
-      taskId="task-1"
-      taskContinuity={taskContinuityState()}
-      tab="memory"
-      setTab={vi.fn()}
-      events={[]}
-      evidence={[]}
-      artifacts={[]}
-      taskRuns={[]}
-      activityGroups={[]}
-      onSelectRun={vi.fn()}
-      onOpenSource={vi.fn(async () => undefined)}
-      onOpenArtifactVersion={vi.fn(async () => undefined)}
-      materials={[]}
-      onCommitMaterials={vi.fn()}
-      materialsDisabled={false}
-      memories={[memory()]}
-      excludedMemoryIds={[]}
-      onToggleMemory={vi.fn()}
-      exclusion={exclusion()}
-      exclusions={exclusions()}
-      materialCandidates={[]}
-      onRequestMaterials={vi.fn()}
-      mcpConnections={[]}
-      mcpToolBindings={[]}
-      onMcpToolBindingsChange={vi.fn()}
-      runMemories={runMemories()}
-      brief={briefState()}
-      workspaceName="我的空间"
-      expertName="经营分析师"
-      onOpenBriefMemory={vi.fn()}
-      onOpenBriefIssue={vi.fn()}
-      onOpenBriefReference={vi.fn()}
-      suggestions={suggestions()}
-      taskCandidates={[]}
-      onEditCandidate={vi.fn()}
-      onRejectCandidate={vi.fn()}
-      onDeleteCandidate={vi.fn()}
-      onOpenMemoryPage={vi.fn()}
-      memoriesError=""
-      memoriesWarning=""
-      {...overrides}
+      open={props.open}
+      setOpen={props.setOpen}
+      tab={props.tab}
+      setTab={props.setTab}
+      process={{
+        taskId: props.taskId,
+        taskContinuity: props.taskContinuity,
+        events: props.events,
+        activeRun: overrides.activeRun as RunSummary | undefined,
+        taskRuns: props.taskRuns,
+        artifacts: props.artifacts,
+        activityGroups: props.activityGroups,
+        onSelectRun: props.onSelectRun,
+        onOpenArtifactVersion: props.onOpenArtifactVersion,
+      }}
+      sources={{
+        evidence: props.evidence,
+        activeRunId: (overrides.activeRun as RunSummary | undefined)?.id,
+        onOpenSource: props.onOpenSource,
+        materials: props.materials,
+        onCommitMaterials: props.onCommitMaterials,
+        materialsDisabled: props.materialsDisabled,
+        materialCandidates: props.materialCandidates,
+        onRequestMaterials: props.onRequestMaterials,
+        mcpConnections: props.mcpConnections,
+        mcpToolBindings: props.mcpToolBindings,
+        onMcpToolBindingsChange: props.onMcpToolBindingsChange,
+      }}
+      memory={{
+        suggestions: props.suggestions,
+        taskCandidates: props.taskCandidates,
+        workspaceName: props.workspaceName,
+        expertName: props.expertName,
+        onEditCandidate: props.onEditCandidate,
+        onRejectCandidate: props.onRejectCandidate,
+        onDeleteCandidate: props.onDeleteCandidate,
+        onOpenMemoryPage: props.onOpenMemoryPage,
+        memoriesError: props.memoriesError,
+        memoriesWarning: props.memoriesWarning,
+        runMemories: props.runMemories,
+        memories: props.memories,
+        excludedMemoryIds: props.excludedMemoryIds,
+        onToggleMemory: props.onToggleMemory,
+        exclusion: props.exclusion,
+        exclusions: props.exclusions,
+      }}
+      brief={{
+        brief: props.brief.brief,
+        loading: props.brief.loading,
+        error: props.brief.error,
+        onRetry: props.brief.refresh,
+        workspaceName: props.workspaceName,
+        expertName: props.expertName,
+        onOpenMemory: props.onOpenBriefMemory,
+        onOpenIssue: props.onOpenBriefIssue,
+        onOpenReference: props.onOpenBriefReference,
+      }}
+      artifacts={{ items: props.artifacts }}
     />,
+    { ...(reuseContainer ? { container: reuseContainer } : {}) },
   );
   return container;
 };
@@ -375,6 +439,29 @@ describe('ContextPanel 本任务连续简报', () => {
     createdAt: 1,
     updatedAt: 2,
   };
+
+  it('切到其他页签后，精确版本打开失败仍只有面板共同反馈出口', async () => {
+    let reject!: (error: Error) => void;
+    const onOpenArtifactVersion = vi.fn(
+      () =>
+        new Promise<void>((_resolve, fail) => {
+          reject = fail;
+        }),
+    );
+    const options = {
+      taskRuns: [sourceRun],
+      artifacts: [artifact],
+      taskContinuity: taskContinuityState({ revision: taskContinuityRevision() }),
+      onOpenArtifactVersion,
+    };
+    const container = renderPanel({ ...options, tab: 'process' });
+    fireEvent.click(screen.getByRole('button', { name: '查看该版本' }));
+    renderPanel({ ...options, tab: 'memory' }, container);
+    await act(async () => reject(new Error('精确版本读取失败')));
+    expect(await screen.findByText('精确版本读取失败')).toBeTruthy();
+    expect(screen.getAllByText('精确版本读取失败')).toHaveLength(1);
+    expect(screen.getByText('下次运行可用')).toBeTruthy();
+  });
 
   it('区分目标、用户要求与助手进度，并可回到来源 Run 和精确 ArtifactVersion', () => {
     const onSelectRun = vi.fn();

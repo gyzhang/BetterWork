@@ -1,5 +1,5 @@
 import type { AgentRuntimeEvent } from '@betterwork/agent-protocol';
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 
 import { AlertIcon, CheckIcon, ChevronRightIcon } from '../icons';
 import { toolStageLabel } from '../lib/labels';
@@ -50,7 +50,7 @@ export function ToolActivity({
   const [expanded, setExpanded] = useState(false);
   const [selectedId, setSelectedId] = useState<string>();
   const panelId = useId();
-  const tools = deriveToolActivity(events);
+  const tools = useMemo(() => deriveToolActivity(events), [events]);
   if (tools.length === 0) return null;
   const failed = tools.filter((tool) => tool.status === 'failed').length;
   const cancelled = tools.filter((tool) => tool.status === 'cancelled').length;
