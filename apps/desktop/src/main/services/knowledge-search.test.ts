@@ -7,9 +7,13 @@ import type {
   EmbeddingModelSnapshot,
   KnowledgeMaterialReference,
 } from '@betterwork/agent-protocol';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { EmbeddingRequest, EmbeddingResult } from './embedding-client';
+import {
+  legacySubstringChunkIds,
+  seedSearchChunks,
+} from './fixtures/knowledge-search-read-fixtures';
 import { type EmbeddingRunner } from './knowledge-index-service';
 import {
   KnowledgeSearchService,
@@ -22,7 +26,152 @@ import type { WorkerScanRequest } from './knowledge-worker-runner';
 
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const task of cleanup.splice(0)) await task();
+});
+
+describe('Knowledge search read models', () => {
+  it('counts scoped coverage without full chunks or fallback scans on FTS hits', async () => {
+    const harness = await makeHarness({ Alpha: 'revenue report', Beta: 'unrelated memo' });
+    const full = vi.spyOn(harness.vault.index, 'chunksInScope').mockImplementation(() => {
+      throw new Error('Coverage must not hydrate complete scoped chunks');
+    });
+    const scan = vi.spyOn(harness.vault.index, 'searchTextInScope');
+    const selected = vi.spyOn(harness.vault.index, 'chunksByIdsInScope');
+    const response = await harness.service.search({
+      scope: libraryScope,
+      query: 'revenue',
+      mode: 'keyword',
+    });
+    expect(response.coverage).toEqual({ eligibleChunks: 2, indexedChunks: 0 });
+    expect(response.results).toHaveLength(1);
+    expect(full).not.toHaveBeenCalled();
+    expect(scan).not.toHaveBeenCalled();
+    expect(selected).not.toHaveBeenCalled();
+    expect(harness.stub.calls).toEqual([]);
+  });
+
+  it('avoids full-scope hydration for disabled and missing semantic coverage', async () => {
+    const harness = await makeHarness({ Alpha: 'revenue report', Beta: 'unrelated memo' });
+    const full = vi.spyOn(harness.vault.index, 'chunksInScope').mockImplementation(() => {
+      throw new Error('An unavailable semantic path must not hydrate complete scope');
+    });
+    const disabled = await harness.service.search({ scope: libraryScope, query: 'revenue' });
+    expect(disabled.degradedReason).toBe('semantic-disabled');
+    expect(disabled.coverage).toEqual({ eligibleChunks: 2, indexedChunks: 0 });
+    harness.enableSemantic();
+    const missing = await harness.service.search({ scope: libraryScope, query: 'revenue' });
+    expect(missing.degradedReason).toBe('index-missing');
+    expect(missing.results).toEqual(disabled.results);
+    expect(missing.coverage).toEqual(disabled.coverage);
+    expect(full).not.toHaveBeenCalled();
+    expect(harness.stub.calls).toEqual([]);
+  });
+
+  it('scans all scoped text, promotes a late winner and hydrates only the ranked 50', async () => {
+    const contents = Array.from({ length: 80 }, (_, index) =>
+      index === 79 ? '\u590D\u76D8\u53E3\u5F84' : '\u7532'.repeat(19) + '\u590D\u76D8\u53E3\u5F84',
+    );
+    const body = contents.join('');
+    const harness = await makeHarness({ Allowed: body, Foreign: '\u590D\u76D8\u53E3\u5F84' });
+    const allowed = harness.references.get('Allowed')!;
+    const foreign = harness.references.get('Foreign')!;
+    const index = harness.vault.index;
+    const chunks = seedSearchChunks(index, allowed.knowledgeRevisionId, 'Allowed', contents);
+    const revisionIds = [allowed.knowledgeRevisionId];
+    expect(index.searchChunks(revisionIds, '"\u76D8"')).toEqual([]);
+    const original = index.chunksInScope(revisionIds);
+    const expected = legacySubstringChunkIds(original, ['\u76D8']);
+    expect(expected[0]).toBe(chunks[79]!.id);
+    const full = vi.spyOn(index, 'chunksInScope').mockImplementation(() => {
+      throw new Error('Substring must not materialize every complete chunk');
+    });
+    const selected = vi.spyOn(index, 'chunksByIdsInScope');
+    const scoped = new KnowledgeSearchService({
+      vault: harness.vault,
+      index,
+      runMaterials: () => [allowed],
+      embedding: harness.stub.runner,
+    });
+    const response = await scoped.search({
+      scope: { kind: 'run', runId: 'fixed-run' },
+      query: '\u76D8',
+      mode: 'keyword',
+      limit: 8,
+    });
+    expect(response.results.map(({ chunkId }) => chunkId)).toEqual(expected.slice(0, 8));
+    expect(response.coverage).toEqual({ eligibleChunks: 80, indexedChunks: 0 });
+    expect(selected).toHaveBeenCalledExactlyOnceWith(revisionIds, expected);
+    expect(full).not.toHaveBeenCalled();
+    for (const hit of response.results) {
+      expect(hit.reference).toEqual(allowed);
+      expect(Array.from(body).slice(hit.span.start, hit.span.end).join('')).toBe(hit.excerpt);
+      expect(hit.excerptHash).toBe(sha256Hex(hit.excerpt));
+      expect(hit.textHash).toBe(chunks[0]!.textHash);
+    }
+    const foreignChunk = index.retrievalChunks(foreign.knowledgeRevisionId)[0]!;
+    expect(index.chunksByIdsInScope(revisionIds, [foreignChunk.id, ...expected])).toEqual(
+      original.filter(({ id }) => expected.includes(id)),
+    );
+    expect(index.chunksByIdsInScope([], [foreignChunk.id])).toEqual([]);
+    expect(index.chunksByIdsInScope(revisionIds, [])).toEqual([]);
+    const projected = [...index.searchTextInScope(revisionIds)];
+    expect(projected).toHaveLength(80);
+    expect(Object.keys(projected[0]!).sort()).toEqual([
+      'content',
+      'id',
+      'revisionId',
+      'span',
+      'title',
+    ]);
+    expect([...index.searchTextInScope([])]).toEqual([]);
+    expect(harness.stub.calls).toEqual([]);
+  });
+
+  it('retains old Run revisions while the library resolves the refreshed registration', async () => {
+    const harness = await makeHarness({ Material: 'revenue old report' });
+    const old = harness.references.get('Material')!;
+    await writeFile(old.sourcePath, 'current unrelated report');
+    await harness.vault.importPaths([old.sourcePath]);
+    expect(harness.vault.registeredRevisionId(old.knowledgeDocumentId)).not.toBe(
+      old.knowledgeRevisionId,
+    );
+    const scoped = new KnowledgeSearchService({
+      vault: harness.vault,
+      index: harness.vault.index,
+      runMaterials: () => [old, old],
+      embedding: harness.stub.runner,
+    });
+    const saved = await scoped.search({
+      scope: { kind: 'run', runId: 'saved-run' },
+      query: 'ven',
+      mode: 'keyword',
+    });
+    expect(saved.results).toHaveLength(1);
+    expect(saved.results[0]?.reference).toEqual(old);
+    expect(saved.coverage).toEqual({ eligibleChunks: 1, indexedChunks: 0 });
+    const current = await harness.service.search({
+      scope: libraryScope,
+      query: 'ven',
+      mode: 'keyword',
+    });
+    expect(current.results).toEqual([]);
+    expect(current.coverage).toEqual({ eligibleChunks: 1, indexedChunks: 0 });
+  });
+
+  it('releases a partially consumed text cursor before rebuilding derived chunks', async () => {
+    const harness = await makeHarness({ Material: 'revenue report' });
+    const reference = harness.references.get('Material')!;
+    for (const chunk of harness.vault.index.searchTextInScope([reference.knowledgeRevisionId])) {
+      expect(chunk.title).toBe('Material');
+      break;
+    }
+    expect(() =>
+      seedSearchChunks(harness.vault.index, reference.knowledgeRevisionId, 'Material', [
+        'revenue report',
+      ]),
+    ).not.toThrow();
+  });
 });
 
 const fingerprint = (seed: string): string => seed.repeat(2).slice(0, 64);
