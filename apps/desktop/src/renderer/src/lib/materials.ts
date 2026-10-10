@@ -1,27 +1,15 @@
-import type {
-  MaterialCandidate,
-  MaterialReference,
-  TaskMaterialSelection,
+import {
+  type MaterialCandidate,
+  materialListIdentity,
+  type MaterialReference,
+  type TaskMaterialSelection,
 } from '@betterwork/agent-protocol';
 
-/**
- * 材料引用的身份键：同一条精确版本被重复引用时只保留一条（专家与任务材料设计 §3.6）。
- *
- * 这条投影此前在四个文件里各写了一遍（App、ContextPanel、ComposerCapabilityPicker、
- * ExpertsView 共六份函数副本），任何一处改口径都会让「同一条材料在两个列表里算两条」
- * 这类分叉无声发生。收在这里之后，页面只表达「谁参与去重」，不再表达「怎么算同一条」。
- */
-export const materialReferenceKey = (reference: MaterialReference): string => {
-  if (reference.kind === 'knowledge-revision') return `knowledge:${reference.knowledgeRevisionId}`;
-  if (reference.kind === 'artifact-version') return `artifact:${reference.artifactVersionId}`;
-  return `snapshot:${reference.snapshotId}`;
-};
-
 export const taskMaterialKey = (selection: TaskMaterialSelection): string =>
-  materialReferenceKey(selection.reference);
+  materialListIdentity(selection.reference);
 
 export const materialCandidateKey = (candidate: MaterialCandidate): string =>
-  materialReferenceKey(candidate.reference);
+  materialListIdentity(candidate.reference);
 
 /**
  * 成果版本材料只在它诞生的工作空间里可用；知识修订与输入快照跨空间通用。

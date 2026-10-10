@@ -8,7 +8,7 @@ import type {
 import type { AppStore } from '../persistence';
 import { deriveEffectiveStatus } from '../persistence/memory-repository';
 import {
-  materialReferenceKeyOf,
+  materialDependencyIdentity,
   type ProvenanceReader,
   type SourceDependencies,
 } from './memory-provenance';
@@ -58,7 +58,7 @@ const dedupeMaterials = (
   into: Map<string, MaterialReference>,
 ): void => {
   for (const reference of references) {
-    const key = materialReferenceKeyOf(reference);
+    const key = materialDependencyIdentity(reference);
     if (!into.has(key)) into.set(key, reference);
   }
 };

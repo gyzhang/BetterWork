@@ -552,7 +552,7 @@ export const knowledgeMaterialReferenceSchema = z
   .strict();
 export type KnowledgeMaterialReference = z.infer<typeof knowledgeMaterialReferenceSchema>;
 
-/** 修订完整身份（不含 originWorkspaceId）：材料、足迹与声明共用同一比较口径。 */
+/** 知识旧引用兼容比较，不含 originWorkspaceId；完整读取范围使用 sameMaterialVersion。 */
 export function sameKnowledgeReference(
   left: KnowledgeMaterialReference,
   right: KnowledgeMaterialReference,
@@ -591,6 +591,48 @@ export const materialReferenceSchema = z.discriminatedUnion('kind', [
   inputSnapshotMaterialReferenceSchema,
 ]);
 export type MaterialReference = z.infer<typeof materialReferenceSchema>;
+
+/** List identity only: never use this projection to authorize a read. */
+export const materialListIdentity = (reference: MaterialReference): string => {
+  switch (reference.kind) {
+    case 'knowledge-revision':
+      return `${reference.kind}:${reference.knowledgeRevisionId}`;
+    case 'artifact-version':
+      return `${reference.kind}:${reference.artifactVersionId}`;
+    case 'workspace-input-snapshot':
+      return `${reference.kind}:${reference.snapshotId}`;
+  }
+};
+
+/** Exact scope fields; the original input path is display metadata, not a read handle. */
+export const sameMaterialVersion = (left: MaterialReference, right: MaterialReference): boolean => {
+  if (left.kind === 'knowledge-revision' && right.kind === 'knowledge-revision') {
+    return (
+      sameKnowledgeReference(left, right) && left.originWorkspaceId === right.originWorkspaceId
+    );
+  }
+  if (left.kind === 'artifact-version' && right.kind === 'artifact-version') {
+    return (
+      left.artifactId === right.artifactId &&
+      left.artifactVersionId === right.artifactVersionId &&
+      left.contentHash === right.contentHash &&
+      left.originWorkspaceId === right.originWorkspaceId
+    );
+  }
+  return (
+    left.kind === 'workspace-input-snapshot' &&
+    right.kind === 'workspace-input-snapshot' &&
+    left.snapshotId === right.snapshotId &&
+    left.workspaceId === right.workspaceId &&
+    left.contentHash === right.contentHash &&
+    left.format === right.format &&
+    left.fileKey === right.fileKey
+  );
+};
+
+/** Existing schema-ordered JSON format, including optional audit fields. */
+export const materialReferenceFingerprint = (reference: MaterialReference): string =>
+  JSON.stringify(materialReferenceSchema.parse(reference));
 
 /** section 内容上的码点半开区间 [start, end)，见知识契约 §2.3。 */
 export const knowledgeSpanSchema = z

@@ -22,6 +22,7 @@ import type {
   WorkspaceReferenceListItem,
   WorkspaceSummary,
 } from '@betterwork/agent-protocol';
+import { materialListIdentity } from '@betterwork/agent-protocol';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { deriveActivityGroups } from './activity';
@@ -80,7 +81,7 @@ import {
 } from './icons';
 import { describeActionError, reportAction, trackAction } from './lib/async-action';
 import { fileNameOf } from './lib/format';
-import { materialReferenceAppliesToWorkspace, materialReferenceKey } from './lib/materials';
+import { materialReferenceAppliesToWorkspace } from './lib/materials';
 import {
   type AssistantAnswerSource,
   excerptOf,
@@ -481,7 +482,7 @@ export function App(): React.JSX.Element {
         setTaskMaterials((current) =>
           current.some(
             (existing) =>
-              materialReferenceKey(existing.reference) === materialReferenceKey(reference),
+              materialListIdentity(existing.reference) === materialListIdentity(reference),
           )
             ? current
             : [...current, { reference, purpose: 'structure-reference', addedFrom: 'user-input' }],

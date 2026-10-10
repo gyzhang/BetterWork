@@ -2,7 +2,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 
 import { describeError } from '@betterwork/agent-core';
-import type { MaterialReference, McpToolBinding } from '@betterwork/agent-protocol';
+import {
+  materialListIdentity,
+  type MaterialReference,
+  type McpToolBinding,
+} from '@betterwork/agent-protocol';
 
 import type { AppStore } from '../persistence';
 import { type MaterialFactLedger, recordMaterialFacts } from './material-fact-policy';
@@ -104,8 +108,9 @@ export class RunToolResultAdapter {
     if (!snapshot) return;
     const exactMaterial = output.material;
     const material = exactMaterial
-      ? snapshot.materials.find((selection) =>
-          sameMaterialReference(selection.reference, exactMaterial),
+      ? snapshot.materials.find(
+          (selection) =>
+            materialListIdentity(selection.reference) === materialListIdentity(exactMaterial),
         )?.reference
       : snapshot.materials
           .filter((selection) => selection.reference.kind === 'workspace-input-snapshot')
@@ -194,8 +199,9 @@ export class RunToolResultAdapter {
     const { runId } = context;
     const snapshot = this.store.runContextSnapshots.get(runId);
     if (!snapshot) return;
-    const selectedMaterial = snapshot.materials.find((selection) =>
-      sameMaterialReference(selection.reference, output.material),
+    const selectedMaterial = snapshot.materials.find(
+      (selection) =>
+        materialListIdentity(selection.reference) === materialListIdentity(output.material),
     )?.reference;
     if (!selectedMaterial) return;
     const sections = output.sections;
@@ -307,17 +313,6 @@ const serializeToolOutput = (output: unknown): string => {
   } catch (error) {
     return `MCP 工具结果无法序列化：${describeError(error)}`;
   }
-};
-
-const sameMaterialReference = (left: MaterialReference, right: MaterialReference): boolean => {
-  if (left.kind !== right.kind) return false;
-  if (left.kind === 'knowledge-revision' && right.kind === 'knowledge-revision')
-    return left.knowledgeRevisionId === right.knowledgeRevisionId;
-  if (left.kind === 'artifact-version' && right.kind === 'artifact-version')
-    return left.artifactVersionId === right.artifactVersionId;
-  if (left.kind === 'workspace-input-snapshot' && right.kind === 'workspace-input-snapshot')
-    return left.snapshotId === right.snapshotId;
-  return false;
 };
 
 const officeFactValues = (value: unknown): unknown => {

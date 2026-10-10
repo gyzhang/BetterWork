@@ -3,9 +3,9 @@ import type {
   MemoryDependency,
   TaskMaterialSelection,
 } from '@betterwork/agent-protocol';
-import { stableStringifyJson } from '@betterwork/agent-protocol';
+import { materialReferenceFingerprint, stableStringifyJson } from '@betterwork/agent-protocol';
 
-import { type AppStore, materialReferenceKey } from '../persistence';
+import { type AppStore } from '../persistence';
 import { deriveEffectiveStatus } from '../persistence/memory-repository';
 
 /**
@@ -60,12 +60,8 @@ export const continuityProgressDependenciesAreCurrent = (
     ): boolean =>
       selections.some(
         (selection) =>
-          materialReferenceKey(selection) ===
-            materialReferenceKey({
-              reference,
-              purpose: 'background',
-              addedFrom: 'user-input',
-            }) && stableStringifyJson(selection.reference) === stableStringifyJson(reference),
+          materialReferenceFingerprint(selection.reference) ===
+          materialReferenceFingerprint(reference),
       );
     if (
       sourceReferences.some(

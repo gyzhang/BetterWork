@@ -19,6 +19,7 @@ import type {
   KnowledgeTextPage,
   ModelProfileSummary,
 } from '@betterwork/agent-protocol';
+import { materialListIdentity } from '@betterwork/agent-protocol';
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ToastTone } from '../components/TransientToast';
@@ -506,17 +507,14 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     }
   };
 
-  const materialKey = (result: KnowledgeSearchHit): string =>
-    `${result.reference.knowledgeDocumentId}:${result.reference.knowledgeRevisionId}`;
-
   const isSelected = useCallback(
-    (result: KnowledgeSearchHit): boolean => selected.has(materialKey(result)),
+    (result: KnowledgeSearchHit): boolean => selected.has(materialListIdentity(result.reference)),
     [selected],
   );
   const toggleSelect = useCallback((result: KnowledgeSearchHit, checked: boolean): void => {
     setSelected((current) => {
       const next = new Map(current);
-      const key = materialKey(result);
+      const key = materialListIdentity(result.reference);
       if (checked) {
         next.set(key, { reference: result.reference, purpose: 'background' });
       } else {
@@ -530,7 +528,7 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
     setSelected(
       new Map(
         results.map((result) => [
-          materialKey(result),
+          materialListIdentity(result.reference),
           { reference: result.reference, purpose: 'background' },
         ]),
       ),

@@ -3,8 +3,10 @@ import {
   artifactInputRelationInputSchema,
   type ArtifactSourceDeclarationKind,
   type MaterialReference,
+  materialReferenceFingerprint,
   type RunArtifactSourceDeclaration,
   sameKnowledgeReference,
+  sameMaterialVersion,
 } from '@betterwork/agent-protocol';
 
 import type { AppStore } from '../persistence';
@@ -56,7 +58,10 @@ export class ArtifactDeclarationService {
     const relations = new Map<string, string>();
     for (const raw of inputs) {
       const input = artifactInputRelationInputSchema.parse(raw);
-      const key = JSON.stringify(input.input);
+      const key =
+        input.input.kind === 'evidence'
+          ? JSON.stringify(input.input)
+          : materialReferenceFingerprint(input.input);
       const previous = relations.get(key);
       if (previous !== undefined) {
         if (previous !== input.relation) {
@@ -184,23 +189,22 @@ export class ArtifactDeclarationService {
       snapshot?.materials.some(
         (selection) =>
           selection.reference.kind === reference.kind &&
-          sameReferenceLoose(selection.reference, reference),
+          sameDeclaredMaterialVersion(selection.reference, reference),
       ) ?? false;
     if (!inScope) return false;
     if (reference.kind === 'knowledge-revision') {
       return this.store.materialReads.hasKnowledgeBodyRead(runId, reference);
     }
-    return this.store.materialReads.hasBodyRead(
-      runId,
-      JSON.stringify(reference),
-      reference.contentHash,
-    );
+    return this.store.materialReads.hasBodyRead(runId, reference);
   }
 }
 
-const sameReferenceLoose = (left: MaterialReference, right: MaterialReference): boolean => {
+const sameDeclaredMaterialVersion = (
+  left: MaterialReference,
+  right: MaterialReference,
+): boolean => {
   if (left.kind === 'knowledge-revision' && right.kind === 'knowledge-revision') {
     return sameKnowledgeReference(left, right);
   }
-  return JSON.stringify(left) === JSON.stringify(right);
+  return sameMaterialVersion(left, right);
 };

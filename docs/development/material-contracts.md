@@ -78,6 +78,20 @@ interface TaskMaterialSelection {
 
 同一来源在一份 TaskContextRevision 中只能出现一次。需要多个用途时保留一个材料项，修改主用途并在 `note` 中说明其他用途；重复引用返回 `material_reference_duplicate`，不静默生成两个授权项。
 
+### 2.1.1 身份判定的三种用途（E4 / R11）
+
+共享协议分别提供 `materialListIdentity`、`sameMaterialVersion` 与 `materialReferenceFingerprint`，不得把列表键当授权证明：
+
+| 用途 | 判据与边界 |
+| --- | --- |
+| 列表身份 | kind + 修订/版本/快照 ID；忽略哈希、用途和来源空间。用于选择去重、候选匹配和上下文材料段变化；不是精确相等。 |
+| 精确版本相等 | 知识比较 documentId、revisionId、hash、sourcePath、可选 originWorkspaceId；成果比较 artifactId、versionId、hash、originWorkspaceId；输入快照比较 snapshotId、workspaceId、hash、format、fileKey，原始 sourcePath 不作为读取句柄。 |
+| 持久化指纹 | 经现有严格 Schema 固定字段顺序后序列化完整引用，保留知识 originWorkspaceId 和快照 sourcePath 等审计字段；省略与 undefined 的可选值一致。相同版本的指纹可以因审计字段不同而不同。 |
+
+知识的旧兼容比较继续使用 `sameKnowledgeReference`（documentId、revisionId、hash、sourcePath，不含可选 originWorkspaceId），只用于已采用该规则的知识工具、定时合并与成果声明范围核对；读取足迹仍按完整快照字段校验。定时来源的资料实体冲突键（documentId / artifactId 或具体快照 ID）、清单哈希、记忆来源依赖投影和操作幂等输入哈希各有原契约，不替换为列表键或完整引用指纹。
+
+现有 JSON 持久化格式和唯一索引保持，不改写历史足迹或清单哈希；正文读取查询接受类型化引用，解析已存 JSON 后按精确版本比较，避免字段顺序与快照展示路径造成漏判。数据库、文件、归属和跨空间显式入口的校验仍由 Main 独立执行。
+
 ### 2.2 Workspace 候选与任务授权
 
 Workspace 候选关联只负责选择器的发现和筛选，建议表达为：

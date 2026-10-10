@@ -29,6 +29,7 @@ import type {
   TaskMemoryExclusionsData,
   TaskMemoryExclusionsRequest,
 } from '@betterwork/agent-protocol';
+import { materialListIdentity } from '@betterwork/agent-protocol';
 import {
   countCodePoints,
   getRunMemoryContextRequestSchema,
@@ -50,7 +51,6 @@ import {
 import type { AppStore } from '../persistence';
 import {
   deriveEffectiveStatus,
-  materialReferenceKey,
   MemoryConflictError,
   MemoryScopeMismatchError,
   MemoryTerminalError,
@@ -352,7 +352,7 @@ const memoryDependencyAvailable = (
   if (available && revision !== undefined && revision.provenance.verification === 'verified') {
     for (const material of revision.provenance.materialDependencies) {
       if (
-        !probe.allowedMaterialKeys.has(referenceKeyOf(material)) ||
+        !probe.allowedMaterialKeys.has(materialListIdentity(material)) ||
         !materialEntityAvailable(probe.store, material)
       ) {
         available = false;
@@ -382,7 +382,7 @@ const dependencyAvailable = (
   if (record.provenance.verification !== 'verified') return true;
   for (const material of record.provenance.materialDependencies) {
     if (
-      !allowedMaterialKeys.has(referenceKeyOf(material)) ||
+      !allowedMaterialKeys.has(materialListIdentity(material)) ||
       !materialEntityAvailable(store, material)
     ) {
       return false;
@@ -393,15 +393,6 @@ const dependencyAvailable = (
   }
   return true;
 };
-
-/**
- * 精确引用键：与仓储层 materialReferenceKey 同源。它只收整条选择记录，
- * 而记忆依赖里只有裸引用，因此用中性用途补齐——键只由引用分支决定，补齐不影响结果。
- */
-const referenceKeyOf = (reference: MaterialReference): string =>
-  materialReferenceKey({ reference, purpose: 'background', addedFrom: 'user-input' });
-
-export const materialReferenceKeyOf = referenceKeyOf;
 
 const compareText = (left: string, right: string): number =>
   left < right ? -1 : left > right ? 1 : 0;
@@ -455,10 +446,10 @@ export const buildMemoryQueryContext = (
   const titles: { reference: MaterialReference; title: string }[] = [];
   const seen = new Set<string>();
   const ordered = [...input.materials].sort((left, right) =>
-    compareText(referenceKeyOf(left.reference), referenceKeyOf(right.reference)),
+    compareText(materialListIdentity(left.reference), materialListIdentity(right.reference)),
   );
   for (const selection of ordered) {
-    const key = referenceKeyOf(selection.reference);
+    const key = materialListIdentity(selection.reference);
     if (seen.has(key)) continue;
     seen.add(key);
     const title = clampTitle(materialTitleOf(store, selection.reference));
@@ -804,7 +795,7 @@ export const recallMemoriesForQuery = (
 
   const allowedMaterialKeys =
     options.allowedMaterialKeys ??
-    new Set(query.materialTitles.map((entry) => referenceKeyOf(entry.reference)));
+    new Set(query.materialTitles.map((entry) => materialListIdentity(entry.reference)));
   const probe: DependencyProbe = {
     store,
     allowedMaterialKeys,
@@ -1021,20 +1012,20 @@ const collectPriorRunFacts = (store: AppStore, input: RunReplayInput): PriorRunF
     const ownMaterialKeys = new Set<string>();
     const materialReferences: MaterialReference[] = [];
     for (const selection of snapshot?.materials ?? []) {
-      const key = referenceKeyOf(selection.reference);
+      const key = materialListIdentity(selection.reference);
       if (ownMaterialKeys.has(key)) continue;
       ownMaterialKeys.add(key);
       materialReferences.push(selection.reference);
     }
     for (const read of store.materialReads.listByRun(run.id)) {
-      const key = referenceKeyOf(read.material);
+      const key = materialListIdentity(read.material);
       if (ownMaterialKeys.has(key)) continue;
       ownMaterialKeys.add(key);
       materialReferences.push(read.material);
     }
     const inheritedMaterialKeys: string[] = [];
     for (const reference of context?.materialDependencyUnion ?? []) {
-      const key = referenceKeyOf(reference);
+      const key = materialListIdentity(reference);
       materialReferences.push(reference);
       if (ownMaterialKeys.has(key)) continue;
       inheritedMaterialKeys.push(key);
@@ -1104,7 +1095,7 @@ export const planRunHistoryReplay = (store: AppStore, input: RunReplayInput): Ru
   for (const fact of facts) {
     for (const reference of fact.materialReferences) {
       if (materialEntityAvailable(store, reference)) continue;
-      unavailableSourceKeys.add(referenceKeyOf(reference));
+      unavailableSourceKeys.add(materialListIdentity(reference));
     }
   }
   const context: SafetyContext = {
@@ -1145,7 +1136,7 @@ export const planRunHistoryReplay = (store: AppStore, input: RunReplayInput): Ru
       inheritedMemoryDependencies.push(dependency);
     }
     for (const reference of fact.materialReferences) {
-      const key = referenceKeyOf(reference);
+      const key = materialListIdentity(reference);
       if (seenMaterialKeys.has(key)) continue;
       seenMaterialKeys.add(key);
       inheritedMaterialReferences.push(reference);
@@ -1268,7 +1259,7 @@ export const prepareRunMemoryDecision = (
     excludedMemoryIds: input.excludedMemoryIds,
   });
   const allowedMaterialKeys = new Set(
-    input.materials.map((selection) => referenceKeyOf(selection.reference)),
+    input.materials.map((selection) => materialListIdentity(selection.reference)),
   );
   const recall = recallMemoriesForQuery(store, queryContext, { allowedMaterialKeys });
   const replay = planRunHistoryReplay(store, {
@@ -1282,7 +1273,7 @@ export const prepareRunMemoryDecision = (
   const materialDependencyUnion: MaterialReference[] = [];
   const seenMaterialKeys = new Set<string>();
   const pushMaterial = (reference: MaterialReference): void => {
-    const key = referenceKeyOf(reference);
+    const key = materialListIdentity(reference);
     if (seenMaterialKeys.has(key)) return;
     seenMaterialKeys.add(key);
     materialDependencyUnion.push(reference);
@@ -1339,7 +1330,7 @@ export const prepareRunMemoryDecision = (
       ...(input.expertId === undefined ? {} : { expertId: input.expertId }),
       taskId: input.taskId,
       taskContextRevisionId: input.taskContextRevisionId,
-      materialKeys: materialDependencyUnion.map((reference) => referenceKeyOf(reference)),
+      materialKeys: materialDependencyUnion.map((reference) => materialListIdentity(reference)),
     }),
     selectedItems: recall.selectedItems,
     selectedRecords: recall.selectedRecords,

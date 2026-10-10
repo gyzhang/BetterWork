@@ -73,7 +73,7 @@ import {
   type AppStore,
   type CredentialOwnerRef,
   type InputSnapshot,
-  materialReferenceKey,
+  materialSelectionListIdentity,
   type MemoryReadInput,
   type RunContinuityContext,
 } from '../persistence';
@@ -1121,8 +1121,8 @@ export class RunService {
   ): string {
     const previous = this.store.runContextSnapshots.latestByTask(taskId);
     if (!previous) return randomUUID();
-    const previousKeys = new Set(previous.materials.map(materialReferenceKey));
-    const currentKeys = new Set(materials.map(materialReferenceKey));
+    const previousKeys = new Set(previous.materials.map(materialSelectionListIdentity));
+    const currentKeys = new Set(materials.map(materialSelectionListIdentity));
     const isShrink =
       currentKeys.size < previousKeys.size &&
       [...currentKeys].every((key) => previousKeys.has(key));

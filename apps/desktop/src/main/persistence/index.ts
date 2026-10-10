@@ -232,7 +232,7 @@ export {
 export { ModelRepository, type RunnableModel } from './model-repository';
 export { NotificationRepository } from './notification-repository';
 export {
-  materialReferenceKey,
+  materialSelectionListIdentity,
   type RunContextSnapshot,
   RunContextSnapshotRepository,
 } from './run-context-snapshot-repository';

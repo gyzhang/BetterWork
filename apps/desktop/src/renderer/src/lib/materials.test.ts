@@ -3,13 +3,13 @@ import type {
   MaterialReference,
   TaskMaterialSelection,
 } from '@betterwork/agent-protocol';
+import { materialListIdentity } from '@betterwork/agent-protocol';
 import { describe, expect, it } from 'vitest';
 
 import {
   materialCandidateAppliesToWorkspace,
   materialCandidateKey,
   materialReferenceAppliesToWorkspace,
-  materialReferenceKey,
   taskMaterialKey,
 } from './materials';
 
@@ -51,27 +51,27 @@ const candidate = (reference: MaterialReference): MaterialCandidate => ({
   status: 'ready',
 });
 
-describe('materialReferenceKey', () => {
+describe('materialListIdentity', () => {
   it('keys each reference kind by the identity that makes it the same material', () => {
-    expect(materialReferenceKey(knowledge('rev-1'))).toBe('knowledge:rev-1');
-    expect(materialReferenceKey(artifactVersion('ver-2', 'ws-1'))).toBe('artifact:ver-2');
-    expect(materialReferenceKey(inputSnapshot('snap-3'))).toBe('snapshot:snap-3');
+    expect(materialListIdentity(knowledge('rev-1'))).toBe('knowledge-revision:rev-1');
+    expect(materialListIdentity(artifactVersion('ver-2', 'ws-1'))).toBe('artifact-version:ver-2');
+    expect(materialListIdentity(inputSnapshot('snap-3'))).toBe('workspace-input-snapshot:snap-3');
   });
 
   it('collapses repeated picks of one exact version into a single key', () => {
     const again = { ...knowledge('rev-1'), sourcePath: '/renamed/a.md' };
-    expect(materialReferenceKey(again)).toBe(materialReferenceKey(knowledge('rev-1')));
-    expect(materialReferenceKey(artifactVersion('ver-2', 'ws-9'))).toBe(
-      materialReferenceKey(artifactVersion('ver-2', 'ws-1')),
+    expect(materialListIdentity(again)).toBe(materialListIdentity(knowledge('rev-1')));
+    expect(materialListIdentity(artifactVersion('ver-2', 'ws-9'))).toBe(
+      materialListIdentity(artifactVersion('ver-2', 'ws-1')),
     );
-    expect(materialReferenceKey(knowledge('rev-2'))).not.toBe(
-      materialReferenceKey(knowledge('rev-1')),
+    expect(materialListIdentity(knowledge('rev-2'))).not.toBe(
+      materialListIdentity(knowledge('rev-1')),
     );
   });
 
   it('gives selections and candidates the same key as their reference', () => {
-    expect(taskMaterialKey(selection(knowledge('rev-1')))).toBe('knowledge:rev-1');
-    expect(materialCandidateKey(candidate(knowledge('rev-1')))).toBe('knowledge:rev-1');
+    expect(taskMaterialKey(selection(knowledge('rev-1')))).toBe('knowledge-revision:rev-1');
+    expect(materialCandidateKey(candidate(knowledge('rev-1')))).toBe('knowledge-revision:rev-1');
     // 去重跨两种载体成立：已选材料与候选列表比较时必须是同一个口径。
     expect(materialCandidateKey(candidate(knowledge('rev-1')))).toBe(
       taskMaterialKey(selection(knowledge('rev-1'))),
