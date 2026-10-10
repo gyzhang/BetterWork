@@ -599,7 +599,7 @@ E7 完成 R10 的跨议题枚举切片；完整治理读取、重复候选、逐
 
 2026-10-10 22:45 CST：最终源 `76743a364e96dac68ea9fa15aae8603381dcec7c` 的 [Actions 38060522618](https://github.com/gyzhang/BetterWork/actions/runs/38060522618) 在 macos-26-arm64 的 PR Gate 成功，静态与 docs:check 1/154、changed functional 10/160、heavy 1/87 通过，Full verify 跳过。[PR #54](https://github.com/gyzhang/BetterWork/pull/54) 已 squash 为 main `1a6ccd686f8c400ea0d527aff64b7f6c9d54cb2e`，文件树与源一致；代码分支本地/远端删除，原 checkout 同步 main，纯 Markdown 分支 `codex/e7-closeout` 归档。E7 代码与自动化收口，建议 E8 整理知识范围覆盖与 substring 回退读模型，等待后续指令。
 
-## 26. E8：知识范围覆盖与 substring 读模型（本地自动化通过）
+## 26. E8：知识范围覆盖与 substring 读模型（代码与自动化收口）
 
 2026-10-10 用户授权推进 E8，基点 `98833d521cad2fad27ecf4a17b4a29914518b921`，分支 `codex/e8-knowledge-search-read-model`，沿用原 checkout。实施与证据见 [E8 专项 Review](2026-10-10-knowledge-search-read-model.md)。
 
@@ -607,4 +607,6 @@ E7 完成 R10 的跨议题枚举切片；完整治理读取、重复候选、逐
 
 本地 changed functional 14 文件 / 189 项、heavy 2 文件 / 90 项，去重 16 文件 / 279 项通过；docs:check 154 项、静态、build 与串行 bench 3 项通过。四个退化探针检出 2、1、1、2 项失败，恢复后核心 27 项通过。2,000 块样本覆盖计数完整行 2,000→0；回退加计数完整行 4,000→50、仍扫描 2,000 条正文，中位 20.59→10.69 ms，完整结果顺序一致。既有 10,375×1,536 向量样本 warm p95 426.3 ms、Worker 增量 RSS 46.4 MiB，满足原预算。
 
-E8 完成 R10 的该读取切片；substring 仍扫描全部允许正文，可用向量路仍保留完整块映射，读数不外推产品容量。未运行完整 verify、UI、真实模型或安装态人工验收；最新源 SHA 的 macOS PR Gate、合并与归档继续收口。
+E8 完成 R10 的该读取切片；substring 仍扫描全部允许正文，可用向量路仍保留完整块映射，读数不外推产品容量。未运行完整 verify、UI、真实模型或安装态人工验收。
+
+2026-10-10 23:20 CST：最终源 `0a4b8e021830491f3115aee1e7b0806242108ee5` 的 [Actions 38062849012](https://github.com/gyzhang/BetterWork/actions/runs/38062849012) 在 macos-26-arm64 的 PR Gate 成功，静态、docs:check 1/154、changed functional 14/189、heavy 2/90 通过，Full verify 跳过。[PR #56](https://github.com/gyzhang/BetterWork/pull/56) 已 squash 为 main `1e71951de02ffb8d7cee2131e0bd03235903b8ae`，文件树与源一致；代码分支本地/远端删除，原 checkout 同步 main，纯 Markdown 分支 `codex/e8-closeout` 归档。历史依赖装配、治理读取与成功向量路的完整块映射仍有后续范围，另按用户指令推进。

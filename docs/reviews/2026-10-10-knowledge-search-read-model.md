@@ -4,7 +4,7 @@
 
 用户授权推进 E8，批次基点 `98833d521cad2fad27ecf4a17b4a29914518b921`，分支 `codex/e8-knowledge-search-read-model`，沿用当前 checkout。
 
-KnowledgeSearchService 为覆盖计数加载 scope 全部完整块；substring 零 FTS 命中时也加载全部完整块、保留全部匹配再排序。E8 将覆盖率改为聚合计数，将回退改为精简投影的逐块扫描与有界候选身份保留，最后只读选中身份的完整块。扫描范围保持完整，现行 top 50 在范围过滤和匹配后执行；不增加索引、缓存、迁移、协议、依赖、UI 或新的检索算法。
+KnowledgeSearchService 原先为覆盖计数加载 scope 全部完整块；substring 零 FTS 命中时也加载全部完整块、保留全部匹配再排序。E8 将覆盖率改为聚合计数，将回退改为精简投影的逐块扫描与有界候选身份保留，最后只读选中身份的完整块。扫描范围保持完整，现行 top 50 在范围过滤和匹配后执行；不增加索引、缓存、迁移、协议、依赖、UI 或新的检索算法。
 
 匹配仍为 JavaScript NFKC 与 toLocaleLowerCase；所有查询词都必须在规范化标题或正文中，按标题命中词数降序、查询词顺序下首个正文命中词的位置升序、revisionId/sectionOrdinal/start 排序。正文位置沿用字符串 UTF-16 下标，不改为 SQLite 码点位置；相等比较保留原输入顺序。输出的正文、定位、哈希、修订、来源与 RRF/重叠处理保持。
 
@@ -31,4 +31,8 @@ KnowledgeIndexStore 复用 scopeCoverage 聚合计数，新增 searchTextInScope
 
 ## 交接边界
 
-E8 整理 R10 的覆盖计数与 substring 读取切片；substring 仍逐块读取允许范围全部正文，可用向量路仍保留全 scope 完整块映射。历史依赖装配、治理读取及更进一步的正文索引优化另行推进。没有运行完整 verify、UI 走查、真实模型或安装态人工验收。最新源 SHA 的 macOS PR Gate、合并与归档待补。
+E8 整理 R10 的覆盖计数与 substring 读取切片；substring 仍逐块读取允许范围全部正文，可用向量路仍保留全 scope 完整块映射。历史依赖装配、治理读取及更进一步的正文索引优化另行推进。没有运行完整 verify、UI 走查、真实模型或安装态人工验收。
+
+2026-10-10 23:20 CST：最终源 `0a4b8e021830491f3115aee1e7b0806242108ee5` 的 [macOS Actions 38062849012](https://github.com/gyzhang/BetterWork/actions/runs/38062849012) 通过 PR Gate，日志确认 macos-26-arm64。lint、format:check、typecheck、docs:check 1/154、changed functional 14/189 与 heavy 2/90 通过，Full verify 跳过；与本地测试不重复相加。没有首发 CI 失败或重跑。
+
+[PR #56](https://github.com/gyzhang/BetterWork/pull/56) 已 squash 合入 main `1e71951de02ffb8d7cee2131e0bd03235903b8ae`，文件树与最终源一致；代码分支本地/远端均删除，原 checkout 同步 main。按开工基点巡检退出 0，留档 261 测试文件、2,247 粗计声明、154 结构护栏、203 例外登记，规则指纹不变。纯 Markdown 分支 `codex/e8-closeout` 归档此远端证据，无新 worktree。E8 代码与自动化收口，人工验收及上述后续范围保持独立。
