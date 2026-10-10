@@ -1,3 +1,4 @@
+import { materialReferenceFingerprint } from '@betterwork/agent-protocol';
 import {
   type ExecuteMissedScheduleRequest,
   type ExecuteScheduleNowRequest,
@@ -90,12 +91,16 @@ export class ScheduleQueries {
           .listByRun(run.id)
           .filter((item) => item.operation === 'read' || item.operation === 'parse')
       : [];
-    const readMaterials = new Set(reads.map((item) => JSON.stringify(item.material)));
+    const readMaterials = new Set(reads.map((item) => materialReferenceFingerprint(item.material)));
     const adoptedMaterials = new Set(
       run
         ? this.store.artifactInputRelations
             .listBySourceRun(run.taskId, run.id)
-            .map((item) => JSON.stringify(item.input))
+            .map((item) =>
+              item.input.kind === 'evidence'
+                ? JSON.stringify(item.input)
+                : materialReferenceFingerprint(item.input),
+            )
         : [],
     );
     const result = this.outcomes.projectOccurrence(occurrence.id);

@@ -1,9 +1,12 @@
 import {
   knowledgeSpanSchema,
+  materialListIdentity,
   type MaterialReference,
+  materialReferenceFingerprint,
   materialReferenceSchema,
   type RunMaterialRead,
   runMaterialReadSchema,
+  sameMaterialVersion,
   taskMaterialSelectionSchema,
 } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
@@ -29,52 +32,20 @@ interface RunContextMaterialRow {
   materials_json: string;
 }
 
-const materialKey = (reference: MaterialReference): string => {
-  const parsed = materialReferenceSchema.parse(reference);
-  if (parsed.kind === 'knowledge-revision') {
-    return `${parsed.kind}:${parsed.knowledgeRevisionId}`;
-  }
-  if (parsed.kind === 'artifact-version') {
-    return `${parsed.kind}:${parsed.artifactVersionId}`;
-  }
-  return `${parsed.kind}:${parsed.snapshotId}`;
-};
-
-const sameMaterialReference = (left: MaterialReference, right: MaterialReference): boolean => {
-  if (left.kind !== right.kind) return false;
-  if (left.kind === 'knowledge-revision' && right.kind === 'knowledge-revision') {
-    return (
-      left.knowledgeDocumentId === right.knowledgeDocumentId &&
-      left.knowledgeRevisionId === right.knowledgeRevisionId &&
-      left.contentHash === right.contentHash &&
-      left.sourcePath === right.sourcePath &&
-      left.originWorkspaceId === right.originWorkspaceId
-    );
-  }
-  if (left.kind === 'artifact-version' && right.kind === 'artifact-version') {
-    return (
-      left.artifactId === right.artifactId &&
-      left.artifactVersionId === right.artifactVersionId &&
-      left.contentHash === right.contentHash &&
-      left.originWorkspaceId === right.originWorkspaceId
-    );
-  }
-  if (left.kind === 'workspace-input-snapshot' && right.kind === 'workspace-input-snapshot') {
-    return (
-      left.snapshotId === right.snapshotId &&
-      left.workspaceId === right.workspaceId &&
-      left.contentHash === right.contentHash &&
-      left.format === right.format &&
-      left.fileKey === right.fileKey
-    );
-  }
-  return false;
-};
-
 const parseMaterials = (value: string): RunMaterialRead['material'][] => {
   const parsed: unknown = JSON.parse(value);
   if (!Array.isArray(parsed)) throw new Error('Stored run materials must be an array');
   return parsed.map((item) => taskMaterialSelectionSchema.parse(item).reference);
+};
+
+const matchesStoredMaterial = (value: string, reference: MaterialReference): boolean => {
+  try {
+    const stored = materialReferenceSchema.parse(JSON.parse(value) as unknown);
+    return sameMaterialVersion(stored, reference);
+  } catch {
+    // An invalid historical audit row cannot prove that this material was read.
+    return false;
+  }
 };
 
 const toRead = (row: RunMaterialReadRow): RunMaterialRead =>
@@ -112,18 +83,18 @@ export class RunMaterialReadRepository {
       const scoped = context.task_context_revision_id !== null || materials.length > 0;
       if (scoped) {
         const selected = materials.find(
-          (material) => materialKey(material) === materialKey(parsed.material),
+          (material) => materialListIdentity(material) === materialListIdentity(parsed.material),
         );
         if (
           !selected ||
-          !sameMaterialReference(selected, parsed.material) ||
+          !sameMaterialVersion(selected, parsed.material) ||
           selected.contentHash !== parsed.contentHash
         ) {
           throw new Error('Run material read is outside the snapshot scope');
         }
       }
     }
-    const materialJsonKey = JSON.stringify(parsed.material);
+    const materialJsonKey = materialReferenceFingerprint(parsed.material);
     if (parsed.evidenceId) {
       // 新知识足迹：同 toolCall 同序号重复消费时整组核验一致才复用；内容不同必须失败，
       // 不用 INSERT OR IGNORE 掩盖不同内容（契约 §5.2）。
@@ -151,7 +122,9 @@ export class RunMaterialReadRepository {
           (existing.text_hash ?? '') === (parsed.textHash ?? '') &&
           existing.knowledge_span_json === JSON.stringify(parsed.knowledgeSpan) &&
           existing.operation === parsed.operation &&
-          existing.material_json === materialJsonKey;
+          materialReferenceFingerprint(
+            materialReferenceSchema.parse(JSON.parse(existing.material_json)),
+          ) === materialJsonKey;
         if (!sameGroup) {
           throw new Error(
             'Knowledge footprint conflict: same tool call slot holds different content',
@@ -171,7 +144,7 @@ export class RunMaterialReadRepository {
           parsed.id,
           parsed.runId,
           materialJsonKey,
-          materialKey(parsed.material),
+          materialListIdentity(parsed.material),
           parsed.operation,
           parsed.locator ?? null,
           parsed.contentHash,
@@ -195,7 +168,7 @@ export class RunMaterialReadRepository {
       .run(
         parsed.id,
         parsed.runId,
-        JSON.stringify(parsed.material),
+        materialReferenceFingerprint(parsed.material),
         materialJsonKey,
         parsed.operation,
         parsed.locator ?? null,
@@ -231,27 +204,27 @@ export class RunMaterialReadRepository {
     return rows.map(toRead);
   }
 
-  hasMaterialRead(runId: string, materialKey: string, contentHash: string): boolean {
+  /** Lookup the existing persisted key, whose legacy and knowledge audit formats differ. */
+  hasMaterialRead(runId: string, persistedKey: string, contentHash: string): boolean {
     const row = this.db
       .prepare(
         `SELECT 1 AS found FROM run_material_reads
           WHERE run_id = ? AND material_key = ? AND content_hash = ? LIMIT 1`,
       )
-      .get(runId, materialKey, contentHash) as { found?: number } | undefined;
+      .get(runId, persistedKey, contentHash) as { found?: number } | undefined;
     return row?.found === 1;
   }
 
   /** 正文级足迹：`search` 摘要不算实际读取（契约 §6.2）。 */
-  hasBodyRead(runId: string, materialJson: string, contentHash: string): boolean {
-    const row = this.db
+  hasBodyRead(runId: string, reference: MaterialReference): boolean {
+    const parsed = materialReferenceSchema.parse(reference);
+    const rows = this.db
       .prepare(
-        `SELECT 1 AS found FROM run_material_reads
-          WHERE run_id = ? AND material_json = ? AND content_hash = ?
-            AND operation IN ('read', 'parse')
-          LIMIT 1`,
+        `SELECT material_json FROM run_material_reads
+          WHERE run_id = ? AND content_hash = ? AND operation IN ('read', 'parse')`,
       )
-      .get(runId, materialJson, contentHash) as { found?: number } | undefined;
-    return row?.found === 1;
+      .all(runId, parsed.contentHash) as Array<{ material_json: string }>;
+    return rows.some((row) => matchesStoredMaterial(row.material_json, parsed));
   }
 
   /** 知识正文足迹按完整修订身份匹配；搜索足迹 operation='search' 被排除。 */
@@ -262,12 +235,6 @@ export class RunMaterialReadRepository {
           WHERE run_id = ? AND operation <> 'search' AND knowledge_span_json IS NOT NULL`,
       )
       .all(runId) as Array<{ material_json: string }>;
-    return rows.some((row) => {
-      try {
-        return sameMaterialReference(JSON.parse(row.material_json) as MaterialReference, reference);
-      } catch {
-        return false;
-      }
-    });
+    return rows.some((row) => matchesStoredMaterial(row.material_json, reference));
   }
 }

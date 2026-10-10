@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 
+import { materialListIdentity } from '@betterwork/agent-protocol';
 import {
   type ListScheduleSourceItemsRequest,
   listScheduleSourceItemsRequestSchema,
@@ -145,22 +146,13 @@ export const assertScheduleSourceReadyForTask = (
   return toSnapshot(row);
 };
 
-const referenceKey = (item: ScheduleSourceItem): string => {
-  const reference = item.reference;
-  if (reference.kind === 'knowledge-revision')
-    return `knowledge-revision:${reference.knowledgeRevisionId}`;
-  if (reference.kind === 'artifact-version')
-    return `artifact-version:${reference.artifactVersionId}`;
-  return `workspace-input-snapshot:${reference.snapshotId}`;
-};
-
 export const scheduleSourceManifestHash = (items: readonly ScheduleSourceItem[]): string =>
   createHash('sha256')
     .update(
       JSON.stringify(
         items.map((item) => [
           item.ordinal,
-          referenceKey(item),
+          materialListIdentity(item.reference),
           item.reference,
           item.purpose,
           item.origin,
@@ -307,7 +299,7 @@ export class ScheduleSourceRepository {
         '来源清单摘要与实际条目不一致。',
       );
     }
-    const keys = new Set(items.map(referenceKey));
+    const keys = new Set(items.map((item) => materialListIdentity(item.reference)));
     if (keys.size !== items.length) {
       throw new ScheduleSourceRepositoryError(
         'schedule_source_conflict',

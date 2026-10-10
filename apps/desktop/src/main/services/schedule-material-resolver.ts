@@ -3,6 +3,7 @@ import {
   type MaterialReference,
   materialReferenceSchema,
   sameKnowledgeReference,
+  sameMaterialVersion,
   SCHEDULE_SOURCE_ITEM_MAX,
   type ScheduleSourceItem,
   type ScheduleSourceOrigin,
@@ -44,7 +45,7 @@ export class ScheduleMaterialResolutionError extends Error {
   }
 }
 
-const identityKey = (reference: MaterialReference): string => {
+const scheduleMergeConflictIdentity = (reference: MaterialReference): string => {
   if (reference.kind === 'knowledge-revision') {
     return `knowledge-document:${reference.knowledgeDocumentId}`;
   }
@@ -54,28 +55,15 @@ const identityKey = (reference: MaterialReference): string => {
   return `workspace-input:${reference.snapshotId}`;
 };
 
-const sameReference = (left: MaterialReference, right: MaterialReference): boolean => {
+const sameScheduleMaterialVersion = (
+  left: MaterialReference,
+  right: MaterialReference,
+): boolean => {
   if (left.kind !== right.kind) return false;
   if (left.kind === 'knowledge-revision' && right.kind === 'knowledge-revision') {
     return sameKnowledgeReference(left, right);
   }
-  if (left.kind === 'artifact-version' && right.kind === 'artifact-version') {
-    return (
-      left.artifactId === right.artifactId &&
-      left.artifactVersionId === right.artifactVersionId &&
-      left.contentHash === right.contentHash &&
-      left.originWorkspaceId === right.originWorkspaceId
-    );
-  }
-  return (
-    left.kind === 'workspace-input-snapshot' &&
-    right.kind === 'workspace-input-snapshot' &&
-    left.snapshotId === right.snapshotId &&
-    left.workspaceId === right.workspaceId &&
-    left.contentHash === right.contentHash &&
-    left.format === right.format &&
-    left.fileKey === right.fileKey
-  );
+  return sameMaterialVersion(left, right);
 };
 
 const parseSupplement = (materials: readonly TaskMaterialSelection[]): TaskMaterialSelection[] =>
@@ -97,7 +85,7 @@ export const mergeScheduleMaterials = (
 
   for (const sourceItem of sourceItems) {
     const reference = materialReferenceSchema.parse(sourceItem.reference);
-    const key = identityKey(reference);
+    const key = scheduleMergeConflictIdentity(reference);
     const existing = byIdentity.get(key);
     if (existing) {
       throw new ScheduleMaterialResolutionError(
@@ -119,7 +107,7 @@ export const mergeScheduleMaterials = (
 
   for (const selection of parsedSupplements) {
     const reference = materialReferenceSchema.parse(selection.reference);
-    const key = identityKey(reference);
+    const key = scheduleMergeConflictIdentity(reference);
     const existing = byIdentity.get(key);
     if (!existing) {
       byIdentity.set(key, {
@@ -133,7 +121,7 @@ export const mergeScheduleMaterials = (
       });
       continue;
     }
-    if (!sameReference(existing.material.reference, reference)) {
+    if (!sameScheduleMaterialVersion(existing.material.reference, reference)) {
       throw new ScheduleMaterialResolutionError(
         'schedule_source_conflict',
         `定时来源与显式补充指向同一资料的不同修订或哈希：${key}`,

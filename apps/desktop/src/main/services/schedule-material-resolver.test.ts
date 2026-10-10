@@ -106,6 +106,23 @@ describe('ScheduleMaterialResolver', () => {
     }
   });
 
+  it('preserves legacy knowledge references with optional origin metadata', () => {
+    const reference = knowledgeReference('document-legacy');
+    if (reference.kind !== 'knowledge-revision') throw new Error('Expected knowledge reference');
+    const resolved = mergeScheduleMaterials(
+      [sourceItem(reference, 0)],
+      [selection({ ...reference, originWorkspaceId: 'origin' })],
+    );
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0]?.source).toBe('schedule-and-supplement');
+    expect(() =>
+      mergeScheduleMaterials(
+        [sourceItem(reference, 0)],
+        [selection({ ...reference, sourcePath: '/forged.md' })],
+      ),
+    ).toThrow('不同修订或哈希');
+  });
+
   it('merges an exact supplement without mutating the fixed Schedule manifest', () => {
     const reference = knowledgeReference('document-1');
     const sourceItems = [sourceItem(reference, 0)];

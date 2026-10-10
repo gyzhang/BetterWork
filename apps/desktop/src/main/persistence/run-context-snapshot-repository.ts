@@ -3,6 +3,7 @@ import {
   builtinToolPolicySchema,
   type ExpertModelReference,
   expertModelReferenceSchema,
+  materialListIdentity,
   materialReferenceSchema,
   type McpToolBinding,
   mcpToolBindingSchema,
@@ -214,11 +215,5 @@ export class RunContextSnapshotRepository {
 }
 
 /** 只比较稳定材料身份；用途和备注变化不会伪造上下文范围变化。 */
-export const materialReferenceKey = (selection: TaskMaterialSelection): string => {
-  const reference = materialReferenceSchema.parse(selection.reference);
-  if (reference.kind === 'knowledge-revision')
-    return `${reference.kind}:${reference.knowledgeRevisionId}`;
-  if (reference.kind === 'artifact-version')
-    return `${reference.kind}:${reference.artifactVersionId}`;
-  return `${reference.kind}:${reference.snapshotId}`;
-};
+export const materialSelectionListIdentity = (selection: TaskMaterialSelection): string =>
+  materialListIdentity(materialReferenceSchema.parse(selection.reference));

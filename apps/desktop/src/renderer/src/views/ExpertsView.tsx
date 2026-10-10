@@ -8,6 +8,7 @@ import type {
   ModelProfileSummary,
   SkillSummary,
 } from '@betterwork/agent-protocol';
+import { materialListIdentity } from '@betterwork/agent-protocol';
 import { useEffect, useRef, useState } from 'react';
 
 import { ActionBar } from '../components/ActionBar';
@@ -35,7 +36,7 @@ import type { ExpertsState } from '../hooks/use-experts';
 import { useViewMode } from '../hooks/use-view-mode';
 import { ChevronLeftIcon, ExpertIcon, PlusIcon, SummonIcon } from '../icons';
 import { reportAction } from '../lib/async-action';
-import { materialCandidateAppliesToWorkspace, materialReferenceKey } from '../lib/materials';
+import { materialCandidateAppliesToWorkspace } from '../lib/materials';
 
 const VIEW_MODE_STORAGE_KEY = 'experts-view-mode';
 
@@ -325,7 +326,7 @@ function ExpertEditor({
   const [referenceQuery, setReferenceQuery] = useState('');
   const [referenceKind, setReferenceKind] = useState('all');
   const selectedKeys = new Set(
-    referenceMaterials.map((item) => materialReferenceKey(item.reference)),
+    referenceMaterials.map((item) => materialListIdentity(item.reference)),
   );
   const referenceCandidates = materialCandidates
     .filter((candidate) => candidate.reference.kind !== 'workspace-input-snapshot')
@@ -339,7 +340,7 @@ function ExpertEditor({
   const query = referenceQuery.trim().toLocaleLowerCase();
   const availableCandidates = referenceCandidates.filter(
     (candidate) =>
-      !selectedKeys.has(materialReferenceKey(candidate.reference)) &&
+      !selectedKeys.has(materialListIdentity(candidate.reference)) &&
       (referenceKind === 'all' || referenceKind === candidate.reference.kind) &&
       `${candidate.title} ${candidate.sourceLabel} ${candidate.detail ?? ''}`
         .toLocaleLowerCase()
@@ -347,7 +348,7 @@ function ExpertEditor({
   );
   const referenceOptions = (candidates: MaterialCandidate[]): CheckOption<string>[] =>
     candidates.map((candidate) => {
-      const key = materialReferenceKey(candidate.reference);
+      const key = materialListIdentity(candidate.reference);
       const checked = selectedKeys.has(key);
       const applicable = materialCandidateAppliesToWorkspace(candidate, workspaceId);
       const detail = candidate.detail?.startsWith(candidate.title)
@@ -374,13 +375,13 @@ function ExpertEditor({
       onChange({
         ...draft,
         referenceMaterials: referenceMaterials.filter(
-          (item) => materialReferenceKey(item.reference) !== id,
+          (item) => materialListIdentity(item.reference) !== id,
         ),
       });
       return;
     }
     const candidate = referenceCandidates.find(
-      (item) => materialReferenceKey(item.reference) === id,
+      (item) => materialListIdentity(item.reference) === id,
     );
     if (!candidate) return;
     onChange({
@@ -392,9 +393,9 @@ function ExpertEditor({
     });
   };
   const selectedReferenceOptions = referenceMaterials.flatMap((item, index) => {
-    const key = materialReferenceKey(item.reference);
+    const key = materialListIdentity(item.reference);
     const candidate = referenceCandidates.find(
-      (candidate) => materialReferenceKey(candidate.reference) === key,
+      (candidate) => materialListIdentity(candidate.reference) === key,
     );
     return candidate
       ? referenceOptions([candidate])

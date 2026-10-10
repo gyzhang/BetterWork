@@ -171,10 +171,10 @@ const indexOfCodePointSequence = (
 };
 
 /**
- * 同一材料引用按精确身份去重；sourcePath 只是定位入口，不参与身份。
+ * 记忆来源依赖沿用去掉 sourcePath 的完整字段投影；不是列表键或完整持久化指纹。
  * 读取器与解析器共用这一把键，避免两侧对「同一条材料」判定不一致。
  */
-export const materialReferenceKeyOf = (reference: MaterialReference): string =>
+export const materialDependencyIdentity = (reference: MaterialReference): string =>
   stableStringifyJson(
     Object.entries(reference)
       .filter(([key]) => key !== 'sourcePath')
@@ -194,7 +194,7 @@ const closeMemoryDependencies = (
   const path = new Set<string>();
 
   const addMaterial = (reference: MaterialReference): Failure | undefined => {
-    const key = materialReferenceKeyOf(reference);
+    const key = materialDependencyIdentity(reference);
     if (materials.has(key)) return undefined;
     materials.set(key, reference);
     return materials.size > MEMORY_MATERIAL_DEPENDENCY_MAX ? dependencyLimit('材料') : undefined;

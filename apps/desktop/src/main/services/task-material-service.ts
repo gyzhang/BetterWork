@@ -1,9 +1,9 @@
 import path from 'node:path';
 
-import type {
-  MaterialCandidate,
-  MaterialReference,
-  TaskMaterialSelection,
+import {
+  type MaterialCandidate,
+  materialListIdentity,
+  type TaskMaterialSelection,
 } from '@betterwork/agent-protocol';
 
 import type { AppStore, InputSnapshot } from '../persistence';
@@ -37,17 +37,6 @@ export interface TaskMaterialServiceDependencies {
   knowledgeVault: KnowledgeVault;
   inputSnapshots: InputSnapshotService;
 }
-
-const materialKey = (reference: MaterialReference): string => {
-  switch (reference.kind) {
-    case 'knowledge-revision':
-      return `${reference.kind}:${reference.knowledgeRevisionId}`;
-    case 'artifact-version':
-      return `${reference.kind}:${reference.artifactVersionId}`;
-    case 'workspace-input-snapshot':
-      return `${reference.kind}:${reference.snapshotId}`;
-  }
-};
 
 const artifactContentHash = (artifactId: string, versionId: string, store: AppStore): string => {
   const detail = store.artifacts.getVersionDetail(versionId);
@@ -167,7 +156,7 @@ export class TaskMaterialService {
     const workspaceId = this.workspaceId(taskId);
     const seen = new Set<string>();
     for (const selection of selections) {
-      const key = materialKey(selection.reference);
+      const key = materialListIdentity(selection.reference);
       if (seen.has(key)) {
         throw new TaskMaterialError(
           'material_reference_duplicate',
@@ -264,5 +253,3 @@ export class TaskMaterialService {
     return workspaceId;
   }
 }
-
-export { materialKey };

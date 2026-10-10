@@ -4,6 +4,7 @@ import {
   type ExpertReferenceMaterial,
   type MaterialReference,
   sameKnowledgeReference,
+  sameMaterialVersion,
   SCHEDULE_PREPARATION_TIMEOUT_MS,
   SCHEDULE_SOURCE_ITEM_MAX,
   type ScheduleDomainErrorCode,
@@ -57,7 +58,7 @@ export class ScheduleSourceServiceError extends Error {
   }
 }
 
-const identityKey = (reference: MaterialReference): string => {
+const scheduleSourceConflictIdentity = (reference: MaterialReference): string => {
   if (reference.kind === 'knowledge-revision') {
     return `knowledge:${reference.knowledgeDocumentId}`;
   }
@@ -93,28 +94,15 @@ const stableReferenceOrder = (reference: MaterialReference): string => {
   ].join('\u0000');
 };
 
-const sameReference = (left: MaterialReference, right: MaterialReference): boolean => {
+const sameScheduleMaterialVersion = (
+  left: MaterialReference,
+  right: MaterialReference,
+): boolean => {
   if (left.kind !== right.kind) return false;
   if (left.kind === 'knowledge-revision' && right.kind === 'knowledge-revision') {
     return sameKnowledgeReference(left, right);
   }
-  if (left.kind === 'artifact-version' && right.kind === 'artifact-version') {
-    return (
-      left.artifactId === right.artifactId &&
-      left.artifactVersionId === right.artifactVersionId &&
-      left.contentHash === right.contentHash &&
-      left.originWorkspaceId === right.originWorkspaceId
-    );
-  }
-  return (
-    left.kind === 'workspace-input-snapshot' &&
-    right.kind === 'workspace-input-snapshot' &&
-    left.snapshotId === right.snapshotId &&
-    left.workspaceId === right.workspaceId &&
-    left.contentHash === right.contentHash &&
-    left.format === right.format &&
-    left.fileKey === right.fileKey
-  );
+  return sameMaterialVersion(left, right);
 };
 
 const errorCode = (error: unknown): ScheduleDomainErrorCode => {
@@ -439,13 +427,13 @@ export class ScheduleSourceService {
   ): ScheduleSourceCandidate[] {
     const candidates = new Map<string, ScheduleSourceCandidate>();
     const add = (candidate: ScheduleSourceCandidate): void => {
-      const key = identityKey(candidate.reference);
+      const key = scheduleSourceConflictIdentity(candidate.reference);
       const existing = candidates.get(key);
       if (!existing) {
         candidates.set(key, candidate);
         return;
       }
-      if (!sameReference(existing.reference, candidate.reference)) {
+      if (!sameScheduleMaterialVersion(existing.reference, candidate.reference)) {
         throw new ScheduleSourceServiceError(
           'schedule_source_conflict',
           `同一来源身份对应不同修订或内容哈希：${key}`,

@@ -171,6 +171,52 @@ const materialRelation = (reference: KnowledgeMaterialReference): ArtifactInputR
 });
 
 describe('ArtifactDeclarationService.validate', () => {
+  it('accepts input display path differences but rejects altered read scope', () => {
+    const fixture = setup();
+    const previous = fixture.store.runs.get(fixture.runId)!;
+    const snapshot = fixture.store.runContextSnapshots.get(fixture.runId)!;
+    const reference = {
+      kind: 'workspace-input-snapshot' as const,
+      snapshotId: 'input',
+      workspaceId: snapshot.workspaceId,
+      contentHash: HASH,
+      format: 'txt',
+      fileKey: 'input/content',
+      sourcePath: '/original.txt',
+    };
+    const runId = randomUUID();
+    fixture.store.runs.create({ ...previous, id: runId });
+    fixture.store.runContextSnapshots.create({
+      runId,
+      taskId: fixture.taskId,
+      workspaceId: snapshot.workspaceId,
+      contextSegmentId: randomUUID(),
+      materials: [{ reference, purpose: 'background', addedFrom: 'user-input' }],
+      createdAt: 1,
+    });
+    fixture.store.materialReads.save({
+      id: randomUUID(),
+      runId,
+      material: reference,
+      operation: 'parse',
+      locator: 'document',
+      contentHash: HASH,
+      capturedAt: 2,
+    });
+    const { sourcePath: originalPath, ...withoutPath } = reference;
+    expect(originalPath).toBe('/original.txt');
+    const input = { input: withoutPath, relation: 'data' as const };
+    expect(fixture.declarations.validate([input], runId)).toEqual([input]);
+    for (const field of ['workspaceId', 'contentHash', 'format', 'fileKey'] as const) {
+      expect(() =>
+        fixture.declarations.validate(
+          [{ ...input, input: { ...withoutPath, [field]: 'forged' } }],
+          runId,
+        ),
+      ).toThrow(SourceDeclarationError);
+    }
+  });
+
   it.each(['read', 'parse', 'preview', 'search'] as const)(
     '成果版本与工作空间材料的 %s 足迹按实际正文读取判定',
     (operation) => {
