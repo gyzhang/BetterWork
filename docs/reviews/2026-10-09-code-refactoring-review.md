@@ -596,3 +596,5 @@ E6 完成 R10 的历史/来源事件切片；逐 Run 依赖装配、冲突枚举
 E7 完成 R10 的跨议题枚举切片；完整治理读取、重复候选、逐对裁决、历史依赖装配及知识正文检索仍有后续范围。完整 verify、UI 走查、真实模型和安装态人工验收未运行，最新 SHA 的 macOS PR Gate、合并与归档继续收口。
 
 22:38 CST 首发 CI 失败已归因：两套离线集成导入真实 Electron，触发下载失败，尚未加载用例；冲突策略回归通过。补三套相关测试的宿主替身，以 resolve hook 阻断真实 Electron 后，changed functional 10/160、heavy 1/87 通过，移除替身的探针检出导入错误。与前述测试集合不相加；更新源 SHA 后重新走 macOS 门禁，详情见专项报告。
+
+2026-10-10 22:45 CST：最终源 `76743a364e96dac68ea9fa15aae8603381dcec7c` 的 [Actions 38060522618](https://github.com/gyzhang/BetterWork/actions/runs/38060522618) 在 macos-26-arm64 的 PR Gate 成功，静态与 docs:check 1/154、changed functional 10/160、heavy 1/87 通过，Full verify 跳过。[PR #54](https://github.com/gyzhang/BetterWork/pull/54) 已 squash 为 main `1a6ccd686f8c400ea0d527aff64b7f6c9d54cb2e`，文件树与源一致；代码分支本地/远端删除，原 checkout 同步 main，纯 Markdown 分支 `codex/e7-closeout` 归档。E7 代码与自动化收口，建议 E8 整理知识范围覆盖与 substring 回退读模型，等待后续指令。
