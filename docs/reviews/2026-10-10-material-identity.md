@@ -27,4 +27,10 @@ JSON 格式、material_key 的两种历史写入方式、唯一索引与定时�
 - Review 对照原比较字段、旧知识分支、持久化 JSON/唯一索引/清单哈希和全部消费方；没有把列表键升级为授权依据，没有删除审计字段。新增回归先遇到测试工厂返回联合类型未收窄，已显式检查知识分支；初次整理漏掉定时仓储的一处函数引用，已修正。最终类型与检查通过，没有放宽规范或例外。
 - 2026-10-10 docs:check 154 项通过；以原批次基点 drift:check --save 留档，静态读数 254 文件 / 2216 个粗读用例，护栏 154、例外 203 与规则指纹保持，未发现漂移。该静态读数不是展开参数化用例后的运行结果。
 
-macOS 最新源 SHA 的 PR Gate、合并与归档待收口；完整 verify、全 UI 矩阵、OS 进程恢复、真实模型与安装态人工验收未执行。本批只完成 R11 材料身份整理；R10 其他读取路径与 R09 协议文件规模等后续范围不自动开工。
+## 最终门禁与合并
+
+2026-10-10 17:42 CST：源提交 `945d8b45704be645597d4091da7c389333ad3a52` 的 [macOS PR Gate / Actions 38041983063](https://github.com/gyzhang/BetterWork/actions/runs/38041983063) 成功，runner 为 macos-26-arm64。lint、format:check、typecheck、docs:check 通过；文档 1 文件 / 154 项、相关 functional 134 文件 / 1482 项、heavy 4 文件 / 184 项，按三次调用合计 139 文件 / 1820 项。该数字不表示全仓或去重后的规模，Full verify 跳过；本地 build/app-only 和反例不混入 CI 统计。
+
+[PR #48](https://github.com/gyzhang/BetterWork/pull/48) 已 squash 合入 main，提交 `ca7898a1662b2755c070924baef87287d1baca1f`，文件树与源提交一致。代码分支本地/远端均已删除，原 checkout 已同步 main；建立纯 Markdown 分支 `codex/e4-closeout` 归档证据，没有新 worktree。
+
+R11 材料身份整理的代码、Review 与自动化收口。后续建议从 R10 记忆召回/历史读取的轻投影与来源安全证明切片继续，等待用户开发指令；R09 协议文件规模和独立人工验收仍按后续任务推进。完整 verify、全 UI 矩阵、OS 进程恢复、真实模型与安装态人工验收未执行，不改写相关任务板状态。
