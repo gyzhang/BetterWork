@@ -45,6 +45,8 @@ import { SkillExecutionService } from './skill-execution-service';
 import { SkillService } from './skill-service';
 import { TaskMaterialService } from './task-material-service';
 
+vi.mock('electron', () => ({ Notification: { isSupported: () => false } }));
+
 const createCompletionGate = () => {
   let resolve = () => {};
   const promise = new Promise<void>((done) => {

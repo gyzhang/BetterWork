@@ -584,3 +584,15 @@ E6 完成 R10 的历史/来源事件切片；逐 Run 依赖装配、冲突枚举
 2026-10-10 21:49 CST：最终源 `71cffa1ca0d04d237c6150290030634d1279c248` 的 [macOS Actions 38056937617](https://github.com/gyzhang/BetterWork/actions/runs/38056937617) 通过 PR Gate，runner 为 macos-26-arm64。静态检查通过，文档 154、相关 functional 734、heavy 120 项，三次调用合计 72 文件 / 1,008 项，不代表全仓或去重规模；Full verify 跳过。
 
 [PR #52](https://github.com/gyzhang/BetterWork/pull/52) 已 squash 合入 main，提交 `171121e9201daea621e030ea603b76d46ac39219`，文件树与最终源提交一致；代码分支本地/远端删除，原 checkout 同步 main，纯 Markdown 分支 `codex/e6-closeout` 归档，无新 worktree。建议 E7 整理按议题分组的冲突候选枚举，保持重叠、裁决与并存组语义，等待后续指令。
+
+## 25. E7：冲突候选按议题分组（代码与自动化收口）
+
+2026-10-10 用户授权推进 E7，基点 `740df897c09034224b4be56f5502f5ddede5fd41`，分支 `codex/e7-memory-conflict-enumeration`，沿用原 checkout。实施与证据见 [E7 专项 Review](2026-10-10-memory-conflict-enumeration.md)。
+
+唯一冲突策略按原始 topicKey 分组，原输入左项顺序和桶内后续右项顺序保持，避免跨议题两两比较；作用域、有效期、身份/哈希判据、精确修订裁决与并存组规则保持。无候选 LIMIT、协议、迁移、算法版本或 UI 变化。
+
+本地相关 functional 10 文件 / 146 项、heavy 1 文件 / 87 项，去重共 11 文件 / 233 项通过；docs:check 154 项、typecheck、lint、format:check、build 和串行 bench 2 项通过。两个退化探针检出 1 项全量扫描及 2 项顺序失败，恢复后通过。5,000 条 / 1,000 议题样本比较 12,497,500→10,000 次，结果及顺序一致，中位耗时 85.84→0.51 ms；单议题仍保留完整二次方候选和结果，读数不代表容量承诺。
+
+E7 完成 R10 的跨议题枚举切片；完整治理读取、重复候选、逐对裁决、历史依赖装配及知识正文检索仍有后续范围。完整 verify、UI 走查、真实模型和安装态人工验收未运行，最新 SHA 的 macOS PR Gate、合并与归档继续收口。
+
+22:38 CST 首发 CI 失败已归因：两套离线集成导入真实 Electron，触发下载失败，尚未加载用例；冲突策略回归通过。补三套相关测试的宿主替身，以 resolve hook 阻断真实 Electron 后，changed functional 10/160、heavy 1/87 通过，移除替身的探针检出导入错误。与前述测试集合不相加；更新源 SHA 后重新走 macOS 门禁，详情见专项报告。
