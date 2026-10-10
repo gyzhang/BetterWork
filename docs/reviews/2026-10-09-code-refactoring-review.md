@@ -545,10 +545,14 @@ E3 完成 R10 材料候选切片；独立文件仍完整哈希，候选仍全量
 
 [PR #46](https://github.com/gyzhang/BetterWork/pull/46) 已 squash 合入 main，提交 `7fb70aca35ec054311b86627b3b5c89b14642df3`，文件树与最终源提交一致。代码分支本地/远端均已删除，原 checkout 已同步 main；纯 Markdown 分支 `codex/review-e3-closeout` 归档最终证据，无新 worktree。E3 材料候选切片的代码与自动化收口，其他治理与人工验收按后续指令推进。
 
-## 22. E4：材料身份判定整理（本地完成，远端待收口）
+## 22. E4：材料身份判定整理（代码与自动化收口）
 
 2026-10-10 用户授权推进 R11；批次基点 `2eeeb8f197b2857c3570bb53c6496efbfda4a852`，分支 `codex/e4-material-identity`，沿用原 checkout。实施与证据见 [E4 专项 Review](2026-10-10-material-identity.md)。
 
 现有共享协议提供列表身份、精确版本相等与完整持久化指纹，逐入口接入并去掉重复分支；保留知识旧兼容比较、足迹的完整空间审计、两处定时资料冲突策略、记忆依赖投影和历史 JSON 格式。正文足迹查询使用类型化引用与精确比较，避免字段顺序或快照展示路径误拒绝。Main 的来源/文件/归属验证保持，无新 package、迁移或产品范围变化。
 
 2026-10-10 本地定向 functional 两次调用 18 文件 / 269 项、heavy 2 文件 / 148 项，三次合计 20 文件 / 417 项通过；精确比较退化为列表 ID 的反例检出 16 项失败，恢复后通过。typecheck、定向 lint/format、build、app-only 一组通过，网络尝试 0。R11 本地实现与 Review 完成，macOS 最新源 SHA 的 PR Gate、合并与归档继续收口；R10 其他读取路径、R09 协议规模和独立人工验收不自动开工，未运行完整 verify。
+
+2026-10-10 17:42 CST：最终源 SHA `945d8b45704be645597d4091da7c389333ad3a52` 的 [Actions 38041983063](https://github.com/gyzhang/BetterWork/actions/runs/38041983063) 在 macos-26-arm64 通过 PR Gate。文档 154、相关 functional 1482、heavy 184 项按三次调用合计 139 文件 / 1820 项，静态检查通过、Full verify 跳过，不表示全仓或去重规模。
+
+[PR #48](https://github.com/gyzhang/BetterWork/pull/48) 已 squash 合入 main，提交 `ca7898a1662b2755c070924baef87287d1baca1f`，文件树与源提交一致；代码分支本地/远端删除，原 checkout 同步 main，纯 Markdown 分支 `codex/e4-closeout` 归档，无新 worktree。R11 代码与自动化收口；建议下一步按 R10 记忆召回/历史读模型切片推进，等待后续指令。
