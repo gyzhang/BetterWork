@@ -639,7 +639,7 @@ E10 完成 R10 的历史记忆依赖读取切片；逐 Run 审计/材料装配�
 
 2026-10-11 06:37 CST：最终源 `8e8ac46d1f73c24c4e9b2f1aa4dbfbf470c763dd` 的 [Actions 38091769950](https://github.com/gyzhang/BetterWork/actions/runs/38091769950) 在 macos-26-arm64 上通过 PR Gate，静态、docs:check 1/154、changed functional 69/757、heavy 2/120 成功，Full verify 跳过。按三次调用合计 72 文件 / 1,031 项，不表示全仓或去重规模。[PR #60](https://github.com/gyzhang/BetterWork/pull/60) 已 squash 为 main `e650c7b87ae885dcf378e8fbdc221633c0b28ad0`，文件树与源一致；代码分支本地/远端删除，原 checkout 同步 main，原基点巡检退出 0，纯 Markdown 分支 `codex/e10-closeout` 归档。E10 代码与自动化收口，后续读取切片另按用户指令推进。
 
-## 29. E11：记忆列表裁决展示批量读取（本地实现与 Review 完成）
+## 29. E11：记忆列表裁决展示批量读取（代码与自动化收口）
 
 2026-10-11 用户授权 E11，从 main af81dfa632545f3166d9b1cd9c1b7bebcc5d9f37 建立 codex/e11-memory-list-decisions，沿用原 checkout。实施与证据见 [E11 专项 Review](2026-10-11-memory-list-decisions.md)。
 
@@ -647,4 +647,6 @@ E10 完成 R10 的历史记忆依赖读取切片；逐 Run 审计/材料装配�
 
 2026-10-11 06:45 CST，核心 3/54、related functional 6/148、heavy 1/87、docs:check 154、静态与 build 通过；核心另记不相加。四个退化探针检出 3、3、2、1 项失败，字节恢复后相关回归通过。串行 bench 3 文件 / 4 项通过：3,000 身份 / 1,580 裁决 / 100 页内修订，查询 100→1、解码 180→130、JSON 30,650→22,056 字节，中位 3.36→0.62 ms，180 条展示关系与顺序相等；仅裁决读取阶段，不外推完整列表或容量。
 
-E11 完成 R10 的逐项裁决展示读取切片；全域未裁决关联、逐 Run 来源装配与成功向量路完整映射仍有后续范围。未运行完整 verify、UI、真实模型或安装态人工验收；最新 SHA 的 macOS PR Gate、合并与归档继续收口。
+E11 完成 R10 的逐项裁决展示读取切片；全域未裁决关联、逐 Run 来源装配与成功向量路完整映射仍有后续范围。未运行完整 verify、UI、真实模型或安装态人工验收；远端门禁与合并证据见下文。
+
+2026-10-11 06:52 CST：最终源 `3ac089dcdbf58dd4a10f401470eaa102a77970ac` 的 [Actions 38092738909](https://github.com/gyzhang/BetterWork/actions/runs/38092738909) 在 macos-26-arm64 上通过 PR Gate，静态、docs:check 1/154、changed functional 6/148、heavy 1/87 成功，Full verify 跳过。按三次调用合计 8 文件 / 389 项，不表示全仓或去重规模。[PR #62](https://github.com/gyzhang/BetterWork/pull/62) 已 squash 为 main `1498df218bc0464f8ac80bdd368b2164e7601de0`，文件树与源一致；代码分支本地/远端删除，原 checkout 同步 main，原基点巡检退出 0，纯 Markdown 分支 codex/e11-closeout 归档。E11 代码与自动化收口，后续读取切片另按用户指令推进。
