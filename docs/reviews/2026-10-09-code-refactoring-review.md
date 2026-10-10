@@ -509,3 +509,8 @@ B 开始时先刷新 R17 的只读审计与安装树证据。若确认存在可�
 本地按文件去重 16 文件 / 405 项功能回归通过，新增 19 项；独立 bench 1 项通过，3,203 行版本元数据解码缩至目标 3 行，12.16→1.40 ms，来源完整集合一致。两个来源身份/CAS 破坏探针均准确失败，恢复后通过。typecheck、定向 lint/format、build 和 app-only 通过，网络尝试 0；最新源 SHA 的 macOS PR Gate 与合并归档继续收口。
 
 本批完成 R08 的 Schedule 小切片及 R10 的成果来源投影，R08–R11 未全部完成。Run 事件失败原因仍读历史，材料候选与来源安全证明未改；建议 E2 做编译期契约关联，待下一次指令。完整 verify、全 UI 矩阵、真实模型和安装态人工验收未执行，无新 worktree。
+
+
+2026-10-10 15:42 远端收口：源 SHA `2643133a17964e7cb3974a15d5de242f2ab55e96` 的 [macOS PR Gate / Actions 38035098856](https://github.com/gyzhang/BetterWork/actions/runs/38035098856) 成功，runner 为 macos-26-arm64；静态检查、文档护栏 154、相关 functional 66 文件 / 671 项、heavy 2 文件 / 119 项通过，三次测试调用合计 69 文件 / 944 项。Full verify 跳过。本地 bench、build、app-only 与破坏探针证据单列，不混入 CI 读数。
+
+[PR #42](https://github.com/gyzhang/BetterWork/pull/42) 已 squash 合入 main，提交 `b593b1a170282e497505a5656808ec16d8146f16`，与源提交的文件树一致。代码分支本地/远端均已删除，原 checkout 已同步 main，没有新建 worktree；从合并提交建立 `codex/review-e1-closeout`，以纯 Markdown 归档最终证据。E1 的 Schedule 用例与来源投影切片完成；R08–R11 的其余范围及人工验收继续按后续任务推进，不自动开工 E2。
