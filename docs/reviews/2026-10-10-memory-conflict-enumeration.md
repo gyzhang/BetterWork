@@ -40,6 +40,12 @@
 
 本地使用 Node resolve hook 主动阻断真实 Electron 入口，以 CI 相同基点执行 changed：functional 10 文件 / 160 项、heavy 1 文件 / 87 项，共 11 文件 / 247 项通过；与前述定向集合有重复，不相加。移除记忆集成的宿主替身后，探针在导入阶段退出 1，恢复后通过。初次只拦截 CommonJS `_load` 的探针未覆盖 ESM 入口，改为 resolve hook 后才取得有效证据；日志为 `/tmp/betterwork-e7-probe-electron-import-final.log`、`/tmp/betterwork-e7-functional-guarded.log` 和 `/tmp/betterwork-e7-heavy-guarded.log`。三文件定向 lint/format 退出 0；更新源提交后重新核对 macOS PR Gate。
 
+## 最终源 SHA 门禁与合并（2026-10-10 22:45 CST）
+
+更新后最终源 `76743a364e96dac68ea9fa15aae8603381dcec7c` 的 [Actions 38060522618](https://github.com/gyzhang/BetterWork/actions/runs/38060522618) 在 macos-26-arm64 上成功：lint、format:check、typecheck、docs:check（1 文件 / 154 项）、changed functional（10 / 160）、heavy（1 / 87）和 PR Gate 通过；Full verify 跳过。该日志不再出现 Electron 下载/安装错误。首发失败及修复归因保留在上一节，两次 CI 不混计。
+
+[PR #54](https://github.com/gyzhang/BetterWork/pull/54) 已 squash 合入 main `1a6ccd686f8c400ea0d527aff64b7f6c9d54cb2e`，文件树与最终源提交一致。代码分支本地/远端均删除，原 checkout 同步 main；纯 Markdown 分支 `codex/e7-closeout` 归档最终证据，没有新 worktree。commit/push 钩子退出 0，按原批次基点巡检无漂移；留档为 259 测试文件、2,236 粗计声明、154 结构护栏、203 例外登记，规则指纹不变。
+
 ## 边界与后续
 
-E7 完成 R10 的跨议题冲突枚举切片。治理完整记录读取、重复候选查找、逐对裁决和历史依赖装配仍保留；知识正文检索另行推进。没有 UI 变更，完整 verify、UI 走查、真实模型和安装态人工验收未运行。最新源 SHA 的 macOS PR Gate、合并与归档继续收口。
+E7 的代码与自动化收口。治理完整记录读取、重复候选查找、逐对裁决和历史依赖装配仍保留；建议下一步 E8 整理知识检索的范围覆盖计数与 substring 回退读模型，保留范围过滤、匹配、排序和来源校验语义，等待新指令。本轮没有 UI 变更，完整 verify、UI 走查、真实模型和安装态人工验收未运行。
