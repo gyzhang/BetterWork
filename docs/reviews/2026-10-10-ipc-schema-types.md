@@ -26,6 +26,10 @@ Review 核对四个 helper 的实际输入/输出类型、请求解析时机、S
 
 原批次基点 drift:check 已保存读数并复查无漂移，护栏 154、例外 203 和规则指纹保持；docs:check 154 项与差异空白通过。
 
+## 首次 CI 夹具校正
+
+2026-10-10 16:29 CST 首次远端运行 [Actions 38037670498](https://github.com/gyzhang/BetterWork/actions/runs/38037670498) 的相关 functional 50 项通过、编译夹具 1 项超时；该例 9.58s 超过默认 5s，文件总墙钟 13.82s。按工程规范 §9 仅设置该例 20s 夹具上限，全部 32 个编译样本与诊断断言保持，没有新增性能预算或修改全局 timeout/车道。1ms 超时破坏探针准确失败，恢复 20s 后通过，定向 5 文件 / 285 项再次通过；日志 `/tmp/betterwork-e2-compiler-timeout-probe.log` 不提交。首次源 SHA `490a1cc253e3ebeee111742b4589e746aabbdb0c` 的 PR Gate 失败，未据此合并；更新后的精确源 SHA 必须重新通过门禁。
+
 ## 后续边界
 
 E2 完成四个注册 helper 的 Schema/handler 关联。编译期仍不能代替长度、数值范围、精细化校验或不可信运行期数据校验；有意使用 unknown 的响应仍保留原不透明语义。channel 与 Schema/API 的全局映射、共享协议拆分、旧 Preload invoke 及领域错误格式尚未统一，本批不宣称 R09 整项完成。

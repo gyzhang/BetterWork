@@ -2254,6 +2254,8 @@ invalid.push(
   },
 );
 
+// 真实 checker 首轮本地 1.86s、macOS CI 9.58s（38037670498），超过默认 5s。
+// 20s 仅是读取/编译夹具上限，全部正反例与诊断断言保持；不作性能预算。
 it('checks actual IPC helper signatures with positive and negative TypeScript fixtures', () => {
   const sourcePath = fileURLToPath(new URL('./register-ipc.ts', import.meta.url));
   const configPath = ts.findConfigFile(
@@ -2315,4 +2317,4 @@ it('checks actual IPC helper signatures with positive and negative TypeScript fi
       expect(errors.map(format), probe.name).toEqual([]);
     }
   }
-});
+}, 20_000);
