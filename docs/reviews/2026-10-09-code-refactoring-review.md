@@ -557,7 +557,7 @@ E3 完成 R10 材料候选切片；独立文件仍完整哈希，候选仍全量
 
 [PR #48](https://github.com/gyzhang/BetterWork/pull/48) 已 squash 合入 main，提交 `ca7898a1662b2755c070924baef87287d1baca1f`，文件树与源提交一致；代码分支本地/远端删除，原 checkout 同步 main，纯 Markdown 分支 `codex/e4-closeout` 归档，无新 worktree。R11 代码与自动化收口；建议下一步按 R10 记忆召回/历史读模型切片推进，等待后续指令。
 
-## 23. E5：记忆召回排除账本读模型
+## 23. E5：记忆召回排除账本读模型（代码与自动化收口）
 
 2026-10-10 用户授权推进 E5，基点 `12b0e3bdba9406cdeb070434e5b7fcfc2d6d51c6`，分支 `codex/e5-memory-recall-read-model`，沿用原 checkout。实施与证据见 [E5 专项 Review](2026-10-10-memory-recall-read-model.md)。
 
@@ -565,4 +565,8 @@ E3 完成 R10 材料候选切片；独立文件仍完整哈希，候选仍全量
 
 本地相关功能 14 文件 / 268 项、文档护栏 154 项、串行 bench 2 项通过；typecheck、lint、format:check 和 build 通过。两个退化探针分别检出 1 项与 2 项失败，恢复后通过。3,000 最新身份、4,000 修订行的合成样本中，返回 JSON 载荷 14.88 MB→0.50 MB，正文/来源载荷归零；9 次读取中位数 57.41→3.09 ms，身份与顺序一致。读数不表示产品容量承诺。
 
-E5 完成 R10 的召回排除账本切片，完整 verify、UI 走查、真实模型和安装态人工验收未执行。macOS 最新源 SHA 的 PR Gate、合并与归档继续收口；建议 E6 整理历史安全重放读模型，其他 R10 读取路径另行推进，不自动开工。
+E5 完成 R10 的召回排除账本切片，完整 verify、UI 走查、真实模型和安装态人工验收未执行；建议 E6 整理历史安全重放读模型，其他 R10 读取路径另行推进，不自动开工。
+
+2026-10-10 20:44 CST：最终源 SHA `5b642c8d2719ba5d662699d4f67ae3aebc0560e4` 的 [macOS Actions 38052732572](https://github.com/gyzhang/BetterWork/actions/runs/38052732572) 通过 PR Gate，runner 为 macos-26-arm64。静态检查通过，文档 154、相关 functional 720、heavy 120 项按三次调用合计 70 文件 / 994 项，Full verify 跳过；不表示全仓或去重规模。
+
+[PR #50](https://github.com/gyzhang/BetterWork/pull/50) 已 squash 合入 main，提交 `9daf4833b8cba27573c59053fef3d64bd3ec9a3e`，文件树与源提交一致。代码分支本地/远端均删除，原 checkout 同步 main；纯 Markdown 分支 `codex/e5-closeout` 归档，无新 worktree。E5 代码与自动化收口，后续历史读模型及人工验收按新指令推进。
