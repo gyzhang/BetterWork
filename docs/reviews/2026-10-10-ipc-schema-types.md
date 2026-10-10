@@ -30,6 +30,12 @@ Review 核对四个 helper 的实际输入/输出类型、请求解析时机、S
 
 2026-10-10 16:29 CST 首次远端运行 [Actions 38037670498](https://github.com/gyzhang/BetterWork/actions/runs/38037670498) 的相关 functional 50 项通过、编译夹具 1 项超时；该例 9.58s 超过默认 5s，文件总墙钟 13.82s。按工程规范 §9 仅设置该例 20s 夹具上限，全部 32 个编译样本与诊断断言保持，没有新增性能预算或修改全局 timeout/车道。1ms 超时破坏探针准确失败，恢复 20s 后通过，定向 5 文件 / 285 项再次通过；日志 `/tmp/betterwork-e2-compiler-timeout-probe.log` 不提交。首次源 SHA `490a1cc253e3ebeee111742b4589e746aabbdb0c` 的 PR Gate 失败，未据此合并；更新后的精确源 SHA 必须重新通过门禁。
 
+## 最终门禁与合并
+
+2026-10-10 16:38 CST 远端收口：最终源 SHA `4dcdf765b163edd93c34d4f0f724ab441e75db66` 的 [macOS PR Gate / Actions 38038267005](https://github.com/gyzhang/BetterWork/actions/runs/38038267005) 成功，runner 为 macos-26-arm64。静态检查、文档护栏 154 与相关 functional 51 项通过，按两次调用合计 2 文件 / 205 项；heavy 没有匹配文件并以 0 退出，Full verify 跳过。真实编译夹具在 CI 上完成全部断言，耗时 7.077s，20s 单例上限有效。本地额外回归、build、app-only 和两个破坏探针单列，不混入 CI 数字；首次失败和中间因更新取消的运行均不作最终验收证据。
+
+[PR #44](https://github.com/gyzhang/BetterWork/pull/44) 已 squash 合入 main，提交 `0d36e78ad38a53ea00fcec76ce453799c35d59ea`，与最终源提交的文件树一致。代码分支本地/远端均已删除，原 checkout 已同步 main，没有新建 worktree。从该提交建立 `codex/review-e2-closeout`，以纯 Markdown 归档最终证据。E2 的 Schema/handler 编译期关联切片完成；R09 其余契约组织与 E3 候选读模型、其他治理和人工验收仍按后续指令推进。
+
 ## 后续边界
 
 E2 完成四个注册 helper 的 Schema/handler 关联。编译期仍不能代替长度、数值范围、精细化校验或不可信运行期数据校验；有意使用 unknown 的响应仍保留原不透明语义。channel 与 Schema/API 的全局映射、共享协议拆分、旧 Preload invoke 及领域错误格式尚未统一，本批不宣称 R09 整项完成。

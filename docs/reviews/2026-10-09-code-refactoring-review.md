@@ -525,3 +525,8 @@ B 开始时先刷新 R17 的只读审计与安装树证据。若确认存在可�
 本地 5 文件 / 285 项（新增 3 项）通过，真实 checker 覆盖 15 个合法与 17 个非法样本；解除关联的破坏探针准确失败，恢复后通过。typecheck、定向 lint/format、build、app-only 通过，网络尝试 0；最新源 SHA 的 macOS PR Gate、合并及归档继续收口。
 
 E2 完成 R09 的 helper 编译期关联切片，仍保留不可信数据运行期校验；channel 全局映射、协议拆分和旧 Preload/错误格式尚未统一。建议下一步 E3 核对材料候选读模型与来源安全证明，待后续指令。完整 verify、全 UI 矩阵、真实模型及安装态人工验收未执行，无新 worktree。
+
+
+2026-10-10 16:38 CST 远端收口：最终源 SHA `4dcdf765b163edd93c34d4f0f724ab441e75db66` 的 [macOS PR Gate / Actions 38038267005](https://github.com/gyzhang/BetterWork/actions/runs/38038267005) 成功，runner 为 macos-26-arm64。静态检查、文档护栏 154 与相关 functional 51 项通过，按两次调用合计 2 文件 / 205 项；heavy 没有匹配文件并以 0 退出，Full verify 跳过。真实编译夹具在 CI 上完成全部断言，耗时 7.077s，20s 单例上限有效。本地额外回归、build、app-only 和两个破坏探针单列，不混入 CI 数字；首次失败和中间因更新取消的运行均不作最终验收证据。
+
+[PR #44](https://github.com/gyzhang/BetterWork/pull/44) 已 squash 合入 main，提交 `0d36e78ad38a53ea00fcec76ce453799c35d59ea`，与最终源提交的文件树一致。代码分支本地/远端均已删除，原 checkout 已同步 main，没有新建 worktree。从该提交建立 `codex/review-e2-closeout`，以纯 Markdown 归档最终证据。E2 的 Schema/handler 编译期关联切片完成；R09 其余契约组织与 E3 候选读模型、其他治理和人工验收仍按后续指令推进。
