@@ -494,3 +494,7 @@ B 开始时先刷新 R17 的只读审计与安装树证据。若确认存在可�
 - 已实现：ContextPanel 按过程、资料、记忆、简报、成果五组组合；前三组进入内聚组件，简报复用原 WorkspaceBrief，成果保留原 ListRow。精确版本打开的短时反馈仍由面板共同出口承载，切页签后不丢失败；原连续简报、来源区间和记忆子区块正文逐段对比一致。
 - 本地自动化：新增 21 项，functional 12 文件 / 260 项、App heavy 61、UI CLI heavy 11，去重共 14 文件 / 332 项；typecheck、定向 lint/format、build、app-only 通过。历史投影缓存与晚到结果保护两个破坏探针准确失败，恢复后通过。app-only 核对 4 个 Run、失败/取消、重装配历史、五页签入口、历史回答保存 v3 与单一反馈，网络尝试 0；AI 回读最终历史保存与失败/取消截图。
 - 当前边界：等待最新源 SHA 的 macOS PR Gate、合并与归档。D1+D2 覆盖 R07 约定范围；不要求继续清空 App 的所有跨簇接线。下一项建议 E1，先核对 R08–R11 用例/读模型边界并形成小切片，等待后续开发指令。完整 verify、真实模型与安装态人工验收未执行。
+
+2026-10-10 14:49 远端收口：源 SHA `752011e332a27c36e5b344cc47ddb84a1f62d981` 的 [Actions 38031964978](https://github.com/gyzhang/BetterWork/actions/runs/38031964978) / PR Gate 成功；macos-26-arm64 上静态检查、文档护栏 154、相关 functional 51、App heavy 61 项通过，共 7 文件 / 266 项，Full verify 跳过。本地额外 7 文件 / 66 项、build、app-only 与两个破坏探针不混入 CI 读数。
+
+[PR #40](https://github.com/gyzhang/BetterWork/pull/40) 已 squash 合并，main 提交 `95c9342b72c1200575b0f1f1d50829ef90f9d75b`；代码分支本地/远端均已删除，原 checkout 同步 main，未新建 worktree。从此建立 Markdown 归档分支 `codex/review-d2-closeout`，另走文档门禁。D1+D2 完成 R07 本轮约定范围；E1 的 IPC 用例/读模型整理仍待后续指令，其他技术债与人工验收边界不由本批绿灯推导完成。
