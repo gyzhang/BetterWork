@@ -1,6 +1,6 @@
 # ADR-0048：对话内联 ECharts 图表渲染
 
-- 状态：Proposed（2026-10-11 设计定案，实现未开工；待用户验收）
+- 状态：Proposed（2026-10-11 设计定案；已按用户开工指令完成代码实现与自动化测试，ADR 接受状态与人工验收待用户确认）
 - 日期：2026-10-11
 - 背景：算台回复里需要把经营分析、研究结论等数据以图表呈现。当前对话输出只能走 `MarkdownPreview`（`react-markdown` + `remark-gfm`）渲染文本、表格与代码块，图表能力为绿地——全仓无 `echarts`/`d3`/`plotly`/`recharts`/`chart.js` 任何依赖。数据侧已有确定性工具 `calculator`（`packages/tool-runtime/src/calculator.ts`）与 `analyze_business_metrics`（`packages/tool-runtime/src/business-metrics.ts`）产出结构化数值，但这些数值目前只能以文字或 Markdown 表格出现。用户要求先解决「模型能在对话里画出一张图」这一件事，图表成为可保存/可版本化的成果（Artifact）不在本次范围。
 - 关系：延续 [ADR-0013](0013-slide-preview-rendering.md)「能由 Renderer 就地渲染的绝不外派子进程」的哲学；落实 [ADR-0020](0020-deterministic-business-analysis.md) 的确定性数值边界（数据来自工具而非模型心算）；遵守 [ADR-0003](0003-agent-core-boundary.md) 进程边界（渲染只发生在 Renderer，不触主进程、文件系统或模型服务）；反馈落点遵循 [ADR-0006](0006-notification-feedback.md) 与 `docs/10-ui-ux-system.md` §11.5.1（错误用 `InlineError` 基座，不进消息中心）；不改变 [ADR-0005](0005-artifact-version-evidence.md) 的成果与版本契约。
