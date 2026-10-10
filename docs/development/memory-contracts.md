@@ -147,6 +147,8 @@ Main 构造 `MemoryQueryContext`：`workspaceId`、`expertId?`、`taskId`、精�
 
 安全性检查使用**直接＋传递依赖**：历史实际记忆修订、重放继承记忆、历史已选/实际读取材料的保守并集。旧记录缺依赖事实则不推断安全。
 
+历史安全检查的记忆读取模型：完整读取并校验合法候选的运行审计、准备快照和实际材料记录后，对直接与传递记忆的精确修订集中去重，批量投影身份、修订号、contentHash、存储状态、有效期、规范 scope 与身份最新修订号，不读取记忆正文或 provenance。请求集合不加 LIMIT，缺修订保持缺失；保留 direct scope 映射、首次绑定 scope、理由优先级与依赖输出顺序。投影不能充当来源证明，完整详情、召回与材料来源检查仍走原边界。实施与证据见 [E10 历史记忆依赖报告](../reviews/2026-10-11-history-memory-dependencies.md)。
+
 以下情况使依赖历史不可重放：记忆被删除/排除/替代/过期/改修订/缩 scope、来源不可用、依赖材料移除/换版本/哈希不符；相关记忆本次无命中或预算落选不使历史失效。纯增加材料也不应无故截断。
 
 从最近历史向前选连续安全后缀，遇首个不安全轮次停止，不跨过它拼接更早对话。上限 8 个完整问答对、12,000 code points；容不下完整一对就停止。记录实际重放 `runId`/`finalEventId`/`promptHash` 及依赖；不让更近回答隐藏它继承的已撤销信息。落点：`run-history-policy.ts` 的 `HISTORY_LIMITS` 逐项取协议常量 `MEMORY_REPLAY_PAIR_LIMIT`／`MEMORY_REPLAY_CODE_POINT_BUDGET`，服务层不再自写 8 与 12,000；边界用例见 `run-history-policy.test.ts`「caps at eight complete pairs」与「stops instead of truncating a pair to fit the code point budget」。
