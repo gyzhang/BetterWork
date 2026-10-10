@@ -514,3 +514,14 @@ B 开始时先刷新 R17 的只读审计与安装树证据。若确认存在可�
 2026-10-10 15:42 远端收口：源 SHA `2643133a17964e7cb3974a15d5de242f2ab55e96` 的 [macOS PR Gate / Actions 38035098856](https://github.com/gyzhang/BetterWork/actions/runs/38035098856) 成功，runner 为 macos-26-arm64；静态检查、文档护栏 154、相关 functional 66 文件 / 671 项、heavy 2 文件 / 119 项通过，三次测试调用合计 69 文件 / 944 项。Full verify 跳过。本地 bench、build、app-only 与破坏探针证据单列，不混入 CI 读数。
 
 [PR #42](https://github.com/gyzhang/BetterWork/pull/42) 已 squash 合入 main，提交 `b593b1a170282e497505a5656808ec16d8146f16`，与源提交的文件树一致。代码分支本地/远端均已删除，原 checkout 已同步 main，没有新建 worktree；从合并提交建立 `codex/review-e1-closeout`，以纯 Markdown 归档最终证据。E1 的 Schedule 用例与来源投影切片完成；R08–R11 的其余范围及人工验收继续按后续任务推进，不自动开工 E2。
+
+
+## 20. E2：IPC Schema 与处理函数返回类型的编译期关联
+
+2026-10-10 16:20 CST：用户授权 E2，从干净 main `29fb2f706a70bc402740c53429e3eeb5a668c6a6` 建立 `codex/review-ipc-schema-types`，继续原 checkout。具体实施与证据见 [E2 专题](2026-10-10-ipc-schema-types.md)。
+
+四个 helper 以请求 z.output 和响应 z.input（或 Promise）约束回调，NoInfer 保证推导来自 Schema；默认值/转换仍由运行期 parse 完成。154 处生产注册调用通过类型检查，四个运行期 helper 函数体与基点一致。五处 readonly 数组/固定回执/无值返回标注局部收窄，错误和传输语义保持。
+
+本地 5 文件 / 285 项（新增 3 项）通过，真实 checker 覆盖 15 个合法与 17 个非法样本；解除关联的破坏探针准确失败，恢复后通过。typecheck、定向 lint/format、build、app-only 通过，网络尝试 0；最新源 SHA 的 macOS PR Gate、合并及归档继续收口。
+
+E2 完成 R09 的 helper 编译期关联切片，仍保留不可信数据运行期校验；channel 全局映射、协议拆分和旧 Preload/错误格式尚未统一。建议下一步 E3 核对材料候选读模型与来源安全证明，待后续指令。完整 verify、全 UI 矩阵、真实模型及安装态人工验收未执行，无新 worktree。

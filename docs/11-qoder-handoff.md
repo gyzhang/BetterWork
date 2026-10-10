@@ -126,7 +126,7 @@ pre-push 阻止直推 main，并核对干净 HEAD 与空白差异。PR 合并后
 | `apps/desktop/src/main/services/notification-service.ts` | 通知的持久化—广播收口，以及窗口失焦时的系统通知与点击激活。 |
 | `apps/desktop/src/main/services/search-engine-service.ts` | 千帆 `web_summary` 客户端与连接测试；外部字段一律经 `readString` 收窄，错误信息不得含 Key。 |
 | `apps/desktop/src/main/services/model-connectivity.ts` | 模型连通性探测的纯函数实现（可注入 fetch），含超时与 http/https 协议校验收窄。 |
-| `apps/desktop/src/main/ipc/register-ipc.ts` | 全部 channel 注册。三个 helper（`handleInput` / `handleOptionalInput` / `handleNoInput`）是入参校验的唯一通道，handler 不得自行解析 `raw`。 |
+| `apps/desktop/src/main/ipc/register-ipc.ts` | 全部 channel 注册。三个通用 helper（`handleInput` / `handleOptionalInput` / `handleNoInput`）与定时专用 `handleScheduleInput` 统一边界校验；handler 不得自行解析 `raw`，返回值由响应 Schema 的输入类型约束。 |
 | `apps/desktop/src/preload/index.ts` | 最小化、类型化的 Renderer API；所有推送事件过 Zod 后再交给 Renderer。必须维持 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。 |
 | `apps/desktop/src/renderer/src/App.tsx` | 跨簇编排与布局组装（行数以当次 `wc -l` 为准，本文不登记快照）：工作会话状态、视图切换、通知接线、Sidebar 与错误条。侧栏、消息流与 Composer 三段仍是内联 JSX，外提属 UI 复用评估的 R3。 |
 | `apps/desktop/src/renderer/src/views/` | 工作以外的页面级视图：`ArtifactView`、`KnowledgeView`、`MemoryView`、`SkillsView`、`ExpertsView`、`SettingsView`。视图内不出现 IPC 调用。 |
