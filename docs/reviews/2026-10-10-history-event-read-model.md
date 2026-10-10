@@ -43,4 +43,12 @@
 
 ## 边界与后续
 
-E6 完成 R10 的历史候选/回答和来源事件读取切片；历史依赖仍按候选逐 Run 完整装配，未声称消除全部 N+1。冲突枚举和知识正文检索留后续任务。没有新索引、缓存、表迁移、IPC、算法版本或 UI 变更。完整 verify、UI 走查、真实模型语义和安装态人工验收未执行。最新源 SHA 的 macOS PR Gate、合并与证据归档继续收口。
+E6 完成 R10 的历史候选/回答和来源事件读取切片；历史依赖仍按候选逐 Run 完整装配，未声称消除全部 N+1。冲突枚举和知识正文检索留后续任务。没有新索引、缓存、表迁移、IPC、算法版本或 UI 变更。完整 verify、UI 走查、真实模型语义和安装态人工验收未执行。
+
+建议下一步 E7 整理冲突候选枚举，按议题分组减少无关两两比较，保留有效期重叠、裁决与并存组语义；等待后续指令，不自动开工。
+
+## 远端收口（2026-10-10 21:49 CST）
+
+最终源 SHA `71cffa1ca0d04d237c6150290030634d1279c248` 的 [macOS Actions 38056937617](https://github.com/gyzhang/BetterWork/actions/runs/38056937617) 成功，runner 镜像 macos-26-arm64，必需 PR Gate 通过。静态检查通过，文档 1 文件 / 154 项、相关 functional 69 文件 / 734 项、相关 heavy 2 文件 / 120 项；三次调用合计 72 文件 / 1,008 项，不表示去重或全仓规模。Full verify 跳过，本地 bench/build 和退化探针另列。
+
+[代码 PR #52](https://github.com/gyzhang/BetterWork/pull/52) 已 squash 合入 main，提交 `171121e9201daea621e030ea603b76d46ac39219`，文件树与最终源提交一致。代码分支本地/远端均删除，原 checkout 同步 main；从合并提交创建纯 Markdown 分支 `codex/e6-closeout` 归档本节、总 Review 和工作日志，没有新 worktree。E6 代码与自动化收口。
