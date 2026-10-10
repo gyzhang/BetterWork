@@ -1,6 +1,11 @@
 import type { MemoryRecord, MemoryScope } from '@betterwork/agent-protocol';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+import {
+  conflictRecord as record,
+  legacyConflictPairs,
+  mixedConflictRecords,
+} from './fixtures/memory-conflict-fixtures';
 import {
   conflictPairKey,
   duplicateConfirmedMemoryId,
@@ -10,8 +15,6 @@ import {
   unresolvedConflictPairs,
   validityIntersects,
 } from './memory-conflict-policy';
-import { memoryContentHash, normalizedMemoryHash } from './memory-content-policy';
-import { buildUserInstructionProvenance } from './memory-provenance';
 
 const workspaceScope: MemoryScope = { kind: 'workspace', workspaceId: 'ws-1' };
 const otherWorkspaceScope: MemoryScope = { kind: 'workspace', workspaceId: 'ws-2' };
@@ -23,30 +26,6 @@ const expertWorkspaceScope: MemoryScope = {
   workspaceId: 'ws-1',
 };
 const otherExpertScope: MemoryScope = { kind: 'expert', expertId: 'ex-2' };
-
-/** 每条记录的 normalizedHash 随正文变化，因此「同文」在测试里就是同一句话。 */
-const record = (over: Partial<MemoryRecord> & { id: string; content: string }): MemoryRecord => ({
-  revisionId: `rev-${over.id}`,
-  revision: 1,
-  recallPolicy: over.recallPolicy ?? 'relevant',
-  scope: workspaceScope,
-  kind: 'semantic',
-  sourceType: 'user-explicit',
-  confidence: 0.9,
-  status: 'confirmed',
-  contentHash: memoryContentHash(over.content),
-  createdAt: 1_000,
-  updatedAt: 2_000,
-  facet: 'fact',
-  normalizedHash: normalizedMemoryHash(over.content),
-  provenance: buildUserInstructionProvenance({
-    capturedAt: 1_000,
-    operationId: '00000000-0000-4000-8000-000000000000',
-    content: over.content,
-    genericDeclaration: false,
-  }),
-  ...over,
-});
 
 const pair = (
   left: Partial<MemoryRecord> & { id: string; content: string },
@@ -228,5 +207,118 @@ describe('pending counts（契约 §10 管理提示）', () => {
     expect(duplicateConfirmedMemoryId(rejected, records)).toBeUndefined();
     expect(duplicateConfirmedMemoryId(expertCopy, records)).toBeUndefined();
     expect(duplicateConfirmedMemoryId(confirmed, records)).toBeUndefined();
+  });
+});
+
+describe('topic-grouped conflict enumeration', () => {
+  it('preserves interleaved pair direction, result order and exact decision callback order', () => {
+    const records = ['z', 'x', 'y', 'w', 'v', 'u'].map((id, index) =>
+      record({ id, content: id, topicKey: index % 2 === 0 ? 'income' : 'cost' }),
+    );
+    const pairs = listPotentialConflictPairs(records);
+    expect(pairs.map(({ left, right }) => `${left.id}-${right.id}`)).toEqual([
+      'z-y',
+      'z-v',
+      'x-w',
+      'x-u',
+      'y-v',
+      'w-u',
+    ]);
+    const decided = vi.fn((left: string, right: string) => left === 'rev-y' && right === 'rev-v');
+    const unresolved = unresolvedConflictPairs(records, decided);
+    expect(decided.mock.calls).toEqual(
+      pairs.map(({ left, right }) => [left.revisionId, right.revisionId]),
+    );
+    expect(unresolved).toEqual([
+      { leftRevisionId: 'rev-y', rightRevisionId: 'rev-z', state: 'unresolved' },
+      { leftRevisionId: 'rev-v', rightRevisionId: 'rev-z', state: 'unresolved' },
+      { leftRevisionId: 'rev-w', rightRevisionId: 'rev-x', state: 'unresolved' },
+      { leftRevisionId: 'rev-u', rightRevisionId: 'rev-x', state: 'unresolved' },
+      { leftRevisionId: 'rev-u', rightRevisionId: 'rev-w', state: 'unresolved' },
+    ]);
+  });
+
+  it('matches legacy enumeration across permutations, scopes, windows, hashes and repeated identities', () => {
+    const records = mixedConflictRecords();
+    records.push(records[0]!, records[0]!);
+    const permutations = [
+      records,
+      [...records].reverse(),
+      ...Array.from({ length: 7 }, (_, offset) =>
+        records.slice(offset + 1).concat(records.slice(0, offset + 1)),
+      ),
+    ];
+    for (const input of permutations) {
+      Object.freeze(input);
+      for (const item of input) Object.freeze(item);
+      const expected = legacyConflictPairs(input);
+      const actual = listPotentialConflictPairs(input);
+      expect(actual).toEqual(expected);
+      for (const [index, pair] of actual.entries()) {
+        expect(pair.left).toBe(expected[index]!.left);
+        expect(pair.right).toBe(expected[index]!.right);
+      }
+    }
+  });
+
+  it('keeps raw topic equality without trimming, case folding, Unicode normalization or special keys', () => {
+    const topics = ['income', 'Income', ' income', 'é', 'e\u0301', '__proto__', 'constructor', ''];
+    const records = topics.flatMap((topicKey, index) => [
+      record({ id: `a-${index}`, content: 'a', topicKey }),
+      record({ id: `b-${index}`, content: 'b', topicKey }),
+    ]);
+    records.push(
+      record({ id: 'no-topic-a', content: 'a' }),
+      record({ id: 'no-topic-b', content: 'b' }),
+    );
+    expect(listPotentialConflictPairs(records)).toEqual(legacyConflictPairs(records));
+    expect(listPotentialConflictPairs(records)).toHaveLength(topics.length);
+  });
+
+  it('probes only same-topic pairs and leaves missing-topic records out of the candidate scan', () => {
+    let idReads = 0;
+    let missingTopicReads = 0;
+    const records = Array.from({ length: 400 }, (_, index) => {
+      const entry = record({
+        id: `memory-${index}`,
+        content: `${index}`,
+        topicKey: `topic-${index % 80}`,
+      });
+      Object.defineProperty(entry, 'id', {
+        get: () => {
+          idReads += 1;
+          return `memory-${index}`;
+        },
+      });
+      return entry;
+    });
+    const missingTopic = record({ id: 'missing-topic', content: 'content' });
+    Object.defineProperty(missingTopic, 'id', {
+      get: () => {
+        missingTopicReads += 1;
+        return 'missing-topic';
+      },
+    });
+    records.push(missingTopic);
+    expect(listPotentialConflictPairs(records)).toHaveLength(80 * 10);
+    expect(idReads).toBe(2 * 80 * 10);
+    expect(missingTopicReads).toBe(0);
+  });
+
+  it('keeps the complete dense-topic result and handles empty or sparse input', () => {
+    const records = Array.from({ length: 130 }, (_, index) =>
+      record({
+        id: `dense-${index}`,
+        content: `${index}`,
+        topicKey: 'income',
+      }),
+    );
+    expect(listPotentialConflictPairs(records)).toEqual(legacyConflictPairs(records));
+    expect(listPotentialConflictPairs(records)).toHaveLength((130 * 129) / 2);
+    const sparse: MemoryRecord[] = new Array<MemoryRecord>(4);
+    sparse[0] = records[0]!;
+    sparse[3] = records[1]!;
+    expect(listPotentialConflictPairs(sparse)).toEqual(legacyConflictPairs(sparse));
+    expect(listPotentialConflictPairs([])).toEqual([]);
   });
 });

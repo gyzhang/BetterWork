@@ -70,21 +70,35 @@ export interface PotentialConflictPair {
   readonly right: MemoryRecord;
 }
 
-/** 成对枚举：同一对只出现一次，顺序按传入记录里的下标。 */
+interface TopicMember {
+  readonly record: MemoryRecord;
+  readonly group: readonly MemoryRecord[];
+  readonly position: number;
+}
+
+/** 同议题才枚举；左项仍按原输入顺序，不能按桶输出而改变成对顺序。 */
 export const listPotentialConflictPairs = (
   records: readonly MemoryRecord[],
 ): PotentialConflictPair[] => {
+  const groups = new Map<string, MemoryRecord[]>();
+  const members: TopicMember[] = [];
+  for (const record of records) {
+    if (record === undefined || record.topicKey === undefined) continue;
+    let group = groups.get(record.topicKey);
+    if (group === undefined) {
+      group = [];
+      groups.set(record.topicKey, group);
+    }
+    members.push({ record, group, position: group.length });
+    group.push(record);
+  }
   const pairs: PotentialConflictPair[] = [];
-  for (let index = 0; index < records.length; index += 1) {
-    const left = records[index];
-    if (left === undefined) continue;
-    for (let next = index + 1; next < records.length; next += 1) {
-      const right = records[next];
+  for (const { record: left, group, position } of members) {
+    for (let next = position + 1; next < group.length; next += 1) {
+      const right = group[next];
       if (right === undefined) continue;
       if (
         left.id !== right.id &&
-        left.topicKey !== undefined &&
-        left.topicKey === right.topicKey &&
         left.normalizedHash !== right.normalizedHash &&
         scopesIntersect(left.scope, right.scope) &&
         validityIntersects(left, right)
