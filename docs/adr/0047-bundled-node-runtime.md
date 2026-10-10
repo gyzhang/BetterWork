@@ -32,7 +32,7 @@ Python 侧已有完整的随包机制（CPython 3.12.14 制品 + SHA-256 校验 
 
 1. **随包分发独立 Node.js 24.x 二进制**（darwin-arm64），包含 `node`、`npm`、`npx`。制品来源为 nodejs.org 官方发布归档，版本与 SHA-256 锁定在仓库内的 JSON 清单中，构建期下载并校验，与 CPython 制品走同一套机制。
 2. **落地位置**：安装包内 `Contents/Resources/node-runtime/`（含 `bin/node`、`bin/npm`、`bin/npx`、`lib/node_modules/npm/`）。开发态位于 `resources/node-runtime/`。
-3. **MCP 侧改用 managed Node**：`builtin-mcp-runtime-service.ts` 对 Node-based 内置 MCP 使用 `<node-runtime>/bin/node` 替代 `process.execPath`；不再需要 `ELECTRON_RUN_AS_NODE` 和 `runAsNode` 标记。guardian 机制不变，只是 executable 换为真 Node。
+3. **MCP 侧改用 managed Node**：`builtin-mcp-runtime-service.ts` 对 Node-based 内置 MCP 使用 `<node-runtime>/bin/node` 替代 `process.execPath`；不再需要 `ELECTRON_RUN_AS_NODE` 和 `runAsNode` 标记。guardian 机制不变；此处「executable 换为真 Node」指 guardian **spawn 出的 MCP 目标进程**改用 managed Node，**guardian 进程本身仍跑 Electron 内嵌 Node**（见决策 8）——即 Electron(guardian) → spawn → managed Node(MCP server)。
 4. **用户自定义 stdio MCP 的运行时解析**：当用户配置的 `command` 为 `node`、`npm` 或 `npx`（不含路径分隔符）时，应用自动解析到 `<node-runtime>/bin/<command>`。含路径分隔符的命令原样使用（尊重用户显式指定）。
 5. **Skill schema 扩展**：`agent-protocol` 的 entrypoint 联合类型新增 `runtime: "managed-node"`（与现有 `"managed-python"` 对称）。执行时：
    - 用 `<node-runtime>/bin/node` 运行入口脚本；
