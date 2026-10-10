@@ -27,6 +27,12 @@ Review 逐段核对原手动执行顺序、六条 IPC 接线、历史游标、�
 
 夹具早期字段/签名错误由 typecheck 和真实 SQLite 范围校验检出，按现有协议与有效 Run 材料快照修正，没有放宽生产类型或安全校验。没有协议、迁移、依赖或规范例外变化。未运行完整 verify、完整 UI 矩阵、真实模型或安装态人工验收，未操作用户数据库或开发窗口。
 
+## 远端门禁与合并
+
+2026-10-10 15:42 远端收口：源 SHA `2643133a17964e7cb3974a15d5de242f2ab55e96` 的 [macOS PR Gate / Actions 38035098856](https://github.com/gyzhang/BetterWork/actions/runs/38035098856) 成功，runner 为 macos-26-arm64；静态检查、文档护栏 154、相关 functional 66 文件 / 671 项、heavy 2 文件 / 119 项通过，三次测试调用合计 69 文件 / 944 项。Full verify 跳过。本地 bench、build、app-only 与破坏探针证据单列，不混入 CI 读数。
+
+[PR #42](https://github.com/gyzhang/BetterWork/pull/42) 已 squash 合入 main，提交 `b593b1a170282e497505a5656808ec16d8146f16`，与源提交的文件树一致。代码分支本地/远端均已删除，原 checkout 已同步 main，没有新建 worktree；从合并提交建立 `codex/review-e1-closeout`，以纯 Markdown 归档最终证据。E1 的 Schedule 用例与来源投影切片完成；R08–R11 的其余范围及人工验收继续按后续任务推进，不自动开工 E2。
+
 ## 后续边界
 
 E1 完成本批 Schedule 用例与输出来源读模型切片；其他 IPC 业务入口、R09 编译期 Schema 联动、R10 候选/历史与安全证明、R11 材料身份规则仍待后续治理。建议下一步 E2 先收口 Schema 与 handler 返回类型的编译期关联，保留现有运行期校验；等待单独开发指令，不自动开工。
