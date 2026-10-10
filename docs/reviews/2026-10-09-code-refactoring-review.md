@@ -579,4 +579,8 @@ E5 完成 R10 的召回排除账本切片，完整 verify、UI 走查、真实�
 
 本地相关 functional 15 文件 / 212 项、heavy 1 文件 / 87 项，去重共 16 文件 / 299 项通过；docs:check 154 项、typecheck、lint、format:check、build 和串行 bench 通过。两个退化探针分别检出 1 项与 5 项失败，恢复后通过。32 Run / 8,128 事件样本中，协议解码 8,128→160 次，返回 JSON 34.71 MB→0.019 MB，中位读取 23.76→2.52 ms；读数不含完整依赖装配，不代表产品容量承诺。
 
-E6 完成 R10 的历史/来源事件切片；逐 Run 依赖装配、冲突枚举及知识正文检索仍有后续范围。完整 verify、UI 走查、真实模型和安装态人工验收未执行，最新源 SHA 的 macOS PR Gate、合并与归档继续收口。
+E6 完成 R10 的历史/来源事件切片；逐 Run 依赖装配、冲突枚举及知识正文检索仍有后续范围。完整 verify、UI 走查、真实模型和安装态人工验收未执行。
+
+2026-10-10 21:49 CST：最终源 `71cffa1ca0d04d237c6150290030634d1279c248` 的 [macOS Actions 38056937617](https://github.com/gyzhang/BetterWork/actions/runs/38056937617) 通过 PR Gate，runner 为 macos-26-arm64。静态检查通过，文档 154、相关 functional 734、heavy 120 项，三次调用合计 72 文件 / 1,008 项，不代表全仓或去重规模；Full verify 跳过。
+
+[PR #52](https://github.com/gyzhang/BetterWork/pull/52) 已 squash 合入 main，提交 `171121e9201daea621e030ea603b76d46ac39219`，文件树与最终源提交一致；代码分支本地/远端删除，原 checkout 同步 main，纯 Markdown 分支 `codex/e6-closeout` 归档，无新 worktree。建议 E7 整理按议题分组的冲突候选枚举，保持重叠、裁决与并存组语义，等待后续指令。
