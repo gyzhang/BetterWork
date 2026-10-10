@@ -84,6 +84,7 @@ const WorkRunMessage = memo(function WorkRunMessage({
           author="assistant"
           authorName={assistantName}
           content={projection.content}
+          contentFinal={projection.terminal}
           anchorRef={anchorRef}
           actions={
             projection.completed ? (
