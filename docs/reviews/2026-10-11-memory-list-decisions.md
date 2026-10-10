@@ -38,4 +38,8 @@ E11 完成逐项裁决展示读取切片。全域未裁决集合与逐列表项�
 
 ## 远端交接
 
-最新源 SHA 的 macOS PR Gate、合并与纯 Markdown 归档待补；本地通过不替代远端门禁。
+2026-10-11 06:52 CST：最终源 `3ac089dcdbf58dd4a10f401470eaa102a77970ac` 的 [Actions 38092738909](https://github.com/gyzhang/BetterWork/actions/runs/38092738909) 在 macos-26-arm64 上通过 PR Gate。lint、format:check、typecheck 成功；docs:check 1/154、changed functional 6/148、heavy 1/87 通过。按三次调用合计 8 文件 / 389 项，不表示全仓或去重规模；Full verify 跳过，本地核心、build 与 bench 单独记录。
+
+[PR #62](https://github.com/gyzhang/BetterWork/pull/62) 已 squash 合入 main，提交 `1498df218bc0464f8ac80bdd368b2164e7601de0`，文件树与源提交一致。commit/pre-commit、push/pre-push 和原批次基点巡检退出 0；main/origin/main 对齐、工作树干净，代码分支本地/远端均已删除。从合并提交建立 `codex/e11-closeout`，以纯 Markdown 归档本报告、总 Review 和工作日志，归档 PR 继续核对自己的最新源文档门禁与合并清理。
+
+E11 代码与自动化验证收口；完整 verify、UI、真实模型、安装态及 WM/MI 人工验收保持各自授权边界，后续优化另按用户指令推进。
