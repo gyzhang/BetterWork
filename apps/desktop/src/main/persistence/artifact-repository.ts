@@ -67,6 +67,26 @@ interface ArtifactFileRow {
   workspace_relative_path: string | null;
 }
 
+export interface ArtifactMaterialVersion {
+  id: string;
+  artifactId: string;
+  workspaceId: string;
+  title: string;
+  versionNumber: number;
+  contentHash: string;
+  type?: ArtifactType;
+}
+
+interface ArtifactMaterialVersionRow {
+  id: string;
+  artifact_id: string;
+  workspace_id: string;
+  title: string;
+  version_number: number;
+  content_hash: string;
+  readable_type: ArtifactType | null;
+}
+
 interface EvidenceRow {
   id: string;
   task_id: string;
@@ -493,6 +513,34 @@ export class ArtifactRepository {
           },
         }
       : undefined;
+  }
+
+  listMaterialVersions(): ArtifactMaterialVersion[] {
+    const rows = this.db
+      .prepare(
+        `SELECT v.id, v.artifact_id, a.workspace_id, a.title, v.version_number,
+                CASE WHEN v.content IS NOT NULL THEN v.content_hash
+                     WHEN af.version_id IS NOT NULL THEN af.file_hash
+                     ELSE 'unavailable' END AS content_hash,
+                CASE WHEN v.content IS NOT NULL THEN 'markdown'
+                     WHEN af.version_id IS NOT NULL THEN 'presentation'
+                     ELSE NULL END AS readable_type
+           FROM artifacts a
+           JOIN artifact_versions current ON current.id = a.current_version_id
+           JOIN artifact_versions v ON v.artifact_id = a.id
+           LEFT JOIN artifact_files af ON af.version_id = v.id
+          ORDER BY a.updated_at DESC, a.rowid DESC, v.version_number DESC`,
+      )
+      .all() as ArtifactMaterialVersionRow[];
+    return rows.map((row) => ({
+      id: row.id,
+      artifactId: row.artifact_id,
+      workspaceId: row.workspace_id,
+      title: row.title,
+      versionNumber: row.version_number,
+      contentHash: row.content_hash,
+      ...(row.readable_type === null ? {} : { type: row.readable_type }),
+    }));
   }
 
   listVersions(artifactId: string): ArtifactVersionSummary[] {
