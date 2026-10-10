@@ -69,72 +69,54 @@ export class TaskMaterialService {
       throw new TaskMaterialError('task_not_found', '任务工作空间不存在。');
     }
     const candidates: MaterialCandidate[] = [];
-    for (const document of this.dependencies.knowledgeVault.listDocuments()) {
-      for (const revision of this.dependencies.knowledgeVault.listRevisions(document.id)) {
-        const reference: MaterialReference = {
+    for (const revision of this.dependencies.knowledgeVault.listMaterialRevisions()) {
+      candidates.push({
+        reference: {
           kind: 'knowledge-revision',
-          knowledgeDocumentId: document.id,
+          knowledgeDocumentId: revision.documentId,
           knowledgeRevisionId: revision.id,
           contentHash: revision.contentHash,
           sourcePath: revision.sourcePath,
-        };
-        candidates.push({
-          reference,
-          title: revision.title,
-          sourceLabel: `知识 · ${path.basename(revision.sourcePath)}`,
-          status: 'ready',
-          detail: `修订 v${revision.revision}`,
-        });
-      }
+        },
+        title: revision.title,
+        sourceLabel: `知识 · ${path.basename(revision.sourcePath)}`,
+        status: 'ready',
+        detail: `修订 v${revision.revision}`,
+      });
     }
-    for (const artifact of this.dependencies.store.artifacts.list()) {
-      for (const version of this.dependencies.store.artifacts.listVersions(artifact.id)) {
-        const detail = this.dependencies.store.artifacts.getVersionDetail(version.id);
-        if (!detail) {
-          candidates.push({
-            reference: {
-              kind: 'artifact-version',
-              artifactId: artifact.id,
-              artifactVersionId: version.id,
-              contentHash: 'unavailable',
-              originWorkspaceId: artifact.workspaceId,
-            },
-            title: artifact.title,
-            sourceLabel:
-              artifact.workspaceId === workspaceId
-                ? `成果 · ${artifact.title}`
-                : `成果 · ${artifact.title} · 其他工作空间`,
-            status: 'unavailable',
-            detail: `v${version.versionNumber} 不可读取`,
-          });
-          continue;
-        }
-        const readable = detail.type === 'markdown' || detail.type === 'presentation';
-        candidates.push({
-          reference: {
-            kind: 'artifact-version',
-            artifactId: artifact.id,
-            artifactVersionId: version.id,
-            contentHash: detail.type === 'markdown' ? detail.contentHash : detail.fileHash,
-            originWorkspaceId: artifact.workspaceId,
-          },
-          title: artifact.title,
-          sourceLabel:
-            artifact.workspaceId === workspaceId
-              ? `成果 · ${artifact.title}`
-              : `成果 · ${artifact.title} · 其他工作空间`,
-          status: readable ? 'ready' : 'unavailable',
-          detail: readable
-            ? detail.type === 'presentation'
-              ? `v${version.versionNumber} · PPTX`
-              : `v${version.versionNumber}`
-            : `v${version.versionNumber}（文件内容不可读取）`,
-        });
-      }
+    for (const version of this.dependencies.store.artifacts.listMaterialVersions()) {
+      candidates.push({
+        reference: {
+          kind: 'artifact-version',
+          artifactId: version.artifactId,
+          artifactVersionId: version.id,
+          contentHash: version.contentHash,
+          originWorkspaceId: version.workspaceId,
+        },
+        title: version.title,
+        sourceLabel:
+          version.workspaceId === workspaceId
+            ? `成果 · ${version.title}`
+            : `成果 · ${version.title} · 其他工作空间`,
+        status: version.type ? 'ready' : 'unavailable',
+        detail: version.type
+          ? version.type === 'presentation'
+            ? `v${version.versionNumber} · PPTX`
+            : `v${version.versionNumber}`
+          : `v${version.versionNumber} 不可读取`,
+      });
     }
-    for (const snapshot of this.dependencies.store.inputSnapshots.list('ready')) {
-      if (snapshot.workspaceId !== workspaceId) continue;
-      const available = await this.dependencies.inputSnapshots.verify(snapshot);
+    // Only this candidate request shares checks; selection and Run validation re-read each asset.
+    const verifiedAssets = new Map<string, boolean>();
+    for (const snapshot of this.dependencies.store.inputSnapshots.listReadyForWorkspace(
+      workspaceId,
+    )) {
+      const assetKey = JSON.stringify([snapshot.fileKey, snapshot.contentHash, snapshot.byteSize]);
+      let available = verifiedAssets.get(assetKey);
+      if (available === undefined) {
+        available = await this.dependencies.inputSnapshots.verify(snapshot);
+        verifiedAssets.set(assetKey, available);
+      }
       candidates.push({
         reference: {
           kind: 'workspace-input-snapshot',

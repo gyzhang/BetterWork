@@ -144,6 +144,20 @@ interface ScheduledKnowledgeRevisionRow {
   content_hash: string;
 }
 
+export type KnowledgeMaterialRevision = Pick<
+  KnowledgeRevisionSummary,
+  'id' | 'documentId' | 'revision' | 'title' | 'sourcePath' | 'contentHash'
+>;
+
+interface KnowledgeMaterialRevisionRow {
+  id: string;
+  document_id: string;
+  revision: number;
+  title: string;
+  source_path: string;
+  content_hash: string;
+}
+
 const supportedFormats: Record<string, KnowledgeFormat> = {
   '.md': 'markdown',
   '.markdown': 'markdown',
@@ -808,6 +822,25 @@ export class KnowledgeVault {
       }
     }
     return results;
+  }
+
+  listMaterialRevisions(): KnowledgeMaterialRevision[] {
+    const rows = this.db
+      .prepare(
+        `SELECT r.id, r.document_id, r.revision, r.title, r.source_path, r.content_hash
+           FROM knowledge_documents d
+           JOIN knowledge_revisions r ON r.document_id = d.id
+          ORDER BY d.updated_at DESC, d.rowid DESC, r.revision DESC`,
+      )
+      .all() as KnowledgeMaterialRevisionRow[];
+    return rows.map((row) => ({
+      id: row.id,
+      documentId: row.document_id,
+      revision: row.revision,
+      title: row.title,
+      sourcePath: row.source_path,
+      contentHash: row.content_hash,
+    }));
   }
 
   listRevisions(documentId: string): KnowledgeRevisionSummary[] {

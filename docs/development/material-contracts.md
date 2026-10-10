@@ -102,6 +102,8 @@ interface WorkspaceMaterialCandidate {
 - Knowledge 和 Artifact 可以通过“我的全部知识/成果”的显式选择入口跨 Workspace 引用；引用必须携带 `originWorkspaceId`（Knowledge 若没有归属则明确标为全局），在界面显示来源。ExpertRevision 中保存的 ArtifactVersion 常用参考只在其来源 Workspace 适用；召唤到其他 Workspace 时不自动带入，仍需通过任务的显式全局来源选择。路径字符串或旧历史消息不能自动跨空间带入。
 - 任意材料 ID 先在 Main 解析归属、生命周期和内容修订，再写入 TaskContextRevision；Renderer 传来的 ID 不是权限证明。
 
+2026-10-10 E3 读模型整理：选择器的知识修订与成果版本使用批量元数据投影，不加载正文、章节、Evidence 或来源声明；保留完整候选集合、精确版本及原排序，不以 latest 或截断替代旧修订。输入快照先在 SQL 中筛选当前 Workspace 的 ready 记录，再校验真实文件大小与完整哈希。相同 fileKey、contentHash、byteSize 的资产只在单次候选查询内共享校验结果（包括失败）；每个快照身份仍独立展示，不跨请求、保存或 Run 缓存。候选状态仍是当次发现/校验结果，不是读取权限或后续文件未变化的证明；保存、发送和工具入口继续独立校验精确引用、来源归属与文件。读数与边界见 [E3 Review](../reviews/2026-10-10-material-candidate-read-model.md)。
+
 ## 3. 版本、快照与 Run
 
 ### 3.1 运行快照

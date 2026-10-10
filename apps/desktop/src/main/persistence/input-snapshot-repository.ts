@@ -116,6 +116,17 @@ export class InputSnapshotRepository {
     return rows.map(toSnapshot);
   }
 
+  listReadyForWorkspace(workspaceId: string): InputSnapshot[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM input_snapshots
+          WHERE workspace_id = ? AND status = 'ready'
+          ORDER BY updated_at DESC`,
+      )
+      .all(workspaceId) as InputSnapshotRow[];
+    return rows.map(toSnapshot);
+  }
+
   markReady(id: string, updatedAt: number): InputSnapshot | undefined {
     this.db
       .prepare(

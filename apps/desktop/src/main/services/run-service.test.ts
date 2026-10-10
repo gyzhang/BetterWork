@@ -1623,6 +1623,40 @@ describe('RunService', () => {
     );
   });
 
+  it('fails before tool execution when a ready candidate changes after selection', async () => {
+    const fixture = await createFixture();
+    const context = await saveSingleMaterialContext(fixture, 'selected snapshot bytes');
+    const candidates = await fixture.taskMaterials.listCandidates(fixture.taskId);
+    const candidate = candidates.find((item) => item.reference.kind === 'workspace-input-snapshot');
+    expect(candidate?.status).toBe('ready');
+    if (!candidate || candidate.reference.kind !== 'workspace-input-snapshot')
+      throw new Error('Missing candidate');
+    const snapshot = fixture.store.inputSnapshots.get(candidate.reference.snapshotId)!;
+    await rm(fixture.inputSnapshots.resolvePath(snapshot));
+    await writeFile(fixture.inputSnapshots.resolvePath(snapshot), 'tampered snapshot bytes');
+    const service = createService(fixture);
+    const runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: 'read the selected snapshot',
+      taskContextRevisionId: context.id,
+      expectedTaskContextRevision: context.revision,
+    });
+    await waitForCompletion(fixture, runId);
+    expect(statusOf(fixture, runId)).toBe('failed');
+    expect(fixture.store.runs.listEvents(runId)).toContainEqual(
+      expect.objectContaining({
+        type: 'run.failed',
+        error: expect.stringContaining('输入快照缺失或哈希不匹配'),
+      }),
+    );
+    expect(
+      fixture.store.runs.listEvents(runId).some((event) => event.type === 'tool.started'),
+    ).toBe(false);
+    expect(fixture.store.materialReads.listByRun(runId)).toEqual([]);
+    expect(fixture.store.artifacts.list(fixture.taskId)).toEqual([]);
+  });
+
   it('reads a selected input snapshot through its managed copy', async () => {
     const fixture = await createFixture();
     const sourcePath = path.join(fixture.directory, 'selected.txt');
