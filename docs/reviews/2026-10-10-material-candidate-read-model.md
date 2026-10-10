@@ -29,6 +29,12 @@
 
 2026-10-10 17:07 CST 最终串行 bench 退出 0，读数为 4 查询 / 301 返回行 / 0 正文字节 / 12 次完整校验 / 12 MiB，墙钟 11.61ms，日志 `/tmp/betterwork-e3-final-bench.log` 不提交；同一原批次基点 drift:check 复查无漂移。全部定向检查均已收口，待最新源 SHA 的 PR Gate。
 
+## 最终门禁与合并
+
+2026-10-10 17:13 CST：最终源 SHA `0911fe69b378cddc55b0582d54de0a16bdbd2690` 的 [macOS PR Gate / Actions 38040342870](https://github.com/gyzhang/BetterWork/actions/runs/38040342870) 成功，runner 为 macos-26-arm64。lint、format:check、typecheck 与 docs:check 通过；文档护栏 1 文件 / 154 项、相关 functional 70 文件 / 739 项、相关 heavy 3 文件 / 123 项按三次调用合计 74 文件 / 1016 项，不表示全仓或去重规模。Full verify 跳过，bench/build/app-only 的本地证据不混入 CI 数字。
+
+[PR #46](https://github.com/gyzhang/BetterWork/pull/46) 已 squash 合入 main，提交 `7fb70aca35ec054311b86627b3b5c89b14642df3`，与最终源提交的文件树一致。代码分支本地/远端均已删除，原 checkout 已同步 main；建立纯 Markdown 分支 `codex/review-e3-closeout` 归档最终证据，没有新建 worktree。E3 材料候选切片的代码与自动化收口；R10 其他路径、R11 和独立人工验收仍待后续指令。
+
 ## 后续边界
 
 E3 完成 R10 的材料候选切片；候选集合仍完整枚举，独立快照仍需读取和哈希，未宣称大规模候选页面已具分页或零文件读取能力。记忆召回/冲突、其他历史与知识检索的读取路径仍有后续工作。下一步建议 E4 处理 R11 的材料身份判定：分别命名列表身份、精确版本/哈希相等与持久化指纹，逐入口核对语义，待后续指令。不改写专家/记忆/定时任务板的独立人工验收状态。

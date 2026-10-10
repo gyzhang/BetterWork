@@ -531,7 +531,7 @@ E2 完成 R09 的 helper 编译期关联切片，仍保留不可信数据运行�
 
 [PR #44](https://github.com/gyzhang/BetterWork/pull/44) 已 squash 合入 main，提交 `0d36e78ad38a53ea00fcec76ce453799c35d59ea`，与最终源提交的文件树一致。代码分支本地/远端均已删除，原 checkout 已同步 main，没有新建 worktree。从该提交建立 `codex/review-e2-closeout`，以纯 Markdown 归档最终证据。E2 的 Schema/handler 编译期关联切片完成；R09 其余契约组织与 E3 候选读模型、其他治理和人工验收仍按后续指令推进。
 
-## 21. E3：材料候选读模型整理（本地实现完成，远端待收口）
+## 21. E3：材料候选读模型整理（代码与自动化收口）
 
 2026-10-10 17:07 CST。用户授权实施，从干净 main `73433b36640fcab62e3d77026a6f331a782f4e8c` 建立 `codex/review-material-candidates`；沿用原 checkout，无新 worktree。专项契约、实现与证据见 [E3 Review](2026-10-10-material-candidate-read-model.md)。
 
@@ -540,3 +540,7 @@ E2 完成 R09 的 helper 编译期关联切片，仍保留不可信数据运行�
 本地功能 7 文件 / 347 项、串行 bench 1 文件 / 1 项通过，typecheck、定向 lint/format、build、app-only 一组通过，网络尝试 0。300 候选的 SQL 查询 324→4、返回行 601→301、传入 JS 的正文 11,796,840→0 字节、完整文件校验 120→12 次（120→12 MiB）；最终独立合成样本 11.61ms。基点实现被查询数反例拦截，缓存退化反例检出错误 ready；源码恢复后通过。原批次 drift 留档并复查无漂移，护栏 154、例外 203 保持。
 
 E3 完成 R10 材料候选切片；独立文件仍完整哈希，候选仍全量枚举，其他 R10 读取路径未统一。建议 E4 梳理 R11 的材料身份/精确相等/持久化指纹，待后续指令；完整 verify、全 UI、真实模型和安装态人工验收未执行。最新源 SHA 的 macOS PR Gate、合并与归档继续收口。
+
+2026-10-10 17:13 CST：最终源 SHA `0911fe69b378cddc55b0582d54de0a16bdbd2690` 的 [macOS PR Gate / Actions 38040342870](https://github.com/gyzhang/BetterWork/actions/runs/38040342870) 成功，runner 为 macos-26-arm64。文档护栏 154、相关 functional 739、相关 heavy 123 项按三次调用合计 74 文件 / 1016 项，不表示全仓或去重规模；静态检查通过、Full verify 跳过，本地 bench/build/app-only 单列。
+
+[PR #46](https://github.com/gyzhang/BetterWork/pull/46) 已 squash 合入 main，提交 `7fb70aca35ec054311b86627b3b5c89b14642df3`，文件树与最终源提交一致。代码分支本地/远端均已删除，原 checkout 已同步 main；纯 Markdown 分支 `codex/review-e3-closeout` 归档最终证据，无新 worktree。E3 材料候选切片的代码与自动化收口，其他治理与人工验收按后续指令推进。
