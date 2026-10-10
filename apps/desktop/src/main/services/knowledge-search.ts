@@ -19,6 +19,11 @@ import {
 
 import { type EmbeddingRunner } from './knowledge-index-service';
 import type { KnowledgeIndexStore, ScopedRetrievalChunk } from './knowledge-index-store';
+import {
+  compareSearchChunkIdentity as identityOrder,
+  normalizeSearchText as normalize,
+  selectSubstringChunkIds,
+} from './knowledge-search-policy';
 import { makeSpanExcerpt, sha256Hex, sliceCodePoints } from './knowledge-text';
 import type { KnowledgeVault } from './knowledge-vault';
 import type { WorkerScanRequest } from './knowledge-worker-runner';
@@ -54,8 +59,6 @@ interface ScoredChunk {
   readonly rank: number;
 }
 
-const normalize = (value: string): string => value.normalize('NFKC').toLocaleLowerCase();
-
 /** NFKC＋lowercase＋Unicode 空白/标点分词；去重并保留顺序（契约 §9.1.3）。 */
 export function tokenizeQuery(query: string): string[] {
   const terms: string[] = [];
@@ -70,14 +73,6 @@ export function tokenizeQuery(query: string): string[] {
 
 const ftsMatch = (terms: readonly string[]): string =>
   terms.map((term) => `"${term.replaceAll('"', '""')}"`).join(' AND ');
-
-function identityOrder(left: ScopedRetrievalChunk, right: ScopedRetrievalChunk): number {
-  return (
-    left.revisionId.localeCompare(right.revisionId) ||
-    left.span.sectionOrdinal - right.span.sectionOrdinal ||
-    left.span.start - right.span.start
-  );
-}
 
 function referenceOf(chunk: ScopedRetrievalChunk): KnowledgeMaterialReference {
   return {
@@ -180,11 +175,16 @@ export class KnowledgeSearchService {
     let degraded: KnowledgeSearchDegradedReason | undefined;
     let vectorCandidates: ScoredChunk[] = [];
     let semanticRan = false;
-    const scopeChunks = this.index.chunksInScope(revisionIds);
-    let coverage = { eligibleChunks: scopeChunks.length, indexedChunks: 0 };
+    let coverage = this.index.scopeCoverage(revisionIds, []);
 
     if (requestedMode === 'hybrid') {
-      const semantic = await this.vectorPath(terms, input.query, revisionIds, scopeChunks, signal);
+      const semantic = await this.vectorPath(
+        terms,
+        input.query,
+        revisionIds,
+        coverage.eligibleChunks,
+        signal,
+      );
       degraded = semantic.degraded;
       vectorCandidates = semantic.candidates;
       semanticRan = semantic.ran;
@@ -243,35 +243,21 @@ export class KnowledgeSearchService {
     terms: readonly string[],
   ): ScoredChunk[] {
     if (terms.length === 0) return [];
-    const scored: Array<{ chunk: ScopedRetrievalChunk; titleHits: number; contentHit: number }> =
-      [];
-    for (const chunk of this.index.chunksInScope(revisionIds)) {
-      const title = normalize(chunk.title);
-      const content = normalize(chunk.content);
-      const titleHits = terms.filter((term) => title.includes(term)).length;
-      const hitTerm = terms.find((term) => content.includes(term));
-      const contentHit = hitTerm === undefined ? -1 : content.indexOf(hitTerm);
-      if (!terms.every((term) => title.includes(term) || content.includes(term))) continue;
-      scored.push({ chunk, titleHits, contentHit });
-    }
-    scored.sort((left, right) => {
-      if (right.titleHits !== left.titleHits) return right.titleHits - left.titleHits;
-      const leftBody = left.contentHit < 0 ? Number.POSITIVE_INFINITY : left.contentHit;
-      const rightBody = right.contentHit < 0 ? Number.POSITIVE_INFINITY : right.contentHit;
-      if (leftBody !== rightBody) return leftBody - rightBody;
-      return identityOrder(left.chunk, right.chunk);
+    const ids = selectSubstringChunkIds(this.index.searchTextInScope(revisionIds), terms);
+    const byId = new Map(
+      this.index.chunksByIdsInScope(revisionIds, ids).map((chunk) => [chunk.id, chunk] as const),
+    );
+    return ids.flatMap((id, index) => {
+      const chunk = byId.get(id);
+      return chunk === undefined ? [] : [{ chunk, rank: index + 1 }];
     });
-    return scored.slice(0, KNOWLEDGE_SEARCH_CANDIDATE_LIMIT).map((entry, index) => ({
-      chunk: entry.chunk,
-      rank: index + 1,
-    }));
   }
 
   private async vectorPath(
     terms: readonly string[],
     query: string,
     revisionIds: readonly string[],
-    scopeChunks: readonly ScopedRetrievalChunk[],
+    eligibleChunks: number,
     signal: AbortSignal,
   ): Promise<{
     candidates: ScoredChunk[];
@@ -279,7 +265,7 @@ export class KnowledgeSearchService {
     ran: boolean;
     coverage: { eligibleChunks: number; indexedChunks: number };
   }> {
-    const eligible = { eligibleChunks: scopeChunks.length, indexedChunks: 0 };
+    const eligible = { eligibleChunks, indexedChunks: 0 };
     const fail = (reason: KnowledgeSearchDegradedReason) => ({
       candidates: [] as ScoredChunk[],
       degraded: reason,
@@ -314,6 +300,7 @@ export class KnowledgeSearchService {
     if (coverageRows.indexedChunks > KNOWLEDGE_VECTOR_MAX_PUBLISHED) {
       return { ...fail('capacity-exceeded'), coverage: coverageRows };
     }
+    const scopeChunks = this.index.chunksInScope(revisionIds);
     let queryVector: Float32Array | undefined;
     try {
       const result = await this.embedding.embed({ snapshot, inputs: [query], signal });

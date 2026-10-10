@@ -65,6 +65,23 @@ export interface RetrievalChunkRow {
   contentHash: string;
 }
 
+export interface ScopedSearchText {
+  readonly id: string;
+  readonly revisionId: string;
+  readonly span: { readonly sectionOrdinal: number; readonly start: number };
+  readonly title: string;
+  readonly content: string;
+}
+
+interface ScopedSearchTextDbRow {
+  id: string;
+  revision_id: string;
+  section_ordinal: number;
+  start: number;
+  title: string;
+  content: string;
+}
+
 export interface StagingVector {
   chunkId: string;
   chunkHash: string;
@@ -576,7 +593,51 @@ export class KnowledgeIndexStore {
     return rows.map(toScopedChunk);
   }
 
-  /** 允许集合内的全部派生块：给 substring 回退与 eligible 覆盖计数用（契约 §9.1/§9.3）。 */
+  *searchTextInScope(revisionIds: readonly string[]): IterableIterator<ScopedSearchText> {
+    if (revisionIds.length === 0) return;
+    const placeholders = revisionIds.map(() => '?').join(', ');
+    const rows = this.db
+      .prepare(
+        `SELECT c.id, c.revision_id, c.section_ordinal, c.start, r.title, c.content
+           FROM knowledge_retrieval_chunks c
+           JOIN knowledge_revisions r ON r.id = c.revision_id
+          WHERE c.revision_id IN (${placeholders})
+          ORDER BY c.revision_id, c.section_ordinal, c.start`,
+      )
+      .iterate(...revisionIds) as IterableIterator<ScopedSearchTextDbRow>;
+    for (const row of rows) {
+      yield {
+        id: row.id,
+        revisionId: row.revision_id,
+        span: { sectionOrdinal: row.section_ordinal, start: row.start },
+        title: row.title,
+        content: row.content,
+      };
+    }
+  }
+
+  chunksByIdsInScope(
+    revisionIds: readonly string[],
+    chunkIds: readonly string[],
+  ): ScopedRetrievalChunk[] {
+    if (revisionIds.length === 0 || chunkIds.length === 0) return [];
+    const revisionPlaceholders = revisionIds.map(() => '?').join(', ');
+    const chunkPlaceholders = chunkIds.map(() => '?').join(', ');
+    const rows = this.db
+      .prepare(
+        `SELECT c.id, c.revision_id, c.text_hash, c.chunking_version, c.section_ordinal,
+                c.start, c.end, c.locator, c.content, c.chunk_hash,
+                r.document_id, r.title, r.source_path, r.format, r.content_hash AS revision_content_hash
+           FROM knowledge_retrieval_chunks c
+           JOIN knowledge_revisions r ON r.id = c.revision_id
+          WHERE c.revision_id IN (${revisionPlaceholders}) AND c.id IN (${chunkPlaceholders})
+          ORDER BY c.revision_id, c.section_ordinal, c.start`,
+      )
+      .all(...revisionIds, ...chunkIds) as ScopedChunkDbRow[];
+    return rows.map(toScopedChunk);
+  }
+
+  /** 语义路在 await 前固定允许范围的完整块映射；覆盖计数与 substring 不用此入口。 */
   chunksInScope(revisionIds: readonly string[]): ScopedRetrievalChunk[] {
     if (revisionIds.length === 0) return [];
     const placeholders = revisionIds.map(() => '?').join(', ');
