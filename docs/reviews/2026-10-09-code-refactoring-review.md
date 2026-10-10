@@ -651,7 +651,7 @@ E11 完成 R10 的逐项裁决展示读取切片；全域未裁决关联、逐 R
 
 2026-10-11 06:52 CST：最终源 `3ac089dcdbf58dd4a10f401470eaa102a77970ac` 的 [Actions 38092738909](https://github.com/gyzhang/BetterWork/actions/runs/38092738909) 在 macos-26-arm64 上通过 PR Gate，静态、docs:check 1/154、changed functional 6/148、heavy 1/87 成功，Full verify 跳过。按三次调用合计 8 文件 / 389 项，不表示全仓或去重规模。[PR #62](https://github.com/gyzhang/BetterWork/pull/62) 已 squash 为 main `1498df218bc0464f8ac80bdd368b2164e7601de0`，文件树与源一致；代码分支本地/远端删除，原 checkout 同步 main，原基点巡检退出 0，纯 Markdown 分支 codex/e11-closeout 归档。E11 代码与自动化收口，后续读取切片另按用户指令推进。
 
-## 30. E12：未裁决冲突按修订关联（本地验证完成）
+## 30. E12：未裁决冲突按修订关联（代码与自动化收口）
 
 2026-10-11 用户授权推进后续工作，从 main 02443ebf9d874d8a1da2dcb49f8790c9e7fd8b24 建立 codex/e12-memory-conflict-associations，沿用原 checkout。实施与证据见 [E12 专项 Review](2026-10-11-memory-conflict-associations.md)。
 
@@ -659,4 +659,6 @@ E11 完成 R10 的逐项裁决展示读取切片；全域未裁决关联、逐 R
 
 2026-10-11 07:02 CST，核心 3/57、related functional 10/188、heavy 1/87、静态与 build 通过；两档 11 文件 / 275 项，核心另记不相加。四个退化探针检出 3、7、4、1 项失败，字节恢复后相关回归通过。串行 bench 3 文件 / 3 项通过：3,000 身份/500 议题/7,500 未裁决对/100 项页面，修订字段访问 1,499,742→15,000，中位 7.84→0.26 ms，500 条含页外的有序展示关系相等；仅关联阶段，不外推完整列表或容量。
 
-E12 完成 R10 的全域未裁决关联切片；docs:check 154 项、原基点巡检留档及复核退出 0，规则与例外保持。完整枚举、逐 Run 来源装配和成功向量路完整映射仍有后续范围。未运行完整 verify、UI、真实模型或安装态人工验收；远端门禁与合并证据继续收口。
+E12 完成 R10 的全域未裁决关联切片；docs:check 154 项、原基点巡检留档及复核退出 0，规则与例外保持。完整枚举、逐 Run 来源装配和成功向量路完整映射仍有后续范围。未运行完整 verify、UI、真实模型或安装态人工验收；远端门禁与合并证据见下文。
+
+2026-10-11 07:08 CST：最终源 `7fd6c9a813f0ecc1b1b8f20306f409f15db9d92e` 的 [Actions 38093744169](https://github.com/gyzhang/BetterWork/actions/runs/38093744169) 在 macos-26-arm64 上通过 PR Gate，静态、docs:check 1/154、changed functional 10/188、heavy 1/87 成功，Full verify 跳过。三次调用合计 12 文件 / 429 项，不当作全仓或去重规模。[PR #64](https://github.com/gyzhang/BetterWork/pull/64) 已 squash 为 main `5e8b8047a7ba7745c5d83ec17318c06926ec2261`，文件树与最终源一致；代码分支本地/远端删除，原 checkout 同步 main，原基点巡检退出 0，纯 Markdown 分支 codex/e12-closeout 归档。E12 代码与自动化收口，后续读取切片另按用户指令推进。

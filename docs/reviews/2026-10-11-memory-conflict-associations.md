@@ -34,4 +34,8 @@ E12 完成全域未裁决关联切片。密集同议题的完整冲突枚举仍�
 
 ## 远端交接
 
-最新源 SHA 的 macOS PR Gate、合并与文档归档待补；本地通过不代替远端结果或人工验收。
+2026-10-11 07:08 CST：最终源 `7fd6c9a813f0ecc1b1b8f20306f409f15db9d92e` 的 [Actions 38093744169](https://github.com/gyzhang/BetterWork/actions/runs/38093744169) 在 macos-26-arm64 上通过 PR Gate。lint、format:check、typecheck 成功；docs:check 1/154、changed functional 10/188、heavy 1/87 通过。三次调用合计 12 文件 / 429 项，不当作全仓或去重规模；Full verify 跳过，本地核心、build 与 bench 单独记录。
+
+[PR #64](https://github.com/gyzhang/BetterWork/pull/64) 已 squash 合入 main，提交 `5e8b8047a7ba7745c5d83ec17318c06926ec2261`，文件树与最终源一致。commit/pre-commit、push/pre-push、合并后原批次基点巡检退出 0；main/origin/main 对齐、工作树干净，代码分支本地/远端删除。纯 Markdown 分支 `codex/e12-closeout` 归档本报告、总 Review 和日志，归档 PR 继续核对自身最新源的文档门禁与合并清理。
+
+E12 代码与自动化收口；完整 verify、UI、真实模型、安装态及 WM/MI 人工验收保持各自授权边界，后续读取切片另按用户指令推进。
