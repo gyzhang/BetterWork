@@ -611,7 +611,7 @@ E8 完成 R10 的该读取切片；substring 仍扫描全部允许正文，可�
 
 2026-10-10 23:20 CST：最终源 `0a4b8e021830491f3115aee1e7b0806242108ee5` 的 [Actions 38062849012](https://github.com/gyzhang/BetterWork/actions/runs/38062849012) 在 macos-26-arm64 的 PR Gate 成功，静态、docs:check 1/154、changed functional 14/189、heavy 2/90 通过，Full verify 跳过。[PR #56](https://github.com/gyzhang/BetterWork/pull/56) 已 squash 为 main `1e71951de02ffb8d7cee2131e0bd03235903b8ae`，文件树与源一致；代码分支本地/远端删除，原 checkout 同步 main，纯 Markdown 分支 `codex/e8-closeout` 归档。历史依赖装配、治理读取与成功向量路的完整块映射仍有后续范围，另按用户指令推进。
 
-## 27. E9：记忆治理读模型（本地实现与 Review 完成）
+## 27. E9：记忆治理读模型（代码与自动化收口）
 
 2026-10-11 用户授权检出新分支并推进下一任务，基点 `07c6f58d55b6d3996e4d1a5e7edfe9a7918aebda`，分支 `codex/e9-memory-governance-read-model`，沿用原 checkout。实施与证据见 [E9 专项 Review](2026-10-11-memory-governance-read-model.md)。
 
@@ -622,3 +622,5 @@ E8 完成 R10 的该读取切片；substring 仍扫描全部允许正文，可�
 3,000 条 / 500 议题样本中，治理完整记录 3,000→0、逐对裁决 6,500→0 且一次批量读取，JSON 11.70 MB→0.75 MB，中位 112.29→4.85 ms；6,250 个未裁决对及 100 个重复结果一致。轻投影不能充当来源证明，读数不含完整页面、来源或历史装配，不表示容量承诺。
 
 E9 完成 R10 的治理提示读取切片；每项裁决展示、历史依赖装配及成功向量路完整映射仍有后续范围。未运行完整 verify、UI、真实模型或安装态人工验收；最新 SHA 的 macOS PR Gate、合并与归档继续收口。
+
+2026-10-11 04:53 CST：最终源 `83f37efbe64f5431fa11045228d9adc02d9b2ad3` 的 [Actions 38085203237](https://github.com/gyzhang/BetterWork/actions/runs/38085203237) 在 macos-26-arm64 上通过 PR Gate，静态、docs:check 1/154、changed functional 70/756、heavy 2/120 成功，Full verify 跳过。按三次调用合计 73 文件 / 1,030 项，不表示全仓或去重规模。[PR #58](https://github.com/gyzhang/BetterWork/pull/58) 已 squash 为 main `6f4824cf6a25a1922961e500cf0dd7bdbc179f8c`，文件树与源一致；代码分支本地/远端删除，原 checkout 同步 main，原基点巡检退出 0，纯 Markdown 分支 `codex/e9-closeout` 归档。E9 代码与自动化收口，后续读取切片另按用户指令推进。
