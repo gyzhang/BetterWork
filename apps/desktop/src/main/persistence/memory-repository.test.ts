@@ -15,6 +15,7 @@ import {
 import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { legacyReplayDependencies } from '../services/fixtures/history-memory-fixtures';
 import { governanceEntryOf } from '../services/fixtures/memory-governance-fixtures';
 import {
   AppStore,
@@ -990,6 +991,108 @@ describe('MemoryRepository', () => {
       expect(Object.keys(entry).sort()).toEqual(['id', 'revisionId', 'scope']);
     const tied = actual.filter((entry) => tieIds.includes(entry.id));
     expect(tied.map((entry) => entry.id)).toEqual(tied.map((entry) => entry.id).sort());
+  });
+
+  it('projects every requested historical dependency once in first-request order', () => {
+    const store = openStore();
+    const workspaceId = seedWorkspace(store, 'replay');
+    const expertId = seedExpert(store);
+    const scopes: MemoryScope[] = [
+      { kind: 'user' },
+      { kind: 'workspace', workspaceId },
+      { kind: 'expert', expertId },
+      { kind: 'expert-workspace', workspaceId, expertId },
+    ];
+    const records = Array.from({ length: 1_100 }, (_, index) =>
+      seedMemory(store.memories, scopes[index % scopes.length]!, `replay ${index}`, {
+        ...(index % 5 === 0 ? { status: 'candidate' as const } : {}),
+        ...(index % 4 === 0 ? { validFrom: 0, validUntil: 1 } : {}),
+      }),
+    );
+    const old = records[0]!;
+    const edited = store.memories.update({
+      id: old.id,
+      expectedRevision: old.revision,
+      patch: { content: 'new rule', scope: { kind: 'workspace', workspaceId } },
+      normalizedHash: digestOf('new rule'),
+    }).record;
+    const deleted = store.memories.applyGovernance({
+      id: records[1]!.id,
+      expectedRevision: 1,
+      action: 'delete',
+    }).record;
+    const expired = store.memories.applyGovernance({
+      id: records[2]!.id,
+      expectedRevision: 1,
+      action: 'expire',
+    }).record;
+    const ids = [
+      expired.revisionId,
+      old.revisionId,
+      deleted.revisionId,
+      ...records
+        .slice()
+        .reverse()
+        .map((record) => record.revisionId),
+      'missing',
+      edited.revisionId,
+      old.revisionId,
+    ];
+    expect(store.memories.listReplayDependencies([])).toEqual([]);
+    expect(store.memories.listReplayDependencies(ids)).toEqual(
+      legacyReplayDependencies(store.memories, ids),
+    );
+    const actual = store.memories.listReplayDependencies(ids);
+    expect(actual).toHaveLength(1_103);
+    expect(actual.find((entry) => entry.revisionId === old.revisionId)).toMatchObject({
+      revision: 1,
+      latestRevisionOfIdentity: 2,
+      scope: old.scope,
+    });
+    expect(actual.some((entry) => entry.status === 'deleted')).toBe(true);
+    expect(actual.some((entry) => entry.status === 'expired')).toBe(true);
+    expect(actual.some((entry) => entry.status === 'candidate')).toBe(true);
+  });
+
+  it('uses one parameter for exact replay metadata without decoding body or provenance', () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), 'betterwork-replay-projection-'));
+    const databasePath = path.join(directory, 'app.db');
+    const store = AppStore.open(databasePath);
+    const statements: string[] = [];
+    const db = new Database(databasePath, {
+      verbose: (sql) => {
+        if (typeof sql === 'string') statements.push(sql);
+      },
+    });
+    try {
+      const record = seedMemory(store.memories, { kind: 'user' }, 'only metadata');
+      const expected = legacyReplayDependencies(store.memories, [record.revisionId]);
+      db.prepare('UPDATE memory_records SET provenance_json = ? WHERE revision_id = ?').run(
+        '{}',
+        record.revisionId,
+      );
+      const repository = new MemoryRepository(db);
+      statements.length = 0;
+      expect(
+        repository.listReplayDependencies([record.revisionId, record.revisionId, 'missing']),
+      ).toEqual(expected);
+      expect(statements).toHaveLength(1);
+      expect(statements[0]).toContain('json_each');
+      expect(statements[0]).not.toMatch(/r\.\*|provenance_json|LIMIT/iu);
+      expect(expected[0]).not.toHaveProperty('content');
+      expect(expected[0]).not.toHaveProperty('provenance');
+      expect(() => repository.getRevision(record.revisionId)).toThrow();
+      db.prepare("UPDATE memory_records SET scope_kind = 'expert' WHERE revision_id = ?").run(
+        record.revisionId,
+      );
+      expect(() => repository.listReplayDependencies([record.revisionId])).toThrow(
+        MemoryValidationError,
+      );
+    } finally {
+      db.close();
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('projects the complete latest governance set in the original global order', () => {

@@ -106,6 +106,12 @@ export type MemoryGovernanceEntry = Pick<
   | 'candidateDisposition'
 >;
 
+/** 历史重放的精确修订安全字段；不提供正文或来源证明。 */
+export type MemoryReplayDependency = Pick<
+  MemoryRecord,
+  'id' | 'revisionId' | 'revision' | 'contentHash' | 'status' | 'validFrom' | 'validUntil' | 'scope'
+> & { latestRevisionOfIdentity: number };
+
 export interface MemoryListPageQuery extends ListMemoriesRequest {
   /** 游标分页；排序固定 updatedAt DESC / id ASC（§9.1）。 */
   cursor?: ListCursor;
@@ -223,6 +229,15 @@ interface MemoryGovernanceRow extends MemoryRecallAuditRow {
   status: MemoryStatus;
   valid_from: number | null;
   valid_until: number | null;
+}
+
+interface MemoryReplayDependencyRow extends MemoryRecallAuditRow {
+  revision: number;
+  content_hash: string;
+  status: MemoryStatus;
+  valid_from: number | null;
+  valid_until: number | null;
+  latest_revision: number;
 }
 
 interface MemoryRow extends MemoryGovernanceRow {
@@ -560,6 +575,41 @@ export class MemoryRepository {
       .prepare('SELECT * FROM memory_records WHERE revision_id = ?')
       .get(revisionId) as MemoryRow | undefined;
     return row ? toRecord(row) : undefined;
+  }
+
+  /** 完整请求集合只绑定一个 JSON 参数；保留历史/终态，不用最新修订补缺项。 */
+  listReplayDependencies(revisionIds: readonly string[]): MemoryReplayDependency[] {
+    const ids = [...new Set(revisionIds)];
+    if (ids.length === 0) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT r.id, r.revision_id, r.revision, r.content_hash, r.status,
+                r.valid_from, r.valid_until, r.scope_kind, r.workspace_id, r.expert_id,
+                (SELECT MAX(c.revision) FROM memory_records c WHERE c.id = r.id) AS latest_revision
+           FROM memory_records r
+          WHERE r.revision_id IN (SELECT value FROM json_each(?))`,
+      )
+      .all(JSON.stringify(ids)) as MemoryReplayDependencyRow[];
+    const byRevision = new Map(
+      rows.map((row) => [
+        row.revision_id,
+        {
+          id: row.id,
+          revisionId: row.revision_id,
+          revision: row.revision,
+          contentHash: row.content_hash,
+          status: row.status,
+          scope: memoryScopeSchema.parse(rowScope(row)),
+          latestRevisionOfIdentity: row.latest_revision,
+          ...(row.valid_from === null ? {} : { validFrom: row.valid_from }),
+          ...(row.valid_until === null ? {} : { validUntil: row.valid_until }),
+        },
+      ]),
+    );
+    return ids.flatMap((id) => {
+      const dependency = byRevision.get(id);
+      return dependency === undefined ? [] : [dependency];
+    });
   }
 
   list(input: ListMemoriesRequest = {}): MemoryRecord[] {

@@ -984,7 +984,6 @@ const collectPriorRunFacts = (store: AppStore, input: RunReplayInput): PriorRunF
     const snapshot = store.runContextSnapshots.get(run.id);
     const selectedRefs: MemoryRevisionRef[] = [];
     const memoryDependencies: MemoryDependency[] = [];
-    const memoryScopes: Record<string, MemoryScope['kind']> = {};
     for (const item of context?.selectedItems ?? []) {
       const ref: MemoryRevisionRef = {
         memoryId: item.memoryId,
@@ -993,8 +992,6 @@ const collectPriorRunFacts = (store: AppStore, input: RunReplayInput): PriorRunF
       };
       selectedRefs.push(ref);
       memoryDependencies.push(ref);
-      const revision = store.memories.getRevision(item.revisionId);
-      if (revision !== undefined) memoryScopes[item.memoryId] = revision.scope.kind;
     }
     const inheritedMemories = (context?.memoryDependencyUnion ?? []).filter(
       (dependency) => !selectedRefs.some((ref) => ref.revisionId === dependency.revisionId),
@@ -1035,7 +1032,6 @@ const collectPriorRunFacts = (store: AppStore, input: RunReplayInput): PriorRunF
         materialKeys: [...ownMaterialKeys],
         inheritedMaterialKeys: [...new Set(inheritedMaterialKeys)],
         dependencyFactsComplete: context !== undefined && snapshot !== undefined,
-        memoryScopes,
       },
       answer,
       materialReferences,
@@ -1045,37 +1041,46 @@ const collectPriorRunFacts = (store: AppStore, input: RunReplayInput): PriorRunF
   return facts;
 };
 
-const liveRevisionOf = (store: AppStore, revisionId: string): LiveMemoryRevision | undefined => {
-  const revision = store.memories.getRevision(revisionId);
-  if (revision === undefined) return undefined;
-  const current = store.memories.get(revision.id);
-  return {
-    memoryId: revision.id,
-    contentHash: revision.contentHash,
-    status: revision.status,
-    ...(revision.validFrom === undefined ? {} : { validFrom: revision.validFrom }),
-    ...(revision.validUntil === undefined ? {} : { validUntil: revision.validUntil }),
-    latestRevisionOfIdentity: current?.revision ?? revision.revision,
-    revision: revision.revision,
-    scopeKind: revision.scope.kind,
-  };
-};
-
 /**
  * §6.3 安全重放：候选只取同 Task、completed、早于当前 Run 且 completedAt 不晚于准备
  * 时点的运行；依赖按「直接＋传递」并集判定，取连续安全后缀。
  */
 export const planRunHistoryReplay = (store: AppStore, input: RunReplayInput): RunReplayOutcome => {
   const allowedMaterialKeys = new Set(input.allowedMaterialKeys);
-  const facts = collectPriorRunFacts(store, input);
+  const priorFacts = collectPriorRunFacts(store, input);
+  const dependencies = new Map(
+    store.memories
+      .listReplayDependencies(
+        priorFacts.flatMap((fact) => fact.memoryDependencies.map((ref) => ref.revisionId)),
+      )
+      .map((dependency) => [dependency.revisionId, dependency]),
+  );
+  const facts = priorFacts.map((fact) => {
+    const memoryScopes: Record<string, MemoryScope['kind']> = {};
+    for (const ref of fact.record.directMemoryRevisions) {
+      const dependency = dependencies.get(ref.revisionId);
+      if (dependency !== undefined) memoryScopes[ref.memoryId] = dependency.scope.kind;
+    }
+    return { ...fact, record: { ...fact.record, memoryScopes } };
+  });
 
   const liveMemoryRevisions = new Map<string, LiveMemoryRevision>();
   for (const fact of facts) {
     const refs = [...fact.record.directMemoryRevisions, ...fact.record.inheritedMemoryRevisions];
     for (const ref of refs) {
       if (liveMemoryRevisions.has(ref.revisionId)) continue;
-      const live = liveRevisionOf(store, ref.revisionId);
-      if (live === undefined) continue;
+      const dependency = dependencies.get(ref.revisionId);
+      if (dependency === undefined) continue;
+      const live: LiveMemoryRevision = {
+        memoryId: dependency.id,
+        contentHash: dependency.contentHash,
+        status: dependency.status,
+        ...(dependency.validFrom === undefined ? {} : { validFrom: dependency.validFrom }),
+        ...(dependency.validUntil === undefined ? {} : { validUntil: dependency.validUntil }),
+        latestRevisionOfIdentity: dependency.latestRevisionOfIdentity,
+        revision: dependency.revision,
+        scopeKind: dependency.scope.kind,
+      };
       const recorded = fact.record.memoryScopes?.[ref.memoryId];
       liveMemoryRevisions.set(
         ref.revisionId,

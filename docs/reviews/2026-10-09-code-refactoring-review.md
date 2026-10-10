@@ -624,3 +624,15 @@ E8 完成 R10 的该读取切片；substring 仍扫描全部允许正文，可�
 E9 完成 R10 的治理提示读取切片；每项裁决展示、历史依赖装配及成功向量路完整映射仍有后续范围。未运行完整 verify、UI、真实模型或安装态人工验收；最新 SHA 的 macOS PR Gate、合并与归档继续收口。
 
 2026-10-11 04:53 CST：最终源 `83f37efbe64f5431fa11045228d9adc02d9b2ad3` 的 [Actions 38085203237](https://github.com/gyzhang/BetterWork/actions/runs/38085203237) 在 macos-26-arm64 上通过 PR Gate，静态、docs:check 1/154、changed functional 70/756、heavy 2/120 成功，Full verify 跳过。按三次调用合计 73 文件 / 1,030 项，不表示全仓或去重规模。[PR #58](https://github.com/gyzhang/BetterWork/pull/58) 已 squash 为 main `6f4824cf6a25a1922961e500cf0dd7bdbc179f8c`，文件树与源一致；代码分支本地/远端删除，原 checkout 同步 main，原基点巡检退出 0，纯 Markdown 分支 `codex/e9-closeout` 归档。E9 代码与自动化收口，后续读取切片另按用户指令推进。
+
+## 28. E10：历史重放记忆依赖读模型（本地实现与 Review 完成）
+
+2026-10-11 用户授权推进下一任务，基点 `a0bede62eeea5f10a24f48de800caa696daafc4c`，分支 codex/e10-history-memory-dependencies，沿用原 checkout。实施与证据见 [E10 专项 Review](2026-10-11-history-memory-dependencies.md)。
+
+去重后的直接与传递记忆依赖集中读取精确修订安全字段和身份最新修订号；json_each 单参数传入完整请求集合，不截断、不以最新修订填补缺项。direct scope 映射、首次绑定 scope、原失效理由、最近未重放边界、连续安全后缀及完整依赖顺序保持。完整运行审计/快照、材料足迹与来源可用性仍校验；元数据不能充当正文或来源证明。无协议、迁移、索引、算法版本或 UI 变化。
+
+2026-10-11 06:29 CST，本地相关 functional 69 文件 / 757 项、heavy 2 文件 / 120 项，去重共 71 文件 / 877 项通过；docs:check 154 项、静态、build 与串行 bench 3 文件 / 3 项通过。四个退化探针检出 2、2、4、1 项失败，恢复后相关回归通过。
+
+3,000 身份 / 3,064 修订、32 组模拟历史选中引用、128 个精确依赖样本中，完整行/逐项查询 768→0、批量投影 128 行/1 次，累计 JSON 2.99 MB→0.034 MB，中位 31.58→0.19 ms，完整元数据与 direct scope 相等。该读数只含记忆读取阶段，不含完整 Run 管线，不代表容量承诺；14 个真实 Run 的完整重放回归另外验证输出、依赖顺序与调用间变更。
+
+E10 完成 R10 的历史记忆依赖读取切片；逐 Run 审计/材料装配、每项裁决展示与成功向量路完整映射仍有后续范围。未运行完整 verify、UI、真实模型或安装态人工验收；最新 SHA 的 macOS PR Gate、合并与归档继续收口。
