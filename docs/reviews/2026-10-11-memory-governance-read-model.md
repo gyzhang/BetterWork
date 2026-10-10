@@ -44,4 +44,8 @@
 
 ## 远端交接
 
-最新源 SHA 的 macOS PR Gate、合并与纯 Markdown 归档待补；本地通过不替代远端门禁。
+2026-10-11 04:53 CST，最终源 `83f37efbe64f5431fa11045228d9adc02d9b2ad3` 的 [Actions 38085203237](https://github.com/gyzhang/BetterWork/actions/runs/38085203237) 在 macos-26-arm64 上通过 PR Gate。lint、format:check、typecheck 成功；docs:check 1 文件 / 154 项、changed functional 70 文件 / 756 项、heavy 2 文件 / 120 项通过。按三次调用合计 73 文件 / 1,030 项，不表示全仓或去重规模；Full verify 跳过。本地四项 bench 独立于 PR Gate 报告。
+
+[PR #58](https://github.com/gyzhang/BetterWork/pull/58) 已 squash 合入 main，提交 `6f4824cf6a25a1922961e500cf0dd7bdbc179f8c`；文件树与最终源提交一致，原 checkout 的 main 与 origin/main 对齐且干净，代码分支本地/远端均删除。合并后以原基点 `07c6f58d55b6d3996e4d1a5e7edfe9a7918aebda` 再跑巡检退出 0，不拿更新后的 origin/main 替换批次基点。
+
+本证据由同一 checkout 的纯 Markdown 分支 `codex/e9-closeout` 归档，归档 PR 的文档门禁、合并与清理继续收口，不重新运行代码或完整 verify。E9 代码与自动化完成；逐项裁决展示、历史依赖装配、成功向量路映射及独立人工验收按后续指令推进。
