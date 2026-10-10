@@ -1,5 +1,4 @@
 import type {
-  AgentRuntimeEvent,
   ArtifactInput,
   MaterialReference,
   MemoryDependency,
@@ -21,33 +20,14 @@ import {
  * 绝不像自动提炼读取器那样退化成空数组，把「缺证据」伪装成「无依赖」。
  */
 
-const TOOL_EVENT_TYPES: readonly AgentRuntimeEvent['type'][] = [
-  'tool.requested',
-  'tool.started',
-  'tool.progress',
-  'tool.completed',
-  'tool.failed',
-];
-
-const bySequence = (left: AgentRuntimeEvent, right: AgentRuntimeEvent): number =>
-  left.sequence - right.sequence;
-
 /** 只承认「最后一个 message.completed，且其后不再有工具调用」为最终无工具回答。 */
-const finalAnswerEvent = (
-  events: readonly AgentRuntimeEvent[],
-  eventId: string,
-): string | undefined => {
-  const ordered = [...events].sort(bySequence);
-  const completed = ordered.filter((event) => event.type === 'message.completed');
-  const last = completed[completed.length - 1];
-  if (!last || last.type !== 'message.completed' || last.id !== eventId) return undefined;
+const finalAnswerEvent = (store: AppStore, runId: string, eventId: string): string | undefined => {
+  const last = store.runs.getLatestMessageCompletion(runId);
+  if (!last || last.id !== eventId) return undefined;
   if (last.content.length === 0) return undefined;
-  const toolAfter = ordered.some(
-    (event) => event.sequence > last.sequence && TOOL_EVENT_TYPES.includes(event.type),
-  );
-  if (toolAfter) return undefined;
-  const finished = ordered.find((event) => event.type === 'run.completed');
-  if (finished && finished.type === 'run.completed' && finished.finalContent !== last.content) {
+  if (store.runs.hasToolEventAfter(runId, last.sequence)) return undefined;
+  const finished = store.runs.getFirstRunCompletion(runId);
+  if (finished && finished.finalContent !== last.content) {
     return undefined;
   }
   return last.content;
@@ -179,7 +159,7 @@ export const createStoreProvenanceReader = (store: AppStore): ProvenanceReader =
     runAssistantAnswer: (runId, eventId) => {
       const run = store.runs.get(runId);
       if (!run || run.status !== 'completed') return undefined;
-      return finalAnswerEvent(store.runs.listEvents(runId), eventId);
+      return finalAnswerEvent(store, runId, eventId);
     },
     runDependencies,
     checkpointField: (checkpointId, field) => {

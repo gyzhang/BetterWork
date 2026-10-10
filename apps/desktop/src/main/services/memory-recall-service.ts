@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 
 import type {
-  AgentRuntimeEvent,
   GetRunMemoryContextRequest,
   MaterialReference,
   MemoryConflictDecisionRecord,
@@ -298,7 +297,7 @@ const sourceAvailable = (store: AppStore, record: MemoryRecord): boolean => {
         if (store.runs.get(source.runId) === undefined) return false;
         break;
       case 'run-assistant':
-        if (!store.runs.listEvents(source.runId).some((event) => event.id === source.eventId)) {
+        if (store.runs.getEvent(source.runId, source.eventId) === undefined) {
           return false;
         }
         break;
@@ -961,17 +960,6 @@ interface FinalAnswer {
   readonly content: string;
 }
 
-/** 最终回答＝按 sequence 最后一条 message.completed（§6.3）；工具事件本就不属于它。 */
-const finalAnswerOf = (events: readonly AgentRuntimeEvent[]): FinalAnswer | undefined => {
-  let answer: FinalAnswer | undefined;
-  for (const event of events) {
-    if (event.type !== 'message.completed') continue;
-    if (event.content.length === 0) continue;
-    answer = { eventId: event.id, content: event.content };
-  }
-  return answer;
-};
-
 interface PriorRunFacts {
   readonly record: PriorRunRecord;
   readonly answer: FinalAnswer | undefined;
@@ -982,13 +970,16 @@ interface PriorRunFacts {
 const collectPriorRunFacts = (store: AppStore, input: RunReplayInput): PriorRunFacts[] => {
   const currentRun = store.runs.get(input.currentRunId);
   const facts: PriorRunFacts[] = [];
-  for (const run of store.runs.listByTask(input.taskId)) {
-    if (run.id === input.currentRunId) continue;
-    if (run.status !== 'completed') continue;
-    if (currentRun !== undefined && run.createdAt >= currentRun.createdAt) continue;
-    if (run.completedAt !== undefined && run.completedAt > input.evaluatedAt) continue;
-
-    const answer = finalAnswerOf(store.runs.listEvents(run.id));
+  const candidates = store.runs.listHistoryReplayCandidates({
+    taskId: input.taskId,
+    currentRunId: input.currentRunId,
+    ...(currentRun === undefined ? {} : { createdBefore: currentRun.createdAt }),
+    completedAtOrBefore: input.evaluatedAt,
+  });
+  for (const run of candidates) {
+    const event = store.runs.getLatestNonEmptyMessageCompletion(run.id);
+    const answer: FinalAnswer | undefined =
+      event === undefined ? undefined : { eventId: event.id, content: event.content };
     const context = store.runMemoryContexts.get(run.id);
     const snapshot = store.runContextSnapshots.get(run.id);
     const selectedRefs: MemoryRevisionRef[] = [];

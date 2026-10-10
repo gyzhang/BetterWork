@@ -16,6 +16,49 @@ interface EventPayloadRow {
   payload: string;
 }
 
+interface StoredEventRow extends EventPayloadRow {
+  id: string;
+  run_id: string;
+  sequence: number;
+  type: AgentRuntimeEvent['type'];
+}
+
+interface ExistenceRow {
+  present: number;
+}
+
+export interface HistoryReplayCandidateQuery {
+  taskId: string;
+  currentRunId: string;
+  createdBefore?: number;
+  completedAtOrBefore: number;
+}
+
+type MessageCompletion = Extract<AgentRuntimeEvent, { type: 'message.completed' }>;
+type RunCompletion = Extract<AgentRuntimeEvent, { type: 'run.completed' }>;
+
+const toolEventTypes: readonly AgentRuntimeEvent['type'][] = [
+  'tool.requested',
+  'tool.started',
+  'tool.progress',
+  'tool.completed',
+  'tool.failed',
+];
+
+/** 定向事件仍必须自证身份，不能把索引元数据和另一条载荷拼成来源。 */
+const parseStoredEvent = (row: StoredEventRow): AgentRuntimeEvent => {
+  const event = agentRuntimeEventSchema.parse(JSON.parse(row.payload) as unknown);
+  if (
+    event.id !== row.id ||
+    event.runId !== row.run_id ||
+    event.sequence !== row.sequence ||
+    event.type !== row.type
+  ) {
+    throw new Error('Run event metadata does not match its payload');
+  }
+  return event;
+};
+
 const RUNS_LIMIT = 100;
 export const RUN_INTERRUPTED_ON_STARTUP_REASON = '算台上次退出时这次执行被中断';
 
@@ -121,6 +164,29 @@ export class RunRepository {
     return rows.map(toSummary);
   }
 
+  /** 历史候选先过滤 Task/状态/时间，不截断安全判定需要的候选集合。 */
+  listHistoryReplayCandidates(input: HistoryReplayCandidateQuery): RunSummary[] {
+    const conditions = [
+      'task_id = ?',
+      'id != ?',
+      "status = 'completed'",
+      '(completed_at IS NULL OR completed_at <= ?)',
+    ];
+    const parameters: (string | number)[] = [
+      input.taskId,
+      input.currentRunId,
+      input.completedAtOrBefore,
+    ];
+    if (input.createdBefore !== undefined) {
+      conditions.push('created_at < ?');
+      parameters.push(input.createdBefore);
+    }
+    const rows = this.db
+      .prepare(`SELECT * FROM runs WHERE ${conditions.join(' AND ')} ORDER BY created_at ASC`)
+      .all(...parameters) as RunRow[];
+    return rows.map(toSummary);
+  }
+
   /** 只读取 Task 最近的有限轮次，供连续简报来源和历史用户要求装配。 */
   listRecentByTask(taskId: string, limit: number): RunSummary[] {
     if (!Number.isSafeInteger(limit) || limit < 1) {
@@ -145,6 +211,68 @@ export class RunRepository {
       .prepare('SELECT payload FROM run_events WHERE run_id = ? ORDER BY sequence ASC')
       .all(runId) as EventPayloadRow[];
     return rows.map((row) => agentRuntimeEventSchema.parse(JSON.parse(row.payload)));
+  }
+
+  getEvent(runId: string, eventId: string): AgentRuntimeEvent | undefined {
+    const row = this.db
+      .prepare(
+        'SELECT id, run_id, sequence, type, payload FROM run_events WHERE run_id = ? AND id = ?',
+      )
+      .get(runId, eventId) as StoredEventRow | undefined;
+    return row ? parseStoredEvent(row) : undefined;
+  }
+
+  /** 人工来源需要最后一条消息，包括空消息，不能退回较早回答。 */
+  getLatestMessageCompletion(runId: string): MessageCompletion | undefined {
+    for (const event of this.messageCompletionsDescending(runId)) return event;
+    return undefined;
+  }
+
+  /** 历史/消歧沿用最后非空消息；游标只解码找到它之前的消息完成事件。 */
+  getLatestNonEmptyMessageCompletion(runId: string): MessageCompletion | undefined {
+    for (const event of this.messageCompletionsDescending(runId)) {
+      if (event.content.length > 0) return event;
+    }
+    return undefined;
+  }
+
+  /** 保留人工来源旧口径的第一条完成事件，不用最后终态替代它。 */
+  getFirstRunCompletion(runId: string): RunCompletion | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT id, run_id, sequence, type, payload FROM run_events
+          WHERE run_id = ? AND type = 'run.completed' ORDER BY sequence ASC LIMIT 1`,
+      )
+      .get(runId) as StoredEventRow | undefined;
+    if (!row) return undefined;
+    const event = parseStoredEvent(row);
+    if (event.type !== 'run.completed') throw new Error('Expected a Run completion event');
+    return event;
+  }
+
+  hasToolEventAfter(runId: string, sequence: number): boolean {
+    const row = this.db
+      .prepare(
+        `SELECT EXISTS(SELECT 1 FROM run_events WHERE run_id = ? AND sequence > ?
+          AND type IN (${toolEventTypes.map(() => '?').join(', ')})) AS present`,
+      )
+      .get(runId, sequence, ...toolEventTypes) as ExistenceRow | undefined;
+    return row?.present === 1;
+  }
+
+  private *messageCompletionsDescending(runId: string): Generator<MessageCompletion> {
+    const rows = this.db
+      .prepare(
+        `SELECT id, run_id, sequence, type, payload FROM run_events
+          WHERE run_id = ? AND type = 'message.completed' ORDER BY sequence DESC`,
+      )
+      .iterate(runId) as Iterable<StoredEventRow>;
+    for (const row of rows) {
+      const event = parseStoredEvent(row);
+      if (event.type !== 'message.completed')
+        throw new Error('Expected a message completion event');
+      yield event;
+    }
   }
 
   belongsToTask(runId: string, taskId: string): boolean {
