@@ -266,7 +266,7 @@ import {
   shell,
   systemPreferences,
 } from 'electron';
-import { z, type ZodTypeAny } from 'zod';
+import { z } from 'zod';
 
 import { createNodeFileSystem } from '../infrastructure/dependency-adapters';
 import { listDependencyLocks, loadDependencyLock } from '../infrastructure/dependency-lock-catalog';
@@ -374,14 +374,16 @@ const emptyRequestSchema = z.object({}).strict();
 
 /**
  * 注册一个带边界校验的 invoke channel。
- * 所有 IPC 入参都必须走这三个 helper 之一——协议层的 Zod Schema 是唯一真相源，
+ * 通用 IPC 入参都必须走这三个 helper 之一——协议层的 Zod Schema 是唯一真相源，
  * 不允许任何 handler 自行解析 raw 参数。
  */
-function handleInput<Schema extends ZodTypeAny, Result>(
+function handleInput<Schema extends z.ZodType, ResponseSchema extends z.ZodType>(
   channel: string,
   schema: Schema,
-  responseSchema: ZodTypeAny,
-  handler: (input: z.output<Schema>) => Result | Promise<Result>,
+  responseSchema: ResponseSchema,
+  handler: (
+    input: z.output<NoInfer<Schema>>,
+  ) => z.input<NoInfer<ResponseSchema>> | Promise<z.input<NoInfer<ResponseSchema>>>,
 ): void {
   ipcMain.handle(channel, async (_event, raw: unknown) =>
     responseSchema.parse(await handler(schema.parse(raw))),
@@ -389,11 +391,13 @@ function handleInput<Schema extends ZodTypeAny, Result>(
 }
 
 /** 入参可整体省略的 channel（例如「列出全部或按某个 id 过滤」）。 */
-function handleOptionalInput<Schema extends ZodTypeAny, Result>(
+function handleOptionalInput<Schema extends z.ZodType, ResponseSchema extends z.ZodType>(
   channel: string,
   schema: Schema,
-  responseSchema: ZodTypeAny,
-  handler: (input: z.output<Schema>) => Result | Promise<Result>,
+  responseSchema: ResponseSchema,
+  handler: (
+    input: z.output<NoInfer<Schema>>,
+  ) => z.input<NoInfer<ResponseSchema>> | Promise<z.input<NoInfer<ResponseSchema>>>,
 ): void {
   ipcMain.handle(channel, async (_event, raw: unknown) =>
     responseSchema.parse(await handler(schema.parse(raw ?? {}))),
@@ -401,11 +405,13 @@ function handleOptionalInput<Schema extends ZodTypeAny, Result>(
 }
 
 /** 入参必须为空的 channel，防止 Renderer 悄悄夹带字段。 */
-function handleNoInput<Result>(
+function handleNoInput<ResponseSchema extends z.ZodType>(
   channel: string,
-  schema: ZodTypeAny,
-  responseSchema: ZodTypeAny,
-  handler: (event: IpcMainInvokeEvent) => Result | Promise<Result>,
+  schema: z.ZodType,
+  responseSchema: ResponseSchema,
+  handler: (
+    event: IpcMainInvokeEvent,
+  ) => z.input<NoInfer<ResponseSchema>> | Promise<z.input<NoInfer<ResponseSchema>>>,
 ): void {
   ipcMain.handle(channel, async (event, raw: unknown) => {
     schema.parse(raw ?? {});
@@ -496,11 +502,13 @@ const scheduleErrorFrom = (error: unknown): ScheduleDomainError => {
   });
 };
 
-function handleScheduleInput<Schema extends ZodTypeAny, Data>(
+function handleScheduleInput<Schema extends z.ZodType, DataSchema extends z.ZodType>(
   channel: string,
   inputSchema: Schema,
-  dataSchema: ZodTypeAny,
-  handler: (input: z.output<Schema>) => Data | Promise<Data>,
+  dataSchema: DataSchema,
+  handler: (
+    input: z.output<NoInfer<Schema>>,
+  ) => z.input<NoInfer<DataSchema>> | Promise<z.input<NoInfer<DataSchema>>>,
 ): void {
   const responseSchema = scheduleCallResultSchema(dataSchema);
   ipcMain.handle(channel, async (_event, raw: unknown) => {
@@ -713,7 +721,8 @@ function registerScheduleChannels(deps: IpcDependencies): void {
               };
             })()
           : { workspaceId: input.workspaceId, config: input.config };
-      return deps.schedulePreflight.check(target);
+      const result = await deps.schedulePreflight.check(target);
+      return { ...result, problems: [...result.problems] };
     },
   );
 
@@ -1503,7 +1512,7 @@ function registerKnowledgeChannels(deps: IpcDependencies): void {
     clearedResultSchema,
     () => {
       knowledgeIndex.clearJobs();
-      return { cleared: true };
+      return { cleared: true as const };
     },
   );
   handleNoInput(
@@ -2256,7 +2265,7 @@ function registerNotificationChannels({
       if (!markNotificationRendererReady(event.sender.id)) {
         throw new Error('Notification renderer is not the active window');
       }
-      return { ready: true };
+      return { ready: true as const };
     },
   );
   handleInput(
@@ -2287,7 +2296,7 @@ function registerNotificationChannels({
     clearedResultSchema,
     () => {
       notifications.clear();
-      return { cleared: true };
+      return { cleared: true as const };
     },
   );
 }
@@ -2297,7 +2306,7 @@ function registerWindowChannels({ getWindow }: IpcDependencies): void {
     IpcChannel.UpdateWindowTheme,
     updateWindowThemeRequestSchema,
     voidResultSchema,
-    (theme) => {
+    (theme): undefined => {
       const window = getWindow();
       if (!window || window.isDestroyed()) return;
       window.setBackgroundColor(theme.backgroundColor);
