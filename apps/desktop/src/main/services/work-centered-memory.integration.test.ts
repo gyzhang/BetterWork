@@ -32,6 +32,8 @@ import { RunService } from './run-service';
 import { SkillService } from './skill-service';
 import { TaskMaterialService } from './task-material-service';
 
+vi.mock('electron', () => ({ Notification: { isSupported: () => false } }));
+
 // WM15 系统级合成验收：真实文件 SQLite（可关闭重开）＋ mock fetch 捕获实际 Provider 请求。
 // 空间与文案全部合成，不使用任何公司真实文件；这里只证明机制与范围隔离，不证明真实模型语义质量。
 

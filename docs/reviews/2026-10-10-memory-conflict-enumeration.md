@@ -32,6 +32,14 @@
 
 机器为 darwin/arm64、Node v26.8.1；这是纯枚举合成样本，不含数据库加载、来源/依赖校验、逐对裁决查询和 UI 渲染，不表示峰值内存或产品容量承诺。集中议题没有候选次数收益，p95 也未改善。
 
+## macOS 首发失败归因与修复（2026-10-10 22:38 CST）
+
+源 `5bc9a590cfa3b8ea3214b08021e72a0633b01897` 的 [Actions 38059820125](https://github.com/gyzhang/BetterWork/actions/runs/38059820125) 静态与文档检查通过，功能档 8 文件 / 132 项通过、2 套集成在导入阶段失败，重档未运行。两套离线测试经 NotificationService 导入真实 Electron 包，触发二进制下载并发生 `fetch failed`，随后报 `Electron failed to install correctly`；它们尚未加载用例或创建测试库，不涉及用户数据库。冲突策略 13 项在该次 CI 中通过。
+
+工作型记忆、六期定时交付和同入口的 RunService 三套离线测试补 Electron Notification 宿主替身，报告不支持原生通知；真实 SQLite、RunService、通知持久化/广播、来源与 Provider 替身链路保留。原生系统通知仍由既有专门测试覆盖，没有改生产 NotificationService、安装配置或门禁。
+
+本地使用 Node resolve hook 主动阻断真实 Electron 入口，以 CI 相同基点执行 changed：functional 10 文件 / 160 项、heavy 1 文件 / 87 项，共 11 文件 / 247 项通过；与前述定向集合有重复，不相加。移除记忆集成的宿主替身后，探针在导入阶段退出 1，恢复后通过。初次只拦截 CommonJS `_load` 的探针未覆盖 ESM 入口，改为 resolve hook 后才取得有效证据；日志为 `/tmp/betterwork-e7-probe-electron-import-final.log`、`/tmp/betterwork-e7-functional-guarded.log` 和 `/tmp/betterwork-e7-heavy-guarded.log`。三文件定向 lint/format 退出 0；更新源提交后重新核对 macOS PR Gate。
+
 ## 边界与后续
 
 E7 完成 R10 的跨议题冲突枚举切片。治理完整记录读取、重复候选查找、逐对裁决和历史依赖装配仍保留；知识正文检索另行推进。没有 UI 变更，完整 verify、UI 走查、真实模型和安装态人工验收未运行。最新源 SHA 的 macOS PR Gate、合并与归档继续收口。

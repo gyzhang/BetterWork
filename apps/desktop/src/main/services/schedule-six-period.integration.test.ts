@@ -31,6 +31,8 @@ import { ScheduleSourceService } from './schedule-source-service';
 import { SkillService } from './skill-service';
 import { TaskMaterialService } from './task-material-service';
 
+vi.mock('electron', () => ({ Notification: { isSupported: () => false } }));
+
 const MODEL_ENDPOINT = 'http://127.0.0.1:18473/v1/chat/completions';
 const PERIOD_LABELS = [
   '2026年4月',
