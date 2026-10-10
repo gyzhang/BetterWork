@@ -26,7 +26,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { deriveActivityGroups } from './activity';
 import { BrandLogo } from './brand-logo';
-import { InlineLoading } from './components/AsyncButton';
 import { Button } from './components/Button';
 import { Composer } from './components/Composer';
 import type { CapabilityChip } from './components/ComposerCapabilityPicker';
@@ -34,17 +33,14 @@ import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { ContextPanel } from './components/ContextPanel';
 import { DiscussionCheckpointPanel } from './components/DiscussionCheckpointPanel';
 import { IconButton } from './components/IconButton';
-import { InlineError } from './components/InlineError';
 import { PageHeader } from './components/layout/PageHeader';
 import { type MemoryCaptureDraft, MemoryCapturePanel } from './components/MemoryCapturePanel';
 import type { MemoryEditorSubmission } from './components/MemoryEditor';
-import { MessageBlock } from './components/MessageBlock';
 import { ModelEditor } from './components/ModelEditorSheet';
 import { type NavEntry, NavItem, NavList } from './components/NavList';
-import { StatusNote } from './components/StatusNote';
-import { ToolActivity } from './components/ToolActivity';
 import { TransientToast } from './components/TransientToast';
 import { Welcome } from './components/Welcome';
+import { WorkMessageList } from './components/WorkMessageList';
 import { type WorkspaceGroupAction, WorkspaceGroupList } from './components/WorkspaceGroupList';
 import { WorkspaceIdentityDialog } from './components/WorkspaceIdentityDialog';
 import { useAppearance } from './hooks/use-appearance';
@@ -55,6 +51,7 @@ import { useMcpConnections } from './hooks/use-mcp-connections';
 import { newMemoryOperationId, useMemories } from './hooks/use-memories';
 import { useMemorySuggestions } from './hooks/use-memory-suggestions';
 import { useModelSettings } from './hooks/use-model-settings';
+import { useRunArtifactSave } from './hooks/use-run-artifact-save';
 import { useRunMemories, useTaskMemoryExclusion } from './hooks/use-run-memories';
 import { useScheduleTaskContinuation } from './hooks/use-schedule-task-continuation';
 import { useSchedules } from './hooks/use-schedules';
@@ -82,13 +79,17 @@ import {
   WorkIcon,
 } from './icons';
 import { describeActionError, reportAction, trackAction } from './lib/async-action';
-import { fileNameOf, formatTime } from './lib/format';
+import { fileNameOf } from './lib/format';
 import { materialReferenceAppliesToWorkspace, materialReferenceKey } from './lib/materials';
-import { excerptOf, finalAssistantAnswer, planCaptureFromSelection } from './lib/memory-capture';
+import {
+  type AssistantAnswerSource,
+  excerptOf,
+  planCaptureFromSelection,
+} from './lib/memory-capture';
 import { settleMemoryCall } from './lib/memory-result';
 import { candidatesOfTask } from './lib/memory-suggestions';
 import { buildResearchPrompt } from './lib/research-prompt';
-import { extractAssistantText, finalRunContent, mergeRunEvents } from './lib/run-events';
+import { mergeRunEvents } from './lib/run-events';
 import type { TaskDraftExpert } from './lib/task-draft';
 import { handleTitlebarDoubleClick } from './lib/titlebar';
 import type { AppView, ContextTab, SettingsTab } from './lib/view-types';
@@ -267,7 +268,6 @@ export function App(): React.JSX.Element {
   const [selectedArtifact, setSelectedArtifact] = useState<ArtifactDetail>();
   const [selectedArtifactInitialVersion, setSelectedArtifactInitialVersion] =
     useState<ArtifactVersionDetail>();
-  const [artifactNote, setArtifactNote] = useState<{ tone: 'ok' | 'error'; text: string }>();
   /** §3.6：来源专家不可用时不猜专家，改用通用助手并把这件事当场说出来。 */
   const [expertFallbackNotice, setExpertFallbackNotice] = useState<string>();
   // 全局短时提醒：只收「当前对象承载不了」的失败（导航失败、全局前置条件不满足），
@@ -746,23 +746,60 @@ export function App(): React.JSX.Element {
   }, [sidebarCollapsed]);
 
   const activeRun = runs.find((run) => run.id === activeRunId);
-  const latestCompletedRun = useMemo(() => {
-    for (let i = taskAllRuns.length - 1; i >= 0; i--) {
-      const run = taskAllRuns[i];
-      if (!run) continue;
-      const runEvents = taskAllEvents.get(run.id) ?? [];
-      if (runEvents.some((event) => event.type === 'run.completed')) {
-        const content = finalRunContent(runEvents);
-        if (content) return { id: run.id, content };
-      }
-    }
-    return undefined;
-  }, [taskAllRuns, taskAllEvents]);
   const isRunning =
     activeRunId !== undefined &&
     !events.some((event) => ['run.completed', 'run.failed', 'run.cancelled'].includes(event.type));
   const activityGroups = useMemo(() => deriveActivityGroups(events), [events]);
-  const currentTaskArtifacts = artifacts.filter((artifact) => artifact.taskId === activeTask?.id);
+  const currentTaskArtifacts = useMemo(
+    () => artifacts.filter((artifact) => artifact.taskId === activeTask?.id),
+    [artifacts, activeTask?.id],
+  );
+  const savedRunIds = useMemo(
+    () =>
+      new Set(
+        currentTaskArtifacts
+          .filter((artifact) => artifact.type === 'markdown')
+          .map((artifact) => artifact.sourceRunId)
+          .filter((runId): runId is string => runId !== undefined),
+      ),
+    [currentTaskArtifacts],
+  );
+  const showSavedArtifact = useCallback((): void => {
+    setContextTab('artifacts');
+    setContextOpen(true);
+  }, []);
+  const artifactSave = useRunArtifactSave({
+    task: activeTask,
+    artifacts: currentTaskArtifacts,
+    captureSelection,
+    isCurrentSelection,
+    onCommitted: refreshArtifacts,
+    onSaved: showSavedArtifact,
+  });
+  const rememberAnswer = useCallback(
+    (
+      runId: string,
+      answer: AssistantAnswerSource | undefined,
+      trigger: HTMLButtonElement,
+    ): void => {
+      if (!answer) {
+        setActionError('这条回答还没有可定位的最终事件，请等运行完成后再记住经验。');
+        return;
+      }
+      const selected = window.getSelection()?.toString().trim() ?? '';
+      const plan = planCaptureFromSelection(answer.content, selected);
+      memoryCaptureTriggerRef.current = trigger;
+      setMemoryCapture({
+        runId,
+        eventId: answer.eventId,
+        raw: answer.content,
+        initialContent: plan.range ? excerptOf(answer.content, plan.range) : '',
+        range: plan.range,
+      });
+      setMemoryCaptureError(plan.error);
+    },
+    [],
+  );
 
   const startNewTask = useCallback(
     (options: { preservePrompt?: boolean; preserveBindings?: boolean } = {}): void => {
@@ -782,7 +819,6 @@ export function App(): React.JSX.Element {
       setMaterialPickerError('');
       setActionError('');
       setEvidence([]);
-      setArtifactNote(undefined);
       setView('work');
     },
     [changeTaskSelection, clearScheduleTaskContinuation, resetTaskDraft],
@@ -1121,7 +1157,6 @@ export function App(): React.JSX.Element {
       selectStartedRun(result.runId);
       const selectionId = captureSelection();
       replaceComposerPrompt('');
-      setArtifactNote(undefined);
       setContextTab('process');
       const newRun: RunSummary = {
         id: result.runId,
@@ -1188,7 +1223,6 @@ export function App(): React.JSX.Element {
       { runId: run.id, preserveHistory: true },
     );
     const requestId = captureSelection();
-    setArtifactNote(undefined);
     await loadTaskContext(run.taskId, requestId);
     if (!isCurrentSelection(requestId)) return;
     const snapshot = await window.betterwork.runs.listEvents({ runId: run.id });
@@ -1215,7 +1249,6 @@ export function App(): React.JSX.Element {
     setMaterialsLoading(false);
     resetTaskDraft();
     changeTaskSelection({ id: task.id, sessionId: task.sessionId, title: task.title });
-    setArtifactNote(undefined);
     const selectionId = captureSelection();
     const loadedContext = await loadTaskContext(task.id, selectionId);
     if (!isCurrentSelection(selectionId)) return undefined;
@@ -1249,31 +1282,6 @@ export function App(): React.JSX.Element {
       return next;
     });
     return loadedContext;
-  };
-  const saveCurrentArtifact = async (): Promise<void> => {
-    if (!activeTask || !latestCompletedRun) return;
-    try {
-      const artifact = await window.betterwork.artifacts.saveMarkdown({
-        ...(currentTaskArtifacts[0] ? { artifactId: currentTaskArtifacts[0].id } : {}),
-        taskId: activeTask.id,
-        origin: 'assistant-run',
-        runId: latestCompletedRun.id,
-        title: activeTask.title,
-        content: latestCompletedRun.content,
-      });
-      setArtifactNote({
-        tone: 'ok',
-        text: `已保存为 Markdown 成果（v${artifact.versionNumber}）。`,
-      });
-      refreshArtifacts();
-      setContextTab('artifacts');
-      setContextOpen(true);
-    } catch (error) {
-      setArtifactNote({
-        tone: 'error',
-        text: error instanceof Error ? error.message : '保存成果失败。',
-      });
-    }
   };
   const openArtifact = async (artifact: ArtifactSummary): Promise<void> => {
     const detail = await window.betterwork.artifacts.get({ id: artifact.id });
@@ -1723,152 +1731,37 @@ export function App(): React.JSX.Element {
                   {taskAllRuns.length === 0 && !activeRunId ? (
                     <Welcome userName={conversationAddresses.user.trim()} />
                   ) : (
-                    <>
-                      {taskAllRuns.map((run, idx) => {
-                        const runEvents = taskAllEvents.get(run.id) ?? [];
-                        const runAssistantText =
-                          finalRunContent(runEvents) ?? extractAssistantText(runEvents);
-                        const runFailure = runEvents.find((event) => event.type === 'run.failed');
-                        const isRunActive = run.id === activeRunId;
-                        const runIsCompleted = runEvents.some(
-                          (event) => event.type === 'run.completed',
-                        );
-                        const isLatestCompleted =
-                          runIsCompleted &&
-                          run.id ===
-                            [...taskAllRuns].reverse().find((r) => {
-                              const evts = taskAllEvents.get(r.id) ?? [];
-                              return evts.some((event) => event.type === 'run.completed');
-                            })?.id;
-
-                        return (
-                          <div key={run.id} className="run-group">
-                            {idx > 0 && (
-                              <div className="run-divider">
-                                <span>{formatTime(run.createdAt)}</span>
-                              </div>
-                            )}
-                            <MessageBlock
-                              author="user"
-                              authorName={conversationAddresses.user.trim() || '你'}
-                              content={run.prompt}
-                            />
-                            <ToolActivity key={run.id} events={runEvents} />
-                            {runAssistantText && (
-                              <MessageBlock
-                                author="assistant"
-                                authorName={conversationAddresses.assistant.trim() || 'AI'}
-                                content={runAssistantText}
-                                anchorRef={
-                                  idx === taskAllRuns.length - 1 ? latestReplyRef : undefined
-                                }
-                                actions={
-                                  isLatestCompleted ? (
-                                    <>
-                                      <Button
-                                        variant="text"
-                                        size="sm"
-                                        onClick={(event) => {
-                                          const answer = finalAssistantAnswer(runEvents);
-                                          if (!answer) {
-                                            setMemoryCaptureError(
-                                              '这条回答还没有可定位的最终事件，请等运行完成后再记住经验。',
-                                            );
-                                            return;
-                                          }
-                                          // §3.1 与契约 §11.1：只有页面选区在原文里唯一命中才预填，
-                                          // 否则正文留空，让用户在下方只读原文重选，不猜渲染坐标。
-                                          const selected =
-                                            window.getSelection()?.toString().trim() ?? '';
-                                          const plan = planCaptureFromSelection(
-                                            answer.content,
-                                            selected,
-                                          );
-                                          memoryCaptureTriggerRef.current = event.currentTarget;
-                                          setMemoryCapture({
-                                            runId: run.id,
-                                            eventId: answer.eventId,
-                                            raw: answer.content,
-                                            initialContent: plan.range
-                                              ? excerptOf(answer.content, plan.range)
-                                              : '',
-                                            range: plan.range,
-                                          });
-                                          setMemoryCaptureError(plan.error);
-                                        }}
-                                      >
-                                        记住这段经验
-                                      </Button>
-                                      <Button
-                                        variant="text"
-                                        size="sm"
-                                        onClick={() =>
-                                          trackAction(saveCurrentArtifact(), '保存成果')
-                                        }
-                                        disabled={currentTaskArtifacts.some(
-                                          (artifact) => artifact.sourceRunId === run.id,
-                                        )}
-                                      >
-                                        <ArtifactIcon size={13} />
-                                        {currentTaskArtifacts.some(
-                                          (artifact) => artifact.sourceRunId === run.id,
-                                        )
-                                          ? '已保存为成果'
-                                          : '保存为成果'}
-                                      </Button>
-                                    </>
-                                  ) : undefined
-                                }
-                              />
-                            )}
-                            {runFailure?.type === 'run.failed' && (
-                              <InlineError
-                                message={`本次运行未完成，回复内容未登记为正式成果。${runFailure.error ?? ''}`}
-                              />
-                            )}
-                            {runEvents.some((event) => event.type === 'run.cancelled') && (
-                              <StatusNote message="本次运行已停止。可以调整要求后重新开始。" />
-                            )}
-                            {/* 「保存为成果」的失败需要停留并让人据此重试，属 §11.5.1 第二落点；
-                                成功那句改走自消浮层（同一处只留一个落点）。原先两档都写在按钮旁
-                                那句 `.action-note` 里，等于一条常驻的内联成功通道。 */}
-                            {artifactNote?.tone === 'error' && (
-                              <InlineError
-                                message={artifactNote.text}
-                                onDismiss={() => setArtifactNote(undefined)}
-                              />
-                            )}
-                            {artifactNote?.tone === 'ok' && (
-                              <TransientToast
-                                tone="success"
-                                message={artifactNote.text}
-                                onDismiss={() => setArtifactNote(undefined)}
-                              />
-                            )}
-                            {memoryCapture?.runId === run.id && (
-                              <MemoryCapturePanel
-                                capture={memoryCapture}
-                                scopes={memoryCaptureScopes}
-                                error={memoryCaptureError}
-                                onRangeChange={(range) => {
-                                  setMemoryCapture({ ...memoryCapture, range });
-                                  setMemoryCaptureError('');
-                                }}
-                                onSubmit={submitMemoryCapture}
-                                onClose={closeMemoryCapture}
-                              />
-                            )}
-                            {isRunActive &&
-                              runEvents.length > 0 &&
-                              !runEvents.some((event) =>
-                                ['run.completed', 'run.failed', 'run.cancelled'].includes(
-                                  event.type,
-                                ),
-                              ) && <InlineLoading label="正在执行…" />}
-                          </div>
-                        );
-                      })}
-                    </>
+                    <WorkMessageList
+                      runs={taskAllRuns}
+                      events={taskAllEvents}
+                      activeRunId={activeRunId}
+                      savedRunIds={savedRunIds}
+                      artifactSave={artifactSave}
+                      userName={conversationAddresses.user.trim() || '你'}
+                      assistantName={conversationAddresses.assistant.trim() || 'AI'}
+                      latestReplyRef={latestReplyRef}
+                      onRemember={rememberAnswer}
+                      capture={
+                        memoryCapture
+                          ? {
+                              runId: memoryCapture.runId,
+                              panel: (
+                                <MemoryCapturePanel
+                                  capture={memoryCapture}
+                                  scopes={memoryCaptureScopes}
+                                  error={memoryCaptureError}
+                                  onRangeChange={(range) => {
+                                    setMemoryCapture({ ...memoryCapture, range });
+                                    setMemoryCaptureError('');
+                                  }}
+                                  onSubmit={submitMemoryCapture}
+                                  onClose={closeMemoryCapture}
+                                />
+                              ),
+                            }
+                          : undefined
+                      }
+                    />
                   )}
                 </div>
               </div>
@@ -2062,81 +1955,96 @@ export function App(): React.JSX.Element {
       </section>
       {view === 'work' && (
         <ContextPanel
-          taskId={activeTask?.id}
-          taskContinuity={taskContinuity}
           open={contextOpen}
           setOpen={setContextOpen}
           tab={contextTab}
           setTab={setContextTab}
-          events={events}
-          evidence={evidence}
-          artifacts={currentTaskArtifacts}
-          activeRun={activeRun}
-          taskRuns={taskRuns}
-          activityGroups={activityGroups}
-          materials={taskMaterials}
-          onCommitMaterials={commitTaskMaterials}
-          materialsDisabled={isStarting || isRunning}
-          {...(scheduleTaskContinuation.view
-            ? {
-                scheduleContinuation: {
-                  ...scheduleTaskContinuation.view,
-                  removingScope: scheduleTaskContinuation.removingScope,
-                  scopeError: scheduleTaskContinuation.scopeError,
-                  onRemoveScope: () => setPendingScheduleScopeRemoval(true),
-                },
-              }
-            : {})}
-          memories={taskMemories}
-          excludedMemoryIds={excludedMemoryIds}
-          onToggleMemory={(memoryId) => {
-            if (!taskContext) {
-              setActionError('任务上下文还没有建立，暂不能调整本任务的记忆范围。');
-              return;
-            }
-            trackAction(
-              memoryExclusion.toggle(taskContext, memoryId).then((saved) => {
-                if (!saved) return;
-                acceptSavedContext(saved, true);
-                taskExclusions.reload();
-              }),
-              '调整本任务的记忆范围',
-            );
+          process={{
+            taskId: activeTask?.id,
+            taskContinuity,
+            events,
+            activeRun,
+            taskRuns,
+            artifacts: currentTaskArtifacts,
+            activityGroups,
+            onSelectRun: (run) =>
+              reportAction(selectRun(run), setActionError, '无法打开这次执行记录。'),
+            onOpenArtifactVersion: openArtifactVersion,
           }}
-          exclusion={memoryExclusion}
-          exclusions={taskExclusions}
-          materialCandidates={materialCandidates}
-          onRequestMaterials={requestMaterials}
-          mcpConnections={mcpState.connections}
-          mcpToolBindings={mcpToolBindings}
-          onMcpToolBindingsChange={setMcpToolBindings}
-          runMemories={runMemories}
-          brief={brief}
-          workspaceName={workspace?.name}
-          expertName={activeExpert?.name}
-          onOpenBriefMemory={(item) => openMemoryPageAt(item.memoryId)}
-          onOpenBriefIssue={openBriefIssue}
-          onOpenBriefReference={openBriefReference}
-          suggestions={suggestions}
-          taskCandidates={taskCandidates}
-          onEditCandidate={(candidate) => openMemoryPageAt(candidate.id)}
-          onRejectCandidate={(candidate) => actOnTaskCandidate(candidate, 'reject')}
-          onDeleteCandidate={(candidate) => setPendingCandidateDelete(candidate)}
-          onOpenMemoryPage={openMemoryPage}
-          memoriesError={taskMemoriesError}
-          memoriesWarning={taskMemoriesWarning}
-          onSelectRun={(run) =>
-            reportAction(selectRun(run), setActionError, '无法打开这次执行记录。')
-          }
-          onOpenSource={knowledge.onOpenSource}
-          onOpenArtifactVersion={openArtifactVersion}
-          onSelectArtifact={(artifact) =>
-            reportAction(
-              openArtifact(artifact).then(() => setView('artifacts')),
-              setActionError,
-              '无法打开这项成果。',
-            )
-          }
+          sources={{
+            evidence,
+            activeRunId: activeRun?.id,
+            materials: taskMaterials,
+            onCommitMaterials: commitTaskMaterials,
+            materialsDisabled: isStarting || isRunning,
+            ...(scheduleTaskContinuation.view
+              ? {
+                  scheduleContinuation: {
+                    ...scheduleTaskContinuation.view,
+                    removingScope: scheduleTaskContinuation.removingScope,
+                    scopeError: scheduleTaskContinuation.scopeError,
+                    onRemoveScope: () => setPendingScheduleScopeRemoval(true),
+                  },
+                }
+              : {}),
+            materialCandidates,
+            onRequestMaterials: requestMaterials,
+            mcpConnections: mcpState.connections,
+            mcpToolBindings,
+            onMcpToolBindingsChange: setMcpToolBindings,
+            onOpenSource: knowledge.onOpenSource,
+          }}
+          memory={{
+            memories: taskMemories,
+            excludedMemoryIds,
+            onToggleMemory: (memoryId) => {
+              if (!taskContext) {
+                setActionError('任务上下文还没有建立，暂不能调整本任务的记忆范围。');
+                return;
+              }
+              trackAction(
+                memoryExclusion.toggle(taskContext, memoryId).then((saved) => {
+                  if (!saved) return;
+                  acceptSavedContext(saved, true);
+                  taskExclusions.reload();
+                }),
+                '调整本任务的记忆范围',
+              );
+            },
+            exclusion: memoryExclusion,
+            exclusions: taskExclusions,
+            runMemories,
+            workspaceName: workspace?.name,
+            expertName: activeExpert?.name,
+            suggestions,
+            taskCandidates,
+            onEditCandidate: (candidate) => openMemoryPageAt(candidate.id),
+            onRejectCandidate: (candidate) => actOnTaskCandidate(candidate, 'reject'),
+            onDeleteCandidate: (candidate) => setPendingCandidateDelete(candidate),
+            onOpenMemoryPage: openMemoryPage,
+            memoriesError: taskMemoriesError,
+            memoriesWarning: taskMemoriesWarning,
+          }}
+          brief={{
+            brief: brief.brief,
+            loading: brief.loading,
+            error: brief.error,
+            onRetry: brief.refresh,
+            workspaceName: workspace?.name,
+            expertName: activeExpert?.name,
+            onOpenMemory: (item) => openMemoryPageAt(item.memoryId),
+            onOpenIssue: openBriefIssue,
+            onOpenReference: openBriefReference,
+          }}
+          artifacts={{
+            items: currentTaskArtifacts,
+            onSelectArtifact: (artifact) =>
+              reportAction(
+                openArtifact(artifact).then(() => setView('artifacts')),
+                setActionError,
+                '无法打开这项成果。',
+              ),
+          }}
         />
       )}
       {pendingCandidateDelete && (

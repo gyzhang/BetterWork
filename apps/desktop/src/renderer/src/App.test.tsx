@@ -360,6 +360,9 @@ function installApi(options?: {
     },
     artifacts: {
       list: vi.fn(async (): Promise<ArtifactSummary[]> => []),
+      saveMarkdown: vi.fn<Window['betterwork']['artifacts']['saveMarkdown']>(async () => {
+        throw new Error('App 测试没有配置成果保存结果');
+      }),
       get: vi.fn(async (): Promise<ArtifactDetail | null> => null),
       listVersions: vi.fn(async () => []),
       getVersion: vi.fn(async () => null),
@@ -629,6 +632,108 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   Reflect.deleteProperty(window, 'betterwork');
+});
+
+describe('Work message Artifact save in App', () => {
+  const followup: RunSummary = {
+    ...previousRun,
+    id: 'followup-run',
+    prompt: '第二轮要求',
+    createdAt: 2,
+  };
+  const completion = (run: RunSummary): AgentRuntimeEvent[] => [
+    {
+      id: `done-${run.id}`,
+      runId: run.id,
+      sequence: 1,
+      createdAt: 3,
+      type: 'run.completed',
+      finalContent: `最终正文 ${run.id}`,
+    },
+  ];
+  const saved: ArtifactSummary = {
+    id: 'saved-markdown',
+    workspaceId: workspaceFixture.id,
+    taskId: previousTask.id,
+    title: previousTask.title,
+    type: 'markdown',
+    origin: 'assistant-run',
+    sourceRunId: previousRun.id,
+    currentVersionId: 'saved-version',
+    versionNumber: 1,
+    createdAt: 3,
+    updatedAt: 3,
+  };
+
+  it('历史回答保存失败只有一处出口，重试仍保存该 Run，成功只有一枚局部确认', async () => {
+    const api = installApi();
+    api.runs.list.mockResolvedValue([followup, previousRun]);
+    api.runs.listEvents.mockImplementation(async ({ runId }) =>
+      completion(runId === previousRun.id ? previousRun : followup),
+    );
+    api.artifacts.saveMarkdown
+      .mockRejectedValueOnce(new Error('首轮成果写入失败'))
+      .mockResolvedValueOnce(saved);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
+    await screen.findByText(`最终正文 ${followup.id}`);
+    const buttons = await screen.findAllByRole('button', { name: '保存为成果' });
+    fireEvent.click(buttons[0]!);
+    await screen.findByText('首轮成果写入失败');
+    expect(screen.getAllByText('首轮成果写入失败')).toHaveLength(1);
+    expect(screen.queryByText('已保存为 Markdown 成果（v1）。')).toBeNull();
+    fireEvent.click(screen.getAllByRole('button', { name: '保存为成果' })[0]!);
+    await screen.findByText('已保存为 Markdown 成果（v1）。');
+    expect(screen.getAllByText('已保存为 Markdown 成果（v1）。')).toHaveLength(1);
+    expect(screen.queryByText('首轮成果写入失败')).toBeNull();
+    expect(api.artifacts.saveMarkdown.mock.calls).toEqual([
+      [
+        {
+          taskId: previousTask.id,
+          origin: 'assistant-run',
+          runId: previousRun.id,
+          title: previousTask.title,
+          content: `最终正文 ${previousRun.id}`,
+        },
+      ],
+      [
+        {
+          taskId: previousTask.id,
+          origin: 'assistant-run',
+          runId: previousRun.id,
+          title: previousTask.title,
+          content: `最终正文 ${previousRun.id}`,
+        },
+      ],
+    ]);
+    fireEvent.click(screen.getByRole('button', { name: '记住这段经验' }));
+    await screen.findByText('这条回答还没有可定位的最终事件，请等运行完成后再记住经验。');
+    expect(
+      screen.getAllByText('这条回答还没有可定位的最终事件，请等运行完成后再记住经验。'),
+    ).toHaveLength(1);
+    expect(document.querySelector('.memory-capture')).toBeNull();
+  });
+
+  it('保存原 Task 期间新建草稿，晚到成功不展开上下文或污染新草稿', async () => {
+    const api = installApi();
+    api.runs.listEvents.mockResolvedValue(completion(previousRun));
+    let finish!: (artifact: ArtifactSummary) => void;
+    api.artifacts.saveMarkdown.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
+    fireEvent.click(await screen.findByRole('button', { name: '保存为成果' }));
+    fireEvent.click(screen.getByRole('button', { name: '新建任务' }));
+    fireEvent.change(composer(), { target: { value: '尚未发送的新任务要求' } });
+    await act(async () => finish(saved));
+    expect((composer() as HTMLTextAreaElement).value).toBe('尚未发送的新任务要求');
+    expect(screen.getByRole('button', { name: '查看上下文' })).toBeTruthy();
+    expect(screen.queryByText('已保存为 Markdown 成果（v1）。')).toBeNull();
+  });
 });
 
 describe('Skill test run in the task composer', () => {
