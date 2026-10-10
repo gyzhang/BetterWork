@@ -142,6 +142,30 @@ export const unresolvedConflictPairs = (
       return { leftRevisionId, rightRevisionId, state: 'unresolved' as const };
     });
 
+/** 调用内只关联请求的精确修订；逐组保序，任一侧命中即保留完整冲突对。 */
+export const indexMemoryConflictPairs = (
+  revisionIds: readonly string[],
+  pairGroups: readonly (readonly MemoryConflictPair[])[],
+): ReadonlyMap<string, readonly MemoryConflictPair[]> => {
+  const requested = new Set(revisionIds);
+  const byRevision = new Map<string, MemoryConflictPair[]>();
+  if (requested.size === 0) return byRevision;
+  const append = (revisionId: string, pair: MemoryConflictPair): void => {
+    if (!requested.has(revisionId)) return;
+    const pairs = byRevision.get(revisionId) ?? [];
+    pairs.push(pair);
+    byRevision.set(revisionId, pairs);
+  };
+  for (const group of pairGroups) {
+    for (const pair of group) {
+      const { leftRevisionId, rightRevisionId } = pair;
+      append(leftRevisionId, pair);
+      if (rightRevisionId !== leftRevisionId) append(rightRevisionId, pair);
+    }
+  }
+  return byRevision;
+};
+
 /**
  * 与已确认记忆重复的候选（契约 §5.6 的去重口径）：同规范范围＋同 `normalizedHash`。
  * 写入期只抑制候选之间的重复，候选与已确认记忆之间的重复留给用户处理，
