@@ -14,7 +14,7 @@ import {
   recordGovernanceDecision,
   seedGovernanceMemory,
 } from './fixtures/memory-governance-fixtures';
-import { duplicateConfirmedMemoryId, unresolvedConflictPairs } from './memory-conflict-policy';
+import * as conflictPolicy from './memory-conflict-policy';
 import { normalizedMemoryHash } from './memory-content-policy';
 import { buildLegacyProvenance } from './memory-provenance';
 import { MemoryService } from './memory-service';
@@ -599,15 +599,17 @@ describe('MemoryService', () => {
       includeCandidates: true,
       statuses: ['candidate', 'confirmed', 'expired'],
     });
-    const pending = unresolvedConflictPairs(
-      current,
-      (left, right) => store.memoryOperations.findDecisionForPair(left, right) !== undefined,
-    ).filter(
-      (pair) =>
-        pair.leftRevisionId === candidate.revisionId ||
-        pair.rightRevisionId === candidate.revisionId,
-    );
-    const expectedDuplicate = duplicateConfirmedMemoryId(candidate, current);
+    const pending = conflictPolicy
+      .unresolvedConflictPairs(
+        current,
+        (left, right) => store.memoryOperations.findDecisionForPair(left, right) !== undefined,
+      )
+      .filter(
+        (pair) =>
+          pair.leftRevisionId === candidate.revisionId ||
+          pair.rightRevisionId === candidate.revisionId,
+      );
+    const expectedDuplicate = conflictPolicy.duplicateConfirmedMemoryId(candidate, current);
     expect(expectedDuplicate).toBe(expiredConfirmed.id);
     const full = vi.spyOn(store.memories, 'list').mockImplementation(() => {
       throw new Error('Governance must not hydrate the complete global records');
@@ -684,6 +686,64 @@ describe('MemoryService', () => {
     expect(history.data.content).toBe(right.content);
     expect(full).not.toHaveBeenCalled();
     expect(point).not.toHaveBeenCalled();
+  });
+
+  it('associates the complete pending collection once per page without losing outside partners', async () => {
+    const { service, store } = await setup();
+    store.transaction(() => {
+      for (let index = 0; index < 300; index += 1)
+        seedGovernanceMemory(store.memories, `rule ${index}`, {
+          topicKey: `topic-${index % 50}`,
+          createdAt: 1_000 + index,
+        });
+    });
+    const page = store.memories.listPage({ includeCandidates: true, limit: 100 });
+    const expected = page.items.map((record) => {
+      const view = service.get({ id: record.id });
+      if (!view.ok) throw new Error('Expected a live memory view');
+      return view.data;
+    });
+    let revisionReads = 0;
+    let pendingPairs = 0;
+    const enumerate = conflictPolicy.unresolvedConflictPairs;
+    const enumeration = vi
+      .spyOn(conflictPolicy, 'unresolvedConflictPairs')
+      .mockImplementation((...args) => {
+        const pairs = enumerate(...args);
+        pendingPairs += pairs.length;
+        return pairs.map((pair) => ({
+          ...pair,
+          get leftRevisionId() {
+            revisionReads += 1;
+            return pair.leftRevisionId;
+          },
+          get rightRevisionId() {
+            revisionReads += 1;
+            return pair.rightRevisionId;
+          },
+        }));
+      });
+    const result = service.list({ limit: 100 });
+    expect(result).toEqual({
+      ok: true,
+      warnings: [],
+      data: { items: expected, nextCursor: page.nextCursor },
+    });
+    expect(enumeration).toHaveBeenCalledOnce();
+    expect(pendingPairs).toBe(750);
+    const displayedPairs = expected.flatMap((item) => item.conflicts).length;
+    expect(displayedPairs).toBe(500);
+    // Count the association scan plus Schema reads of displayed pairs, never per-row global scans.
+    expect(revisionReads).toBeLessThanOrEqual(2 * pendingPairs + 4 * displayedPairs);
+    const pageRevisions = new Set(page.items.map((record) => record.revisionId));
+    expect(
+      expected
+        .flatMap((item) => item.conflicts)
+        .some(
+          (pair) =>
+            !pageRevisions.has(pair.leftRevisionId) || !pageRevisions.has(pair.rightRevisionId),
+        ),
+    ).toBe(true);
   });
 
   it('distributes one page decision batch exactly like individual live views', async () => {

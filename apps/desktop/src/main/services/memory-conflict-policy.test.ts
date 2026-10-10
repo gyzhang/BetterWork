@@ -1,4 +1,4 @@
-import type { MemoryRecord, MemoryScope } from '@betterwork/agent-protocol';
+import type { MemoryConflictPair, MemoryRecord, MemoryScope } from '@betterwork/agent-protocol';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -11,6 +11,7 @@ import {
   conflictPairKey,
   createConfirmedMemoryLookup,
   duplicateConfirmedMemoryId,
+  indexMemoryConflictPairs,
   listPotentialConflictPairs,
   scopesIntersect,
   scopesMatchExactly,
@@ -33,6 +34,91 @@ const pair = (
   left: Partial<MemoryRecord> & { id: string; content: string },
   right: Partial<MemoryRecord> & { id: string; content: string },
 ): MemoryRecord[] => [record(left), record(right)];
+
+describe('conflict associations by exact revision', () => {
+  it('matches ordered filtering for both sides, outside partners and repeated input pairs', () => {
+    const pending: MemoryConflictPair[] = [
+      { leftRevisionId: 'rev-a', rightRevisionId: 'outside', state: 'unresolved' },
+      { leftRevisionId: 'rev-b', rightRevisionId: 'rev-a', state: 'unresolved' },
+      { leftRevisionId: 'rev-a-old', rightRevisionId: 'outside', state: 'unresolved' },
+    ];
+    const decisions: MemoryConflictPair[] = [
+      {
+        leftRevisionId: 'outside',
+        rightRevisionId: 'rev-b',
+        state: 'keep-both',
+        applicabilityNote: 'condition',
+      },
+      { leftRevisionId: 'rev-a', rightRevisionId: 'rev-b', state: 'replaced' },
+    ];
+    // Even a self-pair supplied to the pure helper must retain filter semantics: one occurrence.
+    const self: MemoryConflictPair = {
+      leftRevisionId: 'rev-a',
+      rightRevisionId: 'rev-a',
+      state: 'unresolved',
+    };
+    pending.push(pending[0]!, self);
+    const revisionIds = ['rev-a', 'rev-b', 'rev-a', 'missing', 'a'];
+    for (const groups of [
+      [pending, decisions],
+      [decisions, [...pending].reverse()],
+    ]) {
+      Object.freeze(groups);
+      for (const group of groups) {
+        Object.freeze(group);
+        for (const entry of group) Object.freeze(entry);
+      }
+      const indexed = indexMemoryConflictPairs(revisionIds, groups);
+      expect([...indexed.keys()].every((id) => revisionIds.includes(id))).toBe(true);
+      for (const revisionId of revisionIds) {
+        const expected = groups.flatMap((group) =>
+          group.filter(
+            (pair) => pair.leftRevisionId === revisionId || pair.rightRevisionId === revisionId,
+          ),
+        );
+        expect(indexed.get(revisionId) ?? []).toEqual(expected);
+        for (const [index, entry] of (indexed.get(revisionId) ?? []).entries())
+          expect(entry).toBe(expected[index]);
+      }
+    }
+    expect(indexMemoryConflictPairs(revisionIds, []).size).toBe(0);
+  });
+
+  it('visits each pair once regardless of page size and skips an empty request', () => {
+    const entries = Array.from({ length: 300 }, (_, index) =>
+      record({
+        id: `memory-${index}`,
+        content: `${index}`,
+        topicKey: `topic-${index % 50}`,
+      }),
+    );
+    let reads = 0;
+    const pairs = unresolvedConflictPairs(entries, () => false).map((pair) => ({
+      ...pair,
+      get leftRevisionId() {
+        reads += 1;
+        return pair.leftRevisionId;
+      },
+      get rightRevisionId() {
+        reads += 1;
+        return pair.rightRevisionId;
+      },
+    }));
+    for (const count of [1, 100]) {
+      const ids = entries.slice(0, count).map((entry) => entry.revisionId);
+      const expected = ids.map((id) =>
+        pairs.filter((pair) => pair.leftRevisionId === id || pair.rightRevisionId === id),
+      );
+      reads = 0;
+      const indexed = indexMemoryConflictPairs(ids, [pairs]);
+      expect(reads).toBe(2 * pairs.length);
+      expect(ids.map((id) => indexed.get(id) ?? [])).toEqual(expected);
+    }
+    reads = 0;
+    expect(indexMemoryConflictPairs([], [pairs]).size).toBe(0);
+    expect(reads).toBe(0);
+  });
+});
 
 describe('scope rules', () => {
   it('treats scopes as intersecting unless they name a different expert or workspace', () => {
