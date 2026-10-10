@@ -35,6 +35,12 @@
 
 ## 边界与后续
 
-E5 完成 R10 的召回排除账本切片，仍需全域元数据扫描；未增加缓存、索引、迁移或新算法。本轮没有 UI 改动；UI 走查、完整 verify、真实模型语义和安装态人工验收未运行。最新源 SHA 的 macOS PR Gate、合并和归档待远端收口。
+E5 完成 R10 的召回排除账本切片，仍需全域元数据扫描；未增加缓存、索引、迁移或新算法。本轮没有 UI 改动；UI 走查、完整 verify、真实模型语义和安装态人工验收未运行。代码与自动化已收口，远端证据如下。
 
 建议下一步 E6 整理历史重放与来源事件读模型，保留完整依赖证明和连续安全后缀，不能先 LIMIT 掉安全检查所需的来源；等待后续指令。R10 的冲突枚举与知识正文检索仍属独立后续范围。
+
+## 远端收口（2026-10-10 20:44 CST）
+
+最终源 SHA `5b642c8d2719ba5d662699d4f67ae3aebc0560e4` 的 [macOS Actions 38052732572](https://github.com/gyzhang/BetterWork/actions/runs/38052732572) 成功，runner 镜像 macos-26-arm64，必需 PR Gate 通过。CI 静态检查通过；文档 1 文件 / 154 项、相关 functional 67 文件 / 720 项、相关 heavy 2 文件 / 120 项，三次调用合计 70 文件 / 994 项，不表示去重或全仓规模。Full verify 跳过；本地 bench/build 和退化探针单列。
+
+[代码 PR #50](https://github.com/gyzhang/BetterWork/pull/50) 已 squash 合入 main，提交 `9daf4833b8cba27573c59053fef3d64bd3ec9a3e`，文件树与最终源提交一致。代码分支本地/远端均删除，原 checkout 同步 main，没有新建 worktree。从合并提交创建纯 Markdown 分支 `codex/e5-closeout` 归档本节、总 Review 与工作日志；E6 不自动开工。
