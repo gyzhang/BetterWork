@@ -51,8 +51,21 @@ export const scopesMatchExactly = (left: MemoryScope, right: MemoryScope): boole
   }
 };
 
+export type MemoryConflictCandidate = Pick<
+  MemoryRecord,
+  'id' | 'revisionId' | 'scope' | 'normalizedHash' | 'topicKey' | 'validFrom' | 'validUntil'
+>;
+
+export type MemoryDuplicateCandidate = Pick<
+  MemoryRecord,
+  'id' | 'scope' | 'normalizedHash' | 'status' | 'candidateDisposition'
+>;
+
 /** 有效期交集：先后生效的口径是替代关系，不构成冲突。 */
-export const validityIntersects = (left: MemoryRecord, right: MemoryRecord): boolean => {
+export const validityIntersects = (
+  left: Pick<MemoryRecord, 'validFrom' | 'validUntil'>,
+  right: Pick<MemoryRecord, 'validFrom' | 'validUntil'>,
+): boolean => {
   const leftStart = left.validFrom ?? 0;
   const leftEnd = left.validUntil ?? Number.MAX_SAFE_INTEGER;
   const rightStart = right.validFrom ?? 0;
@@ -65,23 +78,23 @@ export const conflictPairKey = (leftRevisionId: string, rightRevisionId: string)
     ? `${leftRevisionId}\u0000${rightRevisionId}`
     : `${rightRevisionId}\u0000${leftRevisionId}`;
 
-export interface PotentialConflictPair {
-  readonly left: MemoryRecord;
-  readonly right: MemoryRecord;
+export interface PotentialConflictPair<TRecord extends MemoryConflictCandidate = MemoryRecord> {
+  readonly left: TRecord;
+  readonly right: TRecord;
 }
 
-interface TopicMember {
-  readonly record: MemoryRecord;
-  readonly group: readonly MemoryRecord[];
+interface TopicMember<TRecord extends MemoryConflictCandidate> {
+  readonly record: TRecord;
+  readonly group: readonly TRecord[];
   readonly position: number;
 }
 
 /** 同议题才枚举；左项仍按原输入顺序，不能按桶输出而改变成对顺序。 */
-export const listPotentialConflictPairs = (
-  records: readonly MemoryRecord[],
-): PotentialConflictPair[] => {
-  const groups = new Map<string, MemoryRecord[]>();
-  const members: TopicMember[] = [];
+export const listPotentialConflictPairs = <TRecord extends MemoryConflictCandidate>(
+  records: readonly TRecord[],
+): PotentialConflictPair<TRecord>[] => {
+  const groups = new Map<string, TRecord[]>();
+  const members: TopicMember<TRecord>[] = [];
   for (const record of records) {
     if (record === undefined || record.topicKey === undefined) continue;
     let group = groups.get(record.topicKey);
@@ -92,7 +105,7 @@ export const listPotentialConflictPairs = (
     members.push({ record, group, position: group.length });
     group.push(record);
   }
-  const pairs: PotentialConflictPair[] = [];
+  const pairs: PotentialConflictPair<TRecord>[] = [];
   for (const { record: left, group, position } of members) {
     for (let next = position + 1; next < group.length; next += 1) {
       const right = group[next];
@@ -116,7 +129,7 @@ export const listPotentialConflictPairs = (
  * 输出按精确修订标识规范排序，避免同一对因列表顺序不同而呈现两种方向。
  */
 export const unresolvedConflictPairs = (
-  records: readonly MemoryRecord[],
+  records: readonly MemoryConflictCandidate[],
   isDecided: (leftRevisionId: string, rightRevisionId: string) => boolean,
 ): MemoryConflictPair[] =>
   listPotentialConflictPairs(records)
@@ -135,8 +148,8 @@ export const unresolvedConflictPairs = (
  * 因此这里给出它重复的那条已确认记录标识；已拒绝的候选不再待处理。
  */
 export const duplicateConfirmedMemoryId = (
-  record: MemoryRecord,
-  records: readonly MemoryRecord[],
+  record: MemoryDuplicateCandidate,
+  records: readonly MemoryDuplicateCandidate[],
 ): string | undefined => {
   if (record.status !== 'candidate' || record.candidateDisposition === 'rejected') {
     return undefined;
@@ -149,4 +162,18 @@ export const duplicateConfirmedMemoryId = (
       scopesMatchExactly(candidate.scope, record.scope),
   );
   return match?.id;
+};
+
+/** 调用内按哈希查 confirmed，桶内保留原顺序并复用精确范围判定。 */
+export const createConfirmedMemoryLookup = (
+  records: readonly MemoryDuplicateCandidate[],
+): ((record: MemoryDuplicateCandidate) => string | undefined) => {
+  const byHash = new Map<string, MemoryDuplicateCandidate[]>();
+  for (const record of records) {
+    if (record.status !== 'confirmed') continue;
+    const group = byHash.get(record.normalizedHash);
+    if (group === undefined) byHash.set(record.normalizedHash, [record]);
+    else group.push(record);
+  }
+  return (record) => duplicateConfirmedMemoryId(record, byHash.get(record.normalizedHash) ?? []);
 };

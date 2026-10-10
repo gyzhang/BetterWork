@@ -54,7 +54,11 @@ import {
   MemoryTerminalError,
   MemoryValidationError,
 } from '../persistence/memory-repository';
-import { duplicateConfirmedMemoryId, unresolvedConflictPairs } from './memory-conflict-policy';
+import {
+  conflictPairKey,
+  createConfirmedMemoryLookup,
+  unresolvedConflictPairs,
+} from './memory-conflict-policy';
 import { isSensitiveMemoryContent, normalizedMemoryHash } from './memory-content-policy';
 import {
   buildUserInstructionProvenance,
@@ -127,7 +131,7 @@ const isGlobalScope = (scope: MemoryScope): boolean =>
 
 /** 判定待澄清与重复用的当前记录集合与未裁决冲突对（契约 §5.5、§10 管理提示口径）。 */
 interface PendingGovernance {
-  readonly current: readonly MemoryRecord[];
+  readonly duplicateConfirmedId: (record: MemoryRecord) => string | undefined;
   readonly unresolved: MemoryConflictPair[];
 }
 
@@ -817,19 +821,20 @@ export class MemoryService {
   }
 
   /**
-   * 待澄清口径与重复候选都按「当前全部生效记录」判定，与分页和筛选无关：
+   * 待澄清口径与重复候选都按全域最新 candidate/confirmed/expired 判定，与分页和筛选无关：
    * 一条记录是否撞口径，不取决于这一次查到了哪些记录（契约 §5.5、§5.6）。
    */
   private pendingGovernance(): PendingGovernance {
-    const current = this.store.memories.list({
-      includeCandidates: true,
-      statuses: ['candidate', 'confirmed', 'expired'],
-    });
+    const current = this.store.memories.listGovernanceEntries();
+    const decided = new Set(
+      this.store.memoryOperations
+        .listCurrentDecisionPairs()
+        .map((decision) => conflictPairKey(decision.leftRevisionId, decision.rightRevisionId)),
+    );
     return {
-      current,
-      unresolved: unresolvedConflictPairs(
-        current,
-        (left, right) => this.store.memoryOperations.findDecisionForPair(left, right) !== undefined,
+      duplicateConfirmedId: createConfirmedMemoryLookup(current),
+      unresolved: unresolvedConflictPairs(current, (left, right) =>
+        decided.has(conflictPairKey(left, right)),
       ),
     };
   }
@@ -845,7 +850,7 @@ export class MemoryService {
     const decided = this.store.memoryOperations.listConflictPairsForRevisionIds([
       record.revisionId,
     ]);
-    const duplicatesConfirmedMemoryId = duplicateConfirmedMemoryId(record, context.current);
+    const duplicatesConfirmedMemoryId = context.duplicateConfirmedId(record);
     return memoryViewItemSchema.parse({
       ...record,
       effectiveStatus,

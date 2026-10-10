@@ -1,11 +1,13 @@
 import type { ExpertRevisionDraft, ScheduleConfigDraft } from '@betterwork/agent-protocol';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AppStore, type ScheduleOccurrencePage } from '../persistence';
 import { NotificationService } from './notification-service';
 import { ScheduleNotificationService } from './schedule-notification-service';
 import { ScheduleOutcomeService } from './schedule-outcome-service';
 import { SCHEDULE_TICK_INTERVAL_MS, ScheduleScheduler } from './schedule-scheduler';
+
+vi.mock('electron', () => ({ Notification: { isSupported: () => false } }));
 
 const stores: AppStore[] = [];
 const DAILY_AT = Date.UTC(2025, 0, 1, 9, 0);

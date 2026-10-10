@@ -6,8 +6,10 @@ import {
   legacyConflictPairs,
   mixedConflictRecords,
 } from './fixtures/memory-conflict-fixtures';
+import { governanceEntryOf } from './fixtures/memory-governance-fixtures';
 import {
   conflictPairKey,
+  createConfirmedMemoryLookup,
   duplicateConfirmedMemoryId,
   listPotentialConflictPairs,
   scopesIntersect,
@@ -207,6 +209,88 @@ describe('pending counts（契约 §10 管理提示）', () => {
     expect(duplicateConfirmedMemoryId(rejected, records)).toBeUndefined();
     expect(duplicateConfirmedMemoryId(expertCopy, records)).toBeUndefined();
     expect(duplicateConfirmedMemoryId(confirmed, records)).toBeUndefined();
+  });
+});
+
+describe('governance metadata policies', () => {
+  it('uses minimal projections with identical conflict order and preserved input references', () => {
+    const records = mixedConflictRecords();
+    const entries = records.map(governanceEntryOf);
+    const pairs = listPotentialConflictPairs(entries);
+    expect(pairs.map(({ left, right }) => [left.revisionId, right.revisionId])).toEqual(
+      listPotentialConflictPairs(records).map(({ left, right }) => [
+        left.revisionId,
+        right.revisionId,
+      ]),
+    );
+    expect(unresolvedConflictPairs(entries, () => false)).toEqual(
+      unresolvedConflictPairs(records, () => false),
+    );
+    for (const { left, right } of pairs) {
+      expect(entries).toContain(left);
+      expect(entries).toContain(right);
+    }
+  });
+
+  it('matches the original first-confirmed lookup across scopes, statuses and permutations', () => {
+    const records = [
+      record({ id: 'confirmed-old', content: 'shared', scope: workspaceScope }),
+      record({ id: 'confirmed-new', content: 'shared', scope: workspaceScope, validUntil: 1 }),
+      record({ id: 'global', content: 'shared', scope: userScope }),
+      record({ id: 'expert', content: 'shared', scope: expertWorkspaceScope }),
+      record({ id: 'expired', content: 'shared', scope: workspaceScope, status: 'expired' }),
+      record({ id: 'pending', content: 'shared', scope: workspaceScope, status: 'candidate' }),
+      record({
+        id: 'rejected',
+        content: 'shared',
+        scope: workspaceScope,
+        status: 'candidate',
+        candidateDisposition: 'rejected',
+      }),
+      record({ id: 'missing', content: 'absent', status: 'candidate' }),
+    ];
+    for (const input of [
+      records,
+      [...records].reverse(),
+      records.slice(2).concat(records.slice(0, 2)),
+    ]) {
+      const lookup = createConfirmedMemoryLookup(input.map(governanceEntryOf));
+      for (const candidate of records)
+        expect(lookup(governanceEntryOf(candidate))).toBe(
+          duplicateConfirmedMemoryId(candidate, input),
+        );
+      const self = record({
+        id: input[0]!.id,
+        content: input[0]!.content,
+        scope: input[0]!.scope,
+        status: 'candidate',
+      });
+      expect(lookup(self)).toBe(duplicateConfirmedMemoryId(self, input));
+    }
+  });
+
+  it('does not revisit unrelated confirmed hashes for each candidate lookup', () => {
+    let reads = 0;
+    const unrelated = Array.from({ length: 160 }, (_, index) => {
+      const entry = governanceEntryOf(
+        record({ id: `unrelated-${index}`, content: `other ${index}` }),
+      );
+      const hash = entry.normalizedHash;
+      Object.defineProperty(entry, 'normalizedHash', {
+        get: () => {
+          reads += 1;
+          return hash;
+        },
+      });
+      return entry;
+    });
+    const target = record({ id: 'target', content: 'shared' });
+    const candidate = record({ id: 'pending', content: 'shared', status: 'candidate' });
+    const lookup = createConfirmedMemoryLookup([...unrelated, governanceEntryOf(target)]);
+    reads = 0;
+    expect(lookup(candidate)).toBe(target.id);
+    expect(lookup(candidate)).toBe(target.id);
+    expect(reads).toBe(0);
   });
 });
 

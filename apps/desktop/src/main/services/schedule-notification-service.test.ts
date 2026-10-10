@@ -12,6 +12,8 @@ import { NotificationService } from './notification-service';
 import { ScheduleNotificationService } from './schedule-notification-service';
 import { ScheduleOutcomeService } from './schedule-outcome-service';
 
+vi.mock('electron', () => ({ Notification: { isSupported: () => false } }));
+
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const now = Date.UTC(2026, 8, 20, 10);
 

@@ -31,6 +31,8 @@ import { ScheduleNotificationService } from './schedule-notification-service';
 import { ScheduleOutcomeService } from './schedule-outcome-service';
 import { ScheduleOutputService } from './schedule-output-service';
 
+vi.mock('electron', () => ({ Notification: { isSupported: () => false } }));
+
 const expertDraft: ExpertRevisionDraft = {
   name: '定时回执测试专家',
   summary: '离线来源回执测试',
