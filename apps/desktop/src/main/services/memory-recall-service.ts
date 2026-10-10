@@ -772,17 +772,18 @@ export const recallMemoriesForQuery = (
     evaluatedAt: query.evaluatedAt,
     excludedMemoryIds: query.excludedMemoryIds,
   });
-  const eligibleById = new Map(eligible.map((record) => [record.id, record]));
+  const eligibleIds = new Set(eligible.map((record) => record.id));
 
   // 未入选的记录只在这里补计数：一条记录只能有一个排除理由，Task 排除不能被说成失效。
   const excludedIds = new Set(query.excludedMemoryIds);
-  const allLatest = store.memories.list({});
+  const allLatest = store.memories.listRecallAuditEntries();
+  const auditById = new Map(allLatest.map((entry) => [entry.id, entry]));
   for (const record of allLatest) {
-    if (eligibleById.has(record.id) || excludedIds.has(record.id)) continue;
+    if (eligibleIds.has(record.id) || excludedIds.has(record.id)) continue;
     ledger.add(scopeAppliesToQuery(record.scope, query) ? 'inactive' : 'scope', identityOf(record));
   }
   for (const excludedId of excludedIds) {
-    const record = eligibleById.get(excludedId) ?? allLatest.find((item) => item.id === excludedId);
+    const record = auditById.get(excludedId);
     if (record) ledger.add('task-excluded', identityOf(record));
   }
 

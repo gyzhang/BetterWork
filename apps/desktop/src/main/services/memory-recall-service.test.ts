@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,7 +12,7 @@ import type {
   TaskMaterialSelection,
 } from '@betterwork/agent-protocol';
 import Database from 'better-sqlite3';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AppStore } from '../persistence';
 import { buildDerivedProvenance, manualMemorySource } from './memory-provenance';
@@ -125,6 +125,7 @@ describe('召回期的依赖闭包与冲突组装配', () => {
   };
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     for (const store of stores.splice(0)) store.close();
     await Promise.all(
       directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })),
@@ -223,6 +224,137 @@ describe('召回期的依赖闭包与冲突组装配', () => {
       db.close();
     }
   };
+
+  it('preserves full exclusion counts, latest samples and Task precedence with audit projections', async () => {
+    const { store, service, scope, workspaceId } = await setup();
+    const otherWorkspaceId = store.workspaces.getOrCreate('/tmp/recall/other-audit', 'other').id;
+    const seed = (targetScope: MemoryScope, index: number, status: 'confirmed' | 'candidate') =>
+      store.memories.create({
+        scope: targetScope,
+        status,
+        content: `audit ${index}`,
+        facet: 'fact',
+        normalizedHash: createHash('sha256').update(`audit ${index}`).digest('hex'),
+        confidence: 0.9,
+        createdAt: CAPTURED_AT,
+        provenance: {
+          schemaVersion: 1,
+          verification: 'legacy-unverified',
+          sourceType: 'user-explicit',
+        },
+      }).record;
+    const outside = Array.from({ length: 61 }, (_, index) =>
+      seed({ kind: 'workspace', workspaceId: otherWorkspaceId }, index, 'confirmed'),
+    );
+    const inactive = Array.from({ length: 56 }, (_, index) =>
+      seed(scope, 100 + index, 'candidate'),
+    );
+    const revised = store.memories.update({
+      id: outside[1]!.id,
+      expectedRevision: 1,
+      patch: { content: 'latest audit body' },
+      normalizedHash: createHash('sha256').update('latest audit body').digest('hex'),
+      updatedAt: CAPTURED_AT + 1,
+    }).record;
+    const selected = await confirm(service, store, scope, '收入按回款金额统计的经营分析月报口径。');
+    const excludedSelected = await confirm(service, store, scope, '收入按回款金额统计的排除口径。');
+    const query = {
+      ...queryFor(workspaceId),
+      excludedMemoryIds: [
+        outside[0]!.id,
+        inactive[0]!.id,
+        outside[0]!.id,
+        'unknown-id',
+        excludedSelected.record.id,
+      ],
+    };
+    const fullList = store.memories.list();
+    const identity = (record: MemoryRecord) => ({
+      memoryId: record.id,
+      revisionId: record.revisionId,
+    });
+    const referenceProjection = vi
+      .spyOn(store.memories, 'listRecallAuditEntries')
+      .mockImplementation(() =>
+        fullList.map(({ id, revisionId, scope: entryScope }) => ({
+          id,
+          revisionId,
+          scope: entryScope,
+        })),
+      );
+    const expectedOutcome = recallMemoriesForQuery(store, query);
+    referenceProjection.mockRestore();
+    const fullRead = vi.spyOn(store.memories, 'list').mockImplementation(() => {
+      throw new Error('full audit read');
+    });
+    const outcome = recallMemoriesForQuery(store, query);
+    expect(fullRead).not.toHaveBeenCalled();
+    expect(outcome).toEqual(expectedOutcome);
+    expect(outcome.selectedItems.map((item) => item.revisionId)).toEqual([
+      selected.record.revisionId,
+    ]);
+    expect(outcome.decisionSummary.exclusions).toEqual([
+      {
+        reason: 'inactive',
+        count: 55,
+        identities: fullList
+          .filter((record) => inactive.slice(1).some((item) => item.id === record.id))
+          .slice(0, 50)
+          .map(identity),
+      },
+      {
+        reason: 'scope',
+        count: 60,
+        identities: fullList
+          .filter((record) => outside.slice(1).some((item) => item.id === record.id))
+          .slice(0, 50)
+          .map(identity),
+      },
+      {
+        reason: 'task-excluded',
+        count: 3,
+        identities: [outside[0]!, inactive[0]!, excludedSelected.record].map(identity),
+      },
+    ]);
+    expect(outcome.decisionSummary.exclusions[1]?.identities[0]?.revisionId).toBe(
+      revised.revisionId,
+    );
+  });
+
+  it('never parses out-of-scope provenance and never treats audit identities as candidates', async () => {
+    const { store, service, scope, workspaceId, databasePath } = await setup();
+    const otherWorkspaceId = store.workspaces.getOrCreate('/tmp/recall/opaque-audit', 'other').id;
+    const outside = await confirm(
+      service,
+      store,
+      { kind: 'workspace', workspaceId: otherWorkspaceId },
+      '收入按回款金额统计。',
+    );
+    const eligible = await confirm(service, store, scope, '收入按回款金额统计。');
+    const db = new Database(databasePath);
+    try {
+      const corrupt = db.prepare(
+        'UPDATE memory_records SET provenance_json = ? WHERE revision_id = ?',
+      );
+      corrupt.run('{}', outside.record.revisionId);
+      const outcome = outcomeOf(store, workspaceId);
+      expect(outcome.selectedItems.map((item) => item.revisionId)).toEqual([
+        eligible.record.revisionId,
+      ]);
+      expect(outcome.decisionSummary.exclusions).toEqual([
+        {
+          reason: 'scope',
+          count: 1,
+          identities: [{ memoryId: outside.record.id, revisionId: outside.record.revisionId }],
+        },
+      ]);
+      expect(JSON.stringify(outcome.decisionSummary)).not.toContain(outside.record.content);
+      corrupt.run('{}', eligible.record.revisionId);
+      expect(() => outcomeOf(store, workspaceId)).toThrow();
+    } finally {
+      db.close();
+    }
+  });
 
   it('uses the complete effective reference set for recall and audit beyond the title summary', async () => {
     const { store, service, scope, workspaceId } = await setup();

@@ -89,6 +89,9 @@ export interface RecallCandidateQuery {
   onlyVerifiedProvenance?: boolean;
 }
 
+/** 全域排除账本专用：只含最新身份与范围，不能充当来源证明。 */
+export type MemoryRecallAuditEntry = Pick<MemoryRecord, 'id' | 'revisionId' | 'scope'>;
+
 export interface MemoryListPageQuery extends ListMemoriesRequest {
   /** 游标分页；排序固定 updatedAt DESC / id ASC（§9.1）。 */
   cursor?: ListCursor;
@@ -188,14 +191,20 @@ interface MemoryState {
   recallPolicy: MemoryRecallPolicy;
 }
 
-interface MemoryRow {
-  revision_id: string;
-  id: string;
-  revision: number;
+interface MemoryScopeRow {
   scope_kind: MemoryScope['kind'];
-  scope_id: string;
   expert_id: string | null;
   workspace_id: string | null;
+}
+
+interface MemoryRecallAuditRow extends MemoryScopeRow {
+  id: string;
+  revision_id: string;
+}
+
+interface MemoryRow extends MemoryRecallAuditRow {
+  revision: number;
+  scope_id: string;
   kind: MemoryKind;
   facet: MemoryFacet;
   topic_key: string | null;
@@ -324,7 +333,7 @@ const scopeToColumns = (
   }
 };
 
-const rowScope = (row: MemoryRow): MemoryScope => {
+const rowScope = (row: MemoryScopeRow): MemoryScope => {
   switch (row.scope_kind) {
     case 'user':
       return { kind: 'user' };
@@ -455,13 +464,11 @@ export const deriveEffectiveStatus = (record: MemoryRecord, at: number): MemoryE
   return record.status;
 };
 
-const latestQuery = `
-  SELECT r.*
-    FROM memory_records r
-   WHERE r.revision = (
+const latestRevisionPredicate = `r.revision = (
      SELECT MAX(latest.revision) FROM memory_records latest WHERE latest.id = r.id
-   )
-`;
+   )`;
+
+const latestQuery = `SELECT r.* FROM memory_records r WHERE ${latestRevisionPredicate}`;
 
 const EFFECTIVE_PREDICATE = `
   (r.valid_from IS NULL OR r.valid_from <= ?) AND (r.valid_until IS NULL OR r.valid_until > ?)
@@ -545,6 +552,23 @@ export class MemoryRepository {
       .prepare(`${latestQuery} ${clause} ORDER BY r.updated_at DESC, r.id ASC`)
       .all(...values) as MemoryRow[];
     return rows.map(toRecord);
+  }
+
+  /** 保留完整计数与样本顺序；不筛状态、不截断，也不解码正文或来源。 */
+  listRecallAuditEntries(): MemoryRecallAuditEntry[] {
+    const rows = this.db
+      .prepare(
+        `SELECT r.id, r.revision_id, r.scope_kind, r.workspace_id, r.expert_id
+           FROM memory_records r
+          WHERE ${latestRevisionPredicate}
+          ORDER BY r.updated_at DESC, r.id ASC`,
+      )
+      .all() as MemoryRecallAuditRow[];
+    return rows.map((row) => ({
+      id: row.id,
+      revisionId: row.revision_id,
+      scope: memoryScopeSchema.parse(rowScope(row)),
+    }));
   }
 
   listPage(input: MemoryListPageQuery): MemoryListPage {

@@ -20,7 +20,7 @@ import {
   deriveEffectiveStatus,
   isMemoryEffectiveAt,
   MemoryConflictError,
-  type MemoryRepository,
+  MemoryRepository,
   MemoryScopeMismatchError,
   MemoryTerminalError,
   MemoryValidationError,
@@ -940,6 +940,93 @@ describe('MemoryRepository', () => {
     });
     expect(elsewhere.effect).toBe('created');
     expect(elsewhere.record.id).not.toBe(first.id);
+  });
+
+  it('projects every latest audit identity in list order without record payloads', () => {
+    const store = openStore();
+    const repository = store.memories;
+    const workspaceId = seedWorkspace(store, 'audit');
+    const expertId = seedExpert(store);
+    const scopes: MemoryScope[] = [
+      { kind: 'user' },
+      { kind: 'workspace', workspaceId },
+      { kind: 'expert', expertId },
+      { kind: 'expert-workspace', workspaceId, expertId },
+    ];
+    const records = scopes.map((scope, index) =>
+      seedMemory(repository, scope, `audit record ${index}`, { createdAt: 100 }),
+    );
+    const edited = repository.update({
+      id: records[0]!.id,
+      expectedRevision: 1,
+      patch: { content: 'latest audit record' },
+      normalizedHash: digestOf('latest audit record'),
+      updatedAt: 200,
+    }).record;
+    repository.applyGovernance({ id: records[1]!.id, expectedRevision: 1, action: 'delete' });
+    repository.applyGovernance({ id: records[2]!.id, expectedRevision: 1, action: 'expire' });
+    repository.replace({
+      winnerId: edited.id,
+      winnerExpectedRevision: edited.revision,
+      loserId: seedMemory(repository, { kind: 'user' }, 'superseded').id,
+      loserExpectedRevision: 1,
+    });
+    seedMemory(repository, { kind: 'user' }, 'pending audit', { status: 'candidate' });
+    seedMemory(repository, { kind: 'user' }, 'rejected audit', {
+      status: 'candidate',
+      candidateDisposition: 'rejected',
+    });
+    const tieIds = ['tie-a', 'tie-b', 'tie-c'].map(
+      (content) => seedMemory(repository, { kind: 'user' }, content, { createdAt: 100 }).id,
+    );
+    const expected = repository
+      .list()
+      .map(({ id, revisionId, scope }) => ({ id, revisionId, scope }));
+    const actual = repository.listRecallAuditEntries();
+    expect(actual).toEqual(expected);
+    expect(actual.find((entry) => entry.id === edited.id)?.revisionId).toBe(edited.revisionId);
+    for (const entry of actual)
+      expect(Object.keys(entry).sort()).toEqual(['id', 'revisionId', 'scope']);
+    const tied = actual.filter((entry) => tieIds.includes(entry.id));
+    expect(tied.map((entry) => entry.id)).toEqual(tied.map((entry) => entry.id).sort());
+  });
+
+  it('does not decode excluded payloads but still validates audit scopes', () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), 'betterwork-audit-projection-'));
+    const databasePath = path.join(directory, 'app.db');
+    const store = AppStore.open(databasePath);
+    const statements: string[] = [];
+    const db = new Database(databasePath, {
+      verbose: (sql) => {
+        if (typeof sql === 'string') statements.push(sql);
+      },
+    });
+    try {
+      const record = seedMemory(store.memories, { kind: 'user' }, 'audit-only');
+      db.prepare('UPDATE memory_records SET provenance_json = ? WHERE revision_id = ?').run(
+        '{}',
+        record.revisionId,
+      );
+      const repository = new MemoryRepository(db);
+      statements.length = 0;
+      expect(repository.listRecallAuditEntries()).toEqual([
+        { id: record.id, revisionId: record.revisionId, scope: record.scope },
+      ]);
+      expect(statements).toHaveLength(1);
+      expect(statements[0]).toMatch(
+        /SELECT r\.id, r\.revision_id, r\.scope_kind, r\.workspace_id, r\.expert_id/u,
+      );
+      expect(statements[0]).not.toMatch(/r\.\*|content|provenance_json|LIMIT/iu);
+      expect(() => store.memories.get(record.id)).toThrow();
+      db.prepare("UPDATE memory_records SET scope_kind = 'expert' WHERE revision_id = ?").run(
+        record.revisionId,
+      );
+      expect(() => store.memories.listRecallAuditEntries()).toThrow(MemoryValidationError);
+    } finally {
+      db.close();
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('filters recall candidates by scope, validity and task exclusions without the WM03 gate', () => {
