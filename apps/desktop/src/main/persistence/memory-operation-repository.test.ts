@@ -345,6 +345,58 @@ describe('MemoryOperationRepository', () => {
     expect(store.memoryOperations.countDecisionsReferencingRevisions([])).toBe(0);
   });
 
+  it('projects every exact current decision pair and drops either superseded side', () => {
+    const store = openStore();
+    expect(store.memoryOperations.listCurrentDecisionPairs()).toEqual([]);
+    const records = Array.from({ length: 4 }, (_, index) =>
+      seedMemory(store.memories, `current decision ${index}`, { topicKey: 'unit' }),
+    );
+    for (const [left, right] of [
+      [records[0]!, records[1]!],
+      [records[2]!, records[3]!],
+    ] as const) {
+      store.memoryOperations.recordConflictResolution({
+        operationId: randomUUID(),
+        requestHash: requestHashOf({ left: left.revisionId, right: right.revisionId }),
+        leftRevisionId: left.revisionId,
+        rightRevisionId: right.revisionId,
+        decision: 'keep-both',
+        applicabilityNote: 'distinct applicability',
+      });
+    }
+    const decisions = store.memoryOperations.listDecisionsForRevisionIds(
+      records.map((record) => record.revisionId),
+      { currentOnly: true },
+    );
+    const expected = decisions.map(({ leftRevisionId, rightRevisionId }) => ({
+      leftRevisionId,
+      rightRevisionId,
+    }));
+    expect(store.memoryOperations.listCurrentDecisionPairs()).toEqual(expected);
+    const first = records.find((record) => record.revisionId === expected[0]!.leftRevisionId)!;
+    store.memories.update({
+      id: first.id,
+      expectedRevision: first.revision,
+      patch: { content: 'new first rule' },
+      normalizedHash: digestOf('new first rule'),
+    });
+    expect(store.memoryOperations.listCurrentDecisionPairs()).toEqual(expected.slice(1));
+    const last = records.find((record) => record.revisionId === expected[1]!.rightRevisionId)!;
+    store.memories.update({
+      id: last.id,
+      expectedRevision: last.revision,
+      patch: { content: 'new last rule' },
+      normalizedHash: digestOf('new last rule'),
+    });
+    expect(store.memoryOperations.listCurrentDecisionPairs()).toEqual([]);
+    expect(
+      store.memoryOperations.findDecisionForPair(
+        expected[0]!.leftRevisionId,
+        expected[0]!.rightRevisionId,
+      ),
+    ).toBeDefined();
+  });
+
   it('drops a decision from the current view as soon as either revision moves', () => {
     const store = openStore();
     const left = seedMemory(store.memories, '需求变更走线上表单。', { topicKey: '变更流程' });

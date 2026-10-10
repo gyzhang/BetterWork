@@ -80,6 +80,16 @@ interface DecisionRow {
   created_at: number;
 }
 
+export type CurrentMemoryDecisionPair = Pick<
+  MemoryConflictDecisionRecord,
+  'leftRevisionId' | 'rightRevisionId'
+>;
+
+interface DecisionPairRow {
+  left_revision_id: string;
+  right_revision_id: string;
+}
+
 interface OperationResult {
   effect: MemoryWriteEffect;
   committedRevisionIds: string[];
@@ -322,6 +332,25 @@ export class MemoryOperationRepository {
       )
       .all(...parameters) as DecisionRow[];
     return rows.map(toDecision);
+  }
+
+  /** 治理存在性判断：双方都是最新修订，不绑定全域 ID 列表，不读取裁决说明。 */
+  listCurrentDecisionPairs(): CurrentMemoryDecisionPair[] {
+    const rows = this.db
+      .prepare(
+        `SELECT d.left_revision_id, d.right_revision_id
+           FROM memory_conflict_decisions d
+           JOIN memory_records l ON l.revision_id = d.left_revision_id
+           JOIN memory_records r ON r.revision_id = d.right_revision_id
+          WHERE l.revision = (SELECT MAX(x.revision) FROM memory_records x WHERE x.id = l.id)
+            AND r.revision = (SELECT MAX(y.revision) FROM memory_records y WHERE y.id = r.id)
+          ORDER BY d.created_at ASC, d.id ASC`,
+      )
+      .all() as DecisionPairRow[];
+    return rows.map((row) => ({
+      leftRevisionId: row.left_revision_id,
+      rightRevisionId: row.right_revision_id,
+    }));
   }
 
   /** MemoryViewItem.conflicts：精确修订对与当前共存状态（§9.1）。 */
