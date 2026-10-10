@@ -10,6 +10,7 @@
 
 > 2026-10-08 MCP 专项：用户确认 [ADR-0043](../adr/0043-mcp-multi-transport-and-oauth.md) 的推荐方案并授权编码，CF30–CF32/CF40–CF41 按已实现 CF10/CF11 底座推进，不前置开发百度 profile。CF12/CF33/CF42 的人工或真实服务验收保持独立；下文旧卡的仅静态认证、排除 SSE/OAuth、自动重建并重放会话及自行运行完整 verify 等条款由 ADR-0043 与 ADR-0042 替代。
 > 2026-10-09 内置 MCP 运行时：用户明确要求安装包内置运行时、减少用户安装 Node/Python 和冷启动联网；[ADR-0045](../adr/0045-bundled-runtimes-for-local-mcp.md) Accepted。新增 CF43；真实业务与签名安装验收仍按 CF33/CF42/CF51 边界记录。
+> 2026-10-11 Node 运行时与 Skill 执行链：[ADR-0047](../adr/0047-bundled-node-runtime.md) Accepted，随包独立 Node.js 24.x 与 MCP 接入（决策 1–4、8–11）已在任务分支落地待验收；Node-based Skill 执行链、node_modules 落点与信任指纹（决策 5/6/7）因运行链路 Python-centric 且暂无 Node Skill 消费者，新增 CF44 承载，待首个真实 Node Skill 出现再按实际契约开工，不提前建投机抽象。
 
 ## 1. 交付顺序与完成口径
 
@@ -62,6 +63,7 @@ CF00 不重复此前已证实且未受变更影响的测试；以最新提交、
 | CF41 | 版本协商、OAuth 与运行时限制 | CF40 | doing | SDK auto/legacy、PKCE/state/issuer/resource、预注册/CIMD/DCR、refresh 合并/CAS、登录取消/监听器清理、设置与通知已落地；OAuth/运行时/页面回归通过。待真实账号与 Keychain 重启验收；[完整证据](../acceptance/2026-10-09-mcp-connections.md) |
 | CF42 | M4 里程碑与远程 MCP 端到端 | CF41 | partial | 真实 HTTP/SSE/OAuth 账号尚未提供；保持未验收，不提升 ADR-0025 或关闭 M4；ADR-0043 已接受只代表方案已定案；[完整证据](../acceptance/2026-10-09-mcp-connections.md) |
 | CF43 | 内置 stdio MCP 与随包运行时 | CF32 | partial | ADR-0045 Accepted；三个 Node MCP 与 Python fetch 通过随包 guardian 握手；打包 CPython、fetch wheelhouse 与现有 PPT wheelhouse 均完成离线环境准备。未签名 unpacked 包验证通过；Developer ID 安装态及用户窗口验收待后续窗口；[证据](../acceptance/2026-10-09-mcp-connections.md#2026-10-09-内置-mcp-运行时离线打包验收) |
+| CF44 | Node-based Skill 执行链与依赖落点 | CF43；首个真实 Node Skill | todo | 待补（ADR-0047 决策 5/6/7；无消费者前不开工，避免投机抽象） |
 | CF50 | 跨类迁移回归与用户走查脚本 | CF42, CF43 | todo | 待补 |
 | CF51 | M5 里程碑、ADR Accepted 与整体收尾 | CF50 | todo | 待补 |
 
@@ -311,6 +313,19 @@ CF00 不重复此前已证实且未受变更影响的测试；以最新提交、
 - Python：CPython 3.12.14 macOS arm64 制品、PPT Skill wheelhouse 与 fetch 依赖闭包随包；SkillDependencyService 共享基础解释器，各锁仍生成独立受管 venv；进度、取消与失败原因可见。
 - 验收：schema/迁移/service/guardian 回归；分别在 PATH 不含 Node/Python 的宿主启动四项内置服务；CPython、wheels 与 Node package 资源确实出现在 unpacked/安装包；断网准备成功；损坏哈希拒绝执行；取消后无孤儿进程/半成品环境；不自动启用连接或授权工具。真实业务服务、签名安装与用户窗口结果继续分开记录。
 - 状态：partial；代码、自动化、未签名 unpacked 包、受管 guardian 与禁网环境离线握手已验证；Developer ID 签名安装与人工首装验收仍待后续窗口。
+
+### CF44 Node-based Skill 执行链与依赖落点
+
+- 依据：[ADR-0047](../adr/0047-bundled-node-runtime.md) 决策 5/6/7、[ADR-0009](../adr/0009-script-skill-baseline.md) 脚本 Skill 基线、[ADR-0011](../adr/0011-skill-trust-and-local-distribution.md) 信任与分发、[capability-contracts](capability-contracts.md)。
+- 触发条件（阻塞）：**待第一个真实 Node-based Skill 出现再开工**。当前无任何 Skill 声明 `runtime: "managed-node"`，运行链路 Python-centric（`run-service.ts` 的 binding→environment→execution→fingerprint 硬性要求 Python venv 的 `environmentId` + `resolveEnvironmentPython`），无消费者时实现即投机抽象，违反 AGENTS.md §5。前置 CF43（随包 Node 运行时已就位）。
+- 目标：声明 `runtime: "managed-node"` 的 Node Skill 用随包 `<node-runtime>/bin/node` 端到端执行，`node`/`npm`/`npx` 注入子进程 PATH；node_modules 按来源落点；信任指纹与 Python 对称。
+- 范围：
+  - 协议：`agent-protocol` entrypoint 联合类型新增 `runtime: "managed-node"`；重审 `targetPlatformSchema.abi`（Python 专属，Node 无 ABI 概念）→ 平台契约按 Node 重设计；协议版本递增 + 迁移测试。
+  - 运行链路：`run-service.ts` 为 Node Skill 增加不依赖 Python venv 的 environment 解析分支；`skill-command-runtime.ts` 增加 managed-node 执行分支。
+  - node_modules 落点（决策 6）：内置 Node Skill 构建期 `npm ci` 后随 `resources/skills/<skill>/node_modules/` 只读打包、就地运行；导入 Node Skill 首次 `npm ci --offline` 装进可写的 `userData/skills/<skill>/node_modules/`；准备生命周期（preparing→ready/failed、可取消、有进度）对称 Python venv，对标 `SkillDependencyService`。
+  - 信任指纹（决策 7）：`hash(package-lock.json + toolchain snapshots)`；lock 变化 → 指纹变 → 需重新授权。
+- 验收：第一个真实 Node Skill 端到端执行通过；Skill 脚本内 `npx --version` 可用；内置 node_modules 只读就地运行、导入 node_modules 离线装入且模块解析正常；准备失败/取消有明确状态、不残留半成品；`package-lock.json` 变化触发重授权。真实签名安装与用户窗口按 CF51 边界分开记录。
+- 状态：todo（阻塞：无 Node Skill 消费者，不开工）。
 
 ### CF50 跨类迁移回归与用户走查脚本
 

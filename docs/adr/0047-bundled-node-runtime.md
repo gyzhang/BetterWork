@@ -1,6 +1,6 @@
 # ADR-0047：随包分发独立 Node.js 运行时
 
-- 状态：Proposed（2026-10-10；用户确认技术方案，待最终审核）。
+- 状态：Accepted（2026-10-10；用户审核通过）。决策 1–4、8–11（运行时随包、MCP 接入、打包配置与 Python 脚本改名）已落地；决策 5–7（Node Skill 执行链、node_modules 落点、信任指纹）暂无现存 Node Skill 消费者，另立 [CF44](../development/tasks-capability-foundation.md) 承载，待首个真实 Node Skill 出现再按实际契约开工，本轮未落地。
 - 延续：[ADR-0045](0045-bundled-runtimes-for-local-mcp.md) 的随包运行时机制与离线准备契约、[ADR-0036](0036-macos-only-platform-scope.md) 的 macOS arm64 产品范围、[ADR-0009](0009-script-skill-baseline.md) 的脚本型 Skill 执行基线、[ADR-0011](0011-skill-trust-and-local-distribution.md) 的信任与分发规则。
 - 影响范围：内置 Node stdio MCP 的启动方式、用户自定义 stdio MCP 的运行时解析、未来 Node-based Skill 的执行入口与依赖落点、electron-builder 打包配置与构建脚本，以及随包 Python 构建脚本的命名对齐（`prepare-mcp-runtime-assets` → `prepare-python-runtime-assets`，纯改名不改机制）。
 
