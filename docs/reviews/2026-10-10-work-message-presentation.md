@@ -19,7 +19,7 @@
 
 ## 验证与证据
 
-2026-10-10 07:27 CST，本地实现和定向回归完成，待最新源 SHA 的 PR Gate 与合并归档。
+2026-10-10 07:27 CST，本地实现和定向回归完成；最终提交前的静态、文档与治理复查于 14:41 完成。远端结果见下节。
 
 - 新增 21 项：纯投影 5、消息组合 6、保存 Hook 7、App 2、跨页签反馈 1。functional 12 文件 / 260 项（含文档护栏 154），App heavy 61、UI CLI heavy 11，共 14 文件 / 332 项。覆盖 D1 的选择、草稿、晚到历史及启动回执回归；真实 SQLite 的既有成果版本/Evidence 关系测试继续通过。
 - 类型检查、定向 ESLint/Prettier 与构建通过；构建只留下既有 Zod 注释警告。最终提交前再次检查静态与文档。
@@ -27,6 +27,12 @@
 - `npm run ui:check -- --app-only` 通过：生产 App/Preload/IPC、临时 SQLite、确定性请求替身，4 个 Run（完成、失败、取消）、重装配后历史与记忆恢复、五个页签入口间距、历史回答保存 v3。通过生产 IPC 准备 user-edit v2，再从包含 3 次 Run 的消息列保存已完成回答；正文、sourceRunId、目标 Run 的 Evidence 集合和单枚局部 TransientToast 均有断言；网络尝试 0。
 - 旅程曾因新增断言要求目标 Run 的 Evidence 非空失败。只读检查已关闭的合成库确认该 Run 读取的是成果引用，有材料足迹而没有 Evidence；原 Run、v1 与 v3 的 Evidence 都为 0。改为逐项等于该 Run 的真实登记集合，未修改产品行为或放宽来源隔离。`immutable=1` 只用于已经关闭并检查点落盘的合成库。
 - 最终临时证据：`/var/folders/kq/ts17kvnd5yg2kjtkx645y1zw0000gn/T/betterwork-ui-render-lK3PG1`（`matrix-results.json`、合成库和逐步截图）。AI 页面走查只报告实际回读的截图；完整主题矩阵、完整 verify、真实模型及安装态人工验收未执行。
+
+## PR Gate、合并与归档
+
+2026-10-10 14:49 CST，源 SHA `752011e332a27c36e5b344cc47ddb84a1f62d981` 的 [macOS PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/38031964978) 成功：macos-26-arm64 上 lint、format:check、typecheck、文档护栏 154、相关 functional 51 和 App heavy 61 项通过，按本次 CI 输出共 7 文件 / 266 项；Full verify 跳过。本地额外 7 文件 / 66 项、build、app-only 与两个破坏探针沿用前述证据，不混入 CI 数字。完整日志留在 `/tmp/betterwork-d2-pr-gate.log`，不提交。
+
+[PR #40](https://github.com/gyzhang/BetterWork/pull/40) 已 squash 合入 main，合并提交 `95c9342b72c1200575b0f1f1d50829ef90f9d75b`。代码分支本地/远端均已清理，原 checkout 已同步该提交；从此建立 `codex/review-d2-closeout`，仅以三份 Markdown 归档最终证据，另走纯文档 PR Gate。全程没有新建 worktree。
 
 ## Review 结论与后续边界
 
