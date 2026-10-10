@@ -272,8 +272,21 @@ export class MemoryService {
       ...(parsed.limit === undefined ? {} : { limit: parsed.limit }),
     });
     const governance = this.pendingGovernance();
+    const revisionIds = page.items.map((record) => record.revisionId);
+    const pageRevisions = new Set(revisionIds);
+    const decisionsByRevision = new Map<string, MemoryConflictPair[]>();
+    for (const pair of this.store.memoryOperations.listConflictPairsForRevisionIds(revisionIds)) {
+      for (const revisionId of [pair.leftRevisionId, pair.rightRevisionId]) {
+        if (!pageRevisions.has(revisionId)) continue;
+        const pairs = decisionsByRevision.get(revisionId) ?? [];
+        pairs.push(pair);
+        decisionsByRevision.set(revisionId, pairs);
+      }
+    }
     return okResult({
-      items: page.items.map((record) => this.toViewItem(record, governance)),
+      items: page.items.map((record) =>
+        this.toViewItem(record, governance, decisionsByRevision.get(record.revisionId) ?? []),
+      ),
       ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
     });
   }
@@ -839,7 +852,11 @@ export class MemoryService {
     };
   }
 
-  private toViewItem(record: MemoryRecord, governance?: PendingGovernance): MemoryViewItem {
+  private toViewItem(
+    record: MemoryRecord,
+    governance?: PendingGovernance,
+    decisions?: MemoryConflictPair[],
+  ): MemoryViewItem {
     const context = governance ?? this.pendingGovernance();
     const requiresMaterialSelection = materialDependencyCount(record) > 0;
     const effectiveStatus: MemoryEffectiveStatus = deriveEffectiveStatus(record, Date.now());
@@ -847,9 +864,8 @@ export class MemoryService {
       (pair) =>
         pair.leftRevisionId === record.revisionId || pair.rightRevisionId === record.revisionId,
     );
-    const decided = this.store.memoryOperations.listConflictPairsForRevisionIds([
-      record.revisionId,
-    ]);
+    const decided =
+      decisions ?? this.store.memoryOperations.listConflictPairsForRevisionIds([record.revisionId]);
     const duplicatesConfirmedMemoryId = context.duplicateConfirmedId(record);
     return memoryViewItemSchema.parse({
       ...record,

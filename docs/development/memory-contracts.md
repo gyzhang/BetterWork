@@ -417,6 +417,8 @@ Hook 按 taskId＋contextRevision＋请求序号防过期响应。切任务/卸�
 
 `MemoryViewItem.conflicts` 中 keep-both 分支增加必需 `applicabilityNote`（沿用 1–300）；unresolved/replace 不带该字段。返回精确左右 revisionId，读取已存在裁决表；无新表和迁移。旧持久化回执含旧展示 DTO 时，返回当前状态必须通过实时视图投影补齐，不能给空字符串假说明。
 
+列表展示按当前页精确 revisionId 一次读取涉及任一侧的当前裁决，在调用内按修订分配，保留 createdAt ASC/id ASC 顺序及页外另一侧，不要求双方同时在页内。双方都必须仍为身份最新修订；任一侧变化即撤回旧裁决，不能按身份或议题重新关联说明。未裁决提示仍先于已裁决记录；裁决行继续经完整 Schema 校验，缺失或非法适用说明不补造成有效并存。完整 MemoryRecord 与来源校验、分页/检索、详情和写回执的实时视图保持原边界，不跨调用缓存。实施与证据见 [E11 列表裁决读取报告](../reviews/2026-10-11-memory-list-decisions.md)。
+
 冲突来源详情优先复用已有 `memory:get(id,revisionId)` 与 provenance；同一合法管理范围内才显示。页面/hook 对比精确修订，不把旧 decision 应用于新修订；禁止根据同 topicKey 自动重新关联 note。查询失败不影响已有裁决记录。
 
 换期动作只复用本期材料面板、记忆详情和精确 ArtifactVersion 详情；不新增「恢复历史」IPC、checkpoint 自动摘要或资料权限。source Run 专家快照是「从成果开始新任务」默认专家的来源；旧 Task 的最新 executor 不是来源证据。

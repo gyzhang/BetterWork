@@ -686,6 +686,136 @@ describe('MemoryService', () => {
     expect(point).not.toHaveBeenCalled();
   });
 
+  it('distributes one page decision batch exactly like individual live views', async () => {
+    const { service, store } = await setup();
+    const workspaceId = store.workspaces.getOrCreate('/tmp/e11/page', 'page').id;
+    const records = Array.from({ length: 103 }, (_, index) =>
+      seedGovernanceMemory(store.memories, `chosen rule ${index}`, {
+        scope: { kind: 'workspace', workspaceId },
+        topicKey: `topic-${Math.floor(index / 2)}`,
+        createdAt: 1_000 + index,
+      }),
+    );
+    for (let index = 0; index < 100; index += 2) {
+      recordGovernanceDecision(store, records[index]!, records[index + 1]!, `note-${index}`);
+    }
+    const outside = seedGovernanceMemory(store.memories, 'outside rule', {
+      topicKey: 'topic-50',
+      createdAt: 1,
+    });
+    recordGovernanceDecision(store, records[100]!, outside, 'outside-page condition');
+    store.memoryOperations.recordConflictResolution({
+      operationId: randomUUID(),
+      requestHash: normalizedMemoryHash('replace-page-pair'),
+      leftRevisionId: records[100]!.revisionId,
+      rightRevisionId: records[102]!.revisionId,
+      decision: 'replace',
+      winnerRevisionId: records[100]!.revisionId,
+    });
+    const input = { workspaceId, query: 'chosen', limit: 100 };
+    const page = store.memories.listPage({ ...input, includeCandidates: true });
+    const expected = page.items.map((record) => {
+      const view = service.get({ id: record.id });
+      if (!view.ok) throw new Error('Expected a live memory view');
+      return view.data;
+    });
+    expect(expected.find((record) => record.id === records[100]!.id)?.conflicts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ state: 'unresolved' }),
+        expect.objectContaining({
+          state: 'keep-both',
+          applicabilityNote: 'outside-page condition',
+        }),
+        expect.objectContaining({ state: 'replaced' }),
+      ]),
+    );
+    const batch = vi.spyOn(store.memoryOperations, 'listConflictPairsForRevisionIds');
+    const result = service.list(input);
+    expect(result).toEqual({
+      ok: true,
+      warnings: [],
+      data: { items: expected, nextCursor: page.nextCursor },
+    });
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(batch).toHaveBeenCalledWith(page.items.map((record) => record.revisionId));
+    expect(page.nextCursor).toBeDefined();
+    const continued = service.list({ ...input, cursor: page.nextCursor! });
+    expect(continued.ok && continued.data.items.map((record) => record.id)).toEqual(
+      records
+        .slice(0, 3)
+        .reverse()
+        .map((record) => record.id),
+    );
+    const empty = service.list({ ...input, query: 'absent' });
+    expect(empty).toEqual({ ok: true, warnings: [], data: { items: [] } });
+    expect(batch).toHaveBeenLastCalledWith([]);
+  });
+
+  it.each(['left', 'right'] as const)(
+    'refreshes page decisions after the %s revision changes',
+    async (side) => {
+      const { service, store } = await setup();
+      const left = seedGovernanceMemory(store.memories, 'chosen left', { topicKey: 'unit' });
+      const right = seedGovernanceMemory(store.memories, 'outside right', { topicKey: 'unit' });
+      recordGovernanceDecision(store, left, right, 'exact revision condition');
+      const batch = vi.spyOn(store.memoryOperations, 'listConflictPairsForRevisionIds');
+      const before = service.list({ query: 'chosen' });
+      expect(before.ok && before.data.items[0]?.conflicts[0]).toMatchObject({
+        state: 'keep-both',
+        applicabilityNote: 'exact revision condition',
+      });
+      const changed = side === 'left' ? left : right;
+      const revised = store.memories.update({
+        id: changed.id,
+        expectedRevision: changed.revision,
+        patch: { content: `${changed.content} revised` },
+        normalizedHash: normalizedMemoryHash(`${changed.content} revised`),
+      }).record;
+      const after = service.list({ query: 'chosen' });
+      expect(after.ok && after.data.items[0]?.conflicts).toEqual([
+        {
+          leftRevisionId: [
+            side === 'left' ? revised.revisionId : left.revisionId,
+            side === 'right' ? revised.revisionId : right.revisionId,
+          ].sort()[0],
+          rightRevisionId: [
+            side === 'left' ? revised.revisionId : left.revisionId,
+            side === 'right' ? revised.revisionId : right.revisionId,
+          ].sort()[1],
+          state: 'unresolved',
+        },
+      ]);
+      expect(batch).toHaveBeenCalledTimes(2);
+      const historical = service.get({ id: changed.id, revisionId: changed.revisionId });
+      expect(historical.ok && historical.data.conflicts).toEqual([]);
+    },
+  );
+
+  it('rejects missing or malformed selected decision notes just like individual views', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'betterwork-e11-notes-'));
+    directories.push(directory);
+    const databasePath = path.join(directory, 'app.db');
+    const store = AppStore.open(databasePath);
+    stores.push(store);
+    const service = new MemoryService(store, directory);
+    const left = seedGovernanceMemory(store.memories, 'chosen left', { topicKey: 'unit' });
+    const right = seedGovernanceMemory(store.memories, 'outside right', { topicKey: 'unit' });
+    recordGovernanceDecision(store, left, right, 'condition');
+    const db = new Database(databasePath);
+    try {
+      // Bypass SQL checks only on this fixture connection; repository Schema must reject corruption.
+      db.pragma('ignore_check_constraints = ON');
+      db.prepare('UPDATE memory_conflict_decisions SET applicability_note = NULL').run();
+      expect(() => service.list({ query: 'chosen' })).toThrow();
+      expect(() => service.get({ id: left.id })).toThrow();
+      db.prepare('UPDATE memory_conflict_decisions SET applicability_note = ?').run('');
+      expect(() => service.list({ query: 'chosen' })).toThrow();
+      expect(() => service.get({ id: left.id })).toThrow();
+    } finally {
+      db.close();
+    }
+  });
+
   it('does not turn off-page governance metadata into a full source proof', async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), 'betterwork-e9-source-'));
     directories.push(directory);
