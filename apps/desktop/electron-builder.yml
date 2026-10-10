@@ -33,8 +33,15 @@ extraResources:
       - '*.whl'
       - 'manifest.json'
       - 'README.md'
-  - from: build/mcp-runtime-assets
-    to: mcp-runtime-assets
+  - from: build/python-runtime-assets
+    to: python-runtime-assets
+    filter:
+      - '**/*'
+      - '!.DS_Store'
+      - '!._*'
+  # ADR-0047：随包独立 Node.js 运行时（bin/node + npm/npx symlink + lib/node_modules/npm）。
+  - from: build/node-runtime
+    to: node-runtime
     filter:
       - '**/*'
       - '!.DS_Store'
@@ -45,6 +52,12 @@ extraResources:
     filter:
       - '*.otf'
       - '*.ttf'
+
+# ADR-0047 决策 8：显式开启 runAsNode fuse。内置 MCP 已改用随包独立 Node，但 Knowledge worker
+# 与 skill-guardian 仍以 Electron 内嵌 Node（ELECTRON_RUN_AS_NODE=1）运行；显式声明防止上游改变
+# 出厂默认导致这些受管子进程静默失败。
+electronFuses:
+  runAsNode: true
 
 mac:
   icon: build/icon.icns

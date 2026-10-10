@@ -293,9 +293,13 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
   const resourcesRoot = app.isPackaged
     ? process.resourcesPath
     : path.resolve(app.getAppPath(), '../../resources');
-  const mcpRuntimeAssetsRoot = app.isPackaged
-    ? path.join(process.resourcesPath, 'mcp-runtime-assets')
-    : path.join(app.getAppPath(), 'build', 'mcp-runtime-assets');
+  const pythonRuntimeAssetsRoot = app.isPackaged
+    ? path.join(process.resourcesPath, 'python-runtime-assets')
+    : path.join(app.getAppPath(), 'build', 'python-runtime-assets');
+  // ADR-0047：随包独立 Node 运行时，与 pythonRuntimeAssetsRoot 对称（打包态 Resources / 开发态 build）。
+  const nodeRuntimeRoot = app.isPackaged
+    ? path.join(process.resourcesPath, 'node-runtime')
+    : path.join(app.getAppPath(), 'build', 'node-runtime');
   const dependencies = new SkillDependencyService({
     store,
     paths: {
@@ -305,7 +309,7 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
       wheelhouseRoot: app.isPackaged
         ? path.join(process.resourcesPath, 'wheelhouse')
         : path.resolve(app.getAppPath(), '../../resources/wheelhouse'),
-      bundledPythonRoot: path.join(mcpRuntimeAssetsRoot, 'python'),
+      bundledPythonRoot: path.join(pythonRuntimeAssetsRoot, 'python'),
     },
     filesystem: dependencyFilesystem,
     process: dependencyProcess,
@@ -314,11 +318,13 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
   const builtinMcpRuntime = new BuiltinMcpRuntimeService({
     appRoot: app.getAppPath(),
     resourcesRoot,
-    runtimeAssetsRoot: mcpRuntimeAssetsRoot,
+    runtimeAssetsRoot: pythonRuntimeAssetsRoot,
+    nodeRuntimeRoot,
     dependencies,
   });
   const mcpClientService = new McpClientService(store, {
     guardian: resolveGuardianRuntime(__dirname),
+    nodeRuntimeRoot,
     openBrowser: (url) => shell.openExternal(url),
     resolveBundledRuntime: (serverId, args, signal) =>
       builtinMcpRuntime.resolve(serverId, args, signal),
