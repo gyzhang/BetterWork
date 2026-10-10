@@ -570,3 +570,13 @@ E5 完成 R10 的召回排除账本切片，完整 verify、UI 走查、真实�
 2026-10-10 20:44 CST：最终源 SHA `5b642c8d2719ba5d662699d4f67ae3aebc0560e4` 的 [macOS Actions 38052732572](https://github.com/gyzhang/BetterWork/actions/runs/38052732572) 通过 PR Gate，runner 为 macos-26-arm64。静态检查通过，文档 154、相关 functional 720、heavy 120 项按三次调用合计 70 文件 / 994 项，Full verify 跳过；不表示全仓或去重规模。
 
 [PR #50](https://github.com/gyzhang/BetterWork/pull/50) 已 squash 合入 main，提交 `9daf4833b8cba27573c59053fef3d64bd3ec9a3e`，文件树与源提交一致。代码分支本地/远端均删除，原 checkout 同步 main；纯 Markdown 分支 `codex/e5-closeout` 归档，无新 worktree。E5 代码与自动化收口，后续历史读模型及人工验收按新指令推进。
+
+## 24. E6：历史重放与来源事件读模型（代码与自动化收口）
+
+2026-10-10 用户授权推进 E6，基点 `43da0513cf2abd300f39e4589fbd342dcca67e8d`，分支 `codex/e6-history-event-read-model`，沿用原 checkout。实施与证据见 [E6 专项 Review](2026-10-10-history-event-read-model.md)。
+
+历史候选先在 SQL 按 Task/状态/时间过滤，最后非空回答、人工来源证据和指定来源事件采用定向查询。保留历史/消歧、人工最终来源、已保存来源存在性的三种原有口径；目标载荷仍校验协议与 journal 身份，后续工具只读类型/sequence 元数据。完整依赖集合、连续安全后缀及预算保持，无候选/依赖 LIMIT。
+
+本地相关 functional 15 文件 / 212 项、heavy 1 文件 / 87 项，去重共 16 文件 / 299 项通过；docs:check 154 项、typecheck、lint、format:check、build 和串行 bench 通过。两个退化探针分别检出 1 项与 5 项失败，恢复后通过。32 Run / 8,128 事件样本中，协议解码 8,128→160 次，返回 JSON 34.71 MB→0.019 MB，中位读取 23.76→2.52 ms；读数不含完整依赖装配，不代表产品容量承诺。
+
+E6 完成 R10 的历史/来源事件切片；逐 Run 依赖装配、冲突枚举及知识正文检索仍有后续范围。完整 verify、UI 走查、真实模型和安装态人工验收未执行，最新源 SHA 的 macOS PR Gate、合并与归档继续收口。

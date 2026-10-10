@@ -11,12 +11,17 @@ import type {
   MemoryScope,
   TaskMaterialSelection,
 } from '@betterwork/agent-protocol';
+import { memoryRecallPolicyV1 } from '@betterwork/agent-protocol';
 import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AppStore } from '../persistence';
 import { buildDerivedProvenance, manualMemorySource } from './memory-provenance';
-import { prepareRunMemoryDecision, recallMemoriesForQuery } from './memory-recall-service';
+import {
+  planRunHistoryReplay,
+  prepareRunMemoryDecision,
+  recallMemoriesForQuery,
+} from './memory-recall-service';
 import { MemoryService } from './memory-service';
 
 /**
@@ -403,6 +408,195 @@ describe('召回期的依赖闭包与冲突组装配', () => {
       seeded.record.revisionId,
     );
     expect(withoutTail.authorizationHash).not.toBe(complete.authorizationHash);
+  });
+
+  it('keeps all inherited dependencies and the nearest unsafe boundary with targeted answers', async () => {
+    const { store, service, scope, workspaceId } = await setup();
+    const task = store.tasks.create(workspaceId, 'history', 'history');
+    const dependencies = [];
+    for (let index = 0; index < 80; index += 1) {
+      dependencies.push(dependencyOf(await confirm(service, store, scope, `dependency ${index}`)));
+    }
+    for (let index = 0; index < 14; index += 1) {
+      const runId = `history-${index}`;
+      store.runs.create({
+        id: runId,
+        taskId: task.task.id,
+        sessionId: task.sessionId,
+        prompt: `prompt ${index}`,
+        status: 'completed',
+        createdAt: index,
+        completedAt: 20,
+      });
+      store.runs.appendEvent({
+        id: `${runId}-answer`,
+        runId,
+        sequence: 1,
+        createdAt: 1,
+        type: 'message.completed',
+        messageId: runId,
+        content: `answer ${index}`,
+      });
+      store.runs.appendEvent({
+        id: `${runId}-empty`,
+        runId,
+        sequence: 2,
+        createdAt: 2,
+        type: 'message.completed',
+        messageId: runId,
+        content: '',
+      });
+      store.runs.appendEvent({
+        id: `${runId}-tool`,
+        runId,
+        sequence: 3,
+        createdAt: 3,
+        type: 'tool.progress',
+        toolCallId: runId,
+        message: 'later tool',
+      });
+      store.runContextSnapshots.create({
+        runId,
+        taskId: task.task.id,
+        workspaceId,
+        contextSegmentId: runId,
+        materials: [],
+        createdAt: 0,
+      });
+      store.runMemoryContexts.recordSelection({
+        runId,
+        evaluatedAt: 0,
+        selectedAt: 0,
+        queryHash: CONTENT_HASH,
+        authorizationHash: CONTENT_HASH,
+        policySnapshot: memoryRecallPolicyV1,
+        selectedItems: [],
+        decisionSummary: {
+          budget: {
+            totalItems: 0,
+            preferenceItems: 0,
+            contentCodePoints: 0,
+            wrapperCodePoints: 0,
+            blockCodePoints: 0,
+          },
+          exclusions: [],
+          queryTruncated: false,
+          conflictReviewRequired: false,
+        },
+        memoryDependencyUnion: index === 12 ? dependencies : [],
+      });
+    }
+    const input = {
+      taskId: task.task.id,
+      currentRunId: 'missing-current',
+      evaluatedAt: CAPTURED_AT,
+      excludedMemoryIds: [],
+      allowedMaterialKeys: [],
+    };
+    const full = vi.spyOn(store.runs, 'listEvents').mockImplementation(() => {
+      throw new Error('full journal');
+    });
+    const allRuns = vi.spyOn(store.runs, 'listByTask').mockImplementation(() => {
+      throw new Error('unfiltered task history');
+    });
+    const plan = planRunHistoryReplay(store, input);
+    expect(plan.messages).toEqual(
+      Array.from({ length: 8 }, (_, index) => [
+        { role: 'user', content: `prompt ${index + 6}` },
+        { role: 'assistant', content: `answer ${index + 6}` },
+      ]).flat(),
+    );
+    expect(plan.inheritedMemoryDependencies).toEqual(dependencies);
+    expect(plan.replay.at(-1)).toEqual({
+      replayed: false,
+      runId: 'history-5',
+      reason: 'history-budget',
+    });
+    const blocked = planRunHistoryReplay(store, {
+      ...input,
+      excludedMemoryIds: [dependencies.at(-1)!.memoryId],
+    });
+    expect(blocked.messages).toEqual([
+      { role: 'user', content: 'prompt 13' },
+      { role: 'assistant', content: 'answer 13' },
+    ]);
+    expect(blocked.replay.at(-1)).toEqual({
+      replayed: false,
+      runId: 'history-12',
+      reason: 'memory-excluded',
+    });
+    expect(full).not.toHaveBeenCalled();
+    expect(allRuns).not.toHaveBeenCalled();
+  });
+
+  it('checks a saved assistant source by exact Run/event presence without rejudging the answer', async () => {
+    const { store, service, scope, workspaceId } = await setup();
+    const seeded = await confirm(service, store, scope, '收入按回款金额统计。');
+    const task = store.tasks.create(workspaceId, 'source', 'source');
+    store.runs.create({
+      id: 'source-run',
+      taskId: task.task.id,
+      sessionId: task.sessionId,
+      prompt: 'source',
+      status: 'failed',
+      createdAt: 0,
+    });
+    store.runs.appendEvent({
+      id: 'saved-event',
+      runId: 'source-run',
+      sequence: 1,
+      createdAt: 1,
+      type: 'message.completed',
+      messageId: 'message',
+      content: 'answer',
+    });
+    store.runs.appendEvent({
+      id: 'newer-event',
+      runId: 'source-run',
+      sequence: 2,
+      createdAt: 2,
+      type: 'message.completed',
+      messageId: 'newer',
+      content: 'newer answer',
+    });
+    const source = {
+      kind: 'run-assistant' as const,
+      runId: 'source-run',
+      eventId: 'saved-event',
+      contentHash: createHash('sha256').update('answer').digest('hex'),
+      excerpt: 'answer',
+      excerptHash: createHash('sha256').update('answer').digest('hex'),
+      start: 0,
+      end: 6,
+    };
+    const reviseSource = (runId: string) => {
+      const current = store.memories.get(seeded.record.id)!;
+      return store.memories.update({
+        id: current.id,
+        expectedRevision: current.revision,
+        patch: {},
+        provenance: buildDerivedProvenance({
+          capturedAt: CAPTURED_AT,
+          sources: [{ ...source, runId }],
+          materialDependencies: [],
+          memoryDependencies: [],
+        }),
+      }).record;
+    };
+    const valid = reviseSource('source-run');
+    const full = vi.spyOn(store.runs, 'listEvents').mockImplementation(() => {
+      throw new Error('full journal');
+    });
+    expect(selectedRevisionIds(store, workspaceId)).toContain(valid.revisionId);
+    const missing = reviseSource('wrong-run');
+    const unavailable = outcomeOf(store, workspaceId);
+    expect(unavailable.selectedItems).toEqual([]);
+    expect(unavailable.decisionSummary.exclusions).toContainEqual({
+      reason: 'source-unavailable',
+      count: 1,
+      identities: [{ memoryId: missing.id, revisionId: missing.revisionId }],
+    });
+    expect(full).not.toHaveBeenCalled();
   });
 
   it('末端依赖被删除时，整条链都不再注入', async () => {

@@ -28,14 +28,8 @@ const finalAnswerOf = (
   store: AppStore,
   runId: string,
 ): { readonly eventId: string; readonly text: string } | undefined => {
-  const events = store.runs.listEvents(runId);
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (event?.type === 'message.completed' && event.content.length > 0) {
-      return { eventId: event.id, text: event.content };
-    }
-  }
-  return undefined;
+  const event = store.runs.getLatestNonEmptyMessageCompletion(runId);
+  return event === undefined ? undefined : { eventId: event.id, text: event.content };
 };
 
 const previousFinalAnswer = (

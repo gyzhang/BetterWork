@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AppStore } from '../persistence';
 import { createStoreExtractionSourceReader } from './extraction-source-reader';
@@ -23,6 +23,7 @@ describe('createStoreExtractionSourceReader', () => {
   };
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     for (const store of stores.splice(0)) store.close();
     await Promise.all(
       directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })),
@@ -112,6 +113,28 @@ describe('createStoreExtractionSourceReader', () => {
     const currentRunId = addRun(store, task, '那今年呢？', T0 + 10);
     snapshot(store, currentRunId, task.task.id, workspace.id);
 
+    store.runs.appendEvent({
+      id: randomUUID(),
+      runId: previousRunId,
+      sequence: 2,
+      createdAt: T0 + 2,
+      type: 'message.completed',
+      messageId: randomUUID(),
+      content: '',
+    });
+    store.runs.appendEvent({
+      id: randomUUID(),
+      runId: previousRunId,
+      sequence: 3,
+      createdAt: T0 + 3,
+      type: 'tool.progress',
+      toolCallId: 'call',
+      message: 'irrelevant',
+    });
+    const full = vi.spyOn(store.runs, 'listEvents').mockImplementation(() => {
+      throw new Error('full journal');
+    });
+
     const record = createStoreExtractionSourceReader(store).readSource({
       kind: 'run',
       runId: currentRunId,
@@ -122,6 +145,7 @@ describe('createStoreExtractionSourceReader', () => {
     }
     expect(record.backgroundAnswer?.runId).toBe(previousRunId);
     expect(record.backgroundAnswer?.text).toBe('上季度按回款金额确认收入。');
+    expect(full).not.toHaveBeenCalled();
   });
 
   it('reads a checkpoint as its own source with the task workspace', async () => {
