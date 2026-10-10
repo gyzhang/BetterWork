@@ -318,6 +318,7 @@ CF00 不重复此前已证实且未受变更影响的测试；以最新提交、
 
 - 依据：[ADR-0047](../adr/0047-bundled-node-runtime.md) 决策 5/6/7、[ADR-0009](../adr/0009-script-skill-baseline.md) 脚本 Skill 基线、[ADR-0011](../adr/0011-skill-trust-and-local-distribution.md) 信任与分发、[capability-contracts](capability-contracts.md)。
 - 触发条件（阻塞）：**待第一个真实 Node-based Skill 出现再开工**。当前无任何 Skill 声明 `runtime: "managed-node"`，运行链路 Python-centric（`run-service.ts` 的 binding→environment→execution→fingerprint 硬性要求 Python venv 的 `environmentId` + `resolveEnvironmentPython`），无消费者时实现即投机抽象，违反 AGENTS.md §5。前置 CF43（随包 Node 运行时已就位）。
+- 开工信号（2026-10-11 生态核实结论，出现任一即启动本卡）：Node 的需求近期绝大多数以 **MCP server** 形态出现、已由 CF43 覆盖（内置 Node MCP 与用户自定义裸 `node`/`npm`/`npx` 已走随包运行时），故本卡只等 **Skill 脚本层**的真实 Node 消费者。公开 Skill 脚本主流是 Python（Anthropic 官方仓库/工程博客：docx·pdf·pptx·xlsx 靠 python-docx·python-pptx·openpyxl·pypdf 操作 OOXML），JS/TS 属次要选项，且多数 Skill 仅 `SKILL.md` 无脚本。真正触发 CF44 的是需要 **JS-only 工具链**的 Skill：Prettier/ESLint 程序化调用、Bundler、Puppeteer/Playwright 浏览器自动化（官方仓库“testing web apps”类开发向 Skill 是 Node 最可能的藏身处）、封装 npm-only 且 Python 无对等实现的库，或外部/伙伴/企业用 TS 编写的导入 Skill。开工前另需落实离线约束：managed Node 当前仅 darwin-arm64，导入 Node Skill 需等价 npm cache 离线包（比 Python wheelhouse 更重）。
 - 目标：声明 `runtime: "managed-node"` 的 Node Skill 用随包 `<node-runtime>/bin/node` 端到端执行，`node`/`npm`/`npx` 注入子进程 PATH；node_modules 按来源落点；信任指纹与 Python 对称。
 - 范围：
   - 协议：`agent-protocol` entrypoint 联合类型新增 `runtime: "managed-node"`；重审 `targetPlatformSchema.abi`（Python 专属，Node 无 ABI 概念）→ 平台契约按 Node 重设计；协议版本递增 + 迁移测试。
