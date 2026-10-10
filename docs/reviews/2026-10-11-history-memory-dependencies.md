@@ -41,4 +41,8 @@ lint、format:check、typecheck、docs:check（1 文件 / 154 项）、生产 bu
 
 ## 远端交接
 
-最新源 SHA 的 macOS PR Gate、合并与纯 Markdown 归档待补；本地通过不替代远端门禁。
+2026-10-11 06:37 CST：最终源 `8e8ac46d1f73c24c4e9b2f1aa4dbfbf470c763dd` 的 [Actions 38091769950](https://github.com/gyzhang/BetterWork/actions/runs/38091769950) 在 macos-26-arm64 上通过 PR Gate。lint、format:check、typecheck 成功；docs:check 1 文件 / 154 项、changed functional 69 文件 / 757 项、heavy 2 文件 / 120 项通过。按三次调用合计 72 文件 / 1,031 项，不表示全仓或去重规模；Full verify 跳过，本地 build 与串行 bench 单独记录。
+
+[PR #60](https://github.com/gyzhang/BetterWork/pull/60) 已 squash 合入 main，提交 `e650c7b87ae885dcf378e8fbdc221633c0b28ad0`，文件树与上述源提交一致。commit/pre-commit、push/pre-push 与原批次基点巡检退出 0；main/origin/main 对齐、工作树干净，代码分支本地与远端均已删除。从合并提交建立 `codex/e10-closeout`，以纯 Markdown 归档本报告、总 Review 和工作日志，归档 PR 继续核对自己的最新源文档门禁与合并清理。
+
+E10 的代码与自动化验证已收口；完整 verify、UI、真实模型、安装态及 WM/MI 人工验收保持各自授权边界。逐 Run 来源装配、每项裁决展示与成功向量路完整映射另按用户指令推进。

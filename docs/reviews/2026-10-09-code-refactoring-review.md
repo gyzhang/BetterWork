@@ -625,7 +625,7 @@ E9 完成 R10 的治理提示读取切片；每项裁决展示、历史依赖装
 
 2026-10-11 04:53 CST：最终源 `83f37efbe64f5431fa11045228d9adc02d9b2ad3` 的 [Actions 38085203237](https://github.com/gyzhang/BetterWork/actions/runs/38085203237) 在 macos-26-arm64 上通过 PR Gate，静态、docs:check 1/154、changed functional 70/756、heavy 2/120 成功，Full verify 跳过。按三次调用合计 73 文件 / 1,030 项，不表示全仓或去重规模。[PR #58](https://github.com/gyzhang/BetterWork/pull/58) 已 squash 为 main `6f4824cf6a25a1922961e500cf0dd7bdbc179f8c`，文件树与源一致；代码分支本地/远端删除，原 checkout 同步 main，原基点巡检退出 0，纯 Markdown 分支 `codex/e9-closeout` 归档。E9 代码与自动化收口，后续读取切片另按用户指令推进。
 
-## 28. E10：历史重放记忆依赖读模型（本地实现与 Review 完成）
+## 28. E10：历史重放记忆依赖读模型（代码与自动化收口）
 
 2026-10-11 用户授权推进下一任务，基点 `a0bede62eeea5f10a24f48de800caa696daafc4c`，分支 codex/e10-history-memory-dependencies，沿用原 checkout。实施与证据见 [E10 专项 Review](2026-10-11-history-memory-dependencies.md)。
 
@@ -635,4 +635,6 @@ E9 完成 R10 的治理提示读取切片；每项裁决展示、历史依赖装
 
 3,000 身份 / 3,064 修订、32 组模拟历史选中引用、128 个精确依赖样本中，完整行/逐项查询 768→0、批量投影 128 行/1 次，累计 JSON 2.99 MB→0.034 MB，中位 31.58→0.19 ms，完整元数据与 direct scope 相等。该读数只含记忆读取阶段，不含完整 Run 管线，不代表容量承诺；14 个真实 Run 的完整重放回归另外验证输出、依赖顺序与调用间变更。
 
-E10 完成 R10 的历史记忆依赖读取切片；逐 Run 审计/材料装配、每项裁决展示与成功向量路完整映射仍有后续范围。未运行完整 verify、UI、真实模型或安装态人工验收；最新 SHA 的 macOS PR Gate、合并与归档继续收口。
+E10 完成 R10 的历史记忆依赖读取切片；逐 Run 审计/材料装配、每项裁决展示与成功向量路完整映射仍有后续范围。未运行完整 verify、UI、真实模型或安装态人工验收；远端门禁与合并证据见下文。
+
+2026-10-11 06:37 CST：最终源 `8e8ac46d1f73c24c4e9b2f1aa4dbfbf470c763dd` 的 [Actions 38091769950](https://github.com/gyzhang/BetterWork/actions/runs/38091769950) 在 macos-26-arm64 上通过 PR Gate，静态、docs:check 1/154、changed functional 69/757、heavy 2/120 成功，Full verify 跳过。按三次调用合计 72 文件 / 1,031 项，不表示全仓或去重规模。[PR #60](https://github.com/gyzhang/BetterWork/pull/60) 已 squash 为 main `e650c7b87ae885dcf378e8fbdc221633c0b28ad0`，文件树与源一致；代码分支本地/远端删除，原 checkout 同步 main，原基点巡检退出 0，纯 Markdown 分支 `codex/e10-closeout` 归档。E10 代码与自动化收口，后续读取切片另按用户指令推进。
