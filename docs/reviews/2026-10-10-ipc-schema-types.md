@@ -4,7 +4,7 @@
 
 ## 实施契约
 
-1. 四个主进程注册 helper 的请求与响应类型由对应 Zod Schema 推导。handler 接收请求的 `z.output`，返回响应的 `z.input` 或其 Promise；Schema 默认值、转换与输出规范化仍由原 `.parse()` 完成。
+1. 四个主进程注册 helper 的请求与响应类型由对应 Zod Schema 推导。带入参的 handler 接收请求的 `z.output`，无入参 handler 接收原 `IpcMainInvokeEvent`；四类 handler 返回响应的 `z.input` 或其 Promise；Schema 默认值、转换与输出规范化仍由原 `.parse()` 完成。
 2. Schema 参数是类型推导来源，回调使用 NoInfer，避免错误返回值把 Schema 泛型放宽。通用必填/可省略/无入参，以及定时的 data 类型均约束；同步和异步返回都必须匹配。
 3. 保持请求解析时机、可省略请求 `raw ?? {}`、无入参 event、响应解析、异常传播，以及 Schedule 有界领域错误与 success/rejected 包装。旧 Memory `ok/data/error`、其他 null/异常语义不统一改写。
 4. 编译测试使用仓库实际 tsconfig 和 TypeScript checker，在内存中为真实 register-ipc.ts 追加正/反例；不导出仅供测试的注册 API，不创建第二份 tsconfig，不加入禁止的错误抑制注释。错误同步/异步返回、输入类型、Schema transform/default 与 Schedule 数据形状均验证，运行期非法边界回归继续保留。

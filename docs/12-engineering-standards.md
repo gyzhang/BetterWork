@@ -194,7 +194,7 @@ standards/
 
 - channel、输入、输出全部在 `packages/agent-protocol` 定义；`IpcChannel` 是 channel 名的唯一来源。
 - 通用 handler 必须经 `ipc/register-ipc.ts` 的三个注册 helper 之一：`handleInput`（必填入参）、`handleOptionalInput`（入参可整体省略）、`handleNoInput`（入参必须为空）。三者都在边界上用共享协议的 Zod Schema 校验输入与输出，不允许 handler 自行解析 `raw` 或绕过响应校验。
-- 定时的 `handleScheduleInput` 是专用边界，额外保留有界领域错误与 success/rejected 包装。四个 helper 的 handler 接收请求 Schema 的 `z.output`、返回响应（定时为 data）Schema 的 `z.input` 或其 Promise；Schema 参数决定类型，回调不得放宽推导。响应默认值与转换仍由运行期 `.parse()` 完成，编译期关联不替代边界校验。
+- 定时的 `handleScheduleInput` 是专用边界，额外保留有界领域错误与 success/rejected 包装。带入参的三个 helper 向 handler 提供请求 Schema 的 `z.output`，无入参 helper 继续提供 `IpcMainInvokeEvent`。四个 helper 的 handler 返回响应（定时为 data）Schema 的 `z.input` 或其 Promise；Schema 参数决定类型，回调不得放宽推导。响应默认值与转换仍由运行期 `.parse()` 完成，编译期关联不替代边界校验。
 - 推送给 Renderer 的事件在 preload 侧过 Zod 后再交给监听者。
 - `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true` 不可放松。
 - 需要用户文件访问的能力，白名单校验必须在主进程完成（例如「打开原文」先查知识库登记记录，再交给 `shell.openPath`）。

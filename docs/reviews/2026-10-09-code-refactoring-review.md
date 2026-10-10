@@ -520,7 +520,7 @@ B 开始时先刷新 R17 的只读审计与安装树证据。若确认存在可�
 
 2026-10-10 16:20 CST：用户授权 E2，从干净 main `29fb2f706a70bc402740c53429e3eeb5a668c6a6` 建立 `codex/review-ipc-schema-types`，继续原 checkout。具体实施与证据见 [E2 专题](2026-10-10-ipc-schema-types.md)。
 
-四个 helper 以请求 z.output 和响应 z.input（或 Promise）约束回调，NoInfer 保证推导来自 Schema；默认值/转换仍由运行期 parse 完成。154 处生产注册调用通过类型检查，四个运行期 helper 函数体与基点一致。五处 readonly 数组/固定回执/无值返回标注局部收窄，错误和传输语义保持。
+三个带入参 helper 提供请求 z.output，无入参 helper 保留 invoke event；四个 helper 均以响应 z.input（或 Promise）约束回调，NoInfer 保证推导来自 Schema；默认值/转换仍由运行期 parse 完成。154 处生产注册调用通过类型检查，四个运行期 helper 函数体与基点一致。五处 readonly 数组/固定回执/无值返回标注局部收窄，错误和传输语义保持。
 
 本地 5 文件 / 285 项（新增 3 项）通过，真实 checker 覆盖 15 个合法与 17 个非法样本；解除关联的破坏探针准确失败，恢复后通过。typecheck、定向 lint/format、build、app-only 通过，网络尝试 0；最新源 SHA 的 macOS PR Gate、合并及归档继续收口。
 
