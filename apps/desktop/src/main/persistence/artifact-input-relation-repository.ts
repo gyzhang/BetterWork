@@ -160,4 +160,22 @@ export class ArtifactInputRelationRepository {
       .all(outputVersionId) as RelationRow[];
     return rows.map(toRelation);
   }
+
+  /** 按输出版本的来源 Run 取关系；关系建立者可能是同 Task 的另一次 Run。 */
+  listBySourceRun(taskId: string, runId: string): ArtifactInputRelation[] {
+    const rows = this.db
+      .prepare(
+        `SELECT r.id, r.output_version_id, r.input_json, r.input_key, r.relation, r.created_at,
+                s.source_path
+           FROM artifact_input_relations r
+           JOIN artifact_versions v ON v.id = r.output_version_id
+           JOIN artifacts a ON a.id = v.artifact_id
+           LEFT JOIN input_snapshots s
+             ON s.id = json_extract(r.input_json, '$.snapshotId')
+          WHERE a.task_id = ? AND v.source_run_id = ?
+          ORDER BY r.created_at ASC, r.rowid ASC`,
+      )
+      .all(taskId, runId) as RelationRow[];
+    return rows.map(toRelation);
+  }
 }

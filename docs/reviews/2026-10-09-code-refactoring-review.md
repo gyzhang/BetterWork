@@ -498,3 +498,14 @@ B 开始时先刷新 R17 的只读审计与安装树证据。若确认存在可�
 2026-10-10 14:49 远端收口：源 SHA `752011e332a27c36e5b344cc47ddb84a1f62d981` 的 [Actions 38031964978](https://github.com/gyzhang/BetterWork/actions/runs/38031964978) / PR Gate 成功；macos-26-arm64 上静态检查、文档护栏 154、相关 functional 51、App heavy 61 项通过，共 7 文件 / 266 项，Full verify 跳过。本地额外 7 文件 / 66 项、build、app-only 与两个破坏探针不混入 CI 读数。
 
 [PR #40](https://github.com/gyzhang/BetterWork/pull/40) 已 squash 合并，main 提交 `95c9342b72c1200575b0f1f1d50829ef90f9d75b`；代码分支本地/远端均已删除，原 checkout 同步 main，未新建 worktree。从此建立 Markdown 归档分支 `codex/review-d2-closeout`，另走文档门禁。D1+D2 完成 R07 本轮约定范围；E1 的 IPC 用例/读模型整理仍待后续指令，其他技术债与人工验收边界不由本批绿灯推导完成。
+
+
+## 19. E1：定时 IPC 用例与来源读模型
+
+2026-10-10 15:35 CST：用户授权推进 E1，从干净 main `ca62b2d7ef44dfa0235e745f7bfdb60978914503` 建立 `codex/review-ipc-schedule-use-cases`，继续原 checkout。范围与证据见 [E1 专题](2026-10-10-ipc-schedule-use-cases.md)。
+
+定时详情/历史/来源查询与手动执行进入同层 ScheduleQueries / ScheduleManualExecution；IPC 保留输入/输出 Zod、有界领域错误和事件传输。来源采用与结果元数据按输出版本来源 Run 和 Task 精确投影，保留完整关系、历史路径补齐及去重语义；幂等重放、预检后 CAS、原子 claim、提交后广播和异步派发顺序保持。
+
+本地按文件去重 16 文件 / 405 项功能回归通过，新增 19 项；独立 bench 1 项通过，3,203 行版本元数据解码缩至目标 3 行，12.16→1.40 ms，来源完整集合一致。两个来源身份/CAS 破坏探针均准确失败，恢复后通过。typecheck、定向 lint/format、build 和 app-only 通过，网络尝试 0；最新源 SHA 的 macOS PR Gate 与合并归档继续收口。
+
+本批完成 R08 的 Schedule 小切片及 R10 的成果来源投影，R08–R11 未全部完成。Run 事件失败原因仍读历史，材料候选与来源安全证明未改；建议 E2 做编译期契约关联，待下一次指令。完整 verify、全 UI 矩阵、真实模型和安装态人工验收未执行，无新 worktree。
