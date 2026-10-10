@@ -22,6 +22,7 @@ import {
   type Result,
   scheduleAggregateSchema,
   scheduleCallResultSchema,
+  scheduleDetailSchema,
   scheduleManualExecutionResultSchema,
   scheduleOutputReceiptSchema,
   type WorkspaceMemorySettings,
@@ -34,6 +35,7 @@ import type { AppStore } from '../persistence';
 import { resolveSchedulePeriod } from '../services/schedule-calendar';
 import type { ScheduleOutcomeService } from '../services/schedule-outcome-service';
 import type { ScheduleOutputService } from '../services/schedule-output-service';
+import { ScheduleQueries, ScheduleUseCaseError } from '../services/schedule-use-cases';
 import type { SkillDependencyService } from '../services/skill-dependency-service';
 import type { ToolchainSnapshotService } from '../services/toolchain-snapshot-service';
 
@@ -53,6 +55,7 @@ const mocks = vi.hoisted(() => ({
   prepareSchedule: vi.fn(async () => undefined),
   stopSchedule: vi.fn((): 'cancel-requested' => 'cancel-requested'),
   markNotificationRendererReady: vi.fn(() => true),
+  publishScheduleChange: vi.fn(),
 }));
 
 vi.mock('electron', () => ({
@@ -280,7 +283,7 @@ describe('registerIpc', () => {
       },
       scheduleOutputs,
       scheduleOutcomes,
-      publishScheduleChange: () => undefined,
+      publishScheduleChange: mocks.publishScheduleChange,
       fileArtifactService,
       dependencyLocksRoot: locksRoot,
       getWindow: () => null,
@@ -580,12 +583,18 @@ describe('registerIpc', () => {
       requestKey: 'ipc-manual-once',
       preflightFingerprint: 'ipc-fixture',
     };
+    mocks.publishScheduleChange.mockClear();
     const first = scheduleCallResultSchema(scheduleManualExecutionResultSchema).parse(
       await invoke(IpcChannel.ExecuteScheduleNow, executeInput),
     );
     expect(first.status).toBe('success');
     if (first.status !== 'success') throw new Error('Manual execution was not accepted');
     expect(first.data).toMatchObject({ accepted: true, duplicate: false });
+    expect(mocks.publishScheduleChange).toHaveBeenCalledExactlyOnceWith({
+      scheduleId,
+      occurrenceId: first.data.occurrence.id,
+      reason: 'occurrence',
+    });
     await expect(
       invoke(IpcChannel.ListScheduleOccurrences, { scheduleId, limit: 10 }),
     ).resolves.toMatchObject({
@@ -620,6 +629,7 @@ describe('registerIpc', () => {
     );
     expect(replay).toMatchObject({ status: 'success', data: { accepted: true, duplicate: true } });
     expect(mocks.prepareSchedule).toHaveBeenCalledTimes(1);
+    expect(mocks.publishScheduleChange).toHaveBeenCalledTimes(1);
 
     await expect(
       invoke(IpcChannel.ExecuteMissedSchedule, {
@@ -665,6 +675,47 @@ describe('registerIpc', () => {
         requestKey: 'ipc-after-archive',
       }),
     ).resolves.toMatchObject({ status: 'rejected', error: { code: 'schedule_archived' } });
+  });
+
+  it('validates extracted Schedule query input and output at IPC', async () => {
+    const query = vi.spyOn(ScheduleQueries.prototype, 'getSchedule').mockReturnValue({} as never);
+    try {
+      await expect(
+        invoke(IpcChannel.GetSchedule, { scheduleId: 'synthetic', unapproved: true }),
+      ).rejects.toThrow();
+      expect(query).not.toHaveBeenCalled();
+      await expect(invoke(IpcChannel.GetSchedule, { scheduleId: 'synthetic' })).rejects.toThrow();
+      expect(query).toHaveBeenCalledExactlyOnceWith('synthetic');
+    } finally {
+      query.mockRestore();
+    }
+  });
+
+  it('maps and bounds extracted Schedule domain errors without leaking an unbounded payload', async () => {
+    const query = vi.spyOn(ScheduleQueries.prototype, 'getSchedule').mockImplementation(() => {
+      throw new ScheduleUseCaseError({
+        code: 'schedule_capability_blocked',
+        message: '测'.repeat(2_000),
+        problems: Array.from({ length: 60 }, () => ({
+          code: 'p'.repeat(200),
+          message: '因'.repeat(2_000),
+        })),
+      });
+    });
+    try {
+      const result = scheduleCallResultSchema(scheduleDetailSchema).parse(
+        await invoke(IpcChannel.GetSchedule, { scheduleId: 'synthetic' }),
+      );
+      expect(result.status).toBe('rejected');
+      if (result.status !== 'rejected') throw new Error('Expected domain rejection');
+      expect(result.error.code).toBe('schedule_capability_blocked');
+      expect(Array.from(result.error.message)).toHaveLength(1_000);
+      expect(result.error.problems).toHaveLength(50);
+      expect(result.error.problems?.[0]?.code).toHaveLength(120);
+      expect(result.error.problems?.[0]?.message).toHaveLength(1_000);
+    } finally {
+      query.mockRestore();
+    }
   });
 
   it('persists and reads a task context through validated IPC', async () => {

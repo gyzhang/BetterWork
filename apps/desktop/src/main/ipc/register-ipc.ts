@@ -310,6 +310,11 @@ import type { ScheduleOutputService } from '../services/schedule-output-service'
 import type { SchedulePreflightService } from '../services/schedule-preflight';
 import type { ScheduleService } from '../services/schedule-service';
 import { ScheduleServiceError } from '../services/schedule-service';
+import {
+  ScheduleManualExecution,
+  ScheduleQueries,
+  ScheduleUseCaseError,
+} from '../services/schedule-use-cases';
 import { createQianfanSearchClient } from '../services/search-engine-service';
 import {
   computeDependencyLockHash,
@@ -408,13 +413,6 @@ function handleNoInput<Result>(
   });
 }
 
-class ScheduleIpcError extends Error {
-  constructor(readonly domainError: ScheduleDomainError) {
-    super(domainError.message);
-    this.name = 'ScheduleIpcError';
-  }
-}
-
 const boundedScheduleError = (input: ScheduleDomainError): ScheduleDomainError =>
   scheduleDomainErrorSchema.parse({
     ...input,
@@ -433,8 +431,8 @@ const scheduleIpcError = (
   code: ScheduleDomainError['code'],
   message: string,
   details: Omit<ScheduleDomainError, 'code' | 'message'> = {},
-): ScheduleIpcError =>
-  new ScheduleIpcError(
+): ScheduleUseCaseError =>
+  new ScheduleUseCaseError(
     boundedScheduleError({
       code,
       message: Array.from(message).slice(0, 1_000).join(''),
@@ -443,7 +441,7 @@ const scheduleIpcError = (
   );
 
 const scheduleErrorFrom = (error: unknown): ScheduleDomainError => {
-  if (error instanceof ScheduleIpcError) return boundedScheduleError(error.domainError);
+  if (error instanceof ScheduleUseCaseError) return boundedScheduleError(error.domainError);
   if (error instanceof ScheduleServiceError) {
     return boundedScheduleError({
       code: error.code,
@@ -617,6 +615,14 @@ function registerRunChannels({ store, runs }: IpcDependencies): void {
 
 function registerScheduleChannels(deps: IpcDependencies): void {
   const { store, scheduleService, scheduleOutputs, scheduleOutcomes } = deps;
+  const queries = new ScheduleQueries(store, scheduleService, scheduleOutcomes);
+  const manual = new ScheduleManualExecution({
+    store,
+    schedules: scheduleService,
+    preflight: deps.schedulePreflight,
+    dispatch: deps.scheduleDispatch,
+    onChanged: (event) => notifyScheduleChanged(deps, event),
+  });
 
   handleScheduleInput(
     IpcChannel.ListSchedules,
@@ -629,39 +635,7 @@ function registerScheduleChannels(deps: IpcDependencies): void {
     IpcChannel.GetSchedule,
     getScheduleRequestSchema,
     scheduleDetailSchema,
-    ({ scheduleId }) => {
-      const aggregate = scheduleService.get(scheduleId);
-      if (!aggregate) throw scheduleIpcError('schedule_not_found', '定时规则不存在。');
-      const expert = store.experts.get(aggregate.config.expertId);
-      const boundRevision = store.experts.getRevision(
-        aggregate.config.expertId,
-        aggregate.config.expertRevisionId,
-      );
-      if (!expert || !boundRevision) {
-        throw scheduleIpcError('schedule_capability_blocked', '固定专家修订已不可用。');
-      }
-      const occurrences = store.scheduleOccurrences.listBySchedule({
-        scheduleId,
-        limit: 6,
-      });
-      return {
-        aggregate,
-        expertUpdate: {
-          boundRevision,
-          currentRevision: expert.revision,
-          available: expert.revision.id !== boundRevision.id,
-        },
-        history: {
-          items: occurrences.items.map((occurrence) => {
-            const run = occurrence.firstRunId ? store.runs.get(occurrence.firstRunId) : undefined;
-            const result = scheduleOutcomes.projectOccurrence(occurrence.id);
-            if (!result) throw scheduleIpcError('schedule_conflict', '定时实例结果不可用。');
-            return { occurrence, ...(run ? { run } : {}), result };
-          }),
-          ...(occurrences.nextCursor === undefined ? {} : { nextCursor: occurrences.nextCursor }),
-        },
-      };
-    },
+    ({ scheduleId }) => queries.getSchedule(scheduleId),
   );
 
   handleScheduleInput(
@@ -761,200 +735,34 @@ function registerScheduleChannels(deps: IpcDependencies): void {
     IpcChannel.ListScheduleOccurrences,
     listScheduleOccurrencesRequestSchema,
     scheduleOccurrenceHistoryPageSchema,
-    (input) => {
-      if (!scheduleService.get(input.scheduleId)) {
-        throw scheduleIpcError('schedule_not_found', '定时规则不存在。');
-      }
-      const page = store.scheduleOccurrences.listBySchedule(input);
-      return {
-        items: page.items.map((occurrence) => {
-          const run = occurrence.firstRunId ? store.runs.get(occurrence.firstRunId) : undefined;
-          const result = scheduleOutcomes.projectOccurrence(occurrence.id);
-          if (!result) throw scheduleIpcError('schedule_conflict', '定时实例结果不可用。');
-          return { occurrence, ...(run ? { run } : {}), result };
-        }),
-        ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
-      };
-    },
+    (input) => queries.listOccurrences(input),
   );
 
   handleScheduleInput(
     IpcChannel.GetScheduleOccurrence,
     getScheduleOccurrenceRequestSchema,
     scheduleOccurrenceDetailSchema,
-    ({ occurrenceId }) => {
-      const occurrence = store.scheduleOccurrences.get(occurrenceId);
-      if (!occurrence) throw scheduleIpcError('schedule_not_found', '定时实例不存在。');
-      const config = store.schedules.getConfig(occurrence.scheduleId, occurrence.configVersion);
-      if (!config) throw scheduleIpcError('schedule_conflict', '本期固定配置不可用。');
-      const run = occurrence.firstRunId ? store.runs.get(occurrence.firstRunId) : undefined;
-      if (occurrence.firstRunId && !run) {
-        throw scheduleIpcError('schedule_conflict', '本期关联的 Run 不可用。');
-      }
-      const task = occurrence.taskId ? store.tasks.getSummary(occurrence.taskId) : undefined;
-      const sourceSnapshot = occurrence.sourceSnapshotId
-        ? store.scheduleSources.get(occurrence.sourceSnapshotId)
-        : undefined;
-      const reads = run
-        ? store.materialReads
-            .listByRun(run.id)
-            .filter((item) => item.operation === 'read' || item.operation === 'parse')
-        : [];
-      const readMaterials = new Set(reads.map((item) => JSON.stringify(item.material)));
-      const adoptedMaterials = new Set<string>();
-      if (run) {
-        for (const artifact of store.artifacts.list(run.taskId)) {
-          for (const version of store.artifacts.listVersions(artifact.id)) {
-            if (version.sourceRunId !== run.id) continue;
-            for (const relation of store.artifactInputRelations.listByVersion(version.id)) {
-              adoptedMaterials.add(JSON.stringify(relation.input));
-            }
-          }
-        }
-      }
-      const result = scheduleOutcomes.projectOccurrence(occurrence.id);
-      if (!result) throw scheduleIpcError('schedule_conflict', '定时实例结果不可用。');
-      return {
-        occurrence,
-        result,
-        config,
-        ...(task ? { task } : {}),
-        ...(run ? { run } : {}),
-        ...(sourceSnapshot ? { sourceSnapshot } : {}),
-        outputReceipts: store.scheduleOutputs.listByOccurrence(occurrence.id),
-        readMaterialCount: readMaterials.size,
-        adoptedMaterialCount: adoptedMaterials.size,
-      };
-    },
+    ({ occurrenceId }) => queries.getOccurrence(occurrenceId),
   );
 
   handleScheduleInput(
     IpcChannel.ListScheduleSourceItems,
     listScheduleSourceItemsRequestSchema,
     scheduleSourceItemsPageSchema,
-    (input) => {
-      if (!store.scheduleOccurrences.get(input.occurrenceId)) {
-        throw scheduleIpcError('schedule_not_found', '定时实例不存在。');
-      }
-      return store.scheduleSources.listItems(input);
-    },
+    (input) => queries.listSourceItems(input),
   );
-
-  type ScheduleManualInput = {
-    scheduleId: string;
-    expectedRevision: number;
-    requestKey: string;
-    preflightFingerprint: string;
-  } & ({ trigger: 'manual-now' } | { trigger: 'manual-missed'; originalOccurrenceId: string });
-  const executeManual = async (input: ScheduleManualInput) => {
-    const requestedAt = Date.now();
-    const duplicate = store.scheduleOccurrences.findManualRequest({
-      scheduleId: input.scheduleId,
-      requestKey: input.requestKey,
-      trigger: input.trigger,
-      ...(input.trigger === 'manual-missed'
-        ? { originalOccurrenceId: input.originalOccurrenceId }
-        : {}),
-    });
-    if (duplicate) return { accepted: true as const, duplicate: true, occurrence: duplicate };
-
-    const aggregate = scheduleService.get(input.scheduleId);
-    if (!aggregate) throw scheduleIpcError('schedule_not_found', '定时规则不存在。');
-    if (aggregate.schedule.revision !== input.expectedRevision) {
-      throw scheduleIpcError(
-        'schedule_conflict',
-        '定时规则已在其他位置更新，请载入最新配置后重试。',
-        { currentRevision: aggregate.schedule.revision },
-      );
-    }
-    if (aggregate.schedule.lifecycle === 'archived') {
-      throw scheduleIpcError('schedule_archived', '已归档规则不能执行。');
-    }
-    if (input.trigger === 'manual-missed') {
-      const original = store.scheduleOccurrences.get(input.originalOccurrenceId);
-      if (
-        !original ||
-        original.scheduleId !== input.scheduleId ||
-        original.trigger !== 'scheduled' ||
-        original.phase !== 'closed' ||
-        original.preparationOutcome !== 'missed'
-      ) {
-        throw scheduleIpcError('schedule_conflict', '只能补做同一规则的已错过计划实例。');
-      }
-    }
-    const config = scheduleConfigDraftSchema.parse({
-      name: aggregate.config.name,
-      expertId: aggregate.config.expertId,
-      expertRevisionId: aggregate.config.expertRevisionId,
-      requirements: aggregate.config.requirements,
-      expectedArtifactTypes: aggregate.config.expectedArtifactTypes,
-      timing: aggregate.config.timing,
-      periodRule: aggregate.config.periodRule,
-      knowledgeSources: aggregate.config.knowledgeSources,
-      outputSubdirectory: aggregate.config.outputSubdirectory,
-    });
-    const preflight = await deps.schedulePreflight.check({
-      workspaceId: aggregate.schedule.workspaceId,
-      config,
-    });
-    if (preflight.status === 'blocked') {
-      throw scheduleIpcError('schedule_capability_blocked', '当前专家能力未通过执行前检查。', {
-        problems: preflight.problems.map(({ code, message }) => ({ code, message })),
-      });
-    }
-    if (preflight.fingerprint !== input.preflightFingerprint) {
-      throw scheduleIpcError('schedule_conflict', '能力预检结果已变化，请重新检查后再执行。');
-    }
-
-    const claim =
-      input.trigger === 'manual-now'
-        ? store.scheduleOccurrences.claimManual({
-            scheduleId: input.scheduleId,
-            expectedRevision: input.expectedRevision,
-            trigger: input.trigger,
-            requestKey: input.requestKey,
-            requestedAt,
-            period: resolveSchedulePeriod(config.periodRule, config.timing.timeZone, requestedAt),
-          })
-        : store.scheduleOccurrences.claimManual({
-            scheduleId: input.scheduleId,
-            expectedRevision: input.expectedRevision,
-            trigger: input.trigger,
-            requestKey: input.requestKey,
-            requestedAt,
-            originalOccurrenceId: input.originalOccurrenceId,
-          });
-    if (claim.kind === 'busy') {
-      throw scheduleIpcError('schedule_busy', '这条规则已有一期正在准备或执行。', {
-        existingOccurrenceId: claim.existingOccurrenceId,
-      });
-    }
-    if (claim.kind === 'existing') {
-      return { accepted: true as const, duplicate: true, occurrence: claim.occurrence };
-    }
-
-    notifyScheduleChanged(deps, {
-      scheduleId: claim.occurrence.scheduleId,
-      occurrenceId: claim.occurrence.id,
-      reason: 'occurrence',
-    });
-    void deps.scheduleDispatch
-      .prepareAndStart(claim.occurrence.id, undefined, preflight.fingerprint)
-      .catch((error: unknown) => console.error('Manual Schedule preparation failed', error));
-    return { accepted: true as const, duplicate: false, occurrence: claim.occurrence };
-  };
 
   handleScheduleInput(
     IpcChannel.ExecuteScheduleNow,
     executeScheduleNowRequestSchema,
     scheduleManualExecutionResultSchema,
-    (input) => executeManual({ ...input, trigger: 'manual-now' }),
+    (input) => manual.execute({ ...input, trigger: 'manual-now' }),
   );
   handleScheduleInput(
     IpcChannel.ExecuteMissedSchedule,
     executeMissedScheduleRequestSchema,
     scheduleManualExecutionResultSchema,
-    (input) => executeManual({ ...input, trigger: 'manual-missed' }),
+    (input) => manual.execute({ ...input, trigger: 'manual-missed' }),
   );
 
   handleScheduleInput(

@@ -9,6 +9,158 @@ afterEach(() => {
 });
 
 describe('ArtifactInputRelationRepository', () => {
+  it('projects complete output-source relations and version metadata within the Task', () => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    const workspace = store.workspaces.create('/tmp/source-run-query', '来源投影合成空间');
+    const task = store.tasks.create(workspace.id, '本期任务', '核对来源');
+    const foreign = store.tasks.create(workspace.id, '另一任务', '隔离来源');
+    for (const [id, owner] of [
+      ['first', task],
+      ['author', task],
+      ['foreign', foreign],
+    ] as const) {
+      store.runs.create({
+        id,
+        taskId: owner.task.id,
+        sessionId: owner.sessionId,
+        prompt: '合成来源',
+        status: 'running',
+        createdAt: 1,
+      });
+    }
+    const input = {
+      kind: 'knowledge-revision' as const,
+      knowledgeDocumentId: 'doc',
+      knowledgeRevisionId: 'revision',
+      contentHash: 'hash',
+      sourcePath: '/tmp/source.md',
+    };
+    const first = store.artifacts.saveMarkdown({
+      taskId: task.task.id,
+      origin: 'assistant-run',
+      runId: 'first',
+      title: '首期',
+      content: '正文不进入元数据投影',
+    });
+    store.artifactInputRelations.saveForRun(
+      first.currentVersionId,
+      'author',
+      [{ input, relation: 'data' }],
+      () => true,
+    );
+    const followup = store.artifacts.saveMarkdown({
+      artifactId: first.id,
+      taskId: task.task.id,
+      origin: 'assistant-run',
+      runId: 'author',
+      title: '续作',
+      content: '另一次 Run',
+    });
+    store.artifactInputRelations.saveForRun(
+      followup.currentVersionId,
+      'author',
+      [{ input, relation: 'rule' }],
+      () => true,
+    );
+    const edited = store.artifacts.saveMarkdown({
+      artifactId: first.id,
+      taskId: task.task.id,
+      origin: 'user-edit',
+      title: '人工版',
+      content: '人工修订',
+    });
+    store.artifactInputRelations.inheritFromVersion(
+      edited.currentVersionId,
+      followup.currentVersionId,
+      'inherited',
+    );
+    const other = store.artifacts.saveMarkdown({
+      taskId: foreign.task.id,
+      origin: 'assistant-run',
+      runId: 'foreign',
+      title: '别的任务',
+      content: '隔离正文',
+    });
+    store.artifactInputRelations.saveForRun(
+      other.currentVersionId,
+      'foreign',
+      [{ input, relation: 'data' }],
+      () => true,
+    );
+    expect(store.artifactInputRelations.listBySourceRun(task.task.id, 'first')).toEqual(
+      store.artifactInputRelations.listByVersion(first.currentVersionId),
+    );
+    expect(store.artifactInputRelations.listBySourceRun(task.task.id, 'author')).toEqual(
+      store.artifactInputRelations.listByVersion(followup.currentVersionId),
+    );
+    expect(store.artifactInputRelations.listBySourceRun(foreign.task.id, 'first')).toEqual([]);
+    expect(store.artifactInputRelations.listBySourceRun(task.task.id, 'foreign')).toEqual([]);
+    const versions = store.artifacts.listVersionsBySourceRun(task.task.id, 'first');
+    expect(versions).toEqual([
+      store.artifacts
+        .listVersions(first.id)
+        .find((version) => version.id === first.currentVersionId),
+    ]);
+    expect(versions[0]).not.toHaveProperty('content');
+    expect(store.artifacts.listVersionsBySourceRun(foreign.task.id, 'first')).toEqual([]);
+  });
+
+  it('preserves historical snapshot path enrichment in the source-Run projection', () => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    const workspace = store.workspaces.create('/tmp/source-run-snapshot', '快照合成空间');
+    const task = store.tasks.create(workspace.id, '历史来源', '核对路径');
+    store.runs.create({
+      id: 'snapshot-run',
+      taskId: task.task.id,
+      sessionId: task.sessionId,
+      prompt: '合成快照',
+      status: 'running',
+      createdAt: 1,
+    });
+    const snapshot = store.inputSnapshots.createPreparing({
+      workspaceId: workspace.id,
+      sourcePath: '/tmp/original.md',
+      contentHash: 'snapshot-hash',
+      byteSize: 10,
+      format: 'markdown',
+      fileKey: 'synthetic.md',
+      createdAt: 1,
+    });
+    const artifact = store.artifacts.saveMarkdown({
+      taskId: task.task.id,
+      origin: 'assistant-run',
+      runId: 'snapshot-run',
+      title: '历史版',
+      content: '合成正文',
+    });
+    store.artifactInputRelations.saveForRun(
+      artifact.currentVersionId,
+      'snapshot-run',
+      [
+        {
+          input: {
+            kind: 'workspace-input-snapshot',
+            snapshotId: snapshot.id,
+            contentHash: snapshot.contentHash,
+            workspaceId: workspace.id,
+            format: snapshot.format,
+            fileKey: snapshot.fileKey,
+          },
+          relation: 'data',
+        },
+      ],
+      () => true,
+    );
+    expect(store.artifactInputRelations.listBySourceRun(task.task.id, 'snapshot-run')).toEqual(
+      store.artifactInputRelations.listByVersion(artifact.currentVersionId),
+    );
+    expect(
+      store.artifactInputRelations.listBySourceRun(task.task.id, 'snapshot-run')[0]?.input,
+    ).toMatchObject({ sourcePath: '/tmp/original.md' });
+  });
+
   it('relates a generated ArtifactVersion only to a material read by its Run', () => {
     const store = AppStore.open(':memory:');
     stores.push(store);

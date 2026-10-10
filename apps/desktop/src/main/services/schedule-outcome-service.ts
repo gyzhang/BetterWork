@@ -71,9 +71,8 @@ export class ScheduleOutcomeService {
     }
     const artifactTypes = run
       ? this.store.artifacts
-          .list(run.taskId)
-          .flatMap((artifact) => this.store.artifacts.listVersions(artifact.id))
-          .filter((version) => version.sourceRunId === run.id && version.origin === 'assistant-run')
+          .listVersionsBySourceRun(run.taskId, run.id)
+          .filter((version) => version.origin === 'assistant-run')
           .map((version) => version.type)
       : [];
     let failureDetail: string | undefined;

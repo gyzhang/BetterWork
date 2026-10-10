@@ -510,6 +510,24 @@ export class ArtifactRepository {
     return rows.map(toVersionSummary);
   }
 
+  /** 只读取指定 Task 与来源 Run 的版本元数据，不解码成果正文。 */
+  listVersionsBySourceRun(taskId: string, runId: string): ArtifactVersionSummary[] {
+    const rows = this.db
+      .prepare(
+        `SELECT v.id, v.artifact_id, v.version_number, v.source_run_id, v.origin,
+                v.source_declaration, v.created_at,
+                af.mime_type, af.file_size,
+                af.validation_structure, af.validation_visual, af.validation_manual_edit
+           FROM artifact_versions v
+           JOIN artifacts a ON a.id = v.artifact_id
+           LEFT JOIN artifact_files af ON af.version_id = v.id
+          WHERE a.task_id = ? AND v.source_run_id = ?
+          ORDER BY v.created_at ASC, v.rowid ASC`,
+      )
+      .all(taskId, runId) as ArtifactVersionRow[];
+    return rows.map(toVersionSummary);
+  }
+
   /** 返回某个 Run 实际登记的精确版本，Task Continuity 不把其他 Run 的成果当成本轮结果。 */
   listVersionIdsBySourceRun(taskId: string, runId: string): string[] {
     const rows = this.db
