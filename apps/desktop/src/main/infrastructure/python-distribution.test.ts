@@ -74,7 +74,7 @@ describe('findDistributionForPlatform', () => {
 
 describe('abiTagOf', () => {
   it.each([
-    ['3.12.14', 'cp312'],
+    ['3.12.15', 'cp312'],
     ['3.11.0', 'cp311'],
     ['3.10.8', 'cp310'],
     ['4.0.0', 'cp40'],

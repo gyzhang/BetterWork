@@ -28,6 +28,7 @@ import {
 } from '@modelcontextprotocol/client/stdio';
 import { z } from 'zod';
 
+import desktopPackage from '../../../package.json';
 import type { GuardianRuntime } from '../infrastructure/mac-process-supervisor';
 import type { McpStdioLaunch } from '../infrastructure/mcp-stdio-launch';
 import { managedNodeTool } from '../infrastructure/node-runtime';
@@ -756,7 +757,7 @@ export class McpClientService {
     }
     const createClient = (legacy: boolean): Client =>
       new Client(
-        { name: 'betterwork', version: '0.0.1' },
+        { name: 'betterwork', version: desktopPackage.version },
         {
           versionNegotiation: {
             mode: legacy ? 'legacy' : 'auto',

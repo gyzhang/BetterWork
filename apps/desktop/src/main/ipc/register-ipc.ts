@@ -295,6 +295,7 @@ import { KnowledgeAudit } from '../services/knowledge-audit';
 import type { KnowledgeIndexService } from '../services/knowledge-index-service';
 import type { KnowledgeSearchService } from '../services/knowledge-search';
 import type { KnowledgeVault } from '../services/knowledge-vault';
+import type { ManagedNodeRuntimeService } from '../services/managed-node-runtime-service';
 import { MarkdownArtifactSaveService } from '../services/markdown-artifact-save-service';
 import type { McpClientService } from '../services/mcp-client-service';
 import type { MemoryExtractionService } from '../services/memory-extraction-service';
@@ -353,6 +354,8 @@ export interface IpcDependencies {
   readonly workspaceReferences: WorkspaceReferenceService;
   readonly mcpClientService: McpClientService;
   readonly dependencies: SkillDependencyService;
+  /** 生产宿主总是提供；可选以兼容尚未注入运行时检查器的 IPC 夹具。 */
+  readonly managedNodeRuntime?: Pick<ManagedNodeRuntimeService, 'inspect'>;
   readonly snapshots: ToolchainSnapshotService;
   readonly scheduleService: ScheduleService;
   readonly schedulePreflight: Pick<SchedulePreflightService, 'check'>;
@@ -364,7 +367,7 @@ export interface IpcDependencies {
   /** 随包依赖锁目录：开发态在仓库 resources 下，打包后在安装资源里。 */
   readonly dependencyLocksRoot: string;
   readonly getWindow: () => BrowserWindow | null;
-  /** 默认工作空间根目录；开发态指向仓库根，打包后指向用户文档目录。 */
+  /** 启动期默认空间初始化选定的根目录；已有数据库保留旧默认路径。 */
   readonly getDefaultWorkspaceRoot: () => string;
 }
 
@@ -2006,7 +2009,8 @@ function registerMcpChannels({ mcpClientService }: IpcDependencies): void {
 }
 
 function registerDependencyChannels(deps: IpcDependencies): void {
-  const { dependencies, snapshots, dependencyLocksRoot, skillService, store } = deps;
+  const { dependencies, managedNodeRuntime, snapshots, dependencyLocksRoot, skillService, store } =
+    deps;
   const filesystem = createNodeFileSystem();
   const loadLockForSkill = async (skillId: string, lockId: string) => {
     const assets = await skillService.getDependencyAssets(skillId);
@@ -2014,12 +2018,15 @@ function registerDependencyChannels(deps: IpcDependencies): void {
     return { lock: await loadDependencyLock(dependencyLocksRoot, lockId, filesystem) };
   };
 
-  handleNoInput(
+  handleInput(
     IpcChannel.ListDependencyOptions,
     listDependencyOptionsRequestSchema,
     dependencyOptionsSchema,
-    async () => ({
+    async (input) => ({
       distributions: await dependencies.listManagedDistributions(),
+      ...(managedNodeRuntime && input.includeNodeRuntime
+        ? { nodeRuntime: await managedNodeRuntime.inspect() }
+        : {}),
       lockIds: await listDependencyLocks(dependencyLocksRoot, filesystem),
       snapshots: snapshots.listSnapshotsWithUsage(),
       environments: dependencies.listEnvironments(),

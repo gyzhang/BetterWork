@@ -25,3 +25,7 @@ Electron 应用内有 Node.js 运行时，但不等同于为系统提供 Node.js
 ## 兼容与验收
 
 共享 stdio schema 新增内置运行时描述，旧的 `command/args/cwd/env` 仍作为自定义命令的兼容形状。必须验证 v45→v46 对已知四个服务保留连接 ID 和旧 revision、生成内置 revision、使新目录失效且不复制审阅；其他命令保持不变。自动化须覆盖无外部 Node/Python 的内置启动、CPython 与 wheel 的离线准备、哈希拒绝、取消和随包资源存在性。签名安装包冷启动与用户窗口验收另记在 CF43，不替代真实业务服务验收。
+
+## 实现维护记录
+
+- 2026-10-11：基础解释器更新到 CPython 3.12.15（python-build-standalone release 20261009），继续使用 cp312 ABI；fetch 依赖锁的解释器约束改为 3.12 系列。该补丁版本更新不改变本 ADR 的运行时分发与隔离决策，校验和及实测记录见[依赖验证记录](../development/dependency-verification.md)。

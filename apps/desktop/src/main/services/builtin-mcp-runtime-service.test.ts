@@ -94,7 +94,7 @@ describe('BuiltinMcpRuntimeService', () => {
     expect(prepareEnvironmentAndWait).toHaveBeenCalledWith(
       {
         kind: 'managed',
-        distributionId: 'python-build-standalone-3.12.14-darwin-arm64',
+        distributionId: 'python-build-standalone-3.12.15-darwin-arm64',
       },
       expect.objectContaining({
         platform: { os: 'darwin', arch: 'arm64', abi: 'cp312' },

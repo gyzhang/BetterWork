@@ -1,6 +1,6 @@
 {
   "name": "betterwork",
-  "version": "0.0.1",
+  "version": "1.1.0",
   "private": true,
   "description": "面向知识工作者的个人 AI 工作台，基于本地知识库与长期记忆完成深度研究、数据分析、Word 文档和 PPT。",
   "workspaces": [
@@ -8,6 +8,8 @@
     "packages/*"
   ],
   "scripts": {
+    "version:sync": "node scripts/sync-product-version.mjs",
+    "version:check": "node scripts/sync-product-version.mjs --check",
     "dev": "cd apps/desktop && npm run dev",
     "dev:start": "bash scripts/dev-start.sh",
     "dev:start:empty": "BETTERWORK_SKIP_BUILTIN_REGISTRATION=1 bash scripts/dev-start.sh",
@@ -18,6 +20,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
+    "pretest": "node scripts/sync-product-version.mjs",
     "test": "vitest run --project functional && vitest run --project heavy",
     "test:watch": "vitest --project functional --project heavy",
     "test:coverage": "vitest run --config vitest.coverage.config.ts --coverage",

@@ -46,11 +46,11 @@
 
 依赖锁由作者的**显式依赖集合和目标环境解析结果**产生，不能从任意 Python 文本扫描出可靠的完整锁。扫描只能提示作者去审查 `import`、`requirements`、`pip install` 和环境变量等线索。
 
-1. 在目标 macOS arm64 上使用 BetterWork 管理的 CPython 3.12.14；从脚本和依赖声明中选择本 Skill 真实需要的直接依赖，记录在 `runtime/requirements.in`。不要照搬整个外部工具链的 requirements。
+1. 在目标 macOS arm64 上使用 BetterWork 管理的 CPython 3.12；从脚本和依赖声明中选择本 Skill 真实需要的直接依赖，记录在 `runtime/requirements.in`。不要照搬整个外部工具链的 requirements。
 2. 在一次性隔离环境中生成 pip 安装报告。`--ignore-installed` 确保报告包含完整闭包；`--only-binary=:all:` 拒绝需要用户机编译的源码分发包：
 
    ```sh
-   <受管 CPython 3.12.14>/bin/python3 -m pip install \
+   <受管 CPython 3.12>/bin/python3 -m pip install \
      --dry-run --ignore-installed --only-binary=:all: \
      --report /tmp/skill-pip-report.json \
      -r skills/<skill-id>/runtime/requirements.in

@@ -68,6 +68,8 @@ interface Workspace {
 
 `name / rootPath / iconId / accentId / hiddenAt` 于 2026-09-28 落地（应用库迁移 v35，[ADR-0029](adr/0029-workspace-identity-and-sidebar-groups.md)）。**不提供删除工作空间**：`tasks`、`artifacts`、`input_snapshots`、`run_context_snapshots`、`memory_records` 等对 `workspaces.id` 全是 `ON DELETE CASCADE`，删除会带走整棵子树，因此侧栏只给「隐藏」；真删需要单独的确认设计与迁移，尚未排期。
 
+新建数据库完成 schema migrations 后，启动期幂等初始化会登记一个「默认工作空间」，根目录为 `~/BetterWork`，目录不存在时创建。已有工作空间的数据库沿用升级前的默认根目录和既有名称，不自动改名或搬动用户目录；这属于初始数据初始化，不是 SQLite schema migration，也不随安装包携带数据库模板。
+
 ## 3. Task、Session 与 Conversation
 
 - Task：用户希望完成的一项工作，有明确目标和交付物，创建时固定归属一个 Workspace；需要切换 Workspace 时创建新 Task。

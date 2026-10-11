@@ -1,5 +1,6 @@
 appId: dev.betterwork.desktop
 productName: BetterWork
+artifactName: '${productName}-${version}-${arch}.${ext}'
 
 directories:
   output: dist

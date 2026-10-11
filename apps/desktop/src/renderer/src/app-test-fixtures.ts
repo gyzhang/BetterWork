@@ -52,7 +52,7 @@ export const skill: SkillDetail = {
 export const goal = '使用「中电金信」模板，生成两页演示文稿——封面 + 一页内容页。';
 export const workspaceFixture: WorkspaceSummary = {
   id: 'workspace-1',
-  name: '我的工作空间',
+  name: '默认工作空间',
   rootPath: '/workspace',
   iconId: 'folder',
   accentId: 'moss',

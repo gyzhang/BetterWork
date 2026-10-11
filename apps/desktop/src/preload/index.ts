@@ -1305,10 +1305,10 @@ const api: BetterWorkDesktopApi = {
       ),
   },
   dependencies: {
-    listOptions: () =>
+    listOptions: (input) =>
       invokeValidated(
         IpcChannel.ListDependencyOptions,
-        listDependencyOptionsRequestSchema.parse({}),
+        listDependencyOptionsRequestSchema.parse(input ?? {}),
         dependencyOptionsSchema,
       ),
     inspectPlan: (input) =>

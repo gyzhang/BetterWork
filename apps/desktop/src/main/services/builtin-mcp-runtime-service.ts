@@ -81,7 +81,7 @@ export class BuiltinMcpRuntimeService {
     const environment = await this.options.dependencies.prepareEnvironmentAndWait(
       {
         kind: 'managed',
-        distributionId: 'python-build-standalone-3.12.14-darwin-arm64',
+        distributionId: 'python-build-standalone-3.12.15-darwin-arm64',
       },
       lock,
       signal,

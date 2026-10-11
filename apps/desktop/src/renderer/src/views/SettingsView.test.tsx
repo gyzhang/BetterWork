@@ -82,7 +82,7 @@ describe('模型设置反馈路由（docs/10 §11.5.1）', () => {
 });
 
 describe('应用运行组件设置', () => {
-  it('显示应用受管 Python 的版本与按需准备状态', async () => {
+  it('显示受管 CPython 与随包 Node.js 的版本和状态', async () => {
     Object.defineProperty(window, 'betterwork', {
       configurable: true,
       value: {
@@ -91,12 +91,21 @@ describe('应用运行组件设置', () => {
             distributions: [
               {
                 id: 'managed-python-3.12',
-                version: '3.12.14',
+                version: '3.12.15',
                 platform: { os: 'darwin', arch: 'arm64', abi: 'cp312' },
                 license: 'PSF-2.0',
                 installed: false,
               },
             ],
+            nodeRuntime: {
+              id: 'node-24.21.0-darwin-arm64',
+              version: '24.21.0',
+              npmVersion: '11.19.0',
+              platform: { os: 'darwin', arch: 'arm64' },
+              status: 'installed',
+              detectedVersion: '24.21.0',
+              detectedNpmVersion: '11.19.0',
+            },
             lockIds: [],
             snapshots: [],
             environments: [],
@@ -107,9 +116,12 @@ describe('应用运行组件设置', () => {
 
     render(<RuntimeComponentsSettings />);
 
-    expect(await screen.findByText('受管 CPython 3.12.14')).toBeTruthy();
+    expect(await screen.findByText('受管 CPython 3.12.15')).toBeTruthy();
+    expect(screen.getByText('随包 Node.js 24.21.0')).toBeTruthy();
+    expect(screen.getByText(/darwin\/arm64 · Node\.js 24\.21\.0 · npm 11\.19\.0/u)).toBeTruthy();
+    expect(screen.getByText('已随应用安装')).toBeTruthy();
     expect(screen.getByText('按需准备')).toBeTruthy();
-    expect(screen.getByText(/通常不需要选择 Python 路径/)).toBeTruthy();
+    expect(screen.getByText(/通常不需要选择 Python 或 Node\.js 路径/u)).toBeTruthy();
   });
 });
 

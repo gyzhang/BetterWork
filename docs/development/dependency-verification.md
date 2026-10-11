@@ -7,21 +7,21 @@
 ## 1. 受管 Python 发行候选
 
 - 上游项目：[astral-sh/python-build-standalone](https://github.com/astral-sh/python-build-standalone)（提供可再分发的 CPython 构建）
-- 选定版本：**CPython 3.12.14**，上游 release **20260901**，制品形态 `install_only.tar.gz`
+- 选定版本：**CPython 3.12.15**，上游 release **20261009**，制品形态 `install_only.tar.gz`
 - 选择理由：样本 `ppt-generation-expert` 的工具链（python-pptx / lxml / Pillow 等）在 3.12 上有完整 wheel 覆盖；3.13 仍有部分包缺 wheel，3.9（本机系统 Python）过旧。最终可用性由 A11 的真实包锁与 import/CLI 探测确认，本记录不预先宣称通过。
-- 校验值来源：上游 release 资产 `SHA256SUMS`（2026-09-09 取得，逐字抄录）
+- 校验值来源：上游 release 资产 `SHA256SUMS`（2026-10-11 取得，逐字抄录）
 
 | 目标平台 | 文件名 | SHA-256 |
 | --- | --- | --- |
-| macOS arm64 | `cpython-3.12.14+20260901-aarch64-apple-darwin-install_only.tar.gz` | `3ee3ee547cedfeb7c2b16b2b7156039f7b470bb8f857e226fd3d2eb11db83c76` |
+| macOS arm64 | `cpython-3.12.15+20261009-aarch64-apple-darwin-install_only.tar.gz` | `83dcb04777c798bd95f3687acf9ae84b09860272ee6bdfb05be8bcf9447f75b8` |
 
-下载基址：`https://github.com/astral-sh/python-build-standalone/releases/download/20260901/<文件名>`
+下载基址：`https://github.com/astral-sh/python-build-standalone/releases/download/20261009/<文件名>`
 
 - 许可：PSF-2.0；上游 `install_only` 制品另捆绑若干第三方组件（OpenSSL、zlib、libffi 等），各自许可以上游发行说明为准。随包分发前的许可清单整理属于 A20。
 - 代码落点：`apps/desktop/src/main/infrastructure/python-distribution.ts`（目录常量）＋ `services/skill-dependency-service.ts` 的下载→校验→解压流程。校验值不符一律拒绝使用并清掉半成品目录，不回退到「先跑起来再说」。
-- 状态：**macOS arm64 制品已按锁定 hash 完成真实下载、解压和解释器探测**（2026-09-15，结果见下方第 2 节）。首次发行包随包带入受管制品与 MCP fetch wheels 的完成状态见 CF43；用户离线安装态仍需单独验收。
+- 状态：CPython 3.12.15 macOS arm64 制品已于 2026-10-11 按锁定 hash 完成真实下载、解压和解释器探测（见第 10 节）；CPython 3.12.14 的历史验证保留在第 2 节。首次发行包随包带入受管制品与 MCP fetch wheels 的 CF43 结果见第 9 节；安装后首次准备与启动仍需单独验收。
 
-## 2. 受管 CPython 制品实测（2026-09-15）
+## 2. 旧版受管 CPython 制品实测（2026-09-15）
 
 - 目标制品：macOS arm64 `cpython-3.12.14+20260901-aarch64-apple-darwin-install_only.tar.gz`。
 - 下载地址：锁文件登记的 GitHub release 资产；下载得到的文件按锁定 SHA-256 校验，结果为 `3ee3ee547cedfeb7c2b16b2b7156039f7b470bb8f857e226fd3d2eb11db83c76`。
@@ -109,7 +109,7 @@
 | --- | --- | --- |
 | 样本真实包锁（python-pptx / lxml / PyYAML / Pillow / XlsxWriter / skia-pathops / uharfbuzz 闭包） | A11 | **已产生并实测**，见第 5、6 节 |
 | 工具链快照 + 真实环境准备 + CLI 探测（macOS arm64） | A11 | **已完成**，见第 6 节 |
-| 受管 Python 制品真实下载、校验、解压后建 venv | A20 | **macOS arm64 已完成**真实下载、校验、解压、服务建 venv、8 个 wheel 离线安装和 import 探测，见第 2、7 节 |
+| 受管 Python 制品真实下载、校验、解压后建 venv | A20 | CPython 3.12.15 的真实下载、校验、解压与解释器探测已完成，见第 10 节；CPython 3.12.14 的服务建 venv、8 个 wheel 离线安装和 import 探测见第 2、7 节。新补丁版本的冷 venv 安装仍待验收 |
 | wheelhouse 制品与许可清单随包分发 | A20 | **macOS arm64 已完成**，见 `resources/wheelhouse`、第 7 节和[打包预检](package-preflight.md) |
 | 随包 MCP fetch 依赖锁（macOS arm64/cp312） | CF43 | 43 个 wheel 已锁定，精确制品 hash 来自 PyPI JSON 并与真实下载文件一致；资源打包与冷安装验收按 CF43 记录 |
 | 环境准备 UI（选择解释器、查看缺项、进度与取消） | A12 | 服务尚未被 `main/index.ts` 装配 |
@@ -121,4 +121,11 @@
 - Wheelhouse 实测：43 个 wheel 共 18,330,231 字节；包含 `mcp-server-fetch`、`mcp`、`pydantic`、`httpx`、`readabilipy`、`lxml`、`cryptography` 等完整运行依赖闭包。锁内 import probes 在 venv 完成后验证服务入口与主要模块。
 - 打包生成：[prepare-python-runtime-assets.mjs](../../scripts/prepare-python-runtime-assets.mjs) 读取共享 CPython 候选与依赖锁，把 CPython 压缩包和 wheels 写到 `apps/desktop/build/python-runtime-assets/`；每个资产写入缓存前校验锁定 SHA-256，缺资产时仅下载锁内精确 URL，校验失败则停止打包。该目录由 `.gitignore` 排除并由 electron-builder 复制进安装包。
 - 冷启动机制：首次检测时沿用 `SkillDependencyService` 解压随包 CPython、建立受管 fetch venv，并从随包 wheelhouse 使用 `--no-index --require-hashes` 安装；缺少打包资源时才回退到受批准的固定下载地址。fetch venv 的 lock hash 与 PPT Skill 不同，因此目录键不同，不会复用 PPT 环境。
-- 当前状态：lock、PyPI hash 与资源生成脚本已就绪；完整资源生成、实际离线 venv、四个 server 握手及 macOS arm64 unpacked 安装包检查由 CF43 追加实测结果。在这些验证完成前不将其写成已验收。
+- 当前状态：lock、PyPI hash、完整资源生成、实际离线 venv、四个 server 握手及 macOS arm64 unpacked 安装包检查按 CF43 留有实测记录。2026-10-11 又在本机生成并挂载检查包含 Python 与 Node 独立运行时的 arm64 DMG；新 Python 制品探测见第 10 节。签名安装后的首次启动仍待验收。
+
+## 10. 当前 CPython 制品与 macOS arm64 打包（2026-10-11）
+
+- Python：CPython 3.12.15，python-build-standalone release 20261009，制品 `cpython-3.12.15+20261009-aarch64-apple-darwin-install_only.tar.gz`，SHA-256 `83dcb04777c798bd95f3687acf9ae84b09860272ee6bdfb05be8bcf9447f75b8`。该值与上游 `SHA256SUMS` 和 release asset digest 一致。
+- 下载与解压：`npm run runtimes:prepare` 生成 Python 资源清单共 44 项（解释器归档及 43 个锁定 wheel）；归档实测输出 `3.12.15 arm64 Darwin venv=ok ensurepip=ok`。Node 运行时为 24.21.0，npm 为 11.19.0。
+- 打包：`npm run dist:mac` 成功生成 `apps/desktop/dist/BetterWork-0.0.1-arm64.dmg`；DMG 大小 323,842,294 字节，SHA-256 `a459f8abccfb5d31290ac568c3896693021a94017f1377e1aa5e9eb9c6d6508f`。只读挂载后可见 `BetterWork.app` 与 Applications 链接；包内 44 项 Python 资源 hash 全部匹配，独立 Node 二进制报告 arm64、v24.21.0，npm 报告 11.19.0。
+- 边界：electron-builder 因本机没有 Developer ID 签名身份而跳过签名。本次没有安装或启动 DMG 中的应用；签名、公证和安装后首次启动仍待完成。

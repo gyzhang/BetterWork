@@ -103,7 +103,7 @@ pre-push 阻止直推 main，并核对干净 HEAD 与空白差异。PR 合并后
 
 `knowledge-vault.test.ts` 的 PDF 与 DOCX 两个用例已显式提高超时——它们首次运行需要现场转换 `pdf-parse` 与 `mammoth`，冷 Vite 缓存下会超过默认的 5 秒。
 
-数据文件位于 Electron `userData` 下：应用状态库 `betterwork.db` 与知识库 `vaults/default/vault.sqlite`，都是本地运行数据，绝不能提交到 Git。两个库的 schema 由 `db/` 下的版本化迁移管理；迁移制度之前建立的历史库会在首次启动时被识别并对账，不会丢数据。模型与搜索 API Key 的生产存储由 Main 经 Electron `safeStorage` 加密到 `credentials`；legacy 列与 journal 迁移按[工程规范 §6](12-engineering-standards.md)处理，`pending/failed` owner 不回退明文，`none` 状态保留兼容读取。列表接口只回 `apiKeyConfigured`；日志和错误消息绝不输出密钥。
+数据文件位于 Electron `userData` 下：应用状态库 `betterwork.db` 与知识库 `vaults/default/vault.sqlite`，都是本地运行数据，绝不能提交到 Git。两个库的 schema 由 `db/` 下的版本化迁移管理；迁移制度之前建立的历史库会在首次启动时被识别并对账，不会丢数据。新建应用库在 schema migrations 后幂等初始化「默认工作空间」并创建 `~/BetterWork`；已有 Workspace 的库保留旧默认位置，不自动改名或搬移目录。此初始数据写入不构成 schema migration，安装包不带 SQLite 数据库模板。模型与搜索 API Key 的生产存储由 Main 经 Electron `safeStorage` 加密到 `credentials`；legacy 列与 journal 迁移按[工程规范 §6](12-engineering-standards.md)处理，`pending/failed` owner 不回退明文，`none` 状态保留兼容读取。列表接口只回 `apiKeyConfigured`；日志和错误消息绝不输出密钥。
 以下 §4–§7 保留早期架构/质量治理的交接记录，不能直接作为新待办。新增 UI 工作走 docs/10 §10.1；历史问题是否仍存在须回到代码及最新任务板核实。
 
 ## 4. 代码地图
@@ -162,7 +162,7 @@ pre-push 阻止直推 main，并核对干净 HEAD 与空白差异。PR 合并后
 
 1. IPC 注册器已有 Electron 替身行为测试：非法输入、无入参通道、输出 Schema、来源打开白名单，以及「Workspace → Task → Run → Artifact → 修订 → 导出」主进程旅程。后续新增 channel 必须在同一测试中补边界行为；真实桌面窗口自动化尚未建立。
 2. Renderer 已有 App、视图、组件与 Hook 的 jsdom 行为测试，`ui:check` 另覆盖生产组件/四类页面矩阵、真实 App/Preload/IPC/临时 SQLite 离线旅程和独立进程强杀恢复，具体命中与未覆盖项见 [UI/UX §10.1.3](10-ui-ux-system.md#1013-组合约束与检查边界)。这些证据不代表所有真实桌面路径、真实模型语义、屏幕阅读器或安装验收通过，人工尾项仍查原任务板。
-3. GitHub Actions 在 **macOS runner** 上对目标为 `main` 的 Pull Request 按变更范围执行快门禁：代码或混合差异跑静态检查、文档护栏和相关测试，纯 Markdown 跑 `npm run docs:check`，两档结果聚合为 main 必需状态 `PR Gate`（[ADR-0036](adr/0036-macos-only-platform-scope.md)、[ADR-0039](adr/0039-task-branches-and-protected-main.md)、[ADR-0042](adr/0042-pr-quick-check-and-scheduled-verify.md)；平台范围只有 macOS，Windows 不在支持范围）。macOS 基础打包验证仍未达成；真实桌面 UI 自动化应在该专项中接入。完整 verify 只接 `workflow_dispatch` 和夜间 `schedule`，独立于 PR Gate。工作流按事件类型与 PR/ref 开 `concurrency`，PR 只保留最新运行；完整验证随失败上传截图与读数，随成功只上传 `.ui-render/results.json`（留 7 天），由护栏「远端门禁跑在受支持的平台、能手动触发、并且留下绿跑读数」钉住。
+3. GitHub Actions 在 **macOS runner** 上对目标为 `main` 的 Pull Request 按变更范围执行快门禁：代码或混合差异跑静态检查、文档护栏和相关测试，纯 Markdown 跑 `npm run docs:check`，两档结果聚合为 main 必需状态 `PR Gate`（[ADR-0036](adr/0036-macos-only-platform-scope.md)、[ADR-0039](adr/0039-task-branches-and-protected-main.md)、[ADR-0042](adr/0042-pr-quick-check-and-scheduled-verify.md)；平台范围只有 macOS，Windows 不在支持范围）。2026-10-11 本机 macOS arm64 `dist:mac` 构建的 DMG 已挂载检查；签名安装后的首启仍未验证，真实桌面 UI 自动化应在该专项中接入。完整 verify 只接 `workflow_dispatch` 和夜间 `schedule`，独立于 PR Gate。工作流按事件类型与 PR/ref 开 `concurrency`，PR 只保留最新运行；完整验证随失败上传截图与读数，随成功只上传 `.ui-render/results.json`（留 7 天），由护栏「远端门禁跑在受支持的平台、能手动触发、并且留下绿跑读数」钉住。
 
 **界面**
 

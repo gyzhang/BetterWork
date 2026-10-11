@@ -99,7 +99,7 @@ stdio 由 Main 启动；进程与取消清理复用 macOS supervisor。新旧版
 
 ### 7.1 内置 stdio MCP 运行时（2026-10-09）
 
-产品登记的内置 MCP 使用协议中的固定 `serverId`，与用户自定义命令明确区分。filesystem、memory、sequential-thinking 的锁定 JavaScript 入口随应用生产依赖分发，由 Electron 可执行文件以 Node 模式启动；用户不需要单独安装 Node.js、npm 或 npx。fetch 使用 CPython 3.12.14 darwin/arm64 和单独的依赖锁/wheelhouse；CPython 压缩包与 fetch wheels 在安装包中，首次连接检测时解压基础发行版并为 MCP 服务创建独立 venv，绝不复用 PPT Skill 环境。主进程与 Skill 共享受管 Python 服务，因此同一 CPython 制品也供兼容的 Python Skill/CLI 环境使用；PPT 与 fetch 的依赖仍由不同锁和 venv 隔离。
+产品登记的内置 MCP 使用协议中的固定 `serverId`，与用户自定义命令明确区分。filesystem、memory、sequential-thinking 的锁定 JavaScript 入口和独立 Node.js 运行时随安装包分发，由随包运行时启动；用户不需要单独安装 Node.js、npm 或 npx。fetch 使用 CPython 3.12 darwin/arm64 和单独的依赖锁/wheelhouse；CPython 压缩包与 fetch wheels 在安装包中，首次连接检测时解压基础发行版并为 MCP 服务创建独立 venv，绝不复用 PPT Skill 环境。主进程与 Skill 共享受管 Python 服务，因此同一 CPython 制品也供兼容的 Python Skill/CLI 环境使用；PPT 与 fetch 的依赖仍由不同锁和 venv 隔离。
 
 打包脚本只获取登记版本与固定地址的制品，并逐一验证 SHA-256；已包含的资源可让首次 Python 环境准备离线完成。只有开发或不完整安装包缺少资产时，服务才回退到锁内的精确下载地址；损坏的内置文件不能被静默替换或执行。配置导入仍按自定义 stdio 处理；数据库迁移仅精确识别已知的三种 `npx -y @modelcontextprotocol/...` 和 `uvx mcp-server-fetch` 形状，其他命令不自动改写。
 

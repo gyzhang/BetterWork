@@ -1,18 +1,18 @@
 {
   "name": "@betterwork/desktop",
-  "version": "0.0.1",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "electron-vite build",
-    "preview": "electron-vite preview",
+    "dev": "node ../../scripts/sync-product-version.mjs && electron-vite dev",
+    "build": "node ../../scripts/sync-product-version.mjs && electron-vite build",
+    "preview": "node ../../scripts/sync-product-version.mjs && electron-vite preview",
     "dist": "npm run dist:mac",
     "python:runtimes:prepare": "node ../../scripts/prepare-python-runtime-assets.mjs",
     "node:runtimes:prepare": "node ../../scripts/prepare-node-runtime-assets.mjs",
     "runtimes:prepare": "npm run python:runtimes:prepare && npm run node:runtimes:prepare",
-    "dist:mac": "npm run runtimes:prepare && electron-vite build && electron-builder --mac --arm64"
+    "dist:mac": "node ../../scripts/sync-product-version.mjs && npm run runtimes:prepare && electron-vite build && electron-builder --mac --arm64"
   },
   "dependencies": {
     "@betterwork/agent-core": "*",

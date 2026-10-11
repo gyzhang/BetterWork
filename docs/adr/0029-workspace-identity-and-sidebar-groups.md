@@ -1,5 +1,7 @@
 # ADR-0029：工作空间身份与侧栏分组
 
+> 2026-10-11 补充：用户确认新建数据库首次启动时，默认工作空间显示名为「默认工作空间」、根目录为 `~/BetterWork`，不存在时创建。已有工作空间的数据库沿用旧默认路径与已保存身份，不迁移目录或重命名。该行为由 schema migration 后的幂等初始数据初始化完成，不随包携带 SQLite 模板库；见 [领域模型](../02-domain-model.md) §2。
+
 - 状态：Accepted（2026-09-28，按光哥对低保真原型 D1–D10 全部推荐方案的批准开工实施）。
 - 日期：2026-09-28。
 - 依据：[低保真评审原型](../prototype/workspace-identity/index.html)与 [README](../prototype/workspace-identity/README.md)、[2026-09-28 工作日志](../logs/2026-09-28.md)、[领域模型](../02-domain-model.md) §2、[UI/UX 体系](../10-ui-ux-system.md) §6.1.7、§6.2、§9.12、§10.1。

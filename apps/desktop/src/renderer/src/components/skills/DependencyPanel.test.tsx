@@ -20,8 +20,8 @@ const lockId = 'ppt-generation-expert-darwin-arm64-cp312';
 const options: DependencyOptions = {
   distributions: [
     {
-      id: 'python-build-standalone-3.12.14-darwin-arm64',
-      version: '3.12.14',
+      id: 'python-build-standalone-3.12.15-darwin-arm64',
+      version: '3.12.15',
       platform: { os: 'darwin', arch: 'arm64', abi: 'cp312' },
       license: 'PSF-2.0',
       installed: false,
@@ -59,7 +59,7 @@ const planOf = (overrides: Partial<DependencyPlan> = {}): DependencyPlan => ({
   base: {
     kind: 'managed',
     distributionId: options.distributions[0]!.id,
-    version: '3.12.14',
+    version: '3.12.15',
     sha256: 'b'.repeat(64),
   },
   platform: { os: 'darwin', arch: 'arm64', abi: 'cp312' },
@@ -403,7 +403,7 @@ describe('DependencyPanel', () => {
           base: {
             kind: 'managed',
             distributionId: options.distributions[0]!.id,
-            version: '3.12.14',
+            version: '3.12.15',
             sha256: 'b'.repeat(64),
           },
           platform: { os: 'darwin', arch: 'arm64', abi: 'cp312' },

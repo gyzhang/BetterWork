@@ -319,7 +319,8 @@ describe('Python 环境准备作业', () => {
   });
 
   it('环境键由解释器指纹、平台与包锁共同决定', async () => {
-    const harness = openService();
+    const interpreterVersion = '3.12.15';
+    const harness = openService({ version: interpreterVersion });
     await seedWheelhouse(harness);
     const lock = lockOf();
 
@@ -336,7 +337,7 @@ describe('Python 环境准备作业', () => {
     expect(harness.service.listEnvironments()).toHaveLength(2);
     expect(
       computeEnvironmentKey(
-        { kind: 'local', path: localBase.path, version: '3.12.14' },
+        { kind: 'local', path: localBase.path, version: interpreterVersion },
         { os: 'darwin', arch: 'arm64', abi: 'cp312' },
         computeDependencyLockHash(lock),
       ),
@@ -344,7 +345,7 @@ describe('Python 环境准备作业', () => {
     // 换一个解释器路径就是另一个环境，即使锁完全相同
     expect(
       computeEnvironmentKey(
-        { kind: 'local', path: '/opt/other/python3.12', version: '3.12.14' },
+        { kind: 'local', path: '/opt/other/python3.12', version: interpreterVersion },
         { os: 'darwin', arch: 'arm64', abi: 'cp312' },
         computeDependencyLockHash(lock),
       ),
