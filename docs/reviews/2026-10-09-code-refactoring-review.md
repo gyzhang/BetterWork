@@ -926,3 +926,9 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 2026-10-11 18:48 CST，从最新 `origin/main` `d97ede4ceec6d988c2ba2ba5dcecaa0f2ec47d48` 建立 `codex/r13-app-models-api-fixture`。将模型配置列表默认替身提取为私有 `createModelsApiFixture`，并传入既有 `models` 选项；未提供时仍返回空列表。
 
 `App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡只移动 Models API 测试替身，不改模型配置行为或生产代码；完整 Desktop API fixture 与 App 整树场景仍在，不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 66. R13 子卡：Dependencies API 替身按域收拢
+
+2026-10-11 18:52 CST，从最新 `origin/main` `d2ced673c5c5dfcc6edd28a2fa6a97fcb298f915` 建立 `codex/r13-app-dependencies-api-fixture`。将依赖选项列表默认替身提取为私有 `createDependenciesApiFixture`；发行版、锁、快照和环境集合仍各为空列表。
+
+`App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡只移动 Dependencies API 测试替身，不改依赖发现或生产行为；完整 Desktop API fixture 与 App 整树场景仍在，不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。
