@@ -1187,10 +1187,18 @@ Preload 定向测试 1 文件 / 35 项、全仓 typecheck、改动文件 ESLint/
 
 Preload 定向测试 1 文件 / 36 项通过；编译器正反例覆盖 Skills 与 Experts 的请求、响应和 channel 字面值配对。全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 与差异空白检查通过。PR Gate、合并和分支清理待本卡收口；R09 其他 API 域、Run 事件、Main/Preload 全局映射仍待后续切片。
 
-2026-10-12 00:15 CST 远端收口：源提交 `39ec7c8993c8d958b2f8410b10d4cb38b5f78881` 的 [PR Gate / Actions 38154439655](https://github.com/gyzhang/BetterWork/actions/runs/38154439655) 通过，Quick code check 通过，Full verify 按规则跳过。[PR #168](https://github.com/gyzhang/BetterWork/pull/168) 已 squash 合入 main，合并提交 `e89fb3bc470e47afc20adb9913ec6f5ec7382a12`；任务分支本地与远端均已删除，原 checkout 已同步 main，未创建 worktree。
+2026-10-12 00:15 CST 远端收口：源提交 `39ec7c8ad3ed45831d4721240492c8e52e8d21be` 的 [PR Gate / Actions 38154439655](https://github.com/gyzhang/BetterWork/actions/runs/38154439655) 通过，Quick code check 通过，Full verify 按规则跳过。[PR #168](https://github.com/gyzhang/BetterWork/pull/168) 已 squash 合入 main，合并提交 `e89fb3bc470e47afc20adb9913ec6f5ec7382a12`；任务分支本地与远端均已删除，原 checkout 已同步 main，未创建 worktree。
 
 ## 99. R09 子卡：任务上下文与材料 Preload 通道映射
 
 2026-10-12 00:15 CST，从最新 `origin/main` `e89fb3bc470e47afc20adb9913ec6f5ec7382a12` 在原 checkout 建立 `codex/r09-task-support-contracts`。本卡为 Task Context、Task Continuity、Discussion Checkpoints 与 Task Materials 的 8 个 invoke channel 建立请求/响应 Schema 和 Preload 方法映射；保留原请求默认值、运行期校验、缺失与取消语义，不改领域行为或共享协议。
 
 Preload 定向测试 1 文件 / 37 项通过；编译器正反例覆盖 8 个通道的输入/响应类型与 channel 关联。全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 与差异空白检查通过。PR Gate、合并和分支清理待本卡收口。R09 Memory、MCP、Dependencies、Window、Run 事件及 Main/Preload 全局映射仍待后续切片。
+
+2026-10-12 00:23 CST 远端收口：源提交 `37817be2891281e3ba12e04ccb12a6f05cb8f04f` 的 [PR Gate / Actions 38154970622](https://github.com/gyzhang/BetterWork/actions/runs/38154970622) 通过，Quick code check 通过，Full verify 按规则跳过。[PR #169](https://github.com/gyzhang/BetterWork/pull/169) 已 squash 合入 main，合并提交 `b4cb737601d6b57f2397ea0e7b9c51626598ebea`；任务分支本地与远端均已删除，原 checkout 已同步 main，未创建 worktree。
+
+## 100. R09 子卡：Memory Preload 通道映射
+
+2026-10-12 00:24 CST，从最新 `origin/main` `b4cb737601d6b57f2397ea0e7b9c51626598ebea` 在原 checkout 建立 `codex/r09-memory-channel-contracts`。本卡为 Memory 列表/详情、写入/治理、预览/排除账本、Run 上下文、设置、作业与投影重建共 15 个 invoke channel 建立请求/响应 Schema 和 Preload 方法映射；保留 Result 成功/失败结构（`ok/data/warnings` 或 `ok/error`）、解析默认值与现有错误语义。
+
+Preload 定向测试 1 文件 / 38 项通过；编译器正反例覆盖 15 个通道的输入/响应类型与 channel 关联，运行期回归确认列表默认值及 Memory Result envelope 保持。全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 与差异空白检查通过。PR Gate、合并和分支清理待本卡收口。R09 MCP、Dependencies、Window、Run 事件及 Main/Preload 全局映射仍待后续切片。
