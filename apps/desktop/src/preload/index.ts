@@ -1205,6 +1205,156 @@ const scheduleEventMethods: EventMethodsByChannel<typeof scheduleEventContracts>
     listenContract(scheduleEventContracts[IpcChannel.ScheduleChanged], listener),
 };
 
+const skillInvokeContracts = defineInvokeContracts({
+  [IpcChannel.ListSkills]: {
+    channel: IpcChannel.ListSkills,
+    request: emptyInvokeRequestSchema,
+    response: skillSummarySchema.array(),
+  },
+  [IpcChannel.GetSkill]: {
+    channel: IpcChannel.GetSkill,
+    request: getSkillRequestSchema,
+    response: skillDetailSchema.nullable(),
+  },
+  [IpcChannel.ImportSkill]: {
+    channel: IpcChannel.ImportSkill,
+    request: importSkillRequestSchema,
+    response: skillImportResultSchema,
+  },
+  [IpcChannel.ImportSkillFromUrl]: {
+    channel: IpcChannel.ImportSkillFromUrl,
+    request: importSkillFromUrlRequestSchema,
+    response: skillImportResultSchema,
+  },
+  [IpcChannel.SaveSkillRuntimeProfile]: {
+    channel: IpcChannel.SaveSkillRuntimeProfile,
+    request: saveSkillRuntimeProfileRequestSchema,
+    response: skillMutationResultSchema,
+  },
+  [IpcChannel.SetSkillTrust]: {
+    channel: IpcChannel.SetSkillTrust,
+    request: setSkillTrustRequestSchema,
+    response: skillMutationResultSchema,
+  },
+  [IpcChannel.RevokeSkillTrust]: {
+    channel: IpcChannel.RevokeSkillTrust,
+    request: revokeSkillTrustRequestSchema,
+    response: skillMutationResultSchema,
+  },
+  [IpcChannel.SetSkillEnabled]: {
+    channel: IpcChannel.SetSkillEnabled,
+    request: setSkillEnabledRequestSchema,
+    response: skillMutationResultSchema,
+  },
+  [IpcChannel.CopySkill]: {
+    channel: IpcChannel.CopySkill,
+    request: copySkillRequestSchema,
+    response: skillMutationResultSchema,
+  },
+  [IpcChannel.ExportSkill]: {
+    channel: IpcChannel.ExportSkill,
+    request: exportSkillRequestSchema,
+    response: skillExportResultSchema,
+  },
+  [IpcChannel.DeleteSkill]: {
+    channel: IpcChannel.DeleteSkill,
+    request: deleteSkillRequestSchema,
+    response: deletedResultSchema,
+  },
+  [IpcChannel.RefreshSkillDependencyGrant]: {
+    channel: IpcChannel.RefreshSkillDependencyGrant,
+    request: refreshSkillDependencyGrantRequestSchema,
+    response: refreshSkillDependencyGrantResultSchema,
+  },
+  [IpcChannel.TestSkillRun]: {
+    channel: IpcChannel.TestSkillRun,
+    request: testSkillRunRequestSchema,
+    response: testSkillRunResultSchema,
+  },
+});
+const skillInvokeMethods: InvokeMethodsByChannel<typeof skillInvokeContracts> = {
+  [IpcChannel.ListSkills]: (input) =>
+    invokeContract(skillInvokeContracts[IpcChannel.ListSkills], input),
+  [IpcChannel.GetSkill]: (input) =>
+    invokeContract(skillInvokeContracts[IpcChannel.GetSkill], input),
+  [IpcChannel.ImportSkill]: (input) =>
+    invokeContract(skillInvokeContracts[IpcChannel.ImportSkill], input),
+  [IpcChannel.ImportSkillFromUrl]: (input) =>
+    invokeContract(skillInvokeContracts[IpcChannel.ImportSkillFromUrl], input),
+  [IpcChannel.SaveSkillRuntimeProfile]: (input) =>
+    invokeContract(skillInvokeContracts[IpcChannel.SaveSkillRuntimeProfile], input),
+  [IpcChannel.SetSkillTrust]: (input) =>
+    invokeContract(skillInvokeContracts[IpcChannel.SetSkillTrust], input),
+  [IpcChannel.RevokeSkillTrust]: (input) =>
+    invokeContract(skillInvokeContracts[IpcChannel.RevokeSkillTrust], input),
+  [IpcChannel.SetSkillEnabled]: (input) =>
+    invokeContract(skillInvokeContracts[IpcChannel.SetSkillEnabled], input),
+  [IpcChannel.CopySkill]: (input) =>
+    invokeContract(skillInvokeContracts[IpcChannel.CopySkill], input),
+  [IpcChannel.ExportSkill]: (input) =>
+    invokeContract(skillInvokeContracts[IpcChannel.ExportSkill], input),
+  [IpcChannel.DeleteSkill]: (input) =>
+    invokeContract(skillInvokeContracts[IpcChannel.DeleteSkill], input),
+  [IpcChannel.RefreshSkillDependencyGrant]: (input) =>
+    invokeContract(skillInvokeContracts[IpcChannel.RefreshSkillDependencyGrant], input),
+  [IpcChannel.TestSkillRun]: (input) =>
+    invokeContract(skillInvokeContracts[IpcChannel.TestSkillRun], input),
+};
+
+const expertInvokeContracts = defineInvokeContracts({
+  [IpcChannel.ListExperts]: {
+    channel: IpcChannel.ListExperts,
+    request: listExpertsRequestSchema,
+    response: expertSummarySchema.array(),
+  },
+  [IpcChannel.GetExpert]: {
+    channel: IpcChannel.GetExpert,
+    request: getExpertRequestSchema,
+    response: expertDetailSchema.nullable(),
+  },
+  [IpcChannel.CreateExpert]: {
+    channel: IpcChannel.CreateExpert,
+    request: expertRevisionDraftSchema,
+    response: expertMutationResultSchema,
+  },
+  [IpcChannel.SaveExpertRevision]: {
+    channel: IpcChannel.SaveExpertRevision,
+    request: saveExpertRevisionRequestSchema,
+    response: expertMutationResultSchema,
+  },
+  [IpcChannel.CopyExpert]: {
+    channel: IpcChannel.CopyExpert,
+    request: copyExpertRequestSchema,
+    response: expertMutationResultSchema,
+  },
+  [IpcChannel.SetExpertLifecycle]: {
+    channel: IpcChannel.SetExpertLifecycle,
+    request: setExpertLifecycleRequestSchema,
+    response: expertMutationResultSchema,
+  },
+  [IpcChannel.DeleteExpert]: {
+    channel: IpcChannel.DeleteExpert,
+    request: deleteExpertRequestSchema,
+    response: deletedResultSchema,
+  },
+});
+const expertInvokeMethods: InvokeMethodsByChannel<typeof expertInvokeContracts> = {
+  [IpcChannel.ListExperts]: (input) =>
+    invokeContract(expertInvokeContracts[IpcChannel.ListExperts], input),
+  [IpcChannel.GetExpert]: (input) =>
+    invokeContract(expertInvokeContracts[IpcChannel.GetExpert], input),
+  [IpcChannel.CreateExpert]: (input) =>
+    invokeContract(expertInvokeContracts[IpcChannel.CreateExpert], input),
+  [IpcChannel.SaveExpertRevision]: (input) =>
+    invokeContract(expertInvokeContracts[IpcChannel.SaveExpertRevision], input),
+  [IpcChannel.CopyExpert]: (input) =>
+    invokeContract(expertInvokeContracts[IpcChannel.CopyExpert], input),
+  [IpcChannel.SetExpertLifecycle]: (input) =>
+    invokeContract(expertInvokeContracts[IpcChannel.SetExpertLifecycle], input),
+  [IpcChannel.DeleteExpert]: (input) =>
+    invokeContract(expertInvokeContracts[IpcChannel.DeleteExpert], input),
+};
+
 const api: BetterWorkDesktopApi = {
   runs: {
     start: (input) => runInvokeMethods[IpcChannel.StartRun](input),
@@ -1348,123 +1498,29 @@ const api: BetterWorkDesktopApi = {
       knowledgeInvokeMethods[IpcChannel.GetRunArtifactDeclarations](input),
   },
   skills: {
-    list: () => invokeValidated(IpcChannel.ListSkills, {}, z.array(skillSummarySchema)),
-    get: (input) =>
-      invokeValidated(
-        IpcChannel.GetSkill,
-        getSkillRequestSchema.parse(input),
-        skillDetailSchema.nullable(),
-      ),
-    importFromDialog: () =>
-      invokeValidated(
-        IpcChannel.ImportSkill,
-        importSkillRequestSchema.parse({}),
-        skillImportResultSchema,
-      ),
-    importFromUrl: (input) =>
-      invokeValidated(
-        IpcChannel.ImportSkillFromUrl,
-        importSkillFromUrlRequestSchema.parse(input),
-        skillImportResultSchema,
-      ),
-    saveRuntimeProfile: (input) =>
-      invokeValidated(
-        IpcChannel.SaveSkillRuntimeProfile,
-        saveSkillRuntimeProfileRequestSchema.parse(input),
-        skillMutationResultSchema,
-      ),
-    setTrust: (input) =>
-      invokeValidated(
-        IpcChannel.SetSkillTrust,
-        setSkillTrustRequestSchema.parse(input),
-        skillMutationResultSchema,
-      ),
-    revokeTrust: (input) =>
-      invokeValidated(
-        IpcChannel.RevokeSkillTrust,
-        revokeSkillTrustRequestSchema.parse(input),
-        skillMutationResultSchema,
-      ),
-    setEnabled: (input) =>
-      invokeValidated(
-        IpcChannel.SetSkillEnabled,
-        setSkillEnabledRequestSchema.parse(input),
-        skillMutationResultSchema,
-      ),
-    copy: (input) =>
-      invokeValidated(
-        IpcChannel.CopySkill,
-        copySkillRequestSchema.parse(input),
-        skillMutationResultSchema,
-      ),
-    export: (input) =>
-      invokeValidated(
-        IpcChannel.ExportSkill,
-        exportSkillRequestSchema.parse(input),
-        skillExportResultSchema,
-      ),
-    delete: (input) =>
-      invokeValidated(
-        IpcChannel.DeleteSkill,
-        deleteSkillRequestSchema.parse(input),
-        deletedResultSchema,
-      ),
+    list: () => skillInvokeMethods[IpcChannel.ListSkills]({}),
+    get: (input) => skillInvokeMethods[IpcChannel.GetSkill](input),
+    importFromDialog: () => skillInvokeMethods[IpcChannel.ImportSkill]({}),
+    importFromUrl: (input) => skillInvokeMethods[IpcChannel.ImportSkillFromUrl](input),
+    saveRuntimeProfile: (input) => skillInvokeMethods[IpcChannel.SaveSkillRuntimeProfile](input),
+    setTrust: (input) => skillInvokeMethods[IpcChannel.SetSkillTrust](input),
+    revokeTrust: (input) => skillInvokeMethods[IpcChannel.RevokeSkillTrust](input),
+    setEnabled: (input) => skillInvokeMethods[IpcChannel.SetSkillEnabled](input),
+    copy: (input) => skillInvokeMethods[IpcChannel.CopySkill](input),
+    export: (input) => skillInvokeMethods[IpcChannel.ExportSkill](input),
+    delete: (input) => skillInvokeMethods[IpcChannel.DeleteSkill](input),
     refreshDependencyGrant: (input) =>
-      invokeValidated(
-        IpcChannel.RefreshSkillDependencyGrant,
-        refreshSkillDependencyGrantRequestSchema.parse(input),
-        refreshSkillDependencyGrantResultSchema,
-      ),
-    testRun: (input) =>
-      invokeValidated(
-        IpcChannel.TestSkillRun,
-        testSkillRunRequestSchema.parse(input),
-        testSkillRunResultSchema,
-      ),
+      skillInvokeMethods[IpcChannel.RefreshSkillDependencyGrant](input),
+    testRun: (input) => skillInvokeMethods[IpcChannel.TestSkillRun](input),
   },
   experts: {
-    list: (input) =>
-      invokeValidated(
-        IpcChannel.ListExperts,
-        listExpertsRequestSchema.parse(input ?? {}),
-        z.array(expertSummarySchema),
-      ),
-    get: (input) =>
-      invokeValidated(
-        IpcChannel.GetExpert,
-        getExpertRequestSchema.parse(input),
-        expertDetailSchema.nullable(),
-      ),
-    create: (input) =>
-      invokeValidated(
-        IpcChannel.CreateExpert,
-        expertRevisionDraftSchema.parse(input),
-        expertMutationResultSchema,
-      ),
-    saveRevision: (input) =>
-      invokeValidated(
-        IpcChannel.SaveExpertRevision,
-        saveExpertRevisionRequestSchema.parse(input),
-        expertMutationResultSchema,
-      ),
-    copy: (input) =>
-      invokeValidated(
-        IpcChannel.CopyExpert,
-        copyExpertRequestSchema.parse(input),
-        expertMutationResultSchema,
-      ),
-    setLifecycle: (input) =>
-      invokeValidated(
-        IpcChannel.SetExpertLifecycle,
-        setExpertLifecycleRequestSchema.parse(input),
-        expertMutationResultSchema,
-      ),
-    delete: (input) =>
-      invokeValidated(
-        IpcChannel.DeleteExpert,
-        deleteExpertRequestSchema.parse(input),
-        deletedResultSchema,
-      ),
+    list: (input) => expertInvokeMethods[IpcChannel.ListExperts](input ?? {}),
+    get: (input) => expertInvokeMethods[IpcChannel.GetExpert](input),
+    create: (input) => expertInvokeMethods[IpcChannel.CreateExpert](input),
+    saveRevision: (input) => expertInvokeMethods[IpcChannel.SaveExpertRevision](input),
+    copy: (input) => expertInvokeMethods[IpcChannel.CopyExpert](input),
+    setLifecycle: (input) => expertInvokeMethods[IpcChannel.SetExpertLifecycle](input),
+    delete: (input) => expertInvokeMethods[IpcChannel.DeleteExpert](input),
   },
   taskContexts: {
     get: (input) =>

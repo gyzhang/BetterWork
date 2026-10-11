@@ -154,6 +154,26 @@ describe('schedule preload API', () => {
   });
 });
 
+describe('Skill and Expert preload APIs', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.invoke.mockResolvedValue(null);
+  });
+
+  it('preserves request validation, empty list inputs, and response validation', async () => {
+    expect(() => api().skills.get({ id: '' })).toThrow();
+    expect(() => api().experts.get({ id: '' })).toThrow();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+
+    await expect(api().skills.list()).rejects.toThrow();
+    expect(mocks.invoke).toHaveBeenCalledWith(IpcChannel.ListSkills, {});
+
+    mocks.invoke.mockClear();
+    await expect(api().experts.list()).rejects.toThrow();
+    expect(mocks.invoke).toHaveBeenCalledWith(IpcChannel.ListExperts, { includeArchived: false });
+  });
+});
+
 describe('run preload API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -300,6 +320,10 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `const __scheduleListResult: ReturnType<BetterWorkDesktopApi['schedules']['list']> = scheduleInvokeMethods[IpcChannel.ListSchedules]({});`,
     `const __scheduleContractChannel: typeof IpcChannel.ExecuteScheduleNow = scheduleInvokeContracts[IpcChannel.ExecuteScheduleNow].channel;`,
     `const __scheduleEventUnsubscribe: () => void = scheduleEventMethods[IpcChannel.ScheduleChanged]((event) => { const scheduleId: string = event.scheduleId; });`,
+    `const __skillGetResult: Promise<z.output<typeof skillDetailSchema> | null> = skillInvokeMethods[IpcChannel.GetSkill]({ id: 'skill-1' });`,
+    `const __skillContractChannel: typeof IpcChannel.TestSkillRun = skillInvokeContracts[IpcChannel.TestSkillRun].channel;`,
+    `const __expertGetResult: Promise<z.output<typeof expertDetailSchema> | null> = expertInvokeMethods[IpcChannel.GetExpert]({ id: 'expert-1' });`,
+    `const __expertContractChannel: typeof IpcChannel.SetExpertLifecycle = expertInvokeContracts[IpcChannel.SetExpertLifecycle].channel;`,
   ];
   const invalid = [
     `runInvokeMethods[IpcChannel.StartRun]({ runId: 'run-1' });`,
@@ -330,6 +354,12 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `const __scheduleContractWrongResponse: Promise<never> = scheduleInvokeMethods[IpcChannel.GetSchedule]({ scheduleId: 'schedule-1' });`,
     `const __scheduleContractWrongChannel: typeof IpcChannel.ListSchedules = scheduleInvokeContracts[IpcChannel.GetSchedule].channel;`,
     `scheduleEventMethods[IpcChannel.ScheduleChanged]((event: { reason: 'occurrence' }) => {});`,
+    `skillInvokeMethods[IpcChannel.GetSkill]({ skillId: 'skill-1' });`,
+    `const __skillContractWrongResponse: Promise<z.output<typeof skillSummarySchema>[]> = skillInvokeMethods[IpcChannel.GetSkill]({ id: 'skill-1' });`,
+    `const __skillContractWrongChannel: typeof IpcChannel.ListSkills = skillInvokeContracts[IpcChannel.TestSkillRun].channel;`,
+    `expertInvokeMethods[IpcChannel.GetExpert]({ expertId: 'expert-1' });`,
+    `const __expertContractWrongResponse: Promise<z.output<typeof expertSummarySchema>[]> = expertInvokeMethods[IpcChannel.GetExpert]({ id: 'expert-1' });`,
+    `const __expertContractWrongChannel: typeof IpcChannel.GetExpert = expertInvokeContracts[IpcChannel.DeleteExpert].channel;`,
   ];
   let source = readFileSync(sourcePath, 'utf8') + '\n';
   const cases = [...valid, ...invalid].map((expression, index) => {
