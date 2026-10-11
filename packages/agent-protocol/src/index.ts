@@ -4193,10 +4193,11 @@ export const setModelEnabledRequestSchema = z.object({
 export const testModelRequestSchema = modelProfileInputSchema
   .pick({ baseUrl: true, model: true, role: true, apiKey: true })
   .extend({ id: z.string().min(1).optional() });
-export const updateWindowThemeRequestSchema = z.object({
-  backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-  symbolColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-});
+export const updateWindowThemeRequestSchema = z
+  .object({
+    backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  })
+  .strict();
 export type UpdateWindowThemeRequest = z.infer<typeof updateWindowThemeRequestSchema>;
 
 export const windowToggleMaximizeRequestSchema = z.object({}).strict();

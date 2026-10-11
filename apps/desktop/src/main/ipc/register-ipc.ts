@@ -2310,12 +2310,6 @@ function registerWindowChannels({ getWindow }: IpcDependencies): void {
       const window = getWindow();
       if (!window || window.isDestroyed()) return;
       window.setBackgroundColor(theme.backgroundColor);
-      if (process.platform === 'win32') {
-        window.setTitleBarOverlay({
-          color: theme.backgroundColor,
-          symbolColor: theme.symbolColor,
-        });
-      }
     },
   );
 
@@ -2326,15 +2320,13 @@ function registerWindowChannels({ getWindow }: IpcDependencies): void {
     () => {
       const window = getWindow();
       if (!window || window.isDestroyed()) return { maximized: false };
-      if (process.platform === 'darwin') {
-        // 双击标题栏的行为跟随系统偏好，不自创交互
-        const preference = systemPreferences.getUserDefault('AppleActionOnDoubleClick', 'string');
-        if (preference === 'Minimize') {
-          window.minimize();
-          return { maximized: false };
-        }
-        if (preference === 'None') return { maximized: window.isMaximized() };
+      // 双击标题栏的行为跟随系统偏好，不自创交互。
+      const preference = systemPreferences.getUserDefault('AppleActionOnDoubleClick', 'string');
+      if (preference === 'Minimize') {
+        window.minimize();
+        return { maximized: false };
       }
+      if (preference === 'None') return { maximized: window.isMaximized() };
       if (window.isMaximized()) {
         window.unmaximize();
         return { maximized: false };

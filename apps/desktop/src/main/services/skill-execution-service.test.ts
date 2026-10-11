@@ -355,16 +355,7 @@ it('keeps a prepared environment bound to the authorized dependency selection', 
   const { store, service } = openFixture();
   seedRun(store, 'run-binding');
   seedSkill(store, 'skill-binding', false);
-  const platform = {
-    os:
-      process.platform === 'darwin'
-        ? ('darwin' as const)
-        : process.platform === 'win32'
-          ? ('win32' as const)
-          : ('linux' as const),
-    arch: process.arch === 'arm64' ? ('arm64' as const) : ('x64' as const),
-    abi: 'cp312',
-  };
+  const platform = { os: 'darwin', arch: 'arm64', abi: 'cp312' } as const;
   const profileId = store.skills.saveProfile({
     skillId: 'skill-binding',
     profileHash: 'executable-profile',

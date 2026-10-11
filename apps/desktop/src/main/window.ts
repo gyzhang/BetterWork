@@ -3,16 +3,15 @@ import path from 'node:path';
 import { BrowserWindow, type BrowserWindowConstructorOptions } from 'electron';
 
 /**
- * 首帧窗口主题。
+ * 首帧窗口背景色。
  *
- * 这两个值必须与青玉浅色 Variant 的 `--canvas` / `--text-primary` 一致
- * （见 `renderer/src/styles.css` 与 docs/10 §9.6）。它们只在 Renderer 挂载、
+ * 这个值必须与青玉浅色 Variant 的 `--canvas` 一致
+ * （见 `renderer/src/styles.css` 与 docs/10 §9.6）。它只在 Renderer 挂载、
  * 通过 `window:update-theme` 回报真实 Token 之前生效，作用是避免冷启动时
  * 闪一下白底。改动色系默认值时要同步这里。
  */
 export const INITIAL_WINDOW_THEME = {
   backgroundColor: '#F6F7F5',
-  symbolColor: '#1D2420',
 } as const;
 
 export const WINDOW_LAYOUT = {
@@ -32,20 +31,8 @@ export function createMainWindow(): BrowserWindow {
     minHeight: WINDOW_LAYOUT.minHeight,
     title: '算台 BetterWork',
     backgroundColor: INITIAL_WINDOW_THEME.backgroundColor,
-    ...(process.platform === 'darwin'
-      ? {
-          titleBarStyle: 'hiddenInset' as const,
-          trafficLightPosition: WINDOW_LAYOUT.trafficLightPosition,
-        }
-      : {}),
-    ...(process.platform === 'win32'
-      ? {
-          titleBarOverlay: {
-            color: INITIAL_WINDOW_THEME.backgroundColor,
-            symbolColor: INITIAL_WINDOW_THEME.symbolColor,
-          },
-        }
-      : {}),
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: WINDOW_LAYOUT.trafficLightPosition,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       // 安全基线：Renderer 拿不到 Node 能力，只能通过 preload 暴露的类型化 API 通信
