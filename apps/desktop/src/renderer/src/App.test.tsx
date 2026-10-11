@@ -2149,48 +2149,6 @@ describe('Expert configuration', () => {
     );
   });
 
-  it('内置专家的配置页给的是「复制为用户专家」，不是点了才被后端拒绝的编辑入口', async () => {
-    const api = installApi({ expert: true });
-    api.experts.get.mockResolvedValue({ ...expertDetail, sourceKind: 'builtin' });
-    render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
-    fireEvent.click(await screen.findByRole('button', { name: '详情' }));
-
-    expect(await screen.findByRole('button', { name: '复制为用户专家' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '编辑配置' })).toBeNull();
-  });
-
-  it('专家页在卡片与列表之间切换，两种视图都给同一组就地动作', async () => {
-    installApi({ expert: true });
-    render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
-    expect(await screen.findByRole('button', { name: '详情' })).toBeTruthy();
-    expect(document.querySelector('.expert-cards .card')).not.toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: '列表' }));
-    const row = document.querySelector('.expert-rows .list-row');
-    expect(row).not.toBeNull();
-    expect(row?.textContent).toContain('经营分析专家');
-    expect(row?.textContent).toContain('财务组 · v1');
-  });
-
-  /**
-   * 卡片不是只放一个名字：图标、署名与版本、描述、用途标签都要在一眼之内，
-   * 召唤则是悬停才显形的主动作（DOM 里始终存在，键盘与读屏都拿得到）。
-   */
-  it('卡片交代图标、作者·版本与用途标签，召唤按钮带图标', async () => {
-    installApi({ expert: true });
-    render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
-    expect(await screen.findByRole('button', { name: '详情' })).toBeTruthy();
-    const card = document.querySelector('.expert-cards .card');
-    expect(card?.querySelector('.card-mark svg')).not.toBeNull();
-    expect(card?.textContent).toContain('财务组 · v1');
-    expect(card?.querySelectorAll('.expert-card-tags .badge[data-shape="pill"]')).toHaveLength(2);
-    expect(screen.getByRole('button', { name: '召唤' })).toBeTruthy();
-    expect(card?.querySelector('.card-primary svg')).not.toBeNull();
-  });
-
   it('卡片上的「停用」直接改生命周期，不需要先进配置页', async () => {
     const api = installApi({ expert: true });
     render(<App />);
@@ -2215,53 +2173,16 @@ describe('Expert configuration', () => {
     expect(api.experts.delete).toHaveBeenCalledWith({ expertId: expertSummary.id });
   });
 
-  it('内置专家的卡片给「复制副本」，不给编辑和删除', async () => {
+  it('内置专家卡片通过专家 API 复制', async () => {
     const api = installApi({ expert: true });
     api.experts.list.mockResolvedValue([{ ...expertSummary, sourceKind: 'builtin' }]);
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: '专家' }));
     fireEvent.click(await screen.findByRole('button', { name: '复制副本' }));
-    expect(screen.queryByRole('button', { name: '编辑' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '删除' })).toBeNull();
+
     await waitFor(() =>
       expect(api.experts.copy).toHaveBeenCalledWith({ expertId: expertSummary.id }),
     );
-  });
-
-  it('卡片上的「编辑」先取当前修订再进编辑器，作者与用途标签可改', async () => {
-    const api = installApi({ expert: true });
-    render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
-    fireEvent.click(await screen.findByRole('button', { name: '编辑' }));
-    await waitFor(() => expect(api.experts.get).toHaveBeenCalledWith({ id: expertSummary.id }));
-    expect(await screen.findByRole('textbox', { name: '作者' })).toBeTruthy();
-    expect(screen.getByRole('textbox', { name: /用途标签/ })).toBeTruthy();
-  });
-
-  /**
-   * 编辑器从哪来就回哪去：写着「返回列表」却落在配置详情页，等于骗人多点一次
-   * （光哥 2026-09-28 走查指出）。
-   */
-  it('从配置页进编辑器时返回按钮写「返回详情」，点了仍在配置页', async () => {
-    installApi({ expert: true });
-    render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
-    fireEvent.click(await screen.findByRole('button', { name: '详情' }));
-    fireEvent.click(await screen.findByRole('button', { name: '编辑配置' }));
-    fireEvent.click(await screen.findByRole('button', { name: '返回详情' }));
-    expect(screen.queryByRole('textbox', { name: '作者' })).toBeNull();
-    expect(screen.getByRole('button', { name: '编辑配置' })).toBeTruthy();
-  });
-
-  it('从卡片进编辑器时返回按钮写「返回列表」，点了真的回列表', async () => {
-    installApi({ expert: true });
-    render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
-    fireEvent.click(await screen.findByRole('button', { name: '编辑' }));
-    expect(await screen.findByRole('button', { name: '返回列表' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '返回列表' }));
-    expect(await screen.findByRole('button', { name: '详情' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '编辑配置' })).toBeNull();
   });
 });
 

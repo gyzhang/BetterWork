@@ -70,6 +70,61 @@ function renderCatalog(experts: ExpertSummary[]): HTMLElement {
   return container;
 }
 
+function detailOf(expert: ExpertSummary = userExpert): ExpertDetail {
+  return {
+    ...expert,
+    revision: {
+      id: `${expert.id}-revision-${expert.currentRevision}`,
+      expertId: expert.id,
+      revision: expert.currentRevision,
+      createdAt: 1,
+      name: expert.name,
+      summary: expert.summary,
+      author: expert.author,
+      tags: expert.tags,
+      identity: '负责整理工作材料。',
+      principles: [],
+      inputRequirements: [],
+      deliveryRequirements: [],
+      skillPreset: [],
+      builtinToolPolicy: { mode: 'application-defaults' },
+      modelReference: { mode: 'application-default' },
+      referenceMaterials: [],
+    },
+  };
+}
+
+function renderExpertsPage(options?: {
+  experts?: ExpertSummary[];
+  detail?: ExpertDetail;
+  actions?: Partial<ExpertsState>;
+}) {
+  const state = stateStub(options?.experts ?? [userExpert]);
+  const actions = {
+    ...state,
+    get: vi.fn(async () => options?.detail ?? detailOf()),
+    ...options?.actions,
+  };
+  const onSummon = vi.fn(async () => undefined);
+  const onError = vi.fn();
+  const onManageMemories = vi.fn();
+  const { container } = render(
+    <ExpertsPage
+      state={state}
+      skills={[]}
+      mcpConnections={[]}
+      memories={[]}
+      models={[]}
+      materialCandidates={[]}
+      actions={actions}
+      onSummon={onSummon}
+      onError={onError}
+      onManageMemories={onManageMemories}
+    />,
+  );
+  return { actions, container, onError, onManageMemories, onSummon, state };
+}
+
 /** 一张条目上给出的动作集合；排序比较的是「有哪几颗」，不是「摆在哪一格」。
  * 卡片自己的整片可点区不算动作——它的可及名称是标题与说明的聚合。 */
 function actionLabels(root: Element): string[] {
@@ -269,5 +324,76 @@ describe('ExpertsPage 的目录条目', () => {
       expect(actionLabels(row)).toEqual(actionLabels(card));
       expect(row.querySelector('.list-row-meta')?.textContent).toBe(bylineOnCards[index]);
     }
+  });
+});
+
+describe('ExpertsPage 的整页配置交互', () => {
+  it('卡片交代图标、署名、版本与用途标签，召唤按钮带图标', () => {
+    const cardExpert = { ...userExpert, tags: ['经营分析', '月度复盘'] };
+    const { container } = renderExpertsPage({ experts: [cardExpert] });
+    const card = container.querySelector('.expert-cards .card');
+
+    expect(card?.querySelector('.card-mark svg')).not.toBeNull();
+    expect(card?.textContent).toContain('用户 · 财务组 · v3');
+    expect(card?.querySelectorAll('.expert-card-tags .badge[data-shape="pill"]')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: '召唤' })).toBeTruthy();
+    expect(card?.querySelector('.card-primary svg')).not.toBeNull();
+  });
+
+  it('内置专家详情显示复制入口，不显示编辑入口', async () => {
+    const builtinDetail = detailOf(builtinExpert);
+    renderExpertsPage({ experts: [builtinExpert], detail: builtinDetail });
+    fireEvent.click(screen.getByRole('button', { name: '详情' }));
+
+    expect(await screen.findByRole('button', { name: '复制为用户专家' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '编辑配置' })).toBeNull();
+  });
+
+  it('内置专家卡片只提供复制动作，点击后刷新目录', async () => {
+    const copy = vi.fn(async () => ({ expert: detailOf(builtinExpert) }));
+    const { actions } = renderExpertsPage({
+      experts: [builtinExpert],
+      actions: { copy },
+    });
+
+    const card = screen.getByRole('button', { name: /研究顾问/ }).closest('.card');
+    expect(card).not.toBeNull();
+    expect(within(card as HTMLElement).queryByRole('button', { name: '编辑' })).toBeNull();
+    expect(within(card as HTMLElement).queryByRole('button', { name: '删除' })).toBeNull();
+    fireEvent.click(within(card as HTMLElement).getByRole('button', { name: '复制副本' }));
+
+    await waitFor(() => expect(actions.copy).toHaveBeenCalledWith(builtinExpert.id));
+    await waitFor(() => expect(actions.refresh).toHaveBeenCalledTimes(1));
+  });
+
+  it('卡片编辑先读取当前修订，再显示作者与用途标签字段', async () => {
+    const detail = detailOf();
+    const get = vi.fn(async () => detail);
+    renderExpertsPage({ actions: { get } });
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+
+    await waitFor(() => expect(get).toHaveBeenCalledWith(userExpert.id));
+    expect(await screen.findByRole('textbox', { name: '作者' })).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: /用途标签/ })).toBeTruthy();
+  });
+
+  it('从详情进入编辑器后返回详情', async () => {
+    renderExpertsPage();
+    fireEvent.click(screen.getByRole('button', { name: '详情' }));
+    fireEvent.click(await screen.findByRole('button', { name: '编辑配置' }));
+    fireEvent.click(await screen.findByRole('button', { name: '返回详情' }));
+
+    expect(screen.queryByRole('textbox', { name: '作者' })).toBeNull();
+    expect(screen.getByRole('button', { name: '编辑配置' })).toBeTruthy();
+  });
+
+  it('从卡片进入编辑器后返回目录', async () => {
+    renderExpertsPage();
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+    fireEvent.click(await screen.findByRole('button', { name: '返回列表' }));
+
+    expect(await screen.findByRole('button', { name: '详情' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '编辑配置' })).toBeNull();
   });
 });
