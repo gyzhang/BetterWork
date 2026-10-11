@@ -400,6 +400,317 @@ describe('evidence preload API', () => {
   });
 });
 
+describe('artifact query preload API', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.invoke.mockResolvedValue(null);
+  });
+
+  it('validates and forwards Artifact reads through their typed channels', async () => {
+    const artifact = {
+      id: 'artifact-1',
+      workspaceId: 'workspace-1',
+      taskId: 'task-1',
+      type: 'markdown' as const,
+      sourceDeclarationKind: undefined,
+      title: 'Research notes',
+      currentVersionId: 'version-1',
+      versionNumber: 1,
+      origin: 'assistant-run' as const,
+      sourceRunId: undefined,
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    const evidence = {
+      id: 'evidence-1',
+      taskId: 'task-1',
+      runId: 'run-1',
+      sourceType: 'local-file' as const,
+      sourceUri: 'file:///tmp/source.md',
+      title: 'Source',
+      locator: '',
+      excerpt: '',
+      contentHash: 'evidence-hash',
+      capturedAt: 1,
+      knowledgeSource: undefined,
+    };
+    const artifactDetail = {
+      ...artifact,
+      content: '# Notes',
+      contentHash: 'content-hash',
+      evidence: [evidence],
+    };
+    const version = {
+      id: 'version-1',
+      artifactId: 'artifact-1',
+      type: 'markdown' as const,
+      versionNumber: 1,
+      origin: 'assistant-run' as const,
+      sourceRunId: undefined,
+      createdAt: 1,
+      sourceDeclarationKind: undefined,
+    };
+    const versionDetail = {
+      ...version,
+      content: '# Notes',
+      contentHash: 'content-hash',
+      evidence: [evidence],
+    };
+    const fileDetail = {
+      id: 'artifact-2',
+      workspaceId: 'workspace-1',
+      taskId: 'task-1',
+      type: 'presentation' as const,
+      sourceDeclarationKind: undefined,
+      title: 'Research slides',
+      currentVersionId: 'version-2',
+      versionNumber: 1,
+      origin: 'assistant-run' as const,
+      sourceRunId: undefined,
+      mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      fileSize: 12,
+      createdAt: 1,
+      updatedAt: 2,
+      fileHash: 'file-hash',
+      fileKey: 'file-key',
+      description: undefined,
+      validation: {
+        structure: 'passed' as const,
+        visual: 'pending' as const,
+        manualEdit: 'pending' as const,
+      },
+      evidence: [evidence],
+    };
+    mocks.invoke.mockImplementation(async (channel) => {
+      if (channel === IpcChannel.ListArtifacts) return [artifact];
+      if (channel === IpcChannel.GetArtifact) return artifactDetail;
+      if (channel === IpcChannel.ListArtifactVersions) return [version];
+      if (channel === IpcChannel.GetArtifactVersionExecutor) {
+        return { kind: 'general', sourceRunId: 'run-1' };
+      }
+      if (channel === IpcChannel.GetArtifactVersion) return versionDetail;
+      if (channel === IpcChannel.GetFileArtifact) return fileDetail;
+      return null;
+    });
+
+    const artifacts = api().artifacts;
+    const summaries = await artifacts.list();
+    expect(Object.hasOwn(summaries[0] ?? {}, 'sourceDeclarationKind')).toBe(false);
+    expect(Object.hasOwn(summaries[0] ?? {}, 'sourceRunId')).toBe(false);
+    await artifacts.list({ taskId: 'task-1' });
+    const artifactRead = await artifacts.get({ id: 'artifact-1' });
+    expect(artifactRead?.evidence[0]).toBeDefined();
+    expect(Object.hasOwn(artifactRead?.evidence[0] ?? {}, 'knowledgeSource')).toBe(false);
+    const versions = await artifacts.listVersions({ artifactId: 'artifact-1' });
+    expect(Object.hasOwn(versions[0] ?? {}, 'sourceDeclarationKind')).toBe(false);
+    expect(Object.hasOwn(versions[0] ?? {}, 'sourceRunId')).toBe(false);
+    await artifacts.getVersionExecutor({
+      artifactId: 'artifact-1',
+      artifactVersionId: 'version-1',
+    });
+    const versionRead = await artifacts.getVersion({ id: 'version-1' });
+    expect(versionRead?.evidence[0]).toBeDefined();
+    expect(Object.hasOwn(versionRead?.evidence[0] ?? {}, 'knowledgeSource')).toBe(false);
+    const fileRead = await artifacts.getFileDetail({ artifactId: 'artifact-2' });
+    expect(Object.hasOwn(fileRead ?? {}, 'description')).toBe(false);
+    expect(Object.hasOwn(fileRead?.evidence[0] ?? {}, 'knowledgeSource')).toBe(false);
+
+    expect(mocks.invoke.mock.calls).toEqual([
+      [IpcChannel.ListArtifacts, undefined],
+      [IpcChannel.ListArtifacts, { taskId: 'task-1' }],
+      [IpcChannel.GetArtifact, { id: 'artifact-1' }],
+      [IpcChannel.ListArtifactVersions, { artifactId: 'artifact-1' }],
+      [
+        IpcChannel.GetArtifactVersionExecutor,
+        { artifactId: 'artifact-1', artifactVersionId: 'version-1' },
+      ],
+      [IpcChannel.GetArtifactVersion, { id: 'version-1' }],
+      [IpcChannel.GetFileArtifact, { artifactId: 'artifact-2' }],
+    ]);
+  });
+
+  it('rejects malformed Artifact requests before IPC and malformed responses after IPC', async () => {
+    const artifacts = api().artifacts;
+    expect(() => artifacts.list({ taskId: '' })).toThrow();
+    expect(() => artifacts.get({ id: '' })).toThrow();
+    expect(() => artifacts.listVersions({ artifactId: '' })).toThrow();
+    expect(() => artifacts.getVersionExecutor({ artifactId: '', artifactVersionId: '' })).toThrow();
+    expect(() => artifacts.getVersion({ id: '' })).toThrow();
+    expect(() => artifacts.getFileDetail({ artifactId: '' })).toThrow();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+
+    mocks.invoke
+      .mockResolvedValueOnce([{}])
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce([{}])
+      .mockResolvedValueOnce({ kind: 'unknown' })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({});
+    await Promise.all([
+      expect(artifacts.list()).rejects.toThrow(),
+      expect(artifacts.get({ id: 'artifact-1' })).rejects.toThrow(),
+      expect(artifacts.listVersions({ artifactId: 'artifact-1' })).rejects.toThrow(),
+      expect(
+        artifacts.getVersionExecutor({ artifactId: 'artifact-1', artifactVersionId: 'version-1' }),
+      ).rejects.toThrow(),
+      expect(artifacts.getVersion({ id: 'version-1' })).rejects.toThrow(),
+      expect(artifacts.getFileDetail({ artifactId: 'artifact-2' })).rejects.toThrow(),
+    ]);
+    expect(mocks.invoke).toHaveBeenCalledTimes(6);
+  });
+});
+
+describe('artifact action preload API', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.invoke.mockResolvedValue(null);
+  });
+
+  it('validates and forwards Artifact mutations and file operations', async () => {
+    const saveInput = {
+      taskId: 'task-1',
+      origin: 'assistant-run' as const,
+      runId: 'run-1',
+      title: 'Research notes',
+      content: '# Notes',
+    };
+    const registerInput = {
+      runId: 'run-1',
+      executionId: 'execution-1',
+      outputId: 'output-1',
+      title: 'Research slides',
+    };
+    const artifactSummary = {
+      id: 'artifact-1',
+      workspaceId: 'workspace-1',
+      taskId: 'task-1',
+      type: 'markdown' as const,
+      sourceDeclarationKind: undefined,
+      title: 'Research notes',
+      currentVersionId: 'version-1',
+      versionNumber: 1,
+      origin: 'assistant-run' as const,
+      sourceRunId: undefined,
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    mocks.invoke.mockImplementation(async (channel) => {
+      if (channel === IpcChannel.SaveMarkdownArtifact) return artifactSummary;
+      if (channel === IpcChannel.ExportMarkdownArtifact) {
+        return { cancelled: true, filePath: undefined };
+      }
+      if (channel === IpcChannel.RegisterFileArtifact) {
+        return {
+          artifactId: 'artifact-2',
+          versionId: 'version-2',
+          versionNumber: 1,
+          fileKey: 'file-key',
+          fileHash: 'file-hash',
+          fileSize: 12,
+          validation: { structure: 'passed', visual: 'pending', manualEdit: 'pending' },
+        };
+      }
+      if (channel === IpcChannel.ExportFileArtifact) {
+        return { cancelled: false, filePath: '/tmp/research-slides.pptx' };
+      }
+      if (channel === IpcChannel.OpenFileArtifact) {
+        return { opened: true, error: undefined };
+      }
+      return null;
+    });
+
+    const artifacts = api().artifacts;
+    const saved = await artifacts.saveMarkdown(saveInput);
+    expect(Object.hasOwn(saved, 'sourceDeclarationKind')).toBe(false);
+    expect(Object.hasOwn(saved, 'sourceRunId')).toBe(false);
+    const markdownExport = await artifacts.exportMarkdown({
+      artifactId: 'artifact-1',
+      versionId: 'version-1',
+    });
+    expect(markdownExport).toEqual({ cancelled: true });
+    expect(Object.hasOwn(markdownExport, 'filePath')).toBe(false);
+    await expect(artifacts.registerFile(registerInput)).resolves.toEqual({
+      artifactId: 'artifact-2',
+      versionId: 'version-2',
+      versionNumber: 1,
+      fileKey: 'file-key',
+      fileHash: 'file-hash',
+      fileSize: 12,
+      validation: { structure: 'passed', visual: 'pending', manualEdit: 'pending' },
+    });
+    await expect(
+      artifacts.exportFile({ artifactId: 'artifact-2', versionId: 'version-2' }),
+    ).resolves.toEqual({ cancelled: false, filePath: '/tmp/research-slides.pptx' });
+    const opened = await artifacts.openFile({ artifactId: 'artifact-2' });
+    expect(opened).toEqual({ opened: true });
+    expect(Object.hasOwn(opened, 'error')).toBe(false);
+
+    expect(mocks.invoke.mock.calls).toEqual([
+      [IpcChannel.SaveMarkdownArtifact, saveInput],
+      [IpcChannel.ExportMarkdownArtifact, { artifactId: 'artifact-1', versionId: 'version-1' }],
+      [IpcChannel.RegisterFileArtifact, registerInput],
+      [IpcChannel.ExportFileArtifact, { artifactId: 'artifact-2', versionId: 'version-2' }],
+      [IpcChannel.OpenFileArtifact, { artifactId: 'artifact-2' }],
+    ]);
+  });
+
+  it('rejects malformed Artifact action requests before IPC and responses after IPC', async () => {
+    const artifacts = api().artifacts;
+    expect(() =>
+      artifacts.saveMarkdown({
+        taskId: 'task-1',
+        origin: 'user-edit',
+        runId: 'run-1',
+        title: 'Notes',
+        content: '# Notes',
+      }),
+    ).toThrow();
+    expect(() => artifacts.exportMarkdown({ artifactId: '' })).toThrow();
+    expect(() =>
+      artifacts.registerFile({
+        runId: 'run-1',
+        executionId: 'execution-1',
+        outputId: 'output-1',
+        title: 'Slides',
+        validation: { structure: 'failed', visual: 'pending', manualEdit: 'pending' },
+      }),
+    ).toThrow();
+    expect(() => artifacts.exportFile({ artifactId: '' })).toThrow();
+    expect(() => artifacts.openFile({ artifactId: '' })).toThrow();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+
+    mocks.invoke
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ cancelled: 'yes' })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ cancelled: true, filePath: '' })
+      .mockResolvedValueOnce({ opened: 'yes' });
+    await Promise.all([
+      expect(
+        artifacts.saveMarkdown({
+          taskId: 'task-1',
+          origin: 'assistant-run',
+          runId: 'run-1',
+          title: 'Notes',
+          content: '# Notes',
+        }),
+      ).rejects.toThrow(),
+      expect(artifacts.exportMarkdown({ artifactId: 'artifact-1' })).rejects.toThrow(),
+      expect(
+        artifacts.registerFile({
+          runId: 'run-1',
+          executionId: 'execution-1',
+          outputId: 'output-1',
+          title: 'Slides',
+        }),
+      ).rejects.toThrow(),
+      expect(artifacts.exportFile({ artifactId: 'artifact-2' })).rejects.toThrow(),
+      expect(artifacts.openFile({ artifactId: 'artifact-2' })).rejects.toThrow(),
+    ]);
+    expect(mocks.invoke).toHaveBeenCalledTimes(5);
+  });
+});
+
 describe('model preload API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
