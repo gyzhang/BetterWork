@@ -312,6 +312,79 @@ interface AppTestApiOptions {
   models?: ModelProfileSummary[];
 }
 
+function createMemoryApiFixture(options?: Pick<AppTestApiOptions, 'memories'>) {
+  return {
+    list: vi.fn(async () => okResult({ items: options?.memories ?? [] })),
+    get: vi.fn(async () => okResult(memoryViewItem())),
+    create: vi.fn(async (input: CreateMemoryRequest): Promise<Result<MemoryWriteReceipt>> =>
+      okResult({ ...writeReceipt, operationId: input.operationId }),
+    ),
+    update: vi.fn(async () => okResult(writeReceipt)),
+    setStatus: vi.fn(async () => okResult(writeReceipt)),
+    resolveConflict: vi.fn(async () =>
+      okResult({
+        receipt: writeReceipt,
+        decision: {
+          id: 'conflict-decision-1',
+          operationId: memoryOperationUuid,
+          leftRevisionId: 'memory-1-r1',
+          rightRevisionId: 'memory-2-r1',
+          decision: 'keep-both' as const,
+          applicabilityNote: '按适用范围分别保留。',
+          createdAt: 1,
+        },
+      }),
+    ),
+    preview: vi.fn(async () => ({
+      ok: false as const,
+      error: { code: 'NOT_FOUND' as const, message: '测试未提供范围预览。', retryable: false },
+    })),
+    // 排除清单是独立只读投影：默认空表，个别用例再覆写。
+    taskExclusions: vi.fn(async (input: { taskId: string; taskContextRevisionId: string }) =>
+      okResult({
+        taskId: input?.taskId ?? 'task-1',
+        taskContextRevisionId: input?.taskContextRevisionId ?? 'context-1',
+        taskContextRevision: 1,
+        items: [],
+      }),
+    ),
+    runContext: vi.fn(async (input: { runId: string }) =>
+      okResult({
+        runId: input?.runId ?? 'run-1',
+        phase: 'legacy_unknown' as const,
+        memories: [],
+        reads: [],
+      }),
+    ),
+    getSettings: vi.fn(async () =>
+      okResult({
+        workspaceId: 'workspace-1',
+        revision: 0,
+        autoSuggestEnabled: false,
+        updatedAt: 1,
+      }),
+    ),
+    setSettings: vi.fn(async () =>
+      okResult({
+        receipt: {
+          ...writeReceipt,
+          currentSettings: {
+            workspaceId: 'workspace-1',
+            revision: 1,
+            autoSuggestEnabled: false,
+            updatedAt: 1,
+          },
+        },
+        cancelledJobCount: 0,
+      }),
+    ),
+    listJobs: vi.fn(async () => okResult({ items: [] })),
+    retryJob: vi.fn(async () => okResult({})),
+    cancelJob: vi.fn(async () => okResult({})),
+    rebuildProjection: vi.fn(async () => okResult({ projectionState: 'synced' as const })),
+  };
+}
+
 function createAppTestApi(options?: AppTestApiOptions) {
   emitNotificationChange = undefined;
   emitScheduleChange = undefined;
@@ -480,76 +553,7 @@ function createAppTestApi(options?: AppTestApiOptions) {
       listCandidates: vi.fn(async (): Promise<MaterialCandidate[]> => []),
       prepareInputSnapshot: vi.fn(async (): Promise<InputSnapshot | null> => null),
     },
-    memories: {
-      list: vi.fn(async () => okResult({ items: options?.memories ?? [] })),
-      get: vi.fn(async () => okResult(memoryViewItem())),
-      create: vi.fn(async (input: CreateMemoryRequest): Promise<Result<MemoryWriteReceipt>> =>
-        okResult({ ...writeReceipt, operationId: input.operationId }),
-      ),
-      update: vi.fn(async () => okResult(writeReceipt)),
-      setStatus: vi.fn(async () => okResult(writeReceipt)),
-      resolveConflict: vi.fn(async () =>
-        okResult({
-          receipt: writeReceipt,
-          decision: {
-            id: 'conflict-decision-1',
-            operationId: memoryOperationUuid,
-            leftRevisionId: 'memory-1-r1',
-            rightRevisionId: 'memory-2-r1',
-            decision: 'keep-both',
-            applicabilityNote: '按适用范围分别保留。',
-            createdAt: 1,
-          },
-        }),
-      ),
-      preview: vi.fn(async () => ({
-        ok: false,
-        error: { code: 'NOT_FOUND', message: '测试未提供范围预览。', retryable: false },
-      })),
-      // 排除清单是独立只读投影：默认空表，个别用例再覆写。
-      taskExclusions: vi.fn(async (input: { taskId: string; taskContextRevisionId: string }) =>
-        okResult({
-          taskId: input?.taskId ?? 'task-1',
-          taskContextRevisionId: input?.taskContextRevisionId ?? 'context-1',
-          taskContextRevision: 1,
-          items: [],
-        }),
-      ),
-      runContext: vi.fn(async (input: { runId: string }) =>
-        okResult({
-          runId: input?.runId ?? 'run-1',
-          phase: 'legacy_unknown',
-          memories: [],
-          reads: [],
-        }),
-      ),
-      getSettings: vi.fn(async () =>
-        okResult({
-          workspaceId: 'workspace-1',
-          revision: 0,
-          autoSuggestEnabled: false,
-          updatedAt: 1,
-        }),
-      ),
-      setSettings: vi.fn(async () =>
-        okResult({
-          receipt: {
-            ...writeReceipt,
-            currentSettings: {
-              workspaceId: 'workspace-1',
-              revision: 1,
-              autoSuggestEnabled: false,
-              updatedAt: 1,
-            },
-          },
-          cancelledJobCount: 0,
-        }),
-      ),
-      listJobs: vi.fn(async () => okResult({ items: [] })),
-      retryJob: vi.fn(async () => okResult({})),
-      cancelJob: vi.fn(async () => okResult({})),
-      rebuildProjection: vi.fn(async () => okResult({ projectionState: 'synced' })),
-    },
+    memories: createMemoryApiFixture(options),
     mcp: {
       listConnections: vi.fn(async () => []),
       getConnection: vi.fn(async () => null),
