@@ -7,7 +7,8 @@ dist/
 out/
 release/
 coverage/
-/apps/desktop/build/mcp-runtime-assets/
+/apps/desktop/build/python-runtime-assets/
+/apps/desktop/build/node-runtime/
 
 # Local configuration and logs
 .env

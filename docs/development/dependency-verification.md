@@ -119,6 +119,6 @@
 - Python 服务：上游 `modelcontextprotocol/servers` 的 `mcp-server-fetch`，PyPI 版本 `2026.8.18`，MIT；安装入口为 `python -m mcp_server_fetch`。它要求 MCP Python SDK 1.x（`mcp>=1.29,<2`），所以与 BetterWork MCP 客户端 SDK 2.x 保持独立环境。
 - 解析平台：macOS arm64 / CPython 3.12；使用本机 CPython 3.12.13 解析同一 cp312 ABI 的固定闭包，共 43 个精确版本 wheel。每个制品都从 PyPI JSON 取得 SHA-256 与 URL，再与真实下载文件逐项比对；锁文件 [`mcp-server-fetch-darwin-arm64-cp312.json`](../../resources/dependency-locks/mcp-server-fetch-darwin-arm64-cp312.json) 同时记录版本、URL、哈希和许可。
 - Wheelhouse 实测：43 个 wheel 共 18,330,231 字节；包含 `mcp-server-fetch`、`mcp`、`pydantic`、`httpx`、`readabilipy`、`lxml`、`cryptography` 等完整运行依赖闭包。锁内 import probes 在 venv 完成后验证服务入口与主要模块。
-- 打包生成：[prepare-mcp-runtime-assets.mjs](../../scripts/prepare-mcp-runtime-assets.mjs) 读取共享 CPython 候选与依赖锁，把 CPython 压缩包和 wheels 写到 `apps/desktop/build/mcp-runtime-assets/`；每个资产写入缓存前校验锁定 SHA-256，缺资产时仅下载锁内精确 URL，校验失败则停止打包。该目录由 `.gitignore` 排除并由 electron-builder 复制进安装包。
+- 打包生成：[prepare-python-runtime-assets.mjs](../../scripts/prepare-python-runtime-assets.mjs) 读取共享 CPython 候选与依赖锁，把 CPython 压缩包和 wheels 写到 `apps/desktop/build/python-runtime-assets/`；每个资产写入缓存前校验锁定 SHA-256，缺资产时仅下载锁内精确 URL，校验失败则停止打包。该目录由 `.gitignore` 排除并由 electron-builder 复制进安装包。
 - 冷启动机制：首次检测时沿用 `SkillDependencyService` 解压随包 CPython、建立受管 fetch venv，并从随包 wheelhouse 使用 `--no-index --require-hashes` 安装；缺少打包资源时才回退到受批准的固定下载地址。fetch venv 的 lock hash 与 PPT Skill 不同，因此目录键不同，不会复用 PPT 环境。
 - 当前状态：lock、PyPI hash 与资源生成脚本已就绪；完整资源生成、实际离线 venv、四个 server 握手及 macOS arm64 unpacked 安装包检查由 CF43 追加实测结果。在这些验证完成前不将其写成已验收。

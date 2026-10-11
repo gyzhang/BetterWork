@@ -13,7 +13,7 @@ const runtimeAssetsRoot = path.join(
   'apps',
   'desktop',
   'build',
-  'mcp-runtime-assets',
+  'python-runtime-assets',
 );
 const targetPlatform = { os: 'darwin', arch: 'arm64', abi: 'cp312' };
 const distribution = findDistribution('python-build-standalone-3.12.14-darwin-arm64');
@@ -27,7 +27,7 @@ const lock = dependencyLockSchema.parse(JSON.parse(await readFile(lockPath, 'utf
 const maxAssetBytes = 128 * 1024 * 1024;
 
 if (process.platform !== 'darwin' || process.arch !== 'arm64')
-  throw new Error('内置 MCP 运行时资源仅支持 macOS arm64 打包。');
+  throw new Error('内置 Python 运行时资源仅支持 macOS arm64 打包。');
 if (!distribution) throw new Error('找不到 macOS arm64 CPython 发行候选。');
 if (
   lock.platform.os !== targetPlatform.os ||
@@ -122,5 +122,5 @@ await writeFile(
   )}\n`,
 );
 globalThis.console.log(
-  `MCP 运行时资源已准备：${String(files.length)} 项，${String(files.reduce((sum, file) => sum + file.size, 0))} 字节；本次下载 ${String(downloaded)} 项。`,
+  `Python 运行时资源已准备：${String(files.length)} 项，${String(files.reduce((sum, file) => sum + file.size, 0))} 字节；本次下载 ${String(downloaded)} 项。`,
 );

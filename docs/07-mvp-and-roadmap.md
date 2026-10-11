@@ -1,5 +1,9 @@
 # MVP 与路线图
 
+## 随包独立 Node.js 运行时 — 2026-10-10
+
+用户审核通过 [ADR-0047](adr/0047-bundled-node-runtime.md)，在 [ADR-0045](adr/0045-bundled-runtimes-for-local-mcp.md) 的随包运行时机制上补齐 Node 侧：随包分发版本锁定的独立 Node.js 24.x（darwin-arm64，含 node/npm/npx），内置 Node stdio MCP 与用户自定义 `node`/`npm`/`npx` 命令改用该运行时，不再依赖 Electron 内嵌 Node；构建期由 `prepare-node-runtime-assets.mjs` 下载并 SHA-256 校验，与 CPython 制品同机制。随包 Python 构建脚本改名 `prepare-mcp-runtime-assets` → `prepare-python-runtime-assets`（纯命名对齐，Python venv/wheel/lock 机制一字不动）。运行时随包与 MCP 接入（决策 1–4、8–11）已落地并通过定向与离线回归；Node-based Skill 执行链、导入 Skill 的 `node_modules` 生命周期与信任指纹（决策 5–7）因暂无 Node Skill 消费者，另立 [CF44](development/tasks-capability-foundation.md) 承载，待首个真实 Node Skill 出现再按实际契约开工。真机 DMG 打包、签名公证与体积增量验收待用户执行。
+
 ## 公开网页目的地边界补强 — 2026-10-09
 
 代码 Review 的 B2/R05 延续 E43 只读公开网页范围；用户接受 [ADR-0046](adr/0046-web-fetch-destination-binding.md) 并授权实施逐跳 DNS 全回答校验、实际 socket 地址绑定、统一 15 秒预算与资源释放。域名/TLS 身份保留，特殊地址拒绝，不自动跟随系统代理；不新增私网网页授权，不改变 MCP 授权、Evidence 或既有任务板验收状态。实现、离线回归与 PR 证据只记 [Review 报告](reviews/2026-10-09-code-refactoring-review.md) 的 B2 跟踪。

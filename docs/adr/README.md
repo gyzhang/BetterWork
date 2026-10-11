@@ -45,7 +45,9 @@
 | [0042](0042-pr-quick-check-and-scheduled-verify.md) | PR 快门禁与按需、夜间完整验证 | Accepted（2026-10-08；替代 ADR-0039 的所有代码 PR 必跑完整 verify 范围） |
 | [0043](0043-mcp-multi-transport-and-oauth.md) | MCP 多传输接入与 OAuth 浏览器登录 | Accepted（2026-10-08；用户按推荐方案定案） |
 | [0044](0044-mcp-explicit-side-effect-tool-authorization.md) | MCP 有副作用工具的显式用户授权 | Accepted（2026-10-09；用户允许明确承担风险后使用） |
+| [0045](0045-bundled-runtimes-for-local-mcp.md) | 本地 MCP 使用随应用分发的运行时 | Accepted（2026-10-09；用户要求装后即用内置 MCP，Python 随包 CPython 3.12.14 + 独立 venv，Node 走 Electron 内嵌；其中内置 Node MCP 的启动方式于 2026-10-10 由 [0047](0047-bundled-node-runtime.md) 改为独立随包 Node） |
 | [0046](0046-web-fetch-destination-binding.md) | 公开网页 DNS、实际连接与逐跳资源边界 | Accepted（2026-10-09；B2 用户选择完整方案并授权实施，补强 ADR-0017） |
+| [0047](0047-bundled-node-runtime.md) | 随包分发独立 Node.js 运行时 | Accepted（2026-10-10；用户审核通过。运行时随包与 MCP 接入已落地；Node Skill 执行链决策 5–7 另立任务卡） |
 | [0048](0048-inline-chart-rendering.md) | 对话内联 ECharts 图表渲染 | Proposed（2026-10-11 设计定案；已按用户开工指令完成代码实现与自动化测试，ADR 接受状态与人工验收待用户确认） |
 
 [ADR-0027](0027-knowledge-foundation.md)（Proposed，2026-09-24 文档归档）提出固定知识修订正文读取、嵌入/混合检索、索引作业与显式成果来源声明；延续 ADR-0014/0018，拟细化 ADR-0005 的访问与采用语义，不改变 WM 的非向量记忆召回。产品见[知识基础闭环](../designs/knowledge-foundation.md)，字段见[知识契约](../development/knowledge-contracts.md)，状态只看 [KM 任务板](../development/tasks-knowledge.md)。

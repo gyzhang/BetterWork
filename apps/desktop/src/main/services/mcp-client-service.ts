@@ -30,6 +30,7 @@ import { z } from 'zod';
 
 import type { GuardianRuntime } from '../infrastructure/mac-process-supervisor';
 import type { McpStdioLaunch } from '../infrastructure/mcp-stdio-launch';
+import { managedNodeTool } from '../infrastructure/node-runtime';
 import type { AppStore } from '../persistence';
 import {
   createMcpPolicyFetch,
@@ -68,6 +69,8 @@ interface RunConnections {
 }
 export interface McpClientOptions extends McpNetworkOptions {
   guardian?: GuardianRuntime;
+  /** 随包独立 Node 运行时根目录（ADR-0047 决策 4）；缺省时用户命令 node/npm/npx 原样使用。 */
+  nodeRuntimeRoot?: string;
   resolveBundledRuntime?: (
     serverId: McpBundledServerId,
     args: readonly string[],
@@ -687,7 +690,11 @@ export class McpClientService {
         ? await this.options.resolveBundledRuntime?.(config.runtime.serverId, config.args, signal)
         : config.command
           ? {
-              command: config.command,
+              // ADR-0047 决策 4：裸命令 node/npm/npx 解析到随包运行时；含路径分隔符的显式命令原样使用。
+              command:
+                (this.options.nodeRuntimeRoot
+                  ? managedNodeTool(this.options.nodeRuntimeRoot, config.command)
+                  : undefined) ?? config.command,
               args: config.args,
               ...(config.cwd ? { cwd: config.cwd } : {}),
             }

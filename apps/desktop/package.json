@@ -9,8 +9,10 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "dist": "npm run dist:mac",
-    "mcp:runtimes:prepare": "node ../../scripts/prepare-mcp-runtime-assets.mjs",
-    "dist:mac": "npm run mcp:runtimes:prepare && electron-vite build && electron-builder --mac --arm64"
+    "python:runtimes:prepare": "node ../../scripts/prepare-python-runtime-assets.mjs",
+    "node:runtimes:prepare": "node ../../scripts/prepare-node-runtime-assets.mjs",
+    "runtimes:prepare": "npm run python:runtimes:prepare && npm run node:runtimes:prepare",
+    "dist:mac": "npm run runtimes:prepare && electron-vite build && electron-builder --mac --arm64"
   },
   "dependencies": {
     "@betterwork/agent-core": "*",

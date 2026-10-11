@@ -9,6 +9,7 @@ import {
 } from '@betterwork/agent-protocol';
 
 import type { McpStdioLaunch } from '../infrastructure/mcp-stdio-launch';
+import { managedNodeBin } from '../infrastructure/node-runtime';
 import { type SkillDependencyService } from './skill-dependency-service';
 
 const nodeServerPackages: Record<Exclude<McpBundledServerId, 'fetch'>, string> = {
@@ -21,6 +22,7 @@ interface BuiltinMcpRuntimeOptions {
   readonly appRoot: string;
   readonly resourcesRoot: string;
   readonly runtimeAssetsRoot: string;
+  readonly nodeRuntimeRoot: string;
   readonly dependencies: SkillDependencyService;
 }
 
@@ -55,6 +57,12 @@ export class BuiltinMcpRuntimeService {
     signal.throwIfAborted();
     if (serverId !== 'fetch') {
       const scriptPath = await packageBinPath(this.options.appRoot, nodeServerPackages[serverId]);
+      // ADR-0047 决策 3：优先用随包独立 Node（标准生态、版本与 Electron 解耦）；缺失时回退
+      // Electron 内嵌 Node，供未跑准备脚本的开发/测试态使用，打包态缺制品由验收清单拦住。
+      const managedNode = managedNodeBin(this.options.nodeRuntimeRoot);
+      if (managedNode) {
+        return { command: managedNode, args: [scriptPath, ...serverArgs], runAsNode: false };
+      }
       return {
         command: process.execPath,
         args: [scriptPath, ...serverArgs],
