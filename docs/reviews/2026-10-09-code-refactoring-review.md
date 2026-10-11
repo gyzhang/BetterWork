@@ -896,3 +896,9 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 2026-10-11 18:18 CST，从最新 `origin/main` `9f0c3890bb2523e5550f22d3cf28416f4a57c88b` 建立 `codex/r13-app-tasks-api-fixture`。将任务列表、详情与创建默认替身提取为私有 `createTasksApiFixture`，由总夹具组合 `tasks` 端口；旧任务返回、空详情语义和新建任务/会话回执保持不变。
 
 `App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡只移动 Tasks API 测试替身，不改任务创建或读取行为、协议或生产代码；完整 Desktop API fixture 与 App 整树场景仍在，不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 61. R13 子卡：Task Continuity API 替身按域收拢
+
+2026-10-11 18:25 CST，从最新 `origin/main` `e091025b3b95a157d6f9f5ccb95a974d9861274f` 建立 `codex/r13-app-task-continuity-api-fixture`。将 Task Continuity 的简报读取与保存默认替身提取为私有 `createTaskContinuityApiFixture`，由总夹具组合该端口；读取仍返回 null，未配置的保存仍以原有显式错误拒绝。
+
+`App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡只移动 Task Continuity API 测试替身，不改简报行为或生产代码；完整 Desktop API fixture 与 App 整树场景仍在，不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。
