@@ -23,6 +23,7 @@ import type {
   MemoryWarning,
   PreviewMemoryRequest,
   Result,
+  RunMaterialRead,
   TaskMaterialSelection,
   TaskMemoryExclusionItem,
   TaskMemoryExclusionsData,
@@ -976,12 +977,25 @@ const collectPriorRunFacts = (store: AppStore, input: RunReplayInput): PriorRunF
     ...(currentRun === undefined ? {} : { createdBefore: currentRun.createdAt }),
     completedAtOrBefore: input.evaluatedAt,
   });
+  const runIds = candidates.map((run) => run.id);
+  const contexts = new Map(
+    store.runMemoryContexts.listByRunIds(runIds).map((context) => [context.runId, context]),
+  );
+  const snapshots = new Map(
+    store.runContextSnapshots.listByRunIds(runIds).map((snapshot) => [snapshot.runId, snapshot]),
+  );
+  const readsByRun = new Map<string, RunMaterialRead[]>();
+  for (const read of store.materialReads.listByRunIds(runIds)) {
+    const reads = readsByRun.get(read.runId) ?? [];
+    reads.push(read);
+    readsByRun.set(read.runId, reads);
+  }
   for (const run of candidates) {
     const event = store.runs.getLatestNonEmptyMessageCompletion(run.id);
     const answer: FinalAnswer | undefined =
       event === undefined ? undefined : { eventId: event.id, content: event.content };
-    const context = store.runMemoryContexts.get(run.id);
-    const snapshot = store.runContextSnapshots.get(run.id);
+    const context = contexts.get(run.id);
+    const snapshot = snapshots.get(run.id);
     const selectedRefs: MemoryRevisionRef[] = [];
     const memoryDependencies: MemoryDependency[] = [];
     for (const item of context?.selectedItems ?? []) {
@@ -1006,7 +1020,7 @@ const collectPriorRunFacts = (store: AppStore, input: RunReplayInput): PriorRunF
       ownMaterialKeys.add(key);
       materialReferences.push(selection.reference);
     }
-    for (const read of store.materialReads.listByRun(run.id)) {
+    for (const read of readsByRun.get(run.id) ?? []) {
       const key = materialListIdentity(read.material);
       if (ownMaterialKeys.has(key)) continue;
       ownMaterialKeys.add(key);

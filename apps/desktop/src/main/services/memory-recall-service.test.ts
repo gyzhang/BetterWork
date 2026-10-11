@@ -16,7 +16,11 @@ import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AppStore } from '../persistence';
-import { legacyReplayDependencies, seedReplayRun } from './fixtures/history-memory-fixtures';
+import {
+  legacyHistorySources,
+  legacyReplayDependencies,
+  seedReplayRun,
+} from './fixtures/history-memory-fixtures';
 import { seedGovernanceMemory } from './fixtures/memory-governance-fixtures';
 import { normalizedMemoryHash } from './memory-content-policy';
 import { buildDerivedProvenance, manualMemorySource } from './memory-provenance';
@@ -531,6 +535,153 @@ describe('召回期的依赖闭包与冲突组装配', () => {
     expect(full).not.toHaveBeenCalled();
     expect(allRuns).not.toHaveBeenCalled();
   });
+
+  it('assembles complete history source facts without point reads for each candidate', async () => {
+    const { store, workspaceId, scope, databasePath } = await setup();
+    const task = store.tasks.create(workspaceId, 'source batches', 'source batches');
+    const record = seedGovernanceMemory(store.memories, 'direct source', { scope });
+    const selected = knowledgeReference('selected');
+    const readOnly = knowledgeReference('read-only');
+    const inherited = knowledgeReference('inherited');
+    const runIds = Array.from({ length: 14 }, (_, index) => {
+      const runId = seedReplayRun(store, {
+        taskId: task.task.id,
+        sessionId: task.sessionId,
+        workspaceId,
+        index,
+        selected: [record],
+        materials: index % 2 === 0 ? [selected] : [],
+        inheritedMaterials: [inherited, selected],
+      });
+      store.materialReads.save({
+        id: `${runId}-read`,
+        runId,
+        material: index % 2 === 0 ? selected : readOnly,
+        operation: 'read',
+        contentHash: selected.contentHash,
+        capturedAt: index,
+      });
+      return runId;
+    });
+    const foreign = store.tasks.create(workspaceId, 'foreign', 'foreign');
+    const outside = seedReplayRun(store, {
+      taskId: foreign.task.id,
+      sessionId: foreign.sessionId,
+      workspaceId,
+      index: 100,
+    });
+    const future = seedReplayRun(store, {
+      taskId: task.task.id,
+      sessionId: task.sessionId,
+      workspaceId,
+      index: CAPTURED_AT + 1,
+    });
+    const db = new Database(databasePath);
+    try {
+      for (const id of [outside, future])
+        db.prepare('UPDATE run_memory_contexts SET decision_summary_json = ? WHERE run_id = ?').run(
+          '{}',
+          id,
+        );
+    } finally {
+      db.close();
+    }
+    const input = {
+      taskId: task.task.id,
+      currentRunId: 'missing-current',
+      evaluatedAt: CAPTURED_AT,
+      excludedMemoryIds: [],
+      allowedMaterialKeys: [selected, inherited, readOnly].map(materialListIdentity),
+    };
+    const legacyContexts = vi
+      .spyOn(store.runMemoryContexts, 'listByRunIds')
+      .mockImplementation((ids) => legacyHistorySources(store, ids).contexts);
+    const legacySnapshots = vi
+      .spyOn(store.runContextSnapshots, 'listByRunIds')
+      .mockImplementation((ids) => legacyHistorySources(store, ids).snapshots);
+    const legacyReads = vi
+      .spyOn(store.materialReads, 'listByRunIds')
+      .mockImplementation((ids) => legacyHistorySources(store, ids).reads);
+    const expected = planRunHistoryReplay(store, input);
+    legacyContexts.mockRestore();
+    legacySnapshots.mockRestore();
+    legacyReads.mockRestore();
+    expect(expected.messages).toHaveLength(16);
+    expect(expected.inheritedMaterialReferences).toEqual([selected, inherited, readOnly]);
+    expect(expected.replay.at(-1)).toMatchObject({ runId: runIds[5], reason: 'history-budget' });
+    const contexts = vi.spyOn(store.runMemoryContexts, 'get');
+    const snapshots = vi.spyOn(store.runContextSnapshots, 'get');
+    const reads = vi.spyOn(store.materialReads, 'listByRun');
+    const batchContexts = vi.spyOn(store.runMemoryContexts, 'listByRunIds');
+    const batchSnapshots = vi.spyOn(store.runContextSnapshots, 'listByRunIds');
+    const batchReads = vi.spyOn(store.materialReads, 'listByRunIds');
+    expect(planRunHistoryReplay(store, input)).toEqual(expected);
+    expect(contexts).not.toHaveBeenCalled();
+    expect(snapshots).not.toHaveBeenCalled();
+    expect(reads).not.toHaveBeenCalled();
+    for (const batch of [batchContexts, batchSnapshots, batchReads]) {
+      expect(batch).toHaveBeenCalledOnce();
+      expect(batch).toHaveBeenCalledWith(runIds);
+    }
+    const remove = new Database(databasePath);
+    try {
+      remove.prepare('DELETE FROM run_context_snapshots WHERE run_id = ?').run(runIds.at(-1)!);
+    } finally {
+      remove.close();
+    }
+    const changed = planRunHistoryReplay(store, input);
+    expect(changed.messages).toEqual([]);
+    expect(changed.replay).toEqual([
+      { replayed: false, runId: runIds.at(-1), reason: 'legacy-provenance-unknown' },
+    ]);
+  });
+
+  it.each(['audit', 'snapshot', 'footprint'] as const)(
+    'rejects malformed %s facts even outside the eight replayed turns',
+    async (kind) => {
+      const { store, workspaceId, databasePath } = await setup();
+      const task = store.tasks.create(workspaceId, 'corrupt source', 'corrupt source');
+      const runIds = Array.from({ length: 14 }, (_, index) =>
+        seedReplayRun(store, {
+          taskId: task.task.id,
+          sessionId: task.sessionId,
+          workspaceId,
+          index,
+        }),
+      );
+      const first = runIds[0]!;
+      const material = knowledgeReference('read');
+      store.materialReads.save({
+        id: `${first}-read`,
+        runId: first,
+        material,
+        operation: 'search',
+        contentHash: material.contentHash,
+        capturedAt: 0,
+      });
+      const db = new Database(databasePath);
+      try {
+        const sql =
+          kind === 'audit'
+            ? 'UPDATE run_memory_contexts SET decision_summary_json = ? WHERE run_id = ?'
+            : kind === 'snapshot'
+              ? 'UPDATE run_context_snapshots SET mcp_tool_bindings_json = ? WHERE run_id = ?'
+              : 'UPDATE run_material_reads SET material_json = ? WHERE run_id = ?';
+        db.prepare(sql).run('{}', first);
+      } finally {
+        db.close();
+      }
+      expect(() =>
+        planRunHistoryReplay(store, {
+          taskId: task.task.id,
+          currentRunId: 'missing-current',
+          evaluatedAt: CAPTURED_AT,
+          excludedMemoryIds: [],
+          allowedMaterialKeys: [materialListIdentity(material)],
+        }),
+      ).toThrow();
+    },
+  );
 
   it('reads repeated direct and inherited history dependencies once without full memory records', async () => {
     const { store, scope, workspaceId } = await setup();

@@ -1,15 +1,50 @@
 import type Database from 'better-sqlite3';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { seedReplayRun } from '../services/fixtures/history-memory-fixtures';
 import { AppStore, scheduleSourceManifestHash } from './index';
 
 const stores: AppStore[] = [];
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const store of stores.splice(0)) store.close();
 });
 
 describe('RunContextSnapshotRepository', () => {
+  it('batch reads exact snapshots without truncation and still validates unrelated configuration', () => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    const workspaceId = store.workspaces.getOrCreate('/tmp/batch-snapshots', 'batch').id;
+    const task = store.tasks.create(workspaceId, 'batch', 'batch');
+    const runIds = Array.from({ length: 132 }, (_, index) =>
+      seedReplayRun(store, {
+        taskId: task.task.id,
+        sessionId: task.sessionId,
+        workspaceId,
+        index,
+      }),
+    ).reverse();
+    const requested = [runIds[0]!, 'missing', ...runIds, runIds[0]!];
+    const expected = runIds.map((id) => store.runContextSnapshots.get(id));
+    const db = (store as unknown as { db: Database.Database }).db;
+    const prepare = vi.spyOn(db, 'prepare');
+    expect(store.runContextSnapshots.listByRunIds([])).toEqual([]);
+    expect(prepare).not.toHaveBeenCalled();
+    expect(store.runContextSnapshots.listByRunIds(requested)).toEqual(expected);
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(prepare.mock.calls[0]![0]).toContain('json_each');
+    expect(prepare.mock.calls[0]![0].match(/\?/gu)).toHaveLength(1);
+    expect(prepare.mock.calls[0]![0]).not.toMatch(/LIMIT/iu);
+    prepare.mockRestore();
+    db.prepare('UPDATE run_context_snapshots SET mcp_tool_bindings_json = ? WHERE run_id = ?').run(
+      '{}',
+      runIds.at(-1)!,
+    );
+    expect(() => store.runContextSnapshots.get(runIds.at(-1)!)).toThrow();
+    expect(() => store.runContextSnapshots.listByRunIds(requested)).toThrow();
+  });
+
   it('persists the exact run material binding and context segment', () => {
     const store = AppStore.open(':memory:');
     stores.push(store);

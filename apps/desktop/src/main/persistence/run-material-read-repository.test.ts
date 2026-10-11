@@ -4,19 +4,73 @@ import path from 'node:path';
 
 import { type MaterialReference, materialReferenceFingerprint } from '@betterwork/agent-protocol';
 import Database from 'better-sqlite3';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { seedReplayRun } from '../services/fixtures/history-memory-fixtures';
 import { AppStore } from './index';
 
 const stores: AppStore[] = [];
 const cleanups: Array<() => void> = [];
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const store of stores.splice(0)) store.close();
   for (const cleanup of cleanups.splice(0)) cleanup();
 });
 
 describe('RunMaterialReadRepository', () => {
+  it('batch reads every footprint in original per-run order including search and tied timestamps', () => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    const workspaceId = store.workspaces.getOrCreate('/tmp/batch-reads', 'batch').id;
+    const task = store.tasks.create(workspaceId, 'batch', 'batch');
+    const reference: MaterialReference = {
+      kind: 'knowledge-revision',
+      knowledgeDocumentId: 'doc',
+      knowledgeRevisionId: 'rev',
+      contentHash: 'hash',
+      sourcePath: '/tmp/source.md',
+    };
+    const runIds = Array.from({ length: 130 }, (_, index) => {
+      const runId = seedReplayRun(store, {
+        taskId: task.task.id,
+        sessionId: task.sessionId,
+        workspaceId,
+        index,
+      });
+      for (const [offset, operation] of (['search', 'read', 'parse'] as const).entries())
+        store.materialReads.save({
+          id: `${runId}-${offset}`,
+          runId,
+          material: reference,
+          operation,
+          locator: `${offset}`,
+          contentHash: reference.contentHash,
+          capturedAt: offset === 0 ? 2 : 1,
+        });
+      return runId;
+    }).reverse();
+    const expected = runIds.flatMap((id) => store.materialReads.listByRun(id));
+    const requested = [runIds[0]!, 'missing', ...runIds, runIds[0]!];
+    const db = (store as unknown as { db: Database.Database }).db;
+    const prepare = vi.spyOn(db, 'prepare');
+    expect(store.materialReads.listByRunIds([])).toEqual([]);
+    expect(prepare).not.toHaveBeenCalled();
+    expect(store.materialReads.listByRunIds(requested)).toEqual(expected);
+    expect(expected.slice(0, 3).map((read) => read.operation)).toEqual(['read', 'parse', 'search']);
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(prepare.mock.calls[0]![0]).toContain('json_each');
+    expect(prepare.mock.calls[0]![0].match(/\?/gu)).toHaveLength(1);
+    expect(prepare.mock.calls[0]![0]).not.toMatch(/LIMIT/iu);
+    prepare.mockRestore();
+    db.prepare('UPDATE run_material_reads SET material_json = ? WHERE run_id = ?').run(
+      '{}',
+      runIds.at(-1)!,
+    );
+    expect(() => store.materialReads.listByRun(runIds.at(-1)!)).toThrow();
+    expect(() => store.materialReads.listByRunIds(requested)).toThrow();
+  });
+
   it('requires scoped reads to match the exact selected material and hash', () => {
     const store = AppStore.open(':memory:');
     stores.push(store);
