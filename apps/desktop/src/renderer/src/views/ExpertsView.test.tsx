@@ -347,6 +347,55 @@ describe('ExpertsPage 的目录条目', () => {
 });
 
 describe('ExpertsPage 的整页配置交互', () => {
+  it('参考读取经历加载、失败和重试后才展示空态，并保留创建草稿', async () => {
+    const state = stateStub([]);
+    const actions = { ...state };
+    const onRetryReferences = vi.fn();
+    const onSummon = vi.fn(async () => undefined);
+    const onError = vi.fn();
+    const onManageMemories = vi.fn();
+    const page = (referencesLoading: boolean, referencesError: string) => (
+      <ExpertsPage
+        state={state}
+        actions={actions}
+        skills={[]}
+        mcpConnections={[]}
+        memories={[]}
+        models={[]}
+        materialCandidates={[]}
+        referencesLoading={referencesLoading}
+        referencesError={referencesError}
+        onRetryReferences={onRetryReferences}
+        onSummon={onSummon}
+        onError={onError}
+        onManageMemories={onManageMemories}
+      />
+    );
+    const { rerender } = render(page(true, ''));
+
+    fireEvent.click(screen.getByRole('button', { name: '新建专家' }));
+    fireEvent.change(screen.getByLabelText('名称'), { target: { value: '保留名称草稿' } });
+    expect(screen.getByText('正在加载常用参考…')).toBeTruthy();
+    expect(screen.queryByText('没有匹配的知识修订。')).toBeNull();
+    expect(screen.queryByText('没有匹配的成果版本。')).toBeNull();
+
+    rerender(page(false, '参考暂不可读取'));
+    expect(screen.getByRole('alert').textContent).toContain('参考暂不可读取');
+    expect(screen.queryByText('没有匹配的知识修订。')).toBeNull();
+    expect(screen.queryByText('没有匹配的成果版本。')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    expect(onRetryReferences).toHaveBeenCalledOnce();
+
+    rerender(page(true, ''));
+    expect(screen.getByText('正在加载常用参考…')).toBeTruthy();
+    expect(screen.getByLabelText('名称')).toHaveProperty('value', '保留名称草稿');
+    rerender(page(false, ''));
+
+    expect(await screen.findByText('没有匹配的知识修订。')).toBeTruthy();
+    expect(screen.getByText('没有匹配的成果版本。')).toBeTruthy();
+    expect(screen.getByLabelText('名称')).toHaveProperty('value', '保留名称草稿');
+  });
+
   it('专家详情只汇总当前专家与工作空间的有效记忆', async () => {
     const detail = detailOf();
     const memories: MemoryRecord[] = [
