@@ -385,6 +385,24 @@ function createMemoryApiFixture(options?: Pick<AppTestApiOptions, 'memories'>) {
   };
 }
 
+function createKnowledgeApiFixture() {
+  return {
+    list: vi.fn(async () => []),
+    job: vi.fn(async () => null),
+    jobs: vi.fn(async () => ({ jobs: [] })),
+    settings: vi.fn(async () => ({
+      semanticEnabled: false,
+      revision: 1,
+      embeddingAvailable: false,
+    })),
+    onJobEvent: vi.fn(() => () => undefined),
+    listCollections: vi.fn(async () => []),
+    saveCollection: vi.fn(async () => []),
+    deleteCollection: vi.fn(async () => []),
+    setCollectionMembers: vi.fn(async () => ({ membershipRevision: 2, collectionIds: [] })),
+  };
+}
+
 function createAppTestApi(options?: AppTestApiOptions) {
   emitNotificationChange = undefined;
   emitScheduleChange = undefined;
@@ -417,21 +435,7 @@ function createAppTestApi(options?: AppTestApiOptions) {
     models: {
       list: vi.fn(async (): Promise<ModelProfileSummary[]> => options?.models ?? []),
     },
-    knowledge: {
-      list: vi.fn(async () => []),
-      job: vi.fn(async () => null),
-      jobs: vi.fn(async () => ({ jobs: [] })),
-      settings: vi.fn(async () => ({
-        semanticEnabled: false,
-        revision: 1,
-        embeddingAvailable: false,
-      })),
-      onJobEvent: vi.fn(() => () => undefined),
-      listCollections: vi.fn(async () => []),
-      saveCollection: vi.fn(async () => []),
-      deleteCollection: vi.fn(async () => []),
-      setCollectionMembers: vi.fn(async () => ({ membershipRevision: 2, collectionIds: [] })),
-    },
+    knowledge: createKnowledgeApiFixture(),
     artifacts: {
       list: vi.fn(async (): Promise<ArtifactSummary[]> => []),
       saveMarkdown: vi.fn<Window['betterwork']['artifacts']['saveMarkdown']>(async () => {
