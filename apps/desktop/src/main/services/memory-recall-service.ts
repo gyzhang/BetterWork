@@ -56,6 +56,7 @@ import {
   MemoryTerminalError,
   MemoryValidationError,
 } from '../persistence';
+import { historyMaterialAvailability } from './history-material-availability';
 import { conflictPairKey, listPotentialConflictPairs } from './memory-conflict-policy';
 import { memoryContentHash } from './memory-content-policy';
 import { promptHashOf } from './memory-provenance';
@@ -1105,12 +1106,12 @@ export const planRunHistoryReplay = (store: AppStore, input: RunReplayInput): Ru
       );
     }
   }
+  const materialReferences = facts.flatMap((fact) => fact.materialReferences);
+  const materialAvailability = historyMaterialAvailability(store, materialReferences);
   const unavailableSourceKeys = new Set<string>();
-  for (const fact of facts) {
-    for (const reference of fact.materialReferences) {
-      if (materialEntityAvailable(store, reference)) continue;
-      unavailableSourceKeys.add(materialListIdentity(reference));
-    }
+  for (const [index, reference] of materialReferences.entries()) {
+    if (materialAvailability[index] === true) continue;
+    unavailableSourceKeys.add(materialListIdentity(reference));
   }
   const context: SafetyContext = {
     now: input.evaluatedAt,

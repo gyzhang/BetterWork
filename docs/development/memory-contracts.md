@@ -157,6 +157,8 @@ Main 构造 `MemoryQueryContext`：`workspaceId`、`expertId?`、`taskId`、精�
 
 以下情况使依赖历史不可重放：记忆被删除/排除/替代/过期/改修订/缩 scope、来源不可用、依赖材料移除/换版本/哈希不符；相关记忆本次无命中或预算落选不使历史失效。纯增加材料也不应无故截断。
 
+历史材料实体检查按完整合法候选的材料并集收集精确 artifactVersionId 与 snapshotId，分别去重并批量读取；成果保留原完整版本详情、文件元数据和 Evidence 解码，输入快照保留原完整映射。知识引用的非空路径判据逐条执行，不能以相同列表身份的另一个可用引用覆盖不可用项。缺实体、只有不可读版本行、损坏来源以及调用间删除仍保持原失败边界；不跟随 latest、不加全局 LIMIT、不跨调用缓存。该可用性结果不授予材料读取权限，实际版本相等、哈希与读取范围继续由既有准备及工具边界检查。
+
 从最近历史向前选连续安全后缀，遇首个不安全轮次停止，不跨过它拼接更早对话。上限 8 个完整问答对、12,000 code points；容不下完整一对就停止。记录实际重放 `runId`/`finalEventId`/`promptHash` 及依赖；不让更近回答隐藏它继承的已撤销信息。落点：`run-history-policy.ts` 的 `HISTORY_LIMITS` 逐项取协议常量 `MEMORY_REPLAY_PAIR_LIMIT`／`MEMORY_REPLAY_CODE_POINT_BUDGET`，服务层不再自写 8 与 12,000；边界用例见 `run-history-policy.test.ts`「caps at eight complete pairs」与「stops instead of truncating a pair to fit the code point budget」。
 
 `contextSegmentId` 保留为展示分段，不作为唯一授权闸门。历史 UI 保留，模型请求不带不安全历史；没有模型二次摘要绕回被删除内容。理由码：`memory-revised`、`memory-excluded`、`memory-inactive`、`source-unavailable`、`material-removed-or-replaced`、`legacy-provenance-unknown`、`history-budget`。

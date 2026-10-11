@@ -94,6 +94,19 @@ export class InputSnapshotRepository {
     return row ? toSnapshot(row) : undefined;
   }
 
+  listByIds(snapshotIds: readonly string[]): InputSnapshot[] {
+    const ids = [...new Set(snapshotIds)];
+    if (ids.length === 0) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT s.* FROM json_each(?) requested
+           JOIN input_snapshots s ON s.id = requested.value
+          ORDER BY CAST(requested.key AS INTEGER) ASC`,
+      )
+      .all(JSON.stringify(ids)) as InputSnapshotRow[];
+    return rows.map(toSnapshot);
+  }
+
   findReadyByHash(workspaceId: string, contentHash: string): InputSnapshot | undefined {
     const row = this.db
       .prepare(
