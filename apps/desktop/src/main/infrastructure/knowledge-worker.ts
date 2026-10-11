@@ -16,7 +16,7 @@ import {
 
 import { extractDocument } from '../services/knowledge-extract.ts';
 
-const nonce = process.env.BETTERWORK_KNOWLEDGE_WORKER_NONCE ?? '';
+export const nonce = process.env.BETTERWORK_KNOWLEDGE_WORKER_NONCE ?? '';
 
 const writeLine = (response: KnowledgeWorkerResponse): void => {
   process.stdout.write(`${JSON.stringify(response)}\n`);
@@ -26,13 +26,13 @@ const failure = (id: string, requestNonce: string, code: string, message: string
   writeLine({ id, nonce: requestNonce, kind: 'error', code, message: message.slice(0, 500) });
 };
 
-const float32From = (encoded: string): Float32Array => {
+export const float32From = (encoded: string): Float32Array => {
   const bytes = Buffer.from(encoded, 'base64');
   return new Float32Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 4));
 };
 
 /** 归一化向量的点积即 cosine；只回本批 top 50，全局 top 50 必在其并集内。 */
-function scanBatch(
+export function scanBatch(
   query: Float32Array,
   dimension: number,
   entries: ReadonlyArray<{ chunkId: string; vectorBase64: string }>,
@@ -53,7 +53,7 @@ function scanBatch(
     .slice(0, 50);
 }
 
-async function handleLine(line: string): Promise<void> {
+export async function handleLine(line: string): Promise<void> {
   if (!line.trim()) return;
   let raw: unknown;
   try {
@@ -124,10 +124,16 @@ async function handleLine(line: string): Promise<void> {
   }
 }
 
-const lines = createInterface({ input: process.stdin });
-lines.on('line', (line) => {
-  handleLine(line).catch(() => undefined);
-});
-lines.on('close', () => {
-  process.exit(0);
-});
+export const startWorker = (): void => {
+  const lines = createInterface({ input: process.stdin });
+  lines.on('line', (line) => {
+    handleLine(line).catch(() => undefined);
+  });
+  lines.on('close', () => {
+    process.exit(0);
+  });
+};
+
+if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))) {
+  startWorker();
+}
