@@ -560,6 +560,157 @@ describe('artifact query preload API', () => {
   });
 });
 
+describe('artifact action preload API', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.invoke.mockResolvedValue(null);
+  });
+
+  it('validates and forwards Artifact mutations and file operations', async () => {
+    const saveInput = {
+      taskId: 'task-1',
+      origin: 'assistant-run' as const,
+      runId: 'run-1',
+      title: 'Research notes',
+      content: '# Notes',
+    };
+    const registerInput = {
+      runId: 'run-1',
+      executionId: 'execution-1',
+      outputId: 'output-1',
+      title: 'Research slides',
+    };
+    const artifactSummary = {
+      id: 'artifact-1',
+      workspaceId: 'workspace-1',
+      taskId: 'task-1',
+      type: 'markdown' as const,
+      sourceDeclarationKind: undefined,
+      title: 'Research notes',
+      currentVersionId: 'version-1',
+      versionNumber: 1,
+      origin: 'assistant-run' as const,
+      sourceRunId: undefined,
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    mocks.invoke.mockImplementation(async (channel) => {
+      if (channel === IpcChannel.SaveMarkdownArtifact) return artifactSummary;
+      if (channel === IpcChannel.ExportMarkdownArtifact) {
+        return { cancelled: true, filePath: undefined };
+      }
+      if (channel === IpcChannel.RegisterFileArtifact) {
+        return {
+          artifactId: 'artifact-2',
+          versionId: 'version-2',
+          versionNumber: 1,
+          fileKey: 'file-key',
+          fileHash: 'file-hash',
+          fileSize: 12,
+          validation: { structure: 'passed', visual: 'pending', manualEdit: 'pending' },
+        };
+      }
+      if (channel === IpcChannel.ExportFileArtifact) {
+        return { cancelled: false, filePath: '/tmp/research-slides.pptx' };
+      }
+      if (channel === IpcChannel.OpenFileArtifact) {
+        return { opened: true, error: undefined };
+      }
+      return null;
+    });
+
+    const artifacts = api().artifacts;
+    const saved = await artifacts.saveMarkdown(saveInput);
+    expect(Object.hasOwn(saved, 'sourceDeclarationKind')).toBe(false);
+    expect(Object.hasOwn(saved, 'sourceRunId')).toBe(false);
+    const markdownExport = await artifacts.exportMarkdown({
+      artifactId: 'artifact-1',
+      versionId: 'version-1',
+    });
+    expect(markdownExport).toEqual({ cancelled: true });
+    expect(Object.hasOwn(markdownExport, 'filePath')).toBe(false);
+    await expect(artifacts.registerFile(registerInput)).resolves.toEqual({
+      artifactId: 'artifact-2',
+      versionId: 'version-2',
+      versionNumber: 1,
+      fileKey: 'file-key',
+      fileHash: 'file-hash',
+      fileSize: 12,
+      validation: { structure: 'passed', visual: 'pending', manualEdit: 'pending' },
+    });
+    await expect(
+      artifacts.exportFile({ artifactId: 'artifact-2', versionId: 'version-2' }),
+    ).resolves.toEqual({ cancelled: false, filePath: '/tmp/research-slides.pptx' });
+    const opened = await artifacts.openFile({ artifactId: 'artifact-2' });
+    expect(opened).toEqual({ opened: true });
+    expect(Object.hasOwn(opened, 'error')).toBe(false);
+
+    expect(mocks.invoke.mock.calls).toEqual([
+      [IpcChannel.SaveMarkdownArtifact, saveInput],
+      [IpcChannel.ExportMarkdownArtifact, { artifactId: 'artifact-1', versionId: 'version-1' }],
+      [IpcChannel.RegisterFileArtifact, registerInput],
+      [IpcChannel.ExportFileArtifact, { artifactId: 'artifact-2', versionId: 'version-2' }],
+      [IpcChannel.OpenFileArtifact, { artifactId: 'artifact-2' }],
+    ]);
+  });
+
+  it('rejects malformed Artifact action requests before IPC and responses after IPC', async () => {
+    const artifacts = api().artifacts;
+    expect(() =>
+      artifacts.saveMarkdown({
+        taskId: 'task-1',
+        origin: 'user-edit',
+        runId: 'run-1',
+        title: 'Notes',
+        content: '# Notes',
+      }),
+    ).toThrow();
+    expect(() => artifacts.exportMarkdown({ artifactId: '' })).toThrow();
+    expect(() =>
+      artifacts.registerFile({
+        runId: 'run-1',
+        executionId: 'execution-1',
+        outputId: 'output-1',
+        title: 'Slides',
+        validation: { structure: 'failed', visual: 'pending', manualEdit: 'pending' },
+      }),
+    ).toThrow();
+    expect(() => artifacts.exportFile({ artifactId: '' })).toThrow();
+    expect(() => artifacts.openFile({ artifactId: '' })).toThrow();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+
+    mocks.invoke
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ cancelled: 'yes' })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ cancelled: true, filePath: '' })
+      .mockResolvedValueOnce({ opened: 'yes' });
+    await Promise.all([
+      expect(
+        artifacts.saveMarkdown({
+          taskId: 'task-1',
+          origin: 'assistant-run',
+          runId: 'run-1',
+          title: 'Notes',
+          content: '# Notes',
+        }),
+      ).rejects.toThrow(),
+      expect(artifacts.exportMarkdown({ artifactId: 'artifact-1' })).rejects.toThrow(),
+      expect(
+        artifacts.registerFile({
+          runId: 'run-1',
+          executionId: 'execution-1',
+          outputId: 'output-1',
+          title: 'Slides',
+        }),
+      ).rejects.toThrow(),
+      expect(artifacts.exportFile({ artifactId: 'artifact-2' })).rejects.toThrow(),
+      expect(artifacts.openFile({ artifactId: 'artifact-2' })).rejects.toThrow(),
+    ]);
+    expect(mocks.invoke).toHaveBeenCalledTimes(5);
+  });
+});
+
 describe('model preload API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
