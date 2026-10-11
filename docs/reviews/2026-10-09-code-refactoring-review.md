@@ -824,3 +824,9 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 2026-10-11 17:20 CST，从最新 `origin/main` `bc2523e4abfff70c31e3906826b63acea9915273` 建立 `codex/r13-app-api-fixture-module`。把 App 测试用例数据、事件监听器状态和 `installApi` 构造移到 `app-test-fixtures.ts`；`App.test.tsx` 继续保留整树场景与断言，安装函数负责把同一组替身挂到 `window.betterwork`。API 默认行为、每次安装时的事件回调重置及用例断言不变。
 
 重档 `App.test.tsx` 56/56，typecheck、定向 ESLint/Prettier 与 `git diff --check` 通过。夹具现在独立为 609 行支持模块；App 整树场景及完整 Desktop API 替身仍保留，本卡只建立文件边界，不声称降低整体测试代码量或解决 R13。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 49. R13 子卡：Memory API 替身按域收拢
+
+2026-10-11 17:26 CST，从最新 `origin/main` `ededb618dd0f2d3d0130bacbe76599bc729948c6` 建立 `codex/r13-app-fixture-by-domain`。将完整 Memory API 替身构造提取为私有 `createMemoryApiFixture`，`createAppTestApi` 通过该函数组合 `memories` 端口；Memory 默认列表、写入回执、冲突决议、预览失败、任务排除、运行上下文、设置与投影任务的默认返回保持不变。
+
+`App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该切片只建立 App API fixture 内部的 Memory 域边界，没有新增产品行为、移除完整 API 替身或 App 整树场景，也不据此标记 R13 整体解决；未运行完整 `npm run verify`、UI 或真实模型。
