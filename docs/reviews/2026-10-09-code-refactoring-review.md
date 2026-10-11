@@ -724,3 +724,11 @@ E13 完成 R10 的来源事实读取切片；docs:check 154 项、原基点巡�
 应用启动、窗口标题栏、主题 IPC 和 Skill Python 环境正式路径均收窄为 macOS/arm64；非支持宿主或解释器会明确失败。持久化 `TargetPlatform` Schema 与迁移保持原样，历史非 macOS 环境记录仍可读取，但验证会标记为 `invalid`，执行路径拒绝使用。没有跨平台 runner、兼容开关或授权/索引语义变化。
 
 functional 定向 3 文件 / 69 项、heavy 定向 1 文件 / 37 项、typecheck、改动文件 ESLint/Prettier 与 `docs:check` 1 文件 / 154 项已通过。源 `81eda8279c46fbc35ae824bf64a270fa52ae363e` 的 [Actions 38112908854](https://github.com/gyzhang/BetterWork/actions/runs/38112908854) 在 macos-26-arm64 上通过 PR Gate，Full verify 按仓库策略跳过。[PR #77](https://github.com/gyzhang/BetterWork/pull/77) 已 squash 合并为 main `96d9d4da7ab46a260c943e82be50fd3a98a94d49`；远端任务分支已删除，本地 worktree 保留。
+
+## 37. R15：治理测试与 UI 夹具职责整理（已合并）
+
+`standards/coding-standard.test.ts` 保留为唯一 `docs:check` 入口；33 组护栏按主题拆为八个内部模块，共享扫描辅助集中在 `coding-standard-support.ts`。文档护栏标题检查跟随入口加载的模块读取。拆分前后 AST 对照确认 33 组和 154 个测试标题完全一致，`docs:check` 154/154 通过。
+
+页面夹具按 Artifact、Knowledge、Schedule、专家/记忆、MCP/帮助旅程拆分；完整应用夹具按任务、成果、记忆和恢复拆分。57 种页面步骤与 22 种应用步骤保持一致，`npm run ui:check` 的 74 组真实渲染通过。未整理 CSS 或修改产品行为。
+
+源 `8efeb6393b8ff990331c7d683761eb0cb8d2a8a8` 的 [Actions 38115307115](https://github.com/gyzhang/BetterWork/actions/runs/38115307115) 在 macos-26-arm64 上通过 PR Gate，lint、format:check、typecheck、docs:check 与受影响的测试成功；Full verify 按仓库策略跳过。[PR #79](https://github.com/gyzhang/BetterWork/pull/79) 已 squash 合并为 main `b2387401fdc4408ffc740d3abdf0b939d0c43126`；远端任务分支删除，原 worktree 保留。
