@@ -763,4 +763,4 @@ functional 定向 3 文件 / 69 项、heavy 定向 1 文件 / 37 项、typecheck
 
 上下文 CAS、通用/Expert 分支、内置 Skill/Expert 设置检查、Schedule 材料解析和 Expert 指令合成现位于同层 `run-context-resolver.ts`。RunService 仍先校验 Task/Session/Workspace，再调用 resolver；上下文失败仍在创建 Run 前抛出。传入的 TaskContextRevision ID 是不可变快照标识，保留原有“该 ID 的 revision 必须等于 expected revision”判据，不增加“必须为最新 revision”的新语义。没有协议、迁移、Repository、授权或材料范围变化。
 
-resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:check` 154/154、typecheck、定向 ESLint/Prettier 与生产 build 通过。未运行完整 `npm run verify`、UI、真实模型或安装态验收；精确源 SHA 的 macOS PR Gate、合并和归档待收口。Run 工具上下文构造继续作为后续独立切片。
+resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:check` 154/154、typecheck、定向 ESLint/Prettier 与生产 build 通过。一次 shell 搜索字符串的反引号误触发了 `npm run verify`；命令替换吞掉输出，退出状态未被观察，因此不计为验证证据。未运行 UI、真实模型或安装态验收；精确源 SHA 的 macOS PR Gate、合并和归档待收口。Run 工具上下文构造继续作为后续独立切片。
