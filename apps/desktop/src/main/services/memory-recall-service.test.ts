@@ -17,6 +17,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AppStore } from '../persistence';
 import {
+  legacyHistoryAnswers,
   legacyHistorySources,
   legacyReplayDependencies,
   seedReplayRun,
@@ -602,24 +603,31 @@ describe('召回期的依赖闭包与冲突组装配', () => {
     const legacyReads = vi
       .spyOn(store.materialReads, 'listByRunIds')
       .mockImplementation((ids) => legacyHistorySources(store, ids).reads);
+    const legacyAnswers = vi
+      .spyOn(store.runs, 'listLatestNonEmptyMessageCompletions')
+      .mockImplementation((ids) => legacyHistoryAnswers(store, ids));
     const expected = planRunHistoryReplay(store, input);
     legacyContexts.mockRestore();
     legacySnapshots.mockRestore();
     legacyReads.mockRestore();
+    legacyAnswers.mockRestore();
     expect(expected.messages).toHaveLength(16);
     expect(expected.inheritedMaterialReferences).toEqual([selected, inherited, readOnly]);
     expect(expected.replay.at(-1)).toMatchObject({ runId: runIds[5], reason: 'history-budget' });
     const contexts = vi.spyOn(store.runMemoryContexts, 'get');
     const snapshots = vi.spyOn(store.runContextSnapshots, 'get');
     const reads = vi.spyOn(store.materialReads, 'listByRun');
+    const answers = vi.spyOn(store.runs, 'getLatestNonEmptyMessageCompletion');
     const batchContexts = vi.spyOn(store.runMemoryContexts, 'listByRunIds');
     const batchSnapshots = vi.spyOn(store.runContextSnapshots, 'listByRunIds');
     const batchReads = vi.spyOn(store.materialReads, 'listByRunIds');
+    const batchAnswers = vi.spyOn(store.runs, 'listLatestNonEmptyMessageCompletions');
     expect(planRunHistoryReplay(store, input)).toEqual(expected);
     expect(contexts).not.toHaveBeenCalled();
     expect(snapshots).not.toHaveBeenCalled();
     expect(reads).not.toHaveBeenCalled();
-    for (const batch of [batchContexts, batchSnapshots, batchReads]) {
+    expect(answers).not.toHaveBeenCalled();
+    for (const batch of [batchContexts, batchSnapshots, batchReads, batchAnswers]) {
       expect(batch).toHaveBeenCalledOnce();
       expect(batch).toHaveBeenCalledWith(runIds);
     }
@@ -634,6 +642,94 @@ describe('召回期的依赖闭包与冲突组装配', () => {
     expect(changed.replay).toEqual([
       { replayed: false, runId: runIds.at(-1), reason: 'legacy-provenance-unknown' },
     ]);
+  });
+
+  it('keeps the full replay equal to native answers, isolates candidates and rereads changed messages', async () => {
+    const { store, workspaceId, databasePath } = await setup();
+    const task = store.tasks.create(workspaceId, 'answer batches', 'answer batches');
+    const ids = Array.from({ length: 14 }, (_, index) => {
+      const runId = seedReplayRun(store, {
+        taskId: task.task.id,
+        sessionId: task.sessionId,
+        workspaceId,
+        index,
+      });
+      for (const [sequence, content] of [
+        [0, 'older'],
+        [3, `final ${index}`],
+        [8, ''],
+      ] as const)
+        store.runs.appendEvent({
+          id: `${runId}-m${sequence}`,
+          runId,
+          sequence,
+          createdAt: index,
+          type: 'message.completed',
+          messageId: runId,
+          content,
+        });
+      return runId;
+    });
+    const otherTask = store.tasks.create(workspaceId, 'other', 'other');
+    const other = seedReplayRun(store, {
+      taskId: otherTask.task.id,
+      sessionId: otherTask.sessionId,
+      workspaceId,
+      index: 0,
+    });
+    const future = seedReplayRun(store, {
+      taskId: task.task.id,
+      sessionId: task.sessionId,
+      workspaceId,
+      index: CAPTURED_AT + 1,
+    });
+    const db = new Database(databasePath);
+    try {
+      for (const id of [...ids.map((id) => `${id}-m0`), `${other}-answer`, `${future}-answer`])
+        db.prepare('UPDATE run_events SET payload = ? WHERE id = ?').run('{', id);
+    } finally {
+      db.close();
+    }
+    const input = {
+      taskId: task.task.id,
+      currentRunId: 'missing-current',
+      evaluatedAt: CAPTURED_AT,
+      excludedMemoryIds: [],
+      allowedMaterialKeys: [],
+    };
+    const legacy = vi
+      .spyOn(store.runs, 'listLatestNonEmptyMessageCompletions')
+      .mockImplementation((runIds) => legacyHistoryAnswers(store, runIds));
+    const expected = planRunHistoryReplay(store, input);
+    legacy.mockRestore();
+    const points = vi.spyOn(store.runs, 'getLatestNonEmptyMessageCompletion');
+    const batch = vi.spyOn(store.runs, 'listLatestNonEmptyMessageCompletions');
+    const actual = planRunHistoryReplay(store, input);
+    expect(actual).toEqual(expected);
+    expect(actual.messages).toHaveLength(16);
+    expect(actual.messages.at(-1)?.content).toBe('final 13');
+    expect(batch).toHaveBeenCalledOnce();
+    expect(batch).toHaveBeenCalledWith(ids);
+    expect(points).not.toHaveBeenCalled();
+    store.runs.appendEvent({
+      id: 'new-answer',
+      runId: ids.at(-1)!,
+      sequence: 10,
+      createdAt: 20,
+      type: 'message.completed',
+      messageId: 'new-answer',
+      content: 'updated latest',
+    });
+    expect(planRunHistoryReplay(store, input).messages.at(-1)?.content).toBe('updated latest');
+    const corrupt = new Database(databasePath);
+    try {
+      corrupt
+        .prepare('UPDATE run_events SET payload = ? WHERE id = ?')
+        .run('{}', `${ids.at(0)!}-m8`);
+    } finally {
+      corrupt.close();
+    }
+    expect(() => planRunHistoryReplay(store, input)).toThrow();
   });
 
   it.each(['audit', 'snapshot', 'footprint'] as const)(

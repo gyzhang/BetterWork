@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  type AgentRuntimeEvent,
   type MaterialReference,
   type MemoryDependency,
   memoryRecallPolicyV1,
@@ -11,6 +12,15 @@ import {
 
 import type { AppStore, RunContextSnapshot } from '../../persistence';
 import type { MemoryReplayDependency, MemoryRepository } from '../../persistence/memory-repository';
+
+export const legacyHistoryAnswers = (
+  store: AppStore,
+  runIds: readonly string[],
+): Extract<AgentRuntimeEvent, { type: 'message.completed' }>[] =>
+  [...new Set(runIds)].flatMap((id) => {
+    const event = store.runs.getLatestNonEmptyMessageCompletion(id);
+    return event === undefined ? [] : [event];
+  });
 
 /** 旧逐 Run 完整来源读取的独立对照，不缩小记录或校验字段。 */
 export const legacyHistorySources = (

@@ -236,6 +236,52 @@ export class RunRepository {
     return undefined;
   }
 
+  /** 完整请求集合集中读取；每 Run 只沿空消息向前，仍校验全部消费的事件。 */
+  listLatestNonEmptyMessageCompletions(runIds: readonly string[]): MessageCompletion[] {
+    const ids = [...new Set(runIds)];
+    if (ids.length === 0) return [];
+    // json_each 的 rowid 随成员文本顺序递增；同名 content 取末项，保持 JSON.parse 语义。
+    const rows = this.db
+      .prepare(
+        `WITH RECURSIVE messages AS (
+           SELECT CAST(requested.key AS INTEGER) AS ordinal,
+                  e.id, e.run_id, e.sequence, e.type, e.payload
+             FROM json_each(?) requested
+             JOIN run_events e ON e.id = (
+               SELECT id FROM run_events
+                WHERE run_id = requested.value AND type = 'message.completed'
+                ORDER BY sequence DESC LIMIT 1
+             )
+           UNION ALL
+           SELECT previous.ordinal, e.id, e.run_id, e.sequence, e.type, e.payload
+             FROM messages previous
+             JOIN run_events e ON e.id = (
+               SELECT id FROM run_events
+                WHERE run_id = previous.run_id AND type = 'message.completed'
+                  AND sequence < previous.sequence
+                ORDER BY sequence DESC LIMIT 1
+             )
+            WHERE CASE WHEN json_valid(previous.payload) THEN
+                    (SELECT field.type = 'text' AND field.value = ''
+                       FROM json_each(previous.payload) field
+                      WHERE field.key = 'content'
+                      ORDER BY field.rowid DESC LIMIT 1)
+                  ELSE 0 END
+         )
+         SELECT id, run_id, sequence, type, payload FROM messages
+          ORDER BY ordinal ASC, sequence DESC`,
+      )
+      .iterate(JSON.stringify(ids)) as Iterable<StoredEventRow>;
+    const answers: MessageCompletion[] = [];
+    for (const row of rows) {
+      const event = parseStoredEvent(row);
+      if (event.type !== 'message.completed')
+        throw new Error('Expected a message completion event');
+      if (event.content.length > 0) answers.push(event);
+    }
+    return answers;
+  }
+
   /** 保留人工来源旧口径的第一条完成事件，不用最后终态替代它。 */
   getFirstRunCompletion(runId: string): RunCompletion | undefined {
     const row = this.db
