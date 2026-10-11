@@ -1168,3 +1168,13 @@ Preload 定向测试 1 文件 / 27 项、`docs:check` 154/154 通过，覆盖请
 既有知识域行为以 [知识库与记忆](../04-knowledge-and-memory.md) 和 [KM 任务板](../development/tasks-knowledge.md) 为准；本卡只做 Preload 编译期契约映射，保留列表无参时补空对象、Open Source 省略可选 `error`、job 事件解析与解除订阅语义，不改变 Main handler、知识存储、搜索或工作流。
 
 编译器正反例覆盖 Knowledge 请求、响应、channel 字面值和事件 listener 类型；Preload 定向测试 1 文件 / 35 项，全仓 typecheck、改动文件 ESLint/Prettier 与差异空白检查通过。`docs:check`、PR Gate、合并和分支清理待本卡收口；完整 `npm run verify`、UI、真实模型与安装态验收未运行。其他 API 域与 Main/Preload 全局映射仍待后续切片。
+
+源提交 `1c50922adb2f29632d553c66dafa9912fbd5cfae` 的 [PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/38153026962) 与 Quick code check 通过，Full verify 按规则跳过。[PR #166](https://github.com/gyzhang/BetterWork/pull/166) 已 squash 合入 main，合并提交 `0fbce22c68d3ba853450614ac68390f9a9aa540e`；本地与远端任务分支已删除，本地 checkout 已同步 main。
+
+## 97. R09 子卡：Schedules Preload 通道映射
+
+2026-10-11 23:58 CST，从最新 `origin/main` `0fbce22c68d3ba853450614ac68390f9a9aa540e` 在本地 checkout 建立 `codex/r09-schedule-channel-contracts`。为 Schedule 列表/详情、配置、预览/预检、Occurrence、来源、手动执行与结果重试共 14 个 invoke channel 建立请求/响应 Schema 及 Preload 方法映射；`ScheduleChanged` 事件也纳入事件 Schema 和订阅方法映射。
+
+范围以 [Schedule 契约](../development/schedule-contracts.md)、[SC 任务板](../development/tasks-schedules.md) 和 [ADR-0037](../adr/0037-scheduled-work-and-source-snapshots.md) 为准。本卡只做 Preload 编译期映射；继续使用原 `ScheduleCallResult` 的 success/rejected envelope，保留列表输入默认值、事件运行期校验与解除订阅，不改变调度、持久化、错误或 UI 行为。
+
+Preload 定向测试 1 文件 / 35 项、全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 和差异空白检查通过；PR Gate、合并和分支清理待本卡收口。完整 `npm run verify`、UI、真实模型及安装态验收未运行。其他 API 域与 Main/Preload 全局映射仍待后续切片。

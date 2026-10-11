@@ -1091,6 +1091,120 @@ const knowledgeEventMethods: EventMethodsByChannel<typeof knowledgeEventContract
     listenContract(knowledgeEventContracts[IpcChannel.KnowledgeJobEvent], listener),
 };
 
+const scheduleListRequestSchema = listSchedulesRequestSchema;
+const scheduleInvokeContracts = defineInvokeContracts({
+  [IpcChannel.ListSchedules]: {
+    channel: IpcChannel.ListSchedules,
+    request: scheduleListRequestSchema,
+    response: scheduleCallResultSchema(schedulePageSchema),
+  },
+  [IpcChannel.GetSchedule]: {
+    channel: IpcChannel.GetSchedule,
+    request: getScheduleRequestSchema,
+    response: scheduleCallResultSchema(scheduleDetailSchema),
+  },
+  [IpcChannel.SaveSchedule]: {
+    channel: IpcChannel.SaveSchedule,
+    request: saveScheduleRequestSchema,
+    response: scheduleCallResultSchema(scheduleAggregateSchema),
+  },
+  [IpcChannel.SetScheduleLifecycle]: {
+    channel: IpcChannel.SetScheduleLifecycle,
+    request: setScheduleLifecycleRequestSchema,
+    response: scheduleCallResultSchema(scheduleAggregateSchema),
+  },
+  [IpcChannel.PreviewSchedule]: {
+    channel: IpcChannel.PreviewSchedule,
+    request: previewScheduleRequestSchema,
+    response: scheduleCallResultSchema(schedulePreviewResultSchema),
+  },
+  [IpcChannel.PreflightSchedule]: {
+    channel: IpcChannel.PreflightSchedule,
+    request: preflightScheduleRequestSchema,
+    response: scheduleCallResultSchema(schedulePreflightViewSchema),
+  },
+  [IpcChannel.ApplyScheduleExpertRevision]: {
+    channel: IpcChannel.ApplyScheduleExpertRevision,
+    request: applyScheduleExpertRevisionRequestSchema,
+    response: scheduleCallResultSchema(scheduleAggregateSchema),
+  },
+  [IpcChannel.ListScheduleOccurrences]: {
+    channel: IpcChannel.ListScheduleOccurrences,
+    request: listScheduleOccurrencesRequestSchema,
+    response: scheduleCallResultSchema(scheduleOccurrenceHistoryPageSchema),
+  },
+  [IpcChannel.GetScheduleOccurrence]: {
+    channel: IpcChannel.GetScheduleOccurrence,
+    request: getScheduleOccurrenceRequestSchema,
+    response: scheduleCallResultSchema(scheduleOccurrenceDetailSchema),
+  },
+  [IpcChannel.ListScheduleSourceItems]: {
+    channel: IpcChannel.ListScheduleSourceItems,
+    request: listScheduleSourceItemsRequestSchema,
+    response: scheduleCallResultSchema(scheduleSourceItemsPageSchema),
+  },
+  [IpcChannel.ExecuteScheduleNow]: {
+    channel: IpcChannel.ExecuteScheduleNow,
+    request: executeScheduleNowRequestSchema,
+    response: scheduleCallResultSchema(scheduleManualExecutionResultSchema),
+  },
+  [IpcChannel.ExecuteMissedSchedule]: {
+    channel: IpcChannel.ExecuteMissedSchedule,
+    request: executeMissedScheduleRequestSchema,
+    response: scheduleCallResultSchema(scheduleManualExecutionResultSchema),
+  },
+  [IpcChannel.CancelScheduleOccurrence]: {
+    channel: IpcChannel.CancelScheduleOccurrence,
+    request: cancelScheduleOccurrenceRequestSchema,
+    response: scheduleCallResultSchema(scheduleCancelOccurrenceResultSchema),
+  },
+  [IpcChannel.RetryScheduleOutput]: {
+    channel: IpcChannel.RetryScheduleOutput,
+    request: retryScheduleOutputRequestSchema,
+    response: scheduleCallResultSchema(scheduleOutputReceiptSchema),
+  },
+});
+const scheduleInvokeMethods: InvokeMethodsByChannel<typeof scheduleInvokeContracts> = {
+  [IpcChannel.ListSchedules]: (input) =>
+    invokeContract(scheduleInvokeContracts[IpcChannel.ListSchedules], input),
+  [IpcChannel.GetSchedule]: (input) =>
+    invokeContract(scheduleInvokeContracts[IpcChannel.GetSchedule], input),
+  [IpcChannel.SaveSchedule]: (input) =>
+    invokeContract(scheduleInvokeContracts[IpcChannel.SaveSchedule], input),
+  [IpcChannel.SetScheduleLifecycle]: (input) =>
+    invokeContract(scheduleInvokeContracts[IpcChannel.SetScheduleLifecycle], input),
+  [IpcChannel.PreviewSchedule]: (input) =>
+    invokeContract(scheduleInvokeContracts[IpcChannel.PreviewSchedule], input),
+  [IpcChannel.PreflightSchedule]: (input) =>
+    invokeContract(scheduleInvokeContracts[IpcChannel.PreflightSchedule], input),
+  [IpcChannel.ApplyScheduleExpertRevision]: (input) =>
+    invokeContract(scheduleInvokeContracts[IpcChannel.ApplyScheduleExpertRevision], input),
+  [IpcChannel.ListScheduleOccurrences]: (input) =>
+    invokeContract(scheduleInvokeContracts[IpcChannel.ListScheduleOccurrences], input),
+  [IpcChannel.GetScheduleOccurrence]: (input) =>
+    invokeContract(scheduleInvokeContracts[IpcChannel.GetScheduleOccurrence], input),
+  [IpcChannel.ListScheduleSourceItems]: (input) =>
+    invokeContract(scheduleInvokeContracts[IpcChannel.ListScheduleSourceItems], input),
+  [IpcChannel.ExecuteScheduleNow]: (input) =>
+    invokeContract(scheduleInvokeContracts[IpcChannel.ExecuteScheduleNow], input),
+  [IpcChannel.ExecuteMissedSchedule]: (input) =>
+    invokeContract(scheduleInvokeContracts[IpcChannel.ExecuteMissedSchedule], input),
+  [IpcChannel.CancelScheduleOccurrence]: (input) =>
+    invokeContract(scheduleInvokeContracts[IpcChannel.CancelScheduleOccurrence], input),
+  [IpcChannel.RetryScheduleOutput]: (input) =>
+    invokeContract(scheduleInvokeContracts[IpcChannel.RetryScheduleOutput], input),
+};
+const scheduleEventContracts = defineEventContracts({
+  [IpcChannel.ScheduleChanged]: {
+    channel: IpcChannel.ScheduleChanged,
+    event: scheduleChangedEventSchema,
+  },
+});
+const scheduleEventMethods: EventMethodsByChannel<typeof scheduleEventContracts> = {
+  [IpcChannel.ScheduleChanged]: (listener) =>
+    listenContract(scheduleEventContracts[IpcChannel.ScheduleChanged], listener),
+};
+
 const api: BetterWorkDesktopApi = {
   runs: {
     start: (input) => runInvokeMethods[IpcChannel.StartRun](input),
@@ -1180,97 +1294,22 @@ const api: BetterWorkDesktopApi = {
     onActivate: (listener) => notificationEventMethods[IpcChannel.NotificationActivated](listener),
   },
   schedules: {
-    list: (input) =>
-      invokeValidated(
-        IpcChannel.ListSchedules,
-        listSchedulesRequestSchema.parse(input ?? {}),
-        scheduleCallResultSchema(schedulePageSchema),
-      ),
-    get: (input) =>
-      invokeValidated(
-        IpcChannel.GetSchedule,
-        getScheduleRequestSchema.parse(input),
-        scheduleCallResultSchema(scheduleDetailSchema),
-      ),
-    save: (input) =>
-      invokeValidated(
-        IpcChannel.SaveSchedule,
-        saveScheduleRequestSchema.parse(input),
-        scheduleCallResultSchema(scheduleAggregateSchema),
-      ),
-    setLifecycle: (input) =>
-      invokeValidated(
-        IpcChannel.SetScheduleLifecycle,
-        setScheduleLifecycleRequestSchema.parse(input),
-        scheduleCallResultSchema(scheduleAggregateSchema),
-      ),
-    preview: (input) =>
-      invokeValidated(
-        IpcChannel.PreviewSchedule,
-        previewScheduleRequestSchema.parse(input),
-        scheduleCallResultSchema(schedulePreviewResultSchema),
-      ),
-    preflight: (input) =>
-      invokeValidated(
-        IpcChannel.PreflightSchedule,
-        preflightScheduleRequestSchema.parse(input),
-        scheduleCallResultSchema(schedulePreflightViewSchema),
-      ),
+    list: (input) => scheduleInvokeMethods[IpcChannel.ListSchedules](input ?? {}),
+    get: (input) => scheduleInvokeMethods[IpcChannel.GetSchedule](input),
+    save: (input) => scheduleInvokeMethods[IpcChannel.SaveSchedule](input),
+    setLifecycle: (input) => scheduleInvokeMethods[IpcChannel.SetScheduleLifecycle](input),
+    preview: (input) => scheduleInvokeMethods[IpcChannel.PreviewSchedule](input),
+    preflight: (input) => scheduleInvokeMethods[IpcChannel.PreflightSchedule](input),
     applyExpertRevision: (input) =>
-      invokeValidated(
-        IpcChannel.ApplyScheduleExpertRevision,
-        applyScheduleExpertRevisionRequestSchema.parse(input),
-        scheduleCallResultSchema(scheduleAggregateSchema),
-      ),
-    listOccurrences: (input) =>
-      invokeValidated(
-        IpcChannel.ListScheduleOccurrences,
-        listScheduleOccurrencesRequestSchema.parse(input),
-        scheduleCallResultSchema(scheduleOccurrenceHistoryPageSchema),
-      ),
-    getOccurrence: (input) =>
-      invokeValidated(
-        IpcChannel.GetScheduleOccurrence,
-        getScheduleOccurrenceRequestSchema.parse(input),
-        scheduleCallResultSchema(scheduleOccurrenceDetailSchema),
-      ),
-    listSourceItems: (input) =>
-      invokeValidated(
-        IpcChannel.ListScheduleSourceItems,
-        listScheduleSourceItemsRequestSchema.parse(input),
-        scheduleCallResultSchema(scheduleSourceItemsPageSchema),
-      ),
-    executeNow: (input) =>
-      invokeValidated(
-        IpcChannel.ExecuteScheduleNow,
-        executeScheduleNowRequestSchema.parse(input),
-        scheduleCallResultSchema(scheduleManualExecutionResultSchema),
-      ),
-    executeMissed: (input) =>
-      invokeValidated(
-        IpcChannel.ExecuteMissedSchedule,
-        executeMissedScheduleRequestSchema.parse(input),
-        scheduleCallResultSchema(scheduleManualExecutionResultSchema),
-      ),
-    cancelOccurrence: (input) =>
-      invokeValidated(
-        IpcChannel.CancelScheduleOccurrence,
-        cancelScheduleOccurrenceRequestSchema.parse(input),
-        scheduleCallResultSchema(scheduleCancelOccurrenceResultSchema),
-      ),
-    retryOutput: (input) =>
-      invokeValidated(
-        IpcChannel.RetryScheduleOutput,
-        retryScheduleOutputRequestSchema.parse(input),
-        scheduleCallResultSchema(scheduleOutputReceiptSchema),
-      ),
-    onChange(listener) {
-      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
-        listener(scheduleChangedEventSchema.parse(raw));
-      };
-      ipcRenderer.on(IpcChannel.ScheduleChanged, handler);
-      return () => ipcRenderer.off(IpcChannel.ScheduleChanged, handler);
-    },
+      scheduleInvokeMethods[IpcChannel.ApplyScheduleExpertRevision](input),
+    listOccurrences: (input) => scheduleInvokeMethods[IpcChannel.ListScheduleOccurrences](input),
+    getOccurrence: (input) => scheduleInvokeMethods[IpcChannel.GetScheduleOccurrence](input),
+    listSourceItems: (input) => scheduleInvokeMethods[IpcChannel.ListScheduleSourceItems](input),
+    executeNow: (input) => scheduleInvokeMethods[IpcChannel.ExecuteScheduleNow](input),
+    executeMissed: (input) => scheduleInvokeMethods[IpcChannel.ExecuteMissedSchedule](input),
+    cancelOccurrence: (input) => scheduleInvokeMethods[IpcChannel.CancelScheduleOccurrence](input),
+    retryOutput: (input) => scheduleInvokeMethods[IpcChannel.RetryScheduleOutput](input),
+    onChange: (listener) => scheduleEventMethods[IpcChannel.ScheduleChanged](listener),
   },
   chrome: {
     updateTheme: (input) => ipcRenderer.invoke(IpcChannel.UpdateWindowTheme, input),
