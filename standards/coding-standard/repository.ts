@@ -202,9 +202,12 @@ describe('架构边界', () => {
   });
 
   it('取消词汇只在 agent-core/errors.ts 定义', () => {
-    const allowed = 'packages/agent-core/src/errors.ts';
+    const allowed = new Set([
+      'packages/agent-core/src/errors.ts',
+      'packages/agent-core/src/errors.test.ts',
+    ]);
     const offenders = sourcePathsUnder(...SOURCE_ROOTS).filter(
-      (relative) => relative !== allowed && read(relative).includes("'AbortError'"),
+      (relative) => !allowed.has(relative) && read(relative).includes("'AbortError'"),
     );
     expect(
       offenders,
