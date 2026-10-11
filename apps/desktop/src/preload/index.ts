@@ -12,6 +12,7 @@ import {
   checkKnowledgeSourcesRequestSchema,
   chooseInterpreterResultSchema,
   clearedResultSchema,
+  connectionTestResultSchema,
   copyExpertRequestSchema,
   copySkillRequestSchema,
   createDiscussionCheckpointRequestSchema,
@@ -115,6 +116,9 @@ import {
   memorySettingsDataSchema,
   memoryViewItemSchema,
   memoryWriteReceiptSchema,
+  modelProfileIdSchema,
+  modelProfileSummarySchema,
+  modelSaveResultSchema,
   notificationActivatedSchema,
   notificationChangeEventSchema,
   notificationRendererReadyRequestSchema,
@@ -154,6 +158,7 @@ import {
   saveKnowledgeCollectionRequestSchema,
   saveKnowledgeSettingsRequestSchema,
   saveMcpConnectionRequestSchema,
+  saveModelProfileRequestSchema,
   saveRunSettingsRequestSchema,
   saveScheduleRequestSchema,
   saveSkillRuntimeProfileRequestSchema,
@@ -172,10 +177,12 @@ import {
   schedulePreflightViewSchema,
   schedulePreviewResultSchema,
   scheduleSourceItemsPageSchema,
+  setDefaultModelRequestSchema,
   setExpertLifecycleRequestSchema,
   setKnowledgeCollectionMembersRequestSchema,
   setMemorySettingsRequestSchema,
   setMemoryStatusRequestSchema,
+  setModelEnabledRequestSchema,
   setScheduleLifecycleRequestSchema,
   setSkillEnabledRequestSchema,
   setSkillTrustRequestSchema,
@@ -194,8 +201,10 @@ import {
   taskContinuityRevisionSchema,
   taskMemoryExclusionsDataSchema,
   taskMemoryExclusionsRequestSchema,
+  testModelRequestSchema,
   testSkillRunRequestSchema,
   testSkillRunResultSchema,
+  updatedResultSchema,
   updateMemoryRequestSchema,
   updateWorkspaceIdentityRequestSchema,
   verifyDependencyEnvironmentRequestSchema,
@@ -223,6 +232,13 @@ const evidenceListResponseSchema = evidenceSummarySchema.array().transform((summ
   summaries.map(({ knowledgeSource, ...summary }) => ({
     ...summary,
     ...(knowledgeSource === undefined ? {} : { knowledgeSource }),
+  })),
+);
+
+const modelProfileListResponseSchema = modelProfileSummarySchema.array().transform((profiles) =>
+  profiles.map(({ lastTestedAt, ...profile }) => ({
+    ...profile,
+    ...(lastTestedAt === undefined ? {} : { lastTestedAt }),
   })),
 );
 
@@ -378,12 +394,37 @@ const api: BetterWorkDesktopApi = {
       ),
   },
   models: {
-    list: () => ipcRenderer.invoke(IpcChannel.ListModels),
-    save: (input) => ipcRenderer.invoke(IpcChannel.SaveModel, input),
-    delete: (input) => ipcRenderer.invoke(IpcChannel.DeleteModel, input),
-    setDefault: (input) => ipcRenderer.invoke(IpcChannel.SetDefaultModel, input),
-    setEnabled: (input) => ipcRenderer.invoke(IpcChannel.SetModelEnabled, input),
-    test: (input) => ipcRenderer.invoke(IpcChannel.TestModel, input),
+    list: () => invokeValidated(IpcChannel.ListModels, {}, modelProfileListResponseSchema),
+    save: (input) =>
+      invokeValidated(
+        IpcChannel.SaveModel,
+        saveModelProfileRequestSchema.parse(input),
+        modelSaveResultSchema,
+      ),
+    delete: (input) =>
+      invokeValidated(
+        IpcChannel.DeleteModel,
+        modelProfileIdSchema.parse(input),
+        deletedResultSchema,
+      ),
+    setDefault: (input) =>
+      invokeValidated(
+        IpcChannel.SetDefaultModel,
+        setDefaultModelRequestSchema.parse(input),
+        updatedResultSchema,
+      ),
+    setEnabled: (input) =>
+      invokeValidated(
+        IpcChannel.SetModelEnabled,
+        setModelEnabledRequestSchema.parse(input),
+        updatedResultSchema,
+      ),
+    test: (input) =>
+      invokeValidated(
+        IpcChannel.TestModel,
+        testModelRequestSchema.parse(input),
+        connectionTestResultSchema,
+      ),
   },
   searchEngines: {
     list: () => ipcRenderer.invoke(IpcChannel.ListSearchEngines),

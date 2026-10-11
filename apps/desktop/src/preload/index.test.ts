@@ -400,6 +400,125 @@ describe('evidence preload API', () => {
   });
 });
 
+describe('model preload API', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.invoke.mockResolvedValue(null);
+  });
+
+  it('validates and forwards Model requests and responses through their channels', async () => {
+    const profile = {
+      id: 'model-1',
+      name: 'Primary',
+      provider: 'openai-compatible',
+      baseUrl: 'https://api.example.com/v1',
+      model: 'model-a',
+      role: 'language' as const,
+      apiKeyConfigured: true,
+      enabled: true,
+      priority: 0,
+      connectionStatus: 'connected' as const,
+      maxContextTokens: 8192,
+      maxOutputTokens: 1024,
+      temperature: 0.7,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const saveInput = {
+      name: 'Primary',
+      provider: 'openai-compatible',
+      baseUrl: 'https://api.example.com/v1',
+      model: 'model-a',
+      role: 'language' as const,
+      apiKey: '',
+      maxContextTokens: 8192,
+      maxOutputTokens: 1024,
+      temperature: 0.7,
+      enabled: true,
+      priority: 0,
+    };
+    const testInput = {
+      baseUrl: 'https://api.example.com/v1',
+      model: 'model-a',
+      role: 'language' as const,
+      apiKey: '',
+    };
+    mocks.invoke.mockImplementation(async (channel) => {
+      if (channel === IpcChannel.ListModels) {
+        return [
+          { ...profile, lastTestedAt: undefined },
+          { ...profile, id: 'model-2', lastTestedAt: 2 },
+        ];
+      }
+      if (channel === IpcChannel.SaveModel) return { id: 'model-1' };
+      if (channel === IpcChannel.DeleteModel) return { deleted: true };
+      if (channel === IpcChannel.SetDefaultModel || channel === IpcChannel.SetModelEnabled) {
+        return { updated: true };
+      }
+      return { ok: true, message: 'connected' };
+    });
+
+    const profiles = await api().models.list();
+    await Promise.all([
+      api().models.save(saveInput),
+      api().models.delete({ id: 'model-1' }),
+      api().models.setDefault({ id: 'model-1' }),
+      api().models.setEnabled({ id: 'model-1', enabled: false }),
+      api().models.test(testInput),
+    ]);
+
+    expect(profiles).toHaveLength(2);
+    expect(Object.hasOwn(profiles[0] ?? {}, 'lastTestedAt')).toBe(false);
+    expect(profiles[1]?.lastTestedAt).toBe(2);
+    expect(mocks.invoke.mock.calls).toEqual([
+      [IpcChannel.ListModels, {}],
+      [IpcChannel.SaveModel, saveInput],
+      [IpcChannel.DeleteModel, { id: 'model-1' }],
+      [IpcChannel.SetDefaultModel, { id: 'model-1' }],
+      [IpcChannel.SetModelEnabled, { id: 'model-1', enabled: false }],
+      [IpcChannel.TestModel, testInput],
+    ]);
+  });
+
+  it('rejects invalid Model requests before IPC and malformed responses after IPC', async () => {
+    const saveInput = {
+      name: 'Primary',
+      provider: 'openai-compatible',
+      baseUrl: 'https://api.example.com/v1',
+      model: 'model-a',
+      role: 'language' as const,
+      apiKey: '',
+      maxContextTokens: 8192,
+      maxOutputTokens: 1024,
+      temperature: 0.7,
+      enabled: true,
+      priority: 0,
+    };
+    const testInput = {
+      baseUrl: 'https://api.example.com/v1',
+      model: 'model-a',
+      role: 'language' as const,
+      apiKey: '',
+    };
+
+    expect(() => api().models.save({ ...saveInput, name: '' })).toThrow();
+    expect(() => api().models.delete({ id: '' })).toThrow();
+    expect(() => api().models.setDefault({ id: '' })).toThrow();
+    expect(() => api().models.setEnabled({ id: '', enabled: false })).toThrow();
+    expect(() => api().models.test({ ...testInput, baseUrl: '' })).toThrow();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+
+    mocks.invoke.mockResolvedValue(null);
+    await expect(api().models.list()).rejects.toThrow();
+    await expect(api().models.save(saveInput)).rejects.toThrow();
+    await expect(api().models.delete({ id: 'model-1' })).rejects.toThrow();
+    await expect(api().models.setDefault({ id: 'model-1' })).rejects.toThrow();
+    await expect(api().models.setEnabled({ id: 'model-1', enabled: false })).rejects.toThrow();
+    await expect(api().models.test(testInput)).rejects.toThrow();
+    expect(mocks.invoke).toHaveBeenCalledTimes(6);
+  });
+});
+
 describe('historical task and notification preload APIs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
