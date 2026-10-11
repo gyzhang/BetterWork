@@ -9,6 +9,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { chmod, copyFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import type {
@@ -304,6 +305,17 @@ export class FileArtifactService {
 
   resolveStoredPath(versionId: string): string {
     return path.join(this.artifactFilesRoot, versionId, 'output');
+  }
+
+  async exportVersionToPath(versionId: string, targetPath: string): Promise<void> {
+    const sourcePath = this.resolveStoredPath(versionId);
+    try {
+      await chmod(targetPath, 0o600);
+    } catch (error) {
+      if (!hasCode(error, 'ENOENT')) throw error;
+    }
+    await copyFile(sourcePath, targetPath);
+    await chmod(targetPath, 0o600);
   }
 
   /** 按版本 ID 从不可变成果库安全读取原始文件字节，调用方仍需核对 ArtifactVersion hash。 */
