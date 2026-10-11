@@ -49,6 +49,39 @@ describe('唯一规范源', () => {
     expect(offenders, '这些 package.json 内嵌了会覆盖根配置的第二套标准').toEqual([]);
   });
 
+  it('产品版本以根 package.json 为源并同步到应用清单、锁文件和打包元数据', () => {
+    const rootPackage = JSON.parse(read('package.json')) as {
+      version: string;
+      scripts: Record<string, string>;
+    };
+    const desktopPackage = JSON.parse(read('apps/desktop/package.json')) as {
+      version: string;
+      scripts: Record<string, string>;
+    };
+    const packageLock = JSON.parse(read('package-lock.json')) as {
+      version: string;
+      packages: Record<string, { version: string }>;
+    };
+    expect(rootPackage.version).toMatch(/^\d+\.\d+\.\d+$/u);
+    expect(desktopPackage.version).toBe(rootPackage.version);
+    expect(packageLock.version).toBe(rootPackage.version);
+    expect(packageLock.packages['']?.version).toBe(rootPackage.version);
+    expect(packageLock.packages['apps/desktop']?.version).toBe(rootPackage.version);
+    expect(rootPackage.scripts['version:sync']).toContain('scripts/sync-product-version.mjs');
+    expect(rootPackage.scripts['version:check']).toContain('--check');
+    expect(rootPackage.scripts.pretest).toContain('scripts/sync-product-version.mjs');
+    for (const command of ['dev', 'build', 'preview', 'dist:mac']) {
+      expect(desktopPackage.scripts[command]).toContain('scripts/sync-product-version.mjs');
+    }
+
+    const builderConfig = read('apps/desktop/electron-builder.yml');
+    expect(builderConfig).not.toMatch(/^buildVersion:/mu);
+    expect(builderConfig).toContain("artifactName: '${productName}-${version}-${arch}.${ext}'");
+    expect(read('apps/desktop/src/main/services/mcp-client-service.ts')).toContain(
+      'version: desktopPackage.version',
+    );
+  });
+
   it('tsconfig 只有一份且四项严格开关全开', () => {
     const tsconfigs = REPO_FILES.filter((relative) => /(^|\/)tsconfig.*\.json$/.test(relative));
     expect(tsconfigs, '出现了会各自放宽严格度的第二份 tsconfig').toEqual(['tsconfig.json']);

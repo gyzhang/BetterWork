@@ -39,6 +39,7 @@ import { ExecutionOutputService } from './services/execution-output-service';
 import { type BuiltinExpertReleaseManifest, ExpertService } from './services/expert-service';
 import { createStoreExtractionSourceReader } from './services/extraction-source-reader';
 import { FileArtifactService } from './services/file-artifact-service';
+import { initializeInitialData } from './services/initial-data-bootstrap';
 import { InputSnapshotService } from './services/input-snapshot-service';
 import { KnowledgeIndexService } from './services/knowledge-index-service';
 import { KnowledgeSearchService } from './services/knowledge-search';
@@ -47,6 +48,7 @@ import {
   KnowledgeWorkerRunner,
   resolveKnowledgeWorkerRuntime,
 } from './services/knowledge-worker-runner';
+import { ManagedNodeRuntimeService } from './services/managed-node-runtime-service';
 import { McpClientService } from './services/mcp-client-service';
 import { MemoryExtractionService } from './services/memory-extraction-service';
 import { MemoryRecallService } from './services/memory-recall-service';
@@ -102,8 +104,8 @@ interface ApplicationContext extends ApplicationShutdownServices {
 
 let context: ApplicationContext | null = null;
 
-/** 开发态把仓库根当工作区；打包后不能把安装目录暴露给用户，改用文档目录。 */
-function getDefaultWorkspaceRoot(): string {
+/** 已有数据库继续沿用旧默认路径；开发态是仓库根，打包态是用户文稿目录。 */
+function getLegacyDefaultWorkspaceRoot(): string {
   return app.isPackaged ? app.getPath('documents') : path.resolve(app.getAppPath(), '../..');
 }
 
@@ -113,6 +115,11 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     path.join(userData, 'betterwork.db'),
     new ElectronSafeStorageAdapter(),
   );
+  const defaultWorkspaceRoot = initializeInitialData({
+    workspaces: store.workspaces,
+    defaultWorkspaceRoot: path.join(app.getPath('home'), 'BetterWork'),
+    legacyWorkspaceRoot: getLegacyDefaultWorkspaceRoot(),
+  });
   const startupReadiness: Promise<unknown>[] = [];
   // CF11：legacy 明文密钥→credentials 的启动迁移；safeStorage 不可用时整体跳过、pending 原样保留。
   const credentialRepository = store.credentials;
@@ -301,6 +308,10 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
   const nodeRuntimeRoot = app.isPackaged
     ? path.join(process.resourcesPath, 'node-runtime')
     : path.join(app.getAppPath(), 'build', 'node-runtime');
+  const managedNodeRuntime = new ManagedNodeRuntimeService({
+    nodeRuntimeRoot,
+    runner: dependencyProcess,
+  });
   const dependencies = new SkillDependencyService({
     store,
     paths: {
@@ -719,6 +730,7 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     skillService,
     expertService,
     dependencies,
+    managedNodeRuntime,
     snapshots,
     scheduleService: scheduleManager,
     schedulePreflight,
@@ -729,7 +741,7 @@ function bootstrap(initiallySuspended: boolean): ApplicationContext {
     fileArtifactService,
     dependencyLocksRoot,
     getWindow,
-    getDefaultWorkspaceRoot,
+    getDefaultWorkspaceRoot: () => defaultWorkspaceRoot,
     ...(credentialAccess ? { credentialAccess } : {}),
   });
   return started;

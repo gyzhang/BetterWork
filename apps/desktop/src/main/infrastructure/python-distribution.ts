@@ -22,21 +22,23 @@ export interface PythonDistribution {
   readonly entryRelativePath: string;
 }
 
+const pythonBuildRelease = '20261009';
+
 const upstream = (fileName: string): string =>
-  `https://github.com/astral-sh/python-build-standalone/releases/download/20260901/${fileName}`;
+  `https://github.com/astral-sh/python-build-standalone/releases/download/${pythonBuildRelease}/${fileName}`;
 
 /** PSF-2.0；上游 install_only 制品还捆绑了各自许可的第三方组件，详见发行说明。 */
 const cpythonLicense = 'PSF-2.0 (bundled third-party components under their own licenses)';
 
 export const pythonDistributions: readonly PythonDistribution[] = [
   {
-    id: 'python-build-standalone-3.12.14-darwin-arm64',
-    version: '3.12.14',
-    release: '20260901',
+    id: 'python-build-standalone-3.12.15-darwin-arm64',
+    version: '3.12.15',
+    release: pythonBuildRelease,
     platform: { os: 'darwin', arch: 'arm64', abi: 'cp312' },
-    fileName: 'cpython-3.12.14+20260901-aarch64-apple-darwin-install_only.tar.gz',
-    url: upstream('cpython-3.12.14+20260901-aarch64-apple-darwin-install_only.tar.gz'),
-    sha256: '3ee3ee547cedfeb7c2b16b2b7156039f7b470bb8f857e226fd3d2eb11db83c76',
+    fileName: 'cpython-3.12.15+20261009-aarch64-apple-darwin-install_only.tar.gz',
+    url: upstream('cpython-3.12.15+20261009-aarch64-apple-darwin-install_only.tar.gz'),
+    sha256: '83dcb04777c798bd95f3687acf9ae84b09860272ee6bdfb05be8bcf9447f75b8',
     license: cpythonLicense,
     entryRelativePath: 'python/bin/python3.12',
   },
@@ -56,7 +58,7 @@ export const findDistributionForPlatform = (
     );
   });
 
-/** 由解释器版本派生 ABI 标签，例如 `3.12.14` → `cp312`。 */
+/** 由解释器版本派生 ABI 标签，例如 `3.12.15` → `cp312`。 */
 export const abiTagOf = (version: string): string | null => {
   const match = /^(\d+)\.(\d+)/u.exec(version);
   if (!match?.[1] || !match[2]) return null;

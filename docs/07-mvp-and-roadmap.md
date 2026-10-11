@@ -2,7 +2,7 @@
 
 ## 随包独立 Node.js 运行时 — 2026-10-10
 
-用户审核通过 [ADR-0047](adr/0047-bundled-node-runtime.md)，在 [ADR-0045](adr/0045-bundled-runtimes-for-local-mcp.md) 的随包运行时机制上补齐 Node 侧：随包分发版本锁定的独立 Node.js 24.x（darwin-arm64，含 node/npm/npx），内置 Node stdio MCP 与用户自定义 `node`/`npm`/`npx` 命令改用该运行时，不再依赖 Electron 内嵌 Node；构建期由 `prepare-node-runtime-assets.mjs` 下载并 SHA-256 校验，与 CPython 制品同机制。随包 Python 构建脚本改名 `prepare-mcp-runtime-assets` → `prepare-python-runtime-assets`（纯命名对齐，Python venv/wheel/lock 机制一字不动）。运行时随包与 MCP 接入（决策 1–4、8–11）已落地并通过定向与离线回归；Node-based Skill 执行链、导入 Skill 的 `node_modules` 生命周期与信任指纹（决策 5–7）因暂无 Node Skill 消费者，另立 [CF44](development/tasks-capability-foundation.md) 承载，待首个真实 Node Skill 出现再按实际契约开工。真机 DMG 打包、签名公证与体积增量验收待用户执行。
+用户审核通过 [ADR-0047](adr/0047-bundled-node-runtime.md)，在 [ADR-0045](adr/0045-bundled-runtimes-for-local-mcp.md) 的随包运行时机制上补齐 Node 侧：随包分发版本锁定的独立 Node.js 24.x（darwin-arm64，含 node/npm/npx），内置 Node stdio MCP 与用户自定义 `node`/`npm`/`npx` 命令改用该运行时，不再依赖 Electron 内嵌 Node；构建期由 `prepare-node-runtime-assets.mjs` 下载并 SHA-256 校验，与 CPython 制品同机制。随包 Python 构建脚本改名 `prepare-mcp-runtime-assets` → `prepare-python-runtime-assets`（纯命名对齐，Python venv/wheel/lock 机制一字不动）。运行时随包与 MCP 接入（决策 1–4、8–11）已落地并通过定向与离线回归；Node-based Skill 执行链、导入 Skill 的 `node_modules` 生命周期与信任指纹（决策 5–7）因暂无 Node Skill 消费者，另立 [CF44](development/tasks-capability-foundation.md) 承载，待首个真实 Node Skill 出现再按实际契约开工。本机 arm64 DMG 已于 2026-10-11 构建并挂载检查；签名公证、安装后首启与发布体积验收仍待完成。
 
 ## 公开网页目的地边界补强 — 2026-10-09
 
@@ -10,7 +10,7 @@
 
 ## 设置中的 MCP 多传输与 OAuth — 2026-10-08 定案，2026-10-09 实现
 
-用户审阅预览后按推荐 D1–D5 定案并授权编码，[ADR-0043](adr/0043-mcp-multi-transport-and-oauth.md) 已 Accepted。[设置中的 MCP](designs/mcp-connections.md)按 MCP 2026-07-28 实现本地 stdio、Streamable HTTP（含显式授权的本机 HTTP）、旧 HTTP+SSE 与 OAuth 浏览器登录，支持新旧版本协商、受管凭据、配置修订、工具合同审阅、Run 独立客户端及取消/历史保留。2026-10-09 用户明确要求产品安装包内置一组可直接使用的 MCP/CLI/Skill/Expert，尽量不要求用户另装 Node.js/Python 或联网准备运行时；[ADR-0045](adr/0045-bundled-runtimes-for-local-mcp.md) 与 CF43 落实当前内置 stdio MCP 和共享 Python 3.12.14 基础运行时，外部 CLI 仍按各自依赖契约处理。
+用户审阅预览后按推荐 D1–D5 定案并授权编码，[ADR-0043](adr/0043-mcp-multi-transport-and-oauth.md) 已 Accepted。[设置中的 MCP](designs/mcp-connections.md)按 MCP 2026-07-28 实现本地 stdio、Streamable HTTP（含显式授权的本机 HTTP）、旧 HTTP+SSE 与 OAuth 浏览器登录，支持新旧版本协商、受管凭据、配置修订、工具合同审阅、Run 独立客户端及取消/历史保留。2026-10-09 用户明确要求产品安装包内置一组可直接使用的 MCP/CLI/Skill/Expert，尽量不要求用户另装 Node.js/Python 或联网准备运行时；[ADR-0045](adr/0045-bundled-runtimes-for-local-mcp.md) 与 CF43 落实当前内置 stdio MCP 和共享 CPython 3.12 基础运行时，外部 CLI 仍按各自依赖契约处理。
 
 代码与离线自动化、AI 生产组件页面检查已落地，证据见 [CF 唯一任务板](development/tasks-capability-foundation.md)与[本轮记录](acceptance/2026-10-09-mcp-connections.md)。真实业务 server/OAuth 账号、真机 Keychain 与用户窗口验收仍待完成；CF33/CF42 保持 partial，不代签 API 或 A/B0/E 等既有验收。本地实现提交为 `9479562`，用户已授权推送与合并，实际版本及合并结果以 Git/PR 记录为准；BetterWork 产品发布尚未执行。
 
@@ -290,7 +290,7 @@ This is documentation adoption only, not authorization to begin product developm
 | 示例数据和 Fake Provider | 已达成：`FakeModelProvider` 可稳定复现事件顺序与工具行为 |
 | 对应教学文档 | 部分达成：架构与领域文档齐备，尚缺面向学习者的链路讲解材料 |
 | Artifact 生成后的自动验证 | 文件成果的分项验证已实现，Markdown 等其他格式不能据此宣称已自动校验；具体证据与剩余验收见 A18–A21 任务板 |
-| macOS 基础打包验证 | **部分达成**：A20 已有 electron-builder 配置和 arm64 unpacked 静态/冷准备证据（见 [A 任务板](development/README.md)）；A21 的签名安装与真实用户旅程仍未完成。Windows 打包随 [ADR-0036](adr/0036-macos-only-platform-scope.md) 退出范围 |
+| macOS 基础打包验证 | **部分达成**：A20 已有 electron-builder 配置和 arm64 unpacked 静态/冷准备证据（见 [A 任务板](development/README.md)）；2026-10-11 本机 `dist:mac` DMG 生成并挂载检查通过，但未签名；A21 的签名安装与真实用户旅程仍未完成。Windows 打包随 [ADR-0036](adr/0036-macos-only-platform-scope.md) 退出范围 |
 
 未达成项应在对应 Phase 收尾前补齐，或在本文档显式记录延后理由，不得默认跳过。
 

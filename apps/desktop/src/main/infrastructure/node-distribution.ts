@@ -18,6 +18,7 @@ export interface NodePlatform {
 export interface NodeDistribution {
   readonly id: string;
   readonly version: string;
+  readonly npmVersion: string;
   readonly platform: NodePlatform;
   readonly fileName: string;
   readonly url: string;
@@ -37,6 +38,7 @@ export const nodeDistributions: readonly NodeDistribution[] = [
   {
     id: 'node-24.21.0-darwin-arm64',
     version: '24.21.0',
+    npmVersion: '11.19.0',
     platform: { os: 'darwin', arch: 'arm64' },
     fileName: 'node-v24.21.0-darwin-arm64.tar.gz',
     url: upstream('24.21.0', 'node-v24.21.0-darwin-arm64.tar.gz'),

@@ -159,7 +159,7 @@ export interface PythonScenario {
 }
 
 export const scenarioOf = (overrides: Partial<PythonScenario> = {}): PythonScenario => ({
-  version: '3.12.14',
+  version: '3.12.15',
   machine: 'arm64',
   system: 'Darwin',
   venv: true,

@@ -1,4 +1,4 @@
-import type { ModelProfileSummary } from '@betterwork/agent-protocol';
+import type { ManagedNodeRuntimeSummary, ModelProfileSummary } from '@betterwork/agent-protocol';
 import { DEFAULT_MAX_SKILL_TOOL_ROUNDS, MAX_SKILL_TOOL_ROUNDS } from '@betterwork/agent-protocol';
 import React from 'react';
 
@@ -11,7 +11,7 @@ import type {
 import { colorSchemes } from '../appearance';
 import { ActionBar } from '../components/ActionBar';
 import { AsyncButton, InlineLoading } from '../components/AsyncButton';
-import { Badge } from '../components/Badge';
+import { Badge, type BadgeTone } from '../components/Badge';
 import { Button } from '../components/Button';
 import { ConnectionStatus } from '../components/ConnectionStatus';
 import { Disclosure } from '../components/Disclosure';
@@ -158,15 +158,15 @@ function RuntimeSettings(): React.JSX.Element {
 }
 
 export function RuntimeComponentsSettings(): React.JSX.Element {
-  const { distributions, loading, error, refresh } = useRuntimeComponents();
+  const { distributions, nodeRuntime, loading, error, refresh } = useRuntimeComponents();
 
   return (
     <section className="settings-section">
       <SectionHeader
         variant="block"
         eyebrow="运行时"
-        title="由 BetterWork 管理 Skill 的运行时"
-        hint="应用统一维护受管 CPython；首次准备 Skill 环境时会按固定来源下载并校验。通常不需要选择 Python 路径，依赖安装在 Skill 专属环境中。"
+        title="由 BetterWork 管理的运行时"
+        hint="应用统一维护受管 CPython 与随包 Node.js。CPython 首次准备 Skill 环境时会按固定来源下载并校验；Node.js 随应用安装，供内置与自定义 stdio MCP 使用。通常不需要选择 Python 或 Node.js 路径。"
         actions={
           <Button variant="secondary" size="lg" type="button" onClick={refresh}>
             重新检查
@@ -176,7 +176,7 @@ export function RuntimeComponentsSettings(): React.JSX.Element {
       {error && <InlineError message={error} />}
       {loading ? (
         <InlineLoading label="正在检查运行时…" />
-      ) : distributions.length > 0 ? (
+      ) : distributions.length > 0 || nodeRuntime ? (
         <div className="runtime-component-list">
           {distributions.map((distribution) => (
             <ListRow
@@ -191,6 +191,16 @@ export function RuntimeComponentsSettings(): React.JSX.Element {
               }
             />
           ))}
+          {nodeRuntime ? (
+            <NodeRuntimeRow runtime={nodeRuntime} />
+          ) : (
+            <ListRow
+              title="随包 Node.js"
+              detail="当前没有返回 Node.js 与 npm 的运行时状态。"
+              meta="可点击“重新检查”读取随包运行时状态。"
+              trailing={<Badge tone="warning">状态未知</Badge>}
+            />
+          )}
         </div>
       ) : (
         <EmptyNotice
@@ -199,6 +209,57 @@ export function RuntimeComponentsSettings(): React.JSX.Element {
         />
       )}
     </section>
+  );
+}
+
+function nodeRuntimePresentation(runtime: ManagedNodeRuntimeSummary): {
+  badge: string;
+  tone: BadgeTone;
+  detail: string;
+  meta: string;
+} {
+  const platform = `${runtime.platform.os}/${runtime.platform.arch}`;
+  switch (runtime.status) {
+    case 'installed':
+      return {
+        badge: '已随应用安装',
+        tone: 'success',
+        detail: `${platform} · Node.js ${runtime.detectedVersion ?? runtime.version} · npm ${runtime.detectedNpmVersion ?? runtime.npmVersion}`,
+        meta: '运行检查通过，可用于内置与自定义 stdio MCP。',
+      };
+    case 'missing':
+      return {
+        badge: '资源缺失',
+        tone: 'danger',
+        detail: `${platform} · 预期 Node.js ${runtime.version} · npm ${runtime.npmVersion}`,
+        meta: '安装包内未找到完整的 Node.js、npm 或 npx 运行时文件。',
+      };
+    case 'mismatch':
+      return {
+        badge: '版本不匹配',
+        tone: 'warning',
+        detail: `${platform} · 检测到 Node.js ${runtime.detectedVersion ?? '未知'} · npm ${runtime.detectedNpmVersion ?? '未知'}`,
+        meta: `随包版本应为 Node.js ${runtime.version} · npm ${runtime.npmVersion}。`,
+      };
+    case 'check-failed':
+      return {
+        badge: '检查失败',
+        tone: 'warning',
+        detail: `${platform} · 预期 Node.js ${runtime.version} · npm ${runtime.npmVersion}`,
+        meta: '无法运行随包版本检查；可点击“重新检查”重试。',
+      };
+  }
+}
+
+function NodeRuntimeRow({ runtime }: { runtime: ManagedNodeRuntimeSummary }): React.JSX.Element {
+  const presentation = nodeRuntimePresentation(runtime);
+  return (
+    <ListRow
+      title={`随包 Node.js ${runtime.version}`}
+      detail={presentation.detail}
+      meta={presentation.meta}
+      trailing={<Badge tone={presentation.tone}>{presentation.badge}</Badge>}
+    />
   );
 }
 

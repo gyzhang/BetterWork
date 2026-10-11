@@ -5716,9 +5716,29 @@ export const managedDistributionSummarySchema = z
   .strict();
 export type ManagedDistributionSummary = z.infer<typeof managedDistributionSummarySchema>;
 
+export const managedNodeRuntimeSummarySchema = z
+  .object({
+    id: z.string().min(1),
+    version: z.string().min(1),
+    npmVersion: z.string().min(1),
+    platform: z
+      .object({
+        os: z.enum(['darwin', 'win32', 'linux']),
+        arch: z.enum(['arm64', 'x64']),
+      })
+      .strict(),
+    status: z.enum(['installed', 'missing', 'mismatch', 'check-failed']),
+    detectedVersion: z.string().min(1).optional(),
+    detectedNpmVersion: z.string().min(1).optional(),
+  })
+  .strict();
+export type ManagedNodeRuntimeSummary = z.infer<typeof managedNodeRuntimeSummarySchema>;
+
 export const dependencyOptionsSchema = z
   .object({
     distributions: z.array(managedDistributionSummarySchema),
+    /** 当前桌面宿主提供；可选以兼容尚未升级的依赖选项调用方。 */
+    nodeRuntime: managedNodeRuntimeSummarySchema.optional(),
     lockIds: z.array(z.string().min(1)),
     snapshots: z.array(managedDependencySnapshotSchema),
     environments: z.array(runtimeEnvironmentSchema),
@@ -5726,7 +5746,12 @@ export const dependencyOptionsSchema = z
   .strict();
 export type DependencyOptions = z.infer<typeof dependencyOptionsSchema>;
 
-export const listDependencyOptionsRequestSchema = z.object({}).strict();
+export const listDependencyOptionsRequestSchema = z
+  .object({
+    /** 设置 → 运行读取 Node 状态时开启；技能依赖选项读取不启动 Node 子进程。 */
+    includeNodeRuntime: z.boolean().optional(),
+  })
+  .strict();
 export type ListDependencyOptionsRequest = z.infer<typeof listDependencyOptionsRequestSchema>;
 
 export const dependencyPlanRequestSchema = z
@@ -6288,7 +6313,7 @@ export interface BetterWorkDesktopApi {
     logout(input: McpOperationRequest): Promise<McpMutationResult>;
   };
   dependencies: {
-    listOptions(): Promise<DependencyOptions>;
+    listOptions(input?: ListDependencyOptionsRequest): Promise<DependencyOptions>;
     inspectPlan(input: DependencyPlanRequest): Promise<DependencyPlan>;
     verifyEnvironment(input: VerifyDependencyEnvironmentRequest): Promise<RuntimeEnvironment>;
     prepare(input: PrepareDependencyRequest): Promise<PrepareDependencyResult>;

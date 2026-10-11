@@ -102,8 +102,10 @@ try {
       encoding: 'utf8',
     },
   ).trim();
-  if (!/^\d+\.\d+\.\d+/u.test(reportedNpm))
-    throw new Error(`随包 npm 不可用：npm --version 输出 ${reportedNpm || '（空）'}`);
+  if (reportedNpm !== distribution.npmVersion)
+    throw new Error(
+      `随包 npm 版本校验失败：期望 ${distribution.npmVersion}，实际 ${reportedNpm || '（空）'}`,
+    );
 
   await writeFile(
     path.join(nodeRuntimeRoot, 'manifest.json'),

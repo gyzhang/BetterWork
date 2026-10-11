@@ -16,7 +16,7 @@ const runtimeAssetsRoot = path.join(
   'python-runtime-assets',
 );
 const targetPlatform = { os: 'darwin', arch: 'arm64', abi: 'cp312' };
-const distribution = findDistribution('python-build-standalone-3.12.14-darwin-arm64');
+const distribution = findDistribution('python-build-standalone-3.12.15-darwin-arm64');
 const lockPath = path.join(
   repositoryRoot,
   'resources',
