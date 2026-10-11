@@ -932,3 +932,9 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 2026-10-11 18:52 CST，从最新 `origin/main` `d2ced673c5c5dfcc6edd28a2fa6a97fcb298f915` 建立 `codex/r13-app-dependencies-api-fixture`。将依赖选项列表默认替身提取为私有 `createDependenciesApiFixture`；发行版、锁、快照和环境集合仍各为空列表。
 
 `App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡只移动 Dependencies API 测试替身，不改依赖发现或生产行为；完整 Desktop API fixture 与 App 整树场景仍在，不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 67. R13 子卡：Chrome API 替身按域收拢
+
+2026-10-11 18:56 CST，从最新 `origin/main` `3af619dc990afc4f3ba2b12f1dc3dde7892ce504` 建立 `codex/r13-app-chrome-api-fixture`。将主题更新 no-op 默认替身提取为私有 `createChromeApiFixture`，由总夹具组合该端口；调用仍异步返回 undefined。
+
+`App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡只移动 Chrome API 测试替身，不改主题应用或生产行为；完整 Desktop API fixture 与 App 整树场景仍在，不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。
