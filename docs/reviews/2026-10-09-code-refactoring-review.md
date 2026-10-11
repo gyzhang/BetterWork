@@ -1236,3 +1236,9 @@ Preload 定向测试 1 文件 / 38 项通过；编译器正反例覆盖 15 个�
 保留推送事件的运行期 Zod 校验与退订行为，不修改共享协议、Main 广播或事件语义。Preload 定向测试 1 文件 / 42 项通过；编译器正反例覆盖事件类型与 channel 字面值关联，运行期回归覆盖有效事件转交、畸形事件拒绝及退订。全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 与差异空白检查通过。本卡已收口；完整 `npm run verify`、UI、真实模型及安装态验收未运行。
 
 源提交 `c08ca2e85f55d7c072c069c558241ca5152116d3` 的 [PR Gate / Actions 38158919508](https://github.com/gyzhang/BetterWork/actions/runs/38158919508) 与 Quick code check 通过，Full verify 按规则跳过。[PR #177](https://github.com/gyzhang/BetterWork/pull/177) 已 squash 合入 main，合并提交 `e69deb24d89e58180a4663774266ca20c888e837`；任务分支本地与远端均已删除，本地 checkout 已同步 main，未创建 worktree。
+
+## 105. R09 子卡：Preload 全局通道契约覆盖护栏
+
+2026-10-12 01:26 CST，从最新 `origin/main` `b3d746ebde55ff0cc8716e0c21ec30063d08df74` 在本地 checkout 建立 `codex/r09-preload-channel-coverage`。静态盘点确认协议定义 159 个 channel 值、Main 注册 154 个 invoke 请求通道及 5 个推送事件；Main 测试已覆盖请求通道齐全、无未知项且无重复。Preload 的 17 组分域契约当前覆盖全部 channel 值，但尚无完整性护栏。
+
+本卡在既有编译器契约测试中加入总覆盖约束，要求 Preload 分域映射 channel 值的并集与共享协议 `IpcChannel` 值集合完全相等，避免新增协议 channel 漏接 Preload。只加测试护栏，不改变运行时行为、Main 注册或共享协议。Preload 定向测试 1 文件 / 42 项、Main IPC 注册测试 1 文件 / 51 项通过；全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 与差异空白检查通过。PR Gate、合并和分支清理待收口；完整 `npm run verify` 未运行。
