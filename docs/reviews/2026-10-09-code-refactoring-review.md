@@ -860,3 +860,9 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 2026-10-11 17:50 CST，从最新 `origin/main` `7ed1786dba8b9b597ca4d876303fdc59fb288edb` 建立 `codex/r13-app-notifications-api-fixture`。将通知列表、单项读取、Renderer ready、已读和变更/系统激活事件注册替身提取为私有 `createNotificationsApiFixture`。注册仍写入既有模块级事件钩子，注销函数仍为空操作；钩子仍由 `createAppTestApi` 在每次安装开始时重置。
 
 `App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡只移动测试替身，不改通知持久化、广播或用户可见行为；完整 Desktop API fixture 与 App 整树场景仍在，不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 55. R13 子卡：Schedules API 替身按域收拢
+
+2026-10-11 17:55 CST，从最新 `origin/main` `ba201dca10f05f25e62c8f7ff61c191b4bdd8ce6` 建立 `codex/r13-app-schedules-api-fixture`。将规则/实例列表、读取、保存、生命周期与变更订阅替身提取为私有 `createSchedulesApiFixture`。事件注册仍写入 `emitScheduleChange`，unsubscribe 仍清空回调；安装开始时仍由总夹具重置回调。
+
+`App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。排期错误码与中文消息原样保留，不改计划产品行为或生产代码；完整 Desktop API fixture 与 App 整树场景仍在，不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。

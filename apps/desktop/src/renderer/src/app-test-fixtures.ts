@@ -510,6 +510,37 @@ function createNotificationsApiFixture() {
   };
 }
 
+function createSchedulesApiFixture() {
+  return {
+    list: vi.fn<Window['betterwork']['schedules']['list']>(async () => ({
+      status: 'success',
+      data: { items: [] },
+    })),
+    onChange: vi.fn((listener: (event: ScheduleChangedEvent) => void) => {
+      emitScheduleChange = listener;
+      return () => {
+        emitScheduleChange = undefined;
+      };
+    }),
+    get: vi.fn<Window['betterwork']['schedules']['get']>(async () => ({
+      status: 'rejected' as const,
+      error: { code: 'schedule_not_found', message: '没有该规则。' },
+    })),
+    save: vi.fn<Window['betterwork']['schedules']['save']>(async () => ({
+      status: 'rejected',
+      error: { code: 'schedule_not_found', message: '没有该规则。' },
+    })),
+    setLifecycle: vi.fn<Window['betterwork']['schedules']['setLifecycle']>(async () => ({
+      status: 'rejected',
+      error: { code: 'schedule_not_found', message: '没有该规则。' },
+    })),
+    getOccurrence: vi.fn<Window['betterwork']['schedules']['getOccurrence']>(async () => ({
+      status: 'rejected' as const,
+      error: { code: 'schedule_not_found', message: '没有该实例。' },
+    })),
+  };
+}
+
 function createAppTestApi(options?: AppTestApiOptions) {
   emitNotificationChange = undefined;
   emitScheduleChange = undefined;
@@ -539,34 +570,7 @@ function createAppTestApi(options?: AppTestApiOptions) {
         throw new Error('App 测试没有配置 Task Continuity 保存结果');
       }),
     },
-    schedules: {
-      list: vi.fn<Window['betterwork']['schedules']['list']>(async () => ({
-        status: 'success',
-        data: { items: [] },
-      })),
-      onChange: vi.fn((listener: (event: ScheduleChangedEvent) => void) => {
-        emitScheduleChange = listener;
-        return () => {
-          emitScheduleChange = undefined;
-        };
-      }),
-      get: vi.fn<Window['betterwork']['schedules']['get']>(async () => ({
-        status: 'rejected' as const,
-        error: { code: 'schedule_not_found', message: '没有该规则。' },
-      })),
-      save: vi.fn<Window['betterwork']['schedules']['save']>(async () => ({
-        status: 'rejected',
-        error: { code: 'schedule_not_found', message: '没有该规则。' },
-      })),
-      setLifecycle: vi.fn<Window['betterwork']['schedules']['setLifecycle']>(async () => ({
-        status: 'rejected',
-        error: { code: 'schedule_not_found', message: '没有该规则。' },
-      })),
-      getOccurrence: vi.fn<Window['betterwork']['schedules']['getOccurrence']>(async () => ({
-        status: 'rejected' as const,
-        error: { code: 'schedule_not_found', message: '没有该实例。' },
-      })),
-    },
+    schedules: createSchedulesApiFixture(),
     taskContexts: createTaskContextApiFixture(options, removedScheduleScopeTaskIds),
     discussionCheckpoints: {
       list: vi.fn(async (): Promise<DiscussionCheckpoint[]> => []),
