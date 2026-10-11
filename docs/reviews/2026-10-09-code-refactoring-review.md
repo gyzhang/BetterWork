@@ -854,3 +854,9 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 2026-10-11 17:45 CST，从最新 `origin/main` `8ac15f13b384769b00114d235da3b015bbcc0ebb` 建立 `codex/r13-app-workspace-api-fixture`。将 Workspace API 默认替身提取为私有 `createWorkspaceApiFixture`，集中工作空间选择、身份和可见性、侧栏分组、简报及参考成果版本方法。保留侧栏分组与 `tasks.list` 返回同一任务的用例约束，确保旧任务行仍可交互。
 
 `App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡只移动 Workspace 测试替身，不改工作空间或参考成果行为；完整 Desktop API fixture 与 App 整树场景仍在，不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 54. R13 子卡：Notifications API 替身按域收拢
+
+2026-10-11 17:50 CST，从最新 `origin/main` `7ed1786dba8b9b597ca4d876303fdc59fb288edb` 建立 `codex/r13-app-notifications-api-fixture`。将通知列表、单项读取、Renderer ready、已读和变更/系统激活事件注册替身提取为私有 `createNotificationsApiFixture`。注册仍写入既有模块级事件钩子，注销函数仍为空操作；钩子仍由 `createAppTestApi` 在每次安装开始时重置。
+
+`App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡只移动测试替身，不改通知持久化、广播或用户可见行为；完整 Desktop API fixture 与 App 整树场景仍在，不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。

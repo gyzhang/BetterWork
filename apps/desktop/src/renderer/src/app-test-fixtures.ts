@@ -493,6 +493,23 @@ function createWorkspaceApiFixture() {
   };
 }
 
+function createNotificationsApiFixture() {
+  return {
+    list: vi.fn(async () => []),
+    get: vi.fn(async (): Promise<NotificationSummary | null> => null),
+    rendererReady: vi.fn(async () => ({ ready: true as const })),
+    markRead: vi.fn(async () => ({ unreadCount: 0 })),
+    onChange: vi.fn((listener: (event: NotificationChangeEvent) => void) => {
+      emitNotificationChange = listener;
+      return () => undefined;
+    }),
+    onActivate: vi.fn((listener: (input: { id: string }) => void) => {
+      activateSystemNotification = listener;
+      return () => undefined;
+    }),
+  };
+}
+
 function createAppTestApi(options?: AppTestApiOptions) {
   emitNotificationChange = undefined;
   emitScheduleChange = undefined;
@@ -507,20 +524,7 @@ function createAppTestApi(options?: AppTestApiOptions) {
     knowledge: createKnowledgeApiFixture(),
     artifacts: createArtifactApiFixture(),
     evidence: { list: vi.fn(async () => []) },
-    notifications: {
-      list: vi.fn(async () => []),
-      get: vi.fn(async (): Promise<NotificationSummary | null> => null),
-      rendererReady: vi.fn(async () => ({ ready: true as const })),
-      markRead: vi.fn(async () => ({ unreadCount: 0 })),
-      onChange: vi.fn((listener: (event: NotificationChangeEvent) => void) => {
-        emitNotificationChange = listener;
-        return () => undefined;
-      }),
-      onActivate: vi.fn((listener: (input: { id: string }) => void) => {
-        activateSystemNotification = listener;
-        return () => undefined;
-      }),
-    },
+    notifications: createNotificationsApiFixture(),
     tasks: {
       list: vi.fn(async (): Promise<RecentTaskSummary[]> => [previousTask]),
       get: vi.fn(async (): Promise<RecentTaskSummary | null> => previousTask),
