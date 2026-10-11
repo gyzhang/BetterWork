@@ -1,8 +1,20 @@
-import type { BetterWorkDesktopApi } from '@betterwork/agent-protocol';
+import type {
+  ArtifactDetail,
+  ArtifactSummary,
+  ArtifactVersionDetail,
+  ArtifactVersionSummary,
+  BetterWorkDesktopApi,
+  EvidenceSummary,
+  FileArtifactDetail,
+} from '@betterwork/agent-protocol';
 import {
   agentRuntimeEventSchema,
   applyScheduleExpertRevisionRequestSchema,
+  artifactDetailSchema,
+  artifactSummarySchema,
+  artifactVersionDetailSchema,
   artifactVersionExecutorSummarySchema,
+  artifactVersionSummarySchema,
   cancelDependencyRequestSchema,
   cancelDependencyResultSchema,
   cancelledResultSchema,
@@ -44,11 +56,15 @@ import {
   expertRevisionDraftSchema,
   expertSummarySchema,
   exportSkillRequestSchema,
+  fileArtifactDetailSchema,
+  getArtifactRequestSchema,
   getArtifactThumbnailsRequestSchema,
   getArtifactThumbnailsResultSchema,
   getArtifactVersionExecutorRequestSchema,
+  getArtifactVersionRequestSchema,
   getDependencyOperationRequestSchema,
   getExpertRequestSchema,
+  getFileArtifactRequestSchema,
   getMcpConnectionRequestSchema,
   getMemoryRequestSchema,
   getMemorySettingsRequestSchema,
@@ -80,6 +96,8 @@ import {
   knowledgeRevisionSummarySchema,
   knowledgeSearchSettingsSchema,
   knowledgeTextPageSchema,
+  listArtifactsRequestSchema,
+  listArtifactVersionsRequestSchema,
   listDependencyOptionsRequestSchema,
   listDiscussionCheckpointsRequestSchema,
   listEvidenceRequestSchema,
@@ -236,12 +254,125 @@ function invokeValidated<Schema extends ZodTypeAny>(
   return ipcRenderer.invoke(channel, input).then((raw: unknown) => schema.parse(raw));
 }
 
-const evidenceListResponseSchema = evidenceSummarySchema.array().transform((summaries) =>
-  summaries.map(({ knowledgeSource, ...summary }) => ({
-    ...summary,
-    ...(knowledgeSource === undefined ? {} : { knowledgeSource }),
-  })),
-);
+const evidenceListResponseSchema = evidenceSummarySchema
+  .array()
+  .transform((summaries) => summaries.map(normalizeEvidenceSummary));
+
+function normalizeEvidenceSummary(
+  summary: z.output<typeof evidenceSummarySchema>,
+): EvidenceSummary {
+  const { knowledgeSource, ...evidence } = summary;
+  return { ...evidence, ...(knowledgeSource === undefined ? {} : { knowledgeSource }) };
+}
+
+function normalizeArtifactSummary(
+  summary: z.output<typeof artifactSummarySchema>,
+): ArtifactSummary {
+  if (summary.type === 'markdown') {
+    const { sourceDeclarationKind, sourceRunId, ...fields } = summary;
+    return {
+      ...fields,
+      ...(sourceDeclarationKind === undefined ? {} : { sourceDeclarationKind }),
+      ...(sourceRunId === undefined ? {} : { sourceRunId }),
+    };
+  }
+  const { sourceDeclarationKind, sourceRunId, ...fields } = summary;
+  return {
+    ...fields,
+    ...(sourceDeclarationKind === undefined ? {} : { sourceDeclarationKind }),
+    ...(sourceRunId === undefined ? {} : { sourceRunId }),
+  };
+}
+
+function normalizeArtifactDetail(detail: z.output<typeof artifactDetailSchema>): ArtifactDetail {
+  if (detail.type === 'markdown') {
+    const { sourceDeclarationKind, sourceRunId, evidence, inputRelations, ...fields } = detail;
+    return {
+      ...fields,
+      ...(sourceDeclarationKind === undefined ? {} : { sourceDeclarationKind }),
+      ...(sourceRunId === undefined ? {} : { sourceRunId }),
+      evidence: evidence.map(normalizeEvidenceSummary),
+      ...(inputRelations === undefined ? {} : { inputRelations }),
+    };
+  }
+  const { sourceDeclarationKind, sourceRunId, description, evidence, inputRelations, ...fields } =
+    detail;
+  return {
+    ...fields,
+    ...(sourceDeclarationKind === undefined ? {} : { sourceDeclarationKind }),
+    ...(sourceRunId === undefined ? {} : { sourceRunId }),
+    ...(description === undefined ? {} : { description }),
+    evidence: evidence.map(normalizeEvidenceSummary),
+    ...(inputRelations === undefined ? {} : { inputRelations }),
+  };
+}
+
+function normalizeFileArtifactDetail(
+  detail: z.output<typeof fileArtifactDetailSchema>,
+): FileArtifactDetail {
+  const { sourceDeclarationKind, sourceRunId, description, evidence, inputRelations, ...fields } =
+    detail;
+  return {
+    ...fields,
+    ...(sourceDeclarationKind === undefined ? {} : { sourceDeclarationKind }),
+    ...(sourceRunId === undefined ? {} : { sourceRunId }),
+    ...(description === undefined ? {} : { description }),
+    evidence: evidence.map(normalizeEvidenceSummary),
+    ...(inputRelations === undefined ? {} : { inputRelations }),
+  };
+}
+
+function normalizeArtifactVersionSummary(
+  summary: z.output<typeof artifactVersionSummarySchema>,
+): ArtifactVersionSummary {
+  const { sourceDeclarationKind, sourceRunId, ...fields } = summary;
+  return {
+    ...fields,
+    ...(sourceDeclarationKind === undefined ? {} : { sourceDeclarationKind }),
+    ...(sourceRunId === undefined ? {} : { sourceRunId }),
+  };
+}
+
+function normalizeArtifactVersionDetail(
+  detail: z.output<typeof artifactVersionDetailSchema>,
+): ArtifactVersionDetail {
+  if (detail.type === 'markdown') {
+    const { sourceDeclarationKind, sourceRunId, evidence, inputRelations, ...fields } = detail;
+    return {
+      ...fields,
+      ...(sourceDeclarationKind === undefined ? {} : { sourceDeclarationKind }),
+      ...(sourceRunId === undefined ? {} : { sourceRunId }),
+      evidence: evidence.map(normalizeEvidenceSummary),
+      ...(inputRelations === undefined ? {} : { inputRelations }),
+    };
+  }
+  const { sourceDeclarationKind, sourceRunId, description, evidence, inputRelations, ...fields } =
+    detail;
+  return {
+    ...fields,
+    ...(sourceDeclarationKind === undefined ? {} : { sourceDeclarationKind }),
+    ...(sourceRunId === undefined ? {} : { sourceRunId }),
+    ...(description === undefined ? {} : { description }),
+    evidence: evidence.map(normalizeEvidenceSummary),
+    ...(inputRelations === undefined ? {} : { inputRelations }),
+  };
+}
+
+const artifactSummaryListResponseSchema = artifactSummarySchema
+  .array()
+  .transform((summaries) => summaries.map(normalizeArtifactSummary));
+const artifactDetailResponseSchema = artifactDetailSchema
+  .nullable()
+  .transform((detail) => (detail === null ? null : normalizeArtifactDetail(detail)));
+const artifactVersionSummaryListResponseSchema = artifactVersionSummarySchema
+  .array()
+  .transform((versions) => versions.map(normalizeArtifactVersionSummary));
+const artifactVersionDetailResponseSchema = artifactVersionDetailSchema
+  .nullable()
+  .transform((detail) => (detail === null ? null : normalizeArtifactVersionDetail(detail)));
+const fileArtifactDetailResponseSchema = fileArtifactDetailSchema
+  .nullable()
+  .transform((detail) => (detail === null ? null : normalizeFileArtifactDetail(detail)));
 
 const modelProfileListResponseSchema = modelProfileSummarySchema.array().transform((profiles) =>
   profiles.map(({ lastTestedAt, ...profile }) => ({
@@ -379,20 +510,45 @@ const api: BetterWorkDesktopApi = {
       ),
   },
   artifacts: {
-    list: (input) => ipcRenderer.invoke(IpcChannel.ListArtifacts, input),
-    get: (input) => ipcRenderer.invoke(IpcChannel.GetArtifact, input),
-    listVersions: (input) => ipcRenderer.invoke(IpcChannel.ListArtifactVersions, input),
+    list: (input) =>
+      invokeValidated(
+        IpcChannel.ListArtifacts,
+        input === undefined ? undefined : listArtifactsRequestSchema.parse(input),
+        artifactSummaryListResponseSchema,
+      ),
+    get: (input) =>
+      invokeValidated(
+        IpcChannel.GetArtifact,
+        getArtifactRequestSchema.parse(input),
+        artifactDetailResponseSchema,
+      ),
+    listVersions: (input) =>
+      invokeValidated(
+        IpcChannel.ListArtifactVersions,
+        listArtifactVersionsRequestSchema.parse(input),
+        artifactVersionSummaryListResponseSchema,
+      ),
     getVersionExecutor: (input) =>
       invokeValidated(
         IpcChannel.GetArtifactVersionExecutor,
         getArtifactVersionExecutorRequestSchema.parse(input),
         artifactVersionExecutorSummarySchema.nullable(),
       ),
-    getVersion: (input) => ipcRenderer.invoke(IpcChannel.GetArtifactVersion, input),
+    getVersion: (input) =>
+      invokeValidated(
+        IpcChannel.GetArtifactVersion,
+        getArtifactVersionRequestSchema.parse(input),
+        artifactVersionDetailResponseSchema,
+      ),
     saveMarkdown: (input) => ipcRenderer.invoke(IpcChannel.SaveMarkdownArtifact, input),
     exportMarkdown: (input) => ipcRenderer.invoke(IpcChannel.ExportMarkdownArtifact, input),
     registerFile: (input) => ipcRenderer.invoke(IpcChannel.RegisterFileArtifact, input),
-    getFileDetail: (input) => ipcRenderer.invoke(IpcChannel.GetFileArtifact, input),
+    getFileDetail: (input) =>
+      invokeValidated(
+        IpcChannel.GetFileArtifact,
+        getFileArtifactRequestSchema.parse(input),
+        fileArtifactDetailResponseSchema,
+      ),
     exportFile: (input) => ipcRenderer.invoke(IpcChannel.ExportFileArtifact, input),
     openFile: (input) => ipcRenderer.invoke(IpcChannel.OpenFileArtifact, input),
     revealFile: (input) =>

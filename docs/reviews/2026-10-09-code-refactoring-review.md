@@ -1090,3 +1090,11 @@ Preload 定向测试 1 文件 / 19 项通过，覆盖三个 API 的请求转发�
 Preload 定向测试 1 文件 / 21 项通过，覆盖旧调用的请求转发、非法 `markRead` 请求拒绝和畸形响应拒绝；typecheck、改动文件 ESLint/Prettier 和差异空白检查通过。完整 `npm run verify`、UI、真实模型及安装态验收未运行。
 
 源提交 `a17f8873b3db0924972ed3afb4b61e6cab5c0bb4` 的 [PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/38144009182) 成功；Quick code check 通过，Full verify 按仓库规则跳过。[PR #151](https://github.com/gyzhang/BetterWork/pull/151) 已合入 main，合并提交 `c376d900f6c383ae8460cac1150f5796df08cc52`；本地和远端任务分支已删除，任务 worktree 保留。R09 的 Artifact、Knowledge 等旧 Preload 调用及全局 channel 映射继续待后续切片。
+
+## 89. R09 子卡：Artifact 查询 Preload 请求与响应边界校验（进行中）
+
+2026-10-11 21:48 CST，Notification 子卡文档收口后，从最新 `origin/main` `03474b73e2c2a57855a55c373d0cd70fa333fb70` 在保留的任务 worktree 建立 `codex/r09-artifact-preload-contracts`。Artifact 的 `list`、`get`、`listVersions`、`getVersion`、`getFileDetail` 接入既有请求与响应 Schema；原已校验的 `getVersionExecutor` 纳入同一组覆盖用例。
+
+列表未传筛选条件时仍向 IPC 传 `undefined`。响应解析省略 Schema 产出的可选 `undefined` 字段，并清理详情中 Evidence 的可选 `knowledgeSource`，以满足精确可选属性类型。没有修改 channel、Main handler、领域行为或共享协议；Artifact 保存/导出/打开等其余调用和 Knowledge、全局 channel 映射仍待后续切片。
+
+Preload 定向测试 1 文件 / 23 项通过，覆盖六个查询 API 的请求转发、非法请求拒绝、畸形响应拒绝及可选属性归一；typecheck、改动文件 ESLint/Prettier 与差异空白检查通过。文档检查待提交前复核；完整 `npm run verify`、UI、真实模型及安装态验收未运行。
