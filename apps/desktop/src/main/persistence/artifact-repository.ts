@@ -161,6 +161,45 @@ const toVersionSummary = (row: ArtifactVersionRow): ArtifactVersionSummary => {
   return { ...common, type: 'markdown' };
 };
 
+const hasMarkdownContent = (row: ArtifactVersionRow): boolean =>
+  row.content !== undefined && row.content !== null && row.content_hash !== undefined;
+
+const toVersionDetail = (
+  row: ArtifactVersionRow,
+  file: ArtifactFileRow | undefined,
+  evidence: EvidenceSummary[],
+): ArtifactVersionDetail | undefined => {
+  if (row.content !== undefined && row.content !== null && row.content_hash !== undefined)
+    return {
+      ...toVersionSummary(row),
+      type: 'markdown',
+      content: row.content,
+      contentHash: row.content_hash,
+      evidence,
+    };
+  if (!file) return undefined;
+  return {
+    id: row.id,
+    artifactId: row.artifact_id,
+    versionNumber: row.version_number,
+    origin: row.origin,
+    ...(row.source_run_id ? { sourceRunId: row.source_run_id } : {}),
+    createdAt: row.created_at,
+    type: 'presentation',
+    mimeType: file.mime_type,
+    fileSize: file.file_size,
+    validation: {
+      structure: file.validation_structure,
+      visual: file.validation_visual,
+      manualEdit: file.validation_manual_edit,
+    },
+    fileHash: file.file_hash,
+    fileKey: file.file_key,
+    ...(file.description ? { description: file.description } : {}),
+    evidence,
+  };
+};
+
 const toEvidence = (row: EvidenceRow): EvidenceSummary => ({
   id: row.id,
   taskId: row.task_id,
@@ -602,39 +641,61 @@ export class ArtifactRepository {
       )
       .get(id) as ArtifactVersionRow | undefined;
     if (!row) return undefined;
+    const file = hasMarkdownContent(row) ? undefined : this.readFileMeta(row.id);
+    const evidence = hasMarkdownContent(row) || file ? this.listVersionEvidence(row.id) : [];
+    return toVersionDetail(row, file, evidence);
+  }
 
-    if (row.content !== undefined && row.content !== null && row.content_hash !== undefined) {
-      return {
-        ...toVersionSummary(row),
-        type: 'markdown' as const,
-        content: row.content,
-        contentHash: row.content_hash,
-        evidence: this.listVersionEvidence(row.id),
-      };
+  /** 完整精确版本与来源解码；缺失及不可读版本不补为 latest。 */
+  listVersionDetails(versionIds: readonly string[]): ArtifactVersionDetail[] {
+    const ids = [...new Set(versionIds)];
+    if (ids.length === 0) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT v.id, v.artifact_id, v.version_number, v.source_run_id, v.origin,
+                v.source_declaration, v.content, v.content_hash, v.created_at,
+                af.mime_type, af.file_size,
+                af.validation_structure, af.validation_visual, af.validation_manual_edit
+           FROM json_each(?) requested
+           JOIN artifact_versions v ON v.id = requested.value
+           LEFT JOIN artifact_files af ON af.version_id = v.id
+          ORDER BY CAST(requested.key AS INTEGER) ASC`,
+      )
+      .all(JSON.stringify(ids)) as ArtifactVersionRow[];
+    const fileIds = rows.filter((row) => !hasMarkdownContent(row)).map((row) => row.id);
+    const fileRows =
+      fileIds.length === 0
+        ? []
+        : (this.db
+            .prepare(
+              'SELECT af.* FROM json_each(?) requested JOIN artifact_files af ON af.version_id = requested.value',
+            )
+            .all(JSON.stringify(fileIds)) as ArtifactFileRow[]);
+    const files = new Map(fileRows.map((file) => [file.version_id, file]));
+    const readableIds = rows
+      .filter((row) => hasMarkdownContent(row) || files.has(row.id))
+      .map((row) => row.id);
+    const evidenceRows =
+      readableIds.length === 0
+        ? []
+        : (this.db
+            .prepare(
+              `SELECT ave.version_id, e.* FROM json_each(?) requested
+           JOIN artifact_version_evidence ave ON ave.version_id = requested.value
+           JOIN evidence e ON e.id = ave.evidence_id
+          ORDER BY CAST(requested.key AS INTEGER) ASC, e.captured_at DESC, e.rowid DESC`,
+            )
+            .all(JSON.stringify(readableIds)) as Array<EvidenceRow & { version_id: string }>);
+    const evidenceByVersion = new Map<string, EvidenceSummary[]>();
+    for (const row of evidenceRows) {
+      const evidence = evidenceByVersion.get(row.version_id) ?? [];
+      evidence.push(toEvidence(row));
+      evidenceByVersion.set(row.version_id, evidence);
     }
-
-    const file = this.readFileMeta(row.id);
-    if (!file) return undefined;
-    return {
-      id: row.id,
-      artifactId: row.artifact_id,
-      versionNumber: row.version_number,
-      origin: row.origin,
-      ...(row.source_run_id ? { sourceRunId: row.source_run_id } : {}),
-      createdAt: row.created_at,
-      type: 'presentation' as const,
-      mimeType: file.mime_type,
-      fileSize: file.file_size,
-      validation: {
-        structure: file.validation_structure,
-        visual: file.validation_visual,
-        manualEdit: file.validation_manual_edit,
-      },
-      fileHash: file.file_hash,
-      fileKey: file.file_key,
-      ...(file.description ? { description: file.description } : {}),
-      evidence: this.listVersionEvidence(row.id),
-    };
+    return rows.flatMap((row) => {
+      const detail = toVersionDetail(row, files.get(row.id), evidenceByVersion.get(row.id) ?? []);
+      return detail === undefined ? [] : [detail];
+    });
   }
 
   getWorkspaceRelativePath(versionId: string): string | undefined {
