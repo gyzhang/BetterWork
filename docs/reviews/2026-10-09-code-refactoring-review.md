@@ -1220,3 +1220,9 @@ Preload 定向测试 1 文件 / 38 项通过；编译器正反例覆盖 15 个�
 保留可选依赖选项筛选、解释器无参调用发送空对象，以及环境操作状态、快照冲突与取消结果的既有语义；不改变 Main handler、依赖服务、运行期行为或共享协议。编译器正反例覆盖 9 个 channel 的 API 返回类型、输入类型及 channel 字面值；运行期测试逐一核对 9 个 API 的转发 channel 和解析后请求，并覆盖非法请求拒绝。Preload 定向测试 1 文件 / 40 项、全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 与差异空白检查通过。本卡已收口；完整 `npm run verify`、UI、真实模型及安装态验收未运行。
 
 源提交 `b34ce1311f84fc3c8dc8d5a50182214a8b7817da` 的 [PR Gate / Actions 38157362495](https://github.com/gyzhang/BetterWork/actions/runs/38157362495) 与 Quick code check 通过，Full verify 按规则跳过。[PR #173](https://github.com/gyzhang/BetterWork/pull/173) 已 squash 合入 main，合并提交 `6b2b2da7da44cfe1b9162012c69f3af0ddff167d`；任务分支本地与远端均已删除，本地 checkout 已同步 main，未创建 worktree。
+
+## 103. R09 子卡：Window Preload 通道映射
+
+2026-10-12 01:02 CST，从最新 `origin/main` `be6f21d869ee2ab3b020f0725d6478b47c0fe48f` 在本地 checkout 建立 `codex/r09-window-channel-contracts`。本卡为窗口主题更新与最大化切换两个 invoke channel 建立请求/响应 Schema 和 Preload 方法映射。
+
+保留主题颜色请求校验、更新主题的 `void` 响应，以及最大化状态结果；不改变窗口、主题或 Main handler 行为。编译器正反例覆盖两个 channel 的输入、响应与 channel 字面值；运行期回归覆盖主题请求在 IPC 前校验、主题响应和最大化结果解析及两个 channel 的转发。Preload 定向测试 1 文件 / 41 项、全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 与差异空白检查通过。PR Gate、合并和分支清理待本卡收口；完整 `npm run verify`、UI、真实模型及安装态验收未运行。
