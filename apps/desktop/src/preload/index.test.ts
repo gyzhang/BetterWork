@@ -283,6 +283,30 @@ describe('run preload API', () => {
     await expect(api().runs.listEvents({ runId: 'run-1' })).rejects.toThrow();
     expect(mocks.invoke).toHaveBeenCalledTimes(4);
   });
+
+  it('validates Run events through their mapped channel and removes the listener', () => {
+    const listener = vi.fn();
+    const unsubscribe = api().runs.onEvent(listener);
+    const handler = mocks.listeners.get(IpcChannel.RunEvent);
+    expect(handler).toBeDefined();
+
+    const event = {
+      id: 'event-1',
+      runId: 'run-1',
+      sequence: 0,
+      createdAt: 1,
+      type: 'run.started',
+      taskId: 'task-1',
+      sessionId: 'session-1',
+    } as const;
+    handler?.({}, event);
+    expect(listener).toHaveBeenCalledWith(event);
+    expect(() => handler?.({}, { ...event, sequence: -1 })).toThrow();
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    expect(mocks.off).toHaveBeenCalledWith(IpcChannel.RunEvent, handler);
+  });
 });
 
 describe('run settings preload API', () => {
@@ -371,6 +395,8 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `const __notificationContractChannel: typeof IpcChannel.DeleteNotification = modelSearchNotificationInvokeContracts[IpcChannel.DeleteNotification].channel;`,
     `const __notificationEventUnsubscribe: () => void = notificationEventMethods[IpcChannel.NotificationChangeEvent]((event) => { const type: 'created' | 'read' | 'read-all' | 'deleted' | 'cleared' = event.type; });`,
     `const __activationEventUnsubscribe: () => void = notificationEventMethods[IpcChannel.NotificationActivated]((event) => { const id: string = event.id; });`,
+    `const __runEventUnsubscribe: () => void = runEventMethods[IpcChannel.RunEvent]((event) => { const runId: string = event.runId; const sequence: number = event.sequence; });`,
+    `const __runEventChannel: typeof IpcChannel.RunEvent = runEventContracts[IpcChannel.RunEvent].channel;`,
     `const __knowledgeListResult: Promise<z.output<typeof knowledgeDocumentSummarySchema>[]> = knowledgeInvokeMethods[IpcChannel.ListKnowledge]({});`,
     `const __knowledgeJobResult: Promise<z.output<typeof knowledgeJobDetailSchema> | null> = knowledgeInvokeMethods[IpcChannel.GetKnowledgeJob]({ jobId: 'job-1' });`,
     `const __knowledgeSourceResult: Promise<OpenKnowledgeSourceResult> = knowledgeInvokeMethods[IpcChannel.OpenKnowledgeSource]({ sourcePath: '/tmp/source.md' });`,
@@ -455,6 +481,8 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `const __notificationContractWrongChannel: typeof IpcChannel.ListNotifications = modelSearchNotificationInvokeContracts[IpcChannel.DeleteNotification].channel;`,
     `notificationEventMethods[IpcChannel.NotificationActivated]((event: { type: 'created' }) => {});`,
     `const __notificationEventWrongChannel: typeof IpcChannel.NotificationActivated = notificationEventContracts[IpcChannel.NotificationChangeEvent].channel;`,
+    `runEventMethods[IpcChannel.RunEvent]((event) => { const sequence: string = event.sequence; });`,
+    `const __runEventWrongChannel: typeof IpcChannel.ListRunEvents = runEventContracts[IpcChannel.RunEvent].channel;`,
     `knowledgeInvokeMethods[IpcChannel.GetKnowledgeJob]({ id: 'job-1' });`,
     `const __knowledgeContractWrongResponse: Promise<z.output<typeof knowledgeSearchResponseSchema>> = knowledgeInvokeMethods[IpcChannel.ListKnowledgeJobs]({});`,
     `const __knowledgeContractWrongChannel: typeof IpcChannel.ListKnowledge = knowledgeInvokeContracts[IpcChannel.GetKnowledgeJob].channel;`,
