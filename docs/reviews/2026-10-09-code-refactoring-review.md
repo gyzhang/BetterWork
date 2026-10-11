@@ -687,10 +687,12 @@ E13 完成 R10 的来源事实读取切片；docs:check 154 项、原基点巡�
 
 2026-10-11 10:55 CST：最终源 `03397d4a5e3662ea025cf12d995a97db63db8e62` 的 [Actions 38106364657](https://github.com/gyzhang/BetterWork/actions/runs/38106364657) 在 macos-26-arm64 上通过 PR Gate，静态、docs:check 1/154、changed functional 69/784、heavy 2/120 成功，Full verify 跳过。三次调用合计 72 文件 / 1,058 项，不当作全仓或去重规模。[PR #70](https://github.com/gyzhang/BetterWork/pull/70) 已 squash 为 main `455eafc42b4efbe3950d7e77fa2b06f79a530fac`，文件树与最终源一致；代码分支本地/远端删除，原 checkout 同步 main，原基点巡检退出 0，纯 Markdown 分支 codex/e14-closeout 归档。E14 代码与自动化收口，建议 E15 整理历史重放材料实体校验，保留精确版本与来源安全，另按用户指令推进。
 
-## 33. E15：历史重放材料实体校验整理（本地自动化通过）
+## 33. E15：历史重放材料实体校验整理（代码与自动化收口）
 
 2026-10-11 用户授权继续下一项，从 main 46117fa3b30c477178cc4d2a5c795e6de5b02776 建立 codex/e15-history-material-entities，沿用原 checkout。实施与证据见 [E15 专项 Review](2026-10-11-history-material-entities.md)。
 
 完整合法候选的已选、读取和继承材料按精确成果版本/快照 ID 集中去重，批量读取完整详情与来源，仍逐条检查知识路径。保留原可读性、缺失/损坏失败边界、来源顺序、预算前全量校验及调用间重读；列表身份不代替实体判据或授权。单项详情共用原映射，召回与工具范围语义保持，不改协议、迁移、UI 或 WM/MI 状态。
 
-定向 4/46、changed functional 71/768 与 heavy 2/120 通过，两档共 73 文件 / 888 项，定向为其子集。五个退化探针检出 3/5/2/2/1 项失败并逐字节恢复。串行 bench 3/4 通过：256 个真实历史 Run / 2,048 次引用的重复材料样本，查询 3,072→4，完整成果 1,024→8、快照 512→4、Evidence 3,072→24，解码实体序列化字节 12,115,968→94,656，可用性结果相等，中位 41.84→0.15 ms。仅实体读取阶段，不能外推独有材料、RSS、端到端或容量。静态、build、docs:check 154 与原基点巡检通过，最新源 macOS PR Gate、合并与归档继续收口；下一建议 E16 历史事实装配整理，待后续指令。
+定向 4/46、changed functional 71/768 与 heavy 2/120 通过，两档共 73 文件 / 888 项，定向为其子集。五个退化探针检出 3/5/2/2/1 项失败并逐字节恢复。串行 bench 3/4 通过：256 个真实历史 Run / 2,048 次引用的重复材料样本，查询 3,072→4，完整成果 1,024→8、快照 512→4、Evidence 3,072→24，解码实体序列化字节 12,115,968→94,656，可用性结果相等，中位 41.84→0.15 ms。仅实体读取阶段，不能外推独有材料、RSS、端到端或容量。静态、build、docs:check 154 与原基点巡检通过，最新源 macOS PR Gate 与合并证据见收口段；下一建议 E16 历史事实装配整理，待后续指令。
+
+2026-10-11 11:18 CST：源 `3bb4f530879c1dfdc616ce25ba6be6da140528ce` 的 [Actions 38107630609](https://github.com/gyzhang/BetterWork/actions/runs/38107630609) 在 macos-26-arm64 上通过 PR Gate，静态、docs:check 1/154、changed functional 71/768、heavy 2/120 成功，Full verify 跳过。三次调用共 74 文件 / 1,042 项，不当作全仓或去重规模。[PR #72](https://github.com/gyzhang/BetterWork/pull/72) 已 squash 为 main `b49809aaf45ec7b5a96e52e9092356cfe32af2f8`，文件树与源一致；代码分支本地/远端删除，原 checkout 同步 main，原基点巡检退出 0，纯 Markdown 分支 codex/e15-closeout 归档。E15 代码与自动化收口，建议 E16 历史事实装配整理，另按用户指令推进。
