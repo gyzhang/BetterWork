@@ -519,6 +519,70 @@ describe('model preload API', () => {
   });
 });
 
+describe('search engine preload API', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.invoke.mockResolvedValue(null);
+  });
+
+  it('validates and forwards Search Engine requests and responses through their channels', async () => {
+    const engine = {
+      provider: 'baidu_qianfan' as const,
+      apiKeyConfigured: true,
+      enabled: true,
+      webTopK: 5,
+      connectionStatus: 'connected' as const,
+      updatedAt: 1,
+    };
+    const saveInput = {
+      provider: 'baidu_qianfan' as const,
+      apiKey: 'api-key',
+      webTopK: 5,
+      enabled: true,
+    };
+    mocks.invoke.mockImplementation(async (channel) => {
+      if (channel === IpcChannel.ListSearchEngines) {
+        return [
+          { ...engine, lastTestedAt: undefined },
+          { ...engine, lastTestedAt: 2 },
+        ];
+      }
+      if (channel === IpcChannel.SaveSearchEngine) return { provider: 'baidu_qianfan' };
+      return { ok: true, message: 'connected' };
+    });
+
+    const engines = await api().searchEngines.list();
+    await Promise.all([api().searchEngines.save(saveInput), api().searchEngines.test(saveInput)]);
+
+    expect(engines).toHaveLength(2);
+    expect(Object.hasOwn(engines[0] ?? {}, 'lastTestedAt')).toBe(false);
+    expect(engines[1]?.lastTestedAt).toBe(2);
+    expect(mocks.invoke.mock.calls).toEqual([
+      [IpcChannel.ListSearchEngines, {}],
+      [IpcChannel.SaveSearchEngine, saveInput],
+      [IpcChannel.TestSearchEngine, saveInput],
+    ]);
+  });
+
+  it('rejects invalid Search Engine requests before IPC and malformed responses after IPC', async () => {
+    const validInput = {
+      provider: 'baidu_qianfan' as const,
+      apiKey: 'api-key',
+      webTopK: 5,
+      enabled: true,
+    };
+    expect(() => api().searchEngines.save({ ...validInput, webTopK: 21 })).toThrow();
+    expect(() => api().searchEngines.test({ ...validInput, apiKey: 'x'.repeat(2001) })).toThrow();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+
+    mocks.invoke.mockResolvedValue(null);
+    await expect(api().searchEngines.list()).rejects.toThrow();
+    await expect(api().searchEngines.save(validInput)).rejects.toThrow();
+    await expect(api().searchEngines.test(validInput)).rejects.toThrow();
+    expect(mocks.invoke).toHaveBeenCalledTimes(3);
+  });
+});
+
 describe('historical task and notification preload APIs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
