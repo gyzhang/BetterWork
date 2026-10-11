@@ -625,6 +625,45 @@ describe('Python 环境准备作业', () => {
     expect(harness.process.callsMatching('venv')).toHaveLength(0);
   });
 
+  it.each([
+    { system: 'Windows', machine: 'AMD64' },
+    { system: 'Linux', machine: 'aarch64' },
+    { system: 'Darwin', machine: 'x86_64' },
+  ])('只接受 macOS arm64 解释器：$system/$machine', async ({ system, machine }) => {
+    const harness = openService({ system, machine });
+
+    await expect(harness.service.inspectPlan(localBase, lockOf())).rejects.toMatchObject({
+      code: 'interpreter-platform-mismatch',
+      message: expect.stringContaining('仅支持 macOS/arm64'),
+    });
+    expect(harness.service.listEnvironments()).toHaveLength(0);
+    expect(harness.process.callsMatching('venv')).toHaveLength(0);
+  });
+
+  it('保留历史非 macOS 环境记录的读取能力，但拒绝将它解析为可执行路径', async () => {
+    const harness = openService();
+    const platform = { os: 'win32', arch: 'x64', abi: 'cp312' } as const;
+    const environment = harness.store.environments.createEnvironment({
+      environmentKey: 'legacy-windows-environment',
+      base: { kind: 'local', path: 'C:\\Python312\\python.exe', version: '3.12.0' },
+      platform,
+      lockHash: 'legacy-lock',
+      lock: lockOf({ platform }),
+      pathKey: 'environments/legacy-windows-environment/instance',
+    });
+    harness.store.environments.updateStatus(environment.id, 'ready');
+
+    expect(harness.service.getEnvironment(environment.id)?.platform).toEqual(platform);
+    expect(() => harness.service.resolveEnvironmentPython(environment.id)).toThrow(
+      '仅支持 macOS/arm64 运行环境',
+    );
+
+    const verified = await harness.service.verifyEnvironment(environment.id);
+    expect(verified.status).toBe('invalid');
+    expect(verified.failureSummary).toContain('仅支持 macOS/arm64 运行环境');
+    expect(harness.process.calls).toHaveLength(0);
+  });
+
   it('版本不满足包锁要求时拒绝，不静默降级', async () => {
     const harness = openService({ version: '3.11.6' });
     await seedWheelhouse(harness);
@@ -956,29 +995,16 @@ const discoverRealInterpreter = async (): Promise<RealInterpreter | null> => {
     const machine = String(parsed['machine'] ?? '').toLowerCase();
     const system = String(parsed['system'] ?? '').toLowerCase();
     const version = String(parsed['version'] ?? '');
-    const arch =
-      machine === 'arm64' || machine === 'aarch64'
-        ? 'arm64'
-        : machine === 'x86_64' || machine === 'amd64'
-          ? 'x64'
-          : null;
-    const osName =
-      system === 'darwin'
-        ? 'darwin'
-        : system === 'linux'
-          ? 'linux'
-          : system === 'windows'
-            ? 'win32'
-            : null;
+    const arch = machine === 'arm64' || machine === 'aarch64' ? 'arm64' : null;
     const abiMatch = /^(\d+)\.(\d+)/u.exec(version);
-    if (!arch || !osName || !abiMatch?.[1] || !abiMatch[2]) continue;
+    if (system !== 'darwin' || !arch || !abiMatch?.[1] || !abiMatch[2]) continue;
     if (parsed['venv'] !== true || parsed['ensurepip'] !== true) continue;
     const executable = String(parsed['executable'] ?? '');
     if (executable === '') continue;
     return {
       path: executable,
       version,
-      platform: { os: osName, arch, abi: `cp${abiMatch[1]}${abiMatch[2]}` },
+      platform: { os: 'darwin', arch, abi: `cp${abiMatch[1]}${abiMatch[2]}` },
     };
   }
   return null;

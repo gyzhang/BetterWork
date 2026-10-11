@@ -861,7 +861,7 @@ describe('界面 Token 纪律', () => {
     expect(offenders, '色值只能来自语义化 Token（docs/12 §8）').toEqual([]);
   });
 
-  it('首帧窗口主题与青玉浅色 Token 保持一致', () => {
+  it('首帧窗口背景与青玉浅色 Canvas Token 保持一致', () => {
     const styles = cssPaths().find((relative) => relative.endsWith('styles.css'));
     expect(styles, '找不到 renderer 的 styles.css').toBeDefined();
     const jadeLight = declarationsOf(styles ?? '').filter(
@@ -870,11 +870,7 @@ describe('界面 Token 纪律', () => {
         declaration.selector.includes("data-scheme='jade'"),
     );
     const canvas = jadeLight.find((declaration) => declaration.property === '--canvas')?.value;
-    const textPrimary = jadeLight.find(
-      (declaration) => declaration.property === '--text-primary',
-    )?.value;
     expect(canvas, '青玉浅色 Variant 缺少 --canvas').toBeDefined();
-    expect(textPrimary, '青玉浅色 Variant 缺少 --text-primary').toBeDefined();
 
     const hexLiterals = (source: string): string[] =>
       [...source.matchAll(/#([0-9a-fA-F]{6})\b/g)].map(
@@ -883,12 +879,12 @@ describe('界面 Token 纪律', () => {
 
     expect(
       hexLiterals(read('apps/desktop/src/main/window.ts')),
-      'INITIAL_WINDOW_THEME 与青玉浅色 --canvas/--text-primary 不一致，冷启动会闪一下错误底色',
-    ).toEqual([canvas, textPrimary]);
+      'INITIAL_WINDOW_THEME 背景色与青玉浅色 --canvas 不一致，冷启动会闪一下错误底色',
+    ).toEqual([canvas]);
     expect(
       [...new Set(hexLiterals(read('apps/desktop/src/renderer/src/appearance.ts')))],
-      'getWindowTheme 的回退值与青玉浅色 Token 不一致',
-    ).toEqual([canvas, textPrimary]);
+      'getWindowTheme 背景回退值与青玉浅色 --canvas 不一致',
+    ).toEqual([canvas]);
   });
 });
 

@@ -716,3 +716,11 @@ E13 完成 R10 的来源事实读取切片；docs:check 154 项、原基点巡�
 向量路径移除嵌入等待前的全 scope 完整块映射；沿用已固定的允许修订、space、维度和 active generation，扫描完整向量集合后用向量行身份稳定排名，只对 top 50 按 chunkId 与允许修订共同补读完整块并恢复排名顺序。关键词、回退、覆盖、旧 Run 修订、租约复核、取消、融合和返回语义不变；无 Schema、迁移、协议或检索算法变化。
 
 定向知识检索 1 文件 / 25 项、`docs:check` 1 文件 / 154 项通过；新增 80 块末尾最高分与稳定同分顺序、受限完整块补读，以及历史 Run 旧修订语义检索回归。typecheck、定向 ESLint 与变更文件 Prettier 通过。未运行完整 verify、UI、真实模型或安装态人工验收；分支提交、推送与 PR 状态按仓库 GitHub 记录。
+
+## 36. R14：macOS/arm64 平台路径整理
+
+2026-10-11 用户授权继续下一项，从最新 `origin/main` 创建独立 `codex/r14-macos-platform-cleanup` 分支，沿用保留的任务 worktree。实现与本地证据见 [R14 专项 Review](2026-10-11-macos-platform-cleanup.md)。
+
+应用启动、窗口标题栏、主题 IPC 和 Skill Python 环境正式路径均收窄为 macOS/arm64；非支持宿主或解释器会明确失败。持久化 `TargetPlatform` Schema 与迁移保持原样，历史非 macOS 环境记录仍可读取，但验证会标记为 `invalid`，执行路径拒绝使用。没有跨平台 runner、兼容开关或授权/索引语义变化。
+
+functional 定向 3 文件 / 69 项、heavy 定向 1 文件 / 37 项、typecheck、改动文件 ESLint/Prettier 与 `docs:check` 1 文件 / 154 项已通过；最新源 PR Gate 与合并事实待补。

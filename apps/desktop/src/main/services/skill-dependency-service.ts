@@ -25,6 +25,7 @@ import {
   pythonDistributions,
 } from '../infrastructure/python-distribution';
 import type { AppStore } from '../persistence';
+import { isSupportedPlatform } from '../supported-platform';
 
 /**
  * Python 环境准备作业（设计 §4、任务 A10）。
@@ -112,6 +113,14 @@ export class DependencyPreparationError extends Error {
     this.name = 'DependencyPreparationError';
   }
 }
+
+const assertSupportedInterpreterPlatform = (platform: TargetPlatform): void => {
+  if (isSupportedPlatform(platform.os, platform.arch)) return;
+  throw new DependencyPreparationError(
+    'interpreter-platform-mismatch',
+    `仅支持 macOS/arm64 运行环境（收到 ${platform.os}/${platform.arch}/${platform.abi}）`,
+  );
+};
 
 interface InterpreterProbe {
   readonly version: string;
@@ -260,14 +269,6 @@ const architectureOf = (machine: string): TargetPlatform['arch'] | null => {
   const value = machine.toLowerCase();
   if (value === 'arm64' || value === 'aarch64') return 'arm64';
   if (value === 'x86_64' || value === 'amd64') return 'x64';
-  return null;
-};
-
-const operatingSystemOf = (system: string): TargetPlatform['os'] | null => {
-  const value = system.toLowerCase();
-  if (value === 'darwin') return 'darwin';
-  if (value === 'windows') return 'win32';
-  if (value === 'linux') return 'linux';
   return null;
 };
 
@@ -498,11 +499,8 @@ export class SkillDependencyService {
   resolveEnvironmentPython(environmentId: string): string {
     const environment = this.store.environments.getEnvironment(environmentId);
     if (!environment || environment.status !== 'ready') throw new Error('运行环境尚未就绪');
-    return path.join(
-      this.roots.paths.userDataRoot,
-      environment.pathKey,
-      environment.platform.os === 'win32' ? 'Scripts/python.exe' : 'bin/python3',
-    );
+    assertSupportedInterpreterPlatform(environment.platform);
+    return path.join(this.roots.paths.userDataRoot, environment.pathKey, 'bin/python3');
   }
 
   getEnvironment(environmentId: string): RuntimeEnvironment | undefined {
@@ -836,10 +834,9 @@ export class SkillDependencyService {
   }
 
   private venvPythonOf(environment: RuntimeEnvironment): string {
+    assertSupportedInterpreterPlatform(environment.platform);
     const root = this.absolutePathOf(environment.pathKey);
-    return environment.platform.os === 'win32'
-      ? path.join(root, 'Scripts', 'python.exe')
-      : path.join(root, 'bin', 'python3');
+    return path.join(root, 'bin', 'python3');
   }
 
   private async resolveBaseIdentity(request: BaseInterpreterRequest): Promise<{
@@ -855,6 +852,7 @@ export class SkillDependencyService {
           `没有登记为 ${request.distributionId} 的受管 Python 制品`,
         );
       }
+      assertSupportedInterpreterPlatform(distribution.platform);
       return {
         base: {
           kind: 'managed',
@@ -873,12 +871,17 @@ export class SkillDependencyService {
     const resolvedPath = await this.roots.filesystem.realpath(request.path);
     const probe = await this.probeInterpreter(resolvedPath);
     const arch = architectureOf(probe.machine);
-    const os = operatingSystemOf(probe.system);
     const abi = abiTagOf(probe.version);
-    if (!arch || !os || !abi) {
+    if (!arch || !abi) {
       throw new DependencyPreparationError(
         'interpreter-platform-mismatch',
         `无法识别解释器平台（machine=${probe.machine} system=${probe.system} version=${probe.version}）`,
+      );
+    }
+    if (!isSupportedPlatform(probe.system.toLowerCase(), arch)) {
+      throw new DependencyPreparationError(
+        'interpreter-platform-mismatch',
+        `仅支持 macOS/arm64 解释器（收到 system=${probe.system} machine=${probe.machine}）`,
       );
     }
     if (!probe.venv || !probe.ensurepip) {
@@ -889,7 +892,7 @@ export class SkillDependencyService {
     }
     return {
       base: { kind: 'local', path: resolvedPath, version: probe.version },
-      platform: { os, arch, abi },
+      platform: { os: 'darwin', arch: 'arm64', abi },
     };
   }
 
@@ -1071,6 +1074,7 @@ export class SkillDependencyService {
     platform: TargetPlatform,
     job: ActiveJob,
   ): Promise<string> {
+    assertSupportedInterpreterPlatform(platform);
     await this.roots.filesystem.mkdir(path.dirname(venvRoot));
     this.reportProgress(job, 'create-environment', '创建专属 venv');
     const created = await this.runProcess({
@@ -1080,10 +1084,7 @@ export class SkillDependencyService {
       timeoutMs: venvTimeoutMs,
       job,
     });
-    const venvPython =
-      platform.os === 'win32'
-        ? path.join(venvRoot, 'Scripts', 'python.exe')
-        : path.join(venvRoot, 'bin', 'python3');
+    const venvPython = path.join(venvRoot, 'bin', 'python3');
     if (created.exitCode !== 0 || !(await this.roots.filesystem.exists(venvPython))) {
       throw new DependencyPreparationError(
         'venv-create-failed',
@@ -1257,8 +1258,9 @@ export class SkillDependencyService {
 
   /** 解释器与包锁必须匹配；不匹配就如实拒绝，不降低标准去凑一个「看起来能跑」的环境。 */
   private assertProbeMatchesPlan(probe: InterpreterProbe, plan: DependencyPlan): void {
+    assertSupportedInterpreterPlatform(plan.platform);
     const arch = architectureOf(probe.machine);
-    const os = operatingSystemOf(probe.system);
+    const os = probe.system.toLowerCase() === 'darwin' ? 'darwin' : null;
     const abi = abiTagOf(probe.version);
     if (arch !== plan.platform.arch || os !== plan.platform.os || abi !== plan.platform.abi) {
       throw new DependencyPreparationError(
@@ -1281,6 +1283,8 @@ export class SkillDependencyService {
   }
 
   private assertLockCompatibility(plan: DependencyPlan, lock: DependencyLock): void {
+    assertSupportedInterpreterPlatform(plan.platform);
+    assertSupportedInterpreterPlatform(lock.platform);
     const target = plan.platform;
     const wanted = lock.platform;
     if (target.os !== wanted.os || target.arch !== wanted.arch || target.abi !== wanted.abi) {

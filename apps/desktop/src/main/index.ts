@@ -75,6 +75,7 @@ import { ToolchainSnapshotService } from './services/toolchain-snapshot-service'
 import { WebFetchService } from './services/web-fetch-service';
 import { WorkspaceBriefService } from './services/workspace-memory-brief-service';
 import { WorkspaceReferenceService } from './services/workspace-reference-service';
+import { isSupportedPlatform } from './supported-platform';
 import { createMainWindow } from './window';
 
 /**
@@ -777,6 +778,11 @@ startPrimaryInstance(
     app
       .whenReady()
       .then(() => {
+        if (!isSupportedPlatform(process.platform, process.arch)) {
+          throw new Error(
+            `当前宿主 ${process.platform}/${process.arch} 不受支持；BetterWork 仅支持 macOS/arm64`,
+          );
+        }
         powerMonitor.on('suspend', () => {
           systemSuspended = true;
           context?.scheduleHost.suspend();
