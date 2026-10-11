@@ -161,6 +161,7 @@ import {
   saveModelProfileRequestSchema,
   saveRunSettingsRequestSchema,
   saveScheduleRequestSchema,
+  saveSearchEngineRequestSchema,
   saveSkillRuntimeProfileRequestSchema,
   saveTaskContextRequestSchema,
   saveTaskContinuityBriefRequestSchema,
@@ -177,6 +178,8 @@ import {
   schedulePreflightViewSchema,
   schedulePreviewResultSchema,
   scheduleSourceItemsPageSchema,
+  searchEngineSaveResultSchema,
+  searchEngineSummarySchema,
   setDefaultModelRequestSchema,
   setExpertLifecycleRequestSchema,
   setKnowledgeCollectionMembersRequestSchema,
@@ -202,6 +205,7 @@ import {
   taskMemoryExclusionsDataSchema,
   taskMemoryExclusionsRequestSchema,
   testModelRequestSchema,
+  testSearchEngineRequestSchema,
   testSkillRunRequestSchema,
   testSkillRunResultSchema,
   updatedResultSchema,
@@ -238,6 +242,13 @@ const evidenceListResponseSchema = evidenceSummarySchema.array().transform((summ
 const modelProfileListResponseSchema = modelProfileSummarySchema.array().transform((profiles) =>
   profiles.map(({ lastTestedAt, ...profile }) => ({
     ...profile,
+    ...(lastTestedAt === undefined ? {} : { lastTestedAt }),
+  })),
+);
+
+const searchEngineListResponseSchema = searchEngineSummarySchema.array().transform((engines) =>
+  engines.map(({ lastTestedAt, ...engine }) => ({
+    ...engine,
     ...(lastTestedAt === undefined ? {} : { lastTestedAt }),
   })),
 );
@@ -427,9 +438,19 @@ const api: BetterWorkDesktopApi = {
       ),
   },
   searchEngines: {
-    list: () => ipcRenderer.invoke(IpcChannel.ListSearchEngines),
-    save: (input) => ipcRenderer.invoke(IpcChannel.SaveSearchEngine, input),
-    test: (input) => ipcRenderer.invoke(IpcChannel.TestSearchEngine, input),
+    list: () => invokeValidated(IpcChannel.ListSearchEngines, {}, searchEngineListResponseSchema),
+    save: (input) =>
+      invokeValidated(
+        IpcChannel.SaveSearchEngine,
+        saveSearchEngineRequestSchema.parse(input),
+        searchEngineSaveResultSchema,
+      ),
+    test: (input) =>
+      invokeValidated(
+        IpcChannel.TestSearchEngine,
+        testSearchEngineRequestSchema.parse(input),
+        connectionTestResultSchema,
+      ),
   },
   notifications: {
     list: () => ipcRenderer.invoke(IpcChannel.ListNotifications),
