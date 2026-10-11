@@ -1241,4 +1241,6 @@ Preload 定向测试 1 文件 / 38 项通过；编译器正反例覆盖 15 个�
 
 2026-10-12 01:26 CST，从最新 `origin/main` `b3d746ebde55ff0cc8716e0c21ec30063d08df74` 在本地 checkout 建立 `codex/r09-preload-channel-coverage`。静态盘点确认协议定义 159 个 channel 值、Main 注册 154 个 invoke 请求通道及 5 个推送事件；Main 测试已覆盖请求通道齐全、无未知项且无重复。Preload 的 17 组分域契约当前覆盖全部 channel 值，但尚无完整性护栏。
 
-本卡在既有编译器契约测试中加入总覆盖约束，要求 Preload 分域映射 channel 值的并集与共享协议 `IpcChannel` 值集合完全相等，避免新增协议 channel 漏接 Preload。只加测试护栏，不改变运行时行为、Main 注册或共享协议。Preload 定向测试 1 文件 / 42 项、Main IPC 注册测试 1 文件 / 51 项通过；全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 与差异空白检查通过。PR Gate、合并和分支清理待收口；完整 `npm run verify` 未运行。
+本卡在既有编译器契约测试中加入总覆盖约束，要求 Preload 分域映射 channel 值的并集与共享协议 `IpcChannel` 值集合完全相等，避免新增协议 channel 漏接 Preload。只加测试护栏，不改变运行时行为、Main 注册或共享协议。Preload 定向测试 1 文件 / 42 项、Main IPC 注册测试 1 文件 / 51 项通过；全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 与差异空白检查通过。本卡已收口；完整 `npm run verify` 未运行。
+
+源提交 `7c1f260457110fe824d4076c299be236bae3a37b` 的 [PR Gate / Actions 38159694112](https://github.com/gyzhang/BetterWork/actions/runs/38159694112) 与 Quick code check 通过，Full verify 按规则跳过。[PR #179](https://github.com/gyzhang/BetterWork/pull/179) 已 squash 合入 main，合并提交 `157549ce0a0aed9aad23fade3ab8a995ad07f1bd`；任务分支本地与远端均已删除，本地 checkout 已同步 main，未创建 worktree。
