@@ -297,6 +297,9 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `const __knowledgeSourceResult: Promise<OpenKnowledgeSourceResult> = knowledgeInvokeMethods[IpcChannel.OpenKnowledgeSource]({ sourcePath: '/tmp/source.md' });`,
     `const __knowledgeSourceChannel: typeof IpcChannel.GetRunArtifactDeclarations = knowledgeInvokeContracts[IpcChannel.GetRunArtifactDeclarations].channel;`,
     `const __knowledgeEventUnsubscribe: () => void = knowledgeEventMethods[IpcChannel.KnowledgeJobEvent]((event) => { const id: string = event.id; const sequence: number = event.sequence; });`,
+    `const __scheduleListResult: ReturnType<BetterWorkDesktopApi['schedules']['list']> = scheduleInvokeMethods[IpcChannel.ListSchedules]({});`,
+    `const __scheduleContractChannel: typeof IpcChannel.ExecuteScheduleNow = scheduleInvokeContracts[IpcChannel.ExecuteScheduleNow].channel;`,
+    `const __scheduleEventUnsubscribe: () => void = scheduleEventMethods[IpcChannel.ScheduleChanged]((event) => { const scheduleId: string = event.scheduleId; });`,
   ];
   const invalid = [
     `runInvokeMethods[IpcChannel.StartRun]({ runId: 'run-1' });`,
@@ -323,6 +326,10 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `const __knowledgeContractWrongResponse: Promise<z.output<typeof knowledgeSearchResponseSchema>> = knowledgeInvokeMethods[IpcChannel.ListKnowledgeJobs]({});`,
     `const __knowledgeContractWrongChannel: typeof IpcChannel.ListKnowledge = knowledgeInvokeContracts[IpcChannel.GetKnowledgeJob].channel;`,
     `knowledgeEventMethods[IpcChannel.KnowledgeJobEvent]((event) => { const sequence: string = event.sequence; });`,
+    `scheduleInvokeMethods[IpcChannel.GetSchedule]({ id: 'schedule-1' });`,
+    `const __scheduleContractWrongResponse: Promise<never> = scheduleInvokeMethods[IpcChannel.GetSchedule]({ scheduleId: 'schedule-1' });`,
+    `const __scheduleContractWrongChannel: typeof IpcChannel.ListSchedules = scheduleInvokeContracts[IpcChannel.GetSchedule].channel;`,
+    `scheduleEventMethods[IpcChannel.ScheduleChanged]((event: { reason: 'occurrence' }) => {});`,
   ];
   let source = readFileSync(sourcePath, 'utf8') + '\n';
   const cases = [...valid, ...invalid].map((expression, index) => {
