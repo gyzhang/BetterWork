@@ -804,3 +804,11 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 2026-10-11 16:14 CST，从最新 main `ed20c31d534027612c35f54dce71ffce6227020d` 在保留 worktree 建立 `codex/e21-artifact-export-copy-service`，继续 R08 的文件成果入口整理。将不可变文件版本复制到导出目标以及导出副本权限整理提取到 `FileArtifactService.exportVersionToPath`；IPC 保留保存对话框、取消、请求与版本校验及错误回传。真实文件系统用例覆盖保存面板预创建的只读占位目标与新目标。未改协议、Repository、Schema、迁移、文件版本或 ArtifactVersion 语义。
 
 本地文件服务与 IPC functional 共 69 项通过；typecheck、定向 ESLint/Prettier、生产 build 通过。最终源 `808f99b991a66407a354ae1e8c8b52c5718597f8` 的 [Actions 38123881992](https://github.com/gyzhang/BetterWork/actions/runs/38123881992) 在 macos-26-arm64 上通过 PR Gate；lint、format:check、typecheck、docs:check 154 项及相关 functional 4 文件 / 92 项通过，无受影响 heavy 测试，Full verify 按策略跳过。[PR #98](https://github.com/gyzhang/BetterWork/pull/98) 已 squash 合入 main `f6f0bec938547bbe7e971764a089751c8f1350c4`。未运行完整 verify、UI 或真实模型。
+
+## 46. R13 子卡：App 测试夹具的 Skill 授权状态显式化
+
+2026-10-11 16:57 CST，从最新 `origin/main` 建立 `codex/r13-app-test-fixture-boundaries`。将共享 App 测试夹具改为默认没有 Skill；只有具体用例显式传入时才提供 trusted/ready Skill。未配置的 Skill 详情返回空，试运行与依赖授权调用失败关闭，避免整树测试无意间继承信任、就绪或授权状态。原有需要该 Skill 的用例均显式选择 fixture。
+
+基线 `App.test.tsx` heavy 61/61；修改后 62/62，原 61 项均保留并增加默认状态回归。`npm run typecheck`、定向 ESLint、Prettier check 通过。没有改生产代码或产品行为。
+
+本卡只收紧默认权限 fixture；App 全树测试与整套 API fixture 的进一步拆分仍未完成，R13 不据此标记整体解决。未运行完整 `npm run verify`、UI 或真实模型。
