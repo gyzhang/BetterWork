@@ -1120,3 +1120,11 @@ Preload 定向测试 1 文件 / 25 项通过，覆盖五个操作 API 的请求�
 Preload 定向测试 1 文件 / 27 项、`docs:check` 154/154 通过，覆盖请求转发、非法请求拒绝、畸形响应拒绝及可选属性归一；typecheck、改动文件 ESLint/Prettier 与差异空白检查通过。完整 `npm run verify`、UI、真实源文件打开及安装态验收未运行。
 
 源提交 `2e98a5347eb38f6e5d7e3e1b4a4a6740bac54511` 的 [PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/38145744699) 与 Quick code check 成功，Full verify 按规则跳过。[PR #157](https://github.com/gyzhang/BetterWork/pull/157) 已 squash 合入 main，合并提交 `0b98e4e1995d9461b0e57df8c173fdaac5432591`；代码分支已删除，任务 worktree 保留。
+
+## 92. R09 子卡：Run 与 Run Settings Preload 通道映射
+
+2026-10-11 23:10 CST，从最新 `origin/main` `5c5137cdb1c2f1b4bf5afe56254fe7afc609ad6a` 在本地 checkout 建立 `codex/r09-preload-run-channel-contracts`。将 `StartRun`、`CancelRun`、`ListRuns`、`ListRunEvents`、`GetRunSettings`、`SaveRunSettings` 六个 invoke channel 与请求/响应 Schema 及 Preload 方法做显式类型映射。
+
+契约类型要求映射项中的 channel 字面值与映射键相同，方法输入和 Promise 返回值由对应请求/响应 Schema 推导。保留 `ListRuns` 未提供筛选时发送 `undefined`、Run Settings 无入参时发送空对象的行为；Run 事件订阅继续使用现有事件 Schema。此卡只覆盖 Preload 的 Run 与 Run Settings invoke 入口，不据此宣称 Main、Preload 与共享协议的全局 channel 映射已收口。
+
+编译器正反例确认正确请求与响应可通过、错误 channel/payload 配对被拒绝；Preload 定向测试 1 文件 / 30 项、全仓 typecheck、改动文件 ESLint/Prettier 和差异空白检查通过。完整 `npm run verify`、UI、真实模型及安装态验收未运行。R09 其余 channel 的编译期映射仍未完成。

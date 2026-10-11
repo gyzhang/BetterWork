@@ -1,5 +1,10 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import type { BetterWorkDesktopApi } from '@betterwork/agent-protocol';
 import { IpcChannel } from '@betterwork/agent-protocol';
+import ts from 'typescript';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -200,6 +205,125 @@ describe('run preload API', () => {
     expect(mocks.invoke).toHaveBeenCalledTimes(4);
   });
 });
+
+describe('run settings preload API', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.invoke.mockResolvedValue({
+      maxSkillToolRounds: 200,
+      enableBuiltinSkills: true,
+      enableBuiltinExperts: true,
+      updatedAt: 1,
+    });
+  });
+
+  it('validates and forwards Run Settings requests and responses through their channels', async () => {
+    await api().runSettings.get();
+    await api().runSettings.save({
+      maxSkillToolRounds: 200,
+      enableBuiltinSkills: true,
+      enableBuiltinExperts: false,
+    });
+
+    expect(mocks.invoke.mock.calls).toEqual([
+      [IpcChannel.GetRunSettings, {}],
+      [
+        IpcChannel.SaveRunSettings,
+        {
+          maxSkillToolRounds: 200,
+          enableBuiltinSkills: true,
+          enableBuiltinExperts: false,
+        },
+      ],
+    ]);
+  });
+
+  it('rejects invalid Run Settings requests before IPC and malformed responses after IPC', async () => {
+    expect(() =>
+      api().runSettings.save({
+        maxSkillToolRounds: 0,
+        enableBuiltinSkills: true,
+        enableBuiltinExperts: true,
+      }),
+    ).toThrow();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+
+    mocks.invoke.mockResolvedValue(null);
+    await expect(api().runSettings.get()).rejects.toThrow();
+    await expect(
+      api().runSettings.save({
+        maxSkillToolRounds: 200,
+        enableBuiltinSkills: true,
+        enableBuiltinExperts: true,
+      }),
+    ).rejects.toThrow();
+    expect(mocks.invoke).toHaveBeenCalledTimes(2);
+  });
+});
+
+it('binds Run Preload request and response schemas to their IPC channels at compile time', () => {
+  const sourcePath = fileURLToPath(new URL('./index.ts', import.meta.url));
+  const configPath = ts.findConfigFile(
+    path.dirname(sourcePath),
+    (fileName) => ts.sys.fileExists(fileName),
+    'tsconfig.json',
+  );
+  if (!configPath) throw new Error('Repository tsconfig is missing');
+  const config = ts.readConfigFile(configPath, (fileName) => ts.sys.readFile(fileName));
+  expect(config.error).toBeUndefined();
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, path.dirname(configPath));
+  expect(parsed.errors).toEqual([]);
+
+  const valid = [
+    `const __runContractResult: Promise<{ runId: string }> = runInvokeMethods[IpcChannel.StartRun]({ taskId: 'task-1', sessionId: 'session-1', prompt: 'prompt' });`,
+    `runInvokeMethods[IpcChannel.ListRuns](undefined);`,
+  ];
+  const invalid = [
+    `runInvokeMethods[IpcChannel.StartRun]({ runId: 'run-1' });`,
+    `runInvokeMethods[IpcChannel.CancelRun]({ taskId: 'task-1', sessionId: 'session-1', prompt: 'prompt' });`,
+  ];
+  let source = readFileSync(sourcePath, 'utf8') + '\n';
+  const cases = [...valid, ...invalid].map((expression, index) => {
+    const start = source.length;
+    source += `${expression};\n`;
+    return { expression, start, end: source.length, rejects: index >= valid.length };
+  });
+
+  const options = { ...parsed.options, noEmit: true };
+  const host = ts.createCompilerHost(options);
+  const getSourceFile = host.getSourceFile.bind(host);
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) =>
+    path.resolve(fileName) === sourcePath
+      ? ts.createSourceFile(fileName, source, languageVersion, true)
+      : getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+  const program = ts.createProgram({ rootNames: [sourcePath], options, host });
+  const diagnostics = ts.getPreEmitDiagnostics(program);
+  const format = (diagnostic: ts.Diagnostic): string =>
+    ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
+  const unexpected = diagnostics.filter(
+    (diagnostic) =>
+      diagnostic.file?.fileName !== sourcePath ||
+      diagnostic.start === undefined ||
+      !cases.some(
+        (probe) =>
+          probe.rejects &&
+          diagnostic.start !== undefined &&
+          diagnostic.start >= probe.start &&
+          diagnostic.start < probe.end,
+      ),
+  );
+  expect(unexpected.map(format)).toEqual([]);
+  for (const probe of cases) {
+    const errors = diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.file?.fileName === sourcePath &&
+        diagnostic.start !== undefined &&
+        diagnostic.start >= probe.start &&
+        diagnostic.start < probe.end,
+    );
+    expect(errors.length > 0, probe.expression).toBe(probe.rejects);
+  }
+}, 20_000);
 
 describe('workspace preload API', () => {
   beforeEach(() => {
