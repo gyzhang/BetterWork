@@ -41,6 +41,14 @@ E13 来源阶段对照仍为 768→3 查询、完整 1,536 行及 1,261,860 字�
 
 ## 验证与后续
 
-2026-10-11 11:10 CST，本地 lint、format:check、typecheck、build、docs:check 1/154、changed functional 71/768 与 heavy 2/120 通过；两测试档共 73 文件 / 888 项，定向 46 项为其子集。原批次基点巡检退出 0，保存规模快照后复核。最新源 SHA 的 macOS PR Gate、合并与文档归档继续收口。完整 verify、UI、真实模型、安装态及 WM/MI 人工验收不在本轮验证范围。
+2026-10-11 11:10 CST，本地 lint、format:check、typecheck、build、docs:check 1/154、changed functional 71/768 与 heavy 2/120 通过；两测试档共 73 文件 / 888 项，定向 46 项为其子集。原批次基点巡检退出 0，保存规模快照后复核通过。最新源 SHA 的 macOS PR Gate 与合并证据见下节。完整 verify、UI、真实模型、安装态及 WM/MI 人工验收不在本轮验证范围。
 
 E15 完成 R10 的材料实体读取切片。建议后续 E16 整理历史重放事实装配的职责与查找，继续保留完整来源、直接/传递依赖及连续安全后缀；成功向量检索路径完整块映射仍有独立后续范围。
+
+## macOS 门禁与代码合并
+
+2026-10-11 11:18 CST，源 `3bb4f530879c1dfdc616ce25ba6be6da140528ce` 的 [Actions 38107630609](https://github.com/gyzhang/BetterWork/actions/runs/38107630609) / PR Gate 成功。实际 macos-26-arm64 上静态、docs:check 1/154、changed functional 71/768、heavy 2/120 通过，Full verify 跳过；三次测试调用共 74 文件 / 1,042 项，不当作全仓或去重规模。本地 bench、build 和变异证据单独保留。
+
+[PR #72](https://github.com/gyzhang/BetterWork/pull/72) 已 squash 为 main `b49809aaf45ec7b5a96e52e9092356cfe32af2f8`，文件树与源提交一致；代码分支本地/远端删除，原 checkout 同步 main，原批次基点巡检退出 0。随后建立纯 Markdown 分支 codex/e15-closeout 归档本节、总报告与当日日志；归档 PR 自身仍需文档 PR Gate。
+
+E15 代码与自动化收口；后续 E16 和独立人工验收保留既有边界，另按用户指令推进。
