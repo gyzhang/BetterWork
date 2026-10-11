@@ -33,12 +33,8 @@ import { McpClientService } from './mcp-client-service';
 import { mcpModelAlias } from './mcp-tool-contract';
 import { MemoryService } from './memory-service';
 import { NotificationService } from './notification-service';
-import {
-  createRunService,
-  createRunTools,
-  RunService,
-  type RunServiceDependencies,
-} from './run-service';
+import { createRunService, RunService, type RunServiceDependencies } from './run-service';
+import { createRunTools } from './run-tool-context';
 import { ScheduleExecutionService } from './schedule-execution-service';
 import { computeDependencyFingerprint } from './skill-dependency-service';
 import { SkillExecutionService } from './skill-execution-service';

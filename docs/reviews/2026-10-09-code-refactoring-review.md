@@ -766,3 +766,9 @@ functional 定向 3 文件 / 69 项、heavy 定向 1 文件 / 37 项、typecheck
 resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:check` 154/154、typecheck、定向 ESLint/Prettier 与生产 build 通过。一次 shell 搜索字符串的反引号误触发了 `npm run verify`；命令替换吞掉输出，退出状态未被观察，因此不计为验证证据。未运行 UI、真实模型或安装态验收。
 
 最终源 `0aff7bc07bbaee0ef20a7f950b4c01a0dd9d6cd9` 的 [Actions 38120318832](https://github.com/gyzhang/BetterWork/actions/runs/38120318832) 中 Quick code check 与 PR Gate 成功；Full verify 按仓库策略跳过。[PR #88](https://github.com/gyzhang/BetterWork/pull/88) 已 squash 合并为 main `b00e418a12552dc949034a24986f92a68718c41d`。PR 创建后 main 先合入用户的测试覆盖 PR #83；本分支合并最新 main 时保留了双方当日日志。Run 工具上下文构造继续作为后续独立切片。
+
+## 41. C6：Run 工具上下文装配抽取（自动化通过，远端收口进行中）
+
+2026-10-11 15:25 CST，沿用保留的任务 worktree，在 `codex/review-run-tool-context` 从 main `b7f1d2b2b107cc7172c2b71d10a0a7511dce5e64` 开始。将工具工厂和作用域门控移入同层 `run-tool-context.ts`；RunService 仍解析模型、材料、Skill 绑定、Expert 内建工具白名单与 MCP 工具，并提供宿主回调。材料范围存在时才构造快照约束文本读取器，并在对应能力可用时注册成果/Office 读取器；无范围时保留基础 Workspace 文本读取工具。Skill 绑定控制 Skill 工具，MCP 保持独立于内建白名单。无协议、迁移、策略或授权语义变化。
+
+新模块 functional 3/3、RunService heavy 88/88、`docs:check` 154/154、typecheck、定向 ESLint/Prettier 与生产 build 通过。原基点巡检发现已合入 main 的 TC01 测试 override 指纹尚未归档；Review `3e28f29` 后按理由更新读数，首次 `--save` 按规则退出 1，复跑 `npm run drift:check -- --batch-base=b7f1d2b2b107cc7172c2b71d10a0a7511dce5e64` 退出 0。Husky 路径只在此 worktree 配置中指向 `.husky/_`，入口探针通过。提交推送及 PR Gate 尚待收口；未运行完整 verify、UI 或真实模型。

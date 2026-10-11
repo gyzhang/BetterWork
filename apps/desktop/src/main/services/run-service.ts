@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 
-import type { AgentTool, SkillInstruction } from '@betterwork/agent-core';
+import type { SkillInstruction } from '@betterwork/agent-core';
 import {
   abortError,
   describeError,
@@ -29,31 +29,12 @@ import {
   TASK_CONTINUITY_RECENT_PROMPTS_MAX,
 } from '@betterwork/agent-protocol';
 import {
-  type ArtifactFileRegistrar,
   type ArtifactReader,
   type ArtifactRegisterInput,
   type ArtifactRegisterOutput,
-  type ArtifactSourceDeclarator,
-  businessMetricsTool,
-  calculatorTool,
-  createArtifactDeclareSourcesTool,
-  createArtifactReadTool,
-  createArtifactRegisterFileTool,
-  createKnowledgeReadTool,
-  createKnowledgeSearchTool,
-  createReadOfficeMaterialTool,
-  createReadTextFileTool,
-  createSkillExecuteTool,
-  createSkillReadResourceTool,
-  createTaskWriteFileTool,
-  createWebFetchTool,
-  createWebSearchTool,
-  type KnowledgeRunRead,
-  type KnowledgeSearch,
   type OfficeMaterialReader,
   type ReadOfficeMaterialInput,
   type ReadTextFile,
-  readTextFileTool,
   type SkillCommandExecuteInput,
   type SkillCommandExecuteOutput,
   type SkillResourceReadInput,
@@ -105,6 +86,7 @@ import type { NotificationService } from './notification-service';
 import type { ResolvedRunContext } from './run-context-resolver';
 import { resolveRunContext } from './run-context-resolver';
 import { isRunTerminalEvent, RunEventLifecycle } from './run-event-lifecycle';
+import { createRunToolContext } from './run-tool-context';
 import { RunToolResultAdapter } from './run-tool-result-adapter';
 import { createQianfanSearchClient } from './search-engine-service';
 import type { ResolvedToolchainSnapshots } from './skill-command-runtime';
@@ -175,66 +157,6 @@ const officeFormatFromMimeType = (mimeType: string): OfficeFormat => {
   if (mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation')
     return 'pptx';
   throw new Error(`不支持的 Office 成果类型：${mimeType}`);
-};
-
-/**
- * 组装一次 Run 可用的工具集。
- * `web_search` 只在存在已启用且配置了 Key 的搜索引擎时注册——
- * 给模型一个必然失败的工具只会浪费一轮调用。
- *
- * Skill 工具只在提供对应依赖时注册：无绑定的 Run 不需要它们。
- */
-export const createRunTools = (dependencies: {
-  knowledgeSearch: KnowledgeSearch;
-  readKnowledge?: KnowledgeRunRead;
-  readTextFile?: ReadTextFile;
-  artifactReader?: ArtifactReader;
-  webSearch?: WebSearch;
-  webFetch?: WebFetch;
-  officeMaterialReader?: OfficeMaterialReader;
-  allowedBuiltinToolNames?: ReadonlySet<string>;
-  skillResourceReader?: (input: SkillResourceReadInput) => Promise<SkillResourceReadOutput>;
-  taskFileWriter?: (input: TaskFileWriteInput) => Promise<TaskFileWriteOutput>;
-  skillCommandExecutor?: (input: SkillCommandExecuteInput) => Promise<SkillCommandExecuteOutput>;
-  artifactFileRegistrar?: ArtifactFileRegistrar;
-  artifactSourceDeclarator?: ArtifactSourceDeclarator;
-  mcpTools?: AgentTool[];
-}): AgentTool[] => {
-  const allows = (name: string): boolean =>
-    !dependencies.allowedBuiltinToolNames || dependencies.allowedBuiltinToolNames.has(name);
-  const tools: AgentTool[] = [];
-  if (allows(calculatorTool.name)) tools.push(calculatorTool);
-  if (allows(businessMetricsTool.name)) tools.push(businessMetricsTool);
-  if (allows(readTextFileTool.name)) {
-    tools.push(
-      dependencies.readTextFile
-        ? createReadTextFileTool(dependencies.readTextFile)
-        : readTextFileTool,
-    );
-  }
-  if (allows('knowledge_search'))
-    tools.push(createKnowledgeSearchTool(dependencies.knowledgeSearch));
-  if (dependencies.readKnowledge && allows('read_knowledge'))
-    tools.push(createKnowledgeReadTool(dependencies.readKnowledge));
-  if (dependencies.artifactSourceDeclarator && allows('artifact_declare_sources'))
-    tools.push(createArtifactDeclareSourcesTool(dependencies.artifactSourceDeclarator));
-  if (dependencies.artifactReader && allows('read_artifact'))
-    tools.push(createArtifactReadTool(dependencies.artifactReader));
-  if (dependencies.webSearch && allows('web_search'))
-    tools.push(createWebSearchTool(dependencies.webSearch));
-  if (dependencies.webFetch && allows('web_fetch'))
-    tools.push(createWebFetchTool(dependencies.webFetch));
-  if (dependencies.officeMaterialReader && allows('read_office_material'))
-    tools.push(createReadOfficeMaterialTool(dependencies.officeMaterialReader));
-  if (dependencies.skillResourceReader)
-    tools.push(createSkillReadResourceTool(dependencies.skillResourceReader));
-  if (dependencies.taskFileWriter) tools.push(createTaskWriteFileTool(dependencies.taskFileWriter));
-  if (dependencies.skillCommandExecutor)
-    tools.push(createSkillExecuteTool(dependencies.skillCommandExecutor));
-  if (dependencies.artifactFileRegistrar)
-    tools.push(createArtifactRegisterFileTool(dependencies.artifactFileRegistrar));
-  if (dependencies.mcpTools) tools.push(...dependencies.mcpTools);
-  return tools;
 };
 
 const truncate = (value: string, max: number): string =>
@@ -709,61 +631,63 @@ export class RunService {
         workspacePath,
         messages: this.buildPreviousMessages(executionContext, memory, continuityMessages),
         model,
-        tools: createRunTools({
-          knowledgeSearch: (query, toolContext) =>
-            this.knowledgeAudit.searchForRun(
-              this.knowledgeAuditContext(executionContext, toolContext, input.taskId),
-              query,
-            ),
-          readKnowledge: (request, toolContext) =>
-            this.knowledgeAudit.readForRun(
-              this.knowledgeAuditContext(executionContext, toolContext, input.taskId),
-              request,
-            ),
-          artifactSourceDeclarator: (inputs) => {
-            this.artifactDeclarations.declare(runId, inputs);
+        tools: createRunToolContext(
+          {
+            materialScope: executionContext.materialScope,
+            hasSkillBindings: bindingIds.length > 0,
           },
-          ...(executionContext.materialScope && this.inputSnapshots
-            ? {
-                readTextFile: this.createScopedReadTextFile(
-                  executionContext.materials,
-                  workspacePath,
-                  input.taskId,
-                ),
-              }
-            : {}),
-          ...(executionContext.materialScope
-            ? {
-                artifactReader: (readInput, readContext) =>
-                  this.readScopedArtifact(executionContext.materials, readInput, readContext),
-              }
-            : {}),
-          ...(webSearch ? { webSearch } : {}),
-          ...(this.webFetch ? { webFetch: this.webFetch } : {}),
-          ...(executionContext.materialScope && this.officeParser
-            ? {
-                officeMaterialReader: (readInput, readContext) =>
-                  this.readScopedOfficeMaterial(executionContext.materials, readInput, readContext),
-              }
-            : {}),
-          ...(allowedBuiltinToolNames ? { allowedBuiltinToolNames } : {}),
-          ...(bindingIds.length > 0
-            ? {
-                skillResourceReader: (resourceInput) =>
-                  this.readSkillResource(runId, resourceInput),
-                taskFileWriter: (writeInput) =>
-                  this.writeTaskFile(runId, input.taskId, workspacePath, writeInput),
-                skillCommandExecutor: (execInput) => this.executeSkillCommand(runId, execInput),
-                ...(this.fileArtifactService
-                  ? {
-                      artifactFileRegistrar: (registrarInput) =>
-                        this.registerFileArtifact(runId, registrarInput),
-                    }
-                  : {}),
-              }
-            : {}),
-          ...(mcpTools.length > 0 ? { mcpTools } : {}),
-        }),
+          {
+            knowledgeSearch: (query, toolContext) =>
+              this.knowledgeAudit.searchForRun(
+                this.knowledgeAuditContext(executionContext, toolContext, input.taskId),
+                query,
+              ),
+            readKnowledge: (request, toolContext) =>
+              this.knowledgeAudit.readForRun(
+                this.knowledgeAuditContext(executionContext, toolContext, input.taskId),
+                request,
+              ),
+            artifactSourceDeclarator: (inputs) => {
+              this.artifactDeclarations.declare(runId, inputs);
+            },
+            ...(this.inputSnapshots
+              ? {
+                  createScopedReadTextFile: () =>
+                    this.createScopedReadTextFile(
+                      executionContext.materials,
+                      workspacePath,
+                      input.taskId,
+                    ),
+                }
+              : {}),
+            artifactReader: (readInput, readContext) =>
+              this.readScopedArtifact(executionContext.materials, readInput, readContext),
+            ...(webSearch ? { webSearch } : {}),
+            ...(this.webFetch ? { webFetch: this.webFetch } : {}),
+            ...(this.officeParser
+              ? {
+                  officeMaterialReader: (readInput, readContext) =>
+                    this.readScopedOfficeMaterial(
+                      executionContext.materials,
+                      readInput,
+                      readContext,
+                    ),
+                }
+              : {}),
+            ...(allowedBuiltinToolNames ? { allowedBuiltinToolNames } : {}),
+            skillResourceReader: (resourceInput) => this.readSkillResource(runId, resourceInput),
+            taskFileWriter: (writeInput) =>
+              this.writeTaskFile(runId, input.taskId, workspacePath, writeInput),
+            skillCommandExecutor: (execInput) => this.executeSkillCommand(runId, execInput),
+            ...(this.fileArtifactService
+              ? {
+                  artifactFileRegistrar: (registrarInput) =>
+                    this.registerFileArtifact(runId, registrarInput),
+                }
+              : {}),
+            mcpTools,
+          },
+        ),
         signal: controller.signal,
         ...(maxSkillToolRounds !== undefined ? { maxToolRounds: maxSkillToolRounds } : {}),
         ...(executionContext.expertInstruction
