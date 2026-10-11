@@ -1014,3 +1014,9 @@ App heavy 51/51；WorkMessageList functional 6/6。typecheck、两份测试文�
 2026-10-11 20:16 CST，从最新 `origin/main` `1607ccefad2f59eb6a9b7bdab900e63c6ca9cfcd` 建立 `codex/r13-explicit-task-fixtures`。App API 夹具中的任务列表、任务详情、工作区任务分组和 Run 列表默认改为空；测试可通过 `tasks`、`runs` 选项显式提供历史数据，任务列表与分组共用同一份数据。App 整树场景逐项声明其需要的历史 Task/Run，避免每个用例无意携带旧任务。
 
 首次切换默认值时 23 个 App 用例因隐式历史 Task 失败；为相应旅程明确提供数据后，App heavy 51/51，夹具 functional 3/3。typecheck、三份改动源码的 ESLint/Prettier 通过。未改产品代码、行为或业务断言；R13 尚未整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 81. R13 收口复核：原始草稿红灯根因已定位
+
+2026-10-11 20:32 CST，在原始报告基点 `94e2b318fc650de951f1d89abaf5e3ca6f69f7a3` 的归档副本中重跑 RunService + App heavy 组合，复现 App 的 42 项中 1 项失败：从定时历史返回工作页后，Composer 首帧仍为空。复核代码发现 `useComposerPrompt` 当时先以空字符串初始化，再由 `useEffect` 读取已有草稿，恰会让重挂载的首帧丢失输入。提交 `2e46e77` 将其改为 `useState(readPromptDraft)`，并新增 Hook 回归断言，要求首帧和重挂载均不经过空草稿帧；该提交状态的 RunService + App 组合 135/135 通过。
+
+当前 `origin/main` 上原用例单独 1/1、App heavy 51/51、RunService + App heavy 139/139 通过；`use-composer-prompt` functional 2/2 通过。另以 PR #136 前后的夹具版本各跑同一组合均为 139/139，因此不把历史 P1 红灯归因于本次 Task/Run 默认值整理。R13 的异步草稿基线已由 `2e46e77` 的代码与 Hook 回归测试解释并修复，P2 夹具默认值也已显式化；按建议保留整树业务旅程并完成 R13。该结论不声称 PR #136 修复了 P1，也未删减终态、撤权、恢复或来源断言。完整 `npm run verify`、UI 和真实模型未运行。
