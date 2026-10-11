@@ -899,11 +899,6 @@ describe('Workspace input material display', () => {
       workspaceId: 'workspace-1',
     });
     expect(await screen.findByText('本次材料 1 项 · 文件 1')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: '查看上下文' }));
-    fireEvent.click(screen.getByRole('tab', { name: '资料' }));
-    const contextPanel = document.querySelector('.context-panel');
-    expect(contextPanel?.textContent).toContain('current-data-excel.xlsx');
   });
 
   it('reloads the filename when reopening a task with a saved input snapshot', async () => {

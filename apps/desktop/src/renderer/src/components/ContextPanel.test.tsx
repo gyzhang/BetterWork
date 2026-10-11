@@ -557,6 +557,33 @@ describe('ContextPanel 本任务连续简报', () => {
 });
 
 describe('ContextPanel 本次任务材料', () => {
+  it('显示已选工作空间快照的文件名', () => {
+    const reference: TaskMaterialSelection['reference'] = {
+      kind: 'workspace-input-snapshot',
+      snapshotId: 'snapshot-saved',
+      workspaceId: 'workspace-1',
+      contentHash: 'hash-saved',
+      format: 'xlsx',
+      fileKey: 'input-snapshots/hash-saved/content',
+    };
+    const candidate: MaterialCandidate = {
+      reference,
+      title: 'current-data-excel.xlsx',
+      sourceLabel: '工作空间文件 · /workspace/current-data-excel.xlsx',
+      status: 'ready',
+    };
+
+    const container = renderPanel({
+      tab: 'sources',
+      materials: [{ reference, purpose: 'current-input', addedFrom: 'user-input' }],
+      materialCandidates: [candidate],
+    });
+
+    expect(container.querySelector('.selected-materials-list')?.textContent).toContain(
+      'current-data-excel.xlsx',
+    );
+  });
+
   it('allows a selected material to use the other purpose', () => {
     const onCommitMaterials = vi.fn();
     const candidate: MaterialCandidate = {
