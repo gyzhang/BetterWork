@@ -4106,6 +4106,21 @@ button.list-row:where(:not(:disabled)):hover {
   padding: 0;
   background: transparent;
 }
+/* 对话内联图表（ADR-0048）：模型直出的 echarts 围栏就地渲染成 SVG 图表。 */
+.echarts-block {
+  margin: 0 0 var(--space-16);
+}
+.echarts-block-canvas {
+  width: 100%;
+  height: 320px;
+}
+/* 回退成代码块时沿用 .markdown-preview pre 的外壳，只收掉与 InlineError 之间的双份缝。 */
+.echarts-block .echarts-block-code {
+  margin: 0;
+}
+.echarts-block .inline-error {
+  margin-top: var(--space-8);
+}
 .markdown-preview a {
   color: var(--brand);
 }

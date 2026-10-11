@@ -21,6 +21,11 @@ export interface MessageBlockProps {
   /** 当前设置的对话称呼；省略时使用基座默认标签。 */
   authorName?: string | undefined;
   content: string;
+  /**
+   * 正文是否已终态（Run 已收尾）。仅影响算台回复里的内联图表：流式期未闭合的
+   * `echarts` 围栏只回退不报错，终态才把失败讲给用户（ADR-0048）。省略时视为终态。
+   */
+  contentFinal?: boolean | undefined;
   /** 这条消息自己的就地动作（记住这段经验／保存为成果），住在气泡下方同一块里。 */
   actions?: ReactNode | undefined;
   /** 最新一条回复的滚动锚点由页面持有（`useTaskScroll` 用它定位打开任务时的视口）。 */
@@ -31,6 +36,7 @@ export function MessageBlock({
   author,
   authorName,
   content,
+  contentFinal,
   actions,
   anchorRef,
 }: MessageBlockProps): React.JSX.Element {
@@ -38,7 +44,7 @@ export function MessageBlock({
     <div className={`message ${author}`} ref={anchorRef}>
       <span>{authorName ?? AUTHOR_LABEL[author]}</span>
       {author === 'assistant' ? (
-        <MarkdownPreview content={content} variant="message" />
+        <MarkdownPreview content={content} variant="message" chartsFinal={contentFinal ?? true} />
       ) : (
         <p>{content}</p>
       )}
