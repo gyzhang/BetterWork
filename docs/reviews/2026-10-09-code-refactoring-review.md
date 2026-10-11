@@ -1128,3 +1128,13 @@ Preload 定向测试 1 文件 / 27 项、`docs:check` 154/154 通过，覆盖请
 契约类型要求映射项中的 channel 字面值与映射键相同，方法输入和 Promise 返回值由对应请求/响应 Schema 推导。保留 `ListRuns` 未提供筛选时发送 `undefined`、Run Settings 无入参时发送空对象的行为；Run 事件订阅继续使用现有事件 Schema。此卡只覆盖 Preload 的 Run 与 Run Settings invoke 入口，不据此宣称 Main、Preload 与共享协议的全局 channel 映射已收口。
 
 编译器正反例确认正确请求与响应可通过、错误 channel/payload 配对被拒绝；Preload 定向测试 1 文件 / 30 项、全仓 typecheck、改动文件 ESLint/Prettier 和差异空白检查通过。完整 `npm run verify`、UI、真实模型及安装态验收未运行。R09 其余 channel 的编译期映射仍未完成。
+
+源提交 `1c6c6b2466e7fa5ffb94a43b3dc7ea002db2a0f4` 的 [PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/38150253561) 通过，Quick code check 通过，Full verify 按仓库规则跳过。[PR #162](https://github.com/gyzhang/BetterWork/pull/162) 已 squash 合入 main，合并提交 `828b42b3ada16927734ccfce2a960f71980fa769`；本地与远端任务分支已删除，本地 checkout 已同步 main。
+
+## 93. R09 子卡：Workspace 与 Task Preload 通道映射
+
+2026-10-11 23:18 CST，从最新 `origin/main` `828b42b3ada16927734ccfce2a960f71980fa769` 在本地 checkout 建立 `codex/r09-workspace-task-channel-contracts`。将 Workspace 查询、创建、身份/隐藏更新、任务分组、记忆简报、参考版本操作，以及 Task 创建/列表/详情的 14 个 invoke channel 与请求/响应 Schema 及 Preload 方法做显式类型映射。
+
+映射类型约束每个 channel 键、channel 字面值和对应 Schema；方法输入与返回值从该项推导。保留目录取消返回 `null`、未传 Task 列表筛选时发送 `undefined`、无参查询发送空对象，以及 memory/reference 结果的既有 `ok/data/error` 结构。此卡只覆盖 Workspace 与基础 Task API；Task Continuity、Task Context、Discussion Checkpoint、材料操作、其余域及 Main/Preload 共享映射仍待后续切片。
+
+编译器正反例确认正确请求/响应与 channel 字面值可通过，错误 payload、响应类型和 channel 配对被拒绝；Preload 定向测试 1 文件 / 33 项，覆盖 14 个映射通道、Memory/reference 的成功与失败 envelope、非法请求和畸形响应。全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 和差异空白检查通过。完整 `npm run verify`、UI、真实模型及安装态验收未运行。
