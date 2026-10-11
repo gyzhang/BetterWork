@@ -950,3 +950,9 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 2026-10-11 19:09 CST，从最新 `origin/main` `57a7c1d7c0832c10ccaecb248cd1c1a7ef21305b` 建立 `codex/r13-expert-list-action-view-tests`。把卡片停用参数与删除确认断言从 App 整树测试移至直接渲染 `ExpertsPage` 的测试；在 `use-experts.test.ts` 新增生命周期和删除参数映射断言。视图测试核对 expectedRevision、确认前不删除以及完成后刷新。
 
 App heavy 53/53；ExpertsView 与 useExperts functional 合计 17/17。typecheck、三份测试文件的 ESLint/Prettier 与 `git diff --check` 通过。未改产品代码、交互或既有业务断言；R13 尚未整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 70. R13 子卡：内置专家复制 API 映射移入 Hook 测试
+
+2026-10-11 19:15 CST，从最新 `origin/main` `3feb3718fe3ef4e1a51cd4e922656fe5df226e1c` 建立 `codex/r13-expert-copy-view-tests`。移除 App 整树中内置专家复制的 API 断言；`ExpertsView.test.tsx` 已直接覆盖内置卡片复制动作与刷新，`use-experts.test.ts` 现在直接断言复制调用以 `{ expertId }` 传递。
+
+App heavy 52/52；ExpertsView 与 useExperts functional 合计 17/17。typecheck、两份测试文件的 ESLint/Prettier 与 `git diff --check` 通过。未改产品代码、交互或既有行为断言；R13 尚未整体解决。未运行完整 `npm run verify`、UI 或真实模型。

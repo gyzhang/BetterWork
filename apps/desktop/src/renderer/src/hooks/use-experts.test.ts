@@ -47,7 +47,8 @@ describe('useExperts 的取数收口', () => {
     expect(result.current.error).toBe('');
   });
 
-  it('生命周期与删除动作把参数原样转交给专家 API', async () => {
+  it('复制、生命周期与删除动作把参数映射到专家 API', async () => {
+    const copy = vi.fn(async () => undefined);
     const setLifecycle = vi.fn(async () => undefined);
     const remove = vi.fn(async () => ({ deleted: true }));
     Object.defineProperty(window, 'betterwork', {
@@ -55,6 +56,7 @@ describe('useExperts 的取数收口', () => {
       value: {
         experts: {
           list: vi.fn(async () => []),
+          copy,
           setLifecycle,
           delete: remove,
         },
@@ -68,9 +70,11 @@ describe('useExperts 的取数收口', () => {
       lifecycle: 'disabled' as const,
       expectedRevision: 7,
     };
+    await result.current.copy('expert-1');
     await result.current.setLifecycle(lifecycleInput);
     await result.current.remove('expert-1');
 
+    expect(copy).toHaveBeenCalledWith({ expertId: 'expert-1' });
     expect(setLifecycle).toHaveBeenCalledWith(lifecycleInput);
     expect(remove).toHaveBeenCalledWith({ expertId: 'expert-1' });
   });
