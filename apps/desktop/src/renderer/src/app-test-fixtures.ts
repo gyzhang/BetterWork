@@ -416,6 +416,58 @@ function createArtifactApiFixture() {
   };
 }
 
+function createTaskContextApiFixture(
+  options: Pick<AppTestApiOptions, 'context'> | undefined,
+  removedScheduleScopeTaskIds: Set<string>,
+) {
+  return {
+    get: vi.fn(async (): Promise<TaskContextRevision | null> => options?.context ?? null),
+    save: vi.fn<Window['betterwork']['taskContexts']['save']>(async (input) => {
+      const removesScheduleScope = input.scheduleSourceSnapshotId === null;
+      if (removesScheduleScope) removedScheduleScopeTaskIds.add(input.taskId);
+      const revision = removesScheduleScope ? (input.expectedRevision ?? 0) + 1 : 1;
+      const scheduleSourceSnapshotId =
+        removesScheduleScope || removedScheduleScopeTaskIds.has(input.taskId)
+          ? undefined
+          : (input.scheduleSourceSnapshotId ?? options?.context?.scheduleSourceSnapshotId);
+      const materials = input.materials ?? options?.context?.materials;
+      return {
+        context: {
+          id: removesScheduleScope ? `context-${String(revision)}` : 'context-1',
+          taskId: input.taskId,
+          revision,
+          executor: input.executor,
+          skillBindings: input.skillBindings,
+          ...(materials !== undefined ? { materials } : {}),
+          ...(scheduleSourceSnapshotId ? { scheduleSourceSnapshotId } : {}),
+          ...(input.excludedMemoryIds !== undefined
+            ? { excludedMemoryIds: input.excludedMemoryIds }
+            : options?.context?.excludedMemoryIds !== undefined
+              ? { excludedMemoryIds: options.context.excludedMemoryIds }
+              : {}),
+          ...(input.mcpToolBindings !== undefined
+            ? { mcpToolBindings: input.mcpToolBindings }
+            : options?.context?.mcpToolBindings !== undefined
+              ? { mcpToolBindings: options.context.mcpToolBindings }
+              : {}),
+          ...(input.modelReference !== undefined
+            ? { modelReference: input.modelReference }
+            : options?.context?.modelReference !== undefined
+              ? { modelReference: options.context.modelReference }
+              : {}),
+          ...(input.builtinToolPolicy !== undefined
+            ? { builtinToolPolicy: input.builtinToolPolicy }
+            : options?.context?.builtinToolPolicy !== undefined
+              ? { builtinToolPolicy: options.context.builtinToolPolicy }
+              : {}),
+          createdAt: 1,
+          updatedAt: removesScheduleScope ? revision : 1,
+        },
+      };
+    }),
+  };
+}
+
 function createAppTestApi(options?: AppTestApiOptions) {
   emitNotificationChange = undefined;
   emitScheduleChange = undefined;
@@ -507,52 +559,7 @@ function createAppTestApi(options?: AppTestApiOptions) {
         error: { code: 'schedule_not_found', message: '没有该实例。' },
       })),
     },
-    taskContexts: {
-      get: vi.fn(async (): Promise<TaskContextRevision | null> => options?.context ?? null),
-      save: vi.fn<Window['betterwork']['taskContexts']['save']>(async (input) => {
-        const removesScheduleScope = input.scheduleSourceSnapshotId === null;
-        if (removesScheduleScope) removedScheduleScopeTaskIds.add(input.taskId);
-        const revision = removesScheduleScope ? (input.expectedRevision ?? 0) + 1 : 1;
-        const scheduleSourceSnapshotId =
-          removesScheduleScope || removedScheduleScopeTaskIds.has(input.taskId)
-            ? undefined
-            : (input.scheduleSourceSnapshotId ?? options?.context?.scheduleSourceSnapshotId);
-        const materials = input.materials ?? options?.context?.materials;
-        return {
-          context: {
-            id: removesScheduleScope ? `context-${String(revision)}` : 'context-1',
-            taskId: input.taskId,
-            revision,
-            executor: input.executor,
-            skillBindings: input.skillBindings,
-            ...(materials !== undefined ? { materials } : {}),
-            ...(scheduleSourceSnapshotId ? { scheduleSourceSnapshotId } : {}),
-            ...(input.excludedMemoryIds !== undefined
-              ? { excludedMemoryIds: input.excludedMemoryIds }
-              : options?.context?.excludedMemoryIds !== undefined
-                ? { excludedMemoryIds: options.context.excludedMemoryIds }
-                : {}),
-            ...(input.mcpToolBindings !== undefined
-              ? { mcpToolBindings: input.mcpToolBindings }
-              : options?.context?.mcpToolBindings !== undefined
-                ? { mcpToolBindings: options.context.mcpToolBindings }
-                : {}),
-            ...(input.modelReference !== undefined
-              ? { modelReference: input.modelReference }
-              : options?.context?.modelReference !== undefined
-                ? { modelReference: options.context.modelReference }
-                : {}),
-            ...(input.builtinToolPolicy !== undefined
-              ? { builtinToolPolicy: input.builtinToolPolicy }
-              : options?.context?.builtinToolPolicy !== undefined
-                ? { builtinToolPolicy: options.context.builtinToolPolicy }
-                : {}),
-            createdAt: 1,
-            updatedAt: removesScheduleScope ? revision : 1,
-          },
-        };
-      }),
-    },
+    taskContexts: createTaskContextApiFixture(options, removedScheduleScopeTaskIds),
     discussionCheckpoints: {
       list: vi.fn(async (): Promise<DiscussionCheckpoint[]> => []),
       create: vi.fn(async () => ({ checkpoint: undefined })),
