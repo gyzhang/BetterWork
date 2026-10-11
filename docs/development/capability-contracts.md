@@ -323,6 +323,8 @@ Search conversion creates one API profile/initial revision per legacy provider r
 
 Do not claim secure erasure of old database pages, WAL, external backups, or user-held originals. Database restoration can require credential re-entry. Test Keychain access across development/signed/upgrade conditions separately; declarations are not acceptance evidence.
 
+Implementation status (2026-10-11): CF10/CF11 contain the credential repository, safeStorage adapter, versioned migration journal, startup migration and automated coverage. CF11 remains `doing` pending the recorded real-machine restart and model/search acceptance; CF12 tracks M1 acceptance. Production bootstrap injects Electron `safeStorage`. A `done` owner resolves from `credentials`; `pending` or `failed` blocks Run dispatch without plaintext fallback; `none` retains the legacy plaintext compatibility path. If protected storage is unavailable, startup migration skips and leaves pending entries recoverable. The legacy columns remain in the schema, so this status does not mean every existing database value has already migrated.
+
 ### 10.3 Expert, task, and historical compatibility
 
 | Legacy state | Forward interpretation |
@@ -353,4 +355,4 @@ No implementation is scheduled by this document. After a separate instruction, c
 
 Required future verification is the [design acceptance matrix](../designs/api-tools-and-remote-mcp.md#9-acceptance-matrix), including negative isolation/credential cases, real SQLite migrations, cancelable injectable network tests, and user-led real-service acceptance. Automated tests do not use external services. Implementation requires `npm run verify`; documentation-only adoption checks links, consistency, and scope without claiming runtime results.
 
-Old A/B0/E task cards and statuses are not changed or duplicated. Local stdio may carry the explicit bundled runtime selector defined by [ADR-0045](../adr/0045-bundled-runtimes-for-local-mcp.md); when it is present, `command` and `cwd` are omitted and `args` contains only server arguments. Without a selector, `command` remains required for a custom stdio server. Credential storage changes require a coordinated update to the existing engineering standard and applicable guards when implemented; documentation adoption alone does not change the current plaintext implementation.
+Old A/B0/E task cards and statuses are not changed or duplicated. Local stdio may carry the explicit bundled runtime selector defined by [ADR-0045](../adr/0045-bundled-runtimes-for-local-mcp.md); when it is present, `command` and `cwd` are omitted and `args` contains only server arguments. Without a selector, `command` remains required for a custom stdio server. Credential implementation and acceptance status are tracked by [CF10–CF12](tasks-capability-foundation.md); the implementation facts above do not change runtime behavior or accept the still-proposed API contracts.
