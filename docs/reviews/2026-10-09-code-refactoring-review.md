@@ -830,3 +830,9 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 2026-10-11 17:26 CST，从最新 `origin/main` `ededb618dd0f2d3d0130bacbe76599bc729948c6` 建立 `codex/r13-app-fixture-by-domain`。将完整 Memory API 替身构造提取为私有 `createMemoryApiFixture`，`createAppTestApi` 通过该函数组合 `memories` 端口；Memory 默认列表、写入回执、冲突决议、预览失败、任务排除、运行上下文、设置与投影任务的默认返回保持不变。
 
 `App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该切片只建立 App API fixture 内部的 Memory 域边界，没有新增产品行为、移除完整 API 替身或 App 整树场景，也不据此标记 R13 整体解决；未运行完整 `npm run verify`、UI 或真实模型。
+
+## 50. R13 子卡：Knowledge API 替身按域收拢
+
+2026-10-11 17:31 CST，从最新 `origin/main` `a9dd7d9f99727a7257433e680a1a9a5b7c1ff5d0` 建立 `codex/r13-app-fixture-next`。将 App API fixture 中的 Knowledge 默认替身提取为私有 `createKnowledgeApiFixture`，覆盖资料列表、作业状态与列表、语义设置、作业事件订阅和集合读写；`createAppTestApi` 改为通过该函数组合 `knowledge` 端口，原返回值及空操作监听清理行为不变。
+
+`App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡只建立 Knowledge 域边界，不改检索逻辑或产品行为，完整 Desktop API fixture 与 App 整树测试仍保留；不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。
