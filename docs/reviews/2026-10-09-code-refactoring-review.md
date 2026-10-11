@@ -1101,10 +1101,12 @@ Preload 定向测试 1 文件 / 23 项通过，覆盖六个查询 API 的请求�
 
 源提交 `f7473ae0f9b10c99595d194e92ad32de4e439ff6` 的 [PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/38144694828) 成功，Quick code check 通过，Full verify 按仓库规则跳过。[PR #153](https://github.com/gyzhang/BetterWork/pull/153) 已合入 main，合并提交 `5b74b3ffc6983ec2be515c9b9a4035b5aabc95c3`；本地和远端任务分支已删除，任务 worktree 保留。Artifact 其他 Preload 调用、Knowledge 与全局 channel 映射仍待后续切片。
 
-## 90. R09 子卡：Artifact 操作 Preload 请求与响应边界校验（进行中）
+## 90. R09 子卡：Artifact 操作 Preload 请求与响应边界校验（已合并）
 
 2026-10-11 21:56 CST，从最新 `origin/main` `1cb97a07e387b27bc9ff1145087cb742ff4034a0` 在保留的任务 worktree 建立 `codex/r09-artifact-action-preload-contracts`。Artifact `saveMarkdown`、`exportMarkdown`、`registerFile`、`exportFile`、`openFile` 接入已有请求与响应 Schema。
 
 导出结果的 `filePath` 与打开结果的 `error` 在 Schema 解析后省略显式 `undefined`；Markdown 保存结果同样归一化可选来源字段。取消结果、文件路径和打开状态保持 Main 返回值语义；不改 channel、Main handler、共享协议或领域行为。Artifact 其余 Preload 调用、Knowledge 与全局 channel 映射仍待后续切片。
 
-Preload 定向测试 1 文件 / 25 项通过，覆盖五个操作 API 的请求转发、非法请求拒绝、畸形响应拒绝及可选属性归一；typecheck、改动文件 ESLint/Prettier 和差异空白检查通过。文档检查待提交前复核；完整 `npm run verify`、UI、真实模型及安装态验收未运行。
+Preload 定向测试 1 文件 / 25 项通过，覆盖五个操作 API 的请求转发、非法请求拒绝、畸形响应拒绝及可选属性归一；typecheck、改动文件 ESLint/Prettier、`docs:check` 154/154 与差异空白检查通过。完整 `npm run verify`、UI、真实模型及安装态验收未运行。
+
+源提交 `75d94064c677af0e20c89cd929389ebe09a757fe` 的 [PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/38145203271) 成功，Quick code check 通过，Full verify 按仓库规则跳过。[PR #155](https://github.com/gyzhang/BetterWork/pull/155) 已合入 main，合并提交 `65f94577661b383ddc3bed6f722b9b7e2e5d8676`；本地和远端任务分支已删除，任务 worktree 保留。Knowledge 与全局 channel 映射仍待后续切片。
