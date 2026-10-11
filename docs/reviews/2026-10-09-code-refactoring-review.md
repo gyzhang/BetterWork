@@ -908,3 +908,9 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 2026-10-11 18:31 CST，从最新 `origin/main` `45dfeeb1243220bc8839c1deeee465ae37a41afb` 建立 `codex/r13-app-discussion-checkpoints-api-fixture`。将讨论检查点列表与创建默认替身提取为私有 `createDiscussionCheckpointsApiFixture`，由总夹具组合该端口；空列表与未创建检查点回执保持不变。
 
 `App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡只移动 Discussion Checkpoints API 测试替身，不改讨论记录行为或生产代码；完整 Desktop API fixture 与 App 整树场景仍在，不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 63. R13 子卡：Materials API 替身按域收拢
+
+2026-10-11 18:36 CST，从最新 `origin/main` `6dc2536faa0ae96194b0cfe04266805eaa9bcb17` 建立 `codex/r13-app-materials-api-fixture`。将材料候选列表与输入快照准备默认替身提取为私有 `createMaterialsApiFixture`，由总夹具组合该端口；列表仍为空，快照准备仍返回 null。
+
+`App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡只移动 Materials API 测试替身，不改材料绑定或生产代码；完整 Desktop API fixture 与 App 整树场景仍在，不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。

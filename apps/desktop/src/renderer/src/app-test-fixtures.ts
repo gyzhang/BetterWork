@@ -618,6 +618,13 @@ function createDiscussionCheckpointsApiFixture() {
   };
 }
 
+function createMaterialsApiFixture() {
+  return {
+    listCandidates: vi.fn(async (): Promise<MaterialCandidate[]> => []),
+    prepareInputSnapshot: vi.fn(async (): Promise<InputSnapshot | null> => null),
+  };
+}
+
 function createAppTestApi(options?: AppTestApiOptions) {
   emitNotificationChange = undefined;
   emitScheduleChange = undefined;
@@ -638,10 +645,7 @@ function createAppTestApi(options?: AppTestApiOptions) {
     schedules: createSchedulesApiFixture(),
     taskContexts: createTaskContextApiFixture(options, removedScheduleScopeTaskIds),
     discussionCheckpoints: createDiscussionCheckpointsApiFixture(),
-    materials: {
-      listCandidates: vi.fn(async (): Promise<MaterialCandidate[]> => []),
-      prepareInputSnapshot: vi.fn(async (): Promise<InputSnapshot | null> => null),
-    },
+    materials: createMaterialsApiFixture(),
     memories: createMemoryApiFixture(options),
     mcp: createMcpApiFixture(),
     experts: createExpertsApiFixture(options),
