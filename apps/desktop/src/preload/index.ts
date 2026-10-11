@@ -5,7 +5,10 @@ import type {
   ArtifactVersionSummary,
   BetterWorkDesktopApi,
   EvidenceSummary,
+  ExportFileArtifactResult,
+  ExportMarkdownArtifactResult,
   FileArtifactDetail,
+  OpenFileArtifactResult,
 } from '@betterwork/agent-protocol';
 import {
   agentRuntimeEventSchema,
@@ -55,6 +58,10 @@ import {
   expertMutationResultSchema,
   expertRevisionDraftSchema,
   expertSummarySchema,
+  exportFileArtifactRequestSchema,
+  exportFileArtifactResultSchema,
+  exportMarkdownArtifactRequestSchema,
+  exportMarkdownArtifactResultSchema,
   exportSkillRequestSchema,
   fileArtifactDetailSchema,
   getArtifactRequestSchema,
@@ -146,6 +153,7 @@ import {
   notificationRendererReadyResultSchema,
   notificationSummarySchema,
   openFileArtifactRequestSchema,
+  openFileArtifactResultSchema,
   preflightScheduleRequestSchema,
   prepareDependencyRequestSchema,
   prepareDependencyResultSchema,
@@ -160,6 +168,8 @@ import {
   refreshKnowledgeDocumentRequestSchema,
   refreshSkillDependencyGrantRequestSchema,
   refreshSkillDependencyGrantResultSchema,
+  registerFileArtifactRequestSchema,
+  registerFileArtifactResultSchema,
   registerToolchainRequestSchema,
   registerToolchainResultSchema,
   removeWorkspaceReferenceVersionRequestSchema,
@@ -178,6 +188,7 @@ import {
   saveExpertRevisionRequestSchema,
   saveKnowledgeCollectionRequestSchema,
   saveKnowledgeSettingsRequestSchema,
+  saveMarkdownArtifactRequestSchema,
   saveMcpConnectionRequestSchema,
   saveModelProfileRequestSchema,
   saveRunSettingsRequestSchema,
@@ -361,6 +372,7 @@ function normalizeArtifactVersionDetail(
 const artifactSummaryListResponseSchema = artifactSummarySchema
   .array()
   .transform((summaries) => summaries.map(normalizeArtifactSummary));
+const artifactSummaryResponseSchema = artifactSummarySchema.transform(normalizeArtifactSummary);
 const artifactDetailResponseSchema = artifactDetailSchema
   .nullable()
   .transform((detail) => (detail === null ? null : normalizeArtifactDetail(detail)));
@@ -373,6 +385,24 @@ const artifactVersionDetailResponseSchema = artifactVersionDetailSchema
 const fileArtifactDetailResponseSchema = fileArtifactDetailSchema
   .nullable()
   .transform((detail) => (detail === null ? null : normalizeFileArtifactDetail(detail)));
+const exportMarkdownArtifactResponseSchema = exportMarkdownArtifactResultSchema.transform(
+  ({ cancelled, filePath }): ExportMarkdownArtifactResult => ({
+    cancelled,
+    ...(filePath === undefined ? {} : { filePath }),
+  }),
+);
+const exportFileArtifactResponseSchema = exportFileArtifactResultSchema.transform(
+  ({ cancelled, filePath }): ExportFileArtifactResult => ({
+    cancelled,
+    ...(filePath === undefined ? {} : { filePath }),
+  }),
+);
+const openFileArtifactResponseSchema = openFileArtifactResultSchema.transform(
+  ({ opened, error }): OpenFileArtifactResult => ({
+    opened,
+    ...(error === undefined ? {} : { error }),
+  }),
+);
 
 const modelProfileListResponseSchema = modelProfileSummarySchema.array().transform((profiles) =>
   profiles.map(({ lastTestedAt, ...profile }) => ({
@@ -540,17 +570,42 @@ const api: BetterWorkDesktopApi = {
         getArtifactVersionRequestSchema.parse(input),
         artifactVersionDetailResponseSchema,
       ),
-    saveMarkdown: (input) => ipcRenderer.invoke(IpcChannel.SaveMarkdownArtifact, input),
-    exportMarkdown: (input) => ipcRenderer.invoke(IpcChannel.ExportMarkdownArtifact, input),
-    registerFile: (input) => ipcRenderer.invoke(IpcChannel.RegisterFileArtifact, input),
+    saveMarkdown: (input) =>
+      invokeValidated(
+        IpcChannel.SaveMarkdownArtifact,
+        saveMarkdownArtifactRequestSchema.parse(input),
+        artifactSummaryResponseSchema,
+      ),
+    exportMarkdown: (input) =>
+      invokeValidated(
+        IpcChannel.ExportMarkdownArtifact,
+        exportMarkdownArtifactRequestSchema.parse(input),
+        exportMarkdownArtifactResponseSchema,
+      ),
+    registerFile: (input) =>
+      invokeValidated(
+        IpcChannel.RegisterFileArtifact,
+        registerFileArtifactRequestSchema.parse(input),
+        registerFileArtifactResultSchema,
+      ),
     getFileDetail: (input) =>
       invokeValidated(
         IpcChannel.GetFileArtifact,
         getFileArtifactRequestSchema.parse(input),
         fileArtifactDetailResponseSchema,
       ),
-    exportFile: (input) => ipcRenderer.invoke(IpcChannel.ExportFileArtifact, input),
-    openFile: (input) => ipcRenderer.invoke(IpcChannel.OpenFileArtifact, input),
+    exportFile: (input) =>
+      invokeValidated(
+        IpcChannel.ExportFileArtifact,
+        exportFileArtifactRequestSchema.parse(input),
+        exportFileArtifactResponseSchema,
+      ),
+    openFile: (input) =>
+      invokeValidated(
+        IpcChannel.OpenFileArtifact,
+        openFileArtifactRequestSchema.parse(input),
+        openFileArtifactResponseSchema,
+      ),
     revealFile: (input) =>
       invokeValidated(
         IpcChannel.RevealFileArtifact,
