@@ -1245,10 +1245,12 @@ Preload 定向测试 1 文件 / 38 项通过；编译器正反例覆盖 15 个�
 
 源提交 `7c1f260457110fe824d4076c299be236bae3a37b` 的 [PR Gate / Actions 38159694112](https://github.com/gyzhang/BetterWork/actions/runs/38159694112) 与 Quick code check 通过，Full verify 按规则跳过。[PR #179](https://github.com/gyzhang/BetterWork/pull/179) 已 squash 合入 main，合并提交 `157549ce0a0aed9aad23fade3ab8a995ad07f1bd`；任务分支本地与远端均已删除，本地 checkout 已同步 main，未创建 worktree。
 
-## 106. R09 子卡：Main/Preload 跨端 channel 类型兼容护栏（进行中）
+## 106. R09 子卡：Main/Preload 跨端 channel 类型兼容护栏（已合并）
 
 2026-10-12 01:44 CST，从干净且与 `origin/main` 一致的 `aafc01f85e8721ef78984d58dea1841c5b3cbcfa` 建立 `codex/r09-main-preload-contract-consistency`。用仓库实际 `tsconfig.json` 的 TypeScript checker 检查 Main `register-ipc.ts` 与 Preload 分域契约之间的 154 个 invoke channel：Preload 请求解析后的输出可作为 Main 请求输入，Main 响应解析后的输出可被 Preload 响应 Schema 接收；定时通道检查成功数据与拒绝 envelope。同步扫描 Main 的事件发送点，核对 5 个 Preload 事件契约对应的 6 个推送调用 payload。
 
 本卡只新增测试护栏，不移动 Schema、不改生产调用或协议。保留 Preload 为可选字段省略 `undefined` 等输出归一化；检查的是 TypeScript 传输类型兼容，运行期 Zod 校验仍是边界保障。R02 的材料事实适用范围及指标/单位/期间/来源关联决策仍按第 7 节待定，本卡不作推断。
 
-Preload 契约测试、Preload API 测试与 Main IPC 注册测试共 3 文件 / 94 项通过；全仓 typecheck、改动文件 ESLint/Prettier、差异空白检查通过。完整 `npm run verify` 未运行；PR Gate、合并与分支清理待收口。
+Preload 契约测试、Preload API 测试与 Main IPC 注册测试共 3 文件 / 94 项通过；全仓 typecheck、改动文件 ESLint/Prettier、差异空白检查通过。完整 `npm run verify` 未运行。
+
+2026-10-12 01:53 CST 远端收口：源提交 `2d834d47cf77a01c9bfa8f4592fcd1d4393a3c5d` 的 [PR Gate / Actions 38161162438](https://github.com/gyzhang/BetterWork/actions/runs/38161162438) 与 Quick code check 通过，纯文档检查和完整 verify 按变更分类跳过。[PR #181](https://github.com/gyzhang/BetterWork/pull/181) 已 squash 合入 main，合并提交 `2a0f42b1dceb49999d642b95f3d1132d8892d7e8`；本地与远端任务分支已删除，checkout 已同步 main，工作树干净且没有额外 worktree。
