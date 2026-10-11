@@ -1040,3 +1040,11 @@ Preload 定向测试 1 文件 / 9 项、`docs:check` 154/154 通过；typecheck�
 Preload 与 IPC 注册器定向测试 2 文件 / 62 项、`docs:check` 154/154 通过；typecheck、改动文件 ESLint/Prettier 与差异空白检查通过。完整 `npm run verify`、UI、真实模型及安装态验收未运行。
 
 源提交 `152bede163d6cdfc7f3a26f65737a2173869ca05` 的 [PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/38140864847) 成功，Quick code check 通过，Full verify 按规则跳过。[PR #140](https://github.com/gyzhang/BetterWork/pull/140) 已 squash 合入 main，合并提交 `ae41fc71700461ec6e717b9f11ae195e6e7eb6ad`；本地与远端任务分支已删除，任务 worktree 保留。R09 其他 API 域和 channel 映射继续待后续切片。
+
+## 84. R09 子卡：Task Preload 请求与响应边界校验
+
+2026-10-11 21:01 CST，Workspace 子卡合并后，从最新 `origin/main` `ced387cdfa43e61e4a12db051fa530f6421a7a65` 在保留的任务 worktree 建立 `codex/r09-task-preload-contracts`。Task Preload 的 `create` 与 `list` 接入既有共享请求和响应 Schema；`get` 继续使用已有校验。`list()` 未提供工作空间筛选时仍以 `undefined` 作为 invoke 参数。
+
+没有改 channel、Main handler、Task 行为、API 类型或错误语义。R09 的 Evidence、Artifact、Model、Search、Notification、Knowledge 等旧 Preload 调用及全局 channel 映射仍未完成。
+
+Preload 定向测试 1 文件 / 13 项、`docs:check` 154/154 通过，覆盖创建/列表正常值、可省略筛选参数、非法请求拒绝和畸形响应拒绝；typecheck、改动文件 ESLint/Prettier 与差异空白检查通过。完整 `npm run verify`、UI、真实模型及安装态验收未运行。
