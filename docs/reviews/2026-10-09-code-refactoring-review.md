@@ -836,3 +836,9 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 2026-10-11 17:31 CST，从最新 `origin/main` `a9dd7d9f99727a7257433e680a1a9a5b7c1ff5d0` 建立 `codex/r13-app-fixture-next`。将 App API fixture 中的 Knowledge 默认替身提取为私有 `createKnowledgeApiFixture`，覆盖资料列表、作业状态与列表、语义设置、作业事件订阅和集合读写；`createAppTestApi` 改为通过该函数组合 `knowledge` 端口，原返回值及空操作监听清理行为不变。
 
 `App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡只建立 Knowledge 域边界，不改检索逻辑或产品行为，完整 Desktop API fixture 与 App 整树测试仍保留；不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 51. R13 子卡：Artifact API 替身按域收拢
+
+2026-10-11 17:35 CST，从最新 `origin/main` `e92a37262a2aadcd07a45ac49c04784500a71c92` 建立 `codex/r13-app-artifact-api-fixture`。将 App API fixture 中的 Artifact 默认替身提取为私有 `createArtifactApiFixture`，集中成果列表、Markdown 保存、详情、版本列表、指定版本与执行器摘要返回；未配置的保存仍抛出原有测试错误。
+
+`App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡仅建立 Artifact 域边界，不改成果行为或测试场景，完整 Desktop API fixture 与 App 整树测试仍保留；不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。
