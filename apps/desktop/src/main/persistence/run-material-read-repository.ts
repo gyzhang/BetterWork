@@ -204,6 +204,20 @@ export class RunMaterialReadRepository {
     return rows.map(toRead);
   }
 
+  /** 请求 Run 首见顺序、每 Run 原足迹顺序；不缩小实际读取的保守并集。 */
+  listByRunIds(runIds: readonly string[]): RunMaterialRead[] {
+    const ids = [...new Set(runIds)];
+    if (ids.length === 0) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT r.* FROM json_each(?) requested
+          JOIN run_material_reads r ON r.run_id = requested.value
+         ORDER BY CAST(requested.key AS INTEGER), r.captured_at ASC, r.rowid ASC`,
+      )
+      .all(JSON.stringify(ids)) as RunMaterialReadRow[];
+    return rows.map(toRead);
+  }
+
   /** Lookup the existing persisted key, whose legacy and knowledge audit formats differ. */
   hasMaterialRead(runId: string, persistedKey: string, contentHash: string): boolean {
     const row = this.db

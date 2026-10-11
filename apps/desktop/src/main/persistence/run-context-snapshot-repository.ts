@@ -194,6 +194,20 @@ export class RunContextSnapshotRepository {
     return row ? toSnapshot(row) : undefined;
   }
 
+  /** 按请求首见顺序读取完整准备快照；沿用全部配置和材料校验。 */
+  listByRunIds(runIds: readonly string[]): RunContextSnapshot[] {
+    const ids = [...new Set(runIds)];
+    if (ids.length === 0) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT s.* FROM json_each(?) requested
+          JOIN run_context_snapshots s ON s.run_id = requested.value
+         ORDER BY CAST(requested.key AS INTEGER)`,
+      )
+      .all(JSON.stringify(ids)) as RunContextSnapshotRow[];
+    return rows.map(toSnapshot);
+  }
+
   listByTask(taskId: string): RunContextSnapshot[] {
     const rows = this.db
       .prepare(

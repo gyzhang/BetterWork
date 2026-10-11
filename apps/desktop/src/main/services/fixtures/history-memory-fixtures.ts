@@ -5,10 +5,31 @@ import {
   type MemoryDependency,
   memoryRecallPolicyV1,
   type MemoryRecord,
+  type RunMaterialRead,
+  type RunMemoryContext,
 } from '@betterwork/agent-protocol';
 
-import type { AppStore } from '../../persistence';
+import type { AppStore, RunContextSnapshot } from '../../persistence';
 import type { MemoryReplayDependency, MemoryRepository } from '../../persistence/memory-repository';
+
+/** 旧逐 Run 完整来源读取的独立对照，不缩小记录或校验字段。 */
+export const legacyHistorySources = (
+  store: AppStore,
+  runIds: readonly string[],
+): { contexts: RunMemoryContext[]; snapshots: RunContextSnapshot[]; reads: RunMaterialRead[] } => {
+  const ids = [...new Set(runIds)];
+  return {
+    contexts: ids.flatMap((id) => {
+      const context = store.runMemoryContexts.get(id);
+      return context === undefined ? [] : [context];
+    }),
+    snapshots: ids.flatMap((id) => {
+      const snapshot = store.runContextSnapshots.get(id);
+      return snapshot === undefined ? [] : [snapshot];
+    }),
+    reads: ids.flatMap((id) => store.materialReads.listByRun(id)),
+  };
+};
 
 /** 旧逐项完整读取的对照；缺项保持缺失，不改成最新修订。 */
 export const legacyReplayDependencies = (
@@ -44,6 +65,7 @@ export const seedReplayRun = (
     selected?: readonly MemoryRecord[];
     dependencies?: readonly MemoryDependency[];
     materials?: readonly MaterialReference[];
+    inheritedMaterials?: readonly MaterialReference[];
     omitContext?: boolean;
     omitSnapshot?: boolean;
   },
@@ -110,6 +132,7 @@ export const seedReplayRun = (
         conflictReviewRequired: false,
       },
       memoryDependencyUnion: [...(input.dependencies ?? [])],
+      materialDependencyUnion: [...(input.inheritedMaterials ?? [])],
     });
   return runId;
 };

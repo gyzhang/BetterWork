@@ -8,8 +8,10 @@ import {
   type MemoryScope,
   type MemorySelectedMemory,
 } from '@betterwork/agent-protocol';
-import { afterEach, describe, expect, it } from 'vitest';
+import type Database from 'better-sqlite3';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { seedReplayRun } from '../services/fixtures/history-memory-fixtures';
 import { AppStore, RunMemoryPhaseError, type RunMemorySelectionInput } from './index';
 
 const sha256Hex = (value: string): string =>
@@ -125,7 +127,40 @@ describe('RunMemoryContextRepository', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     for (const store of stores.splice(0)) store.close();
+  });
+
+  it('batch reads the complete exact run set in first-request order with one parameter', () => {
+    const store = openStore();
+    const workspaceId = seedWorkspace(store, 'batch');
+    const task = store.tasks.create(workspaceId, 'batch', 'batch');
+    const runIds = Array.from({ length: 1_103 }, (_, index) =>
+      seedReplayRun(store, {
+        taskId: task.task.id,
+        sessionId: task.sessionId,
+        workspaceId,
+        index,
+      }),
+    ).reverse();
+    const requested = [runIds[0]!, 'missing', ...runIds, runIds[0]!];
+    const expected = runIds.map((id) => store.runMemoryContexts.get(id));
+    const db = (store as unknown as { db: Database.Database }).db;
+    const prepare = vi.spyOn(db, 'prepare');
+    expect(store.runMemoryContexts.listByRunIds([])).toEqual([]);
+    expect(prepare).not.toHaveBeenCalled();
+    expect(store.runMemoryContexts.listByRunIds(requested)).toEqual(expected);
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(prepare.mock.calls[0]![0]).toContain('json_each');
+    expect(prepare.mock.calls[0]![0].match(/\?/gu)).toHaveLength(1);
+    expect(prepare.mock.calls[0]![0]).not.toMatch(/LIMIT/iu);
+    prepare.mockRestore();
+    db.prepare('UPDATE run_memory_contexts SET decision_summary_json = ? WHERE run_id = ?').run(
+      '{}',
+      runIds.at(-1)!,
+    );
+    expect(() => store.runMemoryContexts.get(runIds.at(-1)!)).toThrow();
+    expect(() => store.runMemoryContexts.listByRunIds(requested)).toThrow();
   });
 
   it('records one snapshot per run and renumbers the injection order from 1', () => {
