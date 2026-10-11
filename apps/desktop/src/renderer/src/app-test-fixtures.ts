@@ -541,6 +541,18 @@ function createSchedulesApiFixture() {
   };
 }
 
+function createExpertsApiFixture(options?: Pick<AppTestApiOptions, 'expert'>) {
+  return {
+    list: vi.fn(async () => (options?.expert ? [expertSummary] : [])),
+    get: vi.fn(async () => (options?.expert ? expertDetail : null)),
+    create: vi.fn(async () => ({ expert: expertDetail })),
+    saveRevision: vi.fn(async () => ({ expert: expertDetail })),
+    copy: vi.fn(async () => ({ expert: expertDetail })),
+    setLifecycle: vi.fn(async () => ({ expert: expertDetail })),
+    delete: vi.fn(async () => ({ deleted: true })),
+  };
+}
+
 function createAppTestApi(options?: AppTestApiOptions) {
   emitNotificationChange = undefined;
   emitScheduleChange = undefined;
@@ -588,15 +600,7 @@ function createAppTestApi(options?: AppTestApiOptions) {
       deleteConnection: vi.fn(async () => ({ deleted: true })),
       testConnection: vi.fn(async () => ({ connection: undefined, tools: [] })),
     },
-    experts: {
-      list: vi.fn(async () => (options?.expert ? [expertSummary] : [])),
-      get: vi.fn(async () => (options?.expert ? expertDetail : null)),
-      create: vi.fn(async () => ({ expert: expertDetail })),
-      saveRevision: vi.fn(async () => ({ expert: expertDetail })),
-      copy: vi.fn(async () => ({ expert: expertDetail })),
-      setLifecycle: vi.fn(async () => ({ expert: expertDetail })),
-      delete: vi.fn(async () => ({ deleted: true })),
-    },
+    experts: createExpertsApiFixture(options),
     runs: {
       list: vi.fn(async (input?: { taskId?: string }): Promise<RunSummary[]> =>
         input?.taskId === previousTask.id ? [previousRun] : [],

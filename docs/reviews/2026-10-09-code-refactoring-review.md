@@ -866,3 +866,9 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 2026-10-11 17:55 CST，从最新 `origin/main` `ba201dca10f05f25e62c8f7ff61c191b4bdd8ce6` 建立 `codex/r13-app-schedules-api-fixture`。将规则/实例列表、读取、保存、生命周期与变更订阅替身提取为私有 `createSchedulesApiFixture`。事件注册仍写入 `emitScheduleChange`，unsubscribe 仍清空回调；安装开始时仍由总夹具重置回调。
 
 `App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。排期错误码与中文消息原样保留，不改计划产品行为或生产代码；完整 Desktop API fixture 与 App 整树场景仍在，不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 56. R13 子卡：Experts API 替身按域收拢
+
+2026-10-11 18:00 CST，从最新 `origin/main` `09f50e123526af6dc2fb49fd622f36ace1429769` 建立 `codex/r13-app-experts-api-fixture`。将专家列表、详情、创建、修订保存、复制、生命周期和删除默认替身提取为私有 `createExpertsApiFixture`，保留 `expert` 选项控制的列表/详情行为及其余写入默认值。
+
+`App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡只移动专家 API 测试替身，不改 Experts UI 测试或生产行为；完整 Desktop API fixture 与 App 整树场景仍在，不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。
