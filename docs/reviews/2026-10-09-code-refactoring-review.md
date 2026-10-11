@@ -1008,3 +1008,9 @@ App heavy 51/51；WorkMessageList functional 6/6。typecheck、两份测试文�
 2026-10-11 20:08 CST，从最新 `origin/main` 建立 `codex/r13-expert-reference-view-test`。将 `App.test.tsx` 中新建专家时参考列表 loading/error/empty 状态、错误不伪装空态及草稿跨状态保留断言移到直接渲染 `ExpertsPage` 的用例。App 继续覆盖 API 失败后点击重试会再次读取，并在父级重渲染后保留编辑草稿的接线行为。
 
 修改前 App heavy 51/51、ExpertsView functional 15/15；修改后分别为 51/51、16/16。typecheck、两份测试文件的 ESLint/Prettier 通过；R13 仍未整体解决。未改生产代码或用户行为；未运行完整 `npm run verify`、UI 或真实模型。
+
+## 80. R13 子卡：App 历史 Task/Run 夹具改为显式提供
+
+2026-10-11 20:16 CST，从最新 `origin/main` `1607ccefad2f59eb6a9b7bdab900e63c6ca9cfcd` 建立 `codex/r13-explicit-task-fixtures`。App API 夹具中的任务列表、任务详情、工作区任务分组和 Run 列表默认改为空；测试可通过 `tasks`、`runs` 选项显式提供历史数据，任务列表与分组共用同一份数据。App 整树场景逐项声明其需要的历史 Task/Run，避免每个用例无意携带旧任务。
+
+首次切换默认值时 23 个 App 用例因隐式历史 Task 失败；为相应旅程明确提供数据后，App heavy 51/51，夹具 functional 3/3。typecheck、三份改动源码的 ESLint/Prettier 通过。未改产品代码、行为或业务断言；R13 尚未整体解决。未运行完整 `npm run verify`、UI 或真实模型。
