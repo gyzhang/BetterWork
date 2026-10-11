@@ -443,7 +443,11 @@ const waitForCompletion = async (
   throw new Error('Run did not complete in time');
 };
 
-const saveSingleMaterialContext = async (fixture: Fixture, content: string) => {
+const saveSingleMaterialContext = async (
+  fixture: Fixture,
+  content: string,
+  builtinToolNames: readonly string[] = ['read_text_file'],
+) => {
   const sourcePath = path.join(fixture.directory, 'selected.md');
   await writeFile(sourcePath, content);
   const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
@@ -456,7 +460,7 @@ const saveSingleMaterialContext = async (fixture: Fixture, content: string) => {
   return fixture.store.taskContexts.save(fixture.taskId, {
     executor: { kind: 'general' },
     skillBindings: [],
-    builtinToolPolicy: { mode: 'allow-list', toolNames: ['read_text_file'] },
+    builtinToolPolicy: { mode: 'allow-list', toolNames: [...builtinToolNames] },
     materials: [
       {
         reference: {
@@ -2024,7 +2028,7 @@ describe('RunService', () => {
     expect(fixture.store.materialReads.listByRun(runId)).toEqual([]);
   });
 
-  it('rejects ambiguous text reads when multiple selected snapshots share a path', async () => {
+  it('keeps ambiguous text read failures local to a general selected-material Run', async () => {
     const fixture = await createFixture();
     const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
     if (!workspaceId) throw new Error('workspace missing');
@@ -2069,7 +2073,7 @@ describe('RunService', () => {
     });
     await waitForCompletion(fixture, runId);
 
-    expect(statusOf(fixture, runId)).toBe('failed');
+    expect(statusOf(fixture, runId)).toBe('completed');
     expect(fixture.store.runs.listEvents(runId)).toContainEqual(
       expect.objectContaining({
         type: 'tool.failed',
@@ -2077,10 +2081,7 @@ describe('RunService', () => {
       }),
     );
     expect(fixture.store.runs.listEvents(runId)).toContainEqual(
-      expect.objectContaining({
-        type: 'run.failed',
-        error: expect.stringContaining('没有成功读取任何材料'),
-      }),
+      expect.objectContaining({ type: 'run.completed' }),
     );
   });
 
@@ -2683,7 +2684,7 @@ describe('RunService', () => {
     expect(messages.at(-2)).toContain('不要把不同期间的客户数相加');
   });
 
-  it('fails a material-scoped run that completes without reading selected materials', async () => {
+  it('does not apply numeric source requirements to a general selected-material Run', async () => {
     const fixture = await createFixture();
     const sourcePath = path.join(fixture.directory, 'selected.md');
     await writeFile(sourcePath, '# 本期输入\n收入：130万元。');
@@ -2741,16 +2742,13 @@ describe('RunService', () => {
     });
     await waitForCompletion(fixture, runId);
 
-    expect(statusOf(fixture, runId)).toBe('failed');
+    expect(statusOf(fixture, runId)).toBe('completed');
     expect(fixture.store.runs.listEvents(runId)).toContainEqual(
-      expect.objectContaining({
-        type: 'run.failed',
-        error: expect.stringContaining('没有成功读取任何材料'),
-      }),
+      expect.objectContaining({ type: 'run.completed' }),
     );
   });
 
-  it('fails a material-scoped run when the final answer invents a customer count', async () => {
+  it('does not apply numeric claim auditing to a general selected-material Run', async () => {
     const fixture = await createFixture();
     const sourcePath = path.join(fixture.directory, 'selected.md');
     await writeFile(sourcePath, '# 本期输入\n收入：130万元，预算：125万元。客户数量未提供。');
@@ -2831,12 +2829,9 @@ describe('RunService', () => {
     });
     await waitForCompletion(fixture, runId);
 
-    expect(statusOf(fixture, runId)).toBe('failed');
+    expect(statusOf(fixture, runId)).toBe('completed');
     expect(fixture.store.runs.listEvents(runId)).toContainEqual(
-      expect.objectContaining({
-        type: 'run.failed',
-        error: expect.stringContaining('材料事实校验失败'),
-      }),
+      expect.objectContaining({ type: 'run.completed' }),
     );
     expect(fixture.store.materialReads.listByRun(runId)).toEqual([
       expect.objectContaining({ locator: 'selected.md' }),
@@ -2845,30 +2840,29 @@ describe('RunService', () => {
 
   it.each([
     ['material', '家', ' ', '10'],
-    ['material', '户', '\t', '10'],
-    ['material', '客户', '　', '10'],
-    ['material', '%', ' ', '10'],
-    ['material', '％', '　', '10'],
+    ['material', '户', '\t', '-12.5'],
+    ['material', '客户', '　', '+10.25'],
+    ['material', '%', ' ', '10.5'],
+    ['material', '％', '\n', '10'],
     ['prompt', '家', ' ', '10'],
-    ['prompt', '%', '\t', '10'],
-    ['material', '％', ' ', '-12.5'],
-    ['prompt', '%', '　', '+10.25'],
-    ['material', '家', '\n', '10.5'],
+    ['prompt', '%', '\t', '10.25'],
+    ['prompt', '％', '　', '-12.5'],
   ])(
-    'accepts %s facts with whitespace before %s (%j): %s',
+    'validates explicit %s facts with whitespace before %s (%j): %s',
     async (source, unit, whitespace, value) => {
       const fixture = await createFixture();
-      const fact = `本期记录：${value}${whitespace}${unit}。`;
+      const fact = `客户数 2026-09：${value}${whitespace}${unit}。`;
       const context = await saveSingleMaterialContext(
         fixture,
         source === 'material' ? fact : '本期口径说明。',
+        ['read_text_file', 'analyze_business_metrics'],
       );
       let requestCount = 0;
       vi.stubGlobal(
         'fetch',
         vi.fn(async () => {
           requestCount += 1;
-          if (requestCount === 1)
+          if (requestCount === 1) {
             return sseResponse(
               JSON.stringify({
                 choices: [
@@ -2889,8 +2883,46 @@ describe('RunService', () => {
                 ],
               }),
             );
+          }
+          if (requestCount === 2) {
+            return sseResponse(
+              JSON.stringify({
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: [
+                        {
+                          index: 0,
+                          id: 'calculate-whitespace-fact',
+                          function: {
+                            name: 'analyze_business_metrics',
+                            arguments: JSON.stringify({
+                              period: '2026-09',
+                              current: {
+                                客户数: {
+                                  value: Number(value),
+                                  unit,
+                                  period: '2026-09',
+                                  sourceId:
+                                    source === 'material'
+                                      ? 'read-whitespace-fact:0'
+                                      : 'user-prompt',
+                                },
+                              },
+                            }),
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              }),
+            );
+          }
           return sseResponse(
-            JSON.stringify({ choices: [{ delta: { content: `本期记录：${value}${unit}。` } }] }),
+            JSON.stringify({
+              choices: [{ delta: { content: `客户数 2026-09：${value}${unit}。` } }],
+            }),
           );
         }),
       );
@@ -2910,7 +2942,7 @@ describe('RunService', () => {
       const runId = service.start({
         taskId: fixture.taskId,
         sessionId: fixture.sessionId,
-        prompt: `读取材料并整理经营摘要。${source === 'prompt' ? fact : ''}`,
+        prompt: `${source === 'prompt' ? `${fact} ` : ''}读取材料并整理经营摘要。`,
         taskContextRevisionId: context.id,
         expectedTaskContextRevision: context.revision,
       });
@@ -2921,9 +2953,12 @@ describe('RunService', () => {
     },
   );
 
-  it('accepts a customer-count table label with a supported value', async () => {
+  it('validates a sourced count value through the explicit business analysis tool', async () => {
     const fixture = await createFixture();
-    const context = await saveSingleMaterialContext(fixture, '客户数（家） | 本期 | 1');
+    const context = await saveSingleMaterialContext(fixture, '客户数 | 2026-09 | 1家', [
+      'read_text_file',
+      'analyze_business_metrics',
+    ]);
     let requestCount = 0;
     const fetchMock = vi.fn(async () => {
       requestCount += 1;
@@ -2949,8 +2984,40 @@ describe('RunService', () => {
           }),
         );
       }
+      if (requestCount === 2) {
+        return sseResponse(
+          JSON.stringify({
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: 'call-calculate-count-table',
+                      function: {
+                        name: 'analyze_business_metrics',
+                        arguments: JSON.stringify({
+                          period: '2026-09',
+                          current: {
+                            客户数: {
+                              value: 1,
+                              unit: '家',
+                              period: '2026-09',
+                              sourceId: 'call-read-count-table:0',
+                            },
+                          },
+                        }),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+        );
+      }
       return sseResponse(
-        JSON.stringify({ choices: [{ delta: { content: '客户数（家） | 本期 | 1' } }] }),
+        JSON.stringify({ choices: [{ delta: { content: '客户数 2026-09：1家。' } }] }),
       );
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -3070,7 +3137,7 @@ describe('RunService', () => {
     );
   });
 
-  it('does not reuse an amount as a customer count', async () => {
+  it('does not apply amount/count unit auditing outside explicit business analysis', async () => {
     const fixture = await createFixture();
     const context = await saveSingleMaterialContext(
       fixture,
@@ -3127,16 +3194,13 @@ describe('RunService', () => {
     });
     await waitForCompletion(fixture, runId);
 
-    expect(statusOf(fixture, runId)).toBe('failed');
+    expect(statusOf(fixture, runId)).toBe('completed');
     expect(fixture.store.runs.listEvents(runId)).toContainEqual(
-      expect.objectContaining({
-        type: 'run.failed',
-        error: expect.stringContaining('材料事实校验失败'),
-      }),
+      expect.objectContaining({ type: 'run.completed' }),
     );
   });
 
-  it('does not reuse an amount as a percentage', async () => {
+  it('does not apply amount/percentage auditing outside explicit business analysis', async () => {
     const fixture = await createFixture();
     const context = await saveSingleMaterialContext(
       fixture,
@@ -3195,12 +3259,9 @@ describe('RunService', () => {
     });
     await waitForCompletion(fixture, runId);
 
-    expect(statusOf(fixture, runId)).toBe('failed');
+    expect(statusOf(fixture, runId)).toBe('completed');
     expect(fixture.store.runs.listEvents(runId)).toContainEqual(
-      expect.objectContaining({
-        type: 'run.failed',
-        error: expect.stringContaining('材料事实校验失败'),
-      }),
+      expect.objectContaining({ type: 'run.completed' }),
     );
   });
 
@@ -3470,8 +3531,12 @@ describe('RunService', () => {
       sessionId: fixture.sessionId,
       prompt: `经营分析: ${JSON.stringify({
         period: '2026-09',
-        current: { revenue: 120 },
-        previous: { revenue: 100 },
+        current: {
+          revenue: { value: 120, unit: '万元', period: '2026-09', sourceId: 'user-prompt' },
+        },
+        previous: {
+          revenue: { value: 100, unit: '万元', period: '2026-08', sourceId: 'user-prompt' },
+        },
       })}`,
       taskContextRevisionId: context.id,
       expectedTaskContextRevision: context.revision,
@@ -3484,10 +3549,46 @@ describe('RunService', () => {
         type: 'tool.completed',
         output: expect.objectContaining({
           period: '2026-09',
-          metrics: [expect.objectContaining({ metric: 'revenue', change: 20, changeRate: 0.2 })],
+          metrics: [
+            expect.objectContaining({
+              metric: 'revenue',
+              change: 20,
+              changeRate: 0.2,
+              unit: '万元',
+              currentPeriod: '2026-09',
+              currentSourceId: 'user-prompt',
+              previousPeriod: '2026-08',
+              previousSourceId: 'user-prompt',
+            }),
+          ],
         }),
       }),
     );
+  });
+
+  it('does not enable business fact auditing for other selected-material Runs', async () => {
+    const fixture = await createFixture();
+    const context = await saveSingleMaterialContext(fixture, '收入 2026-09：100万元。');
+    const service = createService(fixture);
+    const captured = captureFakeProviderRequests();
+    try {
+      captured.respondNextRequest('收入 2026-09：777万元。');
+      const runId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '请用一句话总结。',
+        taskContextRevisionId: context.id,
+        expectedTaskContextRevision: context.revision,
+      });
+      await waitForCompletion(fixture, runId);
+
+      expect(statusOf(fixture, runId)).toBe('completed');
+      expect(fixture.store.runs.listEvents(runId)).toContainEqual(
+        expect.objectContaining({ type: 'run.completed' }),
+      );
+    } finally {
+      captured.restore();
+    }
   });
 
   it('closes cancellation during MCP discovery before model dispatch with one cancelled terminal event', async () => {
@@ -4493,9 +4594,7 @@ describe('RunService', () => {
       });
       await waitForCompletion(fixture, runId);
 
-      expect(statusOf(fixture, runId), JSON.stringify(fixture.store.runs.listEvents(runId))).toBe(
-        'completed',
-      );
+      expect(statusOf(fixture, runId)).toBe('completed');
       const binding = fixture.store.executions.listBindingsByRun(runId)[0];
       expect(binding).toBeDefined();
       expect(captured.toolNames.at(-1)).toEqual(

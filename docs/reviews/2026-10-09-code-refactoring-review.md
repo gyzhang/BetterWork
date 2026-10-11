@@ -338,6 +338,8 @@ tar 告警涉及解包时硬链接/符号链接逃逸，当前旧版本落在构
 
 这些决定留给后续讨论。本轮没有开始上述修复或重构。
 
+2026-10-12 补充：R02 适用范围与事实关联已由用户明确决定，仅对 builtin tool allow-list 明确包含 `analyze_business_metrics` 的经营/数值分析 Run 启用；每项输入需关联指标、单位、期间和本 Run 来源，派生值只能来自确定性工具。实现与证据记于 §107；此决定不追改本节的历史分析时点。
+
 ## 8. 实施跟踪
 
 2026-10-09 15:38：用户接受建议并下达开工指令后，先实施 A 批次。从更新后的 `origin/main`（`e75222e`）建立独立 worktree 和 `codex/review-correctness-baseline` 分支；前文仍记录 14:49 的 Review 基线，不将历史读数改成实施后的读数。
@@ -1254,3 +1256,13 @@ Preload 定向测试 1 文件 / 38 项通过；编译器正反例覆盖 15 个�
 Preload 契约测试、Preload API 测试与 Main IPC 注册测试共 3 文件 / 94 项通过；全仓 typecheck、改动文件 ESLint/Prettier、差异空白检查通过。完整 `npm run verify` 未运行。
 
 2026-10-12 01:53 CST 远端收口：源提交 `2d834d47cf77a01c9bfa8f4592fcd1d4393a3c5d` 的 [PR Gate / Actions 38161162438](https://github.com/gyzhang/BetterWork/actions/runs/38161162438) 与 Quick code check 通过，纯文档检查和完整 verify 按变更分类跳过。[PR #181](https://github.com/gyzhang/BetterWork/pull/181) 已 squash 合入 main，合并提交 `2a0f42b1dceb49999d642b95f3d1132d8892d7e8`；本地与远端任务分支已删除，checkout 已同步 main，工作树干净且没有额外 worktree。
+
+## 107. R02 子卡：经营分析 Run 的材料事实关联防护
+
+2026-10-12 05:14 CST，按用户确认的范围，从 `origin/main` `b72d1f8231c1f7efab787eb7a0df85882fe1199f` 在本地 checkout 建立 `codex/r02-material-fact-contract`。数值事实防护只对 `builtinToolPolicy.mode` 为 `allow-list` 且包含 `analyze_business_metrics` 的 Run 开启；事实关联指标、单位、期间与本 Run 来源，派生值须来自确定性工具。
+
+为分析工具输入增加带来源的指标事实结构，运行时校验来源已在本 Run 实际读取且包含对应指标、数值、单位和期间；材料片段、用户提示及 Knowledge Evidence 使用各自的来源标识。工具校验后才登记直接事实，差额/比例与预算偏差只从确定性分析结果登记，并保留相关来源和期间。最终数字主张需要在同一行包含指标、单位与相关期间。普通 Run 不运行数值审计；原有材料范围的定性事实检查继续保留。
+
+适配来源校验到读取工具与 Run 生命周期；将经营分析输出的指标数改为不携带数字的状态文案，避免把“分析了 N 个指标”误判为业务事实。ADR-0020 和内置经营分析 Skill 补充输入来源及输出契约。Review 核对确认事实来源只登记在当前 Run 内存账本，不改持久化 Schema；适用范围由显式 allow-list 决定，普通 Run 的数字输出不走此策略。
+
+RunService heavy 定向测试 1 文件 / 87 项、事实策略/工具结果适配/工具包测试 3 文件 / 36 项、事实策略 bench 1 文件 / 2 项通过；全仓 typecheck、改动源码 ESLint/Prettier、`docs:check` 与差异空白检查通过。完整 `npm run verify` 未运行。PR Gate、合并与任务分支清理待本卡收口。

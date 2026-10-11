@@ -3,11 +3,12 @@ import {
   type ArtifactFileRegistrar,
   type ArtifactReader,
   type ArtifactSourceDeclarator,
-  businessMetricsTool,
+  type BusinessMetricFactsValidator,
   calculatorTool,
   createArtifactDeclareSourcesTool,
   createArtifactReadTool,
   createArtifactRegisterFileTool,
+  createBusinessMetricsTool,
   createKnowledgeReadTool,
   createKnowledgeSearchTool,
   createReadOfficeMaterialTool,
@@ -41,6 +42,7 @@ export interface RunToolFactoryDependencies {
   webFetch?: WebFetch;
   officeMaterialReader?: OfficeMaterialReader;
   allowedBuiltinToolNames?: ReadonlySet<string>;
+  businessMetricFactsValidator?: BusinessMetricFactsValidator;
   skillResourceReader?: (input: SkillResourceReadInput) => Promise<SkillResourceReadOutput>;
   taskFileWriter?: (input: TaskFileWriteInput) => Promise<TaskFileWriteOutput>;
   skillCommandExecutor?: (input: SkillCommandExecuteInput) => Promise<SkillCommandExecuteOutput>;
@@ -75,7 +77,8 @@ export const createRunTools = (dependencies: RunToolFactoryDependencies): AgentT
     !dependencies.allowedBuiltinToolNames || dependencies.allowedBuiltinToolNames.has(name);
   const tools: AgentTool[] = [];
   if (allows(calculatorTool.name)) tools.push(calculatorTool);
-  if (allows(businessMetricsTool.name)) tools.push(businessMetricsTool);
+  if (allows('analyze_business_metrics'))
+    tools.push(createBusinessMetricsTool(dependencies.businessMetricFactsValidator));
   if (allows(readTextFileTool.name)) {
     tools.push(
       dependencies.readTextFile
@@ -128,6 +131,9 @@ export const createRunToolContext = (
       : {}),
     ...(sources.allowedBuiltinToolNames
       ? { allowedBuiltinToolNames: sources.allowedBuiltinToolNames }
+      : {}),
+    ...(sources.businessMetricFactsValidator
+      ? { businessMetricFactsValidator: sources.businessMetricFactsValidator }
       : {}),
     ...(policy.hasSkillBindings && sources.skillResourceReader
       ? { skillResourceReader: sources.skillResourceReader }
