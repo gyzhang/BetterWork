@@ -300,7 +300,6 @@ export class KnowledgeSearchService {
     if (coverageRows.indexedChunks > KNOWLEDGE_VECTOR_MAX_PUBLISHED) {
       return { ...fail('capacity-exceeded'), coverage: coverageRows };
     }
-    const scopeChunks = this.index.chunksInScope(revisionIds);
     let queryVector: Float32Array | undefined;
     try {
       const result = await this.embedding.embed({ snapshot, inputs: [query], signal });
@@ -315,8 +314,8 @@ export class KnowledgeSearchService {
     const rows = this.index
       .vectorsInGenerations(generationIds)
       .filter((row) => row.vector.length === dimension);
-    const chunkById = new Map(scopeChunks.map((chunk) => [chunk.id, chunk] as const));
-    const scannable = rows.filter((row) => chunkById.has(row.chunkId));
+    const allowedRevisions = new Set(revisionIds);
+    const scannable = rows.filter((row) => allowedRevisions.has(row.revisionId));
     const scores = await this.scanAll(space.id, dimension, queryVector, scannable, signal);
     if (scores === null) {
       return { ...fail('embedding-failed'), coverage: coverageRows };
@@ -327,17 +326,37 @@ export class KnowledgeSearchService {
     if (!stillValid || stillValid.id !== space.id) {
       return { ...fail('index-stale'), coverage: coverageRows };
     }
-    const withChunks = scores.flatMap((entry) => {
-      const chunk = chunkById.get(entry.chunkId);
-      return chunk ? [{ chunk, score: entry.score, row: entry }] : [];
+    const vectorRowsById = new Map(scannable.map((row) => [row.chunkId, row] as const));
+    const ranked = scores.flatMap((entry) => {
+      const row = vectorRowsById.get(entry.chunkId);
+      return row
+        ? [
+            {
+              row,
+              score: entry.score,
+              revisionId: row.revisionId,
+              span: { sectionOrdinal: row.sectionOrdinal, start: row.start },
+            },
+          ]
+        : [];
     });
-    withChunks.sort((left, right) => {
+    ranked.sort((left, right) => {
       if (right.score !== left.score) return right.score - left.score;
-      return identityOrder(left.chunk, right.chunk);
+      return identityOrder(left, right);
     });
-    const candidates = withChunks
-      .slice(0, KNOWLEDGE_SEARCH_CANDIDATE_LIMIT)
-      .map((entry, index) => ({ chunk: entry.chunk, rank: index + 1 }));
+    const topRanked = ranked.slice(0, KNOWLEDGE_SEARCH_CANDIDATE_LIMIT);
+    const chunksById = new Map(
+      this.index
+        .chunksByIdsInScope(
+          revisionIds,
+          topRanked.map((entry) => entry.row.chunkId),
+        )
+        .map((chunk) => [chunk.id, chunk] as const),
+    );
+    const candidates = topRanked.flatMap((entry, index) => {
+      const chunk = chunksById.get(entry.row.chunkId);
+      return chunk ? [{ chunk, rank: index + 1 }] : [];
+    });
     const degraded =
       coverageRows.indexedChunks < coverageRows.eligibleChunks ? 'index-partial' : undefined;
     return {
