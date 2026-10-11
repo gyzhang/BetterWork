@@ -553,6 +553,17 @@ function createExpertsApiFixture(options?: Pick<AppTestApiOptions, 'expert'>) {
   };
 }
 
+function createRunsApiFixture() {
+  return {
+    list: vi.fn(async (input?: { taskId?: string }): Promise<RunSummary[]> =>
+      input?.taskId === previousTask.id ? [previousRun] : [],
+    ),
+    listEvents: vi.fn<Window['betterwork']['runs']['listEvents']>(async () => []),
+    start: vi.fn(async () => ({ runId: 'new-run' })),
+    onEvent: vi.fn<Window['betterwork']['runs']['onEvent']>(() => () => undefined),
+  };
+}
+
 function createAppTestApi(options?: AppTestApiOptions) {
   emitNotificationChange = undefined;
   emitScheduleChange = undefined;
@@ -601,14 +612,7 @@ function createAppTestApi(options?: AppTestApiOptions) {
       testConnection: vi.fn(async () => ({ connection: undefined, tools: [] })),
     },
     experts: createExpertsApiFixture(options),
-    runs: {
-      list: vi.fn(async (input?: { taskId?: string }): Promise<RunSummary[]> =>
-        input?.taskId === previousTask.id ? [previousRun] : [],
-      ),
-      listEvents: vi.fn<Window['betterwork']['runs']['listEvents']>(async () => []),
-      start: vi.fn(async () => ({ runId: 'new-run' })),
-      onEvent: vi.fn<Window['betterwork']['runs']['onEvent']>(() => () => undefined),
-    },
+    runs: createRunsApiFixture(),
     skills: {
       list: vi.fn(async () => options?.skills ?? []),
       get: vi.fn<Window['betterwork']['skills']['get']>(
