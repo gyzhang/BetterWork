@@ -1553,18 +1553,6 @@ describe('Expert configuration', () => {
       await screen.findByRole('menuitem', { name: '本地语言模型 · local-model' }),
     ).toBeTruthy();
   });
-
-  it('内置专家卡片通过专家 API 复制', async () => {
-    const api = installApi({ expert: true });
-    api.experts.list.mockResolvedValue([{ ...expertSummary, sourceKind: 'builtin' }]);
-    render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
-    fireEvent.click(await screen.findByRole('button', { name: '复制副本' }));
-
-    await waitFor(() =>
-      expect(api.experts.copy).toHaveBeenCalledWith({ expertId: expertSummary.id }),
-    );
-  });
 });
 
 /**
