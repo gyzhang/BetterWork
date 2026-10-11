@@ -1159,7 +1159,7 @@ describe('Task context restoration', () => {
     expect(await screen.findByText('这项通知对应的任务已不存在，无法打开。')).toBeTruthy();
   });
 
-  it('没有工具调用的取消运行也显示可继续工作的终态', async () => {
+  it('恢复没有工具调用的取消运行后可继续且不会自动重启', async () => {
     const api = installApi();
     api.runs.list.mockResolvedValue([{ ...previousRun, status: 'cancelled' }]);
     api.runs.listEvents.mockResolvedValue([
@@ -1173,8 +1173,6 @@ describe('Task context restoration', () => {
     ]);
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
-    const terminal = await screen.findByText('本次运行已停止。可以调整要求后重新开始。');
-    expect(terminal.closest('.status-note')).not.toBeNull();
     expect(screen.queryByRole('button', { name: '停止' })).toBeNull();
     expect(screen.getByRole('button', { name: '开始工作' })).toBeTruthy();
     expect(api.runs.start).not.toHaveBeenCalled();

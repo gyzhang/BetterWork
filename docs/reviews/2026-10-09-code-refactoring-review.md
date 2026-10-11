@@ -980,3 +980,9 @@ App heavy 52/52；useRunArtifactSave functional 7/7。typecheck、App 测试文�
 2026-10-11 19:36 CST，从最新 `origin/main` `efc90d8ed8f8eacb796444a472709ba83747eb4a` 建立 `codex/r13-app-empty-skill-view-tests`。在 `SkillsView.test.tsx` 直接验证空列表 API 响应呈现 Skill 空状态且列表只读取一次；移除对应 App 整树测试。App 其余 Skill 运行/导航旅程和独立 fixture 默认值测试继续保留。
 
 App heavy 51/51；SkillsView functional 16/16。typecheck、两份测试文件的 ESLint/Prettier 与 `git diff --check` 通过。未改产品行为或已有端到端旅程；R13 尚未整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 75. R13 子卡：取消运行终态展示断言移入组件测试
+
+2026-10-11 19:43 CST，从最新 `origin/main` `c0a48e898c9723ff424a1f9e81785a57e78e5524` 建立 `codex/r13-app-terminal-state-view-test`。在 `WorkMessageList.test.tsx` 断言取消终态文案落在 `status-note`；App 整树用例保留历史取消 Run 恢复后无停止按钮、可开始工作且不会自动调用 `runs.start` 的跨层验证，移除重复组件呈现断言。
+
+App heavy 51/51；WorkMessageList functional 6/6。typecheck、两份测试文件的 ESLint/Prettier 与 `git diff --check` 通过。未改产品行为或恢复/继续覆盖；R13 尚未整体解决。未运行完整 `npm run verify`、UI 或真实模型。

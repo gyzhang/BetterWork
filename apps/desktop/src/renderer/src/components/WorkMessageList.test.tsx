@@ -180,7 +180,8 @@ describe('work message actions and projection ownership', () => {
     expect(screen.queryByRole('button', { name: '保存为成果' })).toBeNull();
     expect(screen.getByText('片段 old')).toBeTruthy();
     expect(screen.getByText(/本次运行未完成/).textContent).toContain('失败原因');
-    expect(screen.getByText('本次运行已停止。可以调整要求后重新开始。')).toBeTruthy();
+    const cancelled = screen.getByText('本次运行已停止。可以调整要求后重新开始。');
+    expect(cancelled.closest('.status-note')).not.toBeNull();
   });
   it('saving disables all save buttons and preserves the saved label on the source Run', () => {
     const input = props();
