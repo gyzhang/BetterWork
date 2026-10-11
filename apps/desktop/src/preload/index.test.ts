@@ -408,6 +408,18 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `declare const __memoryCancelInput: z.input<typeof cancelMemoryJobRequestSchema>; const __memoryCancelResult: ReturnType<BetterWorkDesktopApi['memories']['cancelJob']> = memoryInvokeMethods[IpcChannel.CancelMemoryJob](__memoryCancelInput);`,
     `declare const __memoryRebuildInput: z.input<typeof rebuildMemoryProjectionRequestSchema>; const __memoryRebuildResult: ReturnType<BetterWorkDesktopApi['memories']['rebuildProjection']> = memoryInvokeMethods[IpcChannel.RebuildMemoryProjection](__memoryRebuildInput);`,
     `const __memoryContractChannel: typeof IpcChannel.RebuildMemoryProjection = memoryInvokeContracts[IpcChannel.RebuildMemoryProjection].channel;`,
+    `const __mcpListResult: ReturnType<BetterWorkDesktopApi['mcp']['listConnections']> = mcpInvokeMethods[IpcChannel.ListMcpConnections]({});`,
+    `const __mcpGetResult: ReturnType<BetterWorkDesktopApi['mcp']['getConnection']> = mcpInvokeMethods[IpcChannel.GetMcpConnection]({ id: 'connection-1' });`,
+    `const __mcpSaveResult: ReturnType<BetterWorkDesktopApi['mcp']['saveConnection']> = mcpInvokeMethods[IpcChannel.SaveMcpConnection]({ name: 'MCP', transport: { kind: 'stdio', command: 'node' } });`,
+    `const __mcpDeleteResult: ReturnType<BetterWorkDesktopApi['mcp']['deleteConnection']> = mcpInvokeMethods[IpcChannel.DeleteMcpConnection]({ id: 'connection-1' });`,
+    `const __mcpTestResult: ReturnType<BetterWorkDesktopApi['mcp']['testConnection']> = mcpInvokeMethods[IpcChannel.TestMcpConnection]({ id: 'connection-1', expectedRevisionId: 'revision-1', operationId: 'ba17e5bd-b537-4a68-9b32-231634967f0c' });`,
+    `const __mcpLifecycleResult: ReturnType<BetterWorkDesktopApi['mcp']['setLifecycle']> = mcpInvokeMethods[IpcChannel.SetMcpLifecycle]({ id: 'connection-1', expectedRevisionId: 'revision-1', lifecycle: 'enabled' });`,
+    `const __mcpReviewResult: ReturnType<BetterWorkDesktopApi['mcp']['reviewTool']> = mcpInvokeMethods[IpcChannel.ReviewMcpTool]({ connectionId: 'connection-1', connectionRevisionId: 'revision-1', toolId: 'tool-1', contractHash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', userConfirmed: true });`,
+    `const __mcpCancelResult: ReturnType<BetterWorkDesktopApi['mcp']['cancelOperation']> = mcpInvokeMethods[IpcChannel.CancelMcpOperation]({ id: 'connection-1', expectedRevisionId: 'revision-1', operationId: 'ba17e5bd-b537-4a68-9b32-231634967f0c' });`,
+    `const __mcpPrepareLoginResult: ReturnType<BetterWorkDesktopApi['mcp']['prepareLogin']> = mcpInvokeMethods[IpcChannel.PrepareMcpLogin]({ id: 'connection-1', expectedRevisionId: 'revision-1', operationId: 'ba17e5bd-b537-4a68-9b32-231634967f0c' });`,
+    `const __mcpContinueLoginResult: ReturnType<BetterWorkDesktopApi['mcp']['continueLogin']> = mcpInvokeMethods[IpcChannel.ContinueMcpLogin]({ id: 'connection-1', expectedRevisionId: 'revision-1', operationId: 'ba17e5bd-b537-4a68-9b32-231634967f0c', issuer: 'https://auth.example', consent: true });`,
+    `const __mcpLogoutResult: ReturnType<BetterWorkDesktopApi['mcp']['logout']> = mcpInvokeMethods[IpcChannel.LogoutMcpConnection]({ id: 'connection-1', expectedRevisionId: 'revision-1', operationId: 'ba17e5bd-b537-4a68-9b32-231634967f0c' });`,
+    `const __mcpContractChannel: typeof IpcChannel.ContinueMcpLogin = mcpInvokeContracts[IpcChannel.ContinueMcpLogin].channel;`,
   ];
   const invalid = [
     `runInvokeMethods[IpcChannel.StartRun]({ runId: 'run-1' });`,
@@ -458,6 +470,9 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `memoryInvokeMethods[IpcChannel.ListMemoryJobs]({ taskId: 'task-1' });`,
     `const __memoryJobsWrongResponse: ReturnType<BetterWorkDesktopApi['memories']['get']> = memoryInvokeMethods[IpcChannel.ListMemoryJobs]({ workspaceId: 'workspace-1' });`,
     `const __memoryProjectionWrongChannel: typeof IpcChannel.ListMemories = memoryInvokeContracts[IpcChannel.RebuildMemoryProjection].channel;`,
+    `mcpInvokeMethods[IpcChannel.GetMcpConnection]({ connectionId: 'connection-1' });`,
+    `const __mcpWrongResponse: ReturnType<BetterWorkDesktopApi['mcp']['cancelOperation']> = mcpInvokeMethods[IpcChannel.GetMcpConnection]({ id: 'connection-1' });`,
+    `const __mcpWrongChannel: typeof IpcChannel.GetMcpConnection = mcpInvokeContracts[IpcChannel.SaveMcpConnection].channel;`,
   ];
   let source = readFileSync(sourcePath, 'utf8') + '\n';
   const cases = [...valid, ...invalid].map((expression, index) => {
@@ -1671,6 +1686,105 @@ describe('task continuity preload API', () => {
 });
 
 describe('MCP preload operations', () => {
+  it('routes each MCP connection API through its validated channel', async () => {
+    const operationId = 'ba17e5bd-b537-4a68-9b32-231634967f0c';
+    const connection: NonNullable<
+      Awaited<ReturnType<BetterWorkDesktopApi['mcp']['getConnection']>>
+    > = {
+      id: 'connection-1',
+      name: 'MCP',
+      transport: { kind: 'stdio', command: 'node', args: [] },
+      status: 'unconfigured',
+      tools: [],
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    mocks.invoke.mockReset();
+    mocks.invoke.mockImplementation(async (channel) => {
+      switch (channel) {
+        case IpcChannel.ListMcpConnections:
+          return [connection];
+        case IpcChannel.GetMcpConnection:
+          return connection;
+        case IpcChannel.DeleteMcpConnection:
+          return { deleted: true };
+        case IpcChannel.CancelMcpOperation:
+          return { cancelled: true };
+        case IpcChannel.PrepareMcpLogin:
+          return {
+            operationId,
+            resource: 'https://mcp.example/mcp',
+            issuers: ['https://auth.example'],
+            scopes: [],
+          };
+        case IpcChannel.TestMcpConnection:
+        case IpcChannel.ContinueMcpLogin:
+          return { connection, tools: [] };
+        default:
+          return { connection };
+      }
+    });
+
+    const mcp = api().mcp;
+    const operation = { id: connection.id, expectedRevisionId: 'revision-1', operationId };
+    await mcp.listConnections();
+    await mcp.getConnection({ id: connection.id });
+    await mcp.saveConnection({
+      name: connection.name,
+      transport: { kind: 'stdio', command: 'node' },
+    });
+    await mcp.deleteConnection({ id: connection.id });
+    await mcp.testConnection(operation);
+    await mcp.setLifecycle({
+      id: connection.id,
+      expectedRevisionId: 'revision-1',
+      lifecycle: 'enabled',
+    });
+    await mcp.reviewTool({
+      connectionId: connection.id,
+      connectionRevisionId: 'revision-1',
+      toolId: 'tool-1',
+      contractHash: 'a'.repeat(64),
+      userConfirmed: true,
+    });
+    await mcp.cancelOperation(operation);
+    await mcp.prepareLogin(operation);
+    await mcp.continueLogin({ ...operation, issuer: 'https://auth.example', consent: true });
+    await mcp.logout(operation);
+
+    expect(mocks.invoke.mock.calls).toEqual([
+      [IpcChannel.ListMcpConnections, {}],
+      [IpcChannel.GetMcpConnection, { id: connection.id }],
+      [
+        IpcChannel.SaveMcpConnection,
+        { name: connection.name, transport: { kind: 'stdio', command: 'node', args: [] } },
+      ],
+      [IpcChannel.DeleteMcpConnection, { id: connection.id }],
+      [IpcChannel.TestMcpConnection, operation],
+      [
+        IpcChannel.SetMcpLifecycle,
+        { id: connection.id, expectedRevisionId: 'revision-1', lifecycle: 'enabled' },
+      ],
+      [
+        IpcChannel.ReviewMcpTool,
+        {
+          connectionId: connection.id,
+          connectionRevisionId: 'revision-1',
+          toolId: 'tool-1',
+          contractHash: 'a'.repeat(64),
+          userConfirmed: true,
+        },
+      ],
+      [IpcChannel.CancelMcpOperation, operation],
+      [IpcChannel.PrepareMcpLogin, operation],
+      [
+        IpcChannel.ContinueMcpLogin,
+        { ...operation, issuer: 'https://auth.example', consent: true },
+      ],
+      [IpcChannel.LogoutMcpConnection, operation],
+    ]);
+  });
+
   it('validates operation IDs and consent before IPC and correlates the login/cancel channels', async () => {
     mocks.invoke.mockClear();
     const operation = {

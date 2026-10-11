@@ -1202,3 +1202,11 @@ Preload 定向测试 1 文件 / 37 项通过；编译器正反例覆盖 8 个通
 2026-10-12 00:24 CST，从最新 `origin/main` `b4cb737601d6b57f2397ea0e7b9c51626598ebea` 在原 checkout 建立 `codex/r09-memory-channel-contracts`。本卡为 Memory 列表/详情、写入/治理、预览/排除账本、Run 上下文、设置、作业与投影重建共 15 个 invoke channel 建立请求/响应 Schema 和 Preload 方法映射；保留 Result 成功/失败结构（`ok/data/warnings` 或 `ok/error`）、解析默认值与现有错误语义。
 
 Preload 定向测试 1 文件 / 38 项通过；编译器正反例覆盖 15 个通道的输入/响应类型与 channel 关联，运行期回归确认列表默认值及 Memory Result envelope 保持。全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 与差异空白检查通过。PR Gate、合并和分支清理待本卡收口。R09 MCP、Dependencies、Window、Run 事件及 Main/Preload 全局映射仍待后续切片。
+
+2026-10-12 00:32 CST 远端收口：源提交 `5bb3a8eb516c8f05e24b80e14402ffcc697459b4` 的 [PR Gate / Actions 38155690026](https://github.com/gyzhang/BetterWork/actions/runs/38155690026) 通过，Quick code check 通过，Full verify 按规则跳过。[PR #170](https://github.com/gyzhang/BetterWork/pull/170) 已 squash 合入 main，合并提交 `4b9e2cd7aa1aed2cdf005fa40ab2c33a78712e64`；任务分支本地与远端均已删除，原 checkout 已同步 main，未创建 worktree。
+
+## 101. R09 子卡：MCP Preload 通道映射
+
+2026-10-12 00:32 CST，从最新 `origin/main` `4b9e2cd7aa1aed2cdf005fa40ab2c33a78712e64` 在原 checkout 建立 `codex/r09-mcp-channel-contracts`。本卡为 MCP 连接列表/详情、保存/删除、测试/启停、工具审查、操作取消与 OAuth 登录/退出共 11 个 invoke channel 建立请求/响应 Schema 和 Preload 方法映射；保留操作回执、取消和异常语义。
+
+编译器正反例覆盖全部 11 个 channel 的请求/响应与方法关联；运行期回归逐一核对 11 个 API 的转发 channel 和解析后请求，并覆盖操作取消、OAuth 准备及异常响应。Preload 定向测试 1 文件 / 39 项、全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 与差异空白检查通过。PR Gate、合并与分支清理待本卡收口；完整 `npm run verify`、UI、真实模型及安装态验收未运行。R09 Dependencies、Window、Run 事件及 Main/Preload 全局映射仍待后续切片。

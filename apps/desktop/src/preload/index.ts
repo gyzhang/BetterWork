@@ -1526,6 +1526,88 @@ const memoryInvokeMethods: InvokeMethodsByChannel<typeof memoryInvokeContracts> 
     invokeContract(memoryInvokeContracts[IpcChannel.RebuildMemoryProjection], input),
 };
 
+const mcpInvokeContracts = defineInvokeContracts({
+  [IpcChannel.ListMcpConnections]: {
+    channel: IpcChannel.ListMcpConnections,
+    request: emptyInvokeRequestSchema,
+    response: mcpConnectionSummarySchema.array(),
+  },
+  [IpcChannel.GetMcpConnection]: {
+    channel: IpcChannel.GetMcpConnection,
+    request: getMcpConnectionRequestSchema,
+    response: mcpConnectionSummarySchema.nullable(),
+  },
+  [IpcChannel.SaveMcpConnection]: {
+    channel: IpcChannel.SaveMcpConnection,
+    request: saveMcpConnectionRequestSchema,
+    response: mcpMutationResultSchema,
+  },
+  [IpcChannel.DeleteMcpConnection]: {
+    channel: IpcChannel.DeleteMcpConnection,
+    request: deleteMcpConnectionRequestSchema,
+    response: deletedResultSchema,
+  },
+  [IpcChannel.TestMcpConnection]: {
+    channel: IpcChannel.TestMcpConnection,
+    request: mcpOperationRequestSchema,
+    response: mcpTestResultSchema,
+  },
+  [IpcChannel.SetMcpLifecycle]: {
+    channel: IpcChannel.SetMcpLifecycle,
+    request: mcpLifecycleRequestSchema,
+    response: mcpMutationResultSchema,
+  },
+  [IpcChannel.ReviewMcpTool]: {
+    channel: IpcChannel.ReviewMcpTool,
+    request: mcpReviewRequestSchema,
+    response: mcpMutationResultSchema,
+  },
+  [IpcChannel.CancelMcpOperation]: {
+    channel: IpcChannel.CancelMcpOperation,
+    request: mcpOperationRequestSchema,
+    response: z.object({ cancelled: z.boolean() }),
+  },
+  [IpcChannel.PrepareMcpLogin]: {
+    channel: IpcChannel.PrepareMcpLogin,
+    request: mcpOperationRequestSchema,
+    response: mcpOAuthPreparationSchema,
+  },
+  [IpcChannel.ContinueMcpLogin]: {
+    channel: IpcChannel.ContinueMcpLogin,
+    request: mcpLoginContinueRequestSchema,
+    response: mcpTestResultSchema,
+  },
+  [IpcChannel.LogoutMcpConnection]: {
+    channel: IpcChannel.LogoutMcpConnection,
+    request: mcpOperationRequestSchema,
+    response: mcpMutationResultSchema,
+  },
+});
+const mcpInvokeMethods: InvokeMethodsByChannel<typeof mcpInvokeContracts> = {
+  [IpcChannel.ListMcpConnections]: (input) =>
+    invokeContract(mcpInvokeContracts[IpcChannel.ListMcpConnections], input),
+  [IpcChannel.GetMcpConnection]: (input) =>
+    invokeContract(mcpInvokeContracts[IpcChannel.GetMcpConnection], input),
+  [IpcChannel.SaveMcpConnection]: (input) =>
+    invokeContract(mcpInvokeContracts[IpcChannel.SaveMcpConnection], input),
+  [IpcChannel.DeleteMcpConnection]: (input) =>
+    invokeContract(mcpInvokeContracts[IpcChannel.DeleteMcpConnection], input),
+  [IpcChannel.TestMcpConnection]: (input) =>
+    invokeContract(mcpInvokeContracts[IpcChannel.TestMcpConnection], input),
+  [IpcChannel.SetMcpLifecycle]: (input) =>
+    invokeContract(mcpInvokeContracts[IpcChannel.SetMcpLifecycle], input),
+  [IpcChannel.ReviewMcpTool]: (input) =>
+    invokeContract(mcpInvokeContracts[IpcChannel.ReviewMcpTool], input),
+  [IpcChannel.CancelMcpOperation]: (input) =>
+    invokeContract(mcpInvokeContracts[IpcChannel.CancelMcpOperation], input),
+  [IpcChannel.PrepareMcpLogin]: (input) =>
+    invokeContract(mcpInvokeContracts[IpcChannel.PrepareMcpLogin], input),
+  [IpcChannel.ContinueMcpLogin]: (input) =>
+    invokeContract(mcpInvokeContracts[IpcChannel.ContinueMcpLogin], input),
+  [IpcChannel.LogoutMcpConnection]: (input) =>
+    invokeContract(mcpInvokeContracts[IpcChannel.LogoutMcpConnection], input),
+};
+
 const api: BetterWorkDesktopApi = {
   runs: {
     start: (input) => runInvokeMethods[IpcChannel.StartRun](input),
@@ -1729,68 +1811,17 @@ const api: BetterWorkDesktopApi = {
     rebuildProjection: (input) => memoryInvokeMethods[IpcChannel.RebuildMemoryProjection](input),
   },
   mcp: {
-    listConnections: () =>
-      invokeValidated(IpcChannel.ListMcpConnections, {}, mcpConnectionSummarySchema.array()),
-    getConnection: (input) =>
-      invokeValidated(
-        IpcChannel.GetMcpConnection,
-        getMcpConnectionRequestSchema.parse(input),
-        mcpConnectionSummarySchema.nullable(),
-      ),
-    saveConnection: (input) =>
-      invokeValidated(
-        IpcChannel.SaveMcpConnection,
-        saveMcpConnectionRequestSchema.parse(input),
-        mcpMutationResultSchema,
-      ),
-    deleteConnection: (input) =>
-      invokeValidated(
-        IpcChannel.DeleteMcpConnection,
-        deleteMcpConnectionRequestSchema.parse(input),
-        deletedResultSchema,
-      ),
-    testConnection: (input) =>
-      invokeValidated(
-        IpcChannel.TestMcpConnection,
-        mcpOperationRequestSchema.parse(input),
-        mcpTestResultSchema,
-      ),
-    setLifecycle: (input) =>
-      invokeValidated(
-        IpcChannel.SetMcpLifecycle,
-        mcpLifecycleRequestSchema.parse(input),
-        mcpMutationResultSchema,
-      ),
-    reviewTool: (input) =>
-      invokeValidated(
-        IpcChannel.ReviewMcpTool,
-        mcpReviewRequestSchema.parse(input),
-        mcpMutationResultSchema,
-      ),
-    cancelOperation: (input) =>
-      invokeValidated(
-        IpcChannel.CancelMcpOperation,
-        mcpOperationRequestSchema.parse(input),
-        z.object({ cancelled: z.boolean() }),
-      ),
-    prepareLogin: (input) =>
-      invokeValidated(
-        IpcChannel.PrepareMcpLogin,
-        mcpOperationRequestSchema.parse(input),
-        mcpOAuthPreparationSchema,
-      ),
-    continueLogin: (input) =>
-      invokeValidated(
-        IpcChannel.ContinueMcpLogin,
-        mcpLoginContinueRequestSchema.parse(input),
-        mcpTestResultSchema,
-      ),
-    logout: (input) =>
-      invokeValidated(
-        IpcChannel.LogoutMcpConnection,
-        mcpOperationRequestSchema.parse(input),
-        mcpMutationResultSchema,
-      ),
+    listConnections: () => mcpInvokeMethods[IpcChannel.ListMcpConnections]({}),
+    getConnection: (input) => mcpInvokeMethods[IpcChannel.GetMcpConnection](input),
+    saveConnection: (input) => mcpInvokeMethods[IpcChannel.SaveMcpConnection](input),
+    deleteConnection: (input) => mcpInvokeMethods[IpcChannel.DeleteMcpConnection](input),
+    testConnection: (input) => mcpInvokeMethods[IpcChannel.TestMcpConnection](input),
+    setLifecycle: (input) => mcpInvokeMethods[IpcChannel.SetMcpLifecycle](input),
+    reviewTool: (input) => mcpInvokeMethods[IpcChannel.ReviewMcpTool](input),
+    cancelOperation: (input) => mcpInvokeMethods[IpcChannel.CancelMcpOperation](input),
+    prepareLogin: (input) => mcpInvokeMethods[IpcChannel.PrepareMcpLogin](input),
+    continueLogin: (input) => mcpInvokeMethods[IpcChannel.ContinueMcpLogin](input),
+    logout: (input) => mcpInvokeMethods[IpcChannel.LogoutMcpConnection](input),
   },
   dependencies: {
     listOptions: (input) =>
