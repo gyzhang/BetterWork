@@ -1088,3 +1088,5 @@ Preload 定向测试 1 文件 / 19 项通过，覆盖三个 API 的请求转发�
 无入参通道仍发送空对象。没有改 channel、通知服务、持久化、生命周期或提示语义。R09 的 Artifact、Knowledge 等旧 Preload 调用及全局 channel 映射仍未完成。
 
 Preload 定向测试 1 文件 / 21 项通过，覆盖旧调用的请求转发、非法 `markRead` 请求拒绝和畸形响应拒绝；typecheck、改动文件 ESLint/Prettier 和差异空白检查通过。完整 `npm run verify`、UI、真实模型及安装态验收未运行。
+
+源提交 `a17f8873b3db0924972ed3afb4b61e6cab5c0bb4` 的 [PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/38144009182) 成功；Quick code check 通过，Full verify 按仓库规则跳过。[PR #151](https://github.com/gyzhang/BetterWork/pull/151) 已合入 main，合并提交 `c376d900f6c383ae8460cac1150f5796df08cc52`；本地和远端任务分支已删除，任务 worktree 保留。R09 的 Artifact、Knowledge 等旧 Preload 调用及全局 channel 映射继续待后续切片。
