@@ -4,12 +4,13 @@ import type {
   ExpertDetail,
   ExpertSummary,
   MaterialCandidate,
+  MemoryRecord,
   ModelProfileSummary,
 } from '@betterwork/agent-protocol';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { languageModel } from '../app-test-fixtures';
+import { languageModel, memoryViewItem } from '../app-test-fixtures';
 import type { ExpertsState } from '../hooks/use-experts';
 import { ExpertsPage } from './ExpertsView';
 
@@ -111,7 +112,9 @@ function detailOf(expert: ExpertSummary = userExpert): ExpertDetail {
 function renderExpertsPage(options?: {
   experts?: ExpertSummary[];
   detail?: ExpertDetail;
+  memories?: MemoryRecord[];
   models?: ModelProfileSummary[];
+  workspaceId?: string;
   actions?: Partial<ExpertsState>;
 }) {
   const state = stateStub(options?.experts ?? [userExpert]);
@@ -128,9 +131,10 @@ function renderExpertsPage(options?: {
       state={state}
       skills={[]}
       mcpConnections={[]}
-      memories={[]}
+      memories={options?.memories ?? []}
       models={options?.models ?? []}
       materialCandidates={[]}
+      {...(options?.workspaceId === undefined ? {} : { workspaceId: options.workspaceId })}
       actions={actions}
       onSummon={onSummon}
       onError={onError}
@@ -343,6 +347,58 @@ describe('ExpertsPage 的目录条目', () => {
 });
 
 describe('ExpertsPage 的整页配置交互', () => {
+  it('专家详情只汇总当前专家与工作空间的有效记忆', async () => {
+    const detail = detailOf();
+    const memories: MemoryRecord[] = [
+      memoryViewItem({
+        id: 'expert-memory',
+        scope: { kind: 'expert', expertId: userExpert.id },
+        content: '专家通用记忆',
+        status: 'confirmed',
+      }),
+      memoryViewItem({
+        id: 'expert-workspace-memory',
+        scope: { kind: 'expert-workspace', expertId: userExpert.id, workspaceId: 'workspace-1' },
+        content: '当前工作空间记忆',
+        status: 'candidate',
+        candidateDisposition: 'pending',
+      }),
+      memoryViewItem({
+        id: 'other-workspace-memory',
+        scope: { kind: 'expert-workspace', expertId: userExpert.id, workspaceId: 'workspace-2' },
+        content: '其他工作空间记忆',
+      }),
+      memoryViewItem({
+        id: 'other-expert-memory',
+        scope: { kind: 'expert', expertId: 'expert-other' },
+        content: '其他专家记忆',
+      }),
+      memoryViewItem({
+        id: 'deleted-expert-memory',
+        scope: { kind: 'expert', expertId: userExpert.id },
+        content: '已删除记忆',
+        status: 'deleted',
+      }),
+    ];
+    const { onManageMemories } = renderExpertsPage({
+      detail,
+      memories,
+      workspaceId: 'workspace-1',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '详情' }));
+
+    expect(await screen.findByText('1 条已确认 · 1 条待确认')).toBeTruthy();
+    expect(screen.getByText('专家通用记忆')).toBeTruthy();
+    expect(screen.getByText('当前工作空间记忆')).toBeTruthy();
+    expect(screen.queryByText('其他工作空间记忆')).toBeNull();
+    expect(screen.queryByText('其他专家记忆')).toBeNull();
+    expect(screen.queryByText('已删除记忆')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '管理记忆' }));
+    expect(onManageMemories).toHaveBeenCalledWith(detail);
+  });
+
   it('保存模型偏好时保留修订版本与编辑内容', async () => {
     const detail = detailOf();
     const saveRevision = vi.fn<ExpertsState['saveRevision']>(async () => ({ expert: detail }));
