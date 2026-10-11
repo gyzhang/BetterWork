@@ -1,5 +1,13 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { symlink } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -189,6 +197,23 @@ describe('FileArtifactService', () => {
     expect((await readFile(f.service.resolveStoredPath(result.versionId))).toString()).toBe(
       'PK-content',
     );
+    f.store.close();
+  });
+  it('exports immutable bytes into editable copies, including a read-only save-panel placeholder', async () => {
+    const f = fixture();
+    const registered = await f.service.register(f.input);
+    const readOnlyTarget = path.join(f.root, 'read-only-export.pptx');
+    writeFileSync(readOnlyTarget, 'save-panel placeholder', { mode: 0o400 });
+
+    await f.service.exportVersionToPath(registered.versionId, readOnlyTarget);
+
+    expect(readFileSync(readOnlyTarget).toString()).toBe('PK-content');
+    expect(statSync(readOnlyTarget).mode & 0o777).toBe(0o600);
+
+    const newTarget = path.join(f.root, 'new-export.pptx');
+    await f.service.exportVersionToPath(registered.versionId, newTarget);
+    expect(readFileSync(newTarget).toString()).toBe('PK-content');
+    expect(statSync(newTarget).mode & 0o777).toBe(0o600);
     f.store.close();
   });
   it('resolves current and requested versions only for file artifacts that own them', async () => {
