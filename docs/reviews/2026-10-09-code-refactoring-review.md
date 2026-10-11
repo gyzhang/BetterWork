@@ -1233,4 +1233,6 @@ Preload 定向测试 1 文件 / 38 项通过；编译器正反例覆盖 15 个�
 
 2026-10-12 01:14 CST，从最新 `origin/main` `ed5f4987f94e7a058ffab56c8bb30d056c78c522` 在本地 checkout 建立 `codex/r09-run-event-contracts`。将 `RunEvent` 推送事件及其 `agentRuntimeEventSchema` 接入既有 Preload 事件契约映射和类型化订阅方法。
 
-保留推送事件的运行期 Zod 校验与退订行为，不修改共享协议、Main 广播或事件语义。Preload 定向测试 1 文件 / 42 项通过；编译器正反例覆盖事件类型与 channel 字面值关联，运行期回归覆盖有效事件转交、畸形事件拒绝及退订。全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 与差异空白检查通过。本卡实现验证已完成；PR Gate、合并和分支清理待收口。完整 `npm run verify`、UI、真实模型及安装态验收未运行。
+保留推送事件的运行期 Zod 校验与退订行为，不修改共享协议、Main 广播或事件语义。Preload 定向测试 1 文件 / 42 项通过；编译器正反例覆盖事件类型与 channel 字面值关联，运行期回归覆盖有效事件转交、畸形事件拒绝及退订。全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 与差异空白检查通过。本卡已收口；完整 `npm run verify`、UI、真实模型及安装态验收未运行。
+
+源提交 `c08ca2e85f55d7c072c069c558241ca5152116d3` 的 [PR Gate / Actions 38158919508](https://github.com/gyzhang/BetterWork/actions/runs/38158919508) 与 Quick code check 通过，Full verify 按规则跳过。[PR #177](https://github.com/gyzhang/BetterWork/pull/177) 已 squash 合入 main，合并提交 `e69deb24d89e58180a4663774266ca20c888e837`；任务分支本地与远端均已删除，本地 checkout 已同步 main，未创建 worktree。
