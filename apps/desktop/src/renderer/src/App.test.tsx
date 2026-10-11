@@ -477,17 +477,6 @@ describe('Skill test run in the task composer', () => {
   });
 });
 
-describe('App test Skill empty state', () => {
-  it('renders the empty Skills page from the test API', async () => {
-    const api = installApi();
-    render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: '技能' }));
-
-    expect(await screen.findByText('还没有 Skill')).toBeTruthy();
-    expect(api.skills.list).toHaveBeenCalled();
-  });
-});
-
 describe('Expert summon in the task composer', () => {
   it('summons an Expert into a blank task and pins its revision on first send', async () => {
     const api = installApi({ expert: true });

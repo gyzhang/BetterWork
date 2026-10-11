@@ -974,3 +974,9 @@ App heavy 52/52；夹具 functional 1/1。typecheck、两份测试文件的 ESLi
 2026-10-11 19:30 CST，从最新 `origin/main` `3cc9fa937a72daa6363a83655c2b8826d3a0d274` 建立 `codex/r13-app-artifact-save-view-tests`。App 整树测试移除与 Hook 重复的逐项保存 payload 对比，改为验证失败提示、重试确认与恰好两次请求；`use-run-artifact-save.test.ts` 保留精确 Task/Run/成果字段、失败后同目标重试断言。
 
 App heavy 52/52；useRunArtifactSave functional 7/7。typecheck、App 测试文件的 ESLint/Prettier 与 `git diff --check` 通过。未改变产品行为或 Hook 覆盖；R13 尚未整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 74. R13 子卡：空 Skill 页面测试移入视图测试
+
+2026-10-11 19:36 CST，从最新 `origin/main` `efc90d8ed8f8eacb796444a472709ba83747eb4a` 建立 `codex/r13-app-empty-skill-view-tests`。在 `SkillsView.test.tsx` 直接验证空列表 API 响应呈现 Skill 空状态且列表只读取一次；移除对应 App 整树测试。App 其余 Skill 运行/导航旅程和独立 fixture 默认值测试继续保留。
+
+App heavy 51/51；SkillsView functional 16/16。typecheck、两份测试文件的 ESLint/Prettier 与 `git diff --check` 通过。未改产品行为或已有端到端旅程；R13 尚未整体解决。未运行完整 `npm run verify`、UI 或真实模型。

@@ -93,6 +93,26 @@ afterEach(() => {
 });
 
 describe('SkillsPage', () => {
+  it('shows the empty state for an empty Skill list', async () => {
+    const dependencies = dependencyStub();
+    const list = vi.fn(async () => []);
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        dependencies,
+        skills: {
+          list,
+          refreshDependencyGrant: grantStub(),
+        },
+      },
+    });
+
+    render(<Harness />);
+
+    expect(await screen.findByText('还没有 Skill')).toBeTruthy();
+    expect(list).toHaveBeenCalledTimes(1);
+  });
+
   it('shows source, trust, enabled and environment independently', async () => {
     Object.defineProperty(window, 'betterwork', {
       configurable: true,
