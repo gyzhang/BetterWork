@@ -496,18 +496,9 @@ describe('Skill test run in the task composer', () => {
   });
 });
 
-describe('App test API defaults', () => {
-  it('does not provide a trusted and ready Skill unless the fixture opts in', async () => {
+describe('App test Skill empty state', () => {
+  it('renders the empty Skills page from the test API', async () => {
     const api = installApi();
-    expect(await api.skills.list()).toEqual([]);
-    await expect(api.skills.get({ id: skill.id })).resolves.toBeNull();
-    await expect(
-      api.skills.refreshDependencyGrant({ skillId: skill.id, lockId: 'lock-unconfigured' }),
-    ).rejects.toThrow('App 测试没有配置 Skill 依赖授权结果');
-    await expect(api.skills.testRun({ skillId: skill.id })).rejects.toThrow(
-      'App 测试没有配置 Skill 试运行结果',
-    );
-
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: '技能' }));
 

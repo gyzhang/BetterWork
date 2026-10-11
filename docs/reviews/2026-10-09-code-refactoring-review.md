@@ -962,3 +962,9 @@ App heavy 52/52；ExpertsView 与 useExperts functional 合计 17/17。typecheck
 2026-10-11 19:20 CST，从最新 `origin/main` `61c00fe43cfb3ec28fa1e185da5717d2aa80a166` 建立 `codex/r13-expert-memory-summary-view-tests`。新增直接渲染 `ExpertsPage` 的记忆摘要用例，验证当前专家与工作空间过滤、已删除记录排除、确认/待确认计数、摘要正文及管理回调。App 保留 API 数据接入摘要和进入记忆管理页的跨层覆盖，只移除重复的页面正文/过滤断言。
 
 App heavy 52/52；ExpertsView functional 15/15。typecheck、两份测试文件的 ESLint/Prettier 与 `git diff --check` 通过。未改产品代码或业务行为；R13 尚未整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 72. R13 子卡：App 测试 API 默认值移出整树用例
+
+2026-10-11 19:25 CST，从最新 `origin/main` `ce5cbebb6502dc56b2aeccaed6a2915650bafdf2` 建立 `codex/r13-app-fixture-defaults-test`。新增 `app-test-fixtures.test.ts` 验证 Skill 默认空列表、缺失详情和未配置授权/试运行的拒绝结果。App 整树用例保留空 Skill 页面及 API 列表接线断言，移走纯 fixture 默认值断言。
+
+App heavy 52/52；夹具 functional 1/1。typecheck、两份测试文件的 ESLint/Prettier 与 `git diff --check` 通过。未改变测试默认值或产品行为；R13 尚未整体解决。未运行完整 `npm run verify`、UI 或真实模型。
