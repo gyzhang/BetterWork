@@ -631,6 +631,12 @@ function createEvidenceApiFixture() {
   };
 }
 
+function createModelsApiFixture(options?: Pick<AppTestApiOptions, 'models'>) {
+  return {
+    list: vi.fn(async (): Promise<ModelProfileSummary[]> => options?.models ?? []),
+  };
+}
+
 function createAppTestApi(options?: AppTestApiOptions) {
   emitNotificationChange = undefined;
   emitScheduleChange = undefined;
@@ -639,9 +645,7 @@ function createAppTestApi(options?: AppTestApiOptions) {
   const api = {
     chrome: { updateTheme: vi.fn(async () => undefined) },
     workspace: createWorkspaceApiFixture(),
-    models: {
-      list: vi.fn(async (): Promise<ModelProfileSummary[]> => options?.models ?? []),
-    },
+    models: createModelsApiFixture(options),
     knowledge: createKnowledgeApiFixture(),
     artifacts: createArtifactApiFixture(),
     evidence: createEvidenceApiFixture(),
