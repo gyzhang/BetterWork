@@ -37,3 +37,11 @@ E10、E13–E15 已整理精确记忆依赖、历史来源、最终回答和材�
 建议下一项 E17 整理知识检索成功向量路径的完整块映射：扫描与确定性排名保留原边界，评估按命中身份补读完整块，保持修订范围、旧版本、租约、取消和回退。此建议尚未开工，需要下一次开发指令。
 
 用户告知仓库已开启 auto-merge，GitHub API 已核实 allow_auto_merge=true；PR 收口先核对实际状态，避免重复合并。
+
+## macOS 门禁与代码合并
+
+2026-10-11 11:43 CST，源 `0026e92f283e926035430158f180d34b01369571` 的 [Actions 38109068998](https://github.com/gyzhang/BetterWork/actions/runs/38109068998) / PR Gate 成功。日志确认实际 macos-26-arm64；静态、docs:check 1/154、changed functional 9/147、heavy 1/87 通过，Full verify 跳过。三次测试调用共 11 文件 / 388 项，不当作全仓或去重规模；本地 build、bench 和退化证据另记。
+
+[PR #74](https://github.com/gyzhang/BetterWork/pull/74) 设置门禁后自动 squash，现已合入 main `d7c922c4172b6f84a7ce7a8d8380ff16919e66b1`。文件树与送检源一致，main/origin/main 对齐、工作树干净；代码分支本地和远端均删除，原批次基点巡检退出 0。原 checkout 新建纯 Markdown 分支 codex/e16-closeout 归档本节、总报告及日志，归档 PR 自身仍需最新源文档门禁。
+
+E16 代码与自动化收口；E17 与独立人工验收保留既有边界，另按用户指令推进。
