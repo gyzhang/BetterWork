@@ -12,6 +12,7 @@ import {
   checkKnowledgeSourcesRequestSchema,
   chooseInterpreterResultSchema,
   clearedResultSchema,
+  clearNotificationsRequestSchema,
   connectionTestResultSchema,
   copyExpertRequestSchema,
   copySkillRequestSchema,
@@ -96,6 +97,8 @@ import {
   listTaskMaterialCandidatesRequestSchema,
   listTasksRequestSchema,
   listWorkspaceReferenceVersionsRequestSchema,
+  markAllNotificationsReadRequestSchema,
+  markNotificationReadRequestSchema,
   materialCandidateSchema,
   mcpConnectionSummarySchema,
   mcpLifecycleRequestSchema,
@@ -208,6 +211,7 @@ import {
   testSearchEngineRequestSchema,
   testSkillRunRequestSchema,
   testSkillRunResultSchema,
+  unreadCountResultSchema,
   updatedResultSchema,
   updateMemoryRequestSchema,
   updateWorkspaceIdentityRequestSchema,
@@ -453,7 +457,8 @@ const api: BetterWorkDesktopApi = {
       ),
   },
   notifications: {
-    list: () => ipcRenderer.invoke(IpcChannel.ListNotifications),
+    list: () =>
+      invokeValidated(IpcChannel.ListNotifications, {}, notificationSummarySchema.array()),
     get: (input) =>
       invokeValidated(
         IpcChannel.GetNotification,
@@ -466,15 +471,30 @@ const api: BetterWorkDesktopApi = {
         notificationRendererReadyRequestSchema.parse({}),
         notificationRendererReadyResultSchema,
       ),
-    markRead: (input) => ipcRenderer.invoke(IpcChannel.MarkNotificationRead, input),
-    markAllRead: () => ipcRenderer.invoke(IpcChannel.MarkAllNotificationsRead, {}),
+    markRead: (input) =>
+      invokeValidated(
+        IpcChannel.MarkNotificationRead,
+        markNotificationReadRequestSchema.parse(input),
+        unreadCountResultSchema,
+      ),
+    markAllRead: () =>
+      invokeValidated(
+        IpcChannel.MarkAllNotificationsRead,
+        markAllNotificationsReadRequestSchema.parse({}),
+        unreadCountResultSchema,
+      ),
     delete: (input) =>
       invokeValidated(
         IpcChannel.DeleteNotification,
         deleteNotificationRequestSchema.parse(input),
         deletedResultSchema,
       ),
-    clear: () => ipcRenderer.invoke(IpcChannel.ClearNotifications, {}),
+    clear: () =>
+      invokeValidated(
+        IpcChannel.ClearNotifications,
+        clearNotificationsRequestSchema.parse({}),
+        clearedResultSchema,
+      ),
     onChange(listener) {
       const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
         listener(notificationChangeEventSchema.parse(raw));
