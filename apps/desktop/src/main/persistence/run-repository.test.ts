@@ -37,6 +37,164 @@ afterEach(() => {
 });
 
 describe('RunRepository history and source read models', () => {
+  it('batches all requested nonempty answers in first-request order with the original decode window', () => {
+    const store = openStore();
+    const task = seedTask(store);
+    const ids = Array.from({ length: 1_103 }, (_, index) => `batch-${index}`);
+    store.transaction(() => {
+      for (const [index, id] of ids.entries()) {
+        store.runs.create({
+          id,
+          taskId: task.task.id,
+          sessionId: task.sessionId,
+          prompt: id,
+          status: 'completed',
+          createdAt: index,
+          completedAt: index,
+        });
+        if (index === 4) continue;
+        store.runs.appendEvent(message(id, 1, index === 3 ? '' : 'older'));
+        if (index !== 3)
+          store.runs.appendEvent(
+            message(id, 3, ['\u0000', ' ', '中文😀'][index] ?? `answer ${index}`),
+          );
+        store.runs.appendEvent(message(id, 8, ''));
+      }
+    });
+    const requested = [...ids].reverse().concat('missing', ids[0]!);
+    const expected = [...new Set(requested)].flatMap((id) => {
+      const event = store.runs.getLatestNonEmptyMessageCompletion(id);
+      return event === undefined ? [] : [event];
+    });
+    const db = (store as unknown as { db: Database.Database }).db;
+    const prepare = vi.spyOn(db, 'prepare');
+    const parse = vi.spyOn(agentRuntimeEventSchema, 'parse');
+    const pointRead = vi.spyOn(store.runs, 'getLatestNonEmptyMessageCompletion');
+    expect(store.runs.listLatestNonEmptyMessageCompletions([])).toEqual([]);
+    expect(prepare).not.toHaveBeenCalled();
+    expect(store.runs.listLatestNonEmptyMessageCompletions(requested)).toEqual(expected);
+    expect(expected).toHaveLength(1_101);
+    expect(parse).toHaveBeenCalledTimes(2_204);
+    expect(pointRead).not.toHaveBeenCalled();
+    expect(prepare).toHaveBeenCalledOnce();
+    const sql = prepare.mock.calls[0]![0];
+    expect(sql).toContain('json_each(?)');
+    expect(sql.match(/\?/gu)).toHaveLength(1);
+    expect(sql).not.toMatch(/ORDER BY ordinal[^]*LIMIT/u);
+    store.runs.appendEvent(message(ids[0]!, 10, 'updated'));
+    expect(store.runs.listLatestNonEmptyMessageCompletions([ids[0]!])).toEqual([
+      message(ids[0]!, 10, 'updated'),
+    ]);
+  });
+
+  it.each([false, true])('keeps a long empty tail complete (all empty: %s)', (allEmpty) => {
+    const store = openStore();
+    const task = seedTask(store);
+    store.runs.create({
+      id: 'deep',
+      taskId: task.task.id,
+      sessionId: task.sessionId,
+      prompt: 'deep',
+      status: 'completed',
+      createdAt: 0,
+    });
+    store.transaction(() => {
+      store.runs.appendEvent(message('deep', 1, allEmpty ? '' : 'answer'));
+      for (let sequence = 2; sequence <= 1_308; sequence += 1)
+        store.runs.appendEvent(message('deep', sequence, ''));
+    });
+    const expected = store.runs.getLatestNonEmptyMessageCompletion('deep');
+    const parse = vi.spyOn(agentRuntimeEventSchema, 'parse');
+    expect(store.runs.listLatestNonEmptyMessageCompletions(['deep'])).toEqual(
+      expected === undefined ? [] : [expected],
+    );
+    expect(parse).toHaveBeenCalledTimes(1_308);
+  });
+
+  it('never consumes old messages or unrelated event payloads after finding the answer', () => {
+    const store = openStore();
+    const task = seedTask(store);
+    for (const id of ['window', 'outside'])
+      store.runs.create({
+        id,
+        taskId: task.task.id,
+        sessionId: task.sessionId,
+        prompt: id,
+        status: 'completed',
+        createdAt: 0,
+      });
+    const older = message('window', 1, 'older');
+    const answer = message('window', 3, 'answer');
+    const empty = message('window', 7, '');
+    for (const event of [older, answer, empty, message('outside', 1, 'outside')])
+      store.runs.appendEvent(event);
+    store.runs.appendEvent({
+      id: 'irrelevant',
+      runId: 'window',
+      sequence: 9,
+      createdAt: 9,
+      type: 'reasoning.delta',
+      delta: 'private',
+    });
+    const db = (store as unknown as { db: Database.Database }).db;
+    for (const id of [older.id, 'outside-e1', 'irrelevant'])
+      db.prepare('UPDATE run_events SET payload = ? WHERE id = ?').run('{', id);
+    expect(store.runs.getLatestNonEmptyMessageCompletion('window')).toEqual(answer);
+    const parse = vi.spyOn(agentRuntimeEventSchema, 'parse');
+    expect(store.runs.listLatestNonEmptyMessageCompletions(['window'])).toEqual([answer]);
+    expect(parse.mock.calls.map(([value]) => value)).toEqual([empty, answer]);
+  });
+
+  it.each(['id', 'runId', 'sequence', 'type', 'syntax', 'schema', 'number', 'null', 'messageId'])(
+    'rejects consumed answer and empty-tail %s corruption like the original reader',
+    (kind) => {
+      const store = openStore();
+      const task = seedTask(store);
+      store.runs.create({
+        id: 'corrupt',
+        taskId: task.task.id,
+        sessionId: task.sessionId,
+        prompt: 'corrupt',
+        status: 'completed',
+        createdAt: 0,
+      });
+      const answer = message('corrupt', 3, 'answer');
+      const empty = message('corrupt', 7, '');
+      store.runs.appendEvent(answer);
+      store.runs.appendEvent(empty);
+      const db = (store as unknown as { db: Database.Database }).db;
+      for (const target of [answer, empty]) {
+        const patch =
+          kind === 'type'
+            ? { type: 'message.delta', delta: '' }
+            : kind === 'sequence'
+              ? { sequence: 99 }
+              : kind === 'number' || kind === 'null'
+                ? { content: kind === 'number' ? 0 : null }
+                : kind === 'messageId'
+                  ? { messageId: undefined }
+                  : { [kind]: 'forged' };
+        const payload =
+          kind === 'syntax'
+            ? '{'
+            : kind === 'schema'
+              ? '{}'
+              : JSON.stringify({ ...target, ...patch });
+        db.prepare('UPDATE run_events SET payload = ? WHERE id = ?').run(payload, target.id);
+        expect(() => store.runs.getLatestNonEmptyMessageCompletion('corrupt')).toThrow();
+        expect(() => store.runs.listLatestNonEmptyMessageCompletions(['corrupt'])).toThrow();
+        db.prepare('UPDATE run_events SET payload = ? WHERE id = ?').run(
+          JSON.stringify(target),
+          target.id,
+        );
+      }
+      store.runs.appendEvent(message('corrupt', 10, 'recovered'));
+      expect(store.runs.listLatestNonEmptyMessageCompletions(['corrupt'])).toEqual([
+        message('corrupt', 10, 'recovered'),
+      ]);
+    },
+  );
+
   it('filters all replay candidates before events with the existing time and tie order', () => {
     const store = openStore();
     const task = seedTask(store);

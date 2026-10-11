@@ -978,6 +978,9 @@ const collectPriorRunFacts = (store: AppStore, input: RunReplayInput): PriorRunF
     completedAtOrBefore: input.evaluatedAt,
   });
   const runIds = candidates.map((run) => run.id);
+  const answers = new Map(
+    store.runs.listLatestNonEmptyMessageCompletions(runIds).map((event) => [event.runId, event]),
+  );
   const contexts = new Map(
     store.runMemoryContexts.listByRunIds(runIds).map((context) => [context.runId, context]),
   );
@@ -991,7 +994,7 @@ const collectPriorRunFacts = (store: AppStore, input: RunReplayInput): PriorRunF
     readsByRun.set(read.runId, reads);
   }
   for (const run of candidates) {
-    const event = store.runs.getLatestNonEmptyMessageCompletion(run.id);
+    const event = answers.get(run.id);
     const answer: FinalAnswer | undefined =
       event === undefined ? undefined : { eventId: event.id, content: event.content };
     const context = contexts.get(run.id);
