@@ -1554,30 +1554,6 @@ describe('Expert configuration', () => {
     ).toBeTruthy();
   });
 
-  it('卡片上的「停用」直接改生命周期，不需要先进配置页', async () => {
-    const api = installApi({ expert: true });
-    render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
-    fireEvent.click(await screen.findByRole('button', { name: '停用' }));
-    await waitFor(() => expect(api.experts.setLifecycle).toHaveBeenCalledTimes(1));
-    expect(api.experts.setLifecycle).toHaveBeenCalledWith({
-      expertId: expertSummary.id,
-      lifecycle: 'disabled',
-      expectedRevision: 1,
-    });
-  });
-
-  it('删除要先确认，确认之后才真的删', async () => {
-    const api = installApi({ expert: true });
-    render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
-    fireEvent.click(await screen.findByRole('button', { name: '删除' }));
-    expect(api.experts.delete).not.toHaveBeenCalled();
-    fireEvent.click(await screen.findByRole('button', { name: '删除专家' }));
-    await waitFor(() => expect(api.experts.delete).toHaveBeenCalledTimes(1));
-    expect(api.experts.delete).toHaveBeenCalledWith({ expertId: expertSummary.id });
-  });
-
   it('内置专家卡片通过专家 API 复制', async () => {
     const api = installApi({ expert: true });
     api.experts.list.mockResolvedValue([{ ...expertSummary, sourceKind: 'builtin' }]);

@@ -415,6 +415,39 @@ describe('ExpertsPage 的整页配置交互', () => {
     await waitFor(() => expect(actions.refresh).toHaveBeenCalledTimes(1));
   });
 
+  it('卡片停用直接提交当前修订并刷新目录', async () => {
+    const setLifecycle = vi.fn<ExpertsState['setLifecycle']>(async () => ({ expert: detailOf() }));
+    const { actions, container, state } = renderExpertsPage({ actions: { setLifecycle } });
+    const card = container.querySelector('.expert-cards .card');
+    expect(card).not.toBeNull();
+
+    fireEvent.click(within(card as HTMLElement).getByRole('button', { name: '停用' }));
+
+    await waitFor(() =>
+      expect(actions.setLifecycle).toHaveBeenCalledWith({
+        expertId: userExpert.id,
+        lifecycle: 'disabled',
+        expectedRevision: userExpert.currentRevision,
+      }),
+    );
+    await waitFor(() => expect(state.refresh).toHaveBeenCalledTimes(1));
+  });
+
+  it('删除卡片先要求确认，确认后才删除并刷新目录', async () => {
+    const remove = vi.fn<ExpertsState['remove']>(async () => ({ deleted: true }));
+    const { actions, container, state } = renderExpertsPage({ actions: { remove } });
+    const card = container.querySelector('.expert-cards .card');
+    expect(card).not.toBeNull();
+
+    fireEvent.click(within(card as HTMLElement).getByRole('button', { name: '删除' }));
+    expect(actions.remove).not.toHaveBeenCalled();
+
+    fireEvent.click(await screen.findByRole('button', { name: '删除专家' }));
+
+    await waitFor(() => expect(actions.remove).toHaveBeenCalledWith(userExpert.id));
+    await waitFor(() => expect(state.refresh).toHaveBeenCalledTimes(1));
+  });
+
   it('卡片编辑先读取当前修订，再显示作者与用途标签字段', async () => {
     const detail = detailOf();
     const get = vi.fn(async () => detail);
