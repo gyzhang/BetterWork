@@ -746,3 +746,11 @@ functional 定向 3 文件 / 69 项、heavy 定向 1 文件 / 37 项、typecheck
 现行架构、交接 §3 与 Qoder 速查镜像的补充提交 `5423e91b6fb3f68f5bc0344aefcaf29b380c21e0` 的 [Actions 38116890863](https://github.com/gyzhang/BetterWork/actions/runs/38116890863) 中 Documentation check 与 PR Gate 成功，Full verify 和 Quick code check 按纯文档分类跳过；[PR #84](https://github.com/gyzhang/BetterWork/pull/84) 已 squash 合并为 main `977efdba96efcf0f74f418e468da23c9e5ac5571`。
 
 批次末 `npm run drift:check -- --batch-base=c8ef5483ddee8d8cc461445a083702c64086e2ef` 退出 1：当前脚本只从 `standards/coding-standard.test.ts` 聚合器读取护栏和例外，而 R15 已将它们移入聚合器导入的主题模块；因此旧基线把迁移位置识别成整组删除。R15 的 AST 对照已确认 33 个 describe 组和 154 个用例标题保持，未写入会把当前例外登记降为 0 的错误基线；drift-check 对模块化后的扫描支持需另行修复。
+
+## 39. R15 后续：drift-check 读取模块化护栏（代码与自动化通过，PR 收口中）
+
+2026-10-11：基于 §38 记录的未解决巡检问题，在保留的任务 worktree 从最新 `origin/main` `d02458d91b884c009d1bae45960eb8c75bacb163` 建立 `codex/r15-drift-check-modules`。
+
+`drift:check` 现在从唯一聚合入口解析其实际导入的 `standards/coding-standard/` 模块：护栏数、例外理由、文档引用和测试规模均随模块读取，目录内未导入的文件不计入。规则 AST 指纹继续使用原聚合器命名空间，现有 48 个基线项保持逐项相同，没有改写或降级基线。
+
+本地 `scripts/drift-check.test.ts` heavy 12/12、`docs:check` 154/154、typecheck、定向 ESLint/Prettier 通过。`npm run drift:check` 退出 0：154 条护栏、203 条例外、14 次文档点名覆盖 10 条，规则指纹无变化；测试规模读数恢复包含八个主题模块。批次基点巡检、提交、推送及 PR Gate 待收口；未运行完整 verify。

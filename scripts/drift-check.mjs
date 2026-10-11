@@ -72,6 +72,32 @@ function read(relativePath) {
 
 const exists = (relativePath) => existsSync(path.join(repositoryRoot, relativePath));
 
+/** 结构护栏的唯一入口只导入并执行这些主题模块；不扫描目录里的孤立测试文件。 */
+function codingStandardSources() {
+  const entry = 'standards/coding-standard.test.ts';
+  const pending = [entry];
+  const visited = new Set();
+  for (const file of pending) {
+    if (visited.has(file)) continue;
+    visited.add(file);
+    const text = read(file);
+    const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+    for (const statement of source.statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier))
+        continue;
+      const specifier = statement.moduleSpecifier.text;
+      if (!specifier.startsWith('.')) continue;
+      const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier));
+      const importedFile = path.posix.extname(resolved) === '' ? `${resolved}.ts` : resolved;
+      if (!importedFile.startsWith('standards/coding-standard/')) continue;
+      if (!exists(importedFile))
+        throw new Error(`Imported coding-standard module does not exist: ${importedFile}`);
+      pending.push(importedFile);
+    }
+  }
+  return [...visited].map((file) => ({ file, text: read(file) }));
+}
+
 const localDay = (date) =>
   [
     date.getFullYear(),
@@ -241,28 +267,38 @@ function checkUnpushed(ageLimitDays) {
 /** ③ 规模与例外的读数：跨快照比较，例外增长必须被重新确认。 */
 function collectReadings() {
   const files = walk(repositoryRoot, []);
+  const guardrailSources = codingStandardSources();
   const tsFiles = files.filter((file) => /\.tsx?$/.test(file));
   const testFiles = tsFiles.filter((file) => /\.test\.tsx?$/.test(file));
   const sourceFiles = tsFiles.filter(
     (file) => !/\.test\.tsx?$/.test(file) && !file.startsWith('standards/'),
   );
+  const caseCount = (text) => (text.match(/\bit\(/gu) ?? []).length;
   const cases = testFiles.reduce(
     (total, file) => total + (read(file).match(/\bit\(/gu) ?? []).length,
     0,
   );
-  const guardrails = (read('standards/coding-standard.test.ts').match(/^ {2}it\(/gmu) ?? []).length;
-  const exceptions = ['standards/coding-standard.test.ts', 'eslint.config.mjs'].reduce(
-    (total, file) => total + (read(file).match(/reason:/gu) ?? []).length,
+  const importedTestFiles = guardrailSources.filter(
+    ({ file, text }) => !testFiles.includes(file) && caseCount(text) > 0,
+  );
+  const totalCases =
+    cases + importedTestFiles.reduce((total, { text }) => total + caseCount(text), 0);
+  const guardrails = guardrailSources.reduce(
+    (total, { text }) => total + (text.match(/^ {2}it\(/gmu) ?? []).length,
     0,
   );
+  const exceptions = [
+    ...guardrailSources.map(({ text }) => text),
+    read('eslint.config.mjs'),
+  ].reduce((total, text) => total + (text.match(/reason:/gu) ?? []).length, 0);
   const eslintBlocks = (read('eslint.config.mjs').match(/^\s*files:/gmu) ?? []).length;
   const ruleFiles = files.filter(
     (file) => file.startsWith('.qoder/rules/') && file.endsWith('.md'),
   ).length;
   const sourceLines = sourceFiles.reduce((total, file) => total + read(file).split('\n').length, 0);
   return {
-    测试文件: testFiles.length,
-    用例: cases,
+    测试文件: testFiles.length + importedTestFiles.length,
+    用例: totalCases,
     结构护栏: guardrails,
     例外登记: exceptions,
     eslint配置块: eslintBlocks,
@@ -275,16 +311,18 @@ function collectReadings() {
 function collectReferenceReadings() {
   const titles = new Map();
   const canonicalTitles = new Set();
-  let describe = '';
-  for (const line of read('standards/coding-standard.test.ts').split('\n')) {
-    const describeMatch = /^describe\(\s*'([^']+)'/u.exec(line);
-    if (describeMatch?.[1]) describe = describeMatch[1];
-    const itMatch = /^ {2}it\(\s*'([^']+)'/u.exec(line);
-    if (!itMatch?.[1]) continue;
-    const canonical = `${describe} › ${itMatch[1]}`;
-    canonicalTitles.add(canonical);
-    titles.set(itMatch[1], canonical);
-    titles.set(canonical, canonical);
+  for (const { text } of codingStandardSources()) {
+    let describe = '';
+    for (const line of text.split('\n')) {
+      const describeMatch = /^describe\(\s*'([^']+)'/u.exec(line);
+      if (describeMatch?.[1]) describe = describeMatch[1];
+      const itMatch = /^ {2}it\(\s*'([^']+)'/u.exec(line);
+      if (!itMatch?.[1]) continue;
+      const canonical = `${describe} › ${itMatch[1]}`;
+      canonicalTitles.add(canonical);
+      titles.set(itMatch[1], canonical);
+      titles.set(canonical, canonical);
+    }
   }
   const livingDocs = walk(repositoryRoot, []).filter(
     (file) =>
@@ -360,38 +398,41 @@ function fingerprint(text, expression = false) {
 
 function collectRuleSnapshot() {
   const entries = { 'eslint.config.mjs': fingerprint(read('eslint.config.mjs')) };
-  const file = 'standards/coding-standard.test.ts';
-  const source = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true);
-  const containsReason = (node) => {
-    let found = false;
-    const visit = (child) => {
-      if (ts.isPropertyAssignment(child) && child.name.getText(source) === 'reason') found = true;
-      ts.forEachChild(child, visit);
+  const stableOwner = 'standards/coding-standard.test.ts';
+  for (const { file, text } of codingStandardSources()) {
+    const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+    const containsReason = (node) => {
+      let found = false;
+      const visit = (child) => {
+        if (ts.isPropertyAssignment(child) && child.name.getText(source) === 'reason') found = true;
+        ts.forEachChild(child, visit);
+      };
+      visit(node);
+      return found;
     };
-    visit(node);
-    return found;
-  };
-  const visit = (node, scopes) => {
-    const next =
-      ts.isCallExpression(node) &&
-      ['describe', 'it'].includes(node.expression.getText(source)) &&
-      node.arguments[0] &&
-      ts.isStringLiteral(node.arguments[0])
-        ? [...scopes, node.arguments[0].text]
-        : scopes;
-    if (
-      ts.isVariableDeclaration(node) &&
-      node.initializer &&
-      (containsReason(node.initializer) ||
-        /exception|exempt|allowlist|whitelist|outlet|owners/iu.test(node.name.getText(source)))
-    ) {
-      const key = [file, ...scopes, node.name.getText(source)].join(' › ');
-      if (key in entries) throw new Error(`规则快照键重名：${key}`);
-      entries[key] = fingerprint(node.initializer.getText(source), true);
-    }
-    ts.forEachChild(node, (child) => visit(child, next));
-  };
-  visit(source, []);
+    const visit = (node, scopes) => {
+      const next =
+        ts.isCallExpression(node) &&
+        ['describe', 'it'].includes(node.expression.getText(source)) &&
+        node.arguments[0] &&
+        ts.isStringLiteral(node.arguments[0])
+          ? [...scopes, node.arguments[0].text]
+          : scopes;
+      if (
+        ts.isVariableDeclaration(node) &&
+        node.initializer &&
+        (containsReason(node.initializer) ||
+          /exception|exempt|allowlist|whitelist|outlet|owners/iu.test(node.name.getText(source)))
+      ) {
+        // Keep the pre-modularization key namespace so R15's file move does not invalidate reviewed fingerprints.
+        const key = [stableOwner, ...scopes, node.name.getText(source)].join(' › ');
+        if (key in entries) throw new Error(`规则快照键重名：${key}`);
+        entries[key] = fingerprint(node.initializer.getText(source), true);
+      }
+      ts.forEachChild(node, (child) => visit(child, next));
+    };
+    visit(source, []);
+  }
   return { version: 1, entries };
 }
 
