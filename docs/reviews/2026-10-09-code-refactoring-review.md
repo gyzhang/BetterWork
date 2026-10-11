@@ -1138,3 +1138,13 @@ Preload 定向测试 1 文件 / 27 项、`docs:check` 154/154 通过，覆盖请
 映射类型约束每个 channel 键、channel 字面值和对应 Schema；方法输入与返回值从该项推导。保留目录取消返回 `null`、未传 Task 列表筛选时发送 `undefined`、无参查询发送空对象，以及 memory/reference 结果的既有 `ok/data/error` 结构。此卡只覆盖 Workspace 与基础 Task API；Task Continuity、Task Context、Discussion Checkpoint、材料操作、其余域及 Main/Preload 共享映射仍待后续切片。
 
 编译器正反例确认正确请求/响应与 channel 字面值可通过，错误 payload、响应类型和 channel 配对被拒绝；Preload 定向测试 1 文件 / 33 项，覆盖 14 个映射通道、Memory/reference 的成功与失败 envelope、非法请求和畸形响应。全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 和差异空白检查通过。完整 `npm run verify`、UI、真实模型及安装态验收未运行。
+
+源提交 `6e3ee9f84e1b7d050f75e0ed9ff63d981cdf5c74` 的 [PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/38151100688) 与 Quick code check 通过，Full verify 按规则跳过。[PR #163](https://github.com/gyzhang/BetterWork/pull/163) 已 squash 合入 main，合并提交 `86de33d5857312048b18add901c94adaf2c73594`；本地与远端任务分支已删除，本地 checkout 已同步 main。
+
+## 94. R09 子卡：Evidence 与 Artifact Preload 通道映射
+
+2026-10-11 23:28 CST，从最新 `origin/main` `86de33d5857312048b18add901c94adaf2c73594` 在本地 checkout 建立 `codex/r09-evidence-artifact-channel-contracts`。将 Evidence 列表与 Artifact 查询、保存、导出、文件操作和缩略图共 14 个 invoke channel 映射到对应的请求/响应 Schema 及 Preload 方法。
+
+编译期约束 channel 键与字面值相同，并由 Schema 推导方法输入与返回类型。保留省略 Artifact 列表筛选时传 `undefined`、Artifact/Evidence 结果的可选字段归一、空/取消/错误结果形状；Main、共享协议及领域行为不变。原有 `getThumbnails` 与 `revealFile` 也纳入请求、响应校验和通道映射。
+
+编译器正反例覆盖请求、响应类型及 channel 字面值；Preload 定向测试 1 文件 / 33 项，覆盖 14 个映射通道及运行期请求/响应校验。全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 和差异空白检查通过。完整 `npm run verify`、UI、真实模型及安装态验收未运行。R09 其他 API 域与 Main/Preload 全局映射仍待后续切片。

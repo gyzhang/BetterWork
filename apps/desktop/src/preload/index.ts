@@ -622,6 +622,112 @@ const searchEngineListResponseSchema = searchEngineSummarySchema.array().transfo
   })),
 );
 
+const artifactEvidenceListRequestSchema = listArtifactsRequestSchema.optional();
+const artifactEvidenceInvokeContracts = defineInvokeContracts({
+  [IpcChannel.ListEvidence]: {
+    channel: IpcChannel.ListEvidence,
+    request: listEvidenceRequestSchema,
+    response: evidenceListResponseSchema,
+  },
+  [IpcChannel.ListArtifacts]: {
+    channel: IpcChannel.ListArtifacts,
+    request: artifactEvidenceListRequestSchema,
+    response: artifactSummaryListResponseSchema,
+  },
+  [IpcChannel.GetArtifact]: {
+    channel: IpcChannel.GetArtifact,
+    request: getArtifactRequestSchema,
+    response: artifactDetailResponseSchema,
+  },
+  [IpcChannel.ListArtifactVersions]: {
+    channel: IpcChannel.ListArtifactVersions,
+    request: listArtifactVersionsRequestSchema,
+    response: artifactVersionSummaryListResponseSchema,
+  },
+  [IpcChannel.GetArtifactVersionExecutor]: {
+    channel: IpcChannel.GetArtifactVersionExecutor,
+    request: getArtifactVersionExecutorRequestSchema,
+    response: artifactVersionExecutorSummarySchema.nullable(),
+  },
+  [IpcChannel.GetArtifactVersion]: {
+    channel: IpcChannel.GetArtifactVersion,
+    request: getArtifactVersionRequestSchema,
+    response: artifactVersionDetailResponseSchema,
+  },
+  [IpcChannel.SaveMarkdownArtifact]: {
+    channel: IpcChannel.SaveMarkdownArtifact,
+    request: saveMarkdownArtifactRequestSchema,
+    response: artifactSummaryResponseSchema,
+  },
+  [IpcChannel.ExportMarkdownArtifact]: {
+    channel: IpcChannel.ExportMarkdownArtifact,
+    request: exportMarkdownArtifactRequestSchema,
+    response: exportMarkdownArtifactResponseSchema,
+  },
+  [IpcChannel.RegisterFileArtifact]: {
+    channel: IpcChannel.RegisterFileArtifact,
+    request: registerFileArtifactRequestSchema,
+    response: registerFileArtifactResultSchema,
+  },
+  [IpcChannel.GetFileArtifact]: {
+    channel: IpcChannel.GetFileArtifact,
+    request: getFileArtifactRequestSchema,
+    response: fileArtifactDetailResponseSchema,
+  },
+  [IpcChannel.ExportFileArtifact]: {
+    channel: IpcChannel.ExportFileArtifact,
+    request: exportFileArtifactRequestSchema,
+    response: exportFileArtifactResponseSchema,
+  },
+  [IpcChannel.OpenFileArtifact]: {
+    channel: IpcChannel.OpenFileArtifact,
+    request: openFileArtifactRequestSchema,
+    response: openFileArtifactResponseSchema,
+  },
+  [IpcChannel.RevealFileArtifact]: {
+    channel: IpcChannel.RevealFileArtifact,
+    request: openFileArtifactRequestSchema,
+    response: revealFileArtifactResultSchema,
+  },
+  [IpcChannel.GetArtifactThumbnails]: {
+    channel: IpcChannel.GetArtifactThumbnails,
+    request: getArtifactThumbnailsRequestSchema,
+    response: getArtifactThumbnailsResultSchema,
+  },
+});
+const artifactEvidenceInvokeMethods: InvokeMethodsByChannel<
+  typeof artifactEvidenceInvokeContracts
+> = {
+  [IpcChannel.ListEvidence]: (input) =>
+    invokeContract(artifactEvidenceInvokeContracts[IpcChannel.ListEvidence], input),
+  [IpcChannel.ListArtifacts]: (input) =>
+    invokeContract(artifactEvidenceInvokeContracts[IpcChannel.ListArtifacts], input),
+  [IpcChannel.GetArtifact]: (input) =>
+    invokeContract(artifactEvidenceInvokeContracts[IpcChannel.GetArtifact], input),
+  [IpcChannel.ListArtifactVersions]: (input) =>
+    invokeContract(artifactEvidenceInvokeContracts[IpcChannel.ListArtifactVersions], input),
+  [IpcChannel.GetArtifactVersionExecutor]: (input) =>
+    invokeContract(artifactEvidenceInvokeContracts[IpcChannel.GetArtifactVersionExecutor], input),
+  [IpcChannel.GetArtifactVersion]: (input) =>
+    invokeContract(artifactEvidenceInvokeContracts[IpcChannel.GetArtifactVersion], input),
+  [IpcChannel.SaveMarkdownArtifact]: (input) =>
+    invokeContract(artifactEvidenceInvokeContracts[IpcChannel.SaveMarkdownArtifact], input),
+  [IpcChannel.ExportMarkdownArtifact]: (input) =>
+    invokeContract(artifactEvidenceInvokeContracts[IpcChannel.ExportMarkdownArtifact], input),
+  [IpcChannel.RegisterFileArtifact]: (input) =>
+    invokeContract(artifactEvidenceInvokeContracts[IpcChannel.RegisterFileArtifact], input),
+  [IpcChannel.GetFileArtifact]: (input) =>
+    invokeContract(artifactEvidenceInvokeContracts[IpcChannel.GetFileArtifact], input),
+  [IpcChannel.ExportFileArtifact]: (input) =>
+    invokeContract(artifactEvidenceInvokeContracts[IpcChannel.ExportFileArtifact], input),
+  [IpcChannel.OpenFileArtifact]: (input) =>
+    invokeContract(artifactEvidenceInvokeContracts[IpcChannel.OpenFileArtifact], input),
+  [IpcChannel.RevealFileArtifact]: (input) =>
+    invokeContract(artifactEvidenceInvokeContracts[IpcChannel.RevealFileArtifact], input),
+  [IpcChannel.GetArtifactThumbnails]: (input) =>
+    invokeContract(artifactEvidenceInvokeContracts[IpcChannel.GetArtifactThumbnails], input),
+};
+
 const api: BetterWorkDesktopApi = {
   runs: {
     start: (input) => runInvokeMethods[IpcChannel.StartRun](input),
@@ -663,92 +769,25 @@ const api: BetterWorkDesktopApi = {
     get: (input) => workspaceTaskInvokeMethods[IpcChannel.GetTask](input),
   },
   evidence: {
-    list: (input) =>
-      invokeValidated(
-        IpcChannel.ListEvidence,
-        listEvidenceRequestSchema.parse(input),
-        evidenceListResponseSchema,
-      ),
+    list: (input) => artifactEvidenceInvokeMethods[IpcChannel.ListEvidence](input),
   },
   artifacts: {
-    list: (input) =>
-      invokeValidated(
-        IpcChannel.ListArtifacts,
-        input === undefined ? undefined : listArtifactsRequestSchema.parse(input),
-        artifactSummaryListResponseSchema,
-      ),
-    get: (input) =>
-      invokeValidated(
-        IpcChannel.GetArtifact,
-        getArtifactRequestSchema.parse(input),
-        artifactDetailResponseSchema,
-      ),
-    listVersions: (input) =>
-      invokeValidated(
-        IpcChannel.ListArtifactVersions,
-        listArtifactVersionsRequestSchema.parse(input),
-        artifactVersionSummaryListResponseSchema,
-      ),
+    list: (input) => artifactEvidenceInvokeMethods[IpcChannel.ListArtifacts](input),
+    get: (input) => artifactEvidenceInvokeMethods[IpcChannel.GetArtifact](input),
+    listVersions: (input) => artifactEvidenceInvokeMethods[IpcChannel.ListArtifactVersions](input),
     getVersionExecutor: (input) =>
-      invokeValidated(
-        IpcChannel.GetArtifactVersionExecutor,
-        getArtifactVersionExecutorRequestSchema.parse(input),
-        artifactVersionExecutorSummarySchema.nullable(),
-      ),
-    getVersion: (input) =>
-      invokeValidated(
-        IpcChannel.GetArtifactVersion,
-        getArtifactVersionRequestSchema.parse(input),
-        artifactVersionDetailResponseSchema,
-      ),
-    saveMarkdown: (input) =>
-      invokeValidated(
-        IpcChannel.SaveMarkdownArtifact,
-        saveMarkdownArtifactRequestSchema.parse(input),
-        artifactSummaryResponseSchema,
-      ),
+      artifactEvidenceInvokeMethods[IpcChannel.GetArtifactVersionExecutor](input),
+    getVersion: (input) => artifactEvidenceInvokeMethods[IpcChannel.GetArtifactVersion](input),
+    saveMarkdown: (input) => artifactEvidenceInvokeMethods[IpcChannel.SaveMarkdownArtifact](input),
     exportMarkdown: (input) =>
-      invokeValidated(
-        IpcChannel.ExportMarkdownArtifact,
-        exportMarkdownArtifactRequestSchema.parse(input),
-        exportMarkdownArtifactResponseSchema,
-      ),
-    registerFile: (input) =>
-      invokeValidated(
-        IpcChannel.RegisterFileArtifact,
-        registerFileArtifactRequestSchema.parse(input),
-        registerFileArtifactResultSchema,
-      ),
-    getFileDetail: (input) =>
-      invokeValidated(
-        IpcChannel.GetFileArtifact,
-        getFileArtifactRequestSchema.parse(input),
-        fileArtifactDetailResponseSchema,
-      ),
-    exportFile: (input) =>
-      invokeValidated(
-        IpcChannel.ExportFileArtifact,
-        exportFileArtifactRequestSchema.parse(input),
-        exportFileArtifactResponseSchema,
-      ),
-    openFile: (input) =>
-      invokeValidated(
-        IpcChannel.OpenFileArtifact,
-        openFileArtifactRequestSchema.parse(input),
-        openFileArtifactResponseSchema,
-      ),
-    revealFile: (input) =>
-      invokeValidated(
-        IpcChannel.RevealFileArtifact,
-        openFileArtifactRequestSchema.parse(input),
-        revealFileArtifactResultSchema,
-      ),
+      artifactEvidenceInvokeMethods[IpcChannel.ExportMarkdownArtifact](input),
+    registerFile: (input) => artifactEvidenceInvokeMethods[IpcChannel.RegisterFileArtifact](input),
+    getFileDetail: (input) => artifactEvidenceInvokeMethods[IpcChannel.GetFileArtifact](input),
+    exportFile: (input) => artifactEvidenceInvokeMethods[IpcChannel.ExportFileArtifact](input),
+    openFile: (input) => artifactEvidenceInvokeMethods[IpcChannel.OpenFileArtifact](input),
+    revealFile: (input) => artifactEvidenceInvokeMethods[IpcChannel.RevealFileArtifact](input),
     getThumbnails: (input) =>
-      invokeValidated(
-        IpcChannel.GetArtifactThumbnails,
-        getArtifactThumbnailsRequestSchema.parse(input),
-        getArtifactThumbnailsResultSchema,
-      ),
+      artifactEvidenceInvokeMethods[IpcChannel.GetArtifactThumbnails](input),
   },
   models: {
     list: () => invokeValidated(IpcChannel.ListModels, {}, modelProfileListResponseSchema),
