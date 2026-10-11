@@ -5,7 +5,9 @@ import {
   artifactVersionExecutorSummarySchema,
   cancelDependencyRequestSchema,
   cancelDependencyResultSchema,
+  cancelledResultSchema,
   cancelMemoryJobRequestSchema,
+  cancelRunRequestSchema,
   cancelScheduleOccurrenceRequestSchema,
   checkKnowledgeSourcesRequestSchema,
   chooseInterpreterResultSchema,
@@ -80,6 +82,8 @@ import {
   listKnowledgeRevisionsRequestSchema,
   listMemoriesRequestSchema,
   listMemoryJobsRequestSchema,
+  listRunEventsRequestSchema,
+  listRunsRequestSchema,
   listScheduleOccurrencesRequestSchema,
   listScheduleSourceItemsRequestSchema,
   listSchedulesRequestSchema,
@@ -138,6 +142,7 @@ import {
   runArtifactSourceDeclarationSchema,
   runSettingsSchema,
   runSourcePreviewSchema,
+  runSummarySchema,
   runtimeEnvironmentSchema,
   saveExpertRevisionRequestSchema,
   saveKnowledgeCollectionRequestSchema,
@@ -174,6 +179,8 @@ import {
   skillImportResultSchema,
   skillMutationResultSchema,
   skillSummarySchema,
+  startRunRequestSchema,
+  startRunResultSchema,
   taskContextMutationResultSchema,
   taskContextRevisionSchema,
   taskContinuityBriefMutationResultSchema,
@@ -203,10 +210,30 @@ function invokeValidated<Schema extends ZodTypeAny>(
 
 const api: BetterWorkDesktopApi = {
   runs: {
-    start: (input) => ipcRenderer.invoke(IpcChannel.StartRun, input),
-    cancel: (input) => ipcRenderer.invoke(IpcChannel.CancelRun, input),
-    list: (input) => ipcRenderer.invoke(IpcChannel.ListRuns, input),
-    listEvents: (input) => ipcRenderer.invoke(IpcChannel.ListRunEvents, input),
+    start: (input) =>
+      invokeValidated(
+        IpcChannel.StartRun,
+        startRunRequestSchema.parse(input),
+        startRunResultSchema,
+      ),
+    cancel: (input) =>
+      invokeValidated(
+        IpcChannel.CancelRun,
+        cancelRunRequestSchema.parse(input),
+        cancelledResultSchema,
+      ),
+    list: (input) =>
+      invokeValidated(
+        IpcChannel.ListRuns,
+        input === undefined ? undefined : listRunsRequestSchema.parse(input),
+        runSummarySchema.array(),
+      ),
+    listEvents: (input) =>
+      invokeValidated(
+        IpcChannel.ListRunEvents,
+        listRunEventsRequestSchema.parse(input),
+        agentRuntimeEventSchema.array(),
+      ),
     onEvent(listener) {
       const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
         listener(agentRuntimeEventSchema.parse(raw));

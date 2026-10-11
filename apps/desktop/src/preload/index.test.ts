@@ -149,6 +149,58 @@ describe('schedule preload API', () => {
   });
 });
 
+describe('run preload API', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.invoke.mockResolvedValue([]);
+  });
+
+  it('validates and forwards Run requests and responses through their channels', async () => {
+    mocks.invoke.mockImplementation(async (channel) => {
+      if (channel === IpcChannel.StartRun) return { runId: 'run-1' };
+      if (channel === IpcChannel.CancelRun) return { cancelled: true };
+      return [];
+    });
+
+    await Promise.all([
+      api().runs.start({
+        taskId: 'task-1',
+        sessionId: 'session-1',
+        prompt: '归纳本次资料。',
+      }),
+      api().runs.cancel({ runId: 'run-1' }),
+      api().runs.list(),
+      api().runs.listEvents({ runId: 'run-1' }),
+    ]);
+
+    expect(mocks.invoke.mock.calls).toEqual([
+      [IpcChannel.StartRun, { taskId: 'task-1', sessionId: 'session-1', prompt: '归纳本次资料。' }],
+      [IpcChannel.CancelRun, { runId: 'run-1' }],
+      [IpcChannel.ListRuns, undefined],
+      [IpcChannel.ListRunEvents, { runId: 'run-1' }],
+    ]);
+  });
+
+  it('rejects invalid Run requests before IPC and malformed responses after IPC', async () => {
+    expect(() =>
+      api().runs.start({ taskId: '', sessionId: 'session-1', prompt: '归纳本次资料。' }),
+    ).toThrow();
+    expect(() => api().runs.cancel({ runId: '' })).toThrow();
+    expect(() => api().runs.list({ taskId: '' })).toThrow();
+    expect(() => api().runs.listEvents({ runId: '' })).toThrow();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+
+    mocks.invoke.mockResolvedValue(null);
+    await expect(
+      api().runs.start({ taskId: 'task-1', sessionId: 'session-1', prompt: '归纳本次资料。' }),
+    ).rejects.toThrow();
+    await expect(api().runs.cancel({ runId: 'run-1' })).rejects.toThrow();
+    await expect(api().runs.list()).rejects.toThrow();
+    await expect(api().runs.listEvents({ runId: 'run-1' })).rejects.toThrow();
+    expect(mocks.invoke).toHaveBeenCalledTimes(4);
+  });
+});
+
 describe('historical task and notification preload APIs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
