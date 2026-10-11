@@ -8,8 +8,8 @@
 
 - 平台：macOS arm64。
 - 构建命令：`npm run dist:mac --workspace=@betterwork/desktop`。
-- 文件：`apps/desktop/dist/BetterWork-1.1.0-arm64.dmg`，323,830,831 字节。
-- SHA-256：`ce68c7f803f9fa71010e62257a6d52718fe42be7c2df244cf339f330544688d8`。
+- 文件：`apps/desktop/dist/BetterWork-1.1.0-arm64.dmg`，323,831,303 字节。
+- SHA-256：`78f82de229de2a89e0ecec530eb537e7092190079316e6a4e169ec961b316664`。
 - Bundle ID：`dev.betterwork.desktop`；`CFBundleShortVersionString` 和 `CFBundleVersion` 均为 `1.1.0`。
 - `hdiutil verify` 校验有效；只读挂载包含 `BetterWork.app` 与 Applications 链接。应用 Resources 中没有 `.db`、`.sqlite` 或 `.sqlite3` 文件，也没有随包 SQLite 模板库。
 
