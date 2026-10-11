@@ -204,6 +204,35 @@ describe('task support preload APIs', () => {
   });
 });
 
+describe('memory preload API', () => {
+  const memoryFailure = {
+    ok: false as const,
+    error: { code: 'INTERNAL_ERROR' as const, message: '合成错误', retryable: false },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.invoke.mockResolvedValue(memoryFailure);
+  });
+
+  it('preserves request defaults and the Memory Result envelope', async () => {
+    await expect(api().memories.list({})).resolves.toEqual(memoryFailure);
+    expect(mocks.invoke).toHaveBeenLastCalledWith(IpcChannel.ListMemories, {
+      includeCandidates: true,
+    });
+
+    expect(() => api().memories.get({ id: '' })).toThrow();
+    expect(mocks.invoke).toHaveBeenCalledTimes(1);
+
+    await expect(api().memories.listJobs({ workspaceId: 'workspace-1' })).resolves.toEqual(
+      memoryFailure,
+    );
+    expect(mocks.invoke).toHaveBeenLastCalledWith(IpcChannel.ListMemoryJobs, {
+      workspaceId: 'workspace-1',
+    });
+  });
+});
+
 describe('run preload API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -363,6 +392,22 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `const __materialCandidatesResult: Promise<z.output<typeof materialCandidateSchema>[]> = taskSupportInvokeMethods[IpcChannel.ListTaskMaterialCandidates]({ taskId: 'task-1' });`,
     `const __inputSnapshotResult: Promise<z.output<typeof inputSnapshotSchema> | null> = taskSupportInvokeMethods[IpcChannel.PrepareWorkspaceInputSnapshot]({ workspaceId: 'workspace-1' });`,
     `const __taskSupportContractChannel: typeof IpcChannel.PrepareWorkspaceInputSnapshot = taskSupportInvokeContracts[IpcChannel.PrepareWorkspaceInputSnapshot].channel;`,
+    `const __memoryListResult: ReturnType<BetterWorkDesktopApi['memories']['list']> = memoryInvokeMethods[IpcChannel.ListMemories]({});`,
+    `declare const __memoryGetInput: z.input<typeof getMemoryRequestSchema>; const __memoryGetResult: ReturnType<BetterWorkDesktopApi['memories']['get']> = memoryInvokeMethods[IpcChannel.GetMemory](__memoryGetInput);`,
+    `declare const __memoryCreateInput: z.input<typeof createMemoryRequestSchema>; const __memoryCreateResult: ReturnType<BetterWorkDesktopApi['memories']['create']> = memoryInvokeMethods[IpcChannel.CreateMemory](__memoryCreateInput);`,
+    `declare const __memoryUpdateInput: z.input<typeof updateMemoryRequestSchema>; const __memoryUpdateResult: ReturnType<BetterWorkDesktopApi['memories']['update']> = memoryInvokeMethods[IpcChannel.UpdateMemory](__memoryUpdateInput);`,
+    `declare const __memoryStatusInput: z.input<typeof setMemoryStatusRequestSchema>; const __memoryStatusResult: ReturnType<BetterWorkDesktopApi['memories']['setStatus']> = memoryInvokeMethods[IpcChannel.SetMemoryStatus](__memoryStatusInput);`,
+    `declare const __memoryResolveInput: z.input<typeof resolveMemoryConflictRequestSchema>; const __memoryResolveResult: ReturnType<BetterWorkDesktopApi['memories']['resolveConflict']> = memoryInvokeMethods[IpcChannel.ResolveMemoryConflict](__memoryResolveInput);`,
+    `declare const __memoryPreviewInput: z.input<typeof previewMemoryRequestSchema>; const __memoryPreviewResult: ReturnType<BetterWorkDesktopApi['memories']['preview']> = memoryInvokeMethods[IpcChannel.PreviewMemory](__memoryPreviewInput);`,
+    `declare const __memoryExclusionsInput: z.input<typeof taskMemoryExclusionsRequestSchema>; const __memoryExclusionsResult: ReturnType<BetterWorkDesktopApi['memories']['taskExclusions']> = memoryInvokeMethods[IpcChannel.TaskMemoryExclusions](__memoryExclusionsInput);`,
+    `declare const __memoryRunContextInput: z.input<typeof getRunMemoryContextRequestSchema>; const __memoryRunContextResult: ReturnType<BetterWorkDesktopApi['memories']['runContext']> = memoryInvokeMethods[IpcChannel.GetRunMemoryContext](__memoryRunContextInput);`,
+    `declare const __memorySettingsInput: z.input<typeof getMemorySettingsRequestSchema>; const __memorySettingsResult: ReturnType<BetterWorkDesktopApi['memories']['getSettings']> = memoryInvokeMethods[IpcChannel.GetMemorySettings](__memorySettingsInput);`,
+    `declare const __memorySetSettingsInput: z.input<typeof setMemorySettingsRequestSchema>; const __memorySetSettingsResult: ReturnType<BetterWorkDesktopApi['memories']['setSettings']> = memoryInvokeMethods[IpcChannel.SetMemorySettings](__memorySetSettingsInput);`,
+    `declare const __memoryJobsInput: z.input<typeof listMemoryJobsRequestSchema>; const __memoryJobsResult: ReturnType<BetterWorkDesktopApi['memories']['listJobs']> = memoryInvokeMethods[IpcChannel.ListMemoryJobs](__memoryJobsInput);`,
+    `declare const __memoryRetryInput: z.input<typeof retryMemoryJobRequestSchema>; const __memoryRetryResult: ReturnType<BetterWorkDesktopApi['memories']['retryJob']> = memoryInvokeMethods[IpcChannel.RetryMemoryJob](__memoryRetryInput);`,
+    `declare const __memoryCancelInput: z.input<typeof cancelMemoryJobRequestSchema>; const __memoryCancelResult: ReturnType<BetterWorkDesktopApi['memories']['cancelJob']> = memoryInvokeMethods[IpcChannel.CancelMemoryJob](__memoryCancelInput);`,
+    `declare const __memoryRebuildInput: z.input<typeof rebuildMemoryProjectionRequestSchema>; const __memoryRebuildResult: ReturnType<BetterWorkDesktopApi['memories']['rebuildProjection']> = memoryInvokeMethods[IpcChannel.RebuildMemoryProjection](__memoryRebuildInput);`,
+    `const __memoryContractChannel: typeof IpcChannel.RebuildMemoryProjection = memoryInvokeContracts[IpcChannel.RebuildMemoryProjection].channel;`,
   ];
   const invalid = [
     `runInvokeMethods[IpcChannel.StartRun]({ runId: 'run-1' });`,
@@ -407,6 +452,12 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `taskSupportInvokeMethods[IpcChannel.ListTaskMaterialCandidates]({ id: 'task-1' });`,
     `const __inputSnapshotWrongResponse: Promise<z.output<typeof inputSnapshotSchema>> = taskSupportInvokeMethods[IpcChannel.PrepareWorkspaceInputSnapshot]({ workspaceId: 'workspace-1' });`,
     `const __taskSupportContractWrongChannel: typeof IpcChannel.GetTaskContext = taskSupportInvokeContracts[IpcChannel.PrepareWorkspaceInputSnapshot].channel;`,
+    `memoryInvokeMethods[IpcChannel.GetMemory]({ memoryId: 'memory-1' });`,
+    `const __memoryWrongResponse: Promise<never> = memoryInvokeMethods[IpcChannel.ListMemories]({});`,
+    `const __memoryWrongChannel: typeof IpcChannel.GetMemory = memoryInvokeContracts[IpcChannel.CreateMemory].channel;`,
+    `memoryInvokeMethods[IpcChannel.ListMemoryJobs]({ taskId: 'task-1' });`,
+    `const __memoryJobsWrongResponse: ReturnType<BetterWorkDesktopApi['memories']['get']> = memoryInvokeMethods[IpcChannel.ListMemoryJobs]({ workspaceId: 'workspace-1' });`,
+    `const __memoryProjectionWrongChannel: typeof IpcChannel.ListMemories = memoryInvokeContracts[IpcChannel.RebuildMemoryProjection].channel;`,
   ];
   let source = readFileSync(sourcePath, 'utf8') + '\n';
   const cases = [...valid, ...invalid].map((expression, index) => {

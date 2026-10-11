@@ -1416,6 +1416,116 @@ const taskSupportInvokeMethods: InvokeMethodsByChannel<typeof taskSupportInvokeC
     invokeContract(taskSupportInvokeContracts[IpcChannel.PrepareWorkspaceInputSnapshot], input),
 };
 
+const memoryInvokeContracts = defineInvokeContracts({
+  [IpcChannel.ListMemories]: {
+    channel: IpcChannel.ListMemories,
+    request: listMemoriesRequestSchema,
+    response: resultSchema(memoryListPageDataSchema),
+  },
+  [IpcChannel.GetMemory]: {
+    channel: IpcChannel.GetMemory,
+    request: getMemoryRequestSchema,
+    response: resultSchema(memoryViewItemSchema),
+  },
+  [IpcChannel.CreateMemory]: {
+    channel: IpcChannel.CreateMemory,
+    request: createMemoryRequestSchema,
+    response: resultSchema(memoryWriteReceiptSchema),
+  },
+  [IpcChannel.UpdateMemory]: {
+    channel: IpcChannel.UpdateMemory,
+    request: updateMemoryRequestSchema,
+    response: resultSchema(memoryWriteReceiptSchema),
+  },
+  [IpcChannel.SetMemoryStatus]: {
+    channel: IpcChannel.SetMemoryStatus,
+    request: setMemoryStatusRequestSchema,
+    response: resultSchema(memoryWriteReceiptSchema),
+  },
+  [IpcChannel.ResolveMemoryConflict]: {
+    channel: IpcChannel.ResolveMemoryConflict,
+    request: resolveMemoryConflictRequestSchema,
+    response: resultSchema(memoryConflictResolutionDataSchema),
+  },
+  [IpcChannel.PreviewMemory]: {
+    channel: IpcChannel.PreviewMemory,
+    request: previewMemoryRequestSchema,
+    response: resultSchema(memoryPreviewDataSchema),
+  },
+  [IpcChannel.TaskMemoryExclusions]: {
+    channel: IpcChannel.TaskMemoryExclusions,
+    request: taskMemoryExclusionsRequestSchema,
+    response: resultSchema(taskMemoryExclusionsDataSchema),
+  },
+  [IpcChannel.GetRunMemoryContext]: {
+    channel: IpcChannel.GetRunMemoryContext,
+    request: getRunMemoryContextRequestSchema,
+    response: resultSchema(memoryRunContextDataSchema),
+  },
+  [IpcChannel.GetMemorySettings]: {
+    channel: IpcChannel.GetMemorySettings,
+    request: getMemorySettingsRequestSchema,
+    response: resultSchema(workspaceMemorySettingsSchema),
+  },
+  [IpcChannel.SetMemorySettings]: {
+    channel: IpcChannel.SetMemorySettings,
+    request: setMemorySettingsRequestSchema,
+    response: resultSchema(memorySettingsDataSchema),
+  },
+  [IpcChannel.ListMemoryJobs]: {
+    channel: IpcChannel.ListMemoryJobs,
+    request: listMemoryJobsRequestSchema,
+    response: resultSchema(memoryJobListDataSchema),
+  },
+  [IpcChannel.RetryMemoryJob]: {
+    channel: IpcChannel.RetryMemoryJob,
+    request: retryMemoryJobRequestSchema,
+    response: resultSchema(memoryJobSummarySchema),
+  },
+  [IpcChannel.CancelMemoryJob]: {
+    channel: IpcChannel.CancelMemoryJob,
+    request: cancelMemoryJobRequestSchema,
+    response: resultSchema(memoryJobSummarySchema),
+  },
+  [IpcChannel.RebuildMemoryProjection]: {
+    channel: IpcChannel.RebuildMemoryProjection,
+    request: rebuildMemoryProjectionRequestSchema,
+    response: resultSchema(memoryProjectionStateDataSchema),
+  },
+});
+const memoryInvokeMethods: InvokeMethodsByChannel<typeof memoryInvokeContracts> = {
+  [IpcChannel.ListMemories]: (input) =>
+    invokeContract(memoryInvokeContracts[IpcChannel.ListMemories], input),
+  [IpcChannel.GetMemory]: (input) =>
+    invokeContract(memoryInvokeContracts[IpcChannel.GetMemory], input),
+  [IpcChannel.CreateMemory]: (input) =>
+    invokeContract(memoryInvokeContracts[IpcChannel.CreateMemory], input),
+  [IpcChannel.UpdateMemory]: (input) =>
+    invokeContract(memoryInvokeContracts[IpcChannel.UpdateMemory], input),
+  [IpcChannel.SetMemoryStatus]: (input) =>
+    invokeContract(memoryInvokeContracts[IpcChannel.SetMemoryStatus], input),
+  [IpcChannel.ResolveMemoryConflict]: (input) =>
+    invokeContract(memoryInvokeContracts[IpcChannel.ResolveMemoryConflict], input),
+  [IpcChannel.PreviewMemory]: (input) =>
+    invokeContract(memoryInvokeContracts[IpcChannel.PreviewMemory], input),
+  [IpcChannel.TaskMemoryExclusions]: (input) =>
+    invokeContract(memoryInvokeContracts[IpcChannel.TaskMemoryExclusions], input),
+  [IpcChannel.GetRunMemoryContext]: (input) =>
+    invokeContract(memoryInvokeContracts[IpcChannel.GetRunMemoryContext], input),
+  [IpcChannel.GetMemorySettings]: (input) =>
+    invokeContract(memoryInvokeContracts[IpcChannel.GetMemorySettings], input),
+  [IpcChannel.SetMemorySettings]: (input) =>
+    invokeContract(memoryInvokeContracts[IpcChannel.SetMemorySettings], input),
+  [IpcChannel.ListMemoryJobs]: (input) =>
+    invokeContract(memoryInvokeContracts[IpcChannel.ListMemoryJobs], input),
+  [IpcChannel.RetryMemoryJob]: (input) =>
+    invokeContract(memoryInvokeContracts[IpcChannel.RetryMemoryJob], input),
+  [IpcChannel.CancelMemoryJob]: (input) =>
+    invokeContract(memoryInvokeContracts[IpcChannel.CancelMemoryJob], input),
+  [IpcChannel.RebuildMemoryProjection]: (input) =>
+    invokeContract(memoryInvokeContracts[IpcChannel.RebuildMemoryProjection], input),
+};
+
 const api: BetterWorkDesktopApi = {
   runs: {
     start: (input) => runInvokeMethods[IpcChannel.StartRun](input),
@@ -1602,96 +1712,21 @@ const api: BetterWorkDesktopApi = {
       taskSupportInvokeMethods[IpcChannel.PrepareWorkspaceInputSnapshot](input),
   },
   memories: {
-    list: (input) =>
-      invokeValidated(
-        IpcChannel.ListMemories,
-        listMemoriesRequestSchema.parse(input ?? {}),
-        resultSchema(memoryListPageDataSchema),
-      ),
-    get: (input) =>
-      invokeValidated(
-        IpcChannel.GetMemory,
-        getMemoryRequestSchema.parse(input),
-        resultSchema(memoryViewItemSchema),
-      ),
-    create: (input) =>
-      invokeValidated(
-        IpcChannel.CreateMemory,
-        createMemoryRequestSchema.parse(input),
-        resultSchema(memoryWriteReceiptSchema),
-      ),
-    update: (input) =>
-      invokeValidated(
-        IpcChannel.UpdateMemory,
-        updateMemoryRequestSchema.parse(input),
-        resultSchema(memoryWriteReceiptSchema),
-      ),
-    setStatus: (input) =>
-      invokeValidated(
-        IpcChannel.SetMemoryStatus,
-        setMemoryStatusRequestSchema.parse(input),
-        resultSchema(memoryWriteReceiptSchema),
-      ),
-    resolveConflict: (input) =>
-      invokeValidated(
-        IpcChannel.ResolveMemoryConflict,
-        resolveMemoryConflictRequestSchema.parse(input),
-        resultSchema(memoryConflictResolutionDataSchema),
-      ),
-    preview: (input) =>
-      invokeValidated(
-        IpcChannel.PreviewMemory,
-        previewMemoryRequestSchema.parse(input),
-        resultSchema(memoryPreviewDataSchema),
-      ),
-    taskExclusions: (input) =>
-      invokeValidated(
-        IpcChannel.TaskMemoryExclusions,
-        taskMemoryExclusionsRequestSchema.parse(input),
-        resultSchema(taskMemoryExclusionsDataSchema),
-      ),
-    runContext: (input) =>
-      invokeValidated(
-        IpcChannel.GetRunMemoryContext,
-        getRunMemoryContextRequestSchema.parse(input),
-        resultSchema(memoryRunContextDataSchema),
-      ),
-    getSettings: (input) =>
-      invokeValidated(
-        IpcChannel.GetMemorySettings,
-        getMemorySettingsRequestSchema.parse(input),
-        resultSchema(workspaceMemorySettingsSchema),
-      ),
-    setSettings: (input) =>
-      invokeValidated(
-        IpcChannel.SetMemorySettings,
-        setMemorySettingsRequestSchema.parse(input),
-        resultSchema(memorySettingsDataSchema),
-      ),
-    listJobs: (input) =>
-      invokeValidated(
-        IpcChannel.ListMemoryJobs,
-        listMemoryJobsRequestSchema.parse(input ?? {}),
-        resultSchema(memoryJobListDataSchema),
-      ),
-    retryJob: (input) =>
-      invokeValidated(
-        IpcChannel.RetryMemoryJob,
-        retryMemoryJobRequestSchema.parse(input),
-        resultSchema(memoryJobSummarySchema),
-      ),
-    cancelJob: (input) =>
-      invokeValidated(
-        IpcChannel.CancelMemoryJob,
-        cancelMemoryJobRequestSchema.parse(input),
-        resultSchema(memoryJobSummarySchema),
-      ),
-    rebuildProjection: (input) =>
-      invokeValidated(
-        IpcChannel.RebuildMemoryProjection,
-        rebuildMemoryProjectionRequestSchema.parse(input),
-        resultSchema(memoryProjectionStateDataSchema),
-      ),
+    list: (input) => memoryInvokeMethods[IpcChannel.ListMemories](input ?? {}),
+    get: (input) => memoryInvokeMethods[IpcChannel.GetMemory](input),
+    create: (input) => memoryInvokeMethods[IpcChannel.CreateMemory](input),
+    update: (input) => memoryInvokeMethods[IpcChannel.UpdateMemory](input),
+    setStatus: (input) => memoryInvokeMethods[IpcChannel.SetMemoryStatus](input),
+    resolveConflict: (input) => memoryInvokeMethods[IpcChannel.ResolveMemoryConflict](input),
+    preview: (input) => memoryInvokeMethods[IpcChannel.PreviewMemory](input),
+    taskExclusions: (input) => memoryInvokeMethods[IpcChannel.TaskMemoryExclusions](input),
+    runContext: (input) => memoryInvokeMethods[IpcChannel.GetRunMemoryContext](input),
+    getSettings: (input) => memoryInvokeMethods[IpcChannel.GetMemorySettings](input),
+    setSettings: (input) => memoryInvokeMethods[IpcChannel.SetMemorySettings](input),
+    listJobs: (input) => memoryInvokeMethods[IpcChannel.ListMemoryJobs](input ?? {}),
+    retryJob: (input) => memoryInvokeMethods[IpcChannel.RetryMemoryJob](input),
+    cancelJob: (input) => memoryInvokeMethods[IpcChannel.CancelMemoryJob](input),
+    rebuildProjection: (input) => memoryInvokeMethods[IpcChannel.RebuildMemoryProjection](input),
   },
   mcp: {
     listConnections: () =>
