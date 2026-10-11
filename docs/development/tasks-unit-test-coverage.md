@@ -37,12 +37,12 @@
 | TC00 | 覆盖率基础设施 | 0 | 0 | 0.5 天 | done |
 | TC01 | 纯函数 + 简单仓储 | 12 | 194 | 1 天 | done |
 | TC02 | 中等仓储 + 纯逻辑服务 | 10 | 285 | 1.5 天 | done |
-| TC03 | 大型复杂仓储（**延后**） | 7 | ~175 | 2 天 | blocked |
+| TC03 | 大型复杂仓储 | 7 | 339 | 2 天 | done |
 | TC04 | 进程入口 | 2 | 23 | 1.5 天 | done |
 | TC05 | Renderer hooks + 组件 | 16 | 104 | 1.5 天 | done |
 | TC06 | 低优先级类型/数据（可选） | 3 | 36 | 0.5 天 | done |
 
-TC00–TC02、TC04–TC06 全部完成（43 文件 / 642 用例）。TC03 仍等重构分支合并。
+TC00–TC06 全部完成（50 文件 / 981 用例）。
 
 ## 4. TC00 覆盖率基础设施
 
@@ -93,19 +93,19 @@ TC00–TC02、TC04–TC06 全部完成（43 文件 / 642 用例）。TC03 仍等
 | `services/schedule-outcome-service.ts` | M | finalizer 去重 + 事务内投影 + 启动恢复 |
 | `packages/agent-core/src/fake-provider.ts` | M | 正则触发工具分发 + 流式 chunk + 取消 |
 
-## 7. TC03 大型复杂仓储（延后）
+## 7. TC03 大型复杂仓储（done）
 
-**前置**：重构分支合并回 main 后再开工。
+**前置**：重构分支合并回 main 后再开工。2026-10-11 开工，同日收口。
 
-| 文件 | 行数 | 方法数 | 核心复杂度 |
-|------|------|--------|------------|
-| `persistence/schedule-occurrence-repository.ts` | 943 | 16+ | 多阶段状态机、跨 6 表事务、cursor 分页 |
-| `persistence/skill-repository.ts` | 492 | 18+ | 6 表 CRUD、trust 模型、JSON frontmatter |
-| `persistence/schedule-source-repository.ts` | 514 | 10+ | manifest hash + 预算限额 + 去重 |
-| `persistence/schedule-output-repository.ts` | 384 | 8 | 7 表 JOIN 校验 + 状态机 + attempt CAS |
-| `persistence/model-repository.ts` | ~350 | 11 | 优先级事务 + 凭据双轨 + upsert |
-| `services/knowledge-index-store.ts` | 740 | ~20 | 向量空间 CAS + staging→active + BM25 |
-| `services/knowledge-job-store.ts` | 481 | ~18 | 作业状态聚合 + sequence 递增 + 分页 |
+| 文件 | 行数 | 方法数 | 核心复杂度 | 状态 |
+|------|------|--------|------------|------|
+| `persistence/model-repository.ts` | ~350 | 11 | 优先级事务 + 凭据双轨 + upsert | done（34 项） |
+| `persistence/schedule-output-repository.ts` | 384 | 8 | 7 表 JOIN 校验 + 状态机 + attempt CAS | done（32 项） |
+| `persistence/skill-repository.ts` | 492 | 18+ | 6 表 CRUD、trust 模型、JSON frontmatter | done（54 项） |
+| `persistence/schedule-source-repository.ts` | 514 | 10+ | manifest hash + 预算限额 + 去重 | done（48 项） |
+| `services/knowledge-job-store.ts` | 481 | ~18 | 作业状态聚合 + sequence 递增 + 分页 | done（55 项） |
+| `services/knowledge-index-store.ts` | 740 | ~20 | 向量空间 CAS + staging→active + BM25 | done（57 项） |
+| `persistence/schedule-occurrence-repository.ts` | 943 | 16+ | 多阶段状态机、跨 6 表事务、cursor 分页 | done（59 项） |
 
 ## 8. TC04 进程入口
 
