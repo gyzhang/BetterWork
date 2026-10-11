@@ -968,3 +968,9 @@ App heavy 52/52；ExpertsView functional 15/15。typecheck、两份测试文件�
 2026-10-11 19:25 CST，从最新 `origin/main` `ce5cbebb6502dc56b2aeccaed6a2915650bafdf2` 建立 `codex/r13-app-fixture-defaults-test`。新增 `app-test-fixtures.test.ts` 验证 Skill 默认空列表、缺失详情和未配置授权/试运行的拒绝结果。App 整树用例保留空 Skill 页面及 API 列表接线断言，移走纯 fixture 默认值断言。
 
 App heavy 52/52；夹具 functional 1/1。typecheck、两份测试文件的 ESLint/Prettier 与 `git diff --check` 通过。未改变测试默认值或产品行为；R13 尚未整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 73. R13 子卡：成果保存请求参数留在 Hook 测试
+
+2026-10-11 19:30 CST，从最新 `origin/main` `3cc9fa937a72daa6363a83655c2b8826d3a0d274` 建立 `codex/r13-app-artifact-save-view-tests`。App 整树测试移除与 Hook 重复的逐项保存 payload 对比，改为验证失败提示、重试确认与恰好两次请求；`use-run-artifact-save.test.ts` 保留精确 Task/Run/成果字段、失败后同目标重试断言。
+
+App heavy 52/52；useRunArtifactSave functional 7/7。typecheck、App 测试文件的 ESLint/Prettier 与 `git diff --check` 通过。未改变产品行为或 Hook 覆盖；R13 尚未整体解决。未运行完整 `npm run verify`、UI 或真实模型。
