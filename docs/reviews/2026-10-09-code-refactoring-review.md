@@ -1257,7 +1257,7 @@ Preload 契约测试、Preload API 测试与 Main IPC 注册测试共 3 文件 /
 
 2026-10-12 01:53 CST 远端收口：源提交 `2d834d47cf77a01c9bfa8f4592fcd1d4393a3c5d` 的 [PR Gate / Actions 38161162438](https://github.com/gyzhang/BetterWork/actions/runs/38161162438) 与 Quick code check 通过，纯文档检查和完整 verify 按变更分类跳过。[PR #181](https://github.com/gyzhang/BetterWork/pull/181) 已 squash 合入 main，合并提交 `2a0f42b1dceb49999d642b95f3d1132d8892d7e8`；本地与远端任务分支已删除，checkout 已同步 main，工作树干净且没有额外 worktree。
 
-## 107. R02 子卡：经营分析 Run 的材料事实关联防护
+## 107. R02 子卡：经营分析 Run 的材料事实关联防护（已合并）
 
 2026-10-12 05:14 CST，按用户确认的范围，从 `origin/main` `b72d1f8231c1f7efab787eb7a0df85882fe1199f` 在本地 checkout 建立 `codex/r02-material-fact-contract`。数值事实防护只对 `builtinToolPolicy.mode` 为 `allow-list` 且包含 `analyze_business_metrics` 的 Run 开启；事实关联指标、单位、期间与本 Run 来源，派生值须来自确定性工具。
 
@@ -1265,4 +1265,6 @@ Preload 契约测试、Preload API 测试与 Main IPC 注册测试共 3 文件 /
 
 适配来源校验到读取工具与 Run 生命周期；将经营分析输出的指标数改为不携带数字的状态文案，避免把“分析了 N 个指标”误判为业务事实。ADR-0020 和内置经营分析 Skill 补充输入来源及输出契约。Review 核对确认事实来源只登记在当前 Run 内存账本，不改持久化 Schema；适用范围由显式 allow-list 决定，普通 Run 的数字输出不走此策略。
 
-RunService heavy 定向测试 1 文件 / 87 项、事实策略/工具结果适配/工具包测试 3 文件 / 36 项、事实策略 bench 1 文件 / 2 项通过；全仓 typecheck、改动源码 ESLint/Prettier、`docs:check` 与差异空白检查通过。完整 `npm run verify` 未运行。PR Gate、合并与任务分支清理待本卡收口。
+RunService heavy 定向测试 1 文件 / 87 项、事实策略/工具结果适配/工具包测试 3 文件 / 36 项、事实策略 bench 1 文件 / 2 项通过；全仓 typecheck、改动源码 ESLint/Prettier、`docs:check` 与差异空白检查通过。完整 `npm run verify` 未运行。
+
+源提交 `53edadd9d4baef03189efa31ac8b9e2a4dc7816c` 的 [PR Gate / Actions 38176117225](https://github.com/gyzhang/BetterWork/actions/runs/38176117225) 与 Quick code check 通过，Full verify 按规则跳过。[PR #183](https://github.com/gyzhang/BetterWork/pull/183) 已 squash 合入提交 `da3058f323e64d3b98bdb5145fd2588673b4cf19`；本地与远端任务分支均已删除，原 checkout 已同步 main，工作树干净且没有额外 worktree。
