@@ -261,7 +261,7 @@ describe('run settings preload API', () => {
   });
 });
 
-it('binds Run, Workspace, and Task Preload schemas to their IPC channels at compile time', () => {
+it('binds mapped Preload schemas and methods to their IPC channels at compile time', () => {
   const sourcePath = fileURLToPath(new URL('./index.ts', import.meta.url));
   const configPath = ts.findConfigFile(
     path.dirname(sourcePath),
@@ -281,6 +281,11 @@ it('binds Run, Workspace, and Task Preload schemas to their IPC channels at comp
     `workspaceTaskInvokeMethods[IpcChannel.ListTasks](undefined);`,
     `const __taskContractResult: Promise<z.output<typeof recentTaskSummarySchema> | null> = workspaceTaskInvokeMethods[IpcChannel.GetTask]({ id: 'task-1' });`,
     `const __taskContractChannel: typeof IpcChannel.GetTask = workspaceTaskInvokeContracts[IpcChannel.GetTask].channel;`,
+    `const __evidenceContractResult: Promise<EvidenceSummary[]> = artifactEvidenceInvokeMethods[IpcChannel.ListEvidence]({ taskId: 'task-1' });`,
+    `const __artifactContractResult: Promise<ArtifactSummary[]> = artifactEvidenceInvokeMethods[IpcChannel.ListArtifacts](undefined);`,
+    `const __artifactContractChannel: typeof IpcChannel.GetArtifactVersion = artifactEvidenceInvokeContracts[IpcChannel.GetArtifactVersion].channel;`,
+    `const __artifactRevealResult: Promise<z.output<typeof revealFileArtifactResultSchema>> = artifactEvidenceInvokeMethods[IpcChannel.RevealFileArtifact]({ artifactId: 'artifact-1' });`,
+    `const __artifactThumbnailsResult: Promise<z.output<typeof getArtifactThumbnailsResultSchema>> = artifactEvidenceInvokeMethods[IpcChannel.GetArtifactThumbnails]({ artifactId: 'artifact-1' });`,
   ];
   const invalid = [
     `runInvokeMethods[IpcChannel.StartRun]({ runId: 'run-1' });`,
@@ -290,6 +295,12 @@ it('binds Run, Workspace, and Task Preload schemas to their IPC channels at comp
     `workspaceTaskInvokeMethods[IpcChannel.ListTasks]({ taskId: 'task-1' });`,
     `const __workspaceContractWrongResponse: Promise<z.output<typeof recentTaskSummarySchema>> = workspaceTaskInvokeMethods[IpcChannel.GetDefaultWorkspace]({});`,
     `const __taskContractWrongChannel: typeof IpcChannel.GetDefaultWorkspace = workspaceTaskInvokeContracts[IpcChannel.GetTask].channel;`,
+    `artifactEvidenceInvokeMethods[IpcChannel.ListEvidence]({ runId: 'run-1' });`,
+    `artifactEvidenceInvokeMethods[IpcChannel.ListArtifacts]({ runId: 'run-1' });`,
+    `const __artifactContractWrongResponse: Promise<EvidenceSummary[]> = artifactEvidenceInvokeMethods[IpcChannel.ListArtifacts](undefined);`,
+    `const __artifactContractWrongChannel: typeof IpcChannel.ListEvidence = artifactEvidenceInvokeContracts[IpcChannel.GetArtifactVersion].channel;`,
+    `artifactEvidenceInvokeMethods[IpcChannel.RevealFileArtifact]({ id: 'artifact-1' });`,
+    `artifactEvidenceInvokeMethods[IpcChannel.GetArtifactThumbnails]({ artifactId: 'artifact-1', revisionId: 'revision-1' });`,
   ];
   let source = readFileSync(sourcePath, 'utf8') + '\n';
   const cases = [...valid, ...invalid].map((expression, index) => {
@@ -904,6 +915,14 @@ describe('artifact action preload API', () => {
       if (channel === IpcChannel.OpenFileArtifact) {
         return { opened: true, error: undefined };
       }
+      if (channel === IpcChannel.RevealFileArtifact) {
+        return { revealed: true, error: undefined };
+      }
+      if (channel === IpcChannel.GetArtifactThumbnails) {
+        return {
+          thumbnails: [{ slideIndex: 0, dataUrl: 'data:image/png;base64,cHJldmlldw==' }],
+        };
+      }
       return null;
     });
 
@@ -932,6 +951,14 @@ describe('artifact action preload API', () => {
     const opened = await artifacts.openFile({ artifactId: 'artifact-2' });
     expect(opened).toEqual({ opened: true });
     expect(Object.hasOwn(opened, 'error')).toBe(false);
+    await expect(artifacts.revealFile({ artifactId: 'artifact-2' })).resolves.toMatchObject({
+      revealed: true,
+    });
+    await expect(
+      artifacts.getThumbnails({ artifactId: 'artifact-2', versionId: 'version-2' }),
+    ).resolves.toEqual({
+      thumbnails: [{ slideIndex: 0, dataUrl: 'data:image/png;base64,cHJldmlldw==' }],
+    });
 
     expect(mocks.invoke.mock.calls).toEqual([
       [IpcChannel.SaveMarkdownArtifact, saveInput],
@@ -939,6 +966,8 @@ describe('artifact action preload API', () => {
       [IpcChannel.RegisterFileArtifact, registerInput],
       [IpcChannel.ExportFileArtifact, { artifactId: 'artifact-2', versionId: 'version-2' }],
       [IpcChannel.OpenFileArtifact, { artifactId: 'artifact-2' }],
+      [IpcChannel.RevealFileArtifact, { artifactId: 'artifact-2' }],
+      [IpcChannel.GetArtifactThumbnails, { artifactId: 'artifact-2', versionId: 'version-2' }],
     ]);
   });
 
@@ -965,6 +994,8 @@ describe('artifact action preload API', () => {
     ).toThrow();
     expect(() => artifacts.exportFile({ artifactId: '' })).toThrow();
     expect(() => artifacts.openFile({ artifactId: '' })).toThrow();
+    expect(() => artifacts.revealFile({ artifactId: '' })).toThrow();
+    expect(() => artifacts.getThumbnails({ artifactId: '' })).toThrow();
     expect(mocks.invoke).not.toHaveBeenCalled();
 
     mocks.invoke
@@ -972,7 +1003,9 @@ describe('artifact action preload API', () => {
       .mockResolvedValueOnce({ cancelled: 'yes' })
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ cancelled: true, filePath: '' })
-      .mockResolvedValueOnce({ opened: 'yes' });
+      .mockResolvedValueOnce({ opened: 'yes' })
+      .mockResolvedValueOnce({ revealed: 'yes' })
+      .mockResolvedValueOnce({ thumbnails: [{}] });
     await Promise.all([
       expect(
         artifacts.saveMarkdown({
@@ -994,8 +1027,10 @@ describe('artifact action preload API', () => {
       ).rejects.toThrow(),
       expect(artifacts.exportFile({ artifactId: 'artifact-2' })).rejects.toThrow(),
       expect(artifacts.openFile({ artifactId: 'artifact-2' })).rejects.toThrow(),
+      expect(artifacts.revealFile({ artifactId: 'artifact-2' })).rejects.toThrow(),
+      expect(artifacts.getThumbnails({ artifactId: 'artifact-2' })).rejects.toThrow(),
     ]);
-    expect(mocks.invoke).toHaveBeenCalledTimes(5);
+    expect(mocks.invoke).toHaveBeenCalledTimes(7);
   });
 });
 
