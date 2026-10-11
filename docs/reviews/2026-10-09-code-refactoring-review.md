@@ -1158,3 +1158,13 @@ Preload 定向测试 1 文件 / 27 项、`docs:check` 154/154 通过，覆盖请
 编译期约束 channel 键与字面值一致，并由 Schema 推导请求、响应及事件 listener 类型。保留无参调用的空对象、模型/搜索列表可选 `lastTestedAt` 归一和通知详情允许 `null` 的现有语义；运行期请求/响应及事件校验、订阅解除行为保持。未更改 Main handler、共享协议、凭据、服务或领域行为。
 
 新增编译器正反例与通知推送事件运行期校验。Preload 定向测试 1 文件 / 34 项、全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 和差异空白检查通过；PR Gate 与合并清理待本卡收口。完整 `npm run verify`、UI、真实模型和安装态验收未运行。R09 其他 API 域与 Main/Preload 全局映射仍待后续切片。
+
+源提交 `0908b1ceb60fb21a8cbf36cb0bb8125d89b28f01` 的 [PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/38152213196) 与 Quick code check 通过，Full verify 按规则跳过。[PR #165](https://github.com/gyzhang/BetterWork/pull/165) 已 squash 合入 main，合并提交 `d6d40a1837e3ba4c5ccc36de76c2bd47da69d628`；本地与远端任务分支已删除，本地 checkout 已同步 main。
+
+## 96. R09 子卡：Knowledge Preload 通道映射
+
+2026-10-11 23:45 CST，从最新 `origin/main` `d6d40a1837e3ba4c5ccc36de76c2bd47da69d628` 在本地 checkout 建立 `codex/r09-knowledge-channel-contracts`。已将 Knowledge 文档、集合、搜索、修订、索引作业、设置、研究草稿及运行来源相关的 25 个 invoke channel 映射到请求/响应 Schema 和 Preload 方法，并将 Knowledge job event 映射到事件 Schema 与订阅方法。
+
+既有知识域行为以 [知识库与记忆](../04-knowledge-and-memory.md) 和 [KM 任务板](../development/tasks-knowledge.md) 为准；本卡只做 Preload 编译期契约映射，保留列表无参时补空对象、Open Source 省略可选 `error`、job 事件解析与解除订阅语义，不改变 Main handler、知识存储、搜索或工作流。
+
+编译器正反例覆盖 Knowledge 请求、响应、channel 字面值和事件 listener 类型；Preload 定向测试 1 文件 / 35 项，全仓 typecheck、改动文件 ESLint/Prettier 与差异空白检查通过。`docs:check`、PR Gate、合并和分支清理待本卡收口；完整 `npm run verify`、UI、真实模型与安装态验收未运行。其他 API 域与 Main/Preload 全局映射仍待后续切片。

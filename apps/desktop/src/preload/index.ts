@@ -28,6 +28,7 @@ import {
   checkKnowledgeSourcesRequestSchema,
   chooseInterpreterResultSchema,
   clearedResultSchema,
+  clearKnowledgeJobsRequestSchema,
   clearNotificationsRequestSchema,
   connectionTestResultSchema,
   copyExpertRequestSchema,
@@ -898,6 +899,198 @@ const notificationEventMethods: EventMethodsByChannel<typeof notificationEventCo
     listenContract(notificationEventContracts[IpcChannel.NotificationActivated], listener),
 };
 
+const knowledgeListRequestSchema = listKnowledgeRequestSchema;
+const knowledgeJobsRequestSchema = listKnowledgeJobsRequestSchema;
+const knowledgeInvokeContracts = defineInvokeContracts({
+  [IpcChannel.ListKnowledge]: {
+    channel: IpcChannel.ListKnowledge,
+    request: knowledgeListRequestSchema,
+    response: knowledgeDocumentSummarySchema.array(),
+  },
+  [IpcChannel.ListKnowledgeCollections]: {
+    channel: IpcChannel.ListKnowledgeCollections,
+    request: emptyInvokeRequestSchema,
+    response: knowledgeCollectionSchema.array(),
+  },
+  [IpcChannel.SaveKnowledgeCollection]: {
+    channel: IpcChannel.SaveKnowledgeCollection,
+    request: saveKnowledgeCollectionRequestSchema,
+    response: knowledgeCollectionSchema.array(),
+  },
+  [IpcChannel.DeleteKnowledgeCollection]: {
+    channel: IpcChannel.DeleteKnowledgeCollection,
+    request: deleteKnowledgeCollectionRequestSchema,
+    response: knowledgeCollectionSchema.array(),
+  },
+  [IpcChannel.SetKnowledgeCollectionMembers]: {
+    channel: IpcChannel.SetKnowledgeCollectionMembers,
+    request: setKnowledgeCollectionMembersRequestSchema,
+    response: knowledgeCollectionMembersResultSchema,
+  },
+  [IpcChannel.ImportKnowledge]: {
+    channel: IpcChannel.ImportKnowledge,
+    request: emptyInvokeRequestSchema,
+    response: knowledgeImportAckSchema,
+  },
+  [IpcChannel.ListKnowledgeJobs]: {
+    channel: IpcChannel.ListKnowledgeJobs,
+    request: knowledgeJobsRequestSchema,
+    response: knowledgeJobPageSchema,
+  },
+  [IpcChannel.GetKnowledgeJob]: {
+    channel: IpcChannel.GetKnowledgeJob,
+    request: knowledgeJobIdRequestSchema,
+    response: knowledgeJobDetailSchema.nullable(),
+  },
+  [IpcChannel.CancelKnowledgeJob]: {
+    channel: IpcChannel.CancelKnowledgeJob,
+    request: knowledgeJobIdRequestSchema,
+    response: knowledgeJobCancelResultSchema,
+  },
+  [IpcChannel.ClearKnowledgeJobs]: {
+    channel: IpcChannel.ClearKnowledgeJobs,
+    request: clearKnowledgeJobsRequestSchema,
+    response: clearedResultSchema,
+  },
+  [IpcChannel.RetryKnowledgeJob]: {
+    channel: IpcChannel.RetryKnowledgeJob,
+    request: retryKnowledgeJobRequestSchema,
+    response: knowledgeJobAckSchema,
+  },
+  [IpcChannel.GetKnowledgeSettings]: {
+    channel: IpcChannel.GetKnowledgeSettings,
+    request: emptyInvokeRequestSchema,
+    response: knowledgeSearchSettingsSchema,
+  },
+  [IpcChannel.SaveKnowledgeSettings]: {
+    channel: IpcChannel.SaveKnowledgeSettings,
+    request: saveKnowledgeSettingsRequestSchema,
+    response: knowledgeSearchSettingsSchema,
+  },
+  [IpcChannel.RebuildKnowledgeIndex]: {
+    channel: IpcChannel.RebuildKnowledgeIndex,
+    request: rebuildKnowledgeIndexRequestSchema,
+    response: knowledgeJobAckSchema,
+  },
+  [IpcChannel.CheckKnowledgeSources]: {
+    channel: IpcChannel.CheckKnowledgeSources,
+    request: checkKnowledgeSourcesRequestSchema,
+    response: knowledgeJobAckSchema,
+  },
+  [IpcChannel.SearchKnowledge]: {
+    channel: IpcChannel.SearchKnowledge,
+    request: searchKnowledgeRequestSchema,
+    response: knowledgeSearchResponseSchema,
+  },
+  [IpcChannel.OpenKnowledgeSource]: {
+    channel: IpcChannel.OpenKnowledgeSource,
+    request: openKnowledgeSourceRequestSchema,
+    response: openKnowledgeSourceResponseSchema,
+  },
+  [IpcChannel.RemoveKnowledgeDocument]: {
+    channel: IpcChannel.RemoveKnowledgeDocument,
+    request: removeKnowledgeDocumentRequestSchema,
+    response: removedResultSchema,
+  },
+  [IpcChannel.RefreshKnowledgeDocument]: {
+    channel: IpcChannel.RefreshKnowledgeDocument,
+    request: refreshKnowledgeDocumentRequestSchema,
+    response: knowledgeJobAckSchema,
+  },
+  [IpcChannel.ListKnowledgeRevisions]: {
+    channel: IpcChannel.ListKnowledgeRevisions,
+    request: listKnowledgeRevisionsRequestSchema,
+    response: knowledgeRevisionSummarySchema.array(),
+  },
+  [IpcChannel.PreviewKnowledge]: {
+    channel: IpcChannel.PreviewKnowledge,
+    request: previewKnowledgeRequestSchema,
+    response: knowledgeTextPageSchema,
+  },
+  [IpcChannel.CreateResearchDraft]: {
+    channel: IpcChannel.CreateResearchDraft,
+    request: knowledgeCreateResearchDraftRequestSchema,
+    response: knowledgeResearchDraftResultSchema,
+  },
+  [IpcChannel.PreviewRunSource]: {
+    channel: IpcChannel.PreviewRunSource,
+    request: previewRunSourceRequestSchema,
+    response: runSourcePreviewSchema,
+  },
+  [IpcChannel.DeclareArtifactSources]: {
+    channel: IpcChannel.DeclareArtifactSources,
+    request: declareArtifactSourcesRequestSchema,
+    response: runArtifactSourceDeclarationSchema,
+  },
+  [IpcChannel.GetRunArtifactDeclarations]: {
+    channel: IpcChannel.GetRunArtifactDeclarations,
+    request: getRunArtifactDeclarationsRequestSchema,
+    response: runArtifactSourceDeclarationSchema.nullable(),
+  },
+});
+const knowledgeInvokeMethods: InvokeMethodsByChannel<typeof knowledgeInvokeContracts> = {
+  [IpcChannel.ListKnowledge]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.ListKnowledge], input),
+  [IpcChannel.ListKnowledgeCollections]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.ListKnowledgeCollections], input),
+  [IpcChannel.SaveKnowledgeCollection]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.SaveKnowledgeCollection], input),
+  [IpcChannel.DeleteKnowledgeCollection]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.DeleteKnowledgeCollection], input),
+  [IpcChannel.SetKnowledgeCollectionMembers]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.SetKnowledgeCollectionMembers], input),
+  [IpcChannel.ImportKnowledge]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.ImportKnowledge], input),
+  [IpcChannel.ListKnowledgeJobs]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.ListKnowledgeJobs], input),
+  [IpcChannel.GetKnowledgeJob]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.GetKnowledgeJob], input),
+  [IpcChannel.CancelKnowledgeJob]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.CancelKnowledgeJob], input),
+  [IpcChannel.ClearKnowledgeJobs]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.ClearKnowledgeJobs], input),
+  [IpcChannel.RetryKnowledgeJob]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.RetryKnowledgeJob], input),
+  [IpcChannel.GetKnowledgeSettings]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.GetKnowledgeSettings], input),
+  [IpcChannel.SaveKnowledgeSettings]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.SaveKnowledgeSettings], input),
+  [IpcChannel.RebuildKnowledgeIndex]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.RebuildKnowledgeIndex], input),
+  [IpcChannel.CheckKnowledgeSources]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.CheckKnowledgeSources], input),
+  [IpcChannel.SearchKnowledge]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.SearchKnowledge], input),
+  [IpcChannel.OpenKnowledgeSource]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.OpenKnowledgeSource], input),
+  [IpcChannel.RemoveKnowledgeDocument]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.RemoveKnowledgeDocument], input),
+  [IpcChannel.RefreshKnowledgeDocument]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.RefreshKnowledgeDocument], input),
+  [IpcChannel.ListKnowledgeRevisions]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.ListKnowledgeRevisions], input),
+  [IpcChannel.PreviewKnowledge]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.PreviewKnowledge], input),
+  [IpcChannel.CreateResearchDraft]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.CreateResearchDraft], input),
+  [IpcChannel.PreviewRunSource]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.PreviewRunSource], input),
+  [IpcChannel.DeclareArtifactSources]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.DeclareArtifactSources], input),
+  [IpcChannel.GetRunArtifactDeclarations]: (input) =>
+    invokeContract(knowledgeInvokeContracts[IpcChannel.GetRunArtifactDeclarations], input),
+};
+const knowledgeEventContracts = defineEventContracts({
+  [IpcChannel.KnowledgeJobEvent]: {
+    channel: IpcChannel.KnowledgeJobEvent,
+    event: knowledgeJobSummarySchema,
+  },
+});
+const knowledgeEventMethods: EventMethodsByChannel<typeof knowledgeEventContracts> = {
+  [IpcChannel.KnowledgeJobEvent]: (listener) =>
+    listenContract(knowledgeEventContracts[IpcChannel.KnowledgeJobEvent], listener),
+};
+
 const api: BetterWorkDesktopApi = {
   runs: {
     start: (input) => runInvokeMethods[IpcChannel.StartRun](input),
@@ -1084,146 +1277,36 @@ const api: BetterWorkDesktopApi = {
     toggleMaximize: () => ipcRenderer.invoke(IpcChannel.WindowToggleMaximize, {}),
   },
   knowledge: {
-    list: (input) =>
-      invokeValidated(
-        IpcChannel.ListKnowledge,
-        listKnowledgeRequestSchema.parse(input ?? {}),
-        z.array(knowledgeDocumentSummarySchema),
-      ),
-    listCollections: () =>
-      invokeValidated(IpcChannel.ListKnowledgeCollections, {}, z.array(knowledgeCollectionSchema)),
-    saveCollection: (input) =>
-      invokeValidated(
-        IpcChannel.SaveKnowledgeCollection,
-        saveKnowledgeCollectionRequestSchema.parse(input),
-        z.array(knowledgeCollectionSchema),
-      ),
+    list: (input) => knowledgeInvokeMethods[IpcChannel.ListKnowledge](input ?? {}),
+    listCollections: () => knowledgeInvokeMethods[IpcChannel.ListKnowledgeCollections]({}),
+    saveCollection: (input) => knowledgeInvokeMethods[IpcChannel.SaveKnowledgeCollection](input),
     deleteCollection: (input) =>
-      invokeValidated(
-        IpcChannel.DeleteKnowledgeCollection,
-        deleteKnowledgeCollectionRequestSchema.parse(input),
-        z.array(knowledgeCollectionSchema),
-      ),
+      knowledgeInvokeMethods[IpcChannel.DeleteKnowledgeCollection](input),
     setCollectionMembers: (input) =>
-      invokeValidated(
-        IpcChannel.SetKnowledgeCollectionMembers,
-        setKnowledgeCollectionMembersRequestSchema.parse(input),
-        knowledgeCollectionMembersResultSchema,
-      ),
-    importFromDialog: () =>
-      invokeValidated(IpcChannel.ImportKnowledge, {}, knowledgeImportAckSchema),
-    jobs: (input) =>
-      invokeValidated(
-        IpcChannel.ListKnowledgeJobs,
-        listKnowledgeJobsRequestSchema.parse(input ?? {}),
-        knowledgeJobPageSchema,
-      ),
-    job: (input) =>
-      invokeValidated(
-        IpcChannel.GetKnowledgeJob,
-        knowledgeJobIdRequestSchema.parse(input),
-        knowledgeJobDetailSchema.nullable(),
-      ),
-    cancelJob: (input) =>
-      invokeValidated(
-        IpcChannel.CancelKnowledgeJob,
-        knowledgeJobIdRequestSchema.parse(input),
-        knowledgeJobCancelResultSchema,
-      ),
-    clearJobs: () => invokeValidated(IpcChannel.ClearKnowledgeJobs, {}, clearedResultSchema),
-    retryJob: (input) =>
-      invokeValidated(
-        IpcChannel.RetryKnowledgeJob,
-        retryKnowledgeJobRequestSchema.parse(input),
-        knowledgeJobAckSchema,
-      ),
-    onJobEvent(listener) {
-      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
-        listener(knowledgeJobSummarySchema.parse(raw));
-      };
-      ipcRenderer.on(IpcChannel.KnowledgeJobEvent, handler);
-      return () => ipcRenderer.off(IpcChannel.KnowledgeJobEvent, handler);
-    },
-    settings: () =>
-      invokeValidated(IpcChannel.GetKnowledgeSettings, {}, knowledgeSearchSettingsSchema),
-    saveSettings: (input) =>
-      invokeValidated(
-        IpcChannel.SaveKnowledgeSettings,
-        saveKnowledgeSettingsRequestSchema.parse(input),
-        knowledgeSearchSettingsSchema,
-      ),
-    rebuildIndex: (input) =>
-      invokeValidated(
-        IpcChannel.RebuildKnowledgeIndex,
-        rebuildKnowledgeIndexRequestSchema.parse(input),
-        knowledgeJobAckSchema,
-      ),
-    checkSources: (input) =>
-      invokeValidated(
-        IpcChannel.CheckKnowledgeSources,
-        checkKnowledgeSourcesRequestSchema.parse(input),
-        knowledgeJobAckSchema,
-      ),
-    search: (input) =>
-      invokeValidated(
-        IpcChannel.SearchKnowledge,
-        searchKnowledgeRequestSchema.parse(input),
-        knowledgeSearchResponseSchema,
-      ),
-    openSource: (input) =>
-      invokeValidated(
-        IpcChannel.OpenKnowledgeSource,
-        openKnowledgeSourceRequestSchema.parse(input),
-        openKnowledgeSourceResponseSchema,
-      ),
-    remove: (input) =>
-      invokeValidated(
-        IpcChannel.RemoveKnowledgeDocument,
-        removeKnowledgeDocumentRequestSchema.parse(input),
-        removedResultSchema,
-      ),
-    refresh: (input) =>
-      invokeValidated(
-        IpcChannel.RefreshKnowledgeDocument,
-        refreshKnowledgeDocumentRequestSchema.parse(input),
-        knowledgeJobAckSchema,
-      ),
-    listRevisions: (input) =>
-      invokeValidated(
-        IpcChannel.ListKnowledgeRevisions,
-        listKnowledgeRevisionsRequestSchema.parse(input),
-        z.array(knowledgeRevisionSummarySchema),
-      ),
-    preview: (input) =>
-      invokeValidated(
-        IpcChannel.PreviewKnowledge,
-        previewKnowledgeRequestSchema.parse(input),
-        knowledgeTextPageSchema,
-      ),
-    createResearchDraft: (input) =>
-      invokeValidated(
-        IpcChannel.CreateResearchDraft,
-        knowledgeCreateResearchDraftRequestSchema.parse(input),
-        knowledgeResearchDraftResultSchema,
-      ),
-    previewRunSource: (input) =>
-      invokeValidated(
-        IpcChannel.PreviewRunSource,
-        previewRunSourceRequestSchema.parse(input),
-        runSourcePreviewSchema,
-      ),
+      knowledgeInvokeMethods[IpcChannel.SetKnowledgeCollectionMembers](input),
+    importFromDialog: () => knowledgeInvokeMethods[IpcChannel.ImportKnowledge]({}),
+    jobs: (input) => knowledgeInvokeMethods[IpcChannel.ListKnowledgeJobs](input ?? {}),
+    job: (input) => knowledgeInvokeMethods[IpcChannel.GetKnowledgeJob](input),
+    cancelJob: (input) => knowledgeInvokeMethods[IpcChannel.CancelKnowledgeJob](input),
+    clearJobs: () => knowledgeInvokeMethods[IpcChannel.ClearKnowledgeJobs]({}),
+    retryJob: (input) => knowledgeInvokeMethods[IpcChannel.RetryKnowledgeJob](input),
+    onJobEvent: (listener) => knowledgeEventMethods[IpcChannel.KnowledgeJobEvent](listener),
+    settings: () => knowledgeInvokeMethods[IpcChannel.GetKnowledgeSettings]({}),
+    saveSettings: (input) => knowledgeInvokeMethods[IpcChannel.SaveKnowledgeSettings](input),
+    rebuildIndex: (input) => knowledgeInvokeMethods[IpcChannel.RebuildKnowledgeIndex](input),
+    checkSources: (input) => knowledgeInvokeMethods[IpcChannel.CheckKnowledgeSources](input),
+    search: (input) => knowledgeInvokeMethods[IpcChannel.SearchKnowledge](input),
+    openSource: (input) => knowledgeInvokeMethods[IpcChannel.OpenKnowledgeSource](input),
+    remove: (input) => knowledgeInvokeMethods[IpcChannel.RemoveKnowledgeDocument](input),
+    refresh: (input) => knowledgeInvokeMethods[IpcChannel.RefreshKnowledgeDocument](input),
+    listRevisions: (input) => knowledgeInvokeMethods[IpcChannel.ListKnowledgeRevisions](input),
+    preview: (input) => knowledgeInvokeMethods[IpcChannel.PreviewKnowledge](input),
+    createResearchDraft: (input) => knowledgeInvokeMethods[IpcChannel.CreateResearchDraft](input),
+    previewRunSource: (input) => knowledgeInvokeMethods[IpcChannel.PreviewRunSource](input),
     declareArtifactSources: (input) =>
-      invokeValidated(
-        IpcChannel.DeclareArtifactSources,
-        declareArtifactSourcesRequestSchema.parse(input),
-        runArtifactSourceDeclarationSchema,
-      ),
+      knowledgeInvokeMethods[IpcChannel.DeclareArtifactSources](input),
     getRunArtifactDeclarations: (input) =>
-      invokeValidated(
-        IpcChannel.GetRunArtifactDeclarations,
-        getRunArtifactDeclarationsRequestSchema.parse(input),
-        runArtifactSourceDeclarationSchema.nullable(),
-      ),
+      knowledgeInvokeMethods[IpcChannel.GetRunArtifactDeclarations](input),
   },
   skills: {
     list: () => invokeValidated(IpcChannel.ListSkills, {}, z.array(skillSummarySchema)),
