@@ -986,3 +986,9 @@ App heavy 51/51；SkillsView functional 16/16。typecheck、两份测试文件�
 2026-10-11 19:43 CST，从最新 `origin/main` `c0a48e898c9723ff424a1f9e81785a57e78e5524` 建立 `codex/r13-app-terminal-state-view-test`。在 `WorkMessageList.test.tsx` 断言取消终态文案落在 `status-note`；App 整树用例保留历史取消 Run 恢复后无停止按钮、可开始工作且不会自动调用 `runs.start` 的跨层验证，移除重复组件呈现断言。
 
 App heavy 51/51；WorkMessageList functional 6/6。typecheck、两份测试文件的 ESLint/Prettier 与 `git diff --check` 通过。未改产品行为或恢复/继续覆盖；R13 尚未整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 76. R13 子卡：工作空间快照文件名呈现下沉到组件测试
+
+2026-10-11 19:49 CST，从最新 `origin/main` 建立 `codex/r13-app-test-audit`。App 整树的“添加文件”用例保留快照准备 API 请求及材料计数断言，移除对上下文面板文件名的重复呈现断言；在 `ContextPanel.test.tsx` 直接给出已选工作空间快照与候选，验证资料列表呈现文件名。重开历史 Task 的 App 用例继续验证按 Task 读取候选并显示文件名，保留 API 到页面的集成路径。
+
+修改前 App heavy 51/51、ContextPanel functional 31/31；修改后分别为 51/51、32/32。typecheck、两份测试文件的 ESLint/Prettier 通过；R13 尚未整体解决。未改生产代码或用户行为；未运行完整 `npm run verify`、UI 或真实模型。
