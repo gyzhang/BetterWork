@@ -68,6 +68,49 @@ describe('Knowledge search read models', () => {
     expect(harness.stub.calls).toEqual([]);
   });
 
+  it('scans for a late vector winner before hydrating only the stable top 50 blocks', async () => {
+    const beforeEmbeddingCheck = { run: () => undefined };
+    const contents = Array.from({ length: 80 }, (_, index) => `chunk ${index} growth notes`);
+    const harness = await makeHarness(
+      { Allowed: contents.join(' ') },
+      {
+        queryVector: () => [0, 0, 1],
+        beforeEmbed: () => beforeEmbeddingCheck.run(),
+      },
+    );
+    const allowed = harness.references.get('Allowed');
+    if (!allowed) throw new Error('fixture reference missing');
+    const index = harness.vault.index;
+    const chunks = seedSearchChunks(index, allowed.knowledgeRevisionId, 'Allowed', contents);
+    const revisionIds = [allowed.knowledgeRevisionId];
+    harness.enableSemantic();
+    harness.publishVectors(
+      'Allowed',
+      contents.map((_, index) => (index === 79 ? [0, 0, 1] : [1, 0, 0])),
+    );
+    const fullScope = vi.spyOn(index, 'chunksInScope').mockImplementation(() => {
+      throw new Error('The successful vector path must not hydrate the complete scope');
+    });
+    const selected = vi.spyOn(index, 'chunksByIdsInScope');
+    beforeEmbeddingCheck.run = () => {
+      expect(fullScope).not.toHaveBeenCalled();
+      expect(selected.mock.calls.every(([, ids]) => ids.length === 0)).toBe(true);
+    };
+
+    const response = await harness.service.search({
+      scope: libraryScope,
+      query: 'unmatched-risk',
+    });
+    const expectedIds = [chunks[79]!.id, ...chunks.slice(0, 49).map((chunk) => chunk.id)];
+    expect(response.effectiveMode).toBe('vector');
+    expect(response.results.map(({ chunkId }) => chunkId)).toEqual(expectedIds);
+    expect(response.coverage).toEqual({ eligibleChunks: 80, indexedChunks: 80 });
+    expect(fullScope).not.toHaveBeenCalled();
+    expect(selected).toHaveBeenNthCalledWith(1, revisionIds, []);
+    expect(selected).toHaveBeenNthCalledWith(2, revisionIds, expectedIds);
+    expect(selected.mock.results[1]?.value).toHaveLength(50);
+  });
+
   it('scans all scoped text, promotes a late winner and hydrates only the ranked 50', async () => {
     const contents = Array.from({ length: 80 }, (_, index) =>
       index === 79 ? '\u590D\u76D8\u53E3\u5F84' : '\u7532'.repeat(19) + '\u590D\u76D8\u53E3\u5F84',
@@ -457,6 +500,39 @@ describe('KnowledgeSearchService 语义路与融合（契约 §9.2/§9.3）', ()
     expect(hit?.matchedBy).toBe('vector');
     expect(hit?.excerpt).toBe('beta memo about payment');
     expect(hit?.excerptHash).toBe(sha256Hex(hit?.excerpt ?? ''));
+  });
+
+  it('Run 向量检索保留所选旧修订，知识页仍只检索当前修订', async () => {
+    const harness = await makeHarness({ Material: 'older customer report' });
+    const oldReference = harness.references.get('Material');
+    if (!oldReference) throw new Error('fixture reference missing');
+    harness.enableSemantic();
+    harness.publishVectors('Material', [[0, 0, 1]]);
+    await writeFile(oldReference.sourcePath, 'current unrelated memo');
+    await harness.vault.importPaths([oldReference.sourcePath]);
+    expect(harness.vault.registeredRevisionId(oldReference.knowledgeDocumentId)).not.toBe(
+      oldReference.knowledgeRevisionId,
+    );
+
+    const runService = new KnowledgeSearchService({
+      vault: harness.vault,
+      index: harness.vault.index,
+      runMaterials: () => [oldReference],
+      embedding: harness.stub.runner,
+      scan: dotScan,
+    });
+    const historical = await runService.search({
+      scope: { kind: 'run', runId: 'historical-run' },
+      query: 'unmatched-risk',
+    });
+    const current = await harness.service.search({ scope: libraryScope, query: 'unmatched-risk' });
+
+    expect(historical.results.map(({ reference }) => reference)).toEqual([oldReference]);
+    expect(historical.results[0]?.matchedBy).toBe('vector');
+    expect(historical.coverage).toEqual({ eligibleChunks: 1, indexedChunks: 1 });
+    expect(current.results).toEqual([]);
+    expect(current.degradedReason).toBe('index-missing');
+    expect(current.coverage).toEqual({ eligibleChunks: 1, indexedChunks: 0 });
   });
 
   it('两路融合：同块合并为 both，RRF 总分压过单路关键词排名', async () => {

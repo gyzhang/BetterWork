@@ -279,7 +279,7 @@ scope 可辨识联合：`{ kind: 'library', collectionId? }` 或 `{ kind: 'run',
 4. 在允许集合内 FTS 命中按 bm25 升序；零命中才用所有词都在规范化 title 或 chunk content 中的 substring 回退。回退先标题命中词数降序，再正文首次命中位置升序，无正文命中排末；最后以 revisionId/sectionOrdinal/start 稳定排序。
 5. top 50 是过滤后截取，不是全库 top 50 后剔除。FTS 排名仅作为本路顺序；旧历史修订也必须有关键词块，不能回退 latest。
 
-读取模型：覆盖计数使用 scope 内的聚合查询，不为计数加载正文。substring 回退按既有块顺序逐块读取身份、标题与正文精简投影，仍完整扫描允许范围；按上述 JavaScript 归一化和稳定排序，只保留前 50 个身份，再以身份与允许修订集合共同约束完整块读取。不能用 SQLite LIKE/lower 代替既有 Unicode 匹配，也不能提前 LIMIT 扫描范围。关键词命中时不执行回退扫描；无可用语义路时不为向量装配加载完整 scope 正文。有可用语义路时仍在嵌入 await 前固定完整块映射，向量租约、覆盖、取消和结果语义不变。实施与证据见 [E8 读模型报告](../reviews/2026-10-10-knowledge-search-read-model.md)。
+读取模型：覆盖计数使用 scope 内的聚合查询，不为计数加载正文。substring 回退按既有块顺序逐块读取身份、标题与正文精简投影，仍完整扫描允许范围；按上述 JavaScript 归一化和稳定排序，只保留前 50 个身份，再以身份与允许修订集合共同约束完整块读取。不能用 SQLite LIKE/lower 代替既有 Unicode 匹配，也不能提前 LIMIT 扫描范围。关键词命中时不执行回退扫描；无可用语义路时不为向量装配加载完整 scope 正文。成功向量路在嵌入前固定允许修订、space 与 active generation；扫描所有范围内向量后，使用向量行的轻量块身份确定性排名，只按前 50 个命中身份与允许修订集合补读完整块并恢复排名顺序。关键词路径、修订范围、旧版本、租约、取消、覆盖与降级语义不变。实施与证据见 [E17 读模型报告](../reviews/2026-10-11-knowledge-success-vector-read-model.md)。
 
 ### 9.2 向量与融合
 
