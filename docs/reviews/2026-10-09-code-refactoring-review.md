@@ -783,8 +783,10 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 
 最终源 `08298a5609207b71fb36f797dfa6a2894784c119` 的 [Actions 38122280321](https://github.com/gyzhang/BetterWork/actions/runs/38122280321) 在 macos-26-arm64 上通过 PR Gate；lint、format:check、typecheck、docs:check、相关 functional 52 项均通过，无受影响 heavy 测试，Full verify 按策略跳过。[PR #92](https://github.com/gyzhang/BetterWork/pull/92) 已 squash 合入 main `cd9b995fc8678ae7c0805d0c67b2ab7a6cbdef6f`。未运行完整 verify、UI 或真实模型。
 
-## 43. E19：成果详情读模型抽取（本地自动化通过，远端收口待完成）
+## 43. E19：成果详情读模型抽取（已合并）
 
 2026-10-11 15:52 CST，从最新 main `7eee1ad1f7d709ac81a02fc29891a747476e9a81` 在保留 worktree 建立 `codex/e19-artifact-query-use-case`，继续 R08 的 Artifact 详情读取切片。将 `GetArtifact`、`GetArtifactVersion` 与 `GetFileArtifact` 的详情组合提取到同层 `ArtifactQueryService`；IPC 继续负责 Zod 边界校验，精确版本归属检查、当前/指定文件版本投影和空结果语义保持。未改协议、Repository、Schema、迁移、ArtifactVersion 或 Evidence 语义。
 
-真实 SQLite 查询用例 2/2，IPC functional 51/51，共 53 项通过；typecheck、定向 ESLint/Prettier 与生产 build 通过。`docs:check`、本批基点巡检、提交推送与 PR Gate 待收口。未运行完整 verify、UI 或真实模型。
+真实 SQLite 查询用例 2/2，IPC functional 51/51，共 53 项通过；typecheck、定向 ESLint/Prettier、生产 build、`docs:check` 154/154 与本批基点巡检通过。
+
+最终源 `26e18e4d730f7213a1571f6becf7f6f5a8bcecb3` 的 [Actions 38122873009](https://github.com/gyzhang/BetterWork/actions/runs/38122873009) 在 macos-26-arm64 上通过 PR Gate；lint、format:check、typecheck、docs:check 与相关 functional 53 项均通过，无受影响 heavy 测试，Full verify 按策略跳过。[PR #94](https://github.com/gyzhang/BetterWork/pull/94) 已 squash 合入 main `fd1a24ecd42c55b7a4d99a76acb551b8c8a912d2`。未运行完整 verify、UI 或真实模型。
