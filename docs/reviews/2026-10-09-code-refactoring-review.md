@@ -956,3 +956,9 @@ App heavy 53/53；ExpertsView 与 useExperts functional 合计 17/17。typecheck
 2026-10-11 19:15 CST，从最新 `origin/main` `3feb3718fe3ef4e1a51cd4e922656fe5df226e1c` 建立 `codex/r13-expert-copy-view-tests`。移除 App 整树中内置专家复制的 API 断言；`ExpertsView.test.tsx` 已直接覆盖内置卡片复制动作与刷新，`use-experts.test.ts` 现在直接断言复制调用以 `{ expertId }` 传递。
 
 App heavy 52/52；ExpertsView 与 useExperts functional 合计 17/17。typecheck、两份测试文件的 ESLint/Prettier 与 `git diff --check` 通过。未改产品代码、交互或既有行为断言；R13 尚未整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 71. R13 子卡：专家记忆摘要过滤移入视图测试
+
+2026-10-11 19:20 CST，从最新 `origin/main` `61c00fe43cfb3ec28fa1e185da5717d2aa80a166` 建立 `codex/r13-expert-memory-summary-view-tests`。新增直接渲染 `ExpertsPage` 的记忆摘要用例，验证当前专家与工作空间过滤、已删除记录排除、确认/待确认计数、摘要正文及管理回调。App 保留 API 数据接入摘要和进入记忆管理页的跨层覆盖，只移除重复的页面正文/过滤断言。
+
+App heavy 52/52；ExpertsView functional 15/15。typecheck、两份测试文件的 ESLint/Prettier 与 `git diff --check` 通过。未改产品代码或业务行为；R13 尚未整体解决。未运行完整 `npm run verify`、UI 或真实模型。

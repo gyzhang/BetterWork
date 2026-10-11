@@ -1489,7 +1489,7 @@ describe('Task context restoration', () => {
 });
 
 describe('Expert configuration', () => {
-  it('shows the Expert memory summary and opens memory management', async () => {
+  it('opens memory management from the Expert memory summary', async () => {
     const legacyProvenance = {
       schemaVersion: 1,
       verification: 'legacy-unverified',
@@ -1529,9 +1529,6 @@ describe('Expert configuration', () => {
     fireEvent.click(await screen.findByRole('button', { name: '详情' }));
 
     expect(await screen.findByText('1 条已确认 · 1 条待确认')).toBeTruthy();
-    expect(screen.getByText(memory.content)).toBeTruthy();
-    expect(screen.getByText(workspaceMemory.content)).toBeTruthy();
-    expect(screen.queryByText(otherWorkspaceMemory.content)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '管理记忆' }));
     expect(await screen.findByText('当前范围：经营分析专家 · 当前工作空间')).toBeTruthy();
     expect(
