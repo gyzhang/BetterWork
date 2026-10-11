@@ -735,8 +735,12 @@ functional 定向 3 文件 / 69 项、heavy 定向 1 文件 / 37 项、typecheck
 
 ## 38. R16：现行规范事实同步（已合并）
 
-工程规范 §6 已说明模型与搜索 API Key 的生产 safeStorage 路径、legacy journal 迁移，以及 `pending/failed/done/none` 的实际读取和派发语义；保留列仍在，存储不可用时迁移保留 pending，不声称旧数据库页、WAL 或备份已安全擦除。能力契约同步 CF10–CF12 代码与验收状态，API 契约仍为 Proposed。
+工程规范 §6、系统架构的实现状态、交接说明 §3 与 Qoder 开发周期速查现已共用模型/搜索 API Key 的生产 safeStorage 路径、legacy journal 迁移和 `pending/failed/done/none` 读取/派发语义；保留列仍在，存储不可用时迁移保留 pending，不声称旧数据库页、WAL 或备份已安全擦除。能力契约同步 CF10–CF12 代码与验收状态，API 契约仍为 Proposed。
 
 工程规范 §7 补全 `handleScheduleInput` 的输入与 data Schema、`ScheduleCallResult` 包装、异常映射和边界校验失败语义。没有改运行代码、历史迁移、ADR 状态或能力范围。
 
+复查现行文档镜像时，又将[系统架构](../03-system-architecture.md)的实现状态、[交接说明 §3](../11-qoder-handoff.md)和 `.qoder/rules/betterwork-dev-cycle.md` 对齐到同一凭据事实；日期标明的 Proposed 架构快照、历史日志及交接 §4–§7 的早期快照保持原样。
+
 提交 `cfed9db7edaba05c63b9e80eebfa8da6378b0897` 的 [Actions 38116034827](https://github.com/gyzhang/BetterWork/actions/runs/38116034827) 执行纯文档分类，Documentation check 与 PR Gate 成功；Full verify 和 Quick code check 按变更类型跳过。本地 `npm run docs:check` 154/154 通过。[PR #81](https://github.com/gyzhang/BetterWork/pull/81) 已 squash 合并为 main `cfbc900d8e877e218b4309b05f326e1e4cd4603f`。
+
+批次末 `npm run drift:check -- --batch-base=c8ef5483ddee8d8cc461445a083702c64086e2ef` 退出 1：当前脚本只从 `standards/coding-standard.test.ts` 聚合器读取护栏和例外，而 R15 已将它们移入聚合器导入的主题模块；因此旧基线把迁移位置识别成整组删除。R15 的 AST 对照已确认 33 个 describe 组和 154 个用例标题保持，未写入会把当前例外登记降为 0 的错误基线；drift-check 对模块化后的扫描支持需另行修复。

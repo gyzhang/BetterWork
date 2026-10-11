@@ -103,7 +103,7 @@ pre-push 阻止直推 main，并核对干净 HEAD 与空白差异。PR 合并后
 
 `knowledge-vault.test.ts` 的 PDF 与 DOCX 两个用例已显式提高超时——它们首次运行需要现场转换 `pdf-parse` 与 `mammoth`，冷 Vite 缓存下会超过默认的 5 秒。
 
-数据文件位于 Electron `userData` 下：应用状态库 `betterwork.db` 与知识库 `vaults/default/vault.sqlite`，都是本地运行数据，绝不能提交到 Git。两个库的 schema 由 `db/` 下的版本化迁移管理；迁移制度之前建立的历史库会在首次启动时被识别并对账，不会丢数据。模型与搜索的 API Key 明文存于本地 SQLite，列表接口只回 `apiKeyConfigured`；日志和错误消息绝不能输出密钥。如未来引入系统钥匙串（`safeStorage`），须先新增 ADR 并设计迁移。
+数据文件位于 Electron `userData` 下：应用状态库 `betterwork.db` 与知识库 `vaults/default/vault.sqlite`，都是本地运行数据，绝不能提交到 Git。两个库的 schema 由 `db/` 下的版本化迁移管理；迁移制度之前建立的历史库会在首次启动时被识别并对账，不会丢数据。模型与搜索 API Key 的生产存储由 Main 经 Electron `safeStorage` 加密到 `credentials`；legacy 列与 journal 迁移按[工程规范 §6](12-engineering-standards.md)处理，`pending/failed` owner 不回退明文，`none` 状态保留兼容读取。列表接口只回 `apiKeyConfigured`；日志和错误消息绝不输出密钥。
 以下 §4–§7 保留早期架构/质量治理的交接记录，不能直接作为新待办。新增 UI 工作走 docs/10 §10.1；历史问题是否仍存在须回到代码及最新任务板核实。
 
 ## 4. 代码地图

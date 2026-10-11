@@ -56,4 +56,4 @@ description: 启动应用、停止应用、调试、运行开发环境、构建�
 
 ## 密钥
 
-- `model_profiles.api_key` 明文存于本地 SQLite，只在主进程内部流转；日志、错误消息、测试输出**绝不打印密钥**。如未来引入系统钥匙串，先新增 ADR 并设计迁移。（docs/12 §6、docs/11 §3）
+- 模型与搜索 API Key 的生产路径由 Main 注入 Electron `safeStorage`，加密后存入 `credentials`；legacy 列与 journal 状态按 docs/12 §6 处理，`pending/failed` 不回退明文，`none` 仍保留兼容读取。对外只回 `apiKeyConfigured`，日志、错误消息、测试输出**绝不打印密钥**。（docs/12 §6、docs/11 §3）
