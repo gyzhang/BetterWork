@@ -992,3 +992,9 @@ App heavy 51/51；WorkMessageList functional 6/6。typecheck、两份测试文�
 2026-10-11 19:49 CST，从最新 `origin/main` 建立 `codex/r13-app-test-audit`。App 整树的“添加文件”用例保留快照准备 API 请求及材料计数断言，移除对上下文面板文件名的重复呈现断言；在 `ContextPanel.test.tsx` 直接给出已选工作空间快照与候选，验证资料列表呈现文件名。重开历史 Task 的 App 用例继续验证按 Task 读取候选并显示文件名，保留 API 到页面的集成路径。
 
 修改前 App heavy 51/51、ContextPanel functional 31/31；修改后分别为 51/51、32/32。typecheck、两份测试文件的 ESLint/Prettier 通过；R13 尚未整体解决。未改生产代码或用户行为；未运行完整 `npm run verify`、UI 或真实模型。
+
+## 77. R13 子卡：专家记忆捕获的组件交互下沉
+
+2026-10-11 19:56 CST，从最新 `origin/main` 建立 `codex/r13-app-test-refinement`。`MemoryCapturePanel.test.tsx` 新增调用方提供的专家与工作空间范围显示断言，并明确取消只调用关闭回调、不提交；App 整树用例继续验证历史专家 Task 默认映射到专家与工作空间范围、取消后恢复触发按钮焦点、重新打开为新草稿且不创建记忆。移除 App 中已由面板直接测试覆盖的原文输入焦点与 Escape 关闭断言。
+
+修改前 App heavy 51/51、MemoryCapturePanel functional 9/9；修改后分别为 51/51、10/10。typecheck、两份测试文件的 ESLint/Prettier 通过；R13 尚未整体解决。未改生产代码或用户行为；未运行完整 `npm run verify`、UI 或真实模型。

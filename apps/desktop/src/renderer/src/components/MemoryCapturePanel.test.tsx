@@ -173,19 +173,38 @@ describe('MemoryCapturePanel 基座', () => {
 
   it('取消把草稿交回页面，面板自己不清状态', () => {
     const onClose = vi.fn();
+    const onSubmit = vi.fn(async () => true);
     render(
       <MemoryCapturePanel
         capture={draft()}
         scopes={scopes}
         error=""
         onRangeChange={() => {}}
-        onSubmit={async () => true}
+        onSubmit={onSubmit}
         onClose={onClose}
       />,
     );
 
     fireEvent.click(screen.getByRole('button', { name: '取消' }));
     expect(onClose).toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('显示调用方提供的专家与工作空间范围', () => {
+    render(
+      <MemoryCapturePanel
+        capture={draft()}
+        scopes={[{ kind: 'expert-workspace', expertId: 'expert-1', workspaceId: 'w1' }]}
+        error=""
+        onRangeChange={() => {}}
+        onSubmit={async () => true}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: '记忆适用范围' }).textContent).toContain(
+      '专家与工作空间',
+    );
   });
 
   it('错误只走内联错误态，不开第二条反馈通道', () => {

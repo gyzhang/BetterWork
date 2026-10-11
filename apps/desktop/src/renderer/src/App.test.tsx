@@ -1217,7 +1217,7 @@ describe('Task context restoration', () => {
     expect(await screen.findByText('专家修订模型（历史版本）')).toBeTruthy();
   });
 
-  it('offers Expert-scoped memory capture for an Expert task', async () => {
+  it('uses the Expert workspace scope for capture on an Expert task', async () => {
     const api = installApi({
       expert: true,
       context: {
@@ -1257,17 +1257,12 @@ describe('Task context restoration', () => {
     fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
     fireEvent.click(await screen.findByRole('button', { name: '记住这段经验' }));
     const trigger = screen.getByRole('button', { name: '记住这段经验' });
-    // 专家任务的捕获表单默认落在「专家 + 工作空间」范围，并给出只读原文选择区（§3.1、MI02）。
+    // 专家任务的捕获表单默认落在「专家 + 工作空间」范围（§3.1、MI02）。
     const scopeButton = await screen.findByRole('button', { name: '记忆适用范围' });
     expect(scopeButton.textContent ?? '').toContain('专家与工作空间');
-    const source = screen.getByRole('textbox', {
-      name: '回答原文（只读，可拖选或用键盘选择）',
-    });
-    expect(document.activeElement).toBe(source);
     const content = screen.getByRole('textbox', { name: '记忆正文' });
-    content.focus();
     fireEvent.change(content, { target: { value: '尚未提交的改写经验' } });
-    fireEvent.keyDown(content, { key: 'Escape' });
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
     expect(screen.queryByRole('textbox', { name: '记忆正文' })).toBeNull();
     expect(document.activeElement).toBe(trigger);
     expect(api.memories.create).not.toHaveBeenCalled();
