@@ -4461,6 +4461,8 @@ export const workspaceSummarySchema = z.object({
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
 });
+export const workspaceDirectorySelectionSchema = z.string().min(1).nullable();
+export type WorkspaceDirectorySelection = z.infer<typeof workspaceDirectorySelectionSchema>;
 export const runSkillBindingSummarySchema = z.object({
   skillId: z.string().min(1),
   skillName: z.string().min(1),
@@ -6064,7 +6066,7 @@ export interface BetterWorkDesktopApi {
   workspace: {
     getDefault(): Promise<WorkspaceSummary>;
     /** 只弹目录选择器：`null` 是用户取消，不登记任何工作空间。 */
-    pickDirectory(): Promise<string | null>;
+    pickDirectory(): Promise<WorkspaceDirectorySelection>;
     listAll(): Promise<WorkspaceSummary[]>;
     create(input: CreateWorkspaceRequest): Promise<WorkspaceSummary>;
     updateIdentity(input: UpdateWorkspaceIdentityRequest): Promise<WorkspaceSummary>;

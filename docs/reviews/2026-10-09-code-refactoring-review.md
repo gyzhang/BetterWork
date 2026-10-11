@@ -1030,3 +1030,11 @@ App heavy 51/51；WorkMessageList functional 6/6。typecheck、两份测试文�
 Preload 定向测试 1 文件 / 9 项、`docs:check` 154/154 通过；typecheck、改动文件 ESLint/Prettier 与差异空白检查通过。回读文档时误触发 `npm run verify`，发现后已停止；没有可用的完整验证结果，不计为证据。UI、真实模型及安装态验收未运行。
 
 源提交 `880b3372a22d5bc63f56994d3598d981c1794e52` 的 [PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/38140254054) 成功；Quick code check 通过，Full verify 按规则跳过。[PR #138](https://github.com/gyzhang/BetterWork/pull/138) 已 squash 合入 main，合并提交 `1ae34152bfb93381d6284519b44aac711dc9c5e0`；本地和远端任务分支已删除，任务 worktree 保留。R09 其他 API 域和 channel 映射继续待后续切片。
+
+## 83. R09 子卡：Workspace Preload 请求与响应边界校验
+
+2026-10-11 20:50 CST，Runs 子卡合并及文档收口后，从最新 `origin/main` `82e3beb796d2c52a6a89783efb0ccf40b788bc48` 在保留的任务 worktree 建立 `codex/r09-workspace-preload-contracts`。Workspace Preload 的默认空间、目录选择、空间列表、创建、身份更新、隐藏状态和任务分组读取均接入现有共享请求/响应 Schema。将原先只在 Main 注册器内联的目录选择 `string | null` Schema 移入共享协议，并由 Main 与 Preload 共用；API 返回类型保持结构等价。
+
+目录取消仍返回 `null`，选中路径仍返回非空字符串；无入参 channel 显式发送空对象。没有改 channel、领域行为或错误语义。R09 的其他 API 域、全局 channel 映射及旧 Preload 调用仍未完成。
+
+Preload 与 IPC 注册器定向测试 2 文件 / 62 项、`docs:check` 154/154 通过；typecheck、改动文件 ESLint/Prettier 与差异空白检查通过。完整 `npm run verify`、UI、真实模型及安装态验收未运行。

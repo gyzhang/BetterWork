@@ -201,6 +201,79 @@ describe('run preload API', () => {
   });
 });
 
+describe('workspace preload API', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.invoke.mockResolvedValue(null);
+  });
+
+  it('validates and forwards workspace requests and responses through their channels', async () => {
+    const workspace = {
+      id: 'workspace-1',
+      name: 'Research',
+      rootPath: '/tmp/research',
+      iconId: 'folder',
+      accentId: 'moss',
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    let directorySelectionCount = 0;
+    mocks.invoke.mockImplementation(async (channel) => {
+      if (channel === IpcChannel.GetDefaultWorkspace) return workspace;
+      if (channel === IpcChannel.PickWorkspaceDirectory) {
+        directorySelectionCount += 1;
+        return directorySelectionCount === 1 ? null : '/tmp/research';
+      }
+      if (channel === IpcChannel.ListWorkspaces) return [workspace];
+      if (channel === IpcChannel.ListWorkspaceTaskGroups) return [];
+      return workspace;
+    });
+
+    await Promise.all([
+      api().workspace.getDefault(),
+      api().workspace.pickDirectory(),
+      api().workspace.listAll(),
+      api().workspace.create({ rootPath: '/tmp/research', name: 'Research' }),
+      api().workspace.updateIdentity({ workspaceId: 'workspace-1', name: 'Research Notes' }),
+      api().workspace.setHidden({ workspaceId: 'workspace-1', hidden: true }),
+      api().workspace.listTaskGroups(),
+    ]);
+    await expect(api().workspace.pickDirectory()).resolves.toBe('/tmp/research');
+
+    expect(mocks.invoke.mock.calls).toEqual([
+      [IpcChannel.GetDefaultWorkspace, {}],
+      [IpcChannel.PickWorkspaceDirectory, {}],
+      [IpcChannel.ListWorkspaces, {}],
+      [IpcChannel.CreateWorkspace, { rootPath: '/tmp/research', name: 'Research' }],
+      [IpcChannel.UpdateWorkspaceIdentity, { workspaceId: 'workspace-1', name: 'Research Notes' }],
+      [IpcChannel.SetWorkspaceHidden, { workspaceId: 'workspace-1', hidden: true }],
+      [IpcChannel.ListWorkspaceTaskGroups, {}],
+      [IpcChannel.PickWorkspaceDirectory, {}],
+    ]);
+  });
+
+  it('rejects invalid workspace requests before IPC and malformed responses after IPC', async () => {
+    expect(() => api().workspace.create({ rootPath: '' })).toThrow();
+    expect(() => api().workspace.updateIdentity({ workspaceId: '', name: 'Research' })).toThrow();
+    expect(() => api().workspace.setHidden({ workspaceId: '', hidden: true })).toThrow();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+
+    mocks.invoke.mockResolvedValue({});
+    await expect(api().workspace.getDefault()).rejects.toThrow();
+    await expect(api().workspace.pickDirectory()).rejects.toThrow();
+    await expect(api().workspace.listAll()).rejects.toThrow();
+    await expect(api().workspace.create({ rootPath: '/tmp/research' })).rejects.toThrow();
+    await expect(
+      api().workspace.updateIdentity({ workspaceId: 'workspace-1', name: 'Research' }),
+    ).rejects.toThrow();
+    await expect(
+      api().workspace.setHidden({ workspaceId: 'workspace-1', hidden: true }),
+    ).rejects.toThrow();
+    await expect(api().workspace.listTaskGroups()).rejects.toThrow();
+    expect(mocks.invoke).toHaveBeenCalledTimes(7);
+  });
+});
+
 describe('historical task and notification preload APIs', () => {
   beforeEach(() => {
     vi.clearAllMocks();

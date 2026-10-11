@@ -251,6 +251,7 @@ import {
   voidResultSchema,
   windowToggleMaximizeRequestSchema,
   workspaceBriefSchema,
+  workspaceDirectorySelectionSchema,
   workspaceMemoryBriefRequestSchema,
   workspaceMemorySettingsSchema,
   workspaceReferenceListDataSchema,
@@ -824,7 +825,7 @@ function registerWorkspaceAndTaskChannels(deps: IpcDependencies): void {
   handleNoInput(
     IpcChannel.PickWorkspaceDirectory,
     emptyRequestSchema,
-    z.string().min(1).nullable(),
+    workspaceDirectorySelectionSchema,
     async () => {
       const result = await showOpenDialog(deps, {
         title: '选择工作空间文件夹',
