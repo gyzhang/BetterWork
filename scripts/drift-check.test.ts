@@ -64,6 +64,7 @@ describe('治理巡检 CLI', () => {
       expect(typeof report.readings['判据总数']).toBe('number');
       // 短标题和 describe › it 是同一判据的两个查找名，不能算成两条护栏。
       expect(report.readings['判据总数']).toBe(report.readings['结构护栏']);
+      expect(report.readings['结构护栏']).toBeGreaterThan(0);
       expect(report.readings['被点过名的判据']).toBeLessThanOrEqual(
         Number(report.readings['判据总数']),
       );
@@ -131,7 +132,13 @@ function withDriftRepository(
 ): void {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'betterwork-drift-fixture-'));
   try {
-    for (const name of ['scripts', 'standards', 'docs/logs', '.husky/_', '.fixture-config/husky'])
+    for (const name of [
+      'scripts',
+      'standards/coding-standard',
+      'docs/logs',
+      '.husky/_',
+      '.fixture-config/husky',
+    ])
       mkdirSync(path.join(directory, name), { recursive: true });
     copyFileSync(scriptPath, path.join(directory, 'scripts/drift-check.mjs'));
     symlinkSync(path.join(repositoryRoot, 'node_modules'), path.join(directory, 'node_modules'));
@@ -150,8 +157,19 @@ function withDriftRepository(
     );
     writeFileSync(
       path.join(directory, 'standards/coding-standard.test.ts'),
-      "const exceptions = [{ match: '.small', reason: 'badge' }];\n",
+      "import './coding-standard/rules';\n",
     );
+    writeFileSync(
+      path.join(directory, 'standards/coding-standard/rules.ts'),
+      "const exceptions = [{ match: '.small', reason: 'badge' }];\n" +
+        "describe('模块主题', () => {\n  it('模块护栏可被引用', () => {});\n});\n",
+    );
+    writeFileSync(
+      path.join(directory, 'standards/coding-standard/not-imported.ts'),
+      "const exceptions = [{ match: '.orphan', reason: 'not loaded' }];\n" +
+        "describe('未加载主题', () => {\n  it('孤立护栏不计入', () => {});\n});\n",
+    );
+    writeFileSync(path.join(directory, 'README.md'), '护栏「模块护栏可被引用」是唯一规则入口。\n');
     writeFileSync(path.join(directory, 'docs/logs/2000-01-01.md'), '# Existing log\n');
     const git = (...args: string[]) =>
       execFileSync('git', args, { cwd: directory, encoding: 'utf8' });
@@ -200,11 +218,31 @@ const appendBatchLog = (directory: string): void =>
   );
 
 describe('治理信号不能被数量或留档掩盖', () => {
+  it(
+    'counts imported topic modules without counting orphan files',
+    () => {
+      withDriftRepository((_directory, run) => {
+        const result = run('--json');
+        const report = parseReport(result.stdout);
+
+        expect(result.status).toBe(0);
+        expect(report.readings['测试文件']).toBe(2);
+        expect(report.readings['用例']).toBe(1);
+        expect(report.readings['结构护栏']).toBe(1);
+        expect(report.readings['例外登记']).toBe(1);
+        expect(report.readings['判据总数']).toBe(1);
+        expect(report.readings['现行文档点名次数']).toBe(1);
+        expect(report.readings['被点过名的判据']).toBe(1);
+      });
+    },
+    cliTimeout,
+  );
+
   it.each(['match', 'reason'])(
     '例外数量相同，修改 %s 也必须报告具体清单',
     (field) => {
       withDriftRepository((directory, run) => {
-        const file = path.join(directory, 'standards/coding-standard.test.ts');
+        const file = path.join(directory, 'standards/coding-standard/rules.ts');
         writeFileSync(
           file,
           readFileSync(file, 'utf8').replace(field === 'match' ? '.small' : 'badge', 'expanded'),
@@ -233,7 +271,7 @@ describe('治理信号不能被数量或留档掩盖', () => {
     () => {
       withDriftRepository((directory, run) => {
         writeFileSync(
-          path.join(directory, 'standards/coding-standard.test.ts'),
+          path.join(directory, 'standards/coding-standard/rules.ts'),
           "// comment\nconst exceptions = [\n { match: '.small', reason: 'badge' }\n];\n",
         );
         expect(run('--json').status).toBe(0);
