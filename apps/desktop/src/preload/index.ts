@@ -9,6 +9,7 @@ import type {
   ExportMarkdownArtifactResult,
   FileArtifactDetail,
   OpenFileArtifactResult,
+  OpenKnowledgeSourceResult,
 } from '@betterwork/agent-protocol';
 import {
   agentRuntimeEventSchema,
@@ -101,6 +102,7 @@ import {
   knowledgeJobSummarySchema,
   knowledgeResearchDraftResultSchema,
   knowledgeRevisionSummarySchema,
+  knowledgeSearchResponseSchema,
   knowledgeSearchSettingsSchema,
   knowledgeTextPageSchema,
   listArtifactsRequestSchema,
@@ -154,6 +156,8 @@ import {
   notificationSummarySchema,
   openFileArtifactRequestSchema,
   openFileArtifactResultSchema,
+  openKnowledgeSourceRequestSchema,
+  openKnowledgeSourceResultSchema,
   preflightScheduleRequestSchema,
   prepareDependencyRequestSchema,
   prepareDependencyResultSchema,
@@ -172,6 +176,8 @@ import {
   registerFileArtifactResultSchema,
   registerToolchainRequestSchema,
   registerToolchainResultSchema,
+  removedResultSchema,
+  removeKnowledgeDocumentRequestSchema,
   removeWorkspaceReferenceVersionRequestSchema,
   resolveMemoryConflictRequestSchema,
   resultSchema,
@@ -212,6 +218,7 @@ import {
   scheduleSourceItemsPageSchema,
   searchEngineSaveResultSchema,
   searchEngineSummarySchema,
+  searchKnowledgeRequestSchema,
   setDefaultModelRequestSchema,
   setExpertLifecycleRequestSchema,
   setKnowledgeCollectionMembersRequestSchema,
@@ -399,6 +406,12 @@ const exportFileArtifactResponseSchema = exportFileArtifactResultSchema.transfor
 );
 const openFileArtifactResponseSchema = openFileArtifactResultSchema.transform(
   ({ opened, error }): OpenFileArtifactResult => ({
+    opened,
+    ...(error === undefined ? {} : { error }),
+  }),
+);
+const openKnowledgeSourceResponseSchema = openKnowledgeSourceResultSchema.transform(
+  ({ opened, error }): OpenKnowledgeSourceResult => ({
     opened,
     ...(error === undefined ? {} : { error }),
   }),
@@ -899,9 +912,24 @@ const api: BetterWorkDesktopApi = {
         checkKnowledgeSourcesRequestSchema.parse(input),
         knowledgeJobAckSchema,
       ),
-    search: (input) => ipcRenderer.invoke(IpcChannel.SearchKnowledge, input),
-    openSource: (input) => ipcRenderer.invoke(IpcChannel.OpenKnowledgeSource, input),
-    remove: (input) => ipcRenderer.invoke(IpcChannel.RemoveKnowledgeDocument, input),
+    search: (input) =>
+      invokeValidated(
+        IpcChannel.SearchKnowledge,
+        searchKnowledgeRequestSchema.parse(input),
+        knowledgeSearchResponseSchema,
+      ),
+    openSource: (input) =>
+      invokeValidated(
+        IpcChannel.OpenKnowledgeSource,
+        openKnowledgeSourceRequestSchema.parse(input),
+        openKnowledgeSourceResponseSchema,
+      ),
+    remove: (input) =>
+      invokeValidated(
+        IpcChannel.RemoveKnowledgeDocument,
+        removeKnowledgeDocumentRequestSchema.parse(input),
+        removedResultSchema,
+      ),
     refresh: (input) =>
       invokeValidated(
         IpcChannel.RefreshKnowledgeDocument,
