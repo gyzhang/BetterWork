@@ -696,3 +696,13 @@ E13 完成 R10 的来源事实读取切片；docs:check 154 项、原基点巡�
 定向 4/46、changed functional 71/768 与 heavy 2/120 通过，两档共 73 文件 / 888 项，定向为其子集。五个退化探针检出 3/5/2/2/1 项失败并逐字节恢复。串行 bench 3/4 通过：256 个真实历史 Run / 2,048 次引用的重复材料样本，查询 3,072→4，完整成果 1,024→8、快照 512→4、Evidence 3,072→24，解码实体序列化字节 12,115,968→94,656，可用性结果相等，中位 41.84→0.15 ms。仅实体读取阶段，不能外推独有材料、RSS、端到端或容量。静态、build、docs:check 154 与原基点巡检通过，最新源 macOS PR Gate 与合并证据见收口段；下一建议 E16 历史事实装配整理，待后续指令。
 
 2026-10-11 11:18 CST：源 `3bb4f530879c1dfdc616ce25ba6be6da140528ce` 的 [Actions 38107630609](https://github.com/gyzhang/BetterWork/actions/runs/38107630609) 在 macos-26-arm64 上通过 PR Gate，静态、docs:check 1/154、changed functional 71/768、heavy 2/120 成功，Full verify 跳过。三次调用共 74 文件 / 1,042 项，不当作全仓或去重规模。[PR #72](https://github.com/gyzhang/BetterWork/pull/72) 已 squash 为 main `b49809aaf45ec7b5a96e52e9092356cfe32af2f8`，文件树与源一致；代码分支本地/远端删除，原 checkout 同步 main，原基点巡检退出 0，纯 Markdown 分支 codex/e15-closeout 归档。E15 代码与自动化收口，建议 E16 历史事实装配整理，另按用户指令推进。
+
+## 34. E16：历史重放事实装配整理（本地自动化通过）
+
+2026-10-11 用户授权继续下一项，从 main e9b82a4b9fd45118a2e50ef1cfa813539c38dd7b 建立 codex/e16-history-replay-facts，沿用原 checkout。实施与证据见 [E16 专项 Review](2026-10-11-history-replay-facts.md)。
+
+历史来源与依赖事实装配提取为应用层独立读模型，服务保留安全规划与输出。完整候选先校验再预算；数组按原序，调用内 runId 索引引用同一事实对象，规划后不再逐轮数组查找。直接/传递修订、已选/实际读取/继承材料、冲突元数据、首次 scope 绑定、缺失与损坏、连续后缀和审计理由优先级保持。无跨调用缓存、协议、Repository、SQL、迁移、UI 或 WM/MI 状态变化。
+
+新增 8 条真实 SQLite 回归，核心 4/63 在新实现与原 E15 服务实现下均通过，原源与临时变异均逐字节恢复。四个退化探针检出 1/2/3/1 项失败；changed functional 9/147、heavy 1/87，共 10 文件 / 234 项通过，核心不叠加。lint、format:check、typecheck、build、docs:check 154、原基点巡检及串行相邻阶段 bench 4/5 通过，最新源 macOS PR Gate 与合并继续收口。
+
+服务 1,565→1,416 行、独立读模型 188 行，是职责分离，不外推全仓代码量、端到端性能或容量；仍完整读取，内存随候选增长。未运行完整 verify、UI、真实模型或安装态人工验收。建议下一项 E17 整理知识检索成功向量路径完整块映射，保留排名、修订范围、租约、取消与回退，待后续开发指令。用户已开启仓库 auto-merge，收口以最新源门禁和实际合并状态为准。
