@@ -525,9 +525,11 @@ describe('Expert summon in the task composer', () => {
     expect(api.experts.get).toHaveBeenCalledWith({ id: expertSummary.id });
   });
 
-  it('专家参考读取失败可在原表单重试，失败与加载不伪装空态、不丢草稿', async () => {
+  it('专家参考读取失败后重试，App 保留创建草稿', async () => {
     const api = installApi({ expert: true });
-    api.materials.listCandidates.mockRejectedValue(new Error('参考暂不可读取'));
+    api.materials.listCandidates
+      .mockRejectedValueOnce(new Error('参考暂不可读取'))
+      .mockResolvedValueOnce([]);
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: '专家' }));
     fireEvent.click(await screen.findByRole('button', { name: '新建专家' }));
@@ -536,13 +538,10 @@ describe('Expert summon in the task composer', () => {
       'textContent',
       expect.stringContaining('参考暂不可读取'),
     );
-    expect(screen.queryByText('没有匹配的知识修订。')).toBeNull();
-    expect(screen.queryByText('没有匹配的成果版本。')).toBeNull();
-    api.materials.listCandidates.mockResolvedValue([]);
     fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    await waitFor(() => expect(api.materials.listCandidates).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
     expect(screen.getByLabelText('名称')).toHaveProperty('value', '保留名称草稿');
-    expect(await screen.findByText('没有匹配的知识修订。')).toBeDefined();
   });
 
   it('carries the Expert common references into the next TaskContext', async () => {

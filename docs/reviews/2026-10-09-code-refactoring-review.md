@@ -999,8 +999,12 @@ App heavy 51/51；WorkMessageList functional 6/6。typecheck、两份测试文�
 
 修改前 App heavy 51/51、MemoryCapturePanel functional 9/9；修改后分别为 51/51、10/10。typecheck、两份测试文件的 ESLint/Prettier 通过；R13 尚未整体解决。未改生产代码或用户行为；未运行完整 `npm run verify`、UI 或真实模型。
 
-## 78. R13 收口审计：保留跨层 App 旅程
+## 78. R13 阶段审计：20:03 的收口结论已撤回
 
-2026-10-11 20:03 CST，从最新 `origin/main` 建立 `codex/r13-app-integration-audit`。逐项复核当前 `App.test.tsx` 的 51 个 heavy 用例后，剩余场景都在验证应用编排：异步历史与选择代次、Task 草稿/CAS 归属、Skill/Expert/模型装配、导航保留、材料快照与成果来源、取消恢复和记忆来源。独立组件、View、Hook 已承接对应的空态、行呈现、确认、参数映射与表单交互；没有再发现可以移走而不削弱跨层关系的纯呈现断言。
+2026-10-11 20:03 CST，从最新 `origin/main` 建立 `codex/r13-app-integration-audit` 后，仅按测试标题和跨层职责检查了剩余 51 个 App 用例，便将 R13 判为完成。该审计没有逐项核对 App 断言与现有 `ExpertsPage` 等视图测试的重合，结论不充分，现予撤回；R13 仍未完成。保留跨层旅程本身是正确方向，但不能据此推断 App 内已无可迁出的页面状态断言。
 
-R13 按原验收边界收口：初始 Task 草稿红灯的原因与回归修复记录在 §8，当前 App 重档仍 51/51；完整 Desktop API 测试端口集中在 `app-test-fixtures.ts`，默认值明确、按 API 域构造，Skill 信任/就绪与授权保持显式保守。保留这一完整端口是为了验证 App 真实组合多个 Hook 与页面的路径；剩余 CAS、迟到响应、恢复、终态与来源场景继续留在 App。最终复核中 App heavy 51/51、fixture defaults functional 1/1。未改代码或测试；未运行完整 `npm run verify`、UI 或真实模型。
+## 79. R13 子卡：专家参考加载与错误状态移入视图测试
+
+2026-10-11 20:08 CST，从最新 `origin/main` 建立 `codex/r13-expert-reference-view-test`。将 `App.test.tsx` 中新建专家时参考列表 loading/error/empty 状态、错误不伪装空态及草稿跨状态保留断言移到直接渲染 `ExpertsPage` 的用例。App 继续覆盖 API 失败后点击重试会再次读取，并在父级重渲染后保留编辑草稿的接线行为。
+
+修改前 App heavy 51/51、ExpertsView functional 15/15；修改后分别为 51/51、16/16。typecheck、两份测试文件的 ESLint/Prettier 通过；R13 仍未整体解决。未改生产代码或用户行为；未运行完整 `npm run verify`、UI 或真实模型。
