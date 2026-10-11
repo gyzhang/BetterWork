@@ -273,50 +273,47 @@ function invokeValidated<Schema extends ZodTypeAny>(
 }
 
 const runListRequestSchema = listRunsRequestSchema.optional();
-const runSettingsRequestSchema = z.object({}).strict();
+const emptyInvokeRequestSchema = z.object({}).strict();
+const runSettingsRequestSchema = emptyInvokeRequestSchema;
 const runListResponseSchema = runSummarySchema.array();
 const runEventsResponseSchema = agentRuntimeEventSchema.array();
+const workspaceListResponseSchema = workspaceSummarySchema.array();
+const workspaceMemoryBriefResponseSchema = resultSchema(workspaceBriefSchema);
+const workspaceReferenceListResponseSchema = resultSchema(workspaceReferenceListDataSchema);
+const workspaceReferenceSetResponseSchema = resultSchema(workspaceReferenceSetDataSchema);
+const workspaceReferenceRemoveResponseSchema = resultSchema(memoryReferenceWriteReceiptSchema);
+const taskListRequestSchema = listTasksRequestSchema.optional();
+const taskListResponseSchema = recentTaskSummarySchema.array();
+const taskDetailResponseSchema = recentTaskSummarySchema.nullable();
 
-interface RunInvokeContractByChannel {
-  [IpcChannel.StartRun]: {
-    channel: typeof IpcChannel.StartRun;
-    request: typeof startRunRequestSchema;
-    response: typeof startRunResultSchema;
-  };
-  [IpcChannel.CancelRun]: {
-    channel: typeof IpcChannel.CancelRun;
-    request: typeof cancelRunRequestSchema;
-    response: typeof cancelledResultSchema;
-  };
-  [IpcChannel.ListRuns]: {
-    channel: typeof IpcChannel.ListRuns;
-    request: typeof runListRequestSchema;
-    response: typeof runListResponseSchema;
-  };
-  [IpcChannel.ListRunEvents]: {
-    channel: typeof IpcChannel.ListRunEvents;
-    request: typeof listRunEventsRequestSchema;
-    response: typeof runEventsResponseSchema;
-  };
-  [IpcChannel.GetRunSettings]: {
-    channel: typeof IpcChannel.GetRunSettings;
-    request: typeof runSettingsRequestSchema;
-    response: typeof runSettingsSchema;
-  };
-  [IpcChannel.SaveRunSettings]: {
-    channel: typeof IpcChannel.SaveRunSettings;
-    request: typeof saveRunSettingsRequestSchema;
-    response: typeof runSettingsSchema;
-  };
+interface IpcInvokeContract {
+  channel: string;
+  request: ZodTypeAny;
+  response: ZodTypeAny;
 }
 
-type RunInvokeMethodByChannel = {
-  [Channel in keyof RunInvokeContractByChannel]: (
-    input: z.input<RunInvokeContractByChannel[Channel]['request']>,
-  ) => Promise<z.output<RunInvokeContractByChannel[Channel]['response']>>;
+function defineInvokeContracts<const Contracts extends Record<string, IpcInvokeContract>>(
+  contracts: Contracts & { [Channel in keyof Contracts]: { channel: Channel } },
+): Contracts {
+  return contracts;
+}
+
+type InvokeMethodsByChannel<Contracts extends Record<string, IpcInvokeContract>> = {
+  [Channel in keyof Contracts]: (
+    input: z.input<Contracts[Channel]['request']>,
+  ) => Promise<z.output<Contracts[Channel]['response']>>;
 };
 
-const runInvokeContracts: RunInvokeContractByChannel = {
+function invokeContract<Request extends ZodTypeAny, Response extends ZodTypeAny>(
+  contract: { channel: string; request: Request; response: Response },
+  input: z.input<Request>,
+): Promise<z.output<Response>> {
+  return ipcRenderer
+    .invoke(contract.channel, contract.request.parse(input))
+    .then((raw: unknown) => contract.response.parse(raw));
+}
+
+const runInvokeContracts = defineInvokeContracts({
   [IpcChannel.StartRun]: {
     channel: IpcChannel.StartRun,
     request: startRunRequestSchema,
@@ -347,30 +344,123 @@ const runInvokeContracts: RunInvokeContractByChannel = {
     request: saveRunSettingsRequestSchema,
     response: runSettingsSchema,
   },
+});
+
+const workspaceTaskInvokeContracts = defineInvokeContracts({
+  [IpcChannel.GetDefaultWorkspace]: {
+    channel: IpcChannel.GetDefaultWorkspace,
+    request: emptyInvokeRequestSchema,
+    response: workspaceSummarySchema,
+  },
+  [IpcChannel.PickWorkspaceDirectory]: {
+    channel: IpcChannel.PickWorkspaceDirectory,
+    request: emptyInvokeRequestSchema,
+    response: workspaceDirectorySelectionSchema,
+  },
+  [IpcChannel.ListWorkspaces]: {
+    channel: IpcChannel.ListWorkspaces,
+    request: emptyInvokeRequestSchema,
+    response: workspaceListResponseSchema,
+  },
+  [IpcChannel.CreateWorkspace]: {
+    channel: IpcChannel.CreateWorkspace,
+    request: createWorkspaceRequestSchema,
+    response: workspaceSummarySchema,
+  },
+  [IpcChannel.UpdateWorkspaceIdentity]: {
+    channel: IpcChannel.UpdateWorkspaceIdentity,
+    request: updateWorkspaceIdentityRequestSchema,
+    response: workspaceSummarySchema,
+  },
+  [IpcChannel.SetWorkspaceHidden]: {
+    channel: IpcChannel.SetWorkspaceHidden,
+    request: setWorkspaceHiddenRequestSchema,
+    response: workspaceSummarySchema,
+  },
+  [IpcChannel.ListWorkspaceTaskGroups]: {
+    channel: IpcChannel.ListWorkspaceTaskGroups,
+    request: emptyInvokeRequestSchema,
+    response: workspaceTaskGroupsSchema,
+  },
+  [IpcChannel.GetWorkspaceMemoryBrief]: {
+    channel: IpcChannel.GetWorkspaceMemoryBrief,
+    request: workspaceMemoryBriefRequestSchema,
+    response: workspaceMemoryBriefResponseSchema,
+  },
+  [IpcChannel.ListWorkspaceReferenceVersions]: {
+    channel: IpcChannel.ListWorkspaceReferenceVersions,
+    request: listWorkspaceReferenceVersionsRequestSchema,
+    response: workspaceReferenceListResponseSchema,
+  },
+  [IpcChannel.SetWorkspaceReferenceVersion]: {
+    channel: IpcChannel.SetWorkspaceReferenceVersion,
+    request: setWorkspaceReferenceVersionRequestSchema,
+    response: workspaceReferenceSetResponseSchema,
+  },
+  [IpcChannel.RemoveWorkspaceReferenceVersion]: {
+    channel: IpcChannel.RemoveWorkspaceReferenceVersion,
+    request: removeWorkspaceReferenceVersionRequestSchema,
+    response: workspaceReferenceRemoveResponseSchema,
+  },
+  [IpcChannel.CreateTask]: {
+    channel: IpcChannel.CreateTask,
+    request: createTaskRequestSchema,
+    response: createdTaskSchema,
+  },
+  [IpcChannel.ListTasks]: {
+    channel: IpcChannel.ListTasks,
+    request: taskListRequestSchema,
+    response: taskListResponseSchema,
+  },
+  [IpcChannel.GetTask]: {
+    channel: IpcChannel.GetTask,
+    request: getTaskRequestSchema,
+    response: taskDetailResponseSchema,
+  },
+});
+
+const runInvokeMethods: InvokeMethodsByChannel<typeof runInvokeContracts> = {
+  [IpcChannel.StartRun]: (input) => invokeContract(runInvokeContracts[IpcChannel.StartRun], input),
+  [IpcChannel.CancelRun]: (input) =>
+    invokeContract(runInvokeContracts[IpcChannel.CancelRun], input),
+  [IpcChannel.ListRuns]: (input) => invokeContract(runInvokeContracts[IpcChannel.ListRuns], input),
+  [IpcChannel.ListRunEvents]: (input) =>
+    invokeContract(runInvokeContracts[IpcChannel.ListRunEvents], input),
+  [IpcChannel.GetRunSettings]: (input) =>
+    invokeContract(runInvokeContracts[IpcChannel.GetRunSettings], input),
+  [IpcChannel.SaveRunSettings]: (input) =>
+    invokeContract(runInvokeContracts[IpcChannel.SaveRunSettings], input),
 };
 
-function invokeRunContract<Request extends ZodTypeAny, Response extends ZodTypeAny>(
-  contract: { channel: string; request: Request; response: Response },
-  input: z.input<Request>,
-): Promise<z.output<Response>> {
-  return ipcRenderer
-    .invoke(contract.channel, contract.request.parse(input))
-    .then((raw: unknown) => contract.response.parse(raw));
-}
-
-const runInvokeMethods: RunInvokeMethodByChannel = {
-  [IpcChannel.StartRun]: (input) =>
-    invokeRunContract(runInvokeContracts[IpcChannel.StartRun], input),
-  [IpcChannel.CancelRun]: (input) =>
-    invokeRunContract(runInvokeContracts[IpcChannel.CancelRun], input),
-  [IpcChannel.ListRuns]: (input) =>
-    invokeRunContract(runInvokeContracts[IpcChannel.ListRuns], input),
-  [IpcChannel.ListRunEvents]: (input) =>
-    invokeRunContract(runInvokeContracts[IpcChannel.ListRunEvents], input),
-  [IpcChannel.GetRunSettings]: (input) =>
-    invokeRunContract(runInvokeContracts[IpcChannel.GetRunSettings], input),
-  [IpcChannel.SaveRunSettings]: (input) =>
-    invokeRunContract(runInvokeContracts[IpcChannel.SaveRunSettings], input),
+const workspaceTaskInvokeMethods: InvokeMethodsByChannel<typeof workspaceTaskInvokeContracts> = {
+  [IpcChannel.GetDefaultWorkspace]: (input) =>
+    invokeContract(workspaceTaskInvokeContracts[IpcChannel.GetDefaultWorkspace], input),
+  [IpcChannel.PickWorkspaceDirectory]: (input) =>
+    invokeContract(workspaceTaskInvokeContracts[IpcChannel.PickWorkspaceDirectory], input),
+  [IpcChannel.ListWorkspaces]: (input) =>
+    invokeContract(workspaceTaskInvokeContracts[IpcChannel.ListWorkspaces], input),
+  [IpcChannel.CreateWorkspace]: (input) =>
+    invokeContract(workspaceTaskInvokeContracts[IpcChannel.CreateWorkspace], input),
+  [IpcChannel.UpdateWorkspaceIdentity]: (input) =>
+    invokeContract(workspaceTaskInvokeContracts[IpcChannel.UpdateWorkspaceIdentity], input),
+  [IpcChannel.SetWorkspaceHidden]: (input) =>
+    invokeContract(workspaceTaskInvokeContracts[IpcChannel.SetWorkspaceHidden], input),
+  [IpcChannel.ListWorkspaceTaskGroups]: (input) =>
+    invokeContract(workspaceTaskInvokeContracts[IpcChannel.ListWorkspaceTaskGroups], input),
+  [IpcChannel.GetWorkspaceMemoryBrief]: (input) =>
+    invokeContract(workspaceTaskInvokeContracts[IpcChannel.GetWorkspaceMemoryBrief], input),
+  [IpcChannel.ListWorkspaceReferenceVersions]: (input) =>
+    invokeContract(workspaceTaskInvokeContracts[IpcChannel.ListWorkspaceReferenceVersions], input),
+  [IpcChannel.SetWorkspaceReferenceVersion]: (input) =>
+    invokeContract(workspaceTaskInvokeContracts[IpcChannel.SetWorkspaceReferenceVersion], input),
+  [IpcChannel.RemoveWorkspaceReferenceVersion]: (input) =>
+    invokeContract(workspaceTaskInvokeContracts[IpcChannel.RemoveWorkspaceReferenceVersion], input),
+  [IpcChannel.CreateTask]: (input) =>
+    invokeContract(workspaceTaskInvokeContracts[IpcChannel.CreateTask], input),
+  [IpcChannel.ListTasks]: (input) =>
+    invokeContract(workspaceTaskInvokeContracts[IpcChannel.ListTasks], input),
+  [IpcChannel.GetTask]: (input) =>
+    invokeContract(workspaceTaskInvokeContracts[IpcChannel.GetTask], input),
 };
 
 const evidenceListResponseSchema = evidenceSummarySchema
@@ -551,74 +641,26 @@ const api: BetterWorkDesktopApi = {
     save: (input) => runInvokeMethods[IpcChannel.SaveRunSettings](input),
   },
   workspace: {
-    getDefault: () => invokeValidated(IpcChannel.GetDefaultWorkspace, {}, workspaceSummarySchema),
-    pickDirectory: () =>
-      invokeValidated(IpcChannel.PickWorkspaceDirectory, {}, workspaceDirectorySelectionSchema),
-    listAll: () => invokeValidated(IpcChannel.ListWorkspaces, {}, workspaceSummarySchema.array()),
-    create: (input) =>
-      invokeValidated(
-        IpcChannel.CreateWorkspace,
-        createWorkspaceRequestSchema.parse(input),
-        workspaceSummarySchema,
-      ),
+    getDefault: () => workspaceTaskInvokeMethods[IpcChannel.GetDefaultWorkspace]({}),
+    pickDirectory: () => workspaceTaskInvokeMethods[IpcChannel.PickWorkspaceDirectory]({}),
+    listAll: () => workspaceTaskInvokeMethods[IpcChannel.ListWorkspaces]({}),
+    create: (input) => workspaceTaskInvokeMethods[IpcChannel.CreateWorkspace](input),
     updateIdentity: (input) =>
-      invokeValidated(
-        IpcChannel.UpdateWorkspaceIdentity,
-        updateWorkspaceIdentityRequestSchema.parse(input),
-        workspaceSummarySchema,
-      ),
-    setHidden: (input) =>
-      invokeValidated(
-        IpcChannel.SetWorkspaceHidden,
-        setWorkspaceHiddenRequestSchema.parse(input),
-        workspaceSummarySchema,
-      ),
-    listTaskGroups: () =>
-      invokeValidated(IpcChannel.ListWorkspaceTaskGroups, {}, workspaceTaskGroupsSchema),
-    memoryBrief: (input) =>
-      invokeValidated(
-        IpcChannel.GetWorkspaceMemoryBrief,
-        workspaceMemoryBriefRequestSchema.parse(input),
-        resultSchema(workspaceBriefSchema),
-      ),
+      workspaceTaskInvokeMethods[IpcChannel.UpdateWorkspaceIdentity](input),
+    setHidden: (input) => workspaceTaskInvokeMethods[IpcChannel.SetWorkspaceHidden](input),
+    listTaskGroups: () => workspaceTaskInvokeMethods[IpcChannel.ListWorkspaceTaskGroups]({}),
+    memoryBrief: (input) => workspaceTaskInvokeMethods[IpcChannel.GetWorkspaceMemoryBrief](input),
     listReferenceVersions: (input) =>
-      invokeValidated(
-        IpcChannel.ListWorkspaceReferenceVersions,
-        listWorkspaceReferenceVersionsRequestSchema.parse(input),
-        resultSchema(workspaceReferenceListDataSchema),
-      ),
+      workspaceTaskInvokeMethods[IpcChannel.ListWorkspaceReferenceVersions](input),
     setReferenceVersion: (input) =>
-      invokeValidated(
-        IpcChannel.SetWorkspaceReferenceVersion,
-        setWorkspaceReferenceVersionRequestSchema.parse(input),
-        resultSchema(workspaceReferenceSetDataSchema),
-      ),
+      workspaceTaskInvokeMethods[IpcChannel.SetWorkspaceReferenceVersion](input),
     removeReferenceVersion: (input) =>
-      invokeValidated(
-        IpcChannel.RemoveWorkspaceReferenceVersion,
-        removeWorkspaceReferenceVersionRequestSchema.parse(input),
-        resultSchema(memoryReferenceWriteReceiptSchema),
-      ),
+      workspaceTaskInvokeMethods[IpcChannel.RemoveWorkspaceReferenceVersion](input),
   },
   tasks: {
-    create: (input) =>
-      invokeValidated(
-        IpcChannel.CreateTask,
-        createTaskRequestSchema.parse(input),
-        createdTaskSchema,
-      ),
-    list: (input) =>
-      invokeValidated(
-        IpcChannel.ListTasks,
-        input === undefined ? undefined : listTasksRequestSchema.parse(input),
-        recentTaskSummarySchema.array(),
-      ),
-    get: (input) =>
-      invokeValidated(
-        IpcChannel.GetTask,
-        getTaskRequestSchema.parse(input),
-        recentTaskSummarySchema.nullable(),
-      ),
+    create: (input) => workspaceTaskInvokeMethods[IpcChannel.CreateTask](input),
+    list: (input) => workspaceTaskInvokeMethods[IpcChannel.ListTasks](input),
+    get: (input) => workspaceTaskInvokeMethods[IpcChannel.GetTask](input),
   },
   evidence: {
     list: (input) =>

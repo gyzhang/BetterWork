@@ -261,7 +261,7 @@ describe('run settings preload API', () => {
   });
 });
 
-it('binds Run Preload request and response schemas to their IPC channels at compile time', () => {
+it('binds Run, Workspace, and Task Preload schemas to their IPC channels at compile time', () => {
   const sourcePath = fileURLToPath(new URL('./index.ts', import.meta.url));
   const configPath = ts.findConfigFile(
     path.dirname(sourcePath),
@@ -277,10 +277,19 @@ it('binds Run Preload request and response schemas to their IPC channels at comp
   const valid = [
     `const __runContractResult: Promise<{ runId: string }> = runInvokeMethods[IpcChannel.StartRun]({ taskId: 'task-1', sessionId: 'session-1', prompt: 'prompt' });`,
     `runInvokeMethods[IpcChannel.ListRuns](undefined);`,
+    `const __workspaceContractResult: Promise<z.output<typeof workspaceSummarySchema>> = workspaceTaskInvokeMethods[IpcChannel.GetDefaultWorkspace]({});`,
+    `workspaceTaskInvokeMethods[IpcChannel.ListTasks](undefined);`,
+    `const __taskContractResult: Promise<z.output<typeof recentTaskSummarySchema> | null> = workspaceTaskInvokeMethods[IpcChannel.GetTask]({ id: 'task-1' });`,
+    `const __taskContractChannel: typeof IpcChannel.GetTask = workspaceTaskInvokeContracts[IpcChannel.GetTask].channel;`,
   ];
   const invalid = [
     `runInvokeMethods[IpcChannel.StartRun]({ runId: 'run-1' });`,
     `runInvokeMethods[IpcChannel.CancelRun]({ taskId: 'task-1', sessionId: 'session-1', prompt: 'prompt' });`,
+    `workspaceTaskInvokeMethods[IpcChannel.GetDefaultWorkspace]({ workspaceId: 'workspace-1' });`,
+    `workspaceTaskInvokeMethods[IpcChannel.CreateTask]({ rootPath: '/tmp/research' });`,
+    `workspaceTaskInvokeMethods[IpcChannel.ListTasks]({ taskId: 'task-1' });`,
+    `const __workspaceContractWrongResponse: Promise<z.output<typeof recentTaskSummarySchema>> = workspaceTaskInvokeMethods[IpcChannel.GetDefaultWorkspace]({});`,
+    `const __taskContractWrongChannel: typeof IpcChannel.GetDefaultWorkspace = workspaceTaskInvokeContracts[IpcChannel.GetTask].channel;`,
   ];
   let source = readFileSync(sourcePath, 'utf8') + '\n';
   const cases = [...valid, ...invalid].map((expression, index) => {
@@ -395,6 +404,161 @@ describe('workspace preload API', () => {
     ).rejects.toThrow();
     await expect(api().workspace.listTaskGroups()).rejects.toThrow();
     expect(mocks.invoke).toHaveBeenCalledTimes(7);
+  });
+
+  it('preserves memory brief and reference result envelopes across their channels', async () => {
+    const operationId = '11111111-1111-4111-8111-111111111111';
+    const contentHash = 'a'.repeat(64);
+    const reference = {
+      id: 'reference-1',
+      workspaceId: 'workspace-1',
+      artifactVersionId: 'version-1',
+      contentHash,
+      status: 'active',
+      revision: 1,
+      selectedAt: 1,
+      updatedAt: 1,
+    } as const;
+    const brief = {
+      workspaceId: 'workspace-1',
+      generatedAt: 1,
+      goals: { items: [], total: 0, truncated: false },
+      constraints: { items: [], total: 0, truncated: false },
+      decisions: { items: [], total: 0, truncated: false },
+      methods: { items: [], total: 0, truncated: false },
+      openIssues: { items: [], total: 0, truncated: false },
+      referenceVersions: { items: [], total: 0, truncated: false },
+    };
+    const receipt = {
+      operationId,
+      commit: 'committed',
+      effect: 'created',
+      committedRevisionIds: [],
+      projectionState: 'synced',
+      currentReference: reference,
+    } as const;
+    const data = {
+      ok: true,
+      data: {
+        receipt,
+        material: {
+          kind: 'artifact-version',
+          artifactId: 'artifact-1',
+          artifactVersionId: 'version-1',
+          contentHash,
+          originWorkspaceId: 'workspace-1',
+        },
+      },
+      warnings: [],
+    } as const;
+    const removedReference = {
+      ...reference,
+      status: 'removed',
+      revision: 2,
+      updatedAt: 2,
+    } as const;
+    const removed = {
+      ok: true,
+      data: { ...receipt, currentReference: removedReference },
+      warnings: [],
+    } as const;
+    mocks.invoke.mockImplementation(async (channel) => {
+      if (channel === IpcChannel.GetWorkspaceMemoryBrief) {
+        return { ok: true, data: brief, warnings: [] };
+      }
+      if (channel === IpcChannel.ListWorkspaceReferenceVersions) {
+        return {
+          ok: true,
+          data: { items: [{ reference, artifactId: 'artifact-1', status: 'ready' }] },
+          warnings: [],
+        };
+      }
+      if (channel === IpcChannel.SetWorkspaceReferenceVersion) return data;
+      if (channel === IpcChannel.RemoveWorkspaceReferenceVersion) return removed;
+      return null;
+    });
+
+    await expect(
+      api().workspace.memoryBrief({ workspaceId: 'workspace-1', expertId: 'expert-1' }),
+    ).resolves.toMatchObject({ ok: true, data: { workspaceId: 'workspace-1' }, warnings: [] });
+    await expect(
+      api().workspace.listReferenceVersions({ workspaceId: 'workspace-1' }),
+    ).resolves.toMatchObject({ ok: true, data: { items: [{ artifactId: 'artifact-1' }] } });
+    await expect(
+      api().workspace.setReferenceVersion({
+        operationId,
+        workspaceId: 'workspace-1',
+        artifactVersionId: 'version-1',
+        expectedRevision: 0,
+      }),
+    ).resolves.toMatchObject({ ok: true, data: { receipt: { currentReference: reference } } });
+    await expect(
+      api().workspace.removeReferenceVersion({
+        operationId,
+        id: 'reference-1',
+        expectedRevision: 1,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: { currentReference: { id: 'reference-1', status: 'removed', revision: 2 } },
+    });
+
+    expect(mocks.invoke.mock.calls).toEqual([
+      [IpcChannel.GetWorkspaceMemoryBrief, { workspaceId: 'workspace-1', expertId: 'expert-1' }],
+      [IpcChannel.ListWorkspaceReferenceVersions, { workspaceId: 'workspace-1' }],
+      [
+        IpcChannel.SetWorkspaceReferenceVersion,
+        {
+          operationId,
+          workspaceId: 'workspace-1',
+          artifactVersionId: 'version-1',
+          expectedRevision: 0,
+        },
+      ],
+      [
+        IpcChannel.RemoveWorkspaceReferenceVersion,
+        { operationId, id: 'reference-1', expectedRevision: 1 },
+      ],
+    ]);
+  });
+
+  it('rejects invalid memory brief and reference requests before IPC', () => {
+    expect(() => api().workspace.memoryBrief({ workspaceId: '' })).toThrow();
+    expect(() => api().workspace.listReferenceVersions({ workspaceId: '' })).toThrow();
+    expect(() =>
+      api().workspace.setReferenceVersion({
+        operationId: 'invalid',
+        workspaceId: 'workspace-1',
+        artifactVersionId: 'version-1',
+        expectedRevision: 0,
+      }),
+    ).toThrow();
+    expect(() =>
+      api().workspace.removeReferenceVersion({
+        operationId: '11111111-1111-4111-8111-111111111111',
+        id: '',
+        expectedRevision: 1,
+      }),
+    ).toThrow();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it('preserves memory error envelopes and rejects malformed result data', async () => {
+    const error = {
+      ok: false,
+      error: { code: 'NOT_FOUND', message: 'Workspace not found', retryable: false },
+    };
+    mocks.invoke.mockResolvedValue(error);
+    await expect(api().workspace.memoryBrief({ workspaceId: 'workspace-1' })).resolves.toEqual(
+      error,
+    );
+
+    mocks.invoke.mockResolvedValue({
+      ok: true,
+      data: { workspaceId: 'workspace-1' },
+      warnings: [],
+    });
+    await expect(api().workspace.memoryBrief({ workspaceId: 'workspace-1' })).rejects.toThrow();
   });
 });
 
