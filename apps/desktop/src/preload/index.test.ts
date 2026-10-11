@@ -430,6 +430,9 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `const __registerToolchainResult: ReturnType<BetterWorkDesktopApi['dependencies']['registerToolchain']> = dependencyInvokeMethods[IpcChannel.RegisterToolchainSnapshot]({ include: [] });`,
     `const __deleteToolchainResult: ReturnType<BetterWorkDesktopApi['dependencies']['deleteToolchainSnapshot']> = dependencyInvokeMethods[IpcChannel.DeleteToolchainSnapshot]({ snapshotId: 'snapshot-1' });`,
     `const __dependencyContractChannel: typeof IpcChannel.DeleteToolchainSnapshot = dependencyInvokeContracts[IpcChannel.DeleteToolchainSnapshot].channel;`,
+    `const __chromeThemeResult: ReturnType<BetterWorkDesktopApi['chrome']['updateTheme']> = chromeInvokeMethods[IpcChannel.UpdateWindowTheme]({ backgroundColor: '#ffffff' });`,
+    `const __chromeMaximizeResult: ReturnType<BetterWorkDesktopApi['chrome']['toggleMaximize']> = chromeInvokeMethods[IpcChannel.WindowToggleMaximize]({});`,
+    `const __chromeContractChannel: typeof IpcChannel.WindowToggleMaximize = chromeInvokeContracts[IpcChannel.WindowToggleMaximize].channel;`,
   ];
   const invalid = [
     `runInvokeMethods[IpcChannel.StartRun]({ runId: 'run-1' });`,
@@ -486,6 +489,9 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `dependencyInvokeMethods[IpcChannel.InspectDependencyPlan]({ lockId: 'lock-1' });`,
     `const __dependencyWrongResponse: ReturnType<BetterWorkDesktopApi['dependencies']['cancel']> = dependencyInvokeMethods[IpcChannel.GetDependencyOperation]({ operationId: 'operation-1' });`,
     `const __dependencyWrongChannel: typeof IpcChannel.ListDependencyOptions = dependencyInvokeContracts[IpcChannel.DeleteToolchainSnapshot].channel;`,
+    `chromeInvokeMethods[IpcChannel.WindowToggleMaximize]({ backgroundColor: '#ffffff' });`,
+    `const __chromeWrongResponse: ReturnType<BetterWorkDesktopApi['chrome']['toggleMaximize']> = chromeInvokeMethods[IpcChannel.UpdateWindowTheme]({ backgroundColor: '#ffffff' });`,
+    `const __chromeWrongChannel: typeof IpcChannel.UpdateWindowTheme = chromeInvokeContracts[IpcChannel.WindowToggleMaximize].channel;`,
   ];
   let source = readFileSync(sourcePath, 'utf8') + '\n';
   const cases = [...valid, ...invalid].map((expression, index) => {
@@ -1695,6 +1701,26 @@ describe('task continuity preload API', () => {
         progress: null,
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe('chrome preload API', () => {
+  it('validates and routes theme and maximize calls through their typed channels', async () => {
+    mocks.invoke.mockReset();
+    mocks.invoke.mockImplementation(async (channel) =>
+      channel === IpcChannel.WindowToggleMaximize ? { maximized: true } : undefined,
+    );
+    const chrome = api().chrome;
+
+    expect(() => chrome.updateTheme({ backgroundColor: 'white' })).toThrow();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    await expect(chrome.updateTheme({ backgroundColor: '#ffffff' })).resolves.toBeUndefined();
+    await expect(chrome.toggleMaximize()).resolves.toEqual({ maximized: true });
+    expect(mocks.invoke.mock.calls).toEqual([
+      [IpcChannel.UpdateWindowTheme, { backgroundColor: '#ffffff' }],
+      [IpcChannel.WindowToggleMaximize, {}],
+    ]);
+    mocks.invoke.mockReset();
   });
 });
 

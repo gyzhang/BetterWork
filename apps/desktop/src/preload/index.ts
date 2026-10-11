@@ -128,6 +128,7 @@ import {
   markAllNotificationsReadRequestSchema,
   markNotificationReadRequestSchema,
   materialCandidateSchema,
+  maximizedResultSchema,
   mcpConnectionSummarySchema,
   mcpLifecycleRequestSchema,
   mcpLoginContinueRequestSchema,
@@ -251,8 +252,11 @@ import {
   unreadCountResultSchema,
   updatedResultSchema,
   updateMemoryRequestSchema,
+  updateWindowThemeRequestSchema,
   updateWorkspaceIdentityRequestSchema,
   verifyDependencyEnvironmentRequestSchema,
+  voidResultSchema,
+  windowToggleMaximizeRequestSchema,
   workspaceBriefSchema,
   workspaceDirectorySelectionSchema,
   workspaceMemoryBriefRequestSchema,
@@ -1668,6 +1672,25 @@ const dependencyInvokeMethods: InvokeMethodsByChannel<typeof dependencyInvokeCon
     invokeContract(dependencyInvokeContracts[IpcChannel.DeleteToolchainSnapshot], input),
 };
 
+const chromeInvokeContracts = defineInvokeContracts({
+  [IpcChannel.UpdateWindowTheme]: {
+    channel: IpcChannel.UpdateWindowTheme,
+    request: updateWindowThemeRequestSchema,
+    response: voidResultSchema,
+  },
+  [IpcChannel.WindowToggleMaximize]: {
+    channel: IpcChannel.WindowToggleMaximize,
+    request: windowToggleMaximizeRequestSchema,
+    response: maximizedResultSchema,
+  },
+});
+const chromeInvokeMethods: InvokeMethodsByChannel<typeof chromeInvokeContracts> = {
+  [IpcChannel.UpdateWindowTheme]: (input) =>
+    invokeContract(chromeInvokeContracts[IpcChannel.UpdateWindowTheme], input),
+  [IpcChannel.WindowToggleMaximize]: (input) =>
+    invokeContract(chromeInvokeContracts[IpcChannel.WindowToggleMaximize], input),
+};
+
 const api: BetterWorkDesktopApi = {
   runs: {
     start: (input) => runInvokeMethods[IpcChannel.StartRun](input),
@@ -1775,8 +1798,8 @@ const api: BetterWorkDesktopApi = {
     onChange: (listener) => scheduleEventMethods[IpcChannel.ScheduleChanged](listener),
   },
   chrome: {
-    updateTheme: (input) => ipcRenderer.invoke(IpcChannel.UpdateWindowTheme, input),
-    toggleMaximize: () => ipcRenderer.invoke(IpcChannel.WindowToggleMaximize, {}),
+    updateTheme: (input) => chromeInvokeMethods[IpcChannel.UpdateWindowTheme](input),
+    toggleMaximize: () => chromeInvokeMethods[IpcChannel.WindowToggleMaximize]({}),
   },
   knowledge: {
     list: (input) => knowledgeInvokeMethods[IpcChannel.ListKnowledge](input ?? {}),
