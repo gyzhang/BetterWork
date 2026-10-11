@@ -16,6 +16,7 @@ import {
   copySkillRequestSchema,
   createDiscussionCheckpointRequestSchema,
   createMemoryRequestSchema,
+  createWorkspaceRequestSchema,
   declareArtifactSourcesRequestSchema,
   deletedResultSchema,
   deleteExpertRequestSchema,
@@ -173,6 +174,7 @@ import {
   setScheduleLifecycleRequestSchema,
   setSkillEnabledRequestSchema,
   setSkillTrustRequestSchema,
+  setWorkspaceHiddenRequestSchema,
   setWorkspaceReferenceVersionRequestSchema,
   skillDetailSchema,
   skillExportResultSchema,
@@ -190,12 +192,16 @@ import {
   testSkillRunRequestSchema,
   testSkillRunResultSchema,
   updateMemoryRequestSchema,
+  updateWorkspaceIdentityRequestSchema,
   verifyDependencyEnvironmentRequestSchema,
   workspaceBriefSchema,
+  workspaceDirectorySelectionSchema,
   workspaceMemoryBriefRequestSchema,
   workspaceMemorySettingsSchema,
   workspaceReferenceListDataSchema,
   workspaceReferenceSetDataSchema,
+  workspaceSummarySchema,
+  workspaceTaskGroupsSchema,
 } from '@betterwork/agent-protocol';
 import { contextBridge, ipcRenderer } from 'electron';
 import { z, type ZodTypeAny } from 'zod';
@@ -252,13 +258,30 @@ const api: BetterWorkDesktopApi = {
       ),
   },
   workspace: {
-    getDefault: () => ipcRenderer.invoke(IpcChannel.GetDefaultWorkspace),
-    pickDirectory: () => ipcRenderer.invoke(IpcChannel.PickWorkspaceDirectory),
-    listAll: () => ipcRenderer.invoke(IpcChannel.ListWorkspaces),
-    create: (input) => ipcRenderer.invoke(IpcChannel.CreateWorkspace, input),
-    updateIdentity: (input) => ipcRenderer.invoke(IpcChannel.UpdateWorkspaceIdentity, input),
-    setHidden: (input) => ipcRenderer.invoke(IpcChannel.SetWorkspaceHidden, input),
-    listTaskGroups: () => ipcRenderer.invoke(IpcChannel.ListWorkspaceTaskGroups),
+    getDefault: () => invokeValidated(IpcChannel.GetDefaultWorkspace, {}, workspaceSummarySchema),
+    pickDirectory: () =>
+      invokeValidated(IpcChannel.PickWorkspaceDirectory, {}, workspaceDirectorySelectionSchema),
+    listAll: () => invokeValidated(IpcChannel.ListWorkspaces, {}, workspaceSummarySchema.array()),
+    create: (input) =>
+      invokeValidated(
+        IpcChannel.CreateWorkspace,
+        createWorkspaceRequestSchema.parse(input),
+        workspaceSummarySchema,
+      ),
+    updateIdentity: (input) =>
+      invokeValidated(
+        IpcChannel.UpdateWorkspaceIdentity,
+        updateWorkspaceIdentityRequestSchema.parse(input),
+        workspaceSummarySchema,
+      ),
+    setHidden: (input) =>
+      invokeValidated(
+        IpcChannel.SetWorkspaceHidden,
+        setWorkspaceHiddenRequestSchema.parse(input),
+        workspaceSummarySchema,
+      ),
+    listTaskGroups: () =>
+      invokeValidated(IpcChannel.ListWorkspaceTaskGroups, {}, workspaceTaskGroupsSchema),
     memoryBrief: (input) =>
       invokeValidated(
         IpcChannel.GetWorkspaceMemoryBrief,
