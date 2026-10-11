@@ -637,6 +637,17 @@ function createModelsApiFixture(options?: Pick<AppTestApiOptions, 'models'>) {
   };
 }
 
+function createDependenciesApiFixture() {
+  return {
+    listOptions: vi.fn(async () => ({
+      distributions: [],
+      lockIds: [],
+      snapshots: [],
+      environments: [],
+    })),
+  };
+}
+
 function createAppTestApi(options?: AppTestApiOptions) {
   emitNotificationChange = undefined;
   emitScheduleChange = undefined;
@@ -661,14 +672,7 @@ function createAppTestApi(options?: AppTestApiOptions) {
     experts: createExpertsApiFixture(options),
     runs: createRunsApiFixture(),
     skills: createSkillsApiFixture(options),
-    dependencies: {
-      listOptions: vi.fn(async () => ({
-        distributions: [],
-        lockIds: [],
-        snapshots: [],
-        environments: [],
-      })),
-    },
+    dependencies: createDependenciesApiFixture(),
   };
   return api;
 }
