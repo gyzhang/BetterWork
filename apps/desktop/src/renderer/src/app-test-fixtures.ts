@@ -602,6 +602,15 @@ function createTasksApiFixture() {
   };
 }
 
+function createTaskContinuityApiFixture() {
+  return {
+    getBrief: vi.fn<Window['betterwork']['taskContinuity']['getBrief']>(async () => null),
+    saveBrief: vi.fn<Window['betterwork']['taskContinuity']['saveBrief']>(async () => {
+      throw new Error('App 测试没有配置 Task Continuity 保存结果');
+    }),
+  };
+}
+
 function createAppTestApi(options?: AppTestApiOptions) {
   emitNotificationChange = undefined;
   emitScheduleChange = undefined;
@@ -618,12 +627,7 @@ function createAppTestApi(options?: AppTestApiOptions) {
     evidence: { list: vi.fn(async () => []) },
     notifications: createNotificationsApiFixture(),
     tasks: createTasksApiFixture(),
-    taskContinuity: {
-      getBrief: vi.fn<Window['betterwork']['taskContinuity']['getBrief']>(async () => null),
-      saveBrief: vi.fn<Window['betterwork']['taskContinuity']['saveBrief']>(async () => {
-        throw new Error('App 测试没有配置 Task Continuity 保存结果');
-      }),
-    },
+    taskContinuity: createTaskContinuityApiFixture(),
     schedules: createSchedulesApiFixture(),
     taskContexts: createTaskContextApiFixture(options, removedScheduleScopeTaskIds),
     discussionCheckpoints: {
