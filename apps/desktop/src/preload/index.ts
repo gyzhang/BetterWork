@@ -265,14 +265,6 @@ import {
 import { contextBridge, ipcRenderer } from 'electron';
 import { z, type ZodTypeAny } from 'zod';
 
-function invokeValidated<Schema extends ZodTypeAny>(
-  channel: string,
-  input: unknown,
-  schema: Schema,
-): Promise<z.output<Schema>> {
-  return ipcRenderer.invoke(channel, input).then((raw: unknown) => schema.parse(raw));
-}
-
 const runListRequestSchema = listRunsRequestSchema.optional();
 const emptyInvokeRequestSchema = z.object({}).strict();
 const runSettingsRequestSchema = emptyInvokeRequestSchema;
@@ -1608,6 +1600,74 @@ const mcpInvokeMethods: InvokeMethodsByChannel<typeof mcpInvokeContracts> = {
     invokeContract(mcpInvokeContracts[IpcChannel.LogoutMcpConnection], input),
 };
 
+const dependencyInvokeContracts = defineInvokeContracts({
+  [IpcChannel.ListDependencyOptions]: {
+    channel: IpcChannel.ListDependencyOptions,
+    request: listDependencyOptionsRequestSchema,
+    response: dependencyOptionsSchema,
+  },
+  [IpcChannel.InspectDependencyPlan]: {
+    channel: IpcChannel.InspectDependencyPlan,
+    request: dependencyPlanRequestSchema,
+    response: dependencyPlanSchema,
+  },
+  [IpcChannel.VerifyDependencyEnvironment]: {
+    channel: IpcChannel.VerifyDependencyEnvironment,
+    request: verifyDependencyEnvironmentRequestSchema,
+    response: runtimeEnvironmentSchema,
+  },
+  [IpcChannel.PrepareDependencyEnvironment]: {
+    channel: IpcChannel.PrepareDependencyEnvironment,
+    request: prepareDependencyRequestSchema,
+    response: prepareDependencyResultSchema,
+  },
+  [IpcChannel.CancelDependencyPreparation]: {
+    channel: IpcChannel.CancelDependencyPreparation,
+    request: cancelDependencyRequestSchema,
+    response: cancelDependencyResultSchema,
+  },
+  [IpcChannel.GetDependencyOperation]: {
+    channel: IpcChannel.GetDependencyOperation,
+    request: getDependencyOperationRequestSchema,
+    response: dependencyOperationSchema.nullable(),
+  },
+  [IpcChannel.ChoosePythonInterpreter]: {
+    channel: IpcChannel.ChoosePythonInterpreter,
+    request: emptyInvokeRequestSchema,
+    response: chooseInterpreterResultSchema,
+  },
+  [IpcChannel.RegisterToolchainSnapshot]: {
+    channel: IpcChannel.RegisterToolchainSnapshot,
+    request: registerToolchainRequestSchema,
+    response: registerToolchainResultSchema,
+  },
+  [IpcChannel.DeleteToolchainSnapshot]: {
+    channel: IpcChannel.DeleteToolchainSnapshot,
+    request: deleteToolchainSnapshotRequestSchema,
+    response: deleteToolchainSnapshotResultSchema,
+  },
+});
+const dependencyInvokeMethods: InvokeMethodsByChannel<typeof dependencyInvokeContracts> = {
+  [IpcChannel.ListDependencyOptions]: (input) =>
+    invokeContract(dependencyInvokeContracts[IpcChannel.ListDependencyOptions], input),
+  [IpcChannel.InspectDependencyPlan]: (input) =>
+    invokeContract(dependencyInvokeContracts[IpcChannel.InspectDependencyPlan], input),
+  [IpcChannel.VerifyDependencyEnvironment]: (input) =>
+    invokeContract(dependencyInvokeContracts[IpcChannel.VerifyDependencyEnvironment], input),
+  [IpcChannel.PrepareDependencyEnvironment]: (input) =>
+    invokeContract(dependencyInvokeContracts[IpcChannel.PrepareDependencyEnvironment], input),
+  [IpcChannel.CancelDependencyPreparation]: (input) =>
+    invokeContract(dependencyInvokeContracts[IpcChannel.CancelDependencyPreparation], input),
+  [IpcChannel.GetDependencyOperation]: (input) =>
+    invokeContract(dependencyInvokeContracts[IpcChannel.GetDependencyOperation], input),
+  [IpcChannel.ChoosePythonInterpreter]: (input) =>
+    invokeContract(dependencyInvokeContracts[IpcChannel.ChoosePythonInterpreter], input),
+  [IpcChannel.RegisterToolchainSnapshot]: (input) =>
+    invokeContract(dependencyInvokeContracts[IpcChannel.RegisterToolchainSnapshot], input),
+  [IpcChannel.DeleteToolchainSnapshot]: (input) =>
+    invokeContract(dependencyInvokeContracts[IpcChannel.DeleteToolchainSnapshot], input),
+};
+
 const api: BetterWorkDesktopApi = {
   runs: {
     start: (input) => runInvokeMethods[IpcChannel.StartRun](input),
@@ -1824,56 +1884,18 @@ const api: BetterWorkDesktopApi = {
     logout: (input) => mcpInvokeMethods[IpcChannel.LogoutMcpConnection](input),
   },
   dependencies: {
-    listOptions: (input) =>
-      invokeValidated(
-        IpcChannel.ListDependencyOptions,
-        listDependencyOptionsRequestSchema.parse(input ?? {}),
-        dependencyOptionsSchema,
-      ),
-    inspectPlan: (input) =>
-      invokeValidated(
-        IpcChannel.InspectDependencyPlan,
-        dependencyPlanRequestSchema.parse(input),
-        dependencyPlanSchema,
-      ),
+    listOptions: (input) => dependencyInvokeMethods[IpcChannel.ListDependencyOptions](input ?? {}),
+    inspectPlan: (input) => dependencyInvokeMethods[IpcChannel.InspectDependencyPlan](input),
     verifyEnvironment: (input) =>
-      invokeValidated(
-        IpcChannel.VerifyDependencyEnvironment,
-        verifyDependencyEnvironmentRequestSchema.parse(input),
-        runtimeEnvironmentSchema,
-      ),
-    prepare: (input) =>
-      invokeValidated(
-        IpcChannel.PrepareDependencyEnvironment,
-        prepareDependencyRequestSchema.parse(input),
-        prepareDependencyResultSchema,
-      ),
-    cancel: (input) =>
-      invokeValidated(
-        IpcChannel.CancelDependencyPreparation,
-        cancelDependencyRequestSchema.parse(input),
-        cancelDependencyResultSchema,
-      ),
-    getOperation: (input) =>
-      invokeValidated(
-        IpcChannel.GetDependencyOperation,
-        getDependencyOperationRequestSchema.parse(input),
-        dependencyOperationSchema.nullable(),
-      ),
-    chooseInterpreter: () =>
-      invokeValidated(IpcChannel.ChoosePythonInterpreter, {}, chooseInterpreterResultSchema),
+      dependencyInvokeMethods[IpcChannel.VerifyDependencyEnvironment](input),
+    prepare: (input) => dependencyInvokeMethods[IpcChannel.PrepareDependencyEnvironment](input),
+    cancel: (input) => dependencyInvokeMethods[IpcChannel.CancelDependencyPreparation](input),
+    getOperation: (input) => dependencyInvokeMethods[IpcChannel.GetDependencyOperation](input),
+    chooseInterpreter: () => dependencyInvokeMethods[IpcChannel.ChoosePythonInterpreter]({}),
     registerToolchain: (input) =>
-      invokeValidated(
-        IpcChannel.RegisterToolchainSnapshot,
-        registerToolchainRequestSchema.parse(input),
-        registerToolchainResultSchema,
-      ),
+      dependencyInvokeMethods[IpcChannel.RegisterToolchainSnapshot](input),
     deleteToolchainSnapshot: (input) =>
-      invokeValidated(
-        IpcChannel.DeleteToolchainSnapshot,
-        deleteToolchainSnapshotRequestSchema.parse(input),
-        deleteToolchainSnapshotResultSchema,
-      ),
+      dependencyInvokeMethods[IpcChannel.DeleteToolchainSnapshot](input),
   },
 };
 
