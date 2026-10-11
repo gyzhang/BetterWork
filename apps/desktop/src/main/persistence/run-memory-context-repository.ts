@@ -244,6 +244,20 @@ export class RunMemoryContextRepository {
     return row ? toContext(row) : undefined;
   }
 
+  /** 完整候选集合单参数读取；保留首见顺序与完整审计校验，缺项不补造。 */
+  listByRunIds(runIds: readonly string[]): RunMemoryContext[] {
+    const ids = [...new Set(runIds)];
+    if (ids.length === 0) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT c.* FROM json_each(?) requested
+          JOIN run_memory_contexts c ON c.run_id = requested.value
+         ORDER BY CAST(requested.key AS INTEGER)`,
+      )
+      .all(JSON.stringify(ids)) as RunMemoryContextRow[];
+    return rows.map(toContext);
+  }
+
   /** §9.2：没有快照的旧运行只报 legacy_unknown，不伪造时间与哈希。 */
   phaseOf(runId: string): MemoryRunPhase {
     const row = this.db
