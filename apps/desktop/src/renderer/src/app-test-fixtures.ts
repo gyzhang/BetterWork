@@ -581,6 +581,16 @@ function createSkillsApiFixture(options?: Pick<AppTestApiOptions, 'skills'>) {
   };
 }
 
+function createMcpApiFixture() {
+  return {
+    listConnections: vi.fn(async () => []),
+    getConnection: vi.fn(async () => null),
+    saveConnection: vi.fn(async () => ({ connection: undefined })),
+    deleteConnection: vi.fn(async () => ({ deleted: true })),
+    testConnection: vi.fn(async () => ({ connection: undefined, tools: [] })),
+  };
+}
+
 function createAppTestApi(options?: AppTestApiOptions) {
   emitNotificationChange = undefined;
   emitScheduleChange = undefined;
@@ -621,13 +631,7 @@ function createAppTestApi(options?: AppTestApiOptions) {
       prepareInputSnapshot: vi.fn(async (): Promise<InputSnapshot | null> => null),
     },
     memories: createMemoryApiFixture(options),
-    mcp: {
-      listConnections: vi.fn(async () => []),
-      getConnection: vi.fn(async () => null),
-      saveConnection: vi.fn(async () => ({ connection: undefined })),
-      deleteConnection: vi.fn(async () => ({ deleted: true })),
-      testConnection: vi.fn(async () => ({ connection: undefined, tools: [] })),
-    },
+    mcp: createMcpApiFixture(),
     experts: createExpertsApiFixture(options),
     runs: createRunsApiFixture(),
     skills: createSkillsApiFixture(options),
