@@ -468,6 +468,31 @@ function createTaskContextApiFixture(
   };
 }
 
+function createWorkspaceApiFixture() {
+  return {
+    getDefault: vi.fn(async () => workspaceFixture),
+    listAll: vi.fn(async () => [workspaceFixture]),
+    pickDirectory: vi.fn(async () => null),
+    create: vi.fn(),
+    updateIdentity: vi.fn(),
+    setHidden: vi.fn(async () => null),
+    // 侧栏分组与 tasks.list 报同一批任务，测试才能继续点得到「旧任务」那一行。
+    listTaskGroups: vi.fn(async () => [
+      { workspace: workspaceFixture, tasks: [previousTask], totalTasks: 1 },
+    ]),
+    memoryBrief: vi.fn(async (): Promise<Result<WorkspaceBrief>> => okResult(briefFixture)),
+    listReferenceVersions: vi.fn(async (): Promise<Result<WorkspaceReferenceListData>> =>
+      okResult({ items: [] }),
+    ),
+    setReferenceVersion: vi.fn(async (): Promise<Result<WorkspaceReferenceSetData>> =>
+      okResult({ receipt: referenceWriteReceipt, material: artifactVersionReference }),
+    ),
+    removeReferenceVersion: vi.fn(async (): Promise<Result<MemoryReferenceWriteReceipt>> =>
+      okResult(referenceWriteReceipt),
+    ),
+  };
+}
+
 function createAppTestApi(options?: AppTestApiOptions) {
   emitNotificationChange = undefined;
   emitScheduleChange = undefined;
@@ -475,28 +500,7 @@ function createAppTestApi(options?: AppTestApiOptions) {
   const removedScheduleScopeTaskIds = new Set<string>();
   const api = {
     chrome: { updateTheme: vi.fn(async () => undefined) },
-    workspace: {
-      getDefault: vi.fn(async () => workspaceFixture),
-      listAll: vi.fn(async () => [workspaceFixture]),
-      pickDirectory: vi.fn(async () => null),
-      create: vi.fn(),
-      updateIdentity: vi.fn(),
-      setHidden: vi.fn(async () => null),
-      // 侧栏分组与 tasks.list 报同一批任务，测试才能继续点得到「旧任务」那一行。
-      listTaskGroups: vi.fn(async () => [
-        { workspace: workspaceFixture, tasks: [previousTask], totalTasks: 1 },
-      ]),
-      memoryBrief: vi.fn(async (): Promise<Result<WorkspaceBrief>> => okResult(briefFixture)),
-      listReferenceVersions: vi.fn(async (): Promise<Result<WorkspaceReferenceListData>> =>
-        okResult({ items: [] }),
-      ),
-      setReferenceVersion: vi.fn(async (): Promise<Result<WorkspaceReferenceSetData>> =>
-        okResult({ receipt: referenceWriteReceipt, material: artifactVersionReference }),
-      ),
-      removeReferenceVersion: vi.fn(async (): Promise<Result<MemoryReferenceWriteReceipt>> =>
-        okResult(referenceWriteReceipt),
-      ),
-    },
+    workspace: createWorkspaceApiFixture(),
     models: {
       list: vi.fn(async (): Promise<ModelProfileSummary[]> => options?.models ?? []),
     },
