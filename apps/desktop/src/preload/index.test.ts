@@ -292,6 +292,11 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `const __notificationContractChannel: typeof IpcChannel.DeleteNotification = modelSearchNotificationInvokeContracts[IpcChannel.DeleteNotification].channel;`,
     `const __notificationEventUnsubscribe: () => void = notificationEventMethods[IpcChannel.NotificationChangeEvent]((event) => { const type: 'created' | 'read' | 'read-all' | 'deleted' | 'cleared' = event.type; });`,
     `const __activationEventUnsubscribe: () => void = notificationEventMethods[IpcChannel.NotificationActivated]((event) => { const id: string = event.id; });`,
+    `const __knowledgeListResult: Promise<z.output<typeof knowledgeDocumentSummarySchema>[]> = knowledgeInvokeMethods[IpcChannel.ListKnowledge]({});`,
+    `const __knowledgeJobResult: Promise<z.output<typeof knowledgeJobDetailSchema> | null> = knowledgeInvokeMethods[IpcChannel.GetKnowledgeJob]({ jobId: 'job-1' });`,
+    `const __knowledgeSourceResult: Promise<OpenKnowledgeSourceResult> = knowledgeInvokeMethods[IpcChannel.OpenKnowledgeSource]({ sourcePath: '/tmp/source.md' });`,
+    `const __knowledgeSourceChannel: typeof IpcChannel.GetRunArtifactDeclarations = knowledgeInvokeContracts[IpcChannel.GetRunArtifactDeclarations].channel;`,
+    `const __knowledgeEventUnsubscribe: () => void = knowledgeEventMethods[IpcChannel.KnowledgeJobEvent]((event) => { const id: string = event.id; const sequence: number = event.sequence; });`,
   ];
   const invalid = [
     `runInvokeMethods[IpcChannel.StartRun]({ runId: 'run-1' });`,
@@ -314,6 +319,10 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `const __notificationContractWrongChannel: typeof IpcChannel.ListNotifications = modelSearchNotificationInvokeContracts[IpcChannel.DeleteNotification].channel;`,
     `notificationEventMethods[IpcChannel.NotificationActivated]((event: { type: 'created' }) => {});`,
     `const __notificationEventWrongChannel: typeof IpcChannel.NotificationActivated = notificationEventContracts[IpcChannel.NotificationChangeEvent].channel;`,
+    `knowledgeInvokeMethods[IpcChannel.GetKnowledgeJob]({ id: 'job-1' });`,
+    `const __knowledgeContractWrongResponse: Promise<z.output<typeof knowledgeSearchResponseSchema>> = knowledgeInvokeMethods[IpcChannel.ListKnowledgeJobs]({});`,
+    `const __knowledgeContractWrongChannel: typeof IpcChannel.ListKnowledge = knowledgeInvokeContracts[IpcChannel.GetKnowledgeJob].channel;`,
+    `knowledgeEventMethods[IpcChannel.KnowledgeJobEvent]((event) => { const sequence: string = event.sequence; });`,
   ];
   let source = readFileSync(sourcePath, 'utf8') + '\n';
   const cases = [...valid, ...invalid].map((expression, index) => {
@@ -1050,6 +1059,7 @@ describe('artifact action preload API', () => {
 describe('knowledge search and source preload API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.listeners.clear();
     mocks.invoke.mockResolvedValue(null);
   });
 
@@ -1122,6 +1132,32 @@ describe('knowledge search and source preload API', () => {
       expect(knowledge.remove({ id: 'document-1' })).rejects.toThrow(),
     ]);
     expect(mocks.invoke).toHaveBeenCalledTimes(3);
+  });
+
+  it('validates Knowledge job events and removes the typed listener', () => {
+    const listener = vi.fn();
+    const unsubscribe = api().knowledge.onJobEvent(listener);
+    const handler = mocks.listeners.get(IpcChannel.KnowledgeJobEvent);
+
+    const event = {
+      id: 'job-1',
+      kind: 'rebuild-keyword',
+      status: 'queued',
+      attempt: 1,
+      sequence: 1,
+      totalCount: 0,
+      completedCount: 0,
+      failedCount: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    handler?.({}, event);
+    expect(listener).toHaveBeenCalledWith(event);
+    expect(() => handler?.({}, { ...event, status: 'unknown' })).toThrow();
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    expect(mocks.off).toHaveBeenCalledWith(IpcChannel.KnowledgeJobEvent, handler);
   });
 });
 
