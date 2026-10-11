@@ -878,3 +878,9 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 2026-10-11 18:05 CST，从最新 `origin/main` `c9458d2257888d05f84ab3fcd079854f20c7c45c` 建立 `codex/r13-app-runs-api-fixture`。将 Run 列表、事件列表、启动与事件订阅替身提取为私有 `createRunsApiFixture`。列表仍只对既有 `previousTask.id` 返回 `previousRun`，其余任务返回空列表。
 
 `App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡只移动 Run API 测试替身，不改 Run 生命周期、事件或生产代码；完整 Desktop API fixture 与 App 整树场景仍在，不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 58. R13 子卡：Skills API 替身按域收拢
+
+2026-10-11 18:10 CST，从最新 `origin/main` `1b86e4f8afaef79fe25631e47d492a5c58a5acb4` 建立 `codex/r13-app-skills-api-fixture`。将 Skill 列表、详情、试运行与依赖授权默认替身提取为私有 `createSkillsApiFixture`，传入原 `skills` 选项。未配置时列表仍为空、详情仍为 null，试运行和依赖授权仍抛出显式配置错误。
+
+`App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡只移动 Skills API 测试替身，不改变信任/授权默认、Skill 行为或生产代码；完整 Desktop API fixture 与 App 整树场景仍在，不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。

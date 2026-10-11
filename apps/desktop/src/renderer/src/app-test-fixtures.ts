@@ -564,6 +564,23 @@ function createRunsApiFixture() {
   };
 }
 
+function createSkillsApiFixture(options?: Pick<AppTestApiOptions, 'skills'>) {
+  return {
+    list: vi.fn(async () => options?.skills ?? []),
+    get: vi.fn<Window['betterwork']['skills']['get']>(
+      async ({ id }) => options?.skills?.find((candidate) => candidate.id === id) ?? null,
+    ),
+    testRun: vi.fn<Window['betterwork']['skills']['testRun']>(async () => {
+      throw new Error('App 测试没有配置 Skill 试运行结果');
+    }),
+    refreshDependencyGrant: vi.fn<Window['betterwork']['skills']['refreshDependencyGrant']>(
+      async () => {
+        throw new Error('App 测试没有配置 Skill 依赖授权结果');
+      },
+    ),
+  };
+}
+
 function createAppTestApi(options?: AppTestApiOptions) {
   emitNotificationChange = undefined;
   emitScheduleChange = undefined;
@@ -613,20 +630,7 @@ function createAppTestApi(options?: AppTestApiOptions) {
     },
     experts: createExpertsApiFixture(options),
     runs: createRunsApiFixture(),
-    skills: {
-      list: vi.fn(async () => options?.skills ?? []),
-      get: vi.fn<Window['betterwork']['skills']['get']>(
-        async ({ id }) => options?.skills?.find((candidate) => candidate.id === id) ?? null,
-      ),
-      testRun: vi.fn<Window['betterwork']['skills']['testRun']>(async () => {
-        throw new Error('App 测试没有配置 Skill 试运行结果');
-      }),
-      refreshDependencyGrant: vi.fn<Window['betterwork']['skills']['refreshDependencyGrant']>(
-        async () => {
-          throw new Error('App 测试没有配置 Skill 依赖授权结果');
-        },
-      ),
-    },
+    skills: createSkillsApiFixture(options),
     dependencies: {
       listOptions: vi.fn(async () => ({
         distributions: [],
