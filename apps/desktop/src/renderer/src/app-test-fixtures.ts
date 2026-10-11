@@ -611,6 +611,13 @@ function createTaskContinuityApiFixture() {
   };
 }
 
+function createDiscussionCheckpointsApiFixture() {
+  return {
+    list: vi.fn(async (): Promise<DiscussionCheckpoint[]> => []),
+    create: vi.fn(async () => ({ checkpoint: undefined })),
+  };
+}
+
 function createAppTestApi(options?: AppTestApiOptions) {
   emitNotificationChange = undefined;
   emitScheduleChange = undefined;
@@ -630,10 +637,7 @@ function createAppTestApi(options?: AppTestApiOptions) {
     taskContinuity: createTaskContinuityApiFixture(),
     schedules: createSchedulesApiFixture(),
     taskContexts: createTaskContextApiFixture(options, removedScheduleScopeTaskIds),
-    discussionCheckpoints: {
-      list: vi.fn(async (): Promise<DiscussionCheckpoint[]> => []),
-      create: vi.fn(async () => ({ checkpoint: undefined })),
-    },
+    discussionCheckpoints: createDiscussionCheckpointsApiFixture(),
     materials: {
       listCandidates: vi.fn(async (): Promise<MaterialCandidate[]> => []),
       prepareInputSnapshot: vi.fn(async (): Promise<InputSnapshot | null> => null),
