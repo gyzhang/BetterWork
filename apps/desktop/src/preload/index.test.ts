@@ -274,6 +274,75 @@ describe('workspace preload API', () => {
   });
 });
 
+describe('task preload API', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.invoke.mockResolvedValue([]);
+  });
+
+  it('validates and forwards Task requests and responses through their channels', async () => {
+    const task = {
+      id: 'task-1',
+      workspaceId: 'workspace-1',
+      title: 'Research',
+      goal: 'Summarize the source material.',
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    mocks.invoke.mockImplementation(async (channel) => {
+      if (channel === IpcChannel.CreateTask) return { task, sessionId: 'session-1' };
+      return [{ ...task, sessionId: 'session-1' }];
+    });
+
+    await Promise.all([
+      api().tasks.create({
+        workspaceId: 'workspace-1',
+        title: 'Research',
+        goal: 'Summarize the source material.',
+      }),
+      api().tasks.list(),
+      api().tasks.list({ workspaceId: 'workspace-1' }),
+    ]);
+
+    expect(mocks.invoke.mock.calls).toEqual([
+      [
+        IpcChannel.CreateTask,
+        {
+          workspaceId: 'workspace-1',
+          title: 'Research',
+          goal: 'Summarize the source material.',
+        },
+      ],
+      [IpcChannel.ListTasks, undefined],
+      [IpcChannel.ListTasks, { workspaceId: 'workspace-1' }],
+    ]);
+  });
+
+  it('rejects invalid Task requests before IPC and malformed responses after IPC', async () => {
+    expect(() =>
+      api().tasks.create({
+        workspaceId: '',
+        title: 'Research',
+        goal: 'Summarize the source material.',
+      }),
+    ).toThrow();
+    expect(() => api().tasks.list({ workspaceId: '' })).toThrow();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+
+    mocks.invoke.mockResolvedValue(null);
+    await expect(
+      api().tasks.create({
+        workspaceId: 'workspace-1',
+        title: 'Research',
+        goal: 'Summarize the source material.',
+      }),
+    ).rejects.toThrow();
+    await expect(api().tasks.list()).rejects.toThrow();
+    await expect(api().tasks.list({ workspaceId: 'workspace-1' })).rejects.toThrow();
+    expect(mocks.invoke).toHaveBeenCalledTimes(3);
+  });
+});
+
 describe('historical task and notification preload APIs', () => {
   beforeEach(() => {
     vi.clearAllMocks();

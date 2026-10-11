@@ -15,7 +15,9 @@ import {
   copyExpertRequestSchema,
   copySkillRequestSchema,
   createDiscussionCheckpointRequestSchema,
+  createdTaskSchema,
   createMemoryRequestSchema,
+  createTaskRequestSchema,
   createWorkspaceRequestSchema,
   declareArtifactSourcesRequestSchema,
   deletedResultSchema,
@@ -89,6 +91,7 @@ import {
   listScheduleSourceItemsRequestSchema,
   listSchedulesRequestSchema,
   listTaskMaterialCandidatesRequestSchema,
+  listTasksRequestSchema,
   listWorkspaceReferenceVersionsRequestSchema,
   materialCandidateSchema,
   mcpConnectionSummarySchema,
@@ -308,8 +311,18 @@ const api: BetterWorkDesktopApi = {
       ),
   },
   tasks: {
-    create: (input) => ipcRenderer.invoke(IpcChannel.CreateTask, input),
-    list: (input) => ipcRenderer.invoke(IpcChannel.ListTasks, input),
+    create: (input) =>
+      invokeValidated(
+        IpcChannel.CreateTask,
+        createTaskRequestSchema.parse(input),
+        createdTaskSchema,
+      ),
+    list: (input) =>
+      invokeValidated(
+        IpcChannel.ListTasks,
+        input === undefined ? undefined : listTasksRequestSchema.parse(input),
+        recentTaskSummarySchema.array(),
+      ),
     get: (input) =>
       invokeValidated(
         IpcChannel.GetTask,
