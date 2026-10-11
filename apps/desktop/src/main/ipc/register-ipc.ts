@@ -293,6 +293,7 @@ import { KnowledgeAudit } from '../services/knowledge-audit';
 import type { KnowledgeIndexService } from '../services/knowledge-index-service';
 import type { KnowledgeSearchService } from '../services/knowledge-search';
 import type { KnowledgeVault } from '../services/knowledge-vault';
+import { MarkdownArtifactSaveService } from '../services/markdown-artifact-save-service';
 import type { McpClientService } from '../services/mcp-client-service';
 import type { MemoryExtractionService } from '../services/memory-extraction-service';
 import type { MemoryRecallService } from '../services/memory-recall-service';
@@ -1049,42 +1050,12 @@ function registerArtifactChannels(deps: IpcDependencies): void {
     },
   );
   const declarations = new ArtifactDeclarationService(store);
+  const markdownArtifactSave = new MarkdownArtifactSaveService(store);
   handleInput(
     IpcChannel.SaveMarkdownArtifact,
     saveMarkdownArtifactRequestSchema,
     artifactSummarySchema,
-    (input) => {
-      // 声明种类由宿主判定；校验先于事务，失败时不留半版本（知识契约 §6.1）。
-      const previousVersionId = input.artifactId
-        ? store.artifacts.getDetail(input.artifactId)?.currentVersionId
-        : undefined;
-      const plan = declarations.planForWrite(
-        input.origin,
-        input.runId,
-        previousVersionId,
-        input.inputRelations ?? null,
-      );
-      return store.transaction(() => {
-        const saved = store.artifacts.saveMarkdown(input, plan.kind);
-        if (plan.copyRelationsFromVersionId) {
-          store.artifactInputRelations.inheritFromVersion(
-            saved.currentVersionId,
-            plan.copyRelationsFromVersionId,
-            plan.kind,
-          );
-          return saved;
-        }
-        if (!plan.inputs || plan.inputs.length === 0) return saved;
-        store.artifactInputRelations.saveForRun(
-          saved.currentVersionId,
-          plan.runId,
-          plan.inputs,
-          declarations.wasReadDuring,
-          plan.kind === 'user' ? 'user' : 'model',
-        );
-        return saved;
-      });
-    },
+    (input) => markdownArtifactSave.save(input),
   );
   handleInput(
     IpcChannel.ExportMarkdownArtifact,

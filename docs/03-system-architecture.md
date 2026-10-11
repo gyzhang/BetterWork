@@ -137,6 +137,8 @@ KnowledgeAudit 继续在工具回调事务内登记精确来源，适配器只�
 
 人工 requestKey 重放先于当前 CAS/能力检查，新的 claim 保持原同步事务，提交后才广播和异步准备。采用计数按输出版本 sourceRunId 归属，而非关系建立者的 run_id；继续修订和历史输入快照语义保持。范围、未拆入口与验证证据见 [E1 说明](reviews/2026-10-10-ipc-schedule-use-cases.md)。
 
+`MarkdownArtifactSaveService` 在现有 Application 层协调 Markdown 成果保存：先由 `ArtifactDeclarationService` 校验来源计划，再在一个 `AppStore` 事务中写版本并保存或继承输入关系。`ArtifactRepository` 继续写成果与版本聚合及 Evidence 关系；IPC 保留请求/响应 Zod 校验，只调用该用例。人工修订继承与 AI Run 来源口径见 [ADR-0005](adr/0005-artifact-version-evidence.md)。
+
 ## 4. Agent Core
 
 Agent Core 不允许直接导入：
