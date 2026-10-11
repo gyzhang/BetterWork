@@ -46,4 +46,12 @@ PR #67 首发源 43e30590f54ef6c5998407501bdfdcd0f45de7fd 与随后合入的 PR 
 
 同步提交后，以实际 PR 基点 0d121449c1cafc78fdd9ed22c5d4c41113c180b1 再跑阻断真实 Electron 导入的相关 functional 68/738、heavy 2/120，均退出 0。两档共 70/858，不与初次或扩大诊断相加。10:03 CST 仍按原批次基点巡检、留档与复核退出 0；更新为测试文件 269、粗读 it 数 2,289、产品源码行 99,268，较 09:57 的增长来自已合入 main 的图表任务，不计为 E13 新增。规则与例外保持，PR 相对当前 main 仅含 E13 的 15 个文件。
 
-未运行完整 verify、UI、真实模型或安装态人工验收，未访问用户数据库。最新源 macOS PR Gate、合并与归档证据待补，不能以本地通过冒称远端通过。
+未运行完整 verify、UI、真实模型或安装态人工验收，未访问用户数据库。最新源 macOS PR Gate 与合并证据见下文。
+
+## 远端交接
+
+2026-10-11 10:07 CST，最终源 `847043860a4c70548f3ec1a5e878f90e3fb2b715` 的 [Actions 38103908475](https://github.com/gyzhang/BetterWork/actions/runs/38103908475) 在 macos-26-arm64 上通过 PR Gate。lint、format:check、typecheck 成功，docs:check 1/154、changed functional 68/738、heavy 2/120 通过，实际 PR 基点为 0d121449c1cafc78fdd9ed22c5d4c41113c180b1。按三次调用合计 71 文件 / 1,012 项，不表示全仓或去重规模；Full verify 跳过，本地 build 与串行 bench 单独记录。
+
+[PR #67](https://github.com/gyzhang/BetterWork/pull/67) 已 squash 合入 main，提交 `9b05de9d6b3e6b3c9bd8603039d622ed691e12b9`，文件树与最终源一致。commit/pre-commit、push/pre-push 及合并后原批次基点巡检退出 0；main/origin/main 对齐、工作树干净，代码分支本地与远端均已删除。由合并提交建立 `codex/e13-closeout`，纯 Markdown 归档本报告、总 Review 与工作日志，归档 PR 继续核对自身最新源的文档门禁和合并清理。
+
+E13 的代码与自动化验证已收口，最终人工验收及 WM/MI 状态保持各自边界。下一项建议为 E14：历史重放最终回答读取整理，继续保留最后非空消息、原事件解码边界与连续安全后缀；尚未开工。扩大诊断发现的凭据测试宿主隔离问题单独留证，不以 E13 相关门禁通过抵消。

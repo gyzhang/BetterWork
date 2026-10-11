@@ -663,7 +663,7 @@ E12 完成 R10 的全域未裁决关联切片；docs:check 154 项、原基点�
 
 2026-10-11 07:08 CST：最终源 `7fd6c9a813f0ecc1b1b8f20306f409f15db9d92e` 的 [Actions 38093744169](https://github.com/gyzhang/BetterWork/actions/runs/38093744169) 在 macos-26-arm64 上通过 PR Gate，静态、docs:check 1/154、changed functional 10/188、heavy 1/87 成功，Full verify 跳过。三次调用合计 12 文件 / 429 项，不当作全仓或去重规模。[PR #64](https://github.com/gyzhang/BetterWork/pull/64) 已 squash 为 main `5e8b8047a7ba7745c5d83ec17318c06926ec2261`，文件树与最终源一致；代码分支本地/远端删除，原 checkout 同步 main，原基点巡检退出 0，纯 Markdown 分支 codex/e12-closeout 归档。E12 代码与自动化收口，后续读取切片另按用户指令推进。
 
-## 31. E13：历史重放来源事实批量读取（本地验证完成）
+## 31. E13：历史重放来源事实批量读取（代码与自动化收口）
 
 2026-10-11 用户授权执行下一建议，从 main 125a29814c636422d8fbcea8f07c87fcf75460b2 建立 codex/e13-history-source-batches，沿用原 checkout。实施与证据见 [E13 专项 Review](2026-10-11-history-source-batches.md)。
 
@@ -672,3 +672,5 @@ E12 完成 R10 的全域未裁决关联切片；docs:check 154 项、原基点�
 2026-10-11 09:55 CST，核心 4/55、related functional 68/738、heavy 2/120、静态与 build 通过；两档 70 文件 / 858 项，核心不相加。四个退化探针检出 1、6、2、1 项失败，源字节恢复后相关回归通过。串行 bench 3 文件 / 3 项通过：256 真实 Run / 1,024 足迹，查询 768→3，中位 20.53→10.59 ms，完整 1,536 行和 1,261,860 字节保持一致。只计三类来源读取阶段，临时存储仍随候选增长，不外推端到端、RSS 或容量。
 
 E13 完成 R10 的来源事实读取切片；docs:check 154 项、原基点巡检留档及复核退出 0，规则与例外保持。逐 Run 最终回答、材料实体检查、完整事实装配与成功向量路完整块映射仍有后续范围。完整 verify、UI、真实模型和安装态人工验收未运行；最新 SHA 的 macOS PR Gate、合并与归档继续收口。
+
+2026-10-11 10:07 CST：最终源 `847043860a4c70548f3ec1a5e878f90e3fb2b715` 的 [Actions 38103908475](https://github.com/gyzhang/BetterWork/actions/runs/38103908475) 在 macos-26-arm64 上通过 PR Gate，静态、docs:check 1/154、changed functional 68/738、heavy 2/120 成功，Full verify 跳过。三次调用合计 71 文件 / 1,012 项，不当作全仓或去重规模。[PR #67](https://github.com/gyzhang/BetterWork/pull/67) 已 squash 为 main `9b05de9d6b3e6b3c9bd8603039d622ed691e12b9`，文件树与最终源一致；代码分支本地/远端删除，原 checkout 同步 main，原基点巡检退出 0，纯 Markdown 分支 codex/e13-closeout 归档。同步 main 的唯一日志冲突完整保留双方内容；扩大诊断拦住既有凭据测试的真实 Electron 导入，失败单独留证，不冒称完整离线通过。E13 代码与自动化收口，建议 E14 整理最终回答读取，另按用户指令推进。
