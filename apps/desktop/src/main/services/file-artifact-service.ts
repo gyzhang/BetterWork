@@ -76,6 +76,11 @@ export interface SlidePreviewResult {
   error?: string;
 }
 
+export type ArtifactFileVersionResolution =
+  | { status: 'invalid-artifact' }
+  | { status: 'invalid-version' }
+  | { status: 'resolved'; versionId: string };
+
 export interface RegisterFileServiceInput {
   runId: string;
   executionId: string;
@@ -282,6 +287,19 @@ export class FileArtifactService {
       return managedPath(workspaceRoot, relativePath);
     }
     throw new Error('Could not find an unused filename in the Workspace delivery folder');
+  }
+
+  resolveArtifactFileVersion(
+    artifactId: string,
+    versionId?: string,
+  ): ArtifactFileVersionResolution {
+    const artifact = this.store.artifacts.getDetail(artifactId);
+    if (!artifact || artifact.type !== 'presentation') return { status: 'invalid-artifact' };
+    const resolvedVersionId = versionId ?? artifact.currentVersionId;
+    if (versionId && !this.store.artifacts.versionBelongsToArtifact(versionId, artifactId)) {
+      return { status: 'invalid-version' };
+    }
+    return { status: 'resolved', versionId: resolvedVersionId };
   }
 
   resolveStoredPath(versionId: string): string {

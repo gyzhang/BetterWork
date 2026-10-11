@@ -1095,21 +1095,20 @@ function registerArtifactChannels(deps: IpcDependencies): void {
     openFileArtifactRequestSchema,
     openFileArtifactResultSchema,
     async (input) => {
-      const { store, fileArtifactService } = deps;
+      const { fileArtifactService } = deps;
       if (!fileArtifactService) throw new Error('File artifact service is not available');
-      const artifact = store.artifacts.getDetail(input.artifactId);
-      if (!artifact || artifact.type !== 'presentation')
+      const resolution = fileArtifactService.resolveArtifactFileVersion(
+        input.artifactId,
+        input.versionId,
+      );
+      if (resolution.status === 'invalid-artifact')
         return { opened: false, error: '该成果不存在或不是文件类型。' };
-      const resolvedVersionId = input.versionId ?? artifact.currentVersionId;
-      if (
-        input.versionId &&
-        !store.artifacts.versionBelongsToArtifact(input.versionId, input.artifactId)
-      ) {
+      if (resolution.status === 'invalid-version') {
         return { opened: false, error: '该版本不属于此成果。' };
       }
       const workspacePath = await fileArtifactService.ensureWorkspaceCopy(
         input.artifactId,
-        resolvedVersionId,
+        resolution.versionId,
       );
       const error = await shell.openPath(workspacePath);
       return error ? { opened: false, error } : { opened: true };
@@ -1120,22 +1119,21 @@ function registerArtifactChannels(deps: IpcDependencies): void {
     openFileArtifactRequestSchema,
     revealFileArtifactResultSchema,
     async (input) => {
-      const { store, fileArtifactService } = deps;
+      const { fileArtifactService } = deps;
       if (!fileArtifactService) throw new Error('File artifact service is not available');
-      const artifact = store.artifacts.getDetail(input.artifactId);
-      if (!artifact || artifact.type !== 'presentation')
+      const resolution = fileArtifactService.resolveArtifactFileVersion(
+        input.artifactId,
+        input.versionId,
+      );
+      if (resolution.status === 'invalid-artifact')
         return { revealed: false, error: '该成果不存在或不是文件类型。' };
-      const resolvedVersionId = input.versionId ?? artifact.currentVersionId;
-      if (
-        input.versionId &&
-        !store.artifacts.versionBelongsToArtifact(input.versionId, input.artifactId)
-      ) {
+      if (resolution.status === 'invalid-version') {
         return { revealed: false, error: '该版本不属于此成果。' };
       }
       try {
         const workspacePath = await fileArtifactService.ensureWorkspaceCopy(
           input.artifactId,
-          resolvedVersionId,
+          resolution.versionId,
         );
         shell.showItemInFolder(workspacePath);
         return { revealed: true };
@@ -1152,19 +1150,18 @@ function registerArtifactChannels(deps: IpcDependencies): void {
     getArtifactThumbnailsRequestSchema,
     getArtifactThumbnailsResultSchema,
     async (input) => {
-      const { store, fileArtifactService } = deps;
+      const { fileArtifactService } = deps;
       if (!fileArtifactService) throw new Error('File artifact service is not available');
-      const artifact = store.artifacts.getDetail(input.artifactId);
-      if (!artifact || artifact.type !== 'presentation')
+      const resolution = fileArtifactService.resolveArtifactFileVersion(
+        input.artifactId,
+        input.versionId,
+      );
+      if (resolution.status === 'invalid-artifact')
         return { thumbnails: [], error: '该成果不存在或不是文件类型。' };
-      const resolvedVersionId = input.versionId ?? artifact.currentVersionId;
-      if (
-        input.versionId &&
-        !store.artifacts.versionBelongsToArtifact(input.versionId, input.artifactId)
-      ) {
+      if (resolution.status === 'invalid-version') {
         return { thumbnails: [], error: '该版本不属于此成果。' };
       }
-      return fileArtifactService.generateThumbnails(resolvedVersionId);
+      return fileArtifactService.generateThumbnails(resolution.versionId);
     },
   );
 }

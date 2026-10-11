@@ -790,3 +790,9 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 真实 SQLite 查询用例 2/2，IPC functional 51/51，共 53 项通过；typecheck、定向 ESLint/Prettier、生产 build、`docs:check` 154/154 与本批基点巡检通过。
 
 最终源 `26e18e4d730f7213a1571f6becf7f6f5a8bcecb3` 的 [Actions 38122873009](https://github.com/gyzhang/BetterWork/actions/runs/38122873009) 在 macos-26-arm64 上通过 PR Gate；lint、format:check、typecheck、docs:check 与相关 functional 53 项均通过，无受影响 heavy 测试，Full verify 按策略跳过。[PR #94](https://github.com/gyzhang/BetterWork/pull/94) 已 squash 合入 main `fd1a24ecd42c55b7a4d99a76acb551b8c8a912d2`。未运行完整 verify、UI 或真实模型。
+
+## 44. E20：文件成果版本访问校验集中（本地自动化通过，远端收口待完成）
+
+2026-10-11 16:01 CST，从最新 main `c57be4549ed690886c05c5170d0ca548b6ff681d` 在保留 worktree 建立 `codex/e20-file-artifact-access-use-case`，继续 R08 的文件成果入口整理。将 Open、Reveal 与缩略图通道重复的文件成果类型和当前/指定版本归属判断提取到 `FileArtifactService.resolveArtifactFileVersion`。工作空间副本校验与准备继续由现有服务处理；Electron shell 调用及各通道的本地化错误、异常捕获和结果映射保持在 IPC。未改协议、Repository、Schema、迁移、文件或 ArtifactVersion 语义。
+
+真实 SQLite 文件服务与 IPC functional 共 68 项通过；typecheck、定向 ESLint/Prettier、生产 build 通过。`docs:check`、本批基点巡检、提交推送与 PR Gate 待收口。未运行完整 verify、UI 或真实模型。

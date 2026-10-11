@@ -191,6 +191,51 @@ describe('FileArtifactService', () => {
     );
     f.store.close();
   });
+  it('resolves current and requested versions only for file artifacts that own them', async () => {
+    const f = fixture();
+    const registered = await f.service.register(f.input);
+    const artifact = f.store.artifacts.getDetail(registered.artifactId);
+    if (!artifact || artifact.type !== 'presentation') {
+      throw new Error('Expected registered file artifact');
+    }
+    expect(f.service.resolveArtifactFileVersion(artifact.id)).toEqual({
+      status: 'resolved',
+      versionId: registered.versionId,
+    });
+    expect(f.service.resolveArtifactFileVersion(artifact.id, registered.versionId)).toEqual({
+      status: 'resolved',
+      versionId: registered.versionId,
+    });
+    expect(f.service.resolveArtifactFileVersion('missing-artifact')).toEqual({
+      status: 'invalid-artifact',
+    });
+
+    const unrelated = f.store.artifacts.registerFile({
+      taskId: artifact.taskId,
+      title: 'Other deck',
+      runId: f.input.runId,
+      mimeType,
+      fileSize: f.output.fileSize,
+      fileHash: f.output.fileHash,
+      fileKey: 'exec-1/other.pptx',
+      executionId: f.input.executionId,
+      validation: passedValidation,
+    });
+    expect(f.service.resolveArtifactFileVersion(artifact.id, unrelated.versionId)).toEqual({
+      status: 'invalid-version',
+    });
+
+    const markdown = f.store.artifacts.saveMarkdown({
+      taskId: artifact.taskId,
+      origin: 'user-edit',
+      title: 'Notes',
+      content: '# Notes',
+    });
+    expect(f.service.resolveArtifactFileVersion(markdown.id)).toEqual({
+      status: 'invalid-artifact',
+    });
+    f.store.close();
+  });
   it('only the relations the registration carried become a model declaration', async () => {
     const declared = fixture();
     const withRelations = await declared.service.register({
