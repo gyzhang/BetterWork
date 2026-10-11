@@ -343,6 +343,63 @@ describe('task preload API', () => {
   });
 });
 
+describe('evidence preload API', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.invoke.mockResolvedValue([]);
+  });
+
+  it('validates and forwards Evidence requests and responses through its channel', async () => {
+    const evidence = {
+      id: 'evidence-1',
+      taskId: 'task-1',
+      runId: 'run-1',
+      sourceType: 'local-file' as const,
+      sourceUri: 'file:///tmp/source.md',
+      title: 'Source',
+      locator: '',
+      excerpt: '',
+      contentHash: 'hash-1',
+      capturedAt: 1,
+    };
+    const knowledgeEvidence = {
+      ...evidence,
+      id: 'evidence-2',
+      knowledgeSource: {
+        reference: {
+          kind: 'knowledge-revision' as const,
+          knowledgeDocumentId: 'document-1',
+          knowledgeRevisionId: 'revision-1',
+          contentHash: 'content-hash',
+          sourcePath: '/tmp/knowledge.md',
+        },
+        textHash: 'text-hash',
+        span: { sectionOrdinal: 0, start: 0, end: 12 },
+        operation: 'search' as const,
+      },
+    };
+    mocks.invoke.mockResolvedValue([
+      { ...evidence, knowledgeSource: undefined },
+      knowledgeEvidence,
+    ]);
+
+    const result = await api().evidence.list({ taskId: 'task-1' });
+    expect(result).toHaveLength(2);
+    expect(Object.hasOwn(result[0] ?? {}, 'knowledgeSource')).toBe(false);
+    expect(result[1]?.knowledgeSource?.reference.knowledgeRevisionId).toBe('revision-1');
+    expect(mocks.invoke).toHaveBeenCalledWith(IpcChannel.ListEvidence, { taskId: 'task-1' });
+  });
+
+  it('rejects invalid Evidence requests before IPC and malformed responses after IPC', async () => {
+    expect(() => api().evidence.list({ taskId: '' })).toThrow();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+
+    mocks.invoke.mockResolvedValue([{}]);
+    await expect(api().evidence.list({ taskId: 'task-1' })).rejects.toThrow();
+    expect(mocks.invoke).toHaveBeenCalledWith(IpcChannel.ListEvidence, { taskId: 'task-1' });
+  });
+});
+
 describe('historical task and notification preload APIs', () => {
   beforeEach(() => {
     vi.clearAllMocks();

@@ -1050,3 +1050,11 @@ Preload 与 IPC 注册器定向测试 2 文件 / 62 项、`docs:check` 154/154 �
 Preload 定向测试 1 文件 / 13 项、`docs:check` 154/154 通过，覆盖创建/列表正常值、可省略筛选参数、非法请求拒绝和畸形响应拒绝；typecheck、改动文件 ESLint/Prettier 与差异空白检查通过。完整 `npm run verify`、UI、真实模型及安装态验收未运行。
 
 源提交 `7510d44e312b8bfe73458a202e820b535661e6c0` 的 [PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/38141583107) 成功；Quick code check 通过，Full verify 按仓库规则跳过。[PR #142](https://github.com/gyzhang/BetterWork/pull/142) 已合入 main，合并提交 `5b0c3f1c7908e58d240e0c99de6dba101b4f1c11`；本地和远端任务分支已删除，任务 worktree 保留。R09 的其他旧 Preload 调用及全局 channel 映射继续待后续切片。
+
+## 85. R09 子卡：Evidence Preload 请求与响应边界校验
+
+2026-10-11 21:09 CST，Task 子卡合并后，从最新 main `2849e8f5fa01b92597b17c93a0ce6929529a2588` 在保留的任务 worktree 建立 `codex/r09-evidence-preload-contracts`。Evidence Preload 的 `list` 接入既有请求与响应 Schema。
+
+响应 Schema 校验 Evidence 后会省略值为 `undefined` 的可选 `knowledgeSource` 属性，使解析结果符合 `EvidenceSummary` 的精确可选属性类型；合法来源对象保持原样。没有改 channel、Main handler、Evidence 行为、API 类型或共享协议。R09 的 Artifact、Model、Search、Notification、Knowledge 等旧 Preload 调用及全局 channel 映射仍未完成。
+
+Preload 定向测试 1 文件 / 15 项通过，覆盖请求转发、非法请求拒绝、畸形响应拒绝与可选属性归一；typecheck、改动文件 ESLint/Prettier 和差异空白检查通过。完整 `npm run verify`、UI、真实模型及安装态验收未运行。
