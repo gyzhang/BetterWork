@@ -403,6 +403,19 @@ function createKnowledgeApiFixture() {
   };
 }
 
+function createArtifactApiFixture() {
+  return {
+    list: vi.fn(async (): Promise<ArtifactSummary[]> => []),
+    saveMarkdown: vi.fn<Window['betterwork']['artifacts']['saveMarkdown']>(async () => {
+      throw new Error('App 测试没有配置成果保存结果');
+    }),
+    get: vi.fn(async (): Promise<ArtifactDetail | null> => null),
+    listVersions: vi.fn(async () => []),
+    getVersion: vi.fn(async () => null),
+    getVersionExecutor: vi.fn(async (): Promise<ArtifactVersionExecutorSummary | null> => null),
+  };
+}
+
 function createAppTestApi(options?: AppTestApiOptions) {
   emitNotificationChange = undefined;
   emitScheduleChange = undefined;
@@ -436,16 +449,7 @@ function createAppTestApi(options?: AppTestApiOptions) {
       list: vi.fn(async (): Promise<ModelProfileSummary[]> => options?.models ?? []),
     },
     knowledge: createKnowledgeApiFixture(),
-    artifacts: {
-      list: vi.fn(async (): Promise<ArtifactSummary[]> => []),
-      saveMarkdown: vi.fn<Window['betterwork']['artifacts']['saveMarkdown']>(async () => {
-        throw new Error('App 测试没有配置成果保存结果');
-      }),
-      get: vi.fn(async (): Promise<ArtifactDetail | null> => null),
-      listVersions: vi.fn(async () => []),
-      getVersion: vi.fn(async () => null),
-      getVersionExecutor: vi.fn(async (): Promise<ArtifactVersionExecutorSummary | null> => null),
-    },
+    artifacts: createArtifactApiFixture(),
     evidence: { list: vi.fn(async () => []) },
     notifications: {
       list: vi.fn(async () => []),
