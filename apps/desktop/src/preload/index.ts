@@ -457,6 +457,17 @@ const runInvokeMethods: InvokeMethodsByChannel<typeof runInvokeContracts> = {
     invokeContract(runInvokeContracts[IpcChannel.SaveRunSettings], input),
 };
 
+const runEventContracts = defineEventContracts({
+  [IpcChannel.RunEvent]: {
+    channel: IpcChannel.RunEvent,
+    event: agentRuntimeEventSchema,
+  },
+});
+const runEventMethods: EventMethodsByChannel<typeof runEventContracts> = {
+  [IpcChannel.RunEvent]: (listener) =>
+    listenContract(runEventContracts[IpcChannel.RunEvent], listener),
+};
+
 const workspaceTaskInvokeMethods: InvokeMethodsByChannel<typeof workspaceTaskInvokeContracts> = {
   [IpcChannel.GetDefaultWorkspace]: (input) =>
     invokeContract(workspaceTaskInvokeContracts[IpcChannel.GetDefaultWorkspace], input),
@@ -1697,13 +1708,7 @@ const api: BetterWorkDesktopApi = {
     cancel: (input) => runInvokeMethods[IpcChannel.CancelRun](input),
     list: (input) => runInvokeMethods[IpcChannel.ListRuns](input),
     listEvents: (input) => runInvokeMethods[IpcChannel.ListRunEvents](input),
-    onEvent(listener) {
-      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
-        listener(agentRuntimeEventSchema.parse(raw));
-      };
-      ipcRenderer.on(IpcChannel.RunEvent, handler);
-      return () => ipcRenderer.off(IpcChannel.RunEvent, handler);
-    },
+    onEvent: (listener) => runEventMethods[IpcChannel.RunEvent](listener),
   },
   runSettings: {
     get: () => runInvokeMethods[IpcChannel.GetRunSettings]({}),
