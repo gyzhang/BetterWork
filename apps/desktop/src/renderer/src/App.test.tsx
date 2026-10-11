@@ -308,6 +308,7 @@ const memoryViewItem = (overrides?: Partial<MemoryViewItem>): MemoryViewItem => 
 
 function installApi(options?: {
   expert?: boolean;
+  skills?: SkillDetail[];
   context?: TaskContextRevision;
   memories?: MemoryViewItem[];
   models?: ModelProfileSummary[];
@@ -574,15 +575,18 @@ function installApi(options?: {
       onEvent: vi.fn<Window['betterwork']['runs']['onEvent']>(() => () => undefined),
     },
     skills: {
-      list: vi.fn(async () => [skill]),
-      get: vi.fn(async () => skill),
-      testRun: vi.fn(async () => ({ runId: 'unexpected-run' })),
-      refreshDependencyGrant: vi.fn(async () => ({
-        skill,
-        selectedSnapshotIds: [],
-        grantActive: true,
-        grantCreated: false,
-      })),
+      list: vi.fn(async () => options?.skills ?? []),
+      get: vi.fn<Window['betterwork']['skills']['get']>(
+        async ({ id }) => options?.skills?.find((candidate) => candidate.id === id) ?? null,
+      ),
+      testRun: vi.fn<Window['betterwork']['skills']['testRun']>(async () => {
+        throw new Error('App 测试没有配置 Skill 试运行结果');
+      }),
+      refreshDependencyGrant: vi.fn<Window['betterwork']['skills']['refreshDependencyGrant']>(
+        async () => {
+          throw new Error('App 测试没有配置 Skill 依赖授权结果');
+        },
+      ),
     },
     dependencies: {
       listOptions: vi.fn(async () => ({
@@ -738,7 +742,7 @@ describe('Work message Artifact save in App', () => {
 
 describe('Skill test run in the task composer', () => {
   it('任务历史快照迟到时保留已经广播的终态与最终回答', async () => {
-    const api = installApi();
+    const api = installApi({ skills: [skill] });
     api.runs.list.mockResolvedValue([{ ...previousRun, status: 'running' }]);
     let emitEvent: ((event: AgentRuntimeEvent) => void) | undefined;
     api.runs.onEvent.mockImplementation((listener) => {
@@ -774,7 +778,7 @@ describe('Skill test run in the task composer', () => {
   });
 
   it('离开再返回同一 Task 时丢弃上一轮历史读取，保留新增 Run', async () => {
-    const api = installApi();
+    const api = installApi({ skills: [skill] });
     let resolveOldSnapshot: ((events: AgentRuntimeEvent[]) => void) | undefined;
     api.runs.listEvents.mockImplementationOnce(
       () =>
@@ -795,7 +799,7 @@ describe('Skill test run in the task composer', () => {
   });
 
   it('同一 Task 开始续作后，未完成的历史读取仍能补齐旧 Run', async () => {
-    const api = installApi();
+    const api = installApi({ skills: [skill] });
     const previousCompleted: AgentRuntimeEvent = {
       id: 'previous-completed',
       runId: previousRun.id,
@@ -832,7 +836,7 @@ describe('Skill test run in the task composer', () => {
   });
 
   it('离开再返回同一 Task 时不让旧讨论节点替换新节点', async () => {
-    const api = installApi();
+    const api = installApi({ skills: [skill] });
     let resolveOldCheckpoints: ((items: DiscussionCheckpoint[]) => void) | undefined;
     api.discussionCheckpoints.list.mockImplementationOnce(
       () =>
@@ -865,7 +869,7 @@ describe('Skill test run in the task composer', () => {
   it.each([false, true])(
     '启动回执之前已结束的 Run 保留事件，补读失败=%s',
     async (recoveryFails) => {
-      const api = installApi();
+      const api = installApi({ skills: [skill] });
       const backgroundErrors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
       let emitEvent: ((event: AgentRuntimeEvent) => void) | undefined;
       api.runs.onEvent.mockImplementation((listener) => {
@@ -917,7 +921,7 @@ describe('Skill test run in the task composer', () => {
   );
 
   it('启动回执迟到时保留用户新开的任务草稿', async () => {
-    const api = installApi();
+    const api = installApi({ skills: [skill] });
     let acknowledge: ((receipt: { runId: string }) => void) | undefined;
     api.runs.start.mockImplementationOnce(
       () =>
@@ -940,7 +944,7 @@ describe('Skill test run in the task composer', () => {
   });
 
   it('opens an empty focused draft and starts only after explicit submission with the Skill binding', async () => {
-    const api = installApi();
+    const api = installApi({ skills: [skill] });
     render(<App />);
     await openTestRun();
 
@@ -987,7 +991,7 @@ describe('Skill test run in the task composer', () => {
   }, 15_000);
 
   it('clears previous messages and ignores late history responses when opening the draft', async () => {
-    const api = installApi();
+    const api = installApi({ skills: [skill] });
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
     await screen.findByRole('textbox', { name: /任务输入/ });
@@ -1010,7 +1014,7 @@ describe('Skill test run in the task composer', () => {
   });
 
   it('retains the prompt and Skill on failure and prevents duplicate starts during submission', async () => {
-    const api = installApi();
+    const api = installApi({ skills: [skill] });
     api.runs.start.mockRejectedValueOnce(new Error('启动失败，请重试'));
     render(<App />);
     await openTestRun();
@@ -1038,7 +1042,7 @@ describe('Skill test run in the task composer', () => {
   });
 
   it.each(['新建任务', '旧任务'])('does not carry the draft Skill into %s', async (destination) => {
-    const api = installApi();
+    const api = installApi({ skills: [skill] });
     render(<App />);
     await openTestRun();
     fireEvent.click(screen.getByRole('button', { name: new RegExp(destination) }));
@@ -1054,6 +1058,26 @@ describe('Skill test run in the task composer', () => {
       taskContextRevisionId: 'context-1',
       expectedTaskContextRevision: 1,
     });
+  });
+});
+
+describe('App test API defaults', () => {
+  it('does not provide a trusted and ready Skill unless the fixture opts in', async () => {
+    const api = installApi();
+    expect(await api.skills.list()).toEqual([]);
+    await expect(api.skills.get({ id: skill.id })).resolves.toBeNull();
+    await expect(
+      api.skills.refreshDependencyGrant({ skillId: skill.id, lockId: 'lock-unconfigured' }),
+    ).rejects.toThrow('App 测试没有配置 Skill 依赖授权结果');
+    await expect(api.skills.testRun({ skillId: skill.id })).rejects.toThrow(
+      'App 测试没有配置 Skill 试运行结果',
+    );
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: '技能' }));
+
+    expect(await screen.findByText('还没有 Skill')).toBeTruthy();
+    expect(api.skills.list).toHaveBeenCalled();
   });
 });
 
@@ -1204,7 +1228,7 @@ describe('Expert summon in the task composer', () => {
 
 describe('应用内帮助', () => {
   it('保留任务草稿与已选技能，阅读手册不启动执行', async () => {
-    const api = installApi();
+    const api = installApi({ skills: [skill] });
     render(<App />);
     await openTestRun();
     fireEvent.change(composer(), { target: { value: '待继续的任务草稿' } });
@@ -1570,7 +1594,7 @@ describe('Task draft ownership in App', () => {
   };
 
   it('A to B to A never restores the old context over the new CAS baseline and working configuration', async () => {
-    const api = installApi({ context: savedContext });
+    const api = installApi({ context: savedContext, skills: [skill] });
     let resolveOldContext: ((context: TaskContextRevision) => void) | undefined;
     api.taskContexts.get.mockImplementationOnce(
       () =>
@@ -1612,7 +1636,7 @@ describe('Task draft ownership in App', () => {
   });
 
   it('a CAS failure retains the full working draft and retries against the same baseline', async () => {
-    const api = installApi({ context: savedContext });
+    const api = installApi({ context: savedContext, skills: [skill] });
     api.runs.listEvents.mockResolvedValue([completed]);
     api.taskContexts.save.mockRejectedValueOnce(new Error('Task context conflict'));
     render(<App />);
@@ -1640,7 +1664,7 @@ describe('Task draft ownership in App', () => {
   });
 
   it('entering another workspace keeps prompt and skills but clears old Task materials and permissions', async () => {
-    const api = installApi({ context: savedContext });
+    const api = installApi({ context: savedContext, skills: [skill] });
     const secondWorkspace = {
       ...workspaceFixture,
       id: 'workspace-2',
@@ -1762,6 +1786,7 @@ describe('Task context restoration', () => {
 
   it('restores the saved Skill selection when reopening a task', async () => {
     const api = installApi({
+      skills: [skill],
       context: {
         id: 'context-previous',
         taskId: previousTask.id,
