@@ -174,6 +174,36 @@ describe('Skill and Expert preload APIs', () => {
   });
 });
 
+describe('task support preload APIs', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.invoke.mockResolvedValue(null);
+  });
+
+  it('preserves Task, continuity, checkpoint, and material request/response validation', async () => {
+    await expect(api().taskContexts.get({ taskId: 'task-1' })).resolves.toBeNull();
+    expect(mocks.invoke).toHaveBeenLastCalledWith(IpcChannel.GetTaskContext, {
+      taskId: 'task-1',
+    });
+
+    await expect(api().taskContinuity.getBrief({ taskId: 'task-1' })).resolves.toBeNull();
+    mocks.invoke.mockResolvedValueOnce([]);
+    await expect(api().discussionCheckpoints.list({ taskId: 'task-1' })).resolves.toEqual([]);
+    mocks.invoke.mockResolvedValueOnce([]);
+    await expect(api().materials.listCandidates({ taskId: 'task-1' })).resolves.toEqual([]);
+    await expect(api().materials.prepareInputSnapshot({ taskId: 'task-1' })).resolves.toBeNull();
+
+    expect(mocks.invoke.mock.calls.map(([channel]) => channel)).toEqual([
+      IpcChannel.GetTaskContext,
+      IpcChannel.GetTaskContinuityBrief,
+      IpcChannel.ListDiscussionCheckpoints,
+      IpcChannel.ListTaskMaterialCandidates,
+      IpcChannel.PrepareWorkspaceInputSnapshot,
+    ]);
+    expect(() => api().taskContexts.get({ taskId: '' })).toThrow();
+  });
+});
+
 describe('run preload API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -324,6 +354,15 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `const __skillContractChannel: typeof IpcChannel.TestSkillRun = skillInvokeContracts[IpcChannel.TestSkillRun].channel;`,
     `const __expertGetResult: Promise<z.output<typeof expertDetailSchema> | null> = expertInvokeMethods[IpcChannel.GetExpert]({ id: 'expert-1' });`,
     `const __expertContractChannel: typeof IpcChannel.SetExpertLifecycle = expertInvokeContracts[IpcChannel.SetExpertLifecycle].channel;`,
+    `const __taskContextGetResult: Promise<z.output<typeof taskContextRevisionSchema> | null> = taskSupportInvokeMethods[IpcChannel.GetTaskContext]({ taskId: 'task-1' });`,
+    `declare const __taskContextSaveInput: z.input<typeof saveTaskContextRequestSchema>; const __taskContextSaveResult: Promise<z.output<typeof taskContextMutationResultSchema>> = taskSupportInvokeMethods[IpcChannel.SaveTaskContext](__taskContextSaveInput);`,
+    `const __taskContinuityGetResult: Promise<z.output<typeof taskContinuityRevisionSchema> | null> = taskSupportInvokeMethods[IpcChannel.GetTaskContinuityBrief]({ taskId: 'task-1' });`,
+    `declare const __taskContinuitySaveInput: z.input<typeof saveTaskContinuityBriefRequestSchema>; const __taskContinuitySaveResult: Promise<z.output<typeof taskContinuityBriefMutationResultSchema>> = taskSupportInvokeMethods[IpcChannel.SaveTaskContinuityBrief](__taskContinuitySaveInput);`,
+    `const __discussionListResult: Promise<z.output<typeof discussionCheckpointSchema>[]> = taskSupportInvokeMethods[IpcChannel.ListDiscussionCheckpoints]({ taskId: 'task-1' });`,
+    `declare const __discussionCreateInput: z.input<typeof createDiscussionCheckpointRequestSchema>; const __discussionCreateResult: Promise<z.output<typeof discussionCheckpointMutationResultSchema>> = taskSupportInvokeMethods[IpcChannel.CreateDiscussionCheckpoint](__discussionCreateInput);`,
+    `const __materialCandidatesResult: Promise<z.output<typeof materialCandidateSchema>[]> = taskSupportInvokeMethods[IpcChannel.ListTaskMaterialCandidates]({ taskId: 'task-1' });`,
+    `const __inputSnapshotResult: Promise<z.output<typeof inputSnapshotSchema> | null> = taskSupportInvokeMethods[IpcChannel.PrepareWorkspaceInputSnapshot]({ workspaceId: 'workspace-1' });`,
+    `const __taskSupportContractChannel: typeof IpcChannel.PrepareWorkspaceInputSnapshot = taskSupportInvokeContracts[IpcChannel.PrepareWorkspaceInputSnapshot].channel;`,
   ];
   const invalid = [
     `runInvokeMethods[IpcChannel.StartRun]({ runId: 'run-1' });`,
@@ -360,6 +399,14 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `expertInvokeMethods[IpcChannel.GetExpert]({ expertId: 'expert-1' });`,
     `const __expertContractWrongResponse: Promise<z.output<typeof expertSummarySchema>[]> = expertInvokeMethods[IpcChannel.GetExpert]({ id: 'expert-1' });`,
     `const __expertContractWrongChannel: typeof IpcChannel.GetExpert = expertInvokeContracts[IpcChannel.DeleteExpert].channel;`,
+    `taskSupportInvokeMethods[IpcChannel.GetTaskContext]({ workspaceId: 'workspace-1' });`,
+    `const __taskContextWrongResponse: Promise<never> = taskSupportInvokeMethods[IpcChannel.GetTaskContext]({ taskId: 'task-1' });`,
+    `const __taskContinuityWrongResponse: Promise<z.output<typeof taskContextRevisionSchema> | null> = taskSupportInvokeMethods[IpcChannel.GetTaskContinuityBrief]({ taskId: 'task-1' });`,
+    `taskSupportInvokeMethods[IpcChannel.ListDiscussionCheckpoints]({ workspaceId: 'workspace-1' });`,
+    `const __discussionWrongResponse: Promise<z.output<typeof materialCandidateSchema>[]> = taskSupportInvokeMethods[IpcChannel.ListDiscussionCheckpoints]({ taskId: 'task-1' });`,
+    `taskSupportInvokeMethods[IpcChannel.ListTaskMaterialCandidates]({ id: 'task-1' });`,
+    `const __inputSnapshotWrongResponse: Promise<z.output<typeof inputSnapshotSchema>> = taskSupportInvokeMethods[IpcChannel.PrepareWorkspaceInputSnapshot]({ workspaceId: 'workspace-1' });`,
+    `const __taskSupportContractWrongChannel: typeof IpcChannel.GetTaskContext = taskSupportInvokeContracts[IpcChannel.PrepareWorkspaceInputSnapshot].channel;`,
   ];
   let source = readFileSync(sourcePath, 'utf8') + '\n';
   const cases = [...valid, ...invalid].map((expression, index) => {

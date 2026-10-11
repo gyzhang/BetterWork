@@ -1355,6 +1355,67 @@ const expertInvokeMethods: InvokeMethodsByChannel<typeof expertInvokeContracts> 
     invokeContract(expertInvokeContracts[IpcChannel.DeleteExpert], input),
 };
 
+const taskSupportInvokeContracts = defineInvokeContracts({
+  [IpcChannel.GetTaskContext]: {
+    channel: IpcChannel.GetTaskContext,
+    request: getTaskContextRequestSchema,
+    response: taskContextRevisionSchema.nullable(),
+  },
+  [IpcChannel.SaveTaskContext]: {
+    channel: IpcChannel.SaveTaskContext,
+    request: saveTaskContextRequestSchema,
+    response: taskContextMutationResultSchema,
+  },
+  [IpcChannel.GetTaskContinuityBrief]: {
+    channel: IpcChannel.GetTaskContinuityBrief,
+    request: getTaskContinuityBriefRequestSchema,
+    response: taskContinuityRevisionSchema.nullable(),
+  },
+  [IpcChannel.SaveTaskContinuityBrief]: {
+    channel: IpcChannel.SaveTaskContinuityBrief,
+    request: saveTaskContinuityBriefRequestSchema,
+    response: taskContinuityBriefMutationResultSchema,
+  },
+  [IpcChannel.ListDiscussionCheckpoints]: {
+    channel: IpcChannel.ListDiscussionCheckpoints,
+    request: listDiscussionCheckpointsRequestSchema,
+    response: discussionCheckpointSchema.array(),
+  },
+  [IpcChannel.CreateDiscussionCheckpoint]: {
+    channel: IpcChannel.CreateDiscussionCheckpoint,
+    request: createDiscussionCheckpointRequestSchema,
+    response: discussionCheckpointMutationResultSchema,
+  },
+  [IpcChannel.ListTaskMaterialCandidates]: {
+    channel: IpcChannel.ListTaskMaterialCandidates,
+    request: listTaskMaterialCandidatesRequestSchema,
+    response: materialCandidateSchema.array(),
+  },
+  [IpcChannel.PrepareWorkspaceInputSnapshot]: {
+    channel: IpcChannel.PrepareWorkspaceInputSnapshot,
+    request: prepareWorkspaceInputSnapshotRequestSchema,
+    response: inputSnapshotSchema.nullable(),
+  },
+});
+const taskSupportInvokeMethods: InvokeMethodsByChannel<typeof taskSupportInvokeContracts> = {
+  [IpcChannel.GetTaskContext]: (input) =>
+    invokeContract(taskSupportInvokeContracts[IpcChannel.GetTaskContext], input),
+  [IpcChannel.SaveTaskContext]: (input) =>
+    invokeContract(taskSupportInvokeContracts[IpcChannel.SaveTaskContext], input),
+  [IpcChannel.GetTaskContinuityBrief]: (input) =>
+    invokeContract(taskSupportInvokeContracts[IpcChannel.GetTaskContinuityBrief], input),
+  [IpcChannel.SaveTaskContinuityBrief]: (input) =>
+    invokeContract(taskSupportInvokeContracts[IpcChannel.SaveTaskContinuityBrief], input),
+  [IpcChannel.ListDiscussionCheckpoints]: (input) =>
+    invokeContract(taskSupportInvokeContracts[IpcChannel.ListDiscussionCheckpoints], input),
+  [IpcChannel.CreateDiscussionCheckpoint]: (input) =>
+    invokeContract(taskSupportInvokeContracts[IpcChannel.CreateDiscussionCheckpoint], input),
+  [IpcChannel.ListTaskMaterialCandidates]: (input) =>
+    invokeContract(taskSupportInvokeContracts[IpcChannel.ListTaskMaterialCandidates], input),
+  [IpcChannel.PrepareWorkspaceInputSnapshot]: (input) =>
+    invokeContract(taskSupportInvokeContracts[IpcChannel.PrepareWorkspaceInputSnapshot], input),
+};
+
 const api: BetterWorkDesktopApi = {
   runs: {
     start: (input) => runInvokeMethods[IpcChannel.StartRun](input),
@@ -1523,60 +1584,22 @@ const api: BetterWorkDesktopApi = {
     delete: (input) => expertInvokeMethods[IpcChannel.DeleteExpert](input),
   },
   taskContexts: {
-    get: (input) =>
-      invokeValidated(
-        IpcChannel.GetTaskContext,
-        getTaskContextRequestSchema.parse(input),
-        taskContextRevisionSchema.nullable(),
-      ),
-    save: (input) =>
-      invokeValidated(
-        IpcChannel.SaveTaskContext,
-        saveTaskContextRequestSchema.parse(input),
-        taskContextMutationResultSchema,
-      ),
+    get: (input) => taskSupportInvokeMethods[IpcChannel.GetTaskContext](input),
+    save: (input) => taskSupportInvokeMethods[IpcChannel.SaveTaskContext](input),
   },
   taskContinuity: {
-    getBrief: (input) =>
-      invokeValidated(
-        IpcChannel.GetTaskContinuityBrief,
-        getTaskContinuityBriefRequestSchema.parse(input),
-        taskContinuityRevisionSchema.nullable(),
-      ),
-    saveBrief: (input) =>
-      invokeValidated(
-        IpcChannel.SaveTaskContinuityBrief,
-        saveTaskContinuityBriefRequestSchema.parse(input),
-        taskContinuityBriefMutationResultSchema,
-      ),
+    getBrief: (input) => taskSupportInvokeMethods[IpcChannel.GetTaskContinuityBrief](input),
+    saveBrief: (input) => taskSupportInvokeMethods[IpcChannel.SaveTaskContinuityBrief](input),
   },
   discussionCheckpoints: {
-    list: (input) =>
-      invokeValidated(
-        IpcChannel.ListDiscussionCheckpoints,
-        listDiscussionCheckpointsRequestSchema.parse(input),
-        discussionCheckpointSchema.array(),
-      ),
-    create: (input) =>
-      invokeValidated(
-        IpcChannel.CreateDiscussionCheckpoint,
-        createDiscussionCheckpointRequestSchema.parse(input),
-        discussionCheckpointMutationResultSchema,
-      ),
+    list: (input) => taskSupportInvokeMethods[IpcChannel.ListDiscussionCheckpoints](input),
+    create: (input) => taskSupportInvokeMethods[IpcChannel.CreateDiscussionCheckpoint](input),
   },
   materials: {
     listCandidates: (input) =>
-      invokeValidated(
-        IpcChannel.ListTaskMaterialCandidates,
-        listTaskMaterialCandidatesRequestSchema.parse(input),
-        materialCandidateSchema.array(),
-      ),
+      taskSupportInvokeMethods[IpcChannel.ListTaskMaterialCandidates](input),
     prepareInputSnapshot: (input) =>
-      invokeValidated(
-        IpcChannel.PrepareWorkspaceInputSnapshot,
-        prepareWorkspaceInputSnapshotRequestSchema.parse(input),
-        inputSnapshotSchema.nullable(),
-      ),
+      taskSupportInvokeMethods[IpcChannel.PrepareWorkspaceInputSnapshot](input),
   },
   memories: {
     list: (input) =>
