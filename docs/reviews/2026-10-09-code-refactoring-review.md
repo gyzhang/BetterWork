@@ -817,4 +817,4 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 
 2026-10-11 17:04 CST，从最新 `origin/main` `d8e951a8924e8f803a8909d30c83e75c9b736261` 建立 `codex/r13-app-test-fixture-split`。把 Expert 目录卡片信息、内置专家详情/复制入口、卡片编辑取数及编辑器返回路径等 6 项页面交互移到 `ExpertsView.test.tsx`，使用显式 `ExpertsState` 端口夹具直接渲染页面。App 测试保留记忆接入、模型与修订保存、生命周期、删除确认和一次专家 API 复制接线覆盖；卡片/列表动作一致性继续由现有 View 测试验证。无生产行为变化。
 
-基线 `App.test.tsx` heavy 62/62、`ExpertsView.test.tsx` functional 5/5；修改后分别为 56/56 与 11/11。typecheck、改动文件 ESLint/Prettier、`docs:check` 154/154 和 `git diff --check` 通过。原专家页面交互由轻量 View 测试覆盖，App 整树测试与完整 Desktop API 夹具仍然存在；此卡仅将页面级行为从整树迁出，不标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+基线 `App.test.tsx` heavy 62/62、`ExpertsView.test.tsx` functional 5/5；修改后分别为 56/56 与 11/11。typecheck、改动文件 ESLint/Prettier、`docs:check` 154/154 和 `git diff --check` 通过。PR 首轮 functional 门禁发现前一项测试写入的列表模式残留到后续测试；每项测试现重置 `localStorage`，本地整文件复跑 11/11 通过，待在同一 PR 重跑门禁。原专家页面交互由轻量 View 测试覆盖，App 整树测试与完整 Desktop API 夹具仍然存在；此卡仅将页面级行为从整树迁出，不标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。

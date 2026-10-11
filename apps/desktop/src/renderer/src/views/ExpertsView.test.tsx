@@ -2,12 +2,20 @@
 
 import type { ExpertDetail, ExpertSummary, MaterialCandidate } from '@betterwork/agent-protocol';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ExpertsState } from '../hooks/use-experts';
 import { ExpertsPage } from './ExpertsView';
 
-afterEach(cleanup);
+beforeEach(() => {
+  vi.stubGlobal('localStorage', { getItem: () => null, setItem: vi.fn() });
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 const userExpert: ExpertSummary = {
   id: 'expert-user',
@@ -351,12 +359,12 @@ describe('ExpertsPage 的整页配置交互', () => {
 
   it('内置专家卡片只提供复制动作，点击后刷新目录', async () => {
     const copy = vi.fn(async () => ({ expert: detailOf(builtinExpert) }));
-    const { actions } = renderExpertsPage({
+    const { actions, container } = renderExpertsPage({
       experts: [builtinExpert],
       actions: { copy },
     });
 
-    const card = screen.getByRole('button', { name: /研究顾问/ }).closest('.card');
+    const card = container.querySelector('.expert-cards .card');
     expect(card).not.toBeNull();
     expect(within(card as HTMLElement).queryByRole('button', { name: '编辑' })).toBeNull();
     expect(within(card as HTMLElement).queryByRole('button', { name: '删除' })).toBeNull();
