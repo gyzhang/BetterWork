@@ -890,3 +890,9 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 2026-10-11 18:14 CST，从最新 `origin/main` `dfd08e24c7a3ef9a17dd0164ab1a61fdabc2cb19` 建立 `codex/r13-app-mcp-api-fixture`。将 MCP 连接列表、读取、保存、删除与连接测试默认替身提取为私有 `createMcpApiFixture`；空列表、null 详情、未创建连接及既有删除/测试回执保持不变。
 
 `App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡只移动 MCP API 测试替身，不改连接/授权行为或生产代码；完整 Desktop API fixture 与 App 整树场景仍在，不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 60. R13 子卡：Tasks API 替身按域收拢
+
+2026-10-11 18:18 CST，从最新 `origin/main` `9f0c3890bb2523e5550f22d3cf28416f4a57c88b` 建立 `codex/r13-app-tasks-api-fixture`。将任务列表、详情与创建默认替身提取为私有 `createTasksApiFixture`，由总夹具组合 `tasks` 端口；旧任务返回、空详情语义和新建任务/会话回执保持不变。
+
+`App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡只移动 Tasks API 测试替身，不改任务创建或读取行为、协议或生产代码；完整 Desktop API fixture 与 App 整树场景仍在，不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。
