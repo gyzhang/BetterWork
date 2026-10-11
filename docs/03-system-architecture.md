@@ -139,6 +139,8 @@ KnowledgeAudit 继续在工具回调事务内登记精确来源，适配器只�
 
 `MarkdownArtifactSaveService` 在现有 Application 层协调 Markdown 成果保存：先由 `ArtifactDeclarationService` 校验来源计划，再在一个 `AppStore` 事务中写版本并保存或继承输入关系。`ArtifactRepository` 继续写成果与版本聚合及 Evidence 关系；IPC 保留请求/响应 Zod 校验，只调用该用例。人工修订继承与 AI Run 来源口径见 [ADR-0005](adr/0005-artifact-version-evidence.md)。
 
+`ArtifactQueryService` 在现有 Application 层组合 Artifact、版本详情与输入关系读模型；文件成果按既有规则验证所选版本归属并读取其文件元数据、Evidence 和输入关系。IPC 保留请求/响应 Zod 校验并委托详情查询，不改变 Repository、版本或来源语义。
+
 ## 4. Agent Core
 
 Agent Core 不允许直接导入：
