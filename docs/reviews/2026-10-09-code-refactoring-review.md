@@ -798,3 +798,9 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 真实 SQLite 文件服务与 IPC functional 共 68 项通过；typecheck、定向 ESLint/Prettier、生产 build、`docs:check` 154/154 与本批基点巡检通过。
 
 最终源 `aefbade120850ff167585c73cfe901329c44aa39` 的 [Actions 38123377299](https://github.com/gyzhang/BetterWork/actions/runs/38123377299) 在 macos-26-arm64 上通过 PR Gate；lint、format:check、typecheck、docs:check 与相关 functional 68 项均通过，无受影响 heavy 测试，Full verify 按策略跳过。[PR #96](https://github.com/gyzhang/BetterWork/pull/96) 已 squash 合入 main `a79ad3fabebfa847c447ebfabae7d36883d827b5`。未运行完整 verify、UI 或真实模型。
+
+## 45. E21：文件成果导出复制下沉
+
+2026-10-11 16:14 CST，从最新 main `ed20c31d534027612c35f54dce71ffce6227020d` 在保留 worktree 建立 `codex/e21-artifact-export-copy-service`，继续 R08 的文件成果入口整理。将不可变文件版本复制到导出目标以及导出副本权限整理提取到 `FileArtifactService.exportVersionToPath`；IPC 保留保存对话框、取消、请求与版本校验及错误回传。真实文件系统用例覆盖保存面板预创建的只读占位目标与新目标。未改协议、Repository、Schema、迁移、文件版本或 ArtifactVersion 语义。
+
+本地文件服务与 IPC functional 共 69 项通过；typecheck、定向 ESLint/Prettier、生产 build 通过。最终源 `808f99b991a66407a354ae1e8c8b52c5718597f8` 的 [Actions 38123881992](https://github.com/gyzhang/BetterWork/actions/runs/38123881992) 在 macos-26-arm64 上通过 PR Gate；lint、format:check、typecheck、docs:check 154 项及相关 functional 4 文件 / 92 项通过，无受影响 heavy 测试，Full verify 按策略跳过。[PR #98](https://github.com/gyzhang/BetterWork/pull/98) 已 squash 合入 main `f6f0bec938547bbe7e971764a089751c8f1350c4`。未运行完整 verify、UI 或真实模型。

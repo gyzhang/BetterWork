@@ -143,6 +143,8 @@ KnowledgeAudit 继续在工具回调事务内登记精确来源，适配器只�
 
 `FileArtifactService.resolveArtifactFileVersion` 集中校验文件成果类型并解析当前或明确指定且归属正确的版本，供打开、定位和缩略图入口共用。工作空间副本准备仍由 FileArtifactService 负责，Electron shell 操作与原有错误映射留在 IPC。
 
+`FileArtifactService.exportVersionToPath` 从不可变成果存储复制指定文件版本到用户选择的导出路径，并将副本权限设为 0600，兼容保存面板预创建的只读占位文件。保存对话框、用户取消、成果与版本校验以及错误回传仍由 IPC 负责。
+
 ## 4. Agent Core
 
 Agent Core 不允许直接导入：
