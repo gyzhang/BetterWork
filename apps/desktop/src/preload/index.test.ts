@@ -286,6 +286,12 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `const __artifactContractChannel: typeof IpcChannel.GetArtifactVersion = artifactEvidenceInvokeContracts[IpcChannel.GetArtifactVersion].channel;`,
     `const __artifactRevealResult: Promise<z.output<typeof revealFileArtifactResultSchema>> = artifactEvidenceInvokeMethods[IpcChannel.RevealFileArtifact]({ artifactId: 'artifact-1' });`,
     `const __artifactThumbnailsResult: Promise<z.output<typeof getArtifactThumbnailsResultSchema>> = artifactEvidenceInvokeMethods[IpcChannel.GetArtifactThumbnails]({ artifactId: 'artifact-1' });`,
+    `const __modelContractResult: Promise<z.output<typeof modelProfileListResponseSchema>> = modelSearchNotificationInvokeMethods[IpcChannel.ListModels]({});`,
+    `const __searchContractResult: Promise<z.output<typeof searchEngineListResponseSchema>> = modelSearchNotificationInvokeMethods[IpcChannel.ListSearchEngines]({});`,
+    `const __notificationContractResult: Promise<z.output<typeof notificationSummarySchema> | null> = modelSearchNotificationInvokeMethods[IpcChannel.GetNotification]({ id: 'notification-1' });`,
+    `const __notificationContractChannel: typeof IpcChannel.DeleteNotification = modelSearchNotificationInvokeContracts[IpcChannel.DeleteNotification].channel;`,
+    `const __notificationEventUnsubscribe: () => void = notificationEventMethods[IpcChannel.NotificationChangeEvent]((event) => { const type: 'created' | 'read' | 'read-all' | 'deleted' | 'cleared' = event.type; });`,
+    `const __activationEventUnsubscribe: () => void = notificationEventMethods[IpcChannel.NotificationActivated]((event) => { const id: string = event.id; });`,
   ];
   const invalid = [
     `runInvokeMethods[IpcChannel.StartRun]({ runId: 'run-1' });`,
@@ -301,6 +307,13 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `const __artifactContractWrongChannel: typeof IpcChannel.ListEvidence = artifactEvidenceInvokeContracts[IpcChannel.GetArtifactVersion].channel;`,
     `artifactEvidenceInvokeMethods[IpcChannel.RevealFileArtifact]({ id: 'artifact-1' });`,
     `artifactEvidenceInvokeMethods[IpcChannel.GetArtifactThumbnails]({ artifactId: 'artifact-1', revisionId: 'revision-1' });`,
+    `modelSearchNotificationInvokeMethods[IpcChannel.SetModelEnabled]({ id: 'model-1', active: false });`,
+    `const __modelContractWrongResponse: Promise<z.output<typeof notificationSummarySchema>[]> = modelSearchNotificationInvokeMethods[IpcChannel.ListModels]({});`,
+    `const __searchContractWrongChannel: typeof IpcChannel.ListModels = modelSearchNotificationInvokeContracts[IpcChannel.ListSearchEngines].channel;`,
+    `modelSearchNotificationInvokeMethods[IpcChannel.GetNotification]({ notificationId: 'notification-1' });`,
+    `const __notificationContractWrongChannel: typeof IpcChannel.ListNotifications = modelSearchNotificationInvokeContracts[IpcChannel.DeleteNotification].channel;`,
+    `notificationEventMethods[IpcChannel.NotificationActivated]((event: { type: 'created' }) => {});`,
+    `const __notificationEventWrongChannel: typeof IpcChannel.NotificationActivated = notificationEventContracts[IpcChannel.NotificationChangeEvent].channel;`,
   ];
   let source = readFileSync(sourcePath, 'utf8') + '\n';
   const cases = [...valid, ...invalid].map((expression, index) => {
@@ -1314,6 +1327,7 @@ describe('notification maintenance preload API', () => {
     mocks.invoke.mockImplementation(async (channel) => {
       if (channel === IpcChannel.ListNotifications) return [notification];
       if (channel === IpcChannel.ClearNotifications) return { cleared: true };
+      if (channel === IpcChannel.DeleteNotification) return { deleted: true };
       return { unreadCount: 2 };
     });
 
@@ -1321,6 +1335,7 @@ describe('notification maintenance preload API', () => {
     await Promise.all([
       api().notifications.markRead({ id: 'notification-1' }),
       api().notifications.markAllRead(),
+      api().notifications.delete({ id: 'notification-1' }),
       api().notifications.clear(),
     ]);
 
@@ -1328,20 +1343,56 @@ describe('notification maintenance preload API', () => {
       [IpcChannel.ListNotifications, {}],
       [IpcChannel.MarkNotificationRead, { id: 'notification-1' }],
       [IpcChannel.MarkAllNotificationsRead, {}],
+      [IpcChannel.DeleteNotification, { id: 'notification-1' }],
       [IpcChannel.ClearNotifications, {}],
     ]);
   });
 
   it('rejects invalid notification requests before IPC and malformed responses after IPC', async () => {
     expect(() => api().notifications.markRead({ id: '' })).toThrow();
+    expect(() => api().notifications.delete({ id: '' })).toThrow();
     expect(mocks.invoke).not.toHaveBeenCalled();
 
     mocks.invoke.mockResolvedValue(null);
     await expect(api().notifications.list()).rejects.toThrow();
+    mocks.invoke.mockResolvedValueOnce({
+      id: '',
+      level: 'info',
+      kind: 'run',
+      title: 'Malformed notification',
+      read: false,
+      createdAt: 1,
+    });
+    await expect(api().notifications.get({ id: 'notification-1' })).rejects.toThrow();
+    await expect(api().notifications.rendererReady()).rejects.toThrow();
     await expect(api().notifications.markRead({ id: 'notification-1' })).rejects.toThrow();
     await expect(api().notifications.markAllRead()).rejects.toThrow();
+    await expect(api().notifications.delete({ id: 'notification-1' })).rejects.toThrow();
     await expect(api().notifications.clear()).rejects.toThrow();
-    expect(mocks.invoke).toHaveBeenCalledTimes(4);
+    expect(mocks.invoke).toHaveBeenCalledTimes(7);
+  });
+
+  it('validates notification events and removes typed listeners', () => {
+    const changeListener = vi.fn();
+    const activateListener = vi.fn();
+    const unsubscribeChange = api().notifications.onChange(changeListener);
+    const unsubscribeActivate = api().notifications.onActivate(activateListener);
+    const changeHandler = mocks.listeners.get(IpcChannel.NotificationChangeEvent);
+    const activateHandler = mocks.listeners.get(IpcChannel.NotificationActivated);
+
+    changeHandler?.({}, { type: 'read-all', unreadCount: 0 });
+    activateHandler?.({}, { id: 'notification-1' });
+    expect(changeListener).toHaveBeenCalledWith({ type: 'read-all', unreadCount: 0 });
+    expect(activateListener).toHaveBeenCalledWith({ id: 'notification-1' });
+    expect(() => changeHandler?.({}, { type: 'unknown' })).toThrow();
+    expect(() => activateHandler?.({}, { id: '' })).toThrow();
+    expect(changeListener).toHaveBeenCalledTimes(1);
+    expect(activateListener).toHaveBeenCalledTimes(1);
+
+    unsubscribeChange();
+    unsubscribeActivate();
+    expect(mocks.off).toHaveBeenCalledWith(IpcChannel.NotificationChangeEvent, changeHandler);
+    expect(mocks.off).toHaveBeenCalledWith(IpcChannel.NotificationActivated, activateHandler);
   });
 });
 

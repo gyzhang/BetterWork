@@ -1148,3 +1148,13 @@ Preload 定向测试 1 文件 / 27 项、`docs:check` 154/154 通过，覆盖请
 编译期约束 channel 键与字面值相同，并由 Schema 推导方法输入与返回类型。保留省略 Artifact 列表筛选时传 `undefined`、Artifact/Evidence 结果的可选字段归一、空/取消/错误结果形状；Main、共享协议及领域行为不变。原有 `getThumbnails` 与 `revealFile` 也纳入请求、响应校验和通道映射。
 
 编译器正反例覆盖请求、响应类型及 channel 字面值；Preload 定向测试 1 文件 / 33 项，覆盖 14 个映射通道及运行期请求/响应校验。全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 和差异空白检查通过。完整 `npm run verify`、UI、真实模型及安装态验收未运行。R09 其他 API 域与 Main/Preload 全局映射仍待后续切片。
+
+源提交 `31fa474a368aeaf682533fd8506a764c8c363641` 的 [PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/38151626807) 与 Quick code check 通过，Full verify 按规则跳过。[PR #164](https://github.com/gyzhang/BetterWork/pull/164) 已 squash 合入 main，合并提交 `f1351a1f5fb6bbf5d3f40ad1753fa26c01ee3ec7`；本地与远端任务分支已删除，本地 checkout 已同步 main。
+
+## 95. R09 子卡：Models、Search Engines 与 Notifications Preload 通道映射
+
+2026-10-11 23:38 CST，从最新 `origin/main` `f1351a1f5fb6bbf5d3f40ad1753fa26c01ee3ec7` 在本地 checkout 建立 `codex/r09-model-search-notification-contracts`。将 Models、Search Engines 与 Notifications 的 16 个 invoke channel 映射到请求/响应 Schema 及 Preload 方法；通知变更与激活两个推送事件也映射到事件 Schema 和订阅方法。
+
+编译期约束 channel 键与字面值一致，并由 Schema 推导请求、响应及事件 listener 类型。保留无参调用的空对象、模型/搜索列表可选 `lastTestedAt` 归一和通知详情允许 `null` 的现有语义；运行期请求/响应及事件校验、订阅解除行为保持。未更改 Main handler、共享协议、凭据、服务或领域行为。
+
+新增编译器正反例与通知推送事件运行期校验。Preload 定向测试 1 文件 / 34 项、全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 和差异空白检查通过；PR Gate 与合并清理待本卡收口。完整 `npm run verify`、UI、真实模型和安装态验收未运行。R09 其他 API 域与 Main/Preload 全局映射仍待后续切片。

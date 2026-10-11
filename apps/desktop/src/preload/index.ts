@@ -313,6 +313,34 @@ function invokeContract<Request extends ZodTypeAny, Response extends ZodTypeAny>
     .then((raw: unknown) => contract.response.parse(raw));
 }
 
+interface IpcEventContract {
+  channel: string;
+  event: ZodTypeAny;
+}
+
+function defineEventContracts<const Contracts extends Record<string, IpcEventContract>>(
+  contracts: Contracts & { [Channel in keyof Contracts]: { channel: Channel } },
+): Contracts {
+  return contracts;
+}
+
+type EventMethodsByChannel<Contracts extends Record<string, IpcEventContract>> = {
+  [Channel in keyof Contracts]: (
+    listener: (event: z.output<Contracts[Channel]['event']>) => void,
+  ) => () => void;
+};
+
+function listenContract<Event extends ZodTypeAny>(
+  contract: { channel: string; event: Event },
+  listener: (event: z.output<Event>) => void,
+): () => void {
+  const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
+    listener(contract.event.parse(raw));
+  };
+  ipcRenderer.on(contract.channel, handler);
+  return () => ipcRenderer.off(contract.channel, handler);
+}
+
 const runInvokeContracts = defineInvokeContracts({
   [IpcChannel.StartRun]: {
     channel: IpcChannel.StartRun,
@@ -728,6 +756,148 @@ const artifactEvidenceInvokeMethods: InvokeMethodsByChannel<
     invokeContract(artifactEvidenceInvokeContracts[IpcChannel.GetArtifactThumbnails], input),
 };
 
+const modelSearchNotificationInvokeContracts = defineInvokeContracts({
+  [IpcChannel.ListModels]: {
+    channel: IpcChannel.ListModels,
+    request: emptyInvokeRequestSchema,
+    response: modelProfileListResponseSchema,
+  },
+  [IpcChannel.SaveModel]: {
+    channel: IpcChannel.SaveModel,
+    request: saveModelProfileRequestSchema,
+    response: modelSaveResultSchema,
+  },
+  [IpcChannel.DeleteModel]: {
+    channel: IpcChannel.DeleteModel,
+    request: modelProfileIdSchema,
+    response: deletedResultSchema,
+  },
+  [IpcChannel.SetDefaultModel]: {
+    channel: IpcChannel.SetDefaultModel,
+    request: setDefaultModelRequestSchema,
+    response: updatedResultSchema,
+  },
+  [IpcChannel.SetModelEnabled]: {
+    channel: IpcChannel.SetModelEnabled,
+    request: setModelEnabledRequestSchema,
+    response: updatedResultSchema,
+  },
+  [IpcChannel.TestModel]: {
+    channel: IpcChannel.TestModel,
+    request: testModelRequestSchema,
+    response: connectionTestResultSchema,
+  },
+  [IpcChannel.ListSearchEngines]: {
+    channel: IpcChannel.ListSearchEngines,
+    request: emptyInvokeRequestSchema,
+    response: searchEngineListResponseSchema,
+  },
+  [IpcChannel.SaveSearchEngine]: {
+    channel: IpcChannel.SaveSearchEngine,
+    request: saveSearchEngineRequestSchema,
+    response: searchEngineSaveResultSchema,
+  },
+  [IpcChannel.TestSearchEngine]: {
+    channel: IpcChannel.TestSearchEngine,
+    request: testSearchEngineRequestSchema,
+    response: connectionTestResultSchema,
+  },
+  [IpcChannel.ListNotifications]: {
+    channel: IpcChannel.ListNotifications,
+    request: emptyInvokeRequestSchema,
+    response: notificationSummarySchema.array(),
+  },
+  [IpcChannel.GetNotification]: {
+    channel: IpcChannel.GetNotification,
+    request: getNotificationRequestSchema,
+    response: notificationSummarySchema.nullable(),
+  },
+  [IpcChannel.NotificationRendererReady]: {
+    channel: IpcChannel.NotificationRendererReady,
+    request: notificationRendererReadyRequestSchema,
+    response: notificationRendererReadyResultSchema,
+  },
+  [IpcChannel.MarkNotificationRead]: {
+    channel: IpcChannel.MarkNotificationRead,
+    request: markNotificationReadRequestSchema,
+    response: unreadCountResultSchema,
+  },
+  [IpcChannel.MarkAllNotificationsRead]: {
+    channel: IpcChannel.MarkAllNotificationsRead,
+    request: markAllNotificationsReadRequestSchema,
+    response: unreadCountResultSchema,
+  },
+  [IpcChannel.DeleteNotification]: {
+    channel: IpcChannel.DeleteNotification,
+    request: deleteNotificationRequestSchema,
+    response: deletedResultSchema,
+  },
+  [IpcChannel.ClearNotifications]: {
+    channel: IpcChannel.ClearNotifications,
+    request: clearNotificationsRequestSchema,
+    response: clearedResultSchema,
+  },
+});
+const modelSearchNotificationInvokeMethods: InvokeMethodsByChannel<
+  typeof modelSearchNotificationInvokeContracts
+> = {
+  [IpcChannel.ListModels]: (input) =>
+    invokeContract(modelSearchNotificationInvokeContracts[IpcChannel.ListModels], input),
+  [IpcChannel.SaveModel]: (input) =>
+    invokeContract(modelSearchNotificationInvokeContracts[IpcChannel.SaveModel], input),
+  [IpcChannel.DeleteModel]: (input) =>
+    invokeContract(modelSearchNotificationInvokeContracts[IpcChannel.DeleteModel], input),
+  [IpcChannel.SetDefaultModel]: (input) =>
+    invokeContract(modelSearchNotificationInvokeContracts[IpcChannel.SetDefaultModel], input),
+  [IpcChannel.SetModelEnabled]: (input) =>
+    invokeContract(modelSearchNotificationInvokeContracts[IpcChannel.SetModelEnabled], input),
+  [IpcChannel.TestModel]: (input) =>
+    invokeContract(modelSearchNotificationInvokeContracts[IpcChannel.TestModel], input),
+  [IpcChannel.ListSearchEngines]: (input) =>
+    invokeContract(modelSearchNotificationInvokeContracts[IpcChannel.ListSearchEngines], input),
+  [IpcChannel.SaveSearchEngine]: (input) =>
+    invokeContract(modelSearchNotificationInvokeContracts[IpcChannel.SaveSearchEngine], input),
+  [IpcChannel.TestSearchEngine]: (input) =>
+    invokeContract(modelSearchNotificationInvokeContracts[IpcChannel.TestSearchEngine], input),
+  [IpcChannel.ListNotifications]: (input) =>
+    invokeContract(modelSearchNotificationInvokeContracts[IpcChannel.ListNotifications], input),
+  [IpcChannel.GetNotification]: (input) =>
+    invokeContract(modelSearchNotificationInvokeContracts[IpcChannel.GetNotification], input),
+  [IpcChannel.NotificationRendererReady]: (input) =>
+    invokeContract(
+      modelSearchNotificationInvokeContracts[IpcChannel.NotificationRendererReady],
+      input,
+    ),
+  [IpcChannel.MarkNotificationRead]: (input) =>
+    invokeContract(modelSearchNotificationInvokeContracts[IpcChannel.MarkNotificationRead], input),
+  [IpcChannel.MarkAllNotificationsRead]: (input) =>
+    invokeContract(
+      modelSearchNotificationInvokeContracts[IpcChannel.MarkAllNotificationsRead],
+      input,
+    ),
+  [IpcChannel.DeleteNotification]: (input) =>
+    invokeContract(modelSearchNotificationInvokeContracts[IpcChannel.DeleteNotification], input),
+  [IpcChannel.ClearNotifications]: (input) =>
+    invokeContract(modelSearchNotificationInvokeContracts[IpcChannel.ClearNotifications], input),
+};
+
+const notificationEventContracts = defineEventContracts({
+  [IpcChannel.NotificationChangeEvent]: {
+    channel: IpcChannel.NotificationChangeEvent,
+    event: notificationChangeEventSchema,
+  },
+  [IpcChannel.NotificationActivated]: {
+    channel: IpcChannel.NotificationActivated,
+    event: notificationActivatedSchema,
+  },
+});
+const notificationEventMethods: EventMethodsByChannel<typeof notificationEventContracts> = {
+  [IpcChannel.NotificationChangeEvent]: (listener) =>
+    listenContract(notificationEventContracts[IpcChannel.NotificationChangeEvent], listener),
+  [IpcChannel.NotificationActivated]: (listener) =>
+    listenContract(notificationEventContracts[IpcChannel.NotificationActivated], listener),
+};
+
 const api: BetterWorkDesktopApi = {
   runs: {
     start: (input) => runInvokeMethods[IpcChannel.StartRun](input),
@@ -790,106 +960,31 @@ const api: BetterWorkDesktopApi = {
       artifactEvidenceInvokeMethods[IpcChannel.GetArtifactThumbnails](input),
   },
   models: {
-    list: () => invokeValidated(IpcChannel.ListModels, {}, modelProfileListResponseSchema),
-    save: (input) =>
-      invokeValidated(
-        IpcChannel.SaveModel,
-        saveModelProfileRequestSchema.parse(input),
-        modelSaveResultSchema,
-      ),
-    delete: (input) =>
-      invokeValidated(
-        IpcChannel.DeleteModel,
-        modelProfileIdSchema.parse(input),
-        deletedResultSchema,
-      ),
-    setDefault: (input) =>
-      invokeValidated(
-        IpcChannel.SetDefaultModel,
-        setDefaultModelRequestSchema.parse(input),
-        updatedResultSchema,
-      ),
-    setEnabled: (input) =>
-      invokeValidated(
-        IpcChannel.SetModelEnabled,
-        setModelEnabledRequestSchema.parse(input),
-        updatedResultSchema,
-      ),
-    test: (input) =>
-      invokeValidated(
-        IpcChannel.TestModel,
-        testModelRequestSchema.parse(input),
-        connectionTestResultSchema,
-      ),
+    list: () => modelSearchNotificationInvokeMethods[IpcChannel.ListModels]({}),
+    save: (input) => modelSearchNotificationInvokeMethods[IpcChannel.SaveModel](input),
+    delete: (input) => modelSearchNotificationInvokeMethods[IpcChannel.DeleteModel](input),
+    setDefault: (input) => modelSearchNotificationInvokeMethods[IpcChannel.SetDefaultModel](input),
+    setEnabled: (input) => modelSearchNotificationInvokeMethods[IpcChannel.SetModelEnabled](input),
+    test: (input) => modelSearchNotificationInvokeMethods[IpcChannel.TestModel](input),
   },
   searchEngines: {
-    list: () => invokeValidated(IpcChannel.ListSearchEngines, {}, searchEngineListResponseSchema),
-    save: (input) =>
-      invokeValidated(
-        IpcChannel.SaveSearchEngine,
-        saveSearchEngineRequestSchema.parse(input),
-        searchEngineSaveResultSchema,
-      ),
-    test: (input) =>
-      invokeValidated(
-        IpcChannel.TestSearchEngine,
-        testSearchEngineRequestSchema.parse(input),
-        connectionTestResultSchema,
-      ),
+    list: () => modelSearchNotificationInvokeMethods[IpcChannel.ListSearchEngines]({}),
+    save: (input) => modelSearchNotificationInvokeMethods[IpcChannel.SaveSearchEngine](input),
+    test: (input) => modelSearchNotificationInvokeMethods[IpcChannel.TestSearchEngine](input),
   },
   notifications: {
-    list: () =>
-      invokeValidated(IpcChannel.ListNotifications, {}, notificationSummarySchema.array()),
-    get: (input) =>
-      invokeValidated(
-        IpcChannel.GetNotification,
-        getNotificationRequestSchema.parse(input),
-        notificationSummarySchema.nullable(),
-      ),
+    list: () => modelSearchNotificationInvokeMethods[IpcChannel.ListNotifications]({}),
+    get: (input) => modelSearchNotificationInvokeMethods[IpcChannel.GetNotification](input),
     rendererReady: () =>
-      invokeValidated(
-        IpcChannel.NotificationRendererReady,
-        notificationRendererReadyRequestSchema.parse({}),
-        notificationRendererReadyResultSchema,
-      ),
+      modelSearchNotificationInvokeMethods[IpcChannel.NotificationRendererReady]({}),
     markRead: (input) =>
-      invokeValidated(
-        IpcChannel.MarkNotificationRead,
-        markNotificationReadRequestSchema.parse(input),
-        unreadCountResultSchema,
-      ),
+      modelSearchNotificationInvokeMethods[IpcChannel.MarkNotificationRead](input),
     markAllRead: () =>
-      invokeValidated(
-        IpcChannel.MarkAllNotificationsRead,
-        markAllNotificationsReadRequestSchema.parse({}),
-        unreadCountResultSchema,
-      ),
-    delete: (input) =>
-      invokeValidated(
-        IpcChannel.DeleteNotification,
-        deleteNotificationRequestSchema.parse(input),
-        deletedResultSchema,
-      ),
-    clear: () =>
-      invokeValidated(
-        IpcChannel.ClearNotifications,
-        clearNotificationsRequestSchema.parse({}),
-        clearedResultSchema,
-      ),
-    onChange(listener) {
-      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
-        listener(notificationChangeEventSchema.parse(raw));
-      };
-      ipcRenderer.on(IpcChannel.NotificationChangeEvent, handler);
-      return () => ipcRenderer.off(IpcChannel.NotificationChangeEvent, handler);
-    },
-    onActivate(listener) {
-      const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
-        listener(notificationActivatedSchema.parse(raw));
-      };
-      ipcRenderer.on(IpcChannel.NotificationActivated, handler);
-      return () => ipcRenderer.off(IpcChannel.NotificationActivated, handler);
-    },
+      modelSearchNotificationInvokeMethods[IpcChannel.MarkAllNotificationsRead]({}),
+    delete: (input) => modelSearchNotificationInvokeMethods[IpcChannel.DeleteNotification](input),
+    clear: () => modelSearchNotificationInvokeMethods[IpcChannel.ClearNotifications]({}),
+    onChange: (listener) => notificationEventMethods[IpcChannel.NotificationChangeEvent](listener),
+    onActivate: (listener) => notificationEventMethods[IpcChannel.NotificationActivated](listener),
   },
   schedules: {
     list: (input) =>
