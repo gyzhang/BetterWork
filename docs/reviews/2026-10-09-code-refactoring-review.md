@@ -757,10 +757,12 @@ functional 定向 3 文件 / 69 项、heavy 定向 1 文件 / 37 项、typecheck
 
 最终源 `06aee5c6fddcd245a78e8fe1247d90ce71216164` 的 [Actions 38118422550](https://github.com/gyzhang/BetterWork/actions/runs/38118422550) 中 Quick code check 与 PR Gate 成功；lint、format:check、typecheck、docs:check、相关 functional/heavy 测试均通过，Full verify 按策略跳过。[PR #86](https://github.com/gyzhang/BetterWork/pull/86) 已 squash 合并为 main `b2e2db7f2bc202430e76976a683df9ce0c6b5ca1`。
 
-## 40. C5：Run 上下文准备抽取（本地自动化通过）
+## 40. C5：Run 上下文准备抽取（代码与自动化收口）
 
 2026-10-11 用户授权继续重构；从最新 main `9117b59d64375a8159e3d0f96079aa13aec30616` 在保留的任务 worktree 建立 `codex/review-run-context-preparation`。实施限于 Run 启动前的 TaskContext/Expert 解析，不抽走 Run 生命周期或工具装配。
 
 上下文 CAS、通用/Expert 分支、内置 Skill/Expert 设置检查、Schedule 材料解析和 Expert 指令合成现位于同层 `run-context-resolver.ts`。RunService 仍先校验 Task/Session/Workspace，再调用 resolver；上下文失败仍在创建 Run 前抛出。传入的 TaskContextRevision ID 是不可变快照标识，保留原有“该 ID 的 revision 必须等于 expected revision”判据，不增加“必须为最新 revision”的新语义。没有协议、迁移、Repository、授权或材料范围变化。
 
-resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:check` 154/154、typecheck、定向 ESLint/Prettier 与生产 build 通过。一次 shell 搜索字符串的反引号误触发了 `npm run verify`；命令替换吞掉输出，退出状态未被观察，因此不计为验证证据。未运行 UI、真实模型或安装态验收；精确源 SHA 的 macOS PR Gate、合并和归档待收口。Run 工具上下文构造继续作为后续独立切片。
+resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:check` 154/154、typecheck、定向 ESLint/Prettier 与生产 build 通过。一次 shell 搜索字符串的反引号误触发了 `npm run verify`；命令替换吞掉输出，退出状态未被观察，因此不计为验证证据。未运行 UI、真实模型或安装态验收。
+
+最终源 `0aff7bc07bbaee0ef20a7f950b4c01a0dd9d6cd9` 的 [Actions 38120318832](https://github.com/gyzhang/BetterWork/actions/runs/38120318832) 中 Quick code check 与 PR Gate 成功；Full verify 按仓库策略跳过。[PR #88](https://github.com/gyzhang/BetterWork/pull/88) 已 squash 合并为 main `b00e418a12552dc949034a24986f92a68718c41d`。PR 创建后 main 先合入用户的测试覆盖 PR #83；本分支合并最新 main 时保留了双方当日日志。Run 工具上下文构造继续作为后续独立切片。
