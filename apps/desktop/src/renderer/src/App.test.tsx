@@ -1539,11 +1539,8 @@ describe('Expert configuration', () => {
     ).toBeTruthy();
   });
 
-  it('allows an Expert to pin a language model profile or inherit the application default', async () => {
-    const api = installApi({
-      expert: true,
-      models: [languageModel],
-    });
+  it('passes model profiles from the API to the Expert editor', async () => {
+    installApi({ expert: true, models: [languageModel] });
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: '专家' }));
     fireEvent.click(await screen.findByRole('button', { name: '详情' }));
@@ -1552,36 +1549,9 @@ describe('Expert configuration', () => {
     const modelSelect = await screen.findByRole('button', { name: '专家模型偏好' });
     expect(modelSelect.textContent).toContain('应用默认模型');
     fireEvent.click(modelSelect);
-    fireEvent.click(await screen.findByRole('menuitem', { name: '本地语言模型 · local-model' }));
-    fireEvent.click(screen.getByRole('button', { name: '保存修订' }));
-
-    await waitFor(() => expect(api.experts.saveRevision).toHaveBeenCalledTimes(1));
-    expect(api.experts.saveRevision).toHaveBeenCalledWith(
-      expect.objectContaining({
-        revision: expect.objectContaining({
-          modelReference: { mode: 'profile', modelProfileId: 'model-language-1' },
-        }),
-      }),
-    );
-  });
-
-  it('opens a separate editor and saves a new immutable revision', async () => {
-    const api = installApi({ expert: true });
-    render(<App />);
-    fireEvent.click(await screen.findByRole('button', { name: '专家' }));
-    fireEvent.click(await screen.findByRole('button', { name: '详情' }));
-    fireEvent.click(await screen.findByRole('button', { name: '编辑配置' }));
-    const identity = await screen.findByRole('textbox', { name: '人格与职责' });
-    fireEvent.change(identity, { target: { value: '负责经营分析并检查交付。' } });
-    fireEvent.click(screen.getByRole('button', { name: '保存修订' }));
-    await waitFor(() => expect(api.experts.saveRevision).toHaveBeenCalledTimes(1));
-    expect(api.experts.saveRevision).toHaveBeenCalledWith(
-      expect.objectContaining({
-        expertId: expertSummary.id,
-        expectedRevision: 1,
-        revision: expect.objectContaining({ identity: '负责经营分析并检查交付。' }),
-      }),
-    );
+    expect(
+      await screen.findByRole('menuitem', { name: '本地语言模型 · local-model' }),
+    ).toBeTruthy();
   });
 
   it('卡片上的「停用」直接改生命周期，不需要先进配置页', async () => {

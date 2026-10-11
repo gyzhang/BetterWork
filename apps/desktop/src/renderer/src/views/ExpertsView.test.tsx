@@ -1,9 +1,15 @@
 // @vitest-environment jsdom
 
-import type { ExpertDetail, ExpertSummary, MaterialCandidate } from '@betterwork/agent-protocol';
+import type {
+  ExpertDetail,
+  ExpertSummary,
+  MaterialCandidate,
+  ModelProfileSummary,
+} from '@betterwork/agent-protocol';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { languageModel } from '../app-test-fixtures';
 import type { ExpertsState } from '../hooks/use-experts';
 import { ExpertsPage } from './ExpertsView';
 
@@ -105,6 +111,7 @@ function detailOf(expert: ExpertSummary = userExpert): ExpertDetail {
 function renderExpertsPage(options?: {
   experts?: ExpertSummary[];
   detail?: ExpertDetail;
+  models?: ModelProfileSummary[];
   actions?: Partial<ExpertsState>;
 }) {
   const state = stateStub(options?.experts ?? [userExpert]);
@@ -122,7 +129,7 @@ function renderExpertsPage(options?: {
       skills={[]}
       mcpConnections={[]}
       memories={[]}
-      models={[]}
+      models={options?.models ?? []}
       materialCandidates={[]}
       actions={actions}
       onSummon={onSummon}
@@ -336,6 +343,40 @@ describe('ExpertsPage 的目录条目', () => {
 });
 
 describe('ExpertsPage 的整页配置交互', () => {
+  it('保存模型偏好时保留修订版本与编辑内容', async () => {
+    const detail = detailOf();
+    const saveRevision = vi.fn<ExpertsState['saveRevision']>(async () => ({ expert: detail }));
+    const { actions } = renderExpertsPage({
+      detail,
+      models: [languageModel],
+      actions: { saveRevision },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '详情' }));
+    fireEvent.click(await screen.findByRole('button', { name: '编辑配置' }));
+    const modelSelect = await screen.findByRole('button', { name: '专家模型偏好' });
+    expect(modelSelect.textContent).toContain('应用默认模型');
+    fireEvent.click(modelSelect);
+    fireEvent.click(await screen.findByRole('menuitem', { name: '本地语言模型 · local-model' }));
+    fireEvent.change(await screen.findByRole('textbox', { name: '人格与职责' }), {
+      target: { value: '负责经营分析并检查交付。' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '保存修订' }));
+
+    await waitFor(() =>
+      expect(actions.saveRevision).toHaveBeenCalledWith(
+        expect.objectContaining({
+          expertId: userExpert.id,
+          expectedRevision: userExpert.currentRevision,
+          revision: expect.objectContaining({
+            identity: '负责经营分析并检查交付。',
+            modelReference: { mode: 'profile', modelProfileId: languageModel.id },
+          }),
+        }),
+      ),
+    );
+  });
+
   it('卡片交代图标、署名、版本与用途标签，召唤按钮带图标', () => {
     const cardExpert = { ...userExpert, tags: ['经营分析', '月度复盘'] };
     const { container } = renderExpertsPage({ experts: [cardExpert] });

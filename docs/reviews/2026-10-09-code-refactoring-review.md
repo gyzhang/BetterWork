@@ -938,3 +938,9 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 2026-10-11 18:56 CST，从最新 `origin/main` `3af619dc990afc4f3ba2b12f1dc3dde7892ce504` 建立 `codex/r13-app-chrome-api-fixture`。将主题更新 no-op 默认替身提取为私有 `createChromeApiFixture`，由总夹具组合该端口；调用仍异步返回 undefined。
 
 `App.test.tsx` heavy 56/56，typecheck、改动文件 ESLint/Prettier 与 `git diff --check` 通过。该子卡只移动 Chrome API 测试替身，不改主题应用或生产行为；完整 Desktop API fixture 与 App 整树场景仍在，不据此标记 R13 整体解决。未运行完整 `npm run verify`、UI 或真实模型。
+
+## 68. R13 子卡：专家配置编辑交互移入视图测试
+
+2026-10-11 19:03 CST，从最新 `origin/main` `53188d063de8a965bf25c2d18f89c266ac668e54` 建立 `codex/r13-expert-config-view-tests`。把专家模型选择、身份编辑与修订保存断言从 App 整树测试移到直接渲染 `ExpertsPage` 的测试；App 保留模型目录从 API 进入编辑器的接线覆盖。视图测试同时核对当前 revision、指定模型引用及编辑后的身份内容。
+
+修改前 App heavy 56 项、ExpertsView functional 11 项；修改后分别为 55/55 与 12/12。typecheck、两份测试文件的 ESLint/Prettier 与 `git diff --check` 通过。未改产品代码、交互或断言范围；R13 尚未整体解决。未运行完整 `npm run verify`、UI 或真实模型。
