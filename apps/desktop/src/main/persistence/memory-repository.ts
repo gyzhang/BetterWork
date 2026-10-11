@@ -92,6 +92,26 @@ export interface RecallCandidateQuery {
 /** 全域排除账本专用：只含最新身份与范围，不能充当来源证明。 */
 export type MemoryRecallAuditEntry = Pick<MemoryRecord, 'id' | 'revisionId' | 'scope'>;
 
+/** 全域治理提示的元数据，不提供正文或来源证明。 */
+export type MemoryGovernanceEntry = Pick<
+  MemoryRecord,
+  | 'id'
+  | 'revisionId'
+  | 'scope'
+  | 'normalizedHash'
+  | 'topicKey'
+  | 'validFrom'
+  | 'validUntil'
+  | 'status'
+  | 'candidateDisposition'
+>;
+
+/** 历史重放的精确修订安全字段；不提供正文或来源证明。 */
+export type MemoryReplayDependency = Pick<
+  MemoryRecord,
+  'id' | 'revisionId' | 'revision' | 'contentHash' | 'status' | 'validFrom' | 'validUntil' | 'scope'
+> & { latestRevisionOfIdentity: number };
+
 export interface MemoryListPageQuery extends ListMemoriesRequest {
   /** 游标分页；排序固定 updatedAt DESC / id ASC（§9.1）。 */
   cursor?: ListCursor;
@@ -202,25 +222,37 @@ interface MemoryRecallAuditRow extends MemoryScopeRow {
   revision_id: string;
 }
 
-interface MemoryRow extends MemoryRecallAuditRow {
+interface MemoryGovernanceRow extends MemoryRecallAuditRow {
+  topic_key: string | null;
+  normalized_hash: string;
+  candidate_disposition: MemoryCandidateDisposition | null;
+  status: MemoryStatus;
+  valid_from: number | null;
+  valid_until: number | null;
+}
+
+interface MemoryReplayDependencyRow extends MemoryRecallAuditRow {
+  revision: number;
+  content_hash: string;
+  status: MemoryStatus;
+  valid_from: number | null;
+  valid_until: number | null;
+  latest_revision: number;
+}
+
+interface MemoryRow extends MemoryGovernanceRow {
   revision: number;
   scope_id: string;
   kind: MemoryKind;
   facet: MemoryFacet;
-  topic_key: string | null;
-  normalized_hash: string;
   recall_policy: 'relevant' | 'pinned';
   provenance_json: string;
-  candidate_disposition: MemoryCandidateDisposition | null;
   replaces_revision_id: string | null;
   content: string;
   source_type: MemorySourceType;
   source_id: string | null;
   source_locator: string | null;
   confidence: number;
-  status: MemoryStatus;
-  valid_from: number | null;
-  valid_until: number | null;
   supersedes_id: string | null;
   content_hash: string;
   created_at: number;
@@ -545,6 +577,41 @@ export class MemoryRepository {
     return row ? toRecord(row) : undefined;
   }
 
+  /** 完整请求集合只绑定一个 JSON 参数；保留历史/终态，不用最新修订补缺项。 */
+  listReplayDependencies(revisionIds: readonly string[]): MemoryReplayDependency[] {
+    const ids = [...new Set(revisionIds)];
+    if (ids.length === 0) return [];
+    const rows = this.db
+      .prepare(
+        `SELECT r.id, r.revision_id, r.revision, r.content_hash, r.status,
+                r.valid_from, r.valid_until, r.scope_kind, r.workspace_id, r.expert_id,
+                (SELECT MAX(c.revision) FROM memory_records c WHERE c.id = r.id) AS latest_revision
+           FROM memory_records r
+          WHERE r.revision_id IN (SELECT value FROM json_each(?))`,
+      )
+      .all(JSON.stringify(ids)) as MemoryReplayDependencyRow[];
+    const byRevision = new Map(
+      rows.map((row) => [
+        row.revision_id,
+        {
+          id: row.id,
+          revisionId: row.revision_id,
+          revision: row.revision,
+          contentHash: row.content_hash,
+          status: row.status,
+          scope: memoryScopeSchema.parse(rowScope(row)),
+          latestRevisionOfIdentity: row.latest_revision,
+          ...(row.valid_from === null ? {} : { validFrom: row.valid_from }),
+          ...(row.valid_until === null ? {} : { validUntil: row.valid_until }),
+        },
+      ]),
+    );
+    return ids.flatMap((id) => {
+      const dependency = byRevision.get(id);
+      return dependency === undefined ? [] : [dependency];
+    });
+  }
+
   list(input: ListMemoriesRequest = {}): MemoryRecord[] {
     const parsed = listMemoriesRequestSchema.parse(input);
     const { clause, values } = this.scopeAndStatusFilter(parsed);
@@ -568,6 +635,34 @@ export class MemoryRepository {
       id: row.id,
       revisionId: row.revision_id,
       scope: memoryScopeSchema.parse(rowScope(row)),
+    }));
+  }
+
+  /** 与治理原集合一致：最新 candidate/confirmed/expired，不按页面、范围或时间截断。 */
+  listGovernanceEntries(): MemoryGovernanceEntry[] {
+    const rows = this.db
+      .prepare(
+        `SELECT r.id, r.revision_id, r.scope_kind, r.workspace_id, r.expert_id,
+                r.normalized_hash, r.topic_key, r.valid_from, r.valid_until,
+                r.status, r.candidate_disposition
+           FROM memory_records r
+          WHERE ${latestRevisionPredicate}
+            AND r.status IN ('candidate', 'confirmed', 'expired')
+          ORDER BY r.updated_at DESC, r.id ASC`,
+      )
+      .all() as MemoryGovernanceRow[];
+    return rows.map((row) => ({
+      id: row.id,
+      revisionId: row.revision_id,
+      scope: memoryScopeSchema.parse(rowScope(row)),
+      normalizedHash: row.normalized_hash,
+      status: row.status,
+      ...(row.topic_key === null ? {} : { topicKey: row.topic_key }),
+      ...(row.valid_from === null ? {} : { validFrom: row.valid_from }),
+      ...(row.valid_until === null ? {} : { validUntil: row.valid_until }),
+      ...(row.candidate_disposition === null
+        ? {}
+        : { candidateDisposition: row.candidate_disposition }),
     }));
   }
 

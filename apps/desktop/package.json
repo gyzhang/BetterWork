@@ -24,6 +24,7 @@
     "@modelcontextprotocol/server-sequential-thinking": "2026.8.31",
     "better-sqlite3": "^13.0.3",
     "cron-parser": "5.10.1",
+    "echarts": "^6.1.0",
     "exceljs": "^4.4.0",
     "fast-xml-parser": "^5.11.1",
     "jszip": "^3.10.1",

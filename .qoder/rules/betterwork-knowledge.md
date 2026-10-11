@@ -21,4 +21,4 @@ description: 资料导入、知识索引、FTS5 检索、Evidence、打开源文
 ## 数据与检索边界
 
 - 数据文件在 Electron userData 下（`~/Library/Application Support/@betterwork/desktop/`），绝不提交 Git；日志避免记录完整文档内容。（docs/11 §3、AGENTS.md §5）
-- 检索走 FTS5 `MATCH`，无结果时回退 LIKE 模糊匹配；`knowledge_search` Tool 保持只读，其结果在 Run 内去重登记为 Evidence。（docs/04 §5、docs/11 §2）
+- 检索走 FTS5 `MATCH`，零命中时按 JavaScript NFKC 与大小写归一化对子串回退；匹配与排序以知识实施契约 §9 为准。`knowledge_search` Tool 保持只读，其结果在 Run 内去重登记为 Evidence。（docs/04 §5、docs/development/knowledge-contracts.md §9、docs/11 §2）

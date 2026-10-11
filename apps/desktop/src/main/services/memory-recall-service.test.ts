@@ -11,11 +11,14 @@ import type {
   MemoryScope,
   TaskMaterialSelection,
 } from '@betterwork/agent-protocol';
-import { memoryRecallPolicyV1 } from '@betterwork/agent-protocol';
+import { materialListIdentity, memoryRecallPolicyV1 } from '@betterwork/agent-protocol';
 import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AppStore } from '../persistence';
+import { legacyReplayDependencies, seedReplayRun } from './fixtures/history-memory-fixtures';
+import { seedGovernanceMemory } from './fixtures/memory-governance-fixtures';
+import { normalizedMemoryHash } from './memory-content-policy';
 import { buildDerivedProvenance, manualMemorySource } from './memory-provenance';
 import {
   planRunHistoryReplay,
@@ -528,6 +531,222 @@ describe('召回期的依赖闭包与冲突组装配', () => {
     expect(full).not.toHaveBeenCalled();
     expect(allRuns).not.toHaveBeenCalled();
   });
+
+  it('reads repeated direct and inherited history dependencies once without full memory records', async () => {
+    const { store, scope, workspaceId } = await setup();
+    const task = store.tasks.create(workspaceId, 'batch history', 'batch history');
+    const records = Array.from({ length: 80 }, (_, index) =>
+      seedGovernanceMemory(store.memories, `batch dependency ${index}`, { scope }),
+    );
+    const dependencies = records.map((record) => ({
+      memoryId: record.id,
+      revisionId: record.revisionId,
+      contentHash: record.contentHash,
+    }));
+    const runIds = Array.from({ length: 14 }, (_, index) =>
+      seedReplayRun(store, {
+        taskId: task.task.id,
+        sessionId: task.sessionId,
+        workspaceId,
+        index,
+        selected: records.slice(0, 16),
+        dependencies,
+      }),
+    );
+    const input = {
+      taskId: task.task.id,
+      currentRunId: 'missing-current',
+      evaluatedAt: CAPTURED_AT,
+      excludedMemoryIds: [],
+      allowedMaterialKeys: [],
+    };
+    const legacy = vi
+      .spyOn(store.memories, 'listReplayDependencies')
+      .mockImplementation((ids) => legacyReplayDependencies(store.memories, ids));
+    const expected = planRunHistoryReplay(store, input);
+    legacy.mockRestore();
+    const projected = vi.spyOn(store.memories, 'listReplayDependencies');
+    const fullRevision = vi.spyOn(store.memories, 'getRevision').mockImplementation(() => {
+      throw new Error('history must not hydrate memory revisions');
+    });
+    const fullCurrent = vi.spyOn(store.memories, 'get').mockImplementation(() => {
+      throw new Error('history must not hydrate current memories');
+    });
+    const actual = planRunHistoryReplay(store, input);
+    expect(actual).toEqual(expected);
+    expect(actual.messages).toHaveLength(16);
+    expect(actual.inheritedMemoryDependencies).toEqual(dependencies);
+    expect(actual.replay.at(-1)).toEqual({
+      replayed: false,
+      runId: runIds[5],
+      reason: 'history-budget',
+    });
+    expect(projected).toHaveBeenCalledTimes(1);
+    expect(new Set(projected.mock.calls[0]![0])).toEqual(
+      new Set(dependencies.map((ref) => ref.revisionId)),
+    );
+    fullRevision.mockRestore();
+    fullCurrent.mockRestore();
+    const changed = records.at(-1)!;
+    store.memories.update({
+      id: changed.id,
+      expectedRevision: 1,
+      patch: { content: 'changed inherited dependency' },
+      normalizedHash: normalizedMemoryHash('changed inherited dependency'),
+    });
+    const blocked = planRunHistoryReplay(store, input);
+    expect(blocked.messages).toEqual([]);
+    expect(blocked.replay.at(-1)).toEqual({
+      replayed: false,
+      runId: runIds[13],
+      reason: 'memory-revised',
+    });
+    expect(projected).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['revised', 'memory-revised'],
+    ['narrowed', 'memory-revised'],
+    ['deleted', 'memory-inactive'],
+    ['expired', 'memory-inactive'],
+    ['superseded', 'memory-inactive'],
+    ['candidate', 'memory-inactive'],
+    ['future', 'memory-inactive'],
+    ['natural-expired', 'memory-inactive'],
+    ['hash-mismatch', 'memory-revised'],
+    ['missing', 'memory-revised'],
+    ['excluded', 'memory-excluded'],
+  ] as const)(
+    'preserves %s rejection and the nearest boundary for direct and inherited dependencies',
+    async (scenario, reason) => {
+      const { store, workspaceId, scope } = await setup();
+      const task = store.tasks.create(workspaceId, 'unsafe history', 'unsafe history');
+      let record = seedGovernanceMemory(store.memories, 'historical rule', {
+        scope: scenario === 'narrowed' ? { kind: 'user' } : scope,
+        ...(scenario === 'candidate' ? { status: 'candidate' as const } : {}),
+        ...(scenario === 'future' ? { validFrom: CAPTURED_AT + 1 } : {}),
+        ...(scenario === 'natural-expired' ? { validUntil: CAPTURED_AT } : {}),
+      });
+      if (scenario === 'revised' || scenario === 'narrowed')
+        store.memories.update({
+          id: record.id,
+          expectedRevision: 1,
+          patch: scenario === 'revised' ? { content: 'new historical rule' } : { scope },
+          normalizedHash: normalizedMemoryHash(
+            scenario === 'revised' ? 'new historical rule' : record.content,
+          ),
+        });
+      if (scenario === 'deleted' || scenario === 'expired')
+        record = store.memories.applyGovernance({
+          id: record.id,
+          expectedRevision: 1,
+          action: scenario === 'deleted' ? 'delete' : 'expire',
+        }).record;
+      if (scenario === 'superseded') {
+        const winner = seedGovernanceMemory(store.memories, 'winning rule', { scope });
+        record = store.memories.replace({
+          winnerId: winner.id,
+          winnerExpectedRevision: 1,
+          loserId: record.id,
+          loserExpectedRevision: 1,
+        }).loser;
+      }
+      if (scenario === 'missing') record = { ...record, revisionId: 'missing-revision' };
+      if (scenario === 'hash-mismatch' || scenario === 'excluded')
+        record = { ...record, contentHash: 'b'.repeat(64) };
+      const dependency = {
+        memoryId: record.id,
+        revisionId: record.revisionId,
+        contentHash: record.contentHash,
+      };
+      for (const inherited of [false, true]) {
+        const offset = inherited ? 3 : 0;
+        seedReplayRun(store, {
+          taskId: task.task.id,
+          sessionId: task.sessionId,
+          workspaceId,
+          index: offset,
+        });
+        const unsafeId = seedReplayRun(store, {
+          taskId: task.task.id,
+          sessionId: task.sessionId,
+          workspaceId,
+          index: offset + 1,
+          ...(inherited ? { dependencies: [dependency] } : { selected: [record] }),
+        });
+        seedReplayRun(store, {
+          taskId: task.task.id,
+          sessionId: task.sessionId,
+          workspaceId,
+          index: offset + 2,
+        });
+        const input = {
+          taskId: task.task.id,
+          currentRunId: 'missing-current',
+          evaluatedAt: CAPTURED_AT,
+          excludedMemoryIds: scenario === 'excluded' ? [record.id] : [],
+          allowedMaterialKeys: [],
+        };
+        const actual = planRunHistoryReplay(store, input);
+        expect(actual.messages).toEqual([
+          { role: 'user', content: `prompt ${offset + 2}` },
+          { role: 'assistant', content: `answer ${offset + 2}` },
+        ]);
+        expect(actual.skippedReason).toBe(reason);
+        expect(actual.replay.at(-1)).toEqual({ replayed: false, runId: unsafeId, reason });
+        const legacy = vi
+          .spyOn(store.memories, 'listReplayDependencies')
+          .mockImplementation((ids) => legacyReplayDependencies(store.memories, ids));
+        expect(planRunHistoryReplay(store, input)).toEqual(actual);
+        legacy.mockRestore();
+      }
+    },
+  );
+
+  it.each(['missing-context', 'missing-snapshot', 'unavailable-material'] as const)(
+    'keeps %s unsafe even when memory metadata is complete',
+    async (scenario) => {
+      const { store, workspaceId, scope } = await setup();
+      const task = store.tasks.create(workspaceId, 'source history', 'source history');
+      const record = seedGovernanceMemory(store.memories, 'safe memory', { scope });
+      const material: MaterialReference = {
+        kind: 'workspace-input-snapshot',
+        workspaceId,
+        snapshotId: 'unavailable',
+        contentHash: CONTENT_HASH,
+        format: 'text',
+        fileKey: 'missing.txt',
+      };
+      const unsafe = seedReplayRun(store, {
+        taskId: task.task.id,
+        sessionId: task.sessionId,
+        workspaceId,
+        index: 0,
+        selected: [record],
+        omitContext: scenario === 'missing-context',
+        omitSnapshot: scenario === 'missing-snapshot',
+        ...(scenario === 'unavailable-material' ? { materials: [material] } : {}),
+      });
+      const plan = planRunHistoryReplay(store, {
+        taskId: task.task.id,
+        currentRunId: 'missing-current',
+        evaluatedAt: CAPTURED_AT,
+        excludedMemoryIds: [],
+        allowedMaterialKeys: [materialListIdentity(material)],
+      });
+      expect(plan.messages).toEqual([]);
+      expect(plan.replay).toEqual([
+        {
+          replayed: false,
+          runId: unsafe,
+          reason:
+            scenario === 'unavailable-material'
+              ? 'source-unavailable'
+              : 'legacy-provenance-unknown',
+        },
+      ]);
+    },
+  );
 
   it('checks a saved assistant source by exact Run/event presence without rejudging the answer', async () => {
     const { store, service, scope, workspaceId } = await setup();

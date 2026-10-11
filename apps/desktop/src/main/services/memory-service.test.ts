@@ -5,9 +5,16 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { CreateMemoryRequest } from '@betterwork/agent-protocol';
-import { afterEach, describe, expect, it } from 'vitest';
+import Database from 'better-sqlite3';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AppStore } from '../persistence';
+import { deriveEffectiveStatus } from '../persistence/memory-repository';
+import {
+  recordGovernanceDecision,
+  seedGovernanceMemory,
+} from './fixtures/memory-governance-fixtures';
+import * as conflictPolicy from './memory-conflict-policy';
 import { normalizedMemoryHash } from './memory-content-policy';
 import { buildLegacyProvenance } from './memory-provenance';
 import { MemoryService } from './memory-service';
@@ -88,6 +95,7 @@ describe('MemoryService', () => {
   };
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     for (const store of stores.splice(0)) store.close();
     await Promise.all(
       directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })),
@@ -565,6 +573,340 @@ describe('MemoryService', () => {
     expect(
       items.find((item) => item.id === confirmedId)?.duplicatesConfirmedMemoryId,
     ).toBeUndefined();
+  });
+
+  it('keeps global governance hints independent of page, query and scope filters', async () => {
+    const { service, store } = await setup();
+    const workspaceId = store.workspaces.getOrCreate('/tmp/e9/selected', 'selected').id;
+    const scope = { kind: 'workspace', workspaceId } as const;
+    seedGovernanceMemory(store.memories, 'shared rule', { scope, createdAt: 100 });
+    const expiredConfirmed = seedGovernanceMemory(store.memories, 'shared rule', {
+      scope,
+      createdAt: 150,
+      validUntil: 1,
+    });
+    const globalConflict = seedGovernanceMemory(store.memories, 'global other rule', {
+      topicKey: 'chosen',
+      createdAt: 200,
+    });
+    const candidate = seedGovernanceMemory(store.memories, 'shared rule', {
+      scope,
+      status: 'candidate',
+      topicKey: 'chosen',
+      createdAt: 300,
+    });
+    const current = store.memories.list({
+      includeCandidates: true,
+      statuses: ['candidate', 'confirmed', 'expired'],
+    });
+    const pending = conflictPolicy
+      .unresolvedConflictPairs(
+        current,
+        (left, right) => store.memoryOperations.findDecisionForPair(left, right) !== undefined,
+      )
+      .filter(
+        (pair) =>
+          pair.leftRevisionId === candidate.revisionId ||
+          pair.rightRevisionId === candidate.revisionId,
+      );
+    const expectedDuplicate = conflictPolicy.duplicateConfirmedMemoryId(candidate, current);
+    expect(expectedDuplicate).toBe(expiredConfirmed.id);
+    const full = vi.spyOn(store.memories, 'list').mockImplementation(() => {
+      throw new Error('Governance must not hydrate the complete global records');
+    });
+    const point = vi.spyOn(store.memoryOperations, 'findDecisionForPair').mockImplementation(() => {
+      throw new Error('Governance must read exact decisions in a batch');
+    });
+    const projected = vi.spyOn(store.memories, 'listGovernanceEntries');
+    const page = service.list({ workspaceId, includeCandidates: true, query: 'chosen', limit: 1 });
+    expect(page.ok).toBe(true);
+    if (!page.ok) return;
+    expect(page.data.nextCursor).toBeDefined();
+    expect(page.data.items).toEqual([
+      {
+        ...candidate,
+        effectiveStatus: deriveEffectiveStatus(candidate, Date.now()),
+        sourceAvailability: 'review-required',
+        requiresMaterialSelection: false,
+        conflicts: pending,
+        duplicatesConfirmedMemoryId: expiredConfirmed.id,
+      },
+    ]);
+    expect(pending).toHaveLength(1);
+    expect([pending[0]?.leftRevisionId, pending[0]?.rightRevisionId]).toContain(
+      globalConflict.revisionId,
+    );
+    expect(projected).toHaveBeenCalledTimes(1);
+    expect(full).not.toHaveBeenCalled();
+    expect(point).not.toHaveBeenCalled();
+  });
+
+  it('keeps exact decision notes and invalidates only the edited revision pair', async () => {
+    const { service, store } = await setup();
+    const left = seedGovernanceMemory(store.memories, 'left rule', { topicKey: 'unit' });
+    const right = seedGovernanceMemory(store.memories, 'right rule', { topicKey: 'unit' });
+    recordGovernanceDecision(store, left, right, 'left for summary; right for detail');
+    const full = vi.spyOn(store.memories, 'list').mockImplementation(() => {
+      throw new Error('Governance must not hydrate the complete global records');
+    });
+    const point = vi.spyOn(store.memoryOperations, 'findDecisionForPair').mockImplementation(() => {
+      throw new Error('Governance must read exact decisions in a batch');
+    });
+    const before = service.get({ id: left.id });
+    expect(before.ok).toBe(true);
+    if (!before.ok) return;
+    expect(before.data.conflicts).toEqual([
+      {
+        leftRevisionId: [left.revisionId, right.revisionId].sort()[0],
+        rightRevisionId: [left.revisionId, right.revisionId].sort()[1],
+        state: 'keep-both',
+        applicabilityNote: 'left for summary; right for detail',
+      },
+    ]);
+    const edited = store.memories.update({
+      id: right.id,
+      expectedRevision: right.revision,
+      patch: { content: 'revised right rule' },
+      normalizedHash: normalizedMemoryHash('revised right rule'),
+    }).record;
+    const after = service.get({ id: left.id });
+    expect(after.ok).toBe(true);
+    if (!after.ok) return;
+    expect(after.data.conflicts).toEqual([
+      {
+        leftRevisionId: [left.revisionId, edited.revisionId].sort()[0],
+        rightRevisionId: [left.revisionId, edited.revisionId].sort()[1],
+        state: 'unresolved',
+      },
+    ]);
+    const history = service.get({ id: right.id, revisionId: right.revisionId });
+    expect(history.ok).toBe(true);
+    if (!history.ok) return;
+    expect(history.data.conflicts).toEqual([]);
+    expect(history.data.content).toBe(right.content);
+    expect(full).not.toHaveBeenCalled();
+    expect(point).not.toHaveBeenCalled();
+  });
+
+  it('associates the complete pending collection once per page without losing outside partners', async () => {
+    const { service, store } = await setup();
+    store.transaction(() => {
+      for (let index = 0; index < 300; index += 1)
+        seedGovernanceMemory(store.memories, `rule ${index}`, {
+          topicKey: `topic-${index % 50}`,
+          createdAt: 1_000 + index,
+        });
+    });
+    const page = store.memories.listPage({ includeCandidates: true, limit: 100 });
+    const expected = page.items.map((record) => {
+      const view = service.get({ id: record.id });
+      if (!view.ok) throw new Error('Expected a live memory view');
+      return view.data;
+    });
+    let revisionReads = 0;
+    let pendingPairs = 0;
+    const enumerate = conflictPolicy.unresolvedConflictPairs;
+    const enumeration = vi
+      .spyOn(conflictPolicy, 'unresolvedConflictPairs')
+      .mockImplementation((...args) => {
+        const pairs = enumerate(...args);
+        pendingPairs += pairs.length;
+        return pairs.map((pair) => ({
+          ...pair,
+          get leftRevisionId() {
+            revisionReads += 1;
+            return pair.leftRevisionId;
+          },
+          get rightRevisionId() {
+            revisionReads += 1;
+            return pair.rightRevisionId;
+          },
+        }));
+      });
+    const result = service.list({ limit: 100 });
+    expect(result).toEqual({
+      ok: true,
+      warnings: [],
+      data: { items: expected, nextCursor: page.nextCursor },
+    });
+    expect(enumeration).toHaveBeenCalledOnce();
+    expect(pendingPairs).toBe(750);
+    const displayedPairs = expected.flatMap((item) => item.conflicts).length;
+    expect(displayedPairs).toBe(500);
+    // Count the association scan plus Schema reads of displayed pairs, never per-row global scans.
+    expect(revisionReads).toBeLessThanOrEqual(2 * pendingPairs + 4 * displayedPairs);
+    const pageRevisions = new Set(page.items.map((record) => record.revisionId));
+    expect(
+      expected
+        .flatMap((item) => item.conflicts)
+        .some(
+          (pair) =>
+            !pageRevisions.has(pair.leftRevisionId) || !pageRevisions.has(pair.rightRevisionId),
+        ),
+    ).toBe(true);
+  });
+
+  it('distributes one page decision batch exactly like individual live views', async () => {
+    const { service, store } = await setup();
+    const workspaceId = store.workspaces.getOrCreate('/tmp/e11/page', 'page').id;
+    const records = Array.from({ length: 103 }, (_, index) =>
+      seedGovernanceMemory(store.memories, `chosen rule ${index}`, {
+        scope: { kind: 'workspace', workspaceId },
+        topicKey: `topic-${Math.floor(index / 2)}`,
+        createdAt: 1_000 + index,
+      }),
+    );
+    for (let index = 0; index < 100; index += 2) {
+      recordGovernanceDecision(store, records[index]!, records[index + 1]!, `note-${index}`);
+    }
+    const outside = seedGovernanceMemory(store.memories, 'outside rule', {
+      topicKey: 'topic-50',
+      createdAt: 1,
+    });
+    recordGovernanceDecision(store, records[100]!, outside, 'outside-page condition');
+    store.memoryOperations.recordConflictResolution({
+      operationId: randomUUID(),
+      requestHash: normalizedMemoryHash('replace-page-pair'),
+      leftRevisionId: records[100]!.revisionId,
+      rightRevisionId: records[102]!.revisionId,
+      decision: 'replace',
+      winnerRevisionId: records[100]!.revisionId,
+    });
+    const input = { workspaceId, query: 'chosen', limit: 100 };
+    const page = store.memories.listPage({ ...input, includeCandidates: true });
+    const expected = page.items.map((record) => {
+      const view = service.get({ id: record.id });
+      if (!view.ok) throw new Error('Expected a live memory view');
+      return view.data;
+    });
+    expect(expected.find((record) => record.id === records[100]!.id)?.conflicts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ state: 'unresolved' }),
+        expect.objectContaining({
+          state: 'keep-both',
+          applicabilityNote: 'outside-page condition',
+        }),
+        expect.objectContaining({ state: 'replaced' }),
+      ]),
+    );
+    const batch = vi.spyOn(store.memoryOperations, 'listConflictPairsForRevisionIds');
+    const result = service.list(input);
+    expect(result).toEqual({
+      ok: true,
+      warnings: [],
+      data: { items: expected, nextCursor: page.nextCursor },
+    });
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(batch).toHaveBeenCalledWith(page.items.map((record) => record.revisionId));
+    expect(page.nextCursor).toBeDefined();
+    const continued = service.list({ ...input, cursor: page.nextCursor! });
+    expect(continued.ok && continued.data.items.map((record) => record.id)).toEqual(
+      records
+        .slice(0, 3)
+        .reverse()
+        .map((record) => record.id),
+    );
+    const empty = service.list({ ...input, query: 'absent' });
+    expect(empty).toEqual({ ok: true, warnings: [], data: { items: [] } });
+    expect(batch).toHaveBeenLastCalledWith([]);
+  });
+
+  it.each(['left', 'right'] as const)(
+    'refreshes page decisions after the %s revision changes',
+    async (side) => {
+      const { service, store } = await setup();
+      const left = seedGovernanceMemory(store.memories, 'chosen left', { topicKey: 'unit' });
+      const right = seedGovernanceMemory(store.memories, 'outside right', { topicKey: 'unit' });
+      recordGovernanceDecision(store, left, right, 'exact revision condition');
+      const batch = vi.spyOn(store.memoryOperations, 'listConflictPairsForRevisionIds');
+      const before = service.list({ query: 'chosen' });
+      expect(before.ok && before.data.items[0]?.conflicts[0]).toMatchObject({
+        state: 'keep-both',
+        applicabilityNote: 'exact revision condition',
+      });
+      const changed = side === 'left' ? left : right;
+      const revised = store.memories.update({
+        id: changed.id,
+        expectedRevision: changed.revision,
+        patch: { content: `${changed.content} revised` },
+        normalizedHash: normalizedMemoryHash(`${changed.content} revised`),
+      }).record;
+      const after = service.list({ query: 'chosen' });
+      expect(after.ok && after.data.items[0]?.conflicts).toEqual([
+        {
+          leftRevisionId: [
+            side === 'left' ? revised.revisionId : left.revisionId,
+            side === 'right' ? revised.revisionId : right.revisionId,
+          ].sort()[0],
+          rightRevisionId: [
+            side === 'left' ? revised.revisionId : left.revisionId,
+            side === 'right' ? revised.revisionId : right.revisionId,
+          ].sort()[1],
+          state: 'unresolved',
+        },
+      ]);
+      expect(batch).toHaveBeenCalledTimes(2);
+      const historical = service.get({ id: changed.id, revisionId: changed.revisionId });
+      expect(historical.ok && historical.data.conflicts).toEqual([]);
+    },
+  );
+
+  it('rejects missing or malformed selected decision notes just like individual views', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'betterwork-e11-notes-'));
+    directories.push(directory);
+    const databasePath = path.join(directory, 'app.db');
+    const store = AppStore.open(databasePath);
+    stores.push(store);
+    const service = new MemoryService(store, directory);
+    const left = seedGovernanceMemory(store.memories, 'chosen left', { topicKey: 'unit' });
+    const right = seedGovernanceMemory(store.memories, 'outside right', { topicKey: 'unit' });
+    recordGovernanceDecision(store, left, right, 'condition');
+    const db = new Database(databasePath);
+    try {
+      // Bypass SQL checks only on this fixture connection; repository Schema must reject corruption.
+      db.pragma('ignore_check_constraints = ON');
+      db.prepare('UPDATE memory_conflict_decisions SET applicability_note = NULL').run();
+      expect(() => service.list({ query: 'chosen' })).toThrow();
+      expect(() => service.get({ id: left.id })).toThrow();
+      db.prepare('UPDATE memory_conflict_decisions SET applicability_note = ?').run('');
+      expect(() => service.list({ query: 'chosen' })).toThrow();
+      expect(() => service.get({ id: left.id })).toThrow();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('does not turn off-page governance metadata into a full source proof', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'betterwork-e9-source-'));
+    directories.push(directory);
+    const databasePath = path.join(directory, 'app.db');
+    const store = AppStore.open(databasePath);
+    stores.push(store);
+    const service = new MemoryService(store, directory);
+    const workspaceId = store.workspaces.getOrCreate('/tmp/e9/own', 'own').id;
+    const foreignWorkspaceId = store.workspaces.getOrCreate('/tmp/e9/foreign', 'foreign').id;
+    const target = seedGovernanceMemory(store.memories, 'target rule', {
+      scope: { kind: 'workspace', workspaceId },
+    });
+    const foreign = seedGovernanceMemory(store.memories, 'foreign rule', {
+      scope: { kind: 'workspace', workspaceId: foreignWorkspaceId },
+    });
+    const db = new Database(databasePath);
+    try {
+      db.prepare('UPDATE memory_records SET provenance_json = ? WHERE revision_id = ?').run(
+        '{}',
+        foreign.revisionId,
+      );
+      const page = service.list({ workspaceId, query: 'target' });
+      expect(page.ok).toBe(true);
+      if (!page.ok) return;
+      expect(page.data.items.map((item) => item.id)).toEqual([target.id]);
+      expect(page.data.items[0]?.provenance).toEqual(target.provenance);
+      expect(() => service.get({ id: foreign.id })).toThrow();
+      expect(() => service.list({ workspaceId: foreignWorkspaceId })).toThrow();
+    } finally {
+      db.close();
+    }
   });
 
   it('lists governance views with derived effective status', async () => {
