@@ -69,6 +69,7 @@ import type { KnowledgeSearchService } from './knowledge-search';
 import type { KnowledgeVault } from './knowledge-vault';
 import {
   auditMaterialFacts,
+  createBusinessMetricFactsValidator,
   createMaterialFactLedger,
   type MaterialFactLedger,
 } from './material-fact-policy';
@@ -375,6 +376,15 @@ export class RunService {
 
     const runId = randomUUID();
     const controller = new AbortController();
+    const explicitBusinessAnalysis =
+      executionContext.builtinToolPolicy?.mode === 'allow-list' &&
+      executionContext.builtinToolPolicy.toolNames.includes('analyze_business_metrics');
+    const materialFacts = createMaterialFactLedger({
+      explicitBusinessAnalysis,
+      materialScope: executionContext.materialScope,
+      selectedMaterialCount: executionContext.materials.length,
+      prompt: input.prompt,
+    });
     const contextSegmentId = this.resolveContextSegment(input.taskId, executionContext.materials);
     // 召回、历史重放与审计指纹在同步事务里一次算清；抛错就没有这次 Run。
     const memory = prepareRunMemoryDecision(this.store, {
@@ -399,11 +409,7 @@ export class RunService {
       skillIds: (resolvedInput.skillBindings ?? []).map((binding) => binding.skillId),
       toolNames: new Map(),
       contextSegmentId,
-      materialFacts: createMaterialFactLedger({
-        materialScope: executionContext.materialScope,
-        selectedMaterialCount: executionContext.materials.length,
-        prompt: input.prompt,
-      }),
+      materialFacts,
       markdownWrites: new Map(),
     });
 
@@ -578,6 +584,10 @@ export class RunService {
     maxSkillToolRounds?: number,
   ): Promise<void> {
     try {
+      const activeRun = this.activeRuns.get(runId);
+      if (!activeRun) throw new Error('Run 活动上下文不存在。');
+      const materialFacts = activeRun.materialFacts;
+      const explicitBusinessAnalysis = materialFacts.enabled;
       if (executionContext.materialScope && this.taskMaterials) {
         await this.taskMaterials.validateSelections(input.taskId, executionContext.materials);
       }
@@ -675,6 +685,9 @@ export class RunService {
                 }
               : {}),
             ...(allowedBuiltinToolNames ? { allowedBuiltinToolNames } : {}),
+            ...(explicitBusinessAnalysis
+              ? { businessMetricFactsValidator: createBusinessMetricFactsValidator(materialFacts) }
+              : {}),
             skillResourceReader: (resourceInput) => this.readSkillResource(runId, resourceInput),
             taskFileWriter: (writeInput) =>
               this.writeTaskFile(runId, input.taskId, workspacePath, writeInput),
@@ -1123,6 +1136,7 @@ export class RunService {
         return {
           path: outputPath,
           material: reference,
+          sourceId: `${context.toolCallId}:0`,
           format:
             snapshot.format === 'md'
               ? 'markdown'
@@ -1150,7 +1164,7 @@ export class RunService {
       }
       let remaining = READ_MATERIAL_CODE_POINT_MAX;
       let truncated = false;
-      const sections: Array<{ locator: string; content: string }> = [];
+      const sections: Array<{ locator: string; content: string; sourceId: string }> = [];
       for (const section of extracted.sections) {
         const locatorCost = countCodePoints(section.locator) + 2;
         if (remaining <= locatorCost) {
@@ -1158,7 +1172,11 @@ export class RunService {
           break;
         }
         const content = sliceCodePoints(section.content, remaining - locatorCost);
-        sections.push({ locator: section.locator, content });
+        sections.push({
+          locator: section.locator,
+          content,
+          sourceId: `${context.toolCallId}:${sections.length}`,
+        });
         remaining -= locatorCost + countCodePoints(content);
         if (countCodePoints(content) < countCodePoints(section.content)) {
           truncated = true;
@@ -1209,6 +1227,7 @@ export class RunService {
       versionNumber: detail.versionNumber,
       content: detail.content,
       contentHash: detail.contentHash,
+      sourceId: `${context.toolCallId}:0`,
     };
   }
 
@@ -1283,7 +1302,10 @@ export class RunService {
           : {}),
       material: reference,
       format: result.format,
-      sections: result.sections,
+      sections: result.sections.map((section, index) => ({
+        ...section,
+        sourceId: `${context.toolCallId}:${index}`,
+      })),
       warnings: result.warnings,
       contentHash,
       message: `已读取 ${result.sections.length} 个 Office 材料片段。`,
@@ -1297,6 +1319,7 @@ export class RunService {
       this.toolResultAdapter.apply({
         runId: event.runId,
         taskId: active.taskId,
+        toolCallId: event.toolCallId,
         toolName: active.toolNames.get(event.toolCallId),
         output: event.output,
         materialFacts: active.materialFacts,

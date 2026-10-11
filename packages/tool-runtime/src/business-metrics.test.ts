@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { analyzeBusinessMetrics, businessMetricsTool } from './business-metrics';
+import {
+  analyzeBusinessMetrics,
+  analyzeSourcedBusinessMetrics,
+  businessMetricsTool,
+  createBusinessMetricsTool,
+} from './business-metrics';
 
 describe('analyzeBusinessMetrics', () => {
   it('calculates changes and budget variances without rounding away evidence', () => {
@@ -50,5 +55,69 @@ describe('analyzeBusinessMetrics', () => {
         },
       ),
     ).rejects.toThrow();
+  });
+
+  it('keeps source, unit and period associations through deterministic results', () => {
+    const result = analyzeSourcedBusinessMetrics({
+      period: '2026-09',
+      current: {
+        revenue: {
+          value: 120,
+          unit: '万元',
+          period: '2026-09',
+          sourceId: 'read-current:0',
+        },
+      },
+      previous: {
+        revenue: {
+          value: 100,
+          unit: '万元',
+          period: '2026-08',
+          sourceId: 'read-previous:0',
+        },
+      },
+    });
+    expect(result.metrics[0]).toMatchObject({
+      metric: 'revenue',
+      unit: '万元',
+      current: 120,
+      currentPeriod: '2026-09',
+      currentSourceId: 'read-current:0',
+      previous: 100,
+      previousPeriod: '2026-08',
+      previousSourceId: 'read-previous:0',
+      change: 20,
+      changeRate: 0.2,
+    });
+  });
+
+  it('rejects incompatible units and validates explicit facts before calculating', async () => {
+    const input = {
+      period: '2026-09',
+      current: {
+        revenue: { value: 120, unit: '万元', period: '2026-09', sourceId: 'read-1:0' },
+      },
+      previous: {
+        revenue: { value: 100, unit: '元', period: '2026-08', sourceId: 'read-1:0' },
+      },
+    };
+    expect(() => analyzeSourcedBusinessMetrics(input)).toThrow('单位与当前期间不一致');
+
+    const controller = new AbortController();
+    const tool = createBusinessMetricsTool(() => {
+      throw new Error('source validation failed');
+    });
+    await expect(
+      tool.execute(
+        { ...input, previous: { revenue: { ...input.previous.revenue, unit: '万元' } } },
+        {
+          runId: 'run-1',
+          toolCallId: 'tool-1',
+          workspacePath: '/tmp',
+          signal: controller.signal,
+          reportProgress: () => undefined,
+        },
+      ),
+    ).rejects.toThrow('source validation failed');
   });
 });

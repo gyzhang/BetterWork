@@ -13,7 +13,13 @@ afterEach(() => {
 });
 const hash = (text: string): string => createHash('sha256').update(text).digest('hex');
 
-const setup = (options: { snapshot?: boolean; binding?: McpToolBinding } = {}) => {
+const setup = (
+  options: {
+    snapshot?: boolean;
+    binding?: McpToolBinding;
+    explicitBusinessAnalysis?: boolean;
+  } = {},
+) => {
   const store = AppStore.open(':memory:');
   stores.push(store);
   const workspace = store.workspaces.getOrCreate('/tmp/c3-fixture', 'C3');
@@ -76,14 +82,24 @@ const setup = (options: { snapshot?: boolean; binding?: McpToolBinding } = {}) =
     });
   }
   const materialFacts = createMaterialFactLedger({
+    explicitBusinessAnalysis: options.explicitBusinessAnalysis ?? true,
     materialScope: true,
     selectedMaterialCount: 2,
     prompt: '',
   });
   const markdownWrites = new Map<string, string>();
   const adapter = new RunToolResultAdapter({ store, getMcpBinding: () => options.binding });
+  let toolCallCount = 0;
   const apply = (toolName: string | undefined, output: unknown): void =>
-    adapter.apply({ runId, taskId, toolName, output, materialFacts, markdownWrites });
+    adapter.apply({
+      runId,
+      taskId,
+      toolCallId: `tool-${++toolCallCount}`,
+      toolName,
+      output,
+      materialFacts,
+      markdownWrites,
+    });
   return {
     store,
     runId,
@@ -103,6 +119,7 @@ describe('Run tool result adapters', () => {
     fixture.apply('read_text_file', {
       path: '/tmp/c3-fixture/input.md',
       material: fixture.textMaterial,
+      sourceId: 'read-text:0',
       contentHash: 'input-hash',
       get content() {
         contentReads += 1;
@@ -110,7 +127,7 @@ describe('Run tool result adapters', () => {
       },
     });
     expect(contentReads).toBe(1);
-    expect(auditMaterialFacts(fixture.materialFacts, '30元。')).toBeUndefined();
+    expect(fixture.materialFacts.sources.get('read-text:0')).toBe('30元。');
     expect(fixture.store.materialReads.listByRun(fixture.runId)).toEqual([
       expect.objectContaining({
         material: fixture.textMaterial,
@@ -123,7 +140,11 @@ describe('Run tool result adapters', () => {
 
   it('retains normalized source-path fallback when text has no exact material', () => {
     const fixture = setup();
-    fixture.apply('read_text_file', { path: '/tmp/c3-fixture/a/../input.md', content: '30元' });
+    fixture.apply('read_text_file', {
+      path: '/tmp/c3-fixture/a/../input.md',
+      sourceId: 'read-text:0',
+      content: '30元',
+    });
     expect(fixture.store.materialReads.listByRun(fixture.runId)).toEqual([
       expect.objectContaining({ material: fixture.textMaterial, contentHash: 'input-hash' }),
     ]);
@@ -133,8 +154,8 @@ describe('Run tool result adapters', () => {
     { sections: [] },
     {
       sections: [
-        { locator: 'page:1', content: '30元' },
-        { locator: 'page:2', content: '40元' },
+        { locator: 'page:1', content: '30元', sourceId: 'read-text:0' },
+        { locator: 'page:2', content: '40元', sourceId: 'read-text:1' },
       ],
     },
   ])('preserves text parse locators and returned sections %j', ({ sections }) => {
@@ -152,7 +173,7 @@ describe('Run tool result adapters', () => {
         ? [['parse', 'document', hash('')]]
         : sections.map((section) => ['parse', section.locator, hash(section.content)]),
     );
-    expect(auditMaterialFacts(fixture.materialFacts, '999元')).toContain('数字（999）');
+    expect(fixture.materialFacts.sources.has('read-text:0')).toBe(sections.length > 0);
   });
 
   it('does not add facts or reads for run work files', () => {
@@ -171,6 +192,7 @@ describe('Run tool result adapters', () => {
     fixture.apply('read_text_file', {
       path: 'p',
       material: fixture.textMaterial,
+      sourceId: 'read-text:0',
       contentHash: 'changed',
       content: '30元',
     });
@@ -180,13 +202,13 @@ describe('Run tool result adapters', () => {
       content: '40元',
     });
     expect(fixture.store.materialReads.listByRun(fixture.runId)).toEqual([]);
-    expect(fixture.materialFacts.materialReadCount).toBe(2);
+    expect(fixture.materialFacts.materialReadCount).toBe(0);
   });
 
   it('keeps unscoped legacy text facts without fabricating a read footprint', () => {
     const fixture = setup({ snapshot: false });
     fixture.apply('read_text_file', { path: 'p', content: '30元' });
-    expect(auditMaterialFacts(fixture.materialFacts, '30元')).toBeUndefined();
+    expect(auditMaterialFacts(fixture.materialFacts, '30元')).toContain('没有成功读取任何材料');
     expect(fixture.store.materialReads.listByRun(fixture.runId)).toEqual([]);
   });
 
@@ -199,6 +221,7 @@ describe('Run tool result adapters', () => {
       versionId: material.artifactVersionId,
       contentHash: material.contentHash,
       content: '30元',
+      sourceId: 'read-artifact:0',
     };
     fixture.apply('read_artifact', { ...output, artifactId: 'other' });
     fixture.apply('read_artifact', { ...output, versionId: 'other' });
@@ -215,18 +238,19 @@ describe('Run tool result adapters', () => {
     ]);
   });
 
-  it('keeps Office cell/address metadata out of the fact pool and hashes the original section', () => {
+  it('keeps Office cell/address metadata out of the fact source and hashes the original section', () => {
     const fixture = setup();
     const content = { cells: [{ address: 'A999', locator: 'row:888', value: '30元' }] };
     fixture.apply('read_office_material', {
       material: fixture.textMaterial,
       format: 'csv',
-      sections: [{ locator: 'Sheet1', content }],
+      sections: [{ locator: 'Sheet1', content, sourceId: 'read-office:0' }],
       contentHash: 'input-hash',
     });
-    expect(auditMaterialFacts(fixture.materialFacts, '30元')).toBeUndefined();
-    expect(fixture.materialFacts.rawNumbers.has(999)).toBe(false);
-    expect(fixture.materialFacts.rawNumbers.has(888)).toBe(false);
+    const source = fixture.materialFacts.sources.get('read-office:0');
+    expect(source).toContain('30元');
+    expect(source).not.toContain('999');
+    expect(source).not.toContain('888');
     expect(fixture.store.materialReads.listByRun(fixture.runId)).toEqual([
       expect.objectContaining({
         operation: 'parse',
@@ -277,13 +301,27 @@ describe('Run tool result adapters', () => {
         },
       ],
     });
-    fixture.apply('read_knowledge', { parts: [{ evidenceId, text: '40元', hidden: '666元' }] });
-    fixture.apply('read_knowledge', { parts: [{ evidenceId, text: '40元' }] });
-    expect(fixture.store.evidence.listByTask(fixture.taskId)).toHaveLength(1);
+    fixture.store.evidence.saveLocal({
+      taskId: fixture.taskId,
+      runId: fixture.runId,
+      sourceUri: '/source',
+      title: 'source',
+      locator: 'l2',
+      excerpt: '40元',
+      contentHash: 'h2',
+    });
+    const readEvidenceId = fixture.store.evidence
+      .listByTask(fixture.taskId)
+      .find((evidence) => evidence.locator === 'l2')?.id;
+    if (!readEvidenceId) throw new Error('read evidence fixture missing');
+    fixture.apply('read_knowledge', {
+      parts: [{ evidenceId: readEvidenceId, text: '40元', hidden: '666元' }],
+    });
+    fixture.apply('read_knowledge', { parts: [{ evidenceId: readEvidenceId, text: '40元' }] });
+    expect(fixture.store.evidence.listByTask(fixture.taskId)).toHaveLength(2);
     expect(fixture.store.materialReads.listByRun(fixture.runId)).toEqual([]);
-    expect(auditMaterialFacts(fixture.materialFacts, '30元；40元')).toBeUndefined();
-    expect(fixture.materialFacts.rawNumbers.has(999)).toBe(false);
-    expect(fixture.materialFacts.rawNumbers.has(666)).toBe(false);
+    expect(fixture.materialFacts.sources.get(evidenceId)).toBe('30元');
+    expect(fixture.materialFacts.sources.get(readEvidenceId)).toBe('40元');
   });
 
   it('rejects a Knowledge evidence ID from another Run', () => {
@@ -390,7 +428,7 @@ describe('Run tool result adapters', () => {
   });
 
   it('tracks only Markdown writes and keeps deterministic calculations distinct from material reads', () => {
-    const fixture = setup();
+    const fixture = setup({ explicitBusinessAnalysis: false });
     fixture.apply('task_write_file', { path: 'report.MD', contentHash: 'h1' });
     fixture.apply('task_write_file', { path: 'image.svg', contentHash: 'h2' });
     fixture.apply('task_write_file', { path: 'report.MD', contentHash: 'h3' });
@@ -400,7 +438,7 @@ describe('Run tool result adapters', () => {
       metrics: [{ metric: '收入', current: 30, warnings: [] }],
       message: '完成',
     });
-    expect(fixture.materialFacts.rawNumbers.has(30)).toBe(true);
+    expect(fixture.materialFacts.facts).toHaveLength(0);
     expect(fixture.materialFacts.materialReadCount).toBe(0);
   });
 
@@ -414,7 +452,8 @@ describe('Run tool result adapters', () => {
   ])('adds no facts, footprints, evidence or writes for a malformed %s result', (toolName) => {
     const fixture = setup();
     expect(() => fixture.apply(toolName, { content: '敏感正文30元' })).toThrow('工具结果契约错误');
-    expect(fixture.materialFacts.rawNumbers.size).toBe(0);
+    expect(fixture.materialFacts.sources.size).toBe(0);
+    expect(fixture.materialFacts.facts).toHaveLength(0);
     expect(fixture.materialFacts.materialReadCount).toBe(0);
     expect(fixture.store.materialReads.listByRun(fixture.runId)).toEqual([]);
     expect(fixture.store.evidence.listByTask(fixture.taskId)).toEqual([]);

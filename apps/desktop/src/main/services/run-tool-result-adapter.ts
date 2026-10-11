@@ -9,7 +9,11 @@ import {
 } from '@betterwork/agent-protocol';
 
 import type { AppStore } from '../persistence';
-import { type MaterialFactLedger, recordMaterialFacts } from './material-fact-policy';
+import {
+  type MaterialFactLedger,
+  recordDeterministicBusinessMetrics,
+  recordMaterialFacts,
+} from './material-fact-policy';
 import { parseRunToolResult, type RunToolResult } from './run-tool-result';
 
 type ToolOutput<Kind extends RunToolResult['kind']> =
@@ -22,6 +26,7 @@ type ToolOutput<Kind extends RunToolResult['kind']> =
 export interface RunToolResultContext {
   readonly runId: string;
   readonly taskId: string;
+  readonly toolCallId: string;
   readonly toolName: string | undefined;
   readonly output: unknown;
   readonly materialFacts: MaterialFactLedger;
@@ -54,30 +59,41 @@ export class RunToolResultAdapter {
         this.readOfficeMaterial(context, result.output);
         return;
       case 'knowledge_search':
-        recordMaterialFacts(context.materialFacts, {
-          kind: 'material-read',
-          content: result.output.results.map((item) => item.excerpt).join('\n'),
-        });
         this.assertAuditedKnowledgeEvidence(
           context.runId,
           result.output.results.map((item) => item.evidenceId),
         );
+        for (const item of result.output.results) {
+          if (!item.evidenceId) continue;
+          recordMaterialFacts(context.materialFacts, {
+            kind: 'material-read',
+            sourceId: item.evidenceId,
+            content: item.excerpt,
+          });
+        }
         return;
       case 'read_knowledge':
-        recordMaterialFacts(context.materialFacts, {
-          kind: 'material-read',
-          content: result.output.parts.map((part) => part.text).join('\n'),
-        });
         this.assertAuditedKnowledgeEvidence(
           context.runId,
           result.output.parts.map((part) => part.evidenceId),
         );
+        if (result.output.parts.length === 0) {
+          recordMaterialFacts(context.materialFacts, {
+            kind: 'material-read',
+            sourceId: context.toolCallId,
+            content: '',
+          });
+        }
+        for (const part of result.output.parts) {
+          recordMaterialFacts(context.materialFacts, {
+            kind: 'material-read',
+            sourceId: part.evidenceId,
+            content: part.text,
+          });
+        }
         return;
       case 'analyze_business_metrics':
-        recordMaterialFacts(context.materialFacts, {
-          kind: 'deterministic-result',
-          content: serializeToolOutput(result.output),
-        });
+        recordDeterministicBusinessMetrics(context.materialFacts, result.output);
         return;
       case 'task_write_file':
         if (path.extname(result.output.path).toLowerCase() === '.md')
@@ -99,10 +115,6 @@ export class RunToolResultAdapter {
 
   private readTextFile(context: RunToolResultContext, output: ToolOutput<'read_text_file'>): void {
     if (output.scope === 'run-work-file') return;
-    recordMaterialFacts(context.materialFacts, {
-      kind: 'material-read',
-      content: output.sections?.map((section) => section.content).join('\n') ?? output.content,
-    });
     const { runId } = context;
     const snapshot = this.store.runContextSnapshots.get(runId);
     if (!snapshot) return;
@@ -129,6 +141,11 @@ export class RunToolResultAdapter {
     ) {
       if (output.sections) {
         if (output.sections.length === 0) {
+          recordMaterialFacts(context.materialFacts, {
+            kind: 'material-read',
+            sourceId: context.toolCallId,
+            content: '',
+          });
           this.saveMaterialRead(
             runId,
             material,
@@ -140,6 +157,13 @@ export class RunToolResultAdapter {
           return;
         }
         for (const section of output.sections) {
+          if (section.sourceId) {
+            recordMaterialFacts(context.materialFacts, {
+              kind: 'material-read',
+              sourceId: section.sourceId,
+              content: section.content,
+            });
+          }
           this.saveMaterialRead(
             runId,
             material,
@@ -150,6 +174,13 @@ export class RunToolResultAdapter {
           );
         }
         return;
+      }
+      if (output.sourceId) {
+        recordMaterialFacts(context.materialFacts, {
+          kind: 'material-read',
+          sourceId: output.sourceId,
+          content: output.content,
+        });
       }
       this.saveMaterialRead(
         runId,
@@ -164,7 +195,6 @@ export class RunToolResultAdapter {
   }
 
   private readArtifact(context: RunToolResultContext, output: ToolOutput<'read_artifact'>): void {
-    recordMaterialFacts(context.materialFacts, { kind: 'material-read', content: output.content });
     const { runId } = context;
     const snapshot = this.store.runContextSnapshots.get(runId);
     if (!snapshot) return;
@@ -176,6 +206,13 @@ export class RunToolResultAdapter {
         selection.reference.contentHash === output.contentHash,
     )?.reference;
     if (material) {
+      if (output.sourceId) {
+        recordMaterialFacts(context.materialFacts, {
+          kind: 'material-read',
+          sourceId: output.sourceId,
+          content: output.content,
+        });
+      }
       this.saveMaterialRead(
         runId,
         material,
@@ -192,10 +229,6 @@ export class RunToolResultAdapter {
     context: RunToolResultContext,
     output: ToolOutput<'read_office_material'>,
   ): void {
-    recordMaterialFacts(context.materialFacts, {
-      kind: 'material-read',
-      content: JSON.stringify(output.sections.map((section) => officeFactValues(section.content))),
-    });
     const { runId } = context;
     const snapshot = this.store.runContextSnapshots.get(runId);
     if (!snapshot) return;
@@ -206,6 +239,11 @@ export class RunToolResultAdapter {
     if (!selectedMaterial) return;
     const sections = output.sections;
     if (sections.length === 0) {
+      recordMaterialFacts(context.materialFacts, {
+        kind: 'material-read',
+        sourceId: context.toolCallId,
+        content: '',
+      });
       this.saveMaterialRead(
         runId,
         selectedMaterial,
@@ -217,7 +255,15 @@ export class RunToolResultAdapter {
       return;
     }
     for (const section of sections) {
+      const content = JSON.stringify(officeFactValues(section.content));
       const excerpt = JSON.stringify(section.content).slice(0, 20_000);
+      if (section.sourceId) {
+        recordMaterialFacts(context.materialFacts, {
+          kind: 'material-read',
+          sourceId: section.sourceId,
+          content,
+        });
+      }
       this.saveMaterialRead(
         runId,
         selectedMaterial,

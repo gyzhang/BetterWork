@@ -1,4 +1,8 @@
 import { materialReferenceSchema } from '@betterwork/agent-protocol';
+import {
+  type BusinessMetricsToolOutput,
+  businessMetricsToolOutputSchema,
+} from '@betterwork/tool-runtime';
 import { z } from 'zod';
 
 const readTextFileResultSchema = z.object({
@@ -6,10 +10,19 @@ const readTextFileResultSchema = z.object({
   content: z.string(),
   scope: z.literal('run-work-file').optional(),
   material: materialReferenceSchema.optional(),
+  sourceId: z.string().min(1).optional(),
   format: z.string().optional(),
   contentHash: z.string().optional(),
   truncated: z.boolean().optional(),
-  sections: z.array(z.object({ locator: z.string(), content: z.string() })).optional(),
+  sections: z
+    .array(
+      z.object({
+        locator: z.string(),
+        content: z.string(),
+        sourceId: z.string().min(1).optional(),
+      }),
+    )
+    .optional(),
 });
 
 const readArtifactResultSchema = z.object({
@@ -17,6 +30,7 @@ const readArtifactResultSchema = z.object({
   versionId: z.string(),
   contentHash: z.string(),
   content: z.string(),
+  sourceId: z.string().min(1).optional(),
 });
 
 const readOfficeMaterialResultSchema = z.object({
@@ -24,7 +38,7 @@ const readOfficeMaterialResultSchema = z.object({
   format: z.enum(['pptx', 'xlsx', 'csv']),
   sections: z.array(
     z
-      .object({ locator: z.string(), content: z.unknown() })
+      .object({ locator: z.string(), content: z.unknown(), sourceId: z.string().min(1).optional() })
       .refine((section) => 'content' in section, {
         path: ['content'],
       }),
@@ -70,26 +84,6 @@ const webFetchResultSchema = z.object({
 
 const taskFileWriteResultSchema = z.object({ path: z.string(), contentHash: z.string() });
 
-// 不改变确定性工具的数值语义（极值算术可能产生非有限结果）；序列化仍使用原结果。
-const metricNumberSchema = z.custom<number>((value) => typeof value === 'number');
-const businessMetricsResultSchema = z.object({
-  period: z.string(),
-  metrics: z.array(
-    z.object({
-      metric: z.string(),
-      current: metricNumberSchema,
-      previous: metricNumberSchema.optional(),
-      budget: metricNumberSchema.optional(),
-      change: metricNumberSchema.optional(),
-      changeRate: metricNumberSchema.optional(),
-      budgetVariance: metricNumberSchema.optional(),
-      budgetVarianceRate: metricNumberSchema.optional(),
-      warnings: z.array(z.string()),
-    }),
-  ),
-  message: z.string(),
-});
-
 export type RunToolResult =
   | { kind: 'read_text_file'; output: z.infer<typeof readTextFileResultSchema> }
   | { kind: 'read_artifact'; output: z.infer<typeof readArtifactResultSchema> }
@@ -99,7 +93,7 @@ export type RunToolResult =
   | { kind: 'web_search'; output: z.infer<typeof webSearchResultSchema> }
   | { kind: 'web_fetch'; output: z.infer<typeof webFetchResultSchema> }
   | { kind: 'task_write_file'; output: z.infer<typeof taskFileWriteResultSchema> }
-  | { kind: 'analyze_business_metrics'; output: unknown }
+  | { kind: 'analyze_business_metrics'; output: BusinessMetricsToolOutput }
   | { kind: 'mcp'; toolName: string; output: unknown }
   | { kind: 'no-additional-effects' };
 
@@ -108,6 +102,14 @@ const checkedOutput = <T>(schema: z.ZodType<T>, toolName: string, output: unknow
   if (result.success) return result.data;
   const fields = [...new Set(result.error.issues.map((issue) => issue.path.join('.') || 'output'))];
   throw new Error(`工具结果契约错误：${toolName}；字段 ${fields.join('、')}`);
+};
+
+const assertCheckedOutput: <T>(
+  schema: z.ZodType<T>,
+  toolName: string,
+  output: unknown,
+) => asserts output is T = (schema, toolName, output) => {
+  checkedOutput(schema, toolName, output);
 };
 
 /** 宿主消费契约只解析一次；原始 tool.completed / Provider 消息不被改写。 */
@@ -139,7 +141,7 @@ export const parseRunToolResult = (
     case 'task_write_file':
       return { kind: toolName, output: checkedOutput(taskFileWriteResultSchema, toolName, output) };
     case 'analyze_business_metrics':
-      checkedOutput(businessMetricsResultSchema, toolName, output);
+      assertCheckedOutput(businessMetricsToolOutputSchema, toolName, output);
       return { kind: toolName, output };
     case 'calculator':
     case 'skill_execute':
