@@ -1629,6 +1629,18 @@ describe('registerIpc', () => {
     expect(notFound.opened).toBe(false);
     expect(notFound.error).toContain('不存在');
 
+    const revealNotFound = (await invoke(IpcChannel.RevealFileArtifact, {
+      artifactId: 'nonexistent-artifact',
+    })) as { revealed: boolean; error: string };
+    expect(revealNotFound.revealed).toBe(false);
+    expect(revealNotFound.error).toContain('不存在');
+
+    const thumbnailsNotFound = (await invoke(IpcChannel.GetArtifactThumbnails, {
+      artifactId: 'nonexistent-artifact',
+    })) as { thumbnails: unknown[]; error: string };
+    expect(thumbnailsNotFound.thumbnails).toEqual([]);
+    expect(thumbnailsNotFound.error).toContain('不存在');
+
     const workspace = (await invoke(IpcChannel.GetDefaultWorkspace, {})) as { id: string };
     const task = (await invoke(IpcChannel.CreateTask, {
       workspaceId: workspace.id,
@@ -1648,6 +1660,12 @@ describe('registerIpc', () => {
     expect(wrongType.opened).toBe(false);
     expect(wrongType.error).toContain('不是文件类型');
     expect(mocks.openPath).not.toHaveBeenCalled();
+    const wrongTypeReveal = (await invoke(IpcChannel.RevealFileArtifact, {
+      artifactId: markdownArtifact.id,
+    })) as { revealed: boolean; error: string };
+    expect(wrongTypeReveal.revealed).toBe(false);
+    expect(wrongTypeReveal.error).toContain('不是文件类型');
+    expect(mocks.showItemInFolder).not.toHaveBeenCalled();
   });
 
   const createMemory = async (

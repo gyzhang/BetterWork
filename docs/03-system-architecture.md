@@ -141,6 +141,8 @@ KnowledgeAudit 继续在工具回调事务内登记精确来源，适配器只�
 
 `ArtifactQueryService` 在现有 Application 层组合 Artifact、版本详情与输入关系读模型；文件成果按既有规则验证所选版本归属并读取其文件元数据、Evidence 和输入关系。IPC 保留请求/响应 Zod 校验并委托详情查询，不改变 Repository、版本或来源语义。
 
+`FileArtifactService.resolveArtifactFileVersion` 集中校验文件成果类型并解析当前或明确指定且归属正确的版本，供打开、定位和缩略图入口共用。工作空间副本准备仍由 FileArtifactService 负责，Electron shell 操作与原有错误映射留在 IPC。
+
 ## 4. Agent Core
 
 Agent Core 不允许直接导入：
