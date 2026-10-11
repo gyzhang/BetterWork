@@ -711,6 +711,84 @@ describe('artifact action preload API', () => {
   });
 });
 
+describe('knowledge search and source preload API', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.invoke.mockResolvedValue(null);
+  });
+
+  it('validates and forwards Knowledge search, source open, and remove calls', async () => {
+    const searchResponse = {
+      results: [
+        {
+          chunkId: 'chunk-1',
+          reference: {
+            kind: 'knowledge-revision' as const,
+            knowledgeDocumentId: 'document-1',
+            knowledgeRevisionId: 'revision-1',
+            contentHash: 'content-hash',
+            sourcePath: '/tmp/source.md',
+          },
+          textHash: 'text-hash',
+          title: 'Source',
+          format: 'markdown' as const,
+          locator: '全文',
+          span: { sectionOrdinal: 0, start: 0, end: 6 },
+          excerpt: 'result',
+          excerptHash: 'excerpt-hash',
+          matchedBy: 'keyword' as const,
+        },
+      ],
+      requestedMode: 'keyword' as const,
+      effectiveMode: 'keyword' as const,
+      coverage: { eligibleChunks: 1, indexedChunks: 1 },
+      durationMs: 2,
+    };
+    mocks.invoke.mockImplementation(async (channel) => {
+      if (channel === IpcChannel.SearchKnowledge) return searchResponse;
+      if (channel === IpcChannel.OpenKnowledgeSource) {
+        return { opened: true, error: undefined };
+      }
+      if (channel === IpcChannel.RemoveKnowledgeDocument) return { removed: true };
+      return null;
+    });
+
+    const knowledge = api().knowledge;
+    await expect(knowledge.search({ query: ' revenue ', mode: 'keyword' })).resolves.toEqual(
+      searchResponse,
+    );
+    const opened = await knowledge.openSource({ sourcePath: '/tmp/source.md' });
+    expect(opened).toEqual({ opened: true });
+    expect(Object.hasOwn(opened, 'error')).toBe(false);
+    await expect(knowledge.remove({ id: 'document-1' })).resolves.toEqual({ removed: true });
+
+    expect(mocks.invoke.mock.calls).toEqual([
+      [IpcChannel.SearchKnowledge, { query: 'revenue', mode: 'keyword' }],
+      [IpcChannel.OpenKnowledgeSource, { sourcePath: '/tmp/source.md' }],
+      [IpcChannel.RemoveKnowledgeDocument, { id: 'document-1' }],
+    ]);
+  });
+
+  it('rejects malformed Knowledge requests before IPC and malformed responses after IPC', async () => {
+    const knowledge = api().knowledge;
+    expect(() => knowledge.search({ query: '   ' })).toThrow();
+    expect(() => knowledge.openSource({ sourcePath: '' })).toThrow();
+    expect(() => knowledge.remove({ id: '' })).toThrow();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+
+    mocks.invoke
+      .mockResolvedValueOnce({ results: [{}] })
+      .mockResolvedValueOnce({ opened: true, error: 1 })
+      .mockResolvedValueOnce({ removed: 'yes' });
+    await Promise.all([
+      expect(knowledge.search({ query: 'revenue' })).rejects.toThrow(),
+      expect(knowledge.openSource({ sourcePath: '/tmp/source.md' })).rejects.toThrow(),
+      expect(knowledge.remove({ id: 'document-1' })).rejects.toThrow(),
+    ]);
+    expect(mocks.invoke).toHaveBeenCalledTimes(3);
+  });
+});
+
 describe('model preload API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
