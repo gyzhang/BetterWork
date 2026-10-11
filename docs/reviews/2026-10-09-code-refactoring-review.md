@@ -723,4 +723,4 @@ E13 完成 R10 的来源事实读取切片；docs:check 154 项、原基点巡�
 
 应用启动、窗口标题栏、主题 IPC 和 Skill Python 环境正式路径均收窄为 macOS/arm64；非支持宿主或解释器会明确失败。持久化 `TargetPlatform` Schema 与迁移保持原样，历史非 macOS 环境记录仍可读取，但验证会标记为 `invalid`，执行路径拒绝使用。没有跨平台 runner、兼容开关或授权/索引语义变化。
 
-functional 定向 3 文件 / 69 项、heavy 定向 1 文件 / 37 项、typecheck、改动文件 ESLint/Prettier 与 `docs:check` 1 文件 / 154 项已通过；最新源 PR Gate 与合并事实待补。
+functional 定向 3 文件 / 69 项、heavy 定向 1 文件 / 37 项、typecheck、改动文件 ESLint/Prettier 与 `docs:check` 1 文件 / 154 项已通过。源 `81eda8279c46fbc35ae824bf64a270fa52ae363e` 的 [Actions 38112908854](https://github.com/gyzhang/BetterWork/actions/runs/38112908854) 在 macos-26-arm64 上通过 PR Gate，Full verify 按仓库策略跳过。[PR #77](https://github.com/gyzhang/BetterWork/pull/77) 已 squash 合并为 main `96d9d4da7ab46a260c943e82be50fd3a98a94d49`；远端任务分支已删除，本地 worktree 保留。
