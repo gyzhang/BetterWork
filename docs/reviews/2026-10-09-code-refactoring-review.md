@@ -1021,10 +1021,12 @@ App heavy 51/51；WorkMessageList functional 6/6。typecheck、两份测试文�
 
 当前 `origin/main` 上原用例单独 1/1、App heavy 51/51、RunService + App heavy 139/139 通过；`use-composer-prompt` functional 2/2 通过。另以 PR #136 前后的夹具版本各跑同一组合均为 139/139，因此不把历史 P1 红灯归因于本次 Task/Run 默认值整理。R13 的异步草稿基线已由 `2e46e77` 的代码与 Hook 回归测试解释并修复，P2 夹具默认值也已显式化；按建议保留整树业务旅程并完成 R13。该结论不声称 PR #136 修复了 P1，也未删减终态、撤权、恢复或来源断言。完整 `npm run verify`、UI 和真实模型未运行。
 
-## 82. R09 子卡：Runs Preload 请求与响应边界校验
+## 82. R09 子卡：Runs Preload 请求与响应边界校验（已合并）
 
 2026-10-11 20:39 CST，R13 合并后在保留的任务 worktree 从最新 `origin/main` `1eadc64062d6879b112eae8fe5e9dd1f3de7ca56` 建立 `codex/r09-ipc-contract-map`。为 Runs Preload 的 `start`、`cancel`、`list`、`listEvents` 接入现有共享请求与响应 Schema；畸形请求在发 IPC 前拒绝，主进程返回的畸形结果在 Preload 解析时拒绝。事件订阅继续使用原有 Event Schema。
 
 `list()` 未提供筛选条件时仍以 `undefined` 作为 invoke 参数；channel 名、参数形状及 API 类型保持。没有改 Main handler、共享协议定义、错误语义或有效调用结果。R09 的其他 API 域、全局 channel 映射和旧 Preload 调用仍未完成，不据此标记 R09 整体收口。
 
 Preload 定向测试 1 文件 / 9 项、`docs:check` 154/154 通过；typecheck、改动文件 ESLint/Prettier 与差异空白检查通过。回读文档时误触发 `npm run verify`，发现后已停止；没有可用的完整验证结果，不计为证据。UI、真实模型及安装态验收未运行。
+
+源提交 `880b3372a22d5bc63f56994d3598d981c1794e52` 的 [PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/38140254054) 成功；Quick code check 通过，Full verify 按规则跳过。[PR #138](https://github.com/gyzhang/BetterWork/pull/138) 已 squash 合入 main，合并提交 `1ae34152bfb93381d6284519b44aac711dc9c5e0`；本地和远端任务分支已删除，任务 worktree 保留。R09 其他 API 域和 channel 映射继续待后续切片。
