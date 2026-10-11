@@ -1,38 +1,34 @@
 {
-  "savedAt": "2026-10-11 11:38",
+  "savedAt": "2026-10-11 15:29",
   "readings": {
     "判据总数": 154,
     "现行文档点名次数": 14,
     "被点过名的判据": 10,
-    "测试文件": 276,
-    "用例": 2315,
+    "测试文件": 330,
+    "用例": 2894,
     "结构护栏": 154,
     "例外登记": 203,
     "eslint配置块": 6,
     "规则文件": 7,
-    "产品源码行": 99694,
+    "产品源码行": 100057,
     "巡检窗口天数": 14
   },
   "ruleSnapshot": {
     "version": 1,
     "entries": {
-      "eslint.config.mjs": "a0d9062f7c49db5ba0592ec1acac82cb14722ae599ead4e6a0d464fe8426057b",
-      "standards/coding-standard.test.ts › PAGE_SHAPE_EXCEPTIONS": "d8e7b4ae54dec1a6906122242f9b6999924304b28d02372642b737944392e240",
-      "standards/coding-standard.test.ts › INLINE_STYLE_OUTLETS": "8d4fb7ff18a112c2f94da9130aec51ccb654c967012dbe01d0f1af7c36e23ff7",
-      "standards/coding-standard.test.ts › SURFACE_SHELL_OWNERS": "4c1f92c824bf27c4c52f033beaa3a42456231dfd67d74df146a944fddabfe794",
-      "standards/coding-standard.test.ts › FIXED_MAX_WIDTH_OWNERS": "9098081ab3bdee20b658e43471ae81fe45ff64d6f803e7cd51b058dade8f7113",
+      "eslint.config.mjs": "56ee28db983afa6bf0ee34312c4f6e15d4b87bf684630138d8f5ebcd3d151127",
       "standards/coding-standard.test.ts › EXEMPTION_SCAN_ROOTS": "03c2441dc50f9962a86cc485c21d86ac5e190f0336eafc3860112995fd8538a0",
       "standards/coding-standard.test.ts › EXEMPTION_SCAN_ROOT_FILES": "bf90cdf0c7cc12945704747a63e36bbd8abaa07163c57152bfba307002182821",
       "standards/coding-standard.test.ts › 界面 Token 纪律 › 小于 12px 的字号只允许出现在豁免徽标 › exemptions": "3d91de776876a833f739d926f2df22411f9d10e95ce58f6c48a3aa26a9795653",
       "standards/coding-standard.test.ts › OVERLAY_SURFACES": "8383598797ad382beec35852c4b48e30a10d7b106699813411f5f3c0ae91d228",
       "standards/coding-standard.test.ts › 浮层基座纪律 › 模态语义只有一处实现，页面不得再自写背板与 Esc › owners": "d96c493c7bbc6058e99bb69725f345f35475fc834bfa60ba7002ce9509047e59",
-      "standards/coding-standard.test.ts › CONTROL_EXEMPTIONS": "d4723b7e664382c807d9623e5e085aa550da15df7b1d0f440fc322373ad66321",
       "standards/coding-standard.test.ts › CHECKBOX_ROW_LABEL_SELECTORS": "c173d4a5b7367515ca2a52fb04276d2546c75cf6399bc4fa7b4d6864502f7773",
       "standards/coding-standard.test.ts › 卡片外壳基座纪律 › 基座的槽位类不得由页面手写 › owners": "793a0d994878f5350e3ba55e5e3aa6202aa6fd3f0972e7630e03d1200420be1c",
       "standards/coding-standard.test.ts › 目录条目卡片纪律 › HAND_BUILT_CARD_FILES": "ef942a8e763b1e8c7f51d6b72fd390f897eabff6f0497fe6ae9689f47f4ea5f9",
       "standards/coding-standard.test.ts › 目录条目卡片纪律 › 网格卡片只有配对件一个出口，不许页面再手摆 Card 的六槽 › owners": "c00ca3e6cf61fd2d34a78ae45b73c4658673eda6b6dbf2a8e7423fe49eb2af66",
       "standards/coding-standard.test.ts › 输入控件基座纪律 › INPUT_APPEARANCE_EXCEPTIONS": "1ffacc053c927a0a0bbb1f5e6f72d2a4199fb98c12c6d9a57de64cd8c697ddae",
       "standards/coding-standard.test.ts › 输入控件基座纪律 › 页面不得替输入控件发几何与外观 › exemptions": "1d87fe5e3046599ea7b8dea9b157ae7d47155cceececfd9398baf3f748607d29",
+      "standards/coding-standard.test.ts › CONTROL_EXEMPTIONS": "d4723b7e664382c807d9623e5e085aa550da15df7b1d0f440fc322373ad66321",
       "standards/coding-standard.test.ts › 界面观感基线 › 焦点环的出口只有登记的那几处 › RING_OUTLETS": "33cd8cdb192513badceb5447ba58750ef547ede4951d10df2b5d42ad08fbe2f0",
       "standards/coding-standard.test.ts › 界面观感基线 › 焦点环的出口只有登记的那几处 › outlets": "f1c0af6fac6d5aca5275305ccc86115b165721639abb43fd4055e5229f636aeb",
       "standards/coding-standard.test.ts › 界面观感基线 › 关掉焦点环必须指名搬到哪 › exemptions": "1d87fe5e3046599ea7b8dea9b157ae7d47155cceececfd9398baf3f748607d29",
@@ -57,6 +53,10 @@
       "standards/coding-standard.test.ts › 反馈通道纪律 › 内联错误必须走 InlineError 基座 › staleExemptions": "300bb41342462dc019bdd4767a2cc6e4f195070f60a2285dfae1154ed2914214",
       "standards/coding-standard.test.ts › 状态呈现纪律 › 语义状态色只能由四个出口给，其余逐条登记理由 › exceptions": "0e3575bb884f9b21a07510a065e449ad6a6b7348043ff4224d27ae151dc5a4b3",
       "standards/coding-standard.test.ts › 状态呈现纪律 › 语义状态色只能由四个出口给，其余逐条登记理由 › hitExceptions": "924fc4947bf69b908d55caa74b68db624600d231cc9f2f79ee187a3eaf916cc0",
+      "standards/coding-standard.test.ts › PAGE_SHAPE_EXCEPTIONS": "d8e7b4ae54dec1a6906122242f9b6999924304b28d02372642b737944392e240",
+      "standards/coding-standard.test.ts › INLINE_STYLE_OUTLETS": "8d4fb7ff18a112c2f94da9130aec51ccb654c967012dbe01d0f1af7c36e23ff7",
+      "standards/coding-standard.test.ts › SURFACE_SHELL_OWNERS": "4c1f92c824bf27c4c52f033beaa3a42456231dfd67d74df146a944fddabfe794",
+      "standards/coding-standard.test.ts › FIXED_MAX_WIDTH_OWNERS": "9098081ab3bdee20b658e43471ae81fe45ff64d6f803e7cd51b058dade8f7113",
       "standards/coding-standard.test.ts › TYPE_LADDER_EXEMPTIONS": "319d2d8fc6123826fb0c846d66615e29bad4755d4a44a9f17a929643bb1e4d8e",
       "standards/coding-standard.test.ts › NON_MARK_GEOMETRY": "2936063ff676fc11c0d38432985313d9dbff8df55409f3e016673e1211649ff7",
       "standards/coding-standard.test.ts › SURFACE_PADDING": "ad087abc93d0f7ed61fee5bb58ad8dde867ad29decf76f1683599fe6ecfe8196",
@@ -65,5 +65,6 @@
       "standards/coding-standard.test.ts › 排版与图标档位纪律 › 行高只取四档 › exemptions": "1d87fe5e3046599ea7b8dea9b157ae7d47155cceececfd9398baf3f748607d29",
       "standards/coding-standard.test.ts › 新增 UI 的实际基座归属 › 新命名表面不能自造卡片或徽标外壳 › owners": "92bb0f10115976a86172f280c87cb4bf569ba95be9c674b5b313a9f1bca1c01b"
     }
-  }
+  },
+  "reviewReason": "Reviewed TC01 commit 3e28f29: the only ESLint change is a test-only override for non-Error rejection cases; production rule strength is unchanged."
 }
