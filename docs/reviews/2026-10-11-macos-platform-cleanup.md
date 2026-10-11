@@ -17,7 +17,8 @@
 - functional 定向测试：3 个文件、69 项通过，覆盖平台谓词、Skill 执行环境绑定与 IPC 协议。
 - heavy 定向测试：`skill-dependency-service.test.ts` 1 个文件、37 项通过，包含不支持解释器拒绝和历史 Windows 环境记录兼容回归。
 - `npm run typecheck`、改动文件 ESLint 与 Prettier 检查通过。
-- `docs:check` 1 个文件、154 项通过；最新源 PR Gate 与合并证据在任务收口后补记。
+- `docs:check` 1 个文件、154 项通过；源提交 `81eda8279c46fbc35ae824bf64a270fa52ae363e` 的 [Actions 38112908854](https://github.com/gyzhang/BetterWork/actions/runs/38112908854) 在 macos-26-arm64 上通过 PR Gate。Quick code check 的 lint、format:check、typecheck、docs:check 与受影响 functional/heavy 测试均成功，Full verify 按仓库策略跳过。
+- [PR #77](https://github.com/gyzhang/BetterWork/pull/77) 已 squash 合并为 main `96d9d4da7ab46a260c943e82be50fd3a98a94d49`；远端任务分支已删除，保留本地 worktree 供后续串行工作。
 
 ## 明确不变
 
