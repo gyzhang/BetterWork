@@ -34,6 +34,7 @@ import {
   dependencyPlanSchema,
   discussionCheckpointMutationResultSchema,
   discussionCheckpointSchema,
+  evidenceSummarySchema,
   executeMissedScheduleRequestSchema,
   executeScheduleNowRequestSchema,
   expertDetailSchema,
@@ -79,6 +80,7 @@ import {
   knowledgeTextPageSchema,
   listDependencyOptionsRequestSchema,
   listDiscussionCheckpointsRequestSchema,
+  listEvidenceRequestSchema,
   listExpertsRequestSchema,
   listKnowledgeJobsRequestSchema,
   listKnowledgeRequestSchema,
@@ -217,6 +219,13 @@ function invokeValidated<Schema extends ZodTypeAny>(
   return ipcRenderer.invoke(channel, input).then((raw: unknown) => schema.parse(raw));
 }
 
+const evidenceListResponseSchema = evidenceSummarySchema.array().transform((summaries) =>
+  summaries.map(({ knowledgeSource, ...summary }) => ({
+    ...summary,
+    ...(knowledgeSource === undefined ? {} : { knowledgeSource }),
+  })),
+);
+
 const api: BetterWorkDesktopApi = {
   runs: {
     start: (input) =>
@@ -331,7 +340,12 @@ const api: BetterWorkDesktopApi = {
       ),
   },
   evidence: {
-    list: (input) => ipcRenderer.invoke(IpcChannel.ListEvidence, input),
+    list: (input) =>
+      invokeValidated(
+        IpcChannel.ListEvidence,
+        listEvidenceRequestSchema.parse(input),
+        evidenceListResponseSchema,
+      ),
   },
   artifacts: {
     list: (input) => ipcRenderer.invoke(IpcChannel.ListArtifacts, input),
