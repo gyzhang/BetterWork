@@ -437,7 +437,6 @@ describe('createStoreBriefReader source availability', () => {
       origin: 'user-edit',
       title: 'Test Artifact',
       content: 'Artifact content',
-      evidence: [],
     });
     createMemory(store, {
       scope: workspaceScope(workspace.id),

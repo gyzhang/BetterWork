@@ -15,6 +15,7 @@ const settingsOf = (overrides: Partial<RunSettings> = {}): RunSettings => ({
   maxSkillToolRounds: DEFAULT_MAX_SKILL_TOOL_ROUNDS,
   enableBuiltinSkills: DEFAULT_ENABLE_BUILTIN_SKILLS,
   enableBuiltinExperts: DEFAULT_ENABLE_BUILTIN_EXPERTS,
+  updatedAt: 1,
   ...overrides,
 });
 

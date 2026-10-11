@@ -40,7 +40,7 @@ describe('reportAction delivers the failure message to the onError callback', ()
     reportAction(Promise.reject(new Error('磁盘已满')), onError);
     // Allow microtasks to flush
     await new Promise((resolve) => {
-      queueMicrotask(resolve);
+      queueMicrotask(() => resolve(undefined));
     });
     expect(onError).toHaveBeenCalledExactlyOnceWith('磁盘已满');
   });
@@ -49,7 +49,7 @@ describe('reportAction delivers the failure message to the onError callback', ()
     const onError = vi.fn();
     reportAction(Promise.reject('oops'), onError);
     await new Promise((resolve) => {
-      queueMicrotask(resolve);
+      queueMicrotask(() => resolve(undefined));
     });
     expect(onError).toHaveBeenCalledExactlyOnceWith('操作失败，请重试。');
   });
@@ -58,7 +58,7 @@ describe('reportAction delivers the failure message to the onError callback', ()
     const onError = vi.fn();
     reportAction(Promise.reject(null), onError, '自定义失败消息');
     await new Promise((resolve) => {
-      queueMicrotask(resolve);
+      queueMicrotask(() => resolve(undefined));
     });
     expect(onError).toHaveBeenCalledExactlyOnceWith('自定义失败消息');
   });
@@ -67,7 +67,7 @@ describe('reportAction delivers the failure message to the onError callback', ()
     const onError = vi.fn();
     reportAction(Promise.resolve('ok'), onError);
     await new Promise((resolve) => {
-      queueMicrotask(resolve);
+      queueMicrotask(() => resolve(undefined));
     });
     expect(onError).not.toHaveBeenCalled();
   });
@@ -79,7 +79,7 @@ describe('trackAction logs failures to the console without disturbing the user',
     const error = new Error('sync failed');
     trackAction(Promise.reject(error), 'refreshList');
     await new Promise((resolve) => {
-      queueMicrotask(resolve);
+      queueMicrotask(() => resolve(undefined));
     });
     expect(spy).toHaveBeenCalledExactlyOnceWith('refreshList failed', error);
   });
@@ -88,7 +88,7 @@ describe('trackAction logs failures to the console without disturbing the user',
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     trackAction(Promise.resolve('ok'), 'refreshList');
     await new Promise((resolve) => {
-      queueMicrotask(resolve);
+      queueMicrotask(() => resolve(undefined));
     });
     expect(spy).not.toHaveBeenCalled();
   });

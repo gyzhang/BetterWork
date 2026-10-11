@@ -1,6 +1,6 @@
 import type {
   AgentMessage,
-  ArtifactSummary,
+  MarkdownArtifactSummary,
   RunSummary,
   TaskContinuityBrief,
 } from '@betterwork/agent-protocol';
@@ -43,7 +43,9 @@ const makeRequirement = (
     : { sources: [{ runId: 'run-1', promptHash: 'aa'.repeat(32) }] }),
 });
 
-const makeArtifact = (overrides: Partial<ArtifactSummary> = {}): ArtifactSummary => ({
+const makeArtifact = (
+  overrides: Partial<MarkdownArtifactSummary> = {},
+): MarkdownArtifactSummary => ({
   id: 'art-1',
   workspaceId: 'ws-1',
   taskId: 'task-1',
@@ -369,7 +371,14 @@ describe('createTaskContinuityContextPlan', () => {
         brief: makeBrief(),
         recentRuns: [],
         latestRun: run,
-        latestRunEvent: { type: 'run.failed', runId: run.id, error: 'boom' },
+        latestRunEvent: {
+          type: 'run.failed',
+          runId: run.id,
+          error: 'boom',
+          id: 'evt-1',
+          sequence: 1,
+          createdAt: 1000,
+        },
         artifacts: [],
       });
       const factsMessage = plan.messages.find((message) =>
@@ -385,7 +394,13 @@ describe('createTaskContinuityContextPlan', () => {
         brief: makeBrief(),
         recentRuns: [],
         latestRun: run,
-        latestRunEvent: { type: 'run.cancelled', runId: run.id },
+        latestRunEvent: {
+          type: 'run.cancelled',
+          runId: run.id,
+          id: 'evt-1',
+          sequence: 1,
+          createdAt: 1000,
+        },
         artifacts: [],
       });
       const factsMessage = plan.messages.find((message) =>
@@ -400,7 +415,14 @@ describe('createTaskContinuityContextPlan', () => {
         brief: makeBrief(),
         recentRuns: [],
         latestRun: run,
-        latestRunEvent: { type: 'run.completed', runId: run.id },
+        latestRunEvent: {
+          type: 'run.completed',
+          runId: run.id,
+          id: 'evt-1',
+          sequence: 1,
+          createdAt: 1000,
+          finalContent: 'done',
+        },
         artifacts: [],
       });
       const factsMessage = plan.messages.find((message) =>

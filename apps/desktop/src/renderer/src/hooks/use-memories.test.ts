@@ -8,18 +8,29 @@ import { useMemories } from './use-memories';
 
 const memoryOf = (id: string): MemoryViewItem => ({
   id,
-  operationId: `op-${id}`,
-  title: `记忆 ${id}`,
-  kind: 'goal',
-  status: 'active',
+  revisionId: `rev-${id}`,
   revision: 1,
+  scope: { kind: 'workspace', workspaceId: 'ws-1' },
+  kind: 'semantic',
   content: `内容 ${id}`,
   sourceType: 'conversation',
-  sourceRef: `source-${id}`,
-  workspaceId: 'ws-1',
-  expertId: undefined,
+  confidence: 0.8,
+  status: 'confirmed',
+  contentHash: 'a'.repeat(64),
   createdAt: 1,
   updatedAt: 1,
+  facet: 'fact',
+  normalizedHash: 'b'.repeat(64),
+  recallPolicy: 'relevant',
+  provenance: {
+    schemaVersion: 1,
+    verification: 'legacy-unverified',
+    sourceType: 'conversation',
+  },
+  effectiveStatus: 'confirmed',
+  sourceAvailability: 'available',
+  requiresMaterialSelection: false,
+  conflicts: [],
 });
 
 const listMemories = vi.fn<() => Promise<unknown>>();
@@ -152,11 +163,10 @@ describe('useMemories', () => {
     await act(async () => {
       outcome = await result.current.create({
         operationId: 'op-new',
-        title: '新记忆',
-        kind: 'goal',
+        facet: 'fact',
         content: '内容',
-        sourceType: 'conversation',
-        sourceRef: 'src',
+        scope: { kind: 'workspace', workspaceId: 'ws-1' },
+        asUserInstruction: false,
       });
     });
 
@@ -186,10 +196,10 @@ describe('useMemories', () => {
 
     await act(async () => {
       await result.current.update({
+        operationId: 'op-1',
         id: 'm-1',
         expectedRevision: 1,
-        title: '修改后',
-        content: '新内容',
+        patch: { content: '新内容' },
       });
     });
 
@@ -221,10 +231,10 @@ describe('useMemories', () => {
 
     await act(async () => {
       await result.current.update({
+        operationId: 'op-2',
         id: 'm-1',
         expectedRevision: 1,
-        title: '修改',
-        content: '内容',
+        patch: { content: '内容' },
       });
     });
     expect(result.current.revisionConflict).toBeDefined();

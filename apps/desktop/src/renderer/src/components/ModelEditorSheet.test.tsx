@@ -16,6 +16,7 @@ const formOf = (overrides: Partial<ModelProfileInput> = {}): ModelProfileInput =
   maxContextTokens: 32768,
   maxOutputTokens: 4096,
   temperature: 0.3,
+  enabled: true,
   ...overrides,
 });
 

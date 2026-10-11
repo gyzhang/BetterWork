@@ -15,7 +15,6 @@ const groupOf = (workspaceId: string, name: string): WorkspaceTaskGroup => ({
     rootPath: `/tmp/${workspaceId}`,
     iconId: 'folder',
     accentId: 'moss',
-    hidden: false,
     createdAt: 1,
     updatedAt: 1,
   },

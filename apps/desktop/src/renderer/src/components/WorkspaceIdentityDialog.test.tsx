@@ -21,7 +21,6 @@ const workspaceOf = (overrides: Partial<WorkspaceSummary> = {}): WorkspaceSummar
   rootPath: '/tmp/test-workspace',
   iconId: 'folder',
   accentId: 'moss',
-  hidden: false,
   createdAt: 1,
   updatedAt: 1,
   ...overrides,

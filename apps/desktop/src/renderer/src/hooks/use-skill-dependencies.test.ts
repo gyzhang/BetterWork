@@ -29,13 +29,18 @@ const skillOf = (id: string): SkillDetail => ({
     createdAt: 1,
   },
   runtimeProfile: {
+    id: 'rp-1',
+    skillId: id,
+    profileHash: 'hash',
     profile: {
+      commands: [],
+      environmentRequirements: [],
       pythonRequirement: undefined,
       dependencyBundle: undefined,
       dependencyLockId: undefined,
       toolchainRequirements: [],
     },
-    finding: { kind: 'none' },
+    createdAt: 1,
   },
 });
 
@@ -43,16 +48,15 @@ const optionsOf = (): DependencyOptions => ({
   distributions: [
     {
       id: 'dist-1',
-      name: 'Python 3.12',
       version: '3.12.0',
-      platform: { os: 'darwin', arch: 'arm64' },
-      active: true,
-      path: '/opt/python',
-      createdAt: 1,
-      updatedAt: 1,
+      platform: { os: 'darwin', arch: 'arm64', abi: 'cp312' },
+      license: 'PSF',
+      installed: true,
     },
   ],
+  lockIds: [],
   snapshots: [],
+  environments: [],
 });
 
 const listOptions = vi.fn<() => Promise<DependencyOptions>>();

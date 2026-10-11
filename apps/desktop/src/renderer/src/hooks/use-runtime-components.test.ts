@@ -8,16 +8,17 @@ import { useRuntimeComponents } from './use-runtime-components';
 
 const distributionOf = (
   id: string,
-  platform: { os: string; arch: string } = { os: 'darwin', arch: 'arm64' },
+  platform: { os: 'darwin' | 'win32' | 'linux'; arch: 'arm64' | 'x64'; abi: string } = {
+    os: 'darwin',
+    arch: 'arm64',
+    abi: 'cp312',
+  },
 ) => ({
   id,
-  name: `runtime-${id}`,
   version: '3.12.0',
   platform,
-  active: true,
-  path: `/opt/runtime/${id}`,
-  createdAt: 1,
-  updatedAt: 1,
+  license: 'PSF',
+  installed: true,
 });
 
 const listOptions = vi.fn<() => Promise<DependencyOptions>>();
@@ -40,11 +41,13 @@ describe('useRuntimeComponents', () => {
   it('挂载时拉取并按平台过滤：只留 darwin/arm64', async () => {
     install({
       distributions: [
-        distributionOf('mac-arm', { os: 'darwin', arch: 'arm64' }),
-        distributionOf('linux-x64', { os: 'linux', arch: 'x64' }),
-        distributionOf('mac-x64', { os: 'darwin', arch: 'x64' }),
+        distributionOf('mac-arm', { os: 'darwin', arch: 'arm64', abi: 'cp312' }),
+        distributionOf('linux-x64', { os: 'linux', arch: 'x64', abi: 'cp312' }),
+        distributionOf('mac-x64', { os: 'darwin', arch: 'x64', abi: 'cp312' }),
       ],
+      lockIds: [],
       snapshots: [],
+      environments: [],
     });
 
     const { result } = renderHook(() => useRuntimeComponents());
@@ -72,7 +75,7 @@ describe('useRuntimeComponents', () => {
   });
 
   it('refresh 重新拉取', async () => {
-    install({ distributions: [], snapshots: [] });
+    install({ distributions: [], lockIds: [], snapshots: [], environments: [] });
 
     const { result } = renderHook(() => useRuntimeComponents());
     await waitFor(() => expect(result.current.loading).toBe(false));

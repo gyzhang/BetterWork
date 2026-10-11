@@ -526,6 +526,8 @@ describe('SkillExecutionRepository verified outputs', () => {
         relativePath: 'late.md',
         fileHash: 'b'.repeat(64),
         fileSize: 512,
+        reportHash: 'c'.repeat(64),
+        validation: { structure: 'passed', visual: 'passed', manualEdit: 'passed' },
       },
     ];
     store.executions.saveVerifiedOutputs('exec-terminal-verify', outputs);

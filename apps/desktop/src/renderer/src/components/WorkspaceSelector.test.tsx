@@ -12,7 +12,6 @@ const workspaceOf = (id: string, name: string, rootPath = `/tmp/${id}`): Workspa
   rootPath,
   iconId: 'folder',
   accentId: 'moss',
-  hidden: false,
   createdAt: 1,
   updatedAt: 1,
 });

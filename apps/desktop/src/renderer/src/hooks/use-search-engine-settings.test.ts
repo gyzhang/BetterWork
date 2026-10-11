@@ -8,9 +8,11 @@ import { useSearchEngineSettings } from './use-search-engine-settings';
 
 const engineOf = (overrides: Partial<SearchEngineSummary> = {}): SearchEngineSummary => ({
   provider: 'baidu_qianfan',
+  apiKeyConfigured: true,
   enabled: true,
-  configured: true,
   webTopK: 10,
+  connectionStatus: 'connected',
+  updatedAt: 1,
   ...overrides,
 });
 

@@ -26,7 +26,7 @@ describe('useTransientToast', () => {
   it('dismissToast 清除浮层', () => {
     const { result } = renderHook(() => useTransientToast());
 
-    act(() => result.current.showToast('info', '提示'));
+    act(() => result.current.showToast('success', '提示'));
     expect(result.current.toast).toBeDefined();
 
     act(() => result.current.dismissToast());
