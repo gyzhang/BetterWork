@@ -272,6 +272,107 @@ function invokeValidated<Schema extends ZodTypeAny>(
   return ipcRenderer.invoke(channel, input).then((raw: unknown) => schema.parse(raw));
 }
 
+const runListRequestSchema = listRunsRequestSchema.optional();
+const runSettingsRequestSchema = z.object({}).strict();
+const runListResponseSchema = runSummarySchema.array();
+const runEventsResponseSchema = agentRuntimeEventSchema.array();
+
+interface RunInvokeContractByChannel {
+  [IpcChannel.StartRun]: {
+    channel: typeof IpcChannel.StartRun;
+    request: typeof startRunRequestSchema;
+    response: typeof startRunResultSchema;
+  };
+  [IpcChannel.CancelRun]: {
+    channel: typeof IpcChannel.CancelRun;
+    request: typeof cancelRunRequestSchema;
+    response: typeof cancelledResultSchema;
+  };
+  [IpcChannel.ListRuns]: {
+    channel: typeof IpcChannel.ListRuns;
+    request: typeof runListRequestSchema;
+    response: typeof runListResponseSchema;
+  };
+  [IpcChannel.ListRunEvents]: {
+    channel: typeof IpcChannel.ListRunEvents;
+    request: typeof listRunEventsRequestSchema;
+    response: typeof runEventsResponseSchema;
+  };
+  [IpcChannel.GetRunSettings]: {
+    channel: typeof IpcChannel.GetRunSettings;
+    request: typeof runSettingsRequestSchema;
+    response: typeof runSettingsSchema;
+  };
+  [IpcChannel.SaveRunSettings]: {
+    channel: typeof IpcChannel.SaveRunSettings;
+    request: typeof saveRunSettingsRequestSchema;
+    response: typeof runSettingsSchema;
+  };
+}
+
+type RunInvokeMethodByChannel = {
+  [Channel in keyof RunInvokeContractByChannel]: (
+    input: z.input<RunInvokeContractByChannel[Channel]['request']>,
+  ) => Promise<z.output<RunInvokeContractByChannel[Channel]['response']>>;
+};
+
+const runInvokeContracts: RunInvokeContractByChannel = {
+  [IpcChannel.StartRun]: {
+    channel: IpcChannel.StartRun,
+    request: startRunRequestSchema,
+    response: startRunResultSchema,
+  },
+  [IpcChannel.CancelRun]: {
+    channel: IpcChannel.CancelRun,
+    request: cancelRunRequestSchema,
+    response: cancelledResultSchema,
+  },
+  [IpcChannel.ListRuns]: {
+    channel: IpcChannel.ListRuns,
+    request: runListRequestSchema,
+    response: runListResponseSchema,
+  },
+  [IpcChannel.ListRunEvents]: {
+    channel: IpcChannel.ListRunEvents,
+    request: listRunEventsRequestSchema,
+    response: runEventsResponseSchema,
+  },
+  [IpcChannel.GetRunSettings]: {
+    channel: IpcChannel.GetRunSettings,
+    request: runSettingsRequestSchema,
+    response: runSettingsSchema,
+  },
+  [IpcChannel.SaveRunSettings]: {
+    channel: IpcChannel.SaveRunSettings,
+    request: saveRunSettingsRequestSchema,
+    response: runSettingsSchema,
+  },
+};
+
+function invokeRunContract<Request extends ZodTypeAny, Response extends ZodTypeAny>(
+  contract: { channel: string; request: Request; response: Response },
+  input: z.input<Request>,
+): Promise<z.output<Response>> {
+  return ipcRenderer
+    .invoke(contract.channel, contract.request.parse(input))
+    .then((raw: unknown) => contract.response.parse(raw));
+}
+
+const runInvokeMethods: RunInvokeMethodByChannel = {
+  [IpcChannel.StartRun]: (input) =>
+    invokeRunContract(runInvokeContracts[IpcChannel.StartRun], input),
+  [IpcChannel.CancelRun]: (input) =>
+    invokeRunContract(runInvokeContracts[IpcChannel.CancelRun], input),
+  [IpcChannel.ListRuns]: (input) =>
+    invokeRunContract(runInvokeContracts[IpcChannel.ListRuns], input),
+  [IpcChannel.ListRunEvents]: (input) =>
+    invokeRunContract(runInvokeContracts[IpcChannel.ListRunEvents], input),
+  [IpcChannel.GetRunSettings]: (input) =>
+    invokeRunContract(runInvokeContracts[IpcChannel.GetRunSettings], input),
+  [IpcChannel.SaveRunSettings]: (input) =>
+    invokeRunContract(runInvokeContracts[IpcChannel.SaveRunSettings], input),
+};
+
 const evidenceListResponseSchema = evidenceSummarySchema
   .array()
   .transform((summaries) => summaries.map(normalizeEvidenceSummary));
@@ -433,30 +534,10 @@ const searchEngineListResponseSchema = searchEngineSummarySchema.array().transfo
 
 const api: BetterWorkDesktopApi = {
   runs: {
-    start: (input) =>
-      invokeValidated(
-        IpcChannel.StartRun,
-        startRunRequestSchema.parse(input),
-        startRunResultSchema,
-      ),
-    cancel: (input) =>
-      invokeValidated(
-        IpcChannel.CancelRun,
-        cancelRunRequestSchema.parse(input),
-        cancelledResultSchema,
-      ),
-    list: (input) =>
-      invokeValidated(
-        IpcChannel.ListRuns,
-        input === undefined ? undefined : listRunsRequestSchema.parse(input),
-        runSummarySchema.array(),
-      ),
-    listEvents: (input) =>
-      invokeValidated(
-        IpcChannel.ListRunEvents,
-        listRunEventsRequestSchema.parse(input),
-        agentRuntimeEventSchema.array(),
-      ),
+    start: (input) => runInvokeMethods[IpcChannel.StartRun](input),
+    cancel: (input) => runInvokeMethods[IpcChannel.CancelRun](input),
+    list: (input) => runInvokeMethods[IpcChannel.ListRuns](input),
+    listEvents: (input) => runInvokeMethods[IpcChannel.ListRunEvents](input),
     onEvent(listener) {
       const handler = (_event: Electron.IpcRendererEvent, raw: unknown): void => {
         listener(agentRuntimeEventSchema.parse(raw));
@@ -466,13 +547,8 @@ const api: BetterWorkDesktopApi = {
     },
   },
   runSettings: {
-    get: () => invokeValidated(IpcChannel.GetRunSettings, {}, runSettingsSchema),
-    save: (input) =>
-      invokeValidated(
-        IpcChannel.SaveRunSettings,
-        saveRunSettingsRequestSchema.parse(input),
-        runSettingsSchema,
-      ),
+    get: () => runInvokeMethods[IpcChannel.GetRunSettings]({}),
+    save: (input) => runInvokeMethods[IpcChannel.SaveRunSettings](input),
   },
   workspace: {
     getDefault: () => invokeValidated(IpcChannel.GetDefaultWorkspace, {}, workspaceSummarySchema),
