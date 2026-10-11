@@ -420,6 +420,16 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `const __mcpContinueLoginResult: ReturnType<BetterWorkDesktopApi['mcp']['continueLogin']> = mcpInvokeMethods[IpcChannel.ContinueMcpLogin]({ id: 'connection-1', expectedRevisionId: 'revision-1', operationId: 'ba17e5bd-b537-4a68-9b32-231634967f0c', issuer: 'https://auth.example', consent: true });`,
     `const __mcpLogoutResult: ReturnType<BetterWorkDesktopApi['mcp']['logout']> = mcpInvokeMethods[IpcChannel.LogoutMcpConnection]({ id: 'connection-1', expectedRevisionId: 'revision-1', operationId: 'ba17e5bd-b537-4a68-9b32-231634967f0c' });`,
     `const __mcpContractChannel: typeof IpcChannel.ContinueMcpLogin = mcpInvokeContracts[IpcChannel.ContinueMcpLogin].channel;`,
+    `const __dependencyOptionsResult: ReturnType<BetterWorkDesktopApi['dependencies']['listOptions']> = dependencyInvokeMethods[IpcChannel.ListDependencyOptions]({});`,
+    `const __dependencyPlanResult: ReturnType<BetterWorkDesktopApi['dependencies']['inspectPlan']> = dependencyInvokeMethods[IpcChannel.InspectDependencyPlan]({ base: { kind: 'local', path: '/usr/bin/python3' }, lockId: 'lock-1' });`,
+    `const __dependencyEnvironmentResult: ReturnType<BetterWorkDesktopApi['dependencies']['verifyEnvironment']> = dependencyInvokeMethods[IpcChannel.VerifyDependencyEnvironment]({ environmentId: 'environment-1' });`,
+    `const __dependencyPrepareResult: ReturnType<BetterWorkDesktopApi['dependencies']['prepare']> = dependencyInvokeMethods[IpcChannel.PrepareDependencyEnvironment]({ base: { kind: 'local', path: '/usr/bin/python3' }, lockId: 'lock-1', kind: 'prepare' });`,
+    `const __dependencyCancelResult: ReturnType<BetterWorkDesktopApi['dependencies']['cancel']> = dependencyInvokeMethods[IpcChannel.CancelDependencyPreparation]({ operationId: 'operation-1' });`,
+    `const __dependencyOperationResult: ReturnType<BetterWorkDesktopApi['dependencies']['getOperation']> = dependencyInvokeMethods[IpcChannel.GetDependencyOperation]({ operationId: 'operation-1' });`,
+    `const __chooseInterpreterResult: ReturnType<BetterWorkDesktopApi['dependencies']['chooseInterpreter']> = dependencyInvokeMethods[IpcChannel.ChoosePythonInterpreter]({});`,
+    `const __registerToolchainResult: ReturnType<BetterWorkDesktopApi['dependencies']['registerToolchain']> = dependencyInvokeMethods[IpcChannel.RegisterToolchainSnapshot]({ include: [] });`,
+    `const __deleteToolchainResult: ReturnType<BetterWorkDesktopApi['dependencies']['deleteToolchainSnapshot']> = dependencyInvokeMethods[IpcChannel.DeleteToolchainSnapshot]({ snapshotId: 'snapshot-1' });`,
+    `const __dependencyContractChannel: typeof IpcChannel.DeleteToolchainSnapshot = dependencyInvokeContracts[IpcChannel.DeleteToolchainSnapshot].channel;`,
   ];
   const invalid = [
     `runInvokeMethods[IpcChannel.StartRun]({ runId: 'run-1' });`,
@@ -473,6 +483,9 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `mcpInvokeMethods[IpcChannel.GetMcpConnection]({ connectionId: 'connection-1' });`,
     `const __mcpWrongResponse: ReturnType<BetterWorkDesktopApi['mcp']['cancelOperation']> = mcpInvokeMethods[IpcChannel.GetMcpConnection]({ id: 'connection-1' });`,
     `const __mcpWrongChannel: typeof IpcChannel.GetMcpConnection = mcpInvokeContracts[IpcChannel.SaveMcpConnection].channel;`,
+    `dependencyInvokeMethods[IpcChannel.InspectDependencyPlan]({ lockId: 'lock-1' });`,
+    `const __dependencyWrongResponse: ReturnType<BetterWorkDesktopApi['dependencies']['cancel']> = dependencyInvokeMethods[IpcChannel.GetDependencyOperation]({ operationId: 'operation-1' });`,
+    `const __dependencyWrongChannel: typeof IpcChannel.ListDependencyOptions = dependencyInvokeContracts[IpcChannel.DeleteToolchainSnapshot].channel;`,
   ];
   let source = readFileSync(sourcePath, 'utf8') + '\n';
   const cases = [...valid, ...invalid].map((expression, index) => {
@@ -1682,6 +1695,102 @@ describe('task continuity preload API', () => {
         progress: null,
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe('Dependencies preload API', () => {
+  it('routes each dependency API through its validated channel and keeps request defaults', async () => {
+    const platform = { os: 'darwin', arch: 'arm64', abi: 'cp312' } as const;
+    const base = { kind: 'local', path: '/usr/bin/python3', version: '3.12.1' } as const;
+    const lock: Awaited<
+      ReturnType<BetterWorkDesktopApi['dependencies']['verifyEnvironment']>
+    >['lock'] = {
+      lockVersion: 1,
+      platform,
+      pythonRequirement: '3.12',
+      packages: [],
+      importProbes: [],
+    };
+    const plan: Awaited<ReturnType<BetterWorkDesktopApi['dependencies']['inspectPlan']>> = {
+      environmentKey: 'environment-key-1',
+      base,
+      platform,
+      lockHash: 'lock-hash-1',
+      lock,
+      missingWheels: [],
+      requiresDownload: false,
+      environment: null,
+    };
+    const environment: Awaited<
+      ReturnType<BetterWorkDesktopApi['dependencies']['verifyEnvironment']>
+    > = {
+      id: 'environment-1',
+      environmentKey: 'environment-key-1',
+      base,
+      platform,
+      lockHash: 'lock-hash-1',
+      lock,
+      pathKey: 'environments/environment-1',
+      status: 'ready',
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    mocks.invoke.mockReset();
+    mocks.invoke.mockImplementation(async (channel) => {
+      switch (channel) {
+        case IpcChannel.ListDependencyOptions:
+          return { distributions: [], lockIds: [], snapshots: [], environments: [] };
+        case IpcChannel.InspectDependencyPlan:
+          return plan;
+        case IpcChannel.VerifyDependencyEnvironment:
+          return environment;
+        case IpcChannel.PrepareDependencyEnvironment:
+          return {
+            operationId: 'operation-1',
+            environmentId: environment.id,
+            environmentKey: environment.environmentKey,
+            reused: false,
+          };
+        case IpcChannel.CancelDependencyPreparation:
+          return { applied: true, status: 'cancelled' };
+        case IpcChannel.GetDependencyOperation:
+          return null;
+        case IpcChannel.ChoosePythonInterpreter:
+          return { cancelled: true };
+        case IpcChannel.RegisterToolchainSnapshot:
+          return { cancelled: true, snapshot: null, reused: false };
+        default:
+          return { status: 'not-found' };
+      }
+    });
+
+    const dependencies = api().dependencies;
+    const planRequest = { base: { kind: 'local' as const, path: base.path }, lockId: 'lock-1' };
+    expect(() => dependencies.verifyEnvironment({ environmentId: '' })).toThrow();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+
+    await dependencies.listOptions();
+    await dependencies.inspectPlan(planRequest);
+    await dependencies.verifyEnvironment({ environmentId: environment.id });
+    await dependencies.prepare({ ...planRequest, kind: 'prepare' });
+    await dependencies.cancel({ operationId: 'operation-1' });
+    await dependencies.getOperation({ operationId: 'operation-1' });
+    await dependencies.chooseInterpreter();
+    await dependencies.registerToolchain({});
+    await dependencies.deleteToolchainSnapshot({ snapshotId: 'snapshot-1' });
+
+    expect(mocks.invoke.mock.calls).toEqual([
+      [IpcChannel.ListDependencyOptions, {}],
+      [IpcChannel.InspectDependencyPlan, planRequest],
+      [IpcChannel.VerifyDependencyEnvironment, { environmentId: environment.id }],
+      [IpcChannel.PrepareDependencyEnvironment, { ...planRequest, kind: 'prepare' }],
+      [IpcChannel.CancelDependencyPreparation, { operationId: 'operation-1' }],
+      [IpcChannel.GetDependencyOperation, { operationId: 'operation-1' }],
+      [IpcChannel.ChoosePythonInterpreter, {}],
+      [IpcChannel.RegisterToolchainSnapshot, {}],
+      [IpcChannel.DeleteToolchainSnapshot, { snapshotId: 'snapshot-1' }],
+    ]);
+    mocks.invoke.mockReset();
   });
 });
 
