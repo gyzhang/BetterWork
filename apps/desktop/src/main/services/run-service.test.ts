@@ -3227,6 +3227,26 @@ describe('RunService', () => {
     expect(fixture.store.runs.list()).toEqual([]);
   });
 
+  it('rejects a TaskContext revision mismatch before creating a Run', async () => {
+    const fixture = await createFixture();
+    const context = fixture.store.taskContexts.save(fixture.taskId, {
+      executor: { kind: 'general' },
+      skillBindings: [],
+    });
+    const service = createService(fixture);
+
+    expect(() =>
+      service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '使用过期的 TaskContext 修订',
+        taskContextRevisionId: context.id,
+        expectedTaskContextRevision: context.revision + 1,
+      }),
+    ).toThrow('TaskContextRevision 已更新');
+    expect(fixture.store.runs.list()).toEqual([]);
+  });
+
   it('registers the web search tool only when a search engine is configured', () => {
     const knowledgeSearch = async () => [];
     expect(createRunTools({ knowledgeSearch }).map((tool) => tool.name)).toEqual([
