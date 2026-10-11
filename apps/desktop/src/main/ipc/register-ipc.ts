@@ -283,6 +283,7 @@ import {
 import { API_KEY_SLOT } from '../persistence/credential-repository';
 import { ScheduleSourceRepositoryError } from '../persistence/schedule-source-repository';
 import { ArtifactDeclarationService } from '../services/artifact-declaration-service';
+import { ArtifactQueryService } from '../services/artifact-query-service';
 import { resolveArtifactVersionExecutor } from '../services/artifact-version-executor';
 import { type CredentialProvisioner, type CredentialResolver } from '../services/credential-access';
 import type { DiscussionCheckpointService } from '../services/discussion-checkpoint-service';
@@ -1007,6 +1008,7 @@ function registerDiscussionCheckpointChannels({ discussionCheckpoints }: IpcDepe
 
 function registerArtifactChannels(deps: IpcDependencies): void {
   const { store } = deps;
+  const artifactQueries = new ArtifactQueryService(store);
 
   handleOptionalInput(
     IpcChannel.ListArtifacts,
@@ -1018,12 +1020,7 @@ function registerArtifactChannels(deps: IpcDependencies): void {
     IpcChannel.GetArtifact,
     getArtifactRequestSchema,
     artifactDetailSchema.nullable(),
-    (input) => {
-      const detail = store.artifacts.getDetail(input.id);
-      if (!detail) return null;
-      const inputRelations = store.artifactInputRelations.listByVersion(detail.currentVersionId);
-      return inputRelations.length > 0 ? { ...detail, inputRelations } : detail;
-    },
+    (input) => artifactQueries.getArtifact(input.id),
   );
   handleInput(
     IpcChannel.ListArtifactVersions,
@@ -1042,12 +1039,7 @@ function registerArtifactChannels(deps: IpcDependencies): void {
     IpcChannel.GetArtifactVersion,
     getArtifactVersionRequestSchema,
     artifactVersionDetailSchema.nullable(),
-    (input) => {
-      const detail = store.artifacts.getVersionDetail(input.id);
-      if (!detail) return null;
-      const inputRelations = store.artifactInputRelations.listByVersion(detail.id);
-      return inputRelations.length > 0 ? { ...detail, inputRelations } : detail;
-    },
+    (input) => artifactQueries.getArtifactVersion(input.id),
   );
   const declarations = new ArtifactDeclarationService(store);
   const markdownArtifactSave = new MarkdownArtifactSaveService(store);
@@ -1067,24 +1059,7 @@ function registerArtifactChannels(deps: IpcDependencies): void {
     IpcChannel.GetFileArtifact,
     getFileArtifactRequestSchema,
     fileArtifactDetailSchema.nullable(),
-    (input) => {
-      const detail = store.artifacts.getDetail(input.artifactId);
-      if (!detail || detail.type !== 'presentation') return null;
-      if (!input.versionId) return detail;
-      if (!store.artifacts.versionBelongsToArtifact(input.versionId, input.artifactId)) return null;
-      const version = store.artifacts.getVersionDetail(input.versionId);
-      if (!version || version.type !== 'presentation') return null;
-      const inputRelations = store.artifactInputRelations.listByVersion(version.id);
-      return {
-        ...detail,
-        fileHash: version.fileHash,
-        fileKey: version.fileKey,
-        validation: version.validation,
-        ...(version.description ? { description: version.description } : {}),
-        evidence: version.evidence,
-        ...(inputRelations.length > 0 ? { inputRelations } : {}),
-      };
-    },
+    (input) => artifactQueries.getFileArtifact(input.artifactId, input.versionId),
   );
   handleInput(
     IpcChannel.RegisterFileArtifact,
