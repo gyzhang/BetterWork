@@ -15,7 +15,6 @@ import type {
   BuiltinToolPolicy,
   ExpertModelReference,
   MaterialReference,
-  McpToolBinding,
   ScriptExecution,
   SkillToolchainRequirement,
   StartRunRequest,
@@ -103,9 +102,10 @@ import {
 } from './memory-recall-service';
 import { ModelProviderFactory, type ResolvedLanguageModel } from './model-provider-factory';
 import type { NotificationService } from './notification-service';
+import type { ResolvedRunContext } from './run-context-resolver';
+import { resolveRunContext } from './run-context-resolver';
 import { isRunTerminalEvent, RunEventLifecycle } from './run-event-lifecycle';
 import { RunToolResultAdapter } from './run-tool-result-adapter';
-import { ScheduleMaterialResolver } from './schedule-material-resolver';
 import { createQianfanSearchClient } from './search-engine-service';
 import type { ResolvedToolchainSnapshots } from './skill-command-runtime';
 import { buildToolchainEnvironment, resolveSkillCommand } from './skill-command-runtime';
@@ -129,21 +129,6 @@ interface ResolvedSkillBindings {
   bindingIds: string[];
   /** 无绑定时为 undefined，避免向模型注入空的 system 指令段。 */
   instructions?: SkillInstruction[];
-}
-
-interface ResolvedRunContext {
-  skillBindings?: StartRunRequest['skillBindings'];
-  expertInstruction?: string;
-  modelReference?: ExpertModelReference;
-  builtinToolPolicy?: BuiltinToolPolicy;
-  materials: TaskMaterialSelection[];
-  materialScope: boolean;
-  scheduleSourceSnapshotId?: string;
-  taskContextRevisionId?: string;
-  expertId?: string;
-  expertRevisionId?: string;
-  excludedMemoryIds: string[];
-  mcpToolBindings: McpToolBinding[];
 }
 
 /** 一次执行期间的内存态；Run 结束后整条丢弃。 */
@@ -447,7 +432,7 @@ export class RunService {
     if (!context) throw new Error('Session does not belong to task');
     const workspaceId = this.store.tasks.getWorkspaceId(input.taskId);
     if (!workspaceId) throw new Error('Task workspace does not exist');
-    const executionContext = this.resolveRunContext(input);
+    const executionContext = resolveRunContext(this.store, input);
     if (
       scheduledAssociation &&
       (!executionContext.taskContextRevisionId ||
@@ -1541,131 +1526,6 @@ export class RunService {
   private allowedBuiltinToolNames(policy?: BuiltinToolPolicy): ReadonlySet<string> | undefined {
     if (!policy || policy.mode === 'application-defaults') return undefined;
     return new Set(policy.toolNames);
-  }
-
-  private resolveRunContext(input: StartRunRequest): ResolvedRunContext {
-    const settings = this.store.runSettings.get();
-    if (!input.taskContextRevisionId) {
-      this.assertBuiltinSkillsAvailable(input.skillBindings ?? [], settings.enableBuiltinSkills);
-      return {
-        ...(input.skillBindings ? { skillBindings: input.skillBindings } : {}),
-        materials: [],
-        materialScope: false,
-        excludedMemoryIds: [],
-        mcpToolBindings: [],
-      };
-    }
-    const expected = input.expectedTaskContextRevision;
-    if (expected === undefined) throw new Error('TaskContextRevision 缺少期望修订号');
-    const context = this.store.taskContexts.get(input.taskContextRevisionId, input.taskId);
-    if (!context) throw new Error('TaskContextRevision 不存在或不属于当前 Task');
-    if (context.revision !== expected) {
-      throw new Error(`TaskContextRevision 已更新：期望 ${expected}，当前为 ${context.revision}`);
-    }
-    if (input.skillBindings && input.skillBindings.length > 0) {
-      throw new Error('TaskContextRevision 与直接 Skill 绑定不能同时提交');
-    }
-    this.assertBuiltinSkillsAvailable(context.skillBindings, settings.enableBuiltinSkills);
-    const workspaceId = this.store.tasks.getWorkspaceId(input.taskId);
-    if (!workspaceId) throw new Error('Task workspace does not exist');
-    const explicitMaterials = context.materials ?? [];
-    const materials = new ScheduleMaterialResolver(this.store)
-      .resolve({
-        taskId: input.taskId,
-        workspaceId,
-        ...(context.scheduleSourceSnapshotId
-          ? { scheduleSourceSnapshotId: context.scheduleSourceSnapshotId }
-          : {}),
-        materials: explicitMaterials,
-      })
-      .map(
-        (material): TaskMaterialSelection =>
-          material.selection ?? {
-            reference: material.reference,
-            purpose: material.purpose,
-            addedFrom:
-              material.scheduleOrigin === 'expert-reference'
-                ? 'expert-reference'
-                : 'workspace-candidate',
-          },
-      );
-    if (context.executor.kind === 'general') {
-      return {
-        ...(context.skillBindings.length > 0 ? { skillBindings: context.skillBindings } : {}),
-        ...(context.modelReference ? { modelReference: context.modelReference } : {}),
-        ...(context.builtinToolPolicy ? { builtinToolPolicy: context.builtinToolPolicy } : {}),
-        materials,
-        materialScope: true,
-        ...(context.scheduleSourceSnapshotId
-          ? { scheduleSourceSnapshotId: context.scheduleSourceSnapshotId }
-          : {}),
-        taskContextRevisionId: context.id,
-        excludedMemoryIds: context.excludedMemoryIds ?? [],
-        mcpToolBindings: context.mcpToolBindings ?? [],
-      };
-    }
-    const expert = this.store.experts.get(context.executor.expertId);
-    if (!expert) throw new Error(`Expert 不存在：${context.executor.expertId}`);
-    if (expert.sourceKind === 'builtin' && !settings.enableBuiltinExperts) {
-      throw new Error(`内置 Expert「${expert.name}」已在设置中停用`);
-    }
-    if (expert.lifecycle !== 'active') throw new Error(`Expert「${expert.name}」当前不可用`);
-    const revision = this.store.experts.getRevision(
-      context.executor.expertId,
-      context.executor.expertRevisionId,
-    );
-    if (!revision) throw new Error('Expert 修订不存在或不属于该 Expert');
-    this.assertBuiltinSkillsAvailable(revision.skillPreset, settings.enableBuiltinSkills);
-    return {
-      skillBindings: context.skillBindings,
-      expertInstruction: this.composeExpertInstruction(revision),
-      modelReference: context.modelReference ?? revision.modelReference,
-      builtinToolPolicy: context.builtinToolPolicy ?? revision.builtinToolPolicy,
-      materials,
-      materialScope: true,
-      ...(context.scheduleSourceSnapshotId
-        ? { scheduleSourceSnapshotId: context.scheduleSourceSnapshotId }
-        : {}),
-      taskContextRevisionId: context.id,
-      expertId: context.executor.expertId,
-      expertRevisionId: context.executor.expertRevisionId,
-      excludedMemoryIds: context.excludedMemoryIds ?? [],
-      mcpToolBindings: context.mcpToolBindings ?? [],
-    };
-  }
-
-  private assertBuiltinSkillsAvailable(
-    bindings: readonly { skillId: string }[],
-    enabled: boolean,
-  ): void {
-    if (enabled) return;
-    const builtinSkill = bindings
-      .map(({ skillId }) => this.store.skills.get(skillId))
-      .find((skill) => skill?.sourceKind === 'builtin');
-    if (builtinSkill) throw new Error(`内置 Skill「${builtinSkill.name}」已在设置中停用`);
-  }
-
-  private composeExpertInstruction(revision: {
-    identity: string;
-    principles: string[];
-    inputRequirements: string[];
-    deliveryRequirements: string[];
-  }): string {
-    const lines = ['以下是当前 Expert 的工作方式，请在本次任务中遵循：', '', revision.identity];
-    if (revision.principles.length > 0) {
-      lines.push('', '工作原则：', ...revision.principles.map((item) => `- ${item}`));
-    }
-    if (revision.inputRequirements.length > 0) {
-      lines.push('', '输入要求：', ...revision.inputRequirements.map((item) => `- ${item}`));
-    }
-    if (revision.deliveryRequirements.length > 0) {
-      lines.push(
-        '',
-        '交付与检查要求：',
-        ...revision.deliveryRequirements.map((item) => `- ${item}`),
-      );
-    }
-    return lines.join('\n');
   }
 
   private async resolveWebSearch(): Promise<WebSearch | undefined> {

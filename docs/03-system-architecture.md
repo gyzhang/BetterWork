@@ -173,7 +173,7 @@ interface AgentEngine {
 
 ### 4.1 Expert 与任务上下文装配（E1 目标）
 
-Expert、ExpertRevision 和 TaskContextRevision 都由 Application 层解析。通用助手是无 Expert 的合法路径；Expert 模式固定一个不可变修订，按任务草稿确定本次有效 Skill 顺序、模型引用和内置工具策略。Application 将人格字段合成为唯一 Expert 指令，按既有 `StartRunRequest.skillBindings` 解析 Skill，并在启动前完成启用、信任、环境、依赖和模型校验。
+Expert、ExpertRevision 和 TaskContextRevision 都由 Application 层解析；`run-context-resolver.ts` 集中完成启动前的上下文修订 CAS、Expert 固定修订、内置能力设置和材料范围准备。通用助手是无 Expert 的合法路径；Expert 模式固定一个不可变修订，按任务草稿确定本次有效 Skill 顺序、模型引用和内置工具策略。Application 将人格字段合成为唯一 Expert 指令，按既有 `StartRunRequest.skillBindings` 解析 Skill，并在启动前完成启用、信任、环境、依赖和模型校验。
 
 启动事务先登记运行所需的 Expert/模型/工具引用和 `run_skill_bindings`，成功提交后才把 `AgentRunInput` 交给 Agent Core。事务失败不留下半个可执行 Run；配置编辑不热换运行中的输入。Agent Core 不读取 Expert、TaskContext、SQLite 或文件，它只接收已解析的指令、消息、工具和模型。精确字段、错误码和旧 Task 迁移见[专家与任务上下文契约](development/expert-contracts.md)。
 
