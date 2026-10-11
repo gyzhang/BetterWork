@@ -2,13 +2,44 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { installApi, skill } from './app-test-fixtures';
+import {
+  installApi,
+  previousRun,
+  previousTask,
+  skill,
+  workspaceFixture,
+} from './app-test-fixtures';
 
 afterEach(() => {
   Reflect.deleteProperty(window, 'betterwork');
 });
 
 describe('App API fixture defaults', () => {
+  it('keeps tasks and runs empty until a test opts into historical data', async () => {
+    const api = installApi();
+
+    await expect(api.tasks.list({ workspaceId: workspaceFixture.id })).resolves.toEqual([]);
+    await expect(api.tasks.get({ id: previousTask.id })).resolves.toBeNull();
+    await expect(api.workspace.listTaskGroups()).resolves.toEqual([
+      { workspace: workspaceFixture, tasks: [], totalTasks: 0 },
+    ]);
+    await expect(api.runs.list({ taskId: previousTask.id })).resolves.toEqual([]);
+  });
+
+  it('shares explicitly provided historical tasks across App task APIs', async () => {
+    const api = installApi({ tasks: [previousTask], runs: [previousRun] });
+
+    await expect(api.tasks.list({ workspaceId: workspaceFixture.id })).resolves.toEqual([
+      previousTask,
+    ]);
+    await expect(api.tasks.get({ id: previousTask.id })).resolves.toEqual(previousTask);
+    await expect(api.workspace.listTaskGroups()).resolves.toEqual([
+      { workspace: workspaceFixture, tasks: [previousTask], totalTasks: 1 },
+    ]);
+    await expect(api.runs.list({ taskId: previousTask.id })).resolves.toEqual([previousRun]);
+    await expect(api.runs.list({ taskId: 'another-task' })).resolves.toEqual([]);
+  });
+
   it('keeps Skill methods empty or explicitly unconfigured by default', async () => {
     const api = installApi();
 

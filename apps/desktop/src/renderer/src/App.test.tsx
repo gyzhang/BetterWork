@@ -56,6 +56,9 @@ function composer(): HTMLElement {
   return screen.getByRole('textbox', { name: /任务输入/ });
 }
 
+const historicalTaskFixture = { tasks: [previousTask] };
+const historicalTaskAndRunFixture = { ...historicalTaskFixture, runs: [previousRun] };
+
 beforeEach(() => {
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: vi.fn() });
   vi.stubGlobal('matchMedia', () => ({
@@ -105,7 +108,7 @@ describe('Work message Artifact save in App', () => {
   };
 
   it('历史回答保存失败只有一处出口，重试成功后只有一枚局部确认', async () => {
-    const api = installApi();
+    const api = installApi(historicalTaskFixture);
     api.runs.list.mockResolvedValue([followup, previousRun]);
     api.runs.listEvents.mockImplementation(async ({ runId }) =>
       completion(runId === previousRun.id ? previousRun : followup),
@@ -135,7 +138,7 @@ describe('Work message Artifact save in App', () => {
   });
 
   it('保存原 Task 期间新建草稿，晚到成功不展开上下文或污染新草稿', async () => {
-    const api = installApi();
+    const api = installApi(historicalTaskAndRunFixture);
     api.runs.listEvents.mockResolvedValue(completion(previousRun));
     let finish!: (artifact: ArtifactSummary) => void;
     api.artifacts.saveMarkdown.mockImplementation(
@@ -158,7 +161,7 @@ describe('Work message Artifact save in App', () => {
 
 describe('Skill test run in the task composer', () => {
   it('任务历史快照迟到时保留已经广播的终态与最终回答', async () => {
-    const api = installApi({ skills: [skill] });
+    const api = installApi({ ...historicalTaskFixture, skills: [skill] });
     api.runs.list.mockResolvedValue([{ ...previousRun, status: 'running' }]);
     let emitEvent: ((event: AgentRuntimeEvent) => void) | undefined;
     api.runs.onEvent.mockImplementation((listener) => {
@@ -194,7 +197,7 @@ describe('Skill test run in the task composer', () => {
   });
 
   it('离开再返回同一 Task 时丢弃上一轮历史读取，保留新增 Run', async () => {
-    const api = installApi({ skills: [skill] });
+    const api = installApi({ ...historicalTaskAndRunFixture, skills: [skill] });
     let resolveOldSnapshot: ((events: AgentRuntimeEvent[]) => void) | undefined;
     api.runs.listEvents.mockImplementationOnce(
       () =>
@@ -215,7 +218,7 @@ describe('Skill test run in the task composer', () => {
   });
 
   it('同一 Task 开始续作后，未完成的历史读取仍能补齐旧 Run', async () => {
-    const api = installApi({ skills: [skill] });
+    const api = installApi({ ...historicalTaskAndRunFixture, skills: [skill] });
     const previousCompleted: AgentRuntimeEvent = {
       id: 'previous-completed',
       runId: previousRun.id,
@@ -252,7 +255,7 @@ describe('Skill test run in the task composer', () => {
   });
 
   it('离开再返回同一 Task 时不让旧讨论节点替换新节点', async () => {
-    const api = installApi({ skills: [skill] });
+    const api = installApi({ ...historicalTaskFixture, skills: [skill] });
     let resolveOldCheckpoints: ((items: DiscussionCheckpoint[]) => void) | undefined;
     api.discussionCheckpoints.list.mockImplementationOnce(
       () =>
@@ -407,7 +410,7 @@ describe('Skill test run in the task composer', () => {
   }, 15_000);
 
   it('clears previous messages and ignores late history responses when opening the draft', async () => {
-    const api = installApi({ skills: [skill] });
+    const api = installApi({ ...historicalTaskAndRunFixture, skills: [skill] });
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: /旧任务/ }));
     await screen.findByRole('textbox', { name: /任务输入/ });
@@ -458,7 +461,10 @@ describe('Skill test run in the task composer', () => {
   });
 
   it.each(['新建任务', '旧任务'])('does not carry the draft Skill into %s', async (destination) => {
-    const api = installApi({ skills: [skill] });
+    const api = installApi({
+      ...(destination === '旧任务' ? historicalTaskFixture : {}),
+      skills: [skill],
+    });
     render(<App />);
     await openTestRun();
     fireEvent.click(screen.getByRole('button', { name: new RegExp(destination) }));
@@ -677,7 +683,7 @@ describe('定时任务导航', () => {
       updatedAt: 5,
     };
     const { detail, occurrence } = scheduleContinuationFixture();
-    const api = installApi({ context });
+    const api = installApi({ ...historicalTaskAndRunFixture, context });
     api.schedules.list.mockResolvedValue({
       status: 'success',
       data: { items: [detail.aggregate] },
@@ -902,6 +908,7 @@ describe('Workspace input material display', () => {
 
   it('reloads the filename when reopening a task with a saved input snapshot', async () => {
     const api = installApi({
+      ...historicalTaskFixture,
       context: {
         id: 'context-previous',
         taskId: previousTask.id,
@@ -984,7 +991,11 @@ describe('Task draft ownership in App', () => {
   };
 
   it('A to B to A never restores the old context over the new CAS baseline and working configuration', async () => {
-    const api = installApi({ context: savedContext, skills: [skill] });
+    const api = installApi({
+      ...historicalTaskAndRunFixture,
+      context: savedContext,
+      skills: [skill],
+    });
     let resolveOldContext: ((context: TaskContextRevision) => void) | undefined;
     api.taskContexts.get.mockImplementationOnce(
       () =>
@@ -1026,7 +1037,11 @@ describe('Task draft ownership in App', () => {
   });
 
   it('a CAS failure retains the full working draft and retries against the same baseline', async () => {
-    const api = installApi({ context: savedContext, skills: [skill] });
+    const api = installApi({
+      ...historicalTaskAndRunFixture,
+      context: savedContext,
+      skills: [skill],
+    });
     api.runs.listEvents.mockResolvedValue([completed]);
     api.taskContexts.save.mockRejectedValueOnce(new Error('Task context conflict'));
     render(<App />);
@@ -1054,7 +1069,11 @@ describe('Task draft ownership in App', () => {
   });
 
   it('entering another workspace keeps prompt and skills but clears old Task materials and permissions', async () => {
-    const api = installApi({ context: savedContext, skills: [skill] });
+    const api = installApi({
+      ...historicalTaskAndRunFixture,
+      context: savedContext,
+      skills: [skill],
+    });
     const secondWorkspace = {
       ...workspaceFixture,
       id: 'workspace-2',
@@ -1093,7 +1112,7 @@ describe('Task draft ownership in App', () => {
 
 describe('Task context restoration', () => {
   it('keeps a draft for background results and opens a historical task by notification ID on click', async () => {
-    const api = installApi();
+    const api = installApi(historicalTaskAndRunFixture);
     api.tasks.list.mockResolvedValue([]);
     const targetNotification: NotificationSummary = {
       id: 'notification-old-task',
@@ -1154,7 +1173,7 @@ describe('Task context restoration', () => {
   });
 
   it('恢复没有工具调用的取消运行后可继续且不会自动重启', async () => {
-    const api = installApi();
+    const api = installApi(historicalTaskFixture);
     api.runs.list.mockResolvedValue([{ ...previousRun, status: 'cancelled' }]);
     api.runs.listEvents.mockResolvedValue([
       {
@@ -1174,6 +1193,7 @@ describe('Task context restoration', () => {
 
   it('restores the saved Skill selection when reopening a task', async () => {
     const api = installApi({
+      ...historicalTaskFixture,
       skills: [skill],
       context: {
         id: 'context-previous',
@@ -1195,6 +1215,7 @@ describe('Task context restoration', () => {
 
   it('does not claim the current default model for an historical Expert revision', async () => {
     installApi({
+      ...historicalTaskFixture,
       expert: true,
       context: {
         id: 'context-previous',
@@ -1218,6 +1239,7 @@ describe('Task context restoration', () => {
 
   it('uses the Expert workspace scope for capture on an Expert task', async () => {
     const api = installApi({
+      ...historicalTaskAndRunFixture,
       expert: true,
       context: {
         id: 'context-previous',
@@ -1275,6 +1297,7 @@ describe('Task context restoration', () => {
 
   it('回答捕获保留原文选区来源，并且不提供全局范围', async () => {
     const api = installApi({
+      ...historicalTaskAndRunFixture,
       expert: true,
       context: {
         id: 'context-previous',
@@ -1354,6 +1377,7 @@ describe('Task context restoration', () => {
   /** MI02 AC3：保存失败要留下草稿与原因，未提交的取消不得写库。 */
   it('回答捕获保存失败时保留草稿与幂等键，取消不写库', async () => {
     const api = installApi({
+      ...historicalTaskAndRunFixture,
       expert: true,
       context: {
         id: 'context-previous',
@@ -1691,7 +1715,11 @@ describe('参考成果版本接入当前任务', () => {
   ] as const)(
     '来源身份迟到 %s 时保留新的选择与草稿，返回原 Task=%s',
     async (outcome, returnToTask) => {
-      const api = installReferenceApi({ expert: true, context: expertContext() });
+      const api = installReferenceApi({
+        ...historicalTaskAndRunFixture,
+        expert: true,
+        context: expertContext(),
+      });
       let resolveExecutor: ((value: ArtifactVersionExecutorSummary | null) => void) | undefined;
       let rejectExecutor: ((error: Error) => void) | undefined;
       api.artifacts.getVersionExecutor.mockImplementationOnce(

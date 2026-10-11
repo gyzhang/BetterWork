@@ -307,6 +307,8 @@ export const memoryViewItem = (overrides?: Partial<MemoryViewItem>): MemoryViewI
 interface AppTestApiOptions {
   expert?: boolean;
   skills?: SkillDetail[];
+  tasks?: RecentTaskSummary[];
+  runs?: RunSummary[];
   context?: TaskContextRevision;
   memories?: MemoryViewItem[];
   models?: ModelProfileSummary[];
@@ -468,7 +470,7 @@ function createTaskContextApiFixture(
   };
 }
 
-function createWorkspaceApiFixture() {
+function createWorkspaceApiFixture(options?: Pick<AppTestApiOptions, 'tasks'>) {
   return {
     getDefault: vi.fn(async () => workspaceFixture),
     listAll: vi.fn(async () => [workspaceFixture]),
@@ -476,9 +478,13 @@ function createWorkspaceApiFixture() {
     create: vi.fn(),
     updateIdentity: vi.fn(),
     setHidden: vi.fn(async () => null),
-    // 侧栏分组与 tasks.list 报同一批任务，测试才能继续点得到「旧任务」那一行。
+    // 工作区分组与任务列表共享同一组显式任务，避免两个 API 对任务是否存在各说各话。
     listTaskGroups: vi.fn(async () => [
-      { workspace: workspaceFixture, tasks: [previousTask], totalTasks: 1 },
+      {
+        workspace: workspaceFixture,
+        tasks: options?.tasks ?? [],
+        totalTasks: options?.tasks?.length ?? 0,
+      },
     ]),
     memoryBrief: vi.fn(async (): Promise<Result<WorkspaceBrief>> => okResult(briefFixture)),
     listReferenceVersions: vi.fn(async (): Promise<Result<WorkspaceReferenceListData>> =>
@@ -553,10 +559,11 @@ function createExpertsApiFixture(options?: Pick<AppTestApiOptions, 'expert'>) {
   };
 }
 
-function createRunsApiFixture() {
+function createRunsApiFixture(options?: Pick<AppTestApiOptions, 'runs'>) {
+  const runs = options?.runs ?? [];
   return {
-    list: vi.fn(async (input?: { taskId?: string }): Promise<RunSummary[]> =>
-      input?.taskId === previousTask.id ? [previousRun] : [],
+    list: vi.fn<Window['betterwork']['runs']['list']>(async (input) =>
+      input?.taskId ? runs.filter((run) => run.taskId === input.taskId) : runs,
     ),
     listEvents: vi.fn<Window['betterwork']['runs']['listEvents']>(async () => []),
     start: vi.fn(async () => ({ runId: 'new-run' })),
@@ -591,10 +598,13 @@ function createMcpApiFixture() {
   };
 }
 
-function createTasksApiFixture() {
+function createTasksApiFixture(options?: Pick<AppTestApiOptions, 'tasks'>) {
+  const tasks = options?.tasks ?? [];
   return {
-    list: vi.fn(async (): Promise<RecentTaskSummary[]> => [previousTask]),
-    get: vi.fn(async (): Promise<RecentTaskSummary | null> => previousTask),
+    list: vi.fn<Window['betterwork']['tasks']['list']>(async () => tasks),
+    get: vi.fn<Window['betterwork']['tasks']['get']>(
+      async ({ id }) => tasks.find((task) => task.id === id) ?? null,
+    ),
     create: vi.fn(async () => ({
       task: { id: 'new-task', title: goal },
       sessionId: 'new-session',
@@ -659,15 +669,16 @@ function createAppTestApi(options?: AppTestApiOptions) {
   emitScheduleChange = undefined;
   activateSystemNotification = undefined;
   const removedScheduleScopeTaskIds = new Set<string>();
+  const tasks = options?.tasks ?? [];
   const api = {
     chrome: createChromeApiFixture(),
-    workspace: createWorkspaceApiFixture(),
+    workspace: createWorkspaceApiFixture({ tasks }),
     models: createModelsApiFixture(options),
     knowledge: createKnowledgeApiFixture(),
     artifacts: createArtifactApiFixture(),
     evidence: createEvidenceApiFixture(),
     notifications: createNotificationsApiFixture(),
-    tasks: createTasksApiFixture(),
+    tasks: createTasksApiFixture({ tasks }),
     taskContinuity: createTaskContinuityApiFixture(),
     schedules: createSchedulesApiFixture(),
     taskContexts: createTaskContextApiFixture(options, removedScheduleScopeTaskIds),
@@ -676,7 +687,7 @@ function createAppTestApi(options?: AppTestApiOptions) {
     memories: createMemoryApiFixture(options),
     mcp: createMcpApiFixture(),
     experts: createExpertsApiFixture(options),
-    runs: createRunsApiFixture(),
+    runs: createRunsApiFixture(options),
     skills: createSkillsApiFixture(options),
     dependencies: createDependenciesApiFixture(),
   };
