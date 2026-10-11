@@ -1209,4 +1209,6 @@ Preload 定向测试 1 文件 / 38 项通过；编译器正反例覆盖 15 个�
 
 2026-10-12 00:32 CST，从最新 `origin/main` `4b9e2cd7aa1aed2cdf005fa40ab2c33a78712e64` 在原 checkout 建立 `codex/r09-mcp-channel-contracts`。本卡为 MCP 连接列表/详情、保存/删除、测试/启停、工具审查、操作取消与 OAuth 登录/退出共 11 个 invoke channel 建立请求/响应 Schema 和 Preload 方法映射；保留操作回执、取消和异常语义。
 
-编译器正反例覆盖全部 11 个 channel 的请求/响应与方法关联；运行期回归逐一核对 11 个 API 的转发 channel 和解析后请求，并覆盖操作取消、OAuth 准备及异常响应。Preload 定向测试 1 文件 / 39 项、全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 与差异空白检查通过。PR Gate、合并与分支清理待本卡收口；完整 `npm run verify`、UI、真实模型及安装态验收未运行。R09 Dependencies、Window、Run 事件及 Main/Preload 全局映射仍待后续切片。
+编译器正反例覆盖全部 11 个 channel 的请求/响应与方法关联；运行期回归逐一核对 11 个 API 的转发 channel 和解析后请求，并覆盖操作取消、OAuth 准备及异常响应。Preload 定向测试 1 文件 / 39 项、全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 与差异空白检查通过。本卡已收口；完整 `npm run verify`、UI、真实模型及安装态验收未运行。R09 Dependencies、Window、Run 事件及 Main/Preload 全局映射仍待后续切片。
+
+源提交 `a3b5f38c1ecf6ab06430d5b3655a2da8ba0feb5c` 的 [PR Gate / Actions 38156579087](https://github.com/gyzhang/BetterWork/actions/runs/38156579087) 与 Quick code check 通过，Full verify 按规则跳过。[PR #171](https://github.com/gyzhang/BetterWork/pull/171) 已 squash 合入 main，合并提交 `e89d6822ef168351b504d7f1620d9c49b2e3b472`；任务分支本地与远端均已删除，本地 checkout 已同步 main，未创建 worktree。
