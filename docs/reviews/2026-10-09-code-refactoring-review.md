@@ -774,3 +774,9 @@ resolver 的真实 SQLite 定向用例 4/4，RunService heavy 88/88，`docs:chec
 新模块 functional 3/3、RunService heavy 88/88、`docs:check` 154/154、typecheck、定向 ESLint/Prettier 与生产 build 通过。原基点巡检发现已合入 main 的 TC01 测试 override 指纹尚未归档；Review `3e28f29` 后按理由更新读数，首次 `--save` 按规则退出 1，复跑原基点巡检退出 0。Husky 路径只在此 worktree 配置中指向 `.husky/_`，入口探针通过。
 
 最终源 `016feb4fdeb98ec4e2e9645ad22830460cc2b01e` 的 [Actions 38121648247](https://github.com/gyzhang/BetterWork/actions/runs/38121648247) 在 macos-26-arm64 通过 PR Gate：静态快检通过，`docs:check` 154/154，相关 functional 4 文件 / 82 项、heavy 1 文件 / 88 项通过；Full verify 按策略跳过。[PR #90](https://github.com/gyzhang/BetterWork/pull/90) 已 squash 合入 main `d22f29eda382549a6c9a1f6d86aa5cf3f27ad2a2`。远端和本地代码任务分支已删除，保留 worktree 并切至 closeout 分支。未运行完整 verify、UI 或真实模型。
+
+## 42. E18：Markdown 成果保存用例抽取（本地自动化通过，远端收口待完成）
+
+2026-10-11 15:41 CST，从最新 main `be55ee44e9642bfed5a03074e7675706988fe325` 在保留 worktree 建立 `codex/e18-artifact-ipc-use-case`，推进 R08 的成果保存切片。将 `SaveMarkdownArtifact` 的来源计划、版本写入和输入关系保存/继承协调提取到 `MarkdownArtifactSaveService`；IPC 继续负责协议边界校验并调用用例，`ArtifactDeclarationService` 与 Repository 的职责保持。未改 channel、Schema、迁移、Evidence 关联或 ArtifactVersion 语义。
+
+真实 SQLite 用例覆盖 Assistant Run Evidence、显式 Evidence 来源关系以及 user-edit 对二者的继承；新服务 functional 1/1、IPC functional 51/51，共 52 项通过。typecheck、定向 ESLint/Prettier、生产 build 通过；`docs:check`、原基点巡检、提交推送与 PR Gate 待收口。未运行完整 verify、UI 或真实模型。
