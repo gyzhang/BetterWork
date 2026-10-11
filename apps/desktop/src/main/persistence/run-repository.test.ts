@@ -87,6 +87,41 @@ describe('RunRepository history and source read models', () => {
     ]);
   });
 
+  it('keeps duplicate and escaped JSON content keys equal to the original decoder', () => {
+    const store = openStore();
+    const task = seedTask(store);
+    store.runs.create({
+      id: 'duplicate',
+      taskId: task.task.id,
+      sessionId: task.sessionId,
+      prompt: 'duplicate',
+      status: 'completed',
+      createdAt: 0,
+    });
+    store.runs.appendEvent(message('duplicate', 3, 'older answer'));
+    const latest = message('duplicate', 7, '');
+    store.runs.appendEvent(latest);
+    const db = (store as unknown as { db: Database.Database }).db;
+    for (const [first, last] of [
+      ['', 'answer'],
+      ['answer', ''],
+      [null, ''],
+      ['', '\u0000'],
+      ['\u0000', ''],
+    ] as const) {
+      const raw = JSON.stringify({ ...latest, content: first }).slice(0, -1);
+      db.prepare('UPDATE run_events SET payload = ? WHERE id = ?').run(
+        `${raw},"cont\\u0065nt":${JSON.stringify(last)}}`,
+        latest.id,
+      );
+      const expected = store.runs.getLatestNonEmptyMessageCompletion('duplicate');
+      const parse = vi.spyOn(agentRuntimeEventSchema, 'parse');
+      expect(store.runs.listLatestNonEmptyMessageCompletions(['duplicate'])).toEqual([expected]);
+      expect(parse).toHaveBeenCalledTimes(last === '' ? 2 : 1);
+      parse.mockRestore();
+    }
+  });
+
   it.each([false, true])('keeps a long empty tail complete (all empty: %s)', (allEmpty) => {
     const store = openStore();
     const task = seedTask(store);

@@ -240,6 +240,7 @@ export class RunRepository {
   listLatestNonEmptyMessageCompletions(runIds: readonly string[]): MessageCompletion[] {
     const ids = [...new Set(runIds)];
     if (ids.length === 0) return [];
+    // json_each 的 rowid 随成员文本顺序递增；同名 content 取末项，保持 JSON.parse 语义。
     const rows = this.db
       .prepare(
         `WITH RECURSIVE messages AS (
@@ -261,8 +262,10 @@ export class RunRepository {
                 ORDER BY sequence DESC LIMIT 1
              )
             WHERE CASE WHEN json_valid(previous.payload) THEN
-                    json_type(previous.payload, '$.content') = 'text'
-                    AND json_extract(previous.payload, '$.content') = ''
+                    (SELECT field.type = 'text' AND field.value = ''
+                       FROM json_each(previous.payload) field
+                      WHERE field.key = 'content'
+                      ORDER BY field.rowid DESC LIMIT 1)
                   ELSE 0 END
          )
          SELECT id, run_id, sequence, type, payload FROM messages
