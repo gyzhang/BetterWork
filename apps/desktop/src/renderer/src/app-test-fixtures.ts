@@ -648,13 +648,19 @@ function createDependenciesApiFixture() {
   };
 }
 
+function createChromeApiFixture() {
+  return {
+    updateTheme: vi.fn(async () => undefined),
+  };
+}
+
 function createAppTestApi(options?: AppTestApiOptions) {
   emitNotificationChange = undefined;
   emitScheduleChange = undefined;
   activateSystemNotification = undefined;
   const removedScheduleScopeTaskIds = new Set<string>();
   const api = {
-    chrome: { updateTheme: vi.fn(async () => undefined) },
+    chrome: createChromeApiFixture(),
     workspace: createWorkspaceApiFixture(),
     models: createModelsApiFixture(options),
     knowledge: createKnowledgeApiFixture(),
