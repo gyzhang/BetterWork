@@ -743,4 +743,6 @@ functional 定向 3 文件 / 69 项、heavy 定向 1 文件 / 37 项、typecheck
 
 提交 `cfed9db7edaba05c63b9e80eebfa8da6378b0897` 的 [Actions 38116034827](https://github.com/gyzhang/BetterWork/actions/runs/38116034827) 执行纯文档分类，Documentation check 与 PR Gate 成功；Full verify 和 Quick code check 按变更类型跳过。本地 `npm run docs:check` 154/154 通过。[PR #81](https://github.com/gyzhang/BetterWork/pull/81) 已 squash 合并为 main `cfbc900d8e877e218b4309b05f326e1e4cd4603f`。
 
+现行架构、交接 §3 与 Qoder 速查镜像的补充提交 `5423e91b6fb3f68f5bc0344aefcaf29b380c21e0` 的 [Actions 38116890863](https://github.com/gyzhang/BetterWork/actions/runs/38116890863) 中 Documentation check 与 PR Gate 成功，Full verify 和 Quick code check 按纯文档分类跳过；[PR #84](https://github.com/gyzhang/BetterWork/pull/84) 已 squash 合并为 main `977efdba96efcf0f74f418e468da23c9e5ac5571`。
+
 批次末 `npm run drift:check -- --batch-base=c8ef5483ddee8d8cc461445a083702c64086e2ef` 退出 1：当前脚本只从 `standards/coding-standard.test.ts` 聚合器读取护栏和例外，而 R15 已将它们移入聚合器导入的主题模块；因此旧基线把迁移位置识别成整组删除。R15 的 AST 对照已确认 33 个 describe 组和 154 个用例标题保持，未写入会把当前例外登记降为 0 的错误基线；drift-check 对模块化后的扫描支持需另行修复。
