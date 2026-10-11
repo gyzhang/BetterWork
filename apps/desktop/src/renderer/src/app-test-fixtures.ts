@@ -625,6 +625,12 @@ function createMaterialsApiFixture() {
   };
 }
 
+function createEvidenceApiFixture() {
+  return {
+    list: vi.fn(async () => []),
+  };
+}
+
 function createAppTestApi(options?: AppTestApiOptions) {
   emitNotificationChange = undefined;
   emitScheduleChange = undefined;
@@ -638,7 +644,7 @@ function createAppTestApi(options?: AppTestApiOptions) {
     },
     knowledge: createKnowledgeApiFixture(),
     artifacts: createArtifactApiFixture(),
-    evidence: { list: vi.fn(async () => []) },
+    evidence: createEvidenceApiFixture(),
     notifications: createNotificationsApiFixture(),
     tasks: createTasksApiFixture(),
     taskContinuity: createTaskContinuityApiFixture(),
