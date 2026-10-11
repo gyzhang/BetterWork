@@ -1068,3 +1068,5 @@ Preload 定向测试 1 文件 / 15 项通过，覆盖请求转发、非法请求
 响应解析会省略值为 `undefined` 的可选 `lastTestedAt`，使结果符合 `ModelProfileSummary` 的精确可选属性类型；带时间戳的配置保持原值。无入参列表继续传空对象。没有改 channel、Main handler、凭据处理、模型配置行为或共享协议。R09 的 Artifact、Search、Notification、Knowledge 等旧 Preload 调用及全局 channel 映射仍未完成。
 
 Preload 定向测试 1 文件 / 17 项通过，覆盖六个 API 的请求转发、非法请求拒绝、畸形响应拒绝与可选属性归一；typecheck、改动文件 ESLint/Prettier 和差异空白检查通过。完整 `npm run verify`、UI、真实模型及安装态验收未运行。
+
+源提交 `7c19452afb2808d214b4548483f33513a2051e6b` 的 [PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/38142822564) 成功；Quick code check 通过，Full verify 按仓库规则跳过。[PR #146](https://github.com/gyzhang/BetterWork/pull/146) 已合入 main，合并提交 `4ad10048257277143a4bdd506dcf6bc9aa45d9b6`；本地和远端任务分支已删除，任务 worktree 保留。R09 的 Artifact、Search、Notification、Knowledge 等旧 Preload 调用及全局 channel 映射继续待后续切片。
