@@ -1080,3 +1080,11 @@ Preload 定向测试 1 文件 / 17 项通过，覆盖六个 API 的请求转发�
 Preload 定向测试 1 文件 / 19 项通过，覆盖三个 API 的请求转发、非法请求拒绝、畸形响应拒绝与可选属性归一；typecheck、改动文件 ESLint/Prettier 和差异空白检查通过。完整 `npm run verify`、UI、真实服务调用及安装态验收未运行。
 
 源提交 `b7ab4acd15fcd8f4c0480361218bf14e6e7e2b97` 的 [PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/38143454479) 成功；Quick code check 通过，Full verify 按仓库规则跳过。[PR #149](https://github.com/gyzhang/BetterWork/pull/149) 已合入 main，合并提交 `4426bba7a7c90704b494055b73a9eb0f78d0fef3`；本地和远端任务分支已删除，任务 worktree 保留。R09 的 Artifact、Notification、Knowledge 等旧 Preload 调用及全局 channel 映射继续待后续切片。
+
+## 88. R09 子卡：Notification Preload 请求与响应边界校验
+
+2026-10-11 21:38 CST，Search 子卡合并后，从最新 main `99457a77ac3bb48a468675af8f9a72dbb14a6d5a` 在保留的任务 worktree 建立 `codex/r09-notification-preload-contracts`。Notification Preload 的 `list`、`markRead`、`markAllRead`、`clear` 接入既有请求与响应 Schema；`get`、`rendererReady`、`delete` 保持已有校验。
+
+无入参通道仍发送空对象。没有改 channel、通知服务、持久化、生命周期或提示语义。R09 的 Artifact、Knowledge 等旧 Preload 调用及全局 channel 映射仍未完成。
+
+Preload 定向测试 1 文件 / 21 项通过，覆盖旧调用的请求转发、非法 `markRead` 请求拒绝和畸形响应拒绝；typecheck、改动文件 ESLint/Prettier 和差异空白检查通过。完整 `npm run verify`、UI、真实模型及安装态验收未运行。

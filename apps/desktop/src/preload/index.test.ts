@@ -583,6 +583,56 @@ describe('search engine preload API', () => {
   });
 });
 
+describe('notification maintenance preload API', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.invoke.mockResolvedValue(null);
+  });
+
+  it('validates and forwards list/read/clear requests and responses', async () => {
+    const notification = {
+      id: 'notification-1',
+      level: 'info' as const,
+      kind: 'run' as const,
+      title: 'Run finished',
+      target: { kind: 'task' as const, taskId: 'task-1' },
+      read: false,
+      createdAt: 1,
+    };
+    mocks.invoke.mockImplementation(async (channel) => {
+      if (channel === IpcChannel.ListNotifications) return [notification];
+      if (channel === IpcChannel.ClearNotifications) return { cleared: true };
+      return { unreadCount: 2 };
+    });
+
+    await expect(api().notifications.list()).resolves.toEqual([notification]);
+    await Promise.all([
+      api().notifications.markRead({ id: 'notification-1' }),
+      api().notifications.markAllRead(),
+      api().notifications.clear(),
+    ]);
+
+    expect(mocks.invoke.mock.calls).toEqual([
+      [IpcChannel.ListNotifications, {}],
+      [IpcChannel.MarkNotificationRead, { id: 'notification-1' }],
+      [IpcChannel.MarkAllNotificationsRead, {}],
+      [IpcChannel.ClearNotifications, {}],
+    ]);
+  });
+
+  it('rejects invalid notification requests before IPC and malformed responses after IPC', async () => {
+    expect(() => api().notifications.markRead({ id: '' })).toThrow();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+
+    mocks.invoke.mockResolvedValue(null);
+    await expect(api().notifications.list()).rejects.toThrow();
+    await expect(api().notifications.markRead({ id: 'notification-1' })).rejects.toThrow();
+    await expect(api().notifications.markAllRead()).rejects.toThrow();
+    await expect(api().notifications.clear()).rejects.toThrow();
+    expect(mocks.invoke).toHaveBeenCalledTimes(4);
+  });
+});
+
 describe('historical task and notification preload APIs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
