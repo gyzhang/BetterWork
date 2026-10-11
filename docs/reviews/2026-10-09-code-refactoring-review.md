@@ -1171,10 +1171,18 @@ Preload 定向测试 1 文件 / 27 项、`docs:check` 154/154 通过，覆盖请
 
 源提交 `1c50922adb2f29632d553c66dafa9912fbd5cfae` 的 [PR Gate](https://github.com/gyzhang/BetterWork/actions/runs/38153026962) 与 Quick code check 通过，Full verify 按规则跳过。[PR #166](https://github.com/gyzhang/BetterWork/pull/166) 已 squash 合入 main，合并提交 `0fbce22c68d3ba853450614ac68390f9a9aa540e`；本地与远端任务分支已删除，本地 checkout 已同步 main。
 
-## 97. R09 子卡：Schedules Preload 通道映射
+## 97. R09 子卡：Schedules Preload 通道映射（已合并）
 
 2026-10-11 23:58 CST，从最新 `origin/main` `0fbce22c68d3ba853450614ac68390f9a9aa540e` 在本地 checkout 建立 `codex/r09-schedule-channel-contracts`。为 Schedule 列表/详情、配置、预览/预检、Occurrence、来源、手动执行与结果重试共 14 个 invoke channel 建立请求/响应 Schema 及 Preload 方法映射；`ScheduleChanged` 事件也纳入事件 Schema 和订阅方法映射。
 
 范围以 [Schedule 契约](../development/schedule-contracts.md)、[SC 任务板](../development/tasks-schedules.md) 和 [ADR-0037](../adr/0037-scheduled-work-and-source-snapshots.md) 为准。本卡只做 Preload 编译期映射；继续使用原 `ScheduleCallResult` 的 success/rejected envelope，保留列表输入默认值、事件运行期校验与解除订阅，不改变调度、持久化、错误或 UI 行为。
 
 Preload 定向测试 1 文件 / 35 项、全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 和差异空白检查通过；PR Gate、合并和分支清理待本卡收口。完整 `npm run verify`、UI、真实模型及安装态验收未运行。其他 API 域与 Main/Preload 全局映射仍待后续切片。
+
+2026-10-12 00:05 CST 远端收口：源提交 `c9441096630586244ddc86f35b6a1986aa3273ca` 的 [PR Gate / Actions 38153607472](https://github.com/gyzhang/BetterWork/actions/runs/38153607472) 通过，Quick code check 通过，Full verify 按规则跳过。[PR #167](https://github.com/gyzhang/BetterWork/pull/167) 已 squash 合入 main，合并提交 `2763f924318e776668fd49f21c161f297480cf3e`；任务分支本地与远端均已删除，原 checkout 已同步 main，未创建 worktree。
+
+## 98. R09 子卡：Skills 与 Experts Preload 通道映射
+
+2026-10-12 00:05 CST，从最新 `origin/main` `2763f924318e776668fd49f21c161f297480cf3e` 在原 checkout 建立 `codex/r09-skill-expert-contracts`。本卡为 Skills 的 13 个 invoke channel 与 Experts 的 7 个 invoke channel 建立请求/响应 Schema 和 Preload 方法映射，并用编译器正反例验证通道、输入与结果类型关联；保留现有解析时机、默认值和运行期校验，不改 Skill/Expert 行为、共享协议或错误语义。
+
+Preload 定向测试 1 文件 / 36 项通过；编译器正反例覆盖 Skills 与 Experts 的请求、响应和 channel 字面值配对。全仓 typecheck、改动文件 ESLint/Prettier、`docs:check` 155/155 与差异空白检查通过。PR Gate、合并和分支清理待本卡收口；R09 其他 API 域、Run 事件、Main/Preload 全局映射仍待后续切片。
