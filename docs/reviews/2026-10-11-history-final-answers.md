@@ -46,3 +46,11 @@ SQL 只控制读取窗口，返回的每条消息仍经原 `parseStoredEvent` �
 ## 后续范围
 
 E14 完成 R10 的最终回答读取切片；材料实体检查、完整历史事实装配及成功向量路完整块映射仍有后续范围。来源证明不得以轻投影替代，也不得为了批量化跳过失效校验。最新 SHA 的 macOS PR Gate、合并及归档证据将在收口时追加。
+
+## 远端门禁与合并交接
+
+2026-10-11 10:55 CST，最终源 `03397d4a5e3662ea025cf12d995a97db63db8e62` 的 [Actions 38106364657](https://github.com/gyzhang/BetterWork/actions/runs/38106364657) 在 macos-26-arm64 上通过 PR Gate。lint、format:check、typecheck、docs:check 1/154、changed functional 69/784、heavy 2/120 成功，Full verify 跳过；三次调用合计 72 文件 / 1,058 项，不当作全仓或去重规模。首发源的成功门禁不代替本次最终源证据。
+
+[PR #70](https://github.com/gyzhang/BetterWork/pull/70) 已 squash 为 main `455eafc42b4efbe3950d7e77fa2b06f79a530fac`，文件树与最终源一致。原 checkout 的 main/origin/main 对齐、工作树干净，代码分支本地及远端删除；合并后仍以原批次起点巡检，退出 0。纯 Markdown 分支 codex/e14-closeout 归档本节、总 Review 和日志，继续核对其最新源文档门禁及合并清理。
+
+E14 代码与自动化收口；完整 verify、UI、真实模型、安装态及 WM/MI 人工验收保持原边界。下一项建议 E15：历史重放材料实体校验整理，保留精确版本与来源安全判据，另按用户指令开工。

@@ -684,3 +684,5 @@ E13 完成 R10 的来源事实读取切片；docs:check 154 项、原基点巡�
 2026-10-11 10:47 CST，最终核心 2/49、changed functional 69/784、heavy 2/120、静态与 build 通过，两档共 71 文件 / 904 项，核心不相加。五个退化探针检出 2、7、10、1、13 项失败，字节恢复后相关回归通过。串行 bench 3 文件 / 4 项通过：256 真实 Run / 6,400 条窗口外旧消息，查询 256→1；无空尾与混合空尾分别完整解码 256/511 条，中位 2.56→0.85、2.79→1.72 ms，结果与消费字节相等，混合空尾 p95 基本持平。仅回答读取阶段，不外推 RSS、端到端或容量。
 
 用户新增依赖的 npm install 退出 0；补核对五份声明与锁文件、ECharts 6.1.0 及传递依赖安装一致，声明和锁文件未改变，后续安装先核对再执行。E14 完成 R10 的该读取切片，材料实体检查、完整历史事实装配与成功向量路完整块映射仍有后续范围。未运行完整 verify、UI、真实模型或安装态人工验收；最新源文档门禁、巡检及 macOS PR Gate、合并与归档继续收口。
+
+2026-10-11 10:55 CST：最终源 `03397d4a5e3662ea025cf12d995a97db63db8e62` 的 [Actions 38106364657](https://github.com/gyzhang/BetterWork/actions/runs/38106364657) 在 macos-26-arm64 上通过 PR Gate，静态、docs:check 1/154、changed functional 69/784、heavy 2/120 成功，Full verify 跳过。三次调用合计 72 文件 / 1,058 项，不当作全仓或去重规模。[PR #70](https://github.com/gyzhang/BetterWork/pull/70) 已 squash 为 main `455eafc42b4efbe3950d7e77fa2b06f79a530fac`，文件树与最终源一致；代码分支本地/远端删除，原 checkout 同步 main，原基点巡检退出 0，纯 Markdown 分支 codex/e14-closeout 归档。E14 代码与自动化收口，建议 E15 整理历史重放材料实体校验，保留精确版本与来源安全，另按用户指令推进。
