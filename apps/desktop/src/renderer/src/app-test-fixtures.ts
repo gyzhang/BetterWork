@@ -591,6 +591,17 @@ function createMcpApiFixture() {
   };
 }
 
+function createTasksApiFixture() {
+  return {
+    list: vi.fn(async (): Promise<RecentTaskSummary[]> => [previousTask]),
+    get: vi.fn(async (): Promise<RecentTaskSummary | null> => previousTask),
+    create: vi.fn(async () => ({
+      task: { id: 'new-task', title: goal },
+      sessionId: 'new-session',
+    })),
+  };
+}
+
 function createAppTestApi(options?: AppTestApiOptions) {
   emitNotificationChange = undefined;
   emitScheduleChange = undefined;
@@ -606,14 +617,7 @@ function createAppTestApi(options?: AppTestApiOptions) {
     artifacts: createArtifactApiFixture(),
     evidence: { list: vi.fn(async () => []) },
     notifications: createNotificationsApiFixture(),
-    tasks: {
-      list: vi.fn(async (): Promise<RecentTaskSummary[]> => [previousTask]),
-      get: vi.fn(async (): Promise<RecentTaskSummary | null> => previousTask),
-      create: vi.fn(async () => ({
-        task: { id: 'new-task', title: goal },
-        sessionId: 'new-session',
-      })),
-    },
+    tasks: createTasksApiFixture(),
     taskContinuity: {
       getBrief: vi.fn<Window['betterwork']['taskContinuity']['getBrief']>(async () => null),
       saveBrief: vi.fn<Window['betterwork']['taskContinuity']['saveBrief']>(async () => {
