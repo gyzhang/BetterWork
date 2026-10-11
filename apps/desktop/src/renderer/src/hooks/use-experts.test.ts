@@ -46,4 +46,32 @@ describe('useExperts 的取数收口', () => {
 
     expect(result.current.error).toBe('');
   });
+
+  it('生命周期与删除动作把参数原样转交给专家 API', async () => {
+    const setLifecycle = vi.fn(async () => undefined);
+    const remove = vi.fn(async () => ({ deleted: true }));
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        experts: {
+          list: vi.fn(async () => []),
+          setLifecycle,
+          delete: remove,
+        },
+      },
+    });
+    const { result } = renderHook(() => useExperts());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const lifecycleInput = {
+      expertId: 'expert-1',
+      lifecycle: 'disabled' as const,
+      expectedRevision: 7,
+    };
+    await result.current.setLifecycle(lifecycleInput);
+    await result.current.remove('expert-1');
+
+    expect(setLifecycle).toHaveBeenCalledWith(lifecycleInput);
+    expect(remove).toHaveBeenCalledWith({ expertId: 'expert-1' });
+  });
 });
