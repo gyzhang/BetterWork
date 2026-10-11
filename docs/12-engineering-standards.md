@@ -188,13 +188,13 @@ standards/
   - 新增迁移必须同时补 `db/migrate.test.ts` 里的对应用例（新库、历史库、幂等、失败回滚、完整性检查）。
 - `PRAGMA foreign_keys` 常开。写测试时要建真实的父级行，不能塞伪造 id。
 - Repository 只写自己的聚合表，但可以读其他表做存在性与归属校验；跨聚合写入由调用方用 `store.transaction()` 显式包起来。Repository 之间不互相持有引用。
-- 密钥（模型与搜索的 API Key）明文存于本地 SQLite，**只**在主进程内部流转；对外接口一律只回 `apiKeyConfigured`。日志、错误信息、测试输出绝不出现 Key。
+- 生产 Main 注入 Electron `safeStorage`；模型与搜索 API Key 成功写入受保护凭据表 `credentials.ciphertext`，明文只在 Main 内解析，对外接口只回 `apiKeyConfigured`。`model_profiles.api_key` 与 `search_engine_configs.api_key` 是保留的 legacy 列：启动迁移通过版本化 journal 按 owner 加密、回环校验并清空明文。`pending/failed` owner 在 Run 前拒绝明文回退并保留恢复状态；`done` owner 从凭据仓储解析；`none` 状态仍有 legacy 明文兼容读取。受保护存储不可用时迁移整体跳过，pending 原样保留。成功迁移不承诺擦除旧数据库页、WAL 或备份。日志、错误信息、测试输出绝不出现 Key。
 
 ## 7. IPC
 
 - channel、输入、输出全部在 `packages/agent-protocol` 定义；`IpcChannel` 是 channel 名的唯一来源。
 - 通用 handler 必须经 `ipc/register-ipc.ts` 的三个注册 helper 之一：`handleInput`（必填入参）、`handleOptionalInput`（入参可整体省略）、`handleNoInput`（入参必须为空）。三者都在边界上用共享协议的 Zod Schema 校验输入与输出，不允许 handler 自行解析 `raw` 或绕过响应校验。
-- 定时的 `handleScheduleInput` 是专用边界，额外保留有界领域错误与 success/rejected 包装。带入参的三个 helper 向 handler 提供请求 Schema 的 `z.output`，无入参 helper 继续提供 `IpcMainInvokeEvent`。四个 helper 的 handler 返回响应（定时为 data）Schema 的 `z.input` 或其 Promise；Schema 参数决定类型，回调不得放宽推导。响应默认值与转换仍由运行期 `.parse()` 完成，编译期关联不替代边界校验。
+- 定时通道使用专用 `handleScheduleInput`：输入先经请求 Schema 解析；handler 返回 data Schema 的 `z.input`，helper 按共享协议包装为 `ScheduleCallResult`（`success/data` 或 `rejected/error`）。已知定时异常映射为有界 `ScheduleDomainError`，未知异常映射为 `schedule_preparation_failed` 并带有界 `problems`。handler 执行错误走该结果包装；输入或输出 Schema 校验失败仍作为 invoke rejection 返回调用方。带入参的三个 helper 向 handler 提供请求 Schema 的 `z.output`，无入参 helper 继续提供 `IpcMainInvokeEvent`。四个 helper 的 handler 返回响应（定时为 data）Schema 的 `z.input` 或其 Promise；Schema 参数决定类型，回调不得放宽推导。响应默认值与转换仍由运行期 `.parse()` 完成，编译期关联不替代边界校验。
 - 推送给 Renderer 的事件在 preload 侧过 Zod 后再交给监听者。
 - `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true` 不可放松。
 - 需要用户文件访问的能力，白名单校验必须在主进程完成（例如「打开原文」先查知识库登记记录，再交给 `shell.openPath`）。
