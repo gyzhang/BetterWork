@@ -27,8 +27,6 @@ afterEach(() => {
 const minimalProfile: RuntimeProfileDraft = {
   commands: [],
   environmentRequirements: [],
-  python: { mode: 'managed' },
-  toolchains: [],
 };
 
 interface SeedSkillOptions {

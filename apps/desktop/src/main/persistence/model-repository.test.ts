@@ -267,9 +267,7 @@ describe('ModelRepository', () => {
         priority: 0,
       });
 
-      store.models.setDefault(
-        store.models.save({ ...baseInput, name: 'New Lang', priority: 5 }).id ?? '',
-      );
+      store.models.setDefault(store.models.save({ ...baseInput, name: 'New Lang', priority: 5 }));
 
       expect(store.models.list().find((m) => m.id === visionId)?.priority).toBe(0);
       expect(store.models.list().find((m) => m.id === langId)?.priority).toBeGreaterThanOrEqual(0);
@@ -320,8 +318,8 @@ describe('ModelRepository', () => {
       const id = store.models.save({ ...baseInput });
 
       store.models.recordConnection(id, 'connected');
-      store.models.recordConnection(id, 'error');
-      expect(store.models.list().find((m) => m.id === id)?.connectionStatus).toBe('error');
+      store.models.recordConnection(id, 'failed');
+      expect(store.models.list().find((m) => m.id === id)?.connectionStatus).toBe('failed');
     });
   });
 
