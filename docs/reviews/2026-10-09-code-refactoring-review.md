@@ -732,3 +732,11 @@ functional 定向 3 文件 / 69 项、heavy 定向 1 文件 / 37 项、typecheck
 页面夹具按 Artifact、Knowledge、Schedule、专家/记忆、MCP/帮助旅程拆分；完整应用夹具按任务、成果、记忆和恢复拆分。57 种页面步骤与 22 种应用步骤保持一致，`npm run ui:check` 的 74 组真实渲染通过。未整理 CSS 或修改产品行为。
 
 源 `8efeb6393b8ff990331c7d683761eb0cb8d2a8a8` 的 [Actions 38115307115](https://github.com/gyzhang/BetterWork/actions/runs/38115307115) 在 macos-26-arm64 上通过 PR Gate，lint、format:check、typecheck、docs:check 与受影响的测试成功；Full verify 按仓库策略跳过。[PR #79](https://github.com/gyzhang/BetterWork/pull/79) 已 squash 合并为 main `b2387401fdc4408ffc740d3abdf0b939d0c43126`；远端任务分支删除，原 worktree 保留。
+
+## 38. R16：现行规范事实同步（已合并）
+
+工程规范 §6 已说明模型与搜索 API Key 的生产 safeStorage 路径、legacy journal 迁移，以及 `pending/failed/done/none` 的实际读取和派发语义；保留列仍在，存储不可用时迁移保留 pending，不声称旧数据库页、WAL 或备份已安全擦除。能力契约同步 CF10–CF12 代码与验收状态，API 契约仍为 Proposed。
+
+工程规范 §7 补全 `handleScheduleInput` 的输入与 data Schema、`ScheduleCallResult` 包装、异常映射和边界校验失败语义。没有改运行代码、历史迁移、ADR 状态或能力范围。
+
+提交 `cfed9db7edaba05c63b9e80eebfa8da6378b0897` 的 [Actions 38116034827](https://github.com/gyzhang/BetterWork/actions/runs/38116034827) 执行纯文档分类，Documentation check 与 PR Gate 成功；Full verify 和 Quick code check 按变更类型跳过。本地 `npm run docs:check` 154/154 通过。[PR #81](https://github.com/gyzhang/BetterWork/pull/81) 已 squash 合并为 main `cfbc900d8e877e218b4309b05f326e1e4cd4603f`。
