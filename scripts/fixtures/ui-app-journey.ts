@@ -70,6 +70,7 @@ const steps = [
   'restore',
   'second-draft',
   'second-run',
+  'artifact-navigation',
   'failed-run',
   'cancelled-run',
   'historical-save',

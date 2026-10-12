@@ -38,6 +38,19 @@ const history: ArtifactVersionDetail = {
   evidence: [],
 };
 
+const currentVersion: ArtifactVersionDetail = {
+  id: current.currentVersionId,
+  artifactId: current.id,
+  versionNumber: current.versionNumber,
+  origin: current.origin,
+  ...(current.sourceRunId ? { sourceRunId: current.sourceRunId } : {}),
+  createdAt: current.updatedAt,
+  type: 'markdown',
+  content: current.content,
+  contentHash: current.contentHash,
+  evidence: current.evidence,
+};
+
 const versions: ArtifactVersionSummary[] = [
   {
     id: 'version-2',
@@ -64,6 +77,7 @@ let failSave = true;
 const artifactApi: Pick<Window['betterwork']['artifacts'], 'listVersions' | 'getVersion'> = {
   listVersions: async () => versions,
   getVersion: async ({ id }) => {
+    if (id === currentVersion.id) return currentVersion;
     if (id !== history.id) throw new Error('本场景未覆盖该历史版本');
     if (failVersion) {
       failVersion = false;
@@ -134,6 +148,7 @@ export const artifactSteps = [
   'open',
   'version-failed',
   'version-recovered',
+  'artifact-keyboard',
   'edit-failed',
   'save-recovered',
   'back',

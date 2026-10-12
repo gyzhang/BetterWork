@@ -99,7 +99,10 @@ export function useArtifactViewer(
     setViewingVersion(initialVersion?.artifactId === selected?.id ? initialVersion : undefined);
     if (!selected) {
       setVersions([]);
-      return;
+      return () => {
+        if (listRequestRef.current === requestId) listRequestRef.current += 1;
+        versionRequestRef.current += 1;
+      };
     }
     reportAction(
       window.betterwork.artifacts.listVersions({ artifactId: selected.id }).then((loaded) => {
@@ -110,6 +113,10 @@ export function useArtifactViewer(
       },
       '版本历史加载失败，请重试。',
     );
+    return () => {
+      if (listRequestRef.current === requestId) listRequestRef.current += 1;
+      versionRequestRef.current += 1;
+    };
   }, [initialVersion, selected]);
 
   // 必须 memo：`toVersionDetail` 每次调用都返回新对象，若不收口，调用方把
@@ -130,7 +137,13 @@ export function useArtifactViewer(
   const selectVersion = async (version: ArtifactVersionSummary): Promise<void> => {
     const requestId = versionRequestRef.current + 1;
     versionRequestRef.current = requestId;
-    const detail = await window.betterwork.artifacts.getVersion({ id: version.id });
+    let detail: ArtifactVersionDetail | null;
+    try {
+      detail = await window.betterwork.artifacts.getVersion({ id: version.id });
+    } catch (error) {
+      if (versionRequestRef.current !== requestId) return;
+      throw error;
+    }
     if (versionRequestRef.current !== requestId) return;
     if (!detail) throw new Error('该版本已不存在，请返回成果列表重新选择。');
     setViewingVersion(detail);

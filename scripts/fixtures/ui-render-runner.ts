@@ -12,7 +12,12 @@ import {
   MAX_SAMPLE_ATTEMPTS,
   settleDelayMs,
 } from './frame-verdict';
-import { checkConflictKeyboard, checkReferenceKeyboard, keyboard } from './ui-keyboard';
+import {
+  checkArtifactKeyboard,
+  checkConflictKeyboard,
+  checkReferenceKeyboard,
+  keyboard,
+} from './ui-keyboard';
 
 function outputDirectory(): string {
   const directory = process.argv[2];
@@ -295,6 +300,7 @@ async function run(): Promise<void> {
                   );
                 reading = await checkReferenceKeyboard(window);
               }
+              if (step === 'artifact-keyboard') reading = await checkArtifactKeyboard(window);
               if (step === 'memory-keyboard') reading = await checkConflictKeyboard(window);
               if (errors.length > 0) throw new Error(`页面运行错误：${errors.join('；')}`);
               const modalOpen = (await window.webContents.executeJavaScript(
