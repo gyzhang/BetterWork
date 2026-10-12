@@ -11,6 +11,7 @@ export interface BusinessMetricFactRecord {
   readonly unit: string;
   readonly periods: readonly string[];
   readonly sourceIds: readonly string[];
+  readonly basis: 'actual' | 'budget' | 'derived';
 }
 
 export interface MaterialFactLedger {
@@ -62,6 +63,7 @@ const sameFact = (left: BusinessMetricFactRecord, right: BusinessMetricFactRecor
   left.metric === right.metric &&
   left.value === right.value &&
   normalizeUnit(left.unit) === normalizeUnit(right.unit) &&
+  left.basis === right.basis &&
   sameStrings(left.periods, right.periods) &&
   sameStrings(left.sourceIds, right.sourceIds);
 
@@ -69,6 +71,77 @@ const sameStrings = (left: readonly string[], right: readonly string[]): boolean
   left.length === right.length && left.every((value, index) => value === right[index]);
 
 const normalizeUnit = (unit: string): string => unit.normalize('NFC').trim().replaceAll('％', '%');
+
+const normalizePeriod = (period: string): string => {
+  const normalized = period.normalize('NFC').trim();
+  const compact = normalized.replace(/\s+/gu, '');
+  const fullDate = compact.match(
+    /^((?:19|20)\d{2})(?:年|[-/.])(\d{1,2})(?:月|[-/.])(\d{1,2})日?$/u,
+  );
+  if (fullDate) {
+    const yearText = fullDate[1];
+    const monthText = fullDate[2];
+    const dayText = fullDate[3];
+    if (yearText === undefined || monthText === undefined || dayText === undefined)
+      return normalized;
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (
+      month >= 1 &&
+      month <= 12 &&
+      date.getUTCFullYear() === year &&
+      date.getUTCMonth() === month - 1 &&
+      date.getUTCDate() === day
+    ) {
+      return `${yearText}-${monthText.padStart(2, '0')}-${dayText.padStart(2, '0')}`;
+    }
+    return normalized;
+  }
+  const month = compact.match(/^((?:19|20)\d{2})(?:年|[-/.])(\d{1,2})月?$/u);
+  if (month) {
+    const yearText = month[1];
+    const monthText = month[2];
+    if (yearText === undefined || monthText === undefined) return normalized;
+    const monthNumber = Number(monthText);
+    if (monthNumber >= 1 && monthNumber <= 12) {
+      return `${yearText}-${monthText.padStart(2, '0')}`;
+    }
+  }
+  return normalized;
+};
+
+interface PeriodMatch {
+  readonly value: string;
+  readonly start: number;
+  readonly end: number;
+}
+
+const textPeriodPattern =
+  /(?<!\d)((?:19|20)\d{2})(?:\s*[-/.]\s*(\d{1,2})(?:\s*[-/.]\s*(\d{1,2})\s*日?)?|\s*年\s*(\d{1,2})\s*月(?:\s*(\d{1,2})\s*日?)?)(?!\d)/gu;
+
+const periodMatchesIn = (content: string): PeriodMatch[] =>
+  [...content.matchAll(textPeriodPattern)].map((match) => ({
+    value: normalizePeriod(match[0]),
+    start: match.index,
+    end: match.index + match[0].length,
+  }));
+
+const periodsInClause = (clause: string, knownPeriods: readonly string[]): string[] => {
+  const periods = new Set(periodMatchesIn(clause).map(({ value }) => value));
+  const normalizedClause = clause.normalize('NFC');
+  for (const period of knownPeriods) {
+    const normalized = period.normalize('NFC').trim();
+    if (!normalized || normalizePeriod(period) !== normalized) continue;
+    const periodPattern = new RegExp(
+      `(?<![\\p{L}\\p{N}])${escapeRegExp(normalized)}(?![\\p{L}\\p{N}])`,
+      'u',
+    );
+    if (periodPattern.test(normalizedClause)) periods.add(normalizePeriod(period));
+  }
+  return [...periods];
+};
 
 const qualitativeClaimPatterns = [
   { phrase: '已续约', label: '已续约状态' },
@@ -121,28 +194,210 @@ export const recordMaterialFacts = (ledger: MaterialFactLedger, input: MaterialF
   }
 };
 
-const sourceContainsFact = (content: string, metric: string, fact: SourcedMetricFact): boolean => {
-  if (sourceContainsStructuredFact(content, metric, fact)) return true;
-  if (!content.includes(metric) || !content.includes(fact.period)) return false;
-  const unit = normalizeUnit(fact.unit);
-  const normalizedContent = content.replaceAll('％', '%');
-  const valuePattern = /[-+]?(?:\d+(?:\.\d+)?|\.\d+)/gu;
-  for (const match of normalizedContent.matchAll(valuePattern)) {
-    const rawValue = match[0];
-    const value = Number(rawValue);
-    if (value !== fact.value) continue;
-    const start = match.index + rawValue.length;
-    const suffix = normalizedContent.slice(start, start + unit.length + 8);
-    const unitMatch = new RegExp(`^\\s*${escapeRegExp(unit)}(?![\\p{L}\\p{N}_])`, 'u');
-    if (unitMatch.test(suffix)) return true;
+interface TextFactAssertion {
+  readonly metric: string;
+  readonly value: number;
+  readonly unit: string;
+  readonly period: string;
+  readonly basis: 'actual' | 'budget';
+}
+
+interface MetricOccurrence {
+  readonly metric: string;
+  readonly start: number;
+  readonly end: number;
+}
+
+const nonAssertiveFactPattern =
+  /待确认|待核实|未确认|未提供|未提及|可能|假设|如果|若|计划|建议|是否|预计|预测|待定|不确定|未知|不可推断|无法(?:判断|确认|推断)|并非|不是|没有|未(?:发生|达到|实现)|不为/iu;
+const numericTokenPattern = '[-+]?(?:\\d{1,3}(?:,\\d{3})+|\\d+(?:\\.\\d+)?|\\.\\d+)';
+const numericValuePattern = /[-+]?(?:\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?|\.\d+)/gu;
+const unitConnectorPattern =
+  /(?:的|且|和|与|但|而|其中|预算|实际|同比|环比|变化|增长|下降|分别|各|等|and|but|with).*$/iu;
+const unitBoundaryPattern =
+  /^(?:的|且|和|与|但|而|其中|预算|实际|同比|环比|变化|增长|下降|分别|各|等|and|but|with)/iu;
+
+interface NumericUnitMatch {
+  readonly value: number;
+  readonly unit: string;
+  readonly index: number;
+}
+
+const valueUnitMatchesIn = (content: string, knownUnits: readonly string[]): NumericUnitMatch[] => {
+  const units = [...new Set(knownUnits.map(normalizeUnit))].sort(
+    (left, right) => right.length - left.length,
+  );
+  const matches: NumericUnitMatch[] = [];
+  for (const numberMatch of content.matchAll(numericValuePattern)) {
+    const rawValue = numberMatch[0];
+    const numberIndex = numberMatch.index;
+    const value = Number(rawValue.replaceAll(',', ''));
+    if (!Number.isFinite(value)) continue;
+    const suffix = content.slice(numberIndex + rawValue.length).trimStart();
+    const exactUnit = units.find((unit) => {
+      if (!suffix.startsWith(unit)) return false;
+      const remainder = suffix.slice(unit.length);
+      const nextCharacter = remainder.slice(0, 1);
+      return (
+        !nextCharacter ||
+        !/[\p{L}\p{N}_]/u.test(nextCharacter) ||
+        unitBoundaryPattern.test(remainder)
+      );
+    });
+    const genericUnitMatch = suffix.match(/^(?:[%％]|[\p{L}][\p{L}\p{N}²³/_·.-]*)/u);
+    const genericUnit = genericUnitMatch?.[0]?.replace(unitConnectorPattern, '').trim();
+    const unit = exactUnit ?? genericUnit;
+    if (!unit) continue;
+    matches.push({ value, unit: normalizeUnit(unit), index: numberIndex });
   }
-  return false;
+  return matches;
+};
+
+const joinSplitNumericUnits = (content: string, units: readonly string[]): string => {
+  // Keep a newline only when it separates a number from its known unit token.
+  let normalized = content.normalize('NFC').replaceAll('％', '%');
+  for (const unit of units) {
+    const normalizedUnit = normalizeUnit(unit);
+    if (!normalizedUnit) continue;
+    const unitPattern = new RegExp(
+      `(${numericTokenPattern})[ \\t]*\\r?\\n[ \\t]*(${escapeRegExp(normalizedUnit)})(?![\\p{L}\\p{N}_])`,
+      'gu',
+    );
+    normalized = normalized.replace(unitPattern, '$1 $2');
+  }
+  return normalized;
+};
+
+const metricOccurrencesIn = (content: string, metrics: readonly string[]): MetricOccurrence[] => {
+  const occurrences: MetricOccurrence[] = [];
+  for (const metric of metrics) {
+    if (!metric) continue;
+    let start = content.indexOf(metric);
+    while (start >= 0) {
+      occurrences.push({ metric, start, end: start + metric.length });
+      start = content.indexOf(metric, start + metric.length);
+    }
+  }
+  return occurrences
+    .sort((left, right) => left.start - right.start || right.end - left.end)
+    .filter(
+      (occurrence, index, values) =>
+        !values.slice(0, index).some((previous) => occurrence.start < previous.end),
+    );
+};
+
+const textFactAssertionsIn = (
+  content: string,
+  metrics: readonly string[],
+  knownPeriods: readonly string[],
+  knownUnits: readonly string[],
+): TextFactAssertion[] => {
+  const assertions: TextFactAssertion[] = [];
+  const sentences = joinSplitNumericUnits(content, knownUnits).split(
+    /[\r\n。！？!?；;]+|(?<!\d)\.(?!\d)/u,
+  );
+  for (const sentence of sentences) {
+    const sentencePeriods = periodsInClause(sentence, knownPeriods);
+    const clauses = sentence.split(/[，、]|,(?!\d)/u);
+    for (const clause of clauses) {
+      const occurrences = metricOccurrencesIn(clause, metrics);
+      if (occurrences.length === 0) continue;
+      const clausePeriods = periodsInClause(clause, knownPeriods);
+      const period =
+        clausePeriods.length === 1
+          ? clausePeriods[0]
+          : clausePeriods.length === 0 && sentencePeriods.length === 1
+            ? sentencePeriods[0]
+            : undefined;
+      if (period === undefined) continue;
+      const periodRanges = periodMatchesIn(clause);
+      const contentWithoutPeriods = [...periodRanges]
+        .reverse()
+        .reduce(
+          (remaining, match) =>
+            `${remaining.slice(0, match.start)}${' '.repeat(match.end - match.start)}${remaining.slice(match.end)}`,
+          clause,
+        );
+      for (const [index, occurrence] of occurrences.entries()) {
+        const nextOccurrence = occurrences[index + 1];
+        const end = nextOccurrence?.start ?? clause.length;
+        if (nonAssertiveFactPattern.test(clause)) continue;
+        const claimStart = occurrence.start;
+        const claimEnd = end;
+        const sanitizedClaim = contentWithoutPeriods.slice(claimStart, claimEnd);
+        const valuePairs = valueUnitMatchesIn(sanitizedClaim, knownUnits);
+        if (valuePairs.length !== 1) continue;
+        const valueMatch = valuePairs[0];
+        if (valueMatch === undefined) continue;
+        const basisContext =
+          `${clause.slice(Math.max(0, occurrence.start - 24), occurrence.start)} ${clause.slice(occurrence.end, occurrence.start + valueMatch.index)}`.toLowerCase();
+        const budgetIndex = Math.max(
+          basisContext.lastIndexOf('预算'),
+          basisContext.lastIndexOf('budget'),
+        );
+        const actualIndex = Math.max(
+          basisContext.lastIndexOf('实际'),
+          basisContext.lastIndexOf('actual'),
+        );
+        assertions.push({
+          metric: occurrence.metric,
+          value: valueMatch.value,
+          unit: valueMatch.unit,
+          period,
+          basis: budgetIndex > actualIndex ? 'budget' : 'actual',
+        });
+      }
+    }
+  }
+  return assertions;
+};
+
+type SourceFactValidation = 'supported' | 'missing' | 'conflict';
+
+type TextFactAssertionIndex = ReadonlyMap<string, readonly TextFactAssertion[]>;
+
+const textFactAssertionKey = (metric: string, period: string, basis: 'actual' | 'budget'): string =>
+  `${basis}\u0000${metric}\u0000${normalizePeriod(period)}`;
+
+const indexTextFactAssertions = (
+  assertions: readonly TextFactAssertion[],
+): TextFactAssertionIndex => {
+  const index = new Map<string, TextFactAssertion[]>();
+  for (const assertion of assertions) {
+    const key = textFactAssertionKey(assertion.metric, assertion.period, assertion.basis);
+    const group = index.get(key);
+    if (group) group.push(assertion);
+    else index.set(key, [assertion]);
+  }
+  return index;
+};
+
+const sourceContainsFact = (
+  content: string,
+  textAssertions: TextFactAssertionIndex,
+  metric: string,
+  fact: SourcedMetricFact,
+  basis: 'actual' | 'budget',
+): SourceFactValidation => {
+  if (sourceContainsStructuredFact(content, metric, fact, basis)) return 'supported';
+  const assertions = textAssertions.get(textFactAssertionKey(metric, fact.period, basis)) ?? [];
+  const distinctFacts = new Set(
+    assertions.map((assertion) => `${assertion.value}\u0000${normalizeUnit(assertion.unit)}`),
+  );
+  if (distinctFacts.size > 1) return 'conflict';
+  return assertions.some(
+    (assertion) =>
+      assertion.value === fact.value && normalizeUnit(assertion.unit) === normalizeUnit(fact.unit),
+  )
+    ? 'supported'
+    : 'missing';
 };
 
 const sourceContainsStructuredFact = (
   content: string,
   metric: string,
   fact: SourcedMetricFact,
+  basis: 'actual' | 'budget',
 ): boolean => {
   const jsonStart = content.indexOf('{');
   const jsonEnd = content.lastIndexOf('}');
@@ -154,7 +409,8 @@ const sourceContainsStructuredFact = (
     return false;
   }
   if (!isRecord(source)) return false;
-  return ['current', 'previous', 'budget'].some((periodKey) => {
+  const periodKeys = basis === 'budget' ? ['budget'] : ['current', 'previous'];
+  return periodKeys.some((periodKey) => {
     const periodFacts = source[periodKey];
     if (!isRecord(periodFacts)) return false;
     const candidate = periodFacts[metric];
@@ -163,7 +419,8 @@ const sourceContainsStructuredFact = (
       candidate.value === fact.value &&
       typeof candidate.unit === 'string' &&
       normalizeUnit(candidate.unit) === normalizeUnit(fact.unit) &&
-      candidate.period === fact.period &&
+      typeof candidate.period === 'string' &&
+      normalizePeriod(candidate.period) === normalizePeriod(fact.period) &&
       candidate.sourceId === fact.sourceId
     );
   });
@@ -178,9 +435,35 @@ const registerFact = (ledger: MaterialFactLedger, fact: BusinessMetricFactRecord
   if (!ledger.facts.some((existing) => sameFact(existing, fact))) ledger.facts.push(fact);
 };
 
+interface SourcedFactEntry {
+  readonly metric: string;
+  readonly fact: SourcedMetricFact;
+  readonly basis: 'actual' | 'budget';
+}
+
 const entriesOf = (
   values: Record<string, SourcedMetricFact> | undefined,
-): Array<[string, SourcedMetricFact]> => (values ? Object.entries(values) : []);
+  basis: 'actual' | 'budget',
+): SourcedFactEntry[] =>
+  values ? Object.entries(values).map(([metric, fact]) => ({ metric, fact, basis })) : [];
+
+const hasConflictingDirectFacts = (facts: readonly BusinessMetricFactRecord[]): boolean =>
+  facts.some((fact, index) =>
+    facts
+      .slice(index + 1)
+      .some(
+        (other) =>
+          fact.basis === other.basis &&
+          fact.basis !== 'derived' &&
+          fact.metric === other.metric &&
+          fact.periods.some((period) =>
+            other.periods.some(
+              (otherPeriod) => normalizePeriod(period) === normalizePeriod(otherPeriod),
+            ),
+          ) &&
+          (fact.value !== other.value || normalizeUnit(fact.unit) !== normalizeUnit(other.unit)),
+      ),
+  );
 
 export const validateAndRecordBusinessMetricFacts = (
   ledger: MaterialFactLedger,
@@ -188,30 +471,51 @@ export const validateAndRecordBusinessMetricFacts = (
 ): void => {
   if (!ledger.enabled) throw new Error('材料事实校验失败：当前 Run 未启用显式经营分析。');
   const entries = [
-    ...entriesOf(input.current),
-    ...entriesOf(input.previous),
-    ...entriesOf(input.budget),
+    ...entriesOf(input.current, 'actual'),
+    ...entriesOf(input.previous, 'actual'),
+    ...entriesOf(input.budget, 'budget'),
   ];
-  for (const [metric, fact] of entries) {
+  const knownMetrics = [...new Set(entries.map(({ metric }) => metric))];
+  const knownPeriods = [...new Set(entries.map(({ fact }) => fact.period))];
+  const knownUnits = [...new Set(entries.map(({ fact }) => fact.unit))];
+  const pendingFacts: BusinessMetricFactRecord[] = [];
+  const textAssertionsBySource = new Map<string, TextFactAssertionIndex>();
+  for (const { metric, fact, basis } of entries) {
     const source = ledger.sources.get(fact.sourceId);
     if (!source) {
       throw new Error(`材料事实校验失败：指标“${metric}”引用了本次 Run 未读取的来源。`);
     }
-    if (!sourceContainsFact(source, metric, fact)) {
+    let textAssertions = textAssertionsBySource.get(fact.sourceId);
+    if (textAssertions === undefined) {
+      textAssertions = indexTextFactAssertions(
+        textFactAssertionsIn(source, knownMetrics, knownPeriods, knownUnits),
+      );
+      textAssertionsBySource.set(fact.sourceId, textAssertions);
+    }
+    const validation = sourceContainsFact(source, textAssertions, metric, fact, basis);
+    if (validation === 'conflict') {
+      throw new Error(
+        `材料事实校验失败：来源存在相互冲突的指标“${metric}”事实（${fact.period}）。`,
+      );
+    }
+    if (validation === 'missing') {
       throw new Error(
         `材料事实校验失败：来源未同时提供指标“${metric}”的数值、单位和期间（${fact.period}）。`,
       );
     }
-  }
-  for (const [metric, fact] of entries) {
-    registerFact(ledger, {
+    pendingFacts.push({
       metric,
       value: fact.value,
       unit: normalizeUnit(fact.unit),
       periods: [fact.period],
       sourceIds: [fact.sourceId],
+      basis,
     });
   }
+  if (hasConflictingDirectFacts([...ledger.facts, ...pendingFacts])) {
+    throw new Error('材料事实校验失败：来源存在相互冲突的指标事实。');
+  }
+  for (const fact of pendingFacts) registerFact(ledger, fact);
 };
 
 // The validator is bound to one Run so each accepted fact records against its own source ledger.
@@ -239,6 +543,7 @@ export const recordDeterministicBusinessMetrics = (
       unit: normalizeUnit(metric.unit),
       periods: [metric.currentPeriod],
       sourceIds: [metric.currentSourceId],
+      basis: 'actual',
     };
     if (!ledger.facts.some((fact) => sameFact(fact, current))) {
       throw new Error(`确定性经营分析结果未匹配已核验输入：${metric.metric}。`);
@@ -253,6 +558,7 @@ export const recordDeterministicBusinessMetrics = (
         unit: normalizeUnit(metric.unit),
         periods: [metric.previousPeriod],
         sourceIds: [metric.previousSourceId],
+        basis: 'actual',
       });
       if (metric.change !== undefined) {
         registerFact(ledger, {
@@ -261,6 +567,7 @@ export const recordDeterministicBusinessMetrics = (
           unit: normalizeUnit(metric.unit),
           periods: [metric.currentPeriod, metric.previousPeriod],
           sourceIds: [metric.currentSourceId, metric.previousSourceId],
+          basis: 'derived',
         });
       }
       if (metric.changeRate !== undefined) {
@@ -270,6 +577,7 @@ export const recordDeterministicBusinessMetrics = (
           unit: '%',
           periods: [metric.currentPeriod, metric.previousPeriod],
           sourceIds: [metric.currentSourceId, metric.previousSourceId],
+          basis: 'derived',
         });
       }
     }
@@ -283,6 +591,7 @@ export const recordDeterministicBusinessMetrics = (
         unit: normalizeUnit(metric.unit),
         periods: [metric.budgetPeriod],
         sourceIds: [metric.budgetSourceId],
+        basis: 'budget',
       });
       if (metric.budgetVariance !== undefined) {
         registerFact(ledger, {
@@ -291,6 +600,7 @@ export const recordDeterministicBusinessMetrics = (
           unit: normalizeUnit(metric.unit),
           periods: [metric.currentPeriod, metric.budgetPeriod],
           sourceIds: [metric.currentSourceId, metric.budgetSourceId],
+          basis: 'derived',
         });
       }
       if (metric.budgetVarianceRate !== undefined) {
@@ -300,6 +610,7 @@ export const recordDeterministicBusinessMetrics = (
           unit: '%',
           periods: [metric.currentPeriod, metric.budgetPeriod],
           sourceIds: [metric.currentSourceId, metric.budgetSourceId],
+          basis: 'derived',
         });
       }
     }
