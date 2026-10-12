@@ -4,7 +4,7 @@ import type {
   ArtifactVersionSummary,
   RevealFileArtifactResult,
 } from '@betterwork/agent-protocol';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { reportAction } from '../lib/async-action';
 
@@ -13,12 +13,20 @@ export interface ArtifactViewer {
   title: string;
   content: string;
   error: string;
+  saving: boolean;
   versions: ArtifactVersionSummary[];
+  versionsLoading: boolean;
+  versionsError: string;
+  loadingVersionId: string | undefined;
   /** 正在查看的版本；未选历史版本时回落到成果的当前版本。 */
   visibleVersion: ArtifactVersionDetail | undefined;
   setTitle: (title: string) => void;
   setContent: (content: string) => void;
   setError: (message: string) => void;
+  beginSave: () => number | undefined;
+  isSaveCurrent: (requestId: number) => boolean;
+  finishSave: (requestId: number) => boolean;
+  retryVersions: () => void;
   beginEditing: () => void;
   cancelEditing: () => void;
   finishEditing: () => void;
@@ -81,24 +89,46 @@ export function useArtifactViewer(
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
   const [versions, setVersions] = useState<ArtifactVersionSummary[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [versionsError, setVersionsError] = useState('');
+  const [loadingVersionId, setLoadingVersionId] = useState<string>();
   const [viewingVersion, setViewingVersion] = useState<ArtifactVersionDetail | undefined>(
     initialVersion,
   );
   const listRequestRef = useRef(0);
   const versionRequestRef = useRef(0);
+  const saveRequestRef = useRef(0);
+  const savePendingRef = useRef(false);
+  const [versionsRetry, setVersionsRetry] = useState(0);
+
+  useLayoutEffect(() => {
+    saveRequestRef.current += 1;
+    savePendingRef.current = false;
+    setSaving(false);
+    return () => {
+      saveRequestRef.current += 1;
+      savePendingRef.current = false;
+    };
+  }, [initialVersion, selected]);
 
   useEffect(() => {
     const requestId = listRequestRef.current + 1;
     listRequestRef.current = requestId;
     versionRequestRef.current += 1;
+    setLoadingVersionId(undefined);
     setEditing(false);
     setError('');
+    setVersions([]);
+    setVersionsError('');
+    setVersionsLoading(selected !== undefined);
     setTitle(selected?.title ?? '');
     setContent(selected?.type === 'markdown' ? selected.content : '');
     setViewingVersion(initialVersion?.artifactId === selected?.id ? initialVersion : undefined);
     if (!selected) {
       setVersions([]);
+      setVersionsLoading(false);
       return () => {
         if (listRequestRef.current === requestId) listRequestRef.current += 1;
         versionRequestRef.current += 1;
@@ -106,10 +136,16 @@ export function useArtifactViewer(
     }
     reportAction(
       window.betterwork.artifacts.listVersions({ artifactId: selected.id }).then((loaded) => {
-        if (listRequestRef.current === requestId) setVersions(loaded);
+        if (listRequestRef.current === requestId) {
+          setVersions(loaded);
+          setVersionsLoading(false);
+        }
       }),
       (message) => {
-        if (listRequestRef.current === requestId) setError(message);
+        if (listRequestRef.current === requestId) {
+          setVersionsError(message);
+          setVersionsLoading(false);
+        }
       },
       '版本历史加载失败，请重试。',
     );
@@ -117,7 +153,7 @@ export function useArtifactViewer(
       if (listRequestRef.current === requestId) listRequestRef.current += 1;
       versionRequestRef.current += 1;
     };
-  }, [initialVersion, selected]);
+  }, [initialVersion, selected, versionsRetry]);
 
   // 必须 memo：`toVersionDetail` 每次调用都返回新对象，若不收口，调用方把
   // `visibleVersion` 放进 useEffect / useCallback 依赖数组时会因引用永远变化而无限重跑。
@@ -137,12 +173,18 @@ export function useArtifactViewer(
   const selectVersion = async (version: ArtifactVersionSummary): Promise<void> => {
     const requestId = versionRequestRef.current + 1;
     versionRequestRef.current = requestId;
+    saveRequestRef.current += 1;
+    savePendingRef.current = false;
+    setSaving(false);
+    setLoadingVersionId(version.id);
     let detail: ArtifactVersionDetail | null;
     try {
       detail = await window.betterwork.artifacts.getVersion({ id: version.id });
     } catch (error) {
       if (versionRequestRef.current !== requestId) return;
       throw error;
+    } finally {
+      if (versionRequestRef.current === requestId) setLoadingVersionId(undefined);
     }
     if (versionRequestRef.current !== requestId) return;
     if (!detail) throw new Error('该版本已不存在，请返回成果列表重新选择。');
@@ -167,6 +209,9 @@ export function useArtifactViewer(
   const finishEditing = (): void => setEditing(false);
 
   const cancelEditing = (): void => {
+    saveRequestRef.current += 1;
+    savePendingRef.current = false;
+    setSaving(false);
     setEditing(false);
     setError('');
     if (!selected || !visibleVersion || !('content' in visibleVersion)) return;
@@ -174,16 +219,49 @@ export function useArtifactViewer(
     setContent(visibleVersion.content);
   };
 
+  const beginSave = (): number | undefined => {
+    if (savePendingRef.current) return undefined;
+    savePendingRef.current = true;
+    const requestId = saveRequestRef.current + 1;
+    saveRequestRef.current = requestId;
+    setSaving(true);
+    setError('');
+    return requestId;
+  };
+
+  const isSaveCurrent = (requestId: number): boolean => saveRequestRef.current === requestId;
+
+  const finishSave = (requestId: number): boolean => {
+    if (!isSaveCurrent(requestId)) return false;
+    savePendingRef.current = false;
+    setSaving(false);
+    return true;
+  };
+
+  const retryVersions = (): void => {
+    setVersionsError('');
+    setVersionsLoading(true);
+    setVersionsRetry((current) => current + 1);
+  };
+
   return {
     editing,
     title,
     content,
     error,
+    saving,
     versions,
+    versionsLoading,
+    versionsError,
+    loadingVersionId,
     visibleVersion,
     setTitle,
     setContent,
     setError,
+    beginSave,
+    isSaveCurrent,
+    finishSave,
+    retryVersions,
     beginEditing,
     cancelEditing,
     finishEditing,

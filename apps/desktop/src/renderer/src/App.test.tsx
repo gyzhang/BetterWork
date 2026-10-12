@@ -36,6 +36,23 @@ import {
   workspaceFixture,
 } from './app-test-fixtures';
 
+interface Deferred<Value> {
+  promise: Promise<Value>;
+  resolve: (value: Value) => void;
+  reject: (error: Error) => void;
+}
+
+const deferred = <Value,>(): Deferred<Value> => {
+  let resolve: ((value: Value) => void) | undefined;
+  let reject: ((error: Error) => void) | undefined;
+  const promise = new Promise<Value>((fulfill, fail) => {
+    resolve = fulfill;
+    reject = fail;
+  });
+  if (!resolve || !reject) throw new Error('Deferred promise did not initialize');
+  return { promise, resolve, reject };
+};
+
 async function openTestRun(): Promise<void> {
   fireEvent.click(screen.getByRole('button', { name: '技能' }));
   fireEvent.click(await screen.findByRole('button', { name: /演示生成专家/ }));
@@ -1929,12 +1946,171 @@ describe('Artifact navigation in App', () => {
     await act(async () => resolveSecond?.(detail(secondSummary)));
     expect(await screen.findAllByRole('heading', { name: '成果 B' })).toHaveLength(2);
     await act(async () => resolveFirst?.(detail(firstSummary)));
-    expect(screen.getAllByRole('heading', { name: '成果 B' })).toHaveLength(2);
+    expect(await screen.findAllByRole('heading', { name: '成果 B' })).toHaveLength(2);
 
     const backButtons = screen.getAllByRole('button', { name: '成果' });
     fireEvent.click(backButtons.at(-1)!);
     expect(await screen.findByRole('button', { name: /成果 A/ })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: '成果 B' })).toBeNull();
+  });
+
+  it('keeps editing B when A revision resolves after navigation', async () => {
+    const api = installApi();
+    const firstSummary = summary('artifact-a', '成果 A');
+    const secondSummary = summary('artifact-b', '成果 B');
+    const firstDetail = detail(firstSummary);
+    const secondDetail = detail(secondSummary);
+    const revisedDetail: MarkdownDetail = {
+      ...firstDetail,
+      title: '成果 A 已修订',
+      currentVersionId: 'version-a2',
+      versionNumber: 2,
+      content: '# A 新内容',
+    };
+    const pendingSave = deferred<ArtifactSummary>();
+    let firstReads = 0;
+    api.artifacts.list.mockResolvedValue([firstSummary, secondSummary]);
+    api.artifacts.get.mockImplementation(async ({ id }) => {
+      if (id === firstSummary.id) {
+        firstReads += 1;
+        return firstReads === 1 ? firstDetail : revisedDetail;
+      }
+      return secondDetail;
+    });
+    api.artifacts.saveMarkdown.mockReturnValueOnce(pendingSave.promise);
+    render(<App />);
+
+    fireEvent.click(
+      await within(screen.getByRole('navigation', { name: '主要导航' })).findByRole('button', {
+        name: '成果',
+      }),
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /成果 A/ }));
+    await screen.findAllByRole('heading', { name: '成果 A' });
+    fireEvent.click(screen.getByRole('button', { name: '编辑此版本' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '标题' }), {
+      target: { value: '成果 A 已修订' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Markdown 内容' }), {
+      target: { value: '# A 新内容' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '保存新版本' }));
+
+    document.querySelector<HTMLButtonElement>('.page-header-leading button')?.click();
+    fireEvent.click(await screen.findByRole('button', { name: /成果 B/ }));
+    await screen.findAllByRole('heading', { name: '成果 B' });
+    fireEvent.click(screen.getByRole('button', { name: '编辑此版本' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Markdown 内容' }), {
+      target: { value: '# B 正在编辑' },
+    });
+
+    await act(async () => {
+      pendingSave.resolve({
+        ...firstSummary,
+        title: revisedDetail.title,
+        currentVersionId: 'version-a2',
+        versionNumber: 2,
+      });
+      await pendingSave.promise;
+    });
+
+    await waitFor(() => expect(api.artifacts.get).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole('heading', { name: '成果 B' })).toBeTruthy();
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Markdown 内容' }).value).toBe(
+      '# B 正在编辑',
+    );
+    expect(screen.getByRole('button', { name: '保存新版本' })).toBeTruthy();
+  });
+
+  it('rejects an A revision from an earlier navigation generation after A→B→A', async () => {
+    const api = installApi();
+    const firstSummary = summary('artifact-a', '成果 A');
+    const secondSummary = summary('artifact-b', '成果 B');
+    const firstDetail = detail(firstSummary);
+    const secondDetail = detail(secondSummary);
+    const revisedDetail: MarkdownDetail = { ...firstDetail, title: '成果 A 旧保存回执' };
+    const pendingSave = deferred<ArtifactSummary>();
+    let firstReads = 0;
+    api.artifacts.list.mockResolvedValue([firstSummary, secondSummary]);
+    api.artifacts.get.mockImplementation(async ({ id }) => {
+      if (id === firstSummary.id) {
+        firstReads += 1;
+        return firstReads < 3 ? firstDetail : revisedDetail;
+      }
+      return secondDetail;
+    });
+    api.artifacts.saveMarkdown.mockReturnValueOnce(pendingSave.promise);
+    render(<App />);
+
+    fireEvent.click(
+      await within(screen.getByRole('navigation', { name: '主要导航' })).findByRole('button', {
+        name: '成果',
+      }),
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /成果 A/ }));
+    await screen.findAllByRole('heading', { name: '成果 A' });
+    fireEvent.click(screen.getByRole('button', { name: '编辑此版本' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存新版本' }));
+
+    document.querySelector<HTMLButtonElement>('.page-header-leading button')?.click();
+    fireEvent.click(await screen.findByRole('button', { name: /成果 B/ }));
+    await screen.findAllByRole('heading', { name: '成果 B' });
+    document.querySelector<HTMLButtonElement>('.page-header-leading button')?.click();
+    fireEvent.click(await screen.findByRole('button', { name: /成果 A/ }));
+    await screen.findAllByRole('heading', { name: '成果 A' });
+
+    await act(async () => {
+      pendingSave.resolve({ ...firstSummary, title: revisedDetail.title, versionNumber: 2 });
+      await pendingSave.promise;
+    });
+
+    expect(api.artifacts.get).toHaveBeenCalledTimes(3);
+    expect(screen.getAllByRole('heading', { name: '成果 A' })).toHaveLength(2);
+    expect(screen.queryByRole('heading', { name: '成果 A 旧保存回执' })).toBeNull();
+  });
+
+  it('does not show A save failure in B after navigating away', async () => {
+    const api = installApi();
+    const firstSummary = summary('artifact-a', '成果 A');
+    const secondSummary = summary('artifact-b', '成果 B');
+    const firstDetail = detail(firstSummary);
+    const secondDetail = detail(secondSummary);
+    const pendingSave = deferred<ArtifactSummary>();
+    api.artifacts.list.mockResolvedValue([firstSummary, secondSummary]);
+    api.artifacts.get.mockImplementation(async ({ id }) =>
+      id === firstSummary.id ? firstDetail : secondDetail,
+    );
+    api.artifacts.saveMarkdown.mockReturnValueOnce(pendingSave.promise);
+    render(<App />);
+
+    fireEvent.click(
+      await within(screen.getByRole('navigation', { name: '主要导航' })).findByRole('button', {
+        name: '成果',
+      }),
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /成果 A/ }));
+    await screen.findAllByRole('heading', { name: '成果 A' });
+    fireEvent.click(screen.getByRole('button', { name: '编辑此版本' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存新版本' }));
+
+    document.querySelector<HTMLButtonElement>('.page-header-leading button')?.click();
+    fireEvent.click(await screen.findByRole('button', { name: /成果 B/ }));
+    await screen.findAllByRole('heading', { name: '成果 B' });
+    fireEvent.click(screen.getByRole('button', { name: '编辑此版本' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Markdown 内容' }), {
+      target: { value: '# B 草稿保留' },
+    });
+
+    await act(async () => {
+      pendingSave.reject(new Error('成果 A 保存失败'));
+      await Promise.resolve();
+    });
+
+    expect(screen.getAllByRole('heading', { name: '成果 B' })).toHaveLength(1);
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Markdown 内容' }).value).toBe(
+      '# B 草稿保留',
+    );
+    expect(screen.queryByText('成果 A 保存失败')).toBeNull();
   });
 
   it('ignores a notification read after leaving the page and accepts a later explicit open', async () => {

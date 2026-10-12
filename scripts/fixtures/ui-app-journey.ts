@@ -5,6 +5,7 @@ import process from 'node:process';
 
 import { abortError } from '@betterwork/agent-core';
 import {
+  type ArtifactInputRelation,
   IpcChannel,
   type MaterialReference,
   type RunSummary,
@@ -71,6 +72,7 @@ const steps = [
   'second-draft',
   'second-run',
   'artifact-navigation',
+  'artifact-save-ownership',
   'failed-run',
   'cancelled-run',
   'historical-save',
@@ -460,7 +462,10 @@ export async function runAppJourney(
   const readings: unknown[] = [];
   let first: RunSummary | undefined;
   let second: RunSummary | undefined;
+  let firstArtifactId: string | undefined;
   let firstVersionId: string | undefined;
+  let firstArtifactRelations: ArtifactInputRelation[] = [];
+  let firstArtifactEvidenceIds: string[] = [];
   let excludedMemoryId: string | undefined;
   const sourcePath = path.join(directory, 'workspace', sourceFileName);
   let expectedSourceContent = '';
@@ -544,7 +549,14 @@ export async function runAppJourney(
       );
       if (step === 'first-run') {
         first = current;
+        firstArtifactId = artifact.id;
         firstVersionId = artifact.currentVersionId;
+        firstArtifactRelations = services.store.artifactInputRelations.listByVersion(
+          artifact.currentVersionId,
+        );
+        const detail = services.store.artifacts.getDetail(artifact.id);
+        assert.ok(detail?.type === 'markdown');
+        firstArtifactEvidenceIds = detail.evidence.map((item) => item.id);
       } else {
         second = current;
         assert.ok(first);
@@ -570,6 +582,44 @@ export async function runAppJourney(
           '实际 Provider 请求没有复用工作口径',
         );
       }
+    }
+    if (step === 'artifact-save-ownership') {
+      assert.ok(first);
+      assert.ok(firstArtifactId);
+      assert.ok(firstVersionId);
+      const artifact = services.store.artifacts.list(first.taskId)[0];
+      assert.ok(artifact, 'UI 丢弃保存回执后 A 不存在');
+      assert.equal(artifact.id, firstArtifactId, '保存创建了错误的成果身份');
+      assert.equal(artifact.versionNumber, 2, 'A 的新版本没有提交');
+      assert.notEqual(artifact.currentVersionId, firstVersionId, 'A 的当前版本没有推进');
+      assert.ok(
+        services.store.artifacts
+          .listVersions(artifact.id)
+          .some((version) => version.id === firstVersionId),
+        '保存覆盖了 A 的历史版本',
+      );
+      const relations = services.store.artifactInputRelations.listByVersion(
+        artifact.currentVersionId,
+      );
+      const relationPayload = (items: ArtifactInputRelation[]) =>
+        items.map(({ input, relation }) => ({ input, relation }));
+      assert.deepEqual(
+        relationPayload(relations),
+        relationPayload(firstArtifactRelations),
+        'A 的新版本没有保留输入关系',
+      );
+      const detail = services.store.artifacts.getDetail(artifact.id);
+      assert.ok(detail?.type === 'markdown');
+      assert.equal(
+        services.store.artifacts.getVersionSourceRunId(firstVersionId),
+        first.id,
+        'A 的原始版本来源 Run 改变',
+      );
+      assert.deepEqual(
+        detail.evidence.map((item) => item.id).sort(),
+        [...firstArtifactEvidenceIds].sort(),
+        'A 的新版本没有保留原 Evidence',
+      );
     }
     if (step === 'save-source') {
       const derived = services.store.memories
@@ -763,7 +813,11 @@ export async function runAppJourney(
       if (sourceIdentity?.kind !== 'expert' || sourceIdentity.expertId !== context.executor.expertId) throw new Error('上期精确版本丢失原专家身份');
       return { excludedMemoryId: method.id, originalVersionId: artifact.currentVersionId, revisedVersionId: saved.currentVersionId, originalExpertId: context.executor.expertId, replacementExpertId: copied.expert.id };
     })()`);
-    assert.equal(services.store.artifacts.listVersions(firstArtifact.id).length, 2);
+    assert.equal(
+      services.store.artifacts.listVersions(firstArtifact.id).length,
+      3,
+      '成果归属验证与换期修订均应形成独立版本',
+    );
     assert.ok(firstVersionId);
     assert.ok(services.store.artifacts.getVersionDetail(firstVersionId));
     const sourceDocument = services.vault.listDocuments()[0];

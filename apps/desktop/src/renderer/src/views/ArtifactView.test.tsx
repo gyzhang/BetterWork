@@ -3,6 +3,7 @@
 import type {
   ArtifactDetail,
   ArtifactInputRelationInput,
+  ArtifactVersionSummary,
   WorkspaceArtifactReference,
 } from '@betterwork/agent-protocol';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -87,14 +88,29 @@ describe('ArtifactPage', () => {
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
   });
 
-  it('shows a version-list loading failure while previewing the Artifact', async () => {
+  it('shows version history busy and failure states and lets the user retry', async () => {
+    let rejectFirst: ((error: Error) => void) | undefined;
+    const firstRequest = new Promise<ArtifactVersionSummary[]>((_resolve, reject) => {
+      rejectFirst = reject;
+    });
+    const loadedVersion: ArtifactVersionSummary = {
+      type: 'markdown',
+      id: selectedArtifact.currentVersionId,
+      artifactId: selectedArtifact.id,
+      versionNumber: selectedArtifact.versionNumber,
+      origin: selectedArtifact.origin,
+      ...(selectedArtifact.sourceRunId ? { sourceRunId: selectedArtifact.sourceRunId } : {}),
+      createdAt: selectedArtifact.createdAt,
+    };
+    const listVersions = vi
+      .fn()
+      .mockReturnValueOnce(firstRequest)
+      .mockResolvedValueOnce([loadedVersion]);
     Object.defineProperty(window, 'betterwork', {
       configurable: true,
       value: {
         artifacts: {
-          listVersions: vi.fn(async () => {
-            throw new Error('版本历史暂不可用');
-          }),
+          listVersions,
           getVersion: vi.fn(async () => null),
         },
       },
@@ -114,8 +130,63 @@ describe('ArtifactPage', () => {
       />,
     );
 
+    expect(await screen.findByRole('status')).toBeTruthy();
+    expect(screen.getByText('正在加载版本历史…')).toBeTruthy();
+    await act(async () => {
+      rejectFirst?.(new Error('版本历史暂不可用'));
+      await Promise.resolve();
+    });
     await waitFor(() =>
       expect(screen.getByRole('alert').textContent).toContain('版本历史暂不可用'),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    await waitFor(() => expect(listVersions).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(screen.getByText('1 个版本')).toBeTruthy();
+  });
+
+  it('shows the current version read failure in the Artifact page', async () => {
+    Object.defineProperty(window, 'betterwork', {
+      configurable: true,
+      value: {
+        artifacts: {
+          listVersions: vi.fn(async () => [
+            {
+              type: 'markdown',
+              id: selectedArtifact.currentVersionId,
+              artifactId: selectedArtifact.id,
+              versionNumber: selectedArtifact.versionNumber,
+              origin: selectedArtifact.origin,
+              ...(selectedArtifact.sourceRunId
+                ? { sourceRunId: selectedArtifact.sourceRunId }
+                : {}),
+              createdAt: selectedArtifact.createdAt,
+            } satisfies ArtifactVersionSummary,
+          ]),
+          getVersion: vi.fn(async () => {
+            throw new Error('当前版本读取失败');
+          }),
+        },
+      },
+    });
+
+    render(
+      <ArtifactPage
+        artifacts={[selectedArtifact]}
+        selected={selectedArtifact}
+        onSelect={vi.fn()}
+        onSave={vi.fn(async () => undefined)}
+        onExport={vi.fn(async () => ({ cancelled: true }))}
+        onOpenSource={vi.fn(async () => undefined)}
+        onOpenFile={vi.fn(async () => ({ opened: true }))}
+        onStartFromVersion={vi.fn(async () => undefined)}
+        onBack={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: '打开版本 v1' }));
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain('当前版本读取失败'),
     );
   });
 });
@@ -413,6 +484,49 @@ describe('ArtifactPage 采用来源选择', () => {
         '# 当前版本',
         [{ input: { kind: 'evidence', evidenceId: 'evidence-precise' }, relation: 'data' }],
       ),
+    );
+  });
+
+  it('修订保存失败保留草稿，可重试且忙碌时拒绝重复提交', async () => {
+    let rejectFirst: ((error: Error) => void) | undefined;
+    const firstSave = new Promise<void>((_resolve, reject) => {
+      rejectFirst = reject;
+    });
+    const onSave = createSaver()
+      .mockImplementationOnce(() => firstSave)
+      .mockResolvedValueOnce(undefined);
+    renderEditable(artifactWithSources(), onSave);
+    fireEvent.change(screen.getByRole('textbox', { name: '标题' }), {
+      target: { value: '保留的修订标题' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Markdown 内容' }), {
+      target: { value: '# 保留的修订草稿' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '保存新版本' }));
+    const busyButton = screen.getByRole('button', { name: '正在保存…' });
+    expect(busyButton.getAttribute('aria-busy')).toBe('true');
+    fireEvent.click(busyButton);
+    expect(onSave).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      rejectFirst?.(new Error('保存修订失败，可重试'));
+      await Promise.resolve();
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain('保存修订失败，可重试'),
+    );
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: '标题' }).value).toBe(
+      '保留的修订标题',
+    );
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Markdown 内容' }).value).toBe(
+      '# 保留的修订草稿',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '保存新版本' }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.queryByRole('textbox', { name: 'Markdown 内容' })).toBeNull(),
     );
   });
 

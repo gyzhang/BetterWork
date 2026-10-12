@@ -1403,18 +1403,37 @@ export function App(): React.JSX.Element {
     title: string,
     content: string,
     inputRelations?: ArtifactInputRelationInput[],
-  ): Promise<void> => {
-    const saved = await window.betterwork.artifacts.saveMarkdown({
-      artifactId: artifact.id,
-      taskId: artifact.taskId,
-      origin: 'user-edit',
-      title,
-      content,
-      ...(inputRelations ? { inputRelations } : {}),
-    });
+  ): Promise<boolean> => {
+    const owner = artifactNavigation.captureOwner(artifact);
+    if (!owner) return false;
+    let saved: ArtifactSummary;
+    try {
+      saved = await window.betterwork.artifacts.saveMarkdown({
+        artifactId: owner.artifactId,
+        taskId: artifact.taskId,
+        origin: 'user-edit',
+        title,
+        content,
+        ...(inputRelations ? { inputRelations } : {}),
+      });
+    } catch (error) {
+      if (!artifactNavigation.isCurrentOwner(owner)) return false;
+      throw error;
+    }
     refreshArtifacts();
-    const detail = await window.betterwork.artifacts.get({ id: saved.id });
+    if (!artifactNavigation.isCurrentOwner(owner)) return false;
+    let detail: ArtifactDetail | null;
+    try {
+      detail = await window.betterwork.artifacts.get({ id: saved.id });
+    } catch (error) {
+      if (!artifactNavigation.isCurrentOwner(owner)) return false;
+      throw error;
+    }
+    if (!artifactNavigation.isCurrentOwner(owner)) return false;
+    if (!detail)
+      throw new Error('成果已保存，但详情暂时无法刷新。返回列表后重新打开即可查看新版本。');
     if (detail) artifactNavigation.selectLoaded(detail);
+    return true;
   };
   const exportArtifact = (
     artifact: ArtifactDetail,
@@ -1862,6 +1881,7 @@ export function App(): React.JSX.Element {
               reportAction(openArtifact(artifact), setActionError, '无法打开这项成果。')
             }
             onSave={reviseArtifact}
+            onVersionSelectionStarted={artifactNavigation.invalidate}
             onExport={exportArtifact}
             onOpenFile={openFileArtifact}
             onOpenSource={knowledge.onOpenSource}

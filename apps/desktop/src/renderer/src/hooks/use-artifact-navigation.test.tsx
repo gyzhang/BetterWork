@@ -179,6 +179,31 @@ describe('useArtifactNavigation', () => {
     expect(result.current.initialVersion).toBeUndefined();
   });
 
+  it('binds revision ownership to the Artifact version and navigation generation', () => {
+    installArtifactApi({ get: async ({ id }) => artifact(id) });
+    const { result } = renderHook(() => useArtifactNavigation());
+    const firstA = artifact('artifact-a');
+    act(() => result.current.selectLoaded(firstA));
+
+    const owner = result.current.captureOwner(firstA);
+    expect(owner).toEqual({
+      artifactId: firstA.id,
+      versionId: firstA.currentVersionId,
+      generation: expect.any(Number),
+    });
+    if (!owner) throw new Error('Selected Artifact did not produce an owner');
+    expect(result.current.isCurrentOwner(owner)).toBe(true);
+
+    act(() => {
+      result.current.selectLoaded(artifact('artifact-b'));
+      result.current.selectLoaded(artifact('artifact-a', 'A reopened'));
+    });
+
+    expect(result.current.selectedArtifact?.id).toBe(firstA.id);
+    expect(result.current.selectedArtifact?.currentVersionId).toBe(firstA.currentVersionId);
+    expect(result.current.isCurrentOwner(owner)).toBe(false);
+  });
+
   it('opens an exact version and ignores an obsolete version lookup failure', async () => {
     const oldVersion = deferred<ArtifactVersionDetail | null>();
     const exactVersion = version('version-exact', 'artifact-exact');

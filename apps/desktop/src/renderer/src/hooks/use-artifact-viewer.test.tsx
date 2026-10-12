@@ -127,6 +127,55 @@ describe('useArtifactViewer', () => {
     expect(result.current.error).toBe('');
   });
 
+  it('shows version history loading, failure, and retry state', async () => {
+    const first = deferred<ArtifactVersionSummary[]>();
+    const loadedVersion = version('version-loaded', 'artifact-a');
+    const listVersions = vi
+      .fn()
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce([loadedVersion]);
+    installArtifactApi({ listVersions });
+    const selected = artifact('artifact-a');
+    const { result } = renderHook(() => useArtifactViewer(selected));
+
+    expect(result.current.versionsLoading).toBe(true);
+    await act(async () => {
+      first.reject(new Error('版本历史暂不可用'));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(result.current.versionsError).toBe('版本历史暂不可用'));
+    expect(result.current.versionsLoading).toBe(false);
+
+    act(() => result.current.retryVersions());
+    await waitFor(() => expect(result.current.versions).toEqual([loadedVersion]));
+    expect(result.current.versionsLoading).toBe(false);
+    expect(result.current.versionsError).toBe('');
+    expect(listVersions).toHaveBeenCalledTimes(2);
+  });
+
+  it('invalidates save feedback and busy state when the selected Artifact changes', () => {
+    installArtifactApi({ listVersions: async () => [] });
+    const { result, rerender } = renderHook(({ selected }) => useArtifactViewer(selected), {
+      initialProps: { selected: artifact('artifact-a') },
+    });
+
+    let requestId: number | undefined;
+    act(() => {
+      requestId = result.current.beginSave();
+    });
+    expect(requestId).toEqual(expect.any(Number));
+    expect(result.current.saving).toBe(true);
+    expect(result.current.beginSave()).toBeUndefined();
+
+    rerender({ selected: artifact('artifact-b') });
+
+    expect(result.current.saving).toBe(false);
+    expect(requestId).toBeDefined();
+    if (requestId === undefined) throw new Error('Save request did not initialize');
+    expect(result.current.isSaveCurrent(requestId)).toBe(false);
+    expect(result.current.finishSave(requestId)).toBe(false);
+  });
+
   it('silently ignores a late failure after a newer version selection succeeds', async () => {
     const selected = artifact('stable');
     const older = deferred<ArtifactVersionDetail | null>();
