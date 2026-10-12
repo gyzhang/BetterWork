@@ -1,5 +1,4 @@
 import type {
-  ArtifactDetail,
   ArtifactSummary,
   ArtifactVersionExecutorSummary,
   CreateMemoryRequest,
@@ -411,7 +410,7 @@ function createArtifactApiFixture() {
     saveMarkdown: vi.fn<Window['betterwork']['artifacts']['saveMarkdown']>(async () => {
       throw new Error('App 测试没有配置成果保存结果');
     }),
-    get: vi.fn(async (): Promise<ArtifactDetail | null> => null),
+    get: vi.fn<Window['betterwork']['artifacts']['get']>(async () => null),
     listVersions: vi.fn(async () => []),
     getVersion: vi.fn(async () => null),
     getVersionExecutor: vi.fn(async (): Promise<ArtifactVersionExecutorSummary | null> => null),

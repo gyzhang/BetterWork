@@ -52,6 +52,11 @@ export async function runTaskJourney(step: string): Promise<void> {
     step === 'interrupted-start' ||
     step === 'acceptance-hang'
   ) {
+    if (
+      (step === 'failed-run' || step === 'cancelled-run') &&
+      !document.querySelector('textarea[aria-label^="任务输入"]')
+    )
+      await click('工作');
     await input(
       'textarea[aria-label^="任务输入"]',
       step === 'first-run'

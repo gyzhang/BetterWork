@@ -10,7 +10,7 @@ import type {
   ArtifactVersionDetail,
   ValidationStatus,
 } from '@betterwork/agent-protocol';
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useCallback, useRef, useState } from 'react';
 
 import { ActionBar } from '../components/ActionBar';
@@ -105,6 +105,7 @@ export function ArtifactPage({
   initialVersion,
   onSelect,
   onSave,
+  onVersionSelectionStarted,
   onExport,
   onOpenFile,
   onOpenSource,
@@ -124,7 +125,8 @@ export function ArtifactPage({
     title: string,
     content: string,
     inputRelations?: ArtifactInputRelationInput[],
-  ) => Promise<void>;
+  ) => Promise<boolean | void>;
+  onVersionSelectionStarted?: (() => void) | undefined;
   onExport: (
     artifact: ArtifactDetail,
     versionId?: string,
@@ -151,11 +153,19 @@ export function ArtifactPage({
     title,
     content,
     error,
+    saving,
     versions,
+    versionsLoading,
+    versionsError,
+    loadingVersionId,
     visibleVersion,
     setTitle,
     setContent,
     setError,
+    beginSave,
+    isSaveCurrent,
+    finishSave,
+    retryVersions,
     beginEditing,
     cancelEditing,
     finishEditing,
@@ -169,6 +179,27 @@ export function ArtifactPage({
     versionId: selected?.type === 'presentation' ? visibleVersion?.id : undefined,
   });
   const sourceSelection = useArtifactSourceSelection(visibleVersion);
+  const submitRevision = (event: FormEvent<HTMLFormElement>): void => {
+    event.preventDefault();
+    if (!selected || selected.type !== 'markdown') return;
+    const requestId = beginSave();
+    if (requestId === undefined) return;
+    const saved = onSave(selected, title, content, sourceSelection.buildInputRelations());
+    trackAction(
+      saved
+        .then(
+          (current) => {
+            if (current !== false && isSaveCurrent(requestId)) finishEditing();
+          },
+          (reason: unknown) => {
+            if (isSaveCurrent(requestId))
+              setError(reason instanceof Error ? reason.message : '保存修订失败。');
+          },
+        )
+        .finally(() => finishSave(requestId)),
+      'save artifact revision',
+    );
+  };
   // 页头那行小字要说清「这是哪一版、在不在本空间」：成果列表是跨空间全量的，
   // 不写归属就会让人对着别的空间的成果点「引用到当前任务」，点了才被仓储拒掉。
   const headerEyebrow =
@@ -356,17 +387,27 @@ export function ArtifactPage({
                 <SectionHeader
                   variant="panel"
                   title="版本历史"
-                  hint={`${versions.length} 个版本`}
+                  hint={
+                    versionsLoading ? (
+                      <InlineLoading label="正在加载版本历史…" />
+                    ) : loadingVersionId ? (
+                      <InlineLoading label="正在打开所选版本…" />
+                    ) : (
+                      `${versions.length} 个版本`
+                    )
+                  }
                 />
+                {versionsError && <InlineError message={versionsError} onRetry={retryVersions} />}
                 {versions.map((version) => (
                   <ListRow
                     key={version.id}
                     variant="plain"
                     selected={version.id === visibleVersion.id}
                     label={`打开版本 v${version.versionNumber}`}
-                    onClick={() =>
-                      reportAction(selectVersion(version), setError, '打开该版本失败，请重试。')
-                    }
+                    onClick={() => {
+                      onVersionSelectionStarted?.();
+                      reportAction(selectVersion(version), setError, '打开该版本失败，请重试。');
+                    }}
                     title={`v${version.versionNumber}`}
                     detail={`${version.origin === 'user-edit' ? '人工修订' : 'AI 生成'} · ${formatTime(version.createdAt)}`}
                   />
@@ -401,18 +442,7 @@ export function ArtifactPage({
               </aside>
               {selected.type === 'markdown' ? (
                 editing ? (
-                  <form
-                    className="artifact-editor"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      setError('');
-                      onSave(selected, title, content, sourceSelection.buildInputRelations())
-                        .then(finishEditing)
-                        .catch((reason: unknown) =>
-                          setError(reason instanceof Error ? reason.message : '保存修订失败。'),
-                        );
-                    }}
-                  >
+                  <form className="artifact-editor" onSubmit={submitRevision}>
                     <Field label="标题">
                       <TextField
                         size="md"
@@ -483,12 +513,23 @@ export function ArtifactPage({
                       hint={`保存后会创建 v${selected.versionNumber + 1} 人工修订版本。`}
                       label="保存成果修订"
                     >
-                      <Button variant="secondary" size="md" type="button" onClick={cancelEditing}>
+                      <Button
+                        variant="secondary"
+                        size="md"
+                        type="button"
+                        disabled={saving}
+                        onClick={cancelEditing}
+                      >
                         取消
                       </Button>
-                      <Button variant="primary" size="md" type="submit">
-                        保存新版本
-                      </Button>
+                      <AsyncButton
+                        variant="primary"
+                        size="md"
+                        type="submit"
+                        busy={saving}
+                        label="保存新版本"
+                        busyLabel="正在保存…"
+                      />
                     </ActionBar>
                   </form>
                 ) : (
