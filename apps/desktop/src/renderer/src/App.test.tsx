@@ -1874,3 +1874,104 @@ describe('参考成果版本接入当前任务', () => {
     expect(api.runs.start).not.toHaveBeenCalled();
   });
 });
+
+describe('Artifact navigation in App', () => {
+  type MarkdownSummary = Extract<ArtifactSummary, { type: 'markdown' }>;
+  type MarkdownDetail = Extract<ArtifactDetail, { type: 'markdown' }>;
+
+  const summary = (id: string, title: string): MarkdownSummary => ({
+    id,
+    workspaceId: workspaceFixture.id,
+    taskId: previousTask.id,
+    type: 'markdown',
+    title,
+    currentVersionId: `version-${id}`,
+    versionNumber: 1,
+    origin: 'assistant-run',
+    sourceRunId: previousRun.id,
+    createdAt: 1,
+    updatedAt: 1,
+  });
+
+  const detail = (item: MarkdownSummary): MarkdownDetail => ({
+    ...item,
+    content: `# ${item.title}`,
+    contentHash: `hash-${item.id}`,
+    evidence: [],
+  });
+
+  it('keeps the latest list selection when artifact reads resolve out of order and returns to the list', async () => {
+    const api = installApi();
+    const firstSummary = summary('artifact-a', '成果 A');
+    const secondSummary = summary('artifact-b', '成果 B');
+    let resolveFirst: ((value: ArtifactDetail | null) => void) | undefined;
+    let resolveSecond: ((value: ArtifactDetail | null) => void) | undefined;
+    let requestIndex = 0;
+    api.artifacts.list.mockResolvedValue([firstSummary, secondSummary]);
+    api.artifacts.get.mockImplementation(() => {
+      if (requestIndex++ === 0)
+        return new Promise((resolve) => {
+          resolveFirst = resolve;
+        });
+      return new Promise((resolve) => {
+        resolveSecond = resolve;
+      });
+    });
+    render(<App />);
+
+    const navigation = screen.getByRole('navigation', { name: '主要导航' });
+    fireEvent.click(await within(navigation).findByRole('button', { name: '成果' }));
+    fireEvent.click(await screen.findByRole('button', { name: /成果 A/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /成果 B/ }));
+    await waitFor(() => expect(resolveFirst).toBeTypeOf('function'));
+    await waitFor(() => expect(resolveSecond).toBeTypeOf('function'));
+
+    await act(async () => resolveSecond?.(detail(secondSummary)));
+    expect(await screen.findAllByRole('heading', { name: '成果 B' })).toHaveLength(2);
+    await act(async () => resolveFirst?.(detail(firstSummary)));
+    expect(screen.getAllByRole('heading', { name: '成果 B' })).toHaveLength(2);
+
+    const backButtons = screen.getAllByRole('button', { name: '成果' });
+    fireEvent.click(backButtons.at(-1)!);
+    expect(await screen.findByRole('button', { name: /成果 A/ })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: '成果 B' })).toBeNull();
+  });
+
+  it('ignores a notification read after leaving the page and accepts a later explicit open', async () => {
+    const api = installApi();
+    const item = summary('notification-artifact', '通知成果');
+    let rejectPending: ((error: Error) => void) | undefined;
+    const pending = new Promise<ArtifactDetail | null>((_resolve, reject) => {
+      rejectPending = reject;
+    });
+    api.artifacts.get.mockImplementationOnce(() => pending);
+    api.artifacts.get.mockResolvedValue(detail(item));
+    const notification: NotificationSummary = {
+      id: 'notification-artifact',
+      level: 'warning',
+      kind: 'run',
+      title: '成果已生成',
+      createdAt: 2,
+      read: false,
+      target: { kind: 'artifact', artifactId: item.id },
+    };
+    api.notifications.get.mockResolvedValue(notification);
+    render(<App />);
+    await screen.findByRole('textbox', { name: /任务输入/ });
+
+    await act(async () => activateSystemNotification?.({ id: notification.id }));
+    await waitFor(() => expect(api.artifacts.get).toHaveBeenCalledWith({ id: item.id }));
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: '主要导航' })).getByRole('button', {
+        name: '技能',
+      }),
+    );
+    await act(async () => Promise.resolve());
+    await act(async () => rejectPending?.(new Error('旧导航失败')));
+    expect(screen.queryByRole('heading', { name: item.title })).toBeNull();
+    expect(screen.queryByText('旧导航失败')).toBeNull();
+
+    await act(async () => activateSystemNotification?.({ id: notification.id }));
+    expect(await screen.findAllByRole('heading', { name: item.title })).toHaveLength(2);
+  });
+});

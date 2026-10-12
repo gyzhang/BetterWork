@@ -45,6 +45,7 @@ import { WorkMessageList } from './components/WorkMessageList';
 import { type WorkspaceGroupAction, WorkspaceGroupList } from './components/WorkspaceGroupList';
 import { WorkspaceIdentityDialog } from './components/WorkspaceIdentityDialog';
 import { useAppearance } from './hooks/use-appearance';
+import { useArtifactNavigation } from './hooks/use-artifact-navigation';
 import { useConversationAddresses } from './hooks/use-conversation-addresses';
 import { useExperts } from './hooks/use-experts';
 import { useKnowledgeLibrary } from './hooks/use-knowledge-library';
@@ -266,9 +267,8 @@ export function App(): React.JSX.Element {
   );
   const [evidence, setEvidence] = useState<EvidenceSummary[]>([]);
   const [artifacts, setArtifacts] = useState<ArtifactSummary[]>([]);
-  const [selectedArtifact, setSelectedArtifact] = useState<ArtifactDetail>();
-  const [selectedArtifactInitialVersion, setSelectedArtifactInitialVersion] =
-    useState<ArtifactVersionDetail>();
+  const artifactNavigation = useArtifactNavigation();
+  const { selectedArtifact, initialVersion: selectedArtifactInitialVersion } = artifactNavigation;
   /** §3.6：来源专家不可用时不猜专家，改用通用助手并把这件事当场说出来。 */
   const [expertFallbackNotice, setExpertFallbackNotice] = useState<string>();
   // 全局短时提醒：只收「当前对象承载不了」的失败（导航失败、全局前置条件不满足），
@@ -276,7 +276,15 @@ export function App(): React.JSX.Element {
   // 表面，25 个调用点共用一个槽互相覆盖，且要等到切换工作空间才清空（docs/10 §11.5.1）。
   // 已经有内联承载点的失败不要再上传到这里，那会让同一句话出现在两个地方。
   const [actionError, setActionError] = useState('');
-  const [view, setView] = useState<AppView>('work');
+  const [view, updateView] = useState<AppView>('work');
+  const invalidateArtifactNavigation = artifactNavigation.invalidate;
+  const setView = useCallback(
+    (next: AppView): void => {
+      if (next !== 'artifacts') invalidateArtifactNavigation();
+      updateView(next);
+    },
+    [invalidateArtifactNavigation],
+  );
   const schedules = useSchedules(view === 'schedules');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => window.localStorage.getItem('betterwork-sidebar-collapsed') === 'true',
@@ -421,14 +429,17 @@ export function App(): React.JSX.Element {
     setContextOpen(false);
     setView('settings');
     setSettingsTab('memory');
-  }, []);
+  }, [setView]);
 
-  const openMemoryPageAt = useCallback((memoryId: string): void => {
-    setMemoryFocusId(memoryId);
-    setContextOpen(false);
-    setView('settings');
-    setSettingsTab('memory');
-  }, []);
+  const openMemoryPageAt = useCallback(
+    (memoryId: string): void => {
+      setMemoryFocusId(memoryId);
+      setContextOpen(false);
+      setView('settings');
+      setSettingsTab('memory');
+    },
+    [setView],
+  );
 
   const actOnTaskCandidate = (candidate: MemoryViewItem, action: 'reject' | 'delete'): void => {
     trackAction(
@@ -455,16 +466,15 @@ export function App(): React.JSX.Element {
 
   const openBriefReference = (item: WorkspaceReferenceListItem): void => {
     reportAction(
-      window.betterwork.artifacts.get({ id: item.artifactId }).then((artifact) => {
-        if (!artifact) {
-          setActionError('该参考版本对应的成果已不存在，请在成果列表中确认。');
-          return;
-        }
-        setSelectedArtifactInitialVersion(undefined);
-        setSelectedArtifact(artifact);
-        setContextOpen(false);
-        setView('artifacts');
-      }),
+      artifactNavigation
+        .openArtifact(item.artifactId, {
+          missingArtifact: '该参考版本对应的成果已不存在，请在成果列表中确认。',
+        })
+        .then((opened) => {
+          if (!opened) return;
+          setContextOpen(false);
+          setView('artifacts');
+        }),
       setActionError,
       '无法打开该参考版本的成果。',
     );
@@ -822,7 +832,7 @@ export function App(): React.JSX.Element {
       setEvidence([]);
       setView('work');
     },
-    [changeTaskSelection, clearScheduleTaskContinuation, resetTaskDraft],
+    [changeTaskSelection, clearScheduleTaskContinuation, resetTaskDraft, setView],
   );
   /** 刷新已登记空间清单：新建与改名之后侧栏与选择器都要看到同一份。 */
   const refreshWorkspaces = (): void => {
@@ -991,7 +1001,14 @@ export function App(): React.JSX.Element {
       setMaterialCandidates(expertMaterialCandidates);
       setView('work');
     },
-    [expertMaterialCandidates, prepareTaskDraft, skillChipForBinding, startNewTask, workspace?.id],
+    [
+      expertMaterialCandidates,
+      prepareTaskDraft,
+      setView,
+      skillChipForBinding,
+      startNewTask,
+      workspace?.id,
+    ],
   );
   const commitTaskMaterials = useCallback(
     (materials: TaskMaterialSelection[]): void => {
@@ -1284,20 +1301,10 @@ export function App(): React.JSX.Element {
     });
     return loadedContext;
   };
-  const openArtifact = async (artifact: ArtifactSummary): Promise<void> => {
-    const detail = await window.betterwork.artifacts.get({ id: artifact.id });
-    if (!detail) throw new Error('成果已不存在，可能已被移除。');
-    setSelectedArtifactInitialVersion(undefined);
-    setSelectedArtifact(detail);
-  };
+  const openArtifact = (artifact: ArtifactSummary): Promise<boolean> =>
+    artifactNavigation.openArtifact(artifact.id);
   const openArtifactVersion = async (versionId: string): Promise<void> => {
-    const version = await window.betterwork.artifacts.getVersion({ id: versionId });
-    if (!version) throw new Error('该成果版本已不存在，无法打开。');
-    const detail = await window.betterwork.artifacts.get({ id: version.artifactId });
-    if (!detail) throw new Error('该版本所属成果已不存在，无法打开。');
-    setSelectedArtifact(detail);
-    setSelectedArtifactInitialVersion(version);
-    setView('artifacts');
+    if (await artifactNavigation.openVersion(versionId)) setView('artifacts');
   };
   const startFromArtifactVersion = async (
     artifact: ArtifactDetail,
@@ -1352,8 +1359,7 @@ export function App(): React.JSX.Element {
           : '来源运行的执行记录不完整，无法确认当时的专家，新任务先用通用助手。';
     }
     startNewTask();
-    setSelectedArtifactInitialVersion(undefined);
-    setSelectedArtifact(undefined);
+    artifactNavigation.clear();
     setExpertFallbackNotice(notice);
     prepareTaskDraft({
       expert: sourceExpert,
@@ -1408,10 +1414,7 @@ export function App(): React.JSX.Element {
     });
     refreshArtifacts();
     const detail = await window.betterwork.artifacts.get({ id: saved.id });
-    if (detail) {
-      setSelectedArtifactInitialVersion(undefined);
-      setSelectedArtifact(detail);
-    }
+    if (detail) artifactNavigation.selectLoaded(detail);
   };
   const exportArtifact = (
     artifact: ArtifactDetail,
@@ -1525,12 +1528,13 @@ export function App(): React.JSX.Element {
     }
     if (target.kind === 'artifact') {
       reportAction(
-        window.betterwork.artifacts.get({ id: target.artifactId }).then((detail) => {
-          if (!detail) throw new Error('这项通知对应的成果已不存在，无法打开。');
-          setSelectedArtifactInitialVersion(undefined);
-          setSelectedArtifact(detail);
-          setView('artifacts');
-        }),
+        artifactNavigation
+          .openArtifact(target.artifactId, {
+            missingArtifact: '这项通知对应的成果已不存在，无法打开。',
+          })
+          .then((opened) => {
+            if (opened) setView('artifacts');
+          }),
         setActionError,
         '无法打开这项成果。',
       );
@@ -1623,8 +1627,7 @@ export function App(): React.JSX.Element {
           onSelect={(next) => {
             setView(next);
             if (next === 'artifacts') {
-              setSelectedArtifactInitialVersion(undefined);
-              setSelectedArtifact(undefined);
+              artifactNavigation.clear();
               refreshArtifacts();
             }
             if (next === 'knowledge') refreshKnowledge();
@@ -1867,8 +1870,7 @@ export function App(): React.JSX.Element {
             referenceScope={artifactReferenceScope}
             onReferenceToTask={referenceVersionToTask}
             onBack={() => {
-              setSelectedArtifact(undefined);
-              setSelectedArtifactInitialVersion(undefined);
+              artifactNavigation.clear();
             }}
           />
         )}
@@ -2041,7 +2043,9 @@ export function App(): React.JSX.Element {
             items: currentTaskArtifacts,
             onSelectArtifact: (artifact) =>
               reportAction(
-                openArtifact(artifact).then(() => setView('artifacts')),
+                openArtifact(artifact).then((opened) => {
+                  if (opened) setView('artifacts');
+                }),
                 setActionError,
                 '无法打开这项成果。',
               ),

@@ -13,15 +13,18 @@ import { useArtifactViewer } from './use-artifact-viewer';
 interface Deferred<Value> {
   promise: Promise<Value>;
   resolve: (value: Value) => void;
+  reject: (error: Error) => void;
 }
 
 const deferred = <Value,>(): Deferred<Value> => {
   let resolve: ((value: Value) => void) | undefined;
-  const promise = new Promise<Value>((fulfill) => {
+  let reject: ((error: Error) => void) | undefined;
+  const promise = new Promise<Value>((fulfill, fail) => {
     resolve = fulfill;
+    reject = fail;
   });
-  if (!resolve) throw new Error('Deferred promise did not initialize');
-  return { promise, resolve };
+  if (!resolve || !reject) throw new Error('Deferred promise did not initialize');
+  return { promise, resolve, reject };
 };
 
 const artifact = (id: string): ArtifactDetail => ({
@@ -53,13 +56,14 @@ const version = (id: string, artifactId: string): ArtifactVersionSummary => ({
 
 const installArtifactApi = (options: {
   listVersions: (input: { artifactId: string }) => Promise<ArtifactVersionSummary[]>;
+  getVersion?: (input: { id: string }) => Promise<ArtifactVersionDetail | null>;
 }): void => {
   Object.defineProperty(window, 'betterwork', {
     configurable: true,
     value: {
       artifacts: {
         listVersions: options.listVersions,
-        getVersion: vi.fn(async () => null),
+        getVersion: options.getVersion ?? vi.fn(async () => null),
       },
     },
   });
@@ -94,6 +98,70 @@ describe('useArtifactViewer', () => {
       await first.promise;
     });
     expect(result.current.versions).toEqual([version('version-second', 'second')]);
+  });
+
+  it('ignores an older version-list failure after the selected Artifact changes', async () => {
+    const first = deferred<ArtifactVersionSummary[]>();
+    const second = deferred<ArtifactVersionSummary[]>();
+    installArtifactApi({
+      listVersions: ({ artifactId }) => (artifactId === 'first' ? first.promise : second.promise),
+    });
+    const { result, rerender } = renderHook(({ selected }) => useArtifactViewer(selected), {
+      initialProps: { selected: artifact('first') },
+    });
+
+    rerender({ selected: artifact('second') });
+    await act(async () => {
+      second.resolve([version('version-second', 'second')]);
+      await second.promise;
+    });
+    await waitFor(() =>
+      expect(result.current.versions).toEqual([version('version-second', 'second')]),
+    );
+
+    await act(async () => {
+      first.reject(new Error('旧成果版本列表失败'));
+      await expect(first.promise).rejects.toThrow('旧成果版本列表失败');
+    });
+    expect(result.current.versions).toEqual([version('version-second', 'second')]);
+    expect(result.current.error).toBe('');
+  });
+
+  it('silently ignores a late failure after a newer version selection succeeds', async () => {
+    const selected = artifact('stable');
+    const older = deferred<ArtifactVersionDetail | null>();
+    const newer = deferred<ArtifactVersionDetail | null>();
+    const detail: ArtifactVersionDetail = {
+      id: 'version-newer',
+      artifactId: selected.id,
+      versionNumber: 2,
+      origin: 'assistant-run',
+      sourceRunId: 'run-1',
+      createdAt: 2,
+      type: 'markdown',
+      content: '# 新版本',
+      contentHash: 'hash-newer',
+      evidence: [],
+    };
+    installArtifactApi({
+      listVersions: async () => [],
+      getVersion: ({ id }) => (id === 'version-older' ? older.promise : newer.promise),
+    });
+    const { result } = renderHook(() => useArtifactViewer(selected));
+
+    const olderRequest = result.current.selectVersion(version('version-older', selected.id));
+    const newerRequest = result.current.selectVersion(version('version-newer', selected.id));
+    await act(async () => {
+      newer.resolve(detail);
+      await newer.promise;
+      await newerRequest;
+    });
+    expect(result.current.visibleVersion?.id).toBe(detail.id);
+
+    await act(async () => older.reject(new Error('旧版本读取失败')));
+    await expect(olderRequest).resolves.toBeUndefined();
+    expect(result.current.visibleVersion?.id).toBe(detail.id);
+    expect(result.current.error).toBe('');
   });
 
   it('keeps visibleVersion referentially stable while the selected Artifact is unchanged', () => {

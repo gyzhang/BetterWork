@@ -118,6 +118,38 @@ export async function checkConflictKeyboard(window: BrowserWindow): Promise<unkn
   };
 }
 
+export async function checkArtifactKeyboard(window: BrowserWindow): Promise<unknown> {
+  const currentVersion = 'button[aria-label="打开版本 v2"]';
+  const historicalVersion = 'button[aria-label="打开版本 v1"]';
+  await window.webContents.executeJavaScript(
+    `document.querySelector(${JSON.stringify(currentVersion)}).focus()`,
+  );
+  await keyboard(window, 'Tab');
+  await focused(window, historicalVersion);
+  await keyboard(window, 'Tab', true);
+  await focused(window, currentVersion);
+  await keyboard(window, 'Enter');
+  assert.equal(
+    await window.webContents.executeJavaScript(
+      `document.querySelector(${JSON.stringify(currentVersion)}).getAttribute('aria-current')`,
+    ),
+    'true',
+    '键盘打开当前版本后选择标记未更新',
+  );
+  assert.equal(
+    await window.webContents.executeJavaScript(
+      'document.querySelector(".markdown-preview")?.textContent?.includes("当前版本")',
+    ),
+    true,
+    '键盘打开当前版本后正文未切换',
+  );
+  return {
+    nativeKeys: ['Tab', 'Shift+Tab', 'Enter'],
+    versionSelectionUpdated: true,
+    focusRingVisible: true,
+  };
+}
+
 export async function checkCaptureKeyboard(window: BrowserWindow): Promise<unknown> {
   const source = '.memory-capture-source textarea';
   assert.equal(

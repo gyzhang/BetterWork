@@ -1,6 +1,77 @@
 import { click, findButton, hasText, waitFor } from './ui-app-step-support';
 
 export async function runArtifactJourney(step: string): Promise<void> {
+  if (step === 'artifact-navigation') {
+    const run = (await window.betterwork.runs.list()).find(
+      (item) => item.status === 'completed' && item.prompt.includes('下期复盘'),
+    );
+    if (!run) throw new Error('成果导航缺少已完成的下期 Run');
+    const artifact = (await window.betterwork.artifacts.list({ taskId: run.taskId }))[0];
+    if (!artifact) throw new Error('成果导航缺少对应的成果');
+
+    await click('成果');
+    await waitFor(() =>
+      [...document.querySelectorAll<HTMLElement>('.completed-work-list .list-row-title')].some(
+        (item) => item.textContent?.trim() === artifact.title,
+      ),
+    );
+    const listRow = [
+      ...document.querySelectorAll<HTMLButtonElement>('.completed-work-list button.list-row'),
+    ].find((item) => item.querySelector('.list-row-title')?.textContent?.trim() === artifact.title);
+    if (!listRow) throw new Error('成果列表没有呈现当前 Run 的成果');
+    listRow.click();
+    await waitFor(
+      () =>
+        document.querySelector('.page-header h1')?.textContent === artifact.title &&
+        Boolean(document.querySelector('.page-header-leading button')),
+    );
+
+    const backButton = document.querySelector<HTMLButtonElement>('.page-header-leading button');
+    if (!backButton) throw new Error('成果详情缺少返回列表动作');
+    backButton.click();
+    await waitFor(
+      () =>
+        Boolean(document.querySelector('.completed-work-list')) &&
+        [...document.querySelectorAll<HTMLElement>('.completed-work-list .list-row-title')].some(
+          (item) => item.textContent?.trim() === artifact.title,
+        ),
+    );
+
+    await click('工作');
+    await click('查看上下文');
+    const artifactTab = [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find(
+      (item) => item.textContent?.trim() === '成果',
+    );
+    if (!artifactTab) throw new Error('工作上下文缺少成果入口');
+    artifactTab.click();
+    const contextRow = (): HTMLButtonElement | undefined =>
+      [...document.querySelectorAll<HTMLButtonElement>('.context-panel button.list-row')].find(
+        (item) => item.getAttribute('aria-label') === `查看成果「${artifact.title}」`,
+      );
+    await waitFor(() => Boolean(contextRow()));
+    const openFromContext = contextRow();
+    if (!openFromContext) throw new Error('工作上下文没有呈现当前 Run 的成果');
+    openFromContext.click();
+    await waitFor(
+      () =>
+        document.querySelector('.page-header h1')?.textContent === artifact.title &&
+        Boolean(document.querySelector('.page-header-leading button')),
+    );
+    const returnFromContext = document.querySelector<HTMLButtonElement>(
+      '.page-header-leading button',
+    );
+    if (!returnFromContext) throw new Error('上下文打开的成果缺少返回列表动作');
+    returnFromContext.click();
+    await waitFor(
+      () =>
+        Boolean(document.querySelector('.completed-work-list')) &&
+        [...document.querySelectorAll<HTMLElement>('.completed-work-list .list-row-title')].some(
+          (item) => item.textContent?.trim() === artifact.title,
+        ),
+    );
+    await click('工作');
+  }
+
   if (step === 'historical-save') {
     const run = (await window.betterwork.runs.list()).find(
       (item) => item.status === 'completed' && item.prompt.includes('下期复盘'),

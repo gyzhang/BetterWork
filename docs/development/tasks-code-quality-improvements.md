@@ -74,8 +74,8 @@ QI01 将 ADR-0020 第 5 项中的“数值、指标、单位、期间、来源�
 | A | QI01 | 关联契约定稿与现行文档同步 | P1/P3 | 3 | QI00 | done | [PR #191](https://github.com/gyzhang/BetterWork/pull/191) `bede329` squash 合并为 `c0ab62e95bb13ddf7820fceee4b4e63331fe2f00`；Documentation check 与 PR Gate 通过 |
 | B | QI02 | 文本输入事实精确关联 | P1 | 8 | QI01 | done | [PR #192](https://github.com/gyzhang/BetterWork/pull/192) 单提交 `125e088` squash 合并为 `f6ac6e991d86c6ffec29ff287cc4d4a500e03456`；PR Gate、Quick code check 通过 |
 | B | QI03 | 输出逐主张核验与遗漏检测 | P1 | 8 | QI01、QI02 | done | [PR #193](https://github.com/gyzhang/BetterWork/pull/193) 单提交 `92daf573e6be924a8085df05fa82bcf902ef9c10` squash 合并为 `8419d93ec71587ad87bcdd69e4670d9f027df45a`；PR Gate、Quick code check 通过，无 Review 评论 |
-| C | QI04 | Office 结构化事实关联 | P2 | 8 | QI01、QI02 | doing | `codex/qi04-office-fact-association`；事实策略/适配器/业务工具 functional 66/66（适配器 38/38）、知识导入 functional 6/6、解析器 heavy 6/6、RunService heavy 89/89、typecheck 通过；PR #194 首轮 Quick code check 暴露旧测试仍期待表格重复生成 slide 文本，已更新断言并准备重推 |
-| D | QI05 | 成果导航身份与请求生命周期 | P2 | 5 | QI00 | todo | 待开工 |
+| C | QI04 | Office 结构化事实关联 | P2 | 8 | QI01、QI02 | done | [PR #194](https://github.com/gyzhang/BetterWork/pull/194) 单提交 `e19c2d7` 的 Quick code check、PR Gate 通过；已 squash 合入 `4786a5f1b629d8a9666fd3037f76fc1c8f3b4a7c`，Actions `38281532385` 成功 |
+| D | QI05 | 成果导航身份与请求生命周期 | P2 | 5 | QI00 | doing | `codex/qi05-artifact-navigation`（基于 `4786a5f1`）；Hook/ArtifactView functional 25/25、App heavy 53/53、typecheck、目标 ESLint/Prettier、`docs:check` 155/155、以 `4786a5f1` 为基点的 `drift:check`、`git diff --check` 通过；`ui:check` 74 组通过，含 8 种成果页面组合的键盘走查及真实 IPC/临时 SQLite 的列表返回、上下文入口旅程；本地验证完成，PR 待创建 |
 | D | QI06 | 修订保存与版本失败归属 | P2 | 5 | QI05 | todo | 待开工 |
 | E | QI07 | 联合回归、负例覆盖与一致性 Review | P2 | 5 | QI02–QI06 | todo | 待开工 |
 | E | QI08 | 用户验收与证据交接 | P2 | 2 | QI07、人工验收窗口 | todo | 待验收 |
@@ -226,6 +226,8 @@ QI01 于 2026-10-12 在 `codex/qi01-fact-association-contract` 完成并合入�
 
 QI03 于 2026-10-13 完成并合入：PR #193 的单提交 `92daf573e6be924a8085df05fa82bcf902ef9c10` 经 PR Gate 和 Quick code check 后 squash 合并为 `8419d93ec71587ad87bcdd69e4670d9f027df45a`；GitHub 未返回 Review 评论。功能 84/84、RunService 重档 87/87、事实策略 bench 2/2、typecheck、目标 ESLint/Prettier、docs:check 155/155 与 drift:check 均通过。此卡未运行完整 verify、真实模型/API 或用户数据操作。
 
-QI04 于 2026-10-13 在 `codex/qi04-office-fact-association` 实施中：CSV/XLSX 单元格与 PPTX 表格行进入当前 Run 的结构化事实来源，文本/备注沿用文本路径；XLSX 解析保留 A1、日期类型与公式缓存类型，PPTX 表格内容不再重复进入整页文本。已加入真实解析器正例、跨行/跨来源/跨 Sheet、歧义表头、缺少缓存值、截断缺表头、预算口径和日期精度回归，并加入 CSV/XLSX 读取到确定性分析的 RunService 集成。事实策略/适配器/业务工具 functional 66/66（适配器 38/38）、解析器 heavy 6/6、RunService heavy 89/89、typecheck、目标 ESLint/Prettier 已通过；文档检查、治理巡检与 PR 门禁待完成。
+QI04 于 2026-10-13 完成并合入：CSV/XLSX 单元格与 PPTX 表格行进入当前 Run 的结构化事实来源；保留来源定位、日期和公式缓存信息，表格不再重复进入 PPTX 整页文本。真实解析器正例、跨行/跨来源/跨 Sheet、歧义表头、缺少缓存、预算口径和日期精度回归，以及 CSV/XLSX 到确定性分析的 RunService 集成均通过。事实策略/适配器/业务工具 functional 66/66（适配器 38/38）、知识导入 functional 6/6、Office 解析器 heavy 6/6、RunService heavy 89/89、typecheck、目标 ESLint/Prettier、docs:check 155/155、批次 drift:check 与 `git diff --check` 通过。[PR #194](https://github.com/gyzhang/BetterWork/pull/194) 单提交 `e19c2d7a5a68cc8abcea7f1e1c072b3d121caaa3` 对应的 [Actions 38281532385](https://github.com/gyzhang/BetterWork/actions/runs/38281532385) 中 Quick code check 与 PR Gate 成功，PR 已 squash 合入 `4786a5f1b629d8a9666fd3037f76fc1c8f3b4a7c`；无未解决 Review 评论。完整 `npm run verify`、真实模型/API 和用户数据操作均未运行。
+
+QI05 于 2026-10-13 在 `codex/qi05-artifact-navigation` 实施中：新增成果导航 Hook，统一列表、精确版本、通知、上下文、返回和离页请求失效；旧版本请求失败也按当前代次收口。回归覆盖 A→B 逆序、A→B→A、同成果重开、清空选择、当前/旧版本、历史列表迟到失败及通知迟到失败。Hook/ArtifactView functional 3 文件 / 25 项、App heavy 53 项、typecheck、目标 ESLint/Prettier 通过。`npm run ui:check` 的 74 组通过：8 种成果页面组合均实测 Tab、Shift+Tab、Enter、焦点环与版本选择；真实 IPC/临时 SQLite 应用旅程实测列表打开/返回及从任务上下文打开/返回。首次旅程运行发现夹具结束时停在成果列表，导致随后 Run 步骤缺少工作输入；恢复回工作页后整轮通过。`npm run docs:check` 155/155、以 `4786a5f1b629d8a9666fd3037f76fc1c8f3b4a7c` 为基点的 `drift:check` 和 `git diff --check` 通过；PR 尚未创建，代码和文档未提交。
 
 后续各卡的实际证据追加在本节，并更新 §3 的对应行；文档、代码、CI 与人工结果分别标明范围。不得将 §1 的历史绿灯复制为后续实现通过证据。
