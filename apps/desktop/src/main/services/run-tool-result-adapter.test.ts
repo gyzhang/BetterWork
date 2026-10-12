@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import type { MaterialReference, McpToolBinding } from '@betterwork/agent-protocol';
 import ExcelJS from 'exceljs';
@@ -375,6 +377,49 @@ describe('Run tool result adapters', () => {
         basis: 'budget',
       }),
     );
+  });
+
+  it('parses the QI08 CSV and XLSX samples into the same October revenue and cost facts', async () => {
+    const sampleRoot = path.resolve(process.cwd(), 'docs/development/qi08-acceptance');
+    const samples = [
+      { format: 'csv' as const, fileName: '多指标经营数据.csv' },
+      { format: 'xlsx' as const, fileName: '多指标经营数据.xlsx' },
+    ];
+
+    for (const sample of samples) {
+      const fixture = setup();
+      const parsed = await parseOfficeBytes(
+        sample.format,
+        await readFile(path.join(sampleRoot, sample.fileName)),
+      );
+      const [sourceId] = applyParsedOffice(fixture, sample.format, parsed);
+      if (!sourceId) throw new Error(`${sample.format.toUpperCase()} section source missing`);
+
+      validateAndRecordBusinessMetricFacts(fixture.materialFacts, {
+        period: '2026-10',
+        current: {
+          收入: { value: 100, unit: '万元', period: '2026-10', sourceId },
+          成本: { value: 80, unit: '万元', period: '2026-10', sourceId },
+        },
+      });
+
+      expect(fixture.materialFacts.facts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            metric: '收入',
+            value: 100,
+            unit: '万元',
+            periods: ['2026-10'],
+          }),
+          expect.objectContaining({
+            metric: '成本',
+            value: 80,
+            unit: '万元',
+            periods: ['2026-10'],
+          }),
+        ]),
+      );
+    }
   });
 
   it('matches a date-typed XLSX period at day precision while retaining its source type', async () => {

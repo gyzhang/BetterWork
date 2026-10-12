@@ -207,7 +207,12 @@ try {
         reopened.pid === marker.pid ||
         reopened.memoryCount < 15 ||
         reopened.runCount !== 6 ||
-        reopened.syntheticRequests !== 0
+        reopened.syntheticRequests !== 0 ||
+        !reopened.qi08Acceptance ||
+        reopened.qi08Acceptance.humanResultsWritten !== false ||
+        reopened.qi08Acceptance.externalNetworkAttempts !== 0 ||
+        reopened.qi08Acceptance.officeFiles?.length !== 2 ||
+        reopened.qi08Acceptance.artifacts?.length !== 2
       )
         throw new Error('合成验收重开丢失数据或自动调用模型');
       console.warn('合成验收准备与重开通过；人工结果未填写');
