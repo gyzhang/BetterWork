@@ -5,6 +5,12 @@ import type {
   SourcedMetricFact,
 } from '@betterwork/tool-runtime';
 
+import {
+  type OfficeFactAssertion,
+  officeFactAssertionsIn,
+  type OfficeFactSource,
+} from './office-fact-policy';
+
 type BusinessMetricFactBasis = 'actual' | 'budget' | 'comparison' | 'budget-variance';
 
 export interface BusinessMetricFactRecord {
@@ -22,6 +28,7 @@ export interface MaterialFactLedger {
   readonly selectedMaterialCount: number;
   materialReadCount: number;
   readonly sources: Map<string, string>;
+  readonly officeSources: Map<string, OfficeFactSource>;
   readonly facts: BusinessMetricFactRecord[];
   readonly supportedQualitativeClaims: Set<string>;
 }
@@ -47,6 +54,7 @@ export const createMaterialFactLedger = ({
     selectedMaterialCount,
     materialReadCount: 0,
     sources: new Map(),
+    officeSources: new Map(),
     facts: [],
     supportedQualitativeClaims: new Set(),
   };
@@ -194,6 +202,26 @@ export const recordMaterialFacts = (ledger: MaterialFactLedger, input: MaterialF
     }
     ledger.sources.set(input.sourceId, input.content);
   }
+};
+
+export const recordOfficeMaterialFacts = (
+  ledger: MaterialFactLedger,
+  input: { readonly sourceId: string; readonly source: OfficeFactSource },
+): void => {
+  if (!ledger.enabled) return;
+  if (!ledger.sources.has(input.sourceId)) {
+    throw new Error('Office 结构化事实来源必须对应本次 Run 已读取的片段。');
+  }
+  const existing = ledger.officeSources.get(input.sourceId);
+  if (
+    existing &&
+    (existing.format !== input.source.format ||
+      existing.locator !== input.source.locator ||
+      JSON.stringify(existing.content) !== JSON.stringify(input.source.content))
+  ) {
+    throw new Error('材料事实来源 ID 冲突，无法建立稳定来源关联。');
+  }
+  ledger.officeSources.set(input.sourceId, input.source);
 };
 
 interface TextFactAssertion {
@@ -354,7 +382,7 @@ const textFactAssertionsIn = (
   return assertions;
 };
 
-type SourceFactValidation = 'supported' | 'missing' | 'conflict';
+type SourceFactValidation = 'supported' | 'missing' | 'conflict' | 'ambiguous';
 
 type TextFactAssertionIndex = ReadonlyMap<string, readonly TextFactAssertion[]>;
 
@@ -383,6 +411,54 @@ const sourceContainsFact = (
 ): SourceFactValidation => {
   if (sourceContainsStructuredFact(content, metric, fact, basis)) return 'supported';
   const assertions = textAssertions.get(textFactAssertionKey(metric, fact.period, basis)) ?? [];
+  const distinctFacts = new Set(
+    assertions.map((assertion) => `${assertion.value}\u0000${normalizeUnit(assertion.unit)}`),
+  );
+  if (distinctFacts.size > 1) return 'conflict';
+  return assertions.some(
+    (assertion) =>
+      assertion.value === fact.value && normalizeUnit(assertion.unit) === normalizeUnit(fact.unit),
+  )
+    ? 'supported'
+    : 'missing';
+};
+
+const officeFactAssertionKey = (
+  metric: string,
+  period: string,
+  basis: 'actual' | 'budget',
+): string => `${metric}\u0000${normalizePeriod(period)}\u0000${basis}`;
+
+const indexOfficeFactAssertions = (
+  source: OfficeFactSource,
+  metrics: readonly string[],
+  units: readonly string[],
+): {
+  readonly assertions: ReadonlyMap<string, readonly OfficeFactAssertion[]>;
+  readonly ambiguous: boolean;
+} => {
+  const result = officeFactAssertionsIn(source, metrics, units);
+  const assertions = new Map<string, OfficeFactAssertion[]>();
+  for (const assertion of result.assertions) {
+    const key = officeFactAssertionKey(assertion.metric, assertion.period, assertion.basis);
+    const existing = assertions.get(key);
+    if (existing) existing.push(assertion);
+    else assertions.set(key, [assertion]);
+  }
+  return { assertions, ambiguous: result.ambiguous };
+};
+
+const officeSourceContainsFact = (
+  index: {
+    readonly assertions: ReadonlyMap<string, readonly OfficeFactAssertion[]>;
+    readonly ambiguous: boolean;
+  },
+  metric: string,
+  fact: SourcedMetricFact,
+  basis: 'actual' | 'budget',
+): SourceFactValidation => {
+  if (index.ambiguous) return 'ambiguous';
+  const assertions = index.assertions.get(officeFactAssertionKey(metric, fact.period, basis)) ?? [];
   const distinctFacts = new Set(
     assertions.map((assertion) => `${assertion.value}\u0000${normalizeUnit(assertion.unit)}`),
   );
@@ -482,23 +558,38 @@ export const validateAndRecordBusinessMetricFacts = (
   const knownUnits = [...new Set(entries.map(({ fact }) => fact.unit))];
   const pendingFacts: BusinessMetricFactRecord[] = [];
   const textAssertionsBySource = new Map<string, TextFactAssertionIndex>();
+  const officeAssertionsBySource = new Map<string, ReturnType<typeof indexOfficeFactAssertions>>();
   for (const { metric, fact, basis } of entries) {
     const source = ledger.sources.get(fact.sourceId);
     if (!source) {
       throw new Error(`材料事实校验失败：指标“${metric}”引用了本次 Run 未读取的来源。`);
     }
-    let textAssertions = textAssertionsBySource.get(fact.sourceId);
-    if (textAssertions === undefined) {
-      textAssertions = indexTextFactAssertions(
-        textFactAssertionsIn(source, knownMetrics, knownPeriods, knownUnits),
-      );
-      textAssertionsBySource.set(fact.sourceId, textAssertions);
+    const officeSource = ledger.officeSources.get(fact.sourceId);
+    let validation: SourceFactValidation;
+    if (officeSource) {
+      let officeAssertions = officeAssertionsBySource.get(fact.sourceId);
+      if (officeAssertions === undefined) {
+        officeAssertions = indexOfficeFactAssertions(officeSource, knownMetrics, knownUnits);
+        officeAssertionsBySource.set(fact.sourceId, officeAssertions);
+      }
+      validation = officeSourceContainsFact(officeAssertions, metric, fact, basis);
+    } else {
+      let textAssertions = textAssertionsBySource.get(fact.sourceId);
+      if (textAssertions === undefined) {
+        textAssertions = indexTextFactAssertions(
+          textFactAssertionsIn(source, knownMetrics, knownPeriods, knownUnits),
+        );
+        textAssertionsBySource.set(fact.sourceId, textAssertions);
+      }
+      validation = sourceContainsFact(source, textAssertions, metric, fact, basis);
     }
-    const validation = sourceContainsFact(source, textAssertions, metric, fact, basis);
     if (validation === 'conflict') {
       throw new Error(
         `材料事实校验失败：来源存在相互冲突的指标“${metric}”事实（${fact.period}）。`,
       );
+    }
+    if (validation === 'ambiguous') {
+      throw new Error(`材料事实校验失败：Office 来源“${metric}”的表头或行定位存在歧义。`);
     }
     if (validation === 'missing') {
       throw new Error(

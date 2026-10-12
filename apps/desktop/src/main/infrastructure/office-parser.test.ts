@@ -80,7 +80,7 @@ describe('OfficeParserService', () => {
       'slide:1/notes',
       'slide:2',
     ]);
-    expect(result.sections[0]?.content).toBe('月报 收入 120');
+    expect(result.sections[0]?.content).toBe('月报');
     expect(result.sections[1]?.content).toEqual([['收入', '120']]);
     expect(result.sections[2]?.content).toBe('备注');
     expect(result.sections[3]?.content).toBe('封底');
@@ -96,10 +96,20 @@ describe('OfficeParserService', () => {
     const plain = full.sections.find((section) => section.locator.startsWith('sheet:经营数据!'));
     const tricky = full.sections.find((section) => section.locator.includes('Q1'));
     expect(plain?.locator).toBe('sheet:经营数据!A1:B1');
+    expect(plain?.content).toEqual([
+      { address: 'A1', valueType: 'text', value: '收入' },
+      {
+        address: 'B1',
+        formula: '100+20',
+        valueType: 'formula',
+        cachedValueType: 'number',
+        value: 120,
+      },
+    ]);
     expect(tricky?.locator).toBe(`sheet:'Q1!数据'!A1:B1`);
     expect(tricky?.content).toEqual([
-      { address: 'A1', value: '2026-08-01T00:00:00.000Z' },
-      { address: 'B1', value: 3456 },
+      { address: 'A1', valueType: 'date', value: '2026-08-01T00:00:00.000Z' },
+      { address: 'B1', valueType: 'number', value: 3456 },
     ]);
 
     // 回读输出定位串：必须得到与整表解析一致的节，而不是静默空结果。
@@ -118,7 +128,7 @@ describe('OfficeParserService', () => {
       structuredLocator: { sheet: 'Q1!数据', range: 'A1:A1' },
     });
     expect(structured.sections[0]?.content).toEqual([
-      { address: 'A1', value: '2026-08-01T00:00:00.000Z' },
+      { address: 'A1', valueType: 'date', value: '2026-08-01T00:00:00.000Z' },
     ]);
 
     await expect(parseOfficeBytes('xlsx', bytes, { locator: 'A1:B1' })).resolves.toEqual(full);
@@ -145,6 +155,13 @@ describe('OfficeParserService', () => {
     );
     const result = await parser.parseFile(filePath, 'xlsx');
     expect(result.warnings).toContain('formula-without-cached-result');
+    expect(result.sections[0]?.content).toEqual([
+      {
+        address: 'A1',
+        formula: '1+1',
+        valueType: 'formula-without-cached-result',
+      },
+    ]);
     const corruptPath = await writeTemp('corrupt.pptx', Buffer.from('not a zip'));
     await expect(parser.parseFile(corruptPath, 'pptx')).rejects.toThrow();
   });

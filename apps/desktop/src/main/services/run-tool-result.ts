@@ -38,7 +38,12 @@ const readOfficeMaterialResultSchema = z.object({
   format: z.enum(['pptx', 'xlsx', 'csv']),
   sections: z.array(
     z
-      .object({ locator: z.string(), content: z.unknown(), sourceId: z.string().min(1).optional() })
+      .object({
+        locator: z.string(),
+        kind: z.enum(['text', 'table', 'notes', 'cells']).optional(),
+        content: z.unknown(),
+        sourceId: z.string().min(1).optional(),
+      })
       .refine((section) => 'content' in section, {
         path: ['content'],
       }),

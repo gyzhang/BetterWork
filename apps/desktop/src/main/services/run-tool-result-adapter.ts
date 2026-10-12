@@ -13,6 +13,7 @@ import {
   type MaterialFactLedger,
   recordDeterministicBusinessMetrics,
   recordMaterialFacts,
+  recordOfficeMaterialFacts,
 } from './material-fact-policy';
 import { parseRunToolResult, type RunToolResult } from './run-tool-result';
 
@@ -255,7 +256,12 @@ export class RunToolResultAdapter {
       return;
     }
     for (const section of sections) {
-      const content = JSON.stringify(officeFactValues(section.content));
+      const structured =
+        output.format !== 'pptx' || section.kind === 'table' || section.locator.includes('/table:');
+      const content =
+        output.format === 'pptx' && !structured && typeof section.content === 'string'
+          ? section.content
+          : JSON.stringify(officeFactValues(section.content));
       const excerpt = JSON.stringify(section.content).slice(0, 20_000);
       if (section.sourceId) {
         recordMaterialFacts(context.materialFacts, {
@@ -263,6 +269,16 @@ export class RunToolResultAdapter {
           sourceId: section.sourceId,
           content,
         });
+        if (structured) {
+          recordOfficeMaterialFacts(context.materialFacts, {
+            sourceId: section.sourceId,
+            source: {
+              format: output.format,
+              locator: section.locator,
+              content: section.content,
+            },
+          });
+        }
       }
       this.saveMaterialRead(
         runId,
