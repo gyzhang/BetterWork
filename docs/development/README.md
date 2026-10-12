@@ -58,6 +58,7 @@ A00 使用同样提示词，只把编号换成 A00。后续追加“按已审阅
 | [工作型记忆开发计划 WM00–WM16](tasks-memory.md) | 记忆召回、来源治理、自动提炼建议、工作空间简报与参考成果版本的唯一任务板；依据 [工作型记忆产品设计](../designs/work-centered-memory.md)、[ADR-0026](../adr/0026-work-centered-memory.md)（Proposed，已实施）、[记忆实施契约](memory-contracts.md) 与[记忆编码提示词](memory-coding-prompts.md)。与 A/B0/E/CF 并行，不重复排期；本手册不维护 WM 状态 |
 | [Task Continuity 开发计划 TC00–TC05](tasks-task-continuity.md) | 跨 Run 连续上下文的唯一实施任务板；依据已批准的 [Task Continuity 产品设计](../designs/task-continuity.md)、[ADR-0038](../adr/0038-task-continuity-across-runs.md) 与[实施契约](task-continuity-contracts.md)，逐卡状态只维护在任务板；不改变 A/B0/E/CF/WM/KM/SC 状态 |
 | [Task Continuity GPT-6 Luna 逐卡提示词](task-continuity-coding-prompts.md) | 后续新任务按卡启动 TC03 等工作；一次只执行明确指派的卡片，不把整份计划当作批量实现授权 |
+| [代码质量改进计划 QI00–QI08](tasks-code-quality-improvements.md) | 2026-10-12 复审后的输入/输出事实关联、Office 分列表格、成果请求生命周期与文档同步；QI 状态只在该任务板维护，本轮仅归档计划，代码卡未开工 |
 | [后续 B/C](phase-b-c-roadmap.md) | 专家配置与研究汇报路径，阶段 A 完成后按模板细化 |
 | [依赖验证记录](dependency-verification.md) | 基础 Python 候选、逐字抄录的上游校验值、本机探测结果与待验证清单 |
 
