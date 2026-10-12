@@ -314,6 +314,114 @@ describe('material fact policy for explicitly scoped business analysis', () => {
     );
   });
 
+  it('matches each output number to the metric in its own claim clause', () => {
+    const ledger = createLedger('收入 2026-09：120万元；成本 2026-09：80万元。');
+    validateAndRecordBusinessMetricFacts(ledger, {
+      period: '2026-09',
+      current: {
+        收入: { value: 120, unit: '万元', period: '2026-09', sourceId: 'read-1:0' },
+        成本: { value: 80, unit: '万元', period: '2026-09', sourceId: 'read-1:0' },
+      },
+    });
+
+    expect(auditMaterialFacts(ledger, '收入 2026-09：120万元，成本 2026-09：120万元。')).toContain(
+      '缺少同一指标、单位、期间和来源关联',
+    );
+    expect(
+      auditMaterialFacts(ledger, '收入 2026-09：120万元。\n成本 2026-09：120万元。'),
+    ).toContain('缺少同一指标、单位、期间和来源关联');
+  });
+
+  it('does not exchange periods between output claims for the same metric', () => {
+    const ledger = createLedger();
+    validateAndRecordBusinessMetricFacts(ledger, sourcedInput);
+
+    expect(auditMaterialFacts(ledger, '收入 2026-09：100万元，收入 2026-08：120万元。')).toContain(
+      '缺少同一指标、单位、期间和来源关联',
+    );
+  });
+
+  it('requires output claims to use the same actual or budget basis as their facts', () => {
+    const ledger = createLedger('2026-10实际收入100万元且预算收入80万元。');
+    validateAndRecordBusinessMetricFacts(ledger, {
+      period: '2026-10',
+      current: {
+        收入: { value: 100, unit: '万元', period: '2026-10', sourceId: 'read-1:0' },
+      },
+      budget: {
+        收入: { value: 80, unit: '万元', period: '2026-10', sourceId: 'read-1:0' },
+      },
+    });
+
+    expect(
+      auditMaterialFacts(ledger, '2026-10实际收入100万元，2026-10预算收入80万元。'),
+    ).toBeUndefined();
+    expect(
+      auditMaterialFacts(ledger, '2026-10实际收入100万元，2026-10预算收入100万元。'),
+    ).toContain('缺少同一指标、单位、期间和来源关联');
+  });
+
+  it('supports deterministic budget variance facts with both related periods and basis', () => {
+    const ledger = createLedger('2026-10实际收入100万元且预算收入80万元。');
+    const input = {
+      period: '2026-10',
+      current: {
+        收入: { value: 100, unit: '万元', period: '2026-10', sourceId: 'read-1:0' },
+      },
+      budget: {
+        收入: { value: 80, unit: '万元', period: '2026-10', sourceId: 'read-1:0' },
+      },
+    };
+    validateAndRecordBusinessMetricFacts(ledger, input);
+    recordDeterministicBusinessMetrics(ledger, analyzeSourcedBusinessMetrics(input));
+
+    expect(
+      auditMaterialFacts(
+        ledger,
+        '2026-10实际收入100万元，2026-10预算收入80万元，收入2026-10对比2026-10预算偏差20万元、预算偏差率25%。',
+      ),
+    ).toBeUndefined();
+  });
+
+  it('detects business values with missing units and Markdown table bare values', () => {
+    const ledger = createLedger();
+    validateAndRecordBusinessMetricFacts(ledger, {
+      period: '2026-09',
+      current: { 收入: sourcedInput.current.收入 },
+    });
+
+    expect(auditMaterialFacts(ledger, '收入 2026-09：120。')).toContain(
+      '缺少同一指标、单位、期间和来源关联',
+    );
+    expect(auditMaterialFacts(ledger, '| 收入 | 2026-09 | 999 |')).toContain(
+      '缺少同一指标、单位、期间和来源关联',
+    );
+  });
+
+  it('keeps dates, list markers, identifiers, and code numbers outside business claims', () => {
+    const ledger = createLedger();
+    validateAndRecordBusinessMetricFacts(ledger, sourcedInput);
+
+    expect(
+      auditMaterialFacts(
+        ledger,
+        '编号 A-12；版本 v2；1) 收入 2026-09：120万元。代码 `const item = 99;`。',
+      ),
+    ).toBeUndefined();
+  });
+
+  it('does not treat digits in a metric label as a business value', () => {
+    const ledger = createLedger('KPI 2 2026-09：100元。');
+    validateAndRecordBusinessMetricFacts(ledger, {
+      period: '2026-09',
+      current: {
+        'KPI 2': { value: 100, unit: '元', period: '2026-09', sourceId: 'read-1:0' },
+      },
+    });
+
+    expect(auditMaterialFacts(ledger, 'KPI 2 2026-09：100元。')).toBeUndefined();
+  });
+
   it('does not authorize arithmetic combinations until a deterministic result records them', () => {
     const ledger = createLedger('收入 2026-09：120万元；客户数 2026-09：100家。');
     validateAndRecordBusinessMetricFacts(ledger, {
