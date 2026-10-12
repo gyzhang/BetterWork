@@ -56,7 +56,7 @@ describe('extractDocument Office 分节（KM13）', () => {
     expect(extracted.pageCount).toBe(2);
   });
 
-  it('PPTX 表格序列化为确定性行文本，slide rels 带出备注节', async () => {
+  it('PPTX 表格不重复进入页面文本，slide rels 带出备注节', async () => {
     const zip = new JSZip();
     zip.file(
       'ppt/presentation.xml',
@@ -81,12 +81,11 @@ describe('extractDocument Office 分节（KM13）', () => {
     const bytes = await zip.generateAsync({ type: 'nodebuffer' });
     const extracted = await extractDocument('pptx', bytes);
     expect(extracted.sections.map((section) => section.locator)).toEqual([
-      'slide:1',
       'slide:1/table:1',
       'slide:1/notes',
     ]);
-    expect(extracted.sections[1]?.content).toBe('甲 | 乙');
-    expect(extracted.sections[2]?.content).toBe('讲稿');
+    expect(extracted.sections[0]?.content).toBe('甲 | 乙');
+    expect(extracted.sections[1]?.content).toBe('讲稿');
   });
 
   it('XLSX 每个非空逻辑行一节，单元格含地址/公式/缓存值的确定性序列化', async () => {

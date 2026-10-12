@@ -107,6 +107,20 @@ const textNodes = (value: unknown, result: string[] = []): string[] => {
   return result;
 };
 
+const slideTextNodes = (value: unknown, result: string[] = []): string[] => {
+  if (value === null || typeof value !== 'object') return result;
+  if (Array.isArray(value)) {
+    for (const item of value) slideTextNodes(item, result);
+    return result;
+  }
+  const record = value as Record<string, unknown>;
+  if (typeof record.t === 'string' || typeof record.t === 'number') result.push(String(record.t));
+  for (const [key, child] of Object.entries(record)) {
+    if (key !== 't' && key !== 'tbl') slideTextNodes(child, result);
+  }
+  return result;
+};
+
 const collectNodes = (value: unknown, key: string, result: Record<string, unknown>[] = []) => {
   if (value === null || typeof value !== 'object') return result;
   if (Array.isArray(value)) {
@@ -220,7 +234,7 @@ const parsePptx = async (
     if (!entry) continue;
     const xml = await textOf(entry, 'PPTX 单页文本');
     const parsed = parser.parse(xml) as unknown;
-    const text = textNodes(parsed).join(' ').trim();
+    const text = slideTextNodes(parsed).join(' ').trim();
     if (text) sections.push({ locator: `slide:${slideNumber}`, kind: 'text', content: text });
     for (const [tableIndex, table] of collectNodes(parsed, 'tbl').entries()) {
       const rows = tableRows(table);
@@ -335,6 +349,15 @@ const toCellText = (value: unknown): unknown => {
   return value ?? null;
 };
 
+const cellValueType = (value: unknown): string => {
+  if (value === null || value === undefined) return 'empty';
+  if (value instanceof Date) return 'date';
+  if (typeof value === 'string') return 'text';
+  if (typeof value === 'number') return 'number';
+  if (typeof value === 'boolean') return 'boolean';
+  return 'other';
+};
+
 const parseXlsx = async (
   buffer: Buffer,
   options: OfficeParseOptions,
@@ -385,12 +408,19 @@ const parseXlsx = async (
           cells.push({
             address: cellAddress(rowNumber, columnNumber),
             formula,
-            ...(result === undefined ? {} : { value: toCellText(result) }),
+            valueType: result === undefined ? 'formula-without-cached-result' : 'formula',
+            ...(result === undefined
+              ? {}
+              : { cachedValueType: cellValueType(result), value: toCellText(result) }),
           });
           if (result === undefined) warnings.push('formula-without-cached-result');
           return;
         }
-        cells.push({ address: cellAddress(rowNumber, columnNumber), value: toCellText(raw) });
+        cells.push({
+          address: cellAddress(rowNumber, columnNumber),
+          valueType: cellValueType(raw),
+          value: toCellText(raw),
+        });
       });
     });
     if (cells.length > 0) {

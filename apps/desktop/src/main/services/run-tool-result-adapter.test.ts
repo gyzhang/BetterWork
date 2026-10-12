@@ -1,10 +1,17 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { MaterialReference, McpToolBinding } from '@betterwork/agent-protocol';
+import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { parseOfficeBytes } from '../infrastructure/office-parser';
 import { AppStore } from '../persistence';
-import { auditMaterialFacts, createMaterialFactLedger } from './material-fact-policy';
+import {
+  auditMaterialFacts,
+  createMaterialFactLedger,
+  validateAndRecordBusinessMetricFacts,
+} from './material-fact-policy';
 import { RunToolResultAdapter } from './run-tool-result-adapter';
 
 const stores: AppStore[] = [];
@@ -110,6 +117,33 @@ const setup = (
     markdownWrites,
     apply,
   };
+};
+
+const applyParsedOffice = (
+  fixture: ReturnType<typeof setup>,
+  format: 'pptx' | 'xlsx' | 'csv',
+  parsed: Awaited<ReturnType<typeof parseOfficeBytes>>,
+): string[] => {
+  const sourceIds = parsed.sections.map((_section, index) => `read-office:${index}`);
+  fixture.apply('read_office_material', {
+    material: { ...fixture.textMaterial, format },
+    format,
+    sections: parsed.sections.map((section, index) => ({
+      ...section,
+      sourceId: sourceIds[index],
+    })),
+    contentHash: 'input-hash',
+  });
+  return sourceIds;
+};
+
+const validateOfficeRevenue = (fixture: ReturnType<typeof setup>, sourceId: string): void => {
+  validateAndRecordBusinessMetricFacts(fixture.materialFacts, {
+    period: '2026-10',
+    current: {
+      收入: { value: 100, unit: '万元', period: '2026-10', sourceId },
+    },
+  });
 };
 
 describe('Run tool result adapters', () => {
@@ -238,19 +272,22 @@ describe('Run tool result adapters', () => {
     ]);
   });
 
-  it('keeps Office cell/address metadata out of the fact source and hashes the original section', () => {
+  it('retains Office cell addresses for facts and hashes the original section', () => {
     const fixture = setup();
     const content = { cells: [{ address: 'A999', locator: 'row:888', value: '30元' }] };
     fixture.apply('read_office_material', {
       material: fixture.textMaterial,
       format: 'csv',
-      sections: [{ locator: 'Sheet1', content, sourceId: 'read-office:0' }],
+      sections: [{ locator: 'Sheet1', kind: 'cells', content, sourceId: 'read-office:0' }],
       contentHash: 'input-hash',
     });
     const source = fixture.materialFacts.sources.get('read-office:0');
     expect(source).toContain('30元');
     expect(source).not.toContain('999');
     expect(source).not.toContain('888');
+    expect(fixture.materialFacts.officeSources.get('read-office:0')).toEqual(
+      expect.objectContaining({ locator: 'Sheet1', format: 'csv' }),
+    );
     expect(fixture.store.materialReads.listByRun(fixture.runId)).toEqual([
       expect.objectContaining({
         operation: 'parse',
@@ -258,6 +295,356 @@ describe('Run tool result adapters', () => {
         excerptHash: hash(JSON.stringify(content)),
       }),
     ]);
+  });
+
+  it('validates a CSV fact using its explicit headers and one returned data row', async () => {
+    const fixture = setup();
+    const parsed = await parseOfficeBytes(
+      'csv',
+      Buffer.from('期间,指标,单位,数值\n2026-10,收入,万元,100\n', 'utf8'),
+    );
+    const [sourceId] = applyParsedOffice(fixture, 'csv', parsed);
+    if (!sourceId) throw new Error('CSV section source missing');
+
+    validateOfficeRevenue(fixture, sourceId);
+
+    expect(fixture.materialFacts.facts).toContainEqual(
+      expect.objectContaining({ metric: '收入', value: 100, unit: '万元', periods: ['2026-10'] }),
+    );
+    expect(fixture.store.materialReads.listByRun(fixture.runId)).toEqual([
+      expect.objectContaining({ operation: 'parse', locator: 'rows:1-2' }),
+    ]);
+  });
+
+  it('validates an XLSX fact using a metric and unit in its header and a cached formula value', async () => {
+    const fixture = setup();
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('经营数据');
+    sheet.addRow(['期间', '收入（万元）']);
+    sheet.addRow(['2026-10', { formula: '50+50', result: 100 }]);
+    const parsed = await parseOfficeBytes('xlsx', Buffer.from(await workbook.xlsx.writeBuffer()));
+    const [sourceId] = applyParsedOffice(fixture, 'xlsx', parsed);
+    if (!sourceId) throw new Error('XLSX section source missing');
+
+    validateOfficeRevenue(fixture, sourceId);
+
+    expect(fixture.materialFacts.facts).toContainEqual(
+      expect.objectContaining({ metric: '收入', value: 100, unit: '万元', periods: ['2026-10'] }),
+    );
+    expect(fixture.materialFacts.officeSources.get(sourceId)?.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ address: 'A1', valueType: 'text', value: '期间' }),
+        expect.objectContaining({
+          address: 'B2',
+          formula: '50+50',
+          valueType: 'formula',
+          cachedValueType: 'number',
+          value: 100,
+        }),
+      ]),
+    );
+    expect(fixture.store.materialReads.listByRun(fixture.runId)).toEqual([
+      expect.objectContaining({ operation: 'parse', locator: 'sheet:经营数据!A1:B2' }),
+    ]);
+  });
+
+  it('keeps a budget basis declared in an XLSX metric header', async () => {
+    const fixture = setup();
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('预算');
+    sheet.addRow(['期间', '预算收入（万元）']);
+    sheet.addRow(['2026-10', 80]);
+    const parsed = await parseOfficeBytes('xlsx', Buffer.from(await workbook.xlsx.writeBuffer()));
+    const [sourceId] = applyParsedOffice(fixture, 'xlsx', parsed);
+    if (!sourceId) throw new Error('XLSX section source missing');
+
+    validateAndRecordBusinessMetricFacts(fixture.materialFacts, {
+      period: '2026-10',
+      current: {},
+      budget: {
+        收入: { value: 80, unit: '万元', period: '2026-10', sourceId },
+      },
+    });
+
+    expect(fixture.materialFacts.facts).toContainEqual(
+      expect.objectContaining({
+        metric: '收入',
+        value: 80,
+        unit: '万元',
+        periods: ['2026-10'],
+        basis: 'budget',
+      }),
+    );
+  });
+
+  it('matches a date-typed XLSX period at day precision while retaining its source type', async () => {
+    const fixture = setup();
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('经营数据');
+    sheet.addRow(['期间', '收入（万元）']);
+    sheet.addRow([new Date(Date.UTC(2026, 9, 1)), 100]);
+    const parsed = await parseOfficeBytes('xlsx', Buffer.from(await workbook.xlsx.writeBuffer()));
+    const [sourceId] = applyParsedOffice(fixture, 'xlsx', parsed);
+    if (!sourceId) throw new Error('XLSX section source missing');
+
+    validateAndRecordBusinessMetricFacts(fixture.materialFacts, {
+      period: '2026-10-01',
+      current: {
+        收入: { value: 100, unit: '万元', period: '2026-10-01', sourceId },
+      },
+    });
+
+    expect(fixture.materialFacts.officeSources.get(sourceId)?.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          address: 'A2',
+          valueType: 'date',
+          value: '2026-10-01T00:00:00.000Z',
+        }),
+      ]),
+    );
+    expect(fixture.materialFacts.facts).toContainEqual(
+      expect.objectContaining({
+        metric: '收入',
+        value: 100,
+        unit: '万元',
+        periods: ['2026-10-01'],
+      }),
+    );
+  });
+
+  it('rejects a row basis that conflicts with its XLSX metric header', async () => {
+    const fixture = setup();
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('预算');
+    sheet.addRow(['期间', '预算收入（万元）', '口径']);
+    sheet.addRow(['2026-10', 80, '实际']);
+    const parsed = await parseOfficeBytes('xlsx', Buffer.from(await workbook.xlsx.writeBuffer()));
+    const [sourceId] = applyParsedOffice(fixture, 'xlsx', parsed);
+    if (!sourceId) throw new Error('XLSX section source missing');
+
+    expect(() =>
+      validateAndRecordBusinessMetricFacts(fixture.materialFacts, {
+        period: '2026-10',
+        current: {},
+        budget: {
+          收入: { value: 80, unit: '万元', period: '2026-10', sourceId },
+        },
+      }),
+    ).toThrow('来源未同时提供指标“收入”的数值、单位和期间');
+  });
+
+  it('rejects an unrecognized value in an explicit XLSX basis column', async () => {
+    const fixture = setup();
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('预算');
+    sheet.addRow(['期间', '预算收入（万元）', '口径']);
+    sheet.addRow(['2026-10', 80, '预测']);
+    const parsed = await parseOfficeBytes('xlsx', Buffer.from(await workbook.xlsx.writeBuffer()));
+    const [sourceId] = applyParsedOffice(fixture, 'xlsx', parsed);
+    if (!sourceId) throw new Error('XLSX section source missing');
+
+    expect(() =>
+      validateAndRecordBusinessMetricFacts(fixture.materialFacts, {
+        period: '2026-10',
+        current: {},
+        budget: {
+          收入: { value: 80, unit: '万元', period: '2026-10', sourceId },
+        },
+      }),
+    ).toThrow('来源未同时提供指标“收入”的数值、单位和期间');
+  });
+
+  it('uses the same PPTX table row for explicitly labeled business fields', async () => {
+    const fixture = setup();
+    const zip = new JSZip();
+    zip.file(
+      'ppt/presentation.xml',
+      '<p:presentation xmlns:p="urn:p"><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>',
+    );
+    zip.file(
+      'ppt/_rels/presentation.xml.rels',
+      '<Relationships xmlns="urn:rels"><Relationship Id="rId1" Type="urn:slide" Target="slides/slide1.xml"/></Relationships>',
+    );
+    zip.file(
+      'ppt/slides/slide1.xml',
+      '<p:sld xmlns:p="urn:p" xmlns:a="urn:a"><p:cSld><a:tbl><a:tr><a:tc><a:t>期间</a:t></a:tc><a:tc><a:t>2026-10</a:t></a:tc><a:tc><a:t>指标</a:t></a:tc><a:tc><a:t>收入</a:t></a:tc><a:tc><a:t>单位</a:t></a:tc><a:tc><a:t>万元</a:t></a:tc><a:tc><a:t>数值</a:t></a:tc><a:tc><a:t>100</a:t></a:tc></a:tr></a:tbl></p:cSld></p:sld>',
+    );
+    const parsed = await parseOfficeBytes('pptx', await zip.generateAsync({ type: 'nodebuffer' }));
+    const tableIndex = parsed.sections.findIndex((section) => section.kind === 'table');
+    const sourceIds = applyParsedOffice(fixture, 'pptx', parsed);
+    const sourceId = sourceIds[tableIndex];
+    if (!sourceId) throw new Error('PPTX table source missing');
+
+    validateOfficeRevenue(fixture, sourceId);
+
+    expect(fixture.materialFacts.facts).toContainEqual(
+      expect.objectContaining({ metric: '收入', value: 100, unit: '万元', periods: ['2026-10'] }),
+    );
+    expect(fixture.store.materialReads.listByRun(fixture.runId)).toContainEqual(
+      expect.objectContaining({ operation: 'parse', locator: 'slide:1/table:1' }),
+    );
+  });
+
+  it('does not assemble PPTX fields across table rows', async () => {
+    const fixture = setup();
+    const zip = new JSZip();
+    zip.file(
+      'ppt/slides/slide1.xml',
+      '<p:sld xmlns:p="urn:p" xmlns:a="urn:a"><p:cSld><a:tbl><a:tr><a:tc><a:t>期间</a:t></a:tc><a:tc><a:t>2026-10</a:t></a:tc><a:tc><a:t>指标</a:t></a:tc><a:tc><a:t>收入</a:t></a:tc><a:tc><a:t>单位</a:t></a:tc><a:tc><a:t>万元</a:t></a:tc></a:tr><a:tr><a:tc><a:t>数值</a:t></a:tc><a:tc><a:t>100</a:t></a:tc></a:tr></a:tbl></p:cSld></p:sld>',
+    );
+    const parsed = await parseOfficeBytes('pptx', await zip.generateAsync({ type: 'nodebuffer' }));
+    const tableIndex = parsed.sections.findIndex((section) => section.kind === 'table');
+    const sourceIds = applyParsedOffice(fixture, 'pptx', parsed);
+    const sourceId = sourceIds[tableIndex];
+    if (!sourceId) throw new Error('PPTX table source missing');
+
+    expect(() => validateOfficeRevenue(fixture, sourceId)).toThrow(
+      '来源未同时提供指标“收入”的数值、单位和期间',
+    );
+  });
+
+  it('does not assemble a CSV fact across separate data rows', async () => {
+    const fixture = setup();
+    const parsed = await parseOfficeBytes(
+      'csv',
+      Buffer.from('期间,指标,单位,数值\n2026-10,收入,万元,\n,,,100\n', 'utf8'),
+    );
+    const [sourceId] = applyParsedOffice(fixture, 'csv', parsed);
+    if (!sourceId) throw new Error('CSV section source missing');
+
+    expect(() => validateOfficeRevenue(fixture, sourceId)).toThrow(
+      '来源未同时提供指标“收入”的数值、单位和期间',
+    );
+  });
+
+  it('rejects an XLSX formula without a cached value as a direct fact', async () => {
+    const fixture = setup();
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('经营数据');
+    sheet.addRow(['期间', '收入（万元）']);
+    sheet.addRow(['2026-10', { formula: '50+50' }]);
+    const parsed = await parseOfficeBytes('xlsx', Buffer.from(await workbook.xlsx.writeBuffer()));
+    const [sourceId] = applyParsedOffice(fixture, 'xlsx', parsed);
+    if (!sourceId) throw new Error('XLSX section source missing');
+
+    expect(() => validateOfficeRevenue(fixture, sourceId)).toThrow(
+      '来源未同时提供指标“收入”的数值、单位和期间',
+    );
+  });
+
+  it('rejects duplicate semantic CSV headers as ambiguous', async () => {
+    const fixture = setup();
+    const parsed = await parseOfficeBytes(
+      'csv',
+      Buffer.from('期间,指标,指标,单位,数值\n2026-10,收入,收入,万元,100\n', 'utf8'),
+    );
+    const [sourceId] = applyParsedOffice(fixture, 'csv', parsed);
+    if (!sourceId) throw new Error('CSV section source missing');
+
+    expect(() => validateOfficeRevenue(fixture, sourceId)).toThrow(
+      'Office 来源“收入”的表头或行定位存在歧义',
+    );
+  });
+
+  it('does not borrow a value from another CSV sourceId', () => {
+    const fixture = setup();
+    fixture.apply('read_office_material', {
+      material: { ...fixture.textMaterial, format: 'csv' },
+      format: 'csv',
+      sections: [
+        {
+          locator: 'rows:1-2',
+          kind: 'cells',
+          content: [
+            ['期间', '指标', '单位', '数值'],
+            ['2026-10', '收入', '万元', ''],
+          ],
+          sourceId: 'read-office:partial',
+        },
+        {
+          locator: 'rows:3-4',
+          kind: 'cells',
+          content: [
+            ['期间', '指标', '单位', '数值'],
+            ['2026-10', '收入', '万元', '100'],
+          ],
+          sourceId: 'read-office:complete',
+        },
+      ],
+      contentHash: 'input-hash',
+    });
+
+    expect(() => validateOfficeRevenue(fixture, 'read-office:partial')).toThrow(
+      '来源未同时提供指标“收入”的数值、单位和期间',
+    );
+  });
+
+  it('does not borrow a value from another XLSX Sheet', async () => {
+    const fixture = setup();
+    const workbook = new ExcelJS.Workbook();
+    const partial = workbook.addWorksheet('摘要');
+    partial.addRow(['期间', '收入（万元）']);
+    partial.addRow(['2026-10']);
+    const complete = workbook.addWorksheet('明细');
+    complete.addRow(['期间', '收入（万元）']);
+    complete.addRow(['2026-10', 100]);
+    const parsed = await parseOfficeBytes('xlsx', Buffer.from(await workbook.xlsx.writeBuffer()));
+    const sourceIds = applyParsedOffice(fixture, 'xlsx', parsed);
+    const partialSource = sourceIds[0];
+    if (!partialSource) throw new Error('Partial XLSX Sheet source missing');
+
+    expect(() => validateOfficeRevenue(fixture, partialSource)).toThrow(
+      '来源未同时提供指标“收入”的数值、单位和期间',
+    );
+  });
+
+  it('rejects an XLSX range that omits its header row', async () => {
+    const fixture = setup();
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('经营数据');
+    sheet.addRow(['期间', '收入（万元）']);
+    sheet.addRow(['2026-10', 100]);
+    const parsed = await parseOfficeBytes('xlsx', Buffer.from(await workbook.xlsx.writeBuffer()), {
+      structuredLocator: { sheet: '经营数据', range: 'A2:B2' },
+    });
+    const [sourceId] = applyParsedOffice(fixture, 'xlsx', parsed);
+    if (!sourceId) throw new Error('Truncated XLSX section source missing');
+
+    expect(() => validateOfficeRevenue(fixture, sourceId)).toThrow(
+      '来源未同时提供指标“收入”的数值、单位和期间',
+    );
+  });
+
+  it('keeps PPTX text and notes on the existing exact-text fact path', () => {
+    const fixture = setup();
+    fixture.apply('read_office_material', {
+      material: { ...fixture.textMaterial, format: 'pptx' },
+      format: 'pptx',
+      sections: [
+        {
+          locator: 'slide:1',
+          kind: 'text',
+          content: '收入 2026-10：100万元。',
+          sourceId: 'read-office:text',
+        },
+        {
+          locator: 'slide:1/notes',
+          kind: 'notes',
+          content: '收入 2026-10：100万元。',
+          sourceId: 'read-office:notes',
+        },
+      ],
+      contentHash: 'input-hash',
+    });
+
+    expect(fixture.materialFacts.sources.get('read-office:text')).toBe('收入 2026-10：100万元。');
+    expect(fixture.materialFacts.sources.get('read-office:notes')).toBe('收入 2026-10：100万元。');
+    expect(fixture.materialFacts.officeSources.has('read-office:text')).toBe(false);
+    validateOfficeRevenue(fixture, 'read-office:notes');
+    expect(fixture.materialFacts.facts).toContainEqual(
+      expect.objectContaining({ metric: '收入', value: 100, unit: '万元', periods: ['2026-10'] }),
+    );
   });
 
   it('retains an empty Office parse footprint', () => {

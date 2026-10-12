@@ -73,8 +73,8 @@ QI01 将 ADR-0020 第 5 项中的“数值、指标、单位、期间、来源�
 | 计划 | QI00 | 复审证据、任务卡及入口归档 | P2 | 2 | 本轮指令 | done | [PR #190](https://github.com/gyzhang/BetterWork/pull/190) 合并为 `55e4488063a4c477437b8f254b0fd3ec0b0e07e6`；文档检查与 PR Gate 通过 |
 | A | QI01 | 关联契约定稿与现行文档同步 | P1/P3 | 3 | QI00 | done | [PR #191](https://github.com/gyzhang/BetterWork/pull/191) `bede329` squash 合并为 `c0ab62e95bb13ddf7820fceee4b4e63331fe2f00`；Documentation check 与 PR Gate 通过 |
 | B | QI02 | 文本输入事实精确关联 | P1 | 8 | QI01 | done | [PR #192](https://github.com/gyzhang/BetterWork/pull/192) 单提交 `125e088` squash 合并为 `f6ac6e991d86c6ffec29ff287cc4d4a500e03456`；PR Gate、Quick code check 通过 |
-| B | QI03 | 输出逐主张核验与遗漏检测 | P1 | 8 | QI01、QI02 | doing | `codex/qi03-output-claim-audit`；功能 84/84、RunService 重档 87/87、事实策略 bench 2/2、typecheck、目标 ESLint/Prettier、docs:check 155/155 与 drift:check 通过；PR/合并待收口 |
-| C | QI04 | Office 结构化事实关联 | P2 | 8 | QI01、QI02 | todo | 待开工 |
+| B | QI03 | 输出逐主张核验与遗漏检测 | P1 | 8 | QI01、QI02 | done | [PR #193](https://github.com/gyzhang/BetterWork/pull/193) 单提交 `92daf573e6be924a8085df05fa82bcf902ef9c10` squash 合并为 `8419d93ec71587ad87bcdd69e4670d9f027df45a`；PR Gate、Quick code check 通过，无 Review 评论 |
+| C | QI04 | Office 结构化事实关联 | P2 | 8 | QI01、QI02 | doing | `codex/qi04-office-fact-association`；事实策略/适配器/业务工具 functional 66/66（适配器 38/38）、知识导入 functional 6/6、解析器 heavy 6/6、RunService heavy 89/89、typecheck 通过；PR #194 首轮 Quick code check 暴露旧测试仍期待表格重复生成 slide 文本，已更新断言并准备重推 |
 | D | QI05 | 成果导航身份与请求生命周期 | P2 | 5 | QI00 | todo | 待开工 |
 | D | QI06 | 修订保存与版本失败归属 | P2 | 5 | QI05 | todo | 待开工 |
 | E | QI07 | 联合回归、负例覆盖与一致性 Review | P2 | 5 | QI02–QI06 | todo | 待开工 |
@@ -223,5 +223,9 @@ git diff --check
 QI00 于 2026-10-12 完成：已创建任务分支并归档计划。开始与结束巡检均退出 0；结束使用本批基点 `b7d484697f7caba82c91368212c3f1db7392157f`，未发现规则或例外漂移。三份文档已中文回读，相对链接/锚点核验 139 项通过，无替换字符和行尾空白；`npm run docs:check` 155/155、`git diff --check` 均退出 0。新任务板另行检查空白，未用 Git 差异检查替代未跟踪文件核验。代码卡全部未开工，产品源码与配置未变，未提交、推送或运行完整 verify。
 
 QI01 于 2026-10-12 在 `codex/qi01-fact-association-contract` 完成并合入：采用 sourceId 内句段/Office 行级唯一关联、冲突批次拒绝、受限期间/单位归一、逐主张输出审计和失败前不部分记账；不增加定位字段或持久化契约。ADR-0020 与架构 §3.3/§3.4 已同步，明确现有实现缺口由 QI02–QI04 修复。本地 `npm run docs:check` 155/155、`git diff --check` 与以 `55e4488063a4c477437b8f254b0fd3ec0b0e07e6` 为基点的 `drift:check` 均退出 0。PR #191 的 `Documentation check` 与 `PR Gate` 均通过，head `bede3295962caaa5d627628847138b2d42b8cf47` squash 合并为 `c0ab62e95bb13ddf7820fceee4b4e63331fe2f00`；没有 Review 评论。此 PR 是文档变更，不代表代码缺陷已修复。
+
+QI03 于 2026-10-13 完成并合入：PR #193 的单提交 `92daf573e6be924a8085df05fa82bcf902ef9c10` 经 PR Gate 和 Quick code check 后 squash 合并为 `8419d93ec71587ad87bcdd69e4670d9f027df45a`；GitHub 未返回 Review 评论。功能 84/84、RunService 重档 87/87、事实策略 bench 2/2、typecheck、目标 ESLint/Prettier、docs:check 155/155 与 drift:check 均通过。此卡未运行完整 verify、真实模型/API 或用户数据操作。
+
+QI04 于 2026-10-13 在 `codex/qi04-office-fact-association` 实施中：CSV/XLSX 单元格与 PPTX 表格行进入当前 Run 的结构化事实来源，文本/备注沿用文本路径；XLSX 解析保留 A1、日期类型与公式缓存类型，PPTX 表格内容不再重复进入整页文本。已加入真实解析器正例、跨行/跨来源/跨 Sheet、歧义表头、缺少缓存值、截断缺表头、预算口径和日期精度回归，并加入 CSV/XLSX 读取到确定性分析的 RunService 集成。事实策略/适配器/业务工具 functional 66/66（适配器 38/38）、解析器 heavy 6/6、RunService heavy 89/89、typecheck、目标 ESLint/Prettier 已通过；文档检查、治理巡检与 PR 门禁待完成。
 
 后续各卡的实际证据追加在本节，并更新 §3 的对应行；文档、代码、CI 与人工结果分别标明范围。不得将 §1 的历史绿灯复制为后续实现通过证据。

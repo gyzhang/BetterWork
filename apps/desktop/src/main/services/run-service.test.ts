@@ -18,6 +18,7 @@ import { countCodePoints, IpcChannel } from '@betterwork/agent-protocol';
 import type { WebFetch } from '@betterwork/tool-runtime';
 import type Database from 'better-sqlite3';
 import type { BrowserWindow } from 'electron';
+import ExcelJS from 'exceljs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { OfficeParserService } from '../infrastructure/office-parser';
@@ -3516,6 +3517,142 @@ describe('RunService', () => {
       expect.objectContaining({ runId, operation: 'parse', locator: 'rows:1-2' }),
     ]);
   });
+
+  it.each(['csv', 'xlsx'] as const)(
+    'reads a selected %s, validates its scoped Office fact, and completes deterministic analysis',
+    async (format) => {
+      const fixture = await createFixture();
+      let bytes: Buffer;
+      if (format === 'csv') {
+        bytes = Buffer.from('期间,指标,单位,数值\n2026-10,收入,万元,100\n', 'utf8');
+      } else {
+        const workbook = new ExcelJS.Workbook();
+        const sheet = workbook.addWorksheet('经营数据');
+        sheet.addRow(['期间', '收入（万元）']);
+        sheet.addRow(['2026-10', { formula: '50+50', result: 100 }]);
+        bytes = Buffer.from(await workbook.xlsx.writeBuffer());
+      }
+      const sourcePath = path.join(fixture.directory, `monthly.${format}`);
+      await writeFile(sourcePath, bytes);
+      const workspaceId = fixture.store.tasks.getWorkspaceId(fixture.taskId);
+      if (!workspaceId) throw new Error('workspace missing');
+      const receipt = await fixture.inputSnapshots.create({
+        workspaceId,
+        workspaceRoot: fixture.directory,
+        sourcePath,
+      });
+      const context = fixture.store.taskContexts.save(fixture.taskId, {
+        executor: { kind: 'general' },
+        skillBindings: [],
+        builtinToolPolicy: {
+          mode: 'allow-list',
+          toolNames: ['read_office_material', 'analyze_business_metrics'],
+        },
+        materials: [
+          {
+            reference: {
+              kind: 'workspace-input-snapshot',
+              snapshotId: receipt.snapshot.id,
+              workspaceId,
+              contentHash: receipt.snapshot.contentHash,
+              format: receipt.snapshot.format,
+              fileKey: receipt.snapshot.fileKey,
+            },
+            purpose: 'current-input',
+            addedFrom: 'user-input',
+          },
+        ],
+      });
+      const service = createService(fixture, { officeParser: new OfficeParserService() });
+      const readCallId = `read-office-${format}`;
+      const analysisCallId = `analyze-office-${format}`;
+      let providerCall = 0;
+      const provider = vi.spyOn(FakeModelProvider.prototype, 'stream').mockImplementation(() => {
+        const call = providerCall;
+        providerCall += 1;
+        return (async function* () {
+          if (call === 0) {
+            yield {
+              type: 'tool-call' as const,
+              toolCall: {
+                id: readCallId,
+                name: 'read_office_material',
+                input: {
+                  sourceKind: 'workspace-input-snapshot',
+                  snapshotId: receipt.snapshot.id,
+                },
+              },
+            };
+          } else if (call === 1) {
+            yield {
+              type: 'tool-call' as const,
+              toolCall: {
+                id: analysisCallId,
+                name: 'analyze_business_metrics',
+                input: {
+                  period: '2026-10',
+                  current: {
+                    收入: {
+                      value: 100,
+                      unit: '万元',
+                      period: '2026-10',
+                      sourceId: `${readCallId}:0`,
+                    },
+                  },
+                },
+              },
+            };
+          } else {
+            yield { type: 'text-delta' as const, delta: '收入 2026-10：100万元。' };
+          }
+          yield { type: 'done' as const };
+        })();
+      });
+
+      try {
+        const runId = service.start({
+          taskId: fixture.taskId,
+          sessionId: fixture.sessionId,
+          prompt: '读取已选表格并分析 2026-10 收入。',
+          taskContextRevisionId: context.id,
+          expectedTaskContextRevision: context.revision,
+        });
+        await waitForCompletion(fixture, runId, 800);
+
+        expect(statusOf(fixture, runId)).toBe('completed');
+        expect(providerCall).toBe(3);
+        const officeRead = fixture.store.runs
+          .listEvents(runId)
+          .find((event) => event.type === 'tool.completed' && event.toolCallId === readCallId);
+        if (officeRead?.type !== 'tool.completed') throw new Error('Office read event missing');
+        expect(officeRead.output).toMatchObject({
+          format,
+          sections: [expect.objectContaining({ kind: 'cells' })],
+        });
+        expect(fixture.store.runs.listEvents(runId)).toContainEqual(
+          expect.objectContaining({
+            type: 'tool.completed',
+            toolCallId: analysisCallId,
+            output: expect.objectContaining({
+              period: '2026-10',
+              metrics: [expect.objectContaining({ metric: '收入', current: 100, unit: '万元' })],
+            }),
+          }),
+        );
+        expect(fixture.store.materialReads.listByRun(runId)).toContainEqual(
+          expect.objectContaining({
+            runId,
+            operation: 'parse',
+            locator: format === 'csv' ? 'rows:1-2' : 'sheet:经营数据!A1:B2',
+            contentHash: receipt.snapshot.contentHash,
+            excerptHash: expect.any(String),
+          }),
+        );
+      } finally {
+        provider.mockRestore();
+      }
+    },
+  );
 
   it('runs the deterministic business analysis tool under an Expert allow-list', async () => {
     const fixture = await createFixture();
