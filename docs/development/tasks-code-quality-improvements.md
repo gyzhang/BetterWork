@@ -72,8 +72,8 @@ QI01 将 ADR-0020 第 5 项中的“数值、指标、单位、期间、来源�
 | --- | --- | --- | --- | ---: | --- | --- | --- |
 | 计划 | QI00 | 复审证据、任务卡及入口归档 | P2 | 2 | 本轮指令 | done | [PR #190](https://github.com/gyzhang/BetterWork/pull/190) 合并为 `55e4488063a4c477437b8f254b0fd3ec0b0e07e6`；文档检查与 PR Gate 通过 |
 | A | QI01 | 关联契约定稿与现行文档同步 | P1/P3 | 3 | QI00 | done | [PR #191](https://github.com/gyzhang/BetterWork/pull/191) `bede329` squash 合并为 `c0ab62e95bb13ddf7820fceee4b4e63331fe2f00`；Documentation check 与 PR Gate 通过 |
-| B | QI02 | 文本输入事实精确关联 | P1 | 8 | QI01 | doing | 从 `c0ab62e95bb13ddf7820fceee4b4e63331fe2f00` 开始；事实策略/工具 21/21、RunService 87/87、基准 2/2 通过；PR 与合并待收口 |
-| B | QI03 | 输出逐主张核验与遗漏检测 | P1 | 8 | QI01、QI02 | todo | 待开工 |
+| B | QI02 | 文本输入事实精确关联 | P1 | 8 | QI01 | done | [PR #192](https://github.com/gyzhang/BetterWork/pull/192) 单提交 `125e088` squash 合并为 `f6ac6e991d86c6ffec29ff287cc4d4a500e03456`；PR Gate、Quick code check 通过 |
+| B | QI03 | 输出逐主张核验与遗漏检测 | P1 | 8 | QI01、QI02 | doing | `codex/qi03-output-claim-audit`；功能 84/84、RunService 重档 87/87、事实策略 bench 2/2、typecheck、目标 ESLint/Prettier、docs:check 155/155 与 drift:check 通过；PR/合并待收口 |
 | C | QI04 | Office 结构化事实关联 | P2 | 8 | QI01、QI02 | todo | 待开工 |
 | D | QI05 | 成果导航身份与请求生命周期 | P2 | 5 | QI00 | todo | 待开工 |
 | D | QI06 | 修订保存与版本失败归属 | P2 | 5 | QI05 | todo | 待开工 |

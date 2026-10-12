@@ -5,13 +5,15 @@ import type {
   SourcedMetricFact,
 } from '@betterwork/tool-runtime';
 
+type BusinessMetricFactBasis = 'actual' | 'budget' | 'comparison' | 'budget-variance';
+
 export interface BusinessMetricFactRecord {
   readonly metric: string;
   readonly value: number;
   readonly unit: string;
   readonly periods: readonly string[];
   readonly sourceIds: readonly string[];
-  readonly basis: 'actual' | 'budget' | 'derived';
+  readonly basis: BusinessMetricFactBasis;
 }
 
 export interface MaterialFactLedger {
@@ -454,7 +456,7 @@ const hasConflictingDirectFacts = (facts: readonly BusinessMetricFactRecord[]): 
       .some(
         (other) =>
           fact.basis === other.basis &&
-          fact.basis !== 'derived' &&
+          (fact.basis === 'actual' || fact.basis === 'budget') &&
           fact.metric === other.metric &&
           fact.periods.some((period) =>
             other.periods.some(
@@ -567,7 +569,7 @@ export const recordDeterministicBusinessMetrics = (
           unit: normalizeUnit(metric.unit),
           periods: [metric.currentPeriod, metric.previousPeriod],
           sourceIds: [metric.currentSourceId, metric.previousSourceId],
-          basis: 'derived',
+          basis: 'comparison',
         });
       }
       if (metric.changeRate !== undefined) {
@@ -577,7 +579,7 @@ export const recordDeterministicBusinessMetrics = (
           unit: '%',
           periods: [metric.currentPeriod, metric.previousPeriod],
           sourceIds: [metric.currentSourceId, metric.previousSourceId],
-          basis: 'derived',
+          basis: 'comparison',
         });
       }
     }
@@ -600,7 +602,7 @@ export const recordDeterministicBusinessMetrics = (
           unit: normalizeUnit(metric.unit),
           periods: [metric.currentPeriod, metric.budgetPeriod],
           sourceIds: [metric.currentSourceId, metric.budgetSourceId],
-          basis: 'derived',
+          basis: 'budget-variance',
         });
       }
       if (metric.budgetVarianceRate !== undefined) {
@@ -610,7 +612,7 @@ export const recordDeterministicBusinessMetrics = (
           unit: '%',
           periods: [metric.currentPeriod, metric.budgetPeriod],
           sourceIds: [metric.currentSourceId, metric.budgetSourceId],
-          basis: 'derived',
+          basis: 'budget-variance',
         });
       }
     }
@@ -623,33 +625,264 @@ const assertKnownInputFact = (ledger: MaterialFactLedger, fact: BusinessMetricFa
   }
 };
 
-const claimNumberPattern =
-  /([-+]?\d+(?:\.\d+)?)(\s*(?:[%％]|(?!年|月|日|号|季度)[\p{L}][\p{L}\p{N}²³/_·.-]*))/gu;
 const labeledCountPattern =
   /客户(?:数|数量)(?:\s*[（(]\s*(?:家|户|客户)\s*[）)])?\s*(?:为|是|[:：|｜\t])\s*([-+]?\d+(?:\.\d+)?)/gu;
 
 interface NumberClaim {
   readonly value: number;
-  readonly unit: string;
+  readonly unit: string | undefined;
+  readonly metric: string | undefined;
+  readonly periods: readonly string[];
+  readonly basis: BusinessMetricFactBasis;
+  readonly start: number;
+  readonly end: number;
 }
 
-const numberClaimsIn = (content: string, periods: readonly string[]): NumberClaim[] => {
-  const claims: NumberClaim[] = [];
-  let claimText = content.replace(
-    /(?:19|20)\d{2}\s*(?:[-/.年]\s*\d{1,2})(?:(?:[-/.月]\s*\d{1,2})日?)?/gu,
-    ' ',
+interface TextRange {
+  readonly start: number;
+  readonly end: number;
+}
+
+const textRangesBetween = (content: string, separator: RegExp): TextRange[] => {
+  const ranges: TextRange[] = [];
+  let start = 0;
+  for (const match of content.matchAll(separator)) {
+    if (match.index > start) ranges.push({ start, end: match.index });
+    start = match.index + match[0].length;
+  }
+  if (start < content.length) ranges.push({ start, end: content.length });
+  return ranges;
+};
+
+const periodEvidenceMatchesIn = (
+  content: string,
+  knownPeriods: readonly string[],
+): PeriodMatch[] => {
+  const matches = periodMatchesIn(content);
+  for (const period of knownPeriods) {
+    const normalized = period.normalize('NFC').trim();
+    if (!normalized || normalizePeriod(period) !== normalized) continue;
+    const periodPattern = new RegExp(
+      `(?<![\\p{L}\\p{N}])${escapeRegExp(normalized)}(?![\\p{L}\\p{N}])`,
+      'gu',
+    );
+    for (const match of content.matchAll(periodPattern)) {
+      if (
+        !matches.some(
+          (existing) =>
+            match.index < existing.end && existing.start < match.index + match[0].length,
+        )
+      ) {
+        matches.push({
+          value: normalizePeriod(period),
+          start: match.index,
+          end: match.index + match[0].length,
+        });
+      }
+    }
+  }
+  return matches.sort((left, right) => left.start - right.start || left.end - right.end);
+};
+
+const blankPeriodMatches = (content: string, matches: readonly PeriodMatch[]): string =>
+  [...matches]
+    .reverse()
+    .reduce(
+      (remaining, match) =>
+        `${remaining.slice(0, match.start)}${' '.repeat(match.end - match.start)}${remaining.slice(match.end)}`,
+      content,
+    );
+
+const nonBusinessNumberBeforePattern =
+  /(?:版本(?:号)?|编号|序号|标识符|ID|URL|https?:\/\/|www\.|(?:^|\s)v|第)\s*[-_:#]*$/iu;
+const derivedOutputPattern =
+  /变化|变动|同比|环比|增长|下降|增加|减少|提升|下滑|增幅|降幅|差额|差异|偏差|较上期|较同期|比上期|比同期/iu;
+const budgetVarianceOutputPattern =
+  /预算.{0,16}(?:偏差|差额|差异|变化|率)|(?:预算)?偏差率|budget.{0,16}(?:variance|gap)/iu;
+const budgetOutputPattern = /预算|budget/iu;
+const codeFencePattern = /```/gu;
+
+const isInsideCode = (content: string, position: number): boolean => {
+  const preceding = content.slice(0, position);
+  const fenceCount = [...preceding.matchAll(codeFencePattern)].length;
+  if (fenceCount % 2 === 1) return true;
+  const lineStart = preceding.lastIndexOf('\n') + 1;
+  const linePrefix = preceding.slice(lineStart);
+  const backtickCount = [...linePrefix.matchAll(/`/gu)].length;
+  return backtickCount % 2 === 1;
+};
+
+const outputBasisForClaim = (
+  clause: string,
+  occurrence: MetricOccurrence | undefined,
+  numberStart: number,
+): BusinessMetricFactBasis => {
+  const anchor = occurrence?.start ?? 0;
+  const context = clause.slice(Math.max(0, anchor - 24), numberStart).toLowerCase();
+  const isBudget = budgetOutputPattern.test(context);
+  if (isBudget && budgetVarianceOutputPattern.test(context)) return 'budget-variance';
+  if (isBudget && derivedOutputPattern.test(context)) return 'budget-variance';
+  if (isBudget) return 'budget';
+  return derivedOutputPattern.test(context) ? 'comparison' : 'actual';
+};
+
+const numberClaimsIn = (
+  content: string,
+  facts: readonly BusinessMetricFactRecord[],
+): NumberClaim[] => {
+  const metrics = [...new Set(facts.map((fact) => fact.metric))].sort(
+    (left, right) => right.length - left.length,
   );
-  for (const period of [...new Set(periods)].sort((left, right) => right.length - left.length)) {
-    claimText = claimText.replace(new RegExp(escapeRegExp(period), 'gu'), ' ');
-  }
-  for (const match of claimText.matchAll(claimNumberPattern)) {
-    const value = Number(match[1]);
-    const unit = match[2]?.trim();
-    if (Number.isFinite(value) && unit) claims.push({ value, unit: normalizeUnit(unit) });
-  }
-  for (const match of content.matchAll(labeledCountPattern)) {
-    const value = Number(match[1]);
-    if (Number.isFinite(value)) claims.push({ value, unit: '客户' });
+  const knownPeriods = [...new Set(facts.flatMap((fact) => fact.periods))];
+  const knownUnits = [...new Set(facts.map((fact) => fact.unit))];
+  const metricAlternation = metrics.map(escapeRegExp).join('|');
+  const commaBeforeMetric = metricAlternation
+    ? new RegExp(`[，,](?=[^。！？!?；;\\r\\n]{0,32}(?:${metricAlternation}))`, 'gu')
+    : /$^/gu;
+  const lineRanges = textRangesBetween(content, /\r?\n/gu);
+  const claims: NumberClaim[] = [];
+  const tableLines = lineRanges.map((range) =>
+    /^\s*\|.*\|\s*$/u.test(content.slice(range.start, range.end)),
+  );
+
+  const processLine = (lineRange: TextRange, isMetricTable: boolean): void => {
+    const line = content.slice(lineRange.start, lineRange.end);
+    for (const sentenceRange of textRangesBetween(line, /[。！？!?；;]+|(?<!\d)\.(?!\d)/gu)) {
+      const sentence = line.slice(sentenceRange.start, sentenceRange.end);
+      const sentencePeriods = periodEvidenceMatchesIn(sentence, knownPeriods);
+      for (const clauseRange of textRangesBetween(sentence, commaBeforeMetric)) {
+        const clause = sentence.slice(clauseRange.start, clauseRange.end);
+        const occurrences = metricOccurrencesIn(clause, metrics);
+        const clausePeriods = periodEvidenceMatchesIn(clause, knownPeriods);
+        const withoutPeriods = blankPeriodMatches(clause, clausePeriods);
+        const unitMatches = valueUnitMatchesIn(withoutPeriods, knownUnits);
+        const unitsByStart = new Map(unitMatches.map((match) => [match.index, match.unit]));
+        const labeledCountStarts = new Set(
+          [...withoutPeriods.matchAll(labeledCountPattern)].map(
+            (match) => match.index + match[0].lastIndexOf(match[1] ?? ''),
+          ),
+        );
+        const numericTokens = [...withoutPeriods.matchAll(numericValuePattern)]
+          .map((match) => {
+            const rawValue = match[0];
+            return {
+              value: Number(rawValue.replaceAll(',', '')),
+              start: match.index,
+              end: match.index + rawValue.length,
+              unit:
+                unitsByStart.get(match.index) ??
+                (labeledCountStarts.has(match.index) ? '客户' : undefined),
+            };
+          })
+          .filter((token) => Number.isFinite(token.value))
+          .filter((token) => {
+            if (
+              occurrences.some(
+                (occurrence) => token.start >= occurrence.start && token.start < occurrence.end,
+              )
+            ) {
+              return false;
+            }
+            if (
+              isInsideCode(
+                content,
+                lineRange.start + sentenceRange.start + clauseRange.start + token.start,
+              )
+            ) {
+              return false;
+            }
+            const prefix = clause.slice(Math.max(0, token.start - 30), token.start);
+            if (nonBusinessNumberBeforePattern.test(prefix)) return false;
+            if (/https?:\/\/|www\./iu.test(prefix.slice(prefix.lastIndexOf(' ') + 1))) return false;
+            const firstMetric = occurrences[0];
+            if (firstMetric && token.end <= firstMetric.start) {
+              const between = clause.slice(token.end, firstMetric.start);
+              if (/^\s*[.)、]\s*$/u.test(between)) return false;
+            }
+            return token.unit !== undefined || occurrences.length > 0 || isMetricTable;
+          });
+        if (numericTokens.length === 0) continue;
+
+        const metricSegments = occurrences.map((occurrence, index) => ({
+          occurrence,
+          start: index === 0 ? 0 : occurrence.start,
+          end: occurrences[index + 1]?.start ?? clause.length,
+        }));
+        const countsByMetric = metricSegments.map(
+          (segment) =>
+            numericTokens.filter(
+              (token) => token.start >= segment.start && token.start < segment.end,
+            ).length,
+        );
+        const ambiguousMetricAssignment =
+          countsByMetric.some((count) => count === 0) && countsByMetric.some((count) => count > 1);
+        const clausePeriodValues = clausePeriods.map(({ value }) => value);
+        const uniqueClausePeriods = [...new Set(clausePeriodValues)];
+        const uniqueSentencePeriods = [...new Set(sentencePeriods.map(({ value }) => value))];
+        const effectivePeriods =
+          clausePeriodValues.length > 0
+            ? clausePeriodValues
+            : uniqueSentencePeriods.length === 1
+              ? uniqueSentencePeriods
+              : [];
+
+        for (const token of numericTokens) {
+          const metricSegment = metricSegments.find(
+            (segment) => token.start >= segment.start && token.start < segment.end,
+          );
+          const occurrence = ambiguousMetricAssignment ? undefined : metricSegment?.occurrence;
+          const basis = outputBasisForClaim(clause, occurrence, token.start);
+          const hasDerivedCue = basis === 'comparison' || basis === 'budget-variance';
+          let periods = effectivePeriods;
+          if (uniqueClausePeriods.length > 1 && hasDerivedCue) {
+            periods = clausePeriodValues;
+          } else if (
+            uniqueClausePeriods.length > 1 &&
+            numericTokens.length === uniqueClausePeriods.length
+          ) {
+            const closest = clausePeriods
+              .filter((match) => uniqueClausePeriods.includes(match.value))
+              .sort(
+                (left, right) =>
+                  Math.abs(left.start + (left.end - left.start) / 2 - token.start) -
+                  Math.abs(right.start + (right.end - right.start) / 2 - token.start),
+              )[0];
+            periods = closest ? [closest.value] : uniqueClausePeriods;
+          }
+          const unit = token.unit;
+          claims.push({
+            value: token.value,
+            unit,
+            metric: occurrence?.metric,
+            periods,
+            basis,
+            start: lineRange.start + sentenceRange.start + clauseRange.start + token.start,
+            end: lineRange.start + sentenceRange.start + clauseRange.start + token.end,
+          });
+        }
+      }
+    }
+  };
+
+  for (let index = 0; index < lineRanges.length;) {
+    if (!tableLines[index]) {
+      const lineRange = lineRanges[index];
+      if (lineRange) processLine(lineRange, false);
+      index += 1;
+      continue;
+    }
+    const tableStart = index;
+    while (tableLines[index] === true) index += 1;
+    const tableEnd = index;
+    const tableText = lineRanges
+      .slice(tableStart, tableEnd)
+      .map((range) => content.slice(range.start, range.end))
+      .join('\n');
+    const tableHasKnownMetric = metrics.some((metric) => tableText.includes(metric));
+    if (!tableHasKnownMetric) continue;
+    for (const lineRange of lineRanges.slice(tableStart, tableEnd)) {
+      if (lineRange) processLine(lineRange, true);
+    }
   }
   return claims;
 };
@@ -658,15 +891,16 @@ const roundedValues = (value: number): number[] => [
   ...new Set([value, ...[0, 1, 2, 3, 4].map((precision) => Number(value.toFixed(precision)))]),
 ];
 
-const factSupportsClaim = (
-  fact: BusinessMetricFactRecord,
-  claim: NumberClaim,
-  line: string,
-): boolean =>
+const factSupportsClaim = (fact: BusinessMetricFactRecord, claim: NumberClaim): boolean =>
+  claim.metric === fact.metric &&
+  claim.unit !== undefined &&
+  claim.basis === fact.basis &&
   normalizeUnit(fact.unit) === claim.unit &&
   roundedValues(fact.value).includes(claim.value) &&
-  line.includes(fact.metric) &&
-  fact.periods.every((period) => line.includes(period));
+  fact.periods.length === claim.periods.length &&
+  fact.periods.every(
+    (period, index) => normalizePeriod(period) === normalizePeriod(claim.periods[index] ?? ''),
+  );
 
 export const auditMaterialFacts = (
   ledger: MaterialFactLedger,
@@ -677,19 +911,15 @@ export const auditMaterialFacts = (
     return '材料事实校验失败：本次 Run 选择了材料，但没有成功读取任何材料。请先读取清单中的材料后再完成输出。';
   }
   if (ledger.enabled) {
-    const claims = numberClaimsIn(
-      content,
-      ledger.facts.flatMap((fact) => fact.periods),
-    );
-    const unsupported = new Set<number>();
+    const claims = numberClaimsIn(content, ledger.facts);
+    const unsupported = new Map<number, number>();
     for (const claim of claims) {
-      const supported = content
-        .split(/\r?\n/u)
-        .some((line) => ledger.facts.some((fact) => factSupportsClaim(fact, claim, line)));
-      if (!supported) unsupported.add(claim.value);
+      const supported = ledger.facts.some((fact) => factSupportsClaim(fact, claim));
+      if (!supported) unsupported.set(claim.start, claim.value);
     }
     if (unsupported.size > 0) {
-      return `材料事实校验失败：最终输出包含缺少同一指标、单位、期间和来源关联的数字（${[...unsupported].join('、')}）。请在每个数值结论中保留指标、单位与期间，并仅使用已核验材料或确定性工具结果。`;
+      const unsupportedValues = [...new Set(unsupported.values())];
+      return `材料事实校验失败：最终输出包含缺少同一指标、单位、期间和来源关联的数字（${unsupportedValues.join('、')}）。请在每个数值结论中保留指标、单位与期间，并仅使用已核验材料或确定性工具结果。`;
     }
   }
   const unsupportedQualitative = qualitativeClaimPatterns

@@ -108,6 +108,62 @@ const listResults = (
   return output.results.filter(isRecord);
 };
 
+const businessMetricSummary = (output: Record<string, unknown> | undefined): string => {
+  const metrics = Array.isArray(output?.metrics) ? output.metrics.filter(isRecord) : [];
+  const analysisPeriod = readText(output?.period);
+  const claims = metrics.flatMap((metric) => {
+    const name = readText(metric.metric);
+    const unit = readText(metric.unit);
+    const current = metric.current;
+    const currentPeriod = readText(metric.currentPeriod) || analysisPeriod;
+    if (
+      !name ||
+      !unit ||
+      !currentPeriod ||
+      typeof current !== 'number' ||
+      !Number.isFinite(current)
+    ) {
+      return [];
+    }
+    const summaries = [`${name} ${currentPeriod}：${current}${unit}`];
+    const previous = metric.previous;
+    const previousPeriod = readText(metric.previousPeriod);
+    if (typeof previous === 'number' && Number.isFinite(previous) && previousPeriod) {
+      summaries.push(`${name} ${previousPeriod}：${previous}${unit}`);
+      if (typeof metric.change === 'number' && Number.isFinite(metric.change)) {
+        summaries.push(
+          `${name} ${currentPeriod} 对比 ${previousPeriod} 变化 ${metric.change}${unit}`,
+        );
+      }
+      if (typeof metric.changeRate === 'number' && Number.isFinite(metric.changeRate)) {
+        summaries.push(
+          `${name} ${currentPeriod} 对比 ${previousPeriod} 变化率 ${metric.changeRate * 100}%`,
+        );
+      }
+    }
+    const budget = metric.budget;
+    const budgetPeriod = readText(metric.budgetPeriod);
+    if (typeof budget === 'number' && Number.isFinite(budget) && budgetPeriod) {
+      summaries.push(`${name} ${budgetPeriod} 预算：${budget}${unit}`);
+      if (typeof metric.budgetVariance === 'number' && Number.isFinite(metric.budgetVariance)) {
+        summaries.push(
+          `${name} ${currentPeriod} 对比 ${budgetPeriod} 预算偏差 ${metric.budgetVariance}${unit}`,
+        );
+      }
+      if (
+        typeof metric.budgetVarianceRate === 'number' &&
+        Number.isFinite(metric.budgetVarianceRate)
+      ) {
+        summaries.push(
+          `${name} ${currentPeriod} 对比 ${budgetPeriod} 预算偏差率 ${metric.budgetVarianceRate * 100}%`,
+        );
+      }
+    }
+    return summaries;
+  });
+  return claims.length > 0 ? claims.join('；') : readText(output?.message);
+};
+
 /** 把工具输出转成一句用户能读懂的中文回复，替代此前层层嵌套的三元表达式。 */
 function summarizeToolResult(toolName: string | undefined, rawContent: string): string {
   const output = parseToolOutput(rawContent);
@@ -115,6 +171,10 @@ function summarizeToolResult(toolName: string | undefined, rawContent: string): 
   if (toolName === 'calculator') {
     const result = readNumberOrText(output?.result);
     return `计算结果是 ${result || rawContent}。`;
+  }
+
+  if (toolName === 'analyze_business_metrics') {
+    return `已完成经营指标分析。${businessMetricSummary(output)}`;
   }
 
   if (toolName === 'knowledge_search' || toolName === 'web_search') {

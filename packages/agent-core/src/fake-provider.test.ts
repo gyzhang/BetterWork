@@ -193,6 +193,46 @@ describe('FakeModelProvider', () => {
       expect(text).toContain('计算结果');
     });
 
+    it('summarizes sourced business metrics with each fact period', async () => {
+      const provider = new FakeModelProvider(0);
+      const toolMessage = {
+        id: 'tool-msg',
+        role: 'tool' as const,
+        content: JSON.stringify({
+          period: '2026-09',
+          metrics: [
+            {
+              metric: 'revenue',
+              current: 120,
+              previous: 100,
+              change: 20,
+              changeRate: 0.2,
+              unit: '万元',
+              currentPeriod: '2026-09',
+              previousPeriod: '2026-08',
+              warnings: [],
+            },
+          ],
+          message: '已按确定性规则完成指标计算。',
+        }),
+        toolName: 'analyze_business_metrics',
+        toolCallId: 'call-1',
+      };
+      const request: ModelRequest = {
+        messages: [toolMessage],
+        tools: [],
+        signal: new AbortController().signal,
+      };
+
+      const chunks = await collectChunks(provider.stream(request));
+      const text = collectText(chunks);
+
+      expect(text).toContain('revenue 2026-09：120万元');
+      expect(text).toContain('revenue 2026-08：100万元');
+      expect(text).toContain('revenue 2026-09 对比 2026-08 变化 20万元');
+      expect(text).toContain('变化率 20%');
+    });
+
     it('summarizes knowledge_search tool result', async () => {
       const provider = new FakeModelProvider(0);
       const toolMessage = {
