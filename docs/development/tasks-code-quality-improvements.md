@@ -76,9 +76,9 @@ QI01 将 ADR-0020 第 5 项中的“数值、指标、单位、期间、来源�
 | B | QI03 | 输出逐主张核验与遗漏检测 | P1 | 8 | QI01、QI02 | done | [PR #193](https://github.com/gyzhang/BetterWork/pull/193) 单提交 `92daf573e6be924a8085df05fa82bcf902ef9c10` squash 合并为 `8419d93ec71587ad87bcdd69e4670d9f027df45a`；PR Gate、Quick code check 通过，无 Review 评论 |
 | C | QI04 | Office 结构化事实关联 | P2 | 8 | QI01、QI02 | done | [PR #194](https://github.com/gyzhang/BetterWork/pull/194) 单提交 `e19c2d7` 的 Quick code check、PR Gate 通过；已 squash 合入 `4786a5f1b629d8a9666fd3037f76fc1c8f3b4a7c`，Actions `38281532385` 成功 |
 | D | QI05 | 成果导航身份与请求生命周期 | P2 | 5 | QI00 | done | [PR #195](https://github.com/gyzhang/BetterWork/pull/195) 基于 `4786a5f1`，合并为 `b6e0a811e14dec4df0982c9758a00f9a90427135`；PR Gate、Quick code check 通过，无 Review 评论 |
-| D | QI06 | 修订保存与版本失败归属 | P2 | 5 | QI05 | doing | `codex/qi06-artifact-save-ownership`（基于 `b6e0a811`）；functional 37/37、App heavy 56/56、typecheck、目标 ESLint/Prettier、`docs:check` 155/155、以 `b6e0a811` 为基点的 `drift:check`、`git diff --check`、完整 `ui:check` 74 组通过；真实 IPC/临时 SQLite 验证 A 的 v2、输入关系与 Evidence 持久化，并在 B 保留编辑状态；PR 待创建 |
-| E | QI07 | 联合回归、负例覆盖与一致性 Review | P2 | 5 | QI02–QI06 | todo | 待开工 |
-| E | QI08 | 用户验收与证据交接 | P2 | 2 | QI07、人工验收窗口 | todo | 待验收 |
+| D | QI06 | 修订保存与版本失败归属 | P2 | 5 | QI05 | done | [PR #196](https://github.com/gyzhang/BetterWork/pull/196) 单提交 `937fe227d547e14062e6f7f10c82e129b775de3a` 经 PR Gate、Quick code check 通过，squash 合并为 `787da13ec7c08ef4e8aba0be6baa4e8a02d0fdae` |
+| E | QI07 | 联合回归、负例覆盖与一致性 Review | P2 | 5 | QI02–QI06 | done | [PR #197](https://github.com/gyzhang/BetterWork/pull/197) 单提交；目标 functional 124/124、成果保存 Hook 7/7、RunService/App heavy 145/145、完整 UI 74 组、QI08 准备/重开冒烟 1/1、全仓 lint/format、typecheck、docs:check 155/155、drift:check 通过；四项隔离负向变异均击穿对应回归后恢复。QI08 人工结果仍待用户 |
+| E | QI08 | 用户验收与证据交接 | P2 | 2 | QI07、人工验收窗口 | todo | [QI08 人工验收材料](qi08-acceptance/README.md)已备合成 CSV/XLSX、口径和结果表；等待用户人工填写，状态未验收 |
 
 点数是相对复杂度，不是工期承诺。A 批次完成文档与方案，B 批次优先关闭两个 P1，C 恢复正确表格的分析路径，D 完成成果状态所有权，E 验收组合路径。QI07 通过只表示规定范围的自动化与 AI Review 完成，QI08 不由 AI 代签。
 

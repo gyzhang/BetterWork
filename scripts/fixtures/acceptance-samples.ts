@@ -1,10 +1,51 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { copyFile, mkdir, readFile, stat } from 'node:fs/promises';
+import path from 'node:path';
 
 import type { CreateMemoryRequest } from '@betterwork/agent-protocol';
 
 import { type AppStore } from '../../apps/desktop/src/main/persistence';
 import { MemoryService } from '../../apps/desktop/src/main/services/memory-service';
+
+export const QI08_RULES_FILE = 'QI08-合成经营口径.md';
+export const QI08_OFFICE_FILES = ['QI08-多指标经营数据.csv', 'QI08-多指标经营数据.xlsx'] as const;
+export const QI08_KNOWLEDGE_READ_PROOF = '成本只与同月收入对照。';
+
+export interface StagedQi08Input {
+  fileName: string;
+  relativePath: string;
+  byteSize: number;
+}
+
+export interface StagedQi08Materials {
+  rulesPath: string;
+  rulesContent: string;
+  officeFiles: StagedQi08Input[];
+}
+
+/** 仅把仓库内明确登记的虚构样本复制进本次临时验收工作空间。 */
+export async function stageQi08Materials(workspaceRoot: string): Promise<StagedQi08Materials> {
+  const sourceRoot = path.resolve(process.cwd(), 'docs/development/qi08-acceptance');
+  await mkdir(workspaceRoot, { recursive: true });
+  const rulesPath = path.join(workspaceRoot, QI08_RULES_FILE);
+  await copyFile(path.join(sourceRoot, '经营口径.md'), rulesPath);
+  const rulesContent = await readFile(rulesPath, 'utf8');
+  assert.ok(rulesContent.includes(QI08_KNOWLEDGE_READ_PROOF), 'QI08 合成口径样本缺少读取校验句');
+
+  const officeFiles: StagedQi08Input[] = [];
+  for (const [index, fileName] of QI08_OFFICE_FILES.entries()) {
+    const extension = index === 0 ? 'csv' : 'xlsx';
+    const sourceName = extension === 'csv' ? '多指标经营数据.csv' : '多指标经营数据.xlsx';
+    const targetPath = path.join(workspaceRoot, fileName);
+    await copyFile(path.join(sourceRoot, sourceName), targetPath);
+    const fileStat = await stat(targetPath);
+    assert.ok(fileStat.isFile() && fileStat.size > 0, `QI08 ${extension.toUpperCase()} 样本为空`);
+    officeFiles.push({ fileName, relativePath: fileName, byteSize: fileStat.size });
+  }
+
+  return { rulesPath, rulesContent, officeFiles };
+}
 
 /** 只走生产服务的写入入口；这些对象是前置样本，不替人工操作作判定。 */
 export async function prepareAcceptanceSamples(

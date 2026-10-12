@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { copyFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -51,7 +51,13 @@ import { TaskMaterialService } from '../../apps/desktop/src/main/services/task-m
 import { ToolchainSnapshotService } from '../../apps/desktop/src/main/services/toolchain-snapshot-service';
 import { WorkspaceBriefService } from '../../apps/desktop/src/main/services/workspace-memory-brief-service';
 import { WorkspaceReferenceService } from '../../apps/desktop/src/main/services/workspace-reference-service';
-import { prepareAcceptanceSamples } from './acceptance-samples';
+import {
+  prepareAcceptanceSamples,
+  QI08_KNOWLEDGE_READ_PROOF,
+  QI08_RULES_FILE,
+  type StagedQi08Input,
+  stageQi08Materials,
+} from './acceptance-samples';
 import { checkCaptureKeyboard } from './ui-keyboard';
 
 const method = '每次复盘先核对口径，再给结论。';
@@ -243,13 +249,19 @@ export function assemble(
   };
 }
 
-export async function seed(services: JourneyServices, directory: string): Promise<string> {
+export async function seed(
+  services: JourneyServices,
+  directory: string,
+  syntheticOnly = false,
+): Promise<{ sourceContent: string; qi08OfficeFiles: StagedQi08Input[] }> {
   const root = path.join(directory, 'workspace');
   await mkdir(root, { recursive: true });
-  const sourcePath = path.join(root, sourceFileName);
-  await copyFile(bookDraftPath, sourcePath);
-  const bookText = await readFile(sourcePath, 'utf8');
-  assert.ok(bookText.includes(bookKnowledgeProof), '知识夹具未使用中文书稿正文');
+  const stagedQi08 = syntheticOnly ? await stageQi08Materials(root) : undefined;
+  const sourcePath = stagedQi08?.rulesPath ?? path.join(root, sourceFileName);
+  if (!stagedQi08) await copyFile(bookDraftPath, sourcePath);
+  const sourceText = stagedQi08?.rulesContent ?? (await readFile(sourcePath, 'utf8'));
+  const readProof = syntheticOnly ? QI08_KNOWLEDGE_READ_PROOF : bookKnowledgeProof;
+  assert.ok(sourceText.includes(readProof), '知识夹具缺少读取校验句');
   const workspace = services.store.workspaces.getOrCreate(root, '协作旅程测试空间');
   await services.vault.importPaths([sourcePath]);
   const document = services.vault.listDocuments()[0];
@@ -324,7 +336,7 @@ export async function seed(services: JourneyServices, directory: string): Promis
     services.store.memoryExtractions.getSettings(workspace.id).autoSuggestEnabled,
     false,
   );
-  return bookText;
+  return { sourceContent: sourceText, qi08OfficeFiles: stagedQi08?.officeFiles ?? [] };
 }
 
 export function syntheticResponse(delta: unknown): Response {
@@ -350,6 +362,8 @@ export async function runAppJourney(
   probeLostRestore = false,
   journeyOptions: { interactive?: boolean; reopenDirectory?: string; silent?: boolean } = {},
 ): Promise<unknown> {
+  const syntheticAcceptance = journeyOptions.interactive === true;
+  const knowledgeReadProof = syntheticAcceptance ? QI08_KNOWLEDGE_READ_PROOF : bookKnowledgeProof;
   // 输出目录可以复用，但每次合成数据库必须全新，不能继承上轮 Run 或探针的排除项。
   const directory =
     journeyOptions.reopenDirectory ?? (await mkdtemp(path.join(output, 'app-journey-')));
@@ -436,7 +450,7 @@ export async function runAppJourney(
     if (ordinal === 2) {
       if (source.kind === 'knowledge-revision')
         assert.ok(
-          body.includes(bookKnowledgeProof),
+          body.includes(knowledgeReadProof),
           '从书稿读取的知识正文未进入后续 Provider 请求',
         );
       return toolResponse(
@@ -467,8 +481,13 @@ export async function runAppJourney(
   let firstArtifactRelations: ArtifactInputRelation[] = [];
   let firstArtifactEvidenceIds: string[] = [];
   let excludedMemoryId: string | undefined;
-  const sourcePath = path.join(directory, 'workspace', sourceFileName);
+  const sourcePath = path.join(
+    directory,
+    'workspace',
+    syntheticAcceptance ? QI08_RULES_FILE : sourceFileName,
+  );
   let expectedSourceContent = '';
+  let qi08OfficeFiles: StagedQi08Input[] = [];
   const rendererErrors: string[] = [];
   const openWindow = async (): Promise<BrowserWindow> => {
     const instance = new BrowserWindow({
@@ -559,6 +578,8 @@ export async function runAppJourney(
         firstArtifactEvidenceIds = detail.evidence.map((item) => item.id);
       } else {
         second = current;
+        const secondArtifact = artifact;
+        assert.notEqual(secondArtifact.id, firstArtifactId, '两期合成成果必须有独立身份');
         assert.ok(first);
         assert.notEqual(second.taskId, first.taskId);
         assert.notEqual(second.sessionId, first.sessionId);
@@ -736,13 +757,44 @@ export async function runAppJourney(
     if (journeyOptions.reopenDirectory) {
       expectedSourceContent = await readFile(sourcePath, 'utf8');
     } else {
-      expectedSourceContent = await seed(services, directory);
+      const seeded = await seed(services, directory, syntheticAcceptance);
+      expectedSourceContent = seeded.sourceContent;
+      qi08OfficeFiles = seeded.qi08OfficeFiles;
       seededScheduleId = services.seededScheduleId;
       assert.ok(seededScheduleId, '普通任务回归旅程未建立暂停定时规则');
     }
     await openWindow();
     if (journeyOptions.reopenDirectory) {
       assert.ok(host.window);
+      const acceptancePreparation = JSON.parse(
+        await readFile(path.join(output, 'acceptance-preparation.json'), 'utf8'),
+      ) as {
+        qi08Acceptance?: {
+          officeFiles?: StagedQi08Input[];
+          artifacts?: Array<{
+            id: string;
+            title: string;
+            currentVersionId: string;
+            versionNumber: number;
+          }>;
+          humanResultsWritten?: boolean;
+        };
+      };
+      const qi08Acceptance = acceptancePreparation.qi08Acceptance;
+      assert.ok(qi08Acceptance, '验收交接缺少 QI08 合成材料记录');
+      assert.equal(qi08Acceptance.humanResultsWritten, false);
+      assert.equal(qi08Acceptance.officeFiles?.length, 2);
+      assert.equal(qi08Acceptance.artifacts?.length, 2);
+      for (const officeFile of qi08Acceptance.officeFiles ?? []) {
+        const stagedPath = path.join(directory, 'workspace', officeFile.relativePath);
+        assert.ok((await stat(stagedPath)).isFile(), `重开后缺少 ${officeFile.fileName}`);
+      }
+      for (const artifact of qi08Acceptance.artifacts ?? []) {
+        const persisted = services.store.artifacts.getDetail(artifact.id);
+        assert.ok(persisted?.type === 'markdown', `重开后缺少成果 ${artifact.title}`);
+        assert.equal(persisted.currentVersionId, artifact.currentVersionId);
+        assert.equal(persisted.versionNumber, artifact.versionNumber);
+      }
       await writeFile(
         path.join(output, 'acceptance-ready.json'),
         JSON.stringify(
@@ -755,6 +807,7 @@ export async function runAppJourney(
             runCount: services.store.runs.list().length,
             syntheticRequests: requests.length,
             humanResultsWritten: false,
+            qi08Acceptance,
           },
           null,
           2,
@@ -766,7 +819,7 @@ export async function runAppJourney(
         services.store.close();
         services.vault.close();
       });
-      return { reopened: true };
+      return { reopened: true, qi08Acceptance };
     }
     for (const step of steps) await checkStep(step);
     assert.ok(first);
@@ -846,6 +899,36 @@ export async function runAppJourney(
     assert.equal(scheduleIsolation.lifecycle, 'paused');
     assert.equal(scheduleIsolation.occurrenceCount, 0);
     assert.equal(scheduleIsolation.ordinaryRunCount, services.store.runs.list().length);
+    const secondArtifactId = second
+      ? services.store.artifacts.list(second.taskId)[0]?.id
+      : undefined;
+    const qi08Artifacts = syntheticAcceptance
+      ? [firstArtifactId, secondArtifactId]
+          .map((id) => services.store.artifacts.list().find((item) => item.id === id))
+          .filter((item) => item !== undefined)
+      : [];
+    if (syntheticAcceptance) {
+      assert.equal(qi08OfficeFiles.length, 2, 'QI08 验收需要 CSV 与 XLSX 两份样本');
+      assert.equal(qi08Artifacts.length, 2, 'QI08 验收需要两份持久化成果');
+      assert.notEqual(qi08Artifacts[0]?.id, qi08Artifacts[1]?.id);
+    }
+    const qi08Acceptance = syntheticAcceptance
+      ? {
+          status: 'prepared-not-accepted',
+          sourceFile: QI08_RULES_FILE,
+          officeFiles: qi08OfficeFiles,
+          artifacts: qi08Artifacts.map((item, index) => ({
+            slot: index === 0 ? 'A' : 'B',
+            id: item.id,
+            title: item.title,
+            currentVersionId: item.currentVersionId,
+            versionNumber: item.versionNumber,
+          })),
+          provider: 'deterministic-offline-substitute',
+          externalNetworkAttempts: networkAttempts.length,
+          humanResultsWritten: false,
+        }
+      : undefined;
     await writeFile(
       path.join(output, 'acceptance-preparation.json'),
       JSON.stringify(
@@ -854,6 +937,7 @@ export async function runAppJourney(
           databaseDirectory: path.basename(directory),
           preparation: prepared,
           versionPreparation,
+          ...(qi08Acceptance ? { qi08Acceptance } : {}),
           humanResultsWritten: false,
         },
         null,
@@ -898,6 +982,7 @@ export async function runAppJourney(
             versionPreparation,
             syntheticRequests: requests.length,
             networkAttempts: networkAttempts.length,
+            ...(qi08Acceptance ? { qi08Acceptance } : {}),
             humanResultsWritten: false,
           },
           null,
@@ -918,6 +1003,7 @@ export async function runAppJourney(
       width: 1380,
       checks: readings,
       acceptancePreparation: prepared,
+      ...(qi08Acceptance ? { qi08Acceptance } : {}),
       versionPreparation,
       model: 'deterministic-fetch-substitute',
       recovery: 'window-destroyed-stores-reopened-services-reassembled',
