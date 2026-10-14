@@ -61,4 +61,5 @@
 - `coverage/full/{functional,heavy,merged}` 留本次原始计数与测试 JSON；`coverage/quick` 留差异计划、测试、检查状态、源码快照与差异覆盖证据。副本存于 `/Users/kevin/.codex/verification-evidence/betterwork-unit-tests-2026-10-15`，包含 verification-manifest、最终覆盖率 JSON、快检与三组有效 Red/Green 日志。
 - 覆盖配置与精确宿主/纯视觉例外保持现行策略；没有通过扩大排除项、提高预算、跳过断言或调用私有方法凑覆盖率。独立进程行为测试不等于父进程 V8 能完整采集其内部计数。
 - 没有运行真实 Electron UI、完整 verify、bench、真实模型或安装验收；jsdom、确定性接口替身与临时 SQLite 的证据只证明列明路径。没有读写用户业务库，不代签 WM/CF/SC 的人工验收。
-- 本轮仅保留已验证改动于独立任务分支，尚未提交、推送或合并。原主工作树保持干净 main。
+- 首次提交 `dd43f032e4d8b343c643343b3f5c1799ff202a6e` 已推送至 [PR #202](https://github.com/gyzhang/BetterWork/pull/202)。该 SHA 的 CI 快检在覆盖率进程中运行 Preload 全通道 TypeScript 编译契约 29.4 秒，超过 20 秒预算；相同正反例现由独立 Node 夹具执行，Vitest 仍保留 20 秒预算。Node 24 定向测试 179/179 通过，编译契约在覆盖率下耗时 1.84 秒，修复后的本地 `check:quick` 全绿；新 SHA 的 PR Gate 仍待运行。
+- 发布门禁完成后将把最终 head、CI 链接和合并 SHA 回填本报告。原主工作树保持干净 main。

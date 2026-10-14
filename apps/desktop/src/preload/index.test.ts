@@ -1,10 +1,8 @@
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import type { BetterWorkDesktopApi } from '@betterwork/agent-protocol';
 import { IpcChannel } from '@betterwork/agent-protocol';
-import ts from 'typescript';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -365,18 +363,6 @@ describe('run settings preload API', () => {
 });
 
 it('binds mapped Preload schemas and methods to their IPC channels at compile time', () => {
-  const sourcePath = fileURLToPath(new URL('./index.ts', import.meta.url));
-  const configPath = ts.findConfigFile(
-    path.dirname(sourcePath),
-    (fileName) => ts.sys.fileExists(fileName),
-    'tsconfig.json',
-  );
-  if (!configPath) throw new Error('Repository tsconfig is missing');
-  const config = ts.readConfigFile(configPath, (fileName) => ts.sys.readFile(fileName));
-  expect(config.error).toBeUndefined();
-  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, path.dirname(configPath));
-  expect(parsed.errors).toEqual([]);
-
   const valid = [
     `const __runContractResult: Promise<{ runId: string }> = runInvokeMethods[IpcChannel.StartRun]({ taskId: 'task-1', sessionId: 'session-1', prompt: 'prompt' });`,
     `runInvokeMethods[IpcChannel.ListRuns](undefined);`,
@@ -522,47 +508,18 @@ it('binds mapped Preload schemas and methods to their IPC channels at compile ti
     `const __chromeWrongResponse: ReturnType<BetterWorkDesktopApi['chrome']['toggleMaximize']> = chromeInvokeMethods[IpcChannel.UpdateWindowTheme]({ backgroundColor: '#ffffff' });`,
     `const __chromeWrongChannel: typeof IpcChannel.UpdateWindowTheme = chromeInvokeContracts[IpcChannel.WindowToggleMaximize].channel;`,
   ];
-  let source = readFileSync(sourcePath, 'utf8') + '\n';
-  const cases = [...valid, ...invalid].map((expression, index) => {
-    const start = source.length;
-    source += `${expression};\n`;
-    return { expression, start, end: source.length, rejects: index >= valid.length };
-  });
-
-  const options = { ...parsed.options, noEmit: true };
-  const host = ts.createCompilerHost(options);
-  const getSourceFile = host.getSourceFile.bind(host);
-  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) =>
-    path.resolve(fileName) === sourcePath
-      ? ts.createSourceFile(fileName, source, languageVersion, true)
-      : getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
-  const program = ts.createProgram({ rootNames: [sourcePath], options, host });
-  const diagnostics = ts.getPreEmitDiagnostics(program);
-  const format = (diagnostic: ts.Diagnostic): string =>
-    ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
-  const unexpected = diagnostics.filter(
-    (diagnostic) =>
-      diagnostic.file?.fileName !== sourcePath ||
-      diagnostic.start === undefined ||
-      !cases.some(
-        (probe) =>
-          probe.rejects &&
-          diagnostic.start !== undefined &&
-          diagnostic.start >= probe.start &&
-          diagnostic.start < probe.end,
-      ),
+  const checkerPath = fileURLToPath(
+    new URL('../../../../scripts/fixtures/preload-type-contract.mjs', import.meta.url),
   );
-  expect(unexpected.map(format)).toEqual([]);
-  for (const probe of cases) {
-    const errors = diagnostics.filter(
-      (diagnostic) =>
-        diagnostic.file?.fileName === sourcePath &&
-        diagnostic.start !== undefined &&
-        diagnostic.start >= probe.start &&
-        diagnostic.start < probe.end,
-    );
-    expect(errors.length > 0, probe.expression).toBe(probe.rejects);
-  }
+  const result = spawnSync(process.execPath, [checkerPath], {
+    encoding: 'utf8',
+    input: JSON.stringify({ valid, invalid }),
+    timeout: 20_000,
+  });
+  expect(result.error).toBeUndefined();
+  expect(result.signal).toBeNull();
+  expect(result.status, result.stderr).toBe(0);
+  expect(JSON.parse(result.stdout)).toEqual({ valid: valid.length, invalid: invalid.length });
 }, 20_000);
 
 describe('workspace preload API', () => {
