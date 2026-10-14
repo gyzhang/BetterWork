@@ -350,3 +350,147 @@ describe('useScheduleDetail', () => {
     expect(result.current.sourceItems).toHaveLength(2);
   });
 });
+
+describe('occurrence request isolation', () => {
+  it.each(['sources', 'evidence'] as const)(
+    'discards a late %s refresh as soon as another occurrence is selected',
+    async (kind) => {
+      const api = installApi();
+      const detail = scheduleDetail();
+      const { result } = renderHook(() => useScheduleDetail(detail));
+      await waitFor(() => expect(result.current.occurrenceLoading).toBe(false));
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      if (kind === 'sources') {
+        api.listSourceItems.mockImplementationOnce(async () => {
+          await gate;
+          return success({
+            items: [
+              {
+                snapshotId: 'old-snapshot',
+                ordinal: 0,
+                reference: {
+                  kind: 'workspace-input-snapshot',
+                  snapshotId: 'old-input',
+                  workspaceId: 'workspace-1',
+                  contentHash: 'a'.repeat(64),
+                  format: 'txt',
+                  fileKey: 'old',
+                },
+                purpose: 'current-input',
+                origin: 'workspace-directory',
+                displayName: 'old',
+              },
+            ],
+          });
+        });
+        act(() => result.current.refreshSources());
+      } else {
+        api.evidenceList.mockImplementationOnce(async () => {
+          await gate;
+          return evidence;
+        });
+        act(() => result.current.refreshEvidence());
+      }
+      api.getOccurrence.mockImplementationOnce(() => new Promise(() => {}));
+      act(() => result.current.selectOccurrence('occ-2'));
+      expect(result.current.selectedOccurrenceId).toBe('occ-2');
+      expect(result.current.sourceItems).toEqual([]);
+      expect(result.current.evidence).toEqual([]);
+      await act(async () => release());
+      expect(result.current.sourceItems).toEqual([]);
+      expect(result.current.evidence).toEqual([]);
+      expect(result.current.occurrence).toBeUndefined();
+    },
+  );
+});
+
+describe('schedule detail refresh and pagination outlets', () => {
+  it('keeps pagination idempotent while a history page is pending', async () => {
+    const api = installApi();
+    const detail = scheduleDetail();
+    let release!: (
+      value: ReturnType<typeof success<{ items: ScheduleOccurrenceHistoryItem[] }>>,
+    ) => void;
+    api.listOccurrences.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const { result } = renderHook(() => useScheduleDetail(detail));
+    await waitFor(() => expect(result.current.occurrenceLoading).toBe(false));
+    act(() => result.current.loadMoreHistory());
+    expect(api.listOccurrences).toHaveBeenCalledOnce();
+    act(() => result.current.loadMoreHistory());
+    expect(api.listOccurrences).toHaveBeenCalledOnce();
+    await act(async () => release(success({ items: [] })));
+  });
+
+  it.each(['sources', 'evidence'] as const)(
+    'keeps the displayed %s during a failed refresh then replaces it on retry',
+    async (kind) => {
+      const api = installApi();
+      const detail = scheduleDetail();
+      const { result } = renderHook(() => useScheduleDetail(detail));
+      await waitFor(() => expect(result.current.occurrenceLoading).toBe(false));
+      if (kind === 'sources')
+        api.listSourceItems.mockRejectedValueOnce(new Error('refresh rejected'));
+      else api.evidenceList.mockRejectedValueOnce(new Error('refresh rejected'));
+      act(() => {
+        if (kind === 'sources') result.current.refreshSources();
+        else result.current.refreshEvidence();
+      });
+      await waitFor(() =>
+        expect(kind === 'sources' ? result.current.sourceError : result.current.evidenceError).toBe(
+          'refresh rejected',
+        ),
+      );
+      expect(kind === 'sources' ? result.current.sourceItems : result.current.evidence).not.toEqual(
+        [],
+      );
+      if (kind === 'sources') api.listSourceItems.mockResolvedValueOnce(success({ items: [] }));
+      else api.evidenceList.mockResolvedValueOnce([]);
+      act(() => {
+        if (kind === 'sources') result.current.refreshSources();
+        else result.current.refreshEvidence();
+      });
+      await waitFor(() =>
+        expect(
+          kind === 'sources' ? result.current.sourceLoading : result.current.evidenceLoading,
+        ).toBe(false),
+      );
+      expect(kind === 'sources' ? result.current.sourceError : result.current.evidenceError).toBe(
+        '',
+      );
+      expect(kind === 'sources' ? result.current.sourceItems : result.current.evidence).toEqual([]);
+    },
+  );
+
+  it('does not fetch evidence or occurrences for an empty history', () => {
+    const api = installApi();
+    const detail = { ...scheduleDetail(), history: { items: [] } };
+    const { result } = renderHook(() => useScheduleDetail(detail));
+    act(() => {
+      result.current.refreshOccurrence();
+      result.current.refreshSources();
+      result.current.refreshEvidence();
+      result.current.loadMoreHistory();
+    });
+    expect(api.getOccurrence).not.toHaveBeenCalled();
+    expect(api.listSourceItems).not.toHaveBeenCalled();
+    expect(api.evidenceList).not.toHaveBeenCalled();
+    expect(api.listOccurrences).not.toHaveBeenCalled();
+  });
+
+  it('avoids a redundant fetch when selecting the already displayed occurrence', async () => {
+    const api = installApi();
+    const detail = scheduleDetail();
+    const { result } = renderHook(() => useScheduleDetail(detail));
+    await waitFor(() => expect(result.current.occurrenceLoading).toBe(false));
+    act(() => result.current.selectOccurrence('occ-run'));
+    expect(api.getOccurrence).toHaveBeenCalledOnce();
+  });
+});

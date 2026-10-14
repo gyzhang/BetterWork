@@ -256,7 +256,11 @@ export function useSkillDependencies(
             if (base && lockId) inspect(base, lockId, token);
             if (skillId) reviewGrant(skillId, lockId, snapshotIds, token);
           }
-          if (found.status === 'failed' || found.status === 'cancelled') {
+          if (
+            found.status === 'failed' ||
+            found.status === 'cancelled' ||
+            found.status === 'interrupted'
+          ) {
             setPreparing(false);
             prepareInFlight.current = false;
           }
@@ -437,6 +441,7 @@ export function useSkillDependencies(
             });
         }),
       (message) => {
+        if (requestId.current !== token) return;
         prepareInFlight.current = false;
         setPreparing(false);
         setError(message);

@@ -1080,3 +1080,119 @@ describe('本机索引动作、作业回看与详情重读（KM15 走查补齐�
     expect(harness.knowledge.preview.mock.calls.length).toBeGreaterThan(1);
   });
 });
+
+describe('Knowledge action failures and research selection boundaries', () => {
+  it.each([
+    ['importFromDialog', 'onImport'],
+    ['refresh', 'onRefresh'],
+    ['saveSettings', 'saveSettings'],
+    ['rebuildIndex', 'rebuildSemantic'],
+    ['rebuildIndex', 'rebuildKeyword'],
+    ['checkSources', 'checkDocumentSource'],
+    ['cancelJob', 'cancelJob'],
+  ] as const)('settles %s rejection at the local action outlet', async (ipcName, action) => {
+    const h = install();
+    const hook = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    h.knowledge[ipcName].mockRejectedValue(new Error('synthetic action rejected'));
+    await act(async () => {
+      const state = hook.result.current;
+      if (action === 'onImport') await state.onImport();
+      else if (action === 'onRefresh')
+        await expect(state.onRefresh(documentOf())).rejects.toThrow('synthetic action rejected');
+      else if (action === 'saveSettings') await state.saveSettings({ semanticEnabled: false });
+      else if (action === 'rebuildSemantic') await state.rebuildSemantic(false);
+      else if (action === 'rebuildKeyword') await state.rebuildKeyword();
+      else if (action === 'checkDocumentSource') await state.checkDocumentSource('doc-1');
+      else await state.cancelJob('job-1');
+    });
+    expect(hook.result.current.error).toBe(
+      action === 'onRefresh'
+        ? '刷新索引失败：synthetic action rejected'
+        : 'synthetic action rejected',
+    );
+    expect(hook.result.current.importing).toBe(false);
+    expect(hook.result.current.activeJobs).toEqual([]);
+    expect(hook.result.current.toast).toBeUndefined();
+  });
+
+  it('does not start a research draft without selected materials', async () => {
+    install();
+    const createResearchDraft = vi.fn();
+    Object.assign(window.betterwork.knowledge, { createResearchDraft });
+    const hook = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    await expect(hook.result.current.research('Research', 'workspace-1')).resolves.toBeUndefined();
+    expect(createResearchDraft).not.toHaveBeenCalled();
+  });
+
+  it('uses a stable idempotency key on research retry and hands rejection back to the caller', async () => {
+    install();
+    const failure = new Error('draft rejected');
+    const createResearchDraft = vi.fn().mockRejectedValue(failure);
+    Object.assign(window.betterwork.knowledge, { createResearchDraft });
+    const hook = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    act(() => hook.result.current.toggleSelect(searchHit(), true));
+    for (let i = 0; i < 2; i++) {
+      await act(async () => {
+        await expect(hook.result.current.research('Research', 'workspace-1')).rejects.toBe(failure);
+      });
+      expect(hook.result.current.researchBusy).toBe(false);
+    }
+    const [first, second] = createResearchDraft.mock.calls;
+    expect(first?.[0]).toEqual(second?.[0]);
+    expect(first?.[0]).toMatchObject({
+      workspaceId: 'workspace-1',
+      prompt: 'Research',
+      materials: [{ reference: searchHit().reference, purpose: 'background' }],
+    });
+    expect(hook.result.current.selectedMaterials).toHaveLength(1);
+  });
+
+  it('prevents duplicate research submissions and keeps the original research input during query edits', async () => {
+    install();
+    let release!: (value: unknown) => void;
+    const createResearchDraft = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    Object.assign(window.betterwork.knowledge, { createResearchDraft });
+    const hook = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    act(() => hook.result.current.toggleSelect(searchHit(), true));
+    let pending!: ReturnType<typeof hook.result.current.research>;
+    act(() => {
+      pending = hook.result.current.research('Research', 'workspace-1');
+    });
+    expect(hook.result.current.researchBusy).toBe(true);
+    await expect(hook.result.current.research('Research', 'workspace-1')).resolves.toBeUndefined();
+    expect(createResearchDraft).toHaveBeenCalledOnce();
+    // The submitted draft keeps its original prompt and selected material.
+    act(() => hook.result.current.setQuery('New query'));
+    await act(async () => {
+      release({ prompt: 'Research' });
+    });
+    expect(await pending).toMatchObject({ stale: false });
+    expect(hook.result.current.researchBusy).toBe(false);
+  });
+
+  it.each(['missing', 'failure'] as const)(
+    'stops job-detail loading for %s results',
+    async (outcome) => {
+      const h = install();
+      const hook = renderHook(() => useKnowledgeLibrary());
+      await flush();
+      if (outcome === 'missing') h.knowledge.job.mockResolvedValue(null);
+      else h.knowledge.job.mockRejectedValue(new Error('detail rejected'));
+      await act(async () => hook.result.current.openJobDetail('job-1'));
+      expect(hook.result.current.jobDetailLoading).toBe(false);
+      expect(hook.result.current.jobDetail).toBeUndefined();
+      expect(hook.result.current.jobDetailError).toBe(
+        outcome === 'failure' ? 'detail rejected' : '这条作业的结果已不可回看。',
+      );
+    },
+  );
+});

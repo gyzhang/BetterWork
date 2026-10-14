@@ -88,3 +88,56 @@ describe('schedule detail projection', () => {
     ]);
   });
 });
+
+describe('schedule result action matrix', () => {
+  it.each([
+    ['needs-material', false, '请回到规则详情'],
+    ['needs-material', true, '打开 Task 补充材料'],
+    ['blocked', false, '启动前检查未通过'],
+    ['skipped-overlap', false, '上一期仍占用执行窗口'],
+    ['cancelled', false, '准备阶段已取消'],
+    ['interrupted', false, '本期不会自动重放'],
+    ['failed', false, '本期没有首个 Run'],
+  ] as const)('explains %s without inventing a Run (task=%s)', (status, hasTask, expected) => {
+    const item = historyItem('one', status, 1, hasTask ? { taskId: 'task-1' } : {});
+    expect(scheduleOccurrenceNoRunMessage(item)).toContain(expected);
+  });
+
+  it('puts the original period after the manual missed trigger', () => {
+    const item = historyItem('one', 'generated', 1, {
+      trigger: 'manual-missed',
+      originalOccurrenceId: 'missed-1',
+    });
+    expect(scheduleOccurrenceHistoryLabel(item)).toBe('人工补做错过期 · 期间 1');
+  });
+
+  it.each([
+    ['missed', false, false, '可人工补做'],
+    ['needs-material', true, false, '打开原 Task'],
+    ['needs-material', false, false, '调整知识范围'],
+    ['save-failed', true, false, '查看已登记成果'],
+    ['no-target-artifact', false, false, '缺项原因'],
+    ['failed', false, false, '启动失败原因'],
+    ['interrupted', false, false, '不会自动重放'],
+    ['cancelled', true, false, '部分成果'],
+    ['cancelled', false, false, '后续计划'],
+    ['generated', true, true, '不代表业务结果已验证'],
+    ['running', true, false, '后台处理'],
+    ['preparing', false, false, '后台处理'],
+    ['skipped-overlap', false, false, '历史事实'],
+  ] as const)('offers a valid next action for %s', (status, hasTask, hasReceipt, expected) => {
+    expect(scheduleOccurrenceNextStep(status, hasTask, hasReceipt)).toContain(expected);
+  });
+
+  it('merges equal-time pages deterministically without mutating either page', () => {
+    const a = historyItem('a', 'missed', 10);
+    const b = historyItem('b', 'blocked', 10);
+    const updatedA = historyItem('a', 'generated', 10);
+    const current = Object.freeze([a]);
+    const incoming = Object.freeze([updatedA, b]);
+    expect(mergeScheduleOccurrenceHistory(current, incoming)).toEqual([b, updatedA]);
+    expect(current).toEqual([a]);
+    expect(incoming).toEqual([updatedA, b]);
+    expect(mergeScheduleOccurrenceHistory([], [])).toEqual([]);
+  });
+});

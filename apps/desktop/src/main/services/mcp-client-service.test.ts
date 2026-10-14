@@ -438,3 +438,192 @@ describe('McpClientService', () => {
     await expect(tools[0]?.execute({ month: '2026-08' }, context(runId))).rejects.toThrow('撤销');
   });
 });
+
+describe('MCP safe diagnostics and operation ownership', () => {
+  const failingRuntime = async (failure: unknown) => {
+    const store = AppStore.open(':memory:');
+    stores.push(store);
+    const resolveBundledRuntime = vi.fn(async () => {
+      throw failure;
+    });
+    const reporter = vi.fn();
+    const service = new McpClientService(store, {
+      resolveBundledRuntime,
+      onOperationComplete: reporter,
+    });
+    services.push(service);
+    const connection = await service.saveConnection({
+      name: 'Failure fixture',
+      transport: { kind: 'stdio', runtime: { kind: 'bundled', serverId: 'memory' }, args: [] },
+    });
+    if (!connection.revisionId) throw new Error('Missing connection revision');
+    return {
+      store,
+      service,
+      connection: { ...connection, revisionId: connection.revisionId },
+      reporter,
+      resolveBundledRuntime,
+    };
+  };
+
+  it.each([
+    [{ name: 'UnauthorizedError' }, '认证失败'],
+    [{ name: 'UnsupportedProtocolVersionError' }, '协议版本不兼容'],
+    [{ name: 'TimeoutError' }, '请求超时'],
+    [{ status: 401 }, '认证失败'],
+    [{ status: 403 }, '权限不足'],
+    [{ data: { status: 429 } }, '请求过多'],
+    [{ status: 404 }, '地址或旧会话已失效'],
+    [{ code: 'CERT_HAS_EXPIRED' }, '证书校验失败'],
+    [{ code: 'DEPTH_ZERO_SELF_SIGNED_CERT' }, '证书校验失败'],
+    [{ code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' }, '证书校验失败'],
+    [{ code: 'ERR_TLS_CERT_ALTNAME_INVALID' }, '证书校验失败'],
+    [{ code: 'SELF_SIGNED_CERT_IN_CHAIN' }, '证书校验失败'],
+    [{ code: 'ENOTFOUND' }, '服务不可达'],
+    [{ code: 'ECONNREFUSED' }, '服务不可达'],
+    [{ code: 'EHOSTUNREACH' }, '服务不可达'],
+    [{ code: 'ENETUNREACH' }, '服务不可达'],
+    [{ cause: { status: 403 } }, '权限不足'],
+    [{ code: 'OTHER' }, 'MCP 检测失败'],
+    [null, 'MCP 检测失败'],
+  ])('returns safe actionable diagnostics for %j', async (metadata, expected) => {
+    const error =
+      metadata === null
+        ? 'private remote payload'
+        : Object.assign(new Error('private remote payload'), metadata);
+    const h = await failingRuntime(error);
+    await expect(h.service.testConnection(h.connection.id)).rejects.toThrow(expected);
+    const updated = h.service.getConnection(h.connection.id);
+    expect(updated).toMatchObject({ status: 'failed', lifecycle: 'disabled' });
+    expect(updated?.failureMessage).toContain(expected);
+    expect(updated?.failureMessage).not.toContain('private remote payload');
+    expect(h.reporter).toHaveBeenCalledExactlyOnceWith('Failure fixture', false, 'test');
+    expect(h.service.listConnections()).toEqual([updated]);
+    expect(h.service.getConnection('unknown')).toBeNull();
+  });
+
+  it('checks connection ownership before cancelling and joins the original operation', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const h = await failingRuntime(new Error('unused'));
+    h.resolveBundledRuntime.mockImplementation(async () => {
+      await gate;
+      throw new Error('late private payload');
+    });
+    const operationId = randomUUID();
+    const input = { id: h.connection.id, expectedRevisionId: h.connection.revisionId, operationId };
+    const testing = h.service.testConnection(input);
+    const rejected = expect(testing).rejects.toSatisfy(isAbortError);
+    await vi.waitFor(() => expect(h.resolveBundledRuntime).toHaveBeenCalledOnce());
+    await expect(h.service.testConnection(input)).rejects.toThrow('ID 已在使用中');
+    expect(h.service.cancelOperation({ ...input, id: 'another-connection' })).toBe(false);
+    expect(h.service.cancelOperation(input)).toBe(true);
+    release();
+    await rejected;
+    expect(h.service.cancelOperation(input)).toBe(false);
+    expect(h.service.getConnection(h.connection.id)?.failureMessage).toContain('已取消');
+    expect(h.reporter).not.toHaveBeenCalled();
+  });
+
+  it('keeps the newest diagnostic when an older detection finishes later', async () => {
+    let rejectOld!: (error: Error) => void;
+    const h = await failingRuntime(new Error('unused'));
+    h.resolveBundledRuntime.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectOld = reject;
+        }),
+    );
+    h.resolveBundledRuntime.mockRejectedValueOnce(
+      Object.assign(new Error('private new payload'), { status: 403 }),
+    );
+    const old = h.service.testConnection(h.connection.id);
+    const oldFailure = expect(old).rejects.toThrow('服务不可达');
+    await vi.waitFor(() => expect(h.resolveBundledRuntime).toHaveBeenCalledOnce());
+    await expect(h.service.testConnection(h.connection.id)).rejects.toThrow('权限不足');
+    rejectOld(Object.assign(new Error('private old payload'), { code: 'ECONNREFUSED' }));
+    await oldFailure;
+    expect(h.service.getConnection(h.connection.id)?.failureMessage).toContain('权限不足');
+  });
+
+  it('rejects secret mutations outside the owning transport without writing a connection', async () => {
+    const h = await failingRuntime(new Error('unused'));
+    await expect(
+      h.service.saveConnection({
+        name: 'Invalid slot',
+        transport: { kind: 'stdio', command: 'node', args: [] },
+        secrets: [
+          {
+            slot: 'http-token',
+            expectedVersion: 0,
+            mutation: { action: 'replace', value: 'synthetic-token' },
+          },
+        ],
+      }),
+    ).rejects.toThrow('凭据槽位');
+    expect(h.service.listConnections()).toHaveLength(1);
+  });
+
+  it('refuses protected secret writes when no credential store is configured', async () => {
+    const h = await failingRuntime(new Error('unused'));
+    await expect(
+      h.service.saveConnection({
+        name: 'Missing storage',
+        transport: {
+          kind: 'stdio',
+          command: 'node',
+          args: [],
+          env: [{ name: 'TOKEN', secret: true }],
+        },
+        secrets: [
+          {
+            slot: 'env:TOKEN',
+            expectedVersion: 0,
+            mutation: { action: 'replace', value: 'synthetic-token' },
+          },
+        ],
+      }),
+    ).rejects.toThrow('受保护存储不可用');
+    expect(h.service.listConnections()).toHaveLength(1);
+  });
+
+  it.each(['prepare', 'continue'] as const)(
+    'reports a refused %s login without spawning a browser',
+    async (operation) => {
+      const h = await failingRuntime(new Error('unused'));
+      const input = {
+        id: h.connection.id,
+        operationId: randomUUID(),
+        expectedRevisionId: h.connection.revisionId,
+      };
+      const promise =
+        operation === 'prepare'
+          ? h.service.prepareLogin(input)
+          : h.service.continueLogin({ ...input, issuer: 'https://issuer.example', consent: true });
+      await expect(promise).rejects.toThrow();
+      expect(h.reporter).toHaveBeenCalledExactlyOnceWith('Failure fixture', false, 'login');
+      expect(h.resolveBundledRuntime).not.toHaveBeenCalled();
+    },
+  );
+
+  it('logs out the current revision and refuses a stale revision', async () => {
+    const h = await failingRuntime(new Error('unused'));
+    await expect(
+      h.service.logout({
+        id: h.connection.id,
+        operationId: randomUUID(),
+        expectedRevisionId: 'stale',
+      }),
+    ).rejects.toThrow();
+    const result = await h.service.logout({
+      id: h.connection.id,
+      operationId: randomUUID(),
+      expectedRevisionId: h.connection.revisionId,
+    });
+    expect(result.id).toBe(h.connection.id);
+    expect(result.lifecycle).toBe('disabled');
+    expect(result.tools).toEqual([]);
+  });
+});
