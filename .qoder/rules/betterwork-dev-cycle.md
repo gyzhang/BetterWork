@@ -19,14 +19,14 @@ description: 启动应用、停止应用、调试、运行开发环境、构建�
 
 ## 提交与推送验证
 
-每个任务在独立分支上工作；并行写任务各用独立 worktree 和分支。提交时由 pre-commit 对暂存文件做差异空白、定向 ESLint / Prettier 与文档结构快检，不按每个 TypeScript 提交跑全仓 typecheck。pre-push 阻止直推 `main`，只核对干净 `HEAD` 与差异空白。代码或混合 PR 执行 lint、format:check、typecheck、docs:check 和按 PR 基点选择的相关测试；纯 Markdown PR 只执行 `npm run docs:check`，两者均由必需状态 `PR Gate` 汇总。合并后删除已合并分支并归档/移除 worktree；未合并任务保留。（docs/12 §1/§1.1、ADR-0039、ADR-0042）
+每个任务在独立分支上工作；并行写任务各用独立 worktree 和分支。pre-commit 按暂存文件做差异空白、定向 ESLint/Prettier 与文档快检；pre-push 核对干净 HEAD 和空白差异并拒绝 main。代码 PR 在独立 macOS runner 并行执行全仓类型感知 lint 与其他代码检查；差异格式在配置/依赖变化时回退全仓，类型全仓，相关功能档后接串行重档并排除真实 Electron UI CLI 回归。发布清单专档执行格式、发布预检、实际消费者登记回归与 docs:check；纯 Markdown 只跑 docs:check。PR Gate 要求对应检查均成功，独立于完整/UI 验证。合并后清理已合并分支和 worktree，未合并工作保留。（docs/12 §1/§1.1、ADR-0039/0042/0046）
 
-完整 `npm run verify`（lint + format:check + typecheck + test + build + ui:check）只由用户按需或夜间计划运行，AI 不因局部修改、提交、推送或合并自行触发。（docs/12 §1/§1.1、ADR-0042）
+日常入口为 `npm run check:quick -- --base origin/main`，纳入未提交与未跟踪差异。完整 verify 仍为 lint + format:check + typecheck + test + build + ui:check，只由用户按需或夜间运行。AI 不因 UI 文件变化、页面 Review、局部修改、提交、推送或合并自动启动真实 UI 检查、页面走查或完整 verify，交接记录 UI 未验证项。（docs/12 §1/§1.1、ADR-0046）
 
     npm run verify        # 用户按需或夜间计划运行完整验证
     npm run docs:check    # 文档结构、摘要与规则链接一致性
 
-完整验证入口为 GitHub Actions → Verify → Run workflow（选择分支），或 `gh workflow run verify.yml --ref <分支名>`；夜间计划每天北京时间 23:30（UTC 15:30）检查默认分支 main。PR Gate 只依赖对应快检，完整验证结果与目标 SHA 单独报告；失败读取步骤与产物并在后续任务分支修复。（docs/12 §1/§1.1、ADR-0042）
+GitHub Actions → Verify → Run workflow 可选分支和 scope=full（缺省）/ui；CLI 为 `gh workflow run verify.yml --ref <分支名> -f scope=ui` 或 scope=full。本地 UI 入口为 npm run ui:check；夜间每天北京时间 23:30（UTC 15:30）仍执行 main 的完整 verify。PR Gate 只依赖对应快检，各范围单独报告实际 SHA 和证据；失败读取步骤与产物后修复。（docs/12 §1/§1.1、ADR-0042/0046）
 
 门禁范围现在有机器强制：`.husky/pre-commit` 按暂存路径运行 `scripts/pre-commit-check.mjs`，`.husky/pre-push` 运行 `scripts/pre-push-check.mjs` 阻止直推 `main` 并核对 HEAD/空白差异；PR workflow 按差异分类并提供稳定 `PR Gate`。护栏「提交与推送门禁纪律 › 本地钩子按暂存范围快检并阻止直推 main」以及提交/推送/分类夹具测试锁住各范围的检查选择。（docs/12 §1）
 

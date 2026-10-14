@@ -6,13 +6,22 @@ on:
       - main
   # 手动触发对所选分支运行完整验证；夜间计划检查 main 最新提交。
   workflow_dispatch:
+    inputs:
+      scope:
+        description: '验证范围：完整验证或专项 UI 验证'
+        type: choice
+        required: true
+        default: full
+        options:
+          - full
+          - ui
   schedule:
     # UTC 15:30 = Asia/Shanghai 23:30，避开整点的调度高峰。
     - cron: '30 15 * * *'
 
 # 同一 PR 只保留最新差异；手动与夜间完整验证分别归组。
 concurrency:
-  group: verify-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  group: verify-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.scope || 'full' }}
   cancel-in-progress: true
 
 permissions:
@@ -27,6 +36,7 @@ jobs:
     outputs:
       has_code: ${{ steps.changes.outputs.has_code }}
       docs_only: ${{ steps.changes.outputs.docs_only }}
+      resources_only: ${{ steps.changes.outputs.resources_only }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -40,8 +50,8 @@ jobs:
           git diff --check "$BASE_SHA...$HEAD_SHA"
           node scripts/classify-pr-changes.mjs --pull-request "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
 
-  quick:
-    name: Quick code check
+  quick-lint:
+    name: Code lint
     needs: classify
     if: github.event_name == 'pull_request' && needs.classify.outputs.has_code == 'true'
     runs-on: macos-latest
@@ -55,23 +65,35 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npm run lint
-      - run: npm run format:check
-      - run: npm run typecheck
-      - run: npm run docs:check
-      # Vitest 按 PR 基点和依赖图选择相关测试；两档依次运行，保留重档的串行约束。
-      - name: 检查受影响的功能测试
+      - name: 检查全仓类型感知规则
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: npx vitest run --project functional --changed="$BASE_SHA" --passWithNoTests
-      - name: 检查受影响的重档测试
+        run: npm run check:quick -- --base "$BASE_SHA" --part lint
+
+  quick:
+    name: Quick code check
+    needs: classify
+    if: github.event_name == 'pull_request' && (needs.classify.outputs.has_code == 'true' || needs.classify.outputs.resources_only == 'true')
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # 与 lint 使用独立 runner；相关测试不启动真实 Electron UI 验证。
+      - name: 检查差异格式、类型、文档和相关行为
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: npx vitest run --project heavy --changed="$BASE_SHA" --passWithNoTests
+        run: npm run check:quick -- --base "$BASE_SHA" --part checks
 
   quality:
     name: Full verify
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.scope == 'full')
     runs-on: macos-latest
     timeout-minutes: 15
     steps:
@@ -111,6 +133,49 @@ jobs:
           retention-days: 7
           include-hidden-files: true
 
+  ui:
+    name: UI verify
+    if: github.event_name == 'workflow_dispatch' && inputs.scope == 'ui'
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      # 专项 UI 验证独立于 PR Gate，保留脚本正反例与真实渲染读数。
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run --project heavy scripts/ui-render-check.test.ts
+      - run: npm run ui:check
+        env:
+          UI_RENDER_OUTPUT_DIR: ${{ github.workspace }}/.ui-render
+      - name: 上传渲染检查产物
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: manual-ui-render-check
+          path: |
+            .ui-render/screenshots/
+            .ui-render/results.json
+            .ui-render/matrix-results.json
+            .ui-render/results.partial.json
+            .ui-render/app-journey.partial.json
+            .ui-render/app-journey-*/
+            .ui-render/process-recovery-*/
+          retention-days: 14
+          include-hidden-files: true
+      - name: 留存渲染检查读数
+        if: success()
+        uses: actions/upload-artifact@v6
+        with:
+          name: manual-ui-render-readings
+          path: .ui-render/results.json
+          retention-days: 7
+          include-hidden-files: true
+
   documentation:
     name: Documentation check
     needs: classify
@@ -131,6 +196,7 @@ jobs:
     needs:
       - classify
       - quick
+      - quick-lint
       - documentation
     if: always() && github.event_name == 'pull_request'
     runs-on: macos-latest
@@ -140,6 +206,8 @@ jobs:
           CLASSIFY_RESULT: ${{ needs.classify.result }}
           HAS_CODE: ${{ needs.classify.outputs.has_code }}
           DOCS_ONLY: ${{ needs.classify.outputs.docs_only }}
+          RESOURCES_ONLY: ${{ needs.classify.outputs.resources_only }}
+          LINT_RESULT: ${{ needs.quick-lint.result }}
           QUICK_RESULT: ${{ needs.quick.result }}
           DOCUMENTATION_RESULT: ${{ needs.documentation.result }}
         run: |
@@ -147,12 +215,17 @@ jobs:
             echo "差异分类失败：不能判断应运行哪一档门禁。"
             exit 1
           fi
-          if [ "$HAS_CODE" = "true" ] && [ "$DOCS_ONLY" = "false" ]; then
-            if [ "$QUICK_RESULT" != "success" ]; then
-              echo "代码或混合差异必须通过 Quick code check；结果：$QUICK_RESULT"
+          if [ "$HAS_CODE" = "true" ] && [ "$DOCS_ONLY" = "false" ] && [ "$RESOURCES_ONLY" = "false" ]; then
+            if [ "$QUICK_RESULT" != "success" ] || [ "$LINT_RESULT" != "success" ]; then
+              echo "代码差异必须通过代码检查与 lint；结果：$QUICK_RESULT / $LINT_RESULT"
               exit 1
             fi
-          elif [ "$HAS_CODE" = "false" ] && [ "$DOCS_ONLY" = "true" ]; then
+          elif [ "$HAS_CODE" = "false" ] && [ "$DOCS_ONLY" = "false" ] && [ "$RESOURCES_ONLY" = "true" ]; then
+            if [ "$QUICK_RESULT" != "success" ]; then
+              echo "发布清单差异必须通过资源检查；结果：$QUICK_RESULT"
+              exit 1
+            fi
+          elif [ "$HAS_CODE" = "false" ] && [ "$DOCS_ONLY" = "true" ] && [ "$RESOURCES_ONLY" = "false" ]; then
             if [ "$DOCUMENTATION_RESULT" != "success" ]; then
               echo "纯 Markdown 差异必须通过 Documentation check；结果：$DOCUMENTATION_RESULT"
               exit 1

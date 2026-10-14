@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import process from 'node:process';
 
+import { classifyChanges } from './pr-check-plan.mjs';
+
 function readStandardInput() {
   return new Promise((resolve, reject) => {
     let input = '';
@@ -14,8 +16,8 @@ function readStandardInput() {
 }
 
 function outputsFor(files) {
-  const docsOnly = files.length > 0 && files.every((file) => file.endsWith('.md'));
-  return `has_code=${!docsOnly}\ndocs_only=${docsOnly}\n`;
+  const scope = classifyChanges(files);
+  return `has_code=${scope === 'code'}\ndocs_only=${scope === 'docs'}\nresources_only=${scope === 'resources'}\n`;
 }
 
 try {

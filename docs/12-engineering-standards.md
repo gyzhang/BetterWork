@@ -15,6 +15,7 @@
 | `npm run format` | Prettier 写入 |
 | `npm run format:check` | Prettier 校验 |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm run check:quick -- --base <ref>` | 日常快检：按差异选择文档/发布清单/代码范围；缺省基点 origin/main，纳入未提交及未跟踪文件，不启动真实 UI 验证 |
 | `npm test` | Vitest **功能档并发 → 重档串行**两次独立调用（`--project functional`，然后 `--project heavy`），断言行为是否正确；重档收录单文件墙钟 ≥20s 的文件，判据见 §9 |
 | `npm run bench` | Vitest **计时基准档**（`--project bench`）：串行跑 `*.bench.test.ts`，断言墙钟与内存预算 |
 | `npm run ui:check` | 独立 Electron 宿主：全部正式色系明暗 × 760/1380px 的组件矩阵，加成果/知识/专家/设置内记忆分区的生产页面关键路径（青玉明暗、两档宿主宽度、普通/减动效）、一条真实 App/Preload/IPC/临时 SQLite 离线旅程与独立进程强杀恢复（青玉深色、1380px）；截图/读数放临时目录，边界见 docs/10 §10.1.3 |
@@ -24,13 +25,15 @@
 
 `.husky/pre-push` 拒绝直接推送 `main`，并核对待推送对象等于当前干净 `HEAD`、差异没有空白错误；它不运行全仓验证。普通任务分支可按个人节奏积累多次提交后再推送，pre-push 不会因代码提交重复执行完整门禁。
 
-`docs:check` 运行结构与文档一致性护栏，不是完整 `verify` 的替代品。PR 是进入 `main` 的唯一入口（[ADR-0039](adr/0039-task-branches-and-protected-main.md)）；验证范围按 [ADR-0042](adr/0042-pr-quick-check-and-scheduled-verify.md)：代码或混合差异由 GitHub Actions 对 PR 合并候选执行 lint、format:check、typecheck、docs:check，再以 PR base SHA 执行 Vitest 相关功能测试与相关重档测试；两档依次运行，重档保持串行。纯 Markdown 差异只执行 `npm run docs:check`。分类前检查差异空白，两种路径都汇总到稳定的必需状态 `PR Gate`。PR Gate 不依赖 Full verify；快门禁通过只能报告对应范围通过。
+`docs:check` 运行结构与文档一致性护栏，不是完整 `verify` 的替代品。PR 是进入 main 的唯一入口（[ADR-0039](adr/0039-task-branches-and-protected-main.md)）；现行范围按 [ADR-0042](adr/0042-pr-quick-check-and-scheduled-verify.md) 与 [ADR-0046](adr/0046-daily-code-check-and-optional-ui-verification.md)：代码或混合差异在独立 macOS runner 并行执行全仓类型感知 lint 与差异格式、全仓类型、文档及相关行为测试。功能档后接重档，重档保持串行；快速调用排除 `scripts/ui-render-check.test.ts`，不启动真实 Electron UI 验证。格式配置、忽略规则或依赖清单变化时回退全仓格式检查，不使用按文件内容缓存的类型感知 lint。仅修改两份内置发布清单与 Markdown 时执行格式、发布预检、实际清单的生产服务登记回归和文档检查；其他资源、未知路径、配置、混合代码及空差异保守走代码档。纯 Markdown 只执行 docs:check。分类前检查差异空白，三种路径都汇总到稳定的必需状态 PR Gate；代码档同时要求 lint 与其他检查成功，必需检查失败、取消或跳过均拒绝合并。PR Gate 不依赖完整或专项 UI 验证，快检通过只代表对应范围。
 
-完整 `npm run verify` 只由用户按需触发或夜间计划运行，AI 不因局部修改、提交、推送或合并自行启动完整验证。`workflow_dispatch` 对所选分支运行完整 verify；`schedule` 每天北京时间 23:30（UTC 15:30）检查默认分支 main 最新提交并留存渲染读数，调度可能延迟。相关测试按依赖图选择，配置或共享模块变化可能选中较多测试，动态文件读取可能未被选择；完整验证负责整体集成回归。夜间/手动结果不阻止已经完成的合并，失败需后续任务分支修复。
+本地与 CI 共用 `scripts/pr-check.mjs`：`npm run check:quick -- --base <ref>` 缺省基点为 origin/main，计入未提交及未跟踪差异；CI 对合并候选以 PR base SHA 执行 `--part lint` 与 `--part checks`，在不同宿主并行。非法基点及检查进程失败/被信号终止均返回失败，每步耗时留在输出和 Actions summary。发布清单与代码混合修改仍强制执行预检与实际消费者回归，不依赖 Vitest 发现动态 JSON 读取。
+
+完整 `npm run verify` 只由用户按需或夜间计划运行。AI 不因局部修改、UI 文件变化、页面 Review、提交、推送或合并自动启动完整验证、真实 UI 检查或页面走查；日常执行快检并记录 UI 未验证项。用户明确安排 UI 验证时执行 `npm run ui:check` 或相应路径。workflow_dispatch 的 scope 缺省 full，对所选分支执行完整 verify；选择 ui 时执行 UI CLI 回归和真实 UI 检查，单独留存截图/读数。schedule 每天北京时间 23:30（UTC 15:30）仍执行 main 的完整 verify，调度可能延迟。相关测试可能因共享模块或配置变化扩大，动态文件读取可能未被选择，完整验证承担整体集成回归。夜间/手动结果不阻止已完成的合并，失败由后续任务分支修复。
 
 护栏「提交与推送门禁纪律 › 本地钩子按暂存范围快检并阻止直推 main」与「远端门禁跑在受支持的平台、能手动触发、并且留下绿跑读数」分别锁定本地和远端形状。
 
-远端那一层也有机器核对：护栏「远端门禁跑在受支持的平台、能手动触发、并且留下绿跑读数」逐样点名——`runs-on` 必须是 macOS（ADR-0036：跑在别的平台上测的是不兼容的靶子，`ui:check` 还会在 Ubuntu 的 userns 限制下崩成 SIGTRAP）、必须留 `workflow_dispatch` 和夜间 `schedule`，必须在手动/夜间任务整条跑 `npm run verify`（不许把完整验证改成只跑某几步），并且必须有一步随**成功**上传 `.ui-render/results.json`：产物只在失败时上传的话，连着两次绿跑之间什么都没留下，「门禁绿了」于是重新变成一句没有读数的话。同一条判据还拦「删掉 `if: success()` 那一步」，所以留存不是一次性配置，是钉住的形状。
+远端那一层也有机器核对：护栏「远端门禁跑在受支持的平台、能手动触发、并且留下绿跑读数」逐样点名——`runs-on` 必须是 macOS（ADR-0036：跑在别的平台上测的是不兼容的靶子，`ui:check` 还会在 Ubuntu 的 userns 限制下崩成 SIGTRAP）、必须留 `workflow_dispatch` 和夜间 `schedule`，必须在手动 full/夜间任务整条跑 `npm run verify`（不许把完整验证改成只跑某几步），并且必须有一步随**成功**上传 `.ui-render/results.json`：产物只在失败时上传的话，连着两次绿跑之间什么都没留下，「门禁绿了」于是重新变成一句没有读数的话。同一条判据还拦「删掉 `if: success()` 那一步」，所以留存不是一次性配置，是钉住的形状。
 文档引用一条结构判据时有固定写法：写成紧邻的 `护栏「X」`／`护栏：「X」`，X 是 `standards/coding-standard.test.ts` 里 `it()` 的标题；同名判据分散在不同块里时写 `describe › it` 的完整路径。判据改名必须同轮把引用一起改掉——护栏「文档点名的护栏必须是一条真实存在的判据」把这句话变成机器可读的。2026-10-02 一次判据改名就让 `betterwork-code-style.md` 指着一台不存在的闸，另外两处引用漏抄了标题后半截：判据在、名字对不上，下一个人仍然无法确定自己找到的是不是同一条。之所以只认紧邻形状：中文正文里大量用「」引用界面文案与术语，放宽到「同一行出现过护栏」会判红 300 多处无关引号，过宽到没人能修的判据等于没有判据。
 规范的执行包括三层门禁与一层周期巡检：
 
@@ -53,7 +56,7 @@
 
 Qoder 的文件规则采用本机 IDE 编辑入口实际保存并识别的 frontmatter；多个通配符按 [IDE 官方说明](https://docs.qoder.com/zh/user-guide/rules)用英文逗号分隔，每一项都是完整模式，不能用 `**/*.ts,tsx,css` 表示多个扩展名。CLI 文档接受的 YAML 列表不能直接推导为 IDE 可用。元数据与正反例测试检查仓内格式和代表文件匹配；实际 IDE 规则页还必须无“未启用”提示、编辑入口必须展示完整范围。设置页识别不证明模型会话已注入正文；更新规则或工具后，AI 另在新会话核对实际上下文，未取得该证据时如实交接。
 
-AI 交接按“已实现／自动化通过／AI 页面走查／待人工验收”分别描述，附改动范围、失败/取消证据、命令退出码、代码版本和未验证项；任务板的 done 判据仍以原卡为准，不新增一套状态。UI 证据按 docs/10 §10.1.1/§10.1.3，最终人类验收不能替代 AI 本轮应完成的测试与走查。提交阶段按暂存范围快检；代码或混合改动由 PR 上的代码快门禁收口，纯 Markdown PR 只执行 `docs:check`；完整 verify 由用户按需或夜间计划运行，分别报告目标 SHA 与覆盖范围。
+AI 交接按“已实现／自动化通过／AI 页面走查／待人工验收”分别描述，附改动范围、失败/取消证据、命令退出码、代码版本和未验证项；任务板的 done 判据仍以原卡为准，不新增一套状态。UI 证据按 docs/10 §10.1.1/§10.1.3；日常只做代码检查并记录 UI 未验证项，用户安排 UI 验证后再交付页面走查证据，夜间自动证据不代签人工验收。提交阶段按暂存范围快检；PR 按代码/发布清单/文档范围收口，完整与专项 UI 验证单独报告目标 SHA 和覆盖范围。
 
 完整 `npm run verify` 不按提交、普通分支 push 或 PR 更新自动运行。pre-push 检查推送引用，拒绝 `main` 目标，并要求新增对象解析到当前干净 `HEAD`；它对新分支以 `origin/main` 为基点、对已有远端分支以远端对象为基点执行差异空白检查。钩子的行为回归在 `scripts/pre-push.test.ts` 的独立 Git 夹具中运行，不执行真实推送、不碰产品数据。代码/混合 PR 的快门禁与纯 Markdown PR 的文档门禁由 `.github/workflows/verify.yml` 分类执行，聚合至 `PR Gate`。护栏「提交与推送门禁纪律 › 本地钩子按暂存范围快检并阻止直推 main」和「任务分支隔离并要求并行写任务使用独立 worktree」锁定本地规则对应关系。
 

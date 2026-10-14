@@ -85,11 +85,13 @@ ArtifactVersion 与 Evidence 的关系由 [ADR-0005](adr/0005-artifact-version-e
     npm run ui:check   # 组件矩阵 + 成果/知识/专家/记忆生产页面合成关键路径 + 真实 IPC/临时 SQLite 离线应用旅程与进程恢复；边界见 docs/10 §10.1.3
     npm run bench      # 计时基准档（串行）：跑完规模/性能卡或专门核查时执行，不在提交门禁里
 
-日常提交只做暂存范围快检；一次任务可以包含多个提交，普通分支 push 不运行完整 `verify`。代码或混合 PR 的 Actions 执行 lint、format:check、typecheck、docs:check，再以 PR base SHA 执行 Vitest 的相关功能测试与相关重档测试；两档依次运行，重档保持串行。纯 Markdown PR 只跑 `docs:check`。`PR Gate` 是 main 的必需状态，依赖分类和对应快检，独立于 Full verify；通过快门禁不能称为完整验证通过。
+日常提交只做暂存范围快检；一次任务可以包含多个提交，普通分支 push 不运行完整 verify。按 [ADR-0046](adr/0046-daily-code-check-and-optional-ui-verification.md)，代码 PR 的全仓类型感知 lint 与差异格式、全仓类型、文档和相关行为测试在独立 macOS runner 并行；相关功能档后接串行重档，快速调用排除真实 Electron UI CLI 回归。发布清单专档执行格式、发布预检、实际消费者登记回归和 docs:check；纯 Markdown PR 只跑 docs:check。PR Gate 是 main 的必需状态，不等待完整或专项 UI 验证。
+
+本地日常入口为 `npm run check:quick -- --base origin/main`，可传其他基点，计入未提交及未跟踪差异。AI 不因 UI 文件变化、页面 Review、提交、推送或合并自动启动真实 UI 检查、页面走查或完整 verify，交接写明 UI 未验证项。
 
 pre-push 阻止直推 main，并核对干净 HEAD 与空白差异。PR 合并后，删除已合并的短期分支；Codex 管理的 worktree 归档或移除。有未提交改动或尚未合并的任务时保留 worktree 与分支。
 
-完整验证：GitHub Actions → Verify → Run workflow，选择 main 或任务分支；CLI 可用 `gh workflow run verify.yml --ref <分支名>`。手动运行验证所选分支，PR 快门禁验证合并候选。夜间 `schedule` 每天北京时间 23:30（UTC 15:30）验证默认分支 main 最新提交，工作流合入 main 后生效，调度高峰时可能延迟。AI 按任务做定向检查，不因局部修改、提交、推送或合并自行启动完整 verify。
+按需验证：本地 npm run ui:check 执行真实 UI 检查，npm run verify 执行完整验证。GitHub Actions → Verify → Run workflow 可选 scope=full（缺省）或 ui，选择 main 或任务分支；CLI 为 `gh workflow run verify.yml --ref <分支名> -f scope=ui`，完整验证选择 scope=full。手动运行验证所选分支，PR 快门禁验证合并候选。夜间 schedule 每天北京时间 23:30（UTC 15:30）仍执行 main 最新提交的完整 verify，调度可能延迟；手动范围、夜间与 PR 独立归组。
 
 配置或共享模块变化可能让相关测试选中较多文件；快门禁始终不执行完整构建或 ui:check。夜间/手动失败应读取该 SHA 的日志与产物，在后续任务分支修复。
 
@@ -196,7 +198,7 @@ pre-push 阻止直推 main，并核对干净 HEAD 与空白差异。PR 合并后
 ## 7. 建议的续作方式
 
 
-先读 [工程规范](12-engineering-standards.md)，再动手。规范是机器强制的：`npm run verify` 不过就不能提交。
+先读 [工程规范](12-engineering-standards.md)，再动手。规范是机器强制的：提交按暂存范围快检，合并须通过 PR Gate；完整 verify 与真实 UI 验证由用户按需或夜间安排。
 
 从 §6「仍未解决」里选一条小而完整的路径收口。优先级建议：
 
