@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
@@ -54,6 +54,22 @@ function runCheck(directory: string): ReturnType<typeof spawnSync> {
 }
 
 describe('提交快检按暂存范围选择', () => {
+  it('rejects a partially staged checked path before lint can inspect the corrected working copy', () => {
+    withRepository((directory) => {
+      writeFileSync(path.join(directory, 'sample.ts'), 'export const staged = 1;\n');
+      execFileSync('git', ['add', 'sample.ts'], { cwd: directory });
+      writeFileSync(path.join(directory, 'sample.ts'), 'export const corrected = 2;\n');
+      const result = runCheck(directory);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('sample.ts');
+      expect(result.stderr).toContain('部分暂存');
+      expect(() => readFileSync(path.join(directory, '.commands'))).toThrow();
+      expect(
+        execFileSync('git', ['show', ':sample.ts'], { cwd: directory, encoding: 'utf8' }),
+      ).toContain('staged');
+    });
+  });
+
   it('纯 Markdown 只跑文档结构检查', () => {
     withRepository((directory) => {
       mkdirSync(path.join(directory, 'docs'));
@@ -66,6 +82,39 @@ describe('提交快检按暂存范围选择', () => {
       expect(readFileSync(path.join(directory, '.commands'), 'utf8')).toBe('npm run docs:check\n');
     });
   });
+
+  it('rejects a staged path deleted from the working copy without changing the index', () => {
+    withRepository((directory) => {
+      writeFileSync(path.join(directory, 'gone.ts'), 'export const value = 1;\n');
+      execFileSync('git', ['add', 'gone.ts'], { cwd: directory });
+      rmSync(path.join(directory, 'gone.ts'));
+      const result = runCheck(directory);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('gone.ts');
+      expect(() => readFileSync(path.join(directory, '.commands'))).toThrow();
+    });
+  });
+
+  it.each(['delete', 'type'])(
+    'rejects a staged %s replaced by an unstaged regular file',
+    (mode) => {
+      withRepository((directory) => {
+        const file = path.join(directory, 'replaced.ts');
+        writeFileSync(file, 'export const old = 1;\n');
+        execFileSync('git', ['add', 'replaced.ts'], { cwd: directory });
+        execFileSync('git', ['commit', '-qm', 'Seed'], { cwd: directory });
+        rmSync(file);
+        if (mode === 'type') symlinkSync('target.ts', file);
+        execFileSync('git', ['add', 'replaced.ts'], { cwd: directory });
+        if (mode === 'type') rmSync(file);
+        writeFileSync(file, 'export const corrected = 2;\n');
+        const result = runCheck(directory);
+        expect(result.status, String(result.stderr)).toBe(1);
+        expect(result.stderr).toContain('replaced.ts');
+        expect(() => readFileSync(path.join(directory, '.commands'))).toThrow();
+      });
+    },
+  );
 
   it('TypeScript 只 lint/format 暂存路径，不在每次提交运行全仓 typecheck', () => {
     withRepository((directory) => {

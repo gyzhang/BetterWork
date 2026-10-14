@@ -1,5 +1,14 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { appendFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import path from 'node:path';
 import process from 'node:process';
 
 import { planChecks } from './pr-check-plan.mjs';
@@ -34,7 +43,47 @@ try {
   const plan = planChecks(files, baseSha, part, process.cwd());
   if (planOnly) process.stdout.write(`${JSON.stringify({ base: baseSha, files, ...plan })}\n`);
   else {
+    const startedAt = Date.now();
+    if (part !== 'lint') {
+      rmSync('coverage/quick', { recursive: true, force: true });
+      mkdirSync('coverage/quick', { recursive: true });
+      writeFileSync(
+        'coverage/quick/plan.json',
+        JSON.stringify(
+          { base: baseSha, head: git(['rev-parse', 'HEAD']).trim(), files, ...plan, startedAt },
+          null,
+          2,
+        ) + '\n',
+      );
+      writeFileSync(
+        'coverage/quick/source-snapshot.json',
+        JSON.stringify(
+          Object.fromEntries(
+            (plan.coverageSources ?? []).map((file) => [
+              file,
+              createHash('sha256').update(readFileSync(file)).digest('hex'),
+            ]),
+          ),
+          null,
+          2,
+        ) + '\n',
+      );
+    }
+    for (const test of plan.requiredTests ?? []) {
+      if (!existsSync(test)) {
+        if (part !== 'lint')
+          writeFileSync(
+            'coverage/quick/check-status.json',
+            JSON.stringify({ label: 'Required consumers', status: 1, missing: test }) + '\n',
+          );
+        throw new Error(`Required consumer test is missing: ${test}`);
+      }
+    }
     process.stdout.write(`Quick check: ${plan.scope}; part: ${part}; base: ${baseSha}\n`);
+    if (plan.uiRequired)
+      process.stdout.write(
+        'UI fixtures changed: optional UI verification remains pending under ADR-0046.\n',
+      );
     const summary = process.env.GITHUB_STEP_SUMMARY;
     if (summary)
       appendFileSync(
@@ -42,6 +91,13 @@ try {
         `## Quick check (${part})\n\nScope: ${plan.scope}; base: \`${baseSha}\`\n\n| Check | Seconds | Result |\n| --- | ---: | --- |\n`,
       );
     for (const item of plan.commands) {
+      if (item.label === 'Changed line coverage')
+        item.args.push(
+          '--started-at',
+          String(startedAt),
+          '--snapshot',
+          'coverage/quick/source-snapshot.json',
+        );
       const started = Date.now();
       process.stdout.write(`Starting ${item.label}\n`);
       const result = spawnSync(item.command, item.args, { stdio: 'inherit' });
@@ -52,6 +108,23 @@ try {
         appendFileSync(
           summary,
           `| ${item.label} | ${seconds} | ${status === 0 ? 'passed' : 'failed'} |\n`,
+        );
+      if (part !== 'lint')
+        writeFileSync(
+          path.join('coverage/quick', 'check-status.json'),
+          JSON.stringify(
+            {
+              base: baseSha,
+              label: item.label,
+              status,
+              seconds,
+              signal: result.signal,
+              error: result.error?.message,
+              uiRequired: plan.uiRequired,
+            },
+            null,
+            2,
+          ) + '\n',
         );
       if (result.error) process.stderr.write(`${result.error.message}\n`);
       if (status !== 0) {

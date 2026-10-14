@@ -1,5 +1,7 @@
 # 架构决策记录
 
+最新增量：[ADR-0049：测试先行证据与差异质量门禁](0049-tdd-and-differential-quality-gates.md)，补充 ADR-0046 的动态消费者、差异行覆盖率、暂存一致性和恢复清理证据。
+
 | ADR | 决策 | 状态 |
 | --- | --- | --- |
 | [0001](0001-greenfield-product.md) | BetterWork 采用全新项目设计 | Accepted |

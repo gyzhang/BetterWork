@@ -16,6 +16,8 @@
 | `npm run format:check` | Prettier 校验 |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run check:quick -- --base <ref>` | 日常快检：按差异选择文档/发布清单/代码范围；缺省基点 origin/main，纳入未提交及未跟踪文件，不启动真实 UI 验证 |
+| `npm run test:coverage` | 同一配置的 functional → heavy 串行覆盖率收集及命中合并；用户按需运行，heavy 包含现有 UI CLI 回归；代码专项可明确排除该文件并如实报告范围 |
+| `npm run coverage:diff -- --base <ref>` | 检查已收集报告中的新增/修改可执行生产行，默认读取 coverage/quick；日常快检自动调用并核对本轮时间及源码快照 |
 | `npm test` | Vitest **功能档并发 → 重档串行**两次独立调用（`--project functional`，然后 `--project heavy`），断言行为是否正确；重档收录单文件墙钟 ≥20s 的文件，判据见 §9 |
 | `npm run bench` | Vitest **计时基准档**（`--project bench`）：串行跑 `*.bench.test.ts`，断言墙钟与内存预算 |
 | `npm run ui:check` | 独立 Electron 宿主：全部正式色系明暗 × 760/1380px 的组件矩阵，加成果/知识/专家/设置内记忆分区的生产页面关键路径（青玉明暗、两档宿主宽度、普通/减动效）、一条真实 App/Preload/IPC/临时 SQLite 离线旅程与独立进程强杀恢复（青玉深色、1380px）；截图/读数放临时目录，边界见 docs/10 §10.1.3 |
@@ -23,11 +25,15 @@
 
 提交由 `.husky/pre-commit` 按**暂存文件**做快检：所有改动跑 `git diff --cached --check`；暂存代码文件跑对应 ESLint / Prettier；含 Markdown 时跑 `npm run docs:check`。每次提交不跑全仓 typecheck、测试、构建或 UI 检查；`.md` 按本文 §1 的格式范围不经 Prettier。
 
+本次检查路径必须与暂存快照一致：若这些路径另有未暂存修改、删除或类型变化，pre-commit 在 lint/format 前拒绝，并列出需重新暂存的路径；其他路径的未暂存内容不阻止聚焦提交。钩子不自动 stash、不覆盖用户内容。新增领域行为和缺陷修复先记录最小行为反例的预期红灯，再实现并记录绿跑与必要重构回归；已有实现的补测标记为特征测试，不伪造测试先行证据。具体门禁增量见 [ADR-0049](adr/0049-tdd-and-differential-quality-gates.md)。
+
 `.husky/pre-push` 拒绝直接推送 `main`，并核对待推送对象等于当前干净 `HEAD`、差异没有空白错误；它不运行全仓验证。普通任务分支可按个人节奏积累多次提交后再推送，pre-push 不会因代码提交重复执行完整门禁。
 
 `docs:check` 运行结构与文档一致性护栏，不是完整 `verify` 的替代品。PR 是进入 main 的唯一入口（[ADR-0039](adr/0039-task-branches-and-protected-main.md)）；现行范围按 [ADR-0042](adr/0042-pr-quick-check-and-scheduled-verify.md) 与 [ADR-0046](adr/0046-daily-code-check-and-optional-ui-verification.md)：代码或混合差异在独立 macOS runner 并行执行全仓类型感知 lint 与差异格式、全仓类型、文档及相关行为测试。功能档后接重档，重档保持串行；快速调用排除 `scripts/ui-render-check.test.ts`，不启动真实 Electron UI 验证。格式配置、忽略规则或依赖清单变化时回退全仓格式检查，不使用按文件内容缓存的类型感知 lint。仅修改两份内置发布清单与 Markdown 时执行格式、发布预检、实际清单的生产服务登记回归和文档检查；其他资源、未知路径、配置、混合代码及空差异保守走代码档。纯 Markdown 只执行 docs:check。分类前检查差异空白，三种路径都汇总到稳定的必需状态 PR Gate；代码档同时要求 lint 与其他检查成功，必需检查失败、取消或跳过均拒绝合并。PR Gate 不依赖完整或专项 UI 验证，快检通过只代表对应范围。
 
 本地与 CI 共用 `scripts/pr-check.mjs`：`npm run check:quick -- --base <ref>` 缺省基点为 origin/main，计入未提交及未跟踪差异；CI 对合并候选以 PR base SHA 执行 `--part lint` 与 `--part checks`，在不同宿主并行。非法基点及检查进程失败/被信号终止均返回失败，每步耗时留在输出和 Actions summary。发布清单与代码混合修改仍强制执行预检与实际消费者回归，不依赖 Vitest 发现动态 JSON 读取。
+
+相关测试之外，内置 Skill/Expert 内容、wheelhouse/依赖锁、Worker/Guardian 入口、迁移及检查脚本强制选择对应动态消费者；已登记的必需测试缺失直接失败，不能借其他测试通过。内置 Skill 的 Markdown 是运行资源，不能进入纯文档档。UI 夹具变化仅记录专项验证待办，不在日常调用真实 Electron。变化的可执行生产 TypeScript 行按 functional/heavy 及强制消费者的命中并集合并，整体至少 80%；边界恰好 80% 通过，缺失/损坏/过期报告或测试期间源码变化拒绝。删除行、纯类型、仅含声明性 import/export 的转发模块、测试和合成夹具不计分；宿主启动及纯视觉资源仅有 scripts/coverage-policy.json 的精确例外与理由，不再豁免整类 index、Preload 或业务组件。快检复用已选择测试进行收集，不另跑全仓测试；覆盖率调用限制最多 4 个 worker，重档仍按原配置串行，不放宽断言或超时。测试结果、计划、源码哈希和差异读数放 coverage/quick，成功或失败均留存 30 天。完整及专项 UI 读数/失败产物也留存 30 天。该门禁与共用档位由护栏「差异覆盖率共用档位并由快检执行，检查证据必须留存」保护。
 
 完整 `npm run verify` 只由用户按需或夜间计划运行。AI 不因局部修改、UI 文件变化、页面 Review、提交、推送或合并自动启动完整验证、真实 UI 检查或页面走查；日常执行快检并记录 UI 未验证项。用户明确安排 UI 验证时执行 `npm run ui:check` 或相应路径。workflow_dispatch 的 scope 缺省 full，对所选分支执行完整 verify；选择 ui 时执行 UI CLI 回归和真实 UI 检查，单独留存截图/读数。schedule 每天北京时间 23:30（UTC 15:30）仍执行 main 的完整 verify，调度可能延迟。相关测试可能因共享模块或配置变化扩大，动态文件读取可能未被选择，完整验证承担整体集成回归。夜间/手动结果不阻止已完成的合并，失败由后续任务分支修复。
 
@@ -61,6 +67,8 @@ AI 交接按“已实现／自动化通过／AI 页面走查／待人工验收�
 完整 `npm run verify` 不按提交、普通分支 push 或 PR 更新自动运行。pre-push 检查推送引用，拒绝 `main` 目标，并要求新增对象解析到当前干净 `HEAD`；它对新分支以 `origin/main` 为基点、对已有远端分支以远端对象为基点执行差异空白检查。钩子的行为回归在 `scripts/pre-push.test.ts` 的独立 Git 夹具中运行，不执行真实推送、不碰产品数据。代码/混合 PR 的快门禁与纯 Markdown PR 的文档门禁由 `.github/workflows/verify.yml` 分类执行，聚合至 `PR Gate`。护栏「提交与推送门禁纪律 › 本地钩子按暂存范围快检并阻止直推 main」和「任务分支隔离并要求并行写任务使用独立 worktree」锁定本地规则对应关系。
 
 PR 更新后，AI 用 `gh run list`/`gh run view` 核对该 PR 最新 SHA 的 Actions 结论，失败时读取失败步骤与产物，在任务分支修复并更新 PR。旧 SHA 的成功不等于本次成功；首发失败后手动绿跑须记录差异与根因，不能仅以重跑关闭问题。workflow 接目标为 `main` 的 PR、手动完整验证与夜间 schedule，不接 push 事件。PR 快门禁、人工验证与完整 verify 分别报告，未经 PR Gate 的本地代码状态不能称为 PR 门禁通过。完整验证失败同样读取该 SHA 的步骤与产物，在后续任务分支修复；不得用旧绿灯或无归因的重跑掩盖失败。
+
+新增领域行为与缺陷修复的日志记录“反例/预期失败 → 红跑命令与退出码 → 绿跑命令与退出码 → 重构后范围”，包括目标代码版本。已有行为补测明确标记特征测试。原始命令输出放临时目录时，日志仍保留失败原因和数字事实，不能只留易清理的路径。夜间 23:30 是计划时间，不保证准时启动；交接核对实际开始/结束时间，失败保留该次 SHA 与阶段，后续同 SHA 绿跑不自动关闭原失败。
 
 巡检由 AI 归因、修复和留证，人类只判定需要改变产品/技术边界的取舍。批次开始记录 `git rev-parse HEAD`；交接时用 `npm run drift:check -- --batch-base=<起点SHA>`，提交后仍用同一起点 SHA，不能以已更新的 origin/main 作为本批次基点。检查与留档有以下边界：
 
@@ -246,6 +254,8 @@ standards/
 - 依赖重型动态导入的用例（PDF / DOCX 解析）要显式提高超时，冷缓存下的首次转换会超过默认 5 秒。
 - **墙钟与内存预算断言只允许住在 `*.bench.test.ts`，由 `npm run bench` 串行跑，不进 `npm run verify`**。原因不是性能不好，而是门禁不可信：137 个测试文件并发抢核时，同一份代码的 p95 会漂到 1.5–5 倍（2026-09-26 实测连跑四轮，红项组合每次都变；串行档里 p95 303ms，预算 1s）。随机红的门禁下一个被牺牲的永远是门禁本身。挪进串行档的同时保留三件事：样本值每次照旧打印、阈值一格没放宽、护栏锁「功能档里不得出现 `performance.now()`」，防止新的计时断言悄悄混回提交门禁。
 - **慢夹具 ≠ 计时基准**：只为构造非法输入而昂贵的用例（例如压缩炸弹夹具要真 DEFLATE 210 MiB）留在功能档，放宽**该用例的超时**并在注释里写明放宽的是夹具时间、断言的是什么边界。放宽超时的注释必须能被反驳：安静机上先量一次实测值（该例约 4 秒），别一上来就写「可能超时」。同批登记的还有两处：`standards/ui-governance.test.ts` 的 ESLint 门禁第一条要冷加载扁平配置与 TS／JSX 解析器（安静机实测 1.8s，整档并发漂到 5.1s 撞过默认 5 秒），`scripts/ui-render-check.test.ts` 三条各真起一次 esbuild＋Electron 子进程（安静机 0.5／1.2／1.6s，macOS runner 上撞线）。两处都按同一判据放宽到 20 秒，并且证过预算真的接在用例上——把常量压到 1ms 时四条全部红成 `Test timed out in 1ms`；阻塞式 `spawnSync` 也是子进程返回后才报超时，所以抬预算是把门禁变可信，不是把红挪个地方。
+- IPC 类型契约以独立 Node 运行真实 TypeScript checker，父测试核对 15 个正例、17 个反例、正常退出和信号；20 秒上限保持。2026-10-14 全量 V8 采样下限制 worker 与串行档仍超时，用户选择独立进程；该编译器进程不承担产品执行行覆盖率。
+- 差异覆盖的真实 V8 正反例会两次启动 Vitest，2026-10-14 并行覆盖采样实测 7.46 秒；快检 CLI 的覆盖门槛正反例两轮子调用实测 6.68 秒。两例各采用 20 秒夹具上限，要求子调用正常退出，断言覆盖率低于 80% 失败、补齐执行后通过，不是性能预算。
 - `scripts/ui-render-check.test.ts` 的 `--acceptance-smoke` 会准备合成验收数据、关闭进程并以新 Electron 进程重开；2026-10-05 macOS runner 在原 20 秒硬上限被终止（spawn status 为 `null`，用例耗时 20.075 秒）。此用例单独采用 60 秒夹具上限，断言仍要求重开成功并且没有写入人工验收结果；这不是性能预算。
 - **重文件走 `heavy` 串行档**：`vitest.config.ts` 的 `HEAVY_TEST_FILES` 收录**单文件墙钟 ≥20s** 的文件（2026-09-29 实测门槛：第 6 名 23.1s、第 7 名 15.9s，中间断档），`npm test` 因此是「functional 并发 → heavy 串行」两次独立调用。判据是墙钟不是主题：这些文件要么渲染整棵应用树（`App.test.tsx` 35 例），要么在真实子进程／解压／数据库上跑，撞 5s 默认超时的从来是它们而不是快文件。**改这类 include／exclude 必须当场核对两档的文件数与用例数**，与改动前当次 `npm test` 的输出逐项对齐（规模快照不进本文，理由见 §1）；漏档的文件会静默消失而不报任何错。**串行档只隔离「我们自己这一批测试文件互相抢核」，隔离不了本机其它进程**：同晚负载 31 时把 `App.test.tsx` 单独跑仍红 5 条超时、且红项与并发跑那次完全不同（红项轮换＝争抢特征），所以「红哪几条随负载而变」只被消掉一半，判读法仍是上一条的「p50／p95 是否同比例放大＋单文件复跑」。
 

@@ -139,6 +139,7 @@ Renderer -> Preload API -> Application -> Agent Core / Infrastructure
 - Schema 变更走版本化迁移并补迁移测试，不得在启动代码里探测后 `ALTER`。
 - 新增领域行为必须有单元测试；Agent 事件顺序、取消和工具失败必须有测试；涉及外部 HTTP 的代码必须可注入 `fetch`，测试不得触网。
 - 修复缺陷时优先添加回归测试。
+- 新增领域行为和缺陷修复保留最小反例的红跑、实现后的绿跑及必要重构回归证据；已有行为补测明确标记为特征测试。日常差异门禁要求新增/修改可执行生产 TypeScript 行覆盖至少 80%，并强制选择动态资源/脚本消费者；具体规则仅见 docs/12 §1/§1.1 与 ADR-0049。
 - 提交时由 pre-commit 按暂存范围做差异空白、定向 ESLint/Prettier 与纯文档 `docs:check`；不在每次提交时运行全仓 typecheck。pre-push 阻止直推 `main`，只核对待推送的干净 HEAD 与差异空白。
 - 代码或混合 PR 在独立 macOS runner 并行执行全仓类型感知 lint 与差异格式、全仓类型、文档和相关行为测试，排除真实 Electron UI CLI 回归；发布清单专档执行格式、预检、实际消费者登记回归与文档检查；纯 Markdown PR 只执行 docs:check。必需状态统一为 PR Gate，main 只通过它接受 PR（见 [ADR-0039](docs/adr/0039-task-branches-and-protected-main.md)、[ADR-0042](docs/adr/0042-pr-quick-check-and-scheduled-verify.md)、[ADR-0046](docs/adr/0046-daily-code-check-and-optional-ui-verification.md)）。
 - 完整 `npm run verify`（lint + format:check + typecheck + test + build + ui:check）只由用户按需或每天北京时间 23:30 的夜间计划运行；AI 不因局部修改、UI 文件变化、页面 Review、提交、推送或合并自动启动完整验证、真实 UI 检查或页面走查。日常使用 npm run check:quick 并记录 UI 未验证项；用户按需可执行 npm run ui:check 或选择 GitHub 手动 scope=ui（见 ADR-0046）。完整验证不要把输出接管道后只看末尾。墙钟与内存预算断言只住在 *.bench.test.ts，由 npm run bench 串行执行，不在 verify 里（见 docs/12 §9）。

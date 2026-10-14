@@ -90,6 +90,14 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: npm run check:quick -- --base "$BASE_SHA" --part checks
+      - name: 留存检查计划、失败阶段和差异覆盖证据
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: quick-quality-evidence
+          path: coverage/quick/
+          retention-days: 30
+          if-no-files-found: warn
 
   quality:
     name: Full verify
@@ -122,7 +130,7 @@ jobs:
             .ui-render/app-journey.partial.json
             .ui-render/app-journey-*/
             .ui-render/process-recovery-*/
-          retention-days: 14
+          retention-days: 30
           include-hidden-files: true
       - name: 留存渲染检查读数
         if: success()
@@ -130,7 +138,7 @@ jobs:
         with:
           name: ui-render-readings
           path: .ui-render/results.json
-          retention-days: 7
+          retention-days: 30
           include-hidden-files: true
 
   ui:
@@ -165,7 +173,7 @@ jobs:
             .ui-render/app-journey.partial.json
             .ui-render/app-journey-*/
             .ui-render/process-recovery-*/
-          retention-days: 14
+          retention-days: 30
           include-hidden-files: true
       - name: 留存渲染检查读数
         if: success()
@@ -173,7 +181,7 @@ jobs:
         with:
           name: manual-ui-render-readings
           path: .ui-render/results.json
-          retention-days: 7
+          retention-days: 30
           include-hidden-files: true
 
   documentation:

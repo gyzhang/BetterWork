@@ -1,32 +1,16 @@
-import { fileURLToPath } from 'node:url';
+import { mergeConfig } from 'vitest/config';
 
-import { defineConfig } from 'vitest/config';
+import coveragePolicy from './scripts/coverage-policy.json';
+import baseConfig from './vitest.config';
 
-const root = fileURLToPath(new URL('.', import.meta.url));
+// 配置共用 production 纳入范围；精确例外与理由只登记在 coverage-policy.json。
+const exceptions = coveragePolicy.exceptions.map((entry) => entry.path);
 
-const alias = {
-  '@betterwork/agent-protocol': `${root}packages/agent-protocol/src/index.ts`,
-  '@betterwork/agent-core/errors': `${root}packages/agent-core/src/errors.ts`,
-  '@betterwork/agent-core': `${root}packages/agent-core/src/index.ts`,
-  '@betterwork/tool-runtime': `${root}packages/tool-runtime/src/index.ts`,
-};
-
-export default defineConfig({
-  resolve: { alias },
+export default mergeConfig(baseConfig, {
   test: {
-    environment: 'node',
-    include: [
-      'standards/**/*.test.ts',
-      'scripts/**/*.test.ts',
-      'packages/**/*.test.ts',
-      'apps/**/*.test.ts',
-      'apps/**/*.test.tsx',
-    ],
-    exclude: ['**/*.bench.test.ts', '**/*.bench.test.tsx'],
-    pool: 'forks',
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'text-summary', 'html', 'json-summary'],
+      reporter: ['text-summary', 'html', 'json', 'json-summary'],
       reportOnFailure: true,
       include: [
         'apps/desktop/src/main/**/*.ts',
@@ -40,19 +24,7 @@ export default defineConfig({
         '**/*.bench.test.ts',
         '**/*.d.ts',
         '**/fixtures/**',
-        '**/index.ts',
-        'apps/desktop/src/main/index.ts',
-        'apps/desktop/src/main/window.ts',
-        'apps/desktop/src/preload/index.ts',
-        'apps/desktop/src/renderer/src/main.tsx',
-        'apps/desktop/src/renderer/src/icons.tsx',
-        'apps/desktop/src/renderer/src/brand-logo.tsx',
-        'apps/desktop/src/renderer/src/echarts-block.tsx',
-        'apps/desktop/src/renderer/src/markdown-preview.tsx',
-        'apps/desktop/src/renderer/src/notifications.tsx',
-        'apps/desktop/src/renderer/src/components/context/**',
-        'apps/desktop/src/renderer/src/components/layout/**',
-        'packages/agent-core/src/fake-provider.ts',
+        ...exceptions,
       ],
     },
   },

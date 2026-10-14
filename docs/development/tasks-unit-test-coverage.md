@@ -14,6 +14,7 @@
 
 ## 1. TDD 工作流
 
+- 新增领域行为/缺陷修复执行最小反例的 Red → Green → Refactor，证据记录按[工程规范 §1.1](../12-engineering-standards.md#11-aihuman-执行与证据)；既有实现补测标记特征测试。2026-10-14 的门禁实施与验证见 [TQ 任务板](tasks-tdd-quality.md)，不把 TC 历史补测改称测试先行。
 - 新增 `*.ts` 必须伴随 `*.test.ts`，同一 PR。
 - 测试行为而非实现：断言输入/输出和可观测副作用，`vi.spyOn` 只用于优化验证。
 - 用公共 API 构造 fixture（`AppStore.open(':memory:')` + 仓储公共方法种子数据）。
@@ -57,7 +58,9 @@ TC00–TC06 全部完成（50 文件 / 981 用例）。
 - `npm run test:coverage` 跑通，输出文本摘要 + HTML 报告
 - 记录基线数字（行覆盖率、分支覆盖率、文件覆盖率）
 
-**已知问题**：V8 覆盖率在此项目配置下收集到 0% 覆盖（文件路径正确但 covered=0）。已安装 istanbul 备选但速度过慢。根因待查：可能是 esbuild transform 与 V8 coverage source map 不匹配。不阻塞后续批次——测试编写不依赖覆盖率数字。
+**历史问题**：TC00 当时在原配置下收集到 0% V8 覆盖，根因未定。2026-10-14 TQ03 改为复用主配置的 functional → heavy 独立调用与报告合并，并用真实 V8 正反例校验覆盖门槛；不将配置修订推导为旧 0% 的已证实根因。当前读数、范围和未验项以 [TQ 任务板](tasks-tdd-quality.md) 与当日日志为准。
+
+**门槛落地（2026-10-14）**：代码快检对新增/修改的可执行生产 TypeScript 行执行整体 ≥80% 门槛，并核对必需报告、本轮时间与源码快照；覆盖例外只登记于 `scripts/coverage-policy.json`。完整覆盖率由 `scripts/test-coverage.mjs` 串行收集并合并，不再维护第二套测试分档。
 
 ## 5. TC01 纯函数 + 简单仓储
 

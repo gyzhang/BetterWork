@@ -40,7 +40,7 @@ let stagedFiles = [];
 try {
   stagedFiles = execFileSync(
     'git',
-    ['diff', '--cached', '--name-only', '--diff-filter=ACMRD', '-z'],
+    ['diff', '--cached', '--no-renames', '--name-only', '--diff-filter=ACMRTD', '-z'],
     { cwd: root, encoding: 'utf8' },
   )
     .split('\0')
@@ -56,6 +56,29 @@ if (process.exitCode === undefined) {
   if (stopOnFailure(run('git', ['diff', '--cached', '--check']))) {
     // Every commit at least checks staged whitespace.
   } else {
+    const unstaged = new Set(
+      execFileSync('git', ['diff', '--name-only', '-z'], { cwd: root, encoding: 'utf8' })
+        .split('\0')
+        .filter((file) => file !== ''),
+    );
+    const deleted = new Set(
+      execFileSync(
+        'git',
+        ['diff', '--cached', '--no-renames', '--name-only', '--diff-filter=D', '-z'],
+        { cwd: root, encoding: 'utf8' },
+      )
+        .split('\0')
+        .filter((file) => file !== ''),
+    );
+    const partialPaths = stagedFiles.filter(
+      (file) => unstaged.has(file) || (deleted.has(file) && existsSync(path.resolve(root, file))),
+    );
+    if (partialPaths.length > 0) {
+      process.stderr.write(
+        `部分暂存的检查路径：请先重新暂存或拆分改动。\n${partialPaths.join('\n')}\n`,
+      );
+      process.exit(1);
+    }
     const existingFiles = stagedFiles.filter((file) => existsSync(path.resolve(root, file)));
     const lintFiles = existingFiles.filter((file) => lintExtensions.has(path.extname(file)));
     const formatFiles = existingFiles.filter((file) => formatExtensions.has(path.extname(file)));

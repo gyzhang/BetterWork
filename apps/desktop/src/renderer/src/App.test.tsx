@@ -2076,6 +2076,11 @@ describe('Artifact navigation in App', () => {
     const firstDetail = detail(firstSummary);
     const secondDetail = detail(secondSummary);
     const pendingSave = deferred<ArtifactSummary>();
+    const firstVersions = deferred<[]>();
+    const secondVersions = deferred<[]>();
+    api.artifacts.listVersions
+      .mockReturnValueOnce(firstVersions.promise)
+      .mockReturnValueOnce(secondVersions.promise);
     api.artifacts.list.mockResolvedValue([firstSummary, secondSummary]);
     api.artifacts.get.mockImplementation(async ({ id }) =>
       id === firstSummary.id ? firstDetail : secondDetail,
@@ -2090,14 +2095,25 @@ describe('Artifact navigation in App', () => {
     );
     fireEvent.click(await screen.findByRole('button', { name: /成果 A/ }));
     await screen.findAllByRole('heading', { name: '成果 A' });
+    await screen.findByText('正在加载版本历史…');
+    await act(async () => {
+      firstVersions.resolve([]);
+      await firstVersions.promise;
+    });
     fireEvent.click(screen.getByRole('button', { name: '编辑此版本' }));
-    fireEvent.click(screen.getByRole('button', { name: '保存新版本' }));
+    fireEvent.click(await screen.findByRole('button', { name: '保存新版本' }));
+    await waitFor(() => expect(api.artifacts.saveMarkdown).toHaveBeenCalledTimes(1));
 
     document.querySelector<HTMLButtonElement>('.page-header-leading button')?.click();
     fireEvent.click(await screen.findByRole('button', { name: /成果 B/ }));
     await screen.findAllByRole('heading', { name: '成果 B' });
+    await screen.findByText('正在加载版本历史…');
+    await act(async () => {
+      secondVersions.resolve([]);
+      await secondVersions.promise;
+    });
     fireEvent.click(screen.getByRole('button', { name: '编辑此版本' }));
-    fireEvent.change(screen.getByRole('textbox', { name: 'Markdown 内容' }), {
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Markdown 内容' }), {
       target: { value: '# B 草稿保留' },
     });
 

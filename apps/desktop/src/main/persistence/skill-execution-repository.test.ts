@@ -1,5 +1,5 @@
 import type { VerifiedExecutionOutput } from '@betterwork/agent-protocol';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { AppStore } from './index';
 import { AppStore as AppStoreClass } from './index';
@@ -13,6 +13,7 @@ const openStore = (): AppStore => {
 
 afterEach(() => {
   for (const store of stores.splice(0)) store.close();
+  vi.restoreAllMocks();
 });
 
 interface SkillFixture {
@@ -344,16 +345,16 @@ describe('SkillExecutionRepository listExecutionsByRun and listOpenExecutions', 
   it('lists executions for a run in creation order', () => {
     const store = openStore();
     const fixture = seedFixture(store);
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1000);
     store.executions.createExecution(baseExecutionInput(fixture, 'exec-list-1'));
+    clock.mockReturnValue(2000);
     store.executions.createExecution(baseExecutionInput(fixture, 'exec-list-2'));
     const listed = store.executions.listExecutionsByRun(fixture.runId);
     expect(listed).toHaveLength(2);
-    const ids = listed.map((execution) => execution.id);
-    expect(ids).toContain('exec-list-1');
-    expect(ids).toContain('exec-list-2');
-    for (let i = 1; i < listed.length; i++) {
-      expect(listed[i - 1]!.createdAt).toBeGreaterThanOrEqual(listed[i]!.createdAt);
-    }
+    expect(listed.map(({ id, createdAt }) => ({ id, createdAt }))).toEqual([
+      { id: 'exec-list-1', createdAt: 1000 },
+      { id: 'exec-list-2', createdAt: 2000 },
+    ]);
   });
 
   it('returns empty for a run with no executions', () => {

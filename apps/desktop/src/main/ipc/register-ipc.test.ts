@@ -1,8 +1,10 @@
+import { spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -30,7 +32,6 @@ import {
   type WorkspaceSummary,
   type WorkspaceTaskGroup,
 } from '@betterwork/agent-protocol';
-import ts from 'typescript';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { AppStore } from '../persistence';
@@ -405,6 +406,22 @@ describe('registerIpc', () => {
       invoke(IpcChannel.CreateTask, { workspaceId: '', title: '', goal: '' }),
     ).rejects.toThrow();
   });
+
+  it.each([
+    undefined,
+    null,
+    [],
+    17,
+    'invalid',
+    { workspaceId: 17, title: 'invalid', goal: 'invalid' },
+  ])(
+    'rejects non-object and mistyped task requests without creating domain records: %j',
+    async (raw) => {
+      const before = store.tasks.listRecent();
+      await expect(invoke(IpcChannel.CreateTask, raw)).rejects.toThrow();
+      expect(store.tasks.listRecent()).toEqual(before);
+    },
+  );
 
   it('retrieves a historical task by stable ID and returns null after deletion', async () => {
     const workspace = store.workspaces.create(
@@ -2177,162 +2194,14 @@ describe('registerIpc', () => {
   });
 });
 
-interface CompileCase {
-  name: string;
-  expression: string;
-}
-
-const request = 'z.object({ text: z.string() })';
-const response = 'z.object({ count: z.number() })';
-const helpers = ['handleInput', 'handleOptionalInput', 'handleNoInput', 'handleScheduleInput'];
-const argument = (helper: string): string =>
-  helper === 'handleNoInput' ? 'emptyRequestSchema' : request;
-const value = (helper: string): string =>
-  helper === 'handleNoInput' ? 'input.sender.id' : 'input.text.length';
-
-const valid: CompileCase[] = helpers.flatMap((helper) =>
-  ['', 'async '].map((asyncPrefix) => ({
-    name: `${helper} ${asyncPrefix || 'sync '}response`,
-    expression: `${helper}('compile-only', ${argument(helper)}, ${response}, ${asyncPrefix}(input) => ({ count: ${value(helper)} }))`,
-  })),
-);
-valid.push(
-  {
-    name: 'request transform produces handler input',
-    expression: `handleInput('compile-only', z.string().transform((text) => text.length), z.string(), (input) => input.toFixed())`,
-  },
-  {
-    name: 'request default produces required handler field',
-    expression: `handleOptionalInput('compile-only', z.object({ text: z.string().default('') }), z.number(), (input) => input.text.length)`,
-  },
-  {
-    name: 'response transform accepts its raw input',
-    expression: `handleInput('compile-only', ${request}, z.string().transform((text) => text.length), () => 'raw')`,
-  },
-  {
-    name: 'response default may fill an omitted field',
-    expression: `handleNoInput('compile-only', emptyRequestSchema, z.object({ count: z.number().default(0) }), () => ({}))`,
-  },
-  {
-    name: 'nullable response preserves missing-object semantics',
-    expression: `handleInput('compile-only', ${request}, ${response}.nullable(), () => null)`,
-  },
-  {
-    name: 'undefined response preserves no-value semantics',
-    expression: `handleNoInput('compile-only', emptyRequestSchema, z.undefined(), (): undefined => {})`,
-  },
-  {
-    name: 'unknown response remains intentionally unconstrained',
-    expression: `handleScheduleInput('compile-only', ${request}, z.unknown(), () => ({ opaque: 'value' }))`,
-  },
-);
-
-const invalid: CompileCase[] = helpers.flatMap((helper) =>
-  ['', 'async '].map((asyncPrefix) => ({
-    name: `${helper} rejects ${asyncPrefix || 'sync '}wrong response`,
-    expression: `${helper}('compile-only', ${argument(helper)}, ${response}, ${asyncPrefix}() => ({ count: 'wrong' }))`,
-  })),
-);
-invalid.push(
-  {
-    name: 'required response field cannot be omitted',
-    expression: `handleInput('compile-only', ${request}, ${response}, () => ({}))`,
-  },
-  {
-    name: 'handler input cannot widen the request Schema',
-    expression: `handleOptionalInput('compile-only', ${request}, ${response}, (input: { text: number }) => ({ count: input.text }))`,
-  },
-  {
-    name: 'handler must use transformed request output',
-    expression: `handleInput('compile-only', z.string().transform((text) => text.length), z.string(), (input) => input.toUpperCase())`,
-  },
-  {
-    name: 'handler returns response transform input rather than output',
-    expression: `handleInput('compile-only', ${request}, z.string().transform((text) => text.length), () => 1)`,
-  },
-  {
-    name: 'defaulted response field still has a type',
-    expression: `handleNoInput('compile-only', emptyRequestSchema, z.object({ count: z.number().default(0) }), () => ({ count: 'wrong' }))`,
-  },
-  {
-    name: 'literal acknowledgement cannot be false',
-    expression: `handleNoInput('compile-only', emptyRequestSchema, z.object({ cleared: z.literal(true) }), () => ({ cleared: false }))`,
-  },
-  {
-    name: 'Schedule handler returns data rather than a transport envelope',
-    expression: `handleScheduleInput('compile-only', ${request}, ${response}, () => ({ status: 'success', data: { count: 0 } }))`,
-  },
-  {
-    name: 'undefined response cannot contain a value',
-    expression: `handleNoInput('compile-only', emptyRequestSchema, z.undefined(), () => 'wrong')`,
-  },
-  {
-    name: 'nullable response does not authorize undefined',
-    expression: `handleInput('compile-only', ${request}, ${response}.nullable(), () => undefined)`,
-  },
-);
-
-// 真实 checker 首轮本地 1.86s、macOS CI 9.58s（38037670498），超过默认 5s。
-// 20s 仅是读取/编译夹具上限，全部正反例与诊断断言保持；不作性能预算。
+// 20s 保留原 checker 上限；父测试核对退出状态和用例数，禁止空跑或异常退出读成成功。
 it('checks actual IPC helper signatures with positive and negative TypeScript fixtures', () => {
-  const sourcePath = fileURLToPath(new URL('./register-ipc.ts', import.meta.url));
-  const configPath = ts.findConfigFile(
-    path.dirname(sourcePath),
-    (fileName) => ts.sys.fileExists(fileName),
-    'tsconfig.json',
+  const fixture = fileURLToPath(
+    new URL('../../../../../scripts/fixtures/ipc-type-contract.mjs', import.meta.url),
   );
-  if (!configPath) throw new Error('Repository tsconfig is missing');
-  const config = ts.readConfigFile(configPath, (fileName) => ts.sys.readFile(fileName));
-  expect(config.error).toBeUndefined();
-  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, path.dirname(configPath));
-  expect(parsed.errors).toEqual([]);
-  let source = readFileSync(sourcePath, 'utf8') + '\n';
-  const cases = [...valid, ...invalid].map((probe) => {
-    const start = source.length;
-    source += `${probe.expression};\n`;
-    return { ...probe, start, end: source.length, rejects: invalid.includes(probe) };
-  });
-  // 只在 checker 的内存源中追加调用，私有 helper 无需为测试导出或在 Electron 中执行。
-  const options = { ...parsed.options, noEmit: true };
-  const host = ts.createCompilerHost(options);
-  const getSourceFile = host.getSourceFile.bind(host);
-  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) =>
-    path.resolve(fileName) === sourcePath
-      ? ts.createSourceFile(fileName, source, languageVersion, true)
-      : getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
-  const program = ts.createProgram({ rootNames: [sourcePath], options, host });
-  const diagnostics = ts.getPreEmitDiagnostics(program);
-  const format = (diagnostic: ts.Diagnostic): string =>
-    ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
-  const unexpected = diagnostics.filter(
-    (diagnostic) =>
-      diagnostic.file?.fileName !== sourcePath ||
-      diagnostic.start === undefined ||
-      !cases.some(
-        (probe) =>
-          probe.rejects &&
-          diagnostic.start !== undefined &&
-          diagnostic.start >= probe.start &&
-          diagnostic.start < probe.end,
-      ),
-  );
-  expect(unexpected.map(format)).toEqual([]);
-  for (const probe of cases) {
-    const errors = diagnostics.filter(
-      (diagnostic) =>
-        diagnostic.file?.fileName === sourcePath &&
-        diagnostic.start !== undefined &&
-        diagnostic.start >= probe.start &&
-        diagnostic.start < probe.end,
-    );
-    if (probe.rejects) {
-      expect(errors.length, probe.name).toBeGreaterThan(0);
-      expect(
-        errors.every((error) => [2322, 2339, 2345].includes(error.code)),
-        probe.name,
-      ).toBe(true);
-    } else {
-      expect(errors.map(format), probe.name).toEqual([]);
-    }
-  }
+  const result = spawnSync(process.execPath, [fixture], { encoding: 'utf8', timeout: 20_000 });
+  expect(result.error).toBeUndefined();
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.signal).toBeNull();
+  expect(JSON.parse(result.stdout)).toEqual({ valid: 15, invalid: 17 });
 }, 20_000);

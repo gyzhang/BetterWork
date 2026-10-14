@@ -20,6 +20,12 @@ describe('PR 验证按差异范围选择', () => {
     expect(result.stdout).toBe('has_code=false\ndocs_only=true\nresources_only=false\n');
   });
 
+  it('treats a builtin Skill instruction as an executable resource dependency', () => {
+    const result = classifyFiles(['resources/skills/example/SKILL.md']);
+    expect(result.status, String(result.stderr)).toBe(0);
+    expect(result.stdout).toBe('has_code=true\ndocs_only=false\nresources_only=false\n');
+  });
+
   it('代码与文档混合差异选择代码快门禁', () => {
     const result = classifyFiles(['README.md', 'apps/desktop/src/main.ts']);
     expect(result.status, String(result.stderr)).toBe(0);

@@ -1,5 +1,5 @@
 import type { DependencyOperationStatus } from '@betterwork/agent-protocol';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   type CreateOperationInput,
@@ -16,6 +16,7 @@ const openStore = (): AppStore => {
 
 afterEach(() => {
   for (const store of stores.splice(0)) store.close();
+  vi.restoreAllMocks();
 });
 
 /**
@@ -118,18 +119,21 @@ describe('DependencyOperationRepository lists operations by environment', () => 
     const store = openStore();
     const envA = createTestEnvironment(store, 'env-A', 'key-A');
     const envB = createTestEnvironment(store, 'env-B', 'key-B');
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1000);
     store.dependencyOperations.createOperation({
       environmentId: envA.environmentId,
       environmentKey: envA.environmentKey,
       kind: 'prepare',
       id: 'op-1',
     });
+    clock.mockReturnValue(2000);
     store.dependencyOperations.createOperation({
       environmentId: envA.environmentId,
       environmentKey: envA.environmentKey,
       kind: 'prepare',
       id: 'op-2',
     });
+    clock.mockReturnValue(3000);
     store.dependencyOperations.createOperation({
       environmentId: envB.environmentId,
       environmentKey: envB.environmentKey,
@@ -138,8 +142,10 @@ describe('DependencyOperationRepository lists operations by environment', () => 
     });
     const listA = store.dependencyOperations.listOperationsByEnvironment('env-A');
     expect(listA).toHaveLength(2);
-    expect(listA[0]!.id).toBe('op-1');
-    expect(listA[1]!.id).toBe('op-2');
+    expect(listA.map(({ id, createdAt }) => ({ id, createdAt }))).toEqual([
+      { id: 'op-2', createdAt: 2000 },
+      { id: 'op-1', createdAt: 1000 },
+    ]);
   });
 
   it('returns an empty array for an environment with no operations', () => {

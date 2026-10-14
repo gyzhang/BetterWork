@@ -1,2 +1,2 @@
-# 只检查暂存范围；完整门禁在推送前对最终提交执行（docs/12 §1）。
+# 暂存路径与工作树一致后按范围快检；远端 PR 门禁按 docs/12 §1 收口。
 node scripts/pre-commit-check.mjs

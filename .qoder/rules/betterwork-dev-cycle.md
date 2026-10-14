@@ -30,6 +30,8 @@ GitHub Actions → Verify → Run workflow 可选分支和 scope=full（缺省�
 
 门禁范围现在有机器强制：`.husky/pre-commit` 按暂存路径运行 `scripts/pre-commit-check.mjs`，`.husky/pre-push` 运行 `scripts/pre-push-check.mjs` 阻止直推 `main` 并核对 HEAD/空白差异；PR workflow 按差异分类并提供稳定 `PR Gate`。护栏「提交与推送门禁纪律 › 本地钩子按暂存范围快检并阻止直推 main」以及提交/推送/分类夹具测试锁住各范围的检查选择。（docs/12 §1）
 
+pre-commit 检查路径另有未暂存变化时拒绝，不能以工作树修正替暂存快照通过。快检强制选择动态资源与脚本消费者，变化的可执行生产 TypeScript 行按各档命中并集达到 80%；缺报告、旧报告、源码变化和必需消费者缺失失败。计划、测试、覆盖率与失败阶段留存 30 天，UI 变化只记录待专项验证。新增行为/缺陷修复的红绿证据及特征测试区分按唯一规范执行。（docs/12 §1/§1.1、ADR-0049）
+
 需要单独定位时：
 
     npm run lint          # 或 npm run lint:fix 自动修复导入顺序等

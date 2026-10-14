@@ -1,16 +1,16 @@
 {
-  "savedAt": "2026-10-11 15:29",
+  "savedAt": "2026-10-14 21:55",
   "readings": {
-    "判据总数": 154,
-    "现行文档点名次数": 14,
-    "被点过名的判据": 10,
-    "测试文件": 330,
-    "用例": 2894,
-    "结构护栏": 154,
-    "例外登记": 203,
+    "判据总数": 156,
+    "现行文档点名次数": 15,
+    "被点过名的判据": 11,
+    "测试文件": 349,
+    "用例": 3375,
+    "结构护栏": 156,
+    "例外登记": 204,
     "eslint配置块": 6,
     "规则文件": 7,
-    "产品源码行": 100057,
+    "产品源码行": 104231,
     "巡检窗口天数": 14
   },
   "ruleSnapshot": {
@@ -66,5 +66,5 @@
       "standards/coding-standard.test.ts › 新增 UI 的实际基座归属 › 新命名表面不能自造卡片或徽标外壳 › owners": "92bb0f10115976a86172f280c87cb4bf569ba95be9c674b5b313a9f1bca1c01b"
     }
   },
-  "reviewReason": "Reviewed TC01 commit 3e28f29: the only ESLint change is a test-only override for non-Error rejection cases; production rule strength is unchanged."
+  "reviewReason": "新增覆盖护栏 reason 类型字段被文本计数计入；已 Review 原整类排除收紧为 5 个宿主/纯视觉精确例外，没有放宽源码豁免或规则指纹"
 }
