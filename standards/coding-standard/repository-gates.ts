@@ -28,6 +28,7 @@ describe('提交与推送门禁纪律', () => {
     needs?: string | string[];
     'runs-on': string;
     steps: {
+      if?: string;
       run?: string;
       env?: Record<string, string>;
       uses?: string;
@@ -298,11 +299,44 @@ describe('提交与推送门禁纪律', () => {
     const artifactUploads = workflow
       .split(/- name:/u)
       .filter((block) => block.includes('uses: actions/upload-artifact@v6'));
-    expect(artifactUploads).toHaveLength(4);
+    expect(artifactUploads).toHaveLength(5);
     expect(
-      artifactUploads.every((block) => block.includes('include-hidden-files: true')),
+      artifactUploads
+        .filter((block) => block.includes('.ui-render/'))
+        .every((block) => block.includes('include-hidden-files: true')),
       'UI 检查产物目录以 .ui-render 开头，上传步骤必须显式包含隐藏文件',
     ).toBe(true);
+  });
+
+  it('差异覆盖率共用档位并由快检执行，检查证据必须留存', () => {
+    const scripts = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
+    expect(scripts.scripts['test:coverage']).toBe('node scripts/test-coverage.mjs');
+    expect(scripts.scripts['coverage:diff']).toBe('node scripts/diff-coverage.mjs');
+    expect(read('vitest.coverage.config.ts')).toContain("import baseConfig from './vitest.config'");
+    const plan = read('scripts/pr-check-plan.mjs');
+    expect(plan).toContain('scripts/diff-coverage.mjs');
+    expect(plan).toContain('--coverage');
+    expect(plan).toContain('dynamic consumers');
+    const quick = readVerifyWorkflow().jobs.quick;
+    const evidence = quick?.steps.find((step) => step.with?.name === 'quick-quality-evidence');
+    expect(evidence?.if).toBe('always()');
+    expect(evidence?.with?.path).toBe('coverage/quick/');
+    expect(evidence?.with?.['retention-days']).toBe(30);
+    for (const job of ['quality', 'ui'])
+      for (const step of readVerifyWorkflow().jobs[job]?.steps ?? [])
+        if (step.uses?.startsWith('actions/upload-artifact@'))
+          expect(step.with?.['retention-days']).toBe(30);
+    const policy = JSON.parse(read('scripts/coverage-policy.json')) as {
+      exceptions: { path: string; reason: string }[];
+    };
+    expect(policy.exceptions.map((item) => item.path)).toEqual([
+      'apps/desktop/src/main/index.ts',
+      'apps/desktop/src/main/window.ts',
+      'apps/desktop/src/renderer/src/main.tsx',
+      'apps/desktop/src/renderer/src/icons.tsx',
+      'apps/desktop/src/renderer/src/brand-logo.tsx',
+    ]);
+    for (const item of policy.exceptions) expect(item.reason.length).toBeGreaterThan(0);
   });
 
   it('治理巡检装在工具链里，但不进提交门禁', () => {

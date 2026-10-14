@@ -1,0 +1,24 @@
+{
+  "exceptions": [
+    {
+      "path": "apps/desktop/src/main/index.ts",
+      "reason": "Electron 安装态装配入口，独立 UI/安装验收；业务服务不豁免。"
+    },
+    {
+      "path": "apps/desktop/src/main/window.ts",
+      "reason": "原生窗口装配，窗口/主题结构护栏及专项 UI 验证。"
+    },
+    {
+      "path": "apps/desktop/src/renderer/src/main.tsx",
+      "reason": "React 挂载入口，应用旅程验证。"
+    },
+    {
+      "path": "apps/desktop/src/renderer/src/icons.tsx",
+      "reason": "纯图标资源，结构护栏与专项视觉验证。"
+    },
+    {
+      "path": "apps/desktop/src/renderer/src/brand-logo.tsx",
+      "reason": "品牌图形资源，人工定稿与专项视觉验证。"
+    }
+  ]
+}

@@ -211,6 +211,8 @@ pre-push 阻止直推 main，并核对干净 HEAD 与空白差异。PR 合并后
 以下能力符合长期方向，但**不是自动授权的下一步**：Embedding 与混合检索、带 Citation 的研究流与大纲确认、网页正文 Fetch、DOCX 报告、Excel 分析、PPT、长期 Memory、Expert/Skill/Kit。开始其中任一项前，应先与项目负责人确认优先级；再更新 [MVP 与路线图](07-mvp-and-roadmap.md)，并在涉及跨模块关系或关键技术选择时新增 ADR。
 ## 8. 变更与提交纪律
 
+TDD 与差异质量门禁增量按 [ADR-0049](adr/0049-tdd-and-differential-quality-gates.md)、[工程规范 §1/§1.1](12-engineering-standards.md)和 [TQ 任务板](development/tasks-tdd-quality.md)：暂存/工作树一致性、动态消费者、80% 差异可执行行覆盖、源码快照与 30 天检查留证已进入本轮实现；实现/本地通过/远端启用分别报告，不因局部绿跑宣称 CI 已发布。既有 UI/模型/安装与人工尾项继续独立验收。
+
 每次开始先执行 `git status --short`。工作树并不一定总是干净；既有改动属于用户，不能删除、覆盖或夹带进无关提交。每个任务使用自己的分支；并行写任务使用独立 worktree 和分支，不共享编辑目录或 Git 暂存区。单个 checkout 同一时刻只允许一个写任务。提交前核对 `git status` 与 `git diff`，追加共享文档（如 `docs/logs/` 当天日志）前先重读文件末尾。每个提交保持聚焦，必要的测试、文档和 ADR 与实现放在同一变更中；PR 快门禁由 PR Gate 收口，完整 verify 按用户按需/夜间计划运行。PR 合并后清理已合并分支并归档/移除 worktree；未提交或未合并内容必须保留。
 
 禁止提交 `.env`、API Key、数据库、构建产物、用户资料或本地工作文件。遇到产品范围、数据迁移策略或安全边界不明确时，先停在文档/ADR 层澄清，不要把猜测固化为实现。

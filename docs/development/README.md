@@ -1,5 +1,7 @@
 # 阶段 A 开发执行手册（供 5.6 Luna 使用）
 
+2026-10-14 工程改进进入 [TQ00–TQ06 任务板](tasks-tdd-quality.md)；沿用 [ADR-0046](../adr/0046-daily-code-check-and-optional-ui-verification.md) 的日常/按需 UI 分工，新增契约见 [ADR-0049](../adr/0049-tdd-and-differential-quality-gates.md)，不改其他系列的人类验收状态。
+
 > 当前平台覆盖：2026-10-02 [ADR-0036](../adr/0036-macos-only-platform-scope.md) 已接受，Windows A09 退出产品与验收范围。下文 blocked 与早期跨平台条件保留为历史记录，不构成待开工任务，不阻塞当前 macOS 验收；本次不把未验收项改为 done。
 
 
