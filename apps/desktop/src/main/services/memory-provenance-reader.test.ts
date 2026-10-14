@@ -2,6 +2,7 @@ import type { AgentRuntimeEvent } from '@betterwork/agent-protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AppStore } from '../persistence';
+import { seedReplayRun } from './fixtures/history-memory-fixtures';
 import { createStoreProvenanceReader } from './memory-provenance-reader';
 
 const stores: AppStore[] = [];
@@ -180,5 +181,163 @@ describe('StoreProvenanceReader assistant source evidence', () => {
     expect(reader.runAssistantAnswer('run', 'answer')).toBeUndefined();
     expect(reader.runAssistantAnswer('run', 'empty')).toBeUndefined();
     expect(store.runs.getLatestNonEmptyMessageCompletion('run')?.id).toBe('answer');
+  });
+});
+
+describe('persisted provenance identity and missing audit boundaries', () => {
+  const tracedRun = (
+    store: AppStore,
+    options: { omitContext?: boolean; omitSnapshot?: boolean } = {},
+  ) => {
+    const run = store.runs.get('run')!;
+    const workspaceId = store.tasks.getWorkspaceId(run.taskId)!;
+    const runId = seedReplayRun(store, {
+      taskId: run.taskId,
+      sessionId: run.sessionId,
+      workspaceId,
+      index: 1,
+      ...options,
+    });
+    return { runId, taskId: run.taskId, workspaceId };
+  };
+
+  it.each([
+    'runPrompt',
+    'runWorkspace',
+    'runDependencies',
+    'checkpointDependencies',
+    'artifactVersion',
+    'artifactVersionDependencies',
+    'memoryRevision',
+  ] as const)('refuses to invent %s for an unknown identity', (action) => {
+    const { reader } = setup();
+    expect(reader[action]('missing')).toBeUndefined();
+  });
+
+  it.each([
+    { omitContext: true },
+    { omitSnapshot: true },
+    { omitContext: true, omitSnapshot: true },
+  ])('requires both persisted preparation and memory audit facts (%j)', (options) => {
+    const { store, reader } = setup();
+    const h = tracedRun(store, options);
+    expect(reader.runDependencies(h.runId)).toBeUndefined();
+    expect(reader.runWorkspace(h.runId)).toBe(h.workspaceId);
+    expect(reader.runPrompt(h.runId)).toBe('prompt 1');
+  });
+
+  it('accepts a proven empty dependency set while refusing unaudited absence', () => {
+    const { store, reader } = setup();
+    const h = tracedRun(store);
+    expect(reader.runDependencies(h.runId)).toEqual({
+      workspaceId: h.workspaceId,
+      materials: [],
+      memories: [],
+    });
+    expect(reader.runDependencies('run')).toBeUndefined();
+  });
+
+  it('reads checkpoint fields from registered rows and refuses an unaudited summary', () => {
+    const { store, reader } = setup();
+    const run = store.runs.get('run')!;
+    store.discussionCheckpoints.create(run.taskId, {
+      id: 'checkpoint',
+      taskId: run.taskId,
+      stage: 'report',
+      title: 'Review',
+      summary: 'Persisted summary',
+      feedback: 'Persisted feedback',
+      artifactVersionIds: [],
+    });
+    expect(reader.checkpointField('checkpoint', 'summary')).toBe('Persisted summary');
+    expect(reader.checkpointField('checkpoint', 'feedback')).toBe('Persisted feedback');
+    expect(reader.checkpointField('missing', 'summary')).toBeUndefined();
+    expect(reader.checkpointDependencies('checkpoint')).toBeUndefined();
+  });
+
+  it('joins a checkpoint to the exact audited Run instead of the latest Task Run', () => {
+    const { store, reader } = setup();
+    const h = tracedRun(store);
+    store.discussionCheckpoints.create(h.taskId, {
+      id: 'checkpoint',
+      taskId: h.taskId,
+      runId: h.runId,
+      stage: 'report',
+      title: 'Review',
+      summary: 'Summary',
+      artifactVersionIds: [],
+    });
+    expect(reader.checkpointDependencies('checkpoint')).toEqual({
+      workspaceId: h.workspaceId,
+      materials: [],
+      memories: [],
+    });
+    const other = tracedRun(store, { omitContext: true });
+    expect(reader.checkpointDependencies('checkpoint')).toEqual({
+      workspaceId: h.workspaceId,
+      materials: [],
+      memories: [],
+    });
+    expect(reader.runDependencies(other.runId)).toBeUndefined();
+  });
+
+  it('keeps artifact text and hash pinned to the selected version across later edits', () => {
+    const { store, reader } = setup();
+    const h = tracedRun(store);
+    const first = store.artifacts.saveMarkdown({
+      taskId: h.taskId,
+      runId: h.runId,
+      origin: 'assistant-run',
+      title: 'Report',
+      content: 'First content',
+    });
+    const second = store.artifacts.saveMarkdown({
+      taskId: h.taskId,
+      artifactId: first.id,
+      origin: 'user-edit',
+      title: 'Report',
+      content: 'Second content',
+    });
+    const original = reader.artifactVersion(first.currentVersionId);
+    expect(original?.readableText).toBe('First content');
+    expect(reader.artifactVersion(second.currentVersionId)?.readableText).toBe('Second content');
+    expect(reader.artifactVersion(second.currentVersionId)?.contentHash).not.toBe(
+      original?.contentHash,
+    );
+    expect(reader.artifactVersionDependencies(second.currentVersionId)).toEqual({
+      workspaceId: h.workspaceId,
+      materials: [],
+      memories: [],
+    });
+  });
+
+  it('refuses a user-only artifact chain and an assistant version without preparation audit', () => {
+    const { store, reader } = setup();
+    const h = tracedRun(store, { omitContext: true });
+    const manual = store.artifacts.saveMarkdown({
+      taskId: h.taskId,
+      origin: 'user-edit',
+      title: 'Manual',
+      content: 'Manual content',
+    });
+    const assistant = store.artifacts.saveMarkdown({
+      taskId: h.taskId,
+      runId: h.runId,
+      origin: 'assistant-run',
+      title: 'Assistant',
+      content: 'Assistant content',
+    });
+    expect(reader.artifactVersionDependencies(manual.currentVersionId)).toBeUndefined();
+    expect(reader.artifactVersionDependencies(assistant.currentVersionId)).toBeUndefined();
+    store.discussionCheckpoints.create(h.taskId, {
+      id: 'checkpoint',
+      taskId: h.taskId,
+      runId: h.runId,
+      stage: 'report',
+      title: 'Review',
+      summary: 'Summary',
+      artifactVersionIds: [assistant.currentVersionId],
+    });
+    expect(reader.checkpointDependencies('checkpoint')).toBeUndefined();
   });
 });

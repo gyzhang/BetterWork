@@ -1,4 +1,18 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  ftruncateSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -157,4 +171,150 @@ describe('InputSnapshotService', () => {
       failureCode: 'snapshot_missing',
     });
   });
+});
+
+describe('input snapshot integrity and failure boundaries', () => {
+  it.each([
+    ['missing workspace', 'workspace_missing'],
+    ['missing source', 'source_missing'],
+    ['workspace root', 'outside_workspace'],
+    ['directory source', 'special_file_rejected'],
+    ['file parent', 'special_file_rejected'],
+    ['linked parent', 'symlink_rejected'],
+    ['oversized source', 'source_too_large'],
+  ])('rejects %s without persisting a partial snapshot', async (scenario, code) => {
+    const h = createHarness();
+    const source = path.join(h.root, 'input.txt');
+    writeFileSync(source, 'original');
+    let sourcePath = source;
+    let workspaceRoot = h.root;
+    if (scenario === 'missing workspace') workspaceRoot = path.join(h.root, 'missing');
+    if (scenario === 'missing source') sourcePath = path.join(h.root, 'missing.txt');
+    if (scenario === 'workspace root') sourcePath = h.root;
+    if (scenario === 'directory source') {
+      sourcePath = path.join(h.root, 'folder');
+      mkdirSync(sourcePath);
+    }
+    if (scenario === 'file parent') sourcePath = path.join(source, 'child.txt');
+    if (scenario === 'linked parent') {
+      const directory = path.join(h.root, 'real');
+      mkdirSync(directory);
+      writeFileSync(path.join(directory, 'child.txt'), 'child');
+      symlinkSync(directory, path.join(h.root, 'linked'));
+      sourcePath = path.join(h.root, 'linked', 'child.txt');
+    }
+    if (scenario === 'oversized source') {
+      const fd = openSync(source, 'w');
+      ftruncateSync(fd, 100 * 1024 * 1024 + 1);
+      closeSync(fd);
+    }
+    await expect(
+      h.service.create({ workspaceId: h.workspaceId, workspaceRoot, sourcePath }),
+    ).rejects.toMatchObject({ code });
+    expect(h.store.inputSnapshots.list()).toEqual([]);
+    expect(existsSync(path.join(h.userData, 'input-snapshots'))).toBe(false);
+  });
+
+  it.each(['DATA.CSV', 'no-extension', 'nested/中文.txt'])(
+    'copies %s with normalized format and read-only permissions',
+    async (relativePath) => {
+      const h = createHarness();
+      const source = path.join(h.root, relativePath);
+      mkdirSync(path.dirname(source), { recursive: true });
+      writeFileSync(source, 'content');
+      const result = await h.service.create({
+        workspaceId: h.workspaceId,
+        workspaceRoot: h.root,
+        sourcePath: relativePath,
+      });
+      const destination = h.service.resolvePath(result.snapshot);
+      expect(result.snapshot.format).toBe(
+        relativePath === 'DATA.CSV' ? 'csv' : relativePath === 'no-extension' ? 'unknown' : 'txt',
+      );
+      expect(result.snapshot.sourcePath).toBe(relativePath);
+      expect(statSync(destination).mode & 0o777).toBe(0o400);
+      expect(readFileSync(source, 'utf8')).toBe('content');
+      expect(await h.service.verify(result.snapshot)).toBe(true);
+      expect(await h.service.verify({ ...result.snapshot, status: 'preparing' })).toBe(false);
+    },
+  );
+
+  it('keeps the old version immutable when the source changes', async () => {
+    const h = createHarness();
+    const source = path.join(h.root, 'input.txt');
+    const request = { workspaceId: h.workspaceId, workspaceRoot: h.root, sourcePath: source };
+    writeFileSync(source, 'first');
+    const first = await h.service.create(request);
+    writeFileSync(source, 'second');
+    const second = await h.service.create(request);
+    expect(second.snapshot.id).not.toBe(first.snapshot.id);
+    expect(readFileSync(h.service.resolvePath(first.snapshot), 'utf8')).toBe('first');
+    expect(readFileSync(h.service.resolvePath(second.snapshot), 'utf8')).toBe('second');
+    expect(h.store.inputSnapshots.list('ready')).toHaveLength(2);
+  });
+
+  it('rejects a corrupt existing blob without replacing it and records the failed attempt', async () => {
+    const h = createHarness();
+    const source = path.join(h.root, 'input.txt');
+    writeFileSync(source, 'original');
+    const request = { workspaceId: h.workspaceId, workspaceRoot: h.root, sourcePath: source };
+    const first = await h.service.create(request);
+    const destination = h.service.resolvePath(first.snapshot);
+    chmodSync(destination, 0o600);
+    writeFileSync(destination, 'corruption');
+    expect(await h.service.verify(first.snapshot)).toBe(false);
+    await expect(h.service.create(request)).rejects.toMatchObject({ code: 'snapshot_corrupt' });
+    expect(readFileSync(destination, 'utf8')).toBe('corruption');
+    expect(h.store.inputSnapshots.list('failed')).toHaveLength(1);
+    expect(h.store.inputSnapshots.list('failed')[0]?.failureCode).toBe('snapshot_corrupt');
+    expect(readdirSync(path.dirname(destination))).toEqual(['content']);
+    expect(await h.service.recover()).toEqual({ cancelled: 0, failed: 1, removedFiles: 0 });
+    expect(await h.service.recover()).toEqual({ cancelled: 0, failed: 0, removedFiles: 0 });
+  });
+
+  it('records write failure when managed storage is obstructed and leaves the source untouched', async () => {
+    const h = createHarness();
+    const source = path.join(h.root, 'input.txt');
+    writeFileSync(source, 'original');
+    writeFileSync(path.join(h.userData, 'input-snapshots'), 'obstruction');
+    await expect(
+      h.service.create({ workspaceId: h.workspaceId, workspaceRoot: h.root, sourcePath: source }),
+    ).rejects.toMatchObject({ code: 'write_failed' });
+    expect(h.store.inputSnapshots.list('failed')[0]?.failureCode).toBe('write_failed');
+    expect(readFileSync(source, 'utf8')).toBe('original');
+  });
+
+  it('retains referenced blobs and ignores unrelated entries during idempotent recovery', async () => {
+    const h = createHarness();
+    writeFileSync(path.join(h.root, 'input.txt'), 'known');
+    const ready = await h.service.create({
+      workspaceId: h.workspaceId,
+      workspaceRoot: h.root,
+      sourcePath: 'input.txt',
+    });
+    const root = path.join(h.userData, 'input-snapshots');
+    mkdirSync(path.join(root, 'unrelated'));
+    writeFileSync(path.join(root, 'readme'), 'keep');
+    expect(await h.service.recover()).toEqual({ cancelled: 0, failed: 0, removedFiles: 0 });
+    expect(await h.service.verify(ready.snapshot)).toBe(true);
+    expect(existsSync(path.join(root, 'unrelated'))).toBe(true);
+    expect(existsSync(path.join(root, 'readme'))).toBe(true);
+  });
+
+  it.each(['../outside', 'input-snapshots/../outside', 'other/content'])(
+    'rejects an invalid managed key %s',
+    async (fileKey) => {
+      const h = createHarness();
+      writeFileSync(path.join(h.root, 'input.txt'), 'known');
+      const { snapshot } = await h.service.create({
+        workspaceId: h.workspaceId,
+        workspaceRoot: h.root,
+        sourcePath: 'input.txt',
+      });
+      expect(() => h.service.resolvePath({ ...snapshot, fileKey })).toThrowError(
+        expect.objectContaining({ code: 'snapshot_corrupt' }),
+      );
+      expect(await h.service.verify({ ...snapshot, fileKey })).toBe(false);
+    },
+  );
 });

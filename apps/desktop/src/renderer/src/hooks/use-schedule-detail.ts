@@ -102,6 +102,8 @@ export function useScheduleDetail(detail: ScheduleDetail): ScheduleDetailState {
       setOccurrenceLoading(true);
       setOccurrenceError('');
       if (!preservePrevious) {
+        sourceRequestId.current += 1;
+        evidenceRequestId.current += 1;
         setOccurrence(undefined);
         setSourceItems([]);
         setEvidence([]);

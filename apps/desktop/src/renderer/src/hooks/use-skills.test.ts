@@ -219,3 +219,163 @@ describe('useSkills 的取数收口', () => {
     expect(result.current.detailLoading).toBe(false);
   });
 });
+
+describe('Skill mutations and import outcomes', () => {
+  const actions = () => {
+    install(undefined, async ({ id }) => detailOf(id));
+    const ipc = {
+      list: vi.fn(async () => [summary]),
+      importFromDialog: vi.fn(async () => ({ cancelled: false, skill: summary })),
+      importFromUrl: vi.fn(async () => ({ cancelled: false, skill: summary })),
+      setTrust: vi.fn(async () => ({ skill: { ...summary, trustStatus: 'trusted' } })),
+      revokeTrust: vi.fn(async () => ({ skill: summary })),
+      setEnabled: vi.fn(async () => ({ skill: { ...summary, enabled: false } })),
+      copy: vi.fn(async () => ({ skill: { ...summary, id: 'copy-1' } })),
+      export: vi.fn(async (): Promise<{ cancelled: boolean; filePath?: string }> => ({
+        cancelled: false,
+        filePath: '/tmp/skill.zip',
+      })),
+      saveRuntimeProfile: vi.fn(async () => ({ skill: summary })),
+    };
+    Object.assign(window.betterwork.skills, ipc);
+    return ipc;
+  };
+
+  it.each(['dialog', 'url'] as const)(
+    'refreshes and selects successful %s imports and clears the busy state',
+    async (kind) => {
+      const ipc = actions();
+      const h = renderSkills();
+      await waitFor(() => expect(h.result.current.loading).toBe(false));
+      await act(async () => {
+        if (kind === 'dialog') await h.result.current.importSkill();
+        else
+          expect(await h.result.current.importSkillFromUrl('https://example.test/skill')).toBe(
+            true,
+          );
+      });
+      await waitFor(() => expect(h.result.current.selectedId).toBe(summary.id));
+      expect(h.result.current.importing).toBe(false);
+      expect(h.result.current.error).toBe('');
+      expect(h.result.current.toast).toContain('默认未信任');
+      if (kind === 'url')
+        expect(ipc.importFromUrl).toHaveBeenCalledWith({ url: 'https://example.test/skill' });
+      act(() => h.result.current.dismissToast());
+      expect(h.result.current.toast).toBe('');
+    },
+  );
+
+  it.each(['dialog', 'url'] as const)(
+    'leaves selection unchanged on a cancelled %s import',
+    async (kind) => {
+      const ipc = actions();
+      ipc.importFromDialog.mockResolvedValue({ cancelled: true, skill: summary });
+      ipc.importFromUrl.mockResolvedValue({ cancelled: true, skill: summary });
+      const h = renderSkills();
+      await waitFor(() => expect(h.result.current.loading).toBe(false));
+      await act(async () => {
+        if (kind === 'dialog') await h.result.current.importSkill();
+        else
+          expect(await h.result.current.importSkillFromUrl('https://example.test/skill')).toBe(
+            false,
+          );
+      });
+      expect(h.result.current.selectedId).toBeUndefined();
+      expect(h.result.current.toast).toBe('');
+      expect(h.result.current.importing).toBe(false);
+      expect(ipc.list).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(['dialog', 'url'] as const)(
+    'presents %s import failures and restores an actionable state',
+    async (kind) => {
+      const ipc = actions();
+      ipc.importFromDialog.mockRejectedValue(new Error('import rejected'));
+      ipc.importFromUrl.mockRejectedValue(new Error('import rejected'));
+      const h = renderSkills();
+      await waitFor(() => expect(h.result.current.loading).toBe(false));
+      await act(async () => {
+        if (kind === 'dialog') await h.result.current.importSkill();
+        else
+          expect(await h.result.current.importSkillFromUrl('https://example.test/skill')).toBe(
+            false,
+          );
+      });
+      expect(h.result.current.error).toBe('import rejected');
+      expect(h.result.current.importing).toBe(false);
+      expect(h.result.current.toast).toBe('');
+      act(() => h.result.current.clearError());
+      expect(h.result.current.error).toBe('');
+    },
+  );
+
+  it.each(['setTrust', 'revokeTrust', 'setEnabled', 'copy'] as const)(
+    'applies %s to the stable skill ID and reloads its detail',
+    async (action) => {
+      const ipc = actions();
+      const h = renderSkills();
+      await waitFor(() => expect(h.result.current.loading).toBe(false));
+      act(() => {
+        if (action === 'setTrust') h.result.current.setTrust(summary, true);
+        else if (action === 'setEnabled') h.result.current.setEnabled(summary, false);
+        else h.result.current[action](summary);
+      });
+      await waitFor(() => expect(h.result.current.toast).not.toBe(''));
+      expect(ipc[action]).toHaveBeenCalledWith(
+        action === 'setTrust'
+          ? { skillId: summary.id, trusted: true }
+          : action === 'setEnabled'
+            ? { skillId: summary.id, enabled: false }
+            : { skillId: summary.id },
+      );
+      await waitFor(() =>
+        expect(h.result.current.selected?.id).toBe(action === 'copy' ? 'copy-1' : summary.id),
+      );
+    },
+  );
+
+  it.each(['setTrust', 'revokeTrust', 'setEnabled', 'copy'] as const)(
+    'presents %s rejection without a success toast',
+    async (action) => {
+      const ipc = actions();
+      ipc[action].mockRejectedValue(new Error('mutation rejected'));
+      const h = renderSkills();
+      await waitFor(() => expect(h.result.current.loading).toBe(false));
+      act(() => {
+        if (action === 'setTrust') h.result.current.setTrust(summary, false);
+        else if (action === 'setEnabled') h.result.current.setEnabled(summary, true);
+        else h.result.current[action](summary);
+      });
+      await waitFor(() => expect(h.result.current.error).toBe('mutation rejected'));
+      expect(h.result.current.toast).toBe('');
+      expect(h.result.current.selectedId).toBeUndefined();
+    },
+  );
+
+  it.each(['success', 'cancelled', 'failure', 'no-path'] as const)(
+    'handles export outcome %s through one result outlet',
+    async (outcome) => {
+      const ipc = actions();
+      if (outcome === 'failure') ipc.export.mockRejectedValue(new Error('export rejected'));
+      else
+        ipc.export.mockResolvedValue(
+          outcome === 'no-path'
+            ? { cancelled: false }
+            : { cancelled: outcome === 'cancelled', filePath: '/tmp/skill.zip' },
+        );
+      const h = renderSkills();
+      await waitFor(() => expect(h.result.current.loading).toBe(false));
+      await act(async () => h.result.current.exportSkill(summary));
+      expect(ipc.export).toHaveBeenCalledWith({ skillId: summary.id });
+      expect(h.result.current.error).toBe(outcome === 'failure' ? 'export rejected' : '');
+      expect(h.result.current.toast).toBe(
+        outcome === 'success'
+          ? 'Skill 已导出到 /tmp/skill.zip。'
+          : outcome === 'no-path'
+            ? 'Skill 已导出到 所选位置。'
+            : '',
+      );
+    },
+  );
+});

@@ -307,6 +307,13 @@ describe('registerIpc', () => {
     expect(missing).toEqual([]);
   });
 
+  it.each(Object.values(IpcChannel).filter((channel) => !PUSH_ONLY_CHANNELS.has(channel)))(
+    'rejects a non-object payload at %s before a domain handler can consume it',
+    async (channel) => {
+      await expect(invoke(channel, 42)).rejects.toMatchObject({ name: 'ZodError' });
+    },
+  );
+
   it('registers no channel outside the protocol', () => {
     const known = new Set<string>(Object.values(IpcChannel));
     expect(mocks.handled.filter((channel) => !known.has(channel))).toEqual([]);

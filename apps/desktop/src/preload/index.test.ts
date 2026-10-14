@@ -1974,3 +1974,405 @@ describe('MCP preload operations', () => {
     expect(mocks.invoke).toHaveBeenLastCalledWith(IpcChannel.LogoutMcpConnection, operation);
   });
 });
+
+describe('Knowledge and Skill boundary contract matrix', () => {
+  const cases: Array<{
+    name: string;
+    channel: string;
+    request: unknown;
+    forwarded?: unknown;
+    call: (desktop: BetterWorkDesktopApi, request: never) => Promise<unknown>;
+  }> = [
+    {
+      name: 'knowledge list',
+      channel: IpcChannel.ListKnowledge,
+      request: {},
+      call: (a, r) => a.knowledge.list(r),
+    },
+    {
+      name: 'collection list',
+      channel: IpcChannel.ListKnowledgeCollections,
+      request: {},
+      call: (a) => a.knowledge.listCollections(),
+    },
+    {
+      name: 'collection creation',
+      channel: IpcChannel.SaveKnowledgeCollection,
+      request: { mode: 'create', name: 'Research' },
+      call: (a, r) => a.knowledge.saveCollection(r),
+    },
+    {
+      name: 'collection deletion',
+      channel: IpcChannel.DeleteKnowledgeCollection,
+      request: { id: 'collection-1', expectedRevision: 1 },
+      call: (a, r) => a.knowledge.deleteCollection(r),
+    },
+    {
+      name: 'collection membership',
+      channel: IpcChannel.SetKnowledgeCollectionMembers,
+      request: { documentId: 'document-1', expectedMembershipRevision: 1, collectionIds: [] },
+      call: (a, r) => a.knowledge.setCollectionMembers(r),
+    },
+    {
+      name: 'knowledge import',
+      channel: IpcChannel.ImportKnowledge,
+      request: {},
+      call: (a) => a.knowledge.importFromDialog(),
+    },
+    {
+      name: 'knowledge jobs',
+      channel: IpcChannel.ListKnowledgeJobs,
+      request: {},
+      forwarded: { limit: 50 },
+      call: (a, r) => a.knowledge.jobs(r),
+    },
+    {
+      name: 'knowledge job detail',
+      channel: IpcChannel.GetKnowledgeJob,
+      request: { jobId: 'job-1' },
+      call: (a, r) => a.knowledge.job(r),
+    },
+    {
+      name: 'knowledge job cancel',
+      channel: IpcChannel.CancelKnowledgeJob,
+      request: { jobId: 'job-1' },
+      call: (a, r) => a.knowledge.cancelJob(r),
+    },
+    {
+      name: 'knowledge jobs clear',
+      channel: IpcChannel.ClearKnowledgeJobs,
+      request: {},
+      call: (a) => a.knowledge.clearJobs(),
+    },
+    {
+      name: 'knowledge job retry',
+      channel: IpcChannel.RetryKnowledgeJob,
+      request: { jobId: 'job-1', itemIds: ['item-1'] },
+      call: (a, r) => a.knowledge.retryJob(r),
+    },
+    {
+      name: 'knowledge settings',
+      channel: IpcChannel.GetKnowledgeSettings,
+      request: {},
+      call: (a) => a.knowledge.settings(),
+    },
+    {
+      name: 'knowledge settings save',
+      channel: IpcChannel.SaveKnowledgeSettings,
+      request: { expectedRevision: 1, semanticEnabled: false },
+      call: (a, r) => a.knowledge.saveSettings(r),
+    },
+    {
+      name: 'keyword rebuild',
+      channel: IpcChannel.RebuildKnowledgeIndex,
+      request: { kind: 'keyword', documentIds: ['document-1'] },
+      call: (a, r) => a.knowledge.rebuildIndex(r),
+    },
+    {
+      name: 'source checking',
+      channel: IpcChannel.CheckKnowledgeSources,
+      request: { documentIds: ['document-1'] },
+      call: (a, r) => a.knowledge.checkSources(r),
+    },
+    {
+      name: 'knowledge refresh',
+      channel: IpcChannel.RefreshKnowledgeDocument,
+      request: { id: 'document-1' },
+      call: (a, r) => a.knowledge.refresh(r),
+    },
+    {
+      name: 'revision list',
+      channel: IpcChannel.ListKnowledgeRevisions,
+      request: { documentId: 'document-1' },
+      call: (a, r) => a.knowledge.listRevisions(r),
+    },
+    {
+      name: 'knowledge preview',
+      channel: IpcChannel.PreviewKnowledge,
+      request: { documentId: 'document-1', revisionId: 'revision-1' },
+      call: (a, r) => a.knowledge.preview(r),
+    },
+    {
+      name: 'run source preview',
+      channel: IpcChannel.PreviewRunSource,
+      request: { runId: 'run-1', evidenceId: 'evidence-1' },
+      call: (a, r) => a.knowledge.previewRunSource(r),
+    },
+    {
+      name: 'artifact source declaration',
+      channel: IpcChannel.DeclareArtifactSources,
+      request: { runId: 'run-1', inputRelations: [] },
+      call: (a, r) => a.knowledge.declareArtifactSources(r),
+    },
+    {
+      name: 'artifact source read',
+      channel: IpcChannel.GetRunArtifactDeclarations,
+      request: { runId: 'run-1' },
+      call: (a, r) => a.knowledge.getRunArtifactDeclarations(r),
+    },
+    {
+      name: 'skill detail',
+      channel: IpcChannel.GetSkill,
+      request: { id: 'skill-1' },
+      call: (a, r) => a.skills.get(r),
+    },
+    {
+      name: 'skill import',
+      channel: IpcChannel.ImportSkill,
+      request: {},
+      call: (a) => a.skills.importFromDialog(),
+    },
+    {
+      name: 'skill URL import',
+      channel: IpcChannel.ImportSkillFromUrl,
+      request: { url: 'https://example.test/skill' },
+      call: (a, r) => a.skills.importFromUrl(r),
+    },
+    {
+      name: 'skill runtime draft',
+      channel: IpcChannel.SaveSkillRuntimeProfile,
+      request: { skillId: 'skill-1', profile: { commands: [], environmentRequirements: [] } },
+      call: (a, r) => a.skills.saveRuntimeProfile(r),
+    },
+    {
+      name: 'skill trust',
+      channel: IpcChannel.SetSkillTrust,
+      request: { skillId: 'skill-1', trusted: true },
+      call: (a, r) => a.skills.setTrust(r),
+    },
+    {
+      name: 'skill revoke',
+      channel: IpcChannel.RevokeSkillTrust,
+      request: { skillId: 'skill-1' },
+      call: (a, r) => a.skills.revokeTrust(r),
+    },
+    {
+      name: 'skill enable',
+      channel: IpcChannel.SetSkillEnabled,
+      request: { skillId: 'skill-1', enabled: false },
+      call: (a, r) => a.skills.setEnabled(r),
+    },
+    {
+      name: 'skill copy',
+      channel: IpcChannel.CopySkill,
+      request: { skillId: 'skill-1' },
+      call: (a, r) => a.skills.copy(r),
+    },
+    {
+      name: 'skill export',
+      channel: IpcChannel.ExportSkill,
+      request: { skillId: 'skill-1' },
+      call: (a, r) => a.skills.export(r),
+    },
+    {
+      name: 'skill dependency grant',
+      channel: IpcChannel.RefreshSkillDependencyGrant,
+      request: { skillId: 'skill-1', lockId: 'lock-1' },
+      call: (a, r) => a.skills.refreshDependencyGrant(r),
+    },
+    {
+      name: 'skill test Run',
+      channel: IpcChannel.TestSkillRun,
+      request: { skillId: 'skill-1', prompt: 'Run test' },
+      call: (a, r) => a.skills.testRun(r),
+    },
+    {
+      name: 'discussion list',
+      channel: IpcChannel.ListDiscussionCheckpoints,
+      request: { taskId: 'task-1' },
+      call: (a, r) => a.discussionCheckpoints.list(r),
+    },
+    {
+      name: 'discussion creation',
+      channel: IpcChannel.CreateDiscussionCheckpoint,
+      request: {
+        id: 'checkpoint-1',
+        taskId: 'task-1',
+        stage: 'report',
+        title: 'Report',
+        summary: '',
+        artifactVersionIds: [],
+      },
+      call: (a, r) => a.discussionCheckpoints.create(r),
+    },
+    {
+      name: 'input snapshot selection',
+      channel: IpcChannel.PrepareWorkspaceInputSnapshot,
+      request: { workspaceId: 'workspace-1' },
+      call: (a, r) => a.materials.prepareInputSnapshot(r),
+    },
+  ];
+
+  beforeEach(() => {
+    mocks.invoke.mockReset();
+  });
+
+  it.each(cases)(
+    'routes $name and rejects a malformed main-process response',
+    async ({ channel, request, forwarded, call }) => {
+      mocks.invoke.mockResolvedValue({ unexpected: 'invalid response' });
+      await expect(call(api(), request as never)).rejects.toThrow();
+      expect(mocks.invoke).toHaveBeenCalledExactlyOnceWith(channel, forwarded ?? request);
+    },
+  );
+
+  it.each(cases)('preserves transport rejection for $name', async ({ request, call }) => {
+    const error = new Error('IPC disconnected');
+    mocks.invoke.mockRejectedValue(error);
+    await expect(call(api(), request as never)).rejects.toBe(error);
+    expect(mocks.invoke).toHaveBeenCalledOnce();
+  });
+
+  it.each(cases.filter((c) => Object.keys(c.request as object).length > 0))(
+    'rejects invalid $name input before IPC',
+    ({ call }) => {
+      expect(() => call(api(), { unexpected: true } as never)).toThrow();
+      expect(mocks.invoke).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe('Memory governance and job boundary matrix', () => {
+  const operationId = '00000000-0000-4000-8000-000000000001';
+  const calls: Array<{
+    name: string;
+    channel: string;
+    input: unknown;
+    call: (desktop: BetterWorkDesktopApi, input: never) => Promise<unknown>;
+  }> = [
+    {
+      name: 'read',
+      channel: IpcChannel.GetMemory,
+      input: { id: 'memory-1' },
+      call: (a, r) => a.memories.get(r),
+    },
+    {
+      name: 'create',
+      channel: IpcChannel.CreateMemory,
+      input: {
+        operationId,
+        content: 'Keep source evidence',
+        facet: 'method',
+        scope: { kind: 'workspace', workspaceId: 'workspace-1' },
+        asUserInstruction: true,
+      },
+      call: (a, r) => a.memories.create(r),
+    },
+    {
+      name: 'update',
+      channel: IpcChannel.UpdateMemory,
+      input: {
+        operationId,
+        id: 'memory-1',
+        expectedRevision: 1,
+        patch: { content: 'Revised method' },
+      },
+      call: (a, r) => a.memories.update(r),
+    },
+    {
+      name: 'status',
+      channel: IpcChannel.SetMemoryStatus,
+      input: { operationId, id: 'memory-1', expectedRevision: 1, action: 'confirm' },
+      call: (a, r) => a.memories.setStatus(r),
+    },
+    {
+      name: 'conflict decision',
+      channel: IpcChannel.ResolveMemoryConflict,
+      input: {
+        operationId,
+        left: { id: 'left', expectedRevision: 1 },
+        right: { id: 'right', expectedRevision: 1 },
+        decision: 'replace',
+        winnerId: 'left',
+      },
+      call: (a, r) => a.memories.resolveConflict(r),
+    },
+    {
+      name: 'preview',
+      channel: IpcChannel.PreviewMemory,
+      input: {
+        taskId: 'task-1',
+        taskContextRevisionId: 'context-1',
+        expectedTaskContextRevision: 1,
+        prompt: 'Preview',
+      },
+      call: (a, r) => a.memories.preview(r),
+    },
+    {
+      name: 'task exclusions',
+      channel: IpcChannel.TaskMemoryExclusions,
+      input: {
+        taskId: 'task-1',
+        taskContextRevisionId: 'context-1',
+        expectedTaskContextRevision: 1,
+      },
+      call: (a, r) => a.memories.taskExclusions(r),
+    },
+    {
+      name: 'Run context',
+      channel: IpcChannel.GetRunMemoryContext,
+      input: { runId: 'run-1' },
+      call: (a, r) => a.memories.runContext(r),
+    },
+    {
+      name: 'settings read',
+      channel: IpcChannel.GetMemorySettings,
+      input: { workspaceId: 'workspace-1' },
+      call: (a, r) => a.memories.getSettings(r),
+    },
+    {
+      name: 'settings write',
+      channel: IpcChannel.SetMemorySettings,
+      input: {
+        operationId,
+        workspaceId: 'workspace-1',
+        expectedRevision: 0,
+        autoSuggestEnabled: false,
+      },
+      call: (a, r) => a.memories.setSettings(r),
+    },
+    {
+      name: 'job retry',
+      channel: IpcChannel.RetryMemoryJob,
+      input: { operationId, jobId: 'job-1', expectedRevision: 1, consentVersion: 1 },
+      call: (a, r) => a.memories.retryJob(r),
+    },
+    {
+      name: 'job cancel',
+      channel: IpcChannel.CancelMemoryJob,
+      input: { operationId, jobId: 'job-1', expectedRevision: 1 },
+      call: (a, r) => a.memories.cancelJob(r),
+    },
+    {
+      name: 'projection rebuild',
+      channel: IpcChannel.RebuildMemoryProjection,
+      input: { operationId },
+      call: (a, r) => a.memories.rebuildProjection(r),
+    },
+  ];
+  beforeEach(() => mocks.invoke.mockReset());
+
+  it.each(calls)(
+    'preserves the domain failure envelope for $name on the exact channel',
+    async ({ channel, input, call }) => {
+      const failure = {
+        ok: false,
+        error: { code: 'INTERNAL_ERROR', message: 'Synthetic refusal', retryable: false },
+      };
+      mocks.invoke.mockResolvedValue(failure);
+      await expect(call(api(), input as never)).resolves.toEqual(failure);
+      expect(mocks.invoke).toHaveBeenCalledExactlyOnceWith(channel, input);
+    },
+  );
+
+  it.each(calls)('rejects malformed $name input before IPC', ({ call }) => {
+    expect(() => call(api(), { operationId: 'bad', unexpected: true } as never)).toThrow();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it.each(calls)('rejects malformed successful $name data after IPC', async ({ input, call }) => {
+    mocks.invoke.mockResolvedValue({ ok: true, data: { unexpected: true } });
+    await expect(call(api(), input as never)).rejects.toThrow();
+    expect(mocks.invoke).toHaveBeenCalledOnce();
+  });
+});

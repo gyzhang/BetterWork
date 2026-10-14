@@ -1,4 +1,5 @@
 import type {
+  NotificationChangeEvent,
   NotificationLevel,
   NotificationSummary,
   NotificationTarget,
@@ -38,6 +39,22 @@ interface UseNotificationsOptions {
   onActivationError?: () => void;
 }
 
+const notificationListAfterChange = (
+  current: readonly NotificationSummary[],
+  event: NotificationChangeEvent,
+): NotificationSummary[] => {
+  if (event.type === 'created')
+    return [event.notification, ...current.filter((item) => item.id !== event.notification.id)];
+  if (event.type === 'read')
+    return current.map((item) =>
+      item.id === event.notificationId ? { ...item, read: true } : item,
+    );
+  if (event.type === 'read-all')
+    return current.map((item) => (item.read ? item : { ...item, read: true }));
+  if (event.type === 'deleted') return current.filter((item) => item.id !== event.notificationId);
+  return [];
+};
+
 export const useNotifications = ({
   navigate,
   isTargetVisible,
@@ -68,18 +85,30 @@ export const useNotifications = ({
 
   useEffect(() => {
     let disposed = false;
+    let awaitingSnapshot = true;
+    const changesDuringLoad: NotificationChangeEvent[] = [];
     trackAction(
-      window.betterwork.notifications.list().then((list) => {
-        if (disposed) return;
-        setNotifications(list);
-        setUnreadCount(list.filter((item) => !item.read).length);
-      }),
+      window.betterwork.notifications
+        .list()
+        .then((list) => {
+          if (disposed) return;
+          const merged = changesDuringLoad.reduce(notificationListAfterChange, list);
+          setNotifications(merged);
+          setUnreadCount(
+            changesDuringLoad.at(-1)?.unreadCount ?? merged.filter((item) => !item.read).length,
+          );
+        })
+        .finally(() => {
+          awaitingSnapshot = false;
+          changesDuringLoad.length = 0;
+        }),
       '加载消息中心',
     );
     const offChange = window.betterwork.notifications.onChange((event) => {
+      if (awaitingSnapshot) changesDuringLoad.push(event);
+      setNotifications((current) => notificationListAfterChange(current, event));
+      setUnreadCount(event.unreadCount);
       if (event.type === 'created') {
-        setNotifications((current) => [event.notification, ...current]);
-        setUnreadCount(event.unreadCount);
         // 落库即已读的通知（成功类）不再投影成浮层：它是一条留档，不是一次打扰。
         // 同页抑制仍然只管「你正在看那个对象」，两者取与。
         if (!event.notification.read && !callbacksRef.current.isTargetVisible(event.notification)) {
@@ -96,26 +125,10 @@ export const useNotifications = ({
             ].slice(0, TOAST_MAX),
           );
         }
-      } else if (event.type === 'read') {
-        setNotifications((current) =>
-          current.map((item) =>
-            item.id === event.notificationId ? { ...item, read: true } : item,
-          ),
-        );
-        setUnreadCount(event.unreadCount);
-      } else if (event.type === 'read-all') {
-        setNotifications((current) =>
-          current.map((item) => (item.read ? item : { ...item, read: true })),
-        );
-        setUnreadCount(event.unreadCount);
       } else if (event.type === 'deleted') {
-        setNotifications((current) => current.filter((item) => item.id !== event.notificationId));
-        setUnreadCount(event.unreadCount);
         setToasts((current) => current.filter((toast) => toast.id !== event.notificationId));
         pausedToastsRef.current.delete(event.notificationId);
-      } else {
-        setNotifications([]);
-        setUnreadCount(event.unreadCount);
+      } else if (event.type === 'cleared') {
         setToasts([]);
       }
     });

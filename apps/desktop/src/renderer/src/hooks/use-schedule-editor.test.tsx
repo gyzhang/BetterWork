@@ -331,3 +331,134 @@ describe('useScheduleEditor', () => {
     );
   });
 });
+
+describe('schedule editor request and save guards', () => {
+  it.each(['missing', 'archived', 'wrong-revision-owner', 'failure'] as const)(
+    'settles selected Expert %s without adopting an invalid revision',
+    async (outcome) => {
+      installApi();
+      const getExpert = vi.fn(async (): Promise<ExpertDetail | null> => {
+        if (outcome === 'failure') throw new Error('expert rejected');
+        if (outcome === 'missing') return null;
+        return {
+          ...activeExpert,
+          ...(outcome === 'archived' ? { lifecycle: 'archived' } : {}),
+          revision: {
+            ...revision,
+            expertId: outcome === 'wrong-revision-owner' ? 'other-expert' : activeExpert.id,
+          },
+        };
+      });
+      const { result } = renderHook(() =>
+        useScheduleEditor({ experts: [activeExpert], getExpert, onSaved: vi.fn() }),
+      );
+      await act(async () => result.current.selectExpert(activeExpert.id));
+      expect(result.current.expertLoading).toBe(false);
+      expect(result.current.expertError).toBe(
+        outcome === 'failure' ? 'expert rejected' : '这个专家当前不可用，请重新选择。',
+      );
+      expect(result.current.value.config.expertRevisionId).toBe('');
+    },
+  );
+
+  it.each(['success', 'failure'] as const)(
+    'ignores a late Expert %s after selection is cleared',
+    async (outcome) => {
+      installApi();
+      let resolve!: (value: ExpertDetail) => void;
+      let reject!: (error: Error) => void;
+      const getExpert = vi.fn(
+        () =>
+          new Promise<ExpertDetail>((ok, fail) => {
+            resolve = ok;
+            reject = fail;
+          }),
+      );
+      const { result } = renderHook(() =>
+        useScheduleEditor({ experts: [activeExpert], getExpert, onSaved: vi.fn() }),
+      );
+      act(() => result.current.selectExpert(activeExpert.id));
+      act(() => result.current.selectExpert(''));
+      await act(async () => {
+        if (outcome === 'success') resolve(activeExpert);
+        else reject(new Error('old failure'));
+      });
+      expect(result.current.expertLabel).toBe('');
+      expect(result.current.expertLoading).toBe(false);
+      expect(result.current.expertError).toBe('');
+      expect(result.current.value.config.expertId).toBe('');
+    },
+  );
+
+  it('rejects unknown Expert selection before IPC', () => {
+    installApi();
+    const getExpert = vi.fn(async () => activeExpert);
+    const { result } = renderHook(() =>
+      useScheduleEditor({ experts: [], getExpert, onSaved: vi.fn() }),
+    );
+    act(() => result.current.selectExpert('unknown'));
+    expect(getExpert).not.toHaveBeenCalled();
+    expect(result.current.expertError).toContain('只能选择');
+  });
+
+  it.each(['domain', 'transport'] as const)(
+    'stops failed preview %s and allows a fresh retry',
+    async (outcome) => {
+      vi.useFakeTimers();
+      const preview = vi.fn<Window['betterwork']['schedules']['preview']>();
+      if (outcome === 'domain')
+        preview.mockResolvedValueOnce({
+          status: 'rejected',
+          error: { code: 'schedule_conflict', message: 'preview rejected' },
+        });
+      else preview.mockRejectedValueOnce(new Error('preview rejected'));
+      preview.mockResolvedValue({ status: 'success', data: previewResult(30) });
+      installApi({ preview });
+      const { result } = renderEditor();
+      await act(async () => vi.advanceTimersByTime(250));
+      expect(result.current.previewLoading).toBe(false);
+      expect(result.current.previewError).toBe('preview rejected');
+      act(() => result.current.retryPreview());
+      await act(async () => vi.advanceTimersByTime(250));
+      expect(result.current.preview).toEqual(previewResult(30));
+      expect(result.current.previewError).toBe('');
+    },
+  );
+
+  it('guards repeated save clicks until the first persistence completes', async () => {
+    let release!: (value: ScheduleCallResult<ScheduleAggregate>) => void;
+    const save = vi.fn(
+      () =>
+        new Promise<ScheduleCallResult<ScheduleAggregate>>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const onSaved = vi.fn();
+    installApi({ save });
+    const { result } = renderEditor({ detail, onSaved });
+    act(() => {
+      result.current.save('paused');
+      result.current.save('enabled');
+    });
+    expect(save).toHaveBeenCalledOnce();
+    expect(result.current.savingTarget).toBe('paused');
+    expect(onSaved).not.toHaveBeenCalled();
+    await act(async () => release({ status: 'success', data: aggregate }));
+    expect(result.current.saving).toBe(false);
+    expect(result.current.savingTarget).toBeUndefined();
+    expect(onSaved).toHaveBeenCalledExactlyOnceWith('paused');
+  });
+
+  it('preserves the edited draft when persistence rejects', async () => {
+    const save = vi.fn().mockRejectedValue(new Error('save rejected'));
+    const onSaved = vi.fn();
+    installApi({ save });
+    const { result } = renderEditor({ detail, onSaved });
+    act(() => result.current.updateConfig((config) => ({ ...config, name: 'My draft' })));
+    await act(async () => result.current.save('paused'));
+    expect(result.current.saveError).toBe('save rejected');
+    expect(result.current.value.config.name).toBe('My draft');
+    expect(result.current.saving).toBe(false);
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+});

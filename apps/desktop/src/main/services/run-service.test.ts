@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -4896,6 +4896,222 @@ describe('RunService', () => {
     await waitForCompletion(fixture, unboundRunId);
     expect(statusOf(fixture, unboundRunId)).toBe('completed');
   });
+  const scriptedSkillCall = (
+    toolName: string,
+    input: () => Record<string, unknown>,
+  ): (() => void) => {
+    let call = 0;
+    const spy = vi.spyOn(FakeModelProvider.prototype, 'stream').mockImplementation(() =>
+      (async function* () {
+        if (call++ === 0)
+          yield {
+            type: 'tool-call' as const,
+            toolCall: { id: 'skill-call', name: toolName, input: input() },
+          };
+        else yield { type: 'text-delta' as const, delta: 'Synthetic completion' };
+        yield { type: 'done' as const };
+      })(),
+    );
+    return () => spy.mockRestore();
+  };
+
+  it.each([
+    'valid',
+    'missing-file',
+    'escape',
+    'unknown-binding',
+    'cross-run',
+    'disabled',
+    'revoked',
+  ] as const)(
+    'enforces Skill resource ownership for %s through the actual model/tool boundary',
+    async (scenario) => {
+      const fixture = await createFixture();
+      const skillId = await createTrustedSkill(fixture, 'resource-skill');
+      const execution = createRealExecutionService(fixture);
+      let otherBindingId = '';
+      if (scenario === 'cross-run') {
+        fixture.store.runs.create({
+          id: 'other-run',
+          taskId: fixture.taskId,
+          sessionId: fixture.sessionId,
+          prompt: 'Other run',
+          status: 'running',
+          createdAt: 1,
+        });
+        otherBindingId = execution.createBinding({ runId: 'other-run', skillId }).id;
+      }
+      const restore = scriptedSkillCall('skill_read_resource', () => {
+        const binding = fixture.store.executions.listBindingsByRun(runId)[0];
+        if (scenario === 'disabled') fixture.store.skills.setEnabled(skillId, false);
+        if (scenario === 'revoked') fixture.store.skills.setTrustPreference(skillId, 'revoked');
+        return {
+          bindingId:
+            scenario === 'unknown-binding'
+              ? 'unknown'
+              : scenario === 'cross-run'
+                ? otherBindingId
+                : (binding?.id ?? ''),
+          path:
+            scenario === 'escape'
+              ? '../../../../outside.txt'
+              : scenario === 'missing-file'
+                ? 'missing.md'
+                : 'SKILL.md',
+        };
+      });
+      const service = createService(fixture, { skillExecutionService: execution });
+      let runId = '';
+      try {
+        runId = service.start({
+          taskId: fixture.taskId,
+          sessionId: fixture.sessionId,
+          prompt: 'Read bound resource',
+          skillBindings: [{ skillId }],
+        });
+        await waitForCompletion(fixture, runId);
+        const events = fixture.store.runs.listEvents(runId);
+        if (scenario === 'valid') {
+          const completed = events.find((event) => event.type === 'tool.completed');
+          expect(completed?.type === 'tool.completed' ? completed.output : undefined).toMatchObject(
+            { path: 'SKILL.md', content: expect.stringContaining('指令内容') },
+          );
+          expect(events.some((event) => event.type === 'tool.failed')).toBe(false);
+        } else {
+          expect(events.filter((event) => event.type === 'tool.failed')).toHaveLength(1);
+          expect(events.some((event) => event.type === 'tool.completed')).toBe(false);
+        }
+        expect(
+          events.filter((event) =>
+            ['run.completed', 'run.failed', 'run.cancelled'].includes(event.type),
+          ),
+        ).toHaveLength(1);
+      } finally {
+        restore();
+        await service.shutdown();
+      }
+    },
+  );
+
+  it.each(['succeeded', 'failed', 'timed-out', 'cancelled'] as const)(
+    'bridges a registered Skill command with a %s result and a clean managed environment',
+    async (outcome) => {
+      const fixture = await createFixture();
+      const skillId = await createTrustedSkill(fixture, 'command-skill', 'Command fixture', {
+        commands: [
+          {
+            commandId: 'inspect',
+            label: 'Inspect fixture',
+            argumentSchema: { type: 'object', properties: {}, additionalProperties: false },
+            timeoutMs: 1_000,
+            execution: {
+              entrypoint: { scope: 'skill', path: 'SKILL.md', runtime: 'managed-python' },
+              argv: [],
+              pathArguments: [],
+              outputs: [],
+            },
+          },
+        ],
+        environmentRequirements: [],
+      });
+      const launch: ProcessSupervisor['launch'] = vi.fn(async (spec) => ({
+        executionId: spec.executionId,
+        result: Promise.resolve(
+          outcome === 'succeeded'
+            ? {
+                kind: 'succeeded' as const,
+                exitCode: 0,
+                outputIds: [],
+                reportHash: 'report-hash',
+                durationMs: 1,
+              }
+            : outcome === 'failed'
+              ? {
+                  kind: 'failed' as const,
+                  phase: 'execute' as const,
+                  code: 'fixture',
+                  summary: 'synthetic',
+                  retryable: false,
+                }
+              : { kind: outcome, cleanupCompleted: true, diagnosticOutputIds: [] },
+        ),
+        capture: () => ({
+          stdout: 'synthetic stdout',
+          stderr: 'synthetic stderr',
+          truncated: false,
+          receivedBytes: 32,
+          droppedBytes: 0,
+        }),
+        cancel: async () => ({ cleanupCompleted: true }),
+      }));
+      const execution = new SkillExecutionService(fixture.store, { launch });
+      const dependencies = {
+        resolveEnvironmentPython: vi.fn(() => '/managed/python'),
+      } as unknown as NonNullable<RunServiceDependencies['dependencies']>;
+      const service = new RunService({
+        ...createServiceDependencies(fixture, { skillExecutionService: execution }),
+        dependencies,
+      });
+      let runId = '';
+      const restore = scriptedSkillCall('skill_execute', () => ({
+        bindingId: fixture.store.executions.listBindingsByRun(runId)[0]?.id ?? '',
+        commandId: 'inspect',
+        args: {},
+      }));
+      try {
+        runId = service.start({
+          taskId: fixture.taskId,
+          sessionId: fixture.sessionId,
+          prompt: 'Execute bound command',
+          skillBindings: [{ skillId }],
+        });
+        await waitForCompletion(fixture, runId);
+        expect(launch).toHaveBeenCalledOnce();
+        const spec = vi.mocked(launch).mock.calls[0]?.[0];
+        expect(spec).toMatchObject({
+          runId,
+          commandId: 'inspect',
+          executable: '/managed/python',
+          timeoutMs: 1_000,
+          maxOutputBytes: 32 * 1024,
+          maxLogBytes: 10 * 1024 * 1024,
+        });
+        expect(spec?.cwd).toBe(
+          path.join(
+            await realpath(fixture.directory),
+            '.betterwork',
+            'tasks',
+            fixture.taskId,
+            'runs',
+            runId,
+            'work',
+          ),
+        );
+        expect(spec?.env).toEqual({
+          PATH: '/usr/local/bin:/usr/bin:/bin',
+          LANG: 'en_US.UTF-8',
+          LC_ALL: 'en_US.UTF-8',
+          TZ: 'UTC',
+          PYTHONDONTWRITEBYTECODE: '1',
+          PYTHONUNBUFFERED: '1',
+          PYTHONNOUSERSITE: '1',
+        });
+        const completed = fixture.store.runs
+          .listEvents(runId)
+          .find((event) => event.type === 'tool.completed');
+        expect(completed?.type === 'tool.completed' ? completed.output : undefined).toMatchObject({
+          status: outcome,
+          stdout: 'synthetic stdout',
+          stderr: 'synthetic stderr',
+        });
+        expect(fixture.store.executions.listExecutionsByRun(runId)[0]?.status).toBe(outcome);
+        expect(statusOf(fixture, runId)).toBe('completed');
+      } finally {
+        restore();
+        await service.shutdown();
+      }
+    },
+  );
 });
 
 describe('CF11 credential dispatch gate', () => {

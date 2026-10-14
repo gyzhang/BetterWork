@@ -634,3 +634,139 @@ describe('ReActAgentEngine', () => {
     });
   });
 });
+
+describe('Agent lifecycle isolation and provider boundaries', () => {
+  it('keeps event identity and sequence isolated across concurrent Runs on the same engine', async () => {
+    const engine = new ReActAgentEngine();
+    const collect = async (runId: string) => {
+      const events = [];
+      for await (const event of engine.run({
+        runId,
+        taskId: 'task',
+        sessionId: 'session',
+        prompt: 'test',
+        workspacePath: '.',
+        model: scriptedModel([[{ type: 'text-delta', delta: runId }, { type: 'done' }]]),
+        tools: [],
+        signal: new AbortController().signal,
+      }))
+        events.push(event);
+      return events;
+    };
+    const runs = await Promise.all([collect('one'), collect('two')]);
+    for (const [index, events] of runs.entries()) {
+      expect(events.every((event) => event.runId === (index === 0 ? 'one' : 'two'))).toBe(true);
+      expect(events.map((event) => event.sequence)).toEqual(events.map((_event, i) => i));
+      expect(events.at(-1)).toMatchObject({
+        type: 'run.completed',
+        finalContent: index === 0 ? 'one' : 'two',
+      });
+    }
+    const ids = runs.flatMap((events) => events.map((event) => event.id));
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('cancels during a pending tool without executing the next tool or publishing a late result', async () => {
+    const controller = new AbortController();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const execute = vi.fn(async () => {
+      await gate;
+      return { value: 'late' };
+    });
+    const next = vi.fn(async () => ({ value: 'next' }));
+    const tools: AgentTool[] = [
+      { name: 'wait', description: '', inputSchema: {}, execute },
+      { name: 'next', description: '', inputSchema: {}, execute: next },
+    ];
+    const iterator = new ReActAgentEngine()
+      .run({
+        runId: 'cancel-tool',
+        taskId: 'task',
+        sessionId: 'session',
+        prompt: 'test',
+        workspacePath: '.',
+        model: scriptedModel([
+          [
+            { type: 'tool-call', toolCall: { id: 'first', name: 'wait', input: {} } },
+            { type: 'tool-call', toolCall: { id: 'second', name: 'next', input: {} } },
+            { type: 'done' },
+          ],
+        ]),
+        tools,
+        signal: controller.signal,
+      })
+      [Symbol.asyncIterator]();
+    const events = [];
+    for (let i = 0; i < 4; i++) events.push((await iterator.next()).value);
+    expect(events.at(-1)?.type).toBe('tool.started');
+    const pending = iterator.next();
+    await Promise.resolve();
+    expect(execute).toHaveBeenCalledOnce();
+    controller.abort('User cancelled');
+    const cancelled = await pending;
+    expect(cancelled.value).toMatchObject({ type: 'run.cancelled', reason: 'User cancelled' });
+    release();
+    expect(await iterator.next()).toMatchObject({ done: true });
+    expect(next).not.toHaveBeenCalled();
+    expect(events.some((event) => event?.type === 'tool.completed')).toBe(false);
+  });
+
+  it.each(['length'] as const)(
+    'refuses a %s finish as a successful final answer',
+    async (finishReason) => {
+      const events = [];
+      for await (const event of new ReActAgentEngine().run({
+        runId: 'limited',
+        taskId: 'task',
+        sessionId: 'session',
+        prompt: 'test',
+        workspacePath: '.',
+        model: scriptedModel([
+          [
+            { type: 'text-delta', delta: 'Partial' },
+            { type: 'done', finishReason },
+          ],
+        ]),
+        tools: [],
+        signal: new AbortController().signal,
+      }))
+        events.push(event);
+      expect(events.at(-1)?.type).toBe('run.failed');
+      expect(
+        events.some(
+          (event) => event.type === 'run.completed' || event.type === 'message.completed',
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it('fails before model dispatch when immutable Skill runtime contracts exceed their budget', async () => {
+    const stream = vi.fn(async function* () {
+      yield { type: 'done' as const };
+    });
+    const model: ModelProvider = { id: 'fixture', stream };
+    const run = new ReActAgentEngine().run({
+      runId: 'oversized',
+      taskId: 'task',
+      sessionId: 'session',
+      prompt: 'test',
+      workspacePath: '.',
+      model,
+      tools: [],
+      signal: new AbortController().signal,
+      skillInstructions: [
+        {
+          skillId: 'skill',
+          name: 'Skill',
+          instruction: 'Body',
+          runtimeInstruction: 'X'.repeat(SKILL_INSTRUCTION_BUDGET),
+        },
+      ],
+    });
+    await expect(run[Symbol.asyncIterator]().next()).rejects.toThrow('运行约定超过上下文预算');
+    expect(stream).not.toHaveBeenCalled();
+  });
+});
