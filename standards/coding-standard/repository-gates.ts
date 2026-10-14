@@ -119,24 +119,38 @@ describe('提交与推送门禁纪律', () => {
     const workflow = readVerifyWorkflow();
     const quick = workflow.jobs.quick;
     expect(quick?.if).toBe(
-      "github.event_name == 'pull_request' && needs.classify.outputs.has_code == 'true'",
+      "github.event_name == 'pull_request' && (needs.classify.outputs.has_code == 'true' || needs.classify.outputs.resources_only == 'true')",
     );
     expect(quick?.needs).toBe('classify');
-    expect(quick?.steps.find((step) => step.uses === 'actions/checkout@v7')?.with).toMatchObject({
-      'fetch-depth': 0,
-    });
+    const lint = workflow.jobs['quick-lint'];
+    expect(lint?.needs).toBe('classify');
+    expect(lint?.if).toBe(
+      "github.event_name == 'pull_request' && needs.classify.outputs.has_code == 'true'",
+    );
+    for (const job of [quick, lint]) {
+      expect(job?.steps.find((step) => step.uses === 'actions/checkout@v7')?.with).toMatchObject({
+        'fetch-depth': 0,
+      });
+      const check = job?.steps.find((step) => step.run?.includes('check:quick'));
+      expect(check?.env?.BASE_SHA).toBe('${{ github.event.pull_request.base.sha }}');
+      expect(job?.steps.some((step) => step.run?.includes('ui:check'))).toBe(false);
+    }
     expect(quick?.steps.flatMap((step) => (step.run ? [step.run] : []))).toEqual([
       'npm ci',
-      'npm run lint',
-      'npm run format:check',
-      'npm run typecheck',
-      'npm run docs:check',
-      'npx vitest run --project functional --changed="$BASE_SHA" --passWithNoTests',
-      'npx vitest run --project heavy --changed="$BASE_SHA" --passWithNoTests',
+      'npm run check:quick -- --base "$BASE_SHA" --part checks',
     ]);
-    for (const step of quick?.steps.filter((item) => item.run?.includes('--changed')) ?? []) {
-      expect(step.env?.BASE_SHA).toBe('${{ github.event.pull_request.base.sha }}');
-    }
+    expect(lint?.steps.flatMap((step) => (step.run ? [step.run] : []))).toEqual([
+      'npm ci',
+      'npm run check:quick -- --base "$BASE_SHA" --part lint',
+    ]);
+    const scripts = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
+    expect(scripts.scripts['check:quick']).toBe('node scripts/pr-check.mjs');
+    const plan = read('scripts/pr-check-plan.mjs');
+    expect(plan).toMatch(/'--exclude',\s*'scripts\/ui-render-check\.test\.ts'/u);
+    expect(plan).toContain("npm('Types', 'typecheck')");
+    expect(plan).toContain("npm('Lint', 'lint')");
+    expect(plan).toContain("'scripts/builtin-release.test.ts'");
+    expect(read('vitest.config.ts')).toContain("'scripts/ui-render-check.test.ts'");
     expect(workflow.jobs.classify?.if).toBe("github.event_name == 'pull_request'");
     expect(workflow.jobs.documentation?.if).toBe(
       "github.event_name == 'pull_request' && needs.classify.outputs.docs_only == 'true'",
@@ -145,7 +159,12 @@ describe('提交与推送门禁纪律', () => {
       workflow.jobs.documentation?.steps.flatMap((step) => (step.run ? [step.run] : [])),
     ).toEqual(['npm ci', 'npm run docs:check']);
     expect(workflow.jobs['pr-gate']?.if).toBe("always() && github.event_name == 'pull_request'");
-    expect(workflow.jobs['pr-gate']?.needs).toEqual(['classify', 'quick', 'documentation']);
+    expect(workflow.jobs['pr-gate']?.needs).toEqual([
+      'classify',
+      'quick',
+      'quick-lint',
+      'documentation',
+    ]);
   });
 
   it('PR Gate 只接受有效分类且对应快检成功，失败或跳过均拒绝合并', () => {
@@ -156,6 +175,8 @@ describe('提交与推送门禁纪律', () => {
       CLASSIFY_RESULT: 'success',
       HAS_CODE: 'true',
       DOCS_ONLY: 'false',
+      RESOURCES_ONLY: 'false',
+      LINT_RESULT: 'success',
       QUICK_RESULT: 'success',
       DOCUMENTATION_RESULT: 'skipped',
     };
@@ -166,9 +187,16 @@ describe('提交与推送门禁纪律', () => {
       QUICK_RESULT: 'skipped',
       DOCUMENTATION_RESULT: 'success',
     };
+    const successfulResources = {
+      ...successfulCode,
+      HAS_CODE: 'false',
+      RESOURCES_ONLY: 'true',
+      LINT_RESULT: 'skipped',
+    };
     const cases = [
       { env: successfulCode, status: 0 },
       { env: successfulDocs, status: 0 },
+      { env: successfulResources, status: 0 },
       { env: { ...successfulCode, CLASSIFY_RESULT: 'failure' }, status: 1 },
       { env: { ...successfulCode, QUICK_RESULT: 'failure' }, status: 1 },
       { env: { ...successfulCode, QUICK_RESULT: 'cancelled' }, status: 1 },
@@ -176,6 +204,13 @@ describe('提交与推送门禁纪律', () => {
       { env: { ...successfulDocs, DOCUMENTATION_RESULT: 'failure' }, status: 1 },
       { env: { ...successfulDocs, DOCUMENTATION_RESULT: 'cancelled' }, status: 1 },
       { env: { ...successfulDocs, DOCUMENTATION_RESULT: 'skipped' }, status: 1 },
+      ...['failure', 'cancelled', 'skipped'].flatMap((result) => [
+        { env: { ...successfulCode, LINT_RESULT: result }, status: 1 },
+        { env: { ...successfulResources, QUICK_RESULT: result }, status: 1 },
+      ]),
+      { env: { ...successfulCode, RESOURCES_ONLY: 'true' }, status: 1 },
+      { env: { ...successfulDocs, RESOURCES_ONLY: 'true' }, status: 1 },
+      { env: { ...successfulCode, RESOURCES_ONLY: '' }, status: 1 },
       { env: { ...successfulCode, HAS_CODE: '' }, status: 1 },
       { env: { ...successfulCode, HAS_CODE: 'false' }, status: 1 },
       { env: { ...successfulDocs, HAS_CODE: 'true' }, status: 1 },
@@ -211,10 +246,31 @@ describe('提交与推送门禁纪律', () => {
     expect(config.on.pull_request).toEqual({ branches: ['main'] });
     expect(config.on.schedule).toEqual([{ cron: '30 15 * * *' }]);
     expect(config.jobs.quality?.if).toBe(
-      "github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'",
+      "github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.scope == 'full')",
     );
     expect(config.jobs.quality?.needs, '完整验证不能依赖只在 PR 运行的分类或快检').toBeUndefined();
+    expect(config.on.workflow_dispatch).toEqual({
+      inputs: {
+        scope: {
+          description: '验证范围：完整验证或专项 UI 验证',
+          type: 'choice',
+          required: true,
+          default: 'full',
+          options: ['full', 'ui'],
+        },
+      },
+    });
+    expect(config.jobs.ui?.if).toBe(
+      "github.event_name == 'workflow_dispatch' && inputs.scope == 'ui'",
+    );
+    expect(config.jobs.ui?.needs).toBeUndefined();
+    expect(config.jobs.ui?.steps.flatMap((step) => (step.run ? [step.run] : []))).toEqual([
+      'npm ci',
+      'npx vitest run --project heavy scripts/ui-render-check.test.ts',
+      'npm run ui:check',
+    ]);
     expect(config.concurrency.group).toContain('github.event_name');
+    expect(config.concurrency.group).toContain('inputs.scope');
     expect(Object.values(config.jobs).every((job) => job['runs-on'].startsWith('macos'))).toBe(
       true,
     );
@@ -242,7 +298,7 @@ describe('提交与推送门禁纪律', () => {
     const artifactUploads = workflow
       .split(/- name:/u)
       .filter((block) => block.includes('uses: actions/upload-artifact@v6'));
-    expect(artifactUploads).toHaveLength(2);
+    expect(artifactUploads).toHaveLength(4);
     expect(
       artifactUploads.every((block) => block.includes('include-hidden-files: true')),
       'UI 检查产物目录以 .ui-render 开头，上传步骤必须显式包含隐藏文件',

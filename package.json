@@ -26,6 +26,7 @@
     "test:coverage": "vitest run --config vitest.coverage.config.ts --coverage",
     "bench": "vitest run --project bench",
     "docs:check": "vitest run --project functional standards/coding-standard.test.ts",
+    "check:quick": "node scripts/pr-check.mjs",
     "drift:check": "node scripts/drift-check.mjs",
     "ui:check": "node scripts/ui-render-check.mjs",
     "verify": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run build && npm run ui:check",

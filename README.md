@@ -116,13 +116,17 @@ npm run dev:stop
 
 默认日志和 PID 文件分别位于 `/tmp/betterwork-dev.log` 与 `/tmp/betterwork-dev.pid`，也可以通过 `BETTERWORK_DEV_LOG`、`BETTERWORK_DEV_PID` 覆盖。请只用这两个脚本启停应用，不要绕开脚本直接启动 Electron，也不要用宽泛的进程匹配杀进程——那会误伤机器上的其他 Electron 应用。
 
-提交时由本地钩子按暂存范围快检；PR 自动运行代码快门禁或纯文档检查。完整验证由用户按需运行，GitHub Actions 也会每天北京时间 23:30 检查 main（见 [ADR-0042](docs/adr/0042-pr-quick-check-and-scheduled-verify.md)）：
+提交时由本地钩子按暂存范围快检；PR 按代码、发布清单或文档差异执行快速检查，真实 Electron UI 验证留给手动和夜间。代码 PR 的 lint 与其他检查在独立 macOS runner 并行；本地共用日常入口。完整验证仍在用户按需或每天北京时间 23:30 的夜间计划执行（见 [ADR-0046](docs/adr/0046-daily-code-check-and-optional-ui-verification.md)）：
 
 ```bash
-npm run verify
+npm run check:quick -- --base origin/main # 日常代码快检
+npm run ui:check                         # 按需真实 UI 检查
+npm run verify                           # 按需完整验证
 ```
 
 测试分功能档与重档两条车道，另有真实 Electron 渲染检查进入 `verify`；规模数字（文件数、用例数、渲染检查组数）以当次 `npm run verify` 的输出为准，本文不登记快照——2026-10-02 之前这里写着一套早已过期的计数。ESLint 全仓零错误。构建会产生两条来自 Zod 的 Rollup `@PURE` 注释警告，属已知警告，不影响构建成功。
+
+GitHub Actions → Verify → Run workflow 可选 scope=full（缺省）或 ui；UI 专项 CLI 为 `gh workflow run verify.yml --ref <分支名> -f scope=ui`。日常 AI 不因 UI 文件变化自动启动真实 UI 检查或页面走查，交接记录 UI 未验证项。
 
 > 不要把 `npm run verify` 的输出接管道后只看末尾：管道的退出码取最后一个命令，`npm run verify | tail` 永远是 0，会把失败读成成功。需要截取输出时用 `npm run verify > /tmp/verify.log 2>&1; echo $?`。
 
