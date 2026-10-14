@@ -34,3 +34,8 @@
 ## 提交后 CI 首轮复核（2026-10-14）
 
 [PR #200](https://github.com/gyzhang/BetterWork/pull/200) 的 [首次 CI](https://github.com/gyzhang/BetterWork/actions/runs/38579220740) 对源 SHA `798ba00ebefca3358bd952ee2e268bb03322733b` 失败，PR Gate 阻断合并。静态检查均通过，functional 扩大至 317 文件/3,607 项，仅 SkillExecutionRepository 旧排序期望失败；失败阶段与完整结果已保存 30 天。固定时间点复现后修正升序断言，相关两组仓储 77 项绿跑，产品排序没有变化；等待修复后的最新 SHA 远端验证。
+
+
+## 第二轮 CI 复核与测试时序修正（2026-10-15）
+
+[run 38580896635](https://github.com/gyzhang/BetterWork/actions/runs/38580896635) 对 `dbb423123d8b4c8cd076ef1b9ebb5a75e94204d7` 的功能档 3,607 项与动态消费者 102 项全绿，重档 219 通过/1 失败。失败为 App 测试在编辑表单出现前查询保存按钮，尚未进入 A 失败/B 草稿隔离断言。现在控制 A/B 版本历史回执、观察加载态并以 act 等待初始化完成，明确检查 A 保存请求已发出，再导航与注入失败；本机整个 App 56 项绿跑，预算与产品交互不变。真实 UI 仍未执行，最新源 SHA 的远端门禁待发布收口；详见 [10 月 15 日日志](../logs/2026-10-15.md)。
