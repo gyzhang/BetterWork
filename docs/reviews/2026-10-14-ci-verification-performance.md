@@ -97,3 +97,5 @@
 用户于 2026-10-14 下达修改指令，现行契约为 [ADR-0046](../adr/0046-daily-code-check-and-optional-ui-verification.md)。落地：独立 lint job、差异格式及全仓回退、明确发布清单资源档、实际生产服务登记回归、快速测试排除真实 UI CLI 回归、本地 check:quick 统一入口、手动 scope=full/ui 分流与两档 UI 留证、日常 AI 验证规则和旧页面 Review 指令对齐。
 
 完整 npm test 的功能/heavy 档位及完整 verify 命令保持既有覆盖；没有引入类型感知 lint 文件缓存、TypeScript 持久化缓存或完整验证并行化。仓内 CLI 每步记录耗时与 Actions summary，后续用同类实际 PR 样本确认收益；本轮本机结果不能外推为 GitHub 加速读数。
+
+2026-10-14 远端实现验收：[PR #198](https://github.com/gyzhang/BetterWork/pull/198)、[Actions 38563812091](https://github.com/gyzhang/BetterWork/actions/runs/38563812091) 成功，源 SHA 为 aee330653ce8bbf472cbab309bf15655c5fcd658，合入 main 220592010d14581acfd811cfe41979a9ebad9640。lint 与其他检查使用不同 runner，分别 79/152 秒，整条流程 194 秒；配置改动选择 314 个功能文件与 7 个重档文件，真实 UI CLI 回归被排除，完整与专项 UI job 跳过。这证明执行范围与并行关系已落地，不等于同机同差异的性能对照实验。
