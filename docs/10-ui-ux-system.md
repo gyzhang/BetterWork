@@ -328,6 +328,8 @@ Skill 详情以配置摘要显示兼容 Python 版本、审核过的依赖锁、
 - 页头带（page header）：贯穿中栏的同一横带——基准高度 70px、左缘 28px、同底部分隔线、同一拖拽区行为；左侧放「返回键 + eyebrow + 页标题」，右侧放本页操作区。返回键始终单行且不压缩；长标题单行省略，完整名称可通过 title 查看。标题与操作不能并排容纳时，操作区换到下一行，页头按内容增高，禁止把中文返回键或操作文字挤成竖排。该响应由 `PageHeader` 基座拥有，页面不覆盖页头几何。工作页的上下文开关可并排容纳，页头与上下文面板顶部仍以 70px 对齐。
 - 版心（page body）：统一 860px、水平居中；窄窗口时两侧各留 24px 最小间距。页内说明文字、内容列表、对话消息与输入框全部落在版心内；工作视图的对话列与输入框同宽。
 - 内容入口：页头底部分隔线到正文首块、工作页页头到讨论节点或消息列首块，以及页签底部分隔线到首块内容，垂直距离统一 **12px**，由 `--content-start-gap` 定义。页签入口包括右侧上下文五页签、设置中的记忆分组和定时任务知识范围选择。各页面不得另写顶部补偿；首块内部的卡片内距、段落间距和居中空态的内部排版不属于这道入口缝。设置页没有 `PageHeader`，窗口顶部 36px 是标题栏安全留白，不冒充页头到正文的间距。
+- **列表页的整页空态统一锚定可用结果区**：`EmptyPage` 填满页头之后、页内说明／筛选／计数等固定内容之后剩余的列表或结果区域，并在其中垂直居中；不按整个窗口居中，也不随空态文字高度贴到区域顶部。直接位于页面 `ScrollRegion` 的 `.page-body` 使用自身钩子类 `.page-body-fill` 填满滚动区；知识页由嵌套的 `knowledge-list-scroll` 承担剩余高度。页内说明、`PageToolbar` 与结果区原有的间距关系保持不变。不同页面上方固定内容不同，因此空态屏幕坐标可以不同，居中的参照区域一致。筛选后没有匹配项仍用列表内的 `EmptyNotice`，不扩成整页空态。
+- **整页空态的文字左缘统一**：`EmptyPage` 横向填满宿主、最大宽度 630px，并在统一版心内居中，内部沿用同一内距；相同窗口与侧栏宽度下，各列表页空态文字左缘一致，不随文案长短收缩提示块宽度。上方说明、筛选和计数仅影响垂直位置。
 - 上下文面板按场景出现：右栏只在承载任务上下文的工作视图渲染（过程／资料／记忆／简报／成果）；成果、知识、设置等无任务上下文的视图不渲染面板，主工作区占满剩余宽度，布局网格不得预留空栏。面板收起后整体移除、不留残条，重开入口固定为页头带右侧操作区的「查看上下文」开关。
 
 实现上以 `components/layout/` 下的 `PageHeader`、`PageToolbar`、`ScrollRegion`、`ViewContainer` 与共享 Token/样式为唯一来源；页面不得自定版心宽度、页头结构、滚动边界，也不得替骨架容器补纵向间距——间距机制必须由骨架自己拥有（§9.8）。设置页因保留二级导航布局作为声明特例，其余新增页面一律套用本骨架。数据加载、搜索和删除等业务编排留在页面对应的 hook，不在布局组件中复制 Cloud 的通用 CRUD 控制器。
@@ -706,7 +708,7 @@ UI Foundation 首批提供四套成对色系：
 | `StatusNote` | `components/StatusNote.tsx` | 持续为真的只读状态，无底/内距/上下 margin；不能装一次性“已保存”，见 §11.5.2 |
 | `InlineError` | `components/InlineError.tsx` | 当前对象可行动的 danger/warning；支持 message/problems、重试/关闭；见 §11.5.1 |
 | `TransientToast` | `components/TransientToast.tsx` | 当场短时结果，局部、自消、不落库；与通知投影共用 #toast-stack，见 §11.5.1 |
-| `EmptyPage`、`EmptyContext`、`EmptyNotice`、`LoadingPage`、`ErrorPage` | `components/EmptyState.tsx` | 整页/区域/行内空态及整页加载/失败；空集合与无匹配文案分清 |
+| `EmptyPage`、`EmptyContext`、`EmptyNotice`、`LoadingPage`、`ErrorPage` | `components/EmptyState.tsx` | 整页空态填满并居中于可用列表/结果区；区域/行内空态及整页加载/失败；空集合与无匹配文案分清 |
 | `PopoverMenu` | `components/PopoverMenu.tsx` | 锚定菜单与下拉；头尾固定、条目区独立滚动；说明列起点统一并左对齐；截断文本由 Tooltip 补全；Esc、焦点归还、方向键、碰撞与触发器字号归基座 |
 | `Modal` | `components/Modal.tsx` | dialog/sheet/viewer；inert、Tab、Esc、焦点恢复与叠层归基座；局部覆盖层可用 useOverlaySemantics |
 | `ConfirmationDialog` | `components/ConfirmationDialog.tsx` | 破坏性/需确认动作；Modal 的 alertdialog 语义，初始焦点落取消 |

@@ -1169,7 +1169,7 @@ export function ExpertsPage({
       />
       {state.error && <InlineError message={state.error} />}
       <ScrollRegion ariaLabel="专家列表" busy={state.loading || detailLoading}>
-        <section className="page-body skills-body">
+        <section className="page-body page-body-fill skills-body">
           {state.loading || detailLoading ? (
             <LoadingPage label="正在加载专家…" />
           ) : state.experts.length === 0 ? (
