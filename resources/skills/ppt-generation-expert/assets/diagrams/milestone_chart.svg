@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- diagram/milestone_chart — 里程碑与阶段区间（拓扑原子：order 路径 + membership 区间）
+       用途：把周期切成有名字的阶段，并在阶段切换处标出验收里程碑（含判据）。
+       边界：只列时间点事件 → diagram/timeline_chart；任务级时长条 → chart/gantt_chart。
+       结构规则：阶段带为 membership 区间，必须首尾相连、不留空白；里程碑菱形只落在阶段边界上；
+                 里程碑卡在带上方、判据在带下方；已完成/进行中/规划期三段视觉必须可辨。
+       改法：阶段带 y=376、高 64px，按数量等分区间（本图 4 段 + 首尾启停带）；
+             里程碑菱形半尺寸 18px，落在阶段间隙中心；卡片宽 220px、高 76px（以菱形 x 居中）；
+             刻度线长 48px，连接卡片底与阶段带顶。
+       分组：里程碑卡 / 阶段带 / 度量 / 说明 / 图例 / 脚注各自成组，沿 y 轴顺序排列且互不重叠。 -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="summary-band" data-pptx-bounds="70 135 1140 50">
+    <rect x="70" y="135" width="1140" height="50" rx="8" fill="#E4E6EA"/>
+    <path d="M76 135.25A8 8 0 0 0 70 143V177A8 8 0 0 0 76 184.75Z" fill="#1B4593"/>
+    <text x="92" y="159" font-size="14" fill="#0C2864">全周期分为 3 个阶段、4 个验收里程碑，当前处于阶段三，已通过前 2 个里程碑。</text>
+    <text x="92" y="177" font-size="14" fill="#0C2864">M2 判定依据为「一期上线且 3 个场景闭环」，已于 5 月达成，较计划提前 2 周。</text>
+  </g>
+
+  <g id="ms-milestones" data-pptx-bounds="88 240 1120 86">
+    <g id="ms-m1">
+      <rect x="88" y="250" width="220" height="76" rx="8" fill="#FFFFFF" stroke="#1B4593" stroke-width="1.5"/>
+      <text x="104" y="274" font-size="16" font-weight="bold" fill="#0C2864">M1 立项批复</text>
+      <text x="104" y="296" font-size="14" fill="#0C2864">2026-01-20</text>
+      <text x="104" y="316" font-size="13" fill="#778495">判据：预算批复完成</text>
+    </g>
+    <g id="ms-m2">
+      <rect x="388" y="250" width="220" height="76" rx="8" fill="#FFFFFF" stroke="#1B4593" stroke-width="1.5"/>
+      <text x="404" y="274" font-size="16" font-weight="bold" fill="#0C2864">M2 一期上线</text>
+      <text x="404" y="296" font-size="14" fill="#0C2864">2026-05-15</text>
+      <text x="404" y="316" font-size="13" fill="#778495">判据：3 个场景闭环</text>
+    </g>
+    <g id="ms-m3">
+      <rect x="688" y="250" width="220" height="76" rx="8" fill="#FFFFFF" stroke="#1B4593" stroke-width="1.5"/>
+      <text x="704" y="274" font-size="16" font-weight="bold" fill="#0C2864">M3 收入确认</text>
+      <text x="704" y="296" font-size="14" fill="#0C2864">2026-07-31</text>
+      <text x="704" y="316" font-size="13" fill="#778495">判据：首个项目确认收入</text>
+    </g>
+    <g id="ms-m4">
+      <rect x="988" y="250" width="220" height="76" rx="8" fill="#FFFFFF" stroke="#778495" stroke-width="1.5" stroke-dasharray="6 4"/>
+      <text x="1004" y="274" font-size="16" font-weight="bold" fill="#778495">M4 全行推广</text>
+      <text x="1004" y="296" font-size="14" fill="#778495">2026-11-30 计划</text>
+      <text x="1004" y="316" font-size="13" fill="#778495">判据：覆盖 12 家分行</text>
+    </g>
+  </g>
+
+  <g id="ms-stages" data-pptx-bounds="70 326 1140 114">
+    <line x1="198" y1="326" x2="198" y2="374" stroke="#778495" stroke-width="1.5"/>
+    <line x1="498" y1="326" x2="498" y2="374" stroke="#778495" stroke-width="1.5"/>
+    <line x1="798" y1="326" x2="798" y2="374" stroke="#778495" stroke-width="1.5"/>
+    <line x1="1098" y1="326" x2="1098" y2="374" stroke="#778495" stroke-width="1.5"/>
+    <rect x="70" y="376" width="126" height="64" rx="8" fill="#0C2864"/>
+    <rect x="200" y="376" width="296" height="64" rx="8" fill="#E4E6EA"/>
+    <rect x="500" y="376" width="296" height="64" rx="8" fill="#E4E6EA"/>
+    <rect x="800" y="376" width="296" height="64" rx="8" fill="#1B4593"/>
+    <rect x="1100" y="376" width="110" height="64" rx="8" fill="#FFFFFF" stroke="#778495" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <text x="133" y="414" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">启动</text>
+    <text x="348" y="403" font-size="16" font-weight="bold" fill="#0C2864" text-anchor="middle">阶段一 · 起步</text>
+    <text x="348" y="425" font-size="13" fill="#778495" text-anchor="middle">2026-01 至 2026-04</text>
+    <text x="648" y="403" font-size="16" font-weight="bold" fill="#0C2864" text-anchor="middle">阶段二 · 扩面</text>
+    <text x="648" y="425" font-size="13" fill="#778495" text-anchor="middle">2026-05 至 2026-07</text>
+    <text x="948" y="403" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">阶段三 · 推广</text>
+    <text x="948" y="425" font-size="13" fill="#E4E6EA" text-anchor="middle">2026-08 至 2026-10</text>
+    <text x="1155" y="414" font-size="14" font-weight="bold" fill="#778495" text-anchor="middle">规划期</text>
+    <polygon points="198,394 216,412 198,430 180,412" fill="#1B4593"/>
+    <polygon points="498,394 516,412 498,430 480,412" fill="#1B4593"/>
+    <polygon points="798,394 816,412 798,430 780,412" fill="#266DE7"/>
+    <polygon points="1098,394 1116,412 1098,430 1080,412" fill="#FFFFFF" stroke="#778495" stroke-width="2"/>
+  </g>
+
+  <g id="ms-metrics" data-pptx-bounds="70 460 1140 56">
+    <text x="86" y="478" font-size="14" fill="#0C2864">启动前投入：0 万</text>
+    <text x="86" y="500" font-size="13" fill="#778495">立项与调研阶段</text>
+    <text x="216" y="478" font-size="14" fill="#0C2864">阶段投入：142 万</text>
+    <text x="216" y="500" font-size="13" fill="#778495">人力 136 万 / 其他 6 万</text>
+    <text x="516" y="478" font-size="14" fill="#0C2864">阶段投入：248 万</text>
+    <text x="516" y="500" font-size="13" fill="#778495">人力 240 万 / 其他 8 万</text>
+    <text x="816" y="478" font-size="14" fill="#0C2864">阶段投入：204 万</text>
+    <text x="816" y="500" font-size="13" fill="#778495">人力 196 万 / 其他 8 万</text>
+    <text x="1116" y="478" font-size="14" fill="#0C2864">余量 88 万</text>
+    <text x="1116" y="500" font-size="13" fill="#778495">按 3 个月均摊</text>
+  </g>
+
+  <g id="ms-note" data-pptx-bounds="70 545 1140 26">
+    <text x="70" y="560" font-size="14" fill="#778495">里程碑只标在阶段边界；每张卡必须写出可判定的验收依据，不写「进展良好」这类不可证伪的表述。</text>
+  </g>
+
+  <g id="ms-legend" data-pptx-bounds="60 600 910 40">
+    <polygon points="80,610 92,620 80,630 68,620" fill="#1B4593"/>
+    <text x="102" y="625" font-size="14" fill="#778495">已通过</text>
+    <polygon points="190,610 202,620 190,630 178,620" fill="#266DE7"/>
+    <text x="212" y="625" font-size="14" fill="#778495">当前</text>
+    <polygon points="280,610 292,620 280,630 268,620" fill="#FFFFFF" stroke="#778495" stroke-width="2"/>
+    <text x="302" y="625" font-size="14" fill="#778495">计划中</text>
+  </g>
+
+  <g id="ms-footnote" data-pptx-bounds="70 660 900 26">
+    <text x="70" y="672" font-size="14" fill="#778495">阶段带首尾相连不留空白；已完成/进行中/规划期三段配色互斥，不得只用文字区分。</text>
+  </g>
+</svg>

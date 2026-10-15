@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" data-pptx-page-role="content">
+  <!-- 原生表格注入夹具 —— 表格区**留白**（不画任何形状），由 native_table_inject.py 按
+       native_tables.json 在 merge 之后注入原生可编辑表格（双击可改数）。
+       留白区 = x 90~1190, y 280~580（在卡片 table-card 的 bounds 之内）。 -->
+  <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF" id="page-bg" data-pptx-role="background"/>
+  <g id="table-card" data-pptx-bounds="70 200 1140 410">
+    <rect x="70" y="200" width="1140" height="410" rx="8" fill="#FFFFFF" stroke="#1B4593" stroke-width="1.5"/>
+    <path d="M76 200.25A8 8 0 0 0 70 208V602A8 8 0 0 0 76 609.75Z" fill="#1B4593"/>
+    <text x="92" y="230" font-size="16" font-weight="bold" fill="#0C2864">原生表格注入验证页</text>
+    <text x="92" y="258" font-size="13" fill="#778495">下方表格区在 SVG 中留白，由 native_tables.json 声明、注入为原生可编辑表格。</text>
+  </g>
+  <g id="conclusion-band" data-pptx-bounds="70 618 1140 46">
+    <rect x="70" y="618" width="1140" height="46" rx="8" fill="#0C2864"/>
+    <path d="M76 618.25A8 8 0 0 0 70 626V656A8 8 0 0 0 76 663.75Z" fill="#00D3E4"/>
+    <text x="92" y="646" font-size="16" font-weight="bold" fill="#FFFFFF">结论：表格转原生后，客户可直接双击单元格改数。</text>
+  </g>
+</svg>

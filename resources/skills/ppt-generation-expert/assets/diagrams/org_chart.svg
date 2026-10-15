@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- diagram/org_chart — 组织架构图（拓扑原子：parent 分支 / indent 缩进）
+       用途：组织层级、汇报线、编制归属、责任分工的静态结构表达。
+       边界：节点带数值且按大小排序 → 用 chart/horizontal_bar_chart；流程顺序 → diagram/flow_chart。
+       结构规则：每层节点等宽等高；层间垂直净距 ≥50px；边为直角折线（根底→水平干线→子顶），
+                 同级子节点从干线同一点分支；虚线仅表示非行政关系（业务指导/虚线上报）。
+       改法：层数 = y 层距 120px（225 / 345 / 465）；第 n 层节点 x = 层中心 − 节点宽/2；
+             干线 y = 父节点底 + 23px，子顶 y = 干线 y + 45px。
+       分组：每个模块一个顶层 g id 并声明 data-pptx-bounds（根坐标、完整包住组内元素）。 -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="summary-band" data-pptx-bounds="70 135 1140 50">
+    <rect x="70" y="135" width="1140" height="50" rx="8" fill="#E4E6EA"/>
+    <path d="M76 135.25A8 8 0 0 0 70 143V177A8 8 0 0 0 76 184.75Z" fill="#1B4593"/>
+    <text x="92" y="159" font-size="14" fill="#0C2864">一级部门 1 个、二级单元 3 个、三级小组 2 个，共 6 个组织单元、编制 86 人。</text>
+    <text x="92" y="177" font-size="14" fill="#0C2864">管理层级压缩为 3 层，二级单元直接对一级负责，取消中间协调岗。</text>
+  </g>
+
+  <g id="org-tree" data-pptx-bounds="70 200 770 340">
+    <polyline points="460,277 460,300 210,300 210,345" fill="none" stroke="#778495" stroke-width="1.5"/>
+    <polyline points="460,300 710,300 710,345" fill="none" stroke="#778495" stroke-width="1.5"/>
+    <line x1="460" y1="300" x2="460" y2="345" stroke="#778495" stroke-width="1.5"/>
+    <polyline points="460,395 460,420 330,420 330,465" fill="none" stroke="#778495" stroke-width="1.5"/>
+    <polyline points="460,420 590,420 590,465" fill="none" stroke="#778495" stroke-width="1.5"/>
+    <g id="org-root">
+      <rect x="330" y="225" width="260" height="52" rx="8" fill="#0C2864"/>
+      <text x="460" y="247" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">一级部门</text>
+      <text x="460" y="266" font-size="13" fill="#E4E6EA" text-anchor="middle">编制 86 人 · 负责人 1 名</text>
+    </g>
+    <g id="org-level2">
+      <rect x="95" y="345" width="230" height="50" rx="8" fill="#FFFFFF" stroke="#1B4593" stroke-width="1.5"/>
+      <text x="210" y="367" font-size="16" font-weight="bold" fill="#0C2864" text-anchor="middle">二级单元 A</text>
+      <text x="210" y="386" font-size="13" fill="#778495" text-anchor="middle">34 人 · 交付主线</text>
+      <rect x="345" y="345" width="230" height="50" rx="8" fill="#FFFFFF" stroke="#1B4593" stroke-width="1.5"/>
+      <text x="460" y="367" font-size="16" font-weight="bold" fill="#0C2864" text-anchor="middle">二级单元 B</text>
+      <text x="460" y="386" font-size="13" fill="#778495" text-anchor="middle">31 人 · 平台与研发</text>
+      <rect x="595" y="345" width="230" height="50" rx="8" fill="#FFFFFF" stroke="#1B4593" stroke-width="1.5"/>
+      <text x="710" y="367" font-size="16" font-weight="bold" fill="#0C2864" text-anchor="middle">二级单元 C</text>
+      <text x="710" y="386" font-size="13" fill="#778495" text-anchor="middle">21 人 · 售前与方案</text>
+    </g>
+    <g id="org-level3">
+      <rect x="230" y="465" width="200" height="46" rx="8" fill="#E4E6EA"/>
+      <text x="330" y="485" font-size="14" font-weight="bold" fill="#0C2864" text-anchor="middle">三级小组 B1</text>
+      <text x="330" y="502" font-size="13" fill="#778495" text-anchor="middle">18 人</text>
+      <rect x="490" y="465" width="200" height="46" rx="8" fill="#E4E6EA"/>
+      <text x="590" y="485" font-size="14" font-weight="bold" fill="#0C2864" text-anchor="middle">三级小组 B2</text>
+      <text x="590" y="502" font-size="13" fill="#778495" text-anchor="middle">13 人</text>
+    </g>
+  </g>
+
+  <g id="org-metrics" data-pptx-bounds="880 225 330 286">
+    <rect x="880" y="225" width="330" height="286" rx="8" fill="#FFFFFF" stroke="#1B4593" stroke-width="1.5"/>
+    <text x="900" y="253" font-size="16" font-weight="bold" fill="#0C2864">编制与层级</text>
+    <line x1="900" y1="272" x2="1190" y2="272" stroke="#E4E6EA" stroke-width="1"/>
+    <text x="900" y="298" font-size="14" fill="#778495">组织单元</text>
+    <text x="1190" y="298" font-size="14" font-weight="bold" fill="#1B4593" text-anchor="end">6 个</text>
+    <line x1="900" y1="316" x2="1190" y2="316" stroke="#E4E6EA" stroke-width="1"/>
+    <text x="900" y="342" font-size="14" fill="#778495">总编制</text>
+    <text x="1190" y="342" font-size="14" font-weight="bold" fill="#1B4593" text-anchor="end">86 人</text>
+    <line x1="900" y1="360" x2="1190" y2="360" stroke="#E4E6EA" stroke-width="1"/>
+    <text x="900" y="386" font-size="14" fill="#778495">管理层级</text>
+    <text x="1190" y="386" font-size="14" font-weight="bold" fill="#1B4593" text-anchor="end">3 层</text>
+    <line x1="900" y1="404" x2="1190" y2="404" stroke="#E4E6EA" stroke-width="1"/>
+    <text x="900" y="430" font-size="14" fill="#778495">管理跨度</text>
+    <text x="1190" y="430" font-size="14" font-weight="bold" fill="#1B4593" text-anchor="end">1 : 3</text>
+    <line x1="900" y1="448" x2="1190" y2="448" stroke="#E4E6EA" stroke-width="1"/>
+    <text x="900" y="474" font-size="14" fill="#778495">平均单单元人数</text>
+    <text x="1190" y="474" font-size="14" font-weight="bold" fill="#1B4593" text-anchor="end">14.3 人</text>
+  </g>
+
+  <g id="org-legend" data-pptx-bounds="70 630 900 40">
+    <line x1="70" y1="648" x2="110" y2="648" stroke="#0C2864" stroke-width="1.5"/>
+    <text x="120" y="653" font-size="14" fill="#778495">实线＝行政汇报线（parent 分支）</text>
+    <line x1="360" y1="648" x2="400" y2="648" stroke="#266DE7" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <text x="410" y="653" font-size="14" fill="#778495">虚线＝业务指导线（link）。节点等宽等高，不编码数值大小。</text>
+  </g>
+</svg>

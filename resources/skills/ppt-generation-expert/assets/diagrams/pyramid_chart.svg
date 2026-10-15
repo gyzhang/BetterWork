@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- diagram/pyramid_chart — 金字塔构成图（拓扑原子：parent 分解 + contrast 层级位阶）
+       用途：市场分层、客户价值金字塔、组织能力/人才梯队、产品组合等「越往上价值密度越高、
+             越往下规模体量越大」的层级构成表达；层内只放占比短文字，说明外置右列。
+       边界：层宽需编码真实数值并精确对比 → chart/horizontal_bar_chart；转化递减 → chart/funnel_chart；
+             时间阶段与验收点 → diagram/milestone_chart；纯层级归属（不带占比） → diagram/org_chart。
+       结构规则：左右轴对称；逐层等高 64px、层间隙 8px；层宽示意化递减（每侧每层加宽 40px），
+                 不编码真实比例——比例悬殊时底层窄到无法承载文字；层内文字水平居中。
+       改法：层数 n → 第 i 层 y = 240 + (i−1)×72；上宽 = 240 + (i−1)×80，下宽 = 上宽 + 80；中轴 x=430；
+             右列说明块与层中线对齐，引线自层右缘中点画至 x=740；层数增减必须同步 bounds。
+       分组：结论条 / 塔身 / 右列说明 / 图例 / 脚注各自成组；相邻组边界互不重叠。 -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="summary-band" data-pptx-bounds="70 135 1140 50">
+    <rect x="70" y="135" width="1140" height="50" rx="8" fill="#E4E6EA"/>
+    <path d="M76 135.25A8 8 0 0 0 70 143V177A8 8 0 0 0 76 184.75Z" fill="#1B4593"/>
+    <text x="92" y="159" font-size="14" fill="#0C2864">智能体产业呈四层价值结构：算力层以 40% 的规模占比居底，平台层仅 10% 却占据最高生态卡位。</text>
+    <text x="92" y="177" font-size="14" fill="#0C2864">价值密度自顶向底递减、规模体量自顶向底递增，二者反向构成金字塔的结构张力。</text>
+  </g>
+
+  <g id="pyr-body" data-pptx-bounds="70 225 675 310">
+    <text x="105" y="250" font-size="13" fill="#778495" text-anchor="middle">价值密度高</text>
+    <line x1="105" y1="262" x2="105" y2="500" stroke="#778495" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="105" y="522" font-size="13" fill="#778495" text-anchor="middle">规模体量大</text>
+    <path d="M310,240 L550,240 L590,304 L270,304 Z" fill="#0C2864"/>
+    <text x="430" y="272" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">10%</text>
+    <path d="M270,312 L590,312 L630,376 L230,376 Z" fill="#1B4593"/>
+    <text x="430" y="344" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">20%</text>
+    <path d="M230,384 L630,384 L670,448 L190,448 Z" fill="#266DE7"/>
+    <text x="430" y="416" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">30%</text>
+    <path d="M190,456 L670,456 L710,520 L150,520 Z" fill="#048AE3"/>
+    <text x="430" y="488" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">40%</text>
+    <line x1="570" y1="272" x2="740" y2="272" stroke="#778495" stroke-width="1" stroke-dasharray="4 3"/>
+    <line x1="610" y1="344" x2="740" y2="344" stroke="#778495" stroke-width="1" stroke-dasharray="4 3"/>
+    <line x1="650" y1="416" x2="740" y2="416" stroke="#778495" stroke-width="1" stroke-dasharray="4 3"/>
+    <line x1="690" y1="488" x2="740" y2="488" stroke="#778495" stroke-width="1" stroke-dasharray="4 3"/>
+  </g>
+
+  <g id="pyr-notes" data-pptx-bounds="750 240 460 280">
+    <g id="pyr-note-l1">
+      <text x="752" y="266" font-size="14" font-weight="bold" fill="#0C2864">Agent 平台层 · 占比 10%</text>
+      <text x="752" y="288" font-size="13" fill="#778495">生态卡位：平台抽成、数据闭环与开发者生态</text>
+    </g>
+    <g id="pyr-note-l2">
+      <text x="752" y="338" font-size="14" font-weight="bold" fill="#0C2864">模型服务层 · 占比 20%</text>
+      <text x="752" y="360" font-size="13" fill="#778495">技术壁垒：基础模型 API、推理优化与模型即服务</text>
+    </g>
+    <g id="pyr-note-l3">
+      <text x="752" y="410" font-size="14" font-weight="bold" fill="#0C2864">行业应用层 · 占比 30%</text>
+      <text x="752" y="432" font-size="13" fill="#778495">规模主力：Agent 原生应用与行业解决方案交付</text>
+    </g>
+    <g id="pyr-note-l4">
+      <text x="752" y="482" font-size="14" font-weight="bold" fill="#0C2864">算力底座层 · 占比 40%</text>
+      <text x="752" y="504" font-size="13" fill="#778495">体量最大：智算中心、AI 芯片与绿色能源配套</text>
+    </g>
+  </g>
+
+  <g id="pyr-legend" data-pptx-bounds="70 600 1140 40">
+    <rect x="70" y="608" width="24" height="14" fill="#0C2864"/>
+    <text x="102" y="620" font-size="14" fill="#778495">平台层</text>
+    <rect x="150" y="608" width="24" height="14" fill="#1B4593"/>
+    <text x="182" y="620" font-size="14" fill="#778495">模型层</text>
+    <rect x="230" y="608" width="24" height="14" fill="#266DE7"/>
+    <text x="262" y="620" font-size="14" fill="#778495">应用层</text>
+    <rect x="310" y="608" width="24" height="14" fill="#048AE3"/>
+    <text x="342" y="620" font-size="14" fill="#778495">算力层</text>
+    <text x="430" y="620" font-size="14" fill="#778495">层宽为示意宽度，不编码真实比例——需按数值精确对比时改用 chart/horizontal_bar_chart。</text>
+  </g>
+
+  <g id="pyr-footnote" data-pptx-bounds="70 660 1100 26">
+    <text x="70" y="672" font-size="14" fill="#778495">结构不变量：左右轴对称、逐层等高 64px、层间隙 8px、每侧每层加宽 40px；层数增减按 y = 240 + (i−1)×72 重算并同步 bounds。</text>
+  </g>
+</svg>

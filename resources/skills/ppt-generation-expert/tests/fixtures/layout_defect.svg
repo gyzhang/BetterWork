@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <!-- 版式校验夹具（缺陷）——verify_layout.py 的阴性测试，故意含四类真实事故：
+       L1 深色数值标签右对齐后落进深蓝条内（2026-09-16 P04/P06/P07/P09 事故）
+       L2 卡片末行文字越过下边框（同批 P13 事故）
+       L4 两行文字基线只差 4px，互相重叠（同批 P11 事故）
+       L5 左侧装饰条是直角矩形，戳出宿主卡片圆角轮廓（同批 P13，Kevin 指出）
+       期望：退出码 1，L1 / L2 / L4 / L5 四类都被报出，且 L1 附带可执行的修法建议。
+       注：条块坐标与 chart-data 声明严格一致，故几何校验应通过——本夹具只验版式。 -->
+  <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF" id="page-bg" data-pptx-role="background"/>
+  <g id="defect-card" data-pptx-bounds="70 200 760 300">
+    <rect x="70" y="200" width="760" height="300" rx="8" fill="#FFFFFF" stroke="#1B4593" stroke-width="1.5"/>
+    <rect x="70" y="200" width="6" height="300" fill="#0C2864"/>
+    <text x="92" y="228" font-size="16" font-weight="bold" fill="#0C2864">版式适配夹具（缺陷对照）</text>
+    <text x="120" y="232" font-size="16" font-weight="bold" fill="#0C2864">与上一行撞在一起</text>
+    <g id="defect-bar-area">
+      <!-- chart-plot-area: object=defect-bar | 330,300,790,600 -->
+      <!-- chart-data: object=defect-bar | calc=bar | horizontal=1 | labels=指标 | values=400.00 | area=330,300,790,600 | value-range=0,420 | bar-width=30 -->
+      <rect x="330.0" y="435.0" width="438.1" height="30" fill="#0C2864"/>
+    </g>
+    <text x="740" y="455" font-size="14" font-weight="bold" fill="#0C2864" text-anchor="end">400.00　99.9%</text>
+    <text x="92" y="502" font-size="13" fill="#778495">这行文字越过卡片下边框，会被边框切断。</text>
+  </g>
+</svg>

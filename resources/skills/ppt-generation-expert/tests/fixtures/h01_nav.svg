@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- 回归夹具 h01 — 原生超链接：整对象同册跳转 + 行内外部链接。
+       同册跳转写 href="#slide-2"（1-based 最终页码），导出后成为指向 slide 部件的内部关系；
+       外部链接写完整 URI。merge 进公司模板时由 merge_into_template.py 按页映射重映射，
+       不得把源 pptx 的页部件复制进目标包（否则包内重名，PowerPoint 报修复）。 -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <a href="#slide-2">
+    <g id="nav-button" data-pptx-bounds="70 150 1140 120">
+      <rect x="70" y="150" width="1140" height="120" rx="8" fill="#1B4593"/>
+      <text x="640" y="205" font-size="22" fill="#FFFFFF" text-anchor="middle">查看详细数据（跳转到第 2 页）</text>
+      <text x="640" y="238" font-size="14" fill="#E4E6EA" text-anchor="middle">同册跳转：整对象锚点</text>
+    </g>
+  </a>
+
+  <g id="ext-link" data-pptx-bounds="70 300 1140 90">
+    <rect x="70" y="300" width="1140" height="90" rx="8" fill="#E4E6EA"/>
+    <text x="90" y="336" font-size="14" fill="#0C2864">外部链接示例：</text>
+    <text x="90" y="362" font-size="14" fill="#0C2864">参见 <a href="https://www.example.com/guide"><tspan>产品指南</tspan></a> 了解完整说明。</text>
+  </g>
+</svg>

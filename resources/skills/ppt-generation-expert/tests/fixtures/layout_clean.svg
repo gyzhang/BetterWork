@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <!-- 版式校验夹具（合规）——用于 verify_layout.py 的阳性测试：
+       数值标签在条尾外侧、文字与容器边框保持净距、无文字互撞，
+       边缘装饰条用贴边 path 跟随宿主圆角（左两角 r=8，纵向取宿主全高）。
+       配套 layout_defect.svg 是它的缺陷对照版。 -->
+  <rect x="0" y="0" width="1280" height="720" fill="#FFFFFF" id="page-bg" data-pptx-role="background"/>
+  <g id="clean-card" data-pptx-bounds="70 200 760 300">
+    <rect x="70" y="200" width="760" height="300" rx="8" fill="#FFFFFF" stroke="#1B4593" stroke-width="1.5"/>
+    <path d="M76 200.25A8 8 0 0 0 70 208V492A8 8 0 0 0 76 499.75Z" fill="#1B4593"/>
+    <text x="92" y="228" font-size="16" font-weight="bold" fill="#0C2864">版式适配夹具（合规）</text>
+    <g id="clean-bar-area">
+      <rect x="330" y="300" width="320" height="30" fill="#0C2864"/>
+    </g>
+    <text x="658" y="321" font-size="14" font-weight="bold" fill="#0C2864">364.00</text>
+    <text x="92" y="470" font-size="13" fill="#778495">末行文字与下边框保持 20px 以上净距；标签在条尾外侧 8px。</text>
+  </g>
+</svg>

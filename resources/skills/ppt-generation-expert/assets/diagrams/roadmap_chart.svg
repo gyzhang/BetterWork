@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Microsoft YaHei" data-pptx-page-role="content">
+  <!-- diagram/roadmap_chart — 路线图（拓扑原子：order 阶段轴 × membership 泳道，正交叠加）
+       用途：多条工作流在同一时间轴上并行推进的规划视图（能力线 / 业务线 / 治理线）。
+       边界：只有单一序列 → diagram/timeline_chart；任务级起止与工时 → chart/gantt_chart。
+       结构规则：列=阶段、行=泳道，形成矩阵；同一泳道跨阶段用同一色系，不同泳道色相必须区分；
+                 已落地=实线边框+左侧色条，计划中=虚线边框+灰字，二者不得只靠文字区分；
+                 每格最多一个条目，格子承载不下就拆页而不是缩字号。
+       改法：泳道高 110px、行距 120px（y 254 / 374 / 494）；阶段列宽 235px、列距 245px（x 230 / 475 / 720 / 965）；
+             条目块 = 列 x+18，泳道 y+19，尺寸 199×72px；阶段表头高 44px（y 200）。
+       分组：表头一行 + 三条泳道各成一组，组边界沿 y 首尾相接（重叠 0px），
+             竖网格线按组切段分配，避免组边界跨越线宽。 -->
+  <rect id="page-background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" data-pptx-role="background"/>
+
+  <g id="summary-band" data-pptx-bounds="70 135 1140 50">
+    <rect x="70" y="135" width="1140" height="50" rx="8" fill="#E4E6EA"/>
+    <path d="M76 135.25A8 8 0 0 0 70 143V177A8 8 0 0 0 76 184.75Z" fill="#1B4593"/>
+    <text x="92" y="159" font-size="14" fill="#0C2864">三线并行推进：平台能力领先业务落地一个季度，治理合规始终与业务同步交付。</text>
+    <text x="92" y="177" font-size="14" fill="#0C2864">当前 Q3：平台线进入多智能体协同，业务线 3 个场景已闭环，治理线补齐模型评测。</text>
+  </g>
+
+  <g id="rm-phases" data-pptx-bounds="230 194 980 52">
+    <line x1="230" y1="200" x2="230" y2="246" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="475" y1="200" x2="475" y2="246" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="720" y1="200" x2="720" y2="246" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="965" y1="200" x2="965" y2="246" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="1200" y1="200" x2="1200" y2="246" stroke="#E4E6EA" stroke-width="1"/>
+    <rect x="230" y="200" width="235" height="44" rx="6" fill="#0C2864"/>
+    <text x="347" y="228" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">2026 Q1</text>
+    <rect x="475" y="200" width="235" height="44" rx="6" fill="#0C2864"/>
+    <text x="592" y="228" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">2026 Q2</text>
+    <rect x="720" y="200" width="235" height="44" rx="6" fill="#1B4593"/>
+    <text x="837" y="228" font-size="16" font-weight="bold" fill="#FFFFFF" text-anchor="middle">2026 Q3 · 当前</text>
+    <rect x="965" y="200" width="235" height="44" rx="6" fill="#E4E6EA" stroke="#778495" stroke-width="1" stroke-dasharray="6 4"/>
+    <text x="1082" y="228" font-size="16" font-weight="bold" fill="#778495" text-anchor="middle">2026 Q4 · 计划</text>
+  </g>
+
+  <g id="rm-lane-platform" data-pptx-bounds="70 246 1140 122">
+    <line x1="230" y1="246" x2="230" y2="368" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="475" y1="246" x2="475" y2="368" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="720" y1="246" x2="720" y2="368" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="965" y1="246" x2="965" y2="368" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="1200" y1="246" x2="1200" y2="368" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="230" y1="254" x2="1200" y2="254" stroke="#E4E6EA" stroke-width="1"/>
+    <rect x="70" y="254" width="150" height="110" rx="8" fill="#0C2864"/>
+    <text x="145" y="300" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">平台能力线</text>
+    <text x="145" y="322" font-size="13" fill="#E4E6EA" text-anchor="middle">运行时与编排</text>
+    <g id="rm-p1">
+      <rect x="248" y="273" width="4" height="72" fill="#0C2864"/>
+      <rect x="252" y="273" width="199" height="72" rx="6" fill="#FFFFFF" stroke="#0C2864" stroke-width="1"/>
+      <text x="270" y="305" font-size="14" fill="#0C2864">智能体运行时</text>
+      <text x="270" y="329" font-size="13" fill="#778495">已上线</text>
+    </g>
+    <g id="rm-p2">
+      <rect x="493" y="273" width="4" height="72" fill="#0C2864"/>
+      <rect x="497" y="273" width="199" height="72" rx="6" fill="#FFFFFF" stroke="#0C2864" stroke-width="1"/>
+      <text x="515" y="305" font-size="14" fill="#0C2864">工具编排引擎</text>
+      <text x="515" y="329" font-size="13" fill="#778495">已上线</text>
+    </g>
+    <g id="rm-p3">
+      <rect x="738" y="273" width="4" height="72" fill="#0C2864"/>
+      <rect x="742" y="273" width="199" height="72" rx="6" fill="#FFFFFF" stroke="#0C2864" stroke-width="1"/>
+      <text x="760" y="305" font-size="14" fill="#0C2864">多智能体协同</text>
+      <text x="760" y="329" font-size="13" fill="#778495">开发中</text>
+    </g>
+    <g id="rm-p4">
+      <rect x="983" y="273" width="199" height="72" rx="6" fill="#FFFFFF" stroke="#778495" stroke-width="1" stroke-dasharray="6 4"/>
+      <text x="1001" y="305" font-size="14" fill="#778495">能力开放 API</text>
+      <text x="1001" y="329" font-size="13" fill="#778495">待启动</text>
+    </g>
+  </g>
+
+  <g id="rm-lane-business" data-pptx-bounds="70 368 1140 122">
+    <line x1="230" y1="368" x2="230" y2="490" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="475" y1="368" x2="475" y2="490" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="720" y1="368" x2="720" y2="490" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="965" y1="368" x2="965" y2="490" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="1200" y1="368" x2="1200" y2="490" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="230" y1="374" x2="1200" y2="374" stroke="#E4E6EA" stroke-width="1"/>
+    <rect x="70" y="374" width="150" height="110" rx="8" fill="#1B4593"/>
+    <text x="145" y="420" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">业务落地线</text>
+    <text x="145" y="442" font-size="13" fill="#E4E6EA" text-anchor="middle">场景闭环</text>
+    <g id="rm-b1">
+      <rect x="248" y="393" width="4" height="72" fill="#1B4593"/>
+      <rect x="252" y="393" width="199" height="72" rx="6" fill="#FFFFFF" stroke="#1B4593" stroke-width="1"/>
+      <text x="270" y="425" font-size="14" fill="#0C2864">立项申报</text>
+      <text x="270" y="449" font-size="13" fill="#778495">已闭环</text>
+    </g>
+    <g id="rm-b2">
+      <rect x="493" y="393" width="4" height="72" fill="#1B4593"/>
+      <rect x="497" y="393" width="199" height="72" rx="6" fill="#FFFFFF" stroke="#1B4593" stroke-width="1"/>
+      <text x="515" y="425" font-size="14" fill="#0C2864">合同审核</text>
+      <text x="515" y="449" font-size="13" fill="#778495">已闭环</text>
+    </g>
+    <g id="rm-b3">
+      <rect x="738" y="393" width="4" height="72" fill="#1B4593"/>
+      <rect x="742" y="393" width="199" height="72" rx="6" fill="#FFFFFF" stroke="#1B4593" stroke-width="1"/>
+      <text x="760" y="425" font-size="14" fill="#0C2864">贷后预警</text>
+      <text x="760" y="449" font-size="13" fill="#778495">试点中</text>
+    </g>
+    <g id="rm-b4">
+      <rect x="983" y="393" width="199" height="72" rx="6" fill="#FFFFFF" stroke="#778495" stroke-width="1" stroke-dasharray="6 4"/>
+      <text x="1001" y="425" font-size="14" fill="#778495">全行推广</text>
+      <text x="1001" y="449" font-size="13" fill="#778495">待启动</text>
+    </g>
+  </g>
+
+  <g id="rm-lane-governance" data-pptx-bounds="70 490 1140 126">
+    <line x1="230" y1="490" x2="230" y2="604" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="475" y1="490" x2="475" y2="604" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="720" y1="490" x2="720" y2="604" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="965" y1="490" x2="965" y2="604" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="1200" y1="490" x2="1200" y2="604" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="230" y1="494" x2="1200" y2="494" stroke="#E4E6EA" stroke-width="1"/>
+    <line x1="230" y1="604" x2="1200" y2="604" stroke="#E4E6EA" stroke-width="1"/>
+    <rect x="70" y="494" width="150" height="110" rx="8" fill="#266DE7"/>
+    <text x="145" y="540" font-size="14" font-weight="bold" fill="#FFFFFF" text-anchor="middle">治理合规线</text>
+    <text x="145" y="562" font-size="13" fill="#E4E6EA" text-anchor="middle">沙箱与审计</text>
+    <g id="rm-g1">
+      <rect x="248" y="513" width="4" height="72" fill="#266DE7"/>
+      <rect x="252" y="513" width="199" height="72" rx="6" fill="#FFFFFF" stroke="#266DE7" stroke-width="1"/>
+      <text x="270" y="545" font-size="14" fill="#0C2864">安全沙箱基线</text>
+      <text x="270" y="569" font-size="13" fill="#778495">已发布</text>
+    </g>
+    <g id="rm-g2">
+      <rect x="493" y="513" width="4" height="72" fill="#266DE7"/>
+      <rect x="497" y="513" width="199" height="72" rx="6" fill="#FFFFFF" stroke="#266DE7" stroke-width="1"/>
+      <text x="515" y="545" font-size="14" fill="#0C2864">权限与审计</text>
+      <text x="515" y="569" font-size="13" fill="#778495">已发布</text>
+    </g>
+    <g id="rm-g3">
+      <rect x="738" y="513" width="4" height="72" fill="#266DE7"/>
+      <rect x="742" y="513" width="199" height="72" rx="6" fill="#FFFFFF" stroke="#266DE7" stroke-width="1"/>
+      <text x="760" y="545" font-size="14" fill="#0C2864">模型评测体系</text>
+      <text x="760" y="569" font-size="13" fill="#778495">开发中</text>
+    </g>
+    <g id="rm-g4">
+      <rect x="983" y="513" width="199" height="72" rx="6" fill="#FFFFFF" stroke="#778495" stroke-width="1" stroke-dasharray="6 4"/>
+      <text x="1001" y="545" font-size="14" fill="#778495">合规报告自动化</text>
+      <text x="1001" y="569" font-size="13" fill="#778495">待启动</text>
+    </g>
+  </g>
+
+  <g id="rm-notes" data-pptx-bounds="70 632 1140 54">
+    <text x="70" y="644" font-size="14" fill="#778495">实线框+左侧色条＝已落地或进行中；虚线框＝计划中。同泳道同色系，跨泳道用不同色相。</text>
+    <text x="70" y="672" font-size="14" fill="#778495">每格一个条目；承载不下时拆页，不缩字号、不叠放。</text>
+  </g>
+</svg>
