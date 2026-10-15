@@ -48,6 +48,8 @@ describe('ExpertService', () => {
       builtinToolPolicy: { mode: 'application-defaults' as const },
       modelReference: { mode: 'application-default' as const },
     };
+    expect(() => service.registerBuiltinRelease([{ ...entry, identity: '' }])).toThrow();
+    expect(service.list()).toEqual([]);
     expect(service.registerBuiltinRelease([entry])).toHaveLength(1);
     expect(service.registerBuiltinRelease([entry])).toHaveLength(1);
     const registered = service.get(entry.expertId);
