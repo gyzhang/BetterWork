@@ -1,6 +1,6 @@
 {
   "name": "betterwork",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "面向知识工作者的个人 AI 工作台，基于本地知识库与长期记忆完成深度研究、数据分析、Word 文档和 PPT。",
   "workspaces": [
