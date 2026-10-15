@@ -127,6 +127,9 @@ export class ReActAgentEngine implements AgentEngine {
         let content = '';
         const pendingToolCalls: ToolCall[] = [];
         let messageStarted = false;
+        let providerRequestId: string | undefined;
+        let providerResponseId: string | undefined;
+        let responseModel: string | undefined;
 
         for await (const chunk of input.model.stream({
           messages,
@@ -151,10 +154,14 @@ export class ReActAgentEngine implements AgentEngine {
           } else if (chunk.type === 'tool-call') {
             pendingToolCalls.push(chunk.toolCall);
             yield events.create({ type: 'tool.requested', toolCall: chunk.toolCall });
-          } else if (chunk.type === 'done' && chunk.finishReason === 'length') {
-            throw new Error(
-              '模型响应达到输出上限，Run 未完成。请提高模型输出上限或缩短任务输入后重试。',
-            );
+          } else if (chunk.type === 'done') {
+            providerRequestId = chunk.providerRequestId;
+            providerResponseId = chunk.providerResponseId;
+            responseModel = chunk.responseModel;
+            if (chunk.finishReason === 'length')
+              throw new Error(
+                '模型响应达到输出上限，Run 未完成。请提高模型输出上限或缩短任务输入后重试。',
+              );
           }
         }
 
@@ -197,6 +204,9 @@ export class ReActAgentEngine implements AgentEngine {
                 availableToolNames,
                 modelProviderId: input.model.id,
                 round,
+                ...(providerRequestId === undefined ? {} : { providerRequestId }),
+                ...(providerResponseId === undefined ? {} : { providerResponseId }),
+                ...(responseModel === undefined ? {} : { responseModel }),
               },
             });
             messages.push({

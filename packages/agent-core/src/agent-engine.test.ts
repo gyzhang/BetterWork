@@ -370,7 +370,12 @@ describe('ReActAgentEngine', () => {
           type: 'tool-call',
           toolCall: { id: 'call-search', name: 'web_search', input: { query: 'AI agents' } },
         },
-        { type: 'done' },
+        {
+          type: 'done',
+          providerRequestId: 'request-456',
+          providerResponseId: 'response-123',
+          responseModel: 'served-model-v2',
+        },
       ],
       [{ type: 'text-delta', delta: '已根据可用工具继续。' }, { type: 'done' }],
     ]);
@@ -404,6 +409,9 @@ describe('ReActAgentEngine', () => {
           availableToolNames: ['web_search'],
           modelProviderId: 'recording',
           round: 0,
+          providerRequestId: 'request-456',
+          providerResponseId: 'response-123',
+          responseModel: 'served-model-v2',
         },
       },
     ]);

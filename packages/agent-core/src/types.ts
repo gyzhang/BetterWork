@@ -26,7 +26,14 @@ export type ModelStreamChunk =
   | { type: 'reasoning-delta'; delta: string }
   | { type: 'text-delta'; delta: string }
   | { type: 'tool-call'; toolCall: ToolCall }
-  | { type: 'done'; finishReason?: ModelFinishReason; usage?: ModelUsage };
+  | {
+      type: 'done';
+      finishReason?: ModelFinishReason;
+      usage?: ModelUsage;
+      providerRequestId?: string;
+      providerResponseId?: string;
+      responseModel?: string;
+    };
 
 export interface ModelRequest {
   messages: AgentMessage[];

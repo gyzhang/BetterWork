@@ -69,6 +69,9 @@ export const agentRuntimeEventSchema = z.discriminatedUnion('type', [
         availableToolNames: z.array(z.string()),
         modelProviderId: z.string(),
         round: z.number().int().nonnegative(),
+        providerRequestId: z.string().optional(),
+        providerResponseId: z.string().optional(),
+        responseModel: z.string().optional(),
       })
       .strict()
       .optional(),

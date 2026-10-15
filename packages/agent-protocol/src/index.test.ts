@@ -118,6 +118,9 @@ describe('run protocol', () => {
           availableToolNames: ['web_search'],
           modelProviderId: 'model-1',
           round: 0,
+          providerRequestId: 'request-456',
+          providerResponseId: 'response-123',
+          responseModel: 'served-model-v2',
         },
       }),
     ).toMatchObject({
