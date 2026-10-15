@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { MemoryViewItem } from '@betterwork/agent-protocol';
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useMemories } from './use-memories';
@@ -58,7 +58,22 @@ const install = (): void => {
   });
 };
 
+const deferred = (): {
+  promise: Promise<unknown>;
+  resolve: (value: unknown) => void;
+  reject: (error: Error) => void;
+} => {
+  let resolve!: (value: unknown) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<unknown>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+};
+
 afterEach(() => {
+  cleanup();
   Reflect.deleteProperty(window, 'betterwork');
   listMemories.mockReset();
   createMemory.mockReset();
@@ -71,6 +86,59 @@ afterEach(() => {
 });
 
 describe('useMemories', () => {
+  it.each(['success', 'domain-failure', 'transport-failure'] as const)(
+    'ends loading when a silent search supersedes a refresh with %s',
+    async (outcome) => {
+      const old = deferred();
+      const current = deferred();
+      listMemories
+        .mockResolvedValueOnce({ ok: true, data: { items: [memoryOf('existing')] }, warnings: [] })
+        .mockReturnValueOnce(old.promise)
+        .mockReturnValueOnce(current.promise);
+      install();
+      const { result } = renderHook(() => useMemories());
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.refresh());
+      expect(result.current.loading).toBe(true);
+      act(() => result.current.setQuery('no-match'));
+      await act(async () => {
+        if (outcome === 'success') current.resolve({ ok: true, data: { items: [] }, warnings: [] });
+        else if (outcome === 'domain-failure')
+          current.resolve({
+            ok: false,
+            error: { code: 'INTERNAL_ERROR', message: 'current failure', retryable: true },
+          });
+        else current.reject(new Error('current failure'));
+      });
+      expect(result.current.loading).toBe(false);
+      await act(async () =>
+        old.resolve({ ok: true, data: { items: [memoryOf('old')] }, warnings: [] }),
+      );
+      expect(result.current.loading).toBe(false);
+      if (outcome === 'success') {
+        expect(result.current.query).toBe('no-match');
+        expect(result.current.memories).toEqual([]);
+        expect(result.current.error).toBe('');
+      } else {
+        expect(result.current.memories.map((item) => item.id)).toEqual(['existing']);
+        expect(result.current.error).toBe('current failure');
+      }
+    },
+  );
+
+  it('ends initial loading when a scope change takes over the request', async () => {
+    const old = deferred();
+    const current = deferred();
+    listMemories.mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise);
+    install();
+    const { result } = renderHook(() => useMemories());
+    act(() => result.current.setFilters({ workspaceId: 'ws-new', expertId: undefined, query: '' }));
+    await act(async () => current.resolve({ ok: true, data: { items: [] }, warnings: [] }));
+    await act(async () => old.reject(new Error('old failure')));
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBe('');
+  });
+
   it('挂载时拉取记忆列表', async () => {
     listMemories.mockResolvedValue({
       ok: true,

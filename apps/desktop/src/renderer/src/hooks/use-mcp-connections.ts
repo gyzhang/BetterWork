@@ -8,7 +8,7 @@ import type {
   McpTestResult,
   SaveMcpConnectionRequest,
 } from '@betterwork/agent-protocol';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { describeActionError, trackAction } from '../lib/async-action';
 
@@ -32,21 +32,33 @@ export function useMcpConnections(): McpConnectionsState {
   const [connections, setConnections] = useState<McpConnectionSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const listRequestId = useRef(0);
   const refresh = useCallback((): void => {
+    const requestId = (listRequestId.current += 1);
     setLoading(true);
     setError('');
     trackAction(
       window.betterwork.mcp
         .listConnections()
-        .then(setConnections)
-        .catch((failure: unknown) =>
-          setError(describeActionError(failure, '读取 MCP 连接失败，请重试。')),
-        )
-        .finally(() => setLoading(false)),
+        .then((loaded) => {
+          if (listRequestId.current === requestId) setConnections(loaded);
+        })
+        .catch((failure: unknown) => {
+          if (listRequestId.current === requestId)
+            setError(describeActionError(failure, '读取 MCP 连接失败，请重试。'));
+        })
+        .finally(() => {
+          if (listRequestId.current === requestId) setLoading(false);
+        }),
       '刷新 MCP 连接',
     );
   }, []);
-  useEffect(() => refresh(), [refresh]);
+  useEffect(() => {
+    refresh();
+    return () => {
+      listRequestId.current += 1;
+    };
+  }, [refresh]);
   const request = (
     id: string,
     operationId: string = crypto.randomUUID(),

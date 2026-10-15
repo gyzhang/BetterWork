@@ -14,7 +14,7 @@ import type {
   KnowledgeTextPage,
   ModelProfileSummary,
 } from '@betterwork/agent-protocol';
-import { act, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import type { FormEvent } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -267,6 +267,7 @@ const install = (): Harness => {
 };
 
 afterEach(() => {
+  cleanup();
   Reflect.deleteProperty(window, 'betterwork');
 });
 
@@ -275,6 +276,107 @@ const flush = async (): Promise<void> => {
     await Promise.resolve();
   });
 };
+
+const deferred = <T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason: Error) => void;
+} => {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+};
+
+describe('knowledge request ownership', () => {
+  it.each([
+    ['success', 'before'],
+    ['failure', 'before'],
+    ['success', 'after'],
+    ['failure', 'after'],
+  ] as const)('ignores an old list %s settling %s the current list', async (outcome, order) => {
+    const harness = install();
+    const old = deferred<KnowledgeDocumentSummary[]>();
+    const current = deferred<KnowledgeDocumentSummary[]>();
+    harness.knowledge.list.mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise);
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    act(() => result.current.setFilter({ kind: 'collection', collectionId: 'A' }));
+    act(() => result.current.setFilter({ kind: 'collection', collectionId: 'B' }));
+    const settleOld = async (): Promise<void> => {
+      await act(async () => {
+        if (outcome === 'success') old.resolve([documentOf({ id: 'old-document' })]);
+        else old.reject(new Error('old list failure'));
+      });
+    };
+    if (order === 'before') {
+      await settleOld();
+      expect(result.current.loading).toBe(true);
+      expect(result.current.loadError).toBe('');
+      expect(result.current.documents).toEqual([]);
+    }
+    await act(async () => current.resolve([documentOf({ id: 'current-document' })]));
+    if (order === 'after') await settleOld();
+    expect(result.current.filter).toEqual({ kind: 'collection', collectionId: 'B' });
+    expect(result.current.documents.map((item) => item.id)).toEqual(['current-document']);
+    expect(result.current.loadError).toBe('');
+    expect(result.current.loading).toBe(false);
+  });
+
+  it('keeps the latest A list through A to B to A and exposes its own failure', async () => {
+    const harness = install();
+    const old = deferred<KnowledgeDocumentSummary[]>();
+    const middle = deferred<KnowledgeDocumentSummary[]>();
+    const current = deferred<KnowledgeDocumentSummary[]>();
+    harness.knowledge.list
+      .mockReturnValueOnce(old.promise)
+      .mockReturnValueOnce(middle.promise)
+      .mockReturnValueOnce(current.promise);
+    const { result } = renderHook(() => useKnowledgeLibrary());
+    await flush();
+    act(() => result.current.setFilter({ kind: 'collection', collectionId: 'A' }));
+    act(() => result.current.setFilter({ kind: 'collection', collectionId: 'B' }));
+    act(() => result.current.setFilter({ kind: 'collection', collectionId: 'A' }));
+    await act(async () => current.reject(new Error('current failure')));
+    await act(async () => {
+      old.resolve([documentOf()]);
+      middle.resolve([documentOf()]);
+    });
+    expect(result.current.documents).toEqual([]);
+    expect(result.current.loadError).toBe('current failure');
+    expect(result.current.loading).toBe(false);
+  });
+
+  it.each(['success', 'failure'] as const)(
+    'discards search %s after a collection change',
+    async (outcome) => {
+      const harness = install();
+      const pending = deferred<KnowledgeSearchResponse>();
+      harness.knowledge.search.mockReturnValueOnce(pending.promise);
+      const { result } = renderHook(() => useKnowledgeLibrary());
+      await flush();
+      act(() => result.current.setQuery('old query'));
+      let search!: Promise<void>;
+      act(() => {
+        search = result.current.onSearch({ preventDefault() {} } as FormEvent);
+      });
+      act(() => result.current.setFilter({ kind: 'collection', collectionId: 'new-collection' }));
+      await act(async () => {
+        if (outcome === 'success') pending.resolve(searchResponse());
+        else pending.reject(new Error('old search failure'));
+        await search;
+      });
+      expect(result.current.query).toBe('');
+      expect(result.current.results).toEqual([]);
+      expect(result.current.searchStatus).toBeUndefined();
+      expect(result.current.error).toBe('');
+      expect(result.current.toast).toBeUndefined();
+    },
+  );
+});
 
 describe('useKnowledgeLibrary 作业接线', () => {
   it('取消导入对话框只给即时确认，不跟踪作业', async () => {

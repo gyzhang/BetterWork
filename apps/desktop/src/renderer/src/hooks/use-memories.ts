@@ -142,14 +142,18 @@ export function useMemories(): MemoriesState {
           // 读取失败不清列表：留着上一次可见内容并说明原因，比刷成空白更可解释。
           setError(outcome.message);
         }
-        if (!silent) setLoading(false);
+        setLoading(false);
       }),
       '刷新记忆列表',
     );
   }, []);
 
   useEffect(() => {
+    const requests = guard.current;
     load(false);
+    return () => {
+      requests.request += 1;
+    };
   }, [load]);
 
   const refresh = useCallback((): void => {

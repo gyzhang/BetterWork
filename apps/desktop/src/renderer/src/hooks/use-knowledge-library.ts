@@ -192,6 +192,7 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   const [cursorStack, setCursorStack] = useState<Array<KnowledgeCursor | undefined>>([]);
   const currentCursor = useRef<KnowledgeCursor | undefined>(undefined);
   const detailSeq = useRef(0);
+  const listSeq = useRef(0);
   const researchSeq = useRef(0);
   const searchSeq = useRef(0);
   const pendingJobs = useRef(new Set<string>());
@@ -200,17 +201,31 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   const reloadDetailRef = useRef<() => void>(() => {});
   const operationByInput = useRef<Map<string, string>>(new Map());
 
+  useEffect(
+    () => () => {
+      listSeq.current += 1;
+      searchSeq.current += 1;
+    },
+    [],
+  );
+
   const refresh = useCallback((): void => {
+    const seq = (listSeq.current += 1);
     setLoading(true);
     setLoadError('');
     trackAction(
       window.betterwork.knowledge
         .list({ filter: filterRef.current })
-        .then(setDocuments)
-        .catch((error: unknown) => {
-          setLoadError(describeActionError(error, '资料库加载失败，请重试。'));
+        .then((loaded) => {
+          if (listSeq.current === seq) setDocuments(loaded);
         })
-        .finally(() => setLoading(false)),
+        .catch((error: unknown) => {
+          if (listSeq.current === seq)
+            setLoadError(describeActionError(error, '资料库加载失败，请重试。'));
+        })
+        .finally(() => {
+          if (listSeq.current === seq) setLoading(false);
+        }),
       '刷新资料库',
     );
     // 详情打开时同步重读版本与正文，避免「刷新内容已完成但界面还是旧版」。
@@ -439,6 +454,7 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
   }, [loadSettings]);
 
   const setFilter = (next: KnowledgeLibraryFilter): void => {
+    searchSeq.current += 1;
     filterRef.current = next;
     setFilterState(next);
     setQuery('');

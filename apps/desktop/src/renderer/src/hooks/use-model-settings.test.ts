@@ -137,6 +137,28 @@ describe('useModelSettings 的 IPC 收口', () => {
     expect(result.current.toast).toBeUndefined();
   });
 
+  it('presents a resolved connection failure inline and clears the previous success', async () => {
+    install();
+    list.mockResolvedValue([]);
+    testConnection
+      .mockResolvedValueOnce({ ok: true, message: 'Connected' })
+      .mockResolvedValueOnce({ ok: false, message: 'HTTP 401' });
+    const { result } = renderHook(() => useModelSettings());
+    act(() => result.current.openEditor(modelOf()));
+    await act(async () => {
+      await result.current.onTest();
+    });
+    expect(result.current.toast?.tone).toBe('success');
+    await act(async () => {
+      await result.current.onTest();
+    });
+    expect(result.current.error).toBe('HTTP 401');
+    expect(result.current.toast).toBeUndefined();
+    expect(result.current.editorOpen).toBe(true);
+    expect(result.current.editorForm.name).toBe(modelOf().name);
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
   it('行内切换启用失败走浮层，不写进表单错误', async () => {
     install();
     setEnabled.mockRejectedValue(new Error('写入失败'));

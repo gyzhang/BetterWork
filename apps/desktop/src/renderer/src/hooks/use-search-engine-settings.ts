@@ -72,6 +72,7 @@ export function useSearchEngineSettings(): SearchEngineSettings {
 
   const test = async (): Promise<void> => {
     setError('');
+    dismissToast();
     setBusy(true);
     try {
       const result = await window.betterwork.searchEngines.test({
@@ -79,7 +80,8 @@ export function useSearchEngineSettings(): SearchEngineSettings {
         apiKey,
         webTopK,
       });
-      showToast('success', result.message);
+      if (result.ok) showToast('success', result.message);
+      else setError(result.message);
       refresh();
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : '连接测试失败。');
