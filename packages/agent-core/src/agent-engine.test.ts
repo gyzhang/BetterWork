@@ -356,28 +356,71 @@ describe('ReActAgentEngine', () => {
     expect(events.at(-1)?.type).toBe('run.completed');
   });
 
-  it('fails the run when the model requests an unknown tool', async () => {
+  it('reports an unknown tool as a recoverable failure and continues the run', async () => {
     const events = [];
     const engine = new ReActAgentEngine();
+    const executeSearch = vi.fn(async (input: Record<string, unknown>) => ({
+      query: input.query,
+      results: [],
+    }));
+    const model = recordingModel([
+      [
+        { type: 'tool-call', toolCall: { id: 'call-unknown', name: 'web_answer', input: {} } },
+        {
+          type: 'tool-call',
+          toolCall: { id: 'call-search', name: 'web_search', input: { query: 'AI agents' } },
+        },
+        { type: 'done' },
+      ],
+      [{ type: 'text-delta', delta: '已根据可用工具继续。' }, { type: 'done' }],
+    ]);
     for await (const event of engine.run({
       runId: 'run-unknown-tool',
       taskId: 'task-1',
       sessionId: 'session-1',
       prompt: '调用不存在的工具',
       workspacePath: '.',
-      model: scriptedModel([
-        [
-          { type: 'tool-call', toolCall: { id: 'call-x', name: '不存在', input: {} } },
-          { type: 'done' },
-        ],
-      ]),
-      tools: [],
+      model,
+      tools: [
+        {
+          name: 'web_search',
+          description: '搜索网络',
+          inputSchema: { type: 'object' },
+          execute: executeSearch,
+        },
+      ],
       signal: new AbortController().signal,
     }))
       events.push(event);
 
-    expect(events.at(-1)).toMatchObject({ type: 'run.failed', error: 'Unknown tool: 不存在' });
-    expect(events.some((event) => event.type === 'tool.started')).toBe(false);
+    expect(events.filter((event) => event.type === 'tool.failed')).toMatchObject([
+      {
+        toolCallId: 'call-unknown',
+        error: expect.stringContaining('web_answer'),
+        diagnostic: {
+          kind: 'unknown-tool',
+          source: 'model-provider-output',
+          requestedName: 'web_answer',
+          availableToolNames: ['web_search'],
+          modelProviderId: 'recording',
+          round: 0,
+        },
+      },
+    ]);
+    expect(executeSearch).toHaveBeenCalledOnce();
+    expect(events.filter((event) => event.type === 'tool.started')).toMatchObject([
+      { toolCall: { id: 'call-search', name: 'web_search' } },
+    ]);
+    expect(events.at(-1)).toMatchObject({
+      type: 'run.completed',
+      finalContent: '已根据可用工具继续。',
+    });
+    expect(events.some((event) => event.type === 'run.failed')).toBe(false);
+    const feedback = model.capturedMessages.find(
+      (message) => message.role === 'tool' && message.toolCallId === 'call-unknown',
+    );
+    expect(feedback).toMatchObject({ role: 'tool', toolName: 'web_answer' });
+    expect(feedback?.content).toContain('只使用本次请求提供的工具');
   });
 
   it('fails the run when the model exceeds the tool round limit', async () => {

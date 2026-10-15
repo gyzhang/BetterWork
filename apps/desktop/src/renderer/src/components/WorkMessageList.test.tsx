@@ -150,6 +150,24 @@ describe('work message actions and projection ownership', () => {
       button,
     );
   });
+  it('keeps the running indicator visible while tools work without narration text', () => {
+    const input = props();
+    const activeEvents = new Map(input.events);
+    activeEvents.set('latest', [
+      agentRuntimeEventSchema.parse({
+        id: 'started-latest',
+        runId: 'latest',
+        createdAt: 1,
+        sequence: 1,
+        type: 'run.started',
+        taskId: 'task',
+        sessionId: 'session',
+      }),
+    ]);
+    render(<WorkMessageList {...input} events={activeEvents} />);
+
+    expect(screen.getByText('正在执行…')).toBeTruthy();
+  });
   it('failure and cancellation keep partial content visible without save actions', () => {
     const input = props();
     const incomplete = new Map(
@@ -178,7 +196,7 @@ describe('work message actions and projection ownership', () => {
     );
     render(<WorkMessageList {...input} events={incomplete} />);
     expect(screen.queryByRole('button', { name: '保存为成果' })).toBeNull();
-    expect(screen.getByText('片段 old')).toBeTruthy();
+    expect(screen.getByText('片段 old', { selector: '.process-narration-preview' })).toBeTruthy();
     expect(screen.getByText(/本次运行未完成/).textContent).toContain('失败原因');
     const cancelled = screen.getByText('本次运行已停止。可以调整要求后重新开始。');
     expect(cancelled.closest('.status-note')).not.toBeNull();

@@ -218,6 +218,35 @@ describe('OpenAICompatibleProvider streaming', () => {
       { type: 'done' },
     ]);
   });
+
+  it('preserves a tool name returned outside the request tool list for diagnostics', async () => {
+    const fetchMock = stubFetch(() =>
+      sse(
+        delta({
+          tool_calls: [
+            { index: 0, id: 'call-1', function: { name: 'web_answer', arguments: '{}' } },
+          ],
+        }),
+        wireFinish('tool_calls'),
+      ),
+    );
+
+    expect(
+      await collect(
+        provider().stream(
+          request({
+            tools: [
+              { name: 'web_search', description: '搜索网页', inputSchema: { type: 'object' } },
+            ],
+          }),
+        ),
+      ),
+    ).toMatchObject([
+      { type: 'tool-call', toolCall: { name: 'web_answer' } },
+      { type: 'done', finishReason: 'tool-calls' },
+    ]);
+    expect(bodyOf(fetchMock).tools).toMatchObject([{ function: { name: 'web_search' } }]);
+  });
 });
 
 describe('OpenAICompatibleProvider completion signals', () => {

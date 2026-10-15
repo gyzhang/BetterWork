@@ -11,6 +11,7 @@ import { InlineLoading } from './AsyncButton';
 import { Button } from './Button';
 import { InlineError } from './InlineError';
 import { MessageBlock } from './MessageBlock';
+import { ProcessNarration } from './ProcessNarration';
 import { StatusNote } from './StatusNote';
 import { ToolActivity } from './ToolActivity';
 import { TransientToast } from './TransientToast';
@@ -79,11 +80,19 @@ const WorkRunMessage = memo(function WorkRunMessage({
       )}
       <MessageBlock author="user" authorName={userName} content={run.prompt} />
       <ToolActivity events={events} />
-      {projection.content && (
+      {projection.narrations.length > 0 && (
+        <ProcessNarration
+          narrations={projection.narrations}
+          active={active}
+          terminal={projection.terminal}
+          anchorRef={projection.finalContent === undefined ? anchorRef : undefined}
+        />
+      )}
+      {projection.finalContent !== undefined && (
         <MessageBlock
           author="assistant"
           authorName={assistantName}
-          content={projection.content}
+          content={projection.finalContent}
           contentFinal={projection.terminal}
           anchorRef={anchorRef}
           actions={
@@ -125,7 +134,12 @@ const WorkRunMessage = memo(function WorkRunMessage({
       {projection.cancelled && <StatusNote message="本次运行已停止。可以调整要求后重新开始。" />}
       {error && <InlineError message={error} onDismiss={dismissFeedback} />}
       {capturePanel}
-      {active && events.length > 0 && !projection.terminal && <InlineLoading label="正在执行…" />}
+      {active &&
+        events.length > 0 &&
+        !projection.terminal &&
+        !projection.narrations.some((narration) => narration.streaming) && (
+          <InlineLoading label="正在执行…" />
+        )}
     </div>
   );
 });

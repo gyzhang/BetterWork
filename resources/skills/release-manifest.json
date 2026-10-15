@@ -6,7 +6,7 @@
       "resourceName": "ppt-generation-expert",
       "name": "PPT 生成（中电金信模板）",
       "description": "使用中电金信公司模板生成新的可编辑 PowerPoint 演示文稿；需要 PPT Master 6.6.0 工具链。",
-      "contentHash": "5322739390439f55ad1fbe6429c4b9ac81e2998b75cddaea7a49bff3c0fc48c7",
+      "contentHash": "0306649f6284bb613136232e47d6646540bb8b554019517697c54c3e91fd3a8c",
       "originalVersion": "v20261007.5",
       "profileHash": "c2017a5f672f5c394d46d218ce590ecad98d4fe66f939f60f4333c51c203142b",
       "dependencyFingerprint": "3add3c7f42b8e386bdb25effcf05499cc56dacf208261b5a8b4eca3b326fbee1",

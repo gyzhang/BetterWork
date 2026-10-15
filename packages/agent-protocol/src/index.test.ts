@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  agentRuntimeEventSchema,
   artifactInputRelationSchema,
   artifactTypeSchema,
   countCodePoints,
@@ -100,6 +101,34 @@ import {
 } from './index';
 
 describe('run protocol', () => {
+  it('stores a bounded diagnostic for an unregistered model tool name', () => {
+    expect(
+      agentRuntimeEventSchema.parse({
+        id: 'event-1',
+        runId: 'run-1',
+        sequence: 2,
+        createdAt: 10,
+        type: 'tool.failed',
+        toolCallId: 'call-1',
+        error: '未知工具',
+        diagnostic: {
+          kind: 'unknown-tool',
+          source: 'model-provider-output',
+          requestedName: 'web_answer',
+          availableToolNames: ['web_search'],
+          modelProviderId: 'model-1',
+          round: 0,
+        },
+      }),
+    ).toMatchObject({
+      type: 'tool.failed',
+      diagnostic: {
+        requestedName: 'web_answer',
+        availableToolNames: ['web_search'],
+      },
+    });
+  });
+
   it('models scoped memory records and rejects invalid validity windows', () => {
     const hash = 'a'.repeat(64);
     const record = memoryRecordSchema.parse({

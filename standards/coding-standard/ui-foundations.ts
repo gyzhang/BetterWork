@@ -102,7 +102,7 @@ describe('界面 Token 纪律', () => {
     }
     expect(
       offenders,
-      '时长只用 --motion-instant / --motion-expand / --motion-overlay（docs/12 §8）',
+      '时长只用 --motion-instant / --motion-expand / --motion-overlay / --motion-narration（docs/12 §8）',
     ).toEqual([]);
   });
 

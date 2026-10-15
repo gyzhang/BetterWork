@@ -114,6 +114,7 @@ export class ReActAgentEngine implements AgentEngine {
       { id: randomUUID(), role: 'user', content: input.prompt },
     ];
     const tools = new Map(input.tools.map((tool) => [tool.name, tool]));
+    const availableToolNames = input.tools.map((tool) => tool.name);
     const maxToolRounds = input.maxToolRounds ?? 20;
 
     yield events.create({ type: 'run.started', taskId: input.taskId, sessionId: input.sessionId });
@@ -183,7 +184,30 @@ export class ReActAgentEngine implements AgentEngine {
           });
         for (const toolCall of pendingToolCalls) {
           const tool = tools.get(toolCall.name);
-          if (!tool) throw new Error(`Unknown tool: ${toolCall.name}`);
+          if (!tool) {
+            const error = `未知工具「${toolCall.name}」未注册到本次 Run。请只使用本次请求提供的工具，或直接继续回答。`;
+            yield events.create({
+              type: 'tool.failed',
+              toolCallId: toolCall.id,
+              error,
+              diagnostic: {
+                kind: 'unknown-tool',
+                source: 'model-provider-output',
+                requestedName: toolCall.name,
+                availableToolNames,
+                modelProviderId: input.model.id,
+                round,
+              },
+            });
+            messages.push({
+              id: randomUUID(),
+              role: 'tool',
+              toolCallId: toolCall.id,
+              toolName: toolCall.name,
+              content: JSON.stringify({ error }),
+            });
+            continue;
+          }
           yield events.create({ type: 'tool.started', toolCall });
           const progress: AgentRuntimeEvent[] = [];
           let wakeForProgress: (() => void) | undefined;
