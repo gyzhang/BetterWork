@@ -113,9 +113,11 @@ export function useModelSettings(): ModelSettings {
 
   const onTest = async (): Promise<void> => {
     setError('');
+    dismissToast();
     try {
       const result = await window.betterwork.models.test(editorPayload());
-      showToast('success', result.message);
+      if (result.ok) showToast('success', result.message);
+      else setError(result.message);
       refresh();
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : '连接测试失败。');

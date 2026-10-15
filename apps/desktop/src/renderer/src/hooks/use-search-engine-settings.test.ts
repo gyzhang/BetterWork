@@ -118,6 +118,29 @@ describe('useSearchEngineSettings', () => {
     expect(result.current.error).toBe('401 未授权');
   });
 
+  it('presents a resolved connection failure inline, preserving the key and clearing success', async () => {
+    listEngines.mockResolvedValue([]);
+    testEngine
+      .mockResolvedValueOnce({ ok: true, message: 'Connected' })
+      .mockResolvedValueOnce({ ok: false, message: 'HTTP 401' });
+    install();
+    const { result } = renderHook(() => useSearchEngineSettings());
+    await waitFor(() => expect(listEngines).toHaveBeenCalledTimes(1));
+    act(() => result.current.setApiKey('audit-input'));
+    await act(async () => {
+      await result.current.test();
+    });
+    expect(result.current.toast?.tone).toBe('success');
+    await act(async () => {
+      await result.current.test();
+    });
+    expect(result.current.error).toBe('HTTP 401');
+    expect(result.current.toast).toBeUndefined();
+    expect(result.current.apiKey).toBe('audit-input');
+    expect(result.current.busy).toBe(false);
+    expect(listEngines).toHaveBeenCalledTimes(3);
+  });
+
   it('webTopK 受范围限制', () => {
     listEngines.mockResolvedValue([]);
     install();

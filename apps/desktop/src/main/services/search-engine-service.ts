@@ -1,4 +1,4 @@
-import { abortError } from '@betterwork/agent-core';
+import { abortError, describeError } from '@betterwork/agent-core';
 import type { WebSearchResponse } from '@betterwork/tool-runtime';
 
 export interface QianfanSearchConfig {
@@ -30,9 +30,6 @@ const readString = (value: unknown): string => (typeof value === 'string' ? valu
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
-const describeError = (error: unknown): string =>
-  error instanceof Error ? error.message : '搜索服务连接失败';
-
 /**
  * 百度千帆 AI 搜索（`web_summary`）客户端。
  *
@@ -43,6 +40,12 @@ export const createQianfanSearchClient = (
   config: QianfanSearchConfig,
   fetchImpl: typeof fetch = fetch,
 ): SearchClient => {
+  const safeDetail = (message: string): string =>
+    (config.apiKey ? message.split(config.apiKey).join('[REDACTED]') : message).slice(0, 500);
+  // 原始堆栈与嵌套 cause 也可能含凭据，只让脱敏后的原因越过服务边界。
+  const requestFailure = (message: string, error: unknown): Error =>
+    new Error(message, { cause: new Error(safeDetail(describeError(error))) });
+
   const search = async (query: string, signal?: AbortSignal): Promise<WebSearchResponse> => {
     const timeout = AbortSignal.timeout(SEARCH_TIMEOUT_MS);
     let response: Response;
@@ -66,17 +69,15 @@ export const createQianfanSearchClient = (
     } catch (error) {
       if (signal?.aborted) throw abortError();
       if (timeout.aborted) {
-        throw new Error(`搜索服务响应超时（超过 ${SEARCH_TIMEOUT_MS / 1000} 秒）`, {
-          cause: error,
-        });
+        throw requestFailure(`搜索服务响应超时（超过 ${SEARCH_TIMEOUT_MS / 1000} 秒）`, error);
       }
-      throw new Error(`无法连接搜索服务：${describeError(error)}`, { cause: error });
+      throw requestFailure(`无法连接搜索服务：${safeDetail(describeError(error))}`, error);
     }
 
     const payload = (await response.json().catch(() => undefined)) as
       QianfanWebSummaryResponse | undefined;
     if (!response.ok) {
-      const detail = readString(payload?.message);
+      const detail = safeDetail(readString(payload?.message));
       throw new Error(`搜索服务返回错误（HTTP ${response.status}${detail ? `：${detail}` : ''}）`);
     }
     if (!isRecord(payload)) throw new Error('搜索服务返回了无法解析的结果');
@@ -106,7 +107,7 @@ export const createQianfanSearchClient = (
       await search('连接测试');
       return { ok: true, message: '搜索服务连接成功' };
     } catch (error) {
-      return { ok: false, message: describeError(error) };
+      return { ok: false, message: safeDetail(describeError(error)) };
     }
   };
 
