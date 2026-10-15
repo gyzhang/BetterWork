@@ -557,7 +557,7 @@ export function ArtifactPage({
         actions={<span className="work-count">{artifacts.length} 项</span>}
       />
       <ScrollRegion ariaLabel="成果列表">
-        <section className="page-body completed-work-page">
+        <section className="page-body page-body-fill completed-work-page">
           <p className="page-intro">
             研究成果、Markdown 文档和 PPT 等文件成果均可版本化管理，方便后续继续修改和导出。
           </p>

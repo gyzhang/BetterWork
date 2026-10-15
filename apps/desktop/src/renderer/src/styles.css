@@ -851,6 +851,13 @@ small {
   margin: 0 auto;
   padding: var(--surface-padding-page);
 }
+/* 正文自身的钩子填满 ScrollRegion，让 EmptyPage 在可用列表区内居中。 */
+.page-body-fill {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
 .page-intro {
   max-width: 640px;
   margin: 0 0 var(--space-24);
@@ -1488,8 +1495,10 @@ small {
 }
 .empty-page {
   display: flex;
+  flex: 1;
+  width: 100%;
   max-width: 630px;
-  min-height: 100%;
+  min-height: 0;
   margin: auto;
   padding: var(--surface-padding-modal);
   flex-direction: column;
@@ -1590,10 +1599,6 @@ small {
   font-weight: 700;
 }
 
-.completed-work-page .empty-page {
-  min-height: 360px;
-  padding: 0;
-}
 .settings-layout {
   display: grid;
   min-height: 0;
@@ -1651,6 +1656,8 @@ small {
 }
 .schedule-rows {
   display: flex;
+  min-height: 0;
+  flex: 1;
   flex-direction: column;
 }
 .schedule-rows .list-row-main > .badge {
@@ -3850,10 +3857,6 @@ button.list-row:where(:not(:disabled)):hover {
 }
 /* `.open-source-button` 与 `.knowledge-more-button` 共用过同一条声明、只有 hover 分家，
    连同 `.evidence-open-button` 一共三套「透明底＋描边」已收进 `Button variant="outline"`。 */
-.knowledge-page .empty-page {
-  min-height: 300px;
-  padding: 0;
-}
 .knowledge-page {
   display: flex;
   height: 100%;

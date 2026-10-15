@@ -238,7 +238,7 @@ export function SchedulesPage({
         />
       )}
       <ScrollRegion ariaLabel="定时任务列表" busy={state.loading || state.refreshing}>
-        <div className="page-body schedules-body">
+        <div className="page-body page-body-fill schedules-body">
           <PageToolbar ariaLabel="定时任务筛选">
             <FieldSelect
               options={options}
@@ -248,49 +248,51 @@ export function SchedulesPage({
               size="md"
             />
           </PageToolbar>
-          <ViewContainer mode="list" className="schedule-rows">
-            {state.loading && state.details.length === 0 ? (
-              <LoadingPage label="正在读取定时任务…" />
-            ) : state.error && state.details.length === 0 ? (
-              <ErrorPage
-                title="暂时无法读取定时任务"
-                detail={state.error}
-                onRetry={state.refresh}
-              />
-            ) : state.details.length === 0 ? (
-              <EmptyPage
-                eyebrow="定时任务"
-                title="尚无定时任务"
-                detail="选择已有专家、持续工作空间与周期，逐期查看工作结果。"
-              />
-            ) : visibleDetails.length === 0 ? (
-              <EmptyNotice
-                title="这个工作空间下没有定时任务"
-                detail="更换工作空间筛选，或选择「全部工作空间」查看其他规则。"
-              />
-            ) : (
-              visibleDetails.map((detail) => (
-                <ScheduleListRow
-                  key={detail.aggregate.schedule.id}
-                  detail={detail}
-                  onEdit={() => setEditorTarget({ kind: 'edit', detail })}
-                  onOpenDetail={() => setDetailTarget(detail)}
-                  onReviewVersion={(versionId) => {
-                    setOpenError('');
-                    reportAction(
-                      onOpenArtifactVersion(versionId),
-                      setOpenError,
-                      '无法打开本期成果版本。',
-                    );
-                  }}
-                  workspaceName={
-                    workspaces.find((item) => item.id === detail.aggregate.schedule.workspaceId)
-                      ?.name ?? '工作空间不可用'
-                  }
+          {!state.loading && !state.error && state.details.length === 0 ? (
+            <EmptyPage
+              eyebrow="定时任务"
+              title="尚无定时任务"
+              detail="选择已有专家、持续工作空间与周期，逐期查看工作结果。"
+            />
+          ) : (
+            <ViewContainer mode="list" className="schedule-rows">
+              {state.loading && state.details.length === 0 ? (
+                <LoadingPage label="正在读取定时任务…" />
+              ) : state.error && state.details.length === 0 ? (
+                <ErrorPage
+                  title="暂时无法读取定时任务"
+                  detail={state.error}
+                  onRetry={state.refresh}
                 />
-              ))
-            )}
-          </ViewContainer>
+              ) : visibleDetails.length === 0 ? (
+                <EmptyNotice
+                  title="这个工作空间下没有定时任务"
+                  detail="更换工作空间筛选，或选择「全部工作空间」查看其他规则。"
+                />
+              ) : (
+                visibleDetails.map((detail) => (
+                  <ScheduleListRow
+                    key={detail.aggregate.schedule.id}
+                    detail={detail}
+                    onEdit={() => setEditorTarget({ kind: 'edit', detail })}
+                    onOpenDetail={() => setDetailTarget(detail)}
+                    onReviewVersion={(versionId) => {
+                      setOpenError('');
+                      reportAction(
+                        onOpenArtifactVersion(versionId),
+                        setOpenError,
+                        '无法打开本期成果版本。',
+                      );
+                    }}
+                    workspaceName={
+                      workspaces.find((item) => item.id === detail.aggregate.schedule.workspaceId)
+                        ?.name ?? '工作空间不可用'
+                    }
+                  />
+                ))
+              )}
+            </ViewContainer>
+          )}
         </div>
       </ScrollRegion>
       {savedMessage && (

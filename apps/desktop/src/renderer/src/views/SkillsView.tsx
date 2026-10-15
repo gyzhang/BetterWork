@@ -248,7 +248,7 @@ export function SkillsPage({ state }: { state: SkillsState }): React.JSX.Element
         <InlineError message={state.error} onDismiss={state.clearError} />
       )}
       <ScrollRegion ariaLabel="技能列表与详情" busy={state.loading || state.detailLoading}>
-        <section className="page-body skills-body">
+        <section className="page-body page-body-fill skills-body">
           {selected ? (
             state.detailLoading ? (
               <LoadingPage label="正在加载详情…" />
