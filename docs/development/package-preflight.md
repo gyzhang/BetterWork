@@ -2,7 +2,7 @@
 
 ## 版本来源
 
-产品版本唯一来源是仓库根 `package.json` 的 `version`。当前为 `1.1.0`。调整版本时只改此处，再运行 `npm run version:sync`；开发、构建、预览、打包和测试入口会自动同步桌面应用清单与 `package-lock.json`。运行 `npm run version:check` 可显式核对。electron-builder、MCP client info 和 DMG 文件名均从应用版本派生。
+产品版本唯一来源是仓库根 `package.json` 的 `version`。当前为 `1.2.0`。调整版本时只改此处，再运行 `npm run version:sync`；开发、构建、预览、打包和测试入口会自动同步桌面应用清单与 `package-lock.json`。运行 `npm run version:check` 可显式核对。electron-builder、MCP client info 和 DMG 文件名均从应用版本派生。
 
 ## 当前人工验证包
 
