@@ -90,6 +90,8 @@ interface ToolExecutionContext {
 
 下文 Manifest/Expert 示例仍为设计参考；具体存储字段与执行技术提案见 [执行器设计](designs/skill-executor-and-dependencies.md)。
 
+2026-10-15 发布内容调整：用户已要求删除当前两个内置 Skill 和一个内置 Expert 的源码资源及发布条目。当前 Skill/Expert 发布清单均为空，新库不预置 Skill 或 Expert；后续内容由用户挑选后再进入发布清单。空清单是有效的发布状态，仍校验清单格式与资源完整性。
+
 ## 3. Skill
 
 Skill 是完成一类工作的可复用方法，可以是纯指令、结构化 Workflow、脚本或 MCP 组合。

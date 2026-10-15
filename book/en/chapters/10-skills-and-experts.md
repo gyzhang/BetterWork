@@ -39,7 +39,7 @@ Separate engines for “research” and “analysis” duplicate cancellation, v
 
 ## 5. Worked example: two presets, one runtime
 
-BetterWork's bundled business-analysis Skill ([BW17](../references.md#bw17), MIT) instructs the agent to confirm periods, budget definitions, and units; extract numbers only from selected and actually read run materials; call deterministic comparisons; and expose missing/zero/inconsistent inputs. This is an English paraphrase of the source's Chinese instructions, not a verbatim code listing.
+BetterWork's historical business-analysis Skill ([BW17](../references.md#bw17), MIT) instructed the agent to confirm periods, budget definitions, and units; extract numbers only from selected and actually read run materials; call deterministic comparisons; and expose missing/zero/inconsistent inputs. This is an English paraphrase of the archived source's Chinese instructions. The sample was removed from the current repository resources and distribution on 2026-10-15; current Skill and Expert release lists are empty.
 
 The method is useful even without a script. The executable arithmetic lives in a tool, not in the Skill's prose. Its period-ratio convention must still be checked against the Chapter 06 course definition.
 
