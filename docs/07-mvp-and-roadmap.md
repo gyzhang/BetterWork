@@ -1,5 +1,9 @@
 # MVP 与路线图
 
+## 空白技能与专家发布清单 — 2026-10-15
+
+用户确认移除当前两个内置 Skill 和一个内置 Expert，源码资源与安装包均不再携带这些样本；两份发布清单保留为空数组。新库首次启动只登记默认工作空间和必要设置，不预置 Skill、Expert、任务或模型配置。后续内置内容由用户重新挑选并单独纳入发布清单；内置登记、用户导入和受管运行时机制继续用于后续内容。空清单必须通过发布预检和真实服务登记回归，安装包内也不得残留未登记的样本资源。
+
 ## 随包独立 Node.js 运行时 — 2026-10-10
 
 用户审核通过 [ADR-0047](adr/0047-bundled-node-runtime.md)，在 [ADR-0045](adr/0045-bundled-runtimes-for-local-mcp.md) 的随包运行时机制上补齐 Node 侧：随包分发版本锁定的独立 Node.js 24.x（darwin-arm64，含 node/npm/npx），内置 Node stdio MCP 与用户自定义 `node`/`npm`/`npx` 命令改用该运行时，不再依赖 Electron 内嵌 Node；构建期由 `prepare-node-runtime-assets.mjs` 下载并 SHA-256 校验，与 CPython 制品同机制。随包 Python 构建脚本改名 `prepare-mcp-runtime-assets` → `prepare-python-runtime-assets`（纯命名对齐，Python venv/wheel/lock 机制一字不动）。运行时随包与 MCP 接入（决策 1–4、8–11）已落地并通过定向与离线回归；Node-based Skill 执行链、导入 Skill 的 `node_modules` 生命周期与信任指纹（决策 5–7）因暂无 Node Skill 消费者，另立 [CF44](development/tasks-capability-foundation.md) 承载，待首个真实 Node Skill 出现再按实际契约开工。本机 arm64 DMG 已于 2026-10-11 构建并挂载检查；签名公证、安装后首启与发布体积验收仍待完成。

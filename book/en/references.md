@@ -78,7 +78,7 @@ Memory repository: status transitions, scope, validity intervals, and revision r
 
 ### BW17
 
-Bundled business-analysis Skill: instructions to confirm definitions, use selected/read material, and call deterministic calculations. The chapter paraphrases its Chinese prose in English. [GitHub](https://github.com/gyzhang/BetterWork/blob/2d8a79f4e4c52b9a5c44e3f024064ab5b9db7d0b/resources/skills/business-analysis/SKILL.md) · [Local source](../../resources/skills/business-analysis/SKILL.md).
+Historical business-analysis Skill: instructions to confirm definitions, use selected/read material, and call deterministic calculations. The chapter paraphrases its Chinese prose in English. This sample was removed from the current repository resources and distribution on 2026-10-15. [Archived source](https://github.com/gyzhang/BetterWork/blob/2d8a79f4e4c52b9a5c44e3f024064ab5b9db7d0b/resources/skills/business-analysis/SKILL.md).
 
 ### BW18
 

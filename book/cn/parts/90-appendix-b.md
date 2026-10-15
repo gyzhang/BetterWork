@@ -66,8 +66,8 @@
 | 8 | `apps/desktop/src/main/services/knowledge-vault.test.ts` | 检索与回退路径 |
 | 9 | `apps/desktop/src/main/services/memory-service.ts` | 四个作用域、生效条件、投影重建、清单路径校验 |
 | 9 | `apps/desktop/src/main/persistence/memory-repository.ts` | 状态流转、作用域、有效区间、修订记录 |
-| 10 | `resources/skills/business-analysis/SKILL.md` | 内置 Skill 的方法说明（本书用中文原文引用） |
-| 10 | `resources/skills/sample-assistant/SKILL.md` | Skill 包的最小骨架 |
+| 10 | [历史方法样本](https://github.com/gyzhang/BetterWork/blob/6bf894f98537fd38e6125e5c5e3182300d3ad273/resources/skills/business-analysis/SKILL.md) | 本书引用的历史方法说明；2026-10-15 已移出当前源码资源与安装包 |
+| 10 | [历史骨架样本](https://github.com/gyzhang/BetterWork/blob/6bf894f98537fd38e6125e5c5e3182300d3ad273/resources/skills/sample-assistant/SKILL.md) | 历史 Skill 包骨架；2026-10-15 已移出当前源码资源与安装包 |
 | 10 | `resources/skills/release-manifest.json` | 内容哈希、能力哈希、依赖指纹、范围哈希、输出契约 |
 | 10 | `apps/desktop/src/main/services/skill-dependency-service.ts` | 环境三元组、先探测后操作、操作收口、错误码、信任检查、取消汇合超时 |
 | 10 | `apps/desktop/src/main/services/expert-service.ts` | 专家配置校验与修订 |

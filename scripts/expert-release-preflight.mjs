@@ -75,11 +75,22 @@ const verifyResourceSet = async (resourceRoot, label) => {
   ]);
   if (skillManifest.formatVersion !== 1) fail('unsupported Skill release manifest format');
   if (expertManifest.formatVersion !== 1) fail('unsupported Expert release manifest format');
-  if (!Array.isArray(skillManifest.skills) || skillManifest.skills.length === 0) {
-    fail('Skill release manifest has no entries');
+  if (!Array.isArray(skillManifest.skills)) {
+    fail('Skill release manifest skills must be an array');
   }
-  if (!Array.isArray(expertManifest.experts) || expertManifest.experts.length === 0) {
-    fail('Expert release manifest has no entries');
+  if (!Array.isArray(expertManifest.experts)) {
+    fail('Expert release manifest experts must be an array');
+  }
+  for (const [directory, entries] of [
+    ['skills', skillManifest.skills],
+    ['experts', expertManifest.experts],
+  ]) {
+    if (entries.length > 0) continue;
+    for (const name of await readdir(path.join(resourceRoot, directory))) {
+      if (!isIgnored(name) && name !== 'release-manifest.json') {
+        fail(`empty ${directory} release contains unlisted resource in ${label}: ${name}`);
+      }
+    }
   }
 
   const skillIds = new Set();

@@ -35,8 +35,8 @@ describe('ExpertService', () => {
     const store = openStore();
     const service = new ExpertService(store);
     const entry = {
-      expertId: 'builtin-research-analyst',
-      name: '研究分析专家',
+      expertId: 'builtin-test-expert',
+      name: '内置测试专家',
       summary: '整理可验证的分析结论',
       author: '算台团队',
       tags: ['研究分析', '证据梳理'],
@@ -48,6 +48,8 @@ describe('ExpertService', () => {
       builtinToolPolicy: { mode: 'application-defaults' as const },
       modelReference: { mode: 'application-default' as const },
     };
+    expect(() => service.registerBuiltinRelease([{ ...entry, identity: '' }])).toThrow();
+    expect(service.list()).toEqual([]);
     expect(service.registerBuiltinRelease([entry])).toHaveLength(1);
     expect(service.registerBuiltinRelease([entry])).toHaveLength(1);
     const registered = service.get(entry.expertId);
@@ -58,7 +60,7 @@ describe('ExpertService', () => {
       tags: ['研究分析', '证据梳理'],
     });
     service.setLifecycle(entry.expertId, 'disabled', registered?.currentRevision ?? 1);
-    const copy = service.copy(entry.expertId, '我的研究分析专家');
+    const copy = service.copy(entry.expertId, '测试专家副本');
     const upgraded = service.registerBuiltinRelease([
       { ...entry, summary: '整理可验证的分析结论（新版）' },
     ]);
