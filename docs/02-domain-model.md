@@ -170,6 +170,8 @@ interface RunStep {
 }
 ```
 
+执行诊断增量中的调用节点/Span 是只读运行投影，**不等于领域 Step**，不拥有恢复、审批、调度或工具权限。[ADR-0050](adr/0050-run-execution-diagnostics.md)与[追踪契约](development/execution-tracing-contracts.md)仍为 Proposed；该提案不把上节 Step 设计自动变为已实现。
+
 ## 6. Artifact
 
 Artifact 是用户可继续使用的工作成果。

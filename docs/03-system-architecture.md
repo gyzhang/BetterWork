@@ -1,5 +1,7 @@
 # 系统架构
 
+> 2026-10-16 执行追踪提案：[ADR-0050](adr/0050-run-execution-diagnostics.md)和[追踪契约](development/execution-tracing-contracts.md)提出 Core 模型/工具事件沿用现有 sequence，Main 宿主诊断另用同库事实流和独立 diagnosticSequence，按 Run/调用标识关联为只读诊断投影。根状态仍取 Application 已提交终态，不引入第二引擎、全局业务总线或外部监控前置。产品方向已接受，技术 Proposed，生产未开工；状态只看 [AT 任务板](development/tasks-execution-tracing.md)。
+
 > 2026-10-03 定时任务技术提案：调度、来源准备、后台专家装配与恢复属于现有 Electron Main 的 Application 服务，不进入 Agent Core 或新建 package；Run 启动事务固定实例关联后才异步消费。见 [ADR-0037](adr/0037-scheduled-work-and-source-snapshots.md)、[契约](development/schedule-contracts.md)。产品原型通过，生产未实现。
 
 > 2026-09-24 知识增量提案：[ADR-0027](adr/0027-knowledge-foundation.md)与[知识契约](development/knowledge-contracts.md)提出固定修订正文读取、Main 所有的嵌入适配、可重建混合索引和受管工作进程；延续现有依赖方向与两库边界，不新建 Agent 引擎或 package。知识修订/历史证据不能当派生缓存删除。方案 Proposed，本轮只写文档；状态只看 [KM 任务板](development/tasks-knowledge.md)。

@@ -1,5 +1,7 @@
 # 阶段 A 开发执行手册（供 5.6 Luna 使用）
 
+2026-10-16 执行追踪增量见 [AT00–AT25 唯一任务板](tasks-execution-tracing.md)、[实施契约](execution-tracing-contracts.md)、[ADR-0050](../adr/0050-run-execution-diagnostics.md)（Proposed）与 [GPT-6 Luna 目标交接](execution-tracing-coding-prompts.md)。用户接受产品方向，本轮只编制计划，代码未开工；后续可按里程碑或 AT01–AT22 离线目标串行推进，不每卡重复申请授权。真实 UI/模型与可选 OTLP 单独指派；验证节奏以当前 docs/12 和 ADR-0046/0049 为准，不继承下文历史任务卡的自动全验要求。
+
 2026-10-14 工程改进进入 [TQ00–TQ06 任务板](tasks-tdd-quality.md)；沿用 [ADR-0046](../adr/0046-daily-code-check-and-optional-ui-verification.md) 的日常/按需 UI 分工，新增契约见 [ADR-0049](../adr/0049-tdd-and-differential-quality-gates.md)，不改其他系列的人类验收状态。
 
 > 当前平台覆盖：2026-10-02 [ADR-0036](../adr/0036-macos-only-platform-scope.md) 已接受，Windows A09 退出产品与验收范围。下文 blocked 与早期跨平台条件保留为历史记录，不构成待开工任务，不阻塞当前 macOS 验收；本次不把未验收项改为 done。

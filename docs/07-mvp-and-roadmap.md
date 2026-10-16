@@ -1,8 +1,14 @@
 # MVP 与路线图
 
+## 执行追踪与运行诊断 — 2026-10-16（方向已接受，开发卡已建立，代码未开工）
+
+用户接受 [AgentScope Studio / AgentScope 2.0 对照建议](reviews/2026-10-16-agent-execution-tracing-analysis.md)，要求形成 GPT-6 Luna 后续目标模式开发卡。近期按模型/工具执行链 → 宿主阶段与工作依据 → 统计/问题标记/本地诊断包 → 离线样本与交接推进，保留现有 Core、SQLite Journal、权限与唯一终态；追踪事实不展示私有推理，不自动改写专家、技能或记忆。
+
+[ADR-0050](adr/0050-run-execution-diagnostics.md)与[实施契约](development/execution-tracing-contracts.md)为 Proposed，提出 Core 事件与宿主诊断独立定序、查询时关联；[AT00–AT25 唯一任务板](development/tasks-execution-tracing.md)和[Luna 目标提示词](development/execution-tracing-coding-prompts.md)已归档。本次只做开发准备，后续目标明确采用技术提案并授权相应范围后开工；AT01–AT22 为完整离线范围，真实 UI/真实模型验收与可选 OTLP 出口分别派发。提交、推送与发布继续独立授权，不改写其他任务系列状态。
+
 ## 模型配置支持多角色 — 2026-10-16（已验收）
 
-光哥指出 DeepSeek 4.1 同时承担语言与视觉用途，要求模型角色可多选。单个 ModelProfile 可选择语言、视觉和嵌入角色的任意非空组合，各角色的默认顺序独立保存；已有单角色配置经 v47 迁移后继续保留原角色和顺序。连通性测试按所选用途测试聊天接口与 Embeddings 接口。此功能只完善角色配置和默认选择，不代表视觉图像理解执行链路已经落地；技术决定见 [ADR-0050](adr/0050-model-profile-multiple-roles.md)。
+光哥指出 DeepSeek 4.1 同时承担语言与视觉用途，要求模型角色可多选。单个 ModelProfile 可选择语言、视觉和嵌入角色的任意非空组合，各角色的默认顺序独立保存；已有单角色配置经 v47 迁移后继续保留原角色和顺序。连通性测试按所选用途测试聊天接口与 Embeddings 接口。此功能只完善角色配置和默认选择，不代表视觉图像理解执行链路已经落地；技术决定见 [ADR-0051](adr/0051-model-profile-multiple-roles.md)。
 
 ## 首批内置研究与汇报资源 — 2026-10-15（本分支已实现，待打包和人工验收）
 
