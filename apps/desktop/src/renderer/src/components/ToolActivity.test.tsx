@@ -58,4 +58,27 @@ describe('ToolActivity', () => {
     fireEvent.click(screen.getByRole('button', { name: /执行技能命令/ }));
     expect(screen.getByRole('alert').textContent).toBe('校验未通过');
   });
+
+  it('shows rejected calls as not executed, separately from execution failures', () => {
+    render(
+      <ToolActivity
+        events={[
+          event({
+            type: 'tool.requested',
+            toolCall: { id: 'bad', name: 'skill_execute', input: {} },
+          }),
+          event({
+            type: 'tool.failed',
+            toolCallId: 'bad',
+            error: '参数不是有效 JSON',
+            diagnostic: { kind: 'invalid-arguments', source: 'model-provider-output' },
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /1 次未执行/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /1 次未执行/ }));
+    expect(screen.getAllByRole('button', { name: /未执行/ })).toHaveLength(2);
+  });
 });

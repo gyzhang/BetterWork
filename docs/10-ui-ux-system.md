@@ -726,6 +726,7 @@ UI Foundation 首批提供四套成对色系：
 | `Composer` | `components/Composer.tsx` | 任务要求卡与固定高度工具栏分离；工具栏与窗口底部留 `--space-12`，材料变化不推挤输入卡；idle/starting/running 与 locked 分列 |
 | `ContextPanel` | `components/ContextPanel.tsx` | 可完全收起的任务上下文，按过程/资料/记忆/简报/成果分组；资料页管理本次材料用途与移除 |
 | `ProcessContext` | `components/context/ProcessContext.tsx` | 过程页签的连续简报表单、工作阶段与执行历史；保留目标/进度冲突及精确来源回看 |
+| `RunExecutionDetails` | `components/context/RunExecutionDetails.tsx` | 当前/历史 Run 的逐轮模型与工具执行链、用量和状态；复用 Modal/Tabs/ListRow/Disclosure，工具载荷按需读取；不展示 reasoning 或模型请求 |
 | `SourcesContext` | `components/context/SourcesContext.tsx` | 资料页签的本期定时来源、本次材料、MCP 选择与逐 Run 已查阅来源；区间回看保持精确修订 |
 | `MemoryContext` | `components/context/MemoryContext.tsx` | 记忆页签的建议、下次范围、本任务排除、本次运行登记与历史调整；各类事实与反馈保持独立出口 |
 | `ComposerCapabilityPicker` | `components/ComposerCapabilityPicker.tsx` | Composer 的能力/材料选择；技能摘要可打开管理，材料按类别计数，锁定原因并入材料摘要；PopoverMenu、ActionBar 组合 |
@@ -789,7 +790,7 @@ UI Foundation 首批提供四套成对色系：
 
 ### 11.1 启动与运行
 
-执行追踪增量的产品方向已于 2026-10-16 获接受，具体详情交互仍为 Proposed、生产未实现：在工作页“过程”页签增加“执行详情”入口，复用 `Modal variant="sheet"` 查看当前/历史 Run 的调用链、指标和来源；关闭归还焦点，默认消息流继续紧凑呈现，不新增一级导航、不显示私有推理。字段/渐进披露见[追踪契约](development/execution-tracing-contracts.md) §1/§6/§7；开发与人工验收状态只看 [AT 任务板](development/tasks-execution-tracing.md)。新领域组件在实际实现时登记 §10.1，本次不把尚不存在的组件写入真实台账。下列当前实现状态保持原有含义。
+执行追踪增量的产品方向已于 2026-10-16 获接受；技术状态仍以 ADR-0050 为准。在工作页“过程”页签通过“执行详情”入口复用 `Modal variant="sheet"` 查看当前/历史 Run 的调用链、指标和来源；关闭归还焦点，默认消息流继续紧凑呈现，不新增一级导航、不显示私有推理。AT-M1 已实现入口和详情组件并有离线行为回归；真实 Electron 页面与视觉验收仍待 AT23。字段/渐进披露见[追踪契约](development/execution-tracing-contracts.md) §1/§6/§7；开发与人工验收状态只看 [AT 任务板](development/tasks-execution-tracing.md)。下列当前实现状态保持原有含义。
 
 - 发送后输入框保留当前上下文，发送按钮切换为停止按钮
 - 第一时间反馈“已开始”和当前阶段，不等待模型首个 token 才响应

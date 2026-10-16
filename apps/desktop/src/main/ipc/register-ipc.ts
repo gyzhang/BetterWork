@@ -70,6 +70,8 @@ import {
   getMemorySettingsRequestSchema,
   getNotificationRequestSchema,
   getRunArtifactDeclarationsRequestSchema,
+  getRunDiagnosticNodeDetailRequestSchema,
+  getRunDiagnosticsSummaryRequestSchema,
   getRunMemoryContextRequestSchema,
   getScheduleOccurrenceRequestSchema,
   getScheduleRequestSchema,
@@ -107,6 +109,7 @@ import {
   listKnowledgeRevisionsRequestSchema,
   listMemoriesRequestSchema,
   listMemoryJobsRequestSchema,
+  listRunDiagnosticsPageRequestSchema,
   listRunEventsRequestSchema,
   listRunsRequestSchema,
   listScheduleOccurrencesRequestSchema,
@@ -178,6 +181,9 @@ import {
   revealFileArtifactResultSchema,
   revokeSkillTrustRequestSchema,
   runArtifactSourceDeclarationSchema,
+  runDiagnosticNodeDetailResponseSchema,
+  runDiagnosticsPageResponseSchema,
+  runDiagnosticsSummaryResponseSchema,
   runSettingsSchema,
   runSourcePreviewSchema,
   runSummarySchema,
@@ -592,6 +598,16 @@ export function registerIpc(deps: IpcDependencies): void {
 }
 
 function registerRunChannels({ store, runs }: IpcDependencies): void {
+  const isDiagnosticsScopeValid = (input: {
+    workspaceId: string;
+    taskId: string;
+    runId: string;
+  }): boolean => {
+    const taskId = store.runs.getTaskId(input.runId);
+    return (
+      taskId === input.taskId && store.tasks.getWorkspaceId(input.taskId) === input.workspaceId
+    );
+  };
   handleNoInput(IpcChannel.GetRunSettings, emptyRequestSchema, runSettingsSchema, () =>
     store.runSettings.get(),
   );
@@ -612,6 +628,39 @@ function registerRunChannels({ store, runs }: IpcDependencies): void {
     listRunEventsRequestSchema,
     z.array(agentRuntimeEventSchema),
     (input) => store.runs.listEvents(input.runId),
+  );
+  handleInput(
+    IpcChannel.GetRunDiagnosticsSummary,
+    getRunDiagnosticsSummaryRequestSchema,
+    runDiagnosticsSummaryResponseSchema,
+    (input) =>
+      isDiagnosticsScopeValid(input)
+        ? (store.runDiagnostics.getSummary(input.runId) ?? null)
+        : null,
+  );
+  handleInput(
+    IpcChannel.ListRunDiagnosticsPage,
+    listRunDiagnosticsPageRequestSchema,
+    runDiagnosticsPageResponseSchema,
+    (input) => {
+      if (!isDiagnosticsScopeValid(input)) return null;
+      return (
+        store.runDiagnostics.getPage({
+          runId: input.runId,
+          pageSize: input.pageSize,
+          ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+        }) ?? null
+      );
+    },
+  );
+  handleInput(
+    IpcChannel.GetRunDiagnosticNodeDetail,
+    getRunDiagnosticNodeDetailRequestSchema,
+    runDiagnosticNodeDetailResponseSchema,
+    (input) =>
+      isDiagnosticsScopeValid(input)
+        ? (store.runDiagnostics.getNodeDetail(input.runId, input.nodeId) ?? null)
+        : null,
   );
   handleOptionalInput(
     IpcChannel.ListRuns,

@@ -1,5 +1,9 @@
-import type { AgentRuntimeEvent, RunSummary } from '@betterwork/agent-protocol';
-import { agentRuntimeEventSchema } from '@betterwork/agent-protocol';
+import type {
+  AgentRuntimeEvent,
+  RunDiagnosticsRecording,
+  RunSummary,
+} from '@betterwork/agent-protocol';
+import { agentRuntimeEventSchema, runDiagnosticsRecordingSchema } from '@betterwork/agent-protocol';
 import type Database from 'better-sqlite3';
 
 interface RunRow {
@@ -87,16 +91,22 @@ const toSummary = (row: RunRow): RunSummary => ({
 export class RunRepository {
   constructor(private readonly db: Database.Database) {}
 
-  create(run: RunSummary): void {
+  create(run: RunSummary, diagnosticsRecording?: RunDiagnosticsRecording): void {
     const session = this.db
       .prepare('SELECT task_id FROM sessions WHERE id = ?')
       .get(run.sessionId) as { task_id: string } | undefined;
     if (!session) throw new Error('Run session does not exist');
     if (session.task_id !== run.taskId) throw new Error('Run session does not belong to task');
+    const recording =
+      diagnosticsRecording === undefined
+        ? undefined
+        : runDiagnosticsRecordingSchema.parse(diagnosticsRecording);
     this.db
       .prepare(
-        `INSERT INTO runs (id, task_id, session_id, prompt, status, created_at, completed_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO runs (
+           id, task_id, session_id, prompt, status, created_at, completed_at,
+           diagnostics_recording_version, diagnostics_sections_json
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         run.id,
@@ -106,6 +116,8 @@ export class RunRepository {
         run.status,
         run.createdAt,
         run.completedAt ?? null,
+        recording?.version ?? null,
+        recording === undefined ? null : JSON.stringify(recording.sections),
       );
   }
 

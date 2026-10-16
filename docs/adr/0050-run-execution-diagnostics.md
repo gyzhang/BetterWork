@@ -1,6 +1,6 @@
 # ADR-0050：Run 执行诊断与双来源事实投影
 
-- 状态：Proposed。2026-10-16 用户接受[调研建议](../reviews/2026-10-16-agent-execution-tracing-analysis.md)，授权编制 GPT-6 Luna 开发卡；本次不构成产品代码开工、真实模型调用或发布授权。后续开发目标明确采用本文及实施契约时，可在其授权范围实施；不由 AI 自动改写 Accepted 状态。
+- 状态：Proposed。2026-10-16 用户接受[调研建议](../reviews/2026-10-16-agent-execution-tracing-analysis.md)并授权编制开发卡；2026-10-17 用户明确授权 AT01–AT10 产品实现、离线测试、文档和日志更新。该开工授权不改变本 ADR 的 Proposed 状态，也不授权真实模型调用、提交、推送或发布。
 - 日期：2026-10-16，来自本机 `date`。
 - 关系：延续 ADR-0003 的 Core 边界、ADR-0005 的成果来源、ADR-0039 的任务分支与 ADR-0046/0049 的验证纪律；不替换已有 Run 终态、材料/记忆权限或 Skill 执行协议。
 - 实施字段、口径和故障规则只定义于[执行追踪契约](../development/execution-tracing-contracts.md)；状态只记 [AT00–AT25 任务板](../development/tasks-execution-tracing.md)。

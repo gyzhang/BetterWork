@@ -4,14 +4,17 @@ import type {
   AgentMessage,
   AgentRuntimeEvent,
   AgentRuntimeEventInput,
+  ModelErrorCode,
 } from '@betterwork/agent-protocol';
 
 import { abortError, describeError, isAbortError } from './errors';
 import type {
   AgentEngine,
   AgentRunInput,
+  ModelFinishReason,
   ModelMessage,
   ModelToolCall,
+  ModelUsage,
   SkillInstruction,
 } from './types';
 
@@ -24,6 +27,35 @@ const SYSTEM_PROMPT = (): string => {
 };
 
 export const SKILL_INSTRUCTION_BUDGET = 16_000;
+
+class ModelCallFailure extends Error {
+  constructor(
+    readonly code: ModelErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ModelCallFailure';
+  }
+}
+
+const safeModelErrorSummary = (code: ModelErrorCode): string => {
+  switch (code) {
+    case 'provider-error':
+      return '模型服务调用失败。';
+    case 'stream-error':
+      return '模型响应流读取失败。';
+    case 'stream-incomplete':
+      return '模型响应流未正常完成。';
+    case 'empty-response':
+      return '模型没有返回可用文本或工具调用。';
+    case 'output-limit':
+      return '模型响应达到输出上限。';
+    case 'content-filter':
+      return '模型响应被内容过滤中断。';
+    case 'unknown-finish-reason':
+      return '模型返回未知完成原因。';
+  }
+};
 
 const OVERFLOW_HINT =
   '（部分 Skill 指令因长度被截断，可通过 skill_read_resource 工具按需读取完整内容。）';
@@ -106,6 +138,8 @@ class RunEventFactory {
 }
 
 export class ReActAgentEngine implements AgentEngine {
+  constructor(private readonly monotonicNow: () => number = () => performance.now()) {}
+
   async *run(input: AgentRunInput): AsyncIterable<AgentRuntimeEvent> {
     const events = new RunEventFactory(input.runId);
     const skillMessages = buildSkillMessages(input.skillInstructions);
@@ -136,58 +170,140 @@ export class ReActAgentEngine implements AgentEngine {
         const pendingToolCalls: Array<{ toolCall: ModelToolCall; error?: string }> = [];
         let messageStarted = false;
         let receivedDone = false;
+        let receivedStreamChunk = false;
+        let finishReason: ModelFinishReason | undefined;
+        let usage: ModelUsage | undefined;
         let providerRequestId: string | undefined;
         let providerResponseId: string | undefined;
         let responseModel: string | undefined;
+        let firstTextAt: number | undefined;
+        const modelCallId = randomUUID();
+        const modelStartedAt = this.monotonicNow();
+        const toolCorrelation = { modelCallId, round };
+        const endingFields = (durationMs: number) => ({
+          modelCallId,
+          round,
+          durationMs,
+          ...(firstTextAt === undefined
+            ? {}
+            : { timeToFirstTextMs: Math.max(0, firstTextAt - modelStartedAt) }),
+          ...(finishReason === undefined ? {} : { finishReason }),
+          ...(usage === undefined ? {} : { usage }),
+          ...(providerRequestId === undefined ? {} : { providerRequestId }),
+          ...(providerResponseId === undefined ? {} : { providerResponseId }),
+          ...(responseModel === undefined ? {} : { responseModel }),
+        });
 
-        for await (const chunk of input.model.stream({
-          messages,
-          tools: input.tools.map(({ name, description, inputSchema }) => ({
-            name,
-            description,
-            inputSchema,
-          })),
-          signal: input.signal,
-        })) {
+        yield events.create({
+          type: 'model.started',
+          modelCallId,
+          round,
+          providerId: input.model.id,
+          messageCount: messages.length,
+          toolDefinitionCount: input.tools.length,
+        });
+
+        try {
           checkCancelled();
+          for await (const chunk of input.model.stream({
+            messages,
+            tools: input.tools.map(({ name, description, inputSchema }) => ({
+              name,
+              description,
+              inputSchema,
+            })),
+            signal: input.signal,
+          })) {
+            receivedStreamChunk = true;
+            checkCancelled();
 
-          if (chunk.type === 'reasoning-delta') {
-            yield events.create({ type: 'reasoning.delta', delta: chunk.delta });
-          } else if (chunk.type === 'text-delta') {
-            if (!messageStarted) {
-              messageStarted = true;
-              yield events.create({ type: 'message.started', messageId });
-              checkCancelled();
+            if (chunk.type === 'reasoning-delta') {
+              yield events.create({ type: 'reasoning.delta', delta: chunk.delta });
+            } else if (chunk.type === 'text-delta') {
+              if (chunk.delta.length > 0 && firstTextAt === undefined) {
+                firstTextAt = this.monotonicNow();
+              }
+              if (!messageStarted) {
+                messageStarted = true;
+                yield events.create({ type: 'message.started', messageId });
+                checkCancelled();
+              }
+              content += chunk.delta;
+              yield events.create({ type: 'message.delta', messageId, delta: chunk.delta });
+            } else if (chunk.type === 'tool-call') {
+              pendingToolCalls.push({ toolCall: chunk.toolCall });
+              yield events.create({
+                type: 'tool.requested',
+                toolCall: chunk.toolCall,
+                ...toolCorrelation,
+              });
+            } else if (chunk.type === 'tool-call-error') {
+              const toolCall = { ...chunk.toolCall, input: {} };
+              pendingToolCalls.push({
+                toolCall: { ...toolCall, rawArguments: chunk.toolCall.rawArguments },
+                error: chunk.error,
+              });
+              yield events.create({
+                type: 'tool.requested',
+                toolCall: {
+                  id: chunk.toolCall.id,
+                  name: chunk.toolCall.name,
+                  input: {},
+                },
+                ...toolCorrelation,
+              });
+            } else if (chunk.type === 'done') {
+              receivedDone = true;
+              finishReason = chunk.finishReason;
+              usage = chunk.usage;
+              providerRequestId = chunk.providerRequestId;
+              providerResponseId = chunk.providerResponseId;
+              responseModel = chunk.responseModel;
             }
-            content += chunk.delta;
-            yield events.create({ type: 'message.delta', messageId, delta: chunk.delta });
-          } else if (chunk.type === 'tool-call') {
-            pendingToolCalls.push({ toolCall: chunk.toolCall });
-            yield events.create({ type: 'tool.requested', toolCall: chunk.toolCall });
-          } else if (chunk.type === 'tool-call-error') {
-            pendingToolCalls.push({
-              toolCall: { ...chunk.toolCall, input: {} },
-              error: chunk.error,
-            });
-          } else if (chunk.type === 'done') {
-            receivedDone = true;
-            providerRequestId = chunk.providerRequestId;
-            providerResponseId = chunk.providerResponseId;
-            responseModel = chunk.responseModel;
-            if (chunk.finishReason === 'length')
-              throw new Error(
-                '模型响应达到输出上限，Run 未完成。请提高模型输出上限或缩短任务输入后重试。',
-              );
-            if (chunk.finishReason === 'content-filter')
-              throw new Error('模型响应被内容过滤中断，Run 未完成。');
-            if (chunk.finishReason === 'unknown')
-              throw new Error('模型返回未知完成原因，Run 未完成。');
+            checkCancelled();
           }
+
           checkCancelled();
+          if (!receivedDone)
+            throw new ModelCallFailure('stream-incomplete', '模型事件流结束时没有完成信号。');
+          if (finishReason === 'length')
+            throw new ModelCallFailure(
+              'output-limit',
+              '模型响应达到输出上限，Run 未完成。请提高模型输出上限或缩短任务输入后重试。',
+            );
+          if (finishReason === 'content-filter')
+            throw new ModelCallFailure('content-filter', '模型响应被内容过滤中断，Run 未完成。');
+          if (finishReason === 'unknown')
+            throw new ModelCallFailure(
+              'unknown-finish-reason',
+              '模型返回未知完成原因，Run 未完成。',
+            );
+          if (pendingToolCalls.length === 0 && !content.trim())
+            throw new ModelCallFailure('empty-response', '模型没有返回有效回复，Run 未完成。');
+        } catch (error) {
+          const durationMs = Math.max(0, this.monotonicNow() - modelStartedAt);
+          if (input.signal.aborted || isAbortError(error)) {
+            yield events.create({ type: 'model.cancelled', ...endingFields(durationMs) });
+            throw abortError();
+          }
+          const errorCode =
+            error instanceof ModelCallFailure
+              ? error.code
+              : receivedStreamChunk
+                ? 'stream-error'
+                : 'provider-error';
+          yield events.create({
+            type: 'model.failed',
+            ...endingFields(durationMs),
+            errorCode,
+            errorSummary: safeModelErrorSummary(errorCode),
+          });
+          throw error;
         }
 
+        const durationMs = Math.max(0, this.monotonicNow() - modelStartedAt);
+        yield events.create({ type: 'model.completed', ...endingFields(durationMs) });
         checkCancelled();
-        if (!receivedDone) throw new Error('模型事件流结束时没有完成信号。');
         if (messageStarted) {
           yield events.create({ type: 'message.completed', messageId, content });
           checkCancelled();
@@ -224,6 +340,8 @@ export class ReActAgentEngine implements AgentEngine {
               type: 'tool.failed',
               toolCallId: toolCall.id,
               error: pending.error,
+              ...toolCorrelation,
+              diagnostic: { kind: 'invalid-arguments', source: 'model-provider-output' },
             });
             checkCancelled();
             messages.push({
@@ -242,6 +360,7 @@ export class ReActAgentEngine implements AgentEngine {
               type: 'tool.failed',
               toolCallId: toolCall.id,
               error,
+              ...toolCorrelation,
               diagnostic: {
                 kind: 'unknown-tool',
                 source: 'model-provider-output',
@@ -264,7 +383,7 @@ export class ReActAgentEngine implements AgentEngine {
             });
             continue;
           }
-          yield events.create({ type: 'tool.started', toolCall });
+          yield events.create({ type: 'tool.started', toolCall, ...toolCorrelation });
           checkCancelled();
           const progress: AgentRuntimeEvent[] = [];
           let acceptsProgress = true;
@@ -282,7 +401,12 @@ export class ReActAgentEngine implements AgentEngine {
                 reportProgress(message) {
                   if (!acceptsProgress || input.signal.aborted) return;
                   progress.push(
-                    events.create({ type: 'tool.progress', toolCallId: toolCall.id, message }),
+                    events.create({
+                      type: 'tool.progress',
+                      toolCallId: toolCall.id,
+                      message,
+                      ...toolCorrelation,
+                    }),
                   );
                   wakeForProgress?.();
                 },
@@ -325,6 +449,7 @@ export class ReActAgentEngine implements AgentEngine {
                 type: 'tool.completed',
                 toolCallId: toolCall.id,
                 output: outcome.output,
+                ...toolCorrelation,
               });
               checkCancelled();
               messages.push({
@@ -336,7 +461,12 @@ export class ReActAgentEngine implements AgentEngine {
               });
             } else {
               const message = describeError(outcome.error);
-              yield events.create({ type: 'tool.failed', toolCallId: toolCall.id, error: message });
+              yield events.create({
+                type: 'tool.failed',
+                toolCallId: toolCall.id,
+                error: message,
+                ...toolCorrelation,
+              });
               checkCancelled();
               messages.push({
                 id: randomUUID(),

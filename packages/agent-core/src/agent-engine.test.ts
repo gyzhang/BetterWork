@@ -35,6 +35,209 @@ const recordingModel = (
 };
 
 describe('ReActAgentEngine', () => {
+  it('records distinct model rounds and measures visible text with an injected monotonic clock', async () => {
+    let clock = 0;
+    let round = 0;
+    const probe: AgentTool = {
+      name: 'probe',
+      description: '测试轮次关联',
+      inputSchema: { type: 'object' },
+      async execute() {
+        clock = 15;
+        return { ok: true };
+      },
+    };
+    const model: ModelProvider = {
+      id: 'fake-provider',
+      async *stream(): AsyncIterable<ModelStreamChunk> {
+        if (round === 0) {
+          clock = 8;
+          yield { type: 'tool-call', toolCall: { id: 'tool-1', name: 'probe', input: {} } };
+          clock = 12;
+          yield {
+            type: 'done',
+            finishReason: 'tool-calls',
+            usage: { promptTokens: 8, completionTokens: 0, totalTokens: 8 },
+            providerRequestId: 'request-1',
+          };
+        } else {
+          yield { type: 'text-delta', delta: '' };
+          clock = 21;
+          yield { type: 'text-delta', delta: '完成' };
+          clock = 27;
+          yield { type: 'done', finishReason: 'stop' };
+        }
+        round += 1;
+      },
+    };
+    const events = [];
+    for await (const event of new ReActAgentEngine(() => clock).run({
+      runId: 'run-model-rounds',
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      prompt: '验证两轮模型调用',
+      workspacePath: '.',
+      model,
+      tools: [probe],
+      signal: new AbortController().signal,
+    }))
+      events.push(event);
+
+    const modelEvents = events.filter((event) => event.type.startsWith('model.'));
+    expect(modelEvents.map((event) => event.type)).toEqual([
+      'model.started',
+      'model.completed',
+      'model.started',
+      'model.completed',
+    ]);
+    expect(modelEvents[0]).toMatchObject({
+      type: 'model.started',
+      round: 0,
+      providerId: 'fake-provider',
+      toolDefinitionCount: 1,
+    });
+    expect(modelEvents[1]).toMatchObject({
+      type: 'model.completed',
+      round: 0,
+      durationMs: 12,
+      finishReason: 'tool-calls',
+      usage: { promptTokens: 8, completionTokens: 0, totalTokens: 8 },
+      providerRequestId: 'request-1',
+    });
+    expect(modelEvents[1]).not.toHaveProperty('timeToFirstTextMs');
+    expect(modelEvents[3]).toMatchObject({
+      type: 'model.completed',
+      round: 1,
+      durationMs: 12,
+      timeToFirstTextMs: 6,
+      finishReason: 'stop',
+    });
+    expect(modelEvents[0]?.id).not.toBe(modelEvents[2]?.id);
+    expect(modelEvents[0]?.type === 'model.started' && modelEvents[0].modelCallId).not.toBe(
+      modelEvents[2]?.type === 'model.started' ? modelEvents[2].modelCallId : undefined,
+    );
+    expect(events.at(-1)?.type).toBe('run.completed');
+  });
+
+  it('records provider, incomplete, fatal finish, and empty-response failures without losing done metadata', async () => {
+    const cases: Array<{
+      model: ModelProvider;
+      errorCode: string;
+      usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
+    }> = [
+      {
+        model: {
+          id: 'fake-provider',
+          stream() {
+            throw new Error('provider secret should not enter diagnostic summary');
+          },
+        },
+        errorCode: 'provider-error',
+      },
+      { model: scriptedModel([[]]), errorCode: 'stream-incomplete' },
+      {
+        model: scriptedModel([
+          [
+            {
+              type: 'done',
+              finishReason: 'length',
+              usage: { promptTokens: 2, completionTokens: 3, totalTokens: 5 },
+              providerRequestId: 'request-kept',
+            },
+          ],
+        ]),
+        errorCode: 'output-limit',
+        usage: { promptTokens: 2, completionTokens: 3, totalTokens: 5 },
+      },
+      {
+        model: scriptedModel([[{ type: 'done', finishReason: 'content-filter' }]]),
+        errorCode: 'content-filter',
+      },
+      {
+        model: scriptedModel([[{ type: 'done', finishReason: 'unknown' }]]),
+        errorCode: 'unknown-finish-reason',
+      },
+      {
+        model: scriptedModel([[{ type: 'done', finishReason: 'stop' }]]),
+        errorCode: 'empty-response',
+      },
+    ];
+
+    for (const [index, testCase] of cases.entries()) {
+      const events = [];
+      for await (const event of new ReActAgentEngine(() => 100).run({
+        runId: `run-model-failure-${index}`,
+        taskId: 'task-1',
+        sessionId: 'session-1',
+        prompt: '测试失败收口',
+        workspacePath: '.',
+        model: testCase.model,
+        tools: [],
+        signal: new AbortController().signal,
+      }))
+        events.push(event);
+
+      const failures = events.filter((event) => event.type === 'model.failed');
+      expect(failures).toHaveLength(1);
+      expect(failures[0]).toMatchObject({
+        type: 'model.failed',
+        errorCode: testCase.errorCode,
+        durationMs: 0,
+      });
+      expect(failures[0]?.type === 'model.failed' ? failures[0].errorSummary : '').not.toContain(
+        'secret',
+      );
+      if (testCase.usage) expect(failures[0]).toMatchObject({ usage: testCase.usage });
+      expect(events.filter((event) => event.type === 'run.failed')).toHaveLength(1);
+      expect(events.filter((event) => event.type.startsWith('model.'))).toHaveLength(2);
+    }
+  });
+
+  it('closes cancelled calls once while preserving a call already completed before cancellation', async () => {
+    for (const cancelAt of [
+      'model.started',
+      'reasoning.delta',
+      'message.started',
+      'message.delta',
+      'tool.requested',
+      'model.completed',
+      'message.completed',
+    ] as const) {
+      const controller = new AbortController();
+      const events = [];
+      for await (const event of new ReActAgentEngine(() => 10).run({
+        runId: `run-cancel-${cancelAt}`,
+        taskId: 'task-1',
+        sessionId: 'session-1',
+        prompt: '取消测试',
+        workspacePath: '.',
+        model: scriptedModel([
+          [
+            { type: 'reasoning-delta', delta: 'private reasoning fixture' },
+            { type: 'text-delta', delta: 'text' },
+            { type: 'tool-call', toolCall: { id: 'tool-1', name: 'probe', input: {} } },
+            { type: 'done', finishReason: 'tool-calls' },
+          ],
+        ]),
+        tools: [],
+        signal: controller.signal,
+      })) {
+        events.push(event);
+        if (event.type === cancelAt) controller.abort();
+      }
+
+      expect(events.filter((event) => event.type === 'run.cancelled')).toHaveLength(1);
+      if (cancelAt === 'model.completed' || cancelAt === 'message.completed') {
+        expect(events.filter((event) => event.type === 'model.completed')).toHaveLength(1);
+        expect(events.filter((event) => event.type === 'model.cancelled')).toHaveLength(0);
+      } else {
+        expect(events.filter((event) => event.type === 'model.cancelled')).toHaveLength(1);
+        expect(events.filter((event) => event.type === 'model.completed')).toHaveLength(0);
+      }
+      expect(events.filter((event) => event.type.startsWith('model.'))).toHaveLength(2);
+    }
+  });
+
   it('emits an ordered tool run and final answer', async () => {
     const events = [];
     const engine = new ReActAgentEngine();
@@ -52,14 +255,18 @@ describe('ReActAgentEngine', () => {
 
     expect(events.map((event) => event.type)).toEqual([
       'run.started',
+      'model.started',
       'reasoning.delta',
       'tool.requested',
+      'model.completed',
       'tool.started',
       'tool.progress',
       'tool.completed',
+      'model.started',
       'message.started',
       'message.delta',
       'message.delta',
+      'model.completed',
       'message.completed',
       'run.completed',
     ]);
@@ -234,6 +441,26 @@ describe('ReActAgentEngine', () => {
       toolCallId: 'call-1',
       error: '工具内部执行失败',
     });
+    const modelCall = events.find((event) => event.type === 'model.started');
+    expect(events.filter((event) => event.type.startsWith('tool.'))).toMatchObject(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'tool.requested',
+          modelCallId: modelCall?.modelCallId,
+          round: 0,
+        }),
+        expect.objectContaining({
+          type: 'tool.started',
+          modelCallId: modelCall?.modelCallId,
+          round: 0,
+        }),
+        expect.objectContaining({
+          type: 'tool.failed',
+          modelCallId: modelCall?.modelCallId,
+          round: 0,
+        }),
+      ]),
+    );
     expect(events.at(-1)?.type).toBe('run.completed');
     expect(events.some((event) => event.type === 'run.failed')).toBe(false);
   });
@@ -272,9 +499,19 @@ describe('ReActAgentEngine', () => {
       [Symbol.asyncIterator]();
 
     expect((await iterator.next()).value?.type).toBe('run.started');
-    expect((await iterator.next()).value?.type).toBe('tool.requested');
-    expect((await iterator.next()).value?.type).toBe('tool.started');
-    expect(await iterator.next()).toMatchObject({ value: { type: 'tool.progress' } });
+    const modelStarted = (await iterator.next()).value;
+    expect(modelStarted?.type).toBe('model.started');
+    const toolRequested = (await iterator.next()).value;
+    expect(toolRequested?.type).toBe('tool.requested');
+    expect((await iterator.next()).value?.type).toBe('model.completed');
+    const toolStarted = (await iterator.next()).value;
+    expect(toolStarted?.type).toBe('tool.started');
+    const toolProgress = await iterator.next();
+    expect(toolProgress).toMatchObject({ value: { type: 'tool.progress' } });
+    if (modelStarted?.type !== 'model.started') throw new Error('Expected model.started');
+    expect(toolRequested).toMatchObject({ modelCallId: modelStarted.modelCallId, round: 0 });
+    expect(toolStarted).toMatchObject({ modelCallId: modelStarted.modelCallId, round: 0 });
+    expect(toolProgress.value).toMatchObject({ modelCallId: modelStarted.modelCallId, round: 0 });
     release?.();
 
     expect((await iterator.next()).value?.type).toBe('tool.completed');
@@ -421,10 +658,18 @@ describe('ReActAgentEngine', () => {
         },
       },
     ]);
+    const modelCall = events.find((event) => event.type === 'model.started');
+    expect(events.find((event) => event.type === 'tool.failed')).toMatchObject({
+      modelCallId: modelCall?.modelCallId,
+      round: 0,
+    });
     expect(executeSearch).toHaveBeenCalledOnce();
     expect(events.filter((event) => event.type === 'tool.started')).toMatchObject([
       { toolCall: { id: 'call-search', name: 'web_search' } },
     ]);
+    expect(
+      events.some((event) => event.type === 'tool.started' && event.toolCall.id === 'call-unknown'),
+    ).toBe(false);
     expect(events.at(-1)).toMatchObject({
       type: 'run.completed',
       finalContent: '已根据可用工具继续。',
@@ -435,6 +680,73 @@ describe('ReActAgentEngine', () => {
     );
     expect(feedback).toMatchObject({ role: 'tool', toolName: 'web_answer' });
     expect(feedback?.content).toContain('只使用本次请求提供的工具');
+  });
+
+  it('correlates requested, rejected, started and completed tools without recording damaged arguments', async () => {
+    const events = [];
+    const execute = vi.fn(async (input: Record<string, unknown>) => ({ value: input.value }));
+    const model = recordingModel([
+      [
+        {
+          type: 'tool-call-error',
+          toolCall: {
+            id: 'call-invalid',
+            name: 'record',
+            rawArguments: '{"private":"do not persist"',
+          },
+          error: '工具参数不是有效 JSON，请修正后重试。',
+        },
+        { type: 'tool-call', toolCall: { id: 'call-valid', name: 'record', input: { value: 7 } } },
+        { type: 'done' },
+      ],
+      [{ type: 'text-delta', delta: '已修正并完成。' }, { type: 'done' }],
+    ]);
+    for await (const event of new ReActAgentEngine().run({
+      runId: 'run-mixed-tools',
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      prompt: '先拒绝损坏参数，再执行合法调用',
+      workspacePath: '.',
+      model,
+      tools: [
+        {
+          name: 'record',
+          description: '记录数字',
+          inputSchema: { type: 'object' },
+          execute,
+        },
+      ],
+      signal: new AbortController().signal,
+    }))
+      events.push(event);
+
+    const modelCall = events.find((event) => event.type === 'model.started');
+    const toolEvents = events.filter((event) => event.type.startsWith('tool.'));
+    expect(modelCall).toMatchObject({ type: 'model.started', round: 0 });
+    expect(toolEvents).toHaveLength(5);
+    expect(
+      toolEvents.every(
+        (event) => 'modelCallId' in event && event.modelCallId === modelCall?.modelCallId,
+      ),
+    ).toBe(true);
+    expect(toolEvents.every((event) => 'round' in event && event.round === 0)).toBe(true);
+    expect(toolEvents).toMatchObject([
+      { type: 'tool.requested', toolCall: { id: 'call-invalid', name: 'record', input: {} } },
+      { type: 'tool.requested', toolCall: { id: 'call-valid', name: 'record' } },
+      {
+        type: 'tool.failed',
+        toolCallId: 'call-invalid',
+        diagnostic: { kind: 'invalid-arguments' },
+      },
+      { type: 'tool.started', toolCall: { id: 'call-valid', name: 'record' } },
+      { type: 'tool.completed', toolCallId: 'call-valid', output: { value: 7 } },
+    ]);
+    expect(JSON.stringify(toolEvents)).not.toContain('do not persist');
+    expect(
+      events.some((event) => event.type === 'tool.started' && event.toolCall.id === 'call-invalid'),
+    ).toBe(false);
+    expect(execute).toHaveBeenCalledOnce();
+    expect(events.at(-1)).toMatchObject({ type: 'run.completed', finalContent: '已修正并完成。' });
   });
 
   it('fails the run when the model exceeds the tool round limit', async () => {
@@ -495,10 +807,16 @@ describe('ReActAgentEngine', () => {
 
     expect(events.map((event) => event.type)).toEqual([
       'run.started',
+      'model.started',
       'message.started',
       'message.delta',
+      'model.failed',
       'run.failed',
     ]);
+    expect(events.find((event) => event.type === 'model.failed')).toMatchObject({
+      errorCode: 'stream-error',
+      errorSummary: '模型响应流读取失败。',
+    });
     expect(events.at(-1)).toMatchObject({ error: '模型连接中断' });
   });
 
@@ -757,7 +1075,7 @@ describe('Agent lifecycle isolation and provider boundaries', () => {
       })
       [Symbol.asyncIterator]();
     const events = [];
-    for (let i = 0; i < 4; i++) events.push((await iterator.next()).value);
+    for (let i = 0; i < 6; i++) events.push((await iterator.next()).value);
     expect(events.at(-1)?.type).toBe('tool.started');
     const pending = iterator.next();
     await Promise.resolve();
@@ -895,7 +1213,11 @@ describe('Agent robustness regressions', () => {
       expect(events.filter((event) => event.type === 'tool.completed')).toMatchObject([
         { toolCallId: 'good', output: { result: 15 } },
       ]);
-      expect(events.filter((event) => event.type === 'tool.requested')).toHaveLength(1);
+      expect(events.filter((event) => event.type === 'tool.requested')).toHaveLength(2);
+      expect(events.filter((event) => event.type === 'tool.requested')).toMatchObject([
+        { toolCall: { id: 'bad', input: {} } },
+        { toolCall: { id: 'good', input: { expression: '7+8' } } },
+      ]);
       expect(requests).toBe(2);
       expect(replayedArguments).toBe(argumentsText);
     },

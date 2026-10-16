@@ -24,6 +24,7 @@ import type {
 } from '@betterwork/agent-protocol';
 import {
   countCodePoints,
+  CURRENT_RUN_DIAGNOSTICS_RECORDING,
   IpcChannel,
   memoryRecallPolicyV2,
   TASK_CONTINUITY_RECENT_PROMPTS_MAX,
@@ -417,14 +418,17 @@ export class RunService {
 
     try {
       this.store.transaction(() => {
-        this.store.runs.create({
-          id: runId,
-          taskId: input.taskId,
-          sessionId: input.sessionId,
-          prompt: input.prompt,
-          status: 'running',
-          createdAt: Date.now(),
-        });
+        this.store.runs.create(
+          {
+            id: runId,
+            taskId: input.taskId,
+            sessionId: input.sessionId,
+            prompt: input.prompt,
+            status: 'running',
+            createdAt: Date.now(),
+          },
+          CURRENT_RUN_DIAGNOSTICS_RECORDING,
+        );
         this.store.runContextSnapshots.create({
           runId,
           taskId: input.taskId,

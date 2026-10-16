@@ -154,6 +154,132 @@ describe('model profile protocol', () => {
 });
 
 describe('run protocol', () => {
+  it('validates model lifecycle events, usage, metadata, and optional tool correlation', () => {
+    const started = {
+      id: 'event-1',
+      runId: 'run-1',
+      sequence: 0,
+      createdAt: 10,
+      type: 'model.started',
+      modelCallId: 'model-call-1',
+      round: 0,
+      providerId: 'openai-compatible',
+      messageCount: 2,
+      toolDefinitionCount: 1,
+    } as const;
+    const completed = {
+      id: 'event-2',
+      runId: 'run-1',
+      sequence: 1,
+      createdAt: 20,
+      type: 'model.completed',
+      modelCallId: 'model-call-1',
+      round: 0,
+      durationMs: 10,
+      timeToFirstTextMs: 4,
+      finishReason: 'tool-calls',
+      usage: { promptTokens: 8, completionTokens: 3, totalTokens: 11 },
+      providerRequestId: 'request-1',
+      providerResponseId: 'response-1',
+      responseModel: 'test/model-v1',
+    } as const;
+    const failed = {
+      id: 'event-3',
+      runId: 'run-1',
+      sequence: 2,
+      createdAt: 30,
+      type: 'model.failed',
+      modelCallId: 'model-call-2',
+      round: 1,
+      durationMs: 10,
+      errorCode: 'provider-error',
+      errorSummary: '模型调用失败。',
+    } as const;
+    const cancelled = {
+      id: 'event-4',
+      runId: 'run-1',
+      sequence: 3,
+      createdAt: 40,
+      type: 'model.cancelled',
+      modelCallId: 'model-call-3',
+      round: 2,
+      durationMs: 10,
+    } as const;
+
+    expect(
+      [started, completed, failed, cancelled].map((event) => agentRuntimeEventSchema.parse(event)),
+    ).toEqual([started, completed, failed, cancelled]);
+    expect(() => agentRuntimeEventSchema.parse({ ...started, modelCallId: undefined })).toThrow();
+    expect(() =>
+      agentRuntimeEventSchema.parse({ ...completed, usage: { promptTokens: -1 } }),
+    ).toThrow();
+    expect(() =>
+      agentRuntimeEventSchema.parse({ ...completed, usage: { completionTokens: 1.5 } }),
+    ).toThrow();
+    expect(() =>
+      agentRuntimeEventSchema.parse({ ...completed, providerRequestId: 'x'.repeat(257) }),
+    ).toThrow();
+    expect(() =>
+      agentRuntimeEventSchema.parse({ ...completed, providerResponseId: 'https://host?id=secret' }),
+    ).toThrow();
+    expect(() =>
+      agentRuntimeEventSchema.parse({ ...completed, responseModel: 'Bearer test-credential' }),
+    ).toThrow();
+    expect(() =>
+      agentRuntimeEventSchema.parse({ ...completed, responseModel: 'model\ncredential' }),
+    ).toThrow();
+    expect(() =>
+      agentRuntimeEventSchema.parse({ ...started, requestBody: 'not allowed' }),
+    ).toThrow();
+    expect(() => agentRuntimeEventSchema.parse({ ...completed, usage: {} })).toThrow();
+    expect(() => agentRuntimeEventSchema.parse({ ...started, type: 'model.finished' })).toThrow();
+
+    expect(
+      agentRuntimeEventSchema.parse({
+        id: 'event-legacy-run',
+        runId: 'run-1',
+        sequence: 0,
+        createdAt: 10,
+        type: 'run.started',
+        taskId: 'task-1',
+        sessionId: 'session-1',
+      }),
+    ).toMatchObject({ type: 'run.started' });
+    expect(
+      agentRuntimeEventSchema.parse({
+        id: 'event-legacy-message',
+        runId: 'run-1',
+        sequence: 1,
+        createdAt: 11,
+        type: 'message.delta',
+        messageId: 'message-1',
+        delta: 'legacy',
+      }),
+    ).toMatchObject({ type: 'message.delta' });
+    expect(
+      agentRuntimeEventSchema.parse({
+        id: 'event-5',
+        runId: 'run-1',
+        sequence: 4,
+        createdAt: 50,
+        type: 'tool.requested',
+        toolCall: { id: 'tool-1', name: 'calculator', input: {} },
+      }),
+    ).toMatchObject({ type: 'tool.requested' });
+    expect(
+      agentRuntimeEventSchema.parse({
+        id: 'event-6',
+        runId: 'run-1',
+        sequence: 5,
+        createdAt: 60,
+        type: 'tool.started',
+        toolCall: { id: 'tool-1', name: 'calculator', input: {} },
+        modelCallId: 'model-call-1',
+        round: 0,
+      }),
+    ).toMatchObject({ modelCallId: 'model-call-1', round: 0 });
+  });
+
   it('stores a bounded diagnostic for an unregistered model tool name', () => {
     expect(
       agentRuntimeEventSchema.parse({

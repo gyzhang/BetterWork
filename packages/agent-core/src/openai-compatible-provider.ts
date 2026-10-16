@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
+import {
+  modelProviderMetadataIdSchema,
+  modelResponseModelSchema,
+} from '@betterwork/agent-protocol';
+
 import { abortError } from './errors';
 import type {
   ModelFinishReason,
@@ -51,12 +56,16 @@ const finishReasonOf = (wireValue: string): ModelFinishReason =>
   FINISH_REASON_BY_WIRE_VALUE.get(wireValue) ?? 'unknown';
 
 const tokenCount = (value: unknown): number | undefined =>
-  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 
-const metadataString = (value: unknown): string | undefined => {
-  if (typeof value !== 'string') return undefined;
-  const normalized = value.trim();
-  return normalized.length > 0 && normalized.length <= 200 ? normalized : undefined;
+const metadataId = (value: unknown): string | undefined => {
+  const parsed = modelProviderMetadataIdSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+};
+
+const responseModelName = (value: unknown): string | undefined => {
+  const parsed = modelResponseModelSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 };
 
 /** usage 只搬运上游真实返回的数字，绝不把 code points 之类推算值冒充成 token。 */
@@ -197,9 +206,9 @@ export class OpenAICompatibleProvider implements ModelProvider {
     if (!response.body) throw new Error('模型服务没有返回流式响应');
 
     const providerRequestId =
-      metadataString(response.headers.get('x-request-id')) ??
-      metadataString(response.headers.get('request-id')) ??
-      metadataString(response.headers.get('x-bce-request-id'));
+      metadataId(response.headers.get('x-request-id')) ??
+      metadataId(response.headers.get('request-id')) ??
+      metadataId(response.headers.get('x-bce-request-id'));
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -229,8 +238,8 @@ export class OpenAICompatibleProvider implements ModelProvider {
         return [];
       }
       const chunk = JSON.parse(data) as StreamPayload;
-      providerResponseId ??= metadataString(chunk.id);
-      responseModel ??= metadataString(chunk.model);
+      providerResponseId ??= metadataId(chunk.id);
+      responseModel ??= responseModelName(chunk.model);
       const choice = chunk.choices?.[0];
       const delta = choice?.delta;
       const parsedUsage = usageOf(chunk.usage);

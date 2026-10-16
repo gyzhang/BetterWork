@@ -205,12 +205,13 @@ describe('ExpertsPage 的目录条目', () => {
     );
     if (origin === 'detail') fireEvent.click(screen.getByRole('button', { name: '详情' }));
     const name = origin === 'detail' ? '编辑配置' : '编辑';
-    fireEvent.click(await screen.findByRole('button', { name }));
+    const editButton = await screen.findByRole('button', { name });
+    fireEvent.click(editButton);
     const field = await screen.findByLabelText('名称');
-    expect(document.activeElement).toBe(field);
+    await waitFor(() => expect(document.activeElement).toBe(field));
     fireEvent.change(field, { target: { value: '未保存的名称' } });
     fireEvent.click(screen.getByRole('button', { name: '取消' }));
-    expect(document.activeElement).toBe(screen.getByRole('button', { name }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name })));
     expect(actions.saveRevision).not.toHaveBeenCalled();
     expect(detail.revision.name).toBe(userExpert.name);
   });
