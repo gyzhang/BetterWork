@@ -1,16 +1,16 @@
 {
-  "savedAt": "2026-10-14 21:55",
+  "savedAt": "2026-10-16 21:27",
   "readings": {
     "判据总数": 156,
     "现行文档点名次数": 15,
     "被点过名的判据": 11,
-    "测试文件": 349,
-    "用例": 3375,
+    "测试文件": 351,
+    "用例": 3469,
     "结构护栏": 156,
-    "例外登记": 204,
+    "例外登记": 207,
     "eslint配置块": 6,
     "规则文件": 7,
-    "产品源码行": 104231,
+    "产品源码行": 104800,
     "巡检窗口天数": 14
   },
   "ruleSnapshot": {
@@ -37,7 +37,7 @@
       "standards/coding-standard.test.ts › 区块头基座纪律 › 生产代码不再手写标题标签，一律走 SectionHeader › HEADING_OWNERS": "38011a699abd9d12699600876ac5bbcfb52827972c5e4bab1502327728adc48b",
       "standards/coding-standard.test.ts › 区块头基座纪律 › 生产代码不再手写标题标签，一律走 SectionHeader › HEADING_FILE_EXEMPTIONS": "9c100821831f68cecc006d84b4510ac710443bc7736e156e3e5e542220ecc4cc",
       "standards/coding-standard.test.ts › 区块头基座纪律 › 生产代码不再手写标题标签，一律走 SectionHeader › exempt": "64f96db27edaae2cc938c180205518d4f6d60957c85bd9308a4977c96e12e7d8",
-      "standards/coding-standard.test.ts › 区块头基座纪律 › 标题的外观只住在基座与登记过的表面里 › HEADING_RULE_OWNERS": "e0a486a64227800a56e8501e718d39adff8b681c29b7b2a386f51315eeb7e1a8",
+      "standards/coding-standard.test.ts › 区块头基座纪律 › 标题的外观只住在基座与登记过的表面里 › HEADING_RULE_OWNERS": "51e2954a236b27ecc0c61f17902ef8863c416ff6b7dd446a44c6699568830df2",
       "standards/coding-standard.test.ts › ICON_BUTTON_EXEMPT_CLASSES": "e4261197a89930537d4069fe2da94131e775754cf7d5ca9e7497a74beb81d60e",
       "standards/coding-standard.test.ts › 图标按钮与动作条纪律 › 留在图标按钮上的领域钩子不再自带方块 › ICON_BUTTON_HOOKS": "bdca389af17c423bec4b9b4993e8c0e04137d1ff70a2aa148b0d5125c75f3e41",
       "standards/coding-standard.test.ts › NON_ACTION_BUTTON_SHAPES": "01310cd9967f70114746de557be156649137ee43e3c8055e45ece8a449b50fd3",
@@ -55,7 +55,7 @@
       "standards/coding-standard.test.ts › 状态呈现纪律 › 语义状态色只能由四个出口给，其余逐条登记理由 › hitExceptions": "924fc4947bf69b908d55caa74b68db624600d231cc9f2f79ee187a3eaf916cc0",
       "standards/coding-standard.test.ts › PAGE_SHAPE_EXCEPTIONS": "d8e7b4ae54dec1a6906122242f9b6999924304b28d02372642b737944392e240",
       "standards/coding-standard.test.ts › INLINE_STYLE_OUTLETS": "8d4fb7ff18a112c2f94da9130aec51ccb654c967012dbe01d0f1af7c36e23ff7",
-      "standards/coding-standard.test.ts › SURFACE_SHELL_OWNERS": "4c1f92c824bf27c4c52f033beaa3a42456231dfd67d74df146a944fddabfe794",
+      "standards/coding-standard.test.ts › SURFACE_SHELL_OWNERS": "a78d0d95cac16c21668eea47fa92d8ba1fe36ec483b639b5b1d470ee25858683",
       "standards/coding-standard.test.ts › FIXED_MAX_WIDTH_OWNERS": "9098081ab3bdee20b658e43471ae81fe45ff64d6f803e7cd51b058dade8f7113",
       "standards/coding-standard.test.ts › TYPE_LADDER_EXEMPTIONS": "319d2d8fc6123826fb0c846d66615e29bad4755d4a44a9f17a929643bb1e4d8e",
       "standards/coding-standard.test.ts › NON_MARK_GEOMETRY": "2936063ff676fc11c0d38432985313d9dbff8df55409f3e016673e1211649ff7",
@@ -66,5 +66,5 @@
       "standards/coding-standard.test.ts › 新增 UI 的实际基座归属 › 新命名表面不能自造卡片或徽标外壳 › owners": "92bb0f10115976a86172f280c87cb4bf569ba95be9c674b5b313a9f1bca1c01b"
     }
   },
-  "reviewReason": "新增覆盖护栏 reason 类型字段被文本计数计入；已 Review 原整类排除收紧为 5 个宿主/纯视觉精确例外，没有放宽源码豁免或规则指纹"
+  "reviewReason": "已核对主分支 #210 三条过程旁白 Markdown 登记：标题排版、流式状态色、正文去外壳均限定实际选择器并对应 docs/10 与 docs/12；本任务不修改规则或豁免范围，仅同步已审查的巡检读数"
 }

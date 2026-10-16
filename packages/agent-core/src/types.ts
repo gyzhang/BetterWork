@@ -22,10 +22,24 @@ export interface ModelUsage {
   totalTokens?: number;
 }
 
+export interface ModelToolCall extends ToolCall {
+  /** Failed argument text is replayed only to pair the rejected call with its error result. */
+  rawArguments?: string;
+}
+
+export interface ModelMessage extends Omit<AgentMessage, 'toolCalls'> {
+  toolCalls?: ModelToolCall[] | undefined;
+}
+
 export type ModelStreamChunk =
   | { type: 'reasoning-delta'; delta: string }
   | { type: 'text-delta'; delta: string }
   | { type: 'tool-call'; toolCall: ToolCall }
+  | {
+      type: 'tool-call-error';
+      toolCall: { id: string; name: string; rawArguments: string };
+      error: string;
+    }
   | {
       type: 'done';
       finishReason?: ModelFinishReason;
@@ -36,7 +50,7 @@ export type ModelStreamChunk =
     };
 
 export interface ModelRequest {
-  messages: AgentMessage[];
+  messages: ModelMessage[];
   tools: ModelToolDefinition[];
   signal: AbortSignal;
   maxOutputTokens?: number;

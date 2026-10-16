@@ -636,3 +636,139 @@ describe('OpenAICompatibleProvider failures', () => {
     ).rejects.toThrow('模型流响应超时（超过 0.001 秒）');
   });
 });
+
+describe('Provider robustness regressions', () => {
+  it('completes on DONE without waiting for HTTP EOF and retains trailing usage', async () => {
+    let close = () => {};
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        close = () => controller.close();
+        controller.enqueue(
+          new TextEncoder().encode(
+            `data: ${delta({ content: 'answer' })}\n\ndata: ${wireFinish('stop')}\n\ndata: ${wireUsageOnly({ total_tokens: 12 })}\n\ndata: [DONE]\n\n`,
+          ),
+        );
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    stubFetch(() => new Response(body));
+    let chunks: ModelStreamChunk[] | undefined;
+    const pending = collect(provider().stream(request())).then((value) => {
+      chunks = value;
+    });
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(chunks?.at(-1)).toMatchObject({
+        type: 'done',
+        finishReason: 'stop',
+        usage: { totalTokens: 12 },
+      });
+      expect(cancelled).toBe(true);
+    } finally {
+      if (!cancelled) close();
+      await pending;
+    }
+  });
+
+  it('cancels an open response body when consumption stops early', async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`data: ${delta({ content: 'answer' })}\n\n`));
+      },
+      cancel,
+    });
+    stubFetch(() => new Response(body));
+    for await (const chunk of provider().stream(request())) {
+      expect(chunk.type).toBe('text-delta');
+      break;
+    }
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it.each([undefined, 'repeated'])(
+    'assigns unique IDs for missing or repeated upstream IDs: %s',
+    async (id) => {
+      stubFetch(() =>
+        sse(
+          delta({
+            tool_calls: [
+              {
+                index: 0,
+                ...(id ? { id } : {}),
+                function: { name: 'calculator', arguments: '{}' },
+              },
+            ],
+          }),
+        ),
+      );
+      const first = await collect(provider().stream(request()));
+      const firstCall = first.find((chunk) => chunk.type === 'tool-call');
+      if (firstCall?.type !== 'tool-call') throw new Error('Missing first tool call');
+      const second = await collect(
+        provider().stream(
+          request({
+            messages: [
+              { id: 'assistant', role: 'assistant', content: '', toolCalls: [firstCall.toolCall] },
+            ],
+          }),
+        ),
+      );
+      const secondCall = second.find((chunk) => chunk.type === 'tool-call');
+      expect(secondCall).toMatchObject({ type: 'tool-call' });
+      if (secondCall?.type !== 'tool-call') throw new Error('Missing second tool call');
+      expect(secondCall.toolCall.id).not.toBe(firstCall.toolCall.id);
+    },
+  );
+});
+
+describe('Provider stream cleanup boundaries', () => {
+  it('preserves the original malformed-stream error if cancelling the body also fails', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: {invalid}\n\n'));
+      },
+      cancel() {
+        throw new Error('secondary cleanup failure');
+      },
+    });
+    stubFetch(() => new Response(body));
+    await expect(collect(provider().stream(request()))).rejects.toBeInstanceOf(SyntaxError);
+  });
+
+  it('reports a failed response-body cleanup after an otherwise completed stream', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+      },
+      cancel() {
+        throw new Error('response cleanup failure');
+      },
+    });
+    stubFetch(() => new Response(body));
+    await expect(collect(provider().stream(request()))).rejects.toThrow('response cleanup failure');
+  });
+
+  it('keeps late upstream IDs stable and disambiguates duplicate IDs in one batch', async () => {
+    stubFetch(() =>
+      sse(
+        delta({ tool_calls: [{ index: 0, function: { name: 'calculator', arguments: '{' } }] }),
+        delta({
+          tool_calls: [
+            { index: 0, id: 'late', function: { arguments: '}' } },
+            { index: 1, id: 'late', function: { name: 'calculator', arguments: '{}' } },
+          ],
+        }),
+      ),
+    );
+    const calls = (await collect(provider().stream(request()))).flatMap((chunk) =>
+      chunk.type === 'tool-call' ? [chunk.toolCall] : [],
+    );
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.id).toBe('late');
+    expect(calls[1]?.id).not.toBe('late');
+  });
+});

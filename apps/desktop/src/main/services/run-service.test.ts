@@ -5234,3 +5234,144 @@ describe('CF11 credential dispatch gate', () => {
     expect(headers?.Authorization).toBe('Bearer SK-FROM-CREDS');
   });
 });
+
+describe('RunService robustness regressions', () => {
+  it.each(['{"expression":', 'null', '[]'])(
+    'recovers invalid model arguments %s through the real Journal',
+    async (argumentsText) => {
+      const fixture = await createFixture();
+      let requests = 0;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          requests += 1;
+          return requests === 1
+            ? sseResponse(
+                JSON.stringify({
+                  choices: [
+                    {
+                      delta: {
+                        tool_calls: [
+                          {
+                            index: 0,
+                            id: 'invalid-arguments',
+                            function: { name: 'calculator', arguments: argumentsText },
+                          },
+                        ],
+                      },
+                      finish_reason: 'tool_calls',
+                    },
+                  ],
+                }),
+              )
+            : sseResponse(
+                JSON.stringify({
+                  choices: [{ delta: { content: 'Recovered' }, finish_reason: 'stop' }],
+                }),
+              );
+        }),
+      );
+      fixture.store.models.save({
+        name: 'Offline robustness model',
+        role: 'language',
+        provider: 'openai-compatible',
+        baseUrl: 'https://offline.invalid/v1',
+        model: 'offline',
+        apiKey: '',
+        maxContextTokens: 8192,
+        maxOutputTokens: 1024,
+        temperature: 0,
+        enabled: true,
+      });
+      const service = createService(fixture);
+      const runId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: 'Use calculator.',
+      });
+      try {
+        await waitForCompletion(fixture, runId);
+        expect(
+          statusOf(fixture, runId),
+          JSON.stringify(fixture.store.runs.listEvents(runId).at(-1)),
+        ).toBe('completed');
+        expect(requests).toBe(2);
+        const events = fixture.store.runs.listEvents(runId);
+        expect(events.filter((event) => event.type === 'tool.failed')).toHaveLength(1);
+        expect(events.some((event) => event.type === 'tool.started')).toBe(false);
+      } finally {
+        await service.shutdown();
+      }
+    },
+  );
+
+  it.each(['skill', 'mcp'] as const)(
+    'cancels during %s cleanup without registering a Markdown artifact',
+    async (phase) => {
+      const fixture = await createFixture();
+      const entered = createCompletionGate();
+      const released = createCompletionGate();
+      const service = createService(fixture, {
+        skillExecutionService: {
+          finishRun: async () => {
+            if (phase === 'skill') {
+              entered.resolve();
+              await released.promise;
+            }
+            return { cancelled: 0, cleanupFailed: 0 };
+          },
+        } as unknown as SkillExecutionService,
+        mcpClientService: {
+          releaseRun: async () => {
+            if (phase === 'mcp') {
+              entered.resolve();
+              await released.promise;
+            }
+          },
+        } as unknown as McpClientService,
+      });
+      const runId = service.start({
+        taskId: fixture.taskId,
+        sessionId: fixture.sessionId,
+        prompt: '请保存为 Markdown 成果。',
+      });
+      try {
+        await entered.promise;
+        expect(service.cancel(runId)).toBe(true);
+        released.resolve();
+        await vi.waitFor(() => expect(service.isActive(runId)).toBe(false));
+        expect(statusOf(fixture, runId)).toBe('cancelled');
+        expect(fixture.store.artifacts.list(fixture.taskId)).toHaveLength(0);
+        expect(fixture.store.notifications.list()).toHaveLength(0);
+      } finally {
+        released.resolve();
+        await service.shutdown();
+      }
+    },
+  );
+
+  it('rejects cancellation once artifact and terminal commit begins', async () => {
+    const fixture = await createFixture();
+    const service = createService(fixture);
+    let runId = '';
+    const accepted: boolean[] = [];
+    const save = fixture.store.artifacts.saveMarkdown.bind(fixture.store.artifacts);
+    vi.spyOn(fixture.store.artifacts, 'saveMarkdown').mockImplementation((...args) => {
+      accepted.push(service.cancel(runId));
+      return save(...args);
+    });
+    runId = service.start({
+      taskId: fixture.taskId,
+      sessionId: fixture.sessionId,
+      prompt: '请保存为 Markdown 成果。',
+    });
+    try {
+      await waitForCompletion(fixture, runId);
+      expect(accepted).toEqual([false]);
+      expect(statusOf(fixture, runId)).toBe('completed');
+      expect(fixture.store.artifacts.list(fixture.taskId)).toHaveLength(1);
+    } finally {
+      await service.shutdown();
+    }
+  });
+});

@@ -62,6 +62,7 @@ interface Connected {
   close: () => Promise<void>;
 }
 interface RunConnections {
+  preparation: Promise<void>;
   controller: AbortController;
   connections: Map<string, Connected>;
   bindings: Map<string, McpToolBinding>;
@@ -160,6 +161,8 @@ export class McpClientService {
     return pending;
   }
   private readonly runs = new Map<string, RunConnections>();
+  private readonly releasingRuns = new Map<string, Promise<void>>();
+  private shutdownPromise: Promise<void> | undefined;
   private readonly operations = new Map<
     string,
     { connectionId: string; controller: AbortController }
@@ -420,7 +423,16 @@ export class McpClientService {
     }
   }
 
-  async createAgentTools(
+  createAgentTools(
+    bindings: readonly McpToolBinding[],
+    runId: string,
+    signal: AbortSignal,
+  ): Promise<AgentTool[]> {
+    if (signal.aborted) return Promise.reject(abortError());
+    return this.trackOperation(() => this.prepareAgentTools(bindings, runId, signal));
+  }
+
+  private async prepareAgentTools(
     bindings: readonly McpToolBinding[],
     runId: string,
     signal: AbortSignal,
@@ -430,7 +442,12 @@ export class McpClientService {
     const abort = (): void => controller.abort();
     signal.addEventListener('abort', abort, { once: true });
     if (signal.aborted) controller.abort();
+    let finishPreparation = (): void => {};
+    const preparation = new Promise<void>((resolve) => {
+      finishPreparation = resolve;
+    });
     const run: RunConnections = {
+      preparation,
       controller,
       connections: new Map(),
       bindings: new Map(),
@@ -544,6 +561,7 @@ export class McpClientService {
       return tools;
     } catch (error) {
       const cancelled = controller.signal.aborted;
+      finishPreparation();
       await this.releaseRun(runId);
       if (cancelled && !timedOut) throw abortError();
       if (timedOut)
@@ -552,6 +570,7 @@ export class McpClientService {
         });
       throw error;
     } finally {
+      finishPreparation();
       clearTimeout(discoveryTimer);
     }
   }
@@ -559,28 +578,54 @@ export class McpClientService {
   getRunToolBinding(runId: string, alias: string): McpToolBinding | undefined {
     return this.runs.get(runId)?.bindings.get(alias);
   }
-  async releaseRun(runId: string): Promise<void> {
+  releaseRun(runId: string): Promise<void> {
+    const releasing = this.releasingRuns.get(runId);
+    if (releasing) return releasing;
     const run = this.runs.get(runId);
-    if (!run) return;
-    this.runs.delete(runId);
+    if (!run) return Promise.resolve();
     run.releaseSignal();
     run.controller.abort();
-    const results = await Promise.allSettled(
-      [...run.connections.values()].map((state) => state.close()),
-    );
-    if (results.some((result) => result.status === 'rejected'))
-      throw new McpClientError('MCP 连接清理失败。');
+    const pending = Promise.resolve()
+      .then(async () => {
+        await run.preparation;
+        const results = await Promise.allSettled(
+          [...run.connections].map(async ([id, state]) => {
+            await state.close();
+            run.connections.delete(id);
+          }),
+        );
+        if (results.some((result) => result.status === 'rejected'))
+          throw new McpClientError('MCP 连接清理失败。');
+        this.runs.delete(runId);
+      })
+      .finally(() => {
+        this.releasingRuns.delete(runId);
+      });
+    this.releasingRuns.set(runId, pending);
+    return pending;
   }
-  async shutdown(): Promise<void> {
+  shutdown(): Promise<void> {
+    if (this.shutdownPromise) return this.shutdownPromise;
     this.stopping = true;
     this.unsubscribe?.();
-    const oauth = this.oauth.shutdown();
     for (const operation of this.operations.values()) operation.controller.abort();
-    await Promise.allSettled([
-      oauth,
-      ...this.pendingOperations,
-      ...[...this.runs.keys()].map((runId) => this.releaseRun(runId)),
-    ]);
+    const pending = Promise.resolve()
+      .then(async () => {
+        const results = await Promise.allSettled([
+          this.oauth.shutdown(),
+          // Callers own operation failures; this drain only waits for their cancellation to settle.
+          Promise.allSettled([...this.pendingOperations]),
+          ...[...this.runs.keys()].map((runId) => this.releaseRun(runId)),
+        ]);
+        if (results.some((result) => result.status === 'rejected'))
+          throw new McpClientError('MCP 退出清理失败，请重试退出。');
+      })
+      .catch((error: unknown) => {
+        this.shutdownPromise = undefined;
+        throw error;
+      });
+    this.shutdownPromise = pending;
+    return pending;
   }
   private invalidate(id: string): void {
     for (const [runId, run] of this.runs)
@@ -639,7 +684,8 @@ export class McpClientService {
             ? {
                 ...init,
                 signal: AbortSignal.any([
-                  ...(init?.signal ? [init.signal] : []),
+                  // Session cleanup must remain retryable after the SDK closes its transport.
+                  ...(init?.signal && init.method !== 'DELETE' ? [init.signal] : []),
                   AbortSignal.timeout(3_000),
                 ]),
               }

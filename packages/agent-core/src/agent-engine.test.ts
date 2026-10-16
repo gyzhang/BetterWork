@@ -260,7 +260,10 @@ describe('ReActAgentEngine', () => {
         prompt: '等待工具',
         workspacePath: '.',
         model: scriptedModel([
-          [{ type: 'tool-call', toolCall: { id: 'wait-1', name: 'wait', input: {} } }],
+          [
+            { type: 'tool-call', toolCall: { id: 'wait-1', name: 'wait', input: {} } },
+            { type: 'done' },
+          ],
           [{ type: 'text-delta', delta: '完成' }, { type: 'done' }],
         ]),
         tools: [longRunningTool],
@@ -296,7 +299,10 @@ describe('ReActAgentEngine', () => {
       prompt: '记录身份',
       workspacePath: '.',
       model: scriptedModel([
-        [{ type: 'tool-call', toolCall: { id: 'call-42', name: 'probe', input: {} } }],
+        [
+          { type: 'tool-call', toolCall: { id: 'call-42', name: 'probe', input: {} } },
+          { type: 'done' },
+        ],
         [{ type: 'text-delta', delta: '完成' }, { type: 'done' }],
       ]),
       tools: [probeTool],
@@ -820,4 +826,226 @@ describe('Agent lifecycle isolation and provider boundaries', () => {
     await expect(run[Symbol.asyncIterator]().next()).rejects.toThrow('运行约定超过上下文预算');
     expect(stream).not.toHaveBeenCalled();
   });
+});
+
+describe('Agent robustness regressions', () => {
+  const run = (model: ModelProvider, tools: AgentTool[] = [], controller = new AbortController()) =>
+    new ReActAgentEngine().run({
+      runId: 'robustness',
+      taskId: 'task',
+      sessionId: 'session',
+      prompt: 'fixture',
+      workspacePath: '.',
+      model,
+      tools,
+      signal: controller.signal,
+    });
+
+  it.each(['{"expression":', 'null', '[]', '42', '"text"'])(
+    'feeds invalid arguments %s back while executing valid sibling calls',
+    async (argumentsText) => {
+      let requests = 0;
+      let replayedArguments: string | undefined;
+      const provider = new OpenAICompatibleProvider(
+        { id: 'offline', baseUrl: 'https://offline.invalid/v1', apiKey: '', model: 'fixture' },
+        {
+          fetchImpl: async (_url, init) => {
+            requests += 1;
+            const body = JSON.parse(String(init?.body)) as {
+              messages: Array<{ tool_calls?: Array<{ function: { arguments: string } }> }>;
+            };
+            if (requests === 2) {
+              replayedArguments = body.messages.flatMap((message) => message.tool_calls ?? [])[0]
+                ?.function.arguments;
+            }
+            const payload =
+              requests === 1
+                ? {
+                    choices: [
+                      {
+                        delta: {
+                          tool_calls: [
+                            {
+                              index: 0,
+                              id: 'bad',
+                              function: { name: 'calculator', arguments: argumentsText },
+                            },
+                            {
+                              index: 1,
+                              id: 'good',
+                              function: { name: 'calculator', arguments: '{"expression":"7+8"}' },
+                            },
+                          ],
+                        },
+                        finish_reason: 'tool_calls',
+                      },
+                    ],
+                  }
+                : { choices: [{ delta: { content: 'Recovered' }, finish_reason: 'stop' }] };
+            return new Response(`data: ${JSON.stringify(payload)}\n\ndata: [DONE]\n\n`);
+          },
+        },
+      );
+      const events = [];
+      for await (const event of run(provider, [calculatorTool])) events.push(event);
+      expect(events.at(-1)).toMatchObject({ type: 'run.completed', finalContent: 'Recovered' });
+      expect(events.filter((event) => event.type === 'tool.failed')).toMatchObject([
+        { toolCallId: 'bad', error: expect.stringContaining('calculator') },
+      ]);
+      expect(events.filter((event) => event.type === 'tool.completed')).toMatchObject([
+        { toolCallId: 'good', output: { result: 15 } },
+      ]);
+      expect(events.filter((event) => event.type === 'tool.requested')).toHaveLength(1);
+      expect(requests).toBe(2);
+      expect(replayedArguments).toBe(argumentsText);
+    },
+  );
+
+  it('does not dispatch a tool cancelled at its started event', async () => {
+    const controller = new AbortController();
+    const execute = vi.fn(async () => ({}));
+    const events = [];
+    for await (const event of run(
+      scriptedModel([
+        [
+          { type: 'tool-call', toolCall: { id: 'call', name: 'fixture', input: {} } },
+          { type: 'done' },
+        ],
+      ]),
+      [{ name: 'fixture', description: '', inputSchema: {}, execute }],
+      controller,
+    )) {
+      events.push(event);
+      if (event.type === 'tool.started') controller.abort('cancel before dispatch');
+    }
+    expect(execute).not.toHaveBeenCalled();
+    expect(events.at(-1)).toMatchObject({
+      type: 'run.cancelled',
+      reason: 'cancel before dispatch',
+    });
+  });
+
+  it('cancels while a progress event is yielded without waiting for the tool to settle', async () => {
+    const controller = new AbortController();
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const iterator = run(
+      scriptedModel([
+        [
+          { type: 'tool-call', toolCall: { id: 'call', name: 'fixture', input: {} } },
+          { type: 'done' },
+        ],
+      ]),
+      [
+        {
+          name: 'fixture',
+          description: '',
+          inputSchema: {},
+          async execute(_input, context) {
+            context.reportProgress('waiting');
+            await gate;
+            context.reportProgress('late');
+            return {};
+          },
+        },
+      ],
+      controller,
+    )[Symbol.asyncIterator]();
+    let pending: ReturnType<typeof iterator.next> | undefined;
+    try {
+      while ((await iterator.next()).value?.type !== 'tool.progress') {
+        /* consume setup */
+      }
+      controller.abort('cancel during progress');
+      let result: Awaited<ReturnType<typeof iterator.next>> | undefined;
+      pending = iterator.next().then((value) => {
+        result = value;
+        return value;
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(result?.value).toMatchObject({
+        type: 'run.cancelled',
+        reason: 'cancel during progress',
+      });
+    } finally {
+      release();
+      await pending;
+      await iterator.return?.();
+    }
+  });
+
+  it('honors cancellation after the final message completion', async () => {
+    const controller = new AbortController();
+    const events = [];
+    for await (const event of run(
+      scriptedModel([[{ type: 'text-delta', delta: 'answer' }, { type: 'done' }]]),
+      [],
+      controller,
+    )) {
+      events.push(event);
+      if (event.type === 'message.completed') controller.abort();
+    }
+    expect(events.at(-1)?.type).toBe('run.cancelled');
+  });
+
+  it.each(['content-filter', 'unknown'] as const)(
+    'rejects a %s completion',
+    async (finishReason) => {
+      const events = [];
+      for await (const event of run(scriptedModel([[{ type: 'done', finishReason }]])))
+        events.push(event);
+      expect(events.at(-1)?.type).toBe('run.failed');
+    },
+  );
+
+  it.each([
+    { chunks: [] as ModelStreamChunk[] },
+    { chunks: [{ type: 'done' }] as ModelStreamChunk[] },
+    {
+      chunks: [
+        { type: 'text-delta', delta: '   ' },
+        { type: 'done', finishReason: 'stop' },
+      ] as ModelStreamChunk[],
+    },
+  ])('rejects an incomplete or empty answer %#', async ({ chunks }) => {
+    const events = [];
+    for await (const event of run(scriptedModel([chunks]))) events.push(event);
+    expect(events.at(-1)?.type).toBe('run.failed');
+  });
+
+  it.each(['sync', 'undefined', 'bigint', 'circular'] as const)(
+    'recovers a %s tool failure and removes its abort listener',
+    async (failure) => {
+      const controller = new AbortController();
+      const added = vi.spyOn(controller.signal, 'addEventListener');
+      const removed = vi.spyOn(controller.signal, 'removeEventListener');
+      const execute: AgentTool['execute'] = () => {
+        if (failure === 'sync') throw new Error('sync failure');
+        if (failure === 'undefined') return Promise.resolve(undefined);
+        if (failure === 'bigint') return Promise.resolve(1n);
+        const output: Record<string, unknown> = {};
+        output.self = output;
+        return Promise.resolve(output);
+      };
+      const events = [];
+      for await (const event of run(
+        scriptedModel([
+          [
+            { type: 'tool-call', toolCall: { id: 'bad', name: 'fixture', input: {} } },
+            { type: 'done' },
+          ],
+          [{ type: 'text-delta', delta: 'Recovered' }, { type: 'done' }],
+        ]),
+        [{ name: 'fixture', description: '', inputSchema: {}, execute }],
+        controller,
+      ))
+        events.push(event);
+      expect(events.at(-1)).toMatchObject({ type: 'run.completed', finalContent: 'Recovered' });
+      expect(events.filter((event) => event.type === 'tool.failed')).toHaveLength(1);
+      expect(events.some((event) => event.type === 'tool.completed')).toBe(false);
+      expect(removed.mock.calls.length).toBe(added.mock.calls.length);
+    },
+  );
 });

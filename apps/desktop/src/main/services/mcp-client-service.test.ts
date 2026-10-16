@@ -627,3 +627,144 @@ describe('MCP safe diagnostics and operation ownership', () => {
     expect(result.tools).toEqual([]);
   });
 });
+
+describe('MCP release robustness regressions', () => {
+  const ownedConnections = (service: McpClientService, runId: string) => {
+    const connections = (
+      service as unknown as {
+        runs: Map<string, { connections: Map<string, { close: () => Promise<void> }> }>;
+      }
+    ).runs.get(runId)?.connections;
+    if (!connections) throw new Error('Missing owned MCP connections');
+    return connections;
+  };
+  const connectionState = (service: McpClientService, runId: string) => {
+    const state = ownedConnections(service, runId).values().next().value;
+    if (!state) throw new Error('Missing owned MCP connection');
+    return state;
+  };
+
+  it('retains a failed connection for a later release retry', async () => {
+    const f = await fixture();
+    f.approve();
+    const runId = f.createRun();
+    await f.service.createAgentTools([f.binding], runId, new AbortController().signal);
+    const state = connectionState(f.service, runId);
+    const close = state.close;
+    const successfulClose = vi.fn(async () => {});
+    ownedConnections(f.service, runId).set('already-closed', { close: successfulClose });
+    let attempts = 0;
+    state.close = async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error('synthetic cleanup failure');
+      await close();
+    };
+    try {
+      await expect(f.service.releaseRun(runId)).rejects.toThrow();
+      await f.service.releaseRun(runId);
+      expect(attempts).toBe(2);
+      expect(successfulClose).toHaveBeenCalledOnce();
+    } finally {
+      state.close = close;
+      await close();
+    }
+  });
+
+  it('shares in-flight release and does not report success before close completes', async () => {
+    const f = await fixture();
+    f.approve();
+    const runId = f.createRun();
+    await f.service.createAgentTools([f.binding], runId, new AbortController().signal);
+    const state = connectionState(f.service, runId);
+    const close = state.close;
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    state.close = async () => {
+      await gate;
+      await close();
+    };
+    const first = f.service.releaseRun(runId);
+    const second = f.service.releaseRun(runId);
+    try {
+      expect(second).toBe(first);
+    } finally {
+      release();
+      await Promise.allSettled([first, second]);
+      state.close = close;
+      await close();
+    }
+  });
+
+  it('propagates shutdown cleanup failure and retries it on the next shutdown', async () => {
+    const f = await fixture();
+    f.approve();
+    const runId = f.createRun();
+    await f.service.createAgentTools([f.binding], runId, new AbortController().signal);
+    const state = connectionState(f.service, runId);
+    const close = state.close;
+    let attempts = 0;
+    state.close = async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error('synthetic shutdown cleanup failure');
+      await close();
+    };
+    try {
+      await expect(f.service.shutdown()).rejects.toThrow();
+      await f.service.shutdown();
+      expect(attempts).toBe(2);
+    } finally {
+      state.close = close;
+      await close();
+    }
+  });
+});
+
+describe('MCP preparation ownership', () => {
+  it('joins a cancelled Run preparation before shutdown finishes and shares shutdown waiting', async () => {
+    const f = await fixture();
+    f.approve();
+    let enter = () => {};
+    let release = () => {};
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const connectionOwner = f.service as unknown as {
+      connect: (connection: unknown, signal: AbortSignal) => Promise<unknown>;
+    };
+    const connect = connectionOwner.connect.bind(f.service);
+    vi.spyOn(connectionOwner, 'connect').mockImplementation(async (...args) => {
+      enter();
+      await released;
+      return connect(...args);
+    });
+    const creating = f.service.createAgentTools(
+      [f.binding],
+      f.createRun(),
+      new AbortController().signal,
+    );
+    const cancelled = expect(creating).rejects.toSatisfy(isAbortError);
+    await entered;
+    const first = f.service.shutdown();
+    const second = f.service.shutdown();
+    let finished = false;
+    const observing = first.then(() => {
+      finished = true;
+    });
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(second).toBe(first);
+      expect(finished).toBe(false);
+      await expect(
+        f.service.createAgentTools([], 'late', new AbortController().signal),
+      ).rejects.toThrow();
+    } finally {
+      release();
+      await Promise.all([first, second, observing, cancelled]);
+    }
+  });
+});

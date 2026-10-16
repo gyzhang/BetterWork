@@ -989,7 +989,7 @@ export class MemoryExtractionService {
         } else if (chunk.type === 'reasoning-delta') {
           // reasoning 只做额度计量，绝不落库、不成为证据。
           reasoningCodePoints += countCodePoints(chunk.delta);
-        } else if (chunk.type === 'tool-call') {
+        } else if (chunk.type === 'tool-call' || chunk.type === 'tool-call-error') {
           sawToolCall = true;
         } else {
           finishReason = chunk.finishReason;

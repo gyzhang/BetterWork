@@ -19,6 +19,7 @@ interface RunEventLifecycleDependencies {
 
 interface RunCompletionHooks {
   auditFinalContent: (content: string) => void;
+  beginCommit: () => void;
   saveMarkdownArtifact: (content: string) => Promise<void>;
   afterCompleted: () => Promise<void>;
 }
@@ -34,11 +35,13 @@ export class RunEventLifecycle {
     runId: string,
     events: AsyncIterable<AgentRuntimeEvent>,
     hooks: RunCompletionHooks,
+    signal: AbortSignal,
   ): Promise<void> {
     let terminalEvent: RunTerminalEvent | undefined;
     for await (const event of events) {
       if (isRunTerminalEvent(event)) {
-        if (event.type === 'run.completed') hooks.auditFinalContent(event.finalContent);
+        if (event.type === 'run.completed' && !signal.aborted)
+          hooks.auditFinalContent(event.finalContent);
         terminalEvent = event;
         break;
       }
@@ -46,17 +49,14 @@ export class RunEventLifecycle {
     }
     if (!terminalEvent) throw new Error('Agent 事件流结束时没有给出终态事件');
 
-    // 设计 §8：先清理子进程，再发布终态；清理失败保持既有快速失败分支。
-    if (this.ports.finishSkills) {
-      try {
-        const cleanup = await this.ports.finishSkills(runId);
-        if (cleanup.cleanupFailed > 0) throw new Error('未能确认全部子进程已停止');
-      } catch (error) {
-        this.fail(runId, `子进程清理失败：${describeError(error)}`);
-        return;
-      }
+    const cleanupErrors = await this.cleanup(runId);
+    if (cleanupErrors.length > 0) {
+      this.fail(runId, cleanupErrors.join('；'));
+      return;
     }
-    await this.ports.releaseMcp?.(runId);
+    if (terminalEvent.type === 'run.completed' && signal.aborted)
+      terminalEvent = this.cancellationEvent(runId, signal);
+    hooks.beginCommit();
     if (terminalEvent.type === 'run.completed') {
       await hooks.saveMarkdownArtifact(terminalEvent.finalContent);
     }
@@ -66,35 +66,38 @@ export class RunEventLifecycle {
 
   /** 也处理引擎装配之前的异常；清理不能确认时不得发布安全取消。 */
   async recover(runId: string, signal: AbortSignal, error: unknown): Promise<void> {
-    let message = describeError(error);
-    let cleanupFailed = false;
-    try {
-      await this.ports.releaseMcp?.(runId);
-    } catch {
-      cleanupFailed = true;
-      message += '；MCP 连接清理失败';
-    }
+    if (this.ports.journal.get(runId)?.status !== 'running') return;
+    const cleanupErrors = await this.cleanup(runId);
+    if (cleanupErrors.length === 0 && signal.aborted && isAbortError(error))
+      this.publish(this.cancellationEvent(runId, signal));
+    else this.fail(runId, [describeError(error), ...cleanupErrors].join('；'));
+  }
+
+  private async cleanup(runId: string): Promise<string[]> {
+    const errors: string[] = [];
     try {
       const cleanup = await this.ports.finishSkills?.(runId);
-      if (cleanup && cleanup.cleanupFailed > 0) {
-        cleanupFailed = true;
-        message += '；子进程清理失败';
-      }
-    } catch (cleanupError) {
-      cleanupFailed = true;
-      message += `；子进程清理失败：${describeError(cleanupError)}`;
+      if (cleanup && cleanup.cleanupFailed > 0) throw new Error('未能确认全部子进程已停止');
+    } catch (error) {
+      errors.push(`子进程清理失败：${describeError(error)}`);
     }
-    if (!cleanupFailed && signal.aborted && isAbortError(error)) {
-      if (this.ports.journal.get(runId)?.status === 'running') {
-        this.publish({
-          id: randomUUID(),
-          runId,
-          sequence: (this.ports.journal.getLatestEvent(runId)?.sequence ?? -1) + 1,
-          createdAt: Date.now(),
-          type: 'run.cancelled',
-        });
-      }
-    } else this.fail(runId, message);
+    try {
+      await this.ports.releaseMcp?.(runId);
+    } catch (error) {
+      errors.push(`MCP 连接清理失败：${describeError(error)}`);
+    }
+    return errors;
+  }
+
+  private cancellationEvent(runId: string, signal: AbortSignal): RunTerminalEvent {
+    return {
+      id: randomUUID(),
+      runId,
+      sequence: (this.ports.journal.getLatestEvent(runId)?.sequence ?? -1) + 1,
+      createdAt: Date.now(),
+      type: 'run.cancelled',
+      ...(typeof signal.reason === 'string' ? { reason: signal.reason } : {}),
+    };
   }
 
   /** forceFailure 已在事务中落库，不能再 append；已提交终态保持不变。 */

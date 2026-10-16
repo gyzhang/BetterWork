@@ -137,7 +137,7 @@ KnowledgeAudit 继续在工具回调事务内登记精确来源，适配器只�
 
 `RunEventLifecycle` 在 Application 层集中事件先落库再分发、候选终态延迟、Skill/MCP 清理与失败/取消恢复。RunService 保留准备/装配、外围 catch/finally、活动注册表、工具结果分发、通知与定时结果等待；材料审计、Markdown 成果和成功后连续简报/记忆行为以具名回调接入。
 
-终态发布前仍按事实审计、Skill 清理、MCP 释放、成功成果登记的顺序处理。清理失败不发布候选成功或安全取消；forceFailure 仍仅收口 running，启动恢复不变。没有新的事件总线、协议或 Core 宿主依赖，既有快速失败和取消裁决保持。范围与证据见 [C4 说明](reviews/2026-10-10-run-event-lifecycle.md)。
+终态发布前按事实审计、Skill 清理、MCP 释放、最终取消裁决、成功成果登记的顺序处理。Skill 与 MCP 清理分别尝试并聚合失败，一项失败不能跳过另一项；清理失败不发布候选成功或安全取消。清理期间仍接受取消，成果提交前最后核对信号；进入成果与终态提交段后拒绝新的取消，已提交终态不被后续错误改写。MCP 保留未确认关闭的连接，重复释放共享在途 Promise，失败后可重试；退出必须向上报告真正的清理失败。forceFailure 仍仅收口 running，启动恢复不变。没有新的事件总线、IPC 事件或 Core 宿主依赖。2026-10-16 用户授权修复后的契约见 [健壮性修复](reviews/2026-10-16-agent-engine-hardening.md)，替代 [C4 说明](reviews/2026-10-10-run-event-lifecycle.md) 中原先保留的清理短路和取消竞争行为。
 
 ### 3.6 定时查询与手动执行用例
 
@@ -188,6 +188,8 @@ interface AgentEngine {
 `workspacePath` 由 Application 层从 Workspace 注入，是 Tool 的文件系统沙箱边界来源；`messages` 用于携带既有历史，首版执行链路尚未把完整历史作为上下文传入；`maxToolRounds` 默认 20，超限以 `run.failed` 终止而不是静默截断。
 
 Agent Core 把传入的 `tools` 作为本次 Run 唯一的调用注册表，并把其中的名称、描述和 Schema 交给 ModelProvider；OpenAI-compatible Provider 将它们发送为模型可调用的函数列表。模型服务仍可能返回列表外的工具名。此时该调用不会执行或扩大授权范围；Agent Core 发出 `tool.failed`，把错误作为工具结果回送模型，使其可以在轮数限制内改用已注册工具或直接回答。未注册工具的失败事件同时持久化诊断字段：Provider 输出的工具名、本次 Run 提供给 Provider 的工具名清单、模型 Provider ID、轮次，以及服务有返回时提供的请求 ID、响应 ID 和实际模型名。字段不含提示词、工具参数或密钥；这些元数据能帮助关联 Provider 服务日志，并说明 Application/Agent Core 提供了什么、Provider 边界返回了什么，但无法单凭客户端日志识别托管模型服务内部是否由模型生成或由其网关改写。
+
+Provider 将损坏 JSON 或非对象工具参数表达为内部 `tool-call-error`，Core 不执行该调用，也不把非法输入放入共享工具事件；改为持久化 `tool.failed` 并反馈模型。内部模型消息保留原始参数字符串以配对工具调用与失败结果，不把占位对象当作成功解析。此扩展仅属于现有 Core/Provider 接口，不改变 IPC Schema 或迁移。缺失或重复的上游调用 ID 被映射到本 Run 内唯一 ID，映射后的 ID 在助手消息、工具执行和结果中一致。流收到 `[DONE]` 后结束读取并关闭响应体，保留终止标记之前的 usage；length、content-filter、未知完成原因及没有有效回复的空完成均不能发布成功。工具同步抛错、异步拒绝与无法序列化的输出统一产生可恢复工具失败；取消在模型与工具的 yield 恢复、派发和等待边界都必须检查。
 
 使用 `AsyncIterable` 表达一次执行的顺序事件，便于取消、测试、多任务并发和在 CLI 中复用。
 
