@@ -14,6 +14,7 @@
 | --- | --- |
 | 新增/修改 IPC、协议、Zod Schema | `packages/agent-protocol/src/index.ts`、[系统架构](docs/03-system-architecture.md)、[ADR-0003](docs/adr/0003-agent-core-boundary.md) |
 | 修改 Agent Core / Provider / Tool | [系统架构](docs/03-system-architecture.md)、[领域模型](docs/02-domain-model.md) |
+| 执行追踪 / 运行诊断 / 模型调用指标 / 宿主阶段 / 诊断包 | [追踪实施契约](docs/development/execution-tracing-contracts.md)、[AT 唯一任务板](docs/development/tasks-execution-tracing.md)、[ADR-0050](docs/adr/0050-run-execution-diagnostics.md)、[Luna 目标交接](docs/development/execution-tracing-coding-prompts.md)；产品方向已接受，技术 Proposed，后续按目标范围另行开工 |
 | Knowledge 导入/索引/检索/Evidence/打开源文件 | [知识库与记忆](docs/04-knowledge-and-memory.md) |
 | 记忆召回/来源治理/自动提炼建议/工作空间简报/参考成果版本 | [工作型记忆产品设计](docs/designs/work-centered-memory.md)、[记忆实施契约](docs/development/memory-contracts.md)、[WM 任务板](docs/development/tasks-memory.md)、[ADR-0026](docs/adr/0026-work-centered-memory.md)（Proposed，已按用户开工指令实施） |
 | Artifact / 版本 / 来源 / 导出 | [ADR-0005](docs/adr/0005-artifact-version-evidence.md)、[UI/UX 体系](docs/10-ui-ux-system.md) |

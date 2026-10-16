@@ -1,5 +1,11 @@
 # MVP 与路线图
 
+## 执行追踪与运行诊断 — 2026-10-16（方向已接受，开发卡已建立，代码未开工）
+
+用户接受 [AgentScope Studio / AgentScope 2.0 对照建议](reviews/2026-10-16-agent-execution-tracing-analysis.md)，要求形成 GPT-6 Luna 后续目标模式开发卡。近期按模型/工具执行链 → 宿主阶段与工作依据 → 统计/问题标记/本地诊断包 → 离线样本与交接推进，保留现有 Core、SQLite Journal、权限与唯一终态；追踪事实不展示私有推理，不自动改写专家、技能或记忆。
+
+[ADR-0050](adr/0050-run-execution-diagnostics.md)与[实施契约](development/execution-tracing-contracts.md)为 Proposed，提出 Core 事件与宿主诊断独立定序、查询时关联；[AT00–AT25 唯一任务板](development/tasks-execution-tracing.md)和[Luna 目标提示词](development/execution-tracing-coding-prompts.md)已归档。本次只做开发准备，后续目标明确采用技术提案并授权相应范围后开工；AT01–AT22 为完整离线范围，真实 UI/真实模型验收与可选 OTLP 出口分别派发。提交、推送与发布继续独立授权，不改写其他任务系列状态。
+
 ## 首批内置研究与汇报资源 — 2026-10-15（本分支已实现，待打包和人工验收）
 
 2026-10-15 用户重新选择首批内置内容为「研究与汇报」Expert 与其 `ppt-generation-expert` Skill。此前移除旧样本、保持空发布清单的决定是当时的发布状态；本次授权后，当前分支已将新资源登记到两份清单。Expert 使用当前 Task 已选择且运行时允许读取的内部材料，按需使用已配置的 `web_search` / `web_fetch`，并引用当前 Run 实际获得的 Evidence。默认报告结构包括摘要与核心发现、研究问题和范围、证据与分析、不确定点、行动建议及来源清单；明确区分内部材料事实、公开来源主张、分析推断和建议。Expert 使用应用默认语言模型，绑定 Skill、`knowledge_search`、`read_text_file`、`read_office_material`、`web_search` 和 `web_fetch`；内部检索复用现有知识检索设置，在语义检索已启用且向量索引可用时可使用已配置的嵌入模型。Expert 不单独绑定嵌入模型，不绑定经营分析工具或 MCP。首批保持通用定位，不加入行业垂直样本或 Expert Kit。
