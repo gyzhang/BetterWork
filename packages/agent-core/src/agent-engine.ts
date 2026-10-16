@@ -4,11 +4,16 @@ import type {
   AgentMessage,
   AgentRuntimeEvent,
   AgentRuntimeEventInput,
-  ToolCall,
 } from '@betterwork/agent-protocol';
 
 import { abortError, describeError, isAbortError } from './errors';
-import type { AgentEngine, AgentRunInput, SkillInstruction } from './types';
+import type {
+  AgentEngine,
+  AgentRunInput,
+  ModelMessage,
+  ModelToolCall,
+  SkillInstruction,
+} from './types';
 
 const SYSTEM_PROMPT = (): string => {
   const now = new Date();
@@ -104,7 +109,7 @@ export class ReActAgentEngine implements AgentEngine {
   async *run(input: AgentRunInput): AsyncIterable<AgentRuntimeEvent> {
     const events = new RunEventFactory(input.runId);
     const skillMessages = buildSkillMessages(input.skillInstructions);
-    const messages: AgentMessage[] = [
+    const messages: ModelMessage[] = [
       { id: randomUUID(), role: 'system', content: SYSTEM_PROMPT() },
       ...(input.expertInstruction
         ? [{ id: randomUUID(), role: 'system' as const, content: input.expertInstruction }]
@@ -116,17 +121,21 @@ export class ReActAgentEngine implements AgentEngine {
     const tools = new Map(input.tools.map((tool) => [tool.name, tool]));
     const availableToolNames = input.tools.map((tool) => tool.name);
     const maxToolRounds = input.maxToolRounds ?? 20;
+    const checkCancelled = (): void => {
+      if (input.signal.aborted) throw abortError();
+    };
 
     yield events.create({ type: 'run.started', taskId: input.taskId, sessionId: input.sessionId });
 
     try {
       for (let round = 0; round <= maxToolRounds; round += 1) {
-        if (input.signal.aborted) throw abortError();
+        checkCancelled();
 
         const messageId = randomUUID();
         let content = '';
-        const pendingToolCalls: ToolCall[] = [];
+        const pendingToolCalls: Array<{ toolCall: ModelToolCall; error?: string }> = [];
         let messageStarted = false;
+        let receivedDone = false;
         let providerRequestId: string | undefined;
         let providerResponseId: string | undefined;
         let responseModel: string | undefined;
@@ -140,7 +149,7 @@ export class ReActAgentEngine implements AgentEngine {
           })),
           signal: input.signal,
         })) {
-          if (input.signal.aborted) throw abortError();
+          checkCancelled();
 
           if (chunk.type === 'reasoning-delta') {
             yield events.create({ type: 'reasoning.delta', delta: chunk.delta });
@@ -148,13 +157,20 @@ export class ReActAgentEngine implements AgentEngine {
             if (!messageStarted) {
               messageStarted = true;
               yield events.create({ type: 'message.started', messageId });
+              checkCancelled();
             }
             content += chunk.delta;
             yield events.create({ type: 'message.delta', messageId, delta: chunk.delta });
           } else if (chunk.type === 'tool-call') {
-            pendingToolCalls.push(chunk.toolCall);
+            pendingToolCalls.push({ toolCall: chunk.toolCall });
             yield events.create({ type: 'tool.requested', toolCall: chunk.toolCall });
+          } else if (chunk.type === 'tool-call-error') {
+            pendingToolCalls.push({
+              toolCall: { ...chunk.toolCall, input: {} },
+              error: chunk.error,
+            });
           } else if (chunk.type === 'done') {
+            receivedDone = true;
             providerRequestId = chunk.providerRequestId;
             providerResponseId = chunk.providerResponseId;
             responseModel = chunk.responseModel;
@@ -162,20 +178,31 @@ export class ReActAgentEngine implements AgentEngine {
               throw new Error(
                 '模型响应达到输出上限，Run 未完成。请提高模型输出上限或缩短任务输入后重试。',
               );
+            if (chunk.finishReason === 'content-filter')
+              throw new Error('模型响应被内容过滤中断，Run 未完成。');
+            if (chunk.finishReason === 'unknown')
+              throw new Error('模型返回未知完成原因，Run 未完成。');
           }
+          checkCancelled();
         }
 
+        checkCancelled();
+        if (!receivedDone) throw new Error('模型事件流结束时没有完成信号。');
         if (messageStarted) {
           yield events.create({ type: 'message.completed', messageId, content });
+          checkCancelled();
           messages.push({
             id: messageId,
             role: 'assistant',
             content,
-            ...(pendingToolCalls.length > 0 ? { toolCalls: pendingToolCalls } : {}),
+            ...(pendingToolCalls.length > 0
+              ? { toolCalls: pendingToolCalls.map((pending) => pending.toolCall) }
+              : {}),
           });
         }
 
         if (pendingToolCalls.length === 0) {
+          if (!content.trim()) throw new Error('模型没有返回有效回复，Run 未完成。');
           yield events.create({ type: 'run.completed', finalContent: content });
           return;
         }
@@ -187,9 +214,27 @@ export class ReActAgentEngine implements AgentEngine {
             id: messageId,
             role: 'assistant',
             content: '',
-            toolCalls: pendingToolCalls,
+            toolCalls: pendingToolCalls.map((pending) => pending.toolCall),
           });
-        for (const toolCall of pendingToolCalls) {
+        for (const pending of pendingToolCalls) {
+          checkCancelled();
+          const { toolCall } = pending;
+          if (pending.error !== undefined) {
+            yield events.create({
+              type: 'tool.failed',
+              toolCallId: toolCall.id,
+              error: pending.error,
+            });
+            checkCancelled();
+            messages.push({
+              id: randomUUID(),
+              role: 'tool',
+              toolCallId: toolCall.id,
+              toolName: toolCall.name,
+              content: JSON.stringify({ error: pending.error }),
+            });
+            continue;
+          }
           const tool = tools.get(toolCall.name);
           if (!tool) {
             const error = `未知工具「${toolCall.name}」未注册到本次 Run。请只使用本次请求提供的工具，或直接继续回答。`;
@@ -209,6 +254,7 @@ export class ReActAgentEngine implements AgentEngine {
                 ...(responseModel === undefined ? {} : { responseModel }),
               },
             });
+            checkCancelled();
             messages.push({
               id: randomUUID(),
               role: 'tool',
@@ -219,30 +265,46 @@ export class ReActAgentEngine implements AgentEngine {
             continue;
           }
           yield events.create({ type: 'tool.started', toolCall });
+          checkCancelled();
           const progress: AgentRuntimeEvent[] = [];
+          let acceptsProgress = true;
           let wakeForProgress: (() => void) | undefined;
           const onAbort = (): void => wakeForProgress?.();
           input.signal.addEventListener('abort', onAbort, { once: true });
-          const execution = tool
-            .execute(toolCall.input, {
-              runId: input.runId,
-              toolCallId: toolCall.id,
-              workspacePath: input.workspacePath,
-              signal: input.signal,
-              reportProgress(message) {
-                progress.push(
-                  events.create({ type: 'tool.progress', toolCallId: toolCall.id, message }),
-                );
-                wakeForProgress?.();
-              },
+          const execution = Promise.resolve()
+            .then(() => {
+              checkCancelled();
+              return tool.execute(toolCall.input, {
+                runId: input.runId,
+                toolCallId: toolCall.id,
+                workspacePath: input.workspacePath,
+                signal: input.signal,
+                reportProgress(message) {
+                  if (!acceptsProgress || input.signal.aborted) return;
+                  progress.push(
+                    events.create({ type: 'tool.progress', toolCallId: toolCall.id, message }),
+                  );
+                  wakeForProgress?.();
+                },
+              });
+            })
+            .then((output: unknown) => {
+              const serialized = JSON.stringify(output);
+              if (serialized === undefined) throw new Error('工具结果无法序列化为 JSON。');
+              return { output: JSON.parse(serialized) as unknown, content: serialized };
             })
             .then(
-              (output) => ({ type: 'completed' as const, output }),
+              ({ output, content: toolContent }) => ({
+                type: 'completed' as const,
+                output,
+                content: toolContent,
+              }),
               (error: unknown) => ({ type: 'failed' as const, error }),
             );
           try {
             let outcome: Awaited<typeof execution> | undefined;
             while (!outcome || progress.length > 0) {
+              checkCancelled();
               const nextProgress = progress.shift();
               if (nextProgress) {
                 yield nextProgress;
@@ -254,7 +316,7 @@ export class ReActAgentEngine implements AgentEngine {
               });
               const result = await Promise.race([execution, progressSignal]);
               wakeForProgress = undefined;
-              if (input.signal.aborted) throw abortError();
+              checkCancelled();
               if (result) outcome = result;
             }
             if (!outcome) throw new Error('Tool execution ended without a result');
@@ -264,16 +326,18 @@ export class ReActAgentEngine implements AgentEngine {
                 toolCallId: toolCall.id,
                 output: outcome.output,
               });
+              checkCancelled();
               messages.push({
                 id: randomUUID(),
                 role: 'tool',
                 toolCallId: toolCall.id,
                 toolName: toolCall.name,
-                content: JSON.stringify(outcome.output),
+                content: outcome.content,
               });
             } else {
               const message = describeError(outcome.error);
               yield events.create({ type: 'tool.failed', toolCallId: toolCall.id, error: message });
+              checkCancelled();
               messages.push({
                 id: randomUUID(),
                 role: 'tool',
@@ -283,6 +347,8 @@ export class ReActAgentEngine implements AgentEngine {
               });
             }
           } finally {
+            acceptsProgress = false;
+            progress.length = 0;
             input.signal.removeEventListener('abort', onAbort);
             wakeForProgress = undefined;
           }

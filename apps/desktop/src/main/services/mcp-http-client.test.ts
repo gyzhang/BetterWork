@@ -392,6 +392,15 @@ describe('MCP HTTP wire behavior', () => {
         ?.headers.get('mcp-session-id'),
     ).toBe(sessionId);
     expect(f.service.getRunToolBinding(id, 'missing')).toBeUndefined();
+    await expect(f.service.shutdown()).rejects.toThrow(/清理/u);
+    f.setDeleteStatus(200);
+    await f.service.shutdown();
+    expect(
+      f.requests
+        .filter((request) => request.method === 'DELETE')
+        .at(-1)
+        ?.headers.get('mcp-session-id'),
+    ).toBe(sessionId);
   });
 
   it('does not expose remote response bodies in tool failure events', async () => {

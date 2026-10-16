@@ -1183,3 +1183,26 @@ describe('MemoryExtractionService 讨论节点与截断来源（WM10 §7.2）', 
     expect(job2?.outcome?.candidateRevisionIds).toEqual([]);
   });
 });
+
+it('rejects an invalid tool call instead of treating it as extraction completion', async () => {
+  const harness = makeFixture({
+    behaviour: {
+      kind: 'chunks',
+      chunks: [
+        {
+          type: 'tool-call-error',
+          toolCall: { id: 'bad', name: 'shell', rawArguments: 'null' },
+          error: 'invalid arguments',
+        },
+        ...stopChunks(validOutput()),
+      ],
+    },
+  });
+  await enableAutoSuggest(harness);
+  harness.putRunRecord();
+  const requested = await harness.service.requestExtractionForRun(RUN_ID);
+  if (!requested.ok) throw new Error('Expected extraction job');
+  await harness.service.runPendingJobs();
+  const job = harness.jobs.get(requested.data.jobId ?? '');
+  expect(job?.errorCode).toBe('MODEL_TOOL_CALL_REJECTED');
+});

@@ -65,6 +65,7 @@ const setup = (
   const started = event(0, { type: 'run.started', taskId: task.id, sessionId });
   const completed = event(1, { type: 'run.completed', finalContent: 'final content' });
   const hooks: CompletionHooks = {
+    beginCommit: () => {},
     auditFinalContent: () => {},
     saveMarkdownArtifact: async (content) => {
       store.artifacts.saveMarkdown({
@@ -83,7 +84,7 @@ const setup = (
     overrides: Partial<CompletionHooks> = {},
   ) => {
     try {
-      await lifecycle.consume(runId, events, { ...hooks, ...overrides });
+      await lifecycle.consume(runId, events, { ...hooks, ...overrides }, controller.signal);
     } catch (error) {
       await lifecycle.recover(runId, controller.signal, error);
     }
@@ -236,7 +237,7 @@ describe('RunEventLifecycle', () => {
         throw new Error('fact audit rejected');
       },
     });
-    expect(order).toEqual(['audit', 'mcp', 'skill']);
+    expect(order).toEqual(['audit', 'skill', 'mcp']);
     expect(fixture.store.artifacts.list()).toEqual([]);
     expect(types(fixture.dispatched)).toEqual(['run.started', 'run.failed']);
   });
@@ -263,7 +264,7 @@ describe('RunEventLifecycle', () => {
       });
       expect(types(fixture.dispatched)).toEqual(['run.started', 'run.failed']);
       expect(fixture.store.artifacts.list()).toEqual([]);
-      expect(mcpReleased).toBe(false);
+      expect(mcpReleased).toBe(true);
     },
   );
 
@@ -281,7 +282,7 @@ describe('RunEventLifecycle', () => {
     expect(fixture.store.artifacts.list()).toEqual([]);
   });
 
-  it('retries MCP release through recovery before failing and does not publish an artifact', async () => {
+  it('retains an MCP cleanup failure after attempting both resources without publishing an artifact', async () => {
     const order: string[] = [];
     const fixture = setup({
       releaseMcp: async () => {
@@ -294,10 +295,10 @@ describe('RunEventLifecycle', () => {
       },
     });
     await fixture.execute(stream([fixture.started, fixture.completed]));
-    expect(order).toEqual(['skill', 'mcp', 'mcp', 'skill']);
+    expect(order).toEqual(['skill', 'mcp']);
     expect(fixture.store.runs.listEvents(fixture.runId).at(-1)).toMatchObject({
       type: 'run.failed',
-      error: 'mcp release failed；MCP 连接清理失败',
+      error: 'MCP 连接清理失败：mcp release failed',
     });
     expect(fixture.store.artifacts.list()).toEqual([]);
   });
@@ -397,7 +398,7 @@ describe('RunEventLifecycle', () => {
       });
       fixture.controller.abort();
       await fixture.lifecycle.recover(fixture.runId, fixture.controller.signal, abortError());
-      expect(order).toEqual(['mcp', 'skill']);
+      expect(order).toEqual(['skill', 'mcp']);
       expect(fixture.store.runs.get(fixture.runId)?.status).toBe('failed');
       expect(fixture.store.runs.listEvents(fixture.runId).at(-1)).toMatchObject({
         type: 'run.failed',
@@ -431,5 +432,69 @@ describe('RunEventLifecycle', () => {
       error: 'first failure',
     });
     expect(fixture.dispatched).toHaveLength(1);
+  });
+});
+
+describe('Lifecycle robustness regressions', () => {
+  it.each(['skill', 'mcp'] as const)(
+    'honors cancellation during %s cleanup before artifact commit',
+    async (phase) => {
+      const entered = gate();
+      const released = gate();
+      const fixture = setup({
+        finishSkills: async () => {
+          if (phase === 'skill') {
+            entered.resolve();
+            await released.promise;
+          }
+          return { cleanupFailed: 0 };
+        },
+        releaseMcp: async () => {
+          if (phase === 'mcp') {
+            entered.resolve();
+            await released.promise;
+          }
+        },
+      });
+      const pending = fixture.execute(stream([fixture.started, fixture.completed]));
+      try {
+        await entered.promise;
+        fixture.controller.abort('cancel while cleaning');
+        released.resolve();
+        await pending;
+        expect(fixture.store.runs.get(fixture.runId)?.status).toBe('cancelled');
+        expect(fixture.store.artifacts.list()).toHaveLength(0);
+        expect(fixture.dispatched.at(-1)).toMatchObject({
+          type: 'run.cancelled',
+          reason: 'cancel while cleaning',
+        });
+      } finally {
+        released.resolve();
+        await pending;
+      }
+    },
+  );
+
+  it('attempts both cleanup ports and preserves both errors before one failed terminal', async () => {
+    const order: string[] = [];
+    const fixture = setup({
+      finishSkills: async () => {
+        order.push('skill');
+        throw new Error('skill cleanup failure');
+      },
+      releaseMcp: async () => {
+        order.push('mcp');
+        throw new Error('mcp cleanup failure');
+      },
+    });
+    await fixture.execute(stream([fixture.started, fixture.completed]));
+    expect(order).toEqual(['skill', 'mcp']);
+    const failure = fixture.dispatched.at(-1);
+    expect(failure).toMatchObject({
+      type: 'run.failed',
+      error: expect.stringContaining('skill cleanup failure'),
+    });
+    expect(failure).toMatchObject({ error: expect.stringContaining('mcp cleanup failure') });
+    expect(fixture.store.artifacts.list()).toHaveLength(0);
   });
 });

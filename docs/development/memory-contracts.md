@@ -188,6 +188,8 @@ Main 的 Provider 包装器在首个实际 `ModelRequest` 装配后计算规范�
 
 ### 7.2 作业输入、输出及保密
 
+Provider 的内部 `tool-call-error` 与正常 `tool-call` 都属于提炼禁止的工具调用，统一落为 `MODEL_TOOL_CALL_REJECTED`；不能误识别为 done，也不进入普通 Agent 的工具纠正轮次。该兼容处理不增加提炼工具、输入来源或模型调用轮次。
+
 | 限制 | 固定值 |
 | --- | --- |
 | 自动提炼全局并发 | 1 |

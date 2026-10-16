@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { abortError } from './errors';
 import type {
   ModelFinishReason,
@@ -163,7 +165,10 @@ export class OpenAICompatibleProvider implements ModelProvider {
                   tool_calls: message.toolCalls.map((call) => ({
                     id: call.id,
                     type: 'function',
-                    function: { name: call.name, arguments: JSON.stringify(call.input) },
+                    function: {
+                      name: call.name,
+                      arguments: call.rawArguments ?? JSON.stringify(call.input),
+                    },
                   })),
                 }
               : {}),
@@ -200,17 +205,27 @@ export class OpenAICompatibleProvider implements ModelProvider {
     const decoder = new TextDecoder();
     let buffer = '';
     let completed = false;
+    let terminated = false;
+    let reachedEof = false;
+    let readFailed = false;
     let wireFinishReason: string | undefined;
     let usage: ModelUsage | undefined;
     let providerResponseId: string | undefined;
     let responseModel: string | undefined;
-    const toolCalls = new Map<number, { id: string; name: string; arguments: string }>();
+    const usedCallIds = new Set(
+      request.messages.flatMap((message) => message.toolCalls?.map((call) => call.id) ?? []),
+    );
+    const toolCalls = new Map<
+      number,
+      { id: string; upstreamId?: string; name: string; arguments: string }
+    >();
     const emitLine = (line: string): ModelStreamChunk[] => {
       if (!line.startsWith('data:')) return [];
       const data = line.slice(5).trim();
       if (!data) return [];
       if (data === '[DONE]') {
         completed = true;
+        terminated = true;
         return [];
       }
       const chunk = JSON.parse(data) as StreamPayload;
@@ -233,11 +248,15 @@ export class OpenAICompatibleProvider implements ModelProvider {
       for (const call of delta?.tool_calls ?? []) {
         const index = call.index ?? 0;
         const current = toolCalls.get(index) ?? {
-          id: call.id ?? `tool-${index}`,
+          id: randomUUID(),
           name: '',
           arguments: '',
         };
-        current.id = call.id ?? current.id;
+        if (call.id && current.upstreamId === undefined) {
+          if (!usedCallIds.has(call.id)) current.id = call.id;
+          current.upstreamId = call.id;
+        }
+        usedCallIds.add(current.id);
         current.name += call.function?.name ?? '';
         current.arguments += call.function?.arguments ?? '';
         toolCalls.set(index, current);
@@ -245,39 +264,64 @@ export class OpenAICompatibleProvider implements ModelProvider {
       return output;
     };
 
+    const cancelBody = async (): Promise<void> => {
+      try {
+        await reader.cancel();
+      } catch (error) {
+        // An already errored body may reject cancellation; preserve its original diagnostic.
+        if (!readFailed) throw this.streamError(error, request.signal, timeout);
+      }
+    };
     try {
-      while (true) {
+      while (!terminated) {
         const result = await reader.read();
+        reachedEof = result.done;
         buffer += decoder.decode(result.value ?? new Uint8Array(), { stream: !result.done });
         const lines = buffer.split('\n');
         buffer = lines.pop() ?? '';
-        for (const line of lines) yield* emitLine(line.trim());
+        for (const line of lines) {
+          yield* emitLine(line.trim());
+          if (terminated) break;
+        }
         if (result.done) break;
       }
-      if (buffer.trim()) yield* emitLine(buffer.trim());
+      if (!terminated && buffer.trim()) yield* emitLine(buffer.trim());
     } catch (error) {
+      readFailed = true;
       throw this.streamError(error, request.signal, timeout);
     } finally {
-      reader.releaseLock();
+      try {
+        if (!reachedEof) await cancelBody();
+      } finally {
+        reader.releaseLock();
+      }
     }
     if (!completed) throw new Error('模型流在收到完成信号前结束');
-    const parsedToolCalls: Extract<ModelStreamChunk, { type: 'tool-call' }>[] = [];
+    const parsedToolCalls: ModelStreamChunk[] = [];
     if (wireFinishReason !== 'length') {
       for (const call of toolCalls.values()) {
-        let input: Record<string, unknown>;
+        let input: unknown;
         try {
-          input = JSON.parse(call.arguments || '{}') as Record<string, unknown>;
-        } catch (error) {
-          const toolName = call.name || '未知工具';
-          const detail = error instanceof Error ? error.message : '未知 JSON 解析错误';
-          throw new Error(
-            `模型返回的工具参数不是有效 JSON（${toolName}，调用 ID ${call.id}，参数长度 ${call.arguments.length}）：${detail}`,
-            { cause: error },
-          );
+          input = JSON.parse(call.arguments || '{}') as unknown;
+        } catch {
+          parsedToolCalls.push({
+            type: 'tool-call-error',
+            toolCall: { id: call.id, name: call.name, rawArguments: call.arguments },
+            error: `工具「${call.name}」的参数不是有效 JSON，请使用 JSON 对象修正后重试。`,
+          });
+          continue;
+        }
+        if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+          parsedToolCalls.push({
+            type: 'tool-call-error',
+            toolCall: { id: call.id, name: call.name, rawArguments: call.arguments },
+            error: `工具「${call.name}」的参数必须是 JSON 对象，请修正后重试。`,
+          });
+          continue;
         }
         parsedToolCalls.push({
           type: 'tool-call',
-          toolCall: { id: call.id, name: call.name, input },
+          toolCall: { id: call.id, name: call.name, input: input as Record<string, unknown> },
         });
       }
     }

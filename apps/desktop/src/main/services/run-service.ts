@@ -116,6 +116,7 @@ interface ResolvedSkillBindings {
 
 /** 一次执行期间的内存态；Run 结束后整条丢弃。 */
 interface ActiveRun {
+  phase: 'running' | 'committing';
   taskId: string;
   prompt: string;
   scheduleOccurrenceId?: string;
@@ -401,6 +402,7 @@ export class RunService {
       taskTitle: taskTitleOf(this.store, input.taskId, workspaceId),
     });
     this.activeRuns.set(runId, {
+      phase: 'running',
       taskId: input.taskId,
       prompt: input.prompt,
       ...(scheduledAssociation ? { scheduleOccurrenceId: scheduledAssociation.occurrenceId } : {}),
@@ -526,7 +528,8 @@ export class RunService {
 
   cancel(runId: string): boolean {
     const active = this.activeRuns.get(runId);
-    if (!active) return false;
+    if (!active || active.phase !== 'running' || this.store.runs.get(runId)?.status !== 'running')
+      return false;
     active.controller.abort();
     return true;
   }
@@ -537,7 +540,12 @@ export class RunService {
 
   acceptsOutput(runId: string): boolean {
     const active = this.activeRuns.get(runId);
-    return Boolean(active && !active.controller.signal.aborted);
+    return Boolean(
+      active &&
+      active.phase === 'running' &&
+      !active.controller.signal.aborted &&
+      this.store.runs.get(runId)?.status === 'running',
+    );
   }
 
   /** 应用关闭前调用：取消所有活跃 Run，等待全部消费结束。 */
@@ -562,7 +570,7 @@ export class RunService {
     let cancelled = 0;
     for (const [runId, active] of this.activeRuns) {
       // 多绑定下按成员判断：指定 Skill 只是其中一个绑定时，整个 Run 仍必须停止（ADR-0012 决策 6）。
-      if (active.skillIds.includes(skillId)) {
+      if (active.phase === 'running' && active.skillIds.includes(skillId)) {
         active.controller.abort(reason);
         cancelled += 1;
         const pending = this.consumePromises.get(runId);
@@ -709,24 +717,32 @@ export class RunService {
         ...(skillInstructions ? { skillInstructions } : {}),
       });
 
-      await this.eventLifecycle.consume(runId, events, {
-        auditFinalContent: (content) => {
-          const factError = this.auditMaterialFacts(runId, content);
-          if (factError) throw new Error(factError);
+      await this.eventLifecycle.consume(
+        runId,
+        events,
+        {
+          beginCommit: () => {
+            activeRun.phase = 'committing';
+          },
+          auditFinalContent: (content) => {
+            const factError = this.auditMaterialFacts(runId, content);
+            if (factError) throw new Error(factError);
+          },
+          saveMarkdownArtifact: (content) =>
+            this.persistRequestedMarkdownArtifact(
+              runId,
+              input,
+              workspacePath,
+              executionContext,
+              content,
+            ),
+          afterCompleted: async () => {
+            await this.syncCompletedRunContinuityProgress(runId, input.taskId);
+            this.requestRunExtraction(runId);
+          },
         },
-        saveMarkdownArtifact: (content) =>
-          this.persistRequestedMarkdownArtifact(
-            runId,
-            input,
-            workspacePath,
-            executionContext,
-            content,
-          ),
-        afterCompleted: async () => {
-          await this.syncCompletedRunContinuityProgress(runId, input.taskId);
-          this.requestRunExtraction(runId);
-        },
-      });
+        controller.signal,
+      );
     } catch (error) {
       await this.eventLifecycle.recover(runId, controller.signal, error);
     } finally {
