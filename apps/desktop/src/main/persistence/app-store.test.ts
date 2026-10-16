@@ -528,7 +528,7 @@ describe('AppStore', () => {
       provider: 'openai-compatible',
       baseUrl: 'http://localhost:8000/v1',
       model: 'demo',
-      role: 'language',
+      roles: ['language'],
       apiKey: 'secret-value',
       maxContextTokens: 8192,
       maxOutputTokens: 1024,
@@ -549,7 +549,7 @@ describe('AppStore', () => {
       provider: 'openai-compatible',
       baseUrl: 'http://localhost:8000/v1',
       model: 'demo',
-      role: 'language',
+      roles: ['language'],
       apiKey: 'vault-secret',
       maxContextTokens: 8192,
       maxOutputTokens: 1024,
@@ -589,7 +589,7 @@ describe('AppStore', () => {
       provider: 'openai-compatible',
       baseUrl: 'http://localhost:8000/v1',
       model: 'demo',
-      role: 'vision',
+      roles: ['vision'],
       apiKey: '',
       maxContextTokens: 8192,
       maxOutputTokens: 1024,
@@ -636,7 +636,7 @@ describe('AppStore', () => {
       provider: 'openai-compatible',
       baseUrl: 'http://localhost:8000/v1',
       model: 'first',
-      role: 'language',
+      roles: ['language'],
       apiKey: '',
       maxContextTokens: 8192,
       maxOutputTokens: 1024,
@@ -648,7 +648,7 @@ describe('AppStore', () => {
       provider: 'openai-compatible',
       baseUrl: 'http://localhost:8000/v1',
       model: 'second',
-      role: 'language',
+      roles: ['language'],
       apiKey: '',
       maxContextTokens: 8192,
       maxOutputTokens: 1024,
@@ -656,7 +656,7 @@ describe('AppStore', () => {
       enabled: true,
     });
     expect(store.models.getForRun('language')?.id).toBe(first);
-    expect(store.models.setDefault(second)).toBe(true);
+    expect(store.models.setDefault(second, 'language')).toBe(true);
     expect(store.models.getForRun('language')?.id).toBe(second);
   });
 
@@ -667,7 +667,7 @@ describe('AppStore', () => {
       provider: 'openai-compatible',
       baseUrl: 'http://localhost:8000/v1',
       model: 'test',
-      role: 'language',
+      roles: ['language'],
       apiKey: '',
       maxContextTokens: 8192,
       maxOutputTokens: 1024,

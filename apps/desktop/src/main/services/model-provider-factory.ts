@@ -132,7 +132,7 @@ export class ModelProviderFactory {
           `指定的模型配置不存在：${reference.modelProfileId}`,
         );
       }
-      if (!configured.enabled || configured.role !== 'language') {
+      if (!configured.enabled || !configured.roles.includes('language')) {
         throw new ModelFactoryError(
           'MODEL_UNAVAILABLE',
           `指定的模型配置不可用于语言模型运行：${configured.name}`,

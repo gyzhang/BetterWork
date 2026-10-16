@@ -3,6 +3,7 @@ import type {
   MaterialPurpose,
   ModelProfileInput,
   ModelProfileSummary,
+  ModelRole,
   RunSummary,
   SkillBlockedReason,
   SkillEnvironmentStatus,
@@ -14,14 +15,14 @@ export const emptyModel: ModelProfileInput = {
   provider: 'openai-compatible',
   baseUrl: '',
   model: '',
-  role: 'language',
+  roles: ['language'],
   apiKey: '',
   maxContextTokens: 8192,
   maxOutputTokens: 8192,
   temperature: 0.7,
   enabled: true,
 };
-export const roleName: Record<ModelProfileSummary['role'], string> = {
+export const roleName: Record<ModelRole, string> = {
   language: '语言',
   vision: '视觉',
   embedding: '嵌入',

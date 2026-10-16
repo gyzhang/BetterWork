@@ -192,7 +192,7 @@ describe('Schedule six period offline integration journey', () => {
       provider: 'openai-compatible',
       baseUrl: 'http://127.0.0.1:18473/v1',
       model: 'six-period-synthetic',
-      role: 'language',
+      roles: ['language'],
       apiKey: '',
       maxContextTokens: 16_384,
       maxOutputTokens: 2_048,

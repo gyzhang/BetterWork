@@ -420,7 +420,7 @@ function ExpertEditor({
   const otherWorkspaceCandidates = availableCandidates.filter(
     (candidate) => !materialCandidateAppliesToWorkspace(candidate, workspaceId),
   );
-  const languageModels = models.filter((model) => model.role === 'language');
+  const languageModels = models.filter((model) => model.roles.includes('language'));
   const selectedModelProfileId =
     draft.modelReference.mode === 'profile' ? draft.modelReference.modelProfileId : undefined;
   const updateLines = (

@@ -10,16 +10,18 @@ import {
   ModelProviderFactory,
 } from './model-provider-factory';
 
-const profile = (over: Partial<ModelProfileSummary & { apiKey: string }> = {}) => ({
+const profile = (
+  over: Partial<ModelProfileSummary & { apiKey: string }> = {},
+): ModelProfileSummary & { apiKey: string } => ({
   id: 'p-1',
   name: '公司内网模型',
   provider: 'openai-compatible',
   baseUrl: 'https://llm.internal.example/v1',
   model: 'glm-4.6',
-  role: 'language' as const,
+  roles: ['language'],
+  rolePriorities: { language: 0 },
   apiKeyConfigured: true,
   enabled: true,
-  priority: 0,
   connectionStatus: 'connected' as const,
   maxContextTokens: 128_000,
   maxOutputTokens: 4_096,
@@ -95,7 +97,7 @@ describe('ModelProviderFactory.resolveForRun', () => {
     ).rejects.toThrow('不可用于语言模型运行');
 
     await expect(
-      factory({ getWithSecret: () => profile({ role: 'embedding' }) }).resolveForRun({
+      factory({ getWithSecret: () => profile({ roles: ['embedding'] }) }).resolveForRun({
         mode: 'profile',
         modelProfileId: 'p-1',
       }),

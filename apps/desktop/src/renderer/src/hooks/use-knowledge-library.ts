@@ -273,7 +273,8 @@ export function useKnowledgeLibrary(): KnowledgeLibrary {
         .then((models) =>
           setEmbeddingModels(
             models.filter(
-              (model) => model.role === 'embedding' && model.enabled && model.apiKeyConfigured,
+              (model) =>
+                model.roles.includes('embedding') && model.enabled && model.apiKeyConfigured,
             ),
           ),
         )

@@ -142,7 +142,7 @@ const makeFixture = (
       provider: 'openai-compatible',
       baseUrl: 'http://127.0.0.1:1234/v1',
       model: 'fixture-model',
-      role: 'language',
+      roles: ['language'],
       apiKey: 'preflight-secret-sentinel',
       maxContextTokens: 8192,
       maxOutputTokens: 8192,
@@ -306,7 +306,7 @@ describe('SchedulePreflightService', () => {
       provider: 'openai-compatible',
       baseUrl: 'https://models.example/v1',
       model: 'fixture-model',
-      role: 'language',
+      roles: ['language'],
       apiKey: '',
       maxContextTokens: 8192,
       maxOutputTokens: 8192,
@@ -324,7 +324,9 @@ describe('SchedulePreflightService', () => {
     );
 
     const migrating = makeFixture();
-    const model = migrating.store.models.list().find((profile) => profile.role === 'language');
+    const model = migrating.store.models
+      .list()
+      .find((profile) => profile.roles.includes('language'));
     if (!model) throw new Error('test setup: language model is missing');
     migrating.store.credentialJournal.ensurePending('model-profile', model.id, API_KEY_SLOT);
     const migrationResult = await migrating.service.check({
@@ -349,7 +351,7 @@ describe('SchedulePreflightService', () => {
         provider: 'openai-compatible',
         baseUrl: 'https://models.example/v1',
         model: 'fixture-model',
-        role: 'language',
+        roles: ['language'],
         apiKey: '',
         maxContextTokens: 8192,
         maxOutputTokens: 8192,
@@ -537,7 +539,9 @@ describe('SchedulePreflightService', () => {
     });
     expect(sourceUpdated.fingerprint).toBe(initial.fingerprint);
 
-    const languageModel = fixture.store.models.list().find((model) => model.role === 'language');
+    const languageModel = fixture.store.models
+      .list()
+      .find((model) => model.roles.includes('language'));
     if (!languageModel) throw new Error('test setup: language model is missing');
     fixture.store.models.setEnabled(languageModel.id, false);
     const capabilityChanged = await fixture.service.check({

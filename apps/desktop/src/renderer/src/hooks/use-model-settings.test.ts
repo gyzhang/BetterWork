@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { ModelProfileSummary } from '@betterwork/agent-protocol';
+import type { ModelProfileSummary, ModelRole } from '@betterwork/agent-protocol';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { type FormEvent } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -26,10 +26,10 @@ const modelOf = (overrides: Partial<ModelProfileSummary> = {}): ModelProfileSumm
   provider: 'openai-compatible',
   baseUrl: 'https://llm.internal/v1',
   model: 'qwen-max',
-  role: 'language',
+  roles: ['language'],
+  rolePriorities: { language: 0 },
   apiKeyConfigured: true,
   enabled: true,
-  priority: 0,
   connectionStatus: 'untested',
   maxContextTokens: 32768,
   maxOutputTokens: 4096,
@@ -44,7 +44,8 @@ const save = vi.fn<(input: never) => Promise<{ id: string }>>();
 const testConnection = vi.fn<(input: never) => Promise<{ ok: boolean; message: string }>>();
 const setEnabled =
   vi.fn<(input: { id: string; enabled: boolean }) => Promise<{ updated: boolean }>>();
-const setDefault = vi.fn<(input: { id: string }) => Promise<{ updated: boolean }>>();
+const setDefault =
+  vi.fn<(input: { id: string; role: ModelRole }) => Promise<{ updated: boolean }>>();
 const remove = vi.fn<(input: { id: string }) => Promise<{ deleted: boolean }>>();
 
 const install = (): void => {
@@ -72,6 +73,28 @@ afterEach(() => {
 });
 
 describe('useModelSettings 的 IPC 收口', () => {
+  it('按多角色筛选模型，并分别解析每个角色的默认值', async () => {
+    install();
+    const languageDefault = modelOf({ id: 'language-default', rolePriorities: { language: 0 } });
+    const multimodal = modelOf({
+      id: 'multimodal',
+      roles: ['language', 'vision'],
+      rolePriorities: { language: 1, vision: 0 },
+    });
+    list.mockResolvedValue([multimodal, languageDefault]);
+    const { result } = renderHook(() => useModelSettings());
+
+    await act(async () => {
+      result.current.refresh();
+    });
+    act(() => result.current.setFilter('vision'));
+
+    expect(result.current.filteredModels.map((model) => model.id)).toEqual(['multimodal']);
+    expect(result.current.defaultModelIds.get('language')).toBe('language-default');
+    expect(result.current.defaultModelIds.get('vision')).toBe('multimodal');
+    expect(result.current.activeLanguageModel?.id).toBe('language-default');
+  });
+
   it('后台刷新失败只记录到控制台，不长出错误状态也不弹浮层', async () => {
     install();
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -178,7 +201,7 @@ describe('useModelSettings 的 IPC 收口', () => {
     list.mockResolvedValue([]);
     const { result } = renderHook(() => useModelSettings());
 
-    act(() => result.current.onSetDefault(modelOf({ enabled: false })));
+    act(() => result.current.onSetDefault(modelOf({ enabled: false }), 'language'));
     await waitFor(() => expect(result.current.toast).toBeDefined());
 
     expect(result.current.toast).toEqual({
@@ -187,6 +210,20 @@ describe('useModelSettings 的 IPC 收口', () => {
     });
     expect(result.current.error).toBe('');
     expect(error, '业务拒绝是一次正常返回，不该在控制台里装成异常').not.toHaveBeenCalled();
+  });
+
+  it('设置多角色模型的指定角色默认值时携带角色到 IPC', async () => {
+    install();
+    setDefault.mockResolvedValue({ updated: true });
+    list.mockResolvedValue([]);
+    const { result } = renderHook(() => useModelSettings());
+
+    act(() => result.current.onSetDefault(modelOf({ roles: ['language', 'vision'] }), 'vision'));
+
+    await waitFor(() => expect(setDefault).toHaveBeenCalledWith({ id: 'model-1', role: 'vision' }));
+    await waitFor(() =>
+      expect(result.current.toast?.message).toBe('内部大模型 已设为视觉默认模型。'),
+    );
   });
 
   it('删除失败走浮层，成功则重新拉清单', async () => {

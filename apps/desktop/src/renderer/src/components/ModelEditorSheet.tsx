@@ -5,9 +5,9 @@ import { CloseIcon } from '../icons';
 import { trackAction } from '../lib/async-action';
 import { ActionBar } from './ActionBar';
 import { Button } from './Button';
+import { CheckList } from './CheckList';
 import { Disclosure } from './Disclosure';
 import { Field } from './Field';
-import { FieldSelect } from './FieldSelect';
 import { IconButton } from './IconButton';
 import { InlineError } from './InlineError';
 import { Modal } from './Modal';
@@ -62,12 +62,19 @@ export function ModelEditor({
           />
         </Field>
         <div className="form-grid">
-          <Field label="模型角色">
-            <FieldSelect
-              size="md"
-              value={form.role}
-              onChange={(role) => setForm({ ...form, role: role as ModelProfileInput['role'] })}
-              options={ROLE_OPTIONS}
+          <Field label="模型角色" group hint="同一模型可以同时用于语言、视觉和嵌入任务。">
+            <CheckList
+              options={ROLE_OPTIONS.map((option) => ({
+                ...option,
+                checked: form.roles.includes(option.id),
+                disabled: form.roles.length === 1 && form.roles.includes(option.id),
+              }))}
+              onToggle={(role, checked) => {
+                const roles = checked
+                  ? [...form.roles, role]
+                  : form.roles.filter((selected) => selected !== role);
+                setForm({ ...form, roles });
+              }}
             />
           </Field>
           <Field label="Provider">

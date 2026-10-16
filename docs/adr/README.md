@@ -1,6 +1,6 @@
 # 架构决策记录
 
-最新增量：[ADR-0049：测试先行证据与差异质量门禁](0049-tdd-and-differential-quality-gates.md)，补充 ADR-0046 的动态消费者、差异行覆盖率、暂存一致性和恢复清理证据。
+最新增量：[ADR-0050：模型配置支持多个角色](0050-model-profile-multiple-roles.md)，为单个模型配置保存多个能力角色及各自默认顺序。
 
 | ADR | 决策 | 状态 |
 | --- | --- | --- |
@@ -51,6 +51,8 @@
 | [0046](0046-web-fetch-destination-binding.md) | 公开网页 DNS、实际连接与逐跳资源边界 | Accepted（2026-10-09；B2 用户选择完整方案并授权实施，补强 ADR-0017） |
 | [0047](0047-bundled-node-runtime.md) | 随包分发独立 Node.js 运行时 | Accepted（2026-10-10；用户审核通过。运行时随包与 MCP 接入已落地；Node Skill 执行链决策 5–7 另立任务卡） |
 | [0048](0048-inline-chart-rendering.md) | 对话内联 ECharts 图表渲染 | Proposed（2026-10-11 设计定案；已按用户开工指令完成代码实现与自动化测试，ADR 接受状态与人工验收待用户确认） |
+| [0049](0049-tdd-and-differential-quality-gates.md) | 测试先行证据与差异质量门禁 | Accepted |
+| [0050](0050-model-profile-multiple-roles.md) | 模型配置支持多个角色及独立默认顺序 | Proposed（按 2026-10-16 用户功能指令实施，待验收确认） |
 
 [ADR-0027](0027-knowledge-foundation.md)（Proposed，2026-09-24 文档归档）提出固定知识修订正文读取、嵌入/混合检索、索引作业与显式成果来源声明；延续 ADR-0014/0018，拟细化 ADR-0005 的访问与采用语义，不改变 WM 的非向量记忆召回。产品见[知识基础闭环](../designs/knowledge-foundation.md)，字段见[知识契约](../development/knowledge-contracts.md)，状态只看 [KM 任务板](../development/tasks-knowledge.md)。
 

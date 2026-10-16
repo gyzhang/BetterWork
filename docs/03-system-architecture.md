@@ -321,7 +321,7 @@ SQLite 是产品状态真相源；向量索引、缩略图和解析缓存均可�
 
 当前实现状态：使用两个相互独立的 SQLite 文件。
 
-应用状态库 `userData/betterwork.db`：`workspaces`、`tasks`、`sessions`、`runs`、`run_events`、`evidence`、`artifacts`、`artifact_versions`、`artifact_version_evidence`、`model_profiles`、`search_engine_configs`、`notifications`。
+应用状态库 `userData/betterwork.db`：`workspaces`、`tasks`、`sessions`、`runs`、`run_events`、`evidence`、`artifacts`、`artifact_versions`、`artifact_version_evidence`、`model_profiles`、`model_profile_roles`、`search_engine_configs`、`notifications`。
 
 知识库 `userData/vaults/default/vault.sqlite`：`knowledge_documents`、`knowledge_chunks`、`knowledge_fts`（FTS5 虚表）。
 
@@ -344,9 +344,9 @@ SQLite 是产品状态真相源；向量索引、缩略图和解析缓存均可�
 
 优先提供 OpenAI-compatible 协议，同时保留 Provider Adapter，兼容公网、公司内网和本地服务。
 
-当前实现状态：`model_profiles` 表支持 `language | vision | embedding` 三种角色，可保存、启用/停用、按角色设默认（以 `priority` 排序）并做真实连通性测试。只有 `language` 角色进入 Agent 执行链路，`vision` 与 `embedding` 仅完成配置层。
+当前实现状态：一个 ModelProfile 可承担 `language | vision | embedding` 中一个或多个角色，角色集合非空且不重复。`model_profile_roles` 保存角色关系和该角色内的默认顺序；迁移 v47 将旧 `model_profiles.role` 与 `priority` 原样迁入，旧列仅保留作兼容快照。模型可保存、启用/停用、按角色设默认并做真实连通性测试。只有包含 `language` 的配置进入 Agent 语言模型执行链路；`vision` 与 `embedding` 仍仅完成配置层。
 
-一个 ModelProfile 只承担一个角色；[UI/UX 体系](10-ui-ux-system.md) §11.4 提出的「同一模型可以承担多个角色」需要改动表结构，属后续切片。`reranker` 与 `ocr` 角色未落地。
+连通性测试按已选角色探测接口：`language` / `vision` 共用 Chat Completions 探测，选中 `embedding` 时另测 Embeddings 接口；这验证接口连通，不等同于视觉理解能力验收。`reranker` 与 `ocr` 角色未落地。
 
 Provider 侧现有 `FakeModelProvider`（教学，按前缀正则触发工具）与 `OpenAICompatibleProvider`（SSE 流式，支持 `reasoning_content` 与 `tool_calls` 增量拼接）。后者以 300 秒整体超时包住请求与流读取，要求 `[DONE]` 或服务端 `finish_reason` 作为完成信号；用户取消优先映射为 Run 取消，提前 EOF 作为失败处理。尚未抽象出独立的 Provider Adapter 层，新增非 OpenAI 兼容协议时需要先在 `agent-core` 增加实现。模型与搜索 API Key 的生产存储由 Main 通过 Electron `safeStorage` 加密到 `credentials`，legacy 列迁移与可用状态见[工程规范 §6](12-engineering-standards.md)；列表接口只回 `apiKeyConfigured`。
 

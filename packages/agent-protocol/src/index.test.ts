@@ -51,6 +51,8 @@ import {
   memorySourceRefSchema,
   memorySourceSelectorSchema,
   memoryWriteReceiptSchema,
+  modelProfileInputSchema,
+  modelProfileSummarySchema,
   resolveMemoryConflictRequestSchema,
   resultSchema,
   retryScheduleOutputRequestSchema,
@@ -84,6 +86,7 @@ import {
   scheduleSourceSnapshotSchema,
   scheduleTimingSchema,
   scriptExecutionSchema,
+  setDefaultModelRequestSchema,
   setScheduleLifecycleRequestSchema,
   setSkillTrustRequestSchema,
   skillBindingSchema,
@@ -99,6 +102,56 @@ import {
   updateWindowThemeRequestSchema,
   workspaceBriefSchema,
 } from './index';
+
+describe('model profile protocol', () => {
+  const base = {
+    name: 'DeepSeek 4.1',
+    provider: 'deepseek',
+    baseUrl: 'https://api.deepseek.com/v1',
+    model: 'deepseek-4.1',
+    apiKey: '',
+  };
+
+  it('accepts several unique roles and rejects an empty or repeated selection', () => {
+    expect(modelProfileInputSchema.parse({ ...base, roles: ['language', 'vision'] }).roles).toEqual(
+      ['language', 'vision'],
+    );
+    expect(modelProfileInputSchema.safeParse({ ...base, roles: [] }).success).toBe(false);
+    expect(
+      modelProfileInputSchema.safeParse({ ...base, roles: ['language', 'language'] }).success,
+    ).toBe(false);
+  });
+
+  it('requires the role when setting an independent default', () => {
+    expect(setDefaultModelRequestSchema.parse({ id: 'model-1', role: 'vision' })).toEqual({
+      id: 'model-1',
+      role: 'vision',
+    });
+    expect(setDefaultModelRequestSchema.safeParse({ id: 'model-1' }).success).toBe(false);
+  });
+
+  it('returns all roles and their independent priorities in the summary', () => {
+    expect(
+      modelProfileSummarySchema.parse({
+        id: 'model-1',
+        name: 'DeepSeek 4.1',
+        provider: 'deepseek',
+        baseUrl: 'https://api.deepseek.com/v1',
+        model: 'deepseek-4.1',
+        roles: ['language', 'vision'],
+        rolePriorities: { language: 0, vision: 2 },
+        apiKeyConfigured: true,
+        enabled: true,
+        connectionStatus: 'connected',
+        maxContextTokens: 8192,
+        maxOutputTokens: 4096,
+        temperature: 0.7,
+        createdAt: 1,
+        updatedAt: 1,
+      }),
+    ).toMatchObject({ roles: ['language', 'vision'], rolePriorities: { language: 0, vision: 2 } });
+  });
+});
 
 describe('run protocol', () => {
   it('stores a bounded diagnostic for an unregistered model tool name', () => {

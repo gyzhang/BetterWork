@@ -227,4 +227,4 @@ type ModelRole = "language" | "vision" | "embedding" | "reranker" | "ocr";
 
 模型配置记录角色、Provider、Endpoint、上下文、工具能力、图片能力和 Embedding 维度。更换 Embedding 模型后应重建对应索引。
 
-当前实现状态：只落地 `language | vision | embedding` 三种角色，`reranker` 与 `ocr` 未落地；配置项记录 Provider、Endpoint、模型标识、上下文与输出 Token 上限、温度、启用状态与优先级，不记录工具能力、图片能力与 Embedding 维度。`language` 进入 Agent 执行链路；`embedding` 用于知识索引与语义检索，并固定模型快照、指纹和维度，切换模型后须显式重建索引；`vision` 当前只支持配置和连通性测试，尚无产品图像理解执行链路。
+当前实现状态：一个配置可选择 `language | vision | embedding` 中多个角色，各角色有独立默认顺序；`reranker` 与 `ocr` 未落地。配置记录 Provider、Endpoint、模型标识、上下文与输出 Token 上限、温度和启用状态，不记录工具能力、图片能力与 Embedding 维度。`language` 进入 Agent 执行链路；`embedding` 用于知识索引与语义检索，并固定模型快照、指纹和维度，切换模型后须显式重建索引；`vision` 当前只支持配置和 Chat Completions 连通性测试，尚无产品图像理解执行链路。

@@ -273,7 +273,7 @@ export async function seed(
     provider: 'openai-compatible',
     baseUrl: 'http://offline.invalid/v1',
     model: 'synthetic',
-    role: 'language',
+    roles: ['language'],
     apiKey: '',
     enabled: true,
     maxContextTokens: 8192,

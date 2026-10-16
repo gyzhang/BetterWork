@@ -12,7 +12,7 @@ const formOf = (overrides: Partial<ModelProfileInput> = {}): ModelProfileInput =
   model: 'gpt-4',
   baseUrl: 'https://api.example.com/v1',
   apiKey: '',
-  role: 'language',
+  roles: ['language'],
   maxContextTokens: 32768,
   maxOutputTokens: 4096,
   temperature: 0.3,
@@ -78,6 +78,29 @@ describe('ModelEditor', () => {
     expect(screen.getByText('API 地址')).toBeTruthy();
     expect(screen.getByText('API Key')).toBeTruthy();
     expect(screen.getByDisplayValue('公司主力模型')).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: '语言模型' })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: '视觉模型' })).toBeTruthy();
+  });
+
+  it('支持同一配置选择多个角色，并保留至少一个角色', () => {
+    const setForm = vi.fn();
+    render(
+      <ModelEditor
+        form={formOf()}
+        setForm={setForm}
+        editing={false}
+        error=""
+        onClose={vi.fn()}
+        onSave={async () => undefined}
+        onTest={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '视觉模型' }));
+    expect(setForm).toHaveBeenCalledWith(
+      expect.objectContaining({ roles: ['language', 'vision'] }),
+    );
+    expect(screen.getByRole('checkbox', { name: '语言模型' }).hasAttribute('disabled')).toBe(true);
   });
 
   it('修改名称调用 setForm', () => {

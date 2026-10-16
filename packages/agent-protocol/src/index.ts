@@ -3731,6 +3731,16 @@ export type ListRunsRequest = z.infer<typeof listRunsRequestSchema>;
 
 export const modelRoleSchema = z.enum(['language', 'vision', 'embedding']);
 export type ModelRole = z.infer<typeof modelRoleSchema>;
+export const modelRolesSchema = z
+  .array(modelRoleSchema)
+  .min(1)
+  .max(3)
+  .refine((roles) => new Set(roles).size === roles.length, '模型角色不能重复');
+export const modelRolePrioritySchema = z.partialRecord(
+  modelRoleSchema,
+  z.number().int().nonnegative(),
+);
+export type ModelRolePriorities = z.infer<typeof modelRolePrioritySchema>;
 export const modelConnectionStatusSchema = z.enum(['untested', 'connected', 'failed']);
 export type ModelConnectionStatus = z.infer<typeof modelConnectionStatusSchema>;
 
@@ -3739,13 +3749,12 @@ export const modelProfileInputSchema = z.object({
   provider: z.string().trim().min(1).max(80),
   baseUrl: z.string().trim().url(),
   model: z.string().trim().min(1).max(200),
-  role: modelRoleSchema,
+  roles: modelRolesSchema,
   apiKey: z.string().max(2000).optional().default(''),
   maxContextTokens: z.number().int().positive().max(10_000_000).default(8192),
   maxOutputTokens: z.number().int().positive().max(1_000_000).default(8192),
   temperature: z.number().min(0).max(2).default(0.7),
   enabled: z.boolean().default(true),
-  priority: z.number().int().nonnegative().optional(),
 });
 export type ModelProfileInput = z.infer<typeof modelProfileInputSchema>;
 export const saveModelProfileRequestSchema = modelProfileInputSchema.extend({
@@ -3758,10 +3767,10 @@ export interface ModelProfileSummary {
   provider: string;
   baseUrl: string;
   model: string;
-  role: ModelRole;
+  roles: ModelRole[];
+  rolePriorities: ModelRolePriorities;
   apiKeyConfigured: boolean;
   enabled: boolean;
-  priority: number;
   connectionStatus: ModelConnectionStatus;
   lastTestedAt?: number;
   maxContextTokens: number;
@@ -4199,13 +4208,16 @@ export const listEvidenceRequestSchema = z.object({ taskId: z.string().min(1) })
 export type ListEvidenceRequest = z.infer<typeof listEvidenceRequestSchema>;
 
 export const modelProfileIdSchema = z.object({ id: z.string().min(1) });
-export const setDefaultModelRequestSchema = z.object({ id: z.string().min(1) });
+export const setDefaultModelRequestSchema = z.object({
+  id: z.string().min(1),
+  role: modelRoleSchema,
+});
 export const setModelEnabledRequestSchema = z.object({
   id: z.string().min(1),
   enabled: z.boolean(),
 });
 export const testModelRequestSchema = modelProfileInputSchema
-  .pick({ baseUrl: true, model: true, role: true, apiKey: true })
+  .pick({ baseUrl: true, model: true, roles: true, apiKey: true })
   .extend({ id: z.string().min(1).optional() });
 export const updateWindowThemeRequestSchema = z
   .object({
@@ -4897,24 +4909,45 @@ export const artifactVersionDetailSchema = z.discriminatedUnion('type', [
   markdownArtifactVersionDetailSchema.extend({ type: z.literal('markdown') }),
   fileArtifactVersionDetailSchema.extend({ type: z.literal('presentation') }),
 ]);
-export const modelProfileSummarySchema = z.object({
-  id: z.string().min(1),
-  name: z.string(),
-  provider: z.string(),
-  baseUrl: z.string().url(),
-  model: z.string(),
-  role: modelRoleSchema,
-  apiKeyConfigured: z.boolean(),
-  enabled: z.boolean(),
-  priority: z.number().int().nonnegative(),
-  connectionStatus: modelConnectionStatusSchema,
-  lastTestedAt: z.number().int().nonnegative().optional(),
-  maxContextTokens: z.number().int().positive(),
-  maxOutputTokens: z.number().int().positive(),
-  temperature: z.number(),
-  createdAt: z.number().int().nonnegative(),
-  updatedAt: z.number().int().nonnegative(),
-});
+export const modelProfileSummarySchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string(),
+    provider: z.string(),
+    baseUrl: z.string().url(),
+    model: z.string(),
+    roles: modelRolesSchema,
+    rolePriorities: modelRolePrioritySchema,
+    apiKeyConfigured: z.boolean(),
+    enabled: z.boolean(),
+    connectionStatus: modelConnectionStatusSchema,
+    lastTestedAt: z.number().int().nonnegative().optional(),
+    maxContextTokens: z.number().int().positive(),
+    maxOutputTokens: z.number().int().positive(),
+    temperature: z.number(),
+    createdAt: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+  })
+  .superRefine((summary, context) => {
+    for (const role of summary.roles) {
+      if (summary.rolePriorities[role] === undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['rolePriorities', role],
+          message: '每个模型角色都需要独立优先级',
+        });
+      }
+    }
+    for (const role of modelRoleSchema.options) {
+      if (summary.rolePriorities[role] !== undefined && !summary.roles.includes(role)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['rolePriorities', role],
+          message: '不能为未选择的模型角色设置优先级',
+        });
+      }
+    }
+  });
 /** 来源检查结论（知识契约 §10.2）：截至某时点，不是实时保证。 */
 export const knowledgeSourceStatusSchema = z.enum([
   'unchecked',
@@ -6151,7 +6184,7 @@ export interface BetterWorkDesktopApi {
     list(): Promise<ModelProfileSummary[]>;
     save(input: z.infer<typeof saveModelProfileRequestSchema>): Promise<{ id: string }>;
     delete(input: { id: string }): Promise<{ deleted: boolean }>;
-    setDefault(input: { id: string }): Promise<{ updated: boolean }>;
+    setDefault(input: { id: string; role: ModelRole }): Promise<{ updated: boolean }>;
     setEnabled(input: { id: string; enabled: boolean }): Promise<{ updated: boolean }>;
     test(input: z.infer<typeof testModelRequestSchema>): Promise<{ ok: boolean; message: string }>;
   };
