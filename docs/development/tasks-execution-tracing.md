@@ -36,7 +36,7 @@
 | AT07 | 历史/实时合并 Hook | AT06 | M1 | done | 602dc92f；Hook 先订阅后查 summary/全量分页，按 node/event ID 合并并按 Core sequence 从 0 检测缺口后补取；切 Run/卸载丢弃迟到响应；红 3、定向 2 文件/10 项绿；check:quick 退出 0（functional 196/3164、动态 277、heavy 210；覆盖 512/544=94.12%）；迁移 v47 |
 | AT08 | 执行链详情领域组件 | AT07 | M1 | done | 602dc92f；placeholder 最小行为反例红 7 项；定向 10 项绿；check:quick 最终退出 0（lint/format/typecheck/docs:check 156、functional 197/3174、动态消费者 277、heavy 5 文件/210；覆盖 587/625=93.92%）；迁移 v47 |
 | AT09 | 工作页当前/历史 Run 详情入口 | AT08 | M1 | done | 当前/历史 scoped 入口、切 Task/收起面板不取消 Run；ContextPanel 33 项、快检含 App heavy 通过；覆盖 604/643=93.93%，迁移 v47 |
-| AT10 | 第 1 期离线跨层回归 | AT09 | M1 | done | RunService＋临时文件 SQLite 重装配 red→green；IPC/Preload/Hook/React 合约 446 项通过；初始 check:quick 退出 0（functional 197/3175、动态 277、heavy 211；覆盖 605/643=94.09%）；同步最新 main 后保留模型角色 v47、诊断元数据迁移为 v48；整合 check:quick 退出 0（functional 196/3157、动态 278、heavy 212；覆盖 605/643=94.09%），见 2026-10-17 日志 |
+| AT10 | 第 1 期离线跨层回归 | AT09 | M1 | done | RunService＋临时文件 SQLite 重装配 red→green；IPC/Preload/Hook/React 合约 446 项通过；初始 check:quick 退出 0（functional 197/3175、动态 277、heavy 211；覆盖 605/643=94.09%）；同步最新 main 后保留模型角色 v47、诊断元数据迁移为 v48；整合 check:quick 退出 0（functional 196/3157、动态 278、heavy 212；覆盖 605/643=94.09%）；PR 快门禁发现 ExpertsView 焦点时序测试竞态并以 waitFor 稳定，后续门禁见 2026-10-17 日志 |
 | AT11 | 宿主事实流迁移与记录器 | AT10 | M2 | todo | 未开工 |
 | AT12 | Run 准备、审计、清理、提交观测 | AT11 | M2 | todo | 未开工 |
 | AT13 | Skill 宿主阶段与执行关联 | AT12 | M2 | todo | 未开工 |
