@@ -316,7 +316,7 @@ const seedSkillChain = (db: Database.Database, now: number): void => {
 describe('application database migrations', () => {
   it('migrates each existing model to its current single role and preserves its priority', () => {
     const db = new Database(':memory:');
-    migrate(db, { migrations: appMigrations.slice(0, -1) });
+    migrate(db, { migrations: appMigrations.filter((migration) => migration.version <= 46) });
     const now = Date.now();
     const insert = db.prepare(
       `INSERT INTO model_profiles (id, name, provider, base_url, model, role, priority, created_at, updated_at)
