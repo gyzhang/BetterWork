@@ -43,6 +43,8 @@ const HEAVY_TEST_FILES = [
   'apps/desktop/src/main/services/run-service.test.ts',
   'apps/desktop/src/main/services/skill-dependency-service.test.ts',
   'apps/desktop/src/renderer/src/App.test.tsx',
+  // GitHub Actions run 38916338635: TypeScript program check hit 20s under functional concurrency.
+  'apps/desktop/src/preload/ipc-contract-consistency.test.ts',
   // 独立 Git/CLI 夹具多次启动 TypeScript 解析器：2026-10-02 定向实测 24.83s。
   'scripts/drift-check.test.ts',
   // 真实 esbuild/Electron CLI 夹具：2026-10-03 核对 run 37048577071，单文件 50.391s。
